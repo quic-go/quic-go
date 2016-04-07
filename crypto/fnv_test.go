@@ -9,13 +9,18 @@ import (
 
 var _ = Describe("FNV", func() {
 	It("gives proper null hash", func() {
-		h := crypto.New128a()
-		Expect(h.Sum128()).To(Equal([]byte{0x6c, 0x62, 0x27, 0x2e, 0x07, 0xbb, 0x01, 0x42, 0x62, 0xb8, 0x21, 0x75, 0x62, 0x95, 0xc5, 0x8d}))
+		hash := crypto.New128a()
+		h, l := hash.Sum128()
+		Expect(l).To(Equal(uint64(0x62b821756295c58d)))
+		Expect(h).To(Equal(uint64(0x6c62272e07bb0142)))
 	})
 
-	It("gives hashes", func() {
-		h := crypto.New128a()
-		h.Write([]byte("foobar"))
-		Expect(h.Sum128()).To(Equal([]byte{0x34, 0x3e, 0x16, 0x62, 0x79, 0x3c, 0x64, 0xbf, 0x6f, 0xd, 0x35, 0x97, 0xba, 0x44, 0x6f, 0x18}))
+	It("calculates hash", func() {
+		hash := crypto.New128a()
+		_, err := hash.Write([]byte("foobar"))
+		Expect(err).ToNot(HaveOccurred())
+		h, l := hash.Sum128()
+		Expect(l).To(Equal(uint64(0x6f0d3597ba446f18)))
+		Expect(h).To(Equal(uint64(0x343e1662793c64bf)))
 	})
 })
