@@ -4,6 +4,8 @@ package crypto
 // created by Glenn Fowler, Landon Curt Noll, and Phong Vo.
 // See https://en.wikipedia.org/wiki/Fowler-Noll-Vo_hash_function.
 
+// Write() algorithm taken and modified from github.com/romain-jacotin/quic
+
 import "hash"
 
 // Hash128 is the common interface implemented by all 128-bit hash functions.
@@ -38,7 +40,6 @@ func (s *sum128a) Sum128() (uint64, uint64) {
 
 func (s *sum128a) Write(data []byte) (int, error) {
 	var t0, t1, t2, t3 uint64
-	// Taken and slightly modified from github.com/romain-jacotin/quic
 	const fnv128PrimeLow = 0x0000013B
 	const fnv128PrimeShift = 24
 

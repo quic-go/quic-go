@@ -14,7 +14,7 @@ type NullAEAD struct{}
 var _ AEAD = &NullAEAD{}
 
 // Open and verify the ciphertext
-func (*NullAEAD) Open(associatedData []byte, r io.Reader) (io.Reader, error) {
+func (*NullAEAD) Open(associatedData []byte, r io.Reader) (*bytes.Reader, error) {
 	ciphertext, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, err
