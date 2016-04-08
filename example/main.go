@@ -61,5 +61,11 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Printf("%s\n", string(frame.Data[0:4]))
+	messageTag, cryptoData, err := quic.ParseCryptoMessage(frame.Data)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("Tag: %d\n", messageTag)
+	fmt.Printf("Talking to: %s\n", string(cryptoData[quic.TagUAID]))
 }
