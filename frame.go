@@ -6,6 +6,7 @@ import (
 )
 
 // A StreamFrame of QUIC
+// TODO: Maybe remove unneeded stuff, e.g. lengths?
 type StreamFrame struct {
 	FinBit            bool
 	DataLengthPresent bool
@@ -33,26 +34,22 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 	}
 	frame.StreamIDLength = typeByte&0x03 + 1
 
-	sid, err := readUint64(r, frame.StreamIDLength)
+	sid, err := readUintN(r, frame.StreamIDLength)
 	if err != nil {
 		return nil, err
 	}
 	frame.StreamID = uint32(sid)
 
-	frame.Offset, err = readUint64(r, frame.OffsetLength)
+	frame.Offset, err = readUintN(r, frame.OffsetLength)
 	if err != nil {
 		return nil, err
 	}
 
 	if frame.DataLengthPresent {
-		var b1, b2 byte
-		if b1, err = r.ReadByte(); err != nil {
+		frame.DataLength, err = readUint16(r)
+		if err != nil {
 			return nil, err
 		}
-		if b2, err = r.ReadByte(); err != nil {
-			return nil, err
-		}
-		frame.DataLength = uint16(b1) + uint16(b2)<<8
 	}
 
 	if frame.DataLength == 0 {

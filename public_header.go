@@ -47,7 +47,7 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	}
 
 	// Connection ID
-	header.ConnectionID, err = readUint64(b, header.ConnectionIDLength)
+	header.ConnectionID, err = readUintN(b, header.ConnectionIDLength)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	// Version (optional)
 	if header.VersionFlag {
 		var v uint64
-		v, err = readUint64(b, 4)
+		v, err = readUintN(b, 4)
 		if err != nil {
 			return nil, err
 		}
@@ -63,7 +63,7 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	}
 
 	// Packet number
-	header.PacketNumber, err = readUint64(b, header.PacketNumberLength)
+	header.PacketNumber, err = readUintN(b, header.PacketNumberLength)
 	if err != nil {
 		return nil, err
 	}
