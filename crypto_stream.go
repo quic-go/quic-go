@@ -15,6 +15,8 @@ const (
 	TagCHLO Tag = 'C' + 'H'<<8 + 'L'<<16 + 'O'<<24
 	// TagREJ is a server hello rejection
 	TagREJ Tag = 'R' + 'E'<<8 + 'J'<<16
+	// TagSCFG is a server config
+	TagSCFG Tag = 'S' + 'C'<<8 + 'F'<<16 + 'G'<<24
 
 	// TagPAD is padding
 	TagPAD Tag = 'P' + 'A'<<8 + 'D'<<16
@@ -49,14 +51,25 @@ const (
 	// TagSFCW is the initial stream flow control receive window.
 	TagSFCW Tag = 'S' + 'F'<<8 + 'C'<<16 + 'W'<<24
 
-	// TagSCFG is the server config
-	TagSCFG Tag = 'S' + 'C'<<8 + 'F'<<16 + 'G'<<24
 	// TagSTK is the source-address token
 	TagSTK Tag = 'S' + 'T'<<8 + 'K'<<16
 	// TagSNO is the server nonce
 	TagSNO Tag = 'S' + 'N'<<8 + 'O'<<16
 	// TagPROF is the server proof
 	TagPROF Tag = 'P' + 'R'<<8 + 'O'<<16 + 'F'<<24
+
+	// TagSCID is the server config ID
+	TagSCID Tag = 'S' + 'C'<<8 + 'I'<<16 + 'D'<<24
+	// TagKEXS is the list of key exchange algos
+	TagKEXS Tag = 'K' + 'E'<<8 + 'X'<<16 + 'S'<<24
+	// TagAEAD is the list of AEAD algos
+	TagAEAD Tag = 'A' + 'E'<<8 + 'A'<<16 + 'D'<<24
+	// TagPUBS is the public value for the KEX
+	TagPUBS Tag = 'P' + 'U'<<8 + 'B'<<16 + 'S'<<24
+	// TagORBT is the client orbit
+	TagORBT Tag = 'O' + 'R'<<8 + 'B'<<16 + 'T'<<24
+	// TagEXPY is the server config expiry
+	TagEXPY Tag = 'E' + 'X'<<8 + 'P'<<16 + 'Y'<<24
 )
 
 var (

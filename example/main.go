@@ -68,4 +68,20 @@ func main() {
 
 	fmt.Printf("Tag: %d\n", messageTag)
 	fmt.Printf("Talking to: %s\n", string(cryptoData[quic.TagUAID]))
+
+	serverConfig := &bytes.Buffer{}
+	quic.WriteCryptoMessage(serverConfig, quic.TagSCFG, map[quic.Tag][]byte{
+		quic.TagSCID: []byte{0xC5, 0x1C, 0x73, 0x6B, 0x8F, 0x48, 0x49, 0xAE, 0xB3, 0x00, 0xA2, 0xD4, 0x4B, 0xA0, 0xCF, 0xDF},
+		quic.TagKEXS: []byte("C255"),
+		quic.TagAEAD: []byte("AESG"),
+		quic.TagPUBS: []byte{},
+		quic.TagORBT: []byte{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7},
+		quic.TagEXPY: []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+		quic.TagVER:  []byte("Q030"),
+	})
+
+	serverReply := &bytes.Buffer{}
+	quic.WriteCryptoMessage(serverReply, quic.TagREJ, map[quic.Tag][]byte{
+		quic.TagSCFG: serverConfig.Bytes(),
+	})
 }
