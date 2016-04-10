@@ -13,6 +13,8 @@ type Tag uint32
 const (
 	// TagCHLO is a client hello
 	TagCHLO Tag = 'C' + 'H'<<8 + 'L'<<16 + 'O'<<24
+	// TagREJ is a server hello rejection
+	TagREJ Tag = 'R' + 'E'<<8 + 'J'<<16
 
 	// TagPAD is padding
 	TagPAD Tag = 'P' + 'A'<<8 + 'D'<<16
@@ -46,6 +48,15 @@ const (
 	TagCFCW Tag = 'C' + 'F'<<8 + 'C'<<16 + 'W'<<24
 	// TagSFCW is the initial stream flow control receive window.
 	TagSFCW Tag = 'S' + 'F'<<8 + 'C'<<16 + 'W'<<24
+
+	// TagSCFG is the server config
+	TagSCFG Tag = 'S' + 'C'<<8 + 'F'<<16 + 'G'<<24
+	// TagSTK is the source-address token
+	TagSTK Tag = 'S' + 'T'<<8 + 'K'<<16
+	// TagSNO is the server nonce
+	TagSNO Tag = 'S' + 'N'<<8 + 'O'<<16
+	// TagPROF is the server proof
+	TagPROF Tag = 'P' + 'R'<<8 + 'O'<<16 + 'F'<<24
 )
 
 var (
