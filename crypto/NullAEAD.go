@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"io/ioutil"
+
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // NullAEAD handles not-yet encrypted packets
@@ -35,4 +37,18 @@ func (*NullAEAD) Open(associatedData []byte, r io.Reader) (*bytes.Reader, error)
 		return nil, errors.New("NullAEAD: failed to authenticate received data")
 	}
 	return bytes.NewReader(ciphertext[12:]), nil
+}
+
+// Seal writes hash and ciphertext to the buffer
+func (*NullAEAD) Seal(b *bytes.Buffer, associatedData []byte, r *bytes.Reader) {
+	plaintext, _ := ioutil.ReadAll(r)
+
+	hash := New128a()
+	hash.Write(associatedData)
+	hash.Write(plaintext)
+	high, low := hash.Sum128()
+
+	utils.WriteUint64(b, low)
+	utils.WriteUint32(b, uint32(high))
+	b.Write(plaintext)
 }
