@@ -72,4 +72,15 @@ var _ = Describe("Public Header", func() {
 			Expect(b.Len()).To(BeZero())
 		})
 	})
+
+	Context("when writing", func() {
+		It("writes a sample header", func() {
+			b := &bytes.Buffer{}
+			WritePublicHeader(b, &PublicHeader{
+				ConnectionID: 1,
+				PacketNumber: 2,
+			})
+			Expect(b.Bytes()).To(Equal([]byte{0x2c, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0}))
+		})
+	})
 })

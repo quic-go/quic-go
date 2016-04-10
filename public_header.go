@@ -72,3 +72,11 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 
 	return header, nil
 }
+
+// WritePublicHeader writes a public header
+func WritePublicHeader(b *bytes.Buffer, h *PublicHeader) {
+	publicFlagByte := uint8(0x0C | 0x20)
+	b.WriteByte(publicFlagByte)
+	utils.WriteUint64(b, h.ConnectionID)         // TODO: Send shorter connection id if possible
+	utils.WriteUint32(b, uint32(h.PacketNumber)) // TODO: Send shorter packet number if possible
+}
