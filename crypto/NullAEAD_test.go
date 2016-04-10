@@ -38,7 +38,7 @@ var _ = Describe("Crypto/NullAEAD", func() {
 		plainText := []byte("They are endowed with reason and conscience and should act towards one another in a spirit of brotherhood.")
 		b := &bytes.Buffer{}
 		aead := &crypto.NullAEAD{}
-		aead.Seal(b, aad, bytes.NewReader(plainText))
+		aead.Seal(b, aad, plainText)
 		Expect(b.Bytes()).To(Equal(append([]byte{0x98, 0x9b, 0x33, 0x3f, 0xe8, 0xde, 0x32, 0x5c, 0xa6, 0x7f, 0x9c, 0xf7}, []byte("They are endowed with reason and conscience and should act towards one another in a spirit of brotherhood.")...)))
 	})
 })

@@ -40,9 +40,7 @@ func (*NullAEAD) Open(associatedData []byte, r io.Reader) (*bytes.Reader, error)
 }
 
 // Seal writes hash and ciphertext to the buffer
-func (*NullAEAD) Seal(b *bytes.Buffer, associatedData []byte, r *bytes.Reader) {
-	plaintext, _ := ioutil.ReadAll(r)
-
+func (*NullAEAD) Seal(b *bytes.Buffer, associatedData []byte, plaintext []byte) {
 	hash := New128a()
 	hash.Write(associatedData)
 	hash.Write(plaintext)
