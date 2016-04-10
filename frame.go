@@ -6,7 +6,6 @@ import (
 )
 
 // A StreamFrame of QUIC
-// TODO: Maybe remove unneeded stuff, e.g. lengths?
 type StreamFrame struct {
 	FinBit   bool
 	StreamID uint32
