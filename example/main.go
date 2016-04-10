@@ -84,4 +84,36 @@ func main() {
 	quic.WriteCryptoMessage(serverReply, quic.TagREJ, map[quic.Tag][]byte{
 		quic.TagSCFG: serverConfig.Bytes(),
 	})
+
+	replyFrame := &bytes.Buffer{}
+	replyFrame.WriteByte(0) // Private header
+	quic.WriteStreamFrame(replyFrame, &quic.StreamFrame{
+		StreamID: 1,
+		Data:     serverReply.Bytes(),
+	})
+
+	fullReply := &bytes.Buffer{}
+	quic.WritePublicHeader(fullReply, &quic.PublicHeader{
+		ConnectionID: publicHeader.ConnectionID,
+		PacketNumber: 1,
+	})
+
+	nullAEAD.Seal(fullReply, fullReply.Bytes(), replyFrame.Bytes())
+
+	conn.WriteToUDP(fullReply.Bytes(), remoteAddr)
+
+	n, remoteAddr, err = conn.ReadFromUDP(data)
+	if err != nil {
+		panic(err)
+	}
+	data = data[:n]
+	r = bytes.NewReader(data)
+
+	fmt.Printf("%v\n", data)
+
+	publicHeader, err = quic.ParsePublicHeader(r)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("%#v\n", publicHeader)
 }
