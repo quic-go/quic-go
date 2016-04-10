@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"sort"
+
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // A Tag in the QUIC crypto
@@ -116,9 +118,9 @@ func ParseCryptoMessage(data []byte) (Tag, map[Tag][]byte, error) {
 
 // WriteCryptoMessage writes a crypto message
 func WriteCryptoMessage(b *bytes.Buffer, messageTag Tag, data map[Tag][]byte) {
-	writeUint32(b, uint32(messageTag))
-	writeUint16(b, uint16(len(data)))
-	writeUint16(b, 0)
+	utils.WriteUint32(b, uint32(messageTag))
+	utils.WriteUint16(b, uint16(len(data)))
+	utils.WriteUint16(b, 0)
 
 	// Save current position in the buffer, so that we can update the index in-place later
 	indexStart := b.Len()
@@ -133,7 +135,7 @@ func WriteCryptoMessage(b *bytes.Buffer, messageTag Tag, data map[Tag][]byte) {
 		tags[i] = uint32(t)
 		i++
 	}
-	sort.Sort(Uint32Slice(tags))
+	sort.Sort(utils.Uint32Slice(tags))
 
 	offset := uint32(0)
 	for i, t := range tags {

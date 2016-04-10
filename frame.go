@@ -3,6 +3,8 @@ package quic
 import (
 	"bytes"
 	"io/ioutil"
+
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // A StreamFrame of QUIC
@@ -29,20 +31,20 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 	}
 	streamIDLen := typeByte&0x03 + 1
 
-	sid, err := readUintN(r, streamIDLen)
+	sid, err := utils.ReadUintN(r, streamIDLen)
 	if err != nil {
 		return nil, err
 	}
 	frame.StreamID = uint32(sid)
 
-	frame.Offset, err = readUintN(r, offsetLen)
+	frame.Offset, err = utils.ReadUintN(r, offsetLen)
 	if err != nil {
 		return nil, err
 	}
 
 	var dataLen uint16
 	if dataLenPresent {
-		dataLen, err = readUint16(r)
+		dataLen, err = utils.ReadUint16(r)
 		if err != nil {
 			return nil, err
 		}
@@ -76,10 +78,10 @@ func WriteStreamFrame(b *bytes.Buffer, f *StreamFrame) {
 	}
 	typeByte ^= 0x03 // TODO: Send shorter stream ID if possible
 	b.WriteByte(typeByte)
-	writeUint32(b, f.StreamID)
+	utils.WriteUint32(b, f.StreamID)
 	if f.Offset != 0 {
-		writeUint64(b, f.Offset)
+		utils.WriteUint64(b, f.Offset)
 	}
-	writeUint16(b, uint16(len(f.Data)))
+	utils.WriteUint16(b, uint16(len(f.Data)))
 	b.Write(f.Data)
 }

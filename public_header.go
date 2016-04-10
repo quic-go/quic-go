@@ -3,6 +3,8 @@ package quic
 import (
 	"bytes"
 	"io"
+
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // The PublicHeader of a QUIC packet
@@ -47,7 +49,7 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	}
 
 	// Connection ID
-	header.ConnectionID, err = readUintN(b, connectionIDLen)
+	header.ConnectionID, err = utils.ReadUintN(b, connectionIDLen)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +57,7 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	// Version (optional)
 	if header.VersionFlag {
 		var v uint64
-		v, err = readUintN(b, 4)
+		v, err = utils.ReadUintN(b, 4)
 		if err != nil {
 			return nil, err
 		}
@@ -63,7 +65,7 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	}
 
 	// Packet number
-	header.PacketNumber, err = readUintN(b, packetNumberLen)
+	header.PacketNumber, err = utils.ReadUintN(b, packetNumberLen)
 	if err != nil {
 		return nil, err
 	}
