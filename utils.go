@@ -47,6 +47,17 @@ func readUint16(b io.ByteReader) (uint16, error) {
 	return uint16(b1) + uint16(b2)<<8, nil
 }
 
+func writeUint64(b *bytes.Buffer, i uint64) {
+	b.WriteByte(uint8(i & 0xff))
+	b.WriteByte(uint8((i >> 8) & 0xff))
+	b.WriteByte(uint8((i >> 16) & 0xff))
+	b.WriteByte(uint8((i >> 24) & 0xff))
+	b.WriteByte(uint8((i >> 32) & 0xff))
+	b.WriteByte(uint8((i >> 40) & 0xff))
+	b.WriteByte(uint8((i >> 48) & 0xff))
+	b.WriteByte(uint8((i >> 56) & 0xff))
+}
+
 func writeUint32(b *bytes.Buffer, i uint32) {
 	b.WriteByte(uint8(i & 0xff))
 	b.WriteByte(uint8((i >> 8) & 0xff))
