@@ -1,6 +1,9 @@
 package quic
 
-import "io"
+import (
+	"bytes"
+	"io"
+)
 
 func readUintN(b io.ByteReader, length uint8) (uint64, error) {
 	var res uint64
@@ -43,3 +46,22 @@ func readUint16(b io.ByteReader) (uint16, error) {
 	}
 	return uint16(b1) + uint16(b2)<<8, nil
 }
+
+func writeUint32(b *bytes.Buffer, i uint32) {
+	b.WriteByte(uint8(i & 0xff))
+	b.WriteByte(uint8((i >> 8) & 0xff))
+	b.WriteByte(uint8((i >> 16) & 0xff))
+	b.WriteByte(uint8((i >> 24) & 0xff))
+}
+
+func writeUint16(b *bytes.Buffer, i uint16) {
+	b.WriteByte(uint8(i & 0xff))
+	b.WriteByte(uint8((i >> 8) & 0xff))
+}
+
+// Uint32Slice attaches the methods of sort.Interface to []uint32, sorting in increasing order.
+type Uint32Slice []uint32
+
+func (s Uint32Slice) Len() int           { return len(s) }
+func (s Uint32Slice) Less(i, j int) bool { return s[i] < s[j] }
+func (s Uint32Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
