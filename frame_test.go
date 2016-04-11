@@ -52,4 +52,16 @@ var _ = Describe("Frame", func() {
 			})
 		})
 	})
+
+	Context("ACK frames", func() {
+		Context("when writing", func() {
+			It("writes simple frames", func() {
+				b := &bytes.Buffer{}
+				WriteAckFrame(b, &AckFrame{
+					LargestObserved: 1,
+				})
+				Expect(b.Bytes()).To(Equal([]byte{0x48, 0, 0x01, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0}))
+			})
+		})
+	})
 })
