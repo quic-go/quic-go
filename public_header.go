@@ -56,12 +56,20 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 
 	// Version (optional)
 	if header.VersionFlag {
-		var v uint64
-		v, err = utils.ReadUintN(b, 4)
-		if err != nil {
+		var b1, b2, b3, b4 uint8
+		if b1, err = b.ReadByte(); err != nil {
 			return nil, err
 		}
-		header.QuicVersion = uint32(v)
+		if b2, err = b.ReadByte(); err != nil {
+			return nil, err
+		}
+		if b3, err = b.ReadByte(); err != nil {
+			return nil, err
+		}
+		if b4, err = b.ReadByte(); err != nil {
+			return nil, err
+		}
+		header.QuicVersion = uint32(b4) + uint32(b3)<<8 + uint32(b2)<<16 + uint32(b1)<<24
 	}
 
 	// Packet number

@@ -13,7 +13,7 @@ func ReadUintN(b io.ByteReader, length uint8) (uint64, error) {
 		if err != nil {
 			return 0, err
 		}
-		res = res<<8 + uint64(bt)
+		res ^= uint64(bt) << (i * 8)
 	}
 	return res, nil
 }
@@ -59,7 +59,7 @@ func WriteUint64(b *bytes.Buffer, i uint64) {
 	b.WriteByte(uint8((i >> 32) & 0xff))
 	b.WriteByte(uint8((i >> 40) & 0xff))
 	b.WriteByte(uint8((i >> 48) & 0xff))
-	b.WriteByte(uint8((i >> 56) & 0xff))
+	b.WriteByte(uint8(i >> 56))
 }
 
 // WriteUint32 writes a uint32

@@ -16,7 +16,7 @@ var _ = Describe("Public Header", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(publicHeader.VersionFlag).To(BeTrue())
 			Expect(publicHeader.ResetFlag).To(BeFalse())
-			Expect(publicHeader.ConnectionID).To(Equal(uint64(0xf61986669b9ffa4c)))
+			Expect(publicHeader.ConnectionID).To(Equal(uint64(0x4cfa9f9b668619f6)))
 			Expect(publicHeader.QuicVersion).To(Equal(binary.BigEndian.Uint32([]byte("Q030"))))
 			Expect(publicHeader.PacketNumber).To(Equal(uint64(1)))
 			Expect(b.Len()).To(BeZero())
@@ -27,7 +27,7 @@ var _ = Describe("Public Header", func() {
 			publicHeader, err := ParsePublicHeader(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(publicHeader.VersionFlag).To(BeFalse())
-			Expect(publicHeader.ConnectionID).To(Equal(uint64(0x9b9ffa4c)))
+			Expect(publicHeader.ConnectionID).To(Equal(uint64(0x4cfa9f9b)))
 			Expect(b.Len()).To(BeZero())
 		})
 
@@ -52,12 +52,12 @@ var _ = Describe("Public Header", func() {
 			b := bytes.NewReader([]byte{0x10, 0xde, 0xca})
 			publicHeader, err := ParsePublicHeader(b)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(publicHeader.PacketNumber).To(Equal(uint64(0xdeca)))
+			Expect(publicHeader.PacketNumber).To(Equal(uint64(0xcade)))
 			Expect(b.Len()).To(BeZero())
 		})
 
 		It("accepts 4-byte packet numbers", func() {
-			b := bytes.NewReader([]byte{0x20, 0xde, 0xca, 0xfb, 0xad})
+			b := bytes.NewReader([]byte{0x20, 0xad, 0xfb, 0xca, 0xde})
 			publicHeader, err := ParsePublicHeader(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(publicHeader.PacketNumber).To(Equal(uint64(0xdecafbad)))
@@ -65,7 +65,7 @@ var _ = Describe("Public Header", func() {
 		})
 
 		It("accepts 6-byte packet numbers", func() {
-			b := bytes.NewReader([]byte{0x30, 0xde, 0xca, 0xfb, 0xad, 0x42, 0x23})
+			b := bytes.NewReader([]byte{0x30, 0x23, 0x42, 0xad, 0xfb, 0xca, 0xde})
 			publicHeader, err := ParsePublicHeader(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(publicHeader.PacketNumber).To(Equal(uint64(0xdecafbad4223)))
@@ -77,10 +77,10 @@ var _ = Describe("Public Header", func() {
 		It("writes a sample header", func() {
 			b := &bytes.Buffer{}
 			WritePublicHeader(b, &PublicHeader{
-				ConnectionID: 1,
+				ConnectionID: 0x4cfa9f9b668619f6,
 				PacketNumber: 2,
 			})
-			Expect(b.Bytes()).To(Equal([]byte{0x2c, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0}))
+			Expect(b.Bytes()).To(Equal([]byte{0x2c, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 2, 0, 0, 0}))
 		})
 	})
 })
