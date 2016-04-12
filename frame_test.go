@@ -58,9 +58,10 @@ var _ = Describe("Frame", func() {
 			It("writes simple frames", func() {
 				b := &bytes.Buffer{}
 				WriteAckFrame(b, &AckFrame{
+					Entropy:         2,
 					LargestObserved: 1,
 				})
-				Expect(b.Bytes()).To(Equal([]byte{0x48, 0, 0x01, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0}))
+				Expect(b.Bytes()).To(Equal([]byte{0x48, 0x02, 0x01, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0}))
 			})
 		})
 	})

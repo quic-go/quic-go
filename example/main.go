@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -65,9 +64,8 @@ func main() {
 		panic(err)
 	}
 
-	if privateFlag&0x02 > 0 || privateFlag&0x04 > 0 {
-		panic(errors.New("FEC packets are not implemented"))
-	}
+	var entropyAcc quic.EntropyAccumulator
+	entropyAcc.Add(publicHeader.PacketNumber, privateFlag&0x01 > 0)
 
 	frame, err := quic.ParseStreamFrame(r)
 	if err != nil {
@@ -109,6 +107,7 @@ func main() {
 	replyFrame := &bytes.Buffer{}
 	replyFrame.WriteByte(0) // Private header
 	quic.WriteAckFrame(replyFrame, &quic.AckFrame{
+		Entropy:         entropyAcc.Get(),
 		LargestObserved: 1,
 	})
 	quic.WriteStreamFrame(replyFrame, &quic.StreamFrame{

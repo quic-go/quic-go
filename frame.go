@@ -88,6 +88,7 @@ func WriteStreamFrame(b *bytes.Buffer, f *StreamFrame) {
 
 // An AckFrame in QUIC
 type AckFrame struct {
+	Entropy         byte
 	LargestObserved uint32 // TODO: change to uint64
 }
 
@@ -95,7 +96,7 @@ type AckFrame struct {
 func WriteAckFrame(b *bytes.Buffer, f *AckFrame) {
 	typeByte := uint8(0x48)
 	b.WriteByte(typeByte)
-	b.WriteByte(0x00) // TODO: Entropy accumulation
+	b.WriteByte(f.Entropy)
 	utils.WriteUint32(b, f.LargestObserved)
 	utils.WriteUint16(b, 1) // TODO: Ack delay time
 	b.WriteByte(0x01)       // Just one timestamp
