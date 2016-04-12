@@ -10,6 +10,11 @@ import (
 	"github.com/lucas-clemente/quic-go/crypto"
 )
 
+const (
+	// QuicVersion32 is Q032
+	QuicVersion32 uint32 = 'Q' + '0'<<8 + '3'<<16 + '2'<<24
+)
+
 func main() {
 	addr, err := net.ResolveUDPAddr("udp", "localhost:6121")
 	if err != nil {
@@ -37,8 +42,9 @@ func main() {
 		panic(err)
 	}
 
-	if publicHeader.VersionFlag && publicHeader.QuicVersion != 0x51303330 {
-		panic("only version Q030 supported")
+	if publicHeader.VersionFlag && publicHeader.QuicVersion < QuicVersion32 {
+		println(publicHeader.QuicVersion)
+		panic("only versions >= Q032 supported")
 	}
 
 	nullAEAD := &crypto.NullAEAD{}
