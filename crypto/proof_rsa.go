@@ -51,3 +51,22 @@ func (kd *KeyData) SignServerProof(chlo []byte, serverConfigData []byte) ([]byte
 	hash.Write(serverConfigData)
 	return rsa.SignPSS(rand.Reader, kd.key, crypto.SHA256, hash.Sum(nil), &rsa.PSSOptions{SaltLength: 32})
 }
+
+// GetCERTdata gets the certificate in the format described by the QUIC crypto doc
+func (kd *KeyData) GetCERTdata() []byte {
+	b := &bytes.Buffer{}
+	b.WriteByte(1) // Entry type compressed
+	b.WriteByte(0) // Entry type end_of_list
+	utils.WriteUint32(b, uint32(len(kd.cert.Raw)+4))
+	gz := zlib.NewWriter(b)
+	lenCert := len(kd.cert.Raw)
+	gz.Write([]byte{
+		byte(lenCert & 0xff),
+		byte((lenCert >> 8) & 0xff),
+		byte((lenCert >> 16) & 0xff),
+		byte((lenCert >> 24) & 0xff),
+	})
+	gz.Write(kd.cert.Raw)
+	gz.Close()
+	return b.Bytes()
+}
