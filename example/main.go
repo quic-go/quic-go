@@ -40,7 +40,6 @@ func main() {
 	data = data[:n]
 	r := bytes.NewReader(data)
 
-	fmt.Printf("Number of bytes: %d\n", n)
 	fmt.Printf("Remote addr: %v\n", remoteAddr)
 
 	publicHeader, err := quic.ParsePublicHeader(r)
@@ -77,7 +76,10 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Printf("Tag: %d\n", messageTag)
+	if messageTag != quic.TagCHLO {
+		panic("expected CHLO")
+	}
+
 	fmt.Printf("Talking to: %q\n", cryptoData[quic.TagUAID])
 
 	kex := crypto.NewCurve25519KEX()
@@ -131,8 +133,6 @@ func main() {
 	}
 	data = data[:n]
 	r = bytes.NewReader(data)
-
-	fmt.Printf("%v\n", data)
 
 	publicHeader, err = quic.ParsePublicHeader(r)
 	if err != nil {
