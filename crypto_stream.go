@@ -72,6 +72,8 @@ const (
 	TagORBT Tag = 'O' + 'R'<<8 + 'B'<<16 + 'T'<<24
 	// TagEXPY is the server config expiry
 	TagEXPY Tag = 'E' + 'X'<<8 + 'P'<<16 + 'Y'<<24
+	// TagCERT is the CERT data
+	TagCERT Tag = 0xff545243
 )
 
 var (
