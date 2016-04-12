@@ -1,12 +1,16 @@
 package crypto
 
 import (
+	"bytes"
+	"compress/zlib"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
 	"io/ioutil"
+
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // KeyData stores a key and a certificate for the server proof
@@ -40,9 +44,10 @@ func LoadKeyData(certFileName string, keyFileName string) (*KeyData, error) {
 // SignServerProof signs CHLO and server config for use in the server proof
 func (kd *KeyData) SignServerProof(chlo []byte, serverConfigData []byte) ([]byte, error) {
 	hash := sha256.New()
-	hash.Write([]byte("QUIC server config signature\x00"))
+	hash.Write([]byte("QUIC CHLO and server config signature\x00"))
 	chloHash := sha256.Sum256(chlo)
+	hash.Write([]byte{32, 0, 0, 0})
 	hash.Write(chloHash[:])
 	hash.Write(serverConfigData)
-	return rsa.SignPSS(rand.Reader, kd.key, crypto.SHA256, hash.Sum(nil), nil)
+	return rsa.SignPSS(rand.Reader, kd.key, crypto.SHA256, hash.Sum(nil), &rsa.PSSOptions{SaltLength: 32})
 }
