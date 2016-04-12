@@ -1,4 +1,4 @@
-package crypto_test
+package crypto
 
 import (
 	. "github.com/onsi/ginkgo"
