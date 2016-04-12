@@ -68,8 +68,8 @@ const (
 	TagAEAD Tag = 'A' + 'E'<<8 + 'A'<<16 + 'D'<<24
 	// TagPUBS is the public value for the KEX
 	TagPUBS Tag = 'P' + 'U'<<8 + 'B'<<16 + 'S'<<24
-	// TagORBT is the client orbit
-	TagORBT Tag = 'O' + 'R'<<8 + 'B'<<16 + 'T'<<24
+	// TagOBIT is the client orbit
+	TagOBIT Tag = 'O' + 'B'<<8 + 'I'<<16 + 'T'<<24
 	// TagEXPY is the server config expiry
 	TagEXPY Tag = 'E' + 'X'<<8 + 'P'<<16 + 'Y'<<24
 	// TagCERT is the CERT data
