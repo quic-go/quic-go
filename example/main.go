@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/crypto"
@@ -16,7 +17,7 @@ const (
 )
 
 func main() {
-	path := "/Users/lucas/src/go/src/github.com/lucas-clemente/quic-go/example/"
+	path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
 	keyData, err := crypto.LoadKeyData(path+"cert.der", path+"key.der")
 	if err != nil {
 		panic(err)
