@@ -12,7 +12,7 @@ import (
 
 const (
 	// QuicVersion32 is Q032
-	QuicVersion32 uint32 = 'Q' + '0'<<8 + '3'<<16 + '2'<<24
+	QuicVersion32 uint32 = 'Q'<<24 + '0'<<16 + '3'<<8 + '2'
 )
 
 func main() {
@@ -47,9 +47,9 @@ func main() {
 		panic(err)
 	}
 
-	if publicHeader.VersionFlag && publicHeader.QuicVersion < QuicVersion32 {
+	if publicHeader.VersionFlag && publicHeader.QuicVersion != QuicVersion32 {
 		println(publicHeader.QuicVersion)
-		panic("only versions >= Q032 supported")
+		panic("only version Q032 supported")
 	}
 
 	nullAEAD := &crypto.NullAEAD{}
