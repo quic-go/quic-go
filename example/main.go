@@ -64,7 +64,7 @@ func main() {
 	}
 
 	nullAEAD := &crypto.NullAEAD{}
-	r, err = nullAEAD.Open(data[0:int(r.Size())-r.Len()], r)
+	r, err = nullAEAD.Open(0, data[0:int(r.Size())-r.Len()], r)
 	if err != nil {
 		panic(err)
 	}
@@ -136,7 +136,7 @@ func main() {
 		panic(err)
 	}
 
-	nullAEAD.Seal(fullReply, fullReply.Bytes(), replyFrame.Bytes())
+	nullAEAD.Seal(0, fullReply, fullReply.Bytes(), replyFrame.Bytes())
 
 	conn.WriteToUDP(fullReply.Bytes(), remoteAddr)
 
