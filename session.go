@@ -6,6 +6,7 @@ import (
 	"net"
 
 	"github.com/lucas-clemente/quic-go/crypto"
+	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 )
 
@@ -60,17 +61,17 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 		panic("streamid not 1")
 	}
 
-	messageTag, cryptoData, err := ParseCryptoMessage(frame.Data)
+	messageTag, cryptoData, err := handshake.ParseHandshakeMessage(frame.Data)
 	if err != nil {
 		panic(err)
 	}
 
 	// TODO: Switch client messages here
-	if messageTag != TagCHLO {
+	if messageTag != handshake.TagCHLO {
 		panic("expected CHLO")
 	}
 
-	if _, ok := cryptoData[TagPUBS]; ok {
+	if _, ok := cryptoData[handshake.TagPUBS]; ok {
 		panic("received CHLO with PUBS")
 	}
 
@@ -79,10 +80,10 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 		return err
 	}
 	var serverReply bytes.Buffer
-	WriteCryptoMessage(&serverReply, TagREJ, map[Tag][]byte{
-		TagSCFG: s.ServerConfig.Get(),
-		TagCERT: s.ServerConfig.GetCertData(),
-		TagPROF: proof,
+	handshake.WriteHandshakeMessage(&serverReply, handshake.TagREJ, map[handshake.Tag][]byte{
+		handshake.TagSCFG: s.ServerConfig.Get(),
+		handshake.TagCERT: s.ServerConfig.GetCertData(),
+		handshake.TagPROF: proof,
 	})
 
 	s.SendFrames([]Frame{
