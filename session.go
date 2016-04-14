@@ -60,6 +60,7 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 	if err != nil {
 		return err
 	}
+	fmt.Printf("Got %d bytes for stream %d\n", len(frame.Data), frame.StreamID)
 
 	// TODO: Switch stream here
 	if frame.StreamID != 1 {

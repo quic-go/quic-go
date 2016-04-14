@@ -56,7 +56,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		fmt.Printf("%#v\n", publicHeader)
+		fmt.Printf("Got packet # %d\n", publicHeader.PacketNumber)
 
 		// Send Version Negotiation Packet if the client is speaking a different protocol version
 		if publicHeader.VersionFlag && publicHeader.QuicVersion != QuicVersion32 {
