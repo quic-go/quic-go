@@ -68,7 +68,7 @@ func main() {
 				panic(err)
 			}
 			utils.WriteUint32BigEndian(fullReply, QuicVersion32)
-			_, err := conn.WriteToUDP(fullReply.Bytes(), remoteAddr)
+			_, err = conn.WriteToUDP(fullReply.Bytes(), remoteAddr)
 			if err != nil {
 				panic(err)
 			}
@@ -80,6 +80,9 @@ func main() {
 			session = quic.NewSession(conn, publicHeader.ConnectionID, serverConfig)
 			sessions[publicHeader.ConnectionID] = session
 		}
-		session.HandlePacket(remoteAddr, data[0:n-r.Len()], publicHeader, r)
+		err = session.HandlePacket(remoteAddr, data[0:n-r.Len()], publicHeader, r)
+		if err != nil {
+			fmt.Printf("Error handling packet: %s\n", err.Error())
+		}
 	}
 }

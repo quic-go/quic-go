@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net"
 
@@ -68,11 +69,11 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 
 	// TODO: Switch client messages here
 	if messageTag != handshake.TagCHLO {
-		panic("expected CHLO")
+		return errors.New("Session: expected CHLO")
 	}
 
-	if _, ok := cryptoData[handshake.TagPUBS]; ok {
-		panic("received CHLO with PUBS")
+	if _, ok := cryptoData[handshake.TagSCFG]; ok {
+		return errors.New("Session: received CHLO with PUBS")
 	}
 
 	proof, err := s.ServerConfig.Sign(frame.Data)
