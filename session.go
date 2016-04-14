@@ -83,11 +83,10 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 		if err != nil {
 			return err
 		}
-		s.aead, err = crypto.DeriveKeysAESGCM(sharedSecret, cryptoData[handshake.TagNONC], s.ConnectionID, frame.Data, s.ServerConfig.Get())
+		s.aead, err = crypto.DeriveKeysChacha20(sharedSecret, cryptoData[handshake.TagNONC], s.ConnectionID, frame.Data, s.ServerConfig.Get(), s.ServerConfig.kd.GetCertUncompressed())
 		if err != nil {
 			return err
 		}
-		fmt.Println("Got common secret")
 		s.SendFrames([]Frame{&AckFrame{
 			Entropy:         s.Entropy.Get(),
 			LargestObserved: 2,

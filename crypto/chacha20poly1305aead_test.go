@@ -9,14 +9,14 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("AES-GCM AEAD", func() {
+var _ = Describe("Chacha20poly1305", func() {
 	var (
 		alice, bob AEAD
 	)
 
 	BeforeEach(func() {
-		keyAlice := make([]byte, 16)
-		keyBob := make([]byte, 16)
+		keyAlice := make([]byte, 32)
+		keyBob := make([]byte, 32)
 		ivAlice := make([]byte, 4)
 		ivBob := make([]byte, 4)
 		rand.Reader.Read(keyAlice)
@@ -24,9 +24,9 @@ var _ = Describe("AES-GCM AEAD", func() {
 		rand.Reader.Read(ivAlice)
 		rand.Reader.Read(ivBob)
 		var err error
-		alice, err = NewAEADAESGCM(keyBob, keyAlice, ivBob, ivAlice)
+		alice, err = NewAEADChacha20Poly1305(keyBob, keyAlice, ivBob, ivAlice)
 		Expect(err).ToNot(HaveOccurred())
-		bob, err = NewAEADAESGCM(keyAlice, keyBob, ivAlice, ivBob)
+		bob, err = NewAEADChacha20Poly1305(keyAlice, keyBob, ivAlice, ivBob)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
@@ -54,6 +54,6 @@ var _ = Describe("AES-GCM AEAD", func() {
 		b := &bytes.Buffer{}
 		alice.Seal(42, b, []byte("aad"), []byte("foobar"))
 		_, err := bob.Open(42, []byte("aad2"), b)
-		Expect(err).To(MatchError("cipher: message authentication failed"))
+		Expect(err).To(HaveOccurred())
 	})
 })

@@ -70,3 +70,8 @@ func (kd *KeyData) GetCERTdata() []byte {
 	gz.Close()
 	return b.Bytes()
 }
+
+// GetCertUncompressed gets the certificate in DER
+func (kd *KeyData) GetCertUncompressed() []byte {
+	return kd.cert.Raw
+}

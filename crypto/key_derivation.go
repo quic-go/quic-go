@@ -11,18 +11,19 @@ import (
 	"golang.org/x/crypto/hkdf"
 )
 
-// DeriveKeysAESGCM derives the client and server keys and creates a matching AES-GCM instance
-func DeriveKeysAESGCM(sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte) (AEAD, error) {
+// DeriveKeysChacha20 derives the client and server keys and creates a matching chacha20poly1305 instance
+func DeriveKeysChacha20(sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte) (AEAD, error) {
 	var info bytes.Buffer
 	info.Write([]byte("QUIC key expansion\x00"))
 	utils.WriteUint64(&info, uint64(connID))
 	info.Write(chlo)
 	info.Write(scfg)
+	info.Write(cert)
 
 	r := hkdf.New(sha256.New, sharedSecret, nonces, info.Bytes())
 
-	otherKey := make([]byte, 16)
-	myKey := make([]byte, 16)
+	otherKey := make([]byte, 32)
+	myKey := make([]byte, 32)
 	otherIV := make([]byte, 4)
 	myIV := make([]byte, 4)
 
@@ -39,5 +40,5 @@ func DeriveKeysAESGCM(sharedSecret, nonces []byte, connID protocol.ConnectionID,
 		return nil, err
 	}
 
-	return NewAEADAESGCM(otherKey, myKey, otherIV, myIV)
+	return NewAEADChacha20Poly1305(otherKey, myKey, otherIV, myIV)
 }
