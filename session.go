@@ -19,7 +19,11 @@ type Session struct {
 	Connection        *net.UDPConn
 	CurrentRemoteAddr *net.UDPAddr
 
+	aead crypto.AEAD
+
 	Entropy EntropyAccumulator
+
+	lastSentPacketNumber protocol.PacketNumber
 }
 
 // NewSession makes a new session
@@ -28,6 +32,7 @@ func NewSession(conn *net.UDPConn, connectionID protocol.ConnectionID, sCfg *Ser
 		Connection:   conn,
 		ConnectionID: connectionID,
 		ServerConfig: sCfg,
+		aead:         &crypto.NullAEAD{},
 	}
 }
 
@@ -38,8 +43,7 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 		s.CurrentRemoteAddr = addr
 	}
 
-	nullAEAD := &crypto.NullAEAD{}
-	r, err := nullAEAD.Open(0, publicHeaderBinary, r)
+	r, err := s.aead.Open(publicHeader.PacketNumber, publicHeaderBinary, r)
 	if err != nil {
 		return err
 	}
@@ -72,8 +76,22 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 		return errors.New("Session: expected CHLO")
 	}
 
-	if _, ok := cryptoData[handshake.TagSCFG]; ok {
-		return errors.New("Session: received CHLO with PUBS")
+	if _, ok := cryptoData[handshake.TagSCID]; ok {
+		var sharedSecret []byte
+		sharedSecret, err = s.ServerConfig.kex.CalculateSharedKey(cryptoData[handshake.TagPUBS])
+		if err != nil {
+			return err
+		}
+		s.aead, err = crypto.DeriveKeysAESGCM(sharedSecret, cryptoData[handshake.TagNONC], s.ConnectionID, frame.Data, s.ServerConfig.Get())
+		if err != nil {
+			return err
+		}
+		fmt.Println("Got common secret")
+		s.SendFrames([]Frame{&AckFrame{
+			Entropy:         s.Entropy.Get(),
+			LargestObserved: 2,
+		}})
+		return nil
 	}
 
 	proof, err := s.ServerConfig.Sign(frame.Data)
@@ -111,14 +129,16 @@ func (s *Session) SendFrames(frames []Frame) error {
 		}
 	}
 
+	s.lastSentPacketNumber++
+
 	var fullReply bytes.Buffer
-	responsePublicHeader := PublicHeader{ConnectionID: s.ConnectionID, PacketNumber: 1}
-	fmt.Printf("%#v\n", responsePublicHeader)
+	responsePublicHeader := PublicHeader{ConnectionID: s.ConnectionID, PacketNumber: s.lastSentPacketNumber}
+	fmt.Printf("Sending packet # %d\n", responsePublicHeader.PacketNumber)
 	if err := responsePublicHeader.WritePublicHeader(&fullReply); err != nil {
 		return err
 	}
 
-	(&crypto.NullAEAD{}).Seal(0, &fullReply, fullReply.Bytes(), framesData.Bytes())
+	s.aead.Seal(s.lastSentPacketNumber, &fullReply, fullReply.Bytes(), framesData.Bytes())
 
 	_, err := s.Connection.WriteToUDP(fullReply.Bytes(), s.CurrentRemoteAddr)
 	return err

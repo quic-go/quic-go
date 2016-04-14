@@ -51,6 +51,9 @@ const (
 	// TagPROF is the server proof
 	TagPROF Tag = 'P' + 'R'<<8 + 'O'<<16 + 'F'<<24
 
+	// TagNONC is the client nonce
+	TagNONC Tag = 'N' + 'O'<<8 + 'N'<<16 + 'C'<<24
+
 	// TagSCID is the server config ID
 	TagSCID Tag = 'S' + 'C'<<8 + 'I'<<16 + 'D'<<24
 	// TagKEXS is the list of key exchange algos
