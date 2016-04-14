@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
 )
 
@@ -21,34 +22,43 @@ func ReadUintN(b io.ByteReader, length uint8) (uint64, error) {
 
 // ReadUint32 reads a uint32
 func ReadUint32(b io.ByteReader) (uint32, error) {
-	var b1, b2, b3, b4 uint8
-	var err error
-	if b1, err = b.ReadByte(); err != nil {
+	slice, err := readNBytes(b, 4)
+	if err != nil {
 		return 0, err
 	}
-	if b2, err = b.ReadByte(); err != nil {
+	return binary.LittleEndian.Uint32(slice), nil
+}
+
+// ReadUint32BigEndian reads a uint32 Big Endian
+func ReadUint32BigEndian(b io.ByteReader) (uint32, error) {
+	slice, err := readNBytes(b, 4)
+	if err != nil {
 		return 0, err
 	}
-	if b3, err = b.ReadByte(); err != nil {
-		return 0, err
-	}
-	if b4, err = b.ReadByte(); err != nil {
-		return 0, err
-	}
-	return uint32(b1) + uint32(b2)<<8 + uint32(b3)<<16 + uint32(b4)<<24, nil
+	return binary.BigEndian.Uint32(slice), nil
 }
 
 // ReadUint16 reads a uint16
 func ReadUint16(b io.ByteReader) (uint16, error) {
-	var b1, b2 uint8
+	slice, err := readNBytes(b, 2)
+	if err != nil {
+		return 0, err
+	}
+	return binary.LittleEndian.Uint16(slice), nil
+}
+
+func readNBytes(b io.ByteReader, n int) ([]byte, error) {
+	slice := make([]byte, n, n)
+	var val uint8
 	var err error
-	if b1, err = b.ReadByte(); err != nil {
-		return 0, err
+	for i := 0; i < n; i++ {
+		val, err = b.ReadByte()
+		if err != nil {
+			return []byte{}, err
+		}
+		slice[i] = val
 	}
-	if b2, err = b.ReadByte(); err != nil {
-		return 0, err
-	}
-	return uint16(b1) + uint16(b2)<<8, nil
+	return slice, nil
 }
 
 // WriteUint64 writes a uint64
@@ -69,6 +79,14 @@ func WriteUint32(b *bytes.Buffer, i uint32) {
 	b.WriteByte(uint8((i >> 8) & 0xff))
 	b.WriteByte(uint8((i >> 16) & 0xff))
 	b.WriteByte(uint8((i >> 24) & 0xff))
+}
+
+// WriteUint32BigEndian writes a uint32
+func WriteUint32BigEndian(b *bytes.Buffer, i uint32) {
+	b.WriteByte(uint8((i >> 24) & 0xff))
+	b.WriteByte(uint8((i >> 16) & 0xff))
+	b.WriteByte(uint8((i >> 8) & 0xff))
+	b.WriteByte(uint8(i & 0xff))
 }
 
 // WriteUint16 writes a uint16
