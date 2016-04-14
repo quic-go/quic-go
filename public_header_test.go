@@ -41,16 +41,14 @@ var _ = Describe("Public Header", func() {
 			Expect(b.Len()).To(BeZero())
 		})
 
-		It("accepts 0-byte connection ID", func() {
+		It("does not accept 0-byte connection ID", func() {
 			b := bytes.NewReader([]byte{0x00, 0x01})
-			publicHeader, err := ParsePublicHeader(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(publicHeader.VersionFlag).To(BeFalse())
-			Expect(b.Len()).To(BeZero())
+			_, err := ParsePublicHeader(b)
+			Expect(err).To(HaveOccurred())
 		})
 
 		It("accepts 2-byte packet numbers", func() {
-			b := bytes.NewReader([]byte{0x10, 0xde, 0xca})
+			b := bytes.NewReader([]byte{0x14, 0x01, 0xde, 0xca})
 			publicHeader, err := ParsePublicHeader(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(publicHeader.PacketNumber).To(Equal(protocol.PacketNumber(0xcade)))
@@ -58,7 +56,7 @@ var _ = Describe("Public Header", func() {
 		})
 
 		It("accepts 4-byte packet numbers", func() {
-			b := bytes.NewReader([]byte{0x20, 0xad, 0xfb, 0xca, 0xde})
+			b := bytes.NewReader([]byte{0x24, 0x01, 0xad, 0xfb, 0xca, 0xde})
 			publicHeader, err := ParsePublicHeader(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(publicHeader.PacketNumber).To(Equal(protocol.PacketNumber(0xdecafbad)))
@@ -66,7 +64,7 @@ var _ = Describe("Public Header", func() {
 		})
 
 		It("accepts 6-byte packet numbers", func() {
-			b := bytes.NewReader([]byte{0x30, 0x23, 0x42, 0xad, 0xfb, 0xca, 0xde})
+			b := bytes.NewReader([]byte{0x34, 0x01, 0x23, 0x42, 0xad, 0xfb, 0xca, 0xde})
 			publicHeader, err := ParsePublicHeader(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(publicHeader.PacketNumber).To(Equal(protocol.PacketNumber(0xdecafbad4223)))

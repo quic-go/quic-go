@@ -75,6 +75,9 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	if err != nil {
 		return nil, err
 	}
+	if header.ConnectionID == 0 {
+		return nil, errors.New("PublicHeader: connection ID cannot be 0")
+	}
 
 	// Version (optional)
 
