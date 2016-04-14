@@ -17,7 +17,7 @@ var _ = Describe("Public Header", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(publicHeader.VersionFlag).To(BeTrue())
 			Expect(publicHeader.ResetFlag).To(BeFalse())
-			Expect(publicHeader.ConnectionID).To(Equal(uint64(0x4cfa9f9b668619f6)))
+			Expect(publicHeader.ConnectionID).To(Equal(protocol.ConnectionID(0x4cfa9f9b668619f6)))
 			Expect(publicHeader.QuicVersion).To(Equal(binary.BigEndian.Uint32([]byte("Q030"))))
 			Expect(publicHeader.PacketNumber).To(Equal(protocol.PacketNumber(1)))
 			Expect(b.Len()).To(BeZero())
@@ -28,7 +28,7 @@ var _ = Describe("Public Header", func() {
 			publicHeader, err := ParsePublicHeader(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(publicHeader.VersionFlag).To(BeFalse())
-			Expect(publicHeader.ConnectionID).To(Equal(uint64(0x4cfa9f9b)))
+			Expect(publicHeader.ConnectionID).To(Equal(protocol.ConnectionID(0x4cfa9f9b)))
 			Expect(b.Len()).To(BeZero())
 		})
 
@@ -37,7 +37,7 @@ var _ = Describe("Public Header", func() {
 			publicHeader, err := ParsePublicHeader(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(publicHeader.VersionFlag).To(BeFalse())
-			Expect(publicHeader.ConnectionID).To(Equal(uint64(0x4c)))
+			Expect(publicHeader.ConnectionID).To(Equal(protocol.ConnectionID(0x4c)))
 			Expect(b.Len()).To(BeZero())
 		})
 

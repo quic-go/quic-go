@@ -13,7 +13,7 @@ import (
 type PublicHeader struct {
 	VersionFlag  bool
 	ResetFlag    bool
-	ConnectionID uint64
+	ConnectionID protocol.ConnectionID
 	QuicVersion  uint32
 	PacketNumber protocol.PacketNumber
 	// packetNumberLen uint8
@@ -33,7 +33,7 @@ func (h *PublicHeader) WritePublicHeader(b *bytes.Buffer) error {
 	}
 
 	b.WriteByte(publicFlagByte)
-	utils.WriteUint64(b, h.ConnectionID)         // TODO: Send shorter connection id if possible
+	utils.WriteUint64(b, uint64(h.ConnectionID)) // TODO: Send shorter connection id if possible
 	utils.WriteUint32(b, uint32(h.PacketNumber)) // TODO: Send shorter packet number if possible
 	return nil
 }
@@ -71,10 +71,11 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	}
 
 	// Connection ID
-	header.ConnectionID, err = utils.ReadUintN(b, connectionIDLen)
+	connID, err := utils.ReadUintN(b, connectionIDLen)
 	if err != nil {
 		return nil, err
 	}
+	header.ConnectionID = protocol.ConnectionID(connID)
 	if header.ConnectionID == 0 {
 		return nil, errors.New("PublicHeader: connection ID cannot be 0")
 	}

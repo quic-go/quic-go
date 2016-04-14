@@ -8,6 +8,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/crypto"
+	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
@@ -28,7 +29,7 @@ func main() {
 	serverConfig := quic.NewServerConfig(crypto.NewCurve25519KEX(), keyData)
 
 	// TODO: When should a session be created?
-	sessions := map[uint64]*quic.Session{}
+	sessions := map[protocol.ConnectionID]*quic.Session{}
 
 	addr, err := net.ResolveUDPAddr("udp", "localhost:6121")
 	if err != nil {

@@ -6,11 +6,12 @@ import (
 	"net"
 
 	"github.com/lucas-clemente/quic-go/crypto"
+	"github.com/lucas-clemente/quic-go/protocol"
 )
 
 // A Session is a QUIC session
 type Session struct {
-	ConnectionID uint64
+	ConnectionID protocol.ConnectionID
 	ServerConfig *ServerConfig
 
 	Connection        *net.UDPConn
@@ -20,7 +21,7 @@ type Session struct {
 }
 
 // NewSession makes a new session
-func NewSession(conn *net.UDPConn, connectionID uint64, sCfg *ServerConfig) *Session {
+func NewSession(conn *net.UDPConn, connectionID protocol.ConnectionID, sCfg *ServerConfig) *Session {
 	return &Session{
 		Connection:   conn,
 		ConnectionID: connectionID,

@@ -7,6 +7,7 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
+// A Frame in QUIC
 type Frame interface {
 	Write(b *bytes.Buffer) error
 }
