@@ -8,14 +8,17 @@ import (
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/crypto"
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 const (
-	// QuicVersion32 is Q032
-	QuicVersion32 uint32 = 'Q'<<24 + '0'<<16 + '3'<<8 + '2'
+	// QuicVersion32Bytes is the QUIC protocol version
+	QuicVersionNumber32 = 32
 )
 
 func main() {
+	QuicVersion32, _ := utils.ReadUint32BigEndian(bytes.NewReader([]byte{'Q', '0', 48 + (QuicVersionNumber32/10)%10, 48 + QuicVersionNumber32%10}))
+
 	path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
 	keyData, err := crypto.LoadKeyData(path+"cert.der", path+"key.der")
 	if err != nil {
@@ -47,9 +50,17 @@ func main() {
 		panic(err)
 	}
 
+	// send Version Negotiation Packet if the client is speaking a different protocol version
 	if publicHeader.VersionFlag && publicHeader.QuicVersion != QuicVersion32 {
-		println(publicHeader.QuicVersion)
-		panic("only version Q032 supported")
+		fmt.Println("Sending VersionNegotiationPacket")
+		fullReply := &bytes.Buffer{}
+		responsePublicHeader := quic.PublicHeader{ConnectionID: publicHeader.ConnectionID, PacketNumber: 1, VersionFlag: true}
+		err = responsePublicHeader.WritePublicHeader(fullReply)
+		if err != nil {
+			panic(err)
+		}
+		utils.WriteUint32BigEndian(fullReply, QuicVersion32)
+		conn.WriteToUDP(fullReply.Bytes(), remoteAddr)
 	}
 
 	nullAEAD := &crypto.NullAEAD{}
@@ -118,10 +129,12 @@ func main() {
 	})
 
 	fullReply := &bytes.Buffer{}
-	quic.WritePublicHeader(fullReply, &quic.PublicHeader{
-		ConnectionID: publicHeader.ConnectionID,
-		PacketNumber: 1,
-	})
+	responsePublicHeader := quic.PublicHeader{ConnectionID: publicHeader.ConnectionID, PacketNumber: 1}
+	fmt.Println(responsePublicHeader)
+	err = responsePublicHeader.WritePublicHeader(fullReply)
+	if err != nil {
+		panic(err)
+	}
 
 	nullAEAD.Seal(fullReply, fullReply.Bytes(), replyFrame.Bytes())
 
