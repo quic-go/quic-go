@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 
+	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
@@ -16,7 +17,7 @@ type NullAEAD struct{}
 var _ AEAD = &NullAEAD{}
 
 // Open and verify the ciphertext
-func (*NullAEAD) Open(packetNumber uint64, associatedData []byte, r io.Reader) (*bytes.Reader, error) {
+func (*NullAEAD) Open(packetNumber protocol.PacketNumber, associatedData []byte, r io.Reader) (*bytes.Reader, error) {
 	ciphertext, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, err
@@ -40,7 +41,7 @@ func (*NullAEAD) Open(packetNumber uint64, associatedData []byte, r io.Reader) (
 }
 
 // Seal writes hash and ciphertext to the buffer
-func (*NullAEAD) Seal(packetNumber uint64, b *bytes.Buffer, associatedData []byte, plaintext []byte) {
+func (*NullAEAD) Seal(packetNumber protocol.PacketNumber, b *bytes.Buffer, associatedData []byte, plaintext []byte) {
 	hash := New128a()
 	hash.Write(associatedData)
 	hash.Write(plaintext)

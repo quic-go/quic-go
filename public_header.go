@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 
+	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
@@ -14,7 +15,7 @@ type PublicHeader struct {
 	ResetFlag    bool
 	ConnectionID uint64
 	QuicVersion  uint32
-	PacketNumber uint64
+	PacketNumber protocol.PacketNumber
 	// packetNumberLen uint8
 }
 
@@ -85,10 +86,11 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	}
 
 	// Packet number
-	header.PacketNumber, err = utils.ReadUintN(b, packetNumberLen)
+	pcktNumber, err := utils.ReadUintN(b, packetNumberLen)
 	if err != nil {
 		return nil, err
 	}
+	header.PacketNumber = protocol.PacketNumber(pcktNumber)
 
 	return header, nil
 }

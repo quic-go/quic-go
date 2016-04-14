@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 
+	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -18,7 +19,7 @@ var _ = Describe("Public Header", func() {
 			Expect(publicHeader.ResetFlag).To(BeFalse())
 			Expect(publicHeader.ConnectionID).To(Equal(uint64(0x4cfa9f9b668619f6)))
 			Expect(publicHeader.QuicVersion).To(Equal(binary.BigEndian.Uint32([]byte("Q030"))))
-			Expect(publicHeader.PacketNumber).To(Equal(uint64(1)))
+			Expect(publicHeader.PacketNumber).To(Equal(protocol.PacketNumber(1)))
 			Expect(b.Len()).To(BeZero())
 		})
 
@@ -52,7 +53,7 @@ var _ = Describe("Public Header", func() {
 			b := bytes.NewReader([]byte{0x10, 0xde, 0xca})
 			publicHeader, err := ParsePublicHeader(b)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(publicHeader.PacketNumber).To(Equal(uint64(0xcade)))
+			Expect(publicHeader.PacketNumber).To(Equal(protocol.PacketNumber(0xcade)))
 			Expect(b.Len()).To(BeZero())
 		})
 
@@ -60,7 +61,7 @@ var _ = Describe("Public Header", func() {
 			b := bytes.NewReader([]byte{0x20, 0xad, 0xfb, 0xca, 0xde})
 			publicHeader, err := ParsePublicHeader(b)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(publicHeader.PacketNumber).To(Equal(uint64(0xdecafbad)))
+			Expect(publicHeader.PacketNumber).To(Equal(protocol.PacketNumber(0xdecafbad)))
 			Expect(b.Len()).To(BeZero())
 		})
 
@@ -68,7 +69,7 @@ var _ = Describe("Public Header", func() {
 			b := bytes.NewReader([]byte{0x30, 0x23, 0x42, 0xad, 0xfb, 0xca, 0xde})
 			publicHeader, err := ParsePublicHeader(b)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(publicHeader.PacketNumber).To(Equal(uint64(0xdecafbad4223)))
+			Expect(publicHeader.PacketNumber).To(Equal(protocol.PacketNumber(0xdecafbad4223)))
 			Expect(b.Len()).To(BeZero())
 		})
 	})

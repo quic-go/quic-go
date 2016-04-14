@@ -8,6 +8,8 @@ import (
 	"errors"
 	"io"
 	"io/ioutil"
+
+	"github.com/lucas-clemente/quic-go/protocol"
 )
 
 type aeadAESGCM struct {
@@ -46,7 +48,7 @@ func NewAEADAESGCM(otherKey []byte, myKey []byte, otherIV []byte, myIV []byte) (
 	}, nil
 }
 
-func (aead *aeadAESGCM) Open(packetNumber uint64, associatedData []byte, r io.Reader) (*bytes.Reader, error) {
+func (aead *aeadAESGCM) Open(packetNumber protocol.PacketNumber, associatedData []byte, r io.Reader) (*bytes.Reader, error) {
 	ciphertext, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, err
@@ -58,14 +60,14 @@ func (aead *aeadAESGCM) Open(packetNumber uint64, associatedData []byte, r io.Re
 	return bytes.NewReader(plaintext), nil
 }
 
-func (aead *aeadAESGCM) Seal(packetNumber uint64, b *bytes.Buffer, associatedData []byte, plaintext []byte) {
+func (aead *aeadAESGCM) Seal(packetNumber protocol.PacketNumber, b *bytes.Buffer, associatedData []byte, plaintext []byte) {
 	ciphertext := aead.encrypter.Seal(nil, makeNonce(aead.myIV, packetNumber), plaintext, associatedData)
 	b.Write(ciphertext)
 }
 
-func makeNonce(iv []byte, packetNumber uint64) []byte {
+func makeNonce(iv []byte, packetNumber protocol.PacketNumber) []byte {
 	res := make([]byte, 12)
 	copy(res[0:4], iv)
-	binary.LittleEndian.PutUint64(res[4:12], packetNumber)
+	binary.LittleEndian.PutUint64(res[4:12], uint64(packetNumber))
 	return res
 }
