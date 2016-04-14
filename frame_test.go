@@ -34,20 +34,20 @@ var _ = Describe("Frame", func() {
 		Context("when writing", func() {
 			It("writes sample frame", func() {
 				b := &bytes.Buffer{}
-				WriteStreamFrame(b, &StreamFrame{
+				(&StreamFrame{
 					StreamID: 1,
 					Data:     []byte("foobar"),
-				})
+				}).Write(b)
 				Expect(b.Bytes()).To(Equal([]byte{0xa3, 0x1, 0, 0, 0, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'}))
 			})
 
 			It("writes offsets", func() {
 				b := &bytes.Buffer{}
-				WriteStreamFrame(b, &StreamFrame{
+				(&StreamFrame{
 					StreamID: 1,
 					Offset:   16,
 					Data:     []byte("foobar"),
-				})
+				}).Write(b)
 				Expect(b.Bytes()).To(Equal([]byte{0xbf, 0x1, 0, 0, 0, 0x10, 0, 0, 0, 0, 0, 0, 0, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'}))
 			})
 		})
@@ -57,10 +57,10 @@ var _ = Describe("Frame", func() {
 		Context("when writing", func() {
 			It("writes simple frames", func() {
 				b := &bytes.Buffer{}
-				WriteAckFrame(b, &AckFrame{
+				(&AckFrame{
 					Entropy:         2,
 					LargestObserved: 1,
-				})
+				}).Write(b)
 				Expect(b.Bytes()).To(Equal([]byte{0x48, 0x02, 0x01, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0}))
 			})
 		})

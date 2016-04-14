@@ -7,6 +7,10 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
+type Frame interface {
+	Write(b *bytes.Buffer) error
+}
+
 // A StreamFrame of QUIC
 type StreamFrame struct {
 	FinBit   bool
@@ -67,7 +71,7 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 }
 
 // WriteStreamFrame writes a stream frame.
-func WriteStreamFrame(b *bytes.Buffer, f *StreamFrame) {
+func (f *StreamFrame) Write(b *bytes.Buffer) error {
 	typeByte := uint8(0x80)
 	if f.FinBit {
 		typeByte ^= 0x40
@@ -84,6 +88,7 @@ func WriteStreamFrame(b *bytes.Buffer, f *StreamFrame) {
 	}
 	utils.WriteUint16(b, uint16(len(f.Data)))
 	b.Write(f.Data)
+	return nil
 }
 
 // An AckFrame in QUIC
@@ -93,7 +98,7 @@ type AckFrame struct {
 }
 
 // WriteAckFrame writes an ack frame.
-func WriteAckFrame(b *bytes.Buffer, f *AckFrame) {
+func (f *AckFrame) Write(b *bytes.Buffer) error {
 	typeByte := uint8(0x48)
 	b.WriteByte(typeByte)
 	b.WriteByte(f.Entropy)
@@ -102,4 +107,5 @@ func WriteAckFrame(b *bytes.Buffer, f *AckFrame) {
 	b.WriteByte(0x01)       // Just one timestamp
 	b.WriteByte(0x00)       // Largest observed
 	utils.WriteUint32(b, 0) // First timestamp
+	return nil
 }
