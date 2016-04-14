@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"errors"
 	"io"
 
 	"github.com/lucas-clemente/quic-go/utils"
@@ -14,6 +15,26 @@ type PublicHeader struct {
 	ConnectionID uint64
 	QuicVersion  uint32
 	PacketNumber uint64
+	// packetNumberLen uint8
+}
+
+// WritePublicHeader writes a public header
+func (h *PublicHeader) WritePublicHeader(b *bytes.Buffer) error {
+	publicFlagByte := uint8(0x0C | 0x20)
+	if h.VersionFlag && h.ResetFlag {
+		return errors.New("Reset Flag and Version Flag should not be set at the same time")
+	}
+	if h.VersionFlag {
+		publicFlagByte |= 0x01
+	}
+	if h.ResetFlag {
+		publicFlagByte |= 0x02
+	}
+
+	b.WriteByte(publicFlagByte)
+	utils.WriteUint64(b, h.ConnectionID)         // TODO: Send shorter connection id if possible
+	utils.WriteUint32(b, uint32(h.PacketNumber)) // TODO: Send shorter packet number if possible
+	return nil
 }
 
 // ParsePublicHeader parses a QUIC packet's public header
@@ -70,12 +91,4 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	}
 
 	return header, nil
-}
-
-// WritePublicHeader writes a public header
-func WritePublicHeader(b *bytes.Buffer, h *PublicHeader) {
-	publicFlagByte := uint8(0x0C | 0x20)
-	b.WriteByte(publicFlagByte)
-	utils.WriteUint64(b, h.ConnectionID)         // TODO: Send shorter connection id if possible
-	utils.WriteUint32(b, uint32(h.PacketNumber)) // TODO: Send shorter packet number if possible
 }

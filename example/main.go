@@ -118,10 +118,12 @@ func main() {
 	})
 
 	fullReply := &bytes.Buffer{}
-	quic.WritePublicHeader(fullReply, &quic.PublicHeader{
-		ConnectionID: publicHeader.ConnectionID,
-		PacketNumber: 1,
-	})
+	responsePublicHeader := quic.PublicHeader{ConnectionID: publicHeader.ConnectionID, PacketNumber: 1}
+	fmt.Println(responsePublicHeader)
+	err = responsePublicHeader.WritePublicHeader(fullReply)
+	if err != nil {
+		panic(err)
+	}
 
 	nullAEAD.Seal(fullReply, fullReply.Bytes(), replyFrame.Bytes())
 

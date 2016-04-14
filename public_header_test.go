@@ -76,11 +76,48 @@ var _ = Describe("Public Header", func() {
 	Context("when writing", func() {
 		It("writes a sample header", func() {
 			b := &bytes.Buffer{}
-			WritePublicHeader(b, &PublicHeader{
+			publicHeader := PublicHeader{
 				ConnectionID: 0x4cfa9f9b668619f6,
 				PacketNumber: 2,
-			})
+			}
+			publicHeader.WritePublicHeader(b)
 			Expect(b.Bytes()).To(Equal([]byte{0x2c, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 2, 0, 0, 0}))
+		})
+
+		It("sets the Version Flag", func() {
+			b := &bytes.Buffer{}
+			publicHeader := PublicHeader{
+				VersionFlag:  true,
+				ConnectionID: 0x4cfa9f9b668619f6,
+				PacketNumber: 2,
+			}
+			publicHeader.WritePublicHeader(b)
+			firstByte, _ := b.ReadByte()
+			Expect(firstByte & 0x01).To(Equal(uint8(1)))
+		})
+
+		It("sets the Reset Flag", func() {
+			b := &bytes.Buffer{}
+			publicHeader := PublicHeader{
+				ResetFlag:    true,
+				ConnectionID: 0x4cfa9f9b668619f6,
+				PacketNumber: 2,
+			}
+			publicHeader.WritePublicHeader(b)
+			firstByte, _ := b.ReadByte()
+			Expect((firstByte & 0x02) >> 1).To(Equal(uint8(1)))
+		})
+
+		It("throws an error if both Reset Flag and Version Flag are set", func() {
+			b := &bytes.Buffer{}
+			publicHeader := PublicHeader{
+				VersionFlag:  true,
+				ResetFlag:    true,
+				ConnectionID: 0x4cfa9f9b668619f6,
+				PacketNumber: 2,
+			}
+			err := publicHeader.WritePublicHeader(b)
+			Expect(err).To(HaveOccurred())
 		})
 	})
 })
