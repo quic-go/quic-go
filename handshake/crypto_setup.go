@@ -47,7 +47,8 @@ func (h *CryptoSetup) HandleCryptoMessage(data []byte) ([]byte, error) {
 		return nil, errors.New("Session: expected CHLO")
 	}
 
-	if _, ok := cryptoData[TagSCID]; ok {
+	if scid, ok := cryptoData[TagSCID]; ok && bytes.Equal(h.scfg.ID, scid) {
+		// We have a CHLO matching our server config, we can continue with the 0-RTT handshake
 		var sharedSecret []byte
 		sharedSecret, err = h.scfg.kex.CalculateSharedKey(cryptoData[TagPUBS])
 		if err != nil {
@@ -60,6 +61,8 @@ func (h *CryptoSetup) HandleCryptoMessage(data []byte) ([]byte, error) {
 		// TODO: Send SHLO
 		return nil, nil
 	}
+
+	// We have an inacholate or non-matching CHLO, we now send a rejection
 
 	var chloOrNil []byte
 	if h.version > protocol.VersionNumber(30) {
