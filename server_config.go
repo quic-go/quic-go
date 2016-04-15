@@ -41,7 +41,7 @@ func (s *ServerConfig) Sign(chlo []byte) ([]byte, error) {
 	return s.kd.SignServerProof(chlo, s.Get())
 }
 
-// GetCertData returns the certificate data
-func (s *ServerConfig) GetCertData() []byte {
-	return s.kd.GetCERTdata()
+// GetCertCompressed returns the certificate data
+func (s *ServerConfig) GetCertCompressed() []byte {
+	return s.kd.GetCertCompressed()
 }

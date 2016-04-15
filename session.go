@@ -183,7 +183,7 @@ func (s *Session) HandleCryptoHandshake(frame *StreamFrame) error {
 	var serverReply bytes.Buffer
 	handshake.WriteHandshakeMessage(&serverReply, handshake.TagREJ, map[handshake.Tag][]byte{
 		handshake.TagSCFG: s.ServerConfig.Get(),
-		handshake.TagCERT: s.ServerConfig.GetCertData(),
+		handshake.TagCERT: s.ServerConfig.GetCertCompressed(),
 		handshake.TagPROF: proof,
 	})
 

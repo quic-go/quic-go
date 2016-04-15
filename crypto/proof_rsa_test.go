@@ -21,7 +21,7 @@ var _ = Describe("ProofRsa", func() {
 		z.Write(cert)
 		z.Close()
 		kd := &KeyData{cert: &x509.Certificate{Raw: cert}}
-		Expect(kd.GetCERTdata()).To(Equal(append([]byte{
+		Expect(kd.GetCertCompressed()).To(Equal(append([]byte{
 			0x01, 0x00,
 			0x08, 0x00, 0x00, 0x00,
 		}, certZlib.Bytes()...)))

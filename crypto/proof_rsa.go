@@ -52,8 +52,8 @@ func (kd *KeyData) SignServerProof(chlo []byte, serverConfigData []byte) ([]byte
 	return rsa.SignPSS(rand.Reader, kd.key, crypto.SHA256, hash.Sum(nil), &rsa.PSSOptions{SaltLength: 32})
 }
 
-// GetCERTdata gets the certificate in the format described by the QUIC crypto doc
-func (kd *KeyData) GetCERTdata() []byte {
+// GetCertCompressed gets the certificate in the format described by the QUIC crypto doc
+func (kd *KeyData) GetCertCompressed() []byte {
 	b := &bytes.Buffer{}
 	b.WriteByte(1) // Entry type compressed
 	b.WriteByte(0) // Entry type end_of_list
