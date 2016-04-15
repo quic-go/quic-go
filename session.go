@@ -114,11 +114,19 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 				return err
 			}
 			// ToDo: react to receiving this frame
+		} else if typeByte&0x02 == 0x02 { // CONNECTION_CLOSE
+			fmt.Println("Detected CONNECTION_CLOSE")
+			frame, err := ParseConnectionCloseFrame(r)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("%#v\n", frame)
 		} else if typeByte == 0 {
 			// PAD
 			return nil
+		} else {
+			return errors.New("Session: invalid Frame Type Field")
 		}
-		return fmt.Errorf("Session: invalid frame type %x", typeByte)
 	}
 	return nil
 }
