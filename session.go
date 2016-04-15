@@ -71,13 +71,14 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 			fmt.Println("No more frames in this packet.")
 			break
 		}
+		r.UnreadByte()
 
 		frameCounter++
 		fmt.Printf("Reading frame %d\n", frameCounter)
 
 		if typeByte&0x80 > 0 { // STREAM
 			fmt.Println("Detected STREAM")
-			frame, err := ParseStreamFrame(r, typeByte)
+			frame, err := ParseStreamFrame(r)
 			if err != nil {
 				return err
 			}
@@ -96,7 +97,7 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 			continue
 		} else if typeByte&0xC0 == 0x40 { // ACK
 			fmt.Println("Detected ACK")
-			frame, err := ParseAckFrame(r, typeByte)
+			frame, err := ParseAckFrame(r)
 			if err != nil {
 				return err
 			}
