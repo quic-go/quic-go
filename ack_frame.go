@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/lucas-clemente/quic-go/utils"
 )
@@ -30,69 +31,75 @@ func (f *AckFrame) Write(b *bytes.Buffer) error {
 func ParseAckFrame(r *bytes.Reader, typeByte byte) (*AckFrame, error) {
 	frame := &AckFrame{}
 
+	fmt.Printf("Bytes remaining in this packet: %d\n", r.Len())
+
 	if typeByte&0x20 == 0x20 {
 		panic("NACK ranges not yet implemented.")
 	}
-	if typeByte&0x10 == 0x10 {
+	if typeByte&0x20 == 0x20 {
 		panic("truncated ACKs not yet implemented.")
 	}
 
-	var largestObservedLen uint8 = 2 * ((typeByte & 0x0C) >> 2)
+	largestObservedLen := 2 * ((typeByte & 0x0C) >> 2)
 	if largestObservedLen == 0 {
 		largestObservedLen = 1
 	}
 
-	var missingSequenceNumberDeltaLen uint8 = 2 * (typeByte & 0x03)
+	missingSequenceNumberDeltaLen := 2 * (typeByte & 0x11)
 	if missingSequenceNumberDeltaLen == 0 {
 		missingSequenceNumberDeltaLen = 1
 	}
 
 	var err error
-	frame.Entropy, err = r.ReadByte()
+	frame.Entropy, err = r.ReadByte() // read 1
 	if err != nil {
 		return nil, err
 	}
 
-	frame.LargestObserved, err = utils.ReadUintN(r, largestObservedLen)
+	frame.LargestObserved, err = utils.ReadUintN(r, largestObservedLen) // read 1
 	if err != nil {
 		return nil, err
 	}
 
-	frame.DelayTime, err = utils.ReadUint16(r)
+	frame.DelayTime, err = utils.ReadUint16(r) // read 2
 	if err != nil {
 		return nil, err
 	}
 
-	numTimestampByte, err := r.ReadByte()
+	numTimestampByte, err := r.ReadByte() // read 1
 	if err != nil {
 		return nil, err
 	}
 	numTimestamp := uint8(numTimestampByte)
+	fmt.Printf("\tnumTimestamp: %d\n", numTimestamp)
 
-	// Delta Largest observed
-	_, err = r.ReadByte()
+	// 1 byte Delta Largest observed
+	_, err = r.ReadByte() // read 1
 	if err != nil {
 		return nil, err
 	}
-
-	// First Timestamp
-	_, err = utils.ReadUint32(r)
+	// 4 byte First timestamp
+	firstTimestamp, err := utils.ReadUint32(r) // read 4
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("\tfirstTimestamp: %d\n", firstTimestamp)
 
-	for i := 0; i < int(numTimestamp)-1; i++ {
-		// Delta Largest observed
+	for i := 0; i < int(numTimestamp)-1; i++ { // ToDo: check number of repititions
+		fmt.Printf("\tTimestamp #%d\n", i+2)
+		// 1 byte Delta Largest observed
 		_, err = r.ReadByte()
 		if err != nil {
 			return nil, err
 		}
-		// Time Since Previous Timestamp
-		_, err := utils.ReadUint16(r)
+		// 2 byte Time Since Previous Timestamp
+		timeSincePreviousTimestamp, err := utils.ReadUint16(r)
 		if err != nil {
 			return nil, err
 		}
+		fmt.Printf("\t\ttimeSincePreviousTimestamp: %d\n", timeSincePreviousTimestamp)
 	}
+	fmt.Printf("Bytes remaining in this packet: %d\n", r.Len())
 
 	return frame, nil
 }

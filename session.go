@@ -116,9 +116,8 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 		} else if typeByte == 0 {
 			// PAD
 			return nil
-		} else {
-			return errors.New("Session: invalid Frame Type Field")
 		}
+		return errors.New("Session: invalid Frame Type Field")
 	}
 	return nil
 }
