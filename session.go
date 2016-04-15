@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"net"
 
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/hpack"
+
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -83,7 +86,15 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 			if frame.StreamID == 1 {
 				s.HandleCryptoHandshake(frame)
 			} else {
-				fmt.Printf("%#v\n", frame)
+				h2r := bytes.NewReader(frame.Data)
+				h2framer := http2.NewFramer(nil, h2r)
+				h2framer.ReadMetaHeaders = hpack.NewDecoder(1024, nil)
+				h2frame, err := h2framer.ReadFrame()
+				if err != nil {
+					return err
+				}
+				h2headersFrame := h2frame.(*http2.MetaHeadersFrame)
+				fmt.Printf("%#v\n", h2headersFrame)
 				panic("streamid not 1")
 			}
 		} else if typeByte&0xC0 == 0x40 { // ACK
