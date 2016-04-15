@@ -41,7 +41,7 @@ func handleStream(frame *quic.StreamFrame) []quic.Frame {
 		return nil
 	}
 	h2headersFrame := h2frame.(*http2.MetaHeadersFrame)
-	fmt.Printf("%#v\n", h2headersFrame)
+	fmt.Printf("Request: %s %s://%s%s\n", h2headersFrame.PseudoValue("method"), h2headersFrame.PseudoValue("scheme"), h2headersFrame.PseudoValue("authority"), h2headersFrame.PseudoValue("path"))
 
 	var replyHeaders bytes.Buffer
 	enc := hpack.NewEncoder(&replyHeaders)
@@ -64,7 +64,6 @@ func handleStream(frame *quic.StreamFrame) []quic.Frame {
 		Data:     []byte("Hello World!"),
 		FinBit:   true,
 	}
-	fmt.Printf("%#v\n", dataStreamFrame)
 
 	return []quic.Frame{headerStreamFrame, dataStreamFrame}
 }
