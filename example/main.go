@@ -15,14 +15,7 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
-const (
-	// QuicVersionNumber32 is the QUIC protocol version
-	QuicVersionNumber32 = 32
-)
-
 func main() {
-	QuicVersion32, _ := utils.ReadUint32BigEndian(bytes.NewReader([]byte{'Q', '0', 48 + (QuicVersionNumber32/10)%10, 48 + QuicVersionNumber32%10}))
-
 	path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
 	keyData, err := crypto.LoadKeyData(path+"cert.der", path+"key.der")
 	if err != nil {
@@ -62,7 +55,7 @@ func main() {
 		fmt.Printf("Got packet # %d\n", publicHeader.PacketNumber)
 
 		// Send Version Negotiation Packet if the client is speaking a different protocol version
-		if publicHeader.VersionFlag && publicHeader.QuicVersion != QuicVersion32 {
+		if publicHeader.VersionFlag && publicHeader.VersionNumber != 32 {
 			fmt.Println("Sending VersionNegotiationPacket")
 			fullReply := &bytes.Buffer{}
 			responsePublicHeader := quic.PublicHeader{ConnectionID: publicHeader.ConnectionID, PacketNumber: 1, VersionFlag: true}
@@ -70,7 +63,7 @@ func main() {
 			if err != nil {
 				panic(err)
 			}
-			utils.WriteUint32BigEndian(fullReply, QuicVersion32)
+			utils.WriteUint32(fullReply, protocol.VersionNumberToTag(protocol.VersionNumber(32)))
 			_, err = conn.WriteToUDP(fullReply.Bytes(), remoteAddr)
 			if err != nil {
 				panic(err)

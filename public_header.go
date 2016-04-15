@@ -11,11 +11,11 @@ import (
 
 // The PublicHeader of a QUIC packet
 type PublicHeader struct {
-	VersionFlag  bool
-	ResetFlag    bool
-	ConnectionID protocol.ConnectionID
-	QuicVersion  uint32
-	PacketNumber protocol.PacketNumber
+	VersionFlag   bool
+	ResetFlag     bool
+	ConnectionID  protocol.ConnectionID
+	VersionNumber protocol.VersionNumber
+	PacketNumber  protocol.PacketNumber
 	// packetNumberLen uint8
 }
 
@@ -83,10 +83,12 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	// Version (optional)
 
 	if header.VersionFlag {
-		header.QuicVersion, err = utils.ReadUint32BigEndian(b)
+		var versionTag uint32
+		versionTag, err = utils.ReadUint32(b)
 		if err != nil {
 			return nil, err
 		}
+		header.VersionNumber = protocol.VersionTagToNumber(versionTag)
 	}
 
 	// Packet number
