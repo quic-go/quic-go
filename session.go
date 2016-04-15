@@ -16,8 +16,9 @@ type StreamCallback func(*StreamFrame) []Frame
 
 // A Session is a QUIC session
 type Session struct {
-	ConnectionID protocol.ConnectionID
-	ServerConfig *ServerConfig
+	VersionNumber protocol.VersionNumber
+	ConnectionID  protocol.ConnectionID
+	ServerConfig  *ServerConfig
 
 	Connection        *net.UDPConn
 	CurrentRemoteAddr *net.UDPAddr
@@ -32,9 +33,10 @@ type Session struct {
 }
 
 // NewSession makes a new session
-func NewSession(conn *net.UDPConn, connectionID protocol.ConnectionID, sCfg *ServerConfig, streamCallback StreamCallback) *Session {
+func NewSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *ServerConfig, streamCallback StreamCallback) *Session {
 	return &Session{
 		Connection:     conn,
+		VersionNumber:  v,
 		ConnectionID:   connectionID,
 		ServerConfig:   sCfg,
 		aead:           &crypto.NullAEAD{},
@@ -172,7 +174,11 @@ func (s *Session) HandleCryptoHandshake(frame *StreamFrame) error {
 		return nil
 	}
 
-	proof, err := s.ServerConfig.Sign(frame.Data)
+	var chloOrNil []byte
+	if s.VersionNumber > protocol.VersionNumber(30) {
+		chloOrNil = frame.Data
+	}
+	proof, err := s.ServerConfig.Sign(chloOrNil)
 	if err != nil {
 		return err
 	}

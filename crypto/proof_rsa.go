@@ -44,10 +44,15 @@ func LoadKeyData(certFileName string, keyFileName string) (*KeyData, error) {
 // SignServerProof signs CHLO and server config for use in the server proof
 func (kd *KeyData) SignServerProof(chlo []byte, serverConfigData []byte) ([]byte, error) {
 	hash := sha256.New()
-	hash.Write([]byte("QUIC CHLO and server config signature\x00"))
-	chloHash := sha256.Sum256(chlo)
-	hash.Write([]byte{32, 0, 0, 0})
-	hash.Write(chloHash[:])
+	if len(chlo) > 0 {
+		// Version >= 31
+		hash.Write([]byte("QUIC CHLO and server config signature\x00"))
+		chloHash := sha256.Sum256(chlo)
+		hash.Write([]byte{32, 0, 0, 0})
+		hash.Write(chloHash[:])
+	} else {
+		hash.Write([]byte("QUIC server config signature\x00"))
+	}
 	hash.Write(serverConfigData)
 	return rsa.SignPSS(rand.Reader, kd.key, crypto.SHA256, hash.Sum(nil), &rsa.PSSOptions{SaltLength: 32})
 }

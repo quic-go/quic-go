@@ -15,6 +15,11 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
+var supportedVersions = map[protocol.VersionNumber]bool{
+	30: true,
+	32: true,
+}
+
 func main() {
 	path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
 	keyData, err := crypto.LoadKeyData(path+"cert.der", path+"key.der")
@@ -55,7 +60,7 @@ func main() {
 		fmt.Printf("Got packet # %d\n", publicHeader.PacketNumber)
 
 		// Send Version Negotiation Packet if the client is speaking a different protocol version
-		if publicHeader.VersionFlag && publicHeader.VersionNumber != 32 {
+		if publicHeader.VersionFlag && !supportedVersions[publicHeader.VersionNumber] {
 			fmt.Println("Sending VersionNegotiationPacket")
 			fullReply := &bytes.Buffer{}
 			responsePublicHeader := quic.PublicHeader{ConnectionID: publicHeader.ConnectionID, PacketNumber: 1, VersionFlag: true}
@@ -63,6 +68,7 @@ func main() {
 			if err != nil {
 				panic(err)
 			}
+			// TODO: Send all versions
 			utils.WriteUint32(fullReply, protocol.VersionNumberToTag(protocol.VersionNumber(32)))
 			_, err = conn.WriteToUDP(fullReply.Bytes(), remoteAddr)
 			if err != nil {
@@ -73,7 +79,7 @@ func main() {
 
 		session, ok := sessions[publicHeader.ConnectionID]
 		if !ok {
-			session = quic.NewSession(conn, publicHeader.ConnectionID, serverConfig, handleStream)
+			session = quic.NewSession(conn, publicHeader.VersionNumber, publicHeader.ConnectionID, serverConfig, handleStream)
 			sessions[publicHeader.ConnectionID] = session
 		}
 		err = session.HandlePacket(remoteAddr, data[0:n-r.Len()], publicHeader, r)
