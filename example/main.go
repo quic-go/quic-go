@@ -3,17 +3,13 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"net"
 	"os"
 
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 
 	"github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/crypto"
-	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/utils"
 )
 
 var supportedVersions = map[protocol.VersionNumber]bool{
@@ -23,70 +19,15 @@ var supportedVersions = map[protocol.VersionNumber]bool{
 
 func main() {
 	path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
-	keyData, err := crypto.LoadKeyData(path+"cert.der", path+"key.der")
+
+	server, err := quic.NewServer(path+"cert.der", path+"key.der", handleStream)
 	if err != nil {
 		panic(err)
 	}
 
-	serverConfig := handshake.NewServerConfig(crypto.NewCurve25519KEX(), keyData)
-
-	// TODO: When should a session be created?
-	sessions := map[protocol.ConnectionID]*quic.Session{}
-
-	addr, err := net.ResolveUDPAddr("udp", "localhost:6121")
+	err = server.ListenAndServe("localhost:6121")
 	if err != nil {
 		panic(err)
-	}
-
-	conn, err := net.ListenUDP("udp", addr)
-	if err != nil {
-		panic(err)
-	}
-
-	for {
-		data := make([]byte, 0x10000)
-		n, remoteAddr, err := conn.ReadFromUDP(data)
-		if err != nil {
-			panic(err)
-		}
-		data = data[:n]
-		r := bytes.NewReader(data)
-
-		fmt.Printf("Received %d bytes from %v\n", n, remoteAddr)
-
-		publicHeader, err := quic.ParsePublicHeader(r)
-		if err != nil {
-			panic(err)
-		}
-		fmt.Printf("Got packet # %d\n", publicHeader.PacketNumber)
-
-		// Send Version Negotiation Packet if the client is speaking a different protocol version
-		if publicHeader.VersionFlag && !supportedVersions[publicHeader.VersionNumber] {
-			fmt.Println("Sending VersionNegotiationPacket")
-			fullReply := &bytes.Buffer{}
-			responsePublicHeader := quic.PublicHeader{ConnectionID: publicHeader.ConnectionID, PacketNumber: 1, VersionFlag: true}
-			err = responsePublicHeader.WritePublicHeader(fullReply)
-			if err != nil {
-				panic(err)
-			}
-			// TODO: Send all versions
-			utils.WriteUint32(fullReply, protocol.VersionNumberToTag(protocol.VersionNumber(32)))
-			_, err = conn.WriteToUDP(fullReply.Bytes(), remoteAddr)
-			if err != nil {
-				panic(err)
-			}
-			continue
-		}
-
-		session, ok := sessions[publicHeader.ConnectionID]
-		if !ok {
-			session = quic.NewSession(conn, publicHeader.VersionNumber, publicHeader.ConnectionID, serverConfig, handleStream)
-			sessions[publicHeader.ConnectionID] = session
-		}
-		err = session.HandlePacket(remoteAddr, data[0:n-r.Len()], publicHeader, r)
-		if err != nil {
-			fmt.Printf("Error handling packet: %s\n", err.Error())
-		}
 	}
 }
 
