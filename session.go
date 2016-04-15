@@ -88,6 +88,13 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 			}
 		} else if typeByte&0xC0 == 0x40 { // ACK
 			fmt.Println("Detected ACK")
+			frame, err := ParseAckFrame(r, typeByte)
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("%#v\n", frame)
+
 			continue // not yet implemented
 		} else if typeByte&0xE0 == 0x20 { // CONGESTION_FEEDBACK
 			fmt.Println("Detected CONGESTION_FEEDBACK")
