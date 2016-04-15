@@ -22,7 +22,7 @@ type Session struct {
 	CurrentRemoteAddr *net.UDPAddr
 
 	ServerConfig *handshake.ServerConfig
-	hshk         *handshake.Handshake
+	cryptoSetup  *handshake.CryptoSetup
 
 	Entropy EntropyAccumulator
 
@@ -38,7 +38,7 @@ func NewSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protoc
 		VersionNumber:  v,
 		ConnectionID:   connectionID,
 		ServerConfig:   sCfg,
-		hshk:           handshake.NewHandshake(connectionID, v, sCfg),
+		cryptoSetup:    handshake.NewCryptoSetup(connectionID, v, sCfg),
 		streamCallback: streamCallback,
 	}
 }
@@ -50,7 +50,7 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 		s.CurrentRemoteAddr = addr
 	}
 
-	r, err := s.hshk.Open(publicHeader.PacketNumber, publicHeaderBinary, r)
+	r, err := s.cryptoSetup.Open(publicHeader.PacketNumber, publicHeaderBinary, r)
 	if err != nil {
 		return err
 	}
@@ -93,14 +93,13 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 			}
 
 			if frame.StreamID == 1 {
-				reply, err := s.hshk.HandleCryptoMessage(frame.Data)
+				reply, err := s.cryptoSetup.HandleCryptoMessage(frame.Data)
 				if err != nil {
 					return err
 				}
 				if reply != nil {
 					s.SendFrames([]Frame{&StreamFrame{StreamID: 1, Data: reply}})
 				}
-				// TODO: Send reply
 			} else {
 				replyFrames := s.streamCallback(frame)
 				if replyFrames != nil {
@@ -163,7 +162,7 @@ func (s *Session) SendFrames(frames []Frame) error {
 		return err
 	}
 
-	s.hshk.Seal(s.lastSentPacketNumber, &fullReply, fullReply.Bytes(), framesData.Bytes())
+	s.cryptoSetup.Seal(s.lastSentPacketNumber, &fullReply, fullReply.Bytes(), framesData.Bytes())
 
 	fmt.Printf("Sending %d bytes to %v\n", len(fullReply.Bytes()), s.CurrentRemoteAddr)
 	_, err := s.Connection.WriteToUDP(fullReply.Bytes(), s.CurrentRemoteAddr)
