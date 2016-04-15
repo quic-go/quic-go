@@ -54,19 +54,88 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 	}
 	s.Entropy.Add(publicHeader.PacketNumber, privateFlag&0x01 > 0)
 
-	// TODO: Switch frame type here
+	frameCounter := 0
 
-	frame, err := ParseStreamFrame(r)
-	if err != nil {
+	// read all frames in the packet
+	for r.Len() > 0 {
+		typeByte, err := r.ReadByte()
+		if err != nil {
+			fmt.Println("No more frames in this packet.")
+			break
+		}
+
+		frameCounter++
+		fmt.Printf("Reading frame %d\n", frameCounter)
+
+		if typeByte&0x80 == 0x80 { // STREAM
+			fmt.Println("Detected STREAM")
+			frame, err := ParseStreamFrame(r, typeByte)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Got %d bytes for stream %d\n", len(frame.Data), frame.StreamID)
+
+			if frame.StreamID == 0 {
+				return errors.New("Session: 0 is not a valid Stream ID")
+			}
+
+			// TODO: Switch stream here
+			if frame.StreamID == 1 {
+				s.HandleCryptoHandshake(frame)
+			} else {
+				fmt.Printf("%#v\n", frame)
+				panic("streamid not 1")
+			}
+		} else if typeByte&0xC0 == 0x40 { // ACK
+			fmt.Println("Detected ACK")
+			frame, err := ParseAckFrame(r, typeByte)
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("%#v\n", frame)
+
+			continue // not yet implemented
+		} else if typeByte&0xE0 == 0x20 { // CONGESTION_FEEDBACK
+			return errors.New("Detected CONGESTION_FEEDBACK")
+		} else if typeByte&0x06 == 0x06 { // STOP_WAITING
+			fmt.Println("Detected STOP_WAITING")
+			r.ReadByte()
+			r.ReadByte()
+		} else {
+			return errors.New("Session: invalid Frame Type Field")
+		}
+	}
+	return nil
+}
+
+// SendFrames sends a number of frames to the client
+func (s *Session) SendFrames(frames []Frame) error {
+	var framesData bytes.Buffer
+	framesData.WriteByte(0) // TODO: entropy
+	for _, f := range frames {
+		if err := f.Write(&framesData); err != nil {
+			return err
+		}
+	}
+
+	s.lastSentPacketNumber++
+
+	var fullReply bytes.Buffer
+	responsePublicHeader := PublicHeader{ConnectionID: s.ConnectionID, PacketNumber: s.lastSentPacketNumber}
+	fmt.Printf("Sending packet # %d\n", responsePublicHeader.PacketNumber)
+	if err := responsePublicHeader.WritePublicHeader(&fullReply); err != nil {
 		return err
 	}
-	fmt.Printf("Got %d bytes for stream %d\n", len(frame.Data), frame.StreamID)
 
-	// TODO: Switch stream here
-	if frame.StreamID != 1 {
-		panic("streamid not 1")
-	}
+	s.aead.Seal(s.lastSentPacketNumber, &fullReply, fullReply.Bytes(), framesData.Bytes())
 
+	_, err := s.Connection.WriteToUDP(fullReply.Bytes(), s.CurrentRemoteAddr)
+	return err
+}
+
+// HandleCryptoHandshake handles the crypto handshake
+func (s *Session) HandleCryptoHandshake(frame *StreamFrame) error {
 	messageTag, cryptoData, err := handshake.ParseHandshakeMessage(frame.Data)
 	if err != nil {
 		panic(err)
@@ -105,7 +174,7 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 		handshake.TagPROF: proof,
 	})
 
-	s.SendFrames([]Frame{
+	return s.SendFrames([]Frame{
 		&AckFrame{
 			Entropy:         s.Entropy.Get(),
 			LargestObserved: 1,
@@ -115,31 +184,4 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 			Data:     serverReply.Bytes(),
 		},
 	})
-
-	return nil
-}
-
-// SendFrames sends a number of frames to the client
-func (s *Session) SendFrames(frames []Frame) error {
-	var framesData bytes.Buffer
-	framesData.WriteByte(0) // TODO: entropy
-	for _, f := range frames {
-		if err := f.Write(&framesData); err != nil {
-			return err
-		}
-	}
-
-	s.lastSentPacketNumber++
-
-	var fullReply bytes.Buffer
-	responsePublicHeader := PublicHeader{ConnectionID: s.ConnectionID, PacketNumber: s.lastSentPacketNumber}
-	fmt.Printf("Sending packet # %d\n", responsePublicHeader.PacketNumber)
-	if err := responsePublicHeader.WritePublicHeader(&fullReply); err != nil {
-		return err
-	}
-
-	s.aead.Seal(s.lastSentPacketNumber, &fullReply, fullReply.Bytes(), framesData.Bytes())
-
-	_, err := s.Connection.WriteToUDP(fullReply.Bytes(), s.CurrentRemoteAddr)
-	return err
 }
