@@ -97,14 +97,13 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 
 			continue // not yet implemented
 		} else if typeByte&0xE0 == 0x20 { // CONGESTION_FEEDBACK
-			fmt.Println("Detected CONGESTION_FEEDBACK")
-			continue // not yet implemented
+			return errors.New("Detected CONGESTION_FEEDBACK")
+		} else if typeByte&0x06 == 0x06 { // STOP_WAITING
+			fmt.Println("Detected STOP_WAITING")
+			r.ReadByte()
+			r.ReadByte()
 		} else {
-			fmt.Println("Detected invalid frame type. Not looking for any further frames in this packet.")
-			// at least one of the first three bits of the Type field has be 1
-			// ToDo: sometimes there are packets that have this kind of "frame". Find out what's going wrong there. Ignore for the moment
-			// return errors.New("Session: invalid Frame Type Field")
-			break
+			return errors.New("Session: invalid Frame Type Field")
 		}
 	}
 	return nil
