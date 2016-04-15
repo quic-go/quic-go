@@ -6,6 +6,9 @@ import (
 	"net"
 	"os"
 
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/hpack"
+
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -77,12 +80,39 @@ func main() {
 
 		session, ok := sessions[publicHeader.ConnectionID]
 		if !ok {
-			session = quic.NewSession(conn, publicHeader.ConnectionID, serverConfig)
+			session = quic.NewSession(conn, publicHeader.ConnectionID, serverConfig, handleStream)
 			sessions[publicHeader.ConnectionID] = session
 		}
 		err = session.HandlePacket(remoteAddr, data[0:n-r.Len()], publicHeader, r)
 		if err != nil {
 			fmt.Printf("Error handling packet: %s\n", err.Error())
 		}
+	}
+}
+
+func handleStream(frame *quic.StreamFrame) *quic.StreamFrame {
+	h2r := bytes.NewReader(frame.Data)
+	var reply bytes.Buffer
+	h2framer := http2.NewFramer(&reply, h2r)
+	h2framer.ReadMetaHeaders = hpack.NewDecoder(1024, nil)
+	h2frame, err := h2framer.ReadFrame()
+	if err != nil {
+		return nil
+	}
+	h2headersFrame := h2frame.(*http2.MetaHeadersFrame)
+	fmt.Printf("%#v\n", h2headersFrame)
+
+	var replyHeaders bytes.Buffer
+	enc := hpack.NewEncoder(&replyHeaders)
+	enc.WriteField(hpack.HeaderField{Name: ":status", Value: "204"})
+	h2framer.WriteHeaders(http2.HeadersFrameParam{
+		StreamID:      h2frame.Header().StreamID,
+		EndHeaders:    true,
+		BlockFragment: replyHeaders.Bytes(),
+	})
+
+	return &quic.StreamFrame{
+		StreamID: frame.StreamID,
+		Data:     reply.Bytes(),
 	}
 }

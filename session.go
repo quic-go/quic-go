@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"net"
 
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/hpack"
-
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 )
+
+// StreamCallback gets a stream frame and returns a reply frame
+type StreamCallback func(*StreamFrame) *StreamFrame
 
 // A Session is a QUIC session
 type Session struct {
@@ -27,15 +27,18 @@ type Session struct {
 	Entropy EntropyAccumulator
 
 	lastSentPacketNumber protocol.PacketNumber
+
+	streamCallback StreamCallback
 }
 
 // NewSession makes a new session
-func NewSession(conn *net.UDPConn, connectionID protocol.ConnectionID, sCfg *ServerConfig) *Session {
+func NewSession(conn *net.UDPConn, connectionID protocol.ConnectionID, sCfg *ServerConfig, streamCallback StreamCallback) *Session {
 	return &Session{
-		Connection:   conn,
-		ConnectionID: connectionID,
-		ServerConfig: sCfg,
-		aead:         &crypto.NullAEAD{},
+		Connection:     conn,
+		ConnectionID:   connectionID,
+		ServerConfig:   sCfg,
+		aead:           &crypto.NullAEAD{},
+		streamCallback: streamCallback,
 	}
 }
 
@@ -70,7 +73,7 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 		frameCounter++
 		fmt.Printf("Reading frame %d\n", frameCounter)
 
-		if typeByte&0x80 == 0x80 { // STREAM
+		if typeByte&0x80 > 0 { // STREAM
 			fmt.Println("Detected STREAM")
 			frame, err := ParseStreamFrame(r, typeByte)
 			if err != nil {
@@ -82,21 +85,17 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 				return errors.New("Session: 0 is not a valid Stream ID")
 			}
 
-			// TODO: Switch stream here
 			if frame.StreamID == 1 {
 				s.HandleCryptoHandshake(frame)
 			} else {
-				h2r := bytes.NewReader(frame.Data)
-				h2framer := http2.NewFramer(nil, h2r)
-				h2framer.ReadMetaHeaders = hpack.NewDecoder(1024, nil)
-				h2frame, err := h2framer.ReadFrame()
-				if err != nil {
-					return err
+				replyFrame := s.streamCallback(frame)
+				replyFrames := []Frame{&AckFrame{Entropy: s.Entropy.Get(), LargestObserved: 3}}
+				if replyFrame != nil {
+					replyFrames = append(replyFrames, replyFrame)
 				}
-				h2headersFrame := h2frame.(*http2.MetaHeadersFrame)
-				fmt.Printf("%#v\n", h2headersFrame)
-				panic("streamid not 1")
+				s.SendFrames(replyFrames)
 			}
+			continue
 		} else if typeByte&0xC0 == 0x40 { // ACK
 			fmt.Println("Detected ACK")
 			frame, err := ParseAckFrame(r, typeByte)
@@ -106,18 +105,19 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 
 			fmt.Printf("%#v\n", frame)
 
-			continue // not yet implemented
+			continue
 		} else if typeByte&0xE0 == 0x20 { // CONGESTION_FEEDBACK
 			return errors.New("Detected CONGESTION_FEEDBACK")
 		} else if typeByte&0x06 == 0x06 { // STOP_WAITING
 			fmt.Println("Detected STOP_WAITING")
 			r.ReadByte()
 			r.ReadByte()
+			continue
 		} else if typeByte == 0 {
 			// PAD
 			return nil
 		}
-		return errors.New("Session: invalid Frame Type Field")
+		return fmt.Errorf("Session: invalid frame type %x", typeByte)
 	}
 	return nil
 }
