@@ -152,6 +152,7 @@ func (s *Session) SendFrames(frames []Frame) error {
 
 	s.aead.Seal(s.lastSentPacketNumber, &fullReply, fullReply.Bytes(), framesData.Bytes())
 
+	fmt.Printf("Sending %d bytes to %v\n", len(fullReply.Bytes()), s.CurrentRemoteAddr)
 	_, err := s.Connection.WriteToUDP(fullReply.Bytes(), s.CurrentRemoteAddr)
 	return err
 }
