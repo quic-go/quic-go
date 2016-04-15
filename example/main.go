@@ -90,7 +90,7 @@ func main() {
 	}
 }
 
-func handleStream(frame *quic.StreamFrame) *quic.StreamFrame {
+func handleStream(frame *quic.StreamFrame) []quic.Frame {
 	h2r := bytes.NewReader(frame.Data)
 	var reply bytes.Buffer
 	h2framer := http2.NewFramer(&reply, h2r)
@@ -104,15 +104,26 @@ func handleStream(frame *quic.StreamFrame) *quic.StreamFrame {
 
 	var replyHeaders bytes.Buffer
 	enc := hpack.NewEncoder(&replyHeaders)
-	enc.WriteField(hpack.HeaderField{Name: ":status", Value: "204"})
+	enc.WriteField(hpack.HeaderField{Name: ":status", Value: "200"})
+	enc.WriteField(hpack.HeaderField{Name: "content-type", Value: "text/plain"})
+	enc.WriteField(hpack.HeaderField{Name: "content-length", Value: "12"})
 	h2framer.WriteHeaders(http2.HeadersFrameParam{
 		StreamID:      h2frame.Header().StreamID,
 		EndHeaders:    true,
 		BlockFragment: replyHeaders.Bytes(),
 	})
-
-	return &quic.StreamFrame{
+	headerStreamFrame := &quic.StreamFrame{
 		StreamID: frame.StreamID,
 		Data:     reply.Bytes(),
+		FinBit:   true,
 	}
+
+	dataStreamFrame := &quic.StreamFrame{
+		StreamID: h2frame.Header().StreamID,
+		Data:     []byte("Hello World!"),
+		FinBit:   true,
+	}
+	fmt.Printf("%#v\n", dataStreamFrame)
+
+	return []quic.Frame{headerStreamFrame, dataStreamFrame}
 }

@@ -12,7 +12,7 @@ import (
 )
 
 // StreamCallback gets a stream frame and returns a reply frame
-type StreamCallback func(*StreamFrame) *StreamFrame
+type StreamCallback func(*StreamFrame) []Frame
 
 // A Session is a QUIC session
 type Session struct {
@@ -88,12 +88,8 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 			if frame.StreamID == 1 {
 				s.HandleCryptoHandshake(frame)
 			} else {
-				replyFrame := s.streamCallback(frame)
-				replyFrames := []Frame{&AckFrame{Entropy: s.Entropy.Get(), LargestObserved: 3}}
-				if replyFrame != nil {
-					replyFrames = append(replyFrames, replyFrame)
-				}
-				s.SendFrames(replyFrames)
+				replyFrames := s.streamCallback(frame)
+				s.SendFrames(append([]Frame{&AckFrame{Entropy: s.Entropy.Get(), LargestObserved: 3}}, replyFrames...))
 			}
 			continue
 		} else if typeByte&0xC0 == 0x40 { // ACK
