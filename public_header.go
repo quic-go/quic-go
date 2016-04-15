@@ -11,12 +11,13 @@ import (
 
 // The PublicHeader of a QUIC packet
 type PublicHeader struct {
-	VersionFlag   bool
-	ResetFlag     bool
-	ConnectionID  protocol.ConnectionID
-	VersionNumber protocol.VersionNumber
-	PacketNumber  protocol.PacketNumber
-	// packetNumberLen uint8
+	VersionFlag     bool
+	ResetFlag       bool
+	ConnectionID    protocol.ConnectionID
+	VersionNumber   protocol.VersionNumber
+	QuicVersion     uint32
+	PacketNumberLen uint8
+	PacketNumber    protocol.PacketNumber
 }
 
 // WritePublicHeader writes a public header
@@ -50,7 +51,7 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	header.VersionFlag = publicFlagByte&0x01 > 0
 	header.ResetFlag = publicFlagByte&0x02 > 0
 
-	var connectionIDLen, packetNumberLen uint8
+	var connectionIDLen uint8
 	switch publicFlagByte & 0x0C {
 	case 0x0C:
 		connectionIDLen = 8
@@ -61,13 +62,13 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	}
 	switch publicFlagByte & 0x30 {
 	case 0x30:
-		packetNumberLen = 6
+		header.PacketNumberLen = 6
 	case 0x20:
-		packetNumberLen = 4
+		header.PacketNumberLen = 4
 	case 0x10:
-		packetNumberLen = 2
+		header.PacketNumberLen = 2
 	case 0x00:
-		packetNumberLen = 1
+		header.PacketNumberLen = 1
 	}
 
 	// Connection ID
@@ -92,7 +93,7 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	}
 
 	// Packet number
-	pcktNumber, err := utils.ReadUintN(b, packetNumberLen)
+	pcktNumber, err := utils.ReadUintN(b, header.PacketNumberLen)
 	if err != nil {
 		return nil, err
 	}

@@ -71,13 +71,14 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 			fmt.Println("No more frames in this packet.")
 			break
 		}
+		r.UnreadByte()
 
 		frameCounter++
 		fmt.Printf("Reading frame %d\n", frameCounter)
 
-		if typeByte&0x80 > 0 { // STREAM
+		if typeByte&0x80 == 0x80 { // STREAM
 			fmt.Println("Detected STREAM")
-			frame, err := ParseStreamFrame(r, typeByte)
+			frame, err := ParseStreamFrame(r)
 			if err != nil {
 				return err
 			}
@@ -96,7 +97,7 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 			continue
 		} else if typeByte&0xC0 == 0x40 { // ACK
 			fmt.Println("Detected ACK")
-			frame, err := ParseAckFrame(r, typeByte)
+			frame, err := ParseAckFrame(r)
 			if err != nil {
 				return err
 			}
@@ -108,14 +109,24 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 			return errors.New("Detected CONGESTION_FEEDBACK")
 		} else if typeByte&0x06 == 0x06 { // STOP_WAITING
 			fmt.Println("Detected STOP_WAITING")
-			r.ReadByte()
-			r.ReadByte()
-			continue
+			_, err := ParseStopWaitingFrame(r, publicHeader.PacketNumberLen)
+			if err != nil {
+				return err
+			}
+			// ToDo: react to receiving this frame
+		} else if typeByte&0x02 == 0x02 { // CONNECTION_CLOSE
+			fmt.Println("Detected CONNECTION_CLOSE")
+			frame, err := ParseConnectionCloseFrame(r)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("%#v\n", frame)
 		} else if typeByte == 0 {
 			// PAD
 			return nil
+		} else {
+			return errors.New("Session: invalid Frame Type Field")
 		}
-		return fmt.Errorf("Session: invalid frame type %x", typeByte)
 	}
 	return nil
 }
