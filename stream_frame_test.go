@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Frame", func() {
+var _ = Describe("StreamFrame", func() {
 	Context("stream frames", func() {
 		Context("when parsing", func() {
 			It("accepts sample frame", func() {
@@ -49,19 +49,6 @@ var _ = Describe("Frame", func() {
 					Data:     []byte("foobar"),
 				}).Write(b)
 				Expect(b.Bytes()).To(Equal([]byte{0xbf, 0x1, 0, 0, 0, 0x10, 0, 0, 0, 0, 0, 0, 0, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'}))
-			})
-		})
-	})
-
-	Context("ACK frames", func() {
-		Context("when writing", func() {
-			It("writes simple frames", func() {
-				b := &bytes.Buffer{}
-				(&AckFrame{
-					Entropy:         2,
-					LargestObserved: 1,
-				}).Write(b)
-				Expect(b.Bytes()).To(Equal([]byte{0x48, 0x02, 0x01, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0}))
 			})
 		})
 	})
