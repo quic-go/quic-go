@@ -76,7 +76,7 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 		frameCounter++
 		fmt.Printf("Reading frame %d\n", frameCounter)
 
-		if typeByte&0x80 > 0 { // STREAM
+		if typeByte&0x80 == 0x80 { // STREAM
 			fmt.Println("Detected STREAM")
 			frame, err := ParseStreamFrame(r)
 			if err != nil {
@@ -109,9 +109,11 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 			return errors.New("Detected CONGESTION_FEEDBACK")
 		} else if typeByte&0x06 == 0x06 { // STOP_WAITING
 			fmt.Println("Detected STOP_WAITING")
-			r.ReadByte()
-			r.ReadByte()
-			continue
+			_, err := ParseStopWaitingFrame(r, publicHeader.PacketNumberLen)
+			if err != nil {
+				return err
+			}
+			// ToDo: react to receiving this frame
 		} else if typeByte == 0 {
 			// PAD
 			return nil
