@@ -68,4 +68,7 @@ const (
 	TagEXPY Tag = 'E' + 'X'<<8 + 'P'<<16 + 'Y'<<24
 	// TagCERT is the CERT data
 	TagCERT Tag = 0xff545243
+
+	// TagSHLO is the server hello
+	TagSHLO Tag = 'S' + 'H'<<8 + 'L'<<16 + 'O'<<24
 )

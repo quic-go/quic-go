@@ -58,8 +58,13 @@ func (h *CryptoSetup) HandleCryptoMessage(data []byte) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		// TODO: Send SHLO
-		return nil, nil
+
+		var reply bytes.Buffer
+		WriteHandshakeMessage(&reply, TagSHLO, map[Tag][]byte{
+			TagPUBS: h.scfg.kex.PublicKey(),
+			TagVER:  protocol.SupportedVersionsAsTags,
+		})
+		return reply.Bytes(), nil
 	}
 
 	// We have an inacholate or non-matching CHLO, we now send a rejection
