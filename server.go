@@ -73,24 +73,13 @@ func (s *Server) ListenAndServe(address string) error {
 			fmt.Printf("Could not parse public header")
 			continue
 		}
+
 		fmt.Printf("Got packet # %d\n", publicHeader.PacketNumber)
 
 		// Send Version Negotiation Packet if the client is speaking a different protocol version
 		if publicHeader.VersionFlag && !supportedVersions[publicHeader.VersionNumber] {
-			fmt.Println("Sending VersionNegotiationPacket")
-			fullReply := &bytes.Buffer{}
-			responsePublicHeader := PublicHeader{ConnectionID: publicHeader.ConnectionID, PacketNumber: 1, VersionFlag: true}
-			err = responsePublicHeader.WritePublicHeader(fullReply)
-			if err != nil {
-				fmt.Printf("Could not write public header")
-				continue
-			}
-			// TODO: Send all versions
-			utils.WriteUint32(fullReply, protocol.VersionNumberToTag(protocol.VersionNumber(32)))
-			_, err = conn.WriteToUDP(fullReply.Bytes(), remoteAddr)
-			if err != nil {
-				fmt.Printf("Could not write to UDP")
-				continue
+			if err := sendVersionNegotiation(conn, remoteAddr, publicHeader); err != nil {
+				fmt.Printf("Error sending version negotiation: %s", err.Error())
 			}
 			continue
 		}
@@ -105,4 +94,22 @@ func (s *Server) ListenAndServe(address string) error {
 			fmt.Printf("Error handling packet: %s\n", err.Error())
 		}
 	}
+}
+
+func sendVersionNegotiation(conn *net.UDPConn, remoteAddr *net.UDPAddr, publicHeader *PublicHeader) error {
+	fmt.Println("Sending VersionNegotiationPacket")
+	fullReply := &bytes.Buffer{}
+	responsePublicHeader := PublicHeader{ConnectionID: publicHeader.ConnectionID, PacketNumber: 1, VersionFlag: true}
+	err := responsePublicHeader.WritePublicHeader(fullReply)
+	if err != nil {
+		return err
+	}
+	for v := range supportedVersions {
+		utils.WriteUint32(fullReply, protocol.VersionNumberToTag(v))
+	}
+	_, err = conn.WriteToUDP(fullReply.Bytes(), remoteAddr)
+	if err != nil {
+		return err
+	}
+	return nil
 }
