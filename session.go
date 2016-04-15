@@ -66,9 +66,8 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 
 		frameCounter++
 		fmt.Printf("Reading frame %d\n", frameCounter)
-		fmt.Printf("\ttype byte: %b\n", typeByte)
 
-		if (typeByte&0x80)>>7 == 1 { // STREAM
+		if typeByte&0x80 == 0x80 { // STREAM
 			fmt.Println("Detected STREAM")
 			frame, err := ParseStreamFrame(r, typeByte)
 			if err != nil {
@@ -87,11 +86,10 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 				fmt.Printf("%#v\n", frame)
 				panic("streamid not 1")
 			}
-
-		} else if (typeByte&0xC0)>>6 == 1 { // ACK
+		} else if typeByte&0xC0 == 0x40 { // ACK
 			fmt.Println("Detected ACK")
 			continue // not yet implemented
-		} else if (typeByte&0xE0)>>5 == 1 { // CONGESTION_FEEDBACK
+		} else if typeByte&0xE0 == 0x20 { // CONGESTION_FEEDBACK
 			fmt.Println("Detected CONGESTION_FEEDBACK")
 			continue // not yet implemented
 		} else {
