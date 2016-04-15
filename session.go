@@ -113,6 +113,9 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 			fmt.Println("Detected STOP_WAITING")
 			r.ReadByte()
 			r.ReadByte()
+		} else if typeByte == 0 {
+			// PAD
+			return nil
 		} else {
 			return errors.New("Session: invalid Frame Type Field")
 		}
