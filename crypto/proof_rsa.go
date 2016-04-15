@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"bytes"
+	"compress/flate"
 	"compress/zlib"
 	"crypto"
 	"crypto/rand"
@@ -63,7 +64,10 @@ func (kd *KeyData) GetCertCompressed() []byte {
 	b.WriteByte(1) // Entry type compressed
 	b.WriteByte(0) // Entry type end_of_list
 	utils.WriteUint32(b, uint32(len(kd.cert.Raw)+4))
-	gz := zlib.NewWriter(b)
+	gz, err := zlib.NewWriterLevelDict(b, flate.BestCompression, certDictZlib)
+	if err != nil {
+		panic(err)
+	}
 	lenCert := len(kd.cert.Raw)
 	gz.Write([]byte{
 		byte(lenCert & 0xff),

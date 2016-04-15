@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"bytes"
+	"compress/flate"
 	"compress/zlib"
 	"crypto"
 	"crypto/rsa"
@@ -16,7 +17,8 @@ var _ = Describe("ProofRsa", func() {
 	It("gives correct cert", func() {
 		cert := []byte{0xde, 0xca, 0xfb, 0xad}
 		certZlib := &bytes.Buffer{}
-		z := zlib.NewWriter(certZlib)
+		z, err := zlib.NewWriterLevelDict(certZlib, flate.BestCompression, certDictZlib)
+		Expect(err).ToNot(HaveOccurred())
 		z.Write([]byte{0x04, 0x00, 0x00, 0x00})
 		z.Write(cert)
 		z.Close()
