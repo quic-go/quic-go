@@ -21,13 +21,9 @@ type StreamFrame struct {
 }
 
 // ParseStreamFrame reads a stream frame. The type byte must not have been read yet.
-func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
+func ParseStreamFrame(r *bytes.Reader, typeByte byte) (*StreamFrame, error) {
 	frame := &StreamFrame{}
 
-	typeByte, err := r.ReadByte()
-	if err != nil {
-		return nil, err
-	}
 	frame.FinBit = typeByte&0x40 > 0
 	dataLenPresent := typeByte&0x20 > 0
 	offsetLen := typeByte & 0x1C >> 2

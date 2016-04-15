@@ -11,8 +11,8 @@ var _ = Describe("Frame", func() {
 	Context("stream frames", func() {
 		Context("when parsing", func() {
 			It("accepts sample frame", func() {
-				b := bytes.NewReader([]byte{0xa0, 0x1, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'})
-				frame, err := ParseStreamFrame(b)
+				b := bytes.NewReader([]byte{0x1, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'})
+				frame, err := ParseStreamFrame(b, 0xa0)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.FinBit).To(BeFalse())
 				Expect(frame.StreamID).To(Equal(uint32(1)))
@@ -21,8 +21,8 @@ var _ = Describe("Frame", func() {
 			})
 
 			It("accepts frame without datalength", func() {
-				b := bytes.NewReader([]byte{0x80, 0x1, 'f', 'o', 'o', 'b', 'a', 'r'})
-				frame, err := ParseStreamFrame(b)
+				b := bytes.NewReader([]byte{0x1, 'f', 'o', 'o', 'b', 'a', 'r'})
+				frame, err := ParseStreamFrame(b, 0x80)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.FinBit).To(BeFalse())
 				Expect(frame.StreamID).To(Equal(uint32(1)))
