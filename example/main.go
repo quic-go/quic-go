@@ -11,6 +11,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/crypto"
+	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 )
@@ -27,7 +28,7 @@ func main() {
 		panic(err)
 	}
 
-	serverConfig := quic.NewServerConfig(crypto.NewCurve25519KEX(), keyData)
+	serverConfig := handshake.NewServerConfig(crypto.NewCurve25519KEX(), keyData)
 
 	// TODO: When should a session be created?
 	sessions := map[protocol.ConnectionID]*quic.Session{}

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 )
@@ -18,12 +17,12 @@ type StreamCallback func(*StreamFrame) []Frame
 type Session struct {
 	VersionNumber protocol.VersionNumber
 	ConnectionID  protocol.ConnectionID
-	ServerConfig  *ServerConfig
 
 	Connection        *net.UDPConn
 	CurrentRemoteAddr *net.UDPAddr
 
-	aead crypto.AEAD
+	ServerConfig *handshake.ServerConfig
+	hshk         *handshake.Handshake
 
 	Entropy EntropyAccumulator
 
@@ -33,13 +32,13 @@ type Session struct {
 }
 
 // NewSession makes a new session
-func NewSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *ServerConfig, streamCallback StreamCallback) *Session {
+func NewSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback) *Session {
 	return &Session{
 		Connection:     conn,
 		VersionNumber:  v,
 		ConnectionID:   connectionID,
 		ServerConfig:   sCfg,
-		aead:           &crypto.NullAEAD{},
+		hshk:           handshake.NewHandshake(connectionID, v, sCfg),
 		streamCallback: streamCallback,
 	}
 }
@@ -51,7 +50,7 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 		s.CurrentRemoteAddr = addr
 	}
 
-	r, err := s.aead.Open(publicHeader.PacketNumber, publicHeaderBinary, r)
+	r, err := s.hshk.Open(publicHeader.PacketNumber, publicHeaderBinary, r)
 	if err != nil {
 		return err
 	}
@@ -61,6 +60,11 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 		return err
 	}
 	s.Entropy.Add(publicHeader.PacketNumber, privateFlag&0x01 > 0)
+
+	s.SendFrames([]Frame{&AckFrame{
+		LargestObserved: uint64(publicHeader.PacketNumber),
+		Entropy:         s.Entropy.Get(),
+	}})
 
 	frameCounter := 0
 
@@ -89,10 +93,19 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 			}
 
 			if frame.StreamID == 1 {
-				s.HandleCryptoHandshake(frame)
+				reply, err := s.hshk.HandleCryptoMessage(frame.Data)
+				if err != nil {
+					return err
+				}
+				if reply != nil {
+					s.SendFrames([]Frame{&StreamFrame{StreamID: 1, Data: reply}})
+				}
+				// TODO: Send reply
 			} else {
 				replyFrames := s.streamCallback(frame)
-				s.SendFrames(append([]Frame{&AckFrame{Entropy: s.Entropy.Get(), LargestObserved: 3}}, replyFrames...))
+				if replyFrames != nil {
+					s.SendFrames(replyFrames)
+				}
 			}
 			continue
 		} else if typeByte&0xC0 == 0x40 { // ACK
@@ -150,65 +163,9 @@ func (s *Session) SendFrames(frames []Frame) error {
 		return err
 	}
 
-	s.aead.Seal(s.lastSentPacketNumber, &fullReply, fullReply.Bytes(), framesData.Bytes())
+	s.hshk.Seal(s.lastSentPacketNumber, &fullReply, fullReply.Bytes(), framesData.Bytes())
 
 	fmt.Printf("Sending %d bytes to %v\n", len(fullReply.Bytes()), s.CurrentRemoteAddr)
 	_, err := s.Connection.WriteToUDP(fullReply.Bytes(), s.CurrentRemoteAddr)
 	return err
-}
-
-// HandleCryptoHandshake handles the crypto handshake
-func (s *Session) HandleCryptoHandshake(frame *StreamFrame) error {
-	messageTag, cryptoData, err := handshake.ParseHandshakeMessage(frame.Data)
-	if err != nil {
-		panic(err)
-	}
-
-	// TODO: Switch client messages here
-	if messageTag != handshake.TagCHLO {
-		return errors.New("Session: expected CHLO")
-	}
-
-	if _, ok := cryptoData[handshake.TagSCID]; ok {
-		var sharedSecret []byte
-		sharedSecret, err = s.ServerConfig.kex.CalculateSharedKey(cryptoData[handshake.TagPUBS])
-		if err != nil {
-			return err
-		}
-		s.aead, err = crypto.DeriveKeysChacha20(sharedSecret, cryptoData[handshake.TagNONC], s.ConnectionID, frame.Data, s.ServerConfig.Get(), s.ServerConfig.kd.GetCertUncompressed())
-		if err != nil {
-			return err
-		}
-		s.SendFrames([]Frame{&AckFrame{
-			Entropy:         s.Entropy.Get(),
-			LargestObserved: 2,
-		}})
-		return nil
-	}
-
-	var chloOrNil []byte
-	if s.VersionNumber > protocol.VersionNumber(30) {
-		chloOrNil = frame.Data
-	}
-	proof, err := s.ServerConfig.Sign(chloOrNil)
-	if err != nil {
-		return err
-	}
-	var serverReply bytes.Buffer
-	handshake.WriteHandshakeMessage(&serverReply, handshake.TagREJ, map[handshake.Tag][]byte{
-		handshake.TagSCFG: s.ServerConfig.Get(),
-		handshake.TagCERT: s.ServerConfig.GetCertCompressed(),
-		handshake.TagPROF: proof,
-	})
-
-	return s.SendFrames([]Frame{
-		&AckFrame{
-			Entropy:         s.Entropy.Get(),
-			LargestObserved: 1,
-		},
-		&StreamFrame{
-			StreamID: 1,
-			Data:     serverReply.Bytes(),
-		},
-	})
 }
