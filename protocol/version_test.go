@@ -17,4 +17,8 @@ var _ = Describe("Version", func() {
 		Expect(protocol.VersionNumberToTag(protocol.VersionNumber(123))).To(Equal(uint32('Q' + '1'<<8 + '2'<<16 + '3'<<24)))
 		Expect(protocol.VersionNumberToTag(protocol.VersionNumber(30))).To(Equal(uint32('Q' + '0'<<8 + '3'<<16 + '0'<<24)))
 	})
+
+	It("has proper tag list", func() {
+		Expect(protocol.SupportedVersionsAsTags).To(Equal([]byte("Q030Q032")))
+	})
 })

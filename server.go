@@ -9,13 +9,7 @@ import (
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/utils"
 )
-
-var supportedVersions = map[protocol.VersionNumber]bool{
-	30: true,
-	32: true,
-}
 
 // A Server of QUIC
 type Server struct {
@@ -77,7 +71,7 @@ func (s *Server) ListenAndServe(address string) error {
 		fmt.Printf("Got packet # %d\n", publicHeader.PacketNumber)
 
 		// Send Version Negotiation Packet if the client is speaking a different protocol version
-		if publicHeader.VersionFlag && !supportedVersions[publicHeader.VersionNumber] {
+		if publicHeader.VersionFlag && !protocol.IsSupportedVersion(publicHeader.VersionNumber) {
 			if err := sendVersionNegotiation(conn, remoteAddr, publicHeader); err != nil {
 				fmt.Printf("Error sending version negotiation: %s", err.Error())
 			}
@@ -104,9 +98,7 @@ func sendVersionNegotiation(conn *net.UDPConn, remoteAddr *net.UDPAddr, publicHe
 	if err != nil {
 		return err
 	}
-	for v := range supportedVersions {
-		utils.WriteUint32(fullReply, protocol.VersionNumberToTag(v))
-	}
+	fullReply.Write(protocol.SupportedVersionsAsTags)
 	_, err = conn.WriteToUDP(fullReply.Bytes(), remoteAddr)
 	if err != nil {
 		return err
