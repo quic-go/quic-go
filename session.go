@@ -27,7 +27,8 @@ type Session struct {
 
 	Entropy EntropyAccumulator
 
-	lastSentPacketNumber protocol.PacketNumber
+	lastSentPacketNumber     protocol.PacketNumber
+	lastObservedPacketNumber protocol.PacketNumber
 
 	streamCallback StreamCallback
 }
@@ -35,18 +36,30 @@ type Session struct {
 // NewSession makes a new session
 func NewSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback) *Session {
 	return &Session{
-		Connection:     conn,
-		VersionNumber:  v,
-		ConnectionID:   connectionID,
-		ServerConfig:   sCfg,
-		cryptoSetup:    handshake.NewCryptoSetup(connectionID, v, sCfg),
-		streamCallback: streamCallback,
+		Connection:               conn,
+		VersionNumber:            v,
+		ConnectionID:             connectionID,
+		ServerConfig:             sCfg,
+		cryptoSetup:              handshake.NewCryptoSetup(connectionID, v, sCfg),
+		streamCallback:           streamCallback,
+		lastObservedPacketNumber: 0,
 	}
 }
 
 // HandlePacket handles a packet
 func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, publicHeader *PublicHeader, r *bytes.Reader) error {
 	// TODO: Only do this after authenticating
+
+	if s.lastObservedPacketNumber > 0 { // the first packet doesn't neccessarily need to have packetNumber 1
+		if publicHeader.PacketNumber < s.lastObservedPacketNumber || publicHeader.PacketNumber > s.lastObservedPacketNumber+1 {
+			return errors.New("Out of order packet")
+		}
+		if publicHeader.PacketNumber == s.lastObservedPacketNumber {
+			return errors.New("Duplicate packet")
+		}
+	}
+	s.lastObservedPacketNumber = publicHeader.PacketNumber
+
 	if addr != s.CurrentRemoteAddr {
 		s.CurrentRemoteAddr = addr
 	}
