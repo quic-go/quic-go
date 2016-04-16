@@ -47,16 +47,16 @@ func (c *aeadCipher) Seal(dst, nonce, plaintext, additionalData []byte) []byte {
 	if len(dst) < len(plaintext) {
 		panic("dst buffer to small")
 	}
+	var Nonce [12]byte
+	copy(Nonce[:], nonce)
 
 	// create the ploy1305 key
 	var polyKey [32]byte
-	var tmp [64]byte
-	chacha.XORKeyStream(tmp[:], c.key[:], nonce, 0, tmp[:])
-	copy(polyKey[:], tmp[:32])
+	chacha.XORKeyStream(polyKey[:], polyKey[:], &(c.key), &Nonce, 0)
 
 	// encrypt the plaintext
 	n := len(plaintext)
-	chacha.XORKeyStream(dst, c.key[:], nonce, 1, plaintext)
+	chacha.XORKeyStream(dst, plaintext, &(c.key), &Nonce, 1)
 
 	// authenticate the ciphertext
 	tag := authenticate(&polyKey, dst[:n], additionalData)
@@ -73,15 +73,15 @@ func (c *aeadCipher) Open(dst, nonce, ciphertext, additionalData []byte) ([]byte
 	if len(dst) < len(ciphertext)-12 {
 		panic("dst buffer to small")
 	}
+	var Nonce [12]byte
+	copy(Nonce[:], nonce)
 
 	hash := ciphertext[len(ciphertext)-12:]
 	ciphertext = ciphertext[:len(ciphertext)-12]
 
 	// create the ploy1305 key
 	var polyKey [32]byte
-	var tmp [64]byte
-	chacha.XORKeyStream(tmp[:], c.key[:], nonce, 0, tmp[:])
-	copy(polyKey[:], tmp[:32])
+	chacha.XORKeyStream(polyKey[:], polyKey[:], &(c.key), &Nonce, 0)
 
 	// authenticate the ciphertext
 	tag := authenticate(&polyKey, ciphertext, additionalData)
@@ -90,7 +90,7 @@ func (c *aeadCipher) Open(dst, nonce, ciphertext, additionalData []byte) ([]byte
 	}
 
 	// decrypt ciphertext
-	chacha.XORKeyStream(dst, c.key[:], nonce, 1, ciphertext)
+	chacha.XORKeyStream(dst, ciphertext, &(c.key), &Nonce, 1)
 	return dst[:len(ciphertext)], nil
 }
 
