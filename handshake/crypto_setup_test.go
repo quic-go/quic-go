@@ -10,7 +10,7 @@ import (
 type mockKEX struct{}
 
 func (*mockKEX) PublicKey() []byte {
-	return []byte("publickey")
+	return []byte("pubs-s")
 }
 func (*mockKEX) CalculateSharedKey(otherPublic []byte) ([]byte, error) {
 	return []byte("shared key"), nil
@@ -55,11 +55,11 @@ var _ = Describe("Crypto setup", func() {
 	})
 
 	It("generates REJ messages", func() {
-		response, err := cs.handleInchoateCHLO(sampleCHLO)
+		response, err := cs.handleInchoateCHLO([]byte("chlo"))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(response).To(HavePrefix("REJ"))
 		Expect(response).To(ContainSubstring("certcompressed"))
-		Expect(response).To(ContainSubstring("publickey"))
+		Expect(response).To(ContainSubstring("pubs-s"))
 		Expect(signer.gotCHLO).To(BeTrue())
 	})
 
@@ -68,5 +68,17 @@ var _ = Describe("Crypto setup", func() {
 		_, err := cs.handleInchoateCHLO(sampleCHLO)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(signer.gotCHLO).To(BeFalse())
+	})
+
+	It("generates SHLO messages", func() {
+		response, err := cs.handleCHLO([]byte("chlo-data"), map[Tag][]byte{
+			TagPUBS: []byte("pubs-c"),
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(response).To(ContainSubstring("pubs-s")) // TODO: Should be new pubs
+		Expect(response).To(ContainSubstring(string(cs.nonce)))
+		Expect(response).To(ContainSubstring(string(protocol.SupportedVersionsAsTags)))
+		Expect(cs.secureAEAD).ToNot(BeNil())
+		Expect(cs.forwardSecureAEAD).ToNot(BeNil())
 	})
 })

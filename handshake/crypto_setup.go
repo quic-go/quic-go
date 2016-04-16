@@ -83,39 +83,11 @@ func (h *CryptoSetup) HandleCryptoMessage(data []byte) ([]byte, error) {
 	}
 
 	if scid, ok := cryptoData[TagSCID]; ok && bytes.Equal(h.scfg.ID, scid) {
-		// We have a CHLO matching our server config, we can continue with the 0-RTT handshake
-		var sharedSecret []byte
-		sharedSecret, err = h.scfg.kex.CalculateSharedKey(cryptoData[TagPUBS])
-		if err != nil {
-			return nil, err
-		}
-		var nonce bytes.Buffer
-		nonce.Write(cryptoData[TagNONC])
-		nonce.Write(h.nonce)
-
-		h.secureAEAD, err = crypto.DeriveKeysChacha20(false, sharedSecret, nonce.Bytes(), h.connID, data, h.scfg.Get(), h.scfg.signer.GetCertUncompressed())
-		if err != nil {
-			return nil, err
-		}
-		// TODO: Use new curve
-		h.forwardSecureAEAD, err = crypto.DeriveKeysChacha20(true, sharedSecret, nonce.Bytes(), h.connID, data, h.scfg.Get(), h.scfg.signer.GetCertUncompressed())
-		if err != nil {
-			return nil, err
-		}
-
-		var reply bytes.Buffer
-		WriteHandshakeMessage(&reply, TagSHLO, map[Tag][]byte{
-			TagPUBS: h.scfg.kex.PublicKey(),
-			TagSNO:  h.nonce,
-			TagVER:  protocol.SupportedVersionsAsTags,
-			TagICSL: []byte{0x1e, 0x00, 0x00, 0x00}, //30
-			TagMSPC: []byte{0x64, 0x00, 0x00, 0x00}, //100
-		})
-		return reply.Bytes(), nil
+		// We have a CHLO with a proper server config ID, do a 0-RTT handshake
+		return h.handleCHLO(data, cryptoData)
 	}
 
 	// We have an inacholate or non-matching CHLO, we now send a rejection
-
 	return h.handleInchoateCHLO(data)
 }
 
@@ -138,4 +110,35 @@ func (h *CryptoSetup) handleInchoateCHLO(data []byte) ([]byte, error) {
 		TagPROF: proof,
 	})
 	return serverReply.Bytes(), nil
+}
+
+func (h *CryptoSetup) handleCHLO(data []byte, cryptoData map[Tag][]byte) ([]byte, error) {
+	// We have a CHLO matching our server config, we can continue with the 0-RTT handshake
+	sharedSecret, err := h.scfg.kex.CalculateSharedKey(cryptoData[TagPUBS])
+	if err != nil {
+		return nil, err
+	}
+	var nonce bytes.Buffer
+	nonce.Write(cryptoData[TagNONC])
+	nonce.Write(h.nonce)
+
+	h.secureAEAD, err = crypto.DeriveKeysChacha20(false, sharedSecret, nonce.Bytes(), h.connID, data, h.scfg.Get(), h.scfg.signer.GetCertUncompressed())
+	if err != nil {
+		return nil, err
+	}
+	// TODO: Use new curve
+	h.forwardSecureAEAD, err = crypto.DeriveKeysChacha20(true, sharedSecret, nonce.Bytes(), h.connID, data, h.scfg.Get(), h.scfg.signer.GetCertUncompressed())
+	if err != nil {
+		return nil, err
+	}
+
+	var reply bytes.Buffer
+	WriteHandshakeMessage(&reply, TagSHLO, map[Tag][]byte{
+		TagPUBS: h.scfg.kex.PublicKey(),
+		TagSNO:  h.nonce,
+		TagVER:  protocol.SupportedVersionsAsTags,
+		TagICSL: []byte{0x1e, 0x00, 0x00, 0x00}, //30
+		TagMSPC: []byte{0x64, 0x00, 0x00, 0x00}, //100
+	})
+	return reply.Bytes(), nil
 }
