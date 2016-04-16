@@ -8,8 +8,9 @@ import (
 )
 
 var _ = Describe("KeyDerivation", func() {
-	It("derives proper keys", func() {
+	It("derives non-fs keys", func() {
 		aead, err := DeriveKeysChacha20(
+			false,
 			[]byte("0123456789012345678901"),
 			[]byte("nonce"),
 			protocol.ConnectionID(42),
@@ -22,5 +23,22 @@ var _ = Describe("KeyDerivation", func() {
 		// If the IVs match, the keys will match too, since the keys are read earlier
 		Expect(chacha.myIV).To(Equal([]byte{0xf0, 0xf5, 0x4c, 0xa8}))
 		Expect(chacha.otherIV).To(Equal([]byte{0x75, 0xd8, 0xa2, 0x8d}))
+	})
+
+	It("derives fs keys", func() {
+		aead, err := DeriveKeysChacha20(
+			true,
+			[]byte("0123456789012345678901"),
+			[]byte("nonce"),
+			protocol.ConnectionID(42),
+			[]byte("chlo"),
+			[]byte("scfg"),
+			[]byte("cert"),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		chacha := aead.(*aeadChacha20Poly1305)
+		// If the IVs match, the keys will match too, since the keys are read earlier
+		Expect(chacha.myIV).To(Equal([]byte{0xf5, 0x73, 0x11, 0x79}))
+		Expect(chacha.otherIV).To(Equal([]byte{0xf7, 0x26, 0x4d, 0x2c}))
 	})
 })
