@@ -6,7 +6,6 @@ import (
 )
 
 // ReadUintN reads N bytes
-// ToDo: add tests
 func ReadUintN(b io.ByteReader, length uint8) (uint64, error) {
 	var res uint64
 	for i := uint8(0); i < length; i++ {

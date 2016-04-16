@@ -94,4 +94,25 @@ var _ = Describe("Utils", func() {
 			Expect(Min(5, 7)).To(Equal(5))
 		})
 	})
+
+	Context("ReadUintN", func() {
+		It("reads n bytes", func() {
+			m := map[uint8]uint64{
+				0: 0x0, 1: 0x01, 2: 0x0201, 3: 0x030201, 4: 0x04030201, 5: 0x0504030201,
+				6: 0x060504030201, 7: 0x07060504030201, 8: 0x0807060504030201,
+			}
+			for n, expected := range m {
+				b := bytes.NewReader([]byte{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8})
+				i, err := ReadUintN(b, n)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(i).To(Equal(expected))
+			}
+		})
+
+		It("errors", func() {
+			b := bytes.NewReader([]byte{0x1, 0x2})
+			_, err := ReadUintN(b, 3)
+			Expect(err).To(HaveOccurred())
+		})
+	})
 })
