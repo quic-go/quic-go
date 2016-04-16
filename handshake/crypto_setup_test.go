@@ -1,6 +1,8 @@
 package handshake
 
 import (
+	"bytes"
+
 	"github.com/lucas-clemente/quic-go/protocol"
 
 	. "github.com/onsi/ginkgo"
@@ -75,10 +77,27 @@ var _ = Describe("Crypto setup", func() {
 			TagPUBS: []byte("pubs-c"),
 		})
 		Expect(err).ToNot(HaveOccurred())
+		Expect(response).To(HavePrefix("SHLO"))
 		Expect(response).To(ContainSubstring("pubs-s")) // TODO: Should be new pubs
 		Expect(response).To(ContainSubstring(string(cs.nonce)))
 		Expect(response).To(ContainSubstring(string(protocol.SupportedVersionsAsTags)))
 		Expect(cs.secureAEAD).ToNot(BeNil())
 		Expect(cs.forwardSecureAEAD).ToNot(BeNil())
+	})
+
+	It("recognizes SCID", func() {
+		var data bytes.Buffer
+		WriteHandshakeMessage(&data, TagCHLO, map[Tag][]byte{TagSCID: scfg.ID})
+		response, err := cs.HandleCryptoMessage(data.Bytes())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(response).To(HavePrefix("SHLO"))
+	})
+
+	It("recognizes missing SCID", func() {
+		var data bytes.Buffer
+		WriteHandshakeMessage(&data, TagCHLO, map[Tag][]byte{})
+		response, err := cs.HandleCryptoMessage(data.Bytes())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(response).To(HavePrefix("REJ"))
 	})
 })
