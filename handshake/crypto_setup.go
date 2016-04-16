@@ -2,8 +2,10 @@ package handshake
 
 import (
 	"bytes"
+	"crypto/rand"
 	"errors"
 	"io"
+	"io/ioutil"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -13,28 +15,61 @@ import (
 type CryptoSetup struct {
 	connID  protocol.ConnectionID
 	version protocol.VersionNumber
-	aead    crypto.AEAD
 	scfg    *ServerConfig
+	nonce   []byte
+
+	secureAEAD                  crypto.AEAD
+	forwardSecureAEAD           crypto.AEAD
+	receivedSecurePacket        bool
+	receivedForwardSecurePacket bool
 }
 
 // NewCryptoSetup creates a new CryptoSetup instance
 func NewCryptoSetup(connID protocol.ConnectionID, version protocol.VersionNumber, scfg *ServerConfig) *CryptoSetup {
+	nonce := make([]byte, 32)
+	if _, err := rand.Reader.Read(nonce); err != nil {
+		panic(err)
+	}
 	return &CryptoSetup{
 		connID:  connID,
 		version: version,
-		aead:    &crypto.NullAEAD{},
 		scfg:    scfg,
+		nonce:   nonce,
 	}
 }
 
 // Open a message
 func (h *CryptoSetup) Open(packetNumber protocol.PacketNumber, associatedData []byte, ciphertext io.Reader) (*bytes.Reader, error) {
-	return h.aead.Open(packetNumber, associatedData, ciphertext)
+	data, err := ioutil.ReadAll(ciphertext)
+	if err != nil {
+		return nil, err
+	}
+
+	if h.forwardSecureAEAD != nil {
+		res, err := h.forwardSecureAEAD.Open(packetNumber, associatedData, bytes.NewReader(data))
+		if err == nil {
+			h.receivedForwardSecurePacket = true
+			return res, nil
+		}
+		if h.receivedForwardSecurePacket {
+			return nil, err
+		}
+	}
+	if h.secureAEAD != nil {
+		return h.secureAEAD.Open(packetNumber, associatedData, bytes.NewReader(data))
+	}
+	return (&crypto.NullAEAD{}).Open(packetNumber, associatedData, bytes.NewReader(data))
 }
 
 // Seal a messageTag
 func (h *CryptoSetup) Seal(packetNumber protocol.PacketNumber, b *bytes.Buffer, associatedData []byte, plaintext []byte) {
-	h.aead.Seal(packetNumber, b, associatedData, plaintext)
+	if h.receivedForwardSecurePacket {
+		h.forwardSecureAEAD.Seal(packetNumber, b, associatedData, plaintext)
+	} else if h.secureAEAD != nil {
+		h.secureAEAD.Seal(packetNumber, b, associatedData, plaintext)
+	} else {
+		(&crypto.NullAEAD{}).Seal(packetNumber, b, associatedData, plaintext)
+	}
 }
 
 // HandleCryptoMessage handles the crypto handshake and returns the answer
@@ -54,7 +89,16 @@ func (h *CryptoSetup) HandleCryptoMessage(data []byte) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		h.aead, err = crypto.DeriveKeysChacha20(sharedSecret, cryptoData[TagNONC], h.connID, data, h.scfg.Get(), h.scfg.kd.GetCertUncompressed())
+		var nonce bytes.Buffer
+		nonce.Write(cryptoData[TagNONC])
+		nonce.Write(h.nonce)
+
+		h.secureAEAD, err = crypto.DeriveKeysChacha20(false, sharedSecret, nonce.Bytes(), h.connID, data, h.scfg.Get(), h.scfg.kd.GetCertUncompressed())
+		if err != nil {
+			return nil, err
+		}
+		// TODO: Use new curve
+		h.forwardSecureAEAD, err = crypto.DeriveKeysChacha20(true, sharedSecret, nonce.Bytes(), h.connID, data, h.scfg.Get(), h.scfg.kd.GetCertUncompressed())
 		if err != nil {
 			return nil, err
 		}
@@ -62,7 +106,10 @@ func (h *CryptoSetup) HandleCryptoMessage(data []byte) ([]byte, error) {
 		var reply bytes.Buffer
 		WriteHandshakeMessage(&reply, TagSHLO, map[Tag][]byte{
 			TagPUBS: h.scfg.kex.PublicKey(),
+			TagSNO:  h.nonce,
 			TagVER:  protocol.SupportedVersionsAsTags,
+			TagICSL: []byte{0x1e, 0x00, 0x00, 0x00}, //30
+			TagMSPC: []byte{0x64, 0x00, 0x00, 0x00}, //100
 		})
 		return reply.Bytes(), nil
 	}
@@ -83,6 +130,7 @@ func (h *CryptoSetup) HandleCryptoMessage(data []byte) ([]byte, error) {
 	WriteHandshakeMessage(&serverReply, TagREJ, map[Tag][]byte{
 		TagSCFG: h.scfg.Get(),
 		TagCERT: h.scfg.GetCertCompressed(),
+		TagSNO:  h.nonce,
 		TagPROF: proof,
 	})
 	return serverReply.Bytes(), nil

@@ -12,9 +12,13 @@ import (
 )
 
 // DeriveKeysChacha20 derives the client and server keys and creates a matching chacha20poly1305 instance
-func DeriveKeysChacha20(sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte) (AEAD, error) {
+func DeriveKeysChacha20(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte) (AEAD, error) {
 	var info bytes.Buffer
-	info.Write([]byte("QUIC key expansion\x00"))
+	if forwardSecure {
+		info.Write([]byte("QUIC forward secure key expansion\x00"))
+	} else {
+		info.Write([]byte("QUIC key expansion\x00"))
+	}
 	utils.WriteUint64(&info, uint64(connID))
 	info.Write(chlo)
 	info.Write(scfg)
