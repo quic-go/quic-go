@@ -13,8 +13,8 @@ import (
 
 // A Server of QUIC
 type Server struct {
-	keyData *crypto.KeyData
-	scfg    *handshake.ServerConfig
+	signer crypto.Signer
+	scfg   *handshake.ServerConfig
 
 	sessions map[protocol.ConnectionID]*Session
 
@@ -24,15 +24,15 @@ type Server struct {
 // NewServer makes a new server
 func NewServer(certPath, keyPath string, cb StreamCallback) (*Server, error) {
 	path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
-	keyData, err := crypto.LoadKeyData(path+"cert.der", path+"key.der")
+	signer, err := crypto.NewRSASigner(path+"cert.der", path+"key.der")
 	if err != nil {
 		return nil, err
 	}
 
-	scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), keyData)
+	scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
 
 	return &Server{
-		keyData:        keyData,
+		signer:         signer,
 		scfg:           scfg,
 		streamCallback: cb,
 		sessions:       map[protocol.ConnectionID]*Session{},

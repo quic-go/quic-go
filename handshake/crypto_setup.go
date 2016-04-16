@@ -93,12 +93,12 @@ func (h *CryptoSetup) HandleCryptoMessage(data []byte) ([]byte, error) {
 		nonce.Write(cryptoData[TagNONC])
 		nonce.Write(h.nonce)
 
-		h.secureAEAD, err = crypto.DeriveKeysChacha20(false, sharedSecret, nonce.Bytes(), h.connID, data, h.scfg.Get(), h.scfg.kd.GetCertUncompressed())
+		h.secureAEAD, err = crypto.DeriveKeysChacha20(false, sharedSecret, nonce.Bytes(), h.connID, data, h.scfg.Get(), h.scfg.signer.GetCertUncompressed())
 		if err != nil {
 			return nil, err
 		}
 		// TODO: Use new curve
-		h.forwardSecureAEAD, err = crypto.DeriveKeysChacha20(true, sharedSecret, nonce.Bytes(), h.connID, data, h.scfg.Get(), h.scfg.kd.GetCertUncompressed())
+		h.forwardSecureAEAD, err = crypto.DeriveKeysChacha20(true, sharedSecret, nonce.Bytes(), h.connID, data, h.scfg.Get(), h.scfg.signer.GetCertUncompressed())
 		if err != nil {
 			return nil, err
 		}

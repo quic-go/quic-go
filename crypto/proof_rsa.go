@@ -14,14 +14,14 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
-// KeyData stores a key and a certificate for the server proof
-type KeyData struct {
+// rsaSigner stores a key and a certificate for the server proof
+type rsaSigner struct {
 	key  *rsa.PrivateKey
 	cert *x509.Certificate
 }
 
-// LoadKeyData loads the key and cert from files
-func LoadKeyData(certFileName string, keyFileName string) (*KeyData, error) {
+// NewRSASigner loads the key and cert from files
+func NewRSASigner(certFileName string, keyFileName string) (Signer, error) {
 	keyDER, err := ioutil.ReadFile(keyFileName)
 	if err != nil {
 		return nil, err
@@ -39,11 +39,11 @@ func LoadKeyData(certFileName string, keyFileName string) (*KeyData, error) {
 		return nil, err
 	}
 
-	return &KeyData{key: key, cert: cert}, nil
+	return &rsaSigner{key: key, cert: cert}, nil
 }
 
 // SignServerProof signs CHLO and server config for use in the server proof
-func (kd *KeyData) SignServerProof(chlo []byte, serverConfigData []byte) ([]byte, error) {
+func (kd *rsaSigner) SignServerProof(chlo []byte, serverConfigData []byte) ([]byte, error) {
 	hash := sha256.New()
 	if len(chlo) > 0 {
 		// Version >= 31
@@ -59,7 +59,7 @@ func (kd *KeyData) SignServerProof(chlo []byte, serverConfigData []byte) ([]byte
 }
 
 // GetCertCompressed gets the certificate in the format described by the QUIC crypto doc
-func (kd *KeyData) GetCertCompressed() []byte {
+func (kd *rsaSigner) GetCertCompressed() []byte {
 	b := &bytes.Buffer{}
 	b.WriteByte(1) // Entry type compressed
 	b.WriteByte(0) // Entry type end_of_list
@@ -81,6 +81,6 @@ func (kd *KeyData) GetCertCompressed() []byte {
 }
 
 // GetCertUncompressed gets the certificate in DER
-func (kd *KeyData) GetCertUncompressed() []byte {
+func (kd *rsaSigner) GetCertUncompressed() []byte {
 	return kd.cert.Raw
 }

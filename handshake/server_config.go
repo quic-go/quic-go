@@ -9,22 +9,22 @@ import (
 
 // ServerConfig is a server config
 type ServerConfig struct {
-	kex crypto.KeyExchange
-	kd  *crypto.KeyData
-	ID  []byte
+	kex    crypto.KeyExchange
+	signer crypto.Signer
+	ID     []byte
 }
 
 // NewServerConfig creates a new server config
-func NewServerConfig(kex crypto.KeyExchange, kd *crypto.KeyData) *ServerConfig {
+func NewServerConfig(kex crypto.KeyExchange, signer crypto.Signer) *ServerConfig {
 	id := make([]byte, 16)
 	_, err := rand.Reader.Read(id)
 	if err != nil {
 		panic(err)
 	}
 	return &ServerConfig{
-		kex: kex,
-		kd:  kd,
-		ID:  id,
+		kex:    kex,
+		signer: signer,
+		ID:     id,
 	}
 }
 
@@ -45,10 +45,10 @@ func (s *ServerConfig) Get() []byte {
 
 // Sign the server config and CHLO with the server's keyData
 func (s *ServerConfig) Sign(chlo []byte) ([]byte, error) {
-	return s.kd.SignServerProof(chlo, s.Get())
+	return s.signer.SignServerProof(chlo, s.Get())
 }
 
 // GetCertCompressed returns the certificate data
 func (s *ServerConfig) GetCertCompressed() []byte {
-	return s.kd.GetCertCompressed()
+	return s.signer.GetCertCompressed()
 }
