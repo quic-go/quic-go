@@ -116,6 +116,10 @@ func (h *CryptoSetup) HandleCryptoMessage(data []byte) ([]byte, error) {
 
 	// We have an inacholate or non-matching CHLO, we now send a rejection
 
+	return h.handleInchoateCHLO(data)
+}
+
+func (h *CryptoSetup) handleInchoateCHLO(data []byte) ([]byte, error) {
 	var chloOrNil []byte
 	if h.version > protocol.VersionNumber(30) {
 		chloOrNil = data
