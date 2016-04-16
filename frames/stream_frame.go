@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"io/ioutil"
 
+	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // A StreamFrame of QUIC
 type StreamFrame struct {
 	FinBit   bool
-	StreamID uint32
+	StreamID protocol.StreamID
 	Offset   uint64
 	Data     []byte
 }
@@ -36,7 +37,7 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 	if err != nil {
 		return nil, err
 	}
-	frame.StreamID = uint32(sid)
+	frame.StreamID = protocol.StreamID(sid)
 
 	frame.Offset, err = utils.ReadUintN(r, offsetLen)
 	if err != nil {
@@ -79,7 +80,7 @@ func (f *StreamFrame) Write(b *bytes.Buffer) error {
 	}
 	typeByte ^= 0x03 // TODO: Send shorter stream ID if possible
 	b.WriteByte(typeByte)
-	utils.WriteUint32(b, f.StreamID)
+	utils.WriteUint32(b, uint32(f.StreamID))
 	if f.Offset != 0 {
 		utils.WriteUint64(b, f.Offset)
 	}

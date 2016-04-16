@@ -3,6 +3,7 @@ package frames
 import (
 	"bytes"
 
+	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -15,7 +16,7 @@ var _ = Describe("StreamFrame", func() {
 				frame, err := ParseStreamFrame(b)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.FinBit).To(BeFalse())
-				Expect(frame.StreamID).To(Equal(uint32(1)))
+				Expect(frame.StreamID).To(Equal(protocol.StreamID(1)))
 				Expect(frame.Offset).To(BeZero())
 				Expect(frame.Data).To(Equal([]byte("foobar")))
 			})
@@ -25,7 +26,7 @@ var _ = Describe("StreamFrame", func() {
 				frame, err := ParseStreamFrame(b)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.FinBit).To(BeFalse())
-				Expect(frame.StreamID).To(Equal(uint32(1)))
+				Expect(frame.StreamID).To(Equal(protocol.StreamID(1)))
 				Expect(frame.Offset).To(BeZero())
 				Expect(frame.Data).To(Equal([]byte("foobar")))
 			})

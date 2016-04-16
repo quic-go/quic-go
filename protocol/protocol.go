@@ -5,3 +5,6 @@ type PacketNumber uint64
 
 // A ConnectionID in QUIC
 type ConnectionID uint64
+
+// A StreamID in QUIC
+type StreamID uint32

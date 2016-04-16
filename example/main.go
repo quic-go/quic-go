@@ -61,7 +61,7 @@ func handleStream(frame *frames.StreamFrame) []frames.Frame {
 	}
 
 	dataStreamFrame := &frames.StreamFrame{
-		StreamID: h2frame.Header().StreamID,
+		StreamID: protocol.StreamID(h2frame.Header().StreamID),
 		Data:     []byte("Hello World!"),
 		FinBit:   true,
 	}
