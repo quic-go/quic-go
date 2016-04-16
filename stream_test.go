@@ -14,7 +14,7 @@ var _ = Describe("Stream", func() {
 			Offset: 0,
 			Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
 		}
-		stream := NewStream()
+		stream := NewStream(1337)
 		stream.AddStreamFrame(&frame)
 		b := make([]byte, 4)
 		n, err := stream.Read(b)
@@ -32,7 +32,7 @@ var _ = Describe("Stream", func() {
 			Offset: 2,
 			Data:   []byte{0xBE, 0xEF},
 		}
-		stream := NewStream()
+		stream := NewStream(1337)
 		stream.AddStreamFrame(&frame1)
 		stream.AddStreamFrame(&frame2)
 		b := make([]byte, 6)
@@ -51,7 +51,7 @@ var _ = Describe("Stream", func() {
 			Offset: 2,
 			Data:   []byte{0xBE, 0xEF},
 		}
-		stream := NewStream()
+		stream := NewStream(1337)
 		stream.AddStreamFrame(&frame1)
 		stream.AddStreamFrame(&frame2)
 		b := make([]byte, 4)
@@ -62,7 +62,7 @@ var _ = Describe("Stream", func() {
 	})
 
 	It("waits until data is available", func() {
-		stream := NewStream()
+		stream := NewStream(1337)
 		go func() {
 			frame := frames.StreamFrame{
 				Offset: 0,
@@ -86,7 +86,7 @@ var _ = Describe("Stream", func() {
 			Offset: 1,
 			Data:   []byte{0xBE, 0xEF},
 		}
-		stream := NewStream()
+		stream := NewStream(1337)
 		stream.AddStreamFrame(&frame1)
 		err := stream.AddStreamFrame(&frame2)
 		Expect(err).To(HaveOccurred())

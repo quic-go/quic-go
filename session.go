@@ -12,7 +12,7 @@ import (
 )
 
 // StreamCallback gets a stream frame and returns a reply frame
-type StreamCallback func(*frames.StreamFrame) []frames.Frame
+type StreamCallback func(*Stream) []frames.Frame
 
 // A Session is a QUIC session
 type Session struct {
@@ -30,6 +30,8 @@ type Session struct {
 	lastSentPacketNumber     protocol.PacketNumber
 	lastObservedPacketNumber protocol.PacketNumber
 
+	Streams map[protocol.StreamID]*Stream
+
 	streamCallback StreamCallback
 }
 
@@ -43,6 +45,7 @@ func NewSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protoc
 		cryptoSetup:              handshake.NewCryptoSetup(connectionID, v, sCfg),
 		streamCallback:           streamCallback,
 		lastObservedPacketNumber: 0,
+		Streams:                  make(map[protocol.StreamID]*Stream),
 	}
 }
 
@@ -115,7 +118,17 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 					s.SendFrames([]frames.Frame{&frames.StreamFrame{StreamID: 1, Data: reply}})
 				}
 			} else {
-				replyFrames := s.streamCallback(frame)
+				stream, ok := s.Streams[frame.StreamID]
+				if !ok {
+					stream = NewStream(frame.StreamID)
+					s.Streams[frame.StreamID] = stream
+				}
+				err := stream.AddStreamFrame(frame)
+				if err != nil {
+					return err
+				}
+
+				replyFrames := s.streamCallback(stream)
 				if replyFrames != nil {
 					s.SendFrames(replyFrames)
 				}

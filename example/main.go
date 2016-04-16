@@ -32,10 +32,9 @@ func main() {
 	}
 }
 
-func handleStream(frame *frames.StreamFrame) []frames.Frame {
-	h2r := bytes.NewReader(frame.Data)
+func handleStream(stream *quic.Stream) []frames.Frame {
 	var reply bytes.Buffer
-	h2framer := http2.NewFramer(&reply, h2r)
+	h2framer := http2.NewFramer(&reply, stream)
 	h2framer.ReadMetaHeaders = hpack.NewDecoder(1024, nil)
 	h2frame, err := h2framer.ReadFrame()
 	if err != nil {
@@ -55,7 +54,7 @@ func handleStream(frame *frames.StreamFrame) []frames.Frame {
 		BlockFragment: replyHeaders.Bytes(),
 	})
 	headerStreamFrame := &frames.StreamFrame{
-		StreamID: frame.StreamID,
+		StreamID: stream.StreamID,
 		Data:     reply.Bytes(),
 		FinBit:   true,
 	}

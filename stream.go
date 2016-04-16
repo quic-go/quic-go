@@ -2,19 +2,22 @@ package quic
 
 import (
 	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // A Stream assembles the data from StreamFrames and provides a super-convenient Read-Interface
 type Stream struct {
+	StreamID       protocol.StreamID
 	StreamFrames   chan *frames.StreamFrame
 	CurrentFrame   *frames.StreamFrame
 	ReadPosInFrame int
 }
 
 // NewStream creates a new Stream
-func NewStream() *Stream {
+func NewStream(StreamID protocol.StreamID) *Stream {
 	return &Stream{
+		StreamID:     StreamID,
 		StreamFrames: make(chan *frames.StreamFrame, 8), // ToDo: add config option for this number
 	}
 }
