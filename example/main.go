@@ -9,6 +9,7 @@ import (
 	"golang.org/x/net/http2/hpack"
 
 	"github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 )
 
@@ -31,7 +32,7 @@ func main() {
 	}
 }
 
-func handleStream(frame *quic.StreamFrame) []quic.Frame {
+func handleStream(frame *frames.StreamFrame) []frames.Frame {
 	h2r := bytes.NewReader(frame.Data)
 	var reply bytes.Buffer
 	h2framer := http2.NewFramer(&reply, h2r)
@@ -53,17 +54,17 @@ func handleStream(frame *quic.StreamFrame) []quic.Frame {
 		EndHeaders:    true,
 		BlockFragment: replyHeaders.Bytes(),
 	})
-	headerStreamFrame := &quic.StreamFrame{
+	headerStreamFrame := &frames.StreamFrame{
 		StreamID: frame.StreamID,
 		Data:     reply.Bytes(),
 		FinBit:   true,
 	}
 
-	dataStreamFrame := &quic.StreamFrame{
+	dataStreamFrame := &frames.StreamFrame{
 		StreamID: h2frame.Header().StreamID,
 		Data:     []byte("Hello World!"),
 		FinBit:   true,
 	}
 
-	return []quic.Frame{headerStreamFrame, dataStreamFrame}
+	return []frames.Frame{headerStreamFrame, dataStreamFrame}
 }

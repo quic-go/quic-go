@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 )
 
 // StreamCallback gets a stream frame and returns a reply frame
-type StreamCallback func(*StreamFrame) []Frame
+type StreamCallback func(*frames.StreamFrame) []frames.Frame
 
 // A Session is a QUIC session
 type Session struct {
@@ -61,7 +62,7 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 	}
 	s.Entropy.Add(publicHeader.PacketNumber, privateFlag&0x01 > 0)
 
-	s.SendFrames([]Frame{&AckFrame{
+	s.SendFrames([]frames.Frame{&frames.AckFrame{
 		LargestObserved: uint64(publicHeader.PacketNumber),
 		Entropy:         s.Entropy.Get(),
 	}})
@@ -82,7 +83,7 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 
 		if typeByte&0x80 == 0x80 { // STREAM
 			fmt.Println("Detected STREAM")
-			frame, err := ParseStreamFrame(r)
+			frame, err := frames.ParseStreamFrame(r)
 			if err != nil {
 				return err
 			}
@@ -98,7 +99,7 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 					return err
 				}
 				if reply != nil {
-					s.SendFrames([]Frame{&StreamFrame{StreamID: 1, Data: reply}})
+					s.SendFrames([]frames.Frame{&frames.StreamFrame{StreamID: 1, Data: reply}})
 				}
 			} else {
 				replyFrames := s.streamCallback(frame)
@@ -109,7 +110,7 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 			continue
 		} else if typeByte&0xC0 == 0x40 { // ACK
 			fmt.Println("Detected ACK")
-			frame, err := ParseAckFrame(r)
+			frame, err := frames.ParseAckFrame(r)
 			if err != nil {
 				return err
 			}
@@ -121,14 +122,14 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 			return errors.New("Detected CONGESTION_FEEDBACK")
 		} else if typeByte&0x06 == 0x06 { // STOP_WAITING
 			fmt.Println("Detected STOP_WAITING")
-			_, err := ParseStopWaitingFrame(r, publicHeader.PacketNumberLen)
+			_, err := frames.ParseStopWaitingFrame(r, publicHeader.PacketNumberLen)
 			if err != nil {
 				return err
 			}
 			// ToDo: react to receiving this frame
 		} else if typeByte&0x02 == 0x02 { // CONNECTION_CLOSE
 			fmt.Println("Detected CONNECTION_CLOSE")
-			frame, err := ParseConnectionCloseFrame(r)
+			frame, err := frames.ParseConnectionCloseFrame(r)
 			if err != nil {
 				return err
 			}
@@ -144,7 +145,7 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 }
 
 // SendFrames sends a number of frames to the client
-func (s *Session) SendFrames(frames []Frame) error {
+func (s *Session) SendFrames(frames []frames.Frame) error {
 	var framesData bytes.Buffer
 	framesData.WriteByte(0) // TODO: entropy
 	for _, f := range frames {
