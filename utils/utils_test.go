@@ -82,4 +82,16 @@ var _ = Describe("Utils", func() {
 			Expect(b.Bytes()).To(Equal([]byte{0x12, 0x35, 0xAC, 0xEF}))
 		})
 	})
+
+	Context("Max", func() {
+		It("returns the maximum", func() {
+			Expect(Max(5, 7)).To(Equal(7))
+		})
+	})
+
+	Context("Min", func() {
+		It("returns the minimum", func() {
+			Expect(Min(5, 7)).To(Equal(5))
+		})
+	})
 })

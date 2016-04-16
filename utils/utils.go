@@ -77,6 +77,22 @@ func WriteUint16(b *bytes.Buffer, i uint16) {
 	b.WriteByte(uint8((i >> 8) & 0xff))
 }
 
+// Max returns the maximum of two Ints
+func Max(a, b int) int {
+	if a < b {
+		return b
+	}
+	return a
+}
+
+// Min returns the minimum of two Ints
+func Min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // Uint32Slice attaches the methods of sort.Interface to []uint32, sorting in increasing order.
 type Uint32Slice []uint32
 

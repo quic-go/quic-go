@@ -1,60 +1,54 @@
 package quic
 
 import (
-	"errors"
-	"io"
-
 	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // A Stream assembles the data from StreamFrames and provides a super-convenient Read-Interface
 type Stream struct {
-	StreamFrames   []*frames.StreamFrame
-	DataLen        uint64
-	ReadPosFrameNo int
+	StreamFrames   chan *frames.StreamFrame
+	CurrentFrame   *frames.StreamFrame
 	ReadPosInFrame int
 }
 
 // NewStream creates a new Stream
 func NewStream() *Stream {
-	return &Stream{}
-}
-
-func (s *Stream) readByte() (byte, error) {
-	if s.ReadPosInFrame == len(s.StreamFrames[s.ReadPosFrameNo].Data) {
-		s.ReadPosFrameNo++
-		if s.ReadPosFrameNo == len(s.StreamFrames) {
-			return 0, io.EOF
-		}
-		s.ReadPosInFrame = 0
+	return &Stream{
+		StreamFrames: make(chan *frames.StreamFrame, 8), // ToDo: add config option for this number
 	}
-	b := s.StreamFrames[s.ReadPosFrameNo].Data[s.ReadPosInFrame]
-	s.ReadPosInFrame++
-	return b, nil
 }
 
 // Read reads data
 func (s *Stream) Read(p []byte) (int, error) {
-	var err error
-	n := 0
-	if c := cap(p); c > 0 {
-		for n < c {
-			p[n], err = s.readByte()
-			n++
-			if err != nil {
-				break
+	bytesRead := 0
+	for bytesRead < len(p) {
+		if s.CurrentFrame == nil {
+			select {
+			case s.CurrentFrame = <-s.StreamFrames:
+			default:
+				if bytesRead == 0 {
+					s.CurrentFrame = <-s.StreamFrames
+				} else {
+					return bytesRead, nil
+				}
 			}
+			s.ReadPosInFrame = 0
+		}
+		m := utils.Min(len(p)-bytesRead, len(s.CurrentFrame.Data)-s.ReadPosInFrame)
+		copy(p[bytesRead:], s.CurrentFrame.Data[s.ReadPosInFrame:])
+		s.ReadPosInFrame += m
+		bytesRead += m
+		if s.ReadPosInFrame >= len(s.CurrentFrame.Data) {
+			s.CurrentFrame = nil
 		}
 	}
-	return n, nil
+
+	return bytesRead, nil
 }
 
 // AddStreamFrame adds a new stream frame
 func (s *Stream) AddStreamFrame(frame *frames.StreamFrame) error {
-	if frame.Offset != s.DataLen {
-		return errors.New("Stream: Wrong offset")
-	}
-	s.StreamFrames = append(s.StreamFrames, frame)
-	s.DataLen += uint64(len(frame.Data))
+	s.StreamFrames <- frame
 	return nil
 }
