@@ -84,15 +84,10 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 		Entropy:         s.Entropy.Get(),
 	}})
 
-	frameCounter := 0
-
 	// read all frames in the packet
 	for r.Len() > 0 {
 		typeByte, _ := r.ReadByte()
 		r.UnreadByte()
-
-		frameCounter++
-		fmt.Printf("Reading frame %d\n", frameCounter)
 
 		err = nil
 		if typeByte&0x80 == 0x80 {
@@ -132,7 +127,6 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 }
 
 func (s *Session) handleStreamFrame(r *bytes.Reader) error {
-	fmt.Println("Detected STREAM")
 	frame, err := frames.ParseStreamFrame(r)
 	if err != nil {
 		return err
@@ -179,7 +173,6 @@ func (s *Session) handleStreamFrame(r *bytes.Reader) error {
 }
 
 func (s *Session) handleAckFrame(r *bytes.Reader) error {
-	fmt.Println("Detected ACK")
 	_, err := frames.ParseAckFrame(r)
 	if err != nil {
 		return err
@@ -198,7 +191,6 @@ func (s *Session) handleConnectionCloseFrame(r *bytes.Reader) error {
 }
 
 func (s *Session) handleStopWaitingFrame(r *bytes.Reader, publicHeader *PublicHeader) error {
-	fmt.Println("Detected STOP_WAITING")
 	_, err := frames.ParseStopWaitingFrame(r, publicHeader.PacketNumberLen)
 	if err != nil {
 		return err
@@ -220,14 +212,13 @@ func (s *Session) SendFrames(frames []frames.Frame) error {
 
 	var fullReply bytes.Buffer
 	responsePublicHeader := PublicHeader{ConnectionID: s.ConnectionID, PacketNumber: s.lastSentPacketNumber}
-	fmt.Printf("Sending packet # %d\n", responsePublicHeader.PacketNumber)
 	if err := responsePublicHeader.WritePublicHeader(&fullReply); err != nil {
 		return err
 	}
 
 	s.cryptoSetup.Seal(s.lastSentPacketNumber, &fullReply, fullReply.Bytes(), framesData.Bytes())
 
-	fmt.Printf("Sending %d bytes to %v\n", len(fullReply.Bytes()), s.CurrentRemoteAddr)
+	fmt.Printf("-> Sending packet %d (%d bytes) to %v\n", responsePublicHeader.PacketNumber, len(fullReply.Bytes()), s.CurrentRemoteAddr)
 	_, err := s.Connection.WriteToUDP(fullReply.Bytes(), s.CurrentRemoteAddr)
 	return err
 }

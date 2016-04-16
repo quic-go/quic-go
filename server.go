@@ -60,15 +60,13 @@ func (s *Server) ListenAndServe(address string) error {
 		data = data[:n]
 		r := bytes.NewReader(data)
 
-		fmt.Printf("Received %d bytes from %v\n", n, remoteAddr)
-
 		publicHeader, err := ParsePublicHeader(r)
 		if err != nil {
 			fmt.Printf("Could not parse public header")
 			continue
 		}
 
-		fmt.Printf("Got packet # %d\n", publicHeader.PacketNumber)
+		fmt.Printf("<- Got packet %d (%d bytes) from %v\n", publicHeader.PacketNumber, n, remoteAddr)
 
 		// Send Version Negotiation Packet if the client is speaking a different protocol version
 		if publicHeader.VersionFlag && !protocol.IsSupportedVersion(publicHeader.VersionNumber) {
