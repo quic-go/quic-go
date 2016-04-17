@@ -80,7 +80,7 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 	s.Entropy.Add(publicHeader.PacketNumber, privateFlag&0x01 > 0)
 
 	s.SendFrames([]frames.Frame{&frames.AckFrame{
-		LargestObserved: uint64(publicHeader.PacketNumber),
+		LargestObserved: publicHeader.PacketNumber,
 		Entropy:         s.Entropy.Get(),
 	}})
 

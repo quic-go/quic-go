@@ -3,6 +3,7 @@ package frames
 import (
 	"bytes"
 
+	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -14,7 +15,7 @@ var _ = Describe("AckFrame", func() {
 			frame, err := ParseAckFrame(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.Entropy).To(Equal(byte(0xA4)))
-			Expect(frame.LargestObserved).To(Equal(uint64(0x03)))
+			Expect(frame.LargestObserved).To(Equal(protocol.PacketNumber(0x03)))
 			Expect(frame.DelayTime).To(Equal(uint16(0x4523)))
 			Expect(b.Len()).To(Equal(0))
 		})
@@ -23,7 +24,7 @@ var _ = Describe("AckFrame", func() {
 			b := bytes.NewReader([]byte{0x4C, 0xA4, 0x37, 0x13, 0xAD, 0xFB, 0xCA, 0xDE, 0x23, 0x45, 0x01, 0x02, 0xFF, 0xEE, 0xDD, 0xCC})
 			frame, err := ParseAckFrame(b)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.LargestObserved).To(Equal(uint64(0xDECAFBAD1337)))
+			Expect(frame.LargestObserved).To(Equal(protocol.PacketNumber(0xDECAFBAD1337)))
 			Expect(b.Len()).To(Equal(0))
 		})
 

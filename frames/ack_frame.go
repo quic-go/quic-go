@@ -3,13 +3,14 @@ package frames
 import (
 	"bytes"
 
+	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // An AckFrame in QUIC
 type AckFrame struct {
 	Entropy         byte
-	LargestObserved uint64
+	LargestObserved protocol.PacketNumber
 	DelayTime       uint16 // Todo: properly interpret this value as described in the specification
 }
 
@@ -47,20 +48,22 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 		largestObservedLen = 1
 	}
 
-	var missingSequenceNumberDeltaLen uint8 = 2 * (typeByte & 0x03)
+	missingSequenceNumberDeltaLen := 2 * (typeByte & 0x03)
 	if missingSequenceNumberDeltaLen == 0 {
 		missingSequenceNumberDeltaLen = 1
 	}
+	_ = missingSequenceNumberDeltaLen
 
 	frame.Entropy, err = r.ReadByte()
 	if err != nil {
 		return nil, err
 	}
 
-	frame.LargestObserved, err = utils.ReadUintN(r, largestObservedLen)
+	largestObserved, err := utils.ReadUintN(r, largestObservedLen)
 	if err != nil {
 		return nil, err
 	}
+	frame.LargestObserved = protocol.PacketNumber(largestObserved)
 
 	frame.DelayTime, err = utils.ReadUint16(r)
 	if err != nil {
