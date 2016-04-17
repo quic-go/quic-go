@@ -110,6 +110,14 @@ var _ = Describe("Utils", func() {
 		})
 	})
 
+	Context("Rand", func() {
+		It("returns either true or false", func() {
+			val, err := RandomBit()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(val).To(SatisfyAny(Equal(true), Equal(false)))
+		})
+	})
+
 	Context("ReadUintN", func() {
 		It("reads n bytes", func() {
 			m := map[uint8]uint64{

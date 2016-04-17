@@ -9,6 +9,7 @@ import (
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // StreamCallback gets a stream frame and returns a reply frame
@@ -25,7 +26,9 @@ type Session struct {
 	ServerConfig *handshake.ServerConfig
 	cryptoSetup  *handshake.CryptoSetup
 
-	Entropy EntropyAccumulator
+	EntropyReceived EntropyAccumulator
+	EntropySent     EntropyAccumulator
+	EntropyHistory  map[protocol.PacketNumber]EntropyAccumulator // ToDo: store this with the packet itself
 
 	lastSentPacketNumber     protocol.PacketNumber
 	lastObservedPacketNumber protocol.PacketNumber
@@ -48,6 +51,7 @@ func NewSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protoc
 		streamCallback:           streamCallback,
 		lastObservedPacketNumber: 0,
 		Streams:                  make(map[protocol.StreamID]*Stream),
+		EntropyHistory:           make(map[protocol.PacketNumber]EntropyAccumulator),
 	}
 }
 
@@ -77,11 +81,11 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 	if err != nil {
 		return err
 	}
-	s.Entropy.Add(publicHeader.PacketNumber, privateFlag&0x01 > 0)
+	s.EntropyReceived.Add(publicHeader.PacketNumber, privateFlag&0x01 > 0)
 
 	s.SendFrames([]frames.Frame{&frames.AckFrame{
 		LargestObserved: publicHeader.PacketNumber,
-		Entropy:         s.Entropy.Get(),
+		Entropy:         s.EntropyReceived.Get(),
 	}})
 
 	// read all frames in the packet
@@ -173,10 +177,21 @@ func (s *Session) handleStreamFrame(r *bytes.Reader) error {
 }
 
 func (s *Session) handleAckFrame(r *bytes.Reader) error {
-	_, err := frames.ParseAckFrame(r)
+	frame, err := frames.ParseAckFrame(r)
 	if err != nil {
 		return err
 	}
+
+	expectedEntropy, ok := s.EntropyHistory[frame.LargestObserved]
+	if !ok {
+		return errors.New("No entropy value saved for received ACK packet")
+	}
+	delete(s.EntropyHistory, frame.LargestObserved)
+
+	if byte(expectedEntropy) != frame.Entropy {
+		return errors.New("Incorrect entropy value in ACK package")
+	}
+
 	return nil
 }
 
@@ -210,7 +225,16 @@ func (s *Session) handleRstStreamFrame(r *bytes.Reader) error {
 // SendFrames sends a number of frames to the client
 func (s *Session) SendFrames(frames []frames.Frame) error {
 	var framesData bytes.Buffer
-	framesData.WriteByte(0) // TODO: entropy
+	entropyBit, err := utils.RandomBit()
+	if err != nil {
+		return err
+	}
+	if entropyBit {
+		framesData.WriteByte(1)
+	} else {
+		framesData.WriteByte(0)
+	}
+
 	for _, f := range frames {
 		if err := f.Write(&framesData); err != nil {
 			return err
@@ -220,14 +244,17 @@ func (s *Session) SendFrames(frames []frames.Frame) error {
 	s.lastSentPacketNumber++
 
 	var fullReply bytes.Buffer
-	responsePublicHeader := PublicHeader{ConnectionID: s.ConnectionID, PacketNumber: s.lastSentPacketNumber}
+	packetNumber := s.lastSentPacketNumber
+	responsePublicHeader := PublicHeader{ConnectionID: s.ConnectionID, PacketNumber: packetNumber}
 	if err := responsePublicHeader.WritePublicHeader(&fullReply); err != nil {
 		return err
 	}
+	s.EntropySent.Add(packetNumber, entropyBit)
+	s.EntropyHistory[packetNumber] = s.EntropySent
 
 	s.cryptoSetup.Seal(s.lastSentPacketNumber, &fullReply, fullReply.Bytes(), framesData.Bytes())
 
 	fmt.Printf("-> Sending packet %d (%d bytes) to %v\n", responsePublicHeader.PacketNumber, len(fullReply.Bytes()), s.CurrentRemoteAddr)
-	_, err := s.Connection.WriteToUDP(fullReply.Bytes(), s.CurrentRemoteAddr)
+	_, err = s.Connection.WriteToUDP(fullReply.Bytes(), s.CurrentRemoteAddr)
 	return err
 }

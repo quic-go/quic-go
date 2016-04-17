@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"crypto/rand"
 	"io"
 )
 
@@ -121,6 +122,20 @@ func Min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// RandomBit returns a cryptographically secure random bit (encoded as true / false)
+func RandomBit() (bool, error) {
+	// ToDo: it's probably more efficient to read a bigger slice of random numbers at once and to cache them somewhere
+	b := make([]byte, 1)
+	_, err := rand.Read(b)
+	if err != nil {
+		return false, err
+	}
+	if uint8(b[0])%2 == 0 {
+		return false, nil
+	}
+	return true, nil
 }
 
 // Uint32Slice attaches the methods of sort.Interface to []uint32, sorting in increasing order.
