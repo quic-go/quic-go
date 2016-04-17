@@ -101,7 +101,7 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 			case 0x0: // PAD
 				return nil
 			case 0x01:
-				err = errors.New("unimplemented: RST_STREAM")
+				err = s.handleRstStreamFrame(r)
 			case 0x02:
 				err = s.handleConnectionCloseFrame(r)
 			case 0x03:
@@ -195,6 +195,15 @@ func (s *Session) handleStopWaitingFrame(r *bytes.Reader, publicHeader *PublicHe
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+func (s *Session) handleRstStreamFrame(r *bytes.Reader) error {
+	frame, err := frames.ParseRstStreamFrame(r)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%#v\n", frame)
 	return nil
 }
 

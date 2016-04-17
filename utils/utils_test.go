@@ -53,6 +53,21 @@ var _ = Describe("Utils", func() {
 		})
 	})
 
+	Context("ReadUint64", func() {
+		It("reads a little endian", func() {
+			b := []byte{0x12, 0x35, 0xAB, 0xFF, 0xEF, 0xBE, 0xAD, 0xDE}
+			val, err := ReadUint64(bytes.NewReader(b))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(val).To(Equal(uint64(0xDEADBEEFFFAB3512)))
+		})
+
+		It("throws an error if less than 8 bytes are passed", func() {
+			b := []byte{0x13, 0x34, 0xEA, 0x00, 0x14, 0xAA}
+			_, err := ReadUint64(bytes.NewReader(b))
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
 	Context("WriteUint16", func() {
 		It("outputs 2 bytes", func() {
 			b := &bytes.Buffer{}
