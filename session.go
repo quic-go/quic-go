@@ -160,7 +160,7 @@ func (s *Session) handleStreamFrame(r *bytes.Reader) error {
 	} else {
 		stream, ok := s.Streams[frame.StreamID]
 		if !ok {
-			stream = NewStream(frame.StreamID)
+			stream = NewStream(s, frame.StreamID)
 			s.Streams[frame.StreamID] = stream
 		}
 		err := stream.AddStreamFrame(frame)
