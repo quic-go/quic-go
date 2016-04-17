@@ -224,6 +224,40 @@ func (s *Session) handleRstStreamFrame(r *bytes.Reader) error {
 
 // SendFrames sends a number of frames to the client
 func (s *Session) SendFrames(frames []frames.Frame) error {
+	for _, f := range frames {
+		err := s.SendFrame(f)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SendFrame sends a frame to the client
+func (s *Session) SendFrame(frame frames.Frame) error {
+	streamframe, ok := frame.(*frames.StreamFrame)
+	if ok {
+		maxlength := 1000
+		if len(streamframe.Data) > maxlength {
+			frame1 := &frames.StreamFrame{
+				StreamID: streamframe.StreamID,
+				Offset:   streamframe.Offset,
+				Data:     streamframe.Data[:maxlength],
+			}
+			frame2 := &frames.StreamFrame{
+				StreamID: streamframe.StreamID,
+				Offset:   streamframe.Offset + uint64(maxlength),
+				Data:     streamframe.Data[maxlength:],
+				FinBit:   streamframe.FinBit,
+			}
+			err := s.SendFrame(frame1)
+			if err != nil {
+				return err
+			}
+			return s.SendFrame(frame2)
+		}
+	}
+
 	var framesData bytes.Buffer
 	entropyBit, err := utils.RandomBit()
 	if err != nil {
@@ -235,10 +269,8 @@ func (s *Session) SendFrames(frames []frames.Frame) error {
 		framesData.WriteByte(0)
 	}
 
-	for _, f := range frames {
-		if err := f.Write(&framesData); err != nil {
-			return err
-		}
+	if err := frame.Write(&framesData); err != nil {
+		return err
 	}
 
 	s.lastSentPacketNumber++
