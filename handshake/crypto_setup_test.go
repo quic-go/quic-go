@@ -2,6 +2,7 @@ package handshake
 
 import (
 	"bytes"
+	"io/ioutil"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 
@@ -41,9 +42,11 @@ var _ = Describe("Crypto setup", func() {
 		signer *mockSigner
 		scfg   *ServerConfig
 		cs     *CryptoSetup
+		buf    *bytes.Buffer
 	)
 
 	BeforeEach(func() {
+		buf = &bytes.Buffer{}
 		kex = &mockKEX{}
 		signer = &mockSigner{}
 		scfg = NewServerConfig(kex, signer)
@@ -53,51 +56,89 @@ var _ = Describe("Crypto setup", func() {
 
 	It("has a nonce", func() {
 		Expect(cs.nonce).To(HaveLen(32))
-		Expect(cs.nonce[10]).ToNot(BeZero())
+		s := 0
+		for _, b := range cs.nonce {
+			s += int(b)
+		}
+		Expect(s).ToNot(BeZero())
 	})
 
-	It("generates REJ messages", func() {
-		response, err := cs.handleInchoateCHLO([]byte("chlo"))
-		Expect(err).ToNot(HaveOccurred())
-		Expect(response).To(HavePrefix("REJ"))
-		Expect(response).To(ContainSubstring("certcompressed"))
-		Expect(response).To(ContainSubstring("pubs-s"))
-		Expect(signer.gotCHLO).To(BeTrue())
-	})
-
-	It("generates REJ messages for version 30", func() {
-		cs.version = protocol.VersionNumber(30)
-		_, err := cs.handleInchoateCHLO(sampleCHLO)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(signer.gotCHLO).To(BeFalse())
-	})
-
-	It("generates SHLO messages", func() {
-		response, err := cs.handleCHLO([]byte("chlo-data"), map[Tag][]byte{
-			TagPUBS: []byte("pubs-c"),
+	Context("when responding to client messages", func() {
+		It("generates REJ messages", func() {
+			response, err := cs.handleInchoateCHLO([]byte("chlo"))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(response).To(HavePrefix("REJ"))
+			Expect(response).To(ContainSubstring("certcompressed"))
+			Expect(response).To(ContainSubstring("pubs-s"))
+			Expect(signer.gotCHLO).To(BeTrue())
 		})
-		Expect(err).ToNot(HaveOccurred())
-		Expect(response).To(HavePrefix("SHLO"))
-		Expect(response).To(ContainSubstring("pubs-s")) // TODO: Should be new pubs
-		Expect(response).To(ContainSubstring(string(cs.nonce)))
-		Expect(response).To(ContainSubstring(string(protocol.SupportedVersionsAsTags)))
-		Expect(cs.secureAEAD).ToNot(BeNil())
-		Expect(cs.forwardSecureAEAD).ToNot(BeNil())
+
+		It("generates REJ messages for version 30", func() {
+			cs.version = protocol.VersionNumber(30)
+			_, err := cs.handleInchoateCHLO(sampleCHLO)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(signer.gotCHLO).To(BeFalse())
+		})
+
+		It("generates SHLO messages", func() {
+			response, err := cs.handleCHLO([]byte("chlo-data"), map[Tag][]byte{
+				TagPUBS: []byte("pubs-c"),
+			})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(response).To(HavePrefix("SHLO"))
+			Expect(response).To(ContainSubstring("pubs-s")) // TODO: Should be new pubs
+			Expect(response).To(ContainSubstring(string(cs.nonce)))
+			Expect(response).To(ContainSubstring(string(protocol.SupportedVersionsAsTags)))
+			Expect(cs.secureAEAD).ToNot(BeNil())
+			Expect(cs.forwardSecureAEAD).ToNot(BeNil())
+		})
+
+		It("recognizes SCID", func() {
+			WriteHandshakeMessage(buf, TagCHLO, map[Tag][]byte{TagSCID: scfg.ID})
+			response, err := cs.HandleCryptoMessage(buf.Bytes())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(response).To(HavePrefix("SHLO"))
+		})
+
+		It("recognizes missing SCID", func() {
+			WriteHandshakeMessage(buf, TagCHLO, map[Tag][]byte{})
+			response, err := cs.HandleCryptoMessage(buf.Bytes())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(response).To(HavePrefix("REJ"))
+		})
 	})
 
-	It("recognizes SCID", func() {
-		var data bytes.Buffer
-		WriteHandshakeMessage(&data, TagCHLO, map[Tag][]byte{TagSCID: scfg.ID})
-		response, err := cs.HandleCryptoMessage(data.Bytes())
-		Expect(err).ToNot(HaveOccurred())
-		Expect(response).To(HavePrefix("SHLO"))
-	})
+	Context("escalating crypto", func() {
+		foobarFNVSigned := []byte{0x18, 0x6f, 0x44, 0xba, 0x97, 0x35, 0xd, 0x6f, 0xbf, 0x64, 0x3c, 0x79, 0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72}
 
-	It("recognizes missing SCID", func() {
-		var data bytes.Buffer
-		WriteHandshakeMessage(&data, TagCHLO, map[Tag][]byte{})
-		response, err := cs.HandleCryptoMessage(data.Bytes())
-		Expect(err).ToNot(HaveOccurred())
-		Expect(response).To(HavePrefix("REJ"))
+		Context("null encryption", func() {
+			It("is used initially", func() {
+				cs.Seal(0, buf, []byte{}, []byte("foobar"))
+				Expect(buf.Bytes()).To(Equal(foobarFNVSigned))
+			})
+
+			It("is accepted initially", func() {
+				r, err := cs.Open(0, []byte{}, bytes.NewReader(foobarFNVSigned))
+				Expect(err).ToNot(HaveOccurred())
+				d, err := ioutil.ReadAll(r)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(d).To(Equal([]byte("foobar")))
+			})
+
+			It("is not accepted after CHLO", func() {
+				_, err := cs.handleCHLO([]byte("chlo-data"), map[Tag][]byte{TagPUBS: []byte("pubs-c")})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cs.secureAEAD).ToNot(BeNil())
+				_, err = cs.Open(0, []byte{}, bytes.NewReader(foobarFNVSigned))
+				Expect(err).To(MatchError("authentication failed"))
+			})
+
+			It("is not used after CHLO", func() {
+				_, err := cs.handleCHLO([]byte("chlo-data"), map[Tag][]byte{TagPUBS: []byte("pubs-c")})
+				Expect(err).ToNot(HaveOccurred())
+				cs.Seal(0, buf, []byte{}, []byte("foobar"))
+				Expect(buf.Bytes()).ToNot(Equal(foobarFNVSigned))
+			})
+		})
 	})
 })
