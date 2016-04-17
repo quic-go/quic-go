@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"io/ioutil"
+	"sync"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -26,6 +27,8 @@ type CryptoSetup struct {
 	receivedForwardSecurePacket bool
 
 	keyDerivation KeyDerivationFunction
+
+	mutex sync.RWMutex
 }
 
 // NewCryptoSetup creates a new CryptoSetup instance
@@ -45,6 +48,9 @@ func NewCryptoSetup(connID protocol.ConnectionID, version protocol.VersionNumber
 
 // Open a message
 func (h *CryptoSetup) Open(packetNumber protocol.PacketNumber, associatedData []byte, ciphertext io.Reader) (*bytes.Reader, error) {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+
 	data, err := ioutil.ReadAll(ciphertext)
 	if err != nil {
 		return nil, err
@@ -68,6 +74,9 @@ func (h *CryptoSetup) Open(packetNumber protocol.PacketNumber, associatedData []
 
 // Seal a messageTag
 func (h *CryptoSetup) Seal(packetNumber protocol.PacketNumber, b *bytes.Buffer, associatedData []byte, plaintext []byte) {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+
 	if h.receivedForwardSecurePacket {
 		h.forwardSecureAEAD.Seal(packetNumber, b, associatedData, plaintext)
 	} else if h.secureAEAD != nil {
@@ -79,6 +88,9 @@ func (h *CryptoSetup) Seal(packetNumber protocol.PacketNumber, b *bytes.Buffer, 
 
 // HandleCryptoMessage handles the crypto handshake and returns the answer
 func (h *CryptoSetup) HandleCryptoMessage(data []byte) ([]byte, error) {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+
 	messageTag, cryptoData, err := ParseHandshakeMessage(data)
 	if err != nil {
 		return nil, err
