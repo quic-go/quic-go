@@ -2,8 +2,11 @@ package handshake
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"io/ioutil"
 
+	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/protocol"
 
 	. "github.com/onsi/ginkgo"
@@ -36,6 +39,32 @@ func (*mockSigner) GetCertUncompressed() []byte {
 	return []byte("certuncompressed")
 }
 
+type mockAEAD struct {
+	forwardSecure bool
+}
+
+func (m *mockAEAD) Seal(packetNumber protocol.PacketNumber, b *bytes.Buffer, associatedData []byte, plaintext []byte) {
+	if m.forwardSecure {
+		b.Write([]byte("forward secure encrypted"))
+	} else {
+		b.Write([]byte("encrypted"))
+	}
+}
+
+func (m *mockAEAD) Open(packetNumber protocol.PacketNumber, associatedData []byte, ciphertext io.Reader) (*bytes.Reader, error) {
+	data, _ := ioutil.ReadAll(ciphertext)
+	if m.forwardSecure && string(data) == "forward secure encrypted" {
+		return bytes.NewReader([]byte("decrypted")), nil
+	} else if !m.forwardSecure && string(data) == "encrypted" {
+		return bytes.NewReader([]byte("decrypted")), nil
+	}
+	return nil, errors.New("authentication failed")
+}
+
+func mockKeyDerivation(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte) (crypto.AEAD, error) {
+	return &mockAEAD{forwardSecure: forwardSecure}, nil
+}
+
 var _ = Describe("Crypto setup", func() {
 	var (
 		kex    *mockKEX
@@ -52,6 +81,7 @@ var _ = Describe("Crypto setup", func() {
 		scfg = NewServerConfig(kex, signer)
 		v := protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
 		cs = NewCryptoSetup(protocol.ConnectionID(42), v, scfg)
+		cs.keyDerivation = mockKeyDerivation
 	})
 
 	It("has a nonce", func() {
@@ -111,6 +141,11 @@ var _ = Describe("Crypto setup", func() {
 	Context("escalating crypto", func() {
 		foobarFNVSigned := []byte{0x18, 0x6f, 0x44, 0xba, 0x97, 0x35, 0xd, 0x6f, 0xbf, 0x64, 0x3c, 0x79, 0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72}
 
+		doCHLO := func() {
+			_, err := cs.handleCHLO([]byte("chlo-data"), map[Tag][]byte{TagPUBS: []byte("pubs-c")})
+			Expect(err).ToNot(HaveOccurred())
+		}
+
 		Context("null encryption", func() {
 			It("is used initially", func() {
 				cs.Seal(0, buf, []byte{}, []byte("foobar"))
@@ -126,18 +161,59 @@ var _ = Describe("Crypto setup", func() {
 			})
 
 			It("is not accepted after CHLO", func() {
-				_, err := cs.handleCHLO([]byte("chlo-data"), map[Tag][]byte{TagPUBS: []byte("pubs-c")})
-				Expect(err).ToNot(HaveOccurred())
+				doCHLO()
 				Expect(cs.secureAEAD).ToNot(BeNil())
-				_, err = cs.Open(0, []byte{}, bytes.NewReader(foobarFNVSigned))
+				_, err := cs.Open(0, []byte{}, bytes.NewReader(foobarFNVSigned))
 				Expect(err).To(MatchError("authentication failed"))
 			})
 
 			It("is not used after CHLO", func() {
-				_, err := cs.handleCHLO([]byte("chlo-data"), map[Tag][]byte{TagPUBS: []byte("pubs-c")})
-				Expect(err).ToNot(HaveOccurred())
+				doCHLO()
 				cs.Seal(0, buf, []byte{}, []byte("foobar"))
 				Expect(buf.Bytes()).ToNot(Equal(foobarFNVSigned))
+			})
+		})
+
+		Context("initial encryption", func() {
+			It("is used after CHLO", func() {
+				doCHLO()
+				cs.Seal(0, buf, []byte{}, []byte("foobar"))
+				Expect(buf.Bytes()).To(Equal([]byte("encrypted")))
+			})
+
+			It("is accepted after CHLO", func() {
+				doCHLO()
+				r, err := cs.Open(0, []byte{}, bytes.NewReader([]byte("encrypted")))
+				Expect(err).ToNot(HaveOccurred())
+				d, err := ioutil.ReadAll(r)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(d).To(Equal([]byte("decrypted")))
+			})
+
+			It("is not used after receiving forward secure packet", func() {
+				doCHLO()
+				_, err := cs.Open(0, []byte{}, bytes.NewReader([]byte("forward secure encrypted")))
+				Expect(err).ToNot(HaveOccurred())
+				cs.Seal(0, buf, []byte{}, []byte("foobar"))
+				Expect(buf.Bytes()).To(Equal([]byte("forward secure encrypted")))
+			})
+
+			It("is not accepted after receiving forward secure packet", func() {
+				doCHLO()
+				_, err := cs.Open(0, []byte{}, bytes.NewReader([]byte("forward secure encrypted")))
+				Expect(err).ToNot(HaveOccurred())
+				_, err = cs.Open(0, []byte{}, bytes.NewReader([]byte("encrypted")))
+				Expect(err).To(MatchError("authentication failed"))
+			})
+		})
+
+		Context("forward secure encryption", func() {
+			It("is used after receiving forward secure packet", func() {
+				doCHLO()
+				_, err := cs.Open(0, []byte{}, bytes.NewReader([]byte("forward secure encrypted")))
+				Expect(err).ToNot(HaveOccurred())
+				cs.Seal(0, buf, []byte{}, []byte("foobar"))
+				Expect(buf.Bytes()).To(Equal([]byte("forward secure encrypted")))
 			})
 		})
 	})

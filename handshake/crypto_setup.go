@@ -11,6 +11,9 @@ import (
 	"github.com/lucas-clemente/quic-go/protocol"
 )
 
+// KeyDerivationFunction is used for key derivation
+type KeyDerivationFunction func(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte) (crypto.AEAD, error)
+
 // The CryptoSetup handles all things crypto for the Session
 type CryptoSetup struct {
 	connID  protocol.ConnectionID
@@ -20,8 +23,9 @@ type CryptoSetup struct {
 
 	secureAEAD                  crypto.AEAD
 	forwardSecureAEAD           crypto.AEAD
-	receivedSecurePacket        bool
 	receivedForwardSecurePacket bool
+
+	keyDerivation KeyDerivationFunction
 }
 
 // NewCryptoSetup creates a new CryptoSetup instance
@@ -31,10 +35,11 @@ func NewCryptoSetup(connID protocol.ConnectionID, version protocol.VersionNumber
 		panic(err)
 	}
 	return &CryptoSetup{
-		connID:  connID,
-		version: version,
-		scfg:    scfg,
-		nonce:   nonce,
+		connID:        connID,
+		version:       version,
+		scfg:          scfg,
+		nonce:         nonce,
+		keyDerivation: crypto.DeriveKeysChacha20,
 	}
 }
 
@@ -122,12 +127,12 @@ func (h *CryptoSetup) handleCHLO(data []byte, cryptoData map[Tag][]byte) ([]byte
 	nonce.Write(cryptoData[TagNONC])
 	nonce.Write(h.nonce)
 
-	h.secureAEAD, err = crypto.DeriveKeysChacha20(false, sharedSecret, nonce.Bytes(), h.connID, data, h.scfg.Get(), h.scfg.signer.GetCertUncompressed())
+	h.secureAEAD, err = h.keyDerivation(false, sharedSecret, nonce.Bytes(), h.connID, data, h.scfg.Get(), h.scfg.signer.GetCertUncompressed())
 	if err != nil {
 		return nil, err
 	}
 	// TODO: Use new curve
-	h.forwardSecureAEAD, err = crypto.DeriveKeysChacha20(true, sharedSecret, nonce.Bytes(), h.connID, data, h.scfg.Get(), h.scfg.signer.GetCertUncompressed())
+	h.forwardSecureAEAD, err = h.keyDerivation(true, sharedSecret, nonce.Bytes(), h.connID, data, h.scfg.Get(), h.scfg.signer.GetCertUncompressed())
 	if err != nil {
 		return nil, err
 	}
