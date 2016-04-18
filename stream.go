@@ -68,12 +68,11 @@ func (s *Stream) ReadByte() (byte, error) {
 }
 
 func (s *Stream) Write(p []byte) (int, error) {
-	frame := &frames.StreamFrame{
+	err := s.Session.SendFrame(&frames.StreamFrame{
 		StreamID: s.StreamID,
 		Offset:   s.WriteOffset,
 		Data:     p,
-	}
-	err := s.Session.SendFrames([]frames.Frame{frame})
+	})
 	if err != nil {
 		return 0, err
 	}
@@ -81,6 +80,7 @@ func (s *Stream) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// Close imlpements io.Closer
 func (s *Stream) Close() error {
 	return s.Session.SendFrame(&frames.StreamFrame{
 		StreamID: s.StreamID,

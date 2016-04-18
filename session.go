@@ -205,17 +205,6 @@ func (s *Session) handleRstStreamFrame(r *bytes.Reader) error {
 	return nil
 }
 
-// SendFrames sends a number of frames to the client
-func (s *Session) SendFrames(frames []frames.Frame) error {
-	for _, f := range frames {
-		err := s.SendFrame(f)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // SendFrame sends a frame to the client
 func (s *Session) SendFrame(frame frames.Frame) error {
 	streamframe, ok := frame.(*frames.StreamFrame)
