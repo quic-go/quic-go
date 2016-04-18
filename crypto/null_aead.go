@@ -1,14 +1,10 @@
 package crypto
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
-	"io"
-	"io/ioutil"
 
 	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // NullAEAD handles not-yet encrypted packets
@@ -17,11 +13,7 @@ type NullAEAD struct{}
 var _ AEAD = &NullAEAD{}
 
 // Open and verify the ciphertext
-func (*NullAEAD) Open(packetNumber protocol.PacketNumber, associatedData []byte, r io.Reader) (*bytes.Reader, error) {
-	ciphertext, err := ioutil.ReadAll(r)
-	if err != nil {
-		return nil, err
-	}
+func (*NullAEAD) Open(packetNumber protocol.PacketNumber, associatedData []byte, ciphertext []byte) ([]byte, error) {
 	if len(ciphertext) < 12 {
 		return nil, errors.New("NullAEAD: ciphertext cannot be less than 12 bytes long")
 	}
@@ -37,17 +29,20 @@ func (*NullAEAD) Open(packetNumber protocol.PacketNumber, associatedData []byte,
 	if uint32(testHigh&0xffffffff) != high || testLow != low {
 		return nil, errors.New("NullAEAD: failed to authenticate received data")
 	}
-	return bytes.NewReader(ciphertext[12:]), nil
+	return ciphertext[12:], nil
 }
 
 // Seal writes hash and ciphertext to the buffer
-func (*NullAEAD) Seal(packetNumber protocol.PacketNumber, b *bytes.Buffer, associatedData []byte, plaintext []byte) {
+func (*NullAEAD) Seal(packetNumber protocol.PacketNumber, associatedData []byte, plaintext []byte) []byte {
+	res := make([]byte, 12+len(plaintext))
+
 	hash := New128a()
 	hash.Write(associatedData)
 	hash.Write(plaintext)
 	high, low := hash.Sum128()
 
-	utils.WriteUint64(b, low)
-	utils.WriteUint32(b, uint32(high))
-	b.Write(plaintext)
+	binary.LittleEndian.PutUint64(res, low)
+	binary.LittleEndian.PutUint32(res[8:], uint32(high))
+	copy(res[12:], plaintext)
+	return res
 }

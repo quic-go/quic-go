@@ -3,8 +3,6 @@ package handshake
 import (
 	"bytes"
 	"errors"
-	"io"
-	"io/ioutil"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -43,20 +41,18 @@ type mockAEAD struct {
 	forwardSecure bool
 }
 
-func (m *mockAEAD) Seal(packetNumber protocol.PacketNumber, b *bytes.Buffer, associatedData []byte, plaintext []byte) {
+func (m *mockAEAD) Seal(packetNumber protocol.PacketNumber, associatedData []byte, plaintext []byte) []byte {
 	if m.forwardSecure {
-		b.Write([]byte("forward secure encrypted"))
-	} else {
-		b.Write([]byte("encrypted"))
+		return []byte("forward secure encrypted")
 	}
+	return []byte("encrypted")
 }
 
-func (m *mockAEAD) Open(packetNumber protocol.PacketNumber, associatedData []byte, ciphertext io.Reader) (*bytes.Reader, error) {
-	data, _ := ioutil.ReadAll(ciphertext)
-	if m.forwardSecure && string(data) == "forward secure encrypted" {
-		return bytes.NewReader([]byte("decrypted")), nil
-	} else if !m.forwardSecure && string(data) == "encrypted" {
-		return bytes.NewReader([]byte("decrypted")), nil
+func (m *mockAEAD) Open(packetNumber protocol.PacketNumber, associatedData []byte, ciphertext []byte) ([]byte, error) {
+	if m.forwardSecure && string(ciphertext) == "forward secure encrypted" {
+		return []byte("decrypted"), nil
+	} else if !m.forwardSecure && string(ciphertext) == "encrypted" {
+		return []byte("decrypted"), nil
 	}
 	return nil, errors.New("authentication failed")
 }
@@ -88,13 +84,11 @@ var _ = Describe("Crypto setup", func() {
 		signer *mockSigner
 		scfg   *ServerConfig
 		cs     *CryptoSetup
-		buf    *bytes.Buffer
 		stream *mockStream
 	)
 
 	BeforeEach(func() {
 		stream = &mockStream{}
-		buf = &bytes.Buffer{}
 		kex = &mockKEX{}
 		signer = &mockSigner{}
 		scfg = NewServerConfig(kex, signer)
@@ -168,14 +162,11 @@ var _ = Describe("Crypto setup", func() {
 
 		Context("null encryption", func() {
 			It("is used initially", func() {
-				cs.Seal(0, buf, []byte{}, []byte("foobar"))
-				Expect(buf.Bytes()).To(Equal(foobarFNVSigned))
+				Expect(cs.Seal(0, []byte{}, []byte("foobar"))).To(Equal(foobarFNVSigned))
 			})
 
 			It("is accepted initially", func() {
-				r, err := cs.Open(0, []byte{}, bytes.NewReader(foobarFNVSigned))
-				Expect(err).ToNot(HaveOccurred())
-				d, err := ioutil.ReadAll(r)
+				d, err := cs.Open(0, []byte{}, foobarFNVSigned)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(d).To(Equal([]byte("foobar")))
 			})
@@ -183,46 +174,44 @@ var _ = Describe("Crypto setup", func() {
 			It("is not accepted after CHLO", func() {
 				doCHLO()
 				Expect(cs.secureAEAD).ToNot(BeNil())
-				_, err := cs.Open(0, []byte{}, bytes.NewReader(foobarFNVSigned))
+				_, err := cs.Open(0, []byte{}, foobarFNVSigned)
 				Expect(err).To(MatchError("authentication failed"))
 			})
 
 			It("is not used after CHLO", func() {
 				doCHLO()
-				cs.Seal(0, buf, []byte{}, []byte("foobar"))
-				Expect(buf.Bytes()).ToNot(Equal(foobarFNVSigned))
+				d := cs.Seal(0, []byte{}, []byte("foobar"))
+				Expect(d).ToNot(Equal(foobarFNVSigned))
 			})
 		})
 
 		Context("initial encryption", func() {
 			It("is used after CHLO", func() {
 				doCHLO()
-				cs.Seal(0, buf, []byte{}, []byte("foobar"))
-				Expect(buf.Bytes()).To(Equal([]byte("encrypted")))
+				d := cs.Seal(0, []byte{}, []byte("foobar"))
+				Expect(d).To(Equal([]byte("encrypted")))
 			})
 
 			It("is accepted after CHLO", func() {
 				doCHLO()
-				r, err := cs.Open(0, []byte{}, bytes.NewReader([]byte("encrypted")))
-				Expect(err).ToNot(HaveOccurred())
-				d, err := ioutil.ReadAll(r)
+				d, err := cs.Open(0, []byte{}, []byte("encrypted"))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(d).To(Equal([]byte("decrypted")))
 			})
 
 			It("is not used after receiving forward secure packet", func() {
 				doCHLO()
-				_, err := cs.Open(0, []byte{}, bytes.NewReader([]byte("forward secure encrypted")))
+				_, err := cs.Open(0, []byte{}, []byte("forward secure encrypted"))
 				Expect(err).ToNot(HaveOccurred())
-				cs.Seal(0, buf, []byte{}, []byte("foobar"))
-				Expect(buf.Bytes()).To(Equal([]byte("forward secure encrypted")))
+				d := cs.Seal(0, []byte{}, []byte("foobar"))
+				Expect(d).To(Equal([]byte("forward secure encrypted")))
 			})
 
 			It("is not accepted after receiving forward secure packet", func() {
 				doCHLO()
-				_, err := cs.Open(0, []byte{}, bytes.NewReader([]byte("forward secure encrypted")))
+				_, err := cs.Open(0, []byte{}, []byte("forward secure encrypted"))
 				Expect(err).ToNot(HaveOccurred())
-				_, err = cs.Open(0, []byte{}, bytes.NewReader([]byte("encrypted")))
+				_, err = cs.Open(0, []byte{}, []byte("encrypted"))
 				Expect(err).To(MatchError("authentication failed"))
 			})
 		})
@@ -230,10 +219,10 @@ var _ = Describe("Crypto setup", func() {
 		Context("forward secure encryption", func() {
 			It("is used after receiving forward secure packet", func() {
 				doCHLO()
-				_, err := cs.Open(0, []byte{}, bytes.NewReader([]byte("forward secure encrypted")))
+				_, err := cs.Open(0, []byte{}, []byte("forward secure encrypted"))
 				Expect(err).ToNot(HaveOccurred())
-				cs.Seal(0, buf, []byte{}, []byte("foobar"))
-				Expect(buf.Bytes()).To(Equal([]byte("forward secure encrypted")))
+				d := cs.Seal(0, []byte{}, []byte("foobar"))
+				Expect(d).To(Equal([]byte("forward secure encrypted")))
 			})
 		})
 	})

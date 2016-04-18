@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
 
 	"github.com/lucas-clemente/quic-go/frames"
@@ -75,10 +76,12 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 		s.CurrentRemoteAddr = addr
 	}
 
-	r, err := s.cryptoSetup.Open(publicHeader.PacketNumber, publicHeaderBinary, r)
+	ciphertext, _ := ioutil.ReadAll(r)
+	plaintext, err := s.cryptoSetup.Open(publicHeader.PacketNumber, publicHeaderBinary, ciphertext)
 	if err != nil {
 		return err
 	}
+	r = bytes.NewReader(plaintext)
 
 	privateFlag, err := r.ReadByte()
 	if err != nil {
@@ -256,7 +259,8 @@ func (s *Session) SendFrame(frame frames.Frame) error {
 	s.EntropySent.Add(packetNumber, entropyBit)
 	s.EntropyHistory[packetNumber] = s.EntropySent
 
-	s.cryptoSetup.Seal(s.lastSentPacketNumber, &fullReply, fullReply.Bytes(), framesData.Bytes())
+	ciphertext := s.cryptoSetup.Seal(s.lastSentPacketNumber, fullReply.Bytes(), framesData.Bytes())
+	fullReply.Write(ciphertext)
 
 	fmt.Printf("-> Sending packet %d (%d bytes) to %v\n", responsePublicHeader.PacketNumber, len(fullReply.Bytes()), s.CurrentRemoteAddr)
 	_, err = s.Connection.WriteToUDP(fullReply.Bytes(), s.CurrentRemoteAddr)

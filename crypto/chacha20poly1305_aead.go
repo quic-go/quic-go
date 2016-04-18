@@ -1,12 +1,9 @@
 package crypto
 
 import (
-	"bytes"
 	"crypto/cipher"
 	"encoding/binary"
 	"errors"
-	"io"
-	"io/ioutil"
 
 	"github.com/lucas-clemente/quic-go/crypto/chacha20poly1305trunc12"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -40,21 +37,16 @@ func NewAEADChacha20Poly1305(otherKey []byte, myKey []byte, otherIV []byte, myIV
 	}, nil
 }
 
-func (aead *aeadChacha20Poly1305) Open(packetNumber protocol.PacketNumber, associatedData []byte, r io.Reader) (*bytes.Reader, error) {
-	ciphertext, err := ioutil.ReadAll(r)
-	if err != nil {
-		return nil, err
-	}
+func (aead *aeadChacha20Poly1305) Open(packetNumber protocol.PacketNumber, associatedData []byte, ciphertext []byte) ([]byte, error) {
 	plaintext, err := aead.decrypter.Open(make([]byte, len(ciphertext)), makeNonce(aead.otherIV, packetNumber), ciphertext, associatedData)
 	if err != nil {
 		return nil, err
 	}
-	return bytes.NewReader(plaintext), nil
+	return plaintext, nil
 }
 
-func (aead *aeadChacha20Poly1305) Seal(packetNumber protocol.PacketNumber, b *bytes.Buffer, associatedData []byte, plaintext []byte) {
-	ciphertext := aead.encrypter.Seal(make([]byte, len(plaintext)+12), makeNonce(aead.myIV, packetNumber), plaintext, associatedData)
-	b.Write(ciphertext)
+func (aead *aeadChacha20Poly1305) Seal(packetNumber protocol.PacketNumber, associatedData []byte, plaintext []byte) []byte {
+	return aead.encrypter.Seal(make([]byte, len(plaintext)+12), makeNonce(aead.myIV, packetNumber), plaintext, associatedData)
 }
 
 func makeNonce(iv []byte, packetNumber protocol.PacketNumber) []byte {
