@@ -23,6 +23,45 @@ var _ = Describe("Stream", func() {
 		Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
 	})
 
+	It("reads a single StreamFrame in multiple goes", func() {
+		frame := frames.StreamFrame{
+			Offset: 0,
+			Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
+		}
+		stream := NewStream(nil, 1337)
+		stream.AddStreamFrame(&frame)
+		b := make([]byte, 2)
+		n, err := stream.Read(b)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(n).To(Equal(2))
+		Expect(b).To(Equal([]byte{0xDE, 0xAD}))
+		n, err = stream.Read(b)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(n).To(Equal(2))
+		Expect(b).To(Equal([]byte{0xBE, 0xEF}))
+	})
+
+	It("reads single bytes", func() {
+		frame := frames.StreamFrame{
+			Offset: 0,
+			Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
+		}
+		stream := NewStream(nil, 1337)
+		stream.AddStreamFrame(&frame)
+		b, err := stream.ReadByte()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(b).To(Equal(byte(0xDE)))
+		b, err = stream.ReadByte()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(b).To(Equal(byte(0xAD)))
+		b, err = stream.ReadByte()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(b).To(Equal(byte(0xBE)))
+		b, err = stream.ReadByte()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(b).To(Equal(byte(0xEF)))
+	})
+
 	It("reads all data available", func() {
 		frame1 := frames.StreamFrame{
 			Offset: 0,

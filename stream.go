@@ -53,6 +53,20 @@ func (s *Stream) Read(p []byte) (int, error) {
 	return bytesRead, nil
 }
 
+// ReadByte implements io.ByteReader
+func (s *Stream) ReadByte() (byte, error) {
+	// TODO: Optimize
+	p := make([]byte, 1)
+	n, err := s.Read(p)
+	if err != nil {
+		return 0, err
+	}
+	if n != 1 {
+		panic("Stream: should have returned error")
+	}
+	return p[0], nil
+}
+
 func (s *Stream) Write(p []byte) (int, error) {
 	frame := &frames.StreamFrame{
 		StreamID: s.StreamID,
