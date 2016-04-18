@@ -78,6 +78,7 @@ func (s *Server) ListenAndServe(address string) error {
 
 		session, ok := s.sessions[publicHeader.ConnectionID]
 		if !ok {
+			fmt.Printf("Serving new connection: %d from %v\n", publicHeader.ConnectionID, remoteAddr)
 			session = NewSession(conn, publicHeader.VersionNumber, publicHeader.ConnectionID, s.scfg, s.streamCallback)
 			s.sessions[publicHeader.ConnectionID] = session
 		}
