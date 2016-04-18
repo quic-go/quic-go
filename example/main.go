@@ -32,7 +32,7 @@ func main() {
 	}
 }
 
-func handleStream(stream *quic.Stream) []frames.Frame {
+func handleStream(session *quic.Session, stream *quic.Stream) []frames.Frame {
 	var reply bytes.Buffer
 	h2framer := http2.NewFramer(&reply, stream)
 	h2framer.ReadMetaHeaders = hpack.NewDecoder(1024, nil)
