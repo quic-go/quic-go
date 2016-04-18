@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"net/http"
 	"os"
+	"strconv"
 
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
@@ -25,46 +27,91 @@ func main() {
 		panic(err)
 	}
 
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("Hello world!"))
+	})
+
 	err = server.ListenAndServe("localhost:6121")
 	if err != nil {
 		panic(err)
 	}
 }
 
-func handleStream(session *quic.Session, stream *quic.Stream) {
+type responseWriter struct {
+	header       http.Header
+	headerStream *quic.Stream
+	dataStream   *quic.Stream
+	status       int
+}
+
+func (w *responseWriter) Header() http.Header {
+	return w.header
+}
+
+func (w *responseWriter) WriteHeader(status int) {
+	w.status = status
+}
+
+func (w *responseWriter) Write(p []byte) (int, error) {
+	if w.status == 0 {
+		w.WriteHeader(200)
+	}
+
+	var headers bytes.Buffer
+	enc := hpack.NewEncoder(&headers)
+	enc.WriteField(hpack.HeaderField{Name: ":status", Value: strconv.Itoa(w.status)})
+	// enc.WriteField(hpack.HeaderField{Name: "content-length", Value: strconv.Itoa(len(p))})
+	// enc.WriteField(hpack.HeaderField{Name: "content-type", Value: http.DetectContentType(p)})
+
+	for k, v := range w.header {
+		enc.WriteField(hpack.HeaderField{Name: k, Value: v[0]})
+	}
+
+	h2framer := http2.NewFramer(w.headerStream, nil)
+	h2framer.WriteHeaders(http2.HeadersFrameParam{
+		StreamID:      uint32(w.dataStream.StreamID),
+		EndHeaders:    true,
+		BlockFragment: headers.Bytes(),
+	})
+
+	defer w.dataStream.Close()
+	return w.dataStream.Write(p)
+}
+
+func handleStream(session *quic.Session, headerStream *quic.Stream) {
 	hpackDecoder := hpack.NewDecoder(1024, nil)
-	h2framer := http2.NewFramer(stream, stream)
+	h2framer := http2.NewFramer(nil, headerStream)
 	h2framer.ReadMetaHeaders = hpackDecoder
 
 	go func() {
 		for {
 			h2frame, err := h2framer.ReadFrame()
 			if err != nil {
-				fmt.Printf("invalid http2 frame: %s", err.Error())
-				return
+				fmt.Printf("invalid http2 frame: %s\n", err.Error())
+				continue
 			}
 			h2headersFrame := h2frame.(*http2.MetaHeadersFrame)
 			fmt.Printf("Request: %s %s://%s%s\n", h2headersFrame.PseudoValue("method"), h2headersFrame.PseudoValue("scheme"), h2headersFrame.PseudoValue("authority"), h2headersFrame.PseudoValue("path"))
 
-			var replyHeaders bytes.Buffer
-			enc := hpack.NewEncoder(&replyHeaders)
-			enc.WriteField(hpack.HeaderField{Name: ":status", Value: "200"})
-			enc.WriteField(hpack.HeaderField{Name: "content-type", Value: "text/plain"})
-			enc.WriteField(hpack.HeaderField{Name: "content-length", Value: "12"})
-			h2framer.WriteHeaders(http2.HeadersFrameParam{
-				StreamID:      h2frame.Header().StreamID,
-				EndHeaders:    true,
-				BlockFragment: replyHeaders.Bytes(),
-			})
+			req, err := http.NewRequest(h2headersFrame.PseudoValue("method"), h2headersFrame.PseudoValue("path"), nil)
+			if err != nil {
+				fmt.Printf("invalid http2 frame: %s\n", err.Error())
+				continue
+			}
 
 			dataStream, err := session.NewStream(protocol.StreamID(h2frame.Header().StreamID))
 			if err != nil {
-				fmt.Printf("error creating stream: %s", err.Error())
-				return
+				fmt.Printf("error creating headerStream: %s\n", err.Error())
+				continue
 			}
 
-			dataStream.Write([]byte("Hello World!"))
-			dataStream.Close()
+			responseWriter := &responseWriter{
+				header:       http.Header{},
+				headerStream: headerStream,
+				dataStream:   dataStream,
+			}
+
+			go http.DefaultServeMux.ServeHTTP(responseWriter, req)
 		}
 	}()
 }
