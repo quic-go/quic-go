@@ -6,6 +6,19 @@ import (
 	"io"
 )
 
+// ReadStream is the read part of a QUIC stream
+type ReadStream interface {
+	io.Reader
+	io.ByteReader
+}
+
+// Stream is the interface for QUIC streams
+type Stream interface {
+	io.Reader
+	io.ByteReader
+	io.Writer
+}
+
 // ReadUintN reads N bytes
 func ReadUintN(b io.ByteReader, length uint8) (uint64, error) {
 	var res uint64
