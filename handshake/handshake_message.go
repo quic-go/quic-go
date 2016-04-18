@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"io"
 	"sort"
 
 	"github.com/lucas-clemente/quic-go/utils"
@@ -14,41 +15,42 @@ var (
 )
 
 // ParseHandshakeMessage reads a crypto message
-func ParseHandshakeMessage(data []byte) (Tag, map[Tag][]byte, error) {
-	if len(data) < 8 {
-		return 0, nil, errHandshakeMessageEOF
+func ParseHandshakeMessage(r utils.ReadStream) (Tag, map[Tag][]byte, error) {
+	messageTag, err := utils.ReadUint32(r)
+	if err != nil {
+		return 0, nil, err
 	}
 
-	messageTag := Tag(binary.LittleEndian.Uint32(data[0:4]))
-	nPairs := int(binary.LittleEndian.Uint16(data[4:6]))
+	nPairs, err := utils.ReadUint32(r)
+	if err != nil {
+		return 0, nil, err
+	}
 
-	data = data[8:]
-
-	// We need space for at least nPairs * 8 bytes
-	if len(data) < int(nPairs)*8 {
-		return 0, nil, errHandshakeMessageEOF
+	index := make([]byte, nPairs*8)
+	_, err = io.ReadFull(r, index)
+	if err != nil {
+		return 0, nil, err
 	}
 
 	resultMap := map[Tag][]byte{}
 
 	dataStart := 0
-	for indexPos := 0; indexPos < nPairs*8; indexPos += 8 {
+	for indexPos := 0; indexPos < int(nPairs)*8; indexPos += 8 {
 		// We know from the check above that data is long enough for the index
-		tag := Tag(binary.LittleEndian.Uint32(data[indexPos : indexPos+4]))
-		dataEnd := int(binary.LittleEndian.Uint32(data[indexPos+4 : indexPos+8]))
+		tag := Tag(binary.LittleEndian.Uint32(index[indexPos : indexPos+4]))
+		dataEnd := int(binary.LittleEndian.Uint32(index[indexPos+4 : indexPos+8]))
 
-		if dataEnd > len(data) {
-			return 0, nil, errHandshakeMessageEOF
-		}
-		if dataEnd < dataStart {
-			return 0, nil, errors.New("invalid end offset in crypto message")
+		data := make([]byte, dataEnd-dataStart)
+		_, err = io.ReadFull(r, data)
+		if err != nil {
+			return 0, nil, err
 		}
 
-		resultMap[tag] = data[nPairs*8+dataStart : nPairs*8+dataEnd]
+		resultMap[tag] = data
 		dataStart = dataEnd
 	}
 
-	return messageTag, resultMap, nil
+	return Tag(messageTag), resultMap, nil
 }
 
 // WriteHandshakeMessage writes a crypto message

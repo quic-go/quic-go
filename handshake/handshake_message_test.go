@@ -10,7 +10,7 @@ import (
 var _ = Describe("Handshake Message", func() {
 	Context("when parsing", func() {
 		It("parses sample CHLO message", func() {
-			tag, msg, err := ParseHandshakeMessage(sampleCHLO)
+			tag, msg, err := ParseHandshakeMessage(bytes.NewReader(sampleCHLO))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(tag).To(Equal(TagCHLO))
 			Expect(msg).To(Equal(sampleCHLOMap))

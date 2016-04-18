@@ -36,23 +36,27 @@ type Session struct {
 	Streams map[protocol.StreamID]*Stream
 
 	streamCallback StreamCallback
-
-	s1offset uint64
 }
 
 // NewSession makes a new session
 func NewSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback) *Session {
-	return &Session{
+	session := &Session{
 		Connection:               conn,
 		VersionNumber:            v,
 		ConnectionID:             connectionID,
 		ServerConfig:             sCfg,
-		cryptoSetup:              handshake.NewCryptoSetup(connectionID, v, sCfg),
 		streamCallback:           streamCallback,
 		lastObservedPacketNumber: 0,
 		Streams:                  make(map[protocol.StreamID]*Stream),
 		EntropyHistory:           make(map[protocol.PacketNumber]EntropyAccumulator),
 	}
+
+	cryptoStream := NewStream(session, protocol.StreamID(1))
+	session.Streams[1] = cryptoStream
+	session.cryptoSetup = handshake.NewCryptoSetup(connectionID, v, sCfg, cryptoStream)
+	go session.cryptoSetup.HandleCryptoStream()
+
+	return session
 }
 
 // HandlePacket handles a packet
@@ -141,33 +145,17 @@ func (s *Session) handleStreamFrame(r *bytes.Reader) error {
 		return errors.New("Session: 0 is not a valid Stream ID")
 	}
 
-	if frame.StreamID == 1 {
-		reply, err := s.cryptoSetup.HandleCryptoMessage(frame.Data)
-		if err != nil {
-			return err
-		}
-		if reply != nil {
-			if len(reply) > 1000 {
-				s.SendFrames([]frames.Frame{&frames.StreamFrame{StreamID: 1, Offset: s.s1offset, Data: reply[:1000]}})
-				s.s1offset += 1000
-				s.SendFrames([]frames.Frame{&frames.StreamFrame{StreamID: 1, Offset: s.s1offset, Data: reply[1000:]}})
-				s.s1offset += uint64(len(reply[1000:]))
-			} else {
-				s.SendFrames([]frames.Frame{&frames.StreamFrame{StreamID: 1, Offset: s.s1offset, Data: reply}})
-				s.s1offset += uint64(len(reply))
-			}
-		}
-	} else {
-		stream, ok := s.Streams[frame.StreamID]
-		if !ok {
-			stream = NewStream(s, frame.StreamID)
-			s.Streams[frame.StreamID] = stream
-		}
-		err := stream.AddStreamFrame(frame)
-		if err != nil {
-			return err
-		}
+	stream, newStream := s.Streams[frame.StreamID]
+	if !newStream {
+		stream = NewStream(s, frame.StreamID)
+		s.Streams[frame.StreamID] = stream
+	}
+	err = stream.AddStreamFrame(frame)
+	if err != nil {
+		return err
+	}
 
+	if !newStream {
 		replyFrames := s.streamCallback(stream)
 		if replyFrames != nil {
 			s.SendFrames(replyFrames)
