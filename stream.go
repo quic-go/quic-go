@@ -81,6 +81,14 @@ func (s *Stream) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+func (s *Stream) Close() error {
+	return s.Session.SendFrame(&frames.StreamFrame{
+		StreamID: s.StreamID,
+		Offset:   s.WriteOffset,
+		FinBit:   true,
+	})
+}
+
 // AddStreamFrame adds a new stream frame
 func (s *Stream) AddStreamFrame(frame *frames.StreamFrame) error {
 	s.StreamFrames <- frame
