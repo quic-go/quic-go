@@ -65,6 +65,23 @@ func mockKeyDerivation(forwardSecure bool, sharedSecret, nonces []byte, connID p
 	return &mockAEAD{forwardSecure: forwardSecure}, nil
 }
 
+type mockStream struct {
+	dataToRead  bytes.Buffer
+	dataWritten bytes.Buffer
+}
+
+func (s *mockStream) Read(p []byte) (int, error) {
+	return s.dataToRead.Read(p)
+}
+
+func (s *mockStream) ReadByte() (byte, error) {
+	return s.dataToRead.ReadByte()
+}
+
+func (s *mockStream) Write(p []byte) (int, error) {
+	return s.dataWritten.Write(p)
+}
+
 var _ = Describe("Crypto setup", func() {
 	var (
 		kex    *mockKEX
@@ -72,15 +89,17 @@ var _ = Describe("Crypto setup", func() {
 		scfg   *ServerConfig
 		cs     *CryptoSetup
 		buf    *bytes.Buffer
+		stream *mockStream
 	)
 
 	BeforeEach(func() {
+		stream = &mockStream{}
 		buf = &bytes.Buffer{}
 		kex = &mockKEX{}
 		signer = &mockSigner{}
 		scfg = NewServerConfig(kex, signer)
 		v := protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
-		cs = NewCryptoSetup(protocol.ConnectionID(42), v, scfg, nil)
+		cs = NewCryptoSetup(protocol.ConnectionID(42), v, scfg, stream)
 		cs.keyDerivation = mockKeyDerivation
 	})
 
@@ -123,18 +142,19 @@ var _ = Describe("Crypto setup", func() {
 			Expect(cs.forwardSecureAEAD).ToNot(BeNil())
 		})
 
-		PIt("recognizes SCID", func() {
-			// WriteHandshakeMessage(buf, TagCHLO, map[Tag][]byte{TagSCID: scfg.ID})
-			// response, err := cs.HandleCryptoMessage(buf.Bytes())
-			// Expect(err).ToNot(HaveOccurred())
-			// Expect(response).To(HavePrefix("SHLO"))
+		It("handles long handshake", func() {
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{})
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{TagSCID: scfg.ID})
+			cs.HandleCryptoStream()
+			Expect(stream.dataWritten.Bytes()).To(HavePrefix("REJ"))
+			Expect(stream.dataWritten.Bytes()).To(ContainSubstring("SHLO"))
 		})
 
-		PIt("recognizes missing SCID", func() {
-			// WriteHandshakeMessage(buf, TagCHLO, map[Tag][]byte{})
-			// response, err := cs.HandleCryptoMessage(buf.Bytes())
-			// Expect(err).ToNot(HaveOccurred())
-			// Expect(response).To(HavePrefix("REJ"))
+		It("handles 0-RTT handshake", func() {
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{TagSCID: scfg.ID})
+			cs.HandleCryptoStream()
+			Expect(stream.dataWritten.Bytes()).To(HavePrefix("SHLO"))
+			Expect(stream.dataWritten.Bytes()).ToNot(ContainSubstring("REJ"))
 		})
 	})
 
