@@ -105,9 +105,9 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 		err = nil
 		if typeByte&0x80 == 0x80 {
 			err = s.handleStreamFrame(r)
-		} else if typeByte == 0x40 {
+		} else if typeByte&0xca == 0x40 {
 			err = s.handleAckFrame(r)
-		} else if typeByte&0xE0 == 0x20 {
+		} else if typeByte&0xe0 == 0x20 {
 			err = errors.New("unimplemented: CONGESTION_FEEDBACK")
 		} else {
 			switch typeByte {
@@ -120,9 +120,15 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 			case 0x03:
 				err = errors.New("unimplemented: GOAWAY")
 			case 0x04:
-				err = errors.New("unimplemented: WINDOW_UPDATE")
+				// err = errors.New("unimplemented: WINDOW_UPDATE")
+				fmt.Println("unimplemented: WINDOW_UPDATE")
+				p := make([]byte, 1+4+8)
+				_, err = r.Read(p)
 			case 0x05:
-				err = errors.New("unimplemented: BLOCKED")
+				// err = errors.New("unimplemented: BLOCKED")
+				fmt.Println("unimplemented: BLOCKED")
+				p := make([]byte, 1+4)
+				_, err = r.Read(p)
 			case 0x06:
 				err = s.handleStopWaitingFrame(r, publicHeader)
 			case 0x07:

@@ -2,6 +2,7 @@ package frames
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
@@ -36,8 +37,9 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 		return nil, err
 	}
 
+	hasNACK := false
 	if typeByte&0x20 == 0x20 {
-		panic("NACK ranges not yet implemented.")
+		hasNACK = true
 	}
 	if typeByte&0x10 == 0x10 {
 		panic("truncated ACKs not yet implemented.")
@@ -94,9 +96,25 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 			return nil, err
 		}
 		// Time Since Previous Timestamp
-		_, err := utils.ReadUint16(r)
+		_, err = utils.ReadUint16(r)
 		if err != nil {
 			return nil, err
+		}
+	}
+
+	if hasNACK {
+		fmt.Println("NACK not implemented yet!")
+		var numRanges uint8
+		numRanges, err = r.ReadByte()
+		if err != nil {
+			return nil, err
+		}
+		p := make([]byte, largestObservedLen+1)
+		for i := uint8(0); i < numRanges; i++ {
+			_, err := r.Read(p)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
