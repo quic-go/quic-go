@@ -32,33 +32,39 @@ func main() {
 }
 
 func handleStream(session *quic.Session, stream *quic.Stream) {
+	hpackDecoder := hpack.NewDecoder(1024, nil)
 	h2framer := http2.NewFramer(stream, stream)
-	h2framer.ReadMetaHeaders = hpack.NewDecoder(1024, nil)
-	h2frame, err := h2framer.ReadFrame()
-	if err != nil {
-		fmt.Printf("invalid http2 frame: %s", err.Error())
-		return
-	}
-	h2headersFrame := h2frame.(*http2.MetaHeadersFrame)
-	fmt.Printf("Request: %s %s://%s%s\n", h2headersFrame.PseudoValue("method"), h2headersFrame.PseudoValue("scheme"), h2headersFrame.PseudoValue("authority"), h2headersFrame.PseudoValue("path"))
+	h2framer.ReadMetaHeaders = hpackDecoder
 
-	var replyHeaders bytes.Buffer
-	enc := hpack.NewEncoder(&replyHeaders)
-	enc.WriteField(hpack.HeaderField{Name: ":status", Value: "200"})
-	enc.WriteField(hpack.HeaderField{Name: "content-type", Value: "text/plain"})
-	enc.WriteField(hpack.HeaderField{Name: "content-length", Value: "12"})
-	h2framer.WriteHeaders(http2.HeadersFrameParam{
-		StreamID:      h2frame.Header().StreamID,
-		EndHeaders:    true,
-		BlockFragment: replyHeaders.Bytes(),
-	})
+	go func() {
+		for {
+			h2frame, err := h2framer.ReadFrame()
+			if err != nil {
+				fmt.Printf("invalid http2 frame: %s", err.Error())
+				return
+			}
+			h2headersFrame := h2frame.(*http2.MetaHeadersFrame)
+			fmt.Printf("Request: %s %s://%s%s\n", h2headersFrame.PseudoValue("method"), h2headersFrame.PseudoValue("scheme"), h2headersFrame.PseudoValue("authority"), h2headersFrame.PseudoValue("path"))
 
-	dataStream, err := session.NewStream(protocol.StreamID(h2frame.Header().StreamID))
-	if err != nil {
-		fmt.Printf("error creating stream: %s", err.Error())
-		return
-	}
+			var replyHeaders bytes.Buffer
+			enc := hpack.NewEncoder(&replyHeaders)
+			enc.WriteField(hpack.HeaderField{Name: ":status", Value: "200"})
+			enc.WriteField(hpack.HeaderField{Name: "content-type", Value: "text/plain"})
+			enc.WriteField(hpack.HeaderField{Name: "content-length", Value: "12"})
+			h2framer.WriteHeaders(http2.HeadersFrameParam{
+				StreamID:      h2frame.Header().StreamID,
+				EndHeaders:    true,
+				BlockFragment: replyHeaders.Bytes(),
+			})
 
-	dataStream.Write([]byte("Hello World!"))
-	dataStream.Close()
+			dataStream, err := session.NewStream(protocol.StreamID(h2frame.Header().StreamID))
+			if err != nil {
+				fmt.Printf("error creating stream: %s", err.Error())
+				return
+			}
+
+			dataStream.Write([]byte("Hello World!"))
+			dataStream.Close()
+		}
+	}()
 }
