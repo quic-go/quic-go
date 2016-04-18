@@ -13,7 +13,7 @@ import (
 )
 
 // StreamCallback gets a stream frame and returns a reply frame
-type StreamCallback func(*Session, *Stream) []frames.Frame
+type StreamCallback func(*Session, *Stream)
 
 // A Session is a QUIC session
 type Session struct {
@@ -154,10 +154,7 @@ func (s *Session) handleStreamFrame(r *bytes.Reader) error {
 	}
 
 	if !newStream {
-		replyFrames := s.streamCallback(s, stream)
-		if replyFrames != nil {
-			s.SendFrames(replyFrames)
-		}
+		s.streamCallback(s, stream)
 	}
 	return nil
 }

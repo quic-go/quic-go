@@ -9,7 +9,6 @@ import (
 	"golang.org/x/net/http2/hpack"
 
 	"github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 )
 
@@ -32,13 +31,13 @@ func main() {
 	}
 }
 
-func handleStream(session *quic.Session, stream *quic.Stream) []frames.Frame {
-	var reply bytes.Buffer
-	h2framer := http2.NewFramer(&reply, stream)
+func handleStream(session *quic.Session, stream *quic.Stream) {
+	h2framer := http2.NewFramer(stream, stream)
 	h2framer.ReadMetaHeaders = hpack.NewDecoder(1024, nil)
 	h2frame, err := h2framer.ReadFrame()
 	if err != nil {
-		return nil
+		fmt.Printf("invalid http2 frame: %s", err.Error())
+		return
 	}
 	h2headersFrame := h2frame.(*http2.MetaHeadersFrame)
 	fmt.Printf("Request: %s %s://%s%s\n", h2headersFrame.PseudoValue("method"), h2headersFrame.PseudoValue("scheme"), h2headersFrame.PseudoValue("authority"), h2headersFrame.PseudoValue("path"))
@@ -53,17 +52,13 @@ func handleStream(session *quic.Session, stream *quic.Stream) []frames.Frame {
 		EndHeaders:    true,
 		BlockFragment: replyHeaders.Bytes(),
 	})
-	headerStreamFrame := &frames.StreamFrame{
-		StreamID: stream.StreamID,
-		Data:     reply.Bytes(),
-		FinBit:   true,
+
+	dataStream, err := session.NewStream(protocol.StreamID(h2frame.Header().StreamID))
+	if err != nil {
+		fmt.Printf("error creating stream: %s", err.Error())
+		return
 	}
 
-	dataStreamFrame := &frames.StreamFrame{
-		StreamID: protocol.StreamID(h2frame.Header().StreamID),
-		Data:     []byte("Hello World!"),
-		FinBit:   true,
-	}
-
-	return []frames.Frame{headerStreamFrame, dataStreamFrame}
+	dataStream.Write([]byte("Hello World!"))
+	dataStream.Close()
 }
