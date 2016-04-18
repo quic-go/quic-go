@@ -51,8 +51,7 @@ func NewSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protoc
 		EntropyHistory:           make(map[protocol.PacketNumber]EntropyAccumulator),
 	}
 
-	cryptoStream := NewStream(session, protocol.StreamID(1))
-	session.Streams[1] = cryptoStream
+	cryptoStream, _ := session.NewStream(1)
 	session.cryptoSetup = handshake.NewCryptoSetup(connectionID, v, sCfg, cryptoStream)
 	go session.cryptoSetup.HandleCryptoStream()
 
@@ -87,10 +86,10 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 	}
 	s.EntropyReceived.Add(publicHeader.PacketNumber, privateFlag&0x01 > 0)
 
-	s.SendFrames([]frames.Frame{&frames.AckFrame{
+	s.SendFrame(&frames.AckFrame{
 		LargestObserved: publicHeader.PacketNumber,
 		Entropy:         s.EntropyReceived.Get(),
-	}})
+	})
 
 	// read all frames in the packet
 	for r.Len() > 0 {
@@ -147,8 +146,7 @@ func (s *Session) handleStreamFrame(r *bytes.Reader) error {
 
 	stream, newStream := s.Streams[frame.StreamID]
 	if !newStream {
-		stream = NewStream(s, frame.StreamID)
-		s.Streams[frame.StreamID] = stream
+		stream, _ = s.NewStream(frame.StreamID)
 	}
 	err = stream.AddStreamFrame(frame)
 	if err != nil {
@@ -277,4 +275,14 @@ func (s *Session) SendFrame(frame frames.Frame) error {
 	fmt.Printf("-> Sending packet %d (%d bytes) to %v\n", responsePublicHeader.PacketNumber, len(fullReply.Bytes()), s.CurrentRemoteAddr)
 	_, err = s.Connection.WriteToUDP(fullReply.Bytes(), s.CurrentRemoteAddr)
 	return err
+}
+
+// NewStream creates a new strean open for reading and writing
+func (s *Session) NewStream(id protocol.StreamID) (*Stream, error) {
+	stream := NewStream(s, id)
+	if s.Streams[id] != nil {
+		return nil, fmt.Errorf("Session: stream with ID %d already exists", id)
+	}
+	s.Streams[id] = stream
+	return stream, nil
 }
