@@ -39,6 +39,8 @@ type Session struct {
 	Streams      map[protocol.StreamID]*Stream
 	streamsMutex sync.RWMutex
 
+	AckQueue []*frames.AckFrame
+
 	streamCallback StreamCallback
 }
 
@@ -92,7 +94,7 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 	}
 	s.EntropyReceived.Add(publicHeader.PacketNumber, privateFlag&0x01 > 0)
 
-	s.SendFrame(&frames.AckFrame{
+	s.queueAck(&frames.AckFrame{
 		LargestObserved: publicHeader.PacketNumber,
 		Entropy:         s.EntropyReceived.Get(),
 	})
@@ -195,6 +197,10 @@ func (s *Session) handleAckFrame(r *bytes.Reader) error {
 	return nil
 }
 
+func (s *Session) queueAck(f *frames.AckFrame) {
+	s.AckQueue = append(s.AckQueue, f)
+}
+
 func (s *Session) handleConnectionCloseFrame(r *bytes.Reader) error {
 	fmt.Println("Detected CONNECTION_CLOSE")
 	frame, err := frames.ParseConnectionCloseFrame(r)
@@ -257,6 +263,13 @@ func (s *Session) SendFrame(frame frames.Frame) error {
 	} else {
 		framesData.WriteByte(0)
 	}
+
+	// add all outstanding ACKs
+	for _, ackFrame := range s.AckQueue {
+		fmt.Printf("Adding ACK for %d\n", ackFrame.LargestObserved)
+		ackFrame.Write(&framesData)
+	}
+	s.AckQueue = s.AckQueue[:0]
 
 	if err := frame.Write(&framesData); err != nil {
 		return err
