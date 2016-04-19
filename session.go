@@ -284,7 +284,6 @@ func (s *Session) SendFrame(frame frames.Frame) error {
 
 	// add all outstanding ACKs
 	for _, ackFrame := range s.AckQueue {
-		fmt.Printf("Adding ACK for %d\n", ackFrame.LargestObserved)
 		ackFrame.Write(&framesData)
 	}
 	s.AckQueue = s.AckQueue[:0]
