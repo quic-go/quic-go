@@ -8,6 +8,7 @@ import (
 	"net"
 	"sync"
 
+	"github.com/lucas-clemente/quic-go/errorcodes"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -140,6 +141,7 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 				err = fmt.Errorf("unknown frame type: %x", typeByte)
 			}
 			if err != nil {
+				s.Close(errorcodes.QUIC_INVALID_FRAME_DATA)
 				return err
 			}
 		}
@@ -226,6 +228,14 @@ func (s *Session) handleRstStreamFrame(r *bytes.Reader) error {
 	}
 	fmt.Printf("%#v\n", frame)
 	return nil
+}
+
+// Close closes the connection by sending a ConnectionClose frame
+func (s *Session) Close(errorCode protocol.ErrorCode) error {
+	frame := &frames.ConnectionCloseFrame{
+		ErrorCode: errorCode,
+	}
+	return s.SendFrame(frame)
 }
 
 // SendFrame sends a frame to the client

@@ -59,9 +59,11 @@ func (s *Server) ListenAndServe(address string) error {
 		}
 		data = data[:n]
 		r := bytes.NewReader(data)
+		// ToDo: check packet size and send errorcodes.QUIC_PACKET_TOO_LARGE if packet is too large
 
 		publicHeader, err := ParsePublicHeader(r)
 		if err != nil {
+			// ToDo: send errorcodes.QUIC_INVALID_PACKET_HEADER
 			fmt.Printf("Could not parse public header")
 			continue
 		}
