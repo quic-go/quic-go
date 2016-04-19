@@ -116,18 +116,135 @@ var _ = Describe("Stream", func() {
 		Expect(n).To(Equal(2))
 	})
 
-	PIt("rejects StreamFrames with wrong Offsets", func() {
+	It("handles StreamFrames in wrong order", func() {
+		frame1 := frames.StreamFrame{
+			Offset: 2,
+			Data:   []byte{0xBE, 0xEF},
+		}
+		frame2 := frames.StreamFrame{
+			Offset: 0,
+			Data:   []byte{0xDE, 0xAD},
+		}
+		stream := NewStream(nil, 1337)
+		stream.AddStreamFrame(&frame1)
+		stream.AddStreamFrame(&frame2)
+		b := make([]byte, 4)
+		n, err := stream.Read(b)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(n).To(Equal(4))
+		Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
+	})
+
+	It("handles duplicate StreamFrames", func() {
+		frame1 := frames.StreamFrame{
+			Offset: 0,
+			Data:   []byte{0xDE, 0xAD},
+		}
+		frame2 := frames.StreamFrame{
+			Offset: 0,
+			Data:   []byte{0xDE, 0xAD},
+		}
+		frame3 := frames.StreamFrame{
+			Offset: 2,
+			Data:   []byte{0xBE, 0xEF},
+		}
+		stream := NewStream(nil, 1337)
+		stream.AddStreamFrame(&frame1)
+		stream.AddStreamFrame(&frame2)
+		stream.AddStreamFrame(&frame3)
+		b := make([]byte, 4)
+		n, err := stream.Read(b)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(n).To(Equal(4))
+		Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
+	})
+
+	It("discards unneeded stream frames", func() {
 		frame1 := frames.StreamFrame{
 			Offset: 0,
 			Data:   []byte{0xDE, 0xAD},
 		}
 		frame2 := frames.StreamFrame{
 			Offset: 1,
+			Data:   []byte{0x42, 0x24},
+		}
+		frame3 := frames.StreamFrame{
+			Offset: 2,
 			Data:   []byte{0xBE, 0xEF},
 		}
 		stream := NewStream(nil, 1337)
 		stream.AddStreamFrame(&frame1)
-		err := stream.AddStreamFrame(&frame2)
-		Expect(err).To(HaveOccurred())
+		stream.AddStreamFrame(&frame2)
+		stream.AddStreamFrame(&frame3)
+		b := make([]byte, 4)
+		n, err := stream.Read(b)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(n).To(Equal(4))
+		Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
+	})
+
+	Context("getting next stream frame", func() {
+		It("gets next frame", func() {
+			stream := NewStream(nil, 1337)
+			stream.AddStreamFrame(&frames.StreamFrame{
+				Offset: 0,
+				Data:   []byte{0xDE, 0xAD},
+			})
+			f := stream.getNextFrameInOrder(true)
+			Expect(f.Data).To(Equal([]byte{0xDE, 0xAD}))
+		})
+
+		It("waits for next frame", func() {
+			stream := NewStream(nil, 1337)
+			var b bool
+			go func() {
+				time.Sleep(time.Millisecond)
+				b = true
+				stream.AddStreamFrame(&frames.StreamFrame{
+					Offset: 0,
+					Data:   []byte{0xDE, 0xAD},
+				})
+			}()
+			f := stream.getNextFrameInOrder(true)
+			Expect(b).To(BeTrue())
+			Expect(f.Data).To(Equal([]byte{0xDE, 0xAD}))
+		})
+
+		It("queues non-matching stream frames", func() {
+			stream := NewStream(nil, 1337)
+			var b bool
+			stream.AddStreamFrame(&frames.StreamFrame{
+				Offset: 2,
+				Data:   []byte{0xBE, 0xEF},
+			})
+			go func() {
+				time.Sleep(time.Millisecond)
+				b = true
+				stream.AddStreamFrame(&frames.StreamFrame{
+					Offset: 0,
+					Data:   []byte{0xDE, 0xAD},
+				})
+			}()
+			f := stream.getNextFrameInOrder(true)
+			Expect(b).To(BeTrue())
+			Expect(f.Data).To(Equal([]byte{0xDE, 0xAD}))
+			stream.ReadOffset += 2
+			f = stream.getNextFrameInOrder(true)
+			Expect(f.Data).To(Equal([]byte{0xBE, 0xEF}))
+		})
+
+		It("returns nil if non-blocking", func() {
+			stream := NewStream(nil, 1337)
+			Expect(stream.getNextFrameInOrder(false)).To(BeNil())
+		})
+
+		It("returns properly if non-blocking", func() {
+			stream := NewStream(nil, 1337)
+			stream.AddStreamFrame(&frames.StreamFrame{
+				Offset: 0,
+				Data:   []byte{0xDE, 0xAD},
+			})
+			Expect(stream.getNextFrameInOrder(false)).ToNot(BeNil())
+		})
 	})
 })
