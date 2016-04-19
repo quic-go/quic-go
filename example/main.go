@@ -40,8 +40,9 @@ func main() {
 type responseWriter struct {
 	header       http.Header
 	headerStream *quic.Stream
-	dataStream   *quic.Stream
+	session      *quic.Session
 	status       int
+	dataStreamID protocol.StreamID
 }
 
 func (w *responseWriter) Header() http.Header {
@@ -69,13 +70,21 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 
 	h2framer := http2.NewFramer(w.headerStream, nil)
 	h2framer.WriteHeaders(http2.HeadersFrameParam{
-		StreamID:      uint32(w.dataStream.StreamID),
+		StreamID:      uint32(w.dataStreamID),
 		EndHeaders:    true,
 		BlockFragment: headers.Bytes(),
 	})
 
-	defer w.dataStream.Close()
-	return w.dataStream.Write(p)
+	if len(p) != 0 {
+		dataStream, err := w.session.NewStream(w.dataStreamID)
+		if err != nil {
+			return 0, fmt.Errorf("error creating data stream: %s\n", err.Error())
+		}
+		defer dataStream.Close()
+		return dataStream.Write(p)
+	}
+
+	return 0, nil
 }
 
 func handleStream(session *quic.Session, headerStream *quic.Stream) {
@@ -99,16 +108,11 @@ func handleStream(session *quic.Session, headerStream *quic.Stream) {
 				continue
 			}
 
-			dataStream, err := session.NewStream(protocol.StreamID(h2frame.Header().StreamID))
-			if err != nil {
-				fmt.Printf("error creating headerStream: %s\n", err.Error())
-				continue
-			}
-
 			responseWriter := &responseWriter{
 				header:       http.Header{},
 				headerStream: headerStream,
-				dataStream:   dataStream,
+				dataStreamID: protocol.StreamID(h2headersFrame.StreamID),
+				session:      session,
 			}
 
 			go http.DefaultServeMux.ServeHTTP(responseWriter, req)
