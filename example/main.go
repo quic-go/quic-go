@@ -91,7 +91,7 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 }
 
 func handleStream(session *quic.Session, headerStream *quic.Stream) {
-	hpackDecoder := hpack.NewDecoder(1024, nil)
+	hpackDecoder := hpack.NewDecoder(4096, nil)
 	h2framer := http2.NewFramer(nil, headerStream)
 
 	go func() {
