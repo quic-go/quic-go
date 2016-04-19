@@ -68,10 +68,12 @@ func (s *Stream) ReadByte() (byte, error) {
 }
 
 func (s *Stream) Write(p []byte) (int, error) {
+	data := make([]byte, len(p))
+	copy(data, p)
 	err := s.Session.SendFrame(&frames.StreamFrame{
 		StreamID: s.StreamID,
 		Offset:   s.WriteOffset,
-		Data:     p,
+		Data:     data,
 	})
 	if err != nil {
 		return 0, err
