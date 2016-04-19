@@ -138,17 +138,29 @@ var _ = Describe("Crypto setup", func() {
 
 		It("handles long handshake", func() {
 			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{})
-			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{TagSCID: scfg.ID})
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{TagSCID: scfg.ID, TagSNO: cs.nonce})
 			cs.HandleCryptoStream()
 			Expect(stream.dataWritten.Bytes()).To(HavePrefix("REJ"))
 			Expect(stream.dataWritten.Bytes()).To(ContainSubstring("SHLO"))
 		})
 
 		It("handles 0-RTT handshake", func() {
-			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{TagSCID: scfg.ID})
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{TagSCID: scfg.ID, TagSNO: cs.nonce})
 			cs.HandleCryptoStream()
 			Expect(stream.dataWritten.Bytes()).To(HavePrefix("SHLO"))
 			Expect(stream.dataWritten.Bytes()).ToNot(ContainSubstring("REJ"))
+		})
+
+		It("recognizes inchoate CHLOs missing SCID", func() {
+			Expect(cs.isInchoateCHLO(map[Tag][]byte{TagSNO: cs.nonce})).To(BeTrue())
+		})
+
+		It("recognizes inchoate CHLOs missing SNO", func() {
+			Expect(cs.isInchoateCHLO(map[Tag][]byte{TagSCID: scfg.ID})).To(BeTrue())
+		})
+
+		It("recognizes proper CHLOs", func() {
+			Expect(cs.isInchoateCHLO(map[Tag][]byte{TagSCID: scfg.ID, TagSNO: cs.nonce})).To(BeFalse())
 		})
 	})
 

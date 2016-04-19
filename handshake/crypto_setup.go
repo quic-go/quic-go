@@ -66,7 +66,7 @@ func (h *CryptoSetup) HandleCryptoStream() {
 		chloData := cachingReader.Get()
 
 		var reply []byte
-		if scid, ok := cryptoData[TagSCID]; ok && bytes.Equal(h.scfg.ID, scid) {
+		if !h.isInchoateCHLO(cryptoData) {
 			// We have a CHLO with a proper server config ID, do a 0-RTT handshake
 			reply, err = h.handleCHLO(chloData, cryptoData)
 			if err != nil {
@@ -81,7 +81,7 @@ func (h *CryptoSetup) HandleCryptoStream() {
 			return
 		}
 
-		// We have an inacholate or non-matching CHLO, we now send a rejection
+		// We have an inchoate or non-matching CHLO, we now send a rejection
 		reply, err = h.handleInchoateCHLO(chloData)
 		if err != nil {
 			fmt.Printf("error in crypto stream (TODO: handle): %s", err.Error())
@@ -128,6 +128,18 @@ func (h *CryptoSetup) Seal(packetNumber protocol.PacketNumber, associatedData []
 	} else {
 		return (&crypto.NullAEAD{}).Seal(packetNumber, associatedData, plaintext)
 	}
+}
+
+func (h *CryptoSetup) isInchoateCHLO(cryptoData map[Tag][]byte) bool {
+	scid, ok := cryptoData[TagSCID]
+	if !ok || !bytes.Equal(h.scfg.ID, scid) {
+		return true
+	}
+	sno, ok := cryptoData[TagSNO]
+	if !ok || !bytes.Equal(h.nonce, sno) {
+		return true
+	}
+	return false
 }
 
 func (h *CryptoSetup) handleInchoateCHLO(data []byte) ([]byte, error) {
