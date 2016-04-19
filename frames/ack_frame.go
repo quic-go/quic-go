@@ -2,8 +2,9 @@ package frames
 
 import (
 	"bytes"
-	"fmt"
+	"errors"
 
+	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 )
@@ -13,6 +14,8 @@ type AckFrame struct {
 	Entropy         byte
 	LargestObserved protocol.PacketNumber
 	DelayTime       uint16 // Todo: properly interpret this value as described in the specification
+	HasNACK         bool
+	NackRanges      []*ackhandler.NackRange
 }
 
 // Write writes an ACK frame.
@@ -37,9 +40,9 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 		return nil, err
 	}
 
-	hasNACK := false
+	frame.HasNACK = false
 	if typeByte&0x20 == 0x20 {
-		hasNACK = true
+		frame.HasNACK = true
 	}
 	if typeByte&0x10 == 0x10 {
 		panic("truncated ACKs not yet implemented.")
@@ -102,19 +105,38 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 		}
 	}
 
-	if hasNACK {
-		fmt.Println("NACK not implemented yet!")
+	if frame.HasNACK {
 		var numRanges uint8
 		numRanges, err = r.ReadByte()
 		if err != nil {
 			return nil, err
 		}
-		p := make([]byte, largestObservedLen+1)
+
 		for i := uint8(0); i < numRanges; i++ {
-			_, err := r.Read(p)
+			missingPacketSequenceNumberDeltaByte, err := r.ReadByte()
 			if err != nil {
 				return nil, err
 			}
+			missingPacketSequenceNumberDelta := uint64(missingPacketSequenceNumberDeltaByte)
+
+			rangeLength, err := utils.ReadUintN(r, largestObservedLen)
+			if err != nil {
+				return nil, err
+			}
+
+			nackRange := ackhandler.NackRange{
+				Length: uint8(rangeLength + 1),
+			}
+			if i == 0 {
+				nackRange.FirstPacketNumber = frame.LargestObserved - protocol.PacketNumber(missingPacketSequenceNumberDelta+rangeLength)
+			} else {
+				if missingPacketSequenceNumberDelta == 0 {
+					return nil, errors.New("ACK frame: Continues NACK ranges not yet implemented.")
+				}
+				lastNackRange := frame.NackRanges[len(frame.NackRanges)-1]
+				nackRange.FirstPacketNumber = lastNackRange.FirstPacketNumber - protocol.PacketNumber(missingPacketSequenceNumberDelta+rangeLength) - 1
+			}
+			frame.NackRanges = append(frame.NackRanges, &nackRange)
 		}
 	}
 
