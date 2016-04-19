@@ -38,11 +38,13 @@ func main() {
 }
 
 type responseWriter struct {
-	header       http.Header
-	headerStream *quic.Stream
 	session      *quic.Session
-	status       int
 	dataStreamID protocol.StreamID
+	headerStream *quic.Stream
+	dataStream   *quic.Stream
+
+	header        http.Header
+	headerWritten bool
 }
 
 func (w *responseWriter) Header() http.Header {
@@ -50,17 +52,11 @@ func (w *responseWriter) Header() http.Header {
 }
 
 func (w *responseWriter) WriteHeader(status int) {
-	w.status = status
-}
-
-func (w *responseWriter) Write(p []byte) (int, error) {
-	if w.status == 0 {
-		w.WriteHeader(200)
-	}
+	w.headerWritten = true
 
 	var headers bytes.Buffer
 	enc := hpack.NewEncoder(&headers)
-	enc.WriteField(hpack.HeaderField{Name: ":status", Value: strconv.Itoa(w.status)})
+	enc.WriteField(hpack.HeaderField{Name: ":status", Value: strconv.Itoa(status)})
 	// enc.WriteField(hpack.HeaderField{Name: "content-length", Value: strconv.Itoa(len(p))})
 	// enc.WriteField(hpack.HeaderField{Name: "content-type", Value: http.DetectContentType(p)})
 
@@ -68,12 +64,19 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 		enc.WriteField(hpack.HeaderField{Name: k, Value: v[0]})
 	}
 
+	fmt.Printf("responding with %d %#v\n", status, w.header)
 	h2framer := http2.NewFramer(w.headerStream, nil)
 	h2framer.WriteHeaders(http2.HeadersFrameParam{
 		StreamID:      uint32(w.dataStreamID),
 		EndHeaders:    true,
 		BlockFragment: headers.Bytes(),
 	})
+}
+
+func (w *responseWriter) Write(p []byte) (int, error) {
+	if !w.headerWritten {
+		w.WriteHeader(200)
+	}
 
 	if len(p) != 0 {
 		dataStream, err := w.session.NewStream(w.dataStreamID)
