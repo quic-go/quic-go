@@ -90,7 +90,6 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 func handleStream(session *quic.Session, headerStream *quic.Stream) {
 	hpackDecoder := hpack.NewDecoder(1024, nil)
 	h2framer := http2.NewFramer(nil, headerStream)
-	h2framer.ReadMetaHeaders = hpackDecoder
 
 	go func() {
 		for {
@@ -99,10 +98,25 @@ func handleStream(session *quic.Session, headerStream *quic.Stream) {
 				fmt.Printf("invalid http2 frame: %s\n", err.Error())
 				continue
 			}
-			h2headersFrame := h2frame.(*http2.MetaHeadersFrame)
-			fmt.Printf("Request: %s %s://%s%s\n", h2headersFrame.PseudoValue("method"), h2headersFrame.PseudoValue("scheme"), h2headersFrame.PseudoValue("authority"), h2headersFrame.PseudoValue("path"))
+			h2headersFrame := h2frame.(*http2.HeadersFrame)
+			if !h2headersFrame.HeadersEnded() {
+				fmt.Printf("http2 header continuation not implemented")
+				continue
+			}
+			headers, err := hpackDecoder.DecodeFull(h2headersFrame.HeaderBlockFragment())
+			if err != nil {
+				fmt.Printf("invalid http2 headers encoding: %s\n", err.Error())
+				continue
+			}
 
-			req, err := http.NewRequest(h2headersFrame.PseudoValue("method"), h2headersFrame.PseudoValue("path"), nil)
+			headersMap := map[string]string{}
+			for _, h := range headers {
+				headersMap[h.Name] = h.Value
+			}
+
+			fmt.Printf("Request: %s %s://%s%s on stream %d\n", headersMap[":method"], headersMap[":scheme"], headersMap[":authority"], headersMap[":path"], h2headersFrame.StreamID)
+
+			req, err := http.NewRequest(headersMap[":method"], headersMap[":path"], nil)
 			if err != nil {
 				fmt.Printf("invalid http2 frame: %s\n", err.Error())
 				continue
