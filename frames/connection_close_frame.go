@@ -5,12 +5,13 @@ import (
 	"errors"
 	"math"
 
+	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // A ConnectionCloseFrame in QUIC
 type ConnectionCloseFrame struct {
-	ErrorCode    uint32
+	ErrorCode    protocol.ErrorCode
 	ReasonPhrase string
 }
 
@@ -24,10 +25,11 @@ func ParseConnectionCloseFrame(r *bytes.Reader) (*ConnectionCloseFrame, error) {
 		return nil, err
 	}
 
-	frame.ErrorCode, err = utils.ReadUint32(r)
+	errorCode, err := utils.ReadUint32(r)
 	if err != nil {
 		return nil, err
 	}
+	frame.ErrorCode = protocol.ErrorCode(errorCode)
 
 	reasonPhraseLen, err := utils.ReadUint16(r)
 	if err != nil {
@@ -49,7 +51,7 @@ func ParseConnectionCloseFrame(r *bytes.Reader) (*ConnectionCloseFrame, error) {
 // Write writes an CONNECTION_CLOSE frame.
 func (f *ConnectionCloseFrame) Write(b *bytes.Buffer) error {
 	b.WriteByte(0x02)
-	utils.WriteUint32(b, f.ErrorCode)
+	utils.WriteUint32(b, uint32(f.ErrorCode))
 
 	if len(f.ReasonPhrase) > math.MaxUint16 {
 		return errors.New("ConnectionFrame: ReasonPhrase too long")
