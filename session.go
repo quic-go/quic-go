@@ -138,10 +138,10 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 				// PING, do nothing
 				r.ReadByte()
 			default:
-				err = fmt.Errorf("unknown frame type: %x", typeByte)
+				err = protocol.NewQuicError(errorcodes.QUIC_INVALID_FRAME_DATA, fmt.Sprintf("unknown type byte 0x%x", typeByte))
 			}
 			if err != nil {
-				s.Close(errorcodes.QUIC_INVALID_FRAME_DATA)
+				s.Close(err)
 				return err
 			}
 		}
@@ -231,9 +231,17 @@ func (s *Session) handleRstStreamFrame(r *bytes.Reader) error {
 }
 
 // Close closes the connection by sending a ConnectionClose frame
-func (s *Session) Close(errorCode protocol.ErrorCode) error {
+func (s *Session) Close(e error) error {
+	errorCode := protocol.ErrorCode(1)
+	reasonPhrase := e.Error()
+
+	quicError, ok := e.(*protocol.QuicError)
+	if ok {
+		errorCode = quicError.ErrorCode
+	}
 	frame := &frames.ConnectionCloseFrame{
-		ErrorCode: errorCode,
+		ErrorCode:    errorCode,
+		ReasonPhrase: reasonPhrase,
 	}
 	return s.SendFrame(frame)
 }

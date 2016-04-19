@@ -4,6 +4,7 @@ import "github.com/lucas-clemente/quic-go/protocol"
 
 const (
 	QUIC_NO_ERROR                      = protocol.ErrorCode(0)
+	QUIC_INTERNAL_ERROR                = protocol.ErrorCode(1)
 	QUIC_STREAM_DATA_AFTER_TERMINATION = protocol.ErrorCode(2)
 	// QUIC_SERVER_ERROR_PROCESSING_STREAM= There was some server error which halted stream processing.
 	// QUIC_MULTIPLE_TERMINATION_OFFSETS= The sender received two mismatching fin or reset offsets for a single stream.
