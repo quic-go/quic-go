@@ -246,5 +246,29 @@ var _ = Describe("Stream", func() {
 			})
 			Expect(stream.getNextFrameInOrder(false)).ToNot(BeNil())
 		})
+
+		It("dequeues 3rd frame after blocking on 1st", func() {
+			stream := NewStream(nil, 1337)
+			stream.AddStreamFrame(&frames.StreamFrame{
+				Offset: 4,
+				Data:   []byte{0x23, 0x42},
+			})
+			stream.AddStreamFrame(&frames.StreamFrame{
+				Offset: 2,
+				Data:   []byte{0xBE, 0xEF},
+			})
+			go func() {
+				time.Sleep(time.Millisecond)
+				stream.AddStreamFrame(&frames.StreamFrame{
+					Offset: 0,
+					Data:   []byte{0xDE, 0xAD},
+				})
+			}()
+			Expect(stream.getNextFrameInOrder(true)).ToNot(BeNil())
+			stream.ReadOffset += 2
+			Expect(stream.getNextFrameInOrder(true)).ToNot(BeNil())
+			stream.ReadOffset += 2
+			Expect(stream.getNextFrameInOrder(true)).ToNot(BeNil())
+		})
 	})
 })
