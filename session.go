@@ -13,7 +13,6 @@ import (
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // StreamCallback gets a stream frame and returns a reply frame
@@ -24,60 +23,46 @@ type Session struct {
 	VersionNumber protocol.VersionNumber
 	ConnectionID  protocol.ConnectionID
 
+	streamCallback StreamCallback
+
 	Connection        *net.UDPConn
 	CurrentRemoteAddr *net.UDPAddr
 
 	ServerConfig *handshake.ServerConfig
 	cryptoSetup  *handshake.CryptoSetup
 
-	EntropyReceived     ackhandler.EntropyAccumulator
-	EntropySent         ackhandler.EntropyAccumulator
-	EntropyHistory      map[protocol.PacketNumber]ackhandler.EntropyAccumulator // ToDo: store this with the packet itself
-	entropyHistoryMutex sync.Mutex
-
-	lastSentPacketNumber     protocol.PacketNumber
-	lastObservedPacketNumber protocol.PacketNumber
-
 	Streams      map[protocol.StreamID]*Stream
 	streamsMutex sync.RWMutex
 
-	AckQueue []*frames.AckFrame
+	outgoingAckHandler ackhandler.OutgoingPacketAckHandler
+	incomingAckHandler ackhandler.IncomingPacketAckHandler
 
-	streamCallback StreamCallback
+	packer    *packetPacker
+	batchMode bool
 }
 
 // NewSession makes a new session
 func NewSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback) *Session {
 	session := &Session{
-		Connection:               conn,
-		VersionNumber:            v,
-		ConnectionID:             connectionID,
-		ServerConfig:             sCfg,
-		streamCallback:           streamCallback,
-		lastObservedPacketNumber: 0,
-		Streams:                  make(map[protocol.StreamID]*Stream),
-		EntropyHistory:           make(map[protocol.PacketNumber]ackhandler.EntropyAccumulator),
+		Connection:     conn,
+		VersionNumber:  v,
+		ConnectionID:   connectionID,
+		ServerConfig:   sCfg,
+		streamCallback: streamCallback,
+		Streams:        make(map[protocol.StreamID]*Stream),
 	}
 
 	cryptoStream, _ := session.NewStream(1)
 	session.cryptoSetup = handshake.NewCryptoSetup(connectionID, v, sCfg, cryptoStream)
 	go session.cryptoSetup.HandleCryptoStream()
 
+	session.packer = &packetPacker{aead: session.cryptoSetup}
+
 	return session
 }
 
 // HandlePacket handles a packet
 func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, publicHeader *PublicHeader, r *bytes.Reader) error {
-	if s.lastObservedPacketNumber > 0 { // the first packet doesn't neccessarily need to have packetNumber 1
-		if publicHeader.PacketNumber < s.lastObservedPacketNumber || publicHeader.PacketNumber > s.lastObservedPacketNumber+1 {
-			return errors.New("Out of order packet")
-		}
-		if publicHeader.PacketNumber == s.lastObservedPacketNumber {
-			return errors.New("Duplicate packet")
-		}
-	}
-	s.lastObservedPacketNumber = publicHeader.PacketNumber
-
 	// TODO: Only do this after authenticating
 	if addr != s.CurrentRemoteAddr {
 		s.CurrentRemoteAddr = addr
@@ -94,12 +79,11 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 	if err != nil {
 		return err
 	}
-	s.EntropyReceived.Add(publicHeader.PacketNumber, privateFlag&0x01 > 0)
 
-	s.queueAck(&frames.AckFrame{
-		LargestObserved: publicHeader.PacketNumber,
-		Entropy:         s.EntropyReceived.Get(),
-	})
+	s.incomingAckHandler.ReceivedPacket(publicHeader.PacketNumber, privateFlag&0x01 > 0)
+
+	s.batchMode = true
+	s.SendFrame(s.incomingAckHandler.DequeueAckFrame())
 
 	// read all frames in the packet
 	for r.Len() > 0 {
@@ -147,7 +131,9 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 			}
 		}
 	}
-	return nil
+
+	s.batchMode = false
+	return s.sendPackets()
 }
 
 func (s *Session) handleStreamFrame(r *bytes.Reader) error {
@@ -156,11 +142,9 @@ func (s *Session) handleStreamFrame(r *bytes.Reader) error {
 		return err
 	}
 	fmt.Printf("Got %d bytes for stream %d\n", len(frame.Data), frame.StreamID)
-
 	if frame.StreamID == 0 {
 		return errors.New("Session: 0 is not a valid Stream ID")
 	}
-
 	s.streamsMutex.RLock()
 	stream, newStream := s.Streams[frame.StreamID]
 	s.streamsMutex.RUnlock()
@@ -172,7 +156,6 @@ func (s *Session) handleStreamFrame(r *bytes.Reader) error {
 	if err != nil {
 		return err
 	}
-
 	if !newStream {
 		s.streamCallback(s, stream)
 	}
@@ -184,24 +167,8 @@ func (s *Session) handleAckFrame(r *bytes.Reader) error {
 	if err != nil {
 		return err
 	}
-
-	s.entropyHistoryMutex.Lock()
-	defer s.entropyHistoryMutex.Unlock()
-	expectedEntropy, ok := s.EntropyHistory[frame.LargestObserved]
-	if !ok {
-		return errors.New("No entropy value saved for received ACK packet")
-	}
-
-	if byte(expectedEntropy) != frame.Entropy {
-		return errors.New("Incorrect entropy value in ACK package")
-	}
-
-	delete(s.EntropyHistory, frame.LargestObserved)
+	s.outgoingAckHandler.ReceivedAck(frame)
 	return nil
-}
-
-func (s *Session) queueAck(f *frames.AckFrame) {
-	s.AckQueue = append(s.AckQueue, f)
 }
 
 func (s *Session) handleConnectionCloseFrame(r *bytes.Reader) error {
@@ -215,10 +182,11 @@ func (s *Session) handleConnectionCloseFrame(r *bytes.Reader) error {
 }
 
 func (s *Session) handleStopWaitingFrame(r *bytes.Reader, publicHeader *PublicHeader) error {
-	_, err := frames.ParseStopWaitingFrame(r, publicHeader.PacketNumberLen)
+	frame, err := frames.ParseStopWaitingFrame(r, publicHeader.PacketNumberLen)
 	if err != nil {
 		return err
 	}
+	fmt.Printf("%#v\n", frame)
 	return nil
 }
 
@@ -235,83 +203,44 @@ func (s *Session) handleRstStreamFrame(r *bytes.Reader) error {
 func (s *Session) Close(e error) error {
 	errorCode := protocol.ErrorCode(1)
 	reasonPhrase := e.Error()
-
 	quicError, ok := e.(*protocol.QuicError)
 	if ok {
 		errorCode = quicError.ErrorCode
 	}
-	frame := &frames.ConnectionCloseFrame{
+	return s.SendFrame(&frames.ConnectionCloseFrame{
 		ErrorCode:    errorCode,
 		ReasonPhrase: reasonPhrase,
+	})
+}
+
+func (s *Session) sendPackets() error {
+	for {
+		packet, err := s.packer.PackPacket()
+		if err != nil {
+			return err
+		}
+		if packet == nil {
+			return nil
+		}
+		s.outgoingAckHandler.SentPacket(&ackhandler.Packet{
+			PacketNumber: packet.number,
+			Plaintext:    packet.payload,
+			EntropyBit:   packet.entropyBit,
+		})
+		_, err = s.Connection.WriteToUDP(packet.raw, s.CurrentRemoteAddr)
+		if err != nil {
+			return err
+		}
 	}
-	return s.SendFrame(frame)
 }
 
 // SendFrame sends a frame to the client
 func (s *Session) SendFrame(frame frames.Frame) error {
-	streamframe, ok := frame.(*frames.StreamFrame)
-	if ok {
-		maxlength := 1000
-		if len(streamframe.Data) > maxlength {
-			frame1 := &frames.StreamFrame{
-				StreamID: streamframe.StreamID,
-				Offset:   streamframe.Offset,
-				Data:     streamframe.Data[:maxlength],
-			}
-			frame2 := &frames.StreamFrame{
-				StreamID: streamframe.StreamID,
-				Offset:   streamframe.Offset + uint64(maxlength),
-				Data:     streamframe.Data[maxlength:],
-				FinBit:   streamframe.FinBit,
-			}
-			err := s.SendFrame(frame1)
-			if err != nil {
-				return err
-			}
-			return s.SendFrame(frame2)
-		}
+	s.packer.AddFrame(frame)
+	if s.batchMode {
+		return nil
 	}
-
-	var framesData bytes.Buffer
-	entropyBit, err := utils.RandomBit()
-	if err != nil {
-		return err
-	}
-	if entropyBit {
-		framesData.WriteByte(1)
-	} else {
-		framesData.WriteByte(0)
-	}
-
-	// add all outstanding ACKs
-	for _, ackFrame := range s.AckQueue {
-		ackFrame.Write(&framesData)
-	}
-	s.AckQueue = s.AckQueue[:0]
-
-	if err := frame.Write(&framesData); err != nil {
-		return err
-	}
-
-	s.lastSentPacketNumber++
-
-	var fullReply bytes.Buffer
-	packetNumber := s.lastSentPacketNumber
-	responsePublicHeader := PublicHeader{ConnectionID: s.ConnectionID, PacketNumber: packetNumber}
-	if err := responsePublicHeader.WritePublicHeader(&fullReply); err != nil {
-		return err
-	}
-	s.EntropySent.Add(packetNumber, entropyBit)
-	s.entropyHistoryMutex.Lock()
-	defer s.entropyHistoryMutex.Unlock()
-	s.EntropyHistory[packetNumber] = s.EntropySent
-
-	ciphertext := s.cryptoSetup.Seal(s.lastSentPacketNumber, fullReply.Bytes(), framesData.Bytes())
-	fullReply.Write(ciphertext)
-
-	fmt.Printf("-> Sending packet %d (%d bytes) to %v\n", responsePublicHeader.PacketNumber, len(fullReply.Bytes()), s.CurrentRemoteAddr)
-	_, err = s.Connection.WriteToUDP(fullReply.Bytes(), s.CurrentRemoteAddr)
-	return err
+	return s.sendPackets()
 }
 
 // NewStream creates a new strean open for reading and writing
