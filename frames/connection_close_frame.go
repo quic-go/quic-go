@@ -46,6 +46,11 @@ func ParseConnectionCloseFrame(r *bytes.Reader) (*ConnectionCloseFrame, error) {
 	return frame, nil
 }
 
+// MaxLength of a written frame
+func (f *ConnectionCloseFrame) MaxLength() int {
+	return 1 + 4 + 2 + len(f.ReasonPhrase)
+}
+
 // Write writes an CONNECTION_CLOSE frame.
 func (f *ConnectionCloseFrame) Write(b *bytes.Buffer) error {
 	b.WriteByte(0x02)

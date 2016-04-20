@@ -88,3 +88,8 @@ func (f *StreamFrame) Write(b *bytes.Buffer) error {
 	b.Write(f.Data)
 	return nil
 }
+
+// MaxLength of a written frame
+func (f *StreamFrame) MaxLength() int {
+	return 1 + 4 + 8 + 2 + 1
+}

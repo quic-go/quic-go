@@ -163,6 +163,33 @@ var _ = Describe("AckFrame", func() {
 			Expect(packetNumber1).To(BeEquivalentTo([]byte{1, 0, 0, 0, 0, 0}))
 			Expect(packetNumber2).To(BeEquivalentTo([]byte{1, 0, 0, 0, 0, 0}))
 		})
+
+		It("has proper max length", func() {
+			b := &bytes.Buffer{}
+			f := &AckFrame{
+				Entropy:         2,
+				LargestObserved: 1,
+			}
+			f.Write(b)
+			Expect(f.MaxLength()).To(Equal(b.Len()))
+		})
+
+		It("has proper max length with nack ranges", func() {
+			b := &bytes.Buffer{}
+			f := &AckFrame{
+				Entropy:         2,
+				LargestObserved: 4,
+				NackRanges: []NackRange{
+					NackRange{
+						FirstPacketNumber: 2,
+						Length:            1,
+					},
+				},
+			}
+			err := f.Write(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(f.MaxLength()).To(Equal(b.Len()))
+		})
 	})
 
 	Context("self-consistency checks", func() {

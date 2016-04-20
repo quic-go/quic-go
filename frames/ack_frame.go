@@ -65,6 +65,16 @@ func (f *AckFrame) Write(b *bytes.Buffer) error {
 	return nil
 }
 
+// MaxLength of a written frame
+func (f *AckFrame) MaxLength() int {
+	l := 1 + 1 + 6 + 2 + 1 + 1 + 4
+	l += (1 + 2) * 0 /* TODO: num_timestamps */
+	if f.HasNACK() {
+		l += 1 + (6+1)*len(f.NackRanges)
+	}
+	return l
+}
+
 // HasNACK returns if the frame has NACK ranges
 func (f *AckFrame) HasNACK() bool {
 	if len(f.NackRanges) > 0 {
@@ -180,7 +190,7 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 				nackRange.FirstPacketNumber = frame.LargestObserved - protocol.PacketNumber(missingPacketSequenceNumberDelta+uint64(rangeLength))
 			} else {
 				if missingPacketSequenceNumberDelta == 0 {
-					return nil, errors.New("ACK frame: Continues NACK ranges not yet implemented.")
+					return nil, errors.New("ACK frame: Continues NACK ranges not yet implemented")
 				}
 				lastNackRange := frame.NackRanges[len(frame.NackRanges)-1]
 				nackRange.FirstPacketNumber = lastNackRange.FirstPacketNumber - protocol.PacketNumber(missingPacketSequenceNumberDelta+uint64(rangeLength)) - 1

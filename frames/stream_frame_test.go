@@ -51,6 +51,17 @@ var _ = Describe("StreamFrame", func() {
 				}).Write(b)
 				Expect(b.Bytes()).To(Equal([]byte{0xbf, 0x1, 0, 0, 0, 0x10, 0, 0, 0, 0, 0, 0, 0, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'}))
 			})
+
+			It("has proper max length", func() {
+				b := &bytes.Buffer{}
+				f := &StreamFrame{
+					StreamID: 1,
+					Data:     []byte("f"),
+					Offset:   1,
+				}
+				f.Write(b)
+				Expect(f.MaxLength()).To(Equal(b.Len()))
+			})
 		})
 	})
 })

@@ -70,6 +70,16 @@ var _ = Describe("ConnectionCloseFrame", func() {
 			err := frame.Write(b)
 			Expect(err).To(HaveOccurred())
 		})
+
+		It("has proper max length", func() {
+			b := &bytes.Buffer{}
+			f := &ConnectionCloseFrame{
+				ErrorCode:    0xDEADBEEF,
+				ReasonPhrase: "foobar",
+			}
+			f.Write(b)
+			Expect(f.MaxLength()).To(Equal(b.Len()))
+		})
 	})
 
 	It("is self-consistent", func() {
