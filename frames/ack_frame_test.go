@@ -46,6 +46,18 @@ var _ = Describe("AckFrame", func() {
 			Expect(frame.NackRanges[0].Length).To(Equal(uint8(2)))
 		})
 
+		It("parses a frame containing one NACK range with a 48 bit missingPacketSequenceNumberDelta", func() {
+			b := bytes.NewReader([]byte{(0x4C | 0x20 | 0x03), 0x08, 0x37, 0x13, 0xAD, 0xFB, 0xCA, 0xDE, 0x72, 0x1, 0x1, 0x0, 0xc0, 0x15, 0x0, 0x0, 0x1, 0xFE, 0xCA, 0xEF, 0xBE, 0xAD, 0xDE, 0x3})
+			frame, err := ParseAckFrame(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame.LargestObserved).To(Equal(protocol.PacketNumber(0xDECAFBAD1337)))
+			Expect(frame.HasNACK()).To(Equal(true))
+			Expect(len(frame.NackRanges)).To(Equal(1))
+			// ToDo: check NACK range
+			Expect(frame.NackRanges[0].Length).To(Equal(uint8(4)))
+			Expect(b.Len()).To(Equal(0))
+		})
+
 		It("parses a frame containing multiple NACK ranges", func() {
 			b := bytes.NewReader([]byte{0x60, 0x2, 0xf, 0xb8, 0x1, 0x1, 0x0, 0xe5, 0x58, 0x4, 0x0, 0x3, 0x1, 0x6, 0x1, 0x2, 0x1, 0x0})
 			frame, err := ParseAckFrame(b)

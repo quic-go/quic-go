@@ -64,7 +64,6 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 	if missingSequenceNumberDeltaLen == 0 {
 		missingSequenceNumberDeltaLen = 1
 	}
-	_ = missingSequenceNumberDeltaLen
 
 	frame.Entropy, err = r.ReadByte()
 	if err != nil {
@@ -120,28 +119,28 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 		}
 
 		for i := uint8(0); i < numRanges; i++ {
-			missingPacketSequenceNumberDeltaByte, err := r.ReadByte()
+			missingPacketSequenceNumberDelta, err := utils.ReadUintN(r, missingSequenceNumberDeltaLen)
 			if err != nil {
 				return nil, err
 			}
-			missingPacketSequenceNumberDelta := uint64(missingPacketSequenceNumberDeltaByte)
 
-			rangeLength, err := utils.ReadUintN(r, largestObservedLen)
+			rangeLengthByte, err := r.ReadByte()
 			if err != nil {
 				return nil, err
 			}
+			rangeLength := uint8(rangeLengthByte)
 
 			nackRange := ackhandler.NackRange{
 				Length: uint8(rangeLength + 1),
 			}
 			if i == 0 {
-				nackRange.FirstPacketNumber = frame.LargestObserved - protocol.PacketNumber(missingPacketSequenceNumberDelta+rangeLength)
+				nackRange.FirstPacketNumber = frame.LargestObserved - protocol.PacketNumber(missingPacketSequenceNumberDelta+uint64(rangeLength))
 			} else {
 				if missingPacketSequenceNumberDelta == 0 {
 					return nil, errors.New("ACK frame: Continues NACK ranges not yet implemented.")
 				}
 				lastNackRange := frame.NackRanges[len(frame.NackRanges)-1]
-				nackRange.FirstPacketNumber = lastNackRange.FirstPacketNumber - protocol.PacketNumber(missingPacketSequenceNumberDelta+rangeLength) - 1
+				nackRange.FirstPacketNumber = lastNackRange.FirstPacketNumber - protocol.PacketNumber(missingPacketSequenceNumberDelta+uint64(rangeLength)) - 1
 			}
 			frame.NackRanges = append(frame.NackRanges, &nackRange)
 		}
