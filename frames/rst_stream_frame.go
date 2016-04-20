@@ -2,7 +2,6 @@ package frames
 
 import (
 	"bytes"
-	"errors"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
@@ -17,7 +16,12 @@ type RstStreamFrame struct {
 
 //Write writes a RST_STREAM frame
 func (f *RstStreamFrame) Write(b *bytes.Buffer) error {
-	return errors.New("RstStreamFrame: Write not yet implemented")
+	panic("RstStreamFrame: Write not yet implemented")
+}
+
+// MaxLength of a written frame
+func (f *RstStreamFrame) MaxLength() int {
+	panic("RstStreamFrame: Write not yet implemented")
 }
 
 // ParseRstStreamFrame parses a RST_STREAM frame

@@ -2,7 +2,6 @@ package frames
 
 import (
 	"bytes"
-	"errors"
 
 	"github.com/lucas-clemente/quic-go/utils"
 )
@@ -14,7 +13,12 @@ type StopWaitingFrame struct {
 }
 
 func (f *StopWaitingFrame) Write(b *bytes.Buffer) error {
-	return errors.New("StopWaitingFrame: Write not yet implemented")
+	panic("StopWaitingFrame: Write not yet implemented")
+}
+
+// MaxLength of a written frame
+func (f *StopWaitingFrame) MaxLength() int {
+	panic("StopWaitingFrame: Write not yet implemented")
 }
 
 // ParseStopWaitingFrame parses a StopWaiting frame
