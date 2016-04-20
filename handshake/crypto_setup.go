@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/lucas-clemente/quic-go/crypto"
@@ -37,7 +38,7 @@ var _ crypto.AEAD = &CryptoSetup{}
 // NewCryptoSetup creates a new CryptoSetup instance
 func NewCryptoSetup(connID protocol.ConnectionID, version protocol.VersionNumber, scfg *ServerConfig, cryptoStream utils.Stream) *CryptoSetup {
 	nonce := make([]byte, 32)
-	if _, err := rand.Reader.Read(nonce); err != nil {
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		panic(err)
 	}
 	return &CryptoSetup{

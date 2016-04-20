@@ -3,6 +3,7 @@ package handshake
 import (
 	"bytes"
 	"crypto/rand"
+	"io"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 )
@@ -17,7 +18,7 @@ type ServerConfig struct {
 // NewServerConfig creates a new server config
 func NewServerConfig(kex crypto.KeyExchange, signer crypto.Signer) *ServerConfig {
 	id := make([]byte, 16)
-	_, err := rand.Reader.Read(id)
+	_, err := io.ReadFull(rand.Reader, id)
 	if err != nil {
 		panic(err)
 	}

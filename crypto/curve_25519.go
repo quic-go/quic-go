@@ -3,6 +3,7 @@ package crypto
 import (
 	"crypto/rand"
 	"errors"
+	"io"
 
 	"golang.org/x/crypto/curve25519"
 )
@@ -18,7 +19,7 @@ var _ KeyExchange = &curve25519KEX{}
 // NewCurve25519KEX creates a new KeyExchange using Curve25519, see https://cr.yp.to/ecdh.html
 func NewCurve25519KEX() KeyExchange {
 	c := &curve25519KEX{}
-	if n, err := rand.Reader.Read(c.secret[:]); n != 32 || err != nil {
+	if _, err := io.ReadFull(rand.Reader, c.secret[:]); err != nil {
 		panic("Curve25519: could not create private key")
 	}
 	// See https://cr.yp.to/ecdh.html
