@@ -190,12 +190,12 @@ func (s *Session) handleAckFrame(r *bytes.Reader) error {
 	if !ok {
 		return errors.New("No entropy value saved for received ACK packet")
 	}
-	delete(s.EntropyHistory, frame.LargestObserved)
 
 	if byte(expectedEntropy) != frame.Entropy {
 		return errors.New("Incorrect entropy value in ACK package")
 	}
 
+	delete(s.EntropyHistory, frame.LargestObserved)
 	return nil
 }
 
