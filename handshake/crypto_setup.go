@@ -32,6 +32,8 @@ type CryptoSetup struct {
 	mutex sync.RWMutex
 }
 
+var _ crypto.AEAD = &CryptoSetup{}
+
 // NewCryptoSetup creates a new CryptoSetup instance
 func NewCryptoSetup(connID protocol.ConnectionID, version protocol.VersionNumber, scfg *ServerConfig, cryptoStream utils.Stream) *CryptoSetup {
 	nonce := make([]byte, 32)
