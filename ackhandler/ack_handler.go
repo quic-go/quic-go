@@ -1,6 +1,9 @@
 package ackhandler
 
-import "github.com/lucas-clemente/quic-go/protocol"
+import (
+	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/protocol"
+)
 
 // The AckHandler handles ACKs
 type AckHandler struct {
@@ -25,9 +28,9 @@ func (h *AckHandler) HandlePacket(packetNumber protocol.PacketNumber) {
 }
 
 // GetNackRanges gets all the NACK ranges
-func (h *AckHandler) GetNackRanges() []*NackRange {
+func (h *AckHandler) GetNackRanges() []*frames.NackRange {
 	// ToDo: improve performance
-	var ranges []*NackRange
+	var ranges []*frames.NackRange
 	inRange := false
 	// ToDo: fix types
 	for i := 0; i < int(h.LargestObserved); i++ {
@@ -35,7 +38,7 @@ func (h *AckHandler) GetNackRanges() []*NackRange {
 		_, ok := h.Observed[packetNumber]
 		if !ok {
 			if !inRange {
-				r := &NackRange{
+				r := &frames.NackRange{
 					FirstPacketNumber: packetNumber,
 					Length:            1,
 				}

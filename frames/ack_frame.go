@@ -4,17 +4,22 @@ import (
 	"bytes"
 	"errors"
 
-	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 )
+
+// NackRange is a NACK range
+type NackRange struct {
+	FirstPacketNumber protocol.PacketNumber
+	Length            uint8
+}
 
 // An AckFrame in QUIC
 type AckFrame struct {
 	Entropy         byte
 	LargestObserved protocol.PacketNumber
 	DelayTime       uint16 // Todo: properly interpret this value as described in the specification
-	NackRanges      []*ackhandler.NackRange
+	NackRanges      []NackRange
 }
 
 // Write writes an ACK frame.
@@ -160,7 +165,7 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 			}
 			rangeLength := uint8(rangeLengthByte)
 
-			nackRange := ackhandler.NackRange{
+			nackRange := NackRange{
 				Length: uint8(rangeLength + 1),
 			}
 			if i == 0 {
@@ -172,7 +177,7 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 				lastNackRange := frame.NackRanges[len(frame.NackRanges)-1]
 				nackRange.FirstPacketNumber = lastNackRange.FirstPacketNumber - protocol.PacketNumber(missingPacketSequenceNumberDelta+uint64(rangeLength)) - 1
 			}
-			frame.NackRanges = append(frame.NackRanges, &nackRange)
+			frame.NackRanges = append(frame.NackRanges, nackRange)
 		}
 	}
 

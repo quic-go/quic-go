@@ -3,7 +3,6 @@ package frames
 import (
 	"bytes"
 
-	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -90,14 +89,14 @@ var _ = Describe("AckFrame", func() {
 
 		It("writes a frame with one NACK range", func() {
 			b := &bytes.Buffer{}
-			nackRange := ackhandler.NackRange{
+			nackRange := NackRange{
 				FirstPacketNumber: 2,
 				Length:            1,
 			}
 			frame := AckFrame{
 				Entropy:         2,
 				LargestObserved: 4,
-				NackRanges:      []*ackhandler.NackRange{&nackRange},
+				NackRanges:      []NackRange{nackRange},
 			}
 			err := frame.Write(b)
 			Expect(err).ToNot(HaveOccurred())
@@ -111,18 +110,18 @@ var _ = Describe("AckFrame", func() {
 
 		It("writes a frame with multiple NACK ranges", func() {
 			b := &bytes.Buffer{}
-			nackRange1 := ackhandler.NackRange{
+			nackRange1 := NackRange{
 				FirstPacketNumber: 4,
 				Length:            3,
 			}
-			nackRange2 := ackhandler.NackRange{
+			nackRange2 := NackRange{
 				FirstPacketNumber: 2,
 				Length:            1,
 			}
 			frame := AckFrame{
 				Entropy:         2,
 				LargestObserved: 7,
-				NackRanges:      []*ackhandler.NackRange{&nackRange1, &nackRange2},
+				NackRanges:      []NackRange{nackRange1, nackRange2},
 			}
 			err := frame.Write(b)
 			Expect(err).ToNot(HaveOccurred())
@@ -156,10 +155,10 @@ var _ = Describe("AckFrame", func() {
 
 		It("is self-consistent for ACK frames with NACK ranges", func() {
 			b := &bytes.Buffer{}
-			nackRanges := []*ackhandler.NackRange{
-				&ackhandler.NackRange{FirstPacketNumber: 9, Length: 3},
-				&ackhandler.NackRange{FirstPacketNumber: 7, Length: 1},
-				&ackhandler.NackRange{FirstPacketNumber: 2, Length: 2},
+			nackRanges := []NackRange{
+				NackRange{FirstPacketNumber: 9, Length: 3},
+				NackRange{FirstPacketNumber: 7, Length: 1},
+				NackRange{FirstPacketNumber: 2, Length: 2},
 			}
 			frameOrig := &AckFrame{
 				LargestObserved: 15,
