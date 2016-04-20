@@ -14,7 +14,6 @@ type AckFrame struct {
 	Entropy         byte
 	LargestObserved protocol.PacketNumber
 	DelayTime       uint16 // Todo: properly interpret this value as described in the specification
-	HasNACK         bool
 	NackRanges      []*ackhandler.NackRange
 }
 
@@ -31,6 +30,14 @@ func (f *AckFrame) Write(b *bytes.Buffer) error {
 	return nil
 }
 
+// HasNACK returns if the frame has NACK ranges
+func (f *AckFrame) HasNACK() bool {
+	if len(f.NackRanges) > 0 {
+		return true
+	}
+	return false
+}
+
 // ParseAckFrame reads an ACK frame
 func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 	frame := &AckFrame{}
@@ -40,9 +47,9 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 		return nil, err
 	}
 
-	frame.HasNACK = false
+	hasNACK := false
 	if typeByte&0x20 == 0x20 {
-		frame.HasNACK = true
+		hasNACK = true
 	}
 	if typeByte&0x10 == 0x10 {
 		panic("truncated ACKs not yet implemented.")
@@ -105,7 +112,7 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 		}
 	}
 
-	if frame.HasNACK {
+	if hasNACK {
 		var numRanges uint8
 		numRanges, err = r.ReadByte()
 		if err != nil {
