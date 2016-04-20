@@ -93,3 +93,23 @@ func (f *StreamFrame) Write(b *bytes.Buffer) error {
 func (f *StreamFrame) MaxLength() int {
 	return 1 + 4 + 8 + 2 + 1
 }
+
+// MaybeSplitOffFrame removes the first n bytes and returns them as a separate frame. If n >= len(n), nil is returned and nothing is modified.
+func (f *StreamFrame) MaybeSplitOffFrame(n int) *StreamFrame {
+	if n >= f.MaxLength()-1+len(f.Data) {
+		return nil
+	}
+	n -= f.MaxLength() - 1
+
+	defer func() {
+		f.Data = f.Data[n:]
+		f.Offset += uint64(n)
+	}()
+
+	return &StreamFrame{
+		FinBit:   false,
+		StreamID: f.StreamID,
+		Offset:   f.Offset,
+		Data:     f.Data[:n],
+	}
+}
