@@ -38,22 +38,22 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, publicHeader *PublicH
 	fs := []frames.Frame{}
 
 	// Read all frames in the packet
+ReadLoop:
 	for r.Len() > 0 {
 		typeByte, _ := r.ReadByte()
 		r.UnreadByte()
 
 		var frame frames.Frame
-		err = nil
 		if typeByte&0x80 == 0x80 {
 			frame, err = frames.ParseStreamFrame(r)
-		} else if typeByte&0xca == 0x40 {
+		} else if typeByte&0xc0 == 0x40 {
 			frame, err = frames.ParseAckFrame(r)
 		} else if typeByte&0xe0 == 0x20 {
 			err = errors.New("unimplemented: CONGESTION_FEEDBACK")
 		} else {
 			switch typeByte {
 			case 0x0: // PAD, end of frames
-				break
+				break ReadLoop
 			case 0x01:
 				frame, err = frames.ParseRstStreamFrame(r)
 			case 0x02:
@@ -64,10 +64,12 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, publicHeader *PublicH
 				fmt.Println("unimplemented: WINDOW_UPDATE")
 				p := make([]byte, 1+4+8)
 				_, err = r.Read(p)
+				frame = nil
 			case 0x05:
 				fmt.Println("unimplemented: BLOCKED")
 				p := make([]byte, 1+4)
 				_, err = r.Read(p)
+				frame = nil
 			case 0x06:
 				frame, err = frames.ParseStopWaitingFrame(r, publicHeader.PacketNumberLen)
 			case 0x07:
@@ -81,7 +83,10 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, publicHeader *PublicH
 		if err != nil {
 			return nil, err
 		}
-		fs = append(fs, frame)
+		// TODO: Remove once all frames are implemented
+		if frame != nil {
+			fs = append(fs, frame)
+		}
 	}
 
 	return &unpackedPacket{
