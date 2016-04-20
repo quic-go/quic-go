@@ -3,6 +3,7 @@ package frames
 import (
 	"bytes"
 	"errors"
+	"io"
 	"math"
 
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -36,14 +37,11 @@ func ParseConnectionCloseFrame(r *bytes.Reader) (*ConnectionCloseFrame, error) {
 		return nil, err
 	}
 
-	for i := 0; i < int(reasonPhraseLen); i++ {
-		val, err := r.ReadByte()
-		if err != nil {
-			return nil, err
-		}
-
-		frame.ReasonPhrase += string(val)
+	reasonPhrase := make([]byte, reasonPhraseLen)
+	if _, err := io.ReadFull(r, reasonPhrase); err != nil {
+		return nil, err
 	}
+	frame.ReasonPhrase = string(reasonPhrase)
 
 	return frame, nil
 }
