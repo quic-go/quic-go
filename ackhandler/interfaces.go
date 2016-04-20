@@ -6,10 +6,10 @@ import (
 )
 
 type OutgoingPacketAckHandler interface {
-	SentPacket(packetNumber protocol.PacketNumber, entropyBit bool, plaintext []byte)
+	SentPacket(packet *Packet) error
 	ReceivedAck(ackFrame *frames.AckFrame)
 
-	DequeuePacketForRetransmission() (packetNumber protocol.PacketNumber, entropyBit bool, plaintext []byte)
+	DequeuePacketForRetransmission() (packet *Packet)
 }
 
 type IncomingPacketAckHandler interface {
