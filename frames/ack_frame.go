@@ -18,8 +18,8 @@ type NackRange struct {
 type AckFrame struct {
 	Entropy         byte
 	LargestObserved protocol.PacketNumber
-	DelayTime       uint16 // Todo: properly interpret this value as described in the specification
-	NackRanges      []NackRange
+	DelayTime       uint16      // Todo: properly interpret this value as described in the specification
+	NackRanges      []NackRange // has to be ordered. The NACK range with the highest FirstPacketNumber goes first, the NACK range with the lowest FirstPacketNumber goes last
 }
 
 // Write writes an ACK frame.
@@ -71,6 +71,14 @@ func (f *AckFrame) HasNACK() bool {
 		return true
 	}
 	return false
+}
+
+// GetHighestInOrderPacket gets the highest in order packet number that is confirmed by this ACK
+func (f *AckFrame) GetHighestInOrderPacket() protocol.PacketNumber {
+	if f.HasNACK() {
+		return (f.NackRanges[len(f.NackRanges)-1].FirstPacketNumber - 1)
+	}
+	return f.LargestObserved
 }
 
 // ParseAckFrame reads an ACK frame
