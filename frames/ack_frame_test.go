@@ -3,6 +3,7 @@ package frames
 import (
 	"bytes"
 
+	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -44,6 +45,7 @@ var _ = Describe("AckFrame", func() {
 			Expect(len(frame.NackRanges)).To(Equal(1))
 			Expect(frame.NackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(1)))
 			Expect(frame.NackRanges[0].Length).To(Equal(uint8(2)))
+			Expect(b.Len()).To(Equal(0))
 		})
 
 		It("parses a frame containing one NACK range with a 48 bit missingPacketSequenceNumberDelta", func() {
@@ -70,31 +72,107 @@ var _ = Describe("AckFrame", func() {
 			Expect(frame.NackRanges[1].Length).To(Equal(uint8(3)))
 			Expect(frame.NackRanges[2].FirstPacketNumber).To(Equal(protocol.PacketNumber(2)))
 			Expect(frame.NackRanges[2].Length).To(Equal(uint8(1)))
+			Expect(b.Len()).To(Equal(0))
 		})
 	})
 
 	Context("when writing", func() {
-		It("writes simple frames", func() {
+		It("writes simple frames without NACK ranges", func() {
 			b := &bytes.Buffer{}
-			(&AckFrame{
+			frame := AckFrame{
 				Entropy:         2,
 				LargestObserved: 1,
-			}).Write(b)
-			Expect(b.Bytes()).To(Equal([]byte{0x48, 0x02, 0x01, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0}))
+			}
+			err := frame.Write(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(b.Bytes()).To(Equal([]byte{0x4c, 0x02, 0x01, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0}))
+		})
+
+		It("writes a frame with one NACK range", func() {
+			b := &bytes.Buffer{}
+			nackRange := ackhandler.NackRange{
+				FirstPacketNumber: 2,
+				Length:            1,
+			}
+			frame := AckFrame{
+				Entropy:         2,
+				LargestObserved: 4,
+				NackRanges:      []*ackhandler.NackRange{&nackRange},
+			}
+			err := frame.Write(b)
+			Expect(err).ToNot(HaveOccurred())
+			missingPacketBytes := b.Bytes()[b.Len()-8:]
+			Expect(missingPacketBytes[0]).To(Equal(uint8(1))) // numRanges
+			Expect(missingPacketBytes[7]).To(Equal(uint8(0))) // rangeLength
+			packetNumber := make([]byte, 6)
+			copy(packetNumber, missingPacketBytes[1:6])
+			Expect(packetNumber).To(BeEquivalentTo([]byte{2, 0, 0, 0, 0, 0}))
+		})
+
+		It("writes a frame with multiple NACK ranges", func() {
+			b := &bytes.Buffer{}
+			nackRange1 := ackhandler.NackRange{
+				FirstPacketNumber: 4,
+				Length:            3,
+			}
+			nackRange2 := ackhandler.NackRange{
+				FirstPacketNumber: 2,
+				Length:            1,
+			}
+			frame := AckFrame{
+				Entropy:         2,
+				LargestObserved: 7,
+				NackRanges:      []*ackhandler.NackRange{&nackRange1, &nackRange2},
+			}
+			err := frame.Write(b)
+			Expect(err).ToNot(HaveOccurred())
+			missingPacketBytes := b.Bytes()[b.Len()-(1+2*7):]
+			Expect(missingPacketBytes[0]).To(Equal(uint8(2)))      // numRanges
+			Expect(missingPacketBytes[7]).To(Equal(uint8(3 - 1)))  // rangeLength #1
+			Expect(missingPacketBytes[14]).To(Equal(uint8(1 - 1))) // rangeLength #2
+			packetNumber1 := make([]byte, 6)
+			packetNumber2 := make([]byte, 6)
+			copy(packetNumber1, missingPacketBytes[1:6])
+			copy(packetNumber2, missingPacketBytes[8:13])
+			Expect(packetNumber1).To(BeEquivalentTo([]byte{1, 0, 0, 0, 0, 0}))
+			Expect(packetNumber2).To(BeEquivalentTo([]byte{1, 0, 0, 0, 0, 0}))
 		})
 	})
 
-	It("is self-consistent", func() {
-		b := &bytes.Buffer{}
-		frame := &AckFrame{
-			Entropy:         0xDE,
-			LargestObserved: 6789,
-		}
-		err := frame.Write(b)
-		Expect(err).ToNot(HaveOccurred())
-		readframe, err := ParseAckFrame(bytes.NewReader(b.Bytes()))
-		Expect(err).ToNot(HaveOccurred())
-		Expect(readframe.Entropy).To(Equal(frame.Entropy))
-		Expect(readframe.LargestObserved).To(Equal(frame.LargestObserved))
+	Context("self-consistency checks", func() {
+		It("is self-consistent for ACK frames without NACK ranges", func() {
+			b := &bytes.Buffer{}
+			frameOrig := &AckFrame{
+				Entropy:         0xDE,
+				LargestObserved: 6789,
+			}
+			err := frameOrig.Write(b)
+			Expect(err).ToNot(HaveOccurred())
+			frame, err := ParseAckFrame(bytes.NewReader(b.Bytes()))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame.Entropy).To(Equal(frameOrig.Entropy))
+			Expect(frame.LargestObserved).To(Equal(frameOrig.LargestObserved))
+		})
+
+		It("is self-consistent for ACK frames with NACK ranges", func() {
+			b := &bytes.Buffer{}
+			nackRanges := []*ackhandler.NackRange{
+				&ackhandler.NackRange{FirstPacketNumber: 9, Length: 3},
+				&ackhandler.NackRange{FirstPacketNumber: 7, Length: 1},
+				&ackhandler.NackRange{FirstPacketNumber: 2, Length: 2},
+			}
+			frameOrig := &AckFrame{
+				LargestObserved: 15,
+				NackRanges:      nackRanges,
+			}
+			err := frameOrig.Write(b)
+			Expect(err).ToNot(HaveOccurred())
+			r := bytes.NewReader(b.Bytes())
+			frame, err := ParseAckFrame(r)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame.LargestObserved).To(Equal(frameOrig.LargestObserved))
+			Expect(len(frame.NackRanges)).To(Equal(len(frameOrig.NackRanges)))
+			Expect(frame.NackRanges).To(Equal(frameOrig.NackRanges))
+		})
 	})
 })

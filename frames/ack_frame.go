@@ -19,14 +19,44 @@ type AckFrame struct {
 
 // Write writes an ACK frame.
 func (f *AckFrame) Write(b *bytes.Buffer) error {
-	typeByte := uint8(0x48)
+	typeByte := uint8(0x40 | 0x0C)
+
+	if f.HasNACK() {
+		typeByte |= (0x20 | 0x03)
+	}
+
 	b.WriteByte(typeByte)
 	b.WriteByte(f.Entropy)
-	utils.WriteUint32(b, uint32(f.LargestObserved)) // TODO: send the correct length
+	utils.WriteUint48(b, uint64(f.LargestObserved)) // TODO: send the correct length
 	utils.WriteUint16(b, 1)                         // TODO: Ack delay time
 	b.WriteByte(0x01)                               // Just one timestamp
-	b.WriteByte(0x00)                               // Largest observed
+	b.WriteByte(0x00)                               // Delta Largest observed
 	utils.WriteUint32(b, 0)                         // First timestamp
+
+	if f.HasNACK() {
+		numRanges := uint8(len(f.NackRanges))
+		b.WriteByte(numRanges)
+
+		for i, nackRange := range f.NackRanges {
+			var missingPacketSequenceNumberDelta uint64
+			if i == 0 {
+				if protocol.PacketNumber(uint64(nackRange.FirstPacketNumber)+uint64(nackRange.Length)) > f.LargestObserved {
+					return errors.New("AckFrame: Invalid NACK ranges")
+				}
+				missingPacketSequenceNumberDelta = uint64(f.LargestObserved-nackRange.FirstPacketNumber) - uint64(nackRange.Length) + 1
+			} else {
+				lastNackRange := f.NackRanges[i-1]
+				missingPacketSequenceNumberDelta = uint64(lastNackRange.FirstPacketNumber-nackRange.FirstPacketNumber) - uint64(nackRange.Length)
+			}
+			rangeLength := nackRange.Length - 1
+			if rangeLength > 255 {
+				return errors.New("AckFrame: NACK ranges larger 256 packets not yet supported")
+			}
+			utils.WriteUint48(b, missingPacketSequenceNumberDelta)
+			b.WriteByte(rangeLength)
+		}
+	}
+
 	return nil
 }
 

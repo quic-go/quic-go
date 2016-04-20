@@ -8,21 +8,6 @@ import (
 )
 
 var _ = Describe("Utils", func() {
-	Context("WriteUint64", func() {
-		It("outputs 8 bytes", func() {
-			b := &bytes.Buffer{}
-			WriteUint64(b, uint64(1))
-			Expect(b.Len()).To(Equal(8))
-		})
-
-		It("outputs a little endian", func() {
-			num := uint64(0xFFEEDDCCBBAA9988)
-			b := &bytes.Buffer{}
-			WriteUint64(b, num)
-			Expect(b.Bytes()).To(Equal([]byte{0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF}))
-		})
-	})
-
 	Context("ReadUint16", func() {
 		It("reads a little endian", func() {
 			b := []byte{0x13, 0xEF}
@@ -95,6 +80,44 @@ var _ = Describe("Utils", func() {
 			b := &bytes.Buffer{}
 			WriteUint32(b, num)
 			Expect(b.Bytes()).To(Equal([]byte{0x12, 0x35, 0xAC, 0xEF}))
+		})
+	})
+
+	Context("WriteUint48", func() {
+		It("outputs 6 bytes", func() {
+			b := &bytes.Buffer{}
+			WriteUint48(b, uint64(1))
+			Expect(b.Len()).To(Equal(6))
+		})
+
+		It("outputs a little endian", func() {
+			num := uint64(0xDEADBEEFCAFE)
+			b := &bytes.Buffer{}
+			WriteUint48(b, num)
+			Expect(b.Bytes()).To(Equal([]byte{0xFE, 0xCA, 0xEF, 0xBE, 0xAD, 0xDE}))
+		})
+
+		It("doesn't care about the two higher order bytes", func() {
+			num := uint64(0x1337DEADBEEFCAFE)
+			b := &bytes.Buffer{}
+			WriteUint48(b, num)
+			Expect(b.Len()).To(Equal(6))
+			Expect(b.Bytes()).To(Equal([]byte{0xFE, 0xCA, 0xEF, 0xBE, 0xAD, 0xDE}))
+		})
+	})
+
+	Context("WriteUint64", func() {
+		It("outputs 8 bytes", func() {
+			b := &bytes.Buffer{}
+			WriteUint64(b, uint64(1))
+			Expect(b.Len()).To(Equal(8))
+		})
+
+		It("outputs a little endian", func() {
+			num := uint64(0xFFEEDDCCBBAA9988)
+			b := &bytes.Buffer{}
+			WriteUint64(b, num)
+			Expect(b.Bytes()).To(Equal([]byte{0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF}))
 		})
 	})
 
