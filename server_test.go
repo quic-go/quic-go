@@ -95,4 +95,27 @@ var _ = Describe("Server", func() {
 		err = server.ListenAndServe("localhost:13370")
 		Expect(err).To(HaveOccurred())
 	})
+
+	PIt("setups and responds with error on invalid frame", func() {
+		path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
+		server, err := NewServer(path+"cert.der", path+"key.der", nil)
+		Expect(err).ToNot(HaveOccurred())
+		go func() {
+			time.Sleep(10 * time.Millisecond)
+			addr, err2 := net.ResolveUDPAddr("udp", "localhost:13370")
+			Expect(err2).ToNot(HaveOccurred())
+			conn, err2 := net.DialUDP("udp", nil, addr)
+			Expect(err2).ToNot(HaveOccurred())
+			_, err2 = conn.Write([]byte{0x05, 0x01, 'Q', '0', '3', '0', 0x01, 0x00})
+			Expect(err2).ToNot(HaveOccurred())
+			data := make([]byte, 1000)
+			n, _, err2 := conn.ReadFromUDP(data)
+			Expect(err2).ToNot(HaveOccurred())
+			Expect(n).ToNot(BeZero())
+			err2 = server.Close()
+			Expect(err2).ToNot(HaveOccurred())
+		}()
+		err = server.ListenAndServe("localhost:13370")
+		Expect(err).To(HaveOccurred())
+	})
 })
