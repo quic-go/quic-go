@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -11,14 +12,22 @@ import (
 	"github.com/lucas-clemente/quic-go/protocol"
 )
 
+type PacketHandler interface {
+	HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, publicHeader *PublicHeader, r *bytes.Reader) error
+}
+
 // A Server of QUIC
 type Server struct {
+	conn *net.UDPConn
+
 	signer crypto.Signer
 	scfg   *handshake.ServerConfig
 
-	sessions map[protocol.ConnectionID]*Session
+	sessions map[protocol.ConnectionID]PacketHandler
 
 	streamCallback StreamCallback
+
+	newSession func(conn *net.UDPConn, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback) PacketHandler
 }
 
 // NewServer makes a new server
@@ -35,7 +44,8 @@ func NewServer(certPath, keyPath string, cb StreamCallback) (*Server, error) {
 		signer:         signer,
 		scfg:           scfg,
 		streamCallback: cb,
-		sessions:       map[protocol.ConnectionID]*Session{},
+		sessions:       map[protocol.ConnectionID]PacketHandler{},
+		newSession:     NewSession,
 	}, nil
 }
 
@@ -46,51 +56,62 @@ func (s *Server) ListenAndServe(address string) error {
 		return err
 	}
 
-	conn, err := net.ListenUDP("udp", addr)
+	s.conn, err = net.ListenUDP("udp", addr)
 	if err != nil {
 		return err
 	}
 
 	for {
-		data := make([]byte, 1400)
-		n, remoteAddr, err := conn.ReadFromUDP(data)
+		data := make([]byte, protocol.MaxPacketSize)
+		n, remoteAddr, err := s.conn.ReadFromUDP(data)
 		if err != nil {
 			return err
 		}
 		data = data[:n]
-		r := bytes.NewReader(data)
-		// ToDo: check packet size and send errorcodes.QUIC_PACKET_TOO_LARGE if packet is too large
-
-		publicHeader, err := ParsePublicHeader(r)
-		if err != nil {
-			// ToDo: send errorcodes.QUIC_INVALID_PACKET_HEADER
-			fmt.Printf("Could not parse public header")
-			continue
-		}
-
-		// fmt.Printf("<- Got packet %d (%d bytes) from %v\n", publicHeader.PacketNumber, n, remoteAddr)
-
-		// Send Version Negotiation Packet if the client is speaking a different protocol version
-		if publicHeader.VersionFlag && !protocol.IsSupportedVersion(publicHeader.VersionNumber) {
-			fmt.Println("Sending VersionNegotiationPacket")
-			_, err = conn.WriteToUDP(composeVersionNegotiation(publicHeader.ConnectionID), remoteAddr)
-			if err != nil {
-				fmt.Printf("Error sending version negotiation: %s", err.Error())
-			}
-			continue
-		}
-
-		session, ok := s.sessions[publicHeader.ConnectionID]
-		if !ok {
-			fmt.Printf("Serving new connection: %d from %v\n", publicHeader.ConnectionID, remoteAddr)
-			session = NewSession(conn, publicHeader.VersionNumber, publicHeader.ConnectionID, s.scfg, s.streamCallback)
-			s.sessions[publicHeader.ConnectionID] = session
-		}
-		err = session.HandlePacket(remoteAddr, data[0:n-r.Len()], publicHeader, r)
-		if err != nil {
-			fmt.Printf("Error handling packet: %s\n", err.Error())
+		if err := s.handlePacket(s.conn, remoteAddr, data); err != nil {
+			fmt.Printf("error handling packet: %s", err.Error())
 		}
 	}
+}
+
+// Close the server
+func (s *Server) Close() error {
+	return s.conn.Close()
+}
+
+func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet []byte) error {
+	r := bytes.NewReader(packet)
+	// ToDo: check packet size and send errorcodes.QUIC_PACKET_TOO_LARGE if packet is too large
+
+	publicHeader, err := ParsePublicHeader(r)
+	if err != nil {
+		// ToDo: send errorcodes.QUIC_INVALID_PACKET_HEADER
+		return errors.New("Could not parse public header")
+	}
+
+	// fmt.Printf("<- Got packet %d (%d bytes) from %v\n", publicHeader.PacketNumber, n, remoteAddr)
+
+	// Send Version Negotiation Packet if the client is speaking a different protocol version
+	if publicHeader.VersionFlag && !protocol.IsSupportedVersion(publicHeader.VersionNumber) {
+		fmt.Println("Sending VersionNegotiationPacket")
+		_, err = conn.WriteToUDP(composeVersionNegotiation(publicHeader.ConnectionID), remoteAddr)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	session, ok := s.sessions[publicHeader.ConnectionID]
+	if !ok {
+		fmt.Printf("Serving new connection: %d from %v\n", publicHeader.ConnectionID, remoteAddr)
+		session = s.newSession(conn, publicHeader.VersionNumber, publicHeader.ConnectionID, s.scfg, s.streamCallback)
+		s.sessions[publicHeader.ConnectionID] = session
+	}
+	err = session.HandlePacket(remoteAddr, packet[0:len(packet)-r.Len()], publicHeader, r)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func composeVersionNegotiation(connectionID protocol.ConnectionID) []byte {

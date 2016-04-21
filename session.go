@@ -35,7 +35,7 @@ type Session struct {
 }
 
 // NewSession makes a new session
-func NewSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback) *Session {
+func NewSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback) PacketHandler {
 	session := &Session{
 		Connection:     conn,
 		streamCallback: streamCallback,
