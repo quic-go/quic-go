@@ -96,7 +96,7 @@ var _ = Describe("Server", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
-	PIt("setups and responds with error on invalid frame", func() {
+	It("setups and responds with error on invalid frame", func() {
 		path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
 		server, err := NewServer(path+"cert.der", path+"key.der", nil)
 		Expect(err).ToNot(HaveOccurred())
