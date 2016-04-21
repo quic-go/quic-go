@@ -8,6 +8,7 @@ import (
 	"net"
 	"sync"
 
+	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/errorcodes"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -29,9 +30,9 @@ type Session struct {
 	ServerConfig *handshake.ServerConfig
 	cryptoSetup  *handshake.CryptoSetup
 
-	EntropyReceived     EntropyAccumulator
-	EntropySent         EntropyAccumulator
-	EntropyHistory      map[protocol.PacketNumber]EntropyAccumulator // ToDo: store this with the packet itself
+	EntropyReceived     ackhandler.EntropyAccumulator
+	EntropySent         ackhandler.EntropyAccumulator
+	EntropyHistory      map[protocol.PacketNumber]ackhandler.EntropyAccumulator // ToDo: store this with the packet itself
 	entropyHistoryMutex sync.Mutex
 
 	lastSentPacketNumber     protocol.PacketNumber
@@ -55,7 +56,7 @@ func NewSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protoc
 		streamCallback:           streamCallback,
 		lastObservedPacketNumber: 0,
 		Streams:                  make(map[protocol.StreamID]*Stream),
-		EntropyHistory:           make(map[protocol.PacketNumber]EntropyAccumulator),
+		EntropyHistory:           make(map[protocol.PacketNumber]ackhandler.EntropyAccumulator),
 	}
 
 	cryptoStream, _ := session.NewStream(1)
