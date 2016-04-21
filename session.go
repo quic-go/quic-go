@@ -32,6 +32,9 @@ type Session struct {
 	unpacker  *packetUnpacker
 	packer    *packetPacker
 	batchMode bool
+
+	// TODO: Remove
+	EntropyReceived ackhandler.EntropyAccumulator
 }
 
 // NewSession makes a new session
@@ -46,7 +49,7 @@ func NewSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protoc
 	cryptoSetup := handshake.NewCryptoSetup(connectionID, v, sCfg, cryptoStream)
 	go cryptoSetup.HandleCryptoStream()
 
-	session.packer = &packetPacker{aead: cryptoSetup}
+	session.packer = &packetPacker{aead: cryptoSetup, connectionID: connectionID}
 	session.unpacker = &packetUnpacker{aead: cryptoSetup}
 
 	return session
@@ -67,9 +70,13 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 		return err
 	}
 
-	s.incomingAckHandler.ReceivedPacket(publicHeader.PacketNumber, packet.entropyBit)
-
-	s.SendFrame(s.incomingAckHandler.DequeueAckFrame())
+	// s.incomingAckHandler.ReceivedPacket(publicHeader.PacketNumber, packet.entropyBit)
+	// s.SendFrame(s.incomingAckHandler.DequeueAckFrame())
+	s.EntropyReceived.Add(publicHeader.PacketNumber, packet.entropyBit)
+	s.SendFrame(&frames.AckFrame{
+		LargestObserved: publicHeader.PacketNumber,
+		Entropy:         s.EntropyReceived.Get(),
+	})
 
 	for _, ff := range packet.frames {
 		var err error
@@ -77,7 +84,7 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 		case *frames.StreamFrame:
 			err = s.handleStreamFrame(frame)
 		case *frames.AckFrame:
-			s.outgoingAckHandler.ReceivedAck(frame)
+			// s.outgoingAckHandler.ReceivedAck(frame)
 		case *frames.ConnectionCloseFrame:
 			fmt.Printf("%#v\n", frame)
 		case *frames.StopWaitingFrame:
@@ -143,11 +150,12 @@ func (s *Session) sendPackets() error {
 		if packet == nil {
 			return nil
 		}
-		s.outgoingAckHandler.SentPacket(&ackhandler.Packet{
-			PacketNumber: packet.number,
-			Plaintext:    packet.payload,
-			EntropyBit:   packet.entropyBit,
-		})
+		// s.outgoingAckHandler.SentPacket(&ackhandler.Packet{
+		// 	PacketNumber: packet.number,
+		// 	Plaintext:    packet.payload,
+		// 	EntropyBit:   packet.entropyBit,
+		// })
+		fmt.Printf("-> Sending packet %d (%d bytes)\n", packet.number, len(packet.raw))
 		_, err = s.Connection.WriteToUDP(packet.raw, s.CurrentRemoteAddr)
 		if err != nil {
 			return err
