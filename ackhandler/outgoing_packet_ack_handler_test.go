@@ -56,6 +56,26 @@ var _ = Describe("AckHandler", func() {
 			Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(2)))
 			Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(2)))
 		})
+
+		It("correctly calculates the entropy, even if the last packet has already been ACKed", func() {
+			packet1 := Packet{PacketNumber: 1, Plaintext: []byte{0x13, 0x37}, EntropyBit: true}
+			packet2 := Packet{PacketNumber: 2, Plaintext: []byte{0xBE, 0xEF}, EntropyBit: true}
+			err := handler.SentPacket(&packet1)
+			Expect(err).ToNot(HaveOccurred())
+			expectedEntropy := EntropyAccumulator(0)
+			expectedEntropy.Add(packet1.PacketNumber, packet1.EntropyBit)
+			ack := frames.AckFrame{
+				LargestObserved: 1,
+				Entropy:         byte(expectedEntropy),
+			}
+			err = handler.ReceivedAck(&ack)
+			Expect(err).ToNot(HaveOccurred())
+			err = handler.SentPacket(&packet2)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(2)))
+			expectedEntropy.Add(packet2.PacketNumber, packet2.EntropyBit)
+			Expect(handler.packetHistory[2].Entropy).To(Equal(expectedEntropy))
+		})
 	})
 
 	Context("ACK handling", func() {

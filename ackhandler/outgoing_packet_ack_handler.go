@@ -35,8 +35,7 @@ func (h *outgoingPacketAckHandler) SentPacket(packet *Packet) error {
 	}
 
 	var lastPacketEntropy EntropyAccumulator
-	// ToDo: write tests for this
-	if packet.PacketNumber == 0 {
+	if packet.PacketNumber == 1 {
 		lastPacketEntropy = EntropyAccumulator(0)
 	} else {
 		if h.highestInOrderAckedPacketNumber == packet.PacketNumber-1 {
