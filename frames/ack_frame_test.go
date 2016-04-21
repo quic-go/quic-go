@@ -76,7 +76,7 @@ var _ = Describe("AckFrame", func() {
 
 		It("gets the highest in order packet number for an ACK without NACK ranges", func() {
 			frame := AckFrame{LargestObserved: 5}
-			Expect(frame.GetHighestInOrderPacket()).To(Equal(protocol.PacketNumber(5)))
+			Expect(frame.GetHighestInOrderPacketNumber()).To(Equal(protocol.PacketNumber(5)))
 		})
 
 		It("gets the highest in order packet number for an ACK with one NACK ranges", func() {
@@ -85,7 +85,7 @@ var _ = Describe("AckFrame", func() {
 				LargestObserved: 6,
 				NackRanges:      []NackRange{nackRange},
 			}
-			Expect(frame.GetHighestInOrderPacket()).To(Equal(protocol.PacketNumber(2)))
+			Expect(frame.GetHighestInOrderPacketNumber()).To(Equal(protocol.PacketNumber(2)))
 		})
 
 		It("gets the highest in order packet number for an ACK with one NACK ranges", func() {
@@ -98,7 +98,7 @@ var _ = Describe("AckFrame", func() {
 				LargestObserved: 15,
 				NackRanges:      nackRanges,
 			}
-			Expect(frame.GetHighestInOrderPacket()).To(Equal(protocol.PacketNumber(3)))
+			Expect(frame.GetHighestInOrderPacketNumber()).To(Equal(protocol.PacketNumber(3)))
 		})
 	})
 

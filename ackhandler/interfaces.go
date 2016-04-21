@@ -7,7 +7,7 @@ import (
 
 type OutgoingPacketAckHandler interface {
 	SentPacket(packet *Packet) error
-	ReceivedAck(ackFrame *frames.AckFrame)
+	ReceivedAck(ackFrame *frames.AckFrame) error
 
 	DequeuePacketForRetransmission() (packet *Packet)
 }

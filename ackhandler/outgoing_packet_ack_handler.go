@@ -52,8 +52,37 @@ func (h *outgoingPacketAckHandler) SentPacket(packet *Packet) error {
 	return nil
 }
 
-func (h *outgoingPacketAckHandler) ReceivedAck(ackFrame *frames.AckFrame) {
-	return
+func (h *outgoingPacketAckHandler) ReceivedAck(ackFrame *frames.AckFrame) error {
+	if ackFrame.LargestObserved > h.lastSentPacketNumber {
+		return errors.New("OutgoingPacketAckHandler: Received ACK for an unsent package")
+	}
+
+	entropyError := errors.New("OutgoingPacketAckHandler: Wrong entropy")
+
+	h.packetHistoryMutex.Lock()
+	defer h.packetHistoryMutex.Unlock()
+
+	highestInOrderAckedEntropy := h.highestInOrderAckedEntropy
+	highestInOrderAckedPacketNumber := ackFrame.GetHighestInOrderPacketNumber()
+	for i := h.highestInOrderAckedPacketNumber + 1; i <= highestInOrderAckedPacketNumber; i++ {
+		highestInOrderAckedEntropy.Add(h.packetHistory[i].PacketNumber, h.packetHistory[i].EntropyBit)
+	}
+
+	if !ackFrame.HasNACK() {
+		if ackFrame.Entropy != byte(h.packetHistory[ackFrame.LargestObserved].Entropy) {
+			return entropyError
+		}
+	}
+	// ToDo: check entropy for ACKs with NACKs
+
+	// Entropy ok. Now actually process the ACK packet
+	for i := h.highestInOrderAckedPacketNumber; i <= highestInOrderAckedPacketNumber; i++ {
+		delete(h.packetHistory, i)
+	}
+
+	h.highestInOrderAckedPacketNumber = highestInOrderAckedPacketNumber
+	h.highestInOrderAckedEntropy = highestInOrderAckedEntropy
+	return nil
 }
 
 func (h *outgoingPacketAckHandler) DequeuePacketForRetransmission() (packet *Packet) {

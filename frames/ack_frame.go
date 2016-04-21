@@ -84,7 +84,7 @@ func (f *AckFrame) HasNACK() bool {
 }
 
 // GetHighestInOrderPacket gets the highest in order packet number that is confirmed by this ACK
-func (f *AckFrame) GetHighestInOrderPacket() protocol.PacketNumber {
+func (f *AckFrame) GetHighestInOrderPacketNumber() protocol.PacketNumber {
 	if f.HasNACK() {
 		return (f.NackRanges[len(f.NackRanges)-1].FirstPacketNumber - 1)
 	}
