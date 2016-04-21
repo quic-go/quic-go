@@ -12,6 +12,7 @@ type outgoingPacketAckHandler struct {
 	lastSentPacketNumber            protocol.PacketNumber
 	highestInOrderAckedPacketNumber protocol.PacketNumber
 	highestInOrderAckedEntropy      EntropyAccumulator
+	LargestObserved                 protocol.PacketNumber
 	packetHistory                   map[protocol.PacketNumber]*Packet
 	packetHistoryMutex              sync.Mutex
 }
@@ -56,7 +57,12 @@ func (h *outgoingPacketAckHandler) ReceivedAck(ackFrame *frames.AckFrame) error 
 		return errors.New("OutgoingPacketAckHandler: Received ACK for an unsent package")
 	}
 
+	if ackFrame.LargestObserved <= h.LargestObserved { // duplicate or out-of-order AckFrame
+		return nil
+	}
+
 	entropyError := errors.New("OutgoingPacketAckHandler: Wrong entropy")
+	mapAccessError := errors.New("OutgoingPacketAckHandler: Packet does not exist in PacketHistory")
 
 	h.packetHistoryMutex.Lock()
 	defer h.packetHistoryMutex.Unlock()
@@ -64,19 +70,76 @@ func (h *outgoingPacketAckHandler) ReceivedAck(ackFrame *frames.AckFrame) error 
 	highestInOrderAckedEntropy := h.highestInOrderAckedEntropy
 	highestInOrderAckedPacketNumber := ackFrame.GetHighestInOrderPacketNumber()
 	for i := h.highestInOrderAckedPacketNumber + 1; i <= highestInOrderAckedPacketNumber; i++ {
-		highestInOrderAckedEntropy.Add(h.packetHistory[i].PacketNumber, h.packetHistory[i].EntropyBit)
+		packet, ok := h.packetHistory[i]
+		if !ok {
+			return mapAccessError
+		}
+		highestInOrderAckedEntropy.Add(packet.PacketNumber, packet.EntropyBit)
 	}
 
+	var expectedEntropy EntropyAccumulator
+
 	if !ackFrame.HasNACK() {
-		if ackFrame.Entropy != byte(h.packetHistory[ackFrame.LargestObserved].Entropy) {
-			return entropyError
+		packet, ok := h.packetHistory[ackFrame.LargestObserved]
+		if !ok {
+			return mapAccessError
+		}
+		expectedEntropy = packet.Entropy
+	} else {
+		if highestInOrderAckedPacketNumber == h.highestInOrderAckedPacketNumber {
+			expectedEntropy = h.highestInOrderAckedEntropy
+		} else {
+			packet, ok := h.packetHistory[highestInOrderAckedPacketNumber]
+			if !ok {
+				return mapAccessError
+			}
+			expectedEntropy = packet.Entropy
+		}
+
+		nackRangeIndex := len(ackFrame.NackRanges) - 1
+		nackRange := ackFrame.NackRanges[nackRangeIndex]
+		for i := highestInOrderAckedPacketNumber + 1; i <= ackFrame.LargestObserved; i++ {
+			if i > nackRange.LastPacketNumber {
+				nackRangeIndex--
+				if nackRangeIndex >= 0 {
+					nackRange = ackFrame.NackRanges[nackRangeIndex]
+				}
+			}
+			if i >= nackRange.FirstPacketNumber && i <= nackRange.LastPacketNumber {
+				continue
+			}
+			packet, ok := h.packetHistory[i]
+			if !ok {
+				return mapAccessError
+			}
+			expectedEntropy.Add(i, packet.EntropyBit)
 		}
 	}
-	// ToDo: check entropy for ACKs with NACKs
+
+	if ackFrame.Entropy != byte(expectedEntropy) {
+		return entropyError
+	}
 
 	// Entropy ok. Now actually process the ACK packet
 	for i := h.highestInOrderAckedPacketNumber; i <= highestInOrderAckedPacketNumber; i++ {
 		delete(h.packetHistory, i)
+	}
+
+	if ackFrame.HasNACK() {
+		nackRangeIndex := len(ackFrame.NackRanges) - 1
+		nackRange := ackFrame.NackRanges[nackRangeIndex]
+		for i := highestInOrderAckedPacketNumber + 1; i <= ackFrame.LargestObserved; i++ {
+			if i > nackRange.LastPacketNumber {
+				nackRangeIndex--
+				if nackRangeIndex >= 0 {
+					nackRange = ackFrame.NackRanges[nackRangeIndex]
+				}
+			}
+			if i >= nackRange.FirstPacketNumber && i <= nackRange.LastPacketNumber {
+				continue
+			}
+			delete(h.packetHistory, i)
+		}
 	}
 
 	h.highestInOrderAckedPacketNumber = highestInOrderAckedPacketNumber
