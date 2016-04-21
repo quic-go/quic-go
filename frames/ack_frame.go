@@ -11,7 +11,7 @@ import (
 // NackRange is a NACK range
 type NackRange struct {
 	FirstPacketNumber protocol.PacketNumber
-	Length            uint8
+	LastPacketNumber  protocol.PacketNumber
 }
 
 // An AckFrame in QUIC
@@ -45,15 +45,15 @@ func (f *AckFrame) Write(b *bytes.Buffer) error {
 		for i, nackRange := range f.NackRanges {
 			var missingPacketSequenceNumberDelta uint64
 			if i == 0 {
-				if protocol.PacketNumber(uint64(nackRange.FirstPacketNumber)+uint64(nackRange.Length)) > f.LargestObserved {
+				if nackRange.LastPacketNumber > f.LargestObserved {
 					return errors.New("AckFrame: Invalid NACK ranges")
 				}
-				missingPacketSequenceNumberDelta = uint64(f.LargestObserved-nackRange.FirstPacketNumber) - uint64(nackRange.Length) + 1
+				missingPacketSequenceNumberDelta = uint64(f.LargestObserved) - uint64(nackRange.LastPacketNumber)
 			} else {
 				lastNackRange := f.NackRanges[i-1]
-				missingPacketSequenceNumberDelta = uint64(lastNackRange.FirstPacketNumber-nackRange.FirstPacketNumber) - uint64(nackRange.Length)
+				missingPacketSequenceNumberDelta = uint64(lastNackRange.FirstPacketNumber) - uint64(nackRange.LastPacketNumber) - 1
 			}
-			rangeLength := nackRange.Length - 1
+			rangeLength := uint8(nackRange.LastPacketNumber - nackRange.FirstPacketNumber)
 			if rangeLength > 255 {
 				return errors.New("AckFrame: NACK ranges larger 256 packets not yet supported")
 			}
@@ -183,9 +183,7 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 			}
 			rangeLength := uint8(rangeLengthByte)
 
-			nackRange := NackRange{
-				Length: uint8(rangeLength + 1),
-			}
+			nackRange := NackRange{}
 			if i == 0 {
 				nackRange.FirstPacketNumber = frame.LargestObserved - protocol.PacketNumber(missingPacketSequenceNumberDelta+uint64(rangeLength))
 			} else {
@@ -195,6 +193,7 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 				lastNackRange := frame.NackRanges[len(frame.NackRanges)-1]
 				nackRange.FirstPacketNumber = lastNackRange.FirstPacketNumber - protocol.PacketNumber(missingPacketSequenceNumberDelta+uint64(rangeLength)) - 1
 			}
+			nackRange.LastPacketNumber = protocol.PacketNumber(uint64(nackRange.FirstPacketNumber) + uint64(rangeLength))
 			frame.NackRanges = append(frame.NackRanges, nackRange)
 		}
 	}

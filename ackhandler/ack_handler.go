@@ -40,12 +40,12 @@ func (h *AckHandler) GetNackRanges() []*frames.NackRange {
 			if !inRange {
 				r := &frames.NackRange{
 					FirstPacketNumber: packetNumber,
-					Length:            1,
+					LastPacketNumber:  packetNumber,
 				}
 				ranges = append(ranges, r)
 				inRange = true
 			} else {
-				ranges[len(ranges)-1].Length++
+				ranges[len(ranges)-1].LastPacketNumber++
 			}
 		} else {
 			inRange = false

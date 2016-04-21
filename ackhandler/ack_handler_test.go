@@ -29,7 +29,7 @@ var _ = Describe("AckHandler", func() {
 		nackRanges := ackHandler.GetNackRanges()
 		Expect(len(nackRanges)).To(Equal(1))
 		Expect(nackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(5)))
-		Expect(nackRanges[0].Length).To(Equal(uint8(1)))
+		Expect(nackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(5)))
 	})
 
 	It("handles two consecutive lost packages", func() {
@@ -44,7 +44,7 @@ var _ = Describe("AckHandler", func() {
 		nackRanges := ackHandler.GetNackRanges()
 		Expect(len(nackRanges)).To(Equal(1))
 		Expect(nackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(5)))
-		Expect(nackRanges[0].Length).To(Equal(uint8(2)))
+		Expect(nackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(6)))
 	})
 
 	It("handles two non-consecutively lost packages", func() {
@@ -59,9 +59,9 @@ var _ = Describe("AckHandler", func() {
 		nackRanges := ackHandler.GetNackRanges()
 		Expect(len(nackRanges)).To(Equal(2))
 		Expect(nackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(3)))
-		Expect(nackRanges[0].Length).To(Equal(uint8(1)))
+		Expect(nackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(3)))
 		Expect(nackRanges[1].FirstPacketNumber).To(Equal(protocol.PacketNumber(7)))
-		Expect(nackRanges[1].Length).To(Equal(uint8(1)))
+		Expect(nackRanges[1].LastPacketNumber).To(Equal(protocol.PacketNumber(7)))
 	})
 
 	It("handles two sequences of lost packages", func() {
@@ -76,9 +76,9 @@ var _ = Describe("AckHandler", func() {
 		nackRanges := ackHandler.GetNackRanges()
 		Expect(len(nackRanges)).To(Equal(2))
 		Expect(nackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(2)))
-		Expect(nackRanges[0].Length).To(Equal(uint8(3)))
+		Expect(nackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(4)))
 		Expect(nackRanges[1].FirstPacketNumber).To(Equal(protocol.PacketNumber(7)))
-		Expect(nackRanges[1].Length).To(Equal(uint8(2)))
+		Expect(nackRanges[1].LastPacketNumber).To(Equal(protocol.PacketNumber(8)))
 	})
 
 })

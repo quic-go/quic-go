@@ -43,7 +43,7 @@ var _ = Describe("AckFrame", func() {
 			Expect(frame.HasNACK()).To(Equal(true))
 			Expect(len(frame.NackRanges)).To(Equal(1))
 			Expect(frame.NackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(1)))
-			Expect(frame.NackRanges[0].Length).To(Equal(uint8(2)))
+			Expect(frame.NackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(2)))
 			Expect(b.Len()).To(Equal(0))
 		})
 
@@ -55,22 +55,23 @@ var _ = Describe("AckFrame", func() {
 			Expect(frame.HasNACK()).To(Equal(true))
 			Expect(len(frame.NackRanges)).To(Equal(1))
 			// ToDo: check NACK range
-			Expect(frame.NackRanges[0].Length).To(Equal(uint8(4)))
+			// Expect(frame.NackRanges[0].Length).To(Equal(uint8(4)))
 			Expect(b.Len()).To(Equal(0))
 		})
 
 		It("parses a frame containing multiple NACK ranges", func() {
+			// sent packets 1, 3, 7, 15
 			b := bytes.NewReader([]byte{0x60, 0x2, 0xf, 0xb8, 0x1, 0x1, 0x0, 0xe5, 0x58, 0x4, 0x0, 0x3, 0x1, 0x6, 0x1, 0x2, 0x1, 0x0})
 			frame, err := ParseAckFrame(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.HasNACK()).To(Equal(true))
 			Expect(len(frame.NackRanges)).To(Equal(3))
 			Expect(frame.NackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(8)))
-			Expect(frame.NackRanges[0].Length).To(Equal(uint8(7)))
+			Expect(frame.NackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(14)))
 			Expect(frame.NackRanges[1].FirstPacketNumber).To(Equal(protocol.PacketNumber(4)))
-			Expect(frame.NackRanges[1].Length).To(Equal(uint8(3)))
+			Expect(frame.NackRanges[1].LastPacketNumber).To(Equal(protocol.PacketNumber(6)))
 			Expect(frame.NackRanges[2].FirstPacketNumber).To(Equal(protocol.PacketNumber(2)))
-			Expect(frame.NackRanges[2].Length).To(Equal(uint8(1)))
+			Expect(frame.NackRanges[2].LastPacketNumber).To(Equal(protocol.PacketNumber(2)))
 			Expect(b.Len()).To(Equal(0))
 		})
 
@@ -80,7 +81,7 @@ var _ = Describe("AckFrame", func() {
 		})
 
 		It("gets the highest in order packet number for an ACK with one NACK ranges", func() {
-			nackRange := NackRange{FirstPacketNumber: 3, Length: 2}
+			nackRange := NackRange{FirstPacketNumber: 3, LastPacketNumber: 4}
 			frame := AckFrame{
 				LargestObserved: 6,
 				NackRanges:      []NackRange{nackRange},
@@ -90,9 +91,9 @@ var _ = Describe("AckFrame", func() {
 
 		It("gets the highest in order packet number for an ACK with one NACK ranges", func() {
 			nackRanges := []NackRange{
-				NackRange{FirstPacketNumber: 9, Length: 3},
-				NackRange{FirstPacketNumber: 7, Length: 1},
-				NackRange{FirstPacketNumber: 4, Length: 2},
+				NackRange{FirstPacketNumber: 9, LastPacketNumber: 11},
+				NackRange{FirstPacketNumber: 7, LastPacketNumber: 7},
+				NackRange{FirstPacketNumber: 4, LastPacketNumber: 5},
 			}
 			frame := &AckFrame{
 				LargestObserved: 15,
@@ -118,7 +119,7 @@ var _ = Describe("AckFrame", func() {
 			b := &bytes.Buffer{}
 			nackRange := NackRange{
 				FirstPacketNumber: 2,
-				Length:            1,
+				LastPacketNumber:  2,
 			}
 			frame := AckFrame{
 				Entropy:         2,
@@ -139,11 +140,11 @@ var _ = Describe("AckFrame", func() {
 			b := &bytes.Buffer{}
 			nackRange1 := NackRange{
 				FirstPacketNumber: 4,
-				Length:            3,
+				LastPacketNumber:  6,
 			}
 			nackRange2 := NackRange{
 				FirstPacketNumber: 2,
-				Length:            1,
+				LastPacketNumber:  2,
 			}
 			frame := AckFrame{
 				Entropy:         2,
@@ -182,7 +183,7 @@ var _ = Describe("AckFrame", func() {
 				NackRanges: []NackRange{
 					NackRange{
 						FirstPacketNumber: 2,
-						Length:            1,
+						LastPacketNumber:  2,
 					},
 				},
 			}
@@ -210,9 +211,9 @@ var _ = Describe("AckFrame", func() {
 		It("is self-consistent for ACK frames with NACK ranges", func() {
 			b := &bytes.Buffer{}
 			nackRanges := []NackRange{
-				NackRange{FirstPacketNumber: 9, Length: 3},
-				NackRange{FirstPacketNumber: 7, Length: 1},
-				NackRange{FirstPacketNumber: 2, Length: 2},
+				NackRange{FirstPacketNumber: 9, LastPacketNumber: 11},
+				NackRange{FirstPacketNumber: 7, LastPacketNumber: 7},
+				NackRange{FirstPacketNumber: 2, LastPacketNumber: 3},
 			}
 			frameOrig := &AckFrame{
 				LargestObserved: 15,
