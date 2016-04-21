@@ -1,6 +1,8 @@
 package quic
 
 import (
+	"fmt"
+
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
@@ -120,6 +122,7 @@ func (s *Stream) Write(p []byte) (int, error) {
 
 // Close imlpements io.Closer
 func (s *Stream) Close() error {
+	fmt.Printf("Closing stream %d\n", s.StreamID)
 	return s.Session.SendFrame(&frames.StreamFrame{
 		StreamID: s.StreamID,
 		Offset:   s.WriteOffset,
