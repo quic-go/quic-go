@@ -68,7 +68,7 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 		return nil, err
 	}
 
-	ciphertext := p.aead.Seal(p.lastPacketNumber, raw.Bytes(), payload)
+	ciphertext := p.aead.Seal(currentPacketNumber, raw.Bytes(), payload)
 	raw.Write(ciphertext)
 
 	if raw.Len() > protocol.MaxPacketSize {
