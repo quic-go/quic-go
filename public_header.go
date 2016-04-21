@@ -22,7 +22,7 @@ type PublicHeader struct {
 
 // WritePublicHeader writes a public header
 func (h *PublicHeader) WritePublicHeader(b *bytes.Buffer) error {
-	publicFlagByte := uint8(0x0C | 0x20)
+	publicFlagByte := uint8(0x3c)
 	if h.VersionFlag && h.ResetFlag {
 		return errors.New("Reset Flag and Version Flag should not be set at the same time")
 	}
