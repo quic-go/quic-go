@@ -9,9 +9,11 @@ import (
 )
 
 type outgoingPacketAckHandler struct {
-	lastSentPacketNumber protocol.PacketNumber
-	packetHistory        map[protocol.PacketNumber]*Packet
-	packetHistoryMutex   sync.Mutex
+	lastSentPacketNumber            protocol.PacketNumber
+	highestInOrderAckedPacketNumber protocol.PacketNumber
+	highestInOrderAckedEntropy      EntropyAccumulator
+	packetHistory                   map[protocol.PacketNumber]*Packet
+	packetHistoryMutex              sync.Mutex
 }
 
 // NewOutgoingPacketAckHandler creates a new outgoingPacketAckHandler
@@ -31,6 +33,20 @@ func (h *outgoingPacketAckHandler) SentPacket(packet *Packet) error {
 	if h.lastSentPacketNumber+1 != packet.PacketNumber {
 		return errors.New("Packet number must be increased by exactly 1")
 	}
+
+	var lastPacketEntropy EntropyAccumulator
+	// ToDo: write tests for this
+	if packet.PacketNumber == 0 {
+		lastPacketEntropy = EntropyAccumulator(0)
+	} else {
+		if h.highestInOrderAckedPacketNumber == packet.PacketNumber-1 {
+			lastPacketEntropy = h.highestInOrderAckedEntropy
+		} else {
+			lastPacketEntropy = h.packetHistory[packet.PacketNumber-1].Entropy
+		}
+	}
+	lastPacketEntropy.Add(packet.PacketNumber, packet.EntropyBit)
+	packet.Entropy = lastPacketEntropy
 	h.lastSentPacketNumber = packet.PacketNumber
 	h.packetHistory[packet.PacketNumber] = packet
 	return nil

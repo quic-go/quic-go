@@ -13,9 +13,10 @@ var _ = Describe("AckHandler", func() {
 	})
 
 	Context("SentPacket", func() {
-		It("accepts two consecutive packets", func() {
+		It("accepts three consecutive packets", func() {
+			entropy := EntropyAccumulator(0)
 			packet1 := Packet{PacketNumber: 1, Plaintext: []byte{0x13, 0x37}, EntropyBit: true}
-			packet2 := Packet{PacketNumber: 2, Plaintext: []byte{0xBE, 0xEF}, EntropyBit: false}
+			packet2 := Packet{PacketNumber: 2, Plaintext: []byte{0xBE, 0xEF}, EntropyBit: true}
 			err := handler.SentPacket(&packet1)
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.SentPacket(&packet2)
@@ -23,6 +24,12 @@ var _ = Describe("AckHandler", func() {
 			Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(2)))
 			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(1)))
 			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(2)))
+			entropy.Add(packet1.PacketNumber, packet1.EntropyBit)
+			Expect(handler.packetHistory[1].PacketNumber).To(Equal(protocol.PacketNumber(1)))
+			Expect(handler.packetHistory[1].Entropy).To(Equal(entropy))
+			entropy.Add(packet2.PacketNumber, packet2.EntropyBit)
+			Expect(handler.packetHistory[2].PacketNumber).To(Equal(protocol.PacketNumber(2)))
+			Expect(handler.packetHistory[2].Entropy).To(Equal(entropy))
 		})
 
 		It("rejects packets with the same packet number", func() {
