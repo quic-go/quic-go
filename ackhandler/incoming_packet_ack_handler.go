@@ -11,9 +11,10 @@ var ErrDuplicatePacket = errors.New("Duplicate Packet")
 
 // The AckHandler handles ACKs
 type incomingPacketAckHandler struct {
-	highestInOrderObserved protocol.PacketNumber
-	largestObserved        protocol.PacketNumber
-	packetHistory          map[protocol.PacketNumber]bool
+	highestInOrderObserved        protocol.PacketNumber
+	highestInOrderObservedEntropy EntropyAccumulator
+	largestObserved               protocol.PacketNumber
+	packetHistory                 map[protocol.PacketNumber]bool
 }
 
 // NewIncomingPacketAckHandler creates a new outgoingPacketAckHandler
@@ -37,6 +38,7 @@ func (h *incomingPacketAckHandler) ReceivedPacket(packetNumber protocol.PacketNu
 
 	if packetNumber == h.highestInOrderObserved+1 {
 		h.highestInOrderObserved = packetNumber
+		h.highestInOrderObservedEntropy.Add(packetNumber, entropyBit)
 	}
 
 	h.packetHistory[packetNumber] = true

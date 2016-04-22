@@ -48,7 +48,39 @@ var _ = Describe("incomingPacketAckHandler", func() {
 	})
 
 	Context("Entropy calculation", func() {
-		// It("calculates the entropy f")
+		It("calculates the entropy for continously received packets", func() {
+			entropy := EntropyAccumulator(0)
+			for i := 1; i < 100; i++ {
+				entropyBit := false
+				if i%3 == 0 || i%5 == 0 {
+					entropyBit = true
+				}
+				entropy.Add(protocol.PacketNumber(i), entropyBit)
+				err := handler.ReceivedPacket(protocol.PacketNumber(i), entropyBit)
+				Expect(err).ToNot(HaveOccurred())
+			}
+			Expect(handler.highestInOrderObservedEntropy).To(Equal(entropy))
+		})
+
+		It("calculates the entropy if there is a NACK range", func() {
+			entropy := EntropyAccumulator(0)
+			for i := 1; i < 100; i++ {
+				entropyBit := false
+				if i%3 == 0 || i%5 == 0 {
+					entropyBit = true
+				}
+
+				if i == 10 || i == 11 || i == 12 {
+					continue
+				}
+				if i < 10 {
+					entropy.Add(protocol.PacketNumber(i), entropyBit)
+				}
+				err := handler.ReceivedPacket(protocol.PacketNumber(i), entropyBit)
+				Expect(err).ToNot(HaveOccurred())
+			}
+			Expect(handler.highestInOrderObservedEntropy).To(Equal(entropy))
+		})
 	})
 
 	Context("NACK range calculation", func() {
