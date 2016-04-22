@@ -177,7 +177,8 @@ var _ = Describe("AckHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(1)))
 				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(2)))
-				Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(3)))
+				Expect(handler.packetHistory[2].MissingReports).To(Equal(uint8(1)))
+				// Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(3)))
 				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(4)))
 			})
 
@@ -196,7 +197,9 @@ var _ = Describe("AckHandler", func() {
 				Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(1)))
 				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(2)))
 				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(3)))
-				Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(4)))
+				Expect(handler.packetHistory[2].MissingReports).To(Equal(uint8(1)))
+				Expect(handler.packetHistory[3].MissingReports).To(Equal(uint8(1)))
+				// Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(4)))
 			})
 
 			It("handles an ACK with multiple NACK ranges", func() {
@@ -217,9 +220,11 @@ var _ = Describe("AckHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(1)))
 				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(2)))
-				Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(3)))
+				Expect(handler.packetHistory[2].MissingReports).To(Equal(uint8(1)))
+				// Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(3)))
 				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(4)))
-				Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(5)))
+				Expect(handler.packetHistory[4].MissingReports).To(Equal(uint8(1)))
+				// Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(5)))
 			})
 
 			It("rejects an ACK with a NACK that has incorrect entropy", func() {
@@ -257,6 +262,33 @@ var _ = Describe("AckHandler", func() {
 				}
 				err = handler.ReceivedAck(&ack)
 				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("increments the missingReports counter every time a NACK for a packet is received", func() {
+				nackRange1 := frames.NackRange{FirstPacketNumber: 4, LastPacketNumber: 4}
+				nackRange2 := frames.NackRange{FirstPacketNumber: 2, LastPacketNumber: 2}
+				entropy := EntropyAccumulator(0)
+				entropy.Add(1, packets[0].EntropyBit)
+				entropy.Add(3, packets[2].EntropyBit)
+				ack1 := frames.AckFrame{
+					LargestObserved: 3,
+					Entropy:         byte(entropy),
+					NackRanges:      []frames.NackRange{nackRange2},
+				}
+				err := handler.ReceivedAck(&ack1)
+				Expect(err).ToNot(HaveOccurred())
+				entropy.Add(5, packets[4].EntropyBit)
+				ack2 := frames.AckFrame{
+					LargestObserved: 5,
+					Entropy:         byte(entropy),
+					NackRanges:      []frames.NackRange{nackRange1, nackRange2},
+				}
+				err = handler.ReceivedAck(&ack2)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(2)))
+				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(4)))
+				Expect(handler.packetHistory[2].MissingReports).To(Equal(uint8(2)))
+				Expect(handler.packetHistory[4].MissingReports).To(Equal(uint8(1)))
 			})
 		})
 	})

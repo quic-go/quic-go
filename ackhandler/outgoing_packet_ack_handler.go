@@ -150,7 +150,7 @@ func (h *outgoingPacketAckHandler) ReceivedAck(ackFrame *frames.AckFrame) error 
 		delete(h.packetHistory, i)
 	}
 
-	// delete packets with a packet number higher than highestInOrderAckedPacketNumber that have already been ACKed
+	// increase MissingReports counter of NACKed packets
 	// this is the case if the PacketNumber is *not* contained in any of the NACK ranges
 	if ackFrame.HasNACK() {
 		nackRangeIndex := len(ackFrame.NackRanges) - 1
@@ -163,11 +163,16 @@ func (h *outgoingPacketAckHandler) ReceivedAck(ackFrame *frames.AckFrame) error 
 					nackRange = ackFrame.NackRanges[nackRangeIndex]
 				}
 			}
-			// PacketNumber i is not contained in a NACK range
+			// PacketNumber i is not contained in a NACK range, increase it's missingReports counter
 			if i >= nackRange.FirstPacketNumber && i <= nackRange.LastPacketNumber {
-				continue
+				packet, ok := h.packetHistory[i]
+				if !ok {
+					return errMapAccess
+				}
+				packet.MissingReports++
+				// ToDo: do something as when packet.MissionReports > threshold
 			}
-			delete(h.packetHistory, i)
+			// ToDo: delete packet from history, since it already has been ACKed
 		}
 	}
 
