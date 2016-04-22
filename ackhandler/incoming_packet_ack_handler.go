@@ -1,9 +1,13 @@
 package ackhandler
 
 import (
+	"errors"
+
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 )
+
+var ErrDuplicatePacket = errors.New("Duplicate Packet")
 
 // The AckHandler handles ACKs
 type incomingPacketAckHandler struct {
@@ -18,11 +22,19 @@ func NewIncomingPacketAckHandler() IncomingPacketAckHandler {
 	}
 }
 
-func (h *incomingPacketAckHandler) ReceivedPacket(packetNumber protocol.PacketNumber, entropyBit bool) {
+func (h *incomingPacketAckHandler) ReceivedPacket(packetNumber protocol.PacketNumber, entropyBit bool) error {
+	if packetNumber == 0 {
+		return errors.New("Invalid packet number")
+	}
+	if h.observed[packetNumber] {
+		return ErrDuplicatePacket
+	}
+
 	if packetNumber > h.largestObserved {
 		h.largestObserved = packetNumber
 	}
 	h.observed[packetNumber] = true
+	return nil
 }
 
 // GetNackRanges gets all the NACK ranges
@@ -30,15 +42,13 @@ func (h *incomingPacketAckHandler) GetNackRanges() []*frames.NackRange {
 	// ToDo: improve performance
 	var ranges []*frames.NackRange
 	inRange := false
-	// ToDo: fix types
-	for i := 0; i < int(h.largestObserved); i++ {
-		packetNumber := protocol.PacketNumber(i)
-		_, ok := h.observed[packetNumber]
+	for i := protocol.PacketNumber(1); i < h.largestObserved; i++ {
+		_, ok := h.observed[i]
 		if !ok {
 			if !inRange {
 				r := &frames.NackRange{
-					FirstPacketNumber: packetNumber,
-					LastPacketNumber:  packetNumber,
+					FirstPacketNumber: i,
+					LastPacketNumber:  i,
 				}
 				ranges = append(ranges, r)
 				inRange = true

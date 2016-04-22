@@ -15,15 +15,16 @@ var _ = Describe("incomingPacketAckHandler", func() {
 	})
 
 	It("Returns no NACK ranges for continously received packets", func() {
-		for i := 0; i < 100; i++ {
-			handler.ReceivedPacket(protocol.PacketNumber(i), false)
+		for i := 1; i < 100; i++ {
+			err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
+			Expect(err).ToNot(HaveOccurred())
 		}
 		Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(99)))
 		Expect(len(handler.GetNackRanges())).To(Equal(0))
 	})
 
 	It("handles a single lost package", func() {
-		for i := 0; i < 10; i++ {
+		for i := 1; i < 10; i++ {
 			if i == 5 {
 				continue
 			}
@@ -37,7 +38,7 @@ var _ = Describe("incomingPacketAckHandler", func() {
 	})
 
 	It("handles two consecutive lost packages", func() {
-		for i := 0; i < 10; i++ {
+		for i := 1; i < 10; i++ {
 			if i == 5 || i == 6 {
 				continue
 			}
@@ -51,7 +52,7 @@ var _ = Describe("incomingPacketAckHandler", func() {
 	})
 
 	It("handles two non-consecutively lost packages", func() {
-		for i := 0; i < 10; i++ {
+		for i := 1; i < 10; i++ {
 			if i == 3 || i == 7 {
 				continue
 			}
@@ -67,7 +68,7 @@ var _ = Describe("incomingPacketAckHandler", func() {
 	})
 
 	It("handles two sequences of lost packages", func() {
-		for i := 0; i < 10; i++ {
+		for i := 1; i < 10; i++ {
 			if i == 2 || i == 3 || i == 4 || i == 7 || i == 8 {
 				continue
 			}
@@ -80,6 +81,37 @@ var _ = Describe("incomingPacketAckHandler", func() {
 		Expect(nackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(4)))
 		Expect(nackRanges[1].FirstPacketNumber).To(Equal(protocol.PacketNumber(7)))
 		Expect(nackRanges[1].LastPacketNumber).To(Equal(protocol.PacketNumber(8)))
+	})
+
+	It("handles a packet that arrives late", func() {
+		err := handler.ReceivedPacket(protocol.PacketNumber(1), false)
+		Expect(err).ToNot(HaveOccurred())
+		err = handler.ReceivedPacket(protocol.PacketNumber(3), false)
+		Expect(err).ToNot(HaveOccurred())
+		err = handler.ReceivedPacket(protocol.PacketNumber(2), false)
+		Expect(err).ToNot(HaveOccurred())
+		nackRanges := handler.GetNackRanges()
+		Expect(len(nackRanges)).To(Equal(0))
+	})
+
+	It("rejects a duplicate package with PacketNumber equal to LargestObserved", func() {
+		for i := 1; i < 5; i++ {
+			err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
+			Expect(err).ToNot(HaveOccurred())
+		}
+		err := handler.ReceivedPacket(4, false)
+		Expect(err).To(HaveOccurred())
+		Expect(err).To(Equal(ErrDuplicatePacket))
+	})
+
+	It("rejects a duplicate package with PacketNumber less than the LargestObserved", func() {
+		for i := 1; i < 5; i++ {
+			err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
+			Expect(err).ToNot(HaveOccurred())
+		}
+		err := handler.ReceivedPacket(2, false)
+		Expect(err).To(HaveOccurred())
+		Expect(err).To(Equal(ErrDuplicatePacket))
 	})
 
 })
