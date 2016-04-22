@@ -11,14 +11,15 @@ var ErrDuplicatePacket = errors.New("Duplicate Packet")
 
 // The AckHandler handles ACKs
 type incomingPacketAckHandler struct {
-	largestObserved protocol.PacketNumber
-	observed        map[protocol.PacketNumber]bool
+	highestInOrderObserved protocol.PacketNumber
+	largestObserved        protocol.PacketNumber
+	packetHistory          map[protocol.PacketNumber]bool
 }
 
 // NewIncomingPacketAckHandler creates a new outgoingPacketAckHandler
 func NewIncomingPacketAckHandler() IncomingPacketAckHandler {
 	return &incomingPacketAckHandler{
-		observed: make(map[protocol.PacketNumber]bool),
+		packetHistory: make(map[protocol.PacketNumber]bool),
 	}
 }
 
@@ -26,14 +27,19 @@ func (h *incomingPacketAckHandler) ReceivedPacket(packetNumber protocol.PacketNu
 	if packetNumber == 0 {
 		return errors.New("Invalid packet number")
 	}
-	if h.observed[packetNumber] {
+	if packetNumber <= h.highestInOrderObserved || h.packetHistory[packetNumber] {
 		return ErrDuplicatePacket
 	}
 
 	if packetNumber > h.largestObserved {
 		h.largestObserved = packetNumber
 	}
-	h.observed[packetNumber] = true
+
+	if packetNumber == h.highestInOrderObserved+1 {
+		h.highestInOrderObserved = packetNumber
+	}
+
+	h.packetHistory[packetNumber] = true
 	return nil
 }
 
@@ -42,8 +48,8 @@ func (h *incomingPacketAckHandler) getNackRanges() []frames.NackRange {
 	// ToDo: improve performance
 	var ranges []frames.NackRange
 	inRange := false
-	for i := protocol.PacketNumber(1); i < h.largestObserved; i++ {
-		_, ok := h.observed[i]
+	for i := h.highestInOrderObserved; i < h.largestObserved; i++ {
+		_, ok := h.packetHistory[i]
 		if !ok {
 			if !inRange {
 				r := frames.NackRange{
@@ -63,5 +69,11 @@ func (h *incomingPacketAckHandler) getNackRanges() []frames.NackRange {
 }
 
 func (h *incomingPacketAckHandler) DequeueAckFrame() *frames.AckFrame {
-	return nil
+	nackRanges := h.getNackRanges()
+	entropy := byte(0)
+	return &frames.AckFrame{
+		LargestObserved: h.largestObserved,
+		Entropy:         entropy,
+		NackRanges:      nackRanges,
+	}
 }
