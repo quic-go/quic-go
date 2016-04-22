@@ -42,20 +42,22 @@ var _ = Describe("AckFrame", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.HasNACK()).To(Equal(true))
 			Expect(len(frame.NackRanges)).To(Equal(1))
+			Expect(frame.LargestObserved).To(Equal(protocol.PacketNumber(3)))
 			Expect(frame.NackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(1)))
 			Expect(frame.NackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(2)))
 			Expect(b.Len()).To(Equal(0))
 		})
 
-		It("parses a frame containing one NACK range with a 48 bit missingPacketSequenceNumberDelta", func() {
-			b := bytes.NewReader([]byte{(0x4C | 0x20 | 0x03), 0x08, 0x37, 0x13, 0xAD, 0xFB, 0xCA, 0xDE, 0x72, 0x1, 0x1, 0x0, 0xc0, 0x15, 0x0, 0x0, 0x1, 0xFE, 0xCA, 0xEF, 0xBE, 0xAD, 0xDE, 0x3})
+		It("parses a frame containing one NACK range with a 48 bit LargestObserved and missingPacketSequenceNumberDelta", func() {
+			rangeLength := 3
+			b := bytes.NewReader([]byte{(0x4C | 0x20 | 0x03), 0x08, 0x37, 0x13, 0xAD, 0xFB, 0xCA, 0xDE, 0x72, 0x1, 0x1, 0x0, 0xc0, 0x15, 0x0, 0x0, 0x1, 0xFE, 0xCA, 0xEF, 0xBE, 0xAD, 0xDE, byte(rangeLength)})
 			frame, err := ParseAckFrame(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.LargestObserved).To(Equal(protocol.PacketNumber(0xDECAFBAD1337)))
 			Expect(frame.HasNACK()).To(Equal(true))
 			Expect(len(frame.NackRanges)).To(Equal(1))
-			// ToDo: check NACK range
-			// Expect(frame.NackRanges[0].Length).To(Equal(uint8(4)))
+			Expect(frame.NackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(0xDECAFBAD1337 - 0xDEADBEEFCAFE - rangeLength)))
+			Expect(frame.NackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(0xDECAFBAD1337 - 0xDEADBEEFCAFE)))
 			Expect(b.Len()).To(Equal(0))
 		})
 
@@ -74,7 +76,9 @@ var _ = Describe("AckFrame", func() {
 			Expect(frame.NackRanges[2].LastPacketNumber).To(Equal(protocol.PacketNumber(2)))
 			Expect(b.Len()).To(Equal(0))
 		})
+	})
 
+	Context("GetHighestInOrderPacket", func() {
 		It("gets the highest in order packet number for an ACK without NACK ranges", func() {
 			frame := AckFrame{LargestObserved: 5}
 			Expect(frame.GetHighestInOrderPacketNumber()).To(Equal(protocol.PacketNumber(5)))
