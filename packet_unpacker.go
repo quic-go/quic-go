@@ -61,10 +61,7 @@ ReadLoop:
 			case 0x03:
 				err = errors.New("unimplemented: GOAWAY")
 			case 0x04:
-				fmt.Println("unimplemented: WINDOW_UPDATE")
-				p := make([]byte, 1+4+8)
-				_, err = r.Read(p)
-				frame = nil
+				frame, err = frames.ParseWindowUpdateFrame(r)
 			case 0x05:
 				fmt.Println("unimplemented: BLOCKED")
 				p := make([]byte, 1+4)

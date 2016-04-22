@@ -86,6 +86,8 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 			fmt.Printf("%#v\n", frame)
 		case *frames.RstStreamFrame:
 			fmt.Printf("%#v\n", frame)
+		case *frames.WindowUpdateFrame:
+			fmt.Printf("%#v\n", frame)
 		default:
 			panic("unexpected frame type")
 		}

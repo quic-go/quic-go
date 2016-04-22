@@ -126,10 +126,15 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	It("accepts WINDOW_UPDATE frames", func() {
-		setReader([]byte{0x04, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
+		setReader([]byte{0x04, 0xEF, 0xBE, 0xAD, 0xDE, 0x37, 0x13, 0, 0, 0, 0, 0xFE, 0xCA})
 		packet, err := unpacker.Unpack(hdrBin, hdr, r)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(HaveLen(0))
+		Expect(packet.frames).To(Equal([]frames.Frame{
+			&frames.WindowUpdateFrame{
+				StreamID:   0xDEADBEEF,
+				ByteOffset: 0xCAFE000000001337,
+			},
+		}))
 	})
 
 	It("accepts BLOCKED frames", func() {
