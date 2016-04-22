@@ -82,6 +82,7 @@ var _ = Describe("AckHandler", func() {
 		var (
 			packets []*Packet
 		)
+
 		BeforeEach(func() {
 			packets = []*Packet{
 				&Packet{PacketNumber: 1, Plaintext: []byte{0x13, 0x37}, EntropyBit: true},
@@ -134,6 +135,7 @@ var _ = Describe("AckHandler", func() {
 				}
 				err := handler.ReceivedAck(&ack)
 				Expect(err).To(HaveOccurred())
+				Expect(err).To(Equal(errEntropy))
 				Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(0)))
 				Expect(handler.highestInOrderAckedEntropy).To(Equal(EntropyAccumulator(0)))
 				// nothing should be deleted from the packetHistory map
@@ -232,6 +234,7 @@ var _ = Describe("AckHandler", func() {
 				}
 				err := handler.ReceivedAck(&ack)
 				Expect(err).To(HaveOccurred())
+				Expect(err).To(Equal(errEntropy))
 				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(1)))
 				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(2)))
 			})
