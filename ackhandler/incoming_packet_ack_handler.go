@@ -14,7 +14,7 @@ type incomingPacketAckHandler struct {
 	highestInOrderObserved        protocol.PacketNumber
 	highestInOrderObservedEntropy EntropyAccumulator
 	largestObserved               protocol.PacketNumber
-	packetHistory                 map[protocol.PacketNumber]bool
+	packetHistory                 map[protocol.PacketNumber]bool // the bool is the EntropyBit of the packet
 }
 
 // NewIncomingPacketAckHandler creates a new outgoingPacketAckHandler
@@ -41,17 +41,18 @@ func (h *incomingPacketAckHandler) ReceivedPacket(packetNumber protocol.PacketNu
 		h.highestInOrderObservedEntropy.Add(packetNumber, entropyBit)
 	}
 
-	h.packetHistory[packetNumber] = true
+	h.packetHistory[packetNumber] = entropyBit
 	return nil
 }
 
 // getNackRanges gets all the NACK ranges
-func (h *incomingPacketAckHandler) getNackRanges() []frames.NackRange {
-	// ToDo: improve performance
+func (h *incomingPacketAckHandler) getNackRanges() ([]frames.NackRange, EntropyAccumulator) {
+	// ToDo: use a better data structure here
 	var ranges []frames.NackRange
 	inRange := false
-	for i := h.highestInOrderObserved; i < h.largestObserved; i++ {
-		_, ok := h.packetHistory[i]
+	entropy := h.highestInOrderObservedEntropy
+	for i := h.highestInOrderObserved + 1; i <= h.largestObserved; i++ {
+		entropyBit, ok := h.packetHistory[i]
 		if !ok {
 			if !inRange {
 				r := frames.NackRange{
@@ -65,17 +66,17 @@ func (h *incomingPacketAckHandler) getNackRanges() []frames.NackRange {
 			}
 		} else {
 			inRange = false
+			entropy.Add(i, entropyBit)
 		}
 	}
-	return ranges
+	return ranges, entropy
 }
 
 func (h *incomingPacketAckHandler) DequeueAckFrame() *frames.AckFrame {
-	nackRanges := h.getNackRanges()
-	entropy := byte(0)
+	nackRanges, entropy := h.getNackRanges()
 	return &frames.AckFrame{
 		LargestObserved: h.largestObserved,
-		Entropy:         entropy,
+		Entropy:         byte(entropy),
 		NackRanges:      nackRanges,
 	}
 }

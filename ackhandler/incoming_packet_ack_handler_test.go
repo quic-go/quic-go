@@ -8,10 +8,14 @@ import (
 )
 
 var _ = Describe("incomingPacketAckHandler", func() {
-	var handler *incomingPacketAckHandler
+	var (
+		handler         *incomingPacketAckHandler
+		expectedEntropy EntropyAccumulator
+	)
 
 	BeforeEach(func() {
 		handler = NewIncomingPacketAckHandler().(*incomingPacketAckHandler)
+		expectedEntropy = EntropyAccumulator(0)
 	})
 
 	Context("accepting and rejecting packets", func() {
@@ -22,7 +26,7 @@ var _ = Describe("incomingPacketAckHandler", func() {
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.ReceivedPacket(protocol.PacketNumber(2), false)
 			Expect(err).ToNot(HaveOccurred())
-			nackRanges := handler.getNackRanges()
+			nackRanges, _ := handler.getNackRanges()
 			Expect(len(nackRanges)).To(Equal(0))
 		})
 
@@ -49,21 +53,19 @@ var _ = Describe("incomingPacketAckHandler", func() {
 
 	Context("Entropy calculation", func() {
 		It("calculates the entropy for continously received packets", func() {
-			entropy := EntropyAccumulator(0)
 			for i := 1; i < 100; i++ {
 				entropyBit := false
 				if i%3 == 0 || i%5 == 0 {
 					entropyBit = true
 				}
-				entropy.Add(protocol.PacketNumber(i), entropyBit)
+				expectedEntropy.Add(protocol.PacketNumber(i), entropyBit)
 				err := handler.ReceivedPacket(protocol.PacketNumber(i), entropyBit)
 				Expect(err).ToNot(HaveOccurred())
 			}
-			Expect(handler.highestInOrderObservedEntropy).To(Equal(entropy))
+			Expect(handler.highestInOrderObservedEntropy).To(Equal(expectedEntropy))
 		})
 
 		It("calculates the entropy if there is a NACK range", func() {
-			entropy := EntropyAccumulator(0)
 			for i := 1; i < 100; i++ {
 				entropyBit := false
 				if i%3 == 0 || i%5 == 0 {
@@ -74,92 +76,117 @@ var _ = Describe("incomingPacketAckHandler", func() {
 					continue
 				}
 				if i < 10 {
-					entropy.Add(protocol.PacketNumber(i), entropyBit)
+					expectedEntropy.Add(protocol.PacketNumber(i), entropyBit)
 				}
 				err := handler.ReceivedPacket(protocol.PacketNumber(i), entropyBit)
 				Expect(err).ToNot(HaveOccurred())
 			}
-			Expect(handler.highestInOrderObservedEntropy).To(Equal(entropy))
+			Expect(handler.highestInOrderObservedEntropy).To(Equal(expectedEntropy))
 		})
 	})
 
 	Context("NACK range calculation", func() {
 		It("Returns no NACK ranges for continously received packets", func() {
 			for i := 1; i < 100; i++ {
-				err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
+				entropyBit := false
+				if i%2 == 0 {
+					entropyBit = true
+				}
+				expectedEntropy.Add(protocol.PacketNumber(i), entropyBit)
+				err := handler.ReceivedPacket(protocol.PacketNumber(i), entropyBit)
 				Expect(err).ToNot(HaveOccurred())
 			}
 			Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(99)))
 			Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(99)))
-			Expect(len(handler.getNackRanges())).To(Equal(0))
+			nackRanges, entropy := handler.getNackRanges()
+			Expect(len(nackRanges)).To(Equal(0))
+			Expect(entropy).To(Equal(expectedEntropy))
 		})
 
 		It("handles a single lost package", func() {
 			for i := 1; i < 10; i++ {
+				entropyBit := true
 				if i == 5 {
 					continue
 				}
-				err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
+				expectedEntropy.Add(protocol.PacketNumber(i), entropyBit)
+				err := handler.ReceivedPacket(protocol.PacketNumber(i), entropyBit)
 				Expect(err).ToNot(HaveOccurred())
 			}
 			Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(9)))
-			nackRanges := handler.getNackRanges()
+			nackRanges, entropy := handler.getNackRanges()
 			Expect(len(nackRanges)).To(Equal(1))
 			Expect(nackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(5)))
 			Expect(nackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(5)))
 			Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(4)))
+			Expect(entropy).To(Equal(expectedEntropy))
 		})
 
 		It("handles two consecutive lost packages", func() {
-			for i := 1; i < 10; i++ {
+			for i := 1; i < 12; i++ {
+				entropyBit := false
+				if i%2 == 0 || i == 5 {
+					entropyBit = true
+				}
 				if i == 5 || i == 6 {
 					continue
 				}
-				err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
+				expectedEntropy.Add(protocol.PacketNumber(i), entropyBit)
+				err := handler.ReceivedPacket(protocol.PacketNumber(i), entropyBit)
 				Expect(err).ToNot(HaveOccurred())
 			}
-			Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(9)))
-			nackRanges := handler.getNackRanges()
+			Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(11)))
+			nackRanges, entropy := handler.getNackRanges()
 			Expect(len(nackRanges)).To(Equal(1))
 			Expect(nackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(5)))
 			Expect(nackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(6)))
 			Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(4)))
+			Expect(entropy).To(Equal(expectedEntropy))
 		})
 
 		It("handles two non-consecutively lost packages", func() {
 			for i := 1; i < 10; i++ {
+				entropyBit := false
+				if i%2 != 0 {
+					entropyBit = true
+				}
 				if i == 3 || i == 7 {
 					continue
 				}
-				err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
+				expectedEntropy.Add(protocol.PacketNumber(i), entropyBit)
+				err := handler.ReceivedPacket(protocol.PacketNumber(i), entropyBit)
 				Expect(err).ToNot(HaveOccurred())
 			}
 			Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(9)))
-			nackRanges := handler.getNackRanges()
+			nackRanges, entropy := handler.getNackRanges()
 			Expect(len(nackRanges)).To(Equal(2))
 			Expect(nackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(3)))
 			Expect(nackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(3)))
 			Expect(nackRanges[1].FirstPacketNumber).To(Equal(protocol.PacketNumber(7)))
 			Expect(nackRanges[1].LastPacketNumber).To(Equal(protocol.PacketNumber(7)))
 			Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(2)))
+			Expect(entropy).To(Equal(expectedEntropy))
 		})
 
 		It("handles two sequences of lost packages", func() {
 			for i := 1; i < 10; i++ {
+				entropyBit := true
 				if i == 2 || i == 3 || i == 4 || i == 7 || i == 8 {
 					continue
 				}
-				err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
+				expectedEntropy.Add(protocol.PacketNumber(i), entropyBit)
+				err := handler.ReceivedPacket(protocol.PacketNumber(i), entropyBit)
 				Expect(err).ToNot(HaveOccurred())
 			}
 			Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(9)))
-			nackRanges := handler.getNackRanges()
+			nackRanges, entropy := handler.getNackRanges()
 			Expect(len(nackRanges)).To(Equal(2))
 			Expect(nackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(2)))
 			Expect(nackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(4)))
 			Expect(nackRanges[1].FirstPacketNumber).To(Equal(protocol.PacketNumber(7)))
 			Expect(nackRanges[1].LastPacketNumber).To(Equal(protocol.PacketNumber(8)))
 			Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(1)))
+			Expect(entropy).To(Equal(expectedEntropy))
 		})
 	})
 })
