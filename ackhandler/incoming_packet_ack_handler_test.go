@@ -7,56 +7,58 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("AckHandler", func() {
+var _ = Describe("incomingPacketAckHandler", func() {
+	var handler *incomingPacketAckHandler
+
+	BeforeEach(func() {
+		handler = NewIncomingPacketAckHandler().(*incomingPacketAckHandler)
+	})
+
 	It("Returns no NACK ranges for continously received packets", func() {
-		ackHandler, _ := NewAckHandler()
 		for i := 0; i < 100; i++ {
-			ackHandler.HandlePacket(protocol.PacketNumber(i))
+			handler.ReceivedPacket(protocol.PacketNumber(i), false)
 		}
-		Expect(ackHandler.LargestObserved).To(Equal(protocol.PacketNumber(99)))
-		Expect(len(ackHandler.GetNackRanges())).To(Equal(0))
+		Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(99)))
+		Expect(len(handler.GetNackRanges())).To(Equal(0))
 	})
 
 	It("handles a single lost package", func() {
-		ackHandler, _ := NewAckHandler()
 		for i := 0; i < 10; i++ {
 			if i == 5 {
 				continue
 			}
-			ackHandler.HandlePacket(protocol.PacketNumber(i))
+			handler.ReceivedPacket(protocol.PacketNumber(i), false)
 		}
-		Expect(ackHandler.LargestObserved).To(Equal(protocol.PacketNumber(9)))
-		nackRanges := ackHandler.GetNackRanges()
+		Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(9)))
+		nackRanges := handler.GetNackRanges()
 		Expect(len(nackRanges)).To(Equal(1))
 		Expect(nackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(5)))
 		Expect(nackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(5)))
 	})
 
 	It("handles two consecutive lost packages", func() {
-		ackHandler, _ := NewAckHandler()
 		for i := 0; i < 10; i++ {
 			if i == 5 || i == 6 {
 				continue
 			}
-			ackHandler.HandlePacket(protocol.PacketNumber(i))
+			handler.ReceivedPacket(protocol.PacketNumber(i), false)
 		}
-		Expect(ackHandler.LargestObserved).To(Equal(protocol.PacketNumber(9)))
-		nackRanges := ackHandler.GetNackRanges()
+		Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(9)))
+		nackRanges := handler.GetNackRanges()
 		Expect(len(nackRanges)).To(Equal(1))
 		Expect(nackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(5)))
 		Expect(nackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(6)))
 	})
 
 	It("handles two non-consecutively lost packages", func() {
-		ackHandler, _ := NewAckHandler()
 		for i := 0; i < 10; i++ {
 			if i == 3 || i == 7 {
 				continue
 			}
-			ackHandler.HandlePacket(protocol.PacketNumber(i))
+			handler.ReceivedPacket(protocol.PacketNumber(i), false)
 		}
-		Expect(ackHandler.LargestObserved).To(Equal(protocol.PacketNumber(9)))
-		nackRanges := ackHandler.GetNackRanges()
+		Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(9)))
+		nackRanges := handler.GetNackRanges()
 		Expect(len(nackRanges)).To(Equal(2))
 		Expect(nackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(3)))
 		Expect(nackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(3)))
@@ -65,15 +67,14 @@ var _ = Describe("AckHandler", func() {
 	})
 
 	It("handles two sequences of lost packages", func() {
-		ackHandler, _ := NewAckHandler()
 		for i := 0; i < 10; i++ {
 			if i == 2 || i == 3 || i == 4 || i == 7 || i == 8 {
 				continue
 			}
-			ackHandler.HandlePacket(protocol.PacketNumber(i))
+			handler.ReceivedPacket(protocol.PacketNumber(i), false)
 		}
-		Expect(ackHandler.LargestObserved).To(Equal(protocol.PacketNumber(9)))
-		nackRanges := ackHandler.GetNackRanges()
+		Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(9)))
+		nackRanges := handler.GetNackRanges()
 		Expect(len(nackRanges)).To(Equal(2))
 		Expect(nackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(2)))
 		Expect(nackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(4)))
