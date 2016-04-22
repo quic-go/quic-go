@@ -14,6 +14,8 @@ type NackRange struct {
 	LastPacketNumber  protocol.PacketNumber
 }
 
+var errInvalidNackRanges = errors.New("AckFrame: ACK frame contains invalid NACK ranges")
+
 // An AckFrame in QUIC
 type AckFrame struct {
 	Entropy         byte
@@ -164,6 +166,9 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 		}
 	}
 
+	// Invalid NACK Handling:
+	// NACKs contain a lot of offsets that require substractions of PacketNumbers. If an ACK contains invalid data, it is possible to underflow the uint64 used to store the PacketNumber
+	// ToDo: handle uint64 overflows
 	if hasNACK {
 		var numRanges uint8
 		numRanges, err = r.ReadByte()
@@ -185,12 +190,18 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 
 			nackRange := NackRange{}
 			if i == 0 {
+				if uint64(frame.LargestObserved) < missingPacketSequenceNumberDelta+uint64(rangeLength) {
+					return nil, errInvalidNackRanges
+				}
 				nackRange.FirstPacketNumber = frame.LargestObserved - protocol.PacketNumber(missingPacketSequenceNumberDelta+uint64(rangeLength))
 			} else {
 				if missingPacketSequenceNumberDelta == 0 {
 					return nil, errors.New("ACK frame: Continues NACK ranges not yet implemented")
 				}
 				lastNackRange := frame.NackRanges[len(frame.NackRanges)-1]
+				if uint64(lastNackRange.FirstPacketNumber) <= missingPacketSequenceNumberDelta+uint64(rangeLength) {
+					return nil, errInvalidNackRanges
+				}
 				nackRange.FirstPacketNumber = lastNackRange.FirstPacketNumber - protocol.PacketNumber(missingPacketSequenceNumberDelta+uint64(rangeLength)) - 1
 			}
 			nackRange.LastPacketNumber = protocol.PacketNumber(uint64(nackRange.FirstPacketNumber) + uint64(rangeLength))
@@ -198,5 +209,37 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 		}
 	}
 
+	if !frame.validateNackRanges() {
+		return nil, errInvalidNackRanges
+	}
+
 	return frame, nil
+}
+
+func (f *AckFrame) validateNackRanges() bool {
+	// check the validity of every single NACK range
+	for _, nackRange := range f.NackRanges {
+		if nackRange.FirstPacketNumber > nackRange.LastPacketNumber {
+			return false
+		}
+		if nackRange.LastPacketNumber >= f.LargestObserved {
+			return false
+		}
+	}
+
+	// check the consistency for ACK with multiple NACK ranges
+	for i, nackRange := range f.NackRanges {
+		if i == 0 {
+			continue
+		}
+		lastNackRange := f.NackRanges[i-1]
+		if lastNackRange.FirstPacketNumber <= nackRange.FirstPacketNumber {
+			return false
+		}
+		if lastNackRange.FirstPacketNumber <= nackRange.LastPacketNumber {
+			return false
+		}
+	}
+
+	return true
 }

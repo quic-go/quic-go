@@ -76,6 +76,14 @@ var _ = Describe("AckFrame", func() {
 			Expect(frame.NackRanges[2].LastPacketNumber).To(Equal(protocol.PacketNumber(2)))
 			Expect(b.Len()).To(Equal(0))
 		})
+
+		It("rejects a packet with an invalid NACK range", func() {
+			// LargestObserved: 8, NackRange: (8-7-3) to (8-7)
+			b := bytes.NewReader([]byte{0x60, 0x8, 0x7, 0x72, 0x1, 0x1, 0x0, 0xc0, 0x15, 0x0, 0x0, 0x1, 0x7, 0x3})
+			_, err := ParseAckFrame(b)
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(Equal(errInvalidNackRanges))
+		})
 	})
 
 	Context("GetHighestInOrderPacket", func() {
@@ -104,6 +112,76 @@ var _ = Describe("AckFrame", func() {
 				NackRanges:      nackRanges,
 			}
 			Expect(frame.GetHighestInOrderPacketNumber()).To(Equal(protocol.PacketNumber(3)))
+		})
+	})
+
+	Context("NACK range validator", func() {
+		It("rejects NACKs with FirstPacketNumber greater than LastPacketNumber", func() {
+			nackRange := NackRange{FirstPacketNumber: 7, LastPacketNumber: 6}
+			ack := AckFrame{
+				LargestObserved: 10,
+				NackRanges:      []NackRange{nackRange},
+			}
+			Expect(ack.validateNackRanges()).To(BeFalse())
+		})
+
+		It("rejects NACKs with FirstPacketNumber greater than LargestObserved", func() {
+			nackRange := NackRange{FirstPacketNumber: 6, LastPacketNumber: 6}
+			ack := AckFrame{
+				LargestObserved: 5,
+				NackRanges:      []NackRange{nackRange},
+			}
+			Expect(ack.validateNackRanges()).To(BeFalse())
+		})
+
+		It("rejects NACKs with NackRanges in the wrong order", func() {
+			nackRanges := []NackRange{
+				NackRange{FirstPacketNumber: 2, LastPacketNumber: 2},
+				NackRange{FirstPacketNumber: 6, LastPacketNumber: 6},
+			}
+			ack := AckFrame{
+				LargestObserved: 7,
+				NackRanges:      nackRanges,
+			}
+			Expect(ack.validateNackRanges()).To(BeFalse())
+		})
+
+		It("rejects NACKs with overlapping NackRanges", func() {
+			nackRanges := []NackRange{
+				NackRange{FirstPacketNumber: 5, LastPacketNumber: 6},
+				NackRange{FirstPacketNumber: 2, LastPacketNumber: 5},
+			}
+			ack := AckFrame{
+				LargestObserved: 7,
+				NackRanges:      nackRanges,
+			}
+			Expect(ack.validateNackRanges()).To(BeFalse())
+		})
+
+		It("accepts an ACK without NACK Ranges", func() {
+			ack := AckFrame{LargestObserved: 7}
+			Expect(ack.validateNackRanges()).To(BeTrue())
+		})
+
+		It("accepts an ACK with one NACK Ranges", func() {
+			nackRange := NackRange{FirstPacketNumber: 6, LastPacketNumber: 8}
+			ack := AckFrame{
+				LargestObserved: 10,
+				NackRanges:      []NackRange{nackRange},
+			}
+			Expect(ack.validateNackRanges()).To(BeTrue())
+		})
+
+		It("accepts an ACK with multiple NACK Ranges", func() {
+			nackRanges := []NackRange{
+				NackRange{FirstPacketNumber: 6, LastPacketNumber: 7},
+				NackRange{FirstPacketNumber: 2, LastPacketNumber: 4},
+			}
+			ack := AckFrame{
+				LargestObserved: 10,
+				NackRanges:      nackRanges,
+			}
+			Expect(ack.validateNackRanges()).To(BeTrue())
 		})
 	})
 
