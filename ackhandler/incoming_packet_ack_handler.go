@@ -37,16 +37,16 @@ func (h *incomingPacketAckHandler) ReceivedPacket(packetNumber protocol.PacketNu
 	return nil
 }
 
-// GetNackRanges gets all the NACK ranges
-func (h *incomingPacketAckHandler) GetNackRanges() []*frames.NackRange {
+// getNackRanges gets all the NACK ranges
+func (h *incomingPacketAckHandler) getNackRanges() []frames.NackRange {
 	// ToDo: improve performance
-	var ranges []*frames.NackRange
+	var ranges []frames.NackRange
 	inRange := false
 	for i := protocol.PacketNumber(1); i < h.largestObserved; i++ {
 		_, ok := h.observed[i]
 		if !ok {
 			if !inRange {
-				r := &frames.NackRange{
+				r := frames.NackRange{
 					FirstPacketNumber: i,
 					LastPacketNumber:  i,
 				}

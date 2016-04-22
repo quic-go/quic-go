@@ -20,7 +20,7 @@ var _ = Describe("incomingPacketAckHandler", func() {
 			Expect(err).ToNot(HaveOccurred())
 		}
 		Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(99)))
-		Expect(len(handler.GetNackRanges())).To(Equal(0))
+		Expect(len(handler.getNackRanges())).To(Equal(0))
 	})
 
 	It("handles a single lost package", func() {
@@ -31,7 +31,7 @@ var _ = Describe("incomingPacketAckHandler", func() {
 			handler.ReceivedPacket(protocol.PacketNumber(i), false)
 		}
 		Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(9)))
-		nackRanges := handler.GetNackRanges()
+		nackRanges := handler.getNackRanges()
 		Expect(len(nackRanges)).To(Equal(1))
 		Expect(nackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(5)))
 		Expect(nackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(5)))
@@ -45,7 +45,7 @@ var _ = Describe("incomingPacketAckHandler", func() {
 			handler.ReceivedPacket(protocol.PacketNumber(i), false)
 		}
 		Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(9)))
-		nackRanges := handler.GetNackRanges()
+		nackRanges := handler.getNackRanges()
 		Expect(len(nackRanges)).To(Equal(1))
 		Expect(nackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(5)))
 		Expect(nackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(6)))
@@ -59,7 +59,7 @@ var _ = Describe("incomingPacketAckHandler", func() {
 			handler.ReceivedPacket(protocol.PacketNumber(i), false)
 		}
 		Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(9)))
-		nackRanges := handler.GetNackRanges()
+		nackRanges := handler.getNackRanges()
 		Expect(len(nackRanges)).To(Equal(2))
 		Expect(nackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(3)))
 		Expect(nackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(3)))
@@ -75,7 +75,7 @@ var _ = Describe("incomingPacketAckHandler", func() {
 			handler.ReceivedPacket(protocol.PacketNumber(i), false)
 		}
 		Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(9)))
-		nackRanges := handler.GetNackRanges()
+		nackRanges := handler.getNackRanges()
 		Expect(len(nackRanges)).To(Equal(2))
 		Expect(nackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(2)))
 		Expect(nackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(4)))
@@ -90,7 +90,7 @@ var _ = Describe("incomingPacketAckHandler", func() {
 		Expect(err).ToNot(HaveOccurred())
 		err = handler.ReceivedPacket(protocol.PacketNumber(2), false)
 		Expect(err).ToNot(HaveOccurred())
-		nackRanges := handler.GetNackRanges()
+		nackRanges := handler.getNackRanges()
 		Expect(len(nackRanges)).To(Equal(0))
 	})
 
