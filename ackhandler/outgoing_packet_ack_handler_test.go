@@ -160,6 +160,25 @@ var _ = Describe("AckHandler", func() {
 				err = handler.ReceivedAck(&ack)
 				Expect(err).ToNot(HaveOccurred())
 			})
+
+			It("checks the entropy of an ACK after a previous ACK was already received", func() {
+				expectedEntropy := EntropyAccumulator(0)
+				expectedEntropy.Add(1, packets[0].EntropyBit)
+				ack := frames.AckFrame{
+					LargestObserved: 1,
+					Entropy:         byte(expectedEntropy),
+				}
+				err := handler.ReceivedAck(&ack)
+				Expect(err).ToNot(HaveOccurred())
+				expectedEntropy.Add(2, packets[1].EntropyBit)
+				expectedEntropy.Add(3, packets[2].EntropyBit)
+				ack = frames.AckFrame{
+					LargestObserved: 3,
+					Entropy:         byte(expectedEntropy),
+				}
+				err = handler.ReceivedAck(&ack)
+				Expect(err).ToNot(HaveOccurred())
+			})
 		})
 
 		Context("ACKs with NACK ranges", func() {
@@ -244,7 +263,7 @@ var _ = Describe("AckHandler", func() {
 				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(2)))
 			})
 
-			It("checks the entropy of an ACK with a NACK after an previous ACK was already received", func() {
+			It("checks the entropy of an ACK with a NACK after a previous ACK was already received", func() {
 				expectedEntropy := EntropyAccumulator(0)
 				expectedEntropy.Add(1, packets[0].EntropyBit)
 				ack := frames.AckFrame{

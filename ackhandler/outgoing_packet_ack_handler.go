@@ -65,27 +65,21 @@ func (h *outgoingPacketAckHandler) calculateExpectedEntropy(ackFrame *frames.Ack
 
 	var expectedEntropy EntropyAccumulator
 
-	if !ackFrame.HasNACK() { // if the packet doesn't have NACKs, the correct entropy value is the entropy we sent the LargestObserved packet with. Just look it up in the map
-		packet, ok := h.packetHistory[ackFrame.LargestObserved]
+	// get the entropy for the highestInOrderAckedPacketNumber
+	// There are two cases:
+	// 1. the packet with highestInOrderAckedPacketNumber has already been ACKed, then it doesn't exist in the packetHistory map anymore, but the value was saved as h.highestInOrderAckedEntropy
+	// 2. the packet with highestInOrderAckedPacketNumber has not yet been ACKed, then it should exist in the packetHistory map, and can just be read from there
+	if highestInOrderAckedPacketNumber == h.highestInOrderAckedPacketNumber {
+		expectedEntropy = h.highestInOrderAckedEntropy
+	} else {
+		packet, ok := h.packetHistory[highestInOrderAckedPacketNumber]
 		if !ok {
 			return 0, errMapAccess
 		}
 		expectedEntropy = packet.Entropy
-	} else { // if the packet has NACKs, the entropy value has to be calculated
-		// get the entropy for the highestInOrderAckedPacketNumber
-		// There are two cases:
-		// 1. the packet with highestInOrderAckedPacketNumber has already been ACKed, then it doesn't exist in the packetHistory map anymore, but the value was saved as h.highestInOrderAckedEntropy
-		// 2. the packet with highestInOrderAckedPacketNumber has not yet been ACKed, then it should exist in the packetHistory map, and can just be read from there
-		if highestInOrderAckedPacketNumber == h.highestInOrderAckedPacketNumber {
-			expectedEntropy = h.highestInOrderAckedEntropy
-		} else {
-			packet, ok := h.packetHistory[highestInOrderAckedPacketNumber]
-			if !ok {
-				return 0, errMapAccess
-			}
-			expectedEntropy = packet.Entropy
-		}
+	}
 
+	if ackFrame.HasNACK() { // if the packet has NACKs, the entropy value has to be calculated
 		nackRangeIndex := len(ackFrame.NackRanges) - 1
 		nackRange := ackFrame.NackRanges[nackRangeIndex]
 		for i := highestInOrderAckedPacketNumber + 1; i <= ackFrame.LargestObserved; i++ {
