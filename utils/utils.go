@@ -139,6 +139,14 @@ func Max(a, b int) int {
 	return a
 }
 
+// MaxUint64 returns the maximum of two uint64
+func MaxUint64(a, b uint64) uint64 {
+	if a < b {
+		return b
+	}
+	return a
+}
+
 // Min returns the minimum of two Ints
 func Min(a, b int) int {
 	if a < b {
