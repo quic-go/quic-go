@@ -310,5 +310,33 @@ var _ = Describe("AckHandler", func() {
 				Expect(handler.packetHistory[4].MissingReports).To(Equal(uint8(1)))
 			})
 		})
+
+		Context("Retransmission handler", func() {
+			It("queues a packet for retransmission", func() {
+				retransmissionThreshold = 1
+				nackRange1 := frames.NackRange{FirstPacketNumber: 4, LastPacketNumber: 4}
+				nackRange2 := frames.NackRange{FirstPacketNumber: 2, LastPacketNumber: 2}
+				entropy := EntropyAccumulator(0)
+				entropy.Add(1, packets[0].EntropyBit)
+				entropy.Add(3, packets[2].EntropyBit)
+				ack1 := frames.AckFrame{
+					LargestObserved: 3,
+					Entropy:         byte(entropy),
+					NackRanges:      []frames.NackRange{nackRange2},
+				}
+				err := handler.ReceivedAck(&ack1)
+				Expect(err).ToNot(HaveOccurred())
+				entropy.Add(5, packets[4].EntropyBit)
+				ack2 := frames.AckFrame{
+					LargestObserved: 5,
+					Entropy:         byte(entropy),
+					NackRanges:      []frames.NackRange{nackRange1, nackRange2},
+				}
+				err = handler.ReceivedAck(&ack2)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(len(handler.retransmissionQueue)).To(Equal(1))
+				Expect(handler.retransmissionQueue[0].PacketNumber).To(Equal(protocol.PacketNumber(2)))
+			})
+		})
 	})
 })
