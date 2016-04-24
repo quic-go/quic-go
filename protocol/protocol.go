@@ -17,3 +17,7 @@ const MaxPacketSize = 1452
 
 // MaxFrameSize is the maximum size of a QUIC frame
 const MaxFrameSize = MaxPacketSize - (1 + 8 + 6) /*public header*/ - 1 /*private header*/ - 12 /*crypto signature*/
+
+// DefaultTCPMSS is the default maximum packet size used in the Linux TCP implementation.
+// Used in QUIC for congestion window computations in bytes.
+const DefaultTCPMSS = 1460
