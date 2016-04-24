@@ -70,7 +70,7 @@ var _ = Describe("Cubic", func() {
 		Expect(current_cwnd).To(Equal(expected_cwnd))
 	})
 
-	// TODO: Test copied form Chromium has no assertions
+	// TODO: Test copied from Chromium has no assertions
 	It("has increasing cwnd stats during convex region", func() {
 		rtt_min := 100 * time.Millisecond
 		current_cwnd := uint64(10)
