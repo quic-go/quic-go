@@ -1,6 +1,23 @@
 package congestion
 
-import "time"
+import (
+	"time"
+
+	"github.com/lucas-clemente/quic-go/utils"
+)
+
+// Note(pwestin): the magic clamping numbers come from the original code in
+// tcp_cubic.c.
+const hybridStartLowWindow = uint64(16)
+
+// Number of delay samples for detecting the increase of delay.
+const hybridStartMinSamples = uint32(8)
+
+// Exit slow start if the min rtt has increased by more than 1/8th.
+const hybridStartDelayFactorExp = 3 // 2^3 = 8
+// The original paper specifies 2 and 8ms, but those have changed over time.
+const hybridStartDelayMinThresholdUs = int64(4000)
+const hybridStartDelayMaxThresholdUs = int64(16000)
 
 // HybridSlowStart implements the TCP hybrid slow start algorithm
 type HybridSlowStart struct {
@@ -9,11 +26,12 @@ type HybridSlowStart struct {
 	started              bool
 	currentMinRTT        time.Duration
 	rttSampleCount       uint32
+	hystartFound         bool
 }
 
 // StartReceiveRound is called for the start of each receive round (burst) in the slow start phase.
-func (s *HybridSlowStart) StartReceiveRound(last_sent uint64) {
-	s.endPacketNumber = last_sent
+func (s *HybridSlowStart) StartReceiveRound(lastSent uint64) {
+	s.endPacketNumber = lastSent
 	s.currentMinRTT = 0
 	s.rttSampleCount = 0
 	s.started = true
@@ -22,4 +40,46 @@ func (s *HybridSlowStart) StartReceiveRound(last_sent uint64) {
 // IsEndOfRound returns true if this ack is the last packet number of our current slow start round.
 func (s *HybridSlowStart) IsEndOfRound(ack uint64) bool {
 	return s.endPacketNumber < ack
+}
+
+// ShouldExitSlowStart should be called on every new ack frame, since a new
+// RTT measurement can be made then.
+// rtt: the RTT for this ack packet.
+// minRTT: is the lowest delay (RTT) we have seen during the session.
+// congestionWindow: the congestion window in packets.
+func (s *HybridSlowStart) ShouldExitSlowStart(latestRTT time.Duration, minRTT time.Duration, congestionWindow uint64) bool {
+	if !s.started {
+		// Time to start the hybrid slow start.
+		s.StartReceiveRound(s.lastSentPacketNumber)
+	}
+	if s.hystartFound {
+		return true
+	}
+	// Second detection parameter - delay increase detection.
+	// Compare the minimum delay (s.currentMinRTT) of the current
+	// burst of packets relative to the minimum delay during the session.
+	// Note: we only look at the first few(8) packets in each burst, since we
+	// only want to compare the lowest RTT of the burst relative to previous
+	// bursts.
+	s.rttSampleCount++
+	if s.rttSampleCount <= hybridStartMinSamples {
+		if s.currentMinRTT == 0 || s.currentMinRTT > latestRTT {
+			s.currentMinRTT = latestRTT
+		}
+	}
+	// We only need to check this once per round.
+	if s.rttSampleCount == hybridStartMinSamples {
+		// Divide minRTT by 8 to get a rtt increase threshold for exiting.
+		minRTTincreaseThresholdUs := int64(minRTT / time.Microsecond >> hybridStartDelayFactorExp)
+		// Ensure the rtt threshold is never less than 2ms or more than 16ms.
+		minRTTincreaseThresholdUs = utils.MinInt64(minRTTincreaseThresholdUs, hybridStartDelayMaxThresholdUs)
+		minRTTincreaseThreshold := time.Duration(utils.MaxInt64(minRTTincreaseThresholdUs, hybridStartDelayMinThresholdUs)) * time.Microsecond
+
+		if s.currentMinRTT > (minRTT + minRTTincreaseThreshold) {
+			s.hystartFound = true
+		}
+	}
+	// Exit from slow start if the cwnd is greater than 16 and
+	// increasing delay is found.
+	return congestionWindow >= hybridStartLowWindow && s.hystartFound
 }

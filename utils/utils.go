@@ -155,6 +155,22 @@ func Min(a, b int) int {
 	return b
 }
 
+// MinInt64 returns the minimum of two int64
+func MinInt64(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// MaxInt64 returns the minimum of two int64
+func MaxInt64(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 // RandomBit returns a cryptographically secure random bit (encoded as true / false)
 func RandomBit() (bool, error) {
 	// ToDo: it's probably more efficient to read a bigger slice of random numbers at once and to cache them somewhere
