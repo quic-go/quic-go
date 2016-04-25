@@ -77,24 +77,12 @@ func (s *Stream) getNextFrameInOrder(wait bool) (*frames.StreamFrame, error) {
 	}
 
 	for {
-		var nextFrameFromChannel *frames.StreamFrame
-		var ok bool
-		if wait {
-			select {
-			case nextFrameFromChannel, ok = <-s.StreamFrames:
-				if !ok {
-					return nil, s.currentErr
-				}
-			}
-		} else {
-			select {
-			case nextFrameFromChannel, ok = <-s.StreamFrames:
-				if !ok {
-					return nil, s.currentErr
-				}
-			default:
-				return nil, nil
-			}
+		nextFrameFromChannel, err := s.nextFrameInChan(wait)
+		if err != nil {
+			return nil, err
+		}
+		if nextFrameFromChannel == nil {
+			return nil, nil
 		}
 
 		if nextFrameFromChannel.Offset == s.ReadOffset {
@@ -109,6 +97,24 @@ func (s *Stream) getNextFrameInOrder(wait bool) (*frames.StreamFrame, error) {
 		// Append to queue
 		s.frameQueue = append(s.frameQueue, nextFrameFromChannel)
 	}
+}
+
+func (s *Stream) nextFrameInChan(blocking bool) (f *frames.StreamFrame, err error) {
+	var ok bool
+	if blocking {
+		select {
+		case f, ok = <-s.StreamFrames:
+		}
+	} else {
+		select {
+		case f, ok = <-s.StreamFrames:
+		default:
+		}
+	}
+	if !ok {
+		return nil, s.currentErr
+	}
+	return
 }
 
 // ReadByte implements io.ByteReader
