@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"errors"
 	"io"
 
 	. "github.com/onsi/ginkgo"
@@ -58,7 +59,7 @@ var _ = Describe("Session", func() {
 			Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
 		})
 
-		It("closes streams", func() {
+		It("closes streams with FIN bits", func() {
 			session.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
 				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
@@ -71,6 +72,43 @@ var _ = Describe("Session", func() {
 			_, err := session.streams[5].Read(p)
 			Expect(err).To(Equal(io.EOF))
 			Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
+			session.garbageCollectStreams()
+			Expect(session.streams).To(HaveLen(1))
+			Expect(session.streams[5]).To(BeNil())
+		})
+
+		It("closes streams with error", func() {
+			testErr := errors.New("test")
+			session.handleStreamFrame(&frames.StreamFrame{
+				StreamID: 5,
+				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
+			})
+			Expect(session.streams).To(HaveLen(1))
+			Expect(session.streams[5]).ToNot(BeNil())
+			Expect(callbackCalled).To(BeTrue())
+			p := make([]byte, 4)
+			_, err := session.streams[5].Read(p)
+			Expect(err).ToNot(HaveOccurred())
+			session.closeStreamsWithError(testErr)
+			_, err = session.streams[5].Read(p)
+			Expect(err).To(Equal(testErr))
+			session.garbageCollectStreams()
+			Expect(session.streams).To(HaveLen(1))
+			Expect(session.streams[5]).To(BeNil())
+		})
+
+		It("closes empty streams with error", func() {
+			testErr := errors.New("test")
+			session.handleStreamFrame(&frames.StreamFrame{
+				StreamID: 5,
+			})
+			Expect(session.streams).To(HaveLen(1))
+			Expect(session.streams[5]).ToNot(BeNil())
+			Expect(callbackCalled).To(BeTrue())
+			session.closeStreamsWithError(testErr)
+			_, err := session.streams[5].Read([]byte{0})
+			Expect(err).To(Equal(testErr))
+			session.garbageCollectStreams()
 			Expect(session.streams).To(HaveLen(1))
 			Expect(session.streams[5]).To(BeNil())
 		})
@@ -83,6 +121,7 @@ var _ = Describe("Session", func() {
 			})
 			_, err := session.streams[5].Read([]byte{0})
 			Expect(err).To(Equal(io.EOF))
+			session.garbageCollectStreams()
 			err = session.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
 				Data:     []byte{},

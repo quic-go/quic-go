@@ -6,23 +6,17 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/frames"
-	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 type mockStreamHandler struct {
-	closedStream bool
-	frames       []frames.Frame
+	frames []frames.Frame
 }
 
 func (m *mockStreamHandler) QueueFrame(f frames.Frame) error {
 	m.frames = append(m.frames, f)
 	return nil
-}
-
-func (m *mockStreamHandler) closeStream(protocol.StreamID) {
-	m.closedStream = true
 }
 
 var _ = Describe("Stream", func() {
@@ -334,11 +328,6 @@ var _ = Describe("Stream", func() {
 	})
 
 	Context("closing", func() {
-		AfterEach(func() {
-			Expect(str.streamFrames).To(BeClosed())
-			Expect(handler.closedStream).To(BeTrue())
-		})
-
 		Context("with fin bit", func() {
 			It("returns EOFs", func() {
 				frame := frames.StreamFrame{
@@ -409,6 +398,24 @@ var _ = Describe("Stream", func() {
 
 		Context("with remote errors", func() {
 			testErr := errors.New("test error")
+
+			It("returns EOF if data is read before", func() {
+				frame := frames.StreamFrame{
+					Offset: 0,
+					Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
+					FinBit: true,
+				}
+				str.AddStreamFrame(&frame)
+				str.RegisterError(testErr)
+				b := make([]byte, 4)
+				n, err := str.Read(b)
+				Expect(err).To(Equal(io.EOF))
+				Expect(n).To(Equal(4))
+				Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
+				n, err = str.Read(b)
+				Expect(n).To(BeZero())
+				Expect(err).To(Equal(io.EOF))
+			})
 
 			It("returns errors", func() {
 				frame := frames.StreamFrame{

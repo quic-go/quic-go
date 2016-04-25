@@ -11,19 +11,21 @@ import (
 
 type streamHandler interface {
 	QueueFrame(frames.Frame) error
-	closeStream(protocol.StreamID)
 }
 
 // A Stream assembles the data from StreamFrames and provides a super-convenient Read-Interface
 type stream struct {
-	session        streamHandler
-	streamID       protocol.StreamID
+	session  streamHandler
+	streamID protocol.StreamID
+	// The chan of unordered stream frames. A nil in this channel is sent by the
+	// session if an error occured, in this case, remoteErr is filled before.
 	streamFrames   chan *frames.StreamFrame
 	currentFrame   *frames.StreamFrame
 	readPosInFrame int
 	writeOffset    uint64
 	readOffset     uint64
 	frameQueue     []*frames.StreamFrame // TODO: replace with heap
+	remoteErr      error
 	currentErr     error
 }
 
@@ -36,14 +38,18 @@ func newStream(session streamHandler, StreamID protocol.StreamID) *stream {
 	}
 }
 
-// Read reads data
+// Read implements io.Reader
 func (s *stream) Read(p []byte) (int, error) {
+	if s.currentErr != nil {
+		return 0, s.currentErr
+	}
 	bytesRead := 0
 	for bytesRead < len(p) {
 		if s.currentFrame == nil {
 			var err error
 			s.currentFrame, err = s.getNextFrameInOrder(bytesRead == 0)
 			if err != nil {
+				s.currentErr = err
 				return bytesRead, err
 			}
 			if s.currentFrame == nil {
@@ -57,14 +63,12 @@ func (s *stream) Read(p []byte) (int, error) {
 		bytesRead += m
 		s.readOffset += uint64(m)
 		if s.readPosInFrame >= len(s.currentFrame.Data) {
-			if s.currentFrame.FinBit {
+			fin := s.currentFrame.FinBit
+			s.currentFrame = nil
+			if fin {
 				s.currentErr = io.EOF
-				close(s.streamFrames)
-				s.currentFrame = nil
-				s.session.closeStream(s.streamID)
 				return bytesRead, io.EOF
 			}
-			s.currentFrame = nil
 		}
 	}
 
@@ -105,22 +109,26 @@ func (s *stream) getNextFrameInOrder(wait bool) (*frames.StreamFrame, error) {
 	}
 }
 
-func (s *stream) nextFrameInChan(blocking bool) (f *frames.StreamFrame, err error) {
+func (s *stream) nextFrameInChan(blocking bool) (*frames.StreamFrame, error) {
+	var f *frames.StreamFrame
 	var ok bool
 	if blocking {
-		select {
-		case f, ok = <-s.streamFrames:
-		}
+		f, ok = <-s.streamFrames
 	} else {
 		select {
 		case f, ok = <-s.streamFrames:
 		default:
+			return nil, nil
 		}
 	}
 	if !ok {
-		return nil, s.currentErr
+		panic("Stream: internal inconsistency: encountered closed chan without nil value (remote error) or FIN bit")
 	}
-	return
+	if f == nil {
+		// We read nil, which indicates a remoteErr
+		return nil, s.remoteErr
+	}
+	return f, nil
 }
 
 // ReadByte implements io.ByteReader
@@ -165,7 +173,10 @@ func (s *stream) AddStreamFrame(frame *frames.StreamFrame) error {
 // RegisterError is called by session to indicate that an error occured and the
 // stream should be closed.
 func (s *stream) RegisterError(err error) {
-	s.currentErr = err
-	s.session.closeStream(s.streamID)
-	close(s.streamFrames)
+	s.remoteErr = err
+	s.streamFrames <- nil
+}
+
+func (s *stream) finishedReading() bool {
+	return s.currentErr != nil
 }

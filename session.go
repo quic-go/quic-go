@@ -78,6 +78,8 @@ func (s *Session) Run() {
 		if err != nil {
 			fmt.Printf("Error in session: %s\n", err.Error())
 		}
+
+		s.garbageCollectStreams()
 	}
 }
 
@@ -154,7 +156,7 @@ func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
 	return nil
 }
 
-// Close closes the connection by sending a ConnectionClose frame
+// Close the connection by sending a ConnectionClose frame
 func (s *Session) Close(e error) error {
 	errorCode := protocol.ErrorCode(1)
 	reasonPhrase := e.Error()
@@ -166,6 +168,17 @@ func (s *Session) Close(e error) error {
 		ErrorCode:    errorCode,
 		ReasonPhrase: reasonPhrase,
 	})
+}
+
+func (s *Session) closeStreamsWithError(err error) {
+	s.streamsMutex.Lock()
+	defer s.streamsMutex.Unlock()
+	for _, s := range s.streams {
+		if s == nil {
+			continue
+		}
+		s.RegisterError(err)
+	}
 }
 
 func (s *Session) sendPacket() error {
@@ -207,10 +220,16 @@ func (s *Session) NewStream(id protocol.StreamID) (utils.Stream, error) {
 	return stream, nil
 }
 
-// closeStream is called by a stream to signal that it was closed remotely
-// and has fininshed reading its data.
-func (s *Session) closeStream(id protocol.StreamID) {
+// garbageCollectStreams goes through all streams and removes EOF'ed streams
+// from the streams map.
+func (s *Session) garbageCollectStreams() {
 	s.streamsMutex.Lock()
-	s.streams[id] = nil
-	s.streamsMutex.Unlock()
+	defer s.streamsMutex.Unlock()
+	for k, v := range s.streams {
+		// Strictly speaking, this is not thread-safe. However it doesn't matter
+		// if the stream is deleted just shortly later, so we don't care.
+		if v.finishedReading() {
+			s.streams[k] = nil
+		}
+	}
 }
