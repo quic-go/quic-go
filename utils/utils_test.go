@@ -125,11 +125,23 @@ var _ = Describe("Utils", func() {
 		It("returns the maximum", func() {
 			Expect(Max(5, 7)).To(Equal(7))
 		})
+
+		It("returns the maximum uint64", func() {
+			Expect(MaxUint64(5, 7)).To(Equal(uint64(7)))
+		})
+
+		It("returns the maximum int64", func() {
+			Expect(MaxInt64(5, 7)).To(Equal(int64(7)))
+		})
 	})
 
 	Context("Min", func() {
 		It("returns the minimum", func() {
 			Expect(Min(5, 7)).To(Equal(5))
+		})
+
+		It("returns the minimum int64", func() {
+			Expect(MinInt64(5, 7)).To(Equal(int64(5)))
 		})
 	})
 
