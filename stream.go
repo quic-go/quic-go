@@ -127,17 +127,10 @@ func (s *Stream) nextFrameInChan(blocking bool) (f *frames.StreamFrame, err erro
 func (s *Stream) ReadByte() (byte, error) {
 	// TODO: Optimize
 	p := make([]byte, 1)
-	n, err := s.Read(p)
-	if err != nil {
-		return 0, err
-	}
-	if n != 1 {
-		panic("Stream: should have returned error")
-	}
-	return p[0], nil
+	_, err := io.ReadFull(s, p)
+	return p[0], err
 }
 
-// TODO: Test
 func (s *Stream) Write(p []byte) (int, error) {
 	data := make([]byte, len(p))
 	copy(data, p)
@@ -153,7 +146,7 @@ func (s *Stream) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// Close imlpements io.Closer
+// Close implements io.Closer
 func (s *Stream) Close() error {
 	fmt.Printf("Closing stream %d\n", s.StreamID)
 	return s.Session.QueueFrame(&frames.StreamFrame{

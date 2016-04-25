@@ -13,10 +13,12 @@ import (
 
 type mockStreamHandler struct {
 	closedStream bool
+	frames       []frames.Frame
 }
 
-func (*mockStreamHandler) QueueFrame(frames.Frame) error {
-	panic("not implemented")
+func (m *mockStreamHandler) QueueFrame(f frames.Frame) error {
+	m.frames = append(m.frames, f)
+	return nil
 }
 
 func (m *mockStreamHandler) closeStream(protocol.StreamID) {
@@ -34,169 +36,214 @@ var _ = Describe("Stream", func() {
 		stream = NewStream(handler, 1337)
 	})
 
-	It("reads a single StreamFrame", func() {
-		frame := frames.StreamFrame{
-			Offset: 0,
-			Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
-		}
-		stream.AddStreamFrame(&frame)
-		b := make([]byte, 4)
-		n, err := stream.Read(b)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(n).To(Equal(4))
-		Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
-	})
-
-	It("reads a single StreamFrame in multiple goes", func() {
-		frame := frames.StreamFrame{
-			Offset: 0,
-			Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
-		}
-		stream.AddStreamFrame(&frame)
-		b := make([]byte, 2)
-		n, err := stream.Read(b)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(n).To(Equal(2))
-		Expect(b).To(Equal([]byte{0xDE, 0xAD}))
-		n, err = stream.Read(b)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(n).To(Equal(2))
-		Expect(b).To(Equal([]byte{0xBE, 0xEF}))
-	})
-
-	It("reads single bytes", func() {
-		frame := frames.StreamFrame{
-			Offset: 0,
-			Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
-		}
-		stream.AddStreamFrame(&frame)
-		b, err := stream.ReadByte()
-		Expect(err).ToNot(HaveOccurred())
-		Expect(b).To(Equal(byte(0xDE)))
-		b, err = stream.ReadByte()
-		Expect(err).ToNot(HaveOccurred())
-		Expect(b).To(Equal(byte(0xAD)))
-		b, err = stream.ReadByte()
-		Expect(err).ToNot(HaveOccurred())
-		Expect(b).To(Equal(byte(0xBE)))
-		b, err = stream.ReadByte()
-		Expect(err).ToNot(HaveOccurred())
-		Expect(b).To(Equal(byte(0xEF)))
-	})
-
-	It("reads all data available", func() {
-		frame1 := frames.StreamFrame{
-			Offset: 0,
-			Data:   []byte{0xDE, 0xAD},
-		}
-		frame2 := frames.StreamFrame{
-			Offset: 2,
-			Data:   []byte{0xBE, 0xEF},
-		}
-		stream.AddStreamFrame(&frame1)
-		stream.AddStreamFrame(&frame2)
-		b := make([]byte, 6)
-		n, err := stream.Read(b)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(n).To(Equal(4))
-		Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00}))
-	})
-
-	It("assembles multiple StreamFrames", func() {
-		frame1 := frames.StreamFrame{
-			Offset: 0,
-			Data:   []byte{0xDE, 0xAD},
-		}
-		frame2 := frames.StreamFrame{
-			Offset: 2,
-			Data:   []byte{0xBE, 0xEF},
-		}
-		stream.AddStreamFrame(&frame1)
-		stream.AddStreamFrame(&frame2)
-		b := make([]byte, 4)
-		n, err := stream.Read(b)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(n).To(Equal(4))
-		Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
-	})
-
-	It("waits until data is available", func() {
-		go func() {
+	Context("reading", func() {
+		It("reads a single StreamFrame", func() {
 			frame := frames.StreamFrame{
+				Offset: 0,
+				Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
+			}
+			stream.AddStreamFrame(&frame)
+			b := make([]byte, 4)
+			n, err := stream.Read(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(n).To(Equal(4))
+			Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
+		})
+
+		It("reads a single StreamFrame in multiple goes", func() {
+			frame := frames.StreamFrame{
+				Offset: 0,
+				Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
+			}
+			stream.AddStreamFrame(&frame)
+			b := make([]byte, 2)
+			n, err := stream.Read(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(n).To(Equal(2))
+			Expect(b).To(Equal([]byte{0xDE, 0xAD}))
+			n, err = stream.Read(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(n).To(Equal(2))
+			Expect(b).To(Equal([]byte{0xBE, 0xEF}))
+		})
+
+		It("reads single bytes", func() {
+			frame := frames.StreamFrame{
+				Offset: 0,
+				Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
+			}
+			stream.AddStreamFrame(&frame)
+			b, err := stream.ReadByte()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(b).To(Equal(byte(0xDE)))
+			b, err = stream.ReadByte()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(b).To(Equal(byte(0xAD)))
+			b, err = stream.ReadByte()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(b).To(Equal(byte(0xBE)))
+			b, err = stream.ReadByte()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(b).To(Equal(byte(0xEF)))
+		})
+
+		It("reads all data available", func() {
+			frame1 := frames.StreamFrame{
 				Offset: 0,
 				Data:   []byte{0xDE, 0xAD},
 			}
-			time.Sleep(time.Millisecond)
-			stream.AddStreamFrame(&frame)
-		}()
-		b := make([]byte, 2)
-		n, err := stream.Read(b)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(n).To(Equal(2))
+			frame2 := frames.StreamFrame{
+				Offset: 2,
+				Data:   []byte{0xBE, 0xEF},
+			}
+			stream.AddStreamFrame(&frame1)
+			stream.AddStreamFrame(&frame2)
+			b := make([]byte, 6)
+			n, err := stream.Read(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(n).To(Equal(4))
+			Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00}))
+		})
+
+		It("assembles multiple StreamFrames", func() {
+			frame1 := frames.StreamFrame{
+				Offset: 0,
+				Data:   []byte{0xDE, 0xAD},
+			}
+			frame2 := frames.StreamFrame{
+				Offset: 2,
+				Data:   []byte{0xBE, 0xEF},
+			}
+			stream.AddStreamFrame(&frame1)
+			stream.AddStreamFrame(&frame2)
+			b := make([]byte, 4)
+			n, err := stream.Read(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(n).To(Equal(4))
+			Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
+		})
+
+		It("waits until data is available", func() {
+			go func() {
+				frame := frames.StreamFrame{
+					Offset: 0,
+					Data:   []byte{0xDE, 0xAD},
+				}
+				time.Sleep(time.Millisecond)
+				stream.AddStreamFrame(&frame)
+			}()
+			b := make([]byte, 2)
+			n, err := stream.Read(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(n).To(Equal(2))
+		})
+
+		It("handles StreamFrames in wrong order", func() {
+			frame1 := frames.StreamFrame{
+				Offset: 2,
+				Data:   []byte{0xBE, 0xEF},
+			}
+			frame2 := frames.StreamFrame{
+				Offset: 0,
+				Data:   []byte{0xDE, 0xAD},
+			}
+			stream.AddStreamFrame(&frame1)
+			stream.AddStreamFrame(&frame2)
+			b := make([]byte, 4)
+			n, err := stream.Read(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(n).To(Equal(4))
+			Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
+		})
+
+		It("handles duplicate StreamFrames", func() {
+			frame1 := frames.StreamFrame{
+				Offset: 0,
+				Data:   []byte{0xDE, 0xAD},
+			}
+			frame2 := frames.StreamFrame{
+				Offset: 0,
+				Data:   []byte{0xDE, 0xAD},
+			}
+			frame3 := frames.StreamFrame{
+				Offset: 2,
+				Data:   []byte{0xBE, 0xEF},
+			}
+			stream.AddStreamFrame(&frame1)
+			stream.AddStreamFrame(&frame2)
+			stream.AddStreamFrame(&frame3)
+			b := make([]byte, 4)
+			n, err := stream.Read(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(n).To(Equal(4))
+			Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
+		})
+
+		It("discards unneeded stream frames", func() {
+			frame1 := frames.StreamFrame{
+				Offset: 0,
+				Data:   []byte{0xDE, 0xAD},
+			}
+			frame2 := frames.StreamFrame{
+				Offset: 1,
+				Data:   []byte{0x42, 0x24},
+			}
+			frame3 := frames.StreamFrame{
+				Offset: 2,
+				Data:   []byte{0xBE, 0xEF},
+			}
+			stream.AddStreamFrame(&frame1)
+			stream.AddStreamFrame(&frame2)
+			stream.AddStreamFrame(&frame3)
+			b := make([]byte, 4)
+			n, err := stream.Read(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(n).To(Equal(4))
+			Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
+		})
 	})
 
-	It("handles StreamFrames in wrong order", func() {
-		frame1 := frames.StreamFrame{
-			Offset: 2,
-			Data:   []byte{0xBE, 0xEF},
-		}
-		frame2 := frames.StreamFrame{
-			Offset: 0,
-			Data:   []byte{0xDE, 0xAD},
-		}
-		stream.AddStreamFrame(&frame1)
-		stream.AddStreamFrame(&frame2)
-		b := make([]byte, 4)
-		n, err := stream.Read(b)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(n).To(Equal(4))
-		Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
-	})
+	Context("writing", func() {
+		It("writes stream frames", func() {
+			n, err := stream.Write([]byte("foobar"))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(n).To(Equal(6))
+			Expect(handler.frames).To(HaveLen(1))
+			Expect(handler.frames[0]).To(Equal(&frames.StreamFrame{
+				StreamID: 1337,
+				Data:     []byte("foobar"),
+			}))
+		})
 
-	It("handles duplicate StreamFrames", func() {
-		frame1 := frames.StreamFrame{
-			Offset: 0,
-			Data:   []byte{0xDE, 0xAD},
-		}
-		frame2 := frames.StreamFrame{
-			Offset: 0,
-			Data:   []byte{0xDE, 0xAD},
-		}
-		frame3 := frames.StreamFrame{
-			Offset: 2,
-			Data:   []byte{0xBE, 0xEF},
-		}
-		stream.AddStreamFrame(&frame1)
-		stream.AddStreamFrame(&frame2)
-		stream.AddStreamFrame(&frame3)
-		b := make([]byte, 4)
-		n, err := stream.Read(b)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(n).To(Equal(4))
-		Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
-	})
+		It("writes multiple stream frames", func() {
+			n, err := stream.Write([]byte("foo"))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(n).To(Equal(3))
+			n, err = stream.Write([]byte("bar"))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(n).To(Equal(3))
+			Expect(handler.frames).To(HaveLen(2))
+			Expect(handler.frames[0]).To(Equal(&frames.StreamFrame{
+				StreamID: 1337,
+				Data:     []byte("foo"),
+			}))
+			Expect(handler.frames[1]).To(Equal(&frames.StreamFrame{
+				StreamID: 1337,
+				Data:     []byte("bar"),
+				Offset:   3,
+			}))
+		})
 
-	It("discards unneeded stream frames", func() {
-		frame1 := frames.StreamFrame{
-			Offset: 0,
-			Data:   []byte{0xDE, 0xAD},
-		}
-		frame2 := frames.StreamFrame{
-			Offset: 1,
-			Data:   []byte{0x42, 0x24},
-		}
-		frame3 := frames.StreamFrame{
-			Offset: 2,
-			Data:   []byte{0xBE, 0xEF},
-		}
-		stream.AddStreamFrame(&frame1)
-		stream.AddStreamFrame(&frame2)
-		stream.AddStreamFrame(&frame3)
-		b := make([]byte, 4)
-		n, err := stream.Read(b)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(n).To(Equal(4))
-		Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
+		It("closes", func() {
+			err := stream.Close()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.frames).To(HaveLen(1))
+			Expect(handler.frames[0]).To(Equal(&frames.StreamFrame{
+				StreamID: 1337,
+				FinBit:   true,
+				Offset:   0,
+			}))
+		})
 	})
 
 	Context("getting next stream frame", func() {
