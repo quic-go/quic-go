@@ -9,10 +9,11 @@ import (
 )
 
 var (
-	errAckForUnsentPacket   = errors.New("OutgoingPacketAckHandler: Received ACK for an unsent package")
-	errEntropy              = errors.New("OutgoingPacketAckHandler: Wrong entropy")
-	errMapAccess            = errors.New("OutgoingPacketAckHandler: Packet does not exist in PacketHistory")
-	retransmissionThreshold = uint8(3)
+	errAckForUnsentPacket       = errors.New("OutgoingPacketAckHandler: Received ACK for an unsent package")
+	errDuplicateOrOutOfOrderAck = errors.New("OutgoingPacketAckHandler: Duplicate or out-of-order ACK")
+	errEntropy                  = errors.New("OutgoingPacketAckHandler: Wrong entropy")
+	errMapAccess                = errors.New("OutgoingPacketAckHandler: Packet does not exist in PacketHistory")
+	retransmissionThreshold     = uint8(3)
 )
 
 type outgoingPacketAckHandler struct {
@@ -114,7 +115,7 @@ func (h *outgoingPacketAckHandler) ReceivedAck(ackFrame *frames.AckFrame) error 
 	}
 
 	if ackFrame.LargestObserved <= h.LargestObserved { // duplicate or out-of-order AckFrame
-		return nil
+		return errDuplicateOrOutOfOrderAck
 	}
 
 	expectedEntropy, err := h.calculateExpectedEntropy(ackFrame)
@@ -132,6 +133,7 @@ func (h *outgoingPacketAckHandler) ReceivedAck(ackFrame *frames.AckFrame) error 
 
 	highestInOrderAckedPacketNumber := ackFrame.GetHighestInOrderPacketNumber()
 	highestInOrderAckedEntropy := h.highestInOrderAckedEntropy
+	h.LargestObserved = ackFrame.LargestObserved
 
 	// if this ACK increases the highestInOrderAckedPacketNumber, the packet will be deleted from the packetHistory map, thus we need to save it's Entropy before doing so
 	if highestInOrderAckedPacketNumber > h.highestInOrderAckedPacketNumber {

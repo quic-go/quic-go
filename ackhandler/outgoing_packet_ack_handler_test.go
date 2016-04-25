@@ -253,6 +253,31 @@ var _ = Describe("AckHandler", func() {
 				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(6)))
 			})
 
+			It("rejects duplicate ACKs", func() {
+				largestObserved := 3
+				ack := frames.AckFrame{
+					LargestObserved: protocol.PacketNumber(largestObserved),
+				}
+				err := handler.ReceivedAck(&ack)
+				Expect(err).ToNot(HaveOccurred())
+				err = handler.ReceivedAck(&ack)
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(Equal(errDuplicateOrOutOfOrderAck))
+			})
+
+			It("rejects out of order ACKs", func() {
+				largestObserved := 3
+				ack := frames.AckFrame{
+					LargestObserved: protocol.PacketNumber(largestObserved),
+				}
+				err := handler.ReceivedAck(&ack)
+				Expect(err).ToNot(HaveOccurred())
+				ack.LargestObserved--
+				err = handler.ReceivedAck(&ack)
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(Equal(errDuplicateOrOutOfOrderAck))
+			})
+
 			It("rejects ACKs with a LargestObserved packet number higher than what was sent out previously", func() {
 				ack := frames.AckFrame{
 					LargestObserved: packets[len(packets)-1].PacketNumber + 1337,
