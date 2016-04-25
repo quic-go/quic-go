@@ -23,7 +23,7 @@ var _ = Describe("Packet unpacker", func() {
 	BeforeEach(func() {
 		aead = &crypto.NullAEAD{}
 		hdr = &PublicHeader{
-			PacketNumber:    1,
+			PacketNumber:    10,
 			PacketNumberLen: 1,
 		}
 		hdrBin = []byte{0x04, 0x4c, 0x01}
@@ -150,8 +150,8 @@ var _ = Describe("Packet unpacker", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.frames).To(Equal([]frames.Frame{
 			&frames.StopWaitingFrame{
-				Entropy:           0xA4,
-				LeastUnackedDelta: 0x03,
+				Entropy:      0xA4,
+				LeastUnacked: 7,
 			},
 		}))
 	})

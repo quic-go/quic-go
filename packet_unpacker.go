@@ -68,7 +68,7 @@ ReadLoop:
 				_, err = r.Read(p)
 				frame = nil
 			case 0x06:
-				frame, err = frames.ParseStopWaitingFrame(r, publicHeader.PacketNumberLen)
+				frame, err = frames.ParseStopWaitingFrame(r, publicHeader.PacketNumber, publicHeader.PacketNumberLen)
 			case 0x07:
 				// PING, do nothing
 				r.ReadByte()
