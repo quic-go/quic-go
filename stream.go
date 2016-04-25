@@ -108,7 +108,7 @@ func (s *Stream) ReadByte() (byte, error) {
 func (s *Stream) Write(p []byte) (int, error) {
 	data := make([]byte, len(p))
 	copy(data, p)
-	err := s.Session.SendFrame(&frames.StreamFrame{
+	err := s.Session.QueueFrame(&frames.StreamFrame{
 		StreamID: s.StreamID,
 		Offset:   s.WriteOffset,
 		Data:     data,
@@ -123,7 +123,7 @@ func (s *Stream) Write(p []byte) (int, error) {
 // Close imlpements io.Closer
 func (s *Stream) Close() error {
 	fmt.Printf("Closing stream %d\n", s.StreamID)
-	return s.Session.SendFrame(&frames.StreamFrame{
+	return s.Session.QueueFrame(&frames.StreamFrame{
 		StreamID: s.StreamID,
 		Offset:   s.WriteOffset,
 		FinBit:   true,

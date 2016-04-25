@@ -5,13 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"sync"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 )
+
+type receivedPacket struct {
+	addr         *net.UDPAddr
+	publicHeader *PublicHeader
+	r            *bytes.Reader
+}
 
 // StreamCallback gets a stream frame and returns a reply frame
 type StreamCallback func(*Session, *Stream)
@@ -23,8 +29,7 @@ type Session struct {
 	Connection        *net.UDPConn
 	CurrentRemoteAddr *net.UDPAddr
 
-	Streams      map[protocol.StreamID]*Stream
-	streamsMutex sync.RWMutex
+	Streams map[protocol.StreamID]*Stream
 
 	outgoingAckHandler ackhandler.OutgoingPacketAckHandler
 	incomingAckHandler ackhandler.IncomingPacketAckHandler
@@ -32,6 +37,8 @@ type Session struct {
 	unpacker  *packetUnpacker
 	packer    *packetPacker
 	batchMode bool
+
+	receivedPackets chan receivedPacket
 }
 
 // NewSession makes a new session
@@ -42,6 +49,7 @@ func NewSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protoc
 		Streams:            make(map[protocol.StreamID]*Stream),
 		outgoingAckHandler: ackhandler.NewOutgoingPacketAckHandler(),
 		incomingAckHandler: ackhandler.NewIncomingPacketAckHandler(),
+		receivedPackets:    make(chan receivedPacket),
 	}
 
 	cryptoStream, _ := session.NewStream(1)
@@ -54,23 +62,37 @@ func NewSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protoc
 	return session
 }
 
-// HandlePacket handles a packet
-func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, publicHeader *PublicHeader, r *bytes.Reader) error {
-	s.batchMode = true
+// Run the session main loop
+func (s *Session) Run() {
+	sendTimeout := 1 * time.Millisecond
+	for {
+		var err error
+		select {
+		case p := <-s.receivedPackets:
+			err = s.handlePacket(p.addr, p.publicHeader, p.r)
+		case <-time.After(sendTimeout):
+			err = s.sendPacket()
+		}
+		if err != nil {
+			fmt.Printf("Error in session: %s\n", err.Error())
+		}
+	}
+}
 
+func (s *Session) handlePacket(addr *net.UDPAddr, publicHeader *PublicHeader, r *bytes.Reader) error {
 	// TODO: Only do this after authenticating
 	if addr != s.CurrentRemoteAddr {
 		s.CurrentRemoteAddr = addr
 	}
 
-	packet, err := s.unpacker.Unpack(publicHeaderBinary, publicHeader, r)
+	packet, err := s.unpacker.Unpack(publicHeader.Raw, publicHeader, r)
 	if err != nil {
 		s.Close(err)
 		return err
 	}
 
 	s.incomingAckHandler.ReceivedPacket(publicHeader.PacketNumber, packet.entropyBit)
-	s.SendFrame(s.incomingAckHandler.DequeueAckFrame())
+	s.QueueFrame(s.incomingAckHandler.DequeueAckFrame())
 
 	for _, ff := range packet.frames {
 		var err error
@@ -96,9 +118,12 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 			return err
 		}
 	}
+	return nil
+}
 
-	s.batchMode = false
-	return s.sendPackets()
+// HandlePacket handles a packet
+func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeader *PublicHeader, r *bytes.Reader) {
+	s.receivedPackets <- receivedPacket{addr: addr, publicHeader: publicHeader, r: r}
 }
 
 func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
@@ -106,9 +131,7 @@ func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
 	if frame.StreamID == 0 {
 		return errors.New("Session: 0 is not a valid Stream ID")
 	}
-	s.streamsMutex.RLock()
 	stream, newStream := s.Streams[frame.StreamID]
-	s.streamsMutex.RUnlock()
 
 	if !newStream {
 		stream, _ = s.NewStream(frame.StreamID)
@@ -132,47 +155,41 @@ func (s *Session) Close(e error) error {
 		errorCode = quicError.ErrorCode
 	}
 	s.batchMode = false
-	return s.SendFrame(&frames.ConnectionCloseFrame{
+	return s.QueueFrame(&frames.ConnectionCloseFrame{
 		ErrorCode:    errorCode,
 		ReasonPhrase: reasonPhrase,
 	})
 }
 
-func (s *Session) sendPackets() error {
-	for {
-		packet, err := s.packer.PackPacket()
-		if err != nil {
-			return err
-		}
-		if packet == nil {
-			return nil
-		}
-		s.outgoingAckHandler.SentPacket(&ackhandler.Packet{
-			PacketNumber: packet.number,
-			Plaintext:    packet.payload,
-			EntropyBit:   packet.entropyBit,
-		})
-		fmt.Printf("-> Sending packet %d (%d bytes)\n", packet.number, len(packet.raw))
-		_, err = s.Connection.WriteToUDP(packet.raw, s.CurrentRemoteAddr)
-		if err != nil {
-			return err
-		}
+func (s *Session) sendPacket() error {
+	packet, err := s.packer.PackPacket()
+	if err != nil {
+		return err
 	}
-}
-
-// SendFrame sends a frame to the client
-func (s *Session) SendFrame(frame frames.Frame) error {
-	s.packer.AddFrame(frame)
-	if s.batchMode {
+	if packet == nil {
 		return nil
 	}
-	return s.sendPackets()
+	s.outgoingAckHandler.SentPacket(&ackhandler.Packet{
+		PacketNumber: packet.number,
+		Plaintext:    packet.payload,
+		EntropyBit:   packet.entropyBit,
+	})
+	fmt.Printf("-> Sending packet %d (%d bytes)\n", packet.number, len(packet.raw))
+	_, err = s.Connection.WriteToUDP(packet.raw, s.CurrentRemoteAddr)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// QueueFrame queues a frame for sending to the client
+func (s *Session) QueueFrame(frame frames.Frame) error {
+	s.packer.AddFrame(frame)
+	return nil
 }
 
 // NewStream creates a new strean open for reading and writing
 func (s *Session) NewStream(id protocol.StreamID) (*Stream, error) {
-	s.streamsMutex.Lock()
-	defer s.streamsMutex.Unlock()
 	stream := NewStream(s, id)
 	if s.Streams[id] != nil {
 		return nil, fmt.Errorf("Session: stream with ID %d already exists", id)

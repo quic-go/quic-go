@@ -11,6 +11,7 @@ import (
 
 // The PublicHeader of a QUIC packet
 type PublicHeader struct {
+	Raw             []byte
 	VersionFlag     bool
 	ResetFlag       bool
 	ConnectionID    protocol.ConnectionID

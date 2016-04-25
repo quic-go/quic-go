@@ -13,7 +13,8 @@ import (
 )
 
 type PacketHandler interface {
-	HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, publicHeader *PublicHeader, r *bytes.Reader) error
+	HandlePacket(addr *net.UDPAddr, publicHeader *PublicHeader, r *bytes.Reader)
+	Run()
 }
 
 // A Server of QUIC
@@ -88,6 +89,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 		// ToDo: send errorcodes.QUIC_INVALID_PACKET_HEADER
 		return errors.New("Could not parse public header")
 	}
+	publicHeader.Raw = packet[:len(packet)-r.Len()]
 
 	// fmt.Printf("<- Got packet %d (%d bytes) from %v\n", publicHeader.PacketNumber, n, remoteAddr)
 
@@ -105,12 +107,10 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 	if !ok {
 		fmt.Printf("Serving new connection: %d from %v\n", publicHeader.ConnectionID, remoteAddr)
 		session = s.newSession(conn, publicHeader.VersionNumber, publicHeader.ConnectionID, s.scfg, s.streamCallback)
+		go session.Run()
 		s.sessions[publicHeader.ConnectionID] = session
 	}
-	err = session.HandlePacket(remoteAddr, packet[0:len(packet)-r.Len()], publicHeader, r)
-	if err != nil {
-		return err
-	}
+	session.HandlePacket(remoteAddr, publicHeader, r)
 	return nil
 }
 
