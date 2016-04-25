@@ -11,7 +11,7 @@ import (
 var (
 	errEntropy              = errors.New("OutgoingPacketAckHandler: Wrong entropy")
 	errMapAccess            = errors.New("OutgoingPacketAckHandler: Packet does not exist in PacketHistory")
-	retransmissionThreshold = uint8(1) // ToDo: use 3 as recommended in the RFC here
+	retransmissionThreshold = uint8(3)
 )
 
 type outgoingPacketAckHandler struct {
@@ -168,7 +168,6 @@ func (h *outgoingPacketAckHandler) ReceivedAck(ackFrame *frames.AckFrame) error 
 				packet.MissingReports++
 				// send out the packet again when it has been NACK more than retransmissionThreshold times
 				if packet.MissingReports > retransmissionThreshold {
-					fmt.Printf("Should retransmit packet %d\n", packet.PacketNumber)
 					h.retransmissionQueue = append(h.retransmissionQueue, packet)
 					// ToDo: delete the packet from the history, as if it had been acked
 				}
@@ -184,5 +183,10 @@ func (h *outgoingPacketAckHandler) ReceivedAck(ackFrame *frames.AckFrame) error 
 }
 
 func (h *outgoingPacketAckHandler) DequeuePacketForRetransmission() (packet *Packet) {
-	return nil
+	if len(h.retransmissionQueue) == 0 {
+		return nil
+	}
+	packet = h.retransmissionQueue[0]
+	h.retransmissionQueue = h.retransmissionQueue[1:]
+	return packet
 }

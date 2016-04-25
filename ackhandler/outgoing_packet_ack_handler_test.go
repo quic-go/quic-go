@@ -337,6 +337,31 @@ var _ = Describe("AckHandler", func() {
 				Expect(len(handler.retransmissionQueue)).To(Equal(1))
 				Expect(handler.retransmissionQueue[0].PacketNumber).To(Equal(protocol.PacketNumber(2)))
 			})
+
+			It("dequeues a packet for retransmission", func() {
+				retransmissionThreshold = 1
+				nackRange := frames.NackRange{FirstPacketNumber: 2, LastPacketNumber: 2}
+				entropy := EntropyAccumulator(0)
+				entropy.Add(1, packets[0].EntropyBit)
+				entropy.Add(3, packets[2].EntropyBit)
+				ack1 := frames.AckFrame{
+					LargestObserved: 3,
+					Entropy:         byte(entropy),
+					NackRanges:      []frames.NackRange{nackRange},
+				}
+				err := handler.ReceivedAck(&ack1)
+				Expect(err).ToNot(HaveOccurred())
+				entropy.Add(4, packets[3].EntropyBit)
+				ack2 := frames.AckFrame{
+					LargestObserved: 4,
+					Entropy:         byte(entropy),
+					NackRanges:      []frames.NackRange{nackRange},
+				}
+				err = handler.ReceivedAck(&ack2)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
+				Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
+			})
 		})
 	})
 })
