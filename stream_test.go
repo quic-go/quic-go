@@ -6,17 +6,32 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
+type mockStreamHandler struct {
+	closedStream bool
+}
+
+func (*mockStreamHandler) QueueFrame(frames.Frame) error {
+	panic("not implemented")
+}
+
+func (m *mockStreamHandler) closeStream(protocol.StreamID) {
+	m.closedStream = true
+}
+
 var _ = Describe("Stream", func() {
 	var (
-		stream *Stream
+		stream  *Stream
+		handler *mockStreamHandler
 	)
 
 	BeforeEach(func() {
-		stream = NewStream(nil, 1337)
+		handler = &mockStreamHandler{}
+		stream = NewStream(handler, 1337)
 	})
 
 	It("reads a single StreamFrame", func() {
@@ -274,6 +289,7 @@ var _ = Describe("Stream", func() {
 	Context("closing", func() {
 		AfterEach(func() {
 			Expect(stream.StreamFrames).To(BeClosed())
+			Expect(handler.closedStream).To(BeTrue())
 		})
 
 		Context("with fin bit", func() {

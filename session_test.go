@@ -1,6 +1,8 @@
 package quic
 
 import (
+	"io"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -56,11 +58,35 @@ var _ = Describe("Session", func() {
 		})
 
 		It("closes streams", func() {
-
+			session.handleStreamFrame(&frames.StreamFrame{
+				StreamID: 5,
+				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
+				FinBit:   true,
+			})
+			Expect(session.Streams).To(HaveLen(1))
+			Expect(session.Streams[5]).ToNot(BeNil())
+			Expect(callbackCalled).To(BeTrue())
+			p := make([]byte, 4)
+			_, err := session.Streams[5].Read(p)
+			Expect(err).To(Equal(io.EOF))
+			Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
+			Expect(session.Streams).To(HaveLen(1))
+			Expect(session.Streams[5]).To(BeNil())
 		})
 
 		It("rejects streams that existed previously", func() {
-
+			session.handleStreamFrame(&frames.StreamFrame{
+				StreamID: 5,
+				Data:     []byte{},
+				FinBit:   true,
+			})
+			_, err := session.Streams[5].Read([]byte{0})
+			Expect(err).To(Equal(io.EOF))
+			err = session.handleStreamFrame(&frames.StreamFrame{
+				StreamID: 5,
+				Data:     []byte{},
+			})
+			Expect(err).To(MatchError("Session: reopening streams is not allowed"))
 		})
 	})
 })

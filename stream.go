@@ -9,9 +9,14 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
+type streamHandler interface {
+	QueueFrame(frames.Frame) error
+	closeStream(protocol.StreamID)
+}
+
 // A Stream assembles the data from StreamFrames and provides a super-convenient Read-Interface
 type Stream struct {
-	Session        *Session
+	Session        streamHandler
 	StreamID       protocol.StreamID
 	StreamFrames   chan *frames.StreamFrame
 	CurrentFrame   *frames.StreamFrame
@@ -23,7 +28,7 @@ type Stream struct {
 }
 
 // NewStream creates a new Stream
-func NewStream(session *Session, StreamID protocol.StreamID) *Stream {
+func NewStream(session streamHandler, StreamID protocol.StreamID) *Stream {
 	return &Stream{
 		Session:      session,
 		StreamID:     StreamID,
@@ -56,6 +61,7 @@ func (s *Stream) Read(p []byte) (int, error) {
 				s.currentErr = io.EOF
 				close(s.StreamFrames)
 				s.CurrentFrame = nil
+				s.Session.closeStream(s.StreamID)
 				return bytesRead, io.EOF
 			}
 			s.CurrentFrame = nil
@@ -131,6 +137,7 @@ func (s *Stream) ReadByte() (byte, error) {
 	return p[0], nil
 }
 
+// TODO: Test
 func (s *Stream) Write(p []byte) (int, error) {
 	data := make([]byte, len(p))
 	copy(data, p)
@@ -166,5 +173,6 @@ func (s *Stream) AddStreamFrame(frame *frames.StreamFrame) error {
 // stream should be closed.
 func (s *Stream) RegisterError(err error) {
 	s.currentErr = err
+	s.Session.closeStream(s.StreamID)
 	close(s.StreamFrames)
 }

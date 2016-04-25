@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
@@ -29,7 +30,8 @@ type Session struct {
 	Connection        *net.UDPConn
 	CurrentRemoteAddr *net.UDPAddr
 
-	Streams map[protocol.StreamID]*Stream
+	Streams      map[protocol.StreamID]*Stream
+	streamsMutex sync.RWMutex
 
 	outgoingAckHandler ackhandler.OutgoingPacketAckHandler
 	incomingAckHandler ackhandler.IncomingPacketAckHandler
@@ -131,16 +133,21 @@ func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
 	if frame.StreamID == 0 {
 		return errors.New("Session: 0 is not a valid Stream ID")
 	}
-	stream, newStream := s.Streams[frame.StreamID]
+	s.streamsMutex.RLock()
+	stream, existingStream := s.Streams[frame.StreamID]
+	s.streamsMutex.RUnlock()
 
-	if !newStream {
+	if !existingStream {
 		stream, _ = s.NewStream(frame.StreamID)
+	}
+	if stream == nil {
+		return errors.New("Session: reopening streams is not allowed")
 	}
 	err := stream.AddStreamFrame(frame)
 	if err != nil {
 		return err
 	}
-	if !newStream {
+	if !existingStream {
 		s.streamCallback(s, stream)
 	}
 	return nil
@@ -190,10 +197,20 @@ func (s *Session) QueueFrame(frame frames.Frame) error {
 
 // NewStream creates a new strean open for reading and writing
 func (s *Session) NewStream(id protocol.StreamID) (*Stream, error) {
+	s.streamsMutex.Lock()
+	defer s.streamsMutex.Unlock()
 	stream := NewStream(s, id)
 	if s.Streams[id] != nil {
 		return nil, fmt.Errorf("Session: stream with ID %d already exists", id)
 	}
 	s.Streams[id] = stream
 	return stream, nil
+}
+
+// closeStream is called by a stream to signal that it was closed remotely
+// and has fininshed reading its data.
+func (s *Session) closeStream(id protocol.StreamID) {
+	s.streamsMutex.Lock()
+	s.Streams[id] = nil
+	s.streamsMutex.Unlock()
 }
