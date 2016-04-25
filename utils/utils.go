@@ -17,6 +17,7 @@ type Stream interface {
 	io.Reader
 	io.ByteReader
 	io.Writer
+	io.Closer
 }
 
 // ReadUintN reads N bytes

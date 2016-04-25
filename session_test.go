@@ -8,6 +8,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 var _ = Describe("Session", func() {
@@ -19,8 +20,8 @@ var _ = Describe("Session", func() {
 	BeforeEach(func() {
 		callbackCalled = false
 		session = &Session{
-			streams:        make(map[protocol.StreamID]*Stream),
-			streamCallback: func(*Session, *Stream) { callbackCalled = true },
+			streams:        make(map[protocol.StreamID]*stream),
+			streamCallback: func(*Session, utils.Stream) { callbackCalled = true },
 		}
 	})
 

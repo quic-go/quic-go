@@ -12,6 +12,7 @@ import (
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 type receivedPacket struct {
@@ -21,7 +22,7 @@ type receivedPacket struct {
 }
 
 // StreamCallback gets a stream frame and returns a reply frame
-type StreamCallback func(*Session, *Stream)
+type StreamCallback func(*Session, utils.Stream)
 
 // A Session is a QUIC session
 type Session struct {
@@ -30,7 +31,7 @@ type Session struct {
 	connection        *net.UDPConn
 	currentRemoteAddr *net.UDPAddr
 
-	streams      map[protocol.StreamID]*Stream
+	streams      map[protocol.StreamID]*stream
 	streamsMutex sync.RWMutex
 
 	outgoingAckHandler ackhandler.OutgoingPacketAckHandler
@@ -47,7 +48,7 @@ func NewSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protoc
 	session := &Session{
 		connection:         conn,
 		streamCallback:     streamCallback,
-		streams:            make(map[protocol.StreamID]*Stream),
+		streams:            make(map[protocol.StreamID]*stream),
 		outgoingAckHandler: ackhandler.NewOutgoingPacketAckHandler(),
 		incomingAckHandler: ackhandler.NewIncomingPacketAckHandler(),
 		receivedPackets:    make(chan receivedPacket),
@@ -133,21 +134,22 @@ func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
 		return errors.New("Session: 0 is not a valid Stream ID")
 	}
 	s.streamsMutex.RLock()
-	stream, existingStream := s.streams[frame.StreamID]
+	str, streamExists := s.streams[frame.StreamID]
 	s.streamsMutex.RUnlock()
 
-	if !existingStream {
-		stream, _ = s.NewStream(frame.StreamID)
+	if !streamExists {
+		ss, _ := s.NewStream(frame.StreamID)
+		str = ss.(*stream)
 	}
-	if stream == nil {
+	if str == nil {
 		return errors.New("Session: reopening streams is not allowed")
 	}
-	err := stream.AddStreamFrame(frame)
+	err := str.AddStreamFrame(frame)
 	if err != nil {
 		return err
 	}
-	if !existingStream {
-		s.streamCallback(s, stream)
+	if !streamExists {
+		s.streamCallback(s, str)
 	}
 	return nil
 }
@@ -193,11 +195,11 @@ func (s *Session) QueueFrame(frame frames.Frame) error {
 	return nil
 }
 
-// NewStream creates a new strean open for reading and writing
-func (s *Session) NewStream(id protocol.StreamID) (*Stream, error) {
+// NewStream creates a new stream open for reading and writing
+func (s *Session) NewStream(id protocol.StreamID) (utils.Stream, error) {
 	s.streamsMutex.Lock()
 	defer s.streamsMutex.Unlock()
-	stream := NewStream(s, id)
+	stream := newStream(s, id)
 	if s.streams[id] != nil {
 		return nil, fmt.Errorf("Session: stream with ID %d already exists", id)
 	}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 var supportedVersions = map[protocol.VersionNumber]bool{
@@ -40,8 +41,8 @@ func main() {
 type responseWriter struct {
 	session      *quic.Session
 	dataStreamID protocol.StreamID
-	headerStream *quic.Stream
-	dataStream   *quic.Stream
+	headerStream utils.Stream
+	dataStream   utils.Stream
 
 	header        http.Header
 	headerWritten bool
@@ -105,7 +106,7 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 	return 0, nil
 }
 
-func handleStream(session *quic.Session, headerStream *quic.Stream) {
+func handleStream(session *quic.Session, headerStream utils.Stream) {
 	hpackDecoder := hpack.NewDecoder(4096, nil)
 	h2framer := http2.NewFramer(nil, headerStream)
 

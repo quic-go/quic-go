@@ -78,6 +78,10 @@ func (s *mockStream) Write(p []byte) (int, error) {
 	return s.dataWritten.Write(p)
 }
 
+func (s *mockStream) Close() error {
+	panic("not implemented")
+}
+
 var _ = Describe("Crypto setup", func() {
 	var (
 		kex    *mockKEX
