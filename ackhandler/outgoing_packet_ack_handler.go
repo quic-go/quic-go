@@ -2,7 +2,6 @@ package ackhandler
 
 import (
 	"errors"
-	"sync"
 
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -18,12 +17,14 @@ var (
 
 type outgoingPacketAckHandler struct {
 	lastSentPacketNumber            protocol.PacketNumber
+	lastSentPacketEntropy           EntropyAccumulator
 	highestInOrderAckedPacketNumber protocol.PacketNumber
-	highestInOrderAckedEntropy      EntropyAccumulator
 	LargestObserved                 protocol.PacketNumber
-	packetHistory                   map[protocol.PacketNumber]*Packet
-	packetHistoryMutex              sync.Mutex
-	retransmissionQueue             []*Packet // ToDo: use better data structure
+	LargestObservedEntropy          EntropyAccumulator
+
+	packetHistory map[protocol.PacketNumber]*Packet
+
+	retransmissionQueue []*Packet // ToDo: use better data structure
 }
 
 // NewOutgoingPacketAckHandler creates a new outgoingPacketAckHandler
@@ -33,9 +34,41 @@ func NewOutgoingPacketAckHandler() OutgoingPacketAckHandler {
 	}
 }
 
+func (h *outgoingPacketAckHandler) ackPacket(packetNumber protocol.PacketNumber) {
+	delete(h.packetHistory, packetNumber)
+}
+
+func (h *outgoingPacketAckHandler) nackPacket(packetNumber protocol.PacketNumber) error {
+	packet, ok := h.packetHistory[packetNumber]
+	if !ok {
+		return errMapAccess
+	}
+
+	packet.MissingReports++
+
+	if packet.MissingReports > retransmissionThreshold {
+		h.queuePacketForRetransmission(packet)
+	}
+	return nil
+}
+
+func (h *outgoingPacketAckHandler) recalculateHighestInOrderAckedPacketNumberFromPacketHistory() {
+	for i := h.highestInOrderAckedPacketNumber; i <= h.lastSentPacketNumber; i++ {
+		_, ok := h.packetHistory[i]
+		if ok {
+			break
+		}
+		h.highestInOrderAckedPacketNumber = i
+	}
+}
+
+func (h *outgoingPacketAckHandler) queuePacketForRetransmission(packet *Packet) {
+	h.retransmissionQueue = append(h.retransmissionQueue, packet)
+	h.ackPacket(packet.PacketNumber)
+	h.recalculateHighestInOrderAckedPacketNumberFromPacketHistory()
+}
+
 func (h *outgoingPacketAckHandler) SentPacket(packet *Packet) error {
-	h.packetHistoryMutex.Lock()
-	defer h.packetHistoryMutex.Unlock()
 	_, ok := h.packetHistory[packet.PacketNumber]
 	if ok {
 		return errors.New("Packet number already exists in Packet History")
@@ -44,68 +77,39 @@ func (h *outgoingPacketAckHandler) SentPacket(packet *Packet) error {
 		return errors.New("Packet number must be increased by exactly 1")
 	}
 
-	var lastPacketEntropy EntropyAccumulator
-	if packet.PacketNumber == 1 {
-		lastPacketEntropy = EntropyAccumulator(0)
-	} else {
-		if h.highestInOrderAckedPacketNumber == packet.PacketNumber-1 {
-			lastPacketEntropy = h.highestInOrderAckedEntropy
-		} else {
-			lastPacketEntropy = h.packetHistory[packet.PacketNumber-1].Entropy
-		}
-	}
-	lastPacketEntropy.Add(packet.PacketNumber, packet.EntropyBit)
-	packet.Entropy = lastPacketEntropy
+	h.lastSentPacketEntropy.Add(packet.PacketNumber, packet.EntropyBit)
+	packet.Entropy = h.lastSentPacketEntropy
 	h.lastSentPacketNumber = packet.PacketNumber
 	h.packetHistory[packet.PacketNumber] = packet
 	return nil
 }
 
 func (h *outgoingPacketAckHandler) calculateExpectedEntropy(ackFrame *frames.AckFrame) (EntropyAccumulator, error) {
-	h.packetHistoryMutex.Lock()
-	defer h.packetHistoryMutex.Unlock()
-
-	highestInOrderAckedPacketNumber := ackFrame.GetHighestInOrderPacketNumber()
-
-	var expectedEntropy EntropyAccumulator
-
-	// get the entropy for the highestInOrderAckedPacketNumber
-	// There are two cases:
-	// 1. the packet with highestInOrderAckedPacketNumber has already been ACKed, then it doesn't exist in the packetHistory map anymore, but the value was saved as h.highestInOrderAckedEntropy
-	// 2. the packet with highestInOrderAckedPacketNumber has not yet been ACKed, then it should exist in the packetHistory map, and can just be read from there
-	if highestInOrderAckedPacketNumber == h.highestInOrderAckedPacketNumber {
-		expectedEntropy = h.highestInOrderAckedEntropy
-	} else {
-		packet, ok := h.packetHistory[highestInOrderAckedPacketNumber]
-		if !ok {
-			return 0, errMapAccess
-		}
-		expectedEntropy = packet.Entropy
+	packet, ok := h.packetHistory[ackFrame.LargestObserved]
+	if !ok {
+		return 0, errMapAccess
 	}
+	expectedEntropy := packet.Entropy
 
 	if ackFrame.HasNACK() { // if the packet has NACKs, the entropy value has to be calculated
-		nackRangeIndex := len(ackFrame.NackRanges) - 1
+		nackRangeIndex := 0
 		nackRange := ackFrame.NackRanges[nackRangeIndex]
-		for i := highestInOrderAckedPacketNumber + 1; i <= ackFrame.LargestObserved; i++ {
-			// select correct NACK range
-			if i > nackRange.LastPacketNumber {
-				nackRangeIndex--
-				if nackRangeIndex >= 0 {
+		for i := ackFrame.LargestObserved; i > ackFrame.GetHighestInOrderPacketNumber(); i-- {
+			if i < nackRange.FirstPacketNumber {
+				nackRangeIndex++
+				if nackRangeIndex < len(ackFrame.NackRanges) {
 					nackRange = ackFrame.NackRanges[nackRangeIndex]
 				}
 			}
-			if i >= nackRange.FirstPacketNumber && i <= nackRange.LastPacketNumber { // PacketNumber i is contained in a NACK range, it's entropyBit is irrelevant
-				continue
+			if i >= nackRange.FirstPacketNumber && i <= nackRange.LastPacketNumber {
+				packet, ok := h.packetHistory[i]
+				if !ok {
+					return 0, errMapAccess
+				}
+				expectedEntropy.Substract(i, packet.EntropyBit)
 			}
-			// PacketNumber i is not contained in a NACK range, it's entropyBit has to be considered
-			packet, ok := h.packetHistory[i]
-			if !ok {
-				return 0, errMapAccess
-			}
-			expectedEntropy.Add(i, packet.EntropyBit)
 		}
 	}
-
 	return expectedEntropy, nil
 }
 
@@ -128,59 +132,33 @@ func (h *outgoingPacketAckHandler) ReceivedAck(ackFrame *frames.AckFrame) error 
 	}
 
 	// Entropy ok. Now actually process the ACK packet
-	h.packetHistoryMutex.Lock()
-	defer h.packetHistoryMutex.Unlock()
-
-	highestInOrderAckedPacketNumber := ackFrame.GetHighestInOrderPacketNumber()
-	highestInOrderAckedEntropy := h.highestInOrderAckedEntropy
 	h.LargestObserved = ackFrame.LargestObserved
+	highestInOrderAckedPacketNumber := ackFrame.GetHighestInOrderPacketNumber()
 
-	// if this ACK increases the highestInOrderAckedPacketNumber, the packet will be deleted from the packetHistory map, thus we need to save it's Entropy before doing so
-	if highestInOrderAckedPacketNumber > h.highestInOrderAckedPacketNumber {
-		packet, ok := h.packetHistory[highestInOrderAckedPacketNumber]
-		if !ok {
-			return errMapAccess
-		}
-		highestInOrderAckedEntropy = packet.Entropy
-	}
-
-	// delete all packets below the highestInOrderAckedPacketNumber
+	// ACK all packets below the highestInOrderAckedPacketNumber
 	for i := h.highestInOrderAckedPacketNumber; i <= highestInOrderAckedPacketNumber; i++ {
-		delete(h.packetHistory, i)
+		h.ackPacket(i)
 	}
 
-	// increase MissingReports counter of NACKed packets
-	// this is the case if the PacketNumber is *not* contained in any of the NACK ranges
 	if ackFrame.HasNACK() {
-		nackRangeIndex := len(ackFrame.NackRanges) - 1
+		nackRangeIndex := 0
 		nackRange := ackFrame.NackRanges[nackRangeIndex]
-		for i := highestInOrderAckedPacketNumber + 1; i <= ackFrame.LargestObserved; i++ {
-			// select correct NACK range
-			if i > nackRange.LastPacketNumber {
-				nackRangeIndex--
-				if nackRangeIndex >= 0 {
+		for i := ackFrame.LargestObserved; i > ackFrame.GetHighestInOrderPacketNumber(); i-- {
+			if i < nackRange.FirstPacketNumber {
+				nackRangeIndex++
+				if nackRangeIndex < len(ackFrame.NackRanges) {
 					nackRange = ackFrame.NackRanges[nackRangeIndex]
 				}
 			}
-			// PacketNumber i is not contained in a NACK range, increase it's missingReports counter
 			if i >= nackRange.FirstPacketNumber && i <= nackRange.LastPacketNumber {
-				packet, ok := h.packetHistory[i]
-				if !ok {
-					return errMapAccess
-				}
-				packet.MissingReports++
-				// send out the packet again when it has been NACK more than retransmissionThreshold times
-				if packet.MissingReports > retransmissionThreshold {
-					h.retransmissionQueue = append(h.retransmissionQueue, packet)
-					// ToDo: delete the packet from the history, as if it had been acked
-				}
+				h.nackPacket(i)
+			} else {
+				h.ackPacket(i)
 			}
-			// ToDo: delete packet from history, since it already has been ACKed
 		}
 	}
 
 	h.highestInOrderAckedPacketNumber = highestInOrderAckedPacketNumber
-	h.highestInOrderAckedEntropy = highestInOrderAckedEntropy
 
 	return nil
 }
