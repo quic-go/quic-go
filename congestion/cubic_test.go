@@ -13,16 +13,6 @@ const kNumConnections uint32 = 2
 const kNConnectionBeta float32 = (float32(kNumConnections) - 1 + kBeta) / float32(kNumConnections)
 const kNConnectionAlpha float32 = 3 * float32(kNumConnections) * float32(kNumConnections) * (1 - kNConnectionBeta) / (1 + kNConnectionBeta)
 
-type mockClock time.Time
-
-func (c *mockClock) Now() time.Time {
-	return time.Time(*c)
-}
-
-func (c *mockClock) Advance(d time.Duration) {
-	*c = mockClock(time.Time(*c).Add(d))
-}
-
 var _ = Describe("Cubic", func() {
 	var (
 		clock mockClock

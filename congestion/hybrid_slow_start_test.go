@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/congestion"
+	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -18,8 +19,8 @@ var _ = Describe("Hybrid slow start", func() {
 	})
 
 	It("works in a simple case", func() {
-		packet_number := uint64(1)
-		end_packet_number := uint64(3)
+		packet_number := protocol.PacketNumber(1)
+		end_packet_number := protocol.PacketNumber(3)
 		slowStart.StartReceiveRound(end_packet_number)
 
 		packet_number++
@@ -53,7 +54,7 @@ var _ = Describe("Hybrid slow start", func() {
 		// RTT of 60ms the detection will happen at 67.5 ms.
 		const kHybridStartMinSamples = 8 // Number of acks required to trigger.
 
-		end_packet_number := uint64(1)
+		end_packet_number := protocol.PacketNumber(1)
 		end_packet_number++
 		slowStart.StartReceiveRound(end_packet_number)
 

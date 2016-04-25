@@ -3,6 +3,7 @@ package congestion
 import (
 	"time"
 
+	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
@@ -21,8 +22,8 @@ const hybridStartDelayMaxThresholdUs = int64(16000)
 
 // HybridSlowStart implements the TCP hybrid slow start algorithm
 type HybridSlowStart struct {
-	endPacketNumber      uint64
-	lastSentPacketNumber uint64
+	endPacketNumber      protocol.PacketNumber
+	lastSentPacketNumber protocol.PacketNumber
 	started              bool
 	currentMinRTT        time.Duration
 	rttSampleCount       uint32
@@ -30,7 +31,7 @@ type HybridSlowStart struct {
 }
 
 // StartReceiveRound is called for the start of each receive round (burst) in the slow start phase.
-func (s *HybridSlowStart) StartReceiveRound(lastSent uint64) {
+func (s *HybridSlowStart) StartReceiveRound(lastSent protocol.PacketNumber) {
 	s.endPacketNumber = lastSent
 	s.currentMinRTT = 0
 	s.rttSampleCount = 0
@@ -38,7 +39,7 @@ func (s *HybridSlowStart) StartReceiveRound(lastSent uint64) {
 }
 
 // IsEndOfRound returns true if this ack is the last packet number of our current slow start round.
-func (s *HybridSlowStart) IsEndOfRound(ack uint64) bool {
+func (s *HybridSlowStart) IsEndOfRound(ack protocol.PacketNumber) bool {
 	return s.endPacketNumber < ack
 }
 
@@ -82,4 +83,9 @@ func (s *HybridSlowStart) ShouldExitSlowStart(latestRTT time.Duration, minRTT ti
 	// Exit from slow start if the cwnd is greater than 16 and
 	// increasing delay is found.
 	return congestionWindow >= hybridStartLowWindow && s.hystartFound
+}
+
+// OnPacketSent is called when a packet was sent
+func (s *HybridSlowStart) OnPacketSent(packetNumber protocol.PacketNumber) {
+	s.lastSentPacketNumber = packetNumber
 }
