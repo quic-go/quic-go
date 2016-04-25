@@ -19,7 +19,7 @@ var _ = Describe("Session", func() {
 	BeforeEach(func() {
 		callbackCalled = false
 		session = &Session{
-			Streams:        make(map[protocol.StreamID]*Stream),
+			streams:        make(map[protocol.StreamID]*Stream),
 			streamCallback: func(*Session, *Stream) { callbackCalled = true },
 		}
 	})
@@ -30,10 +30,10 @@ var _ = Describe("Session", func() {
 				StreamID: 5,
 				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
 			})
-			Expect(session.Streams).To(HaveLen(1))
+			Expect(session.streams).To(HaveLen(1))
 			Expect(callbackCalled).To(BeTrue())
 			p := make([]byte, 4)
-			_, err := session.Streams[5].Read(p)
+			_, err := session.streams[5].Read(p)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
 		})
@@ -43,16 +43,16 @@ var _ = Describe("Session", func() {
 				StreamID: 5,
 				Data:     []byte{0xde, 0xca},
 			})
-			Expect(session.Streams).To(HaveLen(1))
+			Expect(session.streams).To(HaveLen(1))
 			Expect(callbackCalled).To(BeTrue())
 			session.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
 				Offset:   2,
 				Data:     []byte{0xfb, 0xad},
 			})
-			Expect(session.Streams).To(HaveLen(1))
+			Expect(session.streams).To(HaveLen(1))
 			p := make([]byte, 4)
-			_, err := session.Streams[5].Read(p)
+			_, err := session.streams[5].Read(p)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
 		})
@@ -63,15 +63,15 @@ var _ = Describe("Session", func() {
 				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
 				FinBit:   true,
 			})
-			Expect(session.Streams).To(HaveLen(1))
-			Expect(session.Streams[5]).ToNot(BeNil())
+			Expect(session.streams).To(HaveLen(1))
+			Expect(session.streams[5]).ToNot(BeNil())
 			Expect(callbackCalled).To(BeTrue())
 			p := make([]byte, 4)
-			_, err := session.Streams[5].Read(p)
+			_, err := session.streams[5].Read(p)
 			Expect(err).To(Equal(io.EOF))
 			Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
-			Expect(session.Streams).To(HaveLen(1))
-			Expect(session.Streams[5]).To(BeNil())
+			Expect(session.streams).To(HaveLen(1))
+			Expect(session.streams[5]).To(BeNil())
 		})
 
 		It("rejects streams that existed previously", func() {
@@ -80,7 +80,7 @@ var _ = Describe("Session", func() {
 				Data:     []byte{},
 				FinBit:   true,
 			})
-			_, err := session.Streams[5].Read([]byte{0})
+			_, err := session.streams[5].Read([]byte{0})
 			Expect(err).To(Equal(io.EOF))
 			err = session.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,

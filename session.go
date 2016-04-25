@@ -27,18 +27,17 @@ type StreamCallback func(*Session, *Stream)
 type Session struct {
 	streamCallback StreamCallback
 
-	Connection        *net.UDPConn
-	CurrentRemoteAddr *net.UDPAddr
+	connection        *net.UDPConn
+	currentRemoteAddr *net.UDPAddr
 
-	Streams      map[protocol.StreamID]*Stream
+	streams      map[protocol.StreamID]*Stream
 	streamsMutex sync.RWMutex
 
 	outgoingAckHandler ackhandler.OutgoingPacketAckHandler
 	incomingAckHandler ackhandler.IncomingPacketAckHandler
 
-	unpacker  *packetUnpacker
-	packer    *packetPacker
-	batchMode bool
+	unpacker *packetUnpacker
+	packer   *packetPacker
 
 	receivedPackets chan receivedPacket
 }
@@ -46,9 +45,9 @@ type Session struct {
 // NewSession makes a new session
 func NewSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback) PacketHandler {
 	session := &Session{
-		Connection:         conn,
+		connection:         conn,
 		streamCallback:     streamCallback,
-		Streams:            make(map[protocol.StreamID]*Stream),
+		streams:            make(map[protocol.StreamID]*Stream),
 		outgoingAckHandler: ackhandler.NewOutgoingPacketAckHandler(),
 		incomingAckHandler: ackhandler.NewIncomingPacketAckHandler(),
 		receivedPackets:    make(chan receivedPacket),
@@ -83,8 +82,8 @@ func (s *Session) Run() {
 
 func (s *Session) handlePacket(addr *net.UDPAddr, publicHeader *PublicHeader, r *bytes.Reader) error {
 	// TODO: Only do this after authenticating
-	if addr != s.CurrentRemoteAddr {
-		s.CurrentRemoteAddr = addr
+	if addr != s.currentRemoteAddr {
+		s.currentRemoteAddr = addr
 	}
 
 	packet, err := s.unpacker.Unpack(publicHeader.Raw, publicHeader, r)
@@ -134,7 +133,7 @@ func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
 		return errors.New("Session: 0 is not a valid Stream ID")
 	}
 	s.streamsMutex.RLock()
-	stream, existingStream := s.Streams[frame.StreamID]
+	stream, existingStream := s.streams[frame.StreamID]
 	s.streamsMutex.RUnlock()
 
 	if !existingStream {
@@ -161,7 +160,6 @@ func (s *Session) Close(e error) error {
 	if ok {
 		errorCode = quicError.ErrorCode
 	}
-	s.batchMode = false
 	return s.QueueFrame(&frames.ConnectionCloseFrame{
 		ErrorCode:    errorCode,
 		ReasonPhrase: reasonPhrase,
@@ -182,7 +180,7 @@ func (s *Session) sendPacket() error {
 		EntropyBit:   packet.entropyBit,
 	})
 	fmt.Printf("-> Sending packet %d (%d bytes)\n", packet.number, len(packet.raw))
-	_, err = s.Connection.WriteToUDP(packet.raw, s.CurrentRemoteAddr)
+	_, err = s.connection.WriteToUDP(packet.raw, s.currentRemoteAddr)
 	if err != nil {
 		return err
 	}
@@ -200,10 +198,10 @@ func (s *Session) NewStream(id protocol.StreamID) (*Stream, error) {
 	s.streamsMutex.Lock()
 	defer s.streamsMutex.Unlock()
 	stream := NewStream(s, id)
-	if s.Streams[id] != nil {
+	if s.streams[id] != nil {
 		return nil, fmt.Errorf("Session: stream with ID %d already exists", id)
 	}
-	s.Streams[id] = stream
+	s.streams[id] = stream
 	return stream, nil
 }
 
@@ -211,6 +209,6 @@ func (s *Session) NewStream(id protocol.StreamID) (*Stream, error) {
 // and has fininshed reading its data.
 func (s *Session) closeStream(id protocol.StreamID) {
 	s.streamsMutex.Lock()
-	s.Streams[id] = nil
+	s.streams[id] = nil
 	s.streamsMutex.Unlock()
 }
