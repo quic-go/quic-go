@@ -2,6 +2,7 @@ package quic
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -18,6 +19,7 @@ type Stream struct {
 	WriteOffset    uint64
 	ReadOffset     uint64
 	frameQueue     []*frames.StreamFrame // TODO: replace with heap
+	currentErr     error
 }
 
 // NewStream creates a new Stream
@@ -34,7 +36,11 @@ func (s *Stream) Read(p []byte) (int, error) {
 	bytesRead := 0
 	for bytesRead < len(p) {
 		if s.CurrentFrame == nil {
-			s.CurrentFrame = s.getNextFrameInOrder(bytesRead == 0)
+			var err error
+			s.CurrentFrame, err = s.getNextFrameInOrder(bytesRead == 0)
+			if err != nil {
+				return bytesRead, err
+			}
 			if s.CurrentFrame == nil {
 				return bytesRead, nil
 			}
@@ -46,6 +52,12 @@ func (s *Stream) Read(p []byte) (int, error) {
 		bytesRead += m
 		s.ReadOffset += uint64(m)
 		if s.ReadPosInFrame >= len(s.CurrentFrame.Data) {
+			if s.CurrentFrame.FinBit {
+				s.currentErr = io.EOF
+				close(s.StreamFrames)
+				s.CurrentFrame = nil
+				return bytesRead, io.EOF
+			}
 			s.CurrentFrame = nil
 		}
 	}
@@ -53,32 +65,40 @@ func (s *Stream) Read(p []byte) (int, error) {
 	return bytesRead, nil
 }
 
-func (s *Stream) getNextFrameInOrder(wait bool) *frames.StreamFrame {
+func (s *Stream) getNextFrameInOrder(wait bool) (*frames.StreamFrame, error) {
 	// First, check the queue
 	for i, f := range s.frameQueue {
 		if f.Offset == s.ReadOffset {
 			// Move last element into position i
 			s.frameQueue[i] = s.frameQueue[len(s.frameQueue)-1]
 			s.frameQueue = s.frameQueue[:len(s.frameQueue)-1]
-			return f
+			return f, nil
 		}
 	}
 
-	// TODO: Handle error and break while(true) loop
 	for {
 		var nextFrameFromChannel *frames.StreamFrame
+		var ok bool
 		if wait {
-			nextFrameFromChannel = <-s.StreamFrames
+			select {
+			case nextFrameFromChannel, ok = <-s.StreamFrames:
+				if !ok {
+					return nil, s.currentErr
+				}
+			}
 		} else {
 			select {
-			case nextFrameFromChannel = <-s.StreamFrames:
+			case nextFrameFromChannel, ok = <-s.StreamFrames:
+				if !ok {
+					return nil, s.currentErr
+				}
 			default:
-				return nil
+				return nil, nil
 			}
 		}
 
 		if nextFrameFromChannel.Offset == s.ReadOffset {
-			return nextFrameFromChannel
+			return nextFrameFromChannel, nil
 		}
 
 		// Discard if we already know it
@@ -134,4 +154,11 @@ func (s *Stream) Close() error {
 func (s *Stream) AddStreamFrame(frame *frames.StreamFrame) error {
 	s.StreamFrames <- frame
 	return nil
+}
+
+// RegisterError is called by session to indicate that an error occured and the
+// stream should be closed.
+func (s *Stream) RegisterError(err error) {
+	s.currentErr = err
+	close(s.StreamFrames)
 }
