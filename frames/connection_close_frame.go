@@ -52,7 +52,7 @@ func (f *ConnectionCloseFrame) MaxLength() int {
 }
 
 // Write writes an CONNECTION_CLOSE frame.
-func (f *ConnectionCloseFrame) Write(b *bytes.Buffer) error {
+func (f *ConnectionCloseFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, packetNumberLen uint8) error {
 	b.WriteByte(0x02)
 	utils.WriteUint32(b, uint32(f.ErrorCode))
 

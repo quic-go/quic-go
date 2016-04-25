@@ -25,7 +25,7 @@ type AckFrame struct {
 }
 
 // Write writes an ACK frame.
-func (f *AckFrame) Write(b *bytes.Buffer) error {
+func (f *AckFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, packetNumberLen uint8) error {
 	typeByte := uint8(0x40 | 0x0C)
 
 	if f.HasNACK() {

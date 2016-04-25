@@ -42,7 +42,12 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 		return nil, nil
 	}
 
-	payload, err := p.composeNextPayload()
+	currentPacketNumber := protocol.PacketNumber(atomic.AddUint64(
+		(*uint64)(&p.lastPacketNumber),
+		1,
+	))
+
+	payload, err := p.composeNextPayload(currentPacketNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -55,10 +60,6 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 		payload[0] = 1
 	}
 
-	currentPacketNumber := protocol.PacketNumber(atomic.AddUint64(
-		(*uint64)(&p.lastPacketNumber),
-		1,
-	))
 	var raw bytes.Buffer
 	responsePublicHeader := PublicHeader{
 		ConnectionID: p.connectionID,
@@ -83,7 +84,7 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 	}, nil
 }
 
-func (p *packetPacker) composeNextPayload() ([]byte, error) {
+func (p *packetPacker) composeNextPayload(currentPacketNumber protocol.PacketNumber) ([]byte, error) {
 	var payload bytes.Buffer
 	payload.WriteByte(0) // The entropy bit is set in sendPayload
 
@@ -112,7 +113,7 @@ func (p *packetPacker) composeNextPayload() ([]byte, error) {
 			p.queuedFrames = p.queuedFrames[1:]
 		}
 
-		if err := frame.Write(&payload); err != nil {
+		if err := frame.Write(&payload, currentPacketNumber, 6); err != nil {
 			return nil, err
 		}
 	}

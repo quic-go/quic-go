@@ -37,7 +37,7 @@ var _ = Describe("StreamFrame", func() {
 			(&StreamFrame{
 				StreamID: 1,
 				Data:     []byte("foobar"),
-			}).Write(b)
+			}).Write(b, 1, 6)
 			Expect(b.Bytes()).To(Equal([]byte{0xa3, 0x1, 0, 0, 0, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'}))
 		})
 
@@ -47,7 +47,7 @@ var _ = Describe("StreamFrame", func() {
 				StreamID: 1,
 				Offset:   16,
 				Data:     []byte("foobar"),
-			}).Write(b)
+			}).Write(b, 1, 6)
 			Expect(b.Bytes()).To(Equal([]byte{0xbf, 0x1, 0, 0, 0, 0x10, 0, 0, 0, 0, 0, 0, 0, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'}))
 		})
 
@@ -58,7 +58,7 @@ var _ = Describe("StreamFrame", func() {
 				Data:     []byte("f"),
 				Offset:   1,
 			}
-			f.Write(b)
+			f.Write(b, 1, 6)
 			Expect(f.MaxLength()).To(Equal(b.Len()))
 		})
 	})

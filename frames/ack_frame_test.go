@@ -192,7 +192,7 @@ var _ = Describe("AckFrame", func() {
 				Entropy:         2,
 				LargestObserved: 1,
 			}
-			err := frame.Write(b)
+			err := frame.Write(b, 1, 6)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b.Bytes()).To(Equal([]byte{0x4c, 0x02, 0x01, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0}))
 		})
@@ -208,7 +208,7 @@ var _ = Describe("AckFrame", func() {
 				LargestObserved: 4,
 				NackRanges:      []NackRange{nackRange},
 			}
-			err := frame.Write(b)
+			err := frame.Write(b, 1, 6)
 			Expect(err).ToNot(HaveOccurred())
 			missingPacketBytes := b.Bytes()[b.Len()-8:]
 			Expect(missingPacketBytes[0]).To(Equal(uint8(1))) // numRanges
@@ -233,7 +233,7 @@ var _ = Describe("AckFrame", func() {
 				LargestObserved: 7,
 				NackRanges:      []NackRange{nackRange1, nackRange2},
 			}
-			err := frame.Write(b)
+			err := frame.Write(b, 1, 6)
 			Expect(err).ToNot(HaveOccurred())
 			missingPacketBytes := b.Bytes()[b.Len()-(1+2*7):]
 			Expect(missingPacketBytes[0]).To(Equal(uint8(2)))      // numRanges
@@ -253,7 +253,7 @@ var _ = Describe("AckFrame", func() {
 				Entropy:         2,
 				LargestObserved: 1,
 			}
-			f.Write(b)
+			f.Write(b, 1, 6)
 			Expect(f.MaxLength()).To(Equal(b.Len()))
 		})
 
@@ -269,7 +269,7 @@ var _ = Describe("AckFrame", func() {
 					},
 				},
 			}
-			err := f.Write(b)
+			err := f.Write(b, 1, 6)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(f.MaxLength()).To(Equal(b.Len()))
 		})
@@ -282,7 +282,7 @@ var _ = Describe("AckFrame", func() {
 				Entropy:         0xDE,
 				LargestObserved: 6789,
 			}
-			err := frameOrig.Write(b)
+			err := frameOrig.Write(b, 1, 6)
 			Expect(err).ToNot(HaveOccurred())
 			frame, err := ParseAckFrame(bytes.NewReader(b.Bytes()))
 			Expect(err).ToNot(HaveOccurred())
@@ -301,7 +301,7 @@ var _ = Describe("AckFrame", func() {
 				LargestObserved: 15,
 				NackRanges:      nackRanges,
 			}
-			err := frameOrig.Write(b)
+			err := frameOrig.Write(b, 1, 6)
 			Expect(err).ToNot(HaveOccurred())
 			r := bytes.NewReader(b.Bytes())
 			frame, err := ParseAckFrame(r)

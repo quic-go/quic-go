@@ -35,7 +35,7 @@ var _ = Describe("ConnectionCloseFrame", func() {
 			frame := &ConnectionCloseFrame{
 				ErrorCode: 0xDEADBEEF,
 			}
-			err := frame.Write(b)
+			err := frame.Write(b, 1, 6)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b.Len()).To(Equal(1 + 2 + 4))
 			Expect(b.Bytes()).To(Equal([]byte{0x02, 0xEF, 0xBE, 0xAD, 0xDE, 0x00, 0x00}))
@@ -47,7 +47,7 @@ var _ = Describe("ConnectionCloseFrame", func() {
 				ErrorCode:    0xDEADBEEF,
 				ReasonPhrase: "foobar",
 			}
-			err := frame.Write(b)
+			err := frame.Write(b, 1, 6)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b.Len()).To(Equal(1 + 2 + 4 + len(frame.ReasonPhrase)))
 			Expect(b.Bytes()[:5]).To(Equal([]byte{0x02, 0xEF, 0xBE, 0xAD, 0xDE}))
@@ -67,7 +67,7 @@ var _ = Describe("ConnectionCloseFrame", func() {
 				ErrorCode:    0xDEADBEEF,
 				ReasonPhrase: reasonPhrase,
 			}
-			err := frame.Write(b)
+			err := frame.Write(b, 1, 6)
 			Expect(err).To(HaveOccurred())
 		})
 
@@ -77,7 +77,7 @@ var _ = Describe("ConnectionCloseFrame", func() {
 				ErrorCode:    0xDEADBEEF,
 				ReasonPhrase: "foobar",
 			}
-			f.Write(b)
+			f.Write(b, 1, 6)
 			Expect(f.MaxLength()).To(Equal(b.Len()))
 		})
 	})
@@ -88,7 +88,7 @@ var _ = Describe("ConnectionCloseFrame", func() {
 			ErrorCode:    0xDEADBEEF,
 			ReasonPhrase: "Lorem ipsum dolor sit amet.",
 		}
-		err := frame.Write(b)
+		err := frame.Write(b, 1, 6)
 		Expect(err).ToNot(HaveOccurred())
 		readframe, err := ParseConnectionCloseFrame(bytes.NewReader(b.Bytes()))
 		Expect(err).ToNot(HaveOccurred())
