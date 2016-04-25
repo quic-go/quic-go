@@ -9,6 +9,7 @@ import (
 )
 
 var (
+	errAckForUnsentPacket   = errors.New("OutgoingPacketAckHandler: Received ACK for an unsent package")
 	errEntropy              = errors.New("OutgoingPacketAckHandler: Wrong entropy")
 	errMapAccess            = errors.New("OutgoingPacketAckHandler: Packet does not exist in PacketHistory")
 	retransmissionThreshold = uint8(3)
@@ -109,7 +110,7 @@ func (h *outgoingPacketAckHandler) calculateExpectedEntropy(ackFrame *frames.Ack
 
 func (h *outgoingPacketAckHandler) ReceivedAck(ackFrame *frames.AckFrame) error {
 	if ackFrame.LargestObserved > h.lastSentPacketNumber {
-		return errors.New("OutgoingPacketAckHandler: Received ACK for an unsent package")
+		return errAckForUnsentPacket
 	}
 
 	if ackFrame.LargestObserved <= h.LargestObserved { // duplicate or out-of-order AckFrame
