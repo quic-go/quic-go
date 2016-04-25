@@ -1,6 +1,7 @@
 package ackhandler
 
 import (
+	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 
 	. "github.com/onsi/ginkgo"
@@ -187,6 +188,45 @@ var _ = Describe("incomingPacketAckHandler", func() {
 			Expect(nackRanges[1].LastPacketNumber).To(Equal(protocol.PacketNumber(8)))
 			Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(1)))
 			Expect(entropy).To(Equal(expectedEntropy))
+		})
+	})
+
+	Context("handling STOP_WAITING frames", func() {
+		It("resets the entropy", func() {
+			// We simulate 20 packets, numbers 10, 11 and 12 lost
+			expectedAfterStopWaiting := EntropyAccumulator(0)
+			for i := 1; i < 20; i++ {
+				entropyBit := false
+				if i%3 == 0 || i%5 == 0 {
+					entropyBit = true
+				}
+
+				if i == 10 || i == 11 || i == 12 {
+					continue
+				}
+				if i > 12 {
+					expectedAfterStopWaiting.Add(protocol.PacketNumber(i), entropyBit)
+				}
+				err := handler.ReceivedPacket(protocol.PacketNumber(i), entropyBit)
+				Expect(err).ToNot(HaveOccurred())
+			}
+			err := handler.ReceivedStopWaiting(&frames.StopWaitingFrame{Entropy: 42, LeastUnacked: protocol.PacketNumber(12)})
+			Expect(err).ToNot(HaveOccurred())
+			_, e := handler.getNackRanges()
+			Expect(e).To(Equal(42 ^ expectedAfterStopWaiting))
+			Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(12)))
+			Expect(handler.highestInOrderObservedEntropy).To(Equal(EntropyAccumulator(42)))
+		})
+
+		It("does not emit nack ranges after STOP_WAITING", func() {
+			err := handler.ReceivedPacket(10, false)
+			Expect(err).ToNot(HaveOccurred())
+			ranges, _ := handler.getNackRanges()
+			Expect(ranges).To(HaveLen(1))
+			err = handler.ReceivedStopWaiting(&frames.StopWaitingFrame{Entropy: 0, LeastUnacked: protocol.PacketNumber(9)})
+			Expect(err).ToNot(HaveOccurred())
+			ranges, _ = handler.getNackRanges()
+			Expect(ranges).To(HaveLen(0))
 		})
 	})
 })

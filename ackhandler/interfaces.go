@@ -16,6 +16,7 @@ type OutgoingPacketAckHandler interface {
 // IncomingPacketAckHandler handles ACKs needed to send for incoming packets
 type IncomingPacketAckHandler interface {
 	ReceivedPacket(packetNumber protocol.PacketNumber, entropyBit bool) error
+	ReceivedStopWaiting(*frames.StopWaitingFrame) error
 
 	DequeueAckFrame() *frames.AckFrame
 }

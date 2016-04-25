@@ -45,6 +45,18 @@ func (h *incomingPacketAckHandler) ReceivedPacket(packetNumber protocol.PacketNu
 	return nil
 }
 
+func (h *incomingPacketAckHandler) ReceivedStopWaiting(f *frames.StopWaitingFrame) error {
+	// Ignore if STOP_WAITING is unneeded
+	if h.highestInOrderObserved >= f.LeastUnacked {
+		return nil
+	}
+
+	h.highestInOrderObserved = f.LeastUnacked
+	h.highestInOrderObservedEntropy = EntropyAccumulator(f.Entropy)
+
+	return nil
+}
+
 // getNackRanges gets all the NACK ranges
 func (h *incomingPacketAckHandler) getNackRanges() ([]frames.NackRange, EntropyAccumulator) {
 	// ToDo: use a better data structure here

@@ -83,7 +83,7 @@ func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeaderBinary []byte, pub
 		case *frames.ConnectionCloseFrame:
 			fmt.Printf("%#v\n", frame)
 		case *frames.StopWaitingFrame:
-			fmt.Printf("%#v\n", frame)
+			err = s.incomingAckHandler.ReceivedStopWaiting(frame)
 		case *frames.RstStreamFrame:
 			fmt.Printf("%#v\n", frame)
 		case *frames.WindowUpdateFrame:
