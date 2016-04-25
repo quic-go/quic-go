@@ -245,6 +245,7 @@ var _ = Describe("AckHandler", func() {
 				}
 				err := handler.ReceivedAck(&ack)
 				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.LargestObserved).To(Equal(protocol.PacketNumber(largestObserved)))
 				Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(largestObserved)))
 				// all packets with packetNumbers smaller or equal largestObserved should be deleted
 				Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(1)))
@@ -276,6 +277,7 @@ var _ = Describe("AckHandler", func() {
 				err = handler.ReceivedAck(&ack)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(Equal(errDuplicateOrOutOfOrderAck))
+				Expect(handler.LargestObserved).To(Equal(protocol.PacketNumber(largestObserved)))
 			})
 
 			It("rejects ACKs with a LargestObserved packet number higher than what was sent out previously", func() {
@@ -298,11 +300,13 @@ var _ = Describe("AckHandler", func() {
 				}
 				err := handler.ReceivedAck(&ack)
 				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.LargestObserved).To(Equal(protocol.PacketNumber(3)))
 				Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(1)))
 				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(2)))
 				Expect(handler.packetHistory[2].MissingReports).To(Equal(uint8(1)))
 				// Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(3)))
 				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(4)))
+				Expect(handler.LargestObserved).To(Equal(protocol.PacketNumber(3)))
 			})
 
 			It("handles an ACK with one NACK range and two missing packets", func() {
@@ -319,6 +323,7 @@ var _ = Describe("AckHandler", func() {
 				Expect(handler.packetHistory[2].MissingReports).To(Equal(uint8(1)))
 				Expect(handler.packetHistory[3].MissingReports).To(Equal(uint8(1)))
 				// Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(4)))
+				Expect(handler.LargestObserved).To(Equal(protocol.PacketNumber(4)))
 			})
 
 			It("handles an ACK with multiple NACK ranges", func() {
