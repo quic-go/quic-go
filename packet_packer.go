@@ -34,7 +34,8 @@ func (p *packetPacker) AddFrame(f frames.Frame) {
 	p.mutex.Unlock()
 }
 
-func (p *packetPacker) PackPacket() (*packedPacket, error) {
+func (p *packetPacker) PackPacket(controlFrames []frames.Frame) (*packedPacket, error) {
+	// TODO: save controlFrames as a member variable, makes it easier to handle in the unlikely event that there are more controlFrames than you can put into on packet
 	p.mutex.Lock()
 	defer p.mutex.Unlock() // TODO: Split up?
 
@@ -47,7 +48,7 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 		1,
 	))
 
-	payloadFrames, err := p.composeNextPacket()
+	payloadFrames, err := p.composeNextPacket(controlFrames)
 	if err != nil {
 		return nil, err
 	}
@@ -98,9 +99,17 @@ func (p *packetPacker) getPayload(frames []frames.Frame, currentPacketNumber pro
 	return payload.Bytes(), nil
 }
 
-func (p *packetPacker) composeNextPacket() ([]frames.Frame, error) {
+func (p *packetPacker) composeNextPacket(controlFrames []frames.Frame) ([]frames.Frame, error) {
 	payloadLength := 0
 	var payloadFrames []frames.Frame
+
+	// TODO: handle the case where there are more controlFrames than we can put into one packet
+	for len(controlFrames) > 0 {
+		frame := controlFrames[0]
+		payloadFrames = append(payloadFrames, frame)
+		payloadLength += frame.MinLength()
+		controlFrames = controlFrames[1:]
+	}
 
 	for len(p.queuedFrames) > 0 {
 		frame := p.queuedFrames[0]

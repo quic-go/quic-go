@@ -121,7 +121,6 @@ func (s *Session) handlePacket(addr *net.UDPAddr, publicHeader *PublicHeader, r 
 	}
 
 	s.receivedPacketHandler.ReceivedPacket(publicHeader.PacketNumber, packet.entropyBit)
-	s.QueueFrame(s.receivedPacketHandler.DequeueAckFrame())
 
 	for _, ff := range packet.frames {
 		var err error
@@ -225,7 +224,13 @@ func (s *Session) closeStreamsWithError(err error) {
 }
 
 func (s *Session) sendPacket() error {
-	packet, err := s.packer.PackPacket()
+	var controlFrames []frames.Frame
+	ack := s.receivedPacketHandler.DequeueAckFrame()
+	if ack != nil {
+		controlFrames = append(controlFrames, ack)
+	}
+	packet, err := s.packer.PackPacket(controlFrames)
+
 	if err != nil {
 		return err
 	}
