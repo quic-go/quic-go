@@ -8,8 +8,9 @@ import (
 )
 
 var (
+	// ErrDuplicateOrOutOfOrderAck occurs when a duplicate or an out-of-order ACK is received
+	ErrDuplicateOrOutOfOrderAck = errors.New("SentPacketHandler: Duplicate or out-of-order ACK")
 	errAckForUnsentPacket       = errors.New("SentPacketHandler: Received ACK for an unsent package")
-	errDuplicateOrOutOfOrderAck = errors.New("SentPacketHandler: Duplicate or out-of-order ACK")
 	errEntropy                  = errors.New("SentPacketHandler: Wrong entropy")
 	errMapAccess                = errors.New("SentPacketHandler: Packet does not exist in PacketHistory")
 	retransmissionThreshold     = uint8(3)
@@ -119,7 +120,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) error {
 	}
 
 	if ackFrame.LargestObserved <= h.LargestObserved { // duplicate or out-of-order AckFrame
-		return errDuplicateOrOutOfOrderAck
+		return ErrDuplicateOrOutOfOrderAck
 	}
 
 	expectedEntropy, err := h.calculateExpectedEntropy(ackFrame)

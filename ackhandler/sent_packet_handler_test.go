@@ -249,7 +249,7 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 				err = handler.ReceivedAck(&ack)
 				Expect(err).To(HaveOccurred())
-				Expect(err).To(Equal(errDuplicateOrOutOfOrderAck))
+				Expect(err).To(Equal(ErrDuplicateOrOutOfOrderAck))
 			})
 
 			It("rejects out of order ACKs", func() {
@@ -262,7 +262,7 @@ var _ = Describe("SentPacketHandler", func() {
 				ack.LargestObserved--
 				err = handler.ReceivedAck(&ack)
 				Expect(err).To(HaveOccurred())
-				Expect(err).To(Equal(errDuplicateOrOutOfOrderAck))
+				Expect(err).To(Equal(ErrDuplicateOrOutOfOrderAck))
 				Expect(handler.LargestObserved).To(Equal(protocol.PacketNumber(largestObserved)))
 			})
 

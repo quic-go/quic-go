@@ -75,7 +75,7 @@ func (s *Session) Run() {
 		case <-time.After(sendTimeout):
 			err = s.sendPacket()
 		}
-		if err != nil {
+		if err != nil && err != ackhandler.ErrDuplicateOrOutOfOrderAck {
 			fmt.Printf("Error in session: %s\n", err.Error())
 		}
 
