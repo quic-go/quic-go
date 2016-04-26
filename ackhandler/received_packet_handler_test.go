@@ -229,4 +229,53 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(ranges).To(HaveLen(0))
 		})
 	})
+
+	Context("ACK package generation", func() {
+		It("generates a simple ACK frame", func() {
+			entropy := EntropyAccumulator(0)
+			entropy.Add(1, true)
+			entropy.Add(2, true)
+			err := handler.ReceivedPacket(protocol.PacketNumber(1), true)
+			Expect(err).ToNot(HaveOccurred())
+			err = handler.ReceivedPacket(protocol.PacketNumber(2), true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.DequeueAckFrame()).To(Equal(&frames.AckFrame{LargestObserved: 2, Entropy: byte(entropy)}))
+		})
+
+		It("generates an ACK frame with a NACK range", func() {
+			entropy := EntropyAccumulator(0)
+			entropy.Add(1, true)
+			entropy.Add(4, true)
+			err := handler.ReceivedPacket(protocol.PacketNumber(1), true)
+			Expect(err).ToNot(HaveOccurred())
+			err = handler.ReceivedPacket(protocol.PacketNumber(4), true)
+			Expect(err).ToNot(HaveOccurred())
+			expectedAck := frames.AckFrame{
+				LargestObserved: 4,
+				Entropy:         byte(entropy),
+				NackRanges:      []frames.NackRange{frames.NackRange{FirstPacketNumber: 2, LastPacketNumber: 3}},
+			}
+			Expect(handler.DequeueAckFrame()).To(Equal(&expectedAck))
+		})
+
+		It("does not generate an ACK if an ACK has already been sent for the largest Packet", func() {
+			err := handler.ReceivedPacket(protocol.PacketNumber(1), false)
+			Expect(err).ToNot(HaveOccurred())
+			err = handler.ReceivedPacket(protocol.PacketNumber(2), false)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.DequeueAckFrame()).ToNot(BeNil())
+			Expect(handler.DequeueAckFrame()).To(BeNil())
+		})
+
+		It("generates an ACK when an out-of-order packet arrives", func() {
+			err := handler.ReceivedPacket(protocol.PacketNumber(1), false)
+			Expect(err).ToNot(HaveOccurred())
+			err = handler.ReceivedPacket(protocol.PacketNumber(3), false)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.DequeueAckFrame()).ToNot(BeNil())
+			err = handler.ReceivedPacket(protocol.PacketNumber(2), false)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.DequeueAckFrame()).ToNot(BeNil())
+		})
+	})
 })

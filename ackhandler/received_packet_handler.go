@@ -14,6 +14,7 @@ type receivedPacketHandler struct {
 	highestInOrderObservedEntropy EntropyAccumulator
 	largestObserved               protocol.PacketNumber
 	packetHistory                 map[protocol.PacketNumber]bool // the bool is the EntropyBit of the packet
+	stateChanged                  bool                           // has an ACK for this state already been sent? Will be set to false every time a new packet arrives, and to false every time an ACK is sent
 }
 
 // NewReceivedPacketHandler creates a new receivedPacketHandler
@@ -30,6 +31,8 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 	if packetNumber <= h.highestInOrderObserved || h.packetHistory[packetNumber] {
 		return ErrDuplicatePacket
 	}
+
+	h.stateChanged = true
 
 	if packetNumber > h.largestObserved {
 		h.largestObserved = packetNumber
@@ -84,6 +87,12 @@ func (h *receivedPacketHandler) getNackRanges() ([]frames.NackRange, EntropyAccu
 }
 
 func (h *receivedPacketHandler) DequeueAckFrame() *frames.AckFrame {
+	if !h.stateChanged {
+		return nil
+	}
+
+	h.stateChanged = false
+
 	nackRanges, entropy := h.getNackRanges()
 	return &frames.AckFrame{
 		LargestObserved: h.largestObserved,
