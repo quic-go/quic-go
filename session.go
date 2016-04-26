@@ -233,7 +233,7 @@ func (s *Session) sendPacket() error {
 	}
 	s.sentPacketHandler.SentPacket(&ackhandler.Packet{
 		PacketNumber: packet.number,
-		Plaintext:    packet.payload,
+		Frames:       packet.frames,
 		EntropyBit:   packet.entropyBit,
 	})
 	fmt.Printf("-> Sending packet %d (%d bytes)\n", packet.number, len(packet.raw))

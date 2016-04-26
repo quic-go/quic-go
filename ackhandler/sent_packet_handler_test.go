@@ -9,15 +9,20 @@ import (
 
 var _ = Describe("SentPacketHandler", func() {
 	var handler *sentPacketHandler
+	var streamFrame frames.StreamFrame
 	BeforeEach(func() {
 		handler = NewSentPacketHandler().(*sentPacketHandler)
+		streamFrame = frames.StreamFrame{
+			StreamID: 5,
+			Data:     []byte{0x13, 0x37},
+		}
 	})
 
 	Context("SentPacket", func() {
 		It("accepts two consecutive packets", func() {
 			entropy := EntropyAccumulator(0)
-			packet1 := Packet{PacketNumber: 1, Plaintext: []byte{0x13, 0x37}, EntropyBit: true}
-			packet2 := Packet{PacketNumber: 2, Plaintext: []byte{0xBE, 0xEF}, EntropyBit: true}
+			packet1 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true}
+			packet2 := Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: true}
 			err := handler.SentPacket(&packet1)
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.SentPacket(&packet2)
@@ -34,8 +39,8 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("rejects packets with the same packet number", func() {
-			packet1 := Packet{PacketNumber: 1, Plaintext: []byte{0x13, 0x37}, EntropyBit: true}
-			packet2 := Packet{PacketNumber: 1, Plaintext: []byte{0xBE, 0xEF}, EntropyBit: false}
+			packet1 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true}
+			packet2 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: false}
 			err := handler.SentPacket(&packet1)
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.SentPacket(&packet2)
@@ -45,8 +50,8 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("rejects non-consecutive packets", func() {
-			packet1 := Packet{PacketNumber: 1, Plaintext: []byte{0x13, 0x37}, EntropyBit: true}
-			packet2 := Packet{PacketNumber: 3, Plaintext: []byte{0xBE, 0xEF}, EntropyBit: false}
+			packet1 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true}
+			packet2 := Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, EntropyBit: false}
 			err := handler.SentPacket(&packet1)
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.SentPacket(&packet2)
@@ -58,8 +63,8 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("correctly calculates the entropy, even if the last packet has already been ACKed", func() {
-			packet1 := Packet{PacketNumber: 1, Plaintext: []byte{0x13, 0x37}, EntropyBit: true}
-			packet2 := Packet{PacketNumber: 2, Plaintext: []byte{0xBE, 0xEF}, EntropyBit: true}
+			packet1 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true}
+			packet2 := Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: true}
 			err := handler.SentPacket(&packet1)
 			Expect(err).ToNot(HaveOccurred())
 			entropy := EntropyAccumulator(0)
@@ -85,12 +90,12 @@ var _ = Describe("SentPacketHandler", func() {
 		BeforeEach(func() {
 			entropy = EntropyAccumulator(0)
 			packets = []*Packet{
-				&Packet{PacketNumber: 1, Plaintext: []byte{0x13, 0x37}, EntropyBit: true},
-				&Packet{PacketNumber: 2, Plaintext: []byte{0xBE, 0xEF}, EntropyBit: true},
-				&Packet{PacketNumber: 3, Plaintext: []byte{0xCA, 0xFE}, EntropyBit: true},
-				&Packet{PacketNumber: 4, Plaintext: []byte{0x54, 0x32}, EntropyBit: true},
-				&Packet{PacketNumber: 5, Plaintext: []byte{0x12, 0x42}, EntropyBit: true},
-				&Packet{PacketNumber: 6, Plaintext: []byte{0xCA, 0xFE}, EntropyBit: true},
+				&Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true},
+				&Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: true},
+				&Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, EntropyBit: true},
+				&Packet{PacketNumber: 4, Frames: []frames.Frame{&streamFrame}, EntropyBit: true},
+				&Packet{PacketNumber: 5, Frames: []frames.Frame{&streamFrame}, EntropyBit: true},
+				&Packet{PacketNumber: 6, Frames: []frames.Frame{&streamFrame}, EntropyBit: true},
 			}
 			for _, packet := range packets {
 				handler.SentPacket(packet)
@@ -227,12 +232,12 @@ var _ = Describe("SentPacketHandler", func() {
 
 		BeforeEach(func() {
 			packets = []*Packet{
-				&Packet{PacketNumber: 1, Plaintext: []byte{0x13, 0x37}, EntropyBit: false},
-				&Packet{PacketNumber: 2, Plaintext: []byte{0xBE, 0xEF}, EntropyBit: false},
-				&Packet{PacketNumber: 3, Plaintext: []byte{0xCA, 0xFE}, EntropyBit: false},
-				&Packet{PacketNumber: 4, Plaintext: []byte{0x54, 0x32}, EntropyBit: false},
-				&Packet{PacketNumber: 5, Plaintext: []byte{0x54, 0x32}, EntropyBit: false},
-				&Packet{PacketNumber: 6, Plaintext: []byte{0x54, 0x32}, EntropyBit: false},
+				&Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
+				&Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
+				&Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
+				&Packet{PacketNumber: 4, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
+				&Packet{PacketNumber: 5, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
+				&Packet{PacketNumber: 6, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
 			}
 			for _, packet := range packets {
 				handler.SentPacket(packet)
@@ -285,12 +290,12 @@ var _ = Describe("SentPacketHandler", func() {
 			retransmissionThreshold = 1
 
 			packets = []*Packet{
-				&Packet{PacketNumber: 1, Plaintext: []byte{0x13, 0x37}, EntropyBit: false},
-				&Packet{PacketNumber: 2, Plaintext: []byte{0xBE, 0xEF}, EntropyBit: false},
-				&Packet{PacketNumber: 3, Plaintext: []byte{0xCA, 0xFE}, EntropyBit: false},
-				&Packet{PacketNumber: 4, Plaintext: []byte{0x54, 0x32}, EntropyBit: false},
-				&Packet{PacketNumber: 5, Plaintext: []byte{0x12, 0x42}, EntropyBit: false},
-				&Packet{PacketNumber: 6, Plaintext: []byte{0xCA, 0xFE}, EntropyBit: false},
+				&Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
+				&Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
+				&Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
+				&Packet{PacketNumber: 4, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
+				&Packet{PacketNumber: 5, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
+				&Packet{PacketNumber: 6, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
 			}
 			for _, packet := range packets {
 				handler.SentPacket(packet)

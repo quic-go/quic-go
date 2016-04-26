@@ -15,7 +15,7 @@ type packedPacket struct {
 	number     protocol.PacketNumber
 	entropyBit bool
 	raw        []byte
-	payload    []byte
+	frames     []frames.Frame
 }
 
 type packetPacker struct {
@@ -47,12 +47,12 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 		1,
 	))
 
-	frames, err := p.composeNextPacket()
+	payloadFrames, err := p.composeNextPacket()
 	if err != nil {
 		return nil, err
 	}
 
-	payload, err := p.getPayload(frames, currentPacketNumber)
+	payload, err := p.getPayload(payloadFrames, currentPacketNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 		number:     currentPacketNumber,
 		entropyBit: entropyBit,
 		raw:        raw.Bytes(),
-		payload:    payload[1:],
+		frames:     payloadFrames,
 	}, nil
 }
 

@@ -1,11 +1,14 @@
 package ackhandler
 
-import "github.com/lucas-clemente/quic-go/protocol"
+import (
+	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/protocol"
+)
 
 // A Packet is a packet
 type Packet struct {
 	PacketNumber protocol.PacketNumber
-	Plaintext    []byte
+	Frames       []frames.Frame
 	EntropyBit   bool
 	Entropy      EntropyAccumulator
 

@@ -34,7 +34,7 @@ var _ = Describe("Packet packer", func() {
 		Expect(err).ToNot(HaveOccurred())
 		b := &bytes.Buffer{}
 		f.Write(b, 1, 6)
-		Expect(p.payload).To(Equal(b.Bytes()))
+		Expect(len(p.frames)).To(Equal(1))
 		Expect(p.raw).To(ContainSubstring(string(b.Bytes())))
 	})
 
@@ -49,7 +49,7 @@ var _ = Describe("Packet packer", func() {
 		b := &bytes.Buffer{}
 		f1.Write(b, 2, 6)
 		f2.Write(b, 2, 6)
-		Expect(p.payload).To(Equal(b.Bytes()))
+		Expect(len(p.frames)).To(Equal(2))
 		Expect(p.raw).To(ContainSubstring(string(b.Bytes())))
 	})
 
