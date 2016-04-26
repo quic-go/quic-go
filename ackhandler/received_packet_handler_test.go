@@ -8,14 +8,14 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("incomingPacketAckHandler", func() {
+var _ = Describe("receivedPacketHandler", func() {
 	var (
-		handler         *incomingPacketAckHandler
+		handler         *receivedPacketHandler
 		expectedEntropy EntropyAccumulator
 	)
 
 	BeforeEach(func() {
-		handler = NewIncomingPacketAckHandler().(*incomingPacketAckHandler)
+		handler = NewReceivedPacketHandler().(*receivedPacketHandler)
 		expectedEntropy = EntropyAccumulator(0)
 	})
 

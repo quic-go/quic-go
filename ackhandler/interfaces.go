@@ -13,8 +13,8 @@ type SentPacketHandler interface {
 	DequeuePacketForRetransmission() (packet *Packet)
 }
 
-// IncomingPacketAckHandler handles ACKs needed to send for incoming packets
-type IncomingPacketAckHandler interface {
+// ReceivedPacketHandler handles ACKs needed to send for incoming packets
+type ReceivedPacketHandler interface {
 	ReceivedPacket(packetNumber protocol.PacketNumber, entropyBit bool) error
 	ReceivedStopWaiting(*frames.StopWaitingFrame) error
 

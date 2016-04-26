@@ -34,8 +34,8 @@ type Session struct {
 	streams      map[protocol.StreamID]*stream
 	streamsMutex sync.RWMutex
 
-	sentPacketHandler  ackhandler.SentPacketHandler
-	incomingAckHandler ackhandler.IncomingPacketAckHandler
+	sentPacketHandler     ackhandler.SentPacketHandler
+	receivedPacketHandler ackhandler.ReceivedPacketHandler
 
 	unpacker *packetUnpacker
 	packer   *packetPacker
@@ -46,12 +46,12 @@ type Session struct {
 // NewSession makes a new session
 func NewSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback) PacketHandler {
 	session := &Session{
-		connection:         conn,
-		streamCallback:     streamCallback,
-		streams:            make(map[protocol.StreamID]*stream),
-		sentPacketHandler:  ackhandler.NewSentPacketHandler(),
-		incomingAckHandler: ackhandler.NewIncomingPacketAckHandler(),
-		receivedPackets:    make(chan receivedPacket),
+		connection:            conn,
+		streamCallback:        streamCallback,
+		streams:               make(map[protocol.StreamID]*stream),
+		sentPacketHandler:     ackhandler.NewSentPacketHandler(),
+		receivedPacketHandler: ackhandler.NewReceivedPacketHandler(),
+		receivedPackets:       make(chan receivedPacket),
 	}
 
 	cryptoStream, _ := session.NewStream(1)
@@ -95,8 +95,8 @@ func (s *Session) handlePacket(addr *net.UDPAddr, publicHeader *PublicHeader, r 
 		return err
 	}
 
-	s.incomingAckHandler.ReceivedPacket(publicHeader.PacketNumber, packet.entropyBit)
-	s.QueueFrame(s.incomingAckHandler.DequeueAckFrame())
+	s.receivedPacketHandler.ReceivedPacket(publicHeader.PacketNumber, packet.entropyBit)
+	s.QueueFrame(s.receivedPacketHandler.DequeueAckFrame())
 
 	for _, ff := range packet.frames {
 		var err error
@@ -109,7 +109,7 @@ func (s *Session) handlePacket(addr *net.UDPAddr, publicHeader *PublicHeader, r 
 		case *frames.ConnectionCloseFrame:
 			fmt.Printf("%#v\n", frame)
 		case *frames.StopWaitingFrame:
-			err = s.incomingAckHandler.ReceivedStopWaiting(frame)
+			err = s.receivedPacketHandler.ReceivedStopWaiting(frame)
 		case *frames.RstStreamFrame:
 			fmt.Printf("%#v\n", frame)
 		case *frames.WindowUpdateFrame:
