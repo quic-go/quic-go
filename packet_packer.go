@@ -47,7 +47,12 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 		1,
 	))
 
-	payload, err := p.composeNextPayload(currentPacketNumber)
+	frames, err := p.composeNextPacket()
+	if err != nil {
+		return nil, err
+	}
+
+	payload, err := p.getPayload(frames, currentPacketNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -84,38 +89,49 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 	}, nil
 }
 
-func (p *packetPacker) composeNextPayload(currentPacketNumber protocol.PacketNumber) ([]byte, error) {
+func (p *packetPacker) getPayload(frames []frames.Frame, currentPacketNumber protocol.PacketNumber) ([]byte, error) {
 	var payload bytes.Buffer
 	payload.WriteByte(0) // The entropy bit is set in sendPayload
+	for _, frame := range frames {
+		frame.Write(&payload, currentPacketNumber, 6)
+	}
+	return payload.Bytes(), nil
+}
+
+func (p *packetPacker) composeNextPacket() ([]frames.Frame, error) {
+	payloadLength := 0
+	var payloadFrames []frames.Frame
 
 	for len(p.queuedFrames) > 0 {
 		frame := p.queuedFrames[0]
 
-		if payload.Len()-1 > protocol.MaxFrameSize {
+		if payloadLength > protocol.MaxFrameSize {
 			panic("internal inconsistency: packet payload too large")
 		}
 
 		// Does the frame fit into the remaining space?
-		if payload.Len()-1+frame.MinLength() > protocol.MaxFrameSize {
-			return payload.Bytes(), nil
+		if payloadLength+frame.MinLength() > protocol.MaxFrameSize {
+			break
 		}
 
 		if streamframe, isStreamFrame := frame.(*frames.StreamFrame); isStreamFrame {
 			// Split stream frames if necessary
-			previousFrame := streamframe.MaybeSplitOffFrame(protocol.MaxFrameSize - (payload.Len() - 1))
+			previousFrame := streamframe.MaybeSplitOffFrame(protocol.MaxFrameSize - payloadLength)
 			if previousFrame != nil {
 				// Don't pop the queue, leave the modified frame in
 				frame = previousFrame
+				payloadLength += len(previousFrame.Data) - 1
 			} else {
 				p.queuedFrames = p.queuedFrames[1:]
+				payloadLength += len(streamframe.Data) - 1
 			}
 		} else {
 			p.queuedFrames = p.queuedFrames[1:]
 		}
 
-		if err := frame.Write(&payload, currentPacketNumber, 6); err != nil {
-			return nil, err
-		}
+		payloadLength += frame.MinLength()
+		payloadFrames = append(payloadFrames, frame)
 	}
-	return payload.Bytes(), nil
+
+	return payloadFrames, nil
 }
