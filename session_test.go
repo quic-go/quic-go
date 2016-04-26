@@ -129,4 +129,30 @@ var _ = Describe("Session", func() {
 			Expect(err).To(MatchError("Session: reopening streams is not allowed"))
 		})
 	})
+
+	Context("handling RST_STREAM frames", func() {
+		It("closes the receiving streams for writing and reading", func() {
+			s, err := session.NewStream(5)
+			Expect(err).ToNot(HaveOccurred())
+			err = session.handleRstStreamFrame(&frames.RstStreamFrame{
+				StreamID:  5,
+				ErrorCode: 42,
+			})
+			Expect(err).ToNot(HaveOccurred())
+			n, err := s.Write([]byte{0})
+			Expect(n).To(BeZero())
+			Expect(err).To(MatchError("RST_STREAM received with code 42"))
+			n, err = s.Read([]byte{0})
+			Expect(n).To(BeZero())
+			Expect(err).To(MatchError("RST_STREAM received with code 42"))
+		})
+
+		It("errors when the stream is not known", func() {
+			err := session.handleRstStreamFrame(&frames.RstStreamFrame{
+				StreamID:  5,
+				ErrorCode: 42,
+			})
+			Expect(err).To(MatchError("RST_STREAM received for unknown stream"))
+		})
+	})
 })
