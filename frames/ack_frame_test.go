@@ -247,17 +247,17 @@ var _ = Describe("AckFrame", func() {
 			Expect(packetNumber2).To(BeEquivalentTo([]byte{1, 0, 0, 0, 0, 0}))
 		})
 
-		It("has proper max length", func() {
+		It("has proper min length", func() {
 			b := &bytes.Buffer{}
 			f := &AckFrame{
 				Entropy:         2,
 				LargestObserved: 1,
 			}
 			f.Write(b, 1, 6)
-			Expect(f.MaxLength()).To(Equal(b.Len()))
+			Expect(f.MinLength()).To(Equal(b.Len()))
 		})
 
-		It("has proper max length with nack ranges", func() {
+		It("has proper min length with nack ranges", func() {
 			b := &bytes.Buffer{}
 			f := &AckFrame{
 				Entropy:         2,
@@ -271,7 +271,7 @@ var _ = Describe("AckFrame", func() {
 			}
 			err := f.Write(b, 1, 6)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(f.MaxLength()).To(Equal(b.Len()))
+			Expect(f.MinLength()).To(Equal(b.Len()))
 		})
 	})
 

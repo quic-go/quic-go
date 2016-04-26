@@ -30,8 +30,8 @@ func (f *StopWaitingFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNu
 	return nil
 }
 
-// MaxLength of a written frame
-func (f *StopWaitingFrame) MaxLength() int {
+// MinLength of a written frame
+func (f *StopWaitingFrame) MinLength() int {
 	return 1 + 1 + 6
 }
 

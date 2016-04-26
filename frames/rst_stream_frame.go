@@ -19,8 +19,8 @@ func (f *RstStreamFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumb
 	panic("RstStreamFrame: Write not yet implemented")
 }
 
-// MaxLength of a written frame
-func (f *RstStreamFrame) MaxLength() int {
+// MinLength of a written frame
+func (f *RstStreamFrame) MinLength() int {
 	panic("RstStreamFrame: Write not yet implemented")
 }
 

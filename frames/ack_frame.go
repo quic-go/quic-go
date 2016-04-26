@@ -67,8 +67,8 @@ func (f *AckFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, pa
 	return nil
 }
 
-// MaxLength of a written frame
-func (f *AckFrame) MaxLength() int {
+// MinLength of a written frame
+func (f *AckFrame) MinLength() int {
 	l := 1 + 1 + 6 + 2 + 1 + 1 + 4
 	l += (1 + 2) * 0 /* TODO: num_timestamps */
 	if f.HasNACK() {

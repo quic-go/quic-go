@@ -71,14 +71,14 @@ var _ = Describe("ConnectionCloseFrame", func() {
 			Expect(err).To(HaveOccurred())
 		})
 
-		It("has proper max length", func() {
+		It("has proper min length", func() {
 			b := &bytes.Buffer{}
 			f := &ConnectionCloseFrame{
 				ErrorCode:    0xDEADBEEF,
 				ReasonPhrase: "foobar",
 			}
 			f.Write(b, 1, 6)
-			Expect(f.MaxLength()).To(Equal(b.Len()))
+			Expect(f.MinLength()).To(Equal(b.Len()))
 		})
 	})
 

@@ -51,7 +51,7 @@ var _ = Describe("StreamFrame", func() {
 			Expect(b.Bytes()).To(Equal([]byte{0xbf, 0x1, 0, 0, 0, 0x10, 0, 0, 0, 0, 0, 0, 0, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'}))
 		})
 
-		It("has proper max length", func() {
+		It("has proper min length", func() {
 			b := &bytes.Buffer{}
 			f := &StreamFrame{
 				StreamID: 1,
@@ -59,7 +59,7 @@ var _ = Describe("StreamFrame", func() {
 				Offset:   1,
 			}
 			f.Write(b, 1, 6)
-			Expect(f.MaxLength()).To(Equal(b.Len()))
+			Expect(f.MinLength()).To(Equal(b.Len()))
 		})
 	})
 
@@ -81,7 +81,7 @@ var _ = Describe("StreamFrame", func() {
 				Offset:   3,
 				FinBit:   true,
 			}
-			previous := f.MaybeSplitOffFrame(f.MaxLength() - 1 + 3)
+			previous := f.MaybeSplitOffFrame(f.MinLength() - 1 + 3)
 			Expect(previous).ToNot(BeNil())
 			Expect(previous.StreamID).To(Equal(protocol.StreamID(1)))
 			Expect(previous.Data).To(Equal([]byte("foo")))

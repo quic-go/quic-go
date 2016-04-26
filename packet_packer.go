@@ -96,7 +96,7 @@ func (p *packetPacker) composeNextPayload(currentPacketNumber protocol.PacketNum
 		}
 
 		// Does the frame fit into the remaining space?
-		if payload.Len()-1+frame.MaxLength() > protocol.MaxFrameSize {
+		if payload.Len()-1+frame.MinLength() > protocol.MaxFrameSize {
 			return payload.Bytes(), nil
 		}
 

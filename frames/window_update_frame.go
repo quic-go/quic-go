@@ -18,8 +18,8 @@ func (f *WindowUpdateFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketN
 	panic("WindowUpdateFrame: Write not yet implemented")
 }
 
-// MaxLength of a written frame
-func (f *WindowUpdateFrame) MaxLength() int {
+// MinLength of a written frame
+func (f *WindowUpdateFrame) MinLength() int {
 	panic("WindowUpdateFrame: Write not yet implemented")
 }
 
