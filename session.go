@@ -59,7 +59,7 @@ func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		sentPacketHandler:     ackhandler.NewSentPacketHandler(),
 		receivedPacketHandler: ackhandler.NewReceivedPacketHandler(),
 		receivedPackets:       make(chan receivedPacket),
-		closeChan:             make(chan struct{}),
+		closeChan:             make(chan struct{}, 1),
 	}
 
 	cryptoStream, _ := session.NewStream(1)
@@ -206,12 +206,17 @@ func (s *Session) Close(e error) error {
 		errorCode = quicError.ErrorCode
 	}
 	s.closeStreamsWithError(e)
-	// TODO: Don't queue, but send immediately
-	_ = frames.ConnectionCloseFrame{
-		ErrorCode:    errorCode,
-		ReasonPhrase: reasonPhrase,
+	packet, err := s.packer.PackPacket([]frames.Frame{
+		&frames.ConnectionCloseFrame{ErrorCode: errorCode, ReasonPhrase: reasonPhrase},
+	}, false)
+	if err != nil {
+		return err
 	}
-	return nil
+	if packet == nil {
+		panic("Session: internal inconsistency: expected packet not to be nil")
+	}
+	fmt.Printf("-> Sending close packet %d (%d bytes)\n", packet.number, len(packet.raw))
+	return s.conn.write(packet.raw)
 }
 
 func (s *Session) closeStreamsWithError(err error) {
