@@ -59,11 +59,11 @@ func (h *CryptoSetup) HandleCryptoStream() {
 		cachingReader := utils.NewCachingReader(h.cryptoStream)
 		messageTag, cryptoData, err := ParseHandshakeMessage(cachingReader)
 		if err != nil {
-			fmt.Printf("error in crypto stream (TODO: handle): %s", err.Error())
+			fmt.Printf("error in crypto stream (TODO: handle): %s\n", err.Error())
 			return
 		}
 		if messageTag != TagCHLO {
-			fmt.Printf("error in crypto stream (TODO: handle): %s", "Session: expected CHLO")
+			fmt.Printf("error in crypto stream (TODO: handle): %s\n", "Session: expected CHLO")
 			return
 		}
 		chloData := cachingReader.Get()
@@ -73,12 +73,12 @@ func (h *CryptoSetup) HandleCryptoStream() {
 			// We have a CHLO with a proper server config ID, do a 0-RTT handshake
 			reply, err = h.handleCHLO(chloData, cryptoData)
 			if err != nil {
-				fmt.Printf("error in crypto stream (TODO: handle): %s", err.Error())
+				fmt.Printf("error in crypto stream (TODO: handle): %s\n", err.Error())
 				return
 			}
 			_, err = h.cryptoStream.Write(reply)
 			if err != nil {
-				fmt.Printf("error in crypto stream (TODO: handle): %s", err.Error())
+				fmt.Printf("error in crypto stream (TODO: handle): %s\n", err.Error())
 				return
 			}
 			return
@@ -87,12 +87,12 @@ func (h *CryptoSetup) HandleCryptoStream() {
 		// We have an inchoate or non-matching CHLO, we now send a rejection
 		reply, err = h.handleInchoateCHLO(chloData)
 		if err != nil {
-			fmt.Printf("error in crypto stream (TODO: handle): %s", err.Error())
+			fmt.Printf("error in crypto stream (TODO: handle): %s\n", err.Error())
 			return
 		}
 		_, err = h.cryptoStream.Write(reply)
 		if err != nil {
-			fmt.Printf("error in crypto stream (TODO: handle): %s", err.Error())
+			fmt.Printf("error in crypto stream (TODO: handle): %s\n", err.Error())
 			return
 		}
 	}
