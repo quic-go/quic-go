@@ -19,8 +19,7 @@ const (
 	QUIC_ENCRYPTION_FAILURE            = protocol.ErrorCode(13)
 	QUIC_PACKET_TOO_LARGE              = protocol.ErrorCode(14)
 	// QUIC_PACKET_FOR_NONEXISTENT_STREAM= Data was sent for a stream which did not exist.
-	// QUIC_CLIENT_GOING_AWAY= The client is going away (browser close, etc.)
-	// QUIC_SERVER_GOING_AWAY= The server is going away (restart etc.)
+	QUIC_PEER_GOING_AWAY       = protocol.ErrorCode(16)
 	QUIC_INVALID_STREAM_ID     = protocol.ErrorCode(17)
 	QUIC_TOO_MANY_OPEN_STREAMS = protocol.ErrorCode(18)
 	// QUIC_CONNECTION_TIMED_OUT= We hit our pre-negotiated (or default) timeout

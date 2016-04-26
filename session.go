@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
+	"github.com/lucas-clemente/quic-go/errorcodes"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -76,15 +77,12 @@ func (s *Session) Run() {
 			err = s.sendPacket()
 		}
 
-		if err == ackhandler.ErrEntropy {
-			// ToDo: use appropriate QuicError here
-			fmt.Println("Session: Received ACK with incorrect entropy. Closing connection.")
-			s.Close(err)
-			break
-		}
-
-		if err != nil && err != ackhandler.ErrDuplicateOrOutOfOrderAck {
-			fmt.Printf("Error in session: %s\n", err.Error())
+		if err != nil {
+			if err == ackhandler.ErrDuplicateOrOutOfOrderAck {
+				fmt.Printf("Ignoring error in session: %s\n", err.Error())
+			} else {
+				s.Close(err)
+			}
 		}
 
 		s.garbageCollectStreams()
@@ -99,7 +97,6 @@ func (s *Session) handlePacket(addr *net.UDPAddr, publicHeader *PublicHeader, r 
 
 	packet, err := s.unpacker.Unpack(publicHeader.Raw, publicHeader, r)
 	if err != nil {
-		s.Close(err)
 		return err
 	}
 
@@ -126,7 +123,6 @@ func (s *Session) handlePacket(addr *net.UDPAddr, publicHeader *PublicHeader, r 
 			panic("unexpected frame type")
 		}
 		if err != nil {
-			s.Close(err)
 			return err
 		}
 	}
@@ -166,12 +162,17 @@ func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
 
 // Close the connection by sending a ConnectionClose frame
 func (s *Session) Close(e error) error {
+	if e == nil {
+		e = protocol.NewQuicError(errorcodes.QUIC_PEER_GOING_AWAY, "peer going away")
+	}
+	fmt.Printf("Closing session with error: %s\n", e.Error())
 	errorCode := protocol.ErrorCode(1)
 	reasonPhrase := e.Error()
 	quicError, ok := e.(*protocol.QuicError)
 	if ok {
 		errorCode = quicError.ErrorCode
 	}
+	// TODO: Don't queue, but send immediately
 	return s.QueueFrame(&frames.ConnectionCloseFrame{
 		ErrorCode:    errorCode,
 		ReasonPhrase: reasonPhrase,

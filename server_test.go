@@ -114,6 +114,7 @@ var _ = Describe("Server", func() {
 			n, _, err2 := conn.ReadFromUDP(data)
 			Expect(err2).ToNot(HaveOccurred())
 			Expect(n).ToNot(BeZero())
+			time.Sleep(10 * time.Millisecond)
 			err2 = server.Close()
 			Expect(err2).ToNot(HaveOccurred())
 		}()
