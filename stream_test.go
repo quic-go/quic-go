@@ -238,6 +238,14 @@ var _ = Describe("Stream", func() {
 				Offset:   0,
 			}))
 		})
+
+		It("returns remote errors", func() {
+			testErr := errors.New("test")
+			str.RegisterError(testErr)
+			n, err := str.Write([]byte("foo"))
+			Expect(n).To(BeZero())
+			Expect(err).To(Equal(testErr))
+		})
 	})
 
 	Context("getting next str frame", func() {

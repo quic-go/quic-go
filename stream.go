@@ -140,6 +140,9 @@ func (s *stream) ReadByte() (byte, error) {
 }
 
 func (s *stream) Write(p []byte) (int, error) {
+	if s.remoteErr != nil {
+		return 0, s.remoteErr
+	}
 	data := make([]byte, len(p))
 	copy(data, p)
 	err := s.session.QueueFrame(&frames.StreamFrame{
