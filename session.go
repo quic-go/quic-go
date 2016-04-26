@@ -231,7 +231,7 @@ func (s *Session) sendPacket() error {
 	if ack != nil {
 		controlFrames = append(controlFrames, ack)
 	}
-	packet, err := s.packer.PackPacket(controlFrames)
+	packet, err := s.packer.PackPacket(controlFrames, true)
 
 	if err != nil {
 		return err
@@ -252,7 +252,7 @@ func (s *Session) sendPacket() error {
 	return nil
 }
 
-// QueueFrame queues a frame for sending to the client
+// QueueStreamFrame queues a frame for sending to the client
 func (s *Session) QueueStreamFrame(frame *frames.StreamFrame) error {
 	s.packer.AddStreamFrame(*frame)
 	return nil

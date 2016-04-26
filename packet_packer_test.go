@@ -21,7 +21,7 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	It("returns nil when no packet is queued", func() {
-		p, err := packer.PackPacket([]frames.Frame{})
+		p, err := packer.PackPacket([]frames.Frame{}, true)
 		Expect(p).To(BeNil())
 		Expect(err).ToNot(HaveOccurred())
 	})
@@ -32,13 +32,32 @@ var _ = Describe("Packet packer", func() {
 			Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
 		}
 		packer.AddStreamFrame(f)
-		p, err := packer.PackPacket([]frames.Frame{})
+		p, err := packer.PackPacket([]frames.Frame{}, true)
 		Expect(p).ToNot(BeNil())
 		Expect(err).ToNot(HaveOccurred())
 		b := &bytes.Buffer{}
 		f.Write(b, 1, 6)
 		Expect(len(p.frames)).To(Equal(1))
 		Expect(p.raw).To(ContainSubstring(string(b.Bytes())))
+	})
+
+	It("does not pack stream frames if includeStreamFrames=false", func() {
+		f := frames.StreamFrame{
+			StreamID: 5,
+			Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
+		}
+		packer.AddStreamFrame(f)
+		p, err := packer.PackPacket([]frames.Frame{}, false)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(p).To(BeNil())
+	})
+
+	It("packs only control frames", func() {
+		p, err := packer.PackPacket([]frames.Frame{&frames.ConnectionCloseFrame{}}, false)
+		Expect(p).ToNot(BeNil())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(len(p.frames)).To(Equal(1))
+		Expect(p.raw).NotTo(HaveLen(0))
 	})
 
 	It("packs multiple stream frames into single packet", func() {
@@ -52,7 +71,7 @@ var _ = Describe("Packet packer", func() {
 		}
 		packer.AddStreamFrame(f1)
 		packer.AddStreamFrame(f2)
-		p, err := packer.PackPacket([]frames.Frame{})
+		p, err := packer.PackPacket([]frames.Frame{}, true)
 		Expect(p).ToNot(BeNil())
 		Expect(err).ToNot(HaveOccurred())
 		b := &bytes.Buffer{}
@@ -72,10 +91,10 @@ var _ = Describe("Packet packer", func() {
 	// 		packer.AddFrame(f)
 	// 		counter++
 	// 	}
-	// 	payloadFrames, err := packer.composeNextPacket([]frames.Frame{})
+	// 	payloadFrames, err := packer.composeNextPacket([]frames.Frame{}, true)
 	// 	Expect(err).ToNot(HaveOccurred())
 	// 	Expect(len(payloadFrames)).To(Equal(maxFramesPerPacket))
-	// 	payloadFrames, err = packer.composeNextPacket([]frames.Frame{})
+	// 	payloadFrames, err = packer.composeNextPacket([]frames.Frame{}, true)
 	// 	Expect(err).ToNot(HaveOccurred())
 	// 	Expect(len(payloadFrames)).To(Equal(counter - maxFramesPerPacket))
 	// })
@@ -88,10 +107,10 @@ var _ = Describe("Packet packer", func() {
 				Offset: 1,
 			}
 			packer.AddStreamFrame(f)
-			payloadFrames, err := packer.composeNextPacket([]frames.Frame{})
+			payloadFrames, err := packer.composeNextPacket([]frames.Frame{}, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(payloadFrames)).To(Equal(1))
-			payloadFrames, err = packer.composeNextPacket([]frames.Frame{})
+			payloadFrames, err = packer.composeNextPacket([]frames.Frame{}, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(payloadFrames)).To(Equal(0))
 		})
@@ -108,13 +127,13 @@ var _ = Describe("Packet packer", func() {
 			}
 			packer.AddStreamFrame(f1)
 			packer.AddStreamFrame(f2)
-			p, err := packer.PackPacket([]frames.Frame{})
+			p, err := packer.PackPacket([]frames.Frame{}, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(p.raw)).To(Equal(protocol.MaxPacketSize))
-			p, err = packer.PackPacket([]frames.Frame{})
+			p, err = packer.PackPacket([]frames.Frame{}, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(p.raw)).To(Equal(protocol.MaxPacketSize))
-			p, err = packer.PackPacket([]frames.Frame{})
+			p, err = packer.PackPacket([]frames.Frame{}, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p).ToNot(BeNil())
 		})
@@ -125,7 +144,7 @@ var _ = Describe("Packet packer", func() {
 				Offset: 1,
 			}
 			packer.AddStreamFrame(f)
-			p, err := packer.PackPacket([]frames.Frame{})
+			p, err := packer.PackPacket([]frames.Frame{}, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p).ToNot(BeNil())
 			Expect(len(p.raw)).To(Equal(protocol.MaxPacketSize))
@@ -137,10 +156,10 @@ var _ = Describe("Packet packer", func() {
 				Offset: 1,
 			}
 			packer.AddStreamFrame(f)
-			payloadFrames, err := packer.composeNextPacket([]frames.Frame{})
+			payloadFrames, err := packer.composeNextPacket([]frames.Frame{}, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(payloadFrames)).To(Equal(1))
-			payloadFrames, err = packer.composeNextPacket([]frames.Frame{})
+			payloadFrames, err = packer.composeNextPacket([]frames.Frame{}, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(payloadFrames)).To(Equal(1))
 		})

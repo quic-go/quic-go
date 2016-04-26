@@ -34,23 +34,23 @@ func (p *packetPacker) AddStreamFrame(f frames.StreamFrame) {
 	p.mutex.Unlock()
 }
 
-func (p *packetPacker) PackPacket(controlFrames []frames.Frame) (*packedPacket, error) {
+func (p *packetPacker) PackPacket(controlFrames []frames.Frame, includeStreamFrames bool) (*packedPacket, error) {
 	// TODO: save controlFrames as a member variable, makes it easier to handle in the unlikely event that there are more controlFrames than you can put into on packet
 	p.mutex.Lock()
 	defer p.mutex.Unlock() // TODO: Split up?
-
-	if len(p.queuedStreamFrames) == 0 {
-		return nil, nil
-	}
 
 	currentPacketNumber := protocol.PacketNumber(atomic.AddUint64(
 		(*uint64)(&p.lastPacketNumber),
 		1,
 	))
 
-	payloadFrames, err := p.composeNextPacket(controlFrames)
+	payloadFrames, err := p.composeNextPacket(controlFrames, includeStreamFrames)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(payloadFrames) == 0 {
+		return nil, nil
 	}
 
 	payload, err := p.getPayload(payloadFrames, currentPacketNumber)
@@ -99,7 +99,7 @@ func (p *packetPacker) getPayload(frames []frames.Frame, currentPacketNumber pro
 	return payload.Bytes(), nil
 }
 
-func (p *packetPacker) composeNextPacket(controlFrames []frames.Frame) ([]frames.Frame, error) {
+func (p *packetPacker) composeNextPacket(controlFrames []frames.Frame, includeStreamFrames bool) ([]frames.Frame, error) {
 	payloadLength := 0
 	var payloadFrames []frames.Frame
 
@@ -109,6 +109,10 @@ func (p *packetPacker) composeNextPacket(controlFrames []frames.Frame) ([]frames
 		payloadFrames = append(payloadFrames, frame)
 		payloadLength += frame.MinLength()
 		controlFrames = controlFrames[1:]
+	}
+
+	if !includeStreamFrames {
+		return payloadFrames, nil
 	}
 
 	for len(p.queuedStreamFrames) > 0 {
