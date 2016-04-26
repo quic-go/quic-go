@@ -17,14 +17,14 @@ type mockSession struct {
 	packetCount  int
 }
 
-func (s *mockSession) HandlePacket(addr *net.UDPAddr, publicHeader *PublicHeader, r *bytes.Reader) {
+func (s *mockSession) HandlePacket(addr interface{}, publicHeader *PublicHeader, r *bytes.Reader) {
 	s.packetCount++
 }
 
 func (s *mockSession) Run() {
 }
 
-func newMockSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback) PacketHandler {
+func newMockSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback) PacketHandler {
 	return &mockSession{
 		connectionID: connectionID,
 	}

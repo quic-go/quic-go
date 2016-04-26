@@ -13,7 +13,7 @@ import (
 )
 
 type PacketHandler interface {
-	HandlePacket(addr *net.UDPAddr, publicHeader *PublicHeader, r *bytes.Reader)
+	HandlePacket(addr interface{}, publicHeader *PublicHeader, r *bytes.Reader)
 	Run()
 }
 
@@ -28,7 +28,7 @@ type Server struct {
 
 	streamCallback StreamCallback
 
-	newSession func(conn *net.UDPConn, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback) PacketHandler
+	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback) PacketHandler
 }
 
 // NewServer makes a new server
@@ -106,7 +106,13 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 	session, ok := s.sessions[publicHeader.ConnectionID]
 	if !ok {
 		fmt.Printf("Serving new connection: %d from %v\n", publicHeader.ConnectionID, remoteAddr)
-		session = s.newSession(conn, publicHeader.VersionNumber, publicHeader.ConnectionID, s.scfg, s.streamCallback)
+		session = s.newSession(
+			&udpConn{conn: conn, currentAddr: remoteAddr},
+			publicHeader.VersionNumber,
+			publicHeader.ConnectionID,
+			s.scfg,
+			s.streamCallback,
+		)
 		go session.Run()
 		s.sessions[publicHeader.ConnectionID] = session
 	}

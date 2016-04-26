@@ -17,6 +17,11 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
+type mockConnection struct{}
+
+func (*mockConnection) write(p []byte) error                  { return nil }
+func (*mockConnection) setCurrentRemoteAddr(addr interface{}) {}
+
 var _ = Describe("Session", func() {
 	var (
 		session        *Session
@@ -172,7 +177,7 @@ var _ = Describe("Session", func() {
 			signer, err := crypto.NewRSASigner(path+"cert.der", path+"key.der")
 			Expect(err).ToNot(HaveOccurred())
 			scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
-			session = NewSession(nil, 0, 0, scfg, nil).(*Session)
+			session = NewSession(&mockConnection{}, 0, 0, scfg, nil).(*Session)
 		})
 
 		It("shuts down without error", func() {

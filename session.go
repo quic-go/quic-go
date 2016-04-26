@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"net"
 	"sync"
 	"time"
 
@@ -17,7 +16,7 @@ import (
 )
 
 type receivedPacket struct {
-	addr         *net.UDPAddr
+	remoteAddr   interface{}
 	publicHeader *PublicHeader
 	r            *bytes.Reader
 }
@@ -33,8 +32,7 @@ type StreamCallback func(*Session, utils.Stream)
 type Session struct {
 	streamCallback StreamCallback
 
-	connection        *net.UDPConn
-	currentRemoteAddr *net.UDPAddr
+	conn connection
 
 	streams      map[protocol.StreamID]*stream
 	streamsMutex sync.RWMutex
@@ -52,9 +50,9 @@ type Session struct {
 }
 
 // NewSession makes a new session
-func NewSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback) PacketHandler {
+func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback) PacketHandler {
 	session := &Session{
-		connection:            conn,
+		conn:                  conn,
 		streamCallback:        streamCallback,
 		streams:               make(map[protocol.StreamID]*stream),
 		sentPacketHandler:     ackhandler.NewSentPacketHandler(),
@@ -79,7 +77,7 @@ func (s *Session) Run() {
 		var err error
 		select {
 		case p := <-s.receivedPackets:
-			err = s.handlePacket(p.addr, p.publicHeader, p.r)
+			err = s.handlePacket(p.remoteAddr, p.publicHeader, p.r)
 		case <-time.After(sendTimeout):
 			err = s.sendPacket()
 		}
@@ -100,7 +98,7 @@ func (s *Session) Run() {
 	}
 }
 
-func (s *Session) handlePacket(addr *net.UDPAddr, publicHeader *PublicHeader, r *bytes.Reader) error {
+func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeader, r *bytes.Reader) error {
 	// Calcualate packet number
 	publicHeader.PacketNumber = calculatePacketNumber(
 		publicHeader.PacketNumberLen,
@@ -111,9 +109,7 @@ func (s *Session) handlePacket(addr *net.UDPAddr, publicHeader *PublicHeader, r 
 	fmt.Printf("<- Reading packet %d for connection %d\n", publicHeader.PacketNumber, publicHeader.ConnectionID)
 
 	// TODO: Only do this after authenticating
-	if addr != s.currentRemoteAddr {
-		s.currentRemoteAddr = addr
-	}
+	s.conn.setCurrentRemoteAddr(remoteAddr)
 
 	packet, err := s.unpacker.Unpack(publicHeader.Raw, publicHeader, r)
 	if err != nil {
@@ -149,8 +145,8 @@ func (s *Session) handlePacket(addr *net.UDPAddr, publicHeader *PublicHeader, r 
 }
 
 // HandlePacket handles a packet
-func (s *Session) HandlePacket(addr *net.UDPAddr, publicHeader *PublicHeader, r *bytes.Reader) {
-	s.receivedPackets <- receivedPacket{addr: addr, publicHeader: publicHeader, r: r}
+func (s *Session) HandlePacket(remoteAddr interface{}, publicHeader *PublicHeader, r *bytes.Reader) {
+	s.receivedPackets <- receivedPacket{remoteAddr: remoteAddr, publicHeader: publicHeader, r: r}
 }
 
 // TODO: Ignore data for closed streams
@@ -244,7 +240,7 @@ func (s *Session) sendPacket() error {
 		EntropyBit:   packet.entropyBit,
 	})
 	fmt.Printf("-> Sending packet %d (%d bytes)\n", packet.number, len(packet.raw))
-	_, err = s.connection.WriteToUDP(packet.raw, s.currentRemoteAddr)
+	err = s.conn.write(packet.raw)
 	if err != nil {
 		return err
 	}
