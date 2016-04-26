@@ -22,15 +22,15 @@ type packetPacker struct {
 	connectionID protocol.ConnectionID
 	aead         crypto.AEAD
 
-	queuedFrames []frames.Frame
-	mutex        sync.Mutex
+	queuedStreamFrames []frames.StreamFrame
+	mutex              sync.Mutex
 
 	lastPacketNumber protocol.PacketNumber
 }
 
-func (p *packetPacker) AddFrame(f frames.Frame) {
+func (p *packetPacker) AddStreamFrame(f frames.StreamFrame) {
 	p.mutex.Lock()
-	p.queuedFrames = append(p.queuedFrames, f)
+	p.queuedStreamFrames = append(p.queuedStreamFrames, f)
 	p.mutex.Unlock()
 }
 
@@ -39,7 +39,7 @@ func (p *packetPacker) PackPacket(controlFrames []frames.Frame) (*packedPacket, 
 	p.mutex.Lock()
 	defer p.mutex.Unlock() // TODO: Split up?
 
-	if len(p.queuedFrames) == 0 {
+	if len(p.queuedStreamFrames) == 0 {
 		return nil, nil
 	}
 
@@ -111,8 +111,8 @@ func (p *packetPacker) composeNextPacket(controlFrames []frames.Frame) ([]frames
 		controlFrames = controlFrames[1:]
 	}
 
-	for len(p.queuedFrames) > 0 {
-		frame := p.queuedFrames[0]
+	for len(p.queuedStreamFrames) > 0 {
+		frame := p.queuedStreamFrames[0]
 
 		if payloadLength > protocol.MaxFrameSize {
 			panic("internal inconsistency: packet payload too large")
@@ -123,23 +123,19 @@ func (p *packetPacker) composeNextPacket(controlFrames []frames.Frame) ([]frames
 			break
 		}
 
-		if streamframe, isStreamFrame := frame.(*frames.StreamFrame); isStreamFrame {
-			// Split stream frames if necessary
-			previousFrame := streamframe.MaybeSplitOffFrame(protocol.MaxFrameSize - payloadLength)
-			if previousFrame != nil {
-				// Don't pop the queue, leave the modified frame in
-				frame = previousFrame
-				payloadLength += len(previousFrame.Data) - 1
-			} else {
-				p.queuedFrames = p.queuedFrames[1:]
-				payloadLength += len(streamframe.Data) - 1
-			}
+		// Split stream frames if necessary
+		previousFrame := frame.MaybeSplitOffFrame(protocol.MaxFrameSize - payloadLength)
+		if previousFrame != nil {
+			// Don't pop the queue, leave the modified frame in
+			frame = *previousFrame
+			payloadLength += len(previousFrame.Data) - 1
 		} else {
-			p.queuedFrames = p.queuedFrames[1:]
+			p.queuedStreamFrames = p.queuedStreamFrames[1:]
+			payloadLength += len(frame.Data) - 1
 		}
 
 		payloadLength += frame.MinLength()
-		payloadFrames = append(payloadFrames, frame)
+		payloadFrames = append(payloadFrames, &frame)
 	}
 
 	return payloadFrames, nil

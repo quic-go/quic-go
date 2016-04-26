@@ -206,10 +206,11 @@ func (s *Session) Close(e error) error {
 	}
 	s.closeStreamsWithError(e)
 	// TODO: Don't queue, but send immediately
-	return s.QueueFrame(&frames.ConnectionCloseFrame{
+	_ = frames.ConnectionCloseFrame{
 		ErrorCode:    errorCode,
 		ReasonPhrase: reasonPhrase,
-	})
+	}
+	return nil
 }
 
 func (s *Session) closeStreamsWithError(err error) {
@@ -251,8 +252,8 @@ func (s *Session) sendPacket() error {
 }
 
 // QueueFrame queues a frame for sending to the client
-func (s *Session) QueueFrame(frame frames.Frame) error {
-	s.packer.AddFrame(frame)
+func (s *Session) QueueStreamFrame(frame *frames.StreamFrame) error {
+	s.packer.AddStreamFrame(*frame)
 	return nil
 }
 

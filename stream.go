@@ -10,7 +10,7 @@ import (
 )
 
 type streamHandler interface {
-	QueueFrame(frames.Frame) error
+	QueueStreamFrame(*frames.StreamFrame) error
 }
 
 // A Stream assembles the data from StreamFrames and provides a super-convenient Read-Interface
@@ -145,7 +145,7 @@ func (s *stream) Write(p []byte) (int, error) {
 	}
 	data := make([]byte, len(p))
 	copy(data, p)
-	err := s.session.QueueFrame(&frames.StreamFrame{
+	err := s.session.QueueStreamFrame(&frames.StreamFrame{
 		StreamID: s.streamID,
 		Offset:   s.writeOffset,
 		Data:     data,
@@ -160,7 +160,7 @@ func (s *stream) Write(p []byte) (int, error) {
 // Close implements io.Closer
 func (s *stream) Close() error {
 	fmt.Printf("Closing stream %d\n", s.streamID)
-	return s.session.QueueFrame(&frames.StreamFrame{
+	return s.session.QueueStreamFrame(&frames.StreamFrame{
 		StreamID: s.streamID,
 		Offset:   s.writeOffset,
 		FinBit:   true,

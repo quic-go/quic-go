@@ -14,7 +14,7 @@ type mockStreamHandler struct {
 	frames []frames.Frame
 }
 
-func (m *mockStreamHandler) QueueFrame(f frames.Frame) error {
+func (m *mockStreamHandler) QueueStreamFrame(f *frames.StreamFrame) error {
 	m.frames = append(m.frames, f)
 	return nil
 }
