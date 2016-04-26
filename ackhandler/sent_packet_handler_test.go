@@ -172,7 +172,7 @@ var _ = Describe("SentPacketHandler", func() {
 			}
 			err := handler.ReceivedAck(&ack)
 			Expect(err).To(HaveOccurred())
-			Expect(err).To(Equal(errEntropy))
+			Expect(err).To(Equal(ErrEntropy))
 		})
 
 		It("completely processes an ACK without a NACK range", func() {

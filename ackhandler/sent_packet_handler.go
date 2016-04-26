@@ -10,10 +10,14 @@ import (
 var (
 	// ErrDuplicateOrOutOfOrderAck occurs when a duplicate or an out-of-order ACK is received
 	ErrDuplicateOrOutOfOrderAck = errors.New("SentPacketHandler: Duplicate or out-of-order ACK")
-	errAckForUnsentPacket       = errors.New("SentPacketHandler: Received ACK for an unsent package")
-	errEntropy                  = errors.New("SentPacketHandler: Wrong entropy")
-	errMapAccess                = errors.New("SentPacketHandler: Packet does not exist in PacketHistory")
-	retransmissionThreshold     = uint8(3)
+	// ErrEntropy occurs when an ACK with incorrect entropy is received
+	ErrEntropy = errors.New("SentPacketHandler: Wrong entropy")
+)
+
+var (
+	errAckForUnsentPacket   = errors.New("SentPacketHandler: Received ACK for an unsent package")
+	errMapAccess            = errors.New("SentPacketHandler: Packet does not exist in PacketHistory")
+	retransmissionThreshold = uint8(3)
 )
 
 type sentPacketHandler struct {
@@ -129,7 +133,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) error {
 	}
 
 	if byte(expectedEntropy) != ackFrame.Entropy {
-		return errEntropy
+		return ErrEntropy
 	}
 
 	// Entropy ok. Now actually process the ACK packet

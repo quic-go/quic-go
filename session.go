@@ -75,6 +75,14 @@ func (s *Session) Run() {
 		case <-time.After(sendTimeout):
 			err = s.sendPacket()
 		}
+
+		if err == ackhandler.ErrEntropy {
+			// ToDo: use appropriate QuicError here
+			fmt.Println("Session: Received ACK with incorrect entropy. Closing connection.")
+			s.Close(err)
+			break
+		}
+
 		if err != nil && err != ackhandler.ErrDuplicateOrOutOfOrderAck {
 			fmt.Printf("Error in session: %s\n", err.Error())
 		}
