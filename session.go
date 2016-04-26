@@ -42,6 +42,9 @@ type Session struct {
 	packer   *packetPacker
 
 	receivedPackets chan receivedPacket
+
+	// Used to calculate the next packet number from the truncated wire representation
+	lastRcvdPacketNumber protocol.PacketNumber
 }
 
 // NewSession makes a new session
@@ -90,6 +93,15 @@ func (s *Session) Run() {
 }
 
 func (s *Session) handlePacket(addr *net.UDPAddr, publicHeader *PublicHeader, r *bytes.Reader) error {
+	// Calcualate packet number
+	publicHeader.PacketNumber = calculatePacketNumber(
+		publicHeader.PacketNumberLen,
+		s.lastRcvdPacketNumber,
+		publicHeader.PacketNumber,
+	)
+	s.lastRcvdPacketNumber = publicHeader.PacketNumber
+	fmt.Printf("<- Reading packet %d for connection %d\n", publicHeader.PacketNumber, publicHeader.ConnectionID)
+
 	// TODO: Only do this after authenticating
 	if addr != s.currentRemoteAddr {
 		s.currentRemoteAddr = addr
