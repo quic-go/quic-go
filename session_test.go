@@ -172,17 +172,18 @@ var _ = Describe("Session", func() {
 		)
 
 		BeforeEach(func() {
+			time.Sleep(1 * time.Millisecond) // Wait for old goroutines to finish
 			nGoRoutinesBefore = runtime.NumGoroutine()
 			path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
 			signer, err := crypto.NewRSASigner(path+"cert.der", path+"key.der")
 			Expect(err).ToNot(HaveOccurred())
 			scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
 			session = NewSession(&mockConnection{}, 0, 0, scfg, nil).(*Session)
+			go session.Run()
+			Expect(runtime.NumGoroutine()).To(Equal(nGoRoutinesBefore + 2))
 		})
 
 		It("shuts down without error", func() {
-			// crypto stream is running in separate go routine
-			Expect(runtime.NumGoroutine()).To(Equal(nGoRoutinesBefore + 1))
 			session.Close(nil)
 			time.Sleep(1 * time.Millisecond)
 			Expect(runtime.NumGoroutine()).To(Equal(nGoRoutinesBefore))
