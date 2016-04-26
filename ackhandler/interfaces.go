@@ -5,8 +5,8 @@ import (
 	"github.com/lucas-clemente/quic-go/protocol"
 )
 
-// OutgoingPacketAckHandler handles ACKs received for outgoing packets
-type OutgoingPacketAckHandler interface {
+// SentPacketHandler handles ACKs received for outgoing packets
+type SentPacketHandler interface {
 	SentPacket(packet *Packet) error
 	ReceivedAck(ackFrame *frames.AckFrame) error
 

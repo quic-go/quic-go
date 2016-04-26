@@ -34,7 +34,7 @@ type Session struct {
 	streams      map[protocol.StreamID]*stream
 	streamsMutex sync.RWMutex
 
-	outgoingAckHandler ackhandler.OutgoingPacketAckHandler
+	sentPacketHandler  ackhandler.SentPacketHandler
 	incomingAckHandler ackhandler.IncomingPacketAckHandler
 
 	unpacker *packetUnpacker
@@ -49,7 +49,7 @@ func NewSession(conn *net.UDPConn, v protocol.VersionNumber, connectionID protoc
 		connection:         conn,
 		streamCallback:     streamCallback,
 		streams:            make(map[protocol.StreamID]*stream),
-		outgoingAckHandler: ackhandler.NewOutgoingPacketAckHandler(),
+		sentPacketHandler:  ackhandler.NewSentPacketHandler(),
 		incomingAckHandler: ackhandler.NewIncomingPacketAckHandler(),
 		receivedPackets:    make(chan receivedPacket),
 	}
@@ -104,7 +104,7 @@ func (s *Session) handlePacket(addr *net.UDPAddr, publicHeader *PublicHeader, r 
 		case *frames.StreamFrame:
 			err = s.handleStreamFrame(frame)
 		case *frames.AckFrame:
-			err = s.outgoingAckHandler.ReceivedAck(frame)
+			err = s.sentPacketHandler.ReceivedAck(frame)
 			// ToDo: send right error in ConnectionClose frame
 		case *frames.ConnectionCloseFrame:
 			fmt.Printf("%#v\n", frame)
@@ -189,7 +189,7 @@ func (s *Session) sendPacket() error {
 	if packet == nil {
 		return nil
 	}
-	s.outgoingAckHandler.SentPacket(&ackhandler.Packet{
+	s.sentPacketHandler.SentPacket(&ackhandler.Packet{
 		PacketNumber: packet.number,
 		Plaintext:    packet.payload,
 		EntropyBit:   packet.entropyBit,

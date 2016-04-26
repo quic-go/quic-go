@@ -7,10 +7,10 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("AckHandler", func() {
-	var handler *outgoingPacketAckHandler
+var _ = Describe("SentPacketHandler", func() {
+	var handler *sentPacketHandler
 	BeforeEach(func() {
-		handler = NewOutgoingPacketAckHandler().(*outgoingPacketAckHandler)
+		handler = NewSentPacketHandler().(*sentPacketHandler)
 	})
 
 	Context("SentPacket", func() {
