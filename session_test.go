@@ -3,11 +3,16 @@ package quic
 import (
 	"errors"
 	"io"
+	"os"
+	"runtime"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 )
@@ -153,6 +158,29 @@ var _ = Describe("Session", func() {
 				ErrorCode: 42,
 			})
 			Expect(err).To(MatchError("RST_STREAM received for unknown stream"))
+		})
+	})
+
+	Context("closing", func() {
+		var (
+			nGoRoutinesBefore int
+		)
+
+		BeforeEach(func() {
+			nGoRoutinesBefore = runtime.NumGoroutine()
+			path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
+			signer, err := crypto.NewRSASigner(path+"cert.der", path+"key.der")
+			Expect(err).ToNot(HaveOccurred())
+			scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
+			session = NewSession(nil, 0, 0, scfg, nil).(*Session)
+		})
+
+		It("shuts down without error", func() {
+			// crypto stream is running in separate go routine
+			Expect(runtime.NumGoroutine()).To(Equal(nGoRoutinesBefore + 1))
+			session.Close(nil)
+			time.Sleep(1 * time.Millisecond)
+			Expect(runtime.NumGoroutine()).To(Equal(nGoRoutinesBefore))
 		})
 	})
 })

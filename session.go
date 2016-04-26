@@ -88,7 +88,7 @@ func (s *Session) Run() {
 			switch err {
 			// Can happen e.g. when packets thought missing arrive late
 			case ackhandler.ErrDuplicateOrOutOfOrderAck:
-				// Can happen when RST_STREAMs arrive early or late (?)
+			// Can happen when RST_STREAMs arrive early or late (?)
 			case errRstStreamOnInvalidStream:
 				fmt.Printf("Ignoring error in session: %s\n", err.Error())
 			default:
@@ -205,6 +205,7 @@ func (s *Session) Close(e error) error {
 	if ok {
 		errorCode = quicError.ErrorCode
 	}
+	s.closeStreamsWithError(e)
 	// TODO: Don't queue, but send immediately
 	return s.QueueFrame(&frames.ConnectionCloseFrame{
 		ErrorCode:    errorCode,
@@ -268,6 +269,9 @@ func (s *Session) garbageCollectStreams() {
 	s.streamsMutex.Lock()
 	defer s.streamsMutex.Unlock()
 	for k, v := range s.streams {
+		if v == nil {
+			continue
+		}
 		// Strictly speaking, this is not thread-safe. However it doesn't matter
 		// if the stream is deleted just shortly later, so we don't care.
 		if v.finishedReading() {
