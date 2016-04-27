@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/congestion"
+	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -27,7 +28,7 @@ var _ = Describe("Cubic", func() {
 	It("works above origin", func() {
 		// Convex growth.
 		rtt_min := 100 * time.Millisecond
-		current_cwnd := uint64(10)
+		current_cwnd := protocol.PacketNumber(10)
 		expected_cwnd := current_cwnd + 1
 		// Initialize the state.
 		clock.Advance(time.Millisecond)
@@ -46,7 +47,7 @@ var _ = Describe("Cubic", func() {
 		}
 		// Cubic phase.
 		for i := 0; i < 52; i++ {
-			for n := uint64(1); n < current_cwnd; n++ {
+			for n := protocol.PacketNumber(1); n < current_cwnd; n++ {
 				// Call once per ACK.
 				Expect(cubic.CongestionWindowAfterAck(current_cwnd, rtt_min)).To(Equal(current_cwnd))
 			}
@@ -56,14 +57,14 @@ var _ = Describe("Cubic", func() {
 		// Total time elapsed so far; add min_rtt (0.1s) here as well.
 		elapsed_time_s := 10.0 + 0.1
 		// |expected_cwnd| is initial value of cwnd + K * t^3, where K = 0.4.
-		expected_cwnd = uint64(11 + (elapsed_time_s*elapsed_time_s*elapsed_time_s*410)/1024)
+		expected_cwnd = protocol.PacketNumber(11 + (elapsed_time_s*elapsed_time_s*elapsed_time_s*410)/1024)
 		Expect(current_cwnd).To(Equal(expected_cwnd))
 	})
 
 	// TODO: Test copied from Chromium has no assertions
 	It("has increasing cwnd stats during convex region", func() {
 		rtt_min := 100 * time.Millisecond
-		current_cwnd := uint64(10)
+		current_cwnd := protocol.PacketNumber(10)
 		expected_cwnd := current_cwnd + 1
 		// Initialize the state.
 		clock.Advance(time.Millisecond)
@@ -83,7 +84,7 @@ var _ = Describe("Cubic", func() {
 
 		// Testing Cubic mode increase.
 		for i := 0; i < 52; i++ {
-			for n := uint64(1); n < current_cwnd; n++ {
+			for n := protocol.PacketNumber(1); n < current_cwnd; n++ {
 				// Call once per ACK.
 				cubic.CongestionWindowAfterAck(current_cwnd, rtt_min)
 			}
@@ -94,26 +95,26 @@ var _ = Describe("Cubic", func() {
 
 	It("manages loss events", func() {
 		rtt_min := 100 * time.Millisecond
-		current_cwnd := uint64(422)
+		current_cwnd := protocol.PacketNumber(422)
 		expected_cwnd := current_cwnd + 1
 		// Initialize the state.
 		clock.Advance(time.Millisecond)
 		Expect(cubic.CongestionWindowAfterAck(current_cwnd, rtt_min)).To(Equal(expected_cwnd))
-		expected_cwnd = uint64(float32(current_cwnd) * kNConnectionBeta)
+		expected_cwnd = protocol.PacketNumber(float32(current_cwnd) * kNConnectionBeta)
 		Expect(cubic.CongestionWindowAfterPacketLoss(current_cwnd)).To(Equal(expected_cwnd))
-		expected_cwnd = uint64(float32(current_cwnd) * kNConnectionBeta)
+		expected_cwnd = protocol.PacketNumber(float32(current_cwnd) * kNConnectionBeta)
 		Expect(cubic.CongestionWindowAfterPacketLoss(current_cwnd)).To(Equal(expected_cwnd))
 	})
 
 	It("works below origin", func() {
 		// Concave growth.
 		rtt_min := 100 * time.Millisecond
-		current_cwnd := uint64(422)
+		current_cwnd := protocol.PacketNumber(422)
 		expected_cwnd := current_cwnd + 1
 		// Initialize the state.
 		clock.Advance(time.Millisecond)
 		Expect(cubic.CongestionWindowAfterAck(current_cwnd, rtt_min)).To(Equal(expected_cwnd))
-		expected_cwnd = uint64(float32(current_cwnd) * kNConnectionBeta)
+		expected_cwnd = protocol.PacketNumber(float32(current_cwnd) * kNConnectionBeta)
 		Expect(cubic.CongestionWindowAfterPacketLoss(current_cwnd)).To(Equal(expected_cwnd))
 		current_cwnd = expected_cwnd
 		// First update after loss to initialize the epoch.

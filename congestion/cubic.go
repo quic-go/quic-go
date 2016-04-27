@@ -4,7 +4,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/utils"
+	"github.com/lucas-clemente/quic-go/protocol"
 )
 
 // A Clock returns the current time
@@ -24,7 +24,7 @@ type Clock interface {
 // round trip time.
 const cubeScale = 40
 const cubeCongestionWindowScale = 410
-const cubeFactor uint64 = 1 << cubeScale / cubeCongestionWindowScale
+const cubeFactor protocol.PacketNumber = 1 << cubeScale / cubeCongestionWindowScale
 
 const defaultNumConnections = 2
 
@@ -54,21 +54,21 @@ type Cubic struct {
 	// Time when we updated last_congestion_window.
 	lastUpdateTime time.Time
 	// Last congestion window (in packets) used.
-	lastCongestionWindow uint64
+	lastCongestionWindow protocol.PacketNumber
 	// Max congestion window (in packets) used just before last loss event.
 	// Note: to improve fairness to other streams an additional back off is
 	// applied to this value if the new value is below our latest value.
-	lastMaxCongestionWindow uint64
+	lastMaxCongestionWindow protocol.PacketNumber
 	// Number of acked packets since the cycle started (epoch).
-	ackedPacketsCount uint64
+	ackedPacketsCount protocol.PacketNumber
 	// TCP Reno equivalent congestion window in packets.
-	estimatedTCPcongestionWindow uint64
+	estimatedTCPcongestionWindow protocol.PacketNumber
 	// Origin point of cubic function.
-	originPointCongestionWindow uint64
+	originPointCongestionWindow protocol.PacketNumber
 	// Time to origin point of cubic function in 2^10 fractions of a second.
 	timeToOriginPoint uint32
 	// Last congestion window in packets computed by cubic function.
-	lastTargetCongestionWindow uint64
+	lastTargetCongestionWindow protocol.PacketNumber
 }
 
 // NewCubic returns a new Cubic instance
@@ -131,29 +131,29 @@ func (c *Cubic) OnApplicationLimited() {
 // CongestionWindowAfterPacketLoss computes a new congestion window to use after
 // a loss event. Returns the new congestion window in packets. The new
 // congestion window is a multiplicative decrease of our current window.
-func (c *Cubic) CongestionWindowAfterPacketLoss(currentCongestionWindow uint64) uint64 {
+func (c *Cubic) CongestionWindowAfterPacketLoss(currentCongestionWindow protocol.PacketNumber) protocol.PacketNumber {
 	if currentCongestionWindow < c.lastMaxCongestionWindow {
 		// We never reached the old max, so assume we are competing with another
 		// flow. Use our extra back off factor to allow the other flow to go up.
-		c.lastMaxCongestionWindow = uint64(betaLastMax * float32(currentCongestionWindow))
+		c.lastMaxCongestionWindow = protocol.PacketNumber(betaLastMax * float32(currentCongestionWindow))
 	} else {
 		c.lastMaxCongestionWindow = currentCongestionWindow
 	}
 	c.epoch = time.Time{} // Reset time.
-	return uint64(float32(currentCongestionWindow) * c.beta())
+	return protocol.PacketNumber(float32(currentCongestionWindow) * c.beta())
 }
 
 // CongestionWindowAfterAck computes a new congestion window to use after a received ACK.
 // Returns the new congestion window in packets. The new congestion window
 // follows a cubic function that depends on the time passed since last
 // packet loss.
-func (c *Cubic) CongestionWindowAfterAck(currentCongestionWindow uint64, delayMin time.Duration) uint64 {
+func (c *Cubic) CongestionWindowAfterAck(currentCongestionWindow protocol.PacketNumber, delayMin time.Duration) protocol.PacketNumber {
 	c.ackedPacketsCount++ // Packets acked.
 	currentTime := c.clock.Now()
 
 	// Cubic is "independent" of RTT, the update is limited by the time elapsed.
 	if c.lastCongestionWindow == currentCongestionWindow && (currentTime.Sub(c.lastUpdateTime) <= maxCubicTimeInterval) {
-		return utils.MaxUint64(c.lastTargetCongestionWindow, c.estimatedTCPcongestionWindow)
+		return protocol.MaxPacketNumber(c.lastTargetCongestionWindow, c.estimatedTCPcongestionWindow)
 	}
 	c.lastCongestionWindow = currentCongestionWindow
 	c.lastUpdateTime = currentTime
@@ -188,7 +188,7 @@ func (c *Cubic) CongestionWindowAfterAck(currentCongestionWindow uint64, delayMi
 	elapsedTime := int64((currentTime.Add(delayMin).Sub(c.epoch)/time.Microsecond)<<10) / 1000000
 
 	offset := int64(c.timeToOriginPoint) - elapsedTime
-	deltaCongestionWindow := uint64((cubeCongestionWindowScale * offset * offset * offset) >> cubeScale)
+	deltaCongestionWindow := protocol.PacketNumber((cubeCongestionWindowScale * offset * offset * offset) >> cubeScale)
 	targetCongestionWindow := c.originPointCongestionWindow - deltaCongestionWindow
 
 	// With dynamic beta/alpha based on number of active streams, it is possible
@@ -196,7 +196,7 @@ func (c *Cubic) CongestionWindowAfterAck(currentCongestionWindow uint64, delayMi
 	// suddenly, leading to more than one iteration through the following loop.
 	for {
 		// Update estimated TCP congestion_window.
-		requiredAckCount := uint64(float32(c.estimatedTCPcongestionWindow) / c.alpha())
+		requiredAckCount := protocol.PacketNumber(float32(c.estimatedTCPcongestionWindow) / c.alpha())
 		if c.ackedPacketsCount < requiredAckCount {
 			break
 		}
