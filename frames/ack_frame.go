@@ -41,9 +41,23 @@ func (f *AckFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, pa
 	utils.WriteUint32(b, 0)                         // First timestamp
 
 	if f.HasNACK() {
-		numRanges := uint8(len(f.NackRanges))
-		b.WriteByte(numRanges)
+		numRanges := uint64(0)
+		// calculate the number of NackRanges that are about to be written
+		// this number is different from len(f.NackRanges) for the case of contiguous NACK ranges
+		for _, nackRange := range f.NackRanges {
+			rangeLength := uint64(nackRange.LastPacketNumber - nackRange.FirstPacketNumber)
+			numRanges += rangeLength/0xFF + 1
+			if rangeLength > 0 && rangeLength%0xFF == 0 {
+				numRanges--
+			}
+		}
+		if numRanges > 0xFF {
+			panic("Too many NACK ranges. Truncating not yet implemented.")
+		}
 
+		b.WriteByte(uint8(numRanges))
+
+		rangeCounter := uint8(0)
 		for i, nackRange := range f.NackRanges {
 			var missingPacketSequenceNumberDelta uint64
 			if i == 0 {
@@ -55,12 +69,23 @@ func (f *AckFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, pa
 				lastNackRange := f.NackRanges[i-1]
 				missingPacketSequenceNumberDelta = uint64(lastNackRange.FirstPacketNumber) - uint64(nackRange.LastPacketNumber) - 1
 			}
-			rangeLength := uint8(nackRange.LastPacketNumber - nackRange.FirstPacketNumber)
-			if rangeLength > 255 {
-				return errors.New("AckFrame: NACK ranges larger 256 packets not yet supported")
-			}
+			rangeLength := nackRange.LastPacketNumber - nackRange.FirstPacketNumber
+
 			utils.WriteUint48(b, missingPacketSequenceNumberDelta)
-			b.WriteByte(rangeLength)
+			b.WriteByte(uint8(rangeLength % 0x100))
+			rangeCounter++
+
+			rangeLength = rangeLength - (rangeLength % 0x100)
+			for rangeLength > 0 {
+				rangeCounter++
+				utils.WriteUint48(b, 0)
+				b.WriteByte(uint8(0xFF))
+				rangeLength -= 0x100
+			}
+		}
+
+		if rangeCounter != uint8(numRanges) {
+			panic("Inconsistent number of NACK ranges written.")
 		}
 	}
 
