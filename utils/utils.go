@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"io"
+	"time"
 )
 
 // ReadStream is the read part of a QUIC stream
@@ -170,6 +171,22 @@ func MaxInt64(a, b int64) int64 {
 		return a
 	}
 	return b
+}
+
+// MaxDuration returns the max duration
+func MaxDuration(a, b time.Duration) time.Duration {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// AbsDuration returns the absolute value of a time duration
+func AbsDuration(d time.Duration) time.Duration {
+	if d >= 0 {
+		return d
+	}
+	return -d
 }
 
 // RandomBit returns a cryptographically secure random bit (encoded as true / false)

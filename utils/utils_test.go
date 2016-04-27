@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -133,6 +134,15 @@ var _ = Describe("Utils", func() {
 		It("returns the maximum int64", func() {
 			Expect(MaxInt64(5, 7)).To(Equal(int64(7)))
 		})
+
+		It("returns the maximum duration", func() {
+			Expect(MaxDuration(time.Microsecond, time.Nanosecond)).To(Equal(time.Microsecond))
+		})
+	})
+
+	It("returns the abs time", func() {
+		Expect(AbsDuration(time.Microsecond)).To(Equal(time.Microsecond))
+		Expect(AbsDuration(-time.Microsecond)).To(Equal(time.Microsecond))
 	})
 
 	Context("Min", func() {
