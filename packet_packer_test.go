@@ -60,44 +60,22 @@ var _ = Describe("Packet packer", func() {
 		Expect(p.raw).NotTo(HaveLen(0))
 	})
 
-	It("packs multiple stream frames into single packet", func() {
-		f1 := frames.StreamFrame{
-			StreamID: 5,
-			Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
-		}
-		f2 := frames.StreamFrame{
-			StreamID: 5,
-			Data:     []byte{0xBE, 0xEF, 0x13, 0x37},
-		}
-		packer.AddStreamFrame(f1)
-		packer.AddStreamFrame(f2)
-		p, err := packer.PackPacket([]frames.Frame{}, true)
-		Expect(p).ToNot(BeNil())
-		Expect(err).ToNot(HaveOccurred())
+	It("packs many control frames into 1 packets", func() {
+		f := &frames.AckFrame{LargestObserved: 1}
 		b := &bytes.Buffer{}
-		f1.Write(b, 2, 6)
-		f2.Write(b, 2, 6)
-		Expect(len(p.frames)).To(Equal(2))
-		Expect(p.raw).To(ContainSubstring(string(b.Bytes())))
+		f.Write(b, 3, 6)
+		maxFramesPerPacket := protocol.MaxFrameSize / b.Len()
+		var controlFrames []frames.Frame
+		for i := 0; i < maxFramesPerPacket; i++ {
+			controlFrames = append(controlFrames, f)
+		}
+		payloadFrames, err := packer.composeNextPacket(controlFrames, true)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(len(payloadFrames)).To(Equal(maxFramesPerPacket))
+		payloadFrames, err = packer.composeNextPacket([]frames.Frame{}, true)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(len(payloadFrames)).To(BeZero())
 	})
-	//
-	// It("packs many normal frames into 2 packets", func() {
-	// 	f := &frames.AckFrame{LargestObserved: 1}
-	// 	b := &bytes.Buffer{}
-	// 	f.Write(b, 3, 6)
-	// 	maxFramesPerPacket := protocol.MaxFrameSize / b.Len()
-	// 	counter := 0
-	// 	for i := 0; i < maxFramesPerPacket+1; i++ {
-	// 		packer.AddFrame(f)
-	// 		counter++
-	// 	}
-	// 	payloadFrames, err := packer.composeNextPacket([]frames.Frame{}, true)
-	// 	Expect(err).ToNot(HaveOccurred())
-	// 	Expect(len(payloadFrames)).To(Equal(maxFramesPerPacket))
-	// 	payloadFrames, err = packer.composeNextPacket([]frames.Frame{}, true)
-	// 	Expect(err).ToNot(HaveOccurred())
-	// 	Expect(len(payloadFrames)).To(Equal(counter - maxFramesPerPacket))
-	// })
 
 	It("only increases the packet number when there is an actual packet to send", func() {
 		f := frames.StreamFrame{
@@ -134,6 +112,27 @@ var _ = Describe("Packet packer", func() {
 			payloadFrames, err = packer.composeNextPacket([]frames.Frame{}, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(payloadFrames)).To(Equal(0))
+		})
+
+		It("packs multiple small stream frames into single packet", func() {
+			f1 := frames.StreamFrame{
+				StreamID: 5,
+				Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
+			}
+			f2 := frames.StreamFrame{
+				StreamID: 5,
+				Data:     []byte{0xBE, 0xEF, 0x13, 0x37},
+			}
+			packer.AddStreamFrame(f1)
+			packer.AddStreamFrame(f2)
+			p, err := packer.PackPacket([]frames.Frame{}, true)
+			Expect(p).ToNot(BeNil())
+			Expect(err).ToNot(HaveOccurred())
+			b := &bytes.Buffer{}
+			f1.Write(b, 2, 6)
+			f2.Write(b, 2, 6)
+			Expect(len(p.frames)).To(Equal(2))
+			Expect(p.raw).To(ContainSubstring(string(b.Bytes())))
 		})
 
 		It("splits one stream frame larger than maximum size", func() {

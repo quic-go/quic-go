@@ -111,6 +111,10 @@ func (p *packetPacker) composeNextPacket(controlFrames []frames.Frame, includeSt
 		controlFrames = controlFrames[1:]
 	}
 
+	if payloadLength > protocol.MaxFrameSize {
+		panic("internal inconsistency: packet payload too large")
+	}
+
 	if !includeStreamFrames {
 		return payloadFrames, nil
 	}
