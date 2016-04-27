@@ -99,6 +99,27 @@ var _ = Describe("Packet packer", func() {
 	// 	Expect(len(payloadFrames)).To(Equal(counter - maxFramesPerPacket))
 	// })
 
+	It("only increases the packet number when there is an actual packet to send", func() {
+		f := frames.StreamFrame{
+			StreamID: 5,
+			Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
+		}
+		packer.AddStreamFrame(f)
+		p, err := packer.PackPacket([]frames.Frame{}, true)
+		Expect(p).ToNot(BeNil())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(packer.lastPacketNumber).To(Equal(protocol.PacketNumber(1)))
+		p, err = packer.PackPacket([]frames.Frame{}, true)
+		Expect(p).To(BeNil())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(packer.lastPacketNumber).To(Equal(protocol.PacketNumber(1)))
+		packer.AddStreamFrame(f)
+		p, err = packer.PackPacket([]frames.Frame{}, true)
+		Expect(p).ToNot(BeNil())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(packer.lastPacketNumber).To(Equal(protocol.PacketNumber(2)))
+	})
+
 	Context("Stream Frame handling", func() {
 		It("does not splits a stream frame with maximum size", func() {
 			maxStreamFrameDataLen := protocol.MaxFrameSize - (1 + 4 + 8 + 2)

@@ -39,11 +39,6 @@ func (p *packetPacker) PackPacket(controlFrames []frames.Frame, includeStreamFra
 	p.mutex.Lock()
 	defer p.mutex.Unlock() // TODO: Split up?
 
-	currentPacketNumber := protocol.PacketNumber(atomic.AddUint64(
-		(*uint64)(&p.lastPacketNumber),
-		1,
-	))
-
 	payloadFrames, err := p.composeNextPacket(controlFrames, includeStreamFrames)
 	if err != nil {
 		return nil, err
@@ -52,6 +47,11 @@ func (p *packetPacker) PackPacket(controlFrames []frames.Frame, includeStreamFra
 	if len(payloadFrames) == 0 {
 		return nil, nil
 	}
+
+	currentPacketNumber := protocol.PacketNumber(atomic.AddUint64(
+		(*uint64)(&p.lastPacketNumber),
+		1,
+	))
 
 	payload, err := p.getPayload(payloadFrames, currentPacketNumber)
 	if err != nil {
