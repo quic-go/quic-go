@@ -50,6 +50,12 @@ func (h *sentPacketHandler) nackPacket(packetNumber protocol.PacketNumber) error
 		return ErrMapAccess
 	}
 
+	// if the packet has already been retransmit, do nothing
+	// we're probably only receiving another NACK for this packet because the retransmission has not yet arrived at the client
+	if packet.Retransmitted {
+		return nil
+	}
+
 	packet.MissingReports++
 
 	if packet.MissingReports > retransmissionThreshold {
@@ -58,20 +64,9 @@ func (h *sentPacketHandler) nackPacket(packetNumber protocol.PacketNumber) error
 	return nil
 }
 
-func (h *sentPacketHandler) recalculateHighestInOrderAckedPacketNumberFromPacketHistory() {
-	for i := h.highestInOrderAckedPacketNumber; i <= h.lastSentPacketNumber; i++ {
-		_, ok := h.packetHistory[i]
-		if ok {
-			break
-		}
-		h.highestInOrderAckedPacketNumber = i
-	}
-}
-
 func (h *sentPacketHandler) queuePacketForRetransmission(packet *Packet) {
 	h.retransmissionQueue = append(h.retransmissionQueue, packet)
-	h.ackPacket(packet.PacketNumber)
-	h.recalculateHighestInOrderAckedPacketNumberFromPacketHistory()
+	packet.Retransmitted = true
 }
 
 func (h *sentPacketHandler) SentPacket(packet *Packet) error {

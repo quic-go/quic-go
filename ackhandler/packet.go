@@ -13,4 +13,5 @@ type Packet struct {
 	Entropy      EntropyAccumulator
 
 	MissingReports uint8
+	Retransmitted  bool // has this Packet ever been retransmitted
 }

@@ -340,15 +340,16 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
 		})
 
-		It("recalculates the highestInOrderAckedPacketNumber after queueing a retransmission", func() {
+		It("does not change the highestInOrderAckedPacketNumber after queueing a retransmission", func() {
 			ack := frames.AckFrame{
 				LargestObserved: 4,
 				NackRanges:      []frames.NackRange{frames.NackRange{FirstPacketNumber: 3, LastPacketNumber: 3}},
 			}
 			err := handler.ReceivedAck(&ack)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(2)))
 			handler.nackPacket(3) // this is the second NACK for this packet
-			Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(4)))
+			Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(2)))
 		})
 	})
 })
