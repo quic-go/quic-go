@@ -244,11 +244,16 @@ func (s *Session) sendPacket() error {
 	if packet == nil {
 		return nil
 	}
-	s.sentPacketHandler.SentPacket(&ackhandler.Packet{
+
+	err = s.sentPacketHandler.SentPacket(&ackhandler.Packet{
 		PacketNumber: packet.number,
 		Frames:       packet.frames,
 		EntropyBit:   packet.entropyBit,
 	})
+	if err != nil {
+		return err
+	}
+
 	fmt.Printf("-> Sending packet %d (%d bytes)\n", packet.number, len(packet.raw))
 	err = s.conn.write(packet.raw)
 	if err != nil {
