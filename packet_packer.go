@@ -2,7 +2,6 @@ package quic
 
 import (
 	"bytes"
-	"sync"
 	"sync/atomic"
 
 	"github.com/lucas-clemente/quic-go/crypto"
@@ -22,22 +21,21 @@ type packetPacker struct {
 	connectionID protocol.ConnectionID
 	aead         crypto.AEAD
 
-	queuedStreamFrames []frames.StreamFrame
-	mutex              sync.Mutex
+	streamFrameQueue StreamFrameQueue
 
 	lastPacketNumber protocol.PacketNumber
 }
 
 func (p *packetPacker) AddStreamFrame(f frames.StreamFrame) {
-	p.mutex.Lock()
-	p.queuedStreamFrames = append(p.queuedStreamFrames, f)
-	p.mutex.Unlock()
+	p.streamFrameQueue.Push(&f, false)
+}
+
+func (p *packetPacker) AddHighPrioStreamFrame(f frames.StreamFrame) {
+	p.streamFrameQueue.Push(&f, true)
 }
 
 func (p *packetPacker) PackPacket(controlFrames []frames.Frame, includeStreamFrames bool) (*packedPacket, error) {
 	// TODO: save controlFrames as a member variable, makes it easier to handle in the unlikely event that there are more controlFrames than you can put into on packet
-	p.mutex.Lock()
-	defer p.mutex.Unlock() // TODO: Split up?
 
 	payloadFrames, err := p.composeNextPacket(controlFrames, includeStreamFrames)
 	if err != nil {
@@ -119,8 +117,8 @@ func (p *packetPacker) composeNextPacket(controlFrames []frames.Frame, includeSt
 		return payloadFrames, nil
 	}
 
-	for len(p.queuedStreamFrames) > 0 {
-		frame := &p.queuedStreamFrames[0]
+	for p.streamFrameQueue.Len() > 0 {
+		frame := p.streamFrameQueue.Front()
 
 		if payloadLength > protocol.MaxFrameSize {
 			panic("internal inconsistency: packet payload too large")
@@ -138,7 +136,7 @@ func (p *packetPacker) composeNextPacket(controlFrames []frames.Frame, includeSt
 			frame = previousFrame
 			payloadLength += len(previousFrame.Data) - 1
 		} else {
-			p.queuedStreamFrames = p.queuedStreamFrames[1:]
+			p.streamFrameQueue.Pop()
 			payloadLength += len(frame.Data) - 1
 		}
 

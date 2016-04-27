@@ -262,7 +262,7 @@ func (s *Session) sendPacket() error {
 		controlFrames = append(controlFrames, retransmitPacket.GetControlFramesForRetransmission()...)
 		for _, streamFrame := range retransmitPacket.GetStreamFramesForRetransmission() {
 			// TODO: add these stream frames with a higher priority
-			s.packer.AddStreamFrame(*streamFrame)
+			s.packer.AddHighPrioStreamFrame(*streamFrame)
 		}
 	}
 
