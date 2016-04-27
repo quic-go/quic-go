@@ -91,6 +91,8 @@ func (s *Session) Run() {
 			// Can happen e.g. when packets thought missing arrive late
 			case ackhandler.ErrDuplicateOrOutOfOrderAck:
 			// Can happen when RST_STREAMs arrive early or late (?)
+			case ackhandler.ErrMapAccess:
+				s.Close(err) // TODO: sent correct error code here
 			case errRstStreamOnInvalidStream:
 				fmt.Printf("Ignoring error in session: %s\n", err.Error())
 			default:

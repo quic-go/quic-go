@@ -12,11 +12,12 @@ var (
 	ErrDuplicateOrOutOfOrderAck = errors.New("SentPacketHandler: Duplicate or out-of-order ACK")
 	// ErrEntropy occurs when an ACK with incorrect entropy is received
 	ErrEntropy = errors.New("SentPacketHandler: Wrong entropy")
+	// ErrMapAccess occurs when a NACK contains invalid NACK ranges
+	ErrMapAccess = errors.New("SentPacketHandler: Packet does not exist in PacketHistory")
 )
 
 var (
 	errAckForUnsentPacket   = errors.New("SentPacketHandler: Received ACK for an unsent package")
-	errMapAccess            = errors.New("SentPacketHandler: Packet does not exist in PacketHistory")
 	retransmissionThreshold = uint8(3)
 )
 
@@ -46,7 +47,7 @@ func (h *sentPacketHandler) ackPacket(packetNumber protocol.PacketNumber) {
 func (h *sentPacketHandler) nackPacket(packetNumber protocol.PacketNumber) error {
 	packet, ok := h.packetHistory[packetNumber]
 	if !ok {
-		return errMapAccess
+		return ErrMapAccess
 	}
 
 	packet.MissingReports++
@@ -92,7 +93,7 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 func (h *sentPacketHandler) calculateExpectedEntropy(ackFrame *frames.AckFrame) (EntropyAccumulator, error) {
 	packet, ok := h.packetHistory[ackFrame.LargestObserved]
 	if !ok {
-		return 0, errMapAccess
+		return 0, ErrMapAccess
 	}
 	expectedEntropy := packet.Entropy
 
@@ -109,7 +110,7 @@ func (h *sentPacketHandler) calculateExpectedEntropy(ackFrame *frames.AckFrame) 
 			if i >= nackRange.FirstPacketNumber && i <= nackRange.LastPacketNumber {
 				packet, ok := h.packetHistory[i]
 				if !ok {
-					return 0, errMapAccess
+					return 0, ErrMapAccess
 				}
 				expectedEntropy.Substract(i, packet.EntropyBit)
 			}
