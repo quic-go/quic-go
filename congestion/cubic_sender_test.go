@@ -24,17 +24,20 @@ func (c *mockClock) Advance(d time.Duration) {
 
 var _ = Describe("Cubic Sender", func() {
 	var (
-		sender        congestion.SendAlgorithm
-		clock         mockClock
-		bytesInFlight uint64
-		packetNumber  protocol.PacketNumber
+		sender            congestion.SendAlgorithm
+		clock             mockClock
+		bytesInFlight     uint64
+		packetNumber      protocol.PacketNumber
+		ackedPacketNumber protocol.PacketNumber
+		rttStats          *congestion.RTTStats
 	)
 
 	BeforeEach(func() {
 		bytesInFlight = 0
-		clock = mockClock{}
-		sender = congestion.NewCubicSender(initialCongestionWindowPackets)
 		packetNumber = 1
+		clock = mockClock{}
+		rttStats = congestion.NewRTTStats()
+		sender = congestion.NewCubicSender(&clock, rttStats, initialCongestionWindowPackets)
 	})
 
 	SendAvailableSendWindow := func(packetLength uint64) int {
@@ -51,7 +54,21 @@ var _ = Describe("Cubic Sender", func() {
 		return packets_sent
 	}
 
-	It("works with default values", func() {
+	// Normal is that TCP acks every other segment.
+	AckNPackets := func(n int) {
+		rttStats.UpdateRTT(60*time.Millisecond, 0, clock.Now())
+		var ackedPackets congestion.PacketVector
+		var lostPackets congestion.PacketVector
+		for i := 0; i < n; i++ {
+			ackedPacketNumber++
+			ackedPackets = append(ackedPackets, congestion.PacketInfo{Number: ackedPacketNumber, Length: protocol.DefaultTCPMSS})
+		}
+		sender.OnCongestionEvent(true, bytesInFlight, ackedPackets, lostPackets)
+		bytesInFlight -= uint64(n) * protocol.DefaultTCPMSS
+		clock.Advance(time.Millisecond)
+	}
+
+	It("simpler sender", func() {
 		// At startup make sure we are at the default.
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
 		// At startup make sure we can send.
@@ -64,5 +81,23 @@ var _ = Describe("Cubic Sender", func() {
 		// Fill the send window with data, then verify that we can't send.
 		SendAvailableSendWindow(protocol.DefaultTCPMSS)
 		Expect(sender.TimeUntilSend(clock.Now(), sender.GetCongestionWindow())).ToNot(BeZero())
+	})
+
+	It("application limited slow start", func() {
+		// Send exactly 10 packets and ensure the CWND ends at 14 packets.
+		const kNumberOfAcks = 5
+		// At startup make sure we can send.
+		Expect(sender.TimeUntilSend(clock.Now(), 0)).To(BeZero())
+		// Make sure we can send.
+		Expect(sender.TimeUntilSend(clock.Now(), 0)).To(BeZero())
+
+		SendAvailableSendWindow(protocol.DefaultTCPMSS)
+		for i := 0; i < kNumberOfAcks; i++ {
+			AckNPackets(2)
+		}
+		bytesToSend := sender.GetCongestionWindow()
+		// It's expected 2 acks will arrive when the bytes_in_flight are greater than
+		// half the CWND.
+		Expect(bytesToSend).To(Equal(defaultWindowTCP + protocol.DefaultTCPMSS*2*2))
 	})
 })

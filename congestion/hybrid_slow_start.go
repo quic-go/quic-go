@@ -89,3 +89,12 @@ func (s *HybridSlowStart) ShouldExitSlowStart(latestRTT time.Duration, minRTT ti
 func (s *HybridSlowStart) OnPacketSent(packetNumber protocol.PacketNumber) {
 	s.lastSentPacketNumber = packetNumber
 }
+
+// OnPacketAcked gets invoked after ShouldExitSlowStart, so it's best to end
+// the round when the final packet of the burst is received and start it on
+// the next incoming ack.
+func (s *HybridSlowStart) OnPacketAcked(ackedPacketNumber protocol.PacketNumber) {
+	if s.IsEndOfRound(ackedPacketNumber) {
+		s.started = false
+	}
+}

@@ -24,3 +24,6 @@ const DefaultTCPMSS = 1460
 
 // InitialCongestionWindow is the initial congestion window in QUIC packets
 const InitialCongestionWindow = 32
+
+// MaxCongestionWindow is the maximum size of the CWND, in packets.
+const MaxCongestionWindow PacketNumber = 200
