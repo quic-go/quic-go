@@ -63,10 +63,7 @@ ReadLoop:
 			case 0x04:
 				frame, err = frames.ParseWindowUpdateFrame(r)
 			case 0x05:
-				fmt.Println("unimplemented: BLOCKED")
-				p := make([]byte, 1+4)
-				_, err = r.Read(p)
-				frame = nil
+				frame, err = frames.ParseBlockedFrame(r)
 			case 0x06:
 				frame, err = frames.ParseStopWaitingFrame(r, publicHeader.PacketNumber, publicHeader.PacketNumberLen)
 			case 0x07:

@@ -138,10 +138,14 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	It("accepts BLOCKED frames", func() {
-		setReader([]byte{0x05, 0, 0, 0, 0})
+		setReader([]byte{0x05, 0xEF, 0xBE, 0xAD, 0xDE})
 		packet, err := unpacker.Unpack(hdrBin, hdr, r)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(HaveLen(0))
+		Expect(packet.frames).To(Equal([]frames.Frame{
+			&frames.BlockedFrame{
+				StreamID: 0xDEADBEEF,
+			},
+		}))
 	})
 
 	It("unpacks STOP_WAITING frames", func() {

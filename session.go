@@ -30,6 +30,8 @@ type StreamCallback func(*Session, utils.Stream)
 
 // A Session is a QUIC session
 type Session struct {
+	connectionID protocol.ConnectionID
+
 	streamCallback StreamCallback
 
 	conn connection
@@ -54,6 +56,7 @@ type Session struct {
 // NewSession makes a new session
 func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback) PacketHandler {
 	session := &Session{
+		connectionID:          connectionID,
 		conn:                  conn,
 		streamCallback:        streamCallback,
 		streams:               make(map[protocol.StreamID]*stream),
@@ -146,6 +149,8 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 			err = s.handleRstStreamFrame(frame)
 		case *frames.WindowUpdateFrame:
 			fmt.Printf("%#v\n", frame)
+		case *frames.BlockedFrame:
+			fmt.Printf("BLOCKED frame received for connection %d stream %d\n", s.connectionID, frame.StreamID)
 		default:
 			panic("unexpected frame type")
 		}
