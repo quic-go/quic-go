@@ -163,7 +163,6 @@ func (s *Session) HandlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 
 // TODO: Ignore data for closed streams
 func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
-	fmt.Printf("Got %d bytes for stream %d\n", len(frame.Data), frame.StreamID)
 	if frame.StreamID == 0 {
 		return errors.New("Session: 0 is not a valid Stream ID")
 	}
@@ -227,7 +226,6 @@ func (s *Session) Close(e error) error {
 	if packet == nil {
 		panic("Session: internal inconsistency: expected packet not to be nil")
 	}
-	fmt.Printf("-> Sending close packet %d (%d bytes)\n", packet.number, len(packet.raw))
 	return s.conn.write(packet.raw)
 }
 

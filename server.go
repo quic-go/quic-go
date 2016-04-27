@@ -91,8 +91,6 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 	}
 	publicHeader.Raw = packet[:len(packet)-r.Len()]
 
-	// fmt.Printf("<- Got packet %d (%d bytes) from %v\n", publicHeader.PacketNumber, n, remoteAddr)
-
 	// Send Version Negotiation Packet if the client is speaking a different protocol version
 	if publicHeader.VersionFlag && !protocol.IsSupportedVersion(publicHeader.VersionNumber) {
 		fmt.Println("Sending VersionNegotiationPacket")
