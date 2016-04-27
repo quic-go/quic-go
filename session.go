@@ -247,6 +247,25 @@ func (s *Session) closeStreamsWithError(err error) {
 
 func (s *Session) sendPacket() error {
 	var controlFrames []frames.Frame
+
+	// check for retransmissions first
+	// TODO: handle multiple packets retransmissions
+	retransmitPacket := s.sentPacketHandler.DequeuePacketForRetransmission()
+	if retransmitPacket != nil {
+		swf := &frames.StopWaitingFrame{
+			LeastUnacked: retransmitPacket.PacketNumber + 1,
+			Entropy:      byte(retransmitPacket.Entropy),
+		}
+		controlFrames = append(controlFrames, swf)
+
+		// resend the frames that were in the packet
+		controlFrames = append(controlFrames, retransmitPacket.GetControlFramesForRetransmission()...)
+		for _, streamFrame := range retransmitPacket.GetStreamFramesForRetransmission() {
+			// TODO: add these stream frames with a higher priority
+			s.packer.AddStreamFrame(*streamFrame)
+		}
+	}
+
 	ack := s.receivedPacketHandler.DequeueAckFrame()
 	if ack != nil {
 		controlFrames = append(controlFrames, ack)
