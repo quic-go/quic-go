@@ -8,12 +8,6 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
-// NackRange is a NACK range
-type NackRange struct {
-	FirstPacketNumber protocol.PacketNumber
-	LastPacketNumber  protocol.PacketNumber
-}
-
 var errInvalidNackRanges = errors.New("AckFrame: ACK frame contains invalid NACK ranges")
 
 // An AckFrame in QUIC
@@ -45,7 +39,7 @@ func (f *AckFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, pa
 		// calculate the number of NackRanges that are about to be written
 		// this number is different from len(f.NackRanges) for the case of contiguous NACK ranges
 		for _, nackRange := range f.NackRanges {
-			rangeLength := uint64(nackRange.LastPacketNumber - nackRange.FirstPacketNumber)
+			rangeLength := nackRange.Len()
 			numRanges += rangeLength/0xFF + 1
 			if rangeLength > 0 && rangeLength%0xFF == 0 {
 				numRanges--
@@ -69,7 +63,7 @@ func (f *AckFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, pa
 				lastNackRange := f.NackRanges[i-1]
 				missingPacketSequenceNumberDelta = uint64(lastNackRange.FirstPacketNumber) - uint64(nackRange.LastPacketNumber) - 1
 			}
-			rangeLength := nackRange.LastPacketNumber - nackRange.FirstPacketNumber
+			rangeLength := nackRange.Len()
 
 			utils.WriteUint48(b, missingPacketSequenceNumberDelta)
 			b.WriteByte(uint8(rangeLength % 0x100))

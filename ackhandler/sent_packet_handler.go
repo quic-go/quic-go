@@ -107,7 +107,7 @@ func (h *sentPacketHandler) calculateExpectedEntropy(ackFrame *frames.AckFrame) 
 					nackRange = ackFrame.NackRanges[nackRangeIndex]
 				}
 			}
-			if i >= nackRange.FirstPacketNumber && i <= nackRange.LastPacketNumber {
+			if nackRange.ContainsPacketNumber(i) {
 				packet, ok := h.packetHistory[i]
 				if !ok {
 					return 0, ErrMapAccess
@@ -156,7 +156,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) error {
 					nackRange = ackFrame.NackRanges[nackRangeIndex]
 				}
 			}
-			if i >= nackRange.FirstPacketNumber && i <= nackRange.LastPacketNumber {
+			if nackRange.ContainsPacketNumber(i) {
 				h.nackPacket(i)
 			} else {
 				h.ackPacket(i)
