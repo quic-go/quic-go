@@ -85,7 +85,7 @@ func (f *AckFrame) HasNACK() bool {
 	return false
 }
 
-// GetHighestInOrderPacket gets the highest in order packet number that is confirmed by this ACK
+// GetHighestInOrderPacketNumber gets the highest in order packet number that is confirmed by this ACK
 func (f *AckFrame) GetHighestInOrderPacketNumber() protocol.PacketNumber {
 	if f.HasNACK() {
 		return (f.NackRanges[len(f.NackRanges)-1].FirstPacketNumber - 1)
@@ -168,7 +168,7 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 
 	// Invalid NACK Handling:
 	// NACKs contain a lot of offsets that require substractions of PacketNumbers. If an ACK contains invalid data, it is possible to underflow the uint64 used to store the PacketNumber
-	// ToDo: handle uint64 overflows
+	// TODO: handle uint64 overflows
 	if hasNACK {
 		var numRanges uint8
 		numRanges, err = r.ReadByte()
@@ -188,24 +188,34 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 			}
 			rangeLength := uint8(rangeLengthByte)
 
-			nackRange := NackRange{}
-			if i == 0 {
-				if uint64(frame.LargestObserved) < missingPacketSequenceNumberDelta+uint64(rangeLength) {
-					return nil, errInvalidNackRanges
-				}
-				nackRange.FirstPacketNumber = frame.LargestObserved - protocol.PacketNumber(missingPacketSequenceNumberDelta+uint64(rangeLength))
-			} else {
-				if missingPacketSequenceNumberDelta == 0 {
-					return nil, errors.New("ACK frame: Continues NACK ranges not yet implemented")
-				}
-				lastNackRange := frame.NackRanges[len(frame.NackRanges)-1]
-				if uint64(lastNackRange.FirstPacketNumber) <= missingPacketSequenceNumberDelta+uint64(rangeLength) {
-					return nil, errInvalidNackRanges
-				}
-				nackRange.FirstPacketNumber = lastNackRange.FirstPacketNumber - protocol.PacketNumber(missingPacketSequenceNumberDelta+uint64(rangeLength)) - 1
+			if i == 0 && missingPacketSequenceNumberDelta == 0 {
+				return nil, errors.New("ACK frame: largest observed missing not yet implemented")
 			}
-			nackRange.LastPacketNumber = protocol.PacketNumber(uint64(nackRange.FirstPacketNumber) + uint64(rangeLength))
-			frame.NackRanges = append(frame.NackRanges, nackRange)
+
+			// contiguous NACK range
+			if missingPacketSequenceNumberDelta == 0 {
+				nackRange := &frame.NackRanges[len(frame.NackRanges)-1]
+				if uint64(nackRange.FirstPacketNumber) <= uint64(rangeLength)+1 {
+					return nil, errInvalidNackRanges
+				}
+				nackRange.FirstPacketNumber = protocol.PacketNumber(uint64(nackRange.FirstPacketNumber) - uint64(rangeLength) - 1)
+			} else {
+				nackRange := NackRange{}
+				if i == 0 {
+					if uint64(frame.LargestObserved) < missingPacketSequenceNumberDelta+uint64(rangeLength) {
+						return nil, errInvalidNackRanges
+					}
+					nackRange.FirstPacketNumber = frame.LargestObserved - protocol.PacketNumber(missingPacketSequenceNumberDelta+uint64(rangeLength))
+				} else {
+					lastNackRange := frame.NackRanges[len(frame.NackRanges)-1]
+					if uint64(lastNackRange.FirstPacketNumber) <= missingPacketSequenceNumberDelta+uint64(rangeLength) {
+						return nil, errInvalidNackRanges
+					}
+					nackRange.FirstPacketNumber = lastNackRange.FirstPacketNumber - protocol.PacketNumber(missingPacketSequenceNumberDelta+uint64(rangeLength)) - 1
+				}
+				nackRange.LastPacketNumber = protocol.PacketNumber(uint64(nackRange.FirstPacketNumber) + uint64(rangeLength))
+				frame.NackRanges = append(frame.NackRanges, nackRange)
+			}
 		}
 	}
 

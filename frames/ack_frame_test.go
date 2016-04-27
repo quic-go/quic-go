@@ -43,8 +43,7 @@ var _ = Describe("AckFrame", func() {
 			Expect(frame.HasNACK()).To(Equal(true))
 			Expect(len(frame.NackRanges)).To(Equal(1))
 			Expect(frame.LargestObserved).To(Equal(protocol.PacketNumber(3)))
-			Expect(frame.NackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(1)))
-			Expect(frame.NackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(2)))
+			Expect(frame.NackRanges[0]).To(Equal(NackRange{FirstPacketNumber: 1, LastPacketNumber: 2}))
 			Expect(b.Len()).To(Equal(0))
 		})
 
@@ -56,8 +55,7 @@ var _ = Describe("AckFrame", func() {
 			Expect(frame.LargestObserved).To(Equal(protocol.PacketNumber(0xDECAFBAD1337)))
 			Expect(frame.HasNACK()).To(Equal(true))
 			Expect(len(frame.NackRanges)).To(Equal(1))
-			Expect(frame.NackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(0xDECAFBAD1337 - 0xDEADBEEFCAFE - rangeLength)))
-			Expect(frame.NackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(0xDECAFBAD1337 - 0xDEADBEEFCAFE)))
+			Expect(frame.NackRanges[0]).To(Equal(NackRange{FirstPacketNumber: protocol.PacketNumber(0xDECAFBAD1337 - 0xDEADBEEFCAFE - rangeLength), LastPacketNumber: 0xDECAFBAD1337 - 0xDEADBEEFCAFE}))
 			Expect(b.Len()).To(Equal(0))
 		})
 
@@ -68,12 +66,9 @@ var _ = Describe("AckFrame", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.HasNACK()).To(Equal(true))
 			Expect(len(frame.NackRanges)).To(Equal(3))
-			Expect(frame.NackRanges[0].FirstPacketNumber).To(Equal(protocol.PacketNumber(8)))
-			Expect(frame.NackRanges[0].LastPacketNumber).To(Equal(protocol.PacketNumber(14)))
-			Expect(frame.NackRanges[1].FirstPacketNumber).To(Equal(protocol.PacketNumber(4)))
-			Expect(frame.NackRanges[1].LastPacketNumber).To(Equal(protocol.PacketNumber(6)))
-			Expect(frame.NackRanges[2].FirstPacketNumber).To(Equal(protocol.PacketNumber(2)))
-			Expect(frame.NackRanges[2].LastPacketNumber).To(Equal(protocol.PacketNumber(2)))
+			Expect(frame.NackRanges[0]).To(Equal(NackRange{FirstPacketNumber: 8, LastPacketNumber: 14}))
+			Expect(frame.NackRanges[1]).To(Equal(NackRange{FirstPacketNumber: 4, LastPacketNumber: 6}))
+			Expect(frame.NackRanges[2]).To(Equal(NackRange{FirstPacketNumber: 2, LastPacketNumber: 2}))
 			Expect(b.Len()).To(Equal(0))
 		})
 
@@ -83,6 +78,44 @@ var _ = Describe("AckFrame", func() {
 			_, err := ParseAckFrame(b)
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(Equal(errInvalidNackRanges))
+		})
+
+		Context("contiguous NACK ranges", func() {
+			It("parses a frame with a contiguous NACK range spanning two fields", func() {
+				b := bytes.NewReader([]byte{0x64, 0x8, 0x2E, 0x01, 0x72, 0x1, 0x1, 0x0, 0xc0, 0x15, 0x0, 0x0, 0x2, 0x1, 0x2b, 0x0, 0xff})
+				frame, err := ParseAckFrame(b)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(frame.LargestObserved).To(Equal(protocol.PacketNumber(302)))
+				Expect(len(frame.NackRanges)).To(Equal(1))
+				Expect(frame.NackRanges[0]).To(Equal(NackRange{FirstPacketNumber: 2, LastPacketNumber: 301}))
+			})
+
+			It("parses a frame with a contiguous NACK range spanning more than two fields", func() {
+				b := bytes.NewReader([]byte{0x64, 0x8, 0x16, 0x05, 0x72, 0x1, 0x1, 0x0, 0xc0, 0x15, 0x0, 0x0, 0x6, 0x1, 0x13, 0x0, 0xff, 0x0, 0xff, 0x0, 0xff, 0x0, 0xff, 0x0, 0xff})
+				frame, err := ParseAckFrame(b)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(frame.LargestObserved).To(Equal(protocol.PacketNumber(1302)))
+				Expect(len(frame.NackRanges)).To(Equal(1))
+				Expect(frame.NackRanges[0]).To(Equal(NackRange{FirstPacketNumber: 2, LastPacketNumber: 1301}))
+			})
+
+			It("parses a frame with two contiguous NACK ranges", func() {
+				b := bytes.NewReader([]byte{0x64, 0x8, 0x23, 0x03, 0x72, 0x1, 0x1, 0x0, 0xc0, 0x15, 0x0, 0x0, 0x4, 0x1, 0x8f, 0x0, 0xff, 0x1, 0x8f, 0x0, 0xff})
+				frame, err := ParseAckFrame(b)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(frame.LargestObserved).To(Equal(protocol.PacketNumber(803)))
+				Expect(len(frame.NackRanges)).To(Equal(2))
+				Expect(frame.NackRanges[0]).To(Equal(NackRange{FirstPacketNumber: 403, LastPacketNumber: 802}))
+				Expect(frame.NackRanges[1]).To(Equal(NackRange{FirstPacketNumber: 2, LastPacketNumber: 401}))
+			})
+
+			It("rejects a frame with an invalid NACK range", func() {
+				// LargestObserved: 280, but NACK range is 301 packets long
+				b := bytes.NewReader([]byte{0x64, 0x8, 0x18, 0x01, 0x72, 0x1, 0x1, 0x0, 0xc0, 0x15, 0x0, 0x0, 0x2, 0x1, 0x2b, 0x0, 0xff})
+				_, err := ParseAckFrame(b)
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(Equal(errInvalidNackRanges))
+			})
 		})
 	})
 
