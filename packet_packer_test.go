@@ -136,6 +136,26 @@ var _ = Describe("Packet packer", func() {
 			Expect(len(payloadFrames)).To(Equal(0))
 		})
 
+		It("splits one stream frame larger than maximum size", func() {
+			maxStreamFrameDataLen := protocol.MaxFrameSize - (1 + 4 + 8 + 2)
+			f := frames.StreamFrame{
+				Data:   bytes.Repeat([]byte{'f'}, maxStreamFrameDataLen+200),
+				Offset: 1,
+			}
+			packer.AddStreamFrame(f)
+			payloadFrames, err := packer.composeNextPacket([]frames.Frame{}, true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(len(payloadFrames)).To(Equal(1))
+			Expect(len(payloadFrames[0].(*frames.StreamFrame).Data)).To(Equal(maxStreamFrameDataLen))
+			payloadFrames, err = packer.composeNextPacket([]frames.Frame{}, true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(len(payloadFrames)).To(Equal(1))
+			Expect(len(payloadFrames[0].(*frames.StreamFrame).Data)).To(Equal(200))
+			payloadFrames, err = packer.composeNextPacket([]frames.Frame{}, true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(len(payloadFrames)).To(Equal(0))
+		})
+
 		It("packs 2 stream frames that are too big for one packet correctly", func() {
 			maxStreamFrameDataLen := protocol.MaxFrameSize - (1 + 4 + 8 + 2)
 			f1 := frames.StreamFrame{
@@ -157,6 +177,9 @@ var _ = Describe("Packet packer", func() {
 			p, err = packer.PackPacket([]frames.Frame{}, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p).ToNot(BeNil())
+			p, err = packer.PackPacket([]frames.Frame{}, true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p).To(BeNil())
 		})
 
 		It("packs a packet that has the maximum packet size when given a large enough stream frame", func() {

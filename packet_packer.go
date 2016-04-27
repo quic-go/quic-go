@@ -116,7 +116,7 @@ func (p *packetPacker) composeNextPacket(controlFrames []frames.Frame, includeSt
 	}
 
 	for len(p.queuedStreamFrames) > 0 {
-		frame := p.queuedStreamFrames[0]
+		frame := &p.queuedStreamFrames[0]
 
 		if payloadLength > protocol.MaxFrameSize {
 			panic("internal inconsistency: packet payload too large")
@@ -131,7 +131,7 @@ func (p *packetPacker) composeNextPacket(controlFrames []frames.Frame, includeSt
 		previousFrame := frame.MaybeSplitOffFrame(protocol.MaxFrameSize - payloadLength)
 		if previousFrame != nil {
 			// Don't pop the queue, leave the modified frame in
-			frame = *previousFrame
+			frame = previousFrame
 			payloadLength += len(previousFrame.Data) - 1
 		} else {
 			p.queuedStreamFrames = p.queuedStreamFrames[1:]
@@ -139,7 +139,7 @@ func (p *packetPacker) composeNextPacket(controlFrames []frames.Frame, includeSt
 		}
 
 		payloadLength += frame.MinLength()
-		payloadFrames = append(payloadFrames, &frame)
+		payloadFrames = append(payloadFrames, frame)
 	}
 
 	return payloadFrames, nil
