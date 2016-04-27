@@ -244,4 +244,23 @@ var _ = Describe("Session", func() {
 			Expect(conn.written[0]).To(ContainSubstring(string("foobar")))
 		})
 	})
+
+	It("closes when crypto stream errors", func() {
+		path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
+		signer, err := crypto.NewRSASigner(path+"cert.der", path+"key.der")
+		Expect(err).ToNot(HaveOccurred())
+		scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
+		session = NewSession(conn, 0, 0, scfg, nil).(*Session)
+		s, err := session.NewStream(3)
+		Expect(err).NotTo(HaveOccurred())
+		err = session.handleStreamFrame(&frames.StreamFrame{
+			StreamID: 1,
+			Data:     []byte("4242\x00\x00\x00\x00"),
+		})
+		Expect(err).NotTo(HaveOccurred())
+		time.Sleep(time.Millisecond)
+		Expect(session.closed).To(BeTrue())
+		_, err = s.Write([]byte{})
+		Expect(err).To(MatchError("CryptoSetup: expected CHLO"))
+	})
 })

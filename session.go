@@ -45,6 +45,7 @@ type Session struct {
 
 	receivedPackets chan receivedPacket
 	closeChan       chan struct{}
+	closed          bool
 
 	// Used to calculate the next packet number from the truncated wire representation
 	lastRcvdPacketNumber protocol.PacketNumber
@@ -64,7 +65,12 @@ func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol
 
 	cryptoStream, _ := session.NewStream(1)
 	cryptoSetup := handshake.NewCryptoSetup(connectionID, v, sCfg, cryptoStream)
-	go cryptoSetup.HandleCryptoStream()
+
+	go func() {
+		if err := cryptoSetup.HandleCryptoStream(); err != nil {
+			session.Close(err)
+		}
+	}()
 
 	session.packer = &packetPacker{aead: cryptoSetup, connectionID: connectionID}
 	session.unpacker = &packetUnpacker{aead: cryptoSetup}
@@ -196,6 +202,10 @@ func (s *Session) handleRstStreamFrame(frame *frames.RstStreamFrame) error {
 
 // Close the connection by sending a ConnectionClose frame
 func (s *Session) Close(e error) error {
+	if s.closed {
+		return nil
+	}
+	s.closed = true
 	s.closeChan <- struct{}{}
 	if e == nil {
 		e = protocol.NewQuicError(errorcodes.QUIC_PEER_GOING_AWAY, "peer going away")
