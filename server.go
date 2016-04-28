@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -33,8 +32,7 @@ type Server struct {
 
 // NewServer makes a new server
 func NewServer(certPath, keyPath string, cb StreamCallback) (*Server, error) {
-	path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
-	signer, err := crypto.NewRSASigner(path+"cert.der", path+"key.der")
+	signer, err := crypto.NewRSASigner(certPath, keyPath)
 	if err != nil {
 		return nil, err
 	}
