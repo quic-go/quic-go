@@ -20,6 +20,7 @@ func main() {
 	bindTo := flag.String("bind", "localhost", "bind to")
 	certPathDefault := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
 	certPath := flag.String("certpath", certPathDefault, "certificate directory")
+	www := flag.String("www", "/var/www", "www data")
 	flag.Parse()
 
 	server, err := quic.NewServer(*certPath+"cert.der", *certPath+"key.der", handleStream)
@@ -27,9 +28,7 @@ func main() {
 		panic(err)
 	}
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Hello world!"))
-	})
+	http.Handle("/", http.FileServer(http.Dir(*www)))
 
 	err = server.ListenAndServe(*bindTo + ":6121")
 	if err != nil {
