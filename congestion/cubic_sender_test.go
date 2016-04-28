@@ -587,6 +587,47 @@ var _ = Describe("Cubic Sender", func() {
 		// Send a data packet with retransmittable data, and ensure it is tracked.
 		Expect(sender.OnPacketSent(clock.Now(), bytesInFlight, packetNumber, protocol.DefaultTCPMSS, true)).To(BeTrue())
 	})
+
+	// TEST_F(TcpCubicSenderPacketsTest, ConfigureInitialWindow) {
+	//   QuicConfig config;
+	//
+	//   QuicTagVector options;
+	//   options.push_back(kIW03);
+	//   QuicConfigPeer::SetReceivedConnectionOptions(&config, options);
+	//   sender.SetFromConfig(config, Perspective::IS_SERVER);
+	//   Expect( sender.congestion_window()).To(Equal(3u))
+	//
+	//   options.clear();
+	//   options.push_back(kIW10);
+	//   QuicConfigPeer::SetReceivedConnectionOptions(&config, options);
+	//   sender.SetFromConfig(config, Perspective::IS_SERVER);
+	//   Expect( sender.congestion_window()).To(Equal(10u))
+	//
+	//   options.clear();
+	//   options.push_back(kIW20);
+	//   QuicConfigPeer::SetReceivedConnectionOptions(&config, options);
+	//   sender.SetFromConfig(config, Perspective::IS_SERVER);
+	//   Expect( sender.congestion_window()).To(Equal(20u))
+	//
+	//   options.clear();
+	//   options.push_back(kIW50);
+	//   QuicConfigPeer::SetReceivedConnectionOptions(&config, options);
+	//   sender.SetFromConfig(config, Perspective::IS_SERVER);
+	//   Expect( sender.congestion_window()).To(Equal(50u))
+	// }
+	//
+	// TEST_F(TcpCubicSenderPacketsTest, ConfigureMinimumWindow) {
+	//   QuicConfig config;
+	//
+	//   // Verify that kCOPT: kMIN1 forces the min CWND to 1 packet.
+	//   QuicTagVector options;
+	//   options.push_back(kMIN1);
+	//   QuicConfigPeer::SetReceivedConnectionOptions(&config, options);
+	//   sender.SetFromConfig(config, Perspective::IS_SERVER);
+	//   sender.OnRetransmissionTimeout(true);
+	//   Expect( sender.congestion_window()).To(Equal(1u))
+	// }
+
 	It("2 connection congestion avoidance at end of recovery", func() {
 		sender.SetNumEmulatedConnections(2)
 		// Ack 10 packets in 5 acks to raise the CWND to 20.
@@ -686,6 +727,67 @@ var _ = Describe("Cubic Sender", func() {
 		expected_send_window += protocol.DefaultTCPMSS
 		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
 	})
+
+	// TEST_F(TcpCubicSenderPacketsTest, BandwidthResumption) {
+	//   // Test that when provided with CachedNetworkParameters and opted in to the
+	//   // bandwidth resumption experiment, that the TcpCubicSenderPackets sets
+	//   // initial CWND appropriately.
+	//
+	//   // Set some common values.
+	//   CachedNetworkParameters cached_network_params;
+	//   const QuicPacketCount kNumberOfPackets = 123;
+	//   const int kBandwidthEstimateBytesPerSecond =
+	//       kNumberOfPackets * protocol.DefaultTCPMSS;
+	//   cached_network_params.set_bandwidth_estimate_bytes_per_second(
+	//       kBandwidthEstimateBytesPerSecond);
+	//   cached_network_params.set_min_rtt_ms(1000);
+	//
+	//   // Make sure that a bandwidth estimate results in a changed CWND.
+	//   cached_network_params.set_timestamp(clock.WallNow().ToUNIXSeconds() -
+	//                                       (kNumSecondsPerHour - 1));
+	//   sender.ResumeConnectionState(cached_network_params, false);
+	//   Expect( sender.congestion_window()).To(Equal(kNumberOfPackets))
+	//
+	//   // Resumed CWND is limited to be in a sensible range.
+	//   cached_network_params.set_bandwidth_estimate_bytes_per_second(
+	//       (kMaxCongestionWindow + 1) * protocol.DefaultTCPMSS);
+	//   sender.ResumeConnectionState(cached_network_params, false);
+	//   Expect( sender.congestion_window()).To(Equal(kMaxCongestionWindow))
+	//
+	//   cached_network_params.set_bandwidth_estimate_bytes_per_second(
+	//       (kMinCongestionWindowForBandwidthResumption - 1) * protocol.DefaultTCPMSS);
+	//   sender.ResumeConnectionState(cached_network_params, false);
+	//   EXPECT_EQ(kMinCongestionWindowForBandwidthResumption,
+	//             sender.congestion_window());
+	//
+	//   // Resume to the max value.
+	//   cached_network_params.set_max_bandwidth_estimate_bytes_per_second(
+	//       (kMinCongestionWindowForBandwidthResumption + 10) * protocol.DefaultTCPMSS);
+	//   sender.ResumeConnectionState(cached_network_params, true);
+	//   EXPECT_EQ((kMinCongestionWindowForBandwidthResumption + 10) * protocol.DefaultTCPMSS,
+	//             sender.GetCongestionWindow());
+	// }
+	//
+	// TEST_F(TcpCubicSenderPacketsTest, PaceBelowCWND) {
+	//   QuicConfig config;
+	//
+	//   // Verify that kCOPT: kMIN4 forces the min CWND to 1 packet, but allows up
+	//   // to 4 to be sent.
+	//   QuicTagVector options;
+	//   options.push_back(kMIN4);
+	//   QuicConfigPeer::SetReceivedConnectionOptions(&config, options);
+	//   sender.SetFromConfig(config, Perspective::IS_SERVER);
+	//   sender.OnRetransmissionTimeout(true);
+	//   Expect( sender.congestion_window()).To(Equal(1u))
+	//   EXPECT_TRUE(
+	//       sender.TimeUntilSend(QuicTime::Zero(), protocol.DefaultTCPMSS).IsZero());
+	//   EXPECT_TRUE(
+	//       sender.TimeUntilSend(QuicTime::Zero(), 2 * protocol.DefaultTCPMSS).IsZero());
+	//   EXPECT_TRUE(
+	//       sender.TimeUntilSend(QuicTime::Zero(), 3 * protocol.DefaultTCPMSS).IsZero());
+	//   EXPECT_FALSE(
+	//       sender.TimeUntilSend(QuicTime::Zero(), 4 * protocol.DefaultTCPMSS).IsZero());
+	// }
 
 	It("reset after connection migration", func() {
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
