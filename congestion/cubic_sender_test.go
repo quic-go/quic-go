@@ -81,6 +81,16 @@ var _ = Describe("Cubic Sender", func() {
 		bytesInFlight -= uint64(n) * packetLength
 	}
 
+	// Does not increment acked_packet_number_.
+	LosePacket := func(number protocol.PacketNumber) {
+		var ackedPackets congestion.PacketVector
+		var lostPackets congestion.PacketVector = congestion.PacketVector([]congestion.PacketInfo{
+			congestion.PacketInfo{Number: number, Length: protocol.DefaultTCPMSS},
+		})
+		sender.OnCongestionEvent(false, bytesInFlight, ackedPackets, lostPackets)
+		bytesInFlight -= protocol.DefaultTCPMSS
+	}
+
 	SendAvailableSendWindow := func() int { return SendAvailableSendWindowLen(protocol.DefaultTCPMSS) }
 	AckNPackets := func(n int) { AckNPacketsLen(n, protocol.DefaultTCPMSS) }
 	LoseNPackets := func(n int) { LoseNPacketsLen(n, protocol.DefaultTCPMSS) }
@@ -473,6 +483,110 @@ var _ = Describe("Cubic Sender", func() {
 		Expect(sender.GetCongestionWindow()).To(Equal(uint64(expected_send_window)))
 	})
 
+	It("tcp cubic reset epoch on quiescence", func() {
+		const kMaxCongestionWindow = 50
+		const kMaxCongestionWindowBytes = kMaxCongestionWindow * protocol.DefaultTCPMSS
+		sender = congestion.NewCubicSender(&clock, rttStats, false, initialCongestionWindowPackets, kMaxCongestionWindow)
+
+		num_sent := SendAvailableSendWindow()
+
+		// Make sure we fall out of slow start.
+		saved_cwnd := sender.GetCongestionWindow()
+		LoseNPackets(1)
+		Expect(saved_cwnd).To(BeNumerically(">", sender.GetCongestionWindow()))
+
+		// Ack the rest of the outstanding packets to get out of recovery.
+		for i := 1; i < num_sent; i++ {
+			AckNPackets(1)
+		}
+		Expect(bytesInFlight).To(BeZero())
+
+		// Send a new window of data and ack all; cubic growth should occur.
+		saved_cwnd = sender.GetCongestionWindow()
+		num_sent = SendAvailableSendWindow()
+		for i := 0; i < num_sent; i++ {
+			AckNPackets(1)
+		}
+		Expect(saved_cwnd).To(BeNumerically("<", sender.GetCongestionWindow()))
+		Expect(kMaxCongestionWindowBytes).To(BeNumerically(">", sender.GetCongestionWindow()))
+		Expect(bytesInFlight).To(BeZero())
+
+		// Quiescent time of 100 seconds
+		clock.Advance(100 * time.Second)
+
+		// Send new window of data and ack one packet. Cubic epoch should have
+		// been reset; ensure cwnd increase is not dramatic.
+		saved_cwnd = sender.GetCongestionWindow()
+		SendAvailableSendWindow()
+		AckNPackets(1)
+		Expect(saved_cwnd).To(BeNumerically("~", sender.GetCongestionWindow(), protocol.DefaultTCPMSS))
+		Expect(kMaxCongestionWindowBytes).To(BeNumerically(">", sender.GetCongestionWindow()))
+	})
+
+	It("tcp cubic shifted epoch on quiescence", func() {
+		const kMaxCongestionWindow = 50
+		const kMaxCongestionWindowBytes = kMaxCongestionWindow * protocol.DefaultTCPMSS
+		sender = congestion.NewCubicSender(&clock, rttStats, false, initialCongestionWindowPackets, kMaxCongestionWindow)
+
+		num_sent := SendAvailableSendWindow()
+
+		// Make sure we fall out of slow start.
+		saved_cwnd := sender.GetCongestionWindow()
+		LoseNPackets(1)
+		Expect(saved_cwnd).To(BeNumerically(">", sender.GetCongestionWindow()))
+
+		// Ack the rest of the outstanding packets to get out of recovery.
+		for i := 1; i < num_sent; i++ {
+			AckNPackets(1)
+		}
+		Expect(bytesInFlight).To(BeZero())
+
+		// Send a new window of data and ack all; cubic growth should occur.
+		saved_cwnd = sender.GetCongestionWindow()
+		num_sent = SendAvailableSendWindow()
+		for i := 0; i < num_sent; i++ {
+			AckNPackets(1)
+		}
+		Expect(saved_cwnd).To(BeNumerically("<", sender.GetCongestionWindow()))
+		Expect(kMaxCongestionWindowBytes).To(BeNumerically(">", sender.GetCongestionWindow()))
+		Expect(bytesInFlight).To(BeZero())
+
+		// Quiescent time of 100 seconds
+		clock.Advance(100 * time.Second)
+
+		// Send new window of data and ack one packet. Cubic epoch should have
+		// been reset; ensure cwnd increase is not dramatic.
+		saved_cwnd = sender.GetCongestionWindow()
+		SendAvailableSendWindow()
+		AckNPackets(1)
+		Expect(saved_cwnd).To(BeNumerically("~", sender.GetCongestionWindow(), protocol.DefaultTCPMSS))
+		Expect(kMaxCongestionWindowBytes).To(BeNumerically(">", sender.GetCongestionWindow()))
+	})
+
+	It("multiple losses in one window", func() {
+		SendAvailableSendWindow()
+		initial_window := sender.GetCongestionWindow()
+		LosePacket(ackedPacketNumber + 1)
+		post_loss_window := sender.GetCongestionWindow()
+		Expect(initial_window).To(BeNumerically(">", post_loss_window))
+		LosePacket(ackedPacketNumber + 3)
+		Expect(sender.GetCongestionWindow()).To(Equal(post_loss_window))
+		LosePacket(packetNumber - 1)
+		Expect(sender.GetCongestionWindow()).To(Equal(post_loss_window))
+
+		// Lose a later packet and ensure the window decreases.
+		LosePacket(packetNumber)
+		Expect(post_loss_window).To(BeNumerically(">", sender.GetCongestionWindow()))
+	})
+
+	It("don't track ack packets", func() {
+		// Send a packet with no retransmittable data, and ensure it's not tracked.
+		Expect(sender.OnPacketSent(clock.Now(), bytesInFlight, packetNumber, protocol.DefaultTCPMSS, false)).To(BeFalse())
+		packetNumber++
+
+		// Send a data packet with retransmittable data, and ensure it is tracked.
+		Expect(sender.OnPacketSent(clock.Now(), bytesInFlight, packetNumber, protocol.DefaultTCPMSS, true)).To(BeTrue())
+	})
 	It("2 connection congestion avoidance at end of recovery", func() {
 		sender.SetNumEmulatedConnections(2)
 		// Ack 10 packets in 5 acks to raise the CWND to 20.
