@@ -16,6 +16,7 @@ type SendAlgorithm interface {
 	OnRetransmissionTimeout(packetsRetransmitted bool)
 	InRecovery() bool
 	OnConnectionMigration()
+	RetransmissionDelay() time.Duration
 
 	// Experiments
 	SetSlowStartLargeReduction(enabled bool)
