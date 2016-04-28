@@ -42,36 +42,35 @@ var _ = Describe("Cubic Sender", func() {
 		sender = congestion.NewCubicSender(&clock, rttStats, true /*reno*/, initialCongestionWindowPackets, protocol.MaxCongestionWindow)
 	})
 
-	SendAvailableSendWindow := func() int {
+	SendAvailableSendWindowLen := func(packetLength uint64) int {
 		// Send as long as TimeUntilSend returns Zero.
 		packets_sent := 0
 		can_send := sender.TimeUntilSend(clock.Now(), bytesInFlight) == 0
 		for can_send {
-			sender.OnPacketSent(clock.Now(), bytesInFlight, packetNumber, protocol.DefaultTCPMSS, true)
+			sender.OnPacketSent(clock.Now(), bytesInFlight, packetNumber, packetLength, true)
 			packetNumber++
 			packets_sent++
-			bytesInFlight += protocol.DefaultTCPMSS
+			bytesInFlight += packetLength
 			can_send = sender.TimeUntilSend(clock.Now(), bytesInFlight) == 0
 		}
 		return packets_sent
 	}
 
 	// Normal is that TCP acks every other segment.
-	AckNPackets := func(n int) {
+	AckNPacketsLen := func(n int, packetLength uint64) {
 		rttStats.UpdateRTT(60*time.Millisecond, 0, clock.Now())
 		var ackedPackets congestion.PacketVector
 		var lostPackets congestion.PacketVector
 		for i := 0; i < n; i++ {
 			ackedPacketNumber++
-			ackedPackets = append(ackedPackets, congestion.PacketInfo{Number: ackedPacketNumber, Length: protocol.DefaultTCPMSS})
+			ackedPackets = append(ackedPackets, congestion.PacketInfo{Number: ackedPacketNumber, Length: packetLength})
 		}
 		sender.OnCongestionEvent(true, bytesInFlight, ackedPackets, lostPackets)
-		bytesInFlight -= uint64(n) * protocol.DefaultTCPMSS
+		bytesInFlight -= uint64(n) * packetLength
 		clock.Advance(time.Millisecond)
 	}
 
-	LoseNPackets := func(n int) {
-		packetLength := uint64(protocol.DefaultTCPMSS)
+	LoseNPacketsLen := func(n int, packetLength uint64) {
 		var ackedPackets congestion.PacketVector
 		var lostPackets congestion.PacketVector
 		for i := 0; i < n; i++ {
@@ -81,6 +80,10 @@ var _ = Describe("Cubic Sender", func() {
 		sender.OnCongestionEvent(false, bytesInFlight, ackedPackets, lostPackets)
 		bytesInFlight -= uint64(n) * packetLength
 	}
+
+	SendAvailableSendWindow := func() int { return SendAvailableSendWindowLen(protocol.DefaultTCPMSS) }
+	AckNPackets := func(n int) { AckNPacketsLen(n, protocol.DefaultTCPMSS) }
+	LoseNPackets := func(n int) { LoseNPacketsLen(n, protocol.DefaultTCPMSS) }
 
 	It("simpler sender", func() {
 		// At startup make sure we are at the default.
@@ -174,6 +177,84 @@ var _ = Describe("Cubic Sender", func() {
 		Expect(sender.HybridSlowStart().Started()).To(BeTrue())
 		sender.OnRetransmissionTimeout(true)
 		Expect(sender.HybridSlowStart().Started()).To(BeFalse())
+	})
+
+	It("slow start packet loss with large reduction", func() {
+		sender.SetSlowStartLargeReduction(true)
+
+		sender.SetNumEmulatedConnections(1)
+		const kNumberOfAcks = 10
+		for i := 0; i < kNumberOfAcks; i++ {
+			// Send our full send window.
+			SendAvailableSendWindow()
+			AckNPackets(2)
+		}
+		SendAvailableSendWindow()
+		expected_send_window := defaultWindowTCP + (protocol.DefaultTCPMSS * 2 * kNumberOfAcks)
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+
+		// Lose a packet to exit slow start. We should now have fallen out of
+		// slow start with a window reduced by 1.
+		LoseNPackets(1)
+		expected_send_window -= protocol.DefaultTCPMSS
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+
+		// Lose 5 packets in recovery and verify that congestion window is reduced
+		// further.
+		LoseNPackets(5)
+		expected_send_window -= 5 * protocol.DefaultTCPMSS
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+
+		packets_in_recovery_window := expected_send_window / protocol.DefaultTCPMSS
+
+		// Recovery phase. We need to ack every packet in the recovery window before
+		// we exit recovery.
+		number_of_packets_in_window := expected_send_window / protocol.DefaultTCPMSS
+		AckNPackets(int(packets_in_recovery_window))
+		SendAvailableSendWindow()
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+
+		// We need to ack the rest of the window before cwnd increases by 1.
+		AckNPackets(int(number_of_packets_in_window - 1))
+		SendAvailableSendWindow()
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+
+		// Next ack should increase cwnd by 1.
+		AckNPackets(1)
+		expected_send_window += protocol.DefaultTCPMSS
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+
+		// Now RTO and ensure slow start gets reset.
+		Expect(sender.HybridSlowStart().Started()).To(BeTrue())
+		sender.OnRetransmissionTimeout(true)
+		Expect(sender.HybridSlowStart().Started()).To(BeFalse())
+	})
+
+	It("slow start half packet loss with large reduction", func() {
+		sender.SetSlowStartLargeReduction(true)
+
+		sender.SetNumEmulatedConnections(1)
+		const kNumberOfAcks = 10
+		for i := 0; i < kNumberOfAcks; i++ {
+			// Send our full send window in half sized packets.
+			SendAvailableSendWindowLen(protocol.DefaultTCPMSS / 2)
+			AckNPackets(2)
+		}
+		SendAvailableSendWindowLen(protocol.DefaultTCPMSS / 2)
+		expected_send_window := defaultWindowTCP + (protocol.DefaultTCPMSS * 2 * kNumberOfAcks)
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+
+		// Lose a packet to exit slow start. We should now have fallen out of
+		// slow start with a window reduced by 1.
+		LoseNPackets(1)
+		expected_send_window -= protocol.DefaultTCPMSS
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+
+		// Lose 10 packets in recovery and verify that congestion window is reduced
+		// by 5 packets.
+		LoseNPacketsLen(10, protocol.DefaultTCPMSS/2)
+		expected_send_window -= 5 * protocol.DefaultTCPMSS
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
 	})
 
 	It("no PRR when less than one packet in flight", func() {

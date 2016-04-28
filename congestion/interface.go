@@ -17,6 +17,9 @@ type SendAlgorithm interface {
 	InRecovery() bool
 	OnConnectionMigration()
 
+	// Experiments
+	SetSlowStartLargeReduction(enabled bool)
+
 	HybridSlowStart() *HybridSlowStart         // only for testing
 	SlowstartThreshold() protocol.PacketNumber // only for testing
 	RenoBeta() float32                         // only for testing

@@ -174,6 +174,9 @@ func (c *cubicSender) onPacketLost(packetNumber protocol.PacketNumber, lostBytes
 		return
 	}
 	c.lastCutbackExitedSlowstart = c.InSlowStart()
+	if c.InSlowStart() {
+		c.stats.slowstartPacketsLost++
+	}
 
 	c.prr.OnPacketLost(bytesInFlight)
 
@@ -291,4 +294,9 @@ func (c *cubicSender) OnConnectionMigration() {
 	c.congestionWindow = c.initialCongestionWindow
 	c.slowstartThreshold = c.initialMaxCongestionWindow
 	c.maxTCPCongestionWindow = c.initialMaxCongestionWindow
+}
+
+// SetSlowStartLargeReduction allows enabling the SSLR experiment
+func (c *cubicSender) SetSlowStartLargeReduction(enabled bool) {
+	c.slowStartLargeReduction = enabled
 }
