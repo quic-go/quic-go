@@ -13,6 +13,7 @@ type Packet struct {
 	Frames       []frames.Frame
 	EntropyBit   bool
 	Entropy      EntropyAccumulator
+	Length       uint64
 
 	MissingReports uint8
 	Retransmitted  bool // has this Packet ever been retransmitted

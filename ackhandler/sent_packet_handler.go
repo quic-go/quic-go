@@ -29,9 +29,12 @@ type sentPacketHandler struct {
 	LargestObserved                 protocol.PacketNumber
 	LargestObservedEntropy          EntropyAccumulator
 
+	// TODO: Move into separate class as in chromium
 	packetHistory map[protocol.PacketNumber]*Packet
 
 	retransmissionQueue []*Packet // ToDo: use better data structure
+
+	bytesInFlight uint64
 }
 
 // NewSentPacketHandler creates a new sentPacketHandler
@@ -42,6 +45,9 @@ func NewSentPacketHandler() SentPacketHandler {
 }
 
 func (h *sentPacketHandler) ackPacket(packetNumber protocol.PacketNumber) {
+	if packet, ok := h.packetHistory[packetNumber]; ok && !packet.Retransmitted {
+		h.bytesInFlight -= packet.Length
+	}
 	delete(h.packetHistory, packetNumber)
 }
 
@@ -66,6 +72,7 @@ func (h *sentPacketHandler) nackPacket(packetNumber protocol.PacketNumber) error
 }
 
 func (h *sentPacketHandler) queuePacketForRetransmission(packet *Packet) {
+	h.bytesInFlight -= packet.Length
 	h.retransmissionQueue = append(h.retransmissionQueue, packet)
 	packet.Retransmitted = true
 }
@@ -79,6 +86,10 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 		return errors.New("Packet number must be increased by exactly 1")
 	}
 	packet.sendTime = time.Now()
+	if packet.Length == 0 {
+		panic("SentPacketHandler: packet cannot be empty")
+	}
+	h.bytesInFlight += packet.Length
 
 	h.lastSentPacketEntropy.Add(packet.PacketNumber, packet.EntropyBit)
 	packet.Entropy = h.lastSentPacketEntropy
@@ -176,4 +187,8 @@ func (h *sentPacketHandler) DequeuePacketForRetransmission() (packet *Packet) {
 	packet = h.retransmissionQueue[0]
 	h.retransmissionQueue = h.retransmissionQueue[1:]
 	return packet
+}
+
+func (h *sentPacketHandler) BytesInFlight() uint64 {
+	return h.bytesInFlight
 }

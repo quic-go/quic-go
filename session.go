@@ -283,6 +283,7 @@ func (s *Session) sendPacket() error {
 		PacketNumber: packet.number,
 		Frames:       packet.frames,
 		EntropyBit:   packet.entropyBit,
+		Length:       uint64(len(packet.raw)),
 	})
 	if err != nil {
 		return err

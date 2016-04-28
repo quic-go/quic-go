@@ -13,6 +13,8 @@ type SentPacketHandler interface {
 	ReceivedAck(ackFrame *frames.AckFrame) (time.Duration, error)
 
 	DequeuePacketForRetransmission() (packet *Packet)
+
+	BytesInFlight() uint64
 }
 
 // ReceivedPacketHandler handles ACKs needed to send for incoming packets

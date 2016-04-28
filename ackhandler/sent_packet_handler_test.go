@@ -23,8 +23,8 @@ var _ = Describe("SentPacketHandler", func() {
 	Context("SentPacket", func() {
 		It("accepts two consecutive packets", func() {
 			entropy := EntropyAccumulator(0)
-			packet1 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true}
-			packet2 := Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: true}
+			packet1 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1}
+			packet2 := Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 2}
 			err := handler.SentPacket(&packet1)
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.SentPacket(&packet2)
@@ -38,22 +38,24 @@ var _ = Describe("SentPacketHandler", func() {
 			entropy.Add(packet2.PacketNumber, packet2.EntropyBit)
 			Expect(handler.packetHistory[2].PacketNumber).To(Equal(protocol.PacketNumber(2)))
 			Expect(handler.packetHistory[2].Entropy).To(Equal(entropy))
+			Expect(handler.BytesInFlight()).To(Equal(uint64(3)))
 		})
 
 		It("rejects packets with the same packet number", func() {
-			packet1 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true}
-			packet2 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: false}
+			packet1 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1}
+			packet2 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 2}
 			err := handler.SentPacket(&packet1)
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.SentPacket(&packet2)
 			Expect(err).To(HaveOccurred())
 			Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(1)))
 			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(1)))
+			Expect(handler.BytesInFlight()).To(Equal(uint64(1)))
 		})
 
 		It("rejects non-consecutive packets", func() {
-			packet1 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true}
-			packet2 := Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, EntropyBit: false}
+			packet1 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1}
+			packet2 := Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 2}
 			err := handler.SentPacket(&packet1)
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.SentPacket(&packet2)
@@ -62,13 +64,15 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(1)))
 			Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(2)))
 			Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(2)))
+			Expect(handler.BytesInFlight()).To(Equal(uint64(1)))
 		})
 
 		It("correctly calculates the entropy, even if the last packet has already been ACKed", func() {
-			packet1 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true}
-			packet2 := Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: true}
+			packet1 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1}
+			packet2 := Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 2}
 			err := handler.SentPacket(&packet1)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.BytesInFlight()).To(Equal(uint64(1)))
 			entropy := EntropyAccumulator(0)
 			entropy.Add(packet1.PacketNumber, packet1.EntropyBit)
 			ack := frames.AckFrame{
@@ -77,15 +81,17 @@ var _ = Describe("SentPacketHandler", func() {
 			}
 			_, err = handler.ReceivedAck(&ack)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.BytesInFlight()).To(Equal(uint64(0)))
 			err = handler.SentPacket(&packet2)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.BytesInFlight()).To(Equal(uint64(2)))
 			Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(2)))
 			entropy.Add(packet2.PacketNumber, packet2.EntropyBit)
 			Expect(handler.packetHistory[2].Entropy).To(Equal(entropy))
 		})
 
 		It("stores the sent time", func() {
-			packet := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true}
+			packet := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1}
 			err := handler.SentPacket(&packet)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.packetHistory[1].sendTime.Unix()).To(BeNumerically("~", time.Now().Unix(), 1))
@@ -99,16 +105,17 @@ var _ = Describe("SentPacketHandler", func() {
 		BeforeEach(func() {
 			entropy = EntropyAccumulator(0)
 			packets = []*Packet{
-				&Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true},
-				&Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: true},
-				&Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, EntropyBit: true},
-				&Packet{PacketNumber: 4, Frames: []frames.Frame{&streamFrame}, EntropyBit: true},
-				&Packet{PacketNumber: 5, Frames: []frames.Frame{&streamFrame}, EntropyBit: true},
-				&Packet{PacketNumber: 6, Frames: []frames.Frame{&streamFrame}, EntropyBit: true},
+				&Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1},
+				&Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1},
+				&Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1},
+				&Packet{PacketNumber: 4, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1},
+				&Packet{PacketNumber: 5, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1},
+				&Packet{PacketNumber: 6, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1},
 			}
 			for _, packet := range packets {
 				handler.SentPacket(packet)
 			}
+			Expect(handler.BytesInFlight()).To(Equal(uint64(6)))
 		})
 
 		It("no NACK ranges", func() {
@@ -186,6 +193,7 @@ var _ = Describe("SentPacketHandler", func() {
 			}
 			_, err := handler.ReceivedAck(&ack)
 			Expect(err).To(HaveOccurred())
+			Expect(handler.BytesInFlight()).To(Equal(uint64(6)))
 			Expect(err).To(Equal(ErrEntropy))
 		})
 
@@ -201,6 +209,7 @@ var _ = Describe("SentPacketHandler", func() {
 			}
 			_, err := handler.ReceivedAck(&ack)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.BytesInFlight()).To(Equal(uint64(2)))
 			Expect(handler.LargestObserved).To(Equal(protocol.PacketNumber(largestObserved)))
 			Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(largestObserved)))
 			Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(largestObserved - 1)))
@@ -226,6 +235,7 @@ var _ = Describe("SentPacketHandler", func() {
 			}
 			_, err := handler.ReceivedAck(&ack)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.BytesInFlight()).To(Equal(uint64(2)))
 			Expect(handler.LargestObserved).To(Equal(protocol.PacketNumber(largestObserved)))
 			Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(2)))
 			Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(2)))
@@ -241,16 +251,17 @@ var _ = Describe("SentPacketHandler", func() {
 
 		BeforeEach(func() {
 			packets = []*Packet{
-				&Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
-				&Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
-				&Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
-				&Packet{PacketNumber: 4, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
-				&Packet{PacketNumber: 5, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
-				&Packet{PacketNumber: 6, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
+				&Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				&Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				&Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				&Packet{PacketNumber: 4, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				&Packet{PacketNumber: 5, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				&Packet{PacketNumber: 6, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
 			}
 			for _, packet := range packets {
 				handler.SentPacket(packet)
 			}
+			Expect(handler.BytesInFlight()).To(Equal(uint64(6)))
 		})
 
 		Context("ACK validation", func() {
@@ -261,9 +272,11 @@ var _ = Describe("SentPacketHandler", func() {
 				}
 				_, err := handler.ReceivedAck(&ack)
 				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.BytesInFlight()).To(Equal(uint64(3)))
 				_, err = handler.ReceivedAck(&ack)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(Equal(ErrDuplicateOrOutOfOrderAck))
+				Expect(handler.BytesInFlight()).To(Equal(uint64(3)))
 			})
 
 			It("rejects out of order ACKs", func() {
@@ -273,11 +286,13 @@ var _ = Describe("SentPacketHandler", func() {
 				}
 				_, err := handler.ReceivedAck(&ack)
 				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.BytesInFlight()).To(Equal(uint64(3)))
 				ack.LargestObserved--
 				_, err = handler.ReceivedAck(&ack)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(Equal(ErrDuplicateOrOutOfOrderAck))
 				Expect(handler.LargestObserved).To(Equal(protocol.PacketNumber(largestObserved)))
+				Expect(handler.BytesInFlight()).To(Equal(uint64(3)))
 			})
 
 			It("rejects ACKs with a too high LargestObserved packet number", func() {
@@ -288,6 +303,7 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(Equal(errAckForUnsentPacket))
 				Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(0)))
+				Expect(handler.BytesInFlight()).To(Equal(uint64(6)))
 			})
 		})
 
@@ -317,16 +333,17 @@ var _ = Describe("SentPacketHandler", func() {
 			retransmissionThreshold = 1
 
 			packets = []*Packet{
-				&Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
-				&Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
-				&Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
-				&Packet{PacketNumber: 4, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
-				&Packet{PacketNumber: 5, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
-				&Packet{PacketNumber: 6, Frames: []frames.Frame{&streamFrame}, EntropyBit: false},
+				&Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				&Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				&Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				&Packet{PacketNumber: 4, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				&Packet{PacketNumber: 5, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				&Packet{PacketNumber: 6, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
 			}
 			for _, packet := range packets {
 				handler.SentPacket(packet)
 			}
+			Expect(handler.BytesInFlight()).To(Equal(uint64(6)))
 		})
 
 		It("queues a packet for retransmission", func() {
@@ -377,6 +394,46 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(2)))
 			handler.nackPacket(3) // this is the second NACK for this packet
 			Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(2)))
+		})
+	})
+
+	Context("calculating bytes in flight", func() {
+		It("works in a typical retransmission scenanrop", func() {
+			packet1 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1}
+			packet2 := Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 2}
+			err := handler.SentPacket(&packet1)
+			Expect(err).NotTo(HaveOccurred())
+			err = handler.SentPacket(&packet2)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(handler.BytesInFlight()).To(Equal(uint64(3)))
+
+			// ACK 2, NACK 1
+			ack := frames.AckFrame{
+				LargestObserved: 2,
+				NackRanges:      []frames.NackRange{frames.NackRange{FirstPacketNumber: 1, LastPacketNumber: 1}},
+			}
+			_, err = handler.ReceivedAck(&ack)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(handler.BytesInFlight()).To(Equal(uint64(1)))
+
+			// Simulate 2 more NACKs
+			handler.nackPacket(1)
+			handler.nackPacket(1)
+			Expect(handler.BytesInFlight()).To(Equal(uint64(0)))
+
+			// Retransmission
+			packet3 := Packet{PacketNumber: 3, EntropyBit: false, Length: 1}
+			err = handler.SentPacket(&packet3)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(handler.BytesInFlight()).To(Equal(uint64(1)))
+
+			// ACK
+			ack = frames.AckFrame{
+				LargestObserved: 3,
+			}
+			_, err = handler.ReceivedAck(&ack)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(handler.BytesInFlight()).To(Equal(uint64(0)))
 		})
 	})
 })
