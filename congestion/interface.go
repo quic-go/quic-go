@@ -18,4 +18,5 @@ type SendAlgorithm interface {
 
 	HybridSlowStart() *HybridSlowStart         // only for testing
 	SlowstartThreshold() protocol.PacketNumber // only for testing
+	RenoBeta() float32                         // only for testing
 }

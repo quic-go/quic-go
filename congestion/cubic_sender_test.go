@@ -364,4 +364,104 @@ var _ = Describe("Cubic Sender", func() {
 		expected_send_window := kMaxCongestionWindowTCP * protocol.DefaultTCPMSS
 		Expect(sender.GetCongestionWindow()).To(Equal(uint64(expected_send_window)))
 	})
+
+	It("2 connection congestion avoidance at end of recovery", func() {
+		sender.SetNumEmulatedConnections(2)
+		// Ack 10 packets in 5 acks to raise the CWND to 20.
+		const kNumberOfAcks = 5
+		for i := 0; i < kNumberOfAcks; i++ {
+			// Send our full send window.
+			SendAvailableSendWindow()
+			AckNPackets(2)
+		}
+		SendAvailableSendWindow()
+		expected_send_window := defaultWindowTCP + (protocol.DefaultTCPMSS * 2 * kNumberOfAcks)
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+
+		LoseNPackets(1)
+
+		// We should now have fallen out of slow start with a reduced window.
+		expected_send_window = uint64(float32(expected_send_window) * sender.RenoBeta())
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+
+		// No congestion window growth should occur in recovery phase, i.e., until the
+		// currently outstanding 20 packets are acked.
+		for i := 0; i < 10; i++ {
+			// Send our full send window.
+			SendAvailableSendWindow()
+			Expect(sender.InRecovery()).To(BeTrue())
+			AckNPackets(2)
+			Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+		}
+		Expect(sender.InRecovery()).To(BeFalse())
+
+		// Out of recovery now. Congestion window should not grow for half an RTT.
+		packets_in_send_window := expected_send_window / protocol.DefaultTCPMSS
+		SendAvailableSendWindow()
+		AckNPackets(int(packets_in_send_window/2 - 2))
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+
+		// Next ack should increase congestion window by 1MSS.
+		SendAvailableSendWindow()
+		AckNPackets(2)
+		expected_send_window += protocol.DefaultTCPMSS
+		packets_in_send_window += 1
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+
+		// Congestion window should remain steady again for half an RTT.
+		SendAvailableSendWindow()
+		AckNPackets(int(packets_in_send_window/2 - 1))
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+
+		// Next ack should cause congestion window to grow by 1MSS.
+		SendAvailableSendWindow()
+		AckNPackets(2)
+		expected_send_window += protocol.DefaultTCPMSS
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+	})
+
+	It("1 connection congestion avoidance at end of recovery", func() {
+		sender.SetNumEmulatedConnections(1)
+		// Ack 10 packets in 5 acks to raise the CWND to 20.
+		const kNumberOfAcks = 5
+		for i := 0; i < kNumberOfAcks; i++ {
+			// Send our full send window.
+			SendAvailableSendWindow()
+			AckNPackets(2)
+		}
+		SendAvailableSendWindow()
+		expected_send_window := defaultWindowTCP + (protocol.DefaultTCPMSS * 2 * kNumberOfAcks)
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+
+		LoseNPackets(1)
+
+		// We should now have fallen out of slow start with a reduced window.
+		expected_send_window = uint64(float32(expected_send_window) * renoBeta)
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+
+		// No congestion window growth should occur in recovery phase, i.e., until the
+		// currently outstanding 20 packets are acked.
+		for i := 0; i < 10; i++ {
+			// Send our full send window.
+			SendAvailableSendWindow()
+			Expect(sender.InRecovery()).To(BeTrue())
+			AckNPackets(2)
+			Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+		}
+		Expect(sender.InRecovery()).To(BeFalse())
+
+		// Out of recovery now. Congestion window should not grow during RTT.
+		for i := uint64(0); i < expected_send_window/protocol.DefaultTCPMSS-2; i += 2 {
+			// Send our full send window.
+			SendAvailableSendWindow()
+			AckNPackets(2)
+			Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+		}
+
+		// Next ack should cause congestion window to grow by 1MSS.
+		SendAvailableSendWindow()
+		AckNPackets(2)
+		expected_send_window += protocol.DefaultTCPMSS
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+	})
 })

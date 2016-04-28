@@ -176,7 +176,7 @@ func (c *cubicSender) onPacketLost(packetNumber protocol.PacketNumber, lostBytes
 	if c.slowStartLargeReduction && c.InSlowStart() {
 		c.congestionWindow = c.congestionWindow - 1
 	} else if c.reno {
-		c.congestionWindow = protocol.PacketNumber(float32(c.congestionWindow) * c.renoBeta())
+		c.congestionWindow = protocol.PacketNumber(float32(c.congestionWindow) * c.RenoBeta())
 	} else {
 		c.congestionWindow = c.cubic.CongestionWindowAfterPacketLoss(c.congestionWindow)
 	}
@@ -191,7 +191,7 @@ func (c *cubicSender) onPacketLost(packetNumber protocol.PacketNumber, lostBytes
 	c.congestionWindowCount = 0
 }
 
-func (c *cubicSender) renoBeta() float32 {
+func (c *cubicSender) RenoBeta() float32 {
 	// kNConnectionBeta is the backoff factor after loss for our N-connection
 	// emulation, which emulates the effective backoff of an ensemble of N
 	// TCP-Reno connections on a single loss event. The effective multiplier is
