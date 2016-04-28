@@ -100,4 +100,23 @@ var _ = Describe("Cubic Sender", func() {
 		// half the CWND.
 		Expect(bytesToSend).To(Equal(defaultWindowTCP + protocol.DefaultTCPMSS*2*2))
 	})
+
+	It("exponential slow start", func() {
+		const kNumberOfAcks = 20
+		// At startup make sure we can send.
+		Expect(sender.TimeUntilSend(clock.Now(), 0)).To(BeZero())
+		Expect(sender.BandwidthEstimate()).To(BeZero())
+		// Make sure we can send.
+		Expect(sender.TimeUntilSend(clock.Now(), 0)).To(BeZero())
+
+		for i := 0; i < kNumberOfAcks; i++ {
+			// Send our full send window.
+			SendAvailableSendWindow(protocol.DefaultTCPMSS)
+			AckNPackets(2)
+		}
+		cwnd := sender.GetCongestionWindow()
+		Expect(cwnd).To(Equal(defaultWindowTCP + protocol.DefaultTCPMSS*2*kNumberOfAcks))
+		Expect(sender.BandwidthEstimate()).To(Equal(congestion.BandwidthFromDelta(cwnd, rttStats.SmoothedRTT())))
+	})
+
 })

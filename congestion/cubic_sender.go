@@ -199,3 +199,13 @@ func (c *cubicSender) isCwndLimited(bytesInFlight uint64) bool {
 	slowStartLimited := c.InSlowStart() && bytesInFlight > congestionWindow/2
 	return slowStartLimited || availableBytes <= maxBurstBytes
 }
+
+// BandwidthEstimate returns the current bandwidth estimate
+func (c *cubicSender) BandwidthEstimate() Bandwidth {
+	srtt := c.rttStats.SmoothedRTT()
+	if srtt == 0 {
+		// If we haven't measured an rtt, the bandwidth estimate is unknown.
+		return 0
+	}
+	return BandwidthFromDelta(c.GetCongestionWindow(), srtt)
+}

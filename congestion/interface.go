@@ -11,4 +11,5 @@ type SendAlgorithm interface {
 	OnPacketSent(sentTime time.Time, bytesInFlight uint64, packetNumber protocol.PacketNumber, bytes uint64, isRetransmittable bool) bool
 	GetCongestionWindow() uint64
 	OnCongestionEvent(rttUpdated bool, bytesInFlight uint64, ackedPackets PacketVector, lostPackets PacketVector)
+	BandwidthEstimate() Bandwidth
 }
