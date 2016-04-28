@@ -215,3 +215,8 @@ func (c *Cubic) CongestionWindowAfterAck(currentCongestionWindow protocol.Packet
 
 	return targetCongestionWindow
 }
+
+// SetNumConnections sets the number of emulated connections
+func (c *Cubic) SetNumConnections(n int) {
+	c.numConnections = n
+}

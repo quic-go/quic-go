@@ -5,11 +5,13 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 const (
 	maxBurstBytes                                        = 3 * protocol.DefaultTCPMSS
 	defaultMinimumCongestionWindow protocol.PacketNumber = 2
+	renoBeta                       float32               = 0.7 // Reno backoff factor.
 )
 
 type cubicSender struct {
@@ -46,17 +48,27 @@ type cubicSender struct {
 
 	// Maximum number of outstanding packets for tcp.
 	maxTCPCongestionWindow protocol.PacketNumber
+
+	// Number of connections to simulate.
+	numConnections int
+
+	// ACK counter for the Reno implementation.
+	congestionWindowCount uint64
+
+	reno bool
 }
 
 // NewCubicSender makes a new cubic sender
-func NewCubicSender(clock Clock, rttStats *RTTStats, initialCongestionWindow protocol.PacketNumber) SendAlgorithm {
+func NewCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestionWindow, maxCongestionWindow protocol.PacketNumber) SendAlgorithm {
 	return &cubicSender{
 		rttStats:               rttStats,
-		minCongestionWindow:    defaultMinimumCongestionWindow,
 		congestionWindow:       initialCongestionWindow,
-		maxTCPCongestionWindow: protocol.MaxCongestionWindow,
-		slowstartThreshold:     protocol.MaxCongestionWindow,
+		minCongestionWindow:    defaultMinimumCongestionWindow,
+		slowstartThreshold:     maxCongestionWindow,
+		maxTCPCongestionWindow: maxCongestionWindow,
+		numConnections:         defaultNumConnections,
 		cubic:                  NewCubic(clock),
+		reno:                   reno,
 	}
 }
 
@@ -103,6 +115,10 @@ func (c *cubicSender) GetSlowStartThreshold() uint64 {
 
 func (c *cubicSender) ExitSlowstart() {
 	c.slowstartThreshold = c.congestionWindow
+}
+
+func (c *cubicSender) SlowstartThreshold() protocol.PacketNumber {
+	return c.slowstartThreshold
 }
 
 // OnCongestionEvent indicates an update to the congestion state, caused either by an incoming
@@ -159,6 +175,8 @@ func (c *cubicSender) onPacketLost(packetNumber protocol.PacketNumber, lostBytes
 	// TODO(chromium): Separate out all of slow start into a separate class.
 	if c.slowStartLargeReduction && c.InSlowStart() {
 		c.congestionWindow = c.congestionWindow - 1
+	} else if c.reno {
+		c.congestionWindow = protocol.PacketNumber(float32(c.congestionWindow) * c.renoBeta())
 	} else {
 		c.congestionWindow = c.cubic.CongestionWindowAfterPacketLoss(c.congestionWindow)
 	}
@@ -168,6 +186,17 @@ func (c *cubicSender) onPacketLost(packetNumber protocol.PacketNumber, lostBytes
 	}
 	c.slowstartThreshold = c.congestionWindow
 	c.largestSentAtLastCutback = c.largestSentPacketNumber
+	// reset packet count from congestion avoidance mode. We start
+	// counting again when we're out of recovery.
+	c.congestionWindowCount = 0
+}
+
+func (c *cubicSender) renoBeta() float32 {
+	// kNConnectionBeta is the backoff factor after loss for our N-connection
+	// emulation, which emulates the effective backoff of an ensemble of N
+	// TCP-Reno connections on a single loss event. The effective multiplier is
+	// computed as:
+	return (float32(c.numConnections) - 1. + renoBeta) / float32(c.numConnections)
 }
 
 // Called when we receive an ack. Normal TCP tracks how many packets one ack
@@ -187,7 +216,18 @@ func (c *cubicSender) maybeIncreaseCwnd(ackedPacketNumber protocol.PacketNumber,
 		c.congestionWindow++
 		return
 	}
-	c.congestionWindow = protocol.MinPacketNumber(c.maxTCPCongestionWindow, c.cubic.CongestionWindowAfterAck(c.congestionWindow, c.rttStats.MinRTT()))
+	if c.reno {
+		// Classic Reno congestion avoidance.
+		c.congestionWindowCount++
+		// Divide by num_connections to smoothly increase the CWND at a faster
+		// rate than conventional Reno.
+		if protocol.PacketNumber(c.congestionWindowCount*uint64(c.numConnections)) >= c.congestionWindow {
+			c.congestionWindow++
+			c.congestionWindowCount = 0
+		}
+	} else {
+		c.congestionWindow = protocol.MinPacketNumber(c.maxTCPCongestionWindow, c.cubic.CongestionWindowAfterAck(c.congestionWindow, c.rttStats.MinRTT()))
+	}
 }
 
 func (c *cubicSender) isCwndLimited(bytesInFlight uint64) bool {
@@ -208,4 +248,27 @@ func (c *cubicSender) BandwidthEstimate() Bandwidth {
 		return 0
 	}
 	return BandwidthFromDelta(c.GetCongestionWindow(), srtt)
+}
+
+// HybridSlowStart returns the hybrid slow start instance for testing
+func (c *cubicSender) HybridSlowStart() *HybridSlowStart {
+	return &c.hybridSlowStart
+}
+
+// SetNumEmulatedConnections sets the number of emulated connections
+func (c *cubicSender) SetNumEmulatedConnections(n int) {
+	c.numConnections = utils.Max(n, 1)
+	c.cubic.SetNumConnections(c.numConnections)
+}
+
+// OnRetransmissionTimeout is called on an retransmission timeout
+func (c *cubicSender) OnRetransmissionTimeout(packetsRetransmitted bool) {
+	c.largestSentAtLastCutback = 0
+	if !packetsRetransmitted {
+		return
+	}
+	c.hybridSlowStart.Restart()
+	c.cubic.Reset()
+	c.slowstartThreshold = c.congestionWindow / 2
+	c.congestionWindow = c.minCongestionWindow
 }

@@ -12,4 +12,9 @@ type SendAlgorithm interface {
 	GetCongestionWindow() uint64
 	OnCongestionEvent(rttUpdated bool, bytesInFlight uint64, ackedPackets PacketVector, lostPackets PacketVector)
 	BandwidthEstimate() Bandwidth
+	SetNumEmulatedConnections(n int)
+	OnRetransmissionTimeout(packetsRetransmitted bool)
+
+	HybridSlowStart() *HybridSlowStart         // only for testing
+	SlowstartThreshold() protocol.PacketNumber // only for testing
 }

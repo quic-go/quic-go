@@ -141,6 +141,14 @@ func Max(a, b int) int {
 	return a
 }
 
+// MaxUint32 returns the maximum of two uint32
+func MaxUint32(a, b uint32) uint32 {
+	if a < b {
+		return b
+	}
+	return a
+}
+
 // MaxUint64 returns the maximum of two uint64
 func MaxUint64(a, b uint64) uint64 {
 	if a < b {

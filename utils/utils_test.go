@@ -127,6 +127,10 @@ var _ = Describe("Utils", func() {
 			Expect(Max(5, 7)).To(Equal(7))
 		})
 
+		It("returns the maximum uint32", func() {
+			Expect(MaxUint32(5, 7)).To(Equal(uint32(7)))
+		})
+
 		It("returns the maximum uint64", func() {
 			Expect(MaxUint64(5, 7)).To(Equal(uint64(7)))
 		})
