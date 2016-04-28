@@ -22,9 +22,12 @@ var supportedVersions = map[protocol.VersionNumber]bool{
 }
 
 func main() {
-	path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
+	bindTo := *flag.String("bind", "localhost", "bind to")
+	certPathDefault := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
+	certPath := *flag.String("certpath", certPathDefault, "certificate directory")
+	flag.Parse()
 
-	server, err := quic.NewServer(path+"cert.der", path+"key.der", handleStream)
+	server, err := quic.NewServer(certPath+"cert.der", certPath+"key.der", handleStream)
 	if err != nil {
 		panic(err)
 	}
@@ -32,10 +35,8 @@ func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Hello world!"))
 	})
-	bindTo := flag.String("bind", "localhost", "bind to")
-	flag.Parse()
 
-	err = server.ListenAndServe(*bindTo + ":6121")
+	err = server.ListenAndServe(bindTo + ":6121")
 	if err != nil {
 		panic(err)
 	}
