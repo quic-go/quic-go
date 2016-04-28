@@ -139,7 +139,7 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 		case *frames.StreamFrame:
 			err = s.handleStreamFrame(frame)
 		case *frames.AckFrame:
-			err = s.sentPacketHandler.ReceivedAck(frame)
+			_, err = s.sentPacketHandler.ReceivedAck(frame)
 			// ToDo: send right error in ConnectionClose frame
 		case *frames.ConnectionCloseFrame:
 			fmt.Printf("%#v\n", frame)

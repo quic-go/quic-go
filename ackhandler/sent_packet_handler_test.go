@@ -1,6 +1,8 @@
 package ackhandler
 
 import (
+	"time"
+
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
@@ -73,13 +75,20 @@ var _ = Describe("SentPacketHandler", func() {
 				LargestObserved: 1,
 				Entropy:         byte(entropy),
 			}
-			err = handler.ReceivedAck(&ack)
+			_, err = handler.ReceivedAck(&ack)
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.SentPacket(&packet2)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(2)))
 			entropy.Add(packet2.PacketNumber, packet2.EntropyBit)
 			Expect(handler.packetHistory[2].Entropy).To(Equal(entropy))
+		})
+
+		It("stores the sent time", func() {
+			packet := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true}
+			err := handler.SentPacket(&packet)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.packetHistory[1].sendTime.Unix()).To(BeNumerically("~", time.Now().Unix(), 1))
 		})
 	})
 
@@ -175,7 +184,7 @@ var _ = Describe("SentPacketHandler", func() {
 				LargestObserved: 4,
 				Entropy:         1,
 			}
-			err := handler.ReceivedAck(&ack)
+			_, err := handler.ReceivedAck(&ack)
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(Equal(ErrEntropy))
 		})
@@ -190,7 +199,7 @@ var _ = Describe("SentPacketHandler", func() {
 				LargestObserved: protocol.PacketNumber(largestObserved),
 				Entropy:         byte(entropy),
 			}
-			err := handler.ReceivedAck(&ack)
+			_, err := handler.ReceivedAck(&ack)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.LargestObserved).To(Equal(protocol.PacketNumber(largestObserved)))
 			Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(largestObserved)))
@@ -215,7 +224,7 @@ var _ = Describe("SentPacketHandler", func() {
 					frames.NackRange{FirstPacketNumber: 3, LastPacketNumber: 3},
 				},
 			}
-			err := handler.ReceivedAck(&ack)
+			_, err := handler.ReceivedAck(&ack)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.LargestObserved).To(Equal(protocol.PacketNumber(largestObserved)))
 			Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(2)))
@@ -250,9 +259,9 @@ var _ = Describe("SentPacketHandler", func() {
 				ack := frames.AckFrame{
 					LargestObserved: protocol.PacketNumber(largestObserved),
 				}
-				err := handler.ReceivedAck(&ack)
+				_, err := handler.ReceivedAck(&ack)
 				Expect(err).ToNot(HaveOccurred())
-				err = handler.ReceivedAck(&ack)
+				_, err = handler.ReceivedAck(&ack)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(Equal(ErrDuplicateOrOutOfOrderAck))
 			})
@@ -262,10 +271,10 @@ var _ = Describe("SentPacketHandler", func() {
 				ack := frames.AckFrame{
 					LargestObserved: protocol.PacketNumber(largestObserved),
 				}
-				err := handler.ReceivedAck(&ack)
+				_, err := handler.ReceivedAck(&ack)
 				Expect(err).ToNot(HaveOccurred())
 				ack.LargestObserved--
-				err = handler.ReceivedAck(&ack)
+				_, err = handler.ReceivedAck(&ack)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(Equal(ErrDuplicateOrOutOfOrderAck))
 				Expect(handler.LargestObserved).To(Equal(protocol.PacketNumber(largestObserved)))
@@ -275,11 +284,29 @@ var _ = Describe("SentPacketHandler", func() {
 				ack := frames.AckFrame{
 					LargestObserved: packets[len(packets)-1].PacketNumber + 1337,
 				}
-				err := handler.ReceivedAck(&ack)
+				_, err := handler.ReceivedAck(&ack)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(Equal(errAckForUnsentPacket))
 				Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(0)))
 			})
+		})
+
+		It("calculates the time delta", func() {
+			now := time.Now()
+			// First, fake the sent times of the first, second and last packet
+			handler.packetHistory[1].sendTime = now.Add(-10 * time.Minute)
+			handler.packetHistory[2].sendTime = now.Add(-5 * time.Minute)
+			handler.packetHistory[6].sendTime = now.Add(-1 * time.Minute)
+			// Now, check that the proper times are used when calculating the deltas
+			d, err := handler.ReceivedAck(&frames.AckFrame{LargestObserved: 1})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(d).To(BeNumerically("~", 10*time.Minute, 1*time.Second))
+			d, err = handler.ReceivedAck(&frames.AckFrame{LargestObserved: 2})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(d).To(BeNumerically("~", 5*time.Minute, 1*time.Second))
+			d, err = handler.ReceivedAck(&frames.AckFrame{LargestObserved: 6})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(d).To(BeNumerically("~", 1*time.Minute, 1*time.Second))
 		})
 	})
 
@@ -345,7 +372,7 @@ var _ = Describe("SentPacketHandler", func() {
 				LargestObserved: 4,
 				NackRanges:      []frames.NackRange{frames.NackRange{FirstPacketNumber: 3, LastPacketNumber: 3}},
 			}
-			err := handler.ReceivedAck(&ack)
+			_, err := handler.ReceivedAck(&ack)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(2)))
 			handler.nackPacket(3) // this is the second NACK for this packet

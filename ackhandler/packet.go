@@ -1,6 +1,8 @@
 package ackhandler
 
 import (
+	"time"
+
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 )
@@ -14,6 +16,8 @@ type Packet struct {
 
 	MissingReports uint8
 	Retransmitted  bool // has this Packet ever been retransmitted
+
+	sendTime time.Time
 }
 
 func (p *Packet) GetStreamFramesForRetransmission() []*frames.StreamFrame {

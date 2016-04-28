@@ -2,6 +2,7 @@ package ackhandler
 
 import (
 	"errors"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -77,6 +78,7 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 	if h.lastSentPacketNumber+1 != packet.PacketNumber {
 		return errors.New("Packet number must be increased by exactly 1")
 	}
+	packet.sendTime = time.Now()
 
 	h.lastSentPacketEntropy.Add(packet.PacketNumber, packet.EntropyBit)
 	packet.Entropy = h.lastSentPacketEntropy
@@ -114,27 +116,30 @@ func (h *sentPacketHandler) calculateExpectedEntropy(ackFrame *frames.AckFrame) 
 	return expectedEntropy, nil
 }
 
-func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) error {
+func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) (time.Duration, error) {
 	if ackFrame.LargestObserved > h.lastSentPacketNumber {
-		return errAckForUnsentPacket
+		return 0, errAckForUnsentPacket
 	}
 
 	if ackFrame.LargestObserved <= h.LargestObserved { // duplicate or out-of-order AckFrame
-		return ErrDuplicateOrOutOfOrderAck
+		return 0, ErrDuplicateOrOutOfOrderAck
 	}
 
 	expectedEntropy, err := h.calculateExpectedEntropy(ackFrame)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	if byte(expectedEntropy) != ackFrame.Entropy {
-		return ErrEntropy
+		return 0, ErrEntropy
 	}
 
 	// Entropy ok. Now actually process the ACK packet
 	h.LargestObserved = ackFrame.LargestObserved
 	highestInOrderAckedPacketNumber := ackFrame.GetHighestInOrderPacketNumber()
+
+	// Calculate the RTT
+	timeDelta := time.Now().Sub(h.packetHistory[h.LargestObserved].sendTime)
 
 	// ACK all packets below the highestInOrderAckedPacketNumber
 	for i := h.highestInOrderAckedPacketNumber; i <= highestInOrderAckedPacketNumber; i++ {
@@ -161,7 +166,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) error {
 
 	h.highestInOrderAckedPacketNumber = highestInOrderAckedPacketNumber
 
-	return nil
+	return timeDelta, nil
 }
 
 func (h *sentPacketHandler) DequeuePacketForRetransmission() (packet *Packet) {
