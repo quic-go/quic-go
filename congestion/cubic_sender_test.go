@@ -47,8 +47,8 @@ var _ = Describe("Cubic Sender", func() {
 		packets_sent := 0
 		can_send := sender.TimeUntilSend(clock.Now(), bytesInFlight) == 0
 		for can_send {
-			packetNumber++
 			sender.OnPacketSent(clock.Now(), bytesInFlight, packetNumber, protocol.DefaultTCPMSS, true)
+			packetNumber++
 			packets_sent++
 			bytesInFlight += protocol.DefaultTCPMSS
 			can_send = sender.TimeUntilSend(clock.Now(), bytesInFlight) == 0
@@ -133,7 +133,7 @@ var _ = Describe("Cubic Sender", func() {
 		Expect(sender.BandwidthEstimate()).To(Equal(congestion.BandwidthFromDelta(cwnd, rttStats.SmoothedRTT())))
 	})
 
-	PIt("slow start packet loss", func() {
+	It("slow start packet loss", func() {
 		sender.SetNumEmulatedConnections(1)
 		const kNumberOfAcks = 10
 		for i := 0; i < kNumberOfAcks; i++ {
@@ -188,7 +188,7 @@ var _ = Describe("Cubic Sender", func() {
 		Expect(sender.TimeUntilSend(clock.Now(), 0)).To(BeZero())
 	})
 
-	PIt("slow start packet loss PRR", func() {
+	It("slow start packet loss PRR", func() {
 		sender.SetNumEmulatedConnections(1)
 		// Test based on the first example in RFC6937.
 		// Ack 10 packets in 5 acks to raise the CWND to 20, as in the example.
@@ -233,6 +233,60 @@ var _ = Describe("Cubic Sender", func() {
 		AckNPackets(1)
 		expected_send_window += protocol.DefaultTCPMSS
 		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+	})
+
+	It("slow start burst packet loss PRR", func() {
+		sender.SetNumEmulatedConnections(1)
+		// Test based on the second example in RFC6937, though we also implement
+		// forward acknowledgements, so the first two incoming acks will trigger
+		// PRR immediately.
+		// Ack 20 packets in 10 acks to raise the CWND to 30.
+		const kNumberOfAcks = 10
+		for i := 0; i < kNumberOfAcks; i++ {
+			// Send our full send window.
+			SendAvailableSendWindow()
+			AckNPackets(2)
+		}
+		SendAvailableSendWindow()
+		expected_send_window := defaultWindowTCP + (protocol.DefaultTCPMSS * 2 * kNumberOfAcks)
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+
+		// Lose one more than the congestion window reduction, so that after loss,
+		// bytes_in_flight is lesser than the congestion window.
+		send_window_after_loss := uint64(renoBeta * float32(expected_send_window))
+		num_packets_to_lose := (expected_send_window-send_window_after_loss)/protocol.DefaultTCPMSS + 1
+		LoseNPackets(int(num_packets_to_lose))
+		// Immediately after the loss, ensure at least one packet can be sent.
+		// Losses without subsequent acks can occur with timer based loss detection.
+		Expect(sender.TimeUntilSend(clock.Now(), bytesInFlight)).To(BeZero())
+		AckNPackets(1)
+
+		// We should now have fallen out of slow start with a reduced window.
+		expected_send_window = uint64(float32(expected_send_window) * renoBeta)
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+
+		// Only 2 packets should be allowed to be sent, per PRR-SSRB
+		Expect(SendAvailableSendWindow()).To(Equal(2))
+
+		// Ack the next packet, which triggers another loss.
+		LoseNPackets(1)
+		AckNPackets(1)
+
+		// Send 2 packets to simulate PRR-SSRB.
+		Expect(SendAvailableSendWindow()).To(Equal(2))
+
+		// Ack the next packet, which triggers another loss.
+		LoseNPackets(1)
+		AckNPackets(1)
+
+		// Send 2 packets to simulate PRR-SSRB.
+		Expect(SendAvailableSendWindow()).To(Equal(2))
+
+		// Exit recovery and return to sending at the new rate.
+		for i := 0; i < kNumberOfAcks; i++ {
+			AckNPackets(1)
+			Expect(SendAvailableSendWindow()).To(Equal(1))
+		}
 	})
 
 	It("RTO congestion window", func() {

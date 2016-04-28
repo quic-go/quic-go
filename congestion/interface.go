@@ -14,6 +14,7 @@ type SendAlgorithm interface {
 	BandwidthEstimate() Bandwidth
 	SetNumEmulatedConnections(n int)
 	OnRetransmissionTimeout(packetsRetransmitted bool)
+	InRecovery() bool
 
 	HybridSlowStart() *HybridSlowStart         // only for testing
 	SlowstartThreshold() protocol.PacketNumber // only for testing
