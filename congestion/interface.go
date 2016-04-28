@@ -14,14 +14,16 @@ type SendAlgorithm interface {
 	BandwidthEstimate() Bandwidth
 	SetNumEmulatedConnections(n int)
 	OnRetransmissionTimeout(packetsRetransmitted bool)
-	InRecovery() bool
 	OnConnectionMigration()
 	RetransmissionDelay() time.Duration
 
 	// Experiments
 	SetSlowStartLargeReduction(enabled bool)
 
-	HybridSlowStart() *HybridSlowStart         // only for testing
-	SlowstartThreshold() protocol.PacketNumber // only for testing
-	RenoBeta() float32                         // only for testing
+	// Stuff only used in testing
+	// TODO: Maybe make CubicSender public and typeassert in tests?
+	HybridSlowStart() *HybridSlowStart
+	SlowstartThreshold() protocol.PacketNumber
+	RenoBeta() float32
+	InRecovery() bool
 }
