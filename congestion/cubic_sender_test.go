@@ -464,4 +464,36 @@ var _ = Describe("Cubic Sender", func() {
 		expected_send_window += protocol.DefaultTCPMSS
 		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
 	})
+
+	It("reset after connection migration", func() {
+		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
+		Expect(sender.SlowstartThreshold()).To(Equal(protocol.MaxCongestionWindow))
+
+		// Starts with slow start.
+		sender.SetNumEmulatedConnections(1)
+		const kNumberOfAcks = 10
+		for i := 0; i < kNumberOfAcks; i++ {
+			// Send our full send window.
+			SendAvailableSendWindow()
+			AckNPackets(2)
+		}
+		SendAvailableSendWindow()
+		expected_send_window := defaultWindowTCP + (protocol.DefaultTCPMSS * 2 * kNumberOfAcks)
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+
+		// Loses a packet to exit slow start.
+		LoseNPackets(1)
+
+		// We should now have fallen out of slow start with a reduced window. Slow
+		// start threshold is also updated.
+		expected_send_window = uint64(float32(expected_send_window) * renoBeta)
+		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
+		Expect(sender.SlowstartThreshold()).To(Equal(protocol.PacketNumber(expected_send_window / protocol.DefaultTCPMSS)))
+
+		// Resets cwnd and slow start threshold on connection migrations.
+		sender.OnConnectionMigration()
+		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
+		Expect(sender.SlowstartThreshold()).To(Equal(protocol.MaxCongestionWindow))
+		Expect(sender.HybridSlowStart().Started()).To(BeFalse())
+	})
 })

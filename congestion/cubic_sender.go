@@ -21,6 +21,8 @@ type cubicSender struct {
 	stats           connectionStats
 	cubic           *Cubic
 
+	reno bool
+
 	// Track the largest packet that has been sent.
 	largestSentPacketNumber protocol.PacketNumber
 
@@ -55,20 +57,23 @@ type cubicSender struct {
 	// ACK counter for the Reno implementation.
 	congestionWindowCount uint64
 
-	reno bool
+	initialCongestionWindow    protocol.PacketNumber
+	initialMaxCongestionWindow protocol.PacketNumber
 }
 
 // NewCubicSender makes a new cubic sender
-func NewCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestionWindow, maxCongestionWindow protocol.PacketNumber) SendAlgorithm {
+func NewCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestionWindow, initialMaxCongestionWindow protocol.PacketNumber) SendAlgorithm {
 	return &cubicSender{
-		rttStats:               rttStats,
-		congestionWindow:       initialCongestionWindow,
-		minCongestionWindow:    defaultMinimumCongestionWindow,
-		slowstartThreshold:     maxCongestionWindow,
-		maxTCPCongestionWindow: maxCongestionWindow,
-		numConnections:         defaultNumConnections,
-		cubic:                  NewCubic(clock),
-		reno:                   reno,
+		rttStats:                   rttStats,
+		initialCongestionWindow:    initialCongestionWindow,
+		initialMaxCongestionWindow: initialMaxCongestionWindow,
+		congestionWindow:           initialCongestionWindow,
+		minCongestionWindow:        defaultMinimumCongestionWindow,
+		slowstartThreshold:         initialMaxCongestionWindow,
+		maxTCPCongestionWindow:     initialMaxCongestionWindow,
+		numConnections:             defaultNumConnections,
+		cubic:                      NewCubic(clock),
+		reno:                       reno,
 	}
 }
 
@@ -271,4 +276,19 @@ func (c *cubicSender) OnRetransmissionTimeout(packetsRetransmitted bool) {
 	c.cubic.Reset()
 	c.slowstartThreshold = c.congestionWindow / 2
 	c.congestionWindow = c.minCongestionWindow
+}
+
+// OnConnectionMigration is called when the connection is migrated (?)
+func (c *cubicSender) OnConnectionMigration() {
+	c.hybridSlowStart.Restart()
+	c.prr = PrrSender{}
+	c.largestSentPacketNumber = 0
+	c.largestAckedPacketNumber = 0
+	c.largestSentAtLastCutback = 0
+	c.lastCutbackExitedSlowstart = false
+	c.cubic.Reset()
+	c.congestionWindowCount = 0
+	c.congestionWindow = c.initialCongestionWindow
+	c.slowstartThreshold = c.initialMaxCongestionWindow
+	c.maxTCPCongestionWindow = c.initialMaxCongestionWindow
 }
