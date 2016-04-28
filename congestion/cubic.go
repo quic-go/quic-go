@@ -7,11 +7,6 @@ import (
 	"github.com/lucas-clemente/quic-go/protocol"
 )
 
-// A Clock returns the current time
-type Clock interface {
-	Now() time.Time
-}
-
 // This cubic implementation is based on the one found in Chromiums's QUIC
 // implementation, in the files net/quic/congestion_control/cubic.{hh,cc}.
 
