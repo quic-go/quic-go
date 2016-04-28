@@ -16,7 +16,7 @@ var _ = Describe("AckFrame", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.Entropy).To(Equal(byte(0xA4)))
 			Expect(frame.LargestObserved).To(Equal(protocol.PacketNumber(0x03)))
-			Expect(frame.DelayTime).To(Equal(uint16(0x4523)))
+			Expect(frame.DelayTime).To(Equal(uint64(430464)))
 			Expect(frame.HasNACK()).To(Equal(false))
 			Expect(b.Len()).To(Equal(0))
 		})
@@ -231,7 +231,7 @@ var _ = Describe("AckFrame", func() {
 			}
 			err := frame.Write(b, 1, 6)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(b.Bytes()).To(Equal([]byte{0x4c, 0x02, 0x01, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0}))
+			Expect(b.Bytes()).To(Equal([]byte{0x4c, 0x02, 0x01, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0}))
 		})
 
 		It("writes a frame with one NACK range", func() {

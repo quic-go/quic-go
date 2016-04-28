@@ -14,7 +14,7 @@ var errInvalidNackRanges = errors.New("AckFrame: ACK frame contains invalid NACK
 type AckFrame struct {
 	Entropy         byte
 	LargestObserved protocol.PacketNumber
-	DelayTime       uint16      // Todo: properly interpret this value as described in the specification
+	DelayTime       uint64
 	NackRanges      []NackRange // has to be ordered. The NACK range with the highest FirstPacketNumber goes first, the NACK range with the lowest FirstPacketNumber goes last
 }
 
@@ -29,10 +29,10 @@ func (f *AckFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, pa
 	b.WriteByte(typeByte)
 	b.WriteByte(f.Entropy)
 	utils.WriteUint48(b, uint64(f.LargestObserved)) // TODO: send the correct length
-	utils.WriteUint16(b, 1)                         // TODO: Ack delay time
-	b.WriteByte(0x01)                               // Just one timestamp
-	b.WriteByte(0x00)                               // Delta Largest observed
-	utils.WriteUint32(b, 0)                         // First timestamp
+	utils.WriteUfloat16(b, f.DelayTime)
+	b.WriteByte(0x01)       // Just one timestamp
+	b.WriteByte(0x00)       // Delta Largest observed
+	utils.WriteUint32(b, 0) // First timestamp
 
 	if f.HasNACK() {
 		numRanges := uint64(0)
@@ -150,7 +150,7 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 	}
 	frame.LargestObserved = protocol.PacketNumber(largestObserved)
 
-	frame.DelayTime, err = utils.ReadUint16(r)
+	frame.DelayTime, err = utils.ReadUfloat16(r)
 	if err != nil {
 		return nil, err
 	}
