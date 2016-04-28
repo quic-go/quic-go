@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -31,8 +32,10 @@ func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Hello world!"))
 	})
+	bindTo := flag.String("bind", "localhost", "bind to")
+	flag.Parse()
 
-	err = server.ListenAndServe("localhost:6121")
+	err = server.ListenAndServe(*bindTo + ":6121")
 	if err != nil {
 		panic(err)
 	}
