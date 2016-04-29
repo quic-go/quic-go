@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
+	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/errorcodes"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -52,6 +53,8 @@ type Session struct {
 
 	// Used to calculate the next packet number from the truncated wire representation
 	lastRcvdPacketNumber protocol.PacketNumber
+
+	rttStats   congestion.RTTStats
 }
 
 // NewSession makes a new session
@@ -67,6 +70,7 @@ func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		stopWaitingManager:    stopWaitingManager,
 		receivedPackets:       make(chan receivedPacket),
 		closeChan:             make(chan struct{}, 1),
+		rttStats:              congestion.RTTStats{},
 	}
 
 	cryptoStream, _ := session.NewStream(1)
@@ -142,7 +146,10 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 		case *frames.StreamFrame:
 			err = s.handleStreamFrame(frame)
 		case *frames.AckFrame:
-			_, err = s.sentPacketHandler.ReceivedAck(frame)
+			var duration time.Duration
+			duration, err = s.sentPacketHandler.ReceivedAck(frame)
+			s.rttStats.UpdateRTT(duration, frame.DelayTime, time.Now())
+			fmt.Printf("Estimated RTT: %dms\n", s.rttStats.SmoothedRTT()/time.Millisecond)
 			// ToDo: send right error in ConnectionClose frame
 		case *frames.ConnectionCloseFrame:
 			fmt.Printf("%#v\n", frame)
