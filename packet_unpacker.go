@@ -25,7 +25,8 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, publicHeader *PublicH
 	ciphertext, _ := ioutil.ReadAll(r)
 	plaintext, err := u.aead.Open(publicHeader.PacketNumber, publicHeaderBinary, ciphertext)
 	if err != nil {
-		return nil, err
+		// Wrap err in quicError so that public reset is sent by session
+		return nil, protocol.NewQuicError(errorcodes.QUIC_DECRYPTION_FAILURE, err.Error())
 	}
 	r = bytes.NewReader(plaintext)
 

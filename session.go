@@ -51,7 +51,8 @@ type Session struct {
 	closeChan       chan struct{}
 	closed          bool
 
-	// Used to calculate the next packet number from the truncated wire representation
+	// Used to calculate the next packet number from the truncated wire
+	// representation, and sent back in public reset packets
 	lastRcvdPacketNumber protocol.PacketNumber
 
 	rttStats   congestion.RTTStats
@@ -232,6 +233,11 @@ func (s *Session) Close(e error) error {
 		errorCode = quicError.ErrorCode
 	}
 	s.closeStreamsWithError(e)
+
+	if errorCode == errorcodes.QUIC_DECRYPTION_FAILURE {
+		return s.sendPublicReset(s.lastRcvdPacketNumber)
+	}
+
 	packet, err := s.packer.PackPacket(nil, []frames.Frame{
 		&frames.ConnectionCloseFrame{ErrorCode: errorCode, ReasonPhrase: reasonPhrase},
 	}, false)
@@ -338,4 +344,16 @@ func (s *Session) garbageCollectStreams() {
 			s.streams[k] = nil
 		}
 	}
+}
+
+func (s *Session) sendPublicReset(rejectedPacketNumber protocol.PacketNumber) error {
+	fmt.Printf("Sending public reset for connection %d, packet number %d\n", s.connectionID, rejectedPacketNumber)
+	packet := &publicResetPacket{
+		connectionID:         s.connectionID,
+		rejectedPacketNumber: rejectedPacketNumber,
+		nonceProof:           0, // TODO: Currently ignored by chrome.
+	}
+	var b bytes.Buffer
+	packet.Write(&b)
+	return s.conn.write(b.Bytes())
 }

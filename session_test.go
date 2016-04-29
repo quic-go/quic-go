@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"os"
@@ -243,6 +244,13 @@ var _ = Describe("Session", func() {
 			Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x4c, 0x2, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0})))
 			Expect(conn.written[0]).To(ContainSubstring(string("foobar")))
 		})
+
+		It("sends public reset", func() {
+			err := session.sendPublicReset(1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(conn.written).To(HaveLen(1))
+			Expect(conn.written[0]).To(ContainSubstring(string([]byte("PRST"))))
+		})
 	})
 
 	It("closes when crypto stream errors", func() {
@@ -262,5 +270,24 @@ var _ = Describe("Session", func() {
 		Expect(session.closed).To(BeTrue())
 		_, err = s.Write([]byte{})
 		Expect(err).To(MatchError("CryptoSetup: expected CHLO"))
+	})
+
+	It("sends public reset when receiving invalid message", func() {
+		path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
+		signer, err := crypto.NewRSASigner(path+"cert.der", path+"key.der")
+		Expect(err).ToNot(HaveOccurred())
+		scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
+		session = NewSession(conn, 0, 0, scfg, nil).(*Session)
+		hdr := &PublicHeader{
+			PacketNumber: 42,
+		}
+		r := bytes.NewReader([]byte("foo"))
+		err = session.handlePacket(nil, hdr, r)
+		Expect(err).To(HaveOccurred())
+		// Close() should send public reset
+		err = session.Close(err)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(conn.written).To(HaveLen(1))
+		Expect(conn.written[0]).To(ContainSubstring(string([]byte("PRST"))))
 	})
 })
