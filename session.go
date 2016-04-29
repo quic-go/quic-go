@@ -69,7 +69,7 @@ func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		sentPacketHandler:     ackhandler.NewSentPacketHandler(stopWaitingManager),
 		receivedPacketHandler: ackhandler.NewReceivedPacketHandler(),
 		stopWaitingManager:    stopWaitingManager,
-		receivedPackets:       make(chan receivedPacket),
+		receivedPackets:       make(chan receivedPacket, 1000), // TODO: What if server receives many packets and connection is already closed?!
 		closeChan:             make(chan struct{}, 1),
 		rttStats:              congestion.RTTStats{},
 	}
