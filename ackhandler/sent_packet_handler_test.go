@@ -13,7 +13,8 @@ var _ = Describe("SentPacketHandler", func() {
 	var handler *sentPacketHandler
 	var streamFrame frames.StreamFrame
 	BeforeEach(func() {
-		handler = NewSentPacketHandler().(*sentPacketHandler)
+		stopWaitingManager := NewStopWaitingManager()
+		handler = NewSentPacketHandler(stopWaitingManager).(*sentPacketHandler)
 		streamFrame = frames.StreamFrame{
 			StreamID: 5,
 			Data:     []byte{0x13, 0x37},

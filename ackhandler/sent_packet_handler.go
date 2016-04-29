@@ -33,14 +33,16 @@ type sentPacketHandler struct {
 	packetHistory map[protocol.PacketNumber]*Packet
 
 	retransmissionQueue []*Packet // ToDo: use better data structure
+	stopWaitingManager  StopWaitingManager
 
 	bytesInFlight uint64
 }
 
 // NewSentPacketHandler creates a new sentPacketHandler
-func NewSentPacketHandler() SentPacketHandler {
+func NewSentPacketHandler(stopWaitingManager StopWaitingManager) SentPacketHandler {
 	return &sentPacketHandler{
-		packetHistory: make(map[protocol.PacketNumber]*Packet),
+		packetHistory:      make(map[protocol.PacketNumber]*Packet),
+		stopWaitingManager: stopWaitingManager,
 	}
 }
 
@@ -49,6 +51,9 @@ func (h *sentPacketHandler) ackPacket(packetNumber protocol.PacketNumber) {
 		h.bytesInFlight -= packet.Length
 	}
 	delete(h.packetHistory, packetNumber)
+
+	// TODO: add tests
+	h.stopWaitingManager.ReceivedAckForPacketNumber(packetNumber)
 }
 
 func (h *sentPacketHandler) nackPacket(packetNumber protocol.PacketNumber) error {

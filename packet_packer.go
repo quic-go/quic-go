@@ -34,10 +34,10 @@ func (p *packetPacker) AddHighPrioStreamFrame(f frames.StreamFrame) {
 	p.streamFrameQueue.Push(&f, true)
 }
 
-func (p *packetPacker) PackPacket(controlFrames []frames.Frame, includeStreamFrames bool) (*packedPacket, error) {
+func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, includeStreamFrames bool) (*packedPacket, error) {
 	// TODO: save controlFrames as a member variable, makes it easier to handle in the unlikely event that there are more controlFrames than you can put into on packet
 
-	payloadFrames, err := p.composeNextPacket(controlFrames, includeStreamFrames)
+	payloadFrames, err := p.composeNextPacket(stopWaitingFrame, controlFrames, includeStreamFrames)
 	if err != nil {
 		return nil, err
 	}
@@ -97,11 +97,16 @@ func (p *packetPacker) getPayload(frames []frames.Frame, currentPacketNumber pro
 	return payload.Bytes(), nil
 }
 
-func (p *packetPacker) composeNextPacket(controlFrames []frames.Frame, includeStreamFrames bool) ([]frames.Frame, error) {
+func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, includeStreamFrames bool) ([]frames.Frame, error) {
 	payloadLength := 0
 	var payloadFrames []frames.Frame
 
 	// TODO: handle the case where there are more controlFrames than we can put into one packet
+	if stopWaitingFrame != nil {
+		payloadFrames = append(payloadFrames, stopWaitingFrame)
+		payloadLength += stopWaitingFrame.MinLength()
+	}
+
 	for len(controlFrames) > 0 {
 		frame := controlFrames[0]
 		payloadFrames = append(payloadFrames, frame)

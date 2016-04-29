@@ -41,6 +41,7 @@ type Session struct {
 
 	sentPacketHandler     ackhandler.SentPacketHandler
 	receivedPacketHandler ackhandler.ReceivedPacketHandler
+	stopWaitingManager    ackhandler.StopWaitingManager
 
 	unpacker *packetUnpacker
 	packer   *packetPacker
@@ -55,13 +56,15 @@ type Session struct {
 
 // NewSession makes a new session
 func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback) PacketHandler {
+	stopWaitingManager := ackhandler.NewStopWaitingManager()
 	session := &Session{
 		connectionID:          connectionID,
 		conn:                  conn,
 		streamCallback:        streamCallback,
 		streams:               make(map[protocol.StreamID]*stream),
-		sentPacketHandler:     ackhandler.NewSentPacketHandler(),
+		sentPacketHandler:     ackhandler.NewSentPacketHandler(stopWaitingManager),
 		receivedPacketHandler: ackhandler.NewReceivedPacketHandler(),
+		stopWaitingManager:    stopWaitingManager,
 		receivedPackets:       make(chan receivedPacket),
 		closeChan:             make(chan struct{}, 1),
 	}
@@ -222,7 +225,7 @@ func (s *Session) Close(e error) error {
 		errorCode = quicError.ErrorCode
 	}
 	s.closeStreamsWithError(e)
-	packet, err := s.packer.PackPacket([]frames.Frame{
+	packet, err := s.packer.PackPacket(nil, []frames.Frame{
 		&frames.ConnectionCloseFrame{ErrorCode: errorCode, ReasonPhrase: reasonPhrase},
 	}, false)
 	if err != nil {
@@ -252,25 +255,21 @@ func (s *Session) sendPacket() error {
 	// TODO: handle multiple packets retransmissions
 	retransmitPacket := s.sentPacketHandler.DequeuePacketForRetransmission()
 	if retransmitPacket != nil {
-		swf := &frames.StopWaitingFrame{
-			LeastUnacked: retransmitPacket.PacketNumber + 1,
-			Entropy:      byte(retransmitPacket.Entropy),
-		}
-		controlFrames = append(controlFrames, swf)
-
+		s.stopWaitingManager.RegisterPacketForRetransmission(retransmitPacket)
 		// resend the frames that were in the packet
 		controlFrames = append(controlFrames, retransmitPacket.GetControlFramesForRetransmission()...)
 		for _, streamFrame := range retransmitPacket.GetStreamFramesForRetransmission() {
-			// TODO: add these stream frames with a higher priority
 			s.packer.AddHighPrioStreamFrame(*streamFrame)
 		}
 	}
+
+	stopWaitingFrame := s.stopWaitingManager.GetStopWaitingFrame()
 
 	ack := s.receivedPacketHandler.DequeueAckFrame()
 	if ack != nil {
 		controlFrames = append(controlFrames, ack)
 	}
-	packet, err := s.packer.PackPacket(controlFrames, true)
+	packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, true)
 
 	if err != nil {
 		return err
@@ -288,6 +287,8 @@ func (s *Session) sendPacket() error {
 	if err != nil {
 		return err
 	}
+
+	s.stopWaitingManager.SentStopWaitingWithPacket(packet.number)
 
 	fmt.Printf("-> Sending packet %d (%d bytes)\n", packet.number, len(packet.raw))
 	err = s.conn.write(packet.raw)

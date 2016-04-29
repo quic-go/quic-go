@@ -24,3 +24,10 @@ type ReceivedPacketHandler interface {
 
 	DequeueAckFrame() *frames.AckFrame
 }
+
+type StopWaitingManager interface {
+	RegisterPacketForRetransmission(packet *Packet)
+	GetStopWaitingFrame() *frames.StopWaitingFrame
+	SentStopWaitingWithPacket(packetNumber protocol.PacketNumber)
+	ReceivedAckForPacketNumber(packetNumber protocol.PacketNumber)
+}
