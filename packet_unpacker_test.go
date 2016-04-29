@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/frames"
@@ -60,20 +61,7 @@ var _ = Describe("Packet unpacker", func() {
 	It("unpacks ack frames", func() {
 		f := &frames.AckFrame{
 			LargestObserved: 1,
-			DelayTime:       1,
-		}
-		err := f.Write(buf, 3, 6)
-		Expect(err).ToNot(HaveOccurred())
-		setReader(buf.Bytes())
-		packet, err := unpacker.Unpack(hdrBin, hdr, r)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(Equal([]frames.Frame{f}))
-	})
-
-	It("unpacks ack frames", func() {
-		f := &frames.AckFrame{
-			LargestObserved: 1,
-			DelayTime:       1,
+			DelayTime:       time.Microsecond,
 		}
 		err := f.Write(buf, 3, 6)
 		Expect(err).ToNot(HaveOccurred())

@@ -2,6 +2,7 @@ package frames
 
 import (
 	"bytes"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
@@ -16,7 +17,7 @@ var _ = Describe("AckFrame", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.Entropy).To(Equal(byte(0xA4)))
 			Expect(frame.LargestObserved).To(Equal(protocol.PacketNumber(0x03)))
-			Expect(frame.DelayTime).To(Equal(uint64(430464)))
+			Expect(frame.DelayTime).To(Equal(430464 * time.Microsecond))
 			Expect(frame.HasNACK()).To(Equal(false))
 			Expect(b.Len()).To(Equal(0))
 		})

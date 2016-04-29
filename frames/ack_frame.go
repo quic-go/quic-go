@@ -3,6 +3,7 @@ package frames
 import (
 	"bytes"
 	"errors"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
@@ -14,7 +15,7 @@ var errInvalidNackRanges = errors.New("AckFrame: ACK frame contains invalid NACK
 type AckFrame struct {
 	Entropy         byte
 	LargestObserved protocol.PacketNumber
-	DelayTime       uint64
+	DelayTime       time.Duration
 	NackRanges      []NackRange // has to be ordered. The NACK range with the highest FirstPacketNumber goes first, the NACK range with the lowest FirstPacketNumber goes last
 }
 
@@ -29,7 +30,7 @@ func (f *AckFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, pa
 	b.WriteByte(typeByte)
 	b.WriteByte(f.Entropy)
 	utils.WriteUint48(b, uint64(f.LargestObserved)) // TODO: send the correct length
-	utils.WriteUfloat16(b, f.DelayTime)
+	utils.WriteUfloat16(b, uint64(f.DelayTime/time.Microsecond))
 	b.WriteByte(0x01)       // Just one timestamp
 	b.WriteByte(0x00)       // Delta Largest observed
 	utils.WriteUint32(b, 0) // First timestamp
@@ -150,10 +151,11 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 	}
 	frame.LargestObserved = protocol.PacketNumber(largestObserved)
 
-	frame.DelayTime, err = utils.ReadUfloat16(r)
+	delay, err := utils.ReadUfloat16(r)
 	if err != nil {
 		return nil, err
 	}
+	frame.DelayTime = time.Duration(delay) * time.Microsecond
 
 	numTimestampByte, err := r.ReadByte()
 	if err != nil {
