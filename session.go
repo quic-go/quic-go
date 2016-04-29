@@ -128,7 +128,7 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 		publicHeader.PacketNumber,
 	)
 	s.lastRcvdPacketNumber = publicHeader.PacketNumber
-	fmt.Printf("<- Reading packet %d for connection %d\n", publicHeader.PacketNumber, publicHeader.ConnectionID)
+	fmt.Printf("<- Reading packet %d (%d bytes) for connection %d\n", publicHeader.PacketNumber, r.Size(), publicHeader.ConnectionID)
 
 	// TODO: Only do this after authenticating
 	s.conn.setCurrentRemoteAddr(remoteAddr)
