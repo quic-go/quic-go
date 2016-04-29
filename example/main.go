@@ -97,44 +97,50 @@ func handleStream(session *quic.Session, headerStream utils.Stream) {
 
 	go func() {
 		for {
-			h2frame, err := h2framer.ReadFrame()
-			if err != nil {
-				fmt.Printf("invalid http2 frame: %s\n", err.Error())
-				continue
+			if err := handleRequest(session, headerStream, hpackDecoder, h2framer); err != nil {
+				fmt.Printf("error handling h2 request: %s\n", err.Error())
+				return
 			}
-			h2headersFrame := h2frame.(*http2.HeadersFrame)
-			if !h2headersFrame.HeadersEnded() {
-				fmt.Printf("http2 header continuation not implemented")
-				continue
-			}
-			headers, err := hpackDecoder.DecodeFull(h2headersFrame.HeaderBlockFragment())
-			if err != nil {
-				fmt.Printf("invalid http2 headers encoding: %s\n", err.Error())
-				continue
-			}
-
-			req, err := requestFromHeaders(headers)
-			if err != nil {
-				fmt.Printf("invalid http2 frame: %s\n", err.Error())
-				continue
-			}
-			fmt.Printf("Request: %#v\n", req)
-
-			responseWriter := &responseWriter{
-				header:       http.Header{},
-				headerStream: headerStream,
-				dataStreamID: protocol.StreamID(h2headersFrame.StreamID),
-				session:      session,
-			}
-
-			go func() {
-				http.DefaultServeMux.ServeHTTP(responseWriter, req)
-				if responseWriter.dataStream != nil {
-					responseWriter.dataStream.Close()
-				}
-			}()
 		}
 	}()
+}
+
+func handleRequest(session *quic.Session, headerStream utils.Stream, hpackDecoder *hpack.Decoder, h2framer *http2.Framer) error {
+	h2frame, err := h2framer.ReadFrame()
+	if err != nil {
+		return err
+	}
+	h2headersFrame := h2frame.(*http2.HeadersFrame)
+	if !h2headersFrame.HeadersEnded() {
+		return errors.New("http2 header continuation not implemented")
+	}
+	headers, err := hpackDecoder.DecodeFull(h2headersFrame.HeaderBlockFragment())
+	if err != nil {
+		fmt.Printf("invalid http2 headers encoding: %s\n", err.Error())
+		return err
+	}
+
+	req, err := requestFromHeaders(headers)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Request: %#v\n", req)
+
+	responseWriter := &responseWriter{
+		header:       http.Header{},
+		headerStream: headerStream,
+		dataStreamID: protocol.StreamID(h2headersFrame.StreamID),
+		session:      session,
+	}
+
+	go func() {
+		http.DefaultServeMux.ServeHTTP(responseWriter, req)
+		if responseWriter.dataStream != nil {
+			responseWriter.dataStream.Close()
+		}
+	}()
+
+	return nil
 }
 
 func requestFromHeaders(headers []hpack.HeaderField) (*http.Request, error) {
