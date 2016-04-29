@@ -71,4 +71,11 @@ const (
 
 	// TagSHLO is the server hello
 	TagSHLO Tag = 'S' + 'H'<<8 + 'L'<<16 + 'O'<<24
+
+	// TagPRST is the public reset tag
+	TagPRST Tag = 'P' + 'R'<<8 + 'S'<<16 + 'T'<<24
+	// TagRSEQ is the public reset rejected packet number
+	TagRSEQ Tag = 'R' + 'S'<<8 + 'E'<<16 + 'Q'<<24
+	// TagRNON is the public reset nonce
+	TagRNON Tag = 'R' + 'N'<<8 + 'O'<<16 + 'N'<<24
 )
