@@ -55,7 +55,7 @@ type Session struct {
 	// representation, and sent back in public reset packets
 	lastRcvdPacketNumber protocol.PacketNumber
 
-	rttStats   congestion.RTTStats
+	rttStats congestion.RTTStats
 }
 
 // NewSession makes a new session
@@ -150,16 +150,19 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 			var duration time.Duration
 			duration, err = s.sentPacketHandler.ReceivedAck(frame)
 			s.rttStats.UpdateRTT(duration, frame.DelayTime, time.Now())
-			fmt.Printf("Estimated RTT: %dms\n", s.rttStats.SmoothedRTT()/time.Millisecond)
+			fmt.Printf("\t<- %#v\n", frame)
+			fmt.Printf("\tEstimated RTT: %dms\n", s.rttStats.SmoothedRTT()/time.Millisecond)
 			// ToDo: send right error in ConnectionClose frame
 		case *frames.ConnectionCloseFrame:
 			fmt.Printf("%#v\n", frame)
 		case *frames.StopWaitingFrame:
 			err = s.receivedPacketHandler.ReceivedStopWaiting(frame)
+			fmt.Printf("\t<- %#v\n", frame)
 		case *frames.RstStreamFrame:
 			err = s.handleRstStreamFrame(frame)
+			fmt.Printf("\t<- %#v\n", frame)
 		case *frames.WindowUpdateFrame:
-			fmt.Printf("%#v\n", frame)
+			fmt.Printf("\t<- %#v\n", frame)
 		case *frames.BlockedFrame:
 			fmt.Printf("BLOCKED frame received for connection %d stream %d\n", s.connectionID, frame.StreamID)
 		default:
@@ -304,6 +307,9 @@ func (s *Session) sendPacket() error {
 	s.stopWaitingManager.SentStopWaitingWithPacket(packet.number)
 
 	fmt.Printf("-> Sending packet %d (%d bytes)\n", packet.number, len(packet.raw))
+	for _, frame := range controlFrames {
+		fmt.Printf("\t-> %#v\n", frame)
+	}
 	err = s.conn.write(packet.raw)
 	if err != nil {
 		return err
