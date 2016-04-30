@@ -145,6 +145,7 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 		var err error
 		switch frame := ff.(type) {
 		case *frames.StreamFrame:
+			fmt.Printf("\t<- &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: %d}\n", frame.StreamID, frame.FinBit, frame.Offset)
 			err = s.handleStreamFrame(frame)
 		case *frames.AckFrame:
 			var duration time.Duration
@@ -157,8 +158,8 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 			fmt.Printf("\t<- %#v\n", frame)
 			s.Close(nil, false)
 		case *frames.StopWaitingFrame:
-			err = s.receivedPacketHandler.ReceivedStopWaiting(frame)
 			fmt.Printf("\t<- %#v\n", frame)
+			err = s.receivedPacketHandler.ReceivedStopWaiting(frame)
 		case *frames.RstStreamFrame:
 			err = s.handleRstStreamFrame(frame)
 			fmt.Printf("\t<- %#v\n", frame)
@@ -314,9 +315,14 @@ func (s *Session) sendPacket() error {
 	s.stopWaitingManager.SentStopWaitingWithPacket(packet.number)
 
 	fmt.Printf("-> Sending packet %d (%d bytes)\n", packet.number, len(packet.raw))
-	for _, frame := range controlFrames {
-		fmt.Printf("\t-> %#v\n", frame)
+	for _, frame := range packet.frames {
+		if streamFrame, isStreamFrame := frame.(*frames.StreamFrame); isStreamFrame {
+			fmt.Printf("\t-> &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: %d}\n", streamFrame.StreamID, streamFrame.FinBit, streamFrame.Offset)
+		} else {
+			fmt.Printf("\t-> %#v\n", frame)
+		}
 	}
+
 	err = s.conn.write(packet.raw)
 	if err != nil {
 		return err
