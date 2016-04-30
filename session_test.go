@@ -194,7 +194,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("shuts down without error", func() {
-			session.Close(nil)
+			session.Close(nil, true)
 			time.Sleep(1 * time.Millisecond)
 			Expect(runtime.NumGoroutine()).To(Equal(nGoRoutinesBefore))
 		})
@@ -203,7 +203,7 @@ var _ = Describe("Session", func() {
 			testErr := errors.New("test error")
 			s, err := session.NewStream(5)
 			Expect(err).NotTo(HaveOccurred())
-			session.Close(testErr)
+			session.Close(testErr, true)
 			time.Sleep(1 * time.Millisecond)
 			Expect(runtime.NumGoroutine()).To(Equal(nGoRoutinesBefore))
 			n, err := s.Read([]byte{0})
@@ -285,7 +285,7 @@ var _ = Describe("Session", func() {
 		err = session.handlePacket(nil, hdr, r)
 		Expect(err).To(HaveOccurred())
 		// Close() should send public reset
-		err = session.Close(err)
+		err = session.Close(err, true)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(conn.written).To(HaveLen(1))
 		Expect(conn.written[0]).To(ContainSubstring(string([]byte("PRST"))))

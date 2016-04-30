@@ -79,7 +79,7 @@ func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol
 
 	go func() {
 		if err := cryptoSetup.HandleCryptoStream(); err != nil {
-			session.Close(err)
+			session.Close(err, true)
 		}
 	}()
 
@@ -109,11 +109,11 @@ func (s *Session) Run() {
 			case ackhandler.ErrDuplicateOrOutOfOrderAck:
 			// Can happen when RST_STREAMs arrive early or late (?)
 			case ackhandler.ErrMapAccess:
-				s.Close(err) // TODO: sent correct error code here
+				s.Close(err, true) // TODO: sent correct error code here
 			case errRstStreamOnInvalidStream:
 				fmt.Printf("Ignoring error in session: %s\n", err.Error())
 			default:
-				s.Close(err)
+				s.Close(err, true)
 			}
 		}
 
@@ -155,6 +155,7 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 			// ToDo: send right error in ConnectionClose frame
 		case *frames.ConnectionCloseFrame:
 			fmt.Printf("%#v\n", frame)
+			s.Close(nil, false)
 		case *frames.StopWaitingFrame:
 			err = s.receivedPacketHandler.ReceivedStopWaiting(frame)
 			fmt.Printf("\t<- %#v\n", frame)
@@ -218,13 +219,18 @@ func (s *Session) handleRstStreamFrame(frame *frames.RstStreamFrame) error {
 	return nil
 }
 
-// Close the connection by sending a ConnectionClose frame
-func (s *Session) Close(e error) error {
+// Close the connection
+func (s *Session) Close(e error, sendConnectionClose bool) error {
 	if s.closed {
 		return nil
 	}
 	s.closed = true
 	s.closeChan <- struct{}{}
+
+	if !sendConnectionClose {
+		return nil
+	}
+
 	if e == nil {
 		e = protocol.NewQuicError(errorcodes.QUIC_PEER_GOING_AWAY, "peer going away")
 	}
