@@ -13,8 +13,8 @@ var errInvalidNackRanges = errors.New("AckFrame: ACK frame contains invalid NACK
 
 // An AckFrame in QUIC
 type AckFrame struct {
-	Entropy         byte
 	LargestObserved protocol.PacketNumber
+	Entropy         byte
 	DelayTime       time.Duration
 	NackRanges      []NackRange // has to be ordered. The NACK range with the highest FirstPacketNumber goes first, the NACK range with the lowest FirstPacketNumber goes last
 }

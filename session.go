@@ -154,7 +154,7 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 			fmt.Printf("\tEstimated RTT: %dms\n", s.rttStats.SmoothedRTT()/time.Millisecond)
 			// ToDo: send right error in ConnectionClose frame
 		case *frames.ConnectionCloseFrame:
-			fmt.Printf("%#v\n", frame)
+			fmt.Printf("\t<- %#v\n", frame)
 			s.Close(nil, false)
 		case *frames.StopWaitingFrame:
 			err = s.receivedPacketHandler.ReceivedStopWaiting(frame)
@@ -277,6 +277,7 @@ func (s *Session) sendPacket() error {
 	// TODO: handle multiple packets retransmissions
 	retransmitPacket := s.sentPacketHandler.DequeuePacketForRetransmission()
 	if retransmitPacket != nil {
+		fmt.Printf("\t-> Queueing retransmission for packet %d\n", retransmitPacket.PacketNumber)
 		s.stopWaitingManager.RegisterPacketForRetransmission(retransmitPacket)
 		// resend the frames that were in the packet
 		controlFrames = append(controlFrames, retransmitPacket.GetControlFramesForRetransmission()...)
