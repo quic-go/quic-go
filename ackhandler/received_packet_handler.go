@@ -53,7 +53,8 @@ func (h *receivedPacketHandler) ReceivedStopWaiting(f *frames.StopWaitingFrame) 
 		return nil
 	}
 
-	h.highestInOrderObserved = f.LeastUnacked
+	// the LeastUnacked is the smallest packet number of any packet for which the sender is still awaiting an ack. So the highestInOrderObserved is one less than that
+	h.highestInOrderObserved = f.LeastUnacked - 1
 	h.highestInOrderObservedEntropy = EntropyAccumulator(f.Entropy)
 
 	return nil

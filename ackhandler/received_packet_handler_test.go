@@ -214,16 +214,16 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(err).ToNot(HaveOccurred())
 			_, e := handler.getNackRanges()
 			Expect(e).To(Equal(42 ^ expectedAfterStopWaiting))
-			Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(12)))
+			Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(11)))
 			Expect(handler.highestInOrderObservedEntropy).To(Equal(EntropyAccumulator(42)))
 		})
 
-		It("does not emit nack ranges after STOP_WAITING", func() {
+		It("does not emit NACK ranges after STOP_WAITING", func() {
 			err := handler.ReceivedPacket(10, false)
 			Expect(err).ToNot(HaveOccurred())
 			ranges, _ := handler.getNackRanges()
 			Expect(ranges).To(HaveLen(1))
-			err = handler.ReceivedStopWaiting(&frames.StopWaitingFrame{Entropy: 0, LeastUnacked: protocol.PacketNumber(9)})
+			err = handler.ReceivedStopWaiting(&frames.StopWaitingFrame{Entropy: 0, LeastUnacked: protocol.PacketNumber(10)})
 			Expect(err).ToNot(HaveOccurred())
 			ranges, _ = handler.getNackRanges()
 			Expect(ranges).To(HaveLen(0))
