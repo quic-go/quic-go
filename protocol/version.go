@@ -11,7 +11,6 @@ type VersionNumber int
 
 // SupportedVersions lists the versions that the server supports
 var SupportedVersions = []VersionNumber{
-	30,
 	32,
 }
 
