@@ -12,8 +12,8 @@ func (e *EntropyAccumulator) Add(packetNumber protocol.PacketNumber, entropyFlag
 	}
 }
 
-// Substract the contribution of the entropy flag of a given packet number
-func (e *EntropyAccumulator) Substract(packetNumber protocol.PacketNumber, entropyFlag bool) {
+// Subtract the contribution of the entropy flag of a given packet number
+func (e *EntropyAccumulator) Subtract(packetNumber protocol.PacketNumber, entropyFlag bool) {
 	e.Add(packetNumber, entropyFlag)
 }
 

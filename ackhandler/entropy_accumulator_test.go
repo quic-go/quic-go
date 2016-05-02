@@ -25,7 +25,7 @@ var _ = Describe("EntropyAccumulator", func() {
 		})
 	})
 
-	Context("Substract", func() {
+	Context("Subtract", func() {
 		It("calculates the correct entropy", func() {
 			var e1 EntropyAccumulator
 			e1.Add(3, true)
@@ -33,7 +33,7 @@ var _ = Describe("EntropyAccumulator", func() {
 			var e2 EntropyAccumulator
 			e2.Add(1, true)
 			e2.Add(3, true)
-			e2.Substract(1, true)
+			e2.Subtract(1, true)
 
 			Expect(e1).To(Equal(e2))
 		})

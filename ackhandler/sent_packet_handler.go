@@ -125,7 +125,7 @@ func (h *sentPacketHandler) calculateExpectedEntropy(ackFrame *frames.AckFrame) 
 				if !ok {
 					return 0, ErrMapAccess
 				}
-				expectedEntropy.Substract(i, packet.EntropyBit)
+				expectedEntropy.Subtract(i, packet.EntropyBit)
 			}
 		}
 	}
