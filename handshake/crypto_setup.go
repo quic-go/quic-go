@@ -25,6 +25,7 @@ type CryptoSetup struct {
 	secureAEAD                  crypto.AEAD
 	forwardSecureAEAD           crypto.AEAD
 	receivedForwardSecurePacket bool
+	receivedSecurePacket        bool
 
 	keyDerivation KeyDerivationFunction
 
@@ -106,7 +107,14 @@ func (h *CryptoSetup) Open(packetNumber protocol.PacketNumber, associatedData []
 		}
 	}
 	if h.secureAEAD != nil {
-		return h.secureAEAD.Open(packetNumber, associatedData, ciphertext)
+		res, err := h.secureAEAD.Open(packetNumber, associatedData, ciphertext)
+		if err == nil {
+			h.receivedSecurePacket = true
+			return res, nil
+		}
+		if h.receivedSecurePacket {
+			return nil, err
+		}
 	}
 	return (&crypto.NullAEAD{}).Open(packetNumber, associatedData, ciphertext)
 }

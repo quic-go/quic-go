@@ -187,10 +187,20 @@ var _ = Describe("Crypto setup", func() {
 				Expect(d).To(Equal([]byte("foobar")))
 			})
 
-			It("is not accepted after CHLO", func() {
+			It("is still accepted after CHLO", func() {
 				doCHLO()
 				Expect(cs.secureAEAD).ToNot(BeNil())
 				_, err := cs.Open(0, []byte{}, foobarFNVSigned)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("is not accepted after receiving secure packet", func() {
+				doCHLO()
+				Expect(cs.secureAEAD).ToNot(BeNil())
+				d, err := cs.Open(0, []byte{}, []byte("encrypted"))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(d).To(Equal([]byte("decrypted")))
+				_, err = cs.Open(0, []byte{}, foobarFNVSigned)
 				Expect(err).To(MatchError("authentication failed"))
 			})
 
@@ -229,16 +239,6 @@ var _ = Describe("Crypto setup", func() {
 				Expect(err).ToNot(HaveOccurred())
 				_, err = cs.Open(0, []byte{}, []byte("encrypted"))
 				Expect(err).To(MatchError("authentication failed"))
-			})
-		})
-
-		Context("forward secure encryption", func() {
-			It("is used after receiving forward secure packet", func() {
-				doCHLO()
-				_, err := cs.Open(0, []byte{}, []byte("forward secure encrypted"))
-				Expect(err).ToNot(HaveOccurred())
-				d := cs.Seal(0, []byte{}, []byte("foobar"))
-				Expect(d).To(Equal([]byte("forward secure encrypted")))
 			})
 		})
 	})
