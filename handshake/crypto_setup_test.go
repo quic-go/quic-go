@@ -241,5 +241,15 @@ var _ = Describe("Crypto setup", func() {
 				Expect(err).To(MatchError("authentication failed"))
 			})
 		})
+
+		Context("forward secure encryption", func() {
+			It("is used after receiving forward secure packet", func() {
+				doCHLO()
+				_, err := cs.Open(0, []byte{}, []byte("forward secure encrypted"))
+				Expect(err).ToNot(HaveOccurred())
+				d := cs.Seal(0, []byte{}, []byte("foobar"))
+				Expect(d).To(Equal([]byte("forward secure encrypted")))
+			})
+		})
 	})
 })
