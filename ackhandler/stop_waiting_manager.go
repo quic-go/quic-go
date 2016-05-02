@@ -20,7 +20,7 @@ func NewStopWaitingManager() StopWaitingManager {
 	}
 }
 
-// RegisterPacketForRetransmission prepares the StopWaitingFrame, if neccessary
+// RegisterPacketForRetransmission prepares the StopWaitingFrame, if necessary
 func (h *stopWaitingManager) RegisterPacketForRetransmission(packet *Packet) {
 	if h.currentStopWaitingFrame == nil || h.currentStopWaitingFrame.LeastUnacked <= packet.PacketNumber { // <= because for StopWaitingFrames LeastUnacked = packet.PacketNumber + 1
 		h.currentStopWaitingFrame = &frames.StopWaitingFrame{

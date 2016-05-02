@@ -11,6 +11,7 @@ import (
 	"github.com/lucas-clemente/quic-go/protocol"
 )
 
+// PacketHandler handles packets
 type PacketHandler interface {
 	HandlePacket(addr interface{}, publicHeader *PublicHeader, r *bytes.Reader)
 	Run()

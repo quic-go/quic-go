@@ -21,8 +21,9 @@ type Packet struct {
 	sendTime time.Time
 }
 
+// GetStreamFramesForRetransmission gets all the streamframes for retransmission
 func (p *Packet) GetStreamFramesForRetransmission() []*frames.StreamFrame {
-	streamFrames := make([]*frames.StreamFrame, 0)
+	var streamFrames []*frames.StreamFrame
 	for _, frame := range p.Frames {
 		if streamFrame, isStreamFrame := frame.(*frames.StreamFrame); isStreamFrame {
 			streamFrames = append(streamFrames, streamFrame)
@@ -31,8 +32,9 @@ func (p *Packet) GetStreamFramesForRetransmission() []*frames.StreamFrame {
 	return streamFrames
 }
 
+// GetControlFramesForRetransmission gets all the control frames for retransmission
 func (p *Packet) GetControlFramesForRetransmission() []frames.Frame {
-	controlFrames := make([]frames.Frame, 0)
+	var controlFrames []frames.Frame
 	for _, frame := range p.Frames {
 		// omit ACKs
 		if _, isStreamFrame := frame.(*frames.StreamFrame); isStreamFrame {

@@ -25,6 +25,7 @@ type ReceivedPacketHandler interface {
 	DequeueAckFrame() *frames.AckFrame
 }
 
+// StopWaitingManager manages StopWaitings for sent packets
 type StopWaitingManager interface {
 	RegisterPacketForRetransmission(packet *Packet)
 	GetStopWaitingFrame() *frames.StopWaitingFrame

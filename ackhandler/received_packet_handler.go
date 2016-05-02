@@ -7,6 +7,7 @@ import (
 	"github.com/lucas-clemente/quic-go/protocol"
 )
 
+// ErrDuplicatePacket occurres when a duplicate packet is received
 var ErrDuplicatePacket = errors.New("ReceivedPacketHandler: Duplicate Packet")
 
 type receivedPacketHandler struct {

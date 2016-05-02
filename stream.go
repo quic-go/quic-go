@@ -17,7 +17,7 @@ type stream struct {
 	session  streamHandler
 	streamID protocol.StreamID
 	// The chan of unordered stream frames. A nil in this channel is sent by the
-	// session if an error occured, in this case, remoteErr is filled before.
+	// session if an error occurred, in this case, remoteErr is filled before.
 	streamFrames   chan *frames.StreamFrame
 	currentFrame   *frames.StreamFrame
 	readPosInFrame int

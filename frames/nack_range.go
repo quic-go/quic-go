@@ -13,7 +13,7 @@ func (n *NackRange) Len() uint64 {
 	return uint64(n.LastPacketNumber) - uint64(n.FirstPacketNumber)
 }
 
-// IsInRange checks if a packetNumber is contained in a NACK range
+// ContainsPacketNumber checks if a packetNumber is contained in a NACK range
 func (n *NackRange) ContainsPacketNumber(packetNumber protocol.PacketNumber) bool {
 	if packetNumber >= n.FirstPacketNumber && packetNumber <= n.LastPacketNumber {
 		return true

@@ -188,7 +188,7 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 	}
 
 	// Invalid NACK Handling:
-	// NACKs contain a lot of offsets that require substractions of PacketNumbers. If an ACK contains invalid data, it is possible to underflow the uint64 used to store the PacketNumber
+	// NACKs contain a lot of offsets that require subtractions of PacketNumbers. If an ACK contains invalid data, it is possible to underflow the uint64 used to store the PacketNumber
 	// TODO: handle uint64 overflows
 	if hasNACK {
 		var numRanges uint8
