@@ -272,7 +272,7 @@ var _ = Describe("Session", func() {
 		Expect(err).To(MatchError("CryptoSetup: expected CHLO"))
 	})
 
-	It("sends public reset when receiving invalid message", func() {
+	PIt("sends public reset when receiving invalid message", func() {
 		path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
 		signer, err := crypto.NewRSASigner(path+"cert.der", path+"key.der")
 		Expect(err).ToNot(HaveOccurred())

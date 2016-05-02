@@ -136,6 +136,13 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 
 	packet, err := s.unpacker.Unpack(publicHeader.Raw, publicHeader, r)
 	if err != nil {
+		// TODO: We currently treat un-decryptable packets as lost. We should
+		// instead save them to a queue and retry later.
+		// See issue https://github.com/lucas-clemente/quic-go/issues/38
+		if qErr, ok := err.(*protocol.QuicError); ok && qErr.ErrorCode == errorcodes.QUIC_DECRYPTION_FAILURE {
+			fmt.Println("Discarding packet due to decryption failure.")
+			return nil // Discard packet
+		}
 		return err
 	}
 
