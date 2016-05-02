@@ -92,7 +92,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 
 	// Send Version Negotiation Packet if the client is speaking a different protocol version
 	if publicHeader.VersionFlag && !protocol.IsSupportedVersion(publicHeader.VersionNumber) {
-		fmt.Println("Sending VersionNegotiationPacket")
+		fmt.Printf("Client offered version %d, sending VersionNegotiationPacket\n", publicHeader.VersionNumber)
 		_, err = conn.WriteToUDP(composeVersionNegotiation(publicHeader.ConnectionID), remoteAddr)
 		if err != nil {
 			return err
