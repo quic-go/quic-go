@@ -201,7 +201,7 @@ var _ = Describe("Crypto setup", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(d).To(Equal([]byte("decrypted")))
 				_, err = cs.Open(0, []byte{}, foobarFNVSigned)
-				Expect(err).To(Equal(ErrDecryptionFailed))
+				Expect(err).To(MatchError("authentication failed"))
 			})
 
 			It("is not used after CHLO", func() {
@@ -238,7 +238,7 @@ var _ = Describe("Crypto setup", func() {
 				_, err := cs.Open(0, []byte{}, []byte("forward secure encrypted"))
 				Expect(err).ToNot(HaveOccurred())
 				_, err = cs.Open(0, []byte{}, []byte("encrypted"))
-				Expect(err).To(Equal(ErrDecryptionFailed))
+				Expect(err).To(MatchError("authentication failed"))
 			})
 		})
 
