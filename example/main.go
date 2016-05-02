@@ -73,7 +73,6 @@ func (w *responseWriter) WriteHeader(status int) {
 }
 
 func (w *responseWriter) Write(p []byte) (int, error) {
-	fmt.Printf("%#v\n", w.header)
 	if !w.headerWritten {
 		w.WriteHeader(200)
 	}
