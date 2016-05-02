@@ -129,7 +129,7 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 		publicHeader.PacketNumber,
 	)
 	s.lastRcvdPacketNumber = publicHeader.PacketNumber
-	fmt.Printf("<- Reading packet %d (%d bytes) for connection %d\n", publicHeader.PacketNumber, r.Size(), publicHeader.ConnectionID)
+	fmt.Printf("<- Reading packet %d (%d bytes) for connection %x\n", publicHeader.PacketNumber, r.Size(), publicHeader.ConnectionID)
 
 	// TODO: Only do this after authenticating
 	s.conn.setCurrentRemoteAddr(remoteAddr)
@@ -166,7 +166,7 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 		case *frames.WindowUpdateFrame:
 			fmt.Printf("\t<- %#v\n", frame)
 		case *frames.BlockedFrame:
-			fmt.Printf("BLOCKED frame received for connection %d stream %d\n", s.connectionID, frame.StreamID)
+			fmt.Printf("BLOCKED frame received for connection %x stream %d\n", s.connectionID, frame.StreamID)
 		default:
 			panic("unexpected frame type")
 		}
@@ -366,7 +366,7 @@ func (s *Session) garbageCollectStreams() {
 }
 
 func (s *Session) sendPublicReset(rejectedPacketNumber protocol.PacketNumber) error {
-	fmt.Printf("Sending public reset for connection %d, packet number %d\n", s.connectionID, rejectedPacketNumber)
+	fmt.Printf("Sending public reset for connection %x, packet number %d\n", s.connectionID, rejectedPacketNumber)
 	packet := &publicResetPacket{
 		connectionID:         s.connectionID,
 		rejectedPacketNumber: rejectedPacketNumber,
