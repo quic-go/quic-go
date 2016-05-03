@@ -1,6 +1,7 @@
 package h2quic
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
@@ -19,10 +20,11 @@ type Server struct {
 }
 
 // NewServer creates a new server instance
-func NewServer(certPath string) (*Server, error) {
+func NewServer(tlsConfig *tls.Config) (*Server, error) {
 	s := &Server{}
+
 	var err error
-	s.server, err = quic.NewServer(certPath+"cert.der", certPath+"key.der", s.handleStream)
+	s.server, err = quic.NewServer(tlsConfig, s.handleStream)
 	if err != nil {
 		return nil, err
 	}

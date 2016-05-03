@@ -3,11 +3,12 @@ package quic
 import (
 	"bytes"
 	"net"
-	"os"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/testdata"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -71,8 +72,7 @@ var _ = Describe("Server", func() {
 	})
 
 	It("setups and responds with version negotiation", func() {
-		path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
-		server, err := NewServer(path+"cert.der", path+"key.der", nil)
+		server, err := NewServer(testdata.GetTLSConfig(), nil)
 		Expect(err).ToNot(HaveOccurred())
 		go func() {
 			time.Sleep(10 * time.Millisecond)
@@ -99,8 +99,7 @@ var _ = Describe("Server", func() {
 	})
 
 	It("setups and responds with error on invalid frame", func() {
-		path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
-		server, err := NewServer(path+"cert.der", path+"key.der", nil)
+		server, err := NewServer(testdata.GetTLSConfig(), nil)
 		Expect(err).ToNot(HaveOccurred())
 		go func() {
 			time.Sleep(10 * time.Millisecond)

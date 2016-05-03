@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -32,8 +33,8 @@ type Server struct {
 }
 
 // NewServer makes a new server
-func NewServer(certPath, keyPath string, cb StreamCallback) (*Server, error) {
-	signer, err := crypto.NewRSASigner(certPath, keyPath)
+func NewServer(tlsConfig *tls.Config, cb StreamCallback) (*Server, error) {
+	signer, err := crypto.NewRSASigner(tlsConfig)
 	if err != nil {
 		return nil, err
 	}

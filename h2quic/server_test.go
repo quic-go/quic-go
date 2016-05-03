@@ -2,25 +2,24 @@ package h2quic
 
 import (
 	"net/http"
-	"os"
 
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
+
+	"github.com/lucas-clemente/quic-go/testdata"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Response Writer", func() {
-	certPath := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
-
 	var (
 		s *Server
 	)
 
 	BeforeEach(func() {
 		var err error
-		s, err = NewServer(certPath)
+		s, err = NewServer(testdata.GetTLSConfig())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(s).NotTo(BeNil())
 	})

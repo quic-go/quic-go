@@ -8,8 +8,9 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/tls"
 	"crypto/x509"
-	"io/ioutil"
+	"errors"
 
 	"github.com/lucas-clemente/quic-go/utils"
 )
@@ -21,25 +22,23 @@ type rsaSigner struct {
 }
 
 // NewRSASigner loads the key and cert from files
-func NewRSASigner(certFileName string, keyFileName string) (Signer, error) {
-	keyDER, err := ioutil.ReadFile(keyFileName)
-	if err != nil {
-		return nil, err
+func NewRSASigner(tlsConfig *tls.Config) (Signer, error) {
+	if len(tlsConfig.Certificates) == 0 {
+		return nil, errors.New("Expected at least one certificate in TLS config")
 	}
-	key, err := x509.ParsePKCS1PrivateKey(keyDER)
-	if err != nil {
-		return nil, err
-	}
-	certDER, err := ioutil.ReadFile(certFileName)
-	if err != nil {
-		return nil, err
-	}
-	cert, err := x509.ParseCertificate(certDER)
+	cert := tlsConfig.Certificates[0]
+
+	x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
 	if err != nil {
 		return nil, err
 	}
 
-	return &rsaSigner{key: key, cert: cert}, nil
+	rsaKey, ok := cert.PrivateKey.(*rsa.PrivateKey)
+	if !ok {
+		return nil, errors.New("Only RSA private keys are supported for now")
+	}
+
+	return &rsaSigner{key: rsaKey, cert: x509Cert}, nil
 }
 
 // SignServerProof signs CHLO and server config for use in the server proof

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"os"
 	"runtime"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/testdata"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
@@ -204,8 +204,7 @@ var _ = Describe("Session", func() {
 		BeforeEach(func() {
 			time.Sleep(1 * time.Millisecond) // Wait for old goroutines to finish
 			nGoRoutinesBefore = runtime.NumGoroutine()
-			path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
-			signer, err := crypto.NewRSASigner(path+"cert.der", path+"key.der")
+			signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 			Expect(err).ToNot(HaveOccurred())
 			scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
 			session = NewSession(conn, 0, 0, scfg, nil).(*Session)
@@ -237,8 +236,7 @@ var _ = Describe("Session", func() {
 
 	Context("sending packets", func() {
 		BeforeEach(func() {
-			path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
-			signer, err := crypto.NewRSASigner(path+"cert.der", path+"key.der")
+			signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 			Expect(err).ToNot(HaveOccurred())
 			scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
 			session = NewSession(conn, 0, 0, scfg, nil).(*Session)
@@ -274,8 +272,7 @@ var _ = Describe("Session", func() {
 	})
 
 	It("closes when crypto stream errors", func() {
-		path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
-		signer, err := crypto.NewRSASigner(path+"cert.der", path+"key.der")
+		signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 		Expect(err).ToNot(HaveOccurred())
 		scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
 		session = NewSession(conn, 0, 0, scfg, nil).(*Session)
@@ -293,8 +290,7 @@ var _ = Describe("Session", func() {
 	})
 
 	PIt("sends public reset when receiving invalid message", func() {
-		path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
-		signer, err := crypto.NewRSASigner(path+"cert.der", path+"key.der")
+		signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 		Expect(err).ToNot(HaveOccurred())
 		scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
 		session = NewSession(conn, 0, 0, scfg, nil).(*Session)

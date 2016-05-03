@@ -7,7 +7,8 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"crypto/x509"
-	"os"
+
+	"github.com/lucas-clemente/quic-go/testdata"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -30,8 +31,7 @@ var _ = Describe("ProofRsa", func() {
 	})
 
 	It("gives valid signatures", func() {
-		path := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/example/"
-		kd, err := NewRSASigner(path+"cert.der", path+"key.der")
+		kd, err := NewRSASigner(testdata.GetTLSConfig())
 		Expect(err).ToNot(HaveOccurred())
 		signature, err := kd.SignServerProof([]byte{'C', 'H', 'L', 'O'}, []byte{'S', 'C', 'F', 'G'})
 		Expect(err).ToNot(HaveOccurred())
