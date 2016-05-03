@@ -3,6 +3,8 @@
 [![Build Status](https://travis-ci.org/lucas-clemente/quic-go.svg?branch=master)](https://travis-ci.org/lucas-clemente/quic-go)
 [![Godoc Reference](https://godoc.org/github.com/lucas-clemente/quic-go?status.svg)](https://godoc.org/github.com/lucas-clemente/quic-go)
 
+<img src="docs/quic.png" width=303 height=124>
+
 This is very much an incomplete, buggy, unperformant and insecure work in progress :)
 
 Installing deps:
