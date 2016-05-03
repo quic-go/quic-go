@@ -69,6 +69,7 @@ ReadLoop:
 				frame, err = frames.ParseStopWaitingFrame(r, publicHeader.PacketNumber, publicHeader.PacketNumberLen)
 			case 0x07:
 				// PING, do nothing
+				fmt.Printf("\t<- Ping Frame\n")
 				r.ReadByte()
 				continue
 			default:

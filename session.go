@@ -130,7 +130,7 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 		publicHeader.PacketNumber,
 	)
 	s.lastRcvdPacketNumber = publicHeader.PacketNumber
-	fmt.Printf("<- Reading packet %d (%d bytes) for connection %x\n", publicHeader.PacketNumber, r.Size(), publicHeader.ConnectionID)
+	fmt.Printf("<- Reading packet 0x%x (%d bytes) for connection %x\n", publicHeader.PacketNumber, r.Size(), publicHeader.ConnectionID)
 
 	// TODO: Only do this after authenticating
 	s.conn.setCurrentRemoteAddr(remoteAddr)
@@ -306,7 +306,7 @@ func (s *Session) sendPacket() error {
 	// TODO: handle multiple packets retransmissions
 	retransmitPacket := s.sentPacketHandler.DequeuePacketForRetransmission()
 	if retransmitPacket != nil {
-		fmt.Printf("\t-> Queueing retransmission for packet %d\n", retransmitPacket.PacketNumber)
+		fmt.Printf("\tQueueing retransmission for packet 0x%x\n", retransmitPacket.PacketNumber)
 		s.stopWaitingManager.RegisterPacketForRetransmission(retransmitPacket)
 		// resend the frames that were in the packet
 		controlFrames = append(controlFrames, retransmitPacket.GetControlFramesForRetransmission()...)
@@ -342,10 +342,10 @@ func (s *Session) sendPacket() error {
 
 	s.stopWaitingManager.SentStopWaitingWithPacket(packet.number)
 
-	fmt.Printf("-> Sending packet %d (%d bytes)\n", packet.number, len(packet.raw))
+	fmt.Printf("-> Sending packet 0x%x (%d bytes)\n", packet.number, len(packet.raw))
 	for _, frame := range packet.frames {
 		if streamFrame, isStreamFrame := frame.(*frames.StreamFrame); isStreamFrame {
-			fmt.Printf("\t-> &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: %d}\n", streamFrame.StreamID, streamFrame.FinBit, streamFrame.Offset)
+			fmt.Printf("\t-> &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: 0x%x, Data length: 0x%x, Offset + Data length: 0x%x}\n", streamFrame.StreamID, streamFrame.FinBit, streamFrame.Offset, len(streamFrame.Data), streamFrame.Offset+uint64(len(streamFrame.Data)))
 		} else {
 			fmt.Printf("\t-> %#v\n", frame)
 		}
