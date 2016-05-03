@@ -101,6 +101,11 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 	payloadLength := 0
 	var payloadFrames []frames.Frame
 
+	// don't send out packets that only contain a StopWaitingFrame
+	if len(controlFrames) == 0 && p.streamFrameQueue.Len() == 0 {
+		return nil, nil
+	}
+
 	// TODO: handle the case where there are more controlFrames than we can put into one packet
 	if stopWaitingFrame != nil {
 		payloadFrames = append(payloadFrames, stopWaitingFrame)

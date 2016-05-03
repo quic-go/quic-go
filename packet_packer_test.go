@@ -69,6 +69,13 @@ var _ = Describe("Packet packer", func() {
 		Expect(p.frames[0]).To(Equal(swf))
 	})
 
+	It("does not pack a packet containing only a StopWaitingFrame", func() {
+		swf := &frames.StopWaitingFrame{LeastUnacked: 10}
+		p, err := packer.PackPacket(swf, []frames.Frame{}, false)
+		Expect(p).To(BeNil())
+		Expect(err).ToNot(HaveOccurred())
+	})
+
 	It("packs many control frames into 1 packets", func() {
 		f := &frames.AckFrame{LargestObserved: 1}
 		b := &bytes.Buffer{}
