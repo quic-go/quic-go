@@ -14,12 +14,20 @@ type BlockedFrame struct {
 
 //Write writes a RST_STREAM frame
 func (f *BlockedFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, packetNumberLen uint8) error {
-	panic("BlockedFrame: Write not yet implemented")
+	b.WriteByte(0x05)
+
+	if f.StreamID == 0 {
+		panic("Writing of connection level BlockedFrames not yet implemented.")
+	}
+
+	utils.WriteUint32(b, uint32(f.StreamID))
+
+	return nil
 }
 
 // MinLength of a written frame
 func (f *BlockedFrame) MinLength() int {
-	panic("BlockedFrame: Write not yet implemented")
+	return 1 + 4
 }
 
 // ParseBlockedFrame parses a BLOCKED frame

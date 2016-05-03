@@ -17,4 +17,18 @@ var _ = Describe("BlockedFrame", func() {
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0xDEADBEEF)))
 		})
 	})
+
+	Context("when writing", func() {
+		It("writes a sample frame", func() {
+			b := &bytes.Buffer{}
+			frame := BlockedFrame{StreamID: 0x1337}
+			frame.Write(b, 10, 6)
+			Expect(b.Bytes()).To(Equal([]byte{0x05, 0x37, 0x13, 0x0, 0x0}))
+		})
+
+		It("has the correct min length", func() {
+			frame := BlockedFrame{StreamID: 3}
+			Expect(frame.MinLength()).To(Equal(5))
+		})
+	})
 })
