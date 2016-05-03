@@ -30,7 +30,7 @@ func NewServer(certPath string) (*Server, error) {
 	return s, nil
 }
 
-//ListenAndServe listens on the network address and calls the handler.
+// ListenAndServe listens on the network address and calls the handler.
 func (s *Server) ListenAndServe(addr string, handler http.Handler) error {
 	if handler != nil {
 		s.handler = handler
