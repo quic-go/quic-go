@@ -246,6 +246,80 @@ var _ = Describe("Stream", func() {
 			Expect(n).To(BeZero())
 			Expect(err).To(Equal(testErr))
 		})
+
+		Context("flow control", func() {
+			It("writes everything if the flow control window is big enough", func() {
+				str.flowControlWindow = 4
+				n, err := str.Write([]byte{0xDE, 0xCA, 0xFB, 0xAD})
+				Expect(n).To(Equal(4))
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("waits for a flow control window update", func() {
+				var b bool
+				str.flowControlWindow = 1
+				_, err := str.Write([]byte{0x42})
+				Expect(err).ToNot(HaveOccurred())
+
+				go func() {
+					time.Sleep(2 * time.Millisecond)
+					b = true
+					str.UpdateFlowControlWindow(3)
+				}()
+				n, err := str.Write([]byte{0x13, 0x37})
+				Expect(b).To(BeTrue())
+				Expect(n).To(Equal(2))
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("splits writing of frames when given more data than the flow control windows size", func() {
+				str.flowControlWindow = 2
+				var b bool
+
+				go func() {
+					time.Sleep(time.Millisecond)
+					b = true
+					str.UpdateFlowControlWindow(4)
+				}()
+
+				n, err := str.Write([]byte{0xDE, 0xCA, 0xFB, 0xAD})
+				Expect(len(handler.frames)).To(Equal(2))
+				Expect(b).To(BeTrue())
+				Expect(n).To(Equal(4))
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("writes after a flow control window update", func() {
+				var b bool
+				str.flowControlWindow = 1
+				_, err := str.Write([]byte{0x42})
+				Expect(err).ToNot(HaveOccurred())
+
+				go func() {
+					time.Sleep(time.Millisecond)
+					b = true
+					str.UpdateFlowControlWindow(3)
+				}()
+				n, err := str.Write([]byte{0xDE, 0xAD})
+				Expect(b).To(BeTrue())
+				Expect(n).To(Equal(2))
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
+	})
+
+	Context("flow control window updating", func() {
+		It("updates the flow control window", func() {
+			str.flowControlWindow = 3
+			str.UpdateFlowControlWindow(4)
+			Expect(str.flowControlWindow).To(Equal(uint64(4)))
+		})
+
+		It("never shrinks the flow control window", func() {
+			str.flowControlWindow = 100
+			str.UpdateFlowControlWindow(50)
+			Expect(str.flowControlWindow).To(Equal(uint64(100)))
+		})
 	})
 
 	Context("getting next str frame", func() {

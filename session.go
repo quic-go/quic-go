@@ -23,7 +23,8 @@ type receivedPacket struct {
 }
 
 var (
-	errRstStreamOnInvalidStream = errors.New("RST_STREAM received for unknown stream")
+	errRstStreamOnInvalidStream    = errors.New("RST_STREAM received for unknown stream")
+	errWindowUpdateOnInvalidStream = errors.New("WINDOW_UPDATE received for unknown stream")
 )
 
 // StreamCallback gets a stream frame and returns a reply frame
@@ -172,6 +173,7 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 			fmt.Printf("\t<- %#v\n", frame)
 		case *frames.WindowUpdateFrame:
 			fmt.Printf("\t<- %#v\n", frame)
+			err = s.handleWindowUpdateFrame(frame)
 		case *frames.BlockedFrame:
 			fmt.Printf("BLOCKED frame received for connection %x stream %d\n", s.connectionID, frame.StreamID)
 		default:
@@ -212,6 +214,25 @@ func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
 	if !streamExists {
 		s.streamCallback(s, str)
 	}
+	return nil
+}
+
+func (s *Session) handleWindowUpdateFrame(frame *frames.WindowUpdateFrame) error {
+	if frame.StreamID == 0 {
+		// TODO: handle connection level WindowUpdateFrames
+		// return errors.New("Connection level flow control not yet implemented")
+		return nil
+	}
+	s.streamsMutex.RLock()
+	stream, ok := s.streams[frame.StreamID]
+	s.streamsMutex.RUnlock()
+
+	if !ok {
+		return errWindowUpdateOnInvalidStream
+	}
+
+	stream.UpdateFlowControlWindow(frame.ByteOffset)
+
 	return nil
 }
 

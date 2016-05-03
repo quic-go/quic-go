@@ -2,6 +2,8 @@ package quic
 
 import (
 	"io"
+	"sync"
+	"sync/atomic"
 
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -26,14 +28,19 @@ type stream struct {
 	frameQueue     []*frames.StreamFrame // TODO: replace with heap
 	remoteErr      error
 	currentErr     error
+
+	flowControlWindow uint64
+	windowUpdateCond  *sync.Cond
 }
 
 // newStream creates a new Stream
 func newStream(session streamHandler, StreamID protocol.StreamID) *stream {
 	return &stream{
-		session:      session,
-		streamID:     StreamID,
-		streamFrames: make(chan *frames.StreamFrame, 8), // ToDo: add config option for this number
+		session:           session,
+		streamID:          StreamID,
+		streamFrames:      make(chan *frames.StreamFrame, 8), // ToDo: add config option for this number
+		flowControlWindow: 0x4000,                            // 16 byte, TODO: read this from the negotiated connection parameters (TagCFCW)
+		windowUpdateCond:  sync.NewCond(&sync.Mutex{}),
 	}
 }
 
@@ -138,21 +145,44 @@ func (s *stream) ReadByte() (byte, error) {
 	return p[0], err
 }
 
+func (s *stream) UpdateFlowControlWindow(n uint64) {
+	if n > s.flowControlWindow {
+		atomic.StoreUint64((*uint64)(&s.flowControlWindow), n)
+		s.windowUpdateCond.Broadcast()
+	}
+}
+
 func (s *stream) Write(p []byte) (int, error) {
 	if s.remoteErr != nil {
 		return 0, s.remoteErr
 	}
-	data := make([]byte, len(p))
-	copy(data, p)
-	err := s.session.QueueStreamFrame(&frames.StreamFrame{
-		StreamID: s.streamID,
-		Offset:   s.writeOffset,
-		Data:     data,
-	})
-	if err != nil {
-		return 0, err
+
+	dataWritten := 0
+
+	for dataWritten < len(p) {
+		s.windowUpdateCond.L.Lock()
+		remainingBytesInWindow := int64(s.flowControlWindow) - int64(s.writeOffset)
+		for ; remainingBytesInWindow == 0; remainingBytesInWindow = int64(s.flowControlWindow) - int64(s.writeOffset) {
+			s.windowUpdateCond.Wait()
+		}
+		s.windowUpdateCond.L.Unlock()
+
+		dataLen := utils.Min(len(p), int(remainingBytesInWindow))
+		data := make([]byte, dataLen)
+		copy(data, p)
+		err := s.session.QueueStreamFrame(&frames.StreamFrame{
+			StreamID: s.streamID,
+			Offset:   s.writeOffset,
+			Data:     data,
+		})
+		if err != nil {
+			return 0, err
+		}
+
+		dataWritten += dataLen
+		s.writeOffset += uint64(dataLen)
 	}
-	s.writeOffset += uint64(len(p))
+
 	return len(p), nil
 }
 
@@ -171,7 +201,7 @@ func (s *stream) AddStreamFrame(frame *frames.StreamFrame) error {
 	return nil
 }
 
-// RegisterError is called by session to indicate that an error occured and the
+// RegisterError is called by session to indicate that an error occurred and the
 // stream should be closed.
 func (s *stream) RegisterError(err error) {
 	s.remoteErr = err

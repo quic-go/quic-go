@@ -172,7 +172,27 @@ var _ = Describe("Session", func() {
 				StreamID:  5,
 				ErrorCode: 42,
 			})
-			Expect(err).To(MatchError("RST_STREAM received for unknown stream"))
+			Expect(err).To(MatchError(errRstStreamOnInvalidStream))
+		})
+	})
+
+	Context("handling WINDOW_UPDATE frames", func() {
+		It("updates the Flow Control Windows of a stream", func() {
+			_, err := session.NewStream(5)
+			Expect(err).ToNot(HaveOccurred())
+			err = session.handleWindowUpdateFrame(&frames.WindowUpdateFrame{
+				StreamID:   5,
+				ByteOffset: 0x8000,
+			})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("errors when the stream is not known", func() {
+			err := session.handleWindowUpdateFrame(&frames.WindowUpdateFrame{
+				StreamID:   5,
+				ByteOffset: 1337,
+			})
+			Expect(err).To(MatchError(errWindowUpdateOnInvalidStream))
 		})
 	})
 
