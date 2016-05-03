@@ -23,7 +23,12 @@ const MaxFrameSize = MaxPacketSize - (1 + 8 + 6) /*public header*/ - 1 /*private
 const DefaultTCPMSS = 1460
 
 // InitialCongestionWindow is the initial congestion window in QUIC packets
-const InitialCongestionWindow = 32
+const InitialCongestionWindow PacketNumber = 32
 
 // MaxCongestionWindow is the maximum size of the CWND, in packets.
+// TODO: Unused?
 const MaxCongestionWindow PacketNumber = 200
+
+// DefaultMaxCongestionWindow is the default for the max congestion window
+// Taken from Chrome
+const DefaultMaxCongestionWindow PacketNumber = 107
