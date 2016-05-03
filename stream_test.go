@@ -305,6 +305,23 @@ var _ = Describe("Stream", func() {
 				Expect(n).To(Equal(2))
 				Expect(err).ToNot(HaveOccurred())
 			})
+
+			It("immediately returns on remote errors", func() {
+				var b bool
+				str.flowControlWindow = 1
+
+				testErr := errors.New("test error")
+
+				go func() {
+					time.Sleep(time.Millisecond)
+					b = true
+					str.RegisterError(testErr)
+				}()
+
+				_, err := str.Write([]byte{0xDE, 0xCA, 0xFB, 0xAD})
+				Expect(b).To(BeTrue())
+				Expect(err).To(Equal(testErr))
+			})
 		})
 	})
 

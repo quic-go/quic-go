@@ -163,6 +163,9 @@ func (s *stream) Write(p []byte) (int, error) {
 		s.windowUpdateCond.L.Lock()
 		remainingBytesInWindow := int64(s.flowControlWindow) - int64(s.writeOffset)
 		for ; remainingBytesInWindow == 0; remainingBytesInWindow = int64(s.flowControlWindow) - int64(s.writeOffset) {
+			if s.remoteErr != nil {
+				return 0, s.remoteErr
+			}
 			s.windowUpdateCond.Wait()
 		}
 		s.windowUpdateCond.L.Unlock()
@@ -206,6 +209,7 @@ func (s *stream) AddStreamFrame(frame *frames.StreamFrame) error {
 func (s *stream) RegisterError(err error) {
 	s.remoteErr = err
 	s.streamFrames <- nil
+	s.windowUpdateCond.Broadcast()
 }
 
 func (s *stream) finishedReading() bool {
