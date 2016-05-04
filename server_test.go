@@ -54,21 +54,21 @@ var _ = Describe("Server", func() {
 		})
 
 		It("creates new sessions", func() {
-			err := server.handlePacket(nil, nil, []byte{0x04, 0x4c, 0x01})
+			err := server.handlePacket(nil, nil, []byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x01})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(server.sessions).To(HaveLen(1))
-			Expect(server.sessions[0x4c].(*mockSession).connectionID).To(Equal(protocol.ConnectionID(0x4c)))
-			Expect(server.sessions[0x4c].(*mockSession).packetCount).To(Equal(1))
+			Expect(server.sessions[0x4cfa9f9b668619f6].(*mockSession).connectionID).To(Equal(protocol.ConnectionID(0x4cfa9f9b668619f6)))
+			Expect(server.sessions[0x4cfa9f9b668619f6].(*mockSession).packetCount).To(Equal(1))
 		})
 
 		It("assigns packets to existing sessions", func() {
-			err := server.handlePacket(nil, nil, []byte{0x04, 0x4c, 0x01})
+			err := server.handlePacket(nil, nil, []byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x01})
 			Expect(err).ToNot(HaveOccurred())
-			err = server.handlePacket(nil, nil, []byte{0x04, 0x4c, 0x01})
+			err = server.handlePacket(nil, nil, []byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x01})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(server.sessions).To(HaveLen(1))
-			Expect(server.sessions[0x4c].(*mockSession).connectionID).To(Equal(protocol.ConnectionID(0x4c)))
-			Expect(server.sessions[0x4c].(*mockSession).packetCount).To(Equal(2))
+			Expect(server.sessions[0x4cfa9f9b668619f6].(*mockSession).connectionID).To(Equal(protocol.ConnectionID(0x4cfa9f9b668619f6)))
+			Expect(server.sessions[0x4cfa9f9b668619f6].(*mockSession).packetCount).To(Equal(2))
 		})
 	})
 
@@ -76,50 +76,54 @@ var _ = Describe("Server", func() {
 		server, err := NewServer(testdata.GetTLSConfig(), nil)
 		Expect(err).ToNot(HaveOccurred())
 		go func() {
-			time.Sleep(10 * time.Millisecond)
-			addr, err2 := net.ResolveUDPAddr("udp", "localhost:13370")
-			Expect(err2).ToNot(HaveOccurred())
-			conn, err2 := net.DialUDP("udp", nil, addr)
-			Expect(err2).ToNot(HaveOccurred())
-			_, err2 = conn.Write([]byte{0x05, 0x01, 'Q', '0', '0', '0', 0x01})
-			Expect(err2).ToNot(HaveOccurred())
-			data := make([]byte, 1000)
-			n, _, err2 := conn.ReadFromUDP(data)
-			Expect(err2).ToNot(HaveOccurred())
-			data = data[:n]
-			expected := append(
-				[]byte{0x3d, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0},
-				protocol.SupportedVersionsAsTags...,
-			)
-			Expect(data).To(Equal(expected))
-			err2 = server.Close()
-			Expect(err2).ToNot(HaveOccurred())
+			defer GinkgoRecover()
+			err := server.ListenAndServe("localhost:13370")
+			Expect(err).To(HaveOccurred())
 		}()
-		err = server.ListenAndServe("localhost:13370")
-		Expect(err).To(HaveOccurred())
+
+		time.Sleep(10 * time.Millisecond)
+		addr, err2 := net.ResolveUDPAddr("udp", "localhost:13370")
+		Expect(err2).ToNot(HaveOccurred())
+		conn, err2 := net.DialUDP("udp", nil, addr)
+		Expect(err2).ToNot(HaveOccurred())
+		_, err2 = conn.Write([]byte{0x09, 0x01, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x01, 'Q', '0', '0', '0', 0x01})
+		Expect(err2).ToNot(HaveOccurred())
+		data := make([]byte, 1000)
+		n, _, err2 := conn.ReadFromUDP(data)
+		Expect(err2).ToNot(HaveOccurred())
+		data = data[:n]
+		expected := append(
+			[]byte{0x3d, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0},
+			protocol.SupportedVersionsAsTags...,
+		)
+		Expect(data).To(Equal(expected))
+		err2 = server.Close()
+		Expect(err2).ToNot(HaveOccurred())
 	})
 
 	It("setups and responds with error on invalid frame", func() {
 		server, err := NewServer(testdata.GetTLSConfig(), nil)
 		Expect(err).ToNot(HaveOccurred())
 		go func() {
-			time.Sleep(10 * time.Millisecond)
-			addr, err2 := net.ResolveUDPAddr("udp", "localhost:13370")
-			Expect(err2).ToNot(HaveOccurred())
-			conn, err2 := net.DialUDP("udp", nil, addr)
-			Expect(err2).ToNot(HaveOccurred())
-			_, err2 = conn.Write([]byte{0x05, 0x01, 'Q', '0', '3', '0', 0x01, 0x00})
-			Expect(err2).ToNot(HaveOccurred())
-			data := make([]byte, 1000)
-			n, _, err2 := conn.ReadFromUDP(data)
-			Expect(err2).ToNot(HaveOccurred())
-			Expect(n).ToNot(BeZero())
-			time.Sleep(10 * time.Millisecond)
-			err2 = server.Close()
-			Expect(err2).ToNot(HaveOccurred())
+			defer GinkgoRecover()
+			err := server.ListenAndServe("localhost:13370")
+			Expect(err).To(HaveOccurred())
 		}()
-		err = server.ListenAndServe("localhost:13370")
-		Expect(err).To(HaveOccurred())
+
+		time.Sleep(10 * time.Millisecond)
+		addr, err2 := net.ResolveUDPAddr("udp", "localhost:13370")
+		Expect(err2).ToNot(HaveOccurred())
+		conn, err2 := net.DialUDP("udp", nil, addr)
+		Expect(err2).ToNot(HaveOccurred())
+		_, err2 = conn.Write([]byte{0x09, 0x01, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x01, 'Q', '0', '0', '0', 0x01, 0x00})
+		Expect(err2).ToNot(HaveOccurred())
+		data := make([]byte, 1000)
+		n, _, err2 := conn.ReadFromUDP(data)
+		Expect(err2).ToNot(HaveOccurred())
+		Expect(n).ToNot(BeZero())
+		time.Sleep(10 * time.Millisecond)
+		err2 = server.Close()
+		Expect(err2).ToNot(HaveOccurred())
 	})
 
 	It("closes and deletes sessions", func() {
@@ -138,7 +142,7 @@ var _ = Describe("Server", func() {
 		time.Sleep(10 * time.Millisecond)
 		conn, err := net.DialUDP("udp", nil, addr)
 		Expect(err).ToNot(HaveOccurred())
-		pheader := []byte{0x0d, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x51, 0x30, 0x33, 0x32, 0x01}
+		pheader := []byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x51, 0x30, 0x33, 0x32, 0x01}
 		_, err = conn.Write(append(pheader, (&crypto.NullAEAD{}).Seal(0, pheader, nil)...))
 		Expect(err).ToNot(HaveOccurred())
 

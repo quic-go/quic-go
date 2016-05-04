@@ -52,15 +52,15 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	header.VersionFlag = publicFlagByte&0x01 > 0
 	header.ResetFlag = publicFlagByte&0x02 > 0
 
-	var connectionIDLen uint8
-	switch publicFlagByte & 0x0C {
-	case 0x0C:
-		connectionIDLen = 8
-	case 0x08:
-		connectionIDLen = 4
-	case 0x04:
-		connectionIDLen = 1
+	// TODO: Add this check when we drop support for <v33
+	// if publicFlagByte&0x04 > 0 {
+	// 	return nil, errors.New("diversification nonces should only be sent by servers")
+	// }
+
+	if publicFlagByte&0x08 == 0 {
+		return nil, errors.New("truncating connection ID is not supported")
 	}
+
 	switch publicFlagByte & 0x30 {
 	case 0x30:
 		header.PacketNumberLen = 6
@@ -73,7 +73,7 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	}
 
 	// Connection ID
-	connID, err := utils.ReadUintN(b, connectionIDLen)
+	connID, err := utils.ReadUint64(b)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,6 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	}
 
 	// Version (optional)
-
 	if header.VersionFlag {
 		var versionTag uint32
 		versionTag, err = utils.ReadUint32(b)

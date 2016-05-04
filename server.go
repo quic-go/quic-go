@@ -3,7 +3,6 @@ package quic
 import (
 	"bytes"
 	"crypto/tls"
-	"errors"
 	"net"
 	"sync"
 
@@ -89,7 +88,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 	publicHeader, err := ParsePublicHeader(r)
 	if err != nil {
 		// ToDo: send errorcodes.QUIC_INVALID_PACKET_HEADER
-		return errors.New("Could not parse public header")
+		return err
 	}
 	publicHeader.Raw = packet[:len(packet)-r.Len()]
 
