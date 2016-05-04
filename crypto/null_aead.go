@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 
+	"github.com/lucas-clemente/fnv128a"
 	"github.com/lucas-clemente/quic-go/protocol"
 )
 
@@ -18,7 +19,7 @@ func (*NullAEAD) Open(packetNumber protocol.PacketNumber, associatedData []byte,
 		return nil, errors.New("NullAEAD: ciphertext cannot be less than 12 bytes long")
 	}
 
-	hash := New128a()
+	hash := fnv128a.New()
 	hash.Write(associatedData)
 	hash.Write(ciphertext[12:])
 	testHigh, testLow := hash.Sum128()
@@ -36,7 +37,7 @@ func (*NullAEAD) Open(packetNumber protocol.PacketNumber, associatedData []byte,
 func (*NullAEAD) Seal(packetNumber protocol.PacketNumber, associatedData []byte, plaintext []byte) []byte {
 	res := make([]byte, 12+len(plaintext))
 
-	hash := New128a()
+	hash := fnv128a.New()
 	hash.Write(associatedData)
 	hash.Write(plaintext)
 	high, low := hash.Sum128()
