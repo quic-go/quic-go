@@ -10,7 +10,7 @@ import (
 )
 
 const initialCongestionWindowPackets protocol.PacketNumber = 10
-const defaultWindowTCP = uint64(initialCongestionWindowPackets * protocol.DefaultTCPMSS)
+const defaultWindowTCP = protocol.ByteCount(initialCongestionWindowPackets) * protocol.DefaultTCPMSS
 const renoBeta float32 = 0.7 // Reno backoff factor.
 
 type mockClock time.Time
@@ -27,7 +27,7 @@ var _ = Describe("Cubic Sender", func() {
 	var (
 		sender            congestion.SendAlgorithm
 		clock             mockClock
-		bytesInFlight     uint64
+		bytesInFlight     protocol.ByteCount
 		packetNumber      protocol.PacketNumber
 		ackedPacketNumber protocol.PacketNumber
 		rttStats          *congestion.RTTStats
@@ -42,7 +42,7 @@ var _ = Describe("Cubic Sender", func() {
 		sender = congestion.NewCubicSender(&clock, rttStats, true /*reno*/, initialCongestionWindowPackets, protocol.MaxCongestionWindow)
 	})
 
-	SendAvailableSendWindowLen := func(packetLength uint64) int {
+	SendAvailableSendWindowLen := func(packetLength protocol.ByteCount) int {
 		// Send as long as TimeUntilSend returns Zero.
 		packets_sent := 0
 		can_send := sender.TimeUntilSend(clock.Now(), bytesInFlight) == 0
@@ -57,7 +57,7 @@ var _ = Describe("Cubic Sender", func() {
 	}
 
 	// Normal is that TCP acks every other segment.
-	AckNPacketsLen := func(n int, packetLength uint64) {
+	AckNPacketsLen := func(n int, packetLength protocol.ByteCount) {
 		rttStats.UpdateRTT(60*time.Millisecond, 0, clock.Now())
 		var ackedPackets congestion.PacketVector
 		var lostPackets congestion.PacketVector
@@ -66,11 +66,11 @@ var _ = Describe("Cubic Sender", func() {
 			ackedPackets = append(ackedPackets, congestion.PacketInfo{Number: ackedPacketNumber, Length: packetLength})
 		}
 		sender.OnCongestionEvent(true, bytesInFlight, ackedPackets, lostPackets)
-		bytesInFlight -= uint64(n) * packetLength
+		bytesInFlight -= protocol.ByteCount(n) * packetLength
 		clock.Advance(time.Millisecond)
 	}
 
-	LoseNPacketsLen := func(n int, packetLength uint64) {
+	LoseNPacketsLen := func(n int, packetLength protocol.ByteCount) {
 		var ackedPackets congestion.PacketVector
 		var lostPackets congestion.PacketVector
 		for i := 0; i < n; i++ {
@@ -78,7 +78,7 @@ var _ = Describe("Cubic Sender", func() {
 			lostPackets = append(lostPackets, congestion.PacketInfo{Number: ackedPacketNumber, Length: packetLength})
 		}
 		sender.OnCongestionEvent(false, bytesInFlight, ackedPackets, lostPackets)
-		bytesInFlight -= uint64(n) * packetLength
+		bytesInFlight -= protocol.ByteCount(n) * packetLength
 	}
 
 	// Does not increment acked_packet_number_.
@@ -163,7 +163,7 @@ var _ = Describe("Cubic Sender", func() {
 		packets_in_recovery_window := expected_send_window / protocol.DefaultTCPMSS
 
 		// We should now have fallen out of slow start with a reduced window.
-		expected_send_window = uint64(float32(expected_send_window) * renoBeta)
+		expected_send_window = protocol.ByteCount(float32(expected_send_window) * renoBeta)
 		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
 
 		// Recovery phase. We need to ack every packet in the recovery window before
@@ -297,7 +297,7 @@ var _ = Describe("Cubic Sender", func() {
 
 		// We should now have fallen out of slow start with a reduced window.
 		send_window_before_loss := expected_send_window
-		expected_send_window = uint64(float32(expected_send_window) * renoBeta)
+		expected_send_window = protocol.ByteCount(float32(expected_send_window) * renoBeta)
 		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
 
 		// Testing TCP proportional rate reduction.
@@ -307,7 +307,7 @@ var _ = Describe("Cubic Sender", func() {
 		// triggered the loss.
 		remaining_packets_in_recovery := send_window_before_loss/protocol.DefaultTCPMSS - 2
 
-		for i := uint64(0); i < remaining_packets_in_recovery; i++ {
+		for i := protocol.ByteCount(0); i < remaining_packets_in_recovery; i++ {
 			AckNPackets(1)
 			SendAvailableSendWindow()
 			Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
@@ -315,7 +315,7 @@ var _ = Describe("Cubic Sender", func() {
 
 		// We need to ack another window before we increase CWND by 1.
 		number_of_packets_in_window := expected_send_window / protocol.DefaultTCPMSS
-		for i := uint64(0); i < number_of_packets_in_window; i++ {
+		for i := protocol.ByteCount(0); i < number_of_packets_in_window; i++ {
 			AckNPackets(1)
 			Expect(SendAvailableSendWindow()).To(Equal(1))
 			Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
@@ -344,7 +344,7 @@ var _ = Describe("Cubic Sender", func() {
 
 		// Lose one more than the congestion window reduction, so that after loss,
 		// bytes_in_flight is lesser than the congestion window.
-		send_window_after_loss := uint64(renoBeta * float32(expected_send_window))
+		send_window_after_loss := protocol.ByteCount(renoBeta * float32(expected_send_window))
 		num_packets_to_lose := (expected_send_window-send_window_after_loss)/protocol.DefaultTCPMSS + 1
 		LoseNPackets(int(num_packets_to_lose))
 		// Immediately after the loss, ensure at least one packet can be sent.
@@ -353,7 +353,7 @@ var _ = Describe("Cubic Sender", func() {
 		AckNPackets(1)
 
 		// We should now have fallen out of slow start with a reduced window.
-		expected_send_window = uint64(float32(expected_send_window) * renoBeta)
+		expected_send_window = protocol.ByteCount(float32(expected_send_window) * renoBeta)
 		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
 
 		// Only 2 packets should be allowed to be sent, per PRR-SSRB
@@ -387,7 +387,7 @@ var _ = Describe("Cubic Sender", func() {
 		// Expect the window to decrease to the minimum once the RTO fires
 		// and slow start threshold to be set to 1/2 of the CWND.
 		sender.OnRetransmissionTimeout(true)
-		Expect(sender.GetCongestionWindow()).To(Equal(uint64(2 * protocol.DefaultTCPMSS)))
+		Expect(sender.GetCongestionWindow()).To(Equal(protocol.ByteCount(2 * protocol.DefaultTCPMSS)))
 		Expect(sender.SlowstartThreshold()).To(Equal(protocol.PacketNumber(5)))
 	})
 
@@ -423,7 +423,7 @@ var _ = Describe("Cubic Sender", func() {
 		Expect(rttStats.SmoothedRTT()).To(BeNumerically("~", kRttMs, time.Millisecond))
 		Expect(sender.RetransmissionDelay()).To(BeNumerically("~", expected_delay, time.Millisecond))
 		Expect(sender.BandwidthEstimate() / congestion.BytesPerSecond).To(Equal(congestion.Bandwidth(
-			sender.GetCongestionWindow() * uint64(time.Second) / uint64(rttStats.SmoothedRTT()),
+			sender.GetCongestionWindow() * protocol.ByteCount(time.Second) / protocol.ByteCount(rttStats.SmoothedRTT()),
 		)))
 	})
 
@@ -438,7 +438,7 @@ var _ = Describe("Cubic Sender", func() {
 			AckNPackets(2)
 		}
 		expected_send_window := kMaxCongestionWindowTCP * protocol.DefaultTCPMSS
-		Expect(sender.GetCongestionWindow()).To(Equal(uint64(expected_send_window)))
+		Expect(sender.GetCongestionWindow()).To(Equal(protocol.ByteCount(expected_send_window)))
 	})
 
 	It("tcp reno max congestion window", func() {
@@ -458,7 +458,7 @@ var _ = Describe("Cubic Sender", func() {
 		}
 
 		expected_send_window := kMaxCongestionWindowTCP * protocol.DefaultTCPMSS
-		Expect(sender.GetCongestionWindow()).To(Equal(uint64(expected_send_window)))
+		Expect(sender.GetCongestionWindow()).To(Equal(protocol.ByteCount(expected_send_window)))
 	})
 
 	It("tcp cubic max congestion window", func() {
@@ -480,7 +480,7 @@ var _ = Describe("Cubic Sender", func() {
 		}
 
 		expected_send_window := kMaxCongestionWindowTCP * protocol.DefaultTCPMSS
-		Expect(sender.GetCongestionWindow()).To(Equal(uint64(expected_send_window)))
+		Expect(sender.GetCongestionWindow()).To(Equal(protocol.ByteCount(expected_send_window)))
 	})
 
 	It("tcp cubic reset epoch on quiescence", func() {
@@ -644,7 +644,7 @@ var _ = Describe("Cubic Sender", func() {
 		LoseNPackets(1)
 
 		// We should now have fallen out of slow start with a reduced window.
-		expected_send_window = uint64(float32(expected_send_window) * sender.RenoBeta())
+		expected_send_window = protocol.ByteCount(float32(expected_send_window) * sender.RenoBeta())
 		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
 
 		// No congestion window growth should occur in recovery phase, i.e., until the
@@ -699,7 +699,7 @@ var _ = Describe("Cubic Sender", func() {
 		LoseNPackets(1)
 
 		// We should now have fallen out of slow start with a reduced window.
-		expected_send_window = uint64(float32(expected_send_window) * renoBeta)
+		expected_send_window = protocol.ByteCount(float32(expected_send_window) * renoBeta)
 		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
 
 		// No congestion window growth should occur in recovery phase, i.e., until the
@@ -714,7 +714,7 @@ var _ = Describe("Cubic Sender", func() {
 		Expect(sender.InRecovery()).To(BeFalse())
 
 		// Out of recovery now. Congestion window should not grow during RTT.
-		for i := uint64(0); i < expected_send_window/protocol.DefaultTCPMSS-2; i += 2 {
+		for i := protocol.ByteCount(0); i < expected_send_window/protocol.DefaultTCPMSS-2; i += 2 {
 			// Send our full send window.
 			SendAvailableSendWindow()
 			AckNPackets(2)
@@ -810,7 +810,7 @@ var _ = Describe("Cubic Sender", func() {
 
 		// We should now have fallen out of slow start with a reduced window. Slow
 		// start threshold is also updated.
-		expected_send_window = uint64(float32(expected_send_window) * renoBeta)
+		expected_send_window = protocol.ByteCount(float32(expected_send_window) * renoBeta)
 		Expect(sender.GetCongestionWindow()).To(Equal(expected_send_window))
 		Expect(sender.SlowstartThreshold()).To(Equal(protocol.PacketNumber(expected_send_window / protocol.DefaultTCPMSS)))
 

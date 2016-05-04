@@ -23,7 +23,7 @@ const MaxFrameSize = MaxPacketSize - (1 + 8 + 6) /*public header*/ - 1 /*private
 
 // DefaultTCPMSS is the default maximum packet size used in the Linux TCP implementation.
 // Used in QUIC for congestion window computations in bytes.
-const DefaultTCPMSS = 1460
+const DefaultTCPMSS ByteCount = 1460
 
 // InitialCongestionWindow is the initial congestion window in QUIC packets
 const InitialCongestionWindow PacketNumber = 32

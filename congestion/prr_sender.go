@@ -9,21 +9,21 @@ import (
 
 // PrrSender implements the Proportional Rate Reduction (PRR) per RFC 6937
 type PrrSender struct {
-	bytesSentSinceLoss      uint64
-	bytesDeliveredSinceLoss uint64
-	ackCountSinceLoss       uint64
-	bytesInFlightBeforeLoss uint64
+	bytesSentSinceLoss      protocol.ByteCount
+	bytesDeliveredSinceLoss protocol.ByteCount
+	ackCountSinceLoss       protocol.ByteCount
+	bytesInFlightBeforeLoss protocol.ByteCount
 }
 
 // OnPacketSent should be called after a packet was sent
-func (p *PrrSender) OnPacketSent(sentBytes uint64) {
+func (p *PrrSender) OnPacketSent(sentBytes protocol.ByteCount) {
 	p.bytesSentSinceLoss += sentBytes
 }
 
 // OnPacketLost should be called on the first loss that triggers a recovery
 // period and all other methods in this class should only be called when in
 // recovery.
-func (p *PrrSender) OnPacketLost(bytesInFlight uint64) {
+func (p *PrrSender) OnPacketLost(bytesInFlight protocol.ByteCount) {
 	p.bytesSentSinceLoss = 0
 	p.bytesInFlightBeforeLoss = bytesInFlight
 	p.bytesDeliveredSinceLoss = 0
@@ -31,13 +31,13 @@ func (p *PrrSender) OnPacketLost(bytesInFlight uint64) {
 }
 
 // OnPacketAcked should be called after a packet was acked
-func (p *PrrSender) OnPacketAcked(ackedBytes uint64) {
+func (p *PrrSender) OnPacketAcked(ackedBytes protocol.ByteCount) {
 	p.bytesDeliveredSinceLoss += ackedBytes
 	p.ackCountSinceLoss++
 }
 
 // TimeUntilSend calculates the time until a packet can be sent
-func (p *PrrSender) TimeUntilSend(congestionWindow, bytesInFlight, slowstartThreshold uint64) time.Duration {
+func (p *PrrSender) TimeUntilSend(congestionWindow, bytesInFlight, slowstartThreshold protocol.ByteCount) time.Duration {
 	// Return QuicTime::Zero In order to ensure limited transmit always works.
 	if p.bytesSentSinceLoss == 0 || bytesInFlight < protocol.DefaultTCPMSS {
 		return 0

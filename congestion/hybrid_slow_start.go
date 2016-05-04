@@ -9,7 +9,7 @@ import (
 
 // Note(pwestin): the magic clamping numbers come from the original code in
 // tcp_cubic.c.
-const hybridStartLowWindow = uint64(16)
+const hybridStartLowWindow = protocol.ByteCount(16)
 
 // Number of delay samples for detecting the increase of delay.
 const hybridStartMinSamples = uint32(8)
@@ -48,7 +48,7 @@ func (s *HybridSlowStart) IsEndOfRound(ack protocol.PacketNumber) bool {
 // rtt: the RTT for this ack packet.
 // minRTT: is the lowest delay (RTT) we have seen during the session.
 // congestionWindow: the congestion window in packets.
-func (s *HybridSlowStart) ShouldExitSlowStart(latestRTT time.Duration, minRTT time.Duration, congestionWindow uint64) bool {
+func (s *HybridSlowStart) ShouldExitSlowStart(latestRTT time.Duration, minRTT time.Duration, congestionWindow protocol.ByteCount) bool {
 	if !s.started {
 		// Time to start the hybrid slow start.
 		s.StartReceiveRound(s.lastSentPacketNumber)

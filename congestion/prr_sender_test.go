@@ -21,7 +21,7 @@ var _ = Describe("PRR sender", func() {
 	})
 
 	It("single loss results in send on every other ack", func() {
-		num_packets_in_flight := uint64(50)
+		num_packets_in_flight := protocol.ByteCount(50)
 		bytes_in_flight := num_packets_in_flight * protocol.DefaultTCPMSS
 		ssthresh_after_loss := num_packets_in_flight / 2
 		congestion_window := ssthresh_after_loss * protocol.DefaultTCPMSS
@@ -39,7 +39,7 @@ var _ = Describe("PRR sender", func() {
 		// One packet is lost, and one ack was consumed above. PRR now paces
 		// transmissions through the remaining 48 acks. PRR will alternatively
 		// disallow and allow a packet to be sent in response to an ack.
-		for i := uint64(0); i < ssthresh_after_loss-1; i++ {
+		for i := protocol.ByteCount(0); i < ssthresh_after_loss-1; i++ {
 			// Ack a packet. PRR shouldn't allow sending a packet in response.
 			prr.OnPacketAcked(protocol.DefaultTCPMSS)
 			bytes_in_flight -= protocol.DefaultTCPMSS
@@ -74,7 +74,7 @@ var _ = Describe("PRR sender", func() {
 	})
 
 	It("burst loss results in slow start", func() {
-		bytes_in_flight := uint64(20 * protocol.DefaultTCPMSS)
+		bytes_in_flight := protocol.ByteCount(20 * protocol.DefaultTCPMSS)
 		const num_packets_lost = 13
 		const ssthresh_after_loss = 10
 		const congestion_window = ssthresh_after_loss * protocol.DefaultTCPMSS

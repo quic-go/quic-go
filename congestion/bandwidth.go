@@ -1,6 +1,10 @@
 package congestion
 
-import "time"
+import (
+	"time"
+
+	"github.com/lucas-clemente/quic-go/protocol"
+)
 
 // Bandwidth of a connection
 type Bandwidth uint64
@@ -17,6 +21,6 @@ const (
 )
 
 // BandwidthFromDelta calculates the bandwidth from a number of bytes and a time delta
-func BandwidthFromDelta(bytes uint64, delta time.Duration) Bandwidth {
+func BandwidthFromDelta(bytes protocol.ByteCount, delta time.Duration) Bandwidth {
 	return Bandwidth(bytes) * Bandwidth(time.Second) / Bandwidth(delta) * BytesPerSecond
 }

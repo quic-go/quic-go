@@ -7,10 +7,10 @@ import (
 )
 
 type SendAlgorithm interface {
-	TimeUntilSend(now time.Time, bytesInFlight uint64) time.Duration
-	OnPacketSent(sentTime time.Time, bytesInFlight uint64, packetNumber protocol.PacketNumber, bytes uint64, isRetransmittable bool) bool
-	GetCongestionWindow() uint64
-	OnCongestionEvent(rttUpdated bool, bytesInFlight uint64, ackedPackets PacketVector, lostPackets PacketVector)
+	TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCount) time.Duration
+	OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) bool
+	GetCongestionWindow() protocol.ByteCount
+	OnCongestionEvent(rttUpdated bool, bytesInFlight protocol.ByteCount, ackedPackets PacketVector, lostPackets PacketVector)
 	BandwidthEstimate() Bandwidth
 	SetNumEmulatedConnections(n int)
 	OnRetransmissionTimeout(packetsRetransmitted bool)
