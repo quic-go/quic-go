@@ -68,10 +68,7 @@ ReadLoop:
 			case 0x06:
 				frame, err = frames.ParseStopWaitingFrame(r, publicHeader.PacketNumber, publicHeader.PacketNumberLen)
 			case 0x07:
-				// PING, do nothing
-				fmt.Printf("\t<- Ping Frame\n")
-				r.ReadByte()
-				continue
+				frame, err = frames.ParsePingFrame(r)
 			default:
 				err = protocol.NewQuicError(errorcodes.QUIC_INVALID_FRAME_DATA, fmt.Sprintf("unknown type byte 0x%x", typeByte))
 			}

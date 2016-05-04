@@ -152,7 +152,9 @@ var _ = Describe("Packet unpacker", func() {
 		setReader([]byte{0x07})
 		packet, err := unpacker.Unpack(hdrBin, hdr, r)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(HaveLen(0))
+		Expect(packet.frames).To(Equal([]frames.Frame{
+			&frames.PingFrame{},
+		}))
 	})
 
 	It("errors on invalid type", func() {

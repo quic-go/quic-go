@@ -176,6 +176,8 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 			err = s.handleWindowUpdateFrame(frame)
 		case *frames.BlockedFrame:
 			fmt.Printf("BLOCKED frame received for connection %x stream %d\n", s.connectionID, frame.StreamID)
+		case *frames.PingFrame:
+			fmt.Printf("\t<- %#v\n", frame)
 		default:
 			panic("unexpected frame type")
 		}
