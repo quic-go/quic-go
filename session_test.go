@@ -200,6 +200,7 @@ var _ = Describe("Session", func() {
 	Context("closing", func() {
 		var (
 			nGoRoutinesBefore int
+			closed            bool
 		)
 
 		BeforeEach(func() {
@@ -208,13 +209,14 @@ var _ = Describe("Session", func() {
 			signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 			Expect(err).ToNot(HaveOccurred())
 			scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
-			session = NewSession(conn, 0, 0, scfg, nil).(*Session)
+			session = NewSession(conn, 0, 0, scfg, nil, func(*Session) { closed = true }).(*Session)
 			go session.Run()
 			Expect(runtime.NumGoroutine()).To(Equal(nGoRoutinesBefore + 2))
 		})
 
 		It("shuts down without error", func() {
 			session.Close(nil, true)
+			Expect(closed).To(BeTrue())
 			time.Sleep(1 * time.Millisecond)
 			Expect(runtime.NumGoroutine()).To(Equal(nGoRoutinesBefore))
 		})
@@ -224,6 +226,7 @@ var _ = Describe("Session", func() {
 			s, err := session.NewStream(5)
 			Expect(err).NotTo(HaveOccurred())
 			session.Close(testErr, true)
+			Expect(closed).To(BeTrue())
 			time.Sleep(1 * time.Millisecond)
 			Expect(runtime.NumGoroutine()).To(Equal(nGoRoutinesBefore))
 			n, err := s.Read([]byte{0})
@@ -240,7 +243,7 @@ var _ = Describe("Session", func() {
 			signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 			Expect(err).ToNot(HaveOccurred())
 			scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
-			session = NewSession(conn, 0, 0, scfg, nil).(*Session)
+			session = NewSession(conn, 0, 0, scfg, nil, nil).(*Session)
 		})
 
 		It("sends ack frames", func() {
@@ -277,7 +280,7 @@ var _ = Describe("Session", func() {
 			signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 			Expect(err).ToNot(HaveOccurred())
 			scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
-			session = NewSession(conn, 0, 0, scfg, nil).(*Session)
+			session = NewSession(conn, 0, 0, scfg, nil, func(*Session) {}).(*Session)
 		})
 
 		It("sends after queuing a stream frame", func() {
@@ -308,7 +311,7 @@ var _ = Describe("Session", func() {
 		signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 		Expect(err).ToNot(HaveOccurred())
 		scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
-		session = NewSession(conn, 0, 0, scfg, nil).(*Session)
+		session = NewSession(conn, 0, 0, scfg, nil, func(*Session) {}).(*Session)
 		s, err := session.NewStream(3)
 		Expect(err).NotTo(HaveOccurred())
 		err = session.handleStreamFrame(&frames.StreamFrame{
@@ -327,7 +330,7 @@ var _ = Describe("Session", func() {
 		signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 		Expect(err).ToNot(HaveOccurred())
 		scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
-		session = NewSession(conn, 0, 0, scfg, nil).(*Session)
+		session = NewSession(conn, 0, 0, scfg, nil, nil).(*Session)
 		hdr := &PublicHeader{
 			PacketNumber: 42,
 		}

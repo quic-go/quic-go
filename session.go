@@ -30,11 +30,15 @@ var (
 // StreamCallback gets a stream frame and returns a reply frame
 type StreamCallback func(*Session, utils.Stream)
 
+// CloseCallback is called when a session is closed
+type CloseCallback func(*Session)
+
 // A Session is a QUIC session
 type Session struct {
 	connectionID protocol.ConnectionID
 
 	streamCallback StreamCallback
+	closeCallback  CloseCallback
 
 	conn connection
 
@@ -63,12 +67,13 @@ type Session struct {
 }
 
 // NewSession makes a new session
-func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback) PacketHandler {
+func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback CloseCallback) PacketHandler {
 	stopWaitingManager := ackhandler.NewStopWaitingManager()
 	session := &Session{
 		connectionID:                connectionID,
 		conn:                        conn,
 		streamCallback:              streamCallback,
+		closeCallback:               closeCallback,
 		streams:                     make(map[protocol.StreamID]*stream),
 		sentPacketHandler:           ackhandler.NewSentPacketHandler(stopWaitingManager),
 		receivedPacketHandler:       ackhandler.NewReceivedPacketHandler(),
@@ -269,6 +274,8 @@ func (s *Session) Close(e error, sendConnectionClose bool) error {
 	}
 	s.closed = true
 	s.closeChan <- struct{}{}
+
+	s.closeCallback(s)
 
 	if !sendConnectionClose {
 		return nil

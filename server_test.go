@@ -5,6 +5,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/testdata"
@@ -25,7 +26,7 @@ func (s *mockSession) HandlePacket(addr interface{}, publicHeader *PublicHeader,
 func (s *mockSession) Run() {
 }
 
-func newMockSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback) PacketHandler {
+func newMockSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback CloseCallback) PacketHandler {
 	return &mockSession{
 		connectionID: connectionID,
 	}
@@ -119,5 +120,36 @@ var _ = Describe("Server", func() {
 		}()
 		err = server.ListenAndServe("localhost:13370")
 		Expect(err).To(HaveOccurred())
+	})
+
+	It("closes and deletes sessions", func() {
+		server, err := NewServer(testdata.GetTLSConfig(), nil)
+		Expect(err).ToNot(HaveOccurred())
+		go func() {
+			defer GinkgoRecover()
+			err := server.ListenAndServe("localhost:13370")
+			Expect(err).To(HaveOccurred())
+		}()
+
+		addr, err := net.ResolveUDPAddr("udp", "localhost:13370")
+		Expect(err).ToNot(HaveOccurred())
+
+		// Send an invalid packet
+		time.Sleep(10 * time.Millisecond)
+		conn, err := net.DialUDP("udp", nil, addr)
+		Expect(err).ToNot(HaveOccurred())
+		pheader := []byte{0x0d, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x51, 0x30, 0x33, 0x32, 0x01}
+		_, err = conn.Write(append(pheader, (&crypto.NullAEAD{}).Seal(0, pheader, nil)...))
+		Expect(err).ToNot(HaveOccurred())
+
+		time.Sleep(10 * time.Millisecond)
+
+		// The server should now have closed the session, leaving a nil value in the sessions map
+		Expect(server.sessions).To(HaveLen(1))
+		// Expect(server.sessions[0x4cfa9f9b668619f6]).To(BeNil())
+		Expect(server.sessions[0x4cfa9f9b668619f6]).To(BeNil())
+
+		err = server.Close()
+		Expect(err).ToNot(HaveOccurred())
 	})
 })

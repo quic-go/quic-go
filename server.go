@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
+	"sync"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -25,11 +26,12 @@ type Server struct {
 	signer crypto.Signer
 	scfg   *handshake.ServerConfig
 
-	sessions map[protocol.ConnectionID]PacketHandler
+	sessions      map[protocol.ConnectionID]PacketHandler
+	sessionsMutex sync.RWMutex
 
 	streamCallback StreamCallback
 
-	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback) PacketHandler
+	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback CloseCallback) PacketHandler
 }
 
 // NewServer makes a new server
@@ -101,7 +103,10 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 		return nil
 	}
 
+	s.sessionsMutex.RLock()
 	session, ok := s.sessions[publicHeader.ConnectionID]
+	s.sessionsMutex.RUnlock()
+
 	if !ok {
 		utils.Infof("Serving new connection: %d from %v", publicHeader.ConnectionID, remoteAddr)
 		session = s.newSession(
@@ -110,12 +115,25 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 			publicHeader.ConnectionID,
 			s.scfg,
 			s.streamCallback,
+			s.closeCallback,
 		)
 		go session.Run()
+		s.sessionsMutex.Lock()
 		s.sessions[publicHeader.ConnectionID] = session
+		s.sessionsMutex.Unlock()
+	}
+	if session == nil {
+		// Late packet for closed session
+		return nil
 	}
 	session.HandlePacket(remoteAddr, publicHeader, r)
 	return nil
+}
+
+func (s *Server) closeCallback(session *Session) {
+	s.sessionsMutex.Lock()
+	s.sessions[session.connectionID] = nil
+	s.sessionsMutex.Unlock()
 }
 
 func composeVersionNegotiation(connectionID protocol.ConnectionID) []byte {
