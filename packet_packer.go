@@ -156,3 +156,8 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 
 	return payloadFrames, nil
 }
+
+// Empty returns true if no frames are queued
+func (p *packetPacker) Empty() bool {
+	return p.streamFrameQueue.Front() == nil
+}
