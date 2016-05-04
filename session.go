@@ -48,9 +48,10 @@ type Session struct {
 	unpacker *packetUnpacker
 	packer   *packetPacker
 
-	receivedPackets chan receivedPacket
-	closeChan       chan struct{}
-	closed          bool
+	receivedPackets  chan receivedPacket
+	sendingScheduled chan struct{}
+	closeChan        chan struct{}
+	closed           bool
 
 	connectionParametersManager *handshake.ConnectionParametersManager
 
@@ -74,6 +75,7 @@ func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		stopWaitingManager:          stopWaitingManager,
 		receivedPackets:             make(chan receivedPacket, 1000), // TODO: What if server receives many packets and connection is already closed?!
 		closeChan:                   make(chan struct{}, 1),
+		sendingScheduled:            make(chan struct{}, 1),
 		rttStats:                    congestion.RTTStats{},
 		connectionParametersManager: handshake.NewConnectionParamatersManager(),
 	}
@@ -95,15 +97,22 @@ func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol
 
 // Run the session main loop
 func (s *Session) Run() {
-	sendTimeout := 1 * time.Millisecond
 	for {
+		// Close immediately if requested
+		select {
+		case <-s.closeChan:
+			return
+		default:
+		}
+
 		var err error
 		select {
 		case <-s.closeChan:
 			return
 		case p := <-s.receivedPackets:
 			err = s.handlePacket(p.remoteAddr, p.publicHeader, p.r)
-		case <-time.After(sendTimeout):
+			s.scheduleSending()
+		case <-s.sendingScheduled:
 			err = s.sendPacket()
 		}
 
@@ -360,12 +369,18 @@ func (s *Session) sendPacket() error {
 	if err != nil {
 		return err
 	}
+
+	if !s.packer.Empty() {
+		s.scheduleSending()
+	}
+
 	return nil
 }
 
 // QueueStreamFrame queues a frame for sending to the client
 func (s *Session) QueueStreamFrame(frame *frames.StreamFrame) error {
 	s.packer.AddStreamFrame(*frame)
+	s.scheduleSending()
 	return nil
 }
 
@@ -408,4 +423,12 @@ func (s *Session) sendPublicReset(rejectedPacketNumber protocol.PacketNumber) er
 	var b bytes.Buffer
 	packet.Write(&b)
 	return s.conn.write(b.Bytes())
+}
+
+// scheduleSending signals that we have data for sending
+func (s *Session) scheduleSending() {
+	select {
+	case s.sendingScheduled <- struct{}{}:
+	default:
+	}
 }

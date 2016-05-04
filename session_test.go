@@ -29,6 +29,7 @@ func (m *mockConnection) write(p []byte) error {
 
 func (*mockConnection) setCurrentRemoteAddr(addr interface{}) {}
 
+// TODO: Reorganize
 var _ = Describe("Session", func() {
 	var (
 		session        *Session
@@ -271,6 +272,38 @@ var _ = Describe("Session", func() {
 		})
 	})
 
+	Context("scheduling sending", func() {
+		BeforeEach(func() {
+			signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
+			Expect(err).ToNot(HaveOccurred())
+			scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
+			session = NewSession(conn, 0, 0, scfg, nil).(*Session)
+		})
+
+		It("sends after queuing a stream frame", func() {
+			Expect(session.sendingScheduled).NotTo(Receive())
+			err := session.QueueStreamFrame(&frames.StreamFrame{StreamID: 1})
+			Expect(err).ToNot(HaveOccurred())
+			// Try again, so that we detect blocking scheduleSending
+			err = session.QueueStreamFrame(&frames.StreamFrame{StreamID: 1})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(session.sendingScheduled).To(Receive())
+		})
+
+		It("sends after receiving a packet", func() {
+			Expect(session.sendingScheduled).NotTo(Receive())
+			session.receivedPackets <- receivedPacket{
+				publicHeader: &PublicHeader{},
+				r: bytes.NewReader([]byte{
+					// FNV hash + "foobar"
+					0x18, 0x6f, 0x44, 0xba, 0x97, 0x35, 0xd, 0x6f, 0xbf, 0x64, 0x3c, 0x79, 0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72,
+				}),
+			}
+			session.Run()
+			Expect(session.sendingScheduled).To(Receive())
+		})
+	})
+
 	It("closes when crypto stream errors", func() {
 		signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 		Expect(err).ToNot(HaveOccurred())
@@ -289,6 +322,7 @@ var _ = Describe("Session", func() {
 		Expect(err).To(MatchError("CryptoSetup: expected CHLO"))
 	})
 
+	// See https://github.com/lucas-clemente/quic-go/issues/38
 	PIt("sends public reset when receiving invalid message", func() {
 		signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 		Expect(err).ToNot(HaveOccurred())
