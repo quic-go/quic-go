@@ -31,24 +31,27 @@ type CryptoSetup struct {
 
 	cryptoStream utils.Stream
 
+	connectionParametersManager *ConnectionParametersManager
+
 	mutex sync.RWMutex
 }
 
 var _ crypto.AEAD = &CryptoSetup{}
 
 // NewCryptoSetup creates a new CryptoSetup instance
-func NewCryptoSetup(connID protocol.ConnectionID, version protocol.VersionNumber, scfg *ServerConfig, cryptoStream utils.Stream) *CryptoSetup {
+func NewCryptoSetup(connID protocol.ConnectionID, version protocol.VersionNumber, scfg *ServerConfig, cryptoStream utils.Stream, connectionParametersManager *ConnectionParametersManager) *CryptoSetup {
 	nonce := make([]byte, 32)
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		panic(err)
 	}
 	return &CryptoSetup{
-		connID:        connID,
-		version:       version,
-		scfg:          scfg,
-		nonce:         nonce,
-		keyDerivation: crypto.DeriveKeysChacha20,
-		cryptoStream:  cryptoStream,
+		connID:                      connID,
+		version:                     version,
+		scfg:                        scfg,
+		nonce:                       nonce,
+		keyDerivation:               crypto.DeriveKeysChacha20,
+		cryptoStream:                cryptoStream,
+		connectionParametersManager: connectionParametersManager,
 	}
 }
 
@@ -184,13 +187,19 @@ func (h *CryptoSetup) handleCHLO(data []byte, cryptoData map[Tag][]byte) ([]byte
 		return nil, err
 	}
 
+	err = h.connectionParametersManager.SetFromMap(cryptoData)
+	if err != nil {
+		return nil, err
+	}
+
+	replyMap := h.connectionParametersManager.GetSHLOMap()
+	// add crypto parameters
+	replyMap[TagPUBS] = h.scfg.kex.PublicKey()
+	replyMap[TagSNO] = h.nonce
+	replyMap[TagVER] = protocol.SupportedVersionsAsTags
+
 	var reply bytes.Buffer
-	WriteHandshakeMessage(&reply, TagSHLO, map[Tag][]byte{
-		TagPUBS: h.scfg.kex.PublicKey(),
-		TagSNO:  h.nonce,
-		TagVER:  protocol.SupportedVersionsAsTags,
-		TagICSL: []byte{0x1e, 0x00, 0x00, 0x00}, //30
-		TagMSPC: []byte{0x64, 0x00, 0x00, 0x00}, //100
-	})
+	WriteHandshakeMessage(&reply, TagSHLO, replyMap)
+
 	return reply.Bytes(), nil
 }

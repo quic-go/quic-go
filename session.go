@@ -52,6 +52,8 @@ type Session struct {
 	closeChan       chan struct{}
 	closed          bool
 
+	connectionParametersManager *handshake.ConnectionParametersManager
+
 	// Used to calculate the next packet number from the truncated wire
 	// representation, and sent back in public reset packets
 	lastRcvdPacketNumber protocol.PacketNumber
@@ -63,20 +65,21 @@ type Session struct {
 func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback) PacketHandler {
 	stopWaitingManager := ackhandler.NewStopWaitingManager()
 	session := &Session{
-		connectionID:          connectionID,
-		conn:                  conn,
-		streamCallback:        streamCallback,
-		streams:               make(map[protocol.StreamID]*stream),
-		sentPacketHandler:     ackhandler.NewSentPacketHandler(stopWaitingManager),
-		receivedPacketHandler: ackhandler.NewReceivedPacketHandler(),
-		stopWaitingManager:    stopWaitingManager,
-		receivedPackets:       make(chan receivedPacket, 1000), // TODO: What if server receives many packets and connection is already closed?!
-		closeChan:             make(chan struct{}, 1),
-		rttStats:              congestion.RTTStats{},
+		connectionID:                connectionID,
+		conn:                        conn,
+		streamCallback:              streamCallback,
+		streams:                     make(map[protocol.StreamID]*stream),
+		sentPacketHandler:           ackhandler.NewSentPacketHandler(stopWaitingManager),
+		receivedPacketHandler:       ackhandler.NewReceivedPacketHandler(),
+		stopWaitingManager:          stopWaitingManager,
+		receivedPackets:             make(chan receivedPacket, 1000), // TODO: What if server receives many packets and connection is already closed?!
+		closeChan:                   make(chan struct{}, 1),
+		rttStats:                    congestion.RTTStats{},
+		connectionParametersManager: handshake.NewConnectionParamatersManager(),
 	}
 
 	cryptoStream, _ := session.NewStream(1)
-	cryptoSetup := handshake.NewCryptoSetup(connectionID, v, sCfg, cryptoStream)
+	cryptoSetup := handshake.NewCryptoSetup(connectionID, v, sCfg, cryptoStream, session.connectionParametersManager)
 
 	go func() {
 		if err := cryptoSetup.HandleCryptoStream(); err != nil {

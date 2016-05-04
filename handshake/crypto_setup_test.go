@@ -89,6 +89,7 @@ var _ = Describe("Crypto setup", func() {
 		scfg   *ServerConfig
 		cs     *CryptoSetup
 		stream *mockStream
+		cpm    *ConnectionParametersManager
 	)
 
 	BeforeEach(func() {
@@ -97,7 +98,8 @@ var _ = Describe("Crypto setup", func() {
 		signer = &mockSigner{}
 		scfg = NewServerConfig(kex, signer)
 		v := protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
-		cs = NewCryptoSetup(protocol.ConnectionID(42), v, scfg, stream)
+		cpm = NewConnectionParamatersManager()
+		cs = NewCryptoSetup(protocol.ConnectionID(42), v, scfg, stream, cpm)
 		cs.keyDerivation = mockKeyDerivation
 	})
 
