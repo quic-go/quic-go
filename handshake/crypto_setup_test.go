@@ -11,12 +11,21 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type mockKEX struct{}
-
-func (*mockKEX) PublicKey() []byte {
-	return []byte("pubs-s")
+type mockKEX struct {
+	ephermal bool
 }
-func (*mockKEX) CalculateSharedKey(otherPublic []byte) ([]byte, error) {
+
+func (m *mockKEX) PublicKey() []byte {
+	if m.ephermal {
+		return []byte("ephermal pub")
+	}
+	return []byte("initial public")
+}
+
+func (m *mockKEX) CalculateSharedKey(otherPublic []byte) ([]byte, error) {
+	if m.ephermal {
+		return []byte("shared ephermal"), nil
+	}
 	return []byte("shared key"), nil
 }
 
@@ -39,6 +48,7 @@ func (*mockSigner) GetCertUncompressed() []byte {
 
 type mockAEAD struct {
 	forwardSecure bool
+	sharedSecret  []byte
 }
 
 func (m *mockAEAD) Seal(packetNumber protocol.PacketNumber, associatedData []byte, plaintext []byte) []byte {
@@ -58,7 +68,7 @@ func (m *mockAEAD) Open(packetNumber protocol.PacketNumber, associatedData []byt
 }
 
 func mockKeyDerivation(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte) (crypto.AEAD, error) {
-	return &mockAEAD{forwardSecure: forwardSecure}, nil
+	return &mockAEAD{forwardSecure: forwardSecure, sharedSecret: sharedSecret}, nil
 }
 
 type mockStream struct {
@@ -101,6 +111,7 @@ var _ = Describe("Crypto setup", func() {
 		cpm = NewConnectionParamatersManager()
 		cs = NewCryptoSetup(protocol.ConnectionID(42), v, scfg, stream, cpm)
 		cs.keyDerivation = mockKeyDerivation
+		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
 	})
 
 	It("has a nonce", func() {
@@ -118,7 +129,7 @@ var _ = Describe("Crypto setup", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(response).To(HavePrefix("REJ"))
 			Expect(response).To(ContainSubstring("certcompressed"))
-			Expect(response).To(ContainSubstring("pubs-s"))
+			Expect(response).To(ContainSubstring("initial public"))
 			Expect(signer.gotCHLO).To(BeTrue())
 		})
 
@@ -128,11 +139,15 @@ var _ = Describe("Crypto setup", func() {
 			})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(response).To(HavePrefix("SHLO"))
-			Expect(response).To(ContainSubstring("pubs-s")) // TODO: Should be new pubs
+			Expect(response).To(ContainSubstring("ephermal pub"))
 			Expect(response).To(ContainSubstring(string(cs.nonce)))
 			Expect(response).To(ContainSubstring(string(protocol.SupportedVersionsAsTags)))
 			Expect(cs.secureAEAD).ToNot(BeNil())
+			Expect(cs.secureAEAD.(*mockAEAD).forwardSecure).To(BeFalse())
+			Expect(cs.secureAEAD.(*mockAEAD).sharedSecret).To(Equal([]byte("shared key")))
 			Expect(cs.forwardSecureAEAD).ToNot(BeNil())
+			Expect(cs.forwardSecureAEAD.(*mockAEAD).sharedSecret).To(Equal([]byte("shared ephermal")))
+			Expect(cs.forwardSecureAEAD.(*mockAEAD).forwardSecure).To(BeTrue())
 		})
 
 		It("handles long handshake", func() {

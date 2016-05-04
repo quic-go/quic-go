@@ -15,6 +15,9 @@ import (
 // KeyDerivationFunction is used for key derivation
 type KeyDerivationFunction func(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte) (crypto.AEAD, error)
 
+// KeyExchangeFunction is used to make a new KEX
+type KeyExchangeFunction func() crypto.KeyExchange
+
 // The CryptoSetup handles all things crypto for the Session
 type CryptoSetup struct {
 	connID  protocol.ConnectionID
@@ -28,6 +31,7 @@ type CryptoSetup struct {
 	receivedSecurePacket        bool
 
 	keyDerivation KeyDerivationFunction
+	keyExchange   KeyExchangeFunction
 
 	cryptoStream utils.Stream
 
@@ -50,6 +54,7 @@ func NewCryptoSetup(connID protocol.ConnectionID, version protocol.VersionNumber
 		scfg:                        scfg,
 		nonce:                       nonce,
 		keyDerivation:               crypto.DeriveKeysChacha20,
+		keyExchange:                 crypto.NewCurve25519KEX,
 		cryptoStream:                cryptoStream,
 		connectionParametersManager: connectionParametersManager,
 	}
@@ -181,8 +186,14 @@ func (h *CryptoSetup) handleCHLO(data []byte, cryptoData map[Tag][]byte) ([]byte
 	if err != nil {
 		return nil, err
 	}
-	// TODO: Use new curve
-	h.forwardSecureAEAD, err = h.keyDerivation(true, sharedSecret, nonce.Bytes(), h.connID, data, h.scfg.Get(), h.scfg.signer.GetCertUncompressed())
+
+	// Generate a new curve instance to derive the forward secure key
+	ephermalKex := h.keyExchange()
+	ephermalSharedSecret, err := ephermalKex.CalculateSharedKey(cryptoData[TagPUBS])
+	if err != nil {
+		return nil, err
+	}
+	h.forwardSecureAEAD, err = h.keyDerivation(true, ephermalSharedSecret, nonce.Bytes(), h.connID, data, h.scfg.Get(), h.scfg.signer.GetCertUncompressed())
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +205,7 @@ func (h *CryptoSetup) handleCHLO(data []byte, cryptoData map[Tag][]byte) ([]byte
 
 	replyMap := h.connectionParametersManager.GetSHLOMap()
 	// add crypto parameters
-	replyMap[TagPUBS] = h.scfg.kex.PublicKey()
+	replyMap[TagPUBS] = ephermalKex.PublicKey()
 	replyMap[TagSNO] = h.nonce
 	replyMap[TagVER] = protocol.SupportedVersionsAsTags
 
