@@ -6,15 +6,18 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 )
 
+type streamCreator interface {
+	NewStream(protocol.StreamID) (utils.Stream, error)
+}
+
 type responseWriter struct {
-	session      *quic.Session
+	session      streamCreator
 	dataStreamID protocol.StreamID
 	headerStream utils.Stream
 	dataStream   utils.Stream
@@ -23,7 +26,7 @@ type responseWriter struct {
 	headerWritten bool
 }
 
-func newResponseWriter(headerStream utils.Stream, dataStreamID protocol.StreamID, session *quic.Session) *responseWriter {
+func newResponseWriter(headerStream utils.Stream, dataStreamID protocol.StreamID, session streamCreator) *responseWriter {
 	return &responseWriter{
 		header:       http.Header{},
 		headerStream: headerStream,
@@ -59,7 +62,6 @@ func (w *responseWriter) WriteHeader(status int) {
 	}
 }
 
-// TODO: Test
 func (w *responseWriter) Write(p []byte) (int, error) {
 	if !w.headerWritten {
 		w.WriteHeader(200)
