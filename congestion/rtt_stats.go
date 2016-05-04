@@ -1,7 +1,6 @@
 package congestion
 
 import (
-	"fmt"
 	"math"
 	"time"
 
@@ -85,7 +84,7 @@ func (r *RTTStats) SetRecentMinRTTwindow(recentMinRTTwindow time.Duration) {
 // UpdateRTT updates the RTT based on a new sample.
 func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration, now time.Time) {
 	if sendDelta == math.MaxInt64 || sendDelta <= 0 {
-		fmt.Printf("Ignoring measured sendDelta, because it's is either infinite, zero, or negative: %d\n", sendDelta/time.Microsecond)
+		utils.Infof("Ignoring measured sendDelta, because it's is either infinite, zero, or negative: %d\n", sendDelta/time.Microsecond)
 		return
 	}
 

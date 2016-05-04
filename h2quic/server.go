@@ -3,7 +3,6 @@ package h2quic
 import (
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"net/http"
 
 	"github.com/lucas-clemente/quic-go"
@@ -49,7 +48,7 @@ func (s *Server) handleStream(session *quic.Session, headerStream utils.Stream) 
 	go func() {
 		for {
 			if err := s.handleRequest(session, headerStream, hpackDecoder, h2framer); err != nil {
-				fmt.Printf("error handling h2 request: %s\n", err.Error())
+				utils.Errorf("error handling h2 request: %s\n", err.Error())
 				return
 			}
 		}
@@ -67,7 +66,7 @@ func (s *Server) handleRequest(session *quic.Session, headerStream utils.Stream,
 	}
 	headers, err := hpackDecoder.DecodeFull(h2headersFrame.HeaderBlockFragment())
 	if err != nil {
-		fmt.Printf("invalid http2 headers encoding: %s\n", err.Error())
+		utils.Errorf("invalid http2 headers encoding: %s\n", err.Error())
 		return err
 	}
 
@@ -75,7 +74,7 @@ func (s *Server) handleRequest(session *quic.Session, headerStream utils.Stream,
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Request: %#v\n", req)
+	utils.Infof("Request: %#v\n", req)
 
 	responseWriter := &responseWriter{
 		header:       http.Header{},

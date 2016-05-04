@@ -9,9 +9,12 @@ import (
 
 	"github.com/lucas-clemente/quic-go/h2quic"
 	"github.com/lucas-clemente/quic-go/testdata"
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 func main() {
+	utils.SetLogLevel(utils.LogLevelDebug)
+
 	bindTo := flag.String("bind", "localhost", "bind to")
 	certPath := flag.String("certpath", "", "certificate directory")
 	www := flag.String("www", "/var/www", "www data")

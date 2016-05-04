@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"net"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // PacketHandler handles packets
@@ -70,7 +70,7 @@ func (s *Server) ListenAndServe(address string) error {
 		}
 		data = data[:n]
 		if err := s.handlePacket(s.conn, remoteAddr, data); err != nil {
-			fmt.Printf("error handling packet: %s", err.Error())
+			utils.Errorf("error handling packet: %s", err.Error())
 		}
 	}
 }
@@ -93,7 +93,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 
 	// Send Version Negotiation Packet if the client is speaking a different protocol version
 	if publicHeader.VersionFlag && !protocol.IsSupportedVersion(publicHeader.VersionNumber) {
-		fmt.Printf("Client offered version %d, sending VersionNegotiationPacket\n", publicHeader.VersionNumber)
+		utils.Infof("Client offered version %d, sending VersionNegotiationPacket\n", publicHeader.VersionNumber)
 		_, err = conn.WriteToUDP(composeVersionNegotiation(publicHeader.ConnectionID), remoteAddr)
 		if err != nil {
 			return err
@@ -103,7 +103,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 
 	session, ok := s.sessions[publicHeader.ConnectionID]
 	if !ok {
-		fmt.Printf("Serving new connection: %d from %v\n", publicHeader.ConnectionID, remoteAddr)
+		utils.Infof("Serving new connection: %d from %v\n", publicHeader.ConnectionID, remoteAddr)
 		session = s.newSession(
 			&udpConn{conn: conn, currentAddr: remoteAddr},
 			publicHeader.VersionNumber,

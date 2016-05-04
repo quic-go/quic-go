@@ -47,7 +47,7 @@ func (w *responseWriter) WriteHeader(status int) {
 		enc.WriteField(hpack.HeaderField{Name: k, Value: v[0]})
 	}
 
-	fmt.Printf("Responding with %d %#v\n", status, w.header)
+	utils.Infof("Responding with %d %#v\n", status, w.header)
 	h2framer := http2.NewFramer(w.headerStream, nil)
 	err := h2framer.WriteHeaders(http2.HeadersFrameParam{
 		StreamID:      uint32(w.dataStreamID),
