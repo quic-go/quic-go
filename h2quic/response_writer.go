@@ -47,7 +47,7 @@ func (w *responseWriter) WriteHeader(status int) {
 		enc.WriteField(hpack.HeaderField{Name: k, Value: v[0]})
 	}
 
-	utils.Infof("Responding with %d %#v\n", status, w.header)
+	utils.Infof("Responding with %d %#v", status, w.header)
 	h2framer := http2.NewFramer(w.headerStream, nil)
 	err := h2framer.WriteHeaders(http2.HeadersFrameParam{
 		StreamID:      uint32(w.dataStreamID),
@@ -70,7 +70,7 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 			var err error
 			w.dataStream, err = w.session.NewStream(w.dataStreamID)
 			if err != nil {
-				return 0, fmt.Errorf("error creating data stream: %s\n", err.Error())
+				return 0, fmt.Errorf("error creating data stream: %s", err.Error())
 			}
 		}
 		return w.dataStream.Write(p)

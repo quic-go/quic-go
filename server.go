@@ -93,7 +93,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 
 	// Send Version Negotiation Packet if the client is speaking a different protocol version
 	if publicHeader.VersionFlag && !protocol.IsSupportedVersion(publicHeader.VersionNumber) {
-		utils.Infof("Client offered version %d, sending VersionNegotiationPacket\n", publicHeader.VersionNumber)
+		utils.Infof("Client offered version %d, sending VersionNegotiationPacket", publicHeader.VersionNumber)
 		_, err = conn.WriteToUDP(composeVersionNegotiation(publicHeader.ConnectionID), remoteAddr)
 		if err != nil {
 			return err
@@ -103,7 +103,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 
 	session, ok := s.sessions[publicHeader.ConnectionID]
 	if !ok {
-		utils.Infof("Serving new connection: %d from %v\n", publicHeader.ConnectionID, remoteAddr)
+		utils.Infof("Serving new connection: %d from %v", publicHeader.ConnectionID, remoteAddr)
 		session = s.newSession(
 			&udpConn{conn: conn, currentAddr: remoteAddr},
 			publicHeader.VersionNumber,

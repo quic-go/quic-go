@@ -115,7 +115,7 @@ func (s *Session) Run() {
 			case ackhandler.ErrMapAccess:
 				s.Close(err, true) // TODO: sent correct error code here
 			case errRstStreamOnInvalidStream:
-				utils.Errorf("Ignoring error in session: %s\n", err.Error())
+				utils.Errorf("Ignoring error in session: %s", err.Error())
 			default:
 				s.Close(err, true)
 			}
@@ -133,7 +133,7 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 		publicHeader.PacketNumber,
 	)
 	s.lastRcvdPacketNumber = publicHeader.PacketNumber
-	utils.Infof("<- Reading packet 0x%x (%d bytes) for connection %x\n", publicHeader.PacketNumber, r.Size(), publicHeader.ConnectionID)
+	utils.Infof("<- Reading packet 0x%x (%d bytes) for connection %x", publicHeader.PacketNumber, r.Size(), publicHeader.ConnectionID)
 
 	// TODO: Only do this after authenticating
 	s.conn.setCurrentRemoteAddr(remoteAddr)
@@ -156,31 +156,31 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 		var err error
 		switch frame := ff.(type) {
 		case *frames.StreamFrame:
-			utils.Debugf("\t<- &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: %d}\n", frame.StreamID, frame.FinBit, frame.Offset)
+			utils.Debugf("\t<- &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: %d}", frame.StreamID, frame.FinBit, frame.Offset)
 			err = s.handleStreamFrame(frame)
 		case *frames.AckFrame:
 			var duration time.Duration
 			duration, err = s.sentPacketHandler.ReceivedAck(frame)
 			s.rttStats.UpdateRTT(duration, frame.DelayTime, time.Now())
-			utils.Debugf("\t<- %#v\n", frame)
-			utils.Debugf("\tEstimated RTT: %dms\n", s.rttStats.SmoothedRTT()/time.Millisecond)
+			utils.Debugf("\t<- %#v", frame)
+			utils.Debugf("\tEstimated RTT: %dms", s.rttStats.SmoothedRTT()/time.Millisecond)
 			// ToDo: send right error in ConnectionClose frame
 		case *frames.ConnectionCloseFrame:
-			utils.Debugf("\t<- %#v\n", frame)
+			utils.Debugf("\t<- %#v", frame)
 			s.Close(nil, false)
 		case *frames.StopWaitingFrame:
-			utils.Debugf("\t<- %#v\n", frame)
+			utils.Debugf("\t<- %#v", frame)
 			err = s.receivedPacketHandler.ReceivedStopWaiting(frame)
 		case *frames.RstStreamFrame:
 			err = s.handleRstStreamFrame(frame)
-			utils.Debugf("\t<- %#v\n", frame)
+			utils.Debugf("\t<- %#v", frame)
 		case *frames.WindowUpdateFrame:
-			utils.Debugf("\t<- %#v\n", frame)
+			utils.Debugf("\t<- %#v", frame)
 			err = s.handleWindowUpdateFrame(frame)
 		case *frames.BlockedFrame:
-			utils.Infof("BLOCKED frame received for connection %x stream %d\n", s.connectionID, frame.StreamID)
+			utils.Infof("BLOCKED frame received for connection %x stream %d", s.connectionID, frame.StreamID)
 		case *frames.PingFrame:
-			utils.Debugf("\t<- %#v\n", frame)
+			utils.Debugf("\t<- %#v", frame)
 		default:
 			panic("unexpected frame type")
 		}
@@ -268,7 +268,7 @@ func (s *Session) Close(e error, sendConnectionClose bool) error {
 	if e == nil {
 		e = protocol.NewQuicError(errorcodes.QUIC_PEER_GOING_AWAY, "peer going away")
 	}
-	utils.Errorf("Closing session with error: %s\n", e.Error())
+	utils.Errorf("Closing session with error: %s", e.Error())
 	errorCode := protocol.ErrorCode(1)
 	reasonPhrase := e.Error()
 	quicError, ok := e.(*protocol.QuicError)
@@ -311,7 +311,7 @@ func (s *Session) sendPacket() error {
 	// TODO: handle multiple packets retransmissions
 	retransmitPacket := s.sentPacketHandler.DequeuePacketForRetransmission()
 	if retransmitPacket != nil {
-		utils.Infof("\tQueueing retransmission for packet 0x%x\n", retransmitPacket.PacketNumber)
+		utils.Infof("\tQueueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 		s.stopWaitingManager.RegisterPacketForRetransmission(retransmitPacket)
 		// resend the frames that were in the packet
 		controlFrames = append(controlFrames, retransmitPacket.GetControlFramesForRetransmission()...)
@@ -347,12 +347,12 @@ func (s *Session) sendPacket() error {
 
 	s.stopWaitingManager.SentStopWaitingWithPacket(packet.number)
 
-	utils.Infof("-> Sending packet 0x%x (%d bytes)\n", packet.number, len(packet.raw))
+	utils.Infof("-> Sending packet 0x%x (%d bytes)", packet.number, len(packet.raw))
 	for _, frame := range packet.frames {
 		if streamFrame, isStreamFrame := frame.(*frames.StreamFrame); isStreamFrame {
-			utils.Debugf("\t-> &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: 0x%x, Data length: 0x%x, Offset + Data length: 0x%x}\n", streamFrame.StreamID, streamFrame.FinBit, streamFrame.Offset, len(streamFrame.Data), streamFrame.Offset+uint64(len(streamFrame.Data)))
+			utils.Debugf("\t-> &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: 0x%x, Data length: 0x%x, Offset + Data length: 0x%x}", streamFrame.StreamID, streamFrame.FinBit, streamFrame.Offset, len(streamFrame.Data), streamFrame.Offset+uint64(len(streamFrame.Data)))
 		} else {
-			utils.Debugf("\t-> %#v\n", frame)
+			utils.Debugf("\t-> %#v", frame)
 		}
 	}
 
@@ -399,7 +399,7 @@ func (s *Session) garbageCollectStreams() {
 }
 
 func (s *Session) sendPublicReset(rejectedPacketNumber protocol.PacketNumber) error {
-	utils.Infof("Sending public reset for connection %x, packet number %d\n", s.connectionID, rejectedPacketNumber)
+	utils.Infof("Sending public reset for connection %x, packet number %d", s.connectionID, rejectedPacketNumber)
 	packet := &publicResetPacket{
 		connectionID:         s.connectionID,
 		rejectedPacketNumber: rejectedPacketNumber,

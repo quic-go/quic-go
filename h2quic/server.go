@@ -48,7 +48,7 @@ func (s *Server) handleStream(session *quic.Session, headerStream utils.Stream) 
 	go func() {
 		for {
 			if err := s.handleRequest(session, headerStream, hpackDecoder, h2framer); err != nil {
-				utils.Errorf("error handling h2 request: %s\n", err.Error())
+				utils.Errorf("error handling h2 request: %s", err.Error())
 				return
 			}
 		}
@@ -66,7 +66,7 @@ func (s *Server) handleRequest(session *quic.Session, headerStream utils.Stream,
 	}
 	headers, err := hpackDecoder.DecodeFull(h2headersFrame.HeaderBlockFragment())
 	if err != nil {
-		utils.Errorf("invalid http2 headers encoding: %s\n", err.Error())
+		utils.Errorf("invalid http2 headers encoding: %s", err.Error())
 		return err
 	}
 
@@ -74,7 +74,7 @@ func (s *Server) handleRequest(session *quic.Session, headerStream utils.Stream,
 	if err != nil {
 		return err
 	}
-	utils.Infof("Request: %#v\n", req)
+	utils.Infof("Request: %#v", req)
 
 	responseWriter := &responseWriter{
 		header:       http.Header{},
