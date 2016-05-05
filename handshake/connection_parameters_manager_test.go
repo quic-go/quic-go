@@ -1,6 +1,8 @@
 package handshake
 
 import (
+	"time"
+
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -56,5 +58,12 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(val).To(Equal(protocol.ByteCount(0xEFBEADDE)))
 		})
+	})
+
+	It("gets idle connection state lifetime", func() {
+		cpm.params[TagICSL] = []byte{0xad, 0xfb, 0xca, 0xde}
+		val, err := cpm.GetIdleConnectionStateLifetime()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(val).To(Equal(0xdecafbad * time.Second))
 	})
 })

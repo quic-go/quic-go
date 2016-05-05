@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 )
@@ -75,4 +76,17 @@ func (h *ConnectionParametersManager) GetStreamFlowControlWindow() (protocol.Byt
 	}
 
 	return protocol.ByteCount(value), nil
+}
+
+// GetIdleConnectionStateLifetime gets the idle timeout
+func (h *ConnectionParametersManager) GetIdleConnectionStateLifetime() (time.Duration, error) {
+	rawValue, err := h.GetRawValue(TagICSL)
+	if err != nil {
+		return 0, err
+	}
+
+	if len(rawValue) != 4 {
+		return 0, errors.New("expected uint32 for ICSL")
+	}
+	return time.Duration(binary.LittleEndian.Uint32(rawValue)) * time.Second, nil
 }
