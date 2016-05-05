@@ -79,14 +79,13 @@ func (h *ConnectionParametersManager) GetStreamFlowControlWindow() (protocol.Byt
 }
 
 // GetIdleConnectionStateLifetime gets the idle timeout
-func (h *ConnectionParametersManager) GetIdleConnectionStateLifetime() (time.Duration, error) {
+func (h *ConnectionParametersManager) GetIdleConnectionStateLifetime() time.Duration {
 	rawValue, err := h.GetRawValue(TagICSL)
 	if err != nil {
-		return 0, err
+		panic("ConnectionParameters: Could not find ICSL")
 	}
-
 	if len(rawValue) != 4 {
-		return 0, errors.New("expected uint32 for ICSL")
+		panic("ConnectionParameters: ICSL has invalid value")
 	}
-	return time.Duration(binary.LittleEndian.Uint32(rawValue)) * time.Second, nil
+	return time.Duration(binary.LittleEndian.Uint32(rawValue)) * time.Second
 }

@@ -62,8 +62,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 
 	It("gets idle connection state lifetime", func() {
 		cpm.params[TagICSL] = []byte{0xad, 0xfb, 0xca, 0xde}
-		val, err := cpm.GetIdleConnectionStateLifetime()
-		Expect(err).ToNot(HaveOccurred())
+		val := cpm.GetIdleConnectionStateLifetime()
 		Expect(val).To(Equal(0xdecafbad * time.Second))
 	})
 })

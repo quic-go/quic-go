@@ -19,10 +19,10 @@ const (
 	QUIC_ENCRYPTION_FAILURE            = protocol.ErrorCode(13)
 	QUIC_PACKET_TOO_LARGE              = protocol.ErrorCode(14)
 	// QUIC_PACKET_FOR_NONEXISTENT_STREAM= Data was sent for a stream which did not exist.
-	QUIC_PEER_GOING_AWAY       = protocol.ErrorCode(16)
-	QUIC_INVALID_STREAM_ID     = protocol.ErrorCode(17)
-	QUIC_TOO_MANY_OPEN_STREAMS = protocol.ErrorCode(18)
-	// QUIC_CONNECTION_TIMED_OUT= We hit our pre-negotiated (or default) timeout
+	QUIC_PEER_GOING_AWAY                         = protocol.ErrorCode(16)
+	QUIC_INVALID_STREAM_ID                       = protocol.ErrorCode(17)
+	QUIC_TOO_MANY_OPEN_STREAMS                   = protocol.ErrorCode(18)
+	QUIC_NETWORK_IDLE_TIMEOUT                    = protocol.ErrorCode(25)
 	QUIC_CRYPTO_TAGS_OUT_OF_ORDER                = protocol.ErrorCode(29)
 	QUIC_CRYPTO_TOO_MANY_ENTRIES                 = protocol.ErrorCode(30)
 	QUIC_CRYPTO_INVALID_VALUE_LENGTH             = protocol.ErrorCode(31)

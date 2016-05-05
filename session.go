@@ -119,6 +119,8 @@ func (s *Session) Run() {
 			s.scheduleSending()
 		case <-s.sendingScheduled:
 			err = s.sendPacket()
+		case <-time.After(s.connectionParametersManager.GetIdleConnectionStateLifetime()):
+			s.Close(protocol.NewQuicError(errorcodes.QUIC_NETWORK_IDLE_TIMEOUT, "No recent network activity."), true)
 		}
 
 		if err != nil {

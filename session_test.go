@@ -45,6 +45,9 @@ var _ = Describe("Session", func() {
 			streams:                     make(map[protocol.StreamID]*stream),
 			streamCallback:              func(*Session, utils.Stream) { callbackCalled = true },
 			connectionParametersManager: handshake.NewConnectionParamatersManager(),
+			closeChan:                   make(chan struct{}, 1),
+			closeCallback:               func(*Session) {},
+			packer:                      &packetPacker{aead: &crypto.NullAEAD{}},
 		}
 	})
 
@@ -344,4 +347,13 @@ var _ = Describe("Session", func() {
 		Expect(conn.written).To(HaveLen(1))
 		Expect(conn.written[0]).To(ContainSubstring(string([]byte("PRST"))))
 	})
+
+	It("times out", func(done Done) {
+		session.connectionParametersManager.SetFromMap(map[handshake.Tag][]byte{
+			handshake.TagICSL: {0, 0, 0, 0},
+		})
+		session.Run() // Would normally not return
+		Expect(conn.written[0]).To(ContainSubstring("No recent network activity."))
+		close(done)
+	}, 0.5)
 })
