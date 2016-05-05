@@ -11,10 +11,11 @@ import (
 )
 
 // ConnectionParametersManager stores the connection parameters
+// Warning: Writes may only be done from the crypto stream, see the comment
+// in GetSHLOMap().
 type ConnectionParametersManager struct {
 	params map[Tag][]byte
-	// TODO: We can probably remove this mutex.
-	mutex sync.RWMutex
+	mutex  sync.RWMutex
 }
 
 // ErrTagNotInConnectionParameterMap is returned when a tag is not present in the connection parameters
@@ -56,7 +57,9 @@ func (h *ConnectionParametersManager) GetRawValue(tag Tag) ([]byte, error) {
 
 // GetSHLOMap gets all values (except crypto values) needed for the SHLO
 func (h *ConnectionParametersManager) GetSHLOMap() map[Tag][]byte {
-	// TODO: This races.
+	// Since GetSHLOMap is only called from the crypto stream, and changes to
+	// the params are only made by the crypto stream itself, there is no data race
+	// here, and we need not copy the map.
 	return h.params
 }
 
