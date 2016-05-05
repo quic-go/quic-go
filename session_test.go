@@ -41,9 +41,10 @@ var _ = Describe("Session", func() {
 		conn = &mockConnection{}
 		callbackCalled = false
 		session = &Session{
-			conn:           conn,
-			streams:        make(map[protocol.StreamID]*stream),
-			streamCallback: func(*Session, utils.Stream) { callbackCalled = true },
+			conn:                        conn,
+			streams:                     make(map[protocol.StreamID]*stream),
+			streamCallback:              func(*Session, utils.Stream) { callbackCalled = true },
+			connectionParametersManager: handshake.NewConnectionParamatersManager(),
 		}
 	})
 

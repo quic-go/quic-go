@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/handshake"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -27,7 +28,8 @@ var _ = Describe("Stream", func() {
 
 	BeforeEach(func() {
 		handler = &mockStreamHandler{}
-		str = newStream(handler, 1337)
+		cpm := handshake.NewConnectionParamatersManager()
+		str, _ = newStream(handler, cpm, 1337)
 	})
 
 	Context("reading", func() {

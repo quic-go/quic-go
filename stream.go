@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 )
@@ -29,19 +30,28 @@ type stream struct {
 	remoteErr      error
 	currentErr     error
 
+	connectionParameterManager *handshake.ConnectionParametersManager
+
 	flowControlWindow uint64
 	windowUpdateCond  *sync.Cond
 }
 
 // newStream creates a new Stream
-func newStream(session streamHandler, StreamID protocol.StreamID) *stream {
-	return &stream{
-		session:           session,
-		streamID:          StreamID,
-		streamFrames:      make(chan *frames.StreamFrame, 8), // ToDo: add config option for this number
-		flowControlWindow: 0x4000,                            // 16 byte, TODO: read this from the negotiated connection parameters (TagCFCW)
-		windowUpdateCond:  sync.NewCond(&sync.Mutex{}),
+func newStream(session streamHandler, connectionParameterManager *handshake.ConnectionParametersManager, StreamID protocol.StreamID) (*stream, error) {
+	s := &stream{
+		session:                    session,
+		streamID:                   StreamID,
+		streamFrames:               make(chan *frames.StreamFrame, 8), // ToDo: add config option for this number
+		connectionParameterManager: connectionParameterManager,
+		windowUpdateCond:           sync.NewCond(&sync.Mutex{}),
 	}
+
+	flowControlWindow, err := connectionParameterManager.GetStreamFlowControlWindow()
+	if err != nil {
+		return nil, err
+	}
+	s.flowControlWindow = uint64(flowControlWindow)
+	return s, nil
 }
 
 // Read implements io.Reader

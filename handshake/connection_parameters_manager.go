@@ -1,6 +1,8 @@
 package handshake
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"sync"
 )
@@ -19,6 +21,12 @@ func NewConnectionParamatersManager() *ConnectionParametersManager {
 	cpm := &ConnectionParametersManager{
 		params: make(map[Tag][]byte),
 	}
+
+	// set default parameters
+	cpm.mutex.Lock()
+	cpm.params[TagSFCW] = []byte{0x0, 0x40, 0x0, 0x0} // Stream Flow Control Window
+	cpm.params[TagCFCW] = []byte{0x0, 0x40, 0x0, 0x0} // Connection Flow Control WindowWindow
+	cpm.mutex.Unlock()
 	return cpm
 }
 
@@ -50,4 +58,22 @@ func (h *ConnectionParametersManager) GetSHLOMap() map[Tag][]byte {
 		TagICSL: []byte{0x1e, 0x00, 0x00, 0x00}, //30
 		TagMSPC: []byte{0x64, 0x00, 0x00, 0x00}, //100
 	}
+}
+
+// GetStreamFlowControlWindow gets the size of the stream-level flow control window
+func (h *ConnectionParametersManager) GetStreamFlowControlWindow() (uint32, error) {
+	rawValue, err := h.GetRawValue(TagSFCW)
+
+	if err != nil {
+		return 0, err
+	}
+
+	var value uint32
+	buf := bytes.NewBuffer(rawValue)
+	err = binary.Read(buf, binary.LittleEndian, &value)
+	if err != nil {
+		return 0, err
+	}
+
+	return value, nil
 }
