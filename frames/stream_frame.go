@@ -12,7 +12,7 @@ import (
 type StreamFrame struct {
 	FinBit   bool
 	StreamID protocol.StreamID
-	Offset   uint64
+	Offset   protocol.ByteCount
 	Data     []byte
 }
 
@@ -39,10 +39,11 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 	}
 	frame.StreamID = protocol.StreamID(sid)
 
-	frame.Offset, err = utils.ReadUintN(r, offsetLen)
+	offset, err := utils.ReadUintN(r, offsetLen)
 	if err != nil {
 		return nil, err
 	}
+	frame.Offset = protocol.ByteCount(offset)
 
 	var dataLen uint16
 	if dataLenPresent {
@@ -82,7 +83,7 @@ func (f *StreamFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber,
 	b.WriteByte(typeByte)
 	utils.WriteUint32(b, uint32(f.StreamID))
 	if f.Offset != 0 {
-		utils.WriteUint64(b, f.Offset)
+		utils.WriteUint64(b, uint64(f.Offset))
 	}
 	utils.WriteUint16(b, uint16(len(f.Data)))
 	b.Write(f.Data)
@@ -103,7 +104,7 @@ func (f *StreamFrame) MaybeSplitOffFrame(n int) *StreamFrame {
 
 	defer func() {
 		f.Data = f.Data[n:]
-		f.Offset += uint64(n)
+		f.Offset += protocol.ByteCount(n)
 	}()
 
 	return &StreamFrame{

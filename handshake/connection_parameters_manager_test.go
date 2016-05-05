@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -46,14 +47,14 @@ var _ = Describe("ConnectionsParameterManager", func() {
 		It("has the correct default flow control window", func() {
 			val, err := cpm.GetStreamFlowControlWindow()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(val).To(Equal(uint32(0x4000)))
+			Expect(val).To(Equal(protocol.ByteCount(0x4000)))
 		})
 
 		It("reads the stream-level flowControlWindow", func() {
 			cpm.params[TagSFCW] = []byte{0xDE, 0xAD, 0xBE, 0xEF}
 			val, err := cpm.GetStreamFlowControlWindow()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(val).To(Equal(uint32(0xEFBEADDE)))
+			Expect(val).To(Equal(protocol.ByteCount(0xEFBEADDE)))
 		})
 	})
 })

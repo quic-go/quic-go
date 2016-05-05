@@ -7,6 +7,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
+	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -331,13 +332,13 @@ var _ = Describe("Stream", func() {
 		It("updates the flow control window", func() {
 			str.flowControlWindow = 3
 			str.UpdateFlowControlWindow(4)
-			Expect(str.flowControlWindow).To(Equal(uint64(4)))
+			Expect(str.flowControlWindow).To(Equal(protocol.ByteCount(4)))
 		})
 
 		It("never shrinks the flow control window", func() {
 			str.flowControlWindow = 100
 			str.UpdateFlowControlWindow(50)
-			Expect(str.flowControlWindow).To(Equal(uint64(100)))
+			Expect(str.flowControlWindow).To(Equal(protocol.ByteCount(100)))
 		})
 	})
 

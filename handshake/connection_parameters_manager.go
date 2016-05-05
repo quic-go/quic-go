@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"sync"
+
+	"github.com/lucas-clemente/quic-go/protocol"
 )
 
 // ConnectionParametersManager stores the connection parameters
@@ -61,7 +63,7 @@ func (h *ConnectionParametersManager) GetSHLOMap() map[Tag][]byte {
 }
 
 // GetStreamFlowControlWindow gets the size of the stream-level flow control window
-func (h *ConnectionParametersManager) GetStreamFlowControlWindow() (uint32, error) {
+func (h *ConnectionParametersManager) GetStreamFlowControlWindow() (protocol.ByteCount, error) {
 	rawValue, err := h.GetRawValue(TagSFCW)
 
 	if err != nil {
@@ -75,5 +77,5 @@ func (h *ConnectionParametersManager) GetStreamFlowControlWindow() (uint32, erro
 		return 0, err
 	}
 
-	return value, nil
+	return protocol.ByteCount(value), nil
 }

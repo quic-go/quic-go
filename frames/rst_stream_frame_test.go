@@ -16,7 +16,7 @@ var _ = Describe("RstStreamFrame", func() {
 				frame, err := ParseRstStreamFrame(b)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.StreamID).To(Equal(protocol.StreamID(0xDEADBEEF)))
-				Expect(frame.ByteOffset).To(Equal(uint64(0xDECAFBAD11223344)))
+				Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0xDECAFBAD11223344)))
 				Expect(frame.ErrorCode).To(Equal(uint32(0x13371234)))
 			})
 		})

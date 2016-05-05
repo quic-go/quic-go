@@ -10,7 +10,7 @@ import (
 // A WindowUpdateFrame in QUIC
 type WindowUpdateFrame struct {
 	StreamID   protocol.StreamID
-	ByteOffset uint64
+	ByteOffset protocol.ByteCount
 }
 
 //Write writes a RST_STREAM frame
@@ -39,10 +39,11 @@ func ParseWindowUpdateFrame(r *bytes.Reader) (*WindowUpdateFrame, error) {
 	}
 	frame.StreamID = protocol.StreamID(sid)
 
-	frame.ByteOffset, err = utils.ReadUint64(r)
+	byteOffset, err := utils.ReadUint64(r)
 	if err != nil {
 		return nil, err
 	}
+	frame.ByteOffset = protocol.ByteCount(byteOffset)
 
 	return frame, nil
 }

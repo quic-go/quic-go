@@ -3,7 +3,6 @@ package quic
 import (
 	"io"
 	"sync"
-	"sync/atomic"
 
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -23,16 +22,16 @@ type stream struct {
 	// session if an error occurred, in this case, remoteErr is filled before.
 	streamFrames   chan *frames.StreamFrame
 	currentFrame   *frames.StreamFrame
-	readPosInFrame int
-	writeOffset    uint64
-	readOffset     uint64
+	readPosInFrame protocol.ByteCount
+	writeOffset    protocol.ByteCount
+	readOffset     protocol.ByteCount
 	frameQueue     []*frames.StreamFrame // TODO: replace with heap
 	remoteErr      error
 	currentErr     error
 
 	connectionParameterManager *handshake.ConnectionParametersManager
 
-	flowControlWindow uint64
+	flowControlWindow protocol.ByteCount
 	windowUpdateCond  *sync.Cond
 }
 
@@ -50,7 +49,7 @@ func newStream(session streamHandler, connectionParameterManager *handshake.Conn
 	if err != nil {
 		return nil, err
 	}
-	s.flowControlWindow = uint64(flowControlWindow)
+	s.flowControlWindow = flowControlWindow
 	return s, nil
 }
 
@@ -73,12 +72,13 @@ func (s *stream) Read(p []byte) (int, error) {
 			}
 			s.readPosInFrame = 0
 		}
-		m := utils.Min(len(p)-bytesRead, len(s.currentFrame.Data)-s.readPosInFrame)
+		// TODO: don't cast to int for comparing
+		m := utils.Min(len(p)-bytesRead, int(protocol.ByteCount(len(s.currentFrame.Data))-s.readPosInFrame))
 		copy(p[bytesRead:], s.currentFrame.Data[s.readPosInFrame:])
-		s.readPosInFrame += m
+		s.readPosInFrame += protocol.ByteCount(m)
 		bytesRead += m
-		s.readOffset += uint64(m)
-		if s.readPosInFrame >= len(s.currentFrame.Data) {
+		s.readOffset += protocol.ByteCount(m)
+		if s.readPosInFrame >= protocol.ByteCount(len(s.currentFrame.Data)) {
 			fin := s.currentFrame.FinBit
 			s.currentFrame = nil
 			if fin {
@@ -155,9 +155,11 @@ func (s *stream) ReadByte() (byte, error) {
 	return p[0], err
 }
 
-func (s *stream) UpdateFlowControlWindow(n uint64) {
+func (s *stream) UpdateFlowControlWindow(n protocol.ByteCount) {
 	if n > s.flowControlWindow {
-		atomic.StoreUint64((*uint64)(&s.flowControlWindow), n)
+		s.windowUpdateCond.L.Lock()
+		s.flowControlWindow = n
+		s.windowUpdateCond.L.Unlock()
 		s.windowUpdateCond.Broadcast()
 	}
 }
@@ -193,7 +195,7 @@ func (s *stream) Write(p []byte) (int, error) {
 		}
 
 		dataWritten += dataLen
-		s.writeOffset += uint64(dataLen)
+		s.writeOffset += protocol.ByteCount(dataLen)
 	}
 
 	return len(p), nil

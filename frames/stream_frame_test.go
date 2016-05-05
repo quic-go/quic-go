@@ -71,7 +71,7 @@ var _ = Describe("StreamFrame", func() {
 				Offset:   3,
 			}
 			Expect(f.MaybeSplitOffFrame(1000)).To(BeNil())
-			Expect(f.Offset).To(Equal(uint64(3)))
+			Expect(f.Offset).To(Equal(protocol.ByteCount(3)))
 		})
 
 		It("splits off initial frame", func() {
@@ -85,11 +85,11 @@ var _ = Describe("StreamFrame", func() {
 			Expect(previous).ToNot(BeNil())
 			Expect(previous.StreamID).To(Equal(protocol.StreamID(1)))
 			Expect(previous.Data).To(Equal([]byte("foo")))
-			Expect(previous.Offset).To(Equal(uint64(3)))
+			Expect(previous.Offset).To(Equal(protocol.ByteCount(3)))
 			Expect(previous.FinBit).To(BeFalse())
 			Expect(f.StreamID).To(Equal(protocol.StreamID(1)))
 			Expect(f.Data).To(Equal([]byte("bar")))
-			Expect(f.Offset).To(Equal(uint64(6)))
+			Expect(f.Offset).To(Equal(protocol.ByteCount(6)))
 			Expect(f.FinBit).To(BeTrue())
 		})
 	})

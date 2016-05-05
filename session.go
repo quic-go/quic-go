@@ -366,7 +366,7 @@ func (s *Session) sendPacket() error {
 	utils.Infof("-> Sending packet 0x%x (%d bytes)", packet.number, len(packet.raw))
 	for _, frame := range packet.frames {
 		if streamFrame, isStreamFrame := frame.(*frames.StreamFrame); isStreamFrame {
-			utils.Debugf("\t-> &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: 0x%x, Data length: 0x%x, Offset + Data length: 0x%x}", streamFrame.StreamID, streamFrame.FinBit, streamFrame.Offset, len(streamFrame.Data), streamFrame.Offset+uint64(len(streamFrame.Data)))
+			utils.Debugf("\t-> &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: 0x%x, Data length: 0x%x, Offset + Data length: 0x%x}", streamFrame.StreamID, streamFrame.FinBit, streamFrame.Offset, len(streamFrame.Data), streamFrame.Offset+protocol.ByteCount(len(streamFrame.Data)))
 		} else {
 			utils.Debugf("\t-> %#v", frame)
 		}

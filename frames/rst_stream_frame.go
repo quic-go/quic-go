@@ -10,7 +10,7 @@ import (
 // A RstStreamFrame in QUIC
 type RstStreamFrame struct {
 	StreamID   protocol.StreamID
-	ByteOffset uint64
+	ByteOffset protocol.ByteCount
 	ErrorCode  uint32
 }
 
@@ -40,10 +40,11 @@ func ParseRstStreamFrame(r *bytes.Reader) (*RstStreamFrame, error) {
 	}
 	frame.StreamID = protocol.StreamID(sid)
 
-	frame.ByteOffset, err = utils.ReadUint64(r)
+	byteOffset, err := utils.ReadUint64(r)
 	if err != nil {
 		return nil, err
 	}
+	frame.ByteOffset = protocol.ByteCount(byteOffset)
 
 	frame.ErrorCode, err = utils.ReadUint32(r)
 	if err != nil {
