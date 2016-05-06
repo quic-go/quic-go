@@ -15,20 +15,14 @@ var _ = Describe("ConnectionsParameterManager", func() {
 	})
 
 	It("stores and retrieves a value", func() {
-		kexs := []byte{0xDE, 0xCA, 0xFB, 0xAD}
 		icsl := []byte{0x13, 0x37}
 		values := map[Tag][]byte{
-			TagKEXS: kexs,
 			TagICSL: icsl,
 		}
 
 		cpm.SetFromMap(values)
 
-		val, err := cpm.GetRawValue(TagKEXS)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(val).To(Equal(kexs))
-
-		val, err = cpm.GetRawValue(TagICSL)
+		val, err := cpm.GetRawValue(TagICSL)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(val).To(Equal(icsl))
 	})

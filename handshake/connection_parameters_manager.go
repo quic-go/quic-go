@@ -13,6 +13,7 @@ import (
 // ConnectionParametersManager stores the connection parameters
 // Warning: Writes may only be done from the crypto stream, see the comment
 // in GetSHLOMap().
+// TODO: Separate our SFCW from the client's
 type ConnectionParametersManager struct {
 	params map[Tag][]byte
 	mutex  sync.RWMutex
@@ -37,7 +38,10 @@ func NewConnectionParamatersManager() *ConnectionParametersManager {
 func (h *ConnectionParametersManager) SetFromMap(params map[Tag][]byte) error {
 	h.mutex.Lock()
 	for key, value := range params {
-		h.params[key] = value
+		switch key {
+		case TagSFCW, TagCFCW, TagICSL, TagMSPC:
+			h.params[key] = value
+		}
 	}
 	h.mutex.Unlock()
 	return nil
