@@ -13,12 +13,17 @@ import (
 )
 
 func main() {
-	utils.SetLogLevel(utils.LogLevelDebug)
-
+	verbose := flag.Bool("v", false, "verbose")
 	bindTo := flag.String("bind", "localhost", "bind to")
 	certPath := flag.String("certpath", "", "certificate directory")
 	www := flag.String("www", "/var/www", "www data")
 	flag.Parse()
+
+	if *verbose {
+		utils.SetLogLevel(utils.LogLevelDebug)
+	} else {
+		utils.SetLogLevel(utils.LogLevelInfo)
+	}
 
 	var tlsConfig *tls.Config
 	if *certPath == "" {
