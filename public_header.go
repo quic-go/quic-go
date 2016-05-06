@@ -9,6 +9,12 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
+var (
+	errResetAndVersionFlagSet        = errors.New("PublicHeader: Reset Flag and Version Flag should not be set at the same time")
+	errReceivedTruncatedConnectionID = errors.New("PublicHeader: Receiving packets with truncated ConnectionID is not supported")
+	errInvalidConnectionID           = errors.New("PublicHeader: connection ID cannot be 0")
+)
+
 // The PublicHeader of a QUIC packet
 type PublicHeader struct {
 	Raw             []byte
@@ -25,7 +31,7 @@ type PublicHeader struct {
 func (h *PublicHeader) WritePublicHeader(b *bytes.Buffer) error {
 	publicFlagByte := uint8(0x3c)
 	if h.VersionFlag && h.ResetFlag {
-		return errors.New("Reset Flag and Version Flag should not be set at the same time")
+		return errResetAndVersionFlagSet
 	}
 	if h.VersionFlag {
 		publicFlagByte |= 0x01
@@ -58,7 +64,7 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	// }
 
 	if publicFlagByte&0x08 == 0 {
-		return nil, errors.New("truncating connection ID is not supported")
+		return nil, errReceivedTruncatedConnectionID
 	}
 
 	switch publicFlagByte & 0x30 {
@@ -79,7 +85,7 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	}
 	header.ConnectionID = protocol.ConnectionID(connID)
 	if header.ConnectionID == 0 {
-		return nil, errors.New("PublicHeader: connection ID cannot be 0")
+		return nil, errInvalidConnectionID
 	}
 
 	// Version (optional)
@@ -93,11 +99,11 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	}
 
 	// Packet number
-	pcktNumber, err := utils.ReadUintN(b, header.PacketNumberLen)
+	packetNumber, err := utils.ReadUintN(b, header.PacketNumberLen)
 	if err != nil {
 		return nil, err
 	}
-	header.PacketNumber = protocol.PacketNumber(pcktNumber)
+	header.PacketNumber = protocol.PacketNumber(packetNumber)
 
 	return header, nil
 }

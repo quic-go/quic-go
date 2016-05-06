@@ -26,6 +26,14 @@ var _ = Describe("Public Header", func() {
 			b := bytes.NewReader([]byte{0x00, 0x01})
 			_, err := ParsePublicHeader(b)
 			Expect(err).To(HaveOccurred())
+			Expect(err).To(Equal(errReceivedTruncatedConnectionID))
+		})
+
+		It("rejects 0 as a connection ID", func() {
+			b := bytes.NewReader([]byte{0x09, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x51, 0x30, 0x33, 0x30, 0x01})
+			_, err := ParsePublicHeader(b)
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(Equal(errInvalidConnectionID))
 		})
 
 		It("accepts 1-byte packet numbers", func() {
@@ -115,6 +123,7 @@ var _ = Describe("Public Header", func() {
 			}
 			err := publicHeader.WritePublicHeader(b)
 			Expect(err).To(HaveOccurred())
+			Expect(err).To(Equal(errResetAndVersionFlagSet))
 		})
 	})
 })
