@@ -77,12 +77,12 @@ var _ = Describe("Server", func() {
 		Expect(err).ToNot(HaveOccurred())
 		go func() {
 			defer GinkgoRecover()
-			err := server.ListenAndServe("localhost:13370")
+			err := server.ListenAndServe("127.0.0.1:13370")
 			Expect(err).To(HaveOccurred())
 		}()
 
 		time.Sleep(10 * time.Millisecond)
-		addr, err2 := net.ResolveUDPAddr("udp", "localhost:13370")
+		addr, err2 := net.ResolveUDPAddr("udp", "127.0.0.1:13370")
 		Expect(err2).ToNot(HaveOccurred())
 		conn, err2 := net.DialUDP("udp", nil, addr)
 		Expect(err2).ToNot(HaveOccurred())
@@ -106,12 +106,12 @@ var _ = Describe("Server", func() {
 		Expect(err).ToNot(HaveOccurred())
 		go func() {
 			defer GinkgoRecover()
-			err := server.ListenAndServe("localhost:13370")
+			err := server.ListenAndServe("127.0.0.1:13370")
 			Expect(err).To(HaveOccurred())
 		}()
 
 		time.Sleep(10 * time.Millisecond)
-		addr, err2 := net.ResolveUDPAddr("udp", "localhost:13370")
+		addr, err2 := net.ResolveUDPAddr("udp", "127.0.0.1:13370")
 		Expect(err2).ToNot(HaveOccurred())
 		conn, err2 := net.DialUDP("udp", nil, addr)
 		Expect(err2).ToNot(HaveOccurred())
@@ -131,11 +131,11 @@ var _ = Describe("Server", func() {
 		Expect(err).ToNot(HaveOccurred())
 		go func() {
 			defer GinkgoRecover()
-			err := server.ListenAndServe("localhost:13370")
+			err := server.ListenAndServe("127.0.0.1:13370")
 			Expect(err).To(HaveOccurred())
 		}()
 
-		addr, err := net.ResolveUDPAddr("udp", "localhost:13370")
+		addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:13370")
 		Expect(err).ToNot(HaveOccurred())
 
 		// Send an invalid packet

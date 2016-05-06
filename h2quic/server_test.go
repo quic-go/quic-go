@@ -26,7 +26,7 @@ var _ = Describe("Response Writer", func() {
 
 	It("uses default handler", func() {
 		// We try binding to a low port number, s.t. it always fails
-		err := s.ListenAndServe("localhost:80", nil)
+		err := s.ListenAndServe("127.0.0.1:80", nil)
 		Expect(err).To(HaveOccurred())
 		Expect(s.handler).To(Equal(http.DefaultServeMux))
 	})
@@ -34,7 +34,7 @@ var _ = Describe("Response Writer", func() {
 	It("sets handler properly", func() {
 		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
 		// We try binding to a low port number, s.t. it always fails
-		err := s.ListenAndServe("localhost:80", h)
+		err := s.ListenAndServe("127.0.0.1:80", h)
 		Expect(err).To(HaveOccurred())
 		Expect(s.handler).NotTo(Equal(http.DefaultServeMux))
 	})
