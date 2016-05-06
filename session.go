@@ -323,6 +323,10 @@ func (s *Session) closeStreamsWithError(err error) {
 }
 
 func (s *Session) sendPacket() error {
+	if !s.congestionAllowsSending() {
+		return nil
+	}
+
 	var controlFrames []frames.Frame
 
 	// check for retransmissions first
@@ -445,4 +449,8 @@ func (s *Session) scheduleSending() {
 	case s.sendingScheduled <- struct{}{}:
 	default:
 	}
+}
+
+func (s *Session) congestionAllowsSending() bool {
+	return protocol.ByteCount(s.sentPacketHandler.BytesInFlight()) < 100*protocol.DefaultTCPMSS
 }
