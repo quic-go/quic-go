@@ -74,7 +74,7 @@ func (s *Server) handleRequest(session *quic.Session, headerStream utils.Stream,
 	if err != nil {
 		return err
 	}
-	utils.Infof("Request: %#v", req)
+	utils.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
 
 	responseWriter := &responseWriter{
 		header:       http.Header{},

@@ -107,7 +107,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 	s.sessionsMutex.RUnlock()
 
 	if !ok {
-		utils.Infof("Serving new connection: %d from %v", publicHeader.ConnectionID, remoteAddr)
+		utils.Infof("Serving new connection: %x from %v", publicHeader.ConnectionID, remoteAddr)
 		session = s.newSession(
 			&udpConn{conn: conn, currentAddr: remoteAddr},
 			publicHeader.VersionNumber,

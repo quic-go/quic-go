@@ -149,7 +149,7 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 		publicHeader.PacketNumber,
 	)
 	s.lastRcvdPacketNumber = publicHeader.PacketNumber
-	utils.Infof("<- Reading packet 0x%x (%d bytes) for connection %x", publicHeader.PacketNumber, r.Size(), publicHeader.ConnectionID)
+	utils.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x", publicHeader.PacketNumber, r.Size(), publicHeader.ConnectionID)
 
 	// TODO: Only do this after authenticating
 	s.conn.setCurrentRemoteAddr(remoteAddr)
@@ -369,7 +369,7 @@ func (s *Session) sendPacket() error {
 
 	s.stopWaitingManager.SentStopWaitingWithPacket(packet.number)
 
-	utils.Infof("-> Sending packet 0x%x (%d bytes)", packet.number, len(packet.raw))
+	utils.Debugf("-> Sending packet 0x%x (%d bytes)", packet.number, len(packet.raw))
 	for _, frame := range packet.frames {
 		if streamFrame, isStreamFrame := frame.(*frames.StreamFrame); isStreamFrame {
 			utils.Debugf("\t-> &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: 0x%x, Data length: 0x%x, Offset + Data length: 0x%x}", streamFrame.StreamID, streamFrame.FinBit, streamFrame.Offset, len(streamFrame.Data), streamFrame.Offset+protocol.ByteCount(len(streamFrame.Data)))
