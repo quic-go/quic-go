@@ -17,6 +17,7 @@ type AckFrame struct {
 	Entropy         byte
 	DelayTime       time.Duration
 	NackRanges      []NackRange // has to be ordered. The NACK range with the highest FirstPacketNumber goes first, the NACK range with the lowest FirstPacketNumber goes last
+	Truncated       bool
 }
 
 // Write writes an ACK frame.
@@ -126,9 +127,7 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 	if typeByte&0x20 == 0x20 {
 		hasNACK = true
 	}
-	if typeByte&0x10 == 0x10 {
-		panic("truncated ACKs not yet implemented.")
-	}
+	frame.Truncated = typeByte&0x10 > 0
 
 	largestObservedLen := 2 * ((typeByte & 0x0C) >> 2)
 	if largestObservedLen == 0 {

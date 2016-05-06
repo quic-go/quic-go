@@ -81,6 +81,13 @@ var _ = Describe("AckFrame", func() {
 			Expect(err).To(Equal(errInvalidNackRanges))
 		})
 
+		It("accepts truncated acks", func() {
+			b := bytes.NewReader([]byte{0x50, 0xA4, 0x03, 0x23, 0x45, 0x01, 0x02, 0xFF, 0xEE, 0xDD, 0xCC})
+			frame, err := ParseAckFrame(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame.Truncated).To(BeTrue())
+		})
+
 		Context("contiguous NACK ranges", func() {
 			It("parses a frame with a contiguous NACK range spanning two fields", func() {
 				b := bytes.NewReader([]byte{0x64, 0x8, 0x2E, 0x01, 0x72, 0x1, 0x1, 0x0, 0xc0, 0x15, 0x0, 0x0, 0x2, 0x1, 0x2b, 0x0, 0xff})
