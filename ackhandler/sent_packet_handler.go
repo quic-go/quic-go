@@ -35,7 +35,7 @@ type sentPacketHandler struct {
 	retransmissionQueue []*Packet // ToDo: use better data structure
 	stopWaitingManager  StopWaitingManager
 
-	bytesInFlight uint64
+	bytesInFlight protocol.ByteCount
 }
 
 // NewSentPacketHandler creates a new sentPacketHandler
@@ -194,6 +194,6 @@ func (h *sentPacketHandler) DequeuePacketForRetransmission() (packet *Packet) {
 	return packet
 }
 
-func (h *sentPacketHandler) BytesInFlight() uint64 {
+func (h *sentPacketHandler) BytesInFlight() protocol.ByteCount {
 	return h.bytesInFlight
 }

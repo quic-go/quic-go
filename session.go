@@ -361,7 +361,7 @@ func (s *Session) sendPacket() error {
 		PacketNumber: packet.number,
 		Frames:       packet.frames,
 		EntropyBit:   packet.entropyBit,
-		Length:       uint64(len(packet.raw)),
+		Length:       protocol.ByteCount(len(packet.raw)),
 	})
 	if err != nil {
 		return err
@@ -452,5 +452,5 @@ func (s *Session) scheduleSending() {
 }
 
 func (s *Session) congestionAllowsSending() bool {
-	return protocol.ByteCount(s.sentPacketHandler.BytesInFlight()) < 100*protocol.DefaultTCPMSS
+	return s.sentPacketHandler.BytesInFlight() < 100*protocol.DefaultTCPMSS
 }

@@ -14,7 +14,7 @@ type SentPacketHandler interface {
 
 	DequeuePacketForRetransmission() (packet *Packet)
 
-	BytesInFlight() uint64
+	BytesInFlight() protocol.ByteCount
 }
 
 // ReceivedPacketHandler handles ACKs needed to send for incoming packets
