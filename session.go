@@ -176,7 +176,7 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 			err = s.handleStreamFrame(frame)
 		case *frames.AckFrame:
 			var duration time.Duration
-			duration, err = s.sentPacketHandler.ReceivedAck(frame)
+			duration, _, _, err = s.sentPacketHandler.ReceivedAck(frame)
 			s.rttStats.UpdateRTT(duration, frame.DelayTime, time.Now())
 			utils.Debugf("\t<- %#v", frame)
 			utils.Debugf("\tEstimated RTT: %dms", s.rttStats.SmoothedRTT()/time.Millisecond)

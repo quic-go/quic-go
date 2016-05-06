@@ -46,34 +46,39 @@ func NewSentPacketHandler(stopWaitingManager StopWaitingManager) SentPacketHandl
 	}
 }
 
-func (h *sentPacketHandler) ackPacket(packetNumber protocol.PacketNumber) {
-	if packet, ok := h.packetHistory[packetNumber]; ok && !packet.Retransmitted {
+func (h *sentPacketHandler) ackPacket(packetNumber protocol.PacketNumber) *Packet {
+	packet, ok := h.packetHistory[packetNumber]
+	if ok && !packet.Retransmitted {
 		h.bytesInFlight -= packet.Length
 	}
 	delete(h.packetHistory, packetNumber)
 
 	// TODO: add tests
 	h.stopWaitingManager.ReceivedAckForPacketNumber(packetNumber)
+
+	return packet
 }
 
-func (h *sentPacketHandler) nackPacket(packetNumber protocol.PacketNumber) error {
+func (h *sentPacketHandler) nackPacket(packetNumber protocol.PacketNumber) (*Packet, error) {
 	packet, ok := h.packetHistory[packetNumber]
 	if !ok {
-		return ErrMapAccess
+		return nil, ErrMapAccess
 	}
 
-	// if the packet has already been retransmit, do nothing
-	// we're probably only receiving another NACK for this packet because the retransmission has not yet arrived at the client
+	// If the packet has already been retransmitted, do nothing.
+	// We're probably only receiving another NACK for this packet because the
+	// retransmission has not yet arrived at the client.
 	if packet.Retransmitted {
-		return nil
+		return nil, nil
 	}
 
 	packet.MissingReports++
 
 	if packet.MissingReports > retransmissionThreshold {
 		h.queuePacketForRetransmission(packet)
+		return packet, nil
 	}
-	return nil
+	return nil, nil
 }
 
 func (h *sentPacketHandler) queuePacketForRetransmission(packet *Packet) {
@@ -132,22 +137,23 @@ func (h *sentPacketHandler) calculateExpectedEntropy(ackFrame *frames.AckFrame) 
 	return expectedEntropy, nil
 }
 
-func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) (time.Duration, error) {
+// TODO: Simplify return types
+func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) (time.Duration, []*Packet, []*Packet, error) {
 	if ackFrame.LargestObserved > h.lastSentPacketNumber {
-		return 0, errAckForUnsentPacket
+		return 0, nil, nil, errAckForUnsentPacket
 	}
 
 	if ackFrame.LargestObserved <= h.LargestObserved { // duplicate or out-of-order AckFrame
-		return 0, ErrDuplicateOrOutOfOrderAck
+		return 0, nil, nil, ErrDuplicateOrOutOfOrderAck
 	}
 
 	expectedEntropy, err := h.calculateExpectedEntropy(ackFrame)
 	if err != nil {
-		return 0, err
+		return 0, nil, nil, err
 	}
 
 	if byte(expectedEntropy) != ackFrame.Entropy {
-		return 0, ErrEntropy
+		return 0, nil, nil, ErrEntropy
 	}
 
 	// Entropy ok. Now actually process the ACK packet
@@ -157,9 +163,15 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) (time.Duratio
 	// Calculate the RTT
 	timeDelta := time.Now().Sub(h.packetHistory[h.LargestObserved].sendTime)
 
+	var ackedPackets []*Packet
+	var lostPackets []*Packet
+
 	// ACK all packets below the highestInOrderAckedPacketNumber
 	for i := h.highestInOrderAckedPacketNumber; i <= highestInOrderAckedPacketNumber; i++ {
-		h.ackPacket(i)
+		p := h.ackPacket(i)
+		if p != nil {
+			ackedPackets = append(ackedPackets, p)
+		}
 	}
 
 	if ackFrame.HasNACK() {
@@ -173,16 +185,25 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) (time.Duratio
 				}
 			}
 			if nackRange.ContainsPacketNumber(i) {
-				h.nackPacket(i)
+				p, err := h.nackPacket(i)
+				if err != nil {
+					return 0, nil, nil, err
+				}
+				if p != nil {
+					lostPackets = append(lostPackets, p)
+				}
 			} else {
-				h.ackPacket(i)
+				p := h.ackPacket(i)
+				if p != nil {
+					ackedPackets = append(ackedPackets, p)
+				}
 			}
 		}
 	}
 
 	h.highestInOrderAckedPacketNumber = highestInOrderAckedPacketNumber
 
-	return timeDelta, nil
+	return timeDelta, ackedPackets, lostPackets, nil
 }
 
 func (h *sentPacketHandler) DequeuePacketForRetransmission() (packet *Packet) {
