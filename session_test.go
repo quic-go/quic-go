@@ -352,6 +352,7 @@ var _ = Describe("Session", func() {
 		session.connectionParametersManager.SetFromMap(map[handshake.Tag][]byte{
 			handshake.TagICSL: {0, 0, 0, 0},
 		})
+		session.packer.connectionParametersManager = session.connectionParametersManager
 		session.Run() // Would normally not return
 		Expect(conn.written[0]).To(ContainSubstring("No recent network activity."))
 		close(done)

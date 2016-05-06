@@ -39,6 +39,20 @@ var _ = Describe("ConnectionsParameterManager", func() {
 		Expect(entryMap).To(HaveKey(TagMSPC))
 	})
 
+	Context("Truncated connection IDs", func() {
+		It("does not send truncated connection IDs if the TCID tag is missing", func() {
+			Expect(cpm.TruncateConnectionID()).To(BeFalse())
+		})
+
+		It("reads the tag for truncated connection IDs", func() {
+			values := map[Tag][]byte{
+				TagTCID: []byte{0, 0, 0, 0},
+			}
+			cpm.SetFromMap(values)
+			Expect(cpm.TruncateConnectionID()).To(BeTrue())
+		})
+	})
+
 	Context("flow control", func() {
 		It("has the correct default flow control window", func() {
 			val, err := cpm.GetStreamFlowControlWindow()

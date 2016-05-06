@@ -39,7 +39,7 @@ func (h *ConnectionParametersManager) SetFromMap(params map[Tag][]byte) error {
 	h.mutex.Lock()
 	for key, value := range params {
 		switch key {
-		case TagSFCW, TagCFCW, TagICSL, TagMSPC:
+		case TagSFCW, TagCFCW, TagICSL, TagMSPC, TagTCID:
 			h.params[key] = value
 		}
 	}
@@ -61,10 +61,10 @@ func (h *ConnectionParametersManager) GetRawValue(tag Tag) ([]byte, error) {
 
 // GetSHLOMap gets all values (except crypto values) needed for the SHLO
 func (h *ConnectionParametersManager) GetSHLOMap() map[Tag][]byte {
-	// Since GetSHLOMap is only called from the crypto stream, and changes to
-	// the params are only made by the crypto stream itself, there is no data race
-	// here, and we need not copy the map.
-	return h.params
+	return map[Tag][]byte{
+		TagICSL: []byte{0x1e, 0x00, 0x00, 0x00}, //30
+		TagMSPC: []byte{0x64, 0x00, 0x00, 0x00}, //100
+	}
 }
 
 // GetStreamFlowControlWindow gets the size of the stream-level flow control window
@@ -95,4 +95,24 @@ func (h *ConnectionParametersManager) GetIdleConnectionStateLifetime() time.Dura
 		panic("ConnectionParameters: ICSL has invalid value")
 	}
 	return time.Duration(binary.LittleEndian.Uint32(rawValue)) * time.Second
+}
+
+// TruncateConnectionID determines if the client requests truncated ConnectionIDs
+func (h *ConnectionParametersManager) TruncateConnectionID() bool {
+	rawValue, err := h.GetRawValue(TagTCID)
+	if err != nil {
+		return false
+	}
+
+	var value uint32
+	buf := bytes.NewBuffer(rawValue)
+	err = binary.Read(buf, binary.LittleEndian, &value)
+	if err != nil {
+		return false
+	}
+
+	if value == 0 {
+		return true
+	}
+	return false
 }

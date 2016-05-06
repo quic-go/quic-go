@@ -94,7 +94,7 @@ func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		}
 	}()
 
-	session.packer = &packetPacker{aead: cryptoSetup, connectionID: connectionID}
+	session.packer = &packetPacker{aead: cryptoSetup, connectionParametersManager: session.connectionParametersManager, connectionID: connectionID}
 	session.unpacker = &packetUnpacker{aead: cryptoSetup}
 
 	return session

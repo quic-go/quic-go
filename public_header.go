@@ -17,19 +17,20 @@ var (
 
 // The PublicHeader of a QUIC packet
 type PublicHeader struct {
-	Raw             []byte
-	VersionFlag     bool
-	ResetFlag       bool
-	ConnectionID    protocol.ConnectionID
-	VersionNumber   protocol.VersionNumber
-	QuicVersion     uint32
-	PacketNumberLen uint8
-	PacketNumber    protocol.PacketNumber
+	Raw                  []byte
+	VersionFlag          bool
+	ResetFlag            bool
+	ConnectionID         protocol.ConnectionID
+	TruncateConnectionID bool
+	VersionNumber        protocol.VersionNumber
+	QuicVersion          uint32
+	PacketNumberLen      uint8
+	PacketNumber         protocol.PacketNumber
 }
 
 // WritePublicHeader writes a public header
 func (h *PublicHeader) WritePublicHeader(b *bytes.Buffer) error {
-	publicFlagByte := uint8(0x3c)
+	publicFlagByte := uint8(0x34)
 	if h.VersionFlag && h.ResetFlag {
 		return errResetAndVersionFlagSet
 	}
@@ -39,9 +40,16 @@ func (h *PublicHeader) WritePublicHeader(b *bytes.Buffer) error {
 	if h.ResetFlag {
 		publicFlagByte |= 0x02
 	}
+	if !h.TruncateConnectionID {
+		publicFlagByte |= 0x08
+	}
 
 	b.WriteByte(publicFlagByte)
-	utils.WriteUint64(b, uint64(h.ConnectionID)) // TODO: Send shorter connection id if possible
+
+	if !h.TruncateConnectionID {
+		utils.WriteUint64(b, uint64(h.ConnectionID))
+	}
+
 	utils.WriteUint48(b, uint64(h.PacketNumber)) // TODO: Send shorter packet number if possible
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 )
@@ -18,8 +19,9 @@ type packedPacket struct {
 }
 
 type packetPacker struct {
-	connectionID protocol.ConnectionID
-	aead         crypto.AEAD
+	connectionID                protocol.ConnectionID
+	aead                        crypto.AEAD
+	connectionParametersManager *handshake.ConnectionParametersManager
 
 	streamFrameQueue StreamFrameQueue
 
@@ -66,8 +68,9 @@ func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 
 	var raw bytes.Buffer
 	responsePublicHeader := PublicHeader{
-		ConnectionID: p.connectionID,
-		PacketNumber: currentPacketNumber,
+		ConnectionID:         p.connectionID,
+		PacketNumber:         currentPacketNumber,
+		TruncateConnectionID: p.connectionParametersManager.TruncateConnectionID(),
 	}
 	if err := responsePublicHeader.WritePublicHeader(&raw); err != nil {
 		return nil, err

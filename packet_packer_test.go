@@ -5,6 +5,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -17,7 +18,7 @@ var _ = Describe("Packet packer", func() {
 
 	BeforeEach(func() {
 		aead := &crypto.NullAEAD{}
-		packer = &packetPacker{aead: aead}
+		packer = &packetPacker{aead: aead, connectionParametersManager: handshake.NewConnectionParamatersManager()}
 	})
 
 	It("returns nil when no packet is queued", func() {

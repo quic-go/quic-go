@@ -125,5 +125,18 @@ var _ = Describe("Public Header", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(Equal(errResetAndVersionFlagSet))
 		})
+
+		It("truncates the connection ID", func() {
+			b := &bytes.Buffer{}
+			publicHeader := PublicHeader{
+				ConnectionID:         0x4cfa9f9b668619f6,
+				TruncateConnectionID: true,
+			}
+			err := publicHeader.WritePublicHeader(b)
+			Expect(err).ToNot(HaveOccurred())
+			firstByte, _ := b.ReadByte()
+			Expect(firstByte & 0x08).To(BeZero())
+			Expect(b.Bytes()).ToNot(ContainSubstring(string([]byte{0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c})))
+		})
 	})
 })
