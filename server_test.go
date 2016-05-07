@@ -81,7 +81,7 @@ var _ = Describe("Server", func() {
 			Expect(err).To(HaveOccurred())
 		}()
 
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 		addr, err2 := net.ResolveUDPAddr("udp", "127.0.0.1:13370")
 		Expect(err2).ToNot(HaveOccurred())
 		conn, err2 := net.DialUDP("udp", nil, addr)
@@ -110,7 +110,7 @@ var _ = Describe("Server", func() {
 			Expect(err).To(HaveOccurred())
 		}()
 
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 		addr, err2 := net.ResolveUDPAddr("udp", "127.0.0.1:13370")
 		Expect(err2).ToNot(HaveOccurred())
 		conn, err2 := net.DialUDP("udp", nil, addr)
@@ -121,7 +121,7 @@ var _ = Describe("Server", func() {
 		n, _, err2 := conn.ReadFromUDP(data)
 		Expect(err2).ToNot(HaveOccurred())
 		Expect(n).ToNot(BeZero())
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 		err2 = server.Close()
 		Expect(err2).ToNot(HaveOccurred())
 	})
@@ -139,7 +139,7 @@ var _ = Describe("Server", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		// Send an invalid packet
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 		conn, err := net.DialUDP("udp", nil, addr)
 		Expect(err).ToNot(HaveOccurred())
 		pheader := []byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x51, 0x30, 0x33, 0x32, 0x01}
