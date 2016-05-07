@@ -73,4 +73,9 @@ var _ = Describe("ConnectionsParameterManager", func() {
 		val := cpm.GetIdleConnectionStateLifetime()
 		Expect(val).To(Equal(0xdecafbad * time.Second))
 	})
+
+	It("has initial idle conneciton state lifetime", func() {
+		val := cpm.GetIdleConnectionStateLifetime()
+		Expect(val).To(Equal(30 * time.Second))
+	})
 })
