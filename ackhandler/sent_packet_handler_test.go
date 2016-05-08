@@ -375,10 +375,10 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("keeps the packets in the right order", func() {
-			handler.nackPacket(2)
-			handler.nackPacket(2)
 			handler.nackPacket(4)
 			handler.nackPacket(4)
+			handler.nackPacket(2)
+			handler.nackPacket(2)
 			packet := handler.DequeuePacketForRetransmission()
 			Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(2)))
 			packet = handler.DequeuePacketForRetransmission()
@@ -386,12 +386,12 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("only queues each packet once, regardless of the number of NACKs", func() {
-			handler.nackPacket(2)
-			handler.nackPacket(2)
 			handler.nackPacket(4)
 			handler.nackPacket(4)
 			handler.nackPacket(2)
 			handler.nackPacket(2)
+			handler.nackPacket(4)
+			handler.nackPacket(4)
 			_ = handler.DequeuePacketForRetransmission()
 			_ = handler.DequeuePacketForRetransmission()
 			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())

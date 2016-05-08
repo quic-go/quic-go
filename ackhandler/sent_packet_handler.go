@@ -32,7 +32,7 @@ type sentPacketHandler struct {
 	// TODO: Move into separate class as in chromium
 	packetHistory map[protocol.PacketNumber]*Packet
 
-	retransmissionQueue []*Packet // ToDo: use better data structure
+	retransmissionQueue []*Packet
 	stopWaitingManager  StopWaitingManager
 
 	bytesInFlight protocol.ByteCount
@@ -210,8 +210,10 @@ func (h *sentPacketHandler) DequeuePacketForRetransmission() (packet *Packet) {
 	if len(h.retransmissionQueue) == 0 {
 		return nil
 	}
-	packet = h.retransmissionQueue[0]
-	h.retransmissionQueue = h.retransmissionQueue[1:]
+	queueLen := len(h.retransmissionQueue)
+	// packets are usually NACKed in descending order. So use the slice as a stack
+	packet = h.retransmissionQueue[queueLen-1]
+	h.retransmissionQueue = h.retransmissionQueue[:queueLen-1]
 	return packet
 }
 

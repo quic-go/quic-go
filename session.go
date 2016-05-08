@@ -333,7 +333,7 @@ func (s *Session) sendPacket() error {
 	// TODO: handle multiple packets retransmissions
 	retransmitPacket := s.sentPacketHandler.DequeuePacketForRetransmission()
 	if retransmitPacket != nil {
-		utils.Debugf("\tQueueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
+		utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 		s.stopWaitingManager.RegisterPacketForRetransmission(retransmitPacket)
 		// resend the frames that were in the packet
 		controlFrames = append(controlFrames, retransmitPacket.GetControlFramesForRetransmission()...)
