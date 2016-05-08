@@ -25,7 +25,7 @@ func (c *mockClock) Advance(d time.Duration) {
 
 var _ = Describe("Cubic Sender", func() {
 	var (
-		sender            congestion.SendAlgorithm
+		sender            congestion.SendAlgorithmWithDebugInfo
 		clock             mockClock
 		bytesInFlight     protocol.ByteCount
 		packetNumber      protocol.PacketNumber
