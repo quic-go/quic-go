@@ -156,33 +156,36 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 	}
 	frame.DelayTime = time.Duration(delay) * time.Microsecond
 
-	numTimestampByte, err := r.ReadByte()
-	if err != nil {
-		return nil, err
-	}
-	numTimestamp := uint8(numTimestampByte)
+	if !frame.Truncated {
+		var err error
+		numTimestampByte, err := r.ReadByte()
+		if err != nil {
+			return nil, err
+		}
+		numTimestamp := uint8(numTimestampByte)
 
-	// Delta Largest observed
-	_, err = r.ReadByte()
-	if err != nil {
-		return nil, err
-	}
-	// First Timestamp
-	_, err = utils.ReadUint32(r)
-	if err != nil {
-		return nil, err
-	}
-
-	for i := 0; i < int(numTimestamp)-1; i++ {
 		// Delta Largest observed
 		_, err = r.ReadByte()
 		if err != nil {
 			return nil, err
 		}
-		// Time Since Previous Timestamp
-		_, err = utils.ReadUint16(r)
+		// First Timestamp
+		_, err = utils.ReadUint32(r)
 		if err != nil {
 			return nil, err
+		}
+
+		for i := 0; i < int(numTimestamp)-1; i++ {
+			// Delta Largest observed
+			_, err = r.ReadByte()
+			if err != nil {
+				return nil, err
+			}
+			// Time Since Previous Timestamp
+			_, err = utils.ReadUint16(r)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 

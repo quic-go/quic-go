@@ -82,10 +82,11 @@ var _ = Describe("AckFrame", func() {
 		})
 
 		It("accepts truncated acks", func() {
-			b := bytes.NewReader([]byte{0x50, 0xA4, 0x03, 0x23, 0x45, 0x01, 0x02, 0xFF, 0xEE, 0xDD, 0xCC})
+			b := bytes.NewReader([]byte{0x50, 0xA4, 0x03, 0x23, 0x45})
 			frame, err := ParseAckFrame(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.Truncated).To(BeTrue())
+			Expect(b.Len()).To(BeZero())
 		})
 
 		Context("contiguous NACK ranges", func() {
