@@ -9,6 +9,7 @@ import (
 type stopWaitingManager struct {
 	// sentStopWaitings            map[protocol.PacketNumber]protocol.PacketNumber // map[LeastUnacked]stopWaitingSentWithPacketNumber
 	lastNewStopWaitingFirstSentWithPacketNumber protocol.PacketNumber
+	maxRetransmittedPacketNumber                protocol.PacketNumber
 	currentStopWaitingFrame                     *frames.StopWaitingFrame
 	currentStopWaitingFrameSent                 bool
 }
@@ -22,11 +23,16 @@ func NewStopWaitingManager() StopWaitingManager {
 
 // RegisterPacketForRetransmission prepares the StopWaitingFrame, if necessary
 func (h *stopWaitingManager) RegisterPacketForRetransmission(packet *Packet) {
+	// out-of-order retransmission. A StopWaitingFrame with a higher LeastUnacked was already queued (or sent in the past), no need to send another one again
+	if packet.PacketNumber < h.maxRetransmittedPacketNumber {
+		return
+	}
 	if h.currentStopWaitingFrame == nil || h.currentStopWaitingFrame.LeastUnacked <= packet.PacketNumber { // <= because for StopWaitingFrames LeastUnacked = packet.PacketNumber + 1
 		h.currentStopWaitingFrame = &frames.StopWaitingFrame{
 			LeastUnacked: packet.PacketNumber + 1,
 			Entropy:      byte(packet.Entropy), // TODO: do we have to send out the entropy of this packet or of the next packet, possible fix for #29
 		}
+		h.maxRetransmittedPacketNumber = packet.PacketNumber
 		h.currentStopWaitingFrameSent = false
 	}
 }

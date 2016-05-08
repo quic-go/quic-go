@@ -45,6 +45,16 @@ var _ = Describe("StopWaitingManager", func() {
 		Expect(swf.Entropy).To(Equal(byte(8)))
 	})
 
+	It("does not create a new StopWaitingFrame for an out-of-order retransmission", func() {
+		leastUnacked := protocol.PacketNumber(10)
+		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked, Entropy: 8})
+		manager.SentStopWaitingWithPacket(12)
+		manager.ReceivedAckForPacketNumber(12)
+		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked - 1, Entropy: 10})
+		swf := manager.GetStopWaitingFrame()
+		Expect(swf).To(BeNil())
+	})
+
 	Context("ACK handling", func() {
 		It("removes the current StopWaitingFrame when the first packet it was sent with is ACKed", func() {
 			manager.RegisterPacketForRetransmission(&Packet{PacketNumber: 10})
