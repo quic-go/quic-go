@@ -39,11 +39,11 @@ func (s *mockSigner) SignServerProof(sni string, chlo []byte, serverConfigData [
 	}
 	return []byte("proof"), nil
 }
-func (*mockSigner) GetCertCompressed(sni string) []byte {
-	return []byte("certcompressed")
+func (*mockSigner) GetCertCompressed(sni string) ([]byte, error) {
+	return []byte("certcompressed"), nil
 }
-func (*mockSigner) GetCertUncompressed(sni string) []byte {
-	return []byte("certuncompressed")
+func (*mockSigner) GetCertUncompressed(sni string) ([]byte, error) {
+	return []byte("certuncompressed"), nil
 }
 
 type mockAEAD struct {

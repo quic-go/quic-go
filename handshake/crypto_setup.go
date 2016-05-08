@@ -161,10 +161,15 @@ func (h *CryptoSetup) handleInchoateCHLO(data []byte) ([]byte, error) {
 		return nil, err
 	}
 
+	certCompressed, err := h.scfg.GetCertCompressed("")
+	if err != nil {
+		return nil, err
+	}
+
 	var serverReply bytes.Buffer
 	WriteHandshakeMessage(&serverReply, TagREJ, map[Tag][]byte{
 		TagSCFG: h.scfg.Get(),
-		TagCERT: h.scfg.GetCertCompressed(""),
+		TagCERT: certCompressed,
 		TagSNO:  h.nonce,
 		TagPROF: proof,
 	})
@@ -184,7 +189,12 @@ func (h *CryptoSetup) handleCHLO(data []byte, cryptoData map[Tag][]byte) ([]byte
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
-	h.secureAEAD, err = h.keyDerivation(false, sharedSecret, nonce.Bytes(), h.connID, data, h.scfg.Get(), h.scfg.signer.GetCertUncompressed(""))
+	certUncompressed, err := h.scfg.signer.GetCertUncompressed("")
+	if err != nil {
+		return nil, err
+	}
+
+	h.secureAEAD, err = h.keyDerivation(false, sharedSecret, nonce.Bytes(), h.connID, data, h.scfg.Get(), certUncompressed)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +205,7 @@ func (h *CryptoSetup) handleCHLO(data []byte, cryptoData map[Tag][]byte) ([]byte
 	if err != nil {
 		return nil, err
 	}
-	h.forwardSecureAEAD, err = h.keyDerivation(true, ephermalSharedSecret, nonce.Bytes(), h.connID, data, h.scfg.Get(), h.scfg.signer.GetCertUncompressed(""))
+	h.forwardSecureAEAD, err = h.keyDerivation(true, ephermalSharedSecret, nonce.Bytes(), h.connID, data, h.scfg.Get(), certUncompressed)
 	if err != nil {
 		return nil, err
 	}

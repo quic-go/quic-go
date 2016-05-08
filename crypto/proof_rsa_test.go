@@ -25,7 +25,9 @@ var _ = Describe("ProofRsa", func() {
 		z.Write(cert)
 		z.Close()
 		kd := &rsaSigner{cert: &x509.Certificate{Raw: cert}}
-		Expect(kd.GetCertCompressed("")).To(Equal(append([]byte{
+		certCompressed, err := kd.GetCertCompressed("")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(certCompressed).To(Equal(append([]byte{
 			0x01, 0x00,
 			0x08, 0x00, 0x00, 0x00,
 		}, certZlib.Bytes()...)))

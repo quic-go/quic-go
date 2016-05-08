@@ -60,7 +60,7 @@ func (kd *rsaSigner) SignServerProof(sni string, chlo []byte, serverConfigData [
 }
 
 // GetCertCompressed gets the certificate in the format described by the QUIC crypto doc
-func (kd *rsaSigner) GetCertCompressed(sni string) []byte {
+func (kd *rsaSigner) GetCertCompressed(sni string) ([]byte, error) {
 	b := &bytes.Buffer{}
 	b.WriteByte(1) // Entry type compressed
 	b.WriteByte(0) // Entry type end_of_list
@@ -78,12 +78,12 @@ func (kd *rsaSigner) GetCertCompressed(sni string) []byte {
 	})
 	gz.Write(kd.cert.Raw)
 	gz.Close()
-	return b.Bytes()
+	return b.Bytes(), nil
 }
 
 // GetCertUncompressed gets the certificate in DER
-func (kd *rsaSigner) GetCertUncompressed(sni string) []byte {
-	return kd.cert.Raw
+func (kd *rsaSigner) GetCertUncompressed(sni string) ([]byte, error) {
+	return kd.cert.Raw, nil
 }
 
 func (kd *rsaSigner) getCertForSNI(sni string) (*tls.Certificate, error) {
