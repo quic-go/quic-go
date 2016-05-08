@@ -7,7 +7,6 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"crypto/tls"
-	"crypto/x509"
 
 	"github.com/lucas-clemente/quic-go/testdata"
 
@@ -24,7 +23,13 @@ var _ = Describe("ProofRsa", func() {
 		z.Write([]byte{0x04, 0x00, 0x00, 0x00})
 		z.Write(cert)
 		z.Close()
-		kd := &rsaSigner{cert: &x509.Certificate{Raw: cert}}
+		kd := &rsaSigner{
+			config: &tls.Config{
+				Certificates: []tls.Certificate{
+					tls.Certificate{Certificate: [][]byte{cert}},
+				},
+			},
+		}
 		certCompressed, err := kd.GetCertCompressed("")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(certCompressed).To(Equal(append([]byte{
@@ -34,6 +39,7 @@ var _ = Describe("ProofRsa", func() {
 	})
 
 	It("gives valid signatures", func() {
+		key := testdata.GetTLSConfig().Certificates[0].PrivateKey.(*rsa.PrivateKey).Public().(*rsa.PublicKey)
 		kd, err := NewRSASigner(testdata.GetTLSConfig())
 		Expect(err).ToNot(HaveOccurred())
 		signature, err := kd.SignServerProof("", []byte{'C', 'H', 'L', 'O'}, []byte{'S', 'C', 'F', 'G'})
@@ -41,7 +47,7 @@ var _ = Describe("ProofRsa", func() {
 		// Generated with:
 		// ruby -e 'require "digest"; p Digest::SHA256.digest("QUIC CHLO and server config signature\x00" + "\x20\x00\x00\x00" + Digest::SHA256.digest("CHLO") + "SCFG")'
 		data := []byte("W\xA6\xFC\xDE\xC7\xD2>c\xE6\xB5\xF6\tq\x9E|<~1\xA33\x01\xCA=\x19\xBD\xC1\xE4\xB0\xBA\x9B\x16%")
-		err = rsa.VerifyPSS(kd.(*rsaSigner).cert.PublicKey.(*rsa.PublicKey), crypto.SHA256, data, signature, &rsa.PSSOptions{SaltLength: 32})
+		err = rsa.VerifyPSS(key, crypto.SHA256, data, signature, &rsa.PSSOptions{SaltLength: 32})
 		Expect(err).ToNot(HaveOccurred())
 	})
 
