@@ -1,24 +1,57 @@
-# A QUIC implementation in native Go
+# A QUIC server implementation in pure Go
+
+<img src="docs/quic.png" width=303 height=124>
 
 [![Build Status](https://travis-ci.org/lucas-clemente/quic-go.svg?branch=master)](https://travis-ci.org/lucas-clemente/quic-go)
 [![Godoc Reference](https://godoc.org/github.com/lucas-clemente/quic-go?status.svg)](https://godoc.org/github.com/lucas-clemente/quic-go)
 
-<img src="docs/quic.png" width=303 height=124>
-
 This is very much an incomplete, buggy, unperformant and insecure work in progress :)
+
+## Features
+
+Done:
+
+- Basic protocol with support for QUIC version 32
+- HTTP/2 support
+- Crypto (RSA for signing, curve25519 for KEX, chacha20-poly1305 as cipher)
+- Basic loss detection (currently only fast retransmission) & retransmission
+- Flow Control when sending
+- Congestion control using cubic
+
+Major TODOs:
+
+- Security, especially DOS protections
+- Performance
+- Better packet loss detection
+- Support for QUIC versions 33 & 34
+- HTTP Uploads
+- Flow Control when receiving
+- Some special cases
+- Better error handling
+- Connection migration
+- Certificate compression
+- Public API cleanup
+- QUIC client
+- Integration into caddy (mostly to figure out the right server API)
+
+## Guides
 
 Installing deps:
 
     go get -t
 
+Running tests:
+
+    go test ./...
+
 Running the example server:
 
-    go run example/main.go
+    go run example/main.go -www /var/www/
 
 Using the `quic_client` from chromium:
 
-    quic_client --host=127.0.0.1 --port=6121 --v=1 https://quic.clemente.io
+    quic_client --quic-version=32 --host=127.0.0.1 --port=6121 --v=1 https://quic.clemente.io
 
-Using Chrome:
+Using Chrome (currently does not work due to version mismatch):
 
     /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --user-data-dir=/tmp/chrome --no-proxy-server --enable-quic --origin-to-force-quic-on=quic.clemente.io:443 --host-resolver-rules='MAP quic.clemente.io:443 127.0.0.1:6121' https://quic.clemente.io
