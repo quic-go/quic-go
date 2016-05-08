@@ -72,7 +72,7 @@ var _ = Describe("Server", func() {
 		})
 	})
 
-	It("setups and responds with version negotiation", func() {
+	PIt("setups and responds with version negotiation", func() {
 		server, err := NewServer(testdata.GetTLSConfig(), nil)
 		Expect(err).ToNot(HaveOccurred())
 		go func() {
@@ -101,7 +101,7 @@ var _ = Describe("Server", func() {
 		Expect(err2).ToNot(HaveOccurred())
 	})
 
-	It("setups and responds with error on invalid frame", func() {
+	PIt("setups and responds with error on invalid frame", func() {
 		server, err := NewServer(testdata.GetTLSConfig(), nil)
 		Expect(err).ToNot(HaveOccurred())
 		go func() {
@@ -126,7 +126,7 @@ var _ = Describe("Server", func() {
 		Expect(err2).ToNot(HaveOccurred())
 	})
 
-	It("closes and deletes sessions", func() {
+	PIt("closes and deletes sessions", func() {
 		server, err := NewServer(testdata.GetTLSConfig(), nil)
 		Expect(err).ToNot(HaveOccurred())
 		go func() {
