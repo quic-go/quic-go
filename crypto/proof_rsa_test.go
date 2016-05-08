@@ -24,7 +24,7 @@ var _ = Describe("ProofRsa", func() {
 		z.Write(cert)
 		z.Close()
 		kd := &rsaSigner{cert: &x509.Certificate{Raw: cert}}
-		Expect(kd.GetCertCompressed()).To(Equal(append([]byte{
+		Expect(kd.GetCertCompressed("")).To(Equal(append([]byte{
 			0x01, 0x00,
 			0x08, 0x00, 0x00, 0x00,
 		}, certZlib.Bytes()...)))
@@ -33,7 +33,7 @@ var _ = Describe("ProofRsa", func() {
 	It("gives valid signatures", func() {
 		kd, err := NewRSASigner(testdata.GetTLSConfig())
 		Expect(err).ToNot(HaveOccurred())
-		signature, err := kd.SignServerProof([]byte{'C', 'H', 'L', 'O'}, []byte{'S', 'C', 'F', 'G'})
+		signature, err := kd.SignServerProof("", []byte{'C', 'H', 'L', 'O'}, []byte{'S', 'C', 'F', 'G'})
 		Expect(err).ToNot(HaveOccurred())
 		// Generated with:
 		// ruby -e 'require "digest"; p Digest::SHA256.digest("QUIC CHLO and server config signature\x00" + "\x20\x00\x00\x00" + Digest::SHA256.digest("CHLO") + "SCFG")'

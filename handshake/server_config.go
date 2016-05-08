@@ -45,11 +45,11 @@ func (s *ServerConfig) Get() []byte {
 }
 
 // Sign the server config and CHLO with the server's keyData
-func (s *ServerConfig) Sign(chlo []byte) ([]byte, error) {
-	return s.signer.SignServerProof(chlo, s.Get())
+func (s *ServerConfig) Sign(sni string, chlo []byte) ([]byte, error) {
+	return s.signer.SignServerProof(sni, chlo, s.Get())
 }
 
 // GetCertCompressed returns the certificate data
-func (s *ServerConfig) GetCertCompressed() []byte {
-	return s.signer.GetCertCompressed()
+func (s *ServerConfig) GetCertCompressed(sni string) []byte {
+	return s.signer.GetCertCompressed(sni)
 }

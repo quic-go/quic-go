@@ -33,16 +33,16 @@ type mockSigner struct {
 	gotCHLO bool
 }
 
-func (s *mockSigner) SignServerProof(chlo []byte, serverConfigData []byte) ([]byte, error) {
+func (s *mockSigner) SignServerProof(sni string, chlo []byte, serverConfigData []byte) ([]byte, error) {
 	if len(chlo) > 0 {
 		s.gotCHLO = true
 	}
 	return []byte("proof"), nil
 }
-func (*mockSigner) GetCertCompressed() []byte {
+func (*mockSigner) GetCertCompressed(sni string) []byte {
 	return []byte("certcompressed")
 }
-func (*mockSigner) GetCertUncompressed() []byte {
+func (*mockSigner) GetCertUncompressed(sni string) []byte {
 	return []byte("certuncompressed")
 }
 

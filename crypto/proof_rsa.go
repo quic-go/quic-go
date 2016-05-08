@@ -42,7 +42,7 @@ func NewRSASigner(tlsConfig *tls.Config) (Signer, error) {
 }
 
 // SignServerProof signs CHLO and server config for use in the server proof
-func (kd *rsaSigner) SignServerProof(chlo []byte, serverConfigData []byte) ([]byte, error) {
+func (kd *rsaSigner) SignServerProof(sni string, chlo []byte, serverConfigData []byte) ([]byte, error) {
 	hash := sha256.New()
 	if len(chlo) > 0 {
 		// Version >= 31
@@ -58,7 +58,7 @@ func (kd *rsaSigner) SignServerProof(chlo []byte, serverConfigData []byte) ([]by
 }
 
 // GetCertCompressed gets the certificate in the format described by the QUIC crypto doc
-func (kd *rsaSigner) GetCertCompressed() []byte {
+func (kd *rsaSigner) GetCertCompressed(sni string) []byte {
 	b := &bytes.Buffer{}
 	b.WriteByte(1) // Entry type compressed
 	b.WriteByte(0) // Entry type end_of_list
@@ -80,6 +80,6 @@ func (kd *rsaSigner) GetCertCompressed() []byte {
 }
 
 // GetCertUncompressed gets the certificate in DER
-func (kd *rsaSigner) GetCertUncompressed() []byte {
+func (kd *rsaSigner) GetCertUncompressed(sni string) []byte {
 	return kd.cert.Raw
 }
