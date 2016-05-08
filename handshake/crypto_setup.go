@@ -73,6 +73,8 @@ func (h *CryptoSetup) HandleCryptoStream() error {
 		}
 		chloData := cachingReader.Get()
 
+		utils.Infof("Got crypto message:\n%s", printHandshakeMessage(cryptoData))
+
 		var reply []byte
 		if !h.isInchoateCHLO(cryptoData) {
 			// We have a CHLO with a proper server config ID, do a 0-RTT handshake

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"sort"
 
@@ -85,4 +86,21 @@ func WriteHandshakeMessage(b *bytes.Buffer, messageTag Tag, data map[Tag][]byte)
 
 	// Now we write the index data for real
 	copy(b.Bytes()[indexStart:], indexData)
+}
+
+func printHandshakeMessage(data map[Tag][]byte) string {
+	var res string
+	for k, v := range data {
+		if k == TagPAD {
+			continue
+		}
+		res += fmt.Sprintf("\t%s: %#v\n", tagToString(k), string(v))
+	}
+	return res
+}
+
+func tagToString(tag Tag) string {
+	b := make([]byte, 4)
+	binary.LittleEndian.PutUint32(b, uint32(tag))
+	return string(b)
 }
