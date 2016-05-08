@@ -6,6 +6,7 @@ import (
 	"compress/zlib"
 	"crypto"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 
 	"github.com/lucas-clemente/quic-go/testdata"
@@ -40,5 +41,58 @@ var _ = Describe("ProofRsa", func() {
 		data := []byte("W\xA6\xFC\xDE\xC7\xD2>c\xE6\xB5\xF6\tq\x9E|<~1\xA33\x01\xCA=\x19\xBD\xC1\xE4\xB0\xBA\x9B\x16%")
 		err = rsa.VerifyPSS(kd.(*rsaSigner).cert.PublicKey.(*rsa.PublicKey), crypto.SHA256, data, signature, &rsa.PSSOptions{SaltLength: 32})
 		Expect(err).ToNot(HaveOccurred())
+	})
+
+	Context("retrieving certificate", func() {
+		var (
+			signer *rsaSigner
+			config *tls.Config
+			cert   tls.Certificate
+		)
+
+		BeforeEach(func() {
+			cert = testdata.GetCertificate()
+			config = &tls.Config{}
+			signer = &rsaSigner{config: config}
+		})
+
+		It("uses first certificate in config.Certificates", func() {
+			config.Certificates = []tls.Certificate{cert}
+			cert, err := signer.getCertForSNI("")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cert.PrivateKey).ToNot(BeNil())
+			Expect(cert.Certificate[0]).ToNot(BeNil())
+		})
+
+		It("uses NameToCertificate entries", func() {
+			config.NameToCertificate = map[string]*tls.Certificate{
+				"quic.clemente.io": &cert,
+			}
+			cert, err := signer.getCertForSNI("quic.clemente.io")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cert.PrivateKey).ToNot(BeNil())
+			Expect(cert.Certificate[0]).ToNot(BeNil())
+		})
+
+		It("uses NameToCertificate entries with wildcard", func() {
+			config.NameToCertificate = map[string]*tls.Certificate{
+				"*.clemente.io": &cert,
+			}
+			cert, err := signer.getCertForSNI("quic.clemente.io")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cert.PrivateKey).ToNot(BeNil())
+			Expect(cert.Certificate[0]).ToNot(BeNil())
+		})
+
+		It("uses GetCertificate", func() {
+			config.GetCertificate = func(clientHello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+				Expect(clientHello.ServerName).To(Equal("quic.clemente.io"))
+				return &cert, nil
+			}
+			cert, err := signer.getCertForSNI("quic.clemente.io")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cert.PrivateKey).ToNot(BeNil())
+			Expect(cert.Certificate[0]).ToNot(BeNil())
+		})
 	})
 })

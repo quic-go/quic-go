@@ -11,14 +11,16 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"strings"
 
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // rsaSigner stores a key and a certificate for the server proof
 type rsaSigner struct {
-	key  *rsa.PrivateKey
-	cert *x509.Certificate
+	key    *rsa.PrivateKey
+	cert   *x509.Certificate
+	config *tls.Config
 }
 
 // NewRSASigner loads the key and cert from files
@@ -38,7 +40,7 @@ func NewRSASigner(tlsConfig *tls.Config) (Signer, error) {
 		return nil, errors.New("Only RSA private keys are supported for now")
 	}
 
-	return &rsaSigner{key: rsaKey, cert: x509Cert}, nil
+	return &rsaSigner{key: rsaKey, cert: x509Cert, config: tlsConfig}, nil
 }
 
 // SignServerProof signs CHLO and server config for use in the server proof
@@ -82,4 +84,29 @@ func (kd *rsaSigner) GetCertCompressed(sni string) []byte {
 // GetCertUncompressed gets the certificate in DER
 func (kd *rsaSigner) GetCertUncompressed(sni string) []byte {
 	return kd.cert.Raw
+}
+
+func (kd *rsaSigner) getCertForSNI(sni string) (*tls.Certificate, error) {
+	if kd.config.GetCertificate != nil {
+		cert, err := kd.config.GetCertificate(&tls.ClientHelloInfo{ServerName: sni})
+		if err != nil {
+			return nil, err
+		}
+		if cert != nil {
+			return cert, nil
+		}
+	}
+	if len(kd.config.NameToCertificate) != 0 {
+		if cert, ok := kd.config.NameToCertificate[sni]; ok {
+			return cert, nil
+		}
+		wildcardSNI := "*" + strings.TrimLeftFunc(sni, func(r rune) bool { return r != '.' })
+		if cert, ok := kd.config.NameToCertificate[wildcardSNI]; ok {
+			return cert, nil
+		}
+	}
+	if len(kd.config.Certificates) != 0 {
+		return &kd.config.Certificates[0], nil
+	}
+	return nil, errors.New("no matching certificate found")
 }
