@@ -63,7 +63,8 @@ type Session struct {
 	// representation, and sent back in public reset packets
 	lastRcvdPacketNumber protocol.PacketNumber
 
-	rttStats congestion.RTTStats
+	rttStats   congestion.RTTStats
+	congestion congestion.SendAlgorithm
 }
 
 // NewSession makes a new session
@@ -96,6 +97,14 @@ func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol
 
 	session.packer = &packetPacker{aead: cryptoSetup, connectionParametersManager: session.connectionParametersManager, connectionID: connectionID}
 	session.unpacker = &packetUnpacker{aead: cryptoSetup}
+
+	session.congestion = congestion.NewCubicSender(
+		congestion.DefaultClock{},
+		&session.rttStats,
+		false, /* don't use reno since chromium doesn't (why?) */
+		protocol.InitialCongestionWindow,
+		protocol.DefaultMaxCongestionWindow,
+	)
 
 	return session
 }
@@ -175,13 +184,9 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 			utils.Debugf("\t<- &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: %d}", frame.StreamID, frame.FinBit, frame.Offset)
 			err = s.handleStreamFrame(frame)
 		case *frames.AckFrame:
-			var duration time.Duration
-			duration, _, _, err = s.sentPacketHandler.ReceivedAck(frame)
-			s.rttStats.UpdateRTT(duration, frame.DelayTime, time.Now())
-			utils.Debugf("\t<- %#v", frame)
-			utils.Debugf("\tEstimated RTT: %dms", s.rttStats.SmoothedRTT()/time.Millisecond)
-			// ToDo: send right error in ConnectionClose frame
+			err = s.handleAckFrame(frame)
 		case *frames.ConnectionCloseFrame:
+			// ToDo: send right error in ConnectionClose frame
 			utils.Debugf("\t<- %#v", frame)
 			s.Close(nil, false)
 		case *frames.StopWaitingFrame:
@@ -266,6 +271,37 @@ func (s *Session) handleRstStreamFrame(frame *frames.RstStreamFrame) error {
 		return errRstStreamOnInvalidStream
 	}
 	str.RegisterError(fmt.Errorf("RST_STREAM received with code %d", frame.ErrorCode))
+	return nil
+}
+
+func (s *Session) handleAckFrame(frame *frames.AckFrame) error {
+	duration, acked, lost, err := s.sentPacketHandler.ReceivedAck(frame)
+	if err != nil {
+		return err
+	}
+
+	// TODO: Don't always update RTT
+	s.rttStats.UpdateRTT(duration, frame.DelayTime, time.Now())
+
+	cAcked := make(congestion.PacketVector, len(acked))
+	for i, v := range acked {
+		cAcked[i].Number = v.PacketNumber
+		cAcked[i].Length = v.Length
+	}
+	cLost := make(congestion.PacketVector, len(lost))
+	for i, v := range lost {
+		cLost[i].Number = v.PacketNumber
+		cLost[i].Length = v.Length
+	}
+	s.congestion.OnCongestionEvent(
+		true, /* rtt updated */
+		s.sentPacketHandler.BytesInFlight(),
+		cAcked,
+		cLost,
+	)
+
+	utils.Debugf("\t<- %#v", frame)
+	utils.Debugf("\tEstimated RTT: %dms", s.rttStats.SmoothedRTT()/time.Millisecond)
 	return nil
 }
 
@@ -367,6 +403,14 @@ func (s *Session) sendPacket() error {
 		return err
 	}
 
+	s.congestion.OnPacketSent(
+		time.Now(),
+		s.sentPacketHandler.BytesInFlight(),
+		packet.number,
+		protocol.ByteCount(len(packet.raw)),
+		true, /* TODO: is retransmittable */
+	)
+
 	s.stopWaitingManager.SentStopWaitingWithPacket(packet.number)
 
 	utils.Debugf("-> Sending packet 0x%x (%d bytes)", packet.number, len(packet.raw))
@@ -452,5 +496,5 @@ func (s *Session) scheduleSending() {
 }
 
 func (s *Session) congestionAllowsSending() bool {
-	return s.sentPacketHandler.BytesInFlight() < 100*protocol.DefaultTCPMSS
+	return s.sentPacketHandler.BytesInFlight() <= s.congestion.GetCongestionWindow()
 }
