@@ -125,7 +125,7 @@ var _ = Describe("Crypto setup", func() {
 
 	Context("when responding to client messages", func() {
 		It("generates REJ messages", func() {
-			response, err := cs.handleInchoateCHLO([]byte("chlo"))
+			response, err := cs.handleInchoateCHLO("", []byte("chlo"))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(response).To(HavePrefix("REJ"))
 			Expect(response).To(ContainSubstring("certcompressed"))
@@ -134,7 +134,7 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		It("generates SHLO messages", func() {
-			response, err := cs.handleCHLO([]byte("chlo-data"), map[Tag][]byte{
+			response, err := cs.handleCHLO("", []byte("chlo-data"), map[Tag][]byte{
 				TagPUBS: []byte("pubs-c"),
 			})
 			Expect(err).ToNot(HaveOccurred())
@@ -151,16 +151,18 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		It("handles long handshake", func() {
-			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{})
-			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{TagSCID: scfg.ID, TagSNO: cs.nonce})
-			cs.HandleCryptoStream()
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{TagSNI: []byte("quic.clemente.io")})
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{TagSCID: scfg.ID, TagSNO: cs.nonce, TagSNI: []byte("quic.clemente.io")})
+			err := cs.HandleCryptoStream()
+			Expect(err).NotTo(HaveOccurred())
 			Expect(stream.dataWritten.Bytes()).To(HavePrefix("REJ"))
 			Expect(stream.dataWritten.Bytes()).To(ContainSubstring("SHLO"))
 		})
 
 		It("handles 0-RTT handshake", func() {
-			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{TagSCID: scfg.ID, TagSNO: cs.nonce})
-			cs.HandleCryptoStream()
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{TagSCID: scfg.ID, TagSNO: cs.nonce, TagSNI: []byte("quic.clemente.io")})
+			err := cs.HandleCryptoStream()
+			Expect(err).NotTo(HaveOccurred())
 			Expect(stream.dataWritten.Bytes()).To(HavePrefix("SHLO"))
 			Expect(stream.dataWritten.Bytes()).ToNot(ContainSubstring("REJ"))
 		})
@@ -178,11 +180,17 @@ var _ = Describe("Crypto setup", func() {
 		})
 	})
 
+	It("errors without SNI", func() {
+		WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{})
+		err := cs.HandleCryptoStream()
+		Expect(err).To(MatchError("expected SNI in handshake map"))
+	})
+
 	Context("escalating crypto", func() {
 		foobarFNVSigned := []byte{0x18, 0x6f, 0x44, 0xba, 0x97, 0x35, 0xd, 0x6f, 0xbf, 0x64, 0x3c, 0x79, 0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72}
 
 		doCHLO := func() {
-			_, err := cs.handleCHLO([]byte("chlo-data"), map[Tag][]byte{TagPUBS: []byte("pubs-c")})
+			_, err := cs.handleCHLO("", []byte("chlo-data"), map[Tag][]byte{TagPUBS: []byte("pubs-c")})
 			Expect(err).ToNot(HaveOccurred())
 		}
 

@@ -75,10 +75,19 @@ func (h *CryptoSetup) HandleCryptoStream() error {
 
 		utils.Infof("Got crypto message:\n%s", printHandshakeMessage(cryptoData))
 
+		sniSlice, ok := cryptoData[TagSNI]
+		if !ok {
+			return errors.New("expected SNI in handshake map")
+		}
+		sni := string(sniSlice)
+		if sni == "" {
+			return errors.New("expected SNI in handshake map")
+		}
+
 		var reply []byte
 		if !h.isInchoateCHLO(cryptoData) {
 			// We have a CHLO with a proper server config ID, do a 0-RTT handshake
-			reply, err = h.handleCHLO(chloData, cryptoData)
+			reply, err = h.handleCHLO(sni, chloData, cryptoData)
 			if err != nil {
 				return err
 			}
@@ -90,7 +99,7 @@ func (h *CryptoSetup) HandleCryptoStream() error {
 		}
 
 		// We have an inchoate or non-matching CHLO, we now send a rejection
-		reply, err = h.handleInchoateCHLO(chloData)
+		reply, err = h.handleInchoateCHLO(sni, chloData)
 		if err != nil {
 			return err
 		}
@@ -155,13 +164,13 @@ func (h *CryptoSetup) isInchoateCHLO(cryptoData map[Tag][]byte) bool {
 	return false
 }
 
-func (h *CryptoSetup) handleInchoateCHLO(data []byte) ([]byte, error) {
-	proof, err := h.scfg.Sign("", data)
+func (h *CryptoSetup) handleInchoateCHLO(sni string, data []byte) ([]byte, error) {
+	proof, err := h.scfg.Sign(sni, data)
 	if err != nil {
 		return nil, err
 	}
 
-	certCompressed, err := h.scfg.GetCertCompressed("")
+	certCompressed, err := h.scfg.GetCertCompressed(sni)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +185,7 @@ func (h *CryptoSetup) handleInchoateCHLO(data []byte) ([]byte, error) {
 	return serverReply.Bytes(), nil
 }
 
-func (h *CryptoSetup) handleCHLO(data []byte, cryptoData map[Tag][]byte) ([]byte, error) {
+func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]byte) ([]byte, error) {
 	// We have a CHLO matching our server config, we can continue with the 0-RTT handshake
 	sharedSecret, err := h.scfg.kex.CalculateSharedKey(cryptoData[TagPUBS])
 	if err != nil {
@@ -189,7 +198,7 @@ func (h *CryptoSetup) handleCHLO(data []byte, cryptoData map[Tag][]byte) ([]byte
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
-	certUncompressed, err := h.scfg.signer.GetCertUncompressed("")
+	certUncompressed, err := h.scfg.signer.GetCertUncompressed(sni)
 	if err != nil {
 		return nil, err
 	}
