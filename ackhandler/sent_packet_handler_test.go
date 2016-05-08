@@ -21,6 +21,14 @@ var _ = Describe("SentPacketHandler", func() {
 		}
 	})
 
+	BeforeEach(func() {
+		retransmissionThreshold = 1
+	})
+
+	AfterEach(func() {
+		retransmissionThreshold = 3
+	})
+
 	Context("SentPacket", func() {
 		It("accepts two consecutive packets", func() {
 			entropy := EntropyAccumulator(0)
@@ -343,8 +351,6 @@ var _ = Describe("SentPacketHandler", func() {
 		var packets []*Packet
 
 		BeforeEach(func() {
-			retransmissionThreshold = 1
-
 			packets = []*Packet{
 				&Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
 				&Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
