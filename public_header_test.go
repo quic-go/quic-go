@@ -86,7 +86,7 @@ var _ = Describe("Public Header", func() {
 				PacketNumber: 2,
 			}
 			publicHeader.WritePublicHeader(b)
-			Expect(b.Bytes()).To(Equal([]byte{0x38, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 2, 0, 0, 0, 0, 0}))
+			Expect(b.Bytes()).To(Equal([]byte{0x3c, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 2, 0, 0, 0, 0, 0}))
 		})
 
 		It("sets the Version Flag", func() {

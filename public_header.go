@@ -30,7 +30,7 @@ type PublicHeader struct {
 
 // WritePublicHeader writes a public header
 func (h *PublicHeader) WritePublicHeader(b *bytes.Buffer) error {
-	publicFlagByte := uint8(0x30)
+	publicFlagByte := uint8(0x34)
 	if h.VersionFlag && h.ResetFlag {
 		return errResetAndVersionFlagSet
 	}
