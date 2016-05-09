@@ -50,7 +50,10 @@ func (h *PublicHeader) WritePublicHeader(b *bytes.Buffer) error {
 		utils.WriteUint64(b, uint64(h.ConnectionID))
 	}
 
-	utils.WriteUint48(b, uint64(h.PacketNumber)) // TODO: Send shorter packet number if possible
+	if !h.ResetFlag && !h.VersionFlag {
+		utils.WriteUint48(b, uint64(h.PacketNumber)) // TODO: Send shorter packet number if possible
+	}
+
 	return nil
 }
 

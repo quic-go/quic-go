@@ -97,6 +97,8 @@ var _ = Describe("Public Header", func() {
 				PacketNumber: 2,
 			}
 			publicHeader.WritePublicHeader(b)
+			// must be the first assertion
+			Expect(b.Len()).To(Equal(1 + 8)) // 1 FlagByte + 8 ConnectionID
 			firstByte, _ := b.ReadByte()
 			Expect(firstByte & 0x01).To(Equal(uint8(1)))
 		})
@@ -109,6 +111,8 @@ var _ = Describe("Public Header", func() {
 				PacketNumber: 2,
 			}
 			publicHeader.WritePublicHeader(b)
+			// must be the first assertion
+			Expect(b.Len()).To(Equal(1 + 8)) // 1 FlagByte + 8 ConnectionID
 			firstByte, _ := b.ReadByte()
 			Expect((firstByte & 0x02) >> 1).To(Equal(uint8(1)))
 		})
