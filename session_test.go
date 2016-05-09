@@ -256,21 +256,20 @@ var _ = Describe("Session", func() {
 		)
 
 		BeforeEach(func() {
-			time.Sleep(1 * time.Millisecond) // Wait for old goroutines to finish
-			nGoRoutinesBefore = runtime.NumGoroutine()
+			time.Sleep(10 * time.Millisecond) // Wait for old goroutines to finish
 			signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 			Expect(err).ToNot(HaveOccurred())
 			scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
+			nGoRoutinesBefore = runtime.NumGoroutine()
 			session = NewSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) { closed = true }).(*Session)
 			go session.Run()
-			Expect(runtime.NumGoroutine()).To(Equal(nGoRoutinesBefore + 2))
+			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore + 2))
 		})
 
 		It("shuts down without error", func() {
 			session.Close(nil, true)
 			Expect(closed).To(BeTrue())
-			time.Sleep(1 * time.Millisecond)
-			Expect(runtime.NumGoroutine()).To(Equal(nGoRoutinesBefore))
+			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore))
 		})
 
 		It("closes streams with proper error", func() {
@@ -279,8 +278,7 @@ var _ = Describe("Session", func() {
 			Expect(err).NotTo(HaveOccurred())
 			session.Close(testErr, true)
 			Expect(closed).To(BeTrue())
-			time.Sleep(1 * time.Millisecond)
-			Expect(runtime.NumGoroutine()).To(Equal(nGoRoutinesBefore))
+			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore))
 			n, err := s.Read([]byte{0})
 			Expect(n).To(BeZero())
 			Expect(err).To(Equal(testErr))
@@ -371,8 +369,7 @@ var _ = Describe("Session", func() {
 			Data:     []byte("4242\x00\x00\x00\x00"),
 		})
 		Expect(err).NotTo(HaveOccurred())
-		time.Sleep(time.Millisecond)
-		Expect(session.closed).To(BeTrue())
+		Eventually(func() bool { return session.closed }).Should(BeTrue())
 		_, err = s.Write([]byte{})
 		Expect(err).To(MatchError("CryptoSetup: expected CHLO"))
 	})
