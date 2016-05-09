@@ -11,7 +11,7 @@ This is very much an incomplete, buggy, unperformant and insecure work in progre
 
 Done:
 
-- Basic protocol with support for QUIC version 32
+- Basic protocol with support for QUIC version 31 and 32
 - HTTP/2 support
 - Crypto (RSA for signing, curve25519 for KEX, chacha20-poly1305 as cipher)
 - Basic loss detection (currently only fast retransmission) & retransmission
@@ -52,7 +52,7 @@ Using the `quic_client` from chromium:
 
     quic_client --quic-version=32 --host=127.0.0.1 --port=6121 --v=1 https://quic.clemente.io
 
-Using Chrome (currently does not work due to version mismatch):
+Using Chrome:
 
     /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --user-data-dir=/tmp/chrome --no-proxy-server --enable-quic --origin-to-force-quic-on=quic.clemente.io:443 --host-resolver-rules='MAP quic.clemente.io:443 127.0.0.1:6121' https://quic.clemente.io
 
