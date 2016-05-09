@@ -83,6 +83,11 @@ func (f *AckFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, pa
 		if rangeCounter != uint8(numRanges) {
 			panic("Inconsistent number of NACK ranges written.")
 		}
+
+		// TODO: Remove once we drop support for <32
+		if version < protocol.VersionNumber(32) {
+			b.WriteByte(0)
+		}
 	}
 
 	return nil
@@ -115,7 +120,7 @@ func (f *AckFrame) GetHighestInOrderPacketNumber() protocol.PacketNumber {
 }
 
 // ParseAckFrame reads an ACK frame
-func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
+func ParseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, error) {
 	frame := &AckFrame{}
 
 	typeByte, err := r.ReadByte()
@@ -238,6 +243,14 @@ func ParseAckFrame(r *bytes.Reader) (*AckFrame, error) {
 				}
 				nackRange.LastPacketNumber = protocol.PacketNumber(uint64(nackRange.FirstPacketNumber) + uint64(rangeLength))
 				frame.NackRanges = append(frame.NackRanges, nackRange)
+			}
+
+			// TODO: Remove once we drop support for versions <32
+			if version < protocol.VersionNumber(32) {
+				_, err = r.ReadByte()
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	}

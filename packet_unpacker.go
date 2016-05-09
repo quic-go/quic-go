@@ -18,7 +18,8 @@ type unpackedPacket struct {
 }
 
 type packetUnpacker struct {
-	aead crypto.AEAD
+	version protocol.VersionNumber
+	aead    crypto.AEAD
 }
 
 func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, publicHeader *PublicHeader, r *bytes.Reader) (*unpackedPacket, error) {
@@ -48,7 +49,7 @@ ReadLoop:
 		if typeByte&0x80 == 0x80 {
 			frame, err = frames.ParseStreamFrame(r)
 		} else if typeByte&0xc0 == 0x40 {
-			frame, err = frames.ParseAckFrame(r)
+			frame, err = frames.ParseAckFrame(r, u.version)
 		} else if typeByte&0xe0 == 0x20 {
 			err = errors.New("unimplemented: CONGESTION_FEEDBACK")
 		} else {
