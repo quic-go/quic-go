@@ -129,9 +129,9 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 	return nil
 }
 
-func (s *Server) closeCallback(session *Session) {
+func (s *Server) closeCallback(id protocol.ConnectionID) {
 	s.sessionsMutex.Lock()
-	s.sessions[session.connectionID] = nil
+	s.sessions[id] = nil
 	s.sessionsMutex.Unlock()
 }
 

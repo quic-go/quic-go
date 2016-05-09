@@ -94,7 +94,7 @@ var _ = Describe("Session", func() {
 			streamCallback:              func(*Session, utils.Stream) { callbackCalled = true },
 			connectionParametersManager: handshake.NewConnectionParamatersManager(),
 			closeChan:                   make(chan struct{}, 1),
-			closeCallback:               func(*Session) {},
+			closeCallback:               func(protocol.ConnectionID) {},
 			packer:                      &packetPacker{aead: &crypto.NullAEAD{}},
 		}
 	})
@@ -261,7 +261,7 @@ var _ = Describe("Session", func() {
 			signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 			Expect(err).ToNot(HaveOccurred())
 			scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
-			session = NewSession(conn, 0, 0, scfg, nil, func(*Session) { closed = true }).(*Session)
+			session = NewSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) { closed = true }).(*Session)
 			go session.Run()
 			Expect(runtime.NumGoroutine()).To(Equal(nGoRoutinesBefore + 2))
 		})
@@ -332,7 +332,7 @@ var _ = Describe("Session", func() {
 			signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 			Expect(err).ToNot(HaveOccurred())
 			scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
-			session = NewSession(conn, 0, 0, scfg, nil, func(*Session) {}).(*Session)
+			session = NewSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) {}).(*Session)
 		})
 
 		It("sends after queuing a stream frame", func() {
@@ -363,7 +363,7 @@ var _ = Describe("Session", func() {
 		signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 		Expect(err).ToNot(HaveOccurred())
 		scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
-		session = NewSession(conn, 0, 0, scfg, nil, func(*Session) {}).(*Session)
+		session = NewSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) {}).(*Session)
 		s, err := session.NewStream(3)
 		Expect(err).NotTo(HaveOccurred())
 		err = session.handleStreamFrame(&frames.StreamFrame{
@@ -415,7 +415,7 @@ var _ = Describe("Session", func() {
 			signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 			Expect(err).ToNot(HaveOccurred())
 			scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
-			session = NewSession(conn, 0, 0, scfg, nil, func(*Session) {}).(*Session)
+			session = NewSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) {}).(*Session)
 
 			cong = &mockCongestion{}
 			session.congestion = cong

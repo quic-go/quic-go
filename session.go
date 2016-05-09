@@ -31,7 +31,7 @@ var (
 type StreamCallback func(*Session, utils.Stream)
 
 // CloseCallback is called when a session is closed
-type CloseCallback func(*Session)
+type CloseCallback func(id protocol.ConnectionID)
 
 // A Session is a QUIC session
 type Session struct {
@@ -313,7 +313,7 @@ func (s *Session) Close(e error, sendConnectionClose bool) error {
 	s.closed = true
 	s.closeChan <- struct{}{}
 
-	s.closeCallback(s)
+	s.closeCallback(s.connectionID)
 
 	if !sendConnectionClose {
 		return nil
