@@ -55,3 +55,15 @@ Using the `quic_client` from chromium:
 Using Chrome (currently does not work due to version mismatch):
 
     /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --user-data-dir=/tmp/chrome --no-proxy-server --enable-quic --origin-to-force-quic-on=quic.clemente.io:443 --host-resolver-rules='MAP quic.clemente.io:443 127.0.0.1:6121' https://quic.clemente.io
+
+## Usage
+
+See the [example server](example/main.go) or our [fork](https://github.com/lucas-clemente/caddy) of caddy. Starting a QUIC server is very similar to the standard lib http in go:
+
+```go
+http.Handle("/", http.FileServer(http.Dir(wwwDir)))
+
+server, _ := h2quic.NewServer(tlsConfig)
+
+server.ListenAndServe("localhost:4242", nil /* use http.DefaultServeMux */)
+```
