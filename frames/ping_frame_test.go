@@ -3,6 +3,7 @@ package frames
 import (
 	"bytes"
 
+	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -21,7 +22,7 @@ var _ = Describe("PingFrame", func() {
 		It("writes a sample frame", func() {
 			b := &bytes.Buffer{}
 			frame := PingFrame{}
-			frame.Write(b, 10, 6)
+			frame.Write(b, 10, protocol.PacketNumberLen6)
 			Expect(b.Bytes()).To(Equal([]byte{0x07}))
 		})
 

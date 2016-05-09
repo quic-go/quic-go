@@ -24,7 +24,7 @@ type PublicHeader struct {
 	TruncateConnectionID bool
 	VersionNumber        protocol.VersionNumber
 	QuicVersion          uint32
-	PacketNumberLen      uint8
+	PacketNumberLen      protocol.PacketNumberLen
 	PacketNumber         protocol.PacketNumber
 }
 
@@ -77,13 +77,13 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 
 	switch publicFlagByte & 0x30 {
 	case 0x30:
-		header.PacketNumberLen = 6
+		header.PacketNumberLen = protocol.PacketNumberLen6
 	case 0x20:
-		header.PacketNumberLen = 4
+		header.PacketNumberLen = protocol.PacketNumberLen4
 	case 0x10:
-		header.PacketNumberLen = 2
+		header.PacketNumberLen = protocol.PacketNumberLen2
 	case 0x00:
-		header.PacketNumberLen = 1
+		header.PacketNumberLen = protocol.PacketNumberLen1
 	}
 
 	// Connection ID
@@ -107,7 +107,7 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	}
 
 	// Packet number
-	packetNumber, err := utils.ReadUintN(b, header.PacketNumberLen)
+	packetNumber, err := utils.ReadUintN(b, uint8(header.PacketNumberLen))
 	if err != nil {
 		return nil, err
 	}

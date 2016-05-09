@@ -11,13 +11,13 @@ import (
 
 // Tests taken and extended from chrome
 var _ = Describe("packet number calculation", func() {
-	check := func(length uint8, expected, last uint64) {
+	check := func(length protocol.PacketNumberLen, expected, last uint64) {
 		epoch := uint64(1) << (length * 8)
 		epochMask := epoch - 1
 		wirePacketNumber := expected & epochMask
 		Expect(calculatePacketNumber(length, protocol.PacketNumber(last), protocol.PacketNumber(wirePacketNumber))).To(Equal(protocol.PacketNumber(expected)))
 	}
-	for _, length := range []uint8{1, 2, 4, 6} {
+	for _, length := range []protocol.PacketNumberLen{protocol.PacketNumberLen1, protocol.PacketNumberLen2, protocol.PacketNumberLen4, protocol.PacketNumberLen6} {
 		Context(fmt.Sprintf("with %d bytes", length), func() {
 			epoch := uint64(1) << (length * 8)
 			epochMask := epoch - 1

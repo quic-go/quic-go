@@ -14,7 +14,7 @@ type WindowUpdateFrame struct {
 }
 
 //Write writes a RST_STREAM frame
-func (f *WindowUpdateFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, packetNumberLen uint8) error {
+func (f *WindowUpdateFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, packetNumberLen protocol.PacketNumberLen) error {
 	panic("WindowUpdateFrame: Write not yet implemented")
 }
 

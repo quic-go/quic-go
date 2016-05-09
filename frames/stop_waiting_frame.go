@@ -14,7 +14,7 @@ type StopWaitingFrame struct {
 	LeastUnacked protocol.PacketNumber
 }
 
-func (f *StopWaitingFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, packetNumberLen uint8) error {
+func (f *StopWaitingFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, packetNumberLen protocol.PacketNumberLen) error {
 	// packetNumber is the packet number of the packet that this StopWaitingFrame will be sent with
 	typeByte := uint8(0x06)
 	b.WriteByte(typeByte)
@@ -36,7 +36,7 @@ func (f *StopWaitingFrame) MinLength() int {
 }
 
 // ParseStopWaitingFrame parses a StopWaiting frame
-func ParseStopWaitingFrame(r *bytes.Reader, packetNumber protocol.PacketNumber, packetNumberLen uint8) (*StopWaitingFrame, error) {
+func ParseStopWaitingFrame(r *bytes.Reader, packetNumber protocol.PacketNumber, packetNumberLen protocol.PacketNumberLen) (*StopWaitingFrame, error) {
 	frame := &StopWaitingFrame{}
 
 	// read the TypeByte
@@ -50,7 +50,7 @@ func ParseStopWaitingFrame(r *bytes.Reader, packetNumber protocol.PacketNumber, 
 		return nil, err
 	}
 
-	leastUnackedDelta, err := utils.ReadUintN(r, packetNumberLen)
+	leastUnackedDelta, err := utils.ReadUintN(r, uint8(packetNumberLen))
 	if err != nil {
 		return nil, err
 	}

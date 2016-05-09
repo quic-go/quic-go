@@ -2,8 +2,8 @@ package quic
 
 import "github.com/lucas-clemente/quic-go/protocol"
 
-func calculatePacketNumber(packetNumberLength uint8, lastPacketNumber protocol.PacketNumber, wirePacketNumber protocol.PacketNumber) protocol.PacketNumber {
-	epochDelta := protocol.PacketNumber(1) << (packetNumberLength * 8)
+func calculatePacketNumber(packetNumberLength protocol.PacketNumberLen, lastPacketNumber protocol.PacketNumber, wirePacketNumber protocol.PacketNumber) protocol.PacketNumber {
+	epochDelta := protocol.PacketNumber(1) << (uint8(packetNumberLength) * 8)
 	epoch := lastPacketNumber & ^(epochDelta - 1)
 	prevEpochBegin := epoch - epochDelta
 	nextEpochBegin := epoch + epochDelta
