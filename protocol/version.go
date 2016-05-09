@@ -11,7 +11,7 @@ type VersionNumber int
 
 // SupportedVersions lists the versions that the server supports
 var SupportedVersions = []VersionNumber{
-	32,
+	31, 32,
 }
 
 // SupportedVersionsAsTags is needed for the SHLO crypto message

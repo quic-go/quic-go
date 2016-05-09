@@ -50,7 +50,7 @@ var _ = Describe("Packet unpacker", func() {
 			StreamID: 1,
 			Data:     []byte("foobar"),
 		}
-		err := f.Write(buf, 3, 6)
+		err := f.Write(buf, 3, 6, 0)
 		Expect(err).ToNot(HaveOccurred())
 		setReader(buf.Bytes())
 		packet, err := unpacker.Unpack(hdrBin, hdr, r)
@@ -63,7 +63,7 @@ var _ = Describe("Packet unpacker", func() {
 			LargestObserved: 1,
 			DelayTime:       time.Microsecond,
 		}
-		err := f.Write(buf, 3, 6)
+		err := f.Write(buf, 3, 6, 32)
 		Expect(err).ToNot(HaveOccurred())
 		setReader(buf.Bytes())
 		packet, err := unpacker.Unpack(hdrBin, hdr, r)
@@ -99,7 +99,7 @@ var _ = Describe("Packet unpacker", func() {
 
 	It("unpacks CONNECTION_CLOSE frames", func() {
 		f := &frames.ConnectionCloseFrame{ReasonPhrase: "foo"}
-		err := f.Write(buf, 6, 6)
+		err := f.Write(buf, 6, 6, 0)
 		Expect(err).ToNot(HaveOccurred())
 		setReader(buf.Bytes())
 		packet, err := unpacker.Unpack(hdrBin, hdr, r)

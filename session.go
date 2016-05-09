@@ -95,7 +95,7 @@ func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		}
 	}()
 
-	session.packer = &packetPacker{aead: cryptoSetup, connectionParametersManager: session.connectionParametersManager, connectionID: connectionID}
+	session.packer = &packetPacker{aead: cryptoSetup, connectionParametersManager: session.connectionParametersManager, connectionID: connectionID, version: v}
 	session.unpacker = &packetUnpacker{aead: cryptoSetup}
 
 	session.congestion = congestion.NewCubicSender(

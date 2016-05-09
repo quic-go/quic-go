@@ -37,7 +37,7 @@ var _ = Describe("Packet packer", func() {
 		Expect(p).ToNot(BeNil())
 		Expect(err).ToNot(HaveOccurred())
 		b := &bytes.Buffer{}
-		f.Write(b, 1, 6)
+		f.Write(b, 1, 6, 0)
 		Expect(len(p.frames)).To(Equal(1))
 		Expect(p.raw).To(ContainSubstring(string(b.Bytes())))
 	})
@@ -80,7 +80,7 @@ var _ = Describe("Packet packer", func() {
 	It("packs many control frames into 1 packets", func() {
 		f := &frames.AckFrame{LargestObserved: 1}
 		b := &bytes.Buffer{}
-		f.Write(b, 3, 6)
+		f.Write(b, 3, 6, 32)
 		maxFramesPerPacket := protocol.MaxFrameSize / b.Len()
 		var controlFrames []frames.Frame
 		for i := 0; i < maxFramesPerPacket; i++ {
@@ -146,8 +146,8 @@ var _ = Describe("Packet packer", func() {
 			Expect(p).ToNot(BeNil())
 			Expect(err).ToNot(HaveOccurred())
 			b := &bytes.Buffer{}
-			f1.Write(b, 2, 6)
-			f2.Write(b, 2, 6)
+			f1.Write(b, 2, 6, 0)
+			f2.Write(b, 2, 6, 0)
 			Expect(len(p.frames)).To(Equal(2))
 			Expect(p.raw).To(ContainSubstring(string(b.Bytes())))
 		})

@@ -14,7 +14,7 @@ type StopWaitingFrame struct {
 	LeastUnacked protocol.PacketNumber
 }
 
-func (f *StopWaitingFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, packetNumberLen protocol.PacketNumberLen) error {
+func (f *StopWaitingFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, packetNumberLen protocol.PacketNumberLen, version protocol.VersionNumber) error {
 	// packetNumber is the packet number of the packet that this StopWaitingFrame will be sent with
 	typeByte := uint8(0x06)
 	b.WriteByte(typeByte)

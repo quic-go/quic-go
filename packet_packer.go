@@ -19,7 +19,9 @@ type packedPacket struct {
 }
 
 type packetPacker struct {
-	connectionID                protocol.ConnectionID
+	connectionID protocol.ConnectionID
+	version      protocol.VersionNumber
+
 	aead                        crypto.AEAD
 	connectionParametersManager *handshake.ConnectionParametersManager
 
@@ -95,7 +97,7 @@ func (p *packetPacker) getPayload(frames []frames.Frame, currentPacketNumber pro
 	var payload bytes.Buffer
 	payload.WriteByte(0) // The entropy bit is set in sendPayload
 	for _, frame := range frames {
-		frame.Write(&payload, currentPacketNumber, 6)
+		frame.Write(&payload, currentPacketNumber, 6, p.version)
 	}
 	return payload.Bytes(), nil
 }
