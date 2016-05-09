@@ -82,19 +82,21 @@ var _ = Describe("Public Header", func() {
 		It("writes a sample header", func() {
 			b := &bytes.Buffer{}
 			publicHeader := PublicHeader{
-				ConnectionID: 0x4cfa9f9b668619f6,
-				PacketNumber: 2,
+				ConnectionID:    0x4cfa9f9b668619f6,
+				PacketNumber:    2,
+				PacketNumberLen: protocol.PacketNumberLen6,
 			}
 			publicHeader.WritePublicHeader(b)
-			Expect(b.Bytes()).To(Equal([]byte{0x3c, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 2, 0, 0, 0, 0, 0}))
+			Expect(b.Bytes()).To(Equal([]byte{0x38 | 0x04, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 2, 0, 0, 0, 0, 0}))
 		})
 
 		It("sets the Version Flag", func() {
 			b := &bytes.Buffer{}
 			publicHeader := PublicHeader{
-				VersionFlag:  true,
-				ConnectionID: 0x4cfa9f9b668619f6,
-				PacketNumber: 2,
+				VersionFlag:     true,
+				ConnectionID:    0x4cfa9f9b668619f6,
+				PacketNumber:    2,
+				PacketNumberLen: protocol.PacketNumberLen6,
 			}
 			publicHeader.WritePublicHeader(b)
 			// must be the first assertion
@@ -106,9 +108,10 @@ var _ = Describe("Public Header", func() {
 		It("sets the Reset Flag", func() {
 			b := &bytes.Buffer{}
 			publicHeader := PublicHeader{
-				ResetFlag:    true,
-				ConnectionID: 0x4cfa9f9b668619f6,
-				PacketNumber: 2,
+				ResetFlag:       true,
+				ConnectionID:    0x4cfa9f9b668619f6,
+				PacketNumber:    2,
+				PacketNumberLen: protocol.PacketNumberLen6,
 			}
 			publicHeader.WritePublicHeader(b)
 			// must be the first assertion
@@ -120,10 +123,11 @@ var _ = Describe("Public Header", func() {
 		It("throws an error if both Reset Flag and Version Flag are set", func() {
 			b := &bytes.Buffer{}
 			publicHeader := PublicHeader{
-				VersionFlag:  true,
-				ResetFlag:    true,
-				ConnectionID: 0x4cfa9f9b668619f6,
-				PacketNumber: 2,
+				VersionFlag:     true,
+				ResetFlag:       true,
+				ConnectionID:    0x4cfa9f9b668619f6,
+				PacketNumber:    2,
+				PacketNumberLen: protocol.PacketNumberLen6,
 			}
 			err := publicHeader.WritePublicHeader(b)
 			Expect(err).To(HaveOccurred())
@@ -135,12 +139,74 @@ var _ = Describe("Public Header", func() {
 			publicHeader := PublicHeader{
 				ConnectionID:         0x4cfa9f9b668619f6,
 				TruncateConnectionID: true,
+				PacketNumberLen:      protocol.PacketNumberLen6,
 			}
 			err := publicHeader.WritePublicHeader(b)
 			Expect(err).ToNot(HaveOccurred())
 			firstByte, _ := b.ReadByte()
 			Expect(firstByte & 0x08).To(BeZero())
 			Expect(b.Bytes()).ToNot(ContainSubstring(string([]byte{0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c})))
+		})
+
+		Context("packet number length", func() {
+			It("doesn't write a header if the packet number length is not set", func() {
+				b := &bytes.Buffer{}
+				publicHeader := PublicHeader{
+					ConnectionID: 0x4cfa9f9b668619f6,
+					PacketNumber: 0xDECAFBAD,
+				}
+				err := publicHeader.WritePublicHeader(b)
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(Equal(errPacketNumberLenNotSet))
+			})
+
+			It("writes a header with a 1-byte packet number", func() {
+				b := &bytes.Buffer{}
+				publicHeader := PublicHeader{
+					ConnectionID:    0x4cfa9f9b668619f6,
+					PacketNumber:    0xDECAFBAD,
+					PacketNumberLen: protocol.PacketNumberLen1,
+				}
+				err := publicHeader.WritePublicHeader(b)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(b.Bytes()).To(Equal([]byte{0x08 | 0x04, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xAD}))
+			})
+
+			It("writes a header with a 2-byte packet number", func() {
+				b := &bytes.Buffer{}
+				publicHeader := PublicHeader{
+					ConnectionID:    0x4cfa9f9b668619f6,
+					PacketNumber:    0xDECAFBAD,
+					PacketNumberLen: protocol.PacketNumberLen2,
+				}
+				err := publicHeader.WritePublicHeader(b)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(b.Bytes()).To(Equal([]byte{0x18 | 0x04, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xAD, 0xFB}))
+			})
+
+			It("writes a header with a 4-byte packet number", func() {
+				b := &bytes.Buffer{}
+				publicHeader := PublicHeader{
+					ConnectionID:    0x4cfa9f9b668619f6,
+					PacketNumber:    0x13DECAFBAD,
+					PacketNumberLen: protocol.PacketNumberLen4,
+				}
+				err := publicHeader.WritePublicHeader(b)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(b.Bytes()).To(Equal([]byte{0x28 | 0x04, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xAD, 0xFB, 0xCA, 0xDE}))
+			})
+
+			It("writes a header with a 6-byte packet number", func() {
+				b := &bytes.Buffer{}
+				publicHeader := PublicHeader{
+					ConnectionID:    0x4cfa9f9b668619f6,
+					PacketNumber:    0xBE1337DECAFBAD,
+					PacketNumberLen: protocol.PacketNumberLen6,
+				}
+				err := publicHeader.WritePublicHeader(b)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(b.Bytes()).To(Equal([]byte{0x38 | 0x04, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xAD, 0xFB, 0xCA, 0xDE, 0x37, 0x13}))
+			})
 		})
 	})
 })

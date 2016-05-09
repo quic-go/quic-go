@@ -398,6 +398,7 @@ var _ = Describe("Session", func() {
 			handshake.TagICSL: {0, 0, 0, 0},
 		})
 		session.packer.connectionParametersManager = session.connectionParametersManager
+		session.packer.sentPacketHandler = newMockSentPacketHandler()
 		session.Run() // Would normally not return
 		Expect(conn.written[0]).To(ContainSubstring("No recent network activity."))
 		close(done)
@@ -422,9 +423,9 @@ var _ = Describe("Session", func() {
 			session.QueueStreamFrame(&frames.StreamFrame{})
 			session.sendPacket()
 			Expect(cong.nCalls).To(Equal(2)) // OnPacketSent + GetCongestionWindow
-			Expect(cong.argsOnPacketSent[1]).To(Equal(protocol.ByteCount(35)))
+			Expect(cong.argsOnPacketSent[1]).To(Equal(protocol.ByteCount(30)))
 			Expect(cong.argsOnPacketSent[2]).To(Equal(protocol.PacketNumber(1)))
-			Expect(cong.argsOnPacketSent[3]).To(Equal(protocol.ByteCount(35)))
+			Expect(cong.argsOnPacketSent[3]).To(Equal(protocol.ByteCount(30)))
 			Expect(cong.argsOnPacketSent[4]).To(BeTrue())
 		})
 

@@ -95,7 +95,13 @@ func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		}
 	}()
 
-	session.packer = &packetPacker{aead: cryptoSetup, connectionParametersManager: session.connectionParametersManager, connectionID: connectionID, version: v}
+	session.packer = &packetPacker{
+		aead: cryptoSetup,
+		connectionParametersManager: session.connectionParametersManager,
+		sentPacketHandler:           session.sentPacketHandler,
+		connectionID:                connectionID,
+		version:                     v,
+	}
 	session.unpacker = &packetUnpacker{aead: cryptoSetup, version: v}
 
 	session.congestion = congestion.NewCubicSender(
@@ -152,7 +158,7 @@ func (s *Session) Run() {
 
 func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeader, r *bytes.Reader) error {
 	// Calcualate packet number
-	publicHeader.PacketNumber = calculatePacketNumber(
+	publicHeader.PacketNumber = inferPacketNumber(
 		publicHeader.PacketNumberLen,
 		s.lastRcvdPacketNumber,
 		publicHeader.PacketNumber,

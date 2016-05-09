@@ -10,6 +10,7 @@ import (
 )
 
 var (
+	errPacketNumberLenNotSet         = errors.New("PublicHeader: PacketNumberLen not set")
 	errResetAndVersionFlagSet        = errors.New("PublicHeader: Reset Flag and Version Flag should not be set at the same time")
 	errReceivedTruncatedConnectionID = errors.New("PublicHeader: Receiving packets with truncated ConnectionID is not supported")
 	errInvalidConnectionID           = errors.New("PublicHeader: connection ID cannot be 0")
@@ -30,7 +31,7 @@ type PublicHeader struct {
 
 // WritePublicHeader writes a public header
 func (h *PublicHeader) WritePublicHeader(b *bytes.Buffer) error {
-	publicFlagByte := uint8(0x34)
+	publicFlagByte := uint8(0x04)
 	if h.VersionFlag && h.ResetFlag {
 		return errResetAndVersionFlagSet
 	}
@@ -44,6 +45,19 @@ func (h *PublicHeader) WritePublicHeader(b *bytes.Buffer) error {
 		publicFlagByte |= 0x08
 	}
 
+	if !h.ResetFlag && !h.VersionFlag {
+		switch h.PacketNumberLen {
+		case protocol.PacketNumberLen1:
+			publicFlagByte |= 0x00
+		case protocol.PacketNumberLen2:
+			publicFlagByte |= 0x10
+		case protocol.PacketNumberLen4:
+			publicFlagByte |= 0x20
+		case protocol.PacketNumberLen6:
+			publicFlagByte |= 0x30
+		}
+	}
+
 	b.WriteByte(publicFlagByte)
 
 	if !h.TruncateConnectionID {
@@ -51,7 +65,18 @@ func (h *PublicHeader) WritePublicHeader(b *bytes.Buffer) error {
 	}
 
 	if !h.ResetFlag && !h.VersionFlag {
-		utils.WriteUint48(b, uint64(h.PacketNumber)) // TODO: Send shorter packet number if possible
+		switch h.PacketNumberLen {
+		case protocol.PacketNumberLen1:
+			b.WriteByte(uint8(h.PacketNumber))
+		case protocol.PacketNumberLen2:
+			utils.WriteUint16(b, uint16(h.PacketNumber))
+		case protocol.PacketNumberLen4:
+			utils.WriteUint32(b, uint32(h.PacketNumber))
+		case protocol.PacketNumberLen6:
+			utils.WriteUint48(b, uint64(h.PacketNumber))
+		default:
+			return errPacketNumberLenNotSet
+		}
 	}
 
 	return nil

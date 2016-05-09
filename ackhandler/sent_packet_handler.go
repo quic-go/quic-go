@@ -220,3 +220,7 @@ func (h *sentPacketHandler) DequeuePacketForRetransmission() (packet *Packet) {
 func (h *sentPacketHandler) BytesInFlight() protocol.ByteCount {
 	return h.bytesInFlight
 }
+
+func (h *sentPacketHandler) GetLargestObserved() protocol.PacketNumber {
+	return h.LargestObserved
+}

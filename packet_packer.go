@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"sync/atomic"
 
+	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -21,8 +22,9 @@ type packedPacket struct {
 type packetPacker struct {
 	connectionID protocol.ConnectionID
 	version      protocol.VersionNumber
+	aead         crypto.AEAD
 
-	aead                        crypto.AEAD
+	sentPacketHandler           ackhandler.SentPacketHandler
 	connectionParametersManager *handshake.ConnectionParametersManager
 
 	streamFrameQueue StreamFrameQueue
@@ -72,6 +74,7 @@ func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 	responsePublicHeader := PublicHeader{
 		ConnectionID:         p.connectionID,
 		PacketNumber:         currentPacketNumber,
+		PacketNumberLen:      getPacketNumberLength(currentPacketNumber, p.sentPacketHandler.GetLargestObserved()),
 		TruncateConnectionID: p.connectionParametersManager.TruncateConnectionID(),
 	}
 	if err := responsePublicHeader.WritePublicHeader(&raw); err != nil {
