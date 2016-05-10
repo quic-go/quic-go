@@ -20,7 +20,8 @@ type PacketHandler interface {
 
 // A Server of QUIC
 type Server struct {
-	conn *net.UDPConn
+	conns      []*net.UDPConn
+	connsMutex sync.Mutex
 
 	signer crypto.Signer
 	scfg   *handshake.ServerConfig
@@ -58,19 +59,22 @@ func (s *Server) ListenAndServe(address string) error {
 		return err
 	}
 
-	s.conn, err = net.ListenUDP("udp", addr)
+	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {
 		return err
 	}
+	s.connsMutex.Lock()
+	s.conns = append(s.conns, conn)
+	s.connsMutex.Unlock()
 
 	for {
 		data := make([]byte, protocol.MaxPacketSize)
-		n, remoteAddr, err := s.conn.ReadFromUDP(data)
+		n, remoteAddr, err := conn.ReadFromUDP(data)
 		if err != nil {
 			return err
 		}
 		data = data[:n]
-		if err := s.handlePacket(s.conn, remoteAddr, data); err != nil {
+		if err := s.handlePacket(conn, remoteAddr, data); err != nil {
 			utils.Errorf("error handling packet: %s", err.Error())
 		}
 	}
@@ -78,7 +82,15 @@ func (s *Server) ListenAndServe(address string) error {
 
 // Close the server
 func (s *Server) Close() error {
-	return s.conn.Close()
+	s.connsMutex.Lock()
+	defer s.connsMutex.Unlock()
+	for _, c := range s.conns {
+		err := c.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet []byte) error {
