@@ -165,7 +165,12 @@ func (h *CryptoSetup) isInchoateCHLO(cryptoData map[Tag][]byte) bool {
 }
 
 func (h *CryptoSetup) handleInchoateCHLO(sni string, data []byte) ([]byte, error) {
-	proof, err := h.scfg.Sign(sni, data)
+	var chloOrNil []byte
+	if h.version > protocol.VersionNumber(30) {
+		chloOrNil = data
+	}
+
+	proof, err := h.scfg.Sign(sni, chloOrNil)
 	if err != nil {
 		return nil, err
 	}
