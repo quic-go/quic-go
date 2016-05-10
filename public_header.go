@@ -10,10 +10,11 @@ import (
 )
 
 var (
-	errPacketNumberLenNotSet         = errors.New("PublicHeader: PacketNumberLen not set")
-	errResetAndVersionFlagSet        = errors.New("PublicHeader: Reset Flag and Version Flag should not be set at the same time")
-	errReceivedTruncatedConnectionID = errors.New("PublicHeader: Receiving packets with truncated ConnectionID is not supported")
-	errInvalidConnectionID           = errors.New("PublicHeader: connection ID cannot be 0")
+	errPacketNumberLenNotSet          = errors.New("PublicHeader: PacketNumberLen not set")
+	errResetAndVersionFlagSet         = errors.New("PublicHeader: Reset Flag and Version Flag should not be set at the same time")
+	errReceivedTruncatedConnectionID  = errors.New("PublicHeader: Receiving packets with truncated ConnectionID is not supported")
+	errInvalidConnectionID            = errors.New("PublicHeader: connection ID cannot be 0")
+	errGetLengthOnlyForRegularPackets = errors.New("PublicHeader: GetLength can only be called for regular packets")
 )
 
 // The PublicHeader of a QUIC packet
@@ -142,4 +143,22 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	header.PacketNumber = protocol.PacketNumber(packetNumber)
 
 	return header, nil
+}
+
+// GetLength gets the length of the PublicHeader in bytes
+// can only be called for regular packets
+func (h *PublicHeader) GetLength() (uint8, error) {
+	if h.VersionFlag || h.ResetFlag {
+		return 0, errGetLengthOnlyForRegularPackets
+	}
+
+	length := uint8(1) // 1 byte for public flags
+	if h.PacketNumberLen != protocol.PacketNumberLen1 && h.PacketNumberLen != protocol.PacketNumberLen2 && h.PacketNumberLen != protocol.PacketNumberLen4 && h.PacketNumberLen != protocol.PacketNumberLen6 {
+		return 0, errPacketNumberLenNotSet
+	}
+	if !h.TruncateConnectionID {
+		length += 8 // 8 bytes for the connection ID
+	}
+	length += uint8(h.PacketNumberLen)
+	return length, nil
 }
