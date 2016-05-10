@@ -10,10 +10,11 @@ import (
 
 // A StreamFrame of QUIC
 type StreamFrame struct {
-	FinBit   bool
-	StreamID protocol.StreamID
-	Offset   protocol.ByteCount
-	Data     []byte
+	FinBit      bool
+	StreamID    protocol.StreamID
+	streamIDLen protocol.ByteCount
+	Offset      protocol.ByteCount
+	Data        []byte
 }
 
 // ParseStreamFrame reads a stream frame. The type byte must not have been read yet.
@@ -31,9 +32,9 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 	if offsetLen != 0 {
 		offsetLen++
 	}
-	streamIDLen := typeByte&0x03 + 1
+	frame.streamIDLen = protocol.ByteCount(typeByte&0x03 + 1)
 
-	sid, err := utils.ReadUintN(r, streamIDLen)
+	sid, err := utils.ReadUintN(r, uint8(frame.streamIDLen))
 	if err != nil {
 		return nil, err
 	}
@@ -71,17 +72,43 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 
 // WriteStreamFrame writes a stream frame.
 func (f *StreamFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, packetNumberLen protocol.PacketNumberLen, version protocol.VersionNumber) error {
-	typeByte := uint8(0x80)
+	typeByte := uint8(0x80) // sets the leftmost bit to 1
 	if f.FinBit {
 		typeByte ^= 0x40
 	}
-	typeByte ^= 0x20
+	typeByte ^= 0x20 // dataLenPresent
 	if f.Offset != 0 {
 		typeByte ^= 0x1c // TODO: Send shorter offset if possible
 	}
-	typeByte ^= 0x03 // TODO: Send shorter stream ID if possible
+
+	if f.streamIDLen == 0 {
+		f.calculateStreamIDLength()
+	}
+
+	switch f.streamIDLen {
+	case 1:
+		typeByte ^= 0x0
+	case 2:
+		typeByte ^= 0x01
+	case 3:
+		typeByte ^= 0x02
+	case 4:
+		typeByte ^= 0x03
+	}
+
 	b.WriteByte(typeByte)
-	utils.WriteUint32(b, uint32(f.StreamID))
+
+	switch f.streamIDLen {
+	case 1:
+		b.WriteByte(uint8(f.StreamID))
+	case 2:
+		utils.WriteUint16(b, uint16(f.StreamID))
+	case 3:
+		utils.WriteUint24(b, uint32(f.StreamID))
+	case 4:
+		utils.WriteUint32(b, uint32(f.StreamID))
+	}
+
 	if f.Offset != 0 {
 		utils.WriteUint64(b, uint64(f.Offset))
 	}
@@ -90,9 +117,25 @@ func (f *StreamFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber,
 	return nil
 }
 
+func (f *StreamFrame) calculateStreamIDLength() {
+	if f.StreamID < (1 << 8) {
+		f.streamIDLen = 1
+	} else if f.StreamID < (1 << 16) {
+		f.streamIDLen = 2
+	} else if f.StreamID < (1 << 24) {
+		f.streamIDLen = 3
+	} else {
+		f.streamIDLen = 4
+	}
+}
+
 // MinLength of a written frame
 func (f *StreamFrame) MinLength() protocol.ByteCount {
-	return 1 + 4 + 8 + 2 + 1
+	if f.streamIDLen == 0 {
+		f.calculateStreamIDLength()
+	}
+
+	return 1 + f.streamIDLen + 8 + 2 + 1
 }
 
 // MaybeSplitOffFrame removes the first n bytes and returns them as a separate frame. If n >= len(n), nil is returned and nothing is modified.

@@ -127,6 +127,13 @@ func WriteUint32(b *bytes.Buffer, i uint32) {
 	b.WriteByte(uint8((i >> 24) & 0xff))
 }
 
+// WriteUint24 writes 24 bit of a uint32
+func WriteUint24(b *bytes.Buffer, i uint32) {
+	b.WriteByte(uint8(i & 0xff))
+	b.WriteByte(uint8((i >> 8) & 0xff))
+	b.WriteByte(uint8((i >> 16) & 0xff))
+}
+
 // WriteUint16 writes a uint16
 func WriteUint16(b *bytes.Buffer, i uint16) {
 	b.WriteByte(uint8(i & 0xff))

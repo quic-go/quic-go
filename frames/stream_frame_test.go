@@ -38,7 +38,7 @@ var _ = Describe("StreamFrame", func() {
 				StreamID: 1,
 				Data:     []byte("foobar"),
 			}).Write(b, 1, protocol.PacketNumberLen6, 0)
-			Expect(b.Bytes()).To(Equal([]byte{0xa3, 0x1, 0, 0, 0, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'}))
+			Expect(b.Bytes()).To(Equal([]byte{0xa0, 0x1, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'}))
 		})
 
 		It("writes offsets", func() {
@@ -48,7 +48,7 @@ var _ = Describe("StreamFrame", func() {
 				Offset:   16,
 				Data:     []byte("foobar"),
 			}).Write(b, 1, protocol.PacketNumberLen6, 0)
-			Expect(b.Bytes()).To(Equal([]byte{0xbf, 0x1, 0, 0, 0, 0x10, 0, 0, 0, 0, 0, 0, 0, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'}))
+			Expect(b.Bytes()).To(Equal([]byte{0xbc, 0x1, 0x10, 0, 0, 0, 0, 0, 0, 0, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'}))
 		})
 
 		It("has proper min length", func() {
@@ -60,6 +60,74 @@ var _ = Describe("StreamFrame", func() {
 			}
 			f.Write(b, 1, protocol.PacketNumberLen6, 0)
 			Expect(f.MinLength()).To(Equal(protocol.ByteCount(b.Len())))
+		})
+
+		Context("lengths of StreamIDs", func() {
+			It("writes a 2 byte StreamID", func() {
+				b := &bytes.Buffer{}
+				(&StreamFrame{
+					StreamID: 13,
+					Data:     []byte("foobar"),
+				}).Write(b, 1, protocol.PacketNumberLen6, 0)
+				Expect(b.Bytes()[0] & 0x3).To(Equal(uint8(0x0)))
+				Expect(b.Bytes()[1]).To(Equal(uint8(13)))
+			})
+
+			It("writes a 2 byte StreamID", func() {
+				b := &bytes.Buffer{}
+				(&StreamFrame{
+					StreamID: 0xCAFE,
+					Data:     []byte("foobar"),
+				}).Write(b, 1, protocol.PacketNumberLen6, 0)
+				Expect(b.Bytes()[0] & 0x3).To(Equal(uint8(0x1)))
+				Expect(b.Bytes()[1:3]).To(Equal([]byte{0xFE, 0xCA}))
+			})
+
+			It("writes a 3 byte StreamID", func() {
+				b := &bytes.Buffer{}
+				(&StreamFrame{
+					StreamID: 0x13BEEF,
+					Data:     []byte("foobar"),
+				}).Write(b, 1, protocol.PacketNumberLen6, 0)
+				Expect(b.Bytes()[0] & 0x3).To(Equal(uint8(0x2)))
+				Expect(b.Bytes()[1:4]).To(Equal([]byte{0xEF, 0xBE, 0x13}))
+			})
+
+			It("writes a 4 byte StreamID", func() {
+				b := &bytes.Buffer{}
+				(&StreamFrame{
+					StreamID: 0xDECAFBAD,
+					Data:     []byte("foobar"),
+				}).Write(b, 1, protocol.PacketNumberLen6, 0)
+				Expect(b.Bytes()[0] & 0x3).To(Equal(uint8(0x3)))
+				Expect(b.Bytes()[1:5]).To(Equal([]byte{0xAD, 0xFB, 0xCA, 0xDE}))
+			})
+		})
+	})
+
+	Context("shortening of StreamIDs", func() {
+		It("determines the length of a 1 byte StreamID", func() {
+			f := &StreamFrame{StreamID: 0xFF}
+			f.calculateStreamIDLength()
+			Expect(f.streamIDLen).To(Equal(protocol.ByteCount(1)))
+		})
+
+		It("determines the length of a 2 byte StreamID", func() {
+			f := &StreamFrame{StreamID: 0xFFFF}
+			f.calculateStreamIDLength()
+			Expect(f.streamIDLen).To(Equal(protocol.ByteCount(2)))
+		})
+
+		It("determines the length of a 1 byte StreamID", func() {
+			f := &StreamFrame{StreamID: 0xFFFFFF}
+			f.calculateStreamIDLength()
+			Expect(f.streamIDLen).To(Equal(protocol.ByteCount(3)))
+		})
+
+		It("determines the length of a 1 byte StreamID", func() {
+			f := &StreamFrame{StreamID: 0xFFFFFFFF}
+			f.calculateStreamIDLength()
+			Expect(f.streamIDLen).To(Equal(protocol.ByteCount(4)))
 		})
 	})
 

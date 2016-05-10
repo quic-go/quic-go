@@ -188,11 +188,12 @@ var _ = Describe("Packet packer", func() {
 
 		It("splits one stream frame larger than maximum size", func() {
 			publicHeaderLength := protocol.ByteCount(5)
-			maxStreamFrameDataLen := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLength - (1 + 4 + 8 + 2)
 			f := frames.StreamFrame{
-				Data:   bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen)+200),
-				Offset: 1,
+				StreamID: 7,
+				Offset:   1,
 			}
+			maxStreamFrameDataLen := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLength - f.MinLength() + 1 // + 1 since MinceLength is 1 bigger than the actual StreamFrame header
+			f.Data = bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen)+200)
 			packer.AddStreamFrame(f)
 			payloadFrames, err := packer.composeNextPacket(nil, []frames.Frame{}, publicHeaderLength, true)
 			Expect(err).ToNot(HaveOccurred())
@@ -250,9 +251,11 @@ var _ = Describe("Packet packer", func() {
 		It("splits a stream frame larger than the maximum size", func() {
 			publicHeaderLength := protocol.ByteCount(13)
 			f := frames.StreamFrame{
-				Data:   bytes.Repeat([]byte{'f'}, int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLength-(1+4+8+2)+1)),
-				Offset: 1,
+				StreamID: 5,
+				Offset:   1,
 			}
+			f.Data = bytes.Repeat([]byte{'f'}, int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLength-f.MinLength()+2)) // + 2 since MinceLength is 1 bigger than the actual StreamFrame header
+
 			packer.AddStreamFrame(f)
 			payloadFrames, err := packer.composeNextPacket(nil, []frames.Frame{}, publicHeaderLength, true)
 			Expect(err).ToNot(HaveOccurred())

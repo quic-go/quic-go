@@ -69,6 +69,21 @@ var _ = Describe("Utils", func() {
 		})
 	})
 
+	Context("WriteUint24", func() {
+		It("outputs 3 bytes", func() {
+			b := &bytes.Buffer{}
+			WriteUint24(b, uint32(1))
+			Expect(b.Len()).To(Equal(3))
+		})
+
+		It("outputs a little endian", func() {
+			num := uint32(0xEFAC3512)
+			b := &bytes.Buffer{}
+			WriteUint24(b, num)
+			Expect(b.Bytes()).To(Equal([]byte{0x12, 0x35, 0xAC}))
+		})
+	})
+
 	Context("WriteUint32", func() {
 		It("outputs 4 bytes", func() {
 			b := &bytes.Buffer{}
