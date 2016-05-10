@@ -43,12 +43,8 @@ func (p *packetPacker) AddHighPrioStreamFrame(f frames.StreamFrame) {
 func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, includeStreamFrames bool) (*packedPacket, error) {
 	// TODO: save controlFrames as a member variable, makes it easier to handle in the unlikely event that there are more controlFrames than you can put into on packet
 
-	payloadFrames, err := p.composeNextPacket(stopWaitingFrame, controlFrames, includeStreamFrames)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(payloadFrames) == 0 {
+	// don't send out packets that only contain a StopWaitingFrame
+	if len(controlFrames) == 0 && (p.streamFrameQueue.Len() == 0 || !includeStreamFrames) {
 		return nil, nil
 	}
 
@@ -56,6 +52,23 @@ func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		(*uint64)(&p.lastPacketNumber),
 		1,
 	))
+
+	responsePublicHeader := &PublicHeader{
+		ConnectionID:         p.connectionID,
+		PacketNumber:         currentPacketNumber,
+		PacketNumberLen:      getPacketNumberLength(currentPacketNumber, p.sentPacketHandler.GetLargestObserved()),
+		TruncateConnectionID: p.connectionParametersManager.TruncateConnectionID(),
+	}
+
+	publicHeaderLength, err := responsePublicHeader.GetLength()
+	if err != nil {
+		return nil, err
+	}
+
+	payloadFrames, err := p.composeNextPacket(stopWaitingFrame, controlFrames, publicHeaderLength, includeStreamFrames)
+	if err != nil {
+		return nil, err
+	}
 
 	payload, err := p.getPayload(payloadFrames, currentPacketNumber)
 	if err != nil {
@@ -71,12 +84,6 @@ func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 	}
 
 	var raw bytes.Buffer
-	responsePublicHeader := PublicHeader{
-		ConnectionID:         p.connectionID,
-		PacketNumber:         currentPacketNumber,
-		PacketNumberLen:      getPacketNumberLength(currentPacketNumber, p.sentPacketHandler.GetLargestObserved()),
-		TruncateConnectionID: p.connectionParametersManager.TruncateConnectionID(),
-	}
 	if err := responsePublicHeader.WritePublicHeader(&raw); err != nil {
 		return nil, err
 	}
@@ -105,14 +112,17 @@ func (p *packetPacker) getPayload(frames []frames.Frame, currentPacketNumber pro
 	return payload.Bytes(), nil
 }
 
-func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, includeStreamFrames bool) ([]frames.Frame, error) {
+// func (p *packetPacker) composeNextPacketControlFrames(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame) (uint8, []frames.Frame, error) {
+//
+// }
+//
+// func (p *packetPacker) composeNextPacketStreamFrames() ([]frames.Frame, error) {
+//
+// }
+
+func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, publicHeaderLength uint8, includeStreamFrames bool) ([]frames.Frame, error) {
 	payloadLength := 0
 	var payloadFrames []frames.Frame
-
-	// don't send out packets that only contain a StopWaitingFrame
-	if len(controlFrames) == 0 && p.streamFrameQueue.Len() == 0 {
-		return nil, nil
-	}
 
 	// TODO: handle the case where there are more controlFrames than we can put into one packet
 	if stopWaitingFrame != nil {
@@ -127,7 +137,9 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 		controlFrames = controlFrames[1:]
 	}
 
-	if payloadLength > protocol.MaxFrameSize {
+	maxFrameSize := protocol.MaxFrameAndPublicHeaderSize - int(publicHeaderLength)
+
+	if payloadLength > maxFrameSize {
 		panic("internal inconsistency: packet payload too large")
 	}
 
@@ -138,17 +150,17 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 	for p.streamFrameQueue.Len() > 0 {
 		frame := p.streamFrameQueue.Front()
 
-		if payloadLength > protocol.MaxFrameSize {
+		if payloadLength > maxFrameSize {
 			panic("internal inconsistency: packet payload too large")
 		}
 
 		// Does the frame fit into the remaining space?
-		if payloadLength+frame.MinLength() > protocol.MaxFrameSize {
+		if payloadLength+frame.MinLength() > maxFrameSize {
 			break
 		}
 
 		// Split stream frames if necessary
-		previousFrame := frame.MaybeSplitOffFrame(protocol.MaxFrameSize - payloadLength)
+		previousFrame := frame.MaybeSplitOffFrame(maxFrameSize - payloadLength)
 		if previousFrame != nil {
 			// Don't pop the queue, leave the modified frame in
 			frame = previousFrame

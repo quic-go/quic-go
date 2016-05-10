@@ -32,8 +32,8 @@ type ErrorCode uint32
 // MaxPacketSize is the maximum packet size, including the public header
 const MaxPacketSize = 1452
 
-// MaxFrameSize is the maximum size of a QUIC frame
-const MaxFrameSize = MaxPacketSize - (1 + 8 + 6) /*public header*/ - 1 /*private header*/ - 12 /*crypto signature*/
+// MaxFrameAndPublicHeaderSize is the maximum size of a QUIC frame plus PublicHeader
+const MaxFrameAndPublicHeaderSize = MaxPacketSize - 1 /*private header*/ - 12 /*crypto signature*/
 
 // DefaultTCPMSS is the default maximum packet size used in the Linux TCP implementation.
 // Used in QUIC for congestion window computations in bytes.

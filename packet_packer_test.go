@@ -110,18 +110,19 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	It("packs many control frames into 1 packets", func() {
+		publicHeaderLength := uint8(10)
 		f := &frames.AckFrame{LargestObserved: 1}
 		b := &bytes.Buffer{}
 		f.Write(b, 3, protocol.PacketNumberLen6, 32)
-		maxFramesPerPacket := protocol.MaxFrameSize / b.Len()
+		maxFramesPerPacket := (protocol.MaxFrameAndPublicHeaderSize - int(publicHeaderLength)) / b.Len()
 		var controlFrames []frames.Frame
 		for i := 0; i < maxFramesPerPacket; i++ {
 			controlFrames = append(controlFrames, f)
 		}
-		payloadFrames, err := packer.composeNextPacket(nil, controlFrames, true)
+		payloadFrames, err := packer.composeNextPacket(nil, controlFrames, publicHeaderLength, true)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(len(payloadFrames)).To(Equal(maxFramesPerPacket))
-		payloadFrames, err = packer.composeNextPacket(nil, []frames.Frame{}, true)
+		payloadFrames, err = packer.composeNextPacket(nil, []frames.Frame{}, publicHeaderLength, true)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(len(payloadFrames)).To(BeZero())
 	})
@@ -149,16 +150,17 @@ var _ = Describe("Packet packer", func() {
 
 	Context("Stream Frame handling", func() {
 		It("does not splits a stream frame with maximum size", func() {
-			maxStreamFrameDataLen := protocol.MaxFrameSize - (1 + 4 + 8 + 2)
+			publicHeaderLength := uint8(12)
+			maxStreamFrameDataLen := protocol.MaxFrameAndPublicHeaderSize - int(publicHeaderLength) - (1 + 4 + 8 + 2)
 			f := frames.StreamFrame{
 				Data:   bytes.Repeat([]byte{'f'}, maxStreamFrameDataLen),
 				Offset: 1,
 			}
 			packer.AddStreamFrame(f)
-			payloadFrames, err := packer.composeNextPacket(nil, []frames.Frame{}, true)
+			payloadFrames, err := packer.composeNextPacket(nil, []frames.Frame{}, publicHeaderLength, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(payloadFrames)).To(Equal(1))
-			payloadFrames, err = packer.composeNextPacket(nil, []frames.Frame{}, true)
+			payloadFrames, err = packer.composeNextPacket(nil, []frames.Frame{}, publicHeaderLength, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(payloadFrames)).To(Equal(0))
 		})
@@ -185,28 +187,29 @@ var _ = Describe("Packet packer", func() {
 		})
 
 		It("splits one stream frame larger than maximum size", func() {
-			maxStreamFrameDataLen := protocol.MaxFrameSize - (1 + 4 + 8 + 2)
+			publicHeaderLength := uint8(5)
+			maxStreamFrameDataLen := protocol.MaxFrameAndPublicHeaderSize - int(publicHeaderLength) - (1 + 4 + 8 + 2)
 			f := frames.StreamFrame{
 				Data:   bytes.Repeat([]byte{'f'}, maxStreamFrameDataLen+200),
 				Offset: 1,
 			}
 			packer.AddStreamFrame(f)
-			payloadFrames, err := packer.composeNextPacket(nil, []frames.Frame{}, true)
+			payloadFrames, err := packer.composeNextPacket(nil, []frames.Frame{}, publicHeaderLength, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(payloadFrames)).To(Equal(1))
 			Expect(len(payloadFrames[0].(*frames.StreamFrame).Data)).To(Equal(maxStreamFrameDataLen))
-			payloadFrames, err = packer.composeNextPacket(nil, []frames.Frame{}, true)
+			payloadFrames, err = packer.composeNextPacket(nil, []frames.Frame{}, publicHeaderLength, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(payloadFrames)).To(Equal(1))
 			Expect(len(payloadFrames[0].(*frames.StreamFrame).Data)).To(Equal(200))
-			payloadFrames, err = packer.composeNextPacket(nil, []frames.Frame{}, true)
+			payloadFrames, err = packer.composeNextPacket(nil, []frames.Frame{}, publicHeaderLength, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(payloadFrames)).To(Equal(0))
 		})
 
-		// set pending until https://github.com/lucas-clemente/quic-go/issues/67 is fixed
-		PIt("packs 2 stream frames that are too big for one packet correctly", func() {
-			maxStreamFrameDataLen := protocol.MaxFrameSize - (1 + 4 + 8 + 2)
+		It("packs 2 stream frames that are too big for one packet correctly", func() {
+			publicHeaderLength := uint8(5)
+			maxStreamFrameDataLen := protocol.MaxFrameAndPublicHeaderSize - int(publicHeaderLength) - (1 + 4 + 8 + 2)
 			f1 := frames.StreamFrame{
 				Data:   bytes.Repeat([]byte{'f'}, maxStreamFrameDataLen+100),
 				Offset: 1,
@@ -231,10 +234,10 @@ var _ = Describe("Packet packer", func() {
 			Expect(p).To(BeNil())
 		})
 
-		// set pending until https://github.com/lucas-clemente/quic-go/issues/67 is fixed
-		PIt("packs a packet that has the maximum packet size when given a large enough stream frame", func() {
+		It("packs a packet that has the maximum packet size when given a large enough stream frame", func() {
+			publicHeaderLength := uint8(3)
 			f := frames.StreamFrame{
-				Data:   bytes.Repeat([]byte{'f'}, protocol.MaxFrameSize-(1+4+8+2)),
+				Data:   bytes.Repeat([]byte{'f'}, protocol.MaxFrameAndPublicHeaderSize-int(publicHeaderLength)-(1+4+8+2)),
 				Offset: 1,
 			}
 			packer.AddStreamFrame(f)
@@ -245,15 +248,16 @@ var _ = Describe("Packet packer", func() {
 		})
 
 		It("splits a stream frame larger than the maximum size", func() {
+			publicHeaderLength := uint8(13)
 			f := frames.StreamFrame{
-				Data:   bytes.Repeat([]byte{'f'}, protocol.MaxFrameSize-(1+4+8+2)+1),
+				Data:   bytes.Repeat([]byte{'f'}, protocol.MaxFrameAndPublicHeaderSize-int(publicHeaderLength)-(1+4+8+2)+1),
 				Offset: 1,
 			}
 			packer.AddStreamFrame(f)
-			payloadFrames, err := packer.composeNextPacket(nil, []frames.Frame{}, true)
+			payloadFrames, err := packer.composeNextPacket(nil, []frames.Frame{}, publicHeaderLength, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(payloadFrames)).To(Equal(1))
-			payloadFrames, err = packer.composeNextPacket(nil, []frames.Frame{}, true)
+			payloadFrames, err = packer.composeNextPacket(nil, []frames.Frame{}, publicHeaderLength, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(payloadFrames)).To(Equal(1))
 		})
