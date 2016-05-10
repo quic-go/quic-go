@@ -31,7 +31,7 @@ func (f *StopWaitingFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNu
 }
 
 // MinLength of a written frame
-func (f *StopWaitingFrame) MinLength() int {
+func (f *StopWaitingFrame) MinLength() protocol.ByteCount {
 	return 1 + 1 + 6
 }
 

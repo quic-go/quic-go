@@ -404,7 +404,7 @@ var _ = Describe("AckFrame", func() {
 					LargestObserved: 1,
 				}
 				f.Write(b, 1, protocol.PacketNumberLen6, 32)
-				Expect(f.MinLength()).To(Equal(b.Len()))
+				Expect(f.MinLength()).To(Equal(protocol.ByteCount(b.Len())))
 			})
 
 			It("has proper min length with nack ranges", func() {
@@ -415,7 +415,7 @@ var _ = Describe("AckFrame", func() {
 				}
 				err := f.Write(b, 1, protocol.PacketNumberLen6, 32)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(f.MinLength()).To(Equal(b.Len()))
+				Expect(f.MinLength()).To(Equal(protocol.ByteCount(b.Len())))
 			})
 		})
 	})

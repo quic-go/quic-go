@@ -59,7 +59,7 @@ var _ = Describe("StreamFrame", func() {
 				Offset:   1,
 			}
 			f.Write(b, 1, protocol.PacketNumberLen6, 0)
-			Expect(f.MinLength()).To(Equal(b.Len()))
+			Expect(f.MinLength()).To(Equal(protocol.ByteCount(b.Len())))
 		})
 	})
 

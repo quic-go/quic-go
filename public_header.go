@@ -147,18 +147,18 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 
 // GetLength gets the length of the PublicHeader in bytes
 // can only be called for regular packets
-func (h *PublicHeader) GetLength() (uint8, error) {
+func (h *PublicHeader) GetLength() (protocol.ByteCount, error) {
 	if h.VersionFlag || h.ResetFlag {
 		return 0, errGetLengthOnlyForRegularPackets
 	}
 
-	length := uint8(1) // 1 byte for public flags
+	length := protocol.ByteCount(1) // 1 byte for public flags
 	if h.PacketNumberLen != protocol.PacketNumberLen1 && h.PacketNumberLen != protocol.PacketNumberLen2 && h.PacketNumberLen != protocol.PacketNumberLen4 && h.PacketNumberLen != protocol.PacketNumberLen6 {
 		return 0, errPacketNumberLenNotSet
 	}
 	if !h.TruncateConnectionID {
 		length += 8 // 8 bytes for the connection ID
 	}
-	length += uint8(h.PacketNumberLen)
+	length += protocol.ByteCount(h.PacketNumberLen)
 	return length, nil
 }

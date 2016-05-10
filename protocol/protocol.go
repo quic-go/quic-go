@@ -30,7 +30,7 @@ type ByteCount uint64
 type ErrorCode uint32
 
 // MaxPacketSize is the maximum packet size, including the public header
-const MaxPacketSize = 1452
+const MaxPacketSize ByteCount = 1452
 
 // MaxFrameAndPublicHeaderSize is the maximum size of a QUIC frame plus PublicHeader
 const MaxFrameAndPublicHeaderSize = MaxPacketSize - 1 /*private header*/ - 12 /*crypto signature*/

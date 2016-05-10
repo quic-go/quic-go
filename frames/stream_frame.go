@@ -91,20 +91,20 @@ func (f *StreamFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber,
 }
 
 // MinLength of a written frame
-func (f *StreamFrame) MinLength() int {
+func (f *StreamFrame) MinLength() protocol.ByteCount {
 	return 1 + 4 + 8 + 2 + 1
 }
 
 // MaybeSplitOffFrame removes the first n bytes and returns them as a separate frame. If n >= len(n), nil is returned and nothing is modified.
-func (f *StreamFrame) MaybeSplitOffFrame(n int) *StreamFrame {
-	if n >= f.MinLength()-1+len(f.Data) {
+func (f *StreamFrame) MaybeSplitOffFrame(n protocol.ByteCount) *StreamFrame {
+	if n >= f.MinLength()-1+protocol.ByteCount(len(f.Data)) {
 		return nil
 	}
 	n -= f.MinLength() - 1
 
 	defer func() {
 		f.Data = f.Data[n:]
-		f.Offset += protocol.ByteCount(n)
+		f.Offset += n
 	}()
 
 	return &StreamFrame{

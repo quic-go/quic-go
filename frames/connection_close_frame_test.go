@@ -78,7 +78,7 @@ var _ = Describe("ConnectionCloseFrame", func() {
 				ReasonPhrase: "foobar",
 			}
 			f.Write(b, 1, protocol.PacketNumberLen6, 0)
-			Expect(f.MinLength()).To(Equal(b.Len()))
+			Expect(f.MinLength()).To(Equal(protocol.ByteCount(b.Len())))
 		})
 	})
 

@@ -91,7 +91,7 @@ func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 	ciphertext := p.aead.Seal(currentPacketNumber, raw.Bytes(), payload)
 	raw.Write(ciphertext)
 
-	if raw.Len() > protocol.MaxPacketSize {
+	if protocol.ByteCount(raw.Len()) > protocol.MaxPacketSize {
 		panic("internal inconsistency: packet too large")
 	}
 
@@ -120,8 +120,8 @@ func (p *packetPacker) getPayload(frames []frames.Frame, currentPacketNumber pro
 //
 // }
 
-func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, publicHeaderLength uint8, includeStreamFrames bool) ([]frames.Frame, error) {
-	payloadLength := 0
+func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, publicHeaderLength protocol.ByteCount, includeStreamFrames bool) ([]frames.Frame, error) {
+	payloadLength := protocol.ByteCount(0)
 	var payloadFrames []frames.Frame
 
 	// TODO: handle the case where there are more controlFrames than we can put into one packet
@@ -137,7 +137,7 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 		controlFrames = controlFrames[1:]
 	}
 
-	maxFrameSize := protocol.MaxFrameAndPublicHeaderSize - int(publicHeaderLength)
+	maxFrameSize := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLength
 
 	if payloadLength > maxFrameSize {
 		panic("internal inconsistency: packet payload too large")
@@ -164,10 +164,10 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 		if previousFrame != nil {
 			// Don't pop the queue, leave the modified frame in
 			frame = previousFrame
-			payloadLength += len(previousFrame.Data) - 1
+			payloadLength += protocol.ByteCount(len(previousFrame.Data)) - 1
 		} else {
 			p.streamFrameQueue.Pop()
-			payloadLength += len(frame.Data) - 1
+			payloadLength += protocol.ByteCount(len(frame.Data)) - 1
 		}
 
 		payloadLength += frame.MinLength()

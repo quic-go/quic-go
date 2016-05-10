@@ -181,7 +181,7 @@ var _ = Describe("Public Header", func() {
 				}
 				length, err := publicHeader.GetLength()
 				Expect(err).ToNot(HaveOccurred())
-				Expect(length).To(Equal(uint8(1 + 8 + 6))) // 1 byte public flag, 8 bytes connectionID, and packet number
+				Expect(length).To(Equal(protocol.ByteCount(1 + 8 + 6))) // 1 byte public flag, 8 bytes connectionID, and packet number
 			})
 
 			It("gets the length of a packet with longest packet number length and truncated connectionID", func() {
@@ -193,7 +193,7 @@ var _ = Describe("Public Header", func() {
 				}
 				length, err := publicHeader.GetLength()
 				Expect(err).ToNot(HaveOccurred())
-				Expect(length).To(Equal(uint8(1 + 6))) // 1 byte public flag, and packet number
+				Expect(length).To(Equal(protocol.ByteCount(1 + 6))) // 1 byte public flag, and packet number
 			})
 
 			It("gets the length of a packet 2 byte packet number length ", func() {
@@ -204,7 +204,7 @@ var _ = Describe("Public Header", func() {
 				}
 				length, err := publicHeader.GetLength()
 				Expect(err).ToNot(HaveOccurred())
-				Expect(length).To(Equal(uint8(1 + 8 + 2))) // 1 byte public flag, 8 byte connectionID, and packet number
+				Expect(length).To(Equal(protocol.ByteCount(1 + 8 + 2))) // 1 byte public flag, 8 byte connectionID, and packet number
 			})
 		})
 

@@ -26,7 +26,7 @@ func (f *BlockedFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber
 }
 
 // MinLength of a written frame
-func (f *BlockedFrame) MinLength() int {
+func (f *BlockedFrame) MinLength() protocol.ByteCount {
 	return 1 + 4
 }
 
