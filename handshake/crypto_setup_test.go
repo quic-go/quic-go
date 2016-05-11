@@ -39,7 +39,7 @@ func (s *mockSigner) SignServerProof(sni string, chlo []byte, serverConfigData [
 	}
 	return []byte("proof"), nil
 }
-func (*mockSigner) GetCertsCompressed(sni string) ([]byte, error) {
+func (*mockSigner) GetCertsCompressed(sni string, common, cached []byte) ([]byte, error) {
 	return []byte("certcompressed"), nil
 }
 func (*mockSigner) GetLeafCert(sni string) ([]byte, error) {
@@ -125,7 +125,7 @@ var _ = Describe("Crypto setup", func() {
 
 	Context("when responding to client messages", func() {
 		It("generates REJ messages", func() {
-			response, err := cs.handleInchoateCHLO("", []byte("chlo"))
+			response, err := cs.handleInchoateCHLO("", []byte("chlo"), nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(response).To(HavePrefix("REJ"))
 			Expect(response).To(ContainSubstring("certcompressed"))
@@ -135,7 +135,7 @@ var _ = Describe("Crypto setup", func() {
 
 		It("generates REJ messages for version 30", func() {
 			cs.version = protocol.VersionNumber(30)
-			_, err := cs.handleInchoateCHLO("", sampleCHLO)
+			_, err := cs.handleInchoateCHLO("", sampleCHLO, nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(signer.gotCHLO).To(BeFalse())
 		})

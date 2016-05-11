@@ -99,7 +99,7 @@ func (h *CryptoSetup) HandleCryptoStream() error {
 		}
 
 		// We have an inchoate or non-matching CHLO, we now send a rejection
-		reply, err = h.handleInchoateCHLO(sni, chloData)
+		reply, err = h.handleInchoateCHLO(sni, chloData, cryptoData)
 		if err != nil {
 			return err
 		}
@@ -164,7 +164,7 @@ func (h *CryptoSetup) isInchoateCHLO(cryptoData map[Tag][]byte) bool {
 	return false
 }
 
-func (h *CryptoSetup) handleInchoateCHLO(sni string, data []byte) ([]byte, error) {
+func (h *CryptoSetup) handleInchoateCHLO(sni string, data []byte, cryptoData map[Tag][]byte) ([]byte, error) {
 	var chloOrNil []byte
 	if h.version > protocol.VersionNumber(30) {
 		chloOrNil = data
@@ -175,7 +175,10 @@ func (h *CryptoSetup) handleInchoateCHLO(sni string, data []byte) ([]byte, error
 		return nil, err
 	}
 
-	certCompressed, err := h.scfg.GetCertsCompressed(sni)
+	commonSetHashes := cryptoData[TagCCS]
+	cachedCertsHashes := cryptoData[TagCCRT]
+
+	certCompressed, err := h.scfg.GetCertsCompressed(sni, commonSetHashes, cachedCertsHashes)
 	if err != nil {
 		return nil, err
 	}

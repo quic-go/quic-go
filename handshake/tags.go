@@ -17,8 +17,10 @@ const (
 	TagSNI Tag = 'S' + 'N'<<8 + 'I'<<16
 	// TagVER is the QUIC version
 	TagVER Tag = 'V' + 'E'<<8 + 'R'<<16
-	// TagCCS is the hash of the common certificate sets
+	// TagCCS are the hashes of the common certificate sets
 	TagCCS Tag = 'C' + 'C'<<8 + 'S'<<16
+	// TagCCRT are the hashes of the cached certificates
+	TagCCRT Tag = 'C' + 'C'<<8 + 'R'<<16 + 'T'<<24
 	// TagMSPC is max streams per connection
 	TagMSPC Tag = 'M' + 'S'<<8 + 'P'<<16 + 'C'<<24
 	// TagUAID is the user agent ID

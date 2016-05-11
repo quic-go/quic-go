@@ -50,6 +50,6 @@ func (s *ServerConfig) Sign(sni string, chlo []byte) ([]byte, error) {
 }
 
 // GetCertsCompressed returns the certificate data
-func (s *ServerConfig) GetCertsCompressed(sni string) ([]byte, error) {
-	return s.signer.GetCertsCompressed(sni)
+func (s *ServerConfig) GetCertsCompressed(sni string, commonSetHashes, compressedHashes []byte) ([]byte, error) {
+	return s.signer.GetCertsCompressed(sni, commonSetHashes, compressedHashes)
 }
