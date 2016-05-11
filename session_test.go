@@ -122,6 +122,16 @@ var _ = Describe("Session", func() {
 			Expect(err).To(Equal(errInvalidStreamID))
 		})
 
+		It("does not reject existing streams with even StreamIDs", func() {
+			_, err := session.NewStream(4)
+			Expect(err).ToNot(HaveOccurred())
+			err = session.handleStreamFrame(&frames.StreamFrame{
+				StreamID: 4,
+				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
+			})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
 		It("handles existing streams", func() {
 			session.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
@@ -208,7 +218,8 @@ var _ = Describe("Session", func() {
 				StreamID: 5,
 				Data:     []byte{},
 			})
-			Expect(err).To(MatchError("Session: reopening streams is not allowed"))
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(Equal(errReopeningStreamsNotAllowed))
 		})
 	})
 

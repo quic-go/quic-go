@@ -24,6 +24,7 @@ type receivedPacket struct {
 
 var (
 	errInvalidStreamID             = errors.New("STREAM_FRAME with invalid StreamID received")
+	errReopeningStreamsNotAllowed  = errors.New("Reopening Streams not allowed")
 	errRstStreamOnInvalidStream    = errors.New("RST_STREAM received for unknown stream")
 	errWindowUpdateOnInvalidStream = errors.New("WINDOW_UPDATE received for unknown stream")
 )
@@ -190,6 +191,7 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 		case *frames.StreamFrame:
 			utils.Debugf("\t<- &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: %d}", frame.StreamID, frame.FinBit, frame.Offset)
 			err = s.handleStreamFrame(frame)
+			// TODO: send RstStreamFrame
 		case *frames.AckFrame:
 			err = s.handleAckFrame(frame)
 		case *frames.ConnectionCloseFrame:
@@ -226,20 +228,20 @@ func (s *Session) HandlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 
 // TODO: Ignore data for closed streams
 func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
-	if !s.isValidStreamID(frame.StreamID) {
-		return errInvalidStreamID
-	}
-
 	s.streamsMutex.RLock()
 	str, streamExists := s.streams[frame.StreamID]
 	s.streamsMutex.RUnlock()
 
 	if !streamExists {
+		if !s.isValidStreamID(frame.StreamID) {
+			return errInvalidStreamID
+		}
+
 		ss, _ := s.NewStream(frame.StreamID)
 		str = ss.(*stream)
 	}
 	if str == nil {
-		return errors.New("Session: reopening streams is not allowed")
+		return errReopeningStreamsNotAllowed
 	}
 	err := str.AddStreamFrame(frame)
 	if err != nil {
