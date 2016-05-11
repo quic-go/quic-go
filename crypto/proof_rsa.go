@@ -64,21 +64,30 @@ func (kd *rsaSigner) GetCertsCompressed(sni string) ([]byte, error) {
 	}
 
 	b := &bytes.Buffer{}
-	b.WriteByte(1) // Entry type compressed
-	b.WriteByte(0) // Entry type end_of_list
-	utils.WriteUint32(b, uint32(len(cert.Certificate[0])+4))
+	totalUncompressedLen := 0
+	for _, c := range cert.Certificate {
+		// Entry type compressed
+		b.WriteByte(1)
+		totalUncompressedLen += len(c)
+	}
+	// Entry type end_of_list
+	b.WriteByte(0)
+	// Data + individual lengths as uint32
+	utils.WriteUint32(b, uint32(totalUncompressedLen+4*len(cert.Certificate)))
 	gz, err := zlib.NewWriterLevelDict(b, flate.BestCompression, certDictZlib)
 	if err != nil {
 		panic(err)
 	}
-	lenCert := len(cert.Certificate[0])
-	gz.Write([]byte{
-		byte(lenCert & 0xff),
-		byte((lenCert >> 8) & 0xff),
-		byte((lenCert >> 16) & 0xff),
-		byte((lenCert >> 24) & 0xff),
-	})
-	gz.Write(cert.Certificate[0])
+	for _, c := range cert.Certificate {
+		lenCert := len(c)
+		gz.Write([]byte{
+			byte(lenCert & 0xff),
+			byte((lenCert >> 8) & 0xff),
+			byte((lenCert >> 16) & 0xff),
+			byte((lenCert >> 24) & 0xff),
+		})
+		gz.Write(c)
+	}
 	gz.Close()
 	return b.Bytes(), nil
 }
