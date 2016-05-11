@@ -113,6 +113,15 @@ var _ = Describe("Session", func() {
 			Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
 		})
 
+		It("rejects streams with even StreamIDs", func() {
+			err := session.handleStreamFrame(&frames.StreamFrame{
+				StreamID: 4,
+				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(Equal(errInvalidStreamID))
+		})
+
 		It("handles existing streams", func() {
 			session.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,

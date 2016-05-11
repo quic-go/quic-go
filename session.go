@@ -23,6 +23,7 @@ type receivedPacket struct {
 }
 
 var (
+	errInvalidStreamID             = errors.New("STREAM_FRAME with invalid StreamID received")
 	errRstStreamOnInvalidStream    = errors.New("RST_STREAM received for unknown stream")
 	errWindowUpdateOnInvalidStream = errors.New("WINDOW_UPDATE received for unknown stream")
 )
@@ -225,9 +226,10 @@ func (s *Session) HandlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 
 // TODO: Ignore data for closed streams
 func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
-	if frame.StreamID == 0 {
-		return errors.New("Session: 0 is not a valid Stream ID")
+	if !s.isValidStreamID(frame.StreamID) {
+		return errInvalidStreamID
 	}
+
 	s.streamsMutex.RLock()
 	str, streamExists := s.streams[frame.StreamID]
 	s.streamsMutex.RUnlock()
@@ -247,6 +249,13 @@ func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
 		s.streamCallback(s, str)
 	}
 	return nil
+}
+
+func (s *Session) isValidStreamID(streamID protocol.StreamID) bool {
+	if streamID%2 != 1 {
+		return false
+	}
+	return true
 }
 
 func (s *Session) handleWindowUpdateFrame(frame *frames.WindowUpdateFrame) error {
