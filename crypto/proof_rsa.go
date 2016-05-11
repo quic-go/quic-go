@@ -56,8 +56,8 @@ func (kd *rsaSigner) SignServerProof(sni string, chlo []byte, serverConfigData [
 	)
 }
 
-// GetCertCompressed gets the certificate in the format described by the QUIC crypto doc
-func (kd *rsaSigner) GetCertCompressed(sni string) ([]byte, error) {
+// GetCertsCompressed gets the certificate in the format described by the QUIC crypto doc
+func (kd *rsaSigner) GetCertsCompressed(sni string) ([]byte, error) {
 	cert, err := kd.getCertForSNI(sni)
 	if err != nil {
 		return nil, err

@@ -30,7 +30,7 @@ var _ = Describe("ProofRsa", func() {
 				},
 			},
 		}
-		certCompressed, err := kd.GetCertCompressed("")
+		certCompressed, err := kd.GetCertsCompressed("")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(certCompressed).To(Equal(append([]byte{
 			0x01, 0x00,

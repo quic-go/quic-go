@@ -175,7 +175,7 @@ func (h *CryptoSetup) handleInchoateCHLO(sni string, data []byte) ([]byte, error
 		return nil, err
 	}
 
-	certCompressed, err := h.scfg.GetCertCompressed(sni)
+	certCompressed, err := h.scfg.GetCertsCompressed(sni)
 	if err != nil {
 		return nil, err
 	}
