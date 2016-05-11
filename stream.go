@@ -3,6 +3,7 @@ package quic
 import (
 	"io"
 	"sync"
+	"sync/atomic"
 
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -16,73 +17,104 @@ type streamHandler interface {
 
 // A Stream assembles the data from StreamFrames and provides a super-convenient Read-Interface
 type stream struct {
-	session  streamHandler
 	streamID protocol.StreamID
-	// The chan of unordered stream frames. A nil in this channel is sent by the
-	// session if an error occurred, in this case, remoteErr is filled before.
-	streamFrames   chan *frames.StreamFrame
-	currentFrame   *frames.StreamFrame
-	readPosInFrame protocol.ByteCount
+	session  streamHandler
+
+	readPosInFrame int
 	writeOffset    protocol.ByteCount
 	readOffset     protocol.ByteCount
-	frameQueue     []*frames.StreamFrame // TODO: replace with heap
-	remoteErr      error
-	currentErr     error
 
-	connectionParameterManager *handshake.ConnectionParametersManager
+	// Once set, err must not be changed!
+	err   error
+	mutex sync.Mutex
 
-	flowControlWindow protocol.ByteCount
-	windowUpdateCond  *sync.Cond
+	eof int32 // really a bool
+
+	frameQueue        streamFrameSorter
+	newFrameOrErrCond sync.Cond
+
+	flowControlWindow     protocol.ByteCount
+	windowUpdateOrErrCond sync.Cond
 }
 
 // newStream creates a new Stream
 func newStream(session streamHandler, connectionParameterManager *handshake.ConnectionParametersManager, StreamID protocol.StreamID) (*stream, error) {
 	s := &stream{
-		session:                    session,
-		streamID:                   StreamID,
-		streamFrames:               make(chan *frames.StreamFrame, 8), // ToDo: add config option for this number
-		connectionParameterManager: connectionParameterManager,
-		windowUpdateCond:           sync.NewCond(&sync.Mutex{}),
+		session:  session,
+		streamID: StreamID,
 	}
 
-	flowControlWindow, err := connectionParameterManager.GetStreamFlowControlWindow()
+	s.newFrameOrErrCond.L = &s.mutex
+	s.windowUpdateOrErrCond.L = &s.mutex
+
+	var err error
+	s.flowControlWindow, err = connectionParameterManager.GetStreamFlowControlWindow()
 	if err != nil {
 		return nil, err
 	}
-	s.flowControlWindow = flowControlWindow
+
 	return s, nil
 }
 
-// Read implements io.Reader
+// Read implements io.Reader. It is not thread safe!
 func (s *stream) Read(p []byte) (int, error) {
-	if s.currentErr != nil {
-		return 0, s.currentErr
+	if atomic.LoadInt32(&s.eof) != 0 {
+		return 0, io.EOF
 	}
+
 	bytesRead := 0
 	for bytesRead < len(p) {
-		if s.currentFrame == nil {
-			var err error
-			s.currentFrame, err = s.getNextFrameInOrder(bytesRead == 0)
-			if err != nil {
-				s.currentErr = err
-				return bytesRead, err
-			}
-			if s.currentFrame == nil {
-				return bytesRead, nil
-			}
-			s.readPosInFrame = 0
+		s.mutex.Lock()
+		frame := s.frameQueue.Head()
+
+		if frame == nil && bytesRead > 0 {
+			defer s.mutex.Unlock()
+			return bytesRead, s.err
 		}
-		// TODO: don't cast to int for comparing
-		m := utils.Min(len(p)-bytesRead, int(protocol.ByteCount(len(s.currentFrame.Data))-s.readPosInFrame))
-		copy(p[bytesRead:], s.currentFrame.Data[s.readPosInFrame:])
-		s.readPosInFrame += protocol.ByteCount(m)
+
+		for {
+			// Stop waiting on errors
+			if s.err != nil {
+				break
+			}
+			if frame != nil {
+				// Pop and continue if the frame doesn't have any new data
+				if frame.Offset+protocol.ByteCount(len(frame.Data)) <= s.readOffset && !frame.FinBit {
+					s.frameQueue.Pop()
+					frame = s.frameQueue.Head()
+					continue
+				}
+				// If the frame's offset is <= our current read pos, and we didn't
+				// go into the previous if, we can read data from the frame.
+				if frame.Offset <= s.readOffset {
+					// Set our read position in the frame properly
+					s.readPosInFrame = int(s.readOffset - frame.Offset)
+					break
+				}
+			}
+			s.newFrameOrErrCond.Wait()
+			frame = s.frameQueue.Head()
+		}
+		s.mutex.Unlock()
+
+		if frame == nil {
+			atomic.StoreInt32(&s.eof, 1)
+			// We have an err and no data, return the error
+			return bytesRead, s.err
+		}
+
+		m := utils.Min(len(p)-bytesRead, len(frame.Data)-s.readPosInFrame)
+		copy(p[bytesRead:], frame.Data[s.readPosInFrame:])
+		s.readPosInFrame += m
 		bytesRead += m
 		s.readOffset += protocol.ByteCount(m)
-		if s.readPosInFrame >= protocol.ByteCount(len(s.currentFrame.Data)) {
-			fin := s.currentFrame.FinBit
-			s.currentFrame = nil
+		if s.readPosInFrame >= len(frame.Data) {
+			fin := frame.FinBit
+			s.mutex.Lock()
+			s.frameQueue.Pop()
+			s.mutex.Unlock()
 			if fin {
-				s.currentErr = io.EOF
+				atomic.StoreInt32(&s.eof, 1)
 				return bytesRead, io.EOF
 			}
 		}
@@ -91,96 +123,46 @@ func (s *stream) Read(p []byte) (int, error) {
 	return bytesRead, nil
 }
 
-func (s *stream) getNextFrameInOrder(wait bool) (*frames.StreamFrame, error) {
-	// First, check the queue
-	for i, f := range s.frameQueue {
-		if f.Offset == s.readOffset {
-			// Move last element into position i
-			s.frameQueue[i] = s.frameQueue[len(s.frameQueue)-1]
-			s.frameQueue = s.frameQueue[:len(s.frameQueue)-1]
-			return f, nil
-		}
-	}
-
-	for {
-		nextFrameFromChannel, err := s.nextFrameInChan(wait)
-		if err != nil {
-			return nil, err
-		}
-		if nextFrameFromChannel == nil {
-			return nil, nil
-		}
-
-		if nextFrameFromChannel.Offset == s.readOffset {
-			return nextFrameFromChannel, nil
-		}
-
-		// Discard if we already know it
-		if nextFrameFromChannel.Offset < s.readOffset {
-			continue
-		}
-
-		// Append to queue
-		s.frameQueue = append(s.frameQueue, nextFrameFromChannel)
-	}
-}
-
-func (s *stream) nextFrameInChan(blocking bool) (*frames.StreamFrame, error) {
-	var f *frames.StreamFrame
-	var ok bool
-	if blocking {
-		f, ok = <-s.streamFrames
-	} else {
-		select {
-		case f, ok = <-s.streamFrames:
-		default:
-			return nil, nil
-		}
-	}
-	if !ok {
-		panic("Stream: internal inconsistency: encountered closed chan without nil value (remote error) or FIN bit")
-	}
-	if f == nil {
-		// We read nil, which indicates a remoteErr
-		return nil, s.remoteErr
-	}
-	return f, nil
-}
-
 // ReadByte implements io.ByteReader
 func (s *stream) ReadByte() (byte, error) {
-	// TODO: Optimize
 	p := make([]byte, 1)
 	_, err := io.ReadFull(s, p)
 	return p[0], err
 }
 
 func (s *stream) UpdateFlowControlWindow(n protocol.ByteCount) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	if n > s.flowControlWindow {
-		s.windowUpdateCond.L.Lock()
 		s.flowControlWindow = n
-		s.windowUpdateCond.L.Unlock()
-		s.windowUpdateCond.Broadcast()
+		s.windowUpdateOrErrCond.Broadcast()
 	}
 }
 
 func (s *stream) Write(p []byte) (int, error) {
-	if s.remoteErr != nil {
-		return 0, s.remoteErr
+	s.mutex.Lock()
+	err := s.err
+	s.mutex.Unlock()
+
+	if err != nil {
+		return 0, err
 	}
 
 	dataWritten := 0
 
 	for dataWritten < len(p) {
-		s.windowUpdateCond.L.Lock()
+		s.mutex.Lock()
 		remainingBytesInWindow := int64(s.flowControlWindow) - int64(s.writeOffset)
-		for ; remainingBytesInWindow == 0; remainingBytesInWindow = int64(s.flowControlWindow) - int64(s.writeOffset) {
-			if s.remoteErr != nil {
-				return 0, s.remoteErr
-			}
-			s.windowUpdateCond.Wait()
+		for remainingBytesInWindow == 0 && s.err == nil {
+			s.windowUpdateOrErrCond.Wait()
+			remainingBytesInWindow = int64(s.flowControlWindow) - int64(s.writeOffset)
 		}
-		s.windowUpdateCond.L.Unlock()
+		s.mutex.Unlock()
+
+		if remainingBytesInWindow == 0 {
+			// We must have had an error
+			return 0, s.err
+		}
 
 		dataLen := utils.Min(len(p), int(remainingBytesInWindow))
 		data := make([]byte, dataLen)
@@ -212,18 +194,26 @@ func (s *stream) Close() error {
 
 // AddStreamFrame adds a new stream frame
 func (s *stream) AddStreamFrame(frame *frames.StreamFrame) error {
-	s.streamFrames <- frame
+	s.mutex.Lock()
+	s.frameQueue.Push(frame)
+	s.mutex.Unlock()
+	s.newFrameOrErrCond.Signal()
 	return nil
 }
 
 // RegisterError is called by session to indicate that an error occurred and the
 // stream should be closed.
 func (s *stream) RegisterError(err error) {
-	s.remoteErr = err
-	s.streamFrames <- nil
-	s.windowUpdateCond.Broadcast()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.err != nil { // s.err must not be changed!
+		return
+	}
+	s.err = err
+	s.windowUpdateOrErrCond.Signal()
+	s.newFrameOrErrCond.Signal()
 }
 
 func (s *stream) finishedReading() bool {
-	return s.currentErr != nil
+	return atomic.LoadInt32(&s.eof) != 0
 }

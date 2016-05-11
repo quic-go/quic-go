@@ -179,15 +179,15 @@ var _ = Describe("Stream", func() {
 		It("discards unneeded str frames", func() {
 			frame1 := frames.StreamFrame{
 				Offset: 0,
-				Data:   []byte{0xDE, 0xAD},
+				Data:   []byte("ab"),
 			}
 			frame2 := frames.StreamFrame{
 				Offset: 1,
-				Data:   []byte{0x42, 0x24},
+				Data:   []byte("xy"),
 			}
 			frame3 := frames.StreamFrame{
 				Offset: 2,
-				Data:   []byte{0xBE, 0xEF},
+				Data:   []byte("cd"),
 			}
 			str.AddStreamFrame(&frame1)
 			str.AddStreamFrame(&frame2)
@@ -196,7 +196,7 @@ var _ = Describe("Stream", func() {
 			n, err := str.Read(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(n).To(Equal(4))
-			Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
+			Expect(b).To(Equal([]byte("abyd")))
 		})
 	})
 
@@ -339,93 +339,6 @@ var _ = Describe("Stream", func() {
 			str.flowControlWindow = 100
 			str.UpdateFlowControlWindow(50)
 			Expect(str.flowControlWindow).To(Equal(protocol.ByteCount(100)))
-		})
-	})
-
-	Context("getting next str frame", func() {
-		It("gets next frame", func() {
-			str.AddStreamFrame(&frames.StreamFrame{
-				Offset: 0,
-				Data:   []byte{0xDE, 0xAD},
-			})
-			f, err := str.getNextFrameInOrder(true)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(f.Data).To(Equal([]byte{0xDE, 0xAD}))
-		})
-
-		It("waits for next frame", func() {
-			var b bool
-			go func() {
-				time.Sleep(time.Millisecond)
-				b = true
-				str.AddStreamFrame(&frames.StreamFrame{
-					Offset: 0,
-					Data:   []byte{0xDE, 0xAD},
-				})
-			}()
-			f, err := str.getNextFrameInOrder(true)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(b).To(BeTrue())
-			Expect(f.Data).To(Equal([]byte{0xDE, 0xAD}))
-		})
-
-		It("queues non-matching str frames", func() {
-			var b bool
-			str.AddStreamFrame(&frames.StreamFrame{
-				Offset: 2,
-				Data:   []byte{0xBE, 0xEF},
-			})
-			go func() {
-				time.Sleep(time.Millisecond)
-				b = true
-				str.AddStreamFrame(&frames.StreamFrame{
-					Offset: 0,
-					Data:   []byte{0xDE, 0xAD},
-				})
-			}()
-			f, err := str.getNextFrameInOrder(true)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(b).To(BeTrue())
-			Expect(f.Data).To(Equal([]byte{0xDE, 0xAD}))
-			str.readOffset += 2
-			f, err = str.getNextFrameInOrder(true)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(f.Data).To(Equal([]byte{0xBE, 0xEF}))
-		})
-
-		It("returns nil if non-blocking", func() {
-			Expect(str.getNextFrameInOrder(false)).To(BeNil())
-		})
-
-		It("returns properly if non-blocking", func() {
-			str.AddStreamFrame(&frames.StreamFrame{
-				Offset: 0,
-				Data:   []byte{0xDE, 0xAD},
-			})
-			Expect(str.getNextFrameInOrder(false)).ToNot(BeNil())
-		})
-
-		It("dequeues 3rd frame after blocking on 1st", func() {
-			str.AddStreamFrame(&frames.StreamFrame{
-				Offset: 4,
-				Data:   []byte{0x23, 0x42},
-			})
-			str.AddStreamFrame(&frames.StreamFrame{
-				Offset: 2,
-				Data:   []byte{0xBE, 0xEF},
-			})
-			go func() {
-				time.Sleep(time.Millisecond)
-				str.AddStreamFrame(&frames.StreamFrame{
-					Offset: 0,
-					Data:   []byte{0xDE, 0xAD},
-				})
-			}()
-			Expect(str.getNextFrameInOrder(true)).ToNot(BeNil())
-			str.readOffset += 2
-			Expect(str.getNextFrameInOrder(true)).ToNot(BeNil())
-			str.readOffset += 2
-			Expect(str.getNextFrameInOrder(true)).ToNot(BeNil())
 		})
 	})
 

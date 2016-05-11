@@ -484,8 +484,6 @@ func (s *Session) garbageCollectStreams() {
 		if v == nil {
 			continue
 		}
-		// Strictly speaking, this is not thread-safe. However it doesn't matter
-		// if the stream is deleted just shortly later, so we don't care.
 		if v.finishedReading() {
 			s.streams[k] = nil
 		}
