@@ -11,11 +11,12 @@ import (
 
 // A StreamFrame of QUIC
 type StreamFrame struct {
-	FinBit      bool
-	StreamID    protocol.StreamID
-	streamIDLen protocol.ByteCount
-	Offset      protocol.ByteCount
-	Data        []byte
+	FinBit         bool
+	StreamID       protocol.StreamID
+	streamIDLen    protocol.ByteCount
+	Offset         protocol.ByteCount
+	Data           []byte
+	DataLenPresent bool
 }
 
 var (
@@ -33,7 +34,7 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 	}
 
 	frame.FinBit = typeByte&0x40 > 0
-	dataLenPresent := typeByte&0x20 > 0
+	frame.DataLenPresent = typeByte&0x20 > 0
 	offsetLen := typeByte & 0x1C >> 2
 	if offsetLen != 0 {
 		offsetLen++
@@ -53,7 +54,7 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 	frame.Offset = protocol.ByteCount(offset)
 
 	var dataLen uint16
-	if dataLenPresent {
+	if frame.DataLenPresent {
 		dataLen, err = utils.ReadUint16(r)
 		if err != nil {
 			return nil, err
@@ -79,10 +80,14 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 // WriteStreamFrame writes a stream frame.
 func (f *StreamFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, packetNumberLen protocol.PacketNumberLen, version protocol.VersionNumber) error {
 	typeByte := uint8(0x80) // sets the leftmost bit to 1
+
 	if f.FinBit {
 		typeByte ^= 0x40
 	}
-	typeByte ^= 0x20 // dataLenPresent
+
+	if f.DataLenPresent {
+		typeByte ^= 0x20
+	}
 
 	offsetLength := f.getOffsetLength()
 
@@ -130,8 +135,12 @@ func (f *StreamFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber,
 		return errInvalidOffsetLen
 	}
 
-	utils.WriteUint16(b, uint16(len(f.Data)))
+	if f.DataLenPresent {
+		utils.WriteUint16(b, uint16(len(f.Data)))
+	}
+
 	b.Write(f.Data)
+
 	return nil
 }
 
@@ -178,7 +187,12 @@ func (f *StreamFrame) MinLength() protocol.ByteCount {
 		f.calculateStreamIDLength()
 	}
 
-	return 1 + f.streamIDLen + f.getOffsetLength() + 2 + 1
+	length := protocol.ByteCount(1) + f.streamIDLen + f.getOffsetLength()
+	if f.DataLenPresent {
+		length += 2
+	}
+
+	return length + 1
 }
 
 // MaybeSplitOffFrame removes the first n bytes and returns them as a separate frame. If n >= len(n), nil is returned and nothing is modified.

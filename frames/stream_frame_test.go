@@ -17,16 +17,18 @@ var _ = Describe("StreamFrame", func() {
 			Expect(frame.FinBit).To(BeFalse())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(1)))
 			Expect(frame.Offset).To(BeZero())
+			Expect(frame.DataLenPresent).To(BeTrue())
 			Expect(frame.Data).To(Equal([]byte("foobar")))
 		})
 
-		It("accepts frame without datalength", func() {
+		It("accepts frame without data length", func() {
 			b := bytes.NewReader([]byte{0x80, 0x1, 'f', 'o', 'o', 'b', 'a', 'r'})
 			frame, err := ParseStreamFrame(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.FinBit).To(BeFalse())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(1)))
 			Expect(frame.Offset).To(BeZero())
+			Expect(frame.DataLenPresent).To(BeFalse())
 			Expect(frame.Data).To(Equal([]byte("foobar")))
 		})
 	})
@@ -35,8 +37,9 @@ var _ = Describe("StreamFrame", func() {
 		It("writes sample frame", func() {
 			b := &bytes.Buffer{}
 			(&StreamFrame{
-				StreamID: 1,
-				Data:     []byte("foobar"),
+				StreamID:       1,
+				Data:           []byte("foobar"),
+				DataLenPresent: true,
 			}).Write(b, 1, protocol.PacketNumberLen6, 0)
 			Expect(b.Bytes()).To(Equal([]byte{0xa0, 0x1, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'}))
 		})
@@ -61,6 +64,52 @@ var _ = Describe("StreamFrame", func() {
 			}
 			f.Write(b, 1, protocol.PacketNumberLen6, 0)
 			Expect(f.MinLength()).To(Equal(protocol.ByteCount(b.Len())))
+		})
+
+		Context("data length field", func() {
+			It("writes the data length", func() {
+				dataLen := 0x1337
+				b := &bytes.Buffer{}
+				f := &StreamFrame{
+					StreamID:       1,
+					Data:           bytes.Repeat([]byte{'f'}, dataLen),
+					DataLenPresent: true,
+					Offset:         0,
+				}
+				f.Write(b, 1, protocol.PacketNumberLen6, 0)
+				headerLength := f.MinLength() - 1
+				Expect(b.Bytes()[0] & 0x20).To(Equal(uint8(0x20)))
+				Expect(b.Bytes()[headerLength-2 : headerLength]).To(Equal([]byte{0x37, 0x13}))
+			})
+
+			It("omits the data length field", func() {
+				dataLen := 0x1337
+				b := &bytes.Buffer{}
+				f := &StreamFrame{
+					StreamID:       1,
+					Data:           bytes.Repeat([]byte{'f'}, dataLen),
+					DataLenPresent: false,
+					Offset:         0,
+				}
+				f.Write(b, 1, protocol.PacketNumberLen6, 0)
+				Expect(b.Bytes()[0] & 0x20).To(Equal(uint8(0)))
+				Expect(b.Bytes()[1 : b.Len()-dataLen]).ToNot(ContainSubstring(string([]byte{0x37, 0x13})))
+				minLength := f.MinLength()
+				f.DataLenPresent = true
+				Expect(minLength).To(Equal(f.MinLength() - 2))
+			})
+
+			It("calculates the correcct min-length", func() {
+				f := &StreamFrame{
+					StreamID:       0xCAFE,
+					Data:           []byte("foobar"),
+					DataLenPresent: false,
+					Offset:         0xDEADBEEF,
+				}
+				minLengthWithoutDataLen := f.MinLength()
+				f.DataLenPresent = true
+				Expect(f.MinLength()).To(Equal(minLengthWithoutDataLen + 2))
+			})
 		})
 
 		Context("offset lengths", func() {
