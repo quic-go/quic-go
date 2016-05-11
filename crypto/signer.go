@@ -4,5 +4,5 @@ package crypto
 type Signer interface {
 	SignServerProof(sni string, chlo []byte, serverConfigData []byte) ([]byte, error)
 	GetCertCompressed(sni string) ([]byte, error)
-	GetCertUncompressed(sni string) ([]byte, error)
+	GetLeafCert(sni string) ([]byte, error)
 }

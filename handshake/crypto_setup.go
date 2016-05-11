@@ -203,7 +203,7 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
-	certUncompressed, err := h.scfg.signer.GetCertUncompressed(sni)
+	certUncompressed, err := h.scfg.signer.GetLeafCert(sni)
 	if err != nil {
 		return nil, err
 	}

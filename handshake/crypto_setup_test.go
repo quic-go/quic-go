@@ -42,7 +42,7 @@ func (s *mockSigner) SignServerProof(sni string, chlo []byte, serverConfigData [
 func (*mockSigner) GetCertCompressed(sni string) ([]byte, error) {
 	return []byte("certcompressed"), nil
 }
-func (*mockSigner) GetCertUncompressed(sni string) ([]byte, error) {
+func (*mockSigner) GetLeafCert(sni string) ([]byte, error) {
 	return []byte("certuncompressed"), nil
 }
 

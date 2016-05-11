@@ -83,8 +83,8 @@ func (kd *rsaSigner) GetCertCompressed(sni string) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-// GetCertUncompressed gets the certificate in DER
-func (kd *rsaSigner) GetCertUncompressed(sni string) ([]byte, error) {
+// GetLeafCert gets the leaf certificate
+func (kd *rsaSigner) GetLeafCert(sni string) ([]byte, error) {
 	cert, err := kd.getCertForSNI(sni)
 	if err != nil {
 		return nil, err
