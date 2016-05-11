@@ -420,12 +420,12 @@ var _ = Describe("Session", func() {
 		})
 
 		It("should call OnSent", func() {
-			session.QueueStreamFrame(&frames.StreamFrame{StreamID: 5, DataLenPresent: true})
+			session.QueueStreamFrame(&frames.StreamFrame{StreamID: 5})
 			session.sendPacket()
 			Expect(cong.nCalls).To(Equal(2)) // OnPacketSent + GetCongestionWindow
-			Expect(cong.argsOnPacketSent[1]).To(Equal(protocol.ByteCount(27)))
+			Expect(cong.argsOnPacketSent[1]).To(Equal(protocol.ByteCount(25)))
 			Expect(cong.argsOnPacketSent[2]).To(Equal(protocol.PacketNumber(1)))
-			Expect(cong.argsOnPacketSent[3]).To(Equal(protocol.ByteCount(27)))
+			Expect(cong.argsOnPacketSent[3]).To(Equal(protocol.ByteCount(25)))
 			Expect(cong.argsOnPacketSent[4]).To(BeTrue())
 		})
 

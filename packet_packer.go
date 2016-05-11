@@ -147,8 +147,16 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 		return payloadFrames, nil
 	}
 
+	hasStreamFrames := false
+
+	// temporarily increase the maxFrameSize by 2 bytes
+	// this leads to a properly sized packet in all cases, since we do all the packet length calculations with StreamFrames that have the DataLen set
+	// however, for the last StreamFrame in the packet, we can omit the DataLen, thus saving 2 bytes and yielding a packet of exactly the correct size
+	maxFrameSize += 2
+
 	for p.streamFrameQueue.Len() > 0 {
 		frame := p.streamFrameQueue.Front()
+		frame.DataLenPresent = true // set the dataLen by default. Remove them later if applicable
 
 		if payloadLength > maxFrameSize {
 			panic("internal inconsistency: packet payload too large")
@@ -172,6 +180,13 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 
 		payloadLength += frame.MinLength()
 		payloadFrames = append(payloadFrames, frame)
+		hasStreamFrames = true
+	}
+
+	// remove the dataLen for the last StreamFrame in the packet
+	if hasStreamFrames {
+		payloadFrames[len(payloadFrames)-1].(*frames.StreamFrame).DataLenPresent = false
+		// payloadLength -= 2
 	}
 
 	return payloadFrames, nil
