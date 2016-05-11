@@ -99,6 +99,7 @@ func (f *AckFrame) MinLength() protocol.ByteCount {
 	l += (1 + 2) * 0 /* TODO: num_timestamps */
 	if f.HasNACK() {
 		l += 1 + (6+1)*len(f.NackRanges)
+		l++ // TODO: Remove once we drop support for <32
 	}
 	return protocol.ByteCount(l)
 }

@@ -413,7 +413,7 @@ var _ = Describe("AckFrame", func() {
 					LargestObserved: 4,
 					NackRanges:      []NackRange{NackRange{FirstPacketNumber: 2, LastPacketNumber: 2}},
 				}
-				err := f.Write(b, 1, protocol.PacketNumberLen6, 32)
+				err := f.Write(b, 1, protocol.PacketNumberLen6, 31)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(f.MinLength()).To(Equal(protocol.ByteCount(b.Len())))
 			})
