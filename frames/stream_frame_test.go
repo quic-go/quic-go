@@ -153,7 +153,18 @@ var _ = Describe("StreamFrame", func() {
 		})
 
 		Context("lengths of StreamIDs", func() {
-			It("writes a 2 byte StreamID", func() {
+			It("returns an error for a non-valid StreamID length", func() {
+				b := &bytes.Buffer{}
+				err := (&StreamFrame{
+					StreamID:    1,
+					streamIDLen: 13,
+					Data:        []byte("foobar"),
+				}).Write(b, 1, protocol.PacketNumberLen6, 0)
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(Equal(errInvalidStreamIDLen))
+			})
+
+			It("writes a 1 byte StreamID", func() {
 				b := &bytes.Buffer{}
 				(&StreamFrame{
 					StreamID: 13,

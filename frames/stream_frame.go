@@ -2,6 +2,7 @@ package frames
 
 import (
 	"bytes"
+	"errors"
 	"io/ioutil"
 
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -16,6 +17,11 @@ type StreamFrame struct {
 	Offset      protocol.ByteCount
 	Data        []byte
 }
+
+var (
+	errInvalidStreamIDLen = errors.New("StreamFrame: Invalid StreamID length")
+	errInvalidOffsetLen   = errors.New("StreamFrame: Invalid offset length")
+)
 
 // ParseStreamFrame reads a stream frame. The type byte must not have been read yet.
 func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
@@ -79,38 +85,14 @@ func (f *StreamFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber,
 	typeByte ^= 0x20 // dataLenPresent
 
 	offsetLength := f.getOffsetLength()
-	switch offsetLength {
-	case 0:
-		typeByte ^= 0x0
-	case 2:
-		typeByte ^= 0x1 << 2
-	case 3:
-		typeByte ^= 0x2 << 2
-	case 4:
-		typeByte ^= 0x3 << 2
-	case 5:
-		typeByte ^= 0x4 << 2
-	case 6:
-		typeByte ^= 0x5 << 2
-	case 7:
-		typeByte ^= 0x6 << 2
-	case 8:
-		typeByte ^= 0x7 << 2
+
+	if offsetLength > 0 {
+		typeByte ^= (uint8(offsetLength) - 1) << 2
 	}
 
 	if f.streamIDLen == 0 {
 		f.calculateStreamIDLength()
-	}
-
-	switch f.streamIDLen {
-	case 1:
-		typeByte ^= 0x0
-	case 2:
-		typeByte ^= 0x01
-	case 3:
-		typeByte ^= 0x02
-	case 4:
-		typeByte ^= 0x03
+		typeByte ^= uint8(f.streamIDLen) - 1
 	}
 
 	b.WriteByte(typeByte)
@@ -124,6 +106,8 @@ func (f *StreamFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber,
 		utils.WriteUint24(b, uint32(f.StreamID))
 	case 4:
 		utils.WriteUint32(b, uint32(f.StreamID))
+	default:
+		return errInvalidStreamIDLen
 	}
 
 	switch offsetLength {
@@ -142,6 +126,8 @@ func (f *StreamFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber,
 		utils.WriteUint56(b, uint64(f.Offset))
 	case 8:
 		utils.WriteUint64(b, uint64(f.Offset))
+	default:
+		return errInvalidOffsetLen
 	}
 
 	utils.WriteUint16(b, uint16(len(f.Data)))
