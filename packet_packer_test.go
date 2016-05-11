@@ -238,9 +238,9 @@ var _ = Describe("Packet packer", func() {
 		It("packs a packet that has the maximum packet size when given a large enough stream frame", func() {
 			publicHeaderLength := protocol.ByteCount(3)
 			f := frames.StreamFrame{
-				Data:   bytes.Repeat([]byte{'f'}, int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLength-(1+4+8+2))),
 				Offset: 1,
 			}
+			f.Data = bytes.Repeat([]byte{'f'}, int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLength-f.MinLength()+1)) // + 1 since MinceLength is 1 bigger than the actual StreamFrame header
 			packer.AddStreamFrame(f)
 			p, err := packer.PackPacket(nil, []frames.Frame{}, true)
 			Expect(err).ToNot(HaveOccurred())

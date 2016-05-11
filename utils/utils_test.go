@@ -99,6 +99,21 @@ var _ = Describe("Utils", func() {
 		})
 	})
 
+	Context("WriteUint40", func() {
+		It("outputs 5 bytes", func() {
+			b := &bytes.Buffer{}
+			WriteUint40(b, uint64(1))
+			Expect(b.Len()).To(Equal(5))
+		})
+
+		It("outputs a little endian", func() {
+			num := uint64(0xDEADBEEFCAFE)
+			b := &bytes.Buffer{}
+			WriteUint40(b, num)
+			Expect(b.Bytes()).To(Equal([]byte{0xFE, 0xCA, 0xEF, 0xBE, 0xAD}))
+		})
+	})
+
 	Context("WriteUint48", func() {
 		It("outputs 6 bytes", func() {
 			b := &bytes.Buffer{}
@@ -119,6 +134,21 @@ var _ = Describe("Utils", func() {
 			WriteUint48(b, num)
 			Expect(b.Len()).To(Equal(6))
 			Expect(b.Bytes()).To(Equal([]byte{0xFE, 0xCA, 0xEF, 0xBE, 0xAD, 0xDE}))
+		})
+	})
+
+	Context("WriteUint56", func() {
+		It("outputs 7 bytes", func() {
+			b := &bytes.Buffer{}
+			WriteUint56(b, uint64(1))
+			Expect(b.Len()).To(Equal(7))
+		})
+
+		It("outputs a little endian", func() {
+			num := uint64(0xFFEEDDCCBBAA9988)
+			b := &bytes.Buffer{}
+			WriteUint56(b, num)
+			Expect(b.Bytes()).To(Equal([]byte{0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE}))
 		})
 	})
 

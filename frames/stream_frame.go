@@ -77,8 +77,25 @@ func (f *StreamFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber,
 		typeByte ^= 0x40
 	}
 	typeByte ^= 0x20 // dataLenPresent
-	if f.Offset != 0 {
-		typeByte ^= 0x1c // TODO: Send shorter offset if possible
+
+	offsetLength := f.getOffsetLength()
+	switch offsetLength {
+	case 0:
+		typeByte ^= 0x0
+	case 2:
+		typeByte ^= 0x1 << 2
+	case 3:
+		typeByte ^= 0x2 << 2
+	case 4:
+		typeByte ^= 0x3 << 2
+	case 5:
+		typeByte ^= 0x4 << 2
+	case 6:
+		typeByte ^= 0x5 << 2
+	case 7:
+		typeByte ^= 0x6 << 2
+	case 8:
+		typeByte ^= 0x7 << 2
 	}
 
 	if f.streamIDLen == 0 {
@@ -109,9 +126,24 @@ func (f *StreamFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber,
 		utils.WriteUint32(b, uint32(f.StreamID))
 	}
 
-	if f.Offset != 0 {
+	switch offsetLength {
+	case 0:
+	case 2:
+		utils.WriteUint16(b, uint16(f.Offset))
+	case 3:
+		utils.WriteUint24(b, uint32(f.Offset))
+	case 4:
+		utils.WriteUint32(b, uint32(f.Offset))
+	case 5:
+		utils.WriteUint40(b, uint64(f.Offset))
+	case 6:
+		utils.WriteUint48(b, uint64(f.Offset))
+	case 7:
+		utils.WriteUint56(b, uint64(f.Offset))
+	case 8:
 		utils.WriteUint64(b, uint64(f.Offset))
 	}
+
 	utils.WriteUint16(b, uint16(len(f.Data)))
 	b.Write(f.Data)
 	return nil
@@ -129,13 +161,38 @@ func (f *StreamFrame) calculateStreamIDLength() {
 	}
 }
 
+func (f *StreamFrame) getOffsetLength() protocol.ByteCount {
+	if f.Offset == 0 {
+		return 0
+	}
+	if f.Offset < (1 << 16) {
+		return 2
+	}
+	if f.Offset < (1 << 24) {
+		return 3
+	}
+	if f.Offset < (1 << 32) {
+		return 4
+	}
+	if f.Offset < (1 << 40) {
+		return 5
+	}
+	if f.Offset < (1 << 48) {
+		return 6
+	}
+	if f.Offset < (1 << 56) {
+		return 7
+	}
+	return 8
+}
+
 // MinLength of a written frame
 func (f *StreamFrame) MinLength() protocol.ByteCount {
 	if f.streamIDLen == 0 {
 		f.calculateStreamIDLength()
 	}
 
-	return 1 + f.streamIDLen + 8 + 2 + 1
+	return 1 + f.streamIDLen + f.getOffsetLength() + 2 + 1
 }
 
 // MaybeSplitOffFrame removes the first n bytes and returns them as a separate frame. If n >= len(n), nil is returned and nothing is modified.

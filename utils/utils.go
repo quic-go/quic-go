@@ -109,6 +109,17 @@ func WriteUint64(b *bytes.Buffer, i uint64) {
 	b.WriteByte(uint8(i >> 56))
 }
 
+// WriteUint56 writes 56 bit of a uint64
+func WriteUint56(b *bytes.Buffer, i uint64) {
+	b.WriteByte(uint8(i & 0xff))
+	b.WriteByte(uint8((i >> 8) & 0xff))
+	b.WriteByte(uint8((i >> 16) & 0xff))
+	b.WriteByte(uint8((i >> 24) & 0xff))
+	b.WriteByte(uint8((i >> 32) & 0xff))
+	b.WriteByte(uint8((i >> 40) & 0xff))
+	b.WriteByte(uint8((i >> 48)))
+}
+
 // WriteUint48 writes 48 bit of a uint64
 func WriteUint48(b *bytes.Buffer, i uint64) {
 	b.WriteByte(uint8(i & 0xff))
@@ -117,6 +128,15 @@ func WriteUint48(b *bytes.Buffer, i uint64) {
 	b.WriteByte(uint8((i >> 24) & 0xff))
 	b.WriteByte(uint8((i >> 32) & 0xff))
 	b.WriteByte(uint8((i >> 40)))
+}
+
+// WriteUint40 writes 40 bit of a uint64
+func WriteUint40(b *bytes.Buffer, i uint64) {
+	b.WriteByte(uint8(i & 0xff))
+	b.WriteByte(uint8((i >> 8) & 0xff))
+	b.WriteByte(uint8((i >> 16) & 0xff))
+	b.WriteByte(uint8((i >> 24) & 0xff))
+	b.WriteByte(uint8((i >> 32)))
 }
 
 // WriteUint32 writes a uint32
