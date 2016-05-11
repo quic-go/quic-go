@@ -33,19 +33,27 @@ func compressChain(chain [][]byte, pCommonSetHashes, pCachedHashes []byte) ([]by
 		return nil, err
 	}
 
+	setHashes, err := splitHashes(pCommonSetHashes)
+	if err != nil {
+		return nil, err
+	}
+
 	chainHashes := make([]uint64, len(chain))
 	for i := range chain {
 		chainHashes[i] = hashCert(chain[i])
 	}
 
-	entries := buildEntries(chain, chainHashes, cachedHashes)
+	entries := buildEntries(chain, chainHashes, cachedHashes, setHashes)
 
 	totalUncompressedLen := 0
 	for i, e := range entries {
 		res.WriteByte(uint8(e.t))
 		switch e.t {
 		case entryCached:
-			utils.WriteUint64(res, chainHashes[i])
+			utils.WriteUint64(res, e.h)
+		case entryCommon:
+			utils.WriteUint64(res, e.h)
+			utils.WriteUint32(res, e.i)
 		case entryCompressed:
 			totalUncompressedLen += 4 + len(chain[i])
 		}
@@ -80,7 +88,7 @@ func compressChain(chain [][]byte, pCommonSetHashes, pCachedHashes []byte) ([]by
 	return res.Bytes(), nil
 }
 
-func buildEntries(chain [][]byte, chainHashes, cachedHashes []uint64) []entry {
+func buildEntries(chain [][]byte, chainHashes, cachedHashes, setHashes []uint64) []entry {
 	res := make([]entry, len(chain))
 chainLoop:
 	for i := range chain {
@@ -88,6 +96,22 @@ chainLoop:
 		for j := range cachedHashes {
 			if chainHashes[i] == cachedHashes[j] {
 				res[i] = entry{t: entryCached, h: chainHashes[i]}
+				continue chainLoop
+			}
+		}
+
+		// Go through common sets and check if it's in there
+		for _, setHash := range setHashes {
+			set, ok := certSets[setHash]
+			if !ok {
+				// We don't have this set
+				continue
+			}
+			// We have this set, check if chain[i] is in the set
+			pos := set.findCertInSet(chain[i])
+			if pos >= 0 {
+				// Found
+				res[i] = entry{t: entryCommon, h: setHash, i: uint32(pos)}
 				continue chainLoop
 			}
 		}

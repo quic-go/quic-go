@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"hash/fnv"
 
+	"github.com/lucas-clemente/quic-go-certificates"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -90,6 +91,43 @@ var _ = Describe("Cert compression", func() {
 		Expect(err).ToNot(HaveOccurred())
 		expected := []byte{0x01, 0x02}
 		expected = append(expected, cert2Hash...)
+		expected = append(expected, 0x00)
+		expected = append(expected, []byte{0x08, 0, 0, 0}...)
+		expected = append(expected, certZlib.Bytes()...)
+		Expect(compressed).To(Equal(expected))
+	})
+
+	It("uses common certificates", func() {
+		cert := certsets.CertSet1[42]
+		setHash := make([]byte, 8)
+		binary.LittleEndian.PutUint64(setHash, certsets.CertSet1Hash)
+		chain := [][]byte{cert}
+		compressed, err := compressChain(chain, setHash, nil)
+		Expect(err).ToNot(HaveOccurred())
+		expected := []byte{0x03}
+		expected = append(expected, setHash...)
+		expected = append(expected, []byte{42, 0, 0, 0}...)
+		expected = append(expected, 0x00)
+		Expect(compressed).To(Equal(expected))
+	})
+
+	It("uses common certificates and compressed combined", func() {
+		cert1 := []byte{0xde, 0xca, 0xfb, 0xad}
+		cert2 := certsets.CertSet1[42]
+		setHash := make([]byte, 8)
+		binary.LittleEndian.PutUint64(setHash, certsets.CertSet1Hash)
+		certZlib := &bytes.Buffer{}
+		z, err := zlib.NewWriterLevelDict(certZlib, flate.BestCompression, append(cert2, certDictZlib...))
+		Expect(err).ToNot(HaveOccurred())
+		z.Write([]byte{0x04, 0x00, 0x00, 0x00})
+		z.Write(cert1)
+		z.Close()
+		chain := [][]byte{cert1, cert2}
+		compressed, err := compressChain(chain, setHash, nil)
+		Expect(err).ToNot(HaveOccurred())
+		expected := []byte{0x01, 0x03}
+		expected = append(expected, setHash...)
+		expected = append(expected, []byte{42, 0, 0, 0}...)
 		expected = append(expected, 0x00)
 		expected = append(expected, []byte{0x08, 0, 0, 0}...)
 		expected = append(expected, certZlib.Bytes()...)
