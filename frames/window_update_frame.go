@@ -15,12 +15,17 @@ type WindowUpdateFrame struct {
 
 //Write writes a RST_STREAM frame
 func (f *WindowUpdateFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
-	panic("WindowUpdateFrame: Write not yet implemented")
+	typeByte := uint8(0x04)
+	b.WriteByte(typeByte)
+
+	utils.WriteUint32(b, uint32(f.StreamID))
+	utils.WriteUint64(b, uint64(f.ByteOffset))
+	return nil
 }
 
 // MinLength of a written frame
 func (f *WindowUpdateFrame) MinLength() (protocol.ByteCount, error) {
-	panic("WindowUpdateFrame: Write not yet implemented")
+	return 1 + 4 + 8, nil
 }
 
 // ParseWindowUpdateFrame parses a RST_STREAM frame

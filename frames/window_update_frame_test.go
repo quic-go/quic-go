@@ -9,16 +9,34 @@ import (
 )
 
 var _ = Describe("WindowUpdateFrame", func() {
-	Context("window update frames", func() {
-		Context("when parsing", func() {
-			It("accepts sample frame", func() {
-				b := bytes.NewReader([]byte{0x04, 0xEF, 0xBE, 0xAD, 0xDE, 0x44, 0x33, 0x22, 0x11, 0xAD, 0xFB, 0xCA, 0xDE})
-				frame, err := ParseWindowUpdateFrame(b)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.StreamID).To(Equal(protocol.StreamID(0xDEADBEEF)))
-				Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0xDECAFBAD11223344)))
-				Expect(b.Len()).To(Equal(0))
-			})
+	Context("when parsing", func() {
+		It("accepts sample frame", func() {
+			b := bytes.NewReader([]byte{0x04, 0xEF, 0xBE, 0xAD, 0xDE, 0x44, 0x33, 0x22, 0x11, 0xAD, 0xFB, 0xCA, 0xDE})
+			frame, err := ParseWindowUpdateFrame(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame.StreamID).To(Equal(protocol.StreamID(0xDEADBEEF)))
+			Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0xDECAFBAD11223344)))
+			Expect(b.Len()).To(Equal(0))
+		})
+	})
+
+	Context("when writing", func() {
+		It("has proper min length", func() {
+			f := &WindowUpdateFrame{
+				StreamID:   0x1337,
+				ByteOffset: 0xDEADBEEF,
+			}
+			Expect(f.MinLength()).To(Equal(protocol.ByteCount(13)))
+		})
+
+		It("writes a sample frame", func() {
+			b := &bytes.Buffer{}
+			f := &WindowUpdateFrame{
+				StreamID:   0xDECAFBAD,
+				ByteOffset: 0xDEADBEEFCAFE1337,
+			}
+			f.Write(b, 0)
+			Expect(b.Bytes()).To(Equal([]byte{0x04, 0xAD, 0xFB, 0xCA, 0xDE, 0x37, 0x13, 0xFE, 0xCA, 0xEF, 0xBE, 0xAD, 0xDE}))
 		})
 	})
 })
