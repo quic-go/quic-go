@@ -160,7 +160,7 @@ func (s *Session) Run() {
 
 func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeader, r *bytes.Reader) error {
 	// Calcualate packet number
-	publicHeader.PacketNumber = inferPacketNumber(
+	publicHeader.PacketNumber = protocol.InferPacketNumber(
 		publicHeader.PacketNumberLen,
 		s.lastRcvdPacketNumber,
 		publicHeader.PacketNumber,

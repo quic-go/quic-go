@@ -53,7 +53,7 @@ func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		1,
 	))
 
-	packetNumberLen := getPacketNumberLength(currentPacketNumber, p.sentPacketHandler.GetLargestObserved())
+	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(currentPacketNumber, p.sentPacketHandler.GetLargestObserved())
 	responsePublicHeader := &PublicHeader{
 		ConnectionID:         p.connectionID,
 		PacketNumber:         currentPacketNumber,

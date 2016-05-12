@@ -1,10 +1,9 @@
-package quic
+package protocol
 
 import (
 	"fmt"
 	"math"
 
-	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -12,13 +11,13 @@ import (
 // Tests taken and extended from chrome
 var _ = Describe("packet number calculation", func() {
 	Context("infering a packet number", func() {
-		check := func(length protocol.PacketNumberLen, expected, last uint64) {
+		check := func(length PacketNumberLen, expected, last uint64) {
 			epoch := uint64(1) << (length * 8)
 			epochMask := epoch - 1
 			wirePacketNumber := expected & epochMask
-			Expect(inferPacketNumber(length, protocol.PacketNumber(last), protocol.PacketNumber(wirePacketNumber))).To(Equal(protocol.PacketNumber(expected)))
+			Expect(InferPacketNumber(length, PacketNumber(last), PacketNumber(wirePacketNumber))).To(Equal(PacketNumber(expected)))
 		}
-		for _, length := range []protocol.PacketNumberLen{protocol.PacketNumberLen1, protocol.PacketNumberLen2, protocol.PacketNumberLen4, protocol.PacketNumberLen6} {
+		for _, length := range []PacketNumberLen{PacketNumberLen1, PacketNumberLen2, PacketNumberLen4, PacketNumberLen6} {
 			Context(fmt.Sprintf("with %d bytes", length), func() {
 				epoch := uint64(1) << (length * 8)
 				epochMask := epoch - 1
@@ -129,42 +128,42 @@ var _ = Describe("packet number calculation", func() {
 
 	Context("shortening a packet number", func() {
 		It("sends out low packet numbers as 1 byte", func() {
-			length := getPacketNumberLength(4, 2)
-			Expect(length).To(Equal(protocol.PacketNumberLen1))
+			length := GetPacketNumberLengthForPublicHeader(4, 2)
+			Expect(length).To(Equal(PacketNumberLen1))
 		})
 
 		It("sends out high packet numbers as 1 byte, if all ACKs are received", func() {
-			length := getPacketNumberLength(0xDEADBEEF, 0xDEADBEEF-1)
-			Expect(length).To(Equal(protocol.PacketNumberLen1))
+			length := GetPacketNumberLengthForPublicHeader(0xDEADBEEF, 0xDEADBEEF-1)
+			Expect(length).To(Equal(PacketNumberLen1))
 		})
 
 		It("sends out higher packet numbers as 2 bytes, if a lot of ACKs are missing", func() {
-			length := getPacketNumberLength(200, 2)
-			Expect(length).To(Equal(protocol.PacketNumberLen2))
+			length := GetPacketNumberLengthForPublicHeader(200, 2)
+			Expect(length).To(Equal(PacketNumberLen2))
 		})
 	})
 
 	Context("self-consistency", func() {
 		It("works for small packet numbers", func() {
 			for i := uint64(1); i < 10000; i++ {
-				packetNumber := protocol.PacketNumber(i)
-				highestAcked := protocol.PacketNumber(1)
-				length := getPacketNumberLength(packetNumber, highestAcked)
+				packetNumber := PacketNumber(i)
+				highestAcked := PacketNumber(1)
+				length := GetPacketNumberLengthForPublicHeader(packetNumber, highestAcked)
 				wirePacketNumber := (uint64(packetNumber) << (64 - length*8)) >> (64 - length*8)
 
-				inferedPacketNumber := inferPacketNumber(length, highestAcked, protocol.PacketNumber(wirePacketNumber))
+				inferedPacketNumber := InferPacketNumber(length, highestAcked, PacketNumber(wirePacketNumber))
 				Expect(inferedPacketNumber).To(Equal(packetNumber))
 			}
 		})
 
 		It("works for small packet numbers and increasing ACKed packets", func() {
 			for i := uint64(1); i < 10000; i++ {
-				packetNumber := protocol.PacketNumber(i)
-				highestAcked := protocol.PacketNumber(i / 2)
-				length := getPacketNumberLength(packetNumber, highestAcked)
+				packetNumber := PacketNumber(i)
+				highestAcked := PacketNumber(i / 2)
+				length := GetPacketNumberLengthForPublicHeader(packetNumber, highestAcked)
 				wirePacketNumber := (uint64(packetNumber) << (64 - length*8)) >> (64 - length*8)
 
-				inferedPacketNumber := inferPacketNumber(length, highestAcked, protocol.PacketNumber(wirePacketNumber))
+				inferedPacketNumber := InferPacketNumber(length, highestAcked, PacketNumber(wirePacketNumber))
 				Expect(inferedPacketNumber).To(Equal(packetNumber))
 			}
 		})
@@ -172,20 +171,20 @@ var _ = Describe("packet number calculation", func() {
 		It("also works for larger packet numbers", func() {
 			increment := uint64(1)
 			for i := uint64(1); i < (2 << 46); i += increment {
-				packetNumber := protocol.PacketNumber(i)
-				highestAcked := protocol.PacketNumber(1)
-				length := getPacketNumberLength(packetNumber, highestAcked)
+				packetNumber := PacketNumber(i)
+				highestAcked := PacketNumber(1)
+				length := GetPacketNumberLengthForPublicHeader(packetNumber, highestAcked)
 				wirePacketNumber := (uint64(packetNumber) << (64 - length*8)) >> (64 - length*8)
 
-				inferedPacketNumber := inferPacketNumber(length, highestAcked, protocol.PacketNumber(wirePacketNumber))
+				inferedPacketNumber := InferPacketNumber(length, highestAcked, PacketNumber(wirePacketNumber))
 				Expect(inferedPacketNumber).To(Equal(packetNumber))
 
 				switch length {
-				case protocol.PacketNumberLen2:
+				case PacketNumberLen2:
 					increment = 100
-				case protocol.PacketNumberLen4:
+				case PacketNumberLen4:
 					increment = 50000
-				case protocol.PacketNumberLen6:
+				case PacketNumberLen6:
 					increment = 100000000
 				}
 			}
@@ -193,12 +192,12 @@ var _ = Describe("packet number calculation", func() {
 
 		It("works for packet numbers larger than 2^48", func() {
 			for i := (uint64(1) << 48); i < ((uint64(1) << 63) - 1); i += (uint64(1) << 45) {
-				packetNumber := protocol.PacketNumber(i)
-				highestAcked := protocol.PacketNumber(i - 1000)
-				length := getPacketNumberLength(packetNumber, highestAcked)
+				packetNumber := PacketNumber(i)
+				highestAcked := PacketNumber(i - 1000)
+				length := GetPacketNumberLengthForPublicHeader(packetNumber, highestAcked)
 				wirePacketNumber := (uint64(packetNumber) << (64 - length*8)) >> (64 - length*8)
 
-				inferedPacketNumber := inferPacketNumber(length, highestAcked, protocol.PacketNumber(wirePacketNumber))
+				inferedPacketNumber := InferPacketNumber(length, highestAcked, PacketNumber(wirePacketNumber))
 				Expect(inferedPacketNumber).To(Equal(packetNumber))
 			}
 		})
