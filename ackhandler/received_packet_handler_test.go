@@ -1,6 +1,8 @@
 package ackhandler
 
 import (
+	"time"
+
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 
@@ -19,7 +21,7 @@ var _ = Describe("receivedPacketHandler", func() {
 		expectedEntropy = EntropyAccumulator(0)
 	})
 
-	Context("accepting and rejecting packets", func() {
+	Context("accepting packets", func() {
 		It("handles a packet that arrives late", func() {
 			err := handler.ReceivedPacket(protocol.PacketNumber(1), false)
 			Expect(err).ToNot(HaveOccurred())
@@ -27,8 +29,9 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.ReceivedPacket(protocol.PacketNumber(2), false)
 			Expect(err).ToNot(HaveOccurred())
-			nackRanges, _ := handler.getNackRanges()
-			Expect(len(nackRanges)).To(Equal(0))
+			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(1)))
+			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(2)))
+			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(3)))
 		})
 
 		It("rejects a duplicate package with PacketNumber equal to LargestObserved", func() {
@@ -49,6 +52,13 @@ var _ = Describe("receivedPacketHandler", func() {
 			err := handler.ReceivedPacket(2, false)
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(Equal(ErrDuplicatePacket))
+		})
+
+		It("saves the time when each packet arrived", func() {
+			err := handler.ReceivedPacket(protocol.PacketNumber(3), false)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(3)))
+			Expect(handler.packetHistory[3].TimeReceived).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 		})
 	})
 

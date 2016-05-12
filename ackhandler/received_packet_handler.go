@@ -2,6 +2,7 @@ package ackhandler
 
 import (
 	"errors"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -10,18 +11,23 @@ import (
 // ErrDuplicatePacket occurres when a duplicate packet is received
 var ErrDuplicatePacket = errors.New("ReceivedPacketHandler: Duplicate Packet")
 
+type packetHistoryEntry struct {
+	EntropyBit   bool
+	TimeReceived time.Time
+}
+
 type receivedPacketHandler struct {
 	highestInOrderObserved        protocol.PacketNumber
 	highestInOrderObservedEntropy EntropyAccumulator
 	largestObserved               protocol.PacketNumber
-	packetHistory                 map[protocol.PacketNumber]bool // the bool is the EntropyBit of the packet
-	stateChanged                  bool                           // has an ACK for this state already been sent? Will be set to false every time a new packet arrives, and to false every time an ACK is sent
+	packetHistory                 map[protocol.PacketNumber]packetHistoryEntry
+	stateChanged                  bool // has an ACK for this state already been sent? Will be set to false every time a new packet arrives, and to false every time an ACK is sent
 }
 
 // NewReceivedPacketHandler creates a new receivedPacketHandler
 func NewReceivedPacketHandler() ReceivedPacketHandler {
 	return &receivedPacketHandler{
-		packetHistory: make(map[protocol.PacketNumber]bool),
+		packetHistory: make(map[protocol.PacketNumber]packetHistoryEntry),
 	}
 }
 
@@ -29,7 +35,8 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 	if packetNumber == 0 {
 		return errors.New("Invalid packet number")
 	}
-	if packetNumber <= h.highestInOrderObserved || h.packetHistory[packetNumber] {
+	_, ok := h.packetHistory[packetNumber]
+	if packetNumber <= h.highestInOrderObserved || ok {
 		return ErrDuplicatePacket
 	}
 
@@ -44,7 +51,10 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 		h.highestInOrderObservedEntropy.Add(packetNumber, entropyBit)
 	}
 
-	h.packetHistory[packetNumber] = entropyBit
+	h.packetHistory[packetNumber] = packetHistoryEntry{
+		EntropyBit:   entropyBit,
+		TimeReceived: time.Now(),
+	}
 	return nil
 }
 
@@ -68,7 +78,7 @@ func (h *receivedPacketHandler) getNackRanges() ([]frames.NackRange, EntropyAccu
 	inRange := false
 	entropy := h.highestInOrderObservedEntropy
 	for i := h.largestObserved; i > h.highestInOrderObserved; i-- {
-		entropyBit, ok := h.packetHistory[i]
+		p, ok := h.packetHistory[i]
 		if !ok {
 			if !inRange {
 				r := frames.NackRange{
@@ -82,7 +92,7 @@ func (h *receivedPacketHandler) getNackRanges() ([]frames.NackRange, EntropyAccu
 			}
 		} else {
 			inRange = false
-			entropy.Add(i, entropyBit)
+			entropy.Add(i, p.EntropyBit)
 		}
 	}
 	return ranges, entropy
