@@ -15,9 +15,11 @@ var errInvalidNackRanges = errors.New("AckFrame: ACK frame contains invalid NACK
 type AckFrame struct {
 	LargestObserved protocol.PacketNumber
 	Entropy         byte
-	DelayTime       time.Duration
 	NackRanges      []NackRange // has to be ordered. The NACK range with the highest FirstPacketNumber goes first, the NACK range with the lowest FirstPacketNumber goes last
 	Truncated       bool
+
+	DelayTime          time.Duration
+	PacketReceivedTime time.Time // only for received packets. Will not be modified for received ACKs frames
 }
 
 // Write writes an ACK frame.
@@ -27,6 +29,8 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 	if f.HasNACK() {
 		typeByte |= (0x20 | 0x03)
 	}
+
+	f.DelayTime = time.Now().Sub(f.PacketReceivedTime)
 
 	b.WriteByte(typeByte)
 	b.WriteByte(f.Entropy)

@@ -11,6 +11,8 @@ import (
 // ErrDuplicatePacket occurres when a duplicate packet is received
 var ErrDuplicatePacket = errors.New("ReceivedPacketHandler: Duplicate Packet")
 
+var errInvalidPacketNumber = errors.New("ReceivedPacketHandler: Invalid packet number")
+
 type packetHistoryEntry struct {
 	EntropyBit   bool
 	TimeReceived time.Time
@@ -33,7 +35,7 @@ func NewReceivedPacketHandler() ReceivedPacketHandler {
 
 func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumber, entropyBit bool) error {
 	if packetNumber == 0 {
-		return errors.New("Invalid packet number")
+		return errInvalidPacketNumber
 	}
 	_, ok := h.packetHistory[packetNumber]
 	if packetNumber <= h.highestInOrderObserved || ok {
@@ -98,17 +100,25 @@ func (h *receivedPacketHandler) getNackRanges() ([]frames.NackRange, EntropyAccu
 	return ranges, entropy
 }
 
-func (h *receivedPacketHandler) DequeueAckFrame() *frames.AckFrame {
+func (h *receivedPacketHandler) DequeueAckFrame() (*frames.AckFrame, error) {
 	if !h.stateChanged {
-		return nil
+		return nil, nil
 	}
 
 	h.stateChanged = false
 
-	nackRanges, entropy := h.getNackRanges()
-	return &frames.AckFrame{
-		LargestObserved: h.largestObserved,
-		Entropy:         byte(entropy),
-		NackRanges:      nackRanges,
+	p, ok := h.packetHistory[h.largestObserved]
+	if !ok {
+		return nil, errors.New("bla")
 	}
+	packetReceivedTime := p.TimeReceived
+
+	nackRanges, entropy := h.getNackRanges()
+	ack := frames.AckFrame{
+		LargestObserved:    h.largestObserved,
+		Entropy:            byte(entropy),
+		NackRanges:         nackRanges,
+		PacketReceivedTime: packetReceivedTime,
+	}
+	return &ack, nil
 }

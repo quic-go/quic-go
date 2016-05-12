@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -251,7 +252,22 @@ var _ = Describe("AckFrame", func() {
 			}
 			err := frame.Write(b, 32)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(b.Bytes()).To(Equal([]byte{0x4c, 0x02, 0x01, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0}))
+			// check all values except the DelayTime
+			Expect(b.Bytes()[0:8]).To(Equal([]byte{0x4c, 0x02, 0x01, 0, 0, 0, 0, 0}))
+			Expect(b.Bytes()[10:]).To(Equal([]byte{1, 0, 0, 0, 0, 0}))
+		})
+
+		It("calculates the DelayTime", func() {
+			frame := AckFrame{
+				LargestObserved:    5,
+				PacketReceivedTime: time.Now().Add(-750 * time.Millisecond),
+			}
+			frame.Write(b, 32)
+			Expect(frame.DelayTime).To(BeNumerically("~", 750*time.Millisecond, 10*time.Millisecond))
+			delayTime := frame.DelayTime
+			var b2 bytes.Buffer
+			utils.WriteUfloat16(&b2, uint64(delayTime/time.Microsecond))
+			Expect(b.Bytes()[8:10]).To(Equal(b2.Bytes()))
 		})
 
 		It("writes a frame with one NACK range", func() {

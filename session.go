@@ -397,7 +397,10 @@ func (s *Session) sendPacket() error {
 
 	stopWaitingFrame := s.stopWaitingManager.GetStopWaitingFrame()
 
-	ack := s.receivedPacketHandler.DequeueAckFrame()
+	ack, err := s.receivedPacketHandler.DequeueAckFrame()
+	if err != nil {
+		return err
+	}
 	if ack != nil {
 		controlFrames = append(controlFrames, ack)
 	}

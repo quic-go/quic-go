@@ -321,7 +321,8 @@ var _ = Describe("Session", func() {
 			err := session.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(conn.written).To(HaveLen(1))
-			Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x4c, 0x2, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0})))
+			// test for the beginning of an ACK frame: TypeByte until LargestObserved
+			Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x4c, 0x2, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0})))
 		})
 
 		It("sends queued stream frames", func() {
@@ -333,7 +334,8 @@ var _ = Describe("Session", func() {
 			err := session.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(conn.written).To(HaveLen(1))
-			Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x4c, 0x2, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0})))
+			// test for the beginning of an ACK frame: TypeByte until LargestObserved
+			Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x4c, 0x2, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0})))
 			Expect(conn.written[0]).To(ContainSubstring(string("foobar")))
 		})
 

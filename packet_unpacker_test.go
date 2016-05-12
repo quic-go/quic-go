@@ -2,10 +2,10 @@ package quic
 
 import (
 	"bytes"
-	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/protocol"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -60,15 +60,18 @@ var _ = Describe("Packet unpacker", func() {
 
 	It("unpacks ack frames", func() {
 		f := &frames.AckFrame{
-			LargestObserved: 1,
-			DelayTime:       time.Microsecond,
+			LargestObserved: 0x13,
+			Entropy:         0x37,
 		}
 		err := f.Write(buf, 32)
 		Expect(err).ToNot(HaveOccurred())
 		setReader(buf.Bytes())
 		packet, err := unpacker.Unpack(hdrBin, hdr, r)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(Equal([]frames.Frame{f}))
+		Expect(len(packet.frames)).To(Equal(1))
+		readFrame := packet.frames[0].(*frames.AckFrame)
+		Expect(readFrame.LargestObserved).To(Equal(protocol.PacketNumber(0x13)))
+		Expect(readFrame.Entropy).To(Equal(byte(0x37)))
 	})
 
 	It("errors on CONGESTION_FEEDBACK frames", func() {

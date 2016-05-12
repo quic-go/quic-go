@@ -23,7 +23,7 @@ type ReceivedPacketHandler interface {
 	ReceivedPacket(packetNumber protocol.PacketNumber, entropyBit bool) error
 	ReceivedStopWaiting(*frames.StopWaitingFrame) error
 
-	DequeueAckFrame() *frames.AckFrame
+	DequeueAckFrame() (*frames.AckFrame, error)
 }
 
 // StopWaitingManager manages StopWaitings for sent packets

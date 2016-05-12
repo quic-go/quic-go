@@ -34,6 +34,12 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(3)))
 		})
 
+		It("rejects packets with packet number 0", func() {
+			err := handler.ReceivedPacket(protocol.PacketNumber(0), false)
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(Equal(errInvalidPacketNumber))
+		})
+
 		It("rejects a duplicate package with PacketNumber equal to LargestObserved", func() {
 			for i := 1; i < 5; i++ {
 				err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
@@ -243,7 +249,10 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.ReceivedPacket(protocol.PacketNumber(2), true)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.DequeueAckFrame()).To(Equal(&frames.AckFrame{LargestObserved: 2, Entropy: byte(entropy)}))
+			ack, err := handler.DequeueAckFrame()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(ack.LargestObserved).To(Equal(protocol.PacketNumber(2)))
+			Expect(ack.Entropy).To(Equal(byte(entropy)))
 		})
 
 		It("generates an ACK frame with a NACK range", func() {
@@ -254,12 +263,11 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.ReceivedPacket(protocol.PacketNumber(4), true)
 			Expect(err).ToNot(HaveOccurred())
-			expectedAck := frames.AckFrame{
-				LargestObserved: 4,
-				Entropy:         byte(entropy),
-				NackRanges:      []frames.NackRange{frames.NackRange{FirstPacketNumber: 2, LastPacketNumber: 3}},
-			}
-			Expect(handler.DequeueAckFrame()).To(Equal(&expectedAck))
+			ack, err := handler.DequeueAckFrame()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(ack.LargestObserved).To(Equal(protocol.PacketNumber(4)))
+			Expect(ack.Entropy).To(Equal(byte(entropy)))
+			Expect(ack.NackRanges).To(Equal([]frames.NackRange{frames.NackRange{FirstPacketNumber: 2, LastPacketNumber: 3}}))
 		})
 
 		It("does not generate an ACK if an ACK has already been sent for the largest Packet", func() {
