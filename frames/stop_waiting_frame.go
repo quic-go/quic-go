@@ -13,25 +13,32 @@ type StopWaitingFrame struct {
 	LeastUnacked    protocol.PacketNumber
 	Entropy         byte
 	PacketNumberLen protocol.PacketNumberLen
+	PacketNumber    protocol.PacketNumber
 }
 
 var (
 	errLeastUnackedHigherThanPacketNumber = errors.New("StopWaitingFrame: LeastUnacked can't be greater than the packet number")
+	errPacketNumberNotSet                 = errors.New("StopWaitingFrame: PacketNumber not set")
 	errPacketNumberLenNotSet              = errors.New("StopWaitingFrame: PacketNumberLen not set")
 )
 
-func (f *StopWaitingFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, version protocol.VersionNumber) error {
+func (f *StopWaitingFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
 	// packetNumber is the packet number of the packet that this StopWaitingFrame will be sent with
 	typeByte := uint8(0x06)
 	b.WriteByte(typeByte)
 
 	b.WriteByte(f.Entropy)
 
-	if f.LeastUnacked > packetNumber {
+	// make sure the PacketNumber was set
+	if f.PacketNumber == protocol.PacketNumber(0) {
+		return errPacketNumberNotSet
+	}
+
+	if f.LeastUnacked > f.PacketNumber {
 		return errLeastUnackedHigherThanPacketNumber
 	}
 
-	leastUnackedDelta := uint64(packetNumber - f.LeastUnacked)
+	leastUnackedDelta := uint64(f.PacketNumber - f.LeastUnacked)
 
 	switch f.PacketNumberLen {
 	case protocol.PacketNumberLen1:

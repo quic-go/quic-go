@@ -67,6 +67,7 @@ func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 	}
 
 	if stopWaitingFrame != nil {
+		stopWaitingFrame.PacketNumber = currentPacketNumber
 		stopWaitingFrame.PacketNumberLen = packetNumberLen
 	}
 
@@ -112,7 +113,7 @@ func (p *packetPacker) getPayload(frames []frames.Frame, currentPacketNumber pro
 	var payload bytes.Buffer
 	payload.WriteByte(0) // The entropy bit is set in sendPayload
 	for _, frame := range frames {
-		frame.Write(&payload, currentPacketNumber, p.version)
+		frame.Write(&payload, p.version)
 	}
 	return payload.Bytes(), nil
 }

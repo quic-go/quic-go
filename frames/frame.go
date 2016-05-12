@@ -8,6 +8,6 @@ import (
 
 // A Frame in QUIC
 type Frame interface {
-	Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, version protocol.VersionNumber) error
+	Write(b *bytes.Buffer, version protocol.VersionNumber) error
 	MinLength() (protocol.ByteCount, error)
 }

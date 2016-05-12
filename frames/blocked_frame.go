@@ -12,8 +12,8 @@ type BlockedFrame struct {
 	StreamID protocol.StreamID
 }
 
-//Write writes a RST_STREAM frame
-func (f *BlockedFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, version protocol.VersionNumber) error {
+//Write writes a BlockedFrame frame
+func (f *BlockedFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
 	b.WriteByte(0x05)
 
 	if f.StreamID == 0 {

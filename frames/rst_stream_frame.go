@@ -15,7 +15,7 @@ type RstStreamFrame struct {
 }
 
 //Write writes a RST_STREAM frame
-func (f *RstStreamFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, version protocol.VersionNumber) error {
+func (f *RstStreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
 	panic("RstStreamFrame: Write not yet implemented")
 }
 

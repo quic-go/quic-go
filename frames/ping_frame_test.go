@@ -22,7 +22,7 @@ var _ = Describe("PingFrame", func() {
 		It("writes a sample frame", func() {
 			b := &bytes.Buffer{}
 			frame := PingFrame{}
-			frame.Write(b, 10, 0)
+			frame.Write(b, 0)
 			Expect(b.Bytes()).To(Equal([]byte{0x07}))
 		})
 
