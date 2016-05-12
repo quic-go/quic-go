@@ -40,7 +40,7 @@ var _ = Describe("StreamFrame", func() {
 				StreamID:       1,
 				Data:           []byte("foobar"),
 				DataLenPresent: true,
-			}).Write(b, 1, protocol.PacketNumberLen6, 0)
+			}).Write(b, 1, 0)
 			Expect(b.Bytes()).To(Equal([]byte{0xa0, 0x1, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'}))
 		})
 
@@ -51,7 +51,7 @@ var _ = Describe("StreamFrame", func() {
 				Data:     []byte("f"),
 				Offset:   0,
 			}
-			f.Write(b, 1, protocol.PacketNumberLen6, 0)
+			f.Write(b, 1, 0)
 			Expect(f.MinLength()).To(Equal(protocol.ByteCount(b.Len())))
 		})
 
@@ -62,7 +62,7 @@ var _ = Describe("StreamFrame", func() {
 				Data:     []byte("f"),
 				Offset:   0xDEADBEEFCAFE,
 			}
-			f.Write(b, 1, protocol.PacketNumberLen6, 0)
+			f.Write(b, 1, 0)
 			Expect(f.MinLength()).To(Equal(protocol.ByteCount(b.Len())))
 		})
 
@@ -76,7 +76,7 @@ var _ = Describe("StreamFrame", func() {
 					DataLenPresent: true,
 					Offset:         0,
 				}
-				f.Write(b, 1, protocol.PacketNumberLen6, 0)
+				f.Write(b, 1, 0)
 				headerLength := f.MinLength() - 1
 				Expect(b.Bytes()[0] & 0x20).To(Equal(uint8(0x20)))
 				Expect(b.Bytes()[headerLength-2 : headerLength]).To(Equal([]byte{0x37, 0x13}))
@@ -91,7 +91,7 @@ var _ = Describe("StreamFrame", func() {
 					DataLenPresent: false,
 					Offset:         0,
 				}
-				f.Write(b, 1, protocol.PacketNumberLen6, 0)
+				f.Write(b, 1, 0)
 				Expect(b.Bytes()[0] & 0x20).To(Equal(uint8(0)))
 				Expect(b.Bytes()[1 : b.Len()-dataLen]).ToNot(ContainSubstring(string([]byte{0x37, 0x13})))
 				minLength := f.MinLength()
@@ -119,7 +119,7 @@ var _ = Describe("StreamFrame", func() {
 					StreamID: 1,
 					Data:     []byte("foobar"),
 					Offset:   0,
-				}).Write(b, 1, protocol.PacketNumberLen6, 0)
+				}).Write(b, 1, 0)
 				Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x0)))
 			})
 
@@ -129,7 +129,7 @@ var _ = Describe("StreamFrame", func() {
 					StreamID: 1,
 					Data:     []byte("foobar"),
 					Offset:   0x1337,
-				}).Write(b, 1, protocol.PacketNumberLen6, 0)
+				}).Write(b, 1, 0)
 				Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x1 << 2)))
 				Expect(b.Bytes()[2:4]).To(Equal([]byte{0x37, 0x13}))
 			})
@@ -140,7 +140,7 @@ var _ = Describe("StreamFrame", func() {
 					StreamID: 1,
 					Data:     []byte("foobar"),
 					Offset:   0x13CAFE,
-				}).Write(b, 1, protocol.PacketNumberLen6, 0)
+				}).Write(b, 1, 0)
 				Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x2 << 2)))
 				Expect(b.Bytes()[2:5]).To(Equal([]byte{0xFE, 0xCA, 0x13}))
 			})
@@ -151,7 +151,7 @@ var _ = Describe("StreamFrame", func() {
 					StreamID: 1,
 					Data:     []byte("foobar"),
 					Offset:   0xDEADBEEF,
-				}).Write(b, 1, protocol.PacketNumberLen6, 0)
+				}).Write(b, 1, 0)
 				Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x3 << 2)))
 				Expect(b.Bytes()[2:6]).To(Equal([]byte{0xEF, 0xBE, 0xAD, 0xDE}))
 			})
@@ -162,7 +162,7 @@ var _ = Describe("StreamFrame", func() {
 					StreamID: 1,
 					Data:     []byte("foobar"),
 					Offset:   0x13DEADBEEF,
-				}).Write(b, 1, protocol.PacketNumberLen6, 0)
+				}).Write(b, 1, 0)
 				Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x4 << 2)))
 				Expect(b.Bytes()[2:7]).To(Equal([]byte{0xEF, 0xBE, 0xAD, 0xDE, 0x13}))
 			})
@@ -173,7 +173,7 @@ var _ = Describe("StreamFrame", func() {
 					StreamID: 1,
 					Data:     []byte("foobar"),
 					Offset:   0xDEADBEEFCAFE,
-				}).Write(b, 1, protocol.PacketNumberLen6, 0)
+				}).Write(b, 1, 0)
 				Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x5 << 2)))
 				Expect(b.Bytes()[2:8]).To(Equal([]byte{0xFE, 0xCA, 0xEF, 0xBE, 0xAD, 0xDE}))
 			})
@@ -184,7 +184,7 @@ var _ = Describe("StreamFrame", func() {
 					StreamID: 1,
 					Data:     []byte("foobar"),
 					Offset:   0x13DEADBEEFCAFE,
-				}).Write(b, 1, protocol.PacketNumberLen6, 0)
+				}).Write(b, 1, 0)
 				Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x6 << 2)))
 				Expect(b.Bytes()[2:9]).To(Equal([]byte{0xFE, 0xCA, 0xEF, 0xBE, 0xAD, 0xDE, 0x13}))
 			})
@@ -195,7 +195,7 @@ var _ = Describe("StreamFrame", func() {
 					StreamID: 1,
 					Data:     []byte("foobar"),
 					Offset:   0x1337DEADBEEFCAFE,
-				}).Write(b, 1, protocol.PacketNumberLen6, 0)
+				}).Write(b, 1, 0)
 				Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x7 << 2)))
 				Expect(b.Bytes()[2:10]).To(Equal([]byte{0xFE, 0xCA, 0xEF, 0xBE, 0xAD, 0xDE, 0x37, 0x13}))
 			})
@@ -208,7 +208,7 @@ var _ = Describe("StreamFrame", func() {
 					StreamID:    1,
 					streamIDLen: 13,
 					Data:        []byte("foobar"),
-				}).Write(b, 1, protocol.PacketNumberLen6, 0)
+				}).Write(b, 1, 0)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(Equal(errInvalidStreamIDLen))
 			})
@@ -218,7 +218,7 @@ var _ = Describe("StreamFrame", func() {
 				(&StreamFrame{
 					StreamID: 13,
 					Data:     []byte("foobar"),
-				}).Write(b, 1, protocol.PacketNumberLen6, 0)
+				}).Write(b, 1, 0)
 				Expect(b.Bytes()[0] & 0x3).To(Equal(uint8(0x0)))
 				Expect(b.Bytes()[1]).To(Equal(uint8(13)))
 			})
@@ -228,7 +228,7 @@ var _ = Describe("StreamFrame", func() {
 				(&StreamFrame{
 					StreamID: 0xCAFE,
 					Data:     []byte("foobar"),
-				}).Write(b, 1, protocol.PacketNumberLen6, 0)
+				}).Write(b, 1, 0)
 				Expect(b.Bytes()[0] & 0x3).To(Equal(uint8(0x1)))
 				Expect(b.Bytes()[1:3]).To(Equal([]byte{0xFE, 0xCA}))
 			})
@@ -238,7 +238,7 @@ var _ = Describe("StreamFrame", func() {
 				(&StreamFrame{
 					StreamID: 0x13BEEF,
 					Data:     []byte("foobar"),
-				}).Write(b, 1, protocol.PacketNumberLen6, 0)
+				}).Write(b, 1, 0)
 				Expect(b.Bytes()[0] & 0x3).To(Equal(uint8(0x2)))
 				Expect(b.Bytes()[1:4]).To(Equal([]byte{0xEF, 0xBE, 0x13}))
 			})
@@ -248,7 +248,7 @@ var _ = Describe("StreamFrame", func() {
 				(&StreamFrame{
 					StreamID: 0xDECAFBAD,
 					Data:     []byte("foobar"),
-				}).Write(b, 1, protocol.PacketNumberLen6, 0)
+				}).Write(b, 1, 0)
 				Expect(b.Bytes()[0] & 0x3).To(Equal(uint8(0x3)))
 				Expect(b.Bytes()[1:5]).To(Equal([]byte{0xAD, 0xFB, 0xCA, 0xDE}))
 			})

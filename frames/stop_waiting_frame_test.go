@@ -34,7 +34,7 @@ var _ = Describe("StopWaitingFrame", func() {
 					LeastUnacked: 10,
 					Entropy:      0xE,
 				}
-				frame.Write(b, packetNumber, protocol.PacketNumberLen6, 0)
+				frame.Write(b, packetNumber, 0)
 				Expect(b.Bytes()[0]).To(Equal(uint8(0x06)))
 				// todo: check more
 			})
@@ -48,7 +48,7 @@ var _ = Describe("StopWaitingFrame", func() {
 					Entropy:      0xE,
 				}
 				b := &bytes.Buffer{}
-				frame.Write(b, packetNumber, protocol.PacketNumberLen6, 0)
+				frame.Write(b, packetNumber, 0)
 				readframe, err := ParseStopWaitingFrame(bytes.NewReader(b.Bytes()), packetNumber, 6)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(readframe.Entropy).To(Equal(frame.Entropy))

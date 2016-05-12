@@ -21,7 +21,7 @@ func ParsePingFrame(r *bytes.Reader) (*PingFrame, error) {
 	return frame, nil
 }
 
-func (f *PingFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, packetNumberLen protocol.PacketNumberLen, version protocol.VersionNumber) error {
+func (f *PingFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, version protocol.VersionNumber) error {
 	typeByte := uint8(0x07)
 	b.WriteByte(typeByte)
 	return nil

@@ -52,7 +52,7 @@ func (f *ConnectionCloseFrame) MinLength() protocol.ByteCount {
 }
 
 // Write writes an CONNECTION_CLOSE frame.
-func (f *ConnectionCloseFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, packetNumberLen protocol.PacketNumberLen, version protocol.VersionNumber) error {
+func (f *ConnectionCloseFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, version protocol.VersionNumber) error {
 	b.WriteByte(0x02)
 	utils.WriteUint32(b, uint32(f.ErrorCode))
 

@@ -78,7 +78,7 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 }
 
 // WriteStreamFrame writes a stream frame.
-func (f *StreamFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, packetNumberLen protocol.PacketNumberLen, version protocol.VersionNumber) error {
+func (f *StreamFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, version protocol.VersionNumber) error {
 	typeByte := uint8(0x80) // sets the leftmost bit to 1
 
 	if f.FinBit {

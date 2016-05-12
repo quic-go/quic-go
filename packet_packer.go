@@ -107,7 +107,7 @@ func (p *packetPacker) getPayload(frames []frames.Frame, currentPacketNumber pro
 	var payload bytes.Buffer
 	payload.WriteByte(0) // The entropy bit is set in sendPayload
 	for _, frame := range frames {
-		frame.Write(&payload, currentPacketNumber, 6, p.version)
+		frame.Write(&payload, currentPacketNumber, p.version)
 	}
 	return payload.Bytes(), nil
 }
