@@ -10,9 +10,15 @@ import (
 
 // A StopWaitingFrame in QUIC
 type StopWaitingFrame struct {
-	Entropy      byte
-	LeastUnacked protocol.PacketNumber
+	LeastUnacked    protocol.PacketNumber
+	Entropy         byte
+	PacketNumberLen protocol.PacketNumberLen
 }
+
+var (
+	errLeastUnackedHigherThanPacketNumber = errors.New("StopWaitingFrame: LeastUnacked can't be greater than the packet number")
+	errPacketNumberLenNotSet              = errors.New("StopWaitingFrame: PacketNumberLen not set")
+)
 
 func (f *StopWaitingFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, version protocol.VersionNumber) error {
 	// packetNumber is the packet number of the packet that this StopWaitingFrame will be sent with
@@ -22,17 +28,33 @@ func (f *StopWaitingFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNu
 	b.WriteByte(f.Entropy)
 
 	if f.LeastUnacked > packetNumber {
-		return errors.New("StopWaitingFrame: LeastUnacked can't be greater than the packet number")
+		return errLeastUnackedHigherThanPacketNumber
 	}
+
 	leastUnackedDelta := uint64(packetNumber - f.LeastUnacked)
 
-	utils.WriteUint48(b, leastUnackedDelta)
+	switch f.PacketNumberLen {
+	case protocol.PacketNumberLen1:
+		b.WriteByte(uint8(leastUnackedDelta))
+	case protocol.PacketNumberLen2:
+		utils.WriteUint16(b, uint16(leastUnackedDelta))
+	case protocol.PacketNumberLen4:
+		utils.WriteUint32(b, uint32(leastUnackedDelta))
+	case protocol.PacketNumberLen6:
+		utils.WriteUint48(b, leastUnackedDelta)
+	default:
+		return errPacketNumberLenNotSet
+	}
+
 	return nil
 }
 
 // MinLength of a written frame
-func (f *StopWaitingFrame) MinLength() protocol.ByteCount {
-	return 1 + 1 + 6
+func (f *StopWaitingFrame) MinLength() (protocol.ByteCount, error) {
+	if f.PacketNumberLen == protocol.PacketNumberLenInvalid {
+		return 0, errPacketNumberLenNotSet
+	}
+	return protocol.ByteCount(1 + 1 + f.PacketNumberLen), nil
 }
 
 // ParseStopWaitingFrame parses a StopWaiting frame

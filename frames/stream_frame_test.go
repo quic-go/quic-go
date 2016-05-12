@@ -77,7 +77,8 @@ var _ = Describe("StreamFrame", func() {
 					Offset:         0,
 				}
 				f.Write(b, 1, 0)
-				headerLength := f.MinLength() - 1
+				minLength, _ := f.MinLength()
+				headerLength := minLength - 1
 				Expect(b.Bytes()[0] & 0x20).To(Equal(uint8(0x20)))
 				Expect(b.Bytes()[headerLength-2 : headerLength]).To(Equal([]byte{0x37, 0x13}))
 			})
@@ -94,9 +95,10 @@ var _ = Describe("StreamFrame", func() {
 				f.Write(b, 1, 0)
 				Expect(b.Bytes()[0] & 0x20).To(Equal(uint8(0)))
 				Expect(b.Bytes()[1 : b.Len()-dataLen]).ToNot(ContainSubstring(string([]byte{0x37, 0x13})))
-				minLength := f.MinLength()
+				minLength, _ := f.MinLength()
 				f.DataLenPresent = true
-				Expect(minLength).To(Equal(f.MinLength() - 2))
+				minLengthWithoutDataLen, _ := f.MinLength()
+				Expect(minLength).To(Equal(minLengthWithoutDataLen - 2))
 			})
 
 			It("calculates the correcct min-length", func() {
@@ -106,7 +108,7 @@ var _ = Describe("StreamFrame", func() {
 					DataLenPresent: false,
 					Offset:         0xDEADBEEF,
 				}
-				minLengthWithoutDataLen := f.MinLength()
+				minLengthWithoutDataLen, _ := f.MinLength()
 				f.DataLenPresent = true
 				Expect(f.MinLength()).To(Equal(minLengthWithoutDataLen + 2))
 			})
@@ -346,7 +348,8 @@ var _ = Describe("StreamFrame", func() {
 				Offset:   3,
 				FinBit:   true,
 			}
-			previous := f.MaybeSplitOffFrame(f.MinLength() - 1 + 3)
+			minLength, _ := f.MinLength()
+			previous := f.MaybeSplitOffFrame(minLength - 1 + 3)
 			Expect(previous).ToNot(BeNil())
 			Expect(previous.StreamID).To(Equal(protocol.StreamID(1)))
 			Expect(previous.Data).To(Equal([]byte("foo")))

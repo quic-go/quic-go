@@ -20,7 +20,7 @@ func (f *RstStreamFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumb
 }
 
 // MinLength of a written frame
-func (f *RstStreamFrame) MinLength() protocol.ByteCount {
+func (f *RstStreamFrame) MinLength() (protocol.ByteCount, error) {
 	panic("RstStreamFrame: Write not yet implemented")
 }
 

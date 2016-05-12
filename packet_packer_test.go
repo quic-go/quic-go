@@ -102,10 +102,19 @@ var _ = Describe("Packet packer", func() {
 	It("packs a StopWaitingFrame first", func() {
 		swf := &frames.StopWaitingFrame{LeastUnacked: 10}
 		p, err := packer.PackPacket(swf, []frames.Frame{&frames.ConnectionCloseFrame{}}, false)
-		Expect(p).ToNot(BeNil())
 		Expect(err).ToNot(HaveOccurred())
+		Expect(p).ToNot(BeNil())
 		Expect(len(p.frames)).To(Equal(2))
 		Expect(p.frames[0]).To(Equal(swf))
+	})
+
+	It("sets the LeastUnackedDelta length of a StopWaitingFrame", func() {
+		packetNumber := protocol.PacketNumber(0xDECAFB) // will result in a 4 byte packet number
+		packer.lastPacketNumber = packetNumber - 1
+		swf := &frames.StopWaitingFrame{LeastUnacked: packetNumber - 0x100}
+		p, err := packer.PackPacket(swf, []frames.Frame{&frames.ConnectionCloseFrame{}}, false)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(p.frames[0].(*frames.StopWaitingFrame).PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
 	})
 
 	It("does not pack a packet containing only a StopWaitingFrame", func() {
@@ -159,7 +168,8 @@ var _ = Describe("Packet packer", func() {
 				Offset:         1,
 				DataLenPresent: false,
 			}
-			maxStreamFrameDataLen := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen - f.MinLength()
+			minLength, _ := f.MinLength()
+			maxStreamFrameDataLen := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen - minLength
 			f.Data = bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen))
 			packer.AddStreamFrame(f)
 			payloadFrames, err := packer.composeNextPacket(nil, []frames.Frame{}, publicHeaderLen, true)
@@ -230,7 +240,8 @@ var _ = Describe("Packet packer", func() {
 				StreamID: 7,
 				Offset:   1,
 			}
-			maxStreamFrameDataLen := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen - f.MinLength() + 1 // + 1 since MinceLength is 1 bigger than the actual StreamFrame header
+			minLength, _ := f.MinLength()
+			maxStreamFrameDataLen := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen - minLength + 1 // + 1 since MinceLength is 1 bigger than the actual StreamFrame header
 			f.Data = bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen)+200)
 			packer.AddStreamFrame(f)
 			payloadFrames, err := packer.composeNextPacket(nil, []frames.Frame{}, publicHeaderLen, true)
@@ -285,7 +296,8 @@ var _ = Describe("Packet packer", func() {
 			f := frames.StreamFrame{
 				Offset: 1,
 			}
-			f.Data = bytes.Repeat([]byte{'f'}, int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLen-f.MinLength()+1)) // + 1 since MinceLength is 1 bigger than the actual StreamFrame header
+			minLength, _ := f.MinLength()
+			f.Data = bytes.Repeat([]byte{'f'}, int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLen-minLength+1)) // + 1 since MinceLength is 1 bigger than the actual StreamFrame header
 			packer.AddStreamFrame(f)
 			p, err := packer.PackPacket(nil, []frames.Frame{}, true)
 			Expect(err).ToNot(HaveOccurred())
@@ -298,7 +310,8 @@ var _ = Describe("Packet packer", func() {
 				StreamID: 5,
 				Offset:   1,
 			}
-			f.Data = bytes.Repeat([]byte{'f'}, int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLen-f.MinLength()+2)) // + 2 since MinceLength is 1 bigger than the actual StreamFrame header
+			minLength, _ := f.MinLength()
+			f.Data = bytes.Repeat([]byte{'f'}, int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLen-minLength+2)) // + 2 since MinceLength is 1 bigger than the actual StreamFrame header
 
 			packer.AddStreamFrame(f)
 			payloadFrames, err := packer.composeNextPacket(nil, []frames.Frame{}, publicHeaderLen, true)

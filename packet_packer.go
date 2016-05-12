@@ -53,16 +53,21 @@ func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		1,
 	))
 
+	packetNumberLen := getPacketNumberLength(currentPacketNumber, p.sentPacketHandler.GetLargestObserved())
 	responsePublicHeader := &PublicHeader{
 		ConnectionID:         p.connectionID,
 		PacketNumber:         currentPacketNumber,
-		PacketNumberLen:      getPacketNumberLength(currentPacketNumber, p.sentPacketHandler.GetLargestObserved()),
+		PacketNumberLen:      packetNumberLen,
 		TruncateConnectionID: p.connectionParametersManager.TruncateConnectionID(),
 	}
 
 	publicHeaderLength, err := responsePublicHeader.GetLength()
 	if err != nil {
 		return nil, err
+	}
+
+	if stopWaitingFrame != nil {
+		stopWaitingFrame.PacketNumberLen = packetNumberLen
 	}
 
 	payloadFrames, err := p.composeNextPacket(stopWaitingFrame, controlFrames, publicHeaderLength, includeStreamFrames)
@@ -112,14 +117,6 @@ func (p *packetPacker) getPayload(frames []frames.Frame, currentPacketNumber pro
 	return payload.Bytes(), nil
 }
 
-// func (p *packetPacker) composeNextPacketControlFrames(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame) (uint8, []frames.Frame, error) {
-//
-// }
-//
-// func (p *packetPacker) composeNextPacketStreamFrames() ([]frames.Frame, error) {
-//
-// }
-
 func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, publicHeaderLength protocol.ByteCount, includeStreamFrames bool) ([]frames.Frame, error) {
 	payloadLength := protocol.ByteCount(0)
 	var payloadFrames []frames.Frame
@@ -127,13 +124,18 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 	// TODO: handle the case where there are more controlFrames than we can put into one packet
 	if stopWaitingFrame != nil {
 		payloadFrames = append(payloadFrames, stopWaitingFrame)
-		payloadLength += stopWaitingFrame.MinLength()
+		minLength, err := stopWaitingFrame.MinLength()
+		if err != nil {
+			return nil, err
+		}
+		payloadLength += minLength
 	}
 
 	for len(controlFrames) > 0 {
 		frame := controlFrames[0]
 		payloadFrames = append(payloadFrames, frame)
-		payloadLength += frame.MinLength()
+		minLength, _ := frame.MinLength() // controlFrames does not contain any StopWaitingFrames. So it will *never* return an error
+		payloadLength += minLength
 		controlFrames = controlFrames[1:]
 	}
 
@@ -163,7 +165,8 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 		}
 
 		// Does the frame fit into the remaining space?
-		if payloadLength+frame.MinLength() > maxFrameSize {
+		frameMinLength, _ := frame.MinLength() // StreamFrame.MinLength *never* returns an error
+		if payloadLength+frameMinLength > maxFrameSize {
 			break
 		}
 
@@ -178,7 +181,7 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 			payloadLength += protocol.ByteCount(len(frame.Data)) - 1
 		}
 
-		payloadLength += frame.MinLength()
+		payloadLength += frameMinLength
 		payloadFrames = append(payloadFrames, frame)
 		hasStreamFrames = true
 	}

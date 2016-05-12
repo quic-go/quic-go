@@ -19,7 +19,7 @@ func (f *WindowUpdateFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketN
 }
 
 // MinLength of a written frame
-func (f *WindowUpdateFrame) MinLength() protocol.ByteCount {
+func (f *WindowUpdateFrame) MinLength() (protocol.ByteCount, error) {
 	panic("WindowUpdateFrame: Write not yet implemented")
 }
 

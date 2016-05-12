@@ -182,7 +182,7 @@ func (f *StreamFrame) getOffsetLength() protocol.ByteCount {
 }
 
 // MinLength of a written frame
-func (f *StreamFrame) MinLength() protocol.ByteCount {
+func (f *StreamFrame) MinLength() (protocol.ByteCount, error) {
 	if f.streamIDLen == 0 {
 		f.calculateStreamIDLength()
 	}
@@ -192,15 +192,16 @@ func (f *StreamFrame) MinLength() protocol.ByteCount {
 		length += 2
 	}
 
-	return length + 1
+	return length + 1, nil
 }
 
 // MaybeSplitOffFrame removes the first n bytes and returns them as a separate frame. If n >= len(n), nil is returned and nothing is modified.
 func (f *StreamFrame) MaybeSplitOffFrame(n protocol.ByteCount) *StreamFrame {
-	if n >= f.MinLength()-1+protocol.ByteCount(len(f.Data)) {
+	minLength, _ := f.MinLength() // StreamFrame.MinLength *never* errors
+	if n >= minLength-1+protocol.ByteCount(len(f.Data)) {
 		return nil
 	}
-	n -= f.MinLength() - 1
+	n -= minLength - 1
 
 	defer func() {
 		f.Data = f.Data[n:]

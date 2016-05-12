@@ -94,14 +94,14 @@ func (f *AckFrame) Write(b *bytes.Buffer, packetNumber protocol.PacketNumber, ve
 }
 
 // MinLength of a written frame
-func (f *AckFrame) MinLength() protocol.ByteCount {
+func (f *AckFrame) MinLength() (protocol.ByteCount, error) {
 	l := 1 + 1 + 6 + 2 + 1 + 1 + 4
 	l += (1 + 2) * 0 /* TODO: num_timestamps */
 	if f.HasNACK() {
 		l += 1 + (6+1)*len(f.NackRanges)
 		l++ // TODO: Remove once we drop support for <32
 	}
-	return protocol.ByteCount(l)
+	return protocol.ByteCount(l), nil
 }
 
 // HasNACK returns if the frame has NACK ranges
