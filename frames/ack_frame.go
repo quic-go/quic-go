@@ -24,7 +24,13 @@ type AckFrame struct {
 
 // Write writes an ACK frame.
 func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
-	typeByte := uint8(0x40 | 0x0C)
+	largestObservedLen := protocol.GetPacketNumberLength(f.LargestObserved)
+
+	typeByte := uint8(0x40)
+
+	if largestObservedLen != protocol.PacketNumberLen1 {
+		typeByte ^= (uint8(largestObservedLen / 2)) << 2
+	}
 
 	if f.HasNACK() {
 		typeByte |= (0x20 | 0x03)
@@ -34,7 +40,18 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 
 	b.WriteByte(typeByte)
 	b.WriteByte(f.Entropy)
-	utils.WriteUint48(b, uint64(f.LargestObserved)) // TODO: send the correct length
+
+	switch largestObservedLen {
+	case protocol.PacketNumberLen1:
+		b.WriteByte(uint8(f.LargestObserved))
+	case protocol.PacketNumberLen2:
+		utils.WriteUint16(b, uint16(f.LargestObserved))
+	case protocol.PacketNumberLen4:
+		utils.WriteUint32(b, uint32(f.LargestObserved))
+	case protocol.PacketNumberLen6:
+		utils.WriteUint48(b, uint64(f.LargestObserved))
+	}
+
 	utils.WriteUfloat16(b, uint64(f.DelayTime/time.Microsecond))
 	b.WriteByte(0x01)       // Just one timestamp
 	b.WriteByte(0x00)       // Delta Largest observed
@@ -99,7 +116,8 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 
 // MinLength of a written frame
 func (f *AckFrame) MinLength() (protocol.ByteCount, error) {
-	l := 1 + 1 + 6 + 2 + 1 + 1 + 4
+	l := 1 + 1 + 2 + 1 + 1 + 4 // 1 TypeByte, 1 Entropy, 2 ACK delay time, 1 Num Timestamp, 1 Delta Largest Observed, 4 FirstTimestamp
+	l += int(protocol.GetPacketNumberLength(f.LargestObserved))
 	l += (1 + 2) * 0 /* TODO: num_timestamps */
 	if f.HasNACK() {
 		l += 1 + (6+1)*len(f.NackRanges)

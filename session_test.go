@@ -317,12 +317,15 @@ var _ = Describe("Session", func() {
 		})
 
 		It("sends ack frames", func() {
-			session.receivedPacketHandler.ReceivedPacket(1, true)
+			packetNumber := protocol.PacketNumber(0x0135)
+			var entropy ackhandler.EntropyAccumulator
+			session.receivedPacketHandler.ReceivedPacket(packetNumber, true)
+			entropy.Add(packetNumber, true)
 			err := session.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(conn.written).To(HaveLen(1))
-			// test for the beginning of an ACK frame: TypeByte until LargestObserved
-			Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x4c, 0x2, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0})))
+			// test for the beginning of an ACK frame: Entropy until LargestObserved
+			Expect(conn.written[0]).To(ContainSubstring(string([]byte{byte(entropy), 0x35, 0x01})))
 		})
 
 		It("sends queued stream frames", func() {
@@ -335,7 +338,7 @@ var _ = Describe("Session", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(conn.written).To(HaveLen(1))
 			// test for the beginning of an ACK frame: TypeByte until LargestObserved
-			Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x4c, 0x2, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0})))
+			Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x40, 0x2, 0x1})))
 			Expect(conn.written[0]).To(ContainSubstring(string("foobar")))
 		})
 

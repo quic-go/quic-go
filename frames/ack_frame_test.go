@@ -253,8 +253,8 @@ var _ = Describe("AckFrame", func() {
 			err := frame.Write(b, 32)
 			Expect(err).ToNot(HaveOccurred())
 			// check all values except the DelayTime
-			Expect(b.Bytes()[0:8]).To(Equal([]byte{0x4c, 0x02, 0x01, 0, 0, 0, 0, 0}))
-			Expect(b.Bytes()[10:]).To(Equal([]byte{1, 0, 0, 0, 0, 0}))
+			Expect(b.Bytes()[0:3]).To(Equal([]byte{0x40, 0x02, 0x01}))
+			Expect(b.Bytes()[5:]).To(Equal([]byte{1, 0, 0, 0, 0, 0}))
 		})
 
 		It("calculates the DelayTime", func() {
@@ -267,7 +267,7 @@ var _ = Describe("AckFrame", func() {
 			delayTime := frame.DelayTime
 			var b2 bytes.Buffer
 			utils.WriteUfloat16(&b2, uint64(delayTime/time.Microsecond))
-			Expect(b.Bytes()[8:10]).To(Equal(b2.Bytes()))
+			Expect(b.Bytes()[3:5]).To(Equal(b2.Bytes()))
 		})
 
 		It("writes a frame with one NACK range", func() {
@@ -411,6 +411,48 @@ var _ = Describe("AckFrame", func() {
 				Expect(missingPacketBytes[22:28]).To(Equal([]byte{0, 0, 0, 0, 0, 0})) // missingPacketSequenceNumberDelta #4
 				Expect(missingPacketBytes[28]).To(Equal(uint8(0xFF)))                 // rangeLength #4
 			})
+
+			Context("LargestObserved length", func() {
+				It("writes a 1 byte LargestObserved value", func() {
+					frame := AckFrame{
+						LargestObserved: 7,
+					}
+					err := frame.Write(b, 32)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(b.Bytes()[0] & 0x4C).To(Equal(uint8(0x40)))
+					Expect(b.Bytes()[2]).To(Equal(uint8(7)))
+				})
+
+				It("writes a 2 byte LargestObserved value", func() {
+					frame := AckFrame{
+						LargestObserved: 0x1337,
+					}
+					err := frame.Write(b, 32)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(b.Bytes()[0] & 0x4C).To(Equal(uint8(0x44)))
+					Expect(b.Bytes()[2:4]).To(Equal([]byte{0x37, 0x13}))
+				})
+
+				It("writes a 4 byte LargestObserved value", func() {
+					frame := AckFrame{
+						LargestObserved: 0xDECAFBAD,
+					}
+					err := frame.Write(b, 32)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(b.Bytes()[0] & 0x4C).To(Equal(uint8(0x48)))
+					Expect(b.Bytes()[2:6]).To(Equal([]byte{0xAD, 0xFB, 0xCA, 0xDE}))
+				})
+
+				It("writes a 6 byte LargestObserved value", func() {
+					frame := AckFrame{
+						LargestObserved: 0xDEADBEEFCAFE,
+					}
+					err := frame.Write(b, 32)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(b.Bytes()[0] & 0x4C).To(Equal(uint8(0x4C)))
+					Expect(b.Bytes()[2:8]).To(Equal([]byte{0xFE, 0xCA, 0xEF, 0xBE, 0xAD, 0xDE}))
+				})
+			})
 		})
 
 		Context("min length", func() {
@@ -418,6 +460,15 @@ var _ = Describe("AckFrame", func() {
 				f := &AckFrame{
 					Entropy:         2,
 					LargestObserved: 1,
+				}
+				f.Write(b, 2)
+				Expect(f.MinLength()).To(Equal(protocol.ByteCount(b.Len())))
+			})
+
+			It("has proper min length with a large LargestObserved", func() {
+				f := &AckFrame{
+					Entropy:         2,
+					LargestObserved: 0xDEADBEEFCAFE,
 				}
 				f.Write(b, 2)
 				Expect(f.MinLength()).To(Equal(protocol.ByteCount(b.Len())))

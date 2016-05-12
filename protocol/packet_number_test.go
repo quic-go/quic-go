@@ -126,80 +126,100 @@ var _ = Describe("packet number calculation", func() {
 		}
 	})
 
-	Context("shortening a packet number", func() {
-		It("sends out low packet numbers as 1 byte", func() {
-			length := GetPacketNumberLengthForPublicHeader(4, 2)
-			Expect(length).To(Equal(PacketNumberLen1))
+	Context("shortening a packet number for the PublicHeader", func() {
+		Context("shortening", func() {
+			It("sends out low packet numbers as 1 byte", func() {
+				length := GetPacketNumberLengthForPublicHeader(4, 2)
+				Expect(length).To(Equal(PacketNumberLen1))
+			})
+
+			It("sends out high packet numbers as 1 byte, if all ACKs are received", func() {
+				length := GetPacketNumberLengthForPublicHeader(0xDEADBEEF, 0xDEADBEEF-1)
+				Expect(length).To(Equal(PacketNumberLen1))
+			})
+
+			It("sends out higher packet numbers as 2 bytes, if a lot of ACKs are missing", func() {
+				length := GetPacketNumberLengthForPublicHeader(200, 2)
+				Expect(length).To(Equal(PacketNumberLen2))
+			})
 		})
 
-		It("sends out high packet numbers as 1 byte, if all ACKs are received", func() {
-			length := GetPacketNumberLengthForPublicHeader(0xDEADBEEF, 0xDEADBEEF-1)
-			Expect(length).To(Equal(PacketNumberLen1))
-		})
+		Context("self-consistency", func() {
+			It("works for small packet numbers", func() {
+				for i := uint64(1); i < 10000; i++ {
+					packetNumber := PacketNumber(i)
+					highestAcked := PacketNumber(1)
+					length := GetPacketNumberLengthForPublicHeader(packetNumber, highestAcked)
+					wirePacketNumber := (uint64(packetNumber) << (64 - length*8)) >> (64 - length*8)
 
-		It("sends out higher packet numbers as 2 bytes, if a lot of ACKs are missing", func() {
-			length := GetPacketNumberLengthForPublicHeader(200, 2)
-			Expect(length).To(Equal(PacketNumberLen2))
+					inferedPacketNumber := InferPacketNumber(length, highestAcked, PacketNumber(wirePacketNumber))
+					Expect(inferedPacketNumber).To(Equal(packetNumber))
+				}
+			})
+
+			It("works for small packet numbers and increasing ACKed packets", func() {
+				for i := uint64(1); i < 10000; i++ {
+					packetNumber := PacketNumber(i)
+					highestAcked := PacketNumber(i / 2)
+					length := GetPacketNumberLengthForPublicHeader(packetNumber, highestAcked)
+					wirePacketNumber := (uint64(packetNumber) << (64 - length*8)) >> (64 - length*8)
+
+					inferedPacketNumber := InferPacketNumber(length, highestAcked, PacketNumber(wirePacketNumber))
+					Expect(inferedPacketNumber).To(Equal(packetNumber))
+				}
+			})
+
+			It("also works for larger packet numbers", func() {
+				increment := uint64(1)
+				for i := uint64(1); i < (2 << 46); i += increment {
+					packetNumber := PacketNumber(i)
+					highestAcked := PacketNumber(1)
+					length := GetPacketNumberLengthForPublicHeader(packetNumber, highestAcked)
+					wirePacketNumber := (uint64(packetNumber) << (64 - length*8)) >> (64 - length*8)
+
+					inferedPacketNumber := InferPacketNumber(length, highestAcked, PacketNumber(wirePacketNumber))
+					Expect(inferedPacketNumber).To(Equal(packetNumber))
+
+					switch length {
+					case PacketNumberLen2:
+						increment = 100
+					case PacketNumberLen4:
+						increment = 50000
+					case PacketNumberLen6:
+						increment = 100000000
+					}
+				}
+			})
+
+			It("works for packet numbers larger than 2^48", func() {
+				for i := (uint64(1) << 48); i < ((uint64(1) << 63) - 1); i += (uint64(1) << 45) {
+					packetNumber := PacketNumber(i)
+					highestAcked := PacketNumber(i - 1000)
+					length := GetPacketNumberLengthForPublicHeader(packetNumber, highestAcked)
+					wirePacketNumber := (uint64(packetNumber) << (64 - length*8)) >> (64 - length*8)
+
+					inferedPacketNumber := InferPacketNumber(length, highestAcked, PacketNumber(wirePacketNumber))
+					Expect(inferedPacketNumber).To(Equal(packetNumber))
+				}
+			})
 		})
 	})
 
-	Context("self-consistency", func() {
-		It("works for small packet numbers", func() {
-			for i := uint64(1); i < 10000; i++ {
-				packetNumber := PacketNumber(i)
-				highestAcked := PacketNumber(1)
-				length := GetPacketNumberLengthForPublicHeader(packetNumber, highestAcked)
-				wirePacketNumber := (uint64(packetNumber) << (64 - length*8)) >> (64 - length*8)
-
-				inferedPacketNumber := InferPacketNumber(length, highestAcked, PacketNumber(wirePacketNumber))
-				Expect(inferedPacketNumber).To(Equal(packetNumber))
-			}
+	Context("determining the minimum length of a packet number", func() {
+		It("1 byte", func() {
+			Expect(GetPacketNumberLength(0xFF)).To(Equal(PacketNumberLen1))
 		})
 
-		It("works for small packet numbers and increasing ACKed packets", func() {
-			for i := uint64(1); i < 10000; i++ {
-				packetNumber := PacketNumber(i)
-				highestAcked := PacketNumber(i / 2)
-				length := GetPacketNumberLengthForPublicHeader(packetNumber, highestAcked)
-				wirePacketNumber := (uint64(packetNumber) << (64 - length*8)) >> (64 - length*8)
-
-				inferedPacketNumber := InferPacketNumber(length, highestAcked, PacketNumber(wirePacketNumber))
-				Expect(inferedPacketNumber).To(Equal(packetNumber))
-			}
+		It("2 byte", func() {
+			Expect(GetPacketNumberLength(0xFFFF)).To(Equal(PacketNumberLen2))
 		})
 
-		It("also works for larger packet numbers", func() {
-			increment := uint64(1)
-			for i := uint64(1); i < (2 << 46); i += increment {
-				packetNumber := PacketNumber(i)
-				highestAcked := PacketNumber(1)
-				length := GetPacketNumberLengthForPublicHeader(packetNumber, highestAcked)
-				wirePacketNumber := (uint64(packetNumber) << (64 - length*8)) >> (64 - length*8)
-
-				inferedPacketNumber := InferPacketNumber(length, highestAcked, PacketNumber(wirePacketNumber))
-				Expect(inferedPacketNumber).To(Equal(packetNumber))
-
-				switch length {
-				case PacketNumberLen2:
-					increment = 100
-				case PacketNumberLen4:
-					increment = 50000
-				case PacketNumberLen6:
-					increment = 100000000
-				}
-			}
+		It("4 byte", func() {
+			Expect(GetPacketNumberLength(0xFFFFFFFF)).To(Equal(PacketNumberLen4))
 		})
 
-		It("works for packet numbers larger than 2^48", func() {
-			for i := (uint64(1) << 48); i < ((uint64(1) << 63) - 1); i += (uint64(1) << 45) {
-				packetNumber := PacketNumber(i)
-				highestAcked := PacketNumber(i - 1000)
-				length := GetPacketNumberLengthForPublicHeader(packetNumber, highestAcked)
-				wirePacketNumber := (uint64(packetNumber) << (64 - length*8)) >> (64 - length*8)
-
-				inferedPacketNumber := InferPacketNumber(length, highestAcked, PacketNumber(wirePacketNumber))
-				Expect(inferedPacketNumber).To(Equal(packetNumber))
-			}
+		It("6 byte", func() {
+			Expect(GetPacketNumberLength(0xFFFFFFFFFFFF)).To(Equal(PacketNumberLen6))
 		})
 	})
 })

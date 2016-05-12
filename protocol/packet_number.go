@@ -42,3 +42,17 @@ func GetPacketNumberLengthForPublicHeader(packetNumber PacketNumber, highestAcke
 	// we do not check if there are less than 2^46 packets in flight, since flow control and congestion control will limit this number *a lot* sooner
 	return PacketNumberLen6
 }
+
+// GetPacketNumberLength gets the minimum length needed to fully represent the packet number
+func GetPacketNumberLength(packetNumber PacketNumber) PacketNumberLen {
+	if packetNumber < (1 << (uint8(PacketNumberLen1) * 8)) {
+		return PacketNumberLen1
+	}
+	if packetNumber < (1 << (uint8(PacketNumberLen2) * 8)) {
+		return PacketNumberLen2
+	}
+	if packetNumber < (1 << (uint8(PacketNumberLen4) * 8)) {
+		return PacketNumberLen4
+	}
+	return PacketNumberLen6
+}
