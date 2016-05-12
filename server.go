@@ -14,7 +14,7 @@ import (
 
 // PacketHandler handles packets
 type PacketHandler interface {
-	HandlePacket(addr interface{}, publicHeader *PublicHeader, r *bytes.Reader)
+	HandlePacket(addr interface{}, publicHeader *PublicHeader, data []byte)
 	Run()
 }
 
@@ -137,7 +137,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 		// Late packet for closed session
 		return nil
 	}
-	session.HandlePacket(remoteAddr, publicHeader, r)
+	session.HandlePacket(remoteAddr, publicHeader, packet[len(packet)-r.Len():])
 	return nil
 }
 

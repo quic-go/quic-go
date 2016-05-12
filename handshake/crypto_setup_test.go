@@ -94,22 +94,24 @@ func (s *mockStream) Close() error {
 
 var _ = Describe("Crypto setup", func() {
 	var (
-		kex    *mockKEX
-		signer *mockSigner
-		scfg   *ServerConfig
-		cs     *CryptoSetup
-		stream *mockStream
-		cpm    *ConnectionParametersManager
+		kex         *mockKEX
+		signer      *mockSigner
+		scfg        *ServerConfig
+		cs          *CryptoSetup
+		stream      *mockStream
+		cpm         *ConnectionParametersManager
+		aeadChanged chan struct{}
 	)
 
 	BeforeEach(func() {
+		aeadChanged = make(chan struct{}, 1)
 		stream = &mockStream{}
 		kex = &mockKEX{}
 		signer = &mockSigner{}
 		scfg = NewServerConfig(kex, signer)
 		v := protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
 		cpm = NewConnectionParamatersManager()
-		cs = NewCryptoSetup(protocol.ConnectionID(42), v, scfg, stream, cpm)
+		cs = NewCryptoSetup(protocol.ConnectionID(42), v, scfg, stream, cpm, aeadChanged)
 		cs.keyDerivation = mockKeyDerivation
 		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
 	})
@@ -164,6 +166,7 @@ var _ = Describe("Crypto setup", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stream.dataWritten.Bytes()).To(HavePrefix("REJ"))
 			Expect(stream.dataWritten.Bytes()).To(ContainSubstring("SHLO"))
+			Expect(aeadChanged).To(Receive())
 		})
 
 		It("handles 0-RTT handshake", func() {
@@ -172,6 +175,7 @@ var _ = Describe("Crypto setup", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stream.dataWritten.Bytes()).To(HavePrefix("SHLO"))
 			Expect(stream.dataWritten.Bytes()).ToNot(ContainSubstring("REJ"))
+			Expect(aeadChanged).To(Receive())
 		})
 
 		It("recognizes inchoate CHLOs missing SCID", func() {

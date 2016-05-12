@@ -29,6 +29,7 @@ type CryptoSetup struct {
 	forwardSecureAEAD           crypto.AEAD
 	receivedForwardSecurePacket bool
 	receivedSecurePacket        bool
+	aeadChanged                 chan struct{}
 
 	keyDerivation KeyDerivationFunction
 	keyExchange   KeyExchangeFunction
@@ -43,7 +44,7 @@ type CryptoSetup struct {
 var _ crypto.AEAD = &CryptoSetup{}
 
 // NewCryptoSetup creates a new CryptoSetup instance
-func NewCryptoSetup(connID protocol.ConnectionID, version protocol.VersionNumber, scfg *ServerConfig, cryptoStream utils.Stream, connectionParametersManager *ConnectionParametersManager) *CryptoSetup {
+func NewCryptoSetup(connID protocol.ConnectionID, version protocol.VersionNumber, scfg *ServerConfig, cryptoStream utils.Stream, connectionParametersManager *ConnectionParametersManager, aeadChanged chan struct{}) *CryptoSetup {
 	nonce := make([]byte, 32)
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		panic(err)
@@ -57,6 +58,7 @@ func NewCryptoSetup(connID protocol.ConnectionID, version protocol.VersionNumber
 		keyExchange:                 crypto.NewCurve25519KEX,
 		cryptoStream:                cryptoStream,
 		connectionParametersManager: connectionParametersManager,
+		aeadChanged:                 aeadChanged,
 	}
 }
 
@@ -138,7 +140,7 @@ func (h *CryptoSetup) Open(packetNumber protocol.PacketNumber, associatedData []
 	return (&crypto.NullAEAD{}).Open(packetNumber, associatedData, ciphertext)
 }
 
-// Seal a messageTag
+// Seal a message
 func (h *CryptoSetup) Seal(packetNumber protocol.PacketNumber, associatedData []byte, plaintext []byte) []byte {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
@@ -240,6 +242,8 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 
 	var reply bytes.Buffer
 	WriteHandshakeMessage(&reply, TagSHLO, replyMap)
+
+	h.aeadChanged <- struct{}{}
 
 	return reply.Bytes(), nil
 }

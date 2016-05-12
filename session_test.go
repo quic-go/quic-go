@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"bytes"
 	"errors"
 	"io"
 	"runtime"
@@ -372,10 +371,10 @@ var _ = Describe("Session", func() {
 			Expect(session.sendingScheduled).NotTo(Receive())
 			session.receivedPackets <- receivedPacket{
 				publicHeader: &PublicHeader{},
-				r: bytes.NewReader([]byte{
+				data: []byte{
 					// FNV hash + "foobar"
 					0x18, 0x6f, 0x44, 0xba, 0x97, 0x35, 0xd, 0x6f, 0xbf, 0x64, 0x3c, 0x79, 0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72,
-				}),
+				},
 			}
 			session.Run()
 			Expect(session.sendingScheduled).To(Receive())
@@ -399,23 +398,39 @@ var _ = Describe("Session", func() {
 		Expect(err).To(MatchError("CryptoSetup: expected CHLO"))
 	})
 
-	// See https://github.com/lucas-clemente/quic-go/issues/38
-	PIt("sends public reset when receiving invalid message", func() {
+	It("sends public reset after too many undecryptable packets", func() {
 		signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 		Expect(err).ToNot(HaveOccurred())
 		scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
-		session = NewSession(conn, 0, 0, scfg, nil, nil).(*Session)
-		hdr := &PublicHeader{
-			PacketNumber: 42,
+		session = NewSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) {}).(*Session)
+
+		// Write protocol.MaxUndecryptablePackets and expect a public reset to happen
+		for i := 0; i < protocol.MaxUndecryptablePackets; i++ {
+			hdr := &PublicHeader{
+				PacketNumber: protocol.PacketNumber(i + 1),
+			}
+			session.HandlePacket(nil, hdr, []byte("foobar"))
 		}
-		r := bytes.NewReader([]byte("foo"))
-		err = session.handlePacket(nil, hdr, r)
-		Expect(err).To(HaveOccurred())
-		// Close() should send public reset
-		err = session.Close(err, true)
-		Expect(err).NotTo(HaveOccurred())
+		session.Run()
+
 		Expect(conn.written).To(HaveLen(1))
 		Expect(conn.written[0]).To(ContainSubstring(string([]byte("PRST"))))
+	})
+
+	It("unqueues undecryptable packets for later decryption", func() {
+		signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
+		Expect(err).ToNot(HaveOccurred())
+		scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
+		session = NewSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) {}).(*Session)
+		session.undecryptablePackets = []receivedPacket{{
+			nil,
+			&PublicHeader{PacketNumber: protocol.PacketNumber(42)},
+			nil,
+		}}
+		Expect(session.receivedPackets).NotTo(Receive())
+		session.tryDecryptingQueuedPackets()
+		Expect(session.undecryptablePackets).To(HaveLen(0))
+		Expect(session.receivedPackets).To(Receive())
 	})
 
 	It("times out", func(done Done) {

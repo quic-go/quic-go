@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"bytes"
 	"net"
 	"time"
 
@@ -19,7 +18,7 @@ type mockSession struct {
 	packetCount  int
 }
 
-func (s *mockSession) HandlePacket(addr interface{}, publicHeader *PublicHeader, r *bytes.Reader) {
+func (s *mockSession) HandlePacket(addr interface{}, publicHeader *PublicHeader, data []byte) {
 	s.packetCount++
 }
 

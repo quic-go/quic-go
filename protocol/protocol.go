@@ -51,3 +51,7 @@ const MaxCongestionWindow PacketNumber = 200
 // DefaultMaxCongestionWindow is the default for the max congestion window
 // Taken from Chrome
 const DefaultMaxCongestionWindow PacketNumber = 107
+
+// MaxUndecryptablePackets limits the number of undecryptable packets that a
+// session queues for later until it sends a public reset.
+const MaxUndecryptablePackets = 10
