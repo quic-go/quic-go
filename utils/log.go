@@ -1,6 +1,12 @@
 package utils
 
-import "fmt"
+import (
+	"fmt"
+	"io"
+	"os"
+)
+
+var out io.Writer = os.Stdout
 
 // LogLevel of quic-go
 type LogLevel uint8
@@ -26,20 +32,20 @@ func SetLogLevel(level LogLevel) {
 // Debugf logs something
 func Debugf(format string, args ...interface{}) {
 	if logLevel == LogLevelDebug {
-		fmt.Printf(format+"\n", args...)
+		fmt.Fprintf(out, format+"\n", args...)
 	}
 }
 
 // Infof logs something
 func Infof(format string, args ...interface{}) {
 	if logLevel <= LogLevelInfo {
-		fmt.Printf(format+"\n", args...)
+		fmt.Fprintf(out, format+"\n", args...)
 	}
 }
 
 // Errorf logs something
 func Errorf(format string, args ...interface{}) {
 	if logLevel <= LogLevelError {
-		fmt.Printf(format+"\n", args...)
+		fmt.Fprintf(out, format+"\n", args...)
 	}
 }

@@ -2,7 +2,6 @@ package utils
 
 import (
 	"bytes"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -164,43 +163,6 @@ var _ = Describe("Utils", func() {
 			b := &bytes.Buffer{}
 			WriteUint64(b, num)
 			Expect(b.Bytes()).To(Equal([]byte{0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF}))
-		})
-	})
-
-	Context("Max", func() {
-		It("returns the maximum", func() {
-			Expect(Max(5, 7)).To(Equal(7))
-		})
-
-		It("returns the maximum uint32", func() {
-			Expect(MaxUint32(5, 7)).To(Equal(uint32(7)))
-		})
-
-		It("returns the maximum uint64", func() {
-			Expect(MaxUint64(5, 7)).To(Equal(uint64(7)))
-		})
-
-		It("returns the maximum int64", func() {
-			Expect(MaxInt64(5, 7)).To(Equal(int64(7)))
-		})
-
-		It("returns the maximum duration", func() {
-			Expect(MaxDuration(time.Microsecond, time.Nanosecond)).To(Equal(time.Microsecond))
-		})
-	})
-
-	It("returns the abs time", func() {
-		Expect(AbsDuration(time.Microsecond)).To(Equal(time.Microsecond))
-		Expect(AbsDuration(-time.Microsecond)).To(Equal(time.Microsecond))
-	})
-
-	Context("Min", func() {
-		It("returns the minimum", func() {
-			Expect(Min(5, 7)).To(Equal(5))
-		})
-
-		It("returns the minimum int64", func() {
-			Expect(MinInt64(5, 7)).To(Equal(int64(5)))
 		})
 	})
 
