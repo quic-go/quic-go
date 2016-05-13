@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"runtime"
@@ -378,6 +379,74 @@ var _ = Describe("Session", func() {
 			}
 			session.Run()
 			Expect(session.sendingScheduled).To(Receive())
+		})
+
+		Context("bundling of small packets", func() {
+			It("bundles two small frames into one packet", func() {
+				go session.Run()
+
+				session.QueueStreamFrame(&frames.StreamFrame{
+					StreamID: 5,
+					Data:     []byte("foobar1"),
+				})
+				session.QueueStreamFrame(&frames.StreamFrame{
+					StreamID: 5,
+					Data:     []byte("foobar2"),
+				})
+				time.Sleep(10 * time.Millisecond)
+				Expect(conn.written).To(HaveLen(1))
+			})
+
+			It("sends out two big frames in two packet", func() {
+				go session.Run()
+
+				session.QueueStreamFrame(&frames.StreamFrame{
+					StreamID: 5,
+					Data:     bytes.Repeat([]byte{'e'}, int(protocol.SmallPacketPayloadSizeThreshold+50)),
+				})
+				session.QueueStreamFrame(&frames.StreamFrame{
+					StreamID: 5,
+					Data:     bytes.Repeat([]byte{'f'}, int(protocol.SmallPacketPayloadSizeThreshold+50)),
+				})
+				time.Sleep(10 * time.Millisecond)
+				Expect(conn.written).To(HaveLen(2))
+			})
+
+			It("sends out two small frames that are written to long after one another into two packet", func() {
+				go session.Run()
+
+				session.QueueStreamFrame(&frames.StreamFrame{
+					StreamID: 5,
+					Data:     []byte("foobar1"),
+				})
+				time.Sleep(10 * protocol.SmallPacketSendDelay)
+				session.QueueStreamFrame(&frames.StreamFrame{
+					StreamID: 5,
+					Data:     []byte("foobar2"),
+				})
+				time.Sleep(10 * time.Millisecond)
+				Expect(conn.written).To(HaveLen(2))
+			})
+
+			It("sends a queued ACK frame only once", func() {
+				go session.Run()
+
+				packetNumber := protocol.PacketNumber(0x1337)
+				session.receivedPacketHandler.ReceivedPacket(packetNumber, true)
+				session.QueueStreamFrame(&frames.StreamFrame{
+					StreamID: 5,
+					Data:     []byte("foobar1"),
+				})
+				time.Sleep(10 * protocol.SmallPacketSendDelay)
+				session.QueueStreamFrame(&frames.StreamFrame{
+					StreamID: 5,
+					Data:     []byte("foobar2"),
+				})
+				time.Sleep(10 * time.Millisecond)
+				Expect(conn.written).To(HaveLen(2))
+				Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x37, 0x13})))
+				Expect(conn.written[1]).ToNot(ContainSubstring(string([]byte{0x37, 0x13})))
+			})
 		})
 	})
 

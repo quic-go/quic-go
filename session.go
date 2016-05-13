@@ -62,6 +62,8 @@ type Session struct {
 	undecryptablePackets []receivedPacket
 	aeadChanged          chan struct{}
 
+	smallPacketDelayedOccurranceTime time.Time
+
 	connectionParametersManager *handshake.ConnectionParametersManager
 
 	// Used to calculate the next packet number from the truncated wire
@@ -132,6 +134,12 @@ func (s *Session) Run() {
 		default:
 		}
 
+		// receive at a nil channel blocks forever
+		var smallPacketSendTimer <-chan time.Time
+		if !s.smallPacketDelayedOccurranceTime.IsZero() {
+			smallPacketSendTimer = time.After(time.Now().Sub(s.smallPacketDelayedOccurranceTime))
+		}
+
 		var err error
 		select {
 		case <-s.closeChan:
@@ -144,6 +152,8 @@ func (s *Session) Run() {
 			}
 			s.scheduleSending()
 		case <-s.sendingScheduled:
+			err = s.maybeSendPacket()
+		case <-smallPacketSendTimer:
 			err = s.sendPacket()
 		case <-s.aeadChanged:
 			s.tryDecryptingQueuedPackets()
@@ -381,6 +391,49 @@ func (s *Session) closeStreamsWithError(err error) {
 	}
 }
 
+func (s *Session) maybeSendPacket() error {
+	if !s.congestionAllowsSending() {
+		return nil
+	}
+
+	// always send out retransmissions immediately. No need to check the size of the packet
+	if s.sentPacketHandler.HasPacketForRetransmission() {
+		return s.sendPacket()
+	}
+
+	var maxPacketSize protocol.ByteCount // the maximum size of a packet we could send out at this moment
+
+	// we only estimate the size of the StopWaitingFrame here
+	stopWaitingFrame := s.stopWaitingManager.GetStopWaitingFrame()
+	if stopWaitingFrame != nil {
+		// The actual size of a StopWaitingFrame depends on the packet number of the packet it is sent with, and it's easier here to neglect the fact the StopWaitingFrame could be 5 bytes smaller than calculated here
+		maxPacketSize += 8
+	}
+
+	ack, err := s.receivedPacketHandler.GetAckFrame(false)
+	if err != nil {
+		return err
+	}
+
+	if ack != nil {
+		ackLength, _ := ack.MinLength() // MinLength never errors for an ACK frame
+		maxPacketSize += ackLength
+	}
+
+	// note that maxPacketSize can get (much) larger than protocol.MaxPacketSize if there is a long queue of StreamFrames
+	maxPacketSize += s.packer.StreamFrameQueueByteLen()
+
+	if maxPacketSize > protocol.SmallPacketPayloadSizeThreshold {
+		return s.sendPacket()
+	}
+
+	if s.smallPacketDelayedOccurranceTime.IsZero() {
+		s.smallPacketDelayedOccurranceTime = time.Now()
+	}
+
+	return nil
+}
+
 func (s *Session) sendPacket() error {
 	if !s.congestionAllowsSending() {
 		return nil
@@ -418,6 +471,8 @@ func (s *Session) sendPacket() error {
 	if packet == nil {
 		return nil
 	}
+
+	s.smallPacketDelayedOccurranceTime = time.Time{} // zero
 
 	err = s.sentPacketHandler.SentPacket(&ackhandler.Packet{
 		PacketNumber: packet.number,

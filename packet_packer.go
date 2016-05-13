@@ -200,3 +200,7 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 func (p *packetPacker) Empty() bool {
 	return p.streamFrameQueue.Front() == nil
 }
+
+func (p *packetPacker) StreamFrameQueueByteLen() protocol.ByteCount {
+	return p.streamFrameQueue.ByteLen()
+}
