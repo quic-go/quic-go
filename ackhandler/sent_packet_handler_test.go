@@ -365,9 +365,16 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(6)))
 		})
 
+		It("does not dequeue a packet if no packet has been nacked", func() {
+			handler.nackPacket(2)
+			Expect(handler.HasPacketForRetransmission()).To(BeFalse())
+			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
+		})
+
 		It("queues a packet for retransmission", func() {
 			handler.nackPacket(2)
 			handler.nackPacket(2)
+			Expect(handler.HasPacketForRetransmission()).To(BeTrue())
 			Expect(len(handler.retransmissionQueue)).To(Equal(1))
 			Expect(handler.retransmissionQueue[0].PacketNumber).To(Equal(protocol.PacketNumber(2)))
 		})

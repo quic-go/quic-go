@@ -27,6 +27,10 @@ func (h *mockSentPacketHandler) DequeuePacketForRetransmission() (packet *ackhan
 	return nil
 }
 
+func (h *mockSentPacketHandler) HasPacketForRetransmission() bool {
+	return false
+}
+
 func (h *mockSentPacketHandler) BytesInFlight() protocol.ByteCount {
 	return 0
 }

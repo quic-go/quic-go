@@ -206,10 +206,18 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) (time.Duratio
 	return timeDelta, ackedPackets, lostPackets, nil
 }
 
+func (h *sentPacketHandler) HasPacketForRetransmission() bool {
+	if len(h.retransmissionQueue) > 0 {
+		return true
+	}
+	return false
+}
+
 func (h *sentPacketHandler) DequeuePacketForRetransmission() (packet *Packet) {
-	if len(h.retransmissionQueue) == 0 {
+	if !h.HasPacketForRetransmission() {
 		return nil
 	}
+
 	queueLen := len(h.retransmissionQueue)
 	// packets are usually NACKed in descending order. So use the slice as a stack
 	packet = h.retransmissionQueue[queueLen-1]

@@ -12,6 +12,7 @@ type SentPacketHandler interface {
 	SentPacket(packet *Packet) error
 	ReceivedAck(ackFrame *frames.AckFrame) (time.Duration, []*Packet, []*Packet, error)
 
+	HasPacketForRetransmission() bool
 	DequeuePacketForRetransmission() (packet *Packet)
 
 	BytesInFlight() protocol.ByteCount
