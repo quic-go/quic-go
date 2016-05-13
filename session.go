@@ -205,7 +205,7 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 		var err error
 		switch frame := ff.(type) {
 		case *frames.StreamFrame:
-			utils.Debugf("\t<- &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: %d}", frame.StreamID, frame.FinBit, frame.Offset)
+			utils.Debugf("\t<- &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: 0x%x, Data length: 0x%x, Offset + Data length: 0x%x}", frame.StreamID, frame.FinBit, frame.Offset, len(frame.Data), frame.Offset+protocol.ByteCount(len(frame.Data)))
 			err = s.handleStreamFrame(frame)
 			// TODO: send RstStreamFrame
 		case *frames.AckFrame:
