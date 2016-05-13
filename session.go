@@ -403,7 +403,7 @@ func (s *Session) sendPacket() error {
 
 	stopWaitingFrame := s.stopWaitingManager.GetStopWaitingFrame()
 
-	ack, err := s.receivedPacketHandler.DequeueAckFrame()
+	ack, err := s.receivedPacketHandler.GetAckFrame(true)
 	if err != nil {
 		return err
 	}
