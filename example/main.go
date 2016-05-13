@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 
@@ -36,6 +37,13 @@ func main() {
 		}
 	}
 
+	http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			fmt.Printf("error reading body while handling /echo: %s\n", err.Error())
+		}
+		w.Write(body)
+	})
 	http.Handle("/", http.FileServer(http.Dir(*www)))
 
 	server, err := h2quic.NewServer(tlsConfig)

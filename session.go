@@ -526,12 +526,24 @@ func (s *Session) QueueStreamFrame(frame *frames.StreamFrame) error {
 func (s *Session) NewStream(id protocol.StreamID) (utils.Stream, error) {
 	s.streamsMutex.Lock()
 	defer s.streamsMutex.Unlock()
-	stream, err := newStream(s, s.connectionParametersManager, id)
+	return s.newStreamImpl(id)
+}
 
+// GetOrCreateStream returns an existing stream with the given id, or opens a new stream
+func (s *Session) GetOrCreateStream(id protocol.StreamID) (utils.Stream, error) {
+	s.streamsMutex.Lock()
+	defer s.streamsMutex.Unlock()
+	if stream, ok := s.streams[id]; ok {
+		return stream, nil
+	}
+	return s.newStreamImpl(id)
+}
+
+func (s *Session) newStreamImpl(id protocol.StreamID) (*stream, error) {
+	stream, err := newStream(s, s.connectionParametersManager, id)
 	if err != nil {
 		return nil, err
 	}
-
 	if s.streams[id] != nil {
 		return nil, fmt.Errorf("Session: stream with ID %d already exists", id)
 	}

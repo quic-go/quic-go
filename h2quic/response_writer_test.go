@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"net/http"
 
-	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -16,28 +14,17 @@ type mockStream struct {
 
 func (mockStream) Close() error { return nil }
 
-type mockSession struct {
-	stream *mockStream
-}
-
-func (s *mockSession) NewStream(id protocol.StreamID) (utils.Stream, error) {
-	Expect(id).To(Equal(protocol.StreamID(5)))
-	return s.stream, nil
-}
-
 var _ = Describe("Response Writer", func() {
 	var (
 		w            *responseWriter
 		headerStream *mockStream
 		dataStream   *mockStream
-		s            *mockSession
 	)
 
 	BeforeEach(func() {
 		headerStream = &mockStream{}
 		dataStream = &mockStream{}
-		s = &mockSession{stream: dataStream}
-		w = newResponseWriter(headerStream, 5, s)
+		w = newResponseWriter(headerStream, dataStream, 5)
 	})
 
 	It("writes status", func() {

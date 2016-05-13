@@ -2,7 +2,6 @@ package h2quic
 
 import (
 	"bytes"
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -12,12 +11,7 @@ import (
 	"golang.org/x/net/http2/hpack"
 )
 
-type streamCreator interface {
-	NewStream(protocol.StreamID) (utils.Stream, error)
-}
-
 type responseWriter struct {
-	session      streamCreator
 	dataStreamID protocol.StreamID
 	headerStream utils.Stream
 	dataStream   utils.Stream
@@ -26,12 +20,12 @@ type responseWriter struct {
 	headerWritten bool
 }
 
-func newResponseWriter(headerStream utils.Stream, dataStreamID protocol.StreamID, session streamCreator) *responseWriter {
+func newResponseWriter(headerStream, dataStream utils.Stream, dataStreamID protocol.StreamID) *responseWriter {
 	return &responseWriter{
 		header:       http.Header{},
 		headerStream: headerStream,
+		dataStream:   dataStream,
 		dataStreamID: dataStreamID,
-		session:      session,
 	}
 }
 
@@ -66,16 +60,5 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 	if !w.headerWritten {
 		w.WriteHeader(200)
 	}
-
-	if len(p) != 0 {
-		if w.dataStream == nil {
-			var err error
-			w.dataStream, err = w.session.NewStream(w.dataStreamID)
-			if err != nil {
-				return 0, fmt.Errorf("error creating data stream: %s", err.Error())
-			}
-		}
-		return w.dataStream.Write(p)
-	}
-	return 0, nil
+	return w.dataStream.Write(p)
 }

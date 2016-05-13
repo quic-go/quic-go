@@ -3,6 +3,7 @@ package h2quic
 import (
 	"crypto/tls"
 	"errors"
+	"io/ioutil"
 	"net/http"
 
 	"github.com/lucas-clemente/quic-go"
@@ -11,6 +12,10 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 )
+
+type streamCreator interface {
+	GetOrCreateStream(protocol.StreamID) (utils.Stream, error)
+}
 
 // Server is a HTTP2 server listening for QUIC connections
 type Server struct {
@@ -23,7 +28,7 @@ func NewServer(tlsConfig *tls.Config) (*Server, error) {
 	s := &Server{}
 
 	var err error
-	s.server, err = quic.NewServer(tlsConfig, s.handleStream)
+	s.server, err = quic.NewServer(tlsConfig, s.handleStreamCb)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +46,11 @@ func (s *Server) ListenAndServe(addr string, handler http.Handler) error {
 	return s.server.ListenAndServe(addr)
 }
 
-func (s *Server) handleStream(session *quic.Session, headerStream utils.Stream) {
+func (s *Server) handleStreamCb(session *quic.Session, headerStream utils.Stream) {
+	s.handleStream(session, headerStream)
+}
+
+func (s *Server) handleStream(session streamCreator, headerStream utils.Stream) {
 	hpackDecoder := hpack.NewDecoder(4096, nil)
 	h2framer := http2.NewFramer(nil, headerStream)
 
@@ -55,7 +64,7 @@ func (s *Server) handleStream(session *quic.Session, headerStream utils.Stream) 
 	}()
 }
 
-func (s *Server) handleRequest(session *quic.Session, headerStream utils.Stream, hpackDecoder *hpack.Decoder, h2framer *http2.Framer) error {
+func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream, hpackDecoder *hpack.Decoder, h2framer *http2.Framer) error {
 	h2frame, err := h2framer.ReadFrame()
 	if err != nil {
 		return err
@@ -76,12 +85,15 @@ func (s *Server) handleRequest(session *quic.Session, headerStream utils.Stream,
 	}
 	utils.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
 
-	responseWriter := &responseWriter{
-		header:       http.Header{},
-		headerStream: headerStream,
-		dataStreamID: protocol.StreamID(h2headersFrame.StreamID),
-		session:      session,
+	dataStream, err := session.GetOrCreateStream(protocol.StreamID(h2headersFrame.StreamID))
+	if err != nil {
+		return err
 	}
+
+	// stream's Close() closes the write side, not the read side
+	req.Body = ioutil.NopCloser(dataStream)
+
+	responseWriter := newResponseWriter(headerStream, dataStream, protocol.StreamID(h2headersFrame.StreamID))
 
 	go func() {
 		s.handler.ServeHTTP(responseWriter, req)
