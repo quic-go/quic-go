@@ -2,6 +2,7 @@ package quic
 
 import (
 	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -23,11 +24,11 @@ var _ = Describe("StreamFrameQueue", func() {
 		}
 		frame1 = &frames.StreamFrame{
 			StreamID: 10,
-			Data:     []byte{0xCA, 0xFE},
+			Data:     []byte{0xCA, 0xFE, 0x13},
 		}
 		frame2 = &frames.StreamFrame{
 			StreamID: 11,
-			Data:     []byte{0xDE, 0xAD, 0xBE, 0xEF},
+			Data:     []byte{0xDE, 0xAD, 0xBE, 0xEF, 0x37},
 		}
 	})
 
@@ -36,7 +37,7 @@ var _ = Describe("StreamFrameQueue", func() {
 			Expect(queue.Len()).To(BeZero())
 		})
 
-		It("returns the correct lengths for a queue", func() {
+		It("returns the correct length for a queue", func() {
 			queue.Push(prioFrame1, true)
 			Expect(queue.Len()).To(Equal(1))
 			queue.Push(frame1, false)
@@ -56,6 +57,50 @@ var _ = Describe("StreamFrameQueue", func() {
 			queue.Pop()
 			queue.Pop()
 			Expect(queue.Len()).To(Equal(0))
+		})
+
+		It("does not change the length when using Front()", func() {
+			queue.Push(prioFrame1, true)
+			queue.Push(frame1, false)
+			Expect(queue.Len()).To(Equal(2))
+			queue.Front()
+			Expect(queue.Len()).To(Equal(2))
+		})
+	})
+
+	Context("Queue Byte Length", func() {
+		It("returns the correct length for an empty queue", func() {
+			Expect(queue.ByteLen()).To(BeZero())
+		})
+
+		It("returns the correct byte length for a queue", func() {
+			queue.Push(prioFrame1, true)
+			Expect(queue.ByteLen()).To(Equal(protocol.ByteCount(2)))
+			queue.Push(frame1, false)
+			queue.Push(frame2, false)
+			Expect(queue.ByteLen()).To(Equal(protocol.ByteCount(2 + 3 + 5)))
+		})
+
+		It("returns the correct byte length when popping", func() {
+			queue.Push(prioFrame1, true)
+			queue.Push(prioFrame2, true)
+			queue.Push(frame1, false)
+			queue.Push(frame2, false)
+			Expect(queue.ByteLen()).To(Equal(protocol.ByteCount(2 + 4 + 3 + 5)))
+			queue.Pop()
+			Expect(queue.ByteLen()).To(Equal(protocol.ByteCount(4 + 3 + 5)))
+			queue.Pop()
+			queue.Pop()
+			queue.Pop()
+			Expect(queue.ByteLen()).To(Equal(protocol.ByteCount(0)))
+		})
+
+		It("does not change the byte length when using Front()", func() {
+			queue.Push(prioFrame1, true)
+			queue.Push(frame1, false)
+			Expect(queue.ByteLen()).To(Equal(protocol.ByteCount(2 + 3)))
+			queue.Front()
+			Expect(queue.ByteLen()).To(Equal(protocol.ByteCount(2 + 3)))
 		})
 	})
 
@@ -97,9 +142,7 @@ var _ = Describe("StreamFrameQueue", func() {
 			queue.Push(frame1, false)
 			queue.Push(frame2, false)
 			Expect(queue.Front()).To(Equal(frame1))
-			Expect(queue.Len()).To(Equal(2))
 			Expect(queue.Front()).To(Equal(frame1))
-			Expect(queue.Len()).To(Equal(2))
 		})
 
 		It("returns prio frames first", func() {
@@ -108,7 +151,6 @@ var _ = Describe("StreamFrameQueue", func() {
 			queue.Push(frame2, false)
 			queue.Push(prioFrame2, true)
 			Expect(queue.Front()).To(Equal(prioFrame1))
-			Expect(queue.Len()).To(Equal(4))
 		})
 	})
 })

@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/protocol"
 )
 
 // StreamFrameQueue is a Queue that handles StreamFrames
@@ -31,6 +32,24 @@ func (q *StreamFrameQueue) Len() int {
 	defer q.mutex.Unlock()
 
 	return len(q.prioFrames) + len(q.frames)
+}
+
+// ByteLen returns the total number of bytes queued
+func (q *StreamFrameQueue) ByteLen() protocol.ByteCount {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	// TODO: improve performance
+	// This is a very unperformant implementation. However, the obvious solution of keeping track of the length on Push() and Pop() doesn't work, since the front frame can be split by the PacketPacker
+
+	var length protocol.ByteCount
+	for _, frame := range q.prioFrames {
+		length += protocol.ByteCount(len(frame.Data))
+	}
+	for _, frame := range q.frames {
+		length += protocol.ByteCount(len(frame.Data))
+	}
+	return length
 }
 
 // Pop returns the next element and deletes it from the queue
