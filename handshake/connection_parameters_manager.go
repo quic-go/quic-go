@@ -26,8 +26,10 @@ type ConnectionParametersManager struct {
 	receiveConnectionFlowControlWindow protocol.ByteCount
 }
 
-// ErrTagNotInConnectionParameterMap is returned when a tag is not present in the connection parameters
-var ErrTagNotInConnectionParameterMap = errors.New("Tag not found in ConnectionsParameter map")
+var errTagNotInConnectionParameterMap = errors.New("ConnectionParametersManager: Tag not found in ConnectionsParameter map")
+
+// ErrMalformedTag is returned when the tag value cannot be read
+var ErrMalformedTag = errors.New("ConnectionParametersManager: malformed Tag value")
 
 // NewConnectionParamatersManager creates a new connection parameters manager
 func NewConnectionParamatersManager() *ConnectionParametersManager {
@@ -53,25 +55,25 @@ func (h *ConnectionParametersManager) SetFromMap(params map[Tag][]byte) error {
 		case TagMSPC:
 			clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
 			if err != nil {
-				return err
+				return ErrMalformedTag
 			}
 			h.maxStreamsPerConnection = h.negotiateMaxStreamsPerConnection(clientValue)
 		case TagICSL:
 			clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
 			if err != nil {
-				return err
+				return ErrMalformedTag
 			}
 			h.idleConnectionStateLifetime = h.negotiateIdleConnectionStateLifetime(time.Duration(clientValue) * time.Second)
 		case TagSFCW:
 			sendStreamFlowControlWindow, err := utils.ReadUint32(bytes.NewBuffer(value))
 			if err != nil {
-				return err
+				return ErrMalformedTag
 			}
 			h.sendStreamFlowControlWindow = protocol.ByteCount(sendStreamFlowControlWindow)
 		case TagCFCW:
 			sendConnectionFlowControlWindow, err := utils.ReadUint32(bytes.NewBuffer(value))
 			if err != nil {
-				return err
+				return ErrMalformedTag
 			}
 			h.sendConnectionFlowControlWindow = protocol.ByteCount(sendConnectionFlowControlWindow)
 		}
@@ -96,7 +98,7 @@ func (h *ConnectionParametersManager) getRawValue(tag Tag) ([]byte, error) {
 	h.mutex.RUnlock()
 
 	if !ok {
-		return nil, ErrTagNotInConnectionParameterMap
+		return nil, errTagNotInConnectionParameterMap
 	}
 	return rawValue, nil
 }

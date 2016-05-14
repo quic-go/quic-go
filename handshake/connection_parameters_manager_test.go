@@ -30,7 +30,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 	It("returns an error for a tag that is not set", func() {
 		_, err := cpm.getRawValue(TagKEXS)
 		Expect(err).To(HaveOccurred())
-		Expect(err).To(Equal(ErrTagNotInConnectionParameterMap))
+		Expect(err).To(Equal(errTagNotInConnectionParameterMap))
 	})
 
 	Context("SHLO", func() {
@@ -115,6 +115,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			}
 			err := cpm.SetFromMap(values)
 			Expect(err).To(HaveOccurred())
+			Expect(err).To(Equal(ErrMalformedTag))
 			Expect(cpm.GetSendStreamFlowControlWindow()).To(Equal(protocol.InitialStreamFlowControlWindow))
 		})
 
@@ -133,6 +134,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			}
 			err := cpm.SetFromMap(values)
 			Expect(err).To(HaveOccurred())
+			Expect(err).To(Equal(ErrMalformedTag))
 			Expect(cpm.GetSendStreamFlowControlWindow()).To(Equal(protocol.InitialConnectionFlowControlWindow))
 		})
 	})
@@ -160,6 +162,16 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			Expect(cpm.GetIdleConnectionStateLifetime()).To(Equal(10 * time.Second))
 		})
 
+		It("does not change the idle connection state lifetime when given an invalid value", func() {
+			values := map[Tag][]byte{
+				TagSFCW: []byte{0xDE, 0xAD, 0xBE}, // 1 byte too short
+			}
+			err := cpm.SetFromMap(values)
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(Equal(ErrMalformedTag))
+			Expect(cpm.GetIdleConnectionStateLifetime()).To(Equal(protocol.InitialIdleConnectionStateLifetime))
+		})
+
 		It("gets idle connection state lifetime", func() {
 			value := 0xDECAFBAD * time.Second
 			cpm.idleConnectionStateLifetime = value
@@ -184,6 +196,15 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			err := cpm.SetFromMap(values)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cpm.GetMaxStreamsPerConnection()).To(Equal(uint32(2)))
+		})
+
+		It("errors when given an invalid max streams per connection value", func() {
+			values := map[Tag][]byte{
+				TagMSPC: []byte{2, 0, 0}, // 1 byte too short
+			}
+			err := cpm.SetFromMap(values)
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(Equal(ErrMalformedTag))
 		})
 
 		It("gets the max streams per connection value", func() {
