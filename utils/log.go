@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 )
 
 var out io.Writer = os.Stdout
@@ -24,6 +25,8 @@ const (
 
 var logLevel = LogLevelNothing
 
+var mutex sync.Mutex
+
 // SetLogLevel sets the log level
 func SetLogLevel(level LogLevel) {
 	logLevel = level
@@ -32,20 +35,26 @@ func SetLogLevel(level LogLevel) {
 // Debugf logs something
 func Debugf(format string, args ...interface{}) {
 	if logLevel == LogLevelDebug {
+		mutex.Lock()
 		fmt.Fprintf(out, format+"\n", args...)
+		mutex.Unlock()
 	}
 }
 
 // Infof logs something
 func Infof(format string, args ...interface{}) {
 	if logLevel <= LogLevelInfo {
+		mutex.Lock()
 		fmt.Fprintf(out, format+"\n", args...)
+		mutex.Unlock()
 	}
 }
 
 // Errorf logs something
 func Errorf(format string, args ...interface{}) {
 	if logLevel <= LogLevelError {
+		mutex.Lock()
 		fmt.Fprintf(out, format+"\n", args...)
+		mutex.Unlock()
 	}
 }
