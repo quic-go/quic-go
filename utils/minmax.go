@@ -1,6 +1,10 @@
 package utils
 
-import "time"
+import (
+	"time"
+
+	"github.com/lucas-clemente/quic-go/protocol"
+)
 
 // Max returns the maximum of two Ints
 func Max(a, b int) int {
@@ -80,4 +84,20 @@ func AbsDuration(d time.Duration) time.Duration {
 		return d
 	}
 	return -d
+}
+
+// MaxPacketNumber returns the max packet number
+func MaxPacketNumber(a, b protocol.PacketNumber) protocol.PacketNumber {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// MinPacketNumber returns the min packet number
+func MinPacketNumber(a, b protocol.PacketNumber) protocol.PacketNumber {
+	if a < b {
+		return a
+	}
+	return b
 }

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // This cubic implementation is based on the one found in Chromiums's QUIC
@@ -148,7 +149,7 @@ func (c *Cubic) CongestionWindowAfterAck(currentCongestionWindow protocol.Packet
 
 	// Cubic is "independent" of RTT, the update is limited by the time elapsed.
 	if c.lastCongestionWindow == currentCongestionWindow && (currentTime.Sub(c.lastUpdateTime) <= maxCubicTimeInterval) {
-		return protocol.MaxPacketNumber(c.lastTargetCongestionWindow, c.estimatedTCPcongestionWindow)
+		return utils.MaxPacketNumber(c.lastTargetCongestionWindow, c.estimatedTCPcongestionWindow)
 	}
 	c.lastCongestionWindow = currentCongestionWindow
 	c.lastUpdateTime = currentTime

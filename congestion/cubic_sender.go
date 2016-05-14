@@ -144,7 +144,7 @@ func (c *cubicSender) OnCongestionEvent(rttUpdated bool, bytesInFlight protocol.
 }
 
 func (c *cubicSender) onPacketAcked(ackedPacketNumber protocol.PacketNumber, ackedBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
-	c.largestAckedPacketNumber = protocol.MaxPacketNumber(ackedPacketNumber, c.largestAckedPacketNumber)
+	c.largestAckedPacketNumber = utils.MaxPacketNumber(ackedPacketNumber, c.largestAckedPacketNumber)
 	if c.InRecovery() {
 		// PRR is used when in recovery.
 		c.prr.OnPacketAcked(ackedBytes)
@@ -166,7 +166,7 @@ func (c *cubicSender) onPacketLost(packetNumber protocol.PacketNumber, lostBytes
 			if c.slowStartLargeReduction {
 				if c.stats.slowstartPacketsLost == 1 || (c.stats.slowstartBytesLost/protocol.DefaultTCPMSS) > (c.stats.slowstartBytesLost-lostBytes)/protocol.DefaultTCPMSS {
 					// Reduce congestion window by 1 for every mss of bytes lost.
-					c.congestionWindow = protocol.MaxPacketNumber(c.congestionWindow-1, c.minCongestionWindow)
+					c.congestionWindow = utils.MaxPacketNumber(c.congestionWindow-1, c.minCongestionWindow)
 				}
 				c.slowstartThreshold = c.congestionWindow
 			}
@@ -234,7 +234,7 @@ func (c *cubicSender) maybeIncreaseCwnd(ackedPacketNumber protocol.PacketNumber,
 			c.congestionWindowCount = 0
 		}
 	} else {
-		c.congestionWindow = protocol.MinPacketNumber(c.maxTCPCongestionWindow, c.cubic.CongestionWindowAfterAck(c.congestionWindow, c.rttStats.MinRTT()))
+		c.congestionWindow = utils.MinPacketNumber(c.maxTCPCongestionWindow, c.cubic.CongestionWindowAfterAck(c.congestionWindow, c.rttStats.MinRTT()))
 	}
 }
 

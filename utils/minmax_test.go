@@ -3,6 +3,7 @@ package utils
 import (
 	"time"
 
+	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -38,6 +39,11 @@ var _ = Describe("Min / Max", func() {
 			Expect(MinDuration(time.Microsecond, time.Nanosecond)).To(Equal(time.Nanosecond))
 			Expect(MinDuration(time.Nanosecond, time.Microsecond)).To(Equal(time.Nanosecond))
 		})
+
+		It("returns packet number max", func() {
+			Expect(MaxPacketNumber(1, 2)).To(Equal(protocol.PacketNumber(2)))
+			Expect(MaxPacketNumber(2, 1)).To(Equal(protocol.PacketNumber(2)))
+		})
 	})
 
 	Context("Min", func() {
@@ -54,6 +60,11 @@ var _ = Describe("Min / Max", func() {
 		It("returns the minimum int64", func() {
 			Expect(MinInt64(7, 5)).To(Equal(int64(5)))
 			Expect(MinInt64(5, 7)).To(Equal(int64(5)))
+		})
+
+		It("returns packet number min", func() {
+			Expect(MinPacketNumber(1, 2)).To(Equal(protocol.PacketNumber(1)))
+			Expect(MinPacketNumber(2, 1)).To(Equal(protocol.PacketNumber(1)))
 		})
 	})
 
