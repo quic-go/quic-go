@@ -14,11 +14,15 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type mockSession struct{}
+type mockSession struct {
+	closed bool
+}
 
 func (s *mockSession) GetOrCreateStream(id protocol.StreamID) (utils.Stream, error) {
 	return &mockStream{}, nil
 }
+
+func (s *mockSession) Close(error, bool) error { s.closed = true; return nil }
 
 var _ = Describe("H2 server", func() {
 	var (
@@ -109,5 +113,19 @@ var _ = Describe("H2 server", func() {
 		})
 		s.handleStream(session, headerStream)
 		Consistently(func() bool { return handlerCalled }).Should(BeFalse())
+	})
+
+	It("supports closing after first request", func() {
+		s.CloseAfterFirstRequest = true
+		s.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+		headerStream := &mockStream{id: 3}
+		headerStream.Write([]byte{
+			0x0, 0x0, 0x11, 0x1, 0x4, 0x0, 0x0, 0x0, 0x5,
+			// Taken from https://http2.github.io/http2-spec/compression.html#request.examples.with.huffman.coding
+			0x82, 0x86, 0x84, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff,
+		})
+		Expect(session.closed).To(BeFalse())
+		s.handleStream(session, headerStream)
+		Eventually(func() bool { return session.closed }).Should(BeTrue())
 	})
 })

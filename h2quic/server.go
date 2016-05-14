@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -15,12 +16,16 @@ import (
 
 type streamCreator interface {
 	GetOrCreateStream(protocol.StreamID) (utils.Stream, error)
+	Close(error, bool) error
 }
 
 // Server is a HTTP2 server listening for QUIC connections
 type Server struct {
 	server  *quic.Server
 	handler http.Handler
+
+	// Private flag for demo, do not use
+	CloseAfterFirstRequest bool
 }
 
 // NewServer creates a new server instance
@@ -103,6 +108,10 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 		s.handler.ServeHTTP(responseWriter, req)
 		if responseWriter.dataStream != nil {
 			responseWriter.dataStream.Close()
+		}
+		if s.CloseAfterFirstRequest {
+			time.Sleep(100 * time.Millisecond)
+			session.Close(nil, true)
 		}
 	}()
 
