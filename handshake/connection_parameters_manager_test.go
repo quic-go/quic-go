@@ -15,16 +15,16 @@ var _ = Describe("ConnectionsParameterManager", func() {
 	})
 
 	It("stores and retrieves a value", func() {
-		icsl := []byte{0x13, 0x37}
+		mspc := []byte{0x13, 0x37}
 		values := map[Tag][]byte{
-			TagICSL: icsl,
+			TagMSPC: mspc,
 		}
 
 		cpm.SetFromMap(values)
 
-		val, err := cpm.getRawValue(TagICSL)
+		val, err := cpm.getRawValue(TagMSPC)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(val).To(Equal(icsl))
+		Expect(val).To(Equal(mspc))
 	})
 
 	It("returns an error for a tag that is not set", func() {
@@ -52,6 +52,13 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			entryMap := cpm.GetSHLOMap()
 			Expect(entryMap).To(HaveKey(TagCFCW))
 			Expect(entryMap[TagCFCW]).To(Equal([]byte{0xAD, 0xFB, 0xCA, 0xDE}))
+		})
+
+		It("returns connection-level flow control windows in SHLO", func() {
+			cpm.idleConnectionStateLifetime = 0xDECAFBAD * time.Second
+			entryMap := cpm.GetSHLOMap()
+			Expect(entryMap).To(HaveKey(TagICSL))
+			Expect(entryMap[TagICSL]).To(Equal([]byte{0xAD, 0xFB, 0xCA, 0xDE}))
 		})
 	})
 
@@ -123,14 +130,33 @@ var _ = Describe("ConnectionsParameterManager", func() {
 		})
 	})
 
-	It("gets idle connection state lifetime", func() {
-		cpm.params[TagICSL] = []byte{0xad, 0xfb, 0xca, 0xde}
-		val := cpm.GetIdleConnectionStateLifetime()
-		Expect(val).To(Equal(0xdecafbad * time.Second))
-	})
+	Context("idle connection state lifetime", func() {
+		It("has initial idle conneciton state lifetime", func() {
+			Expect(cpm.GetIdleConnectionStateLifetime()).To(Equal(protocol.InitialIdleConnectionStateLifetime))
+		})
 
-	It("has initial idle conneciton state lifetime", func() {
-		val := cpm.GetIdleConnectionStateLifetime()
-		Expect(val).To(Equal(30 * time.Second))
+		It("negotiates correctly when the client wants a longer lifetime", func() {
+			Expect(cpm.negotiateIdleConnectionStateLifetime(protocol.MaxIdleConnectionStateLifetime + 10*time.Second)).To(Equal(protocol.MaxIdleConnectionStateLifetime))
+		})
+
+		It("negotiates correctly when the client wants a shorter lifetime", func() {
+			Expect(cpm.negotiateIdleConnectionStateLifetime(protocol.MaxIdleConnectionStateLifetime - 1*time.Second)).To(Equal(protocol.MaxIdleConnectionStateLifetime - 1*time.Second))
+		})
+
+		It("sets the negotiated lifetime", func() {
+			// this test only works if the value given here is smaller than protocol.MaxIdleConnectionStateLifetime
+			values := map[Tag][]byte{
+				TagICSL: []byte{10, 0, 0, 0},
+			}
+			err := cpm.SetFromMap(values)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cpm.GetIdleConnectionStateLifetime()).To(Equal(10 * time.Second))
+		})
+
+		It("gets idle connection state lifetime", func() {
+			value := 0xDECAFBAD * time.Second
+			cpm.idleConnectionStateLifetime = value
+			Expect(cpm.GetIdleConnectionStateLifetime()).To(Equal(value))
+		})
 	})
 })

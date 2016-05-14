@@ -1,5 +1,7 @@
 package protocol
 
+import "time"
+
 // A PacketNumber in QUIC
 type PacketNumber uint64
 
@@ -46,3 +48,6 @@ const InitialStreamFlowControlWindow ByteCount = (1 << 14) // 16 kB
 
 // InitialConnectionFlowControlWindow is the initial connection-level flow control window for sending
 const InitialConnectionFlowControlWindow ByteCount = (1 << 14) // 16 kB
+
+// InitialIdleConnectionStateLifetime is the initial idle connection state lifetime
+const InitialIdleConnectionStateLifetime = 30 * time.Second

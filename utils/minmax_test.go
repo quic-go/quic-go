@@ -33,6 +33,11 @@ var _ = Describe("Min / Max", func() {
 			Expect(MaxDuration(time.Microsecond, time.Nanosecond)).To(Equal(time.Microsecond))
 			Expect(MaxDuration(time.Nanosecond, time.Microsecond)).To(Equal(time.Microsecond))
 		})
+
+		It("returns the minimum duration", func() {
+			Expect(MinDuration(time.Microsecond, time.Nanosecond)).To(Equal(time.Nanosecond))
+			Expect(MinDuration(time.Nanosecond, time.Microsecond)).To(Equal(time.Nanosecond))
+		})
 	})
 
 	Context("Min", func() {

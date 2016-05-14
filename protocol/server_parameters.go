@@ -31,3 +31,7 @@ const ReceiveStreamFlowControlWindow ByteCount = (1 << 20) // 1 MB
 // ReceiveConnectionFlowControlWindow is the stream-level flow control window for receiving data
 // TODO: set a reasonable value here
 const ReceiveConnectionFlowControlWindow ByteCount = (1 << 20) // 1 MB
+
+// MaxIdleConnectionStateLifetime is the maximum value we accept for the idle connection state lifetime
+// TODO: set a reasonable value here
+const MaxIdleConnectionStateLifetime = 60 * time.Second

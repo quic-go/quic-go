@@ -18,6 +18,7 @@ type ConnectionParametersManager struct {
 	params map[Tag][]byte
 	mutex  sync.RWMutex
 
+	idleConnectionStateLifetime        time.Duration
 	sendStreamFlowControlWindow        protocol.ByteCount
 	sendConnectionFlowControlWindow    protocol.ByteCount
 	receiveStreamFlowControlWindow     protocol.ByteCount
@@ -31,9 +32,9 @@ var ErrTagNotInConnectionParameterMap = errors.New("Tag not found in Connections
 func NewConnectionParamatersManager() *ConnectionParametersManager {
 	return &ConnectionParametersManager{
 		params: map[Tag][]byte{
-			TagICSL: {0x1e, 0x00, 0x00, 0x00}, // idle connection state lifetime = 30s
 			TagMSPC: {0x64, 0x00, 0x00, 0x00}, // Max streams per connection = 100
 		},
+		idleConnectionStateLifetime:        protocol.InitialIdleConnectionStateLifetime,
 		sendStreamFlowControlWindow:        protocol.InitialStreamFlowControlWindow,     // can only be changed by the client
 		sendConnectionFlowControlWindow:    protocol.InitialConnectionFlowControlWindow, // can only be changed by the client
 		receiveStreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
@@ -48,8 +49,14 @@ func (h *ConnectionParametersManager) SetFromMap(params map[Tag][]byte) error {
 
 	for key, value := range params {
 		switch key {
-		case TagICSL, TagMSPC, TagTCID:
+		case TagMSPC, TagTCID:
 			h.params[key] = value
+		case TagICSL:
+			clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
+			if err != nil {
+				return err
+			}
+			h.idleConnectionStateLifetime = h.negotiateIdleConnectionStateLifetime(time.Duration(clientValue) * time.Second)
 		case TagSFCW:
 			sendStreamFlowControlWindow, err := utils.ReadUint32(bytes.NewBuffer(value))
 			if err != nil {
@@ -68,6 +75,11 @@ func (h *ConnectionParametersManager) SetFromMap(params map[Tag][]byte) error {
 	return nil
 }
 
+func (h *ConnectionParametersManager) negotiateIdleConnectionStateLifetime(clientValue time.Duration) time.Duration {
+	// TODO: what happens if the clients sets 0 seconds?
+	return utils.MinDuration(clientValue, protocol.MaxIdleConnectionStateLifetime)
+}
+
 // getRawValue gets the byte-slice for a tag
 func (h *ConnectionParametersManager) getRawValue(tag Tag) ([]byte, error) {
 	h.mutex.RLock()
@@ -83,12 +95,15 @@ func (h *ConnectionParametersManager) getRawValue(tag Tag) ([]byte, error) {
 // GetSHLOMap gets all values (except crypto values) needed for the SHLO
 func (h *ConnectionParametersManager) GetSHLOMap() map[Tag][]byte {
 	sfcw := bytes.NewBuffer([]byte{})
-	cfcw := bytes.NewBuffer([]byte{})
 	utils.WriteUint32(sfcw, uint32(h.GetReceiveStreamFlowControlWindow()))
+	cfcw := bytes.NewBuffer([]byte{})
 	utils.WriteUint32(cfcw, uint32(h.GetReceiveConnectionFlowControlWindow()))
+	icsl := bytes.NewBuffer([]byte{})
+	utils.Debugf("ICSL: %#v\n", h.GetIdleConnectionStateLifetime())
+	utils.WriteUint32(icsl, uint32(h.GetIdleConnectionStateLifetime()/time.Second))
 
 	return map[Tag][]byte{
-		TagICSL: []byte{0x1e, 0x00, 0x00, 0x00}, //30
+		TagICSL: icsl.Bytes(),
 		TagMSPC: []byte{0x64, 0x00, 0x00, 0x00}, //100
 		TagCFCW: cfcw.Bytes(),
 		TagSFCW: sfcw.Bytes(),
@@ -129,14 +144,10 @@ func (h *ConnectionParametersManager) GetReceiveConnectionFlowControlWindow() pr
 
 // GetIdleConnectionStateLifetime gets the idle timeout
 func (h *ConnectionParametersManager) GetIdleConnectionStateLifetime() time.Duration {
-	rawValue, err := h.getRawValue(TagICSL)
-	if err != nil {
-		panic("ConnectionParameters: Could not find ICSL")
-	}
-	if len(rawValue) != 4 {
-		panic("ConnectionParameters: ICSL has invalid value")
-	}
-	return time.Duration(binary.LittleEndian.Uint32(rawValue)) * time.Second
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+
+	return h.idleConnectionStateLifetime
 }
 
 // TruncateConnectionID determines if the client requests truncated ConnectionIDs

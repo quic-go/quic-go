@@ -58,6 +58,13 @@ func MaxDuration(a, b time.Duration) time.Duration {
 	return b
 }
 
+func MinDuration(a, b time.Duration) time.Duration {
+	if a > b {
+		return b
+	}
+	return a
+}
+
 // AbsDuration returns the absolute value of a time duration
 func AbsDuration(d time.Duration) time.Duration {
 	if d >= 0 {
