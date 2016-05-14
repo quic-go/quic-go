@@ -46,17 +46,21 @@ func (s *Server) ListenAndServe(addr string, handler http.Handler) error {
 	return s.server.ListenAndServe(addr)
 }
 
-func (s *Server) handleStreamCb(session *quic.Session, headerStream utils.Stream) {
-	s.handleStream(session, headerStream)
+func (s *Server) handleStreamCb(session *quic.Session, stream utils.Stream) {
+	s.handleStream(session, stream)
 }
 
-func (s *Server) handleStream(session streamCreator, headerStream utils.Stream) {
+func (s *Server) handleStream(session streamCreator, stream utils.Stream) {
+	if stream.StreamID() != 3 {
+		return
+	}
+
 	hpackDecoder := hpack.NewDecoder(4096, nil)
-	h2framer := http2.NewFramer(nil, headerStream)
+	h2framer := http2.NewFramer(nil, stream)
 
 	go func() {
 		for {
-			if err := s.handleRequest(session, headerStream, hpackDecoder, h2framer); err != nil {
+			if err := s.handleRequest(session, stream, hpackDecoder, h2framer); err != nil {
 				utils.Errorf("error handling h2 request: %s", err.Error())
 				return
 			}
