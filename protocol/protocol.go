@@ -41,4 +41,8 @@ const MaxFrameAndPublicHeaderSize = MaxPacketSize - 1 /*private header*/ - 12 /*
 // Used in QUIC for congestion window computations in bytes.
 const DefaultTCPMSS ByteCount = 1460
 
+// InitialStreamFlowControlWindow is the initial stream-level flow control window for sending
+const InitialStreamFlowControlWindow ByteCount = (1 << 14) // 16 kB
 
+// InitialConnectionFlowControlWindow is the initial connection-level flow control window for sending
+const InitialConnectionFlowControlWindow ByteCount = (1 << 14) // 16 kB

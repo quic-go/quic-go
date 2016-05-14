@@ -47,11 +47,7 @@ func newStream(session streamHandler, connectionParameterManager *handshake.Conn
 	s.newFrameOrErrCond.L = &s.mutex
 	s.windowUpdateOrErrCond.L = &s.mutex
 
-	var err error
-	s.flowControlWindow, err = connectionParameterManager.GetStreamFlowControlWindow()
-	if err != nil {
-		return nil, err
-	}
+	s.flowControlWindow = connectionParameterManager.GetSendStreamFlowControlWindow()
 
 	return s, nil
 }

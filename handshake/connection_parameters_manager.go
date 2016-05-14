@@ -8,15 +8,20 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // ConnectionParametersManager stores the connection parameters
 // Warning: Writes may only be done from the crypto stream, see the comment
 // in GetSHLOMap().
-// TODO: Separate our SFCW from the client's
 type ConnectionParametersManager struct {
 	params map[Tag][]byte
 	mutex  sync.RWMutex
+
+	sendStreamFlowControlWindow        protocol.ByteCount
+	sendConnectionFlowControlWindow    protocol.ByteCount
+	receiveStreamFlowControlWindow     protocol.ByteCount
+	receiveConnectionFlowControlWindow protocol.ByteCount
 }
 
 // ErrTagNotInConnectionParameterMap is returned when a tag is not present in the connection parameters
@@ -26,29 +31,45 @@ var ErrTagNotInConnectionParameterMap = errors.New("Tag not found in Connections
 func NewConnectionParamatersManager() *ConnectionParametersManager {
 	return &ConnectionParametersManager{
 		params: map[Tag][]byte{
-			TagSFCW: {0x0, 0x40, 0x0, 0x0},    // Stream Flow Control Window
-			TagCFCW: {0x0, 0x40, 0x0, 0x0},    // Connection Flow Control Window
 			TagICSL: {0x1e, 0x00, 0x00, 0x00}, // idle connection state lifetime = 30s
 			TagMSPC: {0x64, 0x00, 0x00, 0x00}, // Max streams per connection = 100
 		},
+		sendStreamFlowControlWindow:        protocol.InitialStreamFlowControlWindow,     // can only be changed by the client
+		sendConnectionFlowControlWindow:    protocol.InitialConnectionFlowControlWindow, // can only be changed by the client
+		receiveStreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
+		receiveConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
 	}
 }
 
 // SetFromMap reads all params
 func (h *ConnectionParametersManager) SetFromMap(params map[Tag][]byte) error {
 	h.mutex.Lock()
+	defer h.mutex.Unlock()
+
 	for key, value := range params {
 		switch key {
-		case TagSFCW, TagCFCW, TagICSL, TagMSPC, TagTCID:
+		case TagICSL, TagMSPC, TagTCID:
 			h.params[key] = value
+		case TagSFCW:
+			sendStreamFlowControlWindow, err := utils.ReadUint32(bytes.NewBuffer(value))
+			if err != nil {
+				return err
+			}
+			h.sendStreamFlowControlWindow = protocol.ByteCount(sendStreamFlowControlWindow)
+		case TagCFCW:
+			sendConnectionFlowControlWindow, err := utils.ReadUint32(bytes.NewBuffer(value))
+			if err != nil {
+				return err
+			}
+			h.sendConnectionFlowControlWindow = protocol.ByteCount(sendConnectionFlowControlWindow)
 		}
 	}
-	h.mutex.Unlock()
+
 	return nil
 }
 
-// GetRawValue gets the byte-slice for a tag
-func (h *ConnectionParametersManager) GetRawValue(tag Tag) ([]byte, error) {
+// getRawValue gets the byte-slice for a tag
+func (h *ConnectionParametersManager) getRawValue(tag Tag) ([]byte, error) {
 	h.mutex.RLock()
 	rawValue, ok := h.params[tag]
 	h.mutex.RUnlock()
@@ -61,33 +82,54 @@ func (h *ConnectionParametersManager) GetRawValue(tag Tag) ([]byte, error) {
 
 // GetSHLOMap gets all values (except crypto values) needed for the SHLO
 func (h *ConnectionParametersManager) GetSHLOMap() map[Tag][]byte {
+	sfcw := bytes.NewBuffer([]byte{})
+	cfcw := bytes.NewBuffer([]byte{})
+	utils.WriteUint32(sfcw, uint32(h.GetReceiveStreamFlowControlWindow()))
+	utils.WriteUint32(cfcw, uint32(h.GetReceiveConnectionFlowControlWindow()))
+
 	return map[Tag][]byte{
 		TagICSL: []byte{0x1e, 0x00, 0x00, 0x00}, //30
 		TagMSPC: []byte{0x64, 0x00, 0x00, 0x00}, //100
+		TagCFCW: cfcw.Bytes(),
+		TagSFCW: sfcw.Bytes(),
 	}
 }
 
-// GetStreamFlowControlWindow gets the size of the stream-level flow control window
-func (h *ConnectionParametersManager) GetStreamFlowControlWindow() (protocol.ByteCount, error) {
-	rawValue, err := h.GetRawValue(TagSFCW)
+// GetSendStreamFlowControlWindow gets the size of the stream-level flow control window for sending data
+func (h *ConnectionParametersManager) GetSendStreamFlowControlWindow() protocol.ByteCount {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
 
-	if err != nil {
-		return 0, err
-	}
+	return h.sendStreamFlowControlWindow
+}
 
-	var value uint32
-	buf := bytes.NewBuffer(rawValue)
-	err = binary.Read(buf, binary.LittleEndian, &value)
-	if err != nil {
-		return 0, err
-	}
+// GetSendConnectionFlowControlWindow gets the size of the stream-level flow control window for sending data
+func (h *ConnectionParametersManager) GetSendConnectionFlowControlWindow() protocol.ByteCount {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
 
-	return protocol.ByteCount(value), nil
+	return h.sendConnectionFlowControlWindow
+}
+
+// GetReceiveStreamFlowControlWindow gets the size of the stream-level flow control window for receiving data
+func (h *ConnectionParametersManager) GetReceiveStreamFlowControlWindow() protocol.ByteCount {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+
+	return h.receiveStreamFlowControlWindow
+}
+
+// GetReceiveConnectionFlowControlWindow gets the size of the stream-level flow control window for receiving data
+func (h *ConnectionParametersManager) GetReceiveConnectionFlowControlWindow() protocol.ByteCount {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+
+	return h.receiveConnectionFlowControlWindow
 }
 
 // GetIdleConnectionStateLifetime gets the idle timeout
 func (h *ConnectionParametersManager) GetIdleConnectionStateLifetime() time.Duration {
-	rawValue, err := h.GetRawValue(TagICSL)
+	rawValue, err := h.getRawValue(TagICSL)
 	if err != nil {
 		panic("ConnectionParameters: Could not find ICSL")
 	}
@@ -99,7 +141,7 @@ func (h *ConnectionParametersManager) GetIdleConnectionStateLifetime() time.Dura
 
 // TruncateConnectionID determines if the client requests truncated ConnectionIDs
 func (h *ConnectionParametersManager) TruncateConnectionID() bool {
-	rawValue, err := h.GetRawValue(TagTCID)
+	rawValue, err := h.getRawValue(TagTCID)
 	if err != nil {
 		return false
 	}

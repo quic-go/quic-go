@@ -22,21 +22,37 @@ var _ = Describe("ConnectionsParameterManager", func() {
 
 		cpm.SetFromMap(values)
 
-		val, err := cpm.GetRawValue(TagICSL)
+		val, err := cpm.getRawValue(TagICSL)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(val).To(Equal(icsl))
 	})
 
 	It("returns an error for a tag that is not set", func() {
-		_, err := cpm.GetRawValue(TagKEXS)
+		_, err := cpm.getRawValue(TagKEXS)
 		Expect(err).To(HaveOccurred())
 		Expect(err).To(Equal(ErrTagNotInConnectionParameterMap))
 	})
 
-	It("returns all parameters necessary for the SHLO", func() {
-		entryMap := cpm.GetSHLOMap()
-		Expect(entryMap).To(HaveKey(TagICSL))
-		Expect(entryMap).To(HaveKey(TagMSPC))
+	Context("SHLO", func() {
+		It("returns all parameters necessary for the SHLO", func() {
+			entryMap := cpm.GetSHLOMap()
+			Expect(entryMap).To(HaveKey(TagICSL))
+			Expect(entryMap).To(HaveKey(TagMSPC))
+		})
+
+		It("returns stream-level flow control windows in SHLO", func() {
+			cpm.receiveStreamFlowControlWindow = 0xDEADBEEF
+			entryMap := cpm.GetSHLOMap()
+			Expect(entryMap).To(HaveKey(TagSFCW))
+			Expect(entryMap[TagSFCW]).To(Equal([]byte{0xEF, 0xBE, 0xAD, 0xDE}))
+		})
+
+		It("returns connection-level flow control windows in SHLO", func() {
+			cpm.receiveConnectionFlowControlWindow = 0xDECAFBAD
+			entryMap := cpm.GetSHLOMap()
+			Expect(entryMap).To(HaveKey(TagCFCW))
+			Expect(entryMap[TagCFCW]).To(Equal([]byte{0xAD, 0xFB, 0xCA, 0xDE}))
+		})
 	})
 
 	Context("Truncated connection IDs", func() {
@@ -54,17 +70,56 @@ var _ = Describe("ConnectionsParameterManager", func() {
 	})
 
 	Context("flow control", func() {
-		It("has the correct default flow control window", func() {
-			val, err := cpm.GetStreamFlowControlWindow()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(val).To(Equal(protocol.ByteCount(0x4000)))
+		It("has the correct default stream-level flow control window for sending", func() {
+			Expect(cpm.GetSendStreamFlowControlWindow()).To(Equal(protocol.InitialStreamFlowControlWindow))
 		})
 
-		It("reads the stream-level flowControlWindow", func() {
-			cpm.params[TagSFCW] = []byte{0xDE, 0xAD, 0xBE, 0xEF}
-			val, err := cpm.GetStreamFlowControlWindow()
+		It("has the correct default connection-level flow control window for sending", func() {
+			Expect(cpm.GetSendConnectionFlowControlWindow()).To(Equal(protocol.InitialConnectionFlowControlWindow))
+		})
+
+		It("has the correct default stream-level flow control window for receiving", func() {
+			Expect(cpm.GetReceiveStreamFlowControlWindow()).To(Equal(protocol.ReceiveStreamFlowControlWindow))
+		})
+
+		It("has the correct default connection-level flow control window for receiving", func() {
+			Expect(cpm.GetReceiveConnectionFlowControlWindow()).To(Equal(protocol.ReceiveConnectionFlowControlWindow))
+		})
+
+		It("sets a new stream-level flow control window for sending", func() {
+			values := map[Tag][]byte{
+				TagSFCW: []byte{0xDE, 0xAD, 0xBE, 0xEF},
+			}
+			err := cpm.SetFromMap(values)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(val).To(Equal(protocol.ByteCount(0xEFBEADDE)))
+			Expect(cpm.GetSendStreamFlowControlWindow()).To(Equal(protocol.ByteCount(0xEFBEADDE)))
+		})
+
+		It("does not change the stream-level flow control window when given an invalid value", func() {
+			values := map[Tag][]byte{
+				TagSFCW: []byte{0xDE, 0xAD, 0xBE}, // 1 byte too short
+			}
+			err := cpm.SetFromMap(values)
+			Expect(err).To(HaveOccurred())
+			Expect(cpm.GetSendStreamFlowControlWindow()).To(Equal(protocol.InitialStreamFlowControlWindow))
+		})
+
+		It("sets a new connection-level flow control window for sending", func() {
+			values := map[Tag][]byte{
+				TagCFCW: []byte{0xDE, 0xAD, 0xBE, 0xEF},
+			}
+			err := cpm.SetFromMap(values)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cpm.GetSendConnectionFlowControlWindow()).To(Equal(protocol.ByteCount(0xEFBEADDE)))
+		})
+
+		It("does not change the connection-level flow control window when given an invalid value", func() {
+			values := map[Tag][]byte{
+				TagSFCW: []byte{0xDE, 0xAD, 0xBE}, // 1 byte too short
+			}
+			err := cpm.SetFromMap(values)
+			Expect(err).To(HaveOccurred())
+			Expect(cpm.GetSendStreamFlowControlWindow()).To(Equal(protocol.InitialConnectionFlowControlWindow))
 		})
 	})
 
