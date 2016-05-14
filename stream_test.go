@@ -33,6 +33,10 @@ var _ = Describe("Stream", func() {
 		str, _ = newStream(handler, cpm, 1337)
 	})
 
+	It("gets stream id", func() {
+		Expect(str.StreamID()).To(Equal(protocol.StreamID(1337)))
+	})
+
 	Context("reading", func() {
 		It("reads a single StreamFrame", func() {
 			frame := frames.StreamFrame{

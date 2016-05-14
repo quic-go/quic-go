@@ -4,15 +4,19 @@ import (
 	"bytes"
 	"net/http"
 
+	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 type mockStream struct {
+	id protocol.StreamID
 	bytes.Buffer
 }
 
 func (mockStream) Close() error { return nil }
+
+func (s mockStream) StreamID() protocol.StreamID { return s.id }
 
 var _ = Describe("Response Writer", func() {
 	var (

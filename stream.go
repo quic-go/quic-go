@@ -213,3 +213,7 @@ func (s *stream) RegisterError(err error) {
 func (s *stream) finishedReading() bool {
 	return atomic.LoadInt32(&s.eof) != 0
 }
+
+func (s *stream) StreamID() protocol.StreamID {
+	return s.streamID
+}

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"crypto/rand"
 	"io"
+
+	"github.com/lucas-clemente/quic-go/protocol"
 )
 
 // ReadStream is the read part of a QUIC stream
@@ -18,6 +20,7 @@ type Stream interface {
 	io.ByteReader
 	io.Writer
 	io.Closer
+	StreamID() protocol.StreamID
 }
 
 // ReadUintN reads N bytes
