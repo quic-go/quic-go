@@ -2,8 +2,7 @@ package protocol
 
 import (
 	"bytes"
-
-	"github.com/lucas-clemente/quic-go/utils"
+	"encoding/binary"
 )
 
 // VersionNumber is a version number as int
@@ -41,7 +40,9 @@ func IsSupportedVersion(v VersionNumber) bool {
 func init() {
 	var b bytes.Buffer
 	for _, v := range SupportedVersions {
-		utils.WriteUint32(&b, VersionNumberToTag(v))
+		s := make([]byte, 4)
+		binary.LittleEndian.PutUint32(s, VersionNumberToTag(v))
+		b.Write(s)
 	}
 	SupportedVersionsAsTags = b.Bytes()
 }

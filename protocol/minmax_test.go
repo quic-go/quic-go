@@ -2,6 +2,7 @@ package protocol_test
 
 import (
 	"github.com/lucas-clemente/quic-go/protocol"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
