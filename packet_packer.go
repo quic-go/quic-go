@@ -28,6 +28,7 @@ type packetPacker struct {
 	connectionParametersManager *handshake.ConnectionParametersManager
 
 	streamFrameQueue StreamFrameQueue
+	controlFrames    []frames.Frame
 
 	lastPacketNumber protocol.PacketNumber
 }
@@ -41,11 +42,13 @@ func (p *packetPacker) AddHighPrioStreamFrame(f frames.StreamFrame) {
 }
 
 func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, includeStreamFrames bool) (*packedPacket, error) {
-	// TODO: save controlFrames as a member variable, makes it easier to handle in the unlikely event that there are more controlFrames than you can put into on packet
-
 	// don't send out packets that only contain a StopWaitingFrame
 	if len(controlFrames) == 0 && (p.streamFrameQueue.Len() == 0 || !includeStreamFrames) {
 		return nil, nil
+	}
+
+	if len(controlFrames) > 0 {
+		p.controlFrames = append(p.controlFrames, controlFrames...)
 	}
 
 	currentPacketNumber := protocol.PacketNumber(atomic.AddUint64(
@@ -71,7 +74,7 @@ func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		stopWaitingFrame.PacketNumberLen = packetNumberLen
 	}
 
-	payloadFrames, err := p.composeNextPacket(stopWaitingFrame, controlFrames, publicHeaderLength, includeStreamFrames)
+	payloadFrames, err := p.composeNextPacket(stopWaitingFrame, publicHeaderLength, includeStreamFrames)
 	if err != nil {
 		return nil, err
 	}
@@ -118,11 +121,10 @@ func (p *packetPacker) getPayload(frames []frames.Frame, currentPacketNumber pro
 	return payload.Bytes(), nil
 }
 
-func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, publicHeaderLength protocol.ByteCount, includeStreamFrames bool) ([]frames.Frame, error) {
+func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFrame, publicHeaderLength protocol.ByteCount, includeStreamFrames bool) ([]frames.Frame, error) {
 	payloadLength := protocol.ByteCount(0)
 	var payloadFrames []frames.Frame
 
-	// TODO: handle the case where there are more controlFrames than we can put into one packet
 	if stopWaitingFrame != nil {
 		payloadFrames = append(payloadFrames, stopWaitingFrame)
 		minLength, err := stopWaitingFrame.MinLength()
@@ -132,15 +134,18 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 		payloadLength += minLength
 	}
 
-	for len(controlFrames) > 0 {
-		frame := controlFrames[0]
-		payloadFrames = append(payloadFrames, frame)
-		minLength, _ := frame.MinLength() // controlFrames does not contain any StopWaitingFrames. So it will *never* return an error
-		payloadLength += minLength
-		controlFrames = controlFrames[1:]
-	}
-
 	maxFrameSize := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLength
+
+	for len(p.controlFrames) > 0 {
+		frame := p.controlFrames[0]
+		minLength, _ := frame.MinLength() // controlFrames does not contain any StopWaitingFrames. So it will *never* return an error
+		if payloadLength+minLength > maxFrameSize {
+			break
+		}
+		payloadFrames = append(payloadFrames, frame)
+		payloadLength += minLength
+		p.controlFrames = p.controlFrames[1:]
+	}
 
 	if payloadLength > maxFrameSize {
 		panic("internal inconsistency: packet payload too large")
