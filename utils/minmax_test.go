@@ -46,6 +46,11 @@ var _ = Describe("Min / Max", func() {
 			Expect(Min(7, 5)).To(Equal(5))
 		})
 
+		It("returns the minimum uint32", func() {
+			Expect(MinUint32(7, 5)).To(Equal(uint32(5)))
+			Expect(MinUint32(5, 7)).To(Equal(uint32(5)))
+		})
+
 		It("returns the minimum int64", func() {
 			Expect(MinInt64(7, 5)).To(Equal(int64(5)))
 			Expect(MinInt64(5, 7)).To(Equal(int64(5)))

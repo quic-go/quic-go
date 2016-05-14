@@ -15,16 +15,16 @@ var _ = Describe("ConnectionsParameterManager", func() {
 	})
 
 	It("stores and retrieves a value", func() {
-		mspc := []byte{0x13, 0x37}
+		tcid := []byte{0x13, 0x37}
 		values := map[Tag][]byte{
-			TagMSPC: mspc,
+			TagTCID: tcid,
 		}
 
 		cpm.SetFromMap(values)
 
-		val, err := cpm.getRawValue(TagMSPC)
+		val, err := cpm.getRawValue(TagTCID)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(val).To(Equal(mspc))
+		Expect(val).To(Equal(tcid))
 	})
 
 	It("returns an error for a tag that is not set", func() {
@@ -40,25 +40,32 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			Expect(entryMap).To(HaveKey(TagMSPC))
 		})
 
-		It("returns stream-level flow control windows in SHLO", func() {
+		It("sets the stream-level flow control windows in SHLO", func() {
 			cpm.receiveStreamFlowControlWindow = 0xDEADBEEF
 			entryMap := cpm.GetSHLOMap()
 			Expect(entryMap).To(HaveKey(TagSFCW))
 			Expect(entryMap[TagSFCW]).To(Equal([]byte{0xEF, 0xBE, 0xAD, 0xDE}))
 		})
 
-		It("returns connection-level flow control windows in SHLO", func() {
+		It("sets the connection-level flow control windows in SHLO", func() {
 			cpm.receiveConnectionFlowControlWindow = 0xDECAFBAD
 			entryMap := cpm.GetSHLOMap()
 			Expect(entryMap).To(HaveKey(TagCFCW))
 			Expect(entryMap[TagCFCW]).To(Equal([]byte{0xAD, 0xFB, 0xCA, 0xDE}))
 		})
 
-		It("returns connection-level flow control windows in SHLO", func() {
+		It("sets the connection-level flow control windows in SHLO", func() {
 			cpm.idleConnectionStateLifetime = 0xDECAFBAD * time.Second
 			entryMap := cpm.GetSHLOMap()
 			Expect(entryMap).To(HaveKey(TagICSL))
 			Expect(entryMap[TagICSL]).To(Equal([]byte{0xAD, 0xFB, 0xCA, 0xDE}))
+		})
+
+		It("sets the maximum streams per connection in SHLO", func() {
+			cpm.maxStreamsPerConnection = 0xDEADBEEF
+			entryMap := cpm.GetSHLOMap()
+			Expect(entryMap).To(HaveKey(TagMSPC))
+			Expect(entryMap[TagMSPC]).To(Equal([]byte{0xEF, 0xBE, 0xAD, 0xDE}))
 		})
 	})
 
@@ -157,6 +164,32 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			value := 0xDECAFBAD * time.Second
 			cpm.idleConnectionStateLifetime = value
 			Expect(cpm.GetIdleConnectionStateLifetime()).To(Equal(value))
+		})
+	})
+
+	Context("max streams per connection", func() {
+		It("negotiates correctly when the client wants a larger number", func() {
+			Expect(cpm.negotiateMaxStreamsPerConnection(protocol.MaxStreamsPerConnection + 10)).To(Equal(protocol.MaxStreamsPerConnection))
+		})
+
+		It("negotiates correctly when the client wants a smaller number", func() {
+			Expect(cpm.negotiateMaxStreamsPerConnection(protocol.MaxStreamsPerConnection - 1)).To(Equal(protocol.MaxStreamsPerConnection - 1))
+		})
+
+		It("sets the negotiated max streams per connection value", func() {
+			// this test only works if the value given here is smaller than protocol.MaxStreamsPerConnection
+			values := map[Tag][]byte{
+				TagMSPC: []byte{2, 0, 0, 0},
+			}
+			err := cpm.SetFromMap(values)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cpm.GetMaxStreamsPerConnection()).To(Equal(uint32(2)))
+		})
+
+		It("gets the max streams per connection value", func() {
+			var value uint32 = 0xDECAFBAD
+			cpm.maxStreamsPerConnection = value
+			Expect(cpm.GetMaxStreamsPerConnection()).To(Equal(value))
 		})
 	})
 })

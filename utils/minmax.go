@@ -34,6 +34,14 @@ func Min(a, b int) int {
 	return b
 }
 
+// MinUint32 returns the maximum of two uint32
+func MinUint32(a, b uint32) uint32 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // MinInt64 returns the minimum of two int64
 func MinInt64(a, b int64) int64 {
 	if a < b {
@@ -58,6 +66,7 @@ func MaxDuration(a, b time.Duration) time.Duration {
 	return b
 }
 
+// MinDuration returns the minimum duration
 func MinDuration(a, b time.Duration) time.Duration {
 	if a > b {
 		return b

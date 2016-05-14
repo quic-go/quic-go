@@ -18,6 +18,7 @@ type ConnectionParametersManager struct {
 	params map[Tag][]byte
 	mutex  sync.RWMutex
 
+	maxStreamsPerConnection            uint32
 	idleConnectionStateLifetime        time.Duration
 	sendStreamFlowControlWindow        protocol.ByteCount
 	sendConnectionFlowControlWindow    protocol.ByteCount
@@ -31,9 +32,7 @@ var ErrTagNotInConnectionParameterMap = errors.New("Tag not found in Connections
 // NewConnectionParamatersManager creates a new connection parameters manager
 func NewConnectionParamatersManager() *ConnectionParametersManager {
 	return &ConnectionParametersManager{
-		params: map[Tag][]byte{
-			TagMSPC: {0x64, 0x00, 0x00, 0x00}, // Max streams per connection = 100
-		},
+		params: make(map[Tag][]byte),
 		idleConnectionStateLifetime:        protocol.InitialIdleConnectionStateLifetime,
 		sendStreamFlowControlWindow:        protocol.InitialStreamFlowControlWindow,     // can only be changed by the client
 		sendConnectionFlowControlWindow:    protocol.InitialConnectionFlowControlWindow, // can only be changed by the client
@@ -49,8 +48,14 @@ func (h *ConnectionParametersManager) SetFromMap(params map[Tag][]byte) error {
 
 	for key, value := range params {
 		switch key {
-		case TagMSPC, TagTCID:
+		case TagTCID:
 			h.params[key] = value
+		case TagMSPC:
+			clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
+			if err != nil {
+				return err
+			}
+			h.maxStreamsPerConnection = h.negotiateMaxStreamsPerConnection(clientValue)
 		case TagICSL:
 			clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
 			if err != nil {
@@ -73,6 +78,10 @@ func (h *ConnectionParametersManager) SetFromMap(params map[Tag][]byte) error {
 	}
 
 	return nil
+}
+
+func (h *ConnectionParametersManager) negotiateMaxStreamsPerConnection(clientValue uint32) uint32 {
+	return utils.MinUint32(clientValue, protocol.MaxStreamsPerConnection)
 }
 
 func (h *ConnectionParametersManager) negotiateIdleConnectionStateLifetime(clientValue time.Duration) time.Duration {
@@ -98,13 +107,14 @@ func (h *ConnectionParametersManager) GetSHLOMap() map[Tag][]byte {
 	utils.WriteUint32(sfcw, uint32(h.GetReceiveStreamFlowControlWindow()))
 	cfcw := bytes.NewBuffer([]byte{})
 	utils.WriteUint32(cfcw, uint32(h.GetReceiveConnectionFlowControlWindow()))
+	mspc := bytes.NewBuffer([]byte{})
+	utils.WriteUint32(mspc, uint32(h.GetMaxStreamsPerConnection()))
 	icsl := bytes.NewBuffer([]byte{})
-	utils.Debugf("ICSL: %#v\n", h.GetIdleConnectionStateLifetime())
 	utils.WriteUint32(icsl, uint32(h.GetIdleConnectionStateLifetime()/time.Second))
 
 	return map[Tag][]byte{
 		TagICSL: icsl.Bytes(),
-		TagMSPC: []byte{0x64, 0x00, 0x00, 0x00}, //100
+		TagMSPC: mspc.Bytes(),
 		TagCFCW: cfcw.Bytes(),
 		TagSFCW: sfcw.Bytes(),
 	}
@@ -140,6 +150,14 @@ func (h *ConnectionParametersManager) GetReceiveConnectionFlowControlWindow() pr
 	defer h.mutex.RUnlock()
 
 	return h.receiveConnectionFlowControlWindow
+}
+
+// GetMaxStreamsPerConnection gets the maximum number of streams per connection
+func (h *ConnectionParametersManager) GetMaxStreamsPerConnection() uint32 {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+
+	return h.maxStreamsPerConnection
 }
 
 // GetIdleConnectionStateLifetime gets the idle timeout

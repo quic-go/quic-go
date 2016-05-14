@@ -32,6 +32,10 @@ const ReceiveStreamFlowControlWindow ByteCount = (1 << 20) // 1 MB
 // TODO: set a reasonable value here
 const ReceiveConnectionFlowControlWindow ByteCount = (1 << 20) // 1 MB
 
-// MaxIdleConnectionStateLifetime is the maximum value we accept for the idle connection state lifetime
+// MaxStreamsPerConnection is the maximum value accepted for the number of streams per connection
+// TODO: set a reasonable value here
+const MaxStreamsPerConnection uint32 = 100
+
+// MaxIdleConnectionStateLifetime is the maximum value accepted for the idle connection state lifetime
 // TODO: set a reasonable value here
 const MaxIdleConnectionStateLifetime = 60 * time.Second
