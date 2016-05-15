@@ -290,7 +290,7 @@ func (s *Session) handleWindowUpdateFrame(frame *frames.WindowUpdateFrame) error
 		return errWindowUpdateOnInvalidStream
 	}
 
-	stream.UpdateFlowControlWindow(frame.ByteOffset)
+	stream.UpdateSendFlowControlWindow(frame.ByteOffset)
 
 	return nil
 }
@@ -454,7 +454,6 @@ func (s *Session) sendPacket() error {
 		}
 	}
 
-	stopWaitingFrame := s.stopWaitingManager.GetStopWaitingFrame()
 
 	ack, err := s.receivedPacketHandler.GetAckFrame(true)
 	if err != nil {
@@ -463,6 +462,8 @@ func (s *Session) sendPacket() error {
 	if ack != nil {
 		controlFrames = append(controlFrames, ack)
 	}
+
+	stopWaitingFrame := s.stopWaitingManager.GetStopWaitingFrame()
 	packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, true)
 
 	if err != nil {
@@ -519,6 +520,16 @@ func (s *Session) sendPacket() error {
 func (s *Session) QueueStreamFrame(frame *frames.StreamFrame) error {
 	s.packer.AddStreamFrame(*frame)
 	s.scheduleSending()
+	return nil
+}
+
+// UpdateReceiveFlowControlWindow updates the flow control window for a stream
+func (s *Session) UpdateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
+	wuf := frames.WindowUpdateFrame{
+		StreamID:   streamID,
+		ByteOffset: byteOffset,
+	}
+	s.packer.AddWindowUpdateFrame(&wuf)
 	return nil
 }
 

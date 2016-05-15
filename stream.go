@@ -13,6 +13,7 @@ import (
 
 type streamHandler interface {
 	QueueStreamFrame(*frames.StreamFrame) error
+	UpdateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error
 }
 
 // A Stream assembles the data from StreamFrames and provides a super-convenient Read-Interface
@@ -33,8 +34,10 @@ type stream struct {
 	frameQueue        streamFrameSorter
 	newFrameOrErrCond sync.Cond
 
-	flowControlWindow     protocol.ByteCount
-	windowUpdateOrErrCond sync.Cond
+	sendFlowControlWindow             protocol.ByteCount
+	receiveFlowControlWindow          protocol.ByteCount
+	receiveFlowControlWindowIncrement protocol.ByteCount
+	windowUpdateOrErrCond             sync.Cond
 }
 
 // newStream creates a new Stream
@@ -47,7 +50,9 @@ func newStream(session streamHandler, connectionParameterManager *handshake.Conn
 	s.newFrameOrErrCond.L = &s.mutex
 	s.windowUpdateOrErrCond.L = &s.mutex
 
-	s.flowControlWindow = connectionParameterManager.GetSendStreamFlowControlWindow()
+	s.sendFlowControlWindow = connectionParameterManager.GetSendStreamFlowControlWindow()
+	s.receiveFlowControlWindow = connectionParameterManager.GetReceiveStreamFlowControlWindow()
+	s.receiveFlowControlWindowIncrement = protocol.ReceiveStreamFlowControlWindowIncrement
 
 	return s, nil
 }
@@ -104,6 +109,9 @@ func (s *stream) Read(p []byte) (int, error) {
 		s.readPosInFrame += m
 		bytesRead += m
 		s.readOffset += protocol.ByteCount(m)
+
+		s.maybeTriggerWindowUpdate()
+
 		if s.readPosInFrame >= len(frame.Data) {
 			fin := frame.FinBit
 			s.mutex.Lock()
@@ -126,11 +134,17 @@ func (s *stream) ReadByte() (byte, error) {
 	return p[0], err
 }
 
-func (s *stream) UpdateFlowControlWindow(n protocol.ByteCount) {
+func (s *stream) updateReceiveFlowControlWindow() {
+	n := s.receiveFlowControlWindow + s.receiveFlowControlWindowIncrement
+	s.receiveFlowControlWindow = n
+	s.session.UpdateReceiveFlowControlWindow(s.streamID, n)
+}
+
+func (s *stream) UpdateSendFlowControlWindow(n protocol.ByteCount) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	if n > s.flowControlWindow {
-		s.flowControlWindow = n
+	if n > s.sendFlowControlWindow {
+		s.sendFlowControlWindow = n
 		s.windowUpdateOrErrCond.Broadcast()
 	}
 }
@@ -148,10 +162,10 @@ func (s *stream) Write(p []byte) (int, error) {
 
 	for dataWritten < len(p) {
 		s.mutex.Lock()
-		remainingBytesInWindow := int64(s.flowControlWindow) - int64(s.writeOffset)
+		remainingBytesInWindow := int64(s.sendFlowControlWindow) - int64(s.writeOffset)
 		for remainingBytesInWindow == 0 && s.err == nil {
 			s.windowUpdateOrErrCond.Wait()
-			remainingBytesInWindow = int64(s.flowControlWindow) - int64(s.writeOffset)
+			remainingBytesInWindow = int64(s.sendFlowControlWindow) - int64(s.writeOffset)
 		}
 		s.mutex.Unlock()
 
@@ -190,11 +204,19 @@ func (s *stream) Close() error {
 
 // AddStreamFrame adds a new stream frame
 func (s *stream) AddStreamFrame(frame *frames.StreamFrame) error {
+	// TODO: return flow control window violation here
 	s.mutex.Lock()
 	s.frameQueue.Push(frame)
 	s.mutex.Unlock()
 	s.newFrameOrErrCond.Signal()
 	return nil
+}
+
+func (s *stream) maybeTriggerWindowUpdate() {
+	diff := s.receiveFlowControlWindow - s.readOffset
+	if diff < protocol.WindowUpdateThreshold {
+		s.updateReceiveFlowControlWindow()
+	}
 }
 
 // RegisterError is called by session to indicate that an error occurred and the

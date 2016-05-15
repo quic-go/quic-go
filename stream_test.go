@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"time"
@@ -18,6 +19,10 @@ type mockStreamHandler struct {
 
 func (m *mockStreamHandler) QueueStreamFrame(f *frames.StreamFrame) error {
 	m.frames = append(m.frames, f)
+	return nil
+}
+
+func (m *mockStreamHandler) UpdateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
 	return nil
 }
 
@@ -256,7 +261,7 @@ var _ = Describe("Stream", func() {
 
 		Context("flow control", func() {
 			It("writes everything if the flow control window is big enough", func() {
-				str.flowControlWindow = 4
+				str.sendFlowControlWindow = 4
 				n, err := str.Write([]byte{0xDE, 0xCA, 0xFB, 0xAD})
 				Expect(n).To(Equal(4))
 				Expect(err).ToNot(HaveOccurred())
@@ -264,14 +269,14 @@ var _ = Describe("Stream", func() {
 
 			It("waits for a flow control window update", func() {
 				var b bool
-				str.flowControlWindow = 1
+				str.sendFlowControlWindow = 1
 				_, err := str.Write([]byte{0x42})
 				Expect(err).ToNot(HaveOccurred())
 
 				go func() {
 					time.Sleep(2 * time.Millisecond)
 					b = true
-					str.UpdateFlowControlWindow(3)
+					str.UpdateSendFlowControlWindow(3)
 				}()
 				n, err := str.Write([]byte{0x13, 0x37})
 				Expect(b).To(BeTrue())
@@ -280,13 +285,13 @@ var _ = Describe("Stream", func() {
 			})
 
 			It("splits writing of frames when given more data than the flow control windows size", func() {
-				str.flowControlWindow = 2
+				str.sendFlowControlWindow = 2
 				var b bool
 
 				go func() {
 					time.Sleep(time.Millisecond)
 					b = true
-					str.UpdateFlowControlWindow(4)
+					str.UpdateSendFlowControlWindow(4)
 				}()
 
 				n, err := str.Write([]byte{0xDE, 0xCA, 0xFB, 0xAD})
@@ -298,14 +303,14 @@ var _ = Describe("Stream", func() {
 
 			It("writes after a flow control window update", func() {
 				var b bool
-				str.flowControlWindow = 1
+				str.sendFlowControlWindow = 1
 				_, err := str.Write([]byte{0x42})
 				Expect(err).ToNot(HaveOccurred())
 
 				go func() {
 					time.Sleep(time.Millisecond)
 					b = true
-					str.UpdateFlowControlWindow(3)
+					str.UpdateSendFlowControlWindow(3)
 				}()
 				n, err := str.Write([]byte{0xDE, 0xAD})
 				Expect(b).To(BeTrue())
@@ -315,7 +320,7 @@ var _ = Describe("Stream", func() {
 
 			It("immediately returns on remote errors", func() {
 				var b bool
-				str.flowControlWindow = 1
+				str.sendFlowControlWindow = 1
 
 				testErr := errors.New("test error")
 
@@ -332,17 +337,49 @@ var _ = Describe("Stream", func() {
 		})
 	})
 
-	Context("flow control window updating", func() {
+	Context("flow control window updating, for sending", func() {
 		It("updates the flow control window", func() {
-			str.flowControlWindow = 3
-			str.UpdateFlowControlWindow(4)
-			Expect(str.flowControlWindow).To(Equal(protocol.ByteCount(4)))
+			str.sendFlowControlWindow = 3
+			str.UpdateSendFlowControlWindow(4)
+			Expect(str.sendFlowControlWindow).To(Equal(protocol.ByteCount(4)))
 		})
 
 		It("never shrinks the flow control window", func() {
-			str.flowControlWindow = 100
-			str.UpdateFlowControlWindow(50)
-			Expect(str.flowControlWindow).To(Equal(protocol.ByteCount(100)))
+			str.sendFlowControlWindow = 100
+			str.UpdateSendFlowControlWindow(50)
+			Expect(str.sendFlowControlWindow).To(Equal(protocol.ByteCount(100)))
+		})
+	})
+
+	Context("flow control window updating, for receiving", func() {
+		It("updates the flow control window", func() {
+			len := int(protocol.WindowUpdateThreshold) + 1
+			receiveFlowControlWindow := str.receiveFlowControlWindow
+			frame := frames.StreamFrame{
+				Offset: 0,
+				Data:   bytes.Repeat([]byte{'f'}, len),
+			}
+			str.AddStreamFrame(&frame)
+			b := make([]byte, len)
+			n, err := str.Read(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(n).To(Equal(len))
+			Expect(str.receiveFlowControlWindow).To(Equal(receiveFlowControlWindow + str.receiveFlowControlWindowIncrement))
+		})
+
+		It("does not update the flow control window when not enough data was received", func() {
+			len := int(protocol.WindowUpdateThreshold) - 1
+			receiveFlowControlWindow := str.receiveFlowControlWindow
+			frame := frames.StreamFrame{
+				Offset: 0,
+				Data:   bytes.Repeat([]byte{'f'}, len),
+			}
+			str.AddStreamFrame(&frame)
+			b := make([]byte, len)
+			n, err := str.Read(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(n).To(Equal(len))
+			Expect(str.receiveFlowControlWindow).To(Equal(receiveFlowControlWindow))
 		})
 	})
 

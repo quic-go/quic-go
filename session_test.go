@@ -342,6 +342,17 @@ var _ = Describe("Session", func() {
 			Expect(conn.written[0]).To(ContainSubstring(string("foobar")))
 		})
 
+		It("sends a WindowUpdate frame", func() {
+			_, err := session.NewStream(5)
+			Expect(err).ToNot(HaveOccurred())
+			err = session.UpdateReceiveFlowControlWindow(5, 0xDECAFBAD)
+			Expect(err).ToNot(HaveOccurred())
+			err = session.sendPacket()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(conn.written).To(HaveLen(1))
+			Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x04, 0x05, 0, 0, 0})))
+		})
+
 		It("sends public reset", func() {
 			err := session.sendPublicReset(1)
 			Expect(err).NotTo(HaveOccurred())

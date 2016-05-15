@@ -48,7 +48,7 @@ func (p *packetPacker) AddWindowUpdateFrame(f *frames.WindowUpdateFrame) {
 
 func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, includeStreamFrames bool) (*packedPacket, error) {
 	// don't send out packets that only contain a StopWaitingFrame
-	if len(controlFrames) == 0 && (p.streamFrameQueue.Len() == 0 || !includeStreamFrames) {
+	if len(p.windowUpdateFrames) == 0 && len(controlFrames) == 0 && (p.streamFrameQueue.Len() == 0 || !includeStreamFrames) {
 		return nil, nil
 	}
 
