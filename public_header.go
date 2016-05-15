@@ -32,7 +32,7 @@ type publicHeader struct {
 
 // WritePublicHeader writes a public header
 func (h *publicHeader) WritePublicHeader(b *bytes.Buffer) error {
-	publicFlagByte := uint8(0x04)
+	publicFlagByte := uint8(0x00)
 	if h.VersionFlag && h.ResetFlag {
 		return errResetAndVersionFlagSet
 	}
@@ -43,7 +43,8 @@ func (h *publicHeader) WritePublicHeader(b *bytes.Buffer) error {
 		publicFlagByte |= 0x02
 	}
 	if !h.TruncateConnectionID {
-		publicFlagByte |= 0x08
+		// TODO: Change this once we support version 33 properly
+		publicFlagByte |= 0x0c
 	}
 
 	if !h.ResetFlag && !h.VersionFlag {
