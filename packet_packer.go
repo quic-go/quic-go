@@ -27,9 +27,8 @@ type packetPacker struct {
 	sentPacketHandler           ackhandler.SentPacketHandler
 	connectionParametersManager *handshake.ConnectionParametersManager
 
-	streamFrameQueue   StreamFrameQueue
-	windowUpdateFrames []*frames.WindowUpdateFrame
-	controlFrames      []frames.Frame
+	streamFrameQueue StreamFrameQueue
+	controlFrames    []frames.Frame
 
 	lastPacketNumber protocol.PacketNumber
 }
@@ -42,13 +41,9 @@ func (p *packetPacker) AddHighPrioStreamFrame(f frames.StreamFrame) {
 	p.streamFrameQueue.Push(&f, true)
 }
 
-func (p *packetPacker) AddWindowUpdateFrame(f *frames.WindowUpdateFrame) {
-	p.windowUpdateFrames = append(p.windowUpdateFrames, f)
-}
-
 func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, includeStreamFrames bool) (*packedPacket, error) {
 	// don't send out packets that only contain a StopWaitingFrame
-	if len(p.windowUpdateFrames) == 0 && len(controlFrames) == 0 && (p.streamFrameQueue.Len() == 0 || !includeStreamFrames) {
+	if len(controlFrames) == 0 && (p.streamFrameQueue.Len() == 0 || !includeStreamFrames) {
 		return nil, nil
 	}
 
@@ -131,17 +126,6 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 	var payloadFrames []frames.Frame
 
 	maxFrameSize := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLength
-
-	for len(p.windowUpdateFrames) > 0 {
-		frame := p.windowUpdateFrames[0]
-		minLength, _ := frame.MinLength() // windowUpdateFrames.MinLength() *never* returns an error
-		if payloadLength+minLength > maxFrameSize {
-			break
-		}
-		payloadLength += minLength
-		payloadFrames = append(payloadFrames, frame)
-		p.windowUpdateFrames = p.windowUpdateFrames[1:]
-	}
 
 	if stopWaitingFrame != nil {
 		payloadFrames = append(payloadFrames, stopWaitingFrame)

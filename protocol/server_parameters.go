@@ -46,3 +46,6 @@ const MaxIdleConnectionStateLifetime = 60 * time.Second
 
 // WindowUpdateThreshold is the size of the receive flow control window for which we send out a WindowUpdate frame
 const WindowUpdateThreshold = ReceiveStreamFlowControlWindow / 2
+
+// WindowUpdateNumRepitions is the number of times the same WindowUpdate frame will be sent to the client
+const WindowUpdateNumRepitions uint8 = 2

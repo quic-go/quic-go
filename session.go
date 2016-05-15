@@ -50,6 +50,7 @@ type Session struct {
 	sentPacketHandler     ackhandler.SentPacketHandler
 	receivedPacketHandler ackhandler.ReceivedPacketHandler
 	stopWaitingManager    ackhandler.StopWaitingManager
+	windowUpdateManager   *WindowUpdateManager
 
 	unpacker *packetUnpacker
 	packer   *packetPacker
@@ -86,6 +87,7 @@ func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		sentPacketHandler:           ackhandler.NewSentPacketHandler(stopWaitingManager),
 		receivedPacketHandler:       ackhandler.NewReceivedPacketHandler(),
 		stopWaitingManager:          stopWaitingManager,
+		windowUpdateManager:         NewWindowUpdateManager(),
 		receivedPackets:             make(chan receivedPacket, 1000), // TODO: What if server receives many packets and connection is already closed?!
 		closeChan:                   make(chan struct{}, 1),
 		sendingScheduled:            make(chan struct{}, 1),
@@ -454,6 +456,11 @@ func (s *Session) sendPacket() error {
 		}
 	}
 
+	windowUpdateFrames := s.windowUpdateManager.GetWindowUpdateFrames()
+
+	for _, wuf := range windowUpdateFrames {
+		controlFrames = append(controlFrames, wuf)
+	}
 
 	ack, err := s.receivedPacketHandler.GetAckFrame(true)
 	if err != nil {
@@ -525,11 +532,7 @@ func (s *Session) QueueStreamFrame(frame *frames.StreamFrame) error {
 
 // UpdateReceiveFlowControlWindow updates the flow control window for a stream
 func (s *Session) UpdateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
-	wuf := frames.WindowUpdateFrame{
-		StreamID:   streamID,
-		ByteOffset: byteOffset,
-	}
-	s.packer.AddWindowUpdateFrame(&wuf)
+	s.windowUpdateManager.SetStreamOffset(streamID, byteOffset)
 	return nil
 }
 

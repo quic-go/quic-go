@@ -353,6 +353,22 @@ var _ = Describe("Session", func() {
 			Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x04, 0x05, 0, 0, 0})))
 		})
 
+		It("repeats a WindowUpdate frame in WindowUpdateNumRepitions packets", func() {
+			_, err := session.NewStream(5)
+			Expect(err).ToNot(HaveOccurred())
+			err = session.UpdateReceiveFlowControlWindow(5, 0xDECAFBAD)
+			Expect(err).ToNot(HaveOccurred())
+			for i := uint8(0); i < protocol.WindowUpdateNumRepitions; i++ {
+				err = session.sendPacket()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(conn.written[i]).To(ContainSubstring(string([]byte{0x04, 0x05, 0, 0, 0})))
+			}
+			Expect(conn.written).To(HaveLen(int(protocol.WindowUpdateNumRepitions)))
+			err = session.sendPacket()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(conn.written).To(HaveLen(int(protocol.WindowUpdateNumRepitions))) // no packet was sent
+		})
+
 		It("sends public reset", func() {
 			err := session.sendPublicReset(1)
 			Expect(err).NotTo(HaveOccurred())
