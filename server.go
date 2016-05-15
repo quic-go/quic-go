@@ -15,7 +15,7 @@ import (
 // packetHandler handles packets
 type packetHandler interface {
 	handlePacket(addr interface{}, hdr *publicHeader, data []byte)
-	Run()
+	run()
 }
 
 // A Server of QUIC
@@ -128,7 +128,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 			s.streamCallback,
 			s.closeCallback,
 		)
-		go session.Run()
+		go session.run()
 		s.sessionsMutex.Lock()
 		s.sessions[hdr.ConnectionID] = session
 		s.sessionsMutex.Unlock()

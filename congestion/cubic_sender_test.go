@@ -414,7 +414,7 @@ var _ = Describe("Cubic Sender", func() {
 		Expect(sender.RetransmissionDelay()).To(Equal(expected_delay))
 
 		for i := 0; i < 100; i++ {
-			// Run to make sure that we converge.
+			// run to make sure that we converge.
 			rttStats.UpdateRTT(kRttMs+kDeviationMs, 0, clock.Now())
 			rttStats.UpdateRTT(kRttMs-kDeviationMs, 0, clock.Now())
 		}

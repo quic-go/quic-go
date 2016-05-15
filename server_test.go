@@ -22,7 +22,7 @@ func (s *mockSession) handlePacket(addr interface{}, hdr *publicHeader, data []b
 	s.packetCount++
 }
 
-func (s *mockSession) Run() {
+func (s *mockSession) run() {
 }
 
 func newMockSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) packetHandler {

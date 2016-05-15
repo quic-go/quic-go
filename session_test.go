@@ -315,7 +315,7 @@ var _ = Describe("Session", func() {
 			scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
 			nGoRoutinesBefore = runtime.NumGoroutine()
 			session = newSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) { closed = true }).(*Session)
-			go session.Run()
+			go session.run()
 			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore + 2))
 		})
 
@@ -437,13 +437,13 @@ var _ = Describe("Session", func() {
 					0x18, 0x6f, 0x44, 0xba, 0x97, 0x35, 0xd, 0x6f, 0xbf, 0x64, 0x3c, 0x79, 0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72,
 				},
 			}
-			session.Run()
+			session.run()
 			Expect(session.sendingScheduled).To(Receive())
 		})
 
 		Context("bundling of small packets", func() {
 			It("bundles two small frames into one packet", func() {
-				go session.Run()
+				go session.run()
 
 				session.queueStreamFrame(&frames.StreamFrame{
 					StreamID: 5,
@@ -458,7 +458,7 @@ var _ = Describe("Session", func() {
 			})
 
 			It("sends out two big frames in two packet", func() {
-				go session.Run()
+				go session.run()
 
 				session.queueStreamFrame(&frames.StreamFrame{
 					StreamID: 5,
@@ -473,7 +473,7 @@ var _ = Describe("Session", func() {
 			})
 
 			It("sends out two small frames that are written to long after one another into two packet", func() {
-				go session.Run()
+				go session.run()
 
 				session.queueStreamFrame(&frames.StreamFrame{
 					StreamID: 5,
@@ -489,7 +489,7 @@ var _ = Describe("Session", func() {
 			})
 
 			It("sends a queued ACK frame only once", func() {
-				go session.Run()
+				go session.run()
 
 				packetNumber := protocol.PacketNumber(0x1337)
 				session.receivedPacketHandler.ReceivedPacket(packetNumber, true)
@@ -540,7 +540,7 @@ var _ = Describe("Session", func() {
 			}
 			session.handlePacket(nil, hdr, []byte("foobar"))
 		}
-		session.Run()
+		session.run()
 
 		Expect(conn.written).To(HaveLen(1))
 		Expect(conn.written[0]).To(ContainSubstring(string([]byte("PRST"))))
@@ -568,7 +568,7 @@ var _ = Describe("Session", func() {
 		})
 		session.packer.connectionParametersManager = session.connectionParametersManager
 		session.packer.sentPacketHandler = newMockSentPacketHandler()
-		session.Run() // Would normally not return
+		session.run() // Would normally not return
 		Expect(conn.written[0]).To(ContainSubstring("No recent network activity."))
 		close(done)
 	}, 0.5)

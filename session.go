@@ -126,8 +126,8 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	return session
 }
 
-// Run the session main loop
-func (s *Session) Run() {
+// run the session main loop
+func (s *Session) run() {
 	for {
 		// Close immediately if requested
 		select {
