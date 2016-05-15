@@ -22,9 +22,9 @@ type packetUnpacker struct {
 	aead    crypto.AEAD
 }
 
-func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, publicHeader *PublicHeader, r *bytes.Reader) (*unpackedPacket, error) {
+func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *publicHeader, r *bytes.Reader) (*unpackedPacket, error) {
 	ciphertext, _ := ioutil.ReadAll(r)
-	plaintext, err := u.aead.Open(publicHeader.PacketNumber, publicHeaderBinary, ciphertext)
+	plaintext, err := u.aead.Open(hdr.PacketNumber, publicHeaderBinary, ciphertext)
 	if err != nil {
 		// Wrap err in quicError so that public reset is sent by session
 		return nil, protocol.NewQuicError(errorcodes.QUIC_DECRYPTION_FAILURE, err.Error())
@@ -67,7 +67,7 @@ ReadLoop:
 			case 0x05:
 				frame, err = frames.ParseBlockedFrame(r)
 			case 0x06:
-				frame, err = frames.ParseStopWaitingFrame(r, publicHeader.PacketNumber, publicHeader.PacketNumberLen)
+				frame, err = frames.ParseStopWaitingFrame(r, hdr.PacketNumber, hdr.PacketNumberLen)
 			case 0x07:
 				frame, err = frames.ParsePingFrame(r)
 			default:

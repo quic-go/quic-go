@@ -128,7 +128,7 @@ var _ = Describe("packet number calculation", func() {
 		}
 	})
 
-	Context("shortening a packet number for the PublicHeader", func() {
+	Context("shortening a packet number for the publicHeader", func() {
 		Context("shortening", func() {
 			It("sends out low packet numbers as 1 byte", func() {
 				length := GetPacketNumberLengthForPublicHeader(4, 2)

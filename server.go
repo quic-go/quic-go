@@ -14,7 +14,7 @@ import (
 
 // packetHandler handles packets
 type packetHandler interface {
-	HandlePacket(addr interface{}, publicHeader *PublicHeader, data []byte)
+	HandlePacket(addr interface{}, hdr *publicHeader, data []byte)
 	Run()
 }
 
@@ -97,17 +97,17 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 	r := bytes.NewReader(packet)
 	// ToDo: check packet size and send errorcodes.QUIC_PACKET_TOO_LARGE if packet is too large
 
-	publicHeader, err := ParsePublicHeader(r)
+	hdr, err := ParsePublicHeader(r)
 	if err != nil {
 		// ToDo: send errorcodes.QUIC_INVALID_PACKET_HEADER
 		return err
 	}
-	publicHeader.Raw = packet[:len(packet)-r.Len()]
+	hdr.Raw = packet[:len(packet)-r.Len()]
 
 	// Send Version Negotiation Packet if the client is speaking a different protocol version
-	if publicHeader.VersionFlag && !protocol.IsSupportedVersion(publicHeader.VersionNumber) {
-		utils.Infof("Client offered version %d, sending VersionNegotiationPacket", publicHeader.VersionNumber)
-		_, err = conn.WriteToUDP(composeVersionNegotiation(publicHeader.ConnectionID), remoteAddr)
+	if hdr.VersionFlag && !protocol.IsSupportedVersion(hdr.VersionNumber) {
+		utils.Infof("Client offered version %d, sending VersionNegotiationPacket", hdr.VersionNumber)
+		_, err = conn.WriteToUDP(composeVersionNegotiation(hdr.ConnectionID), remoteAddr)
 		if err != nil {
 			return err
 		}
@@ -115,29 +115,29 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 	}
 
 	s.sessionsMutex.RLock()
-	session, ok := s.sessions[publicHeader.ConnectionID]
+	session, ok := s.sessions[hdr.ConnectionID]
 	s.sessionsMutex.RUnlock()
 
 	if !ok {
-		utils.Infof("Serving new connection: %x, version %d from %v", publicHeader.ConnectionID, publicHeader.VersionNumber, remoteAddr)
+		utils.Infof("Serving new connection: %x, version %d from %v", hdr.ConnectionID, hdr.VersionNumber, remoteAddr)
 		session = s.newSession(
 			&udpConn{conn: conn, currentAddr: remoteAddr},
-			publicHeader.VersionNumber,
-			publicHeader.ConnectionID,
+			hdr.VersionNumber,
+			hdr.ConnectionID,
 			s.scfg,
 			s.streamCallback,
 			s.closeCallback,
 		)
 		go session.Run()
 		s.sessionsMutex.Lock()
-		s.sessions[publicHeader.ConnectionID] = session
+		s.sessions[hdr.ConnectionID] = session
 		s.sessionsMutex.Unlock()
 	}
 	if session == nil {
 		// Late packet for closed session
 		return nil
 	}
-	session.HandlePacket(remoteAddr, publicHeader, packet[len(packet)-r.Len():])
+	session.HandlePacket(remoteAddr, hdr, packet[len(packet)-r.Len():])
 	return nil
 }
 
@@ -149,7 +149,7 @@ func (s *Server) closeCallback(id protocol.ConnectionID) {
 
 func composeVersionNegotiation(connectionID protocol.ConnectionID) []byte {
 	fullReply := &bytes.Buffer{}
-	responsePublicHeader := PublicHeader{
+	responsePublicHeader := publicHeader{
 		ConnectionID: connectionID,
 		PacketNumber: 1,
 		VersionFlag:  true,

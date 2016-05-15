@@ -18,7 +18,7 @@ import (
 
 type receivedPacket struct {
 	remoteAddr   interface{}
-	publicHeader *PublicHeader
+	publicHeader *publicHeader
 	data         []byte
 }
 
@@ -181,27 +181,27 @@ func (s *Session) Run() {
 	}
 }
 
-func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeader, data []byte) error {
+func (s *Session) handlePacket(remoteAddr interface{}, hdr *publicHeader, data []byte) error {
 	r := bytes.NewReader(data)
 
-	// Calcualate packet number
-	publicHeader.PacketNumber = protocol.InferPacketNumber(
-		publicHeader.PacketNumberLen,
+	// Calculate packet number
+	hdr.PacketNumber = protocol.InferPacketNumber(
+		hdr.PacketNumberLen,
 		s.lastRcvdPacketNumber,
-		publicHeader.PacketNumber,
+		hdr.PacketNumber,
 	)
-	s.lastRcvdPacketNumber = publicHeader.PacketNumber
-	utils.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x", publicHeader.PacketNumber, r.Size(), publicHeader.ConnectionID)
+	s.lastRcvdPacketNumber = hdr.PacketNumber
+	utils.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x", hdr.PacketNumber, r.Size(), hdr.ConnectionID)
 
 	// TODO: Only do this after authenticating
 	s.conn.setCurrentRemoteAddr(remoteAddr)
 
-	packet, err := s.unpacker.Unpack(publicHeader.Raw, publicHeader, r)
+	packet, err := s.unpacker.Unpack(hdr.Raw, hdr, r)
 	if err != nil {
 		return err
 	}
 
-	s.receivedPacketHandler.ReceivedPacket(publicHeader.PacketNumber, packet.entropyBit)
+	s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, packet.entropyBit)
 
 	for _, ff := range packet.frames {
 		var err error
@@ -240,8 +240,8 @@ func (s *Session) handlePacket(remoteAddr interface{}, publicHeader *PublicHeade
 }
 
 // HandlePacket handles a packet
-func (s *Session) HandlePacket(remoteAddr interface{}, publicHeader *PublicHeader, data []byte) {
-	s.receivedPackets <- receivedPacket{remoteAddr: remoteAddr, publicHeader: publicHeader, data: data}
+func (s *Session) HandlePacket(remoteAddr interface{}, hdr *publicHeader, data []byte) {
+	s.receivedPackets <- receivedPacket{remoteAddr: remoteAddr, publicHeader: hdr, data: data}
 }
 
 // TODO: Ignore data for closed streams

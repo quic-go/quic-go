@@ -431,7 +431,7 @@ var _ = Describe("Session", func() {
 		It("sends after receiving a packet", func() {
 			Expect(session.sendingScheduled).NotTo(Receive())
 			session.receivedPackets <- receivedPacket{
-				publicHeader: &PublicHeader{},
+				publicHeader: &publicHeader{},
 				data: []byte{
 					// FNV hash + "foobar"
 					0x18, 0x6f, 0x44, 0xba, 0x97, 0x35, 0xd, 0x6f, 0xbf, 0x64, 0x3c, 0x79, 0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72,
@@ -535,7 +535,7 @@ var _ = Describe("Session", func() {
 
 		// Write protocol.MaxUndecryptablePackets and expect a public reset to happen
 		for i := 0; i < protocol.MaxUndecryptablePackets; i++ {
-			hdr := &PublicHeader{
+			hdr := &publicHeader{
 				PacketNumber: protocol.PacketNumber(i + 1),
 			}
 			session.HandlePacket(nil, hdr, []byte("foobar"))
@@ -553,7 +553,7 @@ var _ = Describe("Session", func() {
 		session = newSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) {}).(*Session)
 		session.undecryptablePackets = []receivedPacket{{
 			nil,
-			&PublicHeader{PacketNumber: protocol.PacketNumber(42)},
+			&publicHeader{PacketNumber: protocol.PacketNumber(42)},
 			nil,
 		}}
 		Expect(session.receivedPackets).NotTo(Receive())
