@@ -97,7 +97,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 	r := bytes.NewReader(packet)
 	// ToDo: check packet size and send errorcodes.QUIC_PACKET_TOO_LARGE if packet is too large
 
-	hdr, err := ParsePublicHeader(r)
+	hdr, err := parsePublicHeader(r)
 	if err != nil {
 		// ToDo: send errorcodes.QUIC_INVALID_PACKET_HEADER
 		return err

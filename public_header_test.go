@@ -12,7 +12,7 @@ var _ = Describe("Public Header", func() {
 	Context("when parsing", func() {
 		It("accepts a sample client header", func() {
 			b := bytes.NewReader([]byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x51, 0x30, 0x33, 0x30, 0x01})
-			hdr, err := ParsePublicHeader(b)
+			hdr, err := parsePublicHeader(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.VersionFlag).To(BeTrue())
 			Expect(hdr.ResetFlag).To(BeFalse())
@@ -24,21 +24,21 @@ var _ = Describe("Public Header", func() {
 
 		It("does not accept 0-byte connection ID", func() {
 			b := bytes.NewReader([]byte{0x00, 0x01})
-			_, err := ParsePublicHeader(b)
+			_, err := parsePublicHeader(b)
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(Equal(errReceivedTruncatedConnectionID))
 		})
 
 		It("rejects 0 as a connection ID", func() {
 			b := bytes.NewReader([]byte{0x09, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x51, 0x30, 0x33, 0x30, 0x01})
-			_, err := ParsePublicHeader(b)
+			_, err := parsePublicHeader(b)
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(Equal(errInvalidConnectionID))
 		})
 
 		It("accepts 1-byte packet numbers", func() {
 			b := bytes.NewReader([]byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xde})
-			hdr, err := ParsePublicHeader(b)
+			hdr, err := parsePublicHeader(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0xde)))
 			Expect(b.Len()).To(BeZero())
@@ -46,7 +46,7 @@ var _ = Describe("Public Header", func() {
 
 		It("accepts 2-byte packet numbers", func() {
 			b := bytes.NewReader([]byte{0x18, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xde, 0xca})
-			hdr, err := ParsePublicHeader(b)
+			hdr, err := parsePublicHeader(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0xcade)))
 			Expect(b.Len()).To(BeZero())
@@ -54,7 +54,7 @@ var _ = Describe("Public Header", func() {
 
 		It("accepts 4-byte packet numbers", func() {
 			b := bytes.NewReader([]byte{0x28, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xad, 0xfb, 0xca, 0xde})
-			hdr, err := ParsePublicHeader(b)
+			hdr, err := parsePublicHeader(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0xdecafbad)))
 			Expect(b.Len()).To(BeZero())
@@ -62,7 +62,7 @@ var _ = Describe("Public Header", func() {
 
 		It("accepts 6-byte packet numbers", func() {
 			b := bytes.NewReader([]byte{0x38, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x23, 0x42, 0xad, 0xfb, 0xca, 0xde})
-			hdr, err := ParsePublicHeader(b)
+			hdr, err := parsePublicHeader(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0xdecafbad4223)))
 			Expect(b.Len()).To(BeZero())
@@ -73,7 +73,7 @@ var _ = Describe("Public Header", func() {
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1,
 				0x01,
 			})
-			_, err := ParsePublicHeader(b)
+			_, err := parsePublicHeader(b)
 			Expect(err).To(MatchError("diversification nonces should only be sent by servers"))
 		})
 	})

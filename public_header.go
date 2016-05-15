@@ -83,8 +83,8 @@ func (h *publicHeader) WritePublicHeader(b *bytes.Buffer) error {
 	return nil
 }
 
-// ParsePublicHeader parses a QUIC packet's public header
-func ParsePublicHeader(b io.ByteReader) (*publicHeader, error) {
+// parsePublicHeader parses a QUIC packet's public header
+func parsePublicHeader(b io.ByteReader) (*publicHeader, error) {
 	header := &publicHeader{}
 
 	// First byte
