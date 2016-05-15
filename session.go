@@ -147,7 +147,7 @@ func (s *Session) Run() {
 		case <-s.closeChan:
 			return
 		case p := <-s.receivedPackets:
-			err = s.handlePacket(p.remoteAddr, p.publicHeader, p.data)
+			err = s.handlePacketImpl(p.remoteAddr, p.publicHeader, p.data)
 			if qErr, ok := err.(*protocol.QuicError); ok && qErr.ErrorCode == errorcodes.QUIC_DECRYPTION_FAILURE {
 				s.tryQueueingUndecryptablePacket(p)
 				continue
@@ -181,7 +181,7 @@ func (s *Session) Run() {
 	}
 }
 
-func (s *Session) handlePacket(remoteAddr interface{}, hdr *publicHeader, data []byte) error {
+func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *publicHeader, data []byte) error {
 	r := bytes.NewReader(data)
 
 	// Calculate packet number
@@ -239,8 +239,8 @@ func (s *Session) handlePacket(remoteAddr interface{}, hdr *publicHeader, data [
 	return nil
 }
 
-// HandlePacket handles a packet
-func (s *Session) HandlePacket(remoteAddr interface{}, hdr *publicHeader, data []byte) {
+// handlePacket handles a packet
+func (s *Session) handlePacket(remoteAddr interface{}, hdr *publicHeader, data []byte) {
 	s.receivedPackets <- receivedPacket{remoteAddr: remoteAddr, publicHeader: hdr, data: data}
 }
 
@@ -614,7 +614,7 @@ func (s *Session) tryQueueingUndecryptablePacket(p receivedPacket) {
 
 func (s *Session) tryDecryptingQueuedPackets() {
 	for _, p := range s.undecryptablePackets {
-		s.HandlePacket(p.remoteAddr, p.publicHeader, p.data)
+		s.handlePacket(p.remoteAddr, p.publicHeader, p.data)
 	}
 	s.undecryptablePackets = s.undecryptablePackets[:0]
 }

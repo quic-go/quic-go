@@ -18,7 +18,7 @@ type mockSession struct {
 	packetCount  int
 }
 
-func (s *mockSession) HandlePacket(addr interface{}, hdr *publicHeader, data []byte) {
+func (s *mockSession) handlePacket(addr interface{}, hdr *publicHeader, data []byte) {
 	s.packetCount++
 }
 

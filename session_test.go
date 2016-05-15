@@ -538,7 +538,7 @@ var _ = Describe("Session", func() {
 			hdr := &publicHeader{
 				PacketNumber: protocol.PacketNumber(i + 1),
 			}
-			session.HandlePacket(nil, hdr, []byte("foobar"))
+			session.handlePacket(nil, hdr, []byte("foobar"))
 		}
 		session.Run()
 
