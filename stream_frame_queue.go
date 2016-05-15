@@ -7,15 +7,15 @@ import (
 	"github.com/lucas-clemente/quic-go/protocol"
 )
 
-// StreamFrameQueue is a Queue that handles StreamFrames
-type StreamFrameQueue struct {
+// streamFrameQueue is a Queue that handles StreamFrames
+type streamFrameQueue struct {
 	prioFrames []*frames.StreamFrame
 	frames     []*frames.StreamFrame
 	mutex      sync.Mutex
 }
 
 // Push adds a new StreamFrame to the queue
-func (q *StreamFrameQueue) Push(frame *frames.StreamFrame, prio bool) {
+func (q *streamFrameQueue) Push(frame *frames.StreamFrame, prio bool) {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 
@@ -27,7 +27,7 @@ func (q *StreamFrameQueue) Push(frame *frames.StreamFrame, prio bool) {
 }
 
 // Len returns the total number of queued StreamFrames
-func (q *StreamFrameQueue) Len() int {
+func (q *streamFrameQueue) Len() int {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 
@@ -35,7 +35,7 @@ func (q *StreamFrameQueue) Len() int {
 }
 
 // ByteLen returns the total number of bytes queued
-func (q *StreamFrameQueue) ByteLen() protocol.ByteCount {
+func (q *streamFrameQueue) ByteLen() protocol.ByteCount {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 
@@ -53,7 +53,7 @@ func (q *StreamFrameQueue) ByteLen() protocol.ByteCount {
 }
 
 // Pop returns the next element and deletes it from the queue
-func (q *StreamFrameQueue) Pop() *frames.StreamFrame {
+func (q *streamFrameQueue) Pop() *frames.StreamFrame {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 
@@ -71,7 +71,7 @@ func (q *StreamFrameQueue) Pop() *frames.StreamFrame {
 }
 
 // Front returns the next element without modifying the queue
-func (q *StreamFrameQueue) Front() *frames.StreamFrame {
+func (q *streamFrameQueue) Front() *frames.StreamFrame {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 

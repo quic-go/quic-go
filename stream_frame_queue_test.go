@@ -7,13 +7,13 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("StreamFrameQueue", func() {
+var _ = Describe("streamFrameQueue", func() {
 	var prioFrame1, prioFrame2 *frames.StreamFrame
 	var frame1, frame2 *frames.StreamFrame
-	var queue *StreamFrameQueue
+	var queue *streamFrameQueue
 
 	BeforeEach(func() {
-		queue = &StreamFrameQueue{}
+		queue = &streamFrameQueue{}
 		prioFrame1 = &frames.StreamFrame{
 			StreamID: 5,
 			Data:     []byte{0x13, 0x37},

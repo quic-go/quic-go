@@ -27,7 +27,7 @@ type packetPacker struct {
 	sentPacketHandler           ackhandler.SentPacketHandler
 	connectionParametersManager *handshake.ConnectionParametersManager
 
-	streamFrameQueue StreamFrameQueue
+	streamFrameQueue streamFrameQueue
 	controlFrames    []frames.Frame
 
 	lastPacketNumber protocol.PacketNumber
