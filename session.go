@@ -97,7 +97,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		aeadChanged:                 make(chan struct{}, 1),
 	}
 
-	cryptoStream, _ := session.NewStream(1)
+	cryptoStream, _ := session.OpenStream(1)
 	cryptoSetup := handshake.NewCryptoSetup(connectionID, v, sCfg, cryptoStream, session.connectionParametersManager, session.aeadChanged)
 
 	go func() {
@@ -255,7 +255,7 @@ func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
 			return errInvalidStreamID
 		}
 
-		ss, _ := s.NewStream(frame.StreamID)
+		ss, _ := s.OpenStream(frame.StreamID)
 		str = ss.(*stream)
 	}
 	if str == nil {
@@ -536,15 +536,15 @@ func (s *Session) updateReceiveFlowControlWindow(streamID protocol.StreamID, byt
 	return nil
 }
 
-// NewStream creates a new stream open for reading and writing
-func (s *Session) NewStream(id protocol.StreamID) (utils.Stream, error) {
+// OpenStream creates a new stream open for reading and writing
+func (s *Session) OpenStream(id protocol.StreamID) (utils.Stream, error) {
 	s.streamsMutex.Lock()
 	defer s.streamsMutex.Unlock()
 	return s.newStreamImpl(id)
 }
 
-// GetOrCreateStream returns an existing stream with the given id, or opens a new stream
-func (s *Session) GetOrCreateStream(id protocol.StreamID) (utils.Stream, error) {
+// GetOrOpenStream returns an existing stream with the given id, or opens a new stream
+func (s *Session) GetOrOpenStream(id protocol.StreamID) (utils.Stream, error) {
 	s.streamsMutex.Lock()
 	defer s.streamsMutex.Unlock()
 	if stream, ok := s.streams[id]; ok {

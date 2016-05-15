@@ -18,7 +18,7 @@ type mockSession struct {
 	closed bool
 }
 
-func (s *mockSession) GetOrCreateStream(id protocol.StreamID) (utils.Stream, error) {
+func (s *mockSession) GetOrOpenStream(id protocol.StreamID) (utils.Stream, error) {
 	return &mockStream{}, nil
 }
 

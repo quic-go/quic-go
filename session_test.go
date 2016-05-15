@@ -123,7 +123,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("does not reject existing streams with even StreamIDs", func() {
-			_, err := session.NewStream(4)
+			_, err := session.OpenStream(4)
 			Expect(err).ToNot(HaveOccurred())
 			err = session.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 4,
@@ -152,7 +152,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("does not delete streams with Close()", func() {
-			str, err := session.NewStream(5)
+			str, err := session.OpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
 			str.Close()
 			session.garbageCollectStreams()
@@ -258,7 +258,7 @@ var _ = Describe("Session", func() {
 
 	Context("handling RST_STREAM frames", func() {
 		It("closes the receiving streams for writing and reading", func() {
-			s, err := session.NewStream(5)
+			s, err := session.OpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
 			err = session.handleRstStreamFrame(&frames.RstStreamFrame{
 				StreamID:  5,
@@ -284,7 +284,7 @@ var _ = Describe("Session", func() {
 
 	Context("handling WINDOW_UPDATE frames", func() {
 		It("updates the Flow Control Windows of a stream", func() {
-			_, err := session.NewStream(5)
+			_, err := session.OpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
 			err = session.handleWindowUpdateFrame(&frames.WindowUpdateFrame{
 				StreamID:   5,
@@ -327,7 +327,7 @@ var _ = Describe("Session", func() {
 
 		It("closes streams with proper error", func() {
 			testErr := errors.New("test error")
-			s, err := session.NewStream(5)
+			s, err := session.OpenStream(5)
 			Expect(err).NotTo(HaveOccurred())
 			session.Close(testErr, true)
 			Expect(closed).To(BeTrue())
@@ -376,7 +376,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("sends a WindowUpdate frame", func() {
-			_, err := session.NewStream(5)
+			_, err := session.OpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
 			err = session.updateReceiveFlowControlWindow(5, 0xDECAFBAD)
 			Expect(err).ToNot(HaveOccurred())
@@ -387,7 +387,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("repeats a WindowUpdate frame in WindowUpdateNumRepitions packets", func() {
-			_, err := session.NewStream(5)
+			_, err := session.OpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
 			err = session.updateReceiveFlowControlWindow(5, 0xDECAFBAD)
 			Expect(err).ToNot(HaveOccurred())
@@ -515,7 +515,7 @@ var _ = Describe("Session", func() {
 		Expect(err).ToNot(HaveOccurred())
 		scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
 		session = newSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) {}).(*Session)
-		s, err := session.NewStream(3)
+		s, err := session.OpenStream(3)
 		Expect(err).NotTo(HaveOccurred())
 		err = session.handleStreamFrame(&frames.StreamFrame{
 			StreamID: 1,

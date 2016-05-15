@@ -15,7 +15,7 @@ import (
 )
 
 type streamCreator interface {
-	GetOrCreateStream(protocol.StreamID) (utils.Stream, error)
+	GetOrOpenStream(protocol.StreamID) (utils.Stream, error)
 	Close(error, bool) error
 }
 
@@ -94,7 +94,7 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 	}
 	utils.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
 
-	dataStream, err := session.GetOrCreateStream(protocol.StreamID(h2headersFrame.StreamID))
+	dataStream, err := session.GetOrOpenStream(protocol.StreamID(h2headersFrame.StreamID))
 	if err != nil {
 		return err
 	}
