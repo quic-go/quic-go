@@ -104,7 +104,8 @@ var _ = Describe("Server", func() {
 				return err
 			}
 			data := make([]byte, 1000)
-			n, _, err := conn.ReadFromUDP(data)
+			var n int
+			n, _, err = conn.ReadFromUDP(data)
 			if err != nil {
 				return err
 			}
@@ -142,7 +143,8 @@ var _ = Describe("Server", func() {
 				return err
 			}
 			data := make([]byte, 1000)
-			n, _, err := conn.ReadFromUDP(data)
+			var n int
+			n, _, err = conn.ReadFromUDP(data)
 			if err != nil {
 				return err
 			}
