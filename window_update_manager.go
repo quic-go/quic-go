@@ -12,21 +12,21 @@ type windowUpdateItem struct {
 	Counter uint8
 }
 
-// WindowUpdateManager manages window update frames for receiving data
-type WindowUpdateManager struct {
+// windowUpdateManager manages window update frames for receiving data
+type windowUpdateManager struct {
 	streamOffsets map[protocol.StreamID]*windowUpdateItem
 	mutex         sync.RWMutex
 }
 
-// NewWindowUpdateManager returns a new WindowUpdateManager
-func NewWindowUpdateManager() *WindowUpdateManager {
-	return &WindowUpdateManager{
+// newWindowUpdateManager returns a new windowUpdateManager
+func newWindowUpdateManager() *windowUpdateManager {
+	return &windowUpdateManager{
 		streamOffsets: make(map[protocol.StreamID]*windowUpdateItem),
 	}
 }
 
 // SetStreamOffset sets an offset for a stream
-func (m *WindowUpdateManager) SetStreamOffset(streamID protocol.StreamID, n protocol.ByteCount) {
+func (m *windowUpdateManager) SetStreamOffset(streamID protocol.StreamID, n protocol.ByteCount) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -43,7 +43,7 @@ func (m *WindowUpdateManager) SetStreamOffset(streamID protocol.StreamID, n prot
 }
 
 // GetWindowUpdateFrames gets all the WindowUpdate frames that need to be sent
-func (m *WindowUpdateManager) GetWindowUpdateFrames() []*frames.WindowUpdateFrame {
+func (m *windowUpdateManager) GetWindowUpdateFrames() []*frames.WindowUpdateFrame {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 

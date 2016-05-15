@@ -50,7 +50,7 @@ type Session struct {
 	sentPacketHandler     ackhandler.SentPacketHandler
 	receivedPacketHandler ackhandler.ReceivedPacketHandler
 	stopWaitingManager    ackhandler.StopWaitingManager
-	windowUpdateManager   *WindowUpdateManager
+	windowUpdateManager   *windowUpdateManager
 
 	unpacker *packetUnpacker
 	packer   *packetPacker
@@ -87,7 +87,7 @@ func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		sentPacketHandler:           ackhandler.NewSentPacketHandler(stopWaitingManager),
 		receivedPacketHandler:       ackhandler.NewReceivedPacketHandler(),
 		stopWaitingManager:          stopWaitingManager,
-		windowUpdateManager:         NewWindowUpdateManager(),
+		windowUpdateManager:         newWindowUpdateManager(),
 		receivedPackets:             make(chan receivedPacket, 1000), // TODO: What if server receives many packets and connection is already closed?!
 		closeChan:                   make(chan struct{}, 1),
 		sendingScheduled:            make(chan struct{}, 1),

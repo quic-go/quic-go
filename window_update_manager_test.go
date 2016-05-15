@@ -8,10 +8,10 @@ import (
 )
 
 var _ = Describe("WindowUpdateManager", func() {
-	var wum *WindowUpdateManager
+	var wum *windowUpdateManager
 
 	BeforeEach(func() {
-		wum = NewWindowUpdateManager()
+		wum = newWindowUpdateManager()
 	})
 
 	Context("queueing new window updates", func() {
