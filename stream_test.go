@@ -290,7 +290,7 @@ var _ = Describe("Stream", func() {
 				}()
 
 				n, err := str.Write([]byte{0xDE, 0xCA, 0xFB, 0xAD})
-				Expect(len(handler.frames)).To(Equal(2))
+				Expect(handler.frames).To(HaveLen(2))
 				Expect(b).To(BeTrue())
 				Expect(n).To(Equal(4))
 				Expect(err).ToNot(HaveOccurred())

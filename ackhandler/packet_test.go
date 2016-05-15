@@ -51,14 +51,14 @@ var _ = Describe("Packet", func() {
 
 		It("gets all StreamFrames", func() {
 			streamFrames := packet.GetStreamFramesForRetransmission()
-			Expect(len(streamFrames)).To(Equal(2))
+			Expect(streamFrames).To(HaveLen(2))
 			Expect(streamFrames).To(ContainElement(streamFrame1))
 			Expect(streamFrames).To(ContainElement(streamFrame2))
 		})
 
 		It("gets all control frames", func() {
 			controlFrames := packet.GetControlFramesForRetransmission()
-			Expect(len(controlFrames)).To(Equal(2))
+			Expect(controlFrames).To(HaveLen(2))
 			Expect(controlFrames).To(ContainElement(rstStreamFrame))
 			Expect(controlFrames).To(ContainElement(windowUpdateFrame))
 		})
@@ -81,7 +81,7 @@ var _ = Describe("Packet", func() {
 				Frames:       []frames.Frame{ackFrame1, rstStreamFrame},
 			}
 			streamFrames := packet.GetStreamFramesForRetransmission()
-			Expect(len(streamFrames)).To(Equal(0))
+			Expect(streamFrames).To(BeEmpty())
 		})
 
 		It("returns an empty slice of control frames if no applicable control frames are queued", func() {
@@ -91,7 +91,7 @@ var _ = Describe("Packet", func() {
 				Frames:       []frames.Frame{streamFrame1, ackFrame1, stopWaitingFrame},
 			}
 			controlFrames := packet.GetControlFramesForRetransmission()
-			Expect(len(controlFrames)).To(Equal(0))
+			Expect(controlFrames).To(BeEmpty())
 		})
 	})
 })

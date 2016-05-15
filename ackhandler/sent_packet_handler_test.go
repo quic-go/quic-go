@@ -228,7 +228,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(acked[1].PacketNumber).To(Equal(protocol.PacketNumber(2)))
 			Expect(acked[2].PacketNumber).To(Equal(protocol.PacketNumber(3)))
 			Expect(acked[3].PacketNumber).To(Equal(protocol.PacketNumber(4)))
-			Expect(lost).To(HaveLen(0))
+			Expect(lost).To(BeEmpty())
 		})
 
 		It("completely processes an ACK with a NACK range", func() {
@@ -263,7 +263,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(acked[1].PacketNumber).To(Equal(protocol.PacketNumber(2)))
 			Expect(acked[2].PacketNumber).To(Equal(protocol.PacketNumber(6)))
 			Expect(acked[3].PacketNumber).To(Equal(protocol.PacketNumber(4)))
-			Expect(lost).To(HaveLen(0))
+			Expect(lost).To(BeEmpty())
 		})
 	})
 
@@ -375,7 +375,7 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.nackPacket(2)
 			handler.nackPacket(2)
 			Expect(handler.HasPacketForRetransmission()).To(BeTrue())
-			Expect(len(handler.retransmissionQueue)).To(Equal(1))
+			Expect(handler.retransmissionQueue).To(HaveLen(1))
 			Expect(handler.retransmissionQueue[0].PacketNumber).To(Equal(protocol.PacketNumber(2)))
 		})
 

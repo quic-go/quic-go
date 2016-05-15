@@ -80,7 +80,7 @@ var _ = Describe("Packet packer", func() {
 		Expect(p).ToNot(BeNil())
 		b := &bytes.Buffer{}
 		f.Write(b, 0)
-		Expect(len(p.frames)).To(Equal(1))
+		Expect(p.frames).To(HaveLen(1))
 		Expect(p.raw).To(ContainSubstring(string(b.Bytes())))
 	})
 
@@ -99,8 +99,8 @@ var _ = Describe("Packet packer", func() {
 		p, err := packer.PackPacket(nil, []frames.Frame{&frames.ConnectionCloseFrame{}}, false)
 		Expect(p).ToNot(BeNil())
 		Expect(err).ToNot(HaveOccurred())
-		Expect(len(p.frames)).To(Equal(1))
-		Expect(p.raw).NotTo(HaveLen(0))
+		Expect(p.frames).To(HaveLen(1))
+		Expect(p.raw).NotTo(BeEmpty())
 	})
 
 	It("packs a StopWaitingFrame first", func() {
@@ -108,7 +108,7 @@ var _ = Describe("Packet packer", func() {
 		p, err := packer.PackPacket(swf, []frames.Frame{&frames.ConnectionCloseFrame{}}, false)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(p).ToNot(BeNil())
-		Expect(len(p.frames)).To(Equal(2))
+		Expect(p.frames).To(HaveLen(2))
 		Expect(p.frames[0]).To(Equal(swf))
 	})
 
@@ -140,10 +140,10 @@ var _ = Describe("Packet packer", func() {
 		packer.controlFrames = controlFrames
 		payloadFrames, err := packer.composeNextPacket(nil, publicHeaderLen, true)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(len(payloadFrames)).To(Equal(maxFramesPerPacket))
+		Expect(payloadFrames).To(HaveLen(maxFramesPerPacket))
 		payloadFrames, err = packer.composeNextPacket(nil, publicHeaderLen, true)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(len(payloadFrames)).To(BeZero())
+		Expect(payloadFrames).To(BeEmpty())
 	})
 
 	It("packs a lot of control frames into 2 packets if they don't fit into one", func() {
@@ -159,10 +159,10 @@ var _ = Describe("Packet packer", func() {
 		packer.controlFrames = controlFrames
 		payloadFrames, err := packer.composeNextPacket(nil, publicHeaderLen, true)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(len(payloadFrames)).To(Equal(maxFramesPerPacket))
+		Expect(payloadFrames).To(HaveLen(maxFramesPerPacket))
 		payloadFrames, err = packer.composeNextPacket(nil, publicHeaderLen, true)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(len(payloadFrames)).To(Equal(10))
+		Expect(payloadFrames).To(HaveLen(10))
 	})
 
 	It("only increases the packet number when there is an actual packet to send", func() {
@@ -230,10 +230,10 @@ var _ = Describe("Packet packer", func() {
 			packer.controlFrames = controlFrames
 			payloadFrames, err := packer.composeNextPacket(nil, publicHeaderLen, true)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(len(payloadFrames)).To(Equal(maxFramesPerPacket))
+			Expect(payloadFrames).To(HaveLen(maxFramesPerPacket))
 			payloadFrames, err = packer.composeNextPacket(nil, publicHeaderLen, true)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(len(payloadFrames)).To(Equal(10))
+			Expect(payloadFrames).To(HaveLen(10))
 		})
 
 		It("only packs a WindowUpdateFrame once", func() {
@@ -263,11 +263,11 @@ var _ = Describe("Packet packer", func() {
 			packer.AddStreamFrame(f)
 			payloadFrames, err := packer.composeNextPacket(nil, publicHeaderLen, true)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(len(payloadFrames)).To(Equal(1))
+			Expect(payloadFrames).To(HaveLen(1))
 			Expect(payloadFrames[0].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
 			payloadFrames, err = packer.composeNextPacket(nil, publicHeaderLen, true)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(len(payloadFrames)).To(Equal(0))
+			Expect(payloadFrames).To(BeEmpty())
 		})
 
 		It("correctly handles a stream frame with one byte less than maximum size", func() {
@@ -284,8 +284,8 @@ var _ = Describe("Packet packer", func() {
 			packer.AddStreamFrame(f2)
 			p, err := packer.PackPacket(nil, []frames.Frame{}, true)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(protocol.ByteCount(len(p.raw))).To(Equal(protocol.MaxPacketSize - 1))
-			Expect(len(p.frames)).To(Equal(1))
+			Expect(p.raw).To(HaveLen(int(protocol.MaxPacketSize - 1)))
+			Expect(p.frames).To(HaveLen(1))
 			Expect(p.frames[0].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
 			p, err = packer.PackPacket(nil, []frames.Frame{}, true)
 			Expect(err).ToNot(HaveOccurred())
@@ -315,7 +315,7 @@ var _ = Describe("Packet packer", func() {
 			f1.Write(b, 0)
 			f2.Write(b, 0)
 			f3.Write(b, 0)
-			Expect(len(p.frames)).To(Equal(3))
+			Expect(p.frames).To(HaveLen(3))
 			Expect(p.frames[0].(*frames.StreamFrame).DataLenPresent).To(BeTrue())
 			Expect(p.frames[1].(*frames.StreamFrame).DataLenPresent).To(BeTrue())
 			Expect(p.frames[2].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
@@ -335,17 +335,17 @@ var _ = Describe("Packet packer", func() {
 			packer.AddStreamFrame(f)
 			payloadFrames, err := packer.composeNextPacket(nil, publicHeaderLen, true)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(len(payloadFrames)).To(Equal(1))
+			Expect(payloadFrames).To(HaveLen(1))
 			Expect(payloadFrames[0].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
-			Expect(protocol.ByteCount(len(payloadFrames[0].(*frames.StreamFrame).Data))).To(Equal(maxStreamFrameDataLen))
+			Expect(payloadFrames[0].(*frames.StreamFrame).Data).To(HaveLen(int(maxStreamFrameDataLen)))
 			payloadFrames, err = packer.composeNextPacket(nil, publicHeaderLen, true)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(len(payloadFrames)).To(Equal(1))
-			Expect(len(payloadFrames[0].(*frames.StreamFrame).Data)).To(Equal(200))
+			Expect(payloadFrames).To(HaveLen(1))
+			Expect(payloadFrames[0].(*frames.StreamFrame).Data).To(HaveLen(200))
 			Expect(payloadFrames[0].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
 			payloadFrames, err = packer.composeNextPacket(nil, publicHeaderLen, true)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(len(payloadFrames)).To(Equal(0))
+			Expect(payloadFrames).To(BeEmpty())
 		})
 
 		It("packs 2 stream frames that are too big for one packet correctly", func() {
@@ -362,17 +362,17 @@ var _ = Describe("Packet packer", func() {
 			packer.AddStreamFrame(f2)
 			p, err := packer.PackPacket(nil, []frames.Frame{}, true)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(len(p.frames)).To(Equal(1))
+			Expect(p.frames).To(HaveLen(1))
 			Expect(p.frames[0].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
-			Expect(protocol.ByteCount(len(p.raw))).To(Equal(protocol.MaxPacketSize))
+			Expect(p.raw).To(HaveLen(int(protocol.MaxPacketSize)))
 			p, err = packer.PackPacket(nil, []frames.Frame{}, true)
-			Expect(len(p.frames)).To(Equal(2))
+			Expect(p.frames).To(HaveLen(2))
 			Expect(p.frames[0].(*frames.StreamFrame).DataLenPresent).To(BeTrue())
 			Expect(p.frames[1].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
 			Expect(err).ToNot(HaveOccurred())
-			Expect(protocol.ByteCount(len(p.raw))).To(Equal(protocol.MaxPacketSize))
+			Expect(p.raw).To(HaveLen(int(protocol.MaxPacketSize)))
 			p, err = packer.PackPacket(nil, []frames.Frame{}, true)
-			Expect(len(p.frames)).To(Equal(1))
+			Expect(p.frames).To(HaveLen(1))
 			Expect(p.frames[0].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p).ToNot(BeNil())
@@ -391,7 +391,7 @@ var _ = Describe("Packet packer", func() {
 			p, err := packer.PackPacket(nil, []frames.Frame{}, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p).ToNot(BeNil())
-			Expect(protocol.ByteCount(len(p.raw))).To(Equal(protocol.MaxPacketSize))
+			Expect(p.raw).To(HaveLen(int(protocol.MaxPacketSize)))
 		})
 
 		It("splits a stream frame larger than the maximum size", func() {
@@ -405,10 +405,10 @@ var _ = Describe("Packet packer", func() {
 			packer.AddStreamFrame(f)
 			payloadFrames, err := packer.composeNextPacket(nil, publicHeaderLen, true)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(len(payloadFrames)).To(Equal(1))
+			Expect(payloadFrames).To(HaveLen(1))
 			payloadFrames, err = packer.composeNextPacket(nil, publicHeaderLen, true)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(len(payloadFrames)).To(Equal(1))
+			Expect(payloadFrames).To(HaveLen(1))
 		})
 	})
 

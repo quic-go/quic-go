@@ -116,7 +116,7 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(99)))
 			Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(99)))
 			nackRanges, entropy := handler.getNackRanges()
-			Expect(len(nackRanges)).To(Equal(0))
+			Expect(nackRanges).To(BeEmpty())
 			Expect(entropy).To(Equal(expectedEntropy))
 		})
 
@@ -132,7 +132,7 @@ var _ = Describe("receivedPacketHandler", func() {
 			}
 			Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(9)))
 			nackRanges, entropy := handler.getNackRanges()
-			Expect(len(nackRanges)).To(Equal(1))
+			Expect(nackRanges).To(HaveLen(1))
 			Expect(nackRanges[0]).To(Equal(frames.NackRange{FirstPacketNumber: 5, LastPacketNumber: 5}))
 			Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(4)))
 			Expect(entropy).To(Equal(expectedEntropy))
@@ -153,7 +153,7 @@ var _ = Describe("receivedPacketHandler", func() {
 			}
 			Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(11)))
 			nackRanges, entropy := handler.getNackRanges()
-			Expect(len(nackRanges)).To(Equal(1))
+			Expect(nackRanges).To(HaveLen(1))
 			Expect(nackRanges[0]).To(Equal(frames.NackRange{FirstPacketNumber: 5, LastPacketNumber: 6}))
 			Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(4)))
 			Expect(entropy).To(Equal(expectedEntropy))
@@ -174,7 +174,7 @@ var _ = Describe("receivedPacketHandler", func() {
 			}
 			Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(9)))
 			nackRanges, entropy := handler.getNackRanges()
-			Expect(len(nackRanges)).To(Equal(2))
+			Expect(nackRanges).To(HaveLen(2))
 			Expect(nackRanges[0]).To(Equal(frames.NackRange{FirstPacketNumber: 7, LastPacketNumber: 7}))
 			Expect(nackRanges[1]).To(Equal(frames.NackRange{FirstPacketNumber: 3, LastPacketNumber: 3}))
 			Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(2)))
@@ -193,7 +193,7 @@ var _ = Describe("receivedPacketHandler", func() {
 			}
 			Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(9)))
 			nackRanges, entropy := handler.getNackRanges()
-			Expect(len(nackRanges)).To(Equal(2))
+			Expect(nackRanges).To(HaveLen(2))
 			Expect(nackRanges[0]).To(Equal(frames.NackRange{FirstPacketNumber: 7, LastPacketNumber: 8}))
 			Expect(nackRanges[1]).To(Equal(frames.NackRange{FirstPacketNumber: 2, LastPacketNumber: 4}))
 			Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(1)))
@@ -236,7 +236,7 @@ var _ = Describe("receivedPacketHandler", func() {
 			err = handler.ReceivedStopWaiting(&frames.StopWaitingFrame{Entropy: 0, LeastUnacked: protocol.PacketNumber(10)})
 			Expect(err).ToNot(HaveOccurred())
 			ranges, _ = handler.getNackRanges()
-			Expect(ranges).To(HaveLen(0))
+			Expect(ranges).To(BeEmpty())
 		})
 	})
 
@@ -329,12 +329,12 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(err).ToNot(HaveOccurred())
 			ack, _ := handler.GetAckFrame(true)
 			Expect(ack).ToNot(BeNil())
-			Expect(len(ack.NackRanges)).To(Equal(1))
+			Expect(ack.NackRanges).To(HaveLen(1))
 			err = handler.ReceivedPacket(protocol.PacketNumber(2), false)
 			Expect(err).ToNot(HaveOccurred())
 			ack, _ = handler.GetAckFrame(true)
 			Expect(ack).ToNot(BeNil())
-			Expect(len(ack.NackRanges)).To(Equal(0))
+			Expect(ack.NackRanges).To(BeEmpty())
 		})
 	})
 })

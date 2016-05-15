@@ -498,7 +498,7 @@ var _ = Describe("Session", func() {
 		}}
 		Expect(session.receivedPackets).NotTo(Receive())
 		session.tryDecryptingQueuedPackets()
-		Expect(session.undecryptablePackets).To(HaveLen(0))
+		Expect(session.undecryptablePackets).To(BeEmpty())
 		Expect(session.receivedPackets).To(Receive())
 	})
 

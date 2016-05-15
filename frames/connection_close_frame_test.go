@@ -24,7 +24,7 @@ var _ = Describe("ConnectionCloseFrame", func() {
 			frame, err := ParseConnectionCloseFrame(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.ErrorCode).To(Equal(protocol.ErrorCode(0xDECAFBAD)))
-			Expect(len(frame.ReasonPhrase)).To(Equal(0))
+			Expect(frame.ReasonPhrase).To(BeEmpty())
 			Expect(b.Len()).To(Equal(0))
 		})
 	})

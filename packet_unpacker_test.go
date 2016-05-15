@@ -42,7 +42,7 @@ var _ = Describe("Packet unpacker", func() {
 		packet, err := unpacker.Unpack(hdrBin, hdr, r)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.entropyBit).To(BeTrue())
-		Expect(packet.frames).To(HaveLen(0))
+		Expect(packet.frames).To(BeEmpty())
 	})
 
 	It("unpacks stream frames", func() {
@@ -68,7 +68,7 @@ var _ = Describe("Packet unpacker", func() {
 		setReader(buf.Bytes())
 		packet, err := unpacker.Unpack(hdrBin, hdr, r)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(len(packet.frames)).To(Equal(1))
+		Expect(packet.frames).To(HaveLen(1))
 		readFrame := packet.frames[0].(*frames.AckFrame)
 		Expect(readFrame.LargestObserved).To(Equal(protocol.PacketNumber(0x13)))
 		Expect(readFrame.Entropy).To(Equal(byte(0x37)))
@@ -84,7 +84,7 @@ var _ = Describe("Packet unpacker", func() {
 		setReader([]byte{0, 0, 0})
 		packet, err := unpacker.Unpack(hdrBin, hdr, r)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(HaveLen(0))
+		Expect(packet.frames).To(BeEmpty())
 	})
 
 	It("unpacks RST_STREAM frames", func() {
