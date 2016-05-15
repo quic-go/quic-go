@@ -147,15 +147,14 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	It("packs a lot of control frames into 2 packets if they don't fit into one", func() {
-		windowUpdateFrame := &frames.WindowUpdateFrame{
-			StreamID:   0x1337,
-			ByteOffset: 0xDECAFBAD,
+		blockedFrame := &frames.BlockedFrame{
+			StreamID: 0x1337,
 		}
-		minLength, _ := windowUpdateFrame.MinLength()
+		minLength, _ := blockedFrame.MinLength()
 		maxFramesPerPacket := int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLen) / int(minLength)
 		var controlFrames []frames.Frame
 		for i := 0; i < maxFramesPerPacket+10; i++ {
-			controlFrames = append(controlFrames, windowUpdateFrame)
+			controlFrames = append(controlFrames, blockedFrame)
 		}
 		packer.controlFrames = controlFrames
 		payloadFrames, err := packer.composeNextPacket(nil, publicHeaderLen, true)
@@ -185,6 +184,52 @@ var _ = Describe("Packet packer", func() {
 		Expect(p).ToNot(BeNil())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packer.lastPacketNumber).To(Equal(protocol.PacketNumber(2)))
+	})
+
+	Context("WindowUpdate Frame handling", func() {
+		It("packs one WindowUpdateFrame", func() {
+			f := &frames.WindowUpdateFrame{
+				StreamID:   0x1337,
+				ByteOffset: 0xDECAFBAD,
+			}
+			packer.AddWindowUpdateFrame(f)
+			payloadFrames, err := packer.composeNextPacket(nil, publicHeaderLen, true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(payloadFrames).To(HaveLen(1))
+			Expect(payloadFrames[0]).To(Equal(f))
+		})
+
+		It("packs multiple WindowUpdateFrame", func() {
+			f1 := &frames.WindowUpdateFrame{
+				StreamID:   0x1337,
+				ByteOffset: 0xDECAFBAD,
+			}
+			f2 := &frames.WindowUpdateFrame{
+				StreamID:   0x7331,
+				ByteOffset: 0xDABFACED,
+			}
+			packer.AddWindowUpdateFrame(f1)
+			packer.AddWindowUpdateFrame(f2)
+			payloadFrames, err := packer.composeNextPacket(nil, publicHeaderLen, true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(payloadFrames).To(HaveLen(2))
+			Expect(payloadFrames).To(ContainElement(f1))
+			Expect(payloadFrames).To(ContainElement(f2))
+		})
+
+		It("only packs a WindowUpdateFrame once", func() {
+			f := &frames.WindowUpdateFrame{
+				StreamID:   0x1337,
+				ByteOffset: 0xDECAFBAD,
+			}
+			packer.AddWindowUpdateFrame(f)
+			payloadFrames, err := packer.composeNextPacket(nil, publicHeaderLen, true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(payloadFrames).ToNot(BeNil())
+			payloadFrames, err = packer.composeNextPacket(nil, publicHeaderLen, true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(payloadFrames).To(BeNil())
+		})
 	})
 
 	Context("Stream Frame handling", func() {

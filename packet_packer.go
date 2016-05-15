@@ -27,8 +27,9 @@ type packetPacker struct {
 	sentPacketHandler           ackhandler.SentPacketHandler
 	connectionParametersManager *handshake.ConnectionParametersManager
 
-	streamFrameQueue StreamFrameQueue
-	controlFrames    []frames.Frame
+	streamFrameQueue   StreamFrameQueue
+	windowUpdateFrames []*frames.WindowUpdateFrame
+	controlFrames      []frames.Frame
 
 	lastPacketNumber protocol.PacketNumber
 }
@@ -39,6 +40,10 @@ func (p *packetPacker) AddStreamFrame(f frames.StreamFrame) {
 
 func (p *packetPacker) AddHighPrioStreamFrame(f frames.StreamFrame) {
 	p.streamFrameQueue.Push(&f, true)
+}
+
+func (p *packetPacker) AddWindowUpdateFrame(f *frames.WindowUpdateFrame) {
+	p.windowUpdateFrames = append(p.windowUpdateFrames, f)
 }
 
 func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, includeStreamFrames bool) (*packedPacket, error) {
@@ -122,8 +127,23 @@ func (p *packetPacker) getPayload(frames []frames.Frame, currentPacketNumber pro
 }
 
 func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFrame, publicHeaderLength protocol.ByteCount, includeStreamFrames bool) ([]frames.Frame, error) {
-	payloadLength := protocol.ByteCount(0)
+	var payloadLength protocol.ByteCount
 	var payloadFrames []frames.Frame
+
+	maxFrameSize := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLength
+
+	// TODO: handle the extremely unlikely case that there are more windowUpdateFrames than we can fit into one packet
+	for len(p.windowUpdateFrames) > 0 {
+		frame := p.windowUpdateFrames[0]
+		minLength, _ := frame.MinLength() // windowUpdateFrames.MinLength() *never* returns an error
+		payloadLength += minLength
+		payloadFrames = append(payloadFrames, frame)
+		p.windowUpdateFrames = p.windowUpdateFrames[1:]
+
+		if payloadLength > maxFrameSize {
+			panic("internal inconsistency: packet payload too large")
+		}
+	}
 
 	if stopWaitingFrame != nil {
 		payloadFrames = append(payloadFrames, stopWaitingFrame)
@@ -133,8 +153,6 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 		}
 		payloadLength += minLength
 	}
-
-	maxFrameSize := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLength
 
 	for len(p.controlFrames) > 0 {
 		frame := p.controlFrames[0]
