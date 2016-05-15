@@ -76,7 +76,7 @@ type Session struct {
 }
 
 // NewSession makes a new session
-func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback CloseCallback) PacketHandler {
+func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback CloseCallback) packetHandler {
 	stopWaitingManager := ackhandler.NewStopWaitingManager()
 	session := &Session{
 		connectionID:                connectionID,

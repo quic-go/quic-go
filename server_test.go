@@ -25,7 +25,7 @@ func (s *mockSession) HandlePacket(addr interface{}, publicHeader *PublicHeader,
 func (s *mockSession) Run() {
 }
 
-func newMockSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback CloseCallback) PacketHandler {
+func newMockSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback CloseCallback) packetHandler {
 	return &mockSession{
 		connectionID: connectionID,
 	}
@@ -39,7 +39,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			server = &Server{
-				sessions:   map[protocol.ConnectionID]PacketHandler{},
+				sessions:   map[protocol.ConnectionID]packetHandler{},
 				newSession: newMockSession,
 			}
 		})

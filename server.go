@@ -12,8 +12,8 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
-// PacketHandler handles packets
-type PacketHandler interface {
+// packetHandler handles packets
+type packetHandler interface {
 	HandlePacket(addr interface{}, publicHeader *PublicHeader, data []byte)
 	Run()
 }
@@ -26,12 +26,12 @@ type Server struct {
 	signer crypto.Signer
 	scfg   *handshake.ServerConfig
 
-	sessions      map[protocol.ConnectionID]PacketHandler
+	sessions      map[protocol.ConnectionID]packetHandler
 	sessionsMutex sync.RWMutex
 
 	streamCallback StreamCallback
 
-	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback CloseCallback) PacketHandler
+	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback CloseCallback) packetHandler
 }
 
 // NewServer makes a new server
@@ -47,7 +47,7 @@ func NewServer(tlsConfig *tls.Config, cb StreamCallback) (*Server, error) {
 		signer:         signer,
 		scfg:           scfg,
 		streamCallback: cb,
-		sessions:       map[protocol.ConnectionID]PacketHandler{},
+		sessions:       map[protocol.ConnectionID]packetHandler{},
 		newSession:     NewSession,
 	}, nil
 }
