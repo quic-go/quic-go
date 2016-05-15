@@ -71,11 +71,9 @@ func tlsConfigFromCertpath(certpath string) (*tls.Config, error) {
 		return nil, err
 	}
 	return &tls.Config{
-		Certificates: []tls.Certificate{
-			tls.Certificate{
-				Certificate: [][]byte{certDer},
-				PrivateKey:  key,
-			},
-		},
+		Certificates: []tls.Certificate{{
+			Certificate: [][]byte{certDer},
+			PrivateKey:  key,
+		}},
 	}, nil
 }
