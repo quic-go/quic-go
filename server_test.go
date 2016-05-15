@@ -25,7 +25,7 @@ func (s *mockSession) HandlePacket(addr interface{}, hdr *publicHeader, data []b
 func (s *mockSession) Run() {
 }
 
-func newMockSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback CloseCallback) packetHandler {
+func newMockSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) packetHandler {
 	return &mockSession{
 		connectionID: connectionID,
 	}
