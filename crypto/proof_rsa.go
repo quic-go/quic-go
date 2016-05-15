@@ -33,12 +33,12 @@ func (kd *rsaSigner) SignServerProof(sni string, chlo []byte, serverConfigData [
 
 	hash := sha256.New()
 	if len(chlo) > 0 {
-		// Version >= 31
 		hash.Write([]byte("QUIC CHLO and server config signature\x00"))
 		chloHash := sha256.Sum256(chlo)
 		hash.Write([]byte{32, 0, 0, 0})
 		hash.Write(chloHash[:])
 	} else {
+		// TODO: Remove when we drop support for version 30
 		hash.Write([]byte("QUIC server config signature\x00"))
 	}
 	hash.Write(serverConfigData)

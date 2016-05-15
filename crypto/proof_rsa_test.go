@@ -51,6 +51,19 @@ var _ = Describe("ProofRsa", func() {
 		Expect(err).ToNot(HaveOccurred())
 	})
 
+	It("gives valid signatures for version 30", func() {
+		key := testdata.GetTLSConfig().Certificates[0].PrivateKey.(*rsa.PrivateKey).Public().(*rsa.PublicKey)
+		kd, err := NewRSASigner(testdata.GetTLSConfig())
+		Expect(err).ToNot(HaveOccurred())
+		signature, err := kd.SignServerProof("", nil, []byte{'S', 'C', 'F', 'G'})
+		Expect(err).ToNot(HaveOccurred())
+		// Generated with:
+		// ruby -e 'require "digest"; p Digest::SHA256.digest("QUIC server config signature\x00" + "SCFG")'
+		data := []byte("\x1D\xBB\v\xE9\x14\xD5Q\v\x83\xDB\xA7\x91\xB7\xDAO\xC2\xD3\xE6\xCC\xB2\xE8\xC3QW\x86\t\xB4\b6\x9C\x91C")
+		err = rsa.VerifyPSS(key, crypto.SHA256, data, signature, &rsa.PSSOptions{SaltLength: 32})
+		Expect(err).ToNot(HaveOccurred())
+	})
+
 	Context("retrieving certificate", func() {
 		var (
 			signer *rsaSigner
@@ -62,6 +75,11 @@ var _ = Describe("ProofRsa", func() {
 			cert = testdata.GetCertificate()
 			config = &tls.Config{}
 			signer = &rsaSigner{config: config}
+		})
+
+		It("errors without certificates", func() {
+			_, err := signer.getCertForSNI("")
+			Expect(err).To(MatchError("no matching certificate found"))
 		})
 
 		It("uses first certificate in config.Certificates", func() {
@@ -101,6 +119,13 @@ var _ = Describe("ProofRsa", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cert.PrivateKey).ToNot(BeNil())
 			Expect(cert.Certificate[0]).ToNot(BeNil())
+		})
+
+		It("gets leaf certificates", func() {
+			config.Certificates = []tls.Certificate{cert}
+			cert2, err := signer.GetLeafCert("")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cert2).To(Equal(cert.Certificate[0]))
 		})
 	})
 })
