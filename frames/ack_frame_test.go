@@ -157,9 +157,9 @@ var _ = Describe("AckFrame", func() {
 
 		It("gets the highest in order packet number for an ACK with one NACK ranges", func() {
 			nackRanges := []NackRange{
-				NackRange{FirstPacketNumber: 9, LastPacketNumber: 11},
-				NackRange{FirstPacketNumber: 7, LastPacketNumber: 7},
-				NackRange{FirstPacketNumber: 4, LastPacketNumber: 5},
+				{FirstPacketNumber: 9, LastPacketNumber: 11},
+				{FirstPacketNumber: 7, LastPacketNumber: 7},
+				{FirstPacketNumber: 4, LastPacketNumber: 5},
 			}
 			frame := &AckFrame{
 				LargestObserved: 15,
@@ -190,8 +190,8 @@ var _ = Describe("AckFrame", func() {
 
 		It("rejects NACKs with NackRanges in the wrong order", func() {
 			nackRanges := []NackRange{
-				NackRange{FirstPacketNumber: 2, LastPacketNumber: 2},
-				NackRange{FirstPacketNumber: 6, LastPacketNumber: 6},
+				{FirstPacketNumber: 2, LastPacketNumber: 2},
+				{FirstPacketNumber: 6, LastPacketNumber: 6},
 			}
 			ack := AckFrame{
 				LargestObserved: 7,
@@ -202,8 +202,8 @@ var _ = Describe("AckFrame", func() {
 
 		It("rejects NACKs with overlapping NackRanges", func() {
 			nackRanges := []NackRange{
-				NackRange{FirstPacketNumber: 5, LastPacketNumber: 6},
-				NackRange{FirstPacketNumber: 2, LastPacketNumber: 5},
+				{FirstPacketNumber: 5, LastPacketNumber: 6},
+				{FirstPacketNumber: 2, LastPacketNumber: 5},
 			}
 			ack := AckFrame{
 				LargestObserved: 7,
@@ -228,8 +228,8 @@ var _ = Describe("AckFrame", func() {
 
 		It("accepts an ACK with multiple NACK Ranges", func() {
 			nackRanges := []NackRange{
-				NackRange{FirstPacketNumber: 6, LastPacketNumber: 7},
-				NackRange{FirstPacketNumber: 2, LastPacketNumber: 4},
+				{FirstPacketNumber: 6, LastPacketNumber: 7},
+				{FirstPacketNumber: 2, LastPacketNumber: 4},
 			}
 			ack := AckFrame{
 				LargestObserved: 10,
@@ -274,7 +274,7 @@ var _ = Describe("AckFrame", func() {
 			frame := AckFrame{
 				Entropy:         2,
 				LargestObserved: 4,
-				NackRanges:      []NackRange{NackRange{FirstPacketNumber: 2, LastPacketNumber: 2}},
+				NackRanges:      []NackRange{{FirstPacketNumber: 2, LastPacketNumber: 2}},
 			}
 			err := frame.Write(b, 32)
 			Expect(err).ToNot(HaveOccurred())
@@ -290,7 +290,7 @@ var _ = Describe("AckFrame", func() {
 			frame := AckFrame{
 				Entropy:         2,
 				LargestObserved: 4,
-				NackRanges:      []NackRange{NackRange{FirstPacketNumber: 2, LastPacketNumber: 2}},
+				NackRanges:      []NackRange{{FirstPacketNumber: 2, LastPacketNumber: 2}},
 			}
 			err := frame.Write(b, 31)
 			Expect(err).ToNot(HaveOccurred())
@@ -330,7 +330,7 @@ var _ = Describe("AckFrame", func() {
 				frame := AckFrame{
 					Entropy:         2,
 					LargestObserved: 258,
-					NackRanges:      []NackRange{NackRange{FirstPacketNumber: 2, LastPacketNumber: 257}},
+					NackRanges:      []NackRange{{FirstPacketNumber: 2, LastPacketNumber: 257}},
 				}
 				err := frame.Write(b, 32)
 				Expect(err).ToNot(HaveOccurred())
@@ -344,7 +344,7 @@ var _ = Describe("AckFrame", func() {
 				frame := AckFrame{
 					Entropy:         2,
 					LargestObserved: 302,
-					NackRanges:      []NackRange{NackRange{FirstPacketNumber: 2, LastPacketNumber: 301}},
+					NackRanges:      []NackRange{{FirstPacketNumber: 2, LastPacketNumber: 301}},
 				}
 				err := frame.Write(b, 32)
 				Expect(err).ToNot(HaveOccurred())
@@ -360,7 +360,7 @@ var _ = Describe("AckFrame", func() {
 				frame := AckFrame{
 					Entropy:         2,
 					LargestObserved: 259,
-					NackRanges:      []NackRange{NackRange{FirstPacketNumber: 2, LastPacketNumber: 258}},
+					NackRanges:      []NackRange{{FirstPacketNumber: 2, LastPacketNumber: 258}},
 				}
 				err := frame.Write(b, 32)
 				Expect(err).ToNot(HaveOccurred())
@@ -376,7 +376,7 @@ var _ = Describe("AckFrame", func() {
 				frame := AckFrame{
 					Entropy:         2,
 					LargestObserved: 603,
-					NackRanges:      []NackRange{NackRange{FirstPacketNumber: 2, LastPacketNumber: 601}},
+					NackRanges:      []NackRange{{FirstPacketNumber: 2, LastPacketNumber: 601}},
 				}
 				err := frame.Write(b, 32)
 				Expect(err).ToNot(HaveOccurred())
@@ -478,7 +478,7 @@ var _ = Describe("AckFrame", func() {
 				f := &AckFrame{
 					Entropy:         2,
 					LargestObserved: 4,
-					NackRanges:      []NackRange{NackRange{FirstPacketNumber: 2, LastPacketNumber: 2}},
+					NackRanges:      []NackRange{{FirstPacketNumber: 2, LastPacketNumber: 2}},
 				}
 				err := f.Write(b, 31)
 				Expect(err).ToNot(HaveOccurred())
@@ -508,9 +508,9 @@ var _ = Describe("AckFrame", func() {
 
 		It("is self-consistent for ACK frames with NACK ranges", func() {
 			nackRanges := []NackRange{
-				NackRange{FirstPacketNumber: 9, LastPacketNumber: 11},
-				NackRange{FirstPacketNumber: 7, LastPacketNumber: 7},
-				NackRange{FirstPacketNumber: 2, LastPacketNumber: 3},
+				{FirstPacketNumber: 9, LastPacketNumber: 11},
+				{FirstPacketNumber: 7, LastPacketNumber: 7},
+				{FirstPacketNumber: 2, LastPacketNumber: 3},
 			}
 			frameOrig := &AckFrame{
 				LargestObserved: 15,
@@ -528,9 +528,9 @@ var _ = Describe("AckFrame", func() {
 
 		It("is self-consistent for ACK frames with contiguous NACK ranges", func() {
 			nackRanges := []NackRange{
-				NackRange{FirstPacketNumber: 500, LastPacketNumber: 1500},
-				NackRange{FirstPacketNumber: 350, LastPacketNumber: 351},
-				NackRange{FirstPacketNumber: 2, LastPacketNumber: 306},
+				{FirstPacketNumber: 500, LastPacketNumber: 1500},
+				{FirstPacketNumber: 350, LastPacketNumber: 351},
+				{FirstPacketNumber: 2, LastPacketNumber: 306},
 			}
 			frameOrig := &AckFrame{
 				LargestObserved: 1600,

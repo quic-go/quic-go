@@ -76,7 +76,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 
 		It("reads the tag for truncated connection IDs", func() {
 			values := map[Tag][]byte{
-				TagTCID: []byte{0, 0, 0, 0},
+				TagTCID: {0, 0, 0, 0},
 			}
 			cpm.SetFromMap(values)
 			Expect(cpm.TruncateConnectionID()).To(BeTrue())
@@ -102,7 +102,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 
 		It("sets a new stream-level flow control window for sending", func() {
 			values := map[Tag][]byte{
-				TagSFCW: []byte{0xDE, 0xAD, 0xBE, 0xEF},
+				TagSFCW: {0xDE, 0xAD, 0xBE, 0xEF},
 			}
 			err := cpm.SetFromMap(values)
 			Expect(err).ToNot(HaveOccurred())
@@ -111,7 +111,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 
 		It("does not change the stream-level flow control window when given an invalid value", func() {
 			values := map[Tag][]byte{
-				TagSFCW: []byte{0xDE, 0xAD, 0xBE}, // 1 byte too short
+				TagSFCW: {0xDE, 0xAD, 0xBE}, // 1 byte too short
 			}
 			err := cpm.SetFromMap(values)
 			Expect(err).To(HaveOccurred())
@@ -121,7 +121,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 
 		It("sets a new connection-level flow control window for sending", func() {
 			values := map[Tag][]byte{
-				TagCFCW: []byte{0xDE, 0xAD, 0xBE, 0xEF},
+				TagCFCW: {0xDE, 0xAD, 0xBE, 0xEF},
 			}
 			err := cpm.SetFromMap(values)
 			Expect(err).ToNot(HaveOccurred())
@@ -130,7 +130,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 
 		It("does not change the connection-level flow control window when given an invalid value", func() {
 			values := map[Tag][]byte{
-				TagSFCW: []byte{0xDE, 0xAD, 0xBE}, // 1 byte too short
+				TagSFCW: {0xDE, 0xAD, 0xBE}, // 1 byte too short
 			}
 			err := cpm.SetFromMap(values)
 			Expect(err).To(HaveOccurred())
@@ -155,7 +155,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 		It("sets the negotiated lifetime", func() {
 			// this test only works if the value given here is smaller than protocol.MaxIdleConnectionStateLifetime
 			values := map[Tag][]byte{
-				TagICSL: []byte{10, 0, 0, 0},
+				TagICSL: {10, 0, 0, 0},
 			}
 			err := cpm.SetFromMap(values)
 			Expect(err).ToNot(HaveOccurred())
@@ -164,7 +164,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 
 		It("does not change the idle connection state lifetime when given an invalid value", func() {
 			values := map[Tag][]byte{
-				TagSFCW: []byte{0xDE, 0xAD, 0xBE}, // 1 byte too short
+				TagSFCW: {0xDE, 0xAD, 0xBE}, // 1 byte too short
 			}
 			err := cpm.SetFromMap(values)
 			Expect(err).To(HaveOccurred())
@@ -191,7 +191,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 		It("sets the negotiated max streams per connection value", func() {
 			// this test only works if the value given here is smaller than protocol.MaxStreamsPerConnection
 			values := map[Tag][]byte{
-				TagMSPC: []byte{2, 0, 0, 0},
+				TagMSPC: {2, 0, 0, 0},
 			}
 			err := cpm.SetFromMap(values)
 			Expect(err).ToNot(HaveOccurred())
@@ -200,7 +200,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 
 		It("errors when given an invalid max streams per connection value", func() {
 			values := map[Tag][]byte{
-				TagMSPC: []byte{2, 0, 0}, // 1 byte too short
+				TagMSPC: {2, 0, 0}, // 1 byte too short
 			}
 			err := cpm.SetFromMap(values)
 			Expect(err).To(HaveOccurred())

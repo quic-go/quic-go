@@ -114,12 +114,12 @@ var _ = Describe("SentPacketHandler", func() {
 		BeforeEach(func() {
 			entropy = EntropyAccumulator(0)
 			packets = []*Packet{
-				&Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1},
-				&Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1},
-				&Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1},
-				&Packet{PacketNumber: 4, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1},
-				&Packet{PacketNumber: 5, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1},
-				&Packet{PacketNumber: 6, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1},
+				{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1},
+				{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1},
+				{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1},
+				{PacketNumber: 4, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1},
+				{PacketNumber: 5, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1},
+				{PacketNumber: 6, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1},
 			}
 			for _, packet := range packets {
 				handler.SentPacket(packet)
@@ -148,7 +148,7 @@ var _ = Describe("SentPacketHandler", func() {
 			}
 			ack := frames.AckFrame{
 				LargestObserved: protocol.PacketNumber(largestObserved),
-				NackRanges:      []frames.NackRange{frames.NackRange{FirstPacketNumber: 3, LastPacketNumber: 4}},
+				NackRanges:      []frames.NackRange{{FirstPacketNumber: 3, LastPacketNumber: 4}},
 			}
 			calculatedEntropy, err := handler.calculateExpectedEntropy(&ack)
 			Expect(err).ToNot(HaveOccurred())
@@ -168,7 +168,7 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.ackPacket(5)
 			ack := frames.AckFrame{
 				LargestObserved: protocol.PacketNumber(largestObserved),
-				NackRanges:      []frames.NackRange{frames.NackRange{FirstPacketNumber: 3, LastPacketNumber: 4}},
+				NackRanges:      []frames.NackRange{{FirstPacketNumber: 3, LastPacketNumber: 4}},
 			}
 			calculatedEntropy, err := handler.calculateExpectedEntropy(&ack)
 			Expect(err).ToNot(HaveOccurred())
@@ -186,8 +186,8 @@ var _ = Describe("SentPacketHandler", func() {
 			ack := frames.AckFrame{
 				LargestObserved: protocol.PacketNumber(largestObserved),
 				NackRanges: []frames.NackRange{
-					frames.NackRange{FirstPacketNumber: 4, LastPacketNumber: 4},
-					frames.NackRange{FirstPacketNumber: 2, LastPacketNumber: 2},
+					{FirstPacketNumber: 4, LastPacketNumber: 4},
+					{FirstPacketNumber: 2, LastPacketNumber: 2},
 				},
 			}
 			calculatedEntropy, err := handler.calculateExpectedEntropy(&ack)
@@ -244,8 +244,8 @@ var _ = Describe("SentPacketHandler", func() {
 				LargestObserved: protocol.PacketNumber(largestObserved),
 				Entropy:         byte(entropy),
 				NackRanges: []frames.NackRange{
-					frames.NackRange{FirstPacketNumber: 5, LastPacketNumber: 5},
-					frames.NackRange{FirstPacketNumber: 3, LastPacketNumber: 3},
+					{FirstPacketNumber: 5, LastPacketNumber: 5},
+					{FirstPacketNumber: 3, LastPacketNumber: 3},
 				},
 			}
 			_, acked, lost, err := handler.ReceivedAck(&ack)
@@ -272,12 +272,12 @@ var _ = Describe("SentPacketHandler", func() {
 
 		BeforeEach(func() {
 			packets = []*Packet{
-				&Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
-				&Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
-				&Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
-				&Packet{PacketNumber: 4, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
-				&Packet{PacketNumber: 5, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
-				&Packet{PacketNumber: 6, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				{PacketNumber: 4, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				{PacketNumber: 5, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				{PacketNumber: 6, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
 			}
 			for _, packet := range packets {
 				handler.SentPacket(packet)
@@ -352,12 +352,12 @@ var _ = Describe("SentPacketHandler", func() {
 
 		BeforeEach(func() {
 			packets = []*Packet{
-				&Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
-				&Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
-				&Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
-				&Packet{PacketNumber: 4, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
-				&Packet{PacketNumber: 5, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
-				&Packet{PacketNumber: 6, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				{PacketNumber: 4, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				{PacketNumber: 5, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
+				{PacketNumber: 6, Frames: []frames.Frame{&streamFrame}, EntropyBit: false, Length: 1},
 			}
 			for _, packet := range packets {
 				handler.SentPacket(packet)
@@ -413,7 +413,7 @@ var _ = Describe("SentPacketHandler", func() {
 		It("does not change the highestInOrderAckedPacketNumber after queueing a retransmission", func() {
 			ack := frames.AckFrame{
 				LargestObserved: 4,
-				NackRanges:      []frames.NackRange{frames.NackRange{FirstPacketNumber: 3, LastPacketNumber: 3}},
+				NackRanges:      []frames.NackRange{{FirstPacketNumber: 3, LastPacketNumber: 3}},
 			}
 			_, _, _, err := handler.ReceivedAck(&ack)
 			Expect(err).ToNot(HaveOccurred())
@@ -436,7 +436,7 @@ var _ = Describe("SentPacketHandler", func() {
 			// ACK 2, NACK 1
 			ack := frames.AckFrame{
 				LargestObserved: 2,
-				NackRanges:      []frames.NackRange{frames.NackRange{FirstPacketNumber: 1, LastPacketNumber: 1}},
+				NackRanges:      []frames.NackRange{{FirstPacketNumber: 1, LastPacketNumber: 1}},
 			}
 			_, _, _, err = handler.ReceivedAck(&ack)
 			Expect(err).NotTo(HaveOccurred())
@@ -476,7 +476,7 @@ var _ = Describe("SentPacketHandler", func() {
 		// Now, simulate an ack frame
 		ack := &frames.AckFrame{
 			LargestObserved: 2,
-			NackRanges:      []frames.NackRange{frames.NackRange{FirstPacketNumber: 1, LastPacketNumber: 1}},
+			NackRanges:      []frames.NackRange{{FirstPacketNumber: 1, LastPacketNumber: 1}},
 		}
 		_, acked, lost, err := handler.ReceivedAck(ack)
 		Expect(err).NotTo(HaveOccurred())

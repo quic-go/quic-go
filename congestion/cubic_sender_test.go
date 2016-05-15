@@ -85,7 +85,7 @@ var _ = Describe("Cubic Sender", func() {
 	LosePacket := func(number protocol.PacketNumber) {
 		var ackedPackets congestion.PacketVector
 		var lostPackets congestion.PacketVector = congestion.PacketVector([]congestion.PacketInfo{
-			congestion.PacketInfo{Number: number, Length: protocol.DefaultTCPMSS},
+			{Number: number, Length: protocol.DefaultTCPMSS},
 		})
 		sender.OnCongestionEvent(false, bytesInFlight, ackedPackets, lostPackets)
 		bytesInFlight -= protocol.DefaultTCPMSS

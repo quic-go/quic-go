@@ -12,9 +12,9 @@ import (
 var _ = Describe("Request", func() {
 	It("populates request", func() {
 		headers := []hpack.HeaderField{
-			hpack.HeaderField{":path", "/foo", false},
-			hpack.HeaderField{":authority", "quic.clemente.io", false},
-			hpack.HeaderField{":method", "GET", false},
+			{":path", "/foo", false},
+			{":authority", "quic.clemente.io", false},
+			{":method", "GET", false},
 		}
 		req, err := requestFromHeaders(headers)
 		Expect(err).NotTo(HaveOccurred())
@@ -31,12 +31,12 @@ var _ = Describe("Request", func() {
 
 	It("handles other headers", func() {
 		headers := []hpack.HeaderField{
-			hpack.HeaderField{":path", "/foo", false},
-			hpack.HeaderField{":authority", "quic.clemente.io", false},
-			hpack.HeaderField{":method", "GET", false},
-			hpack.HeaderField{"content-length", "42", false},
-			hpack.HeaderField{"duplicate-header", "1", false},
-			hpack.HeaderField{"duplicate-header", "2", false},
+			{":path", "/foo", false},
+			{":authority", "quic.clemente.io", false},
+			{":method", "GET", false},
+			{"content-length", "42", false},
+			{"duplicate-header", "1", false},
+			{"duplicate-header", "2", false},
 		}
 		req, err := requestFromHeaders(headers)
 		Expect(err).NotTo(HaveOccurred())
@@ -48,8 +48,8 @@ var _ = Describe("Request", func() {
 
 	It("errors with missing path", func() {
 		headers := []hpack.HeaderField{
-			hpack.HeaderField{":authority", "quic.clemente.io", false},
-			hpack.HeaderField{":method", "GET", false},
+			{":authority", "quic.clemente.io", false},
+			{":method", "GET", false},
 		}
 		_, err := requestFromHeaders(headers)
 		Expect(err).To(MatchError(":path, :authority and :method must not be empty"))
@@ -57,8 +57,8 @@ var _ = Describe("Request", func() {
 
 	It("errors with missing method", func() {
 		headers := []hpack.HeaderField{
-			hpack.HeaderField{":path", "/foo", false},
-			hpack.HeaderField{":authority", "quic.clemente.io", false},
+			{":path", "/foo", false},
+			{":authority", "quic.clemente.io", false},
 		}
 		_, err := requestFromHeaders(headers)
 		Expect(err).To(MatchError(":path, :authority and :method must not be empty"))
@@ -66,8 +66,8 @@ var _ = Describe("Request", func() {
 
 	It("errors with missing authority", func() {
 		headers := []hpack.HeaderField{
-			hpack.HeaderField{":path", "/foo", false},
-			hpack.HeaderField{":method", "GET", false},
+			{":path", "/foo", false},
+			{":method", "GET", false},
 		}
 		_, err := requestFromHeaders(headers)
 		Expect(err).To(MatchError(":path, :authority and :method must not be empty"))

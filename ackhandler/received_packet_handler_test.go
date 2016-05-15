@@ -267,7 +267,7 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(ack.LargestObserved).To(Equal(protocol.PacketNumber(4)))
 			Expect(ack.Entropy).To(Equal(byte(entropy)))
-			Expect(ack.NackRanges).To(Equal([]frames.NackRange{frames.NackRange{FirstPacketNumber: 2, LastPacketNumber: 3}}))
+			Expect(ack.NackRanges).To(Equal([]frames.NackRange{{FirstPacketNumber: 2, LastPacketNumber: 3}}))
 		})
 
 		It("does not generate an ACK if an ACK has already been sent for the largest Packet", func() {

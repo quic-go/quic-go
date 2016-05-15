@@ -26,7 +26,7 @@ var _ = Describe("ProofRsa", func() {
 		kd := &rsaSigner{
 			config: &tls.Config{
 				Certificates: []tls.Certificate{
-					tls.Certificate{Certificate: [][]byte{cert}},
+					{Certificate: [][]byte{cert}},
 				},
 			},
 		}

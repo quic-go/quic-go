@@ -16,7 +16,7 @@ var sampleCHLOMap = map[Tag][]byte{
 	TagICSL: []byte("\x1e\x00\x00\x00"),
 	TagNONP: []byte("\xe1\x84T\x1b\xe3\xd6|\x1fi\xb2N\x9eF\xf4Fݫ\xe5\xdef\x94\xf6\xb2\xee\x01ĥw\xfe\xc9\v\xa3"),
 	TagSCLS: []byte("\x01\x00\x00\x00"),
-	TagCSCT: []byte{},
+	TagCSCT: {},
 	TagCOPT: []byte("FIXD"),
 	TagSFCW: []byte("\x00\x00`\x00"),
 	TagCFCW: []byte("\x00\x00\xf0\x00"),
