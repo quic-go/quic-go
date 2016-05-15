@@ -378,7 +378,7 @@ var _ = Describe("Session", func() {
 		It("sends a WindowUpdate frame", func() {
 			_, err := session.NewStream(5)
 			Expect(err).ToNot(HaveOccurred())
-			err = session.UpdateReceiveFlowControlWindow(5, 0xDECAFBAD)
+			err = session.updateReceiveFlowControlWindow(5, 0xDECAFBAD)
 			Expect(err).ToNot(HaveOccurred())
 			err = session.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
@@ -389,7 +389,7 @@ var _ = Describe("Session", func() {
 		It("repeats a WindowUpdate frame in WindowUpdateNumRepitions packets", func() {
 			_, err := session.NewStream(5)
 			Expect(err).ToNot(HaveOccurred())
-			err = session.UpdateReceiveFlowControlWindow(5, 0xDECAFBAD)
+			err = session.updateReceiveFlowControlWindow(5, 0xDECAFBAD)
 			Expect(err).ToNot(HaveOccurred())
 			for i := uint8(0); i < protocol.WindowUpdateNumRepitions; i++ {
 				err = session.sendPacket()

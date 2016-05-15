@@ -13,7 +13,7 @@ import (
 
 type streamHandler interface {
 	queueStreamFrame(*frames.StreamFrame) error
-	UpdateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error
+	updateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error
 }
 
 // A Stream assembles the data from StreamFrames and provides a super-convenient Read-Interface
@@ -140,7 +140,7 @@ func (s *stream) ReadByte() (byte, error) {
 func (s *stream) updateReceiveFlowControlWindow() {
 	n := s.receiveFlowControlWindow + s.receiveFlowControlWindowIncrement
 	s.receiveFlowControlWindow = n
-	s.session.UpdateReceiveFlowControlWindow(s.streamID, n)
+	s.session.updateReceiveFlowControlWindow(s.streamID, n)
 }
 
 func (s *stream) UpdateSendFlowControlWindow(n protocol.ByteCount) {

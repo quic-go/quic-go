@@ -530,8 +530,8 @@ func (s *Session) queueStreamFrame(frame *frames.StreamFrame) error {
 	return nil
 }
 
-// UpdateReceiveFlowControlWindow updates the flow control window for a stream
-func (s *Session) UpdateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
+// updateReceiveFlowControlWindow updates the flow control window for a stream
+func (s *Session) updateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
 	s.windowUpdateManager.SetStreamOffset(streamID, byteOffset)
 	return nil
 }

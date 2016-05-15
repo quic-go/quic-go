@@ -22,7 +22,7 @@ func (m *mockStreamHandler) queueStreamFrame(f *frames.StreamFrame) error {
 	return nil
 }
 
-func (m *mockStreamHandler) UpdateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
+func (m *mockStreamHandler) updateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
 	return nil
 }
 
