@@ -151,7 +151,16 @@ var _ = Describe("Session", func() {
 			Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
 		})
 
-		It("closes streams with FIN bits", func() {
+		It("does not delete streams with Close()", func() {
+			str, err := session.NewStream(5)
+			Expect(err).ToNot(HaveOccurred())
+			str.Close()
+			session.garbageCollectStreams()
+			Expect(session.streams).To(HaveLen(1))
+			Expect(session.streams[5]).ToNot(BeNil())
+		})
+
+		It("does not delete streams with FIN bit", func() {
 			session.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
 				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
@@ -164,6 +173,29 @@ var _ = Describe("Session", func() {
 			_, err := session.streams[5].Read(p)
 			Expect(err).To(Equal(io.EOF))
 			Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
+			session.garbageCollectStreams()
+			Expect(session.streams).To(HaveLen(1))
+			Expect(session.streams[5]).ToNot(BeNil())
+		})
+
+		It("closes streams with FIN bit & close", func() {
+			session.handleStreamFrame(&frames.StreamFrame{
+				StreamID: 5,
+				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
+				FinBit:   true,
+			})
+			Expect(session.streams).To(HaveLen(1))
+			Expect(session.streams[5]).ToNot(BeNil())
+			Expect(callbackCalled).To(BeTrue())
+			p := make([]byte, 4)
+			_, err := session.streams[5].Read(p)
+			Expect(err).To(Equal(io.EOF))
+			Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
+			session.garbageCollectStreams()
+			Expect(session.streams).To(HaveLen(1))
+			Expect(session.streams[5]).ToNot(BeNil())
+			// We still need to close the stream locally
+			session.streams[5].Close()
 			session.garbageCollectStreams()
 			Expect(session.streams).To(HaveLen(1))
 			Expect(session.streams[5]).To(BeNil())
@@ -213,6 +245,7 @@ var _ = Describe("Session", func() {
 			})
 			_, err := session.streams[5].Read([]byte{0})
 			Expect(err).To(Equal(io.EOF))
+			session.streams[5].Close()
 			session.garbageCollectStreams()
 			err = session.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,

@@ -29,7 +29,10 @@ type stream struct {
 	err   error
 	mutex sync.Mutex
 
+	// eof is set if we are finished reading
 	eof int32 // really a bool
+	// closed is set when we are finished writing
+	closed int32 // really a bool
 
 	frameQueue        streamFrameSorter
 	newFrameOrErrCond sync.Cond
@@ -195,6 +198,7 @@ func (s *stream) Write(p []byte) (int, error) {
 
 // Close implements io.Closer
 func (s *stream) Close() error {
+	atomic.StoreInt32(&s.closed, 1)
 	return s.session.QueueStreamFrame(&frames.StreamFrame{
 		StreamID: s.streamID,
 		Offset:   s.writeOffset,
@@ -222,6 +226,7 @@ func (s *stream) maybeTriggerWindowUpdate() {
 // RegisterError is called by session to indicate that an error occurred and the
 // stream should be closed.
 func (s *stream) RegisterError(err error) {
+	atomic.StoreInt32(&s.closed, 1)
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	if s.err != nil { // s.err must not be changed!
@@ -234,6 +239,14 @@ func (s *stream) RegisterError(err error) {
 
 func (s *stream) finishedReading() bool {
 	return atomic.LoadInt32(&s.eof) != 0
+}
+
+func (s *stream) finishedWriting() bool {
+	return atomic.LoadInt32(&s.closed) != 0
+}
+
+func (s *stream) finished() bool {
+	return s.finishedReading() && s.finishedWriting()
 }
 
 func (s *stream) StreamID() protocol.StreamID {

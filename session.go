@@ -574,7 +574,7 @@ func (s *Session) garbageCollectStreams() {
 		if v == nil {
 			continue
 		}
-		if v.finishedReading() {
+		if v.finished() {
 			s.streams[k] = nil
 		}
 	}
