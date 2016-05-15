@@ -362,7 +362,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("sends queued stream frames", func() {
-			session.QueueStreamFrame(&frames.StreamFrame{
+			session.queueStreamFrame(&frames.StreamFrame{
 				StreamID: 1,
 				Data:     []byte("foobar"),
 			})
@@ -420,10 +420,10 @@ var _ = Describe("Session", func() {
 
 		It("sends after queuing a stream frame", func() {
 			Expect(session.sendingScheduled).NotTo(Receive())
-			err := session.QueueStreamFrame(&frames.StreamFrame{StreamID: 1})
+			err := session.queueStreamFrame(&frames.StreamFrame{StreamID: 1})
 			Expect(err).ToNot(HaveOccurred())
 			// Try again, so that we detect blocking scheduleSending
-			err = session.QueueStreamFrame(&frames.StreamFrame{StreamID: 1})
+			err = session.queueStreamFrame(&frames.StreamFrame{StreamID: 1})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(session.sendingScheduled).To(Receive())
 		})
@@ -445,11 +445,11 @@ var _ = Describe("Session", func() {
 			It("bundles two small frames into one packet", func() {
 				go session.Run()
 
-				session.QueueStreamFrame(&frames.StreamFrame{
+				session.queueStreamFrame(&frames.StreamFrame{
 					StreamID: 5,
 					Data:     []byte("foobar1"),
 				})
-				session.QueueStreamFrame(&frames.StreamFrame{
+				session.queueStreamFrame(&frames.StreamFrame{
 					StreamID: 5,
 					Data:     []byte("foobar2"),
 				})
@@ -460,11 +460,11 @@ var _ = Describe("Session", func() {
 			It("sends out two big frames in two packet", func() {
 				go session.Run()
 
-				session.QueueStreamFrame(&frames.StreamFrame{
+				session.queueStreamFrame(&frames.StreamFrame{
 					StreamID: 5,
 					Data:     bytes.Repeat([]byte{'e'}, int(protocol.SmallPacketPayloadSizeThreshold+50)),
 				})
-				session.QueueStreamFrame(&frames.StreamFrame{
+				session.queueStreamFrame(&frames.StreamFrame{
 					StreamID: 5,
 					Data:     bytes.Repeat([]byte{'f'}, int(protocol.SmallPacketPayloadSizeThreshold+50)),
 				})
@@ -475,12 +475,12 @@ var _ = Describe("Session", func() {
 			It("sends out two small frames that are written to long after one another into two packet", func() {
 				go session.Run()
 
-				session.QueueStreamFrame(&frames.StreamFrame{
+				session.queueStreamFrame(&frames.StreamFrame{
 					StreamID: 5,
 					Data:     []byte("foobar1"),
 				})
 				time.Sleep(10 * protocol.SmallPacketSendDelay)
-				session.QueueStreamFrame(&frames.StreamFrame{
+				session.queueStreamFrame(&frames.StreamFrame{
 					StreamID: 5,
 					Data:     []byte("foobar2"),
 				})
@@ -493,12 +493,12 @@ var _ = Describe("Session", func() {
 
 				packetNumber := protocol.PacketNumber(0x1337)
 				session.receivedPacketHandler.ReceivedPacket(packetNumber, true)
-				session.QueueStreamFrame(&frames.StreamFrame{
+				session.queueStreamFrame(&frames.StreamFrame{
 					StreamID: 5,
 					Data:     []byte("foobar1"),
 				})
 				time.Sleep(10 * protocol.SmallPacketSendDelay)
-				session.QueueStreamFrame(&frames.StreamFrame{
+				session.queueStreamFrame(&frames.StreamFrame{
 					StreamID: 5,
 					Data:     []byte("foobar2"),
 				})
@@ -589,7 +589,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("should call OnSent", func() {
-			session.QueueStreamFrame(&frames.StreamFrame{StreamID: 5})
+			session.queueStreamFrame(&frames.StreamFrame{StreamID: 5})
 			session.sendPacket()
 			Expect(cong.nCalls).To(Equal(2)) // OnPacketSent + GetCongestionWindow
 			Expect(cong.argsOnPacketSent[1]).To(Equal(protocol.ByteCount(25)))

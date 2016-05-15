@@ -12,7 +12,7 @@ import (
 )
 
 type streamHandler interface {
-	QueueStreamFrame(*frames.StreamFrame) error
+	queueStreamFrame(*frames.StreamFrame) error
 	UpdateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error
 }
 
@@ -180,7 +180,7 @@ func (s *stream) Write(p []byte) (int, error) {
 		dataLen := utils.Min(len(p), int(remainingBytesInWindow))
 		data := make([]byte, dataLen)
 		copy(data, p)
-		err := s.session.QueueStreamFrame(&frames.StreamFrame{
+		err := s.session.queueStreamFrame(&frames.StreamFrame{
 			StreamID: s.streamID,
 			Offset:   s.writeOffset,
 			Data:     data,
@@ -199,7 +199,7 @@ func (s *stream) Write(p []byte) (int, error) {
 // Close implements io.Closer
 func (s *stream) Close() error {
 	atomic.StoreInt32(&s.closed, 1)
-	return s.session.QueueStreamFrame(&frames.StreamFrame{
+	return s.session.queueStreamFrame(&frames.StreamFrame{
 		StreamID: s.streamID,
 		Offset:   s.writeOffset,
 		FinBit:   true,

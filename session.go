@@ -523,8 +523,8 @@ func (s *Session) sendPacket() error {
 	return nil
 }
 
-// QueueStreamFrame queues a frame for sending to the client
-func (s *Session) QueueStreamFrame(frame *frames.StreamFrame) error {
+// queueStreamFrame queues a frame for sending to the client
+func (s *Session) queueStreamFrame(frame *frames.StreamFrame) error {
 	s.packer.AddStreamFrame(*frame)
 	s.scheduleSending()
 	return nil
