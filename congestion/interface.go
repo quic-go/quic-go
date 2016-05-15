@@ -6,6 +6,7 @@ import (
 	"github.com/lucas-clemente/quic-go/protocol"
 )
 
+// A SendAlgorithm performs congestion control and calculates the congestion window
 type SendAlgorithm interface {
 	TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCount) time.Duration
 	OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) bool
@@ -20,6 +21,7 @@ type SendAlgorithm interface {
 	SetSlowStartLargeReduction(enabled bool)
 }
 
+// SendAlgorithmWithDebugInfo adds some debug functions to SendAlgorithm
 type SendAlgorithmWithDebugInfo interface {
 	SendAlgorithm
 	BandwidthEstimate() Bandwidth
