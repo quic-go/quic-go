@@ -10,10 +10,10 @@ import (
 var _ = Describe("StreamFrameQueue", func() {
 	var prioFrame1, prioFrame2 *frames.StreamFrame
 	var frame1, frame2 *frames.StreamFrame
-	var queue StreamFrameQueue
+	var queue *StreamFrameQueue
 
 	BeforeEach(func() {
-		queue = StreamFrameQueue{}
+		queue = &StreamFrameQueue{}
 		prioFrame1 = &frames.StreamFrame{
 			StreamID: 5,
 			Data:     []byte{0x13, 0x37},
