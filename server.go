@@ -48,7 +48,7 @@ func NewServer(tlsConfig *tls.Config, cb StreamCallback) (*Server, error) {
 		scfg:           scfg,
 		streamCallback: cb,
 		sessions:       map[protocol.ConnectionID]packetHandler{},
-		newSession:     NewSession,
+		newSession:     newSession,
 	}, nil
 }
 

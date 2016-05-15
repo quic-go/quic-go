@@ -75,8 +75,8 @@ type Session struct {
 	congestion congestion.SendAlgorithm
 }
 
-// NewSession makes a new session
-func NewSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback CloseCallback) packetHandler {
+// newSession makes a new session
+func newSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback CloseCallback) packetHandler {
 	stopWaitingManager := ackhandler.NewStopWaitingManager()
 	session := &Session{
 		connectionID:                connectionID,

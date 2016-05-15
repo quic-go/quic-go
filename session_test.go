@@ -314,7 +314,7 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 			scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
 			nGoRoutinesBefore = runtime.NumGoroutine()
-			session = NewSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) { closed = true }).(*Session)
+			session = newSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) { closed = true }).(*Session)
 			go session.Run()
 			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore + 2))
 		})
@@ -346,7 +346,7 @@ var _ = Describe("Session", func() {
 			signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 			Expect(err).ToNot(HaveOccurred())
 			scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
-			session = NewSession(conn, 0, 0, scfg, nil, nil).(*Session)
+			session = newSession(conn, 0, 0, scfg, nil, nil).(*Session)
 		})
 
 		It("sends ack frames", func() {
@@ -415,7 +415,7 @@ var _ = Describe("Session", func() {
 			signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 			Expect(err).ToNot(HaveOccurred())
 			scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
-			session = NewSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) {}).(*Session)
+			session = newSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) {}).(*Session)
 		})
 
 		It("sends after queuing a stream frame", func() {
@@ -514,7 +514,7 @@ var _ = Describe("Session", func() {
 		signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 		Expect(err).ToNot(HaveOccurred())
 		scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
-		session = NewSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) {}).(*Session)
+		session = newSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) {}).(*Session)
 		s, err := session.NewStream(3)
 		Expect(err).NotTo(HaveOccurred())
 		err = session.handleStreamFrame(&frames.StreamFrame{
@@ -531,7 +531,7 @@ var _ = Describe("Session", func() {
 		signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 		Expect(err).ToNot(HaveOccurred())
 		scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
-		session = NewSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) {}).(*Session)
+		session = newSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) {}).(*Session)
 
 		// Write protocol.MaxUndecryptablePackets and expect a public reset to happen
 		for i := 0; i < protocol.MaxUndecryptablePackets; i++ {
@@ -550,7 +550,7 @@ var _ = Describe("Session", func() {
 		signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 		Expect(err).ToNot(HaveOccurred())
 		scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
-		session = NewSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) {}).(*Session)
+		session = newSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) {}).(*Session)
 		session.undecryptablePackets = []receivedPacket{{
 			nil,
 			&PublicHeader{PacketNumber: protocol.PacketNumber(42)},
@@ -582,7 +582,7 @@ var _ = Describe("Session", func() {
 			signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 			Expect(err).ToNot(HaveOccurred())
 			scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
-			session = NewSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) {}).(*Session)
+			session = newSession(conn, 0, 0, scfg, nil, func(protocol.ConnectionID) {}).(*Session)
 
 			cong = &mockCongestion{}
 			session.congestion = cong
