@@ -217,6 +217,25 @@ var _ = Describe("Packet packer", func() {
 			Expect(payloadFrames).To(ContainElement(f2))
 		})
 
+		It("packs a lot of window update frames into 2 packets if they don't fit into one", func() {
+			windowUpdateFrame := &frames.WindowUpdateFrame{
+				StreamID: 0x1337,
+			}
+			minLength, _ := windowUpdateFrame.MinLength()
+			maxFramesPerPacket := int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLen) / int(minLength)
+			var controlFrames []frames.Frame
+			for i := 0; i < maxFramesPerPacket+10; i++ {
+				controlFrames = append(controlFrames, windowUpdateFrame)
+			}
+			packer.controlFrames = controlFrames
+			payloadFrames, err := packer.composeNextPacket(nil, publicHeaderLen, true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(len(payloadFrames)).To(Equal(maxFramesPerPacket))
+			payloadFrames, err = packer.composeNextPacket(nil, publicHeaderLen, true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(len(payloadFrames)).To(Equal(10))
+		})
+
 		It("only packs a WindowUpdateFrame once", func() {
 			f := &frames.WindowUpdateFrame{
 				StreamID:   0x1337,

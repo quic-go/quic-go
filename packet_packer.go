@@ -132,17 +132,15 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 
 	maxFrameSize := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLength
 
-	// TODO: handle the extremely unlikely case that there are more windowUpdateFrames than we can fit into one packet
 	for len(p.windowUpdateFrames) > 0 {
 		frame := p.windowUpdateFrames[0]
 		minLength, _ := frame.MinLength() // windowUpdateFrames.MinLength() *never* returns an error
+		if payloadLength+minLength > maxFrameSize {
+			break
+		}
 		payloadLength += minLength
 		payloadFrames = append(payloadFrames, frame)
 		p.windowUpdateFrames = p.windowUpdateFrames[1:]
-
-		if payloadLength > maxFrameSize {
-			panic("internal inconsistency: packet payload too large")
-		}
 	}
 
 	if stopWaitingFrame != nil {
