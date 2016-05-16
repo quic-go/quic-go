@@ -149,7 +149,7 @@ func (s *Session) run() {
 			return
 		case p := <-s.receivedPackets:
 			err = s.handlePacketImpl(p.remoteAddr, p.publicHeader, p.data)
-			if qErr, ok := err.(*protocol.QuicError); ok && qErr.ErrorCode == errorcodes.QUIC_DECRYPTION_FAILURE {
+			if qErr, ok := err.(*protocol.QuicError); ok && qErr.ErrorCode == errorcodes.DecryptionFailure {
 				s.tryQueueingUndecryptablePacket(p)
 				continue
 			}
@@ -161,7 +161,7 @@ func (s *Session) run() {
 		case <-s.aeadChanged:
 			s.tryDecryptingQueuedPackets()
 		case <-time.After(s.connectionParametersManager.GetIdleConnectionStateLifetime()):
-			s.Close(protocol.NewQuicError(errorcodes.QUIC_NETWORK_IDLE_TIMEOUT, "No recent network activity."), true)
+			s.Close(protocol.NewQuicError(errorcodes.NetworkIdleTimeout, "No recent network activity."), true)
 		}
 
 		if err != nil {
@@ -363,7 +363,7 @@ func (s *Session) Close(e error, sendConnectionClose bool) error {
 	}
 
 	if e == nil {
-		e = protocol.NewQuicError(errorcodes.QUIC_PEER_GOING_AWAY, "peer going away")
+		e = protocol.NewQuicError(errorcodes.PeerGoingAway, "peer going away")
 	}
 	utils.Errorf("Closing session with error: %s", e.Error())
 
@@ -376,11 +376,11 @@ func (s *Session) Close(e error, sendConnectionClose bool) error {
 		errorCode = quicError.ErrorCode
 		reasonPhrase = e.Error()
 	} else {
-		errorCode = errorcodes.QUIC_INTERNAL_ERROR
+		errorCode = errorcodes.InternalError
 	}
 	s.closeStreamsWithError(e)
 
-	if errorCode == errorcodes.QUIC_DECRYPTION_FAILURE {
+	if errorCode == errorcodes.DecryptionFailure {
 		return s.sendPublicReset(s.lastRcvdPacketNumber)
 	}
 
@@ -621,7 +621,7 @@ func (s *Session) congestionAllowsSending() bool {
 func (s *Session) tryQueueingUndecryptablePacket(p receivedPacket) {
 	utils.Debugf("Queueing packet 0x%x for later decryption", p.publicHeader.PacketNumber)
 	if len(s.undecryptablePackets)+1 >= protocol.MaxUndecryptablePackets {
-		s.Close(protocol.NewQuicError(errorcodes.QUIC_DECRYPTION_FAILURE, "too many undecryptable packets received"), true)
+		s.Close(protocol.NewQuicError(errorcodes.DecryptionFailure, "too many undecryptable packets received"), true)
 	}
 	s.undecryptablePackets = append(s.undecryptablePackets, p)
 }
