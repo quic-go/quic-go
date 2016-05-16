@@ -1,12 +1,7 @@
-// Package errorcodes defines the error codes in QUIC.
-//
 package errorcodes
 
-// An ErrorCode in QUIC
-type ErrorCode uint32
-
 // The error codes defined by QUIC
-// Remeber to run go generate ./... whenever the error codes change.
+// Remeber to run `go generate ./...` whenever the error codes change.
 //go:generate stringer -type=ErrorCode
 const (
 	InternalError      ErrorCode = 1
