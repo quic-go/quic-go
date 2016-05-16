@@ -6,8 +6,8 @@ type QuicError struct {
 	ErrorMessage string
 }
 
-// NewQuicError creates a new Quic Error
-func NewQuicError(errorCode ErrorCode, errorMessage string) *QuicError {
+// Error creates a new Quic Error
+func Error(errorCode ErrorCode, errorMessage string) *QuicError {
 	return &QuicError{
 		ErrorCode:    errorCode,
 		ErrorMessage: errorMessage,

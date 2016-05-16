@@ -161,7 +161,7 @@ func (s *Session) run() {
 		case <-s.aeadChanged:
 			s.tryDecryptingQueuedPackets()
 		case <-time.After(s.connectionParametersManager.GetIdleConnectionStateLifetime()):
-			s.Close(protocol.NewQuicError(errorcodes.NetworkIdleTimeout, "No recent network activity."), true)
+			s.Close(protocol.Error(errorcodes.NetworkIdleTimeout, "No recent network activity."), true)
 		}
 
 		if err != nil {
@@ -363,7 +363,7 @@ func (s *Session) Close(e error, sendConnectionClose bool) error {
 	}
 
 	if e == nil {
-		e = protocol.NewQuicError(errorcodes.PeerGoingAway, "peer going away")
+		e = protocol.Error(errorcodes.PeerGoingAway, "peer going away")
 	}
 	utils.Errorf("Closing session with error: %s", e.Error())
 
@@ -621,7 +621,7 @@ func (s *Session) congestionAllowsSending() bool {
 func (s *Session) tryQueueingUndecryptablePacket(p receivedPacket) {
 	utils.Debugf("Queueing packet 0x%x for later decryption", p.publicHeader.PacketNumber)
 	if len(s.undecryptablePackets)+1 >= protocol.MaxUndecryptablePackets {
-		s.Close(protocol.NewQuicError(errorcodes.DecryptionFailure, "too many undecryptable packets received"), true)
+		s.Close(protocol.Error(errorcodes.DecryptionFailure, "too many undecryptable packets received"), true)
 	}
 	s.undecryptablePackets = append(s.undecryptablePackets, p)
 }
