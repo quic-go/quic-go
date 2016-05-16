@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"errors"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -15,6 +16,8 @@ type streamHandler interface {
 	queueStreamFrame(*frames.StreamFrame) error
 	updateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error
 }
+
+var errFlowControlViolation = errors.New("flow control violation")
 
 // A Stream assembles the data from StreamFrames and provides a super-convenient Read-Interface
 type stream struct {
@@ -208,7 +211,11 @@ func (s *stream) Close() error {
 
 // AddStreamFrame adds a new stream frame
 func (s *stream) AddStreamFrame(frame *frames.StreamFrame) error {
-	// TODO: return flow control window violation here
+	maxOffset := frame.Offset + protocol.ByteCount(len(frame.Data))
+	if maxOffset > s.receiveFlowControlWindow {
+		return errFlowControlViolation
+	}
+
 	s.mutex.Lock()
 	s.frameQueue.Push(frame)
 	s.mutex.Unlock()
