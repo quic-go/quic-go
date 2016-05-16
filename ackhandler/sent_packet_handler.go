@@ -18,6 +18,11 @@ var (
 )
 
 var (
+	errDuplicatePacketNumber      = errors.New("Packet number already exists in Packet History")
+	errWrongPacketNumberIncrement = errors.New("Packet number must be increased by exactly 1")
+)
+
+var (
 	errAckForUnsentPacket   = errors.New("SentPacketHandler: Received ACK for an unsent package")
 	retransmissionThreshold = uint8(3)
 )
@@ -90,10 +95,10 @@ func (h *sentPacketHandler) queuePacketForRetransmission(packet *Packet) {
 func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 	_, ok := h.packetHistory[packet.PacketNumber]
 	if ok {
-		return errors.New("Packet number already exists in Packet History")
+		return errDuplicatePacketNumber
 	}
 	if h.lastSentPacketNumber+1 != packet.PacketNumber {
-		return errors.New("Packet number must be increased by exactly 1")
+		return errWrongPacketNumberIncrement
 	}
 	packet.sendTime = time.Now()
 	if packet.Length == 0 {
