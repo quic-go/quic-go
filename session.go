@@ -27,6 +27,7 @@ var (
 	errReopeningStreamsNotAllowed  = errors.New("Reopening Streams not allowed")
 	errRstStreamOnInvalidStream    = errors.New("RST_STREAM received for unknown stream")
 	errWindowUpdateOnInvalidStream = errors.New("WINDOW_UPDATE received for unknown stream")
+	errWindowUpdateOnClosedStream  = errors.New("WINDOW_UPDATE received for an already closed stream")
 )
 
 // StreamCallback gets a stream frame and returns a reply frame
@@ -172,6 +173,8 @@ func (s *Session) run() {
 				s.Close(err, true) // TODO: sent correct error code here
 			case errRstStreamOnInvalidStream:
 				utils.Errorf("Ignoring error in session: %s", err.Error())
+			// Can happen when we already sent the last StreamFrame with the FinBit, but the client already sent a WindowUpdate for this Stream
+			case errWindowUpdateOnClosedStream:
 			default:
 				s.Close(err, true)
 			}
@@ -285,11 +288,15 @@ func (s *Session) handleWindowUpdateFrame(frame *frames.WindowUpdateFrame) error
 		return nil
 	}
 	s.streamsMutex.RLock()
-	stream, ok := s.streams[frame.StreamID]
-	s.streamsMutex.RUnlock()
+	defer s.streamsMutex.RUnlock()
 
-	if !ok {
+	stream, streamExists := s.streams[frame.StreamID]
+
+	if !streamExists {
 		return errWindowUpdateOnInvalidStream
+	}
+	if stream == nil {
+		return errWindowUpdateOnClosedStream
 	}
 
 	stream.UpdateSendFlowControlWindow(frame.ByteOffset)

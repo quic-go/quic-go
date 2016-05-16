@@ -300,6 +300,15 @@ var _ = Describe("Session", func() {
 			})
 			Expect(err).To(MatchError(errWindowUpdateOnInvalidStream))
 		})
+
+		It("errors when receiving a WindowUpdateFrame for a closed stream", func() {
+			session.streams[5] = nil // this is what the garbageCollectStreams() does when a Stream is closed
+			err := session.handleWindowUpdateFrame(&frames.WindowUpdateFrame{
+				StreamID:   5,
+				ByteOffset: 1337,
+			})
+			Expect(err).To(MatchError(errWindowUpdateOnClosedStream))
+		})
 	})
 
 	Context("closing", func() {
