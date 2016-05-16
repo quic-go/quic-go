@@ -211,8 +211,7 @@ var _ = Describe("StreamFrame", func() {
 					streamIDLen: 13,
 					Data:        []byte("foobar"),
 				}).Write(b, 0)
-				Expect(err).To(HaveOccurred())
-				Expect(err).To(Equal(errInvalidStreamIDLen))
+				Expect(err).To(MatchError(errInvalidStreamIDLen))
 			})
 
 			It("writes a 1 byte StreamID", func() {

@@ -25,15 +25,13 @@ var _ = Describe("Public Header", func() {
 		It("does not accept 0-byte connection ID", func() {
 			b := bytes.NewReader([]byte{0x00, 0x01})
 			_, err := parsePublicHeader(b)
-			Expect(err).To(HaveOccurred())
-			Expect(err).To(Equal(errReceivedTruncatedConnectionID))
+			Expect(err).To(MatchError(errReceivedTruncatedConnectionID))
 		})
 
 		It("rejects 0 as a connection ID", func() {
 			b := bytes.NewReader([]byte{0x09, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x51, 0x30, 0x33, 0x30, 0x01})
 			_, err := parsePublicHeader(b)
-			Expect(err).To(HaveOccurred())
-			Expect(err).To(Equal(errInvalidConnectionID))
+			Expect(err).To(MatchError(errInvalidConnectionID))
 		})
 
 		It("accepts 1-byte packet numbers", func() {
@@ -130,8 +128,7 @@ var _ = Describe("Public Header", func() {
 				PacketNumberLen: protocol.PacketNumberLen6,
 			}
 			err := hdr.WritePublicHeader(b)
-			Expect(err).To(HaveOccurred())
-			Expect(err).To(Equal(errResetAndVersionFlagSet))
+			Expect(err).To(MatchError(errResetAndVersionFlagSet))
 		})
 
 		It("truncates the connection ID", func() {
@@ -151,15 +148,13 @@ var _ = Describe("Public Header", func() {
 			It("errors when calling GetLength for Version Negotiation packets", func() {
 				hdr := publicHeader{VersionFlag: true}
 				_, err := hdr.GetLength()
-				Expect(err).To(HaveOccurred())
-				Expect(err).To(Equal(errGetLengthOnlyForRegularPackets))
+				Expect(err).To(MatchError(errGetLengthOnlyForRegularPackets))
 			})
 
 			It("errors when calling GetLength for Public Reset packets", func() {
 				hdr := publicHeader{ResetFlag: true}
 				_, err := hdr.GetLength()
-				Expect(err).To(HaveOccurred())
-				Expect(err).To(Equal(errGetLengthOnlyForRegularPackets))
+				Expect(err).To(MatchError(errGetLengthOnlyForRegularPackets))
 			})
 
 			It("errors when PacketNumberLen is not set", func() {
@@ -168,8 +163,7 @@ var _ = Describe("Public Header", func() {
 					PacketNumber: 0xDECAFBAD,
 				}
 				_, err := hdr.GetLength()
-				Expect(err).To(HaveOccurred())
-				Expect(err).To(Equal(errPacketNumberLenNotSet))
+				Expect(err).To(MatchError(errPacketNumberLenNotSet))
 			})
 
 			It("gets the length of a packet with longest packet number length and connectionID", func() {
@@ -215,8 +209,7 @@ var _ = Describe("Public Header", func() {
 					PacketNumber: 0xDECAFBAD,
 				}
 				err := hdr.WritePublicHeader(b)
-				Expect(err).To(HaveOccurred())
-				Expect(err).To(Equal(errPacketNumberLenNotSet))
+				Expect(err).To(MatchError(errPacketNumberLenNotSet))
 			})
 
 			It("writes a header with a 1-byte packet number", func() {

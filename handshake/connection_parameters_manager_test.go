@@ -29,8 +29,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 
 	It("returns an error for a tag that is not set", func() {
 		_, err := cpm.getRawValue(TagKEXS)
-		Expect(err).To(HaveOccurred())
-		Expect(err).To(Equal(errTagNotInConnectionParameterMap))
+		Expect(err).To(MatchError(errTagNotInConnectionParameterMap))
 	})
 
 	Context("SHLO", func() {
@@ -114,8 +113,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 				TagSFCW: {0xDE, 0xAD, 0xBE}, // 1 byte too short
 			}
 			err := cpm.SetFromMap(values)
-			Expect(err).To(HaveOccurred())
-			Expect(err).To(Equal(ErrMalformedTag))
+			Expect(err).To(MatchError(ErrMalformedTag))
 			Expect(cpm.GetSendStreamFlowControlWindow()).To(Equal(protocol.InitialStreamFlowControlWindow))
 		})
 
@@ -133,8 +131,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 				TagSFCW: {0xDE, 0xAD, 0xBE}, // 1 byte too short
 			}
 			err := cpm.SetFromMap(values)
-			Expect(err).To(HaveOccurred())
-			Expect(err).To(Equal(ErrMalformedTag))
+			Expect(err).To(MatchError(ErrMalformedTag))
 			Expect(cpm.GetSendStreamFlowControlWindow()).To(Equal(protocol.InitialConnectionFlowControlWindow))
 		})
 	})
@@ -167,8 +164,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 				TagSFCW: {0xDE, 0xAD, 0xBE}, // 1 byte too short
 			}
 			err := cpm.SetFromMap(values)
-			Expect(err).To(HaveOccurred())
-			Expect(err).To(Equal(ErrMalformedTag))
+			Expect(err).To(MatchError(ErrMalformedTag))
 			Expect(cpm.GetIdleConnectionStateLifetime()).To(Equal(protocol.InitialIdleConnectionStateLifetime))
 		})
 
@@ -203,8 +199,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 				TagMSPC: {2, 0, 0}, // 1 byte too short
 			}
 			err := cpm.SetFromMap(values)
-			Expect(err).To(HaveOccurred())
-			Expect(err).To(Equal(ErrMalformedTag))
+			Expect(err).To(MatchError(ErrMalformedTag))
 		})
 
 		It("gets the max streams per connection value", func() {

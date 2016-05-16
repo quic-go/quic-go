@@ -201,9 +201,8 @@ var _ = Describe("SentPacketHandler", func() {
 				Entropy:         1,
 			}
 			_, _, _, err := handler.ReceivedAck(&ack)
-			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError(ErrEntropy))
 			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(6)))
-			Expect(err).To(Equal(ErrEntropy))
 		})
 
 		It("completely processes an ACK without a NACK range", func() {
@@ -295,8 +294,7 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(3)))
 				_, _, _, err = handler.ReceivedAck(&ack)
-				Expect(err).To(HaveOccurred())
-				Expect(err).To(Equal(ErrDuplicateOrOutOfOrderAck))
+				Expect(err).To(MatchError(ErrDuplicateOrOutOfOrderAck))
 				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(3)))
 			})
 
@@ -310,8 +308,7 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(3)))
 				ack.LargestObserved--
 				_, _, _, err = handler.ReceivedAck(&ack)
-				Expect(err).To(HaveOccurred())
-				Expect(err).To(Equal(ErrDuplicateOrOutOfOrderAck))
+				Expect(err).To(MatchError(ErrDuplicateOrOutOfOrderAck))
 				Expect(handler.LargestObserved).To(Equal(protocol.PacketNumber(largestObserved)))
 				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(3)))
 			})
@@ -321,8 +318,7 @@ var _ = Describe("SentPacketHandler", func() {
 					LargestObserved: packets[len(packets)-1].PacketNumber + 1337,
 				}
 				_, _, _, err := handler.ReceivedAck(&ack)
-				Expect(err).To(HaveOccurred())
-				Expect(err).To(Equal(errAckForUnsentPacket))
+				Expect(err).To(MatchError(errAckForUnsentPacket))
 				Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(0)))
 				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(6)))
 			})

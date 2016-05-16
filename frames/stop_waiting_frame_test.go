@@ -49,8 +49,7 @@ var _ = Describe("StopWaitingFrame", func() {
 					Entropy:         0xAD,
 				}
 				err := frame.Write(b, 0)
-				Expect(err).To(HaveOccurred())
-				Expect(err).To(Equal(errPacketNumberNotSet))
+				Expect(err).To(MatchError(errPacketNumberNotSet))
 			})
 
 			It("errors when PacketNumberLen was not set", func() {
@@ -61,8 +60,7 @@ var _ = Describe("StopWaitingFrame", func() {
 					Entropy:      0xAD,
 				}
 				err := frame.Write(b, 0)
-				Expect(err).To(HaveOccurred())
-				Expect(err).To(Equal(errPacketNumberLenNotSet))
+				Expect(err).To(MatchError(errPacketNumberLenNotSet))
 			})
 
 			It("errors when the LeastUnackedDelta would be negative", func() {
@@ -73,8 +71,7 @@ var _ = Describe("StopWaitingFrame", func() {
 					PacketNumberLen: protocol.PacketNumberLen1,
 				}
 				err := frame.Write(b, 0)
-				Expect(err).To(HaveOccurred())
-				Expect(err).To(Equal(errLeastUnackedHigherThanPacketNumber))
+				Expect(err).To(MatchError(errLeastUnackedHigherThanPacketNumber))
 			})
 
 			Context("LeastUnackedDelta length", func() {
@@ -144,8 +141,7 @@ var _ = Describe("StopWaitingFrame", func() {
 					LeastUnacked: 10,
 				}
 				_, err := frame.MinLength()
-				Expect(err).To(HaveOccurred())
-				Expect(err).To(Equal(errPacketNumberLenNotSet))
+				Expect(err).To(MatchError(errPacketNumberLenNotSet))
 			})
 		})
 

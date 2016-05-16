@@ -89,8 +89,7 @@ var _ = Describe("AckFrame", func() {
 			// LargestObserved: 8, NackRange: (8-7-3) to (8-7)
 			b := bytes.NewReader([]byte{0x60, 0x8, 0x7, 0x72, 0x1, 0x1, 0x0, 0xc0, 0x15, 0x0, 0x0, 0x1, 0x7, 0x3})
 			_, err := ParseAckFrame(b, 32)
-			Expect(err).To(HaveOccurred())
-			Expect(err).To(Equal(errInvalidNackRanges))
+			Expect(err).To(MatchError(errInvalidNackRanges))
 		})
 
 		It("accepts truncated acks", func() {
@@ -134,8 +133,7 @@ var _ = Describe("AckFrame", func() {
 				// LargestObserved: 280, but NACK range is 301 packets long
 				b := bytes.NewReader([]byte{0x64, 0x8, 0x18, 0x01, 0x72, 0x1, 0x1, 0x0, 0xc0, 0x15, 0x0, 0x0, 0x2, 0x1, 0x2b, 0x0, 0xff})
 				_, err := ParseAckFrame(b, 32)
-				Expect(err).To(HaveOccurred())
-				Expect(err).To(Equal(errInvalidNackRanges))
+				Expect(err).To(MatchError(errInvalidNackRanges))
 			})
 		})
 	})

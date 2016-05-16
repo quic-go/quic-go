@@ -272,7 +272,7 @@ var _ = Describe("Stream", func() {
 			str.RegisterError(testErr)
 			n, err := str.Write([]byte("foo"))
 			Expect(n).To(BeZero())
-			Expect(err).To(Equal(testErr))
+			Expect(err).To(MatchError(testErr))
 		})
 
 		Context("flow control", func() {
@@ -348,7 +348,7 @@ var _ = Describe("Stream", func() {
 
 				_, err := str.Write([]byte{0xDE, 0xCA, 0xFB, 0xAD})
 				Expect(b).To(BeTrue())
-				Expect(err).To(Equal(testErr))
+				Expect(err).To(MatchError(testErr))
 			})
 		})
 	})
@@ -440,12 +440,12 @@ var _ = Describe("Stream", func() {
 				str.AddStreamFrame(&frame)
 				b := make([]byte, 4)
 				n, err := str.Read(b)
-				Expect(err).To(Equal(io.EOF))
+				Expect(err).To(MatchError(io.EOF))
 				Expect(n).To(Equal(4))
 				Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
 				n, err = str.Read(b)
 				Expect(n).To(BeZero())
-				Expect(err).To(Equal(io.EOF))
+				Expect(err).To(MatchError(io.EOF))
 			})
 
 			It("handles out-of-order frames", func() {
@@ -464,12 +464,12 @@ var _ = Describe("Stream", func() {
 				Expect(err).ToNot(HaveOccurred())
 				b := make([]byte, 4)
 				n, err := str.Read(b)
-				Expect(err).To(Equal(io.EOF))
+				Expect(err).To(MatchError(io.EOF))
 				Expect(n).To(Equal(4))
 				Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
 				n, err = str.Read(b)
 				Expect(n).To(BeZero())
-				Expect(err).To(Equal(io.EOF))
+				Expect(err).To(MatchError(io.EOF))
 			})
 
 			It("returns EOFs with partial read", func() {
@@ -482,7 +482,7 @@ var _ = Describe("Stream", func() {
 				Expect(err).ToNot(HaveOccurred())
 				b := make([]byte, 4)
 				n, err := str.Read(b)
-				Expect(err).To(Equal(io.EOF))
+				Expect(err).To(MatchError(io.EOF))
 				Expect(n).To(Equal(2))
 				Expect(b[:n]).To(Equal([]byte{0xDE, 0xAD}))
 			})
@@ -498,7 +498,7 @@ var _ = Describe("Stream", func() {
 				b := make([]byte, 4)
 				n, err := str.Read(b)
 				Expect(n).To(BeZero())
-				Expect(err).To(Equal(io.EOF))
+				Expect(err).To(MatchError(io.EOF))
 			})
 		})
 
@@ -516,12 +516,12 @@ var _ = Describe("Stream", func() {
 				str.RegisterError(testErr)
 				b := make([]byte, 4)
 				n, err := str.Read(b)
-				Expect(err).To(Equal(io.EOF))
+				Expect(err).To(MatchError(io.EOF))
 				Expect(n).To(Equal(4))
 				Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
 				n, err = str.Read(b)
 				Expect(n).To(BeZero())
-				Expect(err).To(Equal(io.EOF))
+				Expect(err).To(MatchError(io.EOF))
 			})
 
 			It("returns errors", func() {
@@ -539,7 +539,7 @@ var _ = Describe("Stream", func() {
 				Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
 				n, err = str.Read(b)
 				Expect(n).To(BeZero())
-				Expect(err).To(Equal(testErr))
+				Expect(err).To(MatchError(testErr))
 			})
 		})
 	})

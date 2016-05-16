@@ -36,8 +36,7 @@ var _ = Describe("receivedPacketHandler", func() {
 
 		It("rejects packets with packet number 0", func() {
 			err := handler.ReceivedPacket(protocol.PacketNumber(0), false)
-			Expect(err).To(HaveOccurred())
-			Expect(err).To(Equal(errInvalidPacketNumber))
+			Expect(err).To(MatchError(errInvalidPacketNumber))
 		})
 
 		It("rejects a duplicate package with PacketNumber equal to LargestObserved", func() {
@@ -46,8 +45,7 @@ var _ = Describe("receivedPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 			}
 			err := handler.ReceivedPacket(4, false)
-			Expect(err).To(HaveOccurred())
-			Expect(err).To(Equal(ErrDuplicatePacket))
+			Expect(err).To(MatchError(ErrDuplicatePacket))
 		})
 
 		It("rejects a duplicate package with PacketNumber less than the LargestObserved", func() {
@@ -56,8 +54,7 @@ var _ = Describe("receivedPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 			}
 			err := handler.ReceivedPacket(2, false)
-			Expect(err).To(HaveOccurred())
-			Expect(err).To(Equal(ErrDuplicatePacket))
+			Expect(err).To(MatchError(ErrDuplicatePacket))
 		})
 
 		It("saves the time when each packet arrived", func() {

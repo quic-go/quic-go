@@ -118,8 +118,7 @@ var _ = Describe("Session", func() {
 				StreamID: 4,
 				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
 			})
-			Expect(err).To(HaveOccurred())
-			Expect(err).To(Equal(errInvalidStreamID))
+			Expect(err).To(MatchError(errInvalidStreamID))
 		})
 
 		It("does not reject existing streams with even StreamIDs", func() {
@@ -171,7 +170,7 @@ var _ = Describe("Session", func() {
 			Expect(callbackCalled).To(BeTrue())
 			p := make([]byte, 4)
 			_, err := session.streams[5].Read(p)
-			Expect(err).To(Equal(io.EOF))
+			Expect(err).To(MatchError(io.EOF))
 			Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
 			session.garbageCollectStreams()
 			Expect(session.streams).To(HaveLen(1))
@@ -189,7 +188,7 @@ var _ = Describe("Session", func() {
 			Expect(callbackCalled).To(BeTrue())
 			p := make([]byte, 4)
 			_, err := session.streams[5].Read(p)
-			Expect(err).To(Equal(io.EOF))
+			Expect(err).To(MatchError(io.EOF))
 			Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
 			session.garbageCollectStreams()
 			Expect(session.streams).To(HaveLen(1))
@@ -215,7 +214,7 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 			session.closeStreamsWithError(testErr)
 			_, err = session.streams[5].Read(p)
-			Expect(err).To(Equal(testErr))
+			Expect(err).To(MatchError(testErr))
 			session.garbageCollectStreams()
 			Expect(session.streams).To(HaveLen(1))
 			Expect(session.streams[5]).To(BeNil())
@@ -231,7 +230,7 @@ var _ = Describe("Session", func() {
 			Expect(callbackCalled).To(BeTrue())
 			session.closeStreamsWithError(testErr)
 			_, err := session.streams[5].Read([]byte{0})
-			Expect(err).To(Equal(testErr))
+			Expect(err).To(MatchError(testErr))
 			session.garbageCollectStreams()
 			Expect(session.streams).To(HaveLen(1))
 			Expect(session.streams[5]).To(BeNil())
@@ -244,15 +243,14 @@ var _ = Describe("Session", func() {
 				FinBit:   true,
 			})
 			_, err := session.streams[5].Read([]byte{0})
-			Expect(err).To(Equal(io.EOF))
+			Expect(err).To(MatchError(io.EOF))
 			session.streams[5].Close()
 			session.garbageCollectStreams()
 			err = session.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
 				Data:     []byte{},
 			})
-			Expect(err).To(HaveOccurred())
-			Expect(err).To(Equal(errReopeningStreamsNotAllowed))
+			Expect(err).To(MatchError(errReopeningStreamsNotAllowed))
 		})
 	})
 
@@ -343,10 +341,10 @@ var _ = Describe("Session", func() {
 			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore))
 			n, err := s.Read([]byte{0})
 			Expect(n).To(BeZero())
-			Expect(err).To(Equal(testErr))
+			Expect(err).To(MatchError(testErr))
 			n, err = s.Write([]byte{0})
 			Expect(n).To(BeZero())
-			Expect(err).To(Equal(testErr))
+			Expect(err).To(MatchError(testErr))
 		})
 	})
 
