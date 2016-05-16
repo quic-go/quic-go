@@ -369,7 +369,7 @@ func (s *Session) Close(e error, sendConnectionClose bool) error {
 
 	// if e is a QUIC error, send it to the client
 	// else, send the generic QUIC internal error
-	var errorCode protocol.ErrorCode
+	var errorCode errorcodes.ErrorCode
 	var reasonPhrase string
 	quicError, ok := e.(*protocol.QuicError)
 	if ok {

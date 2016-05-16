@@ -1,16 +1,17 @@
 package protocol
 
-// An ErrorCode in QUIC
-type ErrorCode uint32
+import (
+	"github.com/lucas-clemente/quic-go/errorcodes"
+)
 
 // A QuicError is a QUIC error
 type QuicError struct {
-	ErrorCode    ErrorCode
+	ErrorCode    errorcodes.ErrorCode
 	ErrorMessage string
 }
 
 // Error creates a new Quic Error
-func Error(errorCode ErrorCode, errorMessage string) *QuicError {
+func Error(errorCode errorcodes.ErrorCode, errorMessage string) *QuicError {
 	return &QuicError{
 		ErrorCode:    errorCode,
 		ErrorMessage: errorMessage,

@@ -1,12 +1,15 @@
+// Package errorcodes defines the error codes in QUIC.
+//
 package errorcodes
 
-import "github.com/lucas-clemente/quic-go/protocol"
+// An ErrorCode in QUIC
+type ErrorCode uint32
 
 // The error codes defined by QUIC
 const (
-	InternalError      protocol.ErrorCode = 1
-	InvalidFrameData   protocol.ErrorCode = 4
-	DecryptionFailure  protocol.ErrorCode = 12
-	PeerGoingAway      protocol.ErrorCode = 16
-	NetworkIdleTimeout protocol.ErrorCode = 25
+	InternalError      ErrorCode = 1
+	InvalidFrameData   ErrorCode = 4
+	DecryptionFailure  ErrorCode = 12
+	PeerGoingAway      ErrorCode = 16
+	NetworkIdleTimeout ErrorCode = 25
 )
