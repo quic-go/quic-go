@@ -354,7 +354,6 @@ var _ = Describe("Stream", func() {
 	Context("flow control window updating, for receiving", func() {
 		It("updates the flow control window", func() {
 			len := int(protocol.WindowUpdateThreshold) + 1
-			receiveFlowControlWindow := str.receiveFlowControlWindow
 			frame := frames.StreamFrame{
 				Offset: 0,
 				Data:   bytes.Repeat([]byte{'f'}, len),
@@ -364,7 +363,7 @@ var _ = Describe("Stream", func() {
 			n, err := str.Read(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(n).To(Equal(len))
-			Expect(str.receiveFlowControlWindow).To(Equal(receiveFlowControlWindow + str.receiveFlowControlWindowIncrement))
+			Expect(str.receiveFlowControlWindow).To(Equal(protocol.ByteCount(len) + str.receiveFlowControlWindowIncrement))
 		})
 
 		It("does not update the flow control window when not enough data was received", func() {

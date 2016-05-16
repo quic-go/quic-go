@@ -138,7 +138,7 @@ func (s *stream) ReadByte() (byte, error) {
 }
 
 func (s *stream) updateReceiveFlowControlWindow() {
-	n := s.receiveFlowControlWindow + s.receiveFlowControlWindowIncrement
+	n := s.readOffset + s.receiveFlowControlWindowIncrement
 	s.receiveFlowControlWindow = n
 	s.session.updateReceiveFlowControlWindow(s.streamID, n)
 }
