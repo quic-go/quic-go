@@ -1,5 +1,8 @@
 package protocol
 
+// An ErrorCode in QUIC
+type ErrorCode uint32
+
 // A QuicError is a QUIC error
 type QuicError struct {
 	ErrorCode    ErrorCode

@@ -30,9 +30,6 @@ type StreamID uint32
 // A ByteCount in QUIC
 type ByteCount uint64
 
-// An ErrorCode in QUIC
-type ErrorCode uint32
-
 // MaxPacketSize is the maximum packet size, including the public header
 const MaxPacketSize ByteCount = 1452
 
