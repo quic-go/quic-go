@@ -239,12 +239,8 @@ func ParseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 			}
 			rangeLength := uint8(rangeLengthByte)
 
-			if i == 0 && missingPacketSequenceNumberDelta == 0 {
-				return nil, errors.New("ACK frame: largest observed missing not yet implemented")
-			}
-
 			// contiguous NACK range
-			if missingPacketSequenceNumberDelta == 0 {
+			if i > 0 && missingPacketSequenceNumberDelta == 0 {
 				nackRange := &frame.NackRanges[len(frame.NackRanges)-1]
 				if uint64(nackRange.FirstPacketNumber) <= uint64(rangeLength)+1 {
 					return nil, errInvalidNackRanges
@@ -291,7 +287,7 @@ func (f *AckFrame) validateNackRanges() bool {
 		if nackRange.FirstPacketNumber > nackRange.LastPacketNumber {
 			return false
 		}
-		if nackRange.LastPacketNumber >= f.LargestObserved {
+		if nackRange.LastPacketNumber > f.LargestObserved {
 			return false
 		}
 	}

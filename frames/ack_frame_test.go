@@ -100,6 +100,16 @@ var _ = Describe("AckFrame", func() {
 			Expect(b.Len()).To(BeZero())
 		})
 
+		It("parses a frame with the largest observed missing", func() {
+			b := bytes.NewReader([]byte{0x60, 0x2, 0xf, 0xb8, 0x1, 0x1, 0x0, 0xe5, 0x58, 0x4, 0x0, 0x1, 0x0, 0x0})
+			frame, err := ParseAckFrame(b, 32)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame.HasNACK()).To(Equal(true))
+			Expect(frame.NackRanges).To(HaveLen(1))
+			Expect(frame.NackRanges[0]).To(Equal(NackRange{FirstPacketNumber: 15, LastPacketNumber: 15}))
+			Expect(b.Len()).To(Equal(0))
+		})
+
 		Context("contiguous NACK ranges", func() {
 			It("parses a frame with a contiguous NACK range spanning two fields", func() {
 				b := bytes.NewReader([]byte{0x64, 0x8, 0x2E, 0x01, 0x72, 0x1, 0x1, 0x0, 0xc0, 0x15, 0x0, 0x0, 0x2, 0x1, 0x2b, 0x0, 0xff})
@@ -184,6 +194,15 @@ var _ = Describe("AckFrame", func() {
 				NackRanges:      []NackRange{nackRange},
 			}
 			Expect(ack.validateNackRanges()).To(BeFalse())
+		})
+
+		It("does not reject NACKs with LasterPacketNumber equal to LargestObserved", func() {
+			nackRange := NackRange{FirstPacketNumber: 7, LastPacketNumber: 7}
+			ack := AckFrame{
+				LargestObserved: 7,
+				NackRanges:      []NackRange{nackRange},
+			}
+			Expect(ack.validateNackRanges()).To(BeTrue())
 		})
 
 		It("rejects NACKs with NackRanges in the wrong order", func() {
