@@ -1,6 +1,8 @@
 package protocol
 
 import (
+	"fmt"
+
 	"github.com/lucas-clemente/quic-go/errorcodes"
 )
 
@@ -19,7 +21,7 @@ func Error(errorCode errorcodes.ErrorCode, errorMessage string) *QuicError {
 }
 
 func (e *QuicError) Error() string {
-	return e.ErrorMessage
+	return fmt.Sprintf("%s: %s", e.ErrorCode.String(), e.ErrorMessage)
 }
 
 var _ error = &QuicError{}

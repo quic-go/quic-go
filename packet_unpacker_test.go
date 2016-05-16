@@ -163,6 +163,6 @@ var _ = Describe("Packet unpacker", func() {
 	It("errors on invalid type", func() {
 		setReader([]byte{0x08})
 		_, err := unpacker.Unpack(hdrBin, hdr, r)
-		Expect(err).To(MatchError("unknown type byte 0x8"))
+		Expect(err).To(MatchError("InvalidFrameData: unknown type byte 0x8"))
 	})
 })
