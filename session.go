@@ -366,11 +366,17 @@ func (s *Session) Close(e error, sendConnectionClose bool) error {
 		e = protocol.NewQuicError(errorcodes.QUIC_PEER_GOING_AWAY, "peer going away")
 	}
 	utils.Errorf("Closing session with error: %s", e.Error())
-	errorCode := protocol.ErrorCode(1)
-	reasonPhrase := e.Error()
+
+	// if e is a QUIC error, send it to the client
+	// else, send the generic QUIC internal error
+	var errorCode protocol.ErrorCode
+	var reasonPhrase string
 	quicError, ok := e.(*protocol.QuicError)
 	if ok {
 		errorCode = quicError.ErrorCode
+		reasonPhrase = e.Error()
+	} else {
+		errorCode = errorcodes.QUIC_INTERNAL_ERROR
 	}
 	s.closeStreamsWithError(e)
 
