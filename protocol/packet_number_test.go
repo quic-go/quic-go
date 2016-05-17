@@ -172,7 +172,7 @@ var _ = Describe("packet number calculation", func() {
 			})
 
 			It("also works for larger packet numbers", func() {
-				increment := uint64(1)
+				increment := uint64(1 << (8 - 3))
 				for i := uint64(1); i < (2 << 46); i += increment {
 					packetNumber := PacketNumber(i)
 					highestAcked := PacketNumber(1)
@@ -184,17 +184,17 @@ var _ = Describe("packet number calculation", func() {
 
 					switch length {
 					case PacketNumberLen2:
-						increment = 100
+						increment = 1 << (2*8 - 3)
 					case PacketNumberLen4:
-						increment = 50000
+						increment = 1 << (4*8 - 3)
 					case PacketNumberLen6:
-						increment = 100000000
+						increment = 1 << (6*8 - 3)
 					}
 				}
 			})
 
 			It("works for packet numbers larger than 2^48", func() {
-				for i := (uint64(1) << 48); i < ((uint64(1) << 63) - 1); i += (uint64(1) << 45) {
+				for i := (uint64(1) << 48); i < ((uint64(1) << 63) - 1); i += (uint64(1) << 48) {
 					packetNumber := PacketNumber(i)
 					highestAcked := PacketNumber(i - 1000)
 					length := GetPacketNumberLengthForPublicHeader(packetNumber, highestAcked)
