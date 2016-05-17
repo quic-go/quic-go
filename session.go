@@ -57,6 +57,8 @@ type Session struct {
 	unpacker *packetUnpacker
 	packer   *packetPacker
 
+	cryptoSetup *handshake.CryptoSetup
+
 	receivedPackets  chan receivedPacket
 	sendingScheduled chan struct{}
 	closeChan        chan struct{}
@@ -100,22 +102,16 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	}
 
 	cryptoStream, _ := session.OpenStream(1)
-	cryptoSetup := handshake.NewCryptoSetup(connectionID, v, sCfg, cryptoStream, session.connectionParametersManager, session.aeadChanged)
-
-	go func() {
-		if err := cryptoSetup.HandleCryptoStream(); err != nil {
-			session.Close(err)
-		}
-	}()
+	session.cryptoSetup = handshake.NewCryptoSetup(connectionID, v, sCfg, cryptoStream, session.connectionParametersManager, session.aeadChanged)
 
 	session.packer = &packetPacker{
-		aead: cryptoSetup,
+		aead: session.cryptoSetup,
 		connectionParametersManager: session.connectionParametersManager,
 		sentPacketHandler:           session.sentPacketHandler,
 		connectionID:                connectionID,
 		version:                     v,
 	}
-	session.unpacker = &packetUnpacker{aead: cryptoSetup, version: v}
+	session.unpacker = &packetUnpacker{aead: session.cryptoSetup, version: v}
 
 	session.congestion = congestion.NewCubicSender(
 		congestion.DefaultClock{},
@@ -130,6 +126,12 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 
 // run the session main loop
 func (s *Session) run() {
+	go func() {
+		if err := s.cryptoSetup.HandleCryptoStream(); err != nil {
+			s.Close(err)
+		}
+	}()
+
 	for {
 		// Close immediately if requested
 		select {
