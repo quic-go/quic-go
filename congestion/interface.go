@@ -27,7 +27,6 @@ type SendAlgorithmWithDebugInfo interface {
 	BandwidthEstimate() Bandwidth
 
 	// Stuff only used in testing
-	// TODO: Maybe make CubicSender public and typeassert in tests?
 
 	HybridSlowStart() *HybridSlowStart
 	SlowstartThreshold() protocol.PacketNumber

@@ -211,7 +211,6 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *publicHeader, da
 		case *frames.StreamFrame:
 			utils.Debugf("\t<- &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: 0x%x, Data length: 0x%x, Offset + Data length: 0x%x}", frame.StreamID, frame.FinBit, frame.Offset, len(frame.Data), frame.Offset+protocol.ByteCount(len(frame.Data)))
 			err = s.handleStreamFrame(frame)
-			// TODO: send error for flow control violation
 			// TODO: send RstStreamFrame
 		case *frames.AckFrame:
 			err = s.handleAckFrame(frame)
