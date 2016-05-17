@@ -47,11 +47,12 @@ type Session struct {
 	streams      map[protocol.StreamID]*stream
 	streamsMutex sync.RWMutex
 
-	sentPacketHandler     ackhandler.SentPacketHandler
-	receivedPacketHandler ackhandler.ReceivedPacketHandler
-	stopWaitingManager    ackhandler.StopWaitingManager
-	windowUpdateManager   *windowUpdateManager
-	blockedFrameQueue     []*frames.BlockedFrame
+	sentPacketHandler      ackhandler.SentPacketHandler
+	receivedPacketHandler  ackhandler.ReceivedPacketHandler
+	stopWaitingManager     ackhandler.StopWaitingManager
+	windowUpdateManager    *windowUpdateManager
+	blockedFrameQueue      []*frames.BlockedFrame
+	blockedFrameQueueMutex sync.Mutex
 
 	unpacker *packetUnpacker
 	packer   *packetPacker
@@ -459,10 +460,12 @@ func (s *Session) sendPacket() error {
 		controlFrames = append(controlFrames, wuf)
 	}
 
+	s.blockedFrameQueueMutex.Lock()
 	for _, bf := range s.blockedFrameQueue {
 		controlFrames = append(controlFrames, bf)
 	}
 	s.blockedFrameQueue = s.blockedFrameQueue[:0]
+	s.blockedFrameQueueMutex.Unlock()
 
 	ack, err := s.receivedPacketHandler.GetAckFrame(true)
 	if err != nil {
@@ -552,6 +555,9 @@ func (s *Session) updateReceiveFlowControlWindow(streamID protocol.StreamID, byt
 }
 
 func (s *Session) streamBlocked(streamID protocol.StreamID) {
+	s.blockedFrameQueueMutex.Lock()
+	defer s.blockedFrameQueueMutex.Unlock()
+
 	s.blockedFrameQueue = append(s.blockedFrameQueue, &frames.BlockedFrame{StreamID: streamID})
 }
 
