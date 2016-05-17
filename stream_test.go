@@ -15,6 +15,9 @@ import (
 
 type mockStreamHandler struct {
 	frames []frames.Frame
+
+	receiveFlowControlWindowCalled          bool
+	receiveFlowControlWindowCalledForStream protocol.StreamID
 }
 
 func (m *mockStreamHandler) queueStreamFrame(f *frames.StreamFrame) error {
@@ -23,6 +26,8 @@ func (m *mockStreamHandler) queueStreamFrame(f *frames.StreamFrame) error {
 }
 
 func (m *mockStreamHandler) updateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
+	m.receiveFlowControlWindowCalled = true
+	m.receiveFlowControlWindowCalledForStream = streamID
 	return nil
 }
 
@@ -277,7 +282,7 @@ var _ = Describe("Stream", func() {
 
 		Context("flow control", func() {
 			It("writes everything if the flow control window is big enough", func() {
-				str.sendFlowControlWindow = 4
+				str.flowController.sendFlowControlWindow = 4
 				n, err := str.Write([]byte{0xDE, 0xCA, 0xFB, 0xAD})
 				Expect(n).To(Equal(4))
 				Expect(err).ToNot(HaveOccurred())
@@ -285,7 +290,7 @@ var _ = Describe("Stream", func() {
 
 			It("waits for a flow control window update", func() {
 				var b bool
-				str.sendFlowControlWindow = 1
+				str.flowController.sendFlowControlWindow = 1
 				_, err := str.Write([]byte{0x42})
 				Expect(err).ToNot(HaveOccurred())
 
@@ -301,7 +306,7 @@ var _ = Describe("Stream", func() {
 			})
 
 			It("splits writing of frames when given more data than the flow control windows size", func() {
-				str.sendFlowControlWindow = 2
+				str.flowController.sendFlowControlWindow = 2
 				var b bool
 
 				go func() {
@@ -319,7 +324,7 @@ var _ = Describe("Stream", func() {
 
 			It("writes after a flow control window update", func() {
 				var b bool
-				str.sendFlowControlWindow = 1
+				str.flowController.sendFlowControlWindow = 1
 				_, err := str.Write([]byte{0x42})
 				Expect(err).ToNot(HaveOccurred())
 
@@ -336,7 +341,7 @@ var _ = Describe("Stream", func() {
 
 			It("immediately returns on remote errors", func() {
 				var b bool
-				str.sendFlowControlWindow = 1
+				str.flowController.sendFlowControlWindow = 1
 
 				testErr := errors.New("test error")
 
@@ -353,23 +358,16 @@ var _ = Describe("Stream", func() {
 		})
 	})
 
-	Context("flow control window updating, for sending", func() {
-		It("updates the flow control window", func() {
-			str.sendFlowControlWindow = 3
-			str.UpdateSendFlowControlWindow(4)
-			Expect(str.sendFlowControlWindow).To(Equal(protocol.ByteCount(4)))
-		})
-
-		It("never shrinks the flow control window", func() {
-			str.sendFlowControlWindow = 100
-			str.UpdateSendFlowControlWindow(50)
-			Expect(str.sendFlowControlWindow).To(Equal(protocol.ByteCount(100)))
-		})
-	})
-
 	Context("flow control window updating, for receiving", func() {
+		var receiveFlowControlWindow protocol.ByteCount = 1337
+		var receiveWindowUpdateThreshold protocol.ByteCount = 1000
+		BeforeEach(func() {
+			str.flowController.receiveFlowControlWindow = receiveFlowControlWindow
+			str.flowController.receiveWindowUpdateThreshold = receiveWindowUpdateThreshold
+		})
+
 		It("updates the flow control window", func() {
-			len := int(protocol.WindowUpdateThreshold) + 1
+			len := int(receiveFlowControlWindow) - int(receiveWindowUpdateThreshold) + 1
 			frame := frames.StreamFrame{
 				Offset: 0,
 				Data:   bytes.Repeat([]byte{'f'}, len),
@@ -380,12 +378,12 @@ var _ = Describe("Stream", func() {
 			n, err := str.Read(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(n).To(Equal(len))
-			Expect(str.receiveFlowControlWindow).To(Equal(protocol.ByteCount(len) + str.receiveFlowControlWindowIncrement))
+			Expect(handler.receiveFlowControlWindowCalled).To(BeTrue())
+			Expect(handler.receiveFlowControlWindowCalledForStream).To(Equal(str.streamID))
 		})
 
 		It("does not update the flow control window when not enough data was received", func() {
-			len := int(protocol.WindowUpdateThreshold) - 1
-			receiveFlowControlWindow := str.receiveFlowControlWindow
+			len := int(receiveFlowControlWindow) - int(receiveWindowUpdateThreshold) - 1
 			frame := frames.StreamFrame{
 				Offset: 0,
 				Data:   bytes.Repeat([]byte{'f'}, len),
@@ -396,11 +394,11 @@ var _ = Describe("Stream", func() {
 			n, err := str.Read(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(n).To(Equal(len))
-			Expect(str.receiveFlowControlWindow).To(Equal(receiveFlowControlWindow))
+			Expect(handler.receiveFlowControlWindowCalled).To(BeFalse())
 		})
 
 		It("accepts frames that completely fill the flow control window", func() {
-			len := int(protocol.ReceiveStreamFlowControlWindow)
+			len := int(receiveFlowControlWindow)
 			frame := frames.StreamFrame{
 				Offset: 0,
 				Data:   bytes.Repeat([]byte{'f'}, len),
@@ -414,15 +412,6 @@ var _ = Describe("Stream", func() {
 			frame := frames.StreamFrame{
 				Offset: 0,
 				Data:   bytes.Repeat([]byte{'f'}, len),
-			}
-			err := str.AddStreamFrame(&frame)
-			Expect(err).To(MatchError(errFlowControlViolation))
-		})
-
-		It("rejects a small frames that would violate the flow control window", func() {
-			frame := frames.StreamFrame{
-				Offset: protocol.ReceiveStreamFlowControlWindow - 1,
-				Data:   []byte{0x13, 0x37},
 			}
 			err := str.AddStreamFrame(&frame)
 			Expect(err).To(MatchError(errFlowControlViolation))
