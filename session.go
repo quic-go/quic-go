@@ -24,7 +24,7 @@ type receivedPacket struct {
 
 var (
 	errRstStreamOnInvalidStream    = errors.New("RST_STREAM received for unknown stream")
-	errWindowUpdateOnInvalidStream = errors.New("WINDOW_UPDATE received for unknown stream")
+	errWindowUpdateOnInvalidStream = qerr.Error(qerr.InvalidWindowUpdateData, "WINDOW_UPDATE received for unknown stream")
 	errWindowUpdateOnClosedStream  = errors.New("WINDOW_UPDATE received for an already closed stream")
 )
 
@@ -173,8 +173,6 @@ func (s *Session) run() {
 				utils.Errorf("Ignoring error in session: %s", err.Error())
 			// Can happen when we already sent the last StreamFrame with the FinBit, but the client already sent a WindowUpdate for this Stream
 			case errWindowUpdateOnClosedStream:
-			// Can happen when the packet opening the stream was lost.
-			case errWindowUpdateOnInvalidStream:
 			default:
 				s.Close(err, true)
 			}
