@@ -607,14 +607,7 @@ func (s *Session) garbageCollectStreams() {
 
 func (s *Session) sendPublicReset(rejectedPacketNumber protocol.PacketNumber) error {
 	utils.Infof("Sending public reset for connection %x, packet number %d", s.connectionID, rejectedPacketNumber)
-	packet := &publicResetPacket{
-		connectionID:         s.connectionID,
-		rejectedPacketNumber: rejectedPacketNumber,
-		nonceProof:           0, // TODO: Currently ignored by chrome.
-	}
-	var b bytes.Buffer
-	packet.Write(&b)
-	return s.conn.write(b.Bytes())
+	return s.conn.write(writePublicReset(s.connectionID, rejectedPacketNumber, 0))
 }
 
 // scheduleSending signals that we have data for sending

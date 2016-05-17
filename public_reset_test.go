@@ -1,8 +1,6 @@
 package quic
 
 import (
-	"bytes"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -10,14 +8,7 @@ import (
 var _ = Describe("public reset", func() {
 	Context("writing", func() {
 		It("writes public reset packets", func() {
-			packet := &publicResetPacket{
-				connectionID:         0xdeadbeef,
-				rejectedPacketNumber: 0x8badf00d,
-				nonceProof:           0xdecafbad,
-			}
-			b := &bytes.Buffer{}
-			packet.Write(b)
-			Expect(b.Bytes()).To(Equal([]byte{
+			Expect(writePublicReset(0xdeadbeef, 0x8badf00d, 0xdecafbad)).To(Equal([]byte{
 				0x0a,
 				0xef, 0xbe, 0xad, 0xde, 0x00, 0x00, 0x00, 0x00,
 				'P', 'R', 'S', 'T',
