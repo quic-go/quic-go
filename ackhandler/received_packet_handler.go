@@ -77,7 +77,7 @@ func (h *receivedPacketHandler) ReceivedStopWaiting(f *frames.StopWaitingFrame) 
 
 // getNackRanges gets all the NACK ranges
 func (h *receivedPacketHandler) getNackRanges() ([]frames.NackRange, EntropyAccumulator) {
-	// ToDo: use a better data structure here
+	// TODO: use a better data structure here
 	var ranges []frames.NackRange
 	inRange := false
 	entropy := h.highestInOrderObservedEntropy

@@ -164,7 +164,7 @@ func WriteUint16(b *bytes.Buffer, i uint16) {
 
 // RandomBit returns a cryptographically secure random bit (encoded as true / false)
 func RandomBit() (bool, error) {
-	// ToDo: it's probably more efficient to read a bigger slice of random numbers at once and to cache them somewhere
+	// TODO: it's probably more efficient to read a bigger slice of random numbers at once and to cache them somewhere
 	b := make([]byte, 1)
 	_, err := rand.Read(b)
 	if err != nil {
