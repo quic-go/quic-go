@@ -30,5 +30,6 @@ var _ = Describe("error codes", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(qerr.ErrorCode(val).String()).To(Equal(name))
 		}
+		Expect(qerr.ErrorCode(0).String()).To(Equal("ErrorCode(0)"))
 	})
 })
