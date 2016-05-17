@@ -2,6 +2,7 @@ package frames
 
 import (
 	"bytes"
+	"strings"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
@@ -59,10 +60,7 @@ var _ = Describe("ConnectionCloseFrame", func() {
 		It("rejects ReasonPhrases that are too long", func() {
 			b := &bytes.Buffer{}
 
-			var reasonPhrase string
-			for i := 0; i < int(0xFFFF+0x11); i++ {
-				reasonPhrase += "a"
-			}
+			reasonPhrase := strings.Repeat("a", 0xFFFF+0x11)
 
 			frame := &ConnectionCloseFrame{
 				ErrorCode:    0xDEADBEEF,
