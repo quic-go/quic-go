@@ -49,3 +49,6 @@ const WindowUpdateThreshold = ReceiveStreamFlowControlWindow / 2
 
 // WindowUpdateNumRepitions is the number of times the same WindowUpdate frame will be sent to the client
 const WindowUpdateNumRepitions uint8 = 2
+
+// MaxSessionUnprocessedPackets is the max number of packets stored in each session that are not yet processed.
+const MaxSessionUnprocessedPackets = 128

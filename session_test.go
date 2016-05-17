@@ -680,4 +680,12 @@ var _ = Describe("Session", func() {
 			Expect(cong.argsOnCongestionEvent[3]).To(Equal(congestion.PacketVector{{2, 2}}))
 		})
 	})
+
+	It("stored up to MaxSessionUnprocessedPackets packets", func(done Done) {
+		// Nothing here should block
+		for i := 0; i < protocol.MaxSessionUnprocessedPackets+10; i++ {
+			session.handlePacket(nil, nil, nil)
+		}
+		close(done)
+	}, 0.5)
 })

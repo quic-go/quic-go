@@ -89,7 +89,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		receivedPacketHandler:       ackhandler.NewReceivedPacketHandler(),
 		stopWaitingManager:          stopWaitingManager,
 		windowUpdateManager:         newWindowUpdateManager(),
-		receivedPackets:             make(chan receivedPacket, 1000), // TODO: What if server receives many packets and connection is already closed?!
+		receivedPackets:             make(chan receivedPacket, protocol.MaxSessionUnprocessedPackets),
 		closeChan:                   make(chan struct{}, 1),
 		sendingScheduled:            make(chan struct{}, 1),
 		rttStats:                    congestion.RTTStats{},
@@ -242,7 +242,12 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *publicHeader, da
 
 // handlePacket handles a packet
 func (s *Session) handlePacket(remoteAddr interface{}, hdr *publicHeader, data []byte) {
-	s.receivedPackets <- receivedPacket{remoteAddr: remoteAddr, publicHeader: hdr, data: data}
+	// Discard packets once the amount of queued packets is larger than
+	// the channel size, protocol.MaxSessionUnprocessedPackets
+	select {
+	case s.receivedPackets <- receivedPacket{remoteAddr: remoteAddr, publicHeader: hdr, data: data}:
+	default:
+	}
 }
 
 func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
