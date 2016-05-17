@@ -6,15 +6,17 @@ import (
 
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 )
 
 var (
 	// ErrDuplicateOrOutOfOrderAck occurs when a duplicate or an out-of-order ACK is received
 	ErrDuplicateOrOutOfOrderAck = errors.New("SentPacketHandler: Duplicate or out-of-order ACK")
 	// ErrEntropy occurs when an ACK with incorrect entropy is received
-	ErrEntropy = errors.New("SentPacketHandler: Wrong entropy")
+	ErrEntropy = qerr.Error(qerr.InvalidAckData, "wrong entropy")
 	// ErrMapAccess occurs when a NACK contains invalid NACK ranges
-	ErrMapAccess = errors.New("SentPacketHandler: Packet does not exist in PacketHistory")
+	ErrMapAccess          = qerr.Error(qerr.InvalidAckData, "Packet does not exist in PacketHistory")
+	errAckForUnsentPacket = qerr.Error(qerr.InvalidAckData, "Received ACK for an unsent package")
 )
 
 var (
@@ -23,7 +25,6 @@ var (
 )
 
 var (
-	errAckForUnsentPacket   = errors.New("SentPacketHandler: Received ACK for an unsent package")
 	retransmissionThreshold = uint8(3)
 )
 

@@ -196,7 +196,7 @@ var _ = Describe("Crypto setup", func() {
 	It("errors without SNI", func() {
 		WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{})
 		err := cs.HandleCryptoStream()
-		Expect(err).To(MatchError("expected SNI in handshake map"))
+		Expect(err).To(MatchError("CryptoMessageParameterNotFound: SNI required"))
 	})
 
 	Context("escalating crypto", func() {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
@@ -29,7 +30,7 @@ type ConnectionParametersManager struct {
 var errTagNotInConnectionParameterMap = errors.New("ConnectionParametersManager: Tag not found in ConnectionsParameter map")
 
 // ErrMalformedTag is returned when the tag value cannot be read
-var ErrMalformedTag = errors.New("ConnectionParametersManager: malformed Tag value")
+var ErrMalformedTag = qerr.Error(qerr.InvalidCryptoMessageParameter, "malformed Tag value")
 
 // NewConnectionParamatersManager creates a new connection parameters manager
 func NewConnectionParamatersManager() *ConnectionParametersManager {

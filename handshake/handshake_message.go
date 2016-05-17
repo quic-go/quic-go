@@ -3,16 +3,11 @@ package handshake
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"sort"
 
 	"github.com/lucas-clemente/quic-go/utils"
-)
-
-var (
-	errHandshakeMessageEOF = errors.New("ParseHandshakeMessage: Unexpected EOF")
 )
 
 // ParseHandshakeMessage reads a crypto message

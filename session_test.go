@@ -16,6 +16,7 @@ import (
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/testdata"
 	"github.com/lucas-clemente/quic-go/utils"
 )
@@ -118,7 +119,7 @@ var _ = Describe("Session", func() {
 				StreamID: 4,
 				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
 			})
-			Expect(err).To(MatchError(errInvalidStreamID))
+			Expect(err).To(MatchError(qerr.InvalidStreamID))
 		})
 
 		It("does not reject existing streams with even StreamIDs", func() {
@@ -531,7 +532,7 @@ var _ = Describe("Session", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(func() bool { return session.closed }).Should(BeTrue())
 		_, err = s.Write([]byte{})
-		Expect(err).To(MatchError("CryptoSetup: expected CHLO"))
+		Expect(err).To(MatchError(qerr.InvalidCryptoMessageType))
 	})
 
 	It("sends public reset after too many undecryptable packets", func() {

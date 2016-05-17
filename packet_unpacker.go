@@ -33,7 +33,7 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *publicHeader, r 
 
 	privateFlag, err := r.ReadByte()
 	if err != nil {
-		return nil, err
+		return nil, qerr.MissingPayload
 	}
 	entropyBit := privateFlag&0x01 > 0
 
@@ -48,8 +48,14 @@ ReadLoop:
 		var frame frames.Frame
 		if typeByte&0x80 == 0x80 {
 			frame, err = frames.ParseStreamFrame(r)
+			if err != nil {
+				err = qerr.Error(qerr.InvalidStreamData, err.Error())
+			}
 		} else if typeByte&0xc0 == 0x40 {
 			frame, err = frames.ParseAckFrame(r, u.version)
+			if err != nil {
+				err = qerr.Error(qerr.InvalidAckData, err.Error())
+			}
 		} else if typeByte&0xe0 == 0x20 {
 			err = errors.New("unimplemented: CONGESTION_FEEDBACK")
 		} else {
@@ -58,16 +64,31 @@ ReadLoop:
 				break ReadLoop
 			case 0x01:
 				frame, err = frames.ParseRstStreamFrame(r)
+				if err != nil {
+					err = qerr.Error(qerr.InvalidRstStreamData, err.Error())
+				}
 			case 0x02:
 				frame, err = frames.ParseConnectionCloseFrame(r)
+				if err != nil {
+					err = qerr.Error(qerr.InvalidConnectionCloseData, err.Error())
+				}
 			case 0x03:
 				err = errors.New("unimplemented: GOAWAY")
 			case 0x04:
 				frame, err = frames.ParseWindowUpdateFrame(r)
+				if err != nil {
+					err = qerr.Error(qerr.InvalidWindowUpdateData, err.Error())
+				}
 			case 0x05:
 				frame, err = frames.ParseBlockedFrame(r)
+				if err != nil {
+					err = qerr.Error(qerr.InvalidBlockedData, err.Error())
+				}
 			case 0x06:
 				frame, err = frames.ParseStopWaitingFrame(r, hdr.PacketNumber, hdr.PacketNumberLen)
+				if err != nil {
+					err = qerr.Error(qerr.InvalidStopWaitingData, err.Error())
+				}
 			case 0x07:
 				frame, err = frames.ParsePingFrame(r)
 			default:

@@ -23,7 +23,6 @@ type receivedPacket struct {
 }
 
 var (
-	errInvalidStreamID             = errors.New("STREAM_FRAME with invalid StreamID received")
 	errReopeningStreamsNotAllowed  = errors.New("Reopening Streams not allowed")
 	errRstStreamOnInvalidStream    = errors.New("RST_STREAM received for unknown stream")
 	errWindowUpdateOnInvalidStream = errors.New("WINDOW_UPDATE received for unknown stream")
@@ -175,6 +174,8 @@ func (s *Session) run() {
 				utils.Errorf("Ignoring error in session: %s", err.Error())
 			// Can happen when we already sent the last StreamFrame with the FinBit, but the client already sent a WindowUpdate for this Stream
 			case errWindowUpdateOnClosedStream:
+			// Can happen when the packet opening the stream was lost.
+			case errWindowUpdateOnInvalidStream:
 			default:
 				s.Close(err, true)
 			}
@@ -256,7 +257,7 @@ func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
 
 	if !streamExists {
 		if !s.isValidStreamID(frame.StreamID) {
-			return errInvalidStreamID
+			return qerr.InvalidStreamID
 		}
 
 		ss, _ := s.OpenStream(frame.StreamID)

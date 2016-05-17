@@ -3,12 +3,12 @@ package handshake
 import (
 	"bytes"
 	"crypto/rand"
-	"errors"
 	"io"
 	"sync"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
@@ -71,7 +71,7 @@ func (h *CryptoSetup) HandleCryptoStream() error {
 			return err
 		}
 		if messageTag != TagCHLO {
-			return errors.New("CryptoSetup: expected CHLO")
+			return qerr.InvalidCryptoMessageType
 		}
 		chloData := cachingReader.Get()
 
@@ -79,11 +79,11 @@ func (h *CryptoSetup) HandleCryptoStream() error {
 
 		sniSlice, ok := cryptoData[TagSNI]
 		if !ok {
-			return errors.New("expected SNI in handshake map")
+			return qerr.Error(qerr.CryptoMessageParameterNotFound, "SNI required")
 		}
 		sni := string(sniSlice)
 		if sni == "" {
-			return errors.New("expected SNI in handshake map")
+			return qerr.Error(qerr.CryptoMessageParameterNotFound, "SNI required")
 		}
 
 		var reply []byte

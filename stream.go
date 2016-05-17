@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"errors"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -9,6 +8,7 @@ import (
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
@@ -17,7 +17,7 @@ type streamHandler interface {
 	updateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error
 }
 
-var errFlowControlViolation = errors.New("flow control violation")
+var errFlowControlViolation = qerr.FlowControlReceivedTooMuchData
 
 // A Stream assembles the data from StreamFrames and provides a super-convenient Read-Interface
 type stream struct {

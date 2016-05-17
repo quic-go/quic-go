@@ -6,14 +6,15 @@ import (
 	"io"
 
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
 var (
 	errPacketNumberLenNotSet          = errors.New("PublicHeader: PacketNumberLen not set")
 	errResetAndVersionFlagSet         = errors.New("PublicHeader: Reset Flag and Version Flag should not be set at the same time")
-	errReceivedTruncatedConnectionID  = errors.New("PublicHeader: Receiving packets with truncated ConnectionID is not supported")
-	errInvalidConnectionID            = errors.New("PublicHeader: connection ID cannot be 0")
+	errReceivedTruncatedConnectionID  = qerr.Error(qerr.InvalidPacketHeader, "receiving packets with truncated ConnectionID is not supported")
+	errInvalidConnectionID            = qerr.Error(qerr.InvalidPacketHeader, "connection ID cannot be 0")
 	errGetLengthOnlyForRegularPackets = errors.New("PublicHeader: GetLength can only be called for regular packets")
 )
 
