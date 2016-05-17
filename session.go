@@ -50,6 +50,7 @@ type Session struct {
 	receivedPacketHandler ackhandler.ReceivedPacketHandler
 	stopWaitingManager    ackhandler.StopWaitingManager
 	windowUpdateManager   *windowUpdateManager
+	blockedFrameQueue     []*frames.BlockedFrame
 
 	unpacker *packetUnpacker
 	packer   *packetPacker
@@ -454,6 +455,11 @@ func (s *Session) sendPacket() error {
 		controlFrames = append(controlFrames, wuf)
 	}
 
+	for _, bf := range s.blockedFrameQueue {
+		controlFrames = append(controlFrames, bf)
+	}
+	s.blockedFrameQueue = s.blockedFrameQueue[:0]
+
 	ack, err := s.receivedPacketHandler.GetAckFrame(true)
 	if err != nil {
 		return err
@@ -539,6 +545,10 @@ func (s *Session) queueStreamFrame(frame *frames.StreamFrame) error {
 func (s *Session) updateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
 	s.windowUpdateManager.SetStreamOffset(streamID, byteOffset)
 	return nil
+}
+
+func (s *Session) streamBlocked(streamID protocol.StreamID) {
+	s.blockedFrameQueue = append(s.blockedFrameQueue, &frames.BlockedFrame{StreamID: streamID})
 }
 
 // OpenStream creates a new stream open for reading and writing

@@ -16,6 +16,9 @@ import (
 type mockStreamHandler struct {
 	frames []frames.Frame
 
+	receivedBlockedCalled    bool
+	receivedBlockedForStream protocol.StreamID
+
 	receiveFlowControlWindowCalled          bool
 	receiveFlowControlWindowCalledForStream protocol.StreamID
 }
@@ -23,6 +26,11 @@ type mockStreamHandler struct {
 func (m *mockStreamHandler) queueStreamFrame(f *frames.StreamFrame) error {
 	m.frames = append(m.frames, f)
 	return nil
+}
+
+func (m *mockStreamHandler) streamBlocked(streamID protocol.StreamID) {
+	m.receivedBlockedCalled = true
+	m.receivedBlockedForStream = streamID
 }
 
 func (m *mockStreamHandler) updateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
@@ -355,6 +363,16 @@ var _ = Describe("Stream", func() {
 				Expect(b).To(BeTrue())
 				Expect(err).To(MatchError(testErr))
 			})
+		})
+	})
+
+	Context("Blocked streams", func() {
+		It("notifies the session when a stream is flow control blocked", func() {
+			str.flowController.sendFlowControlWindow = 1337
+			str.flowController.bytesSent = 1337
+			str.maybeTriggerBlocked()
+			Expect(handler.receivedBlockedCalled).To(BeTrue())
+			Expect(handler.receivedBlockedForStream).To(Equal(str.streamID))
 		})
 	})
 

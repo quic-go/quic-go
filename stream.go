@@ -15,6 +15,7 @@ import (
 type streamHandler interface {
 	queueStreamFrame(*frames.StreamFrame) error
 	updateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error
+	streamBlocked(streamID protocol.StreamID)
 }
 
 var errFlowControlViolation = qerr.FlowControlReceivedTooMuchData
@@ -221,6 +222,14 @@ func (s *stream) maybeTriggerWindowUpdate() {
 
 	if doUpdate {
 		s.session.updateReceiveFlowControlWindow(s.streamID, byteOffset)
+	}
+}
+
+func (s *stream) maybeTriggerBlocked() {
+	doIt := s.flowController.MaybeTriggerBlocked()
+
+	if doIt {
+		s.session.streamBlocked(s.streamID)
 	}
 }
 
