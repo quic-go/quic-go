@@ -36,7 +36,7 @@ var _ = Describe("Quic error", func() {
 		})
 
 		It("changes default errors to InternalError", func() {
-			Expect(qerr.ToQuicError(io.EOF)).To(Equal(qerr.Error(qerr.InternalError, "")))
+			Expect(qerr.ToQuicError(io.EOF)).To(Equal(qerr.Error(qerr.InternalError, "EOF")))
 		})
 	})
 })

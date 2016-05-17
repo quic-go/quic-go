@@ -40,6 +40,6 @@ func ToQuicError(err error) *QuicError {
 	case ErrorCode:
 		return Error(e, "")
 	}
-	utils.Errorf("BUG: Unknown error encountered: %#v", err)
-	return Error(InternalError, "")
+	utils.Errorf("Internal error: %v", err)
+	return Error(InternalError, err.Error())
 }
