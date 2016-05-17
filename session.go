@@ -23,7 +23,6 @@ type receivedPacket struct {
 }
 
 var (
-	errReopeningStreamsNotAllowed  = errors.New("Reopening Streams not allowed")
 	errRstStreamOnInvalidStream    = errors.New("RST_STREAM received for unknown stream")
 	errWindowUpdateOnInvalidStream = errors.New("WINDOW_UPDATE received for unknown stream")
 	errWindowUpdateOnClosedStream  = errors.New("WINDOW_UPDATE received for an already closed stream")
@@ -249,7 +248,6 @@ func (s *Session) handlePacket(remoteAddr interface{}, hdr *publicHeader, data [
 	s.receivedPackets <- receivedPacket{remoteAddr: remoteAddr, publicHeader: hdr, data: data}
 }
 
-// TODO: Ignore data for closed streams
 func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
 	s.streamsMutex.RLock()
 	str, streamExists := s.streams[frame.StreamID]
@@ -264,7 +262,8 @@ func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
 		str = ss.(*stream)
 	}
 	if str == nil {
-		return errReopeningStreamsNotAllowed
+		// Stream is closed, ignore
+		return nil
 	}
 	err := str.AddStreamFrame(frame)
 	if err != nil {

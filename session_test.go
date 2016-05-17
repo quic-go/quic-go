@@ -237,7 +237,7 @@ var _ = Describe("Session", func() {
 			Expect(session.streams[5]).To(BeNil())
 		})
 
-		It("rejects streams that existed previously", func() {
+		It("ignores streams that existed previously", func() {
 			session.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
 				Data:     []byte{},
@@ -251,7 +251,7 @@ var _ = Describe("Session", func() {
 				StreamID: 5,
 				Data:     []byte{},
 			})
-			Expect(err).To(MatchError(errReopeningStreamsNotAllowed))
+			Expect(err).To(BeNil())
 		})
 	})
 
