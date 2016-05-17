@@ -1,4 +1,4 @@
-package errorcodes
+package qerr
 
 // The error codes defined by QUIC
 // Remeber to run `go generate ./...` whenever the error codes change.

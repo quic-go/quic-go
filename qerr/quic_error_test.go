@@ -1,8 +1,7 @@
-package protocol_test
+package qerr_test
 
 import (
-	"github.com/lucas-clemente/quic-go/errorcodes"
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -10,7 +9,7 @@ import (
 
 var _ = Describe("Quic error", func() {
 	It("has a string representation", func() {
-		err := protocol.Error(errorcodes.InternalError, "foobar")
+		err := qerr.Error(qerr.InternalError, "foobar")
 		Expect(err.Error()).To(Equal("InternalError: foobar"))
 	})
 })

@@ -9,10 +9,10 @@ import (
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/congestion"
-	"github.com/lucas-clemente/quic-go/errorcodes"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
@@ -149,7 +149,7 @@ func (s *Session) run() {
 			return
 		case p := <-s.receivedPackets:
 			err = s.handlePacketImpl(p.remoteAddr, p.publicHeader, p.data)
-			if qErr, ok := err.(*protocol.QuicError); ok && qErr.ErrorCode == errorcodes.DecryptionFailure {
+			if qErr, ok := err.(*qerr.QuicError); ok && qErr.ErrorCode == qerr.DecryptionFailure {
 				s.tryQueueingUndecryptablePacket(p)
 				continue
 			}
@@ -161,7 +161,7 @@ func (s *Session) run() {
 		case <-s.aeadChanged:
 			s.tryDecryptingQueuedPackets()
 		case <-time.After(s.connectionParametersManager.GetIdleConnectionStateLifetime()):
-			s.Close(protocol.Error(errorcodes.NetworkIdleTimeout, "No recent network activity."), true)
+			s.Close(qerr.Error(qerr.NetworkIdleTimeout, "No recent network activity."), true)
 		}
 
 		if err != nil {
@@ -363,24 +363,24 @@ func (s *Session) Close(e error, sendConnectionClose bool) error {
 	}
 
 	if e == nil {
-		e = protocol.Error(errorcodes.PeerGoingAway, "peer going away")
+		e = qerr.Error(qerr.PeerGoingAway, "peer going away")
 	}
 	utils.Errorf("Closing session with error: %s", e.Error())
 
 	// if e is a QUIC error, send it to the client
 	// else, send the generic QUIC internal error
-	var errorCode errorcodes.ErrorCode
+	var errorCode qerr.ErrorCode
 	var reasonPhrase string
-	quicError, ok := e.(*protocol.QuicError)
+	quicError, ok := e.(*qerr.QuicError)
 	if ok {
 		errorCode = quicError.ErrorCode
 		reasonPhrase = e.Error()
 	} else {
-		errorCode = errorcodes.InternalError
+		errorCode = qerr.InternalError
 	}
 	s.closeStreamsWithError(e)
 
-	if errorCode == errorcodes.DecryptionFailure {
+	if errorCode == qerr.DecryptionFailure {
 		return s.sendPublicReset(s.lastRcvdPacketNumber)
 	}
 
@@ -621,7 +621,7 @@ func (s *Session) congestionAllowsSending() bool {
 func (s *Session) tryQueueingUndecryptablePacket(p receivedPacket) {
 	utils.Debugf("Queueing packet 0x%x for later decryption", p.publicHeader.PacketNumber)
 	if len(s.undecryptablePackets)+1 >= protocol.MaxUndecryptablePackets {
-		s.Close(protocol.Error(errorcodes.DecryptionFailure, "too many undecryptable packets received"), true)
+		s.Close(qerr.Error(qerr.DecryptionFailure, "too many undecryptable packets received"), true)
 	}
 	s.undecryptablePackets = append(s.undecryptablePackets, p)
 }

@@ -7,9 +7,9 @@ import (
 	"io/ioutil"
 
 	"github.com/lucas-clemente/quic-go/crypto"
-	"github.com/lucas-clemente/quic-go/errorcodes"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 )
 
 type unpackedPacket struct {
@@ -27,7 +27,7 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *publicHeader, r 
 	plaintext, err := u.aead.Open(hdr.PacketNumber, publicHeaderBinary, ciphertext)
 	if err != nil {
 		// Wrap err in quicError so that public reset is sent by session
-		return nil, protocol.Error(errorcodes.DecryptionFailure, err.Error())
+		return nil, qerr.Error(qerr.DecryptionFailure, err.Error())
 	}
 	r = bytes.NewReader(plaintext)
 
@@ -71,7 +71,7 @@ ReadLoop:
 			case 0x07:
 				frame, err = frames.ParsePingFrame(r)
 			default:
-				err = protocol.Error(errorcodes.InvalidFrameData, fmt.Sprintf("unknown type byte 0x%x", typeByte))
+				err = qerr.Error(qerr.InvalidFrameData, fmt.Sprintf("unknown type byte 0x%x", typeByte))
 			}
 		}
 		if err != nil {

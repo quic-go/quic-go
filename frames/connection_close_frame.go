@@ -6,14 +6,14 @@ import (
 	"io"
 	"math"
 
-	"github.com/lucas-clemente/quic-go/errorcodes"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // A ConnectionCloseFrame in QUIC
 type ConnectionCloseFrame struct {
-	ErrorCode    errorcodes.ErrorCode
+	ErrorCode    qerr.ErrorCode
 	ReasonPhrase string
 }
 
@@ -31,7 +31,7 @@ func ParseConnectionCloseFrame(r *bytes.Reader) (*ConnectionCloseFrame, error) {
 	if err != nil {
 		return nil, err
 	}
-	frame.ErrorCode = errorcodes.ErrorCode(errorCode)
+	frame.ErrorCode = qerr.ErrorCode(errorCode)
 
 	reasonPhraseLen, err := utils.ReadUint16(r)
 	if err != nil {
