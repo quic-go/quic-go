@@ -2,6 +2,8 @@ package qerr
 
 import (
 	"fmt"
+
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // ErrorCode can be used as a normal error without reason.
@@ -27,4 +29,17 @@ func Error(errorCode ErrorCode, errorMessage string) *QuicError {
 
 func (e *QuicError) Error() string {
 	return fmt.Sprintf("%s: %s", e.ErrorCode.String(), e.ErrorMessage)
+}
+
+// ToQuicError converts an arbitrary error to a QuicError. It leaves QuicErrors
+// unchanged, and properly handles `ErrorCode`s.
+func ToQuicError(err error) *QuicError {
+	switch e := err.(type) {
+	case *QuicError:
+		return e
+	case ErrorCode:
+		return Error(e, "")
+	}
+	utils.Errorf("BUG: Unknown error encountered: %#v", err)
+	return Error(InternalError, "")
 }

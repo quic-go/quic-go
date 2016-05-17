@@ -363,37 +363,17 @@ func (s *Session) Close(e error, sendConnectionClose bool) error {
 	}
 
 	if e == nil {
-		e = qerr.Error(qerr.PeerGoingAway, "peer going away")
+		e = qerr.PeerGoingAway
 	}
-	utils.Errorf("Closing session with error: %s", e.Error())
 
-	// if e is a QUIC error, send it to the client
-	// else, send the generic QUIC internal error
-	var errorCode qerr.ErrorCode
-	var reasonPhrase string
-	quicError, ok := e.(*qerr.QuicError)
-	if ok {
-		errorCode = quicError.ErrorCode
-		reasonPhrase = e.Error()
-	} else {
-		errorCode = qerr.InternalError
-	}
+	utils.Errorf("Closing session with error: %s", e.Error())
 	s.closeStreamsWithError(e)
 
-	if errorCode == qerr.DecryptionFailure {
+	quicErr := qerr.ToQuicError(e)
+	if quicErr.ErrorCode == qerr.DecryptionFailure {
 		return s.sendPublicReset(s.lastRcvdPacketNumber)
 	}
-
-	packet, err := s.packer.PackPacket(nil, []frames.Frame{
-		&frames.ConnectionCloseFrame{ErrorCode: errorCode, ReasonPhrase: reasonPhrase},
-	}, false)
-	if err != nil {
-		return err
-	}
-	if packet == nil {
-		panic("Session: internal inconsistency: expected packet not to be nil")
-	}
-	return s.conn.write(packet.raw)
+	return s.sendConnectionClose(quicErr)
 }
 
 func (s *Session) closeStreamsWithError(err error) {
@@ -535,6 +515,19 @@ func (s *Session) sendPacket() error {
 	}
 
 	return nil
+}
+
+func (s *Session) sendConnectionClose(quicErr *qerr.QuicError) error {
+	packet, err := s.packer.PackPacket(nil, []frames.Frame{
+		&frames.ConnectionCloseFrame{ErrorCode: quicErr.ErrorCode, ReasonPhrase: quicErr.ErrorMessage},
+	}, false)
+	if err != nil {
+		return err
+	}
+	if packet == nil {
+		panic("Session: internal inconsistency: expected packet not to be nil")
+	}
+	return s.conn.write(packet.raw)
 }
 
 // queueStreamFrame queues a frame for sending to the client
