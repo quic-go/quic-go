@@ -8,8 +8,9 @@ import (
 type flowController struct {
 	streamID protocol.StreamID
 
-	bytesSent             protocol.ByteCount
-	sendFlowControlWindow protocol.ByteCount
+	bytesSent                protocol.ByteCount
+	sendFlowControlWindow    protocol.ByteCount
+	lastBlockedSentForOffset protocol.ByteCount
 
 	bytesRead                         protocol.ByteCount
 	receiveWindowUpdateThreshold      protocol.ByteCount
@@ -49,6 +50,21 @@ func (c *flowController) SendWindowSize() protocol.ByteCount {
 
 func (c *flowController) AddBytesRead(n protocol.ByteCount) {
 	c.bytesRead += n
+}
+
+// MaybeTriggerBlocked determines if it is necessary to send a Blocked for this stream
+// it makes sure that only one Blocked is sent for each offset
+func (c *flowController) MaybeTriggerBlocked() bool {
+	if c.SendWindowSize() != 0 {
+		return false
+	}
+
+	if c.lastBlockedSentForOffset == c.sendFlowControlWindow {
+		return false
+	}
+
+	c.lastBlockedSentForOffset = c.sendFlowControlWindow
+	return true
 }
 
 // MaybeTriggerWindowUpdate determines if it is necessary to send a WindowUpdate
