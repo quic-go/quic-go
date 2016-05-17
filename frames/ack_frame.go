@@ -185,8 +185,8 @@ func ParseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 	frame.DelayTime = time.Duration(delay) * time.Microsecond
 
 	if !frame.Truncated {
-		var err error
-		numTimestampByte, err := r.ReadByte()
+		var numTimestampByte byte
+		numTimestampByte, err = r.ReadByte()
 		if err != nil {
 			return nil, err
 		}
