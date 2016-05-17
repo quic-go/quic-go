@@ -16,7 +16,7 @@ import (
 
 type streamCreator interface {
 	GetOrOpenStream(protocol.StreamID) (utils.Stream, error)
-	Close(error, bool) error
+	Close(error) error
 }
 
 // Server is a HTTP2 server listening for QUIC connections
@@ -111,7 +111,7 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 		}
 		if s.CloseAfterFirstRequest {
 			time.Sleep(100 * time.Millisecond)
-			session.Close(nil, true)
+			session.Close(nil)
 		}
 	}()
 

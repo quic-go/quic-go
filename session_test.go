@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"runtime"
+	"sync/atomic"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -328,16 +329,25 @@ var _ = Describe("Session", func() {
 		})
 
 		It("shuts down without error", func() {
-			session.Close(nil, true)
+			session.Close(nil)
 			Expect(closed).To(BeTrue())
 			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore))
+			Expect(conn.written).To(HaveLen(1))
+			Expect(conn.written[0][len(conn.written[0])-7:]).To(Equal([]byte{0x02, byte(qerr.PeerGoingAway), 0, 0, 0, 0, 0}))
+		})
+
+		It("only closes once", func() {
+			session.Close(nil)
+			session.Close(nil)
+			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore))
+			Expect(conn.written).To(HaveLen(1))
 		})
 
 		It("closes streams with proper error", func() {
 			testErr := errors.New("test error")
 			s, err := session.OpenStream(5)
 			Expect(err).NotTo(HaveOccurred())
-			session.Close(testErr, true)
+			session.Close(testErr)
 			Expect(closed).To(BeTrue())
 			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore))
 			n, err := s.Read([]byte{0})
@@ -554,7 +564,7 @@ var _ = Describe("Session", func() {
 			Data:     []byte("4242\x00\x00\x00\x00"),
 		})
 		Expect(err).NotTo(HaveOccurred())
-		Eventually(func() bool { return session.closed }).Should(BeTrue())
+		Eventually(func() bool { return atomic.LoadUint32(&session.closed) != 0 }).Should(BeTrue())
 		_, err = s.Write([]byte{})
 		Expect(err).To(MatchError(qerr.InvalidCryptoMessageType))
 	})

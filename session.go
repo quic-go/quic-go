@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
@@ -58,7 +59,7 @@ type Session struct {
 	receivedPackets  chan receivedPacket
 	sendingScheduled chan struct{}
 	closeChan        chan struct{}
-	closed           bool
+	closed           uint32 // atomic bool
 
 	undecryptablePackets []receivedPacket
 	aeadChanged          chan struct{}
@@ -102,7 +103,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 
 	go func() {
 		if err := cryptoSetup.HandleCryptoStream(); err != nil {
-			session.Close(err, true)
+			session.Close(err)
 		}
 	}()
 
@@ -160,22 +161,20 @@ func (s *Session) run() {
 		case <-s.aeadChanged:
 			s.tryDecryptingQueuedPackets()
 		case <-time.After(s.connectionParametersManager.GetIdleConnectionStateLifetime()):
-			s.Close(qerr.Error(qerr.NetworkIdleTimeout, "No recent network activity."), true)
+			s.Close(qerr.Error(qerr.NetworkIdleTimeout, "No recent network activity."))
 		}
 
 		if err != nil {
 			switch err {
-			// Can happen e.g. when packets thought missing arrive late
 			case ackhandler.ErrDuplicateOrOutOfOrderAck:
-			// Can happen when RST_STREAMs arrive early or late (?)
-			case ackhandler.ErrMapAccess:
-				s.Close(err, true) // TODO: sent correct error code here
+				// Can happen e.g. when packets thought missing arrive late
 			case errRstStreamOnInvalidStream:
+				// Can happen when RST_STREAMs arrive early or late (?)
 				utils.Errorf("Ignoring error in session: %s", err.Error())
-			// Can happen when we already sent the last StreamFrame with the FinBit, but the client already sent a WindowUpdate for this Stream
 			case errWindowUpdateOnClosedStream:
+				// Can happen when we already sent the last StreamFrame with the FinBit, but the client already sent a WindowUpdate for this Stream
 			default:
-				s.Close(err, true)
+				s.Close(err)
 			}
 		}
 
@@ -216,9 +215,8 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *publicHeader, da
 		case *frames.AckFrame:
 			err = s.handleAckFrame(frame)
 		case *frames.ConnectionCloseFrame:
-			// ToDo: send right error in ConnectionClose frame
 			utils.Debugf("\t<- %#v", frame)
-			s.Close(nil, false)
+			s.closeImpl(qerr.Error(frame.ErrorCode, frame.ReasonPhrase), true)
 		case *frames.StopWaitingFrame:
 			utils.Debugf("\t<- %#v", frame)
 			err = s.receivedPacketHandler.ReceivedStopWaiting(frame)
@@ -348,18 +346,16 @@ func (s *Session) handleAckFrame(frame *frames.AckFrame) error {
 }
 
 // Close the connection
-func (s *Session) Close(e error, sendConnectionClose bool) error {
-	if s.closed {
+func (s *Session) Close(e error) error {
+	return s.closeImpl(e, false)
+}
+
+func (s *Session) closeImpl(e error, remoteClose bool) error {
+	// Only close once
+	if !atomic.CompareAndSwapUint32(&s.closed, 0, 1) {
 		return nil
 	}
-	s.closed = true
 	s.closeChan <- struct{}{}
-
-	s.closeCallback(s.connectionID)
-
-	if !sendConnectionClose {
-		return nil
-	}
 
 	if e == nil {
 		e = qerr.PeerGoingAway
@@ -367,6 +363,11 @@ func (s *Session) Close(e error, sendConnectionClose bool) error {
 
 	utils.Errorf("Closing session with error: %s", e.Error())
 	s.closeStreamsWithError(e)
+	s.closeCallback(s.connectionID)
+
+	if remoteClose {
+		return nil
+	}
 
 	quicErr := qerr.ToQuicError(e)
 	if quicErr.ErrorCode == qerr.DecryptionFailure {
@@ -622,7 +623,7 @@ func (s *Session) congestionAllowsSending() bool {
 func (s *Session) tryQueueingUndecryptablePacket(p receivedPacket) {
 	utils.Debugf("Queueing packet 0x%x for later decryption", p.publicHeader.PacketNumber)
 	if len(s.undecryptablePackets)+1 >= protocol.MaxUndecryptablePackets {
-		s.Close(qerr.Error(qerr.DecryptionFailure, "too many undecryptable packets received"), true)
+		s.Close(qerr.Error(qerr.DecryptionFailure, "too many undecryptable packets received"))
 	}
 	s.undecryptablePackets = append(s.undecryptablePackets, p)
 }

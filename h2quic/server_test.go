@@ -22,7 +22,7 @@ func (s *mockSession) GetOrOpenStream(id protocol.StreamID) (utils.Stream, error
 	return &mockStream{}, nil
 }
 
-func (s *mockSession) Close(error, bool) error { s.closed = true; return nil }
+func (s *mockSession) Close(error) error { s.closed = true; return nil }
 
 var _ = Describe("H2 server", func() {
 	var (
