@@ -140,9 +140,6 @@ func (s *stream) ReadByte() (byte, error) {
 }
 
 func (s *stream) UpdateSendFlowControlWindow(n protocol.ByteCount) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
 	if s.flowController.UpdateSendWindow(n) {
 		s.windowUpdateOrErrCond.Broadcast()
 	}

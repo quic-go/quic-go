@@ -290,20 +290,18 @@ func (s *Session) handleWindowUpdateFrame(frame *frames.WindowUpdateFrame) error
 		// return errors.New("Connection level flow control not yet implemented")
 		return nil
 	}
+
 	s.streamsMutex.RLock()
-	defer s.streamsMutex.RUnlock()
-
 	stream, streamExists := s.streams[frame.StreamID]
-
 	if !streamExists {
 		return errWindowUpdateOnInvalidStream
 	}
 	if stream == nil {
 		return errWindowUpdateOnClosedStream
 	}
+	s.streamsMutex.RUnlock()
 
 	stream.UpdateSendFlowControlWindow(frame.ByteOffset)
-
 	return nil
 }
 
