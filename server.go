@@ -9,6 +9,7 @@ import (
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
@@ -94,13 +95,15 @@ func (s *Server) Close() error {
 }
 
 func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet []byte) error {
+	if protocol.ByteCount(len(packet)) > protocol.MaxPacketSize {
+		return qerr.PacketTooLarge
+	}
+
 	r := bytes.NewReader(packet)
-	// ToDo: check packet size and send errorcodes.QUIC_PACKET_TOO_LARGE if packet is too large
 
 	hdr, err := parsePublicHeader(r)
 	if err != nil {
-		// ToDo: send errorcodes.QUIC_INVALID_PACKET_HEADER
-		return err
+		return qerr.Error(qerr.InvalidPacketHeader, err.Error())
 	}
 	hdr.Raw = packet[:len(packet)-r.Len()]
 
