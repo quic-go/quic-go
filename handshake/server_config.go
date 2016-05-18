@@ -16,17 +16,17 @@ type ServerConfig struct {
 }
 
 // NewServerConfig creates a new server config
-func NewServerConfig(kex crypto.KeyExchange, signer crypto.Signer) *ServerConfig {
+func NewServerConfig(kex crypto.KeyExchange, signer crypto.Signer) (*ServerConfig, error) {
 	id := make([]byte, 16)
 	_, err := io.ReadFull(rand.Reader, id)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	return &ServerConfig{
 		kex:    kex,
 		signer: signer,
 		ID:     id,
-	}
+	}, nil
 }
 
 // Get the server config binary representation

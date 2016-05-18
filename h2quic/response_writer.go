@@ -52,7 +52,7 @@ func (w *responseWriter) WriteHeader(status int) {
 		BlockFragment: headers.Bytes(),
 	})
 	if err != nil {
-		panic(err)
+		utils.Errorf("could not write h2 header: %s", err.Error())
 	}
 }
 

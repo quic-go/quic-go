@@ -7,8 +7,10 @@ import (
 
 var _ = Describe("ProofRsa", func() {
 	It("works", func() {
-		a := NewCurve25519KEX()
-		b := NewCurve25519KEX()
+		a, err := NewCurve25519KEX()
+		Expect(err).ToNot(HaveOccurred())
+		b, err := NewCurve25519KEX()
+		Expect(err).ToNot(HaveOccurred())
 		sA, err := a.CalculateSharedKey(b.PublicKey())
 		Expect(err).ToNot(HaveOccurred())
 		sB, err := b.CalculateSharedKey(a.PublicKey())

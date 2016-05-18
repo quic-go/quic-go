@@ -16,8 +16,11 @@ var _ = Describe("ServerConfig", func() {
 	)
 
 	BeforeEach(func() {
-		kex = crypto.NewCurve25519KEX()
-		scfg = NewServerConfig(kex, nil)
+		var err error
+		kex, err = crypto.NewCurve25519KEX()
+		Expect(err).NotTo(HaveOccurred())
+		scfg, err = NewServerConfig(kex, nil)
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("gets the proper binary representation", func() {

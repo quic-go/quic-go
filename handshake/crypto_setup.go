@@ -16,7 +16,7 @@ import (
 type KeyDerivationFunction func(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte) (crypto.AEAD, error)
 
 // KeyExchangeFunction is used to make a new KEX
-type KeyExchangeFunction func() crypto.KeyExchange
+type KeyExchangeFunction func() (crypto.KeyExchange, error)
 
 // The CryptoSetup handles all things crypto for the Session
 type CryptoSetup struct {
@@ -44,10 +44,10 @@ type CryptoSetup struct {
 var _ crypto.AEAD = &CryptoSetup{}
 
 // NewCryptoSetup creates a new CryptoSetup instance
-func NewCryptoSetup(connID protocol.ConnectionID, version protocol.VersionNumber, scfg *ServerConfig, cryptoStream utils.Stream, connectionParametersManager *ConnectionParametersManager, aeadChanged chan struct{}) *CryptoSetup {
+func NewCryptoSetup(connID protocol.ConnectionID, version protocol.VersionNumber, scfg *ServerConfig, cryptoStream utils.Stream, connectionParametersManager *ConnectionParametersManager, aeadChanged chan struct{}) (*CryptoSetup, error) {
 	nonce := make([]byte, 32)
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		panic(err)
+		return nil, err
 	}
 	return &CryptoSetup{
 		connID:                      connID,
@@ -59,7 +59,7 @@ func NewCryptoSetup(connID protocol.ConnectionID, version protocol.VersionNumber
 		cryptoStream:                cryptoStream,
 		connectionParametersManager: connectionParametersManager,
 		aeadChanged:                 aeadChanged,
-	}
+	}, nil
 }
 
 // HandleCryptoStream reads and writes messages on the crypto stream
@@ -219,7 +219,10 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 	}
 
 	// Generate a new curve instance to derive the forward secure key
-	ephermalKex := h.keyExchange()
+	ephermalKex, err := h.keyExchange()
+	if err != nil {
+		return nil, err
+	}
 	ephermalSharedSecret, err := ephermalKex.CalculateSharedKey(cryptoData[TagPUBS])
 	if err != nil {
 		return nil, err

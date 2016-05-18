@@ -102,7 +102,7 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 		}
 
 		if rangeCounter != uint8(numRanges) {
-			panic("Inconsistent number of NACK ranges written.")
+			return errors.New("BUG: Inconsistent number of NACK ranges written")
 		}
 
 		// TODO: Remove once we drop support for <32

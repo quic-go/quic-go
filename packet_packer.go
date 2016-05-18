@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"errors"
 	"sync/atomic"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
@@ -101,7 +102,7 @@ func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 	raw.Write(ciphertext)
 
 	if protocol.ByteCount(raw.Len()) > protocol.MaxPacketSize {
-		panic("internal inconsistency: packet too large")
+		return nil, errors.New("PacketPacker BUG: packet too large")
 	}
 
 	return &packedPacket{
@@ -148,7 +149,7 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 	}
 
 	if payloadLength > maxFrameSize {
-		panic("internal inconsistency: packet payload too large")
+		return nil, errors.New("PacketPacker BUG: packet payload too large")
 	}
 
 	if !includeStreamFrames {
@@ -167,7 +168,7 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 		frame.DataLenPresent = true // set the dataLen by default. Remove them later if applicable
 
 		if payloadLength > maxFrameSize {
-			panic("internal inconsistency: packet payload too large")
+			return nil, errors.New("PacketPacker BUG: packet payload too large")
 		}
 
 		// Does the frame fit into the remaining space?

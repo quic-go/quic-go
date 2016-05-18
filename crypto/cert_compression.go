@@ -6,6 +6,7 @@ import (
 	"compress/zlib"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"hash/fnv"
 
 	"github.com/lucas-clemente/quic-go/utils"
@@ -63,7 +64,7 @@ func compressChain(chain [][]byte, pCommonSetHashes, pCachedHashes []byte) ([]by
 	if totalUncompressedLen > 0 {
 		gz, err := zlib.NewWriterLevelDict(res, flate.BestCompression, buildZlibDictForEntries(entries, chain))
 		if err != nil {
-			panic(err)
+			return nil, fmt.Errorf("cert compression failed: %s", err.Error())
 		}
 
 		utils.WriteUint32(res, uint32(totalUncompressedLen))

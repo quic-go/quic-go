@@ -82,7 +82,7 @@ type Session struct {
 }
 
 // newSession makes a new session
-func newSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) packetHandler {
+func newSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) (packetHandler, error) {
 	stopWaitingManager := ackhandler.NewStopWaitingManager()
 	connectionParametersManager := handshake.NewConnectionParamatersManager()
 
@@ -107,7 +107,11 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	}
 
 	cryptoStream, _ := session.OpenStream(1)
-	session.cryptoSetup = handshake.NewCryptoSetup(connectionID, v, sCfg, cryptoStream, session.connectionParametersManager, session.aeadChanged)
+	var err error
+	session.cryptoSetup, err = handshake.NewCryptoSetup(connectionID, v, sCfg, cryptoStream, session.connectionParametersManager, session.aeadChanged)
+	if err != nil {
+		return nil, err
+	}
 
 	session.packer = &packetPacker{
 		aead: session.cryptoSetup,
@@ -126,7 +130,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		protocol.DefaultMaxCongestionWindow,
 	)
 
-	return session
+	return session, err
 }
 
 // run the session main loop
@@ -238,7 +242,7 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *publicHeader, da
 		case *frames.PingFrame:
 			utils.Debugf("\t<- %#v", frame)
 		default:
-			panic("unexpected frame type")
+			return errors.New("Session BUG: unexpected frame type")
 		}
 		if err != nil {
 			return err
@@ -549,7 +553,7 @@ func (s *Session) sendConnectionClose(quicErr *qerr.QuicError) error {
 		return err
 	}
 	if packet == nil {
-		panic("Session: internal inconsistency: expected packet not to be nil")
+		return errors.New("Session BUG: expected packet not to be nil")
 	}
 	return s.conn.write(packet.raw)
 }

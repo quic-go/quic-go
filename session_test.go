@@ -94,15 +94,20 @@ var _ = Describe("Session", func() {
 
 		signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
 		Expect(err).ToNot(HaveOccurred())
-		scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
-		session = newSession(
+		kex, err := crypto.NewCurve25519KEX()
+		Expect(err).NotTo(HaveOccurred())
+		scfg, err := handshake.NewServerConfig(kex, signer)
+		Expect(err).NotTo(HaveOccurred())
+		pSession, err := newSession(
 			conn,
 			0,
 			0,
 			scfg,
 			func(*Session, utils.Stream) { streamCallbackCalled = true },
 			func(protocol.ConnectionID) { closeCallbackCalled = true },
-		).(*Session)
+		)
+		Expect(err).NotTo(HaveOccurred())
+		session = pSession.(*Session)
 		Expect(session.streams).To(HaveLen(1)) // Crypto stream
 	})
 

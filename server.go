@@ -32,7 +32,7 @@ type Server struct {
 
 	streamCallback StreamCallback
 
-	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) packetHandler
+	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) (packetHandler, error)
 }
 
 // NewServer makes a new server
@@ -42,7 +42,14 @@ func NewServer(tlsConfig *tls.Config, cb StreamCallback) (*Server, error) {
 		return nil, err
 	}
 
-	scfg := handshake.NewServerConfig(crypto.NewCurve25519KEX(), signer)
+	kex, err := crypto.NewCurve25519KEX()
+	if err != nil {
+		return nil, err
+	}
+	scfg, err := handshake.NewServerConfig(kex, signer)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Server{
 		signer:         signer,
@@ -123,7 +130,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 
 	if !ok {
 		utils.Infof("Serving new connection: %x, version %d from %v", hdr.ConnectionID, hdr.VersionNumber, remoteAddr)
-		session = s.newSession(
+		session, err = s.newSession(
 			&udpConn{conn: conn, currentAddr: remoteAddr},
 			hdr.VersionNumber,
 			hdr.ConnectionID,
@@ -131,6 +138,9 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 			s.streamCallback,
 			s.closeCallback,
 		)
+		if err != nil {
+			return err
+		}
 		go session.run()
 		s.sessionsMutex.Lock()
 		s.sessions[hdr.ConnectionID] = session
@@ -159,7 +169,7 @@ func composeVersionNegotiation(connectionID protocol.ConnectionID) []byte {
 	}
 	err := responsePublicHeader.WritePublicHeader(fullReply)
 	if err != nil {
-		panic(err) // Should not happen ;)
+		utils.Errorf("error composing version negotiation packet: %s", err.Error())
 	}
 	fullReply.Write(protocol.SupportedVersionsAsTags)
 	return fullReply.Bytes()

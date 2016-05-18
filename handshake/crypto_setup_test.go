@@ -104,16 +104,19 @@ var _ = Describe("Crypto setup", func() {
 	)
 
 	BeforeEach(func() {
+		var err error
 		aeadChanged = make(chan struct{}, 1)
 		stream = &mockStream{}
 		kex = &mockKEX{}
 		signer = &mockSigner{}
-		scfg = NewServerConfig(kex, signer)
+		scfg, err = NewServerConfig(kex, signer)
+		Expect(err).NotTo(HaveOccurred())
 		v := protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
 		cpm = NewConnectionParamatersManager()
-		cs = NewCryptoSetup(protocol.ConnectionID(42), v, scfg, stream, cpm, aeadChanged)
+		cs, err = NewCryptoSetup(protocol.ConnectionID(42), v, scfg, stream, cpm, aeadChanged)
+		Expect(err).NotTo(HaveOccurred())
 		cs.keyDerivation = mockKeyDerivation
-		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
+		cs.keyExchange = func() (crypto.KeyExchange, error) { return &mockKEX{ephermal: true}, nil }
 	})
 
 	It("has a nonce", func() {

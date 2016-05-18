@@ -25,10 +25,10 @@ func (s *mockSession) handlePacket(addr interface{}, hdr *publicHeader, data []b
 func (s *mockSession) run() {
 }
 
-func newMockSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) packetHandler {
+func newMockSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) (packetHandler, error) {
 	return &mockSession{
 		connectionID: connectionID,
-	}
+	}, nil
 }
 
 var _ = Describe("Server", func() {

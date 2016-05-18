@@ -103,7 +103,7 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 	}
 	packet.sendTime = time.Now()
 	if packet.Length == 0 {
-		panic("SentPacketHandler: packet cannot be empty")
+		return errors.New("SentPacketHandler: packet cannot be empty")
 	}
 	h.bytesInFlight += packet.Length
 
