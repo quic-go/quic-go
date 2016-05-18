@@ -105,14 +105,22 @@ var _ = Describe("Flow controller", func() {
 
 		It("updates the highestReceived", func() {
 			controller.highestReceived = 1337
-			controller.UpdateHighestReceived(1338)
+			increment := controller.UpdateHighestReceived(1338)
+			Expect(increment).To(Equal(protocol.ByteCount(1338 - 1337)))
 			Expect(controller.highestReceived).To(Equal(protocol.ByteCount(1338)))
 		})
 
 		It("does not decrease the highestReceived", func() {
 			controller.highestReceived = 1337
-			controller.UpdateHighestReceived(1000)
+			increment := controller.UpdateHighestReceived(1000)
+			Expect(increment).To(Equal(protocol.ByteCount(0)))
 			Expect(controller.highestReceived).To(Equal(protocol.ByteCount(1337)))
+		})
+
+		It("increases the highestReceived by a given increment", func() {
+			controller.highestReceived = 1337
+			controller.IncrementHighestReceived(123)
+			Expect(controller.highestReceived).To(Equal(protocol.ByteCount(1337 + 123)))
 		})
 
 		It("detects a flow control violation", func() {

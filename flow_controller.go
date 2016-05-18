@@ -23,13 +23,21 @@ type flowController struct {
 	mutex sync.RWMutex
 }
 
-func newFlowController(connectionParametersManager *handshake.ConnectionParametersManager) *flowController {
-	return &flowController{
-		sendFlowControlWindow:             connectionParametersManager.GetSendStreamFlowControlWindow(),
-		receiveFlowControlWindow:          connectionParametersManager.GetReceiveStreamFlowControlWindow(),
+func newFlowController(streamID protocol.StreamID, connectionParametersManager *handshake.ConnectionParametersManager) *flowController {
+	fc := flowController{
 		receiveWindowUpdateThreshold:      protocol.WindowUpdateThreshold,
 		receiveFlowControlWindowIncrement: protocol.ReceiveStreamFlowControlWindowIncrement,
 	}
+
+	if streamID == 0 {
+		fc.sendFlowControlWindow = connectionParametersManager.GetSendConnectionFlowControlWindow()
+		fc.receiveFlowControlWindow = connectionParametersManager.GetReceiveConnectionFlowControlWindow()
+	} else {
+		fc.sendFlowControlWindow = connectionParametersManager.GetSendStreamFlowControlWindow()
+		fc.receiveFlowControlWindow = connectionParametersManager.GetReceiveStreamFlowControlWindow()
+	}
+
+	return &fc
 }
 
 func (c *flowController) AddBytesSent(n protocol.ByteCount) {
@@ -62,13 +70,27 @@ func (c *flowController) SendWindowSize() protocol.ByteCount {
 	return c.sendFlowControlWindow - c.bytesSent
 }
 
-func (c *flowController) UpdateHighestReceived(n protocol.ByteCount) {
+// UpdateHighestReceived updates the highestReceived value, if the byteOffset is higher
+// Should **only** be used for the stream-level FlowController
+func (c *flowController) UpdateHighestReceived(byteOffset protocol.ByteCount) protocol.ByteCount {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	if n > c.highestReceived {
-		c.highestReceived = n
+	if byteOffset > c.highestReceived {
+		increment := byteOffset - c.highestReceived
+		c.highestReceived = byteOffset
+		return increment
 	}
+	return 0
+}
+
+// IncrementHighestReceived adds an increment to the highestReceived value
+// Should **only** be used for the connection-level FlowController
+func (c *flowController) IncrementHighestReceived(increment protocol.ByteCount) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	c.highestReceived += increment
 }
 
 func (c *flowController) AddBytesRead(n protocol.ByteCount) {

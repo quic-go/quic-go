@@ -51,7 +51,7 @@ func newStream(session streamHandler, connectionParameterManager *handshake.Conn
 	s := &stream{
 		session:        session,
 		streamID:       StreamID,
-		flowController: newFlowController(connectionParameterManager),
+		flowController: newFlowController(StreamID, connectionParameterManager),
 	}
 
 	s.newFrameOrErrCond.L = &s.mutex
