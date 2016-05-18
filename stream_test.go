@@ -655,5 +655,15 @@ var _ = Describe("Stream", func() {
 				Expect(err).To(MatchError(testErr))
 			})
 		})
+
+		Context("when CloseRemote is called", func() {
+			It("closes", func() {
+				str.CloseRemote(0)
+				b := make([]byte, 8)
+				n, err := str.Read(b)
+				Expect(n).To(BeZero())
+				Expect(err).To(MatchError(io.EOF))
+			})
+		})
 	})
 })

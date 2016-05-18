@@ -21,6 +21,7 @@ type Stream interface {
 	io.Writer
 	io.Closer
 	StreamID() protocol.StreamID
+	CloseRemote(offset protocol.ByteCount)
 }
 
 // ReadUintN reads N bytes

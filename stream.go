@@ -254,6 +254,11 @@ func (s *stream) AddStreamFrame(frame *frames.StreamFrame) error {
 	return nil
 }
 
+// CloseRemote makes the stream receive a "virtual" FIN stream frame at a given offset
+func (s *stream) CloseRemote(offset protocol.ByteCount) {
+	s.AddStreamFrame(&frames.StreamFrame{FinBit: true, Offset: offset})
+}
+
 func (s *stream) maybeTriggerWindowUpdate() {
 	// check for stream level window updates
 	doUpdate, byteOffset := s.flowController.MaybeTriggerWindowUpdate()

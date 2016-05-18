@@ -14,9 +14,9 @@ type mockStream struct {
 	bytes.Buffer
 }
 
-func (mockStream) Close() error { return nil }
-
-func (s mockStream) StreamID() protocol.StreamID { return s.id }
+func (mockStream) Close() error                          { return nil }
+func (mockStream) CloseRemote(offset protocol.ByteCount) { panic("not implemented") }
+func (s mockStream) StreamID() protocol.StreamID         { return s.id }
 
 var _ = Describe("Response Writer", func() {
 	var (
