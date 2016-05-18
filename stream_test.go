@@ -374,6 +374,23 @@ var _ = Describe("Stream", func() {
 			Expect(handler.receivedBlockedCalled).To(BeTrue())
 			Expect(handler.receivedBlockedForStream).To(Equal(str.streamID))
 		})
+
+		It("notifies the session as soon as a stream is reaching the end of the window", func() {
+			str.flowController.sendFlowControlWindow = 4
+			str.Write([]byte{0xDE, 0xCA, 0xFB, 0xAD})
+			Expect(handler.receivedBlockedCalled).To(BeTrue())
+			Expect(handler.receivedBlockedForStream).To(Equal(str.streamID))
+		})
+
+		It("notifies the session as soon as a stream is flow control blocked", func() {
+			str.flowController.sendFlowControlWindow = 2
+			go func() {
+				str.Write([]byte{0xDE, 0xCA, 0xFB, 0xAD})
+			}()
+			time.Sleep(time.Millisecond)
+			Expect(handler.receivedBlockedCalled).To(BeTrue())
+			Expect(handler.receivedBlockedForStream).To(Equal(str.streamID))
+		})
 	})
 
 	Context("flow control window updating, for receiving", func() {

@@ -185,6 +185,8 @@ func (s *stream) Write(p []byte) (int, error) {
 		dataWritten += dataLen
 		s.flowController.AddBytesSent(protocol.ByteCount(dataLen))
 		s.writeOffset += protocol.ByteCount(dataLen)
+
+		s.maybeTriggerBlocked()
 	}
 
 	return len(p), nil
