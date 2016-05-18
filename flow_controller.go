@@ -18,7 +18,6 @@ type flowController struct {
 
 	bytesRead                         protocol.ByteCount
 	highestReceived                   protocol.ByteCount
-	receiveWindowUpdateThreshold      protocol.ByteCount
 	receiveFlowControlWindow          protocol.ByteCount
 	receiveFlowControlWindowIncrement protocol.ByteCount
 
@@ -27,16 +26,16 @@ type flowController struct {
 
 func newFlowController(streamID protocol.StreamID, connectionParametersManager *handshake.ConnectionParametersManager) *flowController {
 	fc := flowController{
-		streamID:                          streamID,
-		connectionParametersManager:       connectionParametersManager,
-		receiveWindowUpdateThreshold:      protocol.WindowUpdateThreshold,
-		receiveFlowControlWindowIncrement: protocol.ReceiveStreamFlowControlWindowIncrement,
+		streamID:                    streamID,
+		connectionParametersManager: connectionParametersManager,
 	}
 
 	if streamID == 0 {
 		fc.receiveFlowControlWindow = connectionParametersManager.GetReceiveConnectionFlowControlWindow()
+		fc.receiveFlowControlWindowIncrement = fc.receiveFlowControlWindow
 	} else {
 		fc.receiveFlowControlWindow = connectionParametersManager.GetReceiveStreamFlowControlWindow()
+		fc.receiveFlowControlWindowIncrement = fc.receiveFlowControlWindow
 	}
 
 	return &fc
@@ -144,7 +143,8 @@ func (c *flowController) MaybeTriggerWindowUpdate() (bool, protocol.ByteCount) {
 	defer c.mutex.Unlock()
 
 	diff := c.receiveFlowControlWindow - c.bytesRead
-	if diff < c.receiveWindowUpdateThreshold {
+	// Chromium implements the same threshold
+	if diff < (c.receiveFlowControlWindowIncrement / 2) {
 		c.receiveFlowControlWindow += c.receiveFlowControlWindowIncrement
 		return true, c.bytesRead + c.receiveFlowControlWindowIncrement
 	}

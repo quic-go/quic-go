@@ -25,16 +25,12 @@ const SmallPacketPayloadSizeThreshold = MaxPacketSize / 2
 const SmallPacketSendDelay = 500 * time.Microsecond
 
 // ReceiveStreamFlowControlWindow is the stream-level flow control window for receiving data
-// TODO: set a reasonable value here
+// This is the value that Google servers are using
 const ReceiveStreamFlowControlWindow ByteCount = (1 << 20) // 1 MB
 
-// ReceiveStreamFlowControlWindowIncrement is the amount that the stream-level flow control window is increased when sending a WindowUpdate
-const ReceiveStreamFlowControlWindowIncrement = ReceiveStreamFlowControlWindow
-
 // ReceiveConnectionFlowControlWindow is the stream-level flow control window for receiving data
-// temporarily set this to a very high value, until proper connection-level flow control is implemented
-// TODO: set a reasonable value here
-const ReceiveConnectionFlowControlWindow ByteCount = (1 << 20) // 1 MB
+// This is the value that Google servers are using
+const ReceiveConnectionFlowControlWindow ByteCount = (1 << 20) * 1.5 // 1.5 MB
 
 // MaxStreamsPerConnection is the maximum value accepted for the number of streams per connection
 // TODO: set a reasonable value here
@@ -43,9 +39,6 @@ const MaxStreamsPerConnection uint32 = 100
 // MaxIdleConnectionStateLifetime is the maximum value accepted for the idle connection state lifetime
 // TODO: set a reasonable value here
 const MaxIdleConnectionStateLifetime = 60 * time.Second
-
-// WindowUpdateThreshold is the size of the receive flow control window for which we send out a WindowUpdate frame
-const WindowUpdateThreshold = ReceiveStreamFlowControlWindow / 2
 
 // WindowUpdateNumRepitions is the number of times the same WindowUpdate frame will be sent to the client
 const WindowUpdateNumRepitions uint8 = 2

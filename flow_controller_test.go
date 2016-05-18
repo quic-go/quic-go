@@ -155,13 +155,11 @@ var _ = Describe("Flow controller", func() {
 	})
 
 	Context("receive flow control", func() {
-		var receiveFlowControlWindow protocol.ByteCount = 1337
-		var receiveWindowUpdateThreshold protocol.ByteCount = 500
+		var receiveFlowControlWindow protocol.ByteCount = 10000
 		var receiveFlowControlWindowIncrement protocol.ByteCount = 600
 
 		BeforeEach(func() {
 			controller.receiveFlowControlWindow = receiveFlowControlWindow
-			controller.receiveWindowUpdateThreshold = receiveWindowUpdateThreshold
 			controller.receiveFlowControlWindowIncrement = receiveFlowControlWindowIncrement
 		})
 
@@ -172,7 +170,7 @@ var _ = Describe("Flow controller", func() {
 		})
 
 		It("triggers a window update when necessary", func() {
-			readPosition := receiveFlowControlWindow - receiveWindowUpdateThreshold + 1
+			readPosition := receiveFlowControlWindow - receiveFlowControlWindowIncrement/2 + 1
 			controller.bytesRead = readPosition
 			updateNecessary, offset := controller.MaybeTriggerWindowUpdate()
 			Expect(updateNecessary).To(BeTrue())
@@ -180,7 +178,7 @@ var _ = Describe("Flow controller", func() {
 		})
 
 		It("triggers a window update when not necessary", func() {
-			readPosition := receiveFlowControlWindow - receiveWindowUpdateThreshold - 1
+			readPosition := receiveFlowControlWindow - receiveFlowControlWindow/2 - 1
 			controller.bytesRead = readPosition
 			updateNecessary, _ := controller.MaybeTriggerWindowUpdate()
 			Expect(updateNecessary).To(BeFalse())

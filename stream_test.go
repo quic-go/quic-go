@@ -465,15 +465,15 @@ var _ = Describe("Stream", func() {
 	})
 
 	Context("flow control window updating, for receiving", func() {
-		var receiveFlowControlWindow protocol.ByteCount = 1337
-		var receiveWindowUpdateThreshold protocol.ByteCount = 1000
+		var receiveFlowControlWindow protocol.ByteCount = 1000
+		var receiveFlowControlWindowIncrement protocol.ByteCount = 1000
 		BeforeEach(func() {
 			str.flowController.receiveFlowControlWindow = receiveFlowControlWindow
-			str.flowController.receiveWindowUpdateThreshold = receiveWindowUpdateThreshold
+			str.flowController.receiveFlowControlWindowIncrement = receiveFlowControlWindowIncrement
 		})
 
 		It("updates the flow control window", func() {
-			len := int(receiveFlowControlWindow) - int(receiveWindowUpdateThreshold) + 1
+			len := int(receiveFlowControlWindow)/2 + 1
 			frame := frames.StreamFrame{
 				Offset: 0,
 				Data:   bytes.Repeat([]byte{'f'}, len),
@@ -490,8 +490,8 @@ var _ = Describe("Stream", func() {
 
 		It("updates the connection level flow control window", func() {
 			str.connectionFlowController.receiveFlowControlWindow = 100
-			str.connectionFlowController.receiveWindowUpdateThreshold = 60
-			len := 100 - 60 + 1
+			str.connectionFlowController.receiveFlowControlWindowIncrement = 100
+			len := 100/2 + 1
 			frame := frames.StreamFrame{
 				Offset: 0,
 				Data:   bytes.Repeat([]byte{'f'}, len),
@@ -507,7 +507,7 @@ var _ = Describe("Stream", func() {
 		})
 
 		It("does not update the flow control window when not enough data was received", func() {
-			len := int(receiveFlowControlWindow) - int(receiveWindowUpdateThreshold) - 1
+			len := int(receiveFlowControlWindow)/2 - 1
 			frame := frames.StreamFrame{
 				Offset: 0,
 				Data:   bytes.Repeat([]byte{'f'}, len),
