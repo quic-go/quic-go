@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/crypto"
@@ -21,6 +22,7 @@ func (h *mockSentPacketHandler) HasPacketForRetransmission() bool               
 func (h *mockSentPacketHandler) BytesInFlight() protocol.ByteCount                  { return 0 }
 func (h *mockSentPacketHandler) GetLargestObserved() protocol.PacketNumber          { return 1 }
 func (h *mockSentPacketHandler) AllowsSending() bool                                { panic("not implemented") }
+func (h *mockSentPacketHandler) TimeToFirstRTO() time.Duration                      { panic("not implemented") }
 
 func newMockSentPacketHandler() ackhandler.SentPacketHandler {
 	return &mockSentPacketHandler{}

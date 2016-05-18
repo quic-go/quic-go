@@ -251,6 +251,8 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) error {
 }
 
 func (h *sentPacketHandler) HasPacketForRetransmission() bool {
+	h.queuePacketsRTO()
+
 	if len(h.retransmissionQueue) > 0 {
 		return true
 	}
@@ -287,4 +289,34 @@ func (h *sentPacketHandler) getRTO() time.Duration {
 		rto = protocol.DefaultRetransmissionTime
 	}
 	return utils.MaxDuration(rto, protocol.MinRetransmissionTime)
+}
+
+func (h *sentPacketHandler) queuePacketsRTO() {
+	queued := false
+	now := time.Now()
+	for _, p := range h.packetHistory {
+		if p == nil || p.Retransmitted || p.rtoTime.After(now) {
+			continue
+		}
+		h.queuePacketForRetransmission(p)
+		queued = true
+	}
+	if queued {
+		h.congestion.OnRetransmissionTimeout(true)
+	}
+}
+
+func (h *sentPacketHandler) TimeToFirstRTO() time.Duration {
+	now := time.Now()
+	min := utils.InfDuration
+	for _, p := range h.packetHistory {
+		if p == nil || p.Retransmitted {
+			continue
+		}
+		if now.After(p.rtoTime) {
+			return 0
+		}
+		min = utils.MinDuration(min, p.rtoTime.Sub(now))
+	}
+	return min
 }

@@ -12,9 +12,10 @@ import (
 )
 
 type mockCongestion struct {
-	nCalls                int
-	argsOnPacketSent      []interface{}
-	argsOnCongestionEvent []interface{}
+	nCalls                  int
+	argsOnPacketSent        []interface{}
+	argsOnCongestionEvent   []interface{}
+	onRetransmissionTimeout bool
 }
 
 func (m *mockCongestion) TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCount) time.Duration {
@@ -37,14 +38,18 @@ func (m *mockCongestion) OnCongestionEvent(rttUpdated bool, bytesInFlight protoc
 	m.argsOnCongestionEvent = []interface{}{rttUpdated, bytesInFlight, ackedPackets, lostPackets}
 }
 
-func (m *mockCongestion) SetNumEmulatedConnections(n int)                   { panic("not implemented") }
-func (m *mockCongestion) OnRetransmissionTimeout(packetsRetransmitted bool) { panic("not implemented") }
-func (m *mockCongestion) OnConnectionMigration()                            { panic("not implemented") }
-func (m *mockCongestion) SetSlowStartLargeReduction(enabled bool)           { panic("not implemented") }
+func (m *mockCongestion) OnRetransmissionTimeout(packetsRetransmitted bool) {
+	m.nCalls++
+	m.onRetransmissionTimeout = true
+}
 
 func (m *mockCongestion) RetransmissionDelay() time.Duration {
 	return protocol.DefaultRetransmissionTime
 }
+
+func (m *mockCongestion) SetNumEmulatedConnections(n int)         { panic("not implemented") }
+func (m *mockCongestion) OnConnectionMigration()                  { panic("not implemented") }
+func (m *mockCongestion) SetSlowStartLargeReduction(enabled bool) { panic("not implemented") }
 
 var _ = Describe("SentPacketHandler", func() {
 	var (
@@ -556,6 +561,14 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(handler.AllowsSending()).To(BeFalse())
 		})
+
+		It("should call OnRetransmissionTimeout", func() {
+			err := handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
+			Expect(err).NotTo(HaveOccurred())
+			handler.packetHistory[1].rtoTime = time.Now().Add(-time.Second)
+			handler.queuePacketsRTO()
+			Expect(cong.onRetransmissionTimeout).To(BeTrue())
+		})
 	})
 
 	Context("calculating RTO", func() {
@@ -581,6 +594,83 @@ var _ = Describe("SentPacketHandler", func() {
 			val := handler.packetHistory[1].rtoTime
 			expected := time.Now().Add(protocol.DefaultRetransmissionTime)
 			Expect(utils.AbsDuration(expected.Sub(val))).To(BeNumerically("<", time.Millisecond))
+		})
+	})
+
+	Context("RTO retransmission", func() {
+		Context("calculating the time to first RTO", func() {
+			It("defaults to inf", func() {
+				Expect(handler.TimeToFirstRTO()).To(Equal(utils.InfDuration))
+			})
+
+			It("returns time to RTO", func() {
+				err := handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(handler.TimeToFirstRTO()).To(BeNumerically("~", protocol.DefaultRetransmissionTime, time.Millisecond))
+			})
+
+			It("returns 0 when RTOs are required", func() {
+				err := handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
+				Expect(err).NotTo(HaveOccurred())
+				handler.packetHistory[1].rtoTime = time.Now().Add(-time.Second)
+				Expect(handler.TimeToFirstRTO()).To(BeZero())
+			})
+
+			It("ignores nil packets", func() {
+				handler.packetHistory[1] = nil
+				handler.queuePacketsRTO()
+				Expect(handler.TimeToFirstRTO()).To(Equal(utils.InfDuration))
+			})
+		})
+
+		Context("queuing packets due to RTO", func() {
+			It("does nothing if not required", func() {
+				err := handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
+				Expect(err).NotTo(HaveOccurred())
+				handler.queuePacketsRTO()
+				Expect(handler.retransmissionQueue).To(BeEmpty())
+			})
+
+			It("queues a packet if RTO expired", func() {
+				p := &Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1}
+				err := handler.SentPacket(p)
+				Expect(err).NotTo(HaveOccurred())
+				handler.packetHistory[1].rtoTime = time.Now().Add(-time.Second)
+				handler.queuePacketsRTO()
+				Expect(handler.retransmissionQueue).To(HaveLen(1))
+				Expect(handler.retransmissionQueue[0]).To(Equal(p))
+			})
+
+			It("does not queue retransmittedpackets", func() {
+				p := &Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1, Retransmitted: true}
+				err := handler.SentPacket(p)
+				Expect(err).NotTo(HaveOccurred())
+				handler.packetHistory[1].rtoTime = time.Now().Add(-time.Second)
+				handler.queuePacketsRTO()
+				Expect(handler.retransmissionQueue).To(BeEmpty())
+			})
+
+			It("ignores nil packets", func() {
+				handler.packetHistory[1] = nil
+				handler.queuePacketsRTO()
+				Expect(handler.retransmissionQueue).To(BeEmpty())
+			})
+		})
+
+		It("works with HasPacketForRetransmission", func() {
+			p := &Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1}
+			err := handler.SentPacket(p)
+			Expect(err).NotTo(HaveOccurred())
+			handler.packetHistory[1].rtoTime = time.Now().Add(-time.Second)
+			Expect(handler.HasPacketForRetransmission()).To(BeTrue())
+		})
+
+		It("works with DequeuePacketForRetransmission", func() {
+			p := &Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1}
+			err := handler.SentPacket(p)
+			Expect(err).NotTo(HaveOccurred())
+			handler.packetHistory[1].rtoTime = time.Now().Add(-time.Second)
+			Expect(handler.DequeuePacketForRetransmission()).To(Equal(p))
 		})
 	})
 })

@@ -564,4 +564,30 @@ var _ = Describe("Session", func() {
 		}
 		close(done)
 	}, 0.5)
+
+	It("retransmits RTO packets", func() {
+		// We simulate consistently low RTTs, so that the test works faster
+		n := protocol.PacketNumber(10)
+		for p := protocol.PacketNumber(1); p < n; p++ {
+			err := session.sentPacketHandler.SentPacket(&ackhandler.Packet{PacketNumber: p, Length: 1})
+			Expect(err).NotTo(HaveOccurred())
+			time.Sleep(time.Microsecond)
+			err = session.sentPacketHandler.ReceivedAck(&frames.AckFrame{LargestObserved: p})
+			Expect(err).NotTo(HaveOccurred())
+		}
+		// Now, we send a single packet, and expect that it was retransmitted later
+		go session.run()
+		Expect(conn.written).To(BeEmpty())
+		err := session.sentPacketHandler.SentPacket(&ackhandler.Packet{
+			PacketNumber: n,
+			Length:       1,
+			Frames: []frames.Frame{&frames.StreamFrame{
+				Data: bytes.Repeat([]byte{'a'}, int(protocol.SmallPacketPayloadSizeThreshold)+1),
+			}},
+		})
+		session.packer.lastPacketNumber = n
+		Expect(err).NotTo(HaveOccurred())
+		session.scheduleSending()
+		Eventually(func() bool { return len(conn.written) > 0 }).Should(BeTrue())
+	})
 })

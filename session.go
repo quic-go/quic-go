@@ -136,10 +136,16 @@ func (s *Session) run() {
 		default:
 		}
 
-		// receive at a nil channel blocks forever
+		// Note: receive at a nil channel blocks forever
+
 		var smallPacketSendTimer <-chan time.Time
 		if !s.smallPacketDelayedOccurranceTime.IsZero() {
 			smallPacketSendTimer = time.After(time.Now().Sub(s.smallPacketDelayedOccurranceTime))
+		}
+
+		var rtoTimer <-chan time.Time
+		if d := s.sentPacketHandler.TimeToFirstRTO(); d != utils.InfDuration {
+			rtoTimer = time.After(d)
 		}
 
 		var err error
@@ -156,6 +162,8 @@ func (s *Session) run() {
 		case <-s.sendingScheduled:
 			err = s.maybeSendPacket()
 		case <-smallPacketSendTimer:
+			err = s.sendPacket()
+		case <-rtoTimer:
 			err = s.sendPacket()
 		case <-s.aeadChanged:
 			s.tryDecryptingQueuedPackets()

@@ -1,6 +1,8 @@
 package ackhandler
 
 import (
+	"time"
+
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 )
@@ -17,6 +19,8 @@ type SentPacketHandler interface {
 	GetLargestObserved() protocol.PacketNumber
 
 	AllowsSending() bool
+
+	TimeToFirstRTO() time.Duration
 }
 
 // ReceivedPacketHandler handles ACKs needed to send for incoming packets
