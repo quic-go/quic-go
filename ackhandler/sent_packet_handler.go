@@ -4,9 +4,11 @@ import (
 	"errors"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 var (
@@ -42,13 +44,28 @@ type sentPacketHandler struct {
 	stopWaitingManager  StopWaitingManager
 
 	bytesInFlight protocol.ByteCount
+
+	rttStats   *congestion.RTTStats
+	congestion congestion.SendAlgorithm
 }
 
 // NewSentPacketHandler creates a new sentPacketHandler
 func NewSentPacketHandler(stopWaitingManager StopWaitingManager) SentPacketHandler {
+	rttStats := &congestion.RTTStats{}
+
+	congestion := congestion.NewCubicSender(
+		congestion.DefaultClock{},
+		rttStats,
+		false, /* don't use reno since chromium doesn't (why?) */
+		protocol.InitialCongestionWindow,
+		protocol.DefaultMaxCongestionWindow,
+	)
+
 	return &sentPacketHandler{
 		packetHistory:      make(map[protocol.PacketNumber]*Packet),
 		stopWaitingManager: stopWaitingManager,
+		rttStats:           rttStats,
+		congestion:         congestion,
 	}
 }
 
@@ -111,6 +128,15 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 	packet.Entropy = h.lastSentPacketEntropy
 	h.lastSentPacketNumber = packet.PacketNumber
 	h.packetHistory[packet.PacketNumber] = packet
+
+	h.congestion.OnPacketSent(
+		time.Now(),
+		h.BytesInFlight(),
+		packet.PacketNumber,
+		packet.Length,
+		true, /* TODO: is retransmittable */
+	)
+
 	return nil
 }
 
@@ -144,39 +170,42 @@ func (h *sentPacketHandler) calculateExpectedEntropy(ackFrame *frames.AckFrame) 
 }
 
 // TODO: Simplify return types
-func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) (time.Duration, []*Packet, []*Packet, error) {
+func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) error {
 	if ackFrame.LargestObserved > h.lastSentPacketNumber {
-		return 0, nil, nil, errAckForUnsentPacket
+		return errAckForUnsentPacket
 	}
 
 	if ackFrame.LargestObserved <= h.LargestObserved { // duplicate or out-of-order AckFrame
-		return 0, nil, nil, ErrDuplicateOrOutOfOrderAck
+		return ErrDuplicateOrOutOfOrderAck
 	}
 
 	expectedEntropy, err := h.calculateExpectedEntropy(ackFrame)
 	if err != nil {
-		return 0, nil, nil, err
+		return err
 	}
 
 	if byte(expectedEntropy) != ackFrame.Entropy {
-		return 0, nil, nil, ErrEntropy
+		return ErrEntropy
 	}
 
 	// Entropy ok. Now actually process the ACK packet
 	h.LargestObserved = ackFrame.LargestObserved
 	highestInOrderAckedPacketNumber := ackFrame.GetHighestInOrderPacketNumber()
 
-	// Calculate the RTT
+	// Update the RTT
 	timeDelta := time.Now().Sub(h.packetHistory[h.LargestObserved].sendTime)
+	// TODO: Don't always update RTT
+	h.rttStats.UpdateRTT(timeDelta, ackFrame.DelayTime, time.Now())
+	utils.Debugf("\tEstimated RTT: %dms", h.rttStats.SmoothedRTT()/time.Millisecond)
 
-	var ackedPackets []*Packet
-	var lostPackets []*Packet
+	var ackedPackets congestion.PacketVector
+	var lostPackets congestion.PacketVector
 
 	// ACK all packets below the highestInOrderAckedPacketNumber
 	for i := h.highestInOrderAckedPacketNumber; i <= highestInOrderAckedPacketNumber; i++ {
 		p := h.ackPacket(i)
 		if p != nil {
-			ackedPackets = append(ackedPackets, p)
+			ackedPackets = append(ackedPackets, congestion.PacketInfo{Number: p.PacketNumber, Length: p.Length})
 		}
 	}
 
@@ -193,15 +222,15 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) (time.Duratio
 			if nackRange.ContainsPacketNumber(i) {
 				p, err := h.nackPacket(i)
 				if err != nil {
-					return 0, nil, nil, err
+					return err
 				}
 				if p != nil {
-					lostPackets = append(lostPackets, p)
+					lostPackets = append(lostPackets, congestion.PacketInfo{Number: p.PacketNumber, Length: p.Length})
 				}
 			} else {
 				p := h.ackPacket(i)
 				if p != nil {
-					ackedPackets = append(ackedPackets, p)
+					ackedPackets = append(ackedPackets, congestion.PacketInfo{Number: p.PacketNumber, Length: p.Length})
 				}
 			}
 		}
@@ -209,7 +238,14 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) (time.Duratio
 
 	h.highestInOrderAckedPacketNumber = highestInOrderAckedPacketNumber
 
-	return timeDelta, ackedPackets, lostPackets, nil
+	h.congestion.OnCongestionEvent(
+		true, /* TODO: rtt updated */
+		h.BytesInFlight(),
+		ackedPackets,
+		lostPackets,
+	)
+
+	return nil
 }
 
 func (h *sentPacketHandler) HasPacketForRetransmission() bool {
@@ -237,4 +273,8 @@ func (h *sentPacketHandler) BytesInFlight() protocol.ByteCount {
 
 func (h *sentPacketHandler) GetLargestObserved() protocol.PacketNumber {
 	return h.LargestObserved
+}
+
+func (h *sentPacketHandler) AllowsSending() bool {
+	return h.BytesInFlight() <= h.congestion.GetCongestionWindow()
 }

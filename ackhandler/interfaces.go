@@ -1,8 +1,6 @@
 package ackhandler
 
 import (
-	"time"
-
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 )
@@ -10,13 +8,15 @@ import (
 // SentPacketHandler handles ACKs received for outgoing packets
 type SentPacketHandler interface {
 	SentPacket(packet *Packet) error
-	ReceivedAck(ackFrame *frames.AckFrame) (time.Duration, []*Packet, []*Packet, error)
+	ReceivedAck(ackFrame *frames.AckFrame) error
 
 	HasPacketForRetransmission() bool
 	DequeuePacketForRetransmission() (packet *Packet)
 
 	BytesInFlight() protocol.ByteCount
 	GetLargestObserved() protocol.PacketNumber
+
+	AllowsSending() bool
 }
 
 // ReceivedPacketHandler handles ACKs needed to send for incoming packets

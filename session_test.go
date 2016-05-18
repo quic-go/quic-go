@@ -12,7 +12,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
-	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -32,52 +31,6 @@ func (m *mockConnection) write(p []byte) error {
 }
 
 func (*mockConnection) setCurrentRemoteAddr(addr interface{}) {}
-
-type mockCongestion struct {
-	nCalls                int
-	argsOnPacketSent      []interface{}
-	argsOnCongestionEvent []interface{}
-}
-
-func (m *mockCongestion) TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCount) time.Duration {
-	panic("not implemented")
-}
-
-func (m *mockCongestion) OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) bool {
-	m.nCalls++
-	m.argsOnPacketSent = []interface{}{sentTime, bytesInFlight, packetNumber, bytes, isRetransmittable}
-	return false
-}
-
-func (m *mockCongestion) GetCongestionWindow() protocol.ByteCount {
-	m.nCalls++
-	return protocol.DefaultTCPMSS
-}
-
-func (m *mockCongestion) OnCongestionEvent(rttUpdated bool, bytesInFlight protocol.ByteCount, ackedPackets congestion.PacketVector, lostPackets congestion.PacketVector) {
-	m.nCalls++
-	m.argsOnCongestionEvent = []interface{}{rttUpdated, bytesInFlight, ackedPackets, lostPackets}
-}
-
-func (m *mockCongestion) SetNumEmulatedConnections(n int) {
-	panic("not implemented")
-}
-
-func (m *mockCongestion) OnRetransmissionTimeout(packetsRetransmitted bool) {
-	panic("not implemented")
-}
-
-func (m *mockCongestion) OnConnectionMigration() {
-	panic("not implemented")
-}
-
-func (m *mockCongestion) RetransmissionDelay() time.Duration {
-	panic("not implemented")
-}
-
-func (m *mockCongestion) SetSlowStartLargeReduction(enabled bool) {
-	panic("not implemented")
-}
 
 var _ = Describe("Session", func() {
 	var (
@@ -604,68 +557,7 @@ var _ = Describe("Session", func() {
 		close(done)
 	}, 0.5)
 
-	Context("congestion", func() {
-		var (
-			cong *mockCongestion
-		)
-
-		BeforeEach(func() {
-			cong = &mockCongestion{}
-			session.congestion = cong
-		})
-
-		It("should call OnSent", func() {
-			session.queueStreamFrame(&frames.StreamFrame{StreamID: 5})
-			session.sendPacket()
-			Expect(cong.nCalls).To(Equal(2)) // OnPacketSent + GetCongestionWindow
-			Expect(cong.argsOnPacketSent[1]).To(Equal(protocol.ByteCount(25)))
-			Expect(cong.argsOnPacketSent[2]).To(Equal(protocol.PacketNumber(1)))
-			Expect(cong.argsOnPacketSent[3]).To(Equal(protocol.ByteCount(25)))
-			Expect(cong.argsOnPacketSent[4]).To(BeTrue())
-		})
-
-		It("should call OnCongestionEvent", func() {
-			session.sentPacketHandler.SentPacket(&ackhandler.Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
-			session.sentPacketHandler.SentPacket(&ackhandler.Packet{PacketNumber: 2, Frames: []frames.Frame{}, Length: 2})
-			session.sentPacketHandler.SentPacket(&ackhandler.Packet{PacketNumber: 3, Frames: []frames.Frame{}, Length: 3})
-			err := session.handleAckFrame(&frames.AckFrame{
-				LargestObserved: 3,
-				NackRanges:      []frames.NackRange{{2, 2}},
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cong.nCalls).To(Equal(1))
-			//(rttUpdated bool, bytesInFlight protocol.ByteCount, ackedPackets cong.PacketVector, lostPackets cong.PacketVector)
-			Expect(cong.argsOnCongestionEvent[0]).To(BeTrue())
-			Expect(cong.argsOnCongestionEvent[1]).To(Equal(protocol.ByteCount(2)))
-			Expect(cong.argsOnCongestionEvent[2]).To(Equal(congestion.PacketVector{{1, 1}, {3, 3}}))
-			Expect(cong.argsOnCongestionEvent[3]).To(Equal(congestion.PacketVector{}))
-
-			// Loose the packet
-			session.sentPacketHandler.SentPacket(&ackhandler.Packet{PacketNumber: 4, Frames: []frames.Frame{}, Length: 4})
-			err = session.handleAckFrame(&frames.AckFrame{
-				LargestObserved: 4,
-				NackRanges:      []frames.NackRange{{2, 2}},
-			})
-			Expect(err).NotTo(HaveOccurred())
-			session.sentPacketHandler.SentPacket(&ackhandler.Packet{PacketNumber: 5, Frames: []frames.Frame{}, Length: 5})
-			err = session.handleAckFrame(&frames.AckFrame{
-				LargestObserved: 5,
-				NackRanges:      []frames.NackRange{{2, 2}},
-			})
-			Expect(err).NotTo(HaveOccurred())
-			session.sentPacketHandler.SentPacket(&ackhandler.Packet{PacketNumber: 6, Frames: []frames.Frame{}, Length: 6})
-			err = session.handleAckFrame(&frames.AckFrame{
-				LargestObserved: 6,
-				NackRanges:      []frames.NackRange{{2, 2}},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			Expect(cong.argsOnCongestionEvent[2]).To(Equal(congestion.PacketVector{{6, 6}}))
-			Expect(cong.argsOnCongestionEvent[3]).To(Equal(congestion.PacketVector{{2, 2}}))
-		})
-	})
-
-	It("stored up to MaxSessionUnprocessedPackets packets", func(done Done) {
+	It("stores up to MaxSessionUnprocessedPackets packets", func(done Done) {
 		// Nothing here should block
 		for i := 0; i < protocol.MaxSessionUnprocessedPackets+10; i++ {
 			session.handlePacket(nil, nil, nil)

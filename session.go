@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
-	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -76,9 +75,6 @@ type Session struct {
 	// Used to calculate the next packet number from the truncated wire
 	// representation, and sent back in public reset packets
 	lastRcvdPacketNumber protocol.PacketNumber
-
-	rttStats   congestion.RTTStats
-	congestion congestion.SendAlgorithm
 }
 
 // newSession makes a new session
@@ -100,7 +96,6 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		receivedPackets:             make(chan receivedPacket, protocol.MaxSessionUnprocessedPackets),
 		closeChan:                   make(chan struct{}, 1),
 		sendingScheduled:            make(chan struct{}, 1),
-		rttStats:                    congestion.RTTStats{},
 		connectionParametersManager: connectionParametersManager,
 		undecryptablePackets:        make([]receivedPacket, 0, protocol.MaxUndecryptablePackets),
 		aeadChanged:                 make(chan struct{}, 1),
@@ -121,14 +116,6 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		version:                     v,
 	}
 	session.unpacker = &packetUnpacker{aead: session.cryptoSetup, version: v}
-
-	session.congestion = congestion.NewCubicSender(
-		congestion.DefaultClock{},
-		&session.rttStats,
-		false, /* don't use reno since chromium doesn't (why?) */
-		protocol.InitialCongestionWindow,
-		protocol.DefaultMaxCongestionWindow,
-	)
 
 	return session, err
 }
@@ -336,33 +323,12 @@ func (s *Session) handleRstStreamFrame(frame *frames.RstStreamFrame) error {
 }
 
 func (s *Session) handleAckFrame(frame *frames.AckFrame) error {
-	duration, acked, lost, err := s.sentPacketHandler.ReceivedAck(frame)
-	if err != nil {
+
+	if err := s.sentPacketHandler.ReceivedAck(frame); err != nil {
 		return err
 	}
 
-	// TODO: Don't always update RTT
-	s.rttStats.UpdateRTT(duration, frame.DelayTime, time.Now())
-
-	cAcked := make(congestion.PacketVector, len(acked))
-	for i, v := range acked {
-		cAcked[i].Number = v.PacketNumber
-		cAcked[i].Length = v.Length
-	}
-	cLost := make(congestion.PacketVector, len(lost))
-	for i, v := range lost {
-		cLost[i].Number = v.PacketNumber
-		cLost[i].Length = v.Length
-	}
-	s.congestion.OnCongestionEvent(
-		true, /* rtt updated */
-		s.sentPacketHandler.BytesInFlight(),
-		cAcked,
-		cLost,
-	)
-
 	utils.Debugf("\t<- %#v", frame)
-	utils.Debugf("\tEstimated RTT: %dms", s.rttStats.SmoothedRTT()/time.Millisecond)
 	return nil
 }
 
@@ -409,7 +375,7 @@ func (s *Session) closeStreamsWithError(err error) {
 }
 
 func (s *Session) maybeSendPacket() error {
-	if !s.congestionAllowsSending() {
+	if !s.sentPacketHandler.AllowsSending() {
 		return nil
 	}
 
@@ -452,7 +418,7 @@ func (s *Session) maybeSendPacket() error {
 }
 
 func (s *Session) sendPacket() error {
-	if !s.congestionAllowsSending() {
+	if !s.sentPacketHandler.AllowsSending() {
 		return nil
 	}
 
@@ -513,14 +479,6 @@ func (s *Session) sendPacket() error {
 	if err != nil {
 		return err
 	}
-
-	s.congestion.OnPacketSent(
-		time.Now(),
-		s.sentPacketHandler.BytesInFlight(),
-		packet.number,
-		protocol.ByteCount(len(packet.raw)),
-		true, /* TODO: is retransmittable */
-	)
 
 	s.stopWaitingManager.SentStopWaitingWithPacket(packet.number)
 
@@ -633,10 +591,6 @@ func (s *Session) scheduleSending() {
 	case s.sendingScheduled <- struct{}{}:
 	default:
 	}
-}
-
-func (s *Session) congestionAllowsSending() bool {
-	return s.sentPacketHandler.BytesInFlight() <= s.congestion.GetCongestionWindow()
 }
 
 func (s *Session) tryQueueingUndecryptablePacket(p receivedPacket) {
