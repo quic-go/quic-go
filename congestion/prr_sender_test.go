@@ -1,14 +1,12 @@
 package congestion_test
 
 import (
-	"math"
-	"time"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
 	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 var _ = Describe("PRR sender", func() {
@@ -34,7 +32,7 @@ var _ = Describe("PRR sender", func() {
 		// Send retransmission.
 		prr.OnPacketSent(protocol.DefaultTCPMSS)
 		// PRR shouldn't allow sending any more packets.
-		Expect(prr.TimeUntilSend(congestion_window, bytes_in_flight, ssthresh_after_loss*protocol.DefaultTCPMSS)).To(Equal(time.Duration(math.MaxInt64)))
+		Expect(prr.TimeUntilSend(congestion_window, bytes_in_flight, ssthresh_after_loss*protocol.DefaultTCPMSS)).To(Equal(utils.InfDuration))
 
 		// One packet is lost, and one ack was consumed above. PRR now paces
 		// transmissions through the remaining 48 acks. PRR will alternatively
@@ -43,7 +41,7 @@ var _ = Describe("PRR sender", func() {
 			// Ack a packet. PRR shouldn't allow sending a packet in response.
 			prr.OnPacketAcked(protocol.DefaultTCPMSS)
 			bytes_in_flight -= protocol.DefaultTCPMSS
-			Expect(prr.TimeUntilSend(congestion_window, bytes_in_flight, ssthresh_after_loss*protocol.DefaultTCPMSS)).To(Equal(time.Duration(math.MaxInt64)))
+			Expect(prr.TimeUntilSend(congestion_window, bytes_in_flight, ssthresh_after_loss*protocol.DefaultTCPMSS)).To(Equal(utils.InfDuration))
 			// Ack another packet. PRR should now allow sending a packet in response.
 			prr.OnPacketAcked(protocol.DefaultTCPMSS)
 			bytes_in_flight -= protocol.DefaultTCPMSS
@@ -68,7 +66,7 @@ var _ = Describe("PRR sender", func() {
 			// Since bytes_in_flight is equal to the congestion_window,
 			// PRR disallows sending.
 			Expect(bytes_in_flight).To(Equal(congestion_window))
-			Expect(prr.TimeUntilSend(congestion_window, bytes_in_flight, ssthresh_after_loss*protocol.DefaultTCPMSS)).To(Equal(time.Duration(math.MaxInt64)))
+			Expect(prr.TimeUntilSend(congestion_window, bytes_in_flight, ssthresh_after_loss*protocol.DefaultTCPMSS)).To(Equal(utils.InfDuration))
 		}
 
 	})
@@ -95,7 +93,7 @@ var _ = Describe("PRR sender", func() {
 				bytes_in_flight += protocol.DefaultTCPMSS
 			}
 			// PRR should allow no more than 2 packets in response to an ack.
-			Expect(prr.TimeUntilSend(congestion_window, bytes_in_flight, ssthresh_after_loss*protocol.DefaultTCPMSS)).To(Equal(time.Duration(math.MaxInt64)))
+			Expect(prr.TimeUntilSend(congestion_window, bytes_in_flight, ssthresh_after_loss*protocol.DefaultTCPMSS)).To(Equal(utils.InfDuration))
 		}
 
 		// Out of SSRB mode, PRR allows one send in response to each ack.

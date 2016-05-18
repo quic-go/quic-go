@@ -1,10 +1,10 @@
 package congestion
 
 import (
-	"math"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 // PrrSender implements the Proportional Rate Reduction (PRR) per RFC 6937
@@ -48,7 +48,7 @@ func (p *PrrSender) TimeUntilSend(congestionWindow, bytesInFlight, slowstartThre
 		// when more packets are lost than the CWND reduction.
 		//   limit = MAX(prr_delivered - prr_out, DeliveredData) + MSS
 		if p.bytesDeliveredSinceLoss+p.ackCountSinceLoss*protocol.DefaultTCPMSS <= p.bytesSentSinceLoss {
-			return math.MaxInt64
+			return utils.InfDuration
 		}
 		return 0
 	}
@@ -59,5 +59,5 @@ func (p *PrrSender) TimeUntilSend(congestionWindow, bytesInFlight, slowstartThre
 	if p.bytesDeliveredSinceLoss*slowstartThreshold > p.bytesSentSinceLoss*p.bytesInFlightBeforeLoss {
 		return 0
 	}
-	return math.MaxInt64
+	return utils.InfDuration
 }

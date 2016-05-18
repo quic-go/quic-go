@@ -1,7 +1,6 @@
 package congestion
 
 import (
-	"math"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -85,7 +84,7 @@ func (c *cubicSender) TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCo
 	if c.GetCongestionWindow() > bytesInFlight {
 		return 0
 	}
-	return math.MaxInt64
+	return utils.InfDuration
 }
 
 func (c *cubicSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) bool {

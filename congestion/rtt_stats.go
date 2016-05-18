@@ -1,7 +1,6 @@
 package congestion
 
 import (
-	"math"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/utils"
@@ -44,7 +43,7 @@ type RTTStats struct {
 func NewRTTStats() *RTTStats {
 	return &RTTStats{
 		initialRTTus:       initialRTTus,
-		recentMinRTTwindow: math.MaxInt64,
+		recentMinRTTwindow: utils.InfDuration,
 	}
 }
 
@@ -83,7 +82,7 @@ func (r *RTTStats) SetRecentMinRTTwindow(recentMinRTTwindow time.Duration) {
 
 // UpdateRTT updates the RTT based on a new sample.
 func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration, now time.Time) {
-	if sendDelta == math.MaxInt64 || sendDelta <= 0 {
+	if sendDelta == utils.InfDuration || sendDelta <= 0 {
 		utils.Debugf("Ignoring measured sendDelta, because it's is either infinite, zero, or negative: %d", sendDelta/time.Microsecond)
 		return
 	}
@@ -168,7 +167,7 @@ func (r *RTTStats) OnConnectionMigration() {
 	r.meanDeviation = 0
 	r.initialRTTus = initialRTTus
 	r.numMinRTTsamplesRemaining = 0
-	r.recentMinRTTwindow = math.MaxInt64
+	r.recentMinRTTwindow = utils.InfDuration
 	r.recentMinRTT = rttSample{}
 	r.halfWindowRTT = rttSample{}
 	r.quarterWindowRTT = rttSample{}

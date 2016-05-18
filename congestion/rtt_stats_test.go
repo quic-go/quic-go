@@ -1,10 +1,10 @@
 package congestion_test
 
 import (
-	"math"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/congestion"
+	"github.com/lucas-clemente/quic-go/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -181,7 +181,7 @@ var _ = Describe("RTT stats", func() {
 
 		bad_send_deltas := []time.Duration{
 			0,
-			math.MaxInt64,
+			utils.InfDuration,
 			-1000 * time.Microsecond,
 		}
 		// log.StartCapturingLogs();

@@ -1,10 +1,14 @@
 package utils
 
 import (
+	"math"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 )
+
+// InfDuration is a duration of infinite length
+const InfDuration = time.Duration(math.MaxInt64)
 
 // Max returns the maximum of two Ints
 func Max(a, b int) int {
