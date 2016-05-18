@@ -374,6 +374,7 @@ func (s *Session) closeStreamsWithError(err error) {
 	}
 }
 
+// TODO: try sending more than one packet
 func (s *Session) maybeSendPacket() error {
 	if !s.sentPacketHandler.AllowsSending() {
 		return nil

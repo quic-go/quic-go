@@ -48,3 +48,9 @@ const InitialConnectionFlowControlWindow ByteCount = (1 << 14) // 16 kB
 
 // InitialIdleConnectionStateLifetime is the initial idle connection state lifetime
 const InitialIdleConnectionStateLifetime = 30 * time.Second
+
+// DefaultRetransmissionTime is the RTO time on new connections
+const DefaultRetransmissionTime = 500 * time.Millisecond
+
+// MinRetransmissionTime is the minimum RTO time
+const MinRetransmissionTime = 200 * time.Millisecond

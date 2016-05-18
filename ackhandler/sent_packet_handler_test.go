@@ -6,6 +6,7 @@ import (
 	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -39,8 +40,11 @@ func (m *mockCongestion) OnCongestionEvent(rttUpdated bool, bytesInFlight protoc
 func (m *mockCongestion) SetNumEmulatedConnections(n int)                   { panic("not implemented") }
 func (m *mockCongestion) OnRetransmissionTimeout(packetsRetransmitted bool) { panic("not implemented") }
 func (m *mockCongestion) OnConnectionMigration()                            { panic("not implemented") }
-func (m *mockCongestion) RetransmissionDelay() time.Duration                { panic("not implemented") }
 func (m *mockCongestion) SetSlowStartLargeReduction(enabled bool)           { panic("not implemented") }
+
+func (m *mockCongestion) RetransmissionDelay() time.Duration {
+	return protocol.DefaultRetransmissionTime
+}
 
 var _ = Describe("SentPacketHandler", func() {
 	var (
@@ -551,6 +555,32 @@ var _ = Describe("SentPacketHandler", func() {
 			err := handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: protocol.DefaultTCPMSS + 1})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(handler.AllowsSending()).To(BeFalse())
+		})
+	})
+
+	Context("calculating RTO", func() {
+		It("uses default RTO", func() {
+			Expect(handler.getRTO()).To(Equal(protocol.DefaultRetransmissionTime))
+		})
+
+		It("uses RTO from rttStats", func() {
+			rtt := time.Second
+			expected := rtt + rtt/2*4
+			handler.rttStats.UpdateRTT(rtt, 0, time.Now())
+			Expect(handler.getRTO()).To(Equal(expected))
+		})
+
+		It("limits RTO min", func() {
+			rtt := time.Millisecond
+			handler.rttStats.UpdateRTT(rtt, 0, time.Now())
+			Expect(handler.getRTO()).To(Equal(protocol.MinRetransmissionTime))
+		})
+
+		It("stores RTO in sent packets", func() {
+			handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
+			val := handler.packetHistory[1].rtoTime
+			expected := time.Now().Add(protocol.DefaultRetransmissionTime)
+			Expect(utils.AbsDuration(expected.Sub(val))).To(BeNumerically("<", time.Millisecond))
 		})
 	})
 })

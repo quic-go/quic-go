@@ -118,7 +118,9 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 	if h.lastSentPacketNumber+1 != packet.PacketNumber {
 		return errWrongPacketNumberIncrement
 	}
-	packet.sendTime = time.Now()
+	now := time.Now()
+	packet.sendTime = now
+	packet.rtoTime = now.Add(h.getRTO())
 	if packet.Length == 0 {
 		return errors.New("SentPacketHandler: packet cannot be empty")
 	}
@@ -277,4 +279,12 @@ func (h *sentPacketHandler) GetLargestObserved() protocol.PacketNumber {
 
 func (h *sentPacketHandler) AllowsSending() bool {
 	return h.BytesInFlight() <= h.congestion.GetCongestionWindow()
+}
+
+func (h *sentPacketHandler) getRTO() time.Duration {
+	rto := h.congestion.RetransmissionDelay()
+	if rto == 0 {
+		rto = protocol.DefaultRetransmissionTime
+	}
+	return utils.MaxDuration(rto, protocol.MinRetransmissionTime)
 }

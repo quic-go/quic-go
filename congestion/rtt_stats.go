@@ -100,7 +100,7 @@ func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration, now time.Time) {
 	// Correct for ackDelay if information received from the peer results in a
 	// positive RTT sample. Otherwise, we use the sendDelta as a reasonable
 	// measure for smoothedRTT.
-	sample := (sendDelta)
+	sample := sendDelta
 	if sample > ackDelay {
 		sample -= ackDelay
 	}
