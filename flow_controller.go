@@ -15,6 +15,7 @@ type flowController struct {
 	lastBlockedSentForOffset protocol.ByteCount
 
 	bytesRead                         protocol.ByteCount
+	highestReceived                   protocol.ByteCount
 	receiveWindowUpdateThreshold      protocol.ByteCount
 	receiveFlowControlWindow          protocol.ByteCount
 	receiveFlowControlWindowIncrement protocol.ByteCount
@@ -61,6 +62,15 @@ func (c *flowController) SendWindowSize() protocol.ByteCount {
 	return c.sendFlowControlWindow - c.bytesSent
 }
 
+func (c *flowController) UpdateHighestReceived(n protocol.ByteCount) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if n > c.highestReceived {
+		c.highestReceived = n
+	}
+}
+
 func (c *flowController) AddBytesRead(n protocol.ByteCount) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -100,11 +110,11 @@ func (c *flowController) MaybeTriggerWindowUpdate() (bool, protocol.ByteCount) {
 	return false, 0
 }
 
-func (c *flowController) CheckFlowControlViolation(highestByte protocol.ByteCount) bool {
+func (c *flowController) CheckFlowControlViolation() bool {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	if highestByte > c.receiveFlowControlWindow {
+	if c.highestReceived > c.receiveFlowControlWindow {
 		return true
 	}
 	return false

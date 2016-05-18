@@ -103,12 +103,26 @@ var _ = Describe("Flow controller", func() {
 			Expect(updateNecessary).To(BeFalse())
 		})
 
+		It("updates the highestReceived", func() {
+			controller.highestReceived = 1337
+			controller.UpdateHighestReceived(1338)
+			Expect(controller.highestReceived).To(Equal(protocol.ByteCount(1338)))
+		})
+
+		It("does not decrease the highestReceived", func() {
+			controller.highestReceived = 1337
+			controller.UpdateHighestReceived(1000)
+			Expect(controller.highestReceived).To(Equal(protocol.ByteCount(1337)))
+		})
+
 		It("detects a flow control violation", func() {
-			Expect(controller.CheckFlowControlViolation(receiveFlowControlWindow + 1)).To(BeTrue())
+			controller.UpdateHighestReceived(receiveFlowControlWindow + 1)
+			Expect(controller.CheckFlowControlViolation()).To(BeTrue())
 		})
 
 		It("does not give a flow control violation when using the window completely", func() {
-			Expect(controller.CheckFlowControlViolation(receiveFlowControlWindow)).To(BeFalse())
+			controller.UpdateHighestReceived(receiveFlowControlWindow)
+			Expect(controller.CheckFlowControlViolation()).To(BeFalse())
 		})
 	})
 })

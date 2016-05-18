@@ -203,7 +203,8 @@ func (s *stream) Close() error {
 // AddStreamFrame adds a new stream frame
 func (s *stream) AddStreamFrame(frame *frames.StreamFrame) error {
 	maxOffset := frame.Offset + protocol.ByteCount(len(frame.Data))
-	if s.flowController.CheckFlowControlViolation(maxOffset) {
+	s.flowController.UpdateHighestReceived(maxOffset)
+	if s.flowController.CheckFlowControlViolation() {
 		return errFlowControlViolation
 	}
 
