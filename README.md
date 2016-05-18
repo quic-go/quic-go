@@ -14,8 +14,8 @@ Done:
 - Basic protocol with support for QUIC version 30, 31 and 32
 - HTTP/2 support
 - Crypto (RSA for signing, curve25519 for KEX, chacha20-poly1305 as cipher)
-- Basic loss detection (currently only fast retransmission) & retransmission
-- Flow Control when sending
+- Loss detection and retransmission (currently fast retransmission & RTO)
+- Flow Control
 - Congestion control using cubic
 
 Major TODOs:
@@ -24,12 +24,9 @@ Major TODOs:
 - Performance
 - Better packet loss detection
 - Support for QUIC versions 33 & 34
-- Flow Control when receiving
-- Some special cases
-- Better error handling
 - Connection migration
-- Public API cleanup
 - QUIC client
+- Public API design
 - Integration into caddy (mostly to figure out the right server API)
 
 ## Guides
