@@ -99,6 +99,10 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 		return err
 	}
 
+	if h2headersFrame.StreamEnded() {
+		dataStream.CloseRemote(0)
+	}
+
 	// stream's Close() closes the write side, not the read side
 	req.Body = ioutil.NopCloser(dataStream)
 
