@@ -134,6 +134,23 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			Expect(err).To(MatchError(ErrMalformedTag))
 			Expect(cpm.GetSendStreamFlowControlWindow()).To(Equal(protocol.InitialConnectionFlowControlWindow))
 		})
+
+		It("does not allow renegotiation of flow control parameters", func() {
+			values := map[Tag][]byte{
+				TagCFCW: {0xDE, 0xAD, 0xBE, 0xEF},
+				TagSFCW: {0xDE, 0xAD, 0xBE, 0xEF},
+			}
+			err := cpm.SetFromMap(values)
+			Expect(err).ToNot(HaveOccurred())
+			values = map[Tag][]byte{
+				TagCFCW: {0x13, 0x37, 0x13, 0x37},
+				TagSFCW: {0x13, 0x37, 0x13, 0x37},
+			}
+			err = cpm.SetFromMap(values)
+			Expect(err).To(MatchError(ErrFlowControlRenegotiationNotSupported))
+			Expect(cpm.GetSendStreamFlowControlWindow()).To(Equal(protocol.ByteCount(0xEFBEADDE)))
+			Expect(cpm.GetSendConnectionFlowControlWindow()).To(Equal(protocol.ByteCount(0xEFBEADDE)))
+		})
 	})
 
 	Context("idle connection state lifetime", func() {

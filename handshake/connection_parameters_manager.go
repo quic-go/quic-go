@@ -19,6 +19,8 @@ type ConnectionParametersManager struct {
 	params map[Tag][]byte
 	mutex  sync.RWMutex
 
+	flowControlNegotiated bool // have the flow control parameters for sending already been negotiated
+
 	maxStreamsPerConnection            uint32
 	idleConnectionStateLifetime        time.Duration
 	sendStreamFlowControlWindow        protocol.ByteCount
@@ -30,7 +32,10 @@ type ConnectionParametersManager struct {
 var errTagNotInConnectionParameterMap = errors.New("ConnectionParametersManager: Tag not found in ConnectionsParameter map")
 
 // ErrMalformedTag is returned when the tag value cannot be read
-var ErrMalformedTag = qerr.Error(qerr.InvalidCryptoMessageParameter, "malformed Tag value")
+var (
+	ErrMalformedTag                         = qerr.Error(qerr.InvalidCryptoMessageParameter, "malformed Tag value")
+	ErrFlowControlRenegotiationNotSupported = qerr.Error(qerr.InvalidCryptoMessageParameter, "renegotiation of flow control parameters not supported")
+)
 
 // NewConnectionParamatersManager creates a new connection parameters manager
 func NewConnectionParamatersManager() *ConnectionParametersManager {
@@ -66,18 +71,30 @@ func (h *ConnectionParametersManager) SetFromMap(params map[Tag][]byte) error {
 			}
 			h.idleConnectionStateLifetime = h.negotiateIdleConnectionStateLifetime(time.Duration(clientValue) * time.Second)
 		case TagSFCW:
+			if h.flowControlNegotiated {
+				return ErrFlowControlRenegotiationNotSupported
+			}
 			sendStreamFlowControlWindow, err := utils.ReadUint32(bytes.NewBuffer(value))
 			if err != nil {
 				return ErrMalformedTag
 			}
 			h.sendStreamFlowControlWindow = protocol.ByteCount(sendStreamFlowControlWindow)
 		case TagCFCW:
+			if h.flowControlNegotiated {
+				return ErrFlowControlRenegotiationNotSupported
+			}
 			sendConnectionFlowControlWindow, err := utils.ReadUint32(bytes.NewBuffer(value))
 			if err != nil {
 				return ErrMalformedTag
 			}
 			h.sendConnectionFlowControlWindow = protocol.ByteCount(sendConnectionFlowControlWindow)
 		}
+	}
+
+	_, containsSFCW := params[TagSFCW]
+	_, containsCFCW := params[TagCFCW]
+	if containsCFCW || containsSFCW {
+		h.flowControlNegotiated = true
 	}
 
 	return nil
