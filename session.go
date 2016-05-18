@@ -54,6 +54,8 @@ type Session struct {
 	blockedFrameQueue      []*frames.BlockedFrame
 	blockedFrameQueueMutex sync.Mutex
 
+	flowController *flowController // connection level flow controller
+
 	unpacker *packetUnpacker
 	packer   *packetPacker
 
@@ -82,6 +84,8 @@ type Session struct {
 // newSession makes a new session
 func newSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) packetHandler {
 	stopWaitingManager := ackhandler.NewStopWaitingManager()
+	connectionParametersManager := handshake.NewConnectionParamatersManager()
+
 	session := &Session{
 		connectionID:                connectionID,
 		conn:                        conn,
@@ -91,12 +95,13 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		sentPacketHandler:           ackhandler.NewSentPacketHandler(stopWaitingManager),
 		receivedPacketHandler:       ackhandler.NewReceivedPacketHandler(),
 		stopWaitingManager:          stopWaitingManager,
+		flowController:              newFlowController(0, connectionParametersManager),
 		windowUpdateManager:         newWindowUpdateManager(),
 		receivedPackets:             make(chan receivedPacket, protocol.MaxSessionUnprocessedPackets),
 		closeChan:                   make(chan struct{}, 1),
 		sendingScheduled:            make(chan struct{}, 1),
 		rttStats:                    congestion.RTTStats{},
-		connectionParametersManager: handshake.NewConnectionParamatersManager(),
+		connectionParametersManager: connectionParametersManager,
 		undecryptablePackets:        make([]receivedPacket, 0, protocol.MaxUndecryptablePackets),
 		aeadChanged:                 make(chan struct{}, 1),
 	}
@@ -288,22 +293,29 @@ func (s *Session) isValidStreamID(streamID protocol.StreamID) bool {
 
 func (s *Session) handleWindowUpdateFrame(frame *frames.WindowUpdateFrame) error {
 	if frame.StreamID == 0 {
-		// TODO: handle connection level WindowUpdateFrames
-		// return errors.New("Connection level flow control not yet implemented")
-		return nil
+		s.flowController.UpdateSendWindow(frame.ByteOffset)
+		s.streamsMutex.RLock()
+		// tell all streams that the connection-level was updated
+		for _, stream := range s.streams {
+			if stream != nil {
+				stream.ConnectionFlowControlWindowUpdated()
+			}
+		}
+		s.streamsMutex.RUnlock()
+	} else {
+		s.streamsMutex.RLock()
+		stream, streamExists := s.streams[frame.StreamID]
+		if !streamExists {
+			return errWindowUpdateOnInvalidStream
+		}
+		if stream == nil {
+			return errWindowUpdateOnClosedStream
+		}
+		s.streamsMutex.RUnlock()
+
+		stream.UpdateSendFlowControlWindow(frame.ByteOffset)
 	}
 
-	s.streamsMutex.RLock()
-	stream, streamExists := s.streams[frame.StreamID]
-	if !streamExists {
-		return errWindowUpdateOnInvalidStream
-	}
-	if stream == nil {
-		return errWindowUpdateOnClosedStream
-	}
-	s.streamsMutex.RUnlock()
-
-	stream.UpdateSendFlowControlWindow(frame.ByteOffset)
 	return nil
 }
 
@@ -580,7 +592,7 @@ func (s *Session) GetOrOpenStream(id protocol.StreamID) (utils.Stream, error) {
 }
 
 func (s *Session) newStreamImpl(id protocol.StreamID) (*stream, error) {
-	stream, err := newStream(s, s.connectionParametersManager, id)
+	stream, err := newStream(s, s.connectionParametersManager, s.flowController, id)
 	if err != nil {
 		return nil, err
 	}

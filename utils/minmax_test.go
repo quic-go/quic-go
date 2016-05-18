@@ -62,6 +62,11 @@ var _ = Describe("Min / Max", func() {
 			Expect(MinInt64(5, 7)).To(Equal(int64(5)))
 		})
 
+		It("returns the minimum ByteCount", func() {
+			Expect(MinByteCount(7, 5)).To(Equal(protocol.ByteCount(5)))
+			Expect(MinByteCount(5, 7)).To(Equal(protocol.ByteCount(5)))
+		})
+
 		It("returns packet number min", func() {
 			Expect(MinPacketNumber(1, 2)).To(Equal(protocol.PacketNumber(1)))
 			Expect(MinPacketNumber(2, 1)).To(Equal(protocol.PacketNumber(1)))

@@ -15,13 +15,7 @@ type BlockedFrame struct {
 //Write writes a BlockedFrame frame
 func (f *BlockedFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
 	b.WriteByte(0x05)
-
-	if f.StreamID == 0 {
-		panic("Writing of connection level BlockedFrames not yet implemented.")
-	}
-
 	utils.WriteUint32(b, uint32(f.StreamID))
-
 	return nil
 }
 

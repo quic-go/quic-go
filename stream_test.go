@@ -48,7 +48,11 @@ var _ = Describe("Stream", func() {
 	BeforeEach(func() {
 		handler = &mockStreamHandler{}
 		cpm := handshake.NewConnectionParamatersManager()
-		str, _ = newStream(handler, cpm, 1337)
+		flowController := flowController{
+			sendFlowControlWindow:    0xFFFFFF,
+			receiveFlowControlWindow: 0xFFFFFF,
+		}
+		str, _ = newStream(handler, cpm, &flowController, 1337)
 	})
 
 	It("gets stream id", func() {
@@ -236,6 +240,43 @@ var _ = Describe("Stream", func() {
 			Expect(n).To(Equal(4))
 			Expect(b).To(Equal([]byte("abyd")))
 		})
+
+		Context("flow control", func() {
+			It("consumes bytes in the flow control window", func() {
+				str.contributesToConnectionFlowControl = false
+				frame := frames.StreamFrame{
+					Offset: 2,
+					Data:   []byte("foobar"),
+				}
+				err := str.AddStreamFrame(&frame)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(str.flowController.highestReceived).To(Equal(protocol.ByteCount(8)))
+			})
+
+			It("updates the connection level flow controller", func() {
+				str.contributesToConnectionFlowControl = true
+				str.connectionFlowController.highestReceived = 10
+				frame := frames.StreamFrame{
+					Offset: 2,
+					Data:   []byte("foobar"),
+				}
+				err := str.AddStreamFrame(&frame)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(str.connectionFlowController.highestReceived).To(Equal(protocol.ByteCount(10 + 8)))
+			})
+
+			It("doesn't update the connection level flow controller if the stream doesn't contribute", func() {
+				str.contributesToConnectionFlowControl = false
+				str.connectionFlowController.highestReceived = 10
+				frame := frames.StreamFrame{
+					Offset: 2,
+					Data:   []byte("foobar"),
+				}
+				err := str.AddStreamFrame(&frame)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(str.connectionFlowController.highestReceived).To(Equal(protocol.ByteCount(10)))
+			})
+		})
 	})
 
 	Context("writing", func() {
@@ -296,7 +337,16 @@ var _ = Describe("Stream", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("waits for a flow control window update", func() {
+			It("doesn't care about the connection flow control window if it is not contributing", func() {
+				str.flowController.sendFlowControlWindow = 4
+				str.contributesToConnectionFlowControl = false
+				str.connectionFlowController.sendFlowControlWindow = 1
+				n, err := str.Write([]byte{0xDE, 0xCA, 0xFB, 0xAD})
+				Expect(n).To(Equal(4))
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("waits for a stream flow control window update", func() {
 				var b bool
 				str.flowController.sendFlowControlWindow = 1
 				_, err := str.Write([]byte{0x42})
@@ -306,6 +356,27 @@ var _ = Describe("Stream", func() {
 					time.Sleep(2 * time.Millisecond)
 					b = true
 					str.UpdateSendFlowControlWindow(3)
+				}()
+				n, err := str.Write([]byte{0x13, 0x37})
+				Expect(b).To(BeTrue())
+				Expect(n).To(Equal(2))
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("waits for a connection flow control window update", func() {
+				var b bool
+				str.flowController.sendFlowControlWindow = 1000
+				str.connectionFlowController.sendFlowControlWindow = 1
+				str.contributesToConnectionFlowControl = true
+
+				_, err := str.Write([]byte{0x42})
+				Expect(err).ToNot(HaveOccurred())
+
+				go func() {
+					time.Sleep(2 * time.Millisecond)
+					b = true
+					str.connectionFlowController.UpdateSendWindow(3)
+					str.ConnectionFlowControlWindowUpdated()
 				}()
 				n, err := str.Write([]byte{0x13, 0x37})
 				Expect(b).To(BeTrue())
@@ -415,6 +486,24 @@ var _ = Describe("Stream", func() {
 			Expect(n).To(Equal(len))
 			Expect(handler.receiveFlowControlWindowCalled).To(BeTrue())
 			Expect(handler.receiveFlowControlWindowCalledForStream).To(Equal(str.streamID))
+		})
+
+		It("updates the connection level flow control window", func() {
+			str.connectionFlowController.receiveFlowControlWindow = 100
+			str.connectionFlowController.receiveWindowUpdateThreshold = 60
+			len := 100 - 60 + 1
+			frame := frames.StreamFrame{
+				Offset: 0,
+				Data:   bytes.Repeat([]byte{'f'}, len),
+			}
+			err := str.AddStreamFrame(&frame)
+			Expect(err).ToNot(HaveOccurred())
+			b := make([]byte, len)
+			n, err := str.Read(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(n).To(Equal(len))
+			Expect(handler.receiveFlowControlWindowCalled).To(BeTrue())
+			Expect(handler.receiveFlowControlWindowCalledForStream).To(Equal(protocol.StreamID(0)))
 		})
 
 		It("does not update the flow control window when not enough data was received", func() {

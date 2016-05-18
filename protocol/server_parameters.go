@@ -34,7 +34,7 @@ const ReceiveStreamFlowControlWindowIncrement = ReceiveStreamFlowControlWindow
 // ReceiveConnectionFlowControlWindow is the stream-level flow control window for receiving data
 // temporarily set this to a very high value, until proper connection-level flow control is implemented
 // TODO: set a reasonable value here
-const ReceiveConnectionFlowControlWindow ByteCount = (1 << 20) * 1024 * 2 // 2 GB
+const ReceiveConnectionFlowControlWindow ByteCount = (1 << 20) // 1 MB
 
 // MaxStreamsPerConnection is the maximum value accepted for the number of streams per connection
 // TODO: set a reasonable value here

@@ -26,6 +26,13 @@ var _ = Describe("BlockedFrame", func() {
 			Expect(b.Bytes()).To(Equal([]byte{0x05, 0x37, 0x13, 0x0, 0x0}))
 		})
 
+		It("writes a connection-level Blocked", func() {
+			b := &bytes.Buffer{}
+			frame := BlockedFrame{StreamID: 0}
+			frame.Write(b, 0)
+			Expect(b.Bytes()).To(Equal([]byte{0x05, 0, 0, 0, 0}))
+		})
+
 		It("has the correct min length", func() {
 			frame := BlockedFrame{StreamID: 3}
 			Expect(frame.MinLength()).To(Equal(protocol.ByteCount(5)))

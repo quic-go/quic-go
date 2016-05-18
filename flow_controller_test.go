@@ -1,10 +1,20 @@
 package quic
 
 import (
+	"reflect"
+	"unsafe"
+
+	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+// set private variables of the ConnectionParametersManager
+// those are normally read from the server parameter constants in the constructor of the ConnectionParametersManager
+func setConnectionParametersManagerWindow(cpm *handshake.ConnectionParametersManager, name string, value protocol.ByteCount) {
+	*(*protocol.ByteCount)(unsafe.Pointer(reflect.ValueOf(cpm).Elem().FieldByName(name).UnsafeAddr())) = value
+}
 
 var _ = Describe("Flow controller", func() {
 	var controller *flowController
@@ -13,7 +23,50 @@ var _ = Describe("Flow controller", func() {
 		controller = &flowController{}
 	})
 
+	Context("Constructor", func() {
+		var cpm *handshake.ConnectionParametersManager
+
+		BeforeEach(func() {
+			cpm = &handshake.ConnectionParametersManager{}
+			setConnectionParametersManagerWindow(cpm, "sendStreamFlowControlWindow", 1000)
+			setConnectionParametersManagerWindow(cpm, "receiveStreamFlowControlWindow", 2000)
+			setConnectionParametersManagerWindow(cpm, "sendConnectionFlowControlWindow", 3000)
+			setConnectionParametersManagerWindow(cpm, "receiveConnectionFlowControlWindow", 4000)
+		})
+
+		It("reads the stream send and receive windows when acting as stream-level flow controller", func() {
+			fc := newFlowController(5, cpm)
+			Expect(fc.streamID).To(Equal(protocol.StreamID(5)))
+			Expect(fc.receiveFlowControlWindow).To(Equal(protocol.ByteCount(2000)))
+		})
+
+		It("reads the stream send and receive windows when acting as stream-level flow controller", func() {
+			fc := newFlowController(0, cpm)
+			Expect(fc.streamID).To(Equal(protocol.StreamID(0)))
+			Expect(fc.receiveFlowControlWindow).To(Equal(protocol.ByteCount(4000)))
+		})
+
+		It("does not set the stream flow control windows for sending", func() {
+			fc := newFlowController(5, cpm)
+			Expect(fc.sendFlowControlWindow).To(BeZero())
+		})
+
+		It("does not set the connection flow control windows for sending", func() {
+			fc := newFlowController(0, cpm)
+			Expect(fc.sendFlowControlWindow).To(BeZero())
+		})
+	})
+
 	Context("send flow control", func() {
+		var cpm *handshake.ConnectionParametersManager
+
+		BeforeEach(func() {
+			cpm = &handshake.ConnectionParametersManager{}
+			setConnectionParametersManagerWindow(cpm, "sendStreamFlowControlWindow", 1000)
+			setConnectionParametersManagerWindow(cpm, "sendConnectionFlowControlWindow", 3000)
+			controller.connectionParametersManager = cpm
+		})
+
 		It("adds bytes sent", func() {
 			controller.bytesSent = 5
 			controller.AddBytesSent(6)
@@ -40,6 +93,36 @@ var _ = Describe("Flow controller", func() {
 			updateSuccessful = controller.UpdateSendWindow(10)
 			Expect(updateSuccessful).To(BeFalse())
 			Expect(controller.SendWindowSize()).To(Equal(protocol.ByteCount(20)))
+		})
+
+		It("asks the ConnectionParametersManager for the stream flow control window size", func() {
+			controller.streamID = 5
+			Expect(controller.getSendFlowControlWindow()).To(Equal(protocol.ByteCount(1000)))
+			// make sure the value is not cached
+			setConnectionParametersManagerWindow(cpm, "sendStreamFlowControlWindow", 2000)
+			Expect(controller.getSendFlowControlWindow()).To(Equal(protocol.ByteCount(2000)))
+		})
+
+		It("stops asking the ConnectionParametersManager for the flow control stream window size once a window update has arrived", func() {
+			controller.streamID = 5
+			Expect(controller.UpdateSendWindow(8000))
+			setConnectionParametersManagerWindow(cpm, "sendStreamFlowControlWindow", 9000)
+			Expect(controller.getSendFlowControlWindow()).To(Equal(protocol.ByteCount(8000)))
+		})
+
+		It("asks the ConnectionParametersManager for the connection flow control window size", func() {
+			controller.streamID = 0
+			Expect(controller.getSendFlowControlWindow()).To(Equal(protocol.ByteCount(3000)))
+			// make sure the value is not cached
+			setConnectionParametersManagerWindow(cpm, "sendConnectionFlowControlWindow", 5000)
+			Expect(controller.getSendFlowControlWindow()).To(Equal(protocol.ByteCount(5000)))
+		})
+
+		It("stops asking the ConnectionParametersManager for the connection flow control window size once a window update has arrived", func() {
+			controller.streamID = 0
+			Expect(controller.UpdateSendWindow(7000))
+			setConnectionParametersManagerWindow(cpm, "sendConnectionFlowControlWindow", 9000)
+			Expect(controller.getSendFlowControlWindow()).To(Equal(protocol.ByteCount(7000)))
 		})
 
 		Context("Blocked", func() {

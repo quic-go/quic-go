@@ -10,6 +10,8 @@ import (
 type flowController struct {
 	streamID protocol.StreamID
 
+	connectionParametersManager *handshake.ConnectionParametersManager
+
 	bytesSent                protocol.ByteCount
 	sendFlowControlWindow    protocol.ByteCount
 	lastBlockedSentForOffset protocol.ByteCount
@@ -25,19 +27,32 @@ type flowController struct {
 
 func newFlowController(streamID protocol.StreamID, connectionParametersManager *handshake.ConnectionParametersManager) *flowController {
 	fc := flowController{
+		streamID:                          streamID,
+		connectionParametersManager:       connectionParametersManager,
 		receiveWindowUpdateThreshold:      protocol.WindowUpdateThreshold,
 		receiveFlowControlWindowIncrement: protocol.ReceiveStreamFlowControlWindowIncrement,
 	}
 
 	if streamID == 0 {
-		fc.sendFlowControlWindow = connectionParametersManager.GetSendConnectionFlowControlWindow()
 		fc.receiveFlowControlWindow = connectionParametersManager.GetReceiveConnectionFlowControlWindow()
 	} else {
-		fc.sendFlowControlWindow = connectionParametersManager.GetSendStreamFlowControlWindow()
 		fc.receiveFlowControlWindow = connectionParametersManager.GetReceiveStreamFlowControlWindow()
 	}
 
 	return &fc
+}
+
+func (c *flowController) getSendFlowControlWindow() protocol.ByteCount {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	if c.sendFlowControlWindow == 0 {
+		if c.streamID == 0 {
+			return c.connectionParametersManager.GetSendConnectionFlowControlWindow()
+		}
+		return c.connectionParametersManager.GetSendStreamFlowControlWindow()
+	}
+	return c.sendFlowControlWindow
 }
 
 func (c *flowController) AddBytesSent(n protocol.ByteCount) {
@@ -64,10 +79,12 @@ func (c *flowController) SendWindowSize() protocol.ByteCount {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	if c.bytesSent > c.sendFlowControlWindow { // should never happen, but make sure we don't do an underflow here
+	sendFlowControlWindow := c.getSendFlowControlWindow()
+
+	if c.bytesSent > sendFlowControlWindow { // should never happen, but make sure we don't do an underflow here
 		return 0
 	}
-	return c.sendFlowControlWindow - c.bytesSent
+	return sendFlowControlWindow - c.bytesSent
 }
 
 // UpdateHighestReceived updates the highestReceived value, if the byteOffset is higher
@@ -107,14 +124,16 @@ func (c *flowController) MaybeTriggerBlocked() bool {
 		return false
 	}
 
+	sendFlowControlWindow := c.getSendFlowControlWindow()
+
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	if c.lastBlockedSentForOffset == c.sendFlowControlWindow {
+	if c.lastBlockedSentForOffset == sendFlowControlWindow {
 		return false
 	}
 
-	c.lastBlockedSentForOffset = c.sendFlowControlWindow
+	c.lastBlockedSentForOffset = sendFlowControlWindow
 	return true
 }
 

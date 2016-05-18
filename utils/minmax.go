@@ -62,6 +62,14 @@ func MaxInt64(a, b int64) int64 {
 	return b
 }
 
+// MinByteCount returns the minimum of two ByteCounts
+func MinByteCount(a, b protocol.ByteCount) protocol.ByteCount {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // MaxDuration returns the max duration
 func MaxDuration(a, b time.Duration) time.Duration {
 	if a > b {
