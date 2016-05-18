@@ -419,6 +419,10 @@ func (s *Session) maybeSendPacket() error {
 		return s.sendPacket()
 	}
 
+	if maxPacketSize == 0 {
+		return nil
+	}
+
 	if s.smallPacketDelayedOccurranceTime.IsZero() {
 		s.smallPacketDelayedOccurranceTime = time.Now()
 	}
