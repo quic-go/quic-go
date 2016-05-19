@@ -138,12 +138,16 @@ func (s *Session) run() {
 
 		now := time.Now()
 		firstTimeout := utils.InfDuration
-		// Small packet send delay
-		if !s.smallPacketDelayedOccurranceTime.IsZero() {
-			firstTimeout = utils.MinDuration(firstTimeout, s.smallPacketDelayedOccurranceTime.Add(protocol.SmallPacketSendDelay).Sub(now))
+		// Some timeouts are only set when we can actually send
+		// Note: if a packet arrives, we go through this again afterwards.
+		if s.sentPacketHandler.AllowsSending() {
+			// Small packet send delay
+			if !s.smallPacketDelayedOccurranceTime.IsZero() {
+				firstTimeout = utils.MinDuration(firstTimeout, s.smallPacketDelayedOccurranceTime.Add(protocol.SmallPacketSendDelay).Sub(now))
+			}
+			// RTOs
+			firstTimeout = utils.MinDuration(firstTimeout, s.sentPacketHandler.TimeToFirstRTO())
 		}
-		// RTOs
-		firstTimeout = utils.MinDuration(firstTimeout, s.sentPacketHandler.TimeToFirstRTO())
 		// Idle connection timeout
 		firstTimeout = utils.MinDuration(firstTimeout, s.lastNetworkActivityTime.Add(s.connectionParametersManager.GetIdleConnectionStateLifetime()).Sub(now))
 
@@ -389,6 +393,10 @@ func (s *Session) closeStreamsWithError(err error) {
 
 // TODO: try sending more than one packet
 func (s *Session) maybeSendPacket() error {
+	if time.Now().Sub(s.smallPacketDelayedOccurranceTime) > protocol.SmallPacketSendDelay {
+		return s.sendPacket()
+	}
+
 	if !s.sentPacketHandler.AllowsSending() {
 		return nil
 	}
@@ -432,14 +440,12 @@ func (s *Session) maybeSendPacket() error {
 		s.smallPacketDelayedOccurranceTime = time.Now()
 	}
 
-	if time.Now().Sub(s.smallPacketDelayedOccurranceTime) > protocol.SmallPacketSendDelay {
-		return s.sendPacket()
-	}
-
 	return nil
 }
 
 func (s *Session) sendPacket() error {
+	s.smallPacketDelayedOccurranceTime = time.Time{} // zero
+
 	if !s.sentPacketHandler.AllowsSending() {
 		return nil
 	}
@@ -482,8 +488,6 @@ func (s *Session) sendPacket() error {
 	if packet == nil {
 		return nil
 	}
-
-	s.smallPacketDelayedOccurranceTime = time.Time{} // zero
 
 	err = s.sentPacketHandler.SentPacket(&ackhandler.Packet{
 		PacketNumber: packet.number,
