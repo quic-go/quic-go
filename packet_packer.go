@@ -195,7 +195,11 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 
 	// remove the dataLen for the last StreamFrame in the packet
 	if hasStreamFrames {
-		payloadFrames[len(payloadFrames)-1].(*frames.StreamFrame).DataLenPresent = false
+		lastStreamFrame, ok := payloadFrames[len(payloadFrames)-1].(*frames.StreamFrame)
+		if !ok {
+			return nil, errors.New("PacketPacker BUG: StreamFrame type assertion failed")
+		}
+		lastStreamFrame.DataLenPresent = false
 		// payloadLength -= 2
 	}
 
