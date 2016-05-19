@@ -114,6 +114,13 @@ var _ = Describe("Packet packer", func() {
 		Expect(err).ToNot(HaveOccurred())
 	})
 
+	It("packs a packet if it has queued control frames, but no new control frames", func() {
+		packer.controlFrames = []frames.Frame{&frames.BlockedFrame{StreamID: 0}}
+		p, err := packer.PackPacket(nil, []frames.Frame{}, false)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(p).ToNot(BeNil())
+	})
+
 	It("packs many control frames into 1 packets", func() {
 		f := &frames.AckFrame{LargestObserved: 1}
 		b := &bytes.Buffer{}
