@@ -16,12 +16,16 @@ type RstStreamFrame struct {
 
 //Write writes a RST_STREAM frame
 func (f *RstStreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
-	panic("RstStreamFrame: Write not yet implemented")
+	b.WriteByte(0x01)
+	utils.WriteUint32(b, uint32(f.StreamID))
+	utils.WriteUint64(b, uint64(f.ByteOffset))
+	utils.WriteUint32(b, f.ErrorCode)
+	return nil
 }
 
 // MinLength of a written frame
 func (f *RstStreamFrame) MinLength() (protocol.ByteCount, error) {
-	panic("RstStreamFrame: Write not yet implemented")
+	return 1 + 4 + 8 + 4, nil
 }
 
 // ParseRstStreamFrame parses a RST_STREAM frame
