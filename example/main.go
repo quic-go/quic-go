@@ -6,7 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
+
+	_ "net/http/pprof"
 
 	"github.com/lucas-clemente/quic-go/h2quic"
 	"github.com/lucas-clemente/quic-go/testdata"
@@ -14,6 +17,9 @@ import (
 )
 
 func main() {
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 	verbose := flag.Bool("v", false, "verbose")
 	bindTo := flag.String("bind", "localhost", "bind to")
 	certPath := flag.String("certpath", "", "certificate directory")
