@@ -194,14 +194,10 @@ func (h *ConnectionParametersManager) TruncateConnectionID() bool {
 	if err != nil {
 		return false
 	}
-
-	var value uint32
-	buf := bytes.NewBuffer(rawValue)
-	err = binary.Read(buf, binary.LittleEndian, &value)
-	if err != nil {
+	if len(rawValue) != 4 {
 		return false
 	}
-
+	value := binary.LittleEndian.Uint32(rawValue)
 	if value == 0 {
 		return true
 	}
