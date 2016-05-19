@@ -352,10 +352,10 @@ var _ = Describe("Packet packer", func() {
 			p, err := packer.composeNextPacket(nil, publicHeaderLen, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p).To(HaveLen(2))
-			Expect(p[1]).To(Equal(&frames.BlockedFrame{StreamID: 5}))
+			Expect(p[0]).To(Equal(&frames.BlockedFrame{StreamID: 5}))
 		})
 
-		It("removes the dataLen attribute from the last StreamFrame, even if the last frame is a BlockedFrame", func() {
+		It("removes the dataLen attribute from the last StreamFrame, even if it inserted a BlockedFrame before", func() {
 			length := 100
 			packer.AddBlocked(5, protocol.ByteCount(length))
 			f := frames.StreamFrame{
@@ -365,27 +365,8 @@ var _ = Describe("Packet packer", func() {
 			packer.AddStreamFrame(f)
 			p, err := packer.composeNextPacket(nil, publicHeaderLen, true)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(p[0].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
-		})
-
-		It("correctly removes the dataLen attribute from the last StreamFrame, when packing one StreamFrame, one BlockedFrame, and another StreamFrame", func() {
-			length := 10
-			packer.AddBlocked(5, protocol.ByteCount(length))
-			f := frames.StreamFrame{
-				StreamID: 5,
-				Data:     bytes.Repeat([]byte{'f'}, length),
-			}
-			packer.AddStreamFrame(f)
-			f = frames.StreamFrame{
-				StreamID: 7,
-				Data:     []byte("foobar"),
-			}
-			packer.AddStreamFrame(f)
-			p, err := packer.composeNextPacket(nil, publicHeaderLen, true)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(p).To(HaveLen(3))
-			Expect(p[0].(*frames.StreamFrame).DataLenPresent).To(BeTrue())
-			Expect(p[2].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
+			Expect(p).To(HaveLen(2))
+			Expect(p[1].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
 		})
 
 		It("packs a BlockedFrame in the next packet if the current packet doesn't have enough space", func() {
@@ -403,6 +384,29 @@ var _ = Describe("Packet packer", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p).To(HaveLen(1))
 			Expect(p[0]).To(Equal(&frames.BlockedFrame{StreamID: 5}))
+		})
+
+		It("packs a packet with the maximum size with a BlocedFrame", func() {
+			blockedFrame := &frames.BlockedFrame{StreamID: 0x1337}
+			blockedFrameLen, _ := blockedFrame.MinLength()
+			f1 := frames.StreamFrame{
+				StreamID: 5,
+				Offset:   1,
+			}
+			streamFrameHeaderLen, _ := f1.MinLength()
+			streamFrameHeaderLen-- // - 1 since MinceLength is 1 bigger than the actual StreamFrame header
+			// this is the maximum dataLen of a StreamFrames that fits into one packet
+			dataLen := int(protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen - streamFrameHeaderLen - blockedFrameLen)
+			packer.AddBlocked(5, protocol.ByteCount(dataLen))
+			f1.Data = bytes.Repeat([]byte{'f'}, dataLen)
+			packer.AddStreamFrame(f1)
+			p, err := packer.PackPacket(nil, []frames.Frame{}, true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p).ToNot(BeNil())
+			Expect(p.raw).To(HaveLen(int(protocol.MaxPacketSize)))
+			p, err = packer.PackPacket(nil, []frames.Frame{}, true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p).To(BeNil())
 		})
 
 		// TODO: fix this once connection-level BlockedFrames are sent out at the right time

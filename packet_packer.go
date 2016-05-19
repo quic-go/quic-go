@@ -179,7 +179,6 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 	}
 
 	hasStreamFrames := false
-	lastFrameIsBlockedFrame := false
 
 	// temporarily increase the maxFrameSize by 2 bytes
 	// this leads to a properly sized packet in all cases, since we do all the packet length calculations with StreamFrames that have the DataLen set
@@ -211,31 +210,25 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 			payloadLength += protocol.ByteCount(len(frame.Data)) - 1
 		}
 
-		payloadLength += frameMinLength
-		payloadFrames = append(payloadFrames, frame)
-		hasStreamFrames = true
-		lastFrameIsBlockedFrame = false
-
 		blockedFrame := p.blockedManager.GetBlockedFrame(frame.StreamID, frame.Offset+protocol.ByteCount(len(frame.Data)))
 		if blockedFrame != nil {
-			blockedMinLength, _ := blockedFrame.MinLength() // BlockedFrame.MinLength *never* returns an error
-			if payloadLength+blockedMinLength <= maxFrameSize {
+			blockedLength, _ := blockedFrame.MinLength() // BlockedFrame.MinLength *never* returns an error
+			if payloadLength+frameMinLength+blockedLength <= maxFrameSize {
 				payloadFrames = append(payloadFrames, blockedFrame)
-				payloadLength += blockedMinLength
-				lastFrameIsBlockedFrame = true
+				payloadLength += blockedLength
 			} else {
 				p.controlFrames = append(p.controlFrames, blockedFrame)
 			}
 		}
+
+		payloadLength += frameMinLength
+		payloadFrames = append(payloadFrames, frame)
+		hasStreamFrames = true
 	}
 
 	// remove the dataLen for the last StreamFrame in the packet
 	if hasStreamFrames {
-		lastStreamFrameIndex := len(payloadFrames) - 1
-		if lastFrameIsBlockedFrame {
-			lastStreamFrameIndex--
-		}
-		lastStreamFrame, ok := payloadFrames[lastStreamFrameIndex].(*frames.StreamFrame)
+		lastStreamFrame, ok := payloadFrames[len(payloadFrames)-1].(*frames.StreamFrame)
 		if !ok {
 			return nil, errors.New("PacketPacker BUG: StreamFrame type assertion failed")
 		}
