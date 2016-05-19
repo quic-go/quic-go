@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 
-	"github.com/lucas-clemente/crypto/chacha"
+	"github.com/lucas-clemente/chacha20poly1305"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 )
@@ -22,11 +22,11 @@ func NewAEADChacha20Poly1305(otherKey []byte, myKey []byte, otherIV []byte, myIV
 	if len(myKey) != 32 || len(otherKey) != 32 || len(myIV) != 4 || len(otherIV) != 4 {
 		return nil, errors.New("chacha20poly1305: expected 32-byte keys and 4-byte IVs")
 	}
-	encrypter, err := chacha.NewAEADTagSize(myKey, 12)
+	encrypter, err := chacha20poly1305.New(myKey, 12)
 	if err != nil {
 		return nil, err
 	}
-	decrypter, err := chacha.NewAEADTagSize(otherKey, 12)
+	decrypter, err := chacha20poly1305.New(otherKey, 12)
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func NewAEADChacha20Poly1305(otherKey []byte, myKey []byte, otherIV []byte, myIV
 }
 
 func (aead *aeadChacha20Poly1305) Open(packetNumber protocol.PacketNumber, associatedData []byte, ciphertext []byte) ([]byte, error) {
-	plaintext, err := aead.decrypter.Open(make([]byte, len(ciphertext)), makeNonce(aead.otherIV, packetNumber), ciphertext, associatedData)
+	plaintext, err := aead.decrypter.Open(nil, makeNonce(aead.otherIV, packetNumber), ciphertext, associatedData)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +47,7 @@ func (aead *aeadChacha20Poly1305) Open(packetNumber protocol.PacketNumber, assoc
 }
 
 func (aead *aeadChacha20Poly1305) Seal(packetNumber protocol.PacketNumber, associatedData []byte, plaintext []byte) []byte {
-	return aead.encrypter.Seal(make([]byte, len(plaintext)+12), makeNonce(aead.myIV, packetNumber), plaintext, associatedData)
+	return aead.encrypter.Seal(nil, makeNonce(aead.myIV, packetNumber), plaintext, associatedData)
 }
 
 func makeNonce(iv []byte, packetNumber protocol.PacketNumber) []byte {
