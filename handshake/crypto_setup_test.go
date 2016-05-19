@@ -130,7 +130,7 @@ var _ = Describe("Crypto setup", func() {
 
 	Context("when responding to client messages", func() {
 		It("generates REJ messages", func() {
-			response, err := cs.handleInchoateCHLO("", []byte("chlo"), nil)
+			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(response).To(HavePrefix("REJ"))
 			Expect(response).To(ContainSubstring("certcompressed"))
@@ -163,7 +163,10 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		It("handles long handshake", func() {
-			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{TagSNI: []byte("quic.clemente.io")})
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
+				TagSNI: []byte("quic.clemente.io"),
+				TagPAD: bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize),
+			})
 			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{TagSCID: scfg.ID, TagSNO: cs.nonce, TagSNI: []byte("quic.clemente.io")})
 			err := cs.HandleCryptoStream()
 			Expect(err).NotTo(HaveOccurred())
@@ -191,6 +194,11 @@ var _ = Describe("Crypto setup", func() {
 
 		It("recognizes proper CHLOs", func() {
 			Expect(cs.isInchoateCHLO(map[Tag][]byte{TagSCID: scfg.ID, TagSNO: cs.nonce})).To(BeFalse())
+		})
+
+		It("errors on too short inchoate CHLOs", func() {
+			_, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize-1), nil)
+			Expect(err).To(MatchError("CryptoInvalidValueLength: CHLO too small"))
 		})
 	})
 

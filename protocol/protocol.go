@@ -54,3 +54,6 @@ const DefaultRetransmissionTime = 500 * time.Millisecond
 
 // MinRetransmissionTime is the minimum RTO time
 const MinRetransmissionTime = 200 * time.Millisecond
+
+// ClientHelloMinimumSize is the minimum size the server expectes an inchoate CHLO to have.
+const ClientHelloMinimumSize = 1024

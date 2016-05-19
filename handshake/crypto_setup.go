@@ -167,6 +167,10 @@ func (h *CryptoSetup) isInchoateCHLO(cryptoData map[Tag][]byte) bool {
 }
 
 func (h *CryptoSetup) handleInchoateCHLO(sni string, data []byte, cryptoData map[Tag][]byte) ([]byte, error) {
+	if len(data) < protocol.ClientHelloMinimumSize {
+		return nil, qerr.Error(qerr.CryptoInvalidValueLength, "CHLO too small")
+	}
+
 	var chloOrNil []byte
 	if h.version > protocol.VersionNumber(30) {
 		chloOrNil = data
