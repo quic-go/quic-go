@@ -73,6 +73,10 @@ type Session struct {
 	// Used to calculate the next packet number from the truncated wire
 	// representation, and sent back in public reset packets
 	lastRcvdPacketNumber protocol.PacketNumber
+
+	lastNetworkActivityTime time.Time
+
+	timer *time.Timer
 }
 
 // newSession makes a new session
@@ -97,6 +101,8 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		connectionParametersManager: connectionParametersManager,
 		undecryptablePackets:        make([]receivedPacket, 0, protocol.MaxUndecryptablePackets),
 		aeadChanged:                 make(chan struct{}, 1),
+		timer:                       time.NewTimer(0),
+		lastNetworkActivityTime: time.Now(),
 	}
 
 	cryptoStream, _ := session.OpenStream(1)
@@ -128,39 +134,39 @@ func (s *Session) run() {
 		default:
 		}
 
-		// Note: receive at a nil channel blocks forever
+		// Calculate the minimum of all timeouts
 
-		var smallPacketSendTimer <-chan time.Time
+		now := time.Now()
+		firstTimeout := utils.InfDuration
+		// Small packet send delay
 		if !s.smallPacketDelayedOccurranceTime.IsZero() {
-			smallPacketSendTimer = time.After(time.Now().Sub(s.smallPacketDelayedOccurranceTime))
+			firstTimeout = utils.MinDuration(firstTimeout, s.smallPacketDelayedOccurranceTime.Add(protocol.SmallPacketSendDelay).Sub(now))
 		}
+		// RTOs
+		firstTimeout = utils.MinDuration(firstTimeout, s.sentPacketHandler.TimeToFirstRTO())
+		// Idle connection timeout
+		firstTimeout = utils.MinDuration(firstTimeout, s.lastNetworkActivityTime.Add(s.connectionParametersManager.GetIdleConnectionStateLifetime()).Sub(now))
 
-		var rtoTimer <-chan time.Time
-		if d := s.sentPacketHandler.TimeToFirstRTO(); d != utils.InfDuration {
-			rtoTimer = time.After(d)
-		}
+		s.timer.Reset(firstTimeout)
 
 		var err error
 		select {
 		case <-s.closeChan:
 			return
+		case <-s.timer.C:
+			// We do all the interesting stuff after the switch statement, so
+			// nothing to see here.
+		case <-s.sendingScheduled:
+			// We do all the interesting stuff after the switch statement, so
+			// nothing to see here.
 		case p := <-s.receivedPackets:
 			err = s.handlePacketImpl(p.remoteAddr, p.publicHeader, p.data)
 			if qErr, ok := err.(*qerr.QuicError); ok && qErr.ErrorCode == qerr.DecryptionFailure {
 				s.tryQueueingUndecryptablePacket(p)
 				continue
 			}
-			s.scheduleSending()
-		case <-s.sendingScheduled:
-			err = s.maybeSendPacket()
-		case <-smallPacketSendTimer:
-			err = s.sendPacket()
-		case <-rtoTimer:
-			err = s.sendPacket()
 		case <-s.aeadChanged:
 			s.tryDecryptingQueuedPackets()
-		case <-time.After(s.connectionParametersManager.GetIdleConnectionStateLifetime()):
-			s.Close(qerr.Error(qerr.NetworkIdleTimeout, "No recent network activity."))
 		}
 
 		if err != nil {
@@ -177,11 +183,18 @@ func (s *Session) run() {
 			}
 		}
 
+		if err := s.maybeSendPacket(); err != nil {
+			s.Close(err)
+		}
+		if time.Now().Sub(s.lastNetworkActivityTime) > s.connectionParametersManager.GetIdleConnectionStateLifetime() {
+			s.Close(qerr.Error(qerr.NetworkIdleTimeout, "No recent network activity."))
+		}
 		s.garbageCollectStreams()
 	}
 }
 
 func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *publicHeader, data []byte) error {
+	s.lastNetworkActivityTime = time.Now()
 	r := bytes.NewReader(data)
 
 	// Calculate packet number
@@ -417,6 +430,10 @@ func (s *Session) maybeSendPacket() error {
 
 	if s.smallPacketDelayedOccurranceTime.IsZero() {
 		s.smallPacketDelayedOccurranceTime = time.Now()
+	}
+
+	if time.Now().Sub(s.smallPacketDelayedOccurranceTime) > protocol.SmallPacketSendDelay {
+		return s.sendPacket()
 	}
 
 	return nil

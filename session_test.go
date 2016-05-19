@@ -414,19 +414,6 @@ var _ = Describe("Session", func() {
 			Expect(session.sendingScheduled).To(Receive())
 		})
 
-		It("sends after receiving a packet", func() {
-			Expect(session.sendingScheduled).NotTo(Receive())
-			session.receivedPackets <- receivedPacket{
-				publicHeader: &publicHeader{},
-				data: []byte{
-					// FNV hash + "foobar"
-					0x18, 0x6f, 0x44, 0xba, 0x97, 0x35, 0xd, 0x6f, 0xbf, 0x64, 0x3c, 0x79, 0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72,
-				},
-			}
-			session.run()
-			Expect(session.sendingScheduled).To(Receive())
-		})
-
 		Context("bundling of small packets", func() {
 			It("bundles two small frames into one packet", func() {
 				go session.run()
