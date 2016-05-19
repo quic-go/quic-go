@@ -15,7 +15,7 @@ import (
 type streamHandler interface {
 	queueStreamFrame(*frames.StreamFrame) error
 	updateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error
-	streamBlocked(streamID protocol.StreamID)
+	streamBlocked(streamID protocol.StreamID, byteOffset protocol.ByteCount)
 }
 
 var (
@@ -277,14 +277,16 @@ func (s *stream) maybeTriggerBlocked() {
 	streamBlocked := s.flowController.MaybeTriggerBlocked()
 
 	if streamBlocked {
-		s.session.streamBlocked(s.streamID)
+		s.session.streamBlocked(s.streamID, s.writeOffset)
 	}
 
 	if s.contributesToConnectionFlowControl {
 		connectionBlocked := s.connectionFlowController.MaybeTriggerBlocked()
 
 		if connectionBlocked {
-			s.session.streamBlocked(0)
+			// TODO: send out connection-level BlockedFrames at the right time
+			// see https://github.com/lucas-clemente/quic-go/issues/113
+			s.session.streamBlocked(0, 0)
 		}
 	}
 }

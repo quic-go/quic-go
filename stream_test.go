@@ -28,7 +28,7 @@ func (m *mockStreamHandler) queueStreamFrame(f *frames.StreamFrame) error {
 	return nil
 }
 
-func (m *mockStreamHandler) streamBlocked(streamID protocol.StreamID) {
+func (m *mockStreamHandler) streamBlocked(streamID protocol.StreamID, byteOffset protocol.ByteCount) {
 	m.receivedBlockedCalled = true
 	m.receivedBlockedForStream = streamID
 }

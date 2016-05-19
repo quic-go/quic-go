@@ -30,8 +30,20 @@ type packetPacker struct {
 
 	streamFrameQueue streamFrameQueue
 	controlFrames    []frames.Frame
+	blockedManager   *blockedManager
 
 	lastPacketNumber protocol.PacketNumber
+}
+
+func newPacketPacker(connectionID protocol.ConnectionID, aead crypto.AEAD, sentPacketHandler ackhandler.SentPacketHandler, connectionParametersHandler *handshake.ConnectionParametersManager, version protocol.VersionNumber) *packetPacker {
+	return &packetPacker{
+		aead:                        aead,
+		connectionID:                connectionID,
+		connectionParametersManager: connectionParametersHandler,
+		version:                     version,
+		sentPacketHandler:           sentPacketHandler,
+		blockedManager:              newBlockedManager(),
+	}
 }
 
 func (p *packetPacker) AddStreamFrame(f frames.StreamFrame) {
@@ -40,6 +52,16 @@ func (p *packetPacker) AddStreamFrame(f frames.StreamFrame) {
 
 func (p *packetPacker) AddHighPrioStreamFrame(f frames.StreamFrame) {
 	p.streamFrameQueue.Push(&f, true)
+}
+
+func (p *packetPacker) AddBlocked(streamID protocol.StreamID, byteOffset protocol.ByteCount) {
+	// TODO: send out connection-level BlockedFrames at the right time
+	// see https://github.com/lucas-clemente/quic-go/issues/113
+	if streamID == 0 {
+		p.controlFrames = append(p.controlFrames, &frames.BlockedFrame{StreamID: 0})
+	}
+
+	p.blockedManager.AddBlockedStream(streamID, byteOffset)
 }
 
 func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, includeStreamFrames bool) (*packedPacket, error) {
@@ -157,6 +179,7 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 	}
 
 	hasStreamFrames := false
+	lastFrameIsBlockedFrame := false
 
 	// temporarily increase the maxFrameSize by 2 bytes
 	// this leads to a properly sized packet in all cases, since we do all the packet length calculations with StreamFrames that have the DataLen set
@@ -191,11 +214,28 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 		payloadLength += frameMinLength
 		payloadFrames = append(payloadFrames, frame)
 		hasStreamFrames = true
+		lastFrameIsBlockedFrame = false
+
+		blockedFrame := p.blockedManager.GetBlockedFrame(frame.StreamID, frame.Offset+protocol.ByteCount(len(frame.Data)))
+		if blockedFrame != nil {
+			blockedMinLength, _ := blockedFrame.MinLength() // BlockedFrame.MinLength *never* returns an error
+			if payloadLength+blockedMinLength <= maxFrameSize {
+				payloadFrames = append(payloadFrames, blockedFrame)
+				payloadLength += blockedMinLength
+				lastFrameIsBlockedFrame = true
+			} else {
+				p.controlFrames = append(p.controlFrames, blockedFrame)
+			}
+		}
 	}
 
 	// remove the dataLen for the last StreamFrame in the packet
 	if hasStreamFrames {
-		lastStreamFrame, ok := payloadFrames[len(payloadFrames)-1].(*frames.StreamFrame)
+		lastStreamFrameIndex := len(payloadFrames) - 1
+		if lastFrameIsBlockedFrame {
+			lastStreamFrameIndex--
+		}
+		lastStreamFrame, ok := payloadFrames[lastStreamFrameIndex].(*frames.StreamFrame)
 		if !ok {
 			return nil, errors.New("PacketPacker BUG: StreamFrame type assertion failed")
 		}

@@ -381,28 +381,18 @@ var _ = Describe("Session", func() {
 			Expect(conn.written).To(HaveLen(int(protocol.WindowUpdateNumRepitions))) // no packet was sent
 		})
 
-		It("sends queued Blocked frames", func() {
-			bf1 := frames.BlockedFrame{StreamID: 0x1337}
-			bf2 := frames.BlockedFrame{StreamID: 0xDECAFBAD}
-			session.blockedFrameQueue = append(session.blockedFrameQueue, &bf1)
-			session.blockedFrameQueue = append(session.blockedFrameQueue, &bf2)
+		It("queues a Blocked frames", func() {
+			len := 500
+			frame := frames.StreamFrame{
+				StreamID: 0x1337,
+				Data:     bytes.Repeat([]byte{'f'}, len),
+			}
+			session.streamBlocked(0x1337, protocol.ByteCount(len))
+			session.packer.AddStreamFrame(frame)
 			err := session.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(conn.written).To(HaveLen(1))
 			Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x05, 0x37, 0x13, 0, 0})))
-			Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x05, 0xAD, 0xFB, 0xCA, 0xDE})))
-		})
-
-		It("only sends every queued Blocked frame once", func() {
-			bf := frames.BlockedFrame{StreamID: 0x1337}
-			session.blockedFrameQueue = append(session.blockedFrameQueue, &bf)
-			err := session.sendPacket()
-			Expect(err).NotTo(HaveOccurred())
-			session.queueStreamFrame(&frames.StreamFrame{StreamID: 5, Data: []byte("foobar")}) // queue something, so that a packet can actually be sent
-			err = session.sendPacket()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(conn.written).To(HaveLen(2))
-			Expect(conn.written[1]).ToNot(ContainSubstring(string([]byte{0x05, 0x37, 0x13, 0, 0})))
 		})
 
 		It("sends public reset", func() {

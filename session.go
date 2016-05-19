@@ -46,12 +46,10 @@ type Session struct {
 	streams      map[protocol.StreamID]*stream
 	streamsMutex sync.RWMutex
 
-	sentPacketHandler      ackhandler.SentPacketHandler
-	receivedPacketHandler  ackhandler.ReceivedPacketHandler
-	stopWaitingManager     ackhandler.StopWaitingManager
-	windowUpdateManager    *windowUpdateManager
-	blockedFrameQueue      []*frames.BlockedFrame
-	blockedFrameQueueMutex sync.Mutex
+	sentPacketHandler     ackhandler.SentPacketHandler
+	receivedPacketHandler ackhandler.ReceivedPacketHandler
+	stopWaitingManager    ackhandler.StopWaitingManager
+	windowUpdateManager   *windowUpdateManager
 
 	flowController *flowController // connection level flow controller
 
@@ -108,13 +106,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		return nil, err
 	}
 
-	session.packer = &packetPacker{
-		aead: session.cryptoSetup,
-		connectionParametersManager: session.connectionParametersManager,
-		sentPacketHandler:           session.sentPacketHandler,
-		connectionID:                connectionID,
-		version:                     v,
-	}
+	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.sentPacketHandler, session.connectionParametersManager, v)
 	session.unpacker = &packetUnpacker{aead: session.cryptoSetup, version: v}
 
 	return session, err
@@ -456,13 +448,6 @@ func (s *Session) sendPacket() error {
 		controlFrames = append(controlFrames, wuf)
 	}
 
-	s.blockedFrameQueueMutex.Lock()
-	for _, bf := range s.blockedFrameQueue {
-		controlFrames = append(controlFrames, bf)
-	}
-	s.blockedFrameQueue = s.blockedFrameQueue[:0]
-	s.blockedFrameQueueMutex.Unlock()
-
 	ack, err := s.receivedPacketHandler.GetAckFrame(true)
 	if err != nil {
 		return err
@@ -542,11 +527,8 @@ func (s *Session) updateReceiveFlowControlWindow(streamID protocol.StreamID, byt
 	return nil
 }
 
-func (s *Session) streamBlocked(streamID protocol.StreamID) {
-	s.blockedFrameQueueMutex.Lock()
-	defer s.blockedFrameQueueMutex.Unlock()
-
-	s.blockedFrameQueue = append(s.blockedFrameQueue, &frames.BlockedFrame{StreamID: streamID})
+func (s *Session) streamBlocked(streamID protocol.StreamID, byteOffset protocol.ByteCount) {
+	s.packer.AddBlocked(streamID, byteOffset)
 }
 
 // OpenStream creates a new stream open for reading and writing

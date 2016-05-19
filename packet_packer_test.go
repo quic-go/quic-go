@@ -40,6 +40,7 @@ var _ = Describe("Packet packer", func() {
 			aead: aead,
 			connectionParametersManager: handshake.NewConnectionParamatersManager(),
 			sentPacketHandler:           newMockSentPacketHandler(),
+			blockedManager:              newBlockedManager(),
 		}
 		publicHeaderLen = 1 + 8 + 1 // 1 flag byte, 8 connection ID, 1 packet number
 	})
@@ -329,6 +330,87 @@ var _ = Describe("Packet packer", func() {
 			payloadFrames, err = packer.composeNextPacket(nil, publicHeaderLen, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(payloadFrames).To(HaveLen(1))
+		})
+	})
+
+	Context("Blocked frames", func() {
+		It("adds a blocked frame to a packet if there is enough space", func() {
+			length := 100
+			packer.AddBlocked(5, protocol.ByteCount(length))
+			f := frames.StreamFrame{
+				StreamID: 5,
+				Data:     bytes.Repeat([]byte{'f'}, length),
+			}
+			packer.AddStreamFrame(f)
+			p, err := packer.composeNextPacket(nil, publicHeaderLen, true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p).To(HaveLen(2))
+			Expect(p[1]).To(Equal(&frames.BlockedFrame{StreamID: 5}))
+		})
+
+		It("removes the dataLen attribute from the last StreamFrame, even if the last frame is a BlockedFrame", func() {
+			length := 100
+			packer.AddBlocked(5, protocol.ByteCount(length))
+			f := frames.StreamFrame{
+				StreamID: 5,
+				Data:     bytes.Repeat([]byte{'f'}, length),
+			}
+			packer.AddStreamFrame(f)
+			p, err := packer.composeNextPacket(nil, publicHeaderLen, true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p[0].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
+		})
+
+		It("correctly removes the dataLen attribute from the last StreamFrame, when packing one StreamFrame, one BlockedFrame, and another StreamFrame", func() {
+			length := 10
+			packer.AddBlocked(5, protocol.ByteCount(length))
+			f := frames.StreamFrame{
+				StreamID: 5,
+				Data:     bytes.Repeat([]byte{'f'}, length),
+			}
+			packer.AddStreamFrame(f)
+			f = frames.StreamFrame{
+				StreamID: 7,
+				Data:     []byte("foobar"),
+			}
+			packer.AddStreamFrame(f)
+			p, err := packer.composeNextPacket(nil, publicHeaderLen, true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p).To(HaveLen(3))
+			Expect(p[0].(*frames.StreamFrame).DataLenPresent).To(BeTrue())
+			Expect(p[2].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
+		})
+
+		It("packs a BlockedFrame in the next packet if the current packet doesn't have enough space", func() {
+			dataLen := int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLen) - (1 + 1 + 2) + 1
+			packer.AddBlocked(5, protocol.ByteCount(dataLen))
+			f := frames.StreamFrame{
+				StreamID: 5,
+				Data:     bytes.Repeat([]byte{'f'}, dataLen),
+			}
+			packer.AddStreamFrame(f)
+			p, err := packer.composeNextPacket(nil, publicHeaderLen, true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p).To(HaveLen(1))
+			p, err = packer.composeNextPacket(nil, publicHeaderLen, true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p).To(HaveLen(1))
+			Expect(p[0]).To(Equal(&frames.BlockedFrame{StreamID: 5}))
+		})
+
+		// TODO: fix this once connection-level BlockedFrames are sent out at the right time
+		// see https://github.com/lucas-clemente/quic-go/issues/113
+		It("packs a connection-level BlockedFrame", func() {
+			packer.AddBlocked(0, 0x1337)
+			f := frames.StreamFrame{
+				StreamID: 5,
+				Data:     []byte("foobar"),
+			}
+			packer.AddStreamFrame(f)
+			p, err := packer.composeNextPacket(nil, publicHeaderLen, true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p).To(HaveLen(2))
+			Expect(p[0]).To(Equal(&frames.BlockedFrame{StreamID: 0}))
 		})
 	})
 
