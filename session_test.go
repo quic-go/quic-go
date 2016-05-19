@@ -254,7 +254,7 @@ var _ = Describe("Session", func() {
 				ByteOffset: 0x8000,
 			})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(session.streams[5].flowController.sendFlowControlWindow).To(Equal(protocol.ByteCount(0x8000)))
+			Expect(session.streams[5].flowController.SendWindowSize()).To(Equal(protocol.ByteCount(0x8000)))
 		})
 
 		It("updates the Flow Control Windows of the connection", func() {
@@ -263,7 +263,7 @@ var _ = Describe("Session", func() {
 				ByteOffset: 0x800000,
 			})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(session.flowController.sendFlowControlWindow).To(Equal(protocol.ByteCount(0x800000)))
+			Expect(session.flowController.SendWindowSize()).To(Equal(protocol.ByteCount(0x800000)))
 		})
 
 		It("errors when the stream is not known", func() {

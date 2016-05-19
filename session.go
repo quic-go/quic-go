@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
+	"github.com/lucas-clemente/quic-go/flowcontrol"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -51,7 +52,7 @@ type Session struct {
 	stopWaitingManager    ackhandler.StopWaitingManager
 	windowUpdateManager   *windowUpdateManager
 
-	flowController *flowController // connection level flow controller
+	flowController flowcontrol.FlowController // connection level flow controller
 
 	unpacker *packetUnpacker
 	packer   *packetPacker
@@ -93,7 +94,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		sentPacketHandler:           ackhandler.NewSentPacketHandler(stopWaitingManager),
 		receivedPacketHandler:       ackhandler.NewReceivedPacketHandler(),
 		stopWaitingManager:          stopWaitingManager,
-		flowController:              newFlowController(0, connectionParametersManager),
+		flowController:              flowcontrol.NewFlowController(0, connectionParametersManager),
 		windowUpdateManager:         newWindowUpdateManager(),
 		receivedPackets:             make(chan receivedPacket, protocol.MaxSessionUnprocessedPackets),
 		closeChan:                   make(chan struct{}, 1),

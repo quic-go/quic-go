@@ -1,4 +1,4 @@
-package quic
+package flowcontrol
 
 import (
 	"reflect"
@@ -35,24 +35,24 @@ var _ = Describe("Flow controller", func() {
 		})
 
 		It("reads the stream send and receive windows when acting as stream-level flow controller", func() {
-			fc := newFlowController(5, cpm)
+			fc := NewFlowController(5, cpm).(*flowController)
 			Expect(fc.streamID).To(Equal(protocol.StreamID(5)))
 			Expect(fc.receiveFlowControlWindow).To(Equal(protocol.ByteCount(2000)))
 		})
 
 		It("reads the stream send and receive windows when acting as stream-level flow controller", func() {
-			fc := newFlowController(0, cpm)
+			fc := NewFlowController(0, cpm).(*flowController)
 			Expect(fc.streamID).To(Equal(protocol.StreamID(0)))
 			Expect(fc.receiveFlowControlWindow).To(Equal(protocol.ByteCount(4000)))
 		})
 
 		It("does not set the stream flow control windows for sending", func() {
-			fc := newFlowController(5, cpm)
+			fc := NewFlowController(5, cpm).(*flowController)
 			Expect(fc.sendFlowControlWindow).To(BeZero())
 		})
 
 		It("does not set the connection flow control windows for sending", func() {
-			fc := newFlowController(0, cpm)
+			fc := NewFlowController(0, cpm).(*flowController)
 			Expect(fc.sendFlowControlWindow).To(BeZero())
 		})
 	})

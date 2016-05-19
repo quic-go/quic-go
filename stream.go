@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/lucas-clemente/quic-go/flowcontrol"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -44,21 +45,21 @@ type stream struct {
 	frameQueue        streamFrameSorter
 	newFrameOrErrCond sync.Cond
 
-	flowController                     *flowController
-	connectionFlowController           *flowController
+	flowController                     flowcontrol.FlowController
+	connectionFlowController           flowcontrol.FlowController
 	contributesToConnectionFlowControl bool
 
 	windowUpdateOrErrCond sync.Cond
 }
 
 // newStream creates a new Stream
-func newStream(session streamHandler, connectionParameterManager *handshake.ConnectionParametersManager, connectionFlowController *flowController, StreamID protocol.StreamID) (*stream, error) {
+func newStream(session streamHandler, connectionParameterManager *handshake.ConnectionParametersManager, connectionFlowController flowcontrol.FlowController, StreamID protocol.StreamID) (*stream, error) {
 	s := &stream{
 		session:                            session,
 		streamID:                           StreamID,
 		connectionFlowController:           connectionFlowController,
 		contributesToConnectionFlowControl: true,
-		flowController:                     newFlowController(StreamID, connectionParameterManager),
+		flowController:                     flowcontrol.NewFlowController(StreamID, connectionParameterManager),
 	}
 
 	// crypto and header stream don't contribute to connection level flow control

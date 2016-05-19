@@ -1,4 +1,4 @@
-package quic
+package flowcontrol
 
 import (
 	"sync"
@@ -24,7 +24,8 @@ type flowController struct {
 	mutex sync.RWMutex
 }
 
-func newFlowController(streamID protocol.StreamID, connectionParametersManager *handshake.ConnectionParametersManager) *flowController {
+// NewFlowController gets a new flow controller
+func NewFlowController(streamID protocol.StreamID, connectionParametersManager *handshake.ConnectionParametersManager) FlowController {
 	fc := flowController{
 		streamID:                    streamID,
 		connectionParametersManager: connectionParametersManager,
@@ -159,4 +160,11 @@ func (c *flowController) CheckFlowControlViolation() bool {
 		return true
 	}
 	return false
+}
+
+func (c *flowController) GetHighestReceived() protocol.ByteCount {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	return c.highestReceived
 }
