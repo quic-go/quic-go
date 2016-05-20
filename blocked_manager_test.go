@@ -31,6 +31,17 @@ var _ = Describe("WindowUpdateManager", func() {
 		Expect(bm.GetBlockedFrame(1337, 0x1337)).To(BeNil())
 	})
 
+	It("removes the blocked entry when the stream is not blocked anymore", func() {
+		bm.AddBlockedStream(1337, 0x1337)
+		bm.RemoveBlockedStream(1337)
+		Expect(bm.GetBlockedFrame(1337, 0x1337)).To(BeNil())
+	})
+
+	It("doesn't care if the stream was previously blocked when removing the block", func() {
+		bm.RemoveBlockedStream(1337)
+		Expect(bm.GetBlockedFrame(1337, 0x1337)).To(BeNil())
+	})
+
 	It("doesn't get a blocked frame for smaller offsets", func() {
 		bm.AddBlockedStream(1337, 0x1337)
 		Expect(bm.GetBlockedFrame(1337, 0x1336)).To(BeNil())

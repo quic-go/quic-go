@@ -25,6 +25,13 @@ func (m *blockedManager) AddBlockedStream(streamID protocol.StreamID, offset pro
 	m.blockedStreams[streamID] = offset
 }
 
+func (m *blockedManager) RemoveBlockedStream(streamID protocol.StreamID) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	delete(m.blockedStreams, streamID)
+}
+
 func (m *blockedManager) GetBlockedFrame(streamID protocol.StreamID, offset protocol.ByteCount) *frames.BlockedFrame {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()

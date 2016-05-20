@@ -51,6 +51,7 @@ type Session struct {
 	receivedPacketHandler ackhandler.ReceivedPacketHandler
 	stopWaitingManager    ackhandler.StopWaitingManager
 	windowUpdateManager   *windowUpdateManager
+	blockedManager        *blockedManager
 
 	flowController flowcontrol.FlowController // connection level flow controller
 
@@ -96,6 +97,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		stopWaitingManager:          stopWaitingManager,
 		flowController:              flowcontrol.NewFlowController(0, connectionParametersManager),
 		windowUpdateManager:         newWindowUpdateManager(),
+		blockedManager:              newBlockedManager(),
 		receivedPackets:             make(chan receivedPacket, protocol.MaxSessionUnprocessedPackets),
 		closeChan:                   make(chan struct{}, 1),
 		sendingScheduled:            make(chan struct{}, 1),
@@ -113,7 +115,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		return nil, err
 	}
 
-	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.sentPacketHandler, session.connectionParametersManager, v)
+	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.sentPacketHandler, session.connectionParametersManager, session.blockedManager, v)
 	session.unpacker = &packetUnpacker{aead: session.cryptoSetup, version: v}
 
 	return session, err
@@ -302,7 +304,10 @@ func (s *Session) isValidStreamID(streamID protocol.StreamID) bool {
 
 func (s *Session) handleWindowUpdateFrame(frame *frames.WindowUpdateFrame) error {
 	if frame.StreamID == 0 {
-		s.flowController.UpdateSendWindow(frame.ByteOffset)
+		updated := s.flowController.UpdateSendWindow(frame.ByteOffset)
+		if updated {
+			s.blockedManager.RemoveBlockedStream(0)
+		}
 		s.streamsMutex.RLock()
 		// tell all streams that the connection-level was updated
 		for _, stream := range s.streams {
@@ -322,7 +327,10 @@ func (s *Session) handleWindowUpdateFrame(frame *frames.WindowUpdateFrame) error
 		}
 		s.streamsMutex.RUnlock()
 
-		stream.UpdateSendFlowControlWindow(frame.ByteOffset)
+		updated := stream.UpdateSendFlowControlWindow(frame.ByteOffset)
+		if updated {
+			s.blockedManager.RemoveBlockedStream(frame.StreamID)
+		}
 	}
 
 	return nil

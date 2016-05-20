@@ -161,10 +161,12 @@ func (s *stream) ConnectionFlowControlWindowUpdated() {
 	s.windowUpdateOrErrCond.Broadcast()
 }
 
-func (s *stream) UpdateSendFlowControlWindow(n protocol.ByteCount) {
+func (s *stream) UpdateSendFlowControlWindow(n protocol.ByteCount) bool {
 	if s.flowController.UpdateSendWindow(n) {
 		s.windowUpdateOrErrCond.Broadcast()
+		return true
 	}
+	return false
 }
 
 func (s *stream) Write(p []byte) (int, error) {

@@ -381,25 +381,53 @@ var _ = Describe("Session", func() {
 			Expect(conn.written).To(HaveLen(int(protocol.WindowUpdateNumRepitions))) // no packet was sent
 		})
 
-		It("queues a Blocked frames", func() {
-			len := 500
-			frame := frames.StreamFrame{
-				StreamID: 0x1337,
-				Data:     bytes.Repeat([]byte{'f'}, len),
-			}
-			session.streamBlocked(0x1337, protocol.ByteCount(len))
-			session.packer.AddStreamFrame(frame)
-			err := session.sendPacket()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(conn.written).To(HaveLen(1))
-			Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x05, 0x37, 0x13, 0, 0})))
-		})
-
 		It("sends public reset", func() {
 			err := session.sendPublicReset(1)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(conn.written).To(HaveLen(1))
 			Expect(conn.written[0]).To(ContainSubstring(string([]byte("PRST"))))
+		})
+
+		Context("Blocked", func() {
+			It("queues a Blocked frames", func() {
+				len := 500
+				frame := frames.StreamFrame{
+					StreamID: 0x1337,
+					Data:     bytes.Repeat([]byte{'f'}, len),
+				}
+				session.streamBlocked(0x1337, protocol.ByteCount(len))
+				session.packer.AddStreamFrame(frame)
+				err := session.sendPacket()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(conn.written).To(HaveLen(1))
+				Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x05, 0x37, 0x13, 0, 0})))
+			})
+
+			It("does not send a blocked frame for a stream if a WindowUpdate arrived before", func() {
+				len := 500
+				_, err := session.OpenStream(0x1337)
+				Expect(err).ToNot(HaveOccurred())
+				session.streamBlocked(0x1337, protocol.ByteCount(len))
+				wuf := frames.WindowUpdateFrame{
+					StreamID:   0x1337,
+					ByteOffset: protocol.ByteCount(len * 2),
+				}
+				err = session.handleWindowUpdateFrame(&wuf)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(session.blockedManager.GetBlockedFrame(0x1337, protocol.ByteCount(len))).To(BeNil())
+			})
+
+			It("does not send a blocked frame for the connection if a WindowUpdate arrived before", func() {
+				len := 500
+				session.streamBlocked(0, protocol.ByteCount(len))
+				wuf := frames.WindowUpdateFrame{
+					StreamID:   0,
+					ByteOffset: protocol.ByteCount(len * 2),
+				}
+				err := session.handleWindowUpdateFrame(&wuf)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(session.blockedManager.GetBlockedFrame(0, protocol.ByteCount(len))).To(BeNil())
+			})
 		})
 	})
 

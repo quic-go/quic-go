@@ -35,14 +35,14 @@ type packetPacker struct {
 	lastPacketNumber protocol.PacketNumber
 }
 
-func newPacketPacker(connectionID protocol.ConnectionID, aead crypto.AEAD, sentPacketHandler ackhandler.SentPacketHandler, connectionParametersHandler *handshake.ConnectionParametersManager, version protocol.VersionNumber) *packetPacker {
+func newPacketPacker(connectionID protocol.ConnectionID, aead crypto.AEAD, sentPacketHandler ackhandler.SentPacketHandler, connectionParametersHandler *handshake.ConnectionParametersManager, blockedManager *blockedManager, version protocol.VersionNumber) *packetPacker {
 	return &packetPacker{
 		aead:                        aead,
 		connectionID:                connectionID,
 		connectionParametersManager: connectionParametersHandler,
 		version:                     version,
 		sentPacketHandler:           sentPacketHandler,
-		blockedManager:              newBlockedManager(),
+		blockedManager:              blockedManager,
 	}
 }
 
@@ -57,6 +57,7 @@ func (p *packetPacker) AddHighPrioStreamFrame(f frames.StreamFrame) {
 func (p *packetPacker) AddBlocked(streamID protocol.StreamID, byteOffset protocol.ByteCount) {
 	// TODO: send out connection-level BlockedFrames at the right time
 	// see https://github.com/lucas-clemente/quic-go/issues/113
+	// TODO: remove this function completely once #113 is resolved
 	if streamID == 0 {
 		p.controlFrames = append(p.controlFrames, &frames.BlockedFrame{StreamID: 0})
 	}

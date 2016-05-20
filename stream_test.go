@@ -352,6 +352,20 @@ var _ = Describe("Stream", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 
+			It("returns true when the flow control window was updated", func() {
+				updated := str.flowController.UpdateSendWindow(4)
+				Expect(updated).To(BeTrue())
+				updated = str.UpdateSendFlowControlWindow(5)
+				Expect(updated).To(BeTrue())
+			})
+
+			It("returns false when the flow control window was not updated", func() {
+				updated := str.flowController.UpdateSendWindow(4)
+				Expect(updated).To(BeTrue())
+				updated = str.UpdateSendFlowControlWindow(3)
+				Expect(updated).To(BeFalse())
+			})
+
 			It("waits for a stream flow control window update", func() {
 				var b bool
 				updated := str.flowController.UpdateSendWindow(1)
