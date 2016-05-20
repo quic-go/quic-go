@@ -25,13 +25,13 @@ var _ = Describe("receivedPacketHandler", func() {
 		It("handles a packet that arrives late", func() {
 			err := handler.ReceivedPacket(protocol.PacketNumber(1), false)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(1)))
 			err = handler.ReceivedPacket(protocol.PacketNumber(3), false)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(3)))
 			err = handler.ReceivedPacket(protocol.PacketNumber(2), false)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(1)))
 			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(2)))
-			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(3)))
 		})
 
 		It("rejects packets with packet number 0", func() {
@@ -332,6 +332,28 @@ var _ = Describe("receivedPacketHandler", func() {
 			ack, _ = handler.GetAckFrame(true)
 			Expect(ack).ToNot(BeNil())
 			Expect(ack.NackRanges).To(BeEmpty())
+		})
+	})
+
+	Context("Garbage Collector", func() {
+		It("only keeps packets with packet numbers higher than the highestInOrderObserved in packetHistory", func() {
+			handler.ReceivedPacket(1, true)
+			handler.ReceivedPacket(2, true)
+			handler.ReceivedPacket(4, true)
+			Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(1)))
+			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(2)))
+			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(4)))
+		})
+
+		It("garbage collects packetHistory after receiving a StopWaiting", func() {
+			handler.ReceivedPacket(1, true)
+			handler.ReceivedPacket(2, true)
+			handler.ReceivedPacket(4, true)
+			swf := frames.StopWaitingFrame{LeastUnacked: 4}
+			handler.ReceivedStopWaiting(&swf)
+			Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(1)))
+			Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(2)))
+			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(4)))
 		})
 	})
 })

@@ -22,9 +22,11 @@ type receivedPacketHandler struct {
 	highestInOrderObserved        protocol.PacketNumber
 	highestInOrderObservedEntropy EntropyAccumulator
 	largestObserved               protocol.PacketNumber
-	packetHistory                 map[protocol.PacketNumber]packetHistoryEntry
 	currentAckFrame               *frames.AckFrame
 	stateChanged                  bool // has an ACK for this state already been sent? Will be set to false every time a new packet arrives, and to false every time an ACK is sent
+
+	packetHistory           map[protocol.PacketNumber]packetHistoryEntry
+	smallestInPacketHistory protocol.PacketNumber
 }
 
 // NewReceivedPacketHandler creates a new receivedPacketHandler
@@ -59,6 +61,9 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 		EntropyBit:   entropyBit,
 		TimeReceived: time.Now(),
 	}
+
+	h.garbageCollect()
+
 	return nil
 }
 
@@ -71,6 +76,8 @@ func (h *receivedPacketHandler) ReceivedStopWaiting(f *frames.StopWaitingFrame) 
 	// the LeastUnacked is the smallest packet number of any packet for which the sender is still awaiting an ack. So the highestInOrderObserved is one less than that
 	h.highestInOrderObserved = f.LeastUnacked - 1
 	h.highestInOrderObservedEntropy = EntropyAccumulator(f.Entropy)
+
+	h.garbageCollect()
 
 	return nil
 }
@@ -129,4 +136,11 @@ func (h *receivedPacketHandler) GetAckFrame(dequeue bool) (*frames.AckFrame, err
 		PacketReceivedTime: packetReceivedTime,
 	}
 	return h.currentAckFrame, nil
+}
+
+func (h *receivedPacketHandler) garbageCollect() {
+	for i := h.smallestInPacketHistory; i < h.highestInOrderObserved; i++ {
+		delete(h.packetHistory, i)
+	}
+	h.smallestInPacketHistory = h.highestInOrderObserved
 }
