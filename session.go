@@ -489,7 +489,7 @@ func (s *Session) sendPacket() error {
 	}
 
 	stopWaitingFrame := s.stopWaitingManager.GetStopWaitingFrame()
-	packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, true)
+	packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames)
 
 	if err != nil {
 		return err
@@ -532,9 +532,7 @@ func (s *Session) sendPacket() error {
 }
 
 func (s *Session) sendConnectionClose(quicErr *qerr.QuicError) error {
-	packet, err := s.packer.PackPacket(nil, []frames.Frame{
-		&frames.ConnectionCloseFrame{ErrorCode: quicErr.ErrorCode, ReasonPhrase: quicErr.ErrorMessage},
-	}, false)
+	packet, err := s.packer.PackConnectionClose(&frames.ConnectionCloseFrame{ErrorCode: quicErr.ErrorCode, ReasonPhrase: quicErr.ErrorMessage})
 	if err != nil {
 		return err
 	}

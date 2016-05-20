@@ -65,9 +65,17 @@ func (p *packetPacker) AddBlocked(streamID protocol.StreamID, byteOffset protoco
 	p.blockedManager.AddBlockedStream(streamID, byteOffset)
 }
 
-func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, includeStreamFrames bool) (*packedPacket, error) {
+func (p *packetPacker) PackConnectionClose(frame *frames.ConnectionCloseFrame) (*packedPacket, error) {
+	return p.packPacket(nil, []frames.Frame{frame}, true)
+}
+
+func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame) (*packedPacket, error) {
+	return p.packPacket(stopWaitingFrame, controlFrames, false)
+}
+
+func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, onlySendOneControlFrame bool) (*packedPacket, error) {
 	// don't send out packets that only contain a StopWaitingFrame
-	if len(p.controlFrames) == 0 && len(controlFrames) == 0 && (p.streamFrameQueue.Len() == 0 || !includeStreamFrames) {
+	if len(p.controlFrames) == 0 && len(controlFrames) == 0 && p.streamFrameQueue.Len() == 0 {
 		return nil, nil
 	}
 
@@ -98,9 +106,14 @@ func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		stopWaitingFrame.PacketNumberLen = packetNumberLen
 	}
 
-	payloadFrames, err := p.composeNextPacket(stopWaitingFrame, publicHeaderLength, includeStreamFrames)
-	if err != nil {
-		return nil, err
+	var payloadFrames []frames.Frame
+	if onlySendOneControlFrame {
+		payloadFrames = []frames.Frame{controlFrames[0]}
+	} else {
+		payloadFrames, err = p.composeNextPacket(stopWaitingFrame, publicHeaderLength)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	payload, err := p.getPayload(payloadFrames, currentPacketNumber)
@@ -145,7 +158,7 @@ func (p *packetPacker) getPayload(frames []frames.Frame, currentPacketNumber pro
 	return payload.Bytes(), nil
 }
 
-func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFrame, publicHeaderLength protocol.ByteCount, includeStreamFrames bool) ([]frames.Frame, error) {
+func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFrame, publicHeaderLength protocol.ByteCount) ([]frames.Frame, error) {
 	var payloadLength protocol.ByteCount
 	var payloadFrames []frames.Frame
 
@@ -173,10 +186,6 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 
 	if payloadLength > maxFrameSize {
 		return nil, errors.New("PacketPacker BUG: packet payload too large")
-	}
-
-	if !includeStreamFrames {
-		return payloadFrames, nil
 	}
 
 	hasStreamFrames := false
