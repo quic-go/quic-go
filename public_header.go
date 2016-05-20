@@ -29,10 +29,11 @@ type publicHeader struct {
 	QuicVersion          uint32
 	PacketNumberLen      protocol.PacketNumberLen
 	PacketNumber         protocol.PacketNumber
+	DiversificationNonce []byte
 }
 
 // WritePublicHeader writes a public header
-func (h *publicHeader) WritePublicHeader(b *bytes.Buffer) error {
+func (h *publicHeader) WritePublicHeader(b *bytes.Buffer, version protocol.VersionNumber) error {
 	publicFlagByte := uint8(0x00)
 	if h.VersionFlag && h.ResetFlag {
 		return errResetAndVersionFlagSet
@@ -44,8 +45,17 @@ func (h *publicHeader) WritePublicHeader(b *bytes.Buffer) error {
 		publicFlagByte |= 0x02
 	}
 	if !h.TruncateConnectionID {
-		// TODO: Change this once we support version 33 properly
-		publicFlagByte |= 0x0c
+		if version < protocol.VersionNumber(33) {
+			publicFlagByte |= 0x0c
+		} else {
+			publicFlagByte |= 0x08
+		}
+	}
+	if len(h.DiversificationNonce) > 0 {
+		if len(h.DiversificationNonce) != 32 {
+			return errors.New("invalid diversification nonce length")
+		}
+		publicFlagByte |= 0x04
 	}
 
 	if !h.ResetFlag && !h.VersionFlag {
@@ -65,6 +75,10 @@ func (h *publicHeader) WritePublicHeader(b *bytes.Buffer) error {
 
 	if !h.TruncateConnectionID {
 		utils.WriteUint64(b, uint64(h.ConnectionID))
+	}
+
+	if len(h.DiversificationNonce) > 0 {
+		b.Write(h.DiversificationNonce)
 	}
 
 	if !h.ResetFlag && !h.VersionFlag {
