@@ -72,7 +72,7 @@ func (mockAEAD) DiversificationNonce() []byte { return nil }
 var expectedInitialNonceLen int
 var expectedFSNonceLen int
 
-func mockKeyDerivation(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte) (crypto.AEAD, error) {
+func mockKeyDerivation(v protocol.VersionNumber, forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte) (crypto.AEAD, error) {
 	if forwardSecure {
 		Expect(nonces).To(HaveLen(expectedFSNonceLen))
 	} else {

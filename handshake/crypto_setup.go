@@ -13,7 +13,7 @@ import (
 )
 
 // KeyDerivationFunction is used for key derivation
-type KeyDerivationFunction func(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte) (crypto.AEAD, error)
+type KeyDerivationFunction func(version protocol.VersionNumber, forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte) (crypto.AEAD, error)
 
 // KeyExchangeFunction is used to make a new KEX
 type KeyExchangeFunction func() (crypto.KeyExchange, error)
@@ -206,9 +206,6 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 	if err != nil {
 		return nil, err
 	}
-	var fsNonce bytes.Buffer
-	fsNonce.Write(cryptoData[TagNONC])
-	fsNonce.Write(h.nonce)
 
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
@@ -218,12 +215,25 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 		return nil, err
 	}
 
-	h.secureAEAD, err = h.keyDerivation(false, sharedSecret, cryptoData[TagNONC], h.connID, data, h.scfg.Get(), certUncompressed)
+	h.secureAEAD, err = h.keyDerivation(
+		h.version,
+		false,
+		sharedSecret,
+		cryptoData[TagNONC],
+		h.connID,
+		data,
+		h.scfg.Get(),
+		certUncompressed,
+		h.diversificationNonce,
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	// Generate a new curve instance to derive the forward secure key
+	var fsNonce bytes.Buffer
+	fsNonce.Write(cryptoData[TagNONC])
+	fsNonce.Write(h.nonce)
 	ephermalKex, err := h.keyExchange()
 	if err != nil {
 		return nil, err
@@ -232,7 +242,16 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 	if err != nil {
 		return nil, err
 	}
-	h.forwardSecureAEAD, err = h.keyDerivation(true, ephermalSharedSecret, fsNonce.Bytes(), h.connID, data, h.scfg.Get(), certUncompressed)
+	h.forwardSecureAEAD, err = h.keyDerivation(h.version,
+		true,
+		ephermalSharedSecret,
+		fsNonce.Bytes(),
+		h.connID,
+		data,
+		h.scfg.Get(),
+		certUncompressed,
+		nil,
+	)
 	if err != nil {
 		return nil, err
 	}
