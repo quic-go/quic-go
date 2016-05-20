@@ -20,6 +20,8 @@ func main() {
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
+	// runtime.SetBlockProfileRate(1)
+
 	verbose := flag.Bool("v", false, "verbose")
 	bindTo := flag.String("bind", "localhost", "bind to")
 	certPath := flag.String("certpath", "", "certificate directory")
@@ -56,6 +58,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	// server.CloseAfterFirstRequest = true
 
 	err = server.ListenAndServe(*bindTo+":6121", nil)
 	if err != nil {
