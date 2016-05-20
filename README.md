@@ -11,7 +11,7 @@ This is very much an incomplete, buggy, unperformant and insecure work in progre
 
 Done:
 
-- Basic protocol with support for QUIC version 30, 31 and 32
+- Basic protocol with support for QUIC version 30-33
 - HTTP/2 support
 - Crypto (RSA for signing, curve25519 for KEX, chacha20-poly1305 as cipher)
 - Loss detection and retransmission (currently fast retransmission & RTO)
@@ -23,7 +23,7 @@ Major TODOs:
 - Security, especially DOS protections
 - Performance
 - Better packet loss detection
-- Support for QUIC versions 33 & 34
+- Support for QUIC version 34
 - Connection migration
 - QUIC client
 - Public API design
