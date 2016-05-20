@@ -67,6 +67,8 @@ func (m *mockAEAD) Open(packetNumber protocol.PacketNumber, associatedData []byt
 	return nil, errors.New("authentication failed")
 }
 
+func (mockAEAD) DiversificationNonce() []byte { return nil }
+
 var expectedInitialNonceLen int
 var expectedFSNonceLen int
 
@@ -138,6 +140,33 @@ var _ = Describe("Crypto setup", func() {
 			s += int(b)
 		}
 		Expect(s).ToNot(BeZero())
+	})
+
+	Context("diversification nonce", func() {
+		BeforeEach(func() {
+			cs.version = 33
+			cs.secureAEAD = &mockAEAD{}
+			cs.receivedForwardSecurePacket = false
+		})
+
+		It("returns diversification nonces", func() {
+			Expect(cs.DiversificationNonce()).To(HaveLen(32))
+		})
+
+		It("does not return nonce for version < 33", func() {
+			cs.version = 32
+			Expect(cs.DiversificationNonce()).To(BeEmpty())
+		})
+
+		It("does not return nonce for FS packets", func() {
+			cs.receivedForwardSecurePacket = true
+			Expect(cs.DiversificationNonce()).To(BeEmpty())
+		})
+
+		It("does not return nonce for unencrypted packets", func() {
+			cs.secureAEAD = nil
+			Expect(cs.DiversificationNonce()).To(BeEmpty())
+		})
 	})
 
 	Context("when responding to client messages", func() {

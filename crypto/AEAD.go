@@ -6,4 +6,5 @@ import "github.com/lucas-clemente/quic-go/protocol"
 type AEAD interface {
 	Open(packetNumber protocol.PacketNumber, associatedData []byte, ciphertext []byte) ([]byte, error)
 	Seal(packetNumber protocol.PacketNumber, associatedData []byte, plaintext []byte) []byte
+	DiversificationNonce() []byte
 }

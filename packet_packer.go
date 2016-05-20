@@ -94,6 +94,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		PacketNumber:         currentPacketNumber,
 		PacketNumberLen:      packetNumberLen,
 		TruncateConnectionID: p.connectionParametersManager.TruncateConnectionID(),
+		DiversificationNonce: p.aead.DiversificationNonce(),
 	}
 
 	publicHeaderLength, err := responsePublicHeader.GetLength()

@@ -20,10 +20,11 @@ type KeyExchangeFunction func() (crypto.KeyExchange, error)
 
 // The CryptoSetup handles all things crypto for the Session
 type CryptoSetup struct {
-	connID  protocol.ConnectionID
-	version protocol.VersionNumber
-	scfg    *ServerConfig
-	nonce   []byte
+	connID               protocol.ConnectionID
+	version              protocol.VersionNumber
+	scfg                 *ServerConfig
+	nonce                []byte
+	diversificationNonce []byte
 
 	secureAEAD                  crypto.AEAD
 	forwardSecureAEAD           crypto.AEAD
@@ -49,11 +50,16 @@ func NewCryptoSetup(connID protocol.ConnectionID, version protocol.VersionNumber
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return nil, err
 	}
+	diversificationNonce := make([]byte, 32)
+	if _, err := io.ReadFull(rand.Reader, diversificationNonce); err != nil {
+		return nil, err
+	}
 	return &CryptoSetup{
 		connID:                      connID,
 		version:                     version,
 		scfg:                        scfg,
 		nonce:                       nonce,
+		diversificationNonce:        diversificationNonce,
 		keyDerivation:               crypto.DeriveKeysChacha20,
 		keyExchange:                 crypto.NewCurve25519KEX,
 		cryptoStream:                cryptoStream,
@@ -248,4 +254,15 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 	h.aeadChanged <- struct{}{}
 
 	return reply.Bytes(), nil
+}
+
+// DiversificationNonce returns a diversification nonce if required in the next packet to be Seal'ed
+func (h *CryptoSetup) DiversificationNonce() []byte {
+	if h.version < protocol.VersionNumber(33) {
+		return nil
+	}
+	if h.receivedForwardSecurePacket || h.secureAEAD == nil {
+		return nil
+	}
+	return h.diversificationNonce
 }

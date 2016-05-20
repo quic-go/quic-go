@@ -47,3 +47,5 @@ func (*NullAEAD) Seal(packetNumber protocol.PacketNumber, associatedData []byte,
 	copy(res[12:], plaintext)
 	return res
 }
+
+func (NullAEAD) DiversificationNonce() []byte { return nil }
