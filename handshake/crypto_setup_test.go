@@ -67,7 +67,15 @@ func (m *mockAEAD) Open(packetNumber protocol.PacketNumber, associatedData []byt
 	return nil, errors.New("authentication failed")
 }
 
+var expectedInitialNonceLen int
+var expectedFSNonceLen int
+
 func mockKeyDerivation(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte) (crypto.AEAD, error) {
+	if forwardSecure {
+		Expect(nonces).To(HaveLen(expectedFSNonceLen))
+	} else {
+		Expect(nonces).To(HaveLen(expectedInitialNonceLen))
+	}
 	return &mockAEAD{forwardSecure: forwardSecure, sharedSecret: sharedSecret}, nil
 }
 
@@ -101,9 +109,13 @@ var _ = Describe("Crypto setup", func() {
 		stream      *mockStream
 		cpm         *ConnectionParametersManager
 		aeadChanged chan struct{}
+		nonce32     []byte
 	)
 
 	BeforeEach(func() {
+		nonce32 = make([]byte, 32)
+		expectedInitialNonceLen = 32
+		expectedFSNonceLen = 64
 		var err error
 		aeadChanged = make(chan struct{}, 1)
 		stream = &mockStream{}
@@ -148,6 +160,7 @@ var _ = Describe("Crypto setup", func() {
 		It("generates SHLO messages", func() {
 			response, err := cs.handleCHLO("", []byte("chlo-data"), map[Tag][]byte{
 				TagPUBS: []byte("pubs-c"),
+				TagNONC: nonce32,
 			})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(response).To(HavePrefix("SHLO"))
@@ -167,7 +180,11 @@ var _ = Describe("Crypto setup", func() {
 				TagSNI: []byte("quic.clemente.io"),
 				TagPAD: bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize),
 			})
-			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{TagSCID: scfg.ID, TagSNO: cs.nonce, TagSNI: []byte("quic.clemente.io")})
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagSNI:  []byte("quic.clemente.io"),
+				TagNONC: nonce32,
+			})
 			err := cs.HandleCryptoStream()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stream.dataWritten.Bytes()).To(HavePrefix("REJ"))
@@ -176,7 +193,11 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		It("handles 0-RTT handshake", func() {
-			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{TagSCID: scfg.ID, TagSNO: cs.nonce, TagSNI: []byte("quic.clemente.io")})
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagSNI:  []byte("quic.clemente.io"),
+				TagNONC: nonce32,
+			})
 			err := cs.HandleCryptoStream()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stream.dataWritten.Bytes()).To(HavePrefix("SHLO"))
@@ -185,15 +206,11 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		It("recognizes inchoate CHLOs missing SCID", func() {
-			Expect(cs.isInchoateCHLO(map[Tag][]byte{TagSNO: cs.nonce})).To(BeTrue())
-		})
-
-		It("recognizes inchoate CHLOs missing SNO", func() {
-			Expect(cs.isInchoateCHLO(map[Tag][]byte{TagSCID: scfg.ID})).To(BeTrue())
+			Expect(cs.isInchoateCHLO(map[Tag][]byte{})).To(BeTrue())
 		})
 
 		It("recognizes proper CHLOs", func() {
-			Expect(cs.isInchoateCHLO(map[Tag][]byte{TagSCID: scfg.ID, TagSNO: cs.nonce})).To(BeFalse())
+			Expect(cs.isInchoateCHLO(map[Tag][]byte{TagSCID: scfg.ID})).To(BeFalse())
 		})
 
 		It("errors on too short inchoate CHLOs", func() {
@@ -212,7 +229,7 @@ var _ = Describe("Crypto setup", func() {
 		foobarFNVSigned := []byte{0x18, 0x6f, 0x44, 0xba, 0x97, 0x35, 0xd, 0x6f, 0xbf, 0x64, 0x3c, 0x79, 0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72}
 
 		doCHLO := func() {
-			_, err := cs.handleCHLO("", []byte("chlo-data"), map[Tag][]byte{TagPUBS: []byte("pubs-c")})
+			_, err := cs.handleCHLO("", []byte("chlo-data"), map[Tag][]byte{TagPUBS: []byte("pubs-c"), TagNONC: nonce32})
 			Expect(err).ToNot(HaveOccurred())
 		}
 
