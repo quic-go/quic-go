@@ -78,7 +78,8 @@ type Session struct {
 
 	lastNetworkActivityTime time.Time
 
-	timer *time.Timer
+	timer     *time.Timer
+	timerRead bool
 }
 
 // newSession makes a new session
@@ -154,13 +155,20 @@ func (s *Session) run() {
 		// Idle connection timeout
 		firstTimeout = utils.MinDuration(firstTimeout, s.lastNetworkActivityTime.Add(s.connectionParametersManager.GetIdleConnectionStateLifetime()).Sub(now))
 
+		// We need to drain the timer if the value from its channel was not read yet.
+		// See https://groups.google.com/forum/#!topic/golang-dev/c9UUfASVPoU
+		if !s.timer.Stop() && !s.timerRead {
+			<-s.timer.C
+		}
 		s.timer.Reset(firstTimeout)
+		s.timerRead = false
 
 		var err error
 		select {
 		case <-s.closeChan:
 			return
 		case <-s.timer.C:
+			s.timerRead = true
 			// We do all the interesting stuff after the switch statement, so
 			// nothing to see here.
 		case <-s.sendingScheduled:
