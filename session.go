@@ -605,6 +605,9 @@ func (s *Session) garbageCollectStreams() {
 		if v == nil {
 			continue
 		}
+		if v.finishedWriting() {
+			s.blockedManager.RemoveBlockedStream(k)
+		}
 		if v.finished() {
 			s.streams[k] = nil
 		}
