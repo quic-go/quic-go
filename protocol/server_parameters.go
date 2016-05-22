@@ -45,3 +45,6 @@ const WindowUpdateNumRepitions uint8 = 2
 
 // MaxSessionUnprocessedPackets is the max number of packets stored in each session that are not yet processed.
 const MaxSessionUnprocessedPackets = 128
+
+// RetransmissionThreshold + 1 is the number of times a packet has to be NACKed so that it gets retransmitted
+const RetransmissionThreshold uint8 = 3

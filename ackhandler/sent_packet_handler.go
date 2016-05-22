@@ -26,10 +26,6 @@ var (
 	errWrongPacketNumberIncrement = errors.New("Packet number must be increased by exactly 1")
 )
 
-var (
-	retransmissionThreshold = uint8(3)
-)
-
 type sentPacketHandler struct {
 	lastSentPacketNumber            protocol.PacketNumber
 	lastSentPacketEntropy           EntropyAccumulator
@@ -97,7 +93,7 @@ func (h *sentPacketHandler) nackPacket(packetNumber protocol.PacketNumber) (*Pac
 
 	packet.MissingReports++
 
-	if packet.MissingReports > retransmissionThreshold {
+	if packet.MissingReports > protocol.RetransmissionThreshold {
 		h.queuePacketForRetransmission(packet)
 		return packet, nil
 	}
