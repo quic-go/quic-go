@@ -72,7 +72,6 @@ func (h *sentPacketHandler) ackPacket(packetNumber protocol.PacketNumber) *Packe
 	}
 	delete(h.packetHistory, packetNumber)
 
-	// TODO: add tests
 	h.stopWaitingManager.ReceivedAckForPacketNumber(packetNumber)
 
 	return packet

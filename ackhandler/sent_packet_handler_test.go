@@ -51,6 +51,19 @@ func (m *mockCongestion) SetNumEmulatedConnections(n int)         { panic("not i
 func (m *mockCongestion) OnConnectionMigration()                  { panic("not implemented") }
 func (m *mockCongestion) SetSlowStartLargeReduction(enabled bool) { panic("not implemented") }
 
+type mockStopWaiting struct {
+	receivedAckForPacketNumber protocol.PacketNumber
+}
+
+func (m *mockStopWaiting) RegisterPacketForRetransmission(packet *Packet) { panic("not implemented") }
+func (m *mockStopWaiting) GetStopWaitingFrame() *frames.StopWaitingFrame  { panic("not implemented") }
+func (m *mockStopWaiting) SentStopWaitingWithPacket(packetNumber protocol.PacketNumber) {
+	panic("not implemented")
+}
+func (m *mockStopWaiting) ReceivedAckForPacketNumber(packetNumber protocol.PacketNumber) {
+	m.receivedAckForPacketNumber = packetNumber
+}
+
 var _ = Describe("SentPacketHandler", func() {
 	var (
 		handler     *sentPacketHandler
@@ -58,12 +71,17 @@ var _ = Describe("SentPacketHandler", func() {
 	)
 
 	BeforeEach(func() {
-		stopWaitingManager := NewStopWaitingManager()
+		stopWaitingManager := &mockStopWaiting{}
 		handler = NewSentPacketHandler(stopWaitingManager).(*sentPacketHandler)
 		streamFrame = frames.StreamFrame{
 			StreamID: 5,
 			Data:     []byte{0x13, 0x37},
 		}
+	})
+
+	It("informs the StopWaitingManager about ACKs received", func() {
+		handler.ackPacket(2)
+		Expect(handler.stopWaitingManager.(*mockStopWaiting).receivedAckForPacketNumber).To(Equal(protocol.PacketNumber(2)))
 	})
 
 	Context("SentPacket", func() {
