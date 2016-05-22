@@ -518,14 +518,7 @@ func (s *Session) sendPacket() error {
 
 	s.stopWaitingManager.SentStopWaitingWithPacket(packet.number)
 
-	utils.Debugf("-> Sending packet 0x%x (%d bytes)", packet.number, len(packet.raw))
-	for _, frame := range packet.frames {
-		if streamFrame, isStreamFrame := frame.(*frames.StreamFrame); isStreamFrame {
-			utils.Debugf("\t-> &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: 0x%x, Data length: 0x%x, Offset + Data length: 0x%x}", streamFrame.StreamID, streamFrame.FinBit, streamFrame.Offset, len(streamFrame.Data), streamFrame.Offset+protocol.ByteCount(len(streamFrame.Data)))
-		} else {
-			utils.Debugf("\t-> %#v", frame)
-		}
-	}
+	s.logPacket(packet)
 
 	err = s.conn.write(packet.raw)
 	if err != nil {
@@ -547,7 +540,19 @@ func (s *Session) sendConnectionClose(quicErr *qerr.QuicError) error {
 	if packet == nil {
 		return errors.New("Session BUG: expected packet not to be nil")
 	}
+	s.logPacket(packet)
 	return s.conn.write(packet.raw)
+}
+
+func (s *Session) logPacket(packet *packedPacket) {
+	utils.Debugf("-> Sending packet 0x%x (%d bytes)", packet.number, len(packet.raw))
+	for _, frame := range packet.frames {
+		if streamFrame, isStreamFrame := frame.(*frames.StreamFrame); isStreamFrame {
+			utils.Debugf("\t-> &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: 0x%x, Data length: 0x%x, Offset + Data length: 0x%x}", streamFrame.StreamID, streamFrame.FinBit, streamFrame.Offset, len(streamFrame.Data), streamFrame.Offset+protocol.ByteCount(len(streamFrame.Data)))
+		} else {
+			utils.Debugf("\t-> %#v", frame)
+		}
+	}
 }
 
 // queueStreamFrame queues a frame for sending to the client
