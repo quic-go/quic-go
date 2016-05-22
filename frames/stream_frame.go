@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
@@ -72,6 +73,10 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 		if _, err := r.Read(frame.Data); err != nil {
 			return nil, err
 		}
+	}
+
+	if !frame.FinBit && len(frame.Data) == 0 {
+		return nil, qerr.EmptyStreamFrameNoFin
 	}
 
 	return frame, nil

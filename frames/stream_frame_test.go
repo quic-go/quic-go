@@ -4,6 +4,7 @@ import (
 	"bytes"
 
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -30,6 +31,21 @@ var _ = Describe("StreamFrame", func() {
 			Expect(frame.Offset).To(BeZero())
 			Expect(frame.DataLenPresent).To(BeFalse())
 			Expect(frame.Data).To(Equal([]byte("foobar")))
+		})
+
+		It("accepts empty frame with finbit set", func() {
+			b := bytes.NewReader([]byte{0x80 ^ 0x40 ^ 0x20, 0x1, 0, 0})
+			frame, err := ParseStreamFrame(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame.FinBit).To(BeTrue())
+			Expect(frame.DataLenPresent).To(BeTrue())
+			Expect(frame.Data).To(HaveLen(0))
+		})
+
+		It("errors on empty stream frames that don't have the FinBit set", func() {
+			b := bytes.NewReader([]byte{0x80 ^ 0x20, 0x1, 0, 0})
+			_, err := ParseStreamFrame(b)
+			Expect(err).To(MatchError(qerr.EmptyStreamFrameNoFin))
 		})
 	})
 
