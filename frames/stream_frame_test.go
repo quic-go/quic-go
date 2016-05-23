@@ -52,12 +52,24 @@ var _ = Describe("StreamFrame", func() {
 	Context("when writing", func() {
 		It("writes sample frame", func() {
 			b := &bytes.Buffer{}
-			(&StreamFrame{
+			err := (&StreamFrame{
 				StreamID:       1,
 				Data:           []byte("foobar"),
 				DataLenPresent: true,
 			}).Write(b, 0)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(b.Bytes()).To(Equal([]byte{0xa0, 0x1, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'}))
+		})
+
+		It("sets the FinBit", func() {
+			b := &bytes.Buffer{}
+			err := (&StreamFrame{
+				StreamID: 1,
+				Data:     []byte("foobar"),
+				FinBit:   true,
+			}).Write(b, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(b.Bytes()[0] & 0x40).To(Equal(byte(0x40)))
 		})
 
 		It("has proper min length for a short StreamID and a short offset", func() {
@@ -67,7 +79,8 @@ var _ = Describe("StreamFrame", func() {
 				Data:     []byte("f"),
 				Offset:   0,
 			}
-			f.Write(b, 0)
+			err := f.Write(b, 0)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(f.MinLength()).To(Equal(protocol.ByteCount(b.Len())))
 		})
 
@@ -78,7 +91,8 @@ var _ = Describe("StreamFrame", func() {
 				Data:     []byte("f"),
 				Offset:   0xDEADBEEFCAFE,
 			}
-			f.Write(b, 0)
+			err := f.Write(b, 0)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(f.MinLength()).To(Equal(protocol.ByteCount(b.Len())))
 		})
 
@@ -92,7 +106,8 @@ var _ = Describe("StreamFrame", func() {
 					DataLenPresent: true,
 					Offset:         0,
 				}
-				f.Write(b, 0)
+				err := f.Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
 				minLength, _ := f.MinLength()
 				headerLength := minLength - 1
 				Expect(b.Bytes()[0] & 0x20).To(Equal(uint8(0x20)))
@@ -108,7 +123,8 @@ var _ = Describe("StreamFrame", func() {
 					DataLenPresent: false,
 					Offset:         0,
 				}
-				f.Write(b, 0)
+				err := f.Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(b.Bytes()[0] & 0x20).To(Equal(uint8(0)))
 				Expect(b.Bytes()[1 : b.Len()-dataLen]).ToNot(ContainSubstring(string([]byte{0x37, 0x13})))
 				minLength, _ := f.MinLength()
@@ -133,21 +149,23 @@ var _ = Describe("StreamFrame", func() {
 		Context("offset lengths", func() {
 			It("does not write an offset if the offset is 0", func() {
 				b := &bytes.Buffer{}
-				(&StreamFrame{
+				err := (&StreamFrame{
 					StreamID: 1,
 					Data:     []byte("foobar"),
 					Offset:   0,
 				}).Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x0)))
 			})
 
 			It("writes a 2-byte offset if the offset is larger than 0", func() {
 				b := &bytes.Buffer{}
-				(&StreamFrame{
+				err := (&StreamFrame{
 					StreamID: 1,
 					Data:     []byte("foobar"),
 					Offset:   0x1337,
 				}).Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x1 << 2)))
 				Expect(b.Bytes()[2:4]).To(Equal([]byte{0x37, 0x13}))
 			})
@@ -165,55 +183,60 @@ var _ = Describe("StreamFrame", func() {
 
 			It("writes a 4-byte offset if the offset", func() {
 				b := &bytes.Buffer{}
-				(&StreamFrame{
+				err := (&StreamFrame{
 					StreamID: 1,
 					Data:     []byte("foobar"),
 					Offset:   0xDEADBEEF,
 				}).Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x3 << 2)))
 				Expect(b.Bytes()[2:6]).To(Equal([]byte{0xEF, 0xBE, 0xAD, 0xDE}))
 			})
 
 			It("writes a 5-byte offset if the offset", func() {
 				b := &bytes.Buffer{}
-				(&StreamFrame{
+				err := (&StreamFrame{
 					StreamID: 1,
 					Data:     []byte("foobar"),
 					Offset:   0x13DEADBEEF,
 				}).Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x4 << 2)))
 				Expect(b.Bytes()[2:7]).To(Equal([]byte{0xEF, 0xBE, 0xAD, 0xDE, 0x13}))
 			})
 
 			It("writes a 6-byte offset if the offset", func() {
 				b := &bytes.Buffer{}
-				(&StreamFrame{
+				err := (&StreamFrame{
 					StreamID: 1,
 					Data:     []byte("foobar"),
 					Offset:   0xDEADBEEFCAFE,
 				}).Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x5 << 2)))
 				Expect(b.Bytes()[2:8]).To(Equal([]byte{0xFE, 0xCA, 0xEF, 0xBE, 0xAD, 0xDE}))
 			})
 
 			It("writes a 7-byte offset if the offset", func() {
 				b := &bytes.Buffer{}
-				(&StreamFrame{
+				err := (&StreamFrame{
 					StreamID: 1,
 					Data:     []byte("foobar"),
 					Offset:   0x13DEADBEEFCAFE,
 				}).Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x6 << 2)))
 				Expect(b.Bytes()[2:9]).To(Equal([]byte{0xFE, 0xCA, 0xEF, 0xBE, 0xAD, 0xDE, 0x13}))
 			})
 
 			It("writes a 8-byte offset if the offset", func() {
 				b := &bytes.Buffer{}
-				(&StreamFrame{
+				err := (&StreamFrame{
 					StreamID: 1,
 					Data:     []byte("foobar"),
 					Offset:   0x1337DEADBEEFCAFE,
 				}).Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x7 << 2)))
 				Expect(b.Bytes()[2:10]).To(Equal([]byte{0xFE, 0xCA, 0xEF, 0xBE, 0xAD, 0xDE, 0x37, 0x13}))
 			})
@@ -232,40 +255,44 @@ var _ = Describe("StreamFrame", func() {
 
 			It("writes a 1 byte StreamID", func() {
 				b := &bytes.Buffer{}
-				(&StreamFrame{
+				err := (&StreamFrame{
 					StreamID: 13,
 					Data:     []byte("foobar"),
 				}).Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(b.Bytes()[0] & 0x3).To(Equal(uint8(0x0)))
 				Expect(b.Bytes()[1]).To(Equal(uint8(13)))
 			})
 
 			It("writes a 2 byte StreamID", func() {
 				b := &bytes.Buffer{}
-				(&StreamFrame{
+				err := (&StreamFrame{
 					StreamID: 0xCAFE,
 					Data:     []byte("foobar"),
 				}).Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(b.Bytes()[0] & 0x3).To(Equal(uint8(0x1)))
 				Expect(b.Bytes()[1:3]).To(Equal([]byte{0xFE, 0xCA}))
 			})
 
 			It("writes a 3 byte StreamID", func() {
 				b := &bytes.Buffer{}
-				(&StreamFrame{
+				err := (&StreamFrame{
 					StreamID: 0x13BEEF,
 					Data:     []byte("foobar"),
 				}).Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(b.Bytes()[0] & 0x3).To(Equal(uint8(0x2)))
 				Expect(b.Bytes()[1:4]).To(Equal([]byte{0xEF, 0xBE, 0x13}))
 			})
 
 			It("writes a 4 byte StreamID", func() {
 				b := &bytes.Buffer{}
-				(&StreamFrame{
+				err := (&StreamFrame{
 					StreamID: 0xDECAFBAD,
 					Data:     []byte("foobar"),
 				}).Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(b.Bytes()[0] & 0x3).To(Equal(uint8(0x3)))
 				Expect(b.Bytes()[1:5]).To(Equal([]byte{0xAD, 0xFB, 0xCA, 0xDE}))
 			})
