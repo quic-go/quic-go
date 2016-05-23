@@ -48,3 +48,6 @@ const MaxSessionUnprocessedPackets = 128
 
 // RetransmissionThreshold + 1 is the number of times a packet has to be NACKed so that it gets retransmitted
 const RetransmissionThreshold uint8 = 3
+
+// STKExpiryTimeSec is the valid time of a source address token in seconds
+const STKExpiryTimeSec = 24 * 60 * 60
