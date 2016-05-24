@@ -10,9 +10,10 @@ import (
 
 // ServerConfig is a server config
 type ServerConfig struct {
-	kex    crypto.KeyExchange
-	signer crypto.Signer
-	ID     []byte
+	kex       crypto.KeyExchange
+	signer    crypto.Signer
+	ID        []byte
+	stkSource crypto.StkSource
 }
 
 // NewServerConfig creates a new server config
@@ -22,10 +23,21 @@ func NewServerConfig(kex crypto.KeyExchange, signer crypto.Signer) (*ServerConfi
 	if err != nil {
 		return nil, err
 	}
+
+	stkSecret := make([]byte, 32)
+	if _, err = io.ReadFull(rand.Reader, stkSecret); err != nil {
+		return nil, err
+	}
+	stkSource, err := crypto.NewStkSource(stkSecret)
+	if err != nil {
+		return nil, err
+	}
+
 	return &ServerConfig{
-		kex:    kex,
-		signer: signer,
-		ID:     id,
+		kex:       kex,
+		signer:    signer,
+		ID:        id,
+		stkSource: stkSource,
 	}, nil
 }
 

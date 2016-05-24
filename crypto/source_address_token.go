@@ -18,6 +18,14 @@ import (
 	"golang.org/x/crypto/hkdf"
 )
 
+// StkSource is used to create and verify source address tokens
+type StkSource interface {
+	// NewToken creates a new token for a given IP address
+	NewToken(ip net.IP) ([]byte, error)
+	// VerifyToken verifies if a token matches a given IP address and is not outdated
+	VerifyToken(ip net.IP, data []byte) error
+}
+
 type sourceAddressToken struct {
 	ip net.IP
 	// unix timestamp in seconds
@@ -51,7 +59,8 @@ const stkKeySize = 16
 // at 16 :)
 const stkNonceSize = 16
 
-func newStkSource(secret []byte) (*stkSource, error) {
+// NewStkSource creates a source for source address tokens
+func NewStkSource(secret []byte) (StkSource, error) {
 	key, err := deriveKey(secret)
 	if err != nil {
 		return nil, err

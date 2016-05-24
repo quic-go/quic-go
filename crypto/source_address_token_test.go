@@ -52,7 +52,8 @@ var _ = Describe("Source Address Tokens", func() {
 			Expect(ip6).NotTo(BeEmpty())
 
 			secret = []byte("TESTING")
-			source, err = newStkSource(secret)
+			sourceI, err := NewStkSource(secret)
+			source = sourceI.(*stkSource)
 			Expect(err).NotTo(HaveOccurred())
 		})
 

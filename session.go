@@ -111,7 +111,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 
 	cryptoStream, _ := session.OpenStream(1)
 	var err error
-	session.cryptoSetup, err = handshake.NewCryptoSetup(connectionID, v, sCfg, cryptoStream, session.connectionParametersManager, session.aeadChanged)
+	session.cryptoSetup, err = handshake.NewCryptoSetup(connectionID, conn.IP(), v, sCfg, cryptoStream, session.connectionParametersManager, session.aeadChanged)
 	if err != nil {
 		return nil, err
 	}

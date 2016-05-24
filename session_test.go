@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"net"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -31,6 +32,7 @@ func (m *mockConnection) write(p []byte) error {
 }
 
 func (*mockConnection) setCurrentRemoteAddr(addr interface{}) {}
+func (*mockConnection) IP() net.IP                            { return nil }
 
 var _ = Describe("Session", func() {
 	var (

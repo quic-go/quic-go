@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"io"
+	"net"
 	"sync"
 
 	"github.com/lucas-clemente/quic-go/crypto"
@@ -21,6 +22,7 @@ type KeyExchangeFunction func() (crypto.KeyExchange, error)
 // The CryptoSetup handles all things crypto for the Session
 type CryptoSetup struct {
 	connID               protocol.ConnectionID
+	ip                   net.IP
 	version              protocol.VersionNumber
 	scfg                 *ServerConfig
 	nonce                []byte
@@ -45,7 +47,15 @@ type CryptoSetup struct {
 var _ crypto.AEAD = &CryptoSetup{}
 
 // NewCryptoSetup creates a new CryptoSetup instance
-func NewCryptoSetup(connID protocol.ConnectionID, version protocol.VersionNumber, scfg *ServerConfig, cryptoStream utils.Stream, connectionParametersManager *ConnectionParametersManager, aeadChanged chan struct{}) (*CryptoSetup, error) {
+func NewCryptoSetup(
+	connID protocol.ConnectionID,
+	ip net.IP,
+	version protocol.VersionNumber,
+	scfg *ServerConfig,
+	cryptoStream utils.Stream,
+	connectionParametersManager *ConnectionParametersManager,
+	aeadChanged chan struct{},
+) (*CryptoSetup, error) {
 	nonce := make([]byte, 32)
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return nil, err
@@ -56,6 +66,7 @@ func NewCryptoSetup(connID protocol.ConnectionID, version protocol.VersionNumber
 	}
 	return &CryptoSetup{
 		connID:                      connID,
+		ip:                          ip,
 		version:                     version,
 		scfg:                        scfg,
 		nonce:                       nonce,
@@ -81,41 +92,53 @@ func (h *CryptoSetup) HandleCryptoStream() error {
 		}
 		chloData := cachingReader.Get()
 
-		utils.Infof("Got crypto message:\n%s", printHandshakeMessage(cryptoData))
+		utils.Infof("Got CHLO:\n%s", printHandshakeMessage(cryptoData))
 
-		sniSlice, ok := cryptoData[TagSNI]
-		if !ok {
-			return qerr.Error(qerr.CryptoMessageParameterNotFound, "SNI required")
-		}
-		sni := string(sniSlice)
-		if sni == "" {
-			return qerr.Error(qerr.CryptoMessageParameterNotFound, "SNI required")
-		}
-
-		var reply []byte
-		if !h.isInchoateCHLO(cryptoData) {
-			// We have a CHLO with a proper server config ID, do a 0-RTT handshake
-			reply, err = h.handleCHLO(sni, chloData, cryptoData)
-			if err != nil {
-				return err
-			}
-			_, err = h.cryptoStream.Write(reply)
-			if err != nil {
-				return err
-			}
-			return nil
-		}
-
-		// We have an inchoate or non-matching CHLO, we now send a rejection
-		reply, err = h.handleInchoateCHLO(sni, chloData, cryptoData)
+		done, err := h.handleMessage(chloData, cryptoData)
 		if err != nil {
 			return err
+		}
+		if done {
+			return nil
+		}
+	}
+}
+
+func (h *CryptoSetup) handleMessage(chloData []byte, cryptoData map[Tag][]byte) (bool, error) {
+	sniSlice, ok := cryptoData[TagSNI]
+	if !ok {
+		return false, qerr.Error(qerr.CryptoMessageParameterNotFound, "SNI required")
+	}
+	sni := string(sniSlice)
+	if sni == "" {
+		return false, qerr.Error(qerr.CryptoMessageParameterNotFound, "SNI required")
+	}
+
+	var reply []byte
+	var err error
+	if !h.isInchoateCHLO(cryptoData) {
+		// We have a CHLO with a proper server config ID, do a 0-RTT handshake
+		reply, err = h.handleCHLO(sni, chloData, cryptoData)
+		if err != nil {
+			return false, err
 		}
 		_, err = h.cryptoStream.Write(reply)
 		if err != nil {
-			return err
+			return false, err
 		}
+		return true, nil
 	}
+
+	// We have an inchoate or non-matching CHLO, we now send a rejection
+	reply, err = h.handleInchoateCHLO(sni, chloData, cryptoData)
+	if err != nil {
+		return false, err
+	}
+	_, err = h.cryptoStream.Write(reply)
+	if err != nil {
+		return false, err
+	}
+	return false, nil
 }
 
 // Open a message
@@ -165,6 +188,10 @@ func (h *CryptoSetup) isInchoateCHLO(cryptoData map[Tag][]byte) bool {
 	if !ok || !bytes.Equal(h.scfg.ID, scid) {
 		return true
 	}
+	if err := h.scfg.stkSource.VerifyToken(h.ip, cryptoData[TagSTK]); err != nil {
+		utils.Infof("STK invalid: %s", err.Error())
+		return false
+	}
 	return false
 }
 
@@ -191,11 +218,17 @@ func (h *CryptoSetup) handleInchoateCHLO(sni string, data []byte, cryptoData map
 		return nil, err
 	}
 
+	token, err := h.scfg.stkSource.NewToken(h.ip)
+	if err != nil {
+		return nil, err
+	}
+
 	var serverReply bytes.Buffer
 	WriteHandshakeMessage(&serverReply, TagREJ, map[Tag][]byte{
 		TagSCFG: h.scfg.Get(),
 		TagCERT: certCompressed,
 		TagPROF: proof,
+		TagSTK:  token,
 	})
 	return serverReply.Bytes(), nil
 }
@@ -284,4 +317,12 @@ func (h *CryptoSetup) DiversificationNonce() []byte {
 		return nil
 	}
 	return h.diversificationNonce
+}
+
+func (h *CryptoSetup) verifyOrCreateSTK(token []byte) ([]byte, error) {
+	err := h.scfg.stkSource.VerifyToken(h.ip, token)
+	if err != nil {
+		return h.scfg.stkSource.NewToken(h.ip)
+	}
+	return token, nil
 }

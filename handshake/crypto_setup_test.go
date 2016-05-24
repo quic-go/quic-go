@@ -3,6 +3,7 @@ package handshake
 import (
 	"bytes"
 	"errors"
+	"net"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -102,6 +103,26 @@ func (s *mockStream) Close() error                       { panic("not implemente
 func (mockStream) CloseRemote(offset protocol.ByteCount) { panic("not implemented") }
 func (s mockStream) StreamID() protocol.StreamID         { panic("not implemented") }
 
+type mockStkSource struct{}
+
+func (mockStkSource) NewToken(ip net.IP) ([]byte, error) {
+	return append([]byte("token "), ip...), nil
+}
+
+func (mockStkSource) VerifyToken(ip net.IP, token []byte) error {
+	split := bytes.Split(token, []byte(" "))
+	if len(split) != 2 {
+		return errors.New("stk required")
+	}
+	if !bytes.Equal(split[0], []byte("token")) {
+		return errors.New("no prefix match")
+	}
+	if !bytes.Equal(split[1], ip) {
+		return errors.New("ip wrong")
+	}
+	return nil
+}
+
 var _ = Describe("Crypto setup", func() {
 	var (
 		kex         *mockKEX
@@ -112,22 +133,28 @@ var _ = Describe("Crypto setup", func() {
 		cpm         *ConnectionParametersManager
 		aeadChanged chan struct{}
 		nonce32     []byte
+		ip          net.IP
+		validSTK    []byte
 	)
 
 	BeforeEach(func() {
+		var err error
+		ip = net.ParseIP("1.2.3.4")
+		validSTK, err = mockStkSource{}.NewToken(ip)
+		Expect(err).NotTo(HaveOccurred())
 		nonce32 = make([]byte, 32)
 		expectedInitialNonceLen = 32
 		expectedFSNonceLen = 64
-		var err error
 		aeadChanged = make(chan struct{}, 1)
 		stream = &mockStream{}
 		kex = &mockKEX{}
 		signer = &mockSigner{}
 		scfg, err = NewServerConfig(kex, signer)
 		Expect(err).NotTo(HaveOccurred())
+		scfg.stkSource = &mockStkSource{}
 		v := protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
 		cpm = NewConnectionParamatersManager()
-		cs, err = NewCryptoSetup(protocol.ConnectionID(42), v, scfg, stream, cpm, aeadChanged)
+		cs, err = NewCryptoSetup(protocol.ConnectionID(42), ip, v, scfg, stream, cpm, aeadChanged)
 		Expect(err).NotTo(HaveOccurred())
 		cs.keyDerivation = mockKeyDerivation
 		cs.keyExchange = func() (crypto.KeyExchange, error) { return &mockKEX{ephermal: true}, nil }
@@ -207,12 +234,14 @@ var _ = Describe("Crypto setup", func() {
 		It("handles long handshake", func() {
 			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
 				TagSNI: []byte("quic.clemente.io"),
+				TagSTK: validSTK,
 				TagPAD: bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize),
 			})
 			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
 				TagSCID: scfg.ID,
 				TagSNI:  []byte("quic.clemente.io"),
 				TagNONC: nonce32,
+				TagSTK:  validSTK,
 			})
 			err := cs.HandleCryptoStream()
 			Expect(err).NotTo(HaveOccurred())
@@ -226,6 +255,7 @@ var _ = Describe("Crypto setup", func() {
 				TagSCID: scfg.ID,
 				TagSNI:  []byte("quic.clemente.io"),
 				TagNONC: nonce32,
+				TagSTK:  validSTK,
 			})
 			err := cs.HandleCryptoStream()
 			Expect(err).NotTo(HaveOccurred())
@@ -249,7 +279,9 @@ var _ = Describe("Crypto setup", func() {
 	})
 
 	It("errors without SNI", func() {
-		WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{})
+		WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
+			TagSTK: validSTK,
+		})
 		err := cs.HandleCryptoStream()
 		Expect(err).To(MatchError("CryptoMessageParameterNotFound: SNI required"))
 	})
@@ -336,6 +368,36 @@ var _ = Describe("Crypto setup", func() {
 				d := cs.Seal(0, []byte{}, []byte("foobar"))
 				Expect(d).To(Equal([]byte("forward secure encrypted")))
 			})
+		})
+	})
+
+	Context("STK verification and creation", func() {
+		It("requires STK", func() {
+			done, err := cs.handleMessage(bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), map[Tag][]byte{
+				TagSNI: []byte("foo"),
+			})
+			Expect(done).To(BeFalse())
+			Expect(err).To(BeNil())
+			Expect(stream.dataWritten.Bytes()).To(ContainSubstring(string(validSTK)))
+		})
+
+		It("works with proper STK", func() {
+			done, err := cs.handleMessage(bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), map[Tag][]byte{
+				TagSTK: validSTK,
+				TagSNI: []byte("foo"),
+			})
+			Expect(done).To(BeFalse())
+			Expect(err).To(BeNil())
+		})
+
+		It("errors if IP does not match", func() {
+			done, err := cs.handleMessage(bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), map[Tag][]byte{
+				TagSNI: []byte("foo"),
+				TagSTK: []byte("token \x04\x03\x03\x01"),
+			})
+			Expect(done).To(BeFalse())
+			Expect(err).To(BeNil())
+			Expect(stream.dataWritten.Bytes()).To(ContainSubstring(string(validSTK)))
 		})
 	})
 })
