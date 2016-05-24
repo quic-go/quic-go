@@ -545,6 +545,10 @@ func (s *Session) sendConnectionClose(quicErr *qerr.QuicError) error {
 }
 
 func (s *Session) logPacket(packet *packedPacket) {
+	if !utils.Debug() {
+		// We don't need to allocate the slices for calling the format functions
+		return
+	}
 	utils.Debugf("-> Sending packet 0x%x (%d bytes)", packet.number, len(packet.raw))
 	for _, frame := range packet.frames {
 		if streamFrame, isStreamFrame := frame.(*frames.StreamFrame); isStreamFrame {

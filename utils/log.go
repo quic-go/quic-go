@@ -58,3 +58,8 @@ func Errorf(format string, args ...interface{}) {
 		mutex.Unlock()
 	}
 }
+
+// Debug returns true if the log level is LogLevelDebug
+func Debug() bool {
+	return logLevel == LogLevelDebug
+}

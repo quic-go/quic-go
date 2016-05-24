@@ -37,7 +37,7 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *publicHeader, r 
 	}
 	entropyBit := privateFlag&0x01 > 0
 
-	fs := []frames.Frame{}
+	fs := make([]frames.Frame, 0, 1)
 
 	// Read all frames in the packet
 ReadLoop:
