@@ -90,21 +90,21 @@ func (h *receivedPacketHandler) getNackRanges() ([]frames.NackRange, EntropyAccu
 	entropy := h.highestInOrderObservedEntropy
 	for i := h.largestObserved; i > h.highestInOrderObserved; i-- {
 		p, ok := h.packetHistory[i]
-		if !ok {
-			if !inRange {
-				r := frames.NackRange{
-					FirstPacketNumber: i,
-					LastPacketNumber:  i,
-				}
-				ranges = append(ranges, r)
-				inRange = true
-			} else {
-				ranges[len(ranges)-1].FirstPacketNumber--
-			}
-		} else {
+		if ok {
 			inRange = false
-			entropy.Add(i, p.EntropyBit)
-		}
+      entropy.Add(i, p.EntropyBit)
+    }
+    if !ok && !inRange {
+    	r := frames.NackRange{
+    		FirstPacketNumber: i,
+    		LastPacketNumber:  i,
+    	}
+    	ranges = append(ranges, r)
+    	inRange = true
+    } 
+    if !ok && inRange {
+    	ranges[len(ranges)-1].FirstPacketNumber--
+    }
 	}
 	return ranges, entropy
 }
