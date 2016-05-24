@@ -78,8 +78,9 @@ type Session struct {
 
 	lastNetworkActivityTime time.Time
 
-	timer     *time.Timer
-	timerRead bool
+	timer           *time.Timer
+	currentDeadline time.Time
+	timerRead       bool
 }
 
 // newSession makes a new session
@@ -139,29 +140,7 @@ func (s *Session) run() {
 		default:
 		}
 
-		// Calculate the minimum of all timeouts
-		now := time.Now()
-		firstTimeout := utils.InfDuration
-		// Some timeouts are only set when we can actually send
-		// Note: if a packet arrives, we go through this again afterwards.
-		if s.sentPacketHandler.CongestionAllowsSending() {
-			// Small packet send delay
-			if !s.smallPacketDelayedOccurranceTime.IsZero() {
-				firstTimeout = utils.MinDuration(firstTimeout, s.smallPacketDelayedOccurranceTime.Add(protocol.SmallPacketSendDelay).Sub(now))
-			}
-			// RTOs
-			firstTimeout = utils.MinDuration(firstTimeout, s.sentPacketHandler.TimeToFirstRTO())
-		}
-		// Idle connection timeout
-		firstTimeout = utils.MinDuration(firstTimeout, s.lastNetworkActivityTime.Add(s.connectionParametersManager.GetIdleConnectionStateLifetime()).Sub(now))
-
-		// We need to drain the timer if the value from its channel was not read yet.
-		// See https://groups.google.com/forum/#!topic/golang-dev/c9UUfASVPoU
-		if !s.timer.Stop() && !s.timerRead {
-			<-s.timer.C
-		}
-		s.timer.Reset(firstTimeout)
-		s.timerRead = false
+		s.maybeResetTimer()
 
 		var err error
 		select {
@@ -206,6 +185,33 @@ func (s *Session) run() {
 		}
 		s.garbageCollectStreams()
 	}
+}
+
+func (s *Session) maybeResetTimer() {
+	nextDeadline := s.lastNetworkActivityTime.Add(s.connectionParametersManager.GetIdleConnectionStateLifetime())
+
+	if !s.smallPacketDelayedOccurranceTime.IsZero() {
+		// nextDeadline = utils.MinDuration(firstTimeout, s.smallPacketDelayedOccurranceTime.Add(protocol.SmallPacketSendDelay).Sub(now))
+		nextDeadline = utils.MinTime(nextDeadline, s.smallPacketDelayedOccurranceTime.Add(protocol.SmallPacketSendDelay))
+	}
+	if rtoTime := s.sentPacketHandler.TimeOfFirstRTO(); !rtoTime.IsZero() {
+		nextDeadline = utils.MinTime(nextDeadline, rtoTime)
+	}
+
+	if nextDeadline.Equal(s.currentDeadline) {
+		// No need to reset the timer
+		return
+	}
+
+	// We need to drain the timer if the value from its channel was not read yet.
+	// See https://groups.google.com/forum/#!topic/golang-dev/c9UUfASVPoU
+	if !s.timer.Stop() && !s.timerRead {
+		<-s.timer.C
+	}
+	s.timer.Reset(nextDeadline.Sub(time.Now()))
+
+	s.timerRead = false
+	s.currentDeadline = nextDeadline
 }
 
 func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *publicHeader, data []byte) error {

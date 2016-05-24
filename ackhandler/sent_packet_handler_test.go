@@ -646,27 +646,20 @@ var _ = Describe("SentPacketHandler", func() {
 
 	Context("RTO retransmission", func() {
 		Context("calculating the time to first RTO", func() {
-			It("defaults to inf", func() {
-				Expect(handler.TimeToFirstRTO()).To(Equal(utils.InfDuration))
+			It("defaults to zero", func() {
+				Expect(handler.TimeOfFirstRTO().IsZero()).To(BeTrue())
 			})
 
 			It("returns time to RTO", func() {
 				err := handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(handler.TimeToFirstRTO()).To(BeNumerically("~", protocol.DefaultRetransmissionTime, time.Millisecond))
-			})
-
-			It("returns 0 when RTOs are required", func() {
-				err := handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
-				Expect(err).NotTo(HaveOccurred())
-				handler.packetHistory[1].rtoTime = time.Now().Add(-time.Second)
-				Expect(handler.TimeToFirstRTO()).To(BeZero())
+				Expect(handler.TimeOfFirstRTO().Sub(time.Now())).To(BeNumerically("~", protocol.DefaultRetransmissionTime, time.Millisecond))
 			})
 
 			It("ignores nil packets", func() {
 				handler.packetHistory[1] = nil
 				handler.queuePacketsRTO()
-				Expect(handler.TimeToFirstRTO()).To(Equal(utils.InfDuration))
+				Expect(handler.TimeOfFirstRTO().IsZero()).To(BeTrue())
 			})
 		})
 

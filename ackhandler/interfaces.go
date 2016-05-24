@@ -21,7 +21,7 @@ type SentPacketHandler interface {
 	CongestionAllowsSending() bool
 	CheckForError() error
 
-	TimeToFirstRTO() time.Duration
+	TimeOfFirstRTO() time.Time
 }
 
 // ReceivedPacketHandler handles ACKs needed to send for incoming packets

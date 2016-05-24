@@ -98,6 +98,14 @@ func AbsDuration(d time.Duration) time.Duration {
 	return -d
 }
 
+// MinTime returns the earlier time
+func MinTime(a, b time.Time) time.Time {
+	if a.After(b) {
+		return b
+	}
+	return a
+}
+
 // MaxPacketNumber returns the max packet number
 func MaxPacketNumber(a, b protocol.PacketNumber) protocol.PacketNumber {
 	if a > b {

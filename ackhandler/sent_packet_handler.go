@@ -313,17 +313,15 @@ func (h *sentPacketHandler) queuePacketsRTO() {
 	}
 }
 
-func (h *sentPacketHandler) TimeToFirstRTO() time.Duration {
-	now := time.Now()
-	min := utils.InfDuration
+func (h *sentPacketHandler) TimeOfFirstRTO() time.Time {
+	var min time.Time
 	for _, p := range h.packetHistory {
 		if p == nil || p.Retransmitted {
 			continue
 		}
-		if now.After(p.rtoTime) {
-			return 0
+		if min.IsZero() || min.After(p.rtoTime) {
+			min = p.rtoTime
 		}
-		min = utils.MinDuration(min, p.rtoTime.Sub(now))
 	}
 	return min
 }
