@@ -124,6 +124,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 
 // run the session main loop
 func (s *Session) run() {
+	// Start the crypto stream handler
 	go func() {
 		if err := s.cryptoSetup.HandleCryptoStream(); err != nil {
 			s.Close(err)
@@ -139,7 +140,6 @@ func (s *Session) run() {
 		}
 
 		// Calculate the minimum of all timeouts
-
 		now := time.Now()
 		firstTimeout := utils.InfDuration
 		// Some timeouts are only set when we can actually send
@@ -304,10 +304,7 @@ func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
 }
 
 func (s *Session) isValidStreamID(streamID protocol.StreamID) bool {
-	if streamID%2 != 1 {
-		return false
-	}
-	return true
+	return streamID%2 == 1
 }
 
 func (s *Session) handleWindowUpdateFrame(frame *frames.WindowUpdateFrame) error {
@@ -357,16 +354,14 @@ func (s *Session) handleRstStreamFrame(frame *frames.RstStreamFrame) error {
 }
 
 func (s *Session) handleAckFrame(frame *frames.AckFrame) error {
-
 	if err := s.sentPacketHandler.ReceivedAck(frame); err != nil {
 		return err
 	}
-
 	utils.Debugf("\t<- %#v", frame)
 	return nil
 }
 
-// Close the connection
+// Close the connection. If err is nil it will be set to qerr.PeerGoingAway.
 func (s *Session) Close(e error) error {
 	return s.closeImpl(e, false)
 }
@@ -410,7 +405,7 @@ func (s *Session) closeStreamsWithError(err error) {
 
 // TODO: try sending more than one packet
 func (s *Session) maybeSendPacket() error {
-	if time.Now().Sub(s.smallPacketDelayedOccurranceTime) > protocol.SmallPacketSendDelay {
+	if !s.smallPacketDelayedOccurranceTime.IsZero() && time.Now().Sub(s.smallPacketDelayedOccurranceTime) > protocol.SmallPacketSendDelay {
 		return s.sendPacket()
 	}
 
