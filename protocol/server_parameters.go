@@ -51,3 +51,8 @@ const RetransmissionThreshold uint8 = 3
 
 // STKExpiryTimeSec is the valid time of a source address token in seconds
 const STKExpiryTimeSec = 24 * 60 * 60
+
+// MaxTrackedSentPackets is maximum number of sent packets saved for either later retransmission or entropy calculation
+// TODO: find a reasonable value here
+// TODO: decrease this value after dropping support for QUIC 33 and earlier
+const MaxTrackedSentPackets uint32 = 2000

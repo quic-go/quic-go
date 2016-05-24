@@ -19,6 +19,7 @@ type SentPacketHandler interface {
 	GetLargestObserved() protocol.PacketNumber
 
 	CongestionAllowsSending() bool
+	CheckForError() error
 
 	TimeToFirstRTO() time.Duration
 }

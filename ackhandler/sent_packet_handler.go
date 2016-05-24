@@ -17,8 +17,10 @@ var (
 	// ErrEntropy occurs when an ACK with incorrect entropy is received
 	ErrEntropy = qerr.Error(qerr.InvalidAckData, "wrong entropy")
 	// ErrMapAccess occurs when a NACK contains invalid NACK ranges
-	ErrMapAccess          = qerr.Error(qerr.InvalidAckData, "Packet does not exist in PacketHistory")
-	errAckForUnsentPacket = qerr.Error(qerr.InvalidAckData, "Received ACK for an unsent package")
+	ErrMapAccess = qerr.Error(qerr.InvalidAckData, "Packet does not exist in PacketHistory")
+	// ErrTooManyTrackedSentPackets occurs when the sentPacketHandler has to keep track of too many packets
+	ErrTooManyTrackedSentPackets = errors.New("To many outstanding not-acked and not retransmitted packets.")
+	errAckForUnsentPacket        = qerr.Error(qerr.InvalidAckData, "Received ACK for an unsent package")
 )
 
 var (
@@ -103,6 +105,8 @@ func (h *sentPacketHandler) queuePacketForRetransmission(packet *Packet) {
 	h.bytesInFlight -= packet.Length
 	h.retransmissionQueue = append(h.retransmissionQueue, packet)
 	packet.Retransmitted = true
+
+	// TODO: delete from packetHistory once we drop support for version smaller than QUIC 33
 }
 
 func (h *sentPacketHandler) SentPacket(packet *Packet) error {
@@ -276,6 +280,14 @@ func (h *sentPacketHandler) GetLargestObserved() protocol.PacketNumber {
 
 func (h *sentPacketHandler) CongestionAllowsSending() bool {
 	return h.BytesInFlight() <= h.congestion.GetCongestionWindow()
+}
+
+func (h *sentPacketHandler) CheckForError() error {
+	length := len(h.retransmissionQueue) + len(h.packetHistory)
+	if uint32(length) > protocol.MaxTrackedSentPackets {
+		return ErrTooManyTrackedSentPackets
+	}
+	return nil
 }
 
 func (h *sentPacketHandler) getRTO() time.Duration {

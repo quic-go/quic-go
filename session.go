@@ -463,6 +463,11 @@ func (s *Session) maybeSendPacket() error {
 func (s *Session) sendPacket() error {
 	s.smallPacketDelayedOccurranceTime = time.Time{} // zero
 
+	err := s.sentPacketHandler.CheckForError()
+	if err != nil {
+		return err
+	}
+
 	if !s.sentPacketHandler.CongestionAllowsSending() {
 		return nil
 	}

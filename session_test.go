@@ -576,6 +576,18 @@ var _ = Describe("Session", func() {
 		close(done)
 	}, 0.5)
 
+	It("errors when the SentPacketHandler has too many packets tracked", func() {
+		streamFrame := frames.StreamFrame{StreamID: 5, Data: []byte("foobar")}
+		for i := uint32(1); i < protocol.MaxTrackedSentPackets+10; i++ {
+			packet := ackhandler.Packet{PacketNumber: protocol.PacketNumber(i), Frames: []frames.Frame{&streamFrame}, Length: 1}
+			err := session.sentPacketHandler.SentPacket(&packet)
+			Expect(err).ToNot(HaveOccurred())
+		}
+		// now session.sentPacketHandler.CheckForError will return an error
+		err := session.sendPacket()
+		Expect(err).To(MatchError(ackhandler.ErrTooManyTrackedSentPackets))
+	})
+
 	It("stores up to MaxSessionUnprocessedPackets packets", func(done Done) {
 		// Nothing here should block
 		for i := 0; i < protocol.MaxSessionUnprocessedPackets+10; i++ {
