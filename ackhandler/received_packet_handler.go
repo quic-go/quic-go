@@ -101,7 +101,8 @@ func (h *receivedPacketHandler) getNackRanges() ([]frames.NackRange, EntropyAccu
     	}
     	ranges = append(ranges, r)
     	inRange = true
-    } else {
+    } 
+    if !ok && inRange {
     	ranges[len(ranges)-1].FirstPacketNumber--
     }
 	}
