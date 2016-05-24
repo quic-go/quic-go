@@ -144,7 +144,7 @@ func (s *Session) run() {
 		firstTimeout := utils.InfDuration
 		// Some timeouts are only set when we can actually send
 		// Note: if a packet arrives, we go through this again afterwards.
-		if s.sentPacketHandler.AllowsSending() {
+		if s.sentPacketHandler.CongestionAllowsSending() {
 			// Small packet send delay
 			if !s.smallPacketDelayedOccurranceTime.IsZero() {
 				firstTimeout = utils.MinDuration(firstTimeout, s.smallPacketDelayedOccurranceTime.Add(protocol.SmallPacketSendDelay).Sub(now))
@@ -414,7 +414,7 @@ func (s *Session) maybeSendPacket() error {
 		return s.sendPacket()
 	}
 
-	if !s.sentPacketHandler.AllowsSending() {
+	if !s.sentPacketHandler.CongestionAllowsSending() {
 		return nil
 	}
 
@@ -463,7 +463,7 @@ func (s *Session) maybeSendPacket() error {
 func (s *Session) sendPacket() error {
 	s.smallPacketDelayedOccurranceTime = time.Time{} // zero
 
-	if !s.sentPacketHandler.AllowsSending() {
+	if !s.sentPacketHandler.CongestionAllowsSending() {
 		return nil
 	}
 

@@ -18,7 +18,7 @@ type SentPacketHandler interface {
 	BytesInFlight() protocol.ByteCount
 	GetLargestObserved() protocol.PacketNumber
 
-	AllowsSending() bool
+	CongestionAllowsSending() bool
 
 	TimeToFirstRTO() time.Duration
 }

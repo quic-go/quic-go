@@ -274,7 +274,7 @@ func (h *sentPacketHandler) GetLargestObserved() protocol.PacketNumber {
 	return h.LargestObserved
 }
 
-func (h *sentPacketHandler) AllowsSending() bool {
+func (h *sentPacketHandler) CongestionAllowsSending() bool {
 	return h.BytesInFlight() <= h.congestion.GetCongestionWindow()
 }
 

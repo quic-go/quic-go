@@ -21,7 +21,7 @@ func (h *mockSentPacketHandler) DequeuePacketForRetransmission() *ackhandler.Pac
 func (h *mockSentPacketHandler) HasPacketForRetransmission() bool                   { return false }
 func (h *mockSentPacketHandler) BytesInFlight() protocol.ByteCount                  { return 0 }
 func (h *mockSentPacketHandler) GetLargestObserved() protocol.PacketNumber          { return 1 }
-func (h *mockSentPacketHandler) AllowsSending() bool                                { panic("not implemented") }
+func (h *mockSentPacketHandler) CongestionAllowsSending() bool                      { panic("not implemented") }
 func (h *mockSentPacketHandler) TimeToFirstRTO() time.Duration                      { panic("not implemented") }
 
 func newMockSentPacketHandler() ackhandler.SentPacketHandler {

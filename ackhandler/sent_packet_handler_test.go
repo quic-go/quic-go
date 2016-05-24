@@ -589,10 +589,10 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("allows or denies sending", func() {
-			Expect(handler.AllowsSending()).To(BeTrue())
+			Expect(handler.CongestionAllowsSending()).To(BeTrue())
 			err := handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: protocol.DefaultTCPMSS + 1})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(handler.AllowsSending()).To(BeFalse())
+			Expect(handler.CongestionAllowsSending()).To(BeFalse())
 		})
 
 		It("should call OnRetransmissionTimeout", func() {
