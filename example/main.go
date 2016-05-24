@@ -8,6 +8,8 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strings"
+	"sync"
 
 	_ "net/http/pprof"
 
@@ -16,6 +18,17 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
+type binds []string
+
+func (b binds) String() string {
+	return strings.Join(b, ",")
+}
+
+func (b *binds) Set(v string) error {
+	*b = strings.Split(v, ",")
+	return nil
+}
+
 func main() {
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
@@ -23,7 +36,8 @@ func main() {
 	// runtime.SetBlockProfileRate(1)
 
 	verbose := flag.Bool("v", false, "verbose")
-	bindTo := flag.String("bind", "localhost", "bind to")
+	bs := binds{}
+	flag.Var(&bs, "bind", "bind to")
 	certPath := flag.String("certpath", "", "certificate directory")
 	www := flag.String("www", "/var/www", "www data")
 	flag.Parse()
@@ -61,10 +75,23 @@ func main() {
 
 	// server.CloseAfterFirstRequest = true
 
-	err = server.ListenAndServe(*bindTo+":6121", nil)
-	if err != nil {
-		panic(err)
+	if len(bs) == 0 {
+		bs = binds{"localhost:6121"}
 	}
+
+	var wg sync.WaitGroup
+	wg.Add(len(bs))
+	for _, b := range bs {
+		bCap := b
+		go func() {
+			err := server.ListenAndServe(bCap, nil)
+			if err != nil {
+				fmt.Println(err)
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
 }
 
 func tlsConfigFromCertpath(certpath string) (*tls.Config, error) {
