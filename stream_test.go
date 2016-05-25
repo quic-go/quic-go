@@ -464,6 +464,16 @@ var _ = Describe("Stream", func() {
 				Expect(b).To(BeTrue())
 				Expect(err).To(MatchError(testErr))
 			})
+
+			It("works with large flow control windows", func() {
+				// This paniced before due to a wrong cast,
+				// see https://github.com/lucas-clemente/quic-go/issues/143
+				str.contributesToConnectionFlowControl = false
+				updated := str.UpdateSendFlowControlWindow(protocol.ByteCount(1) << 63)
+				Expect(updated).To(BeTrue())
+				_, err := str.Write([]byte("foobar"))
+				Expect(err).NotTo(HaveOccurred())
+			})
 		})
 	})
 

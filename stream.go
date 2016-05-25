@@ -200,7 +200,7 @@ func (s *stream) Write(p []byte) (int, error) {
 			return 0, s.err
 		}
 
-		dataLen := utils.Min(len(p), int(remainingBytesInWindow))
+		dataLen := utils.MinByteCount(protocol.ByteCount(len(p)), remainingBytesInWindow)
 		data := make([]byte, dataLen)
 		copy(data, p)
 		err := s.session.queueStreamFrame(&frames.StreamFrame{
@@ -213,7 +213,7 @@ func (s *stream) Write(p []byte) (int, error) {
 			return 0, err
 		}
 
-		dataWritten += dataLen
+		dataWritten += int(dataLen) // We cannot have written more than the int range
 		s.flowController.AddBytesSent(protocol.ByteCount(dataLen))
 		if s.contributesToConnectionFlowControl {
 			s.connectionFlowController.AddBytesSent(protocol.ByteCount(dataLen))
