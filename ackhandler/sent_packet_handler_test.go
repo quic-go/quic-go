@@ -6,7 +6,6 @@ import (
 	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -159,6 +158,13 @@ var _ = Describe("SentPacketHandler", func() {
 			err := handler.SentPacket(&packet)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.packetHistory[1].sendTime.Unix()).To(BeNumerically("~", time.Now().Unix(), 1))
+		})
+
+		It("updates the last sent time", func() {
+			packet := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1}
+			err := handler.SentPacket(&packet)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.lastSentPacketTime.Unix()).To(BeNumerically("~", time.Now().Unix(), 1))
 		})
 	})
 
@@ -524,7 +530,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 			// Simulate protocol.RetransmissionThreshold more NACKs
 			for i := uint8(0); i < protocol.RetransmissionThreshold; i++ {
-				_, err := handler.nackPacket(1)
+				_, err = handler.nackPacket(1)
 				Expect(err).ToNot(HaveOccurred())
 			}
 			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(0)))
@@ -612,8 +618,8 @@ var _ = Describe("SentPacketHandler", func() {
 		It("should call OnRetransmissionTimeout", func() {
 			err := handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
 			Expect(err).NotTo(HaveOccurred())
-			handler.packetHistory[1].rtoTime = time.Now().Add(-time.Second)
-			handler.queuePacketsRTO()
+			handler.lastSentPacketTime = time.Now().Add(-time.Second)
+			handler.maybeQueuePacketsRTO()
 			Expect(cong.onRetransmissionTimeout).To(BeTrue())
 		})
 	})
@@ -635,13 +641,6 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.rttStats.UpdateRTT(rtt, 0, time.Now())
 			Expect(handler.getRTO()).To(Equal(protocol.MinRetransmissionTime))
 		})
-
-		It("stores RTO in sent packets", func() {
-			handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
-			val := handler.packetHistory[1].rtoTime
-			expected := time.Now().Add(protocol.DefaultRetransmissionTime)
-			Expect(utils.AbsDuration(expected.Sub(val))).To(BeNumerically("<", time.Millisecond))
-		})
 	})
 
 	Context("RTO retransmission", func() {
@@ -658,7 +657,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 			It("ignores nil packets", func() {
 				handler.packetHistory[1] = nil
-				handler.queuePacketsRTO()
+				handler.maybeQueuePacketsRTO()
 				Expect(handler.TimeOfFirstRTO().IsZero()).To(BeTrue())
 			})
 		})
@@ -667,7 +666,7 @@ var _ = Describe("SentPacketHandler", func() {
 			It("does nothing if not required", func() {
 				err := handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
 				Expect(err).NotTo(HaveOccurred())
-				handler.queuePacketsRTO()
+				handler.maybeQueuePacketsRTO()
 				Expect(handler.retransmissionQueue).To(BeEmpty())
 			})
 
@@ -675,8 +674,8 @@ var _ = Describe("SentPacketHandler", func() {
 				p := &Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1}
 				err := handler.SentPacket(p)
 				Expect(err).NotTo(HaveOccurred())
-				handler.packetHistory[1].rtoTime = time.Now().Add(-time.Second)
-				handler.queuePacketsRTO()
+				handler.lastSentPacketTime = time.Now().Add(-time.Second)
+				handler.maybeQueuePacketsRTO()
 				Expect(handler.retransmissionQueue).To(HaveLen(1))
 				Expect(handler.retransmissionQueue[0]).To(Equal(p))
 			})
@@ -685,14 +684,14 @@ var _ = Describe("SentPacketHandler", func() {
 				p := &Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1, Retransmitted: true}
 				err := handler.SentPacket(p)
 				Expect(err).NotTo(HaveOccurred())
-				handler.packetHistory[1].rtoTime = time.Now().Add(-time.Second)
-				handler.queuePacketsRTO()
+				handler.lastSentPacketTime = time.Now().Add(-time.Second)
+				handler.maybeQueuePacketsRTO()
 				Expect(handler.retransmissionQueue).To(BeEmpty())
 			})
 
 			It("ignores nil packets", func() {
 				handler.packetHistory[1] = nil
-				handler.queuePacketsRTO()
+				handler.maybeQueuePacketsRTO()
 				Expect(handler.retransmissionQueue).To(BeEmpty())
 			})
 		})
@@ -701,7 +700,7 @@ var _ = Describe("SentPacketHandler", func() {
 			p := &Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1}
 			err := handler.SentPacket(p)
 			Expect(err).NotTo(HaveOccurred())
-			handler.packetHistory[1].rtoTime = time.Now().Add(-time.Second)
+			handler.lastSentPacketTime = time.Now().Add(-time.Second)
 			Expect(handler.HasPacketForRetransmission()).To(BeTrue())
 		})
 
@@ -709,7 +708,7 @@ var _ = Describe("SentPacketHandler", func() {
 			p := &Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1}
 			err := handler.SentPacket(p)
 			Expect(err).NotTo(HaveOccurred())
-			handler.packetHistory[1].rtoTime = time.Now().Add(-time.Second)
+			handler.lastSentPacketTime = time.Now().Add(-time.Second)
 			Expect(handler.DequeuePacketForRetransmission()).To(Equal(p))
 		})
 	})

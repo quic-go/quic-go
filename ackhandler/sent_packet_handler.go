@@ -19,7 +19,7 @@ var (
 	// ErrMapAccess occurs when a NACK contains invalid NACK ranges
 	ErrMapAccess = qerr.Error(qerr.InvalidAckData, "Packet does not exist in PacketHistory")
 	// ErrTooManyTrackedSentPackets occurs when the sentPacketHandler has to keep track of too many packets
-	ErrTooManyTrackedSentPackets = errors.New("To many outstanding not-acked and not retransmitted packets.")
+	ErrTooManyTrackedSentPackets = errors.New("Too many outstanding non-acked and non-retransmitted packets")
 	errAckForUnsentPacket        = qerr.Error(qerr.InvalidAckData, "Received ACK for an unsent package")
 )
 
@@ -31,6 +31,7 @@ var (
 type sentPacketHandler struct {
 	lastSentPacketNumber            protocol.PacketNumber
 	lastSentPacketEntropy           EntropyAccumulator
+	lastSentPacketTime              time.Time
 	highestInOrderAckedPacketNumber protocol.PacketNumber
 	LargestObserved                 protocol.PacketNumber
 	LargestObservedEntropy          EntropyAccumulator
@@ -118,8 +119,8 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 		return errWrongPacketNumberIncrement
 	}
 	now := time.Now()
+	h.lastSentPacketTime = now
 	packet.sendTime = now
-	packet.rtoTime = now.Add(h.getRTO())
 	if packet.Length == 0 {
 		return errors.New("SentPacketHandler: packet cannot be empty")
 	}
@@ -250,7 +251,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) error {
 }
 
 func (h *sentPacketHandler) HasPacketForRetransmission() bool {
-	h.queuePacketsRTO()
+	h.maybeQueuePacketsRTO()
 
 	if len(h.retransmissionQueue) > 0 {
 		return true
@@ -290,6 +291,20 @@ func (h *sentPacketHandler) CheckForError() error {
 	return nil
 }
 
+func (h *sentPacketHandler) maybeQueuePacketsRTO() {
+	if time.Now().Before(h.TimeOfFirstRTO()) {
+		return
+	}
+	for p := h.highestInOrderAckedPacketNumber + 1; p <= h.lastSentPacketNumber; p++ {
+		packet := h.packetHistory[p]
+		if packet != nil && !packet.Retransmitted {
+			h.queuePacketForRetransmission(packet)
+			h.congestion.OnRetransmissionTimeout(true)
+			return
+		}
+	}
+}
+
 func (h *sentPacketHandler) getRTO() time.Duration {
 	rto := h.congestion.RetransmissionDelay()
 	if rto == 0 {
@@ -298,30 +313,9 @@ func (h *sentPacketHandler) getRTO() time.Duration {
 	return utils.MaxDuration(rto, protocol.MinRetransmissionTime)
 }
 
-func (h *sentPacketHandler) queuePacketsRTO() {
-	queued := false
-	now := time.Now()
-	for _, p := range h.packetHistory {
-		if p == nil || p.Retransmitted || p.rtoTime.After(now) {
-			continue
-		}
-		h.queuePacketForRetransmission(p)
-		queued = true
-	}
-	if queued {
-		h.congestion.OnRetransmissionTimeout(true)
-	}
-}
-
 func (h *sentPacketHandler) TimeOfFirstRTO() time.Time {
-	var min time.Time
-	for _, p := range h.packetHistory {
-		if p == nil || p.Retransmitted {
-			continue
-		}
-		if min.IsZero() || min.After(p.rtoTime) {
-			min = p.rtoTime
-		}
+	if h.lastSentPacketTime.IsZero() {
+		return time.Time{}
 	}
-	return min
+	return h.lastSentPacketTime.Add(h.getRTO())
 }

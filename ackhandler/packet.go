@@ -19,7 +19,6 @@ type Packet struct {
 	Retransmitted  bool // has this Packet ever been retransmitted
 
 	sendTime time.Time
-	rtoTime  time.Time
 }
 
 // GetStreamFramesForRetransmission gets all the streamframes for retransmission
