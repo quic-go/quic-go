@@ -348,8 +348,8 @@ var _ = Describe("Stream", func() {
 				updated = str.connectionFlowController.UpdateSendWindow(1)
 				Expect(updated).To(BeTrue())
 				n, err := str.Write([]byte{0xDE, 0xCA, 0xFB, 0xAD})
-				Expect(n).To(Equal(4))
 				Expect(err).ToNot(HaveOccurred())
+				Expect(n).To(Equal(4))
 			})
 
 			It("returns true when the flow control window was updated", func() {
@@ -379,9 +379,10 @@ var _ = Describe("Stream", func() {
 					str.UpdateSendFlowControlWindow(3)
 				}()
 				n, err := str.Write([]byte{0x13, 0x37})
+				Expect(err).ToNot(HaveOccurred())
 				Expect(b).To(BeTrue())
 				Expect(n).To(Equal(2))
-				Expect(err).ToNot(HaveOccurred())
+				Expect(str.writeOffset).To(Equal(protocol.ByteCount(3)))
 			})
 
 			It("does not write too much data after receiving a window update", func() {
@@ -397,6 +398,7 @@ var _ = Describe("Stream", func() {
 				n, err := str.Write([]byte{0x13, 0x37})
 				Expect(b).To(BeTrue())
 				Expect(n).To(Equal(2))
+				Expect(str.writeOffset).To(Equal(protocol.ByteCount(2)))
 				Expect(err).ToNot(HaveOccurred())
 			})
 
@@ -410,6 +412,7 @@ var _ = Describe("Stream", func() {
 
 				_, err := str.Write([]byte{0x42})
 				Expect(err).ToNot(HaveOccurred())
+				Expect(str.writeOffset).To(Equal(protocol.ByteCount(1)))
 
 				var sendWindowUpdated bool
 				go func() {
@@ -423,6 +426,7 @@ var _ = Describe("Stream", func() {
 				Expect(b).To(BeTrue())
 				Expect(sendWindowUpdated).To(BeTrue())
 				Expect(n).To(Equal(2))
+				Expect(str.writeOffset).To(Equal(protocol.ByteCount(3)))
 				Expect(err).ToNot(HaveOccurred())
 			})
 
@@ -438,10 +442,11 @@ var _ = Describe("Stream", func() {
 				}()
 
 				n, err := str.Write([]byte{0xDE, 0xCA, 0xFB, 0xAD})
+				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.frames).To(HaveLen(2))
 				Expect(b).To(BeTrue())
 				Expect(n).To(Equal(4))
-				Expect(err).ToNot(HaveOccurred())
+				Expect(str.writeOffset).To(Equal(protocol.ByteCount(4)))
 			})
 
 			It("writes after a flow control window update", func() {
@@ -458,9 +463,10 @@ var _ = Describe("Stream", func() {
 					str.UpdateSendFlowControlWindow(3)
 				}()
 				n, err := str.Write([]byte{0xDE, 0xAD})
+				Expect(err).ToNot(HaveOccurred())
 				Expect(b).To(BeTrue())
 				Expect(n).To(Equal(2))
-				Expect(err).ToNot(HaveOccurred())
+				Expect(str.writeOffset).To(Equal(protocol.ByteCount(3)))
 			})
 
 			It("immediately returns on remote errors", func() {
@@ -477,8 +483,8 @@ var _ = Describe("Stream", func() {
 				}()
 
 				_, err := str.Write([]byte{0xDE, 0xCA, 0xFB, 0xAD})
-				Expect(b).To(BeTrue())
 				Expect(err).To(MatchError(testErr))
+				Expect(b).To(BeTrue())
 			})
 
 			It("works with large flow control windows", func() {
