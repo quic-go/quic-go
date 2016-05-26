@@ -17,7 +17,7 @@ import (
 )
 
 type mockStreamHandler struct {
-	frames []frames.Frame
+	frames []*frames.StreamFrame
 
 	receivedBlockedCalled    bool
 	receivedBlockedForStream protocol.StreamID
@@ -334,11 +334,14 @@ var _ = Describe("Stream", func() {
 
 		Context("flow control", func() {
 			It("writes everything if the flow control window is big enough", func() {
+				data := []byte{0xDE, 0xCA, 0xFB, 0xAD}
 				updated := str.flowController.UpdateSendWindow(4)
 				Expect(updated).To(BeTrue())
-				n, err := str.Write([]byte{0xDE, 0xCA, 0xFB, 0xAD})
+				n, err := str.Write(data)
 				Expect(n).To(Equal(4))
 				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.frames).To(HaveLen(1))
+				Expect(handler.frames[0].Data).To(Equal(data))
 			})
 
 			It("doesn't care about the connection flow control window if it is not contributing", func() {
@@ -383,6 +386,11 @@ var _ = Describe("Stream", func() {
 				Expect(b).To(BeTrue())
 				Expect(n).To(Equal(2))
 				Expect(str.writeOffset).To(Equal(protocol.ByteCount(3)))
+				Expect(handler.frames).To(HaveLen(2))
+				Expect(handler.frames[0].Offset).To(Equal(protocol.ByteCount(0)))
+				Expect(handler.frames[0].Data).To(Equal([]byte{0x42}))
+				Expect(handler.frames[1].Offset).To(Equal(protocol.ByteCount(1)))
+				Expect(handler.frames[1].Data).To(Equal([]byte{0x13, 0x37}))
 			})
 
 			It("does not write too much data after receiving a window update", func() {
@@ -400,6 +408,9 @@ var _ = Describe("Stream", func() {
 				Expect(n).To(Equal(2))
 				Expect(str.writeOffset).To(Equal(protocol.ByteCount(2)))
 				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.frames).To(HaveLen(2))
+				Expect(handler.frames[0].Data).To(Equal([]byte{0x13}))
+				Expect(handler.frames[1].Data).To(Equal([]byte{0x37}))
 			})
 
 			It("waits for a connection flow control window update", func() {

@@ -202,7 +202,7 @@ func (s *stream) Write(p []byte) (int, error) {
 
 		dataLen := utils.MinByteCount(protocol.ByteCount(len(p)), remainingBytesInWindow)
 		data := make([]byte, dataLen)
-		copy(data, p)
+		copy(data, p[dataWritten:])
 		err := s.session.queueStreamFrame(&frames.StreamFrame{
 			StreamID: s.streamID,
 			Offset:   s.writeOffset,
