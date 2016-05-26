@@ -182,13 +182,13 @@ func (s *stream) Write(p []byte) (int, error) {
 
 	for dataWritten < len(p) {
 		s.mutex.Lock()
-		remainingBytesInWindow := s.flowController.SendWindowSize()
+		remainingBytesInWindow := utils.MinByteCount(s.flowController.SendWindowSize(), protocol.ByteCount(len(p)-dataWritten))
 		if s.contributesToConnectionFlowControl {
 			remainingBytesInWindow = utils.MinByteCount(remainingBytesInWindow, s.connectionFlowController.SendWindowSize())
 		}
 		for remainingBytesInWindow == 0 && s.err == nil {
 			s.windowUpdateOrErrCond.Wait()
-			remainingBytesInWindow = s.flowController.SendWindowSize()
+			remainingBytesInWindow = utils.MinByteCount(s.flowController.SendWindowSize(), protocol.ByteCount(len(p)-dataWritten))
 			if s.contributesToConnectionFlowControl {
 				remainingBytesInWindow = utils.MinByteCount(remainingBytesInWindow, s.connectionFlowController.SendWindowSize())
 			}
@@ -223,7 +223,7 @@ func (s *stream) Write(p []byte) (int, error) {
 		s.maybeTriggerBlocked()
 	}
 
-	return len(p), nil
+	return dataWritten, nil
 }
 
 // Close implements io.Closer

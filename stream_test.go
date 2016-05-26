@@ -384,6 +384,22 @@ var _ = Describe("Stream", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 
+			It("does not write too much data after receiving a window update", func() {
+				var b bool
+				updated := str.flowController.UpdateSendWindow(1)
+				Expect(updated).To(BeTrue())
+
+				go func() {
+					time.Sleep(2 * time.Millisecond)
+					b = true
+					str.UpdateSendFlowControlWindow(5)
+				}()
+				n, err := str.Write([]byte{0x13, 0x37})
+				Expect(b).To(BeTrue())
+				Expect(n).To(Equal(2))
+				Expect(err).ToNot(HaveOccurred())
+			})
+
 			It("waits for a connection flow control window update", func() {
 				var b bool
 				updated := str.flowController.UpdateSendWindow(1000)
