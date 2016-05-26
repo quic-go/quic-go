@@ -197,34 +197,23 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 	maxFrameSize += 2
 
 	for p.streamFrameQueue.Len() > 0 {
-		frame := p.streamFrameQueue.Front()
-		frame.DataLenPresent = true // set the dataLen by default. Remove them later if applicable
-
 		if payloadLength > maxFrameSize {
 			return nil, errors.New("PacketPacker BUG: packet payload too large")
 		}
 
-		// Does the frame fit into the remaining space?
-		frameMinLength, _ := frame.MinLength() // StreamFrame.MinLength *never* returns an error
-		if payloadLength+frameMinLength > maxFrameSize {
+		frame := p.streamFrameQueue.Pop(maxFrameSize - payloadLength)
+		if frame == nil {
 			break
 		}
+		frame.DataLenPresent = true // set the dataLen by default. Remove them later if applicable
 
-		// Split stream frames if necessary
-		previousFrame := frame.MaybeSplitOffFrame(maxFrameSize - payloadLength)
-		if previousFrame != nil {
-			// Don't pop the queue, leave the modified frame in
-			frame = previousFrame
-			payloadLength += protocol.ByteCount(len(previousFrame.Data)) - 1
-		} else {
-			p.streamFrameQueue.Pop()
-			payloadLength += protocol.ByteCount(len(frame.Data)) - 1
-		}
+		frameMinLength, _ := frame.MinLength() // StreamFrame.MinLength *never* returns an error
+		payloadLength += frameMinLength - 1 + protocol.ByteCount(len(frame.Data))
 
 		blockedFrame := p.blockedManager.GetBlockedFrame(frame.StreamID, frame.Offset+protocol.ByteCount(len(frame.Data)))
 		if blockedFrame != nil {
 			blockedLength, _ := blockedFrame.MinLength() // BlockedFrame.MinLength *never* returns an error
-			if payloadLength+frameMinLength+blockedLength <= maxFrameSize {
+			if payloadLength+blockedLength <= maxFrameSize {
 				payloadFrames = append(payloadFrames, blockedFrame)
 				payloadLength += blockedLength
 			} else {
@@ -232,7 +221,6 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 			}
 		}
 
-		payloadLength += frameMinLength
 		payloadFrames = append(payloadFrames, frame)
 		hasStreamFrames = true
 	}
@@ -252,7 +240,7 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 
 // Empty returns true if no frames are queued
 func (p *packetPacker) Empty() bool {
-	return p.streamFrameQueue.Front() == nil
+	return p.streamFrameQueue.ByteLen() == 0
 }
 
 func (p *packetPacker) StreamFrameQueueByteLen() protocol.ByteCount {

@@ -199,24 +199,3 @@ func (f *StreamFrame) MinLength() (protocol.ByteCount, error) {
 
 	return length + 1, nil
 }
-
-// MaybeSplitOffFrame removes the first n bytes and returns them as a separate frame. If n >= len(n), nil is returned and nothing is modified.
-func (f *StreamFrame) MaybeSplitOffFrame(n protocol.ByteCount) *StreamFrame {
-	minLength, _ := f.MinLength() // StreamFrame.MinLength *never* errors
-	if n >= minLength-1+protocol.ByteCount(len(f.Data)) {
-		return nil
-	}
-	n -= minLength - 1
-
-	defer func() {
-		f.Data = f.Data[n:]
-		f.Offset += n
-	}()
-
-	return &StreamFrame{
-		FinBit:   false,
-		StreamID: f.StreamID,
-		Offset:   f.Offset,
-		Data:     f.Data[:n],
-	}
-}
