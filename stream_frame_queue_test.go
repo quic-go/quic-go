@@ -197,6 +197,14 @@ var _ = Describe("streamFrameQueue", func() {
 				copy(data[len(frame.Data):], nextframe.Data)
 				Expect(data).To(Equal(origdata))
 			})
+
+			It("correctly calculates the byte length when returning a split frame", func() {
+				queue.Push(prioFrame1, true)
+				queue.Push(frame1, false)
+				startByteLength := queue.ByteLen()
+				frame := queue.Pop(6)
+				Expect(queue.ByteLen()).To(Equal(startByteLength - protocol.ByteCount(len(frame.Data))))
+			})
 		})
 	})
 

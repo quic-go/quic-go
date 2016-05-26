@@ -12,6 +12,8 @@ type streamFrameQueue struct {
 	prioFrames []*frames.StreamFrame
 	frames     []*frames.StreamFrame
 	mutex      sync.RWMutex
+
+	byteLen protocol.ByteCount
 }
 
 // Push adds a new StreamFrame to the queue
@@ -26,6 +28,8 @@ func (q *streamFrameQueue) Push(frame *frames.StreamFrame, prio bool) {
 	} else {
 		q.frames = append(q.frames, frame)
 	}
+
+	q.byteLen += protocol.ByteCount(len(frame.Data))
 }
 
 // Len returns the total number of queued StreamFrames
@@ -41,17 +45,7 @@ func (q *streamFrameQueue) ByteLen() protocol.ByteCount {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
 
-	// TODO: improve performance
-	// This is a very unperformant implementation. However, the obvious solution of keeping track of the length on Push() and Pop() doesn't work, since the front frame can be split by the PacketPacker
-
-	var length protocol.ByteCount
-	for _, frame := range q.prioFrames {
-		length += protocol.ByteCount(len(frame.Data))
-	}
-	for _, frame := range q.frames {
-		length += protocol.ByteCount(len(frame.Data))
-	}
-	return length
+	return q.byteLen
 }
 
 // Pop returns the next element and deletes it from the queue
@@ -73,6 +67,7 @@ func (q *streamFrameQueue) Pop(maxLength protocol.ByteCount) *frames.StreamFrame
 	splitFrame := q.maybeSplitOffFrame(frame, maxLength)
 
 	if splitFrame != nil { // StreamFrame was split
+		q.byteLen -= protocol.ByteCount(len(frame.Data))
 		return splitFrame
 	}
 
@@ -83,6 +78,7 @@ func (q *streamFrameQueue) Pop(maxLength protocol.ByteCount) *frames.StreamFrame
 		q.frames = q.frames[1:]
 	}
 
+	q.byteLen -= protocol.ByteCount(len(frame.Data))
 	return frame
 }
 
