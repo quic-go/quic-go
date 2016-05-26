@@ -32,6 +32,13 @@ var _ = Describe("streamFrameQueue", func() {
 		}
 	})
 
+	It("sets the DataLenPresent on all StreamFrames", func() {
+		queue.Push(frame1, false)
+		queue.Push(prioFrame1, true)
+		Expect(queue.frames[0].DataLenPresent).To(BeTrue())
+		Expect(queue.prioFrames[0].DataLenPresent).To(BeTrue())
+	})
+
 	Context("Queue Length", func() {
 		It("returns the correct length for an empty queue", func() {
 			Expect(queue.Len()).To(BeZero())
@@ -45,16 +52,12 @@ var _ = Describe("streamFrameQueue", func() {
 			Expect(queue.Len()).To(Equal(3))
 		})
 
-		It("returns the correct length when popping", func() {
-			queue.Push(prioFrame1, true)
-			queue.Push(prioFrame2, true)
+		It("reduces the length when popping", func() {
 			queue.Push(frame1, false)
 			queue.Push(frame2, false)
-			Expect(queue.Len()).To(Equal(4))
+			Expect(queue.Len()).To(Equal(2))
 			queue.Pop(1000)
-			Expect(queue.Len()).To(Equal(3))
-			queue.Pop(1000)
-			queue.Pop(1000)
+			Expect(queue.Len()).To(Equal(1))
 			queue.Pop(1000)
 			Expect(queue.Len()).To(Equal(0))
 		})
@@ -76,9 +79,8 @@ var _ = Describe("streamFrameQueue", func() {
 		It("returns the correct byte length for a queue", func() {
 			queue.Push(prioFrame1, true)
 			Expect(queue.ByteLen()).To(Equal(protocol.ByteCount(2)))
-			queue.Push(frame1, false)
 			queue.Push(frame2, false)
-			Expect(queue.ByteLen()).To(Equal(protocol.ByteCount(len(prioFrame1.Data) + len(frame1.Data) + len(frame2.Data))))
+			Expect(queue.ByteLen()).To(Equal(protocol.ByteCount(len(prioFrame1.Data) + len(frame2.Data))))
 		})
 
 		It("returns the correct byte length when popping", func() {
@@ -91,7 +93,7 @@ var _ = Describe("streamFrameQueue", func() {
 			Expect(queue.ByteLen()).To(Equal(protocol.ByteCount(0)))
 		})
 
-		It("does not change the byte length when using Front()", func() {
+		It("does not change the byte length when using front()", func() {
 			queue.Push(prioFrame1, true)
 			queue.Push(frame1, false)
 			length := protocol.ByteCount(len(prioFrame1.Data) + len(frame1.Data))
@@ -141,24 +143,28 @@ var _ = Describe("streamFrameQueue", func() {
 				}
 				Expect(queue.maybeSplitOffFrame(f, 1000)).To(BeNil())
 				Expect(f.Offset).To(Equal(protocol.ByteCount(3)))
+				Expect(f.Data).To(Equal([]byte("bar")))
 			})
 
 			It("splits off initial frame", func() {
 				f := &frames.StreamFrame{
-					StreamID: 1,
-					Data:     []byte("foobar"),
-					Offset:   3,
-					FinBit:   true,
+					StreamID:       1,
+					Data:           []byte("foobar"),
+					DataLenPresent: true,
+					Offset:         3,
+					FinBit:         true,
 				}
 				minLength, _ := f.MinLength()
 				previous := queue.maybeSplitOffFrame(f, minLength-1+3)
 				Expect(previous).ToNot(BeNil())
 				Expect(previous.StreamID).To(Equal(protocol.StreamID(1)))
 				Expect(previous.Data).To(Equal([]byte("foo")))
+				Expect(previous.DataLenPresent).To(BeTrue())
 				Expect(previous.Offset).To(Equal(protocol.ByteCount(3)))
 				Expect(previous.FinBit).To(BeFalse())
 				Expect(f.StreamID).To(Equal(protocol.StreamID(1)))
 				Expect(f.Data).To(Equal([]byte("bar")))
+				Expect(f.DataLenPresent).To(BeTrue())
 				Expect(f.Offset).To(Equal(protocol.ByteCount(6)))
 				Expect(f.FinBit).To(BeTrue())
 			})
