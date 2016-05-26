@@ -13,6 +13,7 @@ type streamFrameQueue struct {
 	frames     []*frames.StreamFrame
 	mutex      sync.RWMutex
 
+	len     int
 	byteLen protocol.ByteCount
 }
 
@@ -30,6 +31,7 @@ func (q *streamFrameQueue) Push(frame *frames.StreamFrame, prio bool) {
 	}
 
 	q.byteLen += protocol.ByteCount(len(frame.Data))
+	q.len++
 }
 
 // Len returns the total number of queued StreamFrames
@@ -37,7 +39,7 @@ func (q *streamFrameQueue) Len() int {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
 
-	return len(q.prioFrames) + len(q.frames)
+	return q.len
 }
 
 // ByteLen returns the total number of bytes queued
@@ -79,6 +81,7 @@ func (q *streamFrameQueue) Pop(maxLength protocol.ByteCount) *frames.StreamFrame
 	}
 
 	q.byteLen -= protocol.ByteCount(len(frame.Data))
+	q.len--
 	return frame
 }
 

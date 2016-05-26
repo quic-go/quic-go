@@ -211,6 +211,14 @@ var _ = Describe("streamFrameQueue", func() {
 				frame := queue.Pop(6)
 				Expect(queue.ByteLen()).To(Equal(startByteLength - protocol.ByteCount(len(frame.Data))))
 			})
+
+			It("does not change the length of the queue when returning a split frame", func() {
+				queue.Push(frame1, false)
+				queue.Push(frame2, false)
+				frame := queue.Pop(6)
+				Expect(frame.StreamID).To(Equal(frame1.StreamID)) // make sure the right frame was popped
+				Expect(queue.Len()).To(Equal(2))
+			})
 		})
 	})
 
