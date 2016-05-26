@@ -61,38 +61,6 @@ var _ = Describe("Cubic", func() {
 		Expect(current_cwnd).To(Equal(expected_cwnd))
 	})
 
-	// TODO: Test copied from Chromium has no assertions
-	It("has increasing cwnd stats during convex region", func() {
-		rtt_min := 100 * time.Millisecond
-		current_cwnd := protocol.PacketNumber(10)
-		expected_cwnd := current_cwnd + 1
-		// Initialize the state.
-		clock.Advance(time.Millisecond)
-		expected_cwnd = cubic.CongestionWindowAfterAck(current_cwnd, rtt_min)
-		current_cwnd = expected_cwnd
-		// Testing Reno mode increase.
-		for i := 0; i < 48; i++ {
-			for n := uint64(1); n < uint64(float32(current_cwnd)/kNConnectionAlpha); n++ {
-				// Call once per ACK, causing cwnd growth in Reno mode.
-				cubic.CongestionWindowAfterAck(current_cwnd, rtt_min)
-			}
-			// Advance current time so that cwnd update is allowed to happen by Cubic.
-			clock.Advance(100 * time.Millisecond)
-			current_cwnd = cubic.CongestionWindowAfterAck(current_cwnd, rtt_min)
-			expected_cwnd++
-		}
-
-		// Testing Cubic mode increase.
-		for i := 0; i < 52; i++ {
-			for n := protocol.PacketNumber(1); n < current_cwnd; n++ {
-				// Call once per ACK.
-				cubic.CongestionWindowAfterAck(current_cwnd, rtt_min)
-			}
-			clock.Advance(100 * time.Millisecond)
-			current_cwnd = cubic.CongestionWindowAfterAck(current_cwnd, rtt_min)
-		}
-	})
-
 	It("manages loss events", func() {
 		rtt_min := 100 * time.Millisecond
 		current_cwnd := protocol.PacketNumber(422)
