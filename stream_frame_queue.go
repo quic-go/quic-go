@@ -69,7 +69,7 @@ func (q *streamFrameQueue) Pop(maxLength protocol.ByteCount) *frames.StreamFrame
 	splitFrame := q.maybeSplitOffFrame(frame, maxLength)
 
 	if splitFrame != nil { // StreamFrame was split
-		q.byteLen -= protocol.ByteCount(len(frame.Data))
+		q.byteLen -= protocol.ByteCount(len(splitFrame.Data))
 		return splitFrame
 	}
 
