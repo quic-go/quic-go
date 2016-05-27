@@ -634,4 +634,29 @@ var _ = Describe("Session", func() {
 		session.scheduleSending()
 		Eventually(func() bool { return len(conn.written) > 0 }).Should(BeTrue())
 	})
+
+	Context("counting streams", func() {
+		It("errors when too many streams are opened", func() {
+			// 1.1 * 100
+			for i := 2; i <= 110; i++ {
+				_, err := session.OpenStream(protocol.StreamID(i))
+				Expect(err).NotTo(HaveOccurred())
+			}
+			_, err := session.OpenStream(protocol.StreamID(110))
+			Expect(err).To(MatchError(qerr.TooManyOpenStreams))
+		})
+
+		It("does not error when many streams are opened and closed", func() {
+			for i := 2; i <= 1000; i++ {
+				s, err := session.OpenStream(protocol.StreamID(i))
+				Expect(err).NotTo(HaveOccurred())
+				err = s.Close()
+				Expect(err).NotTo(HaveOccurred())
+				s.CloseRemote(0)
+				_, err = s.Read([]byte("a"))
+				Expect(err).To(MatchError(io.EOF))
+				session.garbageCollectStreams()
+			}
+		})
+	})
 })

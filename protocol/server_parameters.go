@@ -33,8 +33,10 @@ const ReceiveStreamFlowControlWindow ByteCount = (1 << 20) // 1 MB
 const ReceiveConnectionFlowControlWindow ByteCount = (1 << 20) * 1.5 // 1.5 MB
 
 // MaxStreamsPerConnection is the maximum value accepted for the number of streams per connection
-// TODO: set a reasonable value here
 const MaxStreamsPerConnection uint32 = 100
+
+// MaxStreamsMultiplier is the slack the client is allowed for the maximum number of streams per connection, needed e.g. when packets are out of order or dropped.
+const MaxStreamsMultiplier = 1.1
 
 // MaxIdleConnectionStateLifetime is the maximum value accepted for the idle connection state lifetime
 // TODO: set a reasonable value here

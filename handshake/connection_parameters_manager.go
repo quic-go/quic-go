@@ -46,6 +46,7 @@ func NewConnectionParamatersManager() *ConnectionParametersManager {
 		sendConnectionFlowControlWindow:    protocol.InitialConnectionFlowControlWindow, // can only be changed by the client
 		receiveStreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
 		receiveConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
+		maxStreamsPerConnection:            protocol.MaxStreamsPerConnection,
 	}
 }
 

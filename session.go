@@ -44,8 +44,9 @@ type Session struct {
 
 	conn connection
 
-	streams      map[protocol.StreamID]*stream
-	streamsMutex sync.RWMutex
+	streams          map[protocol.StreamID]*stream
+	openStreamsCount uint32
+	streamsMutex     sync.RWMutex
 
 	sentPacketHandler     ackhandler.SentPacketHandler
 	receivedPacketHandler ackhandler.ReceivedPacketHandler
@@ -600,7 +601,12 @@ func (s *Session) GetOrOpenStream(id protocol.StreamID) (utils.Stream, error) {
 	return s.newStreamImpl(id)
 }
 
+// The streamsMutex is locked by OpenStream or GetOrOpenStream before calling this function.
 func (s *Session) newStreamImpl(id protocol.StreamID) (*stream, error) {
+	maxAllowedStreams := uint32(protocol.MaxStreamsMultiplier * float32(s.connectionParametersManager.GetMaxStreamsPerConnection()))
+	if s.openStreamsCount >= maxAllowedStreams {
+		return nil, qerr.TooManyOpenStreams
+	}
 	stream, err := newStream(s, s.connectionParametersManager, s.flowController, id)
 	if err != nil {
 		return nil, err
@@ -608,6 +614,7 @@ func (s *Session) newStreamImpl(id protocol.StreamID) (*stream, error) {
 	if s.streams[id] != nil {
 		return nil, fmt.Errorf("Session: stream with ID %d already exists", id)
 	}
+	s.openStreamsCount++
 	s.streams[id] = stream
 	return stream, nil
 }
@@ -628,6 +635,7 @@ func (s *Session) garbageCollectStreams() {
 			s.windowUpdateManager.RemoveStream(k)
 		}
 		if v.finished() {
+			s.openStreamsCount--
 			s.streams[k] = nil
 		}
 	}
