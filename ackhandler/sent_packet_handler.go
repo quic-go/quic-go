@@ -250,25 +250,36 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) error {
 	return nil
 }
 
-func (h *sentPacketHandler) HasPacketForRetransmission() bool {
+// ProbablyHasPacketForRetransmission returns if there is a packet queued for retransmission
+// There is one case where it gets the answer wrong:
+// if a packet has already been queued for retransmission, but a belated ACK is received for this packet, this function will return true, although the packet will not be returend for retransmission by DequeuePacketForRetransmission()
+func (h *sentPacketHandler) ProbablyHasPacketForRetransmission() bool {
 	h.maybeQueuePacketsRTO()
 
-	if len(h.retransmissionQueue) > 0 {
-		return true
-	}
-	return false
+	return len(h.retransmissionQueue) > 0
 }
 
 func (h *sentPacketHandler) DequeuePacketForRetransmission() (packet *Packet) {
-	if !h.HasPacketForRetransmission() {
+	if !h.ProbablyHasPacketForRetransmission() {
 		return nil
 	}
 
-	queueLen := len(h.retransmissionQueue)
-	// packets are usually NACKed in descending order. So use the slice as a stack
-	packet = h.retransmissionQueue[queueLen-1]
-	h.retransmissionQueue = h.retransmissionQueue[:queueLen-1]
-	return packet
+	for len(h.retransmissionQueue) > 0 {
+		queueLen := len(h.retransmissionQueue)
+		// packets are usually NACKed in descending order. So use the slice as a stack
+		packet = h.retransmissionQueue[queueLen-1]
+		h.retransmissionQueue = h.retransmissionQueue[:queueLen-1]
+
+		// check if the packet was ACKed after it was already queued for retransmission
+		// if so, it doesn't exist in the packetHistory anymore. Skip it then
+		_, ok := h.packetHistory[packet.PacketNumber]
+		if !ok {
+			continue
+		}
+		return packet
+	}
+
+	return nil
 }
 
 func (h *sentPacketHandler) BytesInFlight() protocol.ByteCount {

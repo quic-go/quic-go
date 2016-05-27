@@ -18,7 +18,7 @@ type mockSentPacketHandler struct{}
 func (h *mockSentPacketHandler) SentPacket(packet *ackhandler.Packet) error         { return nil }
 func (h *mockSentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) error        { return nil }
 func (h *mockSentPacketHandler) DequeuePacketForRetransmission() *ackhandler.Packet { return nil }
-func (h *mockSentPacketHandler) HasPacketForRetransmission() bool                   { return false }
+func (h *mockSentPacketHandler) ProbablyHasPacketForRetransmission() bool           { return false }
 func (h *mockSentPacketHandler) BytesInFlight() protocol.ByteCount                  { return 0 }
 func (h *mockSentPacketHandler) GetLargestObserved() protocol.PacketNumber          { return 1 }
 func (h *mockSentPacketHandler) CongestionAllowsSending() bool                      { panic("not implemented") }

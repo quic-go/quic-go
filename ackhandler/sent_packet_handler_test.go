@@ -439,7 +439,7 @@ var _ = Describe("SentPacketHandler", func() {
 				_, err := handler.nackPacket(2)
 				Expect(err).ToNot(HaveOccurred())
 			}
-			Expect(handler.HasPacketForRetransmission()).To(BeFalse())
+			Expect(handler.ProbablyHasPacketForRetransmission()).To(BeFalse())
 			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
 		})
 
@@ -448,7 +448,7 @@ var _ = Describe("SentPacketHandler", func() {
 				_, err := handler.nackPacket(2)
 				Expect(err).ToNot(HaveOccurred())
 			}
-			Expect(handler.HasPacketForRetransmission()).To(BeTrue())
+			Expect(handler.ProbablyHasPacketForRetransmission()).To(BeTrue())
 			Expect(handler.retransmissionQueue).To(HaveLen(1))
 			Expect(handler.retransmissionQueue[0].PacketNumber).To(Equal(protocol.PacketNumber(2)))
 		})
@@ -506,6 +506,19 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(2)))
 			handler.nackPacket(3) // this is the second NACK for this packet
 			Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(2)))
+		})
+
+		It("does not retransmit a packet if a belated was received", func() {
+			// lose packet by NACKing it often enough
+			for i := uint8(0); i < protocol.RetransmissionThreshold+1; i++ {
+				_, err := handler.nackPacket(2)
+				Expect(err).ToNot(HaveOccurred())
+			}
+			// this is the belated ACK
+			handler.ackPacket(2)
+			// this is the edge case where ProbablyHasPacketForRetransmission() get's it wrong: it says there's probably a packet for retransmission, but actually there isn't
+			Expect(handler.ProbablyHasPacketForRetransmission()).To(BeTrue())
+			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
 		})
 	})
 
@@ -701,7 +714,7 @@ var _ = Describe("SentPacketHandler", func() {
 			err := handler.SentPacket(p)
 			Expect(err).NotTo(HaveOccurred())
 			handler.lastSentPacketTime = time.Now().Add(-time.Second)
-			Expect(handler.HasPacketForRetransmission()).To(BeTrue())
+			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
 		})
 
 		It("works with DequeuePacketForRetransmission", func() {

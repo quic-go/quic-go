@@ -420,7 +420,8 @@ func (s *Session) maybeSendPacket() error {
 	}
 
 	// always send out retransmissions immediately. No need to check the size of the packet
-	if s.sentPacketHandler.HasPacketForRetransmission() {
+	// in the edge cases where a belated ACK was received for a packet that was already queued for retransmission, we might send out a small packet. However, this shouldn't happen very often
+	if s.sentPacketHandler.ProbablyHasPacketForRetransmission() {
 		return s.sendPacket()
 	}
 
