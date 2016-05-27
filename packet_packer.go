@@ -28,7 +28,7 @@ type packetPacker struct {
 	sentPacketHandler           ackhandler.SentPacketHandler
 	connectionParametersManager *handshake.ConnectionParametersManager
 
-	streamFrameQueue streamFrameQueue
+	streamFrameQueue *streamFrameQueue
 	controlFrames    []frames.Frame
 	blockedManager   *blockedManager
 
@@ -43,6 +43,7 @@ func newPacketPacker(connectionID protocol.ConnectionID, aead crypto.AEAD, sentP
 		version:                     version,
 		sentPacketHandler:           sentPacketHandler,
 		blockedManager:              blockedManager,
+		streamFrameQueue:            newStreamFrameQueue(),
 	}
 }
 
@@ -201,7 +202,10 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 			return nil, errors.New("PacketPacker BUG: packet payload too large")
 		}
 
-		frame := p.streamFrameQueue.Pop(maxFrameSize - payloadLength)
+		frame, err := p.streamFrameQueue.Pop(maxFrameSize - payloadLength)
+		if err != nil {
+			return nil, err
+		}
 		if frame == nil {
 			break
 		}

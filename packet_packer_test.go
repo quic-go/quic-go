@@ -42,6 +42,7 @@ var _ = Describe("Packet packer", func() {
 			connectionParametersManager: handshake.NewConnectionParamatersManager(),
 			sentPacketHandler:           newMockSentPacketHandler(),
 			blockedManager:              newBlockedManager(),
+			streamFrameQueue:            newStreamFrameQueue(),
 		}
 		publicHeaderLen = 1 + 8 + 1 // 1 flag byte, 8 connection ID, 1 packet number
 	})
@@ -195,6 +196,7 @@ var _ = Describe("Packet packer", func() {
 		It("does not splits a stream frame with maximum size", func() {
 			f := frames.StreamFrame{
 				Offset:         1,
+				StreamID:       13,
 				DataLenPresent: false,
 			}
 			minLength, _ := f.MinLength()
@@ -213,12 +215,14 @@ var _ = Describe("Packet packer", func() {
 		It("correctly handles a stream frame with one byte less than maximum size", func() {
 			maxStreamFrameDataLen := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen - (1 + 1 + 2) - 1
 			f1 := frames.StreamFrame{
-				Data:   bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen)),
-				Offset: 1,
+				StreamID: 5,
+				Offset:   1,
+				Data:     bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen)),
 			}
 			f2 := frames.StreamFrame{
-				Data:   []byte("foobar"),
-				Offset: 1,
+				StreamID: 5,
+				Offset:   1,
+				Data:     []byte("foobar"),
 			}
 			packer.AddStreamFrame(f1)
 			packer.AddStreamFrame(f2)
@@ -291,12 +295,14 @@ var _ = Describe("Packet packer", func() {
 		It("packs 2 stream frames that are too big for one packet correctly", func() {
 			maxStreamFrameDataLen := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen - (1 + 1 + 2)
 			f1 := frames.StreamFrame{
-				Data:   bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen)+100),
-				Offset: 1,
+				StreamID: 5,
+				Data:     bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen)+100),
+				Offset:   1,
 			}
 			f2 := frames.StreamFrame{
-				Data:   bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen)+100),
-				Offset: 1,
+				StreamID: 5,
+				Data:     bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen)+100),
+				Offset:   1,
 			}
 			packer.AddStreamFrame(f1)
 			packer.AddStreamFrame(f2)
@@ -323,7 +329,8 @@ var _ = Describe("Packet packer", func() {
 
 		It("packs a packet that has the maximum packet size when given a large enough stream frame", func() {
 			f := frames.StreamFrame{
-				Offset: 1,
+				StreamID: 5,
+				Offset:   1,
 			}
 			minLength, _ := f.MinLength()
 			f.Data = bytes.Repeat([]byte{'f'}, int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLen-minLength+1)) // + 1 since MinceLength is 1 bigger than the actual StreamFrame header
