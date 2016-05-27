@@ -65,8 +65,8 @@ var _ = Describe("WindowUpdateManager", func() {
 			Expect(wum.streamOffsets[9].Counter).To(Equal(uint8(1)))
 		})
 
-		It("only sends out a window update frame WindowUpdateNumRepitions times", func() {
-			for i := uint8(0); i < protocol.WindowUpdateNumRepitions; i++ {
+		It("only sends out a window update frame WindowUpdateNumRepetitions times", func() {
+			for i := uint8(0); i < protocol.WindowUpdateNumRepetitions; i++ {
 				frames := wum.GetWindowUpdateFrames()
 				Expect(frames).To(HaveLen(2))
 			}

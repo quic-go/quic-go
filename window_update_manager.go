@@ -50,7 +50,7 @@ func (m *windowUpdateManager) GetWindowUpdateFrames() []*frames.WindowUpdateFram
 	var wuf []*frames.WindowUpdateFrame
 
 	for key, value := range m.streamOffsets {
-		if value.Counter >= protocol.WindowUpdateNumRepitions {
+		if value.Counter >= protocol.WindowUpdateNumRepetitions {
 			continue
 		}
 
