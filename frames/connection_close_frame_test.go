@@ -29,6 +29,12 @@ var _ = Describe("ConnectionCloseFrame", func() {
 			Expect(frame.ReasonPhrase).To(BeEmpty())
 			Expect(b.Len()).To(Equal(0))
 		})
+
+		It("rejects long reason phrases", func() {
+			b := bytes.NewReader([]byte{0x02, 0xAD, 0xFB, 0xCA, 0xDE, 0xff, 0xf})
+			_, err := ParseConnectionCloseFrame(b)
+			Expect(err).To(MatchError(qerr.Error(qerr.InvalidConnectionCloseData, "reason phrase too long")))
+		})
 	})
 
 	Context("when writing", func() {

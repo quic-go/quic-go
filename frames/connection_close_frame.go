@@ -38,6 +38,10 @@ func ParseConnectionCloseFrame(r *bytes.Reader) (*ConnectionCloseFrame, error) {
 		return nil, err
 	}
 
+	if reasonPhraseLen > uint16(protocol.MaxPacketSize) {
+		return nil, qerr.Error(qerr.InvalidConnectionCloseData, "reason phrase too long")
+	}
+
 	reasonPhrase := make([]byte, reasonPhraseLen)
 	if _, err := io.ReadFull(r, reasonPhrase); err != nil {
 		return nil, err

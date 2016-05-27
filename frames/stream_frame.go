@@ -62,6 +62,10 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 		}
 	}
 
+	if dataLen > uint16(protocol.MaxPacketSize) {
+		return nil, qerr.Error(qerr.InvalidStreamData, "data len too large")
+	}
+
 	if dataLen == 0 {
 		// The rest of the packet is data
 		frame.Data, err = ioutil.ReadAll(r)

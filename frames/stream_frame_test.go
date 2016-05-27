@@ -47,6 +47,12 @@ var _ = Describe("StreamFrame", func() {
 			_, err := ParseStreamFrame(b)
 			Expect(err).To(MatchError(qerr.EmptyStreamFrameNoFin))
 		})
+
+		It("rejects frames to too large dataLen", func() {
+			b := bytes.NewReader([]byte{0xa0, 0x1, 0xff, 0xf})
+			_, err := ParseStreamFrame(b)
+			Expect(err).To(MatchError(qerr.Error(qerr.InvalidStreamData, "data len too large")))
+		})
 	})
 
 	Context("when writing", func() {
