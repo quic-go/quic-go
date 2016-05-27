@@ -58,3 +58,10 @@ const STKExpiryTimeSec = 24 * 60 * 60
 // TODO: find a reasonable value here
 // TODO: decrease this value after dropping support for QUIC 33 and earlier
 const MaxTrackedSentPackets uint32 = 2000
+
+// CryptoMaxParams is the upper limit for the number of parameters in a crypto message.
+// Value taken from Chrome.
+const CryptoMaxParams = 128
+
+// CryptoParameterMaxLength is the upper limit for the length of a parameter in a crypto message.
+const CryptoParameterMaxLength = ClientHelloMinimumSize

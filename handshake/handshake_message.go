@@ -7,6 +7,8 @@ import (
 	"io"
 	"sort"
 
+	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
@@ -22,6 +24,10 @@ func ParseHandshakeMessage(r utils.ReadStream) (Tag, map[Tag][]byte, error) {
 		return 0, nil, err
 	}
 
+	if nPairs > protocol.CryptoMaxParams {
+		return 0, nil, qerr.CryptoTooManyEntries
+	}
+
 	index := make([]byte, nPairs*8)
 	_, err = io.ReadFull(r, index)
 	if err != nil {
@@ -32,11 +38,15 @@ func ParseHandshakeMessage(r utils.ReadStream) (Tag, map[Tag][]byte, error) {
 
 	dataStart := 0
 	for indexPos := 0; indexPos < int(nPairs)*8; indexPos += 8 {
-		// We know from the check above that data is long enough for the index
 		tag := Tag(binary.LittleEndian.Uint32(index[indexPos : indexPos+4]))
 		dataEnd := int(binary.LittleEndian.Uint32(index[indexPos+4 : indexPos+8]))
 
-		data := make([]byte, dataEnd-dataStart)
+		dataLen := dataEnd - dataStart
+		if dataLen > protocol.CryptoParameterMaxLength {
+			return 0, nil, qerr.Error(qerr.CryptoInvalidValueLength, "value too long")
+		}
+
+		data := make([]byte, dataLen)
 		_, err = io.ReadFull(r, data)
 		if err != nil {
 			return 0, nil, err
