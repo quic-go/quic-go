@@ -64,3 +64,11 @@ func (m *windowUpdateManager) GetWindowUpdateFrames() []*frames.WindowUpdateFram
 
 	return wuf
 }
+
+// RemoveStream should be called when a stream is closed for receiving
+func (m *windowUpdateManager) RemoveStream(streamID protocol.StreamID) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	delete(m.streamOffsets, streamID)
+}

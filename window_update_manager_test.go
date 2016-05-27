@@ -74,4 +74,13 @@ var _ = Describe("WindowUpdateManager", func() {
 			Expect(frames).To(BeEmpty())
 		})
 	})
+
+	Context("removing streams", func() {
+		It("deletes the map entry", func() {
+			wum.SetStreamOffset(7, 0x1000)
+			Expect(wum.streamOffsets).To(HaveKey(protocol.StreamID(7)))
+			wum.RemoveStream(7)
+			Expect(wum.streamOffsets).ToNot(HaveKey(protocol.StreamID(7)))
+		})
+	})
 })

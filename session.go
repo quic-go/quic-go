@@ -624,6 +624,9 @@ func (s *Session) garbageCollectStreams() {
 		if v.finishedWriting() {
 			s.blockedManager.RemoveBlockedStream(k)
 		}
+		if v.finishedReading() {
+			s.windowUpdateManager.RemoveStream(k)
+		}
 		if v.finished() {
 			s.streams[k] = nil
 		}

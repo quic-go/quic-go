@@ -201,6 +201,17 @@ var _ = Describe("Session", func() {
 			Expect(session.blockedManager.blockedStreams).ToNot(HaveKey(protocol.StreamID(5)))
 		})
 
+		It("removes closed streams from WindowUpdateManager", func() {
+			session.handleStreamFrame(&frames.StreamFrame{
+				StreamID: 5,
+				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
+			})
+			session.updateReceiveFlowControlWindow(5, 0x1337)
+			session.streams[5].eof = 1
+			session.garbageCollectStreams()
+			Expect(session.windowUpdateManager.streamOffsets).ToNot(HaveKey(protocol.StreamID(5)))
+		})
+
 		It("closes empty streams with error", func() {
 			testErr := errors.New("test")
 			session.handleStreamFrame(&frames.StreamFrame{
