@@ -2,6 +2,8 @@ package utils
 
 import (
 	"bytes"
+	"io"
+	"sort"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -17,9 +19,11 @@ var _ = Describe("Utils", func() {
 		})
 
 		It("throws an error if less than 2 bytes are passed", func() {
-			b := []byte{0x13}
-			_, err := ReadUint16(bytes.NewReader(b))
-			Expect(err).To(HaveOccurred())
+			b := []byte{0x13, 0xEF}
+			for i := 0; i < len(b); i++ {
+				_, err := ReadUint16(bytes.NewReader(b[:i]))
+				Expect(err).To(MatchError(io.EOF))
+			}
 		})
 	})
 
@@ -32,9 +36,11 @@ var _ = Describe("Utils", func() {
 		})
 
 		It("throws an error if less than 4 bytes are passed", func() {
-			b := []byte{0x13, 0x34, 0xEA}
-			_, err := ReadUint32(bytes.NewReader(b))
-			Expect(err).To(HaveOccurred())
+			b := []byte{0x12, 0x35, 0xAB, 0xFF}
+			for i := 0; i < len(b); i++ {
+				_, err := ReadUint32(bytes.NewReader(b[:i]))
+				Expect(err).To(MatchError(io.EOF))
+			}
 		})
 	})
 
@@ -47,9 +53,11 @@ var _ = Describe("Utils", func() {
 		})
 
 		It("throws an error if less than 8 bytes are passed", func() {
-			b := []byte{0x13, 0x34, 0xEA, 0x00, 0x14, 0xAA}
-			_, err := ReadUint64(bytes.NewReader(b))
-			Expect(err).To(HaveOccurred())
+			b := []byte{0x12, 0x35, 0xAB, 0xFF, 0xEF, 0xBE, 0xAD, 0xDE}
+			for i := 0; i < len(b); i++ {
+				_, err := ReadUint64(bytes.NewReader(b[:i]))
+				Expect(err).To(MatchError(io.EOF))
+			}
 		})
 	})
 
@@ -168,9 +176,19 @@ var _ = Describe("Utils", func() {
 
 	Context("Rand", func() {
 		It("returns either true or false", func() {
-			val, err := RandomBit()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(val).To(SatisfyAny(Equal(true), Equal(false)))
+			countTrue := 0
+			countFalse := 0
+			for i := 0; i < 100; i++ {
+				val, err := RandomBit()
+				Expect(err).NotTo(HaveOccurred())
+				if val {
+					countTrue++
+				} else {
+					countFalse++
+				}
+			}
+			Expect(countTrue).ToNot(BeZero())
+			Expect(countFalse).ToNot(BeZero())
 		})
 	})
 
@@ -193,5 +211,11 @@ var _ = Describe("Utils", func() {
 			_, err := ReadUintN(b, 3)
 			Expect(err).To(HaveOccurred())
 		})
+	})
+
+	It("sorts uint32 slices", func() {
+		s := Uint32Slice{1, 5, 2, 4, 3}
+		sort.Sort(s)
+		Expect(s).To(Equal(Uint32Slice{1, 2, 3, 4, 5}))
 	})
 })

@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"io"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -64,6 +65,11 @@ var _ = Describe("float16", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(val).To(Equal(testcase.expected))
 		}
+	})
+
+	It("errors on eof", func() {
+		_, err := ReadUfloat16(&bytes.Buffer{})
+		Expect(err).To(MatchError(io.EOF))
 	})
 
 	It("writes", func() {

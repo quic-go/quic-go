@@ -167,13 +167,7 @@ func WriteUint16(b *bytes.Buffer, i uint16) {
 func RandomBit() (bool, error) {
 	b := make([]byte, 1)
 	_, err := rand.Read(b)
-	if err != nil {
-		return false, err
-	}
-	if uint8(b[0])%2 == 0 {
-		return false, nil
-	}
-	return true, nil
+	return uint8(b[0])%2 == 0, err
 }
 
 // Uint32Slice attaches the methods of sort.Interface to []uint32, sorting in increasing order.

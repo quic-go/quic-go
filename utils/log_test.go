@@ -54,4 +54,10 @@ var _ = Describe("Log", func() {
 		Errorf("err")
 		Expect(b.Bytes()).To(Equal([]byte("debug\ninfo\nerr\n")))
 	})
+
+	It("says whether debug is enabled", func() {
+		Expect(Debug()).To(BeFalse())
+		SetLogLevel(LogLevelDebug)
+		Expect(Debug()).To(BeTrue())
+	})
 })
