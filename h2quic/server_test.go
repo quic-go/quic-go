@@ -151,4 +151,10 @@ var _ = Describe("H2 server", func() {
 		s.handleStream(session, headerStream)
 		Eventually(func() bool { return handlerCalled }).Should(BeTrue())
 	})
+
+	It("should panic when Serve() is called", func() {
+		Expect(func() {
+			Server{}.Serve(nil)
+		}).To(Panic())
+	})
 })

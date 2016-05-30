@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"time"
 
@@ -59,6 +60,11 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	}
 
 	return server.ListenAndServe()
+}
+
+// Serve should not be called, since it only works properly for TCP listeners.
+func (Server) Serve(net.Listener) error {
+	panic("h2quic.Server.Serve should not be called, see https://godoc.org/github.com/lucas-clemente/quic-go/h2quic")
 }
 
 func (s *Server) handleStreamCb(session *quic.Session, stream utils.Stream) {
