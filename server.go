@@ -21,8 +21,8 @@ type packetHandler interface {
 
 // A Server of QUIC
 type Server struct {
-	conns      []*net.UDPConn
-	connsMutex sync.Mutex
+	addr *net.UDPAddr
+	conn *net.UDPConn
 
 	signer crypto.Signer
 	scfg   *handshake.ServerConfig
@@ -36,7 +36,7 @@ type Server struct {
 }
 
 // NewServer makes a new server
-func NewServer(tlsConfig *tls.Config, cb StreamCallback) (*Server, error) {
+func NewServer(addr string, tlsConfig *tls.Config, cb StreamCallback) (*Server, error) {
 	signer, err := crypto.NewRSASigner(tlsConfig)
 	if err != nil {
 		return nil, err
@@ -51,7 +51,13 @@ func NewServer(tlsConfig *tls.Config, cb StreamCallback) (*Server, error) {
 		return nil, err
 	}
 
+	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Server{
+		addr:           udpAddr,
 		signer:         signer,
 		scfg:           scfg,
 		streamCallback: cb,
@@ -61,19 +67,12 @@ func NewServer(tlsConfig *tls.Config, cb StreamCallback) (*Server, error) {
 }
 
 // ListenAndServe listens and serves a connection
-func (s *Server) ListenAndServe(address string) error {
-	addr, err := net.ResolveUDPAddr("udp", address)
+func (s *Server) ListenAndServe() error {
+	conn, err := net.ListenUDP("udp", s.addr)
 	if err != nil {
 		return err
 	}
-
-	conn, err := net.ListenUDP("udp", addr)
-	if err != nil {
-		return err
-	}
-	s.connsMutex.Lock()
-	s.conns = append(s.conns, conn)
-	s.connsMutex.Unlock()
+	s.conn = conn
 
 	for {
 		data := make([]byte, protocol.MaxPacketSize)
@@ -90,15 +89,10 @@ func (s *Server) ListenAndServe(address string) error {
 
 // Close the server
 func (s *Server) Close() error {
-	s.connsMutex.Lock()
-	defer s.connsMutex.Unlock()
-	for _, c := range s.conns {
-		err := c.Close()
-		if err != nil {
-			return err
-		}
+	if s.conn == nil {
+		return nil
 	}
-	return nil
+	return s.conn.Close()
 }
 
 func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet []byte) error {

@@ -33,27 +33,13 @@ var _ = Describe("H2 server", func() {
 	)
 
 	BeforeEach(func() {
-		var err error
-		s, err = NewServer(testdata.GetTLSConfig())
-		Expect(err).NotTo(HaveOccurred())
-		Expect(s).NotTo(BeNil())
+		s = &Server{
+			Server: &http.Server{
+				TLSConfig: testdata.GetTLSConfig(),
+			},
+		}
 		dataStream = &mockStream{}
 		session = &mockSession{dataStream: dataStream}
-	})
-
-	It("uses default handler", func() {
-		// We try binding to a low port number, s.t. it always fails
-		err := s.ListenAndServe("127.0.0.1:80", nil)
-		Expect(err).To(HaveOccurred())
-		Expect(s.handler).To(Equal(http.DefaultServeMux))
-	})
-
-	It("sets handler properly", func() {
-		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
-		// We try binding to a low port number, s.t. it always fails
-		err := s.ListenAndServe("127.0.0.1:80", h)
-		Expect(err).To(HaveOccurred())
-		Expect(s.handler).NotTo(Equal(http.DefaultServeMux))
 	})
 
 	Context("handling requests", func() {
@@ -71,7 +57,7 @@ var _ = Describe("H2 server", func() {
 
 		It("handles a sample GET request", func() {
 			var handlerCalled bool
-			s.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				Expect(r.Host).To(Equal("www.example.com"))
 				handlerCalled = true
 			})
@@ -88,7 +74,7 @@ var _ = Describe("H2 server", func() {
 
 		It("does not close the dataStream when end of stream is not set", func() {
 			var handlerCalled bool
-			s.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				Expect(r.Host).To(Equal("www.example.com"))
 				handlerCalled = true
 			})
@@ -106,7 +92,7 @@ var _ = Describe("H2 server", func() {
 
 	It("handles the header stream", func() {
 		var handlerCalled bool
-		s.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			Expect(r.Host).To(Equal("www.example.com"))
 			handlerCalled = true
 		})
@@ -122,7 +108,7 @@ var _ = Describe("H2 server", func() {
 
 	It("ignores other streams", func() {
 		var handlerCalled bool
-		s.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			Expect(r.Host).To(Equal("www.example.com"))
 			handlerCalled = true
 		})
@@ -138,7 +124,7 @@ var _ = Describe("H2 server", func() {
 
 	It("supports closing after first request", func() {
 		s.CloseAfterFirstRequest = true
-		s.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+		s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
 		headerStream := &mockStream{id: 3}
 		headerStream.Write([]byte{
 			0x0, 0x0, 0x11, 0x1, 0x4, 0x0, 0x0, 0x0, 0x5,
@@ -148,5 +134,21 @@ var _ = Describe("H2 server", func() {
 		Expect(session.closed).To(BeFalse())
 		s.handleStream(session, headerStream)
 		Eventually(func() bool { return session.closed }).Should(BeTrue())
+	})
+
+	It("uses the default handler as fallback", func() {
+		var handlerCalled bool
+		http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			Expect(r.Host).To(Equal("www.example.com"))
+			handlerCalled = true
+		}))
+		headerStream := &mockStream{id: 3}
+		headerStream.Write([]byte{
+			0x0, 0x0, 0x11, 0x1, 0x4, 0x0, 0x0, 0x0, 0x5,
+			// Taken from https://http2.github.io/http2-spec/compression.html#request.examples.with.huffman.coding
+			0x82, 0x86, 0x84, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff,
+		})
+		s.handleStream(session, headerStream)
+		Eventually(func() bool { return handlerCalled }).Should(BeTrue())
 	})
 })

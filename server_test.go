@@ -84,11 +84,11 @@ var _ = Describe("Server", func() {
 	})
 
 	It("setups and responds with version negotiation", func(done Done) {
-		server, err := NewServer(testdata.GetTLSConfig(), nil)
+		server, err := NewServer("127.0.0.1:13370", testdata.GetTLSConfig(), nil)
 		Expect(err).ToNot(HaveOccurred())
 		go func() {
 			defer GinkgoRecover()
-			err := server.ListenAndServe("127.0.0.1:13370")
+			err := server.ListenAndServe()
 			Expect(err).To(HaveOccurred())
 			close(done)
 		}()
@@ -123,11 +123,11 @@ var _ = Describe("Server", func() {
 	}, 1)
 
 	It("setups and responds with error on invalid frame", func(done Done) {
-		server, err := NewServer(testdata.GetTLSConfig(), nil)
+		server, err := NewServer("127.0.0.1:13370", testdata.GetTLSConfig(), nil)
 		Expect(err).ToNot(HaveOccurred())
 		go func() {
 			defer GinkgoRecover()
-			err := server.ListenAndServe("127.0.0.1:13370")
+			err := server.ListenAndServe()
 			Expect(err).To(HaveOccurred())
 			close(done)
 		}()

@@ -1,7 +1,6 @@
 package h2quic
 
 import (
-	"crypto/tls"
 	"errors"
 	"io/ioutil"
 	"net/http"
@@ -19,36 +18,27 @@ type streamCreator interface {
 	Close(error) error
 }
 
-// Server is a HTTP2 server listening for QUIC connections
+// Server is a HTTP2 server listening for QUIC connections.
+// The nil value is invalid, as a valid TLS config is required.
 type Server struct {
-	server  *quic.Server
-	handler http.Handler
+	*http.Server
 
 	// Private flag for demo, do not use
 	CloseAfterFirstRequest bool
 }
 
-// NewServer creates a new server instance
-func NewServer(tlsConfig *tls.Config) (*Server, error) {
-	s := &Server{}
-
-	var err error
-	s.server, err = quic.NewServer(tlsConfig, s.handleStreamCb)
-	if err != nil {
-		return nil, err
-	}
-
-	return s, nil
-}
-
 // ListenAndServe listens on the network address and calls the handler.
-func (s *Server) ListenAndServe(addr string, handler http.Handler) error {
-	if handler != nil {
-		s.handler = handler
-	} else {
-		s.handler = http.DefaultServeMux
+func (s *Server) ListenAndServe() error {
+	if s.Server == nil {
+		return errors.New("use of h2quic.Server without http.Server")
 	}
-	return s.server.ListenAndServe(addr)
+
+	server, err := quic.NewServer(s.Addr, s.TLSConfig, s.handleStreamCb)
+	if err != nil {
+		return err
+	}
+
+	return server.ListenAndServe()
 }
 
 func (s *Server) handleStreamCb(session *quic.Session, stream utils.Stream) {
@@ -109,7 +99,11 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 	responseWriter := newResponseWriter(headerStream, dataStream, protocol.StreamID(h2headersFrame.StreamID))
 
 	go func() {
-		s.handler.ServeHTTP(responseWriter, req)
+		handler := s.Handler
+		if handler == nil {
+			handler = http.DefaultServeMux
+		}
+		handler.ServeHTTP(responseWriter, req)
 		if responseWriter.dataStream != nil {
 			responseWriter.dataStream.Close()
 		}

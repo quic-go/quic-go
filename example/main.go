@@ -68,13 +68,6 @@ func main() {
 	})
 	http.Handle("/", http.FileServer(http.Dir(*www)))
 
-	server, err := h2quic.NewServer(tlsConfig)
-	if err != nil {
-		panic(err)
-	}
-
-	// server.CloseAfterFirstRequest = true
-
 	if len(bs) == 0 {
 		bs = binds{"localhost:6121"}
 	}
@@ -84,7 +77,14 @@ func main() {
 	for _, b := range bs {
 		bCap := b
 		go func() {
-			err := server.ListenAndServe(bCap, nil)
+			server := h2quic.Server{
+				// CloseAfterFirstRequest: true,
+				Server: &http.Server{
+					Addr:      bCap,
+					TLSConfig: tlsConfig,
+				},
+			}
+			err := server.ListenAndServe()
 			if err != nil {
 				fmt.Println(err)
 			}
