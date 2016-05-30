@@ -57,8 +57,5 @@ See the [example server](example/main.go) or our [fork](https://github.com/lucas
 
 ```go
 http.Handle("/", http.FileServer(http.Dir(wwwDir)))
-
-server, _ := h2quic.NewServer(tlsConfig)
-
-server.ListenAndServe("localhost:4242", nil /* use http.DefaultServeMux */)
+h2quic.ListenAndServeQUIC("localhost:4242", "/path/to/cert/chain.pem", "/path/to/privkey.pem", nil)
 ```

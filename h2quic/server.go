@@ -1,6 +1,7 @@
 package h2quic
 
 import (
+	"crypto/tls"
 	"errors"
 	"io/ioutil"
 	"net/http"
@@ -19,7 +20,7 @@ type streamCreator interface {
 }
 
 // Server is a HTTP2 server listening for QUIC connections.
-// The nil value is invalid, as a valid TLS config is required.
+// The null value is invalid, as a valid TLS config is required.
 type Server struct {
 	*http.Server
 
@@ -27,7 +28,7 @@ type Server struct {
 	CloseAfterFirstRequest bool
 }
 
-// ListenAndServe listens on the network address and calls the handler.
+// ListenAndServe listens on the UDP address s.Addr and calls s.Handler to handle HTTP/2 requests on incoming connections.
 func (s *Server) ListenAndServe() error {
 	if s.Server == nil {
 		return errors.New("use of h2quic.Server without http.Server")
@@ -114,4 +115,25 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 	}()
 
 	return nil
+}
+
+// ListenAndServeQUIC listens on the UDP network address addr and calls the
+// handler for HTTP/2 requests on incoming conections. http.DefaultServeMux is
+// used when handler is nil.
+func ListenAndServeQUIC(addr, certFile, keyFile string, handler http.Handler) error {
+	var err error
+	certs := make([]tls.Certificate, 1)
+	certs[0], err = tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return err
+	}
+	server := &Server{
+		Server: &http.Server{
+			Addr: addr,
+			TLSConfig: &tls.Config{
+				Certificates: certs,
+			},
+		},
+	}
+	return server.ListenAndServe()
 }
