@@ -20,7 +20,6 @@ type streamCreator interface {
 }
 
 // Server is a HTTP2 server listening for QUIC connections.
-// The null value is invalid, as a valid TLS config is required.
 type Server struct {
 	*http.Server
 
@@ -33,8 +32,28 @@ func (s *Server) ListenAndServe() error {
 	if s.Server == nil {
 		return errors.New("use of h2quic.Server without http.Server")
 	}
-
 	server, err := quic.NewServer(s.Addr, s.TLSConfig, s.handleStreamCb)
+	if err != nil {
+		return err
+	}
+	return server.ListenAndServe()
+}
+
+// ListenAndServeTLS listens on the UDP address s.Addr and calls s.Handler to handle HTTP/2 requests on incoming connections.
+func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
+	var err error
+	certs := make([]tls.Certificate, 1)
+	certs[0], err = tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return err
+	}
+
+	// We currently only use the cert-related stuff from tls.Config,
+	// so we don't need to make a full copy.
+	config := &tls.Config{
+		Certificates: certs,
+	}
+	server, err := quic.NewServer(s.Addr, config, s.handleStreamCb)
 	if err != nil {
 		return err
 	}
@@ -121,19 +140,11 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 // handler for HTTP/2 requests on incoming conections. http.DefaultServeMux is
 // used when handler is nil.
 func ListenAndServeQUIC(addr, certFile, keyFile string, handler http.Handler) error {
-	var err error
-	certs := make([]tls.Certificate, 1)
-	certs[0], err = tls.LoadX509KeyPair(certFile, keyFile)
-	if err != nil {
-		return err
-	}
 	server := &Server{
 		Server: &http.Server{
-			Addr: addr,
-			TLSConfig: &tls.Config{
-				Certificates: certs,
-			},
+			Addr:    addr,
+			Handler: handler,
 		},
 	}
-	return server.ListenAndServe()
+	return server.ListenAndServeTLS(certFile, keyFile)
 }
