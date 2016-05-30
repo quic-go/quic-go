@@ -17,4 +17,11 @@ var _ = Describe("ProofRsa", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(sA).To(Equal(sB))
 	})
+
+	It("rejects short public keys", func() {
+		a, err := NewCurve25519KEX()
+		Expect(err).ToNot(HaveOccurred())
+		_, err = a.CalculateSharedKey(nil)
+		Expect(err).To(MatchError("Curve25519: expected public key of 32 byte"))
+	})
 })

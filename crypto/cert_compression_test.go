@@ -97,7 +97,7 @@ var _ = Describe("Cert compression", func() {
 		Expect(compressed).To(Equal(expected))
 	})
 
-	It("uses common certificates", func() {
+	It("uses common certificate sets", func() {
 		cert := certsets.CertSet1[42]
 		setHash := make([]byte, 8)
 		binary.LittleEndian.PutUint64(setHash, certsets.CertSet1Hash)
@@ -109,6 +109,25 @@ var _ = Describe("Cert compression", func() {
 		expected = append(expected, []byte{42, 0, 0, 0}...)
 		expected = append(expected, 0x00)
 		Expect(compressed).To(Equal(expected))
+	})
+
+	It("ignores uncommon certificate sets", func() {
+		cert := []byte{0xde, 0xca, 0xfb, 0xad}
+		setHash := make([]byte, 8)
+		binary.LittleEndian.PutUint64(setHash, 0xdeadbeef)
+		chain := [][]byte{cert}
+		compressed, err := compressChain(chain, setHash, nil)
+		Expect(err).ToNot(HaveOccurred())
+		certZlib := &bytes.Buffer{}
+		z, err := zlib.NewWriterLevelDict(certZlib, flate.BestCompression, certDictZlib)
+		Expect(err).ToNot(HaveOccurred())
+		z.Write([]byte{0x04, 0x00, 0x00, 0x00})
+		z.Write(cert)
+		z.Close()
+		Expect(compressed).To(Equal(append([]byte{
+			0x01, 0x00,
+			0x08, 0x00, 0x00, 0x00,
+		}, certZlib.Bytes()...)))
 	})
 
 	It("uses common certificates and compressed combined", func() {
@@ -132,5 +151,14 @@ var _ = Describe("Cert compression", func() {
 		expected = append(expected, []byte{0x08, 0, 0, 0}...)
 		expected = append(expected, certZlib.Bytes()...)
 		Expect(compressed).To(Equal(expected))
+	})
+
+	It("rejects invalid CCS / CCRT hashes", func() {
+		cert := []byte{0xde, 0xca, 0xfb, 0xad}
+		chain := [][]byte{cert}
+		_, err := compressChain(chain, []byte("foo"), nil)
+		Expect(err).To(MatchError("expected a multiple of 8 bytes for CCS / CCRT hashes"))
+		_, err = compressChain(chain, nil, []byte("foo"))
+		Expect(err).To(MatchError("expected a multiple of 8 bytes for CCS / CCRT hashes"))
 	})
 })

@@ -41,7 +41,7 @@ func (t *sourceAddressToken) serialize() []byte {
 
 func parseToken(data []byte) (*sourceAddressToken, error) {
 	if len(data) != 8+4 && len(data) != 8+16 {
-		return nil, fmt.Errorf("invalid STK length %d", len(data))
+		return nil, fmt.Errorf("invalid STK length: %d", len(data))
 	}
 	return &sourceAddressToken{
 		ip:        data[8:],

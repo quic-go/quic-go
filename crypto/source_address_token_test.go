@@ -33,6 +33,11 @@ var _ = Describe("Source Address Tokens", func() {
 			Expect(token.ip).To(Equal(net.IP{127, 0, 0, 1}))
 			Expect(token.timestamp).To(Equal(uint64(0xdeadbeef)))
 		})
+
+		It("rejects tokens of wrong size", func() {
+			_, err := parseToken(nil)
+			Expect(err).To(MatchError("invalid STK length: 0"))
+		})
 	})
 
 	Context("source", func() {

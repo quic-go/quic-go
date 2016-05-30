@@ -14,7 +14,7 @@ type NullAEAD struct{}
 var _ AEAD = &NullAEAD{}
 
 // Open and verify the ciphertext
-func (*NullAEAD) Open(packetNumber protocol.PacketNumber, associatedData []byte, ciphertext []byte) ([]byte, error) {
+func (NullAEAD) Open(packetNumber protocol.PacketNumber, associatedData []byte, ciphertext []byte) ([]byte, error) {
 	if len(ciphertext) < 12 {
 		return nil, errors.New("NullAEAD: ciphertext cannot be less than 12 bytes long")
 	}
@@ -34,7 +34,7 @@ func (*NullAEAD) Open(packetNumber protocol.PacketNumber, associatedData []byte,
 }
 
 // Seal writes hash and ciphertext to the buffer
-func (*NullAEAD) Seal(packetNumber protocol.PacketNumber, associatedData []byte, plaintext []byte) []byte {
+func (NullAEAD) Seal(packetNumber protocol.PacketNumber, associatedData []byte, plaintext []byte) []byte {
 	res := make([]byte, 12+len(plaintext))
 
 	hash := fnv128a.New()
