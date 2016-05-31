@@ -47,7 +47,7 @@ var _ = Describe("Session", func() {
 		streamCallbackCalled = false
 		closeCallbackCalled = false
 
-		signer, err := crypto.NewRSASigner(testdata.GetTLSConfig())
+		signer, err := crypto.NewProofSource(testdata.GetTLSConfig())
 		Expect(err).ToNot(HaveOccurred())
 		kex, err := crypto.NewCurve25519KEX()
 		Expect(err).NotTo(HaveOccurred())

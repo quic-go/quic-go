@@ -37,7 +37,7 @@ type Server struct {
 
 // NewServer makes a new server
 func NewServer(addr string, tlsConfig *tls.Config, cb StreamCallback) (*Server, error) {
-	signer, err := crypto.NewRSASigner(tlsConfig)
+	signer, err := crypto.NewProofSource(tlsConfig)
 	if err != nil {
 		return nil, err
 	}
