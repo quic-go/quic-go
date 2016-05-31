@@ -142,6 +142,11 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 	return nil
 }
 
+func (s *Server) Close() error {
+	// TODO: implement
+	return nil
+}
+
 // ListenAndServeQUIC listens on the UDP network address addr and calls the
 // handler for HTTP/2 requests on incoming conections. http.DefaultServeMux is
 // used when handler is nil.
