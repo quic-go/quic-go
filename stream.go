@@ -25,6 +25,8 @@ var (
 )
 
 // A Stream assembles the data from StreamFrames and provides a super-convenient Read-Interface
+//
+// Read() and Write() may be called concurrently, but multiple calls to Read() or Write() individually must be synchronized manually.
 type stream struct {
 	streamID protocol.StreamID
 	session  streamHandler

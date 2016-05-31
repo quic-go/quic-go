@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http"
 	"strconv"
+	"sync"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
@@ -13,19 +14,22 @@ import (
 
 type responseWriter struct {
 	dataStreamID protocol.StreamID
-	headerStream utils.Stream
 	dataStream   utils.Stream
+
+	headerStream      utils.Stream
+	headerStreamMutex *sync.Mutex
 
 	header        http.Header
 	headerWritten bool
 }
 
-func newResponseWriter(headerStream, dataStream utils.Stream, dataStreamID protocol.StreamID) *responseWriter {
+func newResponseWriter(headerStream utils.Stream, headerStreamMutex *sync.Mutex, dataStream utils.Stream, dataStreamID protocol.StreamID) *responseWriter {
 	return &responseWriter{
-		header:       http.Header{},
-		headerStream: headerStream,
-		dataStream:   dataStream,
-		dataStreamID: dataStreamID,
+		header:            http.Header{},
+		headerStream:      headerStream,
+		headerStreamMutex: headerStreamMutex,
+		dataStream:        dataStream,
+		dataStreamID:      dataStreamID,
 	}
 }
 
@@ -45,6 +49,8 @@ func (w *responseWriter) WriteHeader(status int) {
 	}
 
 	utils.Infof("Responding with %d", status)
+	w.headerStreamMutex.Lock()
+	defer w.headerStreamMutex.Unlock()
 	h2framer := http2.NewFramer(w.headerStream, nil)
 	err := h2framer.WriteHeaders(http2.HeadersFrameParam{
 		StreamID:      uint32(w.dataStreamID),

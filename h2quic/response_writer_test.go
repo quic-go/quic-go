@@ -3,6 +3,7 @@ package h2quic
 import (
 	"bytes"
 	"net/http"
+	"sync"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
@@ -29,7 +30,7 @@ var _ = Describe("Response Writer", func() {
 	BeforeEach(func() {
 		headerStream = &mockStream{}
 		dataStream = &mockStream{}
-		w = newResponseWriter(headerStream, dataStream, 5)
+		w = newResponseWriter(headerStream, &sync.Mutex{}, dataStream, 5)
 	})
 
 	It("writes status", func() {

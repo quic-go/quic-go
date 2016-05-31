@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/lucas-clemente/quic-go"
@@ -83,8 +84,9 @@ func (s *Server) handleStream(session streamCreator, stream utils.Stream) {
 	h2framer := http2.NewFramer(nil, stream)
 
 	go func() {
+		var headerStreamMutex sync.Mutex // Protects concurrent calls to Write()
 		for {
-			if err := s.handleRequest(session, stream, hpackDecoder, h2framer); err != nil {
+			if err := s.handleRequest(session, stream, &headerStreamMutex, hpackDecoder, h2framer); err != nil {
 				utils.Errorf("error handling h2 request: %s", err.Error())
 				return
 			}
@@ -92,7 +94,7 @@ func (s *Server) handleStream(session streamCreator, stream utils.Stream) {
 	}()
 }
 
-func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream, hpackDecoder *hpack.Decoder, h2framer *http2.Framer) error {
+func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream, headerStreamMutex *sync.Mutex, hpackDecoder *hpack.Decoder, h2framer *http2.Framer) error {
 	h2frame, err := h2framer.ReadFrame()
 	if err != nil {
 		return err
@@ -125,7 +127,7 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 	// stream's Close() closes the write side, not the read side
 	req.Body = ioutil.NopCloser(dataStream)
 
-	responseWriter := newResponseWriter(headerStream, dataStream, protocol.StreamID(h2headersFrame.StreamID))
+	responseWriter := newResponseWriter(headerStream, headerStreamMutex, dataStream, protocol.StreamID(h2headersFrame.StreamID))
 
 	go func() {
 		handler := s.Handler

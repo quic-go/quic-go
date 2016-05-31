@@ -2,6 +2,7 @@ package h2quic
 
 import (
 	"net/http"
+	"sync"
 
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
@@ -66,7 +67,7 @@ var _ = Describe("H2 server", func() {
 				// Taken from https://http2.github.io/http2-spec/compression.html#request.examples.with.huffman.coding
 				0x82, 0x86, 0x84, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff,
 			})
-			err := s.handleRequest(session, headerStream, hpackDecoder, h2framer)
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(func() bool { return handlerCalled }).Should(BeTrue())
 			Expect(dataStream.remoteClosed).To(BeTrue())
@@ -83,7 +84,7 @@ var _ = Describe("H2 server", func() {
 				// Taken from https://http2.github.io/http2-spec/compression.html#request.examples.with.huffman.coding
 				0x82, 0x86, 0x84, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff,
 			})
-			err := s.handleRequest(session, headerStream, hpackDecoder, h2framer)
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(func() bool { return handlerCalled }).Should(BeTrue())
 			Expect(dataStream.remoteClosed).To(BeFalse())
