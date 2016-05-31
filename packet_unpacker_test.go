@@ -110,10 +110,23 @@ var _ = Describe("Packet unpacker", func() {
 		Expect(packet.frames).To(Equal([]frames.Frame{f}))
 	})
 
-	It("errors on GOAWAY frames", func() {
-		setReader([]byte{0x03})
-		_, err := unpacker.Unpack(hdrBin, hdr, r)
-		Expect(err).To(MatchError("unimplemented: GOAWAY"))
+	It("accepts GOAWAY frames", func() {
+		setReader([]byte{
+			0x03,
+			0x01, 0x00, 0x00, 0x00,
+			0x02, 0x00, 0x00, 0x00,
+			0x03, 0x00,
+			'f', 'o', 'o',
+		})
+		packet, err := unpacker.Unpack(hdrBin, hdr, r)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(packet.frames).To(Equal([]frames.Frame{
+			&frames.GoawayFrame{
+				ErrorCode:      1,
+				LastGoodStream: 2,
+				ReasonPhrase:   "foo",
+			},
+		}))
 	})
 
 	It("accepts WINDOW_UPDATE frames", func() {

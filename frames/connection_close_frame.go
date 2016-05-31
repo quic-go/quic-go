@@ -67,10 +67,7 @@ func (f *ConnectionCloseFrame) Write(b *bytes.Buffer, version protocol.VersionNu
 
 	reasonPhraseLen := uint16(len(f.ReasonPhrase))
 	utils.WriteUint16(b, reasonPhraseLen)
-
-	for i := 0; i < int(reasonPhraseLen); i++ {
-		b.WriteByte(uint8(f.ReasonPhrase[i]))
-	}
+	b.WriteString(f.ReasonPhrase)
 
 	return nil
 }

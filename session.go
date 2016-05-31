@@ -250,6 +250,9 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *publicHeader, da
 		case *frames.ConnectionCloseFrame:
 			utils.Debugf("\t<- %#v", frame)
 			s.closeImpl(qerr.Error(frame.ErrorCode, frame.ReasonPhrase), true)
+		case *frames.GoawayFrame:
+			utils.Debugf("\t<- %#v", frame)
+			err = errors.New("unimplemented: handling GOAWAY frames")
 		case *frames.StopWaitingFrame:
 			utils.Debugf("\t<- %#v", frame)
 			err = s.receivedPacketHandler.ReceivedStopWaiting(frame)

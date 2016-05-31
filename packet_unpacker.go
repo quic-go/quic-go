@@ -73,7 +73,10 @@ ReadLoop:
 					err = qerr.Error(qerr.InvalidConnectionCloseData, err.Error())
 				}
 			case 0x03:
-				err = errors.New("unimplemented: GOAWAY")
+				frame, err = frames.ParseGoawayFrame(r)
+				if err != nil {
+					err = qerr.Error(qerr.InvalidGoawayData, err.Error())
+				}
 			case 0x04:
 				frame, err = frames.ParseWindowUpdateFrame(r)
 				if err != nil {
