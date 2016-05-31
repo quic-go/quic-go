@@ -157,4 +157,47 @@ var _ = Describe("H2 server", func() {
 			Server{}.Serve(nil)
 		}).To(Panic())
 	})
+
+	Context("setting http headers", func() {
+		expected := http.Header{
+			"Alt-Svc":            {`quic=":443"; ma=2592000; v="33,32,31,30"`},
+			"Alternate-Protocol": {`443:quic`},
+		}
+
+		It("sets proper headers with numeric port", func() {
+			s.Server.Addr = ":443"
+			hdr := http.Header{}
+			err := s.SetQuicHeaders(hdr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(hdr).To(Equal(expected))
+		})
+
+		It("sets proper headers with full addr", func() {
+			s.Server.Addr = "127.0.0.1:443"
+			hdr := http.Header{}
+			err := s.SetQuicHeaders(hdr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(hdr).To(Equal(expected))
+		})
+
+		It("sets proper headers with string port", func() {
+			s.Server.Addr = ":https"
+			hdr := http.Header{}
+			err := s.SetQuicHeaders(hdr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(hdr).To(Equal(expected))
+		})
+
+		It("works multiple times", func() {
+			s.Server.Addr = ":https"
+			hdr := http.Header{}
+			err := s.SetQuicHeaders(hdr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(hdr).To(Equal(expected))
+			hdr = http.Header{}
+			err = s.SetQuicHeaders(hdr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(hdr).To(Equal(expected))
+		})
+	})
 })

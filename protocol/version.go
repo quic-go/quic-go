@@ -3,6 +3,7 @@ package protocol
 import (
 	"bytes"
 	"encoding/binary"
+	"strconv"
 )
 
 // VersionNumber is a version number as int
@@ -15,6 +16,9 @@ var SupportedVersions = []VersionNumber{
 
 // SupportedVersionsAsTags is needed for the SHLO crypto message
 var SupportedVersionsAsTags []byte
+
+// SupportedVersionsAsString is needed for the Alt-Scv HTTP header
+var SupportedVersionsAsString string
 
 // VersionNumberToTag maps version numbers ('32') to tags ('Q032')
 func VersionNumberToTag(vn VersionNumber) uint32 {
@@ -45,4 +49,11 @@ func init() {
 		b.Write(s)
 	}
 	SupportedVersionsAsTags = b.Bytes()
+
+	for i := len(SupportedVersions) - 1; i >= 0; i-- {
+		SupportedVersionsAsString += strconv.Itoa(int(SupportedVersions[i]))
+		if i != 0 {
+			SupportedVersionsAsString += ","
+		}
+	}
 }

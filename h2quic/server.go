@@ -3,6 +3,7 @@ package h2quic
 import (
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -26,6 +27,8 @@ type Server struct {
 
 	// Private flag for demo, do not use
 	CloseAfterFirstRequest bool
+
+	port int
 }
 
 // ListenAndServe listens on the UDP address s.Addr and calls s.Handler to handle HTTP/2 requests on incoming connections.
@@ -142,8 +145,33 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 	return nil
 }
 
+// Close the server
 func (s *Server) Close() error {
 	// TODO: implement
+	return nil
+}
+
+// SetQuicHeaders can be used to set the proper headers that announce that this server supports QUIC.
+// The values that are set depend on the port information from s.Server.Addr, and currently look like this (if Addr has port 443):
+//  Alternate-Protocol: 443:quic
+//  Alt-Svc: quic=":443"; ma=2592000; v="33,32,31,30"
+func (s *Server) SetQuicHeaders(hdr http.Header) error {
+	if s.port == 0 {
+		// Extract port from s.Server.Addr
+		_, portStr, err := net.SplitHostPort(s.Server.Addr)
+		if err != nil {
+			return err
+		}
+		port, err := net.LookupPort("tcp", portStr)
+		if err != nil {
+			return err
+		}
+		s.port = port
+	}
+
+	hdr.Add("Alternate-Protocol", fmt.Sprintf("%d:quic", s.port))
+	hdr.Add("Alt-Svc", fmt.Sprintf(`quic=":%d"; ma=2592000; v="%s"`, s.port, protocol.SupportedVersionsAsString))
+
 	return nil
 }
 

@@ -22,6 +22,10 @@ var _ = Describe("Version", func() {
 		Expect(protocol.SupportedVersionsAsTags).To(Equal([]byte("Q030Q031Q032Q033")))
 	})
 
+	It("has proper version list", func() {
+		Expect(protocol.SupportedVersionsAsString).To(Equal("33,32,31,30"))
+	})
+
 	It("recognizes supported versions", func() {
 		Expect(protocol.IsSupportedVersion(0)).To(BeFalse())
 		Expect(protocol.IsSupportedVersion(protocol.SupportedVersions[0])).To(BeTrue())
