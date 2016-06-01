@@ -44,7 +44,7 @@ type stream struct {
 	// closed is set when we are finished writing
 	closed int32 // really a bool
 
-	frameQueue        streamFrameSorter
+	frameQueue        *streamFrameSorter
 	newFrameOrErrCond sync.Cond
 
 	flowController                     flowcontrol.FlowController
@@ -62,6 +62,7 @@ func newStream(session streamHandler, connectionParameterManager *handshake.Conn
 		connectionFlowController:           connectionFlowController,
 		contributesToConnectionFlowControl: true,
 		flowController:                     flowcontrol.NewFlowController(StreamID, connectionParameterManager),
+		frameQueue:                         newStreamFrameSorter(),
 	}
 
 	// crypto and header stream don't contribute to connection level flow control

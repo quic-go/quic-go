@@ -216,7 +216,7 @@ var _ = Describe("Stream", func() {
 			Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
 		})
 
-		It("discards unneeded str frames", func() {
+		PIt("discards unneeded str frames", func() {
 			frame1 := frames.StreamFrame{
 				Offset: 0,
 				Data:   []byte("ab"),

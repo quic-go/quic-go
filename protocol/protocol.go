@@ -1,6 +1,9 @@
 package protocol
 
-import "time"
+import (
+	"math"
+	"time"
+)
 
 // A PacketNumber in QUIC
 type PacketNumber uint64
@@ -29,6 +32,9 @@ type StreamID uint32
 
 // A ByteCount in QUIC
 type ByteCount uint64
+
+// MaxByteCount is the maximum value of a ByteCount
+const MaxByteCount = math.MaxUint64
 
 // MaxPacketSize is the maximum packet size, including the public header
 const MaxPacketSize ByteCount = 1452

@@ -1,35 +1,115 @@
 package quic
 
-import "github.com/lucas-clemente/quic-go/frames"
+import (
+	"errors"
 
-// TODO: This is currently quite inefficient
+	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
+	"github.com/lucas-clemente/quic-go/utils"
+)
+
 type streamFrameSorter struct {
-	items []*frames.StreamFrame
+	queuedFrames map[protocol.ByteCount]*frames.StreamFrame
+	readPosition protocol.ByteCount
+	gaps         *utils.ByteIntervalList
 }
 
-func (s *streamFrameSorter) Push(val *frames.StreamFrame) {
-	for i, f := range s.items {
-		if f.Offset > val.Offset {
-			// Insert here
-			s.items = append(s.items, nil)
-			copy(s.items[i+1:], s.items[i:])
-			s.items[i] = val
-			return
+var (
+	errOverlappingStreamData = qerr.Error(qerr.OverlappingStreamData, "")
+	errDuplicateStreamData   = errors.New("Overlapping Stream Data")
+	errEmptyStreamData       = errors.New("Stream Data empty")
+)
+
+func newStreamFrameSorter() *streamFrameSorter {
+	s := streamFrameSorter{
+		gaps:         utils.NewByteIntervalList(),
+		queuedFrames: make(map[protocol.ByteCount]*frames.StreamFrame),
+	}
+	s.gaps.PushFront(utils.ByteInterval{Start: 0, End: protocol.MaxByteCount})
+	return &s
+}
+
+func (s *streamFrameSorter) Push(frame *frames.StreamFrame) error {
+	_, ok := s.queuedFrames[frame.Offset]
+	if ok {
+		return errDuplicateStreamData
+	}
+
+	start := frame.Offset
+	end := frame.Offset + frame.DataLen()
+
+	if start == end {
+		if frame.FinBit {
+			s.queuedFrames[frame.Offset] = frame
+			return nil
+		}
+		return errEmptyStreamData
+	}
+
+	var foundInGap bool
+
+	for gap := s.gaps.Front(); gap != nil; gap = gap.Next() {
+		// the complete frame lies before or after the gap
+		if end <= gap.Value.Start || start > gap.Value.End {
+			continue
+		}
+
+		if start < gap.Value.Start {
+			return errOverlappingStreamData
+		}
+
+		if start < gap.Value.End && end > gap.Value.End {
+			return errOverlappingStreamData
+		}
+
+		foundInGap = true
+
+		if start == gap.Value.Start {
+			if end == gap.Value.End {
+				s.gaps.Remove(gap)
+				break
+			}
+			if end < gap.Value.End {
+				gap.Value.Start = end
+				break
+			}
+		}
+
+		if end == gap.Value.End {
+			gap.Value.End = start
+			break
+		}
+
+		if end < gap.Value.End {
+			intv := utils.ByteInterval{Start: end, End: gap.Value.End}
+			s.gaps.InsertAfter(intv, gap)
+			gap.Value.End = start
+			break
 		}
 	}
-	// Append at the end
-	s.items = append(s.items, val)
+
+	if !foundInGap {
+		return errDuplicateStreamData
+	}
+
+	s.queuedFrames[frame.Offset] = frame
+	return nil
 }
 
 func (s *streamFrameSorter) Pop() *frames.StreamFrame {
-	res := s.items[0]
-	s.items = s.items[1:]
-	return res
+	frame := s.Head()
+	if frame != nil {
+		s.readPosition += frame.DataLen()
+		delete(s.queuedFrames, frame.Offset)
+	}
+	return frame
 }
 
 func (s *streamFrameSorter) Head() *frames.StreamFrame {
-	if len(s.items) > 0 {
-		return s.items[0]
+	frame, ok := s.queuedFrames[s.readPosition]
+	if ok {
+		return frame
 	}
 	return nil
 }
