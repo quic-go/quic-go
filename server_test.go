@@ -16,14 +16,15 @@ import (
 type mockSession struct {
 	connectionID protocol.ConnectionID
 	packetCount  int
+	closed       bool
 }
 
 func (s *mockSession) handlePacket(addr interface{}, hdr *publicHeader, data []byte) {
 	s.packetCount++
 }
 
-func (s *mockSession) run() {
-}
+func (s *mockSession) run()              {}
+func (s *mockSession) Close(error) error { s.closed = true; return nil }
 
 func newMockSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) (packetHandler, error) {
 	return &mockSession{
@@ -81,6 +82,13 @@ var _ = Describe("Server", func() {
 			Expect(server.sessions[0x4cfa9f9b668619f6]).To(BeNil())
 		})
 
+		It("closes sessions when Close is called", func() {
+			session := &mockSession{}
+			server.sessions[1] = session
+			err := server.Close()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(session.closed).To(BeTrue())
+		})
 	})
 
 	It("setups and responds with version negotiation", func(done Done) {

@@ -17,6 +17,7 @@ import (
 type packetHandler interface {
 	handlePacket(addr interface{}, hdr *publicHeader, data []byte)
 	run()
+	Close(error) error
 }
 
 // A Server of QUIC
@@ -89,6 +90,15 @@ func (s *Server) ListenAndServe() error {
 
 // Close the server
 func (s *Server) Close() error {
+	s.sessionsMutex.Lock()
+	for _, session := range s.sessions {
+		if session != nil {
+			s.sessionsMutex.Unlock()
+			_ = session.Close(nil)
+			s.sessionsMutex.Lock()
+		}
+	}
+	s.sessionsMutex.Unlock()
 	if s.conn == nil {
 		return nil
 	}
