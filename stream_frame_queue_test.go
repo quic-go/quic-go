@@ -76,15 +76,15 @@ var _ = Describe("streamFrameQueue", func() {
 			queue.Push(prioFrame1, true)
 			Expect(queue.ByteLen()).To(Equal(protocol.ByteCount(2)))
 			queue.Push(frame2, false)
-			Expect(queue.ByteLen()).To(Equal(protocol.ByteCount(len(prioFrame1.Data) + len(frame2.Data))))
+			Expect(queue.ByteLen()).To(Equal(prioFrame1.DataLen() + frame2.DataLen()))
 		})
 
 		It("returns the correct byte length when popping", func() {
 			queue.Push(prioFrame1, true)
 			queue.Push(frame1, false)
-			Expect(queue.ByteLen()).To(Equal(protocol.ByteCount(len(prioFrame1.Data) + len(frame1.Data))))
+			Expect(queue.ByteLen()).To(Equal(prioFrame1.DataLen() + frame1.DataLen()))
 			queue.Pop(1000)
-			Expect(queue.ByteLen()).To(Equal(protocol.ByteCount(len(frame1.Data))))
+			Expect(queue.ByteLen()).To(Equal(frame1.DataLen()))
 			queue.Pop(1000)
 			Expect(queue.ByteLen()).To(Equal(protocol.ByteCount(0)))
 		})
@@ -117,7 +117,7 @@ var _ = Describe("streamFrameQueue", func() {
 		It("does not change the byte length when using getNextStream()", func() {
 			queue.Push(prioFrame1, true)
 			queue.Push(frame1, false)
-			length := protocol.ByteCount(len(prioFrame1.Data) + len(frame1.Data))
+			length := prioFrame1.DataLen() + frame1.DataLen()
 			Expect(queue.ByteLen()).To(Equal(length))
 			_, err := queue.getNextStream()
 			Expect(err).ToNot(HaveOccurred())
@@ -275,13 +275,13 @@ var _ = Describe("streamFrameQueue", func() {
 
 			It("splits a frame", func() {
 				queue.Push(frame1, false)
-				origlen := len(frame1.Data)
+				origlen := frame1.DataLen()
 				frame, err := queue.Pop(6)
 				Expect(err).ToNot(HaveOccurred())
 				minLength, _ := frame.MinLength()
-				Expect(int(minLength) - 1 + len(frame.Data)).To(Equal(6))
-				Expect(queue.frameMap[frame1.StreamID][0].Data).To(HaveLen(origlen - len(frame.Data)))
-				Expect(queue.frameMap[frame1.StreamID][0].Offset).To(Equal(protocol.ByteCount(len(frame.Data))))
+				Expect(minLength - 1 + frame.DataLen()).To(Equal(protocol.ByteCount(6)))
+				Expect(queue.frameMap[frame1.StreamID][0].Data).To(HaveLen(int(origlen - frame.DataLen())))
+				Expect(queue.frameMap[frame1.StreamID][0].Offset).To(Equal(frame.DataLen()))
 			})
 
 			It("only removes a frame from the queue after return all split parts", func() {
@@ -298,7 +298,7 @@ var _ = Describe("streamFrameQueue", func() {
 			})
 
 			It("gets the whole data of a frame, when it was split", func() {
-				length := len(frame1.Data)
+				length := frame1.DataLen()
 				origdata := make([]byte, length)
 				copy(origdata, frame1.Data)
 				queue.Push(frame1, false)
@@ -306,10 +306,10 @@ var _ = Describe("streamFrameQueue", func() {
 				Expect(err).ToNot(HaveOccurred())
 				nextframe, err := queue.Pop(1000)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(len(frame.Data) + len(nextframe.Data)).To(Equal(length))
+				Expect(frame.DataLen() + nextframe.DataLen()).To(Equal(length))
 				data := make([]byte, length)
 				copy(data, frame.Data)
-				copy(data[len(frame.Data):], nextframe.Data)
+				copy(data[int(frame.DataLen()):], nextframe.Data)
 				Expect(data).To(Equal(origdata))
 			})
 
@@ -320,7 +320,7 @@ var _ = Describe("streamFrameQueue", func() {
 				frame, err := queue.Pop(6)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.StreamID).To(Equal(frame1.StreamID)) // make sure the right frame was popped
-				Expect(queue.ByteLen()).To(Equal(startByteLength - protocol.ByteCount(len(frame.Data))))
+				Expect(queue.ByteLen()).To(Equal(startByteLength - frame.DataLen()))
 			})
 
 			It("does not change the length of the queue when returning a split frame", func() {

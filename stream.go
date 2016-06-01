@@ -99,7 +99,7 @@ func (s *stream) Read(p []byte) (int, error) {
 			}
 			if frame != nil {
 				// Pop and continue if the frame doesn't have any new data
-				if frame.Offset+protocol.ByteCount(len(frame.Data)) <= s.readOffset && !frame.FinBit {
+				if frame.Offset+frame.DataLen() <= s.readOffset && !frame.FinBit {
 					s.frameQueue.Pop()
 					frame = s.frameQueue.Head()
 					continue
@@ -123,7 +123,7 @@ func (s *stream) Read(p []byte) (int, error) {
 			return bytesRead, s.err
 		}
 
-		m := utils.Min(len(p)-bytesRead, len(frame.Data)-s.readPosInFrame)
+		m := utils.Min(len(p)-bytesRead, int(frame.DataLen())-s.readPosInFrame)
 		copy(p[bytesRead:], frame.Data[s.readPosInFrame:])
 
 		s.readPosInFrame += m
@@ -137,7 +137,7 @@ func (s *stream) Read(p []byte) (int, error) {
 
 		s.maybeTriggerWindowUpdate()
 
-		if s.readPosInFrame >= len(frame.Data) {
+		if s.readPosInFrame >= int(frame.DataLen()) {
 			fin := frame.FinBit
 			s.mutex.Lock()
 			s.frameQueue.Pop()
@@ -240,7 +240,7 @@ func (s *stream) Close() error {
 
 // AddStreamFrame adds a new stream frame
 func (s *stream) AddStreamFrame(frame *frames.StreamFrame) error {
-	maxOffset := frame.Offset + protocol.ByteCount(len(frame.Data))
+	maxOffset := frame.Offset + frame.DataLen()
 	increment := s.flowController.UpdateHighestReceived(maxOffset)
 	if s.contributesToConnectionFlowControl {
 		s.connectionFlowController.IncrementHighestReceived(increment)

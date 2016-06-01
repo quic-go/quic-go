@@ -212,9 +212,9 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 		frame.DataLenPresent = true // set the dataLen by default. Remove them later if applicable
 
 		frameMinLength, _ := frame.MinLength() // StreamFrame.MinLength *never* returns an error
-		payloadLength += frameMinLength - 1 + protocol.ByteCount(len(frame.Data))
+		payloadLength += frameMinLength - 1 + frame.DataLen()
 
-		blockedFrame := p.blockedManager.GetBlockedFrame(frame.StreamID, frame.Offset+protocol.ByteCount(len(frame.Data)))
+		blockedFrame := p.blockedManager.GetBlockedFrame(frame.StreamID, frame.Offset+frame.DataLen())
 		if blockedFrame != nil {
 			blockedLength, _ := blockedFrame.MinLength() // BlockedFrame.MinLength *never* returns an error
 			if payloadLength+blockedLength <= maxFrameSize {

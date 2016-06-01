@@ -242,7 +242,7 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *publicHeader, da
 		var err error
 		switch frame := ff.(type) {
 		case *frames.StreamFrame:
-			utils.Debugf("\t<- &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: 0x%x, Data length: 0x%x, Offset + Data length: 0x%x}", frame.StreamID, frame.FinBit, frame.Offset, len(frame.Data), frame.Offset+protocol.ByteCount(len(frame.Data)))
+			utils.Debugf("\t<- &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: 0x%x, Data length: 0x%x, Offset + Data length: 0x%x}", frame.StreamID, frame.FinBit, frame.Offset, frame.DataLen(), frame.Offset+frame.DataLen())
 			err = s.handleStreamFrame(frame)
 			// TODO: send RstStreamFrame
 		case *frames.AckFrame:
@@ -563,7 +563,7 @@ func (s *Session) logPacket(packet *packedPacket) {
 	utils.Debugf("-> Sending packet 0x%x (%d bytes)", packet.number, len(packet.raw))
 	for _, frame := range packet.frames {
 		if streamFrame, isStreamFrame := frame.(*frames.StreamFrame); isStreamFrame {
-			utils.Debugf("\t-> &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: 0x%x, Data length: 0x%x, Offset + Data length: 0x%x}", streamFrame.StreamID, streamFrame.FinBit, streamFrame.Offset, len(streamFrame.Data), streamFrame.Offset+protocol.ByteCount(len(streamFrame.Data)))
+			utils.Debugf("\t-> &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: 0x%x, Data length: 0x%x, Offset + Data length: 0x%x}", streamFrame.StreamID, streamFrame.FinBit, streamFrame.Offset, streamFrame.DataLen(), streamFrame.Offset+streamFrame.DataLen())
 		} else {
 			utils.Debugf("\t-> %#v", frame)
 		}

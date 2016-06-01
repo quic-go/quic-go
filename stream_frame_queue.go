@@ -46,7 +46,7 @@ func (q *streamFrameQueue) Push(frame *frames.StreamFrame, prio bool) {
 		}
 	}
 
-	q.byteLen += protocol.ByteCount(len(frame.Data))
+	q.byteLen += frame.DataLen()
 	q.len++
 }
 
@@ -99,7 +99,7 @@ func (q *streamFrameQueue) Pop(maxLength protocol.ByteCount) (*frames.StreamFram
 	splitFrame := q.maybeSplitOffFrame(frame, maxLength)
 
 	if splitFrame != nil { // StreamFrame was split
-		q.byteLen -= protocol.ByteCount(len(splitFrame.Data))
+		q.byteLen -= splitFrame.DataLen()
 		return splitFrame, nil
 	}
 
@@ -110,7 +110,7 @@ func (q *streamFrameQueue) Pop(maxLength protocol.ByteCount) (*frames.StreamFram
 		q.frameMap[streamID] = q.frameMap[streamID][1:]
 	}
 
-	q.byteLen -= protocol.ByteCount(len(frame.Data))
+	q.byteLen -= frame.DataLen()
 	q.len--
 	return frame, nil
 }
@@ -144,7 +144,7 @@ func (q *streamFrameQueue) getNextStream() (protocol.StreamID, error) {
 // has to be called from a function that has already acquired the mutex
 func (q *streamFrameQueue) maybeSplitOffFrame(frame *frames.StreamFrame, n protocol.ByteCount) *frames.StreamFrame {
 	minLength, _ := frame.MinLength() // StreamFrame.MinLength *never* errors
-	if n >= minLength-1+protocol.ByteCount(len(frame.Data)) {
+	if n >= minLength-1+frame.DataLen() {
 		return nil
 	}
 	n -= minLength - 1

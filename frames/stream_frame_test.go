@@ -377,4 +377,13 @@ var _ = Describe("StreamFrame", func() {
 			Expect(f.getOffsetLength()).To(Equal(protocol.ByteCount(8)))
 		})
 	})
+
+	Context("DataLen", func() {
+		It("determines the length of the data", func() {
+			frame := StreamFrame{
+				Data: []byte("foobar"),
+			}
+			Expect(frame.DataLen()).To(Equal(protocol.ByteCount(6)))
+		})
+	})
 })
