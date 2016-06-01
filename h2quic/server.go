@@ -147,8 +147,14 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 	return nil
 }
 
-// Close the server
+// Close the server immediately, aborting requests and sending CONNECTION_CLOSE frames to connected clients
 func (s *Server) Close() error {
+	// TODO: implement
+	return nil
+}
+
+// CloseGracefully shuts down the server gracefully. The server sends a GOAWAY frame first, then waits for either timeout to trigger, or for all running requests to complete.
+func (s *Server) CloseGracefully(timeout time.Duration) error {
 	// TODO: implement
 	return nil
 }
