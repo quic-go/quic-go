@@ -37,7 +37,8 @@ type ByteCount uint64
 const MaxByteCount = math.MaxUint64
 
 // MaxPacketSize is the maximum packet size, including the public header
-const MaxPacketSize ByteCount = 1452
+// This is the value used by Chromium for a QUIC packet sent using IPv6 (for IPv4 it would be 1370)
+const MaxPacketSize ByteCount = 1350
 
 // MaxFrameAndPublicHeaderSize is the maximum size of a QUIC frame plus PublicHeader
 const MaxFrameAndPublicHeaderSize = MaxPacketSize - 1 /*private header*/ - 12 /*crypto signature*/
