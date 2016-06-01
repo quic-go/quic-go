@@ -59,6 +59,10 @@ const STKExpiryTimeSec = 24 * 60 * 60
 // TODO: decrease this value after dropping support for QUIC 33 and earlier
 const MaxTrackedSentPackets uint32 = 2000
 
+// MaxStreamFrameSorterGaps is the maximum number of gaps between received StreamFrames
+// prevents DOS attacks against the streamFrameSorter
+const MaxStreamFrameSorterGaps = 50
+
 // CryptoMaxParams is the upper limit for the number of parameters in a crypto message.
 // Value taken from Chrome.
 const CryptoMaxParams = 128

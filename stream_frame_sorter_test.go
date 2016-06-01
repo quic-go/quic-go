@@ -395,6 +395,26 @@ var _ = Describe("StreamFrame sorter", func() {
 					compareGapValues(s.gaps, expectedGaps)
 				})
 			})
+
+			Context("DOS protection", func() {
+				It("errors when too many gaps are created", func() {
+					for i := 0; i < protocol.MaxStreamFrameSorterGaps; i++ {
+						f := &frames.StreamFrame{
+							Data:   []byte("foobar"),
+							Offset: protocol.ByteCount(i * 7),
+						}
+						err := s.Push(f)
+						Expect(err).ToNot(HaveOccurred())
+					}
+					Expect(s.gaps.Len()).To(Equal(protocol.MaxStreamFrameSorterGaps))
+					f := &frames.StreamFrame{
+						Data:   []byte("foobar"),
+						Offset: protocol.ByteCount(protocol.MaxStreamFrameSorterGaps*7) + 100,
+					}
+					err := s.Push(f)
+					Expect(err).To(MatchError(errTooManyGapsInReceivedStreamData))
+				})
+			})
 		})
 	})
 })
