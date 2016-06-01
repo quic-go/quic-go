@@ -1,7 +1,7 @@
 package qerr
 
 // The error codes defined by QUIC
-// Remeber to run `go generate ./...` whenever the error codes change.
+// Remember to run `go generate ./...` whenever the error codes change.
 //go:generate stringer -type=ErrorCode
 const (
 	InternalError ErrorCode = 1
@@ -140,7 +140,7 @@ const (
 	// A crypto message was received that contained a parameter with too few
 	// values.
 	CryptoMessageIndexNotFound ErrorCode = 37
-	// An internal error occured in crypto processing.
+	// An internal error occurred in crypto processing.
 	CryptoInternalError ErrorCode = 38
 	// A crypto handshake message specified an unsupported version.
 	CryptoVersionNotSupported ErrorCode = 39
