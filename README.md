@@ -5,15 +5,15 @@
 [![Build Status](https://travis-ci.org/lucas-clemente/quic-go.svg?branch=master)](https://travis-ci.org/lucas-clemente/quic-go)
 [![Godoc Reference](https://godoc.org/github.com/lucas-clemente/quic-go?status.svg)](https://godoc.org/github.com/lucas-clemente/quic-go)
 
-This is very much an incomplete, buggy, unperformant and insecure work in progress :)
+quic-go is an implementation of the [QUIC](https://en.wikipedia.org/wiki/QUIC) protocol in Go. While we're not far from being feature complete, there's still a lot of work to do regarding performance and security. At the moment, we do not recommend use in production systems. We appreciate any feedback :)
 
-## Features
+## Roadmap
 
 Done:
 
 - Basic protocol with support for QUIC version 30-33
 - HTTP/2 support
-- Crypto (RSA for signing, curve25519 for KEX, chacha20-poly1305 as cipher)
+- Crypto (RSA / ECDSA certificates, curve25519 for key exchange, chacha20-poly1305 as cipher)
 - Loss detection and retransmission (currently fast retransmission & RTO)
 - Flow Control
 - Congestion control using cubic
