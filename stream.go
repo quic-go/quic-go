@@ -254,8 +254,11 @@ func (s *stream) AddStreamFrame(frame *frames.StreamFrame) error {
 	}
 
 	s.mutex.Lock()
-	s.frameQueue.Push(frame)
-	s.mutex.Unlock()
+	defer s.mutex.Unlock()
+	err := s.frameQueue.Push(frame)
+	if err != nil && err != errDuplicateStreamData {
+		return err
+	}
 	s.newFrameOrErrCond.Signal()
 	return nil
 }

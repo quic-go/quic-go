@@ -190,14 +190,14 @@ var _ = Describe("Stream", func() {
 			Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
 		})
 
-		It("handles duplicate StreamFrames", func() {
+		It("ignores duplicate StreamFrames", func() {
 			frame1 := frames.StreamFrame{
 				Offset: 0,
 				Data:   []byte{0xDE, 0xAD},
 			}
 			frame2 := frames.StreamFrame{
 				Offset: 0,
-				Data:   []byte{0xDE, 0xAD},
+				Data:   []byte{0x13, 0x37},
 			}
 			frame3 := frames.StreamFrame{
 				Offset: 2,
@@ -216,7 +216,7 @@ var _ = Describe("Stream", func() {
 			Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
 		})
 
-		PIt("discards unneeded str frames", func() {
+		It("rejects a StreamFrames with an overlapping data range", func() {
 			frame1 := frames.StreamFrame{
 				Offset: 0,
 				Data:   []byte("ab"),
@@ -225,21 +225,10 @@ var _ = Describe("Stream", func() {
 				Offset: 1,
 				Data:   []byte("xy"),
 			}
-			frame3 := frames.StreamFrame{
-				Offset: 2,
-				Data:   []byte("cd"),
-			}
 			err := str.AddStreamFrame(&frame1)
 			Expect(err).ToNot(HaveOccurred())
 			err = str.AddStreamFrame(&frame2)
-			Expect(err).ToNot(HaveOccurred())
-			err = str.AddStreamFrame(&frame3)
-			Expect(err).ToNot(HaveOccurred())
-			b := make([]byte, 4)
-			n, err := str.Read(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(n).To(Equal(4))
-			Expect(b).To(Equal([]byte("abyd")))
+			Expect(err).To(MatchError(errOverlappingStreamData))
 		})
 
 		Context("flow control", func() {

@@ -214,12 +214,9 @@ var _ = Describe("Session", func() {
 
 		It("closes empty streams with error", func() {
 			testErr := errors.New("test")
-			session.handleStreamFrame(&frames.StreamFrame{
-				StreamID: 5,
-			})
+			session.newStreamImpl(5)
 			Expect(session.streams).To(HaveLen(2))
 			Expect(session.streams[5]).ToNot(BeNil())
-			Expect(streamCallbackCalled).To(BeTrue())
 			session.closeStreamsWithError(testErr)
 			_, err := session.streams[5].Read([]byte{0})
 			Expect(err).To(MatchError(testErr))
