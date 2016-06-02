@@ -38,8 +38,4 @@ var _ = Describe("Crypto/NullAEAD", func() {
 		_, err := NullAEAD{}.Open(0, nil, nil)
 		Expect(err).To(MatchError("NullAEAD: ciphertext cannot be less than 12 bytes long"))
 	})
-
-	It("has nil diversification nonce", func() {
-		Expect(NullAEAD{}.DiversificationNonce()).To(BeEmpty())
-	})
 })

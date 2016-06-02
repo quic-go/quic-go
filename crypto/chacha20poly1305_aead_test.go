@@ -61,8 +61,4 @@ var _ = Describe("Chacha20poly1305", func() {
 		_, err = NewAEADChacha20Poly1305(keyBob, keyAlice, ivBob, ivAlice[1:])
 		Expect(err).To(MatchError(e))
 	})
-
-	It("has nil diversification nonce", func() {
-		Expect(alice.DiversificationNonce()).To(BeEmpty())
-	})
 })

@@ -56,5 +56,3 @@ func makeNonce(iv []byte, packetNumber protocol.PacketNumber) []byte {
 	binary.LittleEndian.PutUint64(res[4:12], uint64(packetNumber))
 	return res
 }
-
-func (aeadChacha20Poly1305) DiversificationNonce() []byte { return nil }
