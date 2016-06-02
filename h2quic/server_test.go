@@ -212,6 +212,11 @@ var _ = Describe("H2 server", func() {
 		Expect(err).To(MatchError("use of h2quic.Server without http.Server"))
 	})
 
+	It("should error when ListenAndServeTLS is called with s.Server nil", func() {
+		err := (&Server{}).ListenAndServeTLS("", "")
+		Expect(err).To(MatchError("use of h2quic.Server without http.Server"))
+	})
+
 	It("should nop-Close() when s.server is nil", func() {
 		err := (&Server{}).Close()
 		Expect(err).NotTo(HaveOccurred())
@@ -223,7 +228,6 @@ var _ = Describe("H2 server", func() {
 		})
 
 		AfterEach(func() {
-			time.Sleep(10 * time.Millisecond)
 			err := s.Close()
 			Expect(err).NotTo(HaveOccurred())
 		})
@@ -264,7 +268,6 @@ var _ = Describe("H2 server", func() {
 		})
 
 		AfterEach(func() {
-			time.Sleep(10 * time.Millisecond)
 			err := s.Close()
 			Expect(err).NotTo(HaveOccurred())
 		})
