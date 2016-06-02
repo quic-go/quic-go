@@ -3,3 +3,16 @@ language: go
 go:
   - 1.6
   - 1.7beta1
+
+# first part of the GOARCH workaround
+# setting the GOARCH directly doesn't work, since the value will be overwritten later
+# so set it to a temporary environment variable first
+env:
+  - TRAVIS_GOARCH=amd64
+  - TRAVIS_GOARCH=386
+
+# second part of the GOARCH workaround
+# now actually set the GOARCH env variable to the value of the temporary variable set earlier
+before_install:
+  - export GOARCH=$TRAVIS_GOARCH
+  - go env # for debugging
