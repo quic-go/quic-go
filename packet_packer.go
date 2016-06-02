@@ -6,7 +6,6 @@ import (
 	"sync/atomic"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
-	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -23,7 +22,7 @@ type packedPacket struct {
 type packetPacker struct {
 	connectionID protocol.ConnectionID
 	version      protocol.VersionNumber
-	aead         crypto.AEAD
+	cryptoSetup  *handshake.CryptoSetup
 
 	sentPacketHandler           ackhandler.SentPacketHandler
 	connectionParametersManager *handshake.ConnectionParametersManager
@@ -35,9 +34,9 @@ type packetPacker struct {
 	lastPacketNumber protocol.PacketNumber
 }
 
-func newPacketPacker(connectionID protocol.ConnectionID, aead crypto.AEAD, sentPacketHandler ackhandler.SentPacketHandler, connectionParametersHandler *handshake.ConnectionParametersManager, blockedManager *blockedManager, version protocol.VersionNumber) *packetPacker {
+func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.CryptoSetup, sentPacketHandler ackhandler.SentPacketHandler, connectionParametersHandler *handshake.ConnectionParametersManager, blockedManager *blockedManager, version protocol.VersionNumber) *packetPacker {
 	return &packetPacker{
-		aead:                        aead,
+		cryptoSetup:                 cryptoSetup,
 		connectionID:                connectionID,
 		connectionParametersManager: connectionParametersHandler,
 		version:                     version,
@@ -89,13 +88,18 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		1,
 	))
 
+	// cryptoSetup needs to be locked here, so that the AEADs are not changed between
+	// calling DiversificationNonce() and Seal().
+	p.cryptoSetup.LockForSealing()
+	defer p.cryptoSetup.UnlockForSealing()
+
 	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(currentPacketNumber, p.sentPacketHandler.GetLargestObserved())
 	responsePublicHeader := &publicHeader{
 		ConnectionID:         p.connectionID,
 		PacketNumber:         currentPacketNumber,
 		PacketNumberLen:      packetNumberLen,
 		TruncateConnectionID: p.connectionParametersManager.TruncateConnectionID(),
-		DiversificationNonce: p.aead.DiversificationNonce(),
+		DiversificationNonce: p.cryptoSetup.DiversificationNonce(),
 	}
 
 	publicHeaderLength, err := responsePublicHeader.GetLength()
@@ -136,7 +140,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		return nil, err
 	}
 
-	ciphertext := p.aead.Seal(currentPacketNumber, raw.Bytes(), payload)
+	ciphertext := p.cryptoSetup.Seal(currentPacketNumber, raw.Bytes(), payload)
 	raw.Write(ciphertext)
 
 	if protocol.ByteCount(raw.Len()) > protocol.MaxPacketSize {

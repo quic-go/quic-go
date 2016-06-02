@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
-	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -36,9 +35,8 @@ var _ = Describe("Packet packer", func() {
 	)
 
 	BeforeEach(func() {
-		aead := &crypto.NullAEAD{}
 		packer = &packetPacker{
-			aead: aead,
+			cryptoSetup:                 &handshake.CryptoSetup{},
 			connectionParametersManager: handshake.NewConnectionParamatersManager(),
 			sentPacketHandler:           newMockSentPacketHandler(),
 			blockedManager:              newBlockedManager(),

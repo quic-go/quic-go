@@ -169,11 +169,8 @@ func (h *CryptoSetup) Open(packetNumber protocol.PacketNumber, associatedData []
 	return (&crypto.NullAEAD{}).Open(packetNumber, associatedData, ciphertext)
 }
 
-// Seal a message
+// Seal a message, call LockForSealing() before!
 func (h *CryptoSetup) Seal(packetNumber protocol.PacketNumber, associatedData []byte, plaintext []byte) []byte {
-	h.mutex.RLock()
-	defer h.mutex.RUnlock()
-
 	if h.receivedForwardSecurePacket {
 		return h.forwardSecureAEAD.Seal(packetNumber, associatedData, plaintext)
 	} else if h.secureAEAD != nil {
@@ -308,7 +305,7 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 	return reply.Bytes(), nil
 }
 
-// DiversificationNonce returns a diversification nonce if required in the next packet to be Seal'ed
+// DiversificationNonce returns a diversification nonce if required in the next packet to be Seal'ed. See LockForSealing()!
 func (h *CryptoSetup) DiversificationNonce() []byte {
 	if h.version < protocol.VersionNumber(33) {
 		return nil
@@ -317,6 +314,16 @@ func (h *CryptoSetup) DiversificationNonce() []byte {
 		return nil
 	}
 	return h.diversificationNonce
+}
+
+// LockForSealing should be called before Seal(). It is needed so that diversification nonces can be obtained before packets are sealed, and the AEADs are not changed in the meantime.
+func (h *CryptoSetup) LockForSealing() {
+	h.mutex.RLock()
+}
+
+// UnlockForSealing should be called after Seal() is complete, see LockForSealing().
+func (h *CryptoSetup) UnlockForSealing() {
+	h.mutex.RUnlock()
 }
 
 func (h *CryptoSetup) verifyOrCreateSTK(token []byte) ([]byte, error) {
