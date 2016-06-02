@@ -92,7 +92,7 @@ func (h *CryptoSetup) HandleCryptoStream() error {
 		}
 		chloData := cachingReader.Get()
 
-		utils.Infof("Got CHLO:\n%s", printHandshakeMessage(cryptoData))
+		utils.Debugf("Got CHLO:\n%s", printHandshakeMessage(cryptoData))
 
 		done, err := h.handleMessage(chloData, cryptoData)
 		if err != nil {
