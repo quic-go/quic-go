@@ -68,4 +68,4 @@ const MaxStreamFrameSorterGaps = 50
 const CryptoMaxParams = 128
 
 // CryptoParameterMaxLength is the upper limit for the length of a parameter in a crypto message.
-const CryptoParameterMaxLength = ClientHelloMinimumSize
+const CryptoParameterMaxLength = 2000
