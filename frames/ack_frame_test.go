@@ -61,7 +61,7 @@ var _ = Describe("AckFrame", func() {
 		})
 
 		It("parses a frame containing one NACK range with a 48 bit LargestObserved and missingPacketSequenceNumberDelta", func() {
-			rangeLength := 3
+			var rangeLength uint64 = 3
 			b := bytes.NewReader([]byte{(0x4C | 0x20 | 0x03), 0x08, 0x37, 0x13, 0xAD, 0xFB, 0xCA, 0xDE, 0x72, 0x1, 0x1, 0x0, 0xc0, 0x15, 0x0, 0x0, 0x1, 0xFE, 0xCA, 0xEF, 0xBE, 0xAD, 0xDE, byte(rangeLength)})
 			frame, err := ParseAckFrame(b, 32)
 			Expect(err).ToNot(HaveOccurred())
