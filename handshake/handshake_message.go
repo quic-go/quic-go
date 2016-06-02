@@ -36,10 +36,10 @@ func ParseHandshakeMessage(r utils.ReadStream) (Tag, map[Tag][]byte, error) {
 
 	resultMap := map[Tag][]byte{}
 
-	dataStart := 0
+	var dataStart uint32
 	for indexPos := 0; indexPos < int(nPairs)*8; indexPos += 8 {
 		tag := Tag(binary.LittleEndian.Uint32(index[indexPos : indexPos+4]))
-		dataEnd := int(binary.LittleEndian.Uint32(index[indexPos+4 : indexPos+8]))
+		dataEnd := uint32(binary.LittleEndian.Uint32(index[indexPos+4 : indexPos+8]))
 
 		dataLen := dataEnd - dataStart
 		if dataLen > protocol.CryptoParameterMaxLength {
