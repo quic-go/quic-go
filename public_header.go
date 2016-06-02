@@ -175,6 +175,7 @@ func (h *publicHeader) GetLength() (protocol.ByteCount, error) {
 	if !h.TruncateConnectionID {
 		length += 8 // 8 bytes for the connection ID
 	}
+	length += protocol.ByteCount(len(h.DiversificationNonce))
 	length += protocol.ByteCount(h.PacketNumberLen)
 	return length, nil
 }

@@ -228,6 +228,16 @@ var _ = Describe("Public Header", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(length).To(Equal(protocol.ByteCount(1 + 8 + 2))) // 1 byte public flag, 8 byte connectionID, and packet number
 			})
+
+			It("works with diversification nonce", func() {
+				hdr := publicHeader{
+					DiversificationNonce: []byte("foo"),
+					PacketNumberLen:      protocol.PacketNumberLen1,
+				}
+				length, err := hdr.GetLength()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(length).To(Equal(protocol.ByteCount(1 + 8 + 3 + 1)))
+			})
 		})
 
 		Context("packet number length", func() {
