@@ -36,6 +36,10 @@ var _ = Describe("Integration tests", func() {
 		io.WriteString(w, "Hello, World!\n")
 	})
 
+	http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(w, r.Body)
+	})
+
 	BeforeSuite(func() {
 		clientPath = fmt.Sprintf(
 			"%s/src/github.com/lucas-clemente/quic-clients/client-%s-debug",
@@ -74,6 +78,21 @@ var _ = Describe("Integration tests", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Eventually(session).Should(Exit(0))
 				Expect(session.Out).To(Say("Response:\nheaders: HTTP/1.1 200\nstatus: 200\n\nbody: Hello, World!\n"))
+			})
+
+			It("posts and reads a body", func() {
+				command := exec.Command(
+					clientPath,
+					"--quic-version="+strconv.Itoa(int(version)),
+					"--host="+host,
+					"--port="+port,
+					"--body=foo",
+					"https://quic.clemente.io/echo",
+				)
+				session, err := Start(command, GinkgoWriter, GinkgoWriter)
+				Expect(err).NotTo(HaveOccurred())
+				Eventually(session).Should(Exit(0))
+				Expect(session.Out).To(Say("Response:\nheaders: HTTP/1.1 200\nstatus: 200\n\nbody: foo\n"))
 			})
 		})
 	}
