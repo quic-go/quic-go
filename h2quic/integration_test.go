@@ -121,7 +121,7 @@ var _ = Describe("Integration tests", func() {
 				)
 				session, err := Start(command, nil, GinkgoWriter)
 				Expect(err).NotTo(HaveOccurred())
-				Eventually(session).Should(Exit(0))
+				Eventually(session, 2).Should(Exit(0))
 				Expect(bytes.Contains(session.Out.Contents(), data)).To(BeTrue())
 			})
 
@@ -141,7 +141,7 @@ var _ = Describe("Integration tests", func() {
 						)
 						session, err := Start(command, nil, GinkgoWriter)
 						Expect(err).NotTo(HaveOccurred())
-						Eventually(session).Should(Exit(0))
+						Eventually(session, 3).Should(Exit(0))
 						Expect(bytes.Contains(session.Out.Contents(), data)).To(BeTrue())
 					}()
 				}
