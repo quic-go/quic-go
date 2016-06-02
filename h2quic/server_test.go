@@ -2,7 +2,9 @@ package h2quic
 
 import (
 	"net/http"
+	"os"
 	"sync"
+	"time"
 
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
@@ -27,6 +29,9 @@ func (s *mockSession) GetOrOpenStream(id protocol.StreamID) (utils.Stream, error
 func (s *mockSession) Close(error) error { s.closed = true; return nil }
 
 var _ = Describe("H2 server", func() {
+	const port = "4826"
+	const addr = "127.0.0.1:" + port
+
 	var (
 		s          *Server
 		session    *mockSession
@@ -200,5 +205,99 @@ var _ = Describe("H2 server", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(hdr).To(Equal(expected))
 		})
+	})
+
+	It("should error when ListenAndServe is called with s.Server nil", func() {
+		err := (&Server{}).ListenAndServe()
+		Expect(err).To(MatchError("use of h2quic.Server without http.Server"))
+	})
+
+	It("should nop-Close() when s.server is nil", func() {
+		err := (&Server{}).Close()
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	Context("ListenAndServe", func() {
+		BeforeEach(func() {
+			s.Server.Addr = addr
+		})
+
+		AfterEach(func() {
+			time.Sleep(10 * time.Millisecond)
+			err := s.Close()
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("works", func(done Done) {
+			go func() {
+				defer GinkgoRecover()
+				err := s.ListenAndServe()
+				Expect(err).NotTo(HaveOccurred())
+				close(done)
+			}()
+			time.Sleep(10 * time.Millisecond)
+			err := s.Close()
+			Expect(err).NotTo(HaveOccurred())
+		}, 0.5)
+
+		It("may only be called once", func(done Done) {
+			go func() {
+				defer GinkgoRecover()
+				err := s.ListenAndServe()
+				Expect(err).NotTo(HaveOccurred())
+				close(done)
+			}()
+			time.Sleep(10 * time.Millisecond)
+			err := s.ListenAndServe()
+			Expect(err).To(MatchError("ListenAndServe may only be called once"))
+			err = s.Close()
+			Expect(err).NotTo(HaveOccurred())
+		}, 0.5)
+	})
+
+	Context("ListenAndServeTLS", func() {
+		path := os.Getenv("GOPATH")
+		path += "/src/github.com/lucas-clemente/quic-go/example/"
+
+		BeforeEach(func() {
+			s.Server.Addr = addr
+		})
+
+		AfterEach(func() {
+			time.Sleep(10 * time.Millisecond)
+			err := s.Close()
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("works", func(done Done) {
+			go func() {
+				defer GinkgoRecover()
+				err := s.ListenAndServeTLS(path+"fullchain.pem", path+"privkey.pem")
+				Expect(err).NotTo(HaveOccurred())
+				close(done)
+			}()
+			time.Sleep(10 * time.Millisecond)
+			err := s.Close()
+			Expect(err).NotTo(HaveOccurred())
+		}, 0.5)
+
+		It("may only be called once", func(done Done) {
+			go func() {
+				defer GinkgoRecover()
+				err := s.ListenAndServeTLS(path+"fullchain.pem", path+"privkey.pem")
+				Expect(err).NotTo(HaveOccurred())
+				close(done)
+			}()
+			time.Sleep(10 * time.Millisecond)
+			err := s.ListenAndServeTLS(path+"fullchain.pem", path+"privkey.pem")
+			Expect(err).To(MatchError("ListenAndServe may only be called once"))
+			err = s.Close()
+			Expect(err).NotTo(HaveOccurred())
+		}, 0.5)
+	})
+
+	It("closes gracefully", func() {
+		err := s.CloseGracefully(0)
+		Expect(err).NotTo(HaveOccurred())
 	})
 })

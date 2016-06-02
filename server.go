@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/lucas-clemente/quic-go/crypto"
@@ -79,6 +80,9 @@ func (s *Server) ListenAndServe() error {
 		data := make([]byte, protocol.MaxPacketSize)
 		n, remoteAddr, err := conn.ReadFromUDP(data)
 		if err != nil {
+			if strings.HasSuffix(err.Error(), "use of closed network connection") {
+				return nil
+			}
 			return err
 		}
 		data = data[:n]
@@ -102,6 +106,9 @@ func (s *Server) Close() error {
 	if s.conn == nil {
 		return nil
 	}
+	defer func() {
+		s.conn = nil
+	}()
 	return s.conn.Close()
 }
 

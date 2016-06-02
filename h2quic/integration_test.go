@@ -25,13 +25,13 @@ import (
 	. "github.com/onsi/gomega/gexec"
 )
 
-const port = "6729"
-const host = "127.0.0.1"
-const addr = host + ":" + port
-
-const dataLen = 50 * 1024
-
 var _ = Describe("Integration tests", func() {
+	const port = "6729"
+	const host = "127.0.0.1"
+	const addr = host + ":" + port
+
+	const dataLen = 50 * 1024
+
 	var (
 		server     *h2quic.Server
 		clientPath string
