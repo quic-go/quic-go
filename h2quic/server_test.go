@@ -1,9 +1,11 @@
 package h2quic
 
 import (
+	"net"
 	"net/http"
 	"os"
 	"sync"
+	"syscall"
 	"time"
 
 	"golang.org/x/net/http2"
@@ -31,6 +33,9 @@ func (s *mockSession) Close(error) error { s.closed = true; return nil }
 var _ = Describe("H2 server", func() {
 	const port = "4826"
 	const addr = "127.0.0.1:" + port
+
+	certPath := os.Getenv("GOPATH")
+	certPath += "/src/github.com/lucas-clemente/quic-go/example/"
 
 	var (
 		s          *Server
@@ -260,9 +265,6 @@ var _ = Describe("H2 server", func() {
 	})
 
 	Context("ListenAndServeTLS", func() {
-		path := os.Getenv("GOPATH")
-		path += "/src/github.com/lucas-clemente/quic-go/example/"
-
 		BeforeEach(func() {
 			s.Server.Addr = addr
 		})
@@ -275,7 +277,7 @@ var _ = Describe("H2 server", func() {
 		It("works", func(done Done) {
 			go func() {
 				defer GinkgoRecover()
-				err := s.ListenAndServeTLS(path+"fullchain.pem", path+"privkey.pem")
+				err := s.ListenAndServeTLS(certPath+"fullchain.pem", certPath+"privkey.pem")
 				Expect(err).NotTo(HaveOccurred())
 				close(done)
 			}()
@@ -287,12 +289,12 @@ var _ = Describe("H2 server", func() {
 		It("may only be called once", func(done Done) {
 			go func() {
 				defer GinkgoRecover()
-				err := s.ListenAndServeTLS(path+"fullchain.pem", path+"privkey.pem")
+				err := s.ListenAndServeTLS(certPath+"fullchain.pem", certPath+"privkey.pem")
 				Expect(err).NotTo(HaveOccurred())
 				close(done)
 			}()
 			time.Sleep(10 * time.Millisecond)
-			err := s.ListenAndServeTLS(path+"fullchain.pem", path+"privkey.pem")
+			err := s.ListenAndServeTLS(certPath+"fullchain.pem", certPath+"privkey.pem")
 			Expect(err).To(MatchError("ListenAndServe may only be called once"))
 			err = s.Close()
 			Expect(err).NotTo(HaveOccurred())
@@ -302,5 +304,25 @@ var _ = Describe("H2 server", func() {
 	It("closes gracefully", func() {
 		err := s.CloseGracefully(0)
 		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("at least errors in global ListenAndServeQUIC", func() {
+		// It's quite hard to test this, since we cannot properly shutdown the server
+		// once it's started. So, we open a socket on the same port before the test,
+		// so that ListenAndServeQUIC definitely fails. This way we know it at least
+		// created a socket on the proper address :)
+		udpAddr, err := net.ResolveUDPAddr("udp", addr)
+		Expect(err).NotTo(HaveOccurred())
+		c, err := net.ListenUDP("udp", udpAddr)
+		Expect(err).NotTo(HaveOccurred())
+		defer c.Close()
+		err = ListenAndServeQUIC(addr, certPath+"fullchain.pem", certPath+"privkey.pem", nil)
+		// Check that it's an EADDRINUSE
+		Expect(err).ToNot(BeNil())
+		opErr, ok := err.(*net.OpError)
+		Expect(ok).To(BeTrue())
+		syscallErr, ok := opErr.Err.(*os.SyscallError)
+		Expect(ok).To(BeTrue())
+		Expect(syscallErr.Err).To(MatchError(syscall.EADDRINUSE))
 	})
 })
