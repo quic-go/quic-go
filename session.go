@@ -287,23 +287,26 @@ func (s *Session) handlePacket(remoteAddr interface{}, hdr *publicHeader, data [
 }
 
 func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
-	s.streamsMutex.RLock()
+	s.streamsMutex.Lock()
+	defer s.streamsMutex.Unlock()
 	str, streamExists := s.streams[frame.StreamID]
-	s.streamsMutex.RUnlock()
 
+	var err error
 	if !streamExists {
 		if !s.isValidStreamID(frame.StreamID) {
 			return qerr.InvalidStreamID
 		}
 
-		ss, _ := s.OpenStream(frame.StreamID)
-		str = ss.(*stream)
+		str, err = s.newStreamImpl(frame.StreamID)
+		if err != nil {
+			return err
+		}
 	}
 	if str == nil {
 		// Stream is closed, ignore
 		return nil
 	}
-	err := str.AddStreamFrame(frame)
+	err = str.AddStreamFrame(frame)
 	if err != nil {
 		return err
 	}
