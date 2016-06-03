@@ -43,9 +43,6 @@ func NewFlowController(streamID protocol.StreamID, connectionParametersManager *
 }
 
 func (c *flowController) getSendFlowControlWindow() protocol.ByteCount {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-
 	if c.sendFlowControlWindow == 0 {
 		if c.streamID == 0 {
 			return c.connectionParametersManager.GetSendConnectionFlowControlWindow()
@@ -124,7 +121,9 @@ func (c *flowController) MaybeTriggerBlocked() bool {
 		return false
 	}
 
+	c.mutex.RLock()
 	sendFlowControlWindow := c.getSendFlowControlWindow()
+	c.mutex.RUnlock()
 
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
