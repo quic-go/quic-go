@@ -37,15 +37,18 @@ var _ = Describe("Integration tests", func() {
 	)
 
 	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, "Hello, World!\n")
+		_, err := io.WriteString(w, "Hello, World!\n")
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	http.HandleFunc("/data", func(w http.ResponseWriter, r *http.Request) {
-		w.Write(data)
+		_, err := w.Write(data)
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
-		io.Copy(w, r.Body)
+		_, err := io.Copy(w, r.Body)
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	BeforeSuite(func() {
