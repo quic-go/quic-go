@@ -60,7 +60,7 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	return s.serveImpl(config, nil)
 }
 
-// Serve an existing udp conn
+// Serve an existing UDP connection.
 func (s *Server) Serve(conn *net.UDPConn) error {
 	return s.serveImpl(s.TLSConfig, conn)
 }

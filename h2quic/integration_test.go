@@ -5,13 +5,13 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/lucas-clemente/quic-go/h2quic"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -26,16 +26,14 @@ import (
 )
 
 var _ = Describe("Integration tests", func() {
-	const port = "6729"
-	const host = "127.0.0.1"
-	const addr = host + ":" + port
-
 	const dataLen = 50 * 1024
+	const host = "127.0.0.1"
 
 	var (
 		server     *h2quic.Server
 		clientPath string
 		data       []byte
+		port       string
 	)
 
 	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
@@ -60,17 +58,23 @@ var _ = Describe("Integration tests", func() {
 			os.Getenv("GOPATH"),
 			runtime.GOOS,
 		)
+
 		server = &h2quic.Server{
 			Server: &http.Server{
-				Addr:      addr,
 				TLSConfig: testdata.GetTLSConfig(),
 			},
 		}
+
+		addr, err := net.ResolveUDPAddr("udp", host+":0")
+		Expect(err).NotTo(HaveOccurred())
+		conn, err := net.ListenUDP("udp", addr)
+		Expect(err).NotTo(HaveOccurred())
+		port = strconv.Itoa(conn.LocalAddr().(*net.UDPAddr).Port)
+
 		go func() {
 			defer GinkgoRecover()
-			server.ListenAndServe()
+			server.Serve(conn)
 		}()
-		time.Sleep(10 * time.Millisecond)
 	})
 
 	AfterSuite(func() {
