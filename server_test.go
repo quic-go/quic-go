@@ -2,7 +2,6 @@ package quic
 
 import (
 	"net"
-	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -92,76 +91,75 @@ var _ = Describe("Server", func() {
 	})
 
 	It("setups and responds with version negotiation", func(done Done) {
-		server, err := NewServer("127.0.0.1:13370", testdata.GetTLSConfig(), nil)
+		addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
 		Expect(err).ToNot(HaveOccurred())
+
+		server, err := NewServer("", testdata.GetTLSConfig(), nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		serverConn, err := net.ListenUDP("udp", addr)
+		Expect(err).NotTo(HaveOccurred())
+
+		addr = serverConn.LocalAddr().(*net.UDPAddr)
+
 		go func() {
 			defer GinkgoRecover()
-			err := server.ListenAndServe()
+			err := server.Serve(serverConn)
 			Expect(err).ToNot(HaveOccurred())
 			close(done)
 		}()
 
-		addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:13370")
-		Expect(err).ToNot(HaveOccurred())
-		conn, err := net.DialUDP("udp", nil, addr)
+		clientConn, err := net.DialUDP("udp", nil, addr)
 		Expect(err).ToNot(HaveOccurred())
 
-		Eventually(func() error {
-			_, err = conn.Write([]byte{0x09, 0x01, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x01, 'Q', '0', '0', '0', 0x01})
-			if err != nil {
-				return err
-			}
-			data := make([]byte, 1000)
-			var n int
-			n, _, err = conn.ReadFromUDP(data)
-			if err != nil {
-				return err
-			}
-			data = data[:n]
-			expected := append(
-				[]byte{0xd, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
-				protocol.SupportedVersionsAsTags...,
-			)
-			Expect(data).To(Equal(expected))
-			return nil
-		}).ShouldNot(HaveOccurred())
+		_, err = clientConn.Write([]byte{0x09, 0x01, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x01, 'Q', '0', '0', '0', 0x01})
+		Expect(err).NotTo(HaveOccurred())
+		data := make([]byte, 1000)
+		var n int
+		n, _, err = clientConn.ReadFromUDP(data)
+		Expect(err).NotTo(HaveOccurred())
+		data = data[:n]
+		expected := append(
+			[]byte{0xd, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
+			protocol.SupportedVersionsAsTags...,
+		)
+		Expect(data).To(Equal(expected))
 
 		err = server.Close()
 		Expect(err).ToNot(HaveOccurred())
-	}, 1)
+	})
 
 	It("setups and responds with error on invalid frame", func(done Done) {
-		server, err := NewServer("127.0.0.1:13370", testdata.GetTLSConfig(), nil)
+		addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
 		Expect(err).ToNot(HaveOccurred())
+
+		server, err := NewServer("", testdata.GetTLSConfig(), nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		serverConn, err := net.ListenUDP("udp", addr)
+		Expect(err).NotTo(HaveOccurred())
+
+		addr = serverConn.LocalAddr().(*net.UDPAddr)
+
 		go func() {
 			defer GinkgoRecover()
-			err := server.ListenAndServe()
-			Expect(err).NotTo(HaveOccurred())
+			err := server.Serve(serverConn)
+			Expect(err).ToNot(HaveOccurred())
 			close(done)
 		}()
 
-		addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:13370")
-		Expect(err).ToNot(HaveOccurred())
-		conn, err := net.DialUDP("udp", nil, addr)
+		clientConn, err := net.DialUDP("udp", nil, addr)
 		Expect(err).ToNot(HaveOccurred())
 
-		Eventually(func() error {
-			_, err = conn.Write([]byte{0x09, 0x01, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x01, 'Q', '0', '0', '0', 0x01, 0x00})
-			if err != nil {
-				return err
-			}
-			data := make([]byte, 1000)
-			var n int
-			n, _, err = conn.ReadFromUDP(data)
-			if err != nil {
-				return err
-			}
-			Expect(n).ToNot(BeZero())
-			return nil
-		}).ShouldNot(HaveOccurred())
+		_, err = clientConn.Write([]byte{0x09, 0x01, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x01, 'Q', '0', '0', '0', 0x01, 0x00})
+		Expect(err).NotTo(HaveOccurred())
+		data := make([]byte, 1000)
+		var n int
+		n, _, err = clientConn.ReadFromUDP(data)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(n).ToNot(BeZero())
 
-		time.Sleep(20 * time.Millisecond)
 		err = server.Close()
 		Expect(err).ToNot(HaveOccurred())
-	}, 1)
+	})
 })
