@@ -79,6 +79,7 @@ func (s *Server) ListenAndServe() error {
 	return s.Serve(conn)
 }
 
+// Serve on an existing UDP connection.
 func (s *Server) Serve(conn *net.UDPConn) error {
 	s.connMutex.Lock()
 	s.conn = conn
