@@ -31,9 +31,6 @@ func (s *mockSession) GetOrOpenStream(id protocol.StreamID) (utils.Stream, error
 func (s *mockSession) Close(error) error { s.closed = true; return nil }
 
 var _ = Describe("H2 server", func() {
-	const port = "4826"
-	const addr = "127.0.0.1:" + port
-
 	certPath := os.Getenv("GOPATH")
 	certPath += "/src/github.com/lucas-clemente/quic-go/example/"
 
@@ -163,12 +160,6 @@ var _ = Describe("H2 server", func() {
 		Eventually(func() bool { return handlerCalled }).Should(BeTrue())
 	})
 
-	It("should panic when Serve() is called", func() {
-		Expect(func() {
-			Server{}.Serve(nil)
-		}).To(Panic())
-	})
-
 	Context("setting http headers", func() {
 		expected := http.Header{
 			"Alt-Svc":            {`quic=":443"; ma=2592000; v="33,32,31,30"`},
@@ -218,7 +209,7 @@ var _ = Describe("H2 server", func() {
 	})
 
 	It("should error when ListenAndServeTLS is called with s.Server nil", func() {
-		err := (&Server{}).ListenAndServeTLS("", "")
+		err := (&Server{}).ListenAndServeTLS(certPath+"fullchain.pem", certPath+"privkey.pem")
 		Expect(err).To(MatchError("use of h2quic.Server without http.Server"))
 	})
 
@@ -229,7 +220,7 @@ var _ = Describe("H2 server", func() {
 
 	Context("ListenAndServe", func() {
 		BeforeEach(func() {
-			s.Server.Addr = addr
+			s.Server.Addr = "localhost:0"
 		})
 
 		AfterEach(func() {
@@ -266,7 +257,7 @@ var _ = Describe("H2 server", func() {
 
 	Context("ListenAndServeTLS", func() {
 		BeforeEach(func() {
-			s.Server.Addr = addr
+			s.Server.Addr = "localhost:0"
 		})
 
 		AfterEach(func() {
@@ -311,6 +302,7 @@ var _ = Describe("H2 server", func() {
 		// once it's started. So, we open a socket on the same port before the test,
 		// so that ListenAndServeQUIC definitely fails. This way we know it at least
 		// created a socket on the proper address :)
+		const addr = "127.0.0.1:4826"
 		udpAddr, err := net.ResolveUDPAddr("udp", addr)
 		Expect(err).NotTo(HaveOccurred())
 		c, err := net.ListenUDP("udp", udpAddr)

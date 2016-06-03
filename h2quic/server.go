@@ -41,6 +41,34 @@ func (s *Server) ListenAndServe() error {
 	if s.Server == nil {
 		return errors.New("use of h2quic.Server without http.Server")
 	}
+	return s.serveImpl(s.TLSConfig, nil)
+}
+
+// ListenAndServeTLS listens on the UDP address s.Addr and calls s.Handler to handle HTTP/2 requests on incoming connections.
+func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
+	var err error
+	certs := make([]tls.Certificate, 1)
+	certs[0], err = tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return err
+	}
+	// We currently only use the cert-related stuff from tls.Config,
+	// so we don't need to make a full copy.
+	config := &tls.Config{
+		Certificates: certs,
+	}
+	return s.serveImpl(config, nil)
+}
+
+// Serve an existing udp conn
+func (s *Server) Serve(conn *net.UDPConn) error {
+	return s.serveImpl(s.TLSConfig, conn)
+}
+
+func (s *Server) serveImpl(tlsConfig *tls.Config, conn *net.UDPConn) error {
+	if s.Server == nil {
+		return errors.New("use of h2quic.Server without http.Server")
+	}
 	s.serverMutex.Lock()
 	if s.server != nil {
 		s.serverMutex.Unlock()
@@ -54,43 +82,10 @@ func (s *Server) ListenAndServe() error {
 	}
 	s.server = server
 	s.serverMutex.Unlock()
-	return server.ListenAndServe()
-}
-
-// ListenAndServeTLS listens on the UDP address s.Addr and calls s.Handler to handle HTTP/2 requests on incoming connections.
-func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
-	if s.Server == nil {
-		return errors.New("use of h2quic.Server without http.Server")
+	if conn == nil {
+		return server.ListenAndServe()
 	}
-	var err error
-	certs := make([]tls.Certificate, 1)
-	certs[0], err = tls.LoadX509KeyPair(certFile, keyFile)
-	if err != nil {
-		return err
-	}
-	// We currently only use the cert-related stuff from tls.Config,
-	// so we don't need to make a full copy.
-	config := &tls.Config{
-		Certificates: certs,
-	}
-	s.serverMutex.Lock()
-	if s.server != nil {
-		s.serverMutex.Unlock()
-		return errors.New("ListenAndServe may only be called once")
-	}
-	server, err := quic.NewServer(s.Addr, config, s.handleStreamCb)
-	if err != nil {
-		s.serverMutex.Unlock()
-		return err
-	}
-	s.server = server
-	s.serverMutex.Unlock()
-	return server.ListenAndServe()
-}
-
-// Serve should not be called, since it only works properly for TCP listeners.
-func (Server) Serve(net.Listener) error {
-	panic("h2quic.Server.Serve should not be called, see https://godoc.org/github.com/lucas-clemente/quic-go/h2quic")
+	return server.Serve(conn)
 }
 
 func (s *Server) handleStreamCb(session *quic.Session, stream utils.Stream) {
