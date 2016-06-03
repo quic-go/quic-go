@@ -198,7 +198,7 @@ func (h *CryptoSetup) handleInchoateCHLO(sni string, data []byte, cryptoData map
 	}
 
 	var chloOrNil []byte
-	if h.version > protocol.VersionNumber(30) {
+	if h.version > protocol.Version30 {
 		chloOrNil = data
 	}
 
@@ -307,7 +307,7 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 
 // DiversificationNonce returns a diversification nonce if required in the next packet to be Seal'ed. See LockForSealing()!
 func (h *CryptoSetup) DiversificationNonce() []byte {
-	if h.version < protocol.VersionNumber(33) {
+	if h.version < protocol.Version33 {
 		return nil
 	}
 	if h.receivedForwardSecurePacket || h.secureAEAD == nil {

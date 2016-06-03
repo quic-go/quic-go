@@ -10,7 +10,7 @@ import (
 var _ = Describe("KeyDerivation", func() {
 	It("derives non-fs keys", func() {
 		aead, err := DeriveKeysChacha20(
-			32,
+			protocol.Version32,
 			false,
 			[]byte("0123456789012345678901"),
 			[]byte("nonce"),
@@ -29,7 +29,7 @@ var _ = Describe("KeyDerivation", func() {
 
 	It("derives fs keys", func() {
 		aead, err := DeriveKeysChacha20(
-			32,
+			protocol.Version32,
 			true,
 			[]byte("0123456789012345678901"),
 			[]byte("nonce"),
@@ -48,7 +48,7 @@ var _ = Describe("KeyDerivation", func() {
 
 	It("does not use diversification nonces in FS key derivation", func() {
 		aead, err := DeriveKeysChacha20(
-			33,
+			protocol.Version33,
 			true,
 			[]byte("0123456789012345678901"),
 			[]byte("nonce"),
@@ -67,7 +67,7 @@ var _ = Describe("KeyDerivation", func() {
 
 	It("uses diversification nonces in initial key derivation", func() {
 		aead, err := DeriveKeysChacha20(
-			33,
+			protocol.Version33,
 			false,
 			[]byte("0123456789012345678901"),
 			[]byte("nonce"),

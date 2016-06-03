@@ -9,9 +9,17 @@ import (
 // VersionNumber is a version number as int
 type VersionNumber int
 
+// The version numbers, making grepping easier
+const (
+	Version30 VersionNumber = 30 + iota
+	Version31
+	Version32
+	Version33
+)
+
 // SupportedVersions lists the versions that the server supports
 var SupportedVersions = []VersionNumber{
-	30, 31, 32, 33,
+	Version30, Version31, Version32, Version33,
 }
 
 // SupportedVersionsAsTags is needed for the SHLO crypto message

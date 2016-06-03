@@ -171,7 +171,7 @@ var _ = Describe("Crypto setup", func() {
 
 	Context("diversification nonce", func() {
 		BeforeEach(func() {
-			cs.version = 33
+			cs.version = protocol.Version33
 			cs.secureAEAD = &mockAEAD{}
 			cs.receivedForwardSecurePacket = false
 		})
@@ -181,7 +181,7 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		It("does not return nonce for version < 33", func() {
-			cs.version = 32
+			cs.version = protocol.Version32
 			Expect(cs.DiversificationNonce()).To(BeEmpty())
 		})
 
@@ -207,7 +207,7 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		It("generates REJ messages for version 30", func() {
-			cs.version = protocol.VersionNumber(30)
+			cs.version = protocol.Version30
 			_, err := cs.handleInchoateCHLO("", sampleCHLO, nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(signer.gotCHLO).To(BeFalse())

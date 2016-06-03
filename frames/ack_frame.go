@@ -106,7 +106,7 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 		}
 
 		// TODO: Remove once we drop support for <32
-		if version < protocol.VersionNumber(32) {
+		if version < protocol.Version32 {
 			b.WriteByte(0)
 		}
 	}
@@ -265,7 +265,7 @@ func ParseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 			}
 
 			// TODO: Remove once we drop support for versions <32
-			if version < protocol.VersionNumber(32) {
+			if version < protocol.Version32 {
 				_, err = r.ReadByte()
 				if err != nil {
 					return nil, err

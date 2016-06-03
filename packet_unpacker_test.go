@@ -63,7 +63,7 @@ var _ = Describe("Packet unpacker", func() {
 			LargestObserved: 0x13,
 			Entropy:         0x37,
 		}
-		err := f.Write(buf, 32)
+		err := f.Write(buf, protocol.Version32)
 		Expect(err).ToNot(HaveOccurred())
 		setReader(buf.Bytes())
 		packet, err := unpacker.Unpack(hdrBin, hdr, r)

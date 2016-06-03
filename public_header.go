@@ -45,7 +45,7 @@ func (h *publicHeader) WritePublicHeader(b *bytes.Buffer, version protocol.Versi
 		publicFlagByte |= 0x02
 	}
 	if !h.TruncateConnectionID {
-		if version < protocol.VersionNumber(33) {
+		if version < protocol.Version33 {
 			publicFlagByte |= 0x0c
 		} else {
 			publicFlagByte |= 0x08

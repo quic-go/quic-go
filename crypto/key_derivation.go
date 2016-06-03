@@ -44,7 +44,7 @@ func DeriveKeysChacha20(version protocol.VersionNumber, forwardSecure bool, shar
 		return nil, err
 	}
 
-	if !forwardSecure && version >= protocol.VersionNumber(33) {
+	if !forwardSecure && version >= protocol.Version33 {
 		if err := diversify(myKey, myIV, divNonce); err != nil {
 			return nil, err
 		}
