@@ -27,6 +27,11 @@ var logLevel = LogLevelNothing
 
 var mutex sync.Mutex
 
+// SetLogWriter sets the log writer.
+func SetLogWriter(w io.Writer) {
+	out = w
+}
+
 // SetLogLevel sets the log level
 func SetLogLevel(level LogLevel) {
 	logLevel = level

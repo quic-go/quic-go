@@ -226,7 +226,9 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *publicHeader, da
 		hdr.PacketNumber,
 	)
 	s.lastRcvdPacketNumber = hdr.PacketNumber
-	utils.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x", hdr.PacketNumber, r.Size(), hdr.ConnectionID)
+	if utils.Debug() {
+		utils.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x", hdr.PacketNumber, r.Size(), hdr.ConnectionID)
+	}
 
 	// TODO: Only do this after authenticating
 	s.conn.setCurrentRemoteAddr(remoteAddr)
@@ -240,32 +242,25 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *publicHeader, da
 
 	for _, ff := range packet.frames {
 		var err error
+		frames.LogFrame(ff, false)
 		switch frame := ff.(type) {
 		case *frames.StreamFrame:
-			utils.Debugf("\t<- &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: 0x%x, Data length: 0x%x, Offset + Data length: 0x%x}", frame.StreamID, frame.FinBit, frame.Offset, frame.DataLen(), frame.Offset+frame.DataLen())
 			err = s.handleStreamFrame(frame)
 			// TODO: send RstStreamFrame
 		case *frames.AckFrame:
 			err = s.handleAckFrame(frame)
 		case *frames.ConnectionCloseFrame:
-			utils.Debugf("\t<- %#v", frame)
 			s.closeImpl(qerr.Error(frame.ErrorCode, frame.ReasonPhrase), true)
 		case *frames.GoawayFrame:
-			utils.Debugf("\t<- %#v", frame)
 			err = errors.New("unimplemented: handling GOAWAY frames")
 		case *frames.StopWaitingFrame:
-			utils.Debugf("\t<- %#v", frame)
 			err = s.receivedPacketHandler.ReceivedStopWaiting(frame)
 		case *frames.RstStreamFrame:
 			err = s.handleRstStreamFrame(frame)
-			utils.Debugf("\t<- %#v", frame)
 		case *frames.WindowUpdateFrame:
-			utils.Debugf("\t<- %#v", frame)
 			err = s.handleWindowUpdateFrame(frame)
 		case *frames.BlockedFrame:
-			utils.Infof("BLOCKED frame received for connection %x stream %d", s.connectionID, frame.StreamID)
 		case *frames.PingFrame:
-			utils.Debugf("\t<- %#v", frame)
 		default:
 			return errors.New("Session BUG: unexpected frame type")
 		}
@@ -370,7 +365,6 @@ func (s *Session) handleAckFrame(frame *frames.AckFrame) error {
 	if err := s.sentPacketHandler.ReceivedAck(frame); err != nil {
 		return err
 	}
-	utils.Debugf("\t<- %#v", frame)
 	return nil
 }
 
@@ -563,12 +557,10 @@ func (s *Session) logPacket(packet *packedPacket) {
 		// We don't need to allocate the slices for calling the format functions
 		return
 	}
-	utils.Debugf("-> Sending packet 0x%x (%d bytes)", packet.number, len(packet.raw))
-	for _, frame := range packet.frames {
-		if streamFrame, isStreamFrame := frame.(*frames.StreamFrame); isStreamFrame {
-			utils.Debugf("\t-> &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: 0x%x, Data length: 0x%x, Offset + Data length: 0x%x}", streamFrame.StreamID, streamFrame.FinBit, streamFrame.Offset, streamFrame.DataLen(), streamFrame.Offset+streamFrame.DataLen())
-		} else {
-			utils.Debugf("\t-> %#v", frame)
+	if utils.Debug() {
+		utils.Debugf("-> Sending packet 0x%x (%d bytes)", packet.number, len(packet.raw))
+		for _, frame := range packet.frames {
+			frames.LogFrame(frame, true)
 		}
 	}
 }

@@ -198,7 +198,9 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) error {
 	timeDelta := time.Now().Sub(h.packetHistory[h.LargestObserved].sendTime)
 	// TODO: Don't always update RTT
 	h.rttStats.UpdateRTT(timeDelta, ackFrame.DelayTime, time.Now())
-	utils.Debugf("\tEstimated RTT: %dms", h.rttStats.SmoothedRTT()/time.Millisecond)
+	if utils.Debug() {
+		utils.Debugf("\tEstimated RTT: %dms", h.rttStats.SmoothedRTT()/time.Millisecond)
+	}
 
 	var ackedPackets congestion.PacketVector
 	var lostPackets congestion.PacketVector
