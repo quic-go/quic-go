@@ -2,20 +2,14 @@ package integrationtests
 
 import (
 	"bytes"
-	"crypto/rand"
 	"fmt"
-	"io"
-	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
 	"sync"
 
-	"github.com/lucas-clemente/quic-go/h2quic"
 	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/testdata"
 
 	_ "github.com/lucas-clemente/quic-clients" // download clients
 
@@ -26,64 +20,11 @@ import (
 )
 
 var _ = Describe("Integration tests", func() {
-	const dataLen = 50 * 1024
-	const host = "127.0.0.1"
-
-	var (
-		server     *h2quic.Server
-		clientPath string
-		data       []byte
-		port       string
+	clientPath := fmt.Sprintf(
+		"%s/src/github.com/lucas-clemente/quic-clients/client-%s-debug",
+		os.Getenv("GOPATH"),
+		runtime.GOOS,
 	)
-
-	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
-		_, err := io.WriteString(w, "Hello, World!\n")
-		Expect(err).NotTo(HaveOccurred())
-	})
-
-	http.HandleFunc("/data", func(w http.ResponseWriter, r *http.Request) {
-		_, err := w.Write(data)
-		Expect(err).NotTo(HaveOccurred())
-	})
-
-	http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
-		_, err := io.Copy(w, r.Body)
-		Expect(err).NotTo(HaveOccurred())
-	})
-
-	BeforeSuite(func() {
-		data = make([]byte, dataLen)
-		_, err := rand.Read(data)
-		Expect(err).NotTo(HaveOccurred())
-
-		clientPath = fmt.Sprintf(
-			"%s/src/github.com/lucas-clemente/quic-clients/client-%s-debug",
-			os.Getenv("GOPATH"),
-			runtime.GOOS,
-		)
-
-		server = &h2quic.Server{
-			Server: &http.Server{
-				TLSConfig: testdata.GetTLSConfig(),
-			},
-		}
-
-		addr, err := net.ResolveUDPAddr("udp", host+":0")
-		Expect(err).NotTo(HaveOccurred())
-		conn, err := net.ListenUDP("udp", addr)
-		Expect(err).NotTo(HaveOccurred())
-		port = strconv.Itoa(conn.LocalAddr().(*net.UDPAddr).Port)
-
-		go func() {
-			defer GinkgoRecover()
-			server.Serve(conn)
-		}()
-	})
-
-	AfterSuite(func() {
-		err := server.Close()
-		Expect(err).NotTo(HaveOccurred())
-	})
 
 	for i := range protocol.SupportedVersions {
 		version := protocol.SupportedVersions[i]
@@ -93,7 +34,7 @@ var _ = Describe("Integration tests", func() {
 				command := exec.Command(
 					clientPath,
 					"--quic-version="+strconv.Itoa(int(version)),
-					"--host="+host,
+					"--host=127.0.0.1",
 					"--port="+port,
 					"https://quic.clemente.io/hello",
 				)
@@ -108,7 +49,7 @@ var _ = Describe("Integration tests", func() {
 				command := exec.Command(
 					clientPath,
 					"--quic-version="+strconv.Itoa(int(version)),
-					"--host="+host,
+					"--host=127.0.0.1",
 					"--port="+port,
 					"--body=foo",
 					"https://quic.clemente.io/echo",
@@ -124,7 +65,7 @@ var _ = Describe("Integration tests", func() {
 				command := exec.Command(
 					clientPath,
 					"--quic-version="+strconv.Itoa(int(version)),
-					"--host="+host,
+					"--host=127.0.0.1",
 					"--port="+port,
 					"https://quic.clemente.io/data",
 				)
@@ -145,7 +86,7 @@ var _ = Describe("Integration tests", func() {
 						command := exec.Command(
 							clientPath,
 							"--quic-version="+strconv.Itoa(int(version)),
-							"--host="+host,
+							"--host=127.0.0.1",
 							"--port="+port,
 							"https://quic.clemente.io/data",
 						)
