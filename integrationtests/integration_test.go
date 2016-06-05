@@ -1,4 +1,4 @@
-package h2quic_test
+package integrationtests
 
 import (
 	"bytes"
