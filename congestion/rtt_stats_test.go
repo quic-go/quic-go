@@ -1,9 +1,8 @@
-package congestion_test
+package congestion
 
 import (
 	"time"
 
-	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -11,11 +10,11 @@ import (
 
 var _ = Describe("RTT stats", func() {
 	var (
-		rttStats *congestion.RTTStats
+		rttStats *RTTStats
 	)
 
 	BeforeEach(func() {
-		rttStats = congestion.NewRTTStats()
+		rttStats = NewRTTStats()
 	})
 
 	It("DefaultsBeforeUpdate", func() {

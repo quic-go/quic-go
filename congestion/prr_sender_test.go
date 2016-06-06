@@ -1,21 +1,20 @@
-package congestion_test
+package congestion
 
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
 var _ = Describe("PRR sender", func() {
 	var (
-		prr congestion.PrrSender
+		prr PrrSender
 	)
 
 	BeforeEach(func() {
-		prr = congestion.PrrSender{}
+		prr = PrrSender{}
 	})
 
 	It("single loss results in send on every other ack", func() {

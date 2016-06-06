@@ -1,4 +1,4 @@
-package qerr_test
+package qerr
 
 import (
 	"go/ast"
@@ -6,8 +6,6 @@ import (
 	"go/token"
 	"os"
 	"strconv"
-
-	"github.com/lucas-clemente/quic-go/qerr"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -28,8 +26,8 @@ var _ = Describe("error codes", func() {
 			valString := c.(*ast.ValueSpec).Values[0].(*ast.BasicLit).Value
 			val, err := strconv.Atoi(valString)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(qerr.ErrorCode(val).String()).To(Equal(name))
+			Expect(ErrorCode(val).String()).To(Equal(name))
 		}
-		Expect(qerr.ErrorCode(0).String()).To(Equal("ErrorCode(0)"))
+		Expect(ErrorCode(0).String()).To(Equal("ErrorCode(0)"))
 	})
 })

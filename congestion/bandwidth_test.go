@@ -1,15 +1,14 @@
-package congestion_test
+package congestion
 
 import (
 	"time"
 
-	"github.com/lucas-clemente/quic-go/congestion"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Bandwidth", func() {
 	It("converts from time delta", func() {
-		Expect(congestion.BandwidthFromDelta(1, time.Millisecond)).To(Equal(1000 * congestion.BytesPerSecond))
+		Expect(BandwidthFromDelta(1, time.Millisecond)).To(Equal(1000 * BytesPerSecond))
 	})
 })

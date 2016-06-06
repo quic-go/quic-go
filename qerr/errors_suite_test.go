@@ -1,4 +1,4 @@
-package qerr_test
+package qerr
 
 import (
 	"testing"

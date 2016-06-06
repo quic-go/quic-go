@@ -1,9 +1,8 @@
-package congestion_test
+package congestion
 
 import (
 	"time"
 
-	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -11,11 +10,11 @@ import (
 
 var _ = Describe("Hybrid slow start", func() {
 	var (
-		slowStart congestion.HybridSlowStart
+		slowStart HybridSlowStart
 	)
 
 	BeforeEach(func() {
-		slowStart = congestion.HybridSlowStart{}
+		slowStart = HybridSlowStart{}
 	})
 
 	It("works in a simple case", func() {

@@ -1,10 +1,8 @@
-package protocol_test
+package protocol
 
 import (
 	"fmt"
 	"math"
-
-	. "github.com/lucas-clemente/quic-go/protocol"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

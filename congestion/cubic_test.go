@@ -1,9 +1,8 @@
-package congestion_test
+package congestion
 
 import (
 	"time"
 
-	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -17,12 +16,12 @@ const kNConnectionAlpha float32 = 3 * float32(kNumConnections) * float32(kNumCon
 var _ = Describe("Cubic", func() {
 	var (
 		clock mockClock
-		cubic *congestion.Cubic
+		cubic *Cubic
 	)
 
 	BeforeEach(func() {
 		clock = mockClock{}
-		cubic = congestion.NewCubic(&clock)
+		cubic = NewCubic(&clock)
 	})
 
 	It("works above origin", func() {
