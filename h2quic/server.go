@@ -139,6 +139,7 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 
 	if h2headersFrame.StreamEnded() {
 		dataStream.CloseRemote(0)
+		_, _ = dataStream.Read([]byte{0}) // read the eof
 	}
 
 	// stream's Close() closes the write side, not the read side
