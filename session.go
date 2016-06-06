@@ -227,7 +227,7 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *publicHeader, da
 	)
 	s.lastRcvdPacketNumber = hdr.PacketNumber
 	if utils.Debug() {
-		utils.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x", hdr.PacketNumber, r.Size(), hdr.ConnectionID)
+		utils.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x", hdr.PacketNumber, r.Size()+int64(len(hdr.Raw)), hdr.ConnectionID)
 	}
 
 	// TODO: Only do this after authenticating
