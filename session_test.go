@@ -455,6 +455,55 @@ var _ = Describe("Session", func() {
 		})
 	})
 
+	Context("retransmissions", func() {
+		It("sends a StreamFrame from a packet queued for retransmission", func() {
+			f := frames.StreamFrame{
+				StreamID: 0x5,
+				Data:     []byte("foobar1234567"),
+			}
+			p := ackhandler.Packet{
+				PacketNumber: 0x1337,
+				Frames:       []frames.Frame{&f},
+			}
+			sph := newMockSentPacketHandler()
+			sph.(*mockSentPacketHandler).retransmissionQueue = []*ackhandler.Packet{&p}
+			session.sentPacketHandler = sph
+
+			err := session.sendPacket()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(conn.written).To(HaveLen(1))
+			Expect(conn.written[0]).To(ContainSubstring("foobar1234567"))
+		})
+
+		It("sends a StreamFrame from a packet queued for retransmission", func() {
+			f1 := frames.StreamFrame{
+				StreamID: 0x5,
+				Data:     []byte("foobar"),
+			}
+			f2 := frames.StreamFrame{
+				StreamID: 0x7,
+				Data:     []byte("loremipsum"),
+			}
+			p1 := ackhandler.Packet{
+				PacketNumber: 0x1337,
+				Frames:       []frames.Frame{&f1},
+			}
+			p2 := ackhandler.Packet{
+				PacketNumber: 0x1338,
+				Frames:       []frames.Frame{&f2},
+			}
+			sph := newMockSentPacketHandler()
+			sph.(*mockSentPacketHandler).retransmissionQueue = []*ackhandler.Packet{&p1, &p2}
+			session.sentPacketHandler = sph
+
+			err := session.sendPacket()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(conn.written).To(HaveLen(1))
+			Expect(conn.written[0]).To(ContainSubstring("foobar"))
+			Expect(conn.written[0]).To(ContainSubstring("loremipsum"))
+		})
+	})
+
 	Context("scheduling sending", func() {
 		It("sends after queuing a stream frame", func() {
 			Expect(session.sendingScheduled).NotTo(Receive())

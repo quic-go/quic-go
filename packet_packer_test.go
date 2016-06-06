@@ -12,17 +12,30 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type mockSentPacketHandler struct{}
+type mockSentPacketHandler struct {
+	retransmissionQueue []*ackhandler.Packet
+}
 
-func (h *mockSentPacketHandler) SentPacket(packet *ackhandler.Packet) error         { return nil }
-func (h *mockSentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) error        { return nil }
-func (h *mockSentPacketHandler) DequeuePacketForRetransmission() *ackhandler.Packet { return nil }
-func (h *mockSentPacketHandler) ProbablyHasPacketForRetransmission() bool           { return false }
-func (h *mockSentPacketHandler) BytesInFlight() protocol.ByteCount                  { return 0 }
-func (h *mockSentPacketHandler) GetLargestObserved() protocol.PacketNumber          { return 1 }
-func (h *mockSentPacketHandler) CongestionAllowsSending() bool                      { panic("not implemented") }
-func (h *mockSentPacketHandler) CheckForError() error                               { panic("not implemented") }
-func (h *mockSentPacketHandler) TimeOfFirstRTO() time.Time                          { panic("not implemented") }
+func (h *mockSentPacketHandler) SentPacket(packet *ackhandler.Packet) error  { return nil }
+func (h *mockSentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) error { return nil }
+func (h *mockSentPacketHandler) BytesInFlight() protocol.ByteCount           { return 0 }
+func (h *mockSentPacketHandler) GetLargestObserved() protocol.PacketNumber   { return 1 }
+func (h *mockSentPacketHandler) CongestionAllowsSending() bool               { return true }
+func (h *mockSentPacketHandler) CheckForError() error                        { return nil }
+func (h *mockSentPacketHandler) TimeOfFirstRTO() time.Time                   { panic("not implemented") }
+
+func (h *mockSentPacketHandler) ProbablyHasPacketForRetransmission() bool {
+	return len(h.retransmissionQueue) > 0
+}
+
+func (h *mockSentPacketHandler) DequeuePacketForRetransmission() *ackhandler.Packet {
+	if len(h.retransmissionQueue) > 0 {
+		packet := h.retransmissionQueue[0]
+		h.retransmissionQueue = h.retransmissionQueue[1:]
+		return packet
+	}
+	return nil
+}
 
 func newMockSentPacketHandler() ackhandler.SentPacketHandler {
 	return &mockSentPacketHandler{}

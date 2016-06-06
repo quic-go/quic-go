@@ -478,9 +478,11 @@ func (s *Session) sendPacket() error {
 	var controlFrames []frames.Frame
 
 	// check for retransmissions first
-	// TODO: handle multiple packets retransmissions
-	retransmitPacket := s.sentPacketHandler.DequeuePacketForRetransmission()
-	if retransmitPacket != nil {
+	for {
+		retransmitPacket := s.sentPacketHandler.DequeuePacketForRetransmission()
+		if retransmitPacket == nil {
+			break
+		}
 		utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 		s.stopWaitingManager.RegisterPacketForRetransmission(retransmitPacket)
 		// resend the frames that were in the packet
