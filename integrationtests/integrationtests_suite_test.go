@@ -50,7 +50,7 @@ var _ = AfterSuite(func() {
 	err := server.Close()
 	Expect(err).NotTo(HaveOccurred())
 
-	docker.Interrupt().Wait(1)
+	stopSelenium()
 })
 
 func setupHTTPHandlers() {
@@ -107,7 +107,6 @@ func setupSelenium() {
 		"-i",
 		"--rm",
 		"-p=4444:4444",
-		"-p=5900:5900",
 		"selenium/standalone-chrome:latest",
 	)
 	docker, err = gexec.Start(dockerCmd, GinkgoWriter, GinkgoWriter)
@@ -127,6 +126,10 @@ func setupSelenium() {
 	}
 	wd, err = selenium.NewRemote(caps, "http://localhost:4444/wd/hub")
 	Expect(err).NotTo(HaveOccurred())
+}
+
+func stopSelenium() {
+	docker.Interrupt().Wait(1)
 }
 
 func GetLocalIP() string {
