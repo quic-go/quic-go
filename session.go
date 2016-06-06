@@ -336,6 +336,7 @@ func (s *Session) handleWindowUpdateFrame(frame *frames.WindowUpdateFrame) error
 		s.streamsMutex.RUnlock()
 	} else {
 		s.streamsMutex.RLock()
+		defer s.streamsMutex.RUnlock()
 		stream, streamExists := s.streams[frame.StreamID]
 		if !streamExists {
 			return errWindowUpdateOnInvalidStream
@@ -343,7 +344,6 @@ func (s *Session) handleWindowUpdateFrame(frame *frames.WindowUpdateFrame) error
 		if stream == nil {
 			return errWindowUpdateOnClosedStream
 		}
-		s.streamsMutex.RUnlock()
 
 		updated := stream.UpdateSendFlowControlWindow(frame.ByteOffset)
 		if updated {
