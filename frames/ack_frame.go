@@ -263,10 +263,17 @@ func ParseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 				nackRange.LastPacketNumber = protocol.PacketNumber(uint64(nackRange.FirstPacketNumber) + uint64(rangeLength))
 				frame.NackRanges = append(frame.NackRanges, nackRange)
 			}
+		}
 
-			// TODO: Remove once we drop support for versions <32
-			if version < protocol.Version32 {
-				_, err = r.ReadByte()
+		// TODO: Remove once we drop support for versions <32
+		if version < protocol.Version32 {
+			numRevived, err := r.ReadByte()
+			if err != nil {
+				return nil, err
+			}
+
+			for i := uint8(0); i < numRevived; i++ {
+				_, err := utils.ReadUintN(r, largestObservedLen)
 				if err != nil {
 					return nil, err
 				}
