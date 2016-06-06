@@ -311,8 +311,13 @@ func (h *sentPacketHandler) maybeQueuePacketsRTO() {
 	for p := h.highestInOrderAckedPacketNumber + 1; p <= h.lastSentPacketNumber; p++ {
 		packet := h.packetHistory[p]
 		if packet != nil && !packet.Retransmitted {
-			h.queuePacketForRetransmission(packet)
+			packetsLost := congestion.PacketVector{congestion.PacketInfo{
+				Number: packet.PacketNumber,
+				Length: packet.Length,
+			}}
+			h.congestion.OnCongestionEvent(false, h.BytesInFlight(), nil, packetsLost)
 			h.congestion.OnRetransmissionTimeout(true)
+			h.queuePacketForRetransmission(packet)
 			return
 		}
 	}

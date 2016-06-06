@@ -633,6 +633,13 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(err).NotTo(HaveOccurred())
 			handler.lastSentPacketTime = time.Now().Add(-time.Second)
 			handler.maybeQueuePacketsRTO()
+			Expect(cong.nCalls).To(Equal(3))
+			// rttUpdated, bytesInFlight, ackedPackets, lostPackets
+			Expect(cong.argsOnCongestionEvent[0]).To(BeFalse())
+			Expect(cong.argsOnCongestionEvent[1]).To(Equal(protocol.ByteCount(1)))
+			Expect(cong.argsOnCongestionEvent[2]).To(BeEmpty())
+			Expect(cong.argsOnCongestionEvent[3]).To(Equal(congestion.PacketVector{{1, 1}}))
+
 			Expect(cong.onRetransmissionTimeout).To(BeTrue())
 		})
 	})
