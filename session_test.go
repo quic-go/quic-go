@@ -682,14 +682,16 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("counting streams", func() {
-		It("errors when too many streams are opened", func() {
+		It("errors when too many streams are opened", func(done Done) {
 			// 1.1 * 100
 			for i := 2; i <= 110; i++ {
 				_, err := session.OpenStream(protocol.StreamID(i))
 				Expect(err).NotTo(HaveOccurred())
 			}
-			_, err := session.OpenStream(protocol.StreamID(110))
+			_, err := session.OpenStream(protocol.StreamID(111))
 			Expect(err).To(MatchError(qerr.TooManyOpenStreams))
+			Eventually(session.closeChan).Should(Receive())
+			close(done)
 		})
 
 		It("does not error when many streams are opened and closed", func() {

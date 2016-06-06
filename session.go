@@ -610,6 +610,7 @@ func (s *Session) GetOrOpenStream(id protocol.StreamID) (utils.Stream, error) {
 func (s *Session) newStreamImpl(id protocol.StreamID) (*stream, error) {
 	maxAllowedStreams := uint32(protocol.MaxStreamsMultiplier * float32(s.connectionParametersManager.GetMaxStreamsPerConnection()))
 	if atomic.LoadUint32(&s.openStreamsCount) >= maxAllowedStreams {
+		go s.Close(qerr.TooManyOpenStreams)
 		return nil, qerr.TooManyOpenStreams
 	}
 	if _, ok := s.streams[id]; ok {
