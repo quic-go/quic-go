@@ -34,12 +34,12 @@ var _ = Describe("Integrationtests", func() {
 	})
 
 	It("stops the UDPProxy", func() {
-		proxy, err := NewUDPProxy(13370, "localhost", serverPort, nil, nil)
+		proxy, err := NewUDPProxy(13371, "localhost", serverPort, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
 		proxy.Stop()
 
 		// check that port 13370 is not in use anymore
-		addr, err := net.ResolveUDPAddr("udp", ":13370")
+		addr, err := net.ResolveUDPAddr("udp", ":13371")
 		Expect(err).ToNot(HaveOccurred())
 		ln, err := net.ListenUDP("udp", addr)
 		Expect(err).ToNot(HaveOccurred())
