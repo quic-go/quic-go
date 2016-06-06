@@ -318,13 +318,13 @@ var _ = Describe("StreamFrame", func() {
 			Expect(f.streamIDLen).To(Equal(protocol.ByteCount(2)))
 		})
 
-		It("determines the length of a 1 byte StreamID", func() {
+		It("determines the length of a 3 byte StreamID", func() {
 			f := &StreamFrame{StreamID: 0xFFFFFF}
 			f.calculateStreamIDLength()
 			Expect(f.streamIDLen).To(Equal(protocol.ByteCount(3)))
 		})
 
-		It("determines the length of a 1 byte StreamID", func() {
+		It("determines the length of a 4 byte StreamID", func() {
 			f := &StreamFrame{StreamID: 0xFFFFFFFF}
 			f.calculateStreamIDLength()
 			Expect(f.streamIDLen).To(Equal(protocol.ByteCount(4)))

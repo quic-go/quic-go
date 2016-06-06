@@ -210,7 +210,7 @@ func (s *Server) SetQuicHeaders(hdr http.Header) error {
 }
 
 // ListenAndServeQUIC listens on the UDP network address addr and calls the
-// handler for HTTP/2 requests on incoming conections. http.DefaultServeMux is
+// handler for HTTP/2 requests on incoming connections. http.DefaultServeMux is
 // used when handler is nil.
 func ListenAndServeQUIC(addr, certFile, keyFile string, handler http.Handler) error {
 	server := &Server{

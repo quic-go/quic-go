@@ -56,7 +56,7 @@ func (l *ByteIntervalList) Init() *ByteIntervalList {
 	return l
 }
 
-// New returns an initialized list.
+// NewByteIntervalList returns an initialized list.
 func NewByteIntervalList() *ByteIntervalList { return new(ByteIntervalList).Init() }
 
 // Len returns the number of elements of list l.
