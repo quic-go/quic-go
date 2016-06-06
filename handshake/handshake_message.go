@@ -107,5 +107,10 @@ func printHandshakeMessage(data map[Tag][]byte) string {
 func tagToString(tag Tag) string {
 	b := make([]byte, 4)
 	binary.LittleEndian.PutUint32(b, uint32(tag))
+	for i := range b {
+		if b[i] == 0 {
+			b[i] = ' '
+		}
+	}
 	return string(b)
 }
