@@ -705,4 +705,21 @@ var _ = Describe("Session", func() {
 			}
 		})
 	})
+
+	Context("ignoring errors", func() {
+		It("ignores duplicate acks", func() {
+			session.sentPacketHandler.SentPacket(&ackhandler.Packet{
+				PacketNumber: 1,
+				Length:       1,
+			})
+			err := session.handleFrames([]frames.Frame{&frames.AckFrame{
+				LargestObserved: 1,
+			}})
+			Expect(err).NotTo(HaveOccurred())
+			err = session.handleFrames([]frames.Frame{&frames.AckFrame{
+				LargestObserved: 1,
+			}})
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
 })

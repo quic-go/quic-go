@@ -165,17 +165,7 @@ func (s *Session) run() {
 		}
 
 		if err != nil {
-			switch err {
-			case ackhandler.ErrDuplicateOrOutOfOrderAck:
-				// Can happen e.g. when packets thought missing arrive late
-			case errRstStreamOnInvalidStream:
-				// Can happen when RST_STREAMs arrive early or late (?)
-				utils.Errorf("Ignoring error in session: %s", err.Error())
-			case errWindowUpdateOnClosedStream:
-				// Can happen when we already sent the last StreamFrame with the FinBit, but the client already sent a WindowUpdate for this Stream
-			default:
-				s.Close(err)
-			}
+			s.Close(err)
 		}
 
 		if err := s.maybeSendPacket(); err != nil {
@@ -240,7 +230,11 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *publicHeader, da
 
 	s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, packet.entropyBit)
 
-	for _, ff := range packet.frames {
+	return s.handleFrames(packet.frames)
+}
+
+func (s *Session) handleFrames(fs []frames.Frame) error {
+	for _, ff := range fs {
 		var err error
 		frames.LogFrame(ff, false)
 		switch frame := ff.(type) {
@@ -264,8 +258,19 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *publicHeader, da
 		default:
 			return errors.New("Session BUG: unexpected frame type")
 		}
+
 		if err != nil {
-			return err
+			switch err {
+			case ackhandler.ErrDuplicateOrOutOfOrderAck:
+			// Can happen e.g. when packets thought missing arrive late
+			case errRstStreamOnInvalidStream:
+				// Can happen when RST_STREAMs arrive early or late (?)
+				utils.Errorf("Ignoring error in session: %s", err.Error())
+			case errWindowUpdateOnClosedStream:
+				// Can happen when we already sent the last StreamFrame with the FinBit, but the client already sent a WindowUpdate for this Stream
+			default:
+				return err
+			}
 		}
 	}
 	return nil
