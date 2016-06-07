@@ -9,7 +9,7 @@ import (
 
 type blockedManager struct {
 	blockedStreams map[protocol.StreamID]protocol.ByteCount
-	mutex          sync.RWMutex
+	mutex          sync.Mutex
 }
 
 func newBlockedManager() *blockedManager {
@@ -33,8 +33,8 @@ func (m *blockedManager) RemoveBlockedStream(streamID protocol.StreamID) {
 }
 
 func (m *blockedManager) GetBlockedFrame(streamID protocol.StreamID, offset protocol.ByteCount) *frames.BlockedFrame {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
 	blockedOffset, ok := m.blockedStreams[streamID]
 	if !ok {
