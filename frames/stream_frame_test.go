@@ -302,6 +302,19 @@ var _ = Describe("StreamFrame", func() {
 				Expect(b.Bytes()[0] & 0x3).To(Equal(uint8(0x3)))
 				Expect(b.Bytes()[1:5]).To(Equal([]byte{0xAD, 0xFB, 0xCA, 0xDE}))
 			})
+
+			It("writes a multiple byte StreamID, after the Stream length was already determined by MinLenght()", func() {
+				b := &bytes.Buffer{}
+				frame := &StreamFrame{
+					StreamID: 0xDECAFBAD,
+					Data:     []byte("foobar"),
+				}
+				frame.MinLength()
+				err := frame.Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(b.Bytes()[0] & 0x3).To(Equal(uint8(0x3)))
+				Expect(b.Bytes()[1:5]).To(Equal([]byte{0xAD, 0xFB, 0xCA, 0xDE}))
+			})
 		})
 	})
 

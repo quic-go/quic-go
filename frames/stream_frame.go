@@ -106,8 +106,8 @@ func (f *StreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 
 	if f.streamIDLen == 0 {
 		f.calculateStreamIDLength()
-		typeByte ^= uint8(f.streamIDLen) - 1
 	}
+	typeByte ^= uint8(f.streamIDLen) - 1
 
 	b.WriteByte(typeByte)
 
