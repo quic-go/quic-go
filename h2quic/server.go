@@ -130,7 +130,12 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 	if err != nil {
 		return err
 	}
-	utils.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
+
+	if utils.Debug() {
+		utils.Infof("%s %s%s, on data stream %d", req.Method, req.Host, req.RequestURI, h2headersFrame.StreamID)
+	} else {
+		utils.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
+	}
 
 	dataStream, err := session.GetOrOpenStream(protocol.StreamID(h2headersFrame.StreamID))
 	if err != nil {
