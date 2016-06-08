@@ -421,14 +421,14 @@ func (s *Session) maybeSendPacket() error {
 		return s.sendPacket()
 	}
 
-	if !s.sentPacketHandler.CongestionAllowsSending() {
-		return nil
-	}
-
 	// always send out retransmissions immediately. No need to check the size of the packet
 	// in the edge cases where a belated ACK was received for a packet that was already queued for retransmission, we might send out a small packet. However, this shouldn't happen very often
 	if s.sentPacketHandler.ProbablyHasPacketForRetransmission() {
 		return s.sendPacket()
+	}
+
+	if !s.sentPacketHandler.CongestionAllowsSending() {
+		return nil
 	}
 
 	var maxPacketSize protocol.ByteCount // the maximum size of a packet we could send out at this moment
