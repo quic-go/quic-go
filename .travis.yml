@@ -13,8 +13,10 @@ go:
 # setting the GOARCH directly doesn't work, since the value will be overwritten later
 # so set it to a temporary environment variable first
 env:
-  - TRAVIS_GOARCH=amd64
-  - TRAVIS_GOARCH=386
+  - TRAVIS_GOARCH=amd64 TESTMODE=unit
+  - TRAVIS_GOARCH=amd64 TESTMODE=integration
+  - TRAVIS_GOARCH=386 TESTMODE=unit
+  - TRAVIS_GOARCH=386 TESTMODE=integration
 
 # second part of the GOARCH workaround
 # now actually set the GOARCH env variable to the value of the temporary variable set earlier
@@ -26,10 +28,7 @@ before_install:
   - go env # for debugging
 
 script:
-  - go get -t ./...
-  - ginkgo -r --cover --randomizeAllSpecs --randomizeSuites --trace --progress
+  - .travis/script.sh
 
 after_success:
-  - cat quic-go.coverprofile > coverage.txt
-  - cat */*.coverprofile >> coverage.txt
-  - bash <(curl -s https://codecov.io/bash) -f coverage.txt
+  - .travis/after_success.sh
