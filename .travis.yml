@@ -27,7 +27,7 @@ before_install:
 
 script:
   - go get -t ./...
-  - ginkgo -cover -r
+  - ginkgo -r --cover --randomizeAllSpecs --randomizeSuites --trace --progress
 
 after_success:
   - cat quic-go.coverprofile > coverage.txt
