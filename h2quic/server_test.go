@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -315,6 +316,12 @@ var _ = Describe("H2 server", func() {
 		Expect(ok).To(BeTrue())
 		syscallErr, ok := opErr.Err.(*os.SyscallError)
 		Expect(ok).To(BeTrue())
-		Expect(syscallErr.Err).To(MatchError(syscall.EADDRINUSE))
+		if runtime.GOOS == "windows" {
+			// for some reason, Windows return a different error number, corresponding to an WSAEADDRINUSE error
+			// see https://msdn.microsoft.com/en-us/library/windows/desktop/ms681391(v=vs.85).aspx
+			Expect(syscallErr.Err).To(Equal(syscall.Errno(0x2740)))
+		} else {
+			Expect(syscallErr.Err).To(MatchError(syscall.EADDRINUSE))
+		}
 	})
 })
