@@ -17,15 +17,38 @@ import (
 	. "github.com/onsi/gomega/gexec"
 )
 
-var _ = Describe("Drop Proxy", func() {
-	var proxy *UDPProxy
+var proxy *UDPProxy
+
+func runDropTest(incomingPacketDropper, outgoingPacketDropper dropCallback, version protocol.VersionNumber) {
+	proxyPort := 12345
+
 	clientPath := fmt.Sprintf(
 		"%s/src/github.com/lucas-clemente/quic-clients/client-%s-debug",
 		os.Getenv("GOPATH"),
 		runtime.GOOS,
 	)
-	proxyPort := 10001
 
+	iPort, _ := strconv.Atoi(port)
+	var err error
+	proxy, err = NewUDPProxy(proxyPort, "localhost", iPort, incomingPacketDropper, outgoingPacketDropper)
+	Expect(err).ToNot(HaveOccurred())
+
+	command := exec.Command(
+		clientPath,
+		"--quic-version="+strconv.Itoa(int(version)),
+		"--host=127.0.0.1",
+		"--port="+strconv.Itoa(proxyPort),
+		"https://quic.clemente.io/data",
+	)
+
+	session, err := Start(command, nil, GinkgoWriter)
+	Expect(err).NotTo(HaveOccurred())
+	defer session.Kill()
+	Eventually(session, 4).Should(Exit(0))
+	Expect(bytes.Contains(session.Out.Contents(), data)).To(BeTrue())
+}
+
+var _ = Describe("Drop Proxy", func() {
 	AfterEach(func() {
 		proxy.Stop()
 		time.Sleep(time.Millisecond)
@@ -35,7 +58,7 @@ var _ = Describe("Drop Proxy", func() {
 		version := protocol.SupportedVersions[i]
 
 		Context(fmt.Sprintf("with quic version %d", version), func() {
-			It("gets a file when many outgoing packets are dropped", func() {
+			Context("dropping every 4th packet after the crypto handshake", func() {
 				dropper := func(p PacketNumber) bool {
 					if p <= 5 { // don't interfere with the crypto handshake
 						return false
@@ -43,52 +66,14 @@ var _ = Describe("Drop Proxy", func() {
 					return p%4 == 0
 				}
 
-				iPort, _ := strconv.Atoi(port)
-				var err error
-				proxy, err = NewUDPProxy(proxyPort, "localhost", iPort, nil, dropper)
-				Expect(err).ToNot(HaveOccurred())
+				It("gets a file when many outgoing packets are dropped", func() {
+					runDropTest(nil, dropper, version)
+				})
 
-				command := exec.Command(
-					clientPath,
-					"--quic-version="+strconv.Itoa(int(version)),
-					"--host=127.0.0.1",
-					"--port="+strconv.Itoa(proxyPort),
-					"https://quic.clemente.io/data",
-				)
-				session, err := Start(command, nil, GinkgoWriter)
-				Expect(err).NotTo(HaveOccurred())
-				defer session.Kill()
-				Eventually(session, 4).Should(Exit(0))
-				Expect(bytes.Contains(session.Out.Contents(), data)).To(BeTrue())
+				It("gets a file when many incoming packets are dropped", func() {
+					runDropTest(dropper, nil, version)
+				})
 			})
-
-			It("gets a file when many incoming packets are dropped", func() {
-				dropper := func(p PacketNumber) bool {
-					if p <= 5 { // don't interfere with the crypto handshake
-						return false
-					}
-					return p%4 == 0
-				}
-
-				iPort, _ := strconv.Atoi(port)
-				var err error
-				proxy, err = NewUDPProxy(proxyPort, "localhost", iPort, dropper, nil)
-				Expect(err).ToNot(HaveOccurred())
-
-				command := exec.Command(
-					clientPath,
-					"--quic-version="+strconv.Itoa(int(version)),
-					"--host=127.0.0.1",
-					"--port="+strconv.Itoa(proxyPort),
-					"https://quic.clemente.io/data",
-				)
-				session, err := Start(command, nil, GinkgoWriter)
-				Expect(err).NotTo(HaveOccurred())
-				defer session.Kill()
-				Eventually(session, 4).Should(Exit(0))
-				Expect(bytes.Contains(session.Out.Contents(), data)).To(BeTrue())
-			})
-
 		})
 	}
 })
