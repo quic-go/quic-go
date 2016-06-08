@@ -54,6 +54,7 @@ var _ = AfterSuite(func() {
 })
 
 func setupHTTPHandlers() {
+	defer GinkgoRecover()
 	data = make([]byte, dataLen)
 	_, err := rand.Read(data)
 	Expect(err).NotTo(HaveOccurred())

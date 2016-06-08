@@ -11,12 +11,12 @@ type connection struct {
 	ClientAddr *net.UDPAddr // Address of the client
 	ServerConn *net.UDPConn // UDP connection to server
 
-	incomingPacketCounter packetNumber
-	outgoingPacketCounter packetNumber
+	incomingPacketCounter PacketNumber
+	outgoingPacketCounter PacketNumber
 }
 
-type packetNumber uint64
-type dropCallback func(packetNumber) bool
+type PacketNumber uint64
+type dropCallback func(PacketNumber) bool
 
 // UDPProxy is a UDP proxy
 type UDPProxy struct {
@@ -33,7 +33,7 @@ type UDPProxy struct {
 
 // NewUDPProxy creates a new UDP proxy
 func NewUDPProxy(proxyPort int, serverAddress string, serverPort int, dropIncomingPacket, dropOutgoingPacket dropCallback) (*UDPProxy, error) {
-	dontDrop := func(p packetNumber) bool {
+	dontDrop := func(p PacketNumber) bool {
 		return false
 	}
 
