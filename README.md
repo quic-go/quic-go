@@ -60,3 +60,7 @@ See the [example server](example/main.go) or our [fork](https://github.com/lucas
 http.Handle("/", http.FileServer(http.Dir(wwwDir)))
 h2quic.ListenAndServeQUIC("localhost:4242", "/path/to/cert/chain.pem", "/path/to/privkey.pem", nil)
 ```
+
+## Building on Windows
+
+Due to the low Windows timer resolution (see [StackOverflow question](http://stackoverflow.com/questions/37706834/high-resolution-timers-millisecond-precision-in-go-on-windows)) available with Go 1.6.x, some optimizations might not work when compiled with this version of the compiler. Please use Go 1.7 on Windows.
