@@ -171,7 +171,7 @@ func (s *Session) run() {
 		if err := s.maybeSendPacket(); err != nil {
 			s.Close(err)
 		}
-		if time.Now().Sub(s.lastNetworkActivityTime) > s.connectionParametersManager.GetIdleConnectionStateLifetime() {
+		if time.Now().Sub(s.lastNetworkActivityTime) >= s.connectionParametersManager.GetIdleConnectionStateLifetime() {
 			s.Close(qerr.Error(qerr.NetworkIdleTimeout, "No recent network activity."))
 		}
 		s.garbageCollectStreams()
