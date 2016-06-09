@@ -2,7 +2,8 @@
 
 <img src="docs/quic.png" width=303 height=124>
 
-[![Build Status](https://travis-ci.org/lucas-clemente/quic-go.svg?branch=master)](https://travis-ci.org/lucas-clemente/quic-go)
+[![Linux Build Status](https://travis-ci.org/lucas-clemente/quic-go.svg?branch=master)](https://travis-ci.org/lucas-clemente/quic-go)
+[![Windows Build Status](https://ci.appveyor.com/api/projects/status/github/lucas-clemente/quic-go?branch=master&svg=true)](https://ci.appveyor.com/project/lucas-clemente/quic-go/branch/master)
 [![Code Coverage](https://codecov.io/gh/lucas-clemente/quic-go/coverage.svg)](https://codecov.io/gh/lucas-clemente/quic-go/)
 [![Godoc Reference](https://godoc.org/github.com/lucas-clemente/quic-go?status.svg)](https://godoc.org/github.com/lucas-clemente/quic-go)
 
