@@ -187,6 +187,22 @@ var _ = Describe("Session", func() {
 			Expect(session.streams[5]).To(BeNil())
 		})
 
+		It("removes queued StreamFrames from StreamFrameQueue when closing with an error", func() {
+			testErr := errors.New("test")
+			session.handleStreamFrame(&frames.StreamFrame{
+				StreamID: 5,
+				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
+			})
+			f := frames.StreamFrame{
+				StreamID: 5,
+				Data:     []byte("foobar"),
+			}
+			session.streamFrameQueue.Push(&f, true)
+			Expect(session.streams[5]).ToNot(BeNil())
+			session.closeStreamsWithError(testErr)
+			Expect(session.streamFrameQueue.Pop(1000)).To(BeNil())
+		})
+
 		It("removes closed streams from BlockedManager", func() {
 			session.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
@@ -258,6 +274,22 @@ var _ = Describe("Session", func() {
 			n, err = s.Read([]byte{0})
 			Expect(n).To(BeZero())
 			Expect(err).To(MatchError("RST_STREAM received with code 42"))
+		})
+
+		It("deletes queued StreamFrames from the StreamFrameQueue", func() {
+			_, err := session.OpenStream(5)
+			Expect(err).ToNot(HaveOccurred())
+			f := frames.StreamFrame{
+				StreamID: 5,
+				Data:     []byte("foobar"),
+			}
+			session.streamFrameQueue.Push(&f, false)
+			err = session.handleRstStreamFrame(&frames.RstStreamFrame{
+				StreamID:  5,
+				ErrorCode: 42,
+			})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(session.streamFrameQueue.Pop(1000)).To(BeNil())
 		})
 
 		It("errors when the stream is not known", func() {

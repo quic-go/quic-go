@@ -364,7 +364,7 @@ func (s *Session) handleRstStreamFrame(frame *frames.RstStreamFrame) error {
 	if !streamExists || str == nil {
 		return errRstStreamOnInvalidStream
 	}
-	str.RegisterError(fmt.Errorf("RST_STREAM received with code %d", frame.ErrorCode))
+	s.closeStreamWithError(str, fmt.Errorf("RST_STREAM received with code %d", frame.ErrorCode))
 	return nil
 }
 
@@ -409,12 +409,17 @@ func (s *Session) closeImpl(e error, remoteClose bool) error {
 func (s *Session) closeStreamsWithError(err error) {
 	s.streamsMutex.Lock()
 	defer s.streamsMutex.Unlock()
-	for _, s := range s.streams {
-		if s == nil {
+	for _, str := range s.streams {
+		if str == nil {
 			continue
 		}
-		s.RegisterError(err)
+		s.closeStreamWithError(str, err)
 	}
+}
+
+func (s *Session) closeStreamWithError(str *stream, err error) {
+	s.streamFrameQueue.RemoveStream(str.StreamID())
+	str.RegisterError(err)
 }
 
 // TODO: try sending more than one packet
