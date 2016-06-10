@@ -423,5 +423,41 @@ var _ = Describe("streamFrameQueue", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).To(Equal(frame2))
 		})
+
+		Context("garbage collection of activeStreams", func() {
+			It("adjusts the activeStreams slice", func() {
+				queue.activeStreams = []protocol.StreamID{5, 6, 10, 2, 3}
+				queue.RemoveStream(10)
+				Expect(queue.activeStreams).To(Equal([]protocol.StreamID{5, 6, 2, 3}))
+			})
+
+			It("garbage collects correctly if there is only one stream", func() {
+				queue.activeStreams = []protocol.StreamID{10}
+				queue.RemoveStream(10)
+				Expect(queue.activeStreams).To(BeEmpty())
+				Expect(queue.activeStreamsPosition).To(Equal(0))
+			})
+
+			It("does not change the scheduling, when the stream deleted is after the current position in activeStreams", func() {
+				queue.activeStreams = []protocol.StreamID{5, 6, 10, 2, 3}
+				queue.activeStreamsPosition = 0 // the next frame would be from Stream 5
+				queue.RemoveStream(10)
+				Expect(queue.activeStreamsPosition).To(Equal(0))
+			})
+
+			It("makes sure that scheduling is adjusted, if the stream deleted is before the current position in activeStreams", func() {
+				queue.activeStreams = []protocol.StreamID{5, 6, 10, 2, 3}
+				queue.activeStreamsPosition = 3 // the next frame would be from Stream 2
+				queue.RemoveStream(10)
+				Expect(queue.activeStreamsPosition).To(Equal(2))
+			})
+
+			It("makes sure that scheduling is adjusted, when a frame from the deleted stream was scheduled", func() {
+				queue.activeStreams = []protocol.StreamID{5, 6, 10, 2, 3}
+				queue.activeStreamsPosition = 2 // the next frame would be from Stream 10
+				queue.RemoveStream(10)
+				Expect(queue.activeStreamsPosition).To(Equal(2)) // the next frame will be from Stream 2
+			})
+		})
 	})
 })

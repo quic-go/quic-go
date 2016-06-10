@@ -78,7 +78,7 @@ func (q *streamFrameQueue) Pop(maxLength protocol.ByteCount) (*frames.StreamFram
 
 	for len(q.prioFrames) > 0 {
 		frame = q.prioFrames[0]
-		if frame == nil {
+		if frame == nil { // this happens when a Stream that had prioFrames queued gets deleted
 			q.prioFrames = q.prioFrames[1:]
 			continue
 		}
@@ -148,6 +148,30 @@ func (q *streamFrameQueue) RemoveStream(streamID protocol.StreamID) {
 			q.activeStreams[i] = 0
 		}
 	}
+
+	q.garbageCollectActiveStreams()
+}
+
+func (q *streamFrameQueue) garbageCollectActiveStreams() {
+	var j int
+	var deletedIndex int
+
+	for i, str := range q.activeStreams {
+		if str != 0 {
+			q.activeStreams[j] = str
+			j++
+		} else {
+			deletedIndex = i
+		}
+	}
+
+	if len(q.activeStreams) > 0 {
+		q.activeStreams = q.activeStreams[:len(q.activeStreams)-1]
+	}
+
+	if deletedIndex < q.activeStreamsPosition {
+		q.activeStreamsPosition--
+	}
 }
 
 // front returns the next element without modifying the queue
@@ -162,10 +186,6 @@ func (q *streamFrameQueue) getNextStream() (protocol.StreamID, error) {
 		counter++
 		streamID := q.activeStreams[q.activeStreamsPosition]
 		q.activeStreamsPosition = (q.activeStreamsPosition + 1) % len(q.activeStreams)
-
-		if streamID == 0 { // this happens if the stream was deleted
-			continue
-		}
 
 		frameQueue, ok := q.frameMap[streamID]
 		if !ok {
