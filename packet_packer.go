@@ -34,7 +34,7 @@ type packetPacker struct {
 	lastPacketNumber protocol.PacketNumber
 }
 
-func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.CryptoSetup, sentPacketHandler ackhandler.SentPacketHandler, connectionParametersHandler *handshake.ConnectionParametersManager, blockedManager *blockedManager, version protocol.VersionNumber) *packetPacker {
+func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.CryptoSetup, sentPacketHandler ackhandler.SentPacketHandler, connectionParametersHandler *handshake.ConnectionParametersManager, blockedManager *blockedManager, streamFrameQueue *streamFrameQueue, version protocol.VersionNumber) *packetPacker {
 	return &packetPacker{
 		cryptoSetup:                 cryptoSetup,
 		connectionID:                connectionID,
@@ -42,7 +42,7 @@ func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.
 		version:                     version,
 		sentPacketHandler:           sentPacketHandler,
 		blockedManager:              blockedManager,
-		streamFrameQueue:            newStreamFrameQueue(),
+		streamFrameQueue:            streamFrameQueue,
 	}
 }
 
@@ -244,13 +244,4 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 	}
 
 	return payloadFrames, nil
-}
-
-// Empty returns true if no frames are queued
-func (p *packetPacker) Empty() bool {
-	return p.streamFrameQueue.ByteLen() == 0
-}
-
-func (p *packetPacker) StreamFrameQueueByteLen() protocol.ByteCount {
-	return p.streamFrameQueue.ByteLen()
 }

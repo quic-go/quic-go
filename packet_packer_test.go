@@ -454,14 +454,4 @@ var _ = Describe("Packet packer", func() {
 			Expect(p[0]).To(Equal(&frames.BlockedFrame{StreamID: 0}))
 		})
 	})
-
-	It("says whether it is empty", func() {
-		Expect(packer.Empty()).To(BeTrue())
-		f := frames.StreamFrame{
-			StreamID: 5,
-			Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
-		}
-		packer.AddStreamFrame(f)
-		Expect(packer.Empty()).To(BeFalse())
-	})
 })

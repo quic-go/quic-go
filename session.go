@@ -53,6 +53,7 @@ type Session struct {
 	stopWaitingManager    ackhandler.StopWaitingManager
 	windowUpdateManager   *windowUpdateManager
 	blockedManager        *blockedManager
+	streamFrameQueue      *streamFrameQueue
 
 	flowController flowcontrol.FlowController // connection level flow controller
 
@@ -101,6 +102,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		flowController:              flowcontrol.NewFlowController(0, connectionParametersManager),
 		windowUpdateManager:         newWindowUpdateManager(),
 		blockedManager:              newBlockedManager(),
+		streamFrameQueue:            newStreamFrameQueue(),
 		receivedPackets:             make(chan receivedPacket, protocol.MaxSessionUnprocessedPackets),
 		closeChan:                   make(chan struct{}, 1),
 		sendingScheduled:            make(chan struct{}, 1),
@@ -118,7 +120,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		return nil, err
 	}
 
-	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.sentPacketHandler, session.connectionParametersManager, session.blockedManager, v)
+	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.sentPacketHandler, session.connectionParametersManager, session.blockedManager, session.streamFrameQueue, v)
 	session.unpacker = &packetUnpacker{aead: session.cryptoSetup, version: v}
 
 	return session, err
@@ -451,7 +453,7 @@ func (s *Session) maybeSendPacket() error {
 	}
 
 	// note that maxPacketSize can get (much) larger than protocol.MaxPacketSize if there is a long queue of StreamFrames
-	maxPacketSize += s.packer.StreamFrameQueueByteLen()
+	maxPacketSize += s.streamFrameQueue.ByteLen()
 
 	if maxPacketSize > protocol.SmallPacketPayloadSizeThreshold {
 		return s.sendPacket()
@@ -540,7 +542,7 @@ func (s *Session) sendPacket() error {
 		return err
 	}
 
-	if !s.packer.Empty() {
+	if s.streamFrameQueue.Len() > 0 {
 		s.scheduleSending()
 	}
 
