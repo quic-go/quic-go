@@ -395,6 +395,16 @@ var _ = Describe("streamFrameQueue", func() {
 			Expect(frame).To(BeNil())
 		})
 
+		It("deletes multiple prioFrames from different streams", func() {
+			queue.Push(prioFrame1, true)
+			queue.Push(prioFrame2, true)
+			queue.RemoveStream(prioFrame1.StreamID)
+			queue.RemoveStream(prioFrame2.StreamID)
+			frame, err := queue.Pop(1000)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame).To(BeNil())
+		})
+
 		It("deletes the map entry", func() {
 			queue.Push(frame1, false)
 			queue.Push(frame2, false)

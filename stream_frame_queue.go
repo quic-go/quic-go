@@ -127,6 +127,9 @@ func (q *streamFrameQueue) RemoveStream(streamID protocol.StreamID) {
 	defer q.mutex.Unlock()
 
 	for i, frame := range q.prioFrames {
+		if frame == nil {
+			continue
+		}
 		if frame.StreamID == streamID {
 			q.byteLen -= frame.DataLen()
 			q.len--
