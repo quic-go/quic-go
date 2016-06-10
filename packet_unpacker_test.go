@@ -6,6 +6,7 @@ import (
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -37,12 +38,17 @@ var _ = Describe("Packet unpacker", func() {
 		r = bytes.NewReader(aead.Seal(0, hdrBin, append([]byte{0x01}, data...)))
 	}
 
-	It("unpacks empty packets", func() {
+	It("returns an error for empty packets that don't have a private flag", func() {
+		// don't use setReader here, since it adds a private flag
+		r = bytes.NewReader(aead.Seal(0, hdrBin, []byte{}))
+		_, err := unpacker.Unpack(hdrBin, hdr, r)
+		Expect(err).To(MatchError(qerr.MissingPayload))
+	})
+
+	It("returns an error for empty packets that have a private flag", func() {
 		setReader(nil)
-		packet, err := unpacker.Unpack(hdrBin, hdr, r)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.entropyBit).To(BeTrue())
-		Expect(packet.frames).To(BeEmpty())
+		_, err := unpacker.Unpack(hdrBin, hdr, r)
+		Expect(err).To(MatchError(qerr.MissingPayload))
 	})
 
 	It("unpacks stream frames", func() {

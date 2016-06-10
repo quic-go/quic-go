@@ -37,6 +37,10 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *publicHeader, r 
 	}
 	entropyBit := privateFlag&0x01 > 0
 
+	if r.Len() == 0 {
+		return nil, qerr.MissingPayload
+	}
+
 	fs := make([]frames.Frame, 0, 1)
 
 	// Read all frames in the packet
