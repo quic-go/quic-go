@@ -76,10 +76,17 @@ func (q *streamFrameQueue) Pop(maxLength protocol.ByteCount) (*frames.StreamFram
 	var streamID protocol.StreamID
 	var err error
 
-	if len(q.prioFrames) > 0 {
+	for len(q.prioFrames) > 0 {
 		frame = q.prioFrames[0]
+		if frame == nil {
+			q.prioFrames = q.prioFrames[1:]
+			continue
+		}
 		isPrioFrame = true
-	} else {
+		break
+	}
+
+	if !isPrioFrame {
 		streamID, err = q.getNextStream()
 		if err != nil {
 			return nil, err
@@ -115,6 +122,34 @@ func (q *streamFrameQueue) Pop(maxLength protocol.ByteCount) (*frames.StreamFram
 	return frame, nil
 }
 
+func (q *streamFrameQueue) RemoveStream(streamID protocol.StreamID) {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	for i, frame := range q.prioFrames {
+		if frame.StreamID == streamID {
+			q.byteLen -= frame.DataLen()
+			q.len--
+			q.prioFrames[i] = nil
+		}
+	}
+
+	frameQueue, ok := q.frameMap[streamID]
+	if ok {
+		for _, frame := range frameQueue {
+			q.byteLen -= frame.DataLen()
+			q.len--
+		}
+		delete(q.frameMap, streamID)
+	}
+
+	for i, s := range q.activeStreams {
+		if s == streamID {
+			q.activeStreams[i] = 0
+		}
+	}
+}
+
 // front returns the next element without modifying the queue
 // has to be called from a function that has already acquired the mutex
 func (q *streamFrameQueue) getNextStream() (protocol.StreamID, error) {
@@ -124,17 +159,22 @@ func (q *streamFrameQueue) getNextStream() (protocol.StreamID, error) {
 
 	var counter int
 	for counter < len(q.activeStreams) {
+		counter++
 		streamID := q.activeStreams[q.activeStreamsPosition]
+		q.activeStreamsPosition = (q.activeStreamsPosition + 1) % len(q.activeStreams)
+
+		if streamID == 0 { // this happens if the stream was deleted
+			continue
+		}
+
 		frameQueue, ok := q.frameMap[streamID]
 		if !ok {
 			return 0, errMapAccess
 		}
+
 		if len(frameQueue) > 0 {
-			q.activeStreamsPosition = (q.activeStreamsPosition + 1) % len(q.activeStreams)
 			return streamID, nil
 		}
-		q.activeStreamsPosition = (q.activeStreamsPosition + 1) % len(q.activeStreams)
-		counter++
 	}
 
 	return 0, nil

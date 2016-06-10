@@ -65,6 +65,22 @@ var _ = Describe("streamFrameQueue", func() {
 			queue.Pop(1000)
 			Expect(queue.Len()).To(Equal(0))
 		})
+
+		It("reduces the length when deleting a stream for which a prio frame was queued", func() {
+			queue.Push(prioFrame1, true)
+			queue.Push(prioFrame2, true)
+			Expect(queue.Len()).To(Equal(2))
+			queue.RemoveStream(prioFrame1.StreamID)
+			Expect(queue.Len()).To(Equal(1))
+		})
+
+		It("reduces the length when deleting a stream for which a normal frame was queued", func() {
+			queue.Push(frame1, false)
+			queue.Push(frame2, false)
+			Expect(queue.Len()).To(Equal(2))
+			queue.RemoveStream(frame1.StreamID)
+			Expect(queue.Len()).To(Equal(1))
+		})
 	})
 
 	Context("Queue Byte Length", func() {
@@ -87,6 +103,22 @@ var _ = Describe("streamFrameQueue", func() {
 			Expect(queue.ByteLen()).To(Equal(frame1.DataLen()))
 			queue.Pop(1000)
 			Expect(queue.ByteLen()).To(Equal(protocol.ByteCount(0)))
+		})
+
+		It("reduces the byte length when deleting a stream for which a prio frame was queued", func() {
+			queue.Push(prioFrame1, true)
+			queue.Push(prioFrame2, true)
+			Expect(queue.ByteLen()).To(Equal(prioFrame1.DataLen() + prioFrame2.DataLen()))
+			queue.RemoveStream(prioFrame1.StreamID)
+			Expect(queue.ByteLen()).To(Equal(prioFrame2.DataLen()))
+		})
+
+		It("reduces the byte length when deleting a stream for which a normal frame was queued", func() {
+			queue.Push(frame1, false)
+			queue.Push(frame2, false)
+			Expect(queue.ByteLen()).To(Equal(frame1.DataLen() + frame2.DataLen()))
+			queue.RemoveStream(frame1.StreamID)
+			Expect(queue.ByteLen()).To(Equal(frame2.DataLen()))
 		})
 	})
 
@@ -147,6 +179,22 @@ var _ = Describe("streamFrameQueue", func() {
 			streamID, err := queue.getNextStream()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(streamID).To(Equal(frame2.StreamID))
+			streamID, err = queue.getNextStream()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(streamID).To(Equal(frame1.StreamID))
+		})
+
+		It("gets the next frame if a stream was deleted", func() {
+			queue.Push(frame2, false)
+			queue.Push(frame1, false)
+			Expect(queue.activeStreams).To(ContainElement(frame1.StreamID))
+			Expect(queue.activeStreams).To(ContainElement(frame2.StreamID))
+			queue.RemoveStream(frame2.StreamID)
+			Expect(queue.activeStreams).To(ContainElement(frame1.StreamID))
+			Expect(queue.activeStreams).ToNot(ContainElement(frame2.StreamID))
+			streamID, err := queue.getNextStream()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(streamID).To(Equal(frame1.StreamID))
 		})
 	})
 
@@ -331,6 +379,49 @@ var _ = Describe("streamFrameQueue", func() {
 				Expect(frame.StreamID).To(Equal(frame1.StreamID)) // make sure the right frame was popped
 				Expect(queue.Len()).To(Equal(2))
 			})
+		})
+	})
+
+	Context("deleting streams", func() {
+		It("deletes prioFrames", func() {
+			queue.Push(prioFrame1, true)
+			queue.Push(prioFrame2, true)
+			queue.RemoveStream(prioFrame1.StreamID)
+			frame, err := queue.Pop(1000)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame).To(Equal(prioFrame2))
+			frame, err = queue.Pop(1000)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame).To(BeNil())
+		})
+
+		It("deletes the map entry", func() {
+			queue.Push(frame1, false)
+			queue.Push(frame2, false)
+			Expect(queue.frameMap).To(HaveKey(frame1.StreamID))
+			queue.RemoveStream(frame1.StreamID)
+			Expect(queue.frameMap).ToNot(HaveKey(frame1.StreamID))
+		})
+
+		It("gets a normal frame, when the stream of the prio frame was deleted", func() {
+			queue.Push(prioFrame1, true)
+			queue.Push(frame1, true)
+			queue.RemoveStream(prioFrame1.StreamID)
+			frame, err := queue.Pop(1000)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame).To(Equal(frame1))
+			frame, err = queue.Pop(1000)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame).To(BeNil())
+		})
+
+		It("deletes frames", func() {
+			queue.Push(frame1, false)
+			queue.Push(frame2, false)
+			queue.RemoveStream(frame1.StreamID)
+			frame, err := queue.Pop(1000)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame).To(Equal(frame2))
 		})
 	})
 })
