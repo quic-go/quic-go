@@ -230,7 +230,10 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *publicHeader, da
 		return err
 	}
 
-	s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, packet.entropyBit)
+	err = s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, packet.entropyBit)
+	if err != nil {
+		return err
+	}
 
 	return s.handleFrames(packet.frames)
 }
