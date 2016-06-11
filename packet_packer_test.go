@@ -68,6 +68,29 @@ var _ = Describe("Packet packer", func() {
 		Expect(err).ToNot(HaveOccurred())
 	})
 
+	It("doesn't set a private header for QUIC version >= 34", func() {
+		// This is not trivial to test, since PackPacket() already encrypts the packet
+		// So pack the packet for QUIC 33, then for QUIC 34. The packet for QUIC 33 should be 1 byte longer, since it contains the Private Header
+		f := frames.StreamFrame{
+			StreamID: 5,
+			Data:     []byte("foobar"),
+		}
+		// pack the packet for QUIC version 33
+		packer.version = protocol.Version33
+		packer.AddStreamFrame(f)
+		p33, err := packer.PackPacket(nil, []frames.Frame{})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(p33).ToNot(BeNil())
+		// pack the packet for QUIC version 34
+		packer.version = protocol.Version34
+		packer.AddStreamFrame(f)
+		p34, err := packer.PackPacket(nil, []frames.Frame{})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(p34).ToNot(BeNil())
+		Expect(p34.entropyBit).To(BeFalse())
+		Expect(p34.raw).To(HaveLen(len(p33.raw) - 1))
+	})
+
 	It("packs single packets", func() {
 		f := frames.StreamFrame{
 			StreamID: 5,

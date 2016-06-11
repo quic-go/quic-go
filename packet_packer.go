@@ -127,12 +127,16 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		return nil, err
 	}
 
-	entropyBit, err := utils.RandomBit()
-	if err != nil {
-		return nil, err
-	}
-	if entropyBit {
-		payload[0] = 1
+	// set entropy bit in Private Header, for QUIC version < 34
+	var entropyBit bool
+	if p.version < protocol.Version34 {
+		entropyBit, err = utils.RandomBit()
+		if err != nil {
+			return nil, err
+		}
+		if entropyBit {
+			payload[0] = 1
+		}
 	}
 
 	var raw bytes.Buffer
@@ -157,7 +161,13 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 
 func (p *packetPacker) getPayload(frames []frames.Frame, currentPacketNumber protocol.PacketNumber) ([]byte, error) {
 	var payload bytes.Buffer
-	payload.WriteByte(0) // The entropy bit is set in sendPayload
+
+	// reserve 1 byte for the Private Header, for QUIC Version < 34
+	// the entropy bit is set in sendPayload
+	if p.version < protocol.Version34 {
+		payload.WriteByte(0)
+	}
+
 	for _, frame := range frames {
 		frame.Write(&payload, p.version)
 	}
