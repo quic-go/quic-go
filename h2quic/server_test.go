@@ -273,7 +273,7 @@ var _ = Describe("H2 server", func() {
 				Expect(err).NotTo(HaveOccurred())
 				close(done)
 			}()
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(50 * time.Millisecond)
 			err := s.Close()
 			Expect(err).NotTo(HaveOccurred())
 		}, 0.5)

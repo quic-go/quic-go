@@ -585,7 +585,7 @@ var _ = Describe("Session", func() {
 					StreamID: 5,
 					Data:     []byte("foobar1"),
 				})
-				time.Sleep(10 * protocol.SmallPacketSendDelay)
+				time.Sleep(20 * protocol.SmallPacketSendDelay)
 				session.queueStreamFrame(&frames.StreamFrame{
 					StreamID: 5,
 					Data:     []byte("foobar2"),
@@ -603,7 +603,7 @@ var _ = Describe("Session", func() {
 					StreamID: 5,
 					Data:     []byte("foobar1"),
 				})
-				time.Sleep(10 * protocol.SmallPacketSendDelay)
+				time.Sleep(20 * protocol.SmallPacketSendDelay)
 				session.queueStreamFrame(&frames.StreamFrame{
 					StreamID: 5,
 					Data:     []byte("foobar2"),
