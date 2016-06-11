@@ -6,12 +6,16 @@ import (
 
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 )
 
 // ErrDuplicatePacket occurres when a duplicate packet is received
 var ErrDuplicatePacket = errors.New("ReceivedPacketHandler: Duplicate Packet")
 
-var errInvalidPacketNumber = errors.New("ReceivedPacketHandler: Invalid packet number")
+var (
+	errInvalidPacketNumber               = errors.New("ReceivedPacketHandler: Invalid packet number")
+	errTooManyOutstandingReceivedPackets = qerr.Error(qerr.TooManyOutstandingReceivedPackets, "")
+)
 
 type packetHistoryEntry struct {
 	EntropyBit   bool
@@ -63,6 +67,10 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 	}
 
 	h.garbageCollect()
+
+	if uint32(len(h.packetHistory)) > protocol.MaxTrackedReceivedPackets {
+		return errTooManyOutstandingReceivedPackets
+	}
 
 	return nil
 }

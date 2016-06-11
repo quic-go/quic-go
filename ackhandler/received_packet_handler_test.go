@@ -63,6 +63,16 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(3)))
 			Expect(handler.packetHistory[3].TimeReceived).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 		})
+
+		It("doesn't store more than MaxTrackedReceivedPackets packets", func() {
+			for i := uint32(0); i < protocol.MaxTrackedReceivedPackets; i++ {
+				packetNumber := protocol.PacketNumber(1 + 2*i)
+				err := handler.ReceivedPacket(packetNumber, true)
+				Expect(err).ToNot(HaveOccurred())
+			}
+			err := handler.ReceivedPacket(protocol.PacketNumber(3*protocol.MaxTrackedReceivedPackets), true)
+			Expect(err).To(MatchError(errTooManyOutstandingReceivedPackets))
+		})
 	})
 
 	Context("Entropy calculation", func() {

@@ -59,6 +59,10 @@ const STKExpiryTimeSec = 24 * 60 * 60
 // TODO: decrease this value after dropping support for QUIC 33 and earlier
 const MaxTrackedSentPackets uint32 = 2000
 
+// MaxTrackedReceivedPackets is the maximum number of received packets saved for doing the entropy calculations
+// TODO: think about what to do with this when adding support for QUIC 34
+const MaxTrackedReceivedPackets uint32 = 2000
+
 // MaxStreamFrameSorterGaps is the maximum number of gaps between received StreamFrames
 // prevents DOS attacks against the streamFrameSorter
 const MaxStreamFrameSorterGaps = 50
