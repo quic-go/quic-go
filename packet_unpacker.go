@@ -31,11 +31,16 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *publicHeader, r 
 	}
 	r = bytes.NewReader(plaintext)
 
-	privateFlag, err := r.ReadByte()
-	if err != nil {
-		return nil, qerr.MissingPayload
+	// read private flag byte, for QUIC Version < 34
+	var entropyBit bool
+	if u.version < protocol.Version34 {
+		var privateFlag uint8
+		privateFlag, err = r.ReadByte()
+		if err != nil {
+			return nil, qerr.MissingPayload
+		}
+		entropyBit = privateFlag&0x01 > 0
 	}
-	entropyBit := privateFlag&0x01 > 0
 
 	if r.Len() == 0 {
 		return nil, qerr.MissingPayload

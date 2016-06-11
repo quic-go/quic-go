@@ -35,20 +35,36 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	setReader := func(data []byte) {
-		r = bytes.NewReader(aead.Seal(0, hdrBin, append([]byte{0x01}, data...)))
+		if unpacker.version < protocol.Version34 { // add private flag
+			data = append([]byte{0x01}, data...)
+		}
+		r = bytes.NewReader(aead.Seal(0, hdrBin, data))
 	}
 
-	It("returns an error for empty packets that don't have a private flag", func() {
+	It("returns an error for empty packets that don't have a private flag, for QUIC Version < 34", func() {
 		// don't use setReader here, since it adds a private flag
+		unpacker.version = protocol.Version33
 		r = bytes.NewReader(aead.Seal(0, hdrBin, []byte{}))
 		_, err := unpacker.Unpack(hdrBin, hdr, r)
 		Expect(err).To(MatchError(qerr.MissingPayload))
 	})
 
-	It("returns an error for empty packets that have a private flag", func() {
+	It("returns an error for empty packets that have a private flag, for QUIC Version < 34", func() {
+		unpacker.version = protocol.Version33
 		setReader(nil)
 		_, err := unpacker.Unpack(hdrBin, hdr, r)
 		Expect(err).To(MatchError(qerr.MissingPayload))
+	})
+
+	It("does not read read a private flag for QUIC Version >= 34", func() {
+		unpacker.version = protocol.Version34
+		f := &frames.ConnectionCloseFrame{ReasonPhrase: "foo"}
+		err := f.Write(buf, 0)
+		Expect(err).ToNot(HaveOccurred())
+		setReader(buf.Bytes())
+		packet, err := unpacker.Unpack(hdrBin, hdr, r)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(packet.frames).To(Equal([]frames.Frame{f}))
 	})
 
 	It("unpacks stream frames", func() {

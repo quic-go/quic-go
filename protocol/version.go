@@ -15,6 +15,7 @@ const (
 	Version31
 	Version32
 	Version33
+	Version34
 )
 
 // SupportedVersions lists the versions that the server supports
