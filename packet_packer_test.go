@@ -57,6 +57,9 @@ var _ = Describe("Packet packer", func() {
 			blockedManager:              newBlockedManager(),
 			streamFrameQueue:            newStreamFrameQueue(),
 		}
+		packer.streamFrameQueue.UpdateWindow(3, protocol.MaxByteCount)
+		packer.streamFrameQueue.UpdateWindow(5, protocol.MaxByteCount)
+		packer.streamFrameQueue.UpdateWindow(7, protocol.MaxByteCount)
 		publicHeaderLen = 1 + 8 + 1 // 1 flag byte, 8 connection ID, 1 packet number
 		packer.version = protocol.Version34
 	})
@@ -233,7 +236,7 @@ var _ = Describe("Packet packer", func() {
 		It("does not splits a stream frame with maximum size", func() {
 			f := frames.StreamFrame{
 				Offset:         1,
-				StreamID:       13,
+				StreamID:       5,
 				DataLenPresent: false,
 			}
 			minLength, _ := f.MinLength(0)

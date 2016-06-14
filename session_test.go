@@ -73,6 +73,9 @@ var _ = Describe("Session", func() {
 		Expect(err).NotTo(HaveOccurred())
 		session = pSession.(*Session)
 		Expect(session.streams).To(HaveLen(1)) // Crypto stream
+
+		// TODO: remove this once the streamFrameQueue is properly initialized
+		session.streamFrameQueue.UpdateWindow(5, protocol.MaxByteCount)
 	})
 
 	Context("when handling stream frames", func() {
@@ -459,7 +462,7 @@ var _ = Describe("Session", func() {
 
 		It("sends queued stream frames", func() {
 			session.queueStreamFrame(&frames.StreamFrame{
-				StreamID: 1,
+				StreamID: 5,
 				Data:     []byte("foobar"),
 			})
 			session.receivedPacketHandler.ReceivedPacket(1, true)
