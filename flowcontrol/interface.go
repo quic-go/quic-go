@@ -13,7 +13,6 @@ type FlowController interface {
 	MaybeTriggerBlocked() bool
 	MaybeTriggerWindowUpdate() (bool, protocol.ByteCount)
 	CheckFlowControlViolation() bool
-	GetHighestReceived() protocol.ByteCount
 }
 
 // A FlowControlManager manages the flow control

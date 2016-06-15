@@ -241,6 +241,15 @@ var _ = Describe("Session", func() {
 			Expect(session.streams[5]).To(BeNil())
 		})
 
+		It("informs the FlowControlManager about new streams", func() {
+			// since the stream doesn't yet exist, this will throw an error
+			err := session.flowControlManager.UpdateHighestReceived(5, 1000)
+			Expect(err).To(HaveOccurred())
+			session.newStreamImpl(5)
+			err = session.flowControlManager.UpdateHighestReceived(5, 2000)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
 		It("ignores streams that existed previously", func() {
 			session.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,

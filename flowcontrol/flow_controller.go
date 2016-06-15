@@ -161,10 +161,3 @@ func (c *flowController) CheckFlowControlViolation() bool {
 	}
 	return false
 }
-
-func (c *flowController) GetHighestReceived() protocol.ByteCount {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-
-	return c.highestReceived
-}

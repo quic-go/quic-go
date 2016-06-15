@@ -55,6 +55,8 @@ type Session struct {
 	blockedManager        *blockedManager
 	streamFrameQueue      *streamFrameQueue
 
+	flowControlManager flowcontrol.FlowControlManager
+	// TODO: remove
 	flowController flowcontrol.FlowController // connection level flow controller
 
 	unpacker *packetUnpacker
@@ -99,6 +101,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		sentPacketHandler:           ackhandler.NewSentPacketHandler(stopWaitingManager),
 		receivedPacketHandler:       ackhandler.NewReceivedPacketHandler(),
 		stopWaitingManager:          stopWaitingManager,
+		flowControlManager:          flowcontrol.NewFlowControlManager(connectionParametersManager),
 		flowController:              flowcontrol.NewFlowController(0, connectionParametersManager),
 		windowUpdateManager:         newWindowUpdateManager(),
 		blockedManager:              newBlockedManager(),
@@ -626,10 +629,18 @@ func (s *Session) newStreamImpl(id protocol.StreamID) (*stream, error) {
 	if _, ok := s.streams[id]; ok {
 		return nil, fmt.Errorf("Session: stream with ID %d already exists", id)
 	}
-	stream, err := newStream(s, s.connectionParametersManager, s.flowController, id)
+	stream, err := newStream(s, s.connectionParametersManager, s.flowController, s.flowControlManager, id)
 	if err != nil {
 		return nil, err
 	}
+
+	// TODO: find a better solution for determining which streams contribute to connection level flow control
+	if id == 1 || id == 3 {
+		s.flowControlManager.NewStream(id, false)
+	} else {
+		s.flowControlManager.NewStream(id, true)
+	}
+
 	atomic.AddUint32(&s.openStreamsCount, 1)
 	s.streams[id] = stream
 	return stream, nil
