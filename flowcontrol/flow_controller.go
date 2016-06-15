@@ -25,7 +25,8 @@ type flowController struct {
 }
 
 // NewFlowController gets a new flow controller
-func NewFlowController(streamID protocol.StreamID, connectionParametersManager *handshake.ConnectionParametersManager) FlowController {
+// TODO: make private
+func NewFlowController(streamID protocol.StreamID, connectionParametersManager *handshake.ConnectionParametersManager) *flowController {
 	fc := flowController{
 		streamID:                    streamID,
 		connectionParametersManager: connectionParametersManager,
