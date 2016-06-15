@@ -499,7 +499,7 @@ var _ = Describe("Stream", func() {
 		})
 	})
 
-	Context("Blocked streams", func() {
+	PContext("Blocked streams", func() {
 		It("notifies the session when a stream is flow control blocked", func() {
 			updated := str.flowController.UpdateSendWindow(1337)
 			Expect(updated).To(BeTrue())

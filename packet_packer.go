@@ -55,6 +55,7 @@ func (p *packetPacker) AddHighPrioStreamFrame(f frames.StreamFrame) {
 }
 
 func (p *packetPacker) AddBlocked(streamID protocol.StreamID, byteOffset protocol.ByteCount) {
+	return
 	// TODO: send out connection-level BlockedFrames at the right time
 	// see https://github.com/lucas-clemente/quic-go/issues/113
 	// TODO: remove this function completely once #113 is resolved

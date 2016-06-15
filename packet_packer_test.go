@@ -393,7 +393,7 @@ var _ = Describe("Packet packer", func() {
 		})
 	})
 
-	Context("Blocked frames", func() {
+	PContext("Blocked frames", func() {
 		It("adds a blocked frame to a packet if there is enough space", func() {
 			length := 100
 			packer.AddBlocked(5, protocol.ByteCount(length))
