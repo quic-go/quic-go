@@ -220,6 +220,20 @@ var _ = Describe("streamFrameQueue", func() {
 			Expect(frame).To(BeNil())
 		})
 
+		It("tells the FlowControlManager how many bytes it sent", func() {
+			queue.Push(frame1, false)
+			_, err := queue.Pop(1000)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(queue.flowControlManager.(*mockFlowControlHandler).bytesSent).To(Equal(frame1.DataLen()))
+		})
+
+		It("doesn't add the bytes sent to the FlowControlManager if it was a retransmission", func() {
+			queue.Push(prioFrame1, true)
+			_, err := queue.Pop(1000)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(queue.flowControlManager.(*mockFlowControlHandler).bytesSent).To(BeZero())
+		})
+
 		It("returns normal frames if no prio frames are available", func() {
 			queue.Push(frame1, false)
 			queue.Push(frame2, false)

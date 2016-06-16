@@ -148,8 +148,9 @@ func (q *streamFrameQueue) Pop(maxLength protocol.ByteCount) (*frames.StreamFram
 
 	q.byteLen -= frame.DataLen()
 
-	// TODO: don't add retransmission to connection-level flow control
-	q.flowControlManager.AddBytesSent(streamID, frame.DataLen())
+	if !isPrioFrame {
+		q.flowControlManager.AddBytesSent(streamID, frame.DataLen())
+	}
 
 	q.len--
 	return frame, nil

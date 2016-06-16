@@ -46,6 +46,7 @@ type mockFlowControlHandler struct {
 	remainingConnectionWindowSize protocol.ByteCount
 	bytesReadForStream            protocol.StreamID
 	bytesRead                     protocol.ByteCount
+	bytesSent                     protocol.ByteCount
 
 	highestReceivedForStream protocol.StreamID
 	highestReceived          protocol.ByteCount
@@ -85,8 +86,10 @@ func (m *mockFlowControlHandler) UpdateHighestReceived(streamID protocol.StreamI
 }
 
 func (m *mockFlowControlHandler) AddBytesSent(streamID protocol.StreamID, n protocol.ByteCount) error {
+	m.bytesSent += n
 	return nil
 }
+
 func (m *mockFlowControlHandler) SendWindowSize(streamID protocol.StreamID) (protocol.ByteCount, error) {
 	return m.sendWindowSizes[streamID], nil
 }
