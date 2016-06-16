@@ -74,6 +74,19 @@ func (m *mockFlowControlHandler) UpdateHighestReceived(streamID protocol.StreamI
 	return nil
 }
 
+func (m *mockFlowControlHandler) AddBytesSent(streamID protocol.StreamID, n protocol.ByteCount) error {
+	panic("not implemented")
+}
+func (m *mockFlowControlHandler) SendWindowSize(streamID protocol.StreamID) (protocol.ByteCount, error) {
+	panic("not implemented")
+}
+func (m *mockFlowControlHandler) RemainingConnectionWindowSize() protocol.ByteCount {
+	panic("not implemented")
+}
+func (m *mockFlowControlHandler) UpdateWindow(streamID protocol.StreamID, offset protocol.ByteCount) (bool, error) {
+	panic("not implemented")
+}
+
 var _ = Describe("Stream", func() {
 	var (
 		str     *stream

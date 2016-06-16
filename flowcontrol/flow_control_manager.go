@@ -52,11 +52,8 @@ func (f *flowControlManager) NewStream(streamID protocol.StreamID, contributesTo
 
 // UpdateHighestReceived updates the highest received byte offset for a stream
 // it adds the number of additional bytes to connection level flow control
+// streamID must not be 0 here
 func (f *flowControlManager) UpdateHighestReceived(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
-	if streamID == 0 {
-		return errors.New("UpdateHightestReceived requires an actual StreamID.")
-	}
-
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 
@@ -81,6 +78,7 @@ func (f *flowControlManager) UpdateHighestReceived(streamID protocol.StreamID, b
 	return nil
 }
 
+// streamID must not be 0 here
 func (f *flowControlManager) AddBytesRead(streamID protocol.StreamID, n protocol.ByteCount) error {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
@@ -99,6 +97,7 @@ func (f *flowControlManager) AddBytesRead(streamID protocol.StreamID, n protocol
 	return nil
 }
 
+// streamID must not be 0 here
 func (f *flowControlManager) MaybeTriggerStreamWindowUpdate(streamID protocol.StreamID) (bool, protocol.ByteCount, error) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
@@ -117,6 +116,55 @@ func (f *flowControlManager) MaybeTriggerConnectionWindowUpdate() (bool, protoco
 	defer f.mutex.Unlock()
 
 	return f.streamFlowController[0].MaybeTriggerWindowUpdate()
+}
+
+// streamID must not be 0 here
+func (f *flowControlManager) AddBytesSent(streamID protocol.StreamID, n protocol.ByteCount) error {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+
+	streamFlowController, err := f.getFlowController(streamID)
+	if err != nil {
+		return err
+	}
+
+	streamFlowController.AddBytesSent(n)
+
+	if f.contributesToConnectionFlowControl[streamID] {
+		f.streamFlowController[0].AddBytesSent(n)
+	}
+
+	return nil
+}
+
+// must not be called with StreamID 0
+func (f *flowControlManager) SendWindowSize(streamID protocol.StreamID) (protocol.ByteCount, error) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+
+	streamFlowController, err := f.getFlowController(streamID)
+	if err != nil {
+		return 0, err
+	}
+
+	return streamFlowController.SendWindowOffset(), nil
+}
+
+func (f *flowControlManager) RemainingConnectionWindowSize() protocol.ByteCount {
+	return f.streamFlowController[0].SendWindowSize()
+}
+
+// streamID may be 0 here
+func (f *flowControlManager) UpdateWindow(streamID protocol.StreamID, offset protocol.ByteCount) (bool, error) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+
+	streamFlowController, err := f.getFlowController(streamID)
+	if err != nil {
+		return false, err
+	}
+
+	return streamFlowController.UpdateSendWindow(offset), nil
 }
 
 func (f *flowControlManager) getFlowController(streamID protocol.StreamID) (FlowController, error) {
