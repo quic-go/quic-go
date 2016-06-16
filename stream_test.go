@@ -40,9 +40,12 @@ func (m *mockStreamHandler) queueStreamFrame(f *frames.StreamFrame) error {
 }
 
 type mockFlowControlHandler struct {
-	sendWindowSizes    map[protocol.StreamID]protocol.ByteCount
-	bytesReadForStream protocol.StreamID
-	bytesRead          protocol.ByteCount
+	streamsContributing []protocol.StreamID
+
+	sendWindowSizes               map[protocol.StreamID]protocol.ByteCount
+	remainingConnectionWindowSize protocol.ByteCount
+	bytesReadForStream            protocol.StreamID
+	bytesRead                     protocol.ByteCount
 
 	highestReceivedForStream protocol.StreamID
 	highestReceived          protocol.ByteCount
@@ -88,13 +91,18 @@ func (m *mockFlowControlHandler) SendWindowSize(streamID protocol.StreamID) (pro
 	return m.sendWindowSizes[streamID], nil
 }
 func (m *mockFlowControlHandler) RemainingConnectionWindowSize() protocol.ByteCount {
-	panic("not implemented")
+	return m.remainingConnectionWindowSize
 }
 func (m *mockFlowControlHandler) UpdateWindow(streamID protocol.StreamID, offset protocol.ByteCount) (bool, error) {
 	panic("not implemented")
 }
 func (m *mockFlowControlHandler) StreamContributesToConnectionFlowControl(streamID protocol.StreamID) (bool, error) {
-	panic("not implemented")
+	for _, id := range m.streamsContributing {
+		if id == streamID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 var _ = Describe("Stream", func() {

@@ -406,7 +406,7 @@ var _ = Describe("streamFrameQueue", func() {
 				Expect(frame.DataLen()).To(Equal(protocol.ByteCount(len)))
 			})
 
-			It("returns a split frame if the whole frame doesn't fit, for non-zero StreamFrame offset", func() {
+			It("returns a split frame if the whole frame doesn't fit in the stream flow control window, for non-zero StreamFrame offset", func() {
 				frame1.Offset = 2
 				queue.Push(frame1, false)
 				queue.flowControlManager.(*mockFlowControlHandler).sendWindowSizes[frame1.StreamID] = 4
@@ -415,8 +415,29 @@ var _ = Describe("streamFrameQueue", func() {
 				Expect(frame.DataLen()).To(Equal(protocol.ByteCount(2)))
 			})
 
+			It("returns a split frame if the whole frame doesn't fit in the connection flow control window", func() {
+				frame1.Offset = 2
+				queue.Push(frame1, false)
+				queue.flowControlManager.(*mockFlowControlHandler).streamsContributing = []protocol.StreamID{frame1.StreamID}
+				queue.flowControlManager.(*mockFlowControlHandler).remainingConnectionWindowSize = 3
+				frame, err := queue.Pop(1000)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(frame.DataLen()).To(Equal(protocol.ByteCount(3)))
+			})
+
 			It("skips a frame if the stream is flow control blocked", func() {
 				queue.flowControlManager.(*mockFlowControlHandler).sendWindowSizes[frame1.StreamID] = 0
+				queue.Push(frame1, false)
+				queue.Push(frame2, false)
+				frame, err := queue.Pop(1000)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(frame).To(Equal(frame2))
+			})
+
+			It("skips a frame if the connection is flow control blocked", func() {
+				queue.flowControlManager.(*mockFlowControlHandler).sendWindowSizes[frame1.StreamID] = 10000
+				queue.flowControlManager.(*mockFlowControlHandler).streamsContributing = []protocol.StreamID{frame1.StreamID}
+				queue.flowControlManager.(*mockFlowControlHandler).remainingConnectionWindowSize = 0
 				queue.Push(frame1, false)
 				queue.Push(frame2, false)
 				frame, err := queue.Pop(1000)

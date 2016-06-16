@@ -148,7 +148,7 @@ func (q *streamFrameQueue) Pop(maxLength protocol.ByteCount) (*frames.StreamFram
 
 	q.byteLen -= frame.DataLen()
 
-	// TODO: find a better solution for identifying streams that don't contribute to connection level flow control
+	// TODO: don't add retransmission to connection-level flow control
 	q.flowControlManager.AddBytesSent(streamID, frame.DataLen())
 
 	q.len--
@@ -261,9 +261,21 @@ func (q *streamFrameQueue) getMaximumFrameDataSize(frame *frames.StreamFrame) (p
 	if err != nil {
 		return 0, err
 	}
-	if frame.Offset > highestAllowedStreamOffset { // stream level flow control blocked
+	// stream level flow control blocked
+	// TODO: shouldn't that be >=
+	if frame.Offset > highestAllowedStreamOffset {
 		return 0, errStreamFlowControlBlocked
 	}
 
-	return highestAllowedStreamOffset - frame.Offset, nil
+	maxFrameSize := highestAllowedStreamOffset - frame.Offset
+
+	contributes, err := q.flowControlManager.StreamContributesToConnectionFlowControl(frame.StreamID)
+	if err != nil {
+		return 0, err
+	}
+	if contributes {
+		maxFrameSize = utils.MinByteCount(maxFrameSize, q.flowControlManager.RemainingConnectionWindowSize())
+	}
+
+	return maxFrameSize, nil
 }
