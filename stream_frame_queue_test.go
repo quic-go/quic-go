@@ -13,7 +13,6 @@ var _ = Describe("streamFrameQueue", func() {
 	var queue *streamFrameQueue
 
 	BeforeEach(func() {
-		queue = newStreamFrameQueue()
 		prioFrame1 = &frames.StreamFrame{
 			StreamID: 5,
 			Data:     []byte{0x13, 0x37},
@@ -35,11 +34,13 @@ var _ = Describe("streamFrameQueue", func() {
 			Data:     []byte{0xBE, 0xEF},
 		}
 
-		queue.UpdateWindow(prioFrame1.StreamID, 1000)
-		queue.UpdateWindow(prioFrame2.StreamID, 1000)
-		queue.UpdateWindow(frame1.StreamID, 1000)
-		queue.UpdateWindow(frame2.StreamID, 1000)
-		queue.UpdateWindow(frame3.StreamID, 1000)
+		fcm := newMockFlowControlHandler()
+		fcm.sendWindowSizes[frame1.StreamID] = protocol.MaxByteCount
+		fcm.sendWindowSizes[frame2.StreamID] = protocol.MaxByteCount
+		fcm.sendWindowSizes[frame3.StreamID] = protocol.MaxByteCount
+		fcm.sendWindowSizes[prioFrame1.StreamID] = protocol.MaxByteCount
+		fcm.sendWindowSizes[prioFrame2.StreamID] = protocol.MaxByteCount
+		queue = newStreamFrameQueue(fcm)
 	})
 
 	It("sets the DataLenPresent on all StreamFrames", func() {
@@ -389,7 +390,7 @@ var _ = Describe("streamFrameQueue", func() {
 		Context("flow control", func() {
 			It("returns the whole frame if it fits", func() {
 				frame1.Offset = 10
-				queue.flowControlWindows[frame1.StreamID] = 10 + frame1.DataLen()
+				queue.flowControlManager.(*mockFlowControlHandler).sendWindowSizes[frame1.StreamID] = 10 + frame1.DataLen()
 				queue.Push(frame1, false)
 				frame, err := queue.Pop(1000)
 				Expect(err).ToNot(HaveOccurred())
@@ -398,23 +399,24 @@ var _ = Describe("streamFrameQueue", func() {
 
 			It("returns a split frame if the whole frame doesn't fit", func() {
 				queue.Push(frame1, false)
-				queue.flowControlWindows[frame1.StreamID] = 3
+				len := frame1.DataLen() - 1
+				queue.flowControlManager.(*mockFlowControlHandler).sendWindowSizes[frame1.StreamID] = len
 				frame, err := queue.Pop(1000)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.DataLen()).To(Equal(protocol.ByteCount(3)))
+				Expect(frame.DataLen()).To(Equal(protocol.ByteCount(len)))
 			})
 
 			It("returns a split frame if the whole frame doesn't fit, for non-zero StreamFrame offset", func() {
 				frame1.Offset = 2
 				queue.Push(frame1, false)
-				queue.flowControlWindows[frame1.StreamID] = 4
+				queue.flowControlManager.(*mockFlowControlHandler).sendWindowSizes[frame1.StreamID] = 4
 				frame, err := queue.Pop(1000)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.DataLen()).To(Equal(protocol.ByteCount(2)))
 			})
 
 			It("skips a frame if the stream is flow control blocked", func() {
-				queue.flowControlWindows[frame1.StreamID] = 0
+				queue.flowControlManager.(*mockFlowControlHandler).sendWindowSizes[frame1.StreamID] = 0
 				queue.Push(frame1, false)
 				queue.Push(frame2, false)
 				frame, err := queue.Pop(1000)
@@ -423,8 +425,8 @@ var _ = Describe("streamFrameQueue", func() {
 			})
 
 			It("returns nil if no stream is not flow control blocked", func() {
-				queue.flowControlWindows[frame1.StreamID] = 0
-				queue.flowControlWindows[frame2.StreamID] = 0
+				queue.flowControlManager.(*mockFlowControlHandler).sendWindowSizes[frame1.StreamID] = 0
+				queue.flowControlManager.(*mockFlowControlHandler).sendWindowSizes[frame2.StreamID] = 0
 				queue.Push(frame1, false)
 				queue.Push(frame2, false)
 				frame, err := queue.Pop(1000)
@@ -486,13 +488,6 @@ var _ = Describe("streamFrameQueue", func() {
 			Expect(frame).To(Equal(frame2))
 		})
 
-		It("deletes the entries from the flowControlWindows map", func() {
-			queue.UpdateWindow(1337, 0x4000)
-			Expect(queue.flowControlWindows).To(HaveKey(protocol.StreamID(1337)))
-			queue.RemoveStream(1337)
-			Expect(queue.flowControlWindows).ToNot(HaveKey(protocol.StreamID(1337)))
-		})
-
 		Context("garbage collection of activeStreams", func() {
 			It("adjusts the activeStreams slice", func() {
 				queue.activeStreams = []protocol.StreamID{5, 6, 10, 2, 3}
@@ -526,31 +521,6 @@ var _ = Describe("streamFrameQueue", func() {
 				queue.activeStreamsPosition = 2 // the next frame would be from Stream 10
 				queue.RemoveStream(10)
 				Expect(queue.activeStreamsPosition).To(Equal(2)) // the next frame will be from Stream 2
-			})
-		})
-	})
-
-	Context("flow control", func() {
-
-		Context("updating the window", func() {
-			It("creates an entry for a new stream", func() {
-				queue.UpdateWindow(1337, 0x1337)
-				Expect(queue.flowControlWindows).To(HaveKey(protocol.StreamID(1337)))
-				Expect(queue.flowControlWindows[1337]).To(Equal(protocol.ByteCount(0x1337)))
-			})
-
-			It("updates the window for an existing stream", func() {
-				queue.UpdateWindow(1337, 0x1000)
-				Expect(queue.flowControlWindows[1337]).To(Equal(protocol.ByteCount(0x1000)))
-				queue.UpdateWindow(1337, 0x2000)
-				Expect(queue.flowControlWindows[1337]).To(Equal(protocol.ByteCount(0x2000)))
-			})
-
-			It("does not decrease the window size", func() {
-				queue.UpdateWindow(1337, 0x1000)
-				Expect(queue.flowControlWindows[1337]).To(Equal(protocol.ByteCount(0x1000)))
-				queue.UpdateWindow(1337, 0x500)
-				Expect(queue.flowControlWindows[1337]).To(Equal(protocol.ByteCount(0x1000)))
 			})
 		})
 	})

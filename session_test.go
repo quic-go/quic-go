@@ -73,9 +73,6 @@ var _ = Describe("Session", func() {
 		Expect(err).NotTo(HaveOccurred())
 		session = pSession.(*Session)
 		Expect(session.streams).To(HaveLen(1)) // Crypto stream
-
-		// TODO: remove this once the streamFrameQueue is properly initialized
-		session.streamFrameQueue.UpdateWindow(5, protocol.MaxByteCount)
 	})
 
 	Context("when handling stream frames", func() {
@@ -340,7 +337,6 @@ var _ = Describe("Session", func() {
 				ByteOffset: 0x800000,
 			})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(session.flowController.SendWindowSize()).To(Equal(protocol.ByteCount(0x800000)))
 		})
 
 		It("errors when the stream is not known", func() {
@@ -461,6 +457,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("sends queued stream frames", func() {
+			session.OpenStream(5)
 			session.queueStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
 				Data:     []byte("foobar"),
@@ -613,65 +610,77 @@ var _ = Describe("Session", func() {
 
 		Context("bundling of small packets", func() {
 			It("bundles two small frames into one packet", func() {
+				session.OpenStream(5)
 				go session.run()
 
-				session.queueStreamFrame(&frames.StreamFrame{
+				err := session.queueStreamFrame(&frames.StreamFrame{
 					StreamID: 5,
 					Data:     []byte("foobar1"),
 				})
-				session.queueStreamFrame(&frames.StreamFrame{
+				Expect(err).ToNot(HaveOccurred())
+				err = session.queueStreamFrame(&frames.StreamFrame{
 					StreamID: 5,
 					Data:     []byte("foobar2"),
 				})
+				Expect(err).ToNot(HaveOccurred())
 				time.Sleep(10 * time.Millisecond)
 				Expect(conn.written).To(HaveLen(1))
 			})
 
 			It("sends out two big frames in two packet", func() {
+				session.OpenStream(5)
 				go session.run()
 
-				session.queueStreamFrame(&frames.StreamFrame{
+				err := session.queueStreamFrame(&frames.StreamFrame{
 					StreamID: 5,
 					Data:     bytes.Repeat([]byte{'e'}, int(protocol.SmallPacketPayloadSizeThreshold+50)),
 				})
-				session.queueStreamFrame(&frames.StreamFrame{
+				Expect(err).ToNot(HaveOccurred())
+				err = session.queueStreamFrame(&frames.StreamFrame{
 					StreamID: 5,
 					Data:     bytes.Repeat([]byte{'f'}, int(protocol.SmallPacketPayloadSizeThreshold+50)),
 				})
+				Expect(err).ToNot(HaveOccurred())
 				time.Sleep(10 * time.Millisecond)
 				Expect(conn.written).To(HaveLen(2))
 			})
 
 			It("sends out two small frames that are written to long after one another into two packet", func() {
+				session.OpenStream(5)
 				go session.run()
 
-				session.queueStreamFrame(&frames.StreamFrame{
+				err := session.queueStreamFrame(&frames.StreamFrame{
 					StreamID: 5,
 					Data:     []byte("foobar1"),
 				})
+				Expect(err).ToNot(HaveOccurred())
 				time.Sleep(20 * protocol.SmallPacketSendDelay)
-				session.queueStreamFrame(&frames.StreamFrame{
+				err = session.queueStreamFrame(&frames.StreamFrame{
 					StreamID: 5,
 					Data:     []byte("foobar2"),
 				})
+				Expect(err).ToNot(HaveOccurred())
 				time.Sleep(10 * time.Millisecond)
 				Expect(conn.written).To(HaveLen(2))
 			})
 
 			It("sends a queued ACK frame only once", func() {
+				session.OpenStream(5)
 				go session.run()
 
 				packetNumber := protocol.PacketNumber(0x1337)
 				session.receivedPacketHandler.ReceivedPacket(packetNumber, true)
-				session.queueStreamFrame(&frames.StreamFrame{
+				err := session.queueStreamFrame(&frames.StreamFrame{
 					StreamID: 5,
 					Data:     []byte("foobar1"),
 				})
+				Expect(err).ToNot(HaveOccurred())
 				time.Sleep(20 * protocol.SmallPacketSendDelay)
-				session.queueStreamFrame(&frames.StreamFrame{
+				err = session.queueStreamFrame(&frames.StreamFrame{
 					StreamID: 5,
 					Data:     []byte("foobar2"),
 				})
+				Expect(err).ToNot(HaveOccurred())
 				time.Sleep(10 * time.Millisecond)
 				Expect(conn.written).To(HaveLen(2))
 				Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x37, 0x13})))

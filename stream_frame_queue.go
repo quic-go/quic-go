@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/lucas-clemente/quic-go/flowcontrol"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
@@ -20,9 +21,7 @@ type streamFrameQueue struct {
 	frameMap        map[protocol.StreamID][]*frames.StreamFrame
 	frameQueueMutex sync.RWMutex
 
-	flowControlWindows map[protocol.StreamID]protocol.ByteCount
-	bytesSent          protocol.ByteCount
-	windowMutex        sync.Mutex
+	flowControlManager flowcontrol.FlowControlManager
 
 	activeStreams         []protocol.StreamID
 	activeStreamsPosition int
@@ -31,10 +30,10 @@ type streamFrameQueue struct {
 	byteLen protocol.ByteCount
 }
 
-func newStreamFrameQueue() *streamFrameQueue {
+func newStreamFrameQueue(flowControlManager flowcontrol.FlowControlManager) *streamFrameQueue {
 	return &streamFrameQueue{
 		frameMap:           make(map[protocol.StreamID][]*frames.StreamFrame),
-		flowControlWindows: make(map[protocol.StreamID]protocol.ByteCount),
+		flowControlManager: flowControlManager,
 	}
 }
 
@@ -75,24 +74,10 @@ func (q *streamFrameQueue) ByteLen() protocol.ByteCount {
 	return q.byteLen
 }
 
-// UpdateWindow updates the flow control window
-// streamID may be 0, for the connection level flow control window
-func (q *streamFrameQueue) UpdateWindow(streamID protocol.StreamID, offset protocol.ByteCount) {
-	q.windowMutex.Lock()
-	defer q.windowMutex.Unlock()
-
-	windowSize, ok := q.flowControlWindows[streamID]
-	if !ok || offset > windowSize {
-		q.flowControlWindows[streamID] = offset
-	}
-}
-
 // Pop returns the next element and deletes it from the queue
 func (q *streamFrameQueue) Pop(maxLength protocol.ByteCount) (*frames.StreamFrame, error) {
 	q.frameQueueMutex.Lock()
-	q.windowMutex.Lock()
 	defer q.frameQueueMutex.Unlock()
-	defer q.windowMutex.Unlock()
 
 	var isPrioFrame bool
 	var frame *frames.StreamFrame
@@ -127,6 +112,9 @@ func (q *streamFrameQueue) Pop(maxLength protocol.ByteCount) (*frames.StreamFram
 			}
 			frame = q.frameMap[streamID][0]
 			maxFrameDataSize, err = q.getMaximumFrameDataSize(frame)
+			if err != nil {
+				return nil, err
+			}
 			if maxFrameDataSize > 0 {
 				foundFrame = true
 			}
@@ -161,9 +149,7 @@ func (q *streamFrameQueue) Pop(maxLength protocol.ByteCount) (*frames.StreamFram
 	q.byteLen -= frame.DataLen()
 
 	// TODO: find a better solution for identifying streams that don't contribute to connection level flow control
-	if frame.StreamID != 1 && frame.StreamID != 3 {
-		q.bytesSent += frame.DataLen()
-	}
+	q.flowControlManager.AddBytesSent(streamID, frame.DataLen())
 
 	q.len--
 	return frame, nil
@@ -192,8 +178,6 @@ func (q *streamFrameQueue) RemoveStream(streamID protocol.StreamID) {
 		}
 		delete(q.frameMap, streamID)
 	}
-
-	delete(q.flowControlWindows, streamID)
 
 	for i, s := range q.activeStreams {
 		if s == streamID {
@@ -273,9 +257,9 @@ func (q *streamFrameQueue) maybeSplitOffFrame(frame *frames.StreamFrame, n proto
 }
 
 func (q *streamFrameQueue) getMaximumFrameDataSize(frame *frames.StreamFrame) (protocol.ByteCount, error) {
-	highestAllowedStreamOffset, ok := q.flowControlWindows[frame.StreamID]
-	if !ok {
-		return 0, errMapAccess
+	highestAllowedStreamOffset, err := q.flowControlManager.SendWindowSize(frame.StreamID)
+	if err != nil {
+		return 0, err
 	}
 	if frame.Offset > highestAllowedStreamOffset { // stream level flow control blocked
 		return 0, errStreamFlowControlBlocked

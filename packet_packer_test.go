@@ -50,16 +50,18 @@ var _ = Describe("Packet packer", func() {
 	)
 
 	BeforeEach(func() {
+		fcm := newMockFlowControlHandler()
+		fcm.sendWindowSizes[3] = protocol.MaxByteCount
+		fcm.sendWindowSizes[5] = protocol.MaxByteCount
+		fcm.sendWindowSizes[7] = protocol.MaxByteCount
+
 		packer = &packetPacker{
 			cryptoSetup:                 &handshake.CryptoSetup{},
 			connectionParametersManager: handshake.NewConnectionParamatersManager(),
 			sentPacketHandler:           newMockSentPacketHandler(),
 			blockedManager:              newBlockedManager(),
-			streamFrameQueue:            newStreamFrameQueue(),
+			streamFrameQueue:            newStreamFrameQueue(fcm),
 		}
-		packer.streamFrameQueue.UpdateWindow(3, protocol.MaxByteCount)
-		packer.streamFrameQueue.UpdateWindow(5, protocol.MaxByteCount)
-		packer.streamFrameQueue.UpdateWindow(7, protocol.MaxByteCount)
 		publicHeaderLen = 1 + 8 + 1 // 1 flag byte, 8 connection ID, 1 packet number
 		packer.version = protocol.Version34
 	})
