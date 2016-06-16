@@ -93,6 +93,9 @@ func (m *mockFlowControlHandler) RemainingConnectionWindowSize() protocol.ByteCo
 func (m *mockFlowControlHandler) UpdateWindow(streamID protocol.StreamID, offset protocol.ByteCount) (bool, error) {
 	panic("not implemented")
 }
+func (m *mockFlowControlHandler) StreamContributesToConnectionFlowControl(streamID protocol.StreamID) (bool, error) {
+	panic("not implemented")
+}
 
 var _ = Describe("Stream", func() {
 	var (

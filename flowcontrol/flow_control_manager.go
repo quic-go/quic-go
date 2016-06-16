@@ -167,6 +167,17 @@ func (f *flowControlManager) UpdateWindow(streamID protocol.StreamID, offset pro
 	return streamFlowController.UpdateSendWindow(offset), nil
 }
 
+func (f *flowControlManager) StreamContributesToConnectionFlowControl(streamID protocol.StreamID) (bool, error) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+
+	contributes, ok := f.contributesToConnectionFlowControl[streamID]
+	if !ok {
+		return false, errMapAccess
+	}
+	return contributes, nil
+}
+
 func (f *flowControlManager) getFlowController(streamID protocol.StreamID) (FlowController, error) {
 	streamFlowController, ok := f.streamFlowController[streamID]
 	if !ok {

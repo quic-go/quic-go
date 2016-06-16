@@ -29,4 +29,5 @@ type FlowControlManager interface {
 	SendWindowSize(streamID protocol.StreamID) (protocol.ByteCount, error)
 	RemainingConnectionWindowSize() protocol.ByteCount
 	UpdateWindow(streamID protocol.StreamID, offset protocol.ByteCount) (bool, error)
+	StreamContributesToConnectionFlowControl(streamID protocol.StreamID) (bool, error)
 }
