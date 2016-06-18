@@ -703,7 +703,7 @@ var _ = Describe("Session", func() {
 			err := session.sentPacketHandler.SentPacket(&ackhandler.Packet{PacketNumber: p, Length: 1})
 			Expect(err).NotTo(HaveOccurred())
 			time.Sleep(time.Microsecond)
-			err = session.sentPacketHandler.ReceivedAck(&frames.AckFrame{LargestObserved: p})
+			err = session.sentPacketHandler.ReceivedAck(&frames.AckFrameLegacy{LargestObserved: p})
 			Expect(err).NotTo(HaveOccurred())
 		}
 		// Now, we send a single packet, and expect that it was retransmitted later
@@ -755,11 +755,11 @@ var _ = Describe("Session", func() {
 				PacketNumber: 1,
 				Length:       1,
 			})
-			err := session.handleFrames([]frames.Frame{&frames.AckFrame{
+			err := session.handleFrames([]frames.Frame{&frames.AckFrameLegacy{
 				LargestObserved: 1,
 			}})
 			Expect(err).NotTo(HaveOccurred())
-			err = session.handleFrames([]frames.Frame{&frames.AckFrame{
+			err = session.handleFrames([]frames.Frame{&frames.AckFrameLegacy{
 				LargestObserved: 1,
 			}})
 			Expect(err).NotTo(HaveOccurred())

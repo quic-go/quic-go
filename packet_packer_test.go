@@ -16,13 +16,13 @@ type mockSentPacketHandler struct {
 	retransmissionQueue []*ackhandler.Packet
 }
 
-func (h *mockSentPacketHandler) SentPacket(packet *ackhandler.Packet) error  { return nil }
-func (h *mockSentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) error { return nil }
-func (h *mockSentPacketHandler) BytesInFlight() protocol.ByteCount           { return 0 }
-func (h *mockSentPacketHandler) GetLargestObserved() protocol.PacketNumber   { return 1 }
-func (h *mockSentPacketHandler) CongestionAllowsSending() bool               { return true }
-func (h *mockSentPacketHandler) CheckForError() error                        { return nil }
-func (h *mockSentPacketHandler) TimeOfFirstRTO() time.Time                   { panic("not implemented") }
+func (h *mockSentPacketHandler) SentPacket(packet *ackhandler.Packet) error        { return nil }
+func (h *mockSentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameLegacy) error { return nil }
+func (h *mockSentPacketHandler) BytesInFlight() protocol.ByteCount                 { return 0 }
+func (h *mockSentPacketHandler) GetLargestObserved() protocol.PacketNumber         { return 1 }
+func (h *mockSentPacketHandler) CongestionAllowsSending() bool                     { return true }
+func (h *mockSentPacketHandler) CheckForError() error                              { return nil }
+func (h *mockSentPacketHandler) TimeOfFirstRTO() time.Time                         { panic("not implemented") }
 
 func (h *mockSentPacketHandler) ProbablyHasPacketForRetransmission() bool {
 	return len(h.retransmissionQueue) > 0
@@ -169,7 +169,7 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	It("packs many control frames into 1 packets", func() {
-		f := &frames.AckFrame{LargestObserved: 1}
+		f := &frames.AckFrameLegacy{LargestObserved: 1}
 		b := &bytes.Buffer{}
 		f.Write(b, protocol.Version32)
 		maxFramesPerPacket := int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLen) / b.Len()

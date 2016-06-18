@@ -142,7 +142,7 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 	return nil
 }
 
-func (h *sentPacketHandler) calculateExpectedEntropy(ackFrame *frames.AckFrame) (EntropyAccumulator, error) {
+func (h *sentPacketHandler) calculateExpectedEntropy(ackFrame *frames.AckFrameLegacy) (EntropyAccumulator, error) {
 	packet, ok := h.packetHistory[ackFrame.LargestObserved]
 	if !ok {
 		return 0, ErrMapAccess
@@ -172,7 +172,7 @@ func (h *sentPacketHandler) calculateExpectedEntropy(ackFrame *frames.AckFrame) 
 }
 
 // TODO: Simplify return types
-func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame) error {
+func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameLegacy) error {
 	if ackFrame.LargestObserved > h.lastSentPacketNumber {
 		return errAckForUnsentPacket
 	}

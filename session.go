@@ -251,8 +251,8 @@ func (s *Session) handleFrames(fs []frames.Frame) error {
 		case *frames.StreamFrame:
 			err = s.handleStreamFrame(frame)
 			// TODO: send RstStreamFrame
-		case *frames.AckFrame:
-			err = s.handleAckFrame(frame)
+		case *frames.AckFrameLegacy:
+			err = s.handleAckFrameLegacy(frame)
 		case *frames.ConnectionCloseFrame:
 			s.closeImpl(qerr.Error(frame.ErrorCode, frame.ReasonPhrase), true)
 		case *frames.GoawayFrame:
@@ -376,7 +376,7 @@ func (s *Session) handleRstStreamFrame(frame *frames.RstStreamFrame) error {
 	return nil
 }
 
-func (s *Session) handleAckFrame(frame *frames.AckFrame) error {
+func (s *Session) handleAckFrameLegacy(frame *frames.AckFrameLegacy) error {
 	if err := s.sentPacketHandler.ReceivedAck(frame); err != nil {
 		return err
 	}

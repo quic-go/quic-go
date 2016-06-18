@@ -61,7 +61,7 @@ ReadLoop:
 				err = qerr.Error(qerr.InvalidStreamData, err.Error())
 			}
 		} else if typeByte&0xc0 == 0x40 {
-			frame, err = frames.ParseAckFrame(r, u.version)
+			frame, err = frames.ParseAckFrameLegacy(r, u.version)
 			if err != nil {
 				err = qerr.Error(qerr.InvalidAckData, err.Error())
 			}

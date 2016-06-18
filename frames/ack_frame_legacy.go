@@ -14,8 +14,8 @@ var (
 	errTooManyNackRanges = errors.New("AckFrame: Too many NACK ranges. Truncating not implemented.")
 )
 
-// An AckFrame in QUIC
-type AckFrame struct {
+// An AckFrameLegacy is an ACK Frame in legacy format (ACK frame for QUIC <= 33)
+type AckFrameLegacy struct {
 	LargestObserved protocol.PacketNumber
 	Entropy         byte
 	NackRanges      []NackRange // has to be ordered. The NACK range with the highest FirstPacketNumber goes first, the NACK range with the lowest FirstPacketNumber goes last
@@ -26,7 +26,7 @@ type AckFrame struct {
 }
 
 // Write writes an ACK frame.
-func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
+func (f *AckFrameLegacy) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
 	largestObservedLen := protocol.GetPacketNumberLength(f.LargestObserved)
 
 	typeByte := uint8(0x40)
@@ -108,7 +108,7 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 }
 
 // MinLength of a written frame
-func (f *AckFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
+func (f *AckFrameLegacy) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
 	l := 1 + 1 + 2 + 1 + 1 + 4 // 1 TypeByte, 1 Entropy, 2 ACK delay time, 1 Num Timestamp, 1 Delta Largest Observed, 4 FirstTimestamp
 	l += int(protocol.GetPacketNumberLength(f.LargestObserved))
 	l += (1 + 2) * 0 /* TODO: num_timestamps */
@@ -120,7 +120,7 @@ func (f *AckFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount
 }
 
 // HasNACK returns if the frame has NACK ranges
-func (f *AckFrame) HasNACK() bool {
+func (f *AckFrameLegacy) HasNACK() bool {
 	if len(f.NackRanges) > 0 {
 		return true
 	}
@@ -128,16 +128,16 @@ func (f *AckFrame) HasNACK() bool {
 }
 
 // GetHighestInOrderPacketNumber gets the highest in order packet number that is confirmed by this ACK
-func (f *AckFrame) GetHighestInOrderPacketNumber() protocol.PacketNumber {
+func (f *AckFrameLegacy) GetHighestInOrderPacketNumber() protocol.PacketNumber {
 	if f.HasNACK() {
 		return (f.NackRanges[len(f.NackRanges)-1].FirstPacketNumber - 1)
 	}
 	return f.LargestObserved
 }
 
-// ParseAckFrame reads an ACK frame
-func ParseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, error) {
-	frame := &AckFrame{}
+// ParseAckFrameLegacy reads a legacy ACK frame
+func ParseAckFrameLegacy(r *bytes.Reader, version protocol.VersionNumber) (*AckFrameLegacy, error) {
+	frame := &AckFrameLegacy{}
 
 	typeByte, err := r.ReadByte()
 	if err != nil {
@@ -283,7 +283,7 @@ func ParseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 
 // numWrittenNackRanges calculates the number of NackRanges that are about to be written
 // this number is different from len(f.NackRanges) for the case of contiguous NACK ranges
-func (f *AckFrame) numWrittenNackRanges() uint64 {
+func (f *AckFrameLegacy) numWrittenNackRanges() uint64 {
 	var numRanges uint64
 	for _, nackRange := range f.NackRanges {
 		rangeLength := nackRange.Len()
@@ -296,7 +296,7 @@ func (f *AckFrame) numWrittenNackRanges() uint64 {
 	return numRanges
 }
 
-func (f *AckFrame) validateNackRanges() bool {
+func (f *AckFrameLegacy) validateNackRanges() bool {
 	// check the validity of every single NACK range
 	for _, nackRange := range f.NackRanges {
 		if nackRange.FirstPacketNumber > nackRange.LastPacketNumber {
