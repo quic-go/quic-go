@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync/atomic"
 
-	"github.com/lucas-clemente/quic-go/ackhandler"
+	"github.com/lucas-clemente/quic-go/ackhandlerlegacy"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -24,7 +24,7 @@ type packetPacker struct {
 	version      protocol.VersionNumber
 	cryptoSetup  *handshake.CryptoSetup
 
-	sentPacketHandler           ackhandler.SentPacketHandler
+	sentPacketHandler           ackhandlerlegacy.SentPacketHandler
 	connectionParametersManager *handshake.ConnectionParametersManager
 
 	streamFrameQueue *streamFrameQueue
@@ -34,7 +34,7 @@ type packetPacker struct {
 	lastPacketNumber protocol.PacketNumber
 }
 
-func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.CryptoSetup, sentPacketHandler ackhandler.SentPacketHandler, connectionParametersHandler *handshake.ConnectionParametersManager, blockedManager *blockedManager, streamFrameQueue *streamFrameQueue, version protocol.VersionNumber) *packetPacker {
+func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.CryptoSetup, sentPacketHandler ackhandlerlegacy.SentPacketHandler, connectionParametersHandler *handshake.ConnectionParametersManager, blockedManager *blockedManager, streamFrameQueue *streamFrameQueue, version protocol.VersionNumber) *packetPacker {
 	return &packetPacker{
 		cryptoSetup:                 cryptoSetup,
 		connectionID:                connectionID,

@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/ackhandler"
+	"github.com/lucas-clemente/quic-go/ackhandlerlegacy"
 	"github.com/lucas-clemente/quic-go/flowcontrol"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -49,9 +49,9 @@ type Session struct {
 	openStreamsCount uint32
 	streamsMutex     sync.RWMutex
 
-	sentPacketHandler     ackhandler.SentPacketHandler
-	receivedPacketHandler ackhandler.ReceivedPacketHandler
-	stopWaitingManager    ackhandler.StopWaitingManager
+	sentPacketHandler     ackhandlerlegacy.SentPacketHandler
+	receivedPacketHandler ackhandlerlegacy.ReceivedPacketHandler
+	stopWaitingManager    ackhandlerlegacy.StopWaitingManager
 	windowUpdateManager   *windowUpdateManager
 	blockedManager        *blockedManager
 	streamFrameQueue      *streamFrameQueue
@@ -90,7 +90,7 @@ type Session struct {
 
 // newSession makes a new session
 func newSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) (packetHandler, error) {
-	stopWaitingManager := ackhandler.NewStopWaitingManager()
+	stopWaitingManager := ackhandlerlegacy.NewStopWaitingManager()
 	connectionParametersManager := handshake.NewConnectionParamatersManager()
 
 	session := &Session{
@@ -100,8 +100,8 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		streamCallback:              streamCallback,
 		closeCallback:               closeCallback,
 		streams:                     make(map[protocol.StreamID]*stream),
-		sentPacketHandler:           ackhandler.NewSentPacketHandler(stopWaitingManager),
-		receivedPacketHandler:       ackhandler.NewReceivedPacketHandler(),
+		sentPacketHandler:           ackhandlerlegacy.NewSentPacketHandler(stopWaitingManager),
+		receivedPacketHandler:       ackhandlerlegacy.NewReceivedPacketHandler(),
 		stopWaitingManager:          stopWaitingManager,
 		flowControlManager:          flowcontrol.NewFlowControlManager(connectionParametersManager),
 		flowController:              flowcontrol.NewFlowController(0, connectionParametersManager),
@@ -271,7 +271,7 @@ func (s *Session) handleFrames(fs []frames.Frame) error {
 
 		if err != nil {
 			switch err {
-			case ackhandler.ErrDuplicateOrOutOfOrderAck:
+			case ackhandlerlegacy.ErrDuplicateOrOutOfOrderAck:
 			// Can happen e.g. when packets thought missing arrive late
 			case errRstStreamOnInvalidStream:
 				// Can happen when RST_STREAMs arrive early or late (?)
@@ -536,7 +536,7 @@ func (s *Session) sendPacket() error {
 		return nil
 	}
 
-	err = s.sentPacketHandler.SentPacket(&ackhandler.Packet{
+	err = s.sentPacketHandler.SentPacket(&ackhandlerlegacy.Packet{
 		PacketNumber: packet.number,
 		Frames:       packet.frames,
 		EntropyBit:   packet.entropyBit,

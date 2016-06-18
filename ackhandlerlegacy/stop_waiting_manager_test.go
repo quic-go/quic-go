@@ -1,4 +1,4 @@
-package ackhandler
+package ackhandlerlegacy
 
 import (
 	"github.com/lucas-clemente/quic-go/protocol"

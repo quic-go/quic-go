@@ -12,7 +12,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/lucas-clemente/quic-go/ackhandler"
+	"github.com/lucas-clemente/quic-go/ackhandlerlegacy"
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -395,7 +395,7 @@ var _ = Describe("Session", func() {
 	Context("sending packets", func() {
 		It("sends ack frames", func() {
 			packetNumber := protocol.PacketNumber(0x0135)
-			var entropy ackhandler.EntropyAccumulator
+			var entropy ackhandlerlegacy.EntropyAccumulator
 			session.receivedPacketHandler.ReceivedPacket(packetNumber, true)
 			entropy.Add(packetNumber, true)
 			err := session.sendPacket()
@@ -502,12 +502,12 @@ var _ = Describe("Session", func() {
 				StreamID: 0x5,
 				Data:     []byte("foobar1234567"),
 			}
-			p := ackhandler.Packet{
+			p := ackhandlerlegacy.Packet{
 				PacketNumber: 0x1337,
 				Frames:       []frames.Frame{&f},
 			}
 			sph := newMockSentPacketHandler()
-			sph.(*mockSentPacketHandler).retransmissionQueue = []*ackhandler.Packet{&p}
+			sph.(*mockSentPacketHandler).retransmissionQueue = []*ackhandlerlegacy.Packet{&p}
 			session.sentPacketHandler = sph
 
 			err := session.sendPacket()
@@ -525,16 +525,16 @@ var _ = Describe("Session", func() {
 				StreamID: 0x7,
 				Data:     []byte("loremipsum"),
 			}
-			p1 := ackhandler.Packet{
+			p1 := ackhandlerlegacy.Packet{
 				PacketNumber: 0x1337,
 				Frames:       []frames.Frame{&f1},
 			}
-			p2 := ackhandler.Packet{
+			p2 := ackhandlerlegacy.Packet{
 				PacketNumber: 0x1338,
 				Frames:       []frames.Frame{&f2},
 			}
 			sph := newMockSentPacketHandler()
-			sph.(*mockSentPacketHandler).retransmissionQueue = []*ackhandler.Packet{&p1, &p2}
+			sph.(*mockSentPacketHandler).retransmissionQueue = []*ackhandlerlegacy.Packet{&p1, &p2}
 			session.sentPacketHandler = sph
 
 			err := session.sendPacket()
@@ -679,13 +679,13 @@ var _ = Describe("Session", func() {
 	It("errors when the SentPacketHandler has too many packets tracked", func() {
 		streamFrame := frames.StreamFrame{StreamID: 5, Data: []byte("foobar")}
 		for i := uint32(1); i < protocol.MaxTrackedSentPackets+10; i++ {
-			packet := ackhandler.Packet{PacketNumber: protocol.PacketNumber(i), Frames: []frames.Frame{&streamFrame}, Length: 1}
+			packet := ackhandlerlegacy.Packet{PacketNumber: protocol.PacketNumber(i), Frames: []frames.Frame{&streamFrame}, Length: 1}
 			err := session.sentPacketHandler.SentPacket(&packet)
 			Expect(err).ToNot(HaveOccurred())
 		}
 		// now session.sentPacketHandler.CheckForError will return an error
 		err := session.sendPacket()
-		Expect(err).To(MatchError(ackhandler.ErrTooManyTrackedSentPackets))
+		Expect(err).To(MatchError(ackhandlerlegacy.ErrTooManyTrackedSentPackets))
 	})
 
 	It("stores up to MaxSessionUnprocessedPackets packets", func(done Done) {
@@ -700,7 +700,7 @@ var _ = Describe("Session", func() {
 		// We simulate consistently low RTTs, so that the test works faster
 		n := protocol.PacketNumber(10)
 		for p := protocol.PacketNumber(1); p < n; p++ {
-			err := session.sentPacketHandler.SentPacket(&ackhandler.Packet{PacketNumber: p, Length: 1})
+			err := session.sentPacketHandler.SentPacket(&ackhandlerlegacy.Packet{PacketNumber: p, Length: 1})
 			Expect(err).NotTo(HaveOccurred())
 			time.Sleep(time.Microsecond)
 			err = session.sentPacketHandler.ReceivedAck(&frames.AckFrameLegacy{LargestObserved: p})
@@ -709,7 +709,7 @@ var _ = Describe("Session", func() {
 		// Now, we send a single packet, and expect that it was retransmitted later
 		go session.run()
 		Expect(conn.written).To(BeEmpty())
-		err := session.sentPacketHandler.SentPacket(&ackhandler.Packet{
+		err := session.sentPacketHandler.SentPacket(&ackhandlerlegacy.Packet{
 			PacketNumber: n,
 			Length:       1,
 			Frames: []frames.Frame{&frames.StreamFrame{
@@ -751,7 +751,7 @@ var _ = Describe("Session", func() {
 
 	Context("ignoring errors", func() {
 		It("ignores duplicate acks", func() {
-			session.sentPacketHandler.SentPacket(&ackhandler.Packet{
+			session.sentPacketHandler.SentPacket(&ackhandlerlegacy.Packet{
 				PacketNumber: 1,
 				Length:       1,
 			})

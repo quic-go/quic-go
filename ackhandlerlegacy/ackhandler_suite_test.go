@@ -1,4 +1,4 @@
-package ackhandler
+package ackhandlerlegacy
 
 import (
 	. "github.com/onsi/ginkgo"
@@ -9,5 +9,5 @@ import (
 
 func TestCrypto(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "AckHandler Suite")
+	RunSpecs(t, "AckHandler (Legacy) Suite")
 }

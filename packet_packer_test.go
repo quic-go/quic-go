@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/ackhandler"
+	"github.com/lucas-clemente/quic-go/ackhandlerlegacy"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -13,10 +13,10 @@ import (
 )
 
 type mockSentPacketHandler struct {
-	retransmissionQueue []*ackhandler.Packet
+	retransmissionQueue []*ackhandlerlegacy.Packet
 }
 
-func (h *mockSentPacketHandler) SentPacket(packet *ackhandler.Packet) error        { return nil }
+func (h *mockSentPacketHandler) SentPacket(packet *ackhandlerlegacy.Packet) error  { return nil }
 func (h *mockSentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameLegacy) error { return nil }
 func (h *mockSentPacketHandler) BytesInFlight() protocol.ByteCount                 { return 0 }
 func (h *mockSentPacketHandler) GetLargestObserved() protocol.PacketNumber         { return 1 }
@@ -28,7 +28,7 @@ func (h *mockSentPacketHandler) ProbablyHasPacketForRetransmission() bool {
 	return len(h.retransmissionQueue) > 0
 }
 
-func (h *mockSentPacketHandler) DequeuePacketForRetransmission() *ackhandler.Packet {
+func (h *mockSentPacketHandler) DequeuePacketForRetransmission() *ackhandlerlegacy.Packet {
 	if len(h.retransmissionQueue) > 0 {
 		packet := h.retransmissionQueue[0]
 		h.retransmissionQueue = h.retransmissionQueue[1:]
@@ -37,7 +37,7 @@ func (h *mockSentPacketHandler) DequeuePacketForRetransmission() *ackhandler.Pac
 	return nil
 }
 
-func newMockSentPacketHandler() ackhandler.SentPacketHandler {
+func newMockSentPacketHandler() ackhandlerlegacy.SentPacketHandler {
 	return &mockSentPacketHandler{}
 }
 
