@@ -97,7 +97,7 @@ ReadLoop:
 					err = qerr.Error(qerr.InvalidBlockedData, err.Error())
 				}
 			case 0x06:
-				frame, err = frames.ParseStopWaitingFrame(r, hdr.PacketNumber, hdr.PacketNumberLen)
+				frame, err = frames.ParseStopWaitingFrame(r, hdr.PacketNumber, hdr.PacketNumberLen, u.version)
 				if err != nil {
 					err = qerr.Error(qerr.InvalidStopWaitingData, err.Error())
 				}

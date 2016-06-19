@@ -13,7 +13,7 @@ var _ = Describe("StopWaitingFrame", func() {
 		Context("when parsing", func() {
 			It("accepts sample frame", func() {
 				b := bytes.NewReader([]byte{0x06, 0xA4, 0x03})
-				frame, err := ParseStopWaitingFrame(b, 5, 1)
+				frame, err := ParseStopWaitingFrame(b, 5, 1, protocol.Version33)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.Entropy).To(Equal(byte(0xA4)))
 				Expect(frame.LeastUnacked).To(Equal(protocol.PacketNumber(2)))
@@ -21,8 +21,15 @@ var _ = Describe("StopWaitingFrame", func() {
 
 			It("rejects frames with an invalid LeastUnackedDelta", func() {
 				b := bytes.NewReader([]byte{0x06, 0xA4, 0xD})
-				_, err := ParseStopWaitingFrame(b, 10, 1)
+				_, err := ParseStopWaitingFrame(b, 10, 1, protocol.Version33)
 				Expect(err).To(HaveOccurred())
+			})
+
+			It("reads a StopWaitingFrame, for QUIC version 34", func() {
+				b := bytes.NewReader([]byte{0x06, 0x03})
+				frame, err := ParseStopWaitingFrame(b, 5, 1, protocol.Version34)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(frame.LeastUnacked).To(Equal(protocol.PacketNumber(2)))
 			})
 		})
 
@@ -35,10 +42,22 @@ var _ = Describe("StopWaitingFrame", func() {
 					Entropy:         0xAD,
 					PacketNumberLen: protocol.PacketNumberLen6,
 				}
-				frame.Write(b, 0)
+				frame.Write(b, protocol.Version33)
 				Expect(b.Bytes()[0]).To(Equal(uint8(0x06)))
 				Expect(b.Bytes()[1]).To(Equal(uint8(frame.Entropy)))
 				Expect(b.Bytes()[2:8]).To(Equal([]byte{3, 0, 0, 0, 0, 0}))
+			})
+
+			It("writes a sample frame, for QUIC version 34", func() {
+				b := &bytes.Buffer{}
+				frame := &StopWaitingFrame{
+					LeastUnacked:    10,
+					PacketNumber:    13,
+					PacketNumberLen: protocol.PacketNumberLen6,
+				}
+				frame.Write(b, protocol.Version34)
+				Expect(b.Bytes()[0]).To(Equal(uint8(0x06)))
+				Expect(b.Bytes()[1:7]).To(Equal([]byte{3, 0, 0, 0, 0, 0}))
 			})
 
 			It("errors when PacketNumber was not set", func() {
@@ -132,8 +151,16 @@ var _ = Describe("StopWaitingFrame", func() {
 						LeastUnacked:    10,
 						PacketNumberLen: length,
 					}
-					Expect(frame.MinLength(0)).To(Equal(protocol.ByteCount(length + 2)))
+					Expect(frame.MinLength(protocol.Version33)).To(Equal(protocol.ByteCount(length + 2)))
 				}
+			})
+
+			It("calculates the right minLength, for QUIC version 34", func() {
+				frame := &StopWaitingFrame{
+					LeastUnacked:    10,
+					PacketNumberLen: protocol.PacketNumberLen4,
+				}
+				Expect(frame.MinLength(protocol.Version34)).To(Equal(protocol.ByteCount(4 + 1)))
 			})
 
 			It("errors when packetNumberLen is not set", func() {
@@ -156,7 +183,7 @@ var _ = Describe("StopWaitingFrame", func() {
 				}
 				b := &bytes.Buffer{}
 				frame.Write(b, 0)
-				readframe, err := ParseStopWaitingFrame(bytes.NewReader(b.Bytes()), packetNumber, protocol.PacketNumberLen4)
+				readframe, err := ParseStopWaitingFrame(bytes.NewReader(b.Bytes()), packetNumber, protocol.PacketNumberLen4, protocol.Version33)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(readframe.Entropy).To(Equal(frame.Entropy))
 				Expect(readframe.LeastUnacked).To(Equal(frame.LeastUnacked))
