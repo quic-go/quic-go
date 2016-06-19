@@ -179,3 +179,11 @@ func (f *AckFrameNew) HasNACK() bool {
 	}
 	return false
 }
+
+// GetHighestInOrderPacketNumber gets the highest in order packet number that is confirmed by this ACK
+func (f *AckFrameNew) GetHighestInOrderPacketNumber() protocol.PacketNumber {
+	if f.HasNACK() {
+		panic("NACKs not yet implemented")
+	}
+	return f.LargestObserved
+}
