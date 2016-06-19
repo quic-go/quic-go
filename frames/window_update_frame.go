@@ -24,7 +24,7 @@ func (f *WindowUpdateFrame) Write(b *bytes.Buffer, version protocol.VersionNumbe
 }
 
 // MinLength of a written frame
-func (f *WindowUpdateFrame) MinLength() (protocol.ByteCount, error) {
+func (f *WindowUpdateFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
 	return 1 + 4 + 8, nil
 }
 

@@ -500,7 +500,7 @@ var _ = Describe("AckFrame", func() {
 					LargestObserved: 1,
 				}
 				f.Write(b, 2)
-				Expect(f.MinLength()).To(Equal(protocol.ByteCount(b.Len())))
+				Expect(f.MinLength(0)).To(Equal(protocol.ByteCount(b.Len())))
 			})
 
 			It("has proper min length with a large LargestObserved", func() {
@@ -509,7 +509,7 @@ var _ = Describe("AckFrame", func() {
 					LargestObserved: 0xDEADBEEFCAFE,
 				}
 				f.Write(b, 2)
-				Expect(f.MinLength()).To(Equal(protocol.ByteCount(b.Len())))
+				Expect(f.MinLength(0)).To(Equal(protocol.ByteCount(b.Len())))
 			})
 
 			It("has proper min length with nack ranges", func() {
@@ -520,7 +520,7 @@ var _ = Describe("AckFrame", func() {
 				}
 				err := f.Write(b, protocol.Version31)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(f.MinLength()).To(Equal(protocol.ByteCount(b.Len())))
+				Expect(f.MinLength(0)).To(Equal(protocol.ByteCount(b.Len())))
 			})
 		})
 	})

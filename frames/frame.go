@@ -9,5 +9,5 @@ import (
 // A Frame in QUIC
 type Frame interface {
 	Write(b *bytes.Buffer, version protocol.VersionNumber) error
-	MinLength() (protocol.ByteCount, error)
+	MinLength(version protocol.VersionNumber) (protocol.ByteCount, error)
 }

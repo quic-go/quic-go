@@ -98,7 +98,7 @@ func (q *streamFrameQueue) Pop(maxLength protocol.ByteCount) (*frames.StreamFram
 	}
 
 	// Does the frame fit into the remaining space?
-	frameMinLength, _ := frame.MinLength() // StreamFrame.MinLength *never* returns an error
+	frameMinLength, _ := frame.MinLength(0) // StreamFrame.MinLength *never* returns an error, StreamFrame minLength is independet of protocol version
 	if frameMinLength > maxLength {
 		return nil, nil
 	}
@@ -206,7 +206,7 @@ func (q *streamFrameQueue) getNextStream() (protocol.StreamID, error) {
 // maybeSplitOffFrame removes the first n bytes and returns them as a separate frame. If n >= len(n), nil is returned and nothing is modified.
 // has to be called from a function that has already acquired the mutex
 func (q *streamFrameQueue) maybeSplitOffFrame(frame *frames.StreamFrame, n protocol.ByteCount) *frames.StreamFrame {
-	minLength, _ := frame.MinLength() // StreamFrame.MinLength *never* errors
+	minLength, _ := frame.MinLength(0) // StreamFrame.MinLength *never* errors, StreamFrame minLength is independent of protocol version
 	if n >= minLength-1+frame.DataLen() {
 		return nil
 	}

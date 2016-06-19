@@ -38,6 +38,7 @@ type closeCallback func(id protocol.ConnectionID)
 // A Session is a QUIC session
 type Session struct {
 	connectionID protocol.ConnectionID
+	version      protocol.VersionNumber
 
 	streamCallback StreamCallback
 	closeCallback  closeCallback
@@ -94,6 +95,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 
 	session := &Session{
 		connectionID:                connectionID,
+		version:                     v,
 		conn:                        conn,
 		streamCallback:              streamCallback,
 		closeCallback:               closeCallback,
@@ -459,7 +461,7 @@ func (s *Session) maybeSendPacket() error {
 	}
 
 	if ack != nil {
-		ackLength, _ := ack.MinLength() // MinLength never errors for an ACK frame
+		ackLength, _ := ack.MinLength(s.version) // MinLength never errors for an ACK frame
 		maxPacketSize += ackLength
 	}
 

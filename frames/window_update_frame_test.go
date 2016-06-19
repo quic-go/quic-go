@@ -26,7 +26,7 @@ var _ = Describe("WindowUpdateFrame", func() {
 				StreamID:   0x1337,
 				ByteOffset: 0xDEADBEEF,
 			}
-			Expect(f.MinLength()).To(Equal(protocol.ByteCount(13)))
+			Expect(f.MinLength(0)).To(Equal(protocol.ByteCount(13)))
 		})
 
 		It("writes a sample frame", func() {

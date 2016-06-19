@@ -183,7 +183,7 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 
 	if stopWaitingFrame != nil {
 		payloadFrames = append(payloadFrames, stopWaitingFrame)
-		minLength, err := stopWaitingFrame.MinLength()
+		minLength, err := stopWaitingFrame.MinLength(p.version)
 		if err != nil {
 			return nil, err
 		}
@@ -192,7 +192,7 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 
 	for len(p.controlFrames) > 0 {
 		frame := p.controlFrames[0]
-		minLength, _ := frame.MinLength() // controlFrames does not contain any StopWaitingFrames. So it will *never* return an error
+		minLength, _ := frame.MinLength(p.version) // controlFrames does not contain any StopWaitingFrames. So it will *never* return an error
 		if payloadLength+minLength > maxFrameSize {
 			break
 		}
@@ -226,12 +226,12 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 		}
 		frame.DataLenPresent = true // set the dataLen by default. Remove them later if applicable
 
-		frameMinLength, _ := frame.MinLength() // StreamFrame.MinLength *never* returns an error
+		frameMinLength, _ := frame.MinLength(p.version) // StreamFrame.MinLength *never* returns an error
 		payloadLength += frameMinLength - 1 + frame.DataLen()
 
 		blockedFrame := p.blockedManager.GetBlockedFrame(frame.StreamID, frame.Offset+frame.DataLen())
 		if blockedFrame != nil {
-			blockedLength, _ := blockedFrame.MinLength() // BlockedFrame.MinLength *never* returns an error
+			blockedLength, _ := blockedFrame.MinLength(p.version) // BlockedFrame.MinLength *never* returns an error
 			if payloadLength+blockedLength <= maxFrameSize {
 				payloadFrames = append(payloadFrames, blockedFrame)
 				payloadLength += blockedLength

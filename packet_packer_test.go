@@ -190,7 +190,7 @@ var _ = Describe("Packet packer", func() {
 		blockedFrame := &frames.BlockedFrame{
 			StreamID: 0x1337,
 		}
-		minLength, _ := blockedFrame.MinLength()
+		minLength, _ := blockedFrame.MinLength(0)
 		maxFramesPerPacket := int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLen) / int(minLength)
 		var controlFrames []frames.Frame
 		for i := 0; i < maxFramesPerPacket+10; i++ {
@@ -233,7 +233,7 @@ var _ = Describe("Packet packer", func() {
 				StreamID:       13,
 				DataLenPresent: false,
 			}
-			minLength, _ := f.MinLength()
+			minLength, _ := f.MinLength(0)
 			maxStreamFrameDataLen := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen - minLength
 			f.Data = bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen))
 			packer.AddStreamFrame(f)
@@ -307,7 +307,7 @@ var _ = Describe("Packet packer", func() {
 				StreamID: 7,
 				Offset:   1,
 			}
-			minLength, _ := f.MinLength()
+			minLength, _ := f.MinLength(0)
 			maxStreamFrameDataLen := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen - minLength + 1 // + 1 since MinceLength is 1 bigger than the actual StreamFrame header
 			f.Data = bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen)+200)
 			packer.AddStreamFrame(f)
@@ -366,7 +366,7 @@ var _ = Describe("Packet packer", func() {
 				StreamID: 5,
 				Offset:   1,
 			}
-			minLength, _ := f.MinLength()
+			minLength, _ := f.MinLength(0)
 			f.Data = bytes.Repeat([]byte{'f'}, int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLen-minLength+1)) // + 1 since MinceLength is 1 bigger than the actual StreamFrame header
 			packer.AddStreamFrame(f)
 			p, err := packer.PackPacket(nil, []frames.Frame{})
@@ -380,7 +380,7 @@ var _ = Describe("Packet packer", func() {
 				StreamID: 5,
 				Offset:   1,
 			}
-			minLength, _ := f.MinLength()
+			minLength, _ := f.MinLength(0)
 			f.Data = bytes.Repeat([]byte{'f'}, int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLen-minLength+2)) // + 2 since MinceLength is 1 bigger than the actual StreamFrame header
 
 			packer.AddStreamFrame(f)
@@ -441,12 +441,12 @@ var _ = Describe("Packet packer", func() {
 
 		It("packs a packet with the maximum size with a BlocedFrame", func() {
 			blockedFrame := &frames.BlockedFrame{StreamID: 0x1337}
-			blockedFrameLen, _ := blockedFrame.MinLength()
+			blockedFrameLen, _ := blockedFrame.MinLength(0)
 			f1 := frames.StreamFrame{
 				StreamID: 5,
 				Offset:   1,
 			}
-			streamFrameHeaderLen, _ := f1.MinLength()
+			streamFrameHeaderLen, _ := f1.MinLength(0)
 			streamFrameHeaderLen-- // - 1 since MinceLength is 1 bigger than the actual StreamFrame header
 			// this is the maximum dataLen of a StreamFrames that fits into one packet
 			dataLen := int(protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen - streamFrameHeaderLen - blockedFrameLen)

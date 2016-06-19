@@ -64,7 +64,7 @@ var _ = Describe("GoawayFrame", func() {
 			frame := GoawayFrame{
 				ReasonPhrase: "foo",
 			}
-			Expect(frame.MinLength()).To(Equal(protocol.ByteCount(14)))
+			Expect(frame.MinLength(0)).To(Equal(protocol.ByteCount(14)))
 		})
 	})
 })

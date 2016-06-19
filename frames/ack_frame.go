@@ -115,7 +115,7 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 }
 
 // MinLength of a written frame
-func (f *AckFrame) MinLength() (protocol.ByteCount, error) {
+func (f *AckFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
 	l := 1 + 1 + 2 + 1 + 1 + 4 // 1 TypeByte, 1 Entropy, 2 ACK delay time, 1 Num Timestamp, 1 Delta Largest Observed, 4 FirstTimestamp
 	l += int(protocol.GetPacketNumberLength(f.LargestObserved))
 	l += (1 + 2) * 0 /* TODO: num_timestamps */

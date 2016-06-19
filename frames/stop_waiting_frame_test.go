@@ -132,7 +132,7 @@ var _ = Describe("StopWaitingFrame", func() {
 						LeastUnacked:    10,
 						PacketNumberLen: length,
 					}
-					Expect(frame.MinLength()).To(Equal(protocol.ByteCount(length + 2)))
+					Expect(frame.MinLength(0)).To(Equal(protocol.ByteCount(length + 2)))
 				}
 			})
 
@@ -140,7 +140,7 @@ var _ = Describe("StopWaitingFrame", func() {
 				frame := &StopWaitingFrame{
 					LeastUnacked: 10,
 				}
-				_, err := frame.MinLength()
+				_, err := frame.MinLength(0)
 				Expect(err).To(MatchError(errPacketNumberLenNotSet))
 			})
 		})

@@ -28,6 +28,6 @@ func (f *PingFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error
 }
 
 // MinLength of a written frame
-func (f *PingFrame) MinLength() (protocol.ByteCount, error) {
+func (f *PingFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
 	return 1, nil
 }

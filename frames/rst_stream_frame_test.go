@@ -38,7 +38,7 @@ var _ = Describe("RstStreamFrame", func() {
 				ByteOffset: 0x1000,
 				ErrorCode:  0xDE,
 			}
-			Expect(rst.MinLength()).To(Equal(protocol.ByteCount(17)))
+			Expect(rst.MinLength(0)).To(Equal(protocol.ByteCount(17)))
 		})
 	})
 })

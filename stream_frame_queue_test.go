@@ -306,7 +306,7 @@ var _ = Describe("streamFrameQueue", func() {
 					Offset:         3,
 					FinBit:         true,
 				}
-				minLength, _ := f.MinLength()
+				minLength, _ := f.MinLength(0)
 				previous := queue.maybeSplitOffFrame(f, minLength-1+3)
 				Expect(previous).ToNot(BeNil())
 				Expect(previous.StreamID).To(Equal(protocol.StreamID(1)))
@@ -326,7 +326,7 @@ var _ = Describe("streamFrameQueue", func() {
 				origlen := frame1.DataLen()
 				frame, err := queue.Pop(6)
 				Expect(err).ToNot(HaveOccurred())
-				minLength, _ := frame.MinLength()
+				minLength, _ := frame.MinLength(0)
 				Expect(minLength - 1 + frame.DataLen()).To(Equal(protocol.ByteCount(6)))
 				Expect(queue.frameMap[frame1.StreamID][0].Data).To(HaveLen(int(origlen - frame.DataLen())))
 				Expect(queue.frameMap[frame1.StreamID][0].Offset).To(Equal(frame.DataLen()))

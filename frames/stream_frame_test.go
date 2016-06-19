@@ -87,7 +87,7 @@ var _ = Describe("StreamFrame", func() {
 			}
 			err := f.Write(b, 0)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(f.MinLength()).To(Equal(protocol.ByteCount(b.Len())))
+			Expect(f.MinLength(0)).To(Equal(protocol.ByteCount(b.Len())))
 		})
 
 		It("has proper min length for a long StreamID and a big offset", func() {
@@ -99,7 +99,7 @@ var _ = Describe("StreamFrame", func() {
 			}
 			err := f.Write(b, 0)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(f.MinLength()).To(Equal(protocol.ByteCount(b.Len())))
+			Expect(f.MinLength(0)).To(Equal(protocol.ByteCount(b.Len())))
 		})
 
 		Context("data length field", func() {
@@ -114,7 +114,7 @@ var _ = Describe("StreamFrame", func() {
 				}
 				err := f.Write(b, 0)
 				Expect(err).ToNot(HaveOccurred())
-				minLength, _ := f.MinLength()
+				minLength, _ := f.MinLength(0)
 				headerLength := minLength - 1
 				Expect(b.Bytes()[0] & 0x20).To(Equal(uint8(0x20)))
 				Expect(b.Bytes()[headerLength-2 : headerLength]).To(Equal([]byte{0x37, 0x13}))
@@ -133,9 +133,9 @@ var _ = Describe("StreamFrame", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(b.Bytes()[0] & 0x20).To(Equal(uint8(0)))
 				Expect(b.Bytes()[1 : b.Len()-dataLen]).ToNot(ContainSubstring(string([]byte{0x37, 0x13})))
-				minLength, _ := f.MinLength()
+				minLength, _ := f.MinLength(0)
 				f.DataLenPresent = true
-				minLengthWithoutDataLen, _ := f.MinLength()
+				minLengthWithoutDataLen, _ := f.MinLength(0)
 				Expect(minLength).To(Equal(minLengthWithoutDataLen - 2))
 			})
 
@@ -146,9 +146,9 @@ var _ = Describe("StreamFrame", func() {
 					DataLenPresent: false,
 					Offset:         0xDEADBEEF,
 				}
-				minLengthWithoutDataLen, _ := f.MinLength()
+				minLengthWithoutDataLen, _ := f.MinLength(0)
 				f.DataLenPresent = true
-				Expect(f.MinLength()).To(Equal(minLengthWithoutDataLen + 2))
+				Expect(f.MinLength(0)).To(Equal(minLengthWithoutDataLen + 2))
 			})
 		})
 
@@ -309,7 +309,7 @@ var _ = Describe("StreamFrame", func() {
 					StreamID: 0xDECAFBAD,
 					Data:     []byte("foobar"),
 				}
-				frame.MinLength()
+				frame.MinLength(0)
 				err := frame.Write(b, 0)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(b.Bytes()[0] & 0x3).To(Equal(uint8(0x3)))

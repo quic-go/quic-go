@@ -24,7 +24,7 @@ func (f *RstStreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) 
 }
 
 // MinLength of a written frame
-func (f *RstStreamFrame) MinLength() (protocol.ByteCount, error) {
+func (f *RstStreamFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
 	return 1 + 4 + 8 + 4, nil
 }
 
