@@ -83,6 +83,7 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 		}
 		frame.AckRanges = append(frame.AckRanges, ackRange)
 
+		var inLongBlock bool
 		for i := uint8(0); i < numAckBlocks; i++ {
 			var gap uint8
 			gap, err = r.ReadByte()
@@ -95,13 +96,22 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 				return nil, err
 			}
 
-			ackRange := AckRange{
-				LastPacketNumber: frame.AckRanges[i].FirstPacketNumber - protocol.PacketNumber(gap) - 1,
+			length := protocol.PacketNumber(ackBlockLength)
+
+			if inLongBlock {
+				frame.AckRanges[len(frame.AckRanges)-1].FirstPacketNumber -= protocol.PacketNumber(gap) + length
+				frame.AckRanges[len(frame.AckRanges)-1].LastPacketNumber -= protocol.PacketNumber(gap)
+			} else {
+				ackRange := AckRange{
+					LastPacketNumber: frame.AckRanges[len(frame.AckRanges)-1].FirstPacketNumber - protocol.PacketNumber(gap) - 1,
+				}
+				ackRange.FirstPacketNumber = ackRange.LastPacketNumber - length + 1
+				frame.AckRanges = append(frame.AckRanges, ackRange)
 			}
-			ackRange.FirstPacketNumber = ackRange.LastPacketNumber - protocol.PacketNumber(ackBlockLength) + 1
-			frame.AckRanges = append(frame.AckRanges, ackRange)
+
+			inLongBlock = (ackBlockLength == 0)
 		}
-		frame.LowestAcked = frame.AckRanges[numAckBlocks].FirstPacketNumber
+		frame.LowestAcked = frame.AckRanges[len(frame.AckRanges)-1].FirstPacketNumber
 	} else {
 		// make sure that LowestAcked is not 0. 0 is not a valid PacketNumber
 		// TODO: is this really the right behavior?
