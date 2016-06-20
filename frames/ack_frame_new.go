@@ -220,15 +220,15 @@ func (f *AckFrameNew) MinLength(version protocol.VersionNumber) (protocol.ByteCo
 	length += protocol.ByteCount(protocol.GetPacketNumberLength(f.LargestObserved))
 
 	length += (1 + 2) * 0 /* TODO: num_timestamps */
-	if f.HasNACK() {
+	if f.HasMissingRanges() {
 		panic("NACKs not yet implemented")
 	}
 	return length, nil
 }
 
-// HasNACK returns if the frame has NACK ranges
-func (f *AckFrameNew) HasNACK() bool {
-	if len(f.NackRanges) > 0 {
+// HasMissingRanges returns if this frame reports any missing packets
+func (f *AckFrameNew) HasMissingRanges() bool {
+	if len(f.AckRanges) > 0 {
 		return true
 	}
 	return false
@@ -236,7 +236,7 @@ func (f *AckFrameNew) HasNACK() bool {
 
 // GetHighestInOrderPacketNumber gets the highest in order packet number that is confirmed by this ACK
 func (f *AckFrameNew) GetHighestInOrderPacketNumber() protocol.PacketNumber {
-	if f.HasNACK() {
+	if f.HasMissingRanges() {
 		panic("NACKs not yet implemented")
 	}
 	return f.LargestObserved
