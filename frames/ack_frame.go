@@ -58,20 +58,10 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 	utils.WriteUint32(b, 0) // First timestamp
 
 	if f.HasNACK() {
-		numRanges := uint64(0)
-		// calculate the number of NackRanges that are about to be written
-		// this number is different from len(f.NackRanges) for the case of contiguous NACK ranges
-		for _, nackRange := range f.NackRanges {
-			rangeLength := nackRange.Len()
-			numRanges += rangeLength/0xFF + 1
-			if rangeLength > 0 && rangeLength%0xFF == 0 {
-				numRanges--
-			}
-		}
+		numRanges := f.numWrittenNackRanges()
 		if numRanges > 0xFF {
 			panic("Too many NACK ranges. Truncating not yet implemented.")
 		}
-
 		b.WriteByte(uint8(numRanges))
 
 		rangeCounter := uint8(0)
@@ -120,7 +110,7 @@ func (f *AckFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount
 	l += int(protocol.GetPacketNumberLength(f.LargestObserved))
 	l += (1 + 2) * 0 /* TODO: num_timestamps */
 	if f.HasNACK() {
-		l += 1 + (6+1)*len(f.NackRanges)
+		l += 1 + (6+1)*int(f.numWrittenNackRanges())
 		l++ // TODO: Remove once we drop support for <32
 	}
 	return protocol.ByteCount(l), nil
@@ -286,6 +276,21 @@ func ParseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 	}
 
 	return frame, nil
+}
+
+// numWrittenNackRanges calculates the number of NackRanges that are about to be written
+// this number is different from len(f.NackRanges) for the case of contiguous NACK ranges
+func (f *AckFrame) numWrittenNackRanges() uint64 {
+	var numRanges uint64
+	for _, nackRange := range f.NackRanges {
+		rangeLength := nackRange.Len()
+		numRanges += rangeLength/0xFF + 1
+		if rangeLength > 0 && rangeLength%0xFF == 0 {
+			numRanges--
+		}
+	}
+
+	return numRanges
 }
 
 func (f *AckFrame) validateNackRanges() bool {
