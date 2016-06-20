@@ -2,17 +2,22 @@ package frames
 
 import (
 	"bytes"
+	"errors"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
+var errInvalidAckRanges = errors.New("AckFrame: ACK frame contains invalid ACK ranges")
+
 // An AckFrameNew is a ACK frame in QUIC c34
 type AckFrameNew struct {
 	// TODO: rename to LargestAcked
 	LargestObserved protocol.PacketNumber
 	NackRanges      []NackRange // has to be ordered. The NACK range with the highest FirstPacketNumber goes first, the NACK range with the lowest FirstPacketNumber goes last
+	LowestAcked     protocol.PacketNumber
+	AckRanges       []AckRange
 
 	DelayTime          time.Duration
 	PacketReceivedTime time.Time // only for received packets. Will not be modified for received ACKs frames
@@ -30,10 +35,6 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 	hasNACK := false
 	if typeByte&0x20 == 0x20 {
 		hasNACK = true
-	}
-
-	if hasNACK {
-		panic("NACKs not yet implemented")
 	}
 
 	largestObservedLen := 2 * ((typeByte & 0x0C) >> 2)
@@ -58,15 +59,58 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 	}
 	frame.DelayTime = time.Duration(delay) * time.Microsecond
 
-	// TODO: read number of ACK blocks if n flag is set
+	var numAckBlocks uint8
+	if hasNACK {
+		numAckBlocks, err = r.ReadByte()
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	ackBlockLength, err := utils.ReadUintN(r, missingSequenceNumberDeltaLen)
 	if err != nil {
 		return nil, err
 	}
-	utils.Debugf("ackBlockLength: %d", ackBlockLength)
 
-	// TODO: read ACK blocks
+	if ackBlockLength > largestObserved {
+		return nil, errInvalidAckRanges
+	}
+
+	if hasNACK {
+		ackRange := AckRange{
+			FirstPacketNumber: protocol.PacketNumber(largestObserved-ackBlockLength) + 1,
+			LastPacketNumber:  frame.LargestObserved,
+		}
+		frame.AckRanges = append(frame.AckRanges, ackRange)
+
+		for i := uint8(0); i < numAckBlocks; i++ {
+			var gap uint8
+			gap, err = r.ReadByte()
+			if err != nil {
+				return nil, err
+			}
+
+			ackBlockLength, err = utils.ReadUintN(r, missingSequenceNumberDeltaLen)
+			if err != nil {
+				return nil, err
+			}
+
+			ackRange := AckRange{
+				LastPacketNumber: frame.AckRanges[i].FirstPacketNumber - protocol.PacketNumber(gap) - 1,
+			}
+			ackRange.FirstPacketNumber = ackRange.LastPacketNumber - protocol.PacketNumber(ackBlockLength) + 1
+			frame.AckRanges = append(frame.AckRanges, ackRange)
+		}
+		frame.LowestAcked = frame.AckRanges[numAckBlocks].FirstPacketNumber
+	} else {
+		// make sure that LowestAcked is not 0. 0 is not a valid PacketNumber
+		// TODO: is this really the right behavior?
+		if largestObserved == ackBlockLength {
+			frame.LowestAcked = 1
+		} else {
+			frame.LowestAcked = protocol.PacketNumber(largestObserved - ackBlockLength)
+		}
+	}
 
 	var numTimestampByte byte
 	numTimestampByte, err = r.ReadByte()
