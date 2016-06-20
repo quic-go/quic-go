@@ -167,12 +167,15 @@ func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 		typeByte ^= (uint8(largestObservedLen / 2)) << 2
 	}
 
-	missingSequenceNumberDeltaLen := largestObservedLen
+	// TODO: send shorter values, if possible
+	missingSequenceNumberDeltaLen := protocol.PacketNumberLen6
 	if missingSequenceNumberDeltaLen != protocol.PacketNumberLen1 {
 		typeByte ^= (uint8(missingSequenceNumberDeltaLen / 2))
 	}
 
-	f.DelayTime = time.Now().Sub(f.PacketReceivedTime)
+	if f.HasMissingRanges() {
+		typeByte |= (0x20 | 0x03)
+	}
 
 	b.WriteByte(typeByte)
 
@@ -187,22 +190,39 @@ func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 		utils.WriteUint48(b, uint64(f.LargestObserved))
 	}
 
+	f.DelayTime = time.Now().Sub(f.PacketReceivedTime)
 	utils.WriteUfloat16(b, uint64(f.DelayTime/time.Microsecond))
 
-	// TODO: write number of ACK blocks, if present
-
-	switch missingSequenceNumberDeltaLen {
-	case protocol.PacketNumberLen1:
-		b.WriteByte(uint8(f.LargestObserved))
-	case protocol.PacketNumberLen2:
-		utils.WriteUint16(b, uint16(f.LargestObserved))
-	case protocol.PacketNumberLen4:
-		utils.WriteUint32(b, uint32(f.LargestObserved))
-	case protocol.PacketNumberLen6:
-		utils.WriteUint48(b, uint64(f.LargestObserved))
+	if f.HasMissingRanges() {
+		numRanges := len(f.AckRanges)
+		if numRanges >= 0xFF {
+			panic("AckFrame: Too many ACK ranges")
+		}
+		b.WriteByte(uint8(numRanges - 1))
 	}
 
-	// TODO: write ACK blocks
+	if !f.HasMissingRanges() {
+		utils.WriteUint48(b, uint64(f.LargestObserved-f.LowestAcked))
+	} else {
+		if f.LargestObserved != f.AckRanges[0].LastPacketNumber {
+			return errors.New("internal inconsistency")
+		}
+		length := f.LargestObserved - f.AckRanges[0].FirstPacketNumber + 1
+		utils.WriteUint48(b, uint64(length))
+	}
+
+	for i, ackRange := range f.AckRanges {
+		if i == 0 {
+			continue
+		}
+
+		length := ackRange.LastPacketNumber - ackRange.FirstPacketNumber + 1
+		// TODO: implement large gaps
+		gap := f.AckRanges[i-1].FirstPacketNumber - ackRange.LastPacketNumber - 1
+
+		b.WriteByte(uint8(gap))
+		utils.WriteUint48(b, uint64(length))
+	}
 
 	b.WriteByte(0x01)       // Just one timestamp
 	b.WriteByte(0x00)       // Delta Largest observed
@@ -217,7 +237,7 @@ func (f *AckFrameNew) MinLength(version protocol.VersionNumber) (protocol.ByteCo
 	length = 1 + 2 + 1 + 1 + 4 // 1 TypeByte, 2 ACK delay time, 1 Num Timestamp, 1 Delta Largest Observed, 4 FirstTimestamp
 	length += protocol.ByteCount(protocol.GetPacketNumberLength(f.LargestObserved))
 	// for the first ACK block length
-	length += protocol.ByteCount(protocol.GetPacketNumberLength(f.LargestObserved))
+	length += protocol.ByteCount(protocol.PacketNumberLen6)
 
 	length += (1 + 2) * 0 /* TODO: num_timestamps */
 	if f.HasMissingRanges() {

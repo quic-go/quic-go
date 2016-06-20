@@ -155,8 +155,93 @@ var _ = Describe("AckFrame", func() {
 
 	Context("when writing", func() {
 		var b *bytes.Buffer
+
 		BeforeEach(func() {
 			b = &bytes.Buffer{}
+		})
+
+		Context("self-consistency", func() {
+			It("writes a simple ACK frame", func() {
+				frameOrig := &AckFrameNew{
+					LargestObserved: 1,
+				}
+				err := frameOrig.Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
+				r := bytes.NewReader(b.Bytes())
+				frame, err := ParseAckFrameNew(r, 0)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(frame.LargestObserved).To(Equal(frameOrig.LargestObserved))
+				Expect(frame.HasMissingRanges()).To(BeFalse())
+				Expect(r.Len()).To(BeZero())
+			})
+
+			It("writes the correct block length in a simple ACK frame", func() {
+				frameOrig := &AckFrameNew{
+					LargestObserved: 20,
+					LowestAcked:     10,
+				}
+				err := frameOrig.Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
+				r := bytes.NewReader(b.Bytes())
+				frame, err := ParseAckFrameNew(r, 0)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(frame.LargestObserved).To(Equal(frameOrig.LargestObserved))
+				Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
+				Expect(frame.HasMissingRanges()).To(BeFalse())
+				Expect(r.Len()).To(BeZero())
+			})
+
+			It("writes a simple ACK frame with a high packet number", func() {
+				frameOrig := &AckFrameNew{
+					LargestObserved: 0xDEADBEEFCAFE,
+				}
+				err := frameOrig.Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
+				r := bytes.NewReader(b.Bytes())
+				frame, err := ParseAckFrameNew(r, 0)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(frame.LargestObserved).To(Equal(frameOrig.LargestObserved))
+				Expect(frame.HasMissingRanges()).To(BeFalse())
+				Expect(r.Len()).To(BeZero())
+			})
+
+			It("writes an ACK frame with one packet missing", func() {
+				frameOrig := &AckFrameNew{
+					LargestObserved: 40,
+					AckRanges: []AckRange{
+						AckRange{FirstPacketNumber: 25, LastPacketNumber: 40},
+						AckRange{FirstPacketNumber: 1, LastPacketNumber: 23},
+					},
+				}
+				err := frameOrig.Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
+				r := bytes.NewReader(b.Bytes())
+				frame, err := ParseAckFrameNew(r, 0)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(frame.LargestObserved).To(Equal(frameOrig.LargestObserved))
+				Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
+				Expect(r.Len()).To(BeZero())
+			})
+
+			It("writes an ACK frame with multiple missing packets", func() {
+				frameOrig := &AckFrameNew{
+					LargestObserved: 25,
+					AckRanges: []AckRange{
+						AckRange{FirstPacketNumber: 22, LastPacketNumber: 25},
+						AckRange{FirstPacketNumber: 15, LastPacketNumber: 18},
+						AckRange{FirstPacketNumber: 13, LastPacketNumber: 13},
+						AckRange{FirstPacketNumber: 1, LastPacketNumber: 10},
+					},
+				}
+				err := frameOrig.Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
+				r := bytes.NewReader(b.Bytes())
+				frame, err := ParseAckFrameNew(r, 0)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(frame.LargestObserved).To(Equal(frameOrig.LargestObserved))
+				Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
+				Expect(r.Len()).To(BeZero())
+			})
 		})
 
 		Context("min length", func() {
@@ -184,28 +269,6 @@ var _ = Describe("AckFrame", func() {
 				LargestObserved: 0x1337,
 			}
 			Expect(frame.GetHighestInOrderPacketNumber()).To(Equal(protocol.PacketNumber(0x1337)))
-		})
-
-	})
-
-	Context("self-consistency checks", func() {
-		var b *bytes.Buffer
-		BeforeEach(func() {
-			b = &bytes.Buffer{}
-		})
-
-		It("is self-consistent for ACK frames without NACK ranges", func() {
-			frameOrig := &AckFrameNew{
-				LargestObserved: 1,
-			}
-			err := frameOrig.Write(b, protocol.Version34)
-			Expect(err).ToNot(HaveOccurred())
-			r := bytes.NewReader(b.Bytes())
-			frame, err := ParseAckFrameNew(r, protocol.Version34)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.LargestObserved).To(Equal(frameOrig.LargestObserved))
-			Expect(frame.HasMissingRanges()).To(BeFalse())
-			Expect(r.Len()).To(BeZero())
 		})
 	})
 })
