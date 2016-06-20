@@ -9,7 +9,10 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
-var errInvalidNackRanges = errors.New("AckFrame: ACK frame contains invalid NACK ranges")
+var (
+	errInvalidNackRanges = errors.New("AckFrame: ACK frame contains invalid NACK ranges")
+	errTooManyNackRanges = errors.New("AckFrame: Too many NACK ranges. Truncating not implemented.")
+)
 
 // An AckFrame in QUIC
 type AckFrame struct {
@@ -60,7 +63,7 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 	if f.HasNACK() {
 		numRanges := f.numWrittenNackRanges()
 		if numRanges > 0xFF {
-			panic("Too many NACK ranges. Truncating not yet implemented.")
+			return errTooManyNackRanges
 		}
 		b.WriteByte(uint8(numRanges))
 
