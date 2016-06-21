@@ -257,9 +257,7 @@ func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 		return errors.New("BUG: Inconsistent number of ACK ranges written")
 	}
 
-	b.WriteByte(0x01)       // Just one timestamp
-	b.WriteByte(0x00)       // Delta Largest observed
-	utils.WriteUint32(b, 0) // First timestamp
+	b.WriteByte(0) // no timestamps
 
 	return nil
 }
@@ -267,7 +265,7 @@ func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 // MinLength of a written frame
 func (f *AckFrameNew) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
 	var length protocol.ByteCount
-	length = 1 + 2 + 1 + 1 + 4 // 1 TypeByte, 2 ACK delay time, 1 Num Timestamp, 1 Delta Largest Observed, 4 FirstTimestamp
+	length = 1 + 2 + 1 // 1 TypeByte, 2 ACK delay time, 1 Num Timestamp
 	length += protocol.ByteCount(protocol.GetPacketNumberLength(f.LargestObserved))
 
 	missingSequenceNumberDeltaLen := protocol.ByteCount(protocol.PacketNumberLen6)
