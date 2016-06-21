@@ -22,6 +22,13 @@ var _ = Describe("AckFrame", func() {
 			Expect(b.Len()).To(BeZero())
 		})
 
+		It("parses a frame without a timestamp", func() {
+			b := bytes.NewReader([]byte{0x40, 0x3, 0x50, 0x15, 0x3, 0x0})
+			frame, err := ParseAckFrameNew(b, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame.LargestObserved).To(Equal(protocol.PacketNumber(3)))
+		})
+
 		It("parses a frame with a 48 bit packet number", func() {
 			b := bytes.NewReader([]byte{0x4c, 0x37, 0x13, 0xad, 0xfb, 0xca, 0xde, 0x0, 0x0, 0x0, 0x1, 0, 0, 0, 0, 0})
 			frame, err := ParseAckFrameNew(b, protocol.Version34)

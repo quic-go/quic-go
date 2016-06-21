@@ -129,28 +129,30 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 	}
 	numTimestamp := uint8(numTimestampByte)
 
-	// Delta Largest observed
-	_, err = r.ReadByte()
-	if err != nil {
-		return nil, err
-	}
-	// First Timestamp
-	_, err = utils.ReadUint32(r)
-	if err != nil {
-		return nil, err
-	}
-
-	for i := 0; i < int(numTimestamp)-1; i++ {
+	if numTimestamp > 0 {
 		// Delta Largest observed
 		_, err = r.ReadByte()
 		if err != nil {
 			return nil, err
 		}
-
-		// Time Since Previous Timestamp
-		_, err = utils.ReadUint16(r)
+		// First Timestamp
+		_, err = utils.ReadUint32(r)
 		if err != nil {
 			return nil, err
+		}
+
+		for i := 0; i < int(numTimestamp)-1; i++ {
+			// Delta Largest observed
+			_, err = r.ReadByte()
+			if err != nil {
+				return nil, err
+			}
+
+			// Time Since Previous Timestamp
+			_, err = utils.ReadUint16(r)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
