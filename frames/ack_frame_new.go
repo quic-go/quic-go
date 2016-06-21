@@ -312,7 +312,7 @@ func (f *AckFrameNew) numWrittenNackRanges() uint64 {
 
 		lastAckRange := f.AckRanges[i-1]
 		gap := lastAckRange.FirstPacketNumber - ackRange.LastPacketNumber
-		numRanges += 1 + uint64(gap)/0xFF
+		numRanges += 1 + uint64(gap)/(0xFF+1)
 		if uint64(gap)%(0xFF+1) == 0 {
 			numRanges--
 		}
