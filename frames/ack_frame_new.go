@@ -32,9 +32,9 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 		return nil, err
 	}
 
-	hasNACK := false
+	hasMissingRanges := false
 	if typeByte&0x20 == 0x20 {
-		hasNACK = true
+		hasMissingRanges = true
 	}
 
 	largestObservedLen := 2 * ((typeByte & 0x0C) >> 2)
@@ -60,7 +60,7 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 	frame.DelayTime = time.Duration(delay) * time.Microsecond
 
 	var numAckBlocks uint8
-	if hasNACK {
+	if hasMissingRanges {
 		numAckBlocks, err = r.ReadByte()
 		if err != nil {
 			return nil, err
@@ -76,7 +76,7 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 		return nil, errInvalidAckRanges
 	}
 
-	if hasNACK {
+	if hasMissingRanges {
 		ackRange := AckRange{
 			FirstPacketNumber: protocol.PacketNumber(largestObserved-ackBlockLength) + 1,
 			LastPacketNumber:  frame.LargestObserved,
@@ -193,8 +193,10 @@ func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 	f.DelayTime = time.Now().Sub(f.PacketReceivedTime)
 	utils.WriteUfloat16(b, uint64(f.DelayTime/time.Microsecond))
 
+	var numRanges uint64
+	var numRangesWritten uint64 // to check for internal consistency
 	if f.HasMissingRanges() {
-		numRanges := len(f.AckRanges)
+		numRanges = f.numWrittenNackRanges()
 		if numRanges >= 0xFF {
 			panic("AckFrame: Too many ACK ranges")
 		}
@@ -209,6 +211,7 @@ func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 		}
 		length := f.LargestObserved - f.AckRanges[0].FirstPacketNumber + 1
 		utils.WriteUint48(b, uint64(length))
+		numRangesWritten++
 	}
 
 	for i, ackRange := range f.AckRanges {
@@ -217,11 +220,39 @@ func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 		}
 
 		length := ackRange.LastPacketNumber - ackRange.FirstPacketNumber + 1
-		// TODO: implement large gaps
 		gap := f.AckRanges[i-1].FirstPacketNumber - ackRange.LastPacketNumber - 1
 
-		b.WriteByte(uint8(gap))
-		utils.WriteUint48(b, uint64(length))
+		num := gap/0xFF + 1
+		if gap%0xFF == 0 {
+			num--
+		}
+
+		if num == 1 {
+			b.WriteByte(uint8(gap))
+			utils.WriteUint48(b, uint64(length))
+			numRangesWritten++
+		} else {
+			for i := 0; i < int(num); i++ {
+				var lengthWritten uint64
+				var gapWritten uint8
+
+				if i == int(num)-1 { // last block
+					lengthWritten = uint64(length)
+					gapWritten = uint8(gap % 0xFF)
+				} else {
+					lengthWritten = 0
+					gapWritten = 0xFF
+				}
+
+				b.WriteByte(uint8(gapWritten))
+				utils.WriteUint48(b, lengthWritten)
+				numRangesWritten++
+			}
+		}
+	}
+
+	if numRanges != numRangesWritten {
+		return errors.New("BUG: Inconsistent number of ACK ranges written")
 	}
 
 	b.WriteByte(0x01)       // Just one timestamp
@@ -265,4 +296,28 @@ func (f *AckFrameNew) GetHighestInOrderPacketNumber() protocol.PacketNumber {
 		panic("NACKs not yet implemented")
 	}
 	return f.LargestObserved
+}
+
+// numWrittenNackRanges calculates the number of ACK blocks that are about to be written
+// this number is different from len(f.AckRanges) for the case of long gaps (> 255 packets)
+func (f *AckFrameNew) numWrittenNackRanges() uint64 {
+	if len(f.AckRanges) == 0 {
+		return 0
+	}
+
+	var numRanges uint64
+	for i, ackRange := range f.AckRanges {
+		if i == 0 {
+			continue
+		}
+
+		lastAckRange := f.AckRanges[i-1]
+		gap := lastAckRange.FirstPacketNumber - ackRange.LastPacketNumber
+		numRanges += 1 + uint64(gap)/0xFF
+		if uint64(gap)%(0xFF+1) == 0 {
+			numRanges--
+		}
+	}
+
+	return numRanges + 1
 }
