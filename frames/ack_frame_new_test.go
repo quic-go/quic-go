@@ -67,6 +67,13 @@ var _ = Describe("AckFrame", func() {
 				Expect(b.Len()).To(BeZero())
 			})
 
+			It("rejects a frame with invalid ACK ranges", func() {
+				// like the test before, but increased the last ACK range, such that the FirstPacketNumber would be negative
+				b := bytes.NewReader([]byte{0x60, 0x18, 0x94, 0x1, 0x1, 0x3, 0x2, 0x15, 0x2, 0x1, 0x5c, 0xd5, 0x0, 0x0, 0x0, 0x95, 0x0})
+				_, err := ParseAckFrameNew(b, 0)
+				Expect(err).To(MatchError(errInvalidAckRanges))
+			})
+
 			It("parses a frame with multiple single packets missing", func() {
 				b := bytes.NewReader([]byte{0x60, 0x27, 0xda, 0x0, 0x6, 0x9, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x13, 0x2, 0x1, 0x71, 0x12, 0x3, 0x0, 0x0, 0x47, 0x2})
 				frame, err := ParseAckFrameNew(b, 0)
@@ -390,6 +397,121 @@ var _ = Describe("AckFrame", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(f.MinLength(0)).To(Equal(protocol.ByteCount(b.Len())))
 			})
+		})
+	})
+
+	Context("ACK range validator", func() {
+		It("accepts an ACK without NACK Ranges", func() {
+			ack := AckFrameNew{LargestObserved: 7}
+			Expect(ack.validateAckRanges()).To(BeTrue())
+		})
+
+		It("rejects ACK ranges with a single range", func() {
+			ack := AckFrameNew{
+				LargestObserved: 10,
+				AckRanges:       []AckRange{AckRange{FirstPacketNumber: 1, LastPacketNumber: 10}},
+			}
+			Expect(ack.validateAckRanges()).To(BeFalse())
+		})
+
+		It("rejects ACK ranges with LastPacketNumber of the first range unequal to LargestObserved", func() {
+			ack := AckFrameNew{
+				LargestObserved: 10,
+				AckRanges: []AckRange{
+					AckRange{FirstPacketNumber: 8, LastPacketNumber: 9},
+					AckRange{FirstPacketNumber: 2, LastPacketNumber: 3},
+				},
+			}
+			Expect(ack.validateAckRanges()).To(BeFalse())
+		})
+
+		It("rejects ACK ranges with FirstPacketNumber greater than LastPacketNumber", func() {
+			ack := AckFrameNew{
+				LargestObserved: 10,
+				AckRanges: []AckRange{
+					AckRange{FirstPacketNumber: 8, LastPacketNumber: 10},
+					AckRange{FirstPacketNumber: 4, LastPacketNumber: 3},
+				},
+			}
+			Expect(ack.validateAckRanges()).To(BeFalse())
+		})
+
+		It("rejects ACK ranges with FirstPacketNumber greater than LargestObserved", func() {
+			ack := AckFrameNew{
+				LargestObserved: 5,
+				AckRanges: []AckRange{
+					AckRange{FirstPacketNumber: 4, LastPacketNumber: 10},
+					AckRange{FirstPacketNumber: 1, LastPacketNumber: 2},
+				},
+			}
+			Expect(ack.validateAckRanges()).To(BeFalse())
+		})
+
+		It("rejects ACK ranges in the wrong order", func() {
+			ack := AckFrameNew{
+				LargestObserved: 7,
+				AckRanges: []AckRange{
+					{FirstPacketNumber: 2, LastPacketNumber: 2},
+					{FirstPacketNumber: 6, LastPacketNumber: 7},
+				},
+			}
+			Expect(ack.validateAckRanges()).To(BeFalse())
+		})
+
+		It("rejects with overlapping ACK ranges", func() {
+			ack := AckFrameNew{
+				LargestObserved: 7,
+				AckRanges: []AckRange{
+					{FirstPacketNumber: 5, LastPacketNumber: 7},
+					{FirstPacketNumber: 2, LastPacketNumber: 5},
+				},
+			}
+			Expect(ack.validateAckRanges()).To(BeFalse())
+		})
+
+		It("rejects ACK ranges that are part of a larger ACK range", func() {
+			ack := AckFrameNew{
+				LargestObserved: 7,
+				AckRanges: []AckRange{
+					{FirstPacketNumber: 4, LastPacketNumber: 7},
+					{FirstPacketNumber: 5, LastPacketNumber: 6},
+				},
+			}
+			Expect(ack.validateAckRanges()).To(BeFalse())
+		})
+
+		It("rejects with directly adjacent ACK ranges", func() {
+			ack := AckFrameNew{
+				LargestObserved: 7,
+				AckRanges: []AckRange{
+					{FirstPacketNumber: 5, LastPacketNumber: 7},
+					{FirstPacketNumber: 2, LastPacketNumber: 4},
+				},
+			}
+			Expect(ack.validateAckRanges()).To(BeFalse())
+		})
+
+		It("accepts an ACK with one lost packet", func() {
+			ack := AckFrameNew{
+				LargestObserved: 10,
+				AckRanges: []AckRange{
+					{FirstPacketNumber: 5, LastPacketNumber: 10},
+					{FirstPacketNumber: 1, LastPacketNumber: 3},
+				},
+			}
+			Expect(ack.validateAckRanges()).To(BeTrue())
+		})
+
+		It("accepts an ACK with multiple lost packets", func() {
+			ack := AckFrameNew{
+				LargestObserved: 20,
+				AckRanges: []AckRange{
+					{FirstPacketNumber: 15, LastPacketNumber: 20},
+					{FirstPacketNumber: 10, LastPacketNumber: 12},
+					{FirstPacketNumber: 1, LastPacketNumber: 3},
+				},
+			}
+			Expect(ack.validateAckRanges()).To(BeTrue())
 		})
 	})
 

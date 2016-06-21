@@ -122,6 +122,10 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 		}
 	}
 
+	if !frame.validateAckRanges() {
+		return nil, errInvalidAckRanges
+	}
+
 	var numTimestampByte byte
 	numTimestampByte, err = r.ReadByte()
 	if err != nil {
@@ -295,6 +299,44 @@ func (f *AckFrameNew) GetHighestInOrderPacketNumber() protocol.PacketNumber {
 		panic("NACKs not yet implemented")
 	}
 	return f.LargestObserved
+}
+
+func (f *AckFrameNew) validateAckRanges() bool {
+	if len(f.AckRanges) == 0 {
+		return true
+	}
+
+	// if there are missing packets, there will always be at least 2 ACK ranges
+	if len(f.AckRanges) == 1 {
+		return false
+	}
+
+	if f.AckRanges[0].LastPacketNumber != f.LargestObserved {
+		return false
+	}
+
+	// check the validity of every single ACK range
+	for _, ackRange := range f.AckRanges {
+		if ackRange.FirstPacketNumber > ackRange.LastPacketNumber {
+			return false
+		}
+	}
+
+	// check the consistency for ACK with multiple NACK ranges
+	for i, ackRange := range f.AckRanges {
+		if i == 0 {
+			continue
+		}
+		lastAckRange := f.AckRanges[i-1]
+		if lastAckRange.FirstPacketNumber <= ackRange.FirstPacketNumber {
+			return false
+		}
+		if lastAckRange.FirstPacketNumber <= ackRange.LastPacketNumber+1 {
+			return false
+		}
+	}
+
+	return true
 }
 
 // numWrittenNackRanges calculates the number of ACK blocks that are about to be written
