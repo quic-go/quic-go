@@ -267,12 +267,11 @@ func (f *AckFrameNew) MinLength(version protocol.VersionNumber) (protocol.ByteCo
 	var length protocol.ByteCount
 	length = 1 + 2 + 1 + 1 + 4 // 1 TypeByte, 2 ACK delay time, 1 Num Timestamp, 1 Delta Largest Observed, 4 FirstTimestamp
 	length += protocol.ByteCount(protocol.GetPacketNumberLength(f.LargestObserved))
-	// for the first ACK block length
 
 	missingSequenceNumberDeltaLen := protocol.ByteCount(protocol.PacketNumberLen6)
 
 	if f.HasMissingRanges() {
-		length += (1 + missingSequenceNumberDeltaLen) * protocol.ByteCount(len(f.AckRanges))
+		length += (1 + missingSequenceNumberDeltaLen) * protocol.ByteCount(f.numWrittenNackRanges())
 	} else {
 		length += missingSequenceNumberDeltaLen
 	}

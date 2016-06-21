@@ -351,6 +351,20 @@ var _ = Describe("AckFrame", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(f.MinLength(0)).To(Equal(protocol.ByteCount(b.Len())))
 			})
+
+			It("has the proper min length for an ACK with long gaps of missing packets", func() {
+				f := &AckFrameNew{
+					LargestObserved: 2000,
+					AckRanges: []AckRange{
+						AckRange{FirstPacketNumber: 1500, LastPacketNumber: 2000},
+						AckRange{FirstPacketNumber: 290, LastPacketNumber: 295},
+						AckRange{FirstPacketNumber: 1, LastPacketNumber: 19},
+					},
+				}
+				err := f.Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(f.MinLength(0)).To(Equal(protocol.ByteCount(b.Len())))
+			})
 		})
 	})
 
