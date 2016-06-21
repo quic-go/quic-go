@@ -249,7 +249,8 @@ var _ = Describe("AckFrame", func() {
 				f := &AckFrameNew{
 					LargestObserved: 1,
 				}
-				f.Write(b, 0)
+				err := f.Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(f.MinLength(0)).To(Equal(protocol.ByteCount(b.Len())))
 			})
 
@@ -257,7 +258,22 @@ var _ = Describe("AckFrame", func() {
 				f := &AckFrameNew{
 					LargestObserved: 0xDEADBEEFCAFE,
 				}
-				f.Write(b, 0)
+				err := f.Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(f.MinLength(0)).To(Equal(protocol.ByteCount(b.Len())))
+			})
+
+			It("has the proper min length for an ACK with missing packets", func() {
+				f := &AckFrameNew{
+					LargestObserved: 2000,
+					AckRanges: []AckRange{
+						AckRange{FirstPacketNumber: 1000, LastPacketNumber: 2000},
+						AckRange{FirstPacketNumber: 50, LastPacketNumber: 900},
+						AckRange{FirstPacketNumber: 1, LastPacketNumber: 23},
+					},
+				}
+				err := f.Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(f.MinLength(0)).To(Equal(protocol.ByteCount(b.Len())))
 			})
 		})
