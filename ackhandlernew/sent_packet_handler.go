@@ -30,11 +30,9 @@ var (
 
 type sentPacketHandler struct {
 	lastSentPacketNumber            protocol.PacketNumber
-	lastSentPacketEntropy           EntropyAccumulator
 	lastSentPacketTime              time.Time
 	highestInOrderAckedPacketNumber protocol.PacketNumber
 	LargestObserved                 protocol.PacketNumber
-	LargestObservedEntropy          EntropyAccumulator
 
 	// TODO: Move into separate class as in chromium
 	packetHistory map[protocol.PacketNumber]*Packet
@@ -73,6 +71,11 @@ func (h *sentPacketHandler) ackPacket(packetNumber protocol.PacketNumber) *Packe
 	if ok && !packet.Retransmitted {
 		h.bytesInFlight -= packet.Length
 	}
+
+	if h.highestInOrderAckedPacketNumber == packetNumber-1 {
+		h.highestInOrderAckedPacketNumber++
+	}
+
 	delete(h.packetHistory, packetNumber)
 
 	h.stopWaitingManager.ReceivedAckForPacketNumber(packetNumber)
@@ -115,9 +118,12 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 	if ok {
 		return errDuplicatePacketNumber
 	}
+
+	// TODO: allow non-consecutive packet numbers
 	if h.lastSentPacketNumber+1 != packet.PacketNumber {
 		return errWrongPacketNumberIncrement
 	}
+
 	now := time.Now()
 	h.lastSentPacketTime = now
 	packet.sendTime = now
@@ -126,8 +132,6 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 	}
 	h.bytesInFlight += packet.Length
 
-	h.lastSentPacketEntropy.Add(packet.PacketNumber, packet.EntropyBit)
-	packet.Entropy = h.lastSentPacketEntropy
 	h.lastSentPacketNumber = packet.PacketNumber
 	h.packetHistory[packet.PacketNumber] = packet
 
@@ -142,37 +146,8 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 	return nil
 }
 
-func (h *sentPacketHandler) calculateExpectedEntropy(ackFrame *frames.AckFrameLegacy) (EntropyAccumulator, error) {
-	packet, ok := h.packetHistory[ackFrame.LargestObserved]
-	if !ok {
-		return 0, ErrMapAccess
-	}
-	expectedEntropy := packet.Entropy
-
-	if ackFrame.HasNACK() { // if the packet has NACKs, the entropy value has to be calculated
-		nackRangeIndex := 0
-		nackRange := ackFrame.NackRanges[nackRangeIndex]
-		for i := ackFrame.LargestObserved; i > ackFrame.GetHighestInOrderPacketNumber(); i-- {
-			if i < nackRange.FirstPacketNumber {
-				nackRangeIndex++
-				if nackRangeIndex < len(ackFrame.NackRanges) {
-					nackRange = ackFrame.NackRanges[nackRangeIndex]
-				}
-			}
-			if nackRange.ContainsPacketNumber(i) {
-				packet, ok := h.packetHistory[i]
-				if !ok {
-					return 0, ErrMapAccess
-				}
-				expectedEntropy.Subtract(i, packet.EntropyBit)
-			}
-		}
-	}
-	return expectedEntropy, nil
-}
-
 // TODO: Simplify return types
-func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameLegacy) error {
+func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameNew) error {
 	if ackFrame.LargestObserved > h.lastSentPacketNumber {
 		return errAckForUnsentPacket
 	}
@@ -181,18 +156,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameLegacy) error {
 		return ErrDuplicateOrOutOfOrderAck
 	}
 
-	expectedEntropy, err := h.calculateExpectedEntropy(ackFrame)
-	if err != nil {
-		return err
-	}
-
-	if byte(expectedEntropy) != ackFrame.Entropy {
-		return ErrEntropy
-	}
-
-	// Entropy ok. Now actually process the ACK packet
 	h.LargestObserved = ackFrame.LargestObserved
-	highestInOrderAckedPacketNumber := ackFrame.GetHighestInOrderPacketNumber()
 
 	// Update the RTT
 	timeDelta := time.Now().Sub(h.packetHistory[h.LargestObserved].sendTime)
@@ -205,25 +169,22 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameLegacy) error {
 	var ackedPackets congestion.PacketVector
 	var lostPackets congestion.PacketVector
 
-	// ACK all packets below the highestInOrderAckedPacketNumber
-	for i := h.highestInOrderAckedPacketNumber; i <= highestInOrderAckedPacketNumber; i++ {
-		p := h.ackPacket(i)
-		if p != nil {
-			ackedPackets = append(ackedPackets, congestion.PacketInfo{Number: p.PacketNumber, Length: p.Length})
-		}
-	}
+	ackRangeIndex := 0
+	for i := ackFrame.LowestAcked; i <= ackFrame.LargestObserved; i++ {
+		if ackFrame.HasMissingRanges() {
+			ackRange := ackFrame.AckRanges[len(ackFrame.AckRanges)-1-ackRangeIndex]
 
-	if ackFrame.HasNACK() {
-		nackRangeIndex := 0
-		nackRange := ackFrame.NackRanges[nackRangeIndex]
-		for i := ackFrame.LargestObserved; i > ackFrame.GetHighestInOrderPacketNumber(); i-- {
-			if i < nackRange.FirstPacketNumber {
-				nackRangeIndex++
-				if nackRangeIndex < len(ackFrame.NackRanges) {
-					nackRange = ackFrame.NackRanges[nackRangeIndex]
-				}
+			if i > ackRange.LastPacketNumber && ackRangeIndex < len(ackFrame.AckRanges)-1 {
+				ackRangeIndex++
+				ackRange = ackFrame.AckRanges[len(ackFrame.AckRanges)-1-ackRangeIndex]
 			}
-			if nackRange.ContainsPacketNumber(i) {
+
+			if i >= ackRange.FirstPacketNumber { // packet i contained in ACK range
+				p := h.ackPacket(i)
+				if p != nil {
+					ackedPackets = append(ackedPackets, congestion.PacketInfo{Number: p.PacketNumber, Length: p.Length})
+				}
+			} else {
 				p, err := h.nackPacket(i)
 				if err != nil {
 					return err
@@ -231,16 +192,14 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameLegacy) error {
 				if p != nil {
 					lostPackets = append(lostPackets, congestion.PacketInfo{Number: p.PacketNumber, Length: p.Length})
 				}
-			} else {
-				p := h.ackPacket(i)
-				if p != nil {
-					ackedPackets = append(ackedPackets, congestion.PacketInfo{Number: p.PacketNumber, Length: p.Length})
-				}
+			}
+		} else {
+			p := h.ackPacket(i)
+			if p != nil {
+				ackedPackets = append(ackedPackets, congestion.PacketInfo{Number: p.PacketNumber, Length: p.Length})
 			}
 		}
 	}
-
-	h.highestInOrderAckedPacketNumber = highestInOrderAckedPacketNumber
 
 	h.congestion.OnCongestionEvent(
 		true, /* TODO: rtt updated */
@@ -308,6 +267,7 @@ func (h *sentPacketHandler) maybeQueuePacketsRTO() {
 	if time.Now().Before(h.TimeOfFirstRTO()) {
 		return
 	}
+
 	for p := h.highestInOrderAckedPacketNumber + 1; p <= h.lastSentPacketNumber; p++ {
 		packet := h.packetHistory[p]
 		if packet != nil && !packet.Retransmitted {
