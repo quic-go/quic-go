@@ -574,13 +574,4 @@ var _ = Describe("AckFrame", func() {
 			Expect(ack.validateAckRanges()).To(BeTrue())
 		})
 	})
-
-	Context("highest in order packet number", func() {
-		It("gets the hightest in order packet number for a simple ACK", func() {
-			frame := &AckFrameNew{
-				LargestObserved: 0x1337,
-			}
-			Expect(frame.GetHighestInOrderPacketNumber()).To(Equal(protocol.PacketNumber(0x1337)))
-		})
-	})
 })

@@ -296,14 +296,6 @@ func (f *AckFrameNew) HasMissingRanges() bool {
 	return false
 }
 
-// GetHighestInOrderPacketNumber gets the highest in order packet number that is confirmed by this ACK
-func (f *AckFrameNew) GetHighestInOrderPacketNumber() protocol.PacketNumber {
-	if f.HasMissingRanges() {
-		panic("NACKs not yet implemented")
-	}
-	return f.LargestObserved
-}
-
 func (f *AckFrameNew) validateAckRanges() bool {
 	if len(f.AckRanges) == 0 {
 		return true
