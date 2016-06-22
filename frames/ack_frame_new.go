@@ -113,13 +113,7 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 		}
 		frame.LowestAcked = frame.AckRanges[len(frame.AckRanges)-1].FirstPacketNumber
 	} else {
-		// make sure that LowestAcked is not 0. 0 is not a valid PacketNumber
-		// TODO: is this really the right behavior?
-		if largestObserved == ackBlockLength {
-			frame.LowestAcked = 1
-		} else {
-			frame.LowestAcked = protocol.PacketNumber(largestObserved - ackBlockLength)
-		}
+		frame.LowestAcked = protocol.PacketNumber(largestObserved + 1 - ackBlockLength)
 	}
 
 	if !frame.validateAckRanges() {
@@ -210,10 +204,13 @@ func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 	}
 
 	if !f.HasMissingRanges() {
-		utils.WriteUint48(b, uint64(f.LargestObserved-f.LowestAcked))
+		utils.WriteUint48(b, uint64(f.LargestObserved-f.LowestAcked+1))
 	} else {
 		if f.LargestObserved != f.AckRanges[0].LastPacketNumber {
-			return errors.New("internal inconsistency")
+			return errors.New("internal inconsistency: LastPacketNumber does not match ACK ranges")
+		}
+		if f.LowestAcked != f.AckRanges[len(f.AckRanges)-1].FirstPacketNumber {
+			return errors.New("internal inconsistency: FirstPacketNumber does not match ACK ranges")
 		}
 		length := f.LargestObserved - f.AckRanges[0].FirstPacketNumber + 1
 		utils.WriteUint48(b, uint64(length))
