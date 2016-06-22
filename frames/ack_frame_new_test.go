@@ -59,7 +59,7 @@ var _ = Describe("AckFrame", func() {
 			// Length: 0x1d => LowestAcked would be -1
 			b := bytes.NewReader([]byte{0x40, 0x1c, 0x8e, 0x0, 0x1d, 0x1, 0x1, 0x6b, 0x26, 0x3, 0x0})
 			_, err := ParseAckFrameNew(b, 0)
-			Expect(err).To(MatchError(errInvalidAckRanges))
+			Expect(err).To(MatchError(ErrInvalidAckRanges))
 		})
 
 		Context("ACK blocks", func() {
@@ -80,7 +80,7 @@ var _ = Describe("AckFrame", func() {
 				// like the test before, but increased the last ACK range, such that the FirstPacketNumber would be negative
 				b := bytes.NewReader([]byte{0x60, 0x18, 0x94, 0x1, 0x1, 0x3, 0x2, 0x15, 0x2, 0x1, 0x5c, 0xd5, 0x0, 0x0, 0x0, 0x95, 0x0})
 				_, err := ParseAckFrameNew(b, 0)
-				Expect(err).To(MatchError(errInvalidAckRanges))
+				Expect(err).To(MatchError(ErrInvalidAckRanges))
 			})
 
 			It("parses a frame with multiple single packets missing", func() {
@@ -282,6 +282,32 @@ var _ = Describe("AckFrame", func() {
 				Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
 				Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
 				Expect(r.Len()).To(BeZero())
+			})
+
+			It("rejects a frame with incorrect LargestObserved value", func() {
+				frame := &AckFrameNew{
+					LargestObserved: 26,
+					LowestAcked:     1,
+					AckRanges: []AckRange{
+						AckRange{FirstPacketNumber: 12, LastPacketNumber: 25},
+						AckRange{FirstPacketNumber: 1, LastPacketNumber: 10},
+					},
+				}
+				err := frame.Write(b, 0)
+				Expect(err).To(MatchError(errInconsistentAckLargestObserved))
+			})
+
+			It("rejects a frame with incorrect LargestObserved value", func() {
+				frame := &AckFrameNew{
+					LargestObserved: 25,
+					LowestAcked:     2,
+					AckRanges: []AckRange{
+						AckRange{FirstPacketNumber: 12, LastPacketNumber: 25},
+						AckRange{FirstPacketNumber: 1, LastPacketNumber: 10},
+					},
+				}
+				err := frame.Write(b, 0)
+				Expect(err).To(MatchError(errInconsistentAckLowestAcked))
 			})
 
 			Context("longer ACK blocks", func() {

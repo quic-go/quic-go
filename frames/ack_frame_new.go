@@ -9,7 +9,13 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
-var errInvalidAckRanges = errors.New("AckFrame: ACK frame contains invalid ACK ranges")
+// ErrInvalidAckRanges occurs when a client sends inconsistent ACK ranges
+var ErrInvalidAckRanges = errors.New("AckFrame: ACK frame contains invalid ACK ranges")
+
+var (
+	errInconsistentAckLargestObserved = errors.New("internal inconsistency: LargestObserved does not match ACK ranges")
+	errInconsistentAckLowestAcked     = errors.New("internal inconsistency: LowestAcked does not match ACK ranges")
+)
 
 // An AckFrameNew is a ACK frame in QUIC c34
 type AckFrameNew struct {
@@ -73,7 +79,7 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 	}
 
 	if ackBlockLength > largestObserved {
-		return nil, errInvalidAckRanges
+		return nil, ErrInvalidAckRanges
 	}
 
 	if hasMissingRanges {
@@ -117,7 +123,7 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 	}
 
 	if !frame.validateAckRanges() {
-		return nil, errInvalidAckRanges
+		return nil, ErrInvalidAckRanges
 	}
 
 	var numTimestampByte byte
@@ -207,10 +213,10 @@ func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 		utils.WriteUint48(b, uint64(f.LargestObserved-f.LowestAcked+1))
 	} else {
 		if f.LargestObserved != f.AckRanges[0].LastPacketNumber {
-			return errors.New("internal inconsistency: LastPacketNumber does not match ACK ranges")
+			return errInconsistentAckLargestObserved
 		}
 		if f.LowestAcked != f.AckRanges[len(f.AckRanges)-1].FirstPacketNumber {
-			return errors.New("internal inconsistency: FirstPacketNumber does not match ACK ranges")
+			return errInconsistentAckLowestAcked
 		}
 		length := f.LargestObserved - f.AckRanges[0].FirstPacketNumber + 1
 		utils.WriteUint48(b, uint64(length))
