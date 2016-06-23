@@ -10,7 +10,7 @@ var _ = Describe("Packet", func() {
 	Context("getFramesForRetransmission", func() {
 		var packet Packet
 		var streamFrame1, streamFrame2 *frames.StreamFrame
-		var ackFrame1, ackFrame2 *frames.AckFrameLegacy
+		var ackFrame1, ackFrame2 *frames.AckFrameNew
 		var stopWaitingFrame *frames.StopWaitingFrame
 		var rstStreamFrame *frames.RstStreamFrame
 		var windowUpdateFrame *frames.WindowUpdateFrame
@@ -24,13 +24,13 @@ var _ = Describe("Packet", func() {
 				StreamID: 6,
 				Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
 			}
-			ackFrame1 = &frames.AckFrameLegacy{
+			ackFrame1 = &frames.AckFrameNew{
 				LargestObserved: 13,
-				Entropy:         5,
+				LowestAcked:     1,
 			}
-			ackFrame2 = &frames.AckFrameLegacy{
+			ackFrame2 = &frames.AckFrameNew{
 				LargestObserved: 333,
-				Entropy:         17,
+				LowestAcked:     100,
 			}
 			rstStreamFrame = &frames.RstStreamFrame{
 				StreamID:  555,
@@ -38,7 +38,6 @@ var _ = Describe("Packet", func() {
 			}
 			stopWaitingFrame = &frames.StopWaitingFrame{
 				LeastUnacked: 7331,
-				Entropy:      10,
 			}
 			windowUpdateFrame = &frames.WindowUpdateFrame{
 				StreamID: 999,

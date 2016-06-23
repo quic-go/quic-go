@@ -11,8 +11,6 @@ import (
 type Packet struct {
 	PacketNumber protocol.PacketNumber
 	Frames       []frames.Frame
-	EntropyBit   bool
-	Entropy      EntropyAccumulator
 	Length       protocol.ByteCount
 
 	MissingReports uint8
@@ -41,7 +39,7 @@ func (p *Packet) GetControlFramesForRetransmission() []frames.Frame {
 			continue
 		}
 
-		_, isAck := frame.(*frames.AckFrameLegacy)
+		_, isAck := frame.(*frames.AckFrameNew)
 		_, isStopWaiting := frame.(*frames.StopWaitingFrame)
 		if !isAck && !isStopWaiting {
 			controlFrames = append(controlFrames, frame)
