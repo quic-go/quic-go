@@ -30,7 +30,6 @@ func (h *stopWaitingManager) RegisterPacketForRetransmission(packet *Packet) {
 	if h.currentStopWaitingFrame == nil || h.currentStopWaitingFrame.LeastUnacked <= packet.PacketNumber { // <= because for StopWaitingFrames LeastUnacked = packet.PacketNumber + 1
 		h.currentStopWaitingFrame = &frames.StopWaitingFrame{
 			LeastUnacked: packet.PacketNumber + 1,
-			Entropy:      byte(packet.Entropy),
 		}
 		h.maxRetransmittedPacketNumber = packet.PacketNumber
 		h.currentStopWaitingFrameSent = false

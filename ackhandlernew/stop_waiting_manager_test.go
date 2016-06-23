@@ -18,39 +18,36 @@ var _ = Describe("StopWaitingManager", func() {
 
 	It("gets a StopWaitingFrame after a packet has been registered for retransmission", func() {
 		leastUnacked := protocol.PacketNumber(10)
-		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked, Entropy: 10})
+		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked})
 		swf := manager.GetStopWaitingFrame()
 		Expect(swf).ToNot(BeNil())
 		Expect(swf.LeastUnacked).To(Equal(leastUnacked + 1))
-		Expect(swf.Entropy).To(Equal(byte(10)))
 	})
 
 	It("always gets the StopWaitingFrame for the highest retransmitted packet number", func() {
 		leastUnacked := protocol.PacketNumber(10)
-		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked, Entropy: 10})
-		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked - 1, Entropy: 8})
+		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked})
+		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked - 1})
 		swf := manager.GetStopWaitingFrame()
 		Expect(swf).ToNot(BeNil())
 		Expect(swf.LeastUnacked).To(Equal(leastUnacked + 1))
-		Expect(swf.Entropy).To(Equal(byte(10)))
 	})
 
 	It("updates the StopWaitingFrame when a packet with a higher packet number is retransmitted", func() {
 		leastUnacked := protocol.PacketNumber(10)
-		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked - 1, Entropy: 10})
-		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked, Entropy: 8})
+		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked - 1})
+		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked})
 		swf := manager.GetStopWaitingFrame()
 		Expect(swf).ToNot(BeNil())
 		Expect(swf.LeastUnacked).To(Equal(leastUnacked + 1))
-		Expect(swf.Entropy).To(Equal(byte(8)))
 	})
 
 	It("does not create a new StopWaitingFrame for an out-of-order retransmission", func() {
 		leastUnacked := protocol.PacketNumber(10)
-		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked, Entropy: 8})
+		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked})
 		manager.SentStopWaitingWithPacket(12)
 		manager.ReceivedAckForPacketNumber(12)
-		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked - 1, Entropy: 10})
+		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked - 1})
 		swf := manager.GetStopWaitingFrame()
 		Expect(swf).To(BeNil())
 	})
