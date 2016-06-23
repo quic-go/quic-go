@@ -56,6 +56,7 @@ var _ = Describe("Packet packer", func() {
 			streamFrameQueue:            newStreamFrameQueue(),
 		}
 		publicHeaderLen = 1 + 8 + 1 // 1 flag byte, 8 connection ID, 1 packet number
+		packer.version = protocol.Version34
 	})
 
 	AfterEach(func() {
@@ -267,6 +268,7 @@ var _ = Describe("Packet packer", func() {
 			Expect(p.frames[0].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
 			p, err = packer.PackPacket(nil, []frames.Frame{})
 			Expect(err).ToNot(HaveOccurred())
+			Expect(p.frames).To(HaveLen(1))
 			Expect(p.frames[0].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
 		})
 
@@ -300,6 +302,19 @@ var _ = Describe("Packet packer", func() {
 			Expect(p.raw).To(ContainSubstring(string(f1.Data)))
 			Expect(p.raw).To(ContainSubstring(string(f2.Data)))
 			Expect(p.raw).To(ContainSubstring(string(f3.Data)))
+		})
+
+		It("packs a packet with a stream frame larger than maximum size, in QUIC < 34", func() {
+			packer.version = protocol.Version33
+			f := frames.StreamFrame{
+				StreamID: 5,
+				Offset:   1,
+				Data:     bytes.Repeat([]byte{'f'}, int(protocol.MaxPacketSize)+100),
+			}
+			packer.AddStreamFrame(f)
+			p, err := packer.PackPacket(nil, []frames.Frame{})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p.raw).To(HaveLen(int(protocol.MaxPacketSize)))
 		})
 
 		It("splits one stream frame larger than maximum size", func() {

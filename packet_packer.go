@@ -181,6 +181,11 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 
 	maxFrameSize := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLength
 
+	// until QUIC 33, packets have a 1 byte private header
+	if p.version < protocol.Version34 {
+		maxFrameSize--
+	}
+
 	if stopWaitingFrame != nil {
 		payloadFrames = append(payloadFrames, stopWaitingFrame)
 		minLength, err := stopWaitingFrame.MinLength(p.version)
