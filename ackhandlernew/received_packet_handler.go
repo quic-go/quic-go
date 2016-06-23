@@ -18,16 +18,14 @@ var (
 )
 
 type packetHistoryEntry struct {
-	EntropyBit   bool
 	TimeReceived time.Time
 }
 
 type receivedPacketHandler struct {
-	highestInOrderObserved        protocol.PacketNumber
-	highestInOrderObservedEntropy EntropyAccumulator
-	largestObserved               protocol.PacketNumber
-	currentAckFrame               *frames.AckFrameLegacy
-	stateChanged                  bool // has an ACK for this state already been sent? Will be set to false every time a new packet arrives, and to false every time an ACK is sent
+	highestInOrderObserved protocol.PacketNumber
+	largestObserved        protocol.PacketNumber
+	currentAckFrame        *frames.AckFrameNew
+	stateChanged           bool // has an ACK for this state already been sent? Will be set to false every time a new packet arrives, and to false every time an ACK is sent
 
 	packetHistory           map[protocol.PacketNumber]packetHistoryEntry
 	smallestInPacketHistory protocol.PacketNumber
@@ -40,7 +38,7 @@ func NewReceivedPacketHandler() ReceivedPacketHandler {
 	}
 }
 
-func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumber, entropyBit bool) error {
+func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumber) error {
 	if packetNumber == 0 {
 		return errInvalidPacketNumber
 	}
@@ -56,13 +54,12 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 		h.largestObserved = packetNumber
 	}
 
-	if packetNumber == h.highestInOrderObserved+1 {
-		h.highestInOrderObserved = packetNumber
-		h.highestInOrderObservedEntropy.Add(packetNumber, entropyBit)
-	}
+	// TODO: figure out when to increase this value
+	// if packetNumber == h.highestInOrderObserved+1 {
+	// 	h.highestInOrderObserved = packetNumber
+	// }
 
 	h.packetHistory[packetNumber] = packetHistoryEntry{
-		EntropyBit:   entropyBit,
 		TimeReceived: time.Now(),
 	}
 
@@ -83,24 +80,23 @@ func (h *receivedPacketHandler) ReceivedStopWaiting(f *frames.StopWaitingFrame) 
 
 	// the LeastUnacked is the smallest packet number of any packet for which the sender is still awaiting an ack. So the highestInOrderObserved is one less than that
 	h.highestInOrderObserved = f.LeastUnacked - 1
-	h.highestInOrderObservedEntropy = EntropyAccumulator(f.Entropy)
 
 	h.garbageCollect()
 
 	return nil
 }
 
-// getNackRanges gets all the NACK ranges
-func (h *receivedPacketHandler) getNackRanges() ([]frames.NackRange, EntropyAccumulator) {
+// getNackRanges gets all the ACK ranges
+func (h *receivedPacketHandler) getAckRanges() []frames.AckRange {
 	// TODO: use a better data structure here
-	var ranges []frames.NackRange
+	var ranges []frames.AckRange
 	inRange := false
-	entropy := h.highestInOrderObservedEntropy
+
 	for i := h.largestObserved; i > h.highestInOrderObserved; i-- {
-		p, ok := h.packetHistory[i]
-		if !ok {
+		_, ok := h.packetHistory[i]
+		if ok {
 			if !inRange {
-				r := frames.NackRange{
+				r := frames.AckRange{
 					FirstPacketNumber: i,
 					LastPacketNumber:  i,
 				}
@@ -111,13 +107,12 @@ func (h *receivedPacketHandler) getNackRanges() ([]frames.NackRange, EntropyAccu
 			}
 		} else {
 			inRange = false
-			entropy.Add(i, p.EntropyBit)
 		}
 	}
-	return ranges, entropy
+	return ranges
 }
 
-func (h *receivedPacketHandler) GetAckFrame(dequeue bool) (*frames.AckFrameLegacy, error) {
+func (h *receivedPacketHandler) GetAckFrame(dequeue bool) (*frames.AckFrameNew, error) {
 	if !h.stateChanged {
 		return nil, nil
 	}
@@ -136,13 +131,17 @@ func (h *receivedPacketHandler) GetAckFrame(dequeue bool) (*frames.AckFrameLegac
 	}
 	packetReceivedTime := p.TimeReceived
 
-	nackRanges, entropy := h.getNackRanges()
-	h.currentAckFrame = &frames.AckFrameLegacy{
+	ackRanges := h.getAckRanges()
+	h.currentAckFrame = &frames.AckFrameNew{
 		LargestObserved:    h.largestObserved,
-		Entropy:            byte(entropy),
-		NackRanges:         nackRanges,
+		LowestAcked:        ackRanges[len(ackRanges)-1].FirstPacketNumber,
 		PacketReceivedTime: packetReceivedTime,
 	}
+
+	if len(ackRanges) > 1 {
+		h.currentAckFrame.AckRanges = ackRanges
+	}
+
 	return h.currentAckFrame, nil
 }
 

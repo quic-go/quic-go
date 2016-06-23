@@ -26,10 +26,10 @@ type SentPacketHandler interface {
 
 // ReceivedPacketHandler handles ACKs needed to send for incoming packets
 type ReceivedPacketHandler interface {
-	ReceivedPacket(packetNumber protocol.PacketNumber, entropyBit bool) error
+	ReceivedPacket(packetNumber protocol.PacketNumber) error
 	ReceivedStopWaiting(*frames.StopWaitingFrame) error
 
-	GetAckFrame(dequeue bool) (*frames.AckFrameLegacy, error)
+	GetAckFrame(dequeue bool) (*frames.AckFrameNew, error)
 }
 
 // StopWaitingManager manages StopWaitings for sent packets
