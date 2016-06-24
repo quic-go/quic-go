@@ -85,14 +85,10 @@ func (h *sentPacketHandler) ackPacket(packetNumber protocol.PacketNumber) *Packe
 
 func (h *sentPacketHandler) nackPacket(packetNumber protocol.PacketNumber) (*Packet, error) {
 	packet, ok := h.packetHistory[packetNumber]
-	if !ok {
-		return nil, ErrMapAccess
-	}
-
-	// If the packet has already been retransmitted, do nothing.
+	// This means that the packet has already been retransmitted, do nothing.
 	// We're probably only receiving another NACK for this packet because the
 	// retransmission has not yet arrived at the client.
-	if packet.Retransmitted {
+	if !ok {
 		return nil, nil
 	}
 
@@ -109,8 +105,6 @@ func (h *sentPacketHandler) queuePacketForRetransmission(packet *Packet) {
 	h.bytesInFlight -= packet.Length
 	h.retransmissionQueue = append(h.retransmissionQueue, packet)
 	packet.Retransmitted = true
-
-	// TODO: delete from packetHistory once we drop support for version smaller than QUIC 33
 }
 
 func (h *sentPacketHandler) SentPacket(packet *Packet) error {
@@ -231,12 +225,14 @@ func (h *sentPacketHandler) DequeuePacketForRetransmission() (packet *Packet) {
 		packet = h.retransmissionQueue[queueLen-1]
 		h.retransmissionQueue = h.retransmissionQueue[:queueLen-1]
 
-		// check if the packet was ACKed after it was already queued for retransmission
-		// if so, it doesn't exist in the packetHistory anymore. Skip it then
+		// this happens if a belated ACK arrives for this packet
+		// no need to retransmit it
 		_, ok := h.packetHistory[packet.PacketNumber]
 		if !ok {
 			continue
 		}
+
+		delete(h.packetHistory, packet.PacketNumber)
 		return packet
 	}
 

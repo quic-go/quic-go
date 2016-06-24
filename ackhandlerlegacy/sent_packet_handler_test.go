@@ -459,6 +459,7 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 			}
 			packet := handler.DequeuePacketForRetransmission()
+			Expect(packet).ToNot(BeNil())
 			Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(3)))
 			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
 		})
@@ -473,6 +474,7 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 			}
 			packet := handler.DequeuePacketForRetransmission()
+			Expect(packet).ToNot(BeNil())
 			Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(2)))
 			packet = handler.DequeuePacketForRetransmission()
 			Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(4)))
@@ -491,8 +493,10 @@ var _ = Describe("SentPacketHandler", func() {
 				_, err := handler.nackPacket(4)
 				Expect(err).ToNot(HaveOccurred())
 			}
-			_ = handler.DequeuePacketForRetransmission()
-			_ = handler.DequeuePacketForRetransmission()
+			packet := handler.DequeuePacketForRetransmission()
+			Expect(packet).ToNot(BeNil())
+			packet = handler.DequeuePacketForRetransmission()
+			Expect(packet).ToNot(BeNil())
 			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
 		})
 
@@ -508,7 +512,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(2)))
 		})
 
-		It("does not retransmit a packet if a belated was received", func() {
+		It("does not retransmit a packet if a belated ACK was received", func() {
 			// lose packet by NACKing it often enough
 			for i := uint8(0); i < protocol.RetransmissionThreshold+1; i++ {
 				_, err := handler.nackPacket(2)

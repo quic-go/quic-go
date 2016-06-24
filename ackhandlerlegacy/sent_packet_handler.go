@@ -106,8 +106,6 @@ func (h *sentPacketHandler) queuePacketForRetransmission(packet *Packet) {
 	h.bytesInFlight -= packet.Length
 	h.retransmissionQueue = append(h.retransmissionQueue, packet)
 	packet.Retransmitted = true
-
-	// TODO: delete from packetHistory once we drop support for version smaller than QUIC 33
 }
 
 func (h *sentPacketHandler) SentPacket(packet *Packet) error {
