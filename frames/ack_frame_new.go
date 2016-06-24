@@ -13,17 +13,16 @@ import (
 var ErrInvalidAckRanges = errors.New("AckFrame: ACK frame contains invalid ACK ranges")
 
 var (
-	errInconsistentAckLargestObserved = errors.New("internal inconsistency: LargestObserved does not match ACK ranges")
-	errInconsistentAckLowestAcked     = errors.New("internal inconsistency: LowestAcked does not match ACK ranges")
+	errInconsistentAckLargestAcked = errors.New("internal inconsistency: LargestAcked does not match ACK ranges")
+	errInconsistentAckLowestAcked  = errors.New("internal inconsistency: LowestAcked does not match ACK ranges")
 )
 
 // An AckFrameNew is a ACK frame in QUIC c34
 type AckFrameNew struct {
-	// TODO: rename to LargestAcked
-	LargestObserved protocol.PacketNumber
-	NackRanges      []NackRange // has to be ordered. The NACK range with the highest FirstPacketNumber goes first, the NACK range with the lowest FirstPacketNumber goes last
-	LowestAcked     protocol.PacketNumber
-	AckRanges       []AckRange
+	LargestAcked protocol.PacketNumber
+	NackRanges   []NackRange // has to be ordered. The NACK range with the highest FirstPacketNumber goes first, the NACK range with the lowest FirstPacketNumber goes last
+	LowestAcked  protocol.PacketNumber
+	AckRanges    []AckRange
 
 	DelayTime          time.Duration
 	PacketReceivedTime time.Time // only for received packets. Will not be modified for received ACKs frames
@@ -43,9 +42,9 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 		hasMissingRanges = true
 	}
 
-	largestObservedLen := 2 * ((typeByte & 0x0C) >> 2)
-	if largestObservedLen == 0 {
-		largestObservedLen = 1
+	largestAckedLen := 2 * ((typeByte & 0x0C) >> 2)
+	if largestAckedLen == 0 {
+		largestAckedLen = 1
 	}
 
 	missingSequenceNumberDeltaLen := 2 * (typeByte & 0x03)
@@ -53,11 +52,11 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 		missingSequenceNumberDeltaLen = 1
 	}
 
-	largestObserved, err := utils.ReadUintN(r, largestObservedLen)
+	largestAcked, err := utils.ReadUintN(r, largestAckedLen)
 	if err != nil {
 		return nil, err
 	}
-	frame.LargestObserved = protocol.PacketNumber(largestObserved)
+	frame.LargestAcked = protocol.PacketNumber(largestAcked)
 
 	delay, err := utils.ReadUfloat16(r)
 	if err != nil {
@@ -78,14 +77,14 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 		return nil, err
 	}
 
-	if ackBlockLength > largestObserved {
+	if ackBlockLength > largestAcked {
 		return nil, ErrInvalidAckRanges
 	}
 
 	if hasMissingRanges {
 		ackRange := AckRange{
-			FirstPacketNumber: protocol.PacketNumber(largestObserved-ackBlockLength) + 1,
-			LastPacketNumber:  frame.LargestObserved,
+			FirstPacketNumber: protocol.PacketNumber(largestAcked-ackBlockLength) + 1,
+			LastPacketNumber:  frame.LargestAcked,
 		}
 		frame.AckRanges = append(frame.AckRanges, ackRange)
 
@@ -119,7 +118,7 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 		}
 		frame.LowestAcked = frame.AckRanges[len(frame.AckRanges)-1].FirstPacketNumber
 	} else {
-		frame.LowestAcked = protocol.PacketNumber(largestObserved + 1 - ackBlockLength)
+		frame.LowestAcked = protocol.PacketNumber(largestAcked + 1 - ackBlockLength)
 	}
 
 	if !frame.validateAckRanges() {
@@ -134,7 +133,7 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 	numTimestamp := uint8(numTimestampByte)
 
 	if numTimestamp > 0 {
-		// Delta Largest observed
+		// Delta Largest acked
 		_, err = r.ReadByte()
 		if err != nil {
 			return nil, err
@@ -146,7 +145,7 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 		}
 
 		for i := 0; i < int(numTimestamp)-1; i++ {
-			// Delta Largest observed
+			// Delta Largest acked
 			_, err = r.ReadByte()
 			if err != nil {
 				return nil, err
@@ -165,12 +164,12 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 
 // Write writes an ACK frame.
 func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
-	largestObservedLen := protocol.GetPacketNumberLength(f.LargestObserved)
+	largestAckedLen := protocol.GetPacketNumberLength(f.LargestAcked)
 
 	typeByte := uint8(0x40)
 
-	if largestObservedLen != protocol.PacketNumberLen1 {
-		typeByte ^= (uint8(largestObservedLen / 2)) << 2
+	if largestAckedLen != protocol.PacketNumberLen1 {
+		typeByte ^= (uint8(largestAckedLen / 2)) << 2
 	}
 
 	// TODO: send shorter values, if possible
@@ -185,15 +184,15 @@ func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 
 	b.WriteByte(typeByte)
 
-	switch largestObservedLen {
+	switch largestAckedLen {
 	case protocol.PacketNumberLen1:
-		b.WriteByte(uint8(f.LargestObserved))
+		b.WriteByte(uint8(f.LargestAcked))
 	case protocol.PacketNumberLen2:
-		utils.WriteUint16(b, uint16(f.LargestObserved))
+		utils.WriteUint16(b, uint16(f.LargestAcked))
 	case protocol.PacketNumberLen4:
-		utils.WriteUint32(b, uint32(f.LargestObserved))
+		utils.WriteUint32(b, uint32(f.LargestAcked))
 	case protocol.PacketNumberLen6:
-		utils.WriteUint48(b, uint64(f.LargestObserved))
+		utils.WriteUint48(b, uint64(f.LargestAcked))
 	}
 
 	f.DelayTime = time.Now().Sub(f.PacketReceivedTime)
@@ -210,15 +209,15 @@ func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 	}
 
 	if !f.HasMissingRanges() {
-		utils.WriteUint48(b, uint64(f.LargestObserved-f.LowestAcked+1))
+		utils.WriteUint48(b, uint64(f.LargestAcked-f.LowestAcked+1))
 	} else {
-		if f.LargestObserved != f.AckRanges[0].LastPacketNumber {
-			return errInconsistentAckLargestObserved
+		if f.LargestAcked != f.AckRanges[0].LastPacketNumber {
+			return errInconsistentAckLargestAcked
 		}
 		if f.LowestAcked != f.AckRanges[len(f.AckRanges)-1].FirstPacketNumber {
 			return errInconsistentAckLowestAcked
 		}
-		length := f.LargestObserved - f.AckRanges[0].FirstPacketNumber + 1
+		length := f.LargestAcked - f.AckRanges[0].FirstPacketNumber + 1
 		utils.WriteUint48(b, uint64(length))
 		numRangesWritten++
 	}
@@ -273,7 +272,7 @@ func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 func (f *AckFrameNew) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
 	var length protocol.ByteCount
 	length = 1 + 2 + 1 // 1 TypeByte, 2 ACK delay time, 1 Num Timestamp
-	length += protocol.ByteCount(protocol.GetPacketNumberLength(f.LargestObserved))
+	length += protocol.ByteCount(protocol.GetPacketNumberLength(f.LargestAcked))
 
 	missingSequenceNumberDeltaLen := protocol.ByteCount(protocol.PacketNumberLen6)
 
@@ -306,7 +305,7 @@ func (f *AckFrameNew) validateAckRanges() bool {
 		return false
 	}
 
-	if f.AckRanges[0].LastPacketNumber != f.LargestObserved {
+	if f.AckRanges[0].LastPacketNumber != f.LargestAcked {
 		return false
 	}
 

@@ -133,7 +133,7 @@ func (h *receivedPacketHandler) GetAckFrame(dequeue bool) (*frames.AckFrameNew, 
 
 	ackRanges := h.getAckRanges()
 	h.currentAckFrame = &frames.AckFrameNew{
-		LargestObserved:    h.largestObserved,
+		LargestAcked:       h.largestObserved,
 		LowestAcked:        ackRanges[len(ackRanges)-1].FirstPacketNumber,
 		PacketReceivedTime: packetReceivedTime,
 	}

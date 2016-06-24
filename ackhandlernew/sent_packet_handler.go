@@ -148,15 +148,15 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 
 // TODO: Simplify return types
 func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameNew) error {
-	if ackFrame.LargestObserved > h.lastSentPacketNumber {
+	if ackFrame.LargestAcked > h.lastSentPacketNumber {
 		return errAckForUnsentPacket
 	}
 
-	if ackFrame.LargestObserved <= h.LargestObserved { // duplicate or out-of-order AckFrame
+	if ackFrame.LargestAcked <= h.LargestObserved { // duplicate or out-of-order AckFrame
 		return ErrDuplicateOrOutOfOrderAck
 	}
 
-	h.LargestObserved = ackFrame.LargestObserved
+	h.LargestObserved = ackFrame.LargestAcked
 
 	// Update the RTT
 	timeDelta := time.Now().Sub(h.packetHistory[h.LargestObserved].sendTime)
@@ -170,7 +170,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameNew) error {
 	var lostPackets congestion.PacketVector
 
 	ackRangeIndex := 0
-	for i := ackFrame.LowestAcked; i <= ackFrame.LargestObserved; i++ {
+	for i := ackFrame.LowestAcked; i <= ackFrame.LargestAcked; i++ {
 		if ackFrame.HasMissingRanges() {
 			ackRange := ackFrame.AckRanges[len(ackFrame.AckRanges)-1-ackRangeIndex]
 

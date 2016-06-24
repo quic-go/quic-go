@@ -25,12 +25,12 @@ var _ = Describe("Packet", func() {
 				Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
 			}
 			ackFrame1 = &frames.AckFrameNew{
-				LargestObserved: 13,
-				LowestAcked:     1,
+				LargestAcked: 13,
+				LowestAcked:  1,
 			}
 			ackFrame2 = &frames.AckFrameNew{
-				LargestObserved: 333,
-				LowestAcked:     100,
+				LargestAcked: 333,
+				LowestAcked:  100,
 			}
 			rstStreamFrame = &frames.RstStreamFrame{
 				StreamID:  555,
