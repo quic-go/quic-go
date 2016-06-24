@@ -32,7 +32,7 @@ type sentPacketHandler struct {
 	lastSentPacketNumber            protocol.PacketNumber
 	lastSentPacketTime              time.Time
 	highestInOrderAckedPacketNumber protocol.PacketNumber
-	LargestObserved                 protocol.PacketNumber
+	LargestAcked                    protocol.PacketNumber
 
 	// TODO: Move into separate class as in chromium
 	packetHistory map[protocol.PacketNumber]*Packet
@@ -152,14 +152,14 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameNew) error {
 		return errAckForUnsentPacket
 	}
 
-	if ackFrame.LargestAcked <= h.LargestObserved { // duplicate or out-of-order AckFrame
+	if ackFrame.LargestAcked <= h.LargestAcked { // duplicate or out-of-order AckFrame
 		return ErrDuplicateOrOutOfOrderAck
 	}
 
-	h.LargestObserved = ackFrame.LargestAcked
+	h.LargestAcked = ackFrame.LargestAcked
 
 	// Update the RTT
-	timeDelta := time.Now().Sub(h.packetHistory[h.LargestObserved].sendTime)
+	timeDelta := time.Now().Sub(h.packetHistory[h.LargestAcked].sendTime)
 	// TODO: Don't always update RTT
 	h.rttStats.UpdateRTT(timeDelta, ackFrame.DelayTime, time.Now())
 	if utils.Debug() {
@@ -247,8 +247,8 @@ func (h *sentPacketHandler) BytesInFlight() protocol.ByteCount {
 	return h.bytesInFlight
 }
 
-func (h *sentPacketHandler) GetLargestObserved() protocol.PacketNumber {
-	return h.LargestObserved
+func (h *sentPacketHandler) GetLargestAcked() protocol.PacketNumber {
+	return h.LargestAcked
 }
 
 func (h *sentPacketHandler) CongestionAllowsSending() bool {

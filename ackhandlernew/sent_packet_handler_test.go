@@ -83,6 +83,11 @@ var _ = Describe("SentPacketHandler", func() {
 		Expect(handler.stopWaitingManager.(*mockStopWaiting).receivedAckForPacketNumber).To(Equal(protocol.PacketNumber(2)))
 	})
 
+	It("gets the LargestAcked packet number", func() {
+		handler.LargestAcked = 0x1337
+		Expect(handler.GetLargestAcked()).To(Equal(protocol.PacketNumber(0x1337)))
+	})
+
 	Context("registering sent packets", func() {
 		It("accepts two consecutive packets", func() {
 			packet1 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1}
@@ -201,7 +206,7 @@ var _ = Describe("SentPacketHandler", func() {
 				ack.LargestAcked--
 				err = handler.ReceivedAck(&ack)
 				Expect(err).To(MatchError(ErrDuplicateOrOutOfOrderAck))
-				Expect(handler.LargestObserved).To(Equal(protocol.PacketNumber(largestAcked)))
+				Expect(handler.LargestAcked).To(Equal(protocol.PacketNumber(largestAcked)))
 				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(len(packets) - 3)))
 			})
 

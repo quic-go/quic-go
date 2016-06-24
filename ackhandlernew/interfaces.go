@@ -16,7 +16,7 @@ type SentPacketHandler interface {
 	DequeuePacketForRetransmission() (packet *Packet)
 
 	BytesInFlight() protocol.ByteCount
-	GetLargestObserved() protocol.PacketNumber
+	GetLargestAcked() protocol.PacketNumber
 
 	CongestionAllowsSending() bool
 	CheckForError() error
