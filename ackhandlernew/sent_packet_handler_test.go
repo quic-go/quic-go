@@ -223,14 +223,14 @@ var _ = Describe("SentPacketHandler", func() {
 		Context("acks and nacks the right packets", func() {
 			// if a packet is ACKed, it's removed from the packet history
 
-			It("adjusts the highestInOrderAckedPacketNumber", func() {
+			It("adjusts the LargestInOrderAcked", func() {
 				ack := frames.AckFrameNew{
 					LargestAcked: 5,
 					LowestAcked:  1,
 				}
 				err := handler.ReceivedAck(&ack)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(5)))
+				Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(5)))
 				for i := 1; i <= 5; i++ {
 					Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(i)))
 				}
@@ -247,7 +247,7 @@ var _ = Describe("SentPacketHandler", func() {
 				}
 				err := handler.ReceivedAck(&ack)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(0)))
+				Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(0)))
 				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(1)))
 				Expect(handler.packetHistory[1].MissingReports).To(BeZero())
 				for i := 2; i <= 8; i++ {
@@ -270,7 +270,7 @@ var _ = Describe("SentPacketHandler", func() {
 				}
 				err := handler.ReceivedAck(&ack)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(0)))
+				Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(0)))
 				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(1)))
 				Expect(handler.packetHistory[1].MissingReports).To(BeZero())
 				for i := 2; i <= 3; i++ {
@@ -300,7 +300,7 @@ var _ = Describe("SentPacketHandler", func() {
 				}
 				err := handler.ReceivedAck(&ack)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(1)))
+				Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(1)))
 				Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(1)))
 				Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(3)))
 				Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(6)))
@@ -442,7 +442,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
 		})
 
-		It("does not change the highestInOrderAckedPacketNumber after queueing a retransmission", func() {
+		It("does not change the LargestInOrderAcked after queueing a retransmission", func() {
 			ack := frames.AckFrameNew{
 				LargestAcked: 4,
 				LowestAcked:  1,
@@ -453,9 +453,9 @@ var _ = Describe("SentPacketHandler", func() {
 			}
 			err := handler.ReceivedAck(&ack)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(2)))
+			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(2)))
 			handler.nackPacket(3) // this is the second NACK for this packet
-			Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(2)))
+			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(2)))
 		})
 
 		It("does not retransmit a packet if a belated ACK was received", func() {

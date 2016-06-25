@@ -29,10 +29,10 @@ var (
 )
 
 type sentPacketHandler struct {
-	lastSentPacketNumber            protocol.PacketNumber
-	lastSentPacketTime              time.Time
-	highestInOrderAckedPacketNumber protocol.PacketNumber
-	LargestAcked                    protocol.PacketNumber
+	lastSentPacketNumber protocol.PacketNumber
+	lastSentPacketTime   time.Time
+	LargestInOrderAcked  protocol.PacketNumber
+	LargestAcked         protocol.PacketNumber
 
 	// TODO: Move into separate class as in chromium
 	packetHistory map[protocol.PacketNumber]*Packet
@@ -72,8 +72,8 @@ func (h *sentPacketHandler) ackPacket(packetNumber protocol.PacketNumber) *Packe
 		h.bytesInFlight -= packet.Length
 	}
 
-	if h.highestInOrderAckedPacketNumber == packetNumber-1 {
-		h.highestInOrderAckedPacketNumber++
+	if h.LargestInOrderAcked == packetNumber-1 {
+		h.LargestInOrderAcked++
 	}
 
 	delete(h.packetHistory, packetNumber)
@@ -264,7 +264,7 @@ func (h *sentPacketHandler) maybeQueuePacketsRTO() {
 		return
 	}
 
-	for p := h.highestInOrderAckedPacketNumber + 1; p <= h.lastSentPacketNumber; p++ {
+	for p := h.LargestInOrderAcked + 1; p <= h.lastSentPacketNumber; p++ {
 		packet := h.packetHistory[p]
 		if packet != nil && !packet.Retransmitted {
 			packetsLost := congestion.PacketVector{congestion.PacketInfo{
