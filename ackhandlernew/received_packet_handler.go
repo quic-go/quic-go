@@ -17,24 +17,20 @@ var (
 	errTooManyOutstandingReceivedPackets = qerr.Error(qerr.TooManyOutstandingReceivedPackets, "")
 )
 
-type packetHistoryEntry struct {
-	TimeReceived time.Time
-}
-
 type receivedPacketHandler struct {
 	highestInOrderObserved protocol.PacketNumber
 	largestObserved        protocol.PacketNumber
 	currentAckFrame        *frames.AckFrameNew
 	stateChanged           bool // has an ACK for this state already been sent? Will be set to false every time a new packet arrives, and to false every time an ACK is sent
 
-	packetHistory           map[protocol.PacketNumber]packetHistoryEntry
-	smallestInPacketHistory protocol.PacketNumber
+	packetHistory         map[protocol.PacketNumber]time.Time
+	lowestInPacketHistory protocol.PacketNumber
 }
 
 // NewReceivedPacketHandler creates a new receivedPacketHandler
 func NewReceivedPacketHandler() ReceivedPacketHandler {
 	return &receivedPacketHandler{
-		packetHistory: make(map[protocol.PacketNumber]packetHistoryEntry),
+		packetHistory: make(map[protocol.PacketNumber]time.Time),
 	}
 }
 
@@ -59,9 +55,7 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 	// 	h.highestInOrderObserved = packetNumber
 	// }
 
-	h.packetHistory[packetNumber] = packetHistoryEntry{
-		TimeReceived: time.Now(),
-	}
+	h.packetHistory[packetNumber] = time.Now()
 
 	h.garbageCollect()
 
@@ -125,11 +119,10 @@ func (h *receivedPacketHandler) GetAckFrame(dequeue bool) (*frames.AckFrameNew, 
 		return h.currentAckFrame, nil
 	}
 
-	p, ok := h.packetHistory[h.largestObserved]
+	packetReceivedTime, ok := h.packetHistory[h.largestObserved]
 	if !ok {
 		return nil, ErrMapAccess
 	}
-	packetReceivedTime := p.TimeReceived
 
 	ackRanges := h.getAckRanges()
 	h.currentAckFrame = &frames.AckFrameNew{
@@ -146,8 +139,8 @@ func (h *receivedPacketHandler) GetAckFrame(dequeue bool) (*frames.AckFrameNew, 
 }
 
 func (h *receivedPacketHandler) garbageCollect() {
-	for i := h.smallestInPacketHistory; i < h.highestInOrderObserved; i++ {
+	for i := h.lowestInPacketHistory; i < h.highestInOrderObserved; i++ {
 		delete(h.packetHistory, i)
 	}
-	h.smallestInPacketHistory = h.highestInOrderObserved
+	h.lowestInPacketHistory = h.highestInOrderObserved
 }

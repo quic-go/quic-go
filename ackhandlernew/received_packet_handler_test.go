@@ -59,7 +59,7 @@ var _ = Describe("receivedPacketHandler", func() {
 			err := handler.ReceivedPacket(protocol.PacketNumber(3))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(3)))
-			Expect(handler.packetHistory[3].TimeReceived).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+			Expect(handler.packetHistory[3]).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 		})
 
 		It("doesn't store more than MaxTrackedReceivedPackets packets", func() {
