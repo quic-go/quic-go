@@ -36,6 +36,8 @@ type sentPacketHandler struct {
 	LargestObserved                 protocol.PacketNumber
 	LargestObservedEntropy          EntropyAccumulator
 
+	largestReceivedPacketWithAck protocol.PacketNumber
+
 	// TODO: Move into separate class as in chromium
 	packetHistory map[protocol.PacketNumber]*Packet
 
@@ -170,14 +172,17 @@ func (h *sentPacketHandler) calculateExpectedEntropy(ackFrame *frames.AckFrameLe
 }
 
 // TODO: Simplify return types
-func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameLegacy) error {
+func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameLegacy, withPacketNumber protocol.PacketNumber) error {
 	if ackFrame.LargestObserved > h.lastSentPacketNumber {
 		return errAckForUnsentPacket
 	}
 
-	if ackFrame.LargestObserved <= h.LargestObserved { // duplicate or out-of-order AckFrame
+	// duplicate or out-of-order ACK
+	if withPacketNumber <= h.largestReceivedPacketWithAck {
 		return ErrDuplicateOrOutOfOrderAck
 	}
+
+	h.largestReceivedPacketWithAck = withPacketNumber
 
 	expectedEntropy, err := h.calculateExpectedEntropy(ackFrame)
 	if err != nil {

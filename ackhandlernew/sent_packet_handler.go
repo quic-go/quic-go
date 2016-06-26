@@ -34,6 +34,8 @@ type sentPacketHandler struct {
 	LargestInOrderAcked  protocol.PacketNumber
 	LargestAcked         protocol.PacketNumber
 
+	largestReceivedPacketWithAck protocol.PacketNumber
+
 	// TODO: Move into separate class as in chromium
 	packetHistory map[protocol.PacketNumber]*Packet
 
@@ -141,14 +143,17 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 }
 
 // TODO: Simplify return types
-func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameNew) error {
+func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameNew, withPacketNumber protocol.PacketNumber) error {
 	if ackFrame.LargestAcked > h.lastSentPacketNumber {
 		return errAckForUnsentPacket
 	}
 
-	if ackFrame.LargestAcked <= h.LargestAcked { // duplicate or out-of-order AckFrame
+	// duplicate or out-of-order ACK
+	if withPacketNumber <= h.largestReceivedPacketWithAck {
 		return ErrDuplicateOrOutOfOrderAck
 	}
+
+	h.largestReceivedPacketWithAck = withPacketNumber
 
 	h.LargestAcked = ackFrame.LargestAcked
 

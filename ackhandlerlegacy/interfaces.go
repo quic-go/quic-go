@@ -10,7 +10,7 @@ import (
 // SentPacketHandler handles ACKs received for outgoing packets
 type SentPacketHandler interface {
 	SentPacket(packet *Packet) error
-	ReceivedAck(ackFrame *frames.AckFrameLegacy) error
+	ReceivedAck(ackFrame *frames.AckFrameLegacy, withPacketNumber protocol.PacketNumber) error
 
 	ProbablyHasPacketForRetransmission() bool
 	DequeuePacketForRetransmission() (packet *Packet)
