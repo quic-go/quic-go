@@ -23,14 +23,14 @@ type receivedPacketHandler struct {
 	currentAckFrame        *frames.AckFrameNew
 	stateChanged           bool // has an ACK for this state already been sent? Will be set to false every time a new packet arrives, and to false every time an ACK is sent
 
-	packetHistory         map[protocol.PacketNumber]time.Time
-	lowestInPacketHistory protocol.PacketNumber
+	receivedTimes         map[protocol.PacketNumber]time.Time
+	lowestInReceivedTimes protocol.PacketNumber
 }
 
 // NewReceivedPacketHandler creates a new receivedPacketHandler
 func NewReceivedPacketHandler() ReceivedPacketHandler {
 	return &receivedPacketHandler{
-		packetHistory: make(map[protocol.PacketNumber]time.Time),
+		receivedTimes: make(map[protocol.PacketNumber]time.Time),
 	}
 }
 
@@ -38,7 +38,7 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 	if packetNumber == 0 {
 		return errInvalidPacketNumber
 	}
-	_, ok := h.packetHistory[packetNumber]
+	_, ok := h.receivedTimes[packetNumber]
 	if packetNumber <= h.highestInOrderObserved || ok {
 		return ErrDuplicatePacket
 	}
@@ -55,11 +55,11 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 	// 	h.highestInOrderObserved = packetNumber
 	// }
 
-	h.packetHistory[packetNumber] = time.Now()
+	h.receivedTimes[packetNumber] = time.Now()
 
 	h.garbageCollect()
 
-	if uint32(len(h.packetHistory)) > protocol.MaxTrackedReceivedPackets {
+	if uint32(len(h.receivedTimes)) > protocol.MaxTrackedReceivedPackets {
 		return errTooManyOutstandingReceivedPackets
 	}
 
@@ -87,7 +87,7 @@ func (h *receivedPacketHandler) getAckRanges() []frames.AckRange {
 	inRange := false
 
 	for i := h.largestObserved; i > h.highestInOrderObserved; i-- {
-		_, ok := h.packetHistory[i]
+		_, ok := h.receivedTimes[i]
 		if ok {
 			if !inRange {
 				r := frames.AckRange{
@@ -119,7 +119,7 @@ func (h *receivedPacketHandler) GetAckFrame(dequeue bool) (*frames.AckFrameNew, 
 		return h.currentAckFrame, nil
 	}
 
-	packetReceivedTime, ok := h.packetHistory[h.largestObserved]
+	packetReceivedTime, ok := h.receivedTimes[h.largestObserved]
 	if !ok {
 		return nil, ErrMapAccess
 	}
@@ -139,8 +139,8 @@ func (h *receivedPacketHandler) GetAckFrame(dequeue bool) (*frames.AckFrameNew, 
 }
 
 func (h *receivedPacketHandler) garbageCollect() {
-	for i := h.lowestInPacketHistory; i < h.highestInOrderObserved; i++ {
-		delete(h.packetHistory, i)
+	for i := h.lowestInReceivedTimes; i < h.highestInOrderObserved; i++ {
+		delete(h.receivedTimes, i)
 	}
-	h.lowestInPacketHistory = h.highestInOrderObserved
+	h.lowestInReceivedTimes = h.highestInOrderObserved
 }

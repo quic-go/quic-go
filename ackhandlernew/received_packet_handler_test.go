@@ -23,13 +23,13 @@ var _ = Describe("receivedPacketHandler", func() {
 		It("handles a packet that arrives late", func() {
 			err := handler.ReceivedPacket(protocol.PacketNumber(1))
 			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(1)))
+			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(1)))
 			err = handler.ReceivedPacket(protocol.PacketNumber(3))
 			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(3)))
+			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(3)))
 			err = handler.ReceivedPacket(protocol.PacketNumber(2))
 			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(2)))
+			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(2)))
 		})
 
 		It("rejects packets with packet number 0", func() {
@@ -58,8 +58,8 @@ var _ = Describe("receivedPacketHandler", func() {
 		It("saves the time when each packet arrived", func() {
 			err := handler.ReceivedPacket(protocol.PacketNumber(3))
 			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(3)))
-			Expect(handler.packetHistory[3]).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(3)))
+			Expect(handler.receivedTimes[3]).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 		})
 
 		It("doesn't store more than MaxTrackedReceivedPackets packets", func() {
@@ -280,9 +280,9 @@ var _ = Describe("receivedPacketHandler", func() {
 			handler.ReceivedPacket(1)
 			handler.ReceivedPacket(2)
 			handler.ReceivedPacket(4)
-			Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(1)))
-			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(2)))
-			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(4)))
+			Expect(handler.receivedTimes).ToNot(HaveKey(protocol.PacketNumber(1)))
+			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(2)))
+			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(4)))
 		})
 
 		It("garbage collects packetHistory after receiving a StopWaiting", func() {
@@ -291,9 +291,9 @@ var _ = Describe("receivedPacketHandler", func() {
 			handler.ReceivedPacket(4)
 			swf := frames.StopWaitingFrame{LeastUnacked: 4}
 			handler.ReceivedStopWaiting(&swf)
-			Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(1)))
-			Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(2)))
-			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(4)))
+			Expect(handler.receivedTimes).ToNot(HaveKey(protocol.PacketNumber(1)))
+			Expect(handler.receivedTimes).ToNot(HaveKey(protocol.PacketNumber(2)))
+			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(4)))
 		})
 	})
 })
