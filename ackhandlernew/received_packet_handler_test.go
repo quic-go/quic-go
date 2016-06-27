@@ -73,86 +73,6 @@ var _ = Describe("receivedPacketHandler", func() {
 		})
 	})
 
-	Context("ACK range calculation", func() {
-		It("Returns one ACK range for continously received packets", func() {
-			for i := 1; i < 100; i++ {
-				err := handler.ReceivedPacket(protocol.PacketNumber(i))
-				Expect(err).ToNot(HaveOccurred())
-			}
-			Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(99)))
-			// Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(99)))
-			ackRanges := handler.getAckRanges()
-			Expect(ackRanges).To(HaveLen(1))
-			Expect(ackRanges[0]).To(Equal(frames.AckRange{FirstPacketNumber: 1, LastPacketNumber: 99}))
-		})
-
-		It("handles a single lost package", func() {
-			for i := 1; i < 10; i++ {
-				if i == 5 {
-					continue
-				}
-				err := handler.ReceivedPacket(protocol.PacketNumber(i))
-				Expect(err).ToNot(HaveOccurred())
-			}
-			Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(9)))
-			ackRanges := handler.getAckRanges()
-			Expect(ackRanges).To(HaveLen(2))
-			Expect(ackRanges[0]).To(Equal(frames.AckRange{FirstPacketNumber: 6, LastPacketNumber: 9}))
-			Expect(ackRanges[1]).To(Equal(frames.AckRange{FirstPacketNumber: 1, LastPacketNumber: 4}))
-			// Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(4)))
-		})
-
-		It("handles two consecutive lost packages", func() {
-			for i := 1; i < 12; i++ {
-				if i == 5 || i == 6 {
-					continue
-				}
-				err := handler.ReceivedPacket(protocol.PacketNumber(i))
-				Expect(err).ToNot(HaveOccurred())
-			}
-			Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(11)))
-			ackRanges := handler.getAckRanges()
-			Expect(ackRanges).To(HaveLen(2))
-			Expect(ackRanges[0]).To(Equal(frames.AckRange{FirstPacketNumber: 7, LastPacketNumber: 11}))
-			Expect(ackRanges[1]).To(Equal(frames.AckRange{FirstPacketNumber: 1, LastPacketNumber: 4}))
-			// Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(4)))
-		})
-
-		It("handles two non-consecutively lost packages", func() {
-			for i := 1; i < 10; i++ {
-				if i == 3 || i == 7 {
-					continue
-				}
-				err := handler.ReceivedPacket(protocol.PacketNumber(i))
-				Expect(err).ToNot(HaveOccurred())
-			}
-			Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(9)))
-			ackRanges := handler.getAckRanges()
-			Expect(ackRanges).To(HaveLen(3))
-			Expect(ackRanges[0]).To(Equal(frames.AckRange{FirstPacketNumber: 8, LastPacketNumber: 9}))
-			Expect(ackRanges[1]).To(Equal(frames.AckRange{FirstPacketNumber: 4, LastPacketNumber: 6}))
-			Expect(ackRanges[2]).To(Equal(frames.AckRange{FirstPacketNumber: 1, LastPacketNumber: 2}))
-			// Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(2)))
-		})
-
-		It("handles two sequences of lost packages", func() {
-			for i := 1; i < 15; i++ {
-				if i == 2 || i == 3 || i == 4 || i == 7 || i == 8 {
-					continue
-				}
-				err := handler.ReceivedPacket(protocol.PacketNumber(i))
-				Expect(err).ToNot(HaveOccurred())
-			}
-			Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(14)))
-			ackRanges := handler.getAckRanges()
-			Expect(ackRanges).To(HaveLen(3))
-			Expect(ackRanges[0]).To(Equal(frames.AckRange{FirstPacketNumber: 9, LastPacketNumber: 14}))
-			Expect(ackRanges[1]).To(Equal(frames.AckRange{FirstPacketNumber: 5, LastPacketNumber: 6}))
-			Expect(ackRanges[2]).To(Equal(frames.AckRange{FirstPacketNumber: 1, LastPacketNumber: 1}))
-			// Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(1)))
-		})
-	})
-
 	Context("handling STOP_WAITING frames", func() {
 		It("increases the highestInOrderObserved packet number", func() {
 			// We simulate 20 packets, numbers 10, 11 and 12 lost
@@ -166,17 +86,6 @@ var _ = Describe("receivedPacketHandler", func() {
 			err := handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: protocol.PacketNumber(12)})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(11)))
-		})
-
-		It("does not emit ACK ranges after STOP_WAITING", func() {
-			err := handler.ReceivedPacket(10)
-			Expect(err).ToNot(HaveOccurred())
-			ranges := handler.getAckRanges()
-			Expect(ranges).To(HaveLen(1))
-			err = handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: protocol.PacketNumber(10)})
-			Expect(err).ToNot(HaveOccurred())
-			ranges = handler.getAckRanges()
-			Expect(ranges).To(HaveLen(1))
 		})
 	})
 
@@ -272,6 +181,24 @@ var _ = Describe("receivedPacketHandler", func() {
 			ack, _ = handler.GetAckFrame(true)
 			Expect(ack).ToNot(BeNil())
 			Expect(ack.AckRanges).To(BeEmpty())
+		})
+
+		It("does send old ACK ranges after receiving a StopWaiting", func() {
+			err := handler.ReceivedPacket(5)
+			Expect(err).ToNot(HaveOccurred())
+			err = handler.ReceivedPacket(10)
+			Expect(err).ToNot(HaveOccurred())
+			err = handler.ReceivedPacket(11)
+			Expect(err).ToNot(HaveOccurred())
+			err = handler.ReceivedPacket(12)
+			Expect(err).ToNot(HaveOccurred())
+			err = handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: protocol.PacketNumber(11)})
+			Expect(err).ToNot(HaveOccurred())
+			ack, _ := handler.GetAckFrame(true)
+			Expect(ack).ToNot(BeNil())
+			Expect(ack.LargestAcked).To(Equal(protocol.PacketNumber(12)))
+			Expect(ack.LowestAcked).To(Equal(protocol.PacketNumber(11)))
+			Expect(ack.HasMissingRanges()).To(BeFalse())
 		})
 	})
 

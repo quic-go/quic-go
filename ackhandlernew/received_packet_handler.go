@@ -23,6 +23,7 @@ type receivedPacketHandler struct {
 	currentAckFrame        *frames.AckFrameNew
 	stateChanged           bool // has an ACK for this state already been sent? Will be set to false every time a new packet arrives, and to false every time an ACK is sent
 
+	packetHistory         *receivedPacketHistory
 	receivedTimes         map[protocol.PacketNumber]time.Time
 	lowestInReceivedTimes protocol.PacketNumber
 }
@@ -31,6 +32,7 @@ type receivedPacketHandler struct {
 func NewReceivedPacketHandler() ReceivedPacketHandler {
 	return &receivedPacketHandler{
 		receivedTimes: make(map[protocol.PacketNumber]time.Time),
+		packetHistory: newReceivedPacketHistory(),
 	}
 }
 
@@ -43,6 +45,8 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 		return ErrDuplicatePacket
 	}
 
+	h.packetHistory.ReceivedPacket(packetNumber)
+
 	h.stateChanged = true
 	h.currentAckFrame = nil
 
@@ -50,10 +54,9 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 		h.largestObserved = packetNumber
 	}
 
-	// TODO: figure out when to increase this value
-	// if packetNumber == h.highestInOrderObserved+1 {
-	// 	h.highestInOrderObserved = packetNumber
-	// }
+	if packetNumber == h.highestInOrderObserved+1 {
+		h.highestInOrderObserved = packetNumber
+	}
 
 	h.receivedTimes[packetNumber] = time.Now()
 
@@ -75,35 +78,11 @@ func (h *receivedPacketHandler) ReceivedStopWaiting(f *frames.StopWaitingFrame) 
 	// the LeastUnacked is the smallest packet number of any packet for which the sender is still awaiting an ack. So the highestInOrderObserved is one less than that
 	h.highestInOrderObserved = f.LeastUnacked - 1
 
+	h.packetHistory.DeleteBelow(f.LeastUnacked)
+
 	h.garbageCollect()
 
 	return nil
-}
-
-// getNackRanges gets all the ACK ranges
-func (h *receivedPacketHandler) getAckRanges() []frames.AckRange {
-	// TODO: use a better data structure here
-	var ranges []frames.AckRange
-	inRange := false
-
-	for i := h.largestObserved; i > h.highestInOrderObserved; i-- {
-		_, ok := h.receivedTimes[i]
-		if ok {
-			if !inRange {
-				r := frames.AckRange{
-					FirstPacketNumber: i,
-					LastPacketNumber:  i,
-				}
-				ranges = append(ranges, r)
-				inRange = true
-			} else {
-				ranges[len(ranges)-1].FirstPacketNumber--
-			}
-		} else {
-			inRange = false
-		}
-	}
-	return ranges
 }
 
 func (h *receivedPacketHandler) GetAckFrame(dequeue bool) (*frames.AckFrameNew, error) {
@@ -124,7 +103,7 @@ func (h *receivedPacketHandler) GetAckFrame(dequeue bool) (*frames.AckFrameNew, 
 		return nil, ErrMapAccess
 	}
 
-	ackRanges := h.getAckRanges()
+	ackRanges := h.packetHistory.GetAckRanges()
 	h.currentAckFrame = &frames.AckFrameNew{
 		LargestAcked:       h.largestObserved,
 		LowestAcked:        ackRanges[len(ackRanges)-1].FirstPacketNumber,
