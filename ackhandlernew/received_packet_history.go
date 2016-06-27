@@ -1,6 +1,7 @@
 package ackhandlernew
 
 import (
+	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 )
@@ -58,4 +59,19 @@ func (h *receivedPacketHistory) ReceivedPacket(p protocol.PacketNumber) {
 
 	// create a new range at the beginning
 	h.ranges.InsertBefore(utils.PacketInterval{Start: p, End: p}, h.ranges.Front())
+}
+
+// GetAckRanges gets a slice of all AckRanges that can be used in an AckFrame
+func (h *receivedPacketHistory) GetAckRanges() []frames.AckRange {
+	if h.ranges.Len() == 0 {
+		return nil
+	}
+
+	var ackRanges []frames.AckRange
+
+	for el := h.ranges.Back(); el != nil; el = el.Prev() {
+		ackRanges = append(ackRanges, frames.AckRange{FirstPacketNumber: el.Value.Start, LastPacketNumber: el.Value.End})
+	}
+
+	return ackRanges
 }
