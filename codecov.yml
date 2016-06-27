@@ -1,3 +1,4 @@
-coverage: 
-  ignore: 
+coverage:
+  ignore:
     - /utils/byteinterval_linkedlist.go
+    - /utils/packetinterval_linkedlist.go
