@@ -20,9 +20,8 @@ var (
 // An AckFrameNew is a ACK frame in QUIC c34
 type AckFrameNew struct {
 	LargestAcked protocol.PacketNumber
-	NackRanges   []NackRange // has to be ordered. The NACK range with the highest FirstPacketNumber goes first, the NACK range with the lowest FirstPacketNumber goes last
 	LowestAcked  protocol.PacketNumber
-	AckRanges    []AckRange
+	AckRanges    []AckRange // has to be ordered. The ACK range with the highest FirstPacketNumber goes first, the ACK range with the lowest FirstPacketNumber goes last
 
 	DelayTime          time.Duration
 	PacketReceivedTime time.Time // only for received packets. Will not be modified for received ACKs frames
