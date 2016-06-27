@@ -61,6 +61,22 @@ func (h *receivedPacketHistory) ReceivedPacket(p protocol.PacketNumber) {
 	h.ranges.InsertBefore(utils.PacketInterval{Start: p, End: p}, h.ranges.Front())
 }
 
+func (h *receivedPacketHistory) DeleteBelow(leastUnacked protocol.PacketNumber) {
+	nextEl := h.ranges.Front()
+	for el := h.ranges.Front(); nextEl != nil; el = nextEl {
+		nextEl = el.Next()
+
+		if leastUnacked > el.Value.Start && leastUnacked <= el.Value.End {
+			el.Value.Start = leastUnacked
+		}
+		if el.Value.End < leastUnacked { // delete a whole range
+			h.ranges.Remove(el)
+		} else {
+			return
+		}
+	}
+}
+
 // GetAckRanges gets a slice of all AckRanges that can be used in an AckFrame
 func (h *receivedPacketHistory) GetAckRanges() []frames.AckRange {
 	if h.ranges.Len() == 0 {
