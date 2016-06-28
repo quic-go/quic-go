@@ -9,8 +9,12 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
-// ErrInvalidAckRanges occurs when a client sends inconsistent ACK ranges
-var ErrInvalidAckRanges = errors.New("AckFrame: ACK frame contains invalid ACK ranges")
+var (
+	// ErrInvalidAckRanges occurs when a client sends inconsistent ACK ranges
+	ErrInvalidAckRanges = errors.New("AckFrame: ACK frame contains invalid ACK ranges")
+	// ErrInvalidFirstAckRange occurs when the first ACK range contains no packets
+	ErrInvalidFirstAckRange = errors.New("AckFrame: ACK frame has invalid first ACK range")
+)
 
 var (
 	errInconsistentAckLargestAcked = errors.New("internal inconsistency: LargestAcked does not match ACK ranges")
@@ -74,6 +78,9 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 	ackBlockLength, err := utils.ReadUintN(r, missingSequenceNumberDeltaLen)
 	if err != nil {
 		return nil, err
+	}
+	if ackBlockLength < 1 {
+		return nil, ErrInvalidFirstAckRange
 	}
 
 	if ackBlockLength > largestAcked {

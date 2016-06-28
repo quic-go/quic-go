@@ -30,10 +30,21 @@ var _ = Describe("AckFrame", func() {
 		})
 
 		It("parses a frame with a 48 bit packet number", func() {
-			b := bytes.NewReader([]byte{0x4c, 0x37, 0x13, 0xad, 0xfb, 0xca, 0xde, 0x0, 0x0, 0x0, 0x1, 0, 0, 0, 0, 0})
-			frame, err := ParseAckFrameNew(b, protocol.Version34)
+			b := bytes.NewReader([]byte{0x4c, 0x37, 0x13, 0xad, 0xfb, 0xca, 0xde, 0x0, 0x0, 0x5, 0x1, 0, 0, 0, 0, 0})
+			frame, err := ParseAckFrameNew(b, 0)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0xdecafbad1337)))
+			Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(0xdecafbad1337 - 5 + 1)))
+			Expect(frame.HasMissingRanges()).To(BeFalse())
+			Expect(b.Len()).To(BeZero())
+		})
+
+		It("parses a frame with 1 ACKed packet", func() {
+			b := bytes.NewReader([]byte{0x40, 0x10, 0x8e, 0x0, 0x1, 0x0})
+			frame, err := ParseAckFrameNew(b, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x10)))
+			Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(0x10)))
 			Expect(frame.HasMissingRanges()).To(BeFalse())
 			Expect(b.Len()).To(BeZero())
 		})
@@ -60,6 +71,12 @@ var _ = Describe("AckFrame", func() {
 			b := bytes.NewReader([]byte{0x40, 0x1c, 0x8e, 0x0, 0x1d, 0x1, 0x1, 0x6b, 0x26, 0x3, 0x0})
 			_, err := ParseAckFrameNew(b, 0)
 			Expect(err).To(MatchError(ErrInvalidAckRanges))
+		})
+
+		It("errors when the first ACK range is empty", func() {
+			b := bytes.NewReader([]byte{0x40, 0x9, 0x8e, 0x0, 0x0, 0x1, 0})
+			_, err := ParseAckFrameNew(b, 0)
+			Expect(err).To(MatchError(ErrInvalidFirstAckRange))
 		})
 
 		Context("ACK blocks", func() {
