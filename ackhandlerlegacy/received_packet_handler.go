@@ -9,8 +9,12 @@ import (
 	"github.com/lucas-clemente/quic-go/qerr"
 )
 
-// ErrDuplicatePacket occurres when a duplicate packet is received
-var ErrDuplicatePacket = errors.New("ReceivedPacketHandler: Duplicate Packet")
+var (
+	// ErrDuplicatePacket occurres when a duplicate packet is received
+	ErrDuplicatePacket = errors.New("ReceivedPacketHandler: Duplicate Packet")
+	// ErrPacketSmallerThanLastStopWaiting occurs when a packet arrives with a packet number smaller than the largest LeastUnacked of a StopWaitingFrame. If this error occurs, the packet should be ignored
+	ErrPacketSmallerThanLastStopWaiting = errors.New("ReceivedPacketHandler: Packet number smaller than highest StopWaiting")
+)
 
 var (
 	errInvalidPacketNumber               = errors.New("ReceivedPacketHandler: Invalid packet number")
@@ -26,6 +30,7 @@ type receivedPacketHandler struct {
 	highestInOrderObserved        protocol.PacketNumber
 	highestInOrderObservedEntropy EntropyAccumulator
 	largestObserved               protocol.PacketNumber
+	ignorePacketsBelow            protocol.PacketNumber
 	currentAckFrame               *frames.AckFrameLegacy
 	stateChanged                  bool // has an ACK for this state already been sent? Will be set to false every time a new packet arrives, and to false every time an ACK is sent
 
@@ -44,6 +49,13 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 	if packetNumber == 0 {
 		return errInvalidPacketNumber
 	}
+
+	// if the packet number is smaller than the largest LeastUnacked value of a StopWaiting we received, we cannot detect if this packet has a duplicate number
+	// the packet has to be ignored anyway
+	if packetNumber <= h.ignorePacketsBelow {
+		return ErrPacketSmallerThanLastStopWaiting
+	}
+
 	_, ok := h.packetHistory[packetNumber]
 	if packetNumber <= h.highestInOrderObserved || ok {
 		return ErrDuplicatePacket
@@ -76,7 +88,14 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 }
 
 func (h *receivedPacketHandler) ReceivedStopWaiting(f *frames.StopWaitingFrame) error {
-	// Ignore if STOP_WAITING is unneeded
+	// ignore if StopWaiting is unneeded, because we already received a StopWaiting with a higher LeastUnacked
+	if h.ignorePacketsBelow >= f.LeastUnacked {
+		return nil
+	}
+
+	h.ignorePacketsBelow = f.LeastUnacked - 1
+
+	// ignore if StopWaiting is unneeded, since all packets below have already been received
 	if h.highestInOrderObserved >= f.LeastUnacked {
 		return nil
 	}

@@ -57,6 +57,26 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(err).To(MatchError(ErrDuplicatePacket))
 		})
 
+		It("ignores a packet with PacketNumber less than the LeastUnacked of a previously received StopWaiting", func() {
+			err := handler.ReceivedPacket(5, false)
+			Expect(err).ToNot(HaveOccurred())
+			err = handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 10})
+			Expect(err).ToNot(HaveOccurred())
+			err = handler.ReceivedPacket(9, false)
+			Expect(err).To(MatchError(ErrPacketSmallerThanLastStopWaiting))
+			Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(9)))
+		})
+
+		It("does not ignore a packet with PacketNumber equal to LeastUnacked of a previously received StopWaiting", func() {
+			err := handler.ReceivedPacket(5, false)
+			Expect(err).ToNot(HaveOccurred())
+			err = handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 10})
+			Expect(err).ToNot(HaveOccurred())
+			err = handler.ReceivedPacket(10, false)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(10)))
+		})
+
 		It("saves the time when each packet arrived", func() {
 			err := handler.ReceivedPacket(protocol.PacketNumber(3), false)
 			Expect(err).ToNot(HaveOccurred())
@@ -244,6 +264,32 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(err).ToNot(HaveOccurred())
 			ranges, _ = handler.getNackRanges()
 			Expect(ranges).To(BeEmpty())
+		})
+
+		It("increases the ignorePacketsBelow number", func() {
+			err := handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: protocol.PacketNumber(12)})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.ignorePacketsBelow).To(Equal(protocol.PacketNumber(11)))
+		})
+
+		It("increase the ignorePacketsBelow number, even if all packets below the LeastUnacked were already acked", func() {
+			for i := 1; i < 20; i++ {
+				err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
+				Expect(err).ToNot(HaveOccurred())
+			}
+			Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(19)))
+			err := handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: protocol.PacketNumber(12)})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.ignorePacketsBelow).To(Equal(protocol.PacketNumber(11)))
+		})
+
+		It("does not decrease the ignorePacketsBelow number when an out-of-order StopWaiting arrives", func() {
+			err := handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: protocol.PacketNumber(12)})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.ignorePacketsBelow).To(Equal(protocol.PacketNumber(11)))
+			err = handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: protocol.PacketNumber(6)})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.ignorePacketsBelow).To(Equal(protocol.PacketNumber(11)))
 		})
 	})
 
