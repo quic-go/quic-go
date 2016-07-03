@@ -18,7 +18,7 @@ var (
 )
 
 type receivedPacketHandler struct {
-	highestInOrderObserved protocol.PacketNumber
+	largestInOrderObserved protocol.PacketNumber
 	largestObserved        protocol.PacketNumber
 	currentAckFrame        *frames.AckFrameNew
 	stateChanged           bool // has an ACK for this state already been sent? Will be set to false every time a new packet arrives, and to false every time an ACK is sent
@@ -41,7 +41,7 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 		return errInvalidPacketNumber
 	}
 	_, ok := h.receivedTimes[packetNumber]
-	if packetNumber <= h.highestInOrderObserved || ok {
+	if packetNumber <= h.largestInOrderObserved || ok {
 		return ErrDuplicatePacket
 	}
 
@@ -54,8 +54,8 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 		h.largestObserved = packetNumber
 	}
 
-	if packetNumber == h.highestInOrderObserved+1 {
-		h.highestInOrderObserved = packetNumber
+	if packetNumber == h.largestInOrderObserved+1 {
+		h.largestInOrderObserved = packetNumber
 	}
 
 	h.receivedTimes[packetNumber] = time.Now()
@@ -71,12 +71,12 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 
 func (h *receivedPacketHandler) ReceivedStopWaiting(f *frames.StopWaitingFrame) error {
 	// Ignore if STOP_WAITING is unneeded
-	if h.highestInOrderObserved >= f.LeastUnacked {
+	if h.largestInOrderObserved >= f.LeastUnacked {
 		return nil
 	}
 
-	// the LeastUnacked is the smallest packet number of any packet for which the sender is still awaiting an ack. So the highestInOrderObserved is one less than that
-	h.highestInOrderObserved = f.LeastUnacked - 1
+	// the LeastUnacked is the smallest packet number of any packet for which the sender is still awaiting an ack. So the largestInOrderObserved is one less than that
+	h.largestInOrderObserved = f.LeastUnacked - 1
 
 	h.packetHistory.DeleteBelow(f.LeastUnacked)
 
@@ -118,8 +118,8 @@ func (h *receivedPacketHandler) GetAckFrame(dequeue bool) (*frames.AckFrameNew, 
 }
 
 func (h *receivedPacketHandler) garbageCollect() {
-	for i := h.lowestInReceivedTimes; i < h.highestInOrderObserved; i++ {
+	for i := h.lowestInReceivedTimes; i < h.largestInOrderObserved; i++ {
 		delete(h.receivedTimes, i)
 	}
-	h.lowestInReceivedTimes = h.highestInOrderObserved
+	h.lowestInReceivedTimes = h.largestInOrderObserved
 }

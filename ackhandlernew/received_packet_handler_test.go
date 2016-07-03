@@ -74,7 +74,7 @@ var _ = Describe("receivedPacketHandler", func() {
 	})
 
 	Context("handling STOP_WAITING frames", func() {
-		It("increases the highestInOrderObserved packet number", func() {
+		It("increases the largestInOrderObserved packet number", func() {
 			// We simulate 20 packets, numbers 10, 11 and 12 lost
 			for i := 1; i < 20; i++ {
 				if i == 10 || i == 11 || i == 12 {
@@ -85,7 +85,7 @@ var _ = Describe("receivedPacketHandler", func() {
 			}
 			err := handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: protocol.PacketNumber(12)})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.highestInOrderObserved).To(Equal(protocol.PacketNumber(11)))
+			Expect(handler.largestInOrderObserved).To(Equal(protocol.PacketNumber(11)))
 		})
 	})
 
