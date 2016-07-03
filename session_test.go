@@ -434,6 +434,14 @@ var _ = Describe("Session", func() {
 			err = session.handlePacketImpl(nil, hdr, nil)
 			Expect(err).ToNot(HaveOccurred())
 		})
+
+		It("ignores packets smaller than the highest LeastUnacked of a StopWaiting", func() {
+			err := session.receivedPacketHandler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 10})
+			Expect(err).ToNot(HaveOccurred())
+			hdr.PacketNumber = 5
+			err = session.handlePacketImpl(nil, hdr, nil)
+			Expect(err).ToNot(HaveOccurred())
+		})
 	})
 
 	Context("sending packets", func() {

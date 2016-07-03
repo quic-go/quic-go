@@ -244,6 +244,10 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *publicHeader, da
 	if err == ackhandlerlegacy.ErrDuplicatePacket {
 		return nil
 	}
+	// ignore packets with packet numbers smaller than the LeastUnacked of a StopWaiting
+	if err == ackhandlerlegacy.ErrPacketSmallerThanLastStopWaiting {
+		return nil
+	}
 
 	if err != nil {
 		return err
