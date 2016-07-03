@@ -17,6 +17,10 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
+type unpacker interface {
+	Unpack(publicHeaderBinary []byte, hdr *publicHeader, r *bytes.Reader) (*unpackedPacket, error)
+}
+
 type receivedPacket struct {
 	remoteAddr   interface{}
 	publicHeader *publicHeader
@@ -60,7 +64,7 @@ type Session struct {
 	// TODO: remove
 	flowController flowcontrol.FlowController // connection level flow controller
 
-	unpacker *packetUnpacker
+	unpacker unpacker
 	packer   *packetPacker
 
 	cryptoSetup *handshake.CryptoSetup

@@ -34,6 +34,15 @@ func (m *mockConnection) write(p []byte) error {
 func (*mockConnection) setCurrentRemoteAddr(addr interface{}) {}
 func (*mockConnection) IP() net.IP                            { return nil }
 
+type mockUnpacker struct{}
+
+func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *publicHeader, r *bytes.Reader) (*unpackedPacket, error) {
+	return &unpackedPacket{
+		entropyBit: false,
+		frames:     nil,
+	}, nil
+}
+
 var _ = Describe("Session", func() {
 	var (
 		session              *Session
@@ -389,6 +398,33 @@ var _ = Describe("Session", func() {
 			n, err = s.Write([]byte{0})
 			Expect(n).To(BeZero())
 			Expect(err).To(MatchError(testErr))
+		})
+	})
+
+	Context("receiving packets", func() {
+		var hdr *publicHeader
+
+		BeforeEach(func() {
+			session.unpacker = &mockUnpacker{}
+			hdr = &publicHeader{PacketNumberLen: protocol.PacketNumberLen6}
+		})
+
+		It("sets the lastRcvdPacketNumber", func() {
+			hdr.PacketNumber = 5
+			err := session.handlePacketImpl(nil, hdr, nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(session.lastRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
+		})
+
+		It("sets the lastRcvdPacketNumber, for an out-of-order packet", func() {
+			hdr.PacketNumber = 5
+			err := session.handlePacketImpl(nil, hdr, nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(session.lastRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
+			hdr.PacketNumber = 3
+			err = session.handlePacketImpl(nil, hdr, nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(session.lastRcvdPacketNumber).To(Equal(protocol.PacketNumber(3)))
 		})
 	})
 
