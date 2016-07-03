@@ -95,6 +95,7 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 		frame.AckRanges = append(frame.AckRanges, ackRange)
 
 		var inLongBlock bool
+		var lastRangeComplete bool
 		for i := uint8(0); i < numAckBlocks; i++ {
 			var gap uint8
 			gap, err = r.ReadByte()
@@ -113,6 +114,7 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 				frame.AckRanges[len(frame.AckRanges)-1].FirstPacketNumber -= protocol.PacketNumber(gap) + length
 				frame.AckRanges[len(frame.AckRanges)-1].LastPacketNumber -= protocol.PacketNumber(gap)
 			} else {
+				lastRangeComplete = false
 				ackRange := AckRange{
 					LastPacketNumber: frame.AckRanges[len(frame.AckRanges)-1].FirstPacketNumber - protocol.PacketNumber(gap) - 1,
 				}
@@ -120,8 +122,19 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 				frame.AckRanges = append(frame.AckRanges, ackRange)
 			}
 
+			if length > 0 {
+				lastRangeComplete = true
+			}
+
 			inLongBlock = (ackBlockLength == 0)
 		}
+
+		// if the last range was not complete, FirstPacketNumber and LastPacketNumber make no sense
+		// remove the range from frame.AckRanges
+		if !lastRangeComplete {
+			frame.AckRanges = frame.AckRanges[:len(frame.AckRanges)-1]
+		}
+
 		frame.LowestAcked = frame.AckRanges[len(frame.AckRanges)-1].FirstPacketNumber
 	} else {
 		frame.LowestAcked = protocol.PacketNumber(largestAcked + 1 - ackBlockLength)

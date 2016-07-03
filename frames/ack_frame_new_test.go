@@ -146,6 +146,50 @@ var _ = Describe("AckFrame", func() {
 			})
 
 			Context("more than 256 lost packets in a row", func() {
+				// 255 missing packets fit into a single ACK block
+				It("parses a frame with a range of 255 missing packets", func() {
+					b := bytes.NewReader([]byte{0x64, 0x15, 0x1, 0xce, 0x1, 0x1, 0x3, 0xff, 0x13, 0x1, 0x0, 0xb6, 0xc5, 0x0, 0x0})
+					frame, err := ParseAckFrameNew(b, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x115)))
+					Expect(frame.HasMissingRanges()).To(BeTrue())
+					Expect(frame.AckRanges).To(HaveLen(2))
+					Expect(frame.AckRanges[0]).To(Equal(AckRange{FirstPacketNumber: 20 + 255, LastPacketNumber: 0x115}))
+					Expect(frame.AckRanges[1]).To(Equal(AckRange{FirstPacketNumber: 1, LastPacketNumber: 19}))
+					Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(1)))
+					Expect(b.Len()).To(BeZero())
+				})
+
+				// 256 missing packets fit into two ACK blocks
+				It("parses a frame with a range of 256 missing packets", func() {
+					b := bytes.NewReader([]byte{0x64, 0x14, 0x1, 0x96, 0x0, 0x2, 0x1, 0xff, 0x0, 0x1, 0x13, 0x1, 0x0, 0x92, 0xc0, 0x0, 0x0})
+					frame, err := ParseAckFrameNew(b, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x114)))
+					Expect(frame.HasMissingRanges()).To(BeTrue())
+					Expect(frame.AckRanges).To(HaveLen(2))
+					Expect(frame.AckRanges[0]).To(Equal(AckRange{FirstPacketNumber: 20 + 256, LastPacketNumber: 0x114}))
+					Expect(frame.AckRanges[1]).To(Equal(AckRange{FirstPacketNumber: 1, LastPacketNumber: 19}))
+					Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(1)))
+					Expect(b.Len()).To(BeZero())
+				})
+
+				It("parses a frame with an incomplete range at the end", func() {
+					// this is a modified ACK frame that has 5 instead of originally 6 written ranges
+					// each gap is 300 packets and thus takes 2 ranges
+					// the last range is incomplete, and should be completely ignored
+					b := bytes.NewReader([]byte{0x64, 0x9b, 0x3, 0xc9, 0x0, 0x5 /*instead of 0x6*/, 0x1, 0xff, 0x0, 0x2d, 0x1, 0xff, 0x0, 0x2d, 0x1, 0xff, 0x0 /*0x2d, 0x14,*/, 0x1, 0x0, 0xf6, 0xbd, 0x0, 0x0})
+					frame, err := ParseAckFrameNew(b, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x39b)))
+					Expect(frame.HasMissingRanges()).To(BeTrue())
+					Expect(frame.AckRanges).To(HaveLen(3))
+					Expect(frame.AckRanges[0]).To(Equal(AckRange{FirstPacketNumber: 20 + 3*301, LastPacketNumber: 20 + 3*301}))
+					Expect(frame.AckRanges[1]).To(Equal(AckRange{FirstPacketNumber: 20 + 2*301, LastPacketNumber: 20 + 2*301}))
+					Expect(frame.AckRanges[2]).To(Equal(AckRange{FirstPacketNumber: 20 + 1*301, LastPacketNumber: 20 + 1*301}))
+					Expect(b.Len()).To(BeZero())
+				})
+
 				It("parses a frame with one long range, spanning 2 blocks, of missing packets", func() { // 280 missing packets
 					b := bytes.NewReader([]byte{0x64, 0x44, 0x1, 0xa7, 0x0, 0x2, 0x19, 0xff, 0x0, 0x19, 0x13, 0x2, 0x1, 0xb, 0x59, 0x2, 0x0, 0x0, 0xb6, 0x0})
 					frame, err := ParseAckFrameNew(b, 0)
