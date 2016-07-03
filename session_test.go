@@ -426,6 +426,14 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(session.lastRcvdPacketNumber).To(Equal(protocol.PacketNumber(3)))
 		})
+
+		It("ignores duplicate packets", func() {
+			hdr.PacketNumber = 5
+			err := session.handlePacketImpl(nil, hdr, nil)
+			Expect(err).ToNot(HaveOccurred())
+			err = session.handlePacketImpl(nil, hdr, nil)
+			Expect(err).ToNot(HaveOccurred())
+		})
 	})
 
 	Context("sending packets", func() {

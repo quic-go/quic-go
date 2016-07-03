@@ -240,6 +240,11 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *publicHeader, da
 	}
 
 	err = s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, packet.entropyBit)
+	// ignore duplicate packets
+	if err == ackhandlerlegacy.ErrDuplicatePacket {
+		return nil
+	}
+
 	if err != nil {
 		return err
 	}
