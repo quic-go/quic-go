@@ -11,8 +11,25 @@ import (
 	"golang.org/x/crypto/hkdf"
 )
 
-// DeriveKeysChacha20 derives the client and server keys and creates a matching chacha20poly1305 instance
+// DeriveKeysChacha20 derives the client and server keys and creates a matching chacha20poly1305 AEAD instance
 func DeriveKeysChacha20(version protocol.VersionNumber, forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte) (AEAD, error) {
+	otherKey, myKey, otherIV, myIV, err := deriveKeys(version, forwardSecure, sharedSecret, nonces, connID, chlo, scfg, cert, divNonce, 32)
+	if err != nil {
+		return nil, err
+	}
+	return NewAEADChacha20Poly1305(otherKey, myKey, otherIV, myIV)
+}
+
+// DeriveKeysAESGCM derives the client and server keys and creates a matching AES-GCM AEAD instance
+func DeriveKeysAESGCM(version protocol.VersionNumber, forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte) (AEAD, error) {
+	otherKey, myKey, otherIV, myIV, err := deriveKeys(version, forwardSecure, sharedSecret, nonces, connID, chlo, scfg, cert, divNonce, 16)
+	if err != nil {
+		return nil, err
+	}
+	return NewAEADAESGCM(otherKey, myKey, otherIV, myIV)
+}
+
+func deriveKeys(version protocol.VersionNumber, forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo, scfg, cert, divNonce []byte, keyLen int) ([]byte, []byte, []byte, []byte, error) {
 	var info bytes.Buffer
 	if forwardSecure {
 		info.Write([]byte("QUIC forward secure key expansion\x00"))
@@ -26,31 +43,31 @@ func DeriveKeysChacha20(version protocol.VersionNumber, forwardSecure bool, shar
 
 	r := hkdf.New(sha256.New, sharedSecret, nonces, info.Bytes())
 
-	otherKey := make([]byte, 32)
-	myKey := make([]byte, 32)
+	otherKey := make([]byte, keyLen)
+	myKey := make([]byte, keyLen)
 	otherIV := make([]byte, 4)
 	myIV := make([]byte, 4)
 
 	if _, err := io.ReadFull(r, otherKey); err != nil {
-		return nil, err
+		return nil, nil, nil, nil, err
 	}
 	if _, err := io.ReadFull(r, myKey); err != nil {
-		return nil, err
+		return nil, nil, nil, nil, err
 	}
 	if _, err := io.ReadFull(r, otherIV); err != nil {
-		return nil, err
+		return nil, nil, nil, nil, err
 	}
 	if _, err := io.ReadFull(r, myIV); err != nil {
-		return nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	if !forwardSecure && version >= protocol.Version33 {
 		if err := diversify(myKey, myIV, divNonce); err != nil {
-			return nil, err
+			return nil, nil, nil, nil, err
 		}
 	}
 
-	return NewAEADChacha20Poly1305(otherKey, myKey, otherIV, myIV)
+	return otherKey, myKey, otherIV, myIV, nil
 }
 
 func diversify(key, iv, divNonce []byte) error {

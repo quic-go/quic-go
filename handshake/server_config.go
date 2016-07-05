@@ -47,7 +47,7 @@ func (s *ServerConfig) Get() []byte {
 	WriteHandshakeMessage(&serverConfig, TagSCFG, map[Tag][]byte{
 		TagSCID: s.ID,
 		TagKEXS: []byte("C255"),
-		TagAEAD: []byte("CC20"),
+		TagAEAD: []byte("AESG"),
 		TagPUBS: append([]byte{0x20, 0x00, 0x00}, s.kex.PublicKey()...),
 		TagOBIT: {0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7},
 		TagEXPY: {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},

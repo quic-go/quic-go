@@ -71,7 +71,7 @@ func NewCryptoSetup(
 		scfg:                        scfg,
 		nonce:                       nonce,
 		diversificationNonce:        diversificationNonce,
-		keyDerivation:               crypto.DeriveKeysChacha20,
+		keyDerivation:               crypto.DeriveKeysAESGCM,
 		keyExchange:                 crypto.NewCurve25519KEX,
 		cryptoStream:                cryptoStream,
 		connectionParametersManager: connectionParametersManager,

@@ -39,11 +39,7 @@ func NewAEADChacha20Poly1305(otherKey []byte, myKey []byte, otherIV []byte, myIV
 }
 
 func (aead *aeadChacha20Poly1305) Open(packetNumber protocol.PacketNumber, associatedData []byte, ciphertext []byte) ([]byte, error) {
-	plaintext, err := aead.decrypter.Open(nil, makeNonce(aead.otherIV, packetNumber), ciphertext, associatedData)
-	if err != nil {
-		return nil, err
-	}
-	return plaintext, nil
+	return aead.decrypter.Open(nil, makeNonce(aead.otherIV, packetNumber), ciphertext, associatedData)
 }
 
 func (aead *aeadChacha20Poly1305) Seal(packetNumber protocol.PacketNumber, associatedData []byte, plaintext []byte) []byte {

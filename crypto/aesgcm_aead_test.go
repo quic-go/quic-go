@@ -7,15 +7,15 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Chacha20poly1305", func() {
+var _ = Describe("AES-GCM", func() {
 	var (
 		alice, bob                       AEAD
 		keyAlice, keyBob, ivAlice, ivBob []byte
 	)
 
 	BeforeEach(func() {
-		keyAlice = make([]byte, 32)
-		keyBob = make([]byte, 32)
+		keyAlice = make([]byte, 16)
+		keyBob = make([]byte, 16)
 		ivAlice = make([]byte, 4)
 		ivBob = make([]byte, 4)
 		rand.Reader.Read(keyAlice)
@@ -23,9 +23,9 @@ var _ = Describe("Chacha20poly1305", func() {
 		rand.Reader.Read(ivAlice)
 		rand.Reader.Read(ivBob)
 		var err error
-		alice, err = NewAEADChacha20Poly1305(keyBob, keyAlice, ivBob, ivAlice)
+		alice, err = NewAEADAESGCM(keyBob, keyAlice, ivBob, ivAlice)
 		Expect(err).ToNot(HaveOccurred())
-		bob, err = NewAEADChacha20Poly1305(keyAlice, keyBob, ivAlice, ivBob)
+		bob, err = NewAEADAESGCM(keyAlice, keyBob, ivAlice, ivBob)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
@@ -56,14 +56,14 @@ var _ = Describe("Chacha20poly1305", func() {
 
 	It("rejects wrong key and iv sizes", func() {
 		var err error
-		e := "chacha20poly1305: expected 32-byte keys and 4-byte IVs"
-		_, err = NewAEADChacha20Poly1305(keyBob[1:], keyAlice, ivBob, ivAlice)
+		e := "AES-GCM: expected 16-byte keys and 4-byte IVs"
+		_, err = NewAEADAESGCM(keyBob[1:], keyAlice, ivBob, ivAlice)
 		Expect(err).To(MatchError(e))
-		_, err = NewAEADChacha20Poly1305(keyBob, keyAlice[1:], ivBob, ivAlice)
+		_, err = NewAEADAESGCM(keyBob, keyAlice[1:], ivBob, ivAlice)
 		Expect(err).To(MatchError(e))
-		_, err = NewAEADChacha20Poly1305(keyBob, keyAlice, ivBob[1:], ivAlice)
+		_, err = NewAEADAESGCM(keyBob, keyAlice, ivBob[1:], ivAlice)
 		Expect(err).To(MatchError(e))
-		_, err = NewAEADChacha20Poly1305(keyBob, keyAlice, ivBob, ivAlice[1:])
+		_, err = NewAEADAESGCM(keyBob, keyAlice, ivBob, ivAlice[1:])
 		Expect(err).To(MatchError(e))
 	})
 })
