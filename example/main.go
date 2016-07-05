@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/tls"
-	"crypto/x509"
 	"flag"
 	"fmt"
 	"io"
@@ -85,9 +84,12 @@ func main() {
 		tlsConfig = testdata.GetTLSConfig()
 	} else {
 		var err error
-		tlsConfig, err = tlsConfigFromCertpath(*certPath)
+		cert, err := tls.LoadX509KeyPair(*certPath+"/fullchain.pem", *certPath+"/privkey.pem")
 		if err != nil {
 			panic(err)
+		}
+		tlsConfig = &tls.Config{
+			Certificates: []tls.Certificate{cert},
 		}
 	}
 
@@ -117,25 +119,4 @@ func main() {
 		}()
 	}
 	wg.Wait()
-}
-
-func tlsConfigFromCertpath(certpath string) (*tls.Config, error) {
-	keyDer, err := ioutil.ReadFile(certpath + "/key.der")
-	if err != nil {
-		return nil, err
-	}
-	certDer, err := ioutil.ReadFile(certpath + "/cert.der")
-	if err != nil {
-		return nil, err
-	}
-	key, err := x509.ParsePKCS1PrivateKey(keyDer)
-	if err != nil {
-		return nil, err
-	}
-	return &tls.Config{
-		Certificates: []tls.Certificate{{
-			Certificate: [][]byte{certDer},
-			PrivateKey:  key,
-		}},
-	}, nil
 }
