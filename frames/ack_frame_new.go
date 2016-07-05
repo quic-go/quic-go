@@ -75,6 +75,10 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 		}
 	}
 
+	if hasMissingRanges && numAckBlocks == 0 {
+		return nil, ErrInvalidAckRanges
+	}
+
 	ackBlockLength, err := utils.ReadUintN(r, missingSequenceNumberDeltaLen)
 	if err != nil {
 		return nil, err

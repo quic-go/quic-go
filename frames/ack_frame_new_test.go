@@ -93,6 +93,12 @@ var _ = Describe("AckFrame", func() {
 				Expect(b.Len()).To(BeZero())
 			})
 
+			It("rejects a frame that says it has ACK blocks in the typeByte, but doesn't have any", func() {
+				b := bytes.NewReader([]byte{0x63, 0x4, 0xff, 0xff, 0, 2, 0, 0, 0, 0, 0, 0})
+				_, err := ParseAckFrameNew(b, 0)
+				Expect(err).To(MatchError(ErrInvalidAckRanges))
+			})
+
 			It("rejects a frame with invalid ACK ranges", func() {
 				// like the test before, but increased the last ACK range, such that the FirstPacketNumber would be negative
 				b := bytes.NewReader([]byte{0x60, 0x18, 0x94, 0x1, 0x1, 0x3, 0x2, 0x15, 0x2, 0x1, 0x5c, 0xd5, 0x0, 0x0, 0x0, 0x95, 0x0})
