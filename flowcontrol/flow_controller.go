@@ -73,6 +73,7 @@ func (c *flowController) UpdateSendWindow(newOffset protocol.ByteCount) bool {
 	return false
 }
 
+// TODO: remove once the Stream doesn't use it anymore
 func (c *flowController) SendWindowSize() protocol.ByteCount {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
@@ -83,6 +84,13 @@ func (c *flowController) SendWindowSize() protocol.ByteCount {
 		return 0
 	}
 	return sendFlowControlWindow - c.bytesSent
+}
+
+func (c *flowController) SendWindowOffset() protocol.ByteCount {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	return c.getSendFlowControlWindow()
 }
 
 // UpdateHighestReceived updates the highestReceived value, if the byteOffset is higher

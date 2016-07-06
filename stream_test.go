@@ -40,14 +40,25 @@ func (m *mockStreamHandler) queueStreamFrame(f *frames.StreamFrame) error {
 }
 
 type mockFlowControlHandler struct {
-	bytesReadForStream protocol.StreamID
-	bytesRead          protocol.ByteCount
+	streamsContributing []protocol.StreamID
+
+	sendWindowSizes               map[protocol.StreamID]protocol.ByteCount
+	remainingConnectionWindowSize protocol.ByteCount
+	bytesReadForStream            protocol.StreamID
+	bytesRead                     protocol.ByteCount
+	bytesSent                     protocol.ByteCount
 
 	highestReceivedForStream protocol.StreamID
 	highestReceived          protocol.ByteCount
 
 	triggerStreamWindowUpdate     bool
 	triggerConnectionWindowUpdate bool
+}
+
+func newMockFlowControlHandler() *mockFlowControlHandler {
+	return &mockFlowControlHandler{
+		sendWindowSizes: make(map[protocol.StreamID]protocol.ByteCount),
+	}
 }
 
 func (m *mockFlowControlHandler) NewStream(streamID protocol.StreamID, contributesToConnectionFlow bool) {
@@ -72,6 +83,29 @@ func (m *mockFlowControlHandler) UpdateHighestReceived(streamID protocol.StreamI
 	m.highestReceivedForStream = streamID
 	m.highestReceived = byteOffset
 	return nil
+}
+
+func (m *mockFlowControlHandler) AddBytesSent(streamID protocol.StreamID, n protocol.ByteCount) error {
+	m.bytesSent += n
+	return nil
+}
+
+func (m *mockFlowControlHandler) SendWindowSize(streamID protocol.StreamID) (protocol.ByteCount, error) {
+	return m.sendWindowSizes[streamID], nil
+}
+func (m *mockFlowControlHandler) RemainingConnectionWindowSize() protocol.ByteCount {
+	return m.remainingConnectionWindowSize
+}
+func (m *mockFlowControlHandler) UpdateWindow(streamID protocol.StreamID, offset protocol.ByteCount) (bool, error) {
+	panic("not implemented")
+}
+func (m *mockFlowControlHandler) StreamContributesToConnectionFlowControl(streamID protocol.StreamID) (bool, error) {
+	for _, id := range m.streamsContributing {
+		if id == streamID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 var _ = Describe("Stream", func() {
@@ -497,16 +531,18 @@ var _ = Describe("Stream", func() {
 
 	PContext("Blocked streams", func() {
 		It("notifies the session when a stream is flow control blocked", func() {
-			updated := str.flowController.UpdateSendWindow(1337)
+			updated, err := str.flowControlManager.UpdateWindow(str.streamID, 1337)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(updated).To(BeTrue())
-			str.flowController.AddBytesSent(1337)
+			str.flowControlManager.AddBytesSent(str.streamID, 1337)
 			str.maybeTriggerBlocked()
 			Expect(handler.receivedBlockedCalled).To(BeTrue())
 			Expect(handler.receivedBlockedForStream).To(Equal(str.streamID))
 		})
 
 		It("notifies the session as soon as a stream is reaching the end of the window", func() {
-			updated := str.flowController.UpdateSendWindow(4)
+			updated, err := str.flowControlManager.UpdateWindow(str.streamID, 4)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(updated).To(BeTrue())
 			str.Write([]byte{0xDE, 0xCA, 0xFB, 0xAD})
 			Expect(handler.receivedBlockedCalled).To(BeTrue())
@@ -514,7 +550,8 @@ var _ = Describe("Stream", func() {
 		})
 
 		It("notifies the session as soon as a stream is flow control blocked", func() {
-			updated := str.flowController.UpdateSendWindow(2)
+			updated, err := str.flowControlManager.UpdateWindow(str.streamID, 2)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(updated).To(BeTrue())
 			go func() {
 				str.Write([]byte{0xDE, 0xCA, 0xFB, 0xAD})

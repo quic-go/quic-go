@@ -79,10 +79,17 @@ var _ = Describe("Flow controller", func() {
 			Expect(controller.SendWindowSize()).To(Equal(protocol.ByteCount(12 - 5)))
 		})
 
+		It("gets the offset of the flow control window", func() {
+			controller.bytesSent = 5
+			controller.sendFlowControlWindow = 12
+			Expect(controller.SendWindowOffset()).To(Equal(protocol.ByteCount(12)))
+		})
+
 		It("updates the size of the flow control window", func() {
 			controller.bytesSent = 5
 			updateSuccessful := controller.UpdateSendWindow(15)
 			Expect(updateSuccessful).To(BeTrue())
+			Expect(controller.SendWindowOffset()).To(Equal(protocol.ByteCount(15)))
 			Expect(controller.SendWindowSize()).To(Equal(protocol.ByteCount(15 - 5)))
 		})
 

@@ -50,12 +50,17 @@ var _ = Describe("Packet packer", func() {
 	)
 
 	BeforeEach(func() {
+		fcm := newMockFlowControlHandler()
+		fcm.sendWindowSizes[3] = protocol.MaxByteCount
+		fcm.sendWindowSizes[5] = protocol.MaxByteCount
+		fcm.sendWindowSizes[7] = protocol.MaxByteCount
+
 		packer = &packetPacker{
 			cryptoSetup:                 &handshake.CryptoSetup{},
 			connectionParametersManager: handshake.NewConnectionParamatersManager(),
 			sentPacketHandler:           newMockSentPacketHandler(),
 			blockedManager:              newBlockedManager(),
-			streamFrameQueue:            newStreamFrameQueue(),
+			streamFrameQueue:            newStreamFrameQueue(fcm),
 		}
 		publicHeaderLen = 1 + 8 + 1 // 1 flag byte, 8 connection ID, 1 packet number
 		packer.version = protocol.Version34
@@ -233,7 +238,7 @@ var _ = Describe("Packet packer", func() {
 		It("does not splits a stream frame with maximum size", func() {
 			f := frames.StreamFrame{
 				Offset:         1,
-				StreamID:       13,
+				StreamID:       5,
 				DataLenPresent: false,
 			}
 			minLength, _ := f.MinLength(0)
