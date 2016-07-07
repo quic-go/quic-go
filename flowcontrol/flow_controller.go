@@ -24,9 +24,8 @@ type flowController struct {
 	mutex sync.RWMutex
 }
 
-// NewFlowController gets a new flow controller
-// TODO: make private
-func NewFlowController(streamID protocol.StreamID, connectionParametersManager *handshake.ConnectionParametersManager) *flowController {
+// newFlowController gets a new flow controller
+func newFlowController(streamID protocol.StreamID, connectionParametersManager *handshake.ConnectionParametersManager) *flowController {
 	fc := flowController{
 		streamID:                    streamID,
 		connectionParametersManager: connectionParametersManager,
