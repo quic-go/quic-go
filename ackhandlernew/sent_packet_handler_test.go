@@ -367,11 +367,12 @@ var _ = Describe("SentPacketHandler", func() {
 				{PacketNumber: 4, Frames: []frames.Frame{&streamFrame}, Length: 1},
 				{PacketNumber: 5, Frames: []frames.Frame{&streamFrame}, Length: 1},
 				{PacketNumber: 6, Frames: []frames.Frame{&streamFrame}, Length: 1},
+				{PacketNumber: 7, Frames: []frames.Frame{&streamFrame}, Length: 1},
 			}
 			for _, packet := range packets {
 				handler.SentPacket(packet)
 			}
-			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(6)))
+			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(7)))
 		})
 
 		It("does not dequeue a packet if no packet has been nacked", func() {
@@ -451,19 +452,43 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
 		})
 
-		It("does not change the LargestInOrderAcked after queueing a retransmission", func() {
+		It("changes the LargestInOrderAcked after queueing the lowest packet for retransmission", func() {
 			ack := frames.AckFrameNew{
-				LargestAcked: 4,
+				LargestAcked: 7,
 				LowestAcked:  1,
 				AckRanges: []frames.AckRange{
-					{FirstPacketNumber: 4, LastPacketNumber: 4},
+					{FirstPacketNumber: 7, LastPacketNumber: 7},
+					{FirstPacketNumber: 4, LastPacketNumber: 5},
 					{FirstPacketNumber: 1, LastPacketNumber: 2},
 				},
 			}
 			err := handler.ReceivedAck(&ack, 1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(2)))
-			handler.nackPacket(3) // this is the second NACK for this packet
+			// this will trigger a retransmission of packet 3
+			for i := uint8(0); i < protocol.RetransmissionThreshold; i++ {
+				handler.nackPacket(3)
+			}
+			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(5)))
+		})
+
+		It("does not change the LargestInOrderAcked after queueing a higher packet for retransmission", func() {
+			ack := frames.AckFrameNew{
+				LargestAcked: 7,
+				LowestAcked:  1,
+				AckRanges: []frames.AckRange{
+					{FirstPacketNumber: 7, LastPacketNumber: 7},
+					{FirstPacketNumber: 4, LastPacketNumber: 5},
+					{FirstPacketNumber: 1, LastPacketNumber: 2},
+				},
+			}
+			err := handler.ReceivedAck(&ack, 1)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(2)))
+			// this will trigger a retransmission of packet 6
+			for i := uint8(0); i < protocol.RetransmissionThreshold; i++ {
+				handler.nackPacket(6)
+			}
 			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(2)))
 		})
 

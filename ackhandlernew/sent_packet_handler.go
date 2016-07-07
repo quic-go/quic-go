@@ -104,6 +104,18 @@ func (h *sentPacketHandler) queuePacketForRetransmission(packet *Packet) {
 	h.bytesInFlight -= packet.Length
 	h.retransmissionQueue = append(h.retransmissionQueue, packet)
 	packet.Retransmitted = true
+
+	// increase the LargestInOrderAcked, if this is the lowest packet that hasn't been acked yet
+	if packet.PacketNumber == h.LargestInOrderAcked+1 {
+		for i := packet.PacketNumber + 1; i < h.LargestAcked; i++ {
+			_, ok := h.packetHistory[protocol.PacketNumber(i)]
+			if !ok {
+				h.LargestInOrderAcked = i
+			} else {
+				break
+			}
+		}
+	}
 }
 
 func (h *sentPacketHandler) SentPacket(packet *Packet) error {
