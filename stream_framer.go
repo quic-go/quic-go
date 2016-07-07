@@ -96,7 +96,7 @@ func (f *streamFramer) maybePopFrameForRetransmission(maxLen protocol.ByteCount)
 	frame := f.retransmissionQueue[0]
 	frame.DataLenPresent = true
 
-	frameHeaderLen, _ := frame.MinLength(0) // can never error
+	frameHeaderLen, _ := frame.MinLength(protocol.VersionWhatever) // can never error
 	if maxLen < frameHeaderLen {
 		return nil
 	}
@@ -122,7 +122,7 @@ func (f *streamFramer) maybePopNormalFrame(maxLen protocol.ByteCount) *frames.St
 		frame.StreamID = s.streamID
 		// not perfect, but thread-safe since writeOffset is only written when getting data
 		frame.Offset = s.writeOffset
-		frameHeaderLen, _ := frame.MinLength(0) // can never error
+		frameHeaderLen, _ := frame.MinLength(protocol.VersionWhatever) // can never error
 		if maxLen < frameHeaderLen {
 			continue
 		}

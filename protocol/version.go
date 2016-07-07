@@ -16,6 +16,7 @@ const (
 	Version32
 	Version33
 	Version34
+	VersionWhatever = 0 // for when the version doesn't matter
 )
 
 // SupportedVersions lists the versions that the server supports
