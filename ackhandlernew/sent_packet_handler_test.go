@@ -116,18 +116,18 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(1)))
 		})
 
-		It("rejects non-consecutive packets", func() {
+		It("works with non-consecutive packet numbers", func() {
 			packet1 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1}
 			packet2 := Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, Length: 2}
 			err := handler.SentPacket(&packet1)
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.SentPacket(&packet2)
-			Expect(err).To(MatchError(errWrongPacketNumberIncrement))
-			Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(1)))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(3)))
 			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(1)))
 			Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(2)))
-			Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(2)))
-			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(1)))
+			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(3)))
+			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(3)))
 		})
 
 		It("stores the sent time", func() {
