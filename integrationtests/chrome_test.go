@@ -35,7 +35,7 @@ func init() {
 	})
 }
 
-var _ = Describe("Chrome tests", func() {
+var _ = PDescribe("Chrome tests", func() {
 	It("loads a simple hello world page using quic", func(done Done) {
 		err := wd.Get("https://quic.clemente.io/hello")
 		Expect(err).NotTo(HaveOccurred())

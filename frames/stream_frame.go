@@ -201,7 +201,7 @@ func (f *StreamFrame) MinLength(protocol.VersionNumber) (protocol.ByteCount, err
 		length += 2
 	}
 
-	return length + 1, nil
+	return length, nil
 }
 
 // DataLen gives the length of data in bytes

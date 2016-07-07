@@ -48,7 +48,7 @@ func runDropTest(incomingPacketDropper, outgoingPacketDropper dropCallback, vers
 	Expect(bytes.Contains(session.Out.Contents(), data)).To(BeTrue())
 }
 
-var _ = Describe("Drop Proxy", func() {
+var _ = PDescribe("Drop Proxy", func() {
 	AfterEach(func() {
 		proxy.Stop()
 		time.Sleep(time.Millisecond)

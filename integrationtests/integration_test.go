@@ -19,7 +19,7 @@ import (
 	. "github.com/onsi/gomega/gexec"
 )
 
-var _ = Describe("Integration tests", func() {
+var _ = PDescribe("Integration tests", func() {
 	clientPath := fmt.Sprintf(
 		"%s/src/github.com/lucas-clemente/quic-clients/client-%s-debug",
 		os.Getenv("GOPATH"),

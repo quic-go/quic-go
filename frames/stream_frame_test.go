@@ -82,7 +82,7 @@ var _ = Describe("StreamFrame", func() {
 			b := &bytes.Buffer{}
 			f := &StreamFrame{
 				StreamID: 1,
-				Data:     []byte("f"),
+				Data:     []byte{},
 				Offset:   0,
 			}
 			err := f.Write(b, 0)
@@ -94,7 +94,7 @@ var _ = Describe("StreamFrame", func() {
 			b := &bytes.Buffer{}
 			f := &StreamFrame{
 				StreamID: 0xDECAFBAD,
-				Data:     []byte("f"),
+				Data:     []byte{},
 				Offset:   0xDEADBEEFCAFE,
 			}
 			err := f.Write(b, 0)
@@ -115,9 +115,8 @@ var _ = Describe("StreamFrame", func() {
 				err := f.Write(b, 0)
 				Expect(err).ToNot(HaveOccurred())
 				minLength, _ := f.MinLength(0)
-				headerLength := minLength - 1
 				Expect(b.Bytes()[0] & 0x20).To(Equal(uint8(0x20)))
-				Expect(b.Bytes()[headerLength-2 : headerLength]).To(Equal([]byte{0x37, 0x13}))
+				Expect(b.Bytes()[minLength-2 : minLength]).To(Equal([]byte{0x37, 0x13}))
 			})
 
 			It("omits the data length field", func() {
