@@ -168,6 +168,17 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameNew, withPacket
 	var ackedPackets congestion.PacketVector
 	var lostPackets congestion.PacketVector
 
+	// NACK packets below the LowestAcked
+	for i := h.LargestInOrderAcked; i < ackFrame.LowestAcked; i++ {
+		p, err := h.nackPacket(i)
+		if err != nil {
+			return err
+		}
+		if p != nil {
+			lostPackets = append(lostPackets, congestion.PacketInfo{Number: p.PacketNumber, Length: p.Length})
+		}
+	}
+
 	ackRangeIndex := 0
 	for i := ackFrame.LowestAcked; i <= ackFrame.LargestAcked; i++ {
 		if ackFrame.HasMissingRanges() {

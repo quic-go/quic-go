@@ -247,7 +247,6 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(0)))
 				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(1)))
-				Expect(handler.packetHistory[1].MissingReports).To(BeZero())
 				for i := 2; i <= 8; i++ {
 					Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(i)))
 				}
@@ -270,7 +269,6 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(0)))
 				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(1)))
-				Expect(handler.packetHistory[1].MissingReports).To(BeZero())
 				for i := 2; i <= 3; i++ {
 					Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(i)))
 				}
@@ -283,6 +281,19 @@ var _ = Describe("SentPacketHandler", func() {
 				}
 				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(10)))
 				Expect(handler.packetHistory[10].MissingReports).To(BeZero())
+			})
+
+			It("NACKs packets below the LowestAcked", func() {
+				ack := frames.AckFrameNew{
+					LargestAcked: 8,
+					LowestAcked:  3,
+				}
+				err := handler.ReceivedAck(&ack, 1)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(1)))
+				Expect(handler.packetHistory[1].MissingReports).To(Equal(uint8(1)))
+				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(2)))
+				Expect(handler.packetHistory[2].MissingReports).To(Equal(uint8(1)))
 			})
 
 			It("handles an ACK with multiple missing packet ranges", func() {
