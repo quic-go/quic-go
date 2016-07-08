@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/lucas-clemente/quic-go/ackhandlerlegacy"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -25,8 +24,6 @@ type packetPacker struct {
 	version      protocol.VersionNumber
 	cryptoSetup  *handshake.CryptoSetup
 
-	// TODO: Remove
-	sentPacketHandler           ackhandlerlegacy.SentPacketHandler
 	connectionParametersManager *handshake.ConnectionParametersManager
 
 	streamFramer   *streamFramer
@@ -36,27 +33,26 @@ type packetPacker struct {
 	lastPacketNumber protocol.PacketNumber
 }
 
-func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.CryptoSetup, sentPacketHandler ackhandlerlegacy.SentPacketHandler, connectionParametersHandler *handshake.ConnectionParametersManager, blockedManager *blockedManager, streamFramer *streamFramer, version protocol.VersionNumber) *packetPacker {
+func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.CryptoSetup, connectionParametersHandler *handshake.ConnectionParametersManager, blockedManager *blockedManager, streamFramer *streamFramer, version protocol.VersionNumber) *packetPacker {
 	return &packetPacker{
 		cryptoSetup:                 cryptoSetup,
 		connectionID:                connectionID,
 		connectionParametersManager: connectionParametersHandler,
 		version:                     version,
-		sentPacketHandler:           sentPacketHandler,
 		blockedManager:              blockedManager,
 		streamFramer:                streamFramer,
 	}
 }
 
-func (p *packetPacker) PackConnectionClose(frame *frames.ConnectionCloseFrame) (*packedPacket, error) {
-	return p.packPacket(nil, []frames.Frame{frame}, true)
+func (p *packetPacker) PackConnectionClose(frame *frames.ConnectionCloseFrame, largestObserved protocol.PacketNumber) (*packedPacket, error) {
+	return p.packPacket(nil, []frames.Frame{frame}, largestObserved, true)
 }
 
-func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame) (*packedPacket, error) {
-	return p.packPacket(stopWaitingFrame, controlFrames, false)
+func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, largestObserved protocol.PacketNumber) (*packedPacket, error) {
+	return p.packPacket(stopWaitingFrame, controlFrames, largestObserved, false)
 }
 
-func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, onlySendOneControlFrame bool) (*packedPacket, error) {
+func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, largestObserved protocol.PacketNumber, onlySendOneControlFrame bool) (*packedPacket, error) {
 	// don't send out packets that only contain a StopWaitingFrame
 	if len(p.controlFrames) == 0 && len(controlFrames) == 0 && !p.streamFramer.HasData() {
 		return nil, nil
@@ -76,7 +72,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 	p.cryptoSetup.LockForSealing()
 	defer p.cryptoSetup.UnlockForSealing()
 
-	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(currentPacketNumber, p.sentPacketHandler.GetLargestObserved())
+	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(currentPacketNumber, largestObserved)
 	responsePublicHeader := &publicHeader{
 		ConnectionID:         p.connectionID,
 		PacketNumber:         currentPacketNumber,

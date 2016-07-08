@@ -127,7 +127,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	}
 
 	session.streamFramer = newStreamFramer(&session.streams, &session.streamsMutex, flowControlManager)
-	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.sentPacketHandler, session.connectionParametersManager, session.blockedManager, session.streamFramer, v)
+	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.connectionParametersManager, session.blockedManager, session.streamFramer, v)
 	session.unpacker = &packetUnpacker{aead: session.cryptoSetup, version: v}
 
 	return session, err
@@ -515,7 +515,7 @@ func (s *Session) sendPacket() error {
 	}
 
 	stopWaitingFrame := s.stopWaitingManager.GetStopWaitingFrame()
-	packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames)
+	packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, s.sentPacketHandler.GetLargestObserved())
 
 	if err != nil {
 		return err
@@ -551,7 +551,7 @@ func (s *Session) sendPacket() error {
 }
 
 func (s *Session) sendConnectionClose(quicErr *qerr.QuicError) error {
-	packet, err := s.packer.PackConnectionClose(&frames.ConnectionCloseFrame{ErrorCode: quicErr.ErrorCode, ReasonPhrase: quicErr.ErrorMessage})
+	packet, err := s.packer.PackConnectionClose(&frames.ConnectionCloseFrame{ErrorCode: quicErr.ErrorCode, ReasonPhrase: quicErr.ErrorMessage}, s.sentPacketHandler.GetLargestObserved())
 	if err != nil {
 		return err
 	}

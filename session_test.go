@@ -43,6 +43,37 @@ func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *publicHeader, r *b
 	}, nil
 }
 
+type mockSentPacketHandler struct {
+	retransmissionQueue []*ackhandlerlegacy.Packet
+}
+
+func (h *mockSentPacketHandler) SentPacket(packet *ackhandlerlegacy.Packet) error { return nil }
+func (h *mockSentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameLegacy, withPacketNumber protocol.PacketNumber) error {
+	return nil
+}
+func (h *mockSentPacketHandler) BytesInFlight() protocol.ByteCount         { return 0 }
+func (h *mockSentPacketHandler) GetLargestObserved() protocol.PacketNumber { return 1 }
+func (h *mockSentPacketHandler) CongestionAllowsSending() bool             { return true }
+func (h *mockSentPacketHandler) CheckForError() error                      { return nil }
+func (h *mockSentPacketHandler) TimeOfFirstRTO() time.Time                 { panic("not implemented") }
+
+func (h *mockSentPacketHandler) ProbablyHasPacketForRetransmission() bool {
+	return len(h.retransmissionQueue) > 0
+}
+
+func (h *mockSentPacketHandler) DequeuePacketForRetransmission() *ackhandlerlegacy.Packet {
+	if len(h.retransmissionQueue) > 0 {
+		packet := h.retransmissionQueue[0]
+		h.retransmissionQueue = h.retransmissionQueue[1:]
+		return packet
+	}
+	return nil
+}
+
+func newMockSentPacketHandler() ackhandlerlegacy.SentPacketHandler {
+	return &mockSentPacketHandler{}
+}
+
 var _ = Describe("Session", func() {
 	var (
 		session              *Session
@@ -647,7 +678,6 @@ var _ = Describe("Session", func() {
 			handshake.TagICSL: {0, 0, 0, 0},
 		})
 		session.packer.connectionParametersManager = session.connectionParametersManager
-		session.packer.sentPacketHandler = newMockSentPacketHandler()
 		session.run() // Would normally not return
 		Expect(conn.written[0]).To(ContainSubstring("No recent network activity."))
 		close(done)
