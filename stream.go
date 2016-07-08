@@ -160,7 +160,8 @@ func (s *stream) Write(p []byte) (int, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	s.dataForWriting = p
+	s.dataForWriting = make([]byte, len(p))
+	copy(s.dataForWriting, p)
 
 	s.session.scheduleSending()
 

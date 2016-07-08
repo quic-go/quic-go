@@ -346,6 +346,18 @@ var _ = Describe("Stream", func() {
 		It("getDataForWriting returns nil if no data is available", func() {
 			Expect(str.getDataForWriting(1000)).To(BeNil())
 		})
+
+		It("copies the slice while writing", func() {
+			s := []byte("foo")
+			go func() {
+				n, err := str.Write(s)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(n).To(Equal(3))
+			}()
+			Eventually(func() protocol.ByteCount { return str.lenOfDataForWriting() }).ShouldNot(BeZero())
+			s[0] = 'v'
+			Expect(str.getDataForWriting(3)).To(Equal([]byte("foo")))
+		})
 	})
 
 	Context("closing", func() {
