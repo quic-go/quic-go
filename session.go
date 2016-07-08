@@ -344,8 +344,10 @@ func (s *Session) isValidStreamID(streamID protocol.StreamID) bool {
 func (s *Session) handleWindowUpdateFrame(frame *frames.WindowUpdateFrame) error {
 	s.streamsMutex.RLock()
 	defer s.streamsMutex.RUnlock()
-	if s, ok := s.streams[frame.StreamID]; ok && s == nil {
-		return errWindowUpdateOnClosedStream
+	if frame.StreamID != 0 {
+		if s, ok := s.streams[frame.StreamID]; ok && s == nil {
+			return errWindowUpdateOnClosedStream
+		}
 	}
 	_, err := s.flowControlManager.UpdateWindow(frame.StreamID, frame.ByteOffset)
 	return err
