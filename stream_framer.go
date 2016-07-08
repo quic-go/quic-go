@@ -6,6 +6,7 @@ import (
 	"github.com/lucas-clemente/quic-go/flowcontrol"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 type streamFramer struct {
@@ -34,6 +35,11 @@ func (f *streamFramer) HasData() bool {
 	defer f.streamsMutex.RUnlock()
 	for _, s := range *f.streams {
 		if s == nil {
+			continue
+		}
+		// An error should never happen, and needlessly complicates the return values
+		fcLimit, _ := f.getFCAllowanceForStream(s)
+		if fcLimit == 0 {
 			continue
 		}
 		if s.lenOfDataForWriting() > 0 || s.shouldSendFin() {
@@ -68,7 +74,9 @@ func (f *streamFramer) EstimatedDataLen() protocol.ByteCount {
 	defer f.streamsMutex.RUnlock()
 	for _, s := range *f.streams {
 		if s != nil {
-			l += s.lenOfDataForWriting()
+			// An error should never happen, and needlessly complicates the return values
+			fcLimit, _ := f.getFCAllowanceForStream(s)
+			l += utils.MinByteCount(s.lenOfDataForWriting(), fcLimit)
 			if s.shouldSendFin() {
 				l += estimatedLenOfFinFrame
 			}
@@ -127,26 +135,11 @@ func (f *streamFramer) maybePopNormalFrame(maxBytes protocol.ByteCount) (*frames
 		}
 		maxLen := maxBytes - frameHeaderBytes
 
-		flowControlWindow, err := f.flowControlManager.SendWindowSize(s.streamID)
+		fcAllowance, err := f.getFCAllowanceForStream(s)
 		if err != nil {
 			return nil, err
 		}
-		flowControlWindow -= s.writeOffset
-
-		if flowControlWindow < maxLen {
-			maxLen = flowControlWindow
-		}
-
-		contributes, err := f.flowControlManager.StreamContributesToConnectionFlowControl(s.StreamID())
-		if err != nil {
-			return nil, err
-		}
-		if contributes {
-			connectionWindow := f.flowControlManager.RemainingConnectionWindowSize()
-			if connectionWindow < maxLen {
-				maxLen = connectionWindow
-			}
-		}
+		maxLen = utils.MinByteCount(maxLen, fcAllowance)
 
 		if maxLen == 0 {
 			continue
@@ -169,6 +162,27 @@ func (f *streamFramer) maybePopNormalFrame(maxBytes protocol.ByteCount) (*frames
 		return frame, nil
 	}
 	return nil, nil
+}
+
+func (f *streamFramer) getFCAllowanceForStream(s *stream) (protocol.ByteCount, error) {
+	flowControlWindow, err := f.flowControlManager.SendWindowSize(s.streamID)
+	if err != nil {
+		return 0, err
+	}
+	flowControlWindow -= s.writeOffset
+	if flowControlWindow == 0 {
+		return 0, nil
+	}
+
+	contributes, err := f.flowControlManager.StreamContributesToConnectionFlowControl(s.StreamID())
+	if err != nil {
+		return 0, err
+	}
+	connectionWindow := protocol.ByteCount(protocol.MaxByteCount)
+	if contributes {
+		connectionWindow = f.flowControlManager.RemainingConnectionWindowSize()
+	}
+	return utils.MinByteCount(flowControlWindow, connectionWindow), nil
 }
 
 // maybeSplitOffFrame removes the first n bytes and returns them as a separate frame. If n >= len(frame), nil is returned and nothing is modified.

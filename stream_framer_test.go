@@ -79,6 +79,12 @@ var _ = Describe("Stream Framer", func() {
 			Expect(framer.HasData()).To(BeTrue())
 		})
 
+		It("has no data when FC blocked", func() {
+			stream1.dataForWriting = []byte("foobar")
+			Expect(framer.HasData()).To(BeTrue())
+			fcm.sendWindowSizes[stream1.StreamID()] = 0
+			Expect(framer.HasData()).To(BeFalse())
+		})
 	})
 
 	Context("Framer estimated data length", func() {
@@ -107,6 +113,13 @@ var _ = Describe("Stream Framer", func() {
 			stream1.closed = 1
 			// estimate for an average frame containing only a FIN bit
 			Expect(framer.EstimatedDataLen()).To(Equal(protocol.ByteCount(5)))
+		})
+
+		It("is zero when FC blocked", func() {
+			stream1.dataForWriting = []byte("foobar")
+			Expect(framer.EstimatedDataLen()).To(Equal(protocol.ByteCount(6)))
+			fcm.sendWindowSizes[stream1.StreamID()] = 0
+			Expect(framer.EstimatedDataLen()).To(BeZero())
 		})
 
 		It("caps the length", func() {
