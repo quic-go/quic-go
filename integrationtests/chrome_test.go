@@ -35,7 +35,7 @@ func init() {
 	})
 }
 
-var _ = PDescribe("Chrome tests", func() {
+var _ = Describe("Chrome tests", func() {
 	It("loads a simple hello world page using quic", func(done Done) {
 		err := wd.Get("https://quic.clemente.io/hello")
 		Expect(err).NotTo(HaveOccurred())
@@ -45,7 +45,7 @@ var _ = PDescribe("Chrome tests", func() {
 		close(done)
 	}, 5)
 
-	It("loads a large number of files", func(done Done) {
+	PIt("loads a large number of files", func(done Done) {
 		err := wd.Get("https://quic.clemente.io/tiles")
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(func() error {
