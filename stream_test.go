@@ -342,6 +342,10 @@ var _ = Describe("Stream", func() {
 			Expect(err).To(MatchError(testErr))
 			close(done)
 		})
+
+		It("getDataForWriting returns nil if no data is available", func() {
+			Expect(str.getDataForWriting(1000)).To(BeNil())
+		})
 	})
 
 	Context("closing", func() {

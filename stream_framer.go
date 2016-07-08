@@ -80,12 +80,11 @@ func (f *streamFramer) EstimatedDataLen() protocol.ByteCount {
 	return l
 }
 
-// TODO: Maybe remove error return value?
 func (f *streamFramer) PopStreamFrame(maxLen protocol.ByteCount) (*frames.StreamFrame, error) {
 	if frame := f.maybePopFrameForRetransmission(maxLen); frame != nil {
 		return frame, nil
 	}
-	return f.maybePopNormalFrame(maxLen), nil
+	return f.maybePopNormalFrame(maxLen)
 }
 
 func (f *streamFramer) maybePopFrameForRetransmission(maxLen protocol.ByteCount) *frames.StreamFrame {
@@ -110,7 +109,7 @@ func (f *streamFramer) maybePopFrameForRetransmission(maxLen protocol.ByteCount)
 	return frame
 }
 
-func (f *streamFramer) maybePopNormalFrame(maxLen protocol.ByteCount) *frames.StreamFrame {
+func (f *streamFramer) maybePopNormalFrame(maxBytes protocol.ByteCount) (*frames.StreamFrame, error) {
 	frame := &frames.StreamFrame{DataLenPresent: true}
 	f.streamsMutex.RLock()
 	defer f.streamsMutex.RUnlock()
@@ -122,25 +121,54 @@ func (f *streamFramer) maybePopNormalFrame(maxLen protocol.ByteCount) *frames.St
 		frame.StreamID = s.streamID
 		// not perfect, but thread-safe since writeOffset is only written when getting data
 		frame.Offset = s.writeOffset
-		frameHeaderLen, _ := frame.MinLength(protocol.VersionWhatever) // can never error
-		if maxLen < frameHeaderLen {
+		frameHeaderBytes, _ := frame.MinLength(protocol.VersionWhatever) // can never error
+		if maxBytes < frameHeaderBytes {
+			continue
+		}
+		maxLen := maxBytes - frameHeaderBytes
+
+		flowControlWindow, err := f.flowControlManager.SendWindowSize(s.streamID)
+		if err != nil {
+			return nil, err
+		}
+		flowControlWindow -= s.writeOffset
+
+		if flowControlWindow < maxLen {
+			maxLen = flowControlWindow
+		}
+
+		contributes, err := f.flowControlManager.StreamContributesToConnectionFlowControl(s.StreamID())
+		if err != nil {
+			return nil, err
+		}
+		if contributes {
+			connectionWindow := f.flowControlManager.RemainingConnectionWindowSize()
+			if connectionWindow < maxLen {
+				maxLen = connectionWindow
+			}
+		}
+
+		if maxLen == 0 {
 			continue
 		}
 
-		data := s.getDataForWriting(maxLen - frameHeaderLen)
+		data := s.getDataForWriting(maxLen)
 		if data == nil {
 			if s.shouldSendFin() {
 				frame.FinBit = true
 				s.sentFin()
-				return frame
+				return frame, nil
 			}
 			continue
 		}
 
 		frame.Data = data
-		return frame
+		if err := f.flowControlManager.AddBytesSent(s.streamID, protocol.ByteCount(len(data))); err != nil {
+			return nil, err
+		}
+		return frame, nil
 	}
-	return nil
+	return nil, nil
 }
 
 // maybeSplitOffFrame removes the first n bytes and returns them as a separate frame. If n >= len(frame), nil is returned and nothing is modified.
