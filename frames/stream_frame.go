@@ -14,7 +14,6 @@ import (
 type StreamFrame struct {
 	FinBit         bool
 	StreamID       protocol.StreamID
-	streamIDLen    protocol.ByteCount
 	Offset         protocol.ByteCount
 	Data           []byte
 	DataLenPresent bool
@@ -40,9 +39,9 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 	if offsetLen != 0 {
 		offsetLen++
 	}
-	frame.streamIDLen = protocol.ByteCount(typeByte&0x03 + 1)
+	streamIDLen := typeByte&0x03 + 1
 
-	sid, err := utils.ReadUintN(r, uint8(frame.streamIDLen))
+	sid, err := utils.ReadUintN(r, streamIDLen)
 	if err != nil {
 		return nil, err
 	}
@@ -104,14 +103,12 @@ func (f *StreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 		typeByte ^= (uint8(offsetLength) - 1) << 2
 	}
 
-	if f.streamIDLen == 0 {
-		f.calculateStreamIDLength()
-	}
-	typeByte ^= uint8(f.streamIDLen) - 1
+	streamIDLen := f.calculateStreamIDLength()
+	typeByte ^= streamIDLen - 1
 
 	b.WriteByte(typeByte)
 
-	switch f.streamIDLen {
+	switch streamIDLen {
 	case 1:
 		b.WriteByte(uint8(f.StreamID))
 	case 2:
@@ -153,16 +150,15 @@ func (f *StreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 	return nil
 }
 
-func (f *StreamFrame) calculateStreamIDLength() {
+func (f *StreamFrame) calculateStreamIDLength() uint8 {
 	if f.StreamID < (1 << 8) {
-		f.streamIDLen = 1
+		return 1
 	} else if f.StreamID < (1 << 16) {
-		f.streamIDLen = 2
+		return 2
 	} else if f.StreamID < (1 << 24) {
-		f.streamIDLen = 3
-	} else {
-		f.streamIDLen = 4
+		return 3
 	}
+	return 4
 }
 
 func (f *StreamFrame) getOffsetLength() protocol.ByteCount {
@@ -192,11 +188,7 @@ func (f *StreamFrame) getOffsetLength() protocol.ByteCount {
 
 // MinLength of a written frame
 func (f *StreamFrame) MinLength(protocol.VersionNumber) (protocol.ByteCount, error) {
-	if f.streamIDLen == 0 {
-		f.calculateStreamIDLength()
-	}
-
-	length := protocol.ByteCount(1) + f.streamIDLen + f.getOffsetLength()
+	length := protocol.ByteCount(1) + protocol.ByteCount(f.calculateStreamIDLength()) + f.getOffsetLength()
 	if f.DataLenPresent {
 		length += 2
 	}

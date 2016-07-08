@@ -45,7 +45,7 @@ var _ = Describe("Chrome tests", func() {
 		close(done)
 	}, 5)
 
-	PIt("loads a large number of files", func(done Done) {
+	It("loads a large number of files", func(done Done) {
 		err := wd.Get("https://quic.clemente.io/tiles")
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(func() error {
