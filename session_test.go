@@ -171,6 +171,8 @@ var _ = Describe("Session", func() {
 			Expect(session.streams[5]).ToNot(BeNil())
 			// We still need to close the stream locally
 			session.streams[5].Close()
+			// ... and simulate that we actually the FIN
+			session.streams[5].sentFin()
 			session.garbageCollectStreams()
 			Expect(session.streams).To(HaveLen(2))
 			Expect(session.streams[5]).To(BeNil())
@@ -252,6 +254,7 @@ var _ = Describe("Session", func() {
 			_, err := session.streams[5].Read([]byte{0})
 			Expect(err).To(MatchError(io.EOF))
 			session.streams[5].Close()
+			session.streams[5].sentFin()
 			session.garbageCollectStreams()
 			err = session.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
@@ -568,7 +571,7 @@ var _ = Describe("Session", func() {
 				Eventually(conn.written).Should(HaveLen(2))
 			})
 
-			It("sends out two small frames that are written to long after one another into two packet", func() {
+			It("sends out two small frames that are written to long after one another into two packets", func() {
 				s, err := session.OpenStream(5)
 				Expect(err).NotTo(HaveOccurred())
 				go session.run()
@@ -716,6 +719,7 @@ var _ = Describe("Session", func() {
 				Expect(err).NotTo(HaveOccurred())
 				err = s.Close()
 				Expect(err).NotTo(HaveOccurred())
+				s.(*stream).sentFin()
 				s.CloseRemote(0)
 				_, err = s.Read([]byte("a"))
 				Expect(err).To(MatchError(io.EOF))

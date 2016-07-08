@@ -202,6 +202,7 @@ func (s *stream) getDataForWriting(maxBytes protocol.ByteCount) []byte {
 // Close implements io.Closer
 func (s *stream) Close() error {
 	atomic.StoreInt32(&s.closed, 1)
+	s.session.scheduleSending()
 	return nil
 }
 
@@ -286,8 +287,9 @@ func (s *stream) finishedReading() bool {
 }
 
 func (s *stream) finishedWriting() bool {
-	// TODO: sentFIN
-	return atomic.LoadInt32(&s.closed) != 0
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.err != nil || (atomic.LoadInt32(&s.closed) != 0 && s.finSent)
 }
 
 func (s *stream) finished() bool {

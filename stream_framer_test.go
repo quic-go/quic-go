@@ -75,7 +75,7 @@ var _ = Describe("Stream Framer", func() {
 		})
 
 		It("has data with FIN frames", func() {
-			stream1.Close()
+			stream1.closed = 1
 			Expect(framer.HasData()).To(BeTrue())
 		})
 
@@ -104,7 +104,7 @@ var _ = Describe("Stream Framer", func() {
 		})
 
 		It("includes estimated FIN frames", func() {
-			stream1.Close()
+			stream1.closed = 1
 			// estimate for an average frame containing only a FIN bit
 			Expect(framer.EstimatedDataLen()).To(Equal(protocol.ByteCount(5)))
 		})
@@ -264,7 +264,7 @@ var _ = Describe("Stream Framer", func() {
 		Context("sending FINs", func() {
 			It("sends FINs when streams are closed", func() {
 				stream1.writeOffset = 42
-				stream1.Close()
+				stream1.closed = 1
 				frame, err := framer.PopStreamFrame(1000)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(frame.StreamID).To(Equal(stream1.streamID))
