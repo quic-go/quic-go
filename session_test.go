@@ -550,8 +550,8 @@ var _ = Describe("Session", func() {
 				Expect(err).NotTo(HaveOccurred())
 				_, err = s.Write([]byte("foobar2"))
 				Expect(err).NotTo(HaveOccurred())
-				time.Sleep(10 * time.Millisecond)
-				Expect(conn.written).To(HaveLen(1))
+				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(1))
+				Consistently(func() [][]byte { return conn.written }).Should(HaveLen(1))
 			})
 
 			It("sends out two big frames in two packets", func() {
@@ -567,8 +567,7 @@ var _ = Describe("Session", func() {
 				}()
 				_, err = s2.Write(bytes.Repeat([]byte{'e'}, int(protocol.SmallPacketPayloadSizeThreshold+50)))
 				Expect(err).ToNot(HaveOccurred())
-				time.Sleep(10 * time.Millisecond)
-				Eventually(conn.written).Should(HaveLen(2))
+				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(2))
 			})
 
 			It("sends out two small frames that are written to long after one another into two packets", func() {
@@ -577,10 +576,10 @@ var _ = Describe("Session", func() {
 				go session.run()
 				_, err = s.Write([]byte("foobar1"))
 				Expect(err).NotTo(HaveOccurred())
-				Expect(conn.written).To(HaveLen(1))
+				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(1))
 				_, err = s.Write([]byte("foobar2"))
 				Expect(err).NotTo(HaveOccurred())
-				Expect(conn.written).To(HaveLen(2))
+				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(2))
 			})
 
 			It("sends a queued ACK frame only once", func() {
@@ -592,11 +591,11 @@ var _ = Describe("Session", func() {
 				go session.run()
 				_, err = s.Write([]byte("foobar1"))
 				Expect(err).NotTo(HaveOccurred())
-				Expect(conn.written).To(HaveLen(1))
+				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(1))
 				_, err = s.Write([]byte("foobar2"))
 				Expect(err).NotTo(HaveOccurred())
 
-				Expect(conn.written).To(HaveLen(2))
+				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(2))
 				Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x37, 0x13})))
 				Expect(conn.written[1]).ToNot(ContainSubstring(string([]byte{0x37, 0x13})))
 			})
