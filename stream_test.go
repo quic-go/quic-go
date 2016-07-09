@@ -75,6 +75,12 @@ func (m *mockFlowControlHandler) UpdateHighestReceived(streamID protocol.StreamI
 
 func (m *mockFlowControlHandler) AddBytesSent(streamID protocol.StreamID, n protocol.ByteCount) error {
 	m.bytesSent += n
+	for _, s := range m.streamsContributing {
+		if s == streamID {
+			m.remainingConnectionWindowSize -= n
+			return nil
+		}
+	}
 	return nil
 }
 

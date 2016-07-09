@@ -395,39 +395,59 @@ var _ = Describe("Stream Framer", func() {
 			Expect(frame).To(BeNil())
 		})
 	})
+
+	Context("BLOCKED frames", func() {
+		BeforeEach(func() {
+			fcm.remainingConnectionWindowSize = protocol.MaxByteCount
+		})
+
+		It("Pop returns nil if no frame is queued", func() {
+			Expect(framer.PopBlockedFrame()).To(BeNil())
+		})
+
+		It("queues and pops BLOCKED frames for individually blocked streams", func() {
+			fcm.sendWindowSizes[stream1.StreamID()] = 3
+			stream1.dataForWriting = []byte("foo")
+			_, err := framer.PopStreamFrame(1000)
+			Expect(err).NotTo(HaveOccurred())
+			blockedFrame := framer.PopBlockedFrame()
+			Expect(blockedFrame).ToNot(BeNil())
+			Expect(blockedFrame.StreamID).To(Equal(stream1.StreamID()))
+			Expect(framer.PopBlockedFrame()).To(BeNil())
+		})
+
+		It("queues and pops BLOCKED frames for connection blocked streams", func() {
+			fcm.remainingConnectionWindowSize = 3
+			fcm.streamsContributing = []protocol.StreamID{stream1.StreamID()}
+			stream1.dataForWriting = []byte("foo")
+			_, err := framer.PopStreamFrame(1000)
+			Expect(err).NotTo(HaveOccurred())
+			blockedFrame := framer.PopBlockedFrame()
+			Expect(blockedFrame).ToNot(BeNil())
+			Expect(blockedFrame.StreamID).To(BeZero())
+			Expect(framer.PopBlockedFrame()).To(BeNil())
+		})
+
+		It("does not queue BLOCKED frames for non-contributing streams", func() {
+			fcm.remainingConnectionWindowSize = 3
+			stream1.dataForWriting = []byte("foo")
+			_, err := framer.PopStreamFrame(1000)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(framer.PopBlockedFrame()).To(BeNil())
+		})
+
+		It("does not queue BLOCKED frames twice", func() {
+			fcm.sendWindowSizes[stream1.StreamID()] = 3
+			stream1.dataForWriting = []byte("foobar")
+			_, err := framer.PopStreamFrame(1000)
+			Expect(err).NotTo(HaveOccurred())
+			frame, err := framer.PopStreamFrame(1000)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(frame).To(BeNil())
+			blockedFrame := framer.PopBlockedFrame()
+			Expect(blockedFrame).ToNot(BeNil())
+			Expect(blockedFrame.StreamID).To(Equal(stream1.StreamID()))
+			Expect(framer.PopBlockedFrame()).To(BeNil())
+		})
+	})
 })
-
-// Old stream tests
-
-// PContext("Blocked streams", func() {
-// 	It("notifies the session when a stream is flow control blocked", func() {
-// 		updated, err := str.flowControlManager.UpdateWindow(str.streamID, 1337)
-// 		Expect(err).ToNot(HaveOccurred())
-// 		Expect(updated).To(BeTrue())
-// 		str.flowControlManager.AddBytesSent(str.streamID, 1337)
-// 		str.maybeTriggerBlocked()
-// 		Expect(handler.receivedBlockedCalled).To(BeTrue())
-// 		Expect(handler.receivedBlockedForStream).To(Equal(str.streamID))
-// 	})
-//
-// 	It("notifies the session as soon as a stream is reaching the end of the window", func() {
-// 		updated, err := str.flowControlManager.UpdateWindow(str.streamID, 4)
-// 		Expect(err).ToNot(HaveOccurred())
-// 		Expect(updated).To(BeTrue())
-// 		str.Write([]byte{0xDE, 0xCA, 0xFB, 0xAD})
-// 		Expect(handler.receivedBlockedCalled).To(BeTrue())
-// 		Expect(handler.receivedBlockedForStream).To(Equal(str.streamID))
-// 	})
-//
-// 	It("notifies the session as soon as a stream is flow control blocked", func() {
-// 		updated, err := str.flowControlManager.UpdateWindow(str.streamID, 2)
-// 		Expect(err).ToNot(HaveOccurred())
-// 		Expect(updated).To(BeTrue())
-// 		go func() {
-// 			str.Write([]byte{0xDE, 0xCA, 0xFB, 0xAD})
-// 		}()
-// 		time.Sleep(time.Millisecond)
-// 		Expect(handler.receivedBlockedCalled).To(BeTrue())
-// 		Expect(handler.receivedBlockedForStream).To(Equal(str.streamID))
-// 	})
-// })

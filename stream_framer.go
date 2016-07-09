@@ -17,6 +17,7 @@ type streamFramer struct {
 	flowControlManager flowcontrol.FlowControlManager
 
 	retransmissionQueue []*frames.StreamFrame
+	blockedFrameQueue   []*frames.BlockedFrame
 }
 
 func newStreamFramer(streams *map[protocol.StreamID]*stream, streamsMutex *sync.RWMutex, flowControlManager flowcontrol.FlowControlManager) *streamFramer {
@@ -95,6 +96,15 @@ func (f *streamFramer) PopStreamFrame(maxLen protocol.ByteCount) (*frames.Stream
 	return f.maybePopNormalFrame(maxLen)
 }
 
+func (f *streamFramer) PopBlockedFrame() *frames.BlockedFrame {
+	if len(f.blockedFrameQueue) == 0 {
+		return nil
+	}
+	frame := f.blockedFrameQueue[0]
+	f.blockedFrameQueue = f.blockedFrameQueue[1:]
+	return frame
+}
+
 func (f *streamFramer) maybePopFrameForRetransmission(maxLen protocol.ByteCount) *frames.StreamFrame {
 	if len(f.retransmissionQueue) == 0 {
 		return nil
@@ -159,6 +169,18 @@ func (f *streamFramer) maybePopNormalFrame(maxBytes protocol.ByteCount) (*frames
 		if err := f.flowControlManager.AddBytesSent(s.streamID, protocol.ByteCount(len(data))); err != nil {
 			return nil, err
 		}
+
+		// Finally, check if we are now FC blocked and should queue a BLOCKED frame
+		individualFcOffset, _ := f.flowControlManager.SendWindowSize(s.streamID) // can never error
+		if s.writeOffset == individualFcOffset {
+			// We are now stream-level FC blocked
+			f.blockedFrameQueue = append(f.blockedFrameQueue, &frames.BlockedFrame{StreamID: s.StreamID()})
+		}
+		if f.flowControlManager.RemainingConnectionWindowSize() == 0 {
+			// We are now connection-level FC blocked
+			f.blockedFrameQueue = append(f.blockedFrameQueue, &frames.BlockedFrame{StreamID: 0})
+		}
+
 		return frame, nil
 	}
 	return nil, nil
