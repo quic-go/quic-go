@@ -12,9 +12,8 @@ type flowController struct {
 
 	connectionParametersManager *handshake.ConnectionParametersManager
 
-	bytesSent                protocol.ByteCount
-	sendFlowControlWindow    protocol.ByteCount
-	lastBlockedSentForOffset protocol.ByteCount
+	bytesSent             protocol.ByteCount
+	sendFlowControlWindow protocol.ByteCount
 
 	bytesRead                         protocol.ByteCount
 	highestReceived                   protocol.ByteCount
@@ -120,28 +119,6 @@ func (c *flowController) AddBytesRead(n protocol.ByteCount) {
 	defer c.mutex.Unlock()
 
 	c.bytesRead += n
-}
-
-// MaybeTriggerBlocked determines if it is necessary to send a Blocked for this stream
-// it makes sure that only one Blocked is sent for each offset
-func (c *flowController) MaybeTriggerBlocked() bool {
-	if c.SendWindowSize() != 0 {
-		return false
-	}
-
-	c.mutex.RLock()
-	sendFlowControlWindow := c.getSendFlowControlWindow()
-	c.mutex.RUnlock()
-
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	if c.lastBlockedSentForOffset == sendFlowControlWindow {
-		return false
-	}
-
-	c.lastBlockedSentForOffset = sendFlowControlWindow
-	return true
 }
 
 // MaybeTriggerWindowUpdate determines if it is necessary to send a WindowUpdate

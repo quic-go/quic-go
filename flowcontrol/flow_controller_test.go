@@ -131,34 +131,6 @@ var _ = Describe("Flow controller", func() {
 			setConnectionParametersManagerWindow(cpm, "sendConnectionFlowControlWindow", 9000)
 			Expect(controller.getSendFlowControlWindow()).To(Equal(protocol.ByteCount(7000)))
 		})
-
-		Context("Blocked", func() {
-			var sendFlowControlWindow protocol.ByteCount = 20
-
-			BeforeEach(func() {
-				controller.sendFlowControlWindow = sendFlowControlWindow
-			})
-
-			It("sends a Blocked when there's no space left in the window", func() {
-				controller.bytesSent = sendFlowControlWindow
-				Expect(controller.MaybeTriggerBlocked()).To(BeTrue())
-			})
-
-			It("does not send a Blocked when there's still space in the window", func() {
-				controller.bytesSent = sendFlowControlWindow - 1
-				Expect(controller.MaybeTriggerBlocked()).To(BeFalse())
-			})
-
-			It("only sends one Blocked for one offset", func() {
-				controller.bytesSent = sendFlowControlWindow
-				Expect(controller.MaybeTriggerBlocked()).To(BeTrue())
-				Expect(controller.MaybeTriggerBlocked()).To(BeFalse())
-				updateSuccessfull := controller.UpdateSendWindow(sendFlowControlWindow + 1)
-				Expect(updateSuccessfull).To(BeTrue())
-				controller.bytesSent = sendFlowControlWindow + 1
-				Expect(controller.MaybeTriggerBlocked()).To(BeTrue())
-			})
-		})
 	})
 
 	Context("receive flow control", func() {
