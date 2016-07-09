@@ -44,7 +44,7 @@ func init() {
 	})
 
 	http.HandleFunc("/demo/tiles", func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, "<html><body>")
+		io.WriteString(w, "<html><head><style>img{width:40px;height:40px;}</style></head><body>")
 		for i := 0; i < 200; i++ {
 			fmt.Fprintf(w, `<img src="/demo/tile?cachebust=%d">`, i)
 		}

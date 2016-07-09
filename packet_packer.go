@@ -3,9 +3,9 @@ package quic
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"sync/atomic"
 
-	"github.com/lucas-clemente/quic-go/ackhandlerlegacy"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -24,59 +24,37 @@ type packetPacker struct {
 	version      protocol.VersionNumber
 	cryptoSetup  *handshake.CryptoSetup
 
-	sentPacketHandler           ackhandlerlegacy.SentPacketHandler
 	connectionParametersManager *handshake.ConnectionParametersManager
 
-	streamFrameQueue *streamFrameQueue
-	controlFrames    []frames.Frame
-	blockedManager   *blockedManager
+	streamFramer   *streamFramer
+	controlFrames  []frames.Frame
+	blockedManager *blockedManager
 
 	lastPacketNumber protocol.PacketNumber
 }
 
-func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.CryptoSetup, sentPacketHandler ackhandlerlegacy.SentPacketHandler, connectionParametersHandler *handshake.ConnectionParametersManager, blockedManager *blockedManager, streamFrameQueue *streamFrameQueue, version protocol.VersionNumber) *packetPacker {
+func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.CryptoSetup, connectionParametersHandler *handshake.ConnectionParametersManager, blockedManager *blockedManager, streamFramer *streamFramer, version protocol.VersionNumber) *packetPacker {
 	return &packetPacker{
 		cryptoSetup:                 cryptoSetup,
 		connectionID:                connectionID,
 		connectionParametersManager: connectionParametersHandler,
 		version:                     version,
-		sentPacketHandler:           sentPacketHandler,
 		blockedManager:              blockedManager,
-		streamFrameQueue:            streamFrameQueue,
+		streamFramer:                streamFramer,
 	}
 }
 
-func (p *packetPacker) AddStreamFrame(f frames.StreamFrame) {
-	p.streamFrameQueue.Push(&f, false)
+func (p *packetPacker) PackConnectionClose(frame *frames.ConnectionCloseFrame, largestObserved protocol.PacketNumber) (*packedPacket, error) {
+	return p.packPacket(nil, []frames.Frame{frame}, largestObserved, true)
 }
 
-func (p *packetPacker) AddHighPrioStreamFrame(f frames.StreamFrame) {
-	p.streamFrameQueue.Push(&f, true)
+func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, largestObserved protocol.PacketNumber) (*packedPacket, error) {
+	return p.packPacket(stopWaitingFrame, controlFrames, largestObserved, false)
 }
 
-func (p *packetPacker) AddBlocked(streamID protocol.StreamID, byteOffset protocol.ByteCount) {
-	return
-	// TODO: send out connection-level BlockedFrames at the right time
-	// see https://github.com/lucas-clemente/quic-go/issues/113
-	// TODO: remove this function completely once #113 is resolved
-	if streamID == 0 {
-		p.controlFrames = append(p.controlFrames, &frames.BlockedFrame{StreamID: 0})
-	}
-
-	p.blockedManager.AddBlockedStream(streamID, byteOffset)
-}
-
-func (p *packetPacker) PackConnectionClose(frame *frames.ConnectionCloseFrame) (*packedPacket, error) {
-	return p.packPacket(nil, []frames.Frame{frame}, true)
-}
-
-func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame) (*packedPacket, error) {
-	return p.packPacket(stopWaitingFrame, controlFrames, false)
-}
-
-func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, onlySendOneControlFrame bool) (*packedPacket, error) {
+func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, largestObserved protocol.PacketNumber, onlySendOneControlFrame bool) (*packedPacket, error) {
 	// don't send out packets that only contain a StopWaitingFrame
-	if len(p.controlFrames) == 0 && len(controlFrames) == 0 && p.streamFrameQueue.Len() == 0 {
+	if len(p.controlFrames) == 0 && len(controlFrames) == 0 && !p.streamFramer.HasData() {
 		return nil, nil
 	}
 
@@ -94,7 +72,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 	p.cryptoSetup.LockForSealing()
 	defer p.cryptoSetup.UnlockForSealing()
 
-	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(currentPacketNumber, p.sentPacketHandler.GetLargestObserved())
+	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(currentPacketNumber, largestObserved)
 	responsePublicHeader := &publicHeader{
 		ConnectionID:         p.connectionID,
 		PacketNumber:         currentPacketNumber,
@@ -207,7 +185,7 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 	}
 
 	if payloadLength > maxFrameSize {
-		return nil, errors.New("PacketPacker BUG: packet payload too large")
+		return nil, fmt.Errorf("Packet Packer BUG: packet payload (%d) too large (%d)", payloadLength, maxFrameSize)
 	}
 
 	hasStreamFrames := false
@@ -217,12 +195,12 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 	// however, for the last StreamFrame in the packet, we can omit the DataLen, thus saving 2 bytes and yielding a packet of exactly the correct size
 	maxFrameSize += 2
 
-	for p.streamFrameQueue.Len() > 0 {
+	for p.streamFramer.HasData() {
 		if payloadLength > maxFrameSize {
-			return nil, errors.New("PacketPacker BUG: packet payload too large")
+			return nil, fmt.Errorf("Packet Packer BUG: packet payload (%d) too large (%d)", payloadLength, maxFrameSize)
 		}
 
-		frame, err := p.streamFrameQueue.Pop(maxFrameSize - payloadLength)
+		frame, err := p.streamFramer.PopStreamFrame(maxFrameSize - payloadLength)
 		if err != nil {
 			return nil, err
 		}
@@ -231,8 +209,8 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 		}
 		frame.DataLenPresent = true // set the dataLen by default. Remove them later if applicable
 
-		frameMinLength, _ := frame.MinLength(p.version) // StreamFrame.MinLength *never* returns an error
-		payloadLength += frameMinLength - 1 + frame.DataLen()
+		frameHeaderLen, _ := frame.MinLength(p.version) // StreamFrame.MinLength *never* returns an error
+		payloadLength += frameHeaderLen + frame.DataLen()
 
 		blockedFrame := p.blockedManager.GetBlockedFrame(frame.StreamID, frame.Offset+frame.DataLen())
 		if blockedFrame != nil {

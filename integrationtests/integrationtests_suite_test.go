@@ -60,16 +60,19 @@ func setupHTTPHandlers() {
 	Expect(err).NotTo(HaveOccurred())
 
 	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
+		defer GinkgoRecover()
 		_, err := io.WriteString(w, "Hello, World!\n")
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	http.HandleFunc("/data", func(w http.ResponseWriter, r *http.Request) {
+		defer GinkgoRecover()
 		_, err := w.Write(data)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
+		defer GinkgoRecover()
 		_, err := io.Copy(w, r.Body)
 		Expect(err).NotTo(HaveOccurred())
 	})

@@ -82,7 +82,7 @@ var _ = Describe("StreamFrame", func() {
 			b := &bytes.Buffer{}
 			f := &StreamFrame{
 				StreamID: 1,
-				Data:     []byte("f"),
+				Data:     []byte{},
 				Offset:   0,
 			}
 			err := f.Write(b, 0)
@@ -94,7 +94,7 @@ var _ = Describe("StreamFrame", func() {
 			b := &bytes.Buffer{}
 			f := &StreamFrame{
 				StreamID: 0xDECAFBAD,
-				Data:     []byte("f"),
+				Data:     []byte{},
 				Offset:   0xDEADBEEFCAFE,
 			}
 			err := f.Write(b, 0)
@@ -115,9 +115,8 @@ var _ = Describe("StreamFrame", func() {
 				err := f.Write(b, 0)
 				Expect(err).ToNot(HaveOccurred())
 				minLength, _ := f.MinLength(0)
-				headerLength := minLength - 1
 				Expect(b.Bytes()[0] & 0x20).To(Equal(uint8(0x20)))
-				Expect(b.Bytes()[headerLength-2 : headerLength]).To(Equal([]byte{0x37, 0x13}))
+				Expect(b.Bytes()[minLength-2 : minLength]).To(Equal([]byte{0x37, 0x13}))
 			})
 
 			It("omits the data length field", func() {
@@ -249,16 +248,6 @@ var _ = Describe("StreamFrame", func() {
 		})
 
 		Context("lengths of StreamIDs", func() {
-			It("returns an error for a non-valid StreamID length", func() {
-				b := &bytes.Buffer{}
-				err := (&StreamFrame{
-					StreamID:    1,
-					streamIDLen: 13,
-					Data:        []byte("foobar"),
-				}).Write(b, 0)
-				Expect(err).To(MatchError(errInvalidStreamIDLen))
-			})
-
 			It("writes a 1 byte StreamID", func() {
 				b := &bytes.Buffer{}
 				err := (&StreamFrame{
@@ -321,26 +310,22 @@ var _ = Describe("StreamFrame", func() {
 	Context("shortening of StreamIDs", func() {
 		It("determines the length of a 1 byte StreamID", func() {
 			f := &StreamFrame{StreamID: 0xFF}
-			f.calculateStreamIDLength()
-			Expect(f.streamIDLen).To(Equal(protocol.ByteCount(1)))
+			Expect(f.calculateStreamIDLength()).To(Equal(uint8(1)))
 		})
 
 		It("determines the length of a 2 byte StreamID", func() {
 			f := &StreamFrame{StreamID: 0xFFFF}
-			f.calculateStreamIDLength()
-			Expect(f.streamIDLen).To(Equal(protocol.ByteCount(2)))
+			Expect(f.calculateStreamIDLength()).To(Equal(uint8(2)))
 		})
 
 		It("determines the length of a 3 byte StreamID", func() {
 			f := &StreamFrame{StreamID: 0xFFFFFF}
-			f.calculateStreamIDLength()
-			Expect(f.streamIDLen).To(Equal(protocol.ByteCount(3)))
+			Expect(f.calculateStreamIDLength()).To(Equal(uint8(3)))
 		})
 
 		It("determines the length of a 4 byte StreamID", func() {
 			f := &StreamFrame{StreamID: 0xFFFFFFFF}
-			f.calculateStreamIDLength()
-			Expect(f.streamIDLen).To(Equal(protocol.ByteCount(4)))
+			Expect(f.calculateStreamIDLength()).To(Equal(uint8(4)))
 		})
 	})
 

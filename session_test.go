@@ -43,6 +43,37 @@ func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *publicHeader, r *b
 	}, nil
 }
 
+type mockSentPacketHandler struct {
+	retransmissionQueue []*ackhandlerlegacy.Packet
+}
+
+func (h *mockSentPacketHandler) SentPacket(packet *ackhandlerlegacy.Packet) error { return nil }
+func (h *mockSentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameLegacy, withPacketNumber protocol.PacketNumber) error {
+	return nil
+}
+func (h *mockSentPacketHandler) BytesInFlight() protocol.ByteCount         { return 0 }
+func (h *mockSentPacketHandler) GetLargestObserved() protocol.PacketNumber { return 1 }
+func (h *mockSentPacketHandler) CongestionAllowsSending() bool             { return true }
+func (h *mockSentPacketHandler) CheckForError() error                      { return nil }
+func (h *mockSentPacketHandler) TimeOfFirstRTO() time.Time                 { panic("not implemented") }
+
+func (h *mockSentPacketHandler) ProbablyHasPacketForRetransmission() bool {
+	return len(h.retransmissionQueue) > 0
+}
+
+func (h *mockSentPacketHandler) DequeuePacketForRetransmission() *ackhandlerlegacy.Packet {
+	if len(h.retransmissionQueue) > 0 {
+		packet := h.retransmissionQueue[0]
+		h.retransmissionQueue = h.retransmissionQueue[1:]
+		return packet
+	}
+	return nil
+}
+
+func newMockSentPacketHandler() ackhandlerlegacy.SentPacketHandler {
+	return &mockSentPacketHandler{}
+}
+
 var _ = Describe("Session", func() {
 	var (
 		session              *Session
@@ -171,6 +202,8 @@ var _ = Describe("Session", func() {
 			Expect(session.streams[5]).ToNot(BeNil())
 			// We still need to close the stream locally
 			session.streams[5].Close()
+			// ... and simulate that we actually the FIN
+			session.streams[5].sentFin()
 			session.garbageCollectStreams()
 			Expect(session.streams).To(HaveLen(2))
 			Expect(session.streams[5]).To(BeNil())
@@ -194,22 +227,6 @@ var _ = Describe("Session", func() {
 			session.garbageCollectStreams()
 			Expect(session.streams).To(HaveLen(2))
 			Expect(session.streams[5]).To(BeNil())
-		})
-
-		It("removes queued StreamFrames from StreamFrameQueue when closing with an error", func() {
-			testErr := errors.New("test")
-			session.handleStreamFrame(&frames.StreamFrame{
-				StreamID: 5,
-				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
-			})
-			f := frames.StreamFrame{
-				StreamID: 5,
-				Data:     []byte("foobar"),
-			}
-			session.streamFrameQueue.Push(&f, true)
-			Expect(session.streams[5]).ToNot(BeNil())
-			session.closeStreamsWithError(testErr)
-			Expect(session.streamFrameQueue.Pop(1000)).To(BeNil())
 		})
 
 		PIt("removes closed streams from BlockedManager", func() {
@@ -268,6 +285,7 @@ var _ = Describe("Session", func() {
 			_, err := session.streams[5].Read([]byte{0})
 			Expect(err).To(MatchError(io.EOF))
 			session.streams[5].Close()
+			session.streams[5].sentFin()
 			session.garbageCollectStreams()
 			err = session.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
@@ -294,22 +312,6 @@ var _ = Describe("Session", func() {
 			Expect(err).To(MatchError("RST_STREAM received with code 42"))
 		})
 
-		It("deletes queued StreamFrames from the StreamFrameQueue", func() {
-			_, err := session.OpenStream(5)
-			Expect(err).ToNot(HaveOccurred())
-			f := frames.StreamFrame{
-				StreamID: 5,
-				Data:     []byte("foobar"),
-			}
-			session.streamFrameQueue.Push(&f, false)
-			err = session.handleRstStreamFrame(&frames.RstStreamFrame{
-				StreamID:  5,
-				ErrorCode: 42,
-			})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(session.streamFrameQueue.Pop(1000)).To(BeNil())
-		})
-
 		It("errors when the stream is not known", func() {
 			err := session.handleRstStreamFrame(&frames.RstStreamFrame{
 				StreamID:  5,
@@ -320,7 +322,7 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("handling WINDOW_UPDATE frames", func() {
-		It("updates the Flow Control Windows of a stream", func() {
+		It("updates the Flow Control Window of a stream", func() {
 			_, err := session.OpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
 			err = session.handleWindowUpdateFrame(&frames.WindowUpdateFrame{
@@ -328,10 +330,10 @@ var _ = Describe("Session", func() {
 				ByteOffset: 0x8000,
 			})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(session.streams[5].flowController.SendWindowSize()).To(Equal(protocol.ByteCount(0x8000)))
+			Expect(session.flowControlManager.SendWindowSize(5)).To(Equal(protocol.ByteCount(0x8000)))
 		})
 
-		It("updates the Flow Control Windows of the connection", func() {
+		It("updates the Flow Control Window of the connection", func() {
 			err := session.handleWindowUpdateFrame(&frames.WindowUpdateFrame{
 				StreamID:   0,
 				ByteOffset: 0x800000,
@@ -340,11 +342,12 @@ var _ = Describe("Session", func() {
 		})
 
 		It("errors when the stream is not known", func() {
+			// See https://github.com/lucas-clemente/quic-go/issues/203
 			err := session.handleWindowUpdateFrame(&frames.WindowUpdateFrame{
 				StreamID:   5,
 				ByteOffset: 1337,
 			})
-			Expect(err).To(MatchError(errWindowUpdateOnInvalidStream))
+			Expect(err).To(HaveOccurred())
 		})
 
 		It("errors when receiving a WindowUpdateFrame for a closed stream", func() {
@@ -456,21 +459,6 @@ var _ = Describe("Session", func() {
 			Expect(conn.written[0]).To(ContainSubstring(string([]byte{byte(entropy), 0x35, 0x01})))
 		})
 
-		It("sends queued stream frames", func() {
-			session.OpenStream(5)
-			session.queueStreamFrame(&frames.StreamFrame{
-				StreamID: 5,
-				Data:     []byte("foobar"),
-			})
-			session.receivedPacketHandler.ReceivedPacket(1, true)
-			err := session.sendPacket()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(conn.written).To(HaveLen(1))
-			// test for the beginning of an ACK frame: TypeByte until LargestObserved
-			Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x40, 0x2, 0x1})))
-			Expect(conn.written[0]).To(ContainSubstring(string("foobar")))
-		})
-
 		It("sends a WindowUpdate frame", func() {
 			_, err := session.OpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
@@ -503,48 +491,6 @@ var _ = Describe("Session", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(conn.written).To(HaveLen(1))
 			Expect(conn.written[0]).To(ContainSubstring(string([]byte("PRST"))))
-		})
-
-		PContext("Blocked", func() {
-			It("queues a Blocked frames", func() {
-				len := 500
-				frame := frames.StreamFrame{
-					StreamID: 0x1337,
-					Data:     bytes.Repeat([]byte{'f'}, len),
-				}
-				session.streamBlocked(0x1337, protocol.ByteCount(len))
-				session.packer.AddStreamFrame(frame)
-				err := session.sendPacket()
-				Expect(err).NotTo(HaveOccurred())
-				Expect(conn.written).To(HaveLen(1))
-				Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x05, 0x37, 0x13, 0, 0})))
-			})
-
-			It("does not send a blocked frame for a stream if a WindowUpdate arrived before", func() {
-				len := 500
-				_, err := session.OpenStream(0x1337)
-				Expect(err).ToNot(HaveOccurred())
-				session.streamBlocked(0x1337, protocol.ByteCount(len))
-				wuf := frames.WindowUpdateFrame{
-					StreamID:   0x1337,
-					ByteOffset: protocol.ByteCount(len * 2),
-				}
-				err = session.handleWindowUpdateFrame(&wuf)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(session.blockedManager.GetBlockedFrame(0x1337, protocol.ByteCount(len))).To(BeNil())
-			})
-
-			It("does not send a blocked frame for the connection if a WindowUpdate arrived before", func() {
-				len := 500
-				session.streamBlocked(0, protocol.ByteCount(len))
-				wuf := frames.WindowUpdateFrame{
-					StreamID:   0,
-					ByteOffset: protocol.ByteCount(len * 2),
-				}
-				err := session.handleWindowUpdateFrame(&wuf)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(session.blockedManager.GetBlockedFrame(0, protocol.ByteCount(len))).To(BeNil())
-			})
 		})
 	})
 
@@ -598,91 +544,89 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("scheduling sending", func() {
-		It("sends after queuing a stream frame", func() {
+		It("sends after writing to a stream", func(done Done) {
 			Expect(session.sendingScheduled).NotTo(Receive())
-			err := session.queueStreamFrame(&frames.StreamFrame{StreamID: 1})
-			Expect(err).ToNot(HaveOccurred())
-			// Try again, so that we detect blocking scheduleSending
-			err = session.queueStreamFrame(&frames.StreamFrame{StreamID: 1})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(session.sendingScheduled).To(Receive())
+			s, err := session.OpenStream(3)
+			Expect(err).NotTo(HaveOccurred())
+			go func() {
+				s.Write([]byte("foobar"))
+				close(done)
+			}()
+			Eventually(session.sendingScheduled).Should(Receive())
+			s.(*stream).getDataForWriting(1000) // unblock
 		})
 
 		Context("bundling of small packets", func() {
-			It("bundles two small frames into one packet", func() {
-				session.OpenStream(5)
+			It("bundles two small frames of different streams into one packet", func() {
+				s1, err := session.OpenStream(5)
+				Expect(err).NotTo(HaveOccurred())
+				s2, err := session.OpenStream(7)
+				Expect(err).NotTo(HaveOccurred())
 				go session.run()
-
-				err := session.queueStreamFrame(&frames.StreamFrame{
-					StreamID: 5,
-					Data:     []byte("foobar1"),
-				})
-				Expect(err).ToNot(HaveOccurred())
-				err = session.queueStreamFrame(&frames.StreamFrame{
-					StreamID: 5,
-					Data:     []byte("foobar2"),
-				})
-				Expect(err).ToNot(HaveOccurred())
+				go func() {
+					_, err := s1.Write([]byte("foobar1"))
+					Expect(err).NotTo(HaveOccurred())
+				}()
+				_, err = s2.Write([]byte("foobar2"))
+				Expect(err).NotTo(HaveOccurred())
 				time.Sleep(10 * time.Millisecond)
 				Expect(conn.written).To(HaveLen(1))
 			})
 
-			It("sends out two big frames in two packet", func() {
-				session.OpenStream(5)
+			PIt("bundles two small frames of the same stream into one packet", func() {
+				s, err := session.OpenStream(5)
+				Expect(err).NotTo(HaveOccurred())
 				go session.run()
-
-				err := session.queueStreamFrame(&frames.StreamFrame{
-					StreamID: 5,
-					Data:     bytes.Repeat([]byte{'e'}, int(protocol.SmallPacketPayloadSizeThreshold+50)),
-				})
-				Expect(err).ToNot(HaveOccurred())
-				err = session.queueStreamFrame(&frames.StreamFrame{
-					StreamID: 5,
-					Data:     bytes.Repeat([]byte{'f'}, int(protocol.SmallPacketPayloadSizeThreshold+50)),
-				})
-				Expect(err).ToNot(HaveOccurred())
-				time.Sleep(10 * time.Millisecond)
-				Expect(conn.written).To(HaveLen(2))
+				_, err = s.Write([]byte("foobar1"))
+				Expect(err).NotTo(HaveOccurred())
+				_, err = s.Write([]byte("foobar2"))
+				Expect(err).NotTo(HaveOccurred())
+				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(1))
+				Consistently(func() [][]byte { return conn.written }).Should(HaveLen(1))
 			})
 
-			It("sends out two small frames that are written to long after one another into two packet", func() {
-				session.OpenStream(5)
+			It("sends out two big frames in two packets", func() {
+				s1, err := session.OpenStream(5)
+				Expect(err).NotTo(HaveOccurred())
+				s2, err := session.OpenStream(7)
+				Expect(err).NotTo(HaveOccurred())
 				go session.run()
+				go func() {
+					defer GinkgoRecover()
+					_, err := s1.Write(bytes.Repeat([]byte{'e'}, int(protocol.SmallPacketPayloadSizeThreshold+50)))
+					Expect(err).ToNot(HaveOccurred())
+				}()
+				_, err = s2.Write(bytes.Repeat([]byte{'e'}, int(protocol.SmallPacketPayloadSizeThreshold+50)))
+				Expect(err).ToNot(HaveOccurred())
+				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(2))
+			})
 
-				err := session.queueStreamFrame(&frames.StreamFrame{
-					StreamID: 5,
-					Data:     []byte("foobar1"),
-				})
-				Expect(err).ToNot(HaveOccurred())
-				time.Sleep(20 * protocol.SmallPacketSendDelay)
-				err = session.queueStreamFrame(&frames.StreamFrame{
-					StreamID: 5,
-					Data:     []byte("foobar2"),
-				})
-				Expect(err).ToNot(HaveOccurred())
-				time.Sleep(10 * time.Millisecond)
-				Expect(conn.written).To(HaveLen(2))
+			It("sends out two small frames that are written to long after one another into two packets", func() {
+				s, err := session.OpenStream(5)
+				Expect(err).NotTo(HaveOccurred())
+				go session.run()
+				_, err = s.Write([]byte("foobar1"))
+				Expect(err).NotTo(HaveOccurred())
+				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(1))
+				_, err = s.Write([]byte("foobar2"))
+				Expect(err).NotTo(HaveOccurred())
+				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(2))
 			})
 
 			It("sends a queued ACK frame only once", func() {
-				session.OpenStream(5)
-				go session.run()
-
 				packetNumber := protocol.PacketNumber(0x1337)
 				session.receivedPacketHandler.ReceivedPacket(packetNumber, true)
-				err := session.queueStreamFrame(&frames.StreamFrame{
-					StreamID: 5,
-					Data:     []byte("foobar1"),
-				})
-				Expect(err).ToNot(HaveOccurred())
-				time.Sleep(20 * protocol.SmallPacketSendDelay)
-				err = session.queueStreamFrame(&frames.StreamFrame{
-					StreamID: 5,
-					Data:     []byte("foobar2"),
-				})
-				Expect(err).ToNot(HaveOccurred())
-				time.Sleep(10 * time.Millisecond)
-				Expect(conn.written).To(HaveLen(2))
+
+				s, err := session.OpenStream(5)
+				Expect(err).NotTo(HaveOccurred())
+				go session.run()
+				_, err = s.Write([]byte("foobar1"))
+				Expect(err).NotTo(HaveOccurred())
+				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(1))
+				_, err = s.Write([]byte("foobar2"))
+				Expect(err).NotTo(HaveOccurred())
+
+				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(2))
 				Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x37, 0x13})))
 				Expect(conn.written[1]).ToNot(ContainSubstring(string([]byte{0x37, 0x13})))
 			})
@@ -734,7 +678,6 @@ var _ = Describe("Session", func() {
 			handshake.TagICSL: {0, 0, 0, 0},
 		})
 		session.packer.connectionParametersManager = session.connectionParametersManager
-		session.packer.sentPacketHandler = newMockSentPacketHandler()
 		session.run() // Would normally not return
 		Expect(conn.written[0]).To(ContainSubstring("No recent network activity."))
 		close(done)
@@ -805,6 +748,7 @@ var _ = Describe("Session", func() {
 				Expect(err).NotTo(HaveOccurred())
 				err = s.Close()
 				Expect(err).NotTo(HaveOccurred())
+				s.(*stream).sentFin()
 				s.CloseRemote(0)
 				_, err = s.Read([]byte("a"))
 				Expect(err).To(MatchError(io.EOF))

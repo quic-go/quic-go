@@ -32,7 +32,7 @@ func NewFlowControlManager(connectionParametersManager *handshake.ConnectionPara
 		contributesToConnectionFlowControl: make(map[protocol.StreamID]bool),
 	}
 	// initialize connection level flow controller
-	fcm.streamFlowController[0] = NewFlowController(0, connectionParametersManager)
+	fcm.streamFlowController[0] = newFlowController(0, connectionParametersManager)
 	fcm.contributesToConnectionFlowControl[0] = false
 	return &fcm
 }
@@ -46,7 +46,7 @@ func (f *flowControlManager) NewStream(streamID protocol.StreamID, contributesTo
 		return
 	}
 
-	f.streamFlowController[streamID] = NewFlowController(streamID, f.connectionParametersManager)
+	f.streamFlowController[streamID] = newFlowController(streamID, f.connectionParametersManager)
 	f.contributesToConnectionFlowControl[streamID] = contributesToConnectionFlow
 }
 
@@ -178,7 +178,7 @@ func (f *flowControlManager) StreamContributesToConnectionFlowControl(streamID p
 	return contributes, nil
 }
 
-func (f *flowControlManager) getFlowController(streamID protocol.StreamID) (FlowController, error) {
+func (f *flowControlManager) getFlowController(streamID protocol.StreamID) (*flowController, error) {
 	streamFlowController, ok := f.streamFlowController[streamID]
 	if !ok {
 		return nil, errMapAccess

@@ -58,11 +58,9 @@ type Session struct {
 	stopWaitingManager    ackhandlerlegacy.StopWaitingManager
 	windowUpdateManager   *windowUpdateManager
 	blockedManager        *blockedManager
-	streamFrameQueue      *streamFrameQueue
+	streamFramer          *streamFramer
 
 	flowControlManager flowcontrol.FlowControlManager
-	// TODO: remove
-	flowController flowcontrol.FlowController // connection level flow controller
 
 	unpacker unpacker
 	packer   *packetPacker
@@ -108,11 +106,9 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		sentPacketHandler:           ackhandlerlegacy.NewSentPacketHandler(stopWaitingManager),
 		receivedPacketHandler:       ackhandlerlegacy.NewReceivedPacketHandler(),
 		stopWaitingManager:          stopWaitingManager,
-		flowController:              flowcontrol.NewFlowController(0, connectionParametersManager),
 		flowControlManager:          flowControlManager,
 		windowUpdateManager:         newWindowUpdateManager(),
 		blockedManager:              newBlockedManager(),
-		streamFrameQueue:            newStreamFrameQueue(flowControlManager),
 		receivedPackets:             make(chan receivedPacket, protocol.MaxSessionUnprocessedPackets),
 		closeChan:                   make(chan struct{}, 1),
 		sendingScheduled:            make(chan struct{}, 1),
@@ -130,7 +126,8 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		return nil, err
 	}
 
-	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.sentPacketHandler, session.connectionParametersManager, session.blockedManager, session.streamFrameQueue, v)
+	session.streamFramer = newStreamFramer(&session.streams, &session.streamsMutex, flowControlManager)
+	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.connectionParametersManager, session.blockedManager, session.streamFramer, v)
 	session.unpacker = &packetUnpacker{aead: session.cryptoSetup, version: v}
 
 	return session, err
@@ -345,43 +342,15 @@ func (s *Session) isValidStreamID(streamID protocol.StreamID) bool {
 }
 
 func (s *Session) handleWindowUpdateFrame(frame *frames.WindowUpdateFrame) error {
-	if frame.StreamID == 0 {
-		updated := s.flowController.UpdateSendWindow(frame.ByteOffset)
-		if updated {
-			s.blockedManager.RemoveBlockedStream(0)
-		}
-		s.streamsMutex.RLock()
-		// tell all streams that the connection-level was updated
-		for _, stream := range s.streams {
-			if stream != nil {
-				stream.ConnectionFlowControlWindowUpdated()
-			}
-		}
-		s.streamsMutex.RUnlock()
-	} else {
-		s.streamsMutex.RLock()
-		defer s.streamsMutex.RUnlock()
-		stream, streamExists := s.streams[frame.StreamID]
-		if !streamExists {
-			return errWindowUpdateOnInvalidStream
-		}
-		if stream == nil {
+	s.streamsMutex.RLock()
+	defer s.streamsMutex.RUnlock()
+	if frame.StreamID != 0 {
+		if s, ok := s.streams[frame.StreamID]; ok && s == nil {
 			return errWindowUpdateOnClosedStream
 		}
-
-		updated := stream.UpdateSendFlowControlWindow(frame.ByteOffset)
-		if updated {
-			s.blockedManager.RemoveBlockedStream(frame.StreamID)
-		}
 	}
-
-	// TODO: only use this once the other flowController is removed
 	_, err := s.flowControlManager.UpdateWindow(frame.StreamID, frame.ByteOffset)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 // TODO: Handle frame.byteOffset
@@ -446,7 +415,6 @@ func (s *Session) closeStreamsWithError(err error) {
 }
 
 func (s *Session) closeStreamWithError(str *stream, err error) {
-	s.streamFrameQueue.RemoveStream(str.StreamID())
 	str.RegisterError(err)
 }
 
@@ -486,7 +454,7 @@ func (s *Session) maybeSendPacket() error {
 	}
 
 	// note that maxPacketSize can get (much) larger than protocol.MaxPacketSize if there is a long queue of StreamFrames
-	maxPacketSize += s.streamFrameQueue.ByteLen()
+	maxPacketSize += s.streamFramer.EstimatedDataLen()
 
 	if maxPacketSize > protocol.SmallPacketPayloadSizeThreshold {
 		return s.sendPacket()
@@ -528,7 +496,7 @@ func (s *Session) sendPacket() error {
 		// resend the frames that were in the packet
 		controlFrames = append(controlFrames, retransmitPacket.GetControlFramesForRetransmission()...)
 		for _, streamFrame := range retransmitPacket.GetStreamFramesForRetransmission() {
-			s.packer.AddHighPrioStreamFrame(*streamFrame)
+			s.streamFramer.AddFrameForRetransmission(streamFrame)
 		}
 	}
 
@@ -547,7 +515,7 @@ func (s *Session) sendPacket() error {
 	}
 
 	stopWaitingFrame := s.stopWaitingManager.GetStopWaitingFrame()
-	packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames)
+	packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, s.sentPacketHandler.GetLargestObserved())
 
 	if err != nil {
 		return err
@@ -575,7 +543,7 @@ func (s *Session) sendPacket() error {
 		return err
 	}
 
-	if s.streamFrameQueue.Len() > 0 {
+	if s.streamFramer.HasData() {
 		s.scheduleSending()
 	}
 
@@ -583,7 +551,7 @@ func (s *Session) sendPacket() error {
 }
 
 func (s *Session) sendConnectionClose(quicErr *qerr.QuicError) error {
-	packet, err := s.packer.PackConnectionClose(&frames.ConnectionCloseFrame{ErrorCode: quicErr.ErrorCode, ReasonPhrase: quicErr.ErrorMessage})
+	packet, err := s.packer.PackConnectionClose(&frames.ConnectionCloseFrame{ErrorCode: quicErr.ErrorCode, ReasonPhrase: quicErr.ErrorMessage}, s.sentPacketHandler.GetLargestObserved())
 	if err != nil {
 		return err
 	}
@@ -607,21 +575,10 @@ func (s *Session) logPacket(packet *packedPacket) {
 	}
 }
 
-// queueStreamFrame queues a frame for sending to the client
-func (s *Session) queueStreamFrame(frame *frames.StreamFrame) error {
-	s.packer.AddStreamFrame(*frame)
-	s.scheduleSending()
-	return nil
-}
-
 // updateReceiveFlowControlWindow updates the flow control window for a stream
 func (s *Session) updateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
 	s.windowUpdateManager.SetStreamOffset(streamID, byteOffset)
 	return nil
-}
-
-func (s *Session) streamBlocked(streamID protocol.StreamID, byteOffset protocol.ByteCount) {
-	s.packer.AddBlocked(streamID, byteOffset)
 }
 
 // OpenStream creates a new stream open for reading and writing
@@ -651,7 +608,7 @@ func (s *Session) newStreamImpl(id protocol.StreamID) (*stream, error) {
 	if _, ok := s.streams[id]; ok {
 		return nil, fmt.Errorf("Session: stream with ID %d already exists", id)
 	}
-	stream, err := newStream(s, s.connectionParametersManager, s.flowController, s.flowControlManager, id)
+	stream, err := newStream(s, s.connectionParametersManager, s.flowControlManager, id)
 	if err != nil {
 		return nil, err
 	}
