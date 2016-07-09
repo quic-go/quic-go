@@ -57,7 +57,6 @@ type Session struct {
 	receivedPacketHandler ackhandlerlegacy.ReceivedPacketHandler
 	stopWaitingManager    ackhandlerlegacy.StopWaitingManager
 	windowUpdateManager   *windowUpdateManager
-	blockedManager        *blockedManager
 	streamFramer          *streamFramer
 
 	flowControlManager flowcontrol.FlowControlManager
@@ -108,7 +107,6 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		stopWaitingManager:          stopWaitingManager,
 		flowControlManager:          flowControlManager,
 		windowUpdateManager:         newWindowUpdateManager(),
-		blockedManager:              newBlockedManager(),
 		receivedPackets:             make(chan receivedPacket, protocol.MaxSessionUnprocessedPackets),
 		closeChan:                   make(chan struct{}, 1),
 		sendingScheduled:            make(chan struct{}, 1),
@@ -127,7 +125,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	}
 
 	session.streamFramer = newStreamFramer(&session.streams, &session.streamsMutex, flowControlManager)
-	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.connectionParametersManager, session.blockedManager, session.streamFramer, v)
+	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.connectionParametersManager, session.streamFramer, v)
 	session.unpacker = &packetUnpacker{aead: session.cryptoSetup, version: v}
 
 	return session, err
@@ -633,9 +631,6 @@ func (s *Session) garbageCollectStreams() {
 	for k, v := range s.streams {
 		if v == nil {
 			continue
-		}
-		if v.finishedWriting() {
-			s.blockedManager.RemoveBlockedStream(k)
 		}
 		if v.finishedReading() {
 			s.windowUpdateManager.RemoveStream(k)

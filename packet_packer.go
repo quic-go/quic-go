@@ -26,20 +26,18 @@ type packetPacker struct {
 
 	connectionParametersManager *handshake.ConnectionParametersManager
 
-	streamFramer   *streamFramer
-	controlFrames  []frames.Frame
-	blockedManager *blockedManager
+	streamFramer  *streamFramer
+	controlFrames []frames.Frame
 
 	lastPacketNumber protocol.PacketNumber
 }
 
-func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.CryptoSetup, connectionParametersHandler *handshake.ConnectionParametersManager, blockedManager *blockedManager, streamFramer *streamFramer, version protocol.VersionNumber) *packetPacker {
+func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.CryptoSetup, connectionParametersHandler *handshake.ConnectionParametersManager, streamFramer *streamFramer, version protocol.VersionNumber) *packetPacker {
 	return &packetPacker{
 		cryptoSetup:                 cryptoSetup,
 		connectionID:                connectionID,
 		connectionParametersManager: connectionParametersHandler,
 		version:                     version,
-		blockedManager:              blockedManager,
 		streamFramer:                streamFramer,
 	}
 }
@@ -212,7 +210,7 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 		frameHeaderLen, _ := frame.MinLength(p.version) // StreamFrame.MinLength *never* returns an error
 		payloadLength += frameHeaderLen + frame.DataLen()
 
-		blockedFrame := p.blockedManager.GetBlockedFrame(frame.StreamID, frame.Offset+frame.DataLen())
+		blockedFrame := p.streamFramer.PopBlockedFrame()
 		if blockedFrame != nil {
 			blockedLength, _ := blockedFrame.MinLength(p.version) // BlockedFrame.MinLength *never* returns an error
 			if payloadLength+blockedLength <= maxFrameSize {

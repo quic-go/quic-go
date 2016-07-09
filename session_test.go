@@ -229,20 +229,6 @@ var _ = Describe("Session", func() {
 			Expect(session.streams[5]).To(BeNil())
 		})
 
-		PIt("removes closed streams from BlockedManager", func() {
-			session.handleStreamFrame(&frames.StreamFrame{
-				StreamID: 5,
-				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
-			})
-			Expect(session.streams[5]).ToNot(BeNil())
-			session.blockedManager.AddBlockedStream(5, 4)
-			Expect(session.blockedManager.blockedStreams).To(HaveKey(protocol.StreamID(5)))
-			err := session.streams[5].Close()
-			Expect(err).ToNot(HaveOccurred())
-			session.garbageCollectStreams()
-			Expect(session.blockedManager.blockedStreams).ToNot(HaveKey(protocol.StreamID(5)))
-		})
-
 		It("removes closed streams from WindowUpdateManager", func() {
 			session.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,

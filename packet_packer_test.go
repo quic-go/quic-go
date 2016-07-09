@@ -29,7 +29,6 @@ var _ = Describe("Packet packer", func() {
 		packer = &packetPacker{
 			cryptoSetup:                 &handshake.CryptoSetup{},
 			connectionParametersManager: handshake.NewConnectionParamatersManager(),
-			blockedManager:              newBlockedManager(),
 			streamFramer:                streamFramer,
 		}
 		publicHeaderLen = 1 + 8 + 1 // 1 flag byte, 8 connection ID, 1 packet number
@@ -385,10 +384,10 @@ var _ = Describe("Packet packer", func() {
 		})
 	})
 
-	PContext("Blocked frames", func() {
+	Context("Blocked frames", func() {
 		It("adds a blocked frame to a packet if there is enough space", func() {
 			length := 100
-			// packer.AddBlocked(5, protocol.ByteCount(length))
+			streamFramer.blockedFrameQueue = []*frames.BlockedFrame{{StreamID: 5}}
 			f := &frames.StreamFrame{
 				StreamID: 5,
 				Data:     bytes.Repeat([]byte{'f'}, length),
@@ -402,7 +401,7 @@ var _ = Describe("Packet packer", func() {
 
 		It("removes the dataLen attribute from the last StreamFrame, even if it inserted a BlockedFrame before", func() {
 			length := 100
-			// packer.AddBlocked(5, protocol.ByteCount(length))
+			streamFramer.blockedFrameQueue = []*frames.BlockedFrame{{StreamID: 5}}
 			f := &frames.StreamFrame{
 				StreamID: 5,
 				Data:     bytes.Repeat([]byte{'f'}, length),
@@ -416,7 +415,7 @@ var _ = Describe("Packet packer", func() {
 
 		It("packs a BlockedFrame in the next packet if the current packet doesn't have enough space", func() {
 			dataLen := int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLen) - (1 + 1 + 2) + 1
-			// packer.AddBlocked(5, protocol.ByteCount(dataLen))
+			streamFramer.blockedFrameQueue = []*frames.BlockedFrame{{StreamID: 5}}
 			f := &frames.StreamFrame{
 				StreamID: 5,
 				Data:     bytes.Repeat([]byte{'f'}, dataLen),
@@ -441,7 +440,7 @@ var _ = Describe("Packet packer", func() {
 			streamFrameHeaderLen, _ := f1.MinLength(0)
 			// this is the maximum dataLen of a StreamFrames that fits into one packet
 			dataLen := int(protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen - streamFrameHeaderLen - blockedFrameLen)
-			// packer.AddBlocked(5, protocol.ByteCount(dataLen))
+			streamFramer.blockedFrameQueue = []*frames.BlockedFrame{{StreamID: 5}}
 			f1.Data = bytes.Repeat([]byte{'f'}, dataLen)
 			streamFramer.AddFrameForRetransmission(f1)
 			p, err := packer.PackPacket(nil, []frames.Frame{}, 0)
@@ -453,10 +452,8 @@ var _ = Describe("Packet packer", func() {
 			Expect(p).To(BeNil())
 		})
 
-		// TODO: fix this once connection-level BlockedFrames are sent out at the right time
-		// see https://github.com/lucas-clemente/quic-go/issues/113
 		It("packs a connection-level BlockedFrame", func() {
-			// packer.AddBlocked(0, 0x1337)
+			streamFramer.blockedFrameQueue = []*frames.BlockedFrame{{StreamID: 0}}
 			f := &frames.StreamFrame{
 				StreamID: 5,
 				Data:     []byte("foobar"),
