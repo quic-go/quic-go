@@ -12,7 +12,7 @@ type flowControlManager struct {
 	connectionParametersManager        *handshake.ConnectionParametersManager
 	streamFlowController               map[protocol.StreamID]*flowController
 	contributesToConnectionFlowControl map[protocol.StreamID]bool
-	mutex                              sync.Mutex
+	mutex                              sync.RWMutex
 }
 
 var (
@@ -139,8 +139,8 @@ func (f *flowControlManager) AddBytesSent(streamID protocol.StreamID, n protocol
 
 // must not be called with StreamID 0
 func (f *flowControlManager) SendWindowSize(streamID protocol.StreamID) (protocol.ByteCount, error) {
-	f.mutex.Lock()
-	defer f.mutex.Unlock()
+	f.mutex.RLock()
+	defer f.mutex.RUnlock()
 
 	streamFlowController, err := f.getFlowController(streamID)
 	if err != nil {
@@ -151,6 +151,9 @@ func (f *flowControlManager) SendWindowSize(streamID protocol.StreamID) (protoco
 }
 
 func (f *flowControlManager) RemainingConnectionWindowSize() protocol.ByteCount {
+	f.mutex.RLock()
+	defer f.mutex.RUnlock()
+
 	return f.streamFlowController[0].SendWindowSize()
 }
 
@@ -168,8 +171,8 @@ func (f *flowControlManager) UpdateWindow(streamID protocol.StreamID, offset pro
 }
 
 func (f *flowControlManager) StreamContributesToConnectionFlowControl(streamID protocol.StreamID) (bool, error) {
-	f.mutex.Lock()
-	defer f.mutex.Unlock()
+	f.mutex.RLock()
+	defer f.mutex.RUnlock()
 
 	contributes, ok := f.contributesToConnectionFlowControl[streamID]
 	if !ok {
