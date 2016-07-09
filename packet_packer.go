@@ -20,6 +20,8 @@ type packedPacket struct {
 }
 
 type packetPacker struct {
+	lastPacketNumber protocol.PacketNumber
+
 	connectionID protocol.ConnectionID
 	version      protocol.VersionNumber
 	cryptoSetup  *handshake.CryptoSetup
@@ -28,8 +30,6 @@ type packetPacker struct {
 
 	streamFramer  *streamFramer
 	controlFrames []frames.Frame
-
-	lastPacketNumber protocol.PacketNumber
 }
 
 func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.CryptoSetup, connectionParametersHandler *handshake.ConnectionParametersManager, streamFramer *streamFramer, version protocol.VersionNumber) *packetPacker {
