@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"sync/atomic"
 
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -20,11 +19,10 @@ type packedPacket struct {
 }
 
 type packetPacker struct {
+	connectionID     protocol.ConnectionID
+	version          protocol.VersionNumber
+	cryptoSetup      *handshake.CryptoSetup
 	lastPacketNumber protocol.PacketNumber
-
-	connectionID protocol.ConnectionID
-	version      protocol.VersionNumber
-	cryptoSetup  *handshake.CryptoSetup
 
 	connectionParametersManager *handshake.ConnectionParametersManager
 
@@ -60,10 +58,8 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		p.controlFrames = append(p.controlFrames, controlFrames...)
 	}
 
-	currentPacketNumber := protocol.PacketNumber(atomic.AddUint64(
-		(*uint64)(&p.lastPacketNumber),
-		1,
-	))
+	p.lastPacketNumber++
+	currentPacketNumber := p.lastPacketNumber
 
 	// cryptoSetup needs to be locked here, so that the AEADs are not changed between
 	// calling DiversificationNonce() and Seal().
