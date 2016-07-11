@@ -13,12 +13,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type mockStreamHandler struct {
-	scheduledSending bool
-}
-
-func (m *mockStreamHandler) scheduleSending() { m.scheduledSending = true }
-
 type mockFlowControlHandler struct {
 	streamsContributing []protocol.StreamID
 
@@ -96,17 +90,21 @@ func (m *mockFlowControlHandler) StreamContributesToConnectionFlowControl(stream
 
 var _ = Describe("Stream", func() {
 	var (
-		str     *stream
-		handler *mockStreamHandler
+		str          *stream
+		onDataCalled bool
 	)
 
+	onData := func() {
+		onDataCalled = true
+	}
+
 	BeforeEach(func() {
+		onDataCalled = false
 		var streamID protocol.StreamID = 1337
-		handler = &mockStreamHandler{}
 		cpm := handshake.NewConnectionParamatersManager()
 		flowControlManager := flowcontrol.NewFlowControlManager(cpm)
 		flowControlManager.NewStream(streamID, true)
-		str, _ = newStream(handler, cpm, flowControlManager, streamID)
+		str, _ = newStream(onData, cpm, flowControlManager, streamID)
 	})
 
 	It("gets stream id", func() {
@@ -299,7 +297,7 @@ var _ = Describe("Stream", func() {
 				defer str.mutex.Unlock()
 				return str.dataForWriting
 			}).Should(Equal([]byte("foobar")))
-			Expect(handler.scheduledSending).To(BeTrue())
+			Expect(onDataCalled).To(BeTrue())
 			Expect(str.lenOfDataForWriting()).To(Equal(protocol.ByteCount(6)))
 			data := str.getDataForWriting(1000)
 			Expect(data).To(Equal([]byte("foobar")))

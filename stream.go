@@ -13,10 +13,6 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
-type streamHandler interface {
-	scheduleSending()
-}
-
 var (
 	errFlowControlViolation           = qerr.FlowControlReceivedTooMuchData
 	errConnectionFlowControlViolation = qerr.FlowControlReceivedTooMuchData
@@ -27,7 +23,7 @@ var (
 // Read() and Write() may be called concurrently, but multiple calls to Read() or Write() individually must be synchronized manually.
 type stream struct {
 	streamID protocol.StreamID
-	session  streamHandler
+	onData   func()
 
 	readPosInFrame int
 	writeOffset    protocol.ByteCount
@@ -55,9 +51,9 @@ type stream struct {
 }
 
 // newStream creates a new Stream
-func newStream(session streamHandler, connectionParameterManager *handshake.ConnectionParametersManager, flowControlManager flowcontrol.FlowControlManager, StreamID protocol.StreamID) (*stream, error) {
+func newStream(onData func(), connectionParameterManager *handshake.ConnectionParametersManager, flowControlManager flowcontrol.FlowControlManager, StreamID protocol.StreamID) (*stream, error) {
 	s := &stream{
-		session:                            session,
+		onData:                             onData,
 		streamID:                           StreamID,
 		flowControlManager:                 flowControlManager,
 		contributesToConnectionFlowControl: true,
@@ -161,7 +157,7 @@ func (s *stream) Write(p []byte) (int, error) {
 	s.dataForWriting = make([]byte, len(p))
 	copy(s.dataForWriting, p)
 
-	s.session.scheduleSending()
+	s.onData()
 
 	for s.dataForWriting != nil && s.err == nil {
 		s.doneWritingOrErrCond.Wait()
@@ -201,7 +197,7 @@ func (s *stream) getDataForWriting(maxBytes protocol.ByteCount) []byte {
 // Close implements io.Closer
 func (s *stream) Close() error {
 	atomic.StoreInt32(&s.closed, 1)
-	s.session.scheduleSending()
+	s.onData()
 	return nil
 }
 
