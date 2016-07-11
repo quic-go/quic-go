@@ -42,9 +42,6 @@ const MaxStreamsMultiplier = 1.1
 // TODO: set a reasonable value here
 const MaxIdleConnectionStateLifetime = 60 * time.Second
 
-// WindowUpdateNumRepetitions is the number of times the same WindowUpdate frame will be sent to the client
-const WindowUpdateNumRepetitions uint8 = 2
-
 // MaxSessionUnprocessedPackets is the max number of packets stored in each session that are not yet processed.
 const MaxSessionUnprocessedPackets = 128
 

@@ -56,7 +56,6 @@ type Session struct {
 	sentPacketHandler     ackhandlerlegacy.SentPacketHandler
 	receivedPacketHandler ackhandlerlegacy.ReceivedPacketHandler
 	stopWaitingManager    ackhandlerlegacy.StopWaitingManager
-	windowUpdateManager   *windowUpdateManager
 	streamFramer          *streamFramer
 
 	flowControlManager flowcontrol.FlowControlManager
@@ -108,7 +107,6 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		receivedPacketHandler:       ackhandlerlegacy.NewReceivedPacketHandler(),
 		stopWaitingManager:          stopWaitingManager,
 		flowControlManager:          flowControlManager,
-		windowUpdateManager:         newWindowUpdateManager(),
 		receivedPackets:             make(chan receivedPacket, protocol.MaxSessionUnprocessedPackets),
 		closeChan:                   make(chan *qerr.QuicError, 1),
 		sendingScheduled:            make(chan struct{}, 1),
@@ -510,7 +508,10 @@ func (s *Session) sendPacket() error {
 		}
 	}
 
-	windowUpdateFrames := s.windowUpdateManager.GetWindowUpdateFrames()
+	windowUpdateFrames, err := s.getWindowUpdateFrames()
+	if err != nil {
+		return err
+	}
 
 	for _, wuf := range windowUpdateFrames {
 		controlFrames = append(controlFrames, wuf)
@@ -532,6 +533,10 @@ func (s *Session) sendPacket() error {
 	}
 	if packet == nil {
 		return nil
+	}
+
+	for _, f := range windowUpdateFrames {
+		s.packer.QueueControlFrameForNextPacket(f)
 	}
 
 	err = s.sentPacketHandler.SentPacket(&ackhandlerlegacy.Packet{
@@ -583,12 +588,6 @@ func (s *Session) logPacket(packet *packedPacket) {
 			frames.LogFrame(frame, true)
 		}
 	}
-}
-
-// updateReceiveFlowControlWindow updates the flow control window for a stream
-func (s *Session) updateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
-	s.windowUpdateManager.SetStreamOffset(streamID, byteOffset)
-	return nil
 }
 
 // OpenStream creates a new stream open for reading and writing
@@ -644,9 +643,6 @@ func (s *Session) garbageCollectStreams() {
 		if v == nil {
 			continue
 		}
-		if v.finishedReading() {
-			s.windowUpdateManager.RemoveStream(k)
-		}
 		if v.finished() {
 			utils.Debugf("Garbage-collecting stream %d", k)
 			atomic.AddUint32(&s.openStreamsCount, ^uint32(0)) // decrement
@@ -681,4 +677,32 @@ func (s *Session) tryDecryptingQueuedPackets() {
 		s.handlePacket(p.remoteAddr, p.publicHeader, p.data)
 	}
 	s.undecryptablePackets = s.undecryptablePackets[:0]
+}
+
+func (s *Session) getWindowUpdateFrames() ([]*frames.WindowUpdateFrame, error) {
+	s.streamsMutex.RLock()
+	defer s.streamsMutex.RUnlock()
+
+	var res []*frames.WindowUpdateFrame
+
+	for id, str := range s.streams {
+		if str == nil {
+			continue
+		}
+
+		doUpdate, offset, err := s.flowControlManager.MaybeTriggerStreamWindowUpdate(id)
+		if err != nil {
+			return nil, err
+		}
+		if doUpdate {
+			res = append(res, &frames.WindowUpdateFrame{StreamID: id, ByteOffset: offset})
+		}
+	}
+
+	doUpdate, offset := s.flowControlManager.MaybeTriggerConnectionWindowUpdate()
+	if doUpdate {
+		res = append(res, &frames.WindowUpdateFrame{StreamID: 0, ByteOffset: offset})
+	}
+
+	return res, nil
 }

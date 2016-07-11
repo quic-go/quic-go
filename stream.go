@@ -14,7 +14,6 @@ import (
 )
 
 type streamHandler interface {
-	updateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error
 	scheduleSending()
 }
 
@@ -132,7 +131,6 @@ func (s *stream) Read(p []byte) (int, error) {
 		s.readOffset += protocol.ByteCount(m)
 
 		s.flowControlManager.AddBytesRead(s.streamID, protocol.ByteCount(m))
-		s.maybeTriggerWindowUpdate()
 
 		if s.readPosInFrame >= int(frame.DataLen()) {
 			fin := frame.FinBit
@@ -248,25 +246,6 @@ func (s *stream) AddStreamFrame(frame *frames.StreamFrame) error {
 // CloseRemote makes the stream receive a "virtual" FIN stream frame at a given offset
 func (s *stream) CloseRemote(offset protocol.ByteCount) {
 	s.AddStreamFrame(&frames.StreamFrame{FinBit: true, Offset: offset})
-}
-
-func (s *stream) maybeTriggerWindowUpdate() error {
-	// check for stream level window updates
-	doUpdate, byteOffset, err := s.flowControlManager.MaybeTriggerStreamWindowUpdate(s.streamID)
-	if err != nil {
-		return err
-	}
-	if doUpdate {
-		s.session.updateReceiveFlowControlWindow(s.streamID, byteOffset)
-	}
-
-	// check for connection level window updates
-	doUpdate, byteOffset = s.flowControlManager.MaybeTriggerConnectionWindowUpdate()
-	if doUpdate {
-		s.session.updateReceiveFlowControlWindow(0, byteOffset)
-	}
-
-	return nil
 }
 
 // RegisterError is called by session to indicate that an error occurred and the

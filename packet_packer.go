@@ -233,3 +233,7 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 
 	return payloadFrames, nil
 }
+
+func (p *packetPacker) QueueControlFrameForNextPacket(f frames.Frame) {
+	p.controlFrames = append(p.controlFrames, f)
+}

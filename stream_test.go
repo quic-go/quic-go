@@ -14,17 +14,9 @@ import (
 )
 
 type mockStreamHandler struct {
-	receiveFlowControlWindowCalled          bool
-	receiveFlowControlWindowCalledForStream protocol.StreamID
-
 	scheduledSending bool
 }
 
-func (m *mockStreamHandler) updateReceiveFlowControlWindow(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
-	m.receiveFlowControlWindowCalled = true
-	m.receiveFlowControlWindowCalledForStream = streamID
-	return nil
-}
 func (m *mockStreamHandler) scheduleSending() { m.scheduledSending = true }
 
 type mockFlowControlHandler struct {
@@ -416,40 +408,6 @@ var _ = Describe("Stream", func() {
 			Expect(str.flowControlManager.(*mockFlowControlHandler).highestReceivedForStream).To(Equal(str.streamID))
 			Expect(str.flowControlManager.(*mockFlowControlHandler).highestReceived).To(Equal(protocol.ByteCount(2 + 6)))
 		})
-
-		It("updates the flow control window", func() {
-			str.flowControlManager.(*mockFlowControlHandler).triggerStreamWindowUpdate = true
-			frame := frames.StreamFrame{
-				Offset: 0,
-				Data:   []byte("foobar"),
-			}
-			err := str.AddStreamFrame(&frame)
-			Expect(err).ToNot(HaveOccurred())
-			b := make([]byte, 6)
-			n, err := str.Read(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(n).To(Equal(6))
-			Expect(handler.receiveFlowControlWindowCalled).To(BeTrue())
-			Expect(handler.receiveFlowControlWindowCalledForStream).To(Equal(str.streamID))
-		})
-
-		It("updates the connection level flow control window", func() {
-			str.flowControlManager.(*mockFlowControlHandler).triggerConnectionWindowUpdate = true
-			frame := frames.StreamFrame{
-				Offset: 0,
-				Data:   []byte("foobar"),
-			}
-			err := str.AddStreamFrame(&frame)
-			Expect(err).ToNot(HaveOccurred())
-			b := make([]byte, 6)
-			n, err := str.Read(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(n).To(Equal(6))
-			Expect(handler.receiveFlowControlWindowCalled).To(BeTrue())
-			Expect(handler.receiveFlowControlWindowCalledForStream).To(Equal(protocol.StreamID(0)))
-		})
-
-		// TODO: think about flow control violation
 	})
 
 	Context("closing", func() {

@@ -229,17 +229,6 @@ var _ = Describe("Session", func() {
 			Expect(session.streams[5]).To(BeNil())
 		})
 
-		It("removes closed streams from WindowUpdateManager", func() {
-			session.handleStreamFrame(&frames.StreamFrame{
-				StreamID: 5,
-				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
-			})
-			session.updateReceiveFlowControlWindow(5, 0x1337)
-			session.streams[5].eof = 1
-			session.garbageCollectStreams()
-			Expect(session.windowUpdateManager.streamOffsets).ToNot(HaveKey(protocol.StreamID(5)))
-		})
-
 		It("closes empty streams with error", func() {
 			testErr := errors.New("test")
 			session.newStreamImpl(5)
@@ -445,31 +434,19 @@ var _ = Describe("Session", func() {
 			Expect(conn.written[0]).To(ContainSubstring(string([]byte{byte(entropy), 0x35, 0x01})))
 		})
 
-		It("sends a WindowUpdate frame", func() {
+		It("sends two WindowUpdate frames", func() {
 			_, err := session.OpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
-			err = session.updateReceiveFlowControlWindow(5, 0xDECAFBAD)
-			Expect(err).ToNot(HaveOccurred())
+			session.flowControlManager.AddBytesRead(5, protocol.ReceiveStreamFlowControlWindow)
 			err = session.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(conn.written).To(HaveLen(1))
+			err = session.sendPacket()
+			Expect(err).NotTo(HaveOccurred())
+			err = session.sendPacket()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(conn.written).To(HaveLen(2))
 			Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x04, 0x05, 0, 0, 0})))
-		})
-
-		It("repeats a WindowUpdate frame in WindowUpdateNumRepetitions packets", func() {
-			_, err := session.OpenStream(5)
-			Expect(err).ToNot(HaveOccurred())
-			err = session.updateReceiveFlowControlWindow(5, 0xDECAFBAD)
-			Expect(err).ToNot(HaveOccurred())
-			for i := uint8(0); i < protocol.WindowUpdateNumRepetitions; i++ {
-				err = session.sendPacket()
-				Expect(err).NotTo(HaveOccurred())
-				Expect(conn.written[i]).To(ContainSubstring(string([]byte{0x04, 0x05, 0, 0, 0})))
-			}
-			Expect(conn.written).To(HaveLen(int(protocol.WindowUpdateNumRepetitions)))
-			err = session.sendPacket()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(conn.written).To(HaveLen(int(protocol.WindowUpdateNumRepetitions))) // no packet was sent
+			Expect(conn.written[1]).To(ContainSubstring(string([]byte{0x04, 0x05, 0, 0, 0})))
 		})
 
 		It("sends public reset", func() {
@@ -757,6 +734,30 @@ var _ = Describe("Session", func() {
 				LargestObserved: 1,
 			}})
 			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("window updates", func() {
+		It("gets stream level window updates", func() {
+			err := session.flowControlManager.AddBytesRead(1, protocol.ReceiveStreamFlowControlWindow)
+			Expect(err).NotTo(HaveOccurred())
+			frames, err := session.getWindowUpdateFrames()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].StreamID).To(Equal(protocol.StreamID(1)))
+			Expect(frames[0].ByteOffset).To(Equal(protocol.ReceiveStreamFlowControlWindow * 2))
+		})
+
+		It("gets connection level window updates", func() {
+			_, err := session.OpenStream(5)
+			Expect(err).NotTo(HaveOccurred())
+			err = session.flowControlManager.AddBytesRead(5, protocol.ReceiveConnectionFlowControlWindow)
+			Expect(err).NotTo(HaveOccurred())
+			frames, err := session.getWindowUpdateFrames()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].StreamID).To(Equal(protocol.StreamID(0)))
+			Expect(frames[0].ByteOffset).To(Equal(protocol.ReceiveConnectionFlowControlWindow * 2))
 		})
 	})
 })
