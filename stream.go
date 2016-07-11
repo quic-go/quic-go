@@ -46,24 +46,15 @@ type stream struct {
 	doneWritingOrErrCond sync.Cond
 
 	flowControlManager flowcontrol.FlowControlManager
-	// TODO: remove this
-	contributesToConnectionFlowControl bool
 }
 
 // newStream creates a new Stream
 func newStream(onData func(), connectionParameterManager *handshake.ConnectionParametersManager, flowControlManager flowcontrol.FlowControlManager, StreamID protocol.StreamID) (*stream, error) {
 	s := &stream{
-		onData:                             onData,
-		streamID:                           StreamID,
-		flowControlManager:                 flowControlManager,
-		contributesToConnectionFlowControl: true,
-		frameQueue:                         newStreamFrameSorter(),
-	}
-
-	// crypto and header stream don't contribute to connection level flow control
-	// TODO: only include the header stream here when using HTTP2
-	if s.streamID == 1 || s.streamID == 3 {
-		s.contributesToConnectionFlowControl = false
+		onData:             onData,
+		streamID:           StreamID,
+		flowControlManager: flowControlManager,
+		frameQueue:         newStreamFrameSorter(),
 	}
 
 	s.newFrameOrErrCond.L = &s.mutex
