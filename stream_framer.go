@@ -145,11 +145,13 @@ func (f *streamFramer) maybePopNormalFrame(maxBytes protocol.ByteCount) (*frames
 		}
 		maxLen := maxBytes - frameHeaderBytes
 
-		fcAllowance, err := f.getFCAllowanceForStream(s)
-		if err != nil {
-			return nil, err
+		if s.lenOfDataForWriting() != 0 {
+			fcAllowance, err := f.getFCAllowanceForStream(s)
+			if err != nil {
+				return nil, err
+			}
+			maxLen = utils.MinByteCount(maxLen, fcAllowance)
 		}
-		maxLen = utils.MinByteCount(maxLen, fcAllowance)
 
 		if maxLen == 0 {
 			continue
