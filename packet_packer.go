@@ -189,7 +189,7 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 	// however, for the last StreamFrame in the packet, we can omit the DataLen, thus saving 2 bytes and yielding a packet of exactly the correct size
 	maxFrameSize += 2
 
-	for p.streamFramer.HasData() {
+	for {
 		if payloadLength > maxFrameSize {
 			return nil, fmt.Errorf("Packet Packer BUG: packet payload (%d) too large (%d)", payloadLength, maxFrameSize)
 		}
