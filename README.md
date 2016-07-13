@@ -15,7 +15,7 @@ Done:
 
 - Basic protocol with support for QUIC version 30-33
 - HTTP/2 support
-- Crypto (RSA / ECDSA certificates, curve25519 for key exchange, chacha20-poly1305 as cipher)
+- Crypto (RSA / ECDSA certificates, curve25519 for key exchange, AES-GCM or Chacha20-Poly1305 as stream cipher)
 - Loss detection and retransmission (currently fast retransmission & RTO)
 - Flow Control
 - Congestion control using cubic
@@ -55,7 +55,7 @@ Using Chrome:
 
 ## Usage
 
-See the [example server](example/main.go) or our [fork](https://github.com/lucas-clemente/caddy) of caddy. Starting a QUIC server is very similar to the standard lib http in go:
+See the [example server](example/main.go) or the current beta version of [Caddy](https://github.com/mholt/caddy) ([instructions here](https://github.com/mholt/caddy/wiki/QUIC)). Starting a QUIC server is very similar to the standard lib http in go:
 
 ```go
 http.Handle("/", http.FileServer(http.Dir(wwwDir)))
