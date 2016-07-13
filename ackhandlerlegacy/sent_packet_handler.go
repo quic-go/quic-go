@@ -143,11 +143,16 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 }
 
 func (h *sentPacketHandler) calculateExpectedEntropy(ackFrame *frames.AckFrameLegacy) (EntropyAccumulator, error) {
-	packet, ok := h.packetHistory[ackFrame.LargestObserved]
-	if !ok {
-		return 0, ErrMapAccess
+	var expectedEntropy EntropyAccumulator
+	if ackFrame.LargestObserved == h.LargestObserved {
+		expectedEntropy = h.LargestObservedEntropy
+	} else {
+		packet, ok := h.packetHistory[ackFrame.LargestObserved]
+		if !ok {
+			return 0, ErrMapAccess
+		}
+		expectedEntropy = packet.Entropy
 	}
-	expectedEntropy := packet.Entropy
 
 	if ackFrame.HasNACK() { // if the packet has NACKs, the entropy value has to be calculated
 		nackRangeIndex := 0
@@ -168,6 +173,7 @@ func (h *sentPacketHandler) calculateExpectedEntropy(ackFrame *frames.AckFrameLe
 			}
 		}
 	}
+
 	return expectedEntropy, nil
 }
 
@@ -202,12 +208,17 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameLegacy, withPac
 	h.LargestObserved = ackFrame.LargestObserved
 	highestInOrderAckedPacketNumber := ackFrame.GetHighestInOrderPacketNumber()
 
-	// Update the RTT
-	timeDelta := time.Now().Sub(h.packetHistory[h.LargestObserved].sendTime)
-	// TODO: Don't always update RTT
-	h.rttStats.UpdateRTT(timeDelta, ackFrame.DelayTime, time.Now())
-	if utils.Debug() {
-		utils.Debugf("\tEstimated RTT: %dms", h.rttStats.SmoothedRTT()/time.Millisecond)
+	packet, ok := h.packetHistory[h.LargestObserved]
+	if ok {
+		h.LargestObservedEntropy = packet.Entropy
+
+		// Update the RTT
+		timeDelta := time.Now().Sub(packet.sendTime)
+		// TODO: Don't always update RTT
+		h.rttStats.UpdateRTT(timeDelta, ackFrame.DelayTime, time.Now())
+		if utils.Debug() {
+			utils.Debugf("\tEstimated RTT: %dms", h.rttStats.SmoothedRTT()/time.Millisecond)
+		}
 	}
 
 	var ackedPackets congestion.PacketVector
