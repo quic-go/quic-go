@@ -339,6 +339,33 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(handler.packetHistory[8].MissingReports).To(Equal(uint8(1)))
 				Expect(handler.packetHistory[10].MissingReports).To(BeZero())
 			})
+
+			It("processes an ACK frame that would be sent after a late arrival of a packet", func() {
+				largestObserved := 6
+				ack1 := frames.AckFrameNew{
+					LargestAcked: protocol.PacketNumber(largestObserved),
+					LowestAcked:  1,
+					AckRanges: []frames.AckRange{
+						{FirstPacketNumber: 1, LastPacketNumber: 2},
+						{FirstPacketNumber: 4, LastPacketNumber: protocol.PacketNumber(largestObserved)},
+					},
+				}
+				err := handler.ReceivedAck(&ack1, 1)
+				Expect(err).ToNot(HaveOccurred())
+				// Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(len(packets) - 5)))
+				Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(3)))
+				ack2 := frames.AckFrameNew{
+					LargestAcked: protocol.PacketNumber(largestObserved),
+					LowestAcked:  1,
+				}
+				err = handler.ReceivedAck(&ack2, 2)
+				Expect(err).ToNot(HaveOccurred())
+				// Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(len(packets) - 6)))
+				Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(largestObserved)))
+				for i := 1; i <= largestObserved; i++ {
+					Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(i)))
+				}
+			})
 		})
 
 		Context("calculating RTT", func() {

@@ -166,12 +166,15 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameNew, withPacket
 
 	h.LargestAcked = ackFrame.LargestAcked
 
-	// Update the RTT
-	timeDelta := time.Now().Sub(h.packetHistory[h.LargestAcked].sendTime)
-	// TODO: Don't always update RTT
-	h.rttStats.UpdateRTT(timeDelta, ackFrame.DelayTime, time.Now())
-	if utils.Debug() {
-		utils.Debugf("\tEstimated RTT: %dms", h.rttStats.SmoothedRTT()/time.Millisecond)
+	packet, ok := h.packetHistory[h.LargestAcked]
+	if ok {
+		// Update the RTT
+		timeDelta := time.Now().Sub(packet.sendTime)
+		// TODO: Don't always update RTT
+		h.rttStats.UpdateRTT(timeDelta, ackFrame.DelayTime, time.Now())
+		if utils.Debug() {
+			utils.Debugf("\tEstimated RTT: %dms", h.rttStats.SmoothedRTT()/time.Millisecond)
+		}
 	}
 
 	var ackedPackets congestion.PacketVector
