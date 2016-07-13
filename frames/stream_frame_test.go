@@ -78,12 +78,21 @@ var _ = Describe("StreamFrame", func() {
 			Expect(b.Bytes()[0] & 0x40).To(Equal(byte(0x40)))
 		})
 
+		It("errors when length is zero and FIN is not set", func() {
+			b := &bytes.Buffer{}
+			err := (&StreamFrame{
+				StreamID: 1,
+			}).Write(b, 0)
+			Expect(err).To(MatchError("StreamFrame: attempting to write empty frame without FIN"))
+		})
+
 		It("has proper min length for a short StreamID and a short offset", func() {
 			b := &bytes.Buffer{}
 			f := &StreamFrame{
 				StreamID: 1,
 				Data:     []byte{},
 				Offset:   0,
+				FinBit:   true,
 			}
 			err := f.Write(b, 0)
 			Expect(err).ToNot(HaveOccurred())
@@ -96,6 +105,7 @@ var _ = Describe("StreamFrame", func() {
 				StreamID: 0xDECAFBAD,
 				Data:     []byte{},
 				Offset:   0xDEADBEEFCAFE,
+				FinBit:   true,
 			}
 			err := f.Write(b, 0)
 			Expect(err).ToNot(HaveOccurred())

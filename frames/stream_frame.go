@@ -87,6 +87,10 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 
 // WriteStreamFrame writes a stream frame.
 func (f *StreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
+	if len(f.Data) == 0 && !f.FinBit {
+		return errors.New("StreamFrame: attempting to write empty frame without FIN")
+	}
+
 	typeByte := uint8(0x80) // sets the leftmost bit to 1
 
 	if f.FinBit {
