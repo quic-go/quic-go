@@ -30,7 +30,7 @@ func runDropTest(incomingPacketDropper, outgoingPacketDropper dropCallback, vers
 
 	iPort, _ := strconv.Atoi(port)
 	var err error
-	proxy, err = NewUDPProxy(proxyPort, "localhost", iPort, incomingPacketDropper, outgoingPacketDropper)
+	proxy, err = NewUDPProxy(proxyPort, "localhost", iPort, incomingPacketDropper, outgoingPacketDropper, 0)
 	Expect(err).ToNot(HaveOccurred())
 
 	command := exec.Command(

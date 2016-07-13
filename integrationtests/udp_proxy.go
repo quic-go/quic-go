@@ -4,6 +4,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"time"
 )
 
 // Connection is a UDP connection
@@ -26,13 +27,14 @@ type UDPProxy struct {
 	proxyConn          *net.UDPConn
 	dropIncomingPacket dropCallback
 	dropOutgoingPacket dropCallback
+	rtt                time.Duration
 
 	// Mapping from client addresses (as host:port) to connection
 	clientDict map[string]*connection
 }
 
 // NewUDPProxy creates a new UDP proxy
-func NewUDPProxy(proxyPort int, serverAddress string, serverPort int, dropIncomingPacket, dropOutgoingPacket dropCallback) (*UDPProxy, error) {
+func NewUDPProxy(proxyPort int, serverAddress string, serverPort int, dropIncomingPacket, dropOutgoingPacket dropCallback, rtt time.Duration) (*UDPProxy, error) {
 	dontDrop := func(p PacketNumber) bool {
 		return false
 	}
@@ -48,6 +50,7 @@ func NewUDPProxy(proxyPort int, serverAddress string, serverPort int, dropIncomi
 		clientDict:         make(map[string]*connection),
 		dropIncomingPacket: dropIncomingPacket,
 		dropOutgoingPacket: dropOutgoingPacket,
+		rtt:                rtt,
 	}
 
 	saddr, err := net.ResolveUDPAddr("udp", ":"+strconv.Itoa(proxyPort))
@@ -89,9 +92,8 @@ func (p *UDPProxy) newConnection(cliAddr *net.UDPAddr) (*connection, error) {
 
 // runProxy handles inputs to Proxy port
 func (p *UDPProxy) runProxy() error {
-	buffer := make([]byte, 1500)
-
 	for {
+		buffer := make([]byte, 1500)
 		n, cliaddr, err := p.proxyConn.ReadFromUDP(buffer[0:])
 		if err != nil {
 			return err
@@ -119,19 +121,18 @@ func (p *UDPProxy) runProxy() error {
 
 		if !p.dropIncomingPacket(conn.incomingPacketCounter) {
 			// Relay to server
-			_, err = conn.ServerConn.Write(buffer[0:n])
-			if err != nil {
-				return err
-			}
+			go func() {
+				time.Sleep(p.rtt / 2)
+				conn.ServerConn.Write(buffer[0:n])
+			}()
 		}
 	}
 }
 
 // runConnection handles packets from server to a single client
 func (p *UDPProxy) runConnection(conn *connection) error {
-	buffer := make([]byte, 1500)
-
 	for {
+		buffer := make([]byte, 1500)
 		n, err := conn.ServerConn.Read(buffer[0:])
 		if err != nil {
 			return err
@@ -141,10 +142,10 @@ func (p *UDPProxy) runConnection(conn *connection) error {
 
 		if !p.dropOutgoingPacket(conn.outgoingPacketCounter) {
 			// Relay it to client
-			_, err = p.proxyConn.WriteToUDP(buffer[0:n], conn.ClientAddr)
-			if err != nil {
-				return err
-			}
+			go func() {
+				time.Sleep(p.rtt / 2)
+				p.proxyConn.WriteToUDP(buffer[0:n], conn.ClientAddr)
+			}()
 		}
 	}
 }
