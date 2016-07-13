@@ -184,6 +184,11 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameLegacy, withPac
 
 	h.largestReceivedPacketWithAck = withPacketNumber
 
+	// ignore repeated ACK (ACKs that don't have a higher LargestObserved than the last ACK)
+	if ackFrame.LargestObserved <= h.highestInOrderAckedPacketNumber {
+		return nil
+	}
+
 	expectedEntropy, err := h.calculateExpectedEntropy(ackFrame)
 	if err != nil {
 		return err

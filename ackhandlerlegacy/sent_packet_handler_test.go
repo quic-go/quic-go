@@ -375,6 +375,19 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(3)))
 			})
 
+			It("ignores repeated ACKs", func() {
+				ack := frames.AckFrameLegacy{
+					LargestObserved: 3,
+				}
+				err := handler.ReceivedAck(&ack, 1337)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(3)))
+				err = handler.ReceivedAck(&ack, 1337+1)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.LargestObserved).To(Equal(protocol.PacketNumber(3)))
+				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(3)))
+			})
+
 			It("rejects ACKs with a too high LargestObserved packet number", func() {
 				ack := frames.AckFrameLegacy{
 					LargestObserved: packets[len(packets)-1].PacketNumber + 1337,
