@@ -216,6 +216,20 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(err).To(MatchError(errAckForUnsentPacket))
 				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(len(packets))))
 			})
+
+			It("ignores repeated ACKs", func() {
+				ack := frames.AckFrameNew{
+					LargestAcked: 3,
+					LowestAcked:  1,
+				}
+				err := handler.ReceivedAck(&ack, 1337)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(len(packets) - 3)))
+				err = handler.ReceivedAck(&ack, 1337+1)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.LargestAcked).To(Equal(protocol.PacketNumber(3)))
+				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(len(packets) - 3)))
+			})
 		})
 
 		Context("acks and nacks the right packets", func() {

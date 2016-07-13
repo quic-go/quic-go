@@ -159,6 +159,11 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameNew, withPacket
 
 	h.largestReceivedPacketWithAck = withPacketNumber
 
+	// ignore repeated ACK (ACKs that don't have a higher LargestAcked than the last ACK)
+	if ackFrame.LargestAcked <= h.LargestInOrderAcked {
+		return nil
+	}
+
 	h.LargestAcked = ackFrame.LargestAcked
 
 	// Update the RTT
