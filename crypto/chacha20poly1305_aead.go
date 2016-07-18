@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 
-	"github.com/lucas-clemente/chacha20poly1305"
+	"github.com/aead/chacha20"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 )
@@ -22,11 +22,16 @@ func NewAEADChacha20Poly1305(otherKey []byte, myKey []byte, otherIV []byte, myIV
 	if len(myKey) != 32 || len(otherKey) != 32 || len(myIV) != 4 || len(otherIV) != 4 {
 		return nil, errors.New("chacha20poly1305: expected 32-byte keys and 4-byte IVs")
 	}
-	encrypter, err := chacha20poly1305.New(myKey, 12)
+	// copy because ChaCha20Poly1305 expects array pointers
+	var MyKey, OtherKey [32]byte
+	copy(MyKey[:], myKey)
+	copy(OtherKey[:], otherKey)
+
+	encrypter, err := chacha20.NewChaCha20Poly1305WithTagSize(&MyKey, 12)
 	if err != nil {
 		return nil, err
 	}
-	decrypter, err := chacha20poly1305.New(otherKey, 12)
+	decrypter, err := chacha20.NewChaCha20Poly1305WithTagSize(&OtherKey, 12)
 	if err != nil {
 		return nil, err
 	}
