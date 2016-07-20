@@ -222,10 +222,10 @@ func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 	utils.WriteUfloat16(b, uint64(f.DelayTime/time.Microsecond))
 
 	var numRanges uint64
-	var numRangesWritten uint64 // to check for internal consistency
+	var numRangesWritten uint64
 	if f.HasMissingRanges() {
-		numRanges = f.numWrittenNackRanges()
-		if numRanges >= 0xFF {
+		numRanges = f.numWritableNackRanges()
+		if numRanges > 0xFF {
 			panic("AckFrame: Too many ACK ranges")
 		}
 		b.WriteByte(uint8(numRanges - 1))
@@ -280,6 +280,11 @@ func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 				numRangesWritten++
 			}
 		}
+
+		// this is needed if not all AckRanges can be written to the ACK frame (if there are more than 0xFF)
+		if numRangesWritten >= numRanges {
+			break
+		}
 	}
 
 	if numRanges != numRangesWritten {
@@ -300,7 +305,7 @@ func (f *AckFrameNew) MinLength(version protocol.VersionNumber) (protocol.ByteCo
 	missingSequenceNumberDeltaLen := protocol.ByteCount(protocol.PacketNumberLen6)
 
 	if f.HasMissingRanges() {
-		length += (1 + missingSequenceNumberDeltaLen) * protocol.ByteCount(f.numWrittenNackRanges())
+		length += (1 + missingSequenceNumberDeltaLen) * protocol.ByteCount(f.numWritableNackRanges())
 	} else {
 		length += missingSequenceNumberDeltaLen
 	}
@@ -356,9 +361,9 @@ func (f *AckFrameNew) validateAckRanges() bool {
 	return true
 }
 
-// numWrittenNackRanges calculates the number of ACK blocks that are about to be written
+// numWritableNackRanges calculates the number of ACK blocks that are about to be written
 // this number is different from len(f.AckRanges) for the case of long gaps (> 255 packets)
-func (f *AckFrameNew) numWrittenNackRanges() uint64 {
+func (f *AckFrameNew) numWritableNackRanges() uint64 {
 	if len(f.AckRanges) == 0 {
 		return 0
 	}
@@ -371,9 +376,15 @@ func (f *AckFrameNew) numWrittenNackRanges() uint64 {
 
 		lastAckRange := f.AckRanges[i-1]
 		gap := lastAckRange.FirstPacketNumber - ackRange.LastPacketNumber
-		numRanges += 1 + uint64(gap)/(0xFF+1)
-		if uint64(gap)%(0xFF+1) == 0 {
-			numRanges--
+		rangeLength := uint64(gap) / (0xFF + 1)
+		if uint64(gap)%(0xFF+1) != 0 {
+			rangeLength++
+		}
+
+		if numRanges+rangeLength < 0xFF {
+			numRanges += rangeLength
+		} else {
+			break
 		}
 	}
 
