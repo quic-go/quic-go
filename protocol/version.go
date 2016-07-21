@@ -11,8 +11,7 @@ type VersionNumber int
 
 // The version numbers, making grepping easier
 const (
-	Version30 VersionNumber = 30 + iota
-	Version31
+	Version31 VersionNumber = 31 + iota
 	Version32
 	Version33
 	Version34
@@ -21,7 +20,7 @@ const (
 
 // SupportedVersions lists the versions that the server supports
 var SupportedVersions = []VersionNumber{
-	Version30, Version31, Version32, Version33, Version34,
+	Version31, Version32, Version33, Version34,
 }
 
 // SupportedVersionsAsTags is needed for the SHLO crypto message

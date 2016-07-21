@@ -184,8 +184,8 @@ func (h *CryptoSetup) isInchoateCHLO(cryptoData map[Tag][]byte) bool {
 	return false
 }
 
-func (h *CryptoSetup) handleInchoateCHLO(sni string, data []byte, cryptoData map[Tag][]byte) ([]byte, error) {
-	if len(data) < protocol.ClientHelloMinimumSize {
+func (h *CryptoSetup) handleInchoateCHLO(sni string, chlo []byte, cryptoData map[Tag][]byte) ([]byte, error) {
+	if len(chlo) < protocol.ClientHelloMinimumSize {
 		return nil, qerr.Error(qerr.CryptoInvalidValueLength, "CHLO too small")
 	}
 
@@ -200,12 +200,7 @@ func (h *CryptoSetup) handleInchoateCHLO(sni string, data []byte, cryptoData map
 	}
 
 	if h.scfg.stkSource.VerifyToken(h.ip, cryptoData[TagSTK]) == nil {
-		var chloOrNil []byte
-		if h.version > protocol.Version30 {
-			chloOrNil = data
-		}
-
-		proof, err := h.scfg.Sign(sni, chloOrNil)
+		proof, err := h.scfg.Sign(sni, chlo)
 		if err != nil {
 			return nil, err
 		}

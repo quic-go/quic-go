@@ -228,13 +228,6 @@ var _ = Describe("Crypto setup", func() {
 			Expect(signer.gotCHLO).To(BeTrue())
 		})
 
-		It("generates REJ messages for version 30", func() {
-			cs.version = protocol.Version30
-			_, err := cs.handleInchoateCHLO("", sampleCHLO, nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(signer.gotCHLO).To(BeFalse())
-		})
-
 		It("generates SHLO messages", func() {
 			response, err := cs.handleCHLO("", []byte("chlo-data"), map[Tag][]byte{
 				TagPUBS: []byte("pubs-c"),
