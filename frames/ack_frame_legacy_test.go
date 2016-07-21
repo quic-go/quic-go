@@ -99,38 +99,6 @@ var _ = Describe("AckFrame", func() {
 			Expect(b.Len()).To(Equal(0))
 		})
 
-		Context("support for version 31", func() {
-			It("support a simple ACK with one NACK range, version 31", func() {
-				b := bytes.NewReader([]byte{0x60, 0x8, 0x3, 0x72, 0x1, 0x1, 0x0, 0xc0, 0x15, 0x0, 0x0, 0x1, 0x1, 0x1, 0x0})
-				frame, err := ParseAckFrameLegacy(b, protocol.Version31)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.HasNACK()).To(Equal(true))
-				Expect(frame.NackRanges).To(HaveLen(1))
-				Expect(frame.LargestObserved).To(Equal(protocol.PacketNumber(3)))
-				Expect(frame.NackRanges[0]).To(Equal(NackRange{FirstPacketNumber: 1, LastPacketNumber: 2}))
-				Expect(b.Len()).To(Equal(0))
-			})
-
-			It("support a simple ACK with multiple NACK ranges, version 31", func() {
-				b := bytes.NewReader([]byte{0x60, 0x8, 0x9, 0x72, 0x1, 0x1, 0x0, 0xc0, 0x15, 0x0, 0x0, 0x2, 0x1, 0x1, 0x2, 0x0, 0x0})
-				frame, err := ParseAckFrameLegacy(b, protocol.Version31)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.HasNACK()).To(Equal(true))
-				Expect(frame.NackRanges).To(HaveLen(2))
-				Expect(frame.LargestObserved).To(Equal(protocol.PacketNumber(9)))
-				Expect(frame.NackRanges[0]).To(Equal(NackRange{FirstPacketNumber: 7, LastPacketNumber: 8}))
-				Expect(frame.NackRanges[1]).To(Equal(NackRange{FirstPacketNumber: 4, LastPacketNumber: 4}))
-				Expect(b.Len()).To(Equal(0))
-			})
-
-			It("reads the complete ACK frame if it contains revived packet numbers", func() {
-				b := bytes.NewReader([]byte{0x60, 0x8, 0x3, 0x72, 0x1, 0x1, 0x0, 0xc0, 0x15, 0x0, 0x0, 0x1, 0x1, 0x1, 0x3, 0x5, 0x6, 0x7})
-				_, err := ParseAckFrameLegacy(b, protocol.Version31)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(b.Len()).To(Equal(0))
-			})
-		})
-
 		Context("contiguous NACK ranges", func() {
 			It("parses a frame with a contiguous NACK range spanning two fields", func() {
 				b := bytes.NewReader([]byte{0x64, 0x8, 0x2E, 0x01, 0x72, 0x1, 0x1, 0x0, 0xc0, 0x15, 0x0, 0x0, 0x2, 0x1, 0x2b, 0x0, 0xff})
@@ -324,23 +292,6 @@ var _ = Describe("AckFrame", func() {
 			Expect(packetNumber).To(BeEquivalentTo([]byte{2, 0, 0, 0, 0, 0}))
 		})
 
-		It("supports version 31", func() {
-			frame := AckFrameLegacy{
-				Entropy:         2,
-				LargestObserved: 4,
-				NackRanges:      []NackRange{{FirstPacketNumber: 2, LastPacketNumber: 2}},
-			}
-			err := frame.Write(b, protocol.Version31)
-			Expect(err).ToNot(HaveOccurred())
-			missingPacketBytes := b.Bytes()[b.Len()-9:]
-			Expect(missingPacketBytes[0]).To(Equal(uint8(1))) // numRanges
-			Expect(missingPacketBytes[7]).To(Equal(uint8(0))) // rangeLength
-			packetNumber := make([]byte, 6)
-			copy(packetNumber, missingPacketBytes[1:6])
-			Expect(packetNumber).To(BeEquivalentTo([]byte{2, 0, 0, 0, 0, 0}))
-			Expect(b.Bytes()[b.Len()-1]).To(BeZero())
-		})
-
 		It("writes a frame with multiple NACK ranges", func() {
 			nackRange1 := NackRange{FirstPacketNumber: 4, LastPacketNumber: 6}
 			nackRange2 := NackRange{FirstPacketNumber: 2, LastPacketNumber: 2}
@@ -518,7 +469,7 @@ var _ = Describe("AckFrame", func() {
 					LargestObserved: 4,
 					NackRanges:      []NackRange{{FirstPacketNumber: 2, LastPacketNumber: 2}},
 				}
-				err := f.Write(b, protocol.Version31)
+				err := f.Write(b, protocol.Version33)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(f.MinLength(0)).To(Equal(protocol.ByteCount(b.Len())))
 			})
@@ -529,7 +480,7 @@ var _ = Describe("AckFrame", func() {
 					LargestObserved: 3000,
 					NackRanges:      []NackRange{{FirstPacketNumber: 2, LastPacketNumber: 2000}},
 				}
-				err := f.Write(b, protocol.Version31)
+				err := f.Write(b, protocol.Version33)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(f.MinLength(0)).To(Equal(protocol.ByteCount(b.Len())))
 			})

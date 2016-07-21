@@ -17,11 +17,11 @@ var _ = Describe("Version", func() {
 	})
 
 	It("has proper tag list", func() {
-		Expect(SupportedVersionsAsTags).To(Equal([]byte("Q031Q032Q033Q034")))
+		Expect(SupportedVersionsAsTags).To(Equal([]byte("Q032Q033Q034")))
 	})
 
 	It("has proper version list", func() {
-		Expect(SupportedVersionsAsString).To(Equal("34,33,32,31"))
+		Expect(SupportedVersionsAsString).To(Equal("34,33,32"))
 	})
 
 	It("recognizes supported versions", func() {
