@@ -349,8 +349,15 @@ func (s *Session) handleWindowUpdateFrame(frame *frames.WindowUpdateFrame) error
 	s.streamsMutex.RLock()
 	defer s.streamsMutex.RUnlock()
 	if frame.StreamID != 0 {
-		if s, ok := s.streams[frame.StreamID]; ok && s == nil {
+		stream, ok := s.streams[frame.StreamID]
+		if ok && stream == nil {
 			return errWindowUpdateOnClosedStream
+		}
+
+		// open new stream when receiving a WindowUpdate for a non-existing stream
+		// this can occur if the client immediately sends a WindowUpdate for a newly opened stream, and packet reordering occurs such that the packet opening the new stream arrives after the WindowUpdate
+		if !ok {
+			s.newStreamImpl(frame.StreamID)
 		}
 	}
 	_, err := s.flowControlManager.UpdateWindow(frame.StreamID, frame.ByteOffset)

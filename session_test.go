@@ -316,13 +316,14 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("errors when the stream is not known", func() {
-			// See https://github.com/lucas-clemente/quic-go/issues/203
+		It("opens a new stream when receiving a WINDOW_UPDATE for an unknown stream", func() {
 			err := session.handleWindowUpdateFrame(&frames.WindowUpdateFrame{
 				StreamID:   5,
 				ByteOffset: 1337,
 			})
-			Expect(err).To(HaveOccurred())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(session.streams).To(HaveKey(protocol.StreamID(5)))
+			Expect(session.streams[5]).ToNot(BeNil())
 		})
 
 		It("errors when receiving a WindowUpdateFrame for a closed stream", func() {
