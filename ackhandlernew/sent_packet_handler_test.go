@@ -545,6 +545,22 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.ProbablyHasPacketForRetransmission()).To(BeTrue())
 			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
 		})
+
+		It("correctly treats a belated ACK for a packet that has already been RTO retransmitted", func() {
+			// lose packet by NACKing it often enough
+			for i := uint8(0); i < protocol.RetransmissionThreshold+1; i++ {
+				_, err := handler.nackPacket(2)
+				Expect(err).ToNot(HaveOccurred())
+			}
+			packet := handler.DequeuePacketForRetransmission()
+			Expect(packet).ToNot(BeNil())
+			Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(2)))
+			// this is the belated ACK
+			err := handler.ReceivedAck(&frames.AckFrameNew{LowestAcked: 2, LargestAcked: 3}, 1)
+			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(0)))
+			Expect(handler.LargestAcked).To(Equal(protocol.PacketNumber(3)))
+			Expect(err).ToNot(HaveOccurred())
+		})
 	})
 
 	Context("calculating bytes in flight", func() {
