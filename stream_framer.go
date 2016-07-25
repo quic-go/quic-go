@@ -28,28 +28,6 @@ func newStreamFramer(streams *map[protocol.StreamID]*stream, streamsMutex *sync.
 	}
 }
 
-func (f *streamFramer) HasData() bool {
-	if len(f.retransmissionQueue) > 0 {
-		return true
-	}
-	f.streamsMutex.RLock()
-	defer f.streamsMutex.RUnlock()
-	for _, s := range *f.streams {
-		if s == nil {
-			continue
-		}
-		// An error should never happen, and needlessly complicates the return values
-		fcLimit, _ := f.getFCAllowanceForStream(s)
-		if fcLimit == 0 {
-			continue
-		}
-		if s.lenOfDataForWriting() > 0 || s.shouldSendFin() {
-			return true
-		}
-	}
-	return false
-}
-
 func (f *streamFramer) AddFrameForRetransmission(frame *frames.StreamFrame) {
 	f.retransmissionQueue = append(f.retransmissionQueue, frame)
 }

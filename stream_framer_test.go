@@ -59,34 +59,6 @@ var _ = Describe("Stream Framer", func() {
 		Expect(fs[0].DataLenPresent).To(BeTrue())
 	})
 
-	Context("HasData", func() {
-		It("has no data initially", func() {
-			Expect(framer.HasData()).To(BeFalse())
-		})
-
-		It("has data with retransmitted frames", func() {
-			framer.AddFrameForRetransmission(retransmittedFrame1)
-			Expect(framer.HasData()).To(BeTrue())
-		})
-
-		It("has data with normal frames", func() {
-			stream1.dataForWriting = []byte("foobar")
-			Expect(framer.HasData()).To(BeTrue())
-		})
-
-		It("has data with FIN frames", func() {
-			stream1.closed = 1
-			Expect(framer.HasData()).To(BeTrue())
-		})
-
-		It("has no data when FC blocked", func() {
-			stream1.dataForWriting = []byte("foobar")
-			Expect(framer.HasData()).To(BeTrue())
-			fcm.sendWindowSizes[stream1.StreamID()] = 0
-			Expect(framer.HasData()).To(BeFalse())
-		})
-	})
-
 	Context("Framer estimated data length", func() {
 		It("returns the correct length for an empty framer", func() {
 			Expect(framer.EstimatedDataLen()).To(BeZero())
@@ -227,10 +199,10 @@ var _ = Describe("Stream Framer", func() {
 				framer.AddFrameForRetransmission(retransmittedFrame2)
 				fs := framer.PopStreamFrames(6)
 				Expect(fs).To(HaveLen(1))
-				Expect(framer.HasData()).To(BeTrue())
+				Expect(framer.retransmissionQueue).ToNot(BeEmpty())
 				fs = framer.PopStreamFrames(1000)
 				Expect(fs).To(HaveLen(1))
-				Expect(framer.HasData()).To(BeFalse())
+				Expect(framer.retransmissionQueue).To(BeEmpty())
 			})
 
 			It("gets the whole data of a frame if it was split", func() {

@@ -447,7 +447,6 @@ func (s *Session) closeStreamWithError(str *stream, err error) {
 	str.RegisterError(err)
 }
 
-// TODO: try sending more than one packet
 func (s *Session) maybeSendPacket() error {
 	if !s.smallPacketDelayedOccurranceTime.IsZero() && time.Now().Sub(s.smallPacketDelayedOccurranceTime) > protocol.SmallPacketSendDelay {
 		return s.sendPacket()
@@ -503,87 +502,84 @@ func (s *Session) maybeSendPacket() error {
 func (s *Session) sendPacket() error {
 	s.smallPacketDelayedOccurranceTime = time.Time{} // zero
 
-	err := s.sentPacketHandler.CheckForError()
-	if err != nil {
-		return err
-	}
-
-	if !s.sentPacketHandler.CongestionAllowsSending() {
-		return nil
-	}
-
-	var controlFrames []frames.Frame
-
-	// check for retransmissions first
+	// Repeatedly try sending until we don't have any more data, or run out of the congestion window
 	for {
-		retransmitPacket := s.sentPacketHandler.DequeuePacketForRetransmission()
-		if retransmitPacket == nil {
-			break
+		err := s.sentPacketHandler.CheckForError()
+		if err != nil {
+			return err
 		}
-		utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
-		s.stopWaitingManager.RegisterPacketForRetransmission(retransmitPacket)
-		// resend the frames that were in the packet
-		controlFrames = append(controlFrames, retransmitPacket.GetControlFramesForRetransmission()...)
-		for _, streamFrame := range retransmitPacket.GetStreamFramesForRetransmission() {
-			s.streamFramer.AddFrameForRetransmission(streamFrame)
+
+		if !s.sentPacketHandler.CongestionAllowsSending() {
+			return nil
 		}
+
+		var controlFrames []frames.Frame
+
+		// check for retransmissions first
+		for {
+			retransmitPacket := s.sentPacketHandler.DequeuePacketForRetransmission()
+			if retransmitPacket == nil {
+				break
+			}
+			utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
+			s.stopWaitingManager.RegisterPacketForRetransmission(retransmitPacket)
+			// resend the frames that were in the packet
+			controlFrames = append(controlFrames, retransmitPacket.GetControlFramesForRetransmission()...)
+			for _, streamFrame := range retransmitPacket.GetStreamFramesForRetransmission() {
+				s.streamFramer.AddFrameForRetransmission(streamFrame)
+			}
+		}
+
+		windowUpdateFrames, err := s.getWindowUpdateFrames()
+		if err != nil {
+			return err
+		}
+
+		for _, wuf := range windowUpdateFrames {
+			controlFrames = append(controlFrames, wuf)
+		}
+
+		ack, err := s.receivedPacketHandler.GetAckFrame(true)
+		if err != nil {
+			return err
+		}
+		if ack != nil {
+			controlFrames = append(controlFrames, ack)
+		}
+
+		stopWaitingFrame := s.stopWaitingManager.GetStopWaitingFrame()
+		packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, s.sentPacketHandler.GetLargestAcked())
+		if err != nil {
+			return err
+		}
+		if packet == nil {
+			return nil
+		}
+
+		for _, f := range windowUpdateFrames {
+			s.packer.QueueControlFrameForNextPacket(f)
+		}
+
+		err = s.sentPacketHandler.SentPacket(&ackhandlerlegacy.Packet{
+			PacketNumber: packet.number,
+			Frames:       packet.frames,
+			EntropyBit:   packet.entropyBit,
+			Length:       protocol.ByteCount(len(packet.raw)),
+		})
+		if err != nil {
+			return err
+		}
+
+		s.stopWaitingManager.SentStopWaitingWithPacket(packet.number)
+
+		s.logPacket(packet)
+
+		err = s.conn.write(packet.raw)
+		if err != nil {
+			return err
+		}
+
 	}
-
-	windowUpdateFrames, err := s.getWindowUpdateFrames()
-	if err != nil {
-		return err
-	}
-
-	for _, wuf := range windowUpdateFrames {
-		controlFrames = append(controlFrames, wuf)
-	}
-
-	ack, err := s.receivedPacketHandler.GetAckFrame(true)
-	if err != nil {
-		return err
-	}
-	if ack != nil {
-		controlFrames = append(controlFrames, ack)
-	}
-
-	stopWaitingFrame := s.stopWaitingManager.GetStopWaitingFrame()
-	packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, s.sentPacketHandler.GetLargestAcked())
-
-	if err != nil {
-		return err
-	}
-	if packet == nil {
-		return nil
-	}
-
-	for _, f := range windowUpdateFrames {
-		s.packer.QueueControlFrameForNextPacket(f)
-	}
-
-	err = s.sentPacketHandler.SentPacket(&ackhandlerlegacy.Packet{
-		PacketNumber: packet.number,
-		Frames:       packet.frames,
-		EntropyBit:   packet.entropyBit,
-		Length:       protocol.ByteCount(len(packet.raw)),
-	})
-	if err != nil {
-		return err
-	}
-
-	s.stopWaitingManager.SentStopWaitingWithPacket(packet.number)
-
-	s.logPacket(packet)
-
-	err = s.conn.write(packet.raw)
-	if err != nil {
-		return err
-	}
-
-	if s.streamFramer.HasData() {
-		s.scheduleSending()
-	}
-
-	return nil
 }
 
 func (s *Session) sendConnectionClose(quicErr *qerr.QuicError) error {
