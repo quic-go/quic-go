@@ -385,7 +385,20 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	Context("Blocked frames", func() {
-		It("adds a blocked frame to a packet if there is enough space", func() {
+		It("queues a BLOCKED frame", func() {
+			length := 100
+			streamFramer.blockedFrameQueue = []*frames.BlockedFrame{{StreamID: 5}}
+			f := &frames.StreamFrame{
+				StreamID: 5,
+				Data:     bytes.Repeat([]byte{'f'}, length),
+			}
+			streamFramer.AddFrameForRetransmission(f)
+			_, err := packer.composeNextPacket(nil, publicHeaderLen)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packer.controlFrames[0]).To(Equal(&frames.BlockedFrame{StreamID: 5}))
+		})
+
+		It("removes the dataLen attribute from the last StreamFrame, even if it queued a BLOCKED frame", func() {
 			length := 100
 			streamFramer.blockedFrameQueue = []*frames.BlockedFrame{{StreamID: 5}}
 			f := &frames.StreamFrame{
@@ -395,61 +408,8 @@ var _ = Describe("Packet packer", func() {
 			streamFramer.AddFrameForRetransmission(f)
 			p, err := packer.composeNextPacket(nil, publicHeaderLen)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(p).To(HaveLen(2))
-			Expect(p[0]).To(Equal(&frames.BlockedFrame{StreamID: 5}))
-		})
-
-		It("removes the dataLen attribute from the last StreamFrame, even if it inserted a BlockedFrame before", func() {
-			length := 100
-			streamFramer.blockedFrameQueue = []*frames.BlockedFrame{{StreamID: 5}}
-			f := &frames.StreamFrame{
-				StreamID: 5,
-				Data:     bytes.Repeat([]byte{'f'}, length),
-			}
-			streamFramer.AddFrameForRetransmission(f)
-			p, err := packer.composeNextPacket(nil, publicHeaderLen)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(p).To(HaveLen(2))
-			Expect(p[1].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
-		})
-
-		It("packs a BlockedFrame in the next packet if the current packet doesn't have enough space", func() {
-			dataLen := int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLen) - (1 + 1 + 2) + 1
-			streamFramer.blockedFrameQueue = []*frames.BlockedFrame{{StreamID: 5}}
-			f := &frames.StreamFrame{
-				StreamID: 5,
-				Data:     bytes.Repeat([]byte{'f'}, dataLen),
-			}
-			streamFramer.AddFrameForRetransmission(f)
-			p, err := packer.composeNextPacket(nil, publicHeaderLen)
-			Expect(err).ToNot(HaveOccurred())
 			Expect(p).To(HaveLen(1))
-			p, err = packer.composeNextPacket(nil, publicHeaderLen)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(p).To(HaveLen(1))
-			Expect(p[0]).To(Equal(&frames.BlockedFrame{StreamID: 5}))
-		})
-
-		It("packs a packet with the maximum size with a BlockedFrame", func() {
-			blockedFrame := &frames.BlockedFrame{StreamID: 0x1337}
-			blockedFrameLen, _ := blockedFrame.MinLength(0)
-			f1 := &frames.StreamFrame{
-				StreamID: 5,
-				Offset:   1,
-			}
-			streamFrameHeaderLen, _ := f1.MinLength(0)
-			// this is the maximum dataLen of a StreamFrames that fits into one packet
-			dataLen := int(protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen - streamFrameHeaderLen - blockedFrameLen)
-			streamFramer.blockedFrameQueue = []*frames.BlockedFrame{{StreamID: 5}}
-			f1.Data = bytes.Repeat([]byte{'f'}, dataLen)
-			streamFramer.AddFrameForRetransmission(f1)
-			p, err := packer.PackPacket(nil, []frames.Frame{}, 0)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(p).ToNot(BeNil())
-			Expect(p.raw).To(HaveLen(int(protocol.MaxPacketSize)))
-			p, err = packer.PackPacket(nil, []frames.Frame{}, 0)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(p).To(BeNil())
+			Expect(p[0].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
 		})
 
 		It("packs a connection-level BlockedFrame", func() {
@@ -459,10 +419,9 @@ var _ = Describe("Packet packer", func() {
 				Data:     []byte("foobar"),
 			}
 			streamFramer.AddFrameForRetransmission(f)
-			p, err := packer.composeNextPacket(nil, publicHeaderLen)
+			_, err := packer.composeNextPacket(nil, publicHeaderLen)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(p).To(HaveLen(2))
-			Expect(p[0]).To(Equal(&frames.BlockedFrame{StreamID: 0}))
+			Expect(packer.controlFrames[0]).To(Equal(&frames.BlockedFrame{StreamID: 0}))
 		})
 	})
 })

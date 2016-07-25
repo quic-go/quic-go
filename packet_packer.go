@@ -182,53 +182,23 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 		return nil, fmt.Errorf("Packet Packer BUG: packet payload (%d) too large (%d)", payloadLength, maxFrameSize)
 	}
 
-	hasStreamFrames := false
-
 	// temporarily increase the maxFrameSize by 2 bytes
 	// this leads to a properly sized packet in all cases, since we do all the packet length calculations with StreamFrames that have the DataLen set
 	// however, for the last StreamFrame in the packet, we can omit the DataLen, thus saving 2 bytes and yielding a packet of exactly the correct size
 	maxFrameSize += 2
 
-	for {
-		if payloadLength > maxFrameSize {
-			return nil, fmt.Errorf("Packet Packer BUG: packet payload (%d) too large (%d)", payloadLength, maxFrameSize)
-		}
-
-		frame, err := p.streamFramer.PopStreamFrame(maxFrameSize - payloadLength)
-		if err != nil {
-			return nil, err
-		}
-		if frame == nil {
-			break
-		}
-		frame.DataLenPresent = true // set the dataLen by default. Remove them later if applicable
-
-		frameHeaderLen, _ := frame.MinLength(p.version) // StreamFrame.MinLength *never* returns an error
-		payloadLength += frameHeaderLen + frame.DataLen()
-
-		blockedFrame := p.streamFramer.PopBlockedFrame()
-		if blockedFrame != nil {
-			blockedLength, _ := blockedFrame.MinLength(p.version) // BlockedFrame.MinLength *never* returns an error
-			if payloadLength+blockedLength <= maxFrameSize {
-				payloadFrames = append(payloadFrames, blockedFrame)
-				payloadLength += blockedLength
-			} else {
-				p.controlFrames = append(p.controlFrames, blockedFrame)
-			}
-		}
-
-		payloadFrames = append(payloadFrames, frame)
-		hasStreamFrames = true
+	fs := p.streamFramer.PopStreamFrames(maxFrameSize - payloadLength)
+	if len(fs) != 0 {
+		fs[len(fs)-1].DataLenPresent = false
 	}
 
-	// remove the dataLen for the last StreamFrame in the packet
-	if hasStreamFrames {
-		lastStreamFrame, ok := payloadFrames[len(payloadFrames)-1].(*frames.StreamFrame)
-		if !ok {
-			return nil, errors.New("PacketPacker BUG: StreamFrame type assertion failed")
-		}
-		lastStreamFrame.DataLenPresent = false
-		// payloadLength -= 2
+	// TODO: Simplify
+	for _, f := range fs {
+		payloadFrames = append(payloadFrames, f)
+	}
+
+	for b := p.streamFramer.PopBlockedFrame(); b != nil; b = p.streamFramer.PopBlockedFrame() {
+		p.controlFrames = append(p.controlFrames, b)
 	}
 
 	return payloadFrames, nil

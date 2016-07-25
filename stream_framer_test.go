@@ -47,16 +47,16 @@ var _ = Describe("Stream Framer", func() {
 
 	It("sets the DataLenPresent for dequeued retransmitted frames", func() {
 		framer.AddFrameForRetransmission(retransmittedFrame1)
-		f, err := framer.PopStreamFrame(protocol.MaxByteCount)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(f.DataLenPresent).To(BeTrue())
+		fs := framer.PopStreamFrames(protocol.MaxByteCount)
+		Expect(fs).To(HaveLen(1))
+		Expect(fs[0].DataLenPresent).To(BeTrue())
 	})
 
 	It("sets the DataLenPresent for dequeued normal frames", func() {
 		stream1.dataForWriting = []byte("foobar")
-		f, err := framer.PopStreamFrame(protocol.MaxByteCount)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(f.DataLenPresent).To(BeTrue())
+		fs := framer.PopStreamFrames(protocol.MaxByteCount)
+		Expect(fs).To(HaveLen(1))
+		Expect(fs[0].DataLenPresent).To(BeTrue())
 	})
 
 	Context("HasData", func() {
@@ -103,9 +103,9 @@ var _ = Describe("Stream Framer", func() {
 			framer.AddFrameForRetransmission(retransmittedFrame1)
 			stream1.dataForWriting = []byte("foobar")
 			Expect(framer.EstimatedDataLen()).To(Equal(protocol.ByteCount(2 + 6)))
-			framer.PopStreamFrame(1000)
+			framer.PopStreamFrames(8)
 			Expect(framer.EstimatedDataLen()).To(Equal(protocol.ByteCount(6)))
-			framer.PopStreamFrame(1000)
+			framer.PopStreamFrames(1000)
 			Expect(framer.EstimatedDataLen()).To(BeZero())
 		})
 
@@ -130,66 +130,52 @@ var _ = Describe("Stream Framer", func() {
 
 	Context("Popping", func() {
 		It("returns nil when popping an empty framer", func() {
-			Expect(framer.PopStreamFrame(1000)).To(BeNil())
+			Expect(framer.PopStreamFrames(1000)).To(BeEmpty())
 		})
 
 		It("pops frames for retransmission", func() {
 			framer.AddFrameForRetransmission(retransmittedFrame1)
 			framer.AddFrameForRetransmission(retransmittedFrame2)
-			frame, err := framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(Equal(retransmittedFrame1))
-			frame, err = framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(Equal(retransmittedFrame2))
-			frame, err = framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(BeNil())
+			fs := framer.PopStreamFrames(1000)
+			Expect(fs).To(HaveLen(2))
+			Expect(fs[0]).To(Equal(retransmittedFrame1))
+			Expect(fs[1]).To(Equal(retransmittedFrame2))
+			Expect(framer.PopStreamFrames(1000)).To(BeEmpty())
 		})
 
 		It("returns normal frames", func() {
 			stream1.dataForWriting = []byte("foobar")
-			frame, err := framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.StreamID).To(Equal(stream1.streamID))
-			Expect(frame.Data).To(Equal([]byte("foobar")))
-			frame, err = framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(BeNil())
+			fs := framer.PopStreamFrames(1000)
+			Expect(fs).To(HaveLen(1))
+			Expect(fs[0].StreamID).To(Equal(stream1.streamID))
+			Expect(fs[0].Data).To(Equal([]byte("foobar")))
+			Expect(framer.PopStreamFrames(1000)).To(BeEmpty())
 		})
 
 		It("returns multiple normal frames", func() {
 			stream1.dataForWriting = []byte("foobar")
 			stream2.dataForWriting = []byte("foobaz")
-			frame1, err := framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
-			frame2, err := framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
+			fs := framer.PopStreamFrames(1000)
+			Expect(fs).To(HaveLen(2))
 			// Swap if we dequeued in other order
-			if frame1.StreamID != stream1.streamID {
-				frame1, frame2 = frame2, frame1
+			if fs[0].StreamID != stream1.streamID {
+				fs[0], fs[1] = fs[1], fs[0]
 			}
-			Expect(frame1.StreamID).To(Equal(stream1.streamID))
-			Expect(frame1.Data).To(Equal([]byte("foobar")))
-			Expect(frame2.StreamID).To(Equal(stream2.streamID))
-			Expect(frame2.Data).To(Equal([]byte("foobaz")))
-			frame, err := framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(BeNil())
+			Expect(fs[0].StreamID).To(Equal(stream1.streamID))
+			Expect(fs[0].Data).To(Equal([]byte("foobar")))
+			Expect(fs[1].StreamID).To(Equal(stream2.streamID))
+			Expect(fs[1].Data).To(Equal([]byte("foobaz")))
+			Expect(framer.PopStreamFrames(1000)).To(BeEmpty())
 		})
 
 		It("returns retransmission frames before normal frames", func() {
 			framer.AddFrameForRetransmission(retransmittedFrame1)
 			stream1.dataForWriting = []byte("foobar")
-			frame, err := framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(Equal(retransmittedFrame1))
-			frame, err = framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.StreamID).To(Equal(stream1.streamID))
-			frame, err = framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(BeNil())
+			fs := framer.PopStreamFrames(1000)
+			Expect(fs).To(HaveLen(2))
+			Expect(fs[0]).To(Equal(retransmittedFrame1))
+			Expect(fs[1].StreamID).To(Equal(stream1.streamID))
+			Expect(framer.PopStreamFrames(1000)).To(BeEmpty())
 		})
 
 		Context("splitting of frames", func() {
@@ -229,48 +215,46 @@ var _ = Describe("Stream Framer", func() {
 			It("splits a frame", func() {
 				framer.AddFrameForRetransmission(retransmittedFrame2)
 				origlen := retransmittedFrame2.DataLen()
-				frame, err := framer.PopStreamFrame(6)
-				Expect(err).ToNot(HaveOccurred())
-				minLength, _ := frame.MinLength(0)
-				Expect(minLength + frame.DataLen()).To(Equal(protocol.ByteCount(6)))
-				Expect(framer.retransmissionQueue[0].Data).To(HaveLen(int(origlen - frame.DataLen())))
-				Expect(framer.retransmissionQueue[0].Offset).To(Equal(frame.DataLen()))
+				fs := framer.PopStreamFrames(6)
+				Expect(fs).To(HaveLen(1))
+				minLength, _ := fs[0].MinLength(0)
+				Expect(minLength + fs[0].DataLen()).To(Equal(protocol.ByteCount(6)))
+				Expect(framer.retransmissionQueue[0].Data).To(HaveLen(int(origlen - fs[0].DataLen())))
+				Expect(framer.retransmissionQueue[0].Offset).To(Equal(fs[0].DataLen()))
 			})
 
 			It("only removes a frame from the framer after returning all split parts", func() {
 				framer.AddFrameForRetransmission(retransmittedFrame2)
-				frame, err := framer.PopStreamFrame(6)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(frame).ToNot(BeNil())
+				fs := framer.PopStreamFrames(6)
+				Expect(fs).To(HaveLen(1))
 				Expect(framer.HasData()).To(BeTrue())
-				frame, err = framer.PopStreamFrame(100)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(frame).ToNot(BeNil())
+				fs = framer.PopStreamFrames(1000)
+				Expect(fs).To(HaveLen(1))
 				Expect(framer.HasData()).To(BeFalse())
 			})
 
 			It("gets the whole data of a frame if it was split", func() {
 				origdata := []byte("foobar")
 				stream1.dataForWriting = origdata
-				frame, err := framer.PopStreamFrame(7)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.Data).To(Equal([]byte("foo")))
+				fs := framer.PopStreamFrames(7)
+				Expect(fs).To(HaveLen(1))
+				Expect(fs[0].Data).To(Equal([]byte("foo")))
 				var b bytes.Buffer
-				frame.Write(&b, 0)
+				fs[0].Write(&b, 0)
 				Expect(b.Len()).To(Equal(7))
-				frame, err = framer.PopStreamFrame(1000)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.Data).To(Equal([]byte("bar")))
+				fs = framer.PopStreamFrames(1000)
+				Expect(fs).To(HaveLen(1))
+				Expect(fs[0].Data).To(Equal([]byte("bar")))
 			})
 
 			It("correctly calculates the byte length when returning a split frame", func() {
 				framer.AddFrameForRetransmission(retransmittedFrame1)
 				framer.AddFrameForRetransmission(retransmittedFrame2)
 				startByteLength := framer.EstimatedDataLen()
-				frame, err := framer.PopStreamFrame(6)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.StreamID).To(Equal(retransmittedFrame1.StreamID)) // make sure the right frame was popped
-				Expect(framer.EstimatedDataLen()).To(Equal(startByteLength - frame.DataLen()))
+				fs := framer.PopStreamFrames(6)
+				Expect(fs).To(HaveLen(1))
+				Expect(fs[0].StreamID).To(Equal(retransmittedFrame1.StreamID)) // make sure the right frame was popped
+				Expect(framer.EstimatedDataLen()).To(Equal(startByteLength - fs[0].DataLen()))
 			})
 		})
 
@@ -278,12 +262,12 @@ var _ = Describe("Stream Framer", func() {
 			It("sends FINs when streams are closed", func() {
 				stream1.writeOffset = 42
 				stream1.closed = 1
-				frame, err := framer.PopStreamFrame(1000)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(frame.StreamID).To(Equal(stream1.streamID))
-				Expect(frame.Offset).To(Equal(stream1.writeOffset))
-				Expect(frame.FinBit).To(BeTrue())
-				Expect(frame.Data).To(BeEmpty())
+				fs := framer.PopStreamFrames(1000)
+				Expect(fs).To(HaveLen(1))
+				Expect(fs[0].StreamID).To(Equal(stream1.streamID))
+				Expect(fs[0].Offset).To(Equal(stream1.writeOffset))
+				Expect(fs[0].FinBit).To(BeTrue())
+				Expect(fs[0].Data).To(BeEmpty())
 			})
 		})
 	})
@@ -291,15 +275,13 @@ var _ = Describe("Stream Framer", func() {
 	Context("flow control", func() {
 		It("tells the FlowControlManager how many bytes it sent", func() {
 			stream1.dataForWriting = []byte("foobar")
-			_, err := framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
+			framer.PopStreamFrames(1000)
 			Expect(fcm.bytesSent).To(Equal(protocol.ByteCount(6)))
 		})
 
 		It("does not count retransmitted frames as sent bytes", func() {
 			framer.AddFrameForRetransmission(retransmittedFrame1)
-			_, err := framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
+			framer.PopStreamFrames(1000)
 			Expect(fcm.bytesSent).To(BeZero())
 		})
 
@@ -307,62 +289,61 @@ var _ = Describe("Stream Framer", func() {
 			stream1.writeOffset = 10
 			stream1.dataForWriting = []byte("foobar")
 			fcm.sendWindowSizes[stream1.streamID] = 10 + 6
-			frame, err := framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.DataLen()).To(Equal(protocol.ByteCount(6)))
+			fs := framer.PopStreamFrames(1000)
+			Expect(fs).To(HaveLen(1))
+			Expect(fs[0].DataLen()).To(Equal(protocol.ByteCount(6)))
 		})
 
 		It("returns a smaller frame if the whole frame doesn't fit", func() {
 			stream1.dataForWriting = []byte("foobar")
 			fcm.sendWindowSizes[stream1.streamID] = 3
-			frame, err := framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.Data).To(Equal([]byte("foo")))
+			fs := framer.PopStreamFrames(1000)
+			Expect(fs).To(HaveLen(1))
+			Expect(fs[0].Data).To(Equal([]byte("foo")))
 		})
 
 		It("returns a smaller frame if the whole frame doesn't fit in the stream flow control window, for non-zero StreamFrame offset", func() {
 			stream1.writeOffset = 1
 			stream1.dataForWriting = []byte("foobar")
 			fcm.sendWindowSizes[stream1.StreamID()] = 4
-			frame, err := framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.Data).To(Equal([]byte("foo")))
+			fs := framer.PopStreamFrames(1000)
+			Expect(fs).To(HaveLen(1))
+			Expect(fs[0].Data).To(Equal([]byte("foo")))
 		})
 
 		It("returns a smaller frame if the whole frame doesn't fit in the connection flow control window", func() {
 			stream1.dataForWriting = []byte("foobar")
 			fcm.streamsContributing = []protocol.StreamID{stream1.StreamID()}
 			fcm.remainingConnectionWindowSize = 3
-			frame, err := framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.Data).To(Equal([]byte("foo")))
+			fs := framer.PopStreamFrames(1000)
+			Expect(fs).To(HaveLen(1))
+			Expect(fs[0].Data).To(Equal([]byte("foo")))
 		})
 
 		It("ignores the connection flow control window for non-contributing streams", func() {
 			stream1.dataForWriting = []byte("foobar")
 			fcm.remainingConnectionWindowSize = 0
-			frame, err := framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.Data).To(Equal([]byte("foobar")))
+			fs := framer.PopStreamFrames(1000)
+			Expect(fs).To(HaveLen(1))
+			Expect(fs[0].Data).To(Equal([]byte("foobar")))
 		})
 
 		It("respects the connection flow control window for contributing streams", func() {
 			stream1.dataForWriting = []byte("foobar")
 			fcm.remainingConnectionWindowSize = 0
 			fcm.streamsContributing = []protocol.StreamID{stream1.StreamID()}
-			frame, err := framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(BeNil())
+			fs := framer.PopStreamFrames(1000)
+			Expect(fs).To(BeEmpty())
 		})
 
 		It("selects a stream that is not flow control blocked", func() {
 			fcm.sendWindowSizes[stream1.StreamID()] = 0
 			stream1.dataForWriting = []byte("foobar")
 			stream2.dataForWriting = []byte("foobaz")
-			frame, err := framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.StreamID).To(Equal(stream2.StreamID()))
-			Expect(frame.Data).To(Equal([]byte("foobaz")))
+			fs := framer.PopStreamFrames(1000)
+			Expect(fs).To(HaveLen(1))
+			Expect(fs[0].StreamID).To(Equal(stream2.StreamID()))
+			Expect(fs[0].Data).To(Equal([]byte("foobaz")))
 		})
 
 		It("chooses a non-contributing stream if the connection is flow control blocked", func() {
@@ -370,9 +351,9 @@ var _ = Describe("Stream Framer", func() {
 			stream2.dataForWriting = []byte("foobaz")
 			fcm.streamsContributing = []protocol.StreamID{stream1.StreamID()}
 			fcm.remainingConnectionWindowSize = 0
-			frame, err := framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.StreamID).To(Equal(stream2.StreamID()))
+			fs := framer.PopStreamFrames(1000)
+			Expect(fs).To(HaveLen(1))
+			Expect(fs[0].StreamID).To(Equal(stream2.StreamID()))
 		})
 
 		It("returns nil if every stream is individually flow control blocked", func() {
@@ -380,9 +361,8 @@ var _ = Describe("Stream Framer", func() {
 			fcm.sendWindowSizes[stream2.StreamID()] = 0
 			stream1.dataForWriting = []byte("foobar")
 			stream2.dataForWriting = []byte("foobaz")
-			frame, err := framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(BeNil())
+			fs := framer.PopStreamFrames(1000)
+			Expect(fs).To(BeEmpty())
 		})
 
 		It("returns nil if every stream is connection flow control blocked", func() {
@@ -390,9 +370,8 @@ var _ = Describe("Stream Framer", func() {
 			stream1.dataForWriting = []byte("foobar")
 			stream2.dataForWriting = []byte("foobaz")
 			fcm.streamsContributing = []protocol.StreamID{stream1.StreamID(), stream2.StreamID()}
-			frame, err := framer.PopStreamFrame(1000)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(BeNil())
+			fs := framer.PopStreamFrames(1000)
+			Expect(fs).To(BeEmpty())
 		})
 	})
 
@@ -408,8 +387,7 @@ var _ = Describe("Stream Framer", func() {
 		It("queues and pops BLOCKED frames for individually blocked streams", func() {
 			fcm.sendWindowSizes[stream1.StreamID()] = 3
 			stream1.dataForWriting = []byte("foo")
-			_, err := framer.PopStreamFrame(1000)
-			Expect(err).NotTo(HaveOccurred())
+			framer.PopStreamFrames(1000)
 			blockedFrame := framer.PopBlockedFrame()
 			Expect(blockedFrame).ToNot(BeNil())
 			Expect(blockedFrame.StreamID).To(Equal(stream1.StreamID()))
@@ -420,8 +398,7 @@ var _ = Describe("Stream Framer", func() {
 			fcm.remainingConnectionWindowSize = 3
 			fcm.streamsContributing = []protocol.StreamID{stream1.StreamID()}
 			stream1.dataForWriting = []byte("foo")
-			_, err := framer.PopStreamFrame(1000)
-			Expect(err).NotTo(HaveOccurred())
+			framer.PopStreamFrames(1000)
 			blockedFrame := framer.PopBlockedFrame()
 			Expect(blockedFrame).ToNot(BeNil())
 			Expect(blockedFrame.StreamID).To(BeZero())
@@ -431,19 +408,14 @@ var _ = Describe("Stream Framer", func() {
 		It("does not queue BLOCKED frames for non-contributing streams", func() {
 			fcm.remainingConnectionWindowSize = 3
 			stream1.dataForWriting = []byte("foo")
-			_, err := framer.PopStreamFrame(1000)
-			Expect(err).NotTo(HaveOccurred())
+			framer.PopStreamFrames(1000)
 			Expect(framer.PopBlockedFrame()).To(BeNil())
 		})
 
 		It("does not queue BLOCKED frames twice", func() {
 			fcm.sendWindowSizes[stream1.StreamID()] = 3
 			stream1.dataForWriting = []byte("foobar")
-			_, err := framer.PopStreamFrame(1000)
-			Expect(err).NotTo(HaveOccurred())
-			frame, err := framer.PopStreamFrame(1000)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(frame).To(BeNil())
+			framer.PopStreamFrames(1000)
 			blockedFrame := framer.PopBlockedFrame()
 			Expect(blockedFrame).ToNot(BeNil())
 			Expect(blockedFrame.StreamID).To(Equal(stream1.StreamID()))
