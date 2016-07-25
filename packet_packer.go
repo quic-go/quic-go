@@ -49,17 +49,11 @@ func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 }
 
 func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, largestObserved protocol.PacketNumber, onlySendOneControlFrame bool) (*packedPacket, error) {
-	// don't send out packets that only contain a StopWaitingFrame
-	if len(p.controlFrames) == 0 && len(controlFrames) == 0 && !p.streamFramer.HasData() {
-		return nil, nil
-	}
-
 	if len(controlFrames) > 0 {
 		p.controlFrames = append(p.controlFrames, controlFrames...)
 	}
 
-	p.lastPacketNumber++
-	currentPacketNumber := p.lastPacketNumber
+	currentPacketNumber := p.lastPacketNumber + 1
 
 	// cryptoSetup needs to be locked here, so that the AEADs are not changed between
 	// calling DiversificationNonce() and Seal().
@@ -93,6 +87,10 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		if err != nil {
 			return nil, err
 		}
+		// don't send out packets that only contain a StopWaitingFrame
+		if len(payloadFrames) == 0 || (stopWaitingFrame != nil && len(payloadFrames) == 1) {
+			return nil, nil
+		}
 	}
 
 	payload, err := p.getPayload(payloadFrames, currentPacketNumber)
@@ -124,6 +122,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		return nil, errors.New("PacketPacker BUG: packet too large")
 	}
 
+	p.lastPacketNumber++
 	return &packedPacket{
 		number:     currentPacketNumber,
 		entropyBit: entropyBit,
