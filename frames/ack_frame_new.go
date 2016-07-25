@@ -195,14 +195,13 @@ func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 		typeByte ^= (uint8(largestAckedLen / 2)) << 2
 	}
 
-	// TODO: send shorter values, if possible
-	missingSequenceNumberDeltaLen := protocol.PacketNumberLen6
+	missingSequenceNumberDeltaLen := f.getMissingSequenceNumberDeltaLen()
 	if missingSequenceNumberDeltaLen != protocol.PacketNumberLen1 {
 		typeByte ^= (uint8(missingSequenceNumberDeltaLen / 2))
 	}
 
 	if f.HasMissingRanges() {
-		typeByte |= (0x20 | 0x03)
+		typeByte |= 0x20
 	}
 
 	b.WriteByte(typeByte)
@@ -231,8 +230,9 @@ func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 		b.WriteByte(uint8(numRanges - 1))
 	}
 
+	var firstAckBlockLength protocol.PacketNumber
 	if !f.HasMissingRanges() {
-		utils.WriteUint48(b, uint64(f.LargestAcked-f.LowestAcked+1))
+		firstAckBlockLength = f.LargestAcked - f.LowestAcked + 1
 	} else {
 		if f.LargestAcked != f.AckRanges[0].LastPacketNumber {
 			return errInconsistentAckLargestAcked
@@ -240,9 +240,19 @@ func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 		if f.LowestAcked != f.AckRanges[len(f.AckRanges)-1].FirstPacketNumber {
 			return errInconsistentAckLowestAcked
 		}
-		length := f.LargestAcked - f.AckRanges[0].FirstPacketNumber + 1
-		utils.WriteUint48(b, uint64(length))
+		firstAckBlockLength = f.LargestAcked - f.AckRanges[0].FirstPacketNumber + 1
 		numRangesWritten++
+	}
+
+	switch missingSequenceNumberDeltaLen {
+	case protocol.PacketNumberLen1:
+		b.WriteByte(uint8(firstAckBlockLength))
+	case protocol.PacketNumberLen2:
+		utils.WriteUint16(b, uint16(firstAckBlockLength))
+	case protocol.PacketNumberLen4:
+		utils.WriteUint32(b, uint32(firstAckBlockLength))
+	case protocol.PacketNumberLen6:
+		utils.WriteUint48(b, uint64(firstAckBlockLength))
 	}
 
 	for i, ackRange := range f.AckRanges {
@@ -260,7 +270,16 @@ func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 
 		if num == 1 {
 			b.WriteByte(uint8(gap))
-			utils.WriteUint48(b, uint64(length))
+			switch missingSequenceNumberDeltaLen {
+			case protocol.PacketNumberLen1:
+				b.WriteByte(uint8(length))
+			case protocol.PacketNumberLen2:
+				utils.WriteUint16(b, uint16(length))
+			case protocol.PacketNumberLen4:
+				utils.WriteUint32(b, uint32(length))
+			case protocol.PacketNumberLen6:
+				utils.WriteUint48(b, uint64(length))
+			}
 			numRangesWritten++
 		} else {
 			for i := 0; i < int(num); i++ {
@@ -276,7 +295,17 @@ func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 				}
 
 				b.WriteByte(uint8(gapWritten))
-				utils.WriteUint48(b, lengthWritten)
+				switch missingSequenceNumberDeltaLen {
+				case protocol.PacketNumberLen1:
+					b.WriteByte(uint8(lengthWritten))
+				case protocol.PacketNumberLen2:
+					utils.WriteUint16(b, uint16(lengthWritten))
+				case protocol.PacketNumberLen4:
+					utils.WriteUint32(b, uint32(lengthWritten))
+				case protocol.PacketNumberLen6:
+					utils.WriteUint48(b, uint64(lengthWritten))
+				}
+
 				numRangesWritten++
 			}
 		}
@@ -302,7 +331,7 @@ func (f *AckFrameNew) MinLength(version protocol.VersionNumber) (protocol.ByteCo
 	length = 1 + 2 + 1 // 1 TypeByte, 2 ACK delay time, 1 Num Timestamp
 	length += protocol.ByteCount(protocol.GetPacketNumberLength(f.LargestAcked))
 
-	missingSequenceNumberDeltaLen := protocol.ByteCount(protocol.PacketNumberLen6)
+	missingSequenceNumberDeltaLen := protocol.ByteCount(f.getMissingSequenceNumberDeltaLen())
 
 	if f.HasMissingRanges() {
 		length += (1 + missingSequenceNumberDeltaLen) * protocol.ByteCount(f.numWritableNackRanges())
@@ -389,4 +418,31 @@ func (f *AckFrameNew) numWritableNackRanges() uint64 {
 	}
 
 	return numRanges + 1
+}
+
+func (f *AckFrameNew) getMissingSequenceNumberDeltaLen() protocol.PacketNumberLen {
+	var maxRangeLength protocol.PacketNumber
+
+	if f.HasMissingRanges() {
+		for _, ackRange := range f.AckRanges {
+			rangeLength := ackRange.LastPacketNumber - ackRange.FirstPacketNumber + 1
+			if rangeLength > maxRangeLength {
+				maxRangeLength = rangeLength
+			}
+		}
+	} else {
+		maxRangeLength = f.LargestAcked - f.LowestAcked + 1
+	}
+
+	if maxRangeLength <= 0xFF {
+		return protocol.PacketNumberLen1
+	}
+	if maxRangeLength <= 0xFFFF {
+		return protocol.PacketNumberLen2
+	}
+	if maxRangeLength <= 0xFFFFFFFF {
+		return protocol.PacketNumberLen4
+	}
+
+	return protocol.PacketNumberLen6
 }

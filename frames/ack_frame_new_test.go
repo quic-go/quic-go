@@ -377,7 +377,7 @@ var _ = Describe("AckFrame", func() {
 				Expect(err).To(MatchError(errInconsistentAckLowestAcked))
 			})
 
-			Context("longer ACK blocks", func() {
+			Context("longer gaps between ACK blocks", func() {
 				It("only writes one block for 254 lost packets", func() {
 					frameOrig := &AckFrameNew{
 						LargestAcked: 300,
@@ -472,6 +472,115 @@ var _ = Describe("AckFrame", func() {
 					Expect(err).ToNot(HaveOccurred())
 					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
 					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
+				})
+			})
+
+			Context("longer ACK blocks", func() {
+				It("writes a 1 byte Missing Sequence Number Delta", func() {
+					frameOrig := &AckFrameNew{
+						LargestAcked: 200,
+						LowestAcked:  1,
+					}
+					err := frameOrig.Write(b, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(b.Bytes()[0] & 0x3).To(Equal(byte(0x0)))
+					r := bytes.NewReader(b.Bytes())
+					frame, err := ParseAckFrameNew(r, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
+					Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
+					Expect(r.Len()).To(BeZero())
+				})
+
+				It("writes a 2 byte Missing Sequence Number Delta", func() {
+					frameOrig := &AckFrameNew{
+						LargestAcked: 0x100,
+						LowestAcked:  1,
+					}
+					err := frameOrig.Write(b, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(b.Bytes()[0] & 0x3).To(Equal(byte(0x1)))
+					r := bytes.NewReader(b.Bytes())
+					frame, err := ParseAckFrameNew(r, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
+					Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
+					Expect(r.Len()).To(BeZero())
+				})
+
+				It("writes a 4 byte Missing Sequence Number Delta", func() {
+					frameOrig := &AckFrameNew{
+						LargestAcked: 0x10000,
+						LowestAcked:  1,
+					}
+					err := frameOrig.Write(b, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(b.Bytes()[0] & 0x3).To(Equal(byte(0x2)))
+					r := bytes.NewReader(b.Bytes())
+					frame, err := ParseAckFrameNew(r, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
+					Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
+					Expect(r.Len()).To(BeZero())
+				})
+
+				It("writes a 6 byte Missing Sequence Number Delta", func() {
+					frameOrig := &AckFrameNew{
+						LargestAcked: 0x100000000,
+						LowestAcked:  1,
+					}
+					err := frameOrig.Write(b, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(b.Bytes()[0] & 0x3).To(Equal(byte(0x3)))
+					r := bytes.NewReader(b.Bytes())
+					frame, err := ParseAckFrameNew(r, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
+					Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
+					Expect(r.Len()).To(BeZero())
+				})
+
+				It("writes a 1 byte Missing Sequence Number Delta, if all ACK blocks are short", func() {
+					frameOrig := &AckFrameNew{
+						LargestAcked: 5001,
+						LowestAcked:  1,
+						AckRanges: []AckRange{
+							AckRange{FirstPacketNumber: 5000, LastPacketNumber: 5001},
+							AckRange{FirstPacketNumber: 250, LastPacketNumber: 300},
+							AckRange{FirstPacketNumber: 1, LastPacketNumber: 200},
+						},
+					}
+					err := frameOrig.Write(b, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(b.Bytes()[0] & 0x3).To(Equal(byte(0x0)))
+					r := bytes.NewReader(b.Bytes())
+					frame, err := ParseAckFrameNew(r, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
+					Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
+					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
+					Expect(r.Len()).To(BeZero())
+				})
+
+				It("writes a 2 byte Missing Sequence Number Delta, for a frame with 2 ACK ranges", func() {
+					frameOrig := &AckFrameNew{
+						LargestAcked: 10000,
+						LowestAcked:  1,
+						AckRanges: []AckRange{
+							AckRange{FirstPacketNumber: 9990, LastPacketNumber: 10000},
+							AckRange{FirstPacketNumber: 1, LastPacketNumber: 256},
+						},
+					}
+					err := frameOrig.Write(b, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(b.Bytes()[0] & 0x3).To(Equal(byte(0x1)))
+					r := bytes.NewReader(b.Bytes())
+					frame, err := ParseAckFrameNew(r, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
+					Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
+					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
+					Expect(r.Len()).To(BeZero())
 				})
 			})
 
@@ -582,6 +691,22 @@ var _ = Describe("AckFrame", func() {
 					LowestAcked:  1,
 					AckRanges: []AckRange{
 						AckRange{FirstPacketNumber: 1500, LastPacketNumber: 2000},
+						AckRange{FirstPacketNumber: 290, LastPacketNumber: 295},
+						AckRange{FirstPacketNumber: 1, LastPacketNumber: 19},
+					},
+				}
+				err := f.Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(f.MinLength(0)).To(Equal(protocol.ByteCount(b.Len())))
+			})
+
+			It("has the proper min length for an ACK with a long ACK range", func() {
+				largestAcked := protocol.PacketNumber(2 + 0xFFFFFF)
+				f := &AckFrameNew{
+					LargestAcked: largestAcked,
+					LowestAcked:  1,
+					AckRanges: []AckRange{
+						AckRange{FirstPacketNumber: 1500, LastPacketNumber: largestAcked},
 						AckRange{FirstPacketNumber: 290, LastPacketNumber: 295},
 						AckRange{FirstPacketNumber: 1, LastPacketNumber: 19},
 					},
