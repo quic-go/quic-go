@@ -104,8 +104,8 @@ var _ = Describe("Server", func() {
 
 		go func() {
 			defer GinkgoRecover()
-			err := server.Serve(serverConn)
-			Expect(err).ToNot(HaveOccurred())
+			err2 := server.Serve(serverConn)
+			Expect(err2).ToNot(HaveOccurred())
 			close(done)
 		}()
 
@@ -143,8 +143,8 @@ var _ = Describe("Server", func() {
 
 		go func() {
 			defer GinkgoRecover()
-			err := server.Serve(serverConn)
-			Expect(err).ToNot(HaveOccurred())
+			err2 := server.Serve(serverConn)
+			Expect(err2).ToNot(HaveOccurred())
 			close(done)
 		}()
 

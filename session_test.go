@@ -528,8 +528,8 @@ var _ = Describe("Session", func() {
 				Expect(err).NotTo(HaveOccurred())
 				go session.run()
 				go func() {
-					_, err := s1.Write([]byte("foobar1"))
-					Expect(err).NotTo(HaveOccurred())
+					_, err2 := s1.Write([]byte("foobar1"))
+					Expect(err2).NotTo(HaveOccurred())
 				}()
 				_, err = s2.Write([]byte("foobar2"))
 				Expect(err).NotTo(HaveOccurred())
@@ -557,8 +557,8 @@ var _ = Describe("Session", func() {
 				go session.run()
 				go func() {
 					defer GinkgoRecover()
-					_, err := s1.Write(bytes.Repeat([]byte{'e'}, int(protocol.SmallPacketPayloadSizeThreshold+50)))
-					Expect(err).ToNot(HaveOccurred())
+					_, err2 := s1.Write(bytes.Repeat([]byte{'e'}, int(protocol.SmallPacketPayloadSizeThreshold+50)))
+					Expect(err2).ToNot(HaveOccurred())
 				}()
 				_, err = s2.Write(bytes.Repeat([]byte{'e'}, int(protocol.SmallPacketPayloadSizeThreshold+50)))
 				Expect(err).ToNot(HaveOccurred())
