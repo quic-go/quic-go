@@ -186,6 +186,9 @@ func (s *Session) run() {
 				s.tryQueueingUndecryptablePacket(p)
 				continue
 			}
+			// This is a bit unclean, but works properly, since the packet always
+			// begins with the public header and we never copy it.
+			putPacketBuffer(p.publicHeader.Raw)
 			if s.delayedAckOriginTime.IsZero() {
 				s.delayedAckOriginTime = time.Now()
 			}
