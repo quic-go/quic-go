@@ -27,7 +27,9 @@ type mockConnection struct {
 }
 
 func (m *mockConnection) write(p []byte) error {
-	m.written = append(m.written, p)
+	b := make([]byte, len(p))
+	copy(b, p)
+	m.written = append(m.written, b)
 	return nil
 }
 

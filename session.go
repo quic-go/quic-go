@@ -531,10 +531,10 @@ func (s *Session) sendPacket() error {
 		s.delayedAckOriginTime = time.Time{}
 
 		err = s.conn.write(packet.raw)
+		putPacketBuffer(packet.raw)
 		if err != nil {
 			return err
 		}
-
 	}
 }
 

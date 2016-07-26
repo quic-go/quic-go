@@ -110,7 +110,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		}
 	}
 
-	raw := make([]byte, 0, protocol.MaxPacketSize)
+	raw := getPacketBuffer()
 	buffer := bytes.NewBuffer(raw)
 
 	if responsePublicHeader.WritePublicHeader(buffer, p.version) != nil {
