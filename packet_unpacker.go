@@ -44,7 +44,7 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *publicHeader, da
 		return nil, qerr.MissingPayload
 	}
 
-	fs := make([]frames.Frame, 0, 1)
+	fs := make([]frames.Frame, 0, 2)
 
 	// Read all frames in the packet
 ReadLoop:
