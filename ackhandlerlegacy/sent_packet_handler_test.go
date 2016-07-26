@@ -138,9 +138,11 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(1)))
 			entropy := EntropyAccumulator(0)
 			entropy.Add(packet1.PacketNumber, packet1.EntropyBit)
-			ack := frames.AckFrameLegacy{
-				LargestObserved: 1,
-				Entropy:         byte(entropy),
+			ack := frames.AckFrame{
+				AckFrameLegacy: &frames.AckFrameLegacy{
+					LargestObserved: 1,
+					Entropy:         byte(entropy),
+				},
 			}
 			err = handler.ReceivedAck(&ack, 1)
 			Expect(err).ToNot(HaveOccurred())
@@ -275,7 +277,7 @@ var _ = Describe("SentPacketHandler", func() {
 				LargestObserved: 4,
 				Entropy:         1,
 			}
-			err := handler.ReceivedAck(&ack, 1)
+			err := handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, 1)
 			Expect(err).To(MatchError(ErrEntropy))
 			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(6)))
 		})
@@ -290,7 +292,7 @@ var _ = Describe("SentPacketHandler", func() {
 				LargestObserved: protocol.PacketNumber(largestObserved),
 				Entropy:         byte(entropy),
 			}
-			err := handler.ReceivedAck(&ack, 1)
+			err := handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, 1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(2)))
 			Expect(handler.LargestObserved).To(Equal(protocol.PacketNumber(largestObserved)))
@@ -319,7 +321,7 @@ var _ = Describe("SentPacketHandler", func() {
 					{FirstPacketNumber: 3, LastPacketNumber: 3},
 				},
 			}
-			err := handler.ReceivedAck(&ack, 1)
+			err := handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, 1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(2)))
 			Expect(handler.LargestObserved).To(Equal(protocol.PacketNumber(largestObserved)))
@@ -348,7 +350,7 @@ var _ = Describe("SentPacketHandler", func() {
 					{FirstPacketNumber: 3, LastPacketNumber: 4},
 				},
 			}
-			err := handler.ReceivedAck(&ack1, 1)
+			err := handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack1}, 1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(2)))
 			entropy.Add(packets[2].PacketNumber, packets[2].EntropyBit)
@@ -360,7 +362,7 @@ var _ = Describe("SentPacketHandler", func() {
 					{FirstPacketNumber: 4, LastPacketNumber: 4},
 				},
 			}
-			err = handler.ReceivedAck(&ack2, 2)
+			err = handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack2}, 2)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(1)))
 			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(4)))
@@ -391,10 +393,10 @@ var _ = Describe("SentPacketHandler", func() {
 				ack := frames.AckFrameLegacy{
 					LargestObserved: protocol.PacketNumber(largestObserved),
 				}
-				err := handler.ReceivedAck(&ack, 1)
+				err := handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, 1)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(3)))
-				err = handler.ReceivedAck(&ack, 1)
+				err = handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, 1)
 				Expect(err).To(MatchError(ErrDuplicateOrOutOfOrderAck))
 				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(3)))
 			})
@@ -404,10 +406,10 @@ var _ = Describe("SentPacketHandler", func() {
 				ack := frames.AckFrameLegacy{
 					LargestObserved: protocol.PacketNumber(largestObserved),
 				}
-				err := handler.ReceivedAck(&ack, 2)
+				err := handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, 2)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(3)))
-				err = handler.ReceivedAck(&ack, 1)
+				err = handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, 1)
 				Expect(err).To(MatchError(ErrDuplicateOrOutOfOrderAck))
 				Expect(handler.LargestObserved).To(Equal(protocol.PacketNumber(largestObserved)))
 				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(3)))
@@ -417,10 +419,10 @@ var _ = Describe("SentPacketHandler", func() {
 				ack := frames.AckFrameLegacy{
 					LargestObserved: 3,
 				}
-				err := handler.ReceivedAck(&ack, 1337)
+				err := handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, 1337)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(3)))
-				err = handler.ReceivedAck(&ack, 1337+1)
+				err = handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, 1337+1)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.LargestObserved).To(Equal(protocol.PacketNumber(3)))
 				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(3)))
@@ -430,7 +432,7 @@ var _ = Describe("SentPacketHandler", func() {
 				ack := frames.AckFrameLegacy{
 					LargestObserved: packets[len(packets)-1].PacketNumber + 1337,
 				}
-				err := handler.ReceivedAck(&ack, 1)
+				err := handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, 1)
 				Expect(err).To(MatchError(errAckForUnsentPacket))
 				Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(0)))
 				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(6)))
@@ -445,7 +447,8 @@ var _ = Describe("SentPacketHandler", func() {
 				packet := handler.DequeuePacketForRetransmission()
 				Expect(packet).ToNot(BeNil())
 				// this is the belated ACK
-				err := handler.ReceivedAck(&frames.AckFrameLegacy{LargestObserved: 3}, 1)
+				ack := frames.AckFrameLegacy{LargestObserved: 3}
+				err := handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, 1)
 				Expect(handler.LargestObserved).To(Equal(protocol.PacketNumber(3)))
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -459,13 +462,16 @@ var _ = Describe("SentPacketHandler", func() {
 				handler.packetHistory[2].sendTime = now.Add(-5 * time.Minute)
 				handler.packetHistory[6].sendTime = now.Add(-1 * time.Minute)
 				// Now, check that the proper times are used when calculating the deltas
-				err := handler.ReceivedAck(&frames.AckFrameLegacy{LargestObserved: 1}, 1)
+				ack := frames.AckFrameLegacy{LargestObserved: 1}
+				err := handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, 1)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(handler.rttStats.LatestRTT()).To(BeNumerically("~", 10*time.Minute, 1*time.Second))
-				err = handler.ReceivedAck(&frames.AckFrameLegacy{LargestObserved: 2}, 2)
+				ack = frames.AckFrameLegacy{LargestObserved: 2}
+				err = handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, 2)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(handler.rttStats.LatestRTT()).To(BeNumerically("~", 5*time.Minute, 1*time.Second))
-				err = handler.ReceivedAck(&frames.AckFrameLegacy{LargestObserved: 6}, 3)
+				ack = frames.AckFrameLegacy{LargestObserved: 6}
+				err = handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, 3)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(handler.rttStats.LatestRTT()).To(BeNumerically("~", 1*time.Minute, 1*time.Second))
 			})
@@ -473,7 +479,11 @@ var _ = Describe("SentPacketHandler", func() {
 			It("uses the DelayTime in the ack frame", func() {
 				now := time.Now()
 				handler.packetHistory[1].sendTime = now.Add(-10 * time.Minute)
-				err := handler.ReceivedAck(&frames.AckFrameLegacy{LargestObserved: 1, DelayTime: 5 * time.Minute}, 1)
+				ack := frames.AckFrameLegacy{
+					LargestObserved: 1,
+					DelayTime:       5 * time.Minute,
+				}
+				err := handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, 1)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(handler.rttStats.LatestRTT()).To(BeNumerically("~", 5*time.Minute, 1*time.Second))
 			})
@@ -569,7 +579,7 @@ var _ = Describe("SentPacketHandler", func() {
 				LargestObserved: 4,
 				NackRanges:      []frames.NackRange{{FirstPacketNumber: 3, LastPacketNumber: 3}},
 			}
-			err := handler.ReceivedAck(&ack, 1)
+			err := handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, 1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.highestInOrderAckedPacketNumber).To(Equal(protocol.PacketNumber(2)))
 			handler.nackPacket(3) // this is the second NACK for this packet
@@ -605,7 +615,7 @@ var _ = Describe("SentPacketHandler", func() {
 				LargestObserved: 2,
 				NackRanges:      []frames.NackRange{{FirstPacketNumber: 1, LastPacketNumber: 1}},
 			}
-			err = handler.ReceivedAck(&ack, 1)
+			err = handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, 1)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(1)))
 
@@ -626,7 +636,7 @@ var _ = Describe("SentPacketHandler", func() {
 			ack = frames.AckFrameLegacy{
 				LargestObserved: 3,
 			}
-			err = handler.ReceivedAck(&ack, 2)
+			err = handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, 2)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(0)))
 		})
@@ -665,7 +675,7 @@ var _ = Describe("SentPacketHandler", func() {
 				LargestObserved: 3,
 				NackRanges:      []frames.NackRange{{2, 2}},
 			}
-			err := handler.ReceivedAck(&ack, 1)
+			err := handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, 1)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cong.nCalls).To(Equal(4)) // 3 * SentPacket + 1 * ReceivedAck
 			// rttUpdated, bytesInFlight, ackedPackets, lostPackets
@@ -683,7 +693,7 @@ var _ = Describe("SentPacketHandler", func() {
 					LargestObserved: packetNumber,
 					NackRanges:      []frames.NackRange{{2, 2}},
 				}
-				err = handler.ReceivedAck(&ack, protocol.PacketNumber(2+i))
+				err = handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, protocol.PacketNumber(2+i))
 				Expect(err).NotTo(HaveOccurred())
 			}
 

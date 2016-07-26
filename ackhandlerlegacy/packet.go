@@ -41,7 +41,7 @@ func (p *Packet) GetControlFramesForRetransmission() []frames.Frame {
 			continue
 		}
 
-		_, isAck := frame.(*frames.AckFrameLegacy)
+		_, isAck := frame.(*frames.AckFrame)
 		_, isStopWaiting := frame.(*frames.StopWaitingFrame)
 		if !isAck && !isStopWaiting {
 			controlFrames = append(controlFrames, frame)

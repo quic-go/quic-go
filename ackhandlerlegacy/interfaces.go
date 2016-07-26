@@ -10,7 +10,7 @@ import (
 // SentPacketHandler handles ACKs received for outgoing packets
 type SentPacketHandler interface {
 	SentPacket(packet *Packet) error
-	ReceivedAck(ackFrame *frames.AckFrameLegacy, withPacketNumber protocol.PacketNumber) error
+	ReceivedAck(ackFrame *frames.AckFrame, withPacketNumber protocol.PacketNumber) error
 
 	ProbablyHasPacketForRetransmission() bool
 	DequeuePacketForRetransmission() (packet *Packet)
@@ -29,7 +29,7 @@ type ReceivedPacketHandler interface {
 	ReceivedPacket(packetNumber protocol.PacketNumber, entropyBit bool) error
 	ReceivedStopWaiting(*frames.StopWaitingFrame) error
 
-	GetAckFrame(dequeue bool) (*frames.AckFrameLegacy, error)
+	GetAckFrame(dequeue bool) (*frames.AckFrame, error)
 }
 
 // StopWaitingManager manages StopWaitings for sent packets

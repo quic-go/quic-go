@@ -48,7 +48,7 @@ type mockSentPacketHandler struct {
 }
 
 func (h *mockSentPacketHandler) SentPacket(packet *ackhandlerlegacy.Packet) error { return nil }
-func (h *mockSentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameLegacy, withPacketNumber protocol.PacketNumber) error {
+func (h *mockSentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNumber protocol.PacketNumber) error {
 	return nil
 }
 func (h *mockSentPacketHandler) BytesInFlight() protocol.ByteCount         { return 0 }
@@ -674,7 +674,8 @@ var _ = Describe("Session", func() {
 			err := session.sentPacketHandler.SentPacket(&ackhandlerlegacy.Packet{PacketNumber: p, Length: 1})
 			Expect(err).NotTo(HaveOccurred())
 			time.Sleep(time.Microsecond)
-			err = session.sentPacketHandler.ReceivedAck(&frames.AckFrameLegacy{LargestObserved: p}, p)
+			ack := frames.AckFrameLegacy{LargestObserved: p}
+			err = session.sentPacketHandler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, p)
 			Expect(err).NotTo(HaveOccurred())
 		}
 		// Now, we send a single packet, and expect that it was retransmitted later
@@ -727,12 +728,16 @@ var _ = Describe("Session", func() {
 				PacketNumber: 1,
 				Length:       1,
 			})
-			err := session.handleFrames([]frames.Frame{&frames.AckFrameLegacy{
-				LargestObserved: 1,
+			err := session.handleFrames([]frames.Frame{&frames.AckFrame{
+				AckFrameLegacy: &frames.AckFrameLegacy{
+					LargestObserved: 1,
+				},
 			}})
 			Expect(err).NotTo(HaveOccurred())
-			err = session.handleFrames([]frames.Frame{&frames.AckFrameLegacy{
-				LargestObserved: 1,
+			err = session.handleFrames([]frames.Frame{&frames.AckFrame{
+				AckFrameLegacy: &frames.AckFrameLegacy{
+					LargestObserved: 1,
+				},
 			}})
 			Expect(err).NotTo(HaveOccurred())
 		})

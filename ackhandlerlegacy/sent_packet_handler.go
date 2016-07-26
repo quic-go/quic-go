@@ -178,7 +178,8 @@ func (h *sentPacketHandler) calculateExpectedEntropy(ackFrame *frames.AckFrameLe
 }
 
 // TODO: Simplify return types
-func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameLegacy, withPacketNumber protocol.PacketNumber) error {
+func (h *sentPacketHandler) ReceivedAck(ackFrameOrig *frames.AckFrame, withPacketNumber protocol.PacketNumber) error {
+	ackFrame := ackFrameOrig.AckFrameLegacy
 	if ackFrame.LargestObserved > h.lastSentPacketNumber {
 		return errAckForUnsentPacket
 	}
