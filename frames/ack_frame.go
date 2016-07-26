@@ -21,8 +21,8 @@ var (
 	errInconsistentAckLowestAcked  = errors.New("internal inconsistency: LowestAcked does not match ACK ranges")
 )
 
-// An AckFrameNew is a ACK frame in QUIC c34
-type AckFrameNew struct {
+// An AckFrame is a ACK frame in QUIC c34
+type AckFrame struct {
 	LargestAcked protocol.PacketNumber
 	LowestAcked  protocol.PacketNumber
 	AckRanges    []AckRange // has to be ordered. The ACK range with the highest FirstPacketNumber goes first, the ACK range with the lowest FirstPacketNumber goes last
@@ -31,9 +31,9 @@ type AckFrameNew struct {
 	PacketReceivedTime time.Time // only for received packets. Will not be modified for received ACKs frames
 }
 
-// ParseAckFrameNew reads an ACK frame
-func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFrameNew, error) {
-	frame := &AckFrameNew{}
+// ParseAckFrame reads an ACK frame
+func ParseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, error) {
+	frame := &AckFrame{}
 
 	typeByte, err := r.ReadByte()
 	if err != nil {
@@ -186,7 +186,7 @@ func ParseAckFrameNew(r *bytes.Reader, version protocol.VersionNumber) (*AckFram
 }
 
 // Write writes an ACK frame.
-func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
+func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
 	largestAckedLen := protocol.GetPacketNumberLength(f.LargestAcked)
 
 	typeByte := uint8(0x40)
@@ -326,7 +326,7 @@ func (f *AckFrameNew) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 }
 
 // MinLength of a written frame
-func (f *AckFrameNew) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
+func (f *AckFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
 	var length protocol.ByteCount
 	length = 1 + 2 + 1 // 1 TypeByte, 2 ACK delay time, 1 Num Timestamp
 	length += protocol.ByteCount(protocol.GetPacketNumberLength(f.LargestAcked))
@@ -345,14 +345,14 @@ func (f *AckFrameNew) MinLength(version protocol.VersionNumber) (protocol.ByteCo
 }
 
 // HasMissingRanges returns if this frame reports any missing packets
-func (f *AckFrameNew) HasMissingRanges() bool {
+func (f *AckFrame) HasMissingRanges() bool {
 	if len(f.AckRanges) > 0 {
 		return true
 	}
 	return false
 }
 
-func (f *AckFrameNew) validateAckRanges() bool {
+func (f *AckFrame) validateAckRanges() bool {
 	if len(f.AckRanges) == 0 {
 		return true
 	}
@@ -392,7 +392,7 @@ func (f *AckFrameNew) validateAckRanges() bool {
 
 // numWritableNackRanges calculates the number of ACK blocks that are about to be written
 // this number is different from len(f.AckRanges) for the case of long gaps (> 255 packets)
-func (f *AckFrameNew) numWritableNackRanges() uint64 {
+func (f *AckFrame) numWritableNackRanges() uint64 {
 	if len(f.AckRanges) == 0 {
 		return 0
 	}
@@ -420,7 +420,7 @@ func (f *AckFrameNew) numWritableNackRanges() uint64 {
 	return numRanges + 1
 }
 
-func (f *AckFrameNew) getMissingSequenceNumberDeltaLen() protocol.PacketNumberLen {
+func (f *AckFrame) getMissingSequenceNumberDeltaLen() protocol.PacketNumberLen {
 	var maxRangeLength protocol.PacketNumber
 
 	if f.HasMissingRanges() {

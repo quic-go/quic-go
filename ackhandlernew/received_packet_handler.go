@@ -25,7 +25,7 @@ type receivedPacketHandler struct {
 	largestInOrderObserved protocol.PacketNumber
 	largestObserved        protocol.PacketNumber
 	ignorePacketsBelow     protocol.PacketNumber
-	currentAckFrame        *frames.AckFrameNew
+	currentAckFrame        *frames.AckFrame
 	stateChanged           bool // has an ACK for this state already been sent? Will be set to false every time a new packet arrives, and to false every time an ACK is sent
 
 	packetHistory         *receivedPacketHistory
@@ -104,7 +104,7 @@ func (h *receivedPacketHandler) ReceivedStopWaiting(f *frames.StopWaitingFrame) 
 	return nil
 }
 
-func (h *receivedPacketHandler) GetAckFrame(dequeue bool) (*frames.AckFrameNew, error) {
+func (h *receivedPacketHandler) GetAckFrame(dequeue bool) (*frames.AckFrame, error) {
 	if !h.stateChanged {
 		return nil, nil
 	}
@@ -123,7 +123,7 @@ func (h *receivedPacketHandler) GetAckFrame(dequeue bool) (*frames.AckFrameNew, 
 	}
 
 	ackRanges := h.packetHistory.GetAckRanges()
-	h.currentAckFrame = &frames.AckFrameNew{
+	h.currentAckFrame = &frames.AckFrame{
 		LargestAcked:       h.largestObserved,
 		LowestAcked:        ackRanges[len(ackRanges)-1].FirstPacketNumber,
 		PacketReceivedTime: packetReceivedTime,

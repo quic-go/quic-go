@@ -147,7 +147,7 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 }
 
 // TODO: Simplify return types
-func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrameNew, withPacketNumber protocol.PacketNumber) error {
+func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNumber protocol.PacketNumber) error {
 	if ackFrame.LargestAcked > h.lastSentPacketNumber {
 		return errAckForUnsentPacket
 	}
