@@ -110,10 +110,14 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		}
 	}
 
-	payload, err := p.getPayload(payloadFrames, currentPacketNumber)
-	if err != nil {
+	raw := make([]byte, 0, protocol.MaxPacketSize)
+	buffer := bytes.NewBuffer(raw)
+
+	if responsePublicHeader.WritePublicHeader(buffer, p.version) != nil {
 		return nil, err
 	}
+
+	payloadStartIndex := buffer.Len()
 
 	// set entropy bit in Private Header, for QUIC version < 34
 	var entropyBit bool
@@ -123,44 +127,31 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 			return nil, err
 		}
 		if entropyBit {
-			payload[0] = 1
+			buffer.WriteByte(1)
+		} else {
+			buffer.WriteByte(0)
 		}
 	}
 
-	var raw bytes.Buffer
-	if err := responsePublicHeader.WritePublicHeader(&raw, p.version); err != nil {
-		return nil, err
+	for _, frame := range payloadFrames {
+		frame.Write(buffer, p.version)
 	}
 
-	ciphertext := p.cryptoSetup.Seal(nil, payload, currentPacketNumber, raw.Bytes())
-	raw.Write(ciphertext)
-
-	if protocol.ByteCount(raw.Len()) > protocol.MaxPacketSize {
+	if protocol.ByteCount(buffer.Len()+12) > protocol.MaxPacketSize {
 		return nil, errors.New("PacketPacker BUG: packet too large")
 	}
+
+	raw = raw[0:buffer.Len()]
+	p.cryptoSetup.Seal(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], currentPacketNumber, raw[:payloadStartIndex])
+	raw = raw[0 : buffer.Len()+12]
 
 	p.lastPacketNumber++
 	return &packedPacket{
 		number:     currentPacketNumber,
 		entropyBit: entropyBit,
-		raw:        raw.Bytes(),
+		raw:        raw,
 		frames:     payloadFrames,
 	}, nil
-}
-
-func (p *packetPacker) getPayload(frames []frames.Frame, currentPacketNumber protocol.PacketNumber) ([]byte, error) {
-	var payload bytes.Buffer
-
-	// reserve 1 byte for the Private Header, for QUIC Version < 34
-	// the entropy bit is set in sendPayload
-	if p.version < protocol.Version34 {
-		payload.WriteByte(0)
-	}
-
-	for _, frame := range frames {
-		frame.Write(&payload, p.version)
-	}
-	return payload.Bytes(), nil
 }
 
 func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFrame, publicHeaderLength protocol.ByteCount) ([]frames.Frame, error) {
