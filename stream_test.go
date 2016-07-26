@@ -9,6 +9,7 @@ import (
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -61,6 +62,7 @@ func (m *mockFlowControlHandler) UpdateHighestReceived(streamID protocol.StreamI
 
 func (m *mockFlowControlHandler) AddBytesSent(streamID protocol.StreamID, n protocol.ByteCount) error {
 	m.bytesSent += n
+	m.sendWindowSizes[streamID] -= n
 	for _, s := range m.streamsContributing {
 		if s == streamID {
 			m.remainingConnectionWindowSize -= n
@@ -71,11 +73,19 @@ func (m *mockFlowControlHandler) AddBytesSent(streamID protocol.StreamID, n prot
 }
 
 func (m *mockFlowControlHandler) SendWindowSize(streamID protocol.StreamID) (protocol.ByteCount, error) {
-	return m.sendWindowSizes[streamID], nil
+	res := m.sendWindowSizes[streamID]
+	for _, s := range m.streamsContributing {
+		if s == streamID {
+			return utils.MinByteCount(res, m.remainingConnectionWindowSize), nil
+		}
+	}
+	return res, nil
 }
+
 func (m *mockFlowControlHandler) RemainingConnectionWindowSize() protocol.ByteCount {
 	return m.remainingConnectionWindowSize
 }
+
 func (m *mockFlowControlHandler) UpdateWindow(streamID protocol.StreamID, offset protocol.ByteCount) (bool, error) {
 	panic("not implemented")
 }

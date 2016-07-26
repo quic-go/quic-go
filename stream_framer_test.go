@@ -226,7 +226,7 @@ var _ = Describe("Stream Framer", func() {
 		It("returns a smaller frame if the whole frame doesn't fit in the stream flow control window, for non-zero StreamFrame offset", func() {
 			stream1.writeOffset = 1
 			stream1.dataForWriting = []byte("foobar")
-			fcm.sendWindowSizes[stream1.StreamID()] = 4
+			fcm.sendWindowSizes[stream1.StreamID()] = 3
 			fs := framer.PopStreamFrames(1000)
 			Expect(fs).To(HaveLen(1))
 			Expect(fs[0].Data).To(Equal([]byte("foo")))

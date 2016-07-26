@@ -304,10 +304,10 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 			err = session.handleWindowUpdateFrame(&frames.WindowUpdateFrame{
 				StreamID:   5,
-				ByteOffset: 0x8000,
+				ByteOffset: 100,
 			})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(session.flowControlManager.SendWindowSize(5)).To(Equal(protocol.ByteCount(0x8000)))
+			Expect(session.flowControlManager.SendWindowSize(5)).To(Equal(protocol.ByteCount(100)))
 		})
 
 		It("updates the Flow Control Window of the connection", func() {

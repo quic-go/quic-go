@@ -94,8 +94,8 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 		maxLen := maxBytes - currentLen - frameHeaderBytes
 
 		if s.lenOfDataForWriting() != 0 {
-			fcAllowance, _ := f.getFCAllowanceForStream(s) // can never error
-			maxLen = utils.MinByteCount(maxLen, fcAllowance)
+			sendWindowSize, _ := f.flowControlManager.SendWindowSize(s.streamID)
+			maxLen = utils.MinByteCount(maxLen, sendWindowSize)
 		}
 
 		if maxLen == 0 {
@@ -118,14 +118,12 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 		f.flowControlManager.AddBytesSent(s.streamID, protocol.ByteCount(len(data)))
 
 		// Finally, check if we are now FC blocked and should queue a BLOCKED frame
-		individualFcOffset, _ := f.flowControlManager.SendWindowSize(s.streamID) // can never error
-		if s.writeOffset == individualFcOffset {
-			// We are now stream-level FC blocked
-			f.blockedFrameQueue = append(f.blockedFrameQueue, &frames.BlockedFrame{StreamID: s.StreamID()})
-		}
 		if f.flowControlManager.RemainingConnectionWindowSize() == 0 {
 			// We are now connection-level FC blocked
 			f.blockedFrameQueue = append(f.blockedFrameQueue, &frames.BlockedFrame{StreamID: 0})
+		} else if individualWindowSize, _ := f.flowControlManager.SendWindowSize(s.streamID); individualWindowSize == 0 {
+			// We are now stream-level FC blocked
+			f.blockedFrameQueue = append(f.blockedFrameQueue, &frames.BlockedFrame{StreamID: s.StreamID()})
 		}
 
 		res = append(res, frame)
@@ -133,27 +131,6 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 		frame = &frames.StreamFrame{DataLenPresent: true}
 	}
 	return
-}
-
-func (f *streamFramer) getFCAllowanceForStream(s *stream) (protocol.ByteCount, error) {
-	flowControlWindow, err := f.flowControlManager.SendWindowSize(s.streamID)
-	if err != nil {
-		return 0, err
-	}
-	flowControlWindow -= s.writeOffset
-	if flowControlWindow == 0 {
-		return 0, nil
-	}
-
-	contributes, err := f.flowControlManager.StreamContributesToConnectionFlowControl(s.StreamID())
-	if err != nil {
-		return 0, err
-	}
-	connectionWindow := protocol.ByteCount(protocol.MaxByteCount)
-	if contributes {
-		connectionWindow = f.flowControlManager.RemainingConnectionWindowSize()
-	}
-	return utils.MinByteCount(flowControlWindow, connectionWindow), nil
 }
 
 // maybeSplitOffFrame removes the first n bytes and returns them as a separate frame. If n >= len(frame), nil is returned and nothing is modified.
