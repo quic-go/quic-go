@@ -32,41 +32,6 @@ func (f *streamFramer) AddFrameForRetransmission(frame *frames.StreamFrame) {
 	f.retransmissionQueue = append(f.retransmissionQueue, frame)
 }
 
-func (f *streamFramer) EstimatedDataLen() protocol.ByteCount {
-	// We don't accurately calculate the len of FIN frames. Instead we estimate
-	// they're 5 bytes long on average, i.e. 2 bytes stream ID and 2 bytes offset.
-	const estimatedLenOfFinFrame = 1 + 2 + 2
-
-	var l protocol.ByteCount
-	const max = protocol.MaxFrameAndPublicHeaderSize
-
-	// Count retransmissions
-	for _, frame := range f.retransmissionQueue {
-		l += frame.DataLen()
-		if l > max {
-			return max
-		}
-	}
-
-	// Count data in streams
-	f.streamsMutex.RLock()
-	defer f.streamsMutex.RUnlock()
-	for _, s := range *f.streams {
-		if s != nil {
-			// An error should never happen, and needlessly complicates the return values
-			fcLimit, _ := f.getFCAllowanceForStream(s)
-			l += utils.MinByteCount(s.lenOfDataForWriting(), fcLimit)
-			if s.shouldSendFin() {
-				l += estimatedLenOfFinFrame
-			}
-			if l > max {
-				return max
-			}
-		}
-	}
-	return l
-}
-
 func (f *streamFramer) PopStreamFrames(maxLen protocol.ByteCount) []*frames.StreamFrame {
 	fs, currentLen := f.maybePopFramesForRetransmission(maxLen)
 	return append(fs, f.maybePopNormalFrames(maxLen-currentLen)...)

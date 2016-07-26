@@ -59,47 +59,6 @@ var _ = Describe("Stream Framer", func() {
 		Expect(fs[0].DataLenPresent).To(BeTrue())
 	})
 
-	Context("Framer estimated data length", func() {
-		It("returns the correct length for an empty framer", func() {
-			Expect(framer.EstimatedDataLen()).To(BeZero())
-		})
-
-		It("returns the correct byte length", func() {
-			framer.AddFrameForRetransmission(retransmittedFrame1)
-			Expect(framer.EstimatedDataLen()).To(Equal(protocol.ByteCount(2)))
-			stream1.dataForWriting = []byte("foobar")
-			Expect(framer.EstimatedDataLen()).To(Equal(protocol.ByteCount(2 + 6)))
-		})
-
-		It("returns the correct byte length when popping", func() {
-			framer.AddFrameForRetransmission(retransmittedFrame1)
-			stream1.dataForWriting = []byte("foobar")
-			Expect(framer.EstimatedDataLen()).To(Equal(protocol.ByteCount(2 + 6)))
-			framer.PopStreamFrames(8)
-			Expect(framer.EstimatedDataLen()).To(Equal(protocol.ByteCount(6)))
-			framer.PopStreamFrames(1000)
-			Expect(framer.EstimatedDataLen()).To(BeZero())
-		})
-
-		It("includes estimated FIN frames", func() {
-			stream1.closed = 1
-			// estimate for an average frame containing only a FIN bit
-			Expect(framer.EstimatedDataLen()).To(Equal(protocol.ByteCount(5)))
-		})
-
-		It("is zero when FC blocked", func() {
-			stream1.dataForWriting = []byte("foobar")
-			Expect(framer.EstimatedDataLen()).To(Equal(protocol.ByteCount(6)))
-			fcm.sendWindowSizes[stream1.StreamID()] = 0
-			Expect(framer.EstimatedDataLen()).To(BeZero())
-		})
-
-		It("caps the length", func() {
-			stream1.dataForWriting = bytes.Repeat([]byte{'a'}, int(protocol.MaxPacketSize)+10)
-			Expect(framer.EstimatedDataLen()).To(Equal(protocol.MaxFrameAndPublicHeaderSize))
-		})
-	})
-
 	Context("Popping", func() {
 		It("returns nil when popping an empty framer", func() {
 			Expect(framer.PopStreamFrames(1000)).To(BeEmpty())
@@ -217,16 +176,6 @@ var _ = Describe("Stream Framer", func() {
 				fs = framer.PopStreamFrames(1000)
 				Expect(fs).To(HaveLen(1))
 				Expect(fs[0].Data).To(Equal([]byte("bar")))
-			})
-
-			It("correctly calculates the byte length when returning a split frame", func() {
-				framer.AddFrameForRetransmission(retransmittedFrame1)
-				framer.AddFrameForRetransmission(retransmittedFrame2)
-				startByteLength := framer.EstimatedDataLen()
-				fs := framer.PopStreamFrames(6)
-				Expect(fs).To(HaveLen(1))
-				Expect(fs[0].StreamID).To(Equal(retransmittedFrame1.StreamID)) // make sure the right frame was popped
-				Expect(framer.EstimatedDataLen()).To(Equal(startByteLength - fs[0].DataLen()))
 			})
 		})
 
