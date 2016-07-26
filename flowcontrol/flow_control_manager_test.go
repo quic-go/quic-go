@@ -184,26 +184,5 @@ var _ = Describe("Flow Control Manager", func() {
 				Expect(size).To(Equal(protocol.ByteCount(0x1000)))
 			})
 		})
-
-		Context("streams contributing to connection-level flow control", func() {
-			It("says that a stream contributes", func() {
-				fcm.NewStream(5, true)
-				contributes, err := fcm.StreamContributesToConnectionFlowControl(5)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(contributes).To(BeTrue())
-			})
-
-			It("says that a stream doesn't contribute", func() {
-				fcm.NewStream(3, false)
-				contributes, err := fcm.StreamContributesToConnectionFlowControl(3)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(contributes).To(BeFalse())
-			})
-
-			It("returns an error for an unknown stream", func() {
-				_, err := fcm.StreamContributesToConnectionFlowControl(1337)
-				Expect(err).To(HaveOccurred())
-			})
-		})
 	})
 })
