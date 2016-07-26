@@ -30,27 +30,27 @@ var _ = Describe("AES-GCM", func() {
 	})
 
 	It("seals and opens", func() {
-		b := alice.Seal(42, []byte("aad"), []byte("foobar"))
-		text, err := bob.Open(42, []byte("aad"), b)
+		b := alice.Seal(nil, []byte("foobar"), 42, []byte("aad"))
+		text, err := bob.Open(nil, b, 42, []byte("aad"))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(text).To(Equal([]byte("foobar")))
 	})
 
 	It("seals and opens reverse", func() {
-		b := bob.Seal(42, []byte("aad"), []byte("foobar"))
-		text, err := alice.Open(42, []byte("aad"), b)
+		b := bob.Seal(nil, []byte("foobar"), 42, []byte("aad"))
+		text, err := alice.Open(nil, b, 42, []byte("aad"))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(text).To(Equal([]byte("foobar")))
 	})
 
 	It("has the proper length", func() {
-		b := bob.Seal(42, []byte("aad"), []byte("foobar"))
+		b := bob.Seal(nil, []byte("foobar"), 42, []byte("aad"))
 		Expect(b).To(HaveLen(6 + 12))
 	})
 
 	It("fails with wrong aad", func() {
-		b := alice.Seal(42, []byte("aad"), []byte("foobar"))
-		_, err := bob.Open(42, []byte("aad2"), b)
+		b := alice.Seal(nil, []byte("foobar"), 42, []byte("aad"))
+		_, err := bob.Open(nil, b, 42, []byte("aad2"))
 		Expect(err).To(HaveOccurred())
 	})
 

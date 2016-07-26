@@ -132,7 +132,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		return nil, err
 	}
 
-	ciphertext := p.cryptoSetup.Seal(currentPacketNumber, raw.Bytes(), payload)
+	ciphertext := p.cryptoSetup.Seal(nil, payload, currentPacketNumber, raw.Bytes())
 	raw.Write(ciphertext)
 
 	if protocol.ByteCount(raw.Len()) > protocol.MaxPacketSize {

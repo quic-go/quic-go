@@ -142,12 +142,12 @@ func (h *CryptoSetup) handleMessage(chloData []byte, cryptoData map[Tag][]byte) 
 }
 
 // Open a message
-func (h *CryptoSetup) Open(packetNumber protocol.PacketNumber, associatedData []byte, ciphertext []byte) ([]byte, error) {
+func (h *CryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 
 	if h.forwardSecureAEAD != nil {
-		res, err := h.forwardSecureAEAD.Open(packetNumber, associatedData, ciphertext)
+		res, err := h.forwardSecureAEAD.Open(dst, src, packetNumber, associatedData)
 		if err == nil {
 			h.receivedForwardSecurePacket = true
 			return res, nil
@@ -157,7 +157,7 @@ func (h *CryptoSetup) Open(packetNumber protocol.PacketNumber, associatedData []
 		}
 	}
 	if h.secureAEAD != nil {
-		res, err := h.secureAEAD.Open(packetNumber, associatedData, ciphertext)
+		res, err := h.secureAEAD.Open(dst, src, packetNumber, associatedData)
 		if err == nil {
 			h.receivedSecurePacket = true
 			return res, nil
@@ -166,17 +166,17 @@ func (h *CryptoSetup) Open(packetNumber protocol.PacketNumber, associatedData []
 			return nil, err
 		}
 	}
-	return (&crypto.NullAEAD{}).Open(packetNumber, associatedData, ciphertext)
+	return (&crypto.NullAEAD{}).Open(dst, src, packetNumber, associatedData)
 }
 
 // Seal a message, call LockForSealing() before!
-func (h *CryptoSetup) Seal(packetNumber protocol.PacketNumber, associatedData []byte, plaintext []byte) []byte {
+func (h *CryptoSetup) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
 	if h.receivedForwardSecurePacket {
-		return h.forwardSecureAEAD.Seal(packetNumber, associatedData, plaintext)
+		return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData)
 	} else if h.secureAEAD != nil {
-		return h.secureAEAD.Seal(packetNumber, associatedData, plaintext)
+		return h.secureAEAD.Seal(dst, src, packetNumber, associatedData)
 	} else {
-		return (&crypto.NullAEAD{}).Seal(packetNumber, associatedData, plaintext)
+		return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData)
 	}
 }
 
