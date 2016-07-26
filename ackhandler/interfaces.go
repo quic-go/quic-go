@@ -3,17 +3,18 @@ package ackhandler
 import (
 	"time"
 
+	"github.com/lucas-clemente/quic-go/ackhandlerlegacy"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 )
 
 // SentPacketHandler handles ACKs received for outgoing packets
 type SentPacketHandler interface {
-	SentPacket(packet *Packet) error
+	SentPacket(packet *ackhandlerlegacy.Packet) error
 	ReceivedAck(ackFrame *frames.AckFrame, withPacketNumber protocol.PacketNumber) error
 
 	ProbablyHasPacketForRetransmission() bool
-	DequeuePacketForRetransmission() (packet *Packet)
+	DequeuePacketForRetransmission() (packet *ackhandlerlegacy.Packet)
 
 	BytesInFlight() protocol.ByteCount
 	GetLargestAcked() protocol.PacketNumber
@@ -26,7 +27,8 @@ type SentPacketHandler interface {
 
 // ReceivedPacketHandler handles ACKs needed to send for incoming packets
 type ReceivedPacketHandler interface {
-	ReceivedPacket(packetNumber protocol.PacketNumber) error
+	// TODO: remove entroypyBit once we drop support for QUIC 33
+	ReceivedPacket(packetNumber protocol.PacketNumber, entropyBit bool) error
 	ReceivedStopWaiting(*frames.StopWaitingFrame) error
 
 	GetAckFrame(dequeue bool) (*frames.AckFrame, error)
@@ -34,7 +36,7 @@ type ReceivedPacketHandler interface {
 
 // StopWaitingManager manages StopWaitings for sent packets
 type StopWaitingManager interface {
-	RegisterPacketForRetransmission(packet *Packet)
+	RegisterPacketForRetransmission(packet *ackhandlerlegacy.Packet)
 	GetStopWaitingFrame() *frames.StopWaitingFrame
 	SentStopWaitingWithPacket(packetNumber protocol.PacketNumber)
 	ReceivedAckForPacketNumber(packetNumber protocol.PacketNumber)

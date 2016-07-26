@@ -159,7 +159,7 @@ var _ = Describe("SentPacketHandler", func() {
 			packet := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, EntropyBit: true, Length: 1}
 			err := handler.SentPacket(&packet)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.packetHistory[1].sendTime.Unix()).To(BeNumerically("~", time.Now().Unix(), 1))
+			Expect(handler.packetHistory[1].SendTime.Unix()).To(BeNumerically("~", time.Now().Unix(), 1))
 		})
 
 		It("updates the last sent time", func() {
@@ -458,9 +458,9 @@ var _ = Describe("SentPacketHandler", func() {
 			It("calculates the RTT", func() {
 				now := time.Now()
 				// First, fake the sent times of the first, second and last packet
-				handler.packetHistory[1].sendTime = now.Add(-10 * time.Minute)
-				handler.packetHistory[2].sendTime = now.Add(-5 * time.Minute)
-				handler.packetHistory[6].sendTime = now.Add(-1 * time.Minute)
+				handler.packetHistory[1].SendTime = now.Add(-10 * time.Minute)
+				handler.packetHistory[2].SendTime = now.Add(-5 * time.Minute)
+				handler.packetHistory[6].SendTime = now.Add(-1 * time.Minute)
 				// Now, check that the proper times are used when calculating the deltas
 				ack := frames.AckFrameLegacy{LargestObserved: 1}
 				err := handler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, 1)
@@ -478,7 +478,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 			It("uses the DelayTime in the ack frame", func() {
 				now := time.Now()
-				handler.packetHistory[1].sendTime = now.Add(-10 * time.Minute)
+				handler.packetHistory[1].SendTime = now.Add(-10 * time.Minute)
 				ack := frames.AckFrameLegacy{
 					LargestObserved: 1,
 					DelayTime:       5 * time.Minute,

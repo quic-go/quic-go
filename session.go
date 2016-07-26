@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/ackhandlerlegacy"
 	"github.com/lucas-clemente/quic-go/flowcontrol"
 	"github.com/lucas-clemente/quic-go/frames"
@@ -53,9 +54,9 @@ type Session struct {
 	openStreamsCount uint32
 	streamsMutex     sync.RWMutex
 
-	sentPacketHandler     ackhandlerlegacy.SentPacketHandler
-	receivedPacketHandler ackhandlerlegacy.ReceivedPacketHandler
-	stopWaitingManager    ackhandlerlegacy.StopWaitingManager
+	sentPacketHandler     ackhandler.SentPacketHandler
+	receivedPacketHandler ackhandler.ReceivedPacketHandler
+	stopWaitingManager    ackhandler.StopWaitingManager
 	streamFramer          *streamFramer
 
 	flowControlManager flowcontrol.FlowControlManager
@@ -92,9 +93,22 @@ type Session struct {
 
 // newSession makes a new session
 func newSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) (packetHandler, error) {
-	stopWaitingManager := ackhandlerlegacy.NewStopWaitingManager()
 	connectionParametersManager := handshake.NewConnectionParamatersManager()
 	flowControlManager := flowcontrol.NewFlowControlManager(connectionParametersManager)
+
+	var stopWaitingManager ackhandler.StopWaitingManager
+	var sentPacketHandler ackhandler.SentPacketHandler
+	var receivedPacketHandler ackhandler.ReceivedPacketHandler
+
+	if v <= protocol.Version33 {
+		stopWaitingManager = ackhandlerlegacy.NewStopWaitingManager().(ackhandler.StopWaitingManager)
+		sentPacketHandler = ackhandlerlegacy.NewSentPacketHandler(stopWaitingManager).(ackhandler.SentPacketHandler)
+		receivedPacketHandler = ackhandlerlegacy.NewReceivedPacketHandler().(ackhandler.ReceivedPacketHandler)
+	} else {
+		stopWaitingManager = ackhandler.NewStopWaitingManager()
+		sentPacketHandler = ackhandler.NewSentPacketHandler(stopWaitingManager)
+		receivedPacketHandler = ackhandler.NewReceivedPacketHandler()
+	}
 
 	session := &Session{
 		connectionID:                connectionID,
@@ -103,8 +117,8 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		streamCallback:              streamCallback,
 		closeCallback:               closeCallback,
 		streams:                     make(map[protocol.StreamID]*stream),
-		sentPacketHandler:           ackhandlerlegacy.NewSentPacketHandler(stopWaitingManager),
-		receivedPacketHandler:       ackhandlerlegacy.NewReceivedPacketHandler(),
+		sentPacketHandler:           sentPacketHandler,
+		receivedPacketHandler:       receivedPacketHandler,
 		stopWaitingManager:          stopWaitingManager,
 		flowControlManager:          flowControlManager,
 		receivedPackets:             make(chan receivedPacket, protocol.MaxSessionUnprocessedPackets),
@@ -533,7 +547,7 @@ func (s *Session) sendPacket() error {
 	}
 
 	stopWaitingFrame := s.stopWaitingManager.GetStopWaitingFrame()
-	packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, s.sentPacketHandler.GetLargestObserved())
+	packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, s.sentPacketHandler.GetLargestAcked())
 
 	if err != nil {
 		return err
@@ -573,7 +587,7 @@ func (s *Session) sendPacket() error {
 }
 
 func (s *Session) sendConnectionClose(quicErr *qerr.QuicError) error {
-	packet, err := s.packer.PackConnectionClose(&frames.ConnectionCloseFrame{ErrorCode: quicErr.ErrorCode, ReasonPhrase: quicErr.ErrorMessage}, s.sentPacketHandler.GetLargestObserved())
+	packet, err := s.packer.PackConnectionClose(&frames.ConnectionCloseFrame{ErrorCode: quicErr.ErrorCode, ReasonPhrase: quicErr.ErrorMessage}, s.sentPacketHandler.GetLargestAcked())
 	if err != nil {
 		return err
 	}

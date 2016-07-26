@@ -1,6 +1,7 @@
 package ackhandler
 
 import (
+	"github.com/lucas-clemente/quic-go/ackhandlerlegacy"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 )
@@ -22,7 +23,7 @@ func NewStopWaitingManager() StopWaitingManager {
 }
 
 // RegisterPacketForRetransmission prepares the StopWaitingFrame, if necessary
-func (h *stopWaitingManager) RegisterPacketForRetransmission(packet *Packet) {
+func (h *stopWaitingManager) RegisterPacketForRetransmission(packet *ackhandlerlegacy.Packet) {
 	// out-of-order retransmission. A StopWaitingFrame with a higher LeastUnacked was already queued (or sent in the past), no need to send another one again
 	if packet.PacketNumber < h.maxRetransmittedPacketNumber {
 		return

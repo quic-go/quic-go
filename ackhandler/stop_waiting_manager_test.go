@@ -1,6 +1,7 @@
 package ackhandler
 
 import (
+	"github.com/lucas-clemente/quic-go/ackhandlerlegacy"
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -18,7 +19,7 @@ var _ = Describe("StopWaitingManager", func() {
 
 	It("gets a StopWaitingFrame after a packet has been registered for retransmission", func() {
 		leastUnacked := protocol.PacketNumber(10)
-		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked})
+		manager.RegisterPacketForRetransmission(&ackhandlerlegacy.Packet{PacketNumber: leastUnacked})
 		swf := manager.GetStopWaitingFrame()
 		Expect(swf).ToNot(BeNil())
 		Expect(swf.LeastUnacked).To(Equal(leastUnacked + 1))
@@ -26,8 +27,8 @@ var _ = Describe("StopWaitingManager", func() {
 
 	It("always gets the StopWaitingFrame for the highest retransmitted packet number", func() {
 		leastUnacked := protocol.PacketNumber(10)
-		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked})
-		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked - 1})
+		manager.RegisterPacketForRetransmission(&ackhandlerlegacy.Packet{PacketNumber: leastUnacked})
+		manager.RegisterPacketForRetransmission(&ackhandlerlegacy.Packet{PacketNumber: leastUnacked - 1})
 		swf := manager.GetStopWaitingFrame()
 		Expect(swf).ToNot(BeNil())
 		Expect(swf.LeastUnacked).To(Equal(leastUnacked + 1))
@@ -35,8 +36,8 @@ var _ = Describe("StopWaitingManager", func() {
 
 	It("updates the StopWaitingFrame when a packet with a higher packet number is retransmitted", func() {
 		leastUnacked := protocol.PacketNumber(10)
-		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked - 1})
-		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked})
+		manager.RegisterPacketForRetransmission(&ackhandlerlegacy.Packet{PacketNumber: leastUnacked - 1})
+		manager.RegisterPacketForRetransmission(&ackhandlerlegacy.Packet{PacketNumber: leastUnacked})
 		swf := manager.GetStopWaitingFrame()
 		Expect(swf).ToNot(BeNil())
 		Expect(swf.LeastUnacked).To(Equal(leastUnacked + 1))
@@ -44,17 +45,17 @@ var _ = Describe("StopWaitingManager", func() {
 
 	It("does not create a new StopWaitingFrame for an out-of-order retransmission", func() {
 		leastUnacked := protocol.PacketNumber(10)
-		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked})
+		manager.RegisterPacketForRetransmission(&ackhandlerlegacy.Packet{PacketNumber: leastUnacked})
 		manager.SentStopWaitingWithPacket(12)
 		manager.ReceivedAckForPacketNumber(12)
-		manager.RegisterPacketForRetransmission(&Packet{PacketNumber: leastUnacked - 1})
+		manager.RegisterPacketForRetransmission(&ackhandlerlegacy.Packet{PacketNumber: leastUnacked - 1})
 		swf := manager.GetStopWaitingFrame()
 		Expect(swf).To(BeNil())
 	})
 
 	Context("ACK handling", func() {
 		It("removes the current StopWaitingFrame when the first packet it was sent with is ACKed", func() {
-			manager.RegisterPacketForRetransmission(&Packet{PacketNumber: 10})
+			manager.RegisterPacketForRetransmission(&ackhandlerlegacy.Packet{PacketNumber: 10})
 			manager.SentStopWaitingWithPacket(13)
 			manager.SentStopWaitingWithPacket(14)
 			manager.SentStopWaitingWithPacket(15)
@@ -64,7 +65,7 @@ var _ = Describe("StopWaitingManager", func() {
 		})
 
 		It("removes the current StopWaitingFrame when any packet it was sent with is ACKed", func() {
-			manager.RegisterPacketForRetransmission(&Packet{PacketNumber: 10})
+			manager.RegisterPacketForRetransmission(&ackhandlerlegacy.Packet{PacketNumber: 10})
 			manager.SentStopWaitingWithPacket(13)
 			manager.SentStopWaitingWithPacket(14)
 			manager.SentStopWaitingWithPacket(15)
@@ -74,7 +75,7 @@ var _ = Describe("StopWaitingManager", func() {
 		})
 
 		It("does not remove the current StopWaitingFrame when a packet before the one containing the StopWaitingFrame is ACKed", func() {
-			manager.RegisterPacketForRetransmission(&Packet{PacketNumber: 10})
+			manager.RegisterPacketForRetransmission(&ackhandlerlegacy.Packet{PacketNumber: 10})
 			manager.SentStopWaitingWithPacket(13)
 			Expect(manager.GetStopWaitingFrame()).ToNot(BeNil())
 			manager.ReceivedAckForPacketNumber(12)

@@ -41,7 +41,7 @@ func NewReceivedPacketHandler() ReceivedPacketHandler {
 	}
 }
 
-func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumber) error {
+func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumber, entropyBit bool) error {
 	if packetNumber == 0 {
 		return errInvalidPacketNumber
 	}

@@ -3,6 +3,7 @@ package ackhandler
 import (
 	"time"
 
+	"github.com/lucas-clemente/quic-go/ackhandlerlegacy"
 	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -54,8 +55,10 @@ type mockStopWaiting struct {
 	receivedAckForPacketNumber protocol.PacketNumber
 }
 
-func (m *mockStopWaiting) RegisterPacketForRetransmission(packet *Packet) { panic("not implemented") }
-func (m *mockStopWaiting) GetStopWaitingFrame() *frames.StopWaitingFrame  { panic("not implemented") }
+func (m *mockStopWaiting) RegisterPacketForRetransmission(packet *ackhandlerlegacy.Packet) {
+	panic("not implemented")
+}
+func (m *mockStopWaiting) GetStopWaitingFrame() *frames.StopWaitingFrame { panic("not implemented") }
 func (m *mockStopWaiting) SentStopWaitingWithPacket(packetNumber protocol.PacketNumber) {
 	panic("not implemented")
 }
@@ -90,8 +93,8 @@ var _ = Describe("SentPacketHandler", func() {
 
 	Context("registering sent packets", func() {
 		It("accepts two consecutive packets", func() {
-			packet1 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1}
-			packet2 := Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, Length: 2}
+			packet1 := ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1}
+			packet2 := ackhandlerlegacy.Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, Length: 2}
 			err := handler.SentPacket(&packet1)
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.SentPacket(&packet2)
@@ -105,8 +108,8 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("rejects packets with the same packet number", func() {
-			packet1 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1}
-			packet2 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 2}
+			packet1 := ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1}
+			packet2 := ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 2}
 			err := handler.SentPacket(&packet1)
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.SentPacket(&packet2)
@@ -117,8 +120,8 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("works with non-consecutive packet numbers", func() {
-			packet1 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1}
-			packet2 := Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, Length: 2}
+			packet1 := ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1}
+			packet2 := ackhandlerlegacy.Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, Length: 2}
 			err := handler.SentPacket(&packet1)
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.SentPacket(&packet2)
@@ -131,14 +134,14 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("stores the sent time", func() {
-			packet := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1}
+			packet := ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1}
 			err := handler.SentPacket(&packet)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.packetHistory[1].sendTime.Unix()).To(BeNumerically("~", time.Now().Unix(), 1))
+			Expect(handler.packetHistory[1].SendTime.Unix()).To(BeNumerically("~", time.Now().Unix(), 1))
 		})
 
 		It("updates the last sent time", func() {
-			packet := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1}
+			packet := ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1}
 			err := handler.SentPacket(&packet)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.lastSentPacketTime.Unix()).To(BeNumerically("~", time.Now().Unix(), 1))
@@ -148,7 +151,7 @@ var _ = Describe("SentPacketHandler", func() {
 	Context("DOS mitigation", func() {
 		It("checks the size of the packet history, for unacked packets", func() {
 			for i := uint32(1); i < protocol.MaxTrackedSentPackets+10; i++ {
-				packet := Packet{PacketNumber: protocol.PacketNumber(i), Frames: []frames.Frame{&streamFrame}, Length: 1}
+				packet := ackhandlerlegacy.Packet{PacketNumber: protocol.PacketNumber(i), Frames: []frames.Frame{&streamFrame}, Length: 1}
 				err := handler.SentPacket(&packet)
 				Expect(err).ToNot(HaveOccurred())
 			}
@@ -160,10 +163,10 @@ var _ = Describe("SentPacketHandler", func() {
 	})
 
 	Context("ACK processing", func() {
-		var packets []*Packet
+		var packets []*ackhandlerlegacy.Packet
 
 		BeforeEach(func() {
-			packets = []*Packet{
+			packets = []*ackhandlerlegacy.Packet{
 				{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1},
 				{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, Length: 1},
 				{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, Length: 1},
@@ -372,9 +375,9 @@ var _ = Describe("SentPacketHandler", func() {
 			It("calculates the RTT", func() {
 				now := time.Now()
 				// First, fake the sent times of the first, second and last packet
-				handler.packetHistory[1].sendTime = now.Add(-10 * time.Minute)
-				handler.packetHistory[2].sendTime = now.Add(-5 * time.Minute)
-				handler.packetHistory[6].sendTime = now.Add(-1 * time.Minute)
+				handler.packetHistory[1].SendTime = now.Add(-10 * time.Minute)
+				handler.packetHistory[2].SendTime = now.Add(-5 * time.Minute)
+				handler.packetHistory[6].SendTime = now.Add(-1 * time.Minute)
 				// Now, check that the proper times are used when calculating the deltas
 				err := handler.ReceivedAck(&frames.AckFrame{LargestAcked: 1}, 1)
 				Expect(err).NotTo(HaveOccurred())
@@ -389,7 +392,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 			It("uses the DelayTime in the ack frame", func() {
 				now := time.Now()
-				handler.packetHistory[1].sendTime = now.Add(-10 * time.Minute)
+				handler.packetHistory[1].SendTime = now.Add(-10 * time.Minute)
 				err := handler.ReceivedAck(&frames.AckFrame{LargestAcked: 1, DelayTime: 5 * time.Minute}, 1)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(handler.rttStats.LatestRTT()).To(BeNumerically("~", 5*time.Minute, 1*time.Second))
@@ -398,10 +401,10 @@ var _ = Describe("SentPacketHandler", func() {
 	})
 
 	Context("Retransmission handler", func() {
-		var packets []*Packet
+		var packets []*ackhandlerlegacy.Packet
 
 		BeforeEach(func() {
-			packets = []*Packet{
+			packets = []*ackhandlerlegacy.Packet{
 				{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1},
 				{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, Length: 1},
 				{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, Length: 1},
@@ -565,9 +568,9 @@ var _ = Describe("SentPacketHandler", func() {
 
 	Context("calculating bytes in flight", func() {
 		It("works in a typical retransmission scenarios", func() {
-			packet1 := Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1}
-			packet2 := Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, Length: 2}
-			packet3 := Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, Length: 3}
+			packet1 := ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1}
+			packet2 := ackhandlerlegacy.Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, Length: 2}
+			packet3 := ackhandlerlegacy.Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, Length: 3}
 			err := handler.SentPacket(&packet1)
 			Expect(err).NotTo(HaveOccurred())
 			err = handler.SentPacket(&packet2)
@@ -597,7 +600,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(0)))
 
 			// Retransmission
-			packet4 := Packet{PacketNumber: 4, Length: 2}
+			packet4 := ackhandlerlegacy.Packet{PacketNumber: 4, Length: 2}
 			err = handler.SentPacket(&packet4)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(2)))
@@ -624,7 +627,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("should call OnSent", func() {
-			p := &Packet{
+			p := &ackhandlerlegacy.Packet{
 				PacketNumber: 1,
 				Frames:       []frames.Frame{&frames.StreamFrame{StreamID: 5}},
 				Length:       42,
@@ -639,9 +642,9 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("should call OnCongestionEvent", func() {
-			handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
-			handler.SentPacket(&Packet{PacketNumber: 2, Frames: []frames.Frame{}, Length: 2})
-			handler.SentPacket(&Packet{PacketNumber: 3, Frames: []frames.Frame{}, Length: 3})
+			handler.SentPacket(&ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
+			handler.SentPacket(&ackhandlerlegacy.Packet{PacketNumber: 2, Frames: []frames.Frame{}, Length: 2})
+			handler.SentPacket(&ackhandlerlegacy.Packet{PacketNumber: 3, Frames: []frames.Frame{}, Length: 3})
 			ack := frames.AckFrame{
 				LargestAcked: 3,
 				LowestAcked:  1,
@@ -663,7 +666,7 @@ var _ = Describe("SentPacketHandler", func() {
 			var packetNumber protocol.PacketNumber
 			for i := uint8(0); i < protocol.RetransmissionThreshold; i++ {
 				packetNumber = protocol.PacketNumber(4 + i)
-				handler.SentPacket(&Packet{PacketNumber: packetNumber, Frames: []frames.Frame{}, Length: protocol.ByteCount(packetNumber)})
+				handler.SentPacket(&ackhandlerlegacy.Packet{PacketNumber: packetNumber, Frames: []frames.Frame{}, Length: protocol.ByteCount(packetNumber)})
 				ack := frames.AckFrame{
 					LargestAcked: packetNumber,
 					LowestAcked:  1,
@@ -682,13 +685,13 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("allows or denies sending", func() {
 			Expect(handler.CongestionAllowsSending()).To(BeTrue())
-			err := handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: protocol.DefaultTCPMSS + 1})
+			err := handler.SentPacket(&ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: protocol.DefaultTCPMSS + 1})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(handler.CongestionAllowsSending()).To(BeFalse())
 		})
 
 		It("should call OnRetransmissionTimeout", func() {
-			err := handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
+			err := handler.SentPacket(&ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
 			Expect(err).NotTo(HaveOccurred())
 			handler.lastSentPacketTime = time.Now().Add(-time.Second)
 			handler.maybeQueuePacketsRTO()
@@ -728,7 +731,7 @@ var _ = Describe("SentPacketHandler", func() {
 			})
 
 			It("returns time to RTO", func() {
-				err := handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
+				err := handler.SentPacket(&ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(handler.TimeOfFirstRTO().Sub(time.Now())).To(BeNumerically("~", protocol.DefaultRetransmissionTime, time.Millisecond))
 			})
@@ -742,14 +745,14 @@ var _ = Describe("SentPacketHandler", func() {
 
 		Context("queuing packets due to RTO", func() {
 			It("does nothing if not required", func() {
-				err := handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
+				err := handler.SentPacket(&ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
 				Expect(err).NotTo(HaveOccurred())
 				handler.maybeQueuePacketsRTO()
 				Expect(handler.retransmissionQueue).To(BeEmpty())
 			})
 
 			It("queues a packet if RTO expired", func() {
-				p := &Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1}
+				p := &ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1}
 				err := handler.SentPacket(p)
 				Expect(err).NotTo(HaveOccurred())
 				handler.lastSentPacketTime = time.Now().Add(-time.Second)
@@ -759,7 +762,7 @@ var _ = Describe("SentPacketHandler", func() {
 			})
 
 			It("does not queue retransmittedpackets", func() {
-				p := &Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1, Retransmitted: true}
+				p := &ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1, Retransmitted: true}
 				err := handler.SentPacket(p)
 				Expect(err).NotTo(HaveOccurred())
 				handler.lastSentPacketTime = time.Now().Add(-time.Second)
@@ -775,7 +778,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("works with HasPacketForRetransmission", func() {
-			p := &Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1}
+			p := &ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1}
 			err := handler.SentPacket(p)
 			Expect(err).NotTo(HaveOccurred())
 			handler.lastSentPacketTime = time.Now().Add(-time.Second)
@@ -783,7 +786,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("works with DequeuePacketForRetransmission", func() {
-			p := &Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1}
+			p := &ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1}
 			err := handler.SentPacket(p)
 			Expect(err).NotTo(HaveOccurred())
 			handler.lastSentPacketTime = time.Now().Add(-time.Second)

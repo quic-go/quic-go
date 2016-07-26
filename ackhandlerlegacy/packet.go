@@ -1,5 +1,7 @@
 package ackhandlerlegacy
 
+// TODO: move to ackhandler once we remove support for QUIC 33
+
 import (
 	"time"
 
@@ -18,7 +20,7 @@ type Packet struct {
 	MissingReports uint8
 	Retransmitted  bool // has this Packet ever been retransmitted
 
-	sendTime time.Time
+	SendTime time.Time
 }
 
 // GetStreamFramesForRetransmission gets all the streamframes for retransmission

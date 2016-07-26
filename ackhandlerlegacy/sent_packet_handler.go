@@ -120,7 +120,7 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 	}
 	now := time.Now()
 	h.lastSentPacketTime = now
-	packet.sendTime = now
+	packet.SendTime = now
 	if packet.Length == 0 {
 		return errors.New("SentPacketHandler: packet cannot be empty")
 	}
@@ -214,7 +214,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrameOrig *frames.AckFrame, withPacke
 		h.LargestObservedEntropy = packet.Entropy
 
 		// Update the RTT
-		timeDelta := time.Now().Sub(packet.sendTime)
+		timeDelta := time.Now().Sub(packet.SendTime)
 		// TODO: Don't always update RTT
 		h.rttStats.UpdateRTT(timeDelta, ackFrame.DelayTime, time.Now())
 		if utils.Debug() {
@@ -308,7 +308,7 @@ func (h *sentPacketHandler) BytesInFlight() protocol.ByteCount {
 	return h.bytesInFlight
 }
 
-func (h *sentPacketHandler) GetLargestObserved() protocol.PacketNumber {
+func (h *sentPacketHandler) GetLargestAcked() protocol.PacketNumber {
 	return h.LargestObserved
 }
 

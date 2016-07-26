@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/ackhandlerlegacy"
 	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -34,9 +35,9 @@ type sentPacketHandler struct {
 	largestReceivedPacketWithAck protocol.PacketNumber
 
 	// TODO: Move into separate class as in chromium
-	packetHistory map[protocol.PacketNumber]*Packet
+	packetHistory map[protocol.PacketNumber]*ackhandlerlegacy.Packet
 
-	retransmissionQueue []*Packet
+	retransmissionQueue []*ackhandlerlegacy.Packet
 	stopWaitingManager  StopWaitingManager
 
 	bytesInFlight protocol.ByteCount
@@ -58,14 +59,14 @@ func NewSentPacketHandler(stopWaitingManager StopWaitingManager) SentPacketHandl
 	)
 
 	return &sentPacketHandler{
-		packetHistory:      make(map[protocol.PacketNumber]*Packet),
+		packetHistory:      make(map[protocol.PacketNumber]*ackhandlerlegacy.Packet),
 		stopWaitingManager: stopWaitingManager,
 		rttStats:           rttStats,
 		congestion:         congestion,
 	}
 }
 
-func (h *sentPacketHandler) ackPacket(packetNumber protocol.PacketNumber) *Packet {
+func (h *sentPacketHandler) ackPacket(packetNumber protocol.PacketNumber) *ackhandlerlegacy.Packet {
 	packet, ok := h.packetHistory[packetNumber]
 	if ok && !packet.Retransmitted {
 		h.bytesInFlight -= packet.Length
@@ -82,7 +83,7 @@ func (h *sentPacketHandler) ackPacket(packetNumber protocol.PacketNumber) *Packe
 	return packet
 }
 
-func (h *sentPacketHandler) nackPacket(packetNumber protocol.PacketNumber) (*Packet, error) {
+func (h *sentPacketHandler) nackPacket(packetNumber protocol.PacketNumber) (*ackhandlerlegacy.Packet, error) {
 	packet, ok := h.packetHistory[packetNumber]
 	// This means that the packet has already been retransmitted, do nothing.
 	// We're probably only receiving another NACK for this packet because the
@@ -100,7 +101,7 @@ func (h *sentPacketHandler) nackPacket(packetNumber protocol.PacketNumber) (*Pac
 	return nil, nil
 }
 
-func (h *sentPacketHandler) queuePacketForRetransmission(packet *Packet) {
+func (h *sentPacketHandler) queuePacketForRetransmission(packet *ackhandlerlegacy.Packet) {
 	h.bytesInFlight -= packet.Length
 	h.retransmissionQueue = append(h.retransmissionQueue, packet)
 	packet.Retransmitted = true
@@ -118,7 +119,7 @@ func (h *sentPacketHandler) queuePacketForRetransmission(packet *Packet) {
 	}
 }
 
-func (h *sentPacketHandler) SentPacket(packet *Packet) error {
+func (h *sentPacketHandler) SentPacket(packet *ackhandlerlegacy.Packet) error {
 	_, ok := h.packetHistory[packet.PacketNumber]
 	if ok {
 		return errDuplicatePacketNumber
@@ -126,7 +127,7 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 
 	now := time.Now()
 	h.lastSentPacketTime = now
-	packet.sendTime = now
+	packet.SendTime = now
 	if packet.Length == 0 {
 		return errors.New("SentPacketHandler: packet cannot be empty")
 	}
@@ -169,7 +170,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 	packet, ok := h.packetHistory[h.LargestAcked]
 	if ok {
 		// Update the RTT
-		timeDelta := time.Now().Sub(packet.sendTime)
+		timeDelta := time.Now().Sub(packet.SendTime)
 		// TODO: Don't always update RTT
 		h.rttStats.UpdateRTT(timeDelta, ackFrame.DelayTime, time.Now())
 		if utils.Debug() {
@@ -242,7 +243,7 @@ func (h *sentPacketHandler) ProbablyHasPacketForRetransmission() bool {
 	return len(h.retransmissionQueue) > 0
 }
 
-func (h *sentPacketHandler) DequeuePacketForRetransmission() (packet *Packet) {
+func (h *sentPacketHandler) DequeuePacketForRetransmission() (packet *ackhandlerlegacy.Packet) {
 	if !h.ProbablyHasPacketForRetransmission() {
 		return nil
 	}
