@@ -18,7 +18,7 @@ var _ = Describe("Packet unpacker", func() {
 		hdr      *publicHeader
 		hdrBin   []byte
 		aead     crypto.AEAD
-		r        *bytes.Reader
+		data     []byte
 		buf      *bytes.Buffer
 	)
 
@@ -30,29 +30,29 @@ var _ = Describe("Packet unpacker", func() {
 		}
 		hdrBin = []byte{0x04, 0x4c, 0x01}
 		unpacker = &packetUnpacker{aead: aead}
-		r = nil
+		data = nil
 		buf = &bytes.Buffer{}
 	})
 
-	setReader := func(data []byte) {
+	setData := func(p []byte) {
 		if unpacker.version < protocol.Version34 { // add private flag
-			data = append([]byte{0x01}, data...)
+			p = append([]byte{0x01}, p...)
 		}
-		r = bytes.NewReader(aead.Seal(nil, data, 0, hdrBin))
+		data = aead.Seal(nil, p, 0, hdrBin)
 	}
 
 	It("returns an error for empty packets that don't have a private flag, for QUIC Version < 34", func() {
-		// don't use setReader here, since it adds a private flag
+		unpacker.version = protocol.Version34
+		setData(nil)
 		unpacker.version = protocol.Version33
-		r = bytes.NewReader(aead.Seal(nil, nil, 0, hdrBin))
-		_, err := unpacker.Unpack(hdrBin, hdr, r)
+		_, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).To(MatchError(qerr.MissingPayload))
 	})
 
 	It("returns an error for empty packets that have a private flag, for QUIC Version < 34", func() {
 		unpacker.version = protocol.Version33
-		setReader(nil)
-		_, err := unpacker.Unpack(hdrBin, hdr, r)
+		setData(nil)
+		_, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).To(MatchError(qerr.MissingPayload))
 	})
 
@@ -61,8 +61,8 @@ var _ = Describe("Packet unpacker", func() {
 		f := &frames.ConnectionCloseFrame{ReasonPhrase: "foo"}
 		err := f.Write(buf, 0)
 		Expect(err).ToNot(HaveOccurred())
-		setReader(buf.Bytes())
-		packet, err := unpacker.Unpack(hdrBin, hdr, r)
+		setData(buf.Bytes())
+		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.frames).To(Equal([]frames.Frame{f}))
 	})
@@ -74,8 +74,8 @@ var _ = Describe("Packet unpacker", func() {
 		}
 		err := f.Write(buf, 0)
 		Expect(err).ToNot(HaveOccurred())
-		setReader(buf.Bytes())
-		packet, err := unpacker.Unpack(hdrBin, hdr, r)
+		setData(buf.Bytes())
+		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.frames).To(Equal([]frames.Frame{f}))
 	})
@@ -89,9 +89,9 @@ var _ = Describe("Packet unpacker", func() {
 		}
 		err := f.Write(buf, protocol.Version32)
 		Expect(err).ToNot(HaveOccurred())
-		setReader(buf.Bytes())
+		setData(buf.Bytes())
 		unpacker.version = protocol.Version32
-		packet, err := unpacker.Unpack(hdrBin, hdr, r)
+		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.frames).To(HaveLen(1))
 		readFrame := packet.frames[0].(*frames.AckFrame)
@@ -101,21 +101,21 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	It("errors on CONGESTION_FEEDBACK frames", func() {
-		setReader([]byte{0x20})
-		_, err := unpacker.Unpack(hdrBin, hdr, r)
+		setData([]byte{0x20})
+		_, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).To(MatchError("unimplemented: CONGESTION_FEEDBACK"))
 	})
 
 	It("handles pad frames", func() {
-		setReader([]byte{0, 0, 0})
-		packet, err := unpacker.Unpack(hdrBin, hdr, r)
+		setData([]byte{0, 0, 0})
+		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.frames).To(BeEmpty())
 	})
 
 	It("unpacks RST_STREAM frames", func() {
-		setReader([]byte{0x01, 0xEF, 0xBE, 0xAD, 0xDE, 0x44, 0x33, 0x22, 0x11, 0xAD, 0xFB, 0xCA, 0xDE, 0x34, 0x12, 0x37, 0x13})
-		packet, err := unpacker.Unpack(hdrBin, hdr, r)
+		setData([]byte{0x01, 0xEF, 0xBE, 0xAD, 0xDE, 0x44, 0x33, 0x22, 0x11, 0xAD, 0xFB, 0xCA, 0xDE, 0x34, 0x12, 0x37, 0x13})
+		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.frames).To(Equal([]frames.Frame{
 			&frames.RstStreamFrame{
@@ -130,21 +130,21 @@ var _ = Describe("Packet unpacker", func() {
 		f := &frames.ConnectionCloseFrame{ReasonPhrase: "foo"}
 		err := f.Write(buf, 0)
 		Expect(err).ToNot(HaveOccurred())
-		setReader(buf.Bytes())
-		packet, err := unpacker.Unpack(hdrBin, hdr, r)
+		setData(buf.Bytes())
+		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.frames).To(Equal([]frames.Frame{f}))
 	})
 
 	It("accepts GOAWAY frames", func() {
-		setReader([]byte{
+		setData([]byte{
 			0x03,
 			0x01, 0x00, 0x00, 0x00,
 			0x02, 0x00, 0x00, 0x00,
 			0x03, 0x00,
 			'f', 'o', 'o',
 		})
-		packet, err := unpacker.Unpack(hdrBin, hdr, r)
+		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.frames).To(Equal([]frames.Frame{
 			&frames.GoawayFrame{
@@ -156,8 +156,8 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	It("accepts WINDOW_UPDATE frames", func() {
-		setReader([]byte{0x04, 0xEF, 0xBE, 0xAD, 0xDE, 0x37, 0x13, 0, 0, 0, 0, 0xFE, 0xCA})
-		packet, err := unpacker.Unpack(hdrBin, hdr, r)
+		setData([]byte{0x04, 0xEF, 0xBE, 0xAD, 0xDE, 0x37, 0x13, 0, 0, 0, 0, 0xFE, 0xCA})
+		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.frames).To(Equal([]frames.Frame{
 			&frames.WindowUpdateFrame{
@@ -168,8 +168,8 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	It("accepts BLOCKED frames", func() {
-		setReader([]byte{0x05, 0xEF, 0xBE, 0xAD, 0xDE})
-		packet, err := unpacker.Unpack(hdrBin, hdr, r)
+		setData([]byte{0x05, 0xEF, 0xBE, 0xAD, 0xDE})
+		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.frames).To(Equal([]frames.Frame{
 			&frames.BlockedFrame{
@@ -179,8 +179,8 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	It("unpacks STOP_WAITING frames", func() {
-		setReader([]byte{0x06, 0xA4, 0x03})
-		packet, err := unpacker.Unpack(hdrBin, hdr, r)
+		setData([]byte{0x06, 0xA4, 0x03})
+		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.frames).To(Equal([]frames.Frame{
 			&frames.StopWaitingFrame{
@@ -191,8 +191,8 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	It("accepts PING frames", func() {
-		setReader([]byte{0x07})
-		packet, err := unpacker.Unpack(hdrBin, hdr, r)
+		setData([]byte{0x07})
+		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.frames).To(Equal([]frames.Frame{
 			&frames.PingFrame{},
@@ -200,8 +200,8 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	It("errors on invalid type", func() {
-		setReader([]byte{0x08})
-		_, err := unpacker.Unpack(hdrBin, hdr, r)
+		setData([]byte{0x08})
+		_, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).To(MatchError("InvalidFrameData: unknown type byte 0x8"))
 	})
 })

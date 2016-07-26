@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"sync"
@@ -19,7 +18,7 @@ import (
 )
 
 type unpacker interface {
-	Unpack(publicHeaderBinary []byte, hdr *publicHeader, r *bytes.Reader) (*unpackedPacket, error)
+	Unpack(publicHeaderBinary []byte, hdr *publicHeader, data []byte) (*unpackedPacket, error)
 }
 
 type receivedPacket struct {
@@ -236,7 +235,6 @@ func (s *Session) maybeResetTimer() {
 
 func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *publicHeader, data []byte) error {
 	s.lastNetworkActivityTime = time.Now()
-	r := bytes.NewReader(data)
 
 	// Calculate packet number
 	hdr.PacketNumber = protocol.InferPacketNumber(
@@ -246,13 +244,13 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *publicHeader, da
 	)
 	s.lastRcvdPacketNumber = hdr.PacketNumber
 	if utils.Debug() {
-		utils.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x", hdr.PacketNumber, r.Size()+int64(len(hdr.Raw)), hdr.ConnectionID)
+		utils.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x", hdr.PacketNumber, len(data)+len(hdr.Raw), hdr.ConnectionID)
 	}
 
 	// TODO: Only do this after authenticating
 	s.conn.setCurrentRemoteAddr(remoteAddr)
 
-	packet, err := s.unpacker.Unpack(hdr.Raw, hdr, r)
+	packet, err := s.unpacker.Unpack(hdr.Raw, hdr, data)
 	if err != nil {
 		return err
 	}

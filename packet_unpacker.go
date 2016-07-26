@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/ioutil"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/frames"
@@ -22,14 +21,13 @@ type packetUnpacker struct {
 	aead    crypto.AEAD
 }
 
-func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *publicHeader, r *bytes.Reader) (*unpackedPacket, error) {
-	ciphertext, _ := ioutil.ReadAll(r)
-	plaintext, err := u.aead.Open(nil, ciphertext, hdr.PacketNumber, publicHeaderBinary)
+func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *publicHeader, data []byte) (*unpackedPacket, error) {
+	data, err := u.aead.Open(data[:0], data, hdr.PacketNumber, publicHeaderBinary)
 	if err != nil {
 		// Wrap err in quicError so that public reset is sent by session
 		return nil, qerr.Error(qerr.DecryptionFailure, err.Error())
 	}
-	r = bytes.NewReader(plaintext)
+	r := bytes.NewReader(data)
 
 	// read private flag byte, for QUIC Version < 34
 	var entropyBit bool

@@ -38,7 +38,7 @@ func (*mockConnection) IP() net.IP                            { return nil }
 
 type mockUnpacker struct{}
 
-func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *publicHeader, r *bytes.Reader) (*unpackedPacket, error) {
+func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *publicHeader, data []byte) (*unpackedPacket, error) {
 	return &unpackedPacket{
 		entropyBit: false,
 		frames:     nil,
