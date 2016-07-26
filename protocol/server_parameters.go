@@ -17,12 +17,8 @@ const InitialCongestionWindow PacketNumber = 32
 // session queues for later until it sends a public reset.
 const MaxUndecryptablePackets = 10
 
-// SmallPacketPayloadSizeThreshold defines a threshold for small packets
-// if the packet payload size (i.e. the packet without public header and private header) is below SmallPacketSizeThreshold, sending will be delayed by SmallPacketSendDelay
-const SmallPacketPayloadSizeThreshold = MaxPacketSize / 2
-
-// SmallPacketSendDelay is the time delay applied to small packets
-const SmallPacketSendDelay = 500 * time.Microsecond
+// AckSendDelay is the maximal time delay applied to packets containing only ACKs
+const AckSendDelay = 5 * time.Millisecond
 
 // ReceiveStreamFlowControlWindow is the stream-level flow control window for receiving data
 // This is the value that Google servers are using

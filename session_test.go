@@ -557,10 +557,10 @@ var _ = Describe("Session", func() {
 				go session.run()
 				go func() {
 					defer GinkgoRecover()
-					_, err2 := s1.Write(bytes.Repeat([]byte{'e'}, int(protocol.SmallPacketPayloadSizeThreshold+50)))
+					_, err2 := s1.Write(bytes.Repeat([]byte{'e'}, 1000))
 					Expect(err2).ToNot(HaveOccurred())
 				}()
-				_, err = s2.Write(bytes.Repeat([]byte{'e'}, int(protocol.SmallPacketPayloadSizeThreshold+50)))
+				_, err = s2.Write(bytes.Repeat([]byte{'e'}, 1000))
 				Expect(err).ToNot(HaveOccurred())
 				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(2))
 			})
@@ -685,7 +685,7 @@ var _ = Describe("Session", func() {
 			PacketNumber: n,
 			Length:       1,
 			Frames: []frames.Frame{&frames.StreamFrame{
-				Data: bytes.Repeat([]byte{'a'}, int(protocol.SmallPacketPayloadSizeThreshold)+1),
+				Data: bytes.Repeat([]byte{'a'}, 1000),
 			}},
 		})
 		session.packer.lastPacketNumber = n
