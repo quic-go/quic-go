@@ -537,18 +537,6 @@ var _ = Describe("Session", func() {
 				Expect(conn.written).To(HaveLen(1))
 			})
 
-			PIt("bundles two small frames of the same stream into one packet", func() {
-				s, err := session.OpenStream(5)
-				Expect(err).NotTo(HaveOccurred())
-				go session.run()
-				_, err = s.Write([]byte("foobar1"))
-				Expect(err).NotTo(HaveOccurred())
-				_, err = s.Write([]byte("foobar2"))
-				Expect(err).NotTo(HaveOccurred())
-				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(1))
-				Consistently(func() [][]byte { return conn.written }).Should(HaveLen(1))
-			})
-
 			It("sends out two big frames in two packets", func() {
 				s1, err := session.OpenStream(5)
 				Expect(err).NotTo(HaveOccurred())
