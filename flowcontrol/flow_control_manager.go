@@ -6,6 +6,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 type flowControlManager struct {
@@ -146,8 +147,17 @@ func (f *flowControlManager) SendWindowSize(streamID protocol.StreamID) (protoco
 	if err != nil {
 		return 0, err
 	}
+	res := streamFlowController.SendWindowSize()
 
-	return streamFlowController.SendWindowOffset(), nil
+	contributes, ok := f.contributesToConnectionFlowControl[streamID]
+	if !ok {
+		return 0, errMapAccess
+	}
+	if contributes {
+		res = utils.MinByteCount(res, f.streamFlowController[0].SendWindowSize())
+	}
+
+	return res, nil
 }
 
 func (f *flowControlManager) RemainingConnectionWindowSize() protocol.ByteCount {
@@ -168,17 +178,6 @@ func (f *flowControlManager) UpdateWindow(streamID protocol.StreamID, offset pro
 	}
 
 	return streamFlowController.UpdateSendWindow(offset), nil
-}
-
-func (f *flowControlManager) StreamContributesToConnectionFlowControl(streamID protocol.StreamID) (bool, error) {
-	f.mutex.RLock()
-	defer f.mutex.RUnlock()
-
-	contributes, ok := f.contributesToConnectionFlowControl[streamID]
-	if !ok {
-		return false, errMapAccess
-	}
-	return contributes, nil
 }
 
 func (f *flowControlManager) getFlowController(streamID protocol.StreamID) (*flowController, error) {

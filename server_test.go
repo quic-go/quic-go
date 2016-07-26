@@ -72,7 +72,7 @@ var _ = Describe("Server", func() {
 
 		It("closes and deletes sessions", func() {
 			pheader := []byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x51, 0x30, 0x33, 0x32, 0x01}
-			err := server.handlePacket(nil, nil, append(pheader, (&crypto.NullAEAD{}).Seal(0, pheader, nil)...))
+			err := server.handlePacket(nil, nil, append(pheader, (&crypto.NullAEAD{}).Seal(nil, nil, 0, pheader)...))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(server.sessions).To(HaveLen(1))
 			server.closeCallback(0x4cfa9f9b668619f6)
@@ -104,8 +104,8 @@ var _ = Describe("Server", func() {
 
 		go func() {
 			defer GinkgoRecover()
-			err := server.Serve(serverConn)
-			Expect(err).ToNot(HaveOccurred())
+			err2 := server.Serve(serverConn)
+			Expect(err2).ToNot(HaveOccurred())
 			close(done)
 		}()
 
@@ -143,8 +143,8 @@ var _ = Describe("Server", func() {
 
 		go func() {
 			defer GinkgoRecover()
-			err := server.Serve(serverConn)
-			Expect(err).ToNot(HaveOccurred())
+			err2 := server.Serve(serverConn)
+			Expect(err2).ToNot(HaveOccurred())
 			close(done)
 		}()
 

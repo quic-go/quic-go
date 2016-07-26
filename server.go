@@ -86,7 +86,8 @@ func (s *Server) Serve(conn *net.UDPConn) error {
 	s.connMutex.Unlock()
 
 	for {
-		data := make([]byte, protocol.MaxPacketSize)
+		data := getPacketBuffer()
+		data = data[:protocol.MaxPacketSize]
 		n, remoteAddr, err := conn.ReadFromUDP(data)
 		if err != nil {
 			if strings.HasSuffix(err.Error(), "use of closed network connection") {

@@ -143,7 +143,6 @@ func (s *stream) ReadByte() (byte, error) {
 
 func (s *stream) Write(p []byte) (int, error) {
 	s.mutex.Lock()
-	defer s.mutex.Unlock()
 
 	s.dataForWriting = make([]byte, len(p))
 	copy(s.dataForWriting, p)
@@ -154,6 +153,7 @@ func (s *stream) Write(p []byte) (int, error) {
 		s.doneWritingOrErrCond.Wait()
 	}
 
+	s.mutex.Unlock()
 	if s.err != nil {
 		return 0, s.err
 	}
@@ -162,14 +162,15 @@ func (s *stream) Write(p []byte) (int, error) {
 
 func (s *stream) lenOfDataForWriting() protocol.ByteCount {
 	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	return protocol.ByteCount(len(s.dataForWriting))
+	l := protocol.ByteCount(len(s.dataForWriting))
+	s.mutex.Unlock()
+	return l
 }
 
 func (s *stream) getDataForWriting(maxBytes protocol.ByteCount) []byte {
 	s.mutex.Lock()
-	defer s.mutex.Unlock()
 	if s.dataForWriting == nil {
+		s.mutex.Unlock()
 		return nil
 	}
 	var ret []byte
@@ -182,6 +183,7 @@ func (s *stream) getDataForWriting(maxBytes protocol.ByteCount) []byte {
 		s.doneWritingOrErrCond.Signal()
 	}
 	s.writeOffset += protocol.ByteCount(len(ret))
+	s.mutex.Unlock()
 	return ret
 }
 
@@ -194,9 +196,9 @@ func (s *stream) Close() error {
 
 func (s *stream) shouldSendFin() bool {
 	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	closed := atomic.LoadInt32(&s.closed) != 0
-	return closed && !s.finSent && s.err == nil && s.dataForWriting == nil
+	res := atomic.LoadInt32(&s.closed) != 0 && !s.finSent && s.err == nil && s.dataForWriting == nil
+	s.mutex.Unlock()
+	return res
 }
 
 func (s *stream) sentFin() {

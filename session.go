@@ -76,7 +76,7 @@ type Session struct {
 	undecryptablePackets []receivedPacket
 	aeadChanged          chan struct{}
 
-	smallPacketDelayedOccurranceTime time.Time
+	delayedAckOriginTime time.Time
 
 	connectionParametersManager *handshake.ConnectionParametersManager
 
@@ -187,6 +187,9 @@ func (s *Session) run() {
 				s.tryQueueingUndecryptablePacket(p)
 				continue
 			}
+			if s.delayedAckOriginTime.IsZero() {
+				s.delayedAckOriginTime = time.Now()
+			}
 		case <-s.aeadChanged:
 			s.tryDecryptingQueuedPackets()
 		}
@@ -195,7 +198,7 @@ func (s *Session) run() {
 			s.Close(err)
 		}
 
-		if err := s.maybeSendPacket(); err != nil {
+		if err := s.sendPacket(); err != nil {
 			s.Close(err)
 		}
 		if time.Now().Sub(s.lastNetworkActivityTime) >= s.connectionParametersManager.GetIdleConnectionStateLifetime() {
@@ -208,9 +211,8 @@ func (s *Session) run() {
 func (s *Session) maybeResetTimer() {
 	nextDeadline := s.lastNetworkActivityTime.Add(s.connectionParametersManager.GetIdleConnectionStateLifetime())
 
-	if !s.smallPacketDelayedOccurranceTime.IsZero() {
-		// nextDeadline = utils.MinDuration(firstTimeout, s.smallPacketDelayedOccurranceTime.Add(protocol.SmallPacketSendDelay).Sub(now))
-		nextDeadline = utils.MinTime(nextDeadline, s.smallPacketDelayedOccurranceTime.Add(protocol.SmallPacketSendDelay))
+	if !s.delayedAckOriginTime.IsZero() {
+		nextDeadline = utils.MinTime(nextDeadline, s.delayedAckOriginTime.Add(protocol.AckSendDelay))
 	}
 	if rtoTime := s.sentPacketHandler.TimeOfFirstRTO(); !rtoTime.IsZero() {
 		nextDeadline = utils.MinTime(nextDeadline, rtoTime)
@@ -447,143 +449,93 @@ func (s *Session) closeStreamWithError(str *stream, err error) {
 	str.RegisterError(err)
 }
 
-// TODO: try sending more than one packet
-func (s *Session) maybeSendPacket() error {
-	if !s.smallPacketDelayedOccurranceTime.IsZero() && time.Now().Sub(s.smallPacketDelayedOccurranceTime) > protocol.SmallPacketSendDelay {
-		return s.sendPacket()
-	}
-
-	// always send out retransmissions immediately. No need to check the size of the packet
-	// in the edge cases where a belated ACK was received for a packet that was already queued for retransmission, we might send out a small packet. However, this shouldn't happen very often
-	if s.sentPacketHandler.ProbablyHasPacketForRetransmission() {
-		return s.sendPacket()
-	}
-
-	if !s.sentPacketHandler.CongestionAllowsSending() {
-		return nil
-	}
-
-	var maxPacketSize protocol.ByteCount // the maximum size of a packet we could send out at this moment
-
-	// we only estimate the size of the StopWaitingFrame here
-	stopWaitingFrame := s.stopWaitingManager.GetStopWaitingFrame()
-	if stopWaitingFrame != nil {
-		// The actual size of a StopWaitingFrame depends on the packet number of the packet it is sent with, and it's easier here to neglect the fact the StopWaitingFrame could be 5 bytes smaller than calculated here
-		maxPacketSize += 8
-	}
-
-	ack, err := s.receivedPacketHandler.GetAckFrame(false)
-	if err != nil {
-		return err
-	}
-
-	if ack != nil {
-		ackLength, _ := ack.MinLength(s.version) // MinLength never errors for an ACK frame
-		maxPacketSize += ackLength
-	}
-
-	// note that maxPacketSize can get (much) larger than protocol.MaxPacketSize if there is a long queue of StreamFrames
-	maxPacketSize += s.streamFramer.EstimatedDataLen()
-
-	if maxPacketSize > protocol.SmallPacketPayloadSizeThreshold {
-		return s.sendPacket()
-	}
-
-	if maxPacketSize == 0 {
-		return nil
-	}
-
-	if s.smallPacketDelayedOccurranceTime.IsZero() {
-		s.smallPacketDelayedOccurranceTime = time.Now()
-	}
-
-	return nil
-}
-
 func (s *Session) sendPacket() error {
-	s.smallPacketDelayedOccurranceTime = time.Time{} // zero
-
-	err := s.sentPacketHandler.CheckForError()
-	if err != nil {
-		return err
-	}
-
-	if !s.sentPacketHandler.CongestionAllowsSending() {
-		return nil
-	}
-
-	var controlFrames []frames.Frame
-
-	// check for retransmissions first
+	// Repeatedly try sending until we don't have any more data, or run out of the congestion window
 	for {
-		retransmitPacket := s.sentPacketHandler.DequeuePacketForRetransmission()
-		if retransmitPacket == nil {
-			break
+		err := s.sentPacketHandler.CheckForError()
+		if err != nil {
+			return err
 		}
-		utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
-		s.stopWaitingManager.RegisterPacketForRetransmission(retransmitPacket)
-		// resend the frames that were in the packet
-		controlFrames = append(controlFrames, retransmitPacket.GetControlFramesForRetransmission()...)
-		for _, streamFrame := range retransmitPacket.GetStreamFramesForRetransmission() {
-			s.streamFramer.AddFrameForRetransmission(streamFrame)
+
+		if !s.sentPacketHandler.CongestionAllowsSending() {
+			return nil
+		}
+
+		var controlFrames []frames.Frame
+
+		// check for retransmissions first
+		for {
+			retransmitPacket := s.sentPacketHandler.DequeuePacketForRetransmission()
+			if retransmitPacket == nil {
+				break
+			}
+			utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
+			s.stopWaitingManager.RegisterPacketForRetransmission(retransmitPacket)
+			// resend the frames that were in the packet
+			controlFrames = append(controlFrames, retransmitPacket.GetControlFramesForRetransmission()...)
+			for _, streamFrame := range retransmitPacket.GetStreamFramesForRetransmission() {
+				s.streamFramer.AddFrameForRetransmission(streamFrame)
+			}
+		}
+
+		windowUpdateFrames, err := s.getWindowUpdateFrames()
+		if err != nil {
+			return err
+		}
+
+		for _, wuf := range windowUpdateFrames {
+			controlFrames = append(controlFrames, wuf)
+		}
+
+		ack, err := s.receivedPacketHandler.GetAckFrame(false)
+		if err != nil {
+			return err
+		}
+		if ack != nil {
+			controlFrames = append(controlFrames, ack)
+		}
+
+		// Check whether we are allowed to send a packet containing only an ACK
+		maySendOnlyAck := time.Now().Sub(s.delayedAckOriginTime) > protocol.AckSendDelay
+
+		stopWaitingFrame := s.stopWaitingManager.GetStopWaitingFrame()
+		packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, s.sentPacketHandler.GetLargestAcked(), maySendOnlyAck)
+		if err != nil {
+			return err
+		}
+		if packet == nil {
+			return nil
+		}
+
+		// Pop the ACK frame now that we are sure we're gonna send it
+		_, err = s.receivedPacketHandler.GetAckFrame(true)
+		if err != nil {
+			return err
+		}
+
+		for _, f := range windowUpdateFrames {
+			s.packer.QueueControlFrameForNextPacket(f)
+		}
+
+		err = s.sentPacketHandler.SentPacket(&ackhandlerlegacy.Packet{
+			PacketNumber: packet.number,
+			Frames:       packet.frames,
+			EntropyBit:   packet.entropyBit,
+			Length:       protocol.ByteCount(len(packet.raw)),
+		})
+		if err != nil {
+			return err
+		}
+		s.stopWaitingManager.SentStopWaitingWithPacket(packet.number)
+		s.logPacket(packet)
+		s.delayedAckOriginTime = time.Time{}
+
+		err = s.conn.write(packet.raw)
+		putPacketBuffer(packet.raw)
+		if err != nil {
+			return err
 		}
 	}
-
-	windowUpdateFrames, err := s.getWindowUpdateFrames()
-	if err != nil {
-		return err
-	}
-
-	for _, wuf := range windowUpdateFrames {
-		controlFrames = append(controlFrames, wuf)
-	}
-
-	ack, err := s.receivedPacketHandler.GetAckFrame(true)
-	if err != nil {
-		return err
-	}
-	if ack != nil {
-		controlFrames = append(controlFrames, ack)
-	}
-
-	stopWaitingFrame := s.stopWaitingManager.GetStopWaitingFrame()
-	packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, s.sentPacketHandler.GetLargestAcked())
-
-	if err != nil {
-		return err
-	}
-	if packet == nil {
-		return nil
-	}
-
-	for _, f := range windowUpdateFrames {
-		s.packer.QueueControlFrameForNextPacket(f)
-	}
-
-	err = s.sentPacketHandler.SentPacket(&ackhandlerlegacy.Packet{
-		PacketNumber: packet.number,
-		Frames:       packet.frames,
-		EntropyBit:   packet.entropyBit,
-		Length:       protocol.ByteCount(len(packet.raw)),
-	})
-	if err != nil {
-		return err
-	}
-
-	s.stopWaitingManager.SentStopWaitingWithPacket(packet.number)
-
-	s.logPacket(packet)
-
-	err = s.conn.write(packet.raw)
-	if err != nil {
-		return err
-	}
-
-	if s.streamFramer.HasData() {
-		s.scheduleSending()
-	}
-
-	return nil
 }
 
 func (s *Session) sendConnectionClose(quicErr *qerr.QuicError) error {

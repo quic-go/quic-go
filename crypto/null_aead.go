@@ -14,36 +14,40 @@ type NullAEAD struct{}
 var _ AEAD = &NullAEAD{}
 
 // Open and verify the ciphertext
-func (NullAEAD) Open(packetNumber protocol.PacketNumber, associatedData []byte, ciphertext []byte) ([]byte, error) {
-	if len(ciphertext) < 12 {
+func (NullAEAD) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {
+	if len(src) < 12 {
 		return nil, errors.New("NullAEAD: ciphertext cannot be less than 12 bytes long")
 	}
 
 	hash := fnv128a.New()
 	hash.Write(associatedData)
-	hash.Write(ciphertext[12:])
+	hash.Write(src[12:])
 	testHigh, testLow := hash.Sum128()
 
-	low := binary.LittleEndian.Uint64(ciphertext)
-	high := binary.LittleEndian.Uint32(ciphertext[8:])
+	low := binary.LittleEndian.Uint64(src)
+	high := binary.LittleEndian.Uint32(src[8:])
 
 	if uint32(testHigh&0xffffffff) != high || testLow != low {
 		return nil, errors.New("NullAEAD: failed to authenticate received data")
 	}
-	return ciphertext[12:], nil
+	return src[12:], nil
 }
 
 // Seal writes hash and ciphertext to the buffer
-func (NullAEAD) Seal(packetNumber protocol.PacketNumber, associatedData []byte, plaintext []byte) []byte {
-	res := make([]byte, 12+len(plaintext))
+func (NullAEAD) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
+	if cap(dst) < 12+len(src) {
+		dst = make([]byte, 12+len(src))
+	} else {
+		dst = dst[:12+len(src)]
+	}
 
 	hash := fnv128a.New()
 	hash.Write(associatedData)
-	hash.Write(plaintext)
+	hash.Write(src)
 	high, low := hash.Sum128()
 
-	binary.LittleEndian.PutUint64(res, low)
-	binary.LittleEndian.PutUint32(res[8:], uint32(high))
-	copy(res[12:], plaintext)
-	return res
+	copy(dst[12:], src)
+	binary.LittleEndian.PutUint64(dst, low)
+	binary.LittleEndian.PutUint32(dst[8:], uint32(high))
+	return dst
 }

@@ -27,7 +27,9 @@ type mockConnection struct {
 }
 
 func (m *mockConnection) write(p []byte) error {
-	m.written = append(m.written, p)
+	b := make([]byte, len(p))
+	copy(b, p)
+	m.written = append(m.written, b)
 	return nil
 }
 
@@ -302,10 +304,10 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 			err = session.handleWindowUpdateFrame(&frames.WindowUpdateFrame{
 				StreamID:   5,
-				ByteOffset: 0x8000,
+				ByteOffset: 100,
 			})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(session.flowControlManager.SendWindowSize(5)).To(Equal(protocol.ByteCount(0x8000)))
+			Expect(session.flowControlManager.SendWindowSize(5)).To(Equal(protocol.ByteCount(100)))
 		})
 
 		It("updates the Flow Control Window of the connection", func() {
@@ -528,25 +530,13 @@ var _ = Describe("Session", func() {
 				Expect(err).NotTo(HaveOccurred())
 				go session.run()
 				go func() {
-					_, err := s1.Write([]byte("foobar1"))
-					Expect(err).NotTo(HaveOccurred())
+					_, err2 := s1.Write([]byte("foobar1"))
+					Expect(err2).NotTo(HaveOccurred())
 				}()
 				_, err = s2.Write([]byte("foobar2"))
 				Expect(err).NotTo(HaveOccurred())
 				time.Sleep(10 * time.Millisecond)
 				Expect(conn.written).To(HaveLen(1))
-			})
-
-			PIt("bundles two small frames of the same stream into one packet", func() {
-				s, err := session.OpenStream(5)
-				Expect(err).NotTo(HaveOccurred())
-				go session.run()
-				_, err = s.Write([]byte("foobar1"))
-				Expect(err).NotTo(HaveOccurred())
-				_, err = s.Write([]byte("foobar2"))
-				Expect(err).NotTo(HaveOccurred())
-				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(1))
-				Consistently(func() [][]byte { return conn.written }).Should(HaveLen(1))
 			})
 
 			It("sends out two big frames in two packets", func() {
@@ -557,10 +547,10 @@ var _ = Describe("Session", func() {
 				go session.run()
 				go func() {
 					defer GinkgoRecover()
-					_, err := s1.Write(bytes.Repeat([]byte{'e'}, int(protocol.SmallPacketPayloadSizeThreshold+50)))
-					Expect(err).ToNot(HaveOccurred())
+					_, err2 := s1.Write(bytes.Repeat([]byte{'e'}, 1000))
+					Expect(err2).ToNot(HaveOccurred())
 				}()
-				_, err = s2.Write(bytes.Repeat([]byte{'e'}, int(protocol.SmallPacketPayloadSizeThreshold+50)))
+				_, err = s2.Write(bytes.Repeat([]byte{'e'}, 1000))
 				Expect(err).ToNot(HaveOccurred())
 				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(2))
 			})
@@ -685,7 +675,7 @@ var _ = Describe("Session", func() {
 			PacketNumber: n,
 			Length:       1,
 			Frames: []frames.Frame{&frames.StreamFrame{
-				Data: bytes.Repeat([]byte{'a'}, int(protocol.SmallPacketPayloadSizeThreshold)+1),
+				Data: bytes.Repeat([]byte{'a'}, 1000),
 			}},
 		})
 		session.packer.lastPacketNumber = n

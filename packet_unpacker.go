@@ -24,7 +24,7 @@ type packetUnpacker struct {
 
 func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *publicHeader, r *bytes.Reader) (*unpackedPacket, error) {
 	ciphertext, _ := ioutil.ReadAll(r)
-	plaintext, err := u.aead.Open(hdr.PacketNumber, publicHeaderBinary, ciphertext)
+	plaintext, err := u.aead.Open(nil, ciphertext, hdr.PacketNumber, publicHeaderBinary)
 	if err != nil {
 		// Wrap err in quicError so that public reset is sent by session
 		return nil, qerr.Error(qerr.DecryptionFailure, err.Error())

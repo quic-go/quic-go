@@ -41,25 +41,19 @@ func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.
 }
 
 func (p *packetPacker) PackConnectionClose(frame *frames.ConnectionCloseFrame, largestObserved protocol.PacketNumber) (*packedPacket, error) {
-	return p.packPacket(nil, []frames.Frame{frame}, largestObserved, true)
+	return p.packPacket(nil, []frames.Frame{frame}, largestObserved, true, false)
 }
 
-func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, largestObserved protocol.PacketNumber) (*packedPacket, error) {
-	return p.packPacket(stopWaitingFrame, controlFrames, largestObserved, false)
+func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, largestObserved protocol.PacketNumber, maySendOnlyAck bool) (*packedPacket, error) {
+	return p.packPacket(stopWaitingFrame, controlFrames, largestObserved, false, maySendOnlyAck)
 }
 
-func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, largestObserved protocol.PacketNumber, onlySendOneControlFrame bool) (*packedPacket, error) {
-	// don't send out packets that only contain a StopWaitingFrame
-	if len(p.controlFrames) == 0 && len(controlFrames) == 0 && !p.streamFramer.HasData() {
-		return nil, nil
-	}
-
+func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, largestObserved protocol.PacketNumber, onlySendOneControlFrame, maySendOnlyAck bool) (*packedPacket, error) {
 	if len(controlFrames) > 0 {
 		p.controlFrames = append(p.controlFrames, controlFrames...)
 	}
 
-	p.lastPacketNumber++
-	currentPacketNumber := p.lastPacketNumber
+	currentPacketNumber := p.lastPacketNumber + 1
 
 	// cryptoSetup needs to be locked here, so that the AEADs are not changed between
 	// calling DiversificationNonce() and Seal().
@@ -95,10 +89,35 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		}
 	}
 
-	payload, err := p.getPayload(payloadFrames, currentPacketNumber)
-	if err != nil {
+	// Check if we have enough frames to send
+	if len(payloadFrames) == 0 {
+		return nil, nil
+	}
+	// Don't send out packets that only contain a StopWaitingFrame
+	if !onlySendOneControlFrame && len(payloadFrames) == 1 && stopWaitingFrame != nil {
+		return nil, nil
+	}
+	// Don't send out packets that only contain an ACK (plus optional STOP_WAITING), if requested
+	if !maySendOnlyAck {
+		if len(payloadFrames) == 1 {
+			if _, ok := payloadFrames[0].(*frames.AckFrameLegacy); ok {
+				return nil, nil
+			}
+		} else if len(payloadFrames) == 2 && stopWaitingFrame != nil {
+			if _, ok := payloadFrames[1].(*frames.AckFrameLegacy); ok {
+				return nil, nil
+			}
+		}
+	}
+
+	raw := getPacketBuffer()
+	buffer := bytes.NewBuffer(raw)
+
+	if responsePublicHeader.WritePublicHeader(buffer, p.version) != nil {
 		return nil, err
 	}
+
+	payloadStartIndex := buffer.Len()
 
 	// set entropy bit in Private Header, for QUIC version < 34
 	var entropyBit bool
@@ -108,43 +127,31 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 			return nil, err
 		}
 		if entropyBit {
-			payload[0] = 1
+			buffer.WriteByte(1)
+		} else {
+			buffer.WriteByte(0)
 		}
 	}
 
-	var raw bytes.Buffer
-	if err := responsePublicHeader.WritePublicHeader(&raw, p.version); err != nil {
-		return nil, err
+	for _, frame := range payloadFrames {
+		frame.Write(buffer, p.version)
 	}
 
-	ciphertext := p.cryptoSetup.Seal(currentPacketNumber, raw.Bytes(), payload)
-	raw.Write(ciphertext)
-
-	if protocol.ByteCount(raw.Len()) > protocol.MaxPacketSize {
+	if protocol.ByteCount(buffer.Len()+12) > protocol.MaxPacketSize {
 		return nil, errors.New("PacketPacker BUG: packet too large")
 	}
 
+	raw = raw[0:buffer.Len()]
+	p.cryptoSetup.Seal(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], currentPacketNumber, raw[:payloadStartIndex])
+	raw = raw[0 : buffer.Len()+12]
+
+	p.lastPacketNumber++
 	return &packedPacket{
 		number:     currentPacketNumber,
 		entropyBit: entropyBit,
-		raw:        raw.Bytes(),
+		raw:        raw,
 		frames:     payloadFrames,
 	}, nil
-}
-
-func (p *packetPacker) getPayload(frames []frames.Frame, currentPacketNumber protocol.PacketNumber) ([]byte, error) {
-	var payload bytes.Buffer
-
-	// reserve 1 byte for the Private Header, for QUIC Version < 34
-	// the entropy bit is set in sendPayload
-	if p.version < protocol.Version34 {
-		payload.WriteByte(0)
-	}
-
-	for _, frame := range frames {
-		frame.Write(&payload, p.version)
-	}
-	return payload.Bytes(), nil
 }
 
 func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFrame, publicHeaderLength protocol.ByteCount) ([]frames.Frame, error) {
@@ -182,53 +189,23 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 		return nil, fmt.Errorf("Packet Packer BUG: packet payload (%d) too large (%d)", payloadLength, maxFrameSize)
 	}
 
-	hasStreamFrames := false
-
 	// temporarily increase the maxFrameSize by 2 bytes
 	// this leads to a properly sized packet in all cases, since we do all the packet length calculations with StreamFrames that have the DataLen set
 	// however, for the last StreamFrame in the packet, we can omit the DataLen, thus saving 2 bytes and yielding a packet of exactly the correct size
 	maxFrameSize += 2
 
-	for {
-		if payloadLength > maxFrameSize {
-			return nil, fmt.Errorf("Packet Packer BUG: packet payload (%d) too large (%d)", payloadLength, maxFrameSize)
-		}
-
-		frame, err := p.streamFramer.PopStreamFrame(maxFrameSize - payloadLength)
-		if err != nil {
-			return nil, err
-		}
-		if frame == nil {
-			break
-		}
-		frame.DataLenPresent = true // set the dataLen by default. Remove them later if applicable
-
-		frameHeaderLen, _ := frame.MinLength(p.version) // StreamFrame.MinLength *never* returns an error
-		payloadLength += frameHeaderLen + frame.DataLen()
-
-		blockedFrame := p.streamFramer.PopBlockedFrame()
-		if blockedFrame != nil {
-			blockedLength, _ := blockedFrame.MinLength(p.version) // BlockedFrame.MinLength *never* returns an error
-			if payloadLength+blockedLength <= maxFrameSize {
-				payloadFrames = append(payloadFrames, blockedFrame)
-				payloadLength += blockedLength
-			} else {
-				p.controlFrames = append(p.controlFrames, blockedFrame)
-			}
-		}
-
-		payloadFrames = append(payloadFrames, frame)
-		hasStreamFrames = true
+	fs := p.streamFramer.PopStreamFrames(maxFrameSize - payloadLength)
+	if len(fs) != 0 {
+		fs[len(fs)-1].DataLenPresent = false
 	}
 
-	// remove the dataLen for the last StreamFrame in the packet
-	if hasStreamFrames {
-		lastStreamFrame, ok := payloadFrames[len(payloadFrames)-1].(*frames.StreamFrame)
-		if !ok {
-			return nil, errors.New("PacketPacker BUG: StreamFrame type assertion failed")
-		}
-		lastStreamFrame.DataLenPresent = false
-		// payloadLength -= 2
+	// TODO: Simplify
+	for _, f := range fs {
+		payloadFrames = append(payloadFrames, f)
+	}
+
+	for b := p.streamFramer.PopBlockedFrame(); b != nil; b = p.streamFramer.PopBlockedFrame() {
+		p.controlFrames = append(p.controlFrames, b)
 	}
 
 	return payloadFrames, nil
