@@ -21,8 +21,10 @@ var (
 	errInconsistentAckLowestAcked  = errors.New("internal inconsistency: LowestAcked does not match ACK ranges")
 )
 
-// An AckFrame is a ACK frame in QUIC c34
+// An AckFrame is an ACK frame in QUIC
 type AckFrame struct {
+	AckFrameLegacy *AckFrameLegacy
+
 	LargestAcked protocol.PacketNumber
 	LowestAcked  protocol.PacketNumber
 	AckRanges    []AckRange // has to be ordered. The ACK range with the highest FirstPacketNumber goes first, the ACK range with the lowest FirstPacketNumber goes last
@@ -34,6 +36,15 @@ type AckFrame struct {
 // ParseAckFrame reads an ACK frame
 func ParseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, error) {
 	frame := &AckFrame{}
+
+	if version != protocol.VersionWhatever && version <= protocol.Version33 {
+		var err error
+		frame.AckFrameLegacy, err = ParseAckFrameLegacy(r, version)
+		if err != nil {
+			return nil, err
+		}
+		return frame, nil
+	}
 
 	typeByte, err := r.ReadByte()
 	if err != nil {
@@ -187,6 +198,10 @@ func ParseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 
 // Write writes an ACK frame.
 func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
+	if f.AckFrameLegacy != nil {
+		return f.AckFrameLegacy.Write(b, version)
+	}
+
 	largestAckedLen := protocol.GetPacketNumberLength(f.LargestAcked)
 
 	typeByte := uint8(0x40)
@@ -327,6 +342,10 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 
 // MinLength of a written frame
 func (f *AckFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
+	if f.AckFrameLegacy != nil {
+		return f.AckFrameLegacy.MinLength(version)
+	}
+
 	var length protocol.ByteCount
 	length = 1 + 2 + 1 // 1 TypeByte, 2 ACK delay time, 1 Num Timestamp
 	length += protocol.ByteCount(protocol.GetPacketNumberLength(f.LargestAcked))
@@ -346,6 +365,10 @@ func (f *AckFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount
 
 // HasMissingRanges returns if this frame reports any missing packets
 func (f *AckFrame) HasMissingRanges() bool {
+	if f.AckFrameLegacy != nil {
+		panic("HasMissingRanges() should not be called on an AckFrameLegacy")
+	}
+
 	if len(f.AckRanges) > 0 {
 		return true
 	}
