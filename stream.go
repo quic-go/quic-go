@@ -169,8 +169,8 @@ func (s *stream) lenOfDataForWriting() protocol.ByteCount {
 
 func (s *stream) getDataForWriting(maxBytes protocol.ByteCount) []byte {
 	s.mutex.Lock()
-	defer s.mutex.Unlock()
 	if s.dataForWriting == nil {
+		s.mutex.Unlock()
 		return nil
 	}
 	var ret []byte
@@ -183,6 +183,7 @@ func (s *stream) getDataForWriting(maxBytes protocol.ByteCount) []byte {
 		s.doneWritingOrErrCond.Signal()
 	}
 	s.writeOffset += protocol.ByteCount(len(ret))
+	s.mutex.Unlock()
 	return ret
 }
 
