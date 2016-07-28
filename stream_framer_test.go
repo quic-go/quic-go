@@ -109,6 +109,16 @@ var _ = Describe("Stream Framer", func() {
 			Expect(framer.PopStreamFrames(1000)).To(BeEmpty())
 		})
 
+		It("does not pop empty frames", func() {
+			stream1.dataForWriting = []byte("foobar")
+			fs := framer.PopStreamFrames(4)
+			Expect(fs).To(HaveLen(0))
+			fs = framer.PopStreamFrames(5)
+			Expect(fs).To(HaveLen(1))
+			Expect(fs[0].Data).ToNot(BeEmpty())
+			Expect(fs[0].FinBit).To(BeFalse())
+		})
+
 		Context("splitting of frames", func() {
 			It("splits off nothing", func() {
 				f := &frames.StreamFrame{
