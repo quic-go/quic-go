@@ -181,6 +181,10 @@ var _ = Describe("Crypto setup", func() {
 			cs.version = protocol.Version33
 			cs.secureAEAD = &mockAEAD{}
 			cs.receivedForwardSecurePacket = false
+
+			Expect(cs.DiversificationNonce()).To(BeEmpty())
+			// Div nonce is created after CHLO
+			cs.handleCHLO("", nil, map[Tag][]byte{TagNONC: nonce32})
 		})
 
 		It("returns diversification nonces", func() {

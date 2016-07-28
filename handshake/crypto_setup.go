@@ -60,17 +60,12 @@ func NewCryptoSetup(
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return nil, err
 	}
-	diversificationNonce := make([]byte, 32)
-	if _, err := io.ReadFull(rand.Reader, diversificationNonce); err != nil {
-		return nil, err
-	}
 	return &CryptoSetup{
 		connID:                      connID,
 		ip:                          ip,
 		version:                     version,
 		scfg:                        scfg,
 		nonce:                       nonce,
-		diversificationNonce:        diversificationNonce,
 		keyDerivation:               crypto.DeriveKeysAESGCM,
 		keyExchange:                 crypto.NewCurve25519KEX,
 		cryptoStream:                cryptoStream,
@@ -242,6 +237,11 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 
 	certUncompressed, err := h.scfg.signer.GetLeafCert(sni)
 	if err != nil {
+		return nil, err
+	}
+
+	h.diversificationNonce = make([]byte, 32)
+	if _, err := io.ReadFull(rand.Reader, h.diversificationNonce); err != nil {
 		return nil, err
 	}
 
