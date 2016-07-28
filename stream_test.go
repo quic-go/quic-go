@@ -288,6 +288,17 @@ var _ = Describe("Stream", func() {
 			Expect(err).To(MatchError(errOverlappingStreamData))
 		})
 
+		It("calls onData", func() {
+			frame := frames.StreamFrame{
+				Offset: 0,
+				Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
+			}
+			str.AddStreamFrame(&frame)
+			b := make([]byte, 4)
+			_, err := str.Read(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(onDataCalled).To(BeTrue())
+		})
 	})
 
 	Context("writing", func() {

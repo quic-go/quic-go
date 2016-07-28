@@ -118,6 +118,7 @@ func (s *stream) Read(p []byte) (int, error) {
 		s.readOffset += protocol.ByteCount(m)
 
 		s.flowControlManager.AddBytesRead(s.streamID, protocol.ByteCount(m))
+		s.onData() // so that a possible WINDOW_UPDATE is sent
 
 		if s.readPosInFrame >= int(frame.DataLen()) {
 			fin := frame.FinBit
