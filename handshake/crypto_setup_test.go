@@ -167,15 +167,6 @@ var _ = Describe("Crypto setup", func() {
 		cs.keyExchange = func() (crypto.KeyExchange, error) { return &mockKEX{ephermal: true}, nil }
 	})
 
-	It("has a nonce", func() {
-		Expect(cs.nonce).To(HaveLen(32))
-		s := 0
-		for _, b := range cs.nonce {
-			s += int(b)
-		}
-		Expect(s).ToNot(BeZero())
-	})
-
 	Context("diversification nonce", func() {
 		BeforeEach(func() {
 			cs.version = protocol.Version33
@@ -232,7 +223,7 @@ var _ = Describe("Crypto setup", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(response).To(HavePrefix("SHLO"))
 			Expect(response).To(ContainSubstring("ephermal pub"))
-			Expect(response).To(ContainSubstring(string(cs.nonce)))
+			Expect(response).To(ContainSubstring("SNO\x00"))
 			Expect(response).To(ContainSubstring(string(protocol.SupportedVersionsAsTags)))
 			Expect(cs.secureAEAD).ToNot(BeNil())
 			Expect(cs.secureAEAD.(*mockAEAD).forwardSecure).To(BeFalse())

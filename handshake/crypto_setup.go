@@ -25,7 +25,6 @@ type CryptoSetup struct {
 	ip                   net.IP
 	version              protocol.VersionNumber
 	scfg                 *ServerConfig
-	nonce                []byte
 	diversificationNonce []byte
 
 	secureAEAD                  crypto.AEAD
@@ -56,16 +55,11 @@ func NewCryptoSetup(
 	connectionParametersManager *ConnectionParametersManager,
 	aeadChanged chan struct{},
 ) (*CryptoSetup, error) {
-	nonce := make([]byte, 32)
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, err
-	}
 	return &CryptoSetup{
 		connID:                      connID,
 		ip:                          ip,
 		version:                     version,
 		scfg:                        scfg,
-		nonce:                       nonce,
 		keyDerivation:               crypto.DeriveKeysAESGCM,
 		keyExchange:                 crypto.NewCurve25519KEX,
 		cryptoStream:                cryptoStream,
@@ -240,8 +234,13 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 		return nil, err
 	}
 
+	nonce := make([]byte, 32)
+	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, err
+	}
+
 	h.diversificationNonce = make([]byte, 32)
-	if _, err := io.ReadFull(rand.Reader, h.diversificationNonce); err != nil {
+	if _, err = io.ReadFull(rand.Reader, h.diversificationNonce); err != nil {
 		return nil, err
 	}
 
@@ -263,7 +262,7 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 	// Generate a new curve instance to derive the forward secure key
 	var fsNonce bytes.Buffer
 	fsNonce.Write(cryptoData[TagNONC])
-	fsNonce.Write(h.nonce)
+	fsNonce.Write(nonce)
 	ephermalKex, err := h.keyExchange()
 	if err != nil {
 		return nil, err
@@ -294,7 +293,7 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 	replyMap := h.connectionParametersManager.GetSHLOMap()
 	// add crypto parameters
 	replyMap[TagPUBS] = ephermalKex.PublicKey()
-	replyMap[TagSNO] = h.nonce
+	replyMap[TagSNO] = nonce
 	replyMap[TagVER] = protocol.SupportedVersionsAsTags
 
 	var reply bytes.Buffer
