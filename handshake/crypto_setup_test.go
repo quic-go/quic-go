@@ -164,7 +164,7 @@ var _ = Describe("Crypto setup", func() {
 		cs, err = NewCryptoSetup(protocol.ConnectionID(42), ip, v, scfg, stream, cpm, aeadChanged)
 		Expect(err).NotTo(HaveOccurred())
 		cs.keyDerivation = mockKeyDerivation
-		cs.keyExchange = func() (crypto.KeyExchange, error) { return &mockKEX{ephermal: true}, nil }
+		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
 	})
 
 	Context("diversification nonce", func() {

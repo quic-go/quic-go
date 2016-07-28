@@ -17,7 +17,7 @@ import (
 type KeyDerivationFunction func(version protocol.VersionNumber, forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte) (crypto.AEAD, error)
 
 // KeyExchangeFunction is used to make a new KEX
-type KeyExchangeFunction func() (crypto.KeyExchange, error)
+type KeyExchangeFunction func() crypto.KeyExchange
 
 // The CryptoSetup handles all things crypto for the Session
 type CryptoSetup struct {
@@ -61,7 +61,7 @@ func NewCryptoSetup(
 		version:                     version,
 		scfg:                        scfg,
 		keyDerivation:               crypto.DeriveKeysAESGCM,
-		keyExchange:                 crypto.NewCurve25519KEX,
+		keyExchange:                 getEphermalKEX,
 		cryptoStream:                cryptoStream,
 		connectionParametersManager: connectionParametersManager,
 		aeadChanged:                 aeadChanged,
@@ -263,10 +263,7 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 	var fsNonce bytes.Buffer
 	fsNonce.Write(cryptoData[TagNONC])
 	fsNonce.Write(nonce)
-	ephermalKex, err := h.keyExchange()
-	if err != nil {
-		return nil, err
-	}
+	ephermalKex := h.keyExchange()
 	ephermalSharedSecret, err := ephermalKex.CalculateSharedKey(cryptoData[TagPUBS])
 	if err != nil {
 		return nil, err

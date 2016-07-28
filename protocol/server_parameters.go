@@ -66,3 +66,6 @@ const CryptoMaxParams = 128
 
 // CryptoParameterMaxLength is the upper limit for the length of a parameter in a crypto message.
 const CryptoParameterMaxLength = 2000
+
+// EphermalKeyLifetime is the lifetime of the ephermal key during the handshake, see handshake.getEphermalKEX.
+const EphermalKeyLifetime = time.Minute
