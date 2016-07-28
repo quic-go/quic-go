@@ -621,6 +621,7 @@ func (s *Session) garbageCollectStreams() {
 			utils.Debugf("Garbage-collecting stream %d", k)
 			atomic.AddUint32(&s.openStreamsCount, ^uint32(0)) // decrement
 			s.streams[k] = nil
+			s.flowControlManager.RemoveStream(k)
 		}
 	}
 }

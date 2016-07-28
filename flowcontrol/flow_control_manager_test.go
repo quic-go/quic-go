@@ -33,6 +33,14 @@ var _ = Describe("Flow Control Manager", func() {
 		})
 	})
 
+	It("removes streams", func() {
+		fcm.NewStream(5, true)
+		Expect(fcm.streamFlowController).To(HaveKey(protocol.StreamID(5)))
+		fcm.RemoveStream(5)
+		Expect(fcm.streamFlowController).ToNot(HaveKey(protocol.StreamID(5)))
+		Expect(fcm.contributesToConnectionFlowControl).ToNot(HaveKey(protocol.StreamID(5)))
+	})
+
 	Context("receiving data", func() {
 		BeforeEach(func() {
 			fcm.NewStream(1, false)

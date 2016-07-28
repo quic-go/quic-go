@@ -40,6 +40,10 @@ func (m *mockFlowControlHandler) NewStream(streamID protocol.StreamID, contribut
 	panic("not implemented")
 }
 
+func (m *mockFlowControlHandler) RemoveStream(streamID protocol.StreamID) {
+	delete(m.sendWindowSizes, streamID)
+}
+
 func (m *mockFlowControlHandler) MaybeTriggerStreamWindowUpdate(streamID protocol.StreamID) (bool, protocol.ByteCount, error) {
 	return m.triggerStreamWindowUpdate, 0x1337, nil
 }

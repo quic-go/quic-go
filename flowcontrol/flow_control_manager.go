@@ -51,6 +51,14 @@ func (f *flowControlManager) NewStream(streamID protocol.StreamID, contributesTo
 	f.contributesToConnectionFlowControl[streamID] = contributesToConnectionFlow
 }
 
+// RemoveStream removes a closed stream from flow control
+func (f *flowControlManager) RemoveStream(streamID protocol.StreamID) {
+	f.mutex.Lock()
+	delete(f.streamFlowController, streamID)
+	delete(f.contributesToConnectionFlowControl, streamID)
+	f.mutex.Unlock()
+}
+
 // UpdateHighestReceived updates the highest received byte offset for a stream
 // it adds the number of additional bytes to connection level flow control
 // streamID must not be 0 here

@@ -186,7 +186,7 @@ var _ = Describe("Session", func() {
 			Expect(session.streams[5]).ToNot(BeNil())
 		})
 
-		It("closes streams with FIN bit & close", func() {
+		It("deletes streams with FIN bit & close", func() {
 			session.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
 				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
@@ -209,6 +209,9 @@ var _ = Describe("Session", func() {
 			session.garbageCollectStreams()
 			Expect(session.streams).To(HaveLen(2))
 			Expect(session.streams[5]).To(BeNil())
+			// flow controller should have been notified
+			_, err = session.flowControlManager.SendWindowSize(5)
+			Expect(err).To(MatchError("Error accessing the flowController map."))
 		})
 
 		It("closes streams with error", func() {

@@ -5,6 +5,7 @@ import "github.com/lucas-clemente/quic-go/protocol"
 // A FlowControlManager manages the flow control
 type FlowControlManager interface {
 	NewStream(streamID protocol.StreamID, contributesToConnectionFlow bool)
+	RemoveStream(streamID protocol.StreamID)
 	// methods needed for receiving data
 	UpdateHighestReceived(streamID protocol.StreamID, byteOffset protocol.ByteCount) error
 	AddBytesRead(streamID protocol.StreamID, n protocol.ByteCount) error
