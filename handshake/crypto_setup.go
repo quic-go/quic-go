@@ -174,6 +174,9 @@ func (h *CryptoSetup) isInchoateCHLO(cryptoData map[Tag][]byte) bool {
 	if !ok || !bytes.Equal(h.scfg.ID, scid) {
 		return true
 	}
+	if _, ok := cryptoData[TagPUBS]; !ok {
+		return true
+	}
 	if err := h.scfg.stkSource.VerifyToken(h.ip, cryptoData[TagSTK]); err != nil {
 		utils.Infof("STK invalid: %s", err.Error())
 		return false
@@ -186,36 +189,41 @@ func (h *CryptoSetup) handleInchoateCHLO(sni string, data []byte, cryptoData map
 		return nil, qerr.Error(qerr.CryptoInvalidValueLength, "CHLO too small")
 	}
 
-	var chloOrNil []byte
-	if h.version > protocol.Version30 {
-		chloOrNil = data
-	}
-
-	proof, err := h.scfg.Sign(sni, chloOrNil)
-	if err != nil {
-		return nil, err
-	}
-
-	commonSetHashes := cryptoData[TagCCS]
-	cachedCertsHashes := cryptoData[TagCCRT]
-
-	certCompressed, err := h.scfg.GetCertsCompressed(sni, commonSetHashes, cachedCertsHashes)
-	if err != nil {
-		return nil, err
-	}
-
 	token, err := h.scfg.stkSource.NewToken(h.ip)
 	if err != nil {
 		return nil, err
 	}
 
-	var serverReply bytes.Buffer
-	WriteHandshakeMessage(&serverReply, TagREJ, map[Tag][]byte{
+	replyMap := map[Tag][]byte{
 		TagSCFG: h.scfg.Get(),
-		TagCERT: certCompressed,
-		TagPROF: proof,
 		TagSTK:  token,
-	})
+	}
+
+	if h.scfg.stkSource.VerifyToken(h.ip, cryptoData[TagSTK]) == nil {
+		var chloOrNil []byte
+		if h.version > protocol.Version30 {
+			chloOrNil = data
+		}
+
+		proof, err := h.scfg.Sign(sni, chloOrNil)
+		if err != nil {
+			return nil, err
+		}
+
+		commonSetHashes := cryptoData[TagCCS]
+		cachedCertsHashes := cryptoData[TagCCRT]
+
+		certCompressed, err := h.scfg.GetCertsCompressed(sni, commonSetHashes, cachedCertsHashes)
+		if err != nil {
+			return nil, err
+		}
+		// Token was valid, send more details
+		replyMap[TagPROF] = proof
+		replyMap[TagCERT] = certCompressed
+	}
+
+	var serverReply bytes.Buffer
+	WriteHandshakeMessage(&serverReply, TagREJ, replyMap)
 	return serverReply.Bytes(), nil
 }
 

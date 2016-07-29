@@ -203,8 +203,28 @@ var _ = Describe("Crypto setup", func() {
 			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(response).To(HavePrefix("REJ"))
-			Expect(response).To(ContainSubstring("certcompressed"))
 			Expect(response).To(ContainSubstring("initial public"))
+			Expect(signer.gotCHLO).To(BeFalse())
+		})
+
+		It("REJ messages don't include cert or proof without STK", func() {
+			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(response).To(HavePrefix("REJ"))
+			Expect(response).ToNot(ContainSubstring("certcompressed"))
+			Expect(response).ToNot(ContainSubstring("proof"))
+			Expect(signer.gotCHLO).To(BeFalse())
+		})
+
+		It("REJ messages include cert and proof with valid STK", func() {
+			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), map[Tag][]byte{
+				TagSTK: validSTK,
+				TagSNI: []byte("foo"),
+			})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(response).To(HavePrefix("REJ"))
+			Expect(response).To(ContainSubstring("certcompressed"))
+			Expect(response).To(ContainSubstring("proof"))
 			Expect(signer.gotCHLO).To(BeTrue())
 		})
 
@@ -244,6 +264,7 @@ var _ = Describe("Crypto setup", func() {
 				TagSNI:  []byte("quic.clemente.io"),
 				TagNONC: nonce32,
 				TagSTK:  validSTK,
+				TagPUBS: nil,
 			})
 			err := cs.HandleCryptoStream()
 			Expect(err).NotTo(HaveOccurred())
@@ -258,6 +279,7 @@ var _ = Describe("Crypto setup", func() {
 				TagSNI:  []byte("quic.clemente.io"),
 				TagNONC: nonce32,
 				TagSTK:  validSTK,
+				TagPUBS: nil,
 			})
 			err := cs.HandleCryptoStream()
 			Expect(err).NotTo(HaveOccurred())
@@ -267,11 +289,18 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		It("recognizes inchoate CHLOs missing SCID", func() {
-			Expect(cs.isInchoateCHLO(map[Tag][]byte{})).To(BeTrue())
+			Expect(cs.isInchoateCHLO(map[Tag][]byte{TagPUBS: nil})).To(BeTrue())
+		})
+
+		It("recognizes inchoate CHLOs missing PUBS", func() {
+			Expect(cs.isInchoateCHLO(map[Tag][]byte{TagSCID: nil})).To(BeTrue())
 		})
 
 		It("recognizes proper CHLOs", func() {
-			Expect(cs.isInchoateCHLO(map[Tag][]byte{TagSCID: scfg.ID})).To(BeFalse())
+			Expect(cs.isInchoateCHLO(map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagPUBS: nil,
+			})).To(BeFalse())
 		})
 
 		It("errors on too short inchoate CHLOs", func() {
