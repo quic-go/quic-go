@@ -312,6 +312,10 @@ func (h *sentPacketHandler) GetLargestAcked() protocol.PacketNumber {
 	return h.LargestObserved
 }
 
+func (h *sentPacketHandler) GetStopWaitingFrame() *frames.StopWaitingFrame {
+	panic("Legacy AckHandler should use StopWaitingManager")
+}
+
 func (h *sentPacketHandler) CongestionAllowsSending() bool {
 	return h.BytesInFlight() <= h.congestion.GetCongestionWindow()
 }

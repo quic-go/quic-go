@@ -12,6 +12,8 @@ type SentPacketHandler interface {
 	SentPacket(packet *Packet) error
 	ReceivedAck(ackFrame *frames.AckFrame, withPacketNumber protocol.PacketNumber) error
 
+	GetStopWaitingFrame() *frames.StopWaitingFrame
+
 	ProbablyHasPacketForRetransmission() bool
 	DequeuePacketForRetransmission() (packet *Packet)
 

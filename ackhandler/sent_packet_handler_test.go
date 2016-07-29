@@ -350,6 +350,17 @@ var _ = Describe("SentPacketHandler", func() {
 			})
 		})
 
+		Context("StopWaitings", func() {
+			It("does not get a StopWaiting if no ACKs haven't been received yet", func() {
+				Expect(handler.GetStopWaitingFrame()).To(BeNil())
+			})
+
+			It("gets a StopWaitingFrame", func() {
+				handler.LargestAcked = 1336
+				Expect(handler.GetStopWaitingFrame()).To(Equal(&frames.StopWaitingFrame{LeastUnacked: 1337}))
+			})
+		})
+
 		Context("calculating RTT", func() {
 			It("calculates the RTT", func() {
 				now := time.Now()

@@ -513,6 +513,10 @@ func (s *Session) sendPacket() error {
 		var stopWaitingFrame *frames.StopWaitingFrame
 		if s.version <= protocol.Version33 {
 			stopWaitingFrame = s.stopWaitingManager.GetStopWaitingFrame()
+		} else {
+			if ack != nil {
+				stopWaitingFrame = s.sentPacketHandler.GetStopWaitingFrame()
+			}
 		}
 		packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, s.sentPacketHandler.GetLargestAcked(), maySendOnlyAck)
 		if err != nil {

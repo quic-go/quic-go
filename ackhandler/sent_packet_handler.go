@@ -272,6 +272,16 @@ func (h *sentPacketHandler) GetLargestAcked() protocol.PacketNumber {
 	return h.LargestAcked
 }
 
+func (h *sentPacketHandler) GetStopWaitingFrame() *frames.StopWaitingFrame {
+	if h.LargestAcked == 0 {
+		return nil
+	}
+
+	return &frames.StopWaitingFrame{
+		LeastUnacked: h.LargestAcked + 1,
+	}
+}
+
 func (h *sentPacketHandler) CongestionAllowsSending() bool {
 	return h.BytesInFlight() <= h.congestion.GetCongestionWindow()
 }

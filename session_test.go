@@ -56,9 +56,12 @@ func (h *mockSentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacke
 }
 func (h *mockSentPacketHandler) BytesInFlight() protocol.ByteCount      { return 0 }
 func (h *mockSentPacketHandler) GetLargestAcked() protocol.PacketNumber { return 1 }
-func (h *mockSentPacketHandler) CongestionAllowsSending() bool          { return true }
-func (h *mockSentPacketHandler) CheckForError() error                   { return nil }
-func (h *mockSentPacketHandler) TimeOfFirstRTO() time.Time              { panic("not implemented") }
+func (h *mockSentPacketHandler) GetStopWaitingFrame() *frames.StopWaitingFrame {
+	panic("not implemented")
+}
+func (h *mockSentPacketHandler) CongestionAllowsSending() bool { return true }
+func (h *mockSentPacketHandler) CheckForError() error          { return nil }
+func (h *mockSentPacketHandler) TimeOfFirstRTO() time.Time     { panic("not implemented") }
 
 func (h *mockSentPacketHandler) ProbablyHasPacketForRetransmission() bool {
 	return len(h.retransmissionQueue) > 0
