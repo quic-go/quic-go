@@ -13,7 +13,7 @@ quic-go is an implementation of the [QUIC](https://en.wikipedia.org/wiki/QUIC) p
 
 Done:
 
-- Basic protocol with support for QUIC version 30-33
+- Basic protocol with support for QUIC version 30-34
 - HTTP/2 support
 - Crypto (RSA / ECDSA certificates, curve25519 for key exchange, AES-GCM or Chacha20-Poly1305 as stream cipher)
 - Loss detection and retransmission (currently fast retransmission & RTO)
@@ -25,7 +25,6 @@ Major TODOs:
 - Security, especially DOS protections
 - Performance
 - Better packet loss detection
-- Support for QUIC version 34
 - Connection migration
 - QUIC client
 - Public API design
