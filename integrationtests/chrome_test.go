@@ -39,6 +39,31 @@ func init() {
 }
 
 var _ = Describe("Chrome tests", func() {
+	It("does not work with mismatching versions", func() {
+		versionForUs := protocol.SupportedVersions[0]
+		versionForChrome := protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
+
+		// If both are equal, this test doesn't make any sense.
+		if versionForChrome == versionForUs {
+			return
+		}
+
+		supportedVersionsBefore := protocol.SupportedVersions
+		protocol.SupportedVersions = []protocol.VersionNumber{versionForUs}
+		wd := getWebdriverForVersion(versionForChrome)
+
+		defer func() {
+			protocol.SupportedVersions = supportedVersionsBefore
+			wd.Close()
+		}()
+
+		err := wd.Get("https://quic.clemente.io/hello")
+		Expect(err).NotTo(HaveOccurred())
+		source, err := wd.PageSource()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(source).ToNot(ContainSubstring("Hello, World!\n"))
+	})
+
 	for i := range protocol.SupportedVersions {
 		version := protocol.SupportedVersions[i]
 
