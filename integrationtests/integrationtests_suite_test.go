@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/h2quic"
+	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/testdata"
 	"github.com/tebeka/selenium"
 
@@ -32,7 +33,6 @@ var (
 	port   string
 
 	docker *gexec.Session
-	wd     selenium.WebDriver
 )
 
 func TestIntegration(t *testing.T) {
@@ -116,7 +116,13 @@ func setupSelenium() {
 	docker, err = gexec.Start(dockerCmd, GinkgoWriter, GinkgoWriter)
 	Expect(err).NotTo(HaveOccurred())
 	Eventually(docker.Out, 5).Should(gbytes.Say("Selenium Server is up and running"))
+}
 
+func stopSelenium() {
+	docker.Interrupt().Wait(1)
+}
+
+func getWebdriverForVersion(version protocol.VersionNumber) selenium.WebDriver {
 	caps := selenium.Capabilities{
 		"browserName": "chrome",
 		"chromeOptions": map[string]interface{}{
@@ -125,15 +131,13 @@ func setupSelenium() {
 				"--no-proxy-server",
 				"--origin-to-force-quic-on=quic.clemente.io:443",
 				fmt.Sprintf(`--host-resolver-rules=MAP quic.clemente.io:443 %s:%s`, GetLocalIP(), port),
+				fmt.Sprintf(`--quic-version=QUIC_VERSION_%d`, version),
 			},
 		},
 	}
-	wd, err = selenium.NewRemote(caps, "http://localhost:4444/wd/hub")
+	wd, err := selenium.NewRemote(caps, "http://localhost:4444/wd/hub")
 	Expect(err).NotTo(HaveOccurred())
-}
-
-func stopSelenium() {
-	docker.Interrupt().Wait(1)
+	return wd
 }
 
 func GetLocalIP() string {

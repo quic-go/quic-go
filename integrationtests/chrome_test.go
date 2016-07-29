@@ -5,6 +5,9 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/tebeka/selenium"
+
+	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -36,37 +39,59 @@ func init() {
 }
 
 var _ = Describe("Chrome tests", func() {
-	It("loads a simple hello world page using quic", func(done Done) {
-		err := wd.Get("https://quic.clemente.io/hello")
-		Expect(err).NotTo(HaveOccurred())
-		source, err := wd.PageSource()
-		Expect(err).NotTo(HaveOccurred())
-		Expect(source).To(ContainSubstring("Hello, World!\n"))
-		close(done)
-	}, 5)
+	for i := range protocol.SupportedVersions {
+		version := protocol.SupportedVersions[i]
 
-	It("loads a large number of files", func(done Done) {
-		err := wd.Get("https://quic.clemente.io/tiles")
-		Expect(err).NotTo(HaveOccurred())
-		Eventually(func() error {
-			imgs, err := wd.FindElements("tag name", "img")
-			if err != nil {
-				return err
-			}
-			if len(imgs) != nImgs {
-				return fmt.Errorf("expected number of images to be %d, got %d", nImgs, len(imgs))
-			}
-			for i, img := range imgs {
-				size, err := img.Size()
-				if err != nil {
-					return err
-				}
-				if size.Height != imgSize || size.Width != imgSize {
-					return fmt.Errorf("image %d did not have expected size", i)
-				}
-			}
-			return nil
-		}).ShouldNot(HaveOccurred())
-		close(done)
-	}, 10)
+		Context(fmt.Sprintf("with quic version %d", version), func() {
+			var (
+				wd                      selenium.WebDriver
+				supportedVersionsBefore []protocol.VersionNumber
+			)
+
+			BeforeEach(func() {
+				supportedVersionsBefore = protocol.SupportedVersions
+				protocol.SupportedVersions = []protocol.VersionNumber{version}
+				wd = getWebdriverForVersion(version)
+			})
+
+			AfterEach(func() {
+				wd.Close()
+				protocol.SupportedVersions = supportedVersionsBefore
+			})
+
+			It("loads a simple hello world page using quic", func(done Done) {
+				err := wd.Get("https://quic.clemente.io/hello")
+				Expect(err).NotTo(HaveOccurred())
+				source, err := wd.PageSource()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(source).To(ContainSubstring("Hello, World!\n"))
+				close(done)
+			}, 5)
+
+			It("loads a large number of files", func(done Done) {
+				err := wd.Get("https://quic.clemente.io/tiles")
+				Expect(err).NotTo(HaveOccurred())
+				Eventually(func() error {
+					imgs, err := wd.FindElements("tag name", "img")
+					if err != nil {
+						return err
+					}
+					if len(imgs) != nImgs {
+						return fmt.Errorf("expected number of images to be %d, got %d", nImgs, len(imgs))
+					}
+					for i, img := range imgs {
+						size, err := img.Size()
+						if err != nil {
+							return err
+						}
+						if size.Height != imgSize || size.Width != imgSize {
+							return fmt.Errorf("image %d did not have expected size", i)
+						}
+					}
+					return nil
+				}).ShouldNot(HaveOccurred())
+				close(done)
+			}, 10)
+		})
+	}
 })
