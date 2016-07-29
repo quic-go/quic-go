@@ -260,11 +260,11 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *publicHeader, da
 
 	err = s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, packet.entropyBit)
 	// ignore duplicate packets
-	if err == ackhandlerlegacy.ErrDuplicatePacket {
+	if err == ackhandlerlegacy.ErrDuplicatePacket || err == ackhandler.ErrDuplicatePacket {
 		return nil
 	}
 	// ignore packets with packet numbers smaller than the LeastUnacked of a StopWaiting
-	if err == ackhandlerlegacy.ErrPacketSmallerThanLastStopWaiting {
+	if err == ackhandlerlegacy.ErrPacketSmallerThanLastStopWaiting || err == ackhandler.ErrPacketSmallerThanLastStopWaiting {
 		return nil
 	}
 
@@ -304,7 +304,9 @@ func (s *Session) handleFrames(fs []frames.Frame) error {
 		if err != nil {
 			switch err {
 			case ackhandlerlegacy.ErrDuplicateOrOutOfOrderAck:
-			// Can happen e.g. when packets thought missing arrive late
+				// Can happen e.g. when packets thought missing arrive late
+			case ackhandler.ErrDuplicateOrOutOfOrderAck:
+				// Can happen e.g. when packets thought missing arrive late
 			case errRstStreamOnInvalidStream:
 				// Can happen when RST_STREAMs arrive early or late (?)
 				utils.Errorf("Ignoring error in session: %s", err.Error())
