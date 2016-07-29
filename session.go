@@ -417,8 +417,16 @@ func (s *Session) closeImpl(e error, remoteClose bool) error {
 		e = qerr.PeerGoingAway
 	}
 
-	utils.Errorf("Closing session with error: %s", e.Error())
-	s.closeStreamsWithError(e)
+	quicErr := qerr.ToQuicError(e)
+
+	// Don't log 'normal' reasons
+	if quicErr.ErrorCode == qerr.PeerGoingAway || quicErr.ErrorCode == qerr.NetworkIdleTimeout {
+		utils.Infof("Closing connection %x", s.connectionID)
+	} else {
+		utils.Errorf("Closing session with error: %s", e.Error())
+	}
+
+	s.closeStreamsWithError(quicErr)
 	s.closeCallback(s.connectionID)
 
 	if remoteClose {
@@ -427,7 +435,6 @@ func (s *Session) closeImpl(e error, remoteClose bool) error {
 		return nil
 	}
 
-	quicErr := qerr.ToQuicError(e)
 	if quicErr.ErrorCode == qerr.DecryptionFailure {
 		// If we send a public reset, don't send a CONNECTION_CLOSE
 		s.closeChan <- nil

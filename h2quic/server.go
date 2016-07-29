@@ -13,6 +13,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
@@ -104,7 +105,12 @@ func (s *Server) handleStream(session streamCreator, stream utils.Stream) {
 		var headerStreamMutex sync.Mutex // Protects concurrent calls to Write()
 		for {
 			if err := s.handleRequest(session, stream, &headerStreamMutex, hpackDecoder, h2framer); err != nil {
-				utils.Errorf("error handling h2 request: %s", err.Error())
+				// QuicErrors must originate from stream.Read() returning an error.
+				// In this case, the session has already logged the error, so we don't
+				// need to log it again.
+				if _, ok := err.(*qerr.QuicError); !ok {
+					utils.Errorf("error handling h2 request: %s", err.Error())
+				}
 				return
 			}
 		}

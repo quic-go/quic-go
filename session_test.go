@@ -381,10 +381,10 @@ var _ = Describe("Session", func() {
 					Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore))
 					n, err := s.Read([]byte{0})
 					Expect(n).To(BeZero())
-					Expect(err).To(MatchError(testErr))
+					Expect(err.Error()).To(ContainSubstring(testErr.Error()))
 					n, err = s.Write([]byte{0})
 					Expect(n).To(BeZero())
-					Expect(err).To(MatchError(testErr))
+					Expect(err.Error()).To(ContainSubstring(testErr.Error()))
 				})
 			})
 
@@ -603,7 +603,7 @@ var _ = Describe("Session", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Eventually(func() bool { return atomic.LoadUint32(&session.closed) != 0 }).Should(BeTrue())
 				_, err = s.Write([]byte{})
-				Expect(err).To(MatchError(qerr.InvalidCryptoMessageType))
+				Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.InvalidCryptoMessageType))
 			})
 
 			It("sends public reset after too many undecryptable packets", func() {
