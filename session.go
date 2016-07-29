@@ -104,8 +104,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		sentPacketHandler = ackhandlerlegacy.NewSentPacketHandler(stopWaitingManager).(ackhandler.SentPacketHandler)
 		receivedPacketHandler = ackhandlerlegacy.NewReceivedPacketHandler().(ackhandler.ReceivedPacketHandler)
 	} else {
-		stopWaitingManager = ackhandler.NewStopWaitingManager()
-		sentPacketHandler = ackhandler.NewSentPacketHandler(stopWaitingManager)
+		sentPacketHandler = ackhandler.NewSentPacketHandler()
 		receivedPacketHandler = ackhandler.NewReceivedPacketHandler()
 	}
 
@@ -480,7 +479,10 @@ func (s *Session) sendPacket() error {
 				break
 			}
 			utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
-			s.stopWaitingManager.RegisterPacketForRetransmission(retransmitPacket)
+
+			if s.version <= protocol.Version33 {
+				s.stopWaitingManager.RegisterPacketForRetransmission(retransmitPacket)
+			}
 			// resend the frames that were in the packet
 			controlFrames = append(controlFrames, retransmitPacket.GetControlFramesForRetransmission()...)
 			for _, streamFrame := range retransmitPacket.GetStreamFramesForRetransmission() {
@@ -508,7 +510,10 @@ func (s *Session) sendPacket() error {
 		// Check whether we are allowed to send a packet containing only an ACK
 		maySendOnlyAck := time.Now().Sub(s.delayedAckOriginTime) > protocol.AckSendDelay
 
-		stopWaitingFrame := s.stopWaitingManager.GetStopWaitingFrame()
+		var stopWaitingFrame *frames.StopWaitingFrame
+		if s.version <= protocol.Version33 {
+			stopWaitingFrame = s.stopWaitingManager.GetStopWaitingFrame()
+		}
 		packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, s.sentPacketHandler.GetLargestAcked(), maySendOnlyAck)
 		if err != nil {
 			return err
@@ -536,7 +541,10 @@ func (s *Session) sendPacket() error {
 		if err != nil {
 			return err
 		}
-		s.stopWaitingManager.SentStopWaitingWithPacket(packet.number)
+
+		if s.version <= protocol.Version33 {
+			s.stopWaitingManager.SentStopWaitingWithPacket(packet.number)
+		}
 		s.logPacket(packet)
 		s.delayedAckOriginTime = time.Time{}
 

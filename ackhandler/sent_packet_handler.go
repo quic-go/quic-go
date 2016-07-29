@@ -38,7 +38,6 @@ type sentPacketHandler struct {
 	packetHistory map[protocol.PacketNumber]*ackhandlerlegacy.Packet
 
 	retransmissionQueue []*ackhandlerlegacy.Packet
-	stopWaitingManager  StopWaitingManager
 
 	bytesInFlight protocol.ByteCount
 
@@ -47,7 +46,7 @@ type sentPacketHandler struct {
 }
 
 // NewSentPacketHandler creates a new sentPacketHandler
-func NewSentPacketHandler(stopWaitingManager StopWaitingManager) SentPacketHandler {
+func NewSentPacketHandler() SentPacketHandler {
 	rttStats := &congestion.RTTStats{}
 
 	congestion := congestion.NewCubicSender(
@@ -59,10 +58,9 @@ func NewSentPacketHandler(stopWaitingManager StopWaitingManager) SentPacketHandl
 	)
 
 	return &sentPacketHandler{
-		packetHistory:      make(map[protocol.PacketNumber]*ackhandlerlegacy.Packet),
-		stopWaitingManager: stopWaitingManager,
-		rttStats:           rttStats,
-		congestion:         congestion,
+		packetHistory: make(map[protocol.PacketNumber]*ackhandlerlegacy.Packet),
+		rttStats:      rttStats,
+		congestion:    congestion,
 	}
 }
 
@@ -77,8 +75,6 @@ func (h *sentPacketHandler) ackPacket(packetNumber protocol.PacketNumber) *ackha
 	}
 
 	delete(h.packetHistory, packetNumber)
-
-	h.stopWaitingManager.ReceivedAckForPacketNumber(packetNumber)
 
 	return packet
 }
