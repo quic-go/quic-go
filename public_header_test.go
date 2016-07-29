@@ -11,13 +11,13 @@ import (
 var _ = Describe("Public Header", func() {
 	Context("when parsing", func() {
 		It("accepts a sample client header", func() {
-			b := bytes.NewReader([]byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x51, 0x30, 0x33, 0x30, 0x01})
+			b := bytes.NewReader([]byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x51, 0x30, 0x33, 0x34, 0x01})
 			hdr, err := parsePublicHeader(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.VersionFlag).To(BeTrue())
 			Expect(hdr.ResetFlag).To(BeFalse())
 			Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x4cfa9f9b668619f6)))
-			Expect(hdr.VersionNumber).To(Equal(protocol.Version30))
+			Expect(hdr.VersionNumber).To(Equal(protocol.Version34))
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(1)))
 			Expect(b.Len()).To(BeZero())
 		})

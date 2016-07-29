@@ -97,11 +97,6 @@ func (f *AckFrameLegacy) Write(b *bytes.Buffer, version protocol.VersionNumber) 
 		if rangeCounter != uint8(numRanges) {
 			return errors.New("BUG: Inconsistent number of NACK ranges written")
 		}
-
-		// TODO: Remove once we drop support for <32
-		if version < protocol.Version32 {
-			b.WriteByte(0)
-		}
 	}
 
 	return nil
@@ -114,7 +109,6 @@ func (f *AckFrameLegacy) MinLength(version protocol.VersionNumber) (protocol.Byt
 	l += (1 + 2) * 0 /* TODO: num_timestamps */
 	if f.HasNACK() {
 		l += 1 + (6+1)*int(f.numWrittenNackRanges())
-		l++ // TODO: Remove once we drop support for <32
 	}
 	return protocol.ByteCount(l), nil
 }
@@ -255,21 +249,6 @@ func ParseAckFrameLegacy(r *bytes.Reader, version protocol.VersionNumber) (*AckF
 				}
 				nackRange.LastPacketNumber = protocol.PacketNumber(uint64(nackRange.FirstPacketNumber) + uint64(rangeLength))
 				frame.NackRanges = append(frame.NackRanges, nackRange)
-			}
-		}
-
-		// TODO: Remove once we drop support for versions <32
-		if version < protocol.Version32 {
-			numRevived, err := r.ReadByte()
-			if err != nil {
-				return nil, err
-			}
-
-			for i := uint8(0); i < numRevived; i++ {
-				_, err := utils.ReadUintN(r, largestObservedLen)
-				if err != nil {
-					return nil, err
-				}
 			}
 		}
 	}
