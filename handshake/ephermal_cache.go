@@ -1,7 +1,6 @@
 package handshake
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -11,10 +10,10 @@ import (
 )
 
 var (
-	kexLifetime = protocol.EphermalKeyLifetime
-	kexCurrent  crypto.KeyExchange
-	kexSetOnce  sync.Once
-	kexMutex    sync.RWMutex
+	kexLifetime    = protocol.EphermalKeyLifetime
+	kexCurrent     crypto.KeyExchange
+	kexCurrentTime time.Time
+	kexMutex       sync.RWMutex
 )
 
 // getEphermalKEX returns the currently active KEX, which changes every protocol.EphermalKeyLifetime
@@ -25,31 +24,27 @@ var (
 // used for all connections for 60 seconds is negligible. Thus we can amortise
 // the Diffie-Hellman key generation at the server over all the connections in a
 // small time span.
-func getEphermalKEX() crypto.KeyExchange {
-	kexSetOnce.Do(func() { go setKexRoutine() })
+func getEphermalKEX() (res crypto.KeyExchange) {
 	kexMutex.RLock()
-	defer kexMutex.RUnlock()
-	return kexCurrent
-}
+	res = kexCurrent
+	t := kexCurrentTime
+	kexMutex.RUnlock()
+	if res != nil && time.Now().Sub(t) < kexLifetime {
+		return res
+	}
 
-func setKexRoutine() {
-	for {
-		time.Sleep(kexLifetime)
+	kexMutex.Lock()
+	defer kexMutex.Unlock()
+	// Check if still unfulfilled
+	if kexCurrent == nil || time.Now().Sub(kexCurrentTime) > kexLifetime {
 		kex, err := crypto.NewCurve25519KEX()
 		if err != nil {
 			utils.Errorf("could not set KEX: %s", err.Error())
-			continue
+			return kexCurrent
 		}
-		kexMutex.Lock()
 		kexCurrent = kex
-		kexMutex.Unlock()
+		kexCurrentTime = time.Now()
+		return kexCurrent
 	}
-}
-
-func init() {
-	kex, err := crypto.NewCurve25519KEX()
-	if err != nil {
-		panic(fmt.Sprintf("Could not set KEX: %s", err.Error()))
-	}
-	kexCurrent = kex
+	return kexCurrent
 }
