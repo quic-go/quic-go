@@ -536,7 +536,10 @@ var _ = Describe("Session", func() {
 						Expect(err).NotTo(HaveOccurred())
 						s2, err := session.OpenStream(7)
 						Expect(err).NotTo(HaveOccurred())
-						go session.run()
+						go func() {
+							time.Sleep(time.Millisecond)
+							session.run()
+						}()
 						go func() {
 							_, err2 := s1.Write([]byte("foobar1"))
 							Expect(err2).NotTo(HaveOccurred())
