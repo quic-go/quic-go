@@ -115,6 +115,10 @@ func (h *sentPacketHandler) queuePacketForRetransmission(packet *ackhandlerlegac
 			}
 		}
 	}
+
+	// strictly speaking, this is only necessary for RTO retransmissions
+	// this is because FastRetransmissions are triggered by missing ranges in ACKs, and then the LargestAcked will already be higher than the packet number of the retransmitted packet
+	h.stopWaitingManager.QueuedRetransmissionForPacketNumber(packet.PacketNumber)
 }
 
 func (h *sentPacketHandler) SentPacket(packet *ackhandlerlegacy.Packet) error {

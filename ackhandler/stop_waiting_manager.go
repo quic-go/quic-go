@@ -27,3 +27,9 @@ func (s *stopWaitingManager) ReceivedAck(ack *frames.AckFrame) {
 		s.nextLeastUnacked = ack.LargestAcked + 1
 	}
 }
+
+func (s *stopWaitingManager) QueuedRetransmissionForPacketNumber(p protocol.PacketNumber) {
+	if p >= s.nextLeastUnacked {
+		s.nextLeastUnacked = p + 1
+	}
+}

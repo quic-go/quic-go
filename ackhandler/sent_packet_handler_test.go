@@ -357,6 +357,11 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.GetStopWaitingFrame()).To(Equal(&frames.StopWaitingFrame{LeastUnacked: 6}))
 			})
+
+			It("gets a StopWaitingFrame after queueing a retransmission", func() {
+				handler.queuePacketForRetransmission(&ackhandlerlegacy.Packet{PacketNumber: 5, Frames: []frames.Frame{&streamFrame}, Length: 1})
+				Expect(handler.GetStopWaitingFrame()).To(Equal(&frames.StopWaitingFrame{LeastUnacked: 6}))
+			})
 		})
 
 		Context("calculating RTT", func() {

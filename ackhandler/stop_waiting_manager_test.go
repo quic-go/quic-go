@@ -32,4 +32,16 @@ var _ = Describe("StopWaitingManager", func() {
 		Expect(manager.GetStopWaitingFrame()).ToNot(BeNil())
 		Expect(manager.GetStopWaitingFrame()).To(BeNil())
 	})
+
+	It("increases the LeastUnacked when a retransmission is queued", func() {
+		manager.ReceivedAck(&frames.AckFrame{LargestAcked: 10})
+		manager.QueuedRetransmissionForPacketNumber(20)
+		Expect(manager.GetStopWaitingFrame()).To(Equal(&frames.StopWaitingFrame{LeastUnacked: 21}))
+	})
+
+	It("does not decrease the LeastUnacked when a retransmission is queued", func() {
+		manager.ReceivedAck(&frames.AckFrame{LargestAcked: 10})
+		manager.QueuedRetransmissionForPacketNumber(9)
+		Expect(manager.GetStopWaitingFrame()).To(Equal(&frames.StopWaitingFrame{LeastUnacked: 11}))
+	})
 })
