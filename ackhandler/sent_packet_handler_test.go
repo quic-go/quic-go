@@ -351,13 +351,11 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		Context("StopWaitings", func() {
-			It("does not get a StopWaiting if no ACKs haven't been received yet", func() {
-				Expect(handler.GetStopWaitingFrame()).To(BeNil())
-			})
-
 			It("gets a StopWaitingFrame", func() {
-				handler.LargestAcked = 1336
-				Expect(handler.GetStopWaitingFrame()).To(Equal(&frames.StopWaitingFrame{LeastUnacked: 1337}))
+				ack := frames.AckFrame{LargestAcked: 5, LowestAcked: 5}
+				err := handler.ReceivedAck(&ack, 1)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.GetStopWaitingFrame()).To(Equal(&frames.StopWaitingFrame{LeastUnacked: 6}))
 			})
 		})
 

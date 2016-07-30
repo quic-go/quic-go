@@ -35,7 +35,8 @@ type sentPacketHandler struct {
 	largestReceivedPacketWithAck protocol.PacketNumber
 
 	// TODO: Move into separate class as in chromium
-	packetHistory map[protocol.PacketNumber]*ackhandlerlegacy.Packet
+	packetHistory      map[protocol.PacketNumber]*ackhandlerlegacy.Packet
+	stopWaitingManager stopWaitingManager
 
 	retransmissionQueue []*ackhandlerlegacy.Packet
 
@@ -58,9 +59,10 @@ func NewSentPacketHandler() SentPacketHandler {
 	)
 
 	return &sentPacketHandler{
-		packetHistory: make(map[protocol.PacketNumber]*ackhandlerlegacy.Packet),
-		rttStats:      rttStats,
-		congestion:    congestion,
+		packetHistory:      make(map[protocol.PacketNumber]*ackhandlerlegacy.Packet),
+		stopWaitingManager: stopWaitingManager{},
+		rttStats:           rttStats,
+		congestion:         congestion,
 	}
 }
 
@@ -220,6 +222,8 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 		}
 	}
 
+	h.stopWaitingManager.ReceivedAck(ackFrame)
+
 	h.congestion.OnCongestionEvent(
 		true, /* TODO: rtt updated */
 		h.BytesInFlight(),
@@ -273,13 +277,7 @@ func (h *sentPacketHandler) GetLargestAcked() protocol.PacketNumber {
 }
 
 func (h *sentPacketHandler) GetStopWaitingFrame() *frames.StopWaitingFrame {
-	if h.LargestAcked == 0 {
-		return nil
-	}
-
-	return &frames.StopWaitingFrame{
-		LeastUnacked: h.LargestAcked + 1,
-	}
+	return h.stopWaitingManager.GetStopWaitingFrame()
 }
 
 func (h *sentPacketHandler) CongestionAllowsSending() bool {
