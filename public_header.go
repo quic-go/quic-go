@@ -26,7 +26,6 @@ type publicHeader struct {
 	ConnectionID         protocol.ConnectionID
 	TruncateConnectionID bool
 	VersionNumber        protocol.VersionNumber
-	QuicVersion          uint32
 	PacketNumberLen      protocol.PacketNumberLen
 	PacketNumber         protocol.PacketNumber
 	DiversificationNonce []byte
