@@ -44,12 +44,9 @@ func (h *PublicHeader) WritePublicHeader(b *bytes.Buffer, version protocol.Versi
 		publicFlagByte |= 0x02
 	}
 	if !h.TruncateConnectionID {
-		if version < protocol.Version33 {
-			publicFlagByte |= 0x0c
-		} else {
-			publicFlagByte |= 0x08
-		}
+		publicFlagByte |= 0x08
 	}
+
 	if len(h.DiversificationNonce) > 0 {
 		if len(h.DiversificationNonce) != 32 {
 			return errors.New("invalid diversification nonce length")
@@ -110,10 +107,9 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	header.VersionFlag = publicFlagByte&0x01 > 0
 	header.ResetFlag = publicFlagByte&0x02 > 0
 
-	// TODO: Add this check when we drop support for <v33
-	// if publicFlagByte&0x04 > 0 {
-	// 	return nil, errors.New("diversification nonces should only be sent by servers")
-	// }
+	if publicFlagByte&0x04 > 0 {
+		return nil, errors.New("diversification nonces should only be sent by servers")
+	}
 
 	if publicFlagByte&0x08 == 0 {
 		return nil, errReceivedTruncatedConnectionID

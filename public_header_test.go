@@ -66,7 +66,7 @@ var _ = Describe("Public Header", func() {
 			Expect(b.Len()).To(BeZero())
 		})
 
-		PIt("rejects diversification nonces", func() {
+		It("rejects diversification nonces sent by the client", func() {
 			b := bytes.NewReader([]byte{0x0c, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c,
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1,
 				0x01,
@@ -84,8 +84,8 @@ var _ = Describe("Public Header", func() {
 				PacketNumber:    2,
 				PacketNumberLen: protocol.PacketNumberLen6,
 			}
-			hdr.WritePublicHeader(b, protocol.Version32)
-			Expect(b.Bytes()).To(Equal([]byte{0x38 | 0x04, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 2, 0, 0, 0, 0, 0}))
+			hdr.WritePublicHeader(b, protocol.Version33)
+			Expect(b.Bytes()).To(Equal([]byte{0x38, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 2, 0, 0, 0, 0, 0}))
 		})
 
 		It("sets the Version Flag", func() {
@@ -96,7 +96,7 @@ var _ = Describe("Public Header", func() {
 				PacketNumber:    2,
 				PacketNumberLen: protocol.PacketNumberLen6,
 			}
-			hdr.WritePublicHeader(b, protocol.Version32)
+			hdr.WritePublicHeader(b, protocol.VersionWhatever)
 			// must be the first assertion
 			Expect(b.Len()).To(Equal(1 + 8)) // 1 FlagByte + 8 ConnectionID
 			firstByte, _ := b.ReadByte()
@@ -111,7 +111,7 @@ var _ = Describe("Public Header", func() {
 				PacketNumber:    2,
 				PacketNumberLen: protocol.PacketNumberLen6,
 			}
-			hdr.WritePublicHeader(b, protocol.Version32)
+			hdr.WritePublicHeader(b, protocol.VersionWhatever)
 			// must be the first assertion
 			Expect(b.Len()).To(Equal(1 + 8)) // 1 FlagByte + 8 ConnectionID
 			firstByte, _ := b.ReadByte()
@@ -127,7 +127,7 @@ var _ = Describe("Public Header", func() {
 				PacketNumber:    2,
 				PacketNumberLen: protocol.PacketNumberLen6,
 			}
-			err := hdr.WritePublicHeader(b, protocol.Version32)
+			err := hdr.WritePublicHeader(b, protocol.VersionWhatever)
 			Expect(err).To(MatchError(errResetAndVersionFlagSet))
 		})
 
@@ -139,7 +139,7 @@ var _ = Describe("Public Header", func() {
 				PacketNumberLen:      protocol.PacketNumberLen6,
 				PacketNumber:         1,
 			}
-			err := hdr.WritePublicHeader(b, protocol.Version32)
+			err := hdr.WritePublicHeader(b, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b.Bytes()).To(Equal([]byte{0x30, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0}))
 		})
@@ -247,7 +247,7 @@ var _ = Describe("Public Header", func() {
 					ConnectionID: 0x4cfa9f9b668619f6,
 					PacketNumber: 0xDECAFBAD,
 				}
-				err := hdr.WritePublicHeader(b, protocol.Version32)
+				err := hdr.WritePublicHeader(b, protocol.VersionWhatever)
 				Expect(err).To(MatchError(errPacketNumberLenNotSet))
 			})
 
@@ -258,9 +258,9 @@ var _ = Describe("Public Header", func() {
 					PacketNumber:    0xDECAFBAD,
 					PacketNumberLen: protocol.PacketNumberLen1,
 				}
-				err := hdr.WritePublicHeader(b, protocol.Version32)
+				err := hdr.WritePublicHeader(b, protocol.VersionWhatever)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(b.Bytes()).To(Equal([]byte{0x08 | 0x04, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xAD}))
+				Expect(b.Bytes()).To(Equal([]byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xAD}))
 			})
 
 			It("writes a header with a 2-byte packet number", func() {
@@ -270,9 +270,9 @@ var _ = Describe("Public Header", func() {
 					PacketNumber:    0xDECAFBAD,
 					PacketNumberLen: protocol.PacketNumberLen2,
 				}
-				err := hdr.WritePublicHeader(b, protocol.Version32)
+				err := hdr.WritePublicHeader(b, protocol.VersionWhatever)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(b.Bytes()).To(Equal([]byte{0x18 | 0x04, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xAD, 0xFB}))
+				Expect(b.Bytes()).To(Equal([]byte{0x18, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xAD, 0xFB}))
 			})
 
 			It("writes a header with a 4-byte packet number", func() {
@@ -282,9 +282,9 @@ var _ = Describe("Public Header", func() {
 					PacketNumber:    0x13DECAFBAD,
 					PacketNumberLen: protocol.PacketNumberLen4,
 				}
-				err := hdr.WritePublicHeader(b, protocol.Version32)
+				err := hdr.WritePublicHeader(b, protocol.VersionWhatever)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(b.Bytes()).To(Equal([]byte{0x28 | 0x04, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xAD, 0xFB, 0xCA, 0xDE}))
+				Expect(b.Bytes()).To(Equal([]byte{0x28, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xAD, 0xFB, 0xCA, 0xDE}))
 			})
 
 			It("writes a header with a 6-byte packet number", func() {
@@ -294,9 +294,9 @@ var _ = Describe("Public Header", func() {
 					PacketNumber:    0xBE1337DECAFBAD,
 					PacketNumberLen: protocol.PacketNumberLen6,
 				}
-				err := hdr.WritePublicHeader(b, protocol.Version32)
+				err := hdr.WritePublicHeader(b, protocol.VersionWhatever)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(b.Bytes()).To(Equal([]byte{0x38 | 0x04, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xAD, 0xFB, 0xCA, 0xDE, 0x37, 0x13}))
+				Expect(b.Bytes()).To(Equal([]byte{0x38, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xAD, 0xFB, 0xCA, 0xDE, 0x37, 0x13}))
 			})
 		})
 	})
