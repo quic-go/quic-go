@@ -107,9 +107,11 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	header.VersionFlag = publicFlagByte&0x01 > 0
 	header.ResetFlag = publicFlagByte&0x02 > 0
 
-	if publicFlagByte&0x04 > 0 {
-		return nil, errors.New("diversification nonces should only be sent by servers")
-	}
+	// TODO: activate this check once Chrome sends the correct value
+	// see https://github.com/lucas-clemente/quic-go/issues/232
+	// if publicFlagByte&0x04 > 0 {
+	// 	return nil, errors.New("diversification nonces should only be sent by servers")
+	// }
 
 	if publicFlagByte&0x08 == 0 {
 		return nil, errReceivedTruncatedConnectionID
