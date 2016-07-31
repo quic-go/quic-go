@@ -87,10 +87,10 @@ var _ = Describe("Packet unpacker", func() {
 				Entropy:         0x37,
 			},
 		}
-		err := f.Write(buf, protocol.Version32)
+		err := f.Write(buf, protocol.Version33)
 		Expect(err).ToNot(HaveOccurred())
 		setData(buf.Bytes())
-		unpacker.version = protocol.Version32
+		unpacker.version = protocol.Version33
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.frames).To(HaveLen(1))
