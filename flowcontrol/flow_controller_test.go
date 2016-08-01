@@ -154,6 +154,7 @@ var _ = Describe("Flow controller", func() {
 			updateNecessary, offset := controller.MaybeTriggerWindowUpdate()
 			Expect(updateNecessary).To(BeTrue())
 			Expect(offset).To(Equal(readPosition + receiveFlowControlWindowIncrement))
+			Expect(controller.receiveFlowControlWindow).To(Equal(readPosition + receiveFlowControlWindowIncrement))
 		})
 
 		It("triggers a window update when not necessary", func() {

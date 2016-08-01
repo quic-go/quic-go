@@ -102,8 +102,8 @@ func (c *flowController) MaybeTriggerWindowUpdate() (bool, protocol.ByteCount) {
 	diff := c.receiveFlowControlWindow - c.bytesRead
 	// Chromium implements the same threshold
 	if diff < (c.receiveFlowControlWindowIncrement / 2) {
-		c.receiveFlowControlWindow += c.receiveFlowControlWindowIncrement
-		return true, c.bytesRead + c.receiveFlowControlWindowIncrement
+		c.receiveFlowControlWindow = c.bytesRead + c.receiveFlowControlWindowIncrement
+		return true, c.receiveFlowControlWindow
 	}
 	return false, 0
 }
