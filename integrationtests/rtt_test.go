@@ -18,7 +18,7 @@ import (
 	. "github.com/onsi/gomega/gexec"
 )
 
-var _ = Describe("RTT", func() {
+var _ = Describe("non-zero RTT", func() {
 	var rttProxy *proxy.UDPProxy
 
 	runRTTTest := func(rtt time.Duration, version protocol.VersionNumber) {
@@ -32,7 +32,7 @@ var _ = Describe("RTT", func() {
 
 		iPort, _ := strconv.Atoi(port)
 		var err error
-		rttProxy, err = proxy.NewUDPProxy(proxyPort, "localhost", iPort, nil, nil, rtt)
+		rttProxy, err = proxy.NewUDPProxy(proxyPort, "localhost", iPort, nil, nil, rtt, rtt)
 		Expect(err).ToNot(HaveOccurred())
 
 		command := exec.Command(

@@ -32,7 +32,7 @@ var _ = Describe("Drop Proxy", func() {
 
 		iPort, _ := strconv.Atoi(port)
 		var err error
-		dropproxy, err = proxy.NewUDPProxy(proxyPort, "localhost", iPort, incomingPacketDropper, outgoingPacketDropper, 0)
+		dropproxy, err = proxy.NewUDPProxy(proxyPort, "localhost", iPort, incomingPacketDropper, outgoingPacketDropper, 0, 0)
 		Expect(err).ToNot(HaveOccurred())
 
 		command := exec.Command(

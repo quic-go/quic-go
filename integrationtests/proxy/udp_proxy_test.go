@@ -19,7 +19,7 @@ var _ = Describe("UDP Proxy", func() {
 	})
 
 	It("sets up the UDPProxy", func() {
-		proxy, err := NewUDPProxy(13370, "localhost", serverPort, nil, nil, 0)
+		proxy, err := NewUDPProxy(13370, "localhost", serverPort, nil, nil, 0, 0)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(proxy.clientDict).To(HaveLen(0))
 
@@ -34,7 +34,7 @@ var _ = Describe("UDP Proxy", func() {
 	})
 
 	It("stops the UDPProxy", func() {
-		proxy, err := NewUDPProxy(13371, "localhost", serverPort, nil, nil, 0)
+		proxy, err := NewUDPProxy(13371, "localhost", serverPort, nil, nil, 0, 0)
 		Expect(err).ToNot(HaveOccurred())
 		proxy.Stop()
 
@@ -102,7 +102,7 @@ var _ = Describe("UDP Proxy", func() {
 			BeforeEach(func() {
 				// setup the proxy
 				var err error
-				proxy, err = NewUDPProxy(10001, "localhost", serverPort, nil, nil, 0)
+				proxy, err = NewUDPProxy(10001, "localhost", serverPort, nil, nil, 0, 0)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
@@ -175,7 +175,7 @@ var _ = Describe("UDP Proxy", func() {
 				}
 
 				var err error
-				proxy, err = NewUDPProxy(10001, "localhost", serverPort, dropper, nil, 0)
+				proxy, err = NewUDPProxy(10001, "localhost", serverPort, dropper, nil, 0, 0)
 				Expect(err).ToNot(HaveOccurred())
 
 				for i := 1; i <= 6; i++ {
@@ -195,7 +195,7 @@ var _ = Describe("UDP Proxy", func() {
 				}
 
 				var err error
-				proxy, err = NewUDPProxy(10001, "localhost", serverPort, nil, dropper, 0)
+				proxy, err = NewUDPProxy(10001, "localhost", serverPort, nil, dropper, 0, 0)
 				Expect(err).ToNot(HaveOccurred())
 
 				for i := 1; i <= 6; i++ {

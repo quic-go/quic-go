@@ -31,14 +31,14 @@ type UDPProxy struct {
 	proxyConn          *net.UDPConn
 	dropIncomingPacket DropCallback
 	dropOutgoingPacket DropCallback
-	rtt                time.Duration
+	rttGen             rttGenerator
 
 	// Mapping from client addresses (as host:port) to connection
 	clientDict map[string]*connection
 }
 
 // NewUDPProxy creates a new UDP proxy
-func NewUDPProxy(proxyPort int, serverAddress string, serverPort int, dropIncomingPacket, dropOutgoingPacket DropCallback, rtt time.Duration) (*UDPProxy, error) {
+func NewUDPProxy(proxyPort int, serverAddress string, serverPort int, dropIncomingPacket, dropOutgoingPacket DropCallback, rttMin time.Duration, rttMax time.Duration) (*UDPProxy, error) {
 	dontDrop := func(p PacketNumber) bool {
 		return false
 	}
@@ -54,7 +54,7 @@ func NewUDPProxy(proxyPort int, serverAddress string, serverPort int, dropIncomi
 		clientDict:         make(map[string]*connection),
 		dropIncomingPacket: dropIncomingPacket,
 		dropOutgoingPacket: dropOutgoingPacket,
-		rtt:                rtt,
+		rttGen:             newRttGenerator(rttMin, rttMax),
 	}
 
 	saddr, err := net.ResolveUDPAddr("udp", ":"+strconv.Itoa(proxyPort))
@@ -126,7 +126,7 @@ func (p *UDPProxy) runProxy() error {
 		if !p.dropIncomingPacket(conn.incomingPacketCounter) {
 			// Relay to server
 			go func() {
-				time.Sleep(p.rtt / 2)
+				time.Sleep(p.rttGen.getRTT() / 2)
 				conn.ServerConn.Write(buffer[0:n])
 			}()
 		}
@@ -147,7 +147,7 @@ func (p *UDPProxy) runConnection(conn *connection) error {
 		if !p.dropOutgoingPacket(conn.outgoingPacketCounter) {
 			// Relay it to client
 			go func() {
-				time.Sleep(p.rtt / 2)
+				time.Sleep(p.rttGen.getRTT() / 2)
 				p.proxyConn.WriteToUDP(buffer[0:n], conn.ClientAddr)
 			}()
 		}
