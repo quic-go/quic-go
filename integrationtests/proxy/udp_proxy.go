@@ -1,4 +1,4 @@
-package integrationtests
+package proxy
 
 import (
 	"net"
@@ -16,8 +16,12 @@ type connection struct {
 	outgoingPacketCounter PacketNumber
 }
 
+// A PacketNumber is a packet number for the UDP Proxy
+// note that this does not necessarily correspond to the QUIC packet number
 type PacketNumber uint64
-type dropCallback func(PacketNumber) bool
+
+// DropCallback is a callback that determines which packet gets dropped
+type DropCallback func(PacketNumber) bool
 
 // UDPProxy is a UDP proxy
 type UDPProxy struct {
@@ -25,8 +29,8 @@ type UDPProxy struct {
 	mutex      sync.Mutex
 
 	proxyConn          *net.UDPConn
-	dropIncomingPacket dropCallback
-	dropOutgoingPacket dropCallback
+	dropIncomingPacket DropCallback
+	dropOutgoingPacket DropCallback
 	rtt                time.Duration
 
 	// Mapping from client addresses (as host:port) to connection
@@ -34,7 +38,7 @@ type UDPProxy struct {
 }
 
 // NewUDPProxy creates a new UDP proxy
-func NewUDPProxy(proxyPort int, serverAddress string, serverPort int, dropIncomingPacket, dropOutgoingPacket dropCallback, rtt time.Duration) (*UDPProxy, error) {
+func NewUDPProxy(proxyPort int, serverAddress string, serverPort int, dropIncomingPacket, dropOutgoingPacket DropCallback, rtt time.Duration) (*UDPProxy, error) {
 	dontDrop := func(p PacketNumber) bool {
 		return false
 	}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	_ "github.com/lucas-clemente/quic-clients" // download clients
+	"github.com/lucas-clemente/quic-go/integrationtests/proxy"
 	"github.com/lucas-clemente/quic-go/protocol"
 
 	. "github.com/onsi/ginkgo"
@@ -18,7 +19,7 @@ import (
 )
 
 var _ = Describe("RTT", func() {
-	var rttProxy *UDPProxy
+	var rttProxy *proxy.UDPProxy
 
 	runRTTTest := func(rtt time.Duration, version protocol.VersionNumber) {
 		proxyPort := 12345
@@ -31,7 +32,7 @@ var _ = Describe("RTT", func() {
 
 		iPort, _ := strconv.Atoi(port)
 		var err error
-		rttProxy, err = NewUDPProxy(proxyPort, "localhost", iPort, nil, nil, rtt)
+		rttProxy, err = proxy.NewUDPProxy(proxyPort, "localhost", iPort, nil, nil, rtt)
 		Expect(err).ToNot(HaveOccurred())
 
 		command := exec.Command(

@@ -1,4 +1,4 @@
-package integrationtests
+package proxy
 
 import (
 	"net"
@@ -11,7 +11,7 @@ import (
 
 type packetData []byte
 
-var _ = Describe("Integrationtests", func() {
+var _ = Describe("UDP Proxy", func() {
 	var serverPort int
 
 	BeforeEach(func() {
