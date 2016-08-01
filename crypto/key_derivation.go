@@ -12,13 +12,13 @@ import (
 )
 
 // DeriveKeysChacha20 derives the client and server keys and creates a matching chacha20poly1305 AEAD instance
-func DeriveKeysChacha20(version protocol.VersionNumber, forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte) (AEAD, error) {
-	otherKey, myKey, otherIV, myIV, err := deriveKeys(version, forwardSecure, sharedSecret, nonces, connID, chlo, scfg, cert, divNonce, 32)
-	if err != nil {
-		return nil, err
-	}
-	return NewAEADChacha20Poly1305(otherKey, myKey, otherIV, myIV)
-}
+// func DeriveKeysChacha20(version protocol.VersionNumber, forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte) (AEAD, error) {
+// 	otherKey, myKey, otherIV, myIV, err := deriveKeys(version, forwardSecure, sharedSecret, nonces, connID, chlo, scfg, cert, divNonce, 32)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return NewAEADChacha20Poly1305(otherKey, myKey, otherIV, myIV)
+// }
 
 // DeriveKeysAESGCM derives the client and server keys and creates a matching AES-GCM AEAD instance
 func DeriveKeysAESGCM(version protocol.VersionNumber, forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte) (AEAD, error) {
