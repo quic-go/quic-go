@@ -2,7 +2,6 @@ package crypto
 
 import (
 	"crypto/cipher"
-	"encoding/binary"
 	"errors"
 
 	"github.com/aead/chacha20"
@@ -49,11 +48,4 @@ func (aead *aeadChacha20Poly1305) Open(dst, src []byte, packetNumber protocol.Pa
 
 func (aead *aeadChacha20Poly1305) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
 	return aead.encrypter.Seal(dst, makeNonce(aead.myIV, packetNumber), src, associatedData)
-}
-
-func makeNonce(iv []byte, packetNumber protocol.PacketNumber) []byte {
-	res := make([]byte, 12)
-	copy(res[0:4], iv)
-	binary.LittleEndian.PutUint64(res[4:12], uint64(packetNumber))
-	return res
 }
