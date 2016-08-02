@@ -249,21 +249,42 @@ var _ = Describe("receivedPacketHandler", func() {
 	})
 
 	Context("Garbage Collector", func() {
-		PIt("only keeps packets with packet numbers higher than the highestInOrderObserved in packetHistory", func() {
-			handler.ReceivedPacket(1, false)
-			handler.ReceivedPacket(2, false)
-			handler.ReceivedPacket(4, false)
+		It("garbage collects receivedTimes after receiving a StopWaiting, if there are no missing packets", func() {
+			for i := 1; i <= 4; i++ {
+				err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
+				Expect(err).ToNot(HaveOccurred())
+			}
+			err := handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 3})
+			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.receivedTimes).ToNot(HaveKey(protocol.PacketNumber(1)))
-			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(2)))
+			Expect(handler.receivedTimes).ToNot(HaveKey(protocol.PacketNumber(2)))
+			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(3)))
 			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(4)))
 		})
 
-		It("garbage collects packetHistory after receiving a StopWaiting", func() {
-			handler.ReceivedPacket(1, false)
-			handler.ReceivedPacket(2, false)
-			handler.ReceivedPacket(4, false)
-			swf := frames.StopWaitingFrame{LeastUnacked: 4}
-			handler.ReceivedStopWaiting(&swf)
+		It("garbage collects the receivedTimes after receiving multiple StopWaitings", func() {
+			for i := 1; i <= 9; i++ {
+				err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
+				Expect(err).ToNot(HaveOccurred())
+			}
+			err := handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 4})
+			Expect(err).ToNot(HaveOccurred())
+			err = handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 8})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.receivedTimes).To(HaveLen(2)) // packets 8 and 9
+			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(8)))
+			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(9)))
+		})
+
+		It("garbage collects receivedTimes after receiving a StopWaiting, if there are missing packets", func() {
+			err := handler.ReceivedPacket(1, false)
+			Expect(err).ToNot(HaveOccurred())
+			err = handler.ReceivedPacket(2, false)
+			Expect(err).ToNot(HaveOccurred())
+			err = handler.ReceivedPacket(4, false)
+			Expect(err).ToNot(HaveOccurred())
+			err = handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 4})
+			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.receivedTimes).ToNot(HaveKey(protocol.PacketNumber(1)))
 			Expect(handler.receivedTimes).ToNot(HaveKey(protocol.PacketNumber(2)))
 			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(4)))

@@ -28,7 +28,8 @@ type receivedPacketHandler struct {
 	currentAckFrame        *frames.AckFrame
 	stateChanged           bool // has an ACK for this state already been sent? Will be set to false every time a new packet arrives, and to false every time an ACK is sent
 
-	packetHistory         *receivedPacketHistory
+	packetHistory *receivedPacketHistory
+
 	receivedTimes         map[protocol.PacketNumber]time.Time
 	lowestInReceivedTimes protocol.PacketNumber
 }
@@ -72,8 +73,6 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 
 	h.receivedTimes[packetNumber] = time.Now()
 
-	h.garbageCollect()
-
 	if uint32(len(h.receivedTimes)) > protocol.MaxTrackedReceivedPackets {
 		return errTooManyOutstandingReceivedPackets
 	}
@@ -88,6 +87,7 @@ func (h *receivedPacketHandler) ReceivedStopWaiting(f *frames.StopWaitingFrame) 
 	}
 
 	h.ignorePacketsBelow = f.LeastUnacked - 1
+	h.garbageCollectReceivedTimes()
 
 	// ignore if StopWaiting is unneeded, since all packets below have already been received
 	if h.largestInOrderObserved >= f.LeastUnacked {
@@ -98,8 +98,6 @@ func (h *receivedPacketHandler) ReceivedStopWaiting(f *frames.StopWaitingFrame) 
 	h.largestInOrderObserved = f.LeastUnacked - 1
 
 	h.packetHistory.DeleteBelow(f.LeastUnacked)
-
-	h.garbageCollect()
 
 	return nil
 }
@@ -136,9 +134,9 @@ func (h *receivedPacketHandler) GetAckFrame(dequeue bool) (*frames.AckFrame, err
 	return h.currentAckFrame, nil
 }
 
-func (h *receivedPacketHandler) garbageCollect() {
-	for i := h.lowestInReceivedTimes; i < h.largestInOrderObserved; i++ {
+func (h *receivedPacketHandler) garbageCollectReceivedTimes() {
+	for i := h.lowestInReceivedTimes; i <= h.ignorePacketsBelow; i++ {
 		delete(h.receivedTimes, i)
 	}
-	h.lowestInReceivedTimes = h.largestInOrderObserved
+	h.lowestInReceivedTimes = h.ignorePacketsBelow
 }
