@@ -18,6 +18,16 @@ var _ = Describe("RstStreamFrame", func() {
 			Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0xDECAFBAD11223344)))
 			Expect(frame.ErrorCode).To(Equal(uint32(0x13371234)))
 		})
+
+		It("errors on EOFs", func() {
+			data := []byte{0x01, 0xEF, 0xBE, 0xAD, 0xDE, 0x44, 0x33, 0x22, 0x11, 0xAD, 0xFB, 0xCA, 0xDE, 0x34, 0x12, 0x37, 0x13}
+			_, err := ParseRstStreamFrame(bytes.NewReader(data))
+			Expect(err).NotTo(HaveOccurred())
+			for i := range data {
+				_, err := ParseRstStreamFrame(bytes.NewReader(data[0:i]))
+				Expect(err).To(HaveOccurred())
+			}
+		})
 	})
 
 	Context("when writing", func() {

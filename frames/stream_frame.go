@@ -3,6 +3,7 @@ package frames
 import (
 	"bytes"
 	"errors"
+	"io"
 	"io/ioutil"
 
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -73,7 +74,7 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 		}
 	} else {
 		frame.Data = make([]byte, dataLen)
-		if _, err := r.Read(frame.Data); err != nil {
+		if _, err := io.ReadFull(r, frame.Data); err != nil {
 			return nil, err
 		}
 	}

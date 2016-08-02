@@ -16,6 +16,11 @@ var _ = Describe("PingFrame", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b.Len()).To(Equal(0))
 		})
+
+		It("errors on EOFs", func() {
+			_, err := ParsePingFrame(bytes.NewReader(nil))
+			Expect(err).To(HaveOccurred())
+		})
 	})
 
 	Context("when writing", func() {

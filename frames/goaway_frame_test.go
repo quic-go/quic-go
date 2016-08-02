@@ -40,6 +40,21 @@ var _ = Describe("GoawayFrame", func() {
 			_, err := ParseGoawayFrame(b)
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidGoawayData, "reason phrase too long")))
 		})
+
+		It("errors on EOFs", func() {
+			data := []byte{0x03,
+				0x01, 0x00, 0x00, 0x00,
+				0x02, 0x00, 0x00, 0x00,
+				0x03, 0x00,
+				'f', 'o', 'o',
+			}
+			_, err := ParseGoawayFrame(bytes.NewReader(data))
+			Expect(err).NotTo(HaveOccurred())
+			for i := range data {
+				_, err := ParseGoawayFrame(bytes.NewReader(data[0:i]))
+				Expect(err).To(HaveOccurred())
+			}
+		})
 	})
 
 	Context("when writing", func() {

@@ -35,6 +35,16 @@ var _ = Describe("ConnectionCloseFrame", func() {
 			_, err := ParseConnectionCloseFrame(b)
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidConnectionCloseData, "reason phrase too long")))
 		})
+
+		It("errors on EOFs", func() {
+			data := []byte{0x40, 0x19, 0x00, 0x00, 0x00, 0x1B, 0x00, 0x4e, 0x6f, 0x20, 0x72, 0x65, 0x63, 0x65, 0x6e, 0x74, 0x20, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x20, 0x61, 0x63, 0x74, 0x69, 0x76, 0x69, 0x74, 0x79, 0x2e}
+			_, err := ParseConnectionCloseFrame(bytes.NewReader(data))
+			Expect(err).NotTo(HaveOccurred())
+			for i := range data {
+				_, err := ParseConnectionCloseFrame(bytes.NewReader(data[0:i]))
+				Expect(err).To(HaveOccurred())
+			}
+		})
 	})
 
 	Context("when writing", func() {

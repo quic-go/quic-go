@@ -53,6 +53,16 @@ var _ = Describe("StreamFrame", func() {
 			_, err := ParseStreamFrame(b)
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidStreamData, "data len too large")))
 		})
+
+		It("errors on EOFs", func() {
+			data := []byte{0xa0, 0x1, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'}
+			_, err := ParseStreamFrame(bytes.NewReader(data))
+			Expect(err).NotTo(HaveOccurred())
+			for i := range data {
+				_, err := ParseStreamFrame(bytes.NewReader(data[0:i]))
+				Expect(err).To(HaveOccurred())
+			}
+		})
 	})
 
 	Context("when writing", func() {

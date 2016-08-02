@@ -16,6 +16,16 @@ var _ = Describe("BlockedFrame", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0xDEADBEEF)))
 		})
+
+		It("errors on EOFs", func() {
+			data := []byte{0x05, 0xEF, 0xBE, 0xAD, 0xDE}
+			_, err := ParseBlockedFrame(bytes.NewReader(data))
+			Expect(err).NotTo(HaveOccurred())
+			for i := range data {
+				_, err := ParseBlockedFrame(bytes.NewReader(data[0:i]))
+				Expect(err).To(HaveOccurred())
+			}
+		})
 	})
 
 	Context("when writing", func() {

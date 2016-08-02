@@ -135,6 +135,16 @@ var _ = Describe("AckFrame", func() {
 				Expect(err).To(MatchError(errInvalidNackRanges))
 			})
 		})
+
+		It("errors on EOFs", func() {
+			data := []byte{0x64, 0x8, 0x23, 0x03, 0x72, 0x1, 0x1, 0x0, 0xc0, 0x15, 0x0, 0x0, 0x4, 0x1, 0x8f, 0x0, 0xff, 0x1, 0x8f, 0x0, 0xff}
+			_, err := ParseAckFrameLegacy(bytes.NewReader(data), 0)
+			Expect(err).NotTo(HaveOccurred())
+			for i := range data {
+				_, err := ParseAckFrameLegacy(bytes.NewReader(data[0:i]), 0)
+				Expect(err).To(HaveOccurred())
+			}
+		})
 	})
 
 	Context("GetHighestInOrderPacket", func() {

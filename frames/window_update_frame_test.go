@@ -18,6 +18,16 @@ var _ = Describe("WindowUpdateFrame", func() {
 			Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0xDECAFBAD11223344)))
 			Expect(b.Len()).To(Equal(0))
 		})
+
+		It("errors on EOFs", func() {
+			data := []byte{0x04, 0xEF, 0xBE, 0xAD, 0xDE, 0x44, 0x33, 0x22, 0x11, 0xAD, 0xFB, 0xCA, 0xDE}
+			_, err := ParseWindowUpdateFrame(bytes.NewReader(data))
+			Expect(err).NotTo(HaveOccurred())
+			for i := range data {
+				_, err := ParseWindowUpdateFrame(bytes.NewReader(data[0:i]))
+				Expect(err).To(HaveOccurred())
+			}
+		})
 	})
 
 	Context("when writing", func() {
