@@ -88,7 +88,9 @@ var _ = Describe("Session", func() {
 		conn                 *mockConnection
 	)
 
-	for _, version := range []protocol.VersionNumber{protocol.Version33, protocol.Version34} {
+	for _, versionLoop := range []protocol.VersionNumber{protocol.Version33, protocol.Version34} {
+		version := versionLoop
+
 		Context(fmt.Sprintf("with quic version %d", version), func() {
 
 			BeforeEach(func() {
@@ -481,13 +483,13 @@ var _ = Describe("Session", func() {
 
 			Context("sending packets", func() {
 				It("sends ack frames", func() {
-					packetNumber := protocol.PacketNumber(0x0135EA)
+					packetNumber := protocol.PacketNumber(0x35EA)
 					session.receivedPacketHandler.ReceivedPacket(packetNumber, true)
 					err := session.sendPacket()
 					Expect(err).NotTo(HaveOccurred())
 					Expect(conn.written).To(HaveLen(1))
 					// test for the beginning of an ACK frame: Entropy until LargestObserved
-					Expect(conn.written[0]).To(ContainSubstring(string([]byte{0xEA, 0x35, 0x01})))
+					Expect(conn.written[0]).To(ContainSubstring(string([]byte{0xEA, 0x35})))
 				})
 
 				It("sends two WindowUpdate frames", func() {
