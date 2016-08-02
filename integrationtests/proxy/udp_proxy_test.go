@@ -11,7 +11,7 @@ import (
 
 type packetData []byte
 
-var _ = Describe("UDP Proxy", func() {
+var _ = PDescribe("UDP Proxy", func() {
 	var serverPort int
 
 	BeforeEach(func() {
