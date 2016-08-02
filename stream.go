@@ -85,19 +85,8 @@ func (s *stream) Read(p []byte) (int, error) {
 				break
 			}
 			if frame != nil {
-				// Pop and continue if the frame doesn't have any new data
-				if frame.Offset+frame.DataLen() <= s.readOffset && !frame.FinBit {
-					s.frameQueue.Pop()
-					frame = s.frameQueue.Head()
-					continue
-				}
-				// If the frame's offset is <= our current read pos, and we didn't
-				// go into the previous if, we can read data from the frame.
-				if frame.Offset <= s.readOffset {
-					// Set our read position in the frame properly
-					s.readPosInFrame = int(s.readOffset - frame.Offset)
-					break
-				}
+				s.readPosInFrame = int(s.readOffset - frame.Offset)
+				break
 			}
 			s.newFrameOrErrCond.Wait()
 			frame = s.frameQueue.Head()
