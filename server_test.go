@@ -1,11 +1,13 @@
 package quic
 
 import (
+	"bytes"
 	"net"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/testdata"
 
 	. "github.com/onsi/ginkgo"
@@ -87,6 +89,24 @@ var _ = Describe("Server", func() {
 			err := server.Close()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(session.closed).To(BeTrue())
+		})
+
+		It("ignores packets for closed sessions", func() {
+			server.sessions[0x4cfa9f9b668619f6] = nil
+			err := server.handlePacket(nil, nil, []byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x01})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(server.sessions).To(HaveLen(1))
+			Expect(server.sessions[0x4cfa9f9b668619f6]).To(BeNil())
+		})
+
+		It("errors on invalid public header", func() {
+			err := server.handlePacket(nil, nil, nil)
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.InvalidPacketHeader))
+		})
+
+		It("errors on large packets", func() {
+			err := server.handlePacket(nil, nil, bytes.Repeat([]byte{'a'}, int(protocol.MaxPacketSize)+1))
+			Expect(err).To(MatchError(qerr.PacketTooLarge))
 		})
 	})
 

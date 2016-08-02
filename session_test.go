@@ -306,6 +306,14 @@ var _ = Describe("Session", func() {
 					})
 					Expect(err).To(MatchError(errRstStreamOnInvalidStream))
 				})
+
+				It("ignores the error when the stream is not known", func() {
+					err := session.handleFrames([]frames.Frame{&frames.RstStreamFrame{
+						StreamID:  5,
+						ErrorCode: 42,
+					}})
+					Expect(err).NotTo(HaveOccurred())
+				})
 			})
 
 			Context("handling WINDOW_UPDATE frames", func() {
@@ -346,6 +354,43 @@ var _ = Describe("Session", func() {
 					})
 					Expect(err).To(MatchError(errWindowUpdateOnClosedStream))
 				})
+
+				It("ignores errors when receiving a WindowUpdateFrame for a closed stream", func() {
+					session.streams[5] = nil // this is what the garbageCollectStreams() does when a Stream is closed
+					err := session.handleFrames([]frames.Frame{&frames.WindowUpdateFrame{
+						StreamID:   5,
+						ByteOffset: 1337,
+					}})
+					Expect(err).NotTo(HaveOccurred())
+				})
+			})
+
+			It("handles PING frames", func() {
+				err := session.handleFrames([]frames.Frame{&frames.PingFrame{}})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("handles BLOCKED frames", func() {
+				err := session.handleFrames([]frames.Frame{&frames.BlockedFrame{}})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("errors on GOAWAY frames", func() {
+				err := session.handleFrames([]frames.Frame{&frames.GoawayFrame{}})
+				Expect(err).To(MatchError("unimplemented: handling GOAWAY frames"))
+			})
+
+			It("handles STOP_WAITING frames", func() {
+				err := session.handleFrames([]frames.Frame{&frames.StopWaitingFrame{LeastUnacked: 10}})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("handles CONNECTION_CLOSE frames", func() {
+				str, _ := session.OpenStream(5)
+				err := session.handleFrames([]frames.Frame{&frames.ConnectionCloseFrame{ErrorCode: 42, ReasonPhrase: "foobar"}})
+				Expect(err).NotTo(HaveOccurred())
+				_, err = str.Read([]byte{0})
+				Expect(err).To(MatchError(qerr.Error(42, "foobar")))
 			})
 
 			Context("closing", func() {

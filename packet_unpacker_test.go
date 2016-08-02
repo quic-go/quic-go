@@ -204,4 +204,21 @@ var _ = Describe("Packet unpacker", func() {
 		_, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).To(MatchError("InvalidFrameData: unknown type byte 0x8"))
 	})
+
+	It("errors on invalid frames", func() {
+		for b, e := range map[byte]qerr.ErrorCode{
+			0x80: qerr.InvalidStreamData,
+			0x40: qerr.InvalidAckData,
+			0x01: qerr.InvalidRstStreamData,
+			0x02: qerr.InvalidConnectionCloseData,
+			0x03: qerr.InvalidGoawayData,
+			0x04: qerr.InvalidWindowUpdateData,
+			0x05: qerr.InvalidBlockedData,
+			0x06: qerr.InvalidStopWaitingData,
+		} {
+			setData([]byte{b})
+			_, err := unpacker.Unpack(hdrBin, hdr, data)
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(e))
+		}
+	})
 })

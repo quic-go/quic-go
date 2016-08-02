@@ -142,10 +142,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 	if hdr.VersionFlag && !protocol.IsSupportedVersion(hdr.VersionNumber) {
 		utils.Infof("Client offered version %d, sending VersionNegotiationPacket", hdr.VersionNumber)
 		_, err = conn.WriteToUDP(composeVersionNegotiation(hdr.ConnectionID), remoteAddr)
-		if err != nil {
-			return err
-		}
-		return nil
+		return err
 	}
 
 	s.sessionsMutex.RLock()
