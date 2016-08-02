@@ -229,7 +229,7 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(ack.AckRanges).To(BeEmpty())
 		})
 
-		It("does send old ACK ranges after receiving a StopWaiting", func() {
+		It("doesn't send old ACK ranges after receiving a StopWaiting", func() {
 			err := handler.ReceivedPacket(5, false)
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.ReceivedPacket(10, false)
@@ -240,10 +240,28 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: protocol.PacketNumber(11)})
 			Expect(err).ToNot(HaveOccurred())
-			ack, _ := handler.GetAckFrame(true)
+			ack, err := handler.GetAckFrame(true)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(ack).ToNot(BeNil())
 			Expect(ack.LargestAcked).To(Equal(protocol.PacketNumber(12)))
 			Expect(ack.LowestAcked).To(Equal(protocol.PacketNumber(11)))
+			Expect(ack.HasMissingRanges()).To(BeFalse())
+		})
+
+		It("deletes packets from the packetHistory after receiving a StopWaiting, after continously received packets", func() {
+			for i := 1; i <= 12; i++ {
+				err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
+				Expect(err).ToNot(HaveOccurred())
+			}
+			err := handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: protocol.PacketNumber(6)})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.largestInOrderObserved).To(Equal(protocol.PacketNumber(12)))
+			// check that the packets were deleted from the receivedPacketHistory by checking the values in an ACK frame
+			ack, err := handler.GetAckFrame(true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(ack).ToNot(BeNil())
+			Expect(ack.LargestAcked).To(Equal(protocol.PacketNumber(12)))
+			Expect(ack.LowestAcked).To(Equal(protocol.PacketNumber(6)))
 			Expect(ack.HasMissingRanges()).To(BeFalse())
 		})
 	})

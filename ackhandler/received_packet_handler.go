@@ -89,13 +89,10 @@ func (h *receivedPacketHandler) ReceivedStopWaiting(f *frames.StopWaitingFrame) 
 	h.ignorePacketsBelow = f.LeastUnacked - 1
 	h.garbageCollectReceivedTimes()
 
-	// ignore if StopWaiting is unneeded, since all packets below have already been received
-	if h.largestInOrderObserved >= f.LeastUnacked {
-		return nil
-	}
-
 	// the LeastUnacked is the smallest packet number of any packet for which the sender is still awaiting an ack. So the largestInOrderObserved is one less than that
-	h.largestInOrderObserved = f.LeastUnacked - 1
+	if f.LeastUnacked > h.largestInOrderObserved {
+		h.largestInOrderObserved = f.LeastUnacked - 1
+	}
 
 	h.packetHistory.DeleteBelow(f.LeastUnacked)
 
