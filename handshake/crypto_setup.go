@@ -74,7 +74,7 @@ func (h *CryptoSetup) HandleCryptoStream() error {
 		cachingReader := utils.NewCachingReader(h.cryptoStream)
 		messageTag, cryptoData, err := ParseHandshakeMessage(cachingReader)
 		if err != nil {
-			return err
+			return qerr.HandshakeFailed
 		}
 		if messageTag != TagCHLO {
 			return qerr.InvalidCryptoMessageType
@@ -323,12 +323,4 @@ func (h *CryptoSetup) LockForSealing() {
 // UnlockForSealing should be called after Seal() is complete, see LockForSealing().
 func (h *CryptoSetup) UnlockForSealing() {
 	h.mutex.RUnlock()
-}
-
-func (h *CryptoSetup) verifyOrCreateSTK(token []byte) ([]byte, error) {
-	err := h.scfg.stkSource.VerifyToken(h.ip, token)
-	if err != nil {
-		return h.scfg.stkSource.NewToken(h.ip)
-	}
-	return token, nil
 }

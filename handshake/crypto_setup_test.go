@@ -7,6 +7,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -286,7 +287,7 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		It("recognizes inchoate CHLOs missing PUBS", func() {
-			Expect(cs.isInchoateCHLO(map[Tag][]byte{TagSCID: nil})).To(BeTrue())
+			Expect(cs.isInchoateCHLO(map[Tag][]byte{TagSCID: scfg.ID})).To(BeTrue())
 		})
 
 		It("recognizes proper CHLOs", func() {
@@ -308,6 +309,26 @@ var _ = Describe("Crypto setup", func() {
 		})
 		err := cs.HandleCryptoStream()
 		Expect(err).To(MatchError("CryptoMessageParameterNotFound: SNI required"))
+	})
+
+	It("errors with empty SNI", func() {
+		WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
+			TagSTK: validSTK,
+			TagSNI: nil,
+		})
+		err := cs.HandleCryptoStream()
+		Expect(err).To(MatchError("CryptoMessageParameterNotFound: SNI required"))
+	})
+
+	It("errors with invalid message", func() {
+		err := cs.HandleCryptoStream()
+		Expect(err).To(MatchError(qerr.HandshakeFailed))
+	})
+
+	It("errors with non-CHLO message", func() {
+		WriteHandshakeMessage(&stream.dataToRead, TagPAD, nil)
+		err := cs.HandleCryptoStream()
+		Expect(err).To(MatchError(qerr.InvalidCryptoMessageType))
 	})
 
 	Context("escalating crypto", func() {
