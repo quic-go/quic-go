@@ -28,9 +28,8 @@ type receivedPacket struct {
 }
 
 var (
-	errRstStreamOnInvalidStream    = errors.New("RST_STREAM received for unknown stream")
-	errWindowUpdateOnInvalidStream = qerr.Error(qerr.InvalidWindowUpdateData, "WINDOW_UPDATE received for unknown stream")
-	errWindowUpdateOnClosedStream  = errors.New("WINDOW_UPDATE received for an already closed stream")
+	errRstStreamOnInvalidStream   = errors.New("RST_STREAM received for unknown stream")
+	errWindowUpdateOnClosedStream = errors.New("WINDOW_UPDATE received for an already closed stream")
 )
 
 // StreamCallback gets a stream frame and returns a reply frame
