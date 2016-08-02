@@ -7,7 +7,7 @@
 [![Windows Build Status](https://img.shields.io/appveyor/ci/lucas-clemente/quic-go.svg?style=flat-square&label=windows+build)](https://ci.appveyor.com/project/lucas-clemente/quic-go/branch/master)
 [![Code Coverage](https://img.shields.io/codecov/c/github/lucas-clemente/quic-go/master.svg?maxAge=2592000&style=flat-square)](https://codecov.io/gh/lucas-clemente/quic-go/)
 
-quic-go is an implementation of the [QUIC](https://en.wikipedia.org/wiki/QUIC) protocol in Go. While we're not far from being feature complete, there's still a lot of work to do regarding performance and security. At the moment, we do not recommend use in production systems. We appreciate any feedback :)
+quic-go is an implementation of the [QUIC](https://en.wikipedia.org/wiki/QUIC) protocol in Go. While we're not far from being feature complete, there's still work to do regarding performance and security. At the moment, we do not recommend use in production systems. We appreciate any feedback :)
 
 ## Roadmap
 
@@ -15,7 +15,7 @@ Done:
 
 - Basic protocol with support for QUIC version 32-34
 - HTTP/2 support
-- Crypto (RSA / ECDSA certificates, curve25519 for key exchange, AES-GCM or Chacha20-Poly1305 as stream cipher)
+- Crypto (RSA / ECDSA certificates, Curve25519 for key exchange, AES-GCM or Chacha20-Poly1305 as stream cipher)
 - Loss detection and retransmission (currently fast retransmission & RTO)
 - Flow Control
 - Congestion control using cubic
@@ -27,8 +27,6 @@ Major TODOs:
 - Better packet loss detection
 - Connection migration
 - QUIC client
-- Public API design
-- Integration into caddy (mostly to figure out the right server API)
 
 ## Guides
 
@@ -54,7 +52,7 @@ Using Chrome:
 
 ## Usage
 
-See the [example server](example/main.go) or the current beta version of [Caddy](https://github.com/mholt/caddy) ([instructions here](https://github.com/mholt/caddy/wiki/QUIC)). Starting a QUIC server is very similar to the standard lib http in go:
+See the [example server](example/main.go) or try out [Caddy](https://github.com/mholt/caddy) (from version 0.9, [instructions here](https://github.com/mholt/caddy/wiki/QUIC)). Starting a QUIC server is very similar to the standard lib http in go:
 
 ```go
 http.Handle("/", http.FileServer(http.Dir(wwwDir)))
