@@ -51,7 +51,7 @@ var _ = AfterSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	stopSelenium()
-})
+}, 5)
 
 func setupHTTPHandlers() {
 	defer GinkgoRecover()
@@ -119,7 +119,7 @@ func setupSelenium() {
 }
 
 func stopSelenium() {
-	docker.Interrupt().Wait(1)
+	docker.Interrupt().Wait()
 }
 
 func getWebdriverForVersion(version protocol.VersionNumber) selenium.WebDriver {
