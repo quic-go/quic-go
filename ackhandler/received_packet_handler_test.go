@@ -278,6 +278,7 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(handler.receivedTimes).ToNot(HaveKey(protocol.PacketNumber(2)))
 			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(3)))
 			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(4)))
+			Expect(handler.lowestInReceivedTimes).To(Equal(protocol.PacketNumber(3)))
 		})
 
 		It("garbage collects the receivedTimes after receiving multiple StopWaitings", func() {
@@ -292,6 +293,7 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(handler.receivedTimes).To(HaveLen(2)) // packets 8 and 9
 			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(8)))
 			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(9)))
+			Expect(handler.lowestInReceivedTimes).To(Equal(protocol.PacketNumber(8)))
 		})
 
 		It("garbage collects receivedTimes after receiving a StopWaiting, if there are missing packets", func() {
@@ -306,6 +308,7 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(handler.receivedTimes).ToNot(HaveKey(protocol.PacketNumber(1)))
 			Expect(handler.receivedTimes).ToNot(HaveKey(protocol.PacketNumber(2)))
 			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(4)))
+			Expect(handler.lowestInReceivedTimes).To(Equal(protocol.PacketNumber(4)))
 		})
 	})
 })

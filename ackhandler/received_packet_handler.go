@@ -135,5 +135,7 @@ func (h *receivedPacketHandler) garbageCollectReceivedTimes() {
 	for i := h.lowestInReceivedTimes; i <= h.ignorePacketsBelow; i++ {
 		delete(h.receivedTimes, i)
 	}
-	h.lowestInReceivedTimes = h.ignorePacketsBelow
+	if h.ignorePacketsBelow > h.lowestInReceivedTimes {
+		h.lowestInReceivedTimes = h.ignorePacketsBelow + 1
+	}
 }
