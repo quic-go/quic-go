@@ -13,7 +13,12 @@ func LogFrame(frame Frame, sent bool) {
 	}
 	if sf, ok := frame.(*StreamFrame); ok {
 		utils.Debugf("\t%s &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: 0x%x, Data length: 0x%x, Offset + Data length: 0x%x}", dir, sf.StreamID, sf.FinBit, sf.Offset, sf.DataLen(), sf.Offset+sf.DataLen())
-	} else {
-		utils.Debugf("\t%s %#v", dir, frame)
+		return
 	}
+	if ack, ok := frame.(*AckFrame); ok {
+		if ack.AckFrameLegacy != nil {
+			frame = ack.AckFrameLegacy
+		}
+	}
+	utils.Debugf("\t%s %#v", dir, frame)
 }
