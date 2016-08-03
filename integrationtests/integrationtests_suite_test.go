@@ -4,9 +4,12 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -28,9 +31,10 @@ const (
 )
 
 var (
-	server *h2quic.Server
-	data   []byte
-	port   string
+	server      *h2quic.Server
+	data        []byte
+	port        string
+	downloadDir string
 
 	docker *gexec.Session
 )
@@ -43,6 +47,7 @@ func TestIntegration(t *testing.T) {
 var _ = BeforeSuite(func() {
 	setupHTTPHandlers()
 	setupQuicServer()
+	setupDownloadDir()
 	setupSelenium()
 })
 
@@ -51,7 +56,12 @@ var _ = AfterSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	stopSelenium()
+	removeDownloadDir()
 }, 5)
+
+var _ = AfterEach(func() {
+	clearDownloadDir()
+})
 
 func setupHTTPHandlers() {
 	defer GinkgoRecover()
@@ -111,6 +121,7 @@ func setupSelenium() {
 		"-i",
 		"--rm",
 		"-p=4444:4444",
+		fmt.Sprintf("-v=%s/:/home/seluser/Downloads/", downloadDir),
 		"lclemente/standalone-chrome:latest",
 	)
 	docker, err = gexec.Start(dockerCmd, GinkgoWriter, GinkgoWriter)
@@ -160,4 +171,32 @@ func GetLocalIP() string {
 		}
 	}
 	panic("no addr")
+}
+
+// create a temporary directory for Chrome downloads
+// Docker will mount the Chrome download directory here
+func setupDownloadDir() {
+	var err error
+	downloadDir, err = ioutil.TempDir("/tmp", "quicgodownloads")
+	Expect(err).ToNot(HaveOccurred())
+}
+
+// delete all files in the download directory
+func clearDownloadDir() {
+	d, err := os.Open(downloadDir)
+	defer d.Close()
+	Expect(err).ToNot(HaveOccurred())
+	filenames, err := d.Readdirnames(-1)
+	Expect(err).ToNot(HaveOccurred())
+	for _, filename := range filenames {
+		err := os.Remove(filepath.Join(downloadDir, filename))
+		Expect(err).ToNot(HaveOccurred())
+	}
+}
+
+// delete the download directory
+// must be empty when calling this function
+func removeDownloadDir() {
+	err := os.Remove(downloadDir)
+	Expect(err).ToNot(HaveOccurred())
 }

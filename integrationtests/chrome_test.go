@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/tebeka/selenium"
 
@@ -114,9 +116,28 @@ var _ = Describe("Chrome tests", func() {
 						}
 					}
 					return nil
-				}).ShouldNot(HaveOccurred())
+				}, 5).ShouldNot(HaveOccurred())
 				close(done)
 			}, 10)
+
+			It("downloads a small file", func(done Done) {
+				var err error
+				err = wd.Get("https://quic.clemente.io/data")
+				Expect(err).NotTo(HaveOccurred())
+				var file *os.File
+				Eventually(func() error {
+					file, err = os.Open(filepath.Join(downloadDir, "data"))
+					return err
+				}, 30, 0.1).ShouldNot(HaveOccurred())
+				fi, err := file.Stat()
+				Expect(err).ToNot(HaveOccurred())
+				Eventually(fi.Size(), 10, 0.1).Should(Equal(int64(dataLen)))
+				contents := make([]byte, dataLen)
+				_, err = file.Read(contents)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(contents).To(Equal(data))
+				close(done)
+			}, 60)
 		})
 	}
 })
