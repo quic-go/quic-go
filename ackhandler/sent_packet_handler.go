@@ -184,7 +184,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 	var lostPackets congestion.PacketVector
 
 	// NACK packets below the LowestAcked
-	for i := h.LargestInOrderAcked; i < ackFrame.LowestAcked; i++ {
+	for i := h.LargestInOrderAcked + 1; i < ackFrame.LowestAcked; i++ {
 		p, err := h.nackPacket(i)
 		if err != nil {
 			return err
