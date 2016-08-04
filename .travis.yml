@@ -7,7 +7,7 @@ services:
 
 go:
   - 1.6
-  - 1.7rc4
+  - 1.7rc5
 
 # first part of the GOARCH workaround
 # setting the GOARCH directly doesn't work, since the value will be overwritten later
