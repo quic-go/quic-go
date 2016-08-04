@@ -1,7 +1,10 @@
 package integrationtests
 
 import (
+	"bytes"
+	"crypto/md5"
 	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -28,9 +31,10 @@ const (
 )
 
 var (
-	server *h2quic.Server
-	data   []byte
-	port   string
+	server  *h2quic.Server
+	data    []byte
+	dataMD5 []byte
+	port    string
 
 	docker *gexec.Session
 )
@@ -58,6 +62,8 @@ func setupHTTPHandlers() {
 	data = make([]byte, dataLen)
 	_, err := rand.Read(data)
 	Expect(err).NotTo(HaveOccurred())
+	sum := md5.Sum(data)
+	dataMD5 = sum[:]
 
 	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
 		defer GinkgoRecover()
@@ -111,6 +117,7 @@ func setupSelenium() {
 		"-i",
 		"--rm",
 		"-p=4444:4444",
+		"--name", "quic-test-selenium",
 		"lclemente/standalone-chrome:latest",
 	)
 	docker, err = gexec.Start(dockerCmd, GinkgoWriter, GinkgoWriter)
@@ -160,4 +167,45 @@ func GetLocalIP() string {
 		}
 	}
 	panic("no addr")
+}
+
+func removeDownload(filename string) {
+	cmd := exec.Command("docker", "exec", "-i", "quic-test-selenium", "rm", "-f", "/home/seluser/Downloads/"+filename)
+	session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
+	Expect(err).NotTo(HaveOccurred())
+	Eventually(session).Should(gexec.Exit(0))
+}
+
+var _ = AfterEach(func() {
+	removeDownload("data")
+})
+
+func getDownloadSize(filename string) int {
+	var out bytes.Buffer
+	cmd := exec.Command("docker", "exec", "-i", "quic-test-selenium", "stat", "--printf=%s", "/home/seluser/Downloads/"+filename)
+	session, err := gexec.Start(cmd, &out, GinkgoWriter)
+	Expect(err).NotTo(HaveOccurred())
+	Eventually(session).Should(gexec.Exit())
+	if session.ExitCode() != 0 {
+		return 0
+	}
+	Expect(out.Bytes()).ToNot(BeEmpty())
+	size, err := strconv.Atoi(string(out.Bytes()))
+	Expect(err).NotTo(HaveOccurred())
+	return size
+}
+
+func getDownloadMD5(filename string) []byte {
+	var out bytes.Buffer
+	cmd := exec.Command("docker", "exec", "-i", "quic-test-selenium", "md5sum", "/home/seluser/Downloads/"+filename)
+	session, err := gexec.Start(cmd, &out, GinkgoWriter)
+	Expect(err).NotTo(HaveOccurred())
+	Eventually(session).Should(gexec.Exit())
+	if session.ExitCode() != 0 {
+		return nil
+	}
+	Expect(out.Bytes()).ToNot(BeEmpty())
+	res, err := hex.DecodeString(string(out.Bytes()[0:32]))
+	Expect(err).NotTo(HaveOccurred())
+	return res
 }

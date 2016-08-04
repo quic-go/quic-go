@@ -114,9 +114,16 @@ var _ = Describe("Chrome tests", func() {
 						}
 					}
 					return nil
-				}).ShouldNot(HaveOccurred())
+				}, 5).ShouldNot(HaveOccurred())
 				close(done)
 			}, 10)
+
+			It("downloads a small file", func() {
+				err := wd.Get("https://quic.clemente.io/data")
+				Expect(err).NotTo(HaveOccurred())
+				Eventually(func() int { return getDownloadSize("data") }, 30, 0.1).Should(Equal(dataLen))
+				Expect(getDownloadMD5("data")).To(Equal(dataMD5))
+			}, 60)
 		})
 	}
 })
