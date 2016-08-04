@@ -1,10 +1,15 @@
 package proxy
 
 import (
+	"bytes"
 	"net"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go/protocol"
 )
 
 // Connection is a UDP connection
@@ -12,16 +17,12 @@ type connection struct {
 	ClientAddr *net.UDPAddr // Address of the client
 	ServerConn *net.UDPConn // UDP connection to server
 
-	incomingPacketCounter PacketNumber
-	outgoingPacketCounter PacketNumber
+	incomingPacketCounter uint64
+	outgoingPacketCounter uint64
 }
 
-// A PacketNumber is a packet number for the UDP Proxy
-// note that this does not necessarily correspond to the QUIC packet number
-type PacketNumber uint64
-
 // DropCallback is a callback that determines which packet gets dropped
-type DropCallback func(PacketNumber) bool
+type DropCallback func(protocol.PacketNumber) bool
 
 // UDPProxy is a UDP proxy
 type UDPProxy struct {
@@ -39,7 +40,7 @@ type UDPProxy struct {
 
 // NewUDPProxy creates a new UDP proxy
 func NewUDPProxy(proxyPort int, serverAddress string, serverPort int, dropIncomingPacket, dropOutgoingPacket DropCallback, rttMin time.Duration, rttMax time.Duration) (*UDPProxy, error) {
-	dontDrop := func(p PacketNumber) bool {
+	dontDrop := func(p protocol.PacketNumber) bool {
 		return false
 	}
 
@@ -121,13 +122,20 @@ func (p *UDPProxy) runProxy() error {
 			p.mutex.Unlock()
 		}
 
-		conn.incomingPacketCounter++
+		atomic.AddUint64(&conn.incomingPacketCounter, 1)
 
-		if !p.dropIncomingPacket(conn.incomingPacketCounter) {
+		raw := buffer[0:n]
+		r := bytes.NewReader(raw)
+		hdr, err := quic.ParsePublicHeader(r)
+		if err != nil {
+			return err
+		}
+
+		if !p.dropIncomingPacket(hdr.PacketNumber) {
 			// Relay to server
 			go func() {
 				time.Sleep(p.rttGen.getRTT() / 2)
-				conn.ServerConn.Write(buffer[0:n])
+				conn.ServerConn.Write(raw)
 			}()
 		}
 	}
@@ -142,13 +150,20 @@ func (p *UDPProxy) runConnection(conn *connection) error {
 			return err
 		}
 
-		conn.outgoingPacketCounter++
+		raw := buffer[0:n]
+		r := bytes.NewReader(raw)
+		hdr, err := quic.ParsePublicHeader(r)
+		if err != nil {
+			return err
+		}
 
-		if !p.dropOutgoingPacket(conn.outgoingPacketCounter) {
+		atomic.AddUint64(&conn.outgoingPacketCounter, 1)
+
+		if !p.dropOutgoingPacket(hdr.PacketNumber) {
 			// Relay it to client
 			go func() {
 				time.Sleep(p.rttGen.getRTT() / 2)
-				p.proxyConn.WriteToUDP(buffer[0:n], conn.ClientAddr)
+				p.proxyConn.WriteToUDP(raw, conn.ClientAddr)
 			}()
 		}
 	}

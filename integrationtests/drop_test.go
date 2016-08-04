@@ -60,7 +60,7 @@ var _ = Describe("Drop Proxy", func() {
 
 		Context(fmt.Sprintf("with quic version %d", version), func() {
 			Context("dropping every 4th packet after the crypto handshake", func() {
-				dropper := func(p proxy.PacketNumber) bool {
+				dropper := func(p protocol.PacketNumber) bool {
 					if p <= 5 { // don't interfere with the crypto handshake
 						return false
 					}

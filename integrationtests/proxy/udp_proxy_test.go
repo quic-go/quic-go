@@ -1,10 +1,13 @@
 package proxy
 
 import (
+	"bytes"
 	"net"
 	"strconv"
 	"time"
 
+	"github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -13,6 +16,20 @@ type packetData []byte
 
 var _ = Describe("UDP Proxy", func() {
 	var serverPort int
+
+	makePacket := func(p protocol.PacketNumber, payload []byte) []byte {
+		b := &bytes.Buffer{}
+		hdr := quic.PublicHeader{
+			PacketNumber:         p,
+			PacketNumberLen:      protocol.PacketNumberLen6,
+			ConnectionID:         1337,
+			TruncateConnectionID: false,
+		}
+		hdr.WritePublicHeader(b, protocol.Version34)
+		raw := b.Bytes()
+		raw = append(raw, payload...)
+		return raw
+	}
 
 	BeforeEach(func() {
 		serverPort = 7331
@@ -107,38 +124,36 @@ var _ = Describe("UDP Proxy", func() {
 			})
 
 			It("relays packets from the client to the server", func() {
-				_, err := clientConn.Write([]byte("foobar"))
+				_, err := clientConn.Write(makePacket(1, []byte("foobar")))
 				Expect(err).ToNot(HaveOccurred())
 
 				Eventually(func() map[string]*connection { return proxy.clientDict }).Should(HaveLen(1))
-				var key string
 				var conn *connection
-				for key, conn = range proxy.clientDict {
-					Expect(conn.incomingPacketCounter).To(Equal(PacketNumber(1)))
+				for _, conn = range proxy.clientDict {
+					Expect(conn.incomingPacketCounter).To(Equal(uint64(1)))
 				}
-				_, err = clientConn.Write([]byte("decafbad"))
+				_, err = clientConn.Write(makePacket(2, []byte("decafbad")))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(proxy.clientDict).To(HaveLen(1))
 				Eventually(func() []packetData { return serverReceivedPackets }).Should(HaveLen(2))
-				Expect(proxy.clientDict[key].incomingPacketCounter).To(Equal(PacketNumber(2)))
-				Expect(serverReceivedPackets[0]).To(Equal(packetData("foobar")))
-				Expect(serverReceivedPackets[1]).To(Equal(packetData("decafbad")))
+				Expect(string(serverReceivedPackets[0])).To(ContainSubstring("foobar"))
+				Expect(string(serverReceivedPackets[1])).To(ContainSubstring("decafbad"))
 			})
 
 			It("relays packets from the server to the client", func() {
-				_, err := clientConn.Write([]byte("foobar"))
+				_, err := clientConn.Write(makePacket(1, []byte("foobar")))
 				Expect(err).ToNot(HaveOccurred())
 				Eventually(func() map[string]*connection { return proxy.clientDict }).Should(HaveLen(1))
 				var key string
 				var conn *connection
 				for key, conn = range proxy.clientDict {
-					Expect(conn.outgoingPacketCounter).To(Equal(PacketNumber(1)))
+					Expect(conn.outgoingPacketCounter).To(Equal(uint64(1)))
 				}
-				_, err = clientConn.Write([]byte("decafbad"))
+				_, err = clientConn.Write(makePacket(2, []byte("decafbad")))
 				Expect(err).ToNot(HaveOccurred())
 
 				Expect(proxy.clientDict).To(HaveLen(1))
-				Eventually(func() PacketNumber { return proxy.clientDict[key].outgoingPacketCounter }).Should(Equal(PacketNumber(2)))
+				Eventually(func() uint64 { return proxy.clientDict[key].outgoingPacketCounter }).Should(Equal(uint64(2)))
 
 				var clientReceivedPackets []packetData
 
@@ -161,14 +176,14 @@ var _ = Describe("UDP Proxy", func() {
 				Expect(serverReceivedPackets).To(HaveLen(2))
 				Expect(serverNumPacketsSent).To(Equal(2))
 				Eventually(func() []packetData { return clientReceivedPackets }).Should(HaveLen(2))
-				Expect(clientReceivedPackets[0]).To(Equal(packetData("foobar")))
-				Expect(clientReceivedPackets[1]).To(Equal(packetData("decafbad")))
+				Expect(string(clientReceivedPackets[0])).To(ContainSubstring("foobar"))
+				Expect(string(clientReceivedPackets[1])).To(ContainSubstring("decafbad"))
 			})
 		})
 
 		Context("Drop Callbacks", func() {
 			It("drops incoming packets", func() {
-				dropper := func(p PacketNumber) bool {
+				dropper := func(p protocol.PacketNumber) bool {
 					return p%2 == 0
 				}
 
@@ -177,18 +192,18 @@ var _ = Describe("UDP Proxy", func() {
 				Expect(err).ToNot(HaveOccurred())
 
 				for i := 1; i <= 6; i++ {
-					_, err := clientConn.Write([]byte("foobar" + strconv.Itoa(i)))
+					_, err := clientConn.Write(makePacket(protocol.PacketNumber(i), []byte("foobar"+strconv.Itoa(i))))
 					Expect(err).ToNot(HaveOccurred())
 					time.Sleep(time.Millisecond)
 				}
 				Eventually(func() []packetData { return serverReceivedPackets }).Should(HaveLen(3))
-				Expect(serverReceivedPackets[0]).To(Equal(packetData("foobar1")))
-				Expect(serverReceivedPackets[1]).To(Equal(packetData("foobar3")))
-				Expect(serverReceivedPackets[2]).To(Equal(packetData("foobar5")))
+				Expect(string(serverReceivedPackets[0])).To(ContainSubstring("foobar1"))
+				Expect(string(serverReceivedPackets[1])).To(ContainSubstring("foobar3"))
+				Expect(string(serverReceivedPackets[2])).To(ContainSubstring("foobar5"))
 			})
 
 			It("drops outgoing packets", func() {
-				dropper := func(p PacketNumber) bool {
+				dropper := func(p protocol.PacketNumber) bool {
 					return p%2 == 0
 				}
 
@@ -197,7 +212,7 @@ var _ = Describe("UDP Proxy", func() {
 				Expect(err).ToNot(HaveOccurred())
 
 				for i := 1; i <= 6; i++ {
-					_, err := clientConn.Write([]byte("foobar" + strconv.Itoa(i)))
+					_, err := clientConn.Write(makePacket(protocol.PacketNumber(i), []byte("foobar"+strconv.Itoa(i))))
 					Expect(err).ToNot(HaveOccurred())
 					time.Sleep(time.Millisecond)
 				}
@@ -220,9 +235,9 @@ var _ = Describe("UDP Proxy", func() {
 				}()
 
 				Eventually(func() []packetData { return clientReceivedPackets }).Should(HaveLen(3))
-				Expect(clientReceivedPackets[0]).To(Equal(packetData("foobar1")))
-				Expect(clientReceivedPackets[1]).To(Equal(packetData("foobar3")))
-				Expect(clientReceivedPackets[2]).To(Equal(packetData("foobar5")))
+				Expect(string(clientReceivedPackets[0])).To(ContainSubstring("foobar1"))
+				Expect(string(clientReceivedPackets[1])).To(ContainSubstring("foobar3"))
+				Expect(string(clientReceivedPackets[2])).To(ContainSubstring("foobar5"))
 			})
 		})
 	})
