@@ -93,7 +93,7 @@ var _ = Describe("Integration tests", func() {
 						session, err := Start(command, nil, GinkgoWriter)
 						Expect(err).NotTo(HaveOccurred())
 						defer session.Kill()
-						Eventually(session, 3).Should(Exit(0))
+						Eventually(session, 10).Should(Exit(0))
 						Expect(bytes.Contains(session.Out.Contents(), data)).To(BeTrue())
 					}()
 				}

@@ -46,7 +46,7 @@ var _ = Describe("Drop Proxy", func() {
 		session, err := Start(command, GinkgoWriter, GinkgoWriter)
 		Expect(err).NotTo(HaveOccurred())
 		defer session.Kill()
-		Eventually(session, 4).Should(Exit(0))
+		Eventually(session, 20).Should(Exit(0))
 		Expect(bytes.Contains(session.Out.Contents(), data)).To(BeTrue())
 	}
 

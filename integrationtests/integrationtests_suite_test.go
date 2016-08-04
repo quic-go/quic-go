@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	dataLen = 50 * 1024
+	dataLen = 500 * 1024
 )
 
 var (
