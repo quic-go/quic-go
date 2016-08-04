@@ -98,8 +98,8 @@ func (h *PublicHeader) WritePublicHeader(b *bytes.Buffer, version protocol.Versi
 	return nil
 }
 
-// parsePublicHeader parses a QUIC packet's public header
-func parsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
+// ParsePublicHeader parses a QUIC packet's public header
+func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	header := &PublicHeader{}
 
 	// First byte

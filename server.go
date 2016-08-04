@@ -132,7 +132,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 
 	r := bytes.NewReader(packet)
 
-	hdr, err := parsePublicHeader(r)
+	hdr, err := ParsePublicHeader(r)
 	if err != nil {
 		return qerr.Error(qerr.InvalidPacketHeader, err.Error())
 	}
