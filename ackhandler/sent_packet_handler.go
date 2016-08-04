@@ -90,6 +90,10 @@ func (h *sentPacketHandler) nackPacket(packetNumber protocol.PacketNumber) (*ack
 		return nil, nil
 	}
 
+	if packet.Retransmitted {
+		return nil, nil
+	}
+
 	packet.MissingReports++
 
 	if packet.MissingReports > protocol.RetransmissionThreshold {
@@ -149,7 +153,6 @@ func (h *sentPacketHandler) SentPacket(packet *ackhandlerlegacy.Packet) error {
 	return nil
 }
 
-// TODO: Simplify return types
 func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNumber protocol.PacketNumber) error {
 	if ackFrame.LargestAcked > h.lastSentPacketNumber {
 		return errAckForUnsentPacket
