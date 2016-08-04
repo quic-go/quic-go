@@ -31,7 +31,8 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(3)))
 			err = handler.ReceivedPacket(protocol.PacketNumber(2), false)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(2)))
+			Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(2)))
+			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(3)))
 		})
 
 		It("rejects packets with packet number 0", func() {
@@ -416,6 +417,15 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(1)))
 			Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(2)))
 			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(4)))
+		})
+
+		It("garbage collects after receiving out-of-order packets without STOP_WAITING", func() {
+			handler.ReceivedPacket(2, true)
+			handler.ReceivedPacket(1, true)
+			handler.ReceivedPacket(3, true)
+			Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(1)))
+			Expect(handler.packetHistory).ToNot(HaveKey(protocol.PacketNumber(2)))
+			Expect(handler.packetHistory).To(HaveKey(protocol.PacketNumber(3)))
 		})
 	})
 })

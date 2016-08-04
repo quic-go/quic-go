@@ -68,14 +68,19 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 		h.largestObserved = packetNumber
 	}
 
-	if packetNumber == h.highestInOrderObserved+1 {
-		h.highestInOrderObserved = packetNumber
-		h.highestInOrderObservedEntropy.Add(packetNumber, entropyBit)
-	}
-
 	h.packetHistory[packetNumber] = packetHistoryEntry{
 		EntropyBit:   entropyBit,
 		TimeReceived: time.Now(),
+	}
+
+	// Try to increase highestInOrderObserved as far as possible
+	for {
+		p, ok := h.packetHistory[h.highestInOrderObserved+1]
+		if !ok {
+			break
+		}
+		h.highestInOrderObserved++
+		h.highestInOrderObservedEntropy.Add(h.highestInOrderObserved, p.EntropyBit)
 	}
 
 	h.garbageCollect()
