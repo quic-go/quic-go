@@ -61,7 +61,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 	defer p.cryptoSetup.UnlockForSealing()
 
 	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(currentPacketNumber, largestObserved)
-	responsePublicHeader := &publicHeader{
+	responsePublicHeader := &PublicHeader{
 		ConnectionID:         p.connectionID,
 		PacketNumber:         currentPacketNumber,
 		PacketNumberLen:      packetNumberLen,

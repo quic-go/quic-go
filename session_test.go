@@ -39,7 +39,7 @@ func (*mockConnection) IP() net.IP                            { return nil }
 
 type mockUnpacker struct{}
 
-func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *publicHeader, data []byte) (*unpackedPacket, error) {
+func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data []byte) (*unpackedPacket, error) {
 	return &unpackedPacket{
 		entropyBit: false,
 		frames:     nil,
@@ -439,11 +439,11 @@ var _ = Describe("Session", func() {
 			})
 
 			Context("receiving packets", func() {
-				var hdr *publicHeader
+				var hdr *PublicHeader
 
 				BeforeEach(func() {
 					session.unpacker = &mockUnpacker{}
-					hdr = &publicHeader{PacketNumberLen: protocol.PacketNumberLen6}
+					hdr = &PublicHeader{PacketNumberLen: protocol.PacketNumberLen6}
 				})
 
 				It("sets the lastRcvdPacketNumber", func() {
@@ -662,7 +662,7 @@ var _ = Describe("Session", func() {
 			It("sends public reset after too many undecryptable packets", func() {
 				// Write protocol.MaxUndecryptablePackets and expect a public reset to happen
 				for i := 0; i < protocol.MaxUndecryptablePackets; i++ {
-					hdr := &publicHeader{
+					hdr := &PublicHeader{
 						PacketNumber: protocol.PacketNumber(i + 1),
 					}
 					session.handlePacket(nil, hdr, []byte("foobar"))
@@ -676,7 +676,7 @@ var _ = Describe("Session", func() {
 			It("unqueues undecryptable packets for later decryption", func() {
 				session.undecryptablePackets = []receivedPacket{{
 					nil,
-					&publicHeader{PacketNumber: protocol.PacketNumber(42)},
+					&PublicHeader{PacketNumber: protocol.PacketNumber(42)},
 					nil,
 				}}
 				Expect(session.receivedPackets).NotTo(Receive())

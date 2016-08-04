@@ -18,12 +18,12 @@ import (
 )
 
 type unpacker interface {
-	Unpack(publicHeaderBinary []byte, hdr *publicHeader, data []byte) (*unpackedPacket, error)
+	Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data []byte) (*unpackedPacket, error)
 }
 
 type receivedPacket struct {
 	remoteAddr   interface{}
-	publicHeader *publicHeader
+	publicHeader *PublicHeader
 	data         []byte
 }
 
@@ -234,7 +234,7 @@ func (s *Session) maybeResetTimer() {
 	s.currentDeadline = nextDeadline
 }
 
-func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *publicHeader, data []byte) error {
+func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *PublicHeader, data []byte) error {
 	s.lastNetworkActivityTime = time.Now()
 
 	// Calculate packet number
@@ -319,7 +319,7 @@ func (s *Session) handleFrames(fs []frames.Frame) error {
 }
 
 // handlePacket handles a packet
-func (s *Session) handlePacket(remoteAddr interface{}, hdr *publicHeader, data []byte) {
+func (s *Session) handlePacket(remoteAddr interface{}, hdr *PublicHeader, data []byte) {
 	// Discard packets once the amount of queued packets is larger than
 	// the channel size, protocol.MaxSessionUnprocessedPackets
 	select {

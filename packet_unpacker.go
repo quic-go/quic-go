@@ -21,7 +21,7 @@ type packetUnpacker struct {
 	aead    crypto.AEAD
 }
 
-func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *publicHeader, data []byte) (*unpackedPacket, error) {
+func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data []byte) (*unpackedPacket, error) {
 	data, err := u.aead.Open(data[:0], data, hdr.PacketNumber, publicHeaderBinary)
 	if err != nil {
 		// Wrap err in quicError so that public reset is sent by session

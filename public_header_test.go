@@ -79,7 +79,7 @@ var _ = Describe("Public Header", func() {
 	Context("when writing", func() {
 		It("writes a sample header", func() {
 			b := &bytes.Buffer{}
-			hdr := publicHeader{
+			hdr := PublicHeader{
 				ConnectionID:    0x4cfa9f9b668619f6,
 				PacketNumber:    2,
 				PacketNumberLen: protocol.PacketNumberLen6,
@@ -90,7 +90,7 @@ var _ = Describe("Public Header", func() {
 
 		It("sets the Version Flag", func() {
 			b := &bytes.Buffer{}
-			hdr := publicHeader{
+			hdr := PublicHeader{
 				VersionFlag:     true,
 				ConnectionID:    0x4cfa9f9b668619f6,
 				PacketNumber:    2,
@@ -105,7 +105,7 @@ var _ = Describe("Public Header", func() {
 
 		It("sets the Reset Flag", func() {
 			b := &bytes.Buffer{}
-			hdr := publicHeader{
+			hdr := PublicHeader{
 				ResetFlag:       true,
 				ConnectionID:    0x4cfa9f9b668619f6,
 				PacketNumber:    2,
@@ -120,7 +120,7 @@ var _ = Describe("Public Header", func() {
 
 		It("throws an error if both Reset Flag and Version Flag are set", func() {
 			b := &bytes.Buffer{}
-			hdr := publicHeader{
+			hdr := PublicHeader{
 				VersionFlag:     true,
 				ResetFlag:       true,
 				ConnectionID:    0x4cfa9f9b668619f6,
@@ -133,7 +133,7 @@ var _ = Describe("Public Header", func() {
 
 		It("truncates the connection ID", func() {
 			b := &bytes.Buffer{}
-			hdr := publicHeader{
+			hdr := PublicHeader{
 				ConnectionID:         0x4cfa9f9b668619f6,
 				TruncateConnectionID: true,
 				PacketNumberLen:      protocol.PacketNumberLen6,
@@ -146,7 +146,7 @@ var _ = Describe("Public Header", func() {
 
 		It("writes proper v33 packets", func() {
 			b := &bytes.Buffer{}
-			hdr := publicHeader{
+			hdr := PublicHeader{
 				ConnectionID:    0x4cfa9f9b668619f6,
 				PacketNumber:    1,
 				PacketNumberLen: protocol.PacketNumberLen1,
@@ -158,7 +158,7 @@ var _ = Describe("Public Header", func() {
 
 		It("writes diversification nonces", func() {
 			b := &bytes.Buffer{}
-			hdr := publicHeader{
+			hdr := PublicHeader{
 				ConnectionID:         0x4cfa9f9b668619f6,
 				PacketNumber:         1,
 				PacketNumberLen:      protocol.PacketNumberLen1,
@@ -175,19 +175,19 @@ var _ = Describe("Public Header", func() {
 
 		Context("GetLength", func() {
 			It("errors when calling GetLength for Version Negotiation packets", func() {
-				hdr := publicHeader{VersionFlag: true}
+				hdr := PublicHeader{VersionFlag: true}
 				_, err := hdr.GetLength()
 				Expect(err).To(MatchError(errGetLengthOnlyForRegularPackets))
 			})
 
 			It("errors when calling GetLength for Public Reset packets", func() {
-				hdr := publicHeader{ResetFlag: true}
+				hdr := PublicHeader{ResetFlag: true}
 				_, err := hdr.GetLength()
 				Expect(err).To(MatchError(errGetLengthOnlyForRegularPackets))
 			})
 
 			It("errors when PacketNumberLen is not set", func() {
-				hdr := publicHeader{
+				hdr := PublicHeader{
 					ConnectionID: 0x4cfa9f9b668619f6,
 					PacketNumber: 0xDECAFBAD,
 				}
@@ -196,7 +196,7 @@ var _ = Describe("Public Header", func() {
 			})
 
 			It("gets the length of a packet with longest packet number length and connectionID", func() {
-				hdr := publicHeader{
+				hdr := PublicHeader{
 					ConnectionID:    0x4cfa9f9b668619f6,
 					PacketNumber:    0xDECAFBAD,
 					PacketNumberLen: protocol.PacketNumberLen6,
@@ -207,7 +207,7 @@ var _ = Describe("Public Header", func() {
 			})
 
 			It("gets the length of a packet with longest packet number length and truncated connectionID", func() {
-				hdr := publicHeader{
+				hdr := PublicHeader{
 					ConnectionID:         0x4cfa9f9b668619f6,
 					TruncateConnectionID: true,
 					PacketNumber:         0xDECAFBAD,
@@ -219,7 +219,7 @@ var _ = Describe("Public Header", func() {
 			})
 
 			It("gets the length of a packet 2 byte packet number length ", func() {
-				hdr := publicHeader{
+				hdr := PublicHeader{
 					ConnectionID:    0x4cfa9f9b668619f6,
 					PacketNumber:    0xDECAFBAD,
 					PacketNumberLen: protocol.PacketNumberLen2,
@@ -230,7 +230,7 @@ var _ = Describe("Public Header", func() {
 			})
 
 			It("works with diversification nonce", func() {
-				hdr := publicHeader{
+				hdr := PublicHeader{
 					DiversificationNonce: []byte("foo"),
 					PacketNumberLen:      protocol.PacketNumberLen1,
 				}
@@ -243,7 +243,7 @@ var _ = Describe("Public Header", func() {
 		Context("packet number length", func() {
 			It("doesn't write a header if the packet number length is not set", func() {
 				b := &bytes.Buffer{}
-				hdr := publicHeader{
+				hdr := PublicHeader{
 					ConnectionID: 0x4cfa9f9b668619f6,
 					PacketNumber: 0xDECAFBAD,
 				}
@@ -253,7 +253,7 @@ var _ = Describe("Public Header", func() {
 
 			It("writes a header with a 1-byte packet number", func() {
 				b := &bytes.Buffer{}
-				hdr := publicHeader{
+				hdr := PublicHeader{
 					ConnectionID:    0x4cfa9f9b668619f6,
 					PacketNumber:    0xDECAFBAD,
 					PacketNumberLen: protocol.PacketNumberLen1,
@@ -265,7 +265,7 @@ var _ = Describe("Public Header", func() {
 
 			It("writes a header with a 2-byte packet number", func() {
 				b := &bytes.Buffer{}
-				hdr := publicHeader{
+				hdr := PublicHeader{
 					ConnectionID:    0x4cfa9f9b668619f6,
 					PacketNumber:    0xDECAFBAD,
 					PacketNumberLen: protocol.PacketNumberLen2,
@@ -277,7 +277,7 @@ var _ = Describe("Public Header", func() {
 
 			It("writes a header with a 4-byte packet number", func() {
 				b := &bytes.Buffer{}
-				hdr := publicHeader{
+				hdr := PublicHeader{
 					ConnectionID:    0x4cfa9f9b668619f6,
 					PacketNumber:    0x13DECAFBAD,
 					PacketNumberLen: protocol.PacketNumberLen4,
@@ -289,7 +289,7 @@ var _ = Describe("Public Header", func() {
 
 			It("writes a header with a 6-byte packet number", func() {
 				b := &bytes.Buffer{}
-				hdr := publicHeader{
+				hdr := PublicHeader{
 					ConnectionID:    0x4cfa9f9b668619f6,
 					PacketNumber:    0xBE1337DECAFBAD,
 					PacketNumberLen: protocol.PacketNumberLen6,

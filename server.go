@@ -16,7 +16,7 @@ import (
 
 // packetHandler handles packets
 type packetHandler interface {
-	handlePacket(addr interface{}, hdr *publicHeader, data []byte)
+	handlePacket(addr interface{}, hdr *PublicHeader, data []byte)
 	run()
 	Close(error) error
 }
@@ -183,7 +183,7 @@ func (s *Server) closeCallback(id protocol.ConnectionID) {
 
 func composeVersionNegotiation(connectionID protocol.ConnectionID) []byte {
 	fullReply := &bytes.Buffer{}
-	responsePublicHeader := publicHeader{
+	responsePublicHeader := PublicHeader{
 		ConnectionID: connectionID,
 		PacketNumber: 1,
 		VersionFlag:  true,

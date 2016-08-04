@@ -15,7 +15,7 @@ import (
 var _ = Describe("Packet unpacker", func() {
 	var (
 		unpacker *packetUnpacker
-		hdr      *publicHeader
+		hdr      *PublicHeader
 		hdrBin   []byte
 		aead     crypto.AEAD
 		data     []byte
@@ -24,7 +24,7 @@ var _ = Describe("Packet unpacker", func() {
 
 	BeforeEach(func() {
 		aead = &crypto.NullAEAD{}
-		hdr = &publicHeader{
+		hdr = &PublicHeader{
 			PacketNumber:    10,
 			PacketNumberLen: 1,
 		}

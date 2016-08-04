@@ -18,8 +18,8 @@ var (
 	errGetLengthOnlyForRegularPackets = errors.New("PublicHeader: GetLength can only be called for regular packets")
 )
 
-// The publicHeader of a QUIC packet
-type publicHeader struct {
+// The PublicHeader of a QUIC packet
+type PublicHeader struct {
 	Raw                  []byte
 	VersionFlag          bool
 	ResetFlag            bool
@@ -32,7 +32,7 @@ type publicHeader struct {
 }
 
 // WritePublicHeader writes a public header
-func (h *publicHeader) WritePublicHeader(b *bytes.Buffer, version protocol.VersionNumber) error {
+func (h *PublicHeader) WritePublicHeader(b *bytes.Buffer, version protocol.VersionNumber) error {
 	publicFlagByte := uint8(0x00)
 	if h.VersionFlag && h.ResetFlag {
 		return errResetAndVersionFlagSet
@@ -99,8 +99,8 @@ func (h *publicHeader) WritePublicHeader(b *bytes.Buffer, version protocol.Versi
 }
 
 // parsePublicHeader parses a QUIC packet's public header
-func parsePublicHeader(b io.ByteReader) (*publicHeader, error) {
-	header := &publicHeader{}
+func parsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
+	header := &PublicHeader{}
 
 	// First byte
 	publicFlagByte, err := b.ReadByte()
@@ -162,7 +162,7 @@ func parsePublicHeader(b io.ByteReader) (*publicHeader, error) {
 
 // GetLength gets the length of the publicHeader in bytes
 // can only be called for regular packets
-func (h *publicHeader) GetLength() (protocol.ByteCount, error) {
+func (h *PublicHeader) GetLength() (protocol.ByteCount, error) {
 	if h.VersionFlag || h.ResetFlag {
 		return 0, errGetLengthOnlyForRegularPackets
 	}
