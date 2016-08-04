@@ -55,7 +55,7 @@ var _ = AfterSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	stopSelenium()
-}, 5)
+}, 10)
 
 func setupHTTPHandlers() {
 	defer GinkgoRecover()
