@@ -1,15 +1,15 @@
 package integrationtests
 
 import (
+	"bytes"
+	"crypto/md5"
 	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"time"
 
@@ -31,10 +31,10 @@ const (
 )
 
 var (
-	server      *h2quic.Server
-	data        []byte
-	port        string
-	downloadDir string
+	server  *h2quic.Server
+	data    []byte
+	dataMD5 []byte
+	port    string
 
 	docker *gexec.Session
 )
@@ -47,7 +47,6 @@ func TestIntegration(t *testing.T) {
 var _ = BeforeSuite(func() {
 	setupHTTPHandlers()
 	setupQuicServer()
-	setupDownloadDir()
 	setupSelenium()
 })
 
@@ -56,18 +55,15 @@ var _ = AfterSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	stopSelenium()
-	removeDownloadDir()
 }, 5)
-
-var _ = AfterEach(func() {
-	clearDownloadDir()
-})
 
 func setupHTTPHandlers() {
 	defer GinkgoRecover()
 	data = make([]byte, dataLen)
 	_, err := rand.Read(data)
 	Expect(err).NotTo(HaveOccurred())
+	sum := md5.Sum(data)
+	dataMD5 = sum[:]
 
 	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
 		defer GinkgoRecover()
@@ -121,7 +117,7 @@ func setupSelenium() {
 		"-i",
 		"--rm",
 		"-p=4444:4444",
-		fmt.Sprintf("-v=%s/:/home/seluser/Downloads/", downloadDir),
+		"--name", "quic-test-selenium",
 		"lclemente/standalone-chrome:latest",
 	)
 	docker, err = gexec.Start(dockerCmd, GinkgoWriter, GinkgoWriter)
@@ -173,30 +169,43 @@ func GetLocalIP() string {
 	panic("no addr")
 }
 
-// create a temporary directory for Chrome downloads
-// Docker will mount the Chrome download directory here
-func setupDownloadDir() {
-	var err error
-	downloadDir, err = ioutil.TempDir("/tmp", "quicgodownloads")
-	Expect(err).ToNot(HaveOccurred())
+func removeDownload(filename string) {
+	cmd := exec.Command("docker", "exec", "-i", "quic-test-selenium", "rm", "-f", "/home/seluser/Downloads/"+filename)
+	session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
+	Expect(err).NotTo(HaveOccurred())
+	Eventually(session).Should(gexec.Exit(0))
 }
 
-// delete all files in the download directory
-func clearDownloadDir() {
-	d, err := os.Open(downloadDir)
-	defer d.Close()
-	Expect(err).ToNot(HaveOccurred())
-	filenames, err := d.Readdirnames(-1)
-	Expect(err).ToNot(HaveOccurred())
-	for _, filename := range filenames {
-		err := os.Remove(filepath.Join(downloadDir, filename))
-		Expect(err).ToNot(HaveOccurred())
+var _ = AfterEach(func() {
+	removeDownload("data")
+})
+
+func getDownloadSize(filename string) int {
+	var out bytes.Buffer
+	cmd := exec.Command("docker", "exec", "-i", "quic-test-selenium", "stat", "--printf=%s", "/home/seluser/Downloads/"+filename)
+	session, err := gexec.Start(cmd, &out, GinkgoWriter)
+	Expect(err).NotTo(HaveOccurred())
+	Eventually(session).Should(gexec.Exit())
+	if session.ExitCode() != 0 {
+		return 0
 	}
+	Expect(out.Bytes()).ToNot(BeEmpty())
+	size, err := strconv.Atoi(string(out.Bytes()))
+	Expect(err).NotTo(HaveOccurred())
+	return size
 }
 
-// delete the download directory
-// must be empty when calling this function
-func removeDownloadDir() {
-	err := os.Remove(downloadDir)
-	Expect(err).ToNot(HaveOccurred())
+func getDownloadMD5(filename string) []byte {
+	var out bytes.Buffer
+	cmd := exec.Command("docker", "exec", "-i", "quic-test-selenium", "md5sum", "/home/seluser/Downloads/"+filename)
+	session, err := gexec.Start(cmd, &out, GinkgoWriter)
+	Expect(err).NotTo(HaveOccurred())
+	Eventually(session).Should(gexec.Exit())
+	if session.ExitCode() != 0 {
+		return nil
+	}
+	Expect(out.Bytes()).ToNot(BeEmpty())
+	res, err := hex.DecodeString(string(out.Bytes()[0:32]))
+	Expect(err).NotTo(HaveOccurred())
+	return res
 }
