@@ -138,7 +138,7 @@ func (s *stream) Write(p []byte) (int, error) {
 		s.doneWritingOrErrCond.Wait()
 	}
 
-	s.mutex.Unlock()
+	defer s.mutex.Unlock()
 	if s.err != nil {
 		return 0, s.err
 	}
