@@ -48,7 +48,7 @@ type Session struct {
 
 	conn connection
 
-	streams          map[protocol.StreamID]*stream
+	streamsMap       *streamsMap
 	openStreamsCount uint32
 	streamsMutex     sync.RWMutex
 
@@ -108,12 +108,13 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	}
 
 	session := &Session{
-		connectionID:                connectionID,
-		version:                     v,
-		conn:                        conn,
-		streamCallback:              streamCallback,
-		closeCallback:               closeCallback,
-		streams:                     make(map[protocol.StreamID]*stream),
+		connectionID:   connectionID,
+		version:        v,
+		conn:           conn,
+		streamCallback: streamCallback,
+		closeCallback:  closeCallback,
+		// streams:                     make(map[protocol.StreamID]*stream),
+		streamsMap:                  newStreamsMap(),
 		sentPacketHandler:           sentPacketHandler,
 		receivedPacketHandler:       receivedPacketHandler,
 		stopWaitingManager:          stopWaitingManager,
@@ -135,7 +136,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		return nil, err
 	}
 
-	session.streamFramer = newStreamFramer(&session.streams, &session.streamsMutex, flowControlManager)
+	session.streamFramer = newStreamFramer(session.streamsMap, flowControlManager)
 	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.connectionParametersManager, session.streamFramer, v)
 	session.unpacker = &packetUnpacker{aead: session.cryptoSetup, version: v}
 
@@ -331,10 +332,10 @@ func (s *Session) handlePacket(remoteAddr interface{}, hdr *PublicHeader, data [
 func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
 	s.streamsMutex.Lock()
 	defer s.streamsMutex.Unlock()
-	str, streamExists := s.streams[frame.StreamID]
+	str, strExists := s.streamsMap.GetStream(frame.StreamID)
 
 	var err error
-	if !streamExists {
+	if !strExists {
 		if !s.isValidStreamID(frame.StreamID) {
 			return qerr.InvalidStreamID
 		}
@@ -352,7 +353,7 @@ func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
 	if err != nil {
 		return err
 	}
-	if !streamExists {
+	if !strExists {
 		s.streamCallback(s, str)
 	}
 	return nil
@@ -366,14 +367,14 @@ func (s *Session) handleWindowUpdateFrame(frame *frames.WindowUpdateFrame) error
 	s.streamsMutex.RLock()
 	defer s.streamsMutex.RUnlock()
 	if frame.StreamID != 0 {
-		stream, ok := s.streams[frame.StreamID]
-		if ok && stream == nil {
+		str, strExists := s.streamsMap.GetStream(frame.StreamID)
+		if strExists && str == nil {
 			return errWindowUpdateOnClosedStream
 		}
 
 		// open new stream when receiving a WindowUpdate for a non-existing stream
 		// this can occur if the client immediately sends a WindowUpdate for a newly opened stream, and packet reordering occurs such that the packet opening the new stream arrives after the WindowUpdate
-		if !ok {
+		if !strExists {
 			s.newStreamImpl(frame.StreamID)
 		}
 	}
@@ -384,7 +385,7 @@ func (s *Session) handleWindowUpdateFrame(frame *frames.WindowUpdateFrame) error
 // TODO: Handle frame.byteOffset
 func (s *Session) handleRstStreamFrame(frame *frames.RstStreamFrame) error {
 	s.streamsMutex.RLock()
-	str, streamExists := s.streams[frame.StreamID]
+	str, streamExists := s.streamsMap.GetStream(frame.StreamID)
 	s.streamsMutex.RUnlock()
 	if !streamExists || str == nil {
 		return errRstStreamOnInvalidStream
@@ -445,12 +446,16 @@ func (s *Session) closeImpl(e error, remoteClose bool) error {
 func (s *Session) closeStreamsWithError(err error) {
 	s.streamsMutex.Lock()
 	defer s.streamsMutex.Unlock()
-	for _, str := range s.streams {
+
+	fn := func(str *stream) (bool, error) {
 		if str == nil {
-			continue
+			return true, nil
 		}
 		s.closeStreamWithError(str, err)
+		return true, nil
 	}
+
+	s.streamsMap.Iterate(fn)
 }
 
 func (s *Session) closeStreamWithError(str *stream, err error) {
@@ -595,7 +600,8 @@ func (s *Session) OpenStream(id protocol.StreamID) (utils.Stream, error) {
 func (s *Session) GetOrOpenStream(id protocol.StreamID) (utils.Stream, error) {
 	s.streamsMutex.Lock()
 	defer s.streamsMutex.Unlock()
-	if stream, ok := s.streams[id]; ok {
+	stream, strExists := s.streamsMap.GetStream(id)
+	if strExists {
 		return stream, nil
 	}
 	return s.newStreamImpl(id)
@@ -608,7 +614,8 @@ func (s *Session) newStreamImpl(id protocol.StreamID) (*stream, error) {
 		go s.Close(qerr.TooManyOpenStreams)
 		return nil, qerr.TooManyOpenStreams
 	}
-	if _, ok := s.streams[id]; ok {
+	_, strExists := s.streamsMap.GetStream(id)
+	if strExists {
 		return nil, fmt.Errorf("Session: stream with ID %d already exists", id)
 	}
 	stream, err := newStream(s.scheduleSending, s.connectionParametersManager, s.flowControlManager, id)
@@ -624,26 +631,33 @@ func (s *Session) newStreamImpl(id protocol.StreamID) (*stream, error) {
 	}
 
 	atomic.AddUint32(&s.openStreamsCount, 1)
-	s.streams[id] = stream
+	err = s.streamsMap.PutStream(stream)
+	if err != nil {
+		return nil, err
+	}
 	return stream, nil
 }
 
 // garbageCollectStreams goes through all streams and removes EOF'ed streams
 // from the streams map.
 func (s *Session) garbageCollectStreams() {
-	s.streamsMutex.Lock()
-	defer s.streamsMutex.Unlock()
-	for k, v := range s.streams {
-		if v == nil {
-			continue
+	fn := func(str *stream) (bool, error) {
+		if str == nil {
+			return true, nil
 		}
-		if v.finished() {
-			utils.Debugf("Garbage-collecting stream %d", k)
+		id := str.StreamID()
+		if str.finished() {
 			atomic.AddUint32(&s.openStreamsCount, ^uint32(0)) // decrement
-			s.streams[k] = nil
-			s.flowControlManager.RemoveStream(k)
+			err := s.streamsMap.RemoveStream(id)
+			if err != nil {
+				return false, err
+			}
+			s.flowControlManager.RemoveStream(id)
 		}
+		return true, nil
 	}
+
+	s.streamsMap.Iterate(fn)
 }
 
 func (s *Session) sendPublicReset(rejectedPacketNumber protocol.PacketNumber) error {
@@ -680,19 +694,23 @@ func (s *Session) getWindowUpdateFrames() ([]*frames.WindowUpdateFrame, error) {
 
 	var res []*frames.WindowUpdateFrame
 
-	for id, str := range s.streams {
+	fn := func(str *stream) (bool, error) {
 		if str == nil {
-			continue
+			return true, nil
 		}
 
+		id := str.StreamID()
 		doUpdate, offset, err := s.flowControlManager.MaybeTriggerStreamWindowUpdate(id)
 		if err != nil {
-			return nil, err
+			return false, err
 		}
 		if doUpdate {
 			res = append(res, &frames.WindowUpdateFrame{StreamID: id, ByteOffset: offset})
 		}
+		return true, nil
 	}
+
+	s.streamsMap.Iterate(fn)
 
 	doUpdate, offset := s.flowControlManager.MaybeTriggerConnectionWindowUpdate()
 	if doUpdate {

@@ -114,7 +114,7 @@ var _ = Describe("Session", func() {
 				)
 				Expect(err).NotTo(HaveOccurred())
 				session = pSession.(*Session)
-				Expect(session.streams).To(HaveLen(1)) // Crypto stream
+				Expect(session.streamsMap.NumberOfStreams()).To(Equal(1)) // Crypto stream
 			})
 
 			Context("when handling stream frames", func() {
@@ -123,10 +123,12 @@ var _ = Describe("Session", func() {
 						StreamID: 5,
 						Data:     []byte{0xde, 0xca, 0xfb, 0xad},
 					})
-					Expect(session.streams).To(HaveLen(2))
+					Expect(session.streamsMap.NumberOfStreams()).To(Equal(2))
 					Expect(streamCallbackCalled).To(BeTrue())
 					p := make([]byte, 4)
-					_, err := session.streams[5].Read(p)
+					str, _ := session.streamsMap.GetStream(5)
+					Expect(str).ToNot(BeNil())
+					_, err := str.Read(p)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
 				})
@@ -154,16 +156,18 @@ var _ = Describe("Session", func() {
 						StreamID: 5,
 						Data:     []byte{0xde, 0xca},
 					})
-					Expect(session.streams).To(HaveLen(2))
+					Expect(session.streamsMap.NumberOfStreams()).To(Equal(2))
 					Expect(streamCallbackCalled).To(BeTrue())
 					session.handleStreamFrame(&frames.StreamFrame{
 						StreamID: 5,
 						Offset:   2,
 						Data:     []byte{0xfb, 0xad},
 					})
-					Expect(session.streams).To(HaveLen(2))
+					Expect(session.streamsMap.NumberOfStreams()).To(Equal(2))
 					p := make([]byte, 4)
-					_, err := session.streams[5].Read(p)
+					str, _ := session.streamsMap.GetStream(5)
+					Expect(str).ToNot(BeNil())
+					_, err := str.Read(p)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
 				})
@@ -173,8 +177,9 @@ var _ = Describe("Session", func() {
 					Expect(err).ToNot(HaveOccurred())
 					str.Close()
 					session.garbageCollectStreams()
-					Expect(session.streams).To(HaveLen(2))
-					Expect(session.streams[5]).ToNot(BeNil())
+					Expect(session.streamsMap.NumberOfStreams()).To(Equal(2))
+					str, _ = session.streamsMap.GetStream(5)
+					Expect(str).ToNot(BeNil())
 				})
 
 				It("does not delete streams with FIN bit", func() {
@@ -183,16 +188,18 @@ var _ = Describe("Session", func() {
 						Data:     []byte{0xde, 0xca, 0xfb, 0xad},
 						FinBit:   true,
 					})
-					Expect(session.streams).To(HaveLen(2))
-					Expect(session.streams[5]).ToNot(BeNil())
+					Expect(session.streamsMap.NumberOfStreams()).To(Equal(2))
+					str, _ := session.streamsMap.GetStream(5)
+					Expect(str).ToNot(BeNil())
 					Expect(streamCallbackCalled).To(BeTrue())
 					p := make([]byte, 4)
-					_, err := session.streams[5].Read(p)
+					_, err := str.Read(p)
 					Expect(err).To(MatchError(io.EOF))
 					Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
 					session.garbageCollectStreams()
-					Expect(session.streams).To(HaveLen(2))
-					Expect(session.streams[5]).ToNot(BeNil())
+					Expect(session.streamsMap.NumberOfStreams()).To(Equal(2))
+					str, _ = session.streamsMap.GetStream(5)
+					Expect(str).ToNot(BeNil())
 				})
 
 				It("deletes streams with FIN bit & close", func() {
@@ -201,23 +208,27 @@ var _ = Describe("Session", func() {
 						Data:     []byte{0xde, 0xca, 0xfb, 0xad},
 						FinBit:   true,
 					})
-					Expect(session.streams).To(HaveLen(2))
-					Expect(session.streams[5]).ToNot(BeNil())
+					Expect(session.streamsMap.NumberOfStreams()).To(Equal(2))
+					str, _ := session.streamsMap.GetStream(5)
+					Expect(str).ToNot(BeNil())
 					Expect(streamCallbackCalled).To(BeTrue())
 					p := make([]byte, 4)
-					_, err := session.streams[5].Read(p)
+					_, err := str.Read(p)
 					Expect(err).To(MatchError(io.EOF))
 					Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
 					session.garbageCollectStreams()
-					Expect(session.streams).To(HaveLen(2))
-					Expect(session.streams[5]).ToNot(BeNil())
+					Expect(session.streamsMap.NumberOfStreams()).To(Equal(2))
+					str, _ = session.streamsMap.GetStream(5)
+					Expect(str).ToNot(BeNil())
 					// We still need to close the stream locally
-					session.streams[5].Close()
+					str.Close()
 					// ... and simulate that we actually the FIN
-					session.streams[5].sentFin()
+					str.sentFin()
 					session.garbageCollectStreams()
-					Expect(session.streams).To(HaveLen(2))
-					Expect(session.streams[5]).To(BeNil())
+					Expect(session.streamsMap.NumberOfStreams()).To(Equal(1))
+					str, strExists := session.streamsMap.GetStream(5)
+					Expect(strExists).To(BeTrue())
+					Expect(str).To(BeNil())
 					// flow controller should have been notified
 					_, err = session.flowControlManager.SendWindowSize(5)
 					Expect(err).To(MatchError("Error accessing the flowController map."))
@@ -229,31 +240,35 @@ var _ = Describe("Session", func() {
 						StreamID: 5,
 						Data:     []byte{0xde, 0xca, 0xfb, 0xad},
 					})
-					Expect(session.streams).To(HaveLen(2))
-					Expect(session.streams[5]).ToNot(BeNil())
+					Expect(session.streamsMap.NumberOfStreams()).To(Equal(2))
+					str, _ := session.streamsMap.GetStream(5)
+					Expect(str).ToNot(BeNil())
 					Expect(streamCallbackCalled).To(BeTrue())
 					p := make([]byte, 4)
-					_, err := session.streams[5].Read(p)
-					Expect(err).ToNot(HaveOccurred())
+					_, err := str.Read(p)
 					session.closeStreamsWithError(testErr)
-					_, err = session.streams[5].Read(p)
+					_, err = str.Read(p)
 					Expect(err).To(MatchError(testErr))
 					session.garbageCollectStreams()
-					Expect(session.streams).To(HaveLen(2))
-					Expect(session.streams[5]).To(BeNil())
+					Expect(session.streamsMap.NumberOfStreams()).To(Equal(1))
+					str, strExists := session.streamsMap.GetStream(5)
+					Expect(strExists).To(BeTrue())
+					Expect(str).To(BeNil())
 				})
 
 				It("closes empty streams with error", func() {
 					testErr := errors.New("test")
 					session.newStreamImpl(5)
-					Expect(session.streams).To(HaveLen(2))
-					Expect(session.streams[5]).ToNot(BeNil())
+					Expect(session.streamsMap.NumberOfStreams()).To(Equal(2))
+					str, _ := session.streamsMap.GetStream(5)
+					Expect(str).ToNot(BeNil())
 					session.closeStreamsWithError(testErr)
-					_, err := session.streams[5].Read([]byte{0})
+					_, err := str.Read([]byte{0})
 					Expect(err).To(MatchError(testErr))
 					session.garbageCollectStreams()
-					Expect(session.streams).To(HaveLen(2))
-					Expect(session.streams[5]).To(BeNil())
+					str, strExists := session.streamsMap.GetStream(5)
+					Expect(strExists).To(BeTrue())
+					Expect(str).To(BeNil())
 				})
 
 				It("informs the FlowControlManager about new streams", func() {
@@ -271,10 +286,12 @@ var _ = Describe("Session", func() {
 						Data:     []byte{},
 						FinBit:   true,
 					})
-					_, err := session.streams[5].Read([]byte{0})
+					str, _ := session.streamsMap.GetStream(5)
+					Expect(str).ToNot(BeNil())
+					_, err := str.Read([]byte{0})
 					Expect(err).To(MatchError(io.EOF))
-					session.streams[5].Close()
-					session.streams[5].sentFin()
+					str.Close()
+					str.sentFin()
 					session.garbageCollectStreams()
 					err = session.handleStreamFrame(&frames.StreamFrame{
 						StreamID: 5,
@@ -344,13 +361,17 @@ var _ = Describe("Session", func() {
 						ByteOffset: 1337,
 					})
 					Expect(err).ToNot(HaveOccurred())
-					Expect(session.streams).To(HaveKey(protocol.StreamID(5)))
-					Expect(session.streams[5]).ToNot(BeNil())
+					str, strExists := session.streamsMap.GetStream(5)
+					Expect(strExists).To(BeTrue())
+					Expect(str).ToNot(BeNil())
 				})
 
 				It("errors when receiving a WindowUpdateFrame for a closed stream", func() {
-					session.streams[5] = nil // this is what the garbageCollectStreams() does when a Stream is closed
-					err := session.handleWindowUpdateFrame(&frames.WindowUpdateFrame{
+					session.handleStreamFrame(&frames.StreamFrame{StreamID: 5})
+					err := session.streamsMap.RemoveStream(5)
+					Expect(err).ToNot(HaveOccurred())
+					session.garbageCollectStreams()
+					err = session.handleWindowUpdateFrame(&frames.WindowUpdateFrame{
 						StreamID:   5,
 						ByteOffset: 1337,
 					})
@@ -358,8 +379,11 @@ var _ = Describe("Session", func() {
 				})
 
 				It("ignores errors when receiving a WindowUpdateFrame for a closed stream", func() {
-					session.streams[5] = nil // this is what the garbageCollectStreams() does when a Stream is closed
-					err := session.handleFrames([]frames.Frame{&frames.WindowUpdateFrame{
+					session.handleStreamFrame(&frames.StreamFrame{StreamID: 5})
+					err := session.streamsMap.RemoveStream(5)
+					Expect(err).ToNot(HaveOccurred())
+					session.garbageCollectStreams()
+					err = session.handleFrames([]frames.Frame{&frames.WindowUpdateFrame{
 						StreamID:   5,
 						ByteOffset: 1337,
 					}})

@@ -2,7 +2,6 @@ package quic
 
 import (
 	"bytes"
-	"sync"
 
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -14,7 +13,7 @@ var _ = Describe("Stream Framer", func() {
 	var (
 		retransmittedFrame1, retransmittedFrame2 *frames.StreamFrame
 		framer                                   *streamFramer
-		streamsMap                               map[protocol.StreamID]*stream
+		streamsMap                               *streamsMap
 		stream1, stream2                         *stream
 		fcm                                      *mockFlowControlHandler
 	)
@@ -31,18 +30,17 @@ var _ = Describe("Stream Framer", func() {
 
 		stream1 = &stream{streamID: 10}
 		stream2 = &stream{streamID: 11}
-		streamsMap = map[protocol.StreamID]*stream{
-			1: nil, 2: nil, 3: nil, 4: nil, // we have to be able to deal with nil frames
-			10: stream1,
-			11: stream2,
-		}
+
+		streamsMap = newStreamsMap()
+		streamsMap.PutStream(stream1)
+		streamsMap.PutStream(stream2)
 
 		fcm = newMockFlowControlHandler()
 		fcm.sendWindowSizes[stream1.streamID] = protocol.MaxByteCount
 		fcm.sendWindowSizes[stream2.streamID] = protocol.MaxByteCount
 		fcm.sendWindowSizes[retransmittedFrame1.StreamID] = protocol.MaxByteCount
 		fcm.sendWindowSizes[retransmittedFrame2.StreamID] = protocol.MaxByteCount
-		framer = newStreamFramer(&streamsMap, &sync.RWMutex{}, fcm)
+		framer = newStreamFramer(streamsMap, fcm)
 	})
 
 	It("sets the DataLenPresent for dequeued retransmitted frames", func() {
