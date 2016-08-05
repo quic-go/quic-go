@@ -147,7 +147,7 @@ var _ = Describe("UDP Proxy", func() {
 				var key string
 				var conn *connection
 				for key, conn = range proxy.clientDict {
-					Expect(conn.outgoingPacketCounter).To(Equal(uint64(1)))
+					Eventually(conn.outgoingPacketCounter).Should(Equal(uint64(1)))
 				}
 				_, err = clientConn.Write(makePacket(2, []byte("decafbad")))
 				Expect(err).ToNot(HaveOccurred())
