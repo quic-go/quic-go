@@ -19,14 +19,14 @@ func newStreamsMap() *streamsMap {
 	}
 }
 
-func (m *streamsMap) GetStream(id protocol.StreamID) (*stream, error) {
+func (m *streamsMap) GetStream(id protocol.StreamID) (*stream, bool) {
 	m.mutex.RLock()
 	s, ok := m.streams[id]
 	m.mutex.RUnlock()
 	if !ok {
-		return nil, fmt.Errorf("unknown stream: %d", id)
+		return nil, false
 	}
-	return s, nil
+	return s, true
 }
 
 func (m *streamsMap) PutStream(s *stream) error {

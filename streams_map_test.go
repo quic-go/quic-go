@@ -16,8 +16,8 @@ var _ = Describe("Streams Map", func() {
 	})
 
 	It("returns an error for non-existant streams", func() {
-		_, err := m.GetStream(1)
-		Expect(err).To(MatchError("unknown stream: 1"))
+		_, exists := m.GetStream(1)
+		Expect(exists).To(BeFalse())
 	})
 
 	It("returns nil for previously existing streams", func() {
@@ -25,8 +25,8 @@ var _ = Describe("Streams Map", func() {
 		Expect(err).NotTo(HaveOccurred())
 		err = m.RemoveStream(1)
 		Expect(err).NotTo(HaveOccurred())
-		s, err := m.GetStream(1)
-		Expect(err).NotTo(HaveOccurred())
+		s, exists := m.GetStream(1)
+		Expect(exists).To(BeTrue())
 		Expect(s).To(BeNil())
 	})
 
@@ -38,8 +38,8 @@ var _ = Describe("Streams Map", func() {
 	It("stores streams", func() {
 		err := m.PutStream(&stream{streamID: 5})
 		Expect(err).NotTo(HaveOccurred())
-		s, err := m.GetStream(5)
-		Expect(err).NotTo(HaveOccurred())
+		s, exists := m.GetStream(5)
+		Expect(exists).To(BeTrue())
 		Expect(s.streamID).To(Equal(protocol.StreamID(5)))
 	})
 
