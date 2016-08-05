@@ -126,7 +126,7 @@ func setupSelenium() {
 }
 
 func stopSelenium() {
-	docker.Interrupt().Wait()
+	docker.Interrupt().Wait(10)
 }
 
 func getWebdriverForVersion(version protocol.VersionNumber) selenium.WebDriver {
