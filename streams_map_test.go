@@ -1,6 +1,8 @@
 package quic
 
 import (
+	"errors"
+
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -56,5 +58,56 @@ var _ = Describe("Streams Map", func() {
 		Expect(m.NumberOfStreams()).To(Equal(1))
 		m.RemoveStream(5)
 		Expect(m.NumberOfStreams()).To(Equal(0))
+	})
+
+	Context("Lambda", func() {
+		// create 5 streams, ids 1 to 3
+		BeforeEach(func() {
+			for i := 1; i <= 3; i++ {
+				err := m.PutStream(&stream{streamID: protocol.StreamID(i)})
+				Expect(err).NotTo(HaveOccurred())
+			}
+		})
+
+		It("executes the lambda exactly once for every stream", func() {
+			var numIterations int
+			callbackCalled := make(map[protocol.StreamID]bool)
+			fn := func(str *stream) (bool, error) {
+				callbackCalled[str.StreamID()] = true
+				numIterations++
+				return true, nil
+			}
+			err := m.Iterate(fn)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(callbackCalled).To(HaveKey(protocol.StreamID(1)))
+			Expect(callbackCalled).To(HaveKey(protocol.StreamID(2)))
+			Expect(callbackCalled).To(HaveKey(protocol.StreamID(3)))
+			Expect(numIterations).To(Equal(3))
+		})
+
+		It("stops iterating when the callback returns false", func() {
+			var numIterations int
+			fn := func(str *stream) (bool, error) {
+				numIterations++
+				return false, nil
+			}
+			err := m.Iterate(fn)
+			Expect(err).ToNot(HaveOccurred())
+			// due to map access randomization, we don't know for which stream the callback was executed
+			// but it must only be executed once
+			Expect(numIterations).To(Equal(1))
+		})
+
+		It("returns the error, if the lambda returns one", func() {
+			var numIterations int
+			expectedError := errors.New("test")
+			fn := func(str *stream) (bool, error) {
+				numIterations++
+				return true, expectedError
+			}
+			err := m.Iterate(fn)
+			Expect(err).To(MatchError(expectedError))
+			Expect(numIterations).To(Equal(1))
+		})
 	})
 })

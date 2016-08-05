@@ -13,6 +13,8 @@ type streamsMap struct {
 	mutex    sync.RWMutex
 }
 
+type streamLambda func(*stream) (bool, error)
+
 func newStreamsMap() *streamsMap {
 	return &streamsMap{
 		streams: map[protocol.StreamID]*stream{},
@@ -29,6 +31,22 @@ func (m *streamsMap) GetStream(id protocol.StreamID) (*stream, bool) {
 	return s, true
 }
 
+func (m *streamsMap) Iterate(fn streamLambda) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	for _, str := range m.streams {
+		cont, err := fn(str)
+		if err != nil {
+			return err
+		}
+		if !cont {
+			break
+		}
+	}
+	return nil
+}
+
 func (m *streamsMap) PutStream(s *stream) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -40,9 +58,8 @@ func (m *streamsMap) PutStream(s *stream) error {
 	return nil
 }
 
+// Attention: this function must only be called if a mutex has been acquired previously
 func (m *streamsMap) RemoveStream(id protocol.StreamID) error {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
 	s, ok := m.streams[id]
 	if !ok || s == nil {
 		return fmt.Errorf("attempted to remove non-existing stream: %d", id)
