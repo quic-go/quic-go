@@ -108,15 +108,14 @@ func (h *sentPacketHandler) queuePacketForRetransmission(packet *ackhandlerlegac
 	h.retransmissionQueue = append(h.retransmissionQueue, packet)
 	packet.Retransmitted = true
 
-	// increase the LargestInOrderAcked, if this is the lowest packet that hasn't been acked yet
+	// If this is the lowest packet that hasn't been acked or retransmitted yet ...
 	if packet.PacketNumber == h.LargestInOrderAcked+1 {
-		for i := packet.PacketNumber + 1; i < h.LargestAcked; i++ {
-			_, ok := h.packetHistory[protocol.PacketNumber(i)]
-			if !ok {
-				h.LargestInOrderAcked = i
-			} else {
+		// ... increase the LargestInOrderAcked until it's one before the next packet that was not acked and not retransmitted
+		for h.LargestInOrderAcked < h.LargestAcked {
+			if p, notAcked := h.packetHistory[h.LargestInOrderAcked+1]; notAcked && !p.Retransmitted {
 				break
 			}
+			h.LargestInOrderAcked++
 		}
 	}
 

@@ -529,6 +529,31 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(2)))
 		})
 
+		It("increases LargestInOrderAcked past packets queued for retransmission", func() {
+			ack := frames.AckFrame{
+				LargestAcked: 7,
+				LowestAcked:  1,
+				AckRanges: []frames.AckRange{
+					{FirstPacketNumber: 7, LastPacketNumber: 7},
+					{FirstPacketNumber: 4, LastPacketNumber: 5},
+					{FirstPacketNumber: 1, LastPacketNumber: 1},
+				},
+			}
+			err := handler.ReceivedAck(&ack, 1)
+			Expect(err).ToNot(HaveOccurred())
+			// this will trigger a retransmission of packet 3
+			for i := uint8(0); i < protocol.RetransmissionThreshold; i++ {
+				handler.nackPacket(3)
+			}
+			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(1)))
+			// now, trigger retransmission of 2 ...
+			for i := uint8(0); i < protocol.RetransmissionThreshold; i++ {
+				handler.nackPacket(2)
+			}
+			// and check that it increased LargestInOrderAcked past 3
+			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(5)))
+		})
+
 		It("does not retransmit a packet if a belated ACK was received", func() {
 			// lose packet by NACKing it often enough
 			for i := uint8(0); i < protocol.RetransmissionThreshold+1; i++ {
