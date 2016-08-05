@@ -32,24 +32,68 @@ var _ = Describe("Streams Map", func() {
 		Expect(s).To(BeNil())
 	})
 
-	It("errors when removing non-existing stream", func() {
-		err := m.RemoveStream(1)
-		Expect(err).To(MatchError("attempted to remove non-existing stream: 1"))
+	Context("putting streams", func() {
+		It("stores streams", func() {
+			err := m.PutStream(&stream{streamID: 5})
+			Expect(err).NotTo(HaveOccurred())
+			s, exists := m.GetStream(5)
+			Expect(exists).To(BeTrue())
+			Expect(s.streamID).To(Equal(protocol.StreamID(5)))
+			Expect(m.openStreams).To(HaveLen(1))
+			Expect(m.openStreams[0]).To(Equal(protocol.StreamID(5)))
+		})
+
+		It("does not store multiple streams with the same ID", func() {
+			err := m.PutStream(&stream{streamID: 5})
+			Expect(err).NotTo(HaveOccurred())
+			err = m.PutStream(&stream{streamID: 5})
+			Expect(err).To(MatchError("a stream with ID 5 already exists"))
+			Expect(m.openStreams).To(HaveLen(1))
+		})
 	})
 
-	It("stores streams", func() {
-		err := m.PutStream(&stream{streamID: 5})
-		Expect(err).NotTo(HaveOccurred())
-		s, exists := m.GetStream(5)
-		Expect(exists).To(BeTrue())
-		Expect(s.streamID).To(Equal(protocol.StreamID(5)))
-	})
+	Context("deleting streams", func() {
+		BeforeEach(func() {
+			for i := 1; i <= 5; i++ {
+				err := m.PutStream(&stream{streamID: protocol.StreamID(i)})
+				Expect(err).ToNot(HaveOccurred())
+			}
+			Expect(m.openStreams).To(Equal([]protocol.StreamID{1, 2, 3, 4, 5}))
+		})
 
-	It("does not store multiple streams with the same ID", func() {
-		err := m.PutStream(&stream{streamID: 5})
-		Expect(err).NotTo(HaveOccurred())
-		err = m.PutStream(&stream{streamID: 5})
-		Expect(err).To(MatchError("a stream with ID 5 already exists"))
+		It("errors when removing non-existing stream", func() {
+			err := m.RemoveStream(1337)
+			Expect(err).To(MatchError("attempted to remove non-existing stream: 1337"))
+		})
+
+		It("removes the first stream", func() {
+			err := m.RemoveStream(1)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(m.openStreams).To(HaveLen(4))
+			Expect(m.openStreams).To(Equal([]protocol.StreamID{2, 3, 4, 5}))
+		})
+
+		It("removes a stream in the middle", func() {
+			err := m.RemoveStream(3)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(m.openStreams).To(HaveLen(4))
+			Expect(m.openStreams).To(Equal([]protocol.StreamID{1, 2, 4, 5}))
+		})
+
+		It("removes a stream at the end", func() {
+			err := m.RemoveStream(5)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(m.openStreams).To(HaveLen(4))
+			Expect(m.openStreams).To(Equal([]protocol.StreamID{1, 2, 3, 4}))
+		})
+
+		It("removes all streams", func() {
+			for i := 1; i <= 5; i++ {
+				err := m.RemoveStream(protocol.StreamID(i))
+				Expect(err).ToNot(HaveOccurred())
+			}
+			Expect(m.openStreams).To(BeEmpty())
+		})
 	})
 
 	Context("number of streams", func() {
@@ -68,7 +112,7 @@ var _ = Describe("Streams Map", func() {
 			Expect(err).ToNot(HaveOccurred())
 			err = m.RemoveStream(5)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(m.NumberOfStreams()).To(Equal(0))
+			Expect(m.NumberOfStreams()).To(BeZero())
 		})
 	})
 

@@ -8,16 +8,18 @@ import (
 )
 
 type streamsMap struct {
-	streams  map[protocol.StreamID]*stream
-	nStreams int
-	mutex    sync.RWMutex
+	streams     map[protocol.StreamID]*stream
+	openStreams []protocol.StreamID
+	mutex       sync.RWMutex
 }
 
 type streamLambda func(*stream) (bool, error)
 
 func newStreamsMap() *streamsMap {
+	maxNumStreams := uint32(float32(protocol.MaxStreamsPerConnection) * protocol.MaxStreamsMultiplier)
 	return &streamsMap{
-		streams: map[protocol.StreamID]*stream{},
+		streams:     map[protocol.StreamID]*stream{},
+		openStreams: make([]protocol.StreamID, 0, maxNumStreams),
 	}
 }
 
@@ -50,11 +52,15 @@ func (m *streamsMap) Iterate(fn streamLambda) error {
 func (m *streamsMap) PutStream(s *stream) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	if _, ok := m.streams[s.StreamID()]; ok {
-		return fmt.Errorf("a stream with ID %d already exists", s.StreamID())
+
+	id := s.StreamID()
+	if _, ok := m.streams[id]; ok {
+		return fmt.Errorf("a stream with ID %d already exists", id)
 	}
-	m.streams[s.StreamID()] = s
-	m.nStreams++
+
+	m.streams[id] = s
+	m.openStreams = append(m.openStreams, id)
+
 	return nil
 }
 
@@ -64,14 +70,23 @@ func (m *streamsMap) RemoveStream(id protocol.StreamID) error {
 	if !ok || s == nil {
 		return fmt.Errorf("attempted to remove non-existing stream: %d", id)
 	}
+
 	m.streams[id] = nil
-	m.nStreams--
+
+	for i, s := range m.openStreams {
+		if s == id {
+			// delete the streamID from the openStreams slice
+			m.openStreams = m.openStreams[:i+copy(m.openStreams[i:], m.openStreams[i+1:])]
+		}
+	}
+
 	return nil
 }
 
 // NumberOfStreams gets the number of open streams
 func (m *streamsMap) NumberOfStreams() int {
 	m.mutex.RLock()
-	defer m.mutex.RUnlock()
-	return m.nStreams
+	n := len(m.openStreams)
+	m.mutex.RUnlock()
+	return n
 }
