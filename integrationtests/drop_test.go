@@ -43,7 +43,7 @@ var _ = Describe("Drop Proxy", func() {
 			"https://quic.clemente.io/data",
 		)
 
-		session, err := Start(command, nil, GinkgoWriter)
+		session, err := Start(command, GinkgoWriter, GinkgoWriter)
 		Expect(err).NotTo(HaveOccurred())
 		defer session.Kill()
 		Eventually(session, 4).Should(Exit(0))
@@ -61,7 +61,7 @@ var _ = Describe("Drop Proxy", func() {
 		Context(fmt.Sprintf("with quic version %d", version), func() {
 			Context("dropping every 4th packet after the crypto handshake", func() {
 				dropper := func(p protocol.PacketNumber) bool {
-					if p <= 5 { // don't interfere with the crypto handshake
+					if p <= 10 { // don't interfere with the crypto handshake
 						return false
 					}
 					return p%4 == 0

@@ -151,15 +151,17 @@ func (p *UDPProxy) runConnection(conn *connection) error {
 		}
 
 		raw := buffer[0:n]
-		r := bytes.NewReader(raw)
-		hdr, err := quic.ParsePublicHeader(r)
-		if err != nil {
-			return err
-		}
 
-		atomic.AddUint64(&conn.outgoingPacketCounter, 1)
+		// TODO: Switch back to using the public header once Chrome properly sets the type byte.
+		// r := bytes.NewReader(raw)
+		// , err := quic.ParsePublicHeader(r)
+		// if err != nil {
+		// return err
+		// }
 
-		if !p.dropOutgoingPacket(hdr.PacketNumber) {
+		v := atomic.AddUint64(&conn.outgoingPacketCounter, 1)
+
+		if !p.dropOutgoingPacket(protocol.PacketNumber(v)) {
 			// Relay it to client
 			go func() {
 				time.Sleep(p.rttGen.getRTT() / 2)
