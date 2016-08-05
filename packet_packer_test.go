@@ -2,7 +2,6 @@ package quic
 
 import (
 	"bytes"
-	"sync"
 
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -24,7 +23,7 @@ var _ = Describe("Packet packer", func() {
 		fcm.sendWindowSizes[5] = protocol.MaxByteCount
 		fcm.sendWindowSizes[7] = protocol.MaxByteCount
 
-		streamFramer = newStreamFramer(&map[protocol.StreamID]*stream{}, &sync.RWMutex{}, fcm)
+		streamFramer = newStreamFramer(newStreamsMap(), fcm)
 
 		packer = &packetPacker{
 			cryptoSetup:                 &handshake.CryptoSetup{},

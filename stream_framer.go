@@ -1,8 +1,6 @@
 package quic
 
 import (
-	"sync"
-
 	"github.com/lucas-clemente/quic-go/flowcontrol"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -11,8 +9,7 @@ import (
 
 type streamFramer struct {
 	// TODO: Simplify by extracting the streams map into a separate object
-	streams      *map[protocol.StreamID]*stream
-	streamsMutex *sync.RWMutex
+	streamsMap *streamsMap
 
 	flowControlManager flowcontrol.FlowControlManager
 
@@ -20,10 +17,9 @@ type streamFramer struct {
 	blockedFrameQueue   []*frames.BlockedFrame
 }
 
-func newStreamFramer(streams *map[protocol.StreamID]*stream, streamsMutex *sync.RWMutex, flowControlManager flowcontrol.FlowControlManager) *streamFramer {
+func newStreamFramer(streamsMap *streamsMap, flowControlManager flowcontrol.FlowControlManager) *streamFramer {
 	return &streamFramer{
-		streams:            streams,
-		streamsMutex:       streamsMutex,
+		streamsMap:         streamsMap,
 		flowControlManager: flowControlManager,
 	}
 }
@@ -73,15 +69,12 @@ func (f *streamFramer) maybePopFramesForRetransmission(maxLen protocol.ByteCount
 }
 
 func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []*frames.StreamFrame) {
-	f.streamsMutex.RLock()
-	defer f.streamsMutex.RUnlock()
-
 	frame := &frames.StreamFrame{DataLenPresent: true}
 	var currentLen protocol.ByteCount
 
-	for _, s := range *f.streams {
+	fn := func(s *stream) (bool, error) {
 		if s == nil {
-			continue
+			return true, nil
 		}
 
 		frame.StreamID = s.streamID
@@ -89,7 +82,7 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 		frame.Offset = s.writeOffset
 		frameHeaderBytes, _ := frame.MinLength(protocol.VersionWhatever) // can never error
 		if currentLen+frameHeaderBytes > maxBytes {
-			return // theoretically, we could find another stream that fits, but this is quite unlikely, so we stop here
+			return false, nil // theoretically, we could find another stream that fits, but this is quite unlikely, so we stop here
 		}
 		maxLen := maxBytes - currentLen - frameHeaderBytes
 
@@ -99,7 +92,7 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 		}
 
 		if maxLen == 0 {
-			continue
+			return true, nil
 		}
 
 		data := s.getDataForWriting(maxLen)
@@ -111,7 +104,7 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 				currentLen += frameHeaderBytes + frame.DataLen()
 				frame = &frames.StreamFrame{DataLenPresent: true}
 			}
-			continue
+			return true, nil
 		}
 
 		frame.Data = data
@@ -129,7 +122,11 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 		res = append(res, frame)
 		currentLen += frameHeaderBytes + frame.DataLen()
 		frame = &frames.StreamFrame{DataLenPresent: true}
+		return true, nil
 	}
+
+	f.streamsMap.Iterate(fn)
+
 	return
 }
 
