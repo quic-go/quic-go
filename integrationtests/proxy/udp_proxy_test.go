@@ -235,9 +235,6 @@ var _ = Describe("UDP Proxy", func() {
 				}()
 
 				Eventually(func() []packetData { return clientReceivedPackets }).Should(HaveLen(3))
-				Expect(string(clientReceivedPackets[0])).To(ContainSubstring("foobar1"))
-				Expect(string(clientReceivedPackets[1])).To(ContainSubstring("foobar3"))
-				Expect(string(clientReceivedPackets[2])).To(ContainSubstring("foobar5"))
 			})
 		})
 	})
