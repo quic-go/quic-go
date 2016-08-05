@@ -260,10 +260,12 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *PublicHeader, da
 	err = s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, packet.entropyBit)
 	// ignore duplicate packets
 	if err == ackhandlerlegacy.ErrDuplicatePacket || err == ackhandler.ErrDuplicatePacket {
+		utils.Infof("Ignoring packet 0x%x due to ErrDuplicatePacket", hdr.PacketNumber)
 		return nil
 	}
 	// ignore packets with packet numbers smaller than the LeastUnacked of a StopWaiting
 	if err == ackhandlerlegacy.ErrPacketSmallerThanLastStopWaiting || err == ackhandler.ErrPacketSmallerThanLastStopWaiting {
+		utils.Infof("Ignoring packet 0x%x due to ErrPacketSmallerThanLastStopWaiting", hdr.PacketNumber)
 		return nil
 	}
 
@@ -674,7 +676,7 @@ func (s *Session) scheduleSending() {
 }
 
 func (s *Session) tryQueueingUndecryptablePacket(p receivedPacket) {
-	utils.Debugf("Queueing packet 0x%x for later decryption", p.publicHeader.PacketNumber)
+	utils.Infof("Queueing packet 0x%x for later decryption", p.publicHeader.PacketNumber)
 	if len(s.undecryptablePackets)+1 >= protocol.MaxUndecryptablePackets {
 		s.Close(qerr.Error(qerr.DecryptionFailure, "too many undecryptable packets received"))
 	}
