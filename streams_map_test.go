@@ -52,12 +52,24 @@ var _ = Describe("Streams Map", func() {
 		Expect(err).To(MatchError("a stream with ID 5 already exists"))
 	})
 
-	It("gets the number of streams", func() {
-		Expect(m.NumberOfStreams()).To(Equal(0))
-		m.PutStream(&stream{streamID: 5})
-		Expect(m.NumberOfStreams()).To(Equal(1))
-		m.RemoveStream(5)
-		Expect(m.NumberOfStreams()).To(Equal(0))
+	Context("number of streams", func() {
+		It("returns 0 in the beginning", func() {
+			Expect(m.NumberOfStreams()).To(Equal(0))
+		})
+
+		It("increases the counter when a new stream is added", func() {
+			err := m.PutStream(&stream{streamID: 5})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(m.NumberOfStreams()).To(Equal(1))
+		})
+
+		It("decreases the counter when removing a stream", func() {
+			err := m.PutStream(&stream{streamID: 5})
+			Expect(err).ToNot(HaveOccurred())
+			err = m.RemoveStream(5)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(m.NumberOfStreams()).To(Equal(0))
+		})
 	})
 
 	Context("Lambda", func() {

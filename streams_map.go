@@ -69,6 +69,7 @@ func (m *streamsMap) RemoveStream(id protocol.StreamID) error {
 	return nil
 }
 
+// NumberOfStreams gets the number of open streams
 func (m *streamsMap) NumberOfStreams() int {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
