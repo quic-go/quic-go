@@ -16,7 +16,6 @@ type streamFrameSorter struct {
 }
 
 var (
-	errOverlappingStreamData           = qerr.Error(qerr.OverlappingStreamData, "")
 	errTooManyGapsInReceivedStreamData = errors.New("Too many gaps in received StreamFrame data")
 	errDuplicateStreamData             = errors.New("Overlapping Stream Data")
 	errEmptyStreamData                 = errors.New("Stream Data empty")
@@ -57,11 +56,11 @@ func (s *streamFrameSorter) Push(frame *frames.StreamFrame) error {
 		}
 
 		if start < gap.Value.Start {
-			return errOverlappingStreamData
+			return qerr.Error(qerr.OverlappingStreamData, "start of gap in stream chunk")
 		}
 
 		if start < gap.Value.End && end > gap.Value.End {
-			return errOverlappingStreamData
+			return qerr.Error(qerr.OverlappingStreamData, "end of gap in stream chunk")
 		}
 
 		foundInGap = true

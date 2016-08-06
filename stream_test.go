@@ -285,7 +285,7 @@ var _ = Describe("Stream", func() {
 			err := str.AddStreamFrame(&frame1)
 			Expect(err).ToNot(HaveOccurred())
 			err = str.AddStreamFrame(&frame2)
-			Expect(err).To(MatchError(errOverlappingStreamData))
+			Expect(err).To(MatchError("OverlappingStreamData: start of gap in stream chunk"))
 		})
 
 		It("calls onData", func() {

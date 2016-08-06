@@ -3,7 +3,6 @@ package quic
 import (
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -264,7 +263,7 @@ var _ = Describe("StreamFrame sorter", func() {
 						Data:   []byte("foobar"),
 					}
 					err := s.Push(f)
-					Expect(err).To(MatchError(qerr.Error(qerr.OverlappingStreamData, "")))
+					Expect(err).To(MatchError("OverlappingStreamData: end of gap in stream chunk"))
 					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(0)))
 					compareGapValues(s.gaps, expectedGaps)
 				})
@@ -276,7 +275,7 @@ var _ = Describe("StreamFrame sorter", func() {
 						Data:   []byte("12"),
 					}
 					err := s.Push(f)
-					Expect(err).To(MatchError(errOverlappingStreamData))
+					Expect(err).To(MatchError("OverlappingStreamData: end of gap in stream chunk"))
 					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(4)))
 					compareGapValues(s.gaps, expectedGaps)
 				})
@@ -288,7 +287,7 @@ var _ = Describe("StreamFrame sorter", func() {
 						Data:   []byte("foobar"),
 					}
 					err := s.Push(f)
-					Expect(err).To(MatchError(errOverlappingStreamData))
+					Expect(err).To(MatchError("OverlappingStreamData: end of gap in stream chunk"))
 					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(10)))
 					compareGapValues(s.gaps, expectedGaps)
 				})
@@ -300,7 +299,7 @@ var _ = Describe("StreamFrame sorter", func() {
 						Data:   []byte("foobar"),
 					}
 					err := s.Push(f)
-					Expect(err).To(MatchError(errOverlappingStreamData))
+					Expect(err).To(MatchError("OverlappingStreamData: start of gap in stream chunk"))
 					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(8)))
 					compareGapValues(s.gaps, expectedGaps)
 				})
@@ -312,7 +311,7 @@ var _ = Describe("StreamFrame sorter", func() {
 						Data:   []byte("123456789"),
 					}
 					err := s.Push(f)
-					Expect(err).To(MatchError(errOverlappingStreamData))
+					Expect(err).To(MatchError("OverlappingStreamData: end of gap in stream chunk"))
 					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(2)))
 					compareGapValues(s.gaps, expectedGaps)
 				})
@@ -324,7 +323,7 @@ var _ = Describe("StreamFrame sorter", func() {
 						Data:   []byte("123456789"),
 					}
 					err := s.Push(f)
-					Expect(err).To(MatchError(errOverlappingStreamData))
+					Expect(err).To(MatchError("OverlappingStreamData: start of gap in stream chunk"))
 					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(8)))
 					compareGapValues(s.gaps, expectedGaps)
 				})
@@ -336,7 +335,7 @@ var _ = Describe("StreamFrame sorter", func() {
 						Data:   []byte("1234567890"),
 					}
 					err := s.Push(f)
-					Expect(err).To(MatchError(errOverlappingStreamData))
+					Expect(err).To(MatchError("OverlappingStreamData: end of gap in stream chunk"))
 					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(10)))
 					compareGapValues(s.gaps, expectedGaps)
 				})
