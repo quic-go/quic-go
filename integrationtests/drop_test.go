@@ -12,6 +12,7 @@ import (
 	_ "github.com/lucas-clemente/quic-clients" // download clients
 	"github.com/lucas-clemente/quic-go/integrationtests/proxy"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/utils"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -22,6 +23,7 @@ var _ = Describe("Drop Proxy", func() {
 	var dropproxy *proxy.UDPProxy
 
 	runDropTest := func(incomingPacketDropper, outgoingPacketDropper proxy.DropCallback, version protocol.VersionNumber) {
+		utils.SetLogLevel(utils.LogLevelInfo)
 		proxyPort := 12345
 
 		clientPath := fmt.Sprintf(
@@ -53,6 +55,7 @@ var _ = Describe("Drop Proxy", func() {
 	AfterEach(func() {
 		dropproxy.Stop()
 		time.Sleep(time.Millisecond)
+		utils.SetLogLevel(utils.LogLevelNothing)
 	})
 
 	for i := range protocol.SupportedVersions {
