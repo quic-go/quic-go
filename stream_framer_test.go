@@ -117,6 +117,19 @@ var _ = Describe("Stream Framer", func() {
 			Expect(fs[0].FinBit).To(BeFalse())
 		})
 
+		It("uses the round-robin scheduling", func() {
+			stream1.dataForWriting = bytes.Repeat([]byte("f"), 100)
+			stream2.dataForWriting = bytes.Repeat([]byte("e"), 100)
+			fs := framer.PopStreamFrames(10)
+			Expect(fs).To(HaveLen(1))
+			// it doesn't matter here if this data is from stream1 or from stream2...
+			firstStreamID := fs[0].StreamID
+			fs = framer.PopStreamFrames(10)
+			Expect(fs).To(HaveLen(1))
+			// ... but the data popped this time has to be from the other stream
+			Expect(fs[0].StreamID).ToNot(Equal(firstStreamID))
+		})
+
 		Context("splitting of frames", func() {
 			It("splits off nothing", func() {
 				f := &frames.StreamFrame{

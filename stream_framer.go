@@ -125,7 +125,7 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 		return true, nil
 	}
 
-	f.streamsMap.Iterate(fn)
+	f.streamsMap.RoundRobinIterate(fn)
 
 	return
 }
