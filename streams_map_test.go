@@ -17,7 +17,7 @@ var _ = Describe("Streams Map", func() {
 		m = newStreamsMap()
 	})
 
-	It("returns an error for non-existant streams", func() {
+	It("returns an error for non-existent streams", func() {
 		_, exists := m.GetStream(1)
 		Expect(exists).To(BeFalse())
 	})

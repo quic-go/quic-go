@@ -248,7 +248,7 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(ack.HasMissingRanges()).To(BeFalse())
 		})
 
-		It("deletes packets from the packetHistory after receiving a StopWaiting, after continously received packets", func() {
+		It("deletes packets from the packetHistory after receiving a StopWaiting, after continuously received packets", func() {
 			for i := 1; i <= 12; i++ {
 				err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
 				Expect(err).ToNot(HaveOccurred())

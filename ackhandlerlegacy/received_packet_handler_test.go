@@ -97,7 +97,7 @@ var _ = Describe("receivedPacketHandler", func() {
 	})
 
 	Context("Entropy calculation", func() {
-		It("calculates the entropy for continously received packets", func() {
+		It("calculates the entropy for continuously received packets", func() {
 			for i := 1; i < 100; i++ {
 				entropyBit := false
 				if i%3 == 0 || i%5 == 0 {
@@ -131,7 +131,7 @@ var _ = Describe("receivedPacketHandler", func() {
 	})
 
 	Context("NACK range calculation", func() {
-		It("Returns no NACK ranges for continously received packets", func() {
+		It("Returns no NACK ranges for continuously received packets", func() {
 			for i := 1; i < 100; i++ {
 				entropyBit := false
 				if i%2 == 0 {
