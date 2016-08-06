@@ -212,7 +212,7 @@ var _ = Describe("Streams Map", func() {
 			fn := func(str *stream) (bool, error) {
 				lambdaCalledForStream = append(lambdaCalledForStream, str.StreamID())
 				numIterations++
-				if str.StreamID() == 2 || str.StreamID() == 4 {
+				if str.StreamID() == 2 {
 					return false, nil
 				}
 				return true, nil
@@ -221,13 +221,21 @@ var _ = Describe("Streams Map", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(numIterations).To(Equal(2))
 			Expect(lambdaCalledForStream).To(Equal([]protocol.StreamID{1, 2}))
-			Expect(m.roundRobinIndex).To(Equal(2))
+			Expect(m.roundRobinIndex).To(Equal(1))
 			numIterations = 0
 			lambdaCalledForStream = lambdaCalledForStream[:0]
-			err = m.RoundRobinIterate(fn)
+			fn2 := func(str *stream) (bool, error) {
+				lambdaCalledForStream = append(lambdaCalledForStream, str.StreamID())
+				numIterations++
+				if str.StreamID() == 4 {
+					return false, nil
+				}
+				return true, nil
+			}
+			err = m.RoundRobinIterate(fn2)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(numIterations).To(Equal(2))
-			Expect(lambdaCalledForStream).To(Equal([]protocol.StreamID{3, 4}))
+			Expect(numIterations).To(Equal(3))
+			Expect(lambdaCalledForStream).To(Equal([]protocol.StreamID{2, 3, 4}))
 		})
 
 		It("adjust the RoundRobinIndex when deleting an element in front", func() {

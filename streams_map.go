@@ -80,13 +80,13 @@ func (m *streamsMap) RoundRobinIterate(fn streamLambda) error {
 			return fmt.Errorf("BUG: Stream %d is closed, but still in openStreams map", streamID)
 		}
 		cont, err := fn(str)
-		m.roundRobinIndex = (m.roundRobinIndex + 1) % numStreams
 		if err != nil {
 			return err
 		}
 		if !cont {
 			break
 		}
+		m.roundRobinIndex = (m.roundRobinIndex + 1) % numStreams
 	}
 	return nil
 }
