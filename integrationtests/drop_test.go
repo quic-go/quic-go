@@ -19,7 +19,7 @@ import (
 	. "github.com/onsi/gomega/gexec"
 )
 
-var _ = Describe("Drop Proxy", func() {
+var _ = PDescribe("Drop Proxy", func() {
 	var dropproxy *proxy.UDPProxy
 
 	runDropTest := func(incomingPacketDropper, outgoingPacketDropper proxy.DropCallback, version protocol.VersionNumber) {
