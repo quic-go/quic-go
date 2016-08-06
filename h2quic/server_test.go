@@ -241,18 +241,22 @@ var _ = Describe("H2 server", func() {
 			Expect(err).NotTo(HaveOccurred())
 		}, 0.5)
 
-		It("may only be called once", func(done Done) {
-			go func() {
-				defer GinkgoRecover()
-				err := s.ListenAndServe()
-				Expect(err).NotTo(HaveOccurred())
-				close(done)
-			}()
-			time.Sleep(10 * time.Millisecond)
-			err := s.ListenAndServe()
+		It("may only be called once", func() {
+			cErr := make(chan error)
+			for i := 0; i < 2; i++ {
+				go func() {
+					defer GinkgoRecover()
+					err := s.ListenAndServe()
+					if err != nil {
+						cErr <- err
+					}
+				}()
+			}
+			err := <-cErr
 			Expect(err).To(MatchError("ListenAndServe may only be called once"))
 			err = s.Close()
 			Expect(err).NotTo(HaveOccurred())
+
 		}, 0.5)
 	})
 
@@ -278,15 +282,18 @@ var _ = Describe("H2 server", func() {
 			Expect(err).NotTo(HaveOccurred())
 		}, 0.5)
 
-		It("may only be called once", func(done Done) {
-			go func() {
-				defer GinkgoRecover()
-				err := s.ListenAndServeTLS(certPath+"fullchain.pem", certPath+"privkey.pem")
-				Expect(err).NotTo(HaveOccurred())
-				close(done)
-			}()
-			time.Sleep(10 * time.Millisecond)
-			err := s.ListenAndServeTLS(certPath+"fullchain.pem", certPath+"privkey.pem")
+		It("may only be called once", func() {
+			cErr := make(chan error)
+			for i := 0; i < 2; i++ {
+				go func() {
+					defer GinkgoRecover()
+					err := s.ListenAndServeTLS(certPath+"fullchain.pem", certPath+"privkey.pem")
+					if err != nil {
+						cErr <- err
+					}
+				}()
+			}
+			err := <-cErr
 			Expect(err).To(MatchError("ListenAndServe may only be called once"))
 			err = s.Close()
 			Expect(err).NotTo(HaveOccurred())
