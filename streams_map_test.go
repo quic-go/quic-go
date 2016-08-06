@@ -18,29 +18,28 @@ var _ = Describe("Streams Map", func() {
 	})
 
 	It("returns an error for non-existant streams", func() {
-		_, exists := m.GetStream(1)
-		Expect(exists).To(BeFalse())
+		str := m.GetStream(1)
+		Expect(str).To(BeNil())
 	})
 
 	It("returns nil for previously existing streams", func() {
-		err := m.PutStream(&stream{streamID: 1})
+		str := &stream{streamID: 1}
+		err := m.PutStream(str)
 		Expect(err).NotTo(HaveOccurred())
 		err = m.RemoveStream(1)
 		Expect(err).NotTo(HaveOccurred())
-		s, exists := m.GetStream(1)
-		Expect(exists).To(BeTrue())
-		Expect(s).To(BeNil())
+		Expect(str).To(Equal(str))
 	})
 
 	Context("putting streams", func() {
 		It("stores streams", func() {
-			err := m.PutStream(&stream{streamID: 5})
+			str := &stream{streamID: 5}
+			err := m.PutStream(str)
 			Expect(err).NotTo(HaveOccurred())
-			s, exists := m.GetStream(5)
-			Expect(exists).To(BeTrue())
-			Expect(s.streamID).To(Equal(protocol.StreamID(5)))
+			Expect(str).To(Equal(str))
 			Expect(m.openStreams).To(HaveLen(1))
-			Expect(m.openStreams[0]).To(Equal(protocol.StreamID(5)))
+			Expect(m.openStreams[0]).To(Equal(str.streamID))
+			Expect(m.IsClosedStream(str.streamID)).To(BeFalse())
 		})
 
 		It("does not store multiple streams with the same ID", func() {
@@ -71,6 +70,7 @@ var _ = Describe("Streams Map", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(m.openStreams).To(HaveLen(4))
 			Expect(m.openStreams).To(Equal([]protocol.StreamID{2, 3, 4, 5}))
+			Expect(m.IsClosedStream(1)).To(BeTrue())
 		})
 
 		It("removes a stream in the middle", func() {
@@ -78,6 +78,7 @@ var _ = Describe("Streams Map", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(m.openStreams).To(HaveLen(4))
 			Expect(m.openStreams).To(Equal([]protocol.StreamID{1, 2, 4, 5}))
+			Expect(m.IsClosedStream(3)).To(BeTrue())
 		})
 
 		It("removes a stream at the end", func() {
@@ -85,12 +86,14 @@ var _ = Describe("Streams Map", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(m.openStreams).To(HaveLen(4))
 			Expect(m.openStreams).To(Equal([]protocol.StreamID{1, 2, 3, 4}))
+			Expect(m.IsClosedStream(5)).To(BeTrue())
 		})
 
 		It("removes all streams", func() {
 			for i := 1; i <= 5; i++ {
 				err := m.RemoveStream(protocol.StreamID(i))
 				Expect(err).ToNot(HaveOccurred())
+				Expect(m.IsClosedStream(protocol.StreamID(i))).To(BeTrue())
 			}
 			Expect(m.openStreams).To(BeEmpty())
 		})

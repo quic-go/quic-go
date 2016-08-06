@@ -30,14 +30,24 @@ func newStreamsMap() *streamsMap {
 	}
 }
 
-func (m *streamsMap) GetStream(id protocol.StreamID) (*stream, bool) {
+func (m *streamsMap) GetStream(id protocol.StreamID) *stream {
 	m.mutex.RLock()
 	s, ok := m.streams[id]
 	m.mutex.RUnlock()
 	if !ok {
-		return nil, false
+		return nil
 	}
-	return s, true
+	return s
+}
+
+func (m *streamsMap) IsClosedStream(id protocol.StreamID) bool {
+	m.mutex.RLock()
+	s, ok := m.streams[id]
+	m.mutex.RUnlock()
+	if ok && s == nil {
+		return true
+	}
+	return false
 }
 
 func (m *streamsMap) Iterate(fn streamLambda) error {

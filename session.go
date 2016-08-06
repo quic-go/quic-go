@@ -330,10 +330,15 @@ func (s *Session) handlePacket(remoteAddr interface{}, hdr *PublicHeader, data [
 }
 
 func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
-	str, strExists := s.streamsMap.GetStream(frame.StreamID)
+	str := s.streamsMap.GetStream(frame.StreamID)
+
+	if s.streamsMap.IsClosedStream(frame.StreamID) {
+		// Stream is closed, ignore
+		return nil
+	}
 
 	var err error
-	if !strExists {
+	if str == nil {
 		if !s.isValidStreamID(frame.StreamID) {
 			return qerr.InvalidStreamID
 		}
@@ -343,15 +348,12 @@ func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
 			return err
 		}
 	}
-	if str == nil {
-		// Stream is closed, ignore
-		return nil
-	}
+
 	err = str.AddStreamFrame(frame)
 	if err != nil {
 		return err
 	}
-	if !strExists {
+	if str != nil {
 		s.streamCallback(s, str)
 	}
 	return nil
@@ -363,14 +365,15 @@ func (s *Session) isValidStreamID(streamID protocol.StreamID) bool {
 
 func (s *Session) handleWindowUpdateFrame(frame *frames.WindowUpdateFrame) error {
 	if frame.StreamID != 0 {
-		str, strExists := s.streamsMap.GetStream(frame.StreamID)
-		if strExists && str == nil {
+
+		if s.streamsMap.IsClosedStream(frame.StreamID) {
 			return errWindowUpdateOnClosedStream
 		}
 
 		// open new stream when receiving a WindowUpdate for a non-existing stream
 		// this can occur if the client immediately sends a WindowUpdate for a newly opened stream, and packet reordering occurs such that the packet opening the new stream arrives after the WindowUpdate
-		if !strExists {
+		str := s.streamsMap.GetStream(frame.StreamID)
+		if str == nil {
 			s.newStreamImpl(frame.StreamID)
 		}
 	}
@@ -380,8 +383,8 @@ func (s *Session) handleWindowUpdateFrame(frame *frames.WindowUpdateFrame) error
 
 // TODO: Handle frame.byteOffset
 func (s *Session) handleRstStreamFrame(frame *frames.RstStreamFrame) error {
-	str, streamExists := s.streamsMap.GetStream(frame.StreamID)
-	if !streamExists || str == nil {
+	str := s.streamsMap.GetStream(frame.StreamID)
+	if str == nil {
 		return errRstStreamOnInvalidStream
 	}
 	s.closeStreamWithError(str, fmt.Errorf("RST_STREAM received with code %d", frame.ErrorCode))
@@ -584,8 +587,8 @@ func (s *Session) OpenStream(id protocol.StreamID) (utils.Stream, error) {
 
 // GetOrOpenStream returns an existing stream with the given id, or opens a new stream
 func (s *Session) GetOrOpenStream(id protocol.StreamID) (utils.Stream, error) {
-	stream, strExists := s.streamsMap.GetStream(id)
-	if strExists {
+	stream := s.streamsMap.GetStream(id)
+	if stream != nil {
 		return stream, nil
 	}
 	return s.newStreamImpl(id)
@@ -597,8 +600,8 @@ func (s *Session) newStreamImpl(id protocol.StreamID) (*stream, error) {
 		go s.Close(qerr.TooManyOpenStreams)
 		return nil, qerr.TooManyOpenStreams
 	}
-	_, strExists := s.streamsMap.GetStream(id)
-	if strExists {
+
+	if s.streamsMap.IsClosedStream(id) {
 		return nil, fmt.Errorf("Session: stream with ID %d already exists", id)
 	}
 	stream, err := newStream(s.scheduleSending, s.connectionParametersManager, s.flowControlManager, id)

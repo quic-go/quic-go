@@ -126,7 +126,7 @@ var _ = Describe("Session", func() {
 					Expect(session.streamsMap.NumberOfStreams()).To(Equal(2))
 					Expect(streamCallbackCalled).To(BeTrue())
 					p := make([]byte, 4)
-					str, _ := session.streamsMap.GetStream(5)
+					str := session.streamsMap.GetStream(5)
 					Expect(str).ToNot(BeNil())
 					_, err := str.Read(p)
 					Expect(err).ToNot(HaveOccurred())
@@ -165,7 +165,7 @@ var _ = Describe("Session", func() {
 					})
 					Expect(session.streamsMap.NumberOfStreams()).To(Equal(2))
 					p := make([]byte, 4)
-					str, _ := session.streamsMap.GetStream(5)
+					str := session.streamsMap.GetStream(5)
 					Expect(str).ToNot(BeNil())
 					_, err := str.Read(p)
 					Expect(err).ToNot(HaveOccurred())
@@ -178,7 +178,7 @@ var _ = Describe("Session", func() {
 					str.Close()
 					session.garbageCollectStreams()
 					Expect(session.streamsMap.NumberOfStreams()).To(Equal(2))
-					str, _ = session.streamsMap.GetStream(5)
+					str = session.streamsMap.GetStream(5)
 					Expect(str).ToNot(BeNil())
 				})
 
@@ -189,7 +189,7 @@ var _ = Describe("Session", func() {
 						FinBit:   true,
 					})
 					Expect(session.streamsMap.NumberOfStreams()).To(Equal(2))
-					str, _ := session.streamsMap.GetStream(5)
+					str := session.streamsMap.GetStream(5)
 					Expect(str).ToNot(BeNil())
 					Expect(streamCallbackCalled).To(BeTrue())
 					p := make([]byte, 4)
@@ -198,7 +198,7 @@ var _ = Describe("Session", func() {
 					Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
 					session.garbageCollectStreams()
 					Expect(session.streamsMap.NumberOfStreams()).To(Equal(2))
-					str, _ = session.streamsMap.GetStream(5)
+					str = session.streamsMap.GetStream(5)
 					Expect(str).ToNot(BeNil())
 				})
 
@@ -209,7 +209,7 @@ var _ = Describe("Session", func() {
 						FinBit:   true,
 					})
 					Expect(session.streamsMap.NumberOfStreams()).To(Equal(2))
-					str, _ := session.streamsMap.GetStream(5)
+					str := session.streamsMap.GetStream(5)
 					Expect(str).ToNot(BeNil())
 					Expect(streamCallbackCalled).To(BeTrue())
 					p := make([]byte, 4)
@@ -218,7 +218,7 @@ var _ = Describe("Session", func() {
 					Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
 					session.garbageCollectStreams()
 					Expect(session.streamsMap.NumberOfStreams()).To(Equal(2))
-					str, _ = session.streamsMap.GetStream(5)
+					str = session.streamsMap.GetStream(5)
 					Expect(str).ToNot(BeNil())
 					// We still need to close the stream locally
 					str.Close()
@@ -226,9 +226,8 @@ var _ = Describe("Session", func() {
 					str.sentFin()
 					session.garbageCollectStreams()
 					Expect(session.streamsMap.NumberOfStreams()).To(Equal(1))
-					str, strExists := session.streamsMap.GetStream(5)
-					Expect(strExists).To(BeTrue())
-					Expect(str).To(BeNil())
+					Expect(session.streamsMap.GetStream(5)).To(BeNil())
+					Expect(session.streamsMap.IsClosedStream(5)).To(BeTrue())
 					// flow controller should have been notified
 					_, err = session.flowControlManager.SendWindowSize(5)
 					Expect(err).To(MatchError("Error accessing the flowController map."))
@@ -241,7 +240,7 @@ var _ = Describe("Session", func() {
 						Data:     []byte{0xde, 0xca, 0xfb, 0xad},
 					})
 					Expect(session.streamsMap.NumberOfStreams()).To(Equal(2))
-					str, _ := session.streamsMap.GetStream(5)
+					str := session.streamsMap.GetStream(5)
 					Expect(str).ToNot(BeNil())
 					Expect(streamCallbackCalled).To(BeTrue())
 					p := make([]byte, 4)
@@ -251,8 +250,9 @@ var _ = Describe("Session", func() {
 					Expect(err).To(MatchError(testErr))
 					session.garbageCollectStreams()
 					Expect(session.streamsMap.NumberOfStreams()).To(Equal(1))
-					str, strExists := session.streamsMap.GetStream(5)
-					Expect(strExists).To(BeTrue())
+					str = session.streamsMap.GetStream(5)
+					Expect(str).To(BeNil())
+					Expect(session.streamsMap.IsClosedStream(5)).To(BeTrue())
 					Expect(str).To(BeNil())
 				})
 
@@ -260,15 +260,14 @@ var _ = Describe("Session", func() {
 					testErr := errors.New("test")
 					session.newStreamImpl(5)
 					Expect(session.streamsMap.NumberOfStreams()).To(Equal(2))
-					str, _ := session.streamsMap.GetStream(5)
+					str := session.streamsMap.GetStream(5)
 					Expect(str).ToNot(BeNil())
 					session.closeStreamsWithError(testErr)
 					_, err := str.Read([]byte{0})
 					Expect(err).To(MatchError(testErr))
 					session.garbageCollectStreams()
-					str, strExists := session.streamsMap.GetStream(5)
-					Expect(strExists).To(BeTrue())
-					Expect(str).To(BeNil())
+					Expect(session.streamsMap.GetStream(5)).To(BeNil())
+					Expect(session.streamsMap.IsClosedStream(5)).To(BeTrue())
 				})
 
 				It("informs the FlowControlManager about new streams", func() {
@@ -286,7 +285,7 @@ var _ = Describe("Session", func() {
 						Data:     []byte{},
 						FinBit:   true,
 					})
-					str, _ := session.streamsMap.GetStream(5)
+					str := session.streamsMap.GetStream(5)
 					Expect(str).ToNot(BeNil())
 					_, err := str.Read([]byte{0})
 					Expect(err).To(MatchError(io.EOF))
@@ -361,8 +360,7 @@ var _ = Describe("Session", func() {
 						ByteOffset: 1337,
 					})
 					Expect(err).ToNot(HaveOccurred())
-					str, strExists := session.streamsMap.GetStream(5)
-					Expect(strExists).To(BeTrue())
+					str := session.streamsMap.GetStream(5)
 					Expect(str).ToNot(BeNil())
 				})
 
