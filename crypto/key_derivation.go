@@ -43,23 +43,14 @@ func deriveKeys(version protocol.VersionNumber, forwardSecure bool, sharedSecret
 
 	r := hkdf.New(sha256.New, sharedSecret, nonces, info.Bytes())
 
-	otherKey := make([]byte, keyLen)
-	myKey := make([]byte, keyLen)
-	otherIV := make([]byte, 4)
-	myIV := make([]byte, 4)
-
-	if _, err := io.ReadFull(r, otherKey); err != nil {
+	s := make([]byte, 2*keyLen+2*4)
+	if _, err := io.ReadFull(r, s); err != nil {
 		return nil, nil, nil, nil, err
 	}
-	if _, err := io.ReadFull(r, myKey); err != nil {
-		return nil, nil, nil, nil, err
-	}
-	if _, err := io.ReadFull(r, otherIV); err != nil {
-		return nil, nil, nil, nil, err
-	}
-	if _, err := io.ReadFull(r, myIV); err != nil {
-		return nil, nil, nil, nil, err
-	}
+	otherKey := s[:keyLen]
+	myKey := s[keyLen : 2*keyLen]
+	otherIV := s[2*keyLen : 2*keyLen+4]
+	myIV := s[2*keyLen+4:]
 
 	if !forwardSecure && version >= protocol.Version33 {
 		if err := diversify(myKey, myIV, divNonce); err != nil {
