@@ -116,8 +116,8 @@ var _ = Describe("Streams Map", func() {
 		})
 	})
 
-	Context("Lambda", func() {
-		// create 5 streams, ids 1 to 3
+	Context("Iterate", func() {
+		// create 3 streams, ids 1 to 3
 		BeforeEach(func() {
 			for i := 1; i <= 3; i++ {
 				err := m.PutStream(&stream{streamID: protocol.StreamID(i)})
@@ -164,6 +164,88 @@ var _ = Describe("Streams Map", func() {
 			err := m.Iterate(fn)
 			Expect(err).To(MatchError(expectedError))
 			Expect(numIterations).To(Equal(1))
+		})
+	})
+
+	Context("RoundRobinIterate", func() {
+		// create 5 streams, ids 1 to 5
+		var lambdaCalledForStream []protocol.StreamID
+		var numIterations int
+
+		BeforeEach(func() {
+			lambdaCalledForStream = lambdaCalledForStream[:0]
+			numIterations = 0
+			for i := 1; i <= 5; i++ {
+				err := m.PutStream(&stream{streamID: protocol.StreamID(i)})
+				Expect(err).NotTo(HaveOccurred())
+			}
+		})
+
+		It("executes the lambda exactly once for every stream", func() {
+			fn := func(str *stream) (bool, error) {
+				lambdaCalledForStream = append(lambdaCalledForStream, str.StreamID())
+				numIterations++
+				return true, nil
+			}
+			err := m.RoundRobinIterate(fn)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(numIterations).To(Equal(5))
+			Expect(lambdaCalledForStream).To(Equal([]protocol.StreamID{1, 2, 3, 4, 5}))
+			Expect(m.roundRobinIndex).To(BeZero())
+		})
+
+		It("goes around once when starting in the middle", func() {
+			fn := func(str *stream) (bool, error) {
+				lambdaCalledForStream = append(lambdaCalledForStream, str.StreamID())
+				numIterations++
+				return true, nil
+			}
+			m.roundRobinIndex = 3
+			err := m.RoundRobinIterate(fn)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(numIterations).To(Equal(5))
+			Expect(lambdaCalledForStream).To(Equal([]protocol.StreamID{4, 5, 1, 2, 3}))
+			Expect(m.roundRobinIndex).To(Equal(3))
+		})
+
+		It("picks up at the index where it last stopped", func() {
+			fn := func(str *stream) (bool, error) {
+				lambdaCalledForStream = append(lambdaCalledForStream, str.StreamID())
+				numIterations++
+				if str.StreamID() == 2 || str.StreamID() == 4 {
+					return false, nil
+				}
+				return true, nil
+			}
+			err := m.RoundRobinIterate(fn)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(numIterations).To(Equal(2))
+			Expect(lambdaCalledForStream).To(Equal([]protocol.StreamID{1, 2}))
+			Expect(m.roundRobinIndex).To(Equal(2))
+			numIterations = 0
+			lambdaCalledForStream = lambdaCalledForStream[:0]
+			err = m.RoundRobinIterate(fn)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(numIterations).To(Equal(2))
+			Expect(lambdaCalledForStream).To(Equal([]protocol.StreamID{3, 4}))
+		})
+
+		It("adjust the RoundRobinIndex when deleting an element in front", func() {
+			m.roundRobinIndex = 3 // stream 4
+			m.RemoveStream(2)
+			Expect(m.roundRobinIndex).To(Equal(2))
+		})
+
+		It("doesn't adjust the RoundRobinIndex when deleting an element at the back", func() {
+			m.roundRobinIndex = 1 // stream 2
+			m.RemoveStream(4)
+			Expect(m.roundRobinIndex).To(Equal(1))
+		})
+
+		It("doesn't adjust the RoundRobinIndex when deleting the element it is pointing to", func() {
+			m.roundRobinIndex = 3 // stream 4
+			m.RemoveStream(4)
+			Expect(m.roundRobinIndex).To(Equal(3))
 		})
 	})
 })
