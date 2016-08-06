@@ -677,7 +677,7 @@ var _ = Describe("SentPacketHandler", func() {
 			// rttUpdated, bytesInFlight, ackedPackets, lostPackets
 			Expect(cong.argsOnCongestionEvent[0]).To(BeTrue())
 			Expect(cong.argsOnCongestionEvent[1]).To(Equal(protocol.ByteCount(2)))
-			Expect(cong.argsOnCongestionEvent[2]).To(Equal(congestion.PacketVector{{1, 1}, {3, 3}}))
+			Expect(cong.argsOnCongestionEvent[2]).To(Equal(congestion.PacketVector{{Number: 1, Length: 1}, {Number: 3, Length: 3}}))
 			Expect(cong.argsOnCongestionEvent[3]).To(BeEmpty())
 
 			// Loose the packet
@@ -697,8 +697,8 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(err).NotTo(HaveOccurred())
 			}
 
-			Expect(cong.argsOnCongestionEvent[2]).To(Equal(congestion.PacketVector{{packetNumber, protocol.ByteCount(packetNumber)}}))
-			Expect(cong.argsOnCongestionEvent[3]).To(Equal(congestion.PacketVector{{2, 2}}))
+			Expect(cong.argsOnCongestionEvent[2]).To(Equal(congestion.PacketVector{{Number: packetNumber, Length: protocol.ByteCount(packetNumber)}}))
+			Expect(cong.argsOnCongestionEvent[3]).To(Equal(congestion.PacketVector{{Number: 2, Length: 2}}))
 		})
 
 		It("allows or denies sending", func() {
@@ -718,7 +718,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(cong.argsOnCongestionEvent[0]).To(BeFalse())
 			Expect(cong.argsOnCongestionEvent[1]).To(Equal(protocol.ByteCount(1)))
 			Expect(cong.argsOnCongestionEvent[2]).To(BeEmpty())
-			Expect(cong.argsOnCongestionEvent[3]).To(Equal(congestion.PacketVector{{1, 1}}))
+			Expect(cong.argsOnCongestionEvent[3]).To(Equal(congestion.PacketVector{{Number: 1, Length: 1}}))
 			Expect(cong.onRetransmissionTimeout).To(BeTrue())
 		})
 	})
