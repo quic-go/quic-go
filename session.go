@@ -450,9 +450,6 @@ func (s *Session) closeStreamsWithError(err error) {
 	defer s.streamsMutex.Unlock()
 
 	fn := func(str *stream) (bool, error) {
-		if str == nil {
-			return true, nil
-		}
 		s.closeStreamWithError(str, err)
 		return true, nil
 	}
@@ -644,9 +641,6 @@ func (s *Session) newStreamImpl(id protocol.StreamID) (*stream, error) {
 // from the streams map.
 func (s *Session) garbageCollectStreams() {
 	fn := func(str *stream) (bool, error) {
-		if str == nil {
-			return true, nil
-		}
 		id := str.StreamID()
 		if str.finished() {
 			atomic.AddUint32(&s.openStreamsCount, ^uint32(0)) // decrement
@@ -697,10 +691,6 @@ func (s *Session) getWindowUpdateFrames() ([]*frames.WindowUpdateFrame, error) {
 	var res []*frames.WindowUpdateFrame
 
 	fn := func(str *stream) (bool, error) {
-		if str == nil {
-			return true, nil
-		}
-
 		id := str.StreamID()
 		doUpdate, offset, err := s.flowControlManager.MaybeTriggerStreamWindowUpdate(id)
 		if err != nil {

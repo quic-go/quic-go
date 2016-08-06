@@ -44,7 +44,14 @@ func (m *streamsMap) Iterate(fn streamLambda) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	for _, str := range m.streams {
+	for _, streamID := range m.openStreams {
+		str, ok := m.streams[streamID]
+		if !ok {
+			return errMapAccess
+		}
+		if str == nil {
+			return fmt.Errorf("BUG: Stream %d is closed, but still in openStreams map", streamID)
+		}
 		cont, err := fn(str)
 		if err != nil {
 			return err
@@ -68,6 +75,9 @@ func (m *streamsMap) RoundRobinIterate(fn streamLambda) error {
 		str, ok := m.streams[streamID]
 		if !ok {
 			return errMapAccess
+		}
+		if str == nil {
+			return fmt.Errorf("BUG: Stream %d is closed, but still in openStreams map", streamID)
 		}
 		cont, err := fn(str)
 		m.roundRobinIndex = (m.roundRobinIndex + 1) % numStreams
