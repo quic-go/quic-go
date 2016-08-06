@@ -23,4 +23,10 @@ var _ = Describe("Buffer Pool", func() {
 			Expect(buf).To(HaveCap(int(protocol.MaxPacketSize)))
 		}
 	})
+
+	It("panics if wrong-sized buffers are passed", func() {
+		Expect(func() {
+			putPacketBuffer([]byte{0})
+		}).To(Panic())
+	})
 })
