@@ -617,7 +617,7 @@ func (s *Session) newStreamImpl(id protocol.StreamID) (*stream, error) {
 	if strExists {
 		return nil, fmt.Errorf("Session: stream with ID %d already exists", id)
 	}
-	stream, err := newStream(s.scheduleSending, s.connectionParametersManager, s.flowControlManager, id)
+	stream, err := newStream(s.scheduleSending, s.flowControlManager, id)
 	if err != nil {
 		return nil, err
 	}

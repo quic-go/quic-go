@@ -7,7 +7,6 @@ import (
 
 	"github.com/lucas-clemente/quic-go/flowcontrol"
 	"github.com/lucas-clemente/quic-go/frames"
-	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
@@ -44,7 +43,7 @@ type stream struct {
 }
 
 // newStream creates a new Stream
-func newStream(onData func(), connectionParameterManager *handshake.ConnectionParametersManager, flowControlManager flowcontrol.FlowControlManager, StreamID protocol.StreamID) (*stream, error) {
+func newStream(onData func(), flowControlManager flowcontrol.FlowControlManager, StreamID protocol.StreamID) (*stream, error) {
 	s := &stream{
 		onData:             onData,
 		streamID:           StreamID,
