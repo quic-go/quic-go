@@ -110,7 +110,7 @@ var _ = Describe("Stream", func() {
 		cpm := handshake.NewConnectionParamatersManager()
 		flowControlManager := flowcontrol.NewFlowControlManager(cpm)
 		flowControlManager.NewStream(streamID, true)
-		str, _ = newStream(onData, flowControlManager, streamID)
+		str, _ = newStream(streamID, onData, flowControlManager)
 	})
 
 	It("gets stream id", func() {

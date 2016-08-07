@@ -43,7 +43,7 @@ type stream struct {
 }
 
 // newStream creates a new Stream
-func newStream(onData func(), flowControlManager flowcontrol.FlowControlManager, StreamID protocol.StreamID) (*stream, error) {
+func newStream(StreamID protocol.StreamID, onData func(), flowControlManager flowcontrol.FlowControlManager) (*stream, error) {
 	s := &stream{
 		onData:             onData,
 		streamID:           StreamID,
