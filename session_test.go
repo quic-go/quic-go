@@ -318,14 +318,6 @@ var _ = Describe("Session", func() {
 					Expect(err).To(MatchError("RST_STREAM received with code 42"))
 				})
 
-				PIt("errors when the stream is not known", func() {
-					err := session.handleRstStreamFrame(&frames.RstStreamFrame{
-						StreamID:  5,
-						ErrorCode: 42,
-					})
-					Expect(err).To(MatchError(errRstStreamOnInvalidStream))
-				})
-
 				It("ignores the error when the stream is not known", func() {
 					err := session.handleFrames([]frames.Frame{&frames.RstStreamFrame{
 						StreamID:  5,
