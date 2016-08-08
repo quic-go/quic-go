@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -14,7 +15,7 @@ var _ = Describe("Streams Map", func() {
 	)
 
 	BeforeEach(func() {
-		m = newStreamsMap()
+		m = newStreamsMap(nil)
 	})
 
 	It("returns an error for non-existent streams", func() {
@@ -49,6 +50,57 @@ var _ = Describe("Streams Map", func() {
 			err = m.PutStream(&stream{streamID: 5})
 			Expect(err).To(MatchError("a stream with ID 5 already exists"))
 			Expect(m.openStreams).To(HaveLen(1))
+		})
+	})
+
+	Context("getting and creating streams", func() {
+		BeforeEach(func() {
+			m.newStream = func(id protocol.StreamID) (*stream, error) {
+				return &stream{streamID: id}, nil
+			}
+		})
+
+		It("gets new streams", func() {
+			s, err := m.GetOrOpenStream(5)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(s.StreamID()).To(Equal(protocol.StreamID(5)))
+		})
+
+		It("gets existing streams", func() {
+			s, err := m.GetOrOpenStream(5)
+			Expect(err).NotTo(HaveOccurred())
+			s, err = m.GetOrOpenStream(5)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(s.StreamID()).To(Equal(protocol.StreamID(5)))
+		})
+
+		It("returns nil for closed streams", func() {
+			s, err := m.GetOrOpenStream(5)
+			Expect(err).NotTo(HaveOccurred())
+			err = m.RemoveStream(5)
+			Expect(err).NotTo(HaveOccurred())
+			s, err = m.GetOrOpenStream(5)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(s).To(BeNil())
+		})
+
+		Context("counting streams", func() {
+			It("errors when too many streams are opened", func() {
+				for i := 0; i < maxNumStreams; i++ {
+					_, err := m.GetOrOpenStream(protocol.StreamID(i))
+					Expect(err).NotTo(HaveOccurred())
+				}
+				_, err := m.GetOrOpenStream(protocol.StreamID(maxNumStreams))
+				Expect(err).To(MatchError(qerr.TooManyOpenStreams))
+			})
+
+			It("does not error when many streams are opened and closed", func() {
+				for i := 2; i < 10*maxNumStreams; i++ {
+					_, err := m.GetOrOpenStream(protocol.StreamID(i))
+					Expect(err).NotTo(HaveOccurred())
+					m.RemoveStream(protocol.StreamID(i))
+				}
+			})
 		})
 	})
 

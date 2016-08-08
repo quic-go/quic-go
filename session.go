@@ -108,13 +108,11 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	}
 
 	session := &Session{
-		connectionID:   connectionID,
-		version:        v,
-		conn:           conn,
-		streamCallback: streamCallback,
-		closeCallback:  closeCallback,
-		// streams:                     make(map[protocol.StreamID]*stream),
-		streamsMap:                  newStreamsMap(),
+		connectionID:                connectionID,
+		version:                     v,
+		conn:                        conn,
+		streamCallback:              streamCallback,
+		closeCallback:               closeCallback,
 		sentPacketHandler:           sentPacketHandler,
 		receivedPacketHandler:       receivedPacketHandler,
 		stopWaitingManager:          stopWaitingManager,
@@ -128,6 +126,8 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		timer:                       time.NewTimer(0),
 		lastNetworkActivityTime: time.Now(),
 	}
+
+	session.streamsMap = newStreamsMap(session.newStream)
 
 	cryptoStream, _ := session.OpenStream(1)
 	var err error
@@ -635,6 +635,10 @@ func (s *Session) newStreamImpl(id protocol.StreamID) (*stream, error) {
 		return nil, err
 	}
 	return stream, nil
+}
+
+func (s *Session) newStream(id protocol.StreamID) (*stream, error) {
+	return nil, errors.New("not implemented")
 }
 
 // garbageCollectStreams goes through all streams and removes EOF'ed streams

@@ -23,7 +23,7 @@ var _ = Describe("Packet packer", func() {
 		fcm.sendWindowSizes[5] = protocol.MaxByteCount
 		fcm.sendWindowSizes[7] = protocol.MaxByteCount
 
-		streamFramer = newStreamFramer(newStreamsMap(), fcm)
+		streamFramer = newStreamFramer(newStreamsMap(nil), fcm)
 
 		packer = &packetPacker{
 			cryptoSetup:                 &handshake.CryptoSetup{},

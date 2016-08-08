@@ -31,7 +31,7 @@ var _ = Describe("Stream Framer", func() {
 		stream1 = &stream{streamID: 10}
 		stream2 = &stream{streamID: 11}
 
-		streamsMap = newStreamsMap()
+		streamsMap = newStreamsMap(nil)
 		streamsMap.PutStream(stream1)
 		streamsMap.PutStream(stream2)
 
