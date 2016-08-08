@@ -37,16 +37,6 @@ func newStreamsMap(newStream newStreamLambda) *streamsMap {
 	}
 }
 
-func (m *streamsMap) GetStream(id protocol.StreamID) (*stream, bool) {
-	m.mutex.RLock()
-	s, ok := m.streams[id]
-	m.mutex.RUnlock()
-	if !ok {
-		return nil, false
-	}
-	return s, true
-}
-
 // GetOrOpenStream either returns an existing stream, a newly opened stream, or nil if a stream with the provided ID is already closed.
 func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 	m.mutex.RLock()
@@ -70,7 +60,7 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 	if err != nil {
 		return nil, err
 	}
-	m.putStreamImpl(s)
+	m.putStream(s)
 	return s, nil
 }
 
@@ -125,13 +115,7 @@ func (m *streamsMap) RoundRobinIterate(fn streamLambda) error {
 	return nil
 }
 
-func (m *streamsMap) PutStream(s *stream) error {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-	return m.putStreamImpl(s)
-}
-
-func (m *streamsMap) putStreamImpl(s *stream) error {
+func (m *streamsMap) putStream(s *stream) error {
 	id := s.StreamID()
 	if _, ok := m.streams[id]; ok {
 		return fmt.Errorf("a stream with ID %d already exists", id)

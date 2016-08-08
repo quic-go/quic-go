@@ -32,8 +32,8 @@ var _ = Describe("Stream Framer", func() {
 		stream2 = &stream{streamID: 11}
 
 		streamsMap = newStreamsMap(nil)
-		streamsMap.PutStream(stream1)
-		streamsMap.PutStream(stream2)
+		streamsMap.putStream(stream1)
+		streamsMap.putStream(stream2)
 
 		fcm = newMockFlowControlHandler()
 		fcm.sendWindowSizes[stream1.streamID] = protocol.MaxByteCount
