@@ -1,4 +1,14 @@
 coverage:
+  round: nearest
   ignore:
     - /utils/byteinterval_linkedlist.go
     - /utils/packetinterval_linkedlist.go
+
+notify:
+  status:
+    project:
+      default:
+        target: 0
+    patch:
+      default:
+        target: 0
