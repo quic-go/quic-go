@@ -42,6 +42,17 @@ var _ = Describe("StreamFrame", func() {
 			Expect(frame.Data).To(HaveLen(0))
 		})
 
+		It("accepts frames with offsets", func() {
+			b := bytes.NewReader([]byte{0xa4, 0x1, 0x2a, 0x00, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'})
+			frame, err := ParseStreamFrame(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame.FinBit).To(BeFalse())
+			Expect(frame.StreamID).To(Equal(protocol.StreamID(1)))
+			Expect(frame.Offset).To(Equal(protocol.ByteCount(42)))
+			Expect(frame.DataLenPresent).To(BeTrue())
+			Expect(frame.Data).To(Equal([]byte("foobar")))
+		})
+
 		It("errors on empty stream frames that don't have the FinBit set", func() {
 			b := bytes.NewReader([]byte{0x80 ^ 0x20, 0x1, 0, 0})
 			_, err := ParseStreamFrame(b)
@@ -55,7 +66,7 @@ var _ = Describe("StreamFrame", func() {
 		})
 
 		It("errors on EOFs", func() {
-			data := []byte{0xa0, 0x1, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'}
+			data := []byte{0xa4, 0x1, 0x2a, 0x00, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'}
 			_, err := ParseStreamFrame(bytes.NewReader(data))
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
