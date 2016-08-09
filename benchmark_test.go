@@ -104,9 +104,9 @@ var _ = PDescribe("Benchmarks", func() {
 				go session1.run()
 				go session2.run()
 
-				s1stream, err := session1.OpenStream(5)
+				s1stream, err := session1.GetOrOpenStream(5)
 				Expect(err).NotTo(HaveOccurred())
-				s2stream, err := session2.OpenStream(5)
+				s2stream, err := session2.GetOrOpenStream(5)
 				Expect(err).NotTo(HaveOccurred())
 
 				done := make(chan struct{})

@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -14,48 +15,64 @@ var _ = Describe("Streams Map", func() {
 	)
 
 	BeforeEach(func() {
-		m = newStreamsMap()
+		m = newStreamsMap(nil)
 	})
 
-	It("returns an error for non-existent streams", func() {
-		_, exists := m.GetStream(1)
-		Expect(exists).To(BeFalse())
-	})
-
-	It("returns nil for previously existing streams", func() {
-		err := m.PutStream(&stream{streamID: 1})
-		Expect(err).NotTo(HaveOccurred())
-		err = m.RemoveStream(1)
-		Expect(err).NotTo(HaveOccurred())
-		s, exists := m.GetStream(1)
-		Expect(exists).To(BeTrue())
-		Expect(s).To(BeNil())
-	})
-
-	Context("putting streams", func() {
-		It("stores streams", func() {
-			err := m.PutStream(&stream{streamID: 5})
-			Expect(err).NotTo(HaveOccurred())
-			s, exists := m.GetStream(5)
-			Expect(exists).To(BeTrue())
-			Expect(s.streamID).To(Equal(protocol.StreamID(5)))
-			Expect(m.openStreams).To(HaveLen(1))
-			Expect(m.openStreams[0]).To(Equal(protocol.StreamID(5)))
+	Context("getting and creating streams", func() {
+		BeforeEach(func() {
+			m.newStream = func(id protocol.StreamID) (*stream, error) {
+				return &stream{streamID: id}, nil
+			}
 		})
 
-		It("does not store multiple streams with the same ID", func() {
-			err := m.PutStream(&stream{streamID: 5})
+		It("gets new streams", func() {
+			s, err := m.GetOrOpenStream(5)
 			Expect(err).NotTo(HaveOccurred())
-			err = m.PutStream(&stream{streamID: 5})
-			Expect(err).To(MatchError("a stream with ID 5 already exists"))
-			Expect(m.openStreams).To(HaveLen(1))
+			Expect(s.StreamID()).To(Equal(protocol.StreamID(5)))
+		})
+
+		It("gets existing streams", func() {
+			s, err := m.GetOrOpenStream(5)
+			Expect(err).NotTo(HaveOccurred())
+			s, err = m.GetOrOpenStream(5)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(s.StreamID()).To(Equal(protocol.StreamID(5)))
+		})
+
+		It("returns nil for closed streams", func() {
+			s, err := m.GetOrOpenStream(5)
+			Expect(err).NotTo(HaveOccurred())
+			err = m.RemoveStream(5)
+			Expect(err).NotTo(HaveOccurred())
+			s, err = m.GetOrOpenStream(5)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(s).To(BeNil())
+		})
+
+		Context("counting streams", func() {
+			It("errors when too many streams are opened", func() {
+				for i := 0; i < maxNumStreams; i++ {
+					_, err := m.GetOrOpenStream(protocol.StreamID(i))
+					Expect(err).NotTo(HaveOccurred())
+				}
+				_, err := m.GetOrOpenStream(protocol.StreamID(maxNumStreams))
+				Expect(err).To(MatchError(qerr.TooManyOpenStreams))
+			})
+
+			It("does not error when many streams are opened and closed", func() {
+				for i := 2; i < 10*maxNumStreams; i++ {
+					_, err := m.GetOrOpenStream(protocol.StreamID(i))
+					Expect(err).NotTo(HaveOccurred())
+					m.RemoveStream(protocol.StreamID(i))
+				}
+			})
 		})
 	})
 
 	Context("deleting streams", func() {
 		BeforeEach(func() {
 			for i := 1; i <= 5; i++ {
-				err := m.PutStream(&stream{streamID: protocol.StreamID(i)})
+				err := m.putStream(&stream{streamID: protocol.StreamID(i)})
 				Expect(err).ToNot(HaveOccurred())
 			}
 			Expect(m.openStreams).To(Equal([]protocol.StreamID{1, 2, 3, 4, 5}))
@@ -102,13 +119,13 @@ var _ = Describe("Streams Map", func() {
 		})
 
 		It("increases the counter when a new stream is added", func() {
-			err := m.PutStream(&stream{streamID: 5})
+			err := m.putStream(&stream{streamID: 5})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(m.NumberOfStreams()).To(Equal(1))
 		})
 
 		It("decreases the counter when removing a stream", func() {
-			err := m.PutStream(&stream{streamID: 5})
+			err := m.putStream(&stream{streamID: 5})
 			Expect(err).ToNot(HaveOccurred())
 			err = m.RemoveStream(5)
 			Expect(err).ToNot(HaveOccurred())
@@ -120,7 +137,7 @@ var _ = Describe("Streams Map", func() {
 		// create 3 streams, ids 1 to 3
 		BeforeEach(func() {
 			for i := 1; i <= 3; i++ {
-				err := m.PutStream(&stream{streamID: protocol.StreamID(i)})
+				err := m.putStream(&stream{streamID: protocol.StreamID(i)})
 				Expect(err).NotTo(HaveOccurred())
 			}
 		})
@@ -176,7 +193,7 @@ var _ = Describe("Streams Map", func() {
 			lambdaCalledForStream = lambdaCalledForStream[:0]
 			numIterations = 0
 			for i := 1; i <= 5; i++ {
-				err := m.PutStream(&stream{streamID: protocol.StreamID(i)})
+				err := m.putStream(&stream{streamID: protocol.StreamID(i)})
 				Expect(err).NotTo(HaveOccurred())
 			}
 		})
