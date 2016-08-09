@@ -5,7 +5,7 @@ import "net"
 type connection interface {
 	write([]byte) error
 	setCurrentRemoteAddr(interface{})
-	IP() net.IP
+	RemoteAddr() *net.UDPAddr
 }
 
 type udpConn struct {
@@ -24,6 +24,6 @@ func (c *udpConn) setCurrentRemoteAddr(addr interface{}) {
 	c.currentAddr = addr.(*net.UDPAddr)
 }
 
-func (c *udpConn) IP() net.IP {
-	return c.currentAddr.IP
+func (c *udpConn) RemoteAddr() *net.UDPAddr {
+	return c.currentAddr
 }

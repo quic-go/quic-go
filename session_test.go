@@ -35,7 +35,7 @@ func (m *mockConnection) write(p []byte) error {
 }
 
 func (*mockConnection) setCurrentRemoteAddr(addr interface{}) {}
-func (*mockConnection) IP() net.IP                            { return nil }
+func (*mockConnection) RemoteAddr() *net.UDPAddr              { return &net.UDPAddr{} }
 
 type mockUnpacker struct{}
 

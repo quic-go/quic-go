@@ -22,6 +22,7 @@ import (
 type streamCreator interface {
 	GetOrOpenStream(protocol.StreamID) (utils.Stream, error)
 	Close(error) error
+	RemoteAddr() *net.UDPAddr
 }
 
 // Server is a HTTP2 server listening for QUIC connections.
@@ -136,6 +137,8 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 	if err != nil {
 		return err
 	}
+
+	req.RemoteAddr = session.RemoteAddr().String()
 
 	if utils.Debug() {
 		utils.Infof("%s %s%s, on data stream %d", req.Method, req.Host, req.RequestURI, h2headersFrame.StreamID)

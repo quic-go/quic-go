@@ -28,8 +28,10 @@ type mockSession struct {
 func (s *mockSession) GetOrOpenStream(id protocol.StreamID) (utils.Stream, error) {
 	return s.dataStream, nil
 }
-
 func (s *mockSession) Close(error) error { s.closed = true; return nil }
+func (s *mockSession) RemoteAddr() *net.UDPAddr {
+	return &net.UDPAddr{IP: []byte{127, 0, 0, 1}, Port: 42}
+}
 
 var _ = Describe("H2 server", func() {
 	certPath := os.Getenv("GOPATH")
@@ -67,7 +69,9 @@ var _ = Describe("H2 server", func() {
 		It("handles a sample GET request", func() {
 			var handlerCalled bool
 			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer GinkgoRecover()
 				Expect(r.Host).To(Equal("www.example.com"))
+				Expect(r.RemoteAddr).To(Equal("127.0.0.1:42"))
 				handlerCalled = true
 			})
 			headerStream.Write([]byte{

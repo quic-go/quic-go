@@ -3,6 +3,7 @@ package quic
 import (
 	"errors"
 	"fmt"
+	"net"
 	"sync/atomic"
 	"time"
 
@@ -128,7 +129,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 
 	cryptoStream, _ := session.GetOrOpenStream(1)
 	var err error
-	session.cryptoSetup, err = handshake.NewCryptoSetup(connectionID, conn.IP(), v, sCfg, cryptoStream, session.connectionParametersManager, session.aeadChanged)
+	session.cryptoSetup, err = handshake.NewCryptoSetup(connectionID, conn.RemoteAddr().IP, v, sCfg, cryptoStream, session.connectionParametersManager, session.aeadChanged)
 	if err != nil {
 		return nil, err
 	}
@@ -651,4 +652,9 @@ func (s *Session) getWindowUpdateFrames() ([]*frames.WindowUpdateFrame, error) {
 	}
 
 	return res, nil
+}
+
+// RemoteAddr returns the net.UDPAddr of the client
+func (s *Session) RemoteAddr() *net.UDPAddr {
+	return s.conn.RemoteAddr()
 }

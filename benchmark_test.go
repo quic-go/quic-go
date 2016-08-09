@@ -45,7 +45,7 @@ func (c *linkedConnection) write(p []byte) error {
 }
 
 func (*linkedConnection) setCurrentRemoteAddr(addr interface{}) {}
-func (*linkedConnection) IP() net.IP                            { return nil }
+func (*linkedConnection) RemoteAddr() *net.UDPAddr              { return &net.UDPAddr{} }
 
 func setAEAD(cs *handshake.CryptoSetup, aead crypto.AEAD) {
 	*(*bool)(unsafe.Pointer(reflect.ValueOf(cs).Elem().FieldByName("receivedForwardSecurePacket").UnsafeAddr())) = true
