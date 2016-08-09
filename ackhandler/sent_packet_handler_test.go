@@ -93,15 +93,27 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(3)))
 		})
 
-		PIt("rejects packets with the same packet number", func() {
+		It("rejects packets with the same packet number", func() {
 			packet1 := ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1}
 			packet2 := ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 2}
 			err := handler.SentPacket(&packet1)
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.SentPacket(&packet2)
-			Expect(err).To(MatchError(errDuplicatePacketNumber))
+			Expect(err).To(MatchError(errPacketNumberNotIncreasing))
 			Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(1)))
 			Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(1)))
+			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(1)))
+		})
+
+		It("rejects packets with decreasing packet number", func() {
+			packet1 := ackhandlerlegacy.Packet{PacketNumber: 2, Frames: []frames.Frame{&streamFrame}, Length: 1}
+			packet2 := ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 2}
+			err := handler.SentPacket(&packet1)
+			Expect(err).ToNot(HaveOccurred())
+			err = handler.SentPacket(&packet2)
+			Expect(err).To(MatchError(errPacketNumberNotIncreasing))
+			Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(2)))
+			Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(2)))
 			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(1)))
 		})
 

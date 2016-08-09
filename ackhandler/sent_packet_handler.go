@@ -24,7 +24,7 @@ var (
 	errAckForUnsentPacket        = qerr.Error(qerr.InvalidAckData, "Received ACK for an unsent package")
 )
 
-var errDuplicatePacketNumber = errors.New("Packet number already exists in Packet History")
+var errPacketNumberNotIncreasing = errors.New("Already sent a packet with a higher packet number.")
 
 type sentPacketHandler struct {
 	lastSentPacketNumber protocol.PacketNumber
@@ -121,7 +121,9 @@ func (h *sentPacketHandler) queuePacketForRetransmission(packetElement *ackhandl
 }
 
 func (h *sentPacketHandler) SentPacket(packet *ackhandlerlegacy.Packet) error {
-	// TODO: check for decreasing or duplicate packet numbers
+	if packet.PacketNumber <= h.lastSentPacketNumber {
+		return errPacketNumberNotIncreasing
+	}
 
 	now := time.Now()
 	h.lastSentPacketTime = now
