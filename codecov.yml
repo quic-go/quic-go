@@ -3,6 +3,7 @@ coverage:
   ignore:
     - /utils/byteinterval_linkedlist.go
     - /utils/packetinterval_linkedlist.go
+    - /ackhandlerlegacy/packet_linkedlist.go
 
 notify:
   status:
