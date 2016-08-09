@@ -121,7 +121,7 @@ func deriveKey(secret []byte) ([]byte, error) {
 
 func encryptToken(aead cipher.AEAD, token *sourceAddressToken) ([]byte, error) {
 	nonce := make([]byte, stkNonceSize)
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+	if _, err := rand.Read(nonce); err != nil {
 		return nil, err
 	}
 	return aead.Seal(nonce, nonce, token.serialize(), nil), nil

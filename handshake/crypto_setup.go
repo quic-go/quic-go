@@ -3,7 +3,6 @@ package handshake
 import (
 	"bytes"
 	"crypto/rand"
-	"io"
 	"net"
 	"sync"
 
@@ -238,12 +237,12 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 	}
 
 	nonce := make([]byte, 32)
-	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
+	if _, err = rand.Read(nonce); err != nil {
 		return nil, err
 	}
 
 	h.diversificationNonce = make([]byte, 32)
-	if _, err = io.ReadFull(rand.Reader, h.diversificationNonce); err != nil {
+	if _, err = rand.Read(h.diversificationNonce); err != nil {
 		return nil, err
 	}
 
