@@ -59,7 +59,7 @@ func (ps *proofSource) GetCertsCompressed(sni string, pCommonSetHashes, pCachedH
 	if err != nil {
 		return nil, err
 	}
-	return compressChain(cert.Certificate, pCommonSetHashes, pCachedHashes)
+	return getCompressedCert(cert.Certificate, pCommonSetHashes, pCachedHashes)
 }
 
 // GetLeafCert gets the leaf certificate
