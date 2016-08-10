@@ -7,7 +7,6 @@ import (
 	"runtime"
 	"sync"
 	"syscall"
-	"time"
 
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
@@ -233,16 +232,24 @@ var _ = Describe("H2 server", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("works", func(done Done) {
+		It("works", func() {
+			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
 				err := s.ListenAndServe()
 				Expect(err).NotTo(HaveOccurred())
-				close(done)
+				done <- struct{}{}
 			}()
-			time.Sleep(50 * time.Millisecond)
-			err := s.Close()
-			Expect(err).NotTo(HaveOccurred())
+			Eventually(func() bool {
+				err := s.Close()
+				Expect(err).NotTo(HaveOccurred())
+				select {
+				case <-done:
+					return true
+				default:
+					return false
+				}
+			}).Should(BeTrue())
 		}, 0.5)
 
 		It("may only be called once", func() {
@@ -274,16 +281,24 @@ var _ = Describe("H2 server", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("works", func(done Done) {
+		It("works", func() {
+			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
 				err := s.ListenAndServeTLS(certPath+"fullchain.pem", certPath+"privkey.pem")
 				Expect(err).NotTo(HaveOccurred())
-				close(done)
+				done <- struct{}{}
 			}()
-			time.Sleep(50 * time.Millisecond)
-			err := s.Close()
-			Expect(err).NotTo(HaveOccurred())
+			Eventually(func() bool {
+				err := s.Close()
+				Expect(err).NotTo(HaveOccurred())
+				select {
+				case <-done:
+					return true
+				default:
+					return false
+				}
+			}).Should(BeTrue())
 		}, 0.5)
 
 		It("may only be called once", func() {
