@@ -91,6 +91,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(1)))
 			Expect(handler.packetHistory.Back().Value.PacketNumber).To(Equal(protocol.PacketNumber(2)))
 			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(3)))
+			Expect(handler.skippedPackets).To(BeEmpty())
 		})
 
 		It("rejects packets with the same packet number", func() {
@@ -103,6 +104,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(1)))
 			Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(1)))
 			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(1)))
+			Expect(handler.skippedPackets).To(BeEmpty())
 		})
 
 		It("rejects packets with decreasing packet number", func() {
@@ -117,21 +119,6 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(1)))
 		})
 
-		It("works with non-consecutive packet numbers", func() {
-			packet1 := ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1}
-			packet2 := ackhandlerlegacy.Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, Length: 2}
-			err := handler.SentPacket(&packet1)
-			Expect(err).ToNot(HaveOccurred())
-			err = handler.SentPacket(&packet2)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(3)))
-			el := handler.packetHistory.Front()
-			Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(1)))
-			el = el.Next()
-			Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(3)))
-			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(3)))
-		})
-
 		It("stores the sent time", func() {
 			packet := ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1}
 			err := handler.SentPacket(&packet)
@@ -144,6 +131,50 @@ var _ = Describe("SentPacketHandler", func() {
 			err := handler.SentPacket(&packet)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.lastSentPacketTime.Unix()).To(BeNumerically("~", time.Now().Unix(), 1))
+		})
+
+		Context("skipped packet numbers", func() {
+			It("works with non-consecutive packet numbers", func() {
+				packet1 := ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1}
+				packet2 := ackhandlerlegacy.Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, Length: 2}
+				err := handler.SentPacket(&packet1)
+				Expect(err).ToNot(HaveOccurred())
+				err = handler.SentPacket(&packet2)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(3)))
+				el := handler.packetHistory.Front()
+				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(1)))
+				el = el.Next()
+				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(3)))
+				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(3)))
+				Expect(handler.skippedPackets).To(HaveLen(1))
+				Expect(handler.skippedPackets[0]).To(Equal(protocol.PacketNumber(2)))
+			})
+
+			It("recognizes multiple skipped packets", func() {
+				packet1 := ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1}
+				packet2 := ackhandlerlegacy.Packet{PacketNumber: 3, Frames: []frames.Frame{&streamFrame}, Length: 2}
+				packet3 := ackhandlerlegacy.Packet{PacketNumber: 5, Frames: []frames.Frame{&streamFrame}, Length: 2}
+				err := handler.SentPacket(&packet1)
+				Expect(err).ToNot(HaveOccurred())
+				err = handler.SentPacket(&packet2)
+				Expect(err).ToNot(HaveOccurred())
+				err = handler.SentPacket(&packet3)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.skippedPackets).To(HaveLen(2))
+				Expect(handler.skippedPackets).To(Equal([]protocol.PacketNumber{2, 4}))
+			})
+
+			It("recognizes multiple consecutive skipped packets", func() {
+				packet1 := ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{&streamFrame}, Length: 1}
+				packet2 := ackhandlerlegacy.Packet{PacketNumber: 4, Frames: []frames.Frame{&streamFrame}, Length: 2}
+				err := handler.SentPacket(&packet1)
+				Expect(err).ToNot(HaveOccurred())
+				err = handler.SentPacket(&packet2)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.skippedPackets).To(HaveLen(2))
+				Expect(handler.skippedPackets).To(Equal([]protocol.PacketNumber{2, 3}))
+			})
 		})
 	})
 

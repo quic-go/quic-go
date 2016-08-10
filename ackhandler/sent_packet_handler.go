@@ -25,8 +25,10 @@ var errPacketNumberNotIncreasing = errors.New("Already sent a packet with a high
 type sentPacketHandler struct {
 	lastSentPacketNumber protocol.PacketNumber
 	lastSentPacketTime   time.Time
-	LargestInOrderAcked  protocol.PacketNumber
-	LargestAcked         protocol.PacketNumber
+	skippedPackets       []protocol.PacketNumber
+
+	LargestInOrderAcked protocol.PacketNumber
+	LargestAcked        protocol.PacketNumber
 
 	largestReceivedPacketWithAck protocol.PacketNumber
 
@@ -119,6 +121,10 @@ func (h *sentPacketHandler) queuePacketForRetransmission(packetElement *ackhandl
 func (h *sentPacketHandler) SentPacket(packet *ackhandlerlegacy.Packet) error {
 	if packet.PacketNumber <= h.lastSentPacketNumber {
 		return errPacketNumberNotIncreasing
+	}
+
+	for p := h.lastSentPacketNumber + 1; p < packet.PacketNumber; p++ {
+		h.skippedPackets = append(h.skippedPackets, p)
 	}
 
 	now := time.Now()
