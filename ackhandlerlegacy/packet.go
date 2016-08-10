@@ -10,6 +10,7 @@ import (
 )
 
 // A Packet is a packet
+// +gen linkedlist
 type Packet struct {
 	PacketNumber protocol.PacketNumber
 	Frames       []frames.Frame
@@ -18,7 +19,8 @@ type Packet struct {
 	Length       protocol.ByteCount
 
 	MissingReports uint8
-	Retransmitted  bool // has this Packet ever been retransmitted
+	// TODO: remove this when dropping support for QUIC 33
+	Retransmitted bool // has this Packet ever been retransmitted
 
 	SendTime time.Time
 }
