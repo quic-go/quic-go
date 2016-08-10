@@ -492,7 +492,7 @@ func (s *Session) sendPacket() error {
 				stopWaitingFrame = s.sentPacketHandler.GetStopWaitingFrame()
 			}
 		}
-		packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, s.sentPacketHandler.GetLargestAcked(), maySendOnlyAck)
+		packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, s.sentPacketHandler.GetLeastUnacked(), maySendOnlyAck)
 		if err != nil {
 			return err
 		}
@@ -535,7 +535,7 @@ func (s *Session) sendPacket() error {
 }
 
 func (s *Session) sendConnectionClose(quicErr *qerr.QuicError) error {
-	packet, err := s.packer.PackConnectionClose(&frames.ConnectionCloseFrame{ErrorCode: quicErr.ErrorCode, ReasonPhrase: quicErr.ErrorMessage}, s.sentPacketHandler.GetLargestAcked())
+	packet, err := s.packer.PackConnectionClose(&frames.ConnectionCloseFrame{ErrorCode: quicErr.ErrorCode, ReasonPhrase: quicErr.ErrorMessage}, s.sentPacketHandler.GetLeastUnacked())
 	if err != nil {
 		return err
 	}

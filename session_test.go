@@ -55,7 +55,7 @@ func (h *mockSentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacke
 	return nil
 }
 func (h *mockSentPacketHandler) BytesInFlight() protocol.ByteCount      { return 0 }
-func (h *mockSentPacketHandler) GetLargestAcked() protocol.PacketNumber { return 1 }
+func (h *mockSentPacketHandler) GetLeastUnacked() protocol.PacketNumber { return 1 }
 func (h *mockSentPacketHandler) GetStopWaitingFrame() *frames.StopWaitingFrame {
 	panic("not implemented")
 }

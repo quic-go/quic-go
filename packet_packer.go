@@ -40,15 +40,15 @@ func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.
 	}
 }
 
-func (p *packetPacker) PackConnectionClose(frame *frames.ConnectionCloseFrame, largestObserved protocol.PacketNumber) (*packedPacket, error) {
-	return p.packPacket(nil, []frames.Frame{frame}, largestObserved, true, false)
+func (p *packetPacker) PackConnectionClose(frame *frames.ConnectionCloseFrame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
+	return p.packPacket(nil, []frames.Frame{frame}, leastUnacked, true, false)
 }
 
-func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, largestObserved protocol.PacketNumber, maySendOnlyAck bool) (*packedPacket, error) {
-	return p.packPacket(stopWaitingFrame, controlFrames, largestObserved, false, maySendOnlyAck)
+func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, leastUnacked protocol.PacketNumber, maySendOnlyAck bool) (*packedPacket, error) {
+	return p.packPacket(stopWaitingFrame, controlFrames, leastUnacked, false, maySendOnlyAck)
 }
 
-func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, largestObserved protocol.PacketNumber, onlySendOneControlFrame, maySendOnlyAck bool) (*packedPacket, error) {
+func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, leastUnacked protocol.PacketNumber, onlySendOneControlFrame, maySendOnlyAck bool) (*packedPacket, error) {
 	if len(controlFrames) > 0 {
 		p.controlFrames = append(p.controlFrames, controlFrames...)
 	}
@@ -60,7 +60,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 	p.cryptoSetup.LockForSealing()
 	defer p.cryptoSetup.UnlockForSealing()
 
-	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(currentPacketNumber, largestObserved)
+	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(currentPacketNumber, leastUnacked)
 	responsePublicHeader := &PublicHeader{
 		ConnectionID:         p.connectionID,
 		PacketNumber:         currentPacketNumber,

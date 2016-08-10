@@ -273,8 +273,8 @@ func (h *sentPacketHandler) BytesInFlight() protocol.ByteCount {
 	return h.bytesInFlight
 }
 
-func (h *sentPacketHandler) GetLargestAcked() protocol.PacketNumber {
-	return h.LargestAcked
+func (h *sentPacketHandler) GetLeastUnacked() protocol.PacketNumber {
+	return h.LargestInOrderAcked + 1
 }
 
 func (h *sentPacketHandler) GetStopWaitingFrame() *frames.StopWaitingFrame {

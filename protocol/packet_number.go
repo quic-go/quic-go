@@ -28,8 +28,8 @@ func delta(a, b PacketNumber) PacketNumber {
 }
 
 // GetPacketNumberLengthForPublicHeader gets the length of the packet number for the public header
-func GetPacketNumberLengthForPublicHeader(packetNumber PacketNumber, highestAckedPacketNumber PacketNumber) PacketNumberLen {
-	diff := uint64(packetNumber - highestAckedPacketNumber)
+func GetPacketNumberLengthForPublicHeader(packetNumber PacketNumber, leastUnacked PacketNumber) PacketNumberLen {
+	diff := uint64(packetNumber - leastUnacked)
 	if diff < (2 << (uint8(PacketNumberLen1)*8 - 2)) {
 		return PacketNumberLen1
 	}
