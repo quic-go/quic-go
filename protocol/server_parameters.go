@@ -44,6 +44,9 @@ const MaxSessionUnprocessedPackets = 128
 // RetransmissionThreshold + 1 is the number of times a packet has to be NACKed so that it gets retransmitted
 const RetransmissionThreshold uint8 = 3
 
+// SkipPacketAveragePeriodLength is the average period length in which one packet number is skipped to prevent an Optimistic ACK attack
+const SkipPacketAveragePeriodLength PacketNumber = 500
+
 // STKExpiryTimeSec is the valid time of a source address token in seconds
 const STKExpiryTimeSec = 24 * 60 * 60
 

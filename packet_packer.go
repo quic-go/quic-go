@@ -19,10 +19,12 @@ type packedPacket struct {
 }
 
 type packetPacker struct {
-	connectionID     protocol.ConnectionID
-	version          protocol.VersionNumber
-	cryptoSetup      *handshake.CryptoSetup
-	lastPacketNumber protocol.PacketNumber
+	connectionID protocol.ConnectionID
+	version      protocol.VersionNumber
+	cryptoSetup  *handshake.CryptoSetup
+
+	lastPacketNumber      protocol.PacketNumber // TODO: remove when dropping support for QUIC 33
+	packetNumberGenerator *packetNumberGenerator
 
 	connectionParametersManager *handshake.ConnectionParametersManager
 
@@ -31,13 +33,19 @@ type packetPacker struct {
 }
 
 func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.CryptoSetup, connectionParametersHandler *handshake.ConnectionParametersManager, streamFramer *streamFramer, version protocol.VersionNumber) *packetPacker {
-	return &packetPacker{
+	p := &packetPacker{
 		cryptoSetup:                 cryptoSetup,
 		connectionID:                connectionID,
 		connectionParametersManager: connectionParametersHandler,
 		version:                     version,
 		streamFramer:                streamFramer,
 	}
+
+	if version >= protocol.Version34 {
+		p.packetNumberGenerator = newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength)
+	}
+
+	return p
 }
 
 func (p *packetPacker) PackConnectionClose(frame *frames.ConnectionCloseFrame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
@@ -53,7 +61,12 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		p.controlFrames = append(p.controlFrames, controlFrames...)
 	}
 
-	currentPacketNumber := p.lastPacketNumber + 1
+	var currentPacketNumber protocol.PacketNumber
+	if p.version <= protocol.Version33 {
+		currentPacketNumber = p.lastPacketNumber + 1
+	} else {
+		currentPacketNumber = p.packetNumberGenerator.GetNextPacketNumber()
+	}
 
 	// cryptoSetup needs to be locked here, so that the AEADs are not changed between
 	// calling DiversificationNonce() and Seal().
