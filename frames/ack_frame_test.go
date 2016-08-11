@@ -843,6 +843,43 @@ var _ = Describe("AckFrame", func() {
 		})
 	})
 
+	Context("check if ACK frame acks a certain packet", func() {
+		It("works with an ACK without any ranges", func() {
+			f := AckFrame{
+				LowestAcked:  5,
+				LargestAcked: 10,
+			}
+			Expect(f.AcksPacket(1)).To(BeFalse())
+			Expect(f.AcksPacket(4)).To(BeFalse())
+			Expect(f.AcksPacket(5)).To(BeTrue())
+			Expect(f.AcksPacket(8)).To(BeTrue())
+			Expect(f.AcksPacket(10)).To(BeTrue())
+			Expect(f.AcksPacket(11)).To(BeFalse())
+			Expect(f.AcksPacket(20)).To(BeFalse())
+		})
+
+		It("works with an ACK with multiple ACK ranges", func() {
+			f := AckFrame{
+				LowestAcked:  5,
+				LargestAcked: 20,
+				AckRanges: []AckRange{
+					{FirstPacketNumber: 15, LastPacketNumber: 20},
+					{FirstPacketNumber: 5, LastPacketNumber: 8},
+				},
+			}
+			Expect(f.AcksPacket(4)).To(BeFalse())
+			Expect(f.AcksPacket(5)).To(BeTrue())
+			Expect(f.AcksPacket(7)).To(BeTrue())
+			Expect(f.AcksPacket(8)).To(BeTrue())
+			Expect(f.AcksPacket(9)).To(BeFalse())
+			Expect(f.AcksPacket(14)).To(BeFalse())
+			Expect(f.AcksPacket(15)).To(BeTrue())
+			Expect(f.AcksPacket(18)).To(BeTrue())
+			Expect(f.AcksPacket(20)).To(BeTrue())
+			Expect(f.AcksPacket(21)).To(BeFalse())
+		})
+	})
+
 	Context("Legacy AckFrame wrapping", func() {
 		It("parses a ACK frame", func() {
 			b := bytes.NewReader([]byte{0x40, 0xA4, 0x03, 0x23, 0x45, 0x01, 0x02, 0xFF, 0xEE, 0xDD, 0xCC})
