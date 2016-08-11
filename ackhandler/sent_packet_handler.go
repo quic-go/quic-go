@@ -248,6 +248,8 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 		}
 	}
 
+	h.garbageCollectSkippedPackets()
+
 	h.stopWaitingManager.ReceivedAck(ackFrame)
 
 	h.congestion.OnCongestionEvent(
@@ -344,4 +346,14 @@ func (h *sentPacketHandler) TimeOfFirstRTO() time.Time {
 		return time.Time{}
 	}
 	return h.lastSentPacketTime.Add(h.getRTO())
+}
+
+func (h *sentPacketHandler) garbageCollectSkippedPackets() {
+	deleteIndex := 0
+	for i, p := range h.skippedPackets {
+		if p <= h.LargestInOrderAcked {
+			deleteIndex = i + 1
+		}
+	}
+	h.skippedPackets = h.skippedPackets[deleteIndex:]
 }

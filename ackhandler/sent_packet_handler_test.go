@@ -186,6 +186,29 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(handler.skippedPackets[0]).To(Equal(protocol.PacketNumber(10)))
 				Expect(handler.skippedPackets[protocol.MaxTrackedSkippedPackets-1]).To(Equal(protocol.PacketNumber(10 + 2*(protocol.MaxTrackedSkippedPackets-1))))
 			})
+
+			Context("garbage collection", func() {
+				It("keeps all packet numbers above the LargestInOrderAcked", func() {
+					handler.skippedPackets = []protocol.PacketNumber{2, 5, 8, 10}
+					handler.LargestInOrderAcked = 1
+					handler.garbageCollectSkippedPackets()
+					Expect(handler.skippedPackets).To(Equal([]protocol.PacketNumber{2, 5, 8, 10}))
+				})
+
+				It("doesn't keep packet numbers below the LargestInOrderAcked", func() {
+					handler.skippedPackets = []protocol.PacketNumber{1, 5, 8, 10}
+					handler.LargestInOrderAcked = 5
+					handler.garbageCollectSkippedPackets()
+					Expect(handler.skippedPackets).To(Equal([]protocol.PacketNumber{8, 10}))
+				})
+
+				It("deletes all packet numbers if LargestInOrderAcked is sufficiently high", func() {
+					handler.skippedPackets = []protocol.PacketNumber{1, 5, 10}
+					handler.LargestInOrderAcked = 15
+					handler.garbageCollectSkippedPackets()
+					Expect(handler.skippedPackets).To(BeEmpty())
+				})
+			})
 		})
 	})
 
