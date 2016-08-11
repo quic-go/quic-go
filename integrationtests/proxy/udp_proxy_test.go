@@ -194,12 +194,9 @@ var _ = Describe("UDP Proxy", func() {
 				for i := 1; i <= 6; i++ {
 					_, err := clientConn.Write(makePacket(protocol.PacketNumber(i), []byte("foobar"+strconv.Itoa(i))))
 					Expect(err).ToNot(HaveOccurred())
-					time.Sleep(time.Millisecond)
 				}
 				Eventually(func() []packetData { return serverReceivedPackets }).Should(HaveLen(3))
-				Expect(string(serverReceivedPackets[0])).To(ContainSubstring("foobar1"))
-				Expect(string(serverReceivedPackets[1])).To(ContainSubstring("foobar3"))
-				Expect(string(serverReceivedPackets[2])).To(ContainSubstring("foobar5"))
+				Consistently(func() []packetData { return serverReceivedPackets }).Should(HaveLen(3))
 			})
 
 			It("drops outgoing packets", func() {
@@ -214,7 +211,6 @@ var _ = Describe("UDP Proxy", func() {
 				for i := 1; i <= 6; i++ {
 					_, err := clientConn.Write(makePacket(protocol.PacketNumber(i), []byte("foobar"+strconv.Itoa(i))))
 					Expect(err).ToNot(HaveOccurred())
-					time.Sleep(time.Millisecond)
 				}
 
 				var clientReceivedPackets []packetData
@@ -235,6 +231,7 @@ var _ = Describe("UDP Proxy", func() {
 				}()
 
 				Eventually(func() []packetData { return clientReceivedPackets }).Should(HaveLen(3))
+				Consistently(func() []packetData { return clientReceivedPackets }).Should(HaveLen(3))
 			})
 		})
 	})
