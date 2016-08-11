@@ -1,15 +1,14 @@
 coverage:
   round: nearest
   ignore:
+    - /ackhandlerlegacy/packet_linkedlist.go
     - /utils/byteinterval_linkedlist.go
     - /utils/packetinterval_linkedlist.go
-    - /ackhandlerlegacy/packet_linkedlist.go
-
-notify:
-  status:
-    project:
-      default:
-        target: 0
-    patch:
-      default:
-        target: 0
+  notify:
+    status:
+      project:
+        default:
+          threshold: 0.5
+      patch:
+        default:
+          enabled: false
