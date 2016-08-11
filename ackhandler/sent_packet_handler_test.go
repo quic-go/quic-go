@@ -207,6 +207,7 @@ var _ = Describe("SentPacketHandler", func() {
 				{PacketNumber: 8, Frames: []frames.Frame{&streamFrame}, Length: 1},
 				{PacketNumber: 9, Frames: []frames.Frame{&streamFrame}, Length: 1},
 				{PacketNumber: 10, Frames: []frames.Frame{&streamFrame}, Length: 1},
+				{PacketNumber: 12, Frames: []frames.Frame{&streamFrame}, Length: 1},
 			}
 			for _, packet := range packets {
 				handler.SentPacket(packet)
@@ -264,6 +265,30 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(handler.LargestAcked).To(Equal(protocol.PacketNumber(3)))
 				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(len(packets) - 3)))
 			})
+
+			It("rejects ACKs for skipped packets", func() {
+				ack := frames.AckFrame{
+					LargestAcked: 12,
+					LowestAcked:  5,
+				}
+				err := handler.ReceivedAck(&ack, 1337)
+				Expect(err).To(MatchError(ErrAckForSkippedPacket))
+				Expect(handler.LargestAcked).To(BeZero())
+			})
+
+			It("accepts an ACK that correctly nacks a skipped packet", func() {
+				ack := frames.AckFrame{
+					LargestAcked: 12,
+					LowestAcked:  5,
+					AckRanges: []frames.AckRange{
+						{FirstPacketNumber: 12, LastPacketNumber: 12},
+						{FirstPacketNumber: 5, LastPacketNumber: 10},
+					},
+				}
+				err := handler.ReceivedAck(&ack, 1337)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.LargestAcked).ToNot(BeZero())
+			})
 		})
 
 		Context("acks and nacks the right packets", func() {
@@ -281,7 +306,7 @@ var _ = Describe("SentPacketHandler", func() {
 					Expect(el.Value.MissingReports).To(BeZero())
 					el = el.Next()
 				}
-				Expect(el).To(BeNil())
+				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(12)))
 			})
 
 			It("ACKs all packets for an ACK frame with no missing packets", func() {
@@ -300,7 +325,7 @@ var _ = Describe("SentPacketHandler", func() {
 				el = el.Next()
 				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(10)))
 				Expect(el.Value.MissingReports).To(BeZero())
-				Expect(el.Next()).To(BeNil())
+				Expect(el.Next().Value.PacketNumber).To(Equal(protocol.PacketNumber(12)))
 			})
 
 			It("handles an ACK frame with one missing packet range", func() {
@@ -327,7 +352,7 @@ var _ = Describe("SentPacketHandler", func() {
 				el = el.Next()
 				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(10)))
 				Expect(el.Value.MissingReports).To(BeZero())
-				Expect(el.Next()).To(BeNil())
+				Expect(el.Next().Value.PacketNumber).To(Equal(protocol.PacketNumber(12)))
 			})
 
 			It("NACKs packets below the LowestAcked", func() {

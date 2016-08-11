@@ -17,7 +17,9 @@ var (
 	ErrDuplicateOrOutOfOrderAck = errors.New("SentPacketHandler: Duplicate or out-of-order ACK")
 	// ErrTooManyTrackedSentPackets occurs when the sentPacketHandler has to keep track of too many packets
 	ErrTooManyTrackedSentPackets = errors.New("Too many outstanding non-acked and non-retransmitted packets")
-	errAckForUnsentPacket        = qerr.Error(qerr.InvalidAckData, "Received ACK for an unsent package")
+	// ErrAckForSkippedPacket occurs when the client sent an ACK for a packet number that we intentionally skipped
+	ErrAckForSkippedPacket = qerr.Error(qerr.InvalidAckData, "Received an ACK for a skipped packet number")
+	errAckForUnsentPacket  = qerr.Error(qerr.InvalidAckData, "Received ACK for an unsent package")
 )
 
 var errPacketNumberNotIncreasing = errors.New("Already sent a packet with a higher packet number.")
@@ -164,6 +166,13 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 	// ignore repeated ACK (ACKs that don't have a higher LargestAcked than the last ACK)
 	if ackFrame.LargestAcked <= h.LargestInOrderAcked {
 		return nil
+	}
+
+	// check if it acks any packets that were skipped
+	for _, p := range h.skippedPackets {
+		if ackFrame.AcksPacket(p) {
+			return ErrAckForSkippedPacket
+		}
 	}
 
 	h.LargestAcked = ackFrame.LargestAcked
