@@ -175,6 +175,17 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(handler.skippedPackets).To(HaveLen(2))
 				Expect(handler.skippedPackets).To(Equal([]protocol.PacketNumber{2, 3}))
 			})
+
+			It("limits the lengths of the skipped packet slice", func() {
+				for i := 0; i < protocol.MaxTrackedSkippedPackets+5; i++ {
+					packet := ackhandlerlegacy.Packet{PacketNumber: protocol.PacketNumber(2*i + 1), Frames: []frames.Frame{&streamFrame}, Length: 1}
+					err := handler.SentPacket(&packet)
+					Expect(err).ToNot(HaveOccurred())
+				}
+				Expect(handler.skippedPackets).To(HaveLen(protocol.MaxUndecryptablePackets))
+				Expect(handler.skippedPackets[0]).To(Equal(protocol.PacketNumber(10)))
+				Expect(handler.skippedPackets[protocol.MaxTrackedSkippedPackets-1]).To(Equal(protocol.PacketNumber(10 + 2*(protocol.MaxTrackedSkippedPackets-1))))
+			})
 		})
 	})
 

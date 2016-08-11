@@ -127,6 +127,10 @@ func (h *sentPacketHandler) SentPacket(packet *ackhandlerlegacy.Packet) error {
 
 	for p := h.lastSentPacketNumber + 1; p < packet.PacketNumber; p++ {
 		h.skippedPackets = append(h.skippedPackets, p)
+
+		if len(h.skippedPackets) > protocol.MaxTrackedSkippedPackets {
+			h.skippedPackets = h.skippedPackets[1:]
+		}
 	}
 
 	now := time.Now()
