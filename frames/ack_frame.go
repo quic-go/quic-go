@@ -469,3 +469,22 @@ func (f *AckFrame) getMissingSequenceNumberDeltaLen() protocol.PacketNumberLen {
 
 	return protocol.PacketNumberLen6
 }
+
+// AcksPacket determines if this ACK frame acks a certain packet number
+func (f *AckFrame) AcksPacket(p protocol.PacketNumber) bool {
+	if p < f.LowestAcked || p > f.LargestAcked { // this is just a performance optimization
+		return false
+	}
+
+	if f.HasMissingRanges() {
+		// TODO: this could be implemented as a binary search
+		for _, ackRange := range f.AckRanges {
+			if p >= ackRange.FirstPacketNumber && p <= ackRange.LastPacketNumber {
+				return true
+			}
+		}
+		return false
+	}
+	// if packet doesn't have missing ranges
+	return (p >= f.LowestAcked && p <= f.LargestAcked)
+}

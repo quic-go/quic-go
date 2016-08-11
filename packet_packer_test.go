@@ -28,6 +28,7 @@ var _ = Describe("Packet packer", func() {
 		packer = &packetPacker{
 			cryptoSetup:                 &handshake.CryptoSetup{},
 			connectionParametersManager: handshake.NewConnectionParamatersManager(),
+			packetNumberGenerator:       newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
 			streamFramer:                streamFramer,
 		}
 		publicHeaderLen = 1 + 8 + 1 // 1 flag byte, 8 connection ID, 1 packet number
@@ -112,6 +113,16 @@ var _ = Describe("Packet packer", func() {
 		Expect(p.raw).NotTo(BeEmpty())
 	})
 
+	It("increases the packet number", func() {
+		p1, err := packer.PackPacket(nil, []frames.Frame{&frames.ConnectionCloseFrame{}}, 0, true)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(p1).ToNot(BeNil())
+		p2, err := packer.PackPacket(nil, []frames.Frame{&frames.ConnectionCloseFrame{}}, 0, true)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(p2).ToNot(BeNil())
+		Expect(p2.number).To(BeNumerically(">", p1.number))
+	})
+
 	It("packs a StopWaitingFrame first", func() {
 		swf := &frames.StopWaitingFrame{LeastUnacked: 10}
 		p, err := packer.PackPacket(swf, []frames.Frame{&frames.ConnectionCloseFrame{}}, 0, true)
@@ -122,6 +133,7 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	It("sets the LeastUnackedDelta length of a StopWaitingFrame", func() {
+		packer.version = protocol.Version33             // TODO: find a different way to test this when dropping support for QUIC 33
 		packetNumber := protocol.PacketNumber(0xDECAFB) // will result in a 4 byte packet number
 		packer.lastPacketNumber = packetNumber - 1
 		swf := &frames.StopWaitingFrame{LeastUnacked: packetNumber - 0x100}
