@@ -179,7 +179,8 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 	return nil
 }
 
-// Close the server immediately, aborting requests and sending CONNECTION_CLOSE frames to connected clients
+// Close the server immediately, aborting requests and sending CONNECTION_CLOSE frames to connected clients.
+// Close in combination with ListenAndServe() (instead of Serve()) may race if it is called before a UDP socket is established.
 func (s *Server) Close() error {
 	s.serverMutex.Lock()
 	defer s.serverMutex.Unlock()
@@ -192,6 +193,7 @@ func (s *Server) Close() error {
 }
 
 // CloseGracefully shuts down the server gracefully. The server sends a GOAWAY frame first, then waits for either timeout to trigger, or for all running requests to complete.
+// CloseGracefully in combination with ListenAndServe() (instead of Serve()) may race if it is called before a UDP socket is established.
 func (s *Server) CloseGracefully(timeout time.Duration) error {
 	// TODO: implement
 	return nil

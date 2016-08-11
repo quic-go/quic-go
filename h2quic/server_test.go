@@ -232,26 +232,6 @@ var _ = Describe("H2 server", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("works", func() {
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				err := s.ListenAndServe()
-				Expect(err).NotTo(HaveOccurred())
-				done <- struct{}{}
-			}()
-			Eventually(func() bool {
-				err := s.Close()
-				Expect(err).NotTo(HaveOccurred())
-				select {
-				case <-done:
-					return true
-				default:
-					return false
-				}
-			}).Should(BeTrue())
-		}, 0.5)
-
 		It("may only be called once", func() {
 			cErr := make(chan error)
 			for i := 0; i < 2; i++ {
@@ -280,26 +260,6 @@ var _ = Describe("H2 server", func() {
 			err := s.Close()
 			Expect(err).NotTo(HaveOccurred())
 		})
-
-		It("works", func() {
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				err := s.ListenAndServeTLS(certPath+"fullchain.pem", certPath+"privkey.pem")
-				Expect(err).NotTo(HaveOccurred())
-				done <- struct{}{}
-			}()
-			Eventually(func() bool {
-				err := s.Close()
-				Expect(err).NotTo(HaveOccurred())
-				select {
-				case <-done:
-					return true
-				default:
-					return false
-				}
-			}).Should(BeTrue())
-		}, 0.5)
 
 		It("may only be called once", func() {
 			cErr := make(chan error)
