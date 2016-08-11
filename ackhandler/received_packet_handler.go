@@ -12,6 +12,8 @@ import (
 var (
 	// ErrDuplicatePacket occurres when a duplicate packet is received
 	ErrDuplicatePacket = errors.New("ReceivedPacketHandler: Duplicate Packet")
+	// ErrMapAccess occurs when a NACK contains invalid NACK ranges
+	ErrMapAccess = qerr.Error(qerr.InvalidAckData, "Packet does not exist in PacketHistory")
 	// ErrPacketSmallerThanLastStopWaiting occurs when a packet arrives with a packet number smaller than the largest LeastUnacked of a StopWaitingFrame. If this error occurs, the packet should be ignored
 	ErrPacketSmallerThanLastStopWaiting = errors.New("ReceivedPacketHandler: Packet number smaller than highest StopWaiting")
 )

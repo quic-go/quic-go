@@ -15,10 +15,6 @@ import (
 var (
 	// ErrDuplicateOrOutOfOrderAck occurs when a duplicate or an out-of-order ACK is received
 	ErrDuplicateOrOutOfOrderAck = errors.New("SentPacketHandler: Duplicate or out-of-order ACK")
-	// ErrEntropy occurs when an ACK with incorrect entropy is received
-	ErrEntropy = qerr.Error(qerr.InvalidAckData, "wrong entropy")
-	// ErrMapAccess occurs when a NACK contains invalid NACK ranges
-	ErrMapAccess = qerr.Error(qerr.InvalidAckData, "Packet does not exist in PacketHistory")
 	// ErrTooManyTrackedSentPackets occurs when the sentPacketHandler has to keep track of too many packets
 	ErrTooManyTrackedSentPackets = errors.New("Too many outstanding non-acked and non-retransmitted packets")
 	errAckForUnsentPacket        = qerr.Error(qerr.InvalidAckData, "Received ACK for an unsent package")
