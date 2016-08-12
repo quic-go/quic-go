@@ -14,7 +14,7 @@ type SentPacketHandler interface {
 
 	GetStopWaitingFrame() *frames.StopWaitingFrame
 
-	ProbablyHasPacketForRetransmission() bool
+	MaybeQueueRTOs()
 	DequeuePacketForRetransmission() (packet *Packet)
 
 	BytesInFlight() protocol.ByteCount

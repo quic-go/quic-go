@@ -440,6 +440,9 @@ func (s *Session) sendPacket() error {
 			return err
 		}
 
+		// Do this before checking the congestion, since we might de-congestionize here :)
+		s.sentPacketHandler.MaybeQueueRTOs()
+
 		if !s.sentPacketHandler.CongestionAllowsSending() {
 			return nil
 		}

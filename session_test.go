@@ -47,7 +47,9 @@ func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data
 }
 
 type mockSentPacketHandler struct {
-	retransmissionQueue []*ackhandlerlegacy.Packet
+	retransmissionQueue  []*ackhandlerlegacy.Packet
+	congestionLimited    bool
+	maybeQueueRTOsCalled bool
 }
 
 func (h *mockSentPacketHandler) SentPacket(packet *ackhandlerlegacy.Packet) error { return nil }
@@ -59,12 +61,12 @@ func (h *mockSentPacketHandler) GetLeastUnacked() protocol.PacketNumber { return
 func (h *mockSentPacketHandler) GetStopWaitingFrame() *frames.StopWaitingFrame {
 	panic("not implemented")
 }
-func (h *mockSentPacketHandler) CongestionAllowsSending() bool { return true }
+func (h *mockSentPacketHandler) CongestionAllowsSending() bool { return !h.congestionLimited }
 func (h *mockSentPacketHandler) CheckForError() error          { return nil }
 func (h *mockSentPacketHandler) TimeOfFirstRTO() time.Time     { panic("not implemented") }
 
-func (h *mockSentPacketHandler) ProbablyHasPacketForRetransmission() bool {
-	return len(h.retransmissionQueue) > 0
+func (h *mockSentPacketHandler) MaybeQueueRTOs() {
+	h.maybeQueueRTOsCalled = true
 }
 
 func (h *mockSentPacketHandler) DequeuePacketForRetransmission() *ackhandlerlegacy.Packet {
@@ -569,6 +571,15 @@ var _ = Describe("Session", func() {
 					Expect(conn.written).To(HaveLen(1))
 					Expect(conn.written[0]).To(ContainSubstring("foobar"))
 					Expect(conn.written[0]).To(ContainSubstring("loremipsum"))
+				})
+
+				It("calls MaybeQueueRTOs even if congestion blocked, so that bytesInFlight is updated", func() {
+					sph := newMockSentPacketHandler()
+					sph.(*mockSentPacketHandler).congestionLimited = true
+					session.sentPacketHandler = sph
+					err := session.sendPacket()
+					Expect(err).NotTo(HaveOccurred())
+					Expect(sph.(*mockSentPacketHandler).maybeQueueRTOsCalled).To(BeTrue())
 				})
 			})
 

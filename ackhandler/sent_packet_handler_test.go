@@ -568,7 +568,7 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 			}
 			Expect(getPacketElement(2)).ToNot(BeNil())
-			Expect(handler.ProbablyHasPacketForRetransmission()).To(BeFalse())
+			handler.MaybeQueueRTOs()
 			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
 		})
 
@@ -578,7 +578,7 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 			}
 			Expect(getPacketElement(2)).To(BeNil())
-			Expect(handler.ProbablyHasPacketForRetransmission()).To(BeTrue())
+			handler.MaybeQueueRTOs()
 			Expect(handler.retransmissionQueue).To(HaveLen(1))
 			Expect(handler.retransmissionQueue[0].PacketNumber).To(Equal(protocol.PacketNumber(2)))
 		})
@@ -819,7 +819,7 @@ var _ = Describe("SentPacketHandler", func() {
 			err := handler.SentPacket(&ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
 			Expect(err).NotTo(HaveOccurred())
 			handler.lastSentPacketTime = time.Now().Add(-time.Second)
-			handler.maybeQueuePacketsRTO()
+			handler.MaybeQueueRTOs()
 			Expect(cong.nCalls).To(Equal(3))
 			// rttUpdated, bytesInFlight, ackedPackets, lostPackets
 			Expect(cong.argsOnCongestionEvent[0]).To(BeFalse())
@@ -866,7 +866,7 @@ var _ = Describe("SentPacketHandler", func() {
 			It("does nothing if not required", func() {
 				err := handler.SentPacket(&ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
 				Expect(err).NotTo(HaveOccurred())
-				handler.maybeQueuePacketsRTO()
+				handler.MaybeQueueRTOs()
 				Expect(handler.retransmissionQueue).To(BeEmpty())
 			})
 
@@ -875,19 +875,11 @@ var _ = Describe("SentPacketHandler", func() {
 				err := handler.SentPacket(p)
 				Expect(err).NotTo(HaveOccurred())
 				handler.lastSentPacketTime = time.Now().Add(-time.Second)
-				handler.maybeQueuePacketsRTO()
+				handler.MaybeQueueRTOs()
 				Expect(handler.retransmissionQueue).To(HaveLen(1))
 				Expect(handler.retransmissionQueue[0].PacketNumber).To(Equal(p.PacketNumber))
 				Expect(time.Now().Sub(handler.lastSentPacketTime)).To(BeNumerically("<", time.Second/2))
 			})
-		})
-
-		It("works with HasPacketForRetransmission", func() {
-			p := &ackhandlerlegacy.Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1}
-			err := handler.SentPacket(p)
-			Expect(err).NotTo(HaveOccurred())
-			handler.lastSentPacketTime = time.Now().Add(-time.Second)
-			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
 		})
 
 		It("works with DequeuePacketForRetransmission", func() {
@@ -895,6 +887,7 @@ var _ = Describe("SentPacketHandler", func() {
 			err := handler.SentPacket(p)
 			Expect(err).NotTo(HaveOccurred())
 			handler.lastSentPacketTime = time.Now().Add(-time.Second)
+			handler.MaybeQueueRTOs()
 			Expect(handler.DequeuePacketForRetransmission().PacketNumber).To(Equal(p.PacketNumber))
 		})
 	})

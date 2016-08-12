@@ -262,16 +262,8 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 	return nil
 }
 
-// ProbablyHasPacketForRetransmission returns if there is a packet queued for retransmission
-// There is one case where it gets the answer wrong:
-// if a packet has already been queued for retransmission, but a belated ACK is received for this packet, this function will return true, although the packet will not be returend for retransmission by DequeuePacketForRetransmission()
-func (h *sentPacketHandler) ProbablyHasPacketForRetransmission() bool {
-	h.maybeQueuePacketsRTO()
-	return len(h.retransmissionQueue) > 0
-}
-
 func (h *sentPacketHandler) DequeuePacketForRetransmission() *ackhandlerlegacy.Packet {
-	if !h.ProbablyHasPacketForRetransmission() {
+	if len(h.retransmissionQueue) == 0 {
 		return nil
 	}
 
@@ -310,7 +302,7 @@ func (h *sentPacketHandler) CheckForError() error {
 	return nil
 }
 
-func (h *sentPacketHandler) maybeQueuePacketsRTO() {
+func (h *sentPacketHandler) MaybeQueueRTOs() {
 	if time.Now().Before(h.TimeOfFirstRTO()) {
 		return
 	}
