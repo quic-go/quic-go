@@ -729,24 +729,33 @@ var _ = Describe("Session", func() {
 					err := session.sentPacketHandler.SentPacket(&ackhandlerlegacy.Packet{PacketNumber: p, Length: 1})
 					Expect(err).NotTo(HaveOccurred())
 					time.Sleep(time.Microsecond)
-					ack := frames.AckFrameLegacy{LargestObserved: p}
-					err = session.sentPacketHandler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, p)
+					ack := &frames.AckFrame{}
+					if version == protocol.Version33 {
+						ack.AckFrameLegacy = &frames.AckFrameLegacy{LargestObserved: p}
+					} else {
+						ack.LargestAcked = p
+					}
+					err = session.sentPacketHandler.ReceivedAck(ack, p)
 					Expect(err).NotTo(HaveOccurred())
 				}
+				if version == protocol.Version33 {
+					session.packer.lastPacketNumber = n
+				} else {
+					session.packer.packetNumberGenerator.last = n
+				}
 				// Now, we send a single packet, and expect that it was retransmitted later
-				go session.run()
-				Expect(conn.written).To(BeEmpty())
 				err := session.sentPacketHandler.SentPacket(&ackhandlerlegacy.Packet{
 					PacketNumber: n,
 					Length:       1,
 					Frames: []frames.Frame{&frames.StreamFrame{
-						Data: bytes.Repeat([]byte{'a'}, 1000),
+						Data: []byte("foobar"),
 					}},
 				})
-				session.packer.lastPacketNumber = n
 				Expect(err).NotTo(HaveOccurred())
+				go session.run()
 				session.scheduleSending()
-				Eventually(func() bool { return len(conn.written) > 0 }).Should(BeTrue())
+				Eventually(func() [][]byte { return conn.written }).ShouldNot(BeEmpty())
+				Expect(conn.written[0]).To(ContainSubstring("foobar"))
 			})
 
 			Context("counting streams", func() {
