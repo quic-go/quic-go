@@ -591,18 +591,17 @@ var _ = Describe("Session", func() {
 						Expect(err).NotTo(HaveOccurred())
 						s2, err := session.GetOrOpenStream(7)
 						Expect(err).NotTo(HaveOccurred())
-						go func() {
-							time.Sleep(time.Millisecond)
-							session.run()
-						}()
-						go func() {
-							_, err2 := s1.Write([]byte("foobar1"))
-							Expect(err2).NotTo(HaveOccurred())
-						}()
-						_, err = s2.Write([]byte("foobar2"))
-						Expect(err).NotTo(HaveOccurred())
-						time.Sleep(10 * time.Millisecond)
-						Expect(conn.written).To(HaveLen(1))
+
+						// Put data directly into the streams
+						s1.(*stream).dataForWriting = []byte("foobar1")
+						s2.(*stream).dataForWriting = []byte("foobar2")
+
+						session.scheduleSending()
+						go session.run()
+
+						Eventually(func() [][]byte { return conn.written }).Should(HaveLen(1))
+						Expect(conn.written[0]).To(ContainSubstring("foobar1"))
+						Expect(conn.written[0]).To(ContainSubstring("foobar2"))
 					})
 
 					It("sends out two big frames in two packets", func() {
