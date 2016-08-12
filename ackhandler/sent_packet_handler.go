@@ -89,6 +89,7 @@ func (h *sentPacketHandler) nackPacket(packetElement *ackhandlerlegacy.PacketEle
 	packet.MissingReports++
 
 	if packet.MissingReports > protocol.RetransmissionThreshold {
+		utils.Debugf("\tQueueing packet 0x%x for retransmission (fast)", packet.PacketNumber)
 		h.queuePacketForRetransmission(packetElement)
 		return packet, nil
 	}
@@ -98,7 +99,6 @@ func (h *sentPacketHandler) nackPacket(packetElement *ackhandlerlegacy.PacketEle
 // does NOT set packet.Retransmitted. This variable is not needed anymore
 func (h *sentPacketHandler) queuePacketForRetransmission(packetElement *ackhandlerlegacy.PacketElement) {
 	packet := &packetElement.Value
-	utils.Debugf("\tQueueing packet 0x%x for retransmission", packet.PacketNumber)
 	h.bytesInFlight -= packet.Length
 	h.retransmissionQueue = append(h.retransmissionQueue, packet)
 
@@ -327,7 +327,7 @@ func (h *sentPacketHandler) maybeQueuePacketsRTO() {
 		}}
 		h.congestion.OnCongestionEvent(false, h.BytesInFlight(), nil, packetsLost)
 		h.congestion.OnRetransmissionTimeout(true)
-		// utils.Debugf("\tqueueing RTO retransmission for packet 0x%x", packet.PacketNumber)
+		utils.Debugf("\tQueueing packet 0x%x for retransmission (RTO)", packet.PacketNumber)
 		h.queuePacketForRetransmission(el)
 		return
 	}

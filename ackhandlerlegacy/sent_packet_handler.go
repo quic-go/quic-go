@@ -98,6 +98,7 @@ func (h *sentPacketHandler) nackPacket(packetNumber protocol.PacketNumber) (*Pac
 	packet.MissingReports++
 
 	if packet.MissingReports > protocol.RetransmissionThreshold {
+		utils.Debugf("\tQueueing packet 0x%x for retransmission (fast)", packet.PacketNumber)
 		h.queuePacketForRetransmission(packet)
 		return packet, nil
 	}
@@ -341,6 +342,7 @@ func (h *sentPacketHandler) maybeQueuePacketsRTO() {
 			}}
 			h.congestion.OnCongestionEvent(false, h.BytesInFlight(), nil, packetsLost)
 			h.congestion.OnRetransmissionTimeout(true)
+			utils.Debugf("\tQueueing packet 0x%x for retransmission (RTO)", packet.PacketNumber)
 			h.queuePacketForRetransmission(packet)
 			return
 		}
