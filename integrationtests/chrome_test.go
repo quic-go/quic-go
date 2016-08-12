@@ -119,10 +119,11 @@ var _ = Describe("Chrome tests", func() {
 			}, 10)
 
 			It("downloads a small file", func() {
+				dataMan.GenerateData(dataLen)
 				err := wd.Get("https://quic.clemente.io/data")
 				Expect(err).NotTo(HaveOccurred())
 				Eventually(func() int { return getDownloadSize("data") }, 30, 0.1).Should(Equal(dataLen))
-				Expect(getDownloadMD5("data")).To(Equal(dataMD5))
+				Expect(getDownloadMD5("data")).To(Equal(dataMan.GetMD5()))
 			}, 60)
 		})
 	}

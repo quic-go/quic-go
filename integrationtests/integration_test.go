@@ -20,6 +20,10 @@ import (
 )
 
 var _ = Describe("Integration tests", func() {
+	BeforeEach(func() {
+		dataMan.GenerateData(dataLen)
+	})
+
 	clientPath := fmt.Sprintf(
 		"%s/src/github.com/lucas-clemente/quic-clients/client-%s-debug",
 		os.Getenv("GOPATH"),
@@ -61,7 +65,7 @@ var _ = Describe("Integration tests", func() {
 				Expect(session.Out).To(Say("Response:\nheaders: HTTP/1.1 200\nstatus: 200\n\nbody: foo\n"))
 			})
 
-			It("gets a large file", func() {
+			It("gets a file", func() {
 				command := exec.Command(
 					clientPath,
 					"--quic-version="+strconv.Itoa(int(version)),
@@ -73,10 +77,10 @@ var _ = Describe("Integration tests", func() {
 				Expect(err).NotTo(HaveOccurred())
 				defer session.Kill()
 				Eventually(session, 2).Should(Exit(0))
-				Expect(bytes.Contains(session.Out.Contents(), data)).To(BeTrue())
+				Expect(bytes.Contains(session.Out.Contents(), dataMan.GetData())).To(BeTrue())
 			})
 
-			It("gets many large files in parallel", func() {
+			It("gets many copies of a file in parallel", func() {
 				wg := sync.WaitGroup{}
 				for i := 0; i < 10; i++ {
 					wg.Add(1)
@@ -94,7 +98,7 @@ var _ = Describe("Integration tests", func() {
 						Expect(err).NotTo(HaveOccurred())
 						defer session.Kill()
 						Eventually(session, 10).Should(Exit(0))
-						Expect(bytes.Contains(session.Out.Contents(), data)).To(BeTrue())
+						Expect(bytes.Contains(session.Out.Contents(), dataMan.GetData())).To(BeTrue())
 					}()
 				}
 				wg.Wait()

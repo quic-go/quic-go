@@ -19,6 +19,10 @@ import (
 )
 
 var _ = Describe("Random RTT", func() {
+	BeforeEach(func() {
+		dataMan.GenerateData(dataLen)
+	})
+
 	var rttProxy *proxy.UDPProxy
 
 	runRTTTest := func(minRtt, maxRtt time.Duration, version protocol.VersionNumber) {
@@ -47,7 +51,7 @@ var _ = Describe("Random RTT", func() {
 		Expect(err).NotTo(HaveOccurred())
 		defer session.Kill()
 		Eventually(session, 4).Should(Exit(0))
-		Expect(bytes.Contains(session.Out.Contents(), data)).To(BeTrue())
+		Expect(bytes.Contains(session.Out.Contents(), dataMan.GetData())).To(BeTrue())
 	}
 
 	AfterEach(func() {

@@ -20,6 +20,10 @@ import (
 )
 
 var _ = PDescribe("Drop Proxy", func() {
+	BeforeEach(func() {
+		dataMan.GenerateData(dataLen)
+	})
+
 	var dropproxy *proxy.UDPProxy
 
 	runDropTest := func(incomingPacketDropper, outgoingPacketDropper proxy.DropCallback, version protocol.VersionNumber) {
@@ -49,7 +53,7 @@ var _ = PDescribe("Drop Proxy", func() {
 		Expect(err).NotTo(HaveOccurred())
 		defer session.Kill()
 		Eventually(session, 20).Should(Exit(0))
-		Expect(bytes.Contains(session.Out.Contents(), data)).To(BeTrue())
+		Expect(bytes.Contains(session.Out.Contents(), dataMan.GetData())).To(BeTrue())
 	}
 
 	AfterEach(func() {

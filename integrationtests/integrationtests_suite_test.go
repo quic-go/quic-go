@@ -2,8 +2,6 @@ package integrationtests
 
 import (
 	"bytes"
-	"crypto/md5"
-	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -32,8 +30,7 @@ const (
 
 var (
 	server  *h2quic.Server
-	data    []byte
-	dataMD5 []byte
+	dataMan dataManager
 	port    string
 
 	docker *gexec.Session
@@ -59,11 +56,6 @@ var _ = AfterSuite(func() {
 
 func setupHTTPHandlers() {
 	defer GinkgoRecover()
-	data = make([]byte, dataLen)
-	_, err := rand.Read(data)
-	Expect(err).NotTo(HaveOccurred())
-	sum := md5.Sum(data)
-	dataMD5 = sum[:]
 
 	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
 		defer GinkgoRecover()
@@ -73,6 +65,8 @@ func setupHTTPHandlers() {
 
 	http.HandleFunc("/data", func(w http.ResponseWriter, r *http.Request) {
 		defer GinkgoRecover()
+		data := dataMan.GetData()
+		Expect(data).ToNot(HaveLen(0))
 		_, err := w.Write(data)
 		Expect(err).NotTo(HaveOccurred())
 	})
