@@ -329,6 +329,8 @@ func (h *sentPacketHandler) maybeQueuePacketsRTO() {
 		h.congestion.OnRetransmissionTimeout(true)
 		utils.Debugf("\tQueueing packet 0x%x for retransmission (RTO)", packet.PacketNumber)
 		h.queuePacketForRetransmission(el)
+		// Reset the RTO timer here, since it's not clear that this packet contained any retransmittable frames
+		h.lastSentPacketTime = time.Now()
 		return
 	}
 }

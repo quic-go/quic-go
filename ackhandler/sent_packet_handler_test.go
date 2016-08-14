@@ -878,6 +878,7 @@ var _ = Describe("SentPacketHandler", func() {
 				handler.maybeQueuePacketsRTO()
 				Expect(handler.retransmissionQueue).To(HaveLen(1))
 				Expect(handler.retransmissionQueue[0].PacketNumber).To(Equal(p.PacketNumber))
+				Expect(time.Now().Sub(handler.lastSentPacketTime)).To(BeNumerically("<", time.Second/2))
 			})
 		})
 
