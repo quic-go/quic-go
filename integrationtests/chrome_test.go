@@ -3,7 +3,10 @@ package integrationtests
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/tebeka/selenium"
 
@@ -133,6 +136,30 @@ var _ = Describe("Chrome tests", func() {
 				Eventually(func() int { return getDownloadSize("data") }, 90, 0.5).Should(Equal(dataLongLen))
 				Expect(getDownloadMD5("data")).To(Equal(dataMan.GetMD5()))
 			}, 100)
+
+			It("uploads a small file", func() {
+				dataMan.GenerateData(dataLen)
+				data := dataMan.GetData()
+				dir, err := ioutil.TempDir("", "quic-upload-src")
+				Expect(err).ToNot(HaveOccurred())
+				defer os.RemoveAll(dir)
+				tmpfn := filepath.Join(dir, "data.dat")
+				err = ioutil.WriteFile(tmpfn, data, 0777)
+				Expect(err).ToNot(HaveOccurred())
+				copyFileToDocker(tmpfn)
+
+				err = wd.Get("https://quic.clemente.io/uploadform")
+				Expect(err).NotTo(HaveOccurred())
+				elem, err := wd.FindElement(selenium.ByCSSSelector, "#upload")
+				Expect(err).ToNot(HaveOccurred())
+				err = elem.SendKeys("/home/seluser/data.dat")
+				Expect(err).ToNot(HaveOccurred())
+				Eventually(func() error { return elem.Submit() }, 30, 0.1).ShouldNot(HaveOccurred())
+
+				file := filepath.Join(uploadDir, "data.dat")
+				Expect(getFileSize(file)).To(Equal(dataLen))
+				Expect(getFileMD5(file)).To(Equal(dataMan.GetMD5()))
+			})
 		})
 	}
 })

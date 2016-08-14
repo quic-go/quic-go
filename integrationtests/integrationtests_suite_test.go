@@ -2,12 +2,16 @@ package integrationtests
 
 import (
 	"bytes"
+	"crypto/md5"
 	"encoding/hex"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
+	"path"
 	"strconv"
 	"time"
 
@@ -30,9 +34,10 @@ const (
 )
 
 var (
-	server  *h2quic.Server
-	dataMan dataManager
-	port    string
+	server    *h2quic.Server
+	dataMan   dataManager
+	port      string
+	uploadDir string
 
 	docker *gexec.Session
 )
@@ -58,6 +63,10 @@ var _ = AfterSuite(func() {
 func setupHTTPHandlers() {
 	defer GinkgoRecover()
 
+	var err error
+	uploadDir, err = ioutil.TempDir("", "quic-upload-dest")
+	Expect(err).ToNot(HaveOccurred())
+
 	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
 		defer GinkgoRecover()
 		_, err := io.WriteString(w, "Hello, World!\n")
@@ -75,6 +84,35 @@ func setupHTTPHandlers() {
 	http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
 		defer GinkgoRecover()
 		_, err := io.Copy(w, r.Body)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	http.HandleFunc("/uploadform", func(w http.ResponseWriter, r *http.Request) {
+		defer GinkgoRecover()
+		_, err := io.WriteString(w, `<html><body>
+			<form id="form" action="https://quic.clemente.io/uploadhandler" method="post" enctype="multipart/form-data">
+		    <input type="file" id="upload" name="uploadfile" />
+		  </form>
+			<body></html>`)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	http.HandleFunc("/uploadhandler", func(w http.ResponseWriter, r *http.Request) {
+		defer GinkgoRecover()
+
+		err = r.ParseMultipartForm(100 * (1 << 20)) // max. 100 MB
+		Expect(err).ToNot(HaveOccurred())
+		file, handler, err := r.FormFile("uploadfile")
+		Expect(err).ToNot(HaveOccurred())
+		defer file.Close()
+		err = os.MkdirAll(uploadDir, os.ModeDir|0777)
+		Expect(err).ToNot(HaveOccurred())
+		f, err := os.OpenFile(path.Join(uploadDir, handler.Filename), os.O_WRONLY|os.O_CREATE, 0666)
+		Expect(err).ToNot(HaveOccurred())
+		defer f.Close()
+		io.Copy(f, file)
+
+		_, err = io.WriteString(w, "")
 		Expect(err).NotTo(HaveOccurred())
 	})
 }
@@ -175,6 +213,7 @@ var _ = AfterEach(func() {
 	removeDownload("data")
 })
 
+// getDownloadSize gets the file size of a file in the /home/seluser/Downloads folder in the docker container
 func getDownloadSize(filename string) int {
 	var out bytes.Buffer
 	cmd := exec.Command("docker", "exec", "-i", "quic-test-selenium", "stat", "--printf=%s", "/home/seluser/Downloads/"+filename)
@@ -190,6 +229,16 @@ func getDownloadSize(filename string) int {
 	return size
 }
 
+// getFileSize gets the file size of a file on the local file system
+func getFileSize(filename string) int {
+	file, err := os.Open(filename)
+	Expect(err).ToNot(HaveOccurred())
+	fi, err := file.Stat()
+	Expect(err).ToNot(HaveOccurred())
+	return int(fi.Size())
+}
+
+// getDownloadMD5 gets the md5 sum file of a file in the /home/seluser/Downloads folder in the docker container
 func getDownloadMD5(filename string) []byte {
 	var out bytes.Buffer
 	cmd := exec.Command("docker", "exec", "-i", "quic-test-selenium", "md5sum", "/home/seluser/Downloads/"+filename)
@@ -203,4 +252,25 @@ func getDownloadMD5(filename string) []byte {
 	res, err := hex.DecodeString(string(out.Bytes()[0:32]))
 	Expect(err).NotTo(HaveOccurred())
 	return res
+}
+
+// getFileMD5 gets the md5 sum of a file on the local file system
+func getFileMD5(filepath string) []byte {
+	var result []byte
+	file, err := os.Open(filepath)
+	Expect(err).ToNot(HaveOccurred())
+	defer file.Close()
+
+	hash := md5.New()
+	_, err = io.Copy(hash, file)
+	Expect(err).ToNot(HaveOccurred())
+	return hash.Sum(result)
+}
+
+// copyFileToDocker copies a file from the local file system into the /home/seluser/ directory in the docker container
+func copyFileToDocker(filepath string) {
+	cmd := exec.Command("docker", "cp", filepath, "quic-test-selenium:/home/seluser/")
+	session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
+	Expect(err).NotTo(HaveOccurred())
+	Eventually(session).Should(gexec.Exit(0))
 }
