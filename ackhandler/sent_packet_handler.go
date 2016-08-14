@@ -2,6 +2,7 @@ package ackhandler
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/ackhandlerlegacy"
@@ -227,6 +228,9 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 			}
 
 			if packetNumber >= ackRange.FirstPacketNumber { // packet i contained in ACK range
+				if packetNumber > ackRange.LastPacketNumber {
+					return fmt.Errorf("BUG: ackhandler would have acked wrong packet 0x%x, while evaluating range 0x%x -> 0x%x", packetNumber, ackRange.FirstPacketNumber, ackRange.LastPacketNumber)
+				}
 				p := h.ackPacket(el)
 				if p != nil {
 					ackedPackets = append(ackedPackets, congestion.PacketInfo{Number: p.PacketNumber, Length: p.Length})
