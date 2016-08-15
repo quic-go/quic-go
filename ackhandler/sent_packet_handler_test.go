@@ -487,6 +487,31 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(7)))
 				Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(8)))
 			})
+
+			It("processes an ACK that contains old ACK ranges", func() {
+				ack1 := frames.AckFrame{
+					LargestAcked: 6,
+					LowestAcked:  1,
+				}
+				err := handler.ReceivedAck(&ack1, 1)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(7)))
+				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(len(packets) - 6)))
+				ack2 := frames.AckFrame{
+					LargestAcked: 10,
+					LowestAcked:  1,
+					AckRanges: []frames.AckRange{
+						{FirstPacketNumber: 8, LastPacketNumber: 10},
+						{FirstPacketNumber: 3, LastPacketNumber: 3},
+						{FirstPacketNumber: 1, LastPacketNumber: 1},
+					},
+				}
+				err = handler.ReceivedAck(&ack2, 2)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(len(packets) - 6 - 3)))
+				Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(7)))
+				Expect(handler.packetHistory.Back().Value.PacketNumber).To(Equal(protocol.PacketNumber(12)))
+			})
 		})
 
 		Context("calculating RTT", func() {
