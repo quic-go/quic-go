@@ -47,7 +47,9 @@ func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data
 }
 
 type mockSentPacketHandler struct {
-	retransmissionQueue []*ackhandlerlegacy.Packet
+	retransmissionQueue  []*ackhandlerlegacy.Packet
+	congestionLimited    bool
+	maybeQueueRTOsCalled bool
 }
 
 func (h *mockSentPacketHandler) SentPacket(packet *ackhandlerlegacy.Packet) error { return nil }
@@ -59,12 +61,12 @@ func (h *mockSentPacketHandler) GetLeastUnacked() protocol.PacketNumber { return
 func (h *mockSentPacketHandler) GetStopWaitingFrame() *frames.StopWaitingFrame {
 	panic("not implemented")
 }
-func (h *mockSentPacketHandler) CongestionAllowsSending() bool { return true }
+func (h *mockSentPacketHandler) CongestionAllowsSending() bool { return !h.congestionLimited }
 func (h *mockSentPacketHandler) CheckForError() error          { return nil }
 func (h *mockSentPacketHandler) TimeOfFirstRTO() time.Time     { panic("not implemented") }
 
-func (h *mockSentPacketHandler) ProbablyHasPacketForRetransmission() bool {
-	return len(h.retransmissionQueue) > 0
+func (h *mockSentPacketHandler) MaybeQueueRTOs() {
+	h.maybeQueueRTOsCalled = true
 }
 
 func (h *mockSentPacketHandler) DequeuePacketForRetransmission() *ackhandlerlegacy.Packet {
@@ -570,6 +572,15 @@ var _ = Describe("Session", func() {
 					Expect(conn.written[0]).To(ContainSubstring("foobar"))
 					Expect(conn.written[0]).To(ContainSubstring("loremipsum"))
 				})
+
+				It("calls MaybeQueueRTOs even if congestion blocked, so that bytesInFlight is updated", func() {
+					sph := newMockSentPacketHandler()
+					sph.(*mockSentPacketHandler).congestionLimited = true
+					session.sentPacketHandler = sph
+					err := session.sendPacket()
+					Expect(err).NotTo(HaveOccurred())
+					Expect(sph.(*mockSentPacketHandler).maybeQueueRTOsCalled).To(BeTrue())
+				})
 			})
 
 			Context("scheduling sending", func() {
@@ -729,24 +740,33 @@ var _ = Describe("Session", func() {
 					err := session.sentPacketHandler.SentPacket(&ackhandlerlegacy.Packet{PacketNumber: p, Length: 1})
 					Expect(err).NotTo(HaveOccurred())
 					time.Sleep(time.Microsecond)
-					ack := frames.AckFrameLegacy{LargestObserved: p}
-					err = session.sentPacketHandler.ReceivedAck(&frames.AckFrame{AckFrameLegacy: &ack}, p)
+					ack := &frames.AckFrame{}
+					if version == protocol.Version33 {
+						ack.AckFrameLegacy = &frames.AckFrameLegacy{LargestObserved: p}
+					} else {
+						ack.LargestAcked = p
+					}
+					err = session.sentPacketHandler.ReceivedAck(ack, p)
 					Expect(err).NotTo(HaveOccurred())
 				}
+				if version == protocol.Version33 {
+					session.packer.lastPacketNumber = n
+				} else {
+					session.packer.packetNumberGenerator.last = n
+				}
 				// Now, we send a single packet, and expect that it was retransmitted later
-				go session.run()
-				Expect(conn.written).To(BeEmpty())
 				err := session.sentPacketHandler.SentPacket(&ackhandlerlegacy.Packet{
 					PacketNumber: n,
 					Length:       1,
 					Frames: []frames.Frame{&frames.StreamFrame{
-						Data: bytes.Repeat([]byte{'a'}, 1000),
+						Data: []byte("foobar"),
 					}},
 				})
-				session.packer.lastPacketNumber = n
 				Expect(err).NotTo(HaveOccurred())
+				go session.run()
 				session.scheduleSending()
-				Eventually(func() bool { return len(conn.written) > 0 }).Should(BeTrue())
+				Eventually(func() [][]byte { return conn.written }).ShouldNot(BeEmpty())
+				Expect(conn.written[0]).To(ContainSubstring("foobar"))
 			})
 
 			Context("counting streams", func() {

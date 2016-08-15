@@ -513,7 +513,7 @@ var _ = Describe("SentPacketHandler", func() {
 				_, err := handler.nackPacket(2)
 				Expect(err).ToNot(HaveOccurred())
 			}
-			Expect(handler.ProbablyHasPacketForRetransmission()).To(BeFalse())
+			handler.MaybeQueueRTOs()
 			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
 		})
 
@@ -522,7 +522,7 @@ var _ = Describe("SentPacketHandler", func() {
 				_, err := handler.nackPacket(2)
 				Expect(err).ToNot(HaveOccurred())
 			}
-			Expect(handler.ProbablyHasPacketForRetransmission()).To(BeTrue())
+			handler.MaybeQueueRTOs()
 			Expect(handler.retransmissionQueue).To(HaveLen(1))
 			Expect(handler.retransmissionQueue[0].PacketNumber).To(Equal(protocol.PacketNumber(2)))
 		})
@@ -594,8 +594,7 @@ var _ = Describe("SentPacketHandler", func() {
 			}
 			// this is the belated ACK
 			handler.ackPacket(2)
-			// this is the edge case where ProbablyHasPacketForRetransmission() get's it wrong: it says there's probably a packet for retransmission, but actually there isn't
-			Expect(handler.ProbablyHasPacketForRetransmission()).To(BeTrue())
+			handler.MaybeQueueRTOs()
 			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
 		})
 	})
@@ -712,7 +711,7 @@ var _ = Describe("SentPacketHandler", func() {
 			err := handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
 			Expect(err).NotTo(HaveOccurred())
 			handler.lastSentPacketTime = time.Now().Add(-time.Second)
-			handler.maybeQueuePacketsRTO()
+			handler.MaybeQueueRTOs()
 			Expect(cong.nCalls).To(Equal(3))
 			// rttUpdated, bytesInFlight, ackedPackets, lostPackets
 			Expect(cong.argsOnCongestionEvent[0]).To(BeFalse())
@@ -757,7 +756,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 			It("ignores nil packets", func() {
 				handler.packetHistory[1] = nil
-				handler.maybeQueuePacketsRTO()
+				handler.MaybeQueueRTOs()
 				Expect(handler.TimeOfFirstRTO().IsZero()).To(BeTrue())
 			})
 		})
@@ -766,7 +765,7 @@ var _ = Describe("SentPacketHandler", func() {
 			It("does nothing if not required", func() {
 				err := handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
 				Expect(err).NotTo(HaveOccurred())
-				handler.maybeQueuePacketsRTO()
+				handler.MaybeQueueRTOs()
 				Expect(handler.retransmissionQueue).To(BeEmpty())
 			})
 
@@ -775,9 +774,10 @@ var _ = Describe("SentPacketHandler", func() {
 				err := handler.SentPacket(p)
 				Expect(err).NotTo(HaveOccurred())
 				handler.lastSentPacketTime = time.Now().Add(-time.Second)
-				handler.maybeQueuePacketsRTO()
+				handler.MaybeQueueRTOs()
 				Expect(handler.retransmissionQueue).To(HaveLen(1))
 				Expect(handler.retransmissionQueue[0]).To(Equal(p))
+				Expect(time.Now().Sub(handler.lastSentPacketTime)).To(BeNumerically("<", time.Second/2))
 			})
 
 			It("does not queue retransmittedpackets", func() {
@@ -785,23 +785,15 @@ var _ = Describe("SentPacketHandler", func() {
 				err := handler.SentPacket(p)
 				Expect(err).NotTo(HaveOccurred())
 				handler.lastSentPacketTime = time.Now().Add(-time.Second)
-				handler.maybeQueuePacketsRTO()
+				handler.MaybeQueueRTOs()
 				Expect(handler.retransmissionQueue).To(BeEmpty())
 			})
 
 			It("ignores nil packets", func() {
 				handler.packetHistory[1] = nil
-				handler.maybeQueuePacketsRTO()
+				handler.MaybeQueueRTOs()
 				Expect(handler.retransmissionQueue).To(BeEmpty())
 			})
-		})
-
-		It("works with HasPacketForRetransmission", func() {
-			p := &Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1}
-			err := handler.SentPacket(p)
-			Expect(err).NotTo(HaveOccurred())
-			handler.lastSentPacketTime = time.Now().Add(-time.Second)
-			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
 		})
 
 		It("works with DequeuePacketForRetransmission", func() {
@@ -809,6 +801,7 @@ var _ = Describe("SentPacketHandler", func() {
 			err := handler.SentPacket(p)
 			Expect(err).NotTo(HaveOccurred())
 			handler.lastSentPacketTime = time.Now().Add(-time.Second)
+			handler.MaybeQueueRTOs()
 			Expect(handler.DequeuePacketForRetransmission()).To(Equal(p))
 		})
 	})

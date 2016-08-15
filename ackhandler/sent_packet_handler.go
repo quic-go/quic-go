@@ -2,6 +2,7 @@ package ackhandler
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/ackhandlerlegacy"
@@ -227,6 +228,9 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 			}
 
 			if packetNumber >= ackRange.FirstPacketNumber { // packet i contained in ACK range
+				if packetNumber > ackRange.LastPacketNumber {
+					return fmt.Errorf("BUG: ackhandler would have acked wrong packet 0x%x, while evaluating range 0x%x -> 0x%x", packetNumber, ackRange.FirstPacketNumber, ackRange.LastPacketNumber)
+				}
 				p := h.ackPacket(el)
 				if p != nil {
 					ackedPackets = append(ackedPackets, congestion.PacketInfo{Number: p.PacketNumber, Length: p.Length})
@@ -262,16 +266,8 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 	return nil
 }
 
-// ProbablyHasPacketForRetransmission returns if there is a packet queued for retransmission
-// There is one case where it gets the answer wrong:
-// if a packet has already been queued for retransmission, but a belated ACK is received for this packet, this function will return true, although the packet will not be returend for retransmission by DequeuePacketForRetransmission()
-func (h *sentPacketHandler) ProbablyHasPacketForRetransmission() bool {
-	h.maybeQueuePacketsRTO()
-	return len(h.retransmissionQueue) > 0
-}
-
 func (h *sentPacketHandler) DequeuePacketForRetransmission() *ackhandlerlegacy.Packet {
-	if !h.ProbablyHasPacketForRetransmission() {
+	if len(h.retransmissionQueue) == 0 {
 		return nil
 	}
 
@@ -310,7 +306,7 @@ func (h *sentPacketHandler) CheckForError() error {
 	return nil
 }
 
-func (h *sentPacketHandler) maybeQueuePacketsRTO() {
+func (h *sentPacketHandler) MaybeQueueRTOs() {
 	if time.Now().Before(h.TimeOfFirstRTO()) {
 		return
 	}
@@ -329,6 +325,8 @@ func (h *sentPacketHandler) maybeQueuePacketsRTO() {
 		h.congestion.OnRetransmissionTimeout(true)
 		utils.Debugf("\tQueueing packet 0x%x for retransmission (RTO)", packet.PacketNumber)
 		h.queuePacketForRetransmission(el)
+		// Reset the RTO timer here, since it's not clear that this packet contained any retransmittable frames
+		h.lastSentPacketTime = time.Now()
 		return
 	}
 }
