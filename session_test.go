@@ -495,13 +495,13 @@ var _ = Describe("Session", func() {
 
 			Context("sending packets", func() {
 				It("sends ack frames", func() {
-					packetNumber := protocol.PacketNumber(0x35EA)
+					packetNumber := protocol.PacketNumber(0x035E)
 					session.receivedPacketHandler.ReceivedPacket(packetNumber, true)
 					err := session.sendPacket()
 					Expect(err).NotTo(HaveOccurred())
 					Expect(conn.written).To(HaveLen(1))
 					// test for the beginning of an ACK frame: Entropy until LargestObserved
-					Expect(conn.written[0]).To(ContainSubstring(string([]byte{0xEA, 0x35})))
+					Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x5E, 0x03})))
 				})
 
 				It("sends two WindowUpdate frames", func() {
@@ -529,6 +529,8 @@ var _ = Describe("Session", func() {
 
 			Context("retransmissions", func() {
 				It("sends a StreamFrame from a packet queued for retransmission", func() {
+					// for QUIC 33, a StopWaitingFrame is added, so make sure the packet number of the new package is higher than the packet number of the retransmitted packet
+					session.packer.lastPacketNumber = 0x1337 + 10
 					f := frames.StreamFrame{
 						StreamID: 0x5,
 						Data:     []byte("foobar1234567"),
@@ -551,6 +553,8 @@ var _ = Describe("Session", func() {
 				})
 
 				It("sends a StreamFrame from a packet queued for retransmission", func() {
+					// for QUIC 33, a StopWaitingFrame is added, so make sure the packet number of the new package is higher than the packet number of the retransmitted packet
+					session.packer.lastPacketNumber = 0x1337 + 10
 					f1 := frames.StreamFrame{
 						StreamID: 0x5,
 						Data:     []byte("foobar"),

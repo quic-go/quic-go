@@ -124,6 +124,7 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	It("packs a StopWaitingFrame first", func() {
+		packer.packetNumberGenerator.next = 15
 		swf := &frames.StopWaitingFrame{LeastUnacked: 10}
 		p, err := packer.PackPacket(swf, []frames.Frame{&frames.ConnectionCloseFrame{}}, 0, true)
 		Expect(err).ToNot(HaveOccurred())

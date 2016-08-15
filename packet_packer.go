@@ -147,7 +147,10 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 	}
 
 	for _, frame := range payloadFrames {
-		frame.Write(buffer, p.version)
+		err := frame.Write(buffer, p.version)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if protocol.ByteCount(buffer.Len()+12) > protocol.MaxPacketSize {
