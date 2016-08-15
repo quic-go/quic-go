@@ -160,6 +160,30 @@ var _ = Describe("Chrome tests", func() {
 				Expect(getFileSize(file)).To(Equal(dataLen))
 				Expect(getFileMD5(file)).To(Equal(dataMan.GetMD5()))
 			})
+
+			It("uploads a large file", func() {
+				dataMan.GenerateData(dataLongLen)
+				data := dataMan.GetData()
+				dir, err := ioutil.TempDir("", "quic-upload-src")
+				Expect(err).ToNot(HaveOccurred())
+				defer os.RemoveAll(dir)
+				tmpfn := filepath.Join(dir, "data.dat")
+				err = ioutil.WriteFile(tmpfn, data, 0777)
+				Expect(err).ToNot(HaveOccurred())
+				copyFileToDocker(tmpfn)
+
+				err = wd.Get("https://quic.clemente.io/uploadform")
+				Expect(err).NotTo(HaveOccurred())
+				elem, err := wd.FindElement(selenium.ByCSSSelector, "#upload")
+				Expect(err).ToNot(HaveOccurred())
+				err = elem.SendKeys("/home/seluser/data.dat")
+				Expect(err).ToNot(HaveOccurred())
+				Eventually(func() error { return elem.Submit() }, 90, 0.5).ShouldNot(HaveOccurred())
+
+				file := filepath.Join(uploadDir, "data.dat")
+				Expect(getFileSize(file)).To(Equal(dataLongLen))
+				Expect(getFileMD5(file)).To(Equal(dataMan.GetMD5()))
+			})
 		})
 	}
 })
