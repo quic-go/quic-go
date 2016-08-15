@@ -60,12 +60,28 @@ var _ = AfterSuite(func() {
 	stopSelenium()
 }, 10)
 
-func setupHTTPHandlers() {
-	defer GinkgoRecover()
-
+var _ = BeforeEach(func() {
+	// create a new uploadDir for every test
 	var err error
 	uploadDir, err = ioutil.TempDir("", "quic-upload-dest")
 	Expect(err).ToNot(HaveOccurred())
+	err = os.MkdirAll(uploadDir, os.ModeDir|0777)
+	Expect(err).ToNot(HaveOccurred())
+})
+
+var _ = AfterEach(func() {
+	// remove uploadDir
+	if len(uploadDir) < 20 {
+		panic("uploadDir too short")
+	}
+	os.RemoveAll(uploadDir)
+
+	// remove downloaded file in docker container
+	removeDownload("data")
+})
+
+func setupHTTPHandlers() {
+	defer GinkgoRecover()
 
 	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
 		defer GinkgoRecover()
@@ -100,13 +116,11 @@ func setupHTTPHandlers() {
 	http.HandleFunc("/uploadhandler", func(w http.ResponseWriter, r *http.Request) {
 		defer GinkgoRecover()
 
-		err = r.ParseMultipartForm(100 * (1 << 20)) // max. 100 MB
+		err := r.ParseMultipartForm(100 * (1 << 20)) // max. 100 MB
 		Expect(err).ToNot(HaveOccurred())
 		file, handler, err := r.FormFile("uploadfile")
 		Expect(err).ToNot(HaveOccurred())
 		defer file.Close()
-		err = os.MkdirAll(uploadDir, os.ModeDir|0777)
-		Expect(err).ToNot(HaveOccurred())
 		f, err := os.OpenFile(path.Join(uploadDir, handler.Filename), os.O_WRONLY|os.O_CREATE, 0666)
 		Expect(err).ToNot(HaveOccurred())
 		defer f.Close()
@@ -208,10 +222,6 @@ func removeDownload(filename string) {
 	Expect(err).NotTo(HaveOccurred())
 	Eventually(session).Should(gexec.Exit(0))
 }
-
-var _ = AfterEach(func() {
-	removeDownload("data")
-})
 
 // getDownloadSize gets the file size of a file in the /home/seluser/Downloads folder in the docker container
 func getDownloadSize(filename string) int {
