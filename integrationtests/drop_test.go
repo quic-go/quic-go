@@ -19,7 +19,7 @@ import (
 	. "github.com/onsi/gomega/gexec"
 )
 
-var _ = Describe("Drop Proxy", func() {
+var _ = PDescribe("Drop Proxy", func() {
 	BeforeEach(func() {
 		dataMan.GenerateData(dataLen)
 	})
