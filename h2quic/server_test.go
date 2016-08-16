@@ -84,6 +84,20 @@ var _ = Describe("H2 server", func() {
 			Expect(dataStream.remoteClosed).To(BeTrue())
 		})
 
+		It("returns 200 with an empty handler", func() {
+			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+			headerStream.Write([]byte{
+				0x0, 0x0, 0x11, 0x1, 0x5, 0x0, 0x0, 0x0, 0x5,
+				// Taken from https://http2.github.io/http2-spec/compression.html#request.examples.with.huffman.coding
+				0x82, 0x86, 0x84, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff,
+			})
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(func() []byte {
+				return headerStream.Buffer.Bytes()
+			}).Should(Equal([]byte{0x0, 0x0, 0x1, 0x1, 0x4, 0x0, 0x0, 0x0, 0x5, 0x88})) // 0x88 is 200
+		})
+
 		It("does not close the dataStream when end of stream is not set", func() {
 			var handlerCalled bool
 			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

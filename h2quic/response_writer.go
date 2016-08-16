@@ -68,3 +68,9 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 	}
 	return w.dataStream.Write(p)
 }
+
+func (w *responseWriter) finish() {
+	if !w.headerWritten {
+		w.WriteHeader(200)
+	}
+}

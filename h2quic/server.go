@@ -167,6 +167,7 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 			handler = http.DefaultServeMux
 		}
 		handler.ServeHTTP(responseWriter, req)
+		responseWriter.finish()
 		if responseWriter.dataStream != nil {
 			responseWriter.dataStream.Close()
 		}
