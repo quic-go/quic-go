@@ -50,6 +50,7 @@ type mockSentPacketHandler struct {
 	retransmissionQueue  []*ackhandlerlegacy.Packet
 	congestionLimited    bool
 	maybeQueueRTOsCalled bool
+	requestedStopWaiting bool
 }
 
 func (h *mockSentPacketHandler) SentPacket(packet *ackhandlerlegacy.Packet) error { return nil }
@@ -59,7 +60,8 @@ func (h *mockSentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacke
 func (h *mockSentPacketHandler) BytesInFlight() protocol.ByteCount      { return 0 }
 func (h *mockSentPacketHandler) GetLeastUnacked() protocol.PacketNumber { return 1 }
 func (h *mockSentPacketHandler) GetStopWaitingFrame() *frames.StopWaitingFrame {
-	panic("not implemented")
+	h.requestedStopWaiting = true
+	return nil
 }
 func (h *mockSentPacketHandler) CongestionAllowsSending() bool { return !h.congestionLimited }
 func (h *mockSentPacketHandler) CheckForError() error          { return nil }
@@ -542,6 +544,9 @@ var _ = Describe("Session", func() {
 					err := session.sendPacket()
 					Expect(err).NotTo(HaveOccurred())
 					Expect(conn.written).To(HaveLen(1))
+					if session.version > protocol.Version33 { // before version 34, this was handled by the StopWaitingManager
+						Expect(sph.(*mockSentPacketHandler).requestedStopWaiting).To(BeTrue())
+					}
 					Expect(conn.written[0]).To(ContainSubstring("foobar1234567"))
 				})
 

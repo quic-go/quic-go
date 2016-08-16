@@ -448,6 +448,7 @@ func (s *Session) sendPacket() error {
 		}
 
 		var controlFrames []frames.Frame
+		var hasRetransmission bool
 
 		// check for retransmissions first
 		for {
@@ -455,6 +456,7 @@ func (s *Session) sendPacket() error {
 			if retransmitPacket == nil {
 				break
 			}
+			hasRetransmission = true
 			utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 
 			if s.version <= protocol.Version33 {
@@ -491,7 +493,7 @@ func (s *Session) sendPacket() error {
 		if s.version <= protocol.Version33 {
 			stopWaitingFrame = s.stopWaitingManager.GetStopWaitingFrame()
 		} else {
-			if ack != nil {
+			if ack != nil || hasRetransmission {
 				stopWaitingFrame = s.sentPacketHandler.GetStopWaitingFrame()
 			}
 		}
