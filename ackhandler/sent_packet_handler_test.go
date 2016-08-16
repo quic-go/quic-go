@@ -564,8 +564,9 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("does not dequeue a packet if no packet has been nacked", func() {
 			for i := uint8(0); i < protocol.RetransmissionThreshold; i++ {
-				_, err := handler.nackPacket(getPacketElement(2))
-				Expect(err).ToNot(HaveOccurred())
+				el := getPacketElement(2)
+				Expect(el).ToNot(BeNil())
+				handler.nackPacket(el)
 			}
 			Expect(getPacketElement(2)).ToNot(BeNil())
 			handler.MaybeQueueRTOs()
@@ -574,8 +575,9 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("queues a packet for retransmission", func() {
 			for i := uint8(0); i < protocol.RetransmissionThreshold+1; i++ {
-				_, err := handler.nackPacket(getPacketElement(2))
-				Expect(err).ToNot(HaveOccurred())
+				el := getPacketElement(2)
+				Expect(el).ToNot(BeNil())
+				handler.nackPacket(el)
 			}
 			Expect(getPacketElement(2)).To(BeNil())
 			handler.MaybeQueueRTOs()
@@ -585,8 +587,9 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("dequeues a packet for retransmission", func() {
 			for i := uint8(0); i < protocol.RetransmissionThreshold+1; i++ {
-				_, err := handler.nackPacket(getPacketElement(3))
-				Expect(err).ToNot(HaveOccurred())
+				el := getPacketElement(3)
+				Expect(el).ToNot(BeNil())
+				handler.nackPacket(el)
 			}
 			packet := handler.DequeuePacketForRetransmission()
 			Expect(packet).ToNot(BeNil())
@@ -596,12 +599,14 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("keeps the packets in the right order", func() {
 			for i := uint8(0); i < protocol.RetransmissionThreshold+1; i++ {
-				_, err := handler.nackPacket(getPacketElement(4))
-				Expect(err).ToNot(HaveOccurred())
+				el := getPacketElement(4)
+				Expect(el).ToNot(BeNil())
+				handler.nackPacket(el)
 			}
 			for i := uint8(0); i < protocol.RetransmissionThreshold+1; i++ {
-				_, err := handler.nackPacket(getPacketElement(2))
-				Expect(err).ToNot(HaveOccurred())
+				el := getPacketElement(2)
+				Expect(el).ToNot(BeNil())
+				handler.nackPacket(el)
 			}
 			packet := handler.DequeuePacketForRetransmission()
 			Expect(packet).ToNot(BeNil())
@@ -626,7 +631,9 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(2)))
 			// this will trigger a retransmission of packet 3
 			for i := uint8(0); i < protocol.RetransmissionThreshold; i++ {
-				handler.nackPacket(getPacketElement(3))
+				el := getPacketElement(3)
+				Expect(el).ToNot(BeNil())
+				handler.nackPacket(el)
 			}
 			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(5)))
 		})
@@ -646,7 +653,9 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(2)))
 			// this will trigger a retransmission of packet 6
 			for i := uint8(0); i < protocol.RetransmissionThreshold; i++ {
-				handler.nackPacket(getPacketElement(6))
+				el := getPacketElement(6)
+				Expect(el).ToNot(BeNil())
+				handler.nackPacket(el)
 			}
 			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(2)))
 		})
@@ -665,12 +674,16 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(err).ToNot(HaveOccurred())
 			// this will trigger a retransmission of packet 3
 			for i := uint8(0); i < protocol.RetransmissionThreshold; i++ {
-				handler.nackPacket(getPacketElement(3))
+				el := getPacketElement(3)
+				Expect(el).ToNot(BeNil())
+				handler.nackPacket(el)
 			}
 			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(1)))
 			// now, trigger retransmission of 2 ...
 			for i := uint8(0); i < protocol.RetransmissionThreshold; i++ {
-				handler.nackPacket(getPacketElement(2))
+				el := getPacketElement(2)
+				Expect(el).ToNot(BeNil())
+				handler.nackPacket(el)
 			}
 			// and check that it increased LargestInOrderAcked past 3
 			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(5)))
@@ -719,8 +732,9 @@ var _ = Describe("SentPacketHandler", func() {
 
 			// Simulate protocol.RetransmissionThreshold more NACKs
 			for i := uint8(0); i < protocol.RetransmissionThreshold; i++ {
-				_, err = handler.nackPacket(getPacketElement(2))
-				Expect(err).ToNot(HaveOccurred())
+				el := getPacketElement(2)
+				Expect(el).ToNot(BeNil())
+				handler.nackPacket(el)
 			}
 			Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(0)))
 

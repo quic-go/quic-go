@@ -66,7 +66,7 @@ func NewSentPacketHandler() SentPacketHandler {
 	}
 }
 
-func (h *sentPacketHandler) ackPacket(packetElement *ackhandlerlegacy.PacketElement) *ackhandlerlegacy.Packet {
+func (h *sentPacketHandler) ackPacket(packetElement *ackhandlerlegacy.PacketElement) {
 	packet := &packetElement.Value
 
 	h.bytesInFlight -= packet.Length
@@ -80,11 +80,11 @@ func (h *sentPacketHandler) ackPacket(packetElement *ackhandlerlegacy.PacketElem
 	}
 
 	h.packetHistory.Remove(packetElement)
-
-	return packet
 }
 
-func (h *sentPacketHandler) nackPacket(packetElement *ackhandlerlegacy.PacketElement) (*ackhandlerlegacy.Packet, error) {
+// nackPacket NACKs a packet
+// it returns true if a FastRetransmissions was triggered
+func (h *sentPacketHandler) nackPacket(packetElement *ackhandlerlegacy.PacketElement) bool {
 	packet := &packetElement.Value
 
 	packet.MissingReports++
@@ -92,9 +92,9 @@ func (h *sentPacketHandler) nackPacket(packetElement *ackhandlerlegacy.PacketEle
 	if packet.MissingReports > protocol.RetransmissionThreshold {
 		utils.Debugf("\tQueueing packet 0x%x for retransmission (fast)", packet.PacketNumber)
 		h.queuePacketForRetransmission(packetElement)
-		return packet, nil
+		return true
 	}
-	return nil, nil
+	return false
 }
 
 // does NOT set packet.Retransmitted. This variable is not needed anymore
@@ -195,12 +195,9 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 
 		// NACK packets below the LowestAcked
 		if packetNumber < ackFrame.LowestAcked {
-			p, err := h.nackPacket(el)
-			if err != nil {
-				return err
-			}
-			if p != nil {
-				lostPackets = append(lostPackets, congestion.PacketInfo{Number: p.PacketNumber, Length: p.Length})
+			retransmitted := h.nackPacket(el)
+			if retransmitted {
+				lostPackets = append(lostPackets, congestion.PacketInfo{Number: packetNumber, Length: packet.Length})
 			}
 			continue
 		}
@@ -231,24 +228,17 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 				if packetNumber > ackRange.LastPacketNumber {
 					return fmt.Errorf("BUG: ackhandler would have acked wrong packet 0x%x, while evaluating range 0x%x -> 0x%x", packetNumber, ackRange.FirstPacketNumber, ackRange.LastPacketNumber)
 				}
-				p := h.ackPacket(el)
-				if p != nil {
-					ackedPackets = append(ackedPackets, congestion.PacketInfo{Number: p.PacketNumber, Length: p.Length})
-				}
+				h.ackPacket(el)
+				ackedPackets = append(ackedPackets, congestion.PacketInfo{Number: packetNumber, Length: packet.Length})
 			} else {
-				p, err := h.nackPacket(el)
-				if err != nil {
-					return err
-				}
-				if p != nil {
-					lostPackets = append(lostPackets, congestion.PacketInfo{Number: p.PacketNumber, Length: p.Length})
+				retransmitted := h.nackPacket(el)
+				if retransmitted {
+					lostPackets = append(lostPackets, congestion.PacketInfo{Number: packetNumber, Length: packet.Length})
 				}
 			}
 		} else {
-			p := h.ackPacket(el)
-			if p != nil {
-				ackedPackets = append(ackedPackets, congestion.PacketInfo{Number: p.PacketNumber, Length: p.Length})
-			}
+			h.ackPacket(el)
+			ackedPackets = append(ackedPackets, congestion.PacketInfo{Number: packetNumber, Length: packet.Length})
 		}
 	}
 
