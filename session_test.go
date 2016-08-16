@@ -757,7 +757,7 @@ var _ = Describe("Session", func() {
 				if version == protocol.Version33 {
 					session.packer.lastPacketNumber = n
 				} else {
-					session.packer.packetNumberGenerator.last = n
+					session.packer.packetNumberGenerator.next = n + 1
 				}
 				// Now, we send a single packet, and expect that it was retransmitted later
 				err := session.sentPacketHandler.SentPacket(&ackhandlerlegacy.Packet{

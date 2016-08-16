@@ -12,27 +12,38 @@ var _ = Describe("Packet Number Generator", func() {
 	var png packetNumberGenerator
 
 	BeforeEach(func() {
-		png = packetNumberGenerator{}
+		png = *newPacketNumberGenerator(100)
 	})
 
 	It("gets 1 as the first packet number", func() {
-		num := png.GetNextPacketNumber()
+		num := png.Pop()
 		Expect(num).To(Equal(protocol.PacketNumber(1)))
+	})
+
+	It("allows peeking", func() {
+		png.nextToSkip = 1000
+		Expect(png.Peek()).To(Equal(protocol.PacketNumber(1)))
+		Expect(png.Peek()).To(Equal(protocol.PacketNumber(1)))
+		num := png.Pop()
+		Expect(num).To(Equal(protocol.PacketNumber(1)))
+		Expect(png.Peek()).To(Equal(protocol.PacketNumber(2)))
+		Expect(png.Peek()).To(Equal(protocol.PacketNumber(2)))
 	})
 
 	It("skips a packet number", func() {
 		png.nextToSkip = 2
-		num := png.GetNextPacketNumber()
+		num := png.Pop()
 		Expect(num).To(Equal(protocol.PacketNumber(1)))
-		num = png.GetNextPacketNumber()
+		Expect(png.Peek()).To(Equal(protocol.PacketNumber(3)))
+		num = png.Pop()
 		Expect(num).To(Equal(protocol.PacketNumber(3)))
 	})
 
 	It("generates a new packet number to skip", func() {
-		png.last = 100
+		png.next = 100
 		png.averagePeriod = 100
 
-		rep := 1000
+		rep := 5000
 		var sum protocol.PacketNumber
 
 		for i := 0; i < rep; i++ {
@@ -42,7 +53,7 @@ var _ = Describe("Packet Number Generator", func() {
 		}
 
 		average := sum / protocol.PacketNumber(rep)
-		Expect(average).To(BeNumerically("==", protocol.PacketNumber(200), 10))
+		Expect(average).To(BeNumerically("==", protocol.PacketNumber(200), 4))
 	})
 
 	It("uses random numbers", func() {

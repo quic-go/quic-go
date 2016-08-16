@@ -193,7 +193,9 @@ var _ = Describe("Packet packer", func() {
 		Expect(payloadFrames).To(HaveLen(10))
 	})
 
-	It("only increases the packet number when there is an actual packet to send", func() {
+	// TODO: remove once we drop support for QUIC 33
+	It("only increases the packet number when there is an actual packet to send, in QUIC 33", func() {
+		packer.version = protocol.Version33
 		f := &frames.StreamFrame{
 			StreamID: 5,
 			Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
@@ -212,6 +214,24 @@ var _ = Describe("Packet packer", func() {
 		Expect(p).ToNot(BeNil())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packer.lastPacketNumber).To(Equal(protocol.PacketNumber(2)))
+	})
+
+	It("only increases the packet number when there is an actual packet to send, in QUIC 34", func() {
+		packer.packetNumberGenerator.nextToSkip = 1000
+		p, err := packer.PackPacket(nil, []frames.Frame{}, 0, true)
+		Expect(p).To(BeNil())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(packer.packetNumberGenerator.Peek()).To(Equal(protocol.PacketNumber(1)))
+		f := &frames.StreamFrame{
+			StreamID: 5,
+			Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
+		}
+		streamFramer.AddFrameForRetransmission(f)
+		p, err = packer.PackPacket(nil, []frames.Frame{}, 0, true)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(p).ToNot(BeNil())
+		Expect(p.number).To(Equal(protocol.PacketNumber(1)))
+		Expect(packer.packetNumberGenerator.Peek()).To(Equal(protocol.PacketNumber(2)))
 	})
 
 	Context("Stream Frame handling", func() {

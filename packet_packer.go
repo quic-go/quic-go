@@ -65,7 +65,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 	if p.version <= protocol.Version33 {
 		currentPacketNumber = p.lastPacketNumber + 1
 	} else {
-		currentPacketNumber = p.packetNumberGenerator.GetNextPacketNumber()
+		currentPacketNumber = p.packetNumberGenerator.Peek()
 	}
 
 	// cryptoSetup needs to be locked here, so that the AEADs are not changed between
@@ -158,7 +158,15 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 	p.cryptoSetup.Seal(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], currentPacketNumber, raw[:payloadStartIndex])
 	raw = raw[0 : buffer.Len()+12]
 
-	p.lastPacketNumber++
+	if p.version <= protocol.Version33 {
+		p.lastPacketNumber++
+	} else {
+		num := p.packetNumberGenerator.Pop()
+		if num != currentPacketNumber {
+			return nil, errors.New("PacketPacker BUG: Peeked and Popped packet numbers do not match.")
+		}
+	}
+
 	return &packedPacket{
 		number:     currentPacketNumber,
 		entropyBit: entropyBit,

@@ -7,30 +7,39 @@ import (
 	"github.com/lucas-clemente/quic-go/protocol"
 )
 
+// The packetNumberGenerator generates the packet number for the next packet
+// it randomly skips a packet number every averagePeriod packets (on average)
+// it is guarantued to never skip two consecutive packet numbers
 type packetNumberGenerator struct {
-	last          protocol.PacketNumber
-	nextToSkip    protocol.PacketNumber
 	averagePeriod protocol.PacketNumber
+
+	next       protocol.PacketNumber
+	nextToSkip protocol.PacketNumber
 }
 
 func newPacketNumberGenerator(averagePeriod protocol.PacketNumber) *packetNumberGenerator {
 	return &packetNumberGenerator{
+		next:          1,
 		averagePeriod: averagePeriod,
 	}
 }
 
-func (p *packetNumberGenerator) GetNextPacketNumber() protocol.PacketNumber {
-	p.last++
+func (p *packetNumberGenerator) Peek() protocol.PacketNumber {
+	return p.next
+}
 
-	if p.last == p.nextToSkip {
-		return p.GetNextPacketNumber()
-	}
+func (p *packetNumberGenerator) Pop() protocol.PacketNumber {
+	next := p.next
 
-	if p.last > p.nextToSkip {
+	// generate a new packet number for the next packet
+	p.next++
+
+	if p.next == p.nextToSkip {
+		p.next++
 		p.generateNewSkip()
 	}
 
-	return p.last
+	return next
 }
 
 func (p *packetNumberGenerator) generateNewSkip() error {
@@ -41,7 +50,7 @@ func (p *packetNumberGenerator) generateNewSkip() error {
 
 	skip := protocol.PacketNumber(num) * (p.averagePeriod - 1) / (math.MaxUint16 / 2)
 	// make sure that there are never two consecutive packet numbers that are skipped
-	p.nextToSkip = p.last + 2 + skip
+	p.nextToSkip = p.next + 2 + skip
 
 	return nil
 }
