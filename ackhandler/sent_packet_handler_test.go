@@ -75,7 +75,7 @@ var _ = Describe("SentPacketHandler", func() {
 	}
 
 	It("gets the LeastUnacked packet number", func() {
-		handler.LargestInOrderAcked = 0x1337
+		handler.LargestAcked = 0x1337
 		Expect(handler.GetLeastUnacked()).To(Equal(protocol.PacketNumber(0x1337 + 1)))
 	})
 
@@ -188,23 +188,23 @@ var _ = Describe("SentPacketHandler", func() {
 			})
 
 			Context("garbage collection", func() {
-				It("keeps all packet numbers above the LargestInOrderAcked", func() {
+				It("keeps all packet numbers above the LargestAcked", func() {
 					handler.skippedPackets = []protocol.PacketNumber{2, 5, 8, 10}
-					handler.LargestInOrderAcked = 1
+					handler.LargestAcked = 1
 					handler.garbageCollectSkippedPackets()
 					Expect(handler.skippedPackets).To(Equal([]protocol.PacketNumber{2, 5, 8, 10}))
 				})
 
-				It("doesn't keep packet numbers below the LargestInOrderAcked", func() {
+				It("doesn't keep packet numbers below the LargestAcked", func() {
 					handler.skippedPackets = []protocol.PacketNumber{1, 5, 8, 10}
-					handler.LargestInOrderAcked = 5
+					handler.LargestAcked = 5
 					handler.garbageCollectSkippedPackets()
 					Expect(handler.skippedPackets).To(Equal([]protocol.PacketNumber{8, 10}))
 				})
 
-				It("deletes all packet numbers if LargestInOrderAcked is sufficiently high", func() {
+				It("deletes all packet numbers if LargestAcked is sufficiently high", func() {
 					handler.skippedPackets = []protocol.PacketNumber{1, 5, 10}
-					handler.LargestInOrderAcked = 15
+					handler.LargestAcked = 15
 					handler.garbageCollectSkippedPackets()
 					Expect(handler.skippedPackets).To(BeEmpty())
 				})
@@ -326,14 +326,14 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		Context("acks and nacks the right packets", func() {
-			It("adjusts the LargestInOrderAcked", func() {
+			It("adjusts the LargestAcked", func() {
 				ack := frames.AckFrame{
 					LargestAcked: 5,
 					LowestAcked:  1,
 				}
 				err := handler.ReceivedAck(&ack, 1)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(5)))
+				Expect(handler.LargestAcked).To(Equal(protocol.PacketNumber(5)))
 				el := handler.packetHistory.Front()
 				for i := 6; i <= 10; i++ {
 					Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(i)))
@@ -350,7 +350,6 @@ var _ = Describe("SentPacketHandler", func() {
 				}
 				err := handler.ReceivedAck(&ack, 1)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(0)))
 				el := handler.packetHistory.Front()
 				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(1)))
 				el = el.Next()
@@ -373,8 +372,6 @@ var _ = Describe("SentPacketHandler", func() {
 				}
 				err := handler.ReceivedAck(&ack, 1)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.LargestInOrderAcked).To(BeZero())
-				Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(0)))
 				el := handler.packetHistory.Front()
 				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(1)))
 				el = el.Next()
@@ -396,7 +393,6 @@ var _ = Describe("SentPacketHandler", func() {
 				}
 				err := handler.ReceivedAck(&ack, 1)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.LargestInOrderAcked).To(BeZero())
 				el := handler.packetHistory.Front()
 				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(1)))
 				Expect(el.Value.MissingReports).To(Equal(uint8(1)))
@@ -419,7 +415,6 @@ var _ = Describe("SentPacketHandler", func() {
 				}
 				err := handler.ReceivedAck(&ack, 1)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(1)))
 				el := handler.packetHistory.Front()
 				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(2)))
 				Expect(el.Value.MissingReports).To(Equal(uint8(1)))
@@ -459,7 +454,6 @@ var _ = Describe("SentPacketHandler", func() {
 				err = handler.ReceivedAck(&ack2, 2)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(len(packets) - 6)))
-				Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(largestObserved)))
 				Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(7)))
 			})
 
@@ -484,7 +478,6 @@ var _ = Describe("SentPacketHandler", func() {
 				err = handler.ReceivedAck(&ack2, 2)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.BytesInFlight()).To(Equal(protocol.ByteCount(len(packets) - 7)))
-				Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(7)))
 				Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(8)))
 			})
 
@@ -614,79 +607,6 @@ var _ = Describe("SentPacketHandler", func() {
 			packet = handler.DequeuePacketForRetransmission()
 			Expect(packet).ToNot(BeNil())
 			Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(4)))
-		})
-
-		It("changes the LargestInOrderAcked after queueing the lowest packet for retransmission", func() {
-			ack := frames.AckFrame{
-				LargestAcked: 7,
-				LowestAcked:  1,
-				AckRanges: []frames.AckRange{
-					{FirstPacketNumber: 7, LastPacketNumber: 7},
-					{FirstPacketNumber: 4, LastPacketNumber: 5},
-					{FirstPacketNumber: 1, LastPacketNumber: 2},
-				},
-			}
-			err := handler.ReceivedAck(&ack, 1)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(2)))
-			// this will trigger a retransmission of packet 3
-			for i := uint8(0); i < protocol.RetransmissionThreshold; i++ {
-				el := getPacketElement(3)
-				Expect(el).ToNot(BeNil())
-				handler.nackPacket(el)
-			}
-			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(5)))
-		})
-
-		It("does not change the LargestInOrderAcked after queueing a higher packet for retransmission", func() {
-			ack := frames.AckFrame{
-				LargestAcked: 7,
-				LowestAcked:  1,
-				AckRanges: []frames.AckRange{
-					{FirstPacketNumber: 7, LastPacketNumber: 7},
-					{FirstPacketNumber: 4, LastPacketNumber: 5},
-					{FirstPacketNumber: 1, LastPacketNumber: 2},
-				},
-			}
-			err := handler.ReceivedAck(&ack, 1)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(2)))
-			// this will trigger a retransmission of packet 6
-			for i := uint8(0); i < protocol.RetransmissionThreshold; i++ {
-				el := getPacketElement(6)
-				Expect(el).ToNot(BeNil())
-				handler.nackPacket(el)
-			}
-			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(2)))
-		})
-
-		It("increases LargestInOrderAcked past packets queued for retransmission", func() {
-			ack := frames.AckFrame{
-				LargestAcked: 7,
-				LowestAcked:  1,
-				AckRanges: []frames.AckRange{
-					{FirstPacketNumber: 7, LastPacketNumber: 7},
-					{FirstPacketNumber: 4, LastPacketNumber: 5},
-					{FirstPacketNumber: 1, LastPacketNumber: 1},
-				},
-			}
-			err := handler.ReceivedAck(&ack, 1)
-			Expect(err).ToNot(HaveOccurred())
-			// this will trigger a retransmission of packet 3
-			for i := uint8(0); i < protocol.RetransmissionThreshold; i++ {
-				el := getPacketElement(3)
-				Expect(el).ToNot(BeNil())
-				handler.nackPacket(el)
-			}
-			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(1)))
-			// now, trigger retransmission of 2 ...
-			for i := uint8(0); i < protocol.RetransmissionThreshold; i++ {
-				el := getPacketElement(2)
-				Expect(el).ToNot(BeNil())
-				handler.nackPacket(el)
-			}
-			// and check that it increased LargestInOrderAcked past 3
-			Expect(handler.LargestInOrderAcked).To(Equal(protocol.PacketNumber(5)))
 		})
 
 		Context("StopWaitings", func() {

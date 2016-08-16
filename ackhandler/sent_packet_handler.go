@@ -30,8 +30,7 @@ type sentPacketHandler struct {
 	lastSentPacketTime   time.Time
 	skippedPackets       []protocol.PacketNumber
 
-	LargestInOrderAcked protocol.PacketNumber
-	LargestAcked        protocol.PacketNumber
+	LargestAcked protocol.PacketNumber
 
 	largestReceivedPacketWithAck protocol.PacketNumber
 
@@ -68,17 +67,7 @@ func NewSentPacketHandler() SentPacketHandler {
 
 func (h *sentPacketHandler) ackPacket(packetElement *ackhandlerlegacy.PacketElement) {
 	packet := &packetElement.Value
-
 	h.bytesInFlight -= packet.Length
-
-	if h.LargestInOrderAcked == packet.PacketNumber-1 {
-		h.LargestInOrderAcked++
-
-		if next := packetElement.Next(); next != nil {
-			h.LargestInOrderAcked = next.Value.PacketNumber - 1
-		}
-	}
-
 	h.packetHistory.Remove(packetElement)
 }
 
@@ -103,22 +92,18 @@ func (h *sentPacketHandler) queuePacketForRetransmission(packetElement *ackhandl
 	h.bytesInFlight -= packet.Length
 	h.retransmissionQueue = append(h.retransmissionQueue, packet)
 
-	// If this is the lowest packet that hasn't been acked or retransmitted yet ...
-	if packet.PacketNumber == h.LargestInOrderAcked+1 {
-		// ... increase the LargestInOrderAcked until it's one before the next packet that was not acked and not retransmitted
-		for el := packetElement; el != nil; el = el.Next() {
-			if h.LargestInOrderAcked == h.LargestAcked {
-				break
-			}
-			h.LargestInOrderAcked = el.Value.PacketNumber - 1
-		}
-	}
-
 	h.packetHistory.Remove(packetElement)
 
 	// strictly speaking, this is only necessary for RTO retransmissions
 	// this is because FastRetransmissions are triggered by missing ranges in ACKs, and then the LargestAcked will already be higher than the packet number of the retransmitted packet
 	h.stopWaitingManager.QueuedRetransmissionForPacketNumber(packet.PacketNumber)
+}
+
+func (h *sentPacketHandler) largestInOrderAcked() protocol.PacketNumber {
+	if f := h.packetHistory.Front(); f != nil {
+		return f.Value.PacketNumber - 1
+	}
+	return h.LargestAcked
 }
 
 func (h *sentPacketHandler) SentPacket(packet *ackhandlerlegacy.Packet) error {
@@ -169,7 +154,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 	h.largestReceivedPacketWithAck = withPacketNumber
 
 	// ignore repeated ACK (ACKs that don't have a higher LargestAcked than the last ACK)
-	if ackFrame.LargestAcked <= h.LargestInOrderAcked {
+	if ackFrame.LargestAcked <= h.largestInOrderAcked() {
 		return nil
 	}
 
@@ -277,7 +262,7 @@ func (h *sentPacketHandler) BytesInFlight() protocol.ByteCount {
 }
 
 func (h *sentPacketHandler) GetLeastUnacked() protocol.PacketNumber {
-	return h.LargestInOrderAcked + 1
+	return h.largestInOrderAcked() + 1
 }
 
 func (h *sentPacketHandler) GetStopWaitingFrame() *frames.StopWaitingFrame {
@@ -303,10 +288,6 @@ func (h *sentPacketHandler) MaybeQueueRTOs() {
 
 	for el := h.packetHistory.Front(); el != nil; el = el.Next() {
 		packet := &el.Value
-		if packet.PacketNumber < h.LargestInOrderAcked {
-			continue
-		}
-
 		packetsLost := congestion.PacketVector{congestion.PacketInfo{
 			Number: packet.PacketNumber,
 			Length: packet.Length,
@@ -337,9 +318,10 @@ func (h *sentPacketHandler) TimeOfFirstRTO() time.Time {
 }
 
 func (h *sentPacketHandler) garbageCollectSkippedPackets() {
+	lioa := h.largestInOrderAcked()
 	deleteIndex := 0
 	for i, p := range h.skippedPackets {
-		if p <= h.LargestInOrderAcked {
+		if p <= lioa {
 			deleteIndex = i + 1
 		}
 	}
