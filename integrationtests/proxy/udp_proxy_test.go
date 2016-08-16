@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/lucas-clemente/quic-go"
@@ -130,7 +131,7 @@ var _ = Describe("UDP Proxy", func() {
 				Eventually(func() map[string]*connection { return proxy.clientDict }).Should(HaveLen(1))
 				var conn *connection
 				for _, conn = range proxy.clientDict {
-					Expect(conn.incomingPacketCounter).To(Equal(uint64(1)))
+					Expect(atomic.LoadUint64(&conn.incomingPacketCounter)).To(Equal(uint64(1)))
 				}
 				_, err = clientConn.Write(makePacket(2, []byte("decafbad")))
 				Expect(err).ToNot(HaveOccurred())
@@ -147,7 +148,7 @@ var _ = Describe("UDP Proxy", func() {
 				var key string
 				var conn *connection
 				for key, conn = range proxy.clientDict {
-					Eventually(conn.outgoingPacketCounter).Should(Equal(uint64(1)))
+					Eventually(func() uint64 { return atomic.LoadUint64(&conn.outgoingPacketCounter) }).Should(Equal(uint64(1)))
 				}
 				_, err = clientConn.Write(makePacket(2, []byte("decafbad")))
 				Expect(err).ToNot(HaveOccurred())
