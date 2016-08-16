@@ -371,6 +371,18 @@ var _ = Describe("Stream", func() {
 			s[0] = 'v'
 			Expect(str.getDataForWriting(3)).To(Equal([]byte("foo")))
 		})
+
+		It("returns when given a nil input", func() {
+			n, err := str.Write(nil)
+			Expect(n).To(BeZero())
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("returns when given an empty slice", func() {
+			n, err := str.Write([]byte(""))
+			Expect(n).To(BeZero())
+			Expect(err).ToNot(HaveOccurred())
+		})
 	})
 
 	Context("closing", func() {

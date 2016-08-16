@@ -127,6 +127,15 @@ func (s *stream) ReadByte() (byte, error) {
 
 func (s *stream) Write(p []byte) (int, error) {
 	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	if s.err != nil {
+		return 0, s.err
+	}
+
+	if len(p) == 0 {
+		return 0, nil
+	}
 
 	s.dataForWriting = make([]byte, len(p))
 	copy(s.dataForWriting, p)
@@ -137,10 +146,10 @@ func (s *stream) Write(p []byte) (int, error) {
 		s.doneWritingOrErrCond.Wait()
 	}
 
-	defer s.mutex.Unlock()
 	if s.err != nil {
 		return 0, s.err
 	}
+
 	return len(p), nil
 }
 
