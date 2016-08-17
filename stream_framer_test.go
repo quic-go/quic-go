@@ -175,6 +175,36 @@ var _ = Describe("Stream Framer", func() {
 				Expect(framer.retransmissionQueue[0].Offset).To(Equal(fs[0].DataLen()))
 			})
 
+			It("never returns an empty stream frame", func() {
+				// this one frame will be split off from again and again in this test. Therefore, it has to be large enough (checked again at the end)
+				origFrame := &frames.StreamFrame{
+					StreamID: 5,
+					Offset:   1,
+					FinBit:   false,
+					Data:     bytes.Repeat([]byte{'f'}, 30*30),
+				}
+				framer.AddFrameForRetransmission(origFrame)
+
+				minFrameDataLen := protocol.MaxFrameAndPublicHeaderSize
+
+				for i := 0; i < 30; i++ {
+					frames, currentLen := framer.maybePopFramesForRetransmission(protocol.ByteCount(i))
+					if len(frames) == 0 {
+						Expect(currentLen).To(BeZero())
+					} else {
+						Expect(frames).To(HaveLen(1))
+						Expect(currentLen).ToNot(BeZero())
+						dataLen := frames[0].DataLen()
+						Expect(dataLen).ToNot(BeZero())
+						if dataLen < minFrameDataLen {
+							minFrameDataLen = dataLen
+						}
+					}
+				}
+				Expect(framer.retransmissionQueue).To(HaveLen(1)) // check that origFrame was large enough for this test and didn't get used up completely
+				Expect(minFrameDataLen).To(Equal(protocol.ByteCount(1)))
+			})
+
 			It("only removes a frame from the framer after returning all split parts", func() {
 				framer.AddFrameForRetransmission(retransmittedFrame2)
 				fs := framer.PopStreamFrames(6)

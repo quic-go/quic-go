@@ -48,7 +48,7 @@ func (f *streamFramer) maybePopFramesForRetransmission(maxLen protocol.ByteCount
 		frame.DataLenPresent = true
 
 		frameHeaderLen, _ := frame.MinLength(protocol.VersionWhatever) // can never error
-		if currentLen+frameHeaderLen > maxLen {
+		if currentLen+frameHeaderLen >= maxLen {
 			break
 		}
 

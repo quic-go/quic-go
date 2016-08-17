@@ -191,7 +191,8 @@ func (f *StreamFrame) getOffsetLength() protocol.ByteCount {
 	return 8
 }
 
-// MinLength of a written frame
+// MinLength returns the length of the header of a StreamFrame
+// the total length of the StreamFrame is frame.MinLength() + frame.DataLen()
 func (f *StreamFrame) MinLength(protocol.VersionNumber) (protocol.ByteCount, error) {
 	length := protocol.ByteCount(1) + protocol.ByteCount(f.calculateStreamIDLength()) + f.getOffsetLength()
 	if f.DataLenPresent {
