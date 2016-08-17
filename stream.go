@@ -69,13 +69,15 @@ func (s *stream) Read(p []byte) (int, error) {
 		frame := s.frameQueue.Head()
 
 		if frame == nil && bytesRead > 0 {
-			defer s.mutex.Unlock()
+			s.mutex.Unlock()
 			return bytesRead, s.err
 		}
 
+		var err error
 		for {
 			// Stop waiting on errors
 			if s.err != nil {
+				err = s.err
 				break
 			}
 			if frame != nil {
@@ -86,11 +88,12 @@ func (s *stream) Read(p []byte) (int, error) {
 			frame = s.frameQueue.Head()
 		}
 		s.mutex.Unlock()
+		// Here, either frame != nil xor err != nil
 
 		if frame == nil {
 			atomic.StoreInt32(&s.eof, 1)
 			// We have an err and no data, return the error
-			return bytesRead, s.err
+			return bytesRead, err
 		}
 
 		m := utils.Min(len(p)-bytesRead, int(frame.DataLen())-s.readPosInFrame)
