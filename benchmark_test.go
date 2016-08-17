@@ -76,7 +76,7 @@ func setFlowControlParameters(mgr *handshake.ConnectionParametersManager) {
 	})
 }
 
-var _ = PDescribe("Benchmarks", func() {
+var _ = Describe("Benchmarks", func() {
 	for i := range protocol.SupportedVersions {
 		version := protocol.SupportedVersions[i]
 
