@@ -169,7 +169,7 @@ func setupSelenium() {
 	)
 	docker, err = gexec.Start(dockerCmd, GinkgoWriter, GinkgoWriter)
 	Expect(err).NotTo(HaveOccurred())
-	Eventually(docker.Out, 5).Should(gbytes.Say("Selenium Server is up and running"))
+	Eventually(docker.Out, 10).Should(gbytes.Say("Selenium Server is up and running"))
 }
 
 func stopSelenium() {
