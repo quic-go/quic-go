@@ -1,6 +1,8 @@
 package quic
 
 import (
+	"runtime"
+
 	"github.com/lucas-clemente/quic-go/flowcontrol"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -96,15 +98,22 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 		}
 
 		data := s.getDataForWriting(maxLen)
-		if data == nil {
-			if s.shouldSendFin() {
-				frame.FinBit = true
-				s.sentFin()
-				res = append(res, frame)
-				currentLen += frameHeaderBytes + frame.DataLen()
-				frame = &frames.StreamFrame{DataLenPresent: true}
-			}
+
+		// Here, stream.Write() may return in parallel. Afterwards, the user may
+		// call stream.Close(). We want to pack the FIN into the same frame,
+		// so we speculatively allow the other goroutines to run.
+		// In tests, this increased the percentage of FINs packed into the same
+		// frame from ~20% to ~97%.
+		runtime.Gosched()
+
+		shouldSendFin := s.shouldSendFin()
+		if data == nil && !shouldSendFin {
 			return true, nil
+		}
+
+		if shouldSendFin {
+			frame.FinBit = true
+			s.sentFin()
 		}
 
 		frame.Data = data

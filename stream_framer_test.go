@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -253,6 +254,38 @@ var _ = Describe("Stream Framer", func() {
 				Expect(fs[0].FinBit).To(BeTrue())
 				Expect(fs[0].Data).To(BeEmpty())
 			})
+
+			It("bundles FINs with data", func() {
+				// Since this is non-deterministic (see the comment in maybePopNormalFrames),
+				// we give it a few tries and assert that FINs were packed at least
+				// some times.
+				stream1.onData = func() {}
+				stream1.doneWritingOrErrCond.L = &stream1.mutex
+				const n = 1000
+				nFins := 0
+				for i := 0; i < n; {
+					go func() {
+						defer GinkgoRecover()
+						_, err := stream1.Write([]byte("foobar"))
+						Expect(err).NotTo(HaveOccurred())
+						stream1.Close()
+					}()
+					time.Sleep(time.Microsecond)
+					fs := framer.PopStreamFrames(1000)
+					if len(fs) != 1 {
+						continue
+					}
+					Expect(fs[0].StreamID).To(Equal(stream1.streamID))
+					if fs[0].FinBit {
+						nFins++
+					}
+					stream1.closed = 0
+					stream1.finSent = false
+					stream1.dataForWriting = nil
+					i++
+				}
+				Expect(nFins).To(BeNumerically(">", n/2))
+			}, 5)
 		})
 	})
 
