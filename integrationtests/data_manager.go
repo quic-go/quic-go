@@ -2,7 +2,8 @@ package integrationtests
 
 import (
 	"crypto/md5"
-	"crypto/rand"
+	"math/rand"
+	"time"
 )
 
 type dataManager struct {
@@ -12,7 +13,8 @@ type dataManager struct {
 
 func (m *dataManager) GenerateData(len int) error {
 	m.data = make([]byte, len)
-	_, err := rand.Read(m.data)
+	r := rand.New(rand.NewSource(int64(time.Now().Nanosecond())))
+	_, err := r.Read(m.data)
 	if err != nil {
 		return err
 	}
