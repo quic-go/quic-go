@@ -23,24 +23,37 @@ import (
 
 type linkedConnection struct {
 	other *Session
+	c     chan []byte
+}
+
+func newLinkedConnection(other *Session) *linkedConnection {
+	c := make(chan []byte, 500)
+	conn := &linkedConnection{
+		c:     c,
+		other: other,
+	}
+	go func() {
+		for packet := range c {
+			r := bytes.NewReader(packet)
+			hdr, err := ParsePublicHeader(r)
+			if err != nil {
+				Expect(err).NotTo(HaveOccurred())
+			}
+			hdr.Raw = packet[:len(packet)-r.Len()]
+			conn.other.handlePacket(nil, hdr, packet[len(packet)-r.Len():])
+		}
+	}()
+	return conn
 }
 
 func (c *linkedConnection) write(p []byte) error {
 	packet := getPacketBuffer()
 	packet = packet[:len(p)]
 	copy(packet, p)
-
-	go func() {
-		time.Sleep(100 * time.Microsecond)
-		r := bytes.NewReader(packet)
-		hdr, err := ParsePublicHeader(r)
-		if err != nil {
-			Expect(err).NotTo(HaveOccurred())
-		}
-		hdr.Raw = packet[:len(packet)-r.Len()]
-
-		c.other.handlePacket(nil, hdr, packet[len(packet)-r.Len():])
-	}()
+	select {
+	case c.c <- packet:
+	default:
+	}
 	return nil
 }
 
@@ -63,7 +76,7 @@ func setFlowControlParameters(mgr *handshake.ConnectionParametersManager) {
 	})
 }
 
-var _ = PDescribe("Benchmarks", func() {
+var _ = Describe("Benchmarks", func() {
 	for i := range protocol.SupportedVersions {
 		version := protocol.SupportedVersions[i]
 
@@ -74,14 +87,14 @@ var _ = PDescribe("Benchmarks", func() {
 			Measure("two linked sessions", func(b Benchmarker) {
 				connID := protocol.ConnectionID(mrand.Uint32())
 
-				c1 := &linkedConnection{}
+				c1 := newLinkedConnection(nil)
 				session1I, err := newSession(c1, version, connID, nil, func(*Session, utils.Stream) {}, func(id protocol.ConnectionID) {})
 				if err != nil {
 					Expect(err).NotTo(HaveOccurred())
 				}
 				session1 := session1I.(*Session)
 
-				c2 := &linkedConnection{other: session1}
+				c2 := newLinkedConnection(session1)
 				session2I, err := newSession(c2, version, connID, nil, func(*Session, utils.Stream) {}, func(id protocol.ConnectionID) {})
 				if err != nil {
 					Expect(err).NotTo(HaveOccurred())
