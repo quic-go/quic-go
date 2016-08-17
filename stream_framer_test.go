@@ -241,6 +241,18 @@ var _ = Describe("Stream Framer", func() {
 				Expect(fs[0].FinBit).To(BeTrue())
 				Expect(fs[0].Data).To(BeEmpty())
 			})
+
+			It("sends FINs when flow-control blocked", func() {
+				stream1.writeOffset = 42
+				stream1.closed = 1
+				fcm.sendWindowSizes[stream1.StreamID()] = 42
+				fs := framer.PopStreamFrames(1000)
+				Expect(fs).To(HaveLen(1))
+				Expect(fs[0].StreamID).To(Equal(stream1.streamID))
+				Expect(fs[0].Offset).To(Equal(stream1.writeOffset))
+				Expect(fs[0].FinBit).To(BeTrue())
+				Expect(fs[0].Data).To(BeEmpty())
+			})
 		})
 	})
 
