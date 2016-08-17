@@ -79,14 +79,9 @@ var _ = Describe("Response Writer", func() {
 		}))
 	})
 
-	It("writes a 200 in finish if nothing was called", func() {
-		w.finish()
-		Expect(headerStream.Bytes()).To(Equal([]byte{0x0, 0x0, 0x1, 0x1, 0x4, 0x0, 0x0, 0x0, 0x5, 0x88})) // 0x88 is 200
-	})
-
-	It("doesn't do anything in finish if data was written before", func() {
+	It("does not WriteHeader() twice", func() {
 		w.WriteHeader(200)
-		w.finish()
+		w.WriteHeader(500)
 		Expect(headerStream.Bytes()).To(Equal([]byte{0x0, 0x0, 0x1, 0x1, 0x4, 0x0, 0x0, 0x0, 0x5, 0x88})) // 0x88 is 200
 	})
 })

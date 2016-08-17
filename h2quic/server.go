@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -166,8 +167,25 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 		if handler == nil {
 			handler = http.DefaultServeMux
 		}
-		handler.ServeHTTP(responseWriter, req)
-		responseWriter.finish()
+		panicked := false
+		func() {
+			defer func() {
+				if p := recover(); p != nil {
+					// Copied from net/http/server.go
+					const size = 64 << 10
+					buf := make([]byte, size)
+					buf = buf[:runtime.Stack(buf, false)]
+					utils.Errorf("http: panic serving: %v\n%s", p, buf)
+					panicked = true
+				}
+			}()
+			handler.ServeHTTP(responseWriter, req)
+		}()
+		if panicked {
+			responseWriter.WriteHeader(500)
+		} else {
+			responseWriter.WriteHeader(200)
+		}
 		if responseWriter.dataStream != nil {
 			responseWriter.dataStream.Close()
 		}

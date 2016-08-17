@@ -38,6 +38,9 @@ func (w *responseWriter) Header() http.Header {
 }
 
 func (w *responseWriter) WriteHeader(status int) {
+	if w.headerWritten {
+		return
+	}
 	w.headerWritten = true
 
 	var headers bytes.Buffer
@@ -67,10 +70,4 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 		w.WriteHeader(200)
 	}
 	return w.dataStream.Write(p)
-}
-
-func (w *responseWriter) finish() {
-	if !w.headerWritten {
-		w.WriteHeader(200)
-	}
 }
