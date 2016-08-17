@@ -98,9 +98,9 @@ var _ = Describe("Cert compression", func() {
 	})
 
 	It("uses common certificate sets", func() {
-		cert := certsets.CertSet1[42]
+		cert := certsets.CertSet3[42]
 		setHash := make([]byte, 8)
-		binary.LittleEndian.PutUint64(setHash, certsets.CertSet1Hash)
+		binary.LittleEndian.PutUint64(setHash, certsets.CertSet3Hash)
 		chain := [][]byte{cert}
 		compressed, err := compressChain(chain, setHash, nil)
 		Expect(err).ToNot(HaveOccurred())
@@ -132,9 +132,9 @@ var _ = Describe("Cert compression", func() {
 
 	It("uses common certificates and compressed combined", func() {
 		cert1 := []byte{0xde, 0xca, 0xfb, 0xad}
-		cert2 := certsets.CertSet1[42]
+		cert2 := certsets.CertSet3[42]
 		setHash := make([]byte, 8)
-		binary.LittleEndian.PutUint64(setHash, certsets.CertSet1Hash)
+		binary.LittleEndian.PutUint64(setHash, certsets.CertSet3Hash)
 		certZlib := &bytes.Buffer{}
 		z, err := zlib.NewWriterLevelDict(certZlib, flate.BestCompression, append(cert2, certDictZlib...))
 		Expect(err).ToNot(HaveOccurred())

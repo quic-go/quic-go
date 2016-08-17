@@ -9,8 +9,8 @@ import (
 type certSet [][]byte
 
 var certSets = map[uint64]certSet{
-	certsets.CertSet1Hash: certsets.CertSet1,
 	certsets.CertSet2Hash: certsets.CertSet2,
+	certsets.CertSet3Hash: certsets.CertSet3,
 }
 
 // findCertInSet searches for the cert in the set. Negative return value means not found.
