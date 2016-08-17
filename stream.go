@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"fmt"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -97,6 +98,13 @@ func (s *stream) Read(p []byte) (int, error) {
 		}
 
 		m := utils.Min(len(p)-bytesRead, int(frame.DataLen())-s.readPosInFrame)
+
+		if bytesRead > len(p) {
+			return bytesRead, fmt.Errorf("BUG: bytesRead (%d) > len(p) (%d) in stream.Read", bytesRead, len(p))
+		}
+		if s.readPosInFrame > int(frame.DataLen()) {
+			return bytesRead, fmt.Errorf("BUG: readPosInFrame (%d) > frame.DataLen (%d) in stream.Read", s.readPosInFrame, frame.DataLen())
+		}
 		copy(p[bytesRead:], frame.Data[s.readPosInFrame:])
 
 		s.readPosInFrame += m
