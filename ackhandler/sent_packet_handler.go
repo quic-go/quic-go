@@ -266,7 +266,7 @@ func (h *sentPacketHandler) GetLeastUnacked() protocol.PacketNumber {
 }
 
 func (h *sentPacketHandler) GetStopWaitingFrame() *frames.StopWaitingFrame {
-	return h.stopWaitingManager.GetStopWaitingFrame()
+	return h.stopWaitingManager.GetStopWaitingFrame(false)
 }
 
 func (h *sentPacketHandler) CongestionAllowsSending() bool {

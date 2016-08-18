@@ -9,17 +9,24 @@ import (
 type stopWaitingManager struct {
 	largestLeastUnackedSent protocol.PacketNumber
 	nextLeastUnacked        protocol.PacketNumber
+
+	lastStopWaitingFrame *frames.StopWaitingFrame
 }
 
-func (s *stopWaitingManager) GetStopWaitingFrame() *frames.StopWaitingFrame {
+func (s *stopWaitingManager) GetStopWaitingFrame(force bool) *frames.StopWaitingFrame {
 	if s.nextLeastUnacked <= s.largestLeastUnackedSent {
+		if force {
+			return s.lastStopWaitingFrame
+		}
 		return nil
 	}
 
 	s.largestLeastUnackedSent = s.nextLeastUnacked
-	return &frames.StopWaitingFrame{
+	swf := &frames.StopWaitingFrame{
 		LeastUnacked: s.nextLeastUnacked,
 	}
+	s.lastStopWaitingFrame = swf
+	return swf
 }
 
 func (s *stopWaitingManager) ReceivedAck(ack *frames.AckFrame) {
