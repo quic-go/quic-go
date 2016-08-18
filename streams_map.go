@@ -7,17 +7,15 @@ import (
 
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
-)
-
-const (
-	maxNumStreams = int(float32(protocol.MaxStreamsPerConnection) * protocol.MaxStreamsMultiplier)
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 type streamsMap struct {
-	streams     map[protocol.StreamID]*stream
-	openStreams []protocol.StreamID
-	mutex       sync.RWMutex
-	newStream   newStreamLambda
+	streams       map[protocol.StreamID]*stream
+	openStreams   []protocol.StreamID
+	mutex         sync.RWMutex
+	newStream     newStreamLambda
+	maxNumStreams int
 
 	roundRobinIndex int
 }
@@ -30,10 +28,13 @@ var (
 )
 
 func newStreamsMap(newStream newStreamLambda) *streamsMap {
+	maxNumStreams := utils.Max(int(float32(protocol.MaxIncomingDynamicStreams)*protocol.MaxStreamsMultiplier), int(protocol.MaxIncomingDynamicStreams))
+
 	return &streamsMap{
-		streams:     map[protocol.StreamID]*stream{},
-		openStreams: make([]protocol.StreamID, 0, maxNumStreams),
-		newStream:   newStream,
+		streams:       map[protocol.StreamID]*stream{},
+		openStreams:   make([]protocol.StreamID, 0, maxNumStreams),
+		newStream:     newStream,
+		maxNumStreams: maxNumStreams,
 	}
 }
 
@@ -54,7 +55,7 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 	if ok {
 		return s, nil
 	}
-	if len(m.openStreams) == maxNumStreams {
+	if len(m.openStreams) == m.maxNumStreams {
 		return nil, qerr.TooManyOpenStreams
 	}
 	if id%2 == 0 {
