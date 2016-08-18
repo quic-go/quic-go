@@ -31,6 +31,11 @@ var _ = Describe("Streams Map", func() {
 			Expect(s.StreamID()).To(Equal(protocol.StreamID(5)))
 		})
 
+		It("rejects streams with even IDs", func() {
+			_, err := m.GetOrOpenStream(6)
+			Expect(err).To(MatchError("InvalidStreamID: attempted to open stream 6 from client-side"))
+		})
+
 		It("gets existing streams", func() {
 			s, err := m.GetOrOpenStream(5)
 			Expect(err).NotTo(HaveOccurred())
@@ -49,10 +54,14 @@ var _ = Describe("Streams Map", func() {
 			Expect(s).To(BeNil())
 		})
 
+		It("panics on OpenStream", func() {
+			Expect(func() { m.OpenStream(0) }).To(Panic())
+		})
+
 		Context("counting streams", func() {
 			It("errors when too many streams are opened", func() {
 				for i := 0; i < maxNumStreams; i++ {
-					_, err := m.GetOrOpenStream(protocol.StreamID(i))
+					_, err := m.GetOrOpenStream(protocol.StreamID(i*2 + 1))
 					Expect(err).NotTo(HaveOccurred())
 				}
 				_, err := m.GetOrOpenStream(protocol.StreamID(maxNumStreams))
@@ -61,9 +70,9 @@ var _ = Describe("Streams Map", func() {
 
 			It("does not error when many streams are opened and closed", func() {
 				for i := 2; i < 10*maxNumStreams; i++ {
-					_, err := m.GetOrOpenStream(protocol.StreamID(i))
+					_, err := m.GetOrOpenStream(protocol.StreamID(i*2 + 1))
 					Expect(err).NotTo(HaveOccurred())
-					m.RemoveStream(protocol.StreamID(i))
+					m.RemoveStream(protocol.StreamID(i*2 + 1))
 				}
 			})
 		})

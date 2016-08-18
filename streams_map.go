@@ -38,6 +38,7 @@ func newStreamsMap(newStream newStreamLambda) *streamsMap {
 }
 
 // GetOrOpenStream either returns an existing stream, a newly opened stream, or nil if a stream with the provided ID is already closed.
+// Newly opened streams should only originate from the client. To open a stream from the server, OpenStream should be used.
 func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 	m.mutex.RLock()
 	s, ok := m.streams[id]
@@ -56,12 +57,20 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 	if len(m.openStreams) == maxNumStreams {
 		return nil, qerr.TooManyOpenStreams
 	}
+	if id%2 == 0 {
+		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d from client-side", id))
+	}
 	s, err := m.newStream(id)
 	if err != nil {
 		return nil, err
 	}
 	m.putStream(s)
 	return s, nil
+}
+
+// OpenStream opens a stream from the server's side
+func (m *streamsMap) OpenStream(id protocol.StreamID) (*stream, error) {
+	panic("OpenStream: not implemented")
 }
 
 func (m *streamsMap) Iterate(fn streamLambda) error {

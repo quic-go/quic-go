@@ -142,10 +142,10 @@ var _ = Describe("Session", func() {
 				})
 
 				It("does not reject existing streams with even StreamIDs", func() {
-					_, err := session.GetOrOpenStream(4)
+					_, err := session.GetOrOpenStream(5)
 					Expect(err).ToNot(HaveOccurred())
 					err = session.handleStreamFrame(&frames.StreamFrame{
-						StreamID: 4,
+						StreamID: 5,
 						Data:     []byte{0xde, 0xca, 0xfb, 0xad},
 					})
 					Expect(err).ToNot(HaveOccurred())
@@ -820,16 +820,16 @@ var _ = Describe("Session", func() {
 			Context("counting streams", func() {
 				It("errors when too many streams are opened", func() {
 					for i := 2; i <= 110; i++ {
-						_, err := session.GetOrOpenStream(protocol.StreamID(i))
+						_, err := session.GetOrOpenStream(protocol.StreamID(i*2 + 1))
 						Expect(err).NotTo(HaveOccurred())
 					}
-					_, err := session.GetOrOpenStream(protocol.StreamID(111))
+					_, err := session.GetOrOpenStream(protocol.StreamID(301))
 					Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 				})
 
 				It("does not error when many streams are opened and closed", func() {
 					for i := 2; i <= 1000; i++ {
-						s, err := session.GetOrOpenStream(protocol.StreamID(i))
+						s, err := session.GetOrOpenStream(protocol.StreamID(i*2 + 1))
 						Expect(err).NotTo(HaveOccurred())
 						err = s.Close()
 						Expect(err).NotTo(HaveOccurred())
