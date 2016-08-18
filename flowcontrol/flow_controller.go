@@ -61,7 +61,6 @@ func (c *flowController) UpdateSendWindow(newOffset protocol.ByteCount) bool {
 	return false
 }
 
-// TODO: remove once the Stream doesn't use it anymore
 func (c *flowController) SendWindowSize() protocol.ByteCount {
 	sendFlowControlWindow := c.getSendFlowControlWindow()
 

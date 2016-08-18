@@ -569,7 +569,6 @@ func (s *Session) GetOrOpenStream(id protocol.StreamID) (utils.Stream, error) {
 	return s.streamsMap.GetOrOpenStream(id)
 }
 
-// The streamsMutex is locked by OpenStream or GetOrOpenStream before calling this function.
 func (s *Session) newStreamImpl(id protocol.StreamID) (*stream, error) {
 	return s.streamsMap.GetOrOpenStream(id)
 }

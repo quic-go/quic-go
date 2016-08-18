@@ -10,7 +10,6 @@ import (
 )
 
 type streamFramer struct {
-	// TODO: Simplify by extracting the streams map into a separate object
 	streamsMap *streamsMap
 
 	flowControlManager flowcontrol.FlowControlManager
