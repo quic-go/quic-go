@@ -494,7 +494,7 @@ func (s *Session) sendPacket() error {
 			stopWaitingFrame = s.stopWaitingManager.GetStopWaitingFrame()
 		} else {
 			if ack != nil || hasRetransmission {
-				stopWaitingFrame = s.sentPacketHandler.GetStopWaitingFrame()
+				stopWaitingFrame = s.sentPacketHandler.GetStopWaitingFrame(false)
 			}
 		}
 		packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, s.sentPacketHandler.GetLeastUnacked(), maySendOnlyAck)

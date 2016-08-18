@@ -13,7 +13,7 @@ type SentPacketHandler interface {
 	SentPacket(packet *ackhandlerlegacy.Packet) error
 	ReceivedAck(ackFrame *frames.AckFrame, withPacketNumber protocol.PacketNumber) error
 
-	GetStopWaitingFrame() *frames.StopWaitingFrame
+	GetStopWaitingFrame(force bool) *frames.StopWaitingFrame
 
 	MaybeQueueRTOs()
 	DequeuePacketForRetransmission() (packet *ackhandlerlegacy.Packet)

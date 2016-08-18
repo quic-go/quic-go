@@ -614,12 +614,12 @@ var _ = Describe("SentPacketHandler", func() {
 				ack := frames.AckFrame{LargestAcked: 5, LowestAcked: 5}
 				err := handler.ReceivedAck(&ack, 1)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.GetStopWaitingFrame()).To(Equal(&frames.StopWaitingFrame{LeastUnacked: 6}))
+				Expect(handler.GetStopWaitingFrame(false)).To(Equal(&frames.StopWaitingFrame{LeastUnacked: 6}))
 			})
 
 			It("gets a StopWaitingFrame after queueing a retransmission", func() {
 				handler.queuePacketForRetransmission(getPacketElement(5))
-				Expect(handler.GetStopWaitingFrame()).To(Equal(&frames.StopWaitingFrame{LeastUnacked: 6}))
+				Expect(handler.GetStopWaitingFrame(false)).To(Equal(&frames.StopWaitingFrame{LeastUnacked: 6}))
 			})
 		})
 	})

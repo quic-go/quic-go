@@ -59,7 +59,7 @@ func (h *mockSentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacke
 }
 func (h *mockSentPacketHandler) BytesInFlight() protocol.ByteCount      { return 0 }
 func (h *mockSentPacketHandler) GetLeastUnacked() protocol.PacketNumber { return 1 }
-func (h *mockSentPacketHandler) GetStopWaitingFrame() *frames.StopWaitingFrame {
+func (h *mockSentPacketHandler) GetStopWaitingFrame(force bool) *frames.StopWaitingFrame {
 	h.requestedStopWaiting = true
 	return nil
 }

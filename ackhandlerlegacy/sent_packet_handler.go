@@ -304,7 +304,7 @@ func (h *sentPacketHandler) GetLeastUnacked() protocol.PacketNumber {
 	return h.highestInOrderAckedPacketNumber + 1
 }
 
-func (h *sentPacketHandler) GetStopWaitingFrame() *frames.StopWaitingFrame {
+func (h *sentPacketHandler) GetStopWaitingFrame(force bool) *frames.StopWaitingFrame {
 	panic("Legacy AckHandler should use StopWaitingManager")
 }
 

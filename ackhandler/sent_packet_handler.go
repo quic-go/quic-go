@@ -265,8 +265,8 @@ func (h *sentPacketHandler) GetLeastUnacked() protocol.PacketNumber {
 	return h.largestInOrderAcked() + 1
 }
 
-func (h *sentPacketHandler) GetStopWaitingFrame() *frames.StopWaitingFrame {
-	return h.stopWaitingManager.GetStopWaitingFrame(false)
+func (h *sentPacketHandler) GetStopWaitingFrame(force bool) *frames.StopWaitingFrame {
+	return h.stopWaitingManager.GetStopWaitingFrame(force)
 }
 
 func (h *sentPacketHandler) CongestionAllowsSending() bool {
