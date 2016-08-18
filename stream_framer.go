@@ -44,6 +44,10 @@ func (f *streamFramer) PopBlockedFrame() *frames.BlockedFrame {
 	return frame
 }
 
+func (f *streamFramer) HasFramesForRetransmission() bool {
+	return len(f.retransmissionQueue) > 0
+}
+
 func (f *streamFramer) maybePopFramesForRetransmission(maxLen protocol.ByteCount) (res []*frames.StreamFrame, currentLen protocol.ByteCount) {
 	for len(f.retransmissionQueue) > 0 {
 		frame := f.retransmissionQueue[0]

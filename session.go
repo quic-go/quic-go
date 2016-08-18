@@ -448,7 +448,6 @@ func (s *Session) sendPacket() error {
 		}
 
 		var controlFrames []frames.Frame
-		var hasRetransmission bool
 
 		// check for retransmissions first
 		for {
@@ -456,7 +455,6 @@ func (s *Session) sendPacket() error {
 			if retransmitPacket == nil {
 				break
 			}
-			hasRetransmission = true
 			utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 
 			if s.version <= protocol.Version33 {
@@ -489,12 +487,14 @@ func (s *Session) sendPacket() error {
 		// Check whether we are allowed to send a packet containing only an ACK
 		maySendOnlyAck := time.Now().Sub(s.delayedAckOriginTime) > protocol.AckSendDelay
 
+		hasRetransmission := s.streamFramer.HasFramesForRetransmission()
+
 		var stopWaitingFrame *frames.StopWaitingFrame
 		if s.version <= protocol.Version33 {
 			stopWaitingFrame = s.stopWaitingManager.GetStopWaitingFrame()
 		} else {
 			if ack != nil || hasRetransmission {
-				stopWaitingFrame = s.sentPacketHandler.GetStopWaitingFrame(false)
+				stopWaitingFrame = s.sentPacketHandler.GetStopWaitingFrame(hasRetransmission)
 			}
 		}
 		packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, s.sentPacketHandler.GetLeastUnacked(), maySendOnlyAck)

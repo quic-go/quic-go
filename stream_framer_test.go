@@ -44,6 +44,12 @@ var _ = Describe("Stream Framer", func() {
 		framer = newStreamFramer(streamsMap, fcm)
 	})
 
+	It("says if it has retransmissions", func() {
+		Expect(framer.HasFramesForRetransmission()).To(BeFalse())
+		framer.AddFrameForRetransmission(retransmittedFrame1)
+		Expect(framer.HasFramesForRetransmission()).To(BeTrue())
+	})
+
 	It("sets the DataLenPresent for dequeued retransmitted frames", func() {
 		framer.AddFrameForRetransmission(retransmittedFrame1)
 		fs := framer.PopStreamFrames(protocol.MaxByteCount)

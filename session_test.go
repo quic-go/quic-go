@@ -48,12 +48,16 @@ func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data
 
 type mockSentPacketHandler struct {
 	retransmissionQueue  []*ackhandlerlegacy.Packet
+	sentPackets          []*ackhandlerlegacy.Packet
 	congestionLimited    bool
 	maybeQueueRTOsCalled bool
 	requestedStopWaiting bool
 }
 
-func (h *mockSentPacketHandler) SentPacket(packet *ackhandlerlegacy.Packet) error { return nil }
+func (h *mockSentPacketHandler) SentPacket(packet *ackhandlerlegacy.Packet) error {
+	h.sentPackets = append(h.sentPackets, packet)
+	return nil
+}
 func (h *mockSentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNumber protocol.PacketNumber) error {
 	return nil
 }
@@ -61,7 +65,7 @@ func (h *mockSentPacketHandler) BytesInFlight() protocol.ByteCount      { return
 func (h *mockSentPacketHandler) GetLeastUnacked() protocol.PacketNumber { return 1 }
 func (h *mockSentPacketHandler) GetStopWaitingFrame(force bool) *frames.StopWaitingFrame {
 	h.requestedStopWaiting = true
-	return nil
+	return &frames.StopWaitingFrame{LeastUnacked: 0x1337}
 }
 func (h *mockSentPacketHandler) CongestionAllowsSending() bool { return !h.congestionLimited }
 func (h *mockSentPacketHandler) CheckForError() error          { return nil }
@@ -529,8 +533,12 @@ var _ = Describe("Session", func() {
 
 			Context("retransmissions", func() {
 				It("sends a StreamFrame from a packet queued for retransmission", func() {
-					// for QUIC 33, a StopWaitingFrame is added, so make sure the packet number of the new package is higher than the packet number of the retransmitted packet
+					// a StopWaitingFrame is added, so make sure the packet number of the new package is higher than the packet number of the retransmitted packet
 					session.packer.lastPacketNumber = 0x1337 + 10
+					if session.version > protocol.Version33 {
+						session.packer.packetNumberGenerator.next = 0x1337 + 9
+					}
+
 					f := frames.StreamFrame{
 						StreamID: 0x5,
 						Data:     []byte("foobar1234567"),
@@ -553,8 +561,12 @@ var _ = Describe("Session", func() {
 				})
 
 				It("sends a StreamFrame from a packet queued for retransmission", func() {
-					// for QUIC 33, a StopWaitingFrame is added, so make sure the packet number of the new package is higher than the packet number of the retransmitted packet
+					// a StopWaitingFrame is added, so make sure the packet number of the new package is higher than the packet number of the retransmitted packet
 					session.packer.lastPacketNumber = 0x1337 + 10
+					if session.version > protocol.Version33 {
+						session.packer.packetNumberGenerator.next = 0x1337 + 9
+					}
+
 					f1 := frames.StreamFrame{
 						StreamID: 0x5,
 						Data:     []byte("foobar"),
@@ -581,6 +593,33 @@ var _ = Describe("Session", func() {
 					Expect(conn.written[0]).To(ContainSubstring("foobar"))
 					Expect(conn.written[0]).To(ContainSubstring("loremipsum"))
 				})
+
+				// this test is not necessary before QUIC 34, since the legacy StopWaitingManager repeats StopWaitingFrames with every packet until the client ACKs the receipt of any of them
+				if version > protocol.Version33 {
+					It("always attaches a StopWaiting to a packet that contains a retransmission", func() {
+						// make sure the packet number of the new package is higher than the packet number of the retransmitted packet
+						session.packer.packetNumberGenerator.next = 0x1337 + 9
+
+						f := &frames.StreamFrame{
+							StreamID: 0x5,
+							Data:     bytes.Repeat([]byte{'f'}, int(1.5*float32(protocol.MaxPacketSize))),
+						}
+						session.streamFramer.AddFrameForRetransmission(f)
+
+						sph := newMockSentPacketHandler()
+						session.sentPacketHandler = sph
+
+						err := session.sendPacket()
+						Expect(err).NotTo(HaveOccurred())
+						Expect(conn.written).To(HaveLen(2))
+						sentPackets := sph.(*mockSentPacketHandler).sentPackets
+						Expect(sentPackets).To(HaveLen(2))
+						_, ok := sentPackets[0].Frames[0].(*frames.StopWaitingFrame)
+						Expect(ok).To(BeTrue())
+						_, ok = sentPackets[1].Frames[0].(*frames.StopWaitingFrame)
+						Expect(ok).To(BeTrue())
+					})
+				}
 
 				It("calls MaybeQueueRTOs even if congestion blocked, so that bytesInFlight is updated", func() {
 					sph := newMockSentPacketHandler()
