@@ -152,7 +152,7 @@ func setupQuicServer() {
 
 func setupSelenium() {
 	var err error
-	pullCmd := exec.Command("docker", "pull", "lclemente/standalone-chrome:latest")
+	pullCmd := exec.Command("docker", "pull", "lclemente/standalone-chrome:stable")
 	pull, err := gexec.Start(pullCmd, GinkgoWriter, GinkgoWriter)
 	Expect(err).NotTo(HaveOccurred())
 	// Assuming a download at 10 Mbit/s
@@ -165,7 +165,7 @@ func setupSelenium() {
 		"--rm",
 		"-p=4444:4444",
 		"--name", "quic-test-selenium",
-		"lclemente/standalone-chrome:latest",
+		"lclemente/standalone-chrome:stable",
 	)
 	docker, err = gexec.Start(dockerCmd, GinkgoWriter, GinkgoWriter)
 	Expect(err).NotTo(HaveOccurred())
