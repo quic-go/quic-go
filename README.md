@@ -3,7 +3,7 @@
 <img src="docs/quic.png" width=303 height=124>
 
 [![Godoc Reference](https://img.shields.io/badge/godoc-reference-blue.svg?style=flat-square)](https://godoc.org/github.com/lucas-clemente/quic-go)
-[![Linux Build Status](https://img.shields.io/travis/lucas-clemente/quic-go.svg?style=flat-square&label=linux+build)](https://travis-ci.org/lucas-clemente/quic-go)
+[![Linux Build Status](https://img.shields.io/travis/lucas-clemente/quic-go/master.svg?style=flat-square&label=linux+build)](https://travis-ci.org/lucas-clemente/quic-go)
 [![Windows Build Status](https://img.shields.io/appveyor/ci/lucas-clemente/quic-go.svg?style=flat-square&label=windows+build)](https://ci.appveyor.com/project/lucas-clemente/quic-go/branch/master)
 [![Code Coverage](https://img.shields.io/codecov/c/github/lucas-clemente/quic-go/master.svg?style=flat-square)](https://codecov.io/gh/lucas-clemente/quic-go/)
 
