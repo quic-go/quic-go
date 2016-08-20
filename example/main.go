@@ -1,12 +1,15 @@
 package main
 
 import (
+	"crypto/md5"
 	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"sync"
@@ -27,6 +30,11 @@ func (b binds) String() string {
 func (b *binds) Set(v string) error {
 	*b = strings.Split(v, ",")
 	return nil
+}
+
+// Size is needed by the /demo/upload handler to determine the size of the uploaded file
+type Size interface {
+	Size() int64
 }
 
 func init() {
@@ -57,6 +65,38 @@ func init() {
 			fmt.Printf("error reading body while handling /echo: %s\n", err.Error())
 		}
 		w.Write(body)
+	})
+
+	// accept file uploads and return the MD5 of the uploaded file
+	// maximum accepted file size is 1 GB
+	http.HandleFunc("/demo/upload", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			var err error
+			err = r.ParseMultipartForm(1 << 30) // 1 GB
+			if err == nil {
+				var file multipart.File
+				file, _, err = r.FormFile("uploadfile")
+				if err == nil {
+					var size int64
+					if sizeInterface, ok := file.(Size); ok {
+						size = sizeInterface.Size()
+						b := make([]byte, size)
+						file.Read(b)
+						md5 := md5.Sum(b)
+						fmt.Fprintf(w, "%x", md5)
+						return
+					}
+					err = errors.New("Couldn't get uploaded file size.")
+				}
+			}
+			if err != nil {
+				utils.Infof("Error receiving upload: %#v", err)
+			}
+		}
+		io.WriteString(w, `<html><body><form action="/demo/upload" method="post" enctype="multipart/form-data">
+				<input type="file" name="uploadfile"><br>
+				<input type="submit">
+			</form></body></html>`)
 	})
 }
 
