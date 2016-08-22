@@ -64,7 +64,7 @@ const MaxTrackedReceivedPackets uint32 = 2000
 
 // MaxStreamFrameSorterGaps is the maximum number of gaps between received StreamFrames
 // prevents DOS attacks against the streamFrameSorter
-const MaxStreamFrameSorterGaps = 50
+const MaxStreamFrameSorterGaps = 1000
 
 // CryptoMaxParams is the upper limit for the number of parameters in a crypto message.
 // Value taken from Chrome.
