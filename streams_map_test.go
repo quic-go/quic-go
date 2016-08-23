@@ -76,6 +76,37 @@ var _ = Describe("Streams Map", func() {
 				}
 			})
 		})
+
+		Context("DoS mitigation", func() {
+			It("opens and closes a lot of streams", func() {
+				for i := 1; i < 2*protocol.MaxNewStreamIDDelta; i += 2 {
+					streamID := protocol.StreamID(i)
+					_, err := m.GetOrOpenStream(streamID)
+					Expect(m.highestStreamOpenedByClient).To(Equal(streamID))
+					Expect(err).NotTo(HaveOccurred())
+					err = m.RemoveStream(streamID)
+					Expect(err).NotTo(HaveOccurred())
+				}
+			})
+
+			It("prevents opening of streams with very low StreamIDs, if higher streams have already been opened", func() {
+				for i := 1; i < protocol.MaxNewStreamIDDelta+14; i += 2 {
+					if i == 11 || i == 13 {
+						continue
+					}
+					streamID := protocol.StreamID(i)
+					_, err := m.GetOrOpenStream(streamID)
+					Expect(err).NotTo(HaveOccurred())
+					err = m.RemoveStream(streamID)
+					Expect(err).NotTo(HaveOccurred())
+				}
+				Expect(m.highestStreamOpenedByClient).To(Equal(protocol.StreamID(protocol.MaxNewStreamIDDelta + 13)))
+				_, err := m.GetOrOpenStream(11)
+				Expect(err).To(MatchError("InvalidStreamID: attempted to open stream 11, which is a lot smaller than the highest opened stream, 413"))
+				_, err = m.GetOrOpenStream(13)
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
 	})
 
 	Context("deleting streams", func() {
