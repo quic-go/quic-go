@@ -201,11 +201,11 @@ var _ = Describe("ConnectionsParameterManager", func() {
 
 	Context("max streams per connection", func() {
 		It("negotiates correctly when the client wants a larger number", func() {
-			Expect(cpm.negotiateMaxStreamsPerConnection(protocol.MaxStreamsPerConnection + 10)).To(Equal(protocol.MaxStreamsPerConnection))
+			Expect(cpm.negotiateMaxStreamsPerConnection(protocol.MaxStreamsPerConnection + 10)).To(Equal(uint32(protocol.MaxStreamsPerConnection)))
 		})
 
 		It("negotiates correctly when the client wants a smaller number", func() {
-			Expect(cpm.negotiateMaxStreamsPerConnection(protocol.MaxStreamsPerConnection - 1)).To(Equal(protocol.MaxStreamsPerConnection - 1))
+			Expect(cpm.negotiateMaxStreamsPerConnection(protocol.MaxStreamsPerConnection - 1)).To(Equal(uint32(protocol.MaxStreamsPerConnection - 1)))
 		})
 
 		It("sets the negotiated max streams per connection value", func() {

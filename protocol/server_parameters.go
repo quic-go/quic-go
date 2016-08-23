@@ -29,10 +29,10 @@ const ReceiveStreamFlowControlWindow ByteCount = (1 << 20) // 1 MB
 const ReceiveConnectionFlowControlWindow ByteCount = (1 << 20) * 1.5 // 1.5 MB
 
 // MaxStreamsPerConnection is the maximum value accepted for the number of streams per connection
-const MaxStreamsPerConnection uint32 = 100
+const MaxStreamsPerConnection = 100
 
 // MaxIncomingDynamicStreams is the maximum value accepted for the incoming number of dynamic streams per connection
-const MaxIncomingDynamicStreams uint32 = 100
+const MaxIncomingDynamicStreams = 100
 
 // MaxStreamsMultiplier is the slack the client is allowed for the maximum number of streams per connection, needed e.g. when packets are out of order or dropped. The minimum of this procentual increase and the absolute increment specified by MaxStreamsMinimumIncrement is used.
 const MaxStreamsMultiplier = 1.1
@@ -48,13 +48,13 @@ const MaxIdleConnectionStateLifetime = 60 * time.Second
 const MaxSessionUnprocessedPackets = 128
 
 // RetransmissionThreshold + 1 is the number of times a packet has to be NACKed so that it gets retransmitted
-const RetransmissionThreshold uint8 = 3
+const RetransmissionThreshold = 3
 
 // SkipPacketAveragePeriodLength is the average period length in which one packet number is skipped to prevent an Optimistic ACK attack
 const SkipPacketAveragePeriodLength PacketNumber = 500
 
 // MaxTrackedSkippedPackets is the maximum number of skipped packet numbers the SentPacketHandler keep track of for Optimistic ACK attack mitigation
-const MaxTrackedSkippedPackets int = 10
+const MaxTrackedSkippedPackets = 10
 
 // STKExpiryTimeSec is the valid time of a source address token in seconds
 const STKExpiryTimeSec = 24 * 60 * 60
@@ -62,11 +62,11 @@ const STKExpiryTimeSec = 24 * 60 * 60
 // MaxTrackedSentPackets is maximum number of sent packets saved for either later retransmission or entropy calculation
 // TODO: find a reasonable value here
 // TODO: decrease this value after dropping support for QUIC 33 and earlier
-const MaxTrackedSentPackets uint32 = 2000
+const MaxTrackedSentPackets = 2000
 
 // MaxTrackedReceivedPackets is the maximum number of received packets saved for doing the entropy calculations
 // TODO: think about what to do with this when adding support for QUIC 34
-const MaxTrackedReceivedPackets uint32 = 2000
+const MaxTrackedReceivedPackets = 2000
 
 // MaxStreamFrameSorterGaps is the maximum number of gaps between received StreamFrames
 // prevents DOS attacks against the streamFrameSorter
