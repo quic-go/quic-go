@@ -242,7 +242,6 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *PublicHeader, da
 		s.lastRcvdPacketNumber,
 		hdr.PacketNumber,
 	)
-	s.lastRcvdPacketNumber = hdr.PacketNumber
 	if utils.Debug() {
 		utils.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x", hdr.PacketNumber, len(data)+len(hdr.Raw), hdr.ConnectionID)
 	}
@@ -254,6 +253,9 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *PublicHeader, da
 	if err != nil {
 		return err
 	}
+
+	// Only do this after decrypting, so we are sure the packet is not attacker-controlled
+	s.lastRcvdPacketNumber = hdr.PacketNumber
 
 	err = s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, packet.entropyBit)
 	// ignore duplicate packets
