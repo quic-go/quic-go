@@ -37,6 +37,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			entryMap := cpm.GetSHLOMap()
 			Expect(entryMap).To(HaveKey(TagICSL))
 			Expect(entryMap).To(HaveKey(TagMSPC))
+			Expect(entryMap).To(HaveKey(TagMIDS))
 		})
 
 		It("sets the stream-level flow control windows in SHLO", func() {
@@ -65,6 +66,12 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			entryMap := cpm.GetSHLOMap()
 			Expect(entryMap).To(HaveKey(TagMSPC))
 			Expect(entryMap[TagMSPC]).To(Equal([]byte{0xEF, 0xBE, 0xAD, 0xDE}))
+		})
+
+		It("sets the maximum incoming dynamic streams per connection in SHLO", func() {
+			entryMap := cpm.GetSHLOMap()
+			Expect(entryMap).To(HaveKey(TagMIDS))
+			Expect(entryMap[TagMIDS]).To(Equal([]byte{100, 0, 0, 0}))
 		})
 	})
 

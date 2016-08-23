@@ -60,16 +60,16 @@ var _ = Describe("Streams Map", func() {
 
 		Context("counting streams", func() {
 			It("errors when too many streams are opened", func() {
-				for i := 0; i < maxNumStreams; i++ {
+				for i := 0; i < m.maxNumStreams; i++ {
 					_, err := m.GetOrOpenStream(protocol.StreamID(i*2 + 1))
 					Expect(err).NotTo(HaveOccurred())
 				}
-				_, err := m.GetOrOpenStream(protocol.StreamID(maxNumStreams))
+				_, err := m.GetOrOpenStream(protocol.StreamID(m.maxNumStreams))
 				Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 			})
 
 			It("does not error when many streams are opened and closed", func() {
-				for i := 2; i < 10*maxNumStreams; i++ {
+				for i := 2; i < 10*m.maxNumStreams; i++ {
 					_, err := m.GetOrOpenStream(protocol.StreamID(i*2 + 1))
 					Expect(err).NotTo(HaveOccurred())
 					m.RemoveStream(protocol.StreamID(i*2 + 1))

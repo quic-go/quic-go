@@ -130,12 +130,15 @@ func (h *ConnectionParametersManager) GetSHLOMap() map[Tag][]byte {
 	utils.WriteUint32(cfcw, uint32(h.GetReceiveConnectionFlowControlWindow()))
 	mspc := bytes.NewBuffer([]byte{})
 	utils.WriteUint32(mspc, h.GetMaxStreamsPerConnection())
+	mids := bytes.NewBuffer([]byte{})
+	utils.WriteUint32(mids, protocol.MaxIncomingDynamicStreams)
 	icsl := bytes.NewBuffer([]byte{})
 	utils.WriteUint32(icsl, uint32(h.GetIdleConnectionStateLifetime()/time.Second))
 
 	return map[Tag][]byte{
 		TagICSL: icsl.Bytes(),
 		TagMSPC: mspc.Bytes(),
+		TagMIDS: mids.Bytes(),
 		TagCFCW: cfcw.Bytes(),
 		TagSFCW: sfcw.Bytes(),
 	}
@@ -145,7 +148,6 @@ func (h *ConnectionParametersManager) GetSHLOMap() map[Tag][]byte {
 func (h *ConnectionParametersManager) GetSendStreamFlowControlWindow() protocol.ByteCount {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
-
 	return h.sendStreamFlowControlWindow
 }
 
@@ -153,7 +155,6 @@ func (h *ConnectionParametersManager) GetSendStreamFlowControlWindow() protocol.
 func (h *ConnectionParametersManager) GetSendConnectionFlowControlWindow() protocol.ByteCount {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
-
 	return h.sendConnectionFlowControlWindow
 }
 
@@ -161,7 +162,6 @@ func (h *ConnectionParametersManager) GetSendConnectionFlowControlWindow() proto
 func (h *ConnectionParametersManager) GetReceiveStreamFlowControlWindow() protocol.ByteCount {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
-
 	return h.receiveStreamFlowControlWindow
 }
 
@@ -169,7 +169,6 @@ func (h *ConnectionParametersManager) GetReceiveStreamFlowControlWindow() protoc
 func (h *ConnectionParametersManager) GetReceiveConnectionFlowControlWindow() protocol.ByteCount {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
-
 	return h.receiveConnectionFlowControlWindow
 }
 
@@ -177,7 +176,6 @@ func (h *ConnectionParametersManager) GetReceiveConnectionFlowControlWindow() pr
 func (h *ConnectionParametersManager) GetMaxStreamsPerConnection() uint32 {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
-
 	return h.maxStreamsPerConnection
 }
 
@@ -185,7 +183,6 @@ func (h *ConnectionParametersManager) GetMaxStreamsPerConnection() uint32 {
 func (h *ConnectionParametersManager) GetIdleConnectionStateLifetime() time.Duration {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
-
 	return h.idleConnectionStateLifetime
 }
 

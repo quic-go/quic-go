@@ -23,6 +23,8 @@ const (
 	TagCCRT Tag = 'C' + 'C'<<8 + 'R'<<16 + 'T'<<24
 	// TagMSPC is max streams per connection
 	TagMSPC Tag = 'M' + 'S'<<8 + 'P'<<16 + 'C'<<24
+	// TagMIDS is max incoming dyanamic streams
+	TagMIDS Tag = 'M' + 'I'<<8 + 'D'<<16 + 'S'<<24
 	// TagUAID is the user agent ID
 	TagUAID Tag = 'U' + 'A'<<8 + 'I'<<16 + 'D'<<24
 	// TagTCID is truncation of the connection ID
