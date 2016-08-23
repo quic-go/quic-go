@@ -154,7 +154,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 	})
 
 	Context("idle connection state lifetime", func() {
-		It("has initial idle conneciton state lifetime", func() {
+		It("has initial idle connection state lifetime", func() {
 			Expect(cpm.GetIdleConnectionStateLifetime()).To(Equal(protocol.InitialIdleConnectionStateLifetime))
 		})
 

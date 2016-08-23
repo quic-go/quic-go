@@ -159,12 +159,11 @@ func ParseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 		return nil, ErrInvalidAckRanges
 	}
 
-	var numTimestampByte byte
-	numTimestampByte, err = r.ReadByte()
+	var numTimestamp byte
+	numTimestamp, err = r.ReadByte()
 	if err != nil {
 		return nil, err
 	}
-	numTimestamp := uint8(numTimestampByte)
 
 	if numTimestamp > 0 {
 		// Delta Largest acked
@@ -309,7 +308,7 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 					gapWritten = 0xFF
 				}
 
-				b.WriteByte(uint8(gapWritten))
+				b.WriteByte(gapWritten)
 				switch missingSequenceNumberDeltaLen {
 				case protocol.PacketNumberLen1:
 					b.WriteByte(uint8(lengthWritten))
@@ -318,7 +317,7 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 				case protocol.PacketNumberLen4:
 					utils.WriteUint32(b, uint32(lengthWritten))
 				case protocol.PacketNumberLen6:
-					utils.WriteUint48(b, uint64(lengthWritten))
+					utils.WriteUint48(b, lengthWritten)
 				}
 
 				numRangesWritten++

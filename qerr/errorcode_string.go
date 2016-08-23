@@ -23,7 +23,7 @@ var (
 func (i ErrorCode) String() string {
 	switch {
 	case 1 <= i && i <= 14:
-		i -= 1
+		i--
 		return _ErrorCode_name_0[_ErrorCode_index_0[i]:_ErrorCode_index_0[i+1]]
 	case 16 <= i && i <= 20:
 		i -= 16

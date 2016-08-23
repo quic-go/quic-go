@@ -129,7 +129,7 @@ func (h *ConnectionParametersManager) GetSHLOMap() map[Tag][]byte {
 	cfcw := bytes.NewBuffer([]byte{})
 	utils.WriteUint32(cfcw, uint32(h.GetReceiveConnectionFlowControlWindow()))
 	mspc := bytes.NewBuffer([]byte{})
-	utils.WriteUint32(mspc, uint32(h.GetMaxStreamsPerConnection()))
+	utils.WriteUint32(mspc, h.GetMaxStreamsPerConnection())
 	icsl := bytes.NewBuffer([]byte{})
 	utils.WriteUint32(icsl, uint32(h.GetIdleConnectionStateLifetime()/time.Second))
 
