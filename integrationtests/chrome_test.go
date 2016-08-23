@@ -11,6 +11,7 @@ import (
 	"github.com/tebeka/selenium"
 
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -67,126 +68,128 @@ var _ = Describe("Chrome tests", func() {
 		Expect(source).ToNot(ContainSubstring("Hello, World!\n"))
 	})
 
-	for i := range protocol.SupportedVersions {
-		version := protocol.SupportedVersions[i]
+	// for i := range protocol.SupportedVersions {
+	// version := protocol.SupportedVersions[i]
+	version := protocol.Version34
 
-		Context(fmt.Sprintf("with quic version %d", version), func() {
-			var (
-				wd                      selenium.WebDriver
-				supportedVersionsBefore []protocol.VersionNumber
-			)
+	Context(fmt.Sprintf("with quic version %d", version), func() {
+		var (
+			wd                      selenium.WebDriver
+			supportedVersionsBefore []protocol.VersionNumber
+		)
 
-			BeforeEach(func() {
-				supportedVersionsBefore = protocol.SupportedVersions
-				protocol.SupportedVersions = []protocol.VersionNumber{version}
-				wd = getWebdriverForVersion(version)
-			})
+		BeforeEach(func() {
+			supportedVersionsBefore = protocol.SupportedVersions
+			protocol.SupportedVersions = []protocol.VersionNumber{version}
+			wd = getWebdriverForVersion(version)
+		})
 
-			AfterEach(func() {
-				wd.Close()
-				protocol.SupportedVersions = supportedVersionsBefore
-			})
+		AfterEach(func() {
+			wd.Close()
+			protocol.SupportedVersions = supportedVersionsBefore
+		})
 
-			It("loads a simple hello world page using quic", func(done Done) {
-				err := wd.Get("https://quic.clemente.io/hello")
-				Expect(err).NotTo(HaveOccurred())
-				source, err := wd.PageSource()
-				Expect(err).NotTo(HaveOccurred())
-				Expect(source).To(ContainSubstring("Hello, World!\n"))
-				close(done)
-			}, 5)
+		FIt("loads a simple hello world page using quic", func(done Done) {
+			utils.SetLogLevel(utils.LogLevelDebug)
+			err := wd.Get("https://quic.clemente.io/hello")
+			Expect(err).NotTo(HaveOccurred())
+			source, err := wd.PageSource()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(source).To(ContainSubstring("Hello, World!\n"))
+			close(done)
+		}, 5)
 
-			It("loads a large number of files", func(done Done) {
-				err := wd.Get("https://quic.clemente.io/tiles")
-				Expect(err).NotTo(HaveOccurred())
-				Eventually(func() error {
-					imgs, err := wd.FindElements("tag name", "img")
+		It("loads a large number of files", func(done Done) {
+			err := wd.Get("https://quic.clemente.io/tiles")
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(func() error {
+				imgs, err := wd.FindElements("tag name", "img")
+				if err != nil {
+					return err
+				}
+				if len(imgs) != nImgs {
+					return fmt.Errorf("expected number of images to be %d, got %d", nImgs, len(imgs))
+				}
+				for i, img := range imgs {
+					size, err := img.Size()
 					if err != nil {
 						return err
 					}
-					if len(imgs) != nImgs {
-						return fmt.Errorf("expected number of images to be %d, got %d", nImgs, len(imgs))
+					if size.Height != imgSize || size.Width != imgSize {
+						return fmt.Errorf("image %d did not have expected size", i)
 					}
-					for i, img := range imgs {
-						size, err := img.Size()
-						if err != nil {
-							return err
-						}
-						if size.Height != imgSize || size.Width != imgSize {
-							return fmt.Errorf("image %d did not have expected size", i)
-						}
-					}
-					return nil
-				}, 5).ShouldNot(HaveOccurred())
-				close(done)
-			}, 10)
-
-			It("downloads a small file", func() {
-				dataMan.GenerateData(dataLen)
-				err := wd.Get("https://quic.clemente.io/data")
-				Expect(err).NotTo(HaveOccurred())
-				Eventually(func() int { return getDownloadSize("data") }, 30, 0.1).Should(Equal(dataLen))
-				Expect(getDownloadMD5("data")).To(Equal(dataMan.GetMD5()))
-			}, 60)
-
-			It("downloads a large file", func() {
-				dataMan.GenerateData(dataLongLen)
-				err := wd.Get("https://quic.clemente.io/data")
-				Expect(err).NotTo(HaveOccurred())
-				Eventually(func() int { return getDownloadSize("data") }, 90, 0.5).Should(Equal(dataLongLen))
-				Expect(getDownloadMD5("data")).To(Equal(dataMan.GetMD5()))
-			}, 100)
-
-			It("uploads a small file", func() {
-				dataMan.GenerateData(dataLen)
-				data := dataMan.GetData()
-				dir, err := ioutil.TempDir("", "quic-upload-src")
-				Expect(err).ToNot(HaveOccurred())
-				defer os.RemoveAll(dir)
-				tmpfn := filepath.Join(dir, "data.dat")
-				err = ioutil.WriteFile(tmpfn, data, 0777)
-				Expect(err).ToNot(HaveOccurred())
-				copyFileToDocker(tmpfn)
-
-				err = wd.Get("https://quic.clemente.io/uploadform")
-				Expect(err).NotTo(HaveOccurred())
-				elem, err := wd.FindElement(selenium.ByCSSSelector, "#upload")
-				Expect(err).ToNot(HaveOccurred())
-				err = elem.SendKeys("/home/seluser/data.dat")
-				Expect(err).ToNot(HaveOccurred())
-				Eventually(func() error { return elem.Submit() }, 30, 0.1).ShouldNot(HaveOccurred())
-
-				file := filepath.Join(uploadDir, "data.dat")
-				Expect(getFileSize(file)).To(Equal(dataLen))
-				Expect(getFileMD5(file)).To(Equal(dataMan.GetMD5()))
-			})
-
-			It("uploads a large file", func() {
-				if version < protocol.Version34 {
-					Skip("skipping on <v34, see #301")
 				}
-				dataMan.GenerateData(dataLongLen)
-				data := dataMan.GetData()
-				dir, err := ioutil.TempDir("", "quic-upload-src")
-				Expect(err).ToNot(HaveOccurred())
-				defer os.RemoveAll(dir)
-				tmpfn := filepath.Join(dir, "data.dat")
-				err = ioutil.WriteFile(tmpfn, data, 0777)
-				Expect(err).ToNot(HaveOccurred())
-				copyFileToDocker(tmpfn)
+				return nil
+			}, 5).ShouldNot(HaveOccurred())
+			close(done)
+		}, 10)
 
-				err = wd.Get("https://quic.clemente.io/uploadform")
-				Expect(err).NotTo(HaveOccurred())
-				elem, err := wd.FindElement(selenium.ByCSSSelector, "#upload")
-				Expect(err).ToNot(HaveOccurred())
-				err = elem.SendKeys("/home/seluser/data.dat")
-				Expect(err).ToNot(HaveOccurred())
-				Eventually(func() error { return elem.Submit() }, 90, 0.5).ShouldNot(HaveOccurred())
+		It("downloads a small file", func() {
+			dataMan.GenerateData(dataLen)
+			err := wd.Get("https://quic.clemente.io/data")
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(func() int { return getDownloadSize("data") }, 30, 0.1).Should(Equal(dataLen))
+			Expect(getDownloadMD5("data")).To(Equal(dataMan.GetMD5()))
+		}, 60)
 
-				file := filepath.Join(uploadDir, "data.dat")
-				Expect(getFileSize(file)).To(Equal(dataLongLen))
-				Expect(getFileMD5(file)).To(Equal(dataMan.GetMD5()))
-			})
+		It("downloads a large file", func() {
+			dataMan.GenerateData(dataLongLen)
+			err := wd.Get("https://quic.clemente.io/data")
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(func() int { return getDownloadSize("data") }, 90, 0.5).Should(Equal(dataLongLen))
+			Expect(getDownloadMD5("data")).To(Equal(dataMan.GetMD5()))
+		}, 100)
+
+		It("uploads a small file", func() {
+			dataMan.GenerateData(dataLen)
+			data := dataMan.GetData()
+			dir, err := ioutil.TempDir("", "quic-upload-src")
+			Expect(err).ToNot(HaveOccurred())
+			defer os.RemoveAll(dir)
+			tmpfn := filepath.Join(dir, "data.dat")
+			err = ioutil.WriteFile(tmpfn, data, 0777)
+			Expect(err).ToNot(HaveOccurred())
+			copyFileToDocker(tmpfn)
+
+			err = wd.Get("https://quic.clemente.io/uploadform")
+			Expect(err).NotTo(HaveOccurred())
+			elem, err := wd.FindElement(selenium.ByCSSSelector, "#upload")
+			Expect(err).ToNot(HaveOccurred())
+			err = elem.SendKeys("/home/seluser/data.dat")
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(func() error { return elem.Submit() }, 30, 0.1).ShouldNot(HaveOccurred())
+
+			file := filepath.Join(uploadDir, "data.dat")
+			Expect(getFileSize(file)).To(Equal(dataLen))
+			Expect(getFileMD5(file)).To(Equal(dataMan.GetMD5()))
 		})
-	}
+
+		It("uploads a large file", func() {
+			if version < protocol.Version34 {
+				Skip("skipping on <v34, see #301")
+			}
+			dataMan.GenerateData(dataLongLen)
+			data := dataMan.GetData()
+			dir, err := ioutil.TempDir("", "quic-upload-src")
+			Expect(err).ToNot(HaveOccurred())
+			defer os.RemoveAll(dir)
+			tmpfn := filepath.Join(dir, "data.dat")
+			err = ioutil.WriteFile(tmpfn, data, 0777)
+			Expect(err).ToNot(HaveOccurred())
+			copyFileToDocker(tmpfn)
+
+			err = wd.Get("https://quic.clemente.io/uploadform")
+			Expect(err).NotTo(HaveOccurred())
+			elem, err := wd.FindElement(selenium.ByCSSSelector, "#upload")
+			Expect(err).ToNot(HaveOccurred())
+			err = elem.SendKeys("/home/seluser/data.dat")
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(func() error { return elem.Submit() }, 90, 0.5).ShouldNot(HaveOccurred())
+
+			file := filepath.Join(uploadDir, "data.dat")
+			Expect(getFileSize(file)).To(Equal(dataLongLen))
+			Expect(getFileMD5(file)).To(Equal(dataMan.GetMD5()))
+		})
+	})
+	// }
 })

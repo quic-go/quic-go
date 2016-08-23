@@ -11,8 +11,11 @@ import (
 )
 
 type streamsMap struct {
-	streams       map[protocol.StreamID]*stream
-	openStreams   []protocol.StreamID
+	streams     map[protocol.StreamID]*stream
+	openStreams []protocol.StreamID
+
+	highestStreamOpenedByClient protocol.StreamID
+
 	mutex         sync.RWMutex
 	newStream     newStreamLambda
 	maxNumStreams int
@@ -61,10 +64,19 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 	if id%2 == 0 {
 		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d from client-side", id))
 	}
+	if id+protocol.MaxNewStreamIDDelta < m.highestStreamOpenedByClient {
+		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d, which is a lot smaller than the highest opened stream, %d", id, m.highestStreamOpenedByClient))
+	}
+
 	s, err := m.newStream(id)
 	if err != nil {
 		return nil, err
 	}
+
+	if id > m.highestStreamOpenedByClient {
+		m.highestStreamOpenedByClient = id
+	}
+
 	m.putStream(s)
 	return s, nil
 }
