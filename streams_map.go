@@ -180,3 +180,17 @@ func (m *streamsMap) NumberOfStreams() int {
 	m.mutex.RUnlock()
 	return n
 }
+
+// garbageCollectClosedStreams deletes nil values in the streams if they are smaller than protocol.MaxNewStreamIDDelta than the highest stream opened by the client
+func (m *streamsMap) garbageCollectClosedStreams() {
+	m.mutex.Lock()
+	for id, str := range m.streams {
+		if str != nil {
+			continue
+		}
+		if id+protocol.MaxNewStreamIDDelta <= m.highestStreamOpenedByClient {
+			delete(m.streams, id)
+		}
+	}
+	m.mutex.Unlock()
+}
