@@ -142,6 +142,26 @@ var _ = Describe("Streams Map", func() {
 				Expect(m.streams).To(HaveKey(protocol.StreamID(23)))
 				Expect(m.streams[23]).ToNot(BeNil())
 			})
+
+			It("runs garbage-collection after a bunch of streams have been opened", func() {
+				numGarbageCollections := 0
+				numSavedStreams := 0
+				for i := 1; i < 4*protocol.MaxNewStreamIDDelta; i += 2 {
+					streamID := protocol.StreamID(i)
+					_, err := m.GetOrOpenStream(streamID)
+					Expect(m.highestStreamOpenedByClient).To(Equal(streamID))
+					Expect(err).NotTo(HaveOccurred())
+					err = m.RemoveStream(streamID)
+					Expect(err).NotTo(HaveOccurred())
+					if len(m.streams) != numSavedStreams+1 {
+						numGarbageCollections++
+					}
+					numSavedStreams = len(m.streams)
+				}
+				Expect(numGarbageCollections).ToNot(BeZero())
+				Expect(numGarbageCollections).To(BeNumerically("<", 4))
+				Expect(len(m.streams)).To(BeNumerically("<", 2*protocol.MaxNewStreamIDDelta))
+			})
 		})
 	})
 

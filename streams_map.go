@@ -14,7 +14,8 @@ type streamsMap struct {
 	streams     map[protocol.StreamID]*stream
 	openStreams []protocol.StreamID
 
-	highestStreamOpenedByClient protocol.StreamID
+	highestStreamOpenedByClient          protocol.StreamID
+	streamsOpenedAfterLastGarbageCollect int
 
 	mutex         sync.RWMutex
 	newStream     newStreamLambda
@@ -50,6 +51,7 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 	if ok {
 		return s, nil // s may be nil
 	}
+
 	// ... we don't have an existing stream, try opening a new one
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -75,6 +77,11 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 
 	if id > m.highestStreamOpenedByClient {
 		m.highestStreamOpenedByClient = id
+	}
+
+	m.streamsOpenedAfterLastGarbageCollect++
+	if m.streamsOpenedAfterLastGarbageCollect%protocol.MaxNewStreamIDDelta == 0 {
+		m.garbageCollectClosedStreams()
 	}
 
 	m.putStream(s)
@@ -182,8 +189,8 @@ func (m *streamsMap) NumberOfStreams() int {
 }
 
 // garbageCollectClosedStreams deletes nil values in the streams if they are smaller than protocol.MaxNewStreamIDDelta than the highest stream opened by the client
+// note that this garbage collection is relatively expensive, since it iterates over the whole streams map. It should not be called every time a stream is openend or closed
 func (m *streamsMap) garbageCollectClosedStreams() {
-	m.mutex.Lock()
 	for id, str := range m.streams {
 		if str != nil {
 			continue
@@ -192,5 +199,5 @@ func (m *streamsMap) garbageCollectClosedStreams() {
 			delete(m.streams, id)
 		}
 	}
-	m.mutex.Unlock()
+	m.streamsOpenedAfterLastGarbageCollect = 0
 }
