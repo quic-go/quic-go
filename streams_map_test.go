@@ -76,6 +76,93 @@ var _ = Describe("Streams Map", func() {
 				}
 			})
 		})
+
+		Context("DoS mitigation", func() {
+			It("opens and closes a lot of streams", func() {
+				for i := 1; i < 2*protocol.MaxNewStreamIDDelta; i += 2 {
+					streamID := protocol.StreamID(i)
+					_, err := m.GetOrOpenStream(streamID)
+					Expect(m.highestStreamOpenedByClient).To(Equal(streamID))
+					Expect(err).NotTo(HaveOccurred())
+					err = m.RemoveStream(streamID)
+					Expect(err).NotTo(HaveOccurred())
+				}
+			})
+
+			It("prevents opening of streams with very low StreamIDs, if higher streams have already been opened", func() {
+				for i := 1; i < protocol.MaxNewStreamIDDelta+14; i += 2 {
+					if i == 11 || i == 13 {
+						continue
+					}
+					streamID := protocol.StreamID(i)
+					_, err := m.GetOrOpenStream(streamID)
+					Expect(err).NotTo(HaveOccurred())
+					err = m.RemoveStream(streamID)
+					Expect(err).NotTo(HaveOccurred())
+				}
+				Expect(m.highestStreamOpenedByClient).To(Equal(protocol.StreamID(protocol.MaxNewStreamIDDelta + 13)))
+				_, err := m.GetOrOpenStream(11)
+				Expect(err).To(MatchError("InvalidStreamID: attempted to open stream 11, which is a lot smaller than the highest opened stream, 413"))
+				_, err = m.GetOrOpenStream(13)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("garbage-collects closed streams", func() {
+				for i := 1; i < 4*protocol.MaxNewStreamIDDelta; i += 2 {
+					streamID := protocol.StreamID(i)
+					_, err := m.GetOrOpenStream(streamID)
+					Expect(m.highestStreamOpenedByClient).To(Equal(streamID))
+					Expect(err).NotTo(HaveOccurred())
+					err = m.RemoveStream(streamID)
+					Expect(err).NotTo(HaveOccurred())
+				}
+				m.garbageCollectClosedStreams()
+				for i := 1; i < 3*protocol.MaxNewStreamIDDelta; i += 2 {
+					Expect(m.streams).ToNot(HaveKey(protocol.StreamID(i)))
+				}
+				for i := 3*protocol.MaxNewStreamIDDelta + 1; i < 4*protocol.MaxNewStreamIDDelta; i += 2 {
+					Expect(m.streams).To(HaveKey(protocol.StreamID(i)))
+				}
+			})
+
+			It("does not garbage-collects open streams", func() {
+				for i := 1; i < 1002; i += 2 {
+					streamID := protocol.StreamID(i)
+					_, err := m.GetOrOpenStream(streamID)
+					Expect(m.highestStreamOpenedByClient).To(Equal(streamID))
+					Expect(err).NotTo(HaveOccurred())
+					if streamID != 23 {
+						err = m.RemoveStream(streamID)
+						Expect(err).NotTo(HaveOccurred())
+					}
+				}
+				lengthBefore := len(m.streams)
+				m.garbageCollectClosedStreams()
+				Expect(len(m.streams)).To(BeNumerically("<", lengthBefore))
+				Expect(m.streams).To(HaveKey(protocol.StreamID(23)))
+				Expect(m.streams[23]).ToNot(BeNil())
+			})
+
+			It("runs garbage-collection after a bunch of streams have been opened", func() {
+				numGarbageCollections := 0
+				numSavedStreams := 0
+				for i := 1; i < 4*protocol.MaxNewStreamIDDelta; i += 2 {
+					streamID := protocol.StreamID(i)
+					_, err := m.GetOrOpenStream(streamID)
+					Expect(m.highestStreamOpenedByClient).To(Equal(streamID))
+					Expect(err).NotTo(HaveOccurred())
+					err = m.RemoveStream(streamID)
+					Expect(err).NotTo(HaveOccurred())
+					if len(m.streams) != numSavedStreams+1 {
+						numGarbageCollections++
+					}
+					numSavedStreams = len(m.streams)
+				}
+				Expect(numGarbageCollections).ToNot(BeZero())
+				Expect(numGarbageCollections).To(BeNumerically("<", 4))
+				Expect(len(m.streams)).To(BeNumerically("<", 2*protocol.MaxNewStreamIDDelta))
+			})
+		})
 	})
 
 	Context("deleting streams", func() {
