@@ -629,6 +629,9 @@ func (s *Session) scheduleSending() {
 }
 
 func (s *Session) tryQueueingUndecryptablePacket(p receivedPacket) {
+	if s.cryptoSetup.HandshakeComplete() {
+		return
+	}
 	utils.Infof("Queueing packet 0x%x for later decryption", p.publicHeader.PacketNumber)
 	if len(s.undecryptablePackets)+1 >= protocol.MaxUndecryptablePackets {
 		s.Close(qerr.Error(qerr.DecryptionFailure, "too many undecryptable packets received"))
