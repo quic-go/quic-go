@@ -323,3 +323,8 @@ func (h *CryptoSetup) LockForSealing() {
 func (h *CryptoSetup) UnlockForSealing() {
 	h.mutex.RUnlock()
 }
+
+// HandshakeComplete returns true after the first forward secure packet was received form the client.
+func (h *CryptoSetup) HandshakeComplete() bool {
+	return h.receivedForwardSecurePacket
+}

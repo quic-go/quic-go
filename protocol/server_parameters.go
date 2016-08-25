@@ -49,7 +49,7 @@ const MaxNewStreamIDDelta = 4 * MaxStreamsPerConnection
 const MaxIdleConnectionStateLifetime = 60 * time.Second
 
 // MaxSessionUnprocessedPackets is the max number of packets stored in each session that are not yet processed.
-const MaxSessionUnprocessedPackets = 128
+const MaxSessionUnprocessedPackets = 2000
 
 // RetransmissionThreshold + 1 is the number of times a packet has to be NACKed so that it gets retransmitted
 const RetransmissionThreshold = 3

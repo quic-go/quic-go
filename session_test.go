@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"reflect"
 	"runtime"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -737,6 +739,19 @@ var _ = Describe("Session", func() {
 
 				Expect(conn.written).To(HaveLen(1))
 				Expect(conn.written[0]).To(ContainSubstring(string([]byte("PRST"))))
+			})
+
+			It("ignores undecryptable packets after the handshake is complete", func() {
+				*(*bool)(unsafe.Pointer(reflect.ValueOf(session.cryptoSetup).Elem().FieldByName("receivedForwardSecurePacket").UnsafeAddr())) = true
+				for i := 0; i < protocol.MaxUndecryptablePackets; i++ {
+					hdr := &PublicHeader{
+						PacketNumber: protocol.PacketNumber(i + 1),
+					}
+					session.handlePacket(nil, hdr, []byte("foobar"))
+				}
+				go session.run()
+				Consistently(session.undecryptablePackets).Should(HaveLen(0))
+				session.closeImpl(nil, true)
 			})
 
 			It("unqueues undecryptable packets for later decryption", func() {
