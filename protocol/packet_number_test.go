@@ -128,19 +128,19 @@ var _ = Describe("packet number calculation", func() {
 
 	Context("shortening a packet number for the publicHeader", func() {
 		Context("shortening", func() {
-			It("sends out low packet numbers as 1 byte", func() {
+			It("sends out low packet numbers as 2 byte", func() {
 				length := GetPacketNumberLengthForPublicHeader(4, 2)
-				Expect(length).To(Equal(PacketNumberLen1))
-			})
-
-			It("sends out high packet numbers as 1 byte, if all ACKs are received", func() {
-				length := GetPacketNumberLengthForPublicHeader(0xDEADBEEF, 0xDEADBEEF-1)
-				Expect(length).To(Equal(PacketNumberLen1))
-			})
-
-			It("sends out higher packet numbers as 2 bytes, if a lot of ACKs are missing", func() {
-				length := GetPacketNumberLengthForPublicHeader(200, 2)
 				Expect(length).To(Equal(PacketNumberLen2))
+			})
+
+			It("sends out high packet numbers as 2 byte, if all ACKs are received", func() {
+				length := GetPacketNumberLengthForPublicHeader(0xDEADBEEF, 0xDEADBEEF-1)
+				Expect(length).To(Equal(PacketNumberLen2))
+			})
+
+			It("sends out higher packet numbers as 4 bytes, if a lot of ACKs are missing", func() {
+				length := GetPacketNumberLengthForPublicHeader(40000, 2)
+				Expect(length).To(Equal(PacketNumberLen4))
 			})
 		})
 

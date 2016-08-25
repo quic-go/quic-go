@@ -31,7 +31,7 @@ var _ = Describe("Packet packer", func() {
 			packetNumberGenerator:       newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
 			streamFramer:                streamFramer,
 		}
-		publicHeaderLen = 1 + 8 + 1 // 1 flag byte, 8 connection ID, 1 packet number
+		publicHeaderLen = 1 + 8 + 2 // 1 flag byte, 8 connection ID, 2 packet number
 		packer.version = protocol.Version34
 	})
 
