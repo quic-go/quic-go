@@ -196,7 +196,7 @@ var _ = Describe("H2 server", func() {
 
 	Context("setting http headers", func() {
 		expected := http.Header{
-			"Alt-Svc":            {`quic=":443"; ma=2592000; v="35,34,33"`},
+			"Alt-Svc":            {`quic=":443"; ma=2592000; v="35,34"`},
 			"Alternate-Protocol": {`443:quic`},
 		}
 
