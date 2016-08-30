@@ -11,8 +11,7 @@ type VersionNumber int
 
 // The version numbers, making grepping easier
 const (
-	Version32 VersionNumber = 32 + iota
-	Version33
+	Version33 VersionNumber = 33 + iota
 	Version34
 	Version35
 	VersionWhatever = 0 // for when the version doesn't matter
