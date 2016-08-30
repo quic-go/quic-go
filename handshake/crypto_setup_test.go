@@ -81,7 +81,7 @@ func (mockAEAD) DiversificationNonce() []byte { return nil }
 var expectedInitialNonceLen int
 var expectedFSNonceLen int
 
-func mockKeyDerivation(v protocol.VersionNumber, forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte) (crypto.AEAD, error) {
+func mockKeyDerivation(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte) (crypto.AEAD, error) {
 	if forwardSecure {
 		Expect(nonces).To(HaveLen(expectedFSNonceLen))
 	} else {
@@ -181,11 +181,6 @@ var _ = Describe("Crypto setup", func() {
 
 		It("returns diversification nonces", func() {
 			Expect(cs.DiversificationNonce()).To(HaveLen(32))
-		})
-
-		It("does not return nonce for version < 33", func() {
-			cs.version = protocol.Version32
-			Expect(cs.DiversificationNonce()).To(BeEmpty())
 		})
 
 		It("does not return nonce for FS packets", func() {
