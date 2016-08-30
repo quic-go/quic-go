@@ -30,19 +30,14 @@ type packetPacker struct {
 }
 
 func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.CryptoSetup, connectionParametersHandler *handshake.ConnectionParametersManager, streamFramer *streamFramer, version protocol.VersionNumber) *packetPacker {
-	p := &packetPacker{
+	return &packetPacker{
 		cryptoSetup:                 cryptoSetup,
 		connectionID:                connectionID,
 		connectionParametersManager: connectionParametersHandler,
 		version:                     version,
 		streamFramer:                streamFramer,
+		packetNumberGenerator:       newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
 	}
-
-	if version >= protocol.Version34 {
-		p.packetNumberGenerator = newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength)
-	}
-
-	return p
 }
 
 func (p *packetPacker) PackConnectionClose(frame *frames.ConnectionCloseFrame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
@@ -156,11 +151,6 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 	var payloadFrames []frames.Frame
 
 	maxFrameSize := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLength
-
-	// until QUIC 33, packets have a 1 byte private header
-	if p.version < protocol.Version34 {
-		maxFrameSize--
-	}
 
 	if stopWaitingFrame != nil {
 		payloadFrames = append(payloadFrames, stopWaitingFrame)

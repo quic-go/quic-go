@@ -162,9 +162,6 @@ var _ = Describe("Chrome tests", func() {
 			})
 
 			It("uploads a large file", func() {
-				if version < protocol.Version34 {
-					Skip("skipping on <v34, see #301")
-				}
 				dataMan.GenerateData(dataLongLen)
 				data := dataMan.GetData()
 				dir, err := ioutil.TempDir("", "quic-upload-src")
