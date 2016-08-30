@@ -81,23 +81,20 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	It("unpacks ACK frames", func() {
+		unpacker.version = protocol.Version34
 		f := &frames.AckFrame{
-			AckFrameLegacy: &frames.AckFrameLegacy{
-				LargestObserved: 0x13,
-				Entropy:         0x37,
-			},
+			LargestAcked: 0x13,
+			LowestAcked:  1,
 		}
-		err := f.Write(buf, protocol.Version33)
+		err := f.Write(buf, protocol.Version34)
 		Expect(err).ToNot(HaveOccurred())
 		setData(buf.Bytes())
-		unpacker.version = protocol.Version33
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.frames).To(HaveLen(1))
 		readFrame := packet.frames[0].(*frames.AckFrame)
-		Expect(readFrame.AckFrameLegacy).ToNot(BeNil())
-		Expect(readFrame.AckFrameLegacy.LargestObserved).To(Equal(protocol.PacketNumber(0x13)))
-		Expect(readFrame.AckFrameLegacy.Entropy).To(Equal(byte(0x37)))
+		Expect(readFrame).ToNot(BeNil())
+		Expect(readFrame.LargestAcked).To(Equal(protocol.PacketNumber(0x13)))
 	})
 
 	It("errors on CONGESTION_FEEDBACK frames", func() {

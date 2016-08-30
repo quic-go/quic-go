@@ -850,15 +850,11 @@ var _ = Describe("Session", func() {
 				Length:       1,
 			})
 			err := session.handleFrames([]frames.Frame{&frames.AckFrame{
-				AckFrameLegacy: &frames.AckFrameLegacy{
-					LargestObserved: 1,
-				},
+				LargestAcked: 1,
 			}})
 			Expect(err).NotTo(HaveOccurred())
 			err = session.handleFrames([]frames.Frame{&frames.AckFrame{
-				AckFrameLegacy: &frames.AckFrameLegacy{
-					LargestObserved: 1,
-				},
+				LargestAcked: 1,
 			}})
 			Expect(err).NotTo(HaveOccurred())
 		})

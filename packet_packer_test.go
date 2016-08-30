@@ -158,7 +158,7 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	It("packs many control frames into 1 packets", func() {
-		f := &frames.AckFrameLegacy{LargestObserved: 1}
+		f := &frames.AckFrame{LargestAcked: 1}
 		b := &bytes.Buffer{}
 		f.Write(b, protocol.VersionWhatever)
 		maxFramesPerPacket := int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLen) / b.Len()

@@ -879,46 +879,4 @@ var _ = Describe("AckFrame", func() {
 			Expect(f.AcksPacket(21)).To(BeFalse())
 		})
 	})
-
-	Context("Legacy AckFrame wrapping", func() {
-		It("parses a ACK frame", func() {
-			b := bytes.NewReader([]byte{0x40, 0xA4, 0x03, 0x23, 0x45, 0x01, 0x02, 0xFF, 0xEE, 0xDD, 0xCC})
-			frame, err := ParseAckFrame(b, protocol.Version33)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.AckFrameLegacy).ToNot(BeNil())
-			Expect(frame.AckFrameLegacy.Entropy).To(Equal(byte(0xA4)))
-			Expect(frame.AckFrameLegacy.LargestObserved).To(Equal(protocol.PacketNumber(0x03)))
-			Expect(frame.LargestAcked).To(BeZero())
-			Expect(frame.LowestAcked).To(BeZero())
-			Expect(b.Len()).To(Equal(0))
-		})
-
-		It("writes an ACK frame", func() {
-			b1 := &bytes.Buffer{}
-			b2 := &bytes.Buffer{}
-			ackLegacy := &AckFrameLegacy{
-				Entropy:         2,
-				LargestObserved: 1,
-			}
-			frame := AckFrame{
-				AckFrameLegacy: ackLegacy,
-			}
-			err := frame.Write(b1, protocol.Version33)
-			Expect(err).ToNot(HaveOccurred())
-			err = ackLegacy.Write(b2, protocol.Version33)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(b1.Bytes()).To(Equal(b2.Bytes()))
-		})
-
-		It("determines the minLength", func() {
-			ackLegacy := &AckFrameLegacy{
-				Entropy:         2,
-				LargestObserved: 1,
-			}
-			ack := AckFrame{AckFrameLegacy: ackLegacy}
-			minLengthLegacy, _ := ackLegacy.MinLength(0)
-			minLength, _ := ack.MinLength(0)
-			Expect(minLength).To(Equal(minLengthLegacy))
-		})
-	})
 })
