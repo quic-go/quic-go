@@ -2,7 +2,6 @@ package utils
 
 import (
 	"bytes"
-	"crypto/rand"
 	"io"
 
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -161,13 +160,6 @@ func WriteUint24(b *bytes.Buffer, i uint32) {
 func WriteUint16(b *bytes.Buffer, i uint16) {
 	b.WriteByte(uint8(i))
 	b.WriteByte(uint8(i >> 8))
-}
-
-// RandomBit returns a cryptographically secure random bit (encoded as true / false)
-func RandomBit() (bool, error) {
-	b := make([]byte, 1)
-	_, err := rand.Read(b)
-	return b[0]%2 == 0, err
 }
 
 // Uint32Slice attaches the methods of sort.Interface to []uint32, sorting in increasing order.

@@ -174,24 +174,6 @@ var _ = Describe("Utils", func() {
 		})
 	})
 
-	Context("Rand", func() {
-		It("returns either true or false", func() {
-			countTrue := 0
-			countFalse := 0
-			for i := 0; i < 100; i++ {
-				val, err := RandomBit()
-				Expect(err).NotTo(HaveOccurred())
-				if val {
-					countTrue++
-				} else {
-					countFalse++
-				}
-			}
-			Expect(countTrue).ToNot(BeZero())
-			Expect(countFalse).ToNot(BeZero())
-		})
-	})
-
 	Context("ReadUintN", func() {
 		It("reads n bytes", func() {
 			m := map[uint8]uint64{

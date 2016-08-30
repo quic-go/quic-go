@@ -35,37 +35,10 @@ var _ = Describe("Packet packer", func() {
 		packer.version = protocol.Version34
 	})
 
-	AfterEach(func() {
-		packer.lastPacketNumber = 0
-	})
-
 	It("returns nil when no packet is queued", func() {
 		p, err := packer.PackPacket(nil, []frames.Frame{}, 0, true)
 		Expect(p).To(BeNil())
 		Expect(err).ToNot(HaveOccurred())
-	})
-
-	It("doesn't set a private header for QUIC version >= 34", func() {
-		// This is not trivial to test, since PackPacket() already encrypts the packet
-		// So pack the packet for QUIC 33, then for QUIC 34. The packet for QUIC 33 should be 1 byte longer, since it contains the Private Header
-		f := &frames.StreamFrame{
-			StreamID: 5,
-			Data:     []byte("foobar"),
-		}
-		// pack the packet for QUIC version 33
-		packer.version = protocol.Version33
-		streamFramer.AddFrameForRetransmission(f)
-		p33, err := packer.PackPacket(nil, []frames.Frame{}, 0, true)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(p33).ToNot(BeNil())
-		// pack the packet for QUIC version 34
-		packer.version = protocol.Version34
-		streamFramer.AddFrameForRetransmission(f)
-		p34, err := packer.PackPacket(nil, []frames.Frame{}, 0, true)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(p34).ToNot(BeNil())
-		Expect(p34.entropyBit).To(BeFalse())
-		Expect(p34.raw).To(HaveLen(len(p33.raw) - 1))
 	})
 
 	It("packs single packets", func() {
@@ -134,9 +107,8 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	It("sets the LeastUnackedDelta length of a StopWaitingFrame", func() {
-		packer.version = protocol.Version33             // TODO: find a different way to test this when dropping support for QUIC 33
 		packetNumber := protocol.PacketNumber(0xDECAFB) // will result in a 4 byte packet number
-		packer.lastPacketNumber = packetNumber - 1
+		packer.packetNumberGenerator.next = packetNumber
 		swf := &frames.StopWaitingFrame{LeastUnacked: packetNumber - 0x100}
 		p, err := packer.PackPacket(swf, []frames.Frame{&frames.ConnectionCloseFrame{}}, 0, true)
 		Expect(err).ToNot(HaveOccurred())
@@ -194,30 +166,7 @@ var _ = Describe("Packet packer", func() {
 		Expect(payloadFrames).To(HaveLen(10))
 	})
 
-	// TODO: remove once we drop support for QUIC 33
-	It("only increases the packet number when there is an actual packet to send, in QUIC 33", func() {
-		packer.version = protocol.Version33
-		f := &frames.StreamFrame{
-			StreamID: 5,
-			Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
-		}
-		streamFramer.AddFrameForRetransmission(f)
-		p, err := packer.PackPacket(nil, []frames.Frame{}, 0, true)
-		Expect(p).ToNot(BeNil())
-		Expect(err).ToNot(HaveOccurred())
-		Expect(packer.lastPacketNumber).To(Equal(protocol.PacketNumber(1)))
-		p, err = packer.PackPacket(nil, []frames.Frame{}, 0, true)
-		Expect(p).To(BeNil())
-		Expect(err).ToNot(HaveOccurred())
-		Expect(packer.lastPacketNumber).To(Equal(protocol.PacketNumber(1)))
-		streamFramer.AddFrameForRetransmission(f)
-		p, err = packer.PackPacket(nil, []frames.Frame{}, 0, true)
-		Expect(p).ToNot(BeNil())
-		Expect(err).ToNot(HaveOccurred())
-		Expect(packer.lastPacketNumber).To(Equal(protocol.PacketNumber(2)))
-	})
-
-	It("only increases the packet number when there is an actual packet to send, in QUIC 34", func() {
+	It("only increases the packet number when there is an actual packet to send", func() {
 		packer.packetNumberGenerator.nextToSkip = 1000
 		p, err := packer.PackPacket(nil, []frames.Frame{}, 0, true)
 		Expect(p).To(BeNil())
@@ -310,19 +259,6 @@ var _ = Describe("Packet packer", func() {
 			Expect(p.raw).To(ContainSubstring(string(f1.Data)))
 			Expect(p.raw).To(ContainSubstring(string(f2.Data)))
 			Expect(p.raw).To(ContainSubstring(string(f3.Data)))
-		})
-
-		It("packs a packet with a stream frame larger than maximum size, in QUIC < 34", func() {
-			packer.version = protocol.Version33
-			f := &frames.StreamFrame{
-				StreamID: 5,
-				Offset:   1,
-				Data:     bytes.Repeat([]byte{'f'}, int(protocol.MaxPacketSize)+100),
-			}
-			streamFramer.AddFrameForRetransmission(f)
-			p, err := packer.PackPacket(nil, []frames.Frame{}, 0, true)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(p.raw).To(HaveLen(int(protocol.MaxPacketSize)))
 		})
 
 		It("splits one stream frame larger than maximum size", func() {
