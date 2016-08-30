@@ -14,7 +14,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/lucas-clemente/quic-go/ackhandlerlegacy"
+	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -48,14 +48,14 @@ func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data
 }
 
 type mockSentPacketHandler struct {
-	retransmissionQueue  []*ackhandlerlegacy.Packet
-	sentPackets          []*ackhandlerlegacy.Packet
+	retransmissionQueue  []*ackhandler.Packet
+	sentPackets          []*ackhandler.Packet
 	congestionLimited    bool
 	maybeQueueRTOsCalled bool
 	requestedStopWaiting bool
 }
 
-func (h *mockSentPacketHandler) SentPacket(packet *ackhandlerlegacy.Packet) error {
+func (h *mockSentPacketHandler) SentPacket(packet *ackhandler.Packet) error {
 	h.sentPackets = append(h.sentPackets, packet)
 	return nil
 }
@@ -76,7 +76,7 @@ func (h *mockSentPacketHandler) MaybeQueueRTOs() {
 	h.maybeQueueRTOsCalled = true
 }
 
-func (h *mockSentPacketHandler) DequeuePacketForRetransmission() *ackhandlerlegacy.Packet {
+func (h *mockSentPacketHandler) DequeuePacketForRetransmission() *ackhandler.Packet {
 	if len(h.retransmissionQueue) > 0 {
 		packet := h.retransmissionQueue[0]
 		h.retransmissionQueue = h.retransmissionQueue[1:]
@@ -85,7 +85,7 @@ func (h *mockSentPacketHandler) DequeuePacketForRetransmission() *ackhandlerlega
 	return nil
 }
 
-func newMockSentPacketHandler() ackhandlerlegacy.SentPacketHandler {
+func newMockSentPacketHandler() ackhandler.SentPacketHandler {
 	return &mockSentPacketHandler{}
 }
 
@@ -542,12 +542,12 @@ var _ = Describe("Session", func() {
 				StreamID: 0x5,
 				Data:     []byte("foobar1234567"),
 			}
-			p := ackhandlerlegacy.Packet{
+			p := ackhandler.Packet{
 				PacketNumber: 0x1337,
 				Frames:       []frames.Frame{&f},
 			}
 			sph := newMockSentPacketHandler()
-			sph.(*mockSentPacketHandler).retransmissionQueue = []*ackhandlerlegacy.Packet{&p}
+			sph.(*mockSentPacketHandler).retransmissionQueue = []*ackhandler.Packet{&p}
 			session.sentPacketHandler = sph
 
 			err := session.sendPacket()
@@ -574,16 +574,16 @@ var _ = Describe("Session", func() {
 				StreamID: 0x7,
 				Data:     []byte("loremipsum"),
 			}
-			p1 := ackhandlerlegacy.Packet{
+			p1 := ackhandler.Packet{
 				PacketNumber: 0x1337,
 				Frames:       []frames.Frame{&f1},
 			}
-			p2 := ackhandlerlegacy.Packet{
+			p2 := ackhandler.Packet{
 				PacketNumber: 0x1338,
 				Frames:       []frames.Frame{&f2},
 			}
 			sph := newMockSentPacketHandler()
-			sph.(*mockSentPacketHandler).retransmissionQueue = []*ackhandlerlegacy.Packet{&p1, &p2}
+			sph.(*mockSentPacketHandler).retransmissionQueue = []*ackhandler.Packet{&p1, &p2}
 			session.sentPacketHandler = sph
 
 			err := session.sendPacket()
@@ -773,13 +773,13 @@ var _ = Describe("Session", func() {
 	It("errors when the SentPacketHandler has too many packets tracked", func() {
 		streamFrame := frames.StreamFrame{StreamID: 5, Data: []byte("foobar")}
 		for i := uint32(1); i < protocol.MaxTrackedSentPackets+10; i++ {
-			packet := ackhandlerlegacy.Packet{PacketNumber: protocol.PacketNumber(i), Frames: []frames.Frame{&streamFrame}, Length: 1}
+			packet := ackhandler.Packet{PacketNumber: protocol.PacketNumber(i), Frames: []frames.Frame{&streamFrame}, Length: 1}
 			err := session.sentPacketHandler.SentPacket(&packet)
 			Expect(err).ToNot(HaveOccurred())
 		}
 		// now session.sentPacketHandler.CheckForError will return an error
 		err := session.sendPacket()
-		Expect(err).To(MatchError(ackhandlerlegacy.ErrTooManyTrackedSentPackets))
+		Expect(err).To(MatchError(ackhandler.ErrTooManyTrackedSentPackets))
 	})
 
 	It("stores up to MaxSessionUnprocessedPackets packets", func(done Done) {
@@ -794,7 +794,7 @@ var _ = Describe("Session", func() {
 		// We simulate consistently low RTTs, so that the test works faster
 		n := protocol.PacketNumber(10)
 		for p := protocol.PacketNumber(1); p < n; p++ {
-			err := session.sentPacketHandler.SentPacket(&ackhandlerlegacy.Packet{PacketNumber: p, Length: 1})
+			err := session.sentPacketHandler.SentPacket(&ackhandler.Packet{PacketNumber: p, Length: 1})
 			Expect(err).NotTo(HaveOccurred())
 			time.Sleep(time.Microsecond)
 			ack := &frames.AckFrame{}
@@ -804,7 +804,7 @@ var _ = Describe("Session", func() {
 		}
 		session.packer.packetNumberGenerator.next = n + 1
 		// Now, we send a single packet, and expect that it was retransmitted later
-		err := session.sentPacketHandler.SentPacket(&ackhandlerlegacy.Packet{
+		err := session.sentPacketHandler.SentPacket(&ackhandler.Packet{
 			PacketNumber: n,
 			Length:       1,
 			Frames: []frames.Frame{&frames.StreamFrame{
@@ -845,7 +845,7 @@ var _ = Describe("Session", func() {
 
 	Context("ignoring errors", func() {
 		It("ignores duplicate acks", func() {
-			session.sentPacketHandler.SentPacket(&ackhandlerlegacy.Packet{
+			session.sentPacketHandler.SentPacket(&ackhandler.Packet{
 				PacketNumber: 1,
 				Length:       1,
 			})

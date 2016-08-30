@@ -1,7 +1,7 @@
 coverage:
   round: nearest
   ignore:
-    - ackhandlerlegacy/packet_linkedlist.go
+    - ackhandler/packet_linkedlist.go
     - utils/byteinterval_linkedlist.go
     - utils/packetinterval_linkedlist.go
   status:

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
-	"github.com/lucas-clemente/quic-go/ackhandlerlegacy"
 	"github.com/lucas-clemente/quic-go/flowcontrol"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -256,12 +255,12 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *PublicHeader, da
 
 	err = s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, packet.entropyBit)
 	// ignore duplicate packets
-	if err == ackhandlerlegacy.ErrDuplicatePacket || err == ackhandler.ErrDuplicatePacket {
+	if err == ackhandler.ErrDuplicatePacket {
 		utils.Infof("Ignoring packet 0x%x due to ErrDuplicatePacket", hdr.PacketNumber)
 		return nil
 	}
 	// ignore packets with packet numbers smaller than the LeastUnacked of a StopWaiting
-	if err == ackhandlerlegacy.ErrPacketSmallerThanLastStopWaiting || err == ackhandler.ErrPacketSmallerThanLastStopWaiting {
+	if err == ackhandler.ErrPacketSmallerThanLastStopWaiting {
 		utils.Infof("Ignoring packet 0x%x due to ErrPacketSmallerThanLastStopWaiting", hdr.PacketNumber)
 		return nil
 	}
@@ -301,8 +300,6 @@ func (s *Session) handleFrames(fs []frames.Frame) error {
 
 		if err != nil {
 			switch err {
-			case ackhandlerlegacy.ErrDuplicateOrOutOfOrderAck:
-				// Can happen e.g. when packets thought missing arrive late
 			case ackhandler.ErrDuplicateOrOutOfOrderAck:
 				// Can happen e.g. when packets thought missing arrive late
 			case errRstStreamOnInvalidStream:
@@ -517,10 +514,9 @@ func (s *Session) sendPacket() error {
 			s.packer.QueueControlFrameForNextPacket(f)
 		}
 
-		err = s.sentPacketHandler.SentPacket(&ackhandlerlegacy.Packet{
+		err = s.sentPacketHandler.SentPacket(&ackhandler.Packet{
 			PacketNumber: packet.number,
 			Frames:       packet.frames,
-			EntropyBit:   packet.entropyBit,
 			Length:       protocol.ByteCount(len(packet.raw)),
 		})
 		if err != nil {
