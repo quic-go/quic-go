@@ -532,10 +532,7 @@ var _ = Describe("Session", func() {
 	Context("retransmissions", func() {
 		It("sends a StreamFrame from a packet queued for retransmission", func() {
 			// a StopWaitingFrame is added, so make sure the packet number of the new package is higher than the packet number of the retransmitted packet
-			session.packer.lastPacketNumber = 0x1337 + 10
-			if session.version > protocol.Version33 {
-				session.packer.packetNumberGenerator.next = 0x1337 + 9
-			}
+			session.packer.packetNumberGenerator.next = 0x1337 + 9
 
 			f := frames.StreamFrame{
 				StreamID: 0x5,
@@ -552,18 +549,13 @@ var _ = Describe("Session", func() {
 			err := session.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(conn.written).To(HaveLen(1))
-			if session.version > protocol.Version33 { // before version 34, this was handled by the StopWaitingManager
-				Expect(sph.(*mockSentPacketHandler).requestedStopWaiting).To(BeTrue())
-			}
+			Expect(sph.(*mockSentPacketHandler).requestedStopWaiting).To(BeTrue())
 			Expect(conn.written[0]).To(ContainSubstring("foobar1234567"))
 		})
 
 		It("sends a StreamFrame from a packet queued for retransmission", func() {
 			// a StopWaitingFrame is added, so make sure the packet number of the new package is higher than the packet number of the retransmitted packet
-			session.packer.lastPacketNumber = 0x1337 + 10
-			if session.version > protocol.Version33 {
-				session.packer.packetNumberGenerator.next = 0x1337 + 9
-			}
+			session.packer.packetNumberGenerator.next = 0x1337 + 9
 
 			f1 := frames.StreamFrame{
 				StreamID: 0x5,

@@ -453,9 +453,6 @@ func (s *Session) sendPacket() error {
 			}
 			utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 
-			if s.version <= protocol.Version33 {
-				s.stopWaitingManager.RegisterPacketForRetransmission(retransmitPacket)
-			}
 			// resend the frames that were in the packet
 			controlFrames = append(controlFrames, retransmitPacket.GetControlFramesForRetransmission()...)
 			for _, streamFrame := range retransmitPacket.GetStreamFramesForRetransmission() {
@@ -489,12 +486,8 @@ func (s *Session) sendPacket() error {
 		hasRetransmission := s.streamFramer.HasFramesForRetransmission()
 
 		var stopWaitingFrame *frames.StopWaitingFrame
-		if s.version <= protocol.Version33 {
-			stopWaitingFrame = s.stopWaitingManager.GetStopWaitingFrame()
-		} else {
-			if ack != nil || hasRetransmission {
-				stopWaitingFrame = s.sentPacketHandler.GetStopWaitingFrame(hasRetransmission)
-			}
+		if ack != nil || hasRetransmission {
+			stopWaitingFrame = s.sentPacketHandler.GetStopWaitingFrame(hasRetransmission)
 		}
 		packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, s.sentPacketHandler.GetLeastUnacked(), maySendOnlyAck)
 		if err != nil {
@@ -523,9 +516,6 @@ func (s *Session) sendPacket() error {
 			return err
 		}
 
-		if s.version <= protocol.Version33 {
-			s.stopWaitingManager.SentStopWaitingWithPacket(packet.number)
-		}
 		s.logPacket(packet)
 		s.delayedAckOriginTime = time.Time{}
 
