@@ -464,22 +464,25 @@ var _ = Describe("Session", func() {
 					hdr = &PublicHeader{PacketNumberLen: protocol.PacketNumberLen6}
 				})
 
-				It("sets the lastRcvdPacketNumber", func() {
+				It("sets the {last,largest}RcvdPacketNumber", func() {
 					hdr.PacketNumber = 5
 					err := session.handlePacketImpl(nil, hdr, nil)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(session.lastRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
+					Expect(session.largestRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
 				})
 
-				It("sets the lastRcvdPacketNumber, for an out-of-order packet", func() {
+				It("sets the {last,largest}RcvdPacketNumber, for an out-of-order packet", func() {
 					hdr.PacketNumber = 5
 					err := session.handlePacketImpl(nil, hdr, nil)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(session.lastRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
+					Expect(session.largestRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
 					hdr.PacketNumber = 3
 					err = session.handlePacketImpl(nil, hdr, nil)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(session.lastRcvdPacketNumber).To(Equal(protocol.PacketNumber(3)))
+					Expect(session.largestRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
 				})
 
 				It("ignores duplicate packets", func() {

@@ -76,9 +76,10 @@ type Session struct {
 
 	connectionParametersManager *handshake.ConnectionParametersManager
 
+	lastRcvdPacketNumber protocol.PacketNumber
 	// Used to calculate the next packet number from the truncated wire
 	// representation, and sent back in public reset packets
-	lastRcvdPacketNumber protocol.PacketNumber
+	largestRcvdPacketNumber protocol.PacketNumber
 
 	lastNetworkActivityTime time.Time
 
@@ -239,7 +240,7 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *PublicHeader, da
 	// Calculate packet number
 	hdr.PacketNumber = protocol.InferPacketNumber(
 		hdr.PacketNumberLen,
-		s.lastRcvdPacketNumber,
+		s.largestRcvdPacketNumber,
 		hdr.PacketNumber,
 	)
 	if utils.Debug() {
@@ -254,8 +255,9 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *PublicHeader, da
 		return err
 	}
 
-	// Only do this after decrypting, so we are sure the packet is not attacker-controlled
 	s.lastRcvdPacketNumber = hdr.PacketNumber
+	// Only do this after decrypting, so we are sure the packet is not attacker-controlled
+	s.largestRcvdPacketNumber = utils.MaxPacketNumber(s.largestRcvdPacketNumber, hdr.PacketNumber)
 
 	err = s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, packet.entropyBit)
 	// ignore duplicate packets
