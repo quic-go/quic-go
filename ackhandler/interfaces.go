@@ -28,8 +28,7 @@ type SentPacketHandler interface {
 
 // ReceivedPacketHandler handles ACKs needed to send for incoming packets
 type ReceivedPacketHandler interface {
-	// TODO: remove entroypyBit once we drop support for QUIC 33
-	ReceivedPacket(packetNumber protocol.PacketNumber, entropyBit bool) error
+	ReceivedPacket(packetNumber protocol.PacketNumber) error
 	ReceivedStopWaiting(*frames.StopWaitingFrame) error
 
 	GetAckFrame(dequeue bool) (*frames.AckFrame, error)

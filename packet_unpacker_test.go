@@ -35,29 +35,10 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	setData := func(p []byte) {
-		if unpacker.version < protocol.Version34 { // add private flag
-			p = append([]byte{0x01}, p...)
-		}
 		data = aead.Seal(nil, p, 0, hdrBin)
 	}
 
-	It("returns an error for empty packets that don't have a private flag, for QUIC Version < 34", func() {
-		unpacker.version = protocol.Version34
-		setData(nil)
-		unpacker.version = protocol.Version33
-		_, err := unpacker.Unpack(hdrBin, hdr, data)
-		Expect(err).To(MatchError(qerr.MissingPayload))
-	})
-
-	It("returns an error for empty packets that have a private flag, for QUIC Version < 34", func() {
-		unpacker.version = protocol.Version33
-		setData(nil)
-		_, err := unpacker.Unpack(hdrBin, hdr, data)
-		Expect(err).To(MatchError(qerr.MissingPayload))
-	})
-
 	It("does not read read a private flag for QUIC Version >= 34", func() {
-		unpacker.version = protocol.Version34
 		f := &frames.ConnectionCloseFrame{ReasonPhrase: "foo"}
 		err := f.Write(buf, 0)
 		Expect(err).ToNot(HaveOccurred())

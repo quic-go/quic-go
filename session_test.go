@@ -42,8 +42,7 @@ type mockUnpacker struct{}
 
 func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data []byte) (*unpackedPacket, error) {
 	return &unpackedPacket{
-		entropyBit: false,
-		frames:     nil,
+		frames: nil,
 	}, nil
 }
 
@@ -499,7 +498,7 @@ var _ = Describe("Session", func() {
 	Context("sending packets", func() {
 		It("sends ack frames", func() {
 			packetNumber := protocol.PacketNumber(0x035E)
-			session.receivedPacketHandler.ReceivedPacket(packetNumber, true)
+			session.receivedPacketHandler.ReceivedPacket(packetNumber)
 			err := session.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(conn.written).To(HaveLen(1))
@@ -680,7 +679,7 @@ var _ = Describe("Session", func() {
 
 			It("sends a queued ACK frame only once", func() {
 				packetNumber := protocol.PacketNumber(0x1337)
-				session.receivedPacketHandler.ReceivedPacket(packetNumber, true)
+				session.receivedPacketHandler.ReceivedPacket(packetNumber)
 
 				s, err := session.GetOrOpenStream(5)
 				Expect(err).NotTo(HaveOccurred())
