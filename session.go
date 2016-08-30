@@ -98,14 +98,8 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	var sentPacketHandler ackhandler.SentPacketHandler
 	var receivedPacketHandler ackhandler.ReceivedPacketHandler
 
-	if v <= protocol.Version33 {
-		stopWaitingManager = ackhandlerlegacy.NewStopWaitingManager().(ackhandler.StopWaitingManager)
-		sentPacketHandler = ackhandlerlegacy.NewSentPacketHandler(stopWaitingManager).(ackhandler.SentPacketHandler)
-		receivedPacketHandler = ackhandlerlegacy.NewReceivedPacketHandler().(ackhandler.ReceivedPacketHandler)
-	} else {
-		sentPacketHandler = ackhandler.NewSentPacketHandler()
-		receivedPacketHandler = ackhandler.NewReceivedPacketHandler()
-	}
+	sentPacketHandler = ackhandler.NewSentPacketHandler()
+	receivedPacketHandler = ackhandler.NewReceivedPacketHandler()
 
 	session := &Session{
 		connectionID:                connectionID,
