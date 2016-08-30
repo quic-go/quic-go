@@ -503,7 +503,6 @@ var _ = Describe("Session", func() {
 			err := session.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(conn.written).To(HaveLen(1))
-			// test for the beginning of an ACK frame: Entropy until LargestObserved
 			Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x5E, 0x03})))
 		})
 

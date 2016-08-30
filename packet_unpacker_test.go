@@ -176,12 +176,11 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	It("unpacks STOP_WAITING frames", func() {
-		setData([]byte{0x06, 0xA4, 0x03})
+		setData([]byte{0x06, 0x03})
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.frames).To(Equal([]frames.Frame{
 			&frames.StopWaitingFrame{
-				Entropy:      0xA4,
 				LeastUnacked: 7,
 			},
 		}))
