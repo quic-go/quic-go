@@ -196,6 +196,7 @@ func (h *CryptoSetup) handleInchoateCHLO(sni string, chlo []byte, cryptoData map
 	replyMap := map[Tag][]byte{
 		TagSCFG: h.scfg.Get(),
 		TagSTK:  token,
+		TagSVID: []byte("quic-go"),
 	}
 
 	if h.scfg.stkSource.VerifyToken(h.ip, cryptoData[TagSTK]) == nil {

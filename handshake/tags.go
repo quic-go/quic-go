@@ -27,6 +27,8 @@ const (
 	TagMIDS Tag = 'M' + 'I'<<8 + 'D'<<16 + 'S'<<24
 	// TagUAID is the user agent ID
 	TagUAID Tag = 'U' + 'A'<<8 + 'I'<<16 + 'D'<<24
+	// TagSVID is the server ID (unofficial tag by us :)
+	TagSVID Tag = 'S' + 'V'<<8 + 'I'<<16 + 'D'<<24
 	// TagTCID is truncation of the connection ID
 	TagTCID Tag = 'T' + 'C'<<8 + 'I'<<16 + 'D'<<24
 	// TagPDMD is the proof demand
