@@ -15,7 +15,7 @@ install:
   - rmdir c:\go /s /q
   - appveyor DownloadFile https://storage.googleapis.com/golang/go1.7.windows-amd64.zip
   - 7z x go1.7.windows-amd64.zip -y -oC:\ > NUL
-  - set PATH=%PATH%;%GOPATH%\bin
+  - set PATH=%PATH%;%GOPATH%\bin\windows_%GOARCH%;%GOPATH%\bin
   - echo %PATH%
   - echo %GOPATH%
   - git submodule update --init --recursive
@@ -27,7 +27,7 @@ install:
 
 build_script:
   - rm -r integrationtests
-  - go test ./... --ginkgo.noColor
+  - ginkgo -r --randomizeAllSpecs --randomizeSuites --trace --progress
 
 test: off
 
