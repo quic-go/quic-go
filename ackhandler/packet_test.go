@@ -1,4 +1,4 @@
-package ackhandlerlegacy
+package ackhandler
 
 import (
 	"github.com/lucas-clemente/quic-go/frames"
@@ -25,16 +25,10 @@ var _ = Describe("Packet", func() {
 				Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
 			}
 			ackFrame1 = &frames.AckFrame{
-				AckFrameLegacy: &frames.AckFrameLegacy{
-					LargestObserved: 13,
-					Entropy:         5,
-				},
+				LargestAcked: 13,
 			}
 			ackFrame2 = &frames.AckFrame{
-				AckFrameLegacy: &frames.AckFrameLegacy{
-					LargestObserved: 333,
-					Entropy:         17,
-				},
+				LargestAcked: 333,
 			}
 			rstStreamFrame = &frames.RstStreamFrame{
 				StreamID:  555,
@@ -42,7 +36,6 @@ var _ = Describe("Packet", func() {
 			}
 			stopWaitingFrame = &frames.StopWaitingFrame{
 				LeastUnacked: 7331,
-				Entropy:      10,
 			}
 			windowUpdateFrame = &frames.WindowUpdateFrame{
 				StreamID: 999,

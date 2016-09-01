@@ -84,7 +84,7 @@ var _ = Describe("Public Header", func() {
 				PacketNumber:    2,
 				PacketNumberLen: protocol.PacketNumberLen6,
 			}
-			hdr.WritePublicHeader(b, protocol.Version33)
+			hdr.WritePublicHeader(b, protocol.Version35)
 			Expect(b.Bytes()).To(Equal([]byte{0x38, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 2, 0, 0, 0, 0, 0}))
 		})
 
@@ -151,7 +151,7 @@ var _ = Describe("Public Header", func() {
 				PacketNumber:    1,
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}
-			err := hdr.WritePublicHeader(b, protocol.Version33)
+			err := hdr.WritePublicHeader(b, protocol.Version35)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b.Bytes()).To(Equal([]byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x01}))
 		})
@@ -164,7 +164,7 @@ var _ = Describe("Public Header", func() {
 				PacketNumberLen:      protocol.PacketNumberLen1,
 				DiversificationNonce: bytes.Repeat([]byte{1}, 32),
 			}
-			err := hdr.WritePublicHeader(b, protocol.Version33)
+			err := hdr.WritePublicHeader(b, protocol.Version35)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b.Bytes()).To(Equal([]byte{
 				0x0c, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c,

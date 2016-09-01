@@ -8,14 +8,12 @@ import (
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/utils"
 )
 
 type packedPacket struct {
-	number     protocol.PacketNumber
-	entropyBit bool
-	raw        []byte
-	frames     []frames.Frame
+	number protocol.PacketNumber
+	raw    []byte
+	frames []frames.Frame
 }
 
 type packetPacker struct {
@@ -23,7 +21,6 @@ type packetPacker struct {
 	version      protocol.VersionNumber
 	cryptoSetup  *handshake.CryptoSetup
 
-	lastPacketNumber      protocol.PacketNumber // TODO: remove when dropping support for QUIC 33
 	packetNumberGenerator *packetNumberGenerator
 
 	connectionParametersManager *handshake.ConnectionParametersManager
@@ -33,19 +30,14 @@ type packetPacker struct {
 }
 
 func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.CryptoSetup, connectionParametersHandler *handshake.ConnectionParametersManager, streamFramer *streamFramer, version protocol.VersionNumber) *packetPacker {
-	p := &packetPacker{
+	return &packetPacker{
 		cryptoSetup:                 cryptoSetup,
 		connectionID:                connectionID,
 		connectionParametersManager: connectionParametersHandler,
 		version:                     version,
 		streamFramer:                streamFramer,
+		packetNumberGenerator:       newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
 	}
-
-	if version >= protocol.Version34 {
-		p.packetNumberGenerator = newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength)
-	}
-
-	return p
 }
 
 func (p *packetPacker) PackConnectionClose(frame *frames.ConnectionCloseFrame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
@@ -61,12 +53,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		p.controlFrames = append(p.controlFrames, controlFrames...)
 	}
 
-	var currentPacketNumber protocol.PacketNumber
-	if p.version <= protocol.Version33 {
-		currentPacketNumber = p.lastPacketNumber + 1
-	} else {
-		currentPacketNumber = p.packetNumberGenerator.Peek()
-	}
+	currentPacketNumber := p.packetNumberGenerator.Peek()
 
 	// cryptoSetup needs to be locked here, so that the AEADs are not changed between
 	// calling DiversificationNonce() and Seal().
@@ -132,20 +119,6 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 
 	payloadStartIndex := buffer.Len()
 
-	// set entropy bit in Private Header, for QUIC version < 34
-	var entropyBit bool
-	if p.version < protocol.Version34 {
-		entropyBit, err = utils.RandomBit()
-		if err != nil {
-			return nil, err
-		}
-		if entropyBit {
-			buffer.WriteByte(1)
-		} else {
-			buffer.WriteByte(0)
-		}
-	}
-
 	for _, frame := range payloadFrames {
 		err := frame.Write(buffer, p.version)
 		if err != nil {
@@ -161,20 +134,15 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 	p.cryptoSetup.Seal(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], currentPacketNumber, raw[:payloadStartIndex])
 	raw = raw[0 : buffer.Len()+12]
 
-	if p.version <= protocol.Version33 {
-		p.lastPacketNumber++
-	} else {
-		num := p.packetNumberGenerator.Pop()
-		if num != currentPacketNumber {
-			return nil, errors.New("PacketPacker BUG: Peeked and Popped packet numbers do not match.")
-		}
+	num := p.packetNumberGenerator.Pop()
+	if num != currentPacketNumber {
+		return nil, errors.New("PacketPacker BUG: Peeked and Popped packet numbers do not match.")
 	}
 
 	return &packedPacket{
-		number:     currentPacketNumber,
-		entropyBit: entropyBit,
-		raw:        raw,
-		frames:     payloadFrames,
+		number: currentPacketNumber,
+		raw:    raw,
+		frames: payloadFrames,
 	}, nil
 }
 
@@ -183,11 +151,6 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 	var payloadFrames []frames.Frame
 
 	maxFrameSize := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLength
-
-	// until QUIC 33, packets have a 1 byte private header
-	if p.version < protocol.Version34 {
-		maxFrameSize--
-	}
 
 	if stopWaitingFrame != nil {
 		payloadFrames = append(payloadFrames, stopWaitingFrame)

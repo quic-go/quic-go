@@ -12,7 +12,6 @@ import (
 // A StopWaitingFrame in QUIC
 type StopWaitingFrame struct {
 	LeastUnacked    protocol.PacketNumber
-	Entropy         byte
 	PacketNumberLen protocol.PacketNumberLen
 	PacketNumber    protocol.PacketNumber
 }
@@ -27,10 +26,6 @@ func (f *StopWaitingFrame) Write(b *bytes.Buffer, version protocol.VersionNumber
 	// packetNumber is the packet number of the packet that this StopWaitingFrame will be sent with
 	typeByte := uint8(0x06)
 	b.WriteByte(typeByte)
-
-	if version < protocol.Version34 {
-		b.WriteByte(f.Entropy)
-	}
 
 	// make sure the PacketNumber was set
 	if f.PacketNumber == protocol.PacketNumber(0) {
@@ -64,11 +59,6 @@ func (f *StopWaitingFrame) MinLength(version protocol.VersionNumber) (protocol.B
 	var minLength protocol.ByteCount
 	minLength = 1 // typeByte
 
-	// Entropy Byte
-	if version < protocol.Version34 {
-		minLength++
-	}
-
 	if f.PacketNumberLen == protocol.PacketNumberLenInvalid {
 		return 0, errPacketNumberLenNotSet
 	}
@@ -85,13 +75,6 @@ func ParseStopWaitingFrame(r *bytes.Reader, packetNumber protocol.PacketNumber, 
 	_, err := r.ReadByte()
 	if err != nil {
 		return nil, err
-	}
-
-	if version < protocol.Version34 {
-		frame.Entropy, err = r.ReadByte()
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	leastUnackedDelta, err := utils.ReadUintN(r, uint8(packetNumberLen))

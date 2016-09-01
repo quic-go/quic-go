@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/ackhandlerlegacy"
 	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -34,10 +33,10 @@ type sentPacketHandler struct {
 
 	largestReceivedPacketWithAck protocol.PacketNumber
 
-	packetHistory      *ackhandlerlegacy.PacketList
+	packetHistory      *PacketList
 	stopWaitingManager stopWaitingManager
 
-	retransmissionQueue []*ackhandlerlegacy.Packet
+	retransmissionQueue []*Packet
 
 	bytesInFlight protocol.ByteCount
 
@@ -58,14 +57,14 @@ func NewSentPacketHandler() SentPacketHandler {
 	)
 
 	return &sentPacketHandler{
-		packetHistory:      ackhandlerlegacy.NewPacketList(),
+		packetHistory:      NewPacketList(),
 		stopWaitingManager: stopWaitingManager{},
 		rttStats:           rttStats,
 		congestion:         congestion,
 	}
 }
 
-func (h *sentPacketHandler) ackPacket(packetElement *ackhandlerlegacy.PacketElement) {
+func (h *sentPacketHandler) ackPacket(packetElement *PacketElement) {
 	packet := &packetElement.Value
 	h.bytesInFlight -= packet.Length
 	h.packetHistory.Remove(packetElement)
@@ -73,7 +72,7 @@ func (h *sentPacketHandler) ackPacket(packetElement *ackhandlerlegacy.PacketElem
 
 // nackPacket NACKs a packet
 // it returns true if a FastRetransmissions was triggered
-func (h *sentPacketHandler) nackPacket(packetElement *ackhandlerlegacy.PacketElement) bool {
+func (h *sentPacketHandler) nackPacket(packetElement *PacketElement) bool {
 	packet := &packetElement.Value
 
 	packet.MissingReports++
@@ -87,7 +86,7 @@ func (h *sentPacketHandler) nackPacket(packetElement *ackhandlerlegacy.PacketEle
 }
 
 // does NOT set packet.Retransmitted. This variable is not needed anymore
-func (h *sentPacketHandler) queuePacketForRetransmission(packetElement *ackhandlerlegacy.PacketElement) {
+func (h *sentPacketHandler) queuePacketForRetransmission(packetElement *PacketElement) {
 	packet := &packetElement.Value
 	h.bytesInFlight -= packet.Length
 	h.retransmissionQueue = append(h.retransmissionQueue, packet)
@@ -106,7 +105,7 @@ func (h *sentPacketHandler) largestInOrderAcked() protocol.PacketNumber {
 	return h.LargestAcked
 }
 
-func (h *sentPacketHandler) SentPacket(packet *ackhandlerlegacy.Packet) error {
+func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 	if packet.PacketNumber <= h.lastSentPacketNumber {
 		return errPacketNumberNotIncreasing
 	}
@@ -171,7 +170,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 	var lostPackets congestion.PacketVector
 	ackRangeIndex := 0
 
-	var el, elNext *ackhandlerlegacy.PacketElement
+	var el, elNext *PacketElement
 	for el = h.packetHistory.Front(); el != nil; el = elNext {
 		// determine the next list element right at the beginning, because el.Next() is not avaible anymore, when the list element is deleted (i.e. when the packet is ACKed)
 		elNext = el.Next()
@@ -241,7 +240,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 	return nil
 }
 
-func (h *sentPacketHandler) DequeuePacketForRetransmission() *ackhandlerlegacy.Packet {
+func (h *sentPacketHandler) DequeuePacketForRetransmission() *Packet {
 	if len(h.retransmissionQueue) == 0 {
 		return nil
 	}

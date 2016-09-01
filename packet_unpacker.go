@@ -12,8 +12,7 @@ import (
 )
 
 type unpackedPacket struct {
-	entropyBit bool
-	frames     []frames.Frame
+	frames []frames.Frame
 }
 
 type packetUnpacker struct {
@@ -30,17 +29,6 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, da
 		return nil, qerr.Error(qerr.DecryptionFailure, err.Error())
 	}
 	r := bytes.NewReader(decrypted)
-
-	// read private flag byte, for QUIC Version < 34
-	var entropyBit bool
-	if u.version < protocol.Version34 {
-		var privateFlag uint8
-		privateFlag, err = r.ReadByte()
-		if err != nil {
-			return nil, qerr.MissingPayload
-		}
-		entropyBit = privateFlag&0x01 > 0
-	}
 
 	if r.Len() == 0 {
 		return nil, qerr.MissingPayload
@@ -117,7 +105,6 @@ ReadLoop:
 	}
 
 	return &unpackedPacket{
-		entropyBit: entropyBit,
-		frames:     fs,
+		frames: fs,
 	}, nil
 }

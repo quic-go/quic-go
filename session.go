@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
-	"github.com/lucas-clemente/quic-go/ackhandlerlegacy"
 	"github.com/lucas-clemente/quic-go/flowcontrol"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -98,14 +97,8 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	var sentPacketHandler ackhandler.SentPacketHandler
 	var receivedPacketHandler ackhandler.ReceivedPacketHandler
 
-	if v <= protocol.Version33 {
-		stopWaitingManager = ackhandlerlegacy.NewStopWaitingManager().(ackhandler.StopWaitingManager)
-		sentPacketHandler = ackhandlerlegacy.NewSentPacketHandler(stopWaitingManager).(ackhandler.SentPacketHandler)
-		receivedPacketHandler = ackhandlerlegacy.NewReceivedPacketHandler().(ackhandler.ReceivedPacketHandler)
-	} else {
-		sentPacketHandler = ackhandler.NewSentPacketHandler()
-		receivedPacketHandler = ackhandler.NewReceivedPacketHandler()
-	}
+	sentPacketHandler = ackhandler.NewSentPacketHandler()
+	receivedPacketHandler = ackhandler.NewReceivedPacketHandler()
 
 	session := &Session{
 		connectionID:                connectionID,
@@ -260,14 +253,14 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *PublicHeader, da
 	// Only do this after decrypting, so we are sure the packet is not attacker-controlled
 	s.largestRcvdPacketNumber = utils.MaxPacketNumber(s.largestRcvdPacketNumber, hdr.PacketNumber)
 
-	err = s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, packet.entropyBit)
+	err = s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber)
 	// ignore duplicate packets
-	if err == ackhandlerlegacy.ErrDuplicatePacket || err == ackhandler.ErrDuplicatePacket {
+	if err == ackhandler.ErrDuplicatePacket {
 		utils.Infof("Ignoring packet 0x%x due to ErrDuplicatePacket", hdr.PacketNumber)
 		return nil
 	}
 	// ignore packets with packet numbers smaller than the LeastUnacked of a StopWaiting
-	if err == ackhandlerlegacy.ErrPacketSmallerThanLastStopWaiting || err == ackhandler.ErrPacketSmallerThanLastStopWaiting {
+	if err == ackhandler.ErrPacketSmallerThanLastStopWaiting {
 		utils.Infof("Ignoring packet 0x%x due to ErrPacketSmallerThanLastStopWaiting", hdr.PacketNumber)
 		return nil
 	}
@@ -307,8 +300,6 @@ func (s *Session) handleFrames(fs []frames.Frame) error {
 
 		if err != nil {
 			switch err {
-			case ackhandlerlegacy.ErrDuplicateOrOutOfOrderAck:
-				// Can happen e.g. when packets thought missing arrive late
 			case ackhandler.ErrDuplicateOrOutOfOrderAck:
 				// Can happen e.g. when packets thought missing arrive late
 			case errRstStreamOnInvalidStream:
@@ -462,9 +453,6 @@ func (s *Session) sendPacket() error {
 			}
 			utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 
-			if s.version <= protocol.Version33 {
-				s.stopWaitingManager.RegisterPacketForRetransmission(retransmitPacket)
-			}
 			// resend the frames that were in the packet
 			controlFrames = append(controlFrames, retransmitPacket.GetControlFramesForRetransmission()...)
 			for _, streamFrame := range retransmitPacket.GetStreamFramesForRetransmission() {
@@ -498,12 +486,8 @@ func (s *Session) sendPacket() error {
 		hasRetransmission := s.streamFramer.HasFramesForRetransmission()
 
 		var stopWaitingFrame *frames.StopWaitingFrame
-		if s.version <= protocol.Version33 {
-			stopWaitingFrame = s.stopWaitingManager.GetStopWaitingFrame()
-		} else {
-			if ack != nil || hasRetransmission {
-				stopWaitingFrame = s.sentPacketHandler.GetStopWaitingFrame(hasRetransmission)
-			}
+		if ack != nil || hasRetransmission {
+			stopWaitingFrame = s.sentPacketHandler.GetStopWaitingFrame(hasRetransmission)
 		}
 		packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, s.sentPacketHandler.GetLeastUnacked(), maySendOnlyAck)
 		if err != nil {
@@ -523,19 +507,15 @@ func (s *Session) sendPacket() error {
 			s.packer.QueueControlFrameForNextPacket(f)
 		}
 
-		err = s.sentPacketHandler.SentPacket(&ackhandlerlegacy.Packet{
+		err = s.sentPacketHandler.SentPacket(&ackhandler.Packet{
 			PacketNumber: packet.number,
 			Frames:       packet.frames,
-			EntropyBit:   packet.entropyBit,
 			Length:       protocol.ByteCount(len(packet.raw)),
 		})
 		if err != nil {
 			return err
 		}
 
-		if s.version <= protocol.Version33 {
-			s.stopWaitingManager.SentStopWaitingWithPacket(packet.number)
-		}
 		s.logPacket(packet)
 		s.delayedAckOriginTime = time.Time{}
 

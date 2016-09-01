@@ -2,7 +2,7 @@
 // TypeWriter: linkedlist
 // Directive: +gen on Packet
 
-package ackhandlerlegacy
+package ackhandler
 
 // List is a modification of http://golang.org/pkg/container/list/
 // Copyright 2009 The Go Authors. All rights reserved.

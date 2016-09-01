@@ -21,62 +21,62 @@ var _ = Describe("receivedPacketHandler", func() {
 
 	Context("accepting packets", func() {
 		It("handles a packet that arrives late", func() {
-			err := handler.ReceivedPacket(protocol.PacketNumber(1), false)
+			err := handler.ReceivedPacket(protocol.PacketNumber(1))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(1)))
-			err = handler.ReceivedPacket(protocol.PacketNumber(3), false)
+			err = handler.ReceivedPacket(protocol.PacketNumber(3))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(3)))
-			err = handler.ReceivedPacket(protocol.PacketNumber(2), false)
+			err = handler.ReceivedPacket(protocol.PacketNumber(2))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(2)))
 		})
 
 		It("rejects packets with packet number 0", func() {
-			err := handler.ReceivedPacket(protocol.PacketNumber(0), false)
+			err := handler.ReceivedPacket(protocol.PacketNumber(0))
 			Expect(err).To(MatchError(errInvalidPacketNumber))
 		})
 
 		It("rejects a duplicate package with PacketNumber equal to LargestObserved", func() {
 			for i := 1; i < 5; i++ {
-				err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
+				err := handler.ReceivedPacket(protocol.PacketNumber(i))
 				Expect(err).ToNot(HaveOccurred())
 			}
-			err := handler.ReceivedPacket(4, false)
+			err := handler.ReceivedPacket(4)
 			Expect(err).To(MatchError(ErrDuplicatePacket))
 		})
 
 		It("rejects a duplicate package with PacketNumber less than the LargestObserved", func() {
 			for i := 1; i < 5; i++ {
-				err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
+				err := handler.ReceivedPacket(protocol.PacketNumber(i))
 				Expect(err).ToNot(HaveOccurred())
 			}
-			err := handler.ReceivedPacket(2, false)
+			err := handler.ReceivedPacket(2)
 			Expect(err).To(MatchError(ErrDuplicatePacket))
 		})
 
 		It("ignores a packet with PacketNumber less than the LeastUnacked of a previously received StopWaiting", func() {
-			err := handler.ReceivedPacket(5, false)
+			err := handler.ReceivedPacket(5)
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 10})
 			Expect(err).ToNot(HaveOccurred())
-			err = handler.ReceivedPacket(9, false)
+			err = handler.ReceivedPacket(9)
 			Expect(err).To(MatchError(ErrPacketSmallerThanLastStopWaiting))
 			Expect(handler.largestInOrderObserved).To(Equal(protocol.PacketNumber(9)))
 		})
 
 		It("does not ignore a packet with PacketNumber equal to LeastUnacked of a previously received StopWaiting", func() {
-			err := handler.ReceivedPacket(5, false)
+			err := handler.ReceivedPacket(5)
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 10})
 			Expect(err).ToNot(HaveOccurred())
-			err = handler.ReceivedPacket(10, false)
+			err = handler.ReceivedPacket(10)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.largestInOrderObserved).To(Equal(protocol.PacketNumber(10)))
 		})
 
 		It("saves the time when each packet arrived", func() {
-			err := handler.ReceivedPacket(protocol.PacketNumber(3), false)
+			err := handler.ReceivedPacket(protocol.PacketNumber(3))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(3)))
 			Expect(handler.receivedTimes[3]).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
@@ -85,10 +85,10 @@ var _ = Describe("receivedPacketHandler", func() {
 		It("doesn't store more than MaxTrackedReceivedPackets packets", func() {
 			for i := uint32(0); i < protocol.MaxTrackedReceivedPackets; i++ {
 				packetNumber := protocol.PacketNumber(1 + 2*i)
-				err := handler.ReceivedPacket(packetNumber, false)
+				err := handler.ReceivedPacket(packetNumber)
 				Expect(err).ToNot(HaveOccurred())
 			}
-			err := handler.ReceivedPacket(protocol.PacketNumber(3*protocol.MaxTrackedReceivedPackets), false)
+			err := handler.ReceivedPacket(protocol.PacketNumber(3 * protocol.MaxTrackedReceivedPackets))
 			Expect(err).To(MatchError(errTooManyOutstandingReceivedPackets))
 		})
 	})
@@ -100,7 +100,7 @@ var _ = Describe("receivedPacketHandler", func() {
 				if i == 10 || i == 11 || i == 12 {
 					continue
 				}
-				err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
+				err := handler.ReceivedPacket(protocol.PacketNumber(i))
 				Expect(err).ToNot(HaveOccurred())
 			}
 			err := handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: protocol.PacketNumber(12)})
@@ -116,7 +116,7 @@ var _ = Describe("receivedPacketHandler", func() {
 
 		It("increase the ignorePacketsBelow number, even if all packets below the LeastUnacked were already acked", func() {
 			for i := 1; i < 20; i++ {
-				err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
+				err := handler.ReceivedPacket(protocol.PacketNumber(i))
 				Expect(err).ToNot(HaveOccurred())
 			}
 			Expect(handler.largestInOrderObserved).To(Equal(protocol.PacketNumber(19)))
@@ -137,9 +137,9 @@ var _ = Describe("receivedPacketHandler", func() {
 
 	Context("ACK package generation", func() {
 		It("generates a simple ACK frame", func() {
-			err := handler.ReceivedPacket(protocol.PacketNumber(1), false)
+			err := handler.ReceivedPacket(protocol.PacketNumber(1))
 			Expect(err).ToNot(HaveOccurred())
-			err = handler.ReceivedPacket(protocol.PacketNumber(2), false)
+			err = handler.ReceivedPacket(protocol.PacketNumber(2))
 			Expect(err).ToNot(HaveOccurred())
 			ack, err := handler.GetAckFrame(true)
 			Expect(err).ToNot(HaveOccurred())
@@ -149,9 +149,9 @@ var _ = Describe("receivedPacketHandler", func() {
 		})
 
 		It("generates an ACK frame with missing packets", func() {
-			err := handler.ReceivedPacket(protocol.PacketNumber(1), false)
+			err := handler.ReceivedPacket(protocol.PacketNumber(1))
 			Expect(err).ToNot(HaveOccurred())
-			err = handler.ReceivedPacket(protocol.PacketNumber(4), false)
+			err = handler.ReceivedPacket(protocol.PacketNumber(4))
 			Expect(err).ToNot(HaveOccurred())
 			ack, err := handler.GetAckFrame(true)
 			Expect(err).ToNot(HaveOccurred())
@@ -163,9 +163,9 @@ var _ = Describe("receivedPacketHandler", func() {
 		})
 
 		It("does not generate an ACK if an ACK has already been sent for the largest Packet", func() {
-			err := handler.ReceivedPacket(protocol.PacketNumber(1), false)
+			err := handler.ReceivedPacket(protocol.PacketNumber(1))
 			Expect(err).ToNot(HaveOccurred())
-			err = handler.ReceivedPacket(protocol.PacketNumber(2), false)
+			err = handler.ReceivedPacket(protocol.PacketNumber(2))
 			Expect(err).ToNot(HaveOccurred())
 			ack, err := handler.GetAckFrame(true)
 			Expect(err).ToNot(HaveOccurred())
@@ -176,7 +176,7 @@ var _ = Describe("receivedPacketHandler", func() {
 		})
 
 		It("does not dequeue an ACK frame if told so", func() {
-			err := handler.ReceivedPacket(protocol.PacketNumber(2), false)
+			err := handler.ReceivedPacket(protocol.PacketNumber(2))
 			Expect(err).ToNot(HaveOccurred())
 			ack, err := handler.GetAckFrame(false)
 			Expect(err).ToNot(HaveOccurred())
@@ -190,7 +190,7 @@ var _ = Describe("receivedPacketHandler", func() {
 		})
 
 		It("returns a cached ACK frame if the ACK was not dequeued", func() {
-			err := handler.ReceivedPacket(protocol.PacketNumber(2), false)
+			err := handler.ReceivedPacket(protocol.PacketNumber(2))
 			Expect(err).ToNot(HaveOccurred())
 			ack, err := handler.GetAckFrame(false)
 			Expect(err).ToNot(HaveOccurred())
@@ -202,12 +202,12 @@ var _ = Describe("receivedPacketHandler", func() {
 		})
 
 		It("generates a new ACK (and deletes the cached one) when a new packet arrives", func() {
-			err := handler.ReceivedPacket(protocol.PacketNumber(1), false)
+			err := handler.ReceivedPacket(protocol.PacketNumber(1))
 			Expect(err).ToNot(HaveOccurred())
 			ack, _ := handler.GetAckFrame(true)
 			Expect(ack).ToNot(BeNil())
 			Expect(ack.LargestAcked).To(Equal(protocol.PacketNumber(1)))
-			err = handler.ReceivedPacket(protocol.PacketNumber(3), false)
+			err = handler.ReceivedPacket(protocol.PacketNumber(3))
 			Expect(err).ToNot(HaveOccurred())
 			ack, _ = handler.GetAckFrame(true)
 			Expect(ack).ToNot(BeNil())
@@ -215,14 +215,14 @@ var _ = Describe("receivedPacketHandler", func() {
 		})
 
 		It("generates a new ACK when an out-of-order packet arrives", func() {
-			err := handler.ReceivedPacket(protocol.PacketNumber(1), false)
+			err := handler.ReceivedPacket(protocol.PacketNumber(1))
 			Expect(err).ToNot(HaveOccurred())
-			err = handler.ReceivedPacket(protocol.PacketNumber(3), false)
+			err = handler.ReceivedPacket(protocol.PacketNumber(3))
 			Expect(err).ToNot(HaveOccurred())
 			ack, _ := handler.GetAckFrame(true)
 			Expect(ack).ToNot(BeNil())
 			Expect(ack.AckRanges).To(HaveLen(2))
-			err = handler.ReceivedPacket(protocol.PacketNumber(2), false)
+			err = handler.ReceivedPacket(protocol.PacketNumber(2))
 			Expect(err).ToNot(HaveOccurred())
 			ack, _ = handler.GetAckFrame(true)
 			Expect(ack).ToNot(BeNil())
@@ -230,13 +230,13 @@ var _ = Describe("receivedPacketHandler", func() {
 		})
 
 		It("doesn't send old ACK ranges after receiving a StopWaiting", func() {
-			err := handler.ReceivedPacket(5, false)
+			err := handler.ReceivedPacket(5)
 			Expect(err).ToNot(HaveOccurred())
-			err = handler.ReceivedPacket(10, false)
+			err = handler.ReceivedPacket(10)
 			Expect(err).ToNot(HaveOccurred())
-			err = handler.ReceivedPacket(11, false)
+			err = handler.ReceivedPacket(11)
 			Expect(err).ToNot(HaveOccurred())
-			err = handler.ReceivedPacket(12, false)
+			err = handler.ReceivedPacket(12)
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: protocol.PacketNumber(11)})
 			Expect(err).ToNot(HaveOccurred())
@@ -250,7 +250,7 @@ var _ = Describe("receivedPacketHandler", func() {
 
 		It("deletes packets from the packetHistory after receiving a StopWaiting, after continuously received packets", func() {
 			for i := 1; i <= 12; i++ {
-				err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
+				err := handler.ReceivedPacket(protocol.PacketNumber(i))
 				Expect(err).ToNot(HaveOccurred())
 			}
 			err := handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: protocol.PacketNumber(6)})
@@ -269,7 +269,7 @@ var _ = Describe("receivedPacketHandler", func() {
 	Context("Garbage Collector", func() {
 		It("garbage collects receivedTimes after receiving a StopWaiting, if there are no missing packets", func() {
 			for i := 1; i <= 4; i++ {
-				err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
+				err := handler.ReceivedPacket(protocol.PacketNumber(i))
 				Expect(err).ToNot(HaveOccurred())
 			}
 			err := handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 3})
@@ -283,7 +283,7 @@ var _ = Describe("receivedPacketHandler", func() {
 
 		It("garbage collects the receivedTimes after receiving multiple StopWaitings", func() {
 			for i := 1; i <= 9; i++ {
-				err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
+				err := handler.ReceivedPacket(protocol.PacketNumber(i))
 				Expect(err).ToNot(HaveOccurred())
 			}
 			err := handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 4})
@@ -297,11 +297,11 @@ var _ = Describe("receivedPacketHandler", func() {
 		})
 
 		It("garbage collects receivedTimes after receiving a StopWaiting, if there are missing packets", func() {
-			err := handler.ReceivedPacket(1, false)
+			err := handler.ReceivedPacket(1)
 			Expect(err).ToNot(HaveOccurred())
-			err = handler.ReceivedPacket(2, false)
+			err = handler.ReceivedPacket(2)
 			Expect(err).ToNot(HaveOccurred())
-			err = handler.ReceivedPacket(4, false)
+			err = handler.ReceivedPacket(4)
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 4})
 			Expect(err).ToNot(HaveOccurred())

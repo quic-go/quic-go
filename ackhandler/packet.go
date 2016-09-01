@@ -1,6 +1,4 @@
-package ackhandlerlegacy
-
-// TODO: move to ackhandler once we remove support for QUIC 33
+package ackhandler
 
 import (
 	"time"
@@ -14,13 +12,9 @@ import (
 type Packet struct {
 	PacketNumber protocol.PacketNumber
 	Frames       []frames.Frame
-	EntropyBit   bool
-	Entropy      EntropyAccumulator
 	Length       protocol.ByteCount
 
 	MissingReports uint8
-	// TODO: remove this when dropping support for QUIC 33
-	Retransmitted bool // has this Packet ever been retransmitted
 
 	SendTime time.Time
 }
