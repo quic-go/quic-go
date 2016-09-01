@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -490,6 +491,9 @@ func (s *Session) sendPacket() error {
 
 		// Check whether we are allowed to send a packet containing only an ACK
 		maySendOnlyAck := time.Now().Sub(s.delayedAckOriginTime) > protocol.AckSendDelay
+		if runtime.GOOS == "windows" {
+			maySendOnlyAck = true
+		}
 
 		hasRetransmission := s.streamFramer.HasFramesForRetransmission()
 

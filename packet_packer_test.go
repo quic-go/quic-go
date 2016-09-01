@@ -464,19 +464,19 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	It("returns nil if we only have a single STOP_WAITING and an ACK", func() {
-		p, err := packer.PackPacket(&frames.StopWaitingFrame{}, []frames.Frame{&frames.AckFrameLegacy{}}, 0, false)
+		p, err := packer.PackPacket(&frames.StopWaitingFrame{}, []frames.Frame{&frames.AckFrame{}}, 0, false)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(p).To(BeNil())
 	})
 
 	It("returns nil if we only have a single ACK", func() {
-		p, err := packer.PackPacket(nil, []frames.Frame{&frames.AckFrameLegacy{}}, 0, false)
+		p, err := packer.PackPacket(nil, []frames.Frame{&frames.AckFrame{}}, 0, false)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(p).To(BeNil())
 	})
 
 	It("does not return nil if we only have a single ACK but request it to be sent", func() {
-		p, err := packer.PackPacket(nil, []frames.Frame{&frames.AckFrameLegacy{}}, 0, true)
+		p, err := packer.PackPacket(nil, []frames.Frame{&frames.AckFrame{}}, 0, true)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(p).ToNot(BeNil())
 	})

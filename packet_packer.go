@@ -113,11 +113,11 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 	// Don't send out packets that only contain an ACK (plus optional STOP_WAITING), if requested
 	if !maySendOnlyAck {
 		if len(payloadFrames) == 1 {
-			if _, ok := payloadFrames[0].(*frames.AckFrameLegacy); ok {
+			if _, ok := payloadFrames[0].(*frames.AckFrame); ok {
 				return nil, nil
 			}
 		} else if len(payloadFrames) == 2 && stopWaitingFrame != nil {
-			if _, ok := payloadFrames[1].(*frames.AckFrameLegacy); ok {
+			if _, ok := payloadFrames[1].(*frames.AckFrame); ok {
 				return nil, nil
 			}
 		}
