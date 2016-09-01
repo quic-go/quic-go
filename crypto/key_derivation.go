@@ -21,15 +21,15 @@ import (
 // }
 
 // DeriveKeysAESGCM derives the client and server keys and creates a matching AES-GCM AEAD instance
-func DeriveKeysAESGCM(version protocol.VersionNumber, forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte) (AEAD, error) {
-	otherKey, myKey, otherIV, myIV, err := deriveKeys(version, forwardSecure, sharedSecret, nonces, connID, chlo, scfg, cert, divNonce, 16)
+func DeriveKeysAESGCM(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte) (AEAD, error) {
+	otherKey, myKey, otherIV, myIV, err := deriveKeys(forwardSecure, sharedSecret, nonces, connID, chlo, scfg, cert, divNonce, 16)
 	if err != nil {
 		return nil, err
 	}
 	return NewAEADAESGCM(otherKey, myKey, otherIV, myIV)
 }
 
-func deriveKeys(version protocol.VersionNumber, forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo, scfg, cert, divNonce []byte, keyLen int) ([]byte, []byte, []byte, []byte, error) {
+func deriveKeys(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo, scfg, cert, divNonce []byte, keyLen int) ([]byte, []byte, []byte, []byte, error) {
 	var info bytes.Buffer
 	if forwardSecure {
 		info.Write([]byte("QUIC forward secure key expansion\x00"))
@@ -52,7 +52,7 @@ func deriveKeys(version protocol.VersionNumber, forwardSecure bool, sharedSecret
 	otherIV := s[2*keyLen : 2*keyLen+4]
 	myIV := s[2*keyLen+4:]
 
-	if !forwardSecure && version >= protocol.Version33 {
+	if !forwardSecure {
 		if err := diversify(myKey, myIV, divNonce); err != nil {
 			return nil, nil, nil, nil, err
 		}

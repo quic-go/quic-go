@@ -13,7 +13,7 @@ import (
 )
 
 // KeyDerivationFunction is used for key derivation
-type KeyDerivationFunction func(version protocol.VersionNumber, forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte) (crypto.AEAD, error)
+type KeyDerivationFunction func(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte) (crypto.AEAD, error)
 
 // KeyExchangeFunction is used to make a new KEX
 type KeyExchangeFunction func() crypto.KeyExchange
@@ -248,7 +248,6 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 	}
 
 	h.secureAEAD, err = h.keyDerivation(
-		h.version,
 		false,
 		sharedSecret,
 		cryptoData[TagNONC],
@@ -271,7 +270,7 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 	if err != nil {
 		return nil, err
 	}
-	h.forwardSecureAEAD, err = h.keyDerivation(h.version,
+	h.forwardSecureAEAD, err = h.keyDerivation(
 		true,
 		ephermalSharedSecret,
 		fsNonce.Bytes(),
@@ -306,9 +305,6 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 
 // DiversificationNonce returns a diversification nonce if required in the next packet to be Seal'ed. See LockForSealing()!
 func (h *CryptoSetup) DiversificationNonce() []byte {
-	if h.version < protocol.Version33 {
-		return nil
-	}
 	if h.receivedForwardSecurePacket || h.secureAEAD == nil {
 		return nil
 	}

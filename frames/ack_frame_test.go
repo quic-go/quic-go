@@ -883,7 +883,7 @@ var _ = Describe("AckFrame", func() {
 	Context("Legacy AckFrame wrapping", func() {
 		It("parses a ACK frame", func() {
 			b := bytes.NewReader([]byte{0x40, 0xA4, 0x03, 0x23, 0x45, 0x01, 0x02, 0xFF, 0xEE, 0xDD, 0xCC})
-			frame, err := ParseAckFrame(b, protocol.Version32)
+			frame, err := ParseAckFrame(b, protocol.Version33)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.AckFrameLegacy).ToNot(BeNil())
 			Expect(frame.AckFrameLegacy.Entropy).To(Equal(byte(0xA4)))
@@ -903,9 +903,9 @@ var _ = Describe("AckFrame", func() {
 			frame := AckFrame{
 				AckFrameLegacy: ackLegacy,
 			}
-			err := frame.Write(b1, protocol.Version32)
+			err := frame.Write(b1, protocol.Version33)
 			Expect(err).ToNot(HaveOccurred())
-			err = ackLegacy.Write(b2, protocol.Version32)
+			err = ackLegacy.Write(b2, protocol.Version33)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b1.Bytes()).To(Equal(b2.Bytes()))
 		})
