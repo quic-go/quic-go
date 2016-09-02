@@ -13,12 +13,13 @@ type VersionNumber int
 const (
 	Version34 VersionNumber = 34 + iota
 	Version35
+	Version36
 	VersionWhatever = 0 // for when the version doesn't matter
 )
 
 // SupportedVersions lists the versions that the server supports
 var SupportedVersions = []VersionNumber{
-	Version34, Version35,
+	Version34, Version35, Version36,
 }
 
 // SupportedVersionsAsTags is needed for the SHLO crypto message
