@@ -447,6 +447,63 @@ var _ = Describe("AckFrame", func() {
 					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
 				})
 
+				It("writes two blocks for 510 lost packets", func() {
+					frameOrig := &AckFrame{
+						LargestAcked: 600,
+						LowestAcked:  1,
+						AckRanges: []AckRange{
+							{FirstPacketNumber: 20 + 510, LastPacketNumber: 600},
+							{FirstPacketNumber: 1, LastPacketNumber: 19},
+						},
+					}
+					Expect(frameOrig.numWritableNackRanges()).To(Equal(uint64(3)))
+					err := frameOrig.Write(b, 0)
+					Expect(err).ToNot(HaveOccurred())
+					r := bytes.NewReader(b.Bytes())
+					frame, err := ParseAckFrame(r, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
+					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
+				})
+
+				It("writes three blocks for 511 lost packets", func() {
+					frameOrig := &AckFrame{
+						LargestAcked: 600,
+						LowestAcked:  1,
+						AckRanges: []AckRange{
+							{FirstPacketNumber: 20 + 511, LastPacketNumber: 600},
+							{FirstPacketNumber: 1, LastPacketNumber: 19},
+						},
+					}
+					Expect(frameOrig.numWritableNackRanges()).To(Equal(uint64(4)))
+					err := frameOrig.Write(b, 0)
+					Expect(err).ToNot(HaveOccurred())
+					r := bytes.NewReader(b.Bytes())
+					frame, err := ParseAckFrame(r, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
+					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
+				})
+
+				It("writes three blocks for 512 lost packets", func() {
+					frameOrig := &AckFrame{
+						LargestAcked: 600,
+						LowestAcked:  1,
+						AckRanges: []AckRange{
+							{FirstPacketNumber: 20 + 512, LastPacketNumber: 600},
+							{FirstPacketNumber: 1, LastPacketNumber: 19},
+						},
+					}
+					Expect(frameOrig.numWritableNackRanges()).To(Equal(uint64(4)))
+					err := frameOrig.Write(b, 0)
+					Expect(err).ToNot(HaveOccurred())
+					r := bytes.NewReader(b.Bytes())
+					frame, err := ParseAckFrame(r, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
+					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
+				})
+
 				It("writes multiple blocks for a lot of lost packets", func() {
 					frameOrig := &AckFrame{
 						LargestAcked: 3000,

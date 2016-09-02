@@ -287,7 +287,7 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 
 				if i == int(num)-1 { // last block
 					lengthWritten = uint64(length)
-					gapWritten = uint8(gap % 0xFF)
+					gapWritten = uint8(1 + ((gap - 1) % 255))
 				} else {
 					lengthWritten = 0
 					gapWritten = 0xFF
@@ -403,10 +403,10 @@ func (f *AckFrame) numWritableNackRanges() uint64 {
 		}
 
 		lastAckRange := f.AckRanges[i-1]
-		gap := lastAckRange.FirstPacketNumber - ackRange.LastPacketNumber
-		rangeLength := uint64(gap) / (0xFF + 1)
-		if uint64(gap)%(0xFF+1) != 0 {
-			rangeLength++
+		gap := lastAckRange.FirstPacketNumber - ackRange.LastPacketNumber - 1
+		rangeLength := 1 + uint64(gap)/0xFF
+		if uint64(gap)%0xFF == 0 {
+			rangeLength--
 		}
 
 		if numRanges+rangeLength < 0xFF {
