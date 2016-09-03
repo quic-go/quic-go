@@ -98,14 +98,7 @@ func (m *streamsMap) Iterate(fn streamLambda) error {
 	defer m.mutex.Unlock()
 
 	for _, streamID := range m.openStreams {
-		str, ok := m.streams[streamID]
-		if !ok {
-			return errMapAccess
-		}
-		if str == nil {
-			return fmt.Errorf("BUG: Stream %d is closed, but still in openStreams map", streamID)
-		}
-		cont, err := fn(str)
+		cont, err := m.iterateFunc(streamID, fn)
 		if err != nil {
 			return err
 		}
@@ -116,6 +109,9 @@ func (m *streamsMap) Iterate(fn streamLambda) error {
 	return nil
 }
 
+// RoundRobinIterate executes the streamLambda for every open stream, until the streamLambda returns false
+// It uses a round-robin-like scheduling to ensure that every stream is considered fairly
+// It prioritizes the crypto- and the header-stream (StreamIDs 1 and 3)
 func (m *streamsMap) RoundRobinIterate(fn streamLambda) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -123,16 +119,24 @@ func (m *streamsMap) RoundRobinIterate(fn streamLambda) error {
 	numStreams := len(m.openStreams)
 	startIndex := m.roundRobinIndex
 
+	for _, i := range []protocol.StreamID{1, 3} {
+		cont, err := m.iterateFunc(i, fn)
+		if err != nil && err != errMapAccess {
+			return err
+		}
+		if !cont {
+			return nil
+		}
+	}
+
 	for i := 0; i < numStreams; i++ {
 		streamID := m.openStreams[(i+startIndex)%numStreams]
-		str, ok := m.streams[streamID]
-		if !ok {
-			return errMapAccess
+
+		if streamID == 1 || streamID == 3 {
+			continue
 		}
-		if str == nil {
-			return fmt.Errorf("BUG: Stream %d is closed, but still in openStreams map", streamID)
-		}
-		cont, err := fn(str)
+
+		cont, err := m.iterateFunc(streamID, fn)
 		if err != nil {
 			return err
 		}
@@ -142,6 +146,17 @@ func (m *streamsMap) RoundRobinIterate(fn streamLambda) error {
 		m.roundRobinIndex = (m.roundRobinIndex + 1) % numStreams
 	}
 	return nil
+}
+
+func (m *streamsMap) iterateFunc(streamID protocol.StreamID, fn streamLambda) (bool, error) {
+	str, ok := m.streams[streamID]
+	if !ok {
+		return true, errMapAccess
+	}
+	if str == nil {
+		return false, fmt.Errorf("BUG: Stream %d is closed, but still in openStreams map", streamID)
+	}
+	return fn(str)
 }
 
 func (m *streamsMap) putStream(s *stream) error {
