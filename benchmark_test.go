@@ -125,7 +125,7 @@ var _ = Describe("Benchmarks", func() {
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
-					buf := make([]byte, 1024)
+					buf := make([]byte, 1500)
 					dataRead := 0
 					for dataRead < dataLen {
 						n, err := s2stream.Read(buf)
@@ -147,7 +147,7 @@ var _ = Describe("Benchmarks", func() {
 				time.Sleep(time.Millisecond)
 
 				b.RecordValue("transfer rate [MB/s]", float64(dataLen)/1e6/runtime.Seconds())
-			}, 3)
+			}, 6)
 		})
 	}
 })
