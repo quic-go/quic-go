@@ -83,7 +83,7 @@ var _ = Describe("receivedPacketHandler", func() {
 		})
 
 		It("doesn't store more than MaxTrackedReceivedPackets packets", func() {
-			for i := uint32(0); i < protocol.MaxTrackedReceivedPackets; i++ {
+			for i := protocol.PacketNumber(0); i < protocol.MaxTrackedReceivedPackets; i++ {
 				packetNumber := protocol.PacketNumber(1 + 2*i)
 				err := handler.ReceivedPacket(packetNumber)
 				Expect(err).ToNot(HaveOccurred())

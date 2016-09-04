@@ -44,7 +44,7 @@ const MaxNewStreamIDDelta = 4 * MaxStreamsPerConnection
 const MaxIdleConnectionStateLifetime = 60 * time.Second
 
 // MaxSessionUnprocessedPackets is the max number of packets stored in each session that are not yet processed.
-const MaxSessionUnprocessedPackets = 2000
+const MaxSessionUnprocessedPackets = DefaultMaxCongestionWindow
 
 // RetransmissionThreshold + 1 is the number of times a packet has to be NACKed so that it gets retransmitted
 const RetransmissionThreshold = 3
@@ -59,13 +59,10 @@ const MaxTrackedSkippedPackets = 10
 const STKExpiryTimeSec = 24 * 60 * 60
 
 // MaxTrackedSentPackets is maximum number of sent packets saved for either later retransmission or entropy calculation
-// TODO: find a reasonable value here
-// TODO: decrease this value after dropping support for QUIC 33 and earlier
-const MaxTrackedSentPackets = 2000
+const MaxTrackedSentPackets = 2 * DefaultMaxCongestionWindow
 
 // MaxTrackedReceivedPackets is the maximum number of received packets saved for doing the entropy calculations
-// TODO: think about what to do with this when adding support for QUIC 34
-const MaxTrackedReceivedPackets = 2000
+const MaxTrackedReceivedPackets = 2 * DefaultMaxCongestionWindow
 
 // MaxStreamFrameSorterGaps is the maximum number of gaps between received StreamFrames
 // prevents DOS attacks against the streamFrameSorter

@@ -274,7 +274,7 @@ func (h *sentPacketHandler) CongestionAllowsSending() bool {
 
 func (h *sentPacketHandler) CheckForError() error {
 	length := len(h.retransmissionQueue) + h.packetHistory.Len()
-	if uint32(length) > protocol.MaxTrackedSentPackets {
+	if protocol.PacketNumber(length) > protocol.MaxTrackedSentPackets {
 		return ErrTooManyTrackedSentPackets
 	}
 	return nil
