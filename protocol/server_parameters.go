@@ -7,8 +7,7 @@ import "time"
 const MaxCongestionWindow PacketNumber = 200
 
 // DefaultMaxCongestionWindow is the default for the max congestion window
-// Taken from Chrome
-const DefaultMaxCongestionWindow PacketNumber = 107
+const DefaultMaxCongestionWindow PacketNumber = 1000
 
 // InitialCongestionWindow is the initial congestion window in QUIC packets
 const InitialCongestionWindow PacketNumber = 32
