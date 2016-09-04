@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -48,7 +49,7 @@ func (w *responseWriter) WriteHeader(status int) {
 	enc.WriteField(hpack.HeaderField{Name: ":status", Value: strconv.Itoa(status)})
 
 	for k, v := range w.header {
-		enc.WriteField(hpack.HeaderField{Name: k, Value: v[0]})
+		enc.WriteField(hpack.HeaderField{Name: strings.ToLower(k), Value: v[0]})
 	}
 
 	utils.Infof("Responding with %d", status)
