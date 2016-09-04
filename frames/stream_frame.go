@@ -3,8 +3,6 @@ package frames
 import (
 	"bytes"
 	"errors"
-	"io"
-	"io/ioutil"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
@@ -68,13 +66,15 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 
 	if dataLen == 0 {
 		// The rest of the packet is data
-		frame.Data, err = ioutil.ReadAll(r)
-		if err != nil {
-			return nil, err
-		}
-	} else {
+		dataLen = uint16(r.Len())
+	}
+	if dataLen != 0 {
 		frame.Data = make([]byte, dataLen)
-		if _, err := io.ReadFull(r, frame.Data); err != nil {
+		n, err := r.Read(frame.Data)
+		if n != int(dataLen) {
+			return nil, errors.New("BUG: StreamFrame could not read dataLen bytes")
+		}
+		if err != nil {
 			return nil, err
 		}
 	}
