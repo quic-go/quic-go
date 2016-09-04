@@ -2,10 +2,6 @@ package protocol
 
 import "time"
 
-// MaxCongestionWindow is the maximum size of the CWND, in packets.
-// TODO: Unused?
-const MaxCongestionWindow PacketNumber = 200
-
 // DefaultMaxCongestionWindow is the default for the max congestion window
 const DefaultMaxCongestionWindow PacketNumber = 1000
 

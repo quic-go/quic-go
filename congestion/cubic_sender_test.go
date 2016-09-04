@@ -21,6 +21,8 @@ func (c *mockClock) Advance(d time.Duration) {
 	*c = mockClock(time.Time(*c).Add(d))
 }
 
+const MaxCongestionWindow = protocol.PacketNumber(200)
+
 var _ = Describe("Cubic Sender", func() {
 	var (
 		sender            SendAlgorithmWithDebugInfo
@@ -37,7 +39,7 @@ var _ = Describe("Cubic Sender", func() {
 		ackedPacketNumber = 0
 		clock = mockClock{}
 		rttStats = NewRTTStats()
-		sender = NewCubicSender(&clock, rttStats, true /*reno*/, initialCongestionWindowPackets, protocol.MaxCongestionWindow)
+		sender = NewCubicSender(&clock, rttStats, true /*reno*/, initialCongestionWindowPackets, MaxCongestionWindow)
 	})
 
 	SendAvailableSendWindowLen := func(packetLength protocol.ByteCount) int {
@@ -380,7 +382,7 @@ var _ = Describe("Cubic Sender", func() {
 
 	It("RTO congestion window", func() {
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
-		Expect(sender.SlowstartThreshold()).To(Equal(protocol.MaxCongestionWindow))
+		Expect(sender.SlowstartThreshold()).To(Equal(MaxCongestionWindow))
 
 		// Expect the window to decrease to the minimum once the RTO fires
 		// and slow start threshold to be set to 1/2 of the CWND.
@@ -789,7 +791,7 @@ var _ = Describe("Cubic Sender", func() {
 
 	It("reset after connection migration", func() {
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
-		Expect(sender.SlowstartThreshold()).To(Equal(protocol.MaxCongestionWindow))
+		Expect(sender.SlowstartThreshold()).To(Equal(MaxCongestionWindow))
 
 		// Starts with slow start.
 		sender.SetNumEmulatedConnections(1)
@@ -815,7 +817,7 @@ var _ = Describe("Cubic Sender", func() {
 		// Resets cwnd and slow start threshold on connection migrations.
 		sender.OnConnectionMigration()
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
-		Expect(sender.SlowstartThreshold()).To(Equal(protocol.MaxCongestionWindow))
+		Expect(sender.SlowstartThreshold()).To(Equal(MaxCongestionWindow))
 		Expect(sender.HybridSlowStart().Started()).To(BeFalse())
 	})
 })
