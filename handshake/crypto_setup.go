@@ -3,6 +3,7 @@ package handshake
 import (
 	"bytes"
 	"crypto/rand"
+	"io"
 	"net"
 	"sync"
 
@@ -70,19 +71,18 @@ func NewCryptoSetup(
 // HandleCryptoStream reads and writes messages on the crypto stream
 func (h *CryptoSetup) HandleCryptoStream() error {
 	for {
-		cachingReader := utils.NewCachingReader(h.cryptoStream)
-		messageTag, cryptoData, err := ParseHandshakeMessage(cachingReader)
+		var chloData bytes.Buffer
+		messageTag, cryptoData, err := ParseHandshakeMessage(io.TeeReader(h.cryptoStream, &chloData))
 		if err != nil {
 			return qerr.HandshakeFailed
 		}
 		if messageTag != TagCHLO {
 			return qerr.InvalidCryptoMessageType
 		}
-		chloData := cachingReader.Get()
 
 		utils.Debugf("Got CHLO:\n%s", printHandshakeMessage(cryptoData))
 
-		done, err := h.handleMessage(chloData, cryptoData)
+		done, err := h.handleMessage(chloData.Bytes(), cryptoData)
 		if err != nil {
 			return err
 		}
