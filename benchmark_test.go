@@ -34,6 +34,9 @@ func newLinkedConnection(other *Session) *linkedConnection {
 	}
 	go func() {
 		for packet := range c {
+			if packet == nil {
+				return
+			}
 			r := bytes.NewReader(packet)
 			hdr, err := ParsePublicHeader(r)
 			if err != nil {
@@ -144,7 +147,10 @@ var _ = Describe("Benchmarks", func() {
 
 				session1.Close(nil)
 				session2.Close(nil)
-				time.Sleep(time.Millisecond)
+
+				// Signal connections to close
+				c1.c <- nil
+				c2.c <- nil
 
 				b.RecordValue("transfer rate [MB/s]", float64(dataLen)/1e6/runtime.Seconds())
 			}, 3)
