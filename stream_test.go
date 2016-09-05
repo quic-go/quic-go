@@ -150,27 +150,6 @@ var _ = Describe("Stream", func() {
 			Expect(b).To(Equal([]byte{0xBE, 0xEF}))
 		})
 
-		It("reads single bytes", func() {
-			frame := frames.StreamFrame{
-				Offset: 0,
-				Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
-			}
-			err := str.AddStreamFrame(&frame)
-			Expect(err).ToNot(HaveOccurred())
-			b, err := str.ReadByte()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(b).To(Equal(byte(0xDE)))
-			b, err = str.ReadByte()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(b).To(Equal(byte(0xAD)))
-			b, err = str.ReadByte()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(b).To(Equal(byte(0xBE)))
-			b, err = str.ReadByte()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(b).To(Equal(byte(0xEF)))
-		})
-
 		It("reads all data available", func() {
 			frame1 := frames.StreamFrame{
 				Offset: 0,

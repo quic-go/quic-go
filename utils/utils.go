@@ -7,16 +7,9 @@ import (
 	"github.com/lucas-clemente/quic-go/protocol"
 )
 
-// ReadStream is the read part of a QUIC stream
-type ReadStream interface {
-	io.Reader
-	io.ByteReader
-}
-
 // Stream is the interface for QUIC streams
 type Stream interface {
 	io.Reader
-	io.ByteReader
 	io.Writer
 	io.Closer
 	StreamID() protocol.StreamID

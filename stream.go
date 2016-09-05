@@ -129,13 +129,6 @@ func (s *stream) Read(p []byte) (int, error) {
 	return bytesRead, nil
 }
 
-// ReadByte implements io.ByteReader
-func (s *stream) ReadByte() (byte, error) {
-	p := make([]byte, 1)
-	_, err := io.ReadFull(s, p)
-	return p[0], err
-}
-
 func (s *stream) Write(p []byte) (int, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
