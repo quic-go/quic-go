@@ -33,12 +33,3 @@ type ReceivedPacketHandler interface {
 
 	GetAckFrame(dequeue bool) (*frames.AckFrame, error)
 }
-
-// StopWaitingManager manages StopWaitings for sent packets
-// TODO: remove once we drop support for QUIC 33
-type StopWaitingManager interface {
-	RegisterPacketForRetransmission(packet *Packet)
-	GetStopWaitingFrame() *frames.StopWaitingFrame
-	SentStopWaitingWithPacket(packetNumber protocol.PacketNumber)
-	ReceivedAckForPacketNumber(packetNumber protocol.PacketNumber)
-}

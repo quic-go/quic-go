@@ -52,7 +52,6 @@ type Session struct {
 
 	sentPacketHandler     ackhandler.SentPacketHandler
 	receivedPacketHandler ackhandler.ReceivedPacketHandler
-	stopWaitingManager    ackhandler.StopWaitingManager
 	streamFramer          *streamFramer
 
 	flowControlManager flowcontrol.FlowControlManager
@@ -93,7 +92,6 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	connectionParametersManager := handshake.NewConnectionParamatersManager()
 	flowControlManager := flowcontrol.NewFlowControlManager(connectionParametersManager)
 
-	var stopWaitingManager ackhandler.StopWaitingManager
 	var sentPacketHandler ackhandler.SentPacketHandler
 	var receivedPacketHandler ackhandler.ReceivedPacketHandler
 
@@ -108,7 +106,6 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		closeCallback:               closeCallback,
 		sentPacketHandler:           sentPacketHandler,
 		receivedPacketHandler:       receivedPacketHandler,
-		stopWaitingManager:          stopWaitingManager,
 		flowControlManager:          flowControlManager,
 		receivedPackets:             make(chan receivedPacket, protocol.MaxSessionUnprocessedPackets),
 		closeChan:                   make(chan *qerr.QuicError, 1),

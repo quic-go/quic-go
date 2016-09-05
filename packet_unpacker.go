@@ -98,7 +98,6 @@ ReadLoop:
 		if err != nil {
 			return nil, err
 		}
-		// TODO: Remove once all frames are implemented
 		if frame != nil {
 			fs = append(fs, frame)
 		}
