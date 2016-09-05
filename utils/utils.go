@@ -94,65 +94,49 @@ func ReadUint16(b io.ByteReader) (uint16, error) {
 
 // WriteUint64 writes a uint64
 func WriteUint64(b *bytes.Buffer, i uint64) {
-	b.WriteByte(uint8(i))
-	b.WriteByte(uint8(i >> 8))
-	b.WriteByte(uint8(i >> 16))
-	b.WriteByte(uint8(i >> 24))
-	b.WriteByte(uint8(i >> 32))
-	b.WriteByte(uint8(i >> 40))
-	b.WriteByte(uint8(i >> 48))
-	b.WriteByte(uint8(i >> 56))
+	b.Write([]byte{
+		uint8(i), uint8(i >> 8), uint8(i >> 16), uint8(i >> 24),
+		uint8(i >> 32), uint8(i >> 40), uint8(i >> 48), uint8(i >> 56),
+	})
 }
 
 // WriteUint56 writes 56 bit of a uint64
 func WriteUint56(b *bytes.Buffer, i uint64) {
-	b.WriteByte(uint8(i))
-	b.WriteByte(uint8(i >> 8))
-	b.WriteByte(uint8(i >> 16))
-	b.WriteByte(uint8(i >> 24))
-	b.WriteByte(uint8(i >> 32))
-	b.WriteByte(uint8(i >> 40))
-	b.WriteByte(uint8(i >> 48))
+	b.Write([]byte{
+		uint8(i), uint8(i >> 8), uint8(i >> 16), uint8(i >> 24),
+		uint8(i >> 32), uint8(i >> 40), uint8(i >> 48),
+	})
 }
 
 // WriteUint48 writes 48 bit of a uint64
 func WriteUint48(b *bytes.Buffer, i uint64) {
-	b.WriteByte(uint8(i))
-	b.WriteByte(uint8(i >> 8))
-	b.WriteByte(uint8(i >> 16))
-	b.WriteByte(uint8(i >> 24))
-	b.WriteByte(uint8(i >> 32))
-	b.WriteByte(uint8(i >> 40))
+	b.Write([]byte{
+		uint8(i), uint8(i >> 8), uint8(i >> 16), uint8(i >> 24),
+		uint8(i >> 32), uint8(i >> 40),
+	})
 }
 
 // WriteUint40 writes 40 bit of a uint64
 func WriteUint40(b *bytes.Buffer, i uint64) {
-	b.WriteByte(uint8(i))
-	b.WriteByte(uint8(i >> 8))
-	b.WriteByte(uint8(i >> 16))
-	b.WriteByte(uint8(i >> 24))
-	b.WriteByte(uint8(i >> 32))
+	b.Write([]byte{
+		uint8(i), uint8(i >> 8), uint8(i >> 16),
+		uint8(i >> 24), uint8(i >> 32),
+	})
 }
 
 // WriteUint32 writes a uint32
 func WriteUint32(b *bytes.Buffer, i uint32) {
-	b.WriteByte(uint8(i))
-	b.WriteByte(uint8(i >> 8))
-	b.WriteByte(uint8(i >> 16))
-	b.WriteByte(uint8(i >> 24))
+	b.Write([]byte{uint8(i), uint8(i >> 8), uint8(i >> 16), uint8(i >> 24)})
 }
 
 // WriteUint24 writes 24 bit of a uint32
 func WriteUint24(b *bytes.Buffer, i uint32) {
-	b.WriteByte(uint8(i))
-	b.WriteByte(uint8(i >> 8))
-	b.WriteByte(uint8(i >> 16))
+	b.Write([]byte{uint8(i), uint8(i >> 8), uint8(i >> 16)})
 }
 
 // WriteUint16 writes a uint16
 func WriteUint16(b *bytes.Buffer, i uint16) {
-	b.WriteByte(uint8(i))
-	b.WriteByte(uint8(i >> 8))
+	b.Write([]byte{uint8(i), uint8(i >> 8)})
 }
 
 // Uint32Slice attaches the methods of sort.Interface to []uint32, sorting in increasing order.
