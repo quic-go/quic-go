@@ -13,24 +13,25 @@ import (
 )
 
 // ParseHandshakeMessage reads a crypto message
-func ParseHandshakeMessage(r utils.ReadStream) (Tag, map[Tag][]byte, error) {
-	messageTag, err := utils.ReadUint32(r)
-	if err != nil {
-		return 0, nil, err
-	}
+func ParseHandshakeMessage(r io.Reader) (Tag, map[Tag][]byte, error) {
+	slice4 := make([]byte, 4)
 
-	nPairs, err := utils.ReadUint32(r)
-	if err != nil {
+	if _, err := io.ReadFull(r, slice4); err != nil {
 		return 0, nil, err
 	}
+	messageTag := Tag(binary.LittleEndian.Uint32(slice4))
+
+	if _, err := io.ReadFull(r, slice4); err != nil {
+		return 0, nil, err
+	}
+	nPairs := binary.LittleEndian.Uint32(slice4)
 
 	if nPairs > protocol.CryptoMaxParams {
 		return 0, nil, qerr.CryptoTooManyEntries
 	}
 
 	index := make([]byte, nPairs*8)
-	_, err = io.ReadFull(r, index)
-	if err != nil {
+	if _, err := io.ReadFull(r, index); err != nil {
 		return 0, nil, err
 	}
 
@@ -47,8 +48,7 @@ func ParseHandshakeMessage(r utils.ReadStream) (Tag, map[Tag][]byte, error) {
 		}
 
 		data := make([]byte, dataLen)
-		_, err = io.ReadFull(r, data)
-		if err != nil {
+		if _, err := io.ReadFull(r, data); err != nil {
 			return 0, nil, err
 		}
 
@@ -56,7 +56,7 @@ func ParseHandshakeMessage(r utils.ReadStream) (Tag, map[Tag][]byte, error) {
 		dataStart = dataEnd
 	}
 
-	return Tag(messageTag), resultMap, nil
+	return messageTag, resultMap, nil
 }
 
 // WriteHandshakeMessage writes a crypto message
