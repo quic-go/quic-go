@@ -6,6 +6,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -130,6 +131,8 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 		return qerr.PacketTooLarge
 	}
 
+	rcvTime := time.Now()
+
 	r := bytes.NewReader(packet)
 
 	hdr, err := ParsePublicHeader(r)
@@ -175,6 +178,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 		remoteAddr:   remoteAddr,
 		publicHeader: hdr,
 		data:         packet[len(packet)-r.Len():],
+		rcvTime:      rcvTime,
 	})
 	return nil
 }

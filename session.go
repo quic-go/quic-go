@@ -25,6 +25,7 @@ type receivedPacket struct {
 	remoteAddr   interface{}
 	publicHeader *PublicHeader
 	data         []byte
+	rcvTime      time.Time
 }
 
 var (
@@ -179,7 +180,7 @@ func (s *Session) run() {
 			// begins with the public header and we never copy it.
 			putPacketBuffer(p.publicHeader.Raw)
 			if s.delayedAckOriginTime.IsZero() {
-				s.delayedAckOriginTime = time.Now()
+				s.delayedAckOriginTime = p.rcvTime
 			}
 		case <-s.aeadChanged:
 			s.tryDecryptingQueuedPackets()
@@ -226,7 +227,12 @@ func (s *Session) maybeResetTimer() {
 }
 
 func (s *Session) handlePacketImpl(p *receivedPacket) error {
-	s.lastNetworkActivityTime = time.Now()
+	if p.rcvTime.IsZero() {
+		// To simplify testing
+		p.rcvTime = time.Now()
+	}
+
+	s.lastNetworkActivityTime = p.rcvTime
 	hdr := p.publicHeader
 	data := p.data
 
