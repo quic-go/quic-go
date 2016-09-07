@@ -162,14 +162,14 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 	}
 
 	for len(p.controlFrames) > 0 {
-		frame := p.controlFrames[0]
+		frame := p.controlFrames[len(p.controlFrames)-1]
 		minLength, _ := frame.MinLength(p.version) // controlFrames does not contain any StopWaitingFrames. So it will *never* return an error
 		if payloadLength+minLength > maxFrameSize {
 			break
 		}
 		payloadFrames = append(payloadFrames, frame)
 		payloadLength += minLength
-		p.controlFrames = p.controlFrames[1:]
+		p.controlFrames = p.controlFrames[:len(p.controlFrames)-1]
 	}
 
 	if payloadLength > maxFrameSize {
