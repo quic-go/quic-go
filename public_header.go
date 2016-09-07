@@ -21,13 +21,13 @@ var (
 // The PublicHeader of a QUIC packet
 type PublicHeader struct {
 	Raw                  []byte
+	ConnectionID         protocol.ConnectionID
 	VersionFlag          bool
 	ResetFlag            bool
-	ConnectionID         protocol.ConnectionID
 	TruncateConnectionID bool
-	VersionNumber        protocol.VersionNumber
 	PacketNumberLen      protocol.PacketNumberLen
 	PacketNumber         protocol.PacketNumber
+	VersionNumber        protocol.VersionNumber
 	DiversificationNonce []byte
 }
 

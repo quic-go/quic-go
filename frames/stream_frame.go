@@ -11,11 +11,11 @@ import (
 
 // A StreamFrame of QUIC
 type StreamFrame struct {
-	FinBit         bool
 	StreamID       protocol.StreamID
+	FinBit         bool
+	DataLenPresent bool
 	Offset         protocol.ByteCount
 	Data           []byte
-	DataLenPresent bool
 }
 
 var (

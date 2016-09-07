@@ -34,12 +34,12 @@ var _ = Describe("Frame logging", func() {
 
 	It("logs sent frames", func() {
 		LogFrame(&RstStreamFrame{}, true)
-		Expect(string(buf.Bytes())).To(Equal("\t-> &frames.RstStreamFrame{StreamID:0x0, ByteOffset:0x0, ErrorCode:0x0}\n"))
+		Expect(string(buf.Bytes())).To(Equal("\t-> &frames.RstStreamFrame{StreamID:0x0, ErrorCode:0x0, ByteOffset:0x0}\n"))
 	})
 
 	It("logs received frames", func() {
 		LogFrame(&RstStreamFrame{}, false)
-		Expect(string(buf.Bytes())).To(Equal("\t<- &frames.RstStreamFrame{StreamID:0x0, ByteOffset:0x0, ErrorCode:0x0}\n"))
+		Expect(string(buf.Bytes())).To(Equal("\t<- &frames.RstStreamFrame{StreamID:0x0, ErrorCode:0x0, ByteOffset:0x0}\n"))
 	})
 
 	It("logs stream frames", func() {

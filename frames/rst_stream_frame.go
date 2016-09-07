@@ -10,8 +10,8 @@ import (
 // A RstStreamFrame in QUIC
 type RstStreamFrame struct {
 	StreamID   protocol.StreamID
-	ByteOffset protocol.ByteCount
 	ErrorCode  uint32
+	ByteOffset protocol.ByteCount
 }
 
 //Write writes a RST_STREAM frame
