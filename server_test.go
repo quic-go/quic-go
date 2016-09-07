@@ -20,7 +20,7 @@ type mockSession struct {
 	closed       bool
 }
 
-func (s *mockSession) handlePacket(addr interface{}, hdr *PublicHeader, data []byte) {
+func (s *mockSession) handlePacket(*receivedPacket) {
 	s.packetCount++
 }
 

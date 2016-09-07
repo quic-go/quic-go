@@ -459,7 +459,7 @@ var _ = Describe("Session", func() {
 
 		It("sets the {last,largest}RcvdPacketNumber", func() {
 			hdr.PacketNumber = 5
-			err := session.handlePacketImpl(nil, hdr, nil)
+			err := session.handlePacketImpl(&receivedPacket{publicHeader: hdr})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(session.lastRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
 			Expect(session.largestRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
@@ -467,12 +467,12 @@ var _ = Describe("Session", func() {
 
 		It("sets the {last,largest}RcvdPacketNumber, for an out-of-order packet", func() {
 			hdr.PacketNumber = 5
-			err := session.handlePacketImpl(nil, hdr, nil)
+			err := session.handlePacketImpl(&receivedPacket{publicHeader: hdr})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(session.lastRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
 			Expect(session.largestRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
 			hdr.PacketNumber = 3
-			err = session.handlePacketImpl(nil, hdr, nil)
+			err = session.handlePacketImpl(&receivedPacket{publicHeader: hdr})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(session.lastRcvdPacketNumber).To(Equal(protocol.PacketNumber(3)))
 			Expect(session.largestRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
@@ -480,9 +480,9 @@ var _ = Describe("Session", func() {
 
 		It("ignores duplicate packets", func() {
 			hdr.PacketNumber = 5
-			err := session.handlePacketImpl(nil, hdr, nil)
+			err := session.handlePacketImpl(&receivedPacket{publicHeader: hdr})
 			Expect(err).ToNot(HaveOccurred())
-			err = session.handlePacketImpl(nil, hdr, nil)
+			err = session.handlePacketImpl(&receivedPacket{publicHeader: hdr})
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -490,7 +490,7 @@ var _ = Describe("Session", func() {
 			err := session.receivedPacketHandler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 10})
 			Expect(err).ToNot(HaveOccurred())
 			hdr.PacketNumber = 5
-			err = session.handlePacketImpl(nil, hdr, nil)
+			err = session.handlePacketImpl(&receivedPacket{publicHeader: hdr})
 			Expect(err).ToNot(HaveOccurred())
 		})
 	})
@@ -717,7 +717,7 @@ var _ = Describe("Session", func() {
 			hdr := &PublicHeader{
 				PacketNumber: protocol.PacketNumber(i + 1),
 			}
-			session.handlePacket(nil, hdr, []byte("foobar"))
+			session.handlePacket(&receivedPacket{publicHeader: hdr, data: []byte("foobar")})
 		}
 		session.run()
 
@@ -731,7 +731,7 @@ var _ = Describe("Session", func() {
 			hdr := &PublicHeader{
 				PacketNumber: protocol.PacketNumber(i + 1),
 			}
-			session.handlePacket(nil, hdr, []byte("foobar"))
+			session.handlePacket(&receivedPacket{publicHeader: hdr, data: []byte("foobar")})
 		}
 		go session.run()
 		Consistently(session.undecryptablePackets).Should(HaveLen(0))
@@ -739,10 +739,8 @@ var _ = Describe("Session", func() {
 	})
 
 	It("unqueues undecryptable packets for later decryption", func() {
-		session.undecryptablePackets = []receivedPacket{{
-			nil,
-			&PublicHeader{PacketNumber: protocol.PacketNumber(42)},
-			nil,
+		session.undecryptablePackets = []*receivedPacket{{
+			publicHeader: &PublicHeader{PacketNumber: protocol.PacketNumber(42)},
 		}}
 		Expect(session.receivedPackets).NotTo(Receive())
 		session.tryDecryptingQueuedPackets()
@@ -775,7 +773,7 @@ var _ = Describe("Session", func() {
 	It("stores up to MaxSessionUnprocessedPackets packets", func(done Done) {
 		// Nothing here should block
 		for i := protocol.PacketNumber(0); i < protocol.MaxSessionUnprocessedPackets+10; i++ {
-			session.handlePacket(nil, nil, nil)
+			session.handlePacket(&receivedPacket{})
 		}
 		close(done)
 	}, 0.5)

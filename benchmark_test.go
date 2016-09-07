@@ -43,7 +43,7 @@ func newLinkedConnection(other *Session) *linkedConnection {
 				Expect(err).NotTo(HaveOccurred())
 			}
 			hdr.Raw = packet[:len(packet)-r.Len()]
-			conn.other.handlePacket(nil, hdr, packet[len(packet)-r.Len():])
+			conn.other.handlePacket(&receivedPacket{publicHeader: hdr, data: packet[len(packet)-r.Len():]})
 		}
 	}()
 	return conn

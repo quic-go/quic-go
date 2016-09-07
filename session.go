@@ -61,14 +61,14 @@ type Session struct {
 
 	cryptoSetup *handshake.CryptoSetup
 
-	receivedPackets  chan receivedPacket
+	receivedPackets  chan *receivedPacket
 	sendingScheduled chan struct{}
 	// closeChan is used to notify the run loop that it should terminate.
 	// If the value is not nil, the error is sent as a CONNECTION_CLOSE.
 	closeChan chan *qerr.QuicError
 	closed    uint32 // atomic bool
 
-	undecryptablePackets []receivedPacket
+	undecryptablePackets []*receivedPacket
 	aeadChanged          chan struct{}
 
 	delayedAckOriginTime time.Time
@@ -107,11 +107,11 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		sentPacketHandler:           sentPacketHandler,
 		receivedPacketHandler:       receivedPacketHandler,
 		flowControlManager:          flowControlManager,
-		receivedPackets:             make(chan receivedPacket, protocol.MaxSessionUnprocessedPackets),
+		receivedPackets:             make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets),
 		closeChan:                   make(chan *qerr.QuicError, 1),
 		sendingScheduled:            make(chan struct{}, 1),
 		connectionParametersManager: connectionParametersManager,
-		undecryptablePackets:        make([]receivedPacket, 0, protocol.MaxUndecryptablePackets),
+		undecryptablePackets:        make([]*receivedPacket, 0, protocol.MaxUndecryptablePackets),
 		aeadChanged:                 make(chan struct{}, 1),
 		timer:                       time.NewTimer(0),
 		lastNetworkActivityTime: time.Now(),
@@ -170,7 +170,7 @@ func (s *Session) run() {
 			// We do all the interesting stuff after the switch statement, so
 			// nothing to see here.
 		case p := <-s.receivedPackets:
-			err = s.handlePacketImpl(p.remoteAddr, p.publicHeader, p.data)
+			err = s.handlePacketImpl(p)
 			if qErr, ok := err.(*qerr.QuicError); ok && qErr.ErrorCode == qerr.DecryptionFailure {
 				s.tryQueueingUndecryptablePacket(p)
 				continue
@@ -225,8 +225,10 @@ func (s *Session) maybeResetTimer() {
 	s.currentDeadline = nextDeadline
 }
 
-func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *PublicHeader, data []byte) error {
+func (s *Session) handlePacketImpl(p *receivedPacket) error {
 	s.lastNetworkActivityTime = time.Now()
+	hdr := p.publicHeader
+	data := p.data
 
 	// Calculate packet number
 	hdr.PacketNumber = protocol.InferPacketNumber(
@@ -239,7 +241,7 @@ func (s *Session) handlePacketImpl(remoteAddr interface{}, hdr *PublicHeader, da
 	}
 
 	// TODO: Only do this after authenticating
-	s.conn.setCurrentRemoteAddr(remoteAddr)
+	s.conn.setCurrentRemoteAddr(p.remoteAddr)
 
 	packet, err := s.unpacker.Unpack(hdr.Raw, hdr, data)
 	if err != nil {
@@ -312,12 +314,12 @@ func (s *Session) handleFrames(fs []frames.Frame) error {
 	return nil
 }
 
-// handlePacket handles a packet
-func (s *Session) handlePacket(remoteAddr interface{}, hdr *PublicHeader, data []byte) {
+// handlePacket is called by the server with a new packet
+func (s *Session) handlePacket(p *receivedPacket) {
 	// Discard packets once the amount of queued packets is larger than
 	// the channel size, protocol.MaxSessionUnprocessedPackets
 	select {
-	case s.receivedPackets <- receivedPacket{remoteAddr: remoteAddr, publicHeader: hdr, data: data}:
+	case s.receivedPackets <- p:
 	default:
 	}
 }
@@ -611,7 +613,7 @@ func (s *Session) scheduleSending() {
 	}
 }
 
-func (s *Session) tryQueueingUndecryptablePacket(p receivedPacket) {
+func (s *Session) tryQueueingUndecryptablePacket(p *receivedPacket) {
 	if s.cryptoSetup.HandshakeComplete() {
 		return
 	}
@@ -624,7 +626,7 @@ func (s *Session) tryQueueingUndecryptablePacket(p receivedPacket) {
 
 func (s *Session) tryDecryptingQueuedPackets() {
 	for _, p := range s.undecryptablePackets {
-		s.handlePacket(p.remoteAddr, p.publicHeader, p.data)
+		s.handlePacket(p)
 	}
 	s.undecryptablePackets = s.undecryptablePackets[:0]
 }
