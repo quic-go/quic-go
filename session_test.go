@@ -58,7 +58,7 @@ func (h *mockSentPacketHandler) SentPacket(packet *ackhandler.Packet) error {
 	h.sentPackets = append(h.sentPackets, packet)
 	return nil
 }
-func (h *mockSentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNumber protocol.PacketNumber) error {
+func (h *mockSentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNumber protocol.PacketNumber, recvTime time.Time) error {
 	return nil
 }
 func (h *mockSentPacketHandler) BytesInFlight() protocol.ByteCount      { return 0 }
@@ -787,7 +787,7 @@ var _ = Describe("Session", func() {
 			time.Sleep(time.Microsecond)
 			ack := &frames.AckFrame{}
 			ack.LargestAcked = p
-			err = session.sentPacketHandler.ReceivedAck(ack, p)
+			err = session.sentPacketHandler.ReceivedAck(ack, p, time.Now())
 			Expect(err).NotTo(HaveOccurred())
 		}
 		session.packer.packetNumberGenerator.next = n + 1

@@ -374,7 +374,7 @@ func (s *Session) handleRstStreamFrame(frame *frames.RstStreamFrame) error {
 }
 
 func (s *Session) handleAckFrame(frame *frames.AckFrame) error {
-	if err := s.sentPacketHandler.ReceivedAck(frame, s.lastRcvdPacketNumber); err != nil {
+	if err := s.sentPacketHandler.ReceivedAck(frame, s.lastRcvdPacketNumber, s.lastNetworkActivityTime); err != nil {
 		return err
 	}
 	return nil
