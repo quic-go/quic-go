@@ -130,7 +130,7 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 	h.packetHistory.PushBack(*packet)
 
 	h.congestion.OnPacketSent(
-		time.Now(),
+		now,
 		h.BytesInFlight(),
 		packet.PacketNumber,
 		packet.Length,
@@ -140,7 +140,7 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 	return nil
 }
 
-func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNumber protocol.PacketNumber) error {
+func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNumber protocol.PacketNumber, rcvTime time.Time) error {
 	if ackFrame.LargestAcked > h.lastSentPacketNumber {
 		return errAckForUnsentPacket
 	}
@@ -169,6 +169,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 	var ackedPackets congestion.PacketVector
 	var lostPackets congestion.PacketVector
 	ackRangeIndex := 0
+	rttUpdated := false
 
 	var el, elNext *PacketElement
 	for el = h.packetHistory.Front(); el != nil; el = elNext {
@@ -188,9 +189,9 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 
 		// Update the RTT
 		if packetNumber == h.LargestAcked {
-			timeDelta := time.Now().Sub(packet.SendTime)
-			// TODO: Don't always update RTT
-			h.rttStats.UpdateRTT(timeDelta, ackFrame.DelayTime, time.Now())
+			rttUpdated = true
+			timeDelta := rcvTime.Sub(packet.SendTime)
+			h.rttStats.UpdateRTT(timeDelta, ackFrame.DelayTime, rcvTime)
 			if utils.Debug() {
 				utils.Debugf("\tEstimated RTT: %dms", h.rttStats.SmoothedRTT()/time.Millisecond)
 			}
@@ -231,7 +232,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 	h.stopWaitingManager.ReceivedAck(ackFrame)
 
 	h.congestion.OnCongestionEvent(
-		true, /* TODO: rtt updated */
+		rttUpdated,
 		h.BytesInFlight(),
 		ackedPackets,
 		lostPackets,

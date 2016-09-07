@@ -6,6 +6,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -16,7 +17,7 @@ import (
 
 // packetHandler handles packets
 type packetHandler interface {
-	handlePacket(addr interface{}, hdr *PublicHeader, data []byte)
+	handlePacket(*receivedPacket)
 	run()
 	Close(error) error
 }
@@ -130,6 +131,8 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 		return qerr.PacketTooLarge
 	}
 
+	rcvTime := time.Now()
+
 	r := bytes.NewReader(packet)
 
 	hdr, err := ParsePublicHeader(r)
@@ -171,7 +174,12 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 		// Late packet for closed session
 		return nil
 	}
-	session.handlePacket(remoteAddr, hdr, packet[len(packet)-r.Len():])
+	session.handlePacket(&receivedPacket{
+		remoteAddr:   remoteAddr,
+		publicHeader: hdr,
+		data:         packet[len(packet)-r.Len():],
+		rcvTime:      rcvTime,
+	})
 	return nil
 }
 
