@@ -748,15 +748,21 @@ var _ = Describe("Session", func() {
 		Expect(session.receivedPackets).To(Receive())
 	})
 
-	It("times out", func(done Done) {
-		session.connectionParametersManager.SetFromMap(map[handshake.Tag][]byte{
-			handshake.TagICSL: {0, 0, 0, 0},
+	Context("timeouts", func() {
+		It("times out due to no network activity", func(done Done) {
+			session.lastNetworkActivityTime = time.Now().Add(-time.Hour)
+			session.run() // Would normally not return
+			Expect(conn.written[0]).To(ContainSubstring("No recent network activity."))
+			close(done)
 		})
-		session.packer.connectionParametersManager = session.connectionParametersManager
-		session.run() // Would normally not return
-		Expect(conn.written[0]).To(ContainSubstring("No recent network activity."))
-		close(done)
-	}, 3)
+
+		It("times out due to non-completed crypto handshake", func(done Done) {
+			session.sessionCreationTime = time.Now().Add(-time.Hour)
+			session.run() // Would normally not return
+			Expect(conn.written[0]).To(ContainSubstring("Crypto handshake did not complete in time."))
+			close(done)
+		})
+	})
 
 	It("errors when the SentPacketHandler has too many packets tracked", func() {
 		streamFrame := frames.StreamFrame{StreamID: 5, Data: []byte("foobar")}
