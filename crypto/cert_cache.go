@@ -1,42 +1,48 @@
 package crypto
 
 import (
+	"fmt"
 	"hash/fnv"
-	"sync"
+
+	"github.com/hashicorp/golang-lru"
+	"github.com/lucas-clemente/quic-go/protocol"
 )
 
 var (
-	compressedCertsCache      = map[uint64][]byte{}
-	compressedCertsCacheMutex sync.RWMutex
+	compressedCertsCache *lru.Cache
 )
 
 func getCompressedCert(chain [][]byte, pCommonSetHashes, pCachedHashes []byte) ([]byte, error) {
 	// Hash all inputs
-	hash := fnv.New64a()
+	hasher := fnv.New64a()
 	for _, v := range chain {
-		hash.Write(v)
+		hasher.Write(v)
 	}
-	hash.Write(pCommonSetHashes)
-	hash.Write(pCachedHashes)
-	hashRes := hash.Sum64()
+	hasher.Write(pCommonSetHashes)
+	hasher.Write(pCachedHashes)
+	hash := hasher.Sum64()
 
-	compressedCertsCacheMutex.RLock()
-	result, isCached := compressedCertsCache[hashRes]
-	compressedCertsCacheMutex.RUnlock()
+	var result []byte
+
+	resultI, isCached := compressedCertsCache.Get(hash)
 	if isCached {
-		return result, nil
+		result = resultI.([]byte)
+	} else {
+		var err error
+		result, err = compressChain(chain, pCommonSetHashes, pCachedHashes)
+		if err != nil {
+			return nil, err
+		}
+		compressedCertsCache.Add(hash, result)
 	}
 
-	compressedCertsCacheMutex.Lock()
-	defer compressedCertsCacheMutex.Unlock()
-	result, isCached = compressedCertsCache[hashRes]
-	if isCached {
-		return result, nil
-	}
-	cached, err := compressChain(chain, pCommonSetHashes, pCachedHashes)
+	return result, nil
+}
+
+func init() {
+	var err error
+	compressedCertsCache, err = lru.New(protocol.NumCachedCertificates)
 	if err != nil {
-		return nil, err
+		panic(fmt.Sprintf("fatal error in quic-go: could not create lru cache: %s", err.Error()))
 	}
-	compressedCertsCache[hashRes] = cached
-	return cached, nil
 }

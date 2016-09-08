@@ -1,13 +1,16 @@
 package crypto
 
 import (
+	lru "github.com/hashicorp/golang-lru"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Certificate cache", func() {
 	BeforeEach(func() {
-		compressedCertsCache = map[uint64][]byte{}
+		var err error
+		compressedCertsCache, err = lru.New(2)
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("gives a compressed cert", func() {
@@ -29,11 +32,20 @@ var _ = Describe("Certificate cache", func() {
 	})
 
 	It("stores cached values", func() {
-		Expect(compressedCertsCache).To(HaveLen(0))
 		chain := [][]byte{{0xde, 0xca, 0xfb, 0xad}}
-		compressed, err := getCompressedCert(chain, nil, nil)
+		_, err := getCompressedCert(chain, nil, nil)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(compressedCertsCache).To(HaveLen(1))
-		Expect(compressedCertsCache[3838929964809501833]).To(Equal(compressed))
+		Expect(compressedCertsCache.Len()).To(Equal(1))
+		Expect(compressedCertsCache.Contains(uint64(3838929964809501833))).To(BeTrue())
+	})
+
+	It("evicts old values", func() {
+		_, err := getCompressedCert([][]byte{{0x00}}, nil, nil)
+		Expect(err).NotTo(HaveOccurred())
+		_, err = getCompressedCert([][]byte{{0x01}}, nil, nil)
+		Expect(err).NotTo(HaveOccurred())
+		_, err = getCompressedCert([][]byte{{0x02}}, nil, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(compressedCertsCache.Len()).To(Equal(2))
 	})
 })
