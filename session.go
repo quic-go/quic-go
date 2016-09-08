@@ -81,6 +81,7 @@ type Session struct {
 	// representation, and sent back in public reset packets
 	largestRcvdPacketNumber protocol.PacketNumber
 
+	sessionCreationTime     time.Time
 	lastNetworkActivityTime time.Time
 
 	timer           *time.Timer
@@ -99,23 +100,29 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	sentPacketHandler = ackhandler.NewSentPacketHandler()
 	receivedPacketHandler = ackhandler.NewReceivedPacketHandler()
 
+	now := time.Now()
 	session := &Session{
-		connectionID:                connectionID,
-		version:                     v,
-		conn:                        conn,
-		streamCallback:              streamCallback,
-		closeCallback:               closeCallback,
+		conn:         conn,
+		connectionID: connectionID,
+		version:      v,
+
+		streamCallback: streamCallback,
+		closeCallback:  closeCallback,
+
+		connectionParametersManager: connectionParametersManager,
 		sentPacketHandler:           sentPacketHandler,
 		receivedPacketHandler:       receivedPacketHandler,
 		flowControlManager:          flowControlManager,
-		receivedPackets:             make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets),
-		closeChan:                   make(chan *qerr.QuicError, 1),
-		sendingScheduled:            make(chan struct{}, 1),
-		connectionParametersManager: connectionParametersManager,
-		undecryptablePackets:        make([]*receivedPacket, 0, protocol.MaxUndecryptablePackets),
-		aeadChanged:                 make(chan struct{}, 1),
-		timer:                       time.NewTimer(0),
-		lastNetworkActivityTime: time.Now(),
+
+		receivedPackets:      make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets),
+		closeChan:            make(chan *qerr.QuicError, 1),
+		sendingScheduled:     make(chan struct{}, 1),
+		undecryptablePackets: make([]*receivedPacket, 0, protocol.MaxUndecryptablePackets),
+		aeadChanged:          make(chan struct{}, 1),
+
+		timer: time.NewTimer(0),
+		lastNetworkActivityTime: now,
+		sessionCreationTime:     now,
 	}
 
 	session.streamsMap = newStreamsMap(session.newStream)
@@ -193,21 +200,28 @@ func (s *Session) run() {
 		if err := s.sendPacket(); err != nil {
 			s.Close(err)
 		}
-		if time.Now().Sub(s.lastNetworkActivityTime) >= s.connectionParametersManager.GetIdleConnectionStateLifetime() {
+		if time.Now().Sub(s.lastNetworkActivityTime) >= s.idleTimeout() {
 			s.Close(qerr.Error(qerr.NetworkIdleTimeout, "No recent network activity."))
+		}
+		if !s.cryptoSetup.HandshakeComplete() && time.Now().Sub(s.sessionCreationTime) >= protocol.MaxTimeForCryptoHandshake {
+			s.Close(qerr.Error(qerr.NetworkIdleTimeout, "Crypto handshake did not complete in time."))
 		}
 		s.garbageCollectStreams()
 	}
 }
 
 func (s *Session) maybeResetTimer() {
-	nextDeadline := s.lastNetworkActivityTime.Add(s.connectionParametersManager.GetIdleConnectionStateLifetime())
+	nextDeadline := s.lastNetworkActivityTime.Add(s.idleTimeout())
 
 	if !s.delayedAckOriginTime.IsZero() {
 		nextDeadline = utils.MinTime(nextDeadline, s.delayedAckOriginTime.Add(protocol.AckSendDelay))
 	}
 	if rtoTime := s.sentPacketHandler.TimeOfFirstRTO(); !rtoTime.IsZero() {
 		nextDeadline = utils.MinTime(nextDeadline, rtoTime)
+	}
+	if !s.cryptoSetup.HandshakeComplete() {
+		handshakeDeadline := s.sessionCreationTime.Add(protocol.MaxTimeForCryptoHandshake)
+		nextDeadline = utils.MinTime(nextDeadline, handshakeDeadline)
 	}
 
 	if nextDeadline.Equal(s.currentDeadline) {
@@ -224,6 +238,13 @@ func (s *Session) maybeResetTimer() {
 
 	s.timerRead = false
 	s.currentDeadline = nextDeadline
+}
+
+func (s *Session) idleTimeout() time.Duration {
+	if s.cryptoSetup.HandshakeComplete() {
+		return s.connectionParametersManager.GetIdleConnectionStateLifetime()
+	}
+	return protocol.InitialIdleTimeout
 }
 
 func (s *Session) handlePacketImpl(p *receivedPacket) error {

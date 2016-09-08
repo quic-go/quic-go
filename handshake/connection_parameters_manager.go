@@ -41,7 +41,7 @@ var (
 func NewConnectionParamatersManager() *ConnectionParametersManager {
 	return &ConnectionParametersManager{
 		params: make(map[Tag][]byte),
-		idleConnectionStateLifetime:        protocol.InitialIdleConnectionStateLifetime,
+		idleConnectionStateLifetime:        protocol.DefaultIdleTimeout,
 		sendStreamFlowControlWindow:        protocol.InitialStreamFlowControlWindow,     // can only be changed by the client
 		sendConnectionFlowControlWindow:    protocol.InitialConnectionFlowControlWindow, // can only be changed by the client
 		receiveStreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
@@ -106,8 +106,7 @@ func (h *ConnectionParametersManager) negotiateMaxStreamsPerConnection(clientVal
 }
 
 func (h *ConnectionParametersManager) negotiateIdleConnectionStateLifetime(clientValue time.Duration) time.Duration {
-	// TODO: what happens if the clients sets 0 seconds?
-	return utils.MinDuration(clientValue, protocol.MaxIdleConnectionStateLifetime)
+	return utils.MinDuration(clientValue, protocol.MaxIdleTimeout)
 }
 
 // getRawValue gets the byte-slice for a tag
