@@ -9,6 +9,7 @@ import (
 	mrand "math/rand"
 	"net"
 	"reflect"
+	"runtime/debug"
 	"time"
 	"unsafe"
 
@@ -143,7 +144,12 @@ var _ = Describe("Benchmarks", func() {
 				runtime := b.Time("transfer time", func() {
 					_, err := io.Copy(s1stream, bytes.NewReader(data))
 					Expect(err).NotTo(HaveOccurred())
-					<-done
+					select {
+					case <-done:
+					case <-time.After(10 * time.Second):
+						debug.PrintStack()
+						Fail("timeout")
+					}
 				})
 
 				session1.Close(nil)
