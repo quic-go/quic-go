@@ -162,15 +162,15 @@ var _ = Describe("ConnectionsParameterManager", func() {
 
 	Context("idle connection state lifetime", func() {
 		It("has initial idle connection state lifetime", func() {
-			Expect(cpm.GetIdleConnectionStateLifetime()).To(Equal(protocol.InitialIdleConnectionStateLifetime))
+			Expect(cpm.GetIdleConnectionStateLifetime()).To(Equal(protocol.DefaultIdleTimeout))
 		})
 
 		It("negotiates correctly when the client wants a longer lifetime", func() {
-			Expect(cpm.negotiateIdleConnectionStateLifetime(protocol.MaxIdleConnectionStateLifetime + 10*time.Second)).To(Equal(protocol.MaxIdleConnectionStateLifetime))
+			Expect(cpm.negotiateIdleConnectionStateLifetime(protocol.MaxIdleTimeout + 10*time.Second)).To(Equal(protocol.MaxIdleTimeout))
 		})
 
 		It("negotiates correctly when the client wants a shorter lifetime", func() {
-			Expect(cpm.negotiateIdleConnectionStateLifetime(protocol.MaxIdleConnectionStateLifetime - 1*time.Second)).To(Equal(protocol.MaxIdleConnectionStateLifetime - 1*time.Second))
+			Expect(cpm.negotiateIdleConnectionStateLifetime(protocol.MaxIdleTimeout - 1*time.Second)).To(Equal(protocol.MaxIdleTimeout - 1*time.Second))
 		})
 
 		It("sets the negotiated lifetime", func() {
@@ -189,7 +189,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			}
 			err := cpm.SetFromMap(values)
 			Expect(err).To(MatchError(ErrMalformedTag))
-			Expect(cpm.GetIdleConnectionStateLifetime()).To(Equal(protocol.InitialIdleConnectionStateLifetime))
+			Expect(cpm.GetIdleConnectionStateLifetime()).To(Equal(protocol.DefaultIdleTimeout))
 		})
 
 		It("gets idle connection state lifetime", func() {

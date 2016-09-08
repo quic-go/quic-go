@@ -39,10 +39,6 @@ const MaxStreamsMinimumIncrement = 10
 // note that the number of streams is half this value, since the client can only open streams with open StreamID
 const MaxNewStreamIDDelta = 4 * MaxStreamsPerConnection
 
-// MaxIdleConnectionStateLifetime is the maximum value accepted for the idle connection state lifetime
-// TODO: set a reasonable value here
-const MaxIdleConnectionStateLifetime = 60 * time.Second
-
 // MaxSessionUnprocessedPackets is the max number of packets stored in each session that are not yet processed.
 const MaxSessionUnprocessedPackets = DefaultMaxCongestionWindow
 
@@ -77,3 +73,15 @@ const CryptoParameterMaxLength = 2000
 
 // EphermalKeyLifetime is the lifetime of the ephermal key during the handshake, see handshake.getEphermalKEX.
 const EphermalKeyLifetime = time.Minute
+
+// InitialIdleTimeout is the timeout before the handshake succeeds.
+const InitialIdleTimeout = 5 * time.Second
+
+// DefaultIdleTimeout is the default idle timeout.
+const DefaultIdleTimeout = 30 * time.Second
+
+// MaxIdleTimeout is the maximum idle timeout that can be negotiated.
+const MaxIdleTimeout = 1 * time.Minute
+
+// MaxTimeForCryptoHandshake is the default timeout for a connection until the crypto handshake succeeds.
+const MaxTimeForCryptoHandshake = 10 * time.Second
