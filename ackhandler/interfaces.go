@@ -20,7 +20,7 @@ type SentPacketHandler interface {
 	BytesInFlight() protocol.ByteCount
 	GetLeastUnacked() protocol.PacketNumber
 
-	CongestionAllowsSending() bool
+	SendingAllowed() bool
 	CheckForError() error
 
 	TimeOfFirstRTO() time.Time

@@ -67,9 +67,9 @@ func (h *mockSentPacketHandler) GetStopWaitingFrame(force bool) *frames.StopWait
 	h.requestedStopWaiting = true
 	return &frames.StopWaitingFrame{LeastUnacked: 0x1337}
 }
-func (h *mockSentPacketHandler) CongestionAllowsSending() bool { return !h.congestionLimited }
-func (h *mockSentPacketHandler) CheckForError() error          { return nil }
-func (h *mockSentPacketHandler) TimeOfFirstRTO() time.Time     { panic("not implemented") }
+func (h *mockSentPacketHandler) SendingAllowed() bool      { return !h.congestionLimited }
+func (h *mockSentPacketHandler) CheckForError() error      { return nil }
+func (h *mockSentPacketHandler) TimeOfFirstRTO() time.Time { panic("not implemented") }
 
 func (h *mockSentPacketHandler) MaybeQueueRTOs() {
 	h.maybeQueueRTOsCalled = true

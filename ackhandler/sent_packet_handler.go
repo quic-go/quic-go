@@ -269,8 +269,10 @@ func (h *sentPacketHandler) GetStopWaitingFrame(force bool) *frames.StopWaitingF
 	return h.stopWaitingManager.GetStopWaitingFrame(force)
 }
 
-func (h *sentPacketHandler) CongestionAllowsSending() bool {
-	return h.BytesInFlight() <= h.congestion.GetCongestionWindow()
+func (h *sentPacketHandler) SendingAllowed() bool {
+	congestionLimited := h.BytesInFlight() > h.congestion.GetCongestionWindow()
+	maxTrackedLimited := protocol.PacketNumber(len(h.retransmissionQueue)+h.packetHistory.Len()) >= protocol.MaxTrackedSentPackets
+	return !(congestionLimited || maxTrackedLimited)
 }
 
 func (h *sentPacketHandler) CheckForError() error {

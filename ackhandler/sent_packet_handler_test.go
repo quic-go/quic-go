@@ -741,11 +741,17 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(cong.argsOnCongestionEvent[3]).To(Equal(congestion.PacketVector{{Number: 2, Length: 2}}))
 		})
 
-		It("allows or denies sending", func() {
-			Expect(handler.CongestionAllowsSending()).To(BeTrue())
+		It("allows or denies sending based on congestion", func() {
+			Expect(handler.SendingAllowed()).To(BeTrue())
 			err := handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: protocol.DefaultTCPMSS + 1})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(handler.CongestionAllowsSending()).To(BeFalse())
+			Expect(handler.SendingAllowed()).To(BeFalse())
+		})
+
+		It("allows or denies sending based on the number of tracked packets", func() {
+			Expect(handler.SendingAllowed()).To(BeTrue())
+			handler.retransmissionQueue = make([]*Packet, protocol.MaxTrackedSentPackets)
+			Expect(handler.SendingAllowed()).To(BeFalse())
 		})
 
 		It("should call OnRetransmissionTimeout", func() {
