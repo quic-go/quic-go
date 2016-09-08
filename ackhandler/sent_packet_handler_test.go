@@ -786,6 +786,21 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.rttStats.UpdateRTT(rtt, 0, time.Now())
 			Expect(handler.getRTO()).To(Equal(protocol.MinRetransmissionTime))
 		})
+
+		It("limits RTO max", func() {
+			rtt := time.Hour
+			handler.rttStats.UpdateRTT(rtt, 0, time.Now())
+			Expect(handler.getRTO()).To(Equal(protocol.MaxRetransmissionTime))
+		})
+
+		It("implements exponential backoff", func() {
+			handler.consecutiveRTOCount = 0
+			Expect(handler.getRTO()).To(Equal(protocol.DefaultRetransmissionTime))
+			handler.consecutiveRTOCount = 1
+			Expect(handler.getRTO()).To(Equal(2 * protocol.DefaultRetransmissionTime))
+			handler.consecutiveRTOCount = 2
+			Expect(handler.getRTO()).To(Equal(4 * protocol.DefaultRetransmissionTime))
+		})
 	})
 
 	Context("RTO retransmission", func() {

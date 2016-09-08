@@ -42,6 +42,8 @@ type sentPacketHandler struct {
 
 	rttStats   *congestion.RTTStats
 	congestion congestion.SendAlgorithm
+
+	consecutiveRTOCount uint32
 }
 
 // NewSentPacketHandler creates a new sentPacketHandler
@@ -227,6 +229,11 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 		}
 	}
 
+	if rttUpdated {
+		// Reset counter if a new packet was acked
+		h.consecutiveRTOCount = 0
+	}
+
 	h.garbageCollectSkippedPackets()
 
 	h.stopWaitingManager.ReceivedAck(ackFrame)
@@ -300,6 +307,7 @@ func (h *sentPacketHandler) MaybeQueueRTOs() {
 		h.queuePacketForRetransmission(el)
 		// Reset the RTO timer here, since it's not clear that this packet contained any retransmittable frames
 		h.lastSentPacketTime = time.Now()
+		h.consecutiveRTOCount++
 		return
 	}
 }
@@ -309,7 +317,10 @@ func (h *sentPacketHandler) getRTO() time.Duration {
 	if rto == 0 {
 		rto = protocol.DefaultRetransmissionTime
 	}
-	return utils.MaxDuration(rto, protocol.MinRetransmissionTime)
+	rto = utils.MaxDuration(rto, protocol.MinRetransmissionTime)
+	// Exponential backoff
+	rto *= 1 << h.consecutiveRTOCount
+	return utils.MinDuration(rto, protocol.MaxRetransmissionTime)
 }
 
 func (h *sentPacketHandler) TimeOfFirstRTO() time.Time {
