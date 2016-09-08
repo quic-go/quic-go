@@ -762,6 +762,30 @@ var _ = Describe("Session", func() {
 			Expect(conn.written[0]).To(ContainSubstring("Crypto handshake did not complete in time."))
 			close(done)
 		})
+
+		It("does not use ICSL before handshake", func(done Done) {
+			session.lastNetworkActivityTime = time.Now().Add(-time.Minute)
+			session.connectionParametersManager.SetFromMap(map[handshake.Tag][]byte{
+				handshake.TagICSL: {0xff, 0xff, 0xff, 0xff},
+			})
+			session.packer.connectionParametersManager = session.connectionParametersManager
+			session.run() // Would normally not return
+			Expect(conn.written[0]).To(ContainSubstring("No recent network activity."))
+			close(done)
+		})
+
+		It("uses ICSL after handshake", func(done Done) {
+			// session.lastNetworkActivityTime = time.Now().Add(-time.Minute)
+			*(*bool)(unsafe.Pointer(reflect.ValueOf(session.cryptoSetup).Elem().FieldByName("receivedForwardSecurePacket").UnsafeAddr())) = true
+			*(*crypto.AEAD)(unsafe.Pointer(reflect.ValueOf(session.cryptoSetup).Elem().FieldByName("forwardSecureAEAD").UnsafeAddr())) = &crypto.NullAEAD{}
+			session.connectionParametersManager.SetFromMap(map[handshake.Tag][]byte{
+				handshake.TagICSL: {0, 0, 0, 0},
+			})
+			session.packer.connectionParametersManager = session.connectionParametersManager
+			session.run() // Would normally not return
+			Expect(conn.written[0]).To(ContainSubstring("No recent network activity."))
+			close(done)
+		})
 	})
 
 	It("errors when the SentPacketHandler has too many packets tracked", func() {

@@ -200,7 +200,7 @@ func (s *Session) run() {
 		if err := s.sendPacket(); err != nil {
 			s.Close(err)
 		}
-		if time.Now().Sub(s.lastNetworkActivityTime) >= s.connectionParametersManager.GetIdleConnectionStateLifetime() {
+		if time.Now().Sub(s.lastNetworkActivityTime) >= s.idleTimeout() {
 			s.Close(qerr.Error(qerr.NetworkIdleTimeout, "No recent network activity."))
 		}
 		if !s.cryptoSetup.HandshakeComplete() && time.Now().Sub(s.sessionCreationTime) >= protocol.MaxTimeForCryptoHandshake {
@@ -211,7 +211,7 @@ func (s *Session) run() {
 }
 
 func (s *Session) maybeResetTimer() {
-	nextDeadline := s.lastNetworkActivityTime.Add(s.connectionParametersManager.GetIdleConnectionStateLifetime())
+	nextDeadline := s.lastNetworkActivityTime.Add(s.idleTimeout())
 
 	if !s.delayedAckOriginTime.IsZero() {
 		nextDeadline = utils.MinTime(nextDeadline, s.delayedAckOriginTime.Add(protocol.AckSendDelay))
@@ -238,6 +238,13 @@ func (s *Session) maybeResetTimer() {
 
 	s.timerRead = false
 	s.currentDeadline = nextDeadline
+}
+
+func (s *Session) idleTimeout() time.Duration {
+	if s.cryptoSetup.HandshakeComplete() {
+		return s.connectionParametersManager.GetIdleConnectionStateLifetime()
+	}
+	return protocol.InitialIdleTimeout
 }
 
 func (s *Session) handlePacketImpl(p *receivedPacket) error {
