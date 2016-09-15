@@ -95,10 +95,10 @@ var _ = Describe("Flow Control Manager", func() {
 				Expect(err).ToNot(HaveOccurred())
 				err = fcm.AddBytesRead(4, 0x100-0x10)
 				Expect(err).ToNot(HaveOccurred())
-				doIt, offset, err := fcm.MaybeTriggerStreamWindowUpdate(4)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(doIt).To(BeTrue())
-				Expect(offset).ToNot(Equal(protocol.ByteCount(0x100)))
+				updates := fcm.GetWindowUpdates()
+				Expect(updates).To(HaveLen(1))
+				Expect(updates[0].StreamID).To(Equal(protocol.StreamID(4)))
+				Expect(updates[0].Offset).To(Equal(protocol.ByteCount(0x1f0)))
 			})
 
 			It("gets connection level window updates", func() {
@@ -110,10 +110,15 @@ var _ = Describe("Flow Control Manager", func() {
 				Expect(err).ToNot(HaveOccurred())
 				err = fcm.AddBytesRead(6, 0x100-0x10)
 				Expect(err).ToNot(HaveOccurred())
-				doIt, offset := fcm.MaybeTriggerConnectionWindowUpdate()
-				Expect(err).ToNot(HaveOccurred())
-				Expect(doIt).To(BeTrue())
-				Expect(offset).ToNot(Equal(protocol.ByteCount(0x200)))
+				updates := fcm.GetWindowUpdates()
+				Expect(updates).To(HaveLen(3))
+				if updates[0].StreamID == 0 {
+					Expect(updates[0].Offset).ToNot(Equal(protocol.ByteCount(0x200)))
+				} else if updates[1].StreamID == 0 {
+					Expect(updates[1].Offset).ToNot(Equal(protocol.ByteCount(0x200)))
+				} else {
+					Expect(updates[2].Offset).ToNot(Equal(protocol.ByteCount(0x200)))
+				}
 			})
 		})
 	})

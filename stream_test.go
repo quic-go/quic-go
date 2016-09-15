@@ -44,12 +44,14 @@ func (m *mockFlowControlHandler) RemoveStream(streamID protocol.StreamID) {
 	delete(m.sendWindowSizes, streamID)
 }
 
-func (m *mockFlowControlHandler) MaybeTriggerStreamWindowUpdate(streamID protocol.StreamID) (bool, protocol.ByteCount, error) {
-	return m.triggerStreamWindowUpdate, 0x1337, nil
-}
-
-func (m *mockFlowControlHandler) MaybeTriggerConnectionWindowUpdate() (bool, protocol.ByteCount) {
-	return m.triggerConnectionWindowUpdate, 0x1337
+func (m *mockFlowControlHandler) GetWindowUpdates() (res []flowcontrol.WindowUpdate) {
+	if m.triggerStreamWindowUpdate {
+		res = append(res, flowcontrol.WindowUpdate{StreamID: 42, Offset: 0x1337})
+	}
+	if m.triggerConnectionWindowUpdate {
+		res = append(res, flowcontrol.WindowUpdate{StreamID: 0, Offset: 0x1337})
+	}
+	return res
 }
 
 func (m *mockFlowControlHandler) AddBytesRead(streamID protocol.StreamID, n protocol.ByteCount) error {

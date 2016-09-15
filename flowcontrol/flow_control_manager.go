@@ -106,25 +106,15 @@ func (f *flowControlManager) AddBytesRead(streamID protocol.StreamID, n protocol
 	return nil
 }
 
-// streamID must not be 0 here
-func (f *flowControlManager) MaybeTriggerStreamWindowUpdate(streamID protocol.StreamID) (bool, protocol.ByteCount, error) {
+func (f *flowControlManager) GetWindowUpdates() (res []WindowUpdate) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
-
-	streamFlowController, err := f.getFlowController(streamID)
-	if err != nil {
-		return false, 0, err
+	for id, fc := range f.streamFlowController {
+		if necessary, offset := fc.MaybeTriggerWindowUpdate(); necessary {
+			res = append(res, WindowUpdate{StreamID: id, Offset: offset})
+		}
 	}
-
-	doIt, offset := streamFlowController.MaybeTriggerWindowUpdate()
-	return doIt, offset, nil
-}
-
-func (f *flowControlManager) MaybeTriggerConnectionWindowUpdate() (bool, protocol.ByteCount) {
-	f.mutex.Lock()
-	defer f.mutex.Unlock()
-
-	return f.streamFlowController[0].MaybeTriggerWindowUpdate()
+	return res
 }
 
 // streamID must not be 0 here

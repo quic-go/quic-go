@@ -659,25 +659,11 @@ func (s *Session) tryDecryptingQueuedPackets() {
 }
 
 func (s *Session) getWindowUpdateFrames() ([]*frames.WindowUpdateFrame, error) {
-	var res []*frames.WindowUpdateFrame
-
-	s.streamsMap.Iterate(func(str *stream) (bool, error) {
-		id := str.StreamID()
-		doUpdate, offset, err := s.flowControlManager.MaybeTriggerStreamWindowUpdate(id)
-		if err != nil {
-			return false, err
-		}
-		if doUpdate {
-			res = append(res, &frames.WindowUpdateFrame{StreamID: id, ByteOffset: offset})
-		}
-		return true, nil
-	})
-
-	doUpdate, offset := s.flowControlManager.MaybeTriggerConnectionWindowUpdate()
-	if doUpdate {
-		res = append(res, &frames.WindowUpdateFrame{StreamID: 0, ByteOffset: offset})
+	updates := s.flowControlManager.GetWindowUpdates()
+	res := make([]*frames.WindowUpdateFrame, len(updates))
+	for i, u := range updates {
+		res[i] = &frames.WindowUpdateFrame{StreamID: u.StreamID, ByteOffset: u.Offset}
 	}
-
 	return res, nil
 }
 
