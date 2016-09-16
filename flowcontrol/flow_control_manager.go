@@ -119,10 +119,10 @@ func (f *flowControlManager) GetWindowUpdates() (res []WindowUpdate) {
 
 // streamID must not be 0 here
 func (f *flowControlManager) AddBytesSent(streamID protocol.StreamID, n protocol.ByteCount) error {
+	// Only lock the part reading from the map, since send-windows are only accessed from the session goroutine.
 	f.mutex.Lock()
-	defer f.mutex.Unlock()
-
 	streamFlowController, err := f.getFlowController(streamID)
+	f.mutex.Unlock()
 	if err != nil {
 		return err
 	}
@@ -138,10 +138,10 @@ func (f *flowControlManager) AddBytesSent(streamID protocol.StreamID, n protocol
 
 // must not be called with StreamID 0
 func (f *flowControlManager) SendWindowSize(streamID protocol.StreamID) (protocol.ByteCount, error) {
+	// Only lock the part reading from the map, since send-windows are only accessed from the session goroutine.
 	f.mutex.RLock()
-	defer f.mutex.RUnlock()
-
 	streamFlowController, err := f.getFlowController(streamID)
+	f.mutex.RUnlock()
 	if err != nil {
 		return 0, err
 	}
@@ -159,18 +159,19 @@ func (f *flowControlManager) SendWindowSize(streamID protocol.StreamID) (protoco
 }
 
 func (f *flowControlManager) RemainingConnectionWindowSize() protocol.ByteCount {
+	// Only lock the part reading from the map, since send-windows are only accessed from the session goroutine.
 	f.mutex.RLock()
-	defer f.mutex.RUnlock()
-
-	return f.streamFlowController[0].SendWindowSize()
+	res := f.streamFlowController[0].SendWindowSize()
+	f.mutex.RUnlock()
+	return res
 }
 
 // streamID may be 0 here
 func (f *flowControlManager) UpdateWindow(streamID protocol.StreamID, offset protocol.ByteCount) (bool, error) {
+	// Only lock the part reading from the map, since send-windows are only accessed from the session goroutine.
 	f.mutex.Lock()
-	defer f.mutex.Unlock()
-
 	streamFlowController, err := f.getFlowController(streamID)
+	f.mutex.Unlock()
 	if err != nil {
 		return false, err
 	}
