@@ -140,10 +140,10 @@ func (m *streamsMap) RoundRobinIterate(fn streamLambda) error {
 		if err != nil {
 			return err
 		}
+		m.roundRobinIndex = (m.roundRobinIndex + 1) % numStreams
 		if !cont {
 			break
 		}
-		m.roundRobinIndex = (m.roundRobinIndex + 1) % numStreams
 	}
 	return nil
 }

@@ -125,6 +125,11 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 
 		res = append(res, frame)
 		currentLen += frameHeaderBytes + frame.DataLen()
+
+		if currentLen == maxBytes {
+			return false, nil
+		}
+
 		frame = &frames.StreamFrame{DataLenPresent: true}
 		return true, nil
 	}
