@@ -89,8 +89,9 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 		}
 		maxLen := maxBytes - currentLen - frameHeaderBytes
 
+		var sendWindowSize protocol.ByteCount
 		if s.lenOfDataForWriting() != 0 {
-			sendWindowSize, _ := f.flowControlManager.SendWindowSize(s.streamID)
+			sendWindowSize, _ = f.flowControlManager.SendWindowSize(s.streamID)
 			maxLen = utils.MinByteCount(maxLen, sendWindowSize)
 		}
 
@@ -118,7 +119,7 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 		if f.flowControlManager.RemainingConnectionWindowSize() == 0 {
 			// We are now connection-level FC blocked
 			f.blockedFrameQueue = append(f.blockedFrameQueue, &frames.BlockedFrame{StreamID: 0})
-		} else if individualWindowSize, _ := f.flowControlManager.SendWindowSize(s.streamID); individualWindowSize == 0 {
+		} else if sendWindowSize-frame.DataLen() == 0 {
 			// We are now stream-level FC blocked
 			f.blockedFrameQueue = append(f.blockedFrameQueue, &frames.BlockedFrame{StreamID: s.StreamID()})
 		}
