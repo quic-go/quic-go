@@ -278,17 +278,25 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		It("recognizes inchoate CHLOs missing SCID", func() {
-			Expect(cs.isInchoateCHLO(map[Tag][]byte{TagPUBS: nil})).To(BeTrue())
+			Expect(cs.isInchoateCHLO(map[Tag][]byte{TagPUBS: nil, TagSTK: validSTK})).To(BeTrue())
 		})
 
 		It("recognizes inchoate CHLOs missing PUBS", func() {
-			Expect(cs.isInchoateCHLO(map[Tag][]byte{TagSCID: scfg.ID})).To(BeTrue())
+			Expect(cs.isInchoateCHLO(map[Tag][]byte{TagSCID: scfg.ID, TagSTK: validSTK})).To(BeTrue())
+		})
+
+		It("recognizes inchoate CHLOs with invalid tokens", func() {
+			Expect(cs.isInchoateCHLO(map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagPUBS: nil,
+			})).To(BeTrue())
 		})
 
 		It("recognizes proper CHLOs", func() {
 			Expect(cs.isInchoateCHLO(map[Tag][]byte{
 				TagSCID: scfg.ID,
 				TagPUBS: nil,
+				TagSTK:  validSTK,
 			})).To(BeFalse())
 		})
 
