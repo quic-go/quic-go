@@ -834,6 +834,21 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(handler.retransmissionQueue[0].PacketNumber).To(Equal(p.PacketNumber))
 				Expect(time.Now().Sub(handler.lastSentPacketTime)).To(BeNumerically("<", time.Second/2))
 			})
+
+			It("queues two packets if RTO expired", func() {
+				for i := 1; i < 4; i++ {
+					p := &Packet{PacketNumber: protocol.PacketNumber(i), Length: 1}
+					err := handler.SentPacket(p)
+					Expect(err).NotTo(HaveOccurred())
+				}
+				handler.lastSentPacketTime = time.Now().Add(-time.Second)
+				handler.MaybeQueueRTOs()
+				Expect(handler.retransmissionQueue).To(HaveLen(2))
+				Expect(handler.retransmissionQueue[0].PacketNumber).To(Equal(protocol.PacketNumber(1)))
+				Expect(handler.retransmissionQueue[1].PacketNumber).To(Equal(protocol.PacketNumber(2)))
+				Expect(time.Now().Sub(handler.lastSentPacketTime)).To(BeNumerically("<", time.Second/2))
+				Expect(handler.consecutiveRTOCount).To(Equal(uint32(1)))
+			})
 		})
 
 		It("works with DequeuePacketForRetransmission", func() {

@@ -295,21 +295,29 @@ func (h *sentPacketHandler) MaybeQueueRTOs() {
 		return
 	}
 
-	for el := h.packetHistory.Front(); el != nil; el = el.Next() {
-		packet := &el.Value
-		packetsLost := congestion.PacketVector{congestion.PacketInfo{
-			Number: packet.PacketNumber,
-			Length: packet.Length,
-		}}
-		h.congestion.OnCongestionEvent(false, h.BytesInFlight(), nil, packetsLost)
-		h.congestion.OnRetransmissionTimeout(true)
-		utils.Debugf("\tQueueing packet 0x%x for retransmission (RTO)", packet.PacketNumber)
-		h.queuePacketForRetransmission(el)
-		// Reset the RTO timer here, since it's not clear that this packet contained any retransmittable frames
-		h.lastSentPacketTime = time.Now()
-		h.consecutiveRTOCount++
-		return
+	// Always queue the two oldest packets
+	if h.packetHistory.Front() != nil {
+		h.queueRTO(h.packetHistory.Front())
 	}
+	if h.packetHistory.Front() != nil {
+		h.queueRTO(h.packetHistory.Front())
+	}
+
+	// Reset the RTO timer here, since it's not clear that this packet contained any retransmittable frames
+	h.lastSentPacketTime = time.Now()
+	h.consecutiveRTOCount++
+}
+
+func (h *sentPacketHandler) queueRTO(el *PacketElement) {
+	packet := &el.Value
+	packetsLost := congestion.PacketVector{congestion.PacketInfo{
+		Number: packet.PacketNumber,
+		Length: packet.Length,
+	}}
+	h.congestion.OnCongestionEvent(false, h.BytesInFlight(), nil, packetsLost)
+	h.congestion.OnRetransmissionTimeout(true)
+	utils.Debugf("\tQueueing packet 0x%x for retransmission (RTO)", packet.PacketNumber)
+	h.queuePacketForRetransmission(el)
 }
 
 func (h *sentPacketHandler) getRTO() time.Duration {
