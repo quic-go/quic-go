@@ -148,9 +148,9 @@ var _ = Describe("Chrome tests", func() {
 				Expect(err).ToNot(HaveOccurred())
 				copyFileToDocker(tmpfn)
 
-				err = wd.Get("https://quic.clemente.io/uploadform")
+				err = wd.Get("https://quic.clemente.io/uploadform?num=1")
 				Expect(err).NotTo(HaveOccurred())
-				elem, err := wd.FindElement(selenium.ByCSSSelector, "#upload")
+				elem, err := wd.FindElement(selenium.ByCSSSelector, "#upload_0")
 				Expect(err).ToNot(HaveOccurred())
 				err = elem.SendKeys("/home/seluser/data.dat")
 				Expect(err).ToNot(HaveOccurred())
@@ -172,9 +172,9 @@ var _ = Describe("Chrome tests", func() {
 				Expect(err).ToNot(HaveOccurred())
 				copyFileToDocker(tmpfn)
 
-				err = wd.Get("https://quic.clemente.io/uploadform")
+				err = wd.Get("https://quic.clemente.io/uploadform?num=1")
 				Expect(err).NotTo(HaveOccurred())
-				elem, err := wd.FindElement(selenium.ByCSSSelector, "#upload")
+				elem, err := wd.FindElement(selenium.ByCSSSelector, "#upload_0")
 				Expect(err).ToNot(HaveOccurred())
 				err = elem.SendKeys("/home/seluser/data.dat")
 				Expect(err).ToNot(HaveOccurred())
