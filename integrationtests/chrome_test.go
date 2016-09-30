@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/tebeka/selenium"
 
@@ -148,9 +149,9 @@ var _ = Describe("Chrome tests", func() {
 				Expect(err).ToNot(HaveOccurred())
 				copyFileToDocker(tmpfn)
 
-				err = wd.Get("https://quic.clemente.io/uploadform")
+				err = wd.Get("https://quic.clemente.io/uploadform?num=1")
 				Expect(err).NotTo(HaveOccurred())
-				elem, err := wd.FindElement(selenium.ByCSSSelector, "#upload")
+				elem, err := wd.FindElement(selenium.ByCSSSelector, "#upload_0")
 				Expect(err).ToNot(HaveOccurred())
 				err = elem.SendKeys("/home/seluser/data.dat")
 				Expect(err).ToNot(HaveOccurred())
@@ -172,9 +173,9 @@ var _ = Describe("Chrome tests", func() {
 				Expect(err).ToNot(HaveOccurred())
 				copyFileToDocker(tmpfn)
 
-				err = wd.Get("https://quic.clemente.io/uploadform")
+				err = wd.Get("https://quic.clemente.io/uploadform?num=1")
 				Expect(err).NotTo(HaveOccurred())
-				elem, err := wd.FindElement(selenium.ByCSSSelector, "#upload")
+				elem, err := wd.FindElement(selenium.ByCSSSelector, "#upload_0")
 				Expect(err).ToNot(HaveOccurred())
 				err = elem.SendKeys("/home/seluser/data.dat")
 				Expect(err).ToNot(HaveOccurred())
@@ -183,6 +184,50 @@ var _ = Describe("Chrome tests", func() {
 				file := filepath.Join(uploadDir, "data.dat")
 				Expect(getFileSize(file)).To(Equal(dataLongLen))
 				Expect(getFileMD5(file)).To(Equal(dataMan.GetMD5()))
+			})
+
+			// this test takes a long time because it copies every file into the docker container one by one
+			// unfortunately, docker doesn't support copying multiple files at once
+			// see https://github.com/docker/docker/issues/7710
+			It("uploads many small files", func() {
+				num := protocol.MaxStreamsPerConnection + 20
+
+				dir, err := ioutil.TempDir("", "quic-upload-src")
+				Expect(err).ToNot(HaveOccurred())
+				defer os.RemoveAll(dir)
+
+				var md5s [][]byte
+
+				for i := 0; i < num; i++ {
+					dataMan.GenerateData(dataLen)
+					data := dataMan.GetData()
+					md5s = append(md5s, dataMan.GetMD5())
+					tmpfn := filepath.Join(dir, "data_"+strconv.Itoa(i)+".dat")
+					err = ioutil.WriteFile(tmpfn, data, 0777)
+					Expect(err).ToNot(HaveOccurred())
+					copyFileToDocker(tmpfn)
+				}
+
+				err = wd.Get("https://quic.clemente.io/uploadform?num=" + strconv.Itoa(num))
+				Expect(err).NotTo(HaveOccurred())
+
+				for i := 0; i < num; i++ {
+					var elem selenium.WebElement
+					elem, err = wd.FindElement(selenium.ByCSSSelector, "#upload_"+strconv.Itoa(i))
+					Expect(err).ToNot(HaveOccurred())
+					err = elem.SendKeys("/home/seluser/data_" + strconv.Itoa(i) + ".dat")
+					Expect(err).ToNot(HaveOccurred())
+				}
+
+				elem, err := wd.FindElement(selenium.ByCSSSelector, "#form")
+				Expect(err).ToNot(HaveOccurred())
+				Eventually(func() error { return elem.Submit() }, 30, 0.1).ShouldNot(HaveOccurred())
+
+				for i := 0; i < num; i++ {
+					file := filepath.Join(uploadDir, "data_"+strconv.Itoa(i)+".dat")
+					Expect(getFileSize(file)).To(Equal(dataLen))
+					Expect(getFileMD5(file)).To(Equal(md5s[i]))
+				}
 			})
 		})
 	}

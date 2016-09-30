@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"os"
@@ -103,13 +104,18 @@ func setupHTTPHandlers() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	// requires the num GET parameter, e.g. /uploadform?num=2
+	// will create num input fields for uploading files
 	http.HandleFunc("/uploadform", func(w http.ResponseWriter, r *http.Request) {
 		defer GinkgoRecover()
-		_, err := io.WriteString(w, `<html><body>
-			<form id="form" action="https://quic.clemente.io/uploadhandler" method="post" enctype="multipart/form-data">
-		    <input type="file" id="upload" name="uploadfile" />
-		  </form>
-			<body></html>`)
+		num, err := strconv.Atoi(r.URL.Query().Get("num"))
+		Expect(err).ToNot(HaveOccurred())
+		response := "<html><body>\n<form id='form' action='https://quic.clemente.io/uploadhandler' method='post' enctype='multipart/form-data'>"
+		for i := 0; i < num; i++ {
+			response += "<input type='file' id='upload_" + strconv.Itoa(i) + "' name='uploadfile_" + strconv.Itoa(i) + "' />"
+		}
+		response += "</form><body></html>"
+		_, err = io.WriteString(w, response)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -118,13 +124,23 @@ func setupHTTPHandlers() {
 
 		err := r.ParseMultipartForm(100 * (1 << 20)) // max. 100 MB
 		Expect(err).ToNot(HaveOccurred())
-		file, handler, err := r.FormFile("uploadfile")
-		Expect(err).ToNot(HaveOccurred())
-		defer file.Close()
-		f, err := os.OpenFile(path.Join(uploadDir, handler.Filename), os.O_WRONLY|os.O_CREATE, 0666)
-		Expect(err).ToNot(HaveOccurred())
-		defer f.Close()
-		io.Copy(f, file)
+
+		count := 0
+		for {
+			var file multipart.File
+			var handler *multipart.FileHeader
+			file, handler, err = r.FormFile("uploadfile_" + strconv.Itoa(count))
+			if err != nil {
+				break
+			}
+			count++
+			f, err2 := os.OpenFile(path.Join(uploadDir, handler.Filename), os.O_WRONLY|os.O_CREATE, 0666)
+			Expect(err2).ToNot(HaveOccurred())
+			io.Copy(f, file)
+			f.Close()
+			file.Close()
+		}
+		Expect(count).ToNot(BeZero()) // there have been at least one uploaded file in this request
 
 		_, err = io.WriteString(w, "")
 		Expect(err).NotTo(HaveOccurred())
