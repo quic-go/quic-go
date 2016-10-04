@@ -49,7 +49,9 @@ func (w *responseWriter) WriteHeader(status int) {
 	enc.WriteField(hpack.HeaderField{Name: ":status", Value: strconv.Itoa(status)})
 
 	for k, v := range w.header {
-		enc.WriteField(hpack.HeaderField{Name: strings.ToLower(k), Value: v[0]})
+		for index := range v {
+			enc.WriteField(hpack.HeaderField{Name: strings.ToLower(k), Value: v[index]})
+		}
 	}
 
 	utils.Infof("Responding with %d", status)
