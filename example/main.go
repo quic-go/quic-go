@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/md5"
-	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,13 +10,13 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 
 	_ "net/http/pprof"
 
 	"github.com/lucas-clemente/quic-go/h2quic"
-	"github.com/lucas-clemente/quic-go/testdata"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
@@ -109,8 +108,9 @@ func main() {
 	verbose := flag.Bool("v", false, "verbose")
 	bs := binds{}
 	flag.Var(&bs, "bind", "bind to")
-	certPath := flag.String("certpath", "", "certificate directory")
+	certPath := flag.String("certpath", os.Getenv("GOPATH")+"/src/github.com/lucas-clemente/quic-go/example/", "certificate directory")
 	www := flag.String("www", "/var/www", "www data")
+	tcp := flag.Bool("tcp", false, "also listen on TCP")
 	flag.Parse()
 
 	if *verbose {
@@ -119,19 +119,8 @@ func main() {
 		utils.SetLogLevel(utils.LogLevelInfo)
 	}
 
-	var tlsConfig *tls.Config
-	if *certPath == "" {
-		tlsConfig = testdata.GetTLSConfig()
-	} else {
-		var err error
-		cert, err := tls.LoadX509KeyPair(*certPath+"/fullchain.pem", *certPath+"/privkey.pem")
-		if err != nil {
-			panic(err)
-		}
-		tlsConfig = &tls.Config{
-			Certificates: []tls.Certificate{cert},
-		}
-	}
+	certFile := *certPath + "/fullchain.pem"
+	keyFile := *certPath + "/privkey.pem"
 
 	http.Handle("/", http.FileServer(http.Dir(*www)))
 
@@ -144,14 +133,12 @@ func main() {
 	for _, b := range bs {
 		bCap := b
 		go func() {
-			server := h2quic.Server{
-				// CloseAfterFirstRequest: true,
-				Server: &http.Server{
-					Addr:      bCap,
-					TLSConfig: tlsConfig,
-				},
+			var err error
+			if *tcp {
+				err = h2quic.ListenAndServe(bCap, certFile, keyFile, nil)
+			} else {
+				err = h2quic.ListenAndServeQUIC(bCap, certFile, keyFile, nil)
 			}
-			err := server.ListenAndServe()
 			if err != nil {
 				fmt.Println(err)
 			}
