@@ -78,7 +78,7 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn *net.UDPConn) error {
 		return errors.New("ListenAndServe may only be called once")
 	}
 	var err error
-	server, err := quic.NewServer(s.Addr, s.TLSConfig, s.handleStreamCb)
+	server, err := quic.NewServer(s.Addr, tlsConfig, s.handleStreamCb)
 	if err != nil {
 		s.serverMutex.Unlock()
 		return err
