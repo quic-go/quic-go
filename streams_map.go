@@ -11,13 +11,14 @@ import (
 )
 
 type streamsMap struct {
+	mutex sync.RWMutex
+
 	streams     map[protocol.StreamID]*stream
 	openStreams []protocol.StreamID
 
 	highestStreamOpenedByClient          protocol.StreamID
 	streamsOpenedAfterLastGarbageCollect int
 
-	mutex         sync.RWMutex
 	newStream     newStreamLambda
 	maxNumStreams int
 
