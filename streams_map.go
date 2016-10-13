@@ -217,3 +217,9 @@ func (m *streamsMap) garbageCollectClosedStreams() {
 	}
 	m.streamsOpenedAfterLastGarbageCollect = 0
 }
+
+func (m *streamsMap) HighestOpenedStream() protocol.StreamID {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+	return m.highestStreamOpenedByClient // TODO should be for both client and server
+}

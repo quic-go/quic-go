@@ -68,6 +68,9 @@ type Session struct {
 	// If the value is not nil, the error is sent as a CONNECTION_CLOSE.
 	closeChan chan *qerr.QuicError
 	closed    uint32 // atomic bool
+	// gracefulCloseChan receives a timeout when CloseGracefully was called
+	gracefulCloseChan chan time.Duration
+	gracefulClosed    uint32 // atomic bool
 
 	undecryptablePackets []*receivedPacket
 	aeadChanged          chan struct{}
@@ -83,6 +86,7 @@ type Session struct {
 
 	sessionCreationTime     time.Time
 	lastNetworkActivityTime time.Time
+	gracefulCloseTimeout    time.Time
 
 	timer           *time.Timer
 	currentDeadline time.Time
@@ -116,6 +120,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 
 		receivedPackets:      make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets),
 		closeChan:            make(chan *qerr.QuicError, 1),
+		gracefulCloseChan:    make(chan time.Duration, 1),
 		sendingScheduled:     make(chan struct{}, 1),
 		undecryptablePackets: make([]*receivedPacket, 0, protocol.MaxUndecryptablePackets),
 		aeadChanged:          make(chan struct{}, 1),
@@ -158,6 +163,7 @@ func (s *Session) run() {
 				s.sendConnectionClose(errForConnClose)
 			}
 			return
+			// TODO prioritize graceful closing
 		default:
 		}
 
@@ -170,6 +176,12 @@ func (s *Session) run() {
 				s.sendConnectionClose(errForConnClose)
 			}
 			return
+		case timeout := <-s.gracefulCloseChan:
+			s.gracefulCloseTimeout = time.Now().Add(timeout)
+			s.packer.QueueControlFrameForNextPacket(&frames.GoawayFrame{
+				ErrorCode:      qerr.PeerGoingAway,
+				LastGoodStream: s.streamsMap.HighestOpenedStream(),
+			})
 		case <-s.timer.C:
 			s.timerRead = true
 			// We do all the interesting stuff after the switch statement, so
@@ -206,6 +218,9 @@ func (s *Session) run() {
 		if !s.cryptoSetup.HandshakeComplete() && time.Now().Sub(s.sessionCreationTime) >= protocol.MaxTimeForCryptoHandshake {
 			s.Close(qerr.Error(qerr.NetworkIdleTimeout, "Crypto handshake did not complete in time."))
 		}
+		if !s.gracefulCloseTimeout.IsZero() && time.Now().After(s.gracefulCloseTimeout) {
+			s.Close(qerr.PeerGoingAway /* TODO think about this */)
+		}
 		s.garbageCollectStreams()
 	}
 }
@@ -222,6 +237,9 @@ func (s *Session) maybeResetTimer() {
 	if !s.cryptoSetup.HandshakeComplete() {
 		handshakeDeadline := s.sessionCreationTime.Add(protocol.MaxTimeForCryptoHandshake)
 		nextDeadline = utils.MinTime(nextDeadline, handshakeDeadline)
+	}
+	if !s.gracefulCloseTimeout.IsZero() {
+		nextDeadline = utils.MinTime(nextDeadline, s.gracefulCloseTimeout)
 	}
 
 	if nextDeadline.Equal(s.currentDeadline) {
@@ -406,6 +424,19 @@ func (s *Session) Close(e error) error {
 	return s.closeImpl(e, false)
 }
 
+// TODO
+func (s *Session) CloseGracefully(timeout time.Duration) error {
+	// Only close once
+	if !atomic.CompareAndSwapUint32(&s.gracefulClosed, 0, 1) {
+		return nil
+	}
+
+	// Send the timeout
+	s.gracefulCloseChan <- timeout
+
+	return nil
+}
+
 func (s *Session) closeImpl(e error, remoteClose bool) error {
 	// Only close once
 	if !atomic.CompareAndSwapUint32(&s.closed, 0, 1) {
@@ -581,6 +612,10 @@ func (s *Session) logPacket(packet *packedPacket) {
 // GetOrOpenStream either returns an existing stream, a newly opened stream, or nil if a stream with the provided ID is already closed.
 // Newly opened streams should only originate from the client. To open a stream from the server, OpenStream should be used.
 func (s *Session) GetOrOpenStream(id protocol.StreamID) (utils.Stream, error) {
+	if atomic.LoadUint32(&s.gracefulClosed) != 0 {
+		return nil, nil
+	}
+
 	return s.streamsMap.GetOrOpenStream(id)
 }
 
@@ -625,6 +660,10 @@ func (s *Session) garbageCollectStreams() {
 		}
 		return true, nil
 	})
+
+	if atomic.LoadUint32(&s.gracefulClosed) != 0 && s.streamsMap.NumberOfStreams() == 0 {
+		s.Close(nil)
+	}
 }
 
 func (s *Session) sendPublicReset(rejectedPacketNumber protocol.PacketNumber) error {

@@ -449,6 +449,18 @@ var _ = Describe("Session", func() {
 		})
 	})
 
+	Context("graceful shutdowns", func() {
+		It("triggers a graceful shutdown", func() {
+			timeout := time.Second
+			err := session.CloseGracefully(timeout)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(session.gracefulClosed).ToNot(BeZero())
+			Expect(session.gracefulCloseChan).To(Receive(Equal(timeout)))
+		})
+
+		// TODO add test that checks that sending on graceful chan leads to a set timeout and a GOAWAY
+	})
+
 	Context("receiving packets", func() {
 		var hdr *PublicHeader
 
