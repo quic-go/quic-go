@@ -100,6 +100,7 @@ func init() {
 }
 
 func main() {
+	// defer profile.Start().Stop()
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
