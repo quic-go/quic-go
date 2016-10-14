@@ -9,6 +9,7 @@ import (
 	mrand "math/rand"
 	"net"
 	"reflect"
+	"runtime"
 	"runtime/debug"
 	"time"
 	"unsafe"
@@ -90,6 +91,10 @@ var _ = Describe("Benchmarks", func() {
 		Context(fmt.Sprintf("with version %d", version), func() {
 
 			Measure("two linked sessions", func(b Benchmarker) {
+				if runtime.GOOS == "windows" {
+					Skip("benchmark tests disabled on windows, see #325")
+				}
+
 				connID := protocol.ConnectionID(mrand.Uint32())
 
 				c1 := newLinkedConnection(nil)
