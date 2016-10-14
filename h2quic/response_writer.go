@@ -74,3 +74,8 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 	}
 	return w.dataStream.Write(p)
 }
+
+func (w *responseWriter) Flush() {}
+
+// test that we implement http.Flusher
+var _ http.Flusher = &responseWriter{}
