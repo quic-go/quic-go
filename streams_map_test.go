@@ -254,26 +254,6 @@ var _ = Describe("Streams Map", func() {
 		})
 	})
 
-	Context("number of streams", func() {
-		It("returns 0 in the beginning", func() {
-			Expect(m.NumberOfStreams()).To(Equal(0))
-		})
-
-		It("increases the counter when a new stream is added", func() {
-			err := m.putStream(&stream{streamID: 5})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(m.NumberOfStreams()).To(Equal(1))
-		})
-
-		It("decreases the counter when removing a stream", func() {
-			err := m.putStream(&stream{streamID: 5})
-			Expect(err).ToNot(HaveOccurred())
-			err = m.RemoveStream(5)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(m.NumberOfStreams()).To(BeZero())
-		})
-	})
-
 	Context("Iterate", func() {
 		// create 3 streams, ids 1 to 3
 		BeforeEach(func() {

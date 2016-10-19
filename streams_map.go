@@ -197,14 +197,6 @@ func (m *streamsMap) RemoveStream(id protocol.StreamID) error {
 	return nil
 }
 
-// NumberOfStreams gets the number of open streams
-func (m *streamsMap) NumberOfStreams() int {
-	m.mutex.RLock()
-	n := len(m.openStreams)
-	m.mutex.RUnlock()
-	return n
-}
-
 // garbageCollectClosedStreams deletes nil values in the streams if they are smaller than protocol.MaxNewStreamIDDelta than the highest stream opened by the client
 // note that this garbage collection is relatively expensive, since it iterates over the whole streams map. It should not be called every time a stream is openend or closed
 func (m *streamsMap) garbageCollectClosedStreams() {
