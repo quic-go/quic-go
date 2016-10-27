@@ -310,5 +310,16 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(4)))
 			Expect(handler.lowestInReceivedTimes).To(Equal(protocol.PacketNumber(4)))
 		})
+
+		// this prevents a DOS where a client sends us an unreasonably high LeastUnacked value
+		It("does not garbage collect packets higher than the LargestObserved packet number", func() {
+			err := handler.ReceivedPacket(10)
+			Expect(err).ToNot(HaveOccurred())
+			handler.largestObserved = 5
+			err = handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 20})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(10)))
+			Expect(handler.lowestInReceivedTimes).To(Equal(protocol.PacketNumber(20)))
+		})
 	})
 })

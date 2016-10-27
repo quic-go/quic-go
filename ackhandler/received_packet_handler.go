@@ -7,6 +7,7 @@ import (
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 var (
@@ -134,7 +135,8 @@ func (h *receivedPacketHandler) GetAckFrame(dequeue bool) (*frames.AckFrame, err
 }
 
 func (h *receivedPacketHandler) garbageCollectReceivedTimes() {
-	for i := h.lowestInReceivedTimes; i <= h.ignorePacketsBelow; i++ {
+	// the highest element in the receivedTimes map is the largest observed packet
+	for i := h.lowestInReceivedTimes; i <= utils.MinPacketNumber(h.ignorePacketsBelow, h.largestObserved); i++ {
 		delete(h.receivedTimes, i)
 	}
 	if h.ignorePacketsBelow > h.lowestInReceivedTimes {
