@@ -75,7 +75,7 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 
 	h.receivedTimes[packetNumber] = time.Now()
 
-	if protocol.PacketNumber(len(h.receivedTimes)) > protocol.MaxTrackedReceivedPackets {
+	if len(h.receivedTimes) > protocol.MaxTrackedReceivedPackets {
 		return errTooManyOutstandingReceivedPackets
 	}
 

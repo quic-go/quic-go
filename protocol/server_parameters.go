@@ -3,10 +3,10 @@ package protocol
 import "time"
 
 // DefaultMaxCongestionWindow is the default for the max congestion window
-const DefaultMaxCongestionWindow PacketNumber = 1000
+const DefaultMaxCongestionWindow = 1000
 
 // InitialCongestionWindow is the initial congestion window in QUIC packets
-const InitialCongestionWindow PacketNumber = 32
+const InitialCongestionWindow = 32
 
 // MaxUndecryptablePackets limits the number of undecryptable packets that a
 // session queues for later until it sends a public reset.
