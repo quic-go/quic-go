@@ -387,11 +387,27 @@ var _ = Describe("Stream Framer", func() {
 		It("queues and pops BLOCKED frames for individually blocked streams", func() {
 			fcm.sendWindowSizes[stream1.StreamID()] = 3
 			stream1.dataForWriting = []byte("foo")
-			framer.PopStreamFrames(1000)
+			frames := framer.PopStreamFrames(1000)
+			Expect(frames).To(HaveLen(1))
 			blockedFrame := framer.PopBlockedFrame()
 			Expect(blockedFrame).ToNot(BeNil())
 			Expect(blockedFrame.StreamID).To(Equal(stream1.StreamID()))
 			Expect(framer.PopBlockedFrame()).To(BeNil())
+		})
+
+		It("does not queue a stream-level BLOCKED frame after sending the FinBit frame", func() {
+			fcm.sendWindowSizes[stream1.StreamID()] = 5000
+			stream1.dataForWriting = []byte("foo")
+			frames := framer.PopStreamFrames(1000)
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].FinBit).To(BeFalse())
+			stream1.closed = 1
+			frames = framer.PopStreamFrames(1000)
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].FinBit).To(BeTrue())
+			Expect(frames[0].DataLen()).To(BeZero())
+			blockedFrame := framer.PopBlockedFrame()
+			Expect(blockedFrame).To(BeNil())
 		})
 
 		It("queues and pops BLOCKED frames for connection blocked streams", func() {
