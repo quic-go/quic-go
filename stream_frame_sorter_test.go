@@ -395,7 +395,7 @@ var _ = Describe("StreamFrame sorter", func() {
 				})
 			})
 
-			Context("DOS protection", func() {
+			Context("DoS protection", func() {
 				It("errors when too many gaps are created", func() {
 					for i := 0; i < protocol.MaxStreamFrameSorterGaps; i++ {
 						f := &frames.StreamFrame{

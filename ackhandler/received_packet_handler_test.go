@@ -325,7 +325,7 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(handler.lowestInReceivedTimes).To(Equal(protocol.PacketNumber(4)))
 		})
 
-		// this prevents a DOS where a client sends us an unreasonably high LeastUnacked value
+		// this prevents a DoS where a client sends us an unreasonably high LeastUnacked value
 		It("does not garbage collect packets higher than the LargestObserved packet number", func() {
 			err := handler.ReceivedPacket(10)
 			Expect(err).ToNot(HaveOccurred())

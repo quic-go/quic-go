@@ -22,7 +22,7 @@ Done:
 
 Major TODOs:
 
-- Security, especially DOS protections
+- Security, especially DoS protections
 - Performance
 - Better packet loss detection
 - Connection migration

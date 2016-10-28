@@ -64,7 +64,7 @@ const MaxTrackedReceivedPackets = 2 * DefaultMaxCongestionWindow
 const MaxTrackedReceivedAckRanges = DefaultMaxCongestionWindow
 
 // MaxStreamFrameSorterGaps is the maximum number of gaps between received StreamFrames
-// prevents DOS attacks against the streamFrameSorter
+// prevents DoS attacks against the streamFrameSorter
 const MaxStreamFrameSorterGaps = 1000
 
 // CryptoMaxParams is the upper limit for the number of parameters in a crypto message.
