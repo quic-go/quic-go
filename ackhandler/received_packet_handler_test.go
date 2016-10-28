@@ -23,13 +23,10 @@ var _ = Describe("receivedPacketHandler", func() {
 		It("handles a packet that arrives late", func() {
 			err := handler.ReceivedPacket(protocol.PacketNumber(1))
 			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(1)))
 			err = handler.ReceivedPacket(protocol.PacketNumber(3))
 			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(3)))
 			err = handler.ReceivedPacket(protocol.PacketNumber(2))
 			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(2)))
 		})
 
 		It("rejects packets with packet number 0", func() {
@@ -67,8 +64,26 @@ var _ = Describe("receivedPacketHandler", func() {
 		It("saves the time when each packet arrived", func() {
 			err := handler.ReceivedPacket(protocol.PacketNumber(3))
 			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(3)))
-			Expect(handler.receivedTimes[3]).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+			Expect(handler.largestObservedReceivedTime).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+		})
+
+		It("updates the largestObserved and the largestObservedReceivedTime", func() {
+			handler.largestObserved = 3
+			handler.largestObservedReceivedTime = time.Now().Add(-1 * time.Second)
+			err := handler.ReceivedPacket(5)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(5)))
+			Expect(handler.largestObservedReceivedTime).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+		})
+
+		It("doesn't update the largestObserved and the largestObservedReceivedTime for a belated packet", func() {
+			timestamp := time.Now().Add(-1 * time.Second)
+			handler.largestObserved = 5
+			handler.largestObservedReceivedTime = timestamp
+			err := handler.ReceivedPacket(4)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.largestObserved).To(Equal(protocol.PacketNumber(5)))
+			Expect(handler.largestObservedReceivedTime).To(Equal(timestamp))
 		})
 
 		It("doesn't store more than MaxTrackedReceivedPackets packets", func() {
@@ -250,63 +265,6 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(ack.LargestAcked).To(Equal(protocol.PacketNumber(12)))
 			Expect(ack.LowestAcked).To(Equal(protocol.PacketNumber(6)))
 			Expect(ack.HasMissingRanges()).To(BeFalse())
-		})
-	})
-
-	Context("Garbage Collector", func() {
-		It("garbage collects receivedTimes after receiving a StopWaiting, if there are no missing packets", func() {
-			for i := 1; i <= 4; i++ {
-				err := handler.ReceivedPacket(protocol.PacketNumber(i))
-				Expect(err).ToNot(HaveOccurred())
-			}
-			err := handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 3})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.receivedTimes).ToNot(HaveKey(protocol.PacketNumber(1)))
-			Expect(handler.receivedTimes).ToNot(HaveKey(protocol.PacketNumber(2)))
-			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(3)))
-			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(4)))
-			Expect(handler.lowestInReceivedTimes).To(Equal(protocol.PacketNumber(3)))
-		})
-
-		It("garbage collects the receivedTimes after receiving multiple StopWaitings", func() {
-			for i := 1; i <= 9; i++ {
-				err := handler.ReceivedPacket(protocol.PacketNumber(i))
-				Expect(err).ToNot(HaveOccurred())
-			}
-			err := handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 4})
-			Expect(err).ToNot(HaveOccurred())
-			err = handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 8})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.receivedTimes).To(HaveLen(2)) // packets 8 and 9
-			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(8)))
-			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(9)))
-			Expect(handler.lowestInReceivedTimes).To(Equal(protocol.PacketNumber(8)))
-		})
-
-		It("garbage collects receivedTimes after receiving a StopWaiting, if there are missing packets", func() {
-			err := handler.ReceivedPacket(1)
-			Expect(err).ToNot(HaveOccurred())
-			err = handler.ReceivedPacket(2)
-			Expect(err).ToNot(HaveOccurred())
-			err = handler.ReceivedPacket(4)
-			Expect(err).ToNot(HaveOccurred())
-			err = handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 4})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.receivedTimes).ToNot(HaveKey(protocol.PacketNumber(1)))
-			Expect(handler.receivedTimes).ToNot(HaveKey(protocol.PacketNumber(2)))
-			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(4)))
-			Expect(handler.lowestInReceivedTimes).To(Equal(protocol.PacketNumber(4)))
-		})
-
-		// this prevents a DoS where a client sends us an unreasonably high LeastUnacked value
-		It("does not garbage collect packets higher than the LargestObserved packet number", func() {
-			err := handler.ReceivedPacket(10)
-			Expect(err).ToNot(HaveOccurred())
-			handler.largestObserved = 5
-			err = handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 20})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.receivedTimes).To(HaveKey(protocol.PacketNumber(10)))
-			Expect(handler.lowestInReceivedTimes).To(Equal(protocol.PacketNumber(20)))
 		})
 	})
 })

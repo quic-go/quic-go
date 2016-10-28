@@ -19,7 +19,10 @@ type receivedPacketHistory struct {
 	lowestInReceivedPacketNumbers protocol.PacketNumber
 }
 
-var errTooManyOutstandingReceivedAckRanges = qerr.Error(qerr.TooManyOutstandingReceivedPackets, "Too many outstanding received ACK ranges")
+var (
+	errTooManyOutstandingReceivedAckRanges = qerr.Error(qerr.TooManyOutstandingReceivedPackets, "Too many outstanding received ACK ranges")
+	errTooManyOutstandingReceivedPackets   = qerr.Error(qerr.TooManyOutstandingReceivedPackets, "Too many outstanding received packets")
+)
 
 // newReceivedPacketHistory creates a new received packet history
 func newReceivedPacketHistory() *receivedPacketHistory {
