@@ -53,7 +53,6 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.ReceivedPacket(9)
 			Expect(err).To(MatchError(ErrPacketSmallerThanLastStopWaiting))
-			Expect(handler.largestInOrderObserved).To(Equal(protocol.PacketNumber(9)))
 		})
 
 		It("does not ignore a packet with PacketNumber equal to LeastUnacked of a previously received StopWaiting", func() {
@@ -63,7 +62,6 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.ReceivedPacket(10)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.largestInOrderObserved).To(Equal(protocol.PacketNumber(10)))
 		})
 
 		It("saves the time when each packet arrived", func() {
@@ -99,20 +97,6 @@ var _ = Describe("receivedPacketHandler", func() {
 	})
 
 	Context("handling STOP_WAITING frames", func() {
-		It("increases the largestInOrderObserved packet number", func() {
-			// We simulate 20 packets, numbers 10, 11 and 12 lost
-			for i := 1; i < 20; i++ {
-				if i == 10 || i == 11 || i == 12 {
-					continue
-				}
-				err := handler.ReceivedPacket(protocol.PacketNumber(i))
-				Expect(err).ToNot(HaveOccurred())
-			}
-			err := handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: protocol.PacketNumber(12)})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.largestInOrderObserved).To(Equal(protocol.PacketNumber(11)))
-		})
-
 		It("increases the ignorePacketsBelow number", func() {
 			err := handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: protocol.PacketNumber(12)})
 			Expect(err).ToNot(HaveOccurred())
@@ -124,7 +108,6 @@ var _ = Describe("receivedPacketHandler", func() {
 				err := handler.ReceivedPacket(protocol.PacketNumber(i))
 				Expect(err).ToNot(HaveOccurred())
 			}
-			Expect(handler.largestInOrderObserved).To(Equal(protocol.PacketNumber(19)))
 			err := handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: protocol.PacketNumber(12)})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.ignorePacketsBelow).To(Equal(protocol.PacketNumber(11)))
@@ -260,7 +243,6 @@ var _ = Describe("receivedPacketHandler", func() {
 			}
 			err := handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: protocol.PacketNumber(6)})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.largestInOrderObserved).To(Equal(protocol.PacketNumber(12)))
 			// check that the packets were deleted from the receivedPacketHistory by checking the values in an ACK frame
 			ack, err := handler.GetAckFrame(true)
 			Expect(err).ToNot(HaveOccurred())

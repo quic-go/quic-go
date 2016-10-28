@@ -25,11 +25,10 @@ var (
 )
 
 type receivedPacketHandler struct {
-	largestInOrderObserved protocol.PacketNumber
-	largestObserved        protocol.PacketNumber
-	ignorePacketsBelow     protocol.PacketNumber
-	currentAckFrame        *frames.AckFrame
-	stateChanged           bool // has an ACK for this state already been sent? Will be set to false every time a new packet arrives, and to false every time an ACK is sent
+	largestObserved    protocol.PacketNumber
+	ignorePacketsBelow protocol.PacketNumber
+	currentAckFrame    *frames.AckFrame
+	stateChanged       bool // has an ACK for this state already been sent? Will be set to false every time a new packet arrives, and to false every time an ACK is sent
 
 	packetHistory *receivedPacketHistory
 
@@ -72,10 +71,6 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 		h.largestObserved = packetNumber
 	}
 
-	if packetNumber == h.largestInOrderObserved+1 {
-		h.largestInOrderObserved = packetNumber
-	}
-
 	h.receivedTimes[packetNumber] = time.Now()
 
 	if len(h.receivedTimes) > protocol.MaxTrackedReceivedPackets {
@@ -93,11 +88,6 @@ func (h *receivedPacketHandler) ReceivedStopWaiting(f *frames.StopWaitingFrame) 
 
 	h.ignorePacketsBelow = f.LeastUnacked - 1
 	h.garbageCollectReceivedTimes()
-
-	// the LeastUnacked is the smallest packet number of any packet for which the sender is still awaiting an ack. So the largestInOrderObserved is one less than that
-	if f.LeastUnacked > h.largestInOrderObserved {
-		h.largestInOrderObserved = f.LeastUnacked - 1
-	}
 
 	h.packetHistory.DeleteBelow(f.LeastUnacked)
 
