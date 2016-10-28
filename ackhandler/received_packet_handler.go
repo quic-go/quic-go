@@ -21,7 +21,7 @@ var (
 
 var (
 	errInvalidPacketNumber               = errors.New("ReceivedPacketHandler: Invalid packet number")
-	errTooManyOutstandingReceivedPackets = qerr.Error(qerr.TooManyOutstandingReceivedPackets, "")
+	errTooManyOutstandingReceivedPackets = qerr.Error(qerr.TooManyOutstandingReceivedPackets, "Too many outstanding received packets")
 )
 
 type receivedPacketHandler struct {
@@ -61,7 +61,10 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 		return ErrDuplicatePacket
 	}
 
-	h.packetHistory.ReceivedPacket(packetNumber)
+	err := h.packetHistory.ReceivedPacket(packetNumber)
+	if err != nil {
+		return err
+	}
 
 	h.stateChanged = true
 	h.currentAckFrame = nil

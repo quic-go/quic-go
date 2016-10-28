@@ -5,6 +5,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
@@ -14,6 +15,8 @@ type receivedPacketHistory struct {
 	mutex sync.RWMutex
 }
 
+var errTooManyOutstandingReceivedAckRanges = qerr.Error(qerr.TooManyOutstandingReceivedPackets, "Too many outstanding received ACK ranges")
+
 // newReceivedPacketHistory creates a new received packet history
 func newReceivedPacketHistory() *receivedPacketHistory {
 	return &receivedPacketHistory{
@@ -22,19 +25,23 @@ func newReceivedPacketHistory() *receivedPacketHistory {
 }
 
 // ReceivedPacket registers a packet with PacketNumber p and updates the ranges
-func (h *receivedPacketHistory) ReceivedPacket(p protocol.PacketNumber) {
+func (h *receivedPacketHistory) ReceivedPacket(p protocol.PacketNumber) error {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
+	if h.ranges.Len() >= protocol.MaxTrackedReceivedAckRanges {
+		return errTooManyOutstandingReceivedAckRanges
+	}
+
 	if h.ranges.Len() == 0 {
 		h.ranges.PushBack(utils.PacketInterval{Start: p, End: p})
-		return
+		return nil
 	}
 
 	for el := h.ranges.Back(); el != nil; el = el.Prev() {
 		// p already included in an existing range. Nothing to do here
 		if p >= el.Value.Start && p <= el.Value.End {
-			return
+			return nil
 		}
 
 		var rangeExtended bool
@@ -52,20 +59,22 @@ func (h *receivedPacketHistory) ReceivedPacket(p protocol.PacketNumber) {
 			if prev != nil && prev.Value.End+1 == el.Value.Start { // merge two ranges
 				prev.Value.End = el.Value.End
 				h.ranges.Remove(el)
-				return
+				return nil
 			}
-			return // if the two ranges were not merge, we're done here
+			return nil // if the two ranges were not merge, we're done here
 		}
 
 		// create a new range at the end
 		if p > el.Value.End {
 			h.ranges.InsertAfter(utils.PacketInterval{Start: p, End: p}, el)
-			return
+			return nil
 		}
 	}
 
 	// create a new range at the beginning
 	h.ranges.InsertBefore(utils.PacketInterval{Start: p, End: p}, h.ranges.Front())
+
+	return nil
 }
 
 func (h *receivedPacketHistory) DeleteBelow(leastUnacked protocol.PacketNumber) {

@@ -2,6 +2,7 @@ package ackhandler
 
 import (
 	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -170,6 +171,29 @@ var _ = Describe("receivedPacketHistory", func() {
 			hist.DeleteBelow(4)
 			Expect(hist.ranges.Len()).To(Equal(1))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 4, End: 4}))
+		})
+
+		Context("DoS protection", func() {
+			It("doesn't create more than MaxTrackedReceivedAckRanges ranges", func() {
+				for i := protocol.PacketNumber(1); i <= protocol.MaxTrackedReceivedAckRanges; i++ {
+					err := hist.ReceivedPacket(2 * i)
+					Expect(err).ToNot(HaveOccurred())
+				}
+				err := hist.ReceivedPacket(2*protocol.MaxTrackedReceivedAckRanges + 2)
+				Expect(err).To(MatchError(errTooManyOutstandingReceivedAckRanges))
+			})
+
+			It("doesn't consider already deleted ranges for MaxTrackedReceivedAckRanges", func() {
+				for i := protocol.PacketNumber(1); i <= protocol.MaxTrackedReceivedAckRanges; i++ {
+					err := hist.ReceivedPacket(2 * i)
+					Expect(err).ToNot(HaveOccurred())
+				}
+				err := hist.ReceivedPacket(2*protocol.MaxTrackedReceivedAckRanges + 2)
+				Expect(err).To(MatchError(errTooManyOutstandingReceivedAckRanges))
+				hist.DeleteBelow(protocol.MaxTrackedReceivedAckRanges) // deletes about half of the ranges
+				err = hist.ReceivedPacket(2*protocol.MaxTrackedReceivedAckRanges + 4)
+				Expect(err).ToNot(HaveOccurred())
+			})
 		})
 	})
 

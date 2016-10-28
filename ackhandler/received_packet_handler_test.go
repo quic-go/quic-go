@@ -83,13 +83,27 @@ var _ = Describe("receivedPacketHandler", func() {
 		})
 
 		It("doesn't store more than MaxTrackedReceivedPackets packets", func() {
-			for i := protocol.PacketNumber(0); i < protocol.MaxTrackedReceivedPackets; i++ {
-				packetNumber := protocol.PacketNumber(1 + 2*i)
-				err := handler.ReceivedPacket(packetNumber)
+			err := handler.ReceivedPacket(1)
+			Expect(err).ToNot(HaveOccurred())
+			for i := protocol.PacketNumber(3); i < 3+protocol.MaxTrackedReceivedPackets-1; i++ {
+				err := handler.ReceivedPacket(protocol.PacketNumber(i))
 				Expect(err).ToNot(HaveOccurred())
 			}
-			err := handler.ReceivedPacket(protocol.PacketNumber(3 * protocol.MaxTrackedReceivedPackets))
+			err = handler.ReceivedPacket(protocol.PacketNumber(protocol.MaxTrackedReceivedPackets) + 10)
 			Expect(err).To(MatchError(errTooManyOutstandingReceivedPackets))
+		})
+
+		It("passes on errors from receivedPacketHistory", func() {
+			var err error
+			for i := protocol.PacketNumber(0); i < 5*protocol.MaxTrackedReceivedAckRanges; i++ {
+				err = handler.ReceivedPacket(2*i + 1)
+				// this will eventually return an error
+				// details about when exactly the receivedPacketHistory errors are tested there
+				if err != nil {
+					break
+				}
+			}
+			Expect(err).To(MatchError(errTooManyOutstandingReceivedAckRanges))
 		})
 	})
 
