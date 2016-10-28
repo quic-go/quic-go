@@ -17,17 +17,51 @@ var _ = Describe("receivedPacketHistory", func() {
 		hist = newReceivedPacketHistory()
 	})
 
+	// check if the ranges PacketIntervalList contains exactly the same packet number as the receivedPacketNumbers
+	historiesConsistent := func() bool {
+		// check if a packet number is contained in any of the ranges
+		containedInRanges := func(p protocol.PacketNumber) bool {
+			for el := hist.ranges.Front(); el != nil; el = el.Next() {
+				if p >= el.Value.Start && p <= el.Value.End {
+					return true
+				}
+			}
+			return false
+		}
+
+		// first check if all packets contained in the ranges are present in the map
+		for el := hist.ranges.Front(); el != nil; el = el.Next() {
+			for i := el.Value.Start; i <= el.Value.Start; i++ {
+				_, ok := hist.receivedPacketNumbers[i]
+				if !ok {
+					return false
+				}
+			}
+		}
+
+		// then check if all packets in the map are contained in any of the ranges
+		for i := range hist.receivedPacketNumbers {
+			if !containedInRanges(i) {
+				return false
+			}
+		}
+
+		return true
+	}
+
 	Context("ranges", func() {
 		It("adds the first packet", func() {
 			hist.ReceivedPacket(4)
 			Expect(hist.ranges.Len()).To(Equal(1))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 4, End: 4}))
+			Expect(historiesConsistent()).To(BeTrue())
 		})
 
 		It("doesn't care about duplicate packets", func() {
 			hist.ReceivedPacket(4)
 			Expect(hist.ranges.Len()).To(Equal(1))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 4, End: 4}))
+			Expect(historiesConsistent()).To(BeTrue())
 		})
 
 		It("adds a few consecutive packets", func() {
@@ -36,6 +70,7 @@ var _ = Describe("receivedPacketHistory", func() {
 			hist.ReceivedPacket(6)
 			Expect(hist.ranges.Len()).To(Equal(1))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 4, End: 6}))
+			Expect(historiesConsistent()).To(BeTrue())
 		})
 
 		It("doesn't care about a duplicate packet contained in an existing range", func() {
@@ -45,6 +80,7 @@ var _ = Describe("receivedPacketHistory", func() {
 			hist.ReceivedPacket(5)
 			Expect(hist.ranges.Len()).To(Equal(1))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 4, End: 6}))
+			Expect(historiesConsistent()).To(BeTrue())
 		})
 
 		It("extends a range at the front", func() {
@@ -52,6 +88,7 @@ var _ = Describe("receivedPacketHistory", func() {
 			hist.ReceivedPacket(3)
 			Expect(hist.ranges.Len()).To(Equal(1))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 3, End: 4}))
+			Expect(historiesConsistent()).To(BeTrue())
 		})
 
 		It("creates a new range when a packet is lost", func() {
@@ -60,6 +97,7 @@ var _ = Describe("receivedPacketHistory", func() {
 			Expect(hist.ranges.Len()).To(Equal(2))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 4, End: 4}))
 			Expect(hist.ranges.Back().Value).To(Equal(utils.PacketInterval{Start: 6, End: 6}))
+			Expect(historiesConsistent()).To(BeTrue())
 		})
 
 		It("creates a new range in between two ranges", func() {
@@ -71,6 +109,7 @@ var _ = Describe("receivedPacketHistory", func() {
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 4, End: 4}))
 			Expect(hist.ranges.Front().Next().Value).To(Equal(utils.PacketInterval{Start: 7, End: 7}))
 			Expect(hist.ranges.Back().Value).To(Equal(utils.PacketInterval{Start: 10, End: 10}))
+			Expect(historiesConsistent()).To(BeTrue())
 		})
 
 		It("creates a new range before an existing range for a belated packet", func() {
@@ -79,6 +118,7 @@ var _ = Describe("receivedPacketHistory", func() {
 			Expect(hist.ranges.Len()).To(Equal(2))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 4, End: 4}))
 			Expect(hist.ranges.Back().Value).To(Equal(utils.PacketInterval{Start: 6, End: 6}))
+			Expect(historiesConsistent()).To(BeTrue())
 		})
 
 		It("extends a previous range at the end", func() {
@@ -88,6 +128,7 @@ var _ = Describe("receivedPacketHistory", func() {
 			Expect(hist.ranges.Len()).To(Equal(2))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 4, End: 5}))
 			Expect(hist.ranges.Back().Value).To(Equal(utils.PacketInterval{Start: 7, End: 7}))
+			Expect(historiesConsistent()).To(BeTrue())
 		})
 
 		It("extends a range at the front", func() {
@@ -97,6 +138,7 @@ var _ = Describe("receivedPacketHistory", func() {
 			Expect(hist.ranges.Len()).To(Equal(2))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 4, End: 4}))
 			Expect(hist.ranges.Back().Value).To(Equal(utils.PacketInterval{Start: 6, End: 7}))
+			Expect(historiesConsistent()).To(BeTrue())
 		})
 
 		It("closes a range", func() {
@@ -106,6 +148,7 @@ var _ = Describe("receivedPacketHistory", func() {
 			hist.ReceivedPacket(5)
 			Expect(hist.ranges.Len()).To(Equal(1))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 4, End: 6}))
+			Expect(historiesConsistent()).To(BeTrue())
 		})
 
 		It("closes a range in the middle", func() {
@@ -119,6 +162,7 @@ var _ = Describe("receivedPacketHistory", func() {
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 1, End: 1}))
 			Expect(hist.ranges.Front().Next().Value).To(Equal(utils.PacketInterval{Start: 4, End: 6}))
 			Expect(hist.ranges.Back().Value).To(Equal(utils.PacketInterval{Start: 10, End: 10}))
+			Expect(historiesConsistent()).To(BeTrue())
 		})
 	})
 
@@ -126,6 +170,7 @@ var _ = Describe("receivedPacketHistory", func() {
 		It("does nothing when the history is empty", func() {
 			hist.DeleteBelow(5)
 			Expect(hist.ranges.Len()).To(BeZero())
+			Expect(historiesConsistent()).To(BeTrue())
 		})
 
 		It("deletes a range", func() {
@@ -135,6 +180,7 @@ var _ = Describe("receivedPacketHistory", func() {
 			hist.DeleteBelow(6)
 			Expect(hist.ranges.Len()).To(Equal(1))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 10, End: 10}))
+			Expect(historiesConsistent()).To(BeTrue())
 		})
 
 		It("deletes multiple ranges", func() {
@@ -144,6 +190,7 @@ var _ = Describe("receivedPacketHistory", func() {
 			hist.DeleteBelow(8)
 			Expect(hist.ranges.Len()).To(Equal(1))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 10, End: 10}))
+			Expect(historiesConsistent()).To(BeTrue())
 		})
 
 		It("adjusts a range, if leastUnacked lies inside it", func() {
@@ -154,6 +201,7 @@ var _ = Describe("receivedPacketHistory", func() {
 			hist.DeleteBelow(4)
 			Expect(hist.ranges.Len()).To(Equal(1))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 4, End: 6}))
+			Expect(historiesConsistent()).To(BeTrue())
 		})
 
 		It("adjusts a range, if leastUnacked is the last of the range", func() {
@@ -164,6 +212,7 @@ var _ = Describe("receivedPacketHistory", func() {
 			Expect(hist.ranges.Len()).To(Equal(2))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 5, End: 5}))
 			Expect(hist.ranges.Back().Value).To(Equal(utils.PacketInterval{Start: 10, End: 10}))
+			Expect(historiesConsistent()).To(BeTrue())
 		})
 
 		It("keeps a one-packet range, if leastUnacked is exactly that value", func() {
@@ -171,6 +220,7 @@ var _ = Describe("receivedPacketHistory", func() {
 			hist.DeleteBelow(4)
 			Expect(hist.ranges.Len()).To(Equal(1))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 4, End: 4}))
+			Expect(historiesConsistent()).To(BeTrue())
 		})
 
 		Context("DoS protection", func() {
@@ -181,6 +231,18 @@ var _ = Describe("receivedPacketHistory", func() {
 				}
 				err := hist.ReceivedPacket(2*protocol.MaxTrackedReceivedAckRanges + 2)
 				Expect(err).To(MatchError(errTooManyOutstandingReceivedAckRanges))
+				Expect(historiesConsistent()).To(BeTrue())
+			})
+
+			It("doesn't store more than MaxTrackedReceivedPackets packets", func() {
+				err := hist.ReceivedPacket(1)
+				Expect(err).ToNot(HaveOccurred())
+				for i := protocol.PacketNumber(3); i < 3+protocol.MaxTrackedReceivedPackets-1; i++ {
+					err := hist.ReceivedPacket(protocol.PacketNumber(i))
+					Expect(err).ToNot(HaveOccurred())
+				}
+				err = hist.ReceivedPacket(protocol.PacketNumber(protocol.MaxTrackedReceivedPackets) + 10)
+				Expect(err).To(MatchError(errTooManyOutstandingReceivedPackets))
 			})
 
 			It("doesn't consider already deleted ranges for MaxTrackedReceivedAckRanges", func() {
@@ -193,7 +255,35 @@ var _ = Describe("receivedPacketHistory", func() {
 				hist.DeleteBelow(protocol.MaxTrackedReceivedAckRanges) // deletes about half of the ranges
 				err = hist.ReceivedPacket(2*protocol.MaxTrackedReceivedAckRanges + 4)
 				Expect(err).ToNot(HaveOccurred())
+				Expect(historiesConsistent()).To(BeTrue())
 			})
+		})
+	})
+
+	Context("duplicate packet detection", func() {
+		It("detects duplicates for existing ranges", func() {
+			hist.ReceivedPacket(2)
+			hist.ReceivedPacket(4)
+			hist.ReceivedPacket(5)
+			Expect(hist.IsDuplicate(1)).To(BeFalse())
+			Expect(hist.IsDuplicate(2)).To(BeTrue())
+			Expect(hist.IsDuplicate(3)).To(BeFalse())
+			Expect(hist.IsDuplicate(4)).To(BeTrue())
+			Expect(hist.IsDuplicate(5)).To(BeTrue())
+			Expect(hist.IsDuplicate(6)).To(BeFalse())
+		})
+
+		It("detects duplicates after a range has been deleted", func() {
+			hist.ReceivedPacket(2)
+			hist.ReceivedPacket(3)
+			hist.ReceivedPacket(6)
+			hist.DeleteBelow(5)
+			for i := 1; i < 5; i++ {
+				Expect(hist.IsDuplicate(protocol.PacketNumber(i))).To(BeTrue())
+			}
+			Expect(hist.IsDuplicate(5)).To(BeFalse())
+			Expect(hist.IsDuplicate(6)).To(BeTrue())
+			Expect(hist.IsDuplicate(7)).To(BeFalse())
 		})
 	})
 

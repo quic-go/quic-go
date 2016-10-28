@@ -37,21 +37,12 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(err).To(MatchError(errInvalidPacketNumber))
 		})
 
-		It("rejects a duplicate package with PacketNumber equal to LargestObserved", func() {
+		It("rejects a duplicate package", func() {
 			for i := 1; i < 5; i++ {
 				err := handler.ReceivedPacket(protocol.PacketNumber(i))
 				Expect(err).ToNot(HaveOccurred())
 			}
 			err := handler.ReceivedPacket(4)
-			Expect(err).To(MatchError(ErrDuplicatePacket))
-		})
-
-		It("rejects a duplicate package with PacketNumber less than the LargestObserved", func() {
-			for i := 1; i < 5; i++ {
-				err := handler.ReceivedPacket(protocol.PacketNumber(i))
-				Expect(err).ToNot(HaveOccurred())
-			}
-			err := handler.ReceivedPacket(2)
 			Expect(err).To(MatchError(ErrDuplicatePacket))
 		})
 

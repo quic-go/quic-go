@@ -10,9 +10,13 @@ import (
 )
 
 type receivedPacketHistory struct {
+	mutex sync.RWMutex
+
 	ranges *utils.PacketIntervalList
 
-	mutex sync.RWMutex
+	// the map is used as a replacement for a set here. The bool is always supposed to be set to true
+	receivedPacketNumbers         map[protocol.PacketNumber]bool
+	lowestInReceivedPacketNumbers protocol.PacketNumber
 }
 
 var errTooManyOutstandingReceivedAckRanges = qerr.Error(qerr.TooManyOutstandingReceivedPackets, "Too many outstanding received ACK ranges")
@@ -20,7 +24,8 @@ var errTooManyOutstandingReceivedAckRanges = qerr.Error(qerr.TooManyOutstandingR
 // newReceivedPacketHistory creates a new received packet history
 func newReceivedPacketHistory() *receivedPacketHistory {
 	return &receivedPacketHistory{
-		ranges: utils.NewPacketIntervalList(),
+		ranges:                utils.NewPacketIntervalList(),
+		receivedPacketNumbers: make(map[protocol.PacketNumber]bool),
 	}
 }
 
@@ -32,6 +37,12 @@ func (h *receivedPacketHistory) ReceivedPacket(p protocol.PacketNumber) error {
 	if h.ranges.Len() >= protocol.MaxTrackedReceivedAckRanges {
 		return errTooManyOutstandingReceivedAckRanges
 	}
+
+	if len(h.receivedPacketNumbers) >= protocol.MaxTrackedReceivedPackets {
+		return errTooManyOutstandingReceivedPackets
+	}
+
+	h.receivedPacketNumbers[p] = true
 
 	if h.ranges.Len() == 0 {
 		h.ranges.PushBack(utils.PacketInterval{Start: p, End: p})
@@ -77,23 +88,45 @@ func (h *receivedPacketHistory) ReceivedPacket(p protocol.PacketNumber) error {
 	return nil
 }
 
+// DeleteBelow deletes all entries below the leastUnacked packet number
 func (h *receivedPacketHistory) DeleteBelow(leastUnacked protocol.PacketNumber) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
+
+	h.lowestInReceivedPacketNumbers = utils.MaxPacketNumber(h.lowestInReceivedPacketNumbers, leastUnacked)
 
 	nextEl := h.ranges.Front()
 	for el := h.ranges.Front(); nextEl != nil; el = nextEl {
 		nextEl = el.Next()
 
 		if leastUnacked > el.Value.Start && leastUnacked <= el.Value.End {
+			for i := el.Value.Start; i < leastUnacked; i++ { // adjust start value of a range
+				delete(h.receivedPacketNumbers, i)
+			}
 			el.Value.Start = leastUnacked
-		}
-		if el.Value.End < leastUnacked { // delete a whole range
+		} else if el.Value.End < leastUnacked { // delete a whole range
+			for i := el.Value.Start; i <= el.Value.End; i++ {
+				delete(h.receivedPacketNumbers, i)
+			}
 			h.ranges.Remove(el)
-		} else {
+		} else { // no ranges affected. Nothing to do
 			return
 		}
 	}
+}
+
+// IsDuplicate determines if a packet should be regarded as a duplicate packet
+// note that after receiving a StopWaitingFrame, all packets below the LeastUnacked should be regarded as duplicates, even if the packet was just delayed
+func (h *receivedPacketHistory) IsDuplicate(p protocol.PacketNumber) bool {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+
+	if p < h.lowestInReceivedPacketNumbers {
+		return true
+	}
+
+	_, ok := h.receivedPacketNumbers[p]
+	return ok
 }
 
 // GetAckRanges gets a slice of all AckRanges that can be used in an AckFrame

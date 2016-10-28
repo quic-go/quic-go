@@ -56,8 +56,7 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 		return ErrPacketSmallerThanLastStopWaiting
 	}
 
-	_, ok := h.receivedTimes[packetNumber]
-	if packetNumber <= h.largestInOrderObserved || ok {
+	if h.packetHistory.IsDuplicate(packetNumber) {
 		return ErrDuplicatePacket
 	}
 
