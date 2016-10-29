@@ -15,6 +15,7 @@ var _ = Describe("Request", func() {
 			{Name: ":path", Value: "/foo"},
 			{Name: ":authority", Value: "quic.clemente.io"},
 			{Name: ":method", Value: "GET"},
+			{Name: "content-length", Value: "42"},
 		}
 		req, err := requestFromHeaders(headers)
 		Expect(err).NotTo(HaveOccurred())
@@ -23,6 +24,7 @@ var _ = Describe("Request", func() {
 		Expect(req.Proto).To(Equal("HTTP/2.0"))
 		Expect(req.ProtoMajor).To(Equal(2))
 		Expect(req.ProtoMinor).To(Equal(0))
+		Expect(req.ContentLength).To(Equal(int64(42)))
 		Expect(req.Header).To(BeEmpty())
 		Expect(req.Body).To(BeNil())
 		Expect(req.Host).To(Equal("quic.clemente.io"))
@@ -34,14 +36,14 @@ var _ = Describe("Request", func() {
 			{Name: ":path", Value: "/foo"},
 			{Name: ":authority", Value: "quic.clemente.io"},
 			{Name: ":method", Value: "GET"},
-			{Name: "content-length", Value: "42"},
+			{Name: "cache-control", Value: "max-age=0"},
 			{Name: "duplicate-header", Value: "1"},
 			{Name: "duplicate-header", Value: "2"},
 		}
 		req, err := requestFromHeaders(headers)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(req.Header).To(Equal(http.Header{
-			"Content-Length":   []string{"42"},
+			"Cache-Control":    []string{"max-age=0"},
 			"Duplicate-Header": []string{"1", "2"},
 		}))
 	})
