@@ -31,6 +31,21 @@ var _ = Describe("Request", func() {
 		Expect(req.RequestURI).To(Equal("/foo"))
 	})
 
+	It("concatenates the cookie headers", func() {
+		headers := []hpack.HeaderField{
+			{Name: ":path", Value: "/foo"},
+			{Name: ":authority", Value: "quic.clemente.io"},
+			{Name: ":method", Value: "GET"},
+			{Name: "cookie", Value: "cookie1=foobar1"},
+			{Name: "cookie", Value: "cookie2=foobar2"},
+		}
+		req, err := requestFromHeaders(headers)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(req.Header).To(Equal(http.Header{
+			"Cookie": []string{"cookie1=foobar1; cookie2=foobar2"},
+		}))
+	})
+
 	It("handles other headers", func() {
 		headers := []hpack.HeaderField{
 			{Name: ":path", Value: "/foo"},

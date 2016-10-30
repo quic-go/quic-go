@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"golang.org/x/net/http2/hpack"
 )
@@ -28,6 +29,11 @@ func requestFromHeaders(headers []hpack.HeaderField) (*http.Request, error) {
 				httpHeaders.Add(h.Name, h.Value)
 			}
 		}
+	}
+
+	// concatenate cookie headers, see https://tools.ietf.org/html/rfc6265#section-5.4
+	if len(httpHeaders["Cookie"]) > 0 {
+		httpHeaders.Set("Cookie", strings.Join(httpHeaders["Cookie"], "; "))
 	}
 
 	if len(path) == 0 || len(authority) == 0 || len(method) == 0 {
