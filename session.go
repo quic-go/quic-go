@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
+	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/flowcontrol"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -50,6 +51,8 @@ type Session struct {
 	conn connection
 
 	streamsMap *streamsMap
+
+	rttStats *congestion.RTTStats
 
 	sentPacketHandler     ackhandler.SentPacketHandler
 	receivedPacketHandler ackhandler.ReceivedPacketHandler
@@ -97,7 +100,9 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	var sentPacketHandler ackhandler.SentPacketHandler
 	var receivedPacketHandler ackhandler.ReceivedPacketHandler
 
-	sentPacketHandler = ackhandler.NewSentPacketHandler()
+	rttStats := &congestion.RTTStats{}
+
+	sentPacketHandler = ackhandler.NewSentPacketHandler(rttStats)
 	receivedPacketHandler = ackhandler.NewReceivedPacketHandler()
 
 	now := time.Now()
