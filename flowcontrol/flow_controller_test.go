@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"unsafe"
 
+	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
@@ -25,9 +26,11 @@ var _ = Describe("Flow controller", func() {
 
 	Context("Constructor", func() {
 		var cpm *handshake.ConnectionParametersManager
+		var rttStats *congestion.RTTStats
 
 		BeforeEach(func() {
 			cpm = &handshake.ConnectionParametersManager{}
+			rttStats = &congestion.RTTStats{}
 			setConnectionParametersManagerWindow(cpm, "sendStreamFlowControlWindow", 1000)
 			setConnectionParametersManagerWindow(cpm, "receiveStreamFlowControlWindow", 2000)
 			setConnectionParametersManagerWindow(cpm, "sendConnectionFlowControlWindow", 3000)
@@ -35,24 +38,24 @@ var _ = Describe("Flow controller", func() {
 		})
 
 		It("reads the stream send and receive windows when acting as stream-level flow controller", func() {
-			fc := newFlowController(5, cpm)
+			fc := newFlowController(5, cpm, rttStats)
 			Expect(fc.streamID).To(Equal(protocol.StreamID(5)))
 			Expect(fc.receiveFlowControlWindow).To(Equal(protocol.ByteCount(2000)))
 		})
 
 		It("reads the stream send and receive windows when acting as stream-level flow controller", func() {
-			fc := newFlowController(0, cpm)
+			fc := newFlowController(0, cpm, rttStats)
 			Expect(fc.streamID).To(Equal(protocol.StreamID(0)))
 			Expect(fc.receiveFlowControlWindow).To(Equal(protocol.ByteCount(4000)))
 		})
 
 		It("does not set the stream flow control windows for sending", func() {
-			fc := newFlowController(5, cpm)
+			fc := newFlowController(5, cpm, rttStats)
 			Expect(fc.sendFlowControlWindow).To(BeZero())
 		})
 
 		It("does not set the connection flow control windows for sending", func() {
-			fc := newFlowController(0, cpm)
+			fc := newFlowController(0, cpm, rttStats)
 			Expect(fc.sendFlowControlWindow).To(BeZero())
 		})
 	})

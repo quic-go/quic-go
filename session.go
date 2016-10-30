@@ -95,7 +95,6 @@ type Session struct {
 // newSession makes a new session
 func newSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) (packetHandler, error) {
 	connectionParametersManager := handshake.NewConnectionParamatersManager()
-	flowControlManager := flowcontrol.NewFlowControlManager(connectionParametersManager)
 
 	var sentPacketHandler ackhandler.SentPacketHandler
 	var receivedPacketHandler ackhandler.ReceivedPacketHandler
@@ -104,6 +103,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 
 	sentPacketHandler = ackhandler.NewSentPacketHandler(rttStats)
 	receivedPacketHandler = ackhandler.NewReceivedPacketHandler()
+	flowControlManager := flowcontrol.NewFlowControlManager(connectionParametersManager, rttStats)
 
 	now := time.Now()
 	session := &Session{

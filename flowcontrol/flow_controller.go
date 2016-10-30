@@ -1,6 +1,7 @@
 package flowcontrol
 
 import (
+	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 )
@@ -9,6 +10,7 @@ type flowController struct {
 	streamID protocol.StreamID
 
 	connectionParametersManager *handshake.ConnectionParametersManager
+	rttStats                    *congestion.RTTStats
 
 	bytesSent             protocol.ByteCount
 	sendFlowControlWindow protocol.ByteCount
@@ -20,10 +22,11 @@ type flowController struct {
 }
 
 // newFlowController gets a new flow controller
-func newFlowController(streamID protocol.StreamID, connectionParametersManager *handshake.ConnectionParametersManager) *flowController {
+func newFlowController(streamID protocol.StreamID, connectionParametersManager *handshake.ConnectionParametersManager, rttStats *congestion.RTTStats) *flowController {
 	fc := flowController{
 		streamID:                    streamID,
 		connectionParametersManager: connectionParametersManager,
+		rttStats:                    rttStats,
 	}
 
 	if streamID == 0 {
