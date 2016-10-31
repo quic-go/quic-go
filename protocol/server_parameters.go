@@ -17,11 +17,19 @@ const AckSendDelay = 5 * time.Millisecond
 
 // ReceiveStreamFlowControlWindow is the stream-level flow control window for receiving data
 // This is the value that Google servers are using
-const ReceiveStreamFlowControlWindow ByteCount = (1 << 20) // 1 MB
+const ReceiveStreamFlowControlWindow ByteCount = (1 << 10) * 32 // 32 kB
 
-// ReceiveConnectionFlowControlWindow is the stream-level flow control window for receiving data
+// ReceiveConnectionFlowControlWindow is the connection-level flow control window for receiving data
 // This is the value that Google servers are using
-const ReceiveConnectionFlowControlWindow ByteCount = (1 << 20) * 1.5 // 1.5 MB
+const ReceiveConnectionFlowControlWindow ByteCount = (1 << 10) * 48 // 48 kB
+
+// MaxReceiveStreamFlowControlWindow is the maximum stream-level flow control window for receiving data
+// This is the value that Google servers are using
+const MaxReceiveStreamFlowControlWindow ByteCount = 1 * (1 << 20) // 1 MB
+
+// MaxReceiveConnectionFlowControlWindow is the connection-level flow control window for receiving data
+// This is the value that Google servers are using
+const MaxReceiveConnectionFlowControlWindow ByteCount = 1.5 * (1 << 20) // 1.5 MB
 
 // MaxStreamsPerConnection is the maximum value accepted for the number of streams per connection
 const MaxStreamsPerConnection = 100

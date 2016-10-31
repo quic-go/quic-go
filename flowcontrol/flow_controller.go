@@ -1,9 +1,12 @@
 package flowcontrol
 
 import (
+	"time"
+
 	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 type flowController struct {
@@ -15,10 +18,13 @@ type flowController struct {
 	bytesSent             protocol.ByteCount
 	sendFlowControlWindow protocol.ByteCount
 
-	bytesRead                         protocol.ByteCount
-	highestReceived                   protocol.ByteCount
-	receiveFlowControlWindow          protocol.ByteCount
-	receiveFlowControlWindowIncrement protocol.ByteCount
+	lastWindowUpdateTime time.Time
+
+	bytesRead                            protocol.ByteCount
+	highestReceived                      protocol.ByteCount
+	receiveFlowControlWindow             protocol.ByteCount
+	receiveFlowControlWindowIncrement    protocol.ByteCount
+	maxReceiveFlowControlWindowIncrement protocol.ByteCount
 }
 
 // newFlowController gets a new flow controller
@@ -32,9 +38,11 @@ func newFlowController(streamID protocol.StreamID, connectionParametersManager *
 	if streamID == 0 {
 		fc.receiveFlowControlWindow = connectionParametersManager.GetReceiveConnectionFlowControlWindow()
 		fc.receiveFlowControlWindowIncrement = fc.receiveFlowControlWindow
+		fc.maxReceiveFlowControlWindowIncrement = protocol.MaxReceiveConnectionFlowControlWindow
 	} else {
 		fc.receiveFlowControlWindow = connectionParametersManager.GetReceiveStreamFlowControlWindow()
 		fc.receiveFlowControlWindowIncrement = fc.receiveFlowControlWindow
+		fc.maxReceiveFlowControlWindowIncrement = protocol.MaxReceiveStreamFlowControlWindow
 	}
 
 	return &fc
@@ -102,12 +110,50 @@ func (c *flowController) AddBytesRead(n protocol.ByteCount) {
 // if so, it returns true and the offset of the window
 func (c *flowController) MaybeTriggerWindowUpdate() (bool, protocol.ByteCount) {
 	diff := c.receiveFlowControlWindow - c.bytesRead
+
 	// Chromium implements the same threshold
 	if diff < (c.receiveFlowControlWindowIncrement / 2) {
+		c.maybeAdjustWindowIncrement()
+		c.lastWindowUpdateTime = time.Now()
+
 		c.receiveFlowControlWindow = c.bytesRead + c.receiveFlowControlWindowIncrement
+
 		return true, c.receiveFlowControlWindow
 	}
+
 	return false, 0
+}
+
+// maybeAdjustWindowIncrement increases the receiveFlowControlWindowIncrement if we're sending WindowUpdates too often
+func (c *flowController) maybeAdjustWindowIncrement() {
+	if c.lastWindowUpdateTime.IsZero() {
+		return
+	}
+
+	rtt := c.rttStats.SmoothedRTT()
+	if rtt == 0 {
+		return
+	}
+
+	timeSinceLastWindowUpdate := time.Now().Sub(c.lastWindowUpdateTime)
+
+	// interval between the window updates is sufficiently large, no need to increase the increment
+	if timeSinceLastWindowUpdate >= 2*rtt {
+		return
+	}
+
+	oldWindowSize := c.receiveFlowControlWindowIncrement
+	c.receiveFlowControlWindowIncrement = utils.MinByteCount(2*c.receiveFlowControlWindowIncrement, c.maxReceiveFlowControlWindowIncrement)
+
+	// debug log, if the window size was actually increased
+	if oldWindowSize < c.receiveFlowControlWindowIncrement {
+		newWindowSize := c.receiveFlowControlWindowIncrement / (1 << 10)
+		if c.streamID == 0 {
+			utils.Debugf("Increasing receive flow control window for the connection to %d kB", newWindowSize)
+		} else {
+			utils.Debugf("Increasing receive flow control window increment for stream %d to %d kB", c.streamID, newWindowSize)
+		}
+	}
 }
 
 func (c *flowController) CheckFlowControlViolation() bool {
