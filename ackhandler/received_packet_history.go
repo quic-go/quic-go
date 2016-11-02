@@ -1,8 +1,6 @@
 package ackhandler
 
 import (
-	"sync"
-
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
@@ -10,8 +8,6 @@ import (
 )
 
 type receivedPacketHistory struct {
-	mutex sync.RWMutex
-
 	ranges *utils.PacketIntervalList
 
 	// the map is used as a replacement for a set here. The bool is always supposed to be set to true
@@ -34,9 +30,6 @@ func newReceivedPacketHistory() *receivedPacketHistory {
 
 // ReceivedPacket registers a packet with PacketNumber p and updates the ranges
 func (h *receivedPacketHistory) ReceivedPacket(p protocol.PacketNumber) error {
-	h.mutex.Lock()
-	defer h.mutex.Unlock()
-
 	if h.ranges.Len() >= protocol.MaxTrackedReceivedAckRanges {
 		return errTooManyOutstandingReceivedAckRanges
 	}
@@ -93,9 +86,6 @@ func (h *receivedPacketHistory) ReceivedPacket(p protocol.PacketNumber) error {
 
 // DeleteBelow deletes all entries below the leastUnacked packet number
 func (h *receivedPacketHistory) DeleteBelow(leastUnacked protocol.PacketNumber) {
-	h.mutex.Lock()
-	defer h.mutex.Unlock()
-
 	h.lowestInReceivedPacketNumbers = utils.MaxPacketNumber(h.lowestInReceivedPacketNumbers, leastUnacked)
 
 	nextEl := h.ranges.Front()
@@ -121,9 +111,6 @@ func (h *receivedPacketHistory) DeleteBelow(leastUnacked protocol.PacketNumber) 
 // IsDuplicate determines if a packet should be regarded as a duplicate packet
 // note that after receiving a StopWaitingFrame, all packets below the LeastUnacked should be regarded as duplicates, even if the packet was just delayed
 func (h *receivedPacketHistory) IsDuplicate(p protocol.PacketNumber) bool {
-	h.mutex.RLock()
-	defer h.mutex.RUnlock()
-
 	if p < h.lowestInReceivedPacketNumbers {
 		return true
 	}
@@ -134,9 +121,6 @@ func (h *receivedPacketHistory) IsDuplicate(p protocol.PacketNumber) bool {
 
 // GetAckRanges gets a slice of all AckRanges that can be used in an AckFrame
 func (h *receivedPacketHistory) GetAckRanges() []frames.AckRange {
-	h.mutex.RLock()
-	defer h.mutex.RUnlock()
-
 	if h.ranges.Len() == 0 {
 		return nil
 	}
