@@ -236,7 +236,7 @@ func removeDownload(filename string) {
 	cmd := exec.Command("docker", "exec", "-i", "quic-test-selenium", "rm", "-f", "/home/seluser/Downloads/"+filename)
 	session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
 	Expect(err).NotTo(HaveOccurred())
-	Eventually(session).Should(gexec.Exit(0))
+	Eventually(session, 5).Should(gexec.Exit(0))
 }
 
 // getDownloadSize gets the file size of a file in the /home/seluser/Downloads folder in the docker container
@@ -245,7 +245,7 @@ func getDownloadSize(filename string) int {
 	cmd := exec.Command("docker", "exec", "-i", "quic-test-selenium", "stat", "--printf=%s", "/home/seluser/Downloads/"+filename)
 	session, err := gexec.Start(cmd, &out, GinkgoWriter)
 	Expect(err).NotTo(HaveOccurred())
-	Eventually(session).Should(gexec.Exit())
+	Eventually(session, 5).Should(gexec.Exit())
 	if session.ExitCode() != 0 {
 		return 0
 	}
@@ -270,7 +270,7 @@ func getDownloadMD5(filename string) []byte {
 	cmd := exec.Command("docker", "exec", "-i", "quic-test-selenium", "md5sum", "/home/seluser/Downloads/"+filename)
 	session, err := gexec.Start(cmd, &out, GinkgoWriter)
 	Expect(err).NotTo(HaveOccurred())
-	Eventually(session).Should(gexec.Exit())
+	Eventually(session, 5).Should(gexec.Exit())
 	if session.ExitCode() != 0 {
 		return nil
 	}
@@ -298,5 +298,5 @@ func copyFileToDocker(filepath string) {
 	cmd := exec.Command("docker", "cp", filepath, "quic-test-selenium:/home/seluser/")
 	session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
 	Expect(err).NotTo(HaveOccurred())
-	Eventually(session).Should(gexec.Exit(0))
+	Eventually(session, 5).Should(gexec.Exit(0))
 }
