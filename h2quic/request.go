@@ -1,6 +1,7 @@
 package h2quic
 
 import (
+	"crypto/tls"
 	"errors"
 	"net/http"
 	"net/url"
@@ -64,5 +65,6 @@ func requestFromHeaders(headers []hpack.HeaderField) (*http.Request, error) {
 		ContentLength: contentLength,
 		Host:          authority,
 		RequestURI:    path,
+		TLS:           &tls.ConnectionState{},
 	}, nil
 }
