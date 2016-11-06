@@ -196,7 +196,7 @@ func composeVersionNegotiation(connectionID protocol.ConnectionID) []byte {
 		PacketNumber: 1,
 		VersionFlag:  true,
 	}
-	err := responsePublicHeader.WritePublicHeader(fullReply, protocol.Version35)
+	err := responsePublicHeader.Write(fullReply, protocol.Version35)
 	if err != nil {
 		utils.Errorf("error composing version negotiation packet: %s", err.Error())
 	}

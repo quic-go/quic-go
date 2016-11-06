@@ -113,7 +113,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 	raw := getPacketBuffer()
 	buffer := bytes.NewBuffer(raw)
 
-	if err = responsePublicHeader.WritePublicHeader(buffer, p.version); err != nil {
+	if err = responsePublicHeader.Write(buffer, p.version); err != nil {
 		return nil, err
 	}
 

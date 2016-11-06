@@ -31,8 +31,8 @@ type PublicHeader struct {
 	DiversificationNonce []byte
 }
 
-// WritePublicHeader writes a public header
-func (h *PublicHeader) WritePublicHeader(b *bytes.Buffer, version protocol.VersionNumber) error {
+// Write writes a public header
+func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
 	publicFlagByte := uint8(0x00)
 	if h.VersionFlag && h.ResetFlag {
 		return errResetAndVersionFlagSet
