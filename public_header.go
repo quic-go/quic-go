@@ -156,6 +156,18 @@ func ParsePublicHeader(b io.ByteReader, packetSentBy protocol.Perspective) (*Pub
 		return nil, errInvalidConnectionID
 	}
 
+	if packetSentBy == protocol.PerspectiveServer && publicFlagByte&0x04 > 0 {
+		header.DiversificationNonce = make([]byte, 32)
+		for i := 0; i < 32; i++ {
+			var val byte
+			val, err = b.ReadByte()
+			if err != nil {
+				return nil, err
+			}
+			header.DiversificationNonce[i] = val
+		}
+	}
+
 	// Version (optional)
 	if header.VersionFlag && !header.ResetFlag {
 		var versionTag uint32
