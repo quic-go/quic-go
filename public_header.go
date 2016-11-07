@@ -32,11 +32,13 @@ type PublicHeader struct {
 }
 
 // Write writes a public header
-func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
+func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pers protocol.Perspective) error {
 	publicFlagByte := uint8(0x00)
+
 	if h.VersionFlag && h.ResetFlag {
 		return errResetAndVersionFlagSet
 	}
+
 	if h.VersionFlag {
 		publicFlagByte |= 0x01
 	}
@@ -54,7 +56,8 @@ func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber) er
 		publicFlagByte |= 0x04
 	}
 
-	if !h.ResetFlag && !h.VersionFlag {
+	// only set PacketNumberLen bits if a packet number will be written
+	if !(h.ResetFlag || (pers == protocol.PerspectiveServer && h.VersionFlag)) {
 		switch h.PacketNumberLen {
 		case protocol.PacketNumberLen1:
 			publicFlagByte |= 0x00
@@ -73,23 +76,30 @@ func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber) er
 		utils.WriteUint64(b, uint64(h.ConnectionID))
 	}
 
+	if h.VersionFlag && pers == protocol.PerspectiveClient {
+		utils.WriteUint32(b, protocol.VersionNumberToTag(h.VersionNumber))
+	}
+
 	if len(h.DiversificationNonce) > 0 {
 		b.Write(h.DiversificationNonce)
 	}
 
-	if !h.ResetFlag && !h.VersionFlag {
-		switch h.PacketNumberLen {
-		case protocol.PacketNumberLen1:
-			b.WriteByte(uint8(h.PacketNumber))
-		case protocol.PacketNumberLen2:
-			utils.WriteUint16(b, uint16(h.PacketNumber))
-		case protocol.PacketNumberLen4:
-			utils.WriteUint32(b, uint32(h.PacketNumber))
-		case protocol.PacketNumberLen6:
-			utils.WriteUint48(b, uint64(h.PacketNumber))
-		default:
-			return errPacketNumberLenNotSet
-		}
+	// if we're a server, and the VersionFlag is set, we must not include anything else in the packet
+	if h.ResetFlag || (pers == protocol.PerspectiveServer && h.VersionFlag) {
+		return nil
+	}
+
+	switch h.PacketNumberLen {
+	case protocol.PacketNumberLen1:
+		b.WriteByte(uint8(h.PacketNumber))
+	case protocol.PacketNumberLen2:
+		utils.WriteUint16(b, uint16(h.PacketNumber))
+	case protocol.PacketNumberLen4:
+		utils.WriteUint32(b, uint32(h.PacketNumber))
+	case protocol.PacketNumberLen6:
+		utils.WriteUint48(b, uint64(h.PacketNumber))
+	default:
+		return errPacketNumberLenNotSet
 	}
 
 	return nil
