@@ -18,6 +18,7 @@ type packedPacket struct {
 
 type packetPacker struct {
 	connectionID protocol.ConnectionID
+	perspective  protocol.Perspective
 	version      protocol.VersionNumber
 	cryptoSetup  handshake.CryptoSetup
 
@@ -29,11 +30,12 @@ type packetPacker struct {
 	controlFrames []frames.Frame
 }
 
-func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup handshake.CryptoSetup, connectionParameters handshake.ConnectionParametersManager, streamFramer *streamFramer, version protocol.VersionNumber) *packetPacker {
+func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup handshake.CryptoSetup, connectionParameters handshake.ConnectionParametersManager, streamFramer *streamFramer, perspective protocol.Perspective, version protocol.VersionNumber) *packetPacker {
 	return &packetPacker{
 		cryptoSetup:           cryptoSetup,
 		connectionID:          connectionID,
 		connectionParameters:  connectionParameters,
+		perspective:           perspective,
 		version:               version,
 		streamFramer:          streamFramer,
 		packetNumberGenerator: newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
@@ -110,7 +112,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	raw := getPacketBuffer()
 	buffer := bytes.NewBuffer(raw)
 
-	if err = responsePublicHeader.Write(buffer, p.version, protocol.PerspectiveServer); err != nil {
+	if err = responsePublicHeader.Write(buffer, p.version, p.perspective); err != nil {
 		return nil, err
 	}
 

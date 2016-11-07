@@ -33,6 +33,7 @@ var _ = Describe("Packet packer", func() {
 			connectionParameters:  cpm,
 			packetNumberGenerator: newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
 			streamFramer:          streamFramer,
+			perspective:                 protocol.PerspectiveServer,
 		}
 		publicHeaderLen = 1 + 8 + 2 // 1 flag byte, 8 connection ID, 2 packet number
 		packer.version = protocol.Version34

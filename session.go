@@ -108,14 +108,13 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 
 	session.setup()
 	cryptoStream, _ := session.GetOrOpenStream(1)
-
 	var err error
 	session.cryptoSetup, err = handshake.NewCryptoSetup(connectionID, conn.RemoteAddr().IP, v, sCfg, cryptoStream, session.connectionParameters, session.aeadChanged)
 	if err != nil {
 		return nil, err
 	}
 
-	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.connectionParameters, session.streamFramer, session.version)
+	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.connectionParameters, session.streamFramer, session.perspective, session.version)
 	session.unpacker = &packetUnpacker{aead: session.cryptoSetup, version: session.version}
 
 	return session, err
@@ -142,7 +141,7 @@ func newClientSession(conn *net.UDPConn, addr *net.UDPAddr, v protocol.VersionNu
 		return nil, err
 	}
 
-	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.connectionParameters, session.streamFramer, session.version)
+	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.connectionParameters, session.streamFramer, session.perspective, session.version)
 	session.unpacker = &packetUnpacker{aead: session.cryptoSetup, version: session.version}
 
 	return session, err
