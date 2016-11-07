@@ -57,7 +57,7 @@ func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pe
 	}
 
 	// only set PacketNumberLen bits if a packet number will be written
-	if !(h.ResetFlag || (pers == protocol.PerspectiveServer && h.VersionFlag)) {
+	if h.hasPacketNumber(pers) {
 		switch h.PacketNumberLen {
 		case protocol.PacketNumberLen1:
 			publicFlagByte |= 0x00
@@ -85,7 +85,7 @@ func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pe
 	}
 
 	// if we're a server, and the VersionFlag is set, we must not include anything else in the packet
-	if h.ResetFlag || (pers == protocol.PerspectiveServer && h.VersionFlag) {
+	if !h.hasPacketNumber(pers) {
 		return nil
 	}
 
@@ -110,7 +110,8 @@ func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pe
 }
 
 // ParsePublicHeader parses a QUIC packet's public header
-func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
+// the packetSentBy is the perspective of the peer that sent this PublicHeader, i.e. if we're the server, packetSentBy should be PerspectiveClient
+func ParsePublicHeader(b io.ByteReader, packetSentBy protocol.Perspective) (*PublicHeader, error) {
 	header := &PublicHeader{}
 
 	// First byte
@@ -131,15 +132,17 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 		return nil, errReceivedTruncatedConnectionID
 	}
 
-	switch publicFlagByte & 0x30 {
-	case 0x30:
-		header.PacketNumberLen = protocol.PacketNumberLen6
-	case 0x20:
-		header.PacketNumberLen = protocol.PacketNumberLen4
-	case 0x10:
-		header.PacketNumberLen = protocol.PacketNumberLen2
-	case 0x00:
-		header.PacketNumberLen = protocol.PacketNumberLen1
+	if header.hasPacketNumber(packetSentBy) {
+		switch publicFlagByte & 0x30 {
+		case 0x30:
+			header.PacketNumberLen = protocol.PacketNumberLen6
+		case 0x20:
+			header.PacketNumberLen = protocol.PacketNumberLen4
+		case 0x10:
+			header.PacketNumberLen = protocol.PacketNumberLen2
+		case 0x00:
+			header.PacketNumberLen = protocol.PacketNumberLen1
+		}
 	}
 
 	// Connection ID
@@ -147,23 +150,24 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	header.ConnectionID = protocol.ConnectionID(connID)
 	if header.ConnectionID == 0 {
 		return nil, errInvalidConnectionID
 	}
 
-	if !header.ResetFlag {
-		// Version (optional)
-		if header.VersionFlag {
-			var versionTag uint32
-			versionTag, err = utils.ReadUint32(b)
-			if err != nil {
-				return nil, err
-			}
-			header.VersionNumber = protocol.VersionTagToNumber(versionTag)
+	// Version (optional)
+	if header.VersionFlag && !header.ResetFlag {
+		var versionTag uint32
+		versionTag, err = utils.ReadUint32(b)
+		if err != nil {
+			return nil, err
 		}
+		header.VersionNumber = protocol.VersionTagToNumber(versionTag)
+	}
 
-		// Packet number
+	// Packet number
+	if header.hasPacketNumber(packetSentBy) {
 		packetNumber, err := utils.ReadUintN(b, uint8(header.PacketNumberLen))
 		if err != nil {
 			return nil, err
@@ -191,4 +195,16 @@ func (h *PublicHeader) GetLength() (protocol.ByteCount, error) {
 	length += protocol.ByteCount(len(h.DiversificationNonce))
 	length += protocol.ByteCount(h.PacketNumberLen)
 	return length, nil
+}
+
+// hasPacketNumber determines if this PublicHeader will contain a packet number
+// this depends on the ResetFlag, the VersionFlag and who sent the packet
+func (h *PublicHeader) hasPacketNumber(packetSentBy protocol.Perspective) bool {
+	if h.ResetFlag {
+		return false
+	}
+	if h.VersionFlag && packetSentBy == protocol.PerspectiveServer {
+		return false
+	}
+	return true
 }

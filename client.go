@@ -81,7 +81,7 @@ func (c *Client) handlePacket(packet []byte) error {
 
 	r := bytes.NewReader(packet)
 
-	hdr, err := ParsePublicHeader(r)
+	hdr, err := ParsePublicHeader(r, protocol.PerspectiveServer)
 	if err != nil {
 		return qerr.Error(qerr.InvalidPacketHeader, err.Error())
 	}
