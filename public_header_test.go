@@ -94,7 +94,8 @@ var _ = Describe("Public Header", func() {
 				PacketNumber:    2,
 				PacketNumberLen: protocol.PacketNumberLen6,
 			}
-			hdr.Write(b, protocol.Version35, protocol.PerspectiveServer)
+			err := hdr.Write(b, protocol.Version35, protocol.PerspectiveServer)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(b.Bytes()).To(Equal([]byte{0x38, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 2, 0, 0, 0, 0, 0}))
 		})
 
@@ -105,8 +106,19 @@ var _ = Describe("Public Header", func() {
 				PacketNumber:    0x1337,
 				PacketNumberLen: protocol.PacketNumberLen6,
 			}
-			hdr.Write(b, protocol.Version35, protocol.PerspectiveClient)
+			err := hdr.Write(b, protocol.Version35, protocol.PerspectiveClient)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(b.Bytes()).To(Equal([]byte{0x38, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x37, 0x13, 0, 0, 0, 0}))
+		})
+
+		It("refuses to write a Public Header if the PacketNumberLen is not set", func() {
+			hdr := PublicHeader{
+				ConnectionID: 1,
+				PacketNumber: 2,
+			}
+			b := &bytes.Buffer{}
+			err := hdr.Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
+			Expect(err).To(MatchError(errPacketNumberLenNotSet))
 		})
 
 		It("truncates the connection ID", func() {
@@ -173,7 +185,8 @@ var _ = Describe("Public Header", func() {
 					PacketNumber:    2,
 					PacketNumberLen: protocol.PacketNumberLen6,
 				}
-				hdr.Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
+				err := hdr.Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
+				Expect(err).ToNot(HaveOccurred())
 				// must be the first assertion
 				Expect(b.Len()).To(Equal(1 + 8)) // 1 FlagByte + 8 ConnectionID
 				firstByte, _ := b.ReadByte()
@@ -190,7 +203,8 @@ var _ = Describe("Public Header", func() {
 					PacketNumber:    0x1337,
 					PacketNumberLen: protocol.PacketNumberLen6,
 				}
-				hdr.Write(b, protocol.VersionWhatever, protocol.PerspectiveClient)
+				err := hdr.Write(b, protocol.VersionWhatever, protocol.PerspectiveClient)
+				Expect(err).ToNot(HaveOccurred())
 				// must be the first assertion
 				Expect(b.Len()).To(Equal(1 + 8 + 4 + 6)) // 1 FlagByte + 8 ConnectionID + 4 version number + 6 PacketNumber
 				firstByte, _ := b.ReadByte()
@@ -210,7 +224,8 @@ var _ = Describe("Public Header", func() {
 					PacketNumber:    2,
 					PacketNumberLen: protocol.PacketNumberLen6,
 				}
-				hdr.Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
+				err := hdr.Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
+				Expect(err).ToNot(HaveOccurred())
 				// must be the first assertion
 				Expect(b.Len()).To(Equal(1 + 8)) // 1 FlagByte + 8 ConnectionID
 				firstByte, _ := b.ReadByte()
@@ -225,7 +240,8 @@ var _ = Describe("Public Header", func() {
 					PacketNumber:    2,
 					PacketNumberLen: protocol.PacketNumberLen6,
 				}
-				hdr.Write(b, protocol.VersionWhatever, protocol.PerspectiveClient)
+				err := hdr.Write(b, protocol.VersionWhatever, protocol.PerspectiveClient)
+				Expect(err).ToNot(HaveOccurred())
 				// must be the first assertion
 				Expect(b.Len()).To(Equal(1 + 8)) // 1 FlagByte + 8 ConnectionID
 			})

@@ -89,6 +89,10 @@ func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pe
 		return nil
 	}
 
+	if h.PacketNumberLen != protocol.PacketNumberLen1 && h.PacketNumberLen != protocol.PacketNumberLen2 && h.PacketNumberLen != protocol.PacketNumberLen4 && h.PacketNumberLen != protocol.PacketNumberLen6 {
+		return errPacketNumberLenNotSet
+	}
+
 	switch h.PacketNumberLen {
 	case protocol.PacketNumberLen1:
 		b.WriteByte(uint8(h.PacketNumber))
