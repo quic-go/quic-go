@@ -25,9 +25,11 @@ var _ = Describe("Packet packer", func() {
 
 		cpm := &mockConnectionParametersManager{}
 		streamFramer = newStreamFramer(newStreamsMap(nil, cpm), fcm)
+		cs, err := handshake.NewCryptoSetup(0, nil, protocol.VersionWhatever, nil, nil, nil, nil)
+		Expect(err).ToNot(HaveOccurred())
 
 		packer = &packetPacker{
-			cryptoSetup:           &handshake.CryptoSetup{},
+			cryptoSetup:           cs,
 			connectionParameters:  cpm,
 			packetNumberGenerator: newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
 			streamFramer:          streamFramer,

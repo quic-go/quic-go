@@ -138,7 +138,7 @@ var _ = Describe("Crypto setup", func() {
 		kex         *mockKEX
 		signer      *mockSigner
 		scfg        *ServerConfig
-		cs          *CryptoSetup
+		cs          *cryptoSetupServer
 		stream      *mockStream
 		cpm         ConnectionParametersManager
 		aeadChanged chan struct{}
@@ -171,9 +171,10 @@ var _ = Describe("Crypto setup", func() {
 		Expect(err).NotTo(HaveOccurred())
 		scfg.stkSource = &mockStkSource{}
 		v := protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
-		cpm = NewConnectionParamatersManager(protocol.Version36)
-		cs, err = NewCryptoSetup(protocol.ConnectionID(42), ip, v, scfg, stream, cpm, aeadChanged)
+		cpm = NewConnectionParamatersManager(protocol.VersionWhatever)
+		csInt, err := NewCryptoSetup(protocol.ConnectionID(42), ip, v, scfg, stream, cpm, aeadChanged)
 		Expect(err).NotTo(HaveOccurred())
+		cs = csInt.(*cryptoSetupServer)
 		cs.keyDerivation = mockKeyDerivation
 		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
 	})

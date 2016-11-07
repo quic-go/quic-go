@@ -63,7 +63,7 @@ type Session struct {
 	unpacker unpacker
 	packer   *packetPacker
 
-	cryptoSetup *handshake.CryptoSetup
+	cryptoSetup handshake.CryptoSetup
 
 	receivedPackets  chan *receivedPacket
 	sendingScheduled chan struct{}
