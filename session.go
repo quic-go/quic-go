@@ -43,6 +43,7 @@ type closeCallback func(id protocol.ConnectionID)
 // A Session is a QUIC session
 type Session struct {
 	connectionID protocol.ConnectionID
+	perspective  protocol.Perspective
 	version      protocol.VersionNumber
 
 	streamCallback StreamCallback
@@ -95,54 +96,87 @@ type Session struct {
 
 // newSession makes a new session
 func newSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) (packetHandler, error) {
-	connectionParameters := handshake.NewConnectionParamatersManager(v)
-
-	var sentPacketHandler ackhandler.SentPacketHandler
-	rttStats := &congestion.RTTStats{}
-
-	sentPacketHandler = ackhandler.NewSentPacketHandler(rttStats)
-	flowControlManager := flowcontrol.NewFlowControlManager(connectionParameters, rttStats)
-
-	now := time.Now()
 	session := &Session{
 		conn:         conn,
 		connectionID: connectionID,
+		perspective:  protocol.PerspectiveServer,
 		version:      v,
 
 		streamCallback: streamCallback,
 		closeCallback:  closeCallback,
-
-		connectionParameters: connectionParameters,
-		sentPacketHandler:    sentPacketHandler,
-		flowControlManager:   flowControlManager,
-
-		receivedPackets:      make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets),
-		closeChan:            make(chan *qerr.QuicError, 1),
-		sendingScheduled:     make(chan struct{}, 1),
-		undecryptablePackets: make([]*receivedPacket, 0, protocol.MaxUndecryptablePackets),
-		aeadChanged:          make(chan struct{}, 1),
-		runClosed:            make(chan struct{}, 1), // this channel will receive once the run loop has been stopped
-
-		timer: time.NewTimer(0),
-		lastNetworkActivityTime: now,
-		sessionCreationTime:     now,
 	}
 
-	session.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(session.ackAlarmChanged)
-	session.streamsMap = newStreamsMap(session.newStream, session.connectionParameters)
-
+	session.setup()
 	cryptoStream, _ := session.GetOrOpenStream(1)
+
 	var err error
 	session.cryptoSetup, err = handshake.NewCryptoSetup(connectionID, conn.RemoteAddr().IP, v, sCfg, cryptoStream, session.connectionParameters, session.aeadChanged)
 	if err != nil {
 		return nil, err
 	}
 
-	session.streamFramer = newStreamFramer(session.streamsMap, flowControlManager)
-	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.connectionParameters, session.streamFramer, v)
-	session.unpacker = &packetUnpacker{aead: session.cryptoSetup, version: v}
+	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.connectionParameters, session.streamFramer, session.version)
+	session.unpacker = &packetUnpacker{aead: session.cryptoSetup, version: session.version}
 
 	return session, err
+}
+
+func newClientSession(conn *net.UDPConn, addr *net.UDPAddr, v protocol.VersionNumber, connectionID protocol.ConnectionID, streamCallback StreamCallback, closeCallback closeCallback) (*Session, error) {
+	session := &Session{
+		conn:         &udpConn{conn: conn, currentAddr: addr},
+		connectionID: connectionID,
+		perspective:  protocol.PerspectiveClient,
+		version:      v,
+
+		streamCallback: streamCallback,
+		closeCallback:  closeCallback,
+	}
+
+	session.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(session.ackAlarmChanged)
+	session.setup()
+
+	cryptoStream, _ := session.GetOrOpenStream(1)
+	var err error
+	session.cryptoSetup, err = handshake.NewCryptoSetupClient(connectionID, v, cryptoStream)
+	if err != nil {
+		return nil, err
+	}
+
+	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.connectionParameters, session.streamFramer, session.version)
+	session.unpacker = &packetUnpacker{aead: session.cryptoSetup, version: session.version}
+
+	return session, err
+}
+
+// setup is called from newSession and newClientSession and initializes values that are independent of the perspective
+func (s *Session) setup() {
+	s.rttStats = &congestion.RTTStats{}
+	connectionParameters := handshake.NewConnectionParamatersManager(s.version)
+	flowControlManager := flowcontrol.NewFlowControlManager(connectionParameters, s.rttStats)
+
+	var sentPacketHandler ackhandler.SentPacketHandler
+	sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats)
+
+	now := time.Now()
+
+	s.connectionParameters = connectionParameters
+	s.sentPacketHandler = sentPacketHandler
+	s.flowControlManager = flowControlManager
+	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.ackAlarmChanged)
+
+	s.receivedPackets = make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets)
+	s.closeChan = make(chan *qerr.QuicError, 1)
+	s.sendingScheduled = make(chan struct{}, 1)
+	s.undecryptablePackets = make([]*receivedPacket, 0, protocol.MaxUndecryptablePackets)
+	s.aeadChanged = make(chan struct{}, 1)
+	s.runClosed = make(chan struct{}, 1)
+
+	s.timer = time.NewTimer(0)
+	s.lastNetworkActivityTime = now
+	s.sessionCreationTime = now
+
+	s.streamsMap = newStreamsMap(s.newStream, s.connectionParameters)
+	s.streamFramer = newStreamFramer(s.streamsMap, s.flowControlManager)
 }
 
 // run the session main loop

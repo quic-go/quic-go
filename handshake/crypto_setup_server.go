@@ -46,7 +46,7 @@ type cryptoSetupServer struct {
 
 var _ crypto.AEAD = &cryptoSetupServer{}
 
-// NewCryptoSetup creates a new CryptoSetup instance
+// NewCryptoSetup creates a new CryptoSetup instance for a server
 func NewCryptoSetup(
 	connID protocol.ConnectionID,
 	ip net.IP,
