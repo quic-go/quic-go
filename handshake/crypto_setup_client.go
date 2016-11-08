@@ -17,7 +17,7 @@ type cryptoSetupClient struct {
 
 	cryptoStream utils.Stream
 
-	hasServerConfig bool
+	serverConfig *serverConfigClient
 }
 
 var _ crypto.AEAD = &cryptoSetupClient{}
@@ -43,12 +43,24 @@ func (h *cryptoSetupClient) HandleCryptoStream() error {
 	}
 
 	for {
-		var chloData bytes.Buffer
-		messageTag, cryptoData, err := ParseHandshakeMessage(io.TeeReader(h.cryptoStream, &chloData))
-		_ = cryptoData
-		utils.Debugf("Received message on Crypto Stream. MessageTag: %#v", messageTag)
+		var shloData bytes.Buffer
+		messageTag, cryptoData, err := ParseHandshakeMessage(io.TeeReader(h.cryptoStream, &shloData))
 		if err != nil {
 			return qerr.HandshakeFailed
+		}
+
+		if messageTag == TagSHLO {
+			utils.Debugf("Got SHLO:\n%s", printHandshakeMessage(cryptoData))
+		} else if messageTag == TagREJ {
+			utils.Debugf("Got REJ:\n%s", printHandshakeMessage(cryptoData))
+			if scfg, ok := cryptoData[TagSCFG]; ok {
+				h.serverConfig, err = parseServerConfig(scfg)
+				if err != nil {
+					return err
+				}
+			}
+		} else {
+			return qerr.InvalidCryptoMessageType
 		}
 	}
 }
