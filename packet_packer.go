@@ -74,7 +74,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 		DiversificationNonce: p.cryptoSetup.DiversificationNonce(),
 	}
 
-	publicHeaderLength, err := responsePublicHeader.GetLength()
+	publicHeaderLength, err := responsePublicHeader.GetLength(p.perspective)
 	if err != nil {
 		return nil, err
 	}

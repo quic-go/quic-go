@@ -11,11 +11,11 @@ import (
 )
 
 var (
-	errPacketNumberLenNotSet          = errors.New("PublicHeader: PacketNumberLen not set")
-	errResetAndVersionFlagSet         = errors.New("PublicHeader: Reset Flag and Version Flag should not be set at the same time")
-	errReceivedTruncatedConnectionID  = qerr.Error(qerr.InvalidPacketHeader, "receiving packets with truncated ConnectionID is not supported")
-	errInvalidConnectionID            = qerr.Error(qerr.InvalidPacketHeader, "connection ID cannot be 0")
-	errGetLengthOnlyForRegularPackets = errors.New("PublicHeader: GetLength can only be called for regular packets")
+	errPacketNumberLenNotSet             = errors.New("PublicHeader: PacketNumberLen not set")
+	errResetAndVersionFlagSet            = errors.New("PublicHeader: Reset Flag and Version Flag should not be set at the same time")
+	errReceivedTruncatedConnectionID     = qerr.Error(qerr.InvalidPacketHeader, "receiving packets with truncated ConnectionID is not supported")
+	errInvalidConnectionID               = qerr.Error(qerr.InvalidPacketHeader, "connection ID cannot be 0")
+	errGetLengthNotForVersionNegotiation = errors.New("PublicHeader: GetLength cannot be called for VersionNegotiation packets")
 )
 
 // The PublicHeader of a QUIC packet
@@ -192,20 +192,35 @@ func ParsePublicHeader(b io.ByteReader, packetSentBy protocol.Perspective) (*Pub
 
 // GetLength gets the length of the publicHeader in bytes
 // can only be called for regular packets
-func (h *PublicHeader) GetLength() (protocol.ByteCount, error) {
-	if h.VersionFlag || h.ResetFlag {
-		return 0, errGetLengthOnlyForRegularPackets
+func (h *PublicHeader) GetLength(pers protocol.Perspective) (protocol.ByteCount, error) {
+	if h.VersionFlag && h.ResetFlag {
+		return 0, errResetAndVersionFlagSet
+	}
+
+	if h.VersionFlag && pers == protocol.PerspectiveServer {
+		return 0, errGetLengthNotForVersionNegotiation
 	}
 
 	length := protocol.ByteCount(1) // 1 byte for public flags
-	if h.PacketNumberLen != protocol.PacketNumberLen1 && h.PacketNumberLen != protocol.PacketNumberLen2 && h.PacketNumberLen != protocol.PacketNumberLen4 && h.PacketNumberLen != protocol.PacketNumberLen6 {
-		return 0, errPacketNumberLenNotSet
+
+	if h.hasPacketNumber(pers) {
+		if h.PacketNumberLen != protocol.PacketNumberLen1 && h.PacketNumberLen != protocol.PacketNumberLen2 && h.PacketNumberLen != protocol.PacketNumberLen4 && h.PacketNumberLen != protocol.PacketNumberLen6 {
+			return 0, errPacketNumberLenNotSet
+		}
+		length += protocol.ByteCount(h.PacketNumberLen)
 	}
+
 	if !h.TruncateConnectionID {
 		length += 8 // 8 bytes for the connection ID
 	}
+
+	// Version Number in packets sent by the client
+	if h.VersionFlag {
+		length += 4
+	}
+
 	length += protocol.ByteCount(len(h.DiversificationNonce))
-	length += protocol.ByteCount(h.PacketNumberLen)
+
 	return length, nil
 }
 
