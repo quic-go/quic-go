@@ -2,6 +2,7 @@ package handshake
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
 
 	"github.com/lucas-clemente/quic-go/crypto"
@@ -81,6 +82,10 @@ func (h *cryptoSetupClient) getInchoateCHLOValues() map[Tag][]byte {
 	tags[TagSNI] = []byte("quic.clemente.io") // TODO: use real SNI here
 	tags[TagPDMD] = []byte("X509")
 	tags[TagPAD] = bytes.Repeat([]byte("0"), protocol.ClientHelloMinimumSize)
+
+	versionTag := make([]byte, 4, 4)
+	binary.LittleEndian.PutUint32(versionTag, protocol.VersionNumberToTag(h.version))
+	tags[TagVER] = versionTag
 
 	return tags
 }

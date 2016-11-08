@@ -12,6 +12,7 @@ var _ = Describe("Crypto setup", func() {
 	BeforeEach(func() {
 		cs = cryptoSetupClient{
 			cryptoStream: &mockStream{},
+			version:      protocol.Version36,
 		}
 	})
 
@@ -20,6 +21,7 @@ var _ = Describe("Crypto setup", func() {
 			tags := cs.getInchoateCHLOValues()
 			Expect(tags).To(HaveKey(TagSNI))
 			Expect(tags[TagPDMD]).To(Equal([]byte("X509")))
+			Expect(tags[TagVER]).To(Equal([]byte("Q036")))
 		})
 
 		It("is longer than the miminum client hello size", func() {
