@@ -2,8 +2,11 @@ package handshake
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"io"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -22,6 +25,10 @@ type cryptoSetupClient struct {
 
 var _ crypto.AEAD = &cryptoSetupClient{}
 var _ CryptoSetup = &cryptoSetupClient{}
+
+var (
+	errNoObitForClientNonce = errors.New("No OBIT for client nonce available")
+)
 
 // NewCryptoSetupClient creates a new CryptoSetup instance for a client
 func NewCryptoSetupClient(
@@ -113,4 +120,22 @@ func (h *cryptoSetupClient) sendInchoateCHLO() error {
 		return err
 	}
 	return nil
+}
+
+func (h *cryptoSetupClient) generateClientNonce() ([]byte, error) {
+	nonce := make([]byte, 32)
+	binary.BigEndian.PutUint32(nonce, uint32(time.Now().Unix()))
+
+	if len(h.serverConfig.obit) != 8 {
+		return nil, errNoObitForClientNonce
+	}
+
+	copy(nonce[4:12], h.serverConfig.obit)
+
+	_, err := rand.Read(nonce[12:])
+	if err != nil {
+		return nil, err
+	}
+
+	return nonce, nil
 }
