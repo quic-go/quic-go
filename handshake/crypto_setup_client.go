@@ -36,7 +36,10 @@ func NewCryptoSetupClient(
 }
 
 func (h *cryptoSetupClient) HandleCryptoStream() error {
-	h.sendInchoateCHLO()
+	err := h.sendInchoateCHLO()
+	if err != nil {
+		return err
+	}
 
 	for {
 		var chloData bytes.Buffer
@@ -73,14 +76,19 @@ func (h *cryptoSetupClient) HandshakeComplete() bool {
 	return false
 }
 
-func (h *cryptoSetupClient) sendInchoateCHLO() error {
-	b := &bytes.Buffer{}
-
+func (h *cryptoSetupClient) getInchoateCHLOValues() map[Tag][]byte {
 	tags := make(map[Tag][]byte)
 	tags[TagSNI] = []byte("quic.clemente.io") // TODO: use real SNI here
 	tags[TagPDMD] = []byte("X509")
-	tags[TagPAD] = bytes.Repeat([]byte("0"), 1000)
+	tags[TagPAD] = bytes.Repeat([]byte("0"), protocol.ClientHelloMinimumSize)
 
+	return tags
+}
+
+func (h *cryptoSetupClient) sendInchoateCHLO() error {
+	b := &bytes.Buffer{}
+
+	tags := h.getInchoateCHLOValues()
 	WriteHandshakeMessage(b, TagCHLO, tags)
 
 	_, err := h.cryptoStream.Write(b.Bytes())
