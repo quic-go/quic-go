@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/qerr"
 )
 
@@ -14,6 +15,9 @@ type serverConfigClient struct {
 	ID     []byte
 	obit   []byte
 	expiry time.Time
+
+	kex          crypto.KeyExchange
+	sharedSecret []byte
 }
 
 var (
@@ -91,6 +95,18 @@ func (s *serverConfigClient) parseValues(tagMap map[Tag][]byte) error {
 	}
 	if len(pubs) != 35 {
 		return qerr.Error(qerr.CryptoInvalidValueLength, "PUBS")
+	}
+
+	var err error
+	s.kex, err = crypto.NewCurve25519KEX()
+	if err != nil {
+		return err
+	}
+
+	// the PUBS value is always prepended by []byte{0x20, 0x00, 0x00}
+	s.sharedSecret, err = s.kex.CalculateSharedKey(pubs[3:])
+	if err != nil {
+		return err
 	}
 
 	// OBIT

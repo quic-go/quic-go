@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/crypto"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -153,6 +154,17 @@ var _ = Describe("Server Config", func() {
 		})
 
 		Context("PUBS", func() {
+			It("creates a Curve25519 key exchange", func() {
+				serverKex, err := crypto.NewCurve25519KEX()
+				Expect(err).ToNot(HaveOccurred())
+				tagMap[TagPUBS] = append([]byte{0x20, 0x00, 0x00}, serverKex.PublicKey()...)
+				err = scfg.parseValues(tagMap)
+				Expect(err).ToNot(HaveOccurred())
+				sharedSecret, err := serverKex.CalculateSharedKey(scfg.kex.PublicKey())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(scfg.sharedSecret).To(Equal(sharedSecret))
+			})
+
 			It("rejects PUBS values that have the wrong length", func() {
 				tagMap[TagPUBS] = bytes.Repeat([]byte{'F'}, 100) // completely wrong length
 				err := scfg.parseValues(tagMap)
