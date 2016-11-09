@@ -28,6 +28,14 @@ var _ = Describe("Cert compression", func() {
 		Expect(compressed).To(Equal([]byte{0}))
 	})
 
+	It("decompresses empty", func() {
+		compressed, err := compressChain(nil, nil, nil)
+		Expect(err).ToNot(HaveOccurred())
+		uncompressed, err := decompressChain(compressed)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(uncompressed).To(BeEmpty())
+	})
+
 	It("gives correct single cert", func() {
 		cert := []byte{0xde, 0xca, 0xfb, 0xad}
 		certZlib := &bytes.Buffer{}
@@ -43,6 +51,16 @@ var _ = Describe("Cert compression", func() {
 			0x01, 0x00,
 			0x08, 0x00, 0x00, 0x00,
 		}, certZlib.Bytes()...)))
+	})
+
+	It("decompresses a single cert", func() {
+		cert := []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe}
+		chain := [][]byte{cert}
+		compressed, err := compressChain(chain, nil, nil)
+		Expect(err).ToNot(HaveOccurred())
+		uncompressed, err := decompressChain(compressed)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(uncompressed).To(Equal(chain))
 	})
 
 	It("gives correct cert and intermediate", func() {
@@ -63,6 +81,17 @@ var _ = Describe("Cert compression", func() {
 			0x01, 0x01, 0x00,
 			0x10, 0x00, 0x00, 0x00,
 		}, certZlib.Bytes()...)))
+	})
+
+	It("decompresses the chain with a cert and an intermediate", func() {
+		cert1 := []byte{0xde, 0xca, 0xfb, 0xad}
+		cert2 := []byte{0xde, 0xad, 0xbe, 0xef}
+		chain := [][]byte{cert1, cert2}
+		compressed, err := compressChain(chain, nil, nil)
+		Expect(err).ToNot(HaveOccurred())
+		decompressed, err := decompressChain(compressed)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(decompressed).To(Equal(chain))
 	})
 
 	It("uses cached certificates", func() {

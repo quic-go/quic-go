@@ -89,6 +89,74 @@ func compressChain(chain [][]byte, pCommonSetHashes, pCachedHashes []byte) ([]by
 	return res.Bytes(), nil
 }
 
+func decompressChain(data []byte) ([][]byte, error) {
+	var chain [][]byte
+	r := bytes.NewReader(data)
+
+	var numCerts int
+	for {
+		entryTypeByte, err := r.ReadByte()
+		if entryTypeByte == 0 {
+			break
+		}
+
+		et := entryType(entryTypeByte)
+		if err != nil {
+			return nil, err
+		}
+
+		numCerts++
+
+		switch et {
+		case entryCached:
+			panic("not yet implemented")
+		case entryCommon:
+			panic("not yet implemented")
+		case entryCompressed:
+			continue
+		default:
+			return nil, errors.New("unknown entryType")
+		}
+	}
+
+	if numCerts == 0 {
+		return make([][]byte, 0, 0), nil
+	}
+
+	uncompressedLength, err := utils.ReadUint32(r)
+	if err != nil {
+		return nil, err
+	}
+
+	gz, err := zlib.NewReaderDict(r, certDictZlib)
+	if err != nil {
+		return nil, err
+	}
+	defer gz.Close()
+
+	var totalLength uint32
+	for totalLength < uncompressedLength {
+		lenBytes := make([]byte, 4)
+		_, err := gz.Read(lenBytes)
+		if err != nil {
+			return nil, err
+		}
+		certLen := binary.LittleEndian.Uint32(lenBytes)
+
+		cert := make([]byte, certLen)
+		n, err := gz.Read(cert)
+		if uint32(n) != certLen && err != nil {
+			return nil, err
+		}
+
+		chain = append(chain, cert)
+
+		totalLength += 4 + certLen
+	}
+
+	return chain, nil
+}
+
 func buildEntries(chain [][]byte, chainHashes, cachedHashes, setHashes []uint64) []entry {
 	res := make([]entry, len(chain))
 chainLoop:
