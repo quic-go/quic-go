@@ -36,6 +36,33 @@ var _ = Describe("Crypto setup", func() {
 		})
 	})
 
+	Context("Diversification Nonces", func() {
+		It("sets a diversification nonce", func() {
+			nonce := []byte("foobar")
+			err := cs.SetDiversificationNonce(nonce)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cs.diversificationNonce).To(Equal(nonce))
+		})
+
+		It("doesn't do anything when called multiple times with the same nonce", func() {
+			nonce := []byte("foobar")
+			err := cs.SetDiversificationNonce(nonce)
+			Expect(err).ToNot(HaveOccurred())
+			err = cs.SetDiversificationNonce(nonce)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cs.diversificationNonce).To(Equal(nonce))
+		})
+
+		It("rejects a different diversification nonce", func() {
+			nonce1 := []byte("foobar")
+			nonce2 := []byte("raboof")
+			err := cs.SetDiversificationNonce(nonce1)
+			Expect(err).ToNot(HaveOccurred())
+			err = cs.SetDiversificationNonce(nonce2)
+			Expect(err).To(MatchError(errConflictingDiversificationNonces))
+		})
+	})
+
 	Context("Client Nonce generation", func() {
 		BeforeEach(func() {
 			cs.serverConfig.obit = []byte{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8}

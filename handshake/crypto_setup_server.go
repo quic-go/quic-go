@@ -361,6 +361,10 @@ func (h *cryptoSetupServer) DiversificationNonce() []byte {
 	return h.diversificationNonce
 }
 
+func (h *cryptoSetupServer) SetDiversificationNonce(data []byte) error {
+	panic("not needed for cryptoSetupServer")
+}
+
 // LockForSealing should be called before Seal(). It is needed so that diversification nonces can be obtained before packets are sealed, and the AEADs are not changed in the meantime.
 func (h *cryptoSetupServer) LockForSealing() {
 	h.mutex.RLock()

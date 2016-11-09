@@ -21,13 +21,15 @@ type cryptoSetupClient struct {
 	cryptoStream utils.Stream
 
 	serverConfig *serverConfigClient
+	diversificationNonce []byte
 }
 
 var _ crypto.AEAD = &cryptoSetupClient{}
 var _ CryptoSetup = &cryptoSetupClient{}
 
 var (
-	errNoObitForClientNonce = errors.New("No OBIT for client nonce available")
+	errNoObitForClientNonce             = errors.New("No OBIT for client nonce available")
+	errConflictingDiversificationNonces = errors.New("Received two different diversification nonces")
 )
 
 // NewCryptoSetupClient creates a new CryptoSetup instance for a client
@@ -81,6 +83,17 @@ func (h *cryptoSetupClient) Seal(dst, src []byte, packetNumber protocol.PacketNu
 }
 
 func (h *cryptoSetupClient) DiversificationNonce() []byte {
+	panic("not needed for cryptoSetupClient")
+}
+
+func (h *cryptoSetupClient) SetDiversificationNonce(data []byte) error {
+	if len(h.diversificationNonce) == 0 {
+		h.diversificationNonce = data
+		return nil
+	}
+	if !bytes.Equal(h.diversificationNonce, data) {
+		return errConflictingDiversificationNonces
+	}
 	return nil
 }
 
