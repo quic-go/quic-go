@@ -311,8 +311,10 @@ func (s *Session) handlePacketImpl(p *receivedPacket) error {
 	if quicErr, ok := err.(*qerr.QuicError); ok && quicErr.ErrorCode == qerr.DecryptionFailure {
 		return err
 	}
-	// update the remote address, even if unpacking failed for any other reason than a decryption error
-	s.conn.setCurrentRemoteAddr(p.remoteAddr)
+	if s.perspective == protocol.PerspectiveServer {
+		// update the remote address, even if unpacking failed for any other reason than a decryption error
+		s.conn.setCurrentRemoteAddr(p.remoteAddr)
+	}
 	if err != nil {
 		return err
 	}
