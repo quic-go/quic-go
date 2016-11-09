@@ -286,6 +286,13 @@ func (s *Session) idleTimeout() time.Duration {
 }
 
 func (s *Session) handlePacketImpl(p *receivedPacket) error {
+	if s.perspective == protocol.PerspectiveClient {
+		diversificationNonce := p.publicHeader.DiversificationNonce
+		if len(diversificationNonce) > 0 {
+			s.cryptoSetup.SetDiversificationNonce(diversificationNonce)
+		}
+	}
+
 	if p.rcvTime.IsZero() {
 		// To simplify testing
 		p.rcvTime = time.Now()
