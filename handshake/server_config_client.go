@@ -10,6 +10,7 @@ import (
 )
 
 type serverConfigClient struct {
+	raw    []byte
 	ID     []byte
 	obit   []byte
 	expiry time.Time
@@ -29,7 +30,7 @@ func parseServerConfig(data []byte) (*serverConfigClient, error) {
 		return nil, errMessageNotServerConfig
 	}
 
-	scfg := &serverConfigClient{}
+	scfg := &serverConfigClient{raw: data}
 	err = scfg.parseValues(tagMap)
 	if err != nil {
 		return nil, err
@@ -115,4 +116,8 @@ func (s *serverConfigClient) parseValues(tagMap map[Tag][]byte) error {
 	// TODO: implement VER
 
 	return nil
+}
+
+func (s *serverConfigClient) Get() []byte {
+	return s.raw
 }

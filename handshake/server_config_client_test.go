@@ -22,6 +22,23 @@ var _ = Describe("Server Config", func() {
 		tagMap[TagEXPY] = bytes.Repeat([]byte{0}, 8)
 	})
 
+	It("returns the parsed server config", func() {
+		tagMap[TagSCID] = []byte{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf}
+		b := &bytes.Buffer{}
+		WriteHandshakeMessage(b, TagSCFG, tagMap)
+		scfg, err := parseServerConfig(b.Bytes())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(scfg.ID).To(Equal(tagMap[TagSCID]))
+	})
+
+	It("saves the raw server config", func() {
+		b := &bytes.Buffer{}
+		WriteHandshakeMessage(b, TagSCFG, tagMap)
+		scfg, err := parseServerConfig(b.Bytes())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(scfg.raw).To(Equal(b.Bytes()))
+	})
+
 	Context("parsing the server config", func() {
 		It("rejects a handshake message with the wrong message tag", func() {
 			var serverConfig bytes.Buffer
