@@ -106,6 +106,32 @@ var _ = Describe("Crypto setup", func() {
 			Expect(tags[TagPDMD]).To(Equal([]byte("X509")))
 			Expect(tags[TagVER]).To(Equal([]byte("Q036")))
 		})
+
+		It("includes the server config id, if available", func() {
+			id := []byte("foobar")
+			cs.serverConfig = &serverConfigClient{ID: id}
+			tags := cs.getTags()
+			Expect(tags[TagSCID]).To(Equal(id))
+		})
+
+		It("includes the source address token, if available", func() {
+			cs.stk = []byte("sourceaddresstoken")
+			tags := cs.getTags()
+			Expect(tags[TagSTK]).To(Equal(cs.stk))
+		})
+
+		It("includes the server nonce, if available", func() {
+			cs.sno = []byte("foobar")
+			tags := cs.getTags()
+			Expect(tags[TagSNO]).To(Equal(cs.sno))
+		})
+
+		It("doesn't include optional values, if not available", func() {
+			tags := cs.getTags()
+			Expect(tags).ToNot(HaveKey(TagSCID))
+			Expect(tags).ToNot(HaveKey(TagSNO))
+			Expect(tags).ToNot(HaveKey(TagSTK))
+		})
 	})
 
 	Context("Diversification Nonces", func() {

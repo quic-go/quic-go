@@ -170,6 +170,18 @@ func (h *cryptoSetupClient) getTags() map[Tag][]byte {
 	binary.LittleEndian.PutUint32(versionTag, protocol.VersionNumberToTag(h.version))
 	tags[TagVER] = versionTag
 
+	if len(h.stk) > 0 {
+		tags[TagSTK] = h.stk
+	}
+
+	if len(h.sno) > 0 {
+		tags[TagSNO] = h.sno
+	}
+
+	if h.serverConfig != nil {
+		tags[TagSCID] = h.serverConfig.ID
+	}
+
 	return tags
 }
 
