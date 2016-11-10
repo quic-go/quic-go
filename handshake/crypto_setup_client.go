@@ -82,11 +82,22 @@ func (h *cryptoSetupClient) HandleCryptoStream() error {
 
 func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 	utils.Debugf("Got REJ:\n%s", printHandshakeMessage(cryptoData))
+
+	var err error
+
 	if stk, ok := cryptoData[TagSTK]; ok {
 		h.stk = stk
 	}
+
 	if sno, ok := cryptoData[TagSNO]; ok {
 		h.sno = sno
+	}
+
+	if scfg, ok := cryptoData[TagSCFG]; ok {
+		h.serverConfig, err = parseServerConfig(scfg)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

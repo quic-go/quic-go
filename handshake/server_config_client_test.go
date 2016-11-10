@@ -9,18 +9,23 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+// This tagMap can be passed to parseValues and is garantueed to not cause any errors
+func getDefaultServerConfigClient() map[Tag][]byte {
+	return map[Tag][]byte{
+		TagSCID: bytes.Repeat([]byte{'F'}, 16),
+		TagKEXS: []byte("C255"),
+		TagAEAD: []byte("AESG"),
+		TagPUBS: bytes.Repeat([]byte{0}, 35),
+		TagOBIT: bytes.Repeat([]byte{0}, 8),
+		TagEXPY: bytes.Repeat([]byte{0}, 8),
+	}
+}
+
 var _ = Describe("Server Config", func() {
 	var tagMap map[Tag][]byte
 
 	BeforeEach(func() {
-		// This tagMap can be passed to parseValues and doesn't cause any errors
-		tagMap = make(map[Tag][]byte)
-		tagMap[TagSCID] = bytes.Repeat([]byte{'F'}, 16)
-		tagMap[TagKEXS] = []byte("C255")
-		tagMap[TagAEAD] = []byte("AESG")
-		tagMap[TagPUBS] = bytes.Repeat([]byte{0}, 35)
-		tagMap[TagOBIT] = bytes.Repeat([]byte{0}, 8)
-		tagMap[TagEXPY] = bytes.Repeat([]byte{0}, 8)
+		tagMap = getDefaultServerConfigClient()
 	})
 
 	It("returns the parsed server config", func() {

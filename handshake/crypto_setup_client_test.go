@@ -62,6 +62,29 @@ var _ = Describe("Crypto setup", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.sno).To(Equal(nonc))
 		})
+
+		Context("Reading server configs", func() {
+			It("reads a server config", func() {
+				b := &bytes.Buffer{}
+				scfg := getDefaultServerConfigClient()
+				WriteHandshakeMessage(b, TagSCFG, scfg)
+				tagMap[TagSCFG] = b.Bytes()
+				err := cs.handleREJMessage(tagMap)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cs.serverConfig).ToNot(BeNil())
+				Expect(cs.serverConfig.ID).To(Equal(scfg[TagSCID]))
+			})
+
+			It("passes on errors from reading the server config", func() {
+				b := &bytes.Buffer{}
+				WriteHandshakeMessage(b, TagSHLO, make(map[Tag][]byte))
+				tagMap[TagSCFG] = b.Bytes()
+				_, origErr := parseServerConfig(b.Bytes())
+				err := cs.handleREJMessage(tagMap)
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(origErr))
+			})
+		})
 	})
 
 	Context("CHLO generation", func() {
