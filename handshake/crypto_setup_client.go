@@ -21,6 +21,9 @@ type cryptoSetupClient struct {
 	cryptoStream utils.Stream
 
 	serverConfig *serverConfigClient
+
+	stk                  []byte
+	sno                  []byte
 	diversificationNonce []byte
 }
 
@@ -67,7 +70,26 @@ func (h *cryptoSetupClient) HandleCryptoStream() error {
 			utils.Debugf("Got SHLO:\n%s", printHandshakeMessage(cryptoData))
 			panic("SHLOs not yet implemented.")
 		}
+
+		if messageTag == TagREJ {
+			err = h.handleREJMessage(cryptoData)
+			if err != nil {
+				return err
+			}
+		}
 	}
+}
+
+func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
+	utils.Debugf("Got REJ:\n%s", printHandshakeMessage(cryptoData))
+	if stk, ok := cryptoData[TagSTK]; ok {
+		h.stk = stk
+	}
+	if sno, ok := cryptoData[TagSNO]; ok {
+		h.sno = sno
+	}
+
+	return nil
 }
 
 func (h *cryptoSetupClient) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {

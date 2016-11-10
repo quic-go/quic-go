@@ -43,6 +43,25 @@ var _ = Describe("Crypto setup", func() {
 			// note that if this was a complete handshake message, HandleCryptoStream would fail with a qerr.InvalidCryptoMessageType
 			Expect(err).To(MatchError(qerr.HandshakeFailed))
 		})
+
+		It("passes the message on for parsing, and reads the source address token", func() {
+			stk := []byte("foobar")
+			tagMap[TagSTK] = stk
+			WriteHandshakeMessage(&stream.dataToRead, TagREJ, tagMap)
+			// this will throw a qerr.HandshakeFailed due to an EOF in WriteHandshakeMessage
+			// this is because the mockStream doesn't block if there's no data to read
+			err := cs.HandleCryptoStream()
+			Expect(err).To(MatchError(qerr.HandshakeFailed))
+			Expect(cs.stk).Should(Equal(stk))
+		})
+
+		It("saves the server nonce", func() {
+			nonc := []byte("servernonce")
+			tagMap[TagSNO] = nonc
+			err := cs.handleREJMessage(tagMap)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cs.sno).To(Equal(nonc))
+		})
 	})
 
 	Context("CHLO generation", func() {
