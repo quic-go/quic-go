@@ -1,38 +1,62 @@
 package handshake
 
 import (
+	"bytes"
 	"encoding/binary"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Crypto setup", func() {
-	var cs cryptoSetupClient
+	var cs *cryptoSetupClient
+	var stream *mockStream
 
 	BeforeEach(func() {
-		scfg := serverConfigClient{}
-		cs = cryptoSetupClient{
-			cryptoStream: &mockStream{},
-			serverConfig: &scfg,
-			version:      protocol.Version36,
-		}
+		stream = &mockStream{}
+		csInt, err := NewCryptoSetupClient(0, protocol.Version36, stream)
+		Expect(err).ToNot(HaveOccurred())
+		cs = csInt.(*cryptoSetupClient)
 	})
 
-	Context("Inchoate CHLO", func() {
-		It("has the right values", func() {
-			tags := cs.getInchoateCHLOValues()
+	Context("Reading SHLOs", func() {
+		var tagMap map[Tag][]byte
+
+		BeforeEach(func() {
+			tagMap = make(map[Tag][]byte)
+		})
+
+		It("rejects handshake messages with the wrong message tag", func() {
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, tagMap)
+			err := cs.HandleCryptoStream()
+			Expect(err).To(MatchError(qerr.InvalidCryptoMessageType))
+		})
+
+		It("errors on invalid hanshake messages", func() {
+			b := &bytes.Buffer{}
+			WriteHandshakeMessage(b, TagCHLO, tagMap)
+			stream.dataToRead.Write(b.Bytes()[:b.Len()-2]) // cut the handshake message
+			err := cs.HandleCryptoStream()
+			// note that if this was a complete handshake message, HandleCryptoStream would fail with a qerr.InvalidCryptoMessageType
+			Expect(err).To(MatchError(qerr.HandshakeFailed))
+		})
+	})
+
+	Context("CHLO generation", func() {
+		It("is longer than the miminum client hello size", func() {
+			err := cs.sendCHLO()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cs.cryptoStream.(*mockStream).dataWritten.Len()).To(BeNumerically(">", protocol.ClientHelloMinimumSize))
+		})
+
+		It("has the right values for an inchoate CHLO", func() {
+			tags := cs.getTags()
 			Expect(tags).To(HaveKey(TagSNI))
 			Expect(tags[TagPDMD]).To(Equal([]byte("X509")))
 			Expect(tags[TagVER]).To(Equal([]byte("Q036")))
-		})
-
-		It("is longer than the miminum client hello size", func() {
-			err := cs.sendInchoateCHLO()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cs.cryptoStream.(*mockStream).dataWritten.Len()).To(BeNumerically(">", protocol.ClientHelloMinimumSize))
 		})
 	})
 
@@ -65,6 +89,7 @@ var _ = Describe("Crypto setup", func() {
 
 	Context("Client Nonce generation", func() {
 		BeforeEach(func() {
+			cs.serverConfig = &serverConfigClient{}
 			cs.serverConfig.obit = []byte{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8}
 		})
 
