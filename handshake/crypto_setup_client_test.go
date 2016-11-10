@@ -35,7 +35,7 @@ var _ = Describe("Crypto setup", func() {
 			Expect(err).To(MatchError(qerr.InvalidCryptoMessageType))
 		})
 
-		It("errors on invalid hanshake messages", func() {
+		It("errors on invalid handshake messages", func() {
 			b := &bytes.Buffer{}
 			WriteHandshakeMessage(b, TagCHLO, tagMap)
 			stream.dataToRead.Write(b.Bytes()[:b.Len()-2]) // cut the handshake message
@@ -79,6 +79,15 @@ var _ = Describe("Crypto setup", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(cs.serverConfig).ToNot(BeNil())
 				Expect(cs.serverConfig.ID).To(Equal(scfg[TagSCID]))
+			})
+
+			It("generates a client nonce after reading a server config", func() {
+				b := &bytes.Buffer{}
+				WriteHandshakeMessage(b, TagSCFG, getDefaultServerConfigClient())
+				tagMap[TagSCFG] = b.Bytes()
+				err := cs.handleREJMessage(tagMap)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cs.nonc).To(HaveLen(32))
 			})
 
 			It("passes on errors from reading the server config", func() {
@@ -169,25 +178,35 @@ var _ = Describe("Crypto setup", func() {
 
 		It("generates a client nonce", func() {
 			now := time.Now()
-			nonce, err := cs.generateClientNonce()
-			Expect(nonce).To(HaveLen(32))
+			err := cs.generateClientNonce()
+			Expect(cs.nonc).To(HaveLen(32))
 			Expect(err).ToNot(HaveOccurred())
-			Expect(time.Unix(int64(binary.BigEndian.Uint32(nonce[0:4])), 0)).To(BeTemporally("~", now, 1*time.Second))
-			Expect(nonce[4:12]).To(Equal(cs.serverConfig.obit))
+			Expect(time.Unix(int64(binary.BigEndian.Uint32(cs.nonc[0:4])), 0)).To(BeTemporally("~", now, 1*time.Second))
+			Expect(cs.nonc[4:12]).To(Equal(cs.serverConfig.obit))
 		})
 
 		It("uses random values for the last 20 bytes", func() {
-			nonce1, err := cs.generateClientNonce()
+			err := cs.generateClientNonce()
 			Expect(err).ToNot(HaveOccurred())
-			nonce2, err := cs.generateClientNonce()
+			nonce1 := cs.nonc
+			cs.nonc = []byte{}
+			err = cs.generateClientNonce()
 			Expect(err).ToNot(HaveOccurred())
+			nonce2 := cs.nonc
 			Expect(nonce1[4:12]).To(Equal(nonce2[4:12]))
 			Expect(nonce1[12:]).ToNot(Equal(nonce2[12:]))
 		})
 
+		It("errors if a client nonce has already been generated", func() {
+			err := cs.generateClientNonce()
+			Expect(err).ToNot(HaveOccurred())
+			err = cs.generateClientNonce()
+			Expect(err).To(MatchError(errClientNonceAlreadyExists))
+		})
+
 		It("errors if no OBIT value is available", func() {
 			cs.serverConfig.obit = []byte{}
-			_, err := cs.generateClientNonce()
+			err := cs.generateClientNonce()
 			Expect(err).To(MatchError(errNoObitForClientNonce))
 		})
 	})

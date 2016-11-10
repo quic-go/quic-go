@@ -24,6 +24,7 @@ type cryptoSetupClient struct {
 
 	stk                  []byte
 	sno                  []byte
+	nonc                 []byte
 	diversificationNonce []byte
 	certManager          *crypto.CertManager
 }
@@ -32,7 +33,8 @@ var _ crypto.AEAD = &cryptoSetupClient{}
 var _ CryptoSetup = &cryptoSetupClient{}
 
 var (
-	errNoObitForClientNonce             = errors.New("No OBIT for client nonce available")
+	errNoObitForClientNonce             = errors.New("CryptoSetup BUG: No OBIT for client nonce available")
+	errClientNonceAlreadyExists         = errors.New("CryptoSetup BUG: A client nonce was already generated")
 	errConflictingDiversificationNonces = errors.New("Received two different diversification nonces")
 )
 
@@ -97,6 +99,12 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 
 	if scfg, ok := cryptoData[TagSCFG]; ok {
 		h.serverConfig, err = parseServerConfig(scfg)
+		if err != nil {
+			return err
+		}
+
+		// now that we have a server config, we can use its OBIT value to generate a client nonce
+		err = h.generateClientNonce()
 		if err != nil {
 			return err
 		}
@@ -185,20 +193,25 @@ func (h *cryptoSetupClient) getTags() map[Tag][]byte {
 	return tags
 }
 
-func (h *cryptoSetupClient) generateClientNonce() ([]byte, error) {
-	nonce := make([]byte, 32)
-	binary.BigEndian.PutUint32(nonce, uint32(time.Now().Unix()))
+func (h *cryptoSetupClient) generateClientNonce() error {
+	if len(h.nonc) > 0 {
+		return errClientNonceAlreadyExists
+	}
+
+	nonc := make([]byte, 32)
+	binary.BigEndian.PutUint32(nonc, uint32(time.Now().Unix()))
 
 	if len(h.serverConfig.obit) != 8 {
-		return nil, errNoObitForClientNonce
+		return errNoObitForClientNonce
 	}
 
-	copy(nonce[4:12], h.serverConfig.obit)
+	copy(nonc[4:12], h.serverConfig.obit)
 
-	_, err := rand.Read(nonce[12:])
+	_, err := rand.Read(nonc[12:])
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return nonce, nil
+	h.nonc = nonc
+	return nil
 }
