@@ -71,7 +71,16 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 		PacketNumber:         currentPacketNumber,
 		PacketNumberLen:      packetNumberLen,
 		TruncateConnectionID: p.connectionParameters.TruncateConnectionID(),
-		DiversificationNonce: p.cryptoSetup.DiversificationNonce(),
+	}
+
+	if p.perspective == protocol.PerspectiveServer {
+		responsePublicHeader.DiversificationNonce = p.cryptoSetup.DiversificationNonce()
+	}
+
+	// TODO: stop sending version numbers once a version has been negotiated
+	if p.perspective == protocol.PerspectiveClient {
+		responsePublicHeader.VersionFlag = true
+		responsePublicHeader.VersionNumber = protocol.Version36
 	}
 
 	publicHeaderLength, err := responsePublicHeader.GetLength(p.perspective)
