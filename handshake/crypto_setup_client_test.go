@@ -63,6 +63,12 @@ var _ = Describe("Crypto setup", func() {
 			Expect(cs.sno).To(Equal(nonc))
 		})
 
+		It("passes the certificates to the CertManager", func() {
+			tagMap[TagCERT] = []byte("invalid-cert")
+			err := cs.handleREJMessage(tagMap)
+			Expect(err).To(MatchError(qerr.ProofInvalid))
+		})
+
 		Context("Reading server configs", func() {
 			It("reads a server config", func() {
 				b := &bytes.Buffer{}

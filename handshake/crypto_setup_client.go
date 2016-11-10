@@ -25,6 +25,7 @@ type cryptoSetupClient struct {
 	stk                  []byte
 	sno                  []byte
 	diversificationNonce []byte
+	certManager          *crypto.CertManager
 }
 
 var _ crypto.AEAD = &cryptoSetupClient{}
@@ -45,6 +46,7 @@ func NewCryptoSetupClient(
 		connID:       connID,
 		version:      version,
 		cryptoStream: cryptoStream,
+		certManager:  &crypto.CertManager{},
 	}, nil
 }
 
@@ -95,6 +97,13 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 
 	if scfg, ok := cryptoData[TagSCFG]; ok {
 		h.serverConfig, err = parseServerConfig(scfg)
+		if err != nil {
+			return err
+		}
+	}
+
+	if crt, ok := cryptoData[TagCERT]; ok {
+		err := h.certManager.SetData(crt)
 		if err != nil {
 			return err
 		}
