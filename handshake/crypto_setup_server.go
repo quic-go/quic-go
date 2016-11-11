@@ -15,7 +15,7 @@ import (
 )
 
 // KeyDerivationFunction is used for key derivation
-type KeyDerivationFunction func(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte) (crypto.AEAD, error)
+type KeyDerivationFunction func(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte, pers protocol.Perspective) (crypto.AEAD, error)
 
 // KeyExchangeFunction is used to make a new KEX
 type KeyExchangeFunction func() crypto.KeyExchange
@@ -304,6 +304,7 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 		h.scfg.Get(),
 		certUncompressed,
 		h.diversificationNonce,
+		protocol.PerspectiveServer,
 	)
 	if err != nil {
 		return nil, err
@@ -328,6 +329,7 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 		h.scfg.Get(),
 		certUncompressed,
 		nil,
+		protocol.PerspectiveServer,
 	)
 	if err != nil {
 		return nil, err

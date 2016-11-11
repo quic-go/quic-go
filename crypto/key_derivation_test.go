@@ -87,7 +87,7 @@ var _ = Describe("KeyDerivation", func() {
 	// })
 
 	Context("AES-GCM", func() {
-		It("derives non-fs keys", func() {
+		It("derives non-forward secure keys", func() {
 			aead, err := DeriveKeysAESGCM(
 				false,
 				[]byte("0123456789012345678901"),
@@ -97,15 +97,66 @@ var _ = Describe("KeyDerivation", func() {
 				[]byte("scfg"),
 				[]byte("cert"),
 				[]byte("divnonce"),
+				protocol.PerspectiveServer,
 			)
 			Expect(err).ToNot(HaveOccurred())
-			chacha := aead.(*aeadAESGCM)
+			aesgcm := aead.(*aeadAESGCM)
 			// If the IVs match, the keys will match too, since the keys are read earlier
-			Expect(chacha.myIV).To(Equal([]byte{0x1c, 0xec, 0xac, 0x9b}))
-			Expect(chacha.otherIV).To(Equal([]byte{0x64, 0xef, 0x3c, 0x9}))
+			Expect(aesgcm.myIV).To(Equal([]byte{0x1c, 0xec, 0xac, 0x9b}))
+			Expect(aesgcm.otherIV).To(Equal([]byte{0x64, 0xef, 0x3c, 0x9}))
 		})
 
-		It("derives fs keys", func() {
+		It("uses the diversification nonce when generating non-forwared secure keys", func() {
+			aead1, err := DeriveKeysAESGCM(
+				false,
+				[]byte("0123456789012345678901"),
+				[]byte("nonce"),
+				protocol.ConnectionID(42),
+				[]byte("chlo"),
+				[]byte("scfg"),
+				[]byte("cert"),
+				[]byte("divnonce"),
+				protocol.PerspectiveServer,
+			)
+			Expect(err).ToNot(HaveOccurred())
+			aead2, err := DeriveKeysAESGCM(
+				false,
+				[]byte("0123456789012345678901"),
+				[]byte("nonce"),
+				protocol.ConnectionID(42),
+				[]byte("chlo"),
+				[]byte("scfg"),
+				[]byte("cert"),
+				[]byte("ecnonvid"),
+				protocol.PerspectiveServer,
+			)
+			Expect(err).ToNot(HaveOccurred())
+			aesgcm1 := aead1.(*aeadAESGCM)
+			aesgcm2 := aead2.(*aeadAESGCM)
+			Expect(aesgcm1.myIV).ToNot(Equal(aesgcm2.myIV))
+			Expect(aesgcm1.otherIV).To(Equal(aesgcm2.otherIV))
+		})
+
+		It("derives non-forward secure keys, for the other side", func() {
+			aead, err := DeriveKeysAESGCM(
+				false,
+				[]byte("0123456789012345678901"),
+				[]byte("nonce"),
+				protocol.ConnectionID(42),
+				[]byte("chlo"),
+				[]byte("scfg"),
+				[]byte("cert"),
+				[]byte("divnonce"),
+				protocol.PerspectiveClient,
+			)
+			Expect(err).ToNot(HaveOccurred())
+			aesgcm := aead.(*aeadAESGCM)
+			// If the IVs match, the keys will match too, since the keys are read earlier
+			Expect(aesgcm.otherIV).To(Equal([]byte{0x1c, 0xec, 0xac, 0x9b}))
+			Expect(aesgcm.myIV).To(Equal([]byte{0x64, 0xef, 0x3c, 0x9}))
+		})
+
+		It("derives forward secure keys", func() {
 			aead, err := DeriveKeysAESGCM(
 				true,
 				[]byte("0123456789012345678901"),
@@ -115,12 +166,13 @@ var _ = Describe("KeyDerivation", func() {
 				[]byte("scfg"),
 				[]byte("cert"),
 				nil,
+				protocol.PerspectiveServer,
 			)
 			Expect(err).ToNot(HaveOccurred())
-			chacha := aead.(*aeadAESGCM)
+			aesgcm := aead.(*aeadAESGCM)
 			// If the IVs match, the keys will match too, since the keys are read earlier
-			Expect(chacha.myIV).To(Equal([]byte{0x7, 0xad, 0xab, 0xb8}))
-			Expect(chacha.otherIV).To(Equal([]byte{0xf2, 0x7a, 0xcc, 0x42}))
+			Expect(aesgcm.myIV).To(Equal([]byte{0x7, 0xad, 0xab, 0xb8}))
+			Expect(aesgcm.otherIV).To(Equal([]byte{0xf2, 0x7a, 0xcc, 0x42}))
 		})
 
 		It("does not use div-nonce for FS key derivation", func() {
@@ -133,12 +185,13 @@ var _ = Describe("KeyDerivation", func() {
 				[]byte("scfg"),
 				[]byte("cert"),
 				[]byte("divnonce"),
+				protocol.PerspectiveServer,
 			)
 			Expect(err).ToNot(HaveOccurred())
-			chacha := aead.(*aeadAESGCM)
+			aesgcm := aead.(*aeadAESGCM)
 			// If the IVs match, the keys will match too, since the keys are read earlier
-			Expect(chacha.myIV).To(Equal([]byte{0x7, 0xad, 0xab, 0xb8}))
-			Expect(chacha.otherIV).To(Equal([]byte{0xf2, 0x7a, 0xcc, 0x42}))
+			Expect(aesgcm.myIV).To(Equal([]byte{0x7, 0xad, 0xab, 0xb8}))
+			Expect(aesgcm.otherIV).To(Equal([]byte{0xf2, 0x7a, 0xcc, 0x42}))
 		})
 	})
 })
