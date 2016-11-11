@@ -11,15 +11,32 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+type mockCertManager struct {
+	setDataCalledWith []byte
+	leafCert          []byte
+}
+
+func (m *mockCertManager) SetData(data []byte) error {
+	m.setDataCalledWith = data
+	return nil
+}
+
+func (m *mockCertManager) GetLeafCert() []byte {
+	return m.leafCert
+}
+
 var _ = Describe("Crypto setup", func() {
 	var cs *cryptoSetupClient
+	var certManager *mockCertManager
 	var stream *mockStream
 
 	BeforeEach(func() {
 		stream = &mockStream{}
+		certManager = &mockCertManager{}
 		csInt, err := NewCryptoSetupClient(0, protocol.Version36, stream)
 		Expect(err).ToNot(HaveOccurred())
 		cs = csInt.(*cryptoSetupClient)
+		cs.certManager = certManager
 	})
 
 	Context("Reading SHLOs", func() {
@@ -64,9 +81,10 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		It("passes the certificates to the CertManager", func() {
-			tagMap[TagCERT] = []byte("invalid-cert")
+			tagMap[TagCERT] = []byte("cert")
 			err := cs.handleREJMessage(tagMap)
-			Expect(err).To(MatchError(qerr.ProofInvalid))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(certManager.setDataCalledWith).To(Equal(tagMap[TagCERT]))
 		})
 
 		Context("Reading server configs", func() {

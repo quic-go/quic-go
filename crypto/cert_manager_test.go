@@ -7,10 +7,10 @@ import (
 )
 
 var _ = Describe("Cert Manager", func() {
-	var cm *CertManager
+	var cm *certManager
 
 	BeforeEach(func() {
-		cm = &CertManager{}
+		cm = NewCertManager().(*certManager)
 	})
 
 	It("errors when given invalid data", func() {

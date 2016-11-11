@@ -27,7 +27,7 @@ type cryptoSetupClient struct {
 	nonc                 []byte
 	diversificationNonce []byte
 	lastSentCHLO         []byte
-	certManager          *crypto.CertManager
+	certManager          crypto.CertManager
 }
 
 var _ crypto.AEAD = &cryptoSetupClient{}
@@ -49,7 +49,7 @@ func NewCryptoSetupClient(
 		connID:       connID,
 		version:      version,
 		cryptoStream: cryptoStream,
-		certManager:  &crypto.CertManager{},
+		certManager:  crypto.NewCertManager(),
 	}, nil
 }
 
