@@ -97,6 +97,7 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 		h.sno = sno
 	}
 
+	// TODO: what happens if the server sends a different server config in two packets?
 	if scfg, ok := cryptoData[TagSCFG]; ok {
 		h.serverConfig, err = parseServerConfig(scfg)
 		if err != nil {
@@ -104,9 +105,11 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 		}
 
 		// now that we have a server config, we can use its OBIT value to generate a client nonce
-		err = h.generateClientNonce()
-		if err != nil {
-			return err
+		if len(h.nonc) == 0 {
+			err = h.generateClientNonce()
+			if err != nil {
+				return err
+			}
 		}
 	}
 

@@ -90,6 +90,19 @@ var _ = Describe("Crypto setup", func() {
 				Expect(cs.nonc).To(HaveLen(32))
 			})
 
+			It("only generates a client nonce once, when reading multiple server configs", func() {
+				b := &bytes.Buffer{}
+				WriteHandshakeMessage(b, TagSCFG, getDefaultServerConfigClient())
+				tagMap[TagSCFG] = b.Bytes()
+				err := cs.handleREJMessage(tagMap)
+				Expect(err).ToNot(HaveOccurred())
+				nonc := cs.nonc
+				Expect(nonc).ToNot(BeEmpty())
+				err = cs.handleREJMessage(tagMap)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cs.nonc).To(Equal(nonc))
+			})
+
 			It("passes on errors from reading the server config", func() {
 				b := &bytes.Buffer{}
 				WriteHandshakeMessage(b, TagSHLO, make(map[Tag][]byte))
