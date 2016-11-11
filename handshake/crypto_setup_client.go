@@ -195,6 +195,12 @@ func (h *cryptoSetupClient) getTags() map[Tag][]byte {
 
 	if h.serverConfig != nil {
 		tags[TagSCID] = h.serverConfig.ID
+
+		leafCert := h.certManager.GetLeafCert()
+		if leafCert != nil {
+			tags[TagNONC] = h.nonc
+			tags[TagPUBS] = h.serverConfig.kex.PublicKey() // TODO: check if 3 bytes need to be prepended
+		}
 	}
 
 	return tags

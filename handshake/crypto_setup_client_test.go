@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 	. "github.com/onsi/ginkgo"
@@ -186,6 +187,23 @@ var _ = Describe("Crypto setup", func() {
 			Expect(tags).ToNot(HaveKey(TagSCID))
 			Expect(tags).ToNot(HaveKey(TagSNO))
 			Expect(tags).ToNot(HaveKey(TagSTK))
+		})
+
+		It("doesn't change any values after reading the certificate, if the server config is missing", func() {
+			tags := cs.getTags()
+			certManager.leafCert = []byte("leafcert")
+			Expect(cs.getTags()).To(Equal(tags))
+		})
+
+		It("sends a client nonce and a public value after reading the certificate and the server config", func() {
+			certManager.leafCert = []byte("leafcert")
+			cs.nonc = []byte("client-nonce")
+			kex, err := crypto.NewCurve25519KEX()
+			Expect(err).ToNot(HaveOccurred())
+			cs.serverConfig = &serverConfigClient{kex: kex}
+			tags := cs.getTags()
+			Expect(tags[TagNONC]).To(Equal(cs.nonc))
+			Expect(tags[TagPUBS]).To(Equal(kex.PublicKey()))
 		})
 	})
 
