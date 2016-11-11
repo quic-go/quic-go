@@ -33,6 +33,8 @@ func NewClient(addr *net.UDPAddr) (*Client, error) {
 	rand.Seed(time.Now().UTC().UnixNano())
 	connectionID := protocol.ConnectionID(rand.Int63())
 
+	utils.Infof("Starting new connection to %s, connectionID %x", addr.String(), connectionID)
+
 	client := &Client{
 		addr:         addr,
 		conn:         conn,
@@ -59,7 +61,6 @@ func (c *Client) Listen() {
 		data = data[:protocol.MaxPacketSize]
 
 		n, _, err := c.conn.ReadFromUDP(data)
-		utils.Debugf("%d", n)
 		if err != nil {
 			panic(err)
 		}
