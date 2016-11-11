@@ -26,6 +26,7 @@ type cryptoSetupClient struct {
 	sno                  []byte
 	nonc                 []byte
 	diversificationNonce []byte
+	lastSentCHLO         []byte
 	certManager          *crypto.CertManager
 }
 
@@ -168,6 +169,9 @@ func (h *cryptoSetupClient) sendCHLO() error {
 	if err != nil {
 		return err
 	}
+
+	h.lastSentCHLO = b.Bytes()
+
 	return nil
 }
 

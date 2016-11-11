@@ -122,6 +122,21 @@ var _ = Describe("Crypto setup", func() {
 			Expect(cs.cryptoStream.(*mockStream).dataWritten.Len()).To(BeNumerically(">", protocol.ClientHelloMinimumSize))
 		})
 
+		It("saves the last sent CHLO", func() {
+			// send first CHLO
+			err := cs.sendCHLO()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cs.cryptoStream.(*mockStream).dataWritten.Bytes()).To(Equal(cs.lastSentCHLO))
+			cs.cryptoStream.(*mockStream).dataWritten.Reset()
+			firstCHLO := cs.lastSentCHLO
+			// send second CHLO
+			cs.sno = []byte("foobar")
+			err = cs.sendCHLO()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cs.cryptoStream.(*mockStream).dataWritten.Bytes()).To(Equal(cs.lastSentCHLO))
+			Expect(cs.lastSentCHLO).ToNot(Equal(firstCHLO))
+		})
+
 		It("has the right values for an inchoate CHLO", func() {
 			tags := cs.getTags()
 			Expect(tags).To(HaveKey(TagSNI))
