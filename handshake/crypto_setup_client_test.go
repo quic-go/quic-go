@@ -207,6 +207,47 @@ var _ = Describe("Crypto setup", func() {
 		})
 	})
 
+	Context("escalating crypto", func() {
+		// sets all values necessary for escalating to secureAEAD
+		BeforeEach(func() {
+			kex, err := crypto.NewCurve25519KEX()
+			Expect(err).ToNot(HaveOccurred())
+			cs.serverConfig = &serverConfigClient{
+				kex:          kex,
+				obit:         []byte("obit"),
+				sharedSecret: []byte("sharedSecret"),
+				raw:          []byte("rawserverconfig"),
+			}
+			cs.lastSentCHLO = []byte("lastSentCHLO")
+			cs.nonc = []byte("nonc")
+			cs.diversificationNonce = []byte("divnonce")
+			certManager.leafCert = []byte("leafCert")
+		})
+
+		It("creates a secureAEAD once it has all necessary values", func() {
+			err := cs.maybeUpgradeCrypto()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cs.secureAEAD).ToNot(BeNil())
+		})
+
+		It("tries to escalate before reading a handshake message", func() {
+			Expect(cs.secureAEAD).To(BeNil())
+			err := cs.HandleCryptoStream()
+			// this will throw a qerr.HandshakeFailed due to an EOF in WriteHandshakeMessage
+			// this is because the mockStream doesn't block if there's no data to read
+			Expect(err).To(MatchError(qerr.HandshakeFailed))
+			Expect(cs.secureAEAD).ToNot(BeNil())
+		})
+
+		It("tries to escalate the crypto after receiving a diversification nonce", func() {
+			cs.diversificationNonce = nil
+			Expect(cs.secureAEAD).To(BeNil())
+			err := cs.SetDiversificationNonce([]byte("div"))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cs.secureAEAD).ToNot(BeNil())
+		})
+	})
+
 	Context("Diversification Nonces", func() {
 		It("sets a diversification nonce", func() {
 			nonce := []byte("foobar")

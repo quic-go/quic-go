@@ -28,6 +28,9 @@ type cryptoSetupClient struct {
 	diversificationNonce []byte
 	lastSentCHLO         []byte
 	certManager          crypto.CertManager
+
+	keyDerivation KeyDerivationFunction
+	secureAEAD    crypto.AEAD
 }
 
 var _ crypto.AEAD = &cryptoSetupClient{}
@@ -50,12 +53,19 @@ func NewCryptoSetupClient(
 		version:      version,
 		cryptoStream: cryptoStream,
 		certManager:  crypto.NewCertManager(),
+
+		keyDerivation: crypto.DeriveKeysAESGCM,
 	}, nil
 }
 
 func (h *cryptoSetupClient) HandleCryptoStream() error {
 	for {
-		err := h.sendCHLO()
+		err := h.maybeUpgradeCrypto()
+		if err != nil {
+			return err
+		}
+
+		err = h.sendCHLO()
 		if err != nil {
 			return err
 		}
@@ -125,10 +135,20 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 }
 
 func (h *cryptoSetupClient) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {
+	if h.secureAEAD != nil {
+		data, err := h.secureAEAD.Open(dst, src, packetNumber, associatedData)
+		if err == nil {
+			return data, nil
+		}
+		return nil, err
+	}
 	return (&crypto.NullAEAD{}).Open(dst, src, packetNumber, associatedData)
 }
 
 func (h *cryptoSetupClient) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
+	if h.secureAEAD != nil {
+		return h.secureAEAD.Seal(dst, src, packetNumber, associatedData)
+	}
 	return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData)
 }
 
@@ -139,7 +159,7 @@ func (h *cryptoSetupClient) DiversificationNonce() []byte {
 func (h *cryptoSetupClient) SetDiversificationNonce(data []byte) error {
 	if len(h.diversificationNonce) == 0 {
 		h.diversificationNonce = data
-		return nil
+		return h.maybeUpgradeCrypto()
 	}
 	if !bytes.Equal(h.diversificationNonce, data) {
 		return errConflictingDiversificationNonces
@@ -204,6 +224,30 @@ func (h *cryptoSetupClient) getTags() map[Tag][]byte {
 	}
 
 	return tags
+}
+
+func (h *cryptoSetupClient) maybeUpgradeCrypto() error {
+	leafCert := h.certManager.GetLeafCert()
+
+	if h.secureAEAD == nil && (h.serverConfig != nil && len(h.serverConfig.sharedSecret) > 0 && len(h.nonc) > 0 && len(leafCert) > 0 && len(h.diversificationNonce) > 0 && len(h.lastSentCHLO) > 0) {
+		var err error
+		h.secureAEAD, err = h.keyDerivation(
+			false,
+			h.serverConfig.sharedSecret,
+			h.nonc,
+			h.connID,
+			h.lastSentCHLO,
+			h.serverConfig.Get(),
+			leafCert,
+			h.diversificationNonce,
+			protocol.PerspectiveClient,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (h *cryptoSetupClient) generateClientNonce() error {
