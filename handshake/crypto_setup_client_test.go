@@ -141,6 +141,13 @@ var _ = Describe("Crypto setup", func() {
 			Expect(cs.cryptoStream.(*mockStream).dataWritten.Len()).To(BeNumerically(">", protocol.ClientHelloMinimumSize))
 		})
 
+		It("doesn't overflow the packet with padding", func() {
+			tagMap := make(map[Tag][]byte)
+			tagMap[TagSCID] = bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSize*6/10)
+			cs.addPadding(tagMap)
+			Expect(len(tagMap[TagPAD])).To(BeNumerically("<", protocol.ClientHelloMinimumSize/2))
+		})
+
 		It("saves the last sent CHLO", func() {
 			// send first CHLO
 			err := cs.sendCHLO()

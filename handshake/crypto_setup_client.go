@@ -183,6 +183,8 @@ func (h *cryptoSetupClient) sendCHLO() error {
 	b := &bytes.Buffer{}
 
 	tags := h.getTags()
+	h.addPadding(tags)
+
 	WriteHandshakeMessage(b, TagCHLO, tags)
 
 	_, err := h.cryptoStream.Write(b.Bytes())
@@ -199,7 +201,6 @@ func (h *cryptoSetupClient) getTags() map[Tag][]byte {
 	tags := make(map[Tag][]byte)
 	tags[TagSNI] = []byte("quic.clemente.io") // TODO: use real SNI here
 	tags[TagPDMD] = []byte("X509")
-	tags[TagPAD] = bytes.Repeat([]byte("0"), protocol.ClientHelloMinimumSize)
 
 	versionTag := make([]byte, 4, 4)
 	binary.LittleEndian.PutUint32(versionTag, protocol.VersionNumberToTag(h.version))
@@ -224,6 +225,18 @@ func (h *cryptoSetupClient) getTags() map[Tag][]byte {
 	}
 
 	return tags
+}
+
+// add a TagPAD to a tagMap, such that the total size will be bigger than the ClientHelloMinimumSize
+func (h *cryptoSetupClient) addPadding(tags map[Tag][]byte) {
+	var size int
+	for _, tag := range tags {
+		size += 8 + len(tag) // 4 bytes for the tag + 4 bytes for the offset + the length of the data
+	}
+	paddingSize := protocol.ClientHelloMinimumSize - size
+	if paddingSize > 0 {
+		tags[TagPAD] = bytes.Repeat([]byte{0}, paddingSize)
+	}
 }
 
 func (h *cryptoSetupClient) maybeUpgradeCrypto() error {
