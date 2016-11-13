@@ -40,7 +40,7 @@ var _ = Describe("Crypto setup", func() {
 		cs.certManager = certManager
 	})
 
-	Context("Reading SHLOs", func() {
+	Context("Reading REJ", func() {
 		var tagMap map[Tag][]byte
 
 		BeforeEach(func() {
@@ -131,6 +131,41 @@ var _ = Describe("Crypto setup", func() {
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError(origErr))
 			})
+		})
+	})
+
+	Context("Reading SHLO", func() {
+		var tagMap map[Tag][]byte
+
+		BeforeEach(func() {
+			tagMap = make(map[Tag][]byte)
+			tagMap[TagPUBS] = []byte{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f}
+			kex, err := crypto.NewCurve25519KEX()
+			Expect(err).ToNot(HaveOccurred())
+			serverConfig := &serverConfigClient{
+				kex: kex,
+			}
+			cs.serverConfig = serverConfig
+		})
+
+		It("rejects SHLOs without a PUBS", func() {
+			delete(tagMap, TagPUBS)
+			err := cs.handleSHLOMessage(tagMap)
+			Expect(err).To(MatchError(qerr.Error(qerr.CryptoMessageParameterNotFound, "PUBS")))
+		})
+
+		It("reads the server nonce, if set", func() {
+			tagMap[TagSNO] = []byte("server nonce")
+			err := cs.handleSHLOMessage(tagMap)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cs.sno).To(Equal(tagMap[TagSNO]))
+		})
+
+		It("creates a forwardSecureAEAD", func() {
+			tagMap[TagSNO] = []byte("server nonce")
+			err := cs.handleSHLOMessage(tagMap)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cs.forwardSecureAEAD).ToNot(BeNil())
 		})
 	})
 

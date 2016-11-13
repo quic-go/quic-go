@@ -29,8 +29,9 @@ type cryptoSetupClient struct {
 	lastSentCHLO         []byte
 	certManager          crypto.CertManager
 
-	keyDerivation KeyDerivationFunction
-	secureAEAD    crypto.AEAD
+	keyDerivation     KeyDerivationFunction
+	secureAEAD        crypto.AEAD
+	forwardSecureAEAD crypto.AEAD
 }
 
 var _ crypto.AEAD = &cryptoSetupClient{}
@@ -83,7 +84,10 @@ func (h *cryptoSetupClient) HandleCryptoStream() error {
 
 		if messageTag == TagSHLO {
 			utils.Debugf("Got SHLO:\n%s", printHandshakeMessage(cryptoData))
-			panic("SHLOs not yet implemented.")
+			err = h.handleSHLOMessage(cryptoData)
+			if err != nil {
+				return err
+			}
 		}
 
 		if messageTag == TagREJ {
@@ -134,7 +138,51 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 	return nil
 }
 
+func (h *cryptoSetupClient) handleSHLOMessage(cryptoData map[Tag][]byte) error {
+	serverPubs, ok := cryptoData[TagPUBS]
+	if !ok {
+		return qerr.Error(qerr.CryptoMessageParameterNotFound, "PUBS")
+	}
+
+	if sno, ok := cryptoData[TagSNO]; ok {
+		h.sno = sno
+	}
+
+	nonce := append(h.nonc, h.sno...)
+
+	ephermalSharedSecret, err := h.serverConfig.kex.CalculateSharedKey(serverPubs)
+	if err != nil {
+		return err
+	}
+
+	leafCert := h.certManager.GetLeafCert()
+
+	h.forwardSecureAEAD, err = h.keyDerivation(
+		true,
+		ephermalSharedSecret,
+		nonce,
+		h.connID,
+		h.lastSentCHLO,
+		h.serverConfig.Get(),
+		leafCert,
+		nil,
+		protocol.PerspectiveClient,
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (h *cryptoSetupClient) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {
+	if h.forwardSecureAEAD != nil {
+		data, err := h.forwardSecureAEAD.Open(dst, src, packetNumber, associatedData)
+		if err == nil {
+			return data, nil
+		}
+		return nil, err
+	}
 	if h.secureAEAD != nil {
 		data, err := h.secureAEAD.Open(dst, src, packetNumber, associatedData)
 		if err == nil {
@@ -146,6 +194,9 @@ func (h *cryptoSetupClient) Open(dst, src []byte, packetNumber protocol.PacketNu
 }
 
 func (h *cryptoSetupClient) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
+	if h.forwardSecureAEAD != nil {
+		return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData)
+	}
 	if h.secureAEAD != nil {
 		return h.secureAEAD.Seal(dst, src, packetNumber, associatedData)
 	}
