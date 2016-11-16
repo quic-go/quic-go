@@ -2,7 +2,16 @@ package handshake
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/binary"
+	"encoding/pem"
+	"fmt"
+	"math/big"
+	"os"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
@@ -11,6 +20,23 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+// taken from https://golang.org/src/crypto/tls/generate_cert.go
+func pemBlockForKey(priv interface{}) *pem.Block {
+	switch k := priv.(type) {
+	case *rsa.PrivateKey:
+		return &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(k)}
+	case *ecdsa.PrivateKey:
+		b, err := x509.MarshalECPrivateKey(k)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Unable to marshal ECDSA private key: %v", err)
+			os.Exit(2)
+		}
+		return &pem.Block{Type: "EC PRIVATE KEY", Bytes: b}
+	default:
+		return nil
+	}
+}
 
 type mockCertManager struct {
 	setDataCalledWith []byte
@@ -81,6 +107,18 @@ var _ = Describe("Crypto setup", func() {
 			Expect(cs.proof).To(Equal(proof))
 		})
 
+		It("saves the last sent CHLO for signature validation, when receiving the proof", func() {
+			chlo := []byte("last sent CHLO")
+			cs.lastSentCHLO = chlo
+			err := cs.handleREJMessage(tagMap)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cs.chloForSignature).To(BeEmpty())
+			tagMap[TagPROF] = []byte("signature")
+			err = cs.handleREJMessage(tagMap)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cs.chloForSignature).To(Equal(chlo))
+		})
+
 		It("saves the server nonce", func() {
 			nonc := []byte("servernonce")
 			tagMap[TagSNO] = nonc
@@ -89,11 +127,79 @@ var _ = Describe("Crypto setup", func() {
 			Expect(cs.sno).To(Equal(nonc))
 		})
 
-		It("passes the certificates to the CertManager", func() {
-			tagMap[TagCERT] = []byte("cert")
-			err := cs.handleREJMessage(tagMap)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(certManager.setDataCalledWith).To(Equal(tagMap[TagCERT]))
+		Context("Certificates", func() {
+			var leafCert *x509.Certificate
+			var tlsConfig *tls.Config
+
+			BeforeEach(func() {
+				// generate a RSA key pair and a certificate
+				key, err := rsa.GenerateKey(rand.Reader, 1024)
+				Expect(err).ToNot(HaveOccurred())
+				template := x509.Certificate{SerialNumber: big.NewInt(1)}
+				certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+				Expect(err).ToNot(HaveOccurred())
+				leafCert, err = x509.ParseCertificate(certDER)
+				Expect(err).ToNot(HaveOccurred())
+
+				// export certificate and key in PEM format
+				b := &pem.Block{Type: "CERTIFICATE", Bytes: certDER}
+				certPEM := pem.EncodeToMemory(b)
+				b = pemBlockForKey(key)
+				keyPEM := pem.EncodeToMemory(b)
+
+				// create a tls.Config
+				tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
+				Expect(err).ToNot(HaveOccurred())
+				tlsConfig = &tls.Config{
+					Certificates: []tls.Certificate{tlsCert},
+				}
+			})
+
+			It("passes the certificates to the CertManager", func() {
+				tagMap[TagCERT] = []byte("cert")
+				err := cs.handleREJMessage(tagMap)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(certManager.setDataCalledWith).To(Equal(tagMap[TagCERT]))
+			})
+
+			It("verifies the signature, once it has read all required data", func() {
+				cs.serverConfig = &serverConfigClient{}
+				certManager.leafCert = []byte("leaf cert") // this certificate can't be parsed by x509
+				cs.proof = []byte("proof")
+				err := cs.handleREJMessage(tagMap)
+				Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "Certificate data invalid")))
+			})
+
+			It("verifies the signature of the server config", func() {
+				cs.chloForSignature = []byte("CHLO for signature")
+				serverConfigData := []byte("Server Config Data")
+				cs.serverConfig = &serverConfigClient{raw: serverConfigData}
+				certManager.leafCert = leafCert.Raw
+
+				ps, err := crypto.NewProofSource(tlsConfig)
+				Expect(err).ToNot(HaveOccurred())
+				signature, err := ps.SignServerProof("", cs.chloForSignature, serverConfigData)
+				Expect(err).ToNot(HaveOccurred())
+				cs.proof = signature
+
+				err = cs.verifyServerConfigSignature()
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("errors if it can't read the leaf certificate", func() {
+				certManager.leafCert = []byte("invalid leaf cert")
+				err := cs.verifyServerConfigSignature()
+				Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "Certificate data invalid")))
+			})
+
+			It("rejects invalid signatures of the server config", func() {
+				cs.serverConfig = &serverConfigClient{raw: []byte("Server Config Data")}
+				cs.proof = []byte("invalid signature")
+				certManager.leafCert = leafCert.Raw
+
+				err := cs.verifyServerConfigSignature()
+				Expect(err).To(MatchError(qerr.ProofInvalid))
+			})
 		})
 
 		Context("Reading server configs", func() {

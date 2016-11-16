@@ -2,7 +2,11 @@ package handshake
 
 import (
 	"bytes"
+	gocrypto "crypto"
 	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -27,6 +31,7 @@ type cryptoSetupClient struct {
 	nonc                 []byte
 	proof                []byte
 	diversificationNonce []byte
+	chloForSignature     []byte
 	lastSentCHLO         []byte
 	certManager          crypto.CertManager
 
@@ -135,6 +140,7 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 
 	if proof, ok := cryptoData[TagPROF]; ok {
 		h.proof = proof
+		h.chloForSignature = h.lastSentCHLO
 	}
 
 	if crt, ok := cryptoData[TagCERT]; ok {
@@ -142,6 +148,38 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	if h.serverConfig != nil && len(h.proof) != 0 && h.certManager.GetLeafCert() != nil {
+		return h.verifyServerConfigSignature()
+	}
+
+	return nil
+}
+
+func (h *cryptoSetupClient) verifyServerConfigSignature() error {
+	leafCert := h.certManager.GetLeafCert()
+	cert, err := x509.ParseCertificate(leafCert)
+	if err != nil {
+		return qerr.Error(qerr.InvalidCryptoMessageParameter, "Certificate data invalid")
+	}
+
+	hash := sha256.New()
+	hash.Write([]byte("QUIC CHLO and server config signature\x00"))
+	chloHash := sha256.Sum256(h.chloForSignature)
+	hash.Write([]byte{32, 0, 0, 0})
+	hash.Write(chloHash[:])
+	hash.Write(h.serverConfig.Get())
+
+	if cert.PublicKeyAlgorithm == x509.RSA {
+		opts := &rsa.PSSOptions{SaltLength: 32, Hash: gocrypto.SHA256}
+		err = rsa.VerifyPSS(cert.PublicKey.(*rsa.PublicKey), gocrypto.SHA256, hash.Sum(nil), h.proof, opts)
+
+		if err != nil {
+			return qerr.ProofInvalid
+		}
+	} else {
+		panic("Not a RSA.")
 	}
 
 	return nil
