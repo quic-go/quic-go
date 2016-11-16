@@ -100,6 +100,21 @@ var _ = Describe("Crypto setup", func() {
 				Expect(cs.serverConfig.ID).To(Equal(scfg[TagSCID]))
 			})
 
+			It("rejects expired server configs", func() {
+				b := &bytes.Buffer{}
+				scfg := getDefaultServerConfigClient()
+				scfg[TagEXPY] = []byte{0x80, 0x54, 0x72, 0x4F, 0, 0, 0, 0} // 2012-03-28
+				WriteHandshakeMessage(b, TagSCFG, scfg)
+				tagMap[TagSCFG] = b.Bytes()
+				// make sure we actually set TagEXPY correct
+				serverConfig, err := parseServerConfig(b.Bytes())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(serverConfig.expiry.Year()).To(Equal(2012))
+				// now try to read this server config in the crypto setup
+				err = cs.handleREJMessage(tagMap)
+				Expect(err).To(MatchError(qerr.CryptoServerConfigExpired))
+			})
+
 			It("generates a client nonce after reading a server config", func() {
 				b := &bytes.Buffer{}
 				WriteHandshakeMessage(b, TagSCFG, getDefaultServerConfigClient())

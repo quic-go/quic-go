@@ -119,6 +119,10 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 			return err
 		}
 
+		if h.serverConfig.IsExpired() {
+			return qerr.CryptoServerConfigExpired
+		}
+
 		// now that we have a server config, we can use its OBIT value to generate a client nonce
 		if len(h.nonc) == 0 {
 			err = h.generateClientNonce()

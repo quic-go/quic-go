@@ -134,6 +134,10 @@ func (s *serverConfigClient) parseValues(tagMap map[Tag][]byte) error {
 	return nil
 }
 
+func (s *serverConfigClient) IsExpired() bool {
+	return s.expiry.Before(time.Now())
+}
+
 func (s *serverConfigClient) Get() []byte {
 	return s.raw
 }

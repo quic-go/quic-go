@@ -17,7 +17,7 @@ func getDefaultServerConfigClient() map[Tag][]byte {
 		TagAEAD: []byte("AESG"),
 		TagPUBS: bytes.Repeat([]byte{0}, 35),
 		TagOBIT: bytes.Repeat([]byte{0}, 8),
-		TagEXPY: bytes.Repeat([]byte{0}, 8),
+		TagEXPY: []byte{0x0, 0x6c, 0x57, 0x78, 0, 0, 0, 0}, // 2033-12-24
 	}
 }
 
@@ -43,6 +43,14 @@ var _ = Describe("Server Config", func() {
 		scfg, err := parseServerConfig(b.Bytes())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(scfg.raw).To(Equal(b.Bytes()))
+	})
+
+	It("tells if a server config is expired", func() {
+		scfg := &serverConfigClient{}
+		scfg.expiry = time.Now().Add(-time.Second)
+		Expect(scfg.IsExpired()).To(BeTrue())
+		scfg.expiry = time.Now().Add(time.Second)
+		Expect(scfg.IsExpired()).To(BeFalse())
 	})
 
 	Context("parsing the server config", func() {
