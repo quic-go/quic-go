@@ -25,6 +25,7 @@ type cryptoSetupClient struct {
 	stk                  []byte
 	sno                  []byte
 	nonc                 []byte
+	proof                []byte
 	diversificationNonce []byte
 	lastSentCHLO         []byte
 	certManager          crypto.CertManager
@@ -130,6 +131,10 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 				return err
 			}
 		}
+	}
+
+	if proof, ok := cryptoData[TagPROF]; ok {
+		h.proof = proof
 	}
 
 	if crt, ok := cryptoData[TagCERT]; ok {

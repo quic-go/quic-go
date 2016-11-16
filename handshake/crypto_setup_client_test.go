@@ -73,6 +73,14 @@ var _ = Describe("Crypto setup", func() {
 			Expect(cs.stk).Should(Equal(stk))
 		})
 
+		It("saves the proof", func() {
+			proof := []byte("signature for the server config")
+			tagMap[TagPROF] = proof
+			err := cs.handleREJMessage(tagMap)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cs.proof).To(Equal(proof))
+		})
+
 		It("saves the server nonce", func() {
 			nonc := []byte("servernonce")
 			tagMap[TagSNO] = nonc
