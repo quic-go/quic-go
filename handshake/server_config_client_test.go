@@ -235,6 +235,13 @@ var _ = Describe("Server Config", func() {
 				err := scfg.parseValues(tagMap)
 				Expect(err).To(MatchError("CryptoInvalidValueLength: EXPY"))
 			})
+
+			It("deals with absurdly large timestamps", func() {
+				tagMap[TagEXPY] = bytes.Repeat([]byte{0xff}, 8) // this would overflow the int64
+				err := scfg.parseValues(tagMap)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(scfg.expiry.After(time.Now())).To(BeTrue())
+			})
 		})
 	})
 })

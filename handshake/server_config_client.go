@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"math"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/qerr"
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 type serverConfigClient struct {
@@ -127,7 +129,10 @@ func (s *serverConfigClient) parseValues(tagMap map[Tag][]byte) error {
 	if len(expy) != 8 {
 		return qerr.Error(qerr.CryptoInvalidValueLength, "EXPY")
 	}
-	s.expiry = time.Unix(int64(binary.LittleEndian.Uint64(expy)), 0)
+	// make sure that the value doesn't overflow an int64
+	// furthermore, values close to MaxInt64 are not a valid input to time.Unix, thus set MaxInt64/2 as the maximum value here
+	expyTimestamp := utils.MinUint64(binary.LittleEndian.Uint64(expy), math.MaxInt64/2)
+	s.expiry = time.Unix(int64(expyTimestamp), 0)
 
 	// TODO: implement VER
 
