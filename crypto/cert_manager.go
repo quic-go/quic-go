@@ -29,7 +29,7 @@ func NewCertManager() CertManager {
 func (c *certManager) SetData(data []byte) error {
 	chain, err := decompressChain(data)
 	if err != nil {
-		return qerr.ProofInvalid
+		return qerr.Error(qerr.InvalidCryptoMessageParameter, "Certificate data invalid")
 	}
 	c.chain = chain
 

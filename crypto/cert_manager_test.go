@@ -15,7 +15,7 @@ var _ = Describe("Cert Manager", func() {
 
 	It("errors when given invalid data", func() {
 		err := cm.SetData([]byte("foobar"))
-		Expect(err).To(MatchError(qerr.ProofInvalid))
+		Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "Certificate data invalid")))
 	})
 
 	It("decompresses a certificate chain", func() {
