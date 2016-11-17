@@ -35,6 +35,7 @@ type cryptoSetupClient struct {
 	lastSentCHLO         []byte
 	certManager          crypto.CertManager
 
+	serverVerified    bool // has the certificate chain and the proof already been verified
 	keyDerivation     KeyDerivationFunction
 	secureAEAD        crypto.AEAD
 	forwardSecureAEAD crypto.AEAD
@@ -181,6 +182,10 @@ func (h *cryptoSetupClient) verifyServerConfigSignature() error {
 	} else {
 		panic("Not a RSA.")
 	}
+
+	// TODO: verify certificate chain
+
+	h.serverVerified = true
 
 	return nil
 }
@@ -338,6 +343,10 @@ func (h *cryptoSetupClient) addPadding(tags map[Tag][]byte) {
 }
 
 func (h *cryptoSetupClient) maybeUpgradeCrypto() error {
+	if !h.serverVerified {
+		return nil
+	}
+
 	leafCert := h.certManager.GetLeafCert()
 
 	if h.secureAEAD == nil && (h.serverConfig != nil && len(h.serverConfig.sharedSecret) > 0 && len(h.nonc) > 0 && len(leafCert) > 0 && len(h.diversificationNonce) > 0 && len(h.lastSentCHLO) > 0) {

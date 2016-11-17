@@ -396,13 +396,26 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		It("creates a secureAEAD once it has all necessary values", func() {
+			cs.serverVerified = true
 			err := cs.maybeUpgradeCrypto()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cs.secureAEAD).ToNot(BeNil())
+		})
+
+		It("doesn't create a secureAEAD if the certificate is not yet verified, even if it has all necessary values", func() {
+			err := cs.maybeUpgradeCrypto()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cs.secureAEAD).To(BeNil())
+			cs.serverVerified = true
+			// make sure we really had all necessary values before, and only serverVerified was missing
+			err = cs.maybeUpgradeCrypto()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.secureAEAD).ToNot(BeNil())
 		})
 
 		It("tries to escalate before reading a handshake message", func() {
 			Expect(cs.secureAEAD).To(BeNil())
+			cs.serverVerified = true
 			err := cs.HandleCryptoStream()
 			// this will throw a qerr.HandshakeFailed due to an EOF in WriteHandshakeMessage
 			// this is because the mockStream doesn't block if there's no data to read
@@ -412,6 +425,7 @@ var _ = Describe("Crypto setup", func() {
 
 		It("tries to escalate the crypto after receiving a diversification nonce", func() {
 			cs.diversificationNonce = nil
+			cs.serverVerified = true
 			Expect(cs.secureAEAD).To(BeNil())
 			err := cs.SetDiversificationNonce([]byte("div"))
 			Expect(err).ToNot(HaveOccurred())
