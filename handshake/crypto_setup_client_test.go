@@ -185,9 +185,9 @@ var _ = Describe("Crypto setup", func() {
 					cs.serverConfig = &serverConfigClient{raw: serverConfigData}
 					certManager.leafCert = leafCert.Raw
 
-					ps, err := crypto.NewProofSource(tlsConfig)
+					cc, err := crypto.NewCertChain(tlsConfig)
 					Expect(err).ToNot(HaveOccurred())
-					signature, err := ps.SignServerProof("", cs.chloForSignature, serverConfigData)
+					signature, err := cc.SignServerProof("", cs.chloForSignature, serverConfigData)
 					Expect(err).ToNot(HaveOccurred())
 					cs.proof = signature
 
@@ -228,9 +228,9 @@ var _ = Describe("Crypto setup", func() {
 					cs.serverConfig = &serverConfigClient{raw: serverConfigData}
 					certManager.leafCert = leafCert.Raw
 
-					ps, err := crypto.NewProofSource(tlsConfig)
+					cc, err := crypto.NewCertChain(tlsConfig)
 					Expect(err).ToNot(HaveOccurred())
-					signature, err := ps.SignServerProof("", cs.chloForSignature, serverConfigData)
+					signature, err := cc.SignServerProof("", cs.chloForSignature, serverConfigData)
 					Expect(err).ToNot(HaveOccurred())
 					cs.proof = signature
 

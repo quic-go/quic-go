@@ -212,7 +212,7 @@ var _ = Describe("Crypto setup", func() {
 		BeforeEach(func() {
 			xlct = make([]byte, 8)
 			var err error
-			cert, err = cs.scfg.signer.GetLeafCert("")
+			cert, err = cs.scfg.certChain.GetLeafCert("")
 			Expect(err).ToNot(HaveOccurred())
 			binary.LittleEndian.PutUint64(xlct, crypto.HashCert(cert))
 		})

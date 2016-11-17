@@ -30,8 +30,8 @@ type Server struct {
 	conn      *net.UDPConn
 	connMutex sync.Mutex
 
-	signer crypto.Signer
-	scfg   *handshake.ServerConfig
+	certChain crypto.CertChain
+	scfg      *handshake.ServerConfig
 
 	sessions                  map[protocol.ConnectionID]packetHandler
 	sessionsMutex             sync.RWMutex
@@ -44,7 +44,7 @@ type Server struct {
 
 // NewServer makes a new server
 func NewServer(addr string, tlsConfig *tls.Config, cb StreamCallback) (*Server, error) {
-	signer, err := crypto.NewProofSource(tlsConfig)
+	certChain, err := crypto.NewCertChain(tlsConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func NewServer(addr string, tlsConfig *tls.Config, cb StreamCallback) (*Server, 
 	if err != nil {
 		return nil, err
 	}
-	scfg, err := handshake.NewServerConfig(kex, signer)
+	scfg, err := handshake.NewServerConfig(kex, certChain)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func NewServer(addr string, tlsConfig *tls.Config, cb StreamCallback) (*Server, 
 
 	return &Server{
 		addr:                      udpAddr,
-		signer:                    signer,
+		certChain:                 certChain,
 		scfg:                      scfg,
 		streamCallback:            cb,
 		sessions:                  map[protocol.ConnectionID]packetHandler{},

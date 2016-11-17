@@ -129,11 +129,11 @@ var _ = Describe("Session", func() {
 		streamCallbackCalled = false
 		closeCallbackCalled = false
 
-		signer, err := crypto.NewProofSource(testdata.GetTLSConfig())
+		certChain, err := crypto.NewCertChain(testdata.GetTLSConfig())
 		Expect(err).ToNot(HaveOccurred())
 		kex, err := crypto.NewCurve25519KEX()
 		Expect(err).NotTo(HaveOccurred())
-		scfg, err := handshake.NewServerConfig(kex, signer)
+		scfg, err := handshake.NewServerConfig(kex, certChain)
 		Expect(err).NotTo(HaveOccurred())
 		pSession, err := newSession(
 			conn,
