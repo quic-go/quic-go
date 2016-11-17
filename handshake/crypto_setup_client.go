@@ -3,13 +3,16 @@ package handshake
 import (
 	"bytes"
 	gocrypto "crypto"
+	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/asn1"
 	"encoding/binary"
 	"errors"
 	"io"
+	"math/big"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
@@ -17,6 +20,10 @@ import (
 	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
 )
+
+type ecdsaSignature struct {
+	R, S *big.Int
+}
 
 type cryptoSetupClient struct {
 	connID  protocol.ConnectionID
@@ -180,7 +187,14 @@ func (h *cryptoSetupClient) verifyServerConfigSignature() error {
 			return qerr.ProofInvalid
 		}
 	} else {
-		panic("Not a RSA.")
+		signature := &ecdsaSignature{}
+		rest, err := asn1.Unmarshal(h.proof, signature)
+		if err != nil || len(rest) != 0 {
+			return qerr.ProofInvalid
+		}
+		if !ecdsa.Verify(cert.PublicKey.(*ecdsa.PublicKey), hash.Sum(nil), signature.R, signature.S) {
+			return qerr.ProofInvalid
+		}
 	}
 
 	// TODO: verify certificate chain
