@@ -129,8 +129,7 @@ var _ = Describe("Session", func() {
 		streamCallbackCalled = false
 		closeCallbackCalled = false
 
-		certChain, err := crypto.NewCertChain(testdata.GetTLSConfig())
-		Expect(err).ToNot(HaveOccurred())
+		certChain := crypto.NewCertChain(testdata.GetTLSConfig())
 		kex, err := crypto.NewCurve25519KEX()
 		Expect(err).NotTo(HaveOccurred())
 		scfg, err := handshake.NewServerConfig(kex, certChain)

@@ -20,9 +20,11 @@ type certChain struct {
 
 var _ CertChain = &certChain{}
 
+var errNoMatchingCertificate = errors.New("no matching certificate found")
+
 // NewCertChain loads the key and cert from files
-func NewCertChain(tlsConfig *tls.Config) (CertChain, error) {
-	return &certChain{config: tlsConfig}, nil
+func NewCertChain(tlsConfig *tls.Config) CertChain {
+	return &certChain{config: tlsConfig}
 }
 
 // SignServerProof signs CHLO and server config for use in the server proof
@@ -78,5 +80,5 @@ func (c *certChain) getCertForSNI(sni string) (*tls.Certificate, error) {
 		return &c.config.Certificates[0], nil
 	}
 
-	return nil, errors.New("no matching certificate found")
+	return nil, errNoMatchingCertificate
 }

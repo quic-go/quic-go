@@ -44,10 +44,7 @@ type Server struct {
 
 // NewServer makes a new server
 func NewServer(addr string, tlsConfig *tls.Config, cb StreamCallback) (*Server, error) {
-	certChain, err := crypto.NewCertChain(tlsConfig)
-	if err != nil {
-		return nil, err
-	}
+	certChain := crypto.NewCertChain(tlsConfig)
 
 	kex, err := crypto.NewCurve25519KEX()
 	if err != nil {
