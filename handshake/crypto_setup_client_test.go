@@ -46,6 +46,8 @@ type mockCertManager struct {
 
 	verifyServerProofError error
 	verifyServerProofValue bool
+
+	verifyError error
 }
 
 func (m *mockCertManager) SetData(data []byte) error {
@@ -59,6 +61,10 @@ func (m *mockCertManager) GetLeafCert() []byte {
 
 func (m *mockCertManager) VerifyServerProof(proof, chlo, serverConfigData []byte) (bool, error) {
 	return m.verifyServerProofValue, m.verifyServerProofError
+}
+
+func (m *mockCertManager) Verify(hostname string) error {
+	return m.verifyError
 }
 
 var _ = Describe("Crypto setup", func() {

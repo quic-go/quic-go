@@ -12,6 +12,7 @@ type CertManager interface {
 	SetData([]byte) error
 	GetLeafCert() []byte
 	VerifyServerProof(proof, chlo, serverConfigData []byte) (bool, error)
+	Verify(hostname string) error
 }
 
 type certManager struct {
@@ -59,4 +60,34 @@ func (c *certManager) VerifyServerProof(proof, chlo, serverConfigData []byte) (b
 	}
 
 	return verifyServerProof(proof, cert, chlo, serverConfigData), nil
+}
+
+func (c *certManager) Verify(hostname string) error {
+	if len(c.chain) == 0 {
+		return errNoCertificateChain
+	}
+
+	leafCert, err := x509.ParseCertificate(c.GetLeafCert())
+	if err != nil {
+		return err
+	}
+
+	opts := x509.VerifyOptions{DNSName: hostname}
+
+	// the first certificate is the leaf certificate, all others are intermediates
+	if len(c.chain) > 1 {
+		intermediates := x509.NewCertPool()
+		for i := 1; i < len(c.chain); i++ {
+			var cert *x509.Certificate
+			cert, err = x509.ParseCertificate(c.chain[i])
+			if err != nil {
+				return err
+			}
+			intermediates.AddCert(cert)
+		}
+		opts.Intermediates = intermediates
+	}
+
+	_, err = leafCert.Verify(opts)
+	return err
 }
