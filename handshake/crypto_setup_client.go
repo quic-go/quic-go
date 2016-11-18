@@ -15,8 +15,9 @@ import (
 )
 
 type cryptoSetupClient struct {
-	connID  protocol.ConnectionID
-	version protocol.VersionNumber
+	hostname string
+	connID   protocol.ConnectionID
+	version  protocol.VersionNumber
 
 	cryptoStream utils.Stream
 
@@ -48,11 +49,13 @@ var (
 
 // NewCryptoSetupClient creates a new CryptoSetup instance for a client
 func NewCryptoSetupClient(
+	hostname string,
 	connID protocol.ConnectionID,
 	version protocol.VersionNumber,
 	cryptoStream utils.Stream,
 ) (CryptoSetup, error) {
 	return &cryptoSetupClient{
+		hostname:     hostname,
 		connID:       connID,
 		version:      version,
 		cryptoStream: cryptoStream,
@@ -282,7 +285,7 @@ func (h *cryptoSetupClient) sendCHLO() error {
 
 func (h *cryptoSetupClient) getTags() map[Tag][]byte {
 	tags := make(map[Tag][]byte)
-	tags[TagSNI] = []byte("quic.clemente.io") // TODO: use real SNI here
+	tags[TagSNI] = []byte(h.hostname)
 	tags[TagPDMD] = []byte("X509")
 
 	versionTag := make([]byte, 4, 4)

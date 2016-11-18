@@ -152,6 +152,7 @@ var _ = Describe("Session", func() {
 		clientSession, err = newClientSession(
 			&net.UDPConn{},
 			&net.UDPAddr{},
+			"hostname",
 			protocol.Version35,
 			0,
 			func(*Session, utils.Stream) { streamCallbackCalled = true },

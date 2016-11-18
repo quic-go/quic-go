@@ -2,8 +2,10 @@ package quic
 
 import (
 	"bytes"
+	"errors"
 	"math/rand"
 	"net"
+	"net/url"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -22,8 +24,26 @@ type Client struct {
 	session *Session
 }
 
+var errHostname = errors.New("Invalid hostname")
+
 // NewClient makes a new client
-func NewClient(addr *net.UDPAddr) (*Client, error) {
+func NewClient(addr string) (*Client, error) {
+	hostname, err := utils.HostnameFromAddr(addr)
+	if err != nil || len(hostname) == 0 {
+		return nil, errHostname
+	}
+
+	p, err := url.Parse(addr)
+	if err != nil {
+		return nil, err
+	}
+	host := p.Host
+
+	udpAddr, err := net.ResolveUDPAddr("udp", host)
+	if err != nil {
+		return nil, err
+	}
+
 	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
 	if err != nil {
 		return nil, err
@@ -33,10 +53,10 @@ func NewClient(addr *net.UDPAddr) (*Client, error) {
 	rand.Seed(time.Now().UTC().UnixNano())
 	connectionID := protocol.ConnectionID(rand.Int63())
 
-	utils.Infof("Starting new connection to %s, connectionID %x", addr.String(), connectionID)
+	utils.Infof("Starting new connection to %s (%s), connectionID %x", host, udpAddr.String(), connectionID)
 
 	client := &Client{
-		addr:         addr,
+		addr:         udpAddr,
 		conn:         conn,
 		version:      protocol.Version36,
 		connectionID: connectionID,
@@ -44,7 +64,7 @@ func NewClient(addr *net.UDPAddr) (*Client, error) {
 
 	streamCallback := func(session *Session, stream utils.Stream) {}
 
-	client.session, err = newClientSession(conn, addr, client.version, client.connectionID, streamCallback, client.closeCallback)
+	client.session, err = newClientSession(conn, udpAddr, hostname, client.version, client.connectionID, streamCallback, client.closeCallback)
 	if err != nil {
 		return nil, err
 	}

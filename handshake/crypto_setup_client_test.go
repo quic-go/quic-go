@@ -75,7 +75,7 @@ var _ = Describe("Crypto setup", func() {
 	BeforeEach(func() {
 		stream = &mockStream{}
 		certManager = &mockCertManager{}
-		csInt, err := NewCryptoSetupClient(0, protocol.Version36, stream)
+		csInt, err := NewCryptoSetupClient("hostname", 0, protocol.Version36, stream)
 		Expect(err).ToNot(HaveOccurred())
 		cs = csInt.(*cryptoSetupClient)
 		cs.certManager = certManager
@@ -302,8 +302,9 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		It("has the right values for an inchoate CHLO", func() {
+			cs.hostname = "sni-hostname"
 			tags := cs.getTags()
-			Expect(tags).To(HaveKey(TagSNI))
+			Expect(string(tags[TagSNI])).To(Equal(cs.hostname))
 			Expect(tags[TagPDMD]).To(Equal([]byte("X509")))
 			Expect(tags[TagVER]).To(Equal([]byte("Q036")))
 		})
