@@ -57,7 +57,8 @@ var _ = Describe("SentPacketHandler", func() {
 	)
 
 	BeforeEach(func() {
-		handler = NewSentPacketHandler().(*sentPacketHandler)
+		rttStats := &congestion.RTTStats{}
+		handler = NewSentPacketHandler(rttStats).(*sentPacketHandler)
 		streamFrame = frames.StreamFrame{
 			StreamID: 5,
 			Data:     []byte{0x13, 0x37},

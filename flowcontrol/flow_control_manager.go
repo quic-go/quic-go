@@ -4,13 +4,16 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
 type flowControlManager struct {
-	connectionParametersManager        *handshake.ConnectionParametersManager
+	connectionParametersManager *handshake.ConnectionParametersManager
+	rttStats                    *congestion.RTTStats
+
 	streamFlowController               map[protocol.StreamID]*flowController
 	contributesToConnectionFlowControl map[protocol.StreamID]bool
 	mutex                              sync.RWMutex
@@ -26,14 +29,15 @@ var (
 var errMapAccess = errors.New("Error accessing the flowController map.")
 
 // NewFlowControlManager creates a new flow control manager
-func NewFlowControlManager(connectionParametersManager *handshake.ConnectionParametersManager) FlowControlManager {
+func NewFlowControlManager(connectionParametersManager *handshake.ConnectionParametersManager, rttStats *congestion.RTTStats) FlowControlManager {
 	fcm := flowControlManager{
 		connectionParametersManager:        connectionParametersManager,
+		rttStats:                           rttStats,
 		streamFlowController:               make(map[protocol.StreamID]*flowController),
 		contributesToConnectionFlowControl: make(map[protocol.StreamID]bool),
 	}
 	// initialize connection level flow controller
-	fcm.streamFlowController[0] = newFlowController(0, connectionParametersManager)
+	fcm.streamFlowController[0] = newFlowController(0, connectionParametersManager, rttStats)
 	fcm.contributesToConnectionFlowControl[0] = false
 	return &fcm
 }
@@ -47,7 +51,7 @@ func (f *flowControlManager) NewStream(streamID protocol.StreamID, contributesTo
 		return
 	}
 
-	f.streamFlowController[streamID] = newFlowController(streamID, f.connectionParametersManager)
+	f.streamFlowController[streamID] = newFlowController(streamID, f.connectionParametersManager, f.rttStats)
 	f.contributesToConnectionFlowControl[streamID] = contributesToConnectionFlow
 }
 

@@ -1,6 +1,7 @@
 package flowcontrol
 
 import (
+	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
@@ -15,7 +16,7 @@ var _ = Describe("Flow Control Manager", func() {
 		cpm = &handshake.ConnectionParametersManager{}
 		setConnectionParametersManagerWindow(cpm, "receiveStreamFlowControlWindow", 0x100)
 		setConnectionParametersManagerWindow(cpm, "receiveConnectionFlowControlWindow", 0x200)
-		fcm = NewFlowControlManager(cpm).(*flowControlManager)
+		fcm = NewFlowControlManager(cpm, &congestion.RTTStats{}).(*flowControlManager)
 	})
 
 	It("creates a connection level flow controller", func() {

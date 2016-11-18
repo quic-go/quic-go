@@ -5,6 +5,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/flowcontrol"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -110,7 +111,7 @@ var _ = Describe("Stream", func() {
 		onDataCalled = false
 		var streamID protocol.StreamID = 1337
 		cpm := handshake.NewConnectionParamatersManager()
-		flowControlManager := flowcontrol.NewFlowControlManager(cpm)
+		flowControlManager := flowcontrol.NewFlowControlManager(cpm, &congestion.RTTStats{})
 		flowControlManager.NewStream(streamID, true)
 		str, _ = newStream(streamID, onData, flowControlManager)
 	})
