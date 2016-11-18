@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"crypto/x509"
 	"errors"
 
 	"github.com/lucas-clemente/quic-go/qerr"
@@ -10,6 +11,7 @@ import (
 type CertManager interface {
 	SetData([]byte) error
 	GetLeafCert() []byte
+	VerifyServerProof(proof, chlo, serverConfigData []byte) (bool, error)
 }
 
 type certManager struct {
@@ -43,4 +45,18 @@ func (c *certManager) GetLeafCert() []byte {
 		return nil
 	}
 	return c.chain[0]
+}
+
+func (c *certManager) VerifyServerProof(proof, chlo, serverConfigData []byte) (bool, error) {
+	leafCert := c.GetLeafCert()
+	if leafCert == nil {
+		return false, errNoCertificateChain
+	}
+
+	cert, err := x509.ParseCertificate(leafCert)
+	if err != nil {
+		return false, err
+	}
+
+	return verifyServerProof(proof, cert, chlo, serverConfigData), nil
 }

@@ -2,17 +2,10 @@ package handshake
 
 import (
 	"bytes"
-	gocrypto "crypto"
-	"crypto/ecdsa"
 	"crypto/rand"
-	"crypto/rsa"
-	"crypto/sha256"
-	"crypto/x509"
-	"encoding/asn1"
 	"encoding/binary"
 	"errors"
 	"io"
-	"math/big"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
@@ -20,10 +13,6 @@ import (
 	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
 )
-
-type ecdsaSignature struct {
-	R, S *big.Int
-}
 
 type cryptoSetupClient struct {
 	connID  protocol.ConnectionID
@@ -166,35 +155,12 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 }
 
 func (h *cryptoSetupClient) verifyServerConfigSignature() error {
-	leafCert := h.certManager.GetLeafCert()
-	cert, err := x509.ParseCertificate(leafCert)
+	validProof, err := h.certManager.VerifyServerProof(h.proof, h.chloForSignature, h.serverConfig.Get())
 	if err != nil {
 		return qerr.Error(qerr.InvalidCryptoMessageParameter, "Certificate data invalid")
 	}
-
-	hash := sha256.New()
-	hash.Write([]byte("QUIC CHLO and server config signature\x00"))
-	chloHash := sha256.Sum256(h.chloForSignature)
-	hash.Write([]byte{32, 0, 0, 0})
-	hash.Write(chloHash[:])
-	hash.Write(h.serverConfig.Get())
-
-	if cert.PublicKeyAlgorithm == x509.RSA {
-		opts := &rsa.PSSOptions{SaltLength: 32, Hash: gocrypto.SHA256}
-		err = rsa.VerifyPSS(cert.PublicKey.(*rsa.PublicKey), gocrypto.SHA256, hash.Sum(nil), h.proof, opts)
-
-		if err != nil {
-			return qerr.ProofInvalid
-		}
-	} else {
-		signature := &ecdsaSignature{}
-		rest, err := asn1.Unmarshal(h.proof, signature)
-		if err != nil || len(rest) != 0 {
-			return qerr.ProofInvalid
-		}
-		if !ecdsa.Verify(cert.PublicKey.(*ecdsa.PublicKey), hash.Sum(nil), signature.R, signature.S) {
-			return qerr.ProofInvalid
-		}
+	if !validProof {
+		return qerr.ProofInvalid
 	}
 
 	// TODO: verify certificate chain

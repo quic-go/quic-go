@@ -43,4 +43,21 @@ var _ = Describe("Cert Manager", func() {
 			Expect(leafCert).To(BeNil())
 		})
 	})
+
+	Context("verifying the server signature", func() {
+		It("errors when the chain hasn't been set yet", func() {
+			valid, err := cm.VerifyServerProof([]byte("proof"), []byte("chlo"), []byte("scfg"))
+			Expect(err).To(MatchError(errNoCertificateChain))
+			Expect(valid).To(BeFalse())
+		})
+
+		It("errors when it can't parse the certificate", func() {
+			cert := []byte("invalid cert")
+			cm.chain = [][]byte{cert}
+			valid, err := cm.VerifyServerProof([]byte("proof"), []byte("chlo"), []byte("scfg"))
+			Expect(err).To(HaveOccurred())
+			Expect(err).ToNot(MatchError(errNoCertificateChain))
+			Expect(valid).To(BeFalse())
+		})
+	})
 })
