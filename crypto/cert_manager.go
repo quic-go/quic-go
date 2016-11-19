@@ -16,12 +16,12 @@ type CertManager interface {
 }
 
 type certManager struct {
-	chain [][]byte
+	chain []*x509.Certificate
 }
 
 var _ CertManager = &certManager{}
 
-var errNoCertificateChain = errors.New("No certicifate chain loaded")
+var errNoCertificateChain = errors.New("CertManager BUG: No certicifate chain loaded")
 
 // NewCertManager creates a new CertManager
 func NewCertManager() CertManager {
@@ -30,12 +30,21 @@ func NewCertManager() CertManager {
 
 // SetData takes the byte-slice sent in the SHLO and decompresses it into the certificate chain
 func (c *certManager) SetData(data []byte) error {
-	chain, err := decompressChain(data)
+	byteChain, err := decompressChain(data)
 	if err != nil {
 		return qerr.Error(qerr.InvalidCryptoMessageParameter, "Certificate data invalid")
 	}
-	c.chain = chain
 
+	chain := make([]*x509.Certificate, len(byteChain), len(byteChain))
+	for i, data := range byteChain {
+		cert, err := x509.ParseCertificate(data)
+		if err != nil {
+			return err
+		}
+		chain[i] = cert
+	}
+
+	c.chain = chain
 	return nil
 }
 
@@ -45,21 +54,15 @@ func (c *certManager) GetLeafCert() []byte {
 	if len(c.chain) == 0 {
 		return nil
 	}
-	return c.chain[0]
+	return c.chain[0].Raw
 }
 
 func (c *certManager) VerifyServerProof(proof, chlo, serverConfigData []byte) (bool, error) {
-	leafCert := c.GetLeafCert()
-	if leafCert == nil {
+	if len(c.chain) == 0 {
 		return false, errNoCertificateChain
 	}
 
-	cert, err := x509.ParseCertificate(leafCert)
-	if err != nil {
-		return false, err
-	}
-
-	return verifyServerProof(proof, cert, chlo, serverConfigData), nil
+	return verifyServerProof(proof, c.chain[0], chlo, serverConfigData), nil
 }
 
 func (c *certManager) Verify(hostname string) error {
@@ -78,12 +81,7 @@ func (c *certManager) Verify(hostname string) error {
 	if len(c.chain) > 1 {
 		intermediates := x509.NewCertPool()
 		for i := 1; i < len(c.chain); i++ {
-			var cert *x509.Certificate
-			cert, err = x509.ParseCertificate(c.chain[i])
-			if err != nil {
-				return err
-			}
-			intermediates.AddCert(cert)
+			intermediates.AddCert(c.chain[i])
 		}
 		opts.Intermediates = intermediates
 	}

@@ -19,9 +19,19 @@ import (
 
 var _ = Describe("Cert Manager", func() {
 	var cm *certManager
+	var cert1, cert2 []byte
 
 	BeforeEach(func() {
 		cm = NewCertManager().(*certManager)
+		key1, err := rsa.GenerateKey(rand.Reader, 512)
+		Expect(err).ToNot(HaveOccurred())
+		key2, err := rsa.GenerateKey(rand.Reader, 512)
+		Expect(err).ToNot(HaveOccurred())
+		template := &x509.Certificate{SerialNumber: big.NewInt(1)}
+		cert1, err = x509.CreateCertificate(rand.Reader, template, template, &key1.PublicKey, key1)
+		Expect(err).ToNot(HaveOccurred())
+		cert2, err = x509.CreateCertificate(rand.Reader, template, template, &key2.PublicKey, key2)
+		Expect(err).ToNot(HaveOccurred())
 	})
 
 	It("errors when given invalid data", func() {
@@ -29,22 +39,39 @@ var _ = Describe("Cert Manager", func() {
 		Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "Certificate data invalid")))
 	})
 
-	It("decompresses a certificate chain", func() {
-		cert1 := []byte{0xde, 0xca, 0xfb, 0xad}
-		cert2 := []byte{0xde, 0xad, 0xbe, 0xef, 0x13, 0x37}
-		chain := [][]byte{cert1, cert2}
-		compressed, err := compressChain(chain, nil, nil)
-		Expect(err).ToNot(HaveOccurred())
-		err = cm.SetData(compressed)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(cm.chain).To(Equal(chain))
+	Context("setting the data", func() {
+		It("decompresses a certificate chain", func() {
+			chain := [][]byte{cert1, cert2}
+			compressed, err := compressChain(chain, nil, nil)
+			Expect(err).ToNot(HaveOccurred())
+			err = cm.SetData(compressed)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cm.chain[0].Raw).To(Equal(cert1))
+			Expect(cm.chain[1].Raw).To(Equal(cert2))
+		})
+
+		It("errors if it can't decompress the chain", func() {
+			err := cm.SetData([]byte("invalid data"))
+			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "Certificate data invalid")))
+		})
+
+		It("errors if it can't parse a certificate", func() {
+			chain := [][]byte{[]byte("cert1"), []byte("cert2")}
+			compressed, err := compressChain(chain, nil, nil)
+			Expect(err).ToNot(HaveOccurred())
+			err = cm.SetData(compressed)
+			_, ok := err.(asn1.StructuralError)
+			Expect(ok).To(BeTrue())
+		})
 	})
 
 	Context("getting the leaf cert", func() {
 		It("gets it", func() {
-			cert1 := []byte{0xc1}
-			cert2 := []byte{0xc2}
-			cm.chain = [][]byte{cert1, cert2}
+			xcert1, err := x509.ParseCertificate(cert1)
+			Expect(err).ToNot(HaveOccurred())
+			xcert2, err := x509.ParseCertificate(cert2)
+			Expect(err).ToNot(HaveOccurred())
+			cm.chain = []*x509.Certificate{xcert1, xcert2}
 			leafCert := cm.GetLeafCert()
 			Expect(leafCert).To(Equal(cert1))
 		})
@@ -59,15 +86,6 @@ var _ = Describe("Cert Manager", func() {
 		It("errors when the chain hasn't been set yet", func() {
 			valid, err := cm.VerifyServerProof([]byte("proof"), []byte("chlo"), []byte("scfg"))
 			Expect(err).To(MatchError(errNoCertificateChain))
-			Expect(valid).To(BeFalse())
-		})
-
-		It("errors when it can't parse the certificate", func() {
-			cert := []byte("invalid cert")
-			cm.chain = [][]byte{cert}
-			valid, err := cm.VerifyServerProof([]byte("proof"), []byte("chlo"), []byte("scfg"))
-			Expect(err).To(HaveOccurred())
-			Expect(err).ToNot(MatchError(errNoCertificateChain))
 			Expect(valid).To(BeFalse())
 		})
 	})
@@ -86,24 +104,16 @@ var _ = Describe("Cert Manager", func() {
 
 		It("accepts a valid certificate", func() {
 			cc := NewCertChain(testdata.GetTLSConfig()).(*certChain)
-			cert, err := cc.getCertForSNI("quic.clemente.io")
+			tlsCert, err := cc.getCertForSNI("quic.clemente.io")
 			Expect(err).ToNot(HaveOccurred())
-			cm.chain = cert.Certificate
+			for _, data := range tlsCert.Certificate {
+				var cert *x509.Certificate
+				cert, err = x509.ParseCertificate(data)
+				Expect(err).ToNot(HaveOccurred())
+				cm.chain = append(cm.chain, cert)
+			}
 			err = cm.Verify("quic.clemente.io")
 			Expect(err).ToNot(HaveOccurred())
-		})
-
-		It("errors if it can't parse an intermediate certificate", func() {
-			cc := NewCertChain(testdata.GetTLSConfig()).(*certChain)
-			cert, err := cc.getCertForSNI("quic.clemente.io")
-			Expect(err).ToNot(HaveOccurred())
-			cm.chain = cert.Certificate
-			Expect(cm.chain).To(HaveLen(2))
-			cm.chain[1] = []byte("invalid intermediate")
-			err = cm.Verify("quic.clemente.io")
-			Expect(err).To(HaveOccurred())
-			_, ok := err.(asn1.StructuralError)
-			Expect(ok).To(BeTrue())
 		})
 
 		It("doesn't accept an expired certificate", func() {
@@ -119,7 +129,7 @@ var _ = Describe("Cert Manager", func() {
 			}
 			leafCert := getCertificate(template)
 
-			cm.chain = [][]byte{leafCert.Raw}
+			cm.chain = []*x509.Certificate{leafCert}
 			err := cm.Verify("")
 			Expect(err).To(HaveOccurred())
 			Expect(err.(x509.CertificateInvalidError).Reason).To(Equal(x509.Expired))
@@ -138,7 +148,7 @@ var _ = Describe("Cert Manager", func() {
 			}
 			leafCert := getCertificate(template)
 
-			cm.chain = [][]byte{leafCert.Raw}
+			cm.chain = []*x509.Certificate{leafCert}
 			err := cm.Verify("")
 			Expect(err).To(HaveOccurred())
 			Expect(err.(x509.CertificateInvalidError).Reason).To(Equal(x509.Expired))
@@ -158,7 +168,7 @@ var _ = Describe("Cert Manager", func() {
 			}
 			leafCert := getCertificate(template)
 
-			cm.chain = [][]byte{leafCert.Raw}
+			cm.chain = []*x509.Certificate{leafCert}
 			err := cm.Verify("quic.clemente.io")
 			Expect(err).To(HaveOccurred())
 			_, ok := err.(x509.HostnameError)
@@ -170,12 +180,6 @@ var _ = Describe("Cert Manager", func() {
 			Expect(err).To(HaveOccurred())
 		})
 
-		It("errors if it can't parse the leaf certificate", func() {
-			cm.chain = [][]byte{[]byte("invalid leaf cert")}
-			err := cm.Verify("example.com")
-			Expect(err).To(HaveOccurred())
-		})
-
 		// this tests relies on LetsEncrypt not being contained in the Root CAs
 		It("rejects valid certificate with missing certificate chain", func() {
 			if runtime.GOOS == "windows" {
@@ -183,8 +187,10 @@ var _ = Describe("Cert Manager", func() {
 			}
 
 			cert := testdata.GetCertificate()
-			cm.chain = [][]byte{cert.Certificate[0]}
-			err := cm.Verify("quic.clemente.io")
+			xcert, err := x509.ParseCertificate(cert.Certificate[0])
+			Expect(err).ToNot(HaveOccurred())
+			cm.chain = []*x509.Certificate{xcert}
+			err = cm.Verify("quic.clemente.io")
 			_, ok := err.(x509.UnknownAuthorityError)
 			Expect(ok).To(BeTrue())
 		})
