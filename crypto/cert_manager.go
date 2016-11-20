@@ -65,16 +65,13 @@ func (c *certManager) VerifyServerProof(proof, chlo, serverConfigData []byte) (b
 	return verifyServerProof(proof, c.chain[0], chlo, serverConfigData), nil
 }
 
+// Verify verifies the certificate chain
 func (c *certManager) Verify(hostname string) error {
 	if len(c.chain) == 0 {
 		return errNoCertificateChain
 	}
 
-	leafCert, err := x509.ParseCertificate(c.GetLeafCert())
-	if err != nil {
-		return err
-	}
-
+	leafCert := c.chain[0]
 	opts := x509.VerifyOptions{DNSName: hostname}
 
 	// the first certificate is the leaf certificate, all others are intermediates
@@ -86,6 +83,6 @@ func (c *certManager) Verify(hostname string) error {
 		opts.Intermediates = intermediates
 	}
 
-	_, err = leafCert.Verify(opts)
+	_, err := leafCert.Verify(opts)
 	return err
 }
