@@ -146,7 +146,12 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 	if crt, ok := cryptoData[TagCERT]; ok {
 		err := h.certManager.SetData(crt)
 		if err != nil {
-			return err
+			return qerr.Error(qerr.InvalidCryptoMessageParameter, "Certificate data invalid")
+		}
+
+		err = h.certManager.Verify(h.hostname)
+		if err != nil {
+			return qerr.ProofInvalid
 		}
 	}
 

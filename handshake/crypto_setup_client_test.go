@@ -44,6 +44,7 @@ type mockCertManager struct {
 	setDataCalledWith []byte
 	leafCert          []byte
 
+	setDataError           error
 	verifyServerProofError error
 	verifyServerProofValue bool
 
@@ -52,7 +53,7 @@ type mockCertManager struct {
 
 func (m *mockCertManager) SetData(data []byte) error {
 	m.setDataCalledWith = data
-	return nil
+	return m.setDataError
 }
 
 func (m *mockCertManager) GetLeafCert() []byte {
@@ -152,6 +153,20 @@ var _ = Describe("Crypto setup", func() {
 				err := cs.handleREJMessage(tagMap)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(certManager.setDataCalledWith).To(Equal(tagMap[TagCERT]))
+			})
+
+			It("returns an InvalidCryptoMessageParameter error if it can't parse the cert chain", func() {
+				tagMap[TagCERT] = []byte("cert")
+				certManager.setDataError = errors.New("can't parse")
+				err := cs.handleREJMessage(tagMap)
+				Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "Certificate data invalid")))
+			})
+
+			It("returns a ProofInvalid error if the certificate chain is not valid", func() {
+				tagMap[TagCERT] = []byte("cert")
+				certManager.verifyError = errors.New("invalid")
+				err := cs.handleREJMessage(tagMap)
+				Expect(err).To(MatchError(qerr.ProofInvalid))
 			})
 
 			It("verifies the signature", func() {
