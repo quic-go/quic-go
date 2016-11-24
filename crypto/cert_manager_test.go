@@ -3,6 +3,7 @@ package crypto
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
@@ -19,13 +20,15 @@ import (
 
 var _ = Describe("Cert Manager", func() {
 	var cm *certManager
+	var key1, key2 *rsa.PrivateKey
 	var cert1, cert2 []byte
 
 	BeforeEach(func() {
+		var err error
 		cm = NewCertManager().(*certManager)
-		key1, err := rsa.GenerateKey(rand.Reader, 512)
+		key1, err = rsa.GenerateKey(rand.Reader, 768)
 		Expect(err).ToNot(HaveOccurred())
-		key2, err := rsa.GenerateKey(rand.Reader, 512)
+		key2, err = rsa.GenerateKey(rand.Reader, 768)
 		Expect(err).ToNot(HaveOccurred())
 		template := &x509.Certificate{SerialNumber: big.NewInt(1)}
 		cert1, err = x509.CreateCertificate(rand.Reader, template, template, &key1.PublicKey, key1)
@@ -82,10 +85,29 @@ var _ = Describe("Cert Manager", func() {
 		})
 	})
 
-	Context("verifying the server signature", func() {
-		It("errors when the chain hasn't been set yet", func() {
-			valid, err := cm.VerifyServerProof([]byte("proof"), []byte("chlo"), []byte("scfg"))
-			Expect(err).To(MatchError(errNoCertificateChain))
+	Context("verifying the server config signature", func() {
+		It("returns false when the chain hasn't been set yet", func() {
+			valid := cm.VerifyServerProof([]byte("proof"), []byte("chlo"), []byte("scfg"))
+			Expect(valid).To(BeFalse())
+		})
+
+		It("verifies the signature", func() {
+			chlo := []byte("client hello")
+			scfg := []byte("server config data")
+			xcert1, err := x509.ParseCertificate(cert1)
+			Expect(err).ToNot(HaveOccurred())
+			cm.chain = []*x509.Certificate{xcert1}
+			proof, err := signServerProof(&tls.Certificate{PrivateKey: key1}, chlo, scfg)
+			Expect(err).ToNot(HaveOccurred())
+			valid := cm.VerifyServerProof(proof, chlo, scfg)
+			Expect(valid).To(BeTrue())
+		})
+
+		It("rejects an invalid signature", func() {
+			xcert1, err := x509.ParseCertificate(cert1)
+			Expect(err).ToNot(HaveOccurred())
+			cm.chain = []*x509.Certificate{xcert1}
+			valid := cm.VerifyServerProof([]byte("invalid proof"), []byte("chlo"), []byte("scfg"))
 			Expect(valid).To(BeFalse())
 		})
 	})

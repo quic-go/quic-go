@@ -11,7 +11,7 @@ import (
 type CertManager interface {
 	SetData([]byte) error
 	GetLeafCert() []byte
-	VerifyServerProof(proof, chlo, serverConfigData []byte) (bool, error)
+	VerifyServerProof(proof, chlo, serverConfigData []byte) bool
 	Verify(hostname string) error
 }
 
@@ -57,12 +57,14 @@ func (c *certManager) GetLeafCert() []byte {
 	return c.chain[0].Raw
 }
 
-func (c *certManager) VerifyServerProof(proof, chlo, serverConfigData []byte) (bool, error) {
+// VerifyServerProof verifies the signature of the server config
+// it should only be called after the certificate chain has been set, otherwise it returns false
+func (c *certManager) VerifyServerProof(proof, chlo, serverConfigData []byte) bool {
 	if len(c.chain) == 0 {
-		return false, errNoCertificateChain
+		return false
 	}
 
-	return verifyServerProof(proof, c.chain[0], chlo, serverConfigData), nil
+	return verifyServerProof(proof, c.chain[0], chlo, serverConfigData)
 }
 
 // Verify verifies the certificate chain

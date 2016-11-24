@@ -42,13 +42,15 @@ func pemBlockForCert(certDER []byte) *pem.Block {
 
 type mockCertManager struct {
 	setDataCalledWith []byte
-	leafCert          []byte
+	setDataError      error
 
-	setDataError           error
-	verifyServerProofError error
-	verifyServerProofValue bool
+	leafCert []byte
 
-	verifyError error
+	verifyServerProofResult bool
+	verifyServerProofCalled bool
+
+	verifyError  error
+	verifyCalled bool
 }
 
 func (m *mockCertManager) SetData(data []byte) error {
@@ -60,11 +62,13 @@ func (m *mockCertManager) GetLeafCert() []byte {
 	return m.leafCert
 }
 
-func (m *mockCertManager) VerifyServerProof(proof, chlo, serverConfigData []byte) (bool, error) {
-	return m.verifyServerProofValue, m.verifyServerProofError
+func (m *mockCertManager) VerifyServerProof(proof, chlo, serverConfigData []byte) bool {
+	m.verifyServerProofCalled = true
+	return m.verifyServerProofResult
 }
 
 func (m *mockCertManager) Verify(hostname string) error {
+	m.verifyCalled = true
 	return m.verifyError
 }
 
@@ -162,32 +166,65 @@ var _ = Describe("Crypto setup", func() {
 				Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "Certificate data invalid")))
 			})
 
-			It("returns a ProofInvalid error if the certificate chain is not valid", func() {
-				tagMap[TagCERT] = []byte("cert")
-				certManager.verifyError = errors.New("invalid")
-				err := cs.handleREJMessage(tagMap)
-				Expect(err).To(MatchError(qerr.ProofInvalid))
+			Context("verifying the certificate chain", func() {
+				It("returns a ProofInvalid error if the certificate chain is not valid", func() {
+					tagMap[TagCERT] = []byte("cert")
+					certManager.verifyError = errors.New("invalid")
+					err := cs.handleREJMessage(tagMap)
+					Expect(err).To(MatchError(qerr.ProofInvalid))
+				})
+
+				It("verifies the certificate", func() {
+					certManager.verifyServerProofResult = true
+					tagMap[TagCERT] = []byte("cert")
+					err := cs.handleREJMessage(tagMap)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(certManager.verifyCalled).To(BeTrue())
+				})
 			})
 
-			It("verifies the signature", func() {
-				certManager.verifyServerProofValue = true
-				certManager.verifyServerProofError = nil
-				err := cs.verifyServerConfigSignature()
-				Expect(err).ToNot(HaveOccurred())
-			})
+			Context("verifying the signature", func() {
+				BeforeEach(func() {
+					tagMap[TagCERT] = []byte("cert")
+					tagMap[TagPROF] = []byte("proof")
+					certManager.leafCert = []byte("leafcert")
+				})
 
-			It("errors when it can't read the certificate", func() {
-				certManager.verifyServerProofValue = true
-				certManager.verifyServerProofError = errors.New("test error")
-				err := cs.verifyServerConfigSignature()
-				Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "Certificate data invalid")))
-			})
+				It("rejects wrong signature", func() {
+					certManager.verifyServerProofResult = false
+					err := cs.handleREJMessage(tagMap)
+					Expect(err).To(MatchError(qerr.ProofInvalid))
+					Expect(certManager.verifyServerProofCalled).To(BeTrue())
+				})
 
-			It("rejects wrong signatures", func() {
-				certManager.verifyServerProofValue = false
-				certManager.verifyServerProofError = nil
-				err := cs.verifyServerConfigSignature()
-				Expect(err).To(MatchError(qerr.ProofInvalid))
+				It("accepts correct signatures", func() {
+					certManager.verifyServerProofResult = true
+					err := cs.handleREJMessage(tagMap)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(certManager.verifyServerProofCalled).To(BeTrue())
+				})
+
+				It("doesn't try to verify the signature if the certificate is missing", func() {
+					delete(tagMap, TagCERT)
+					certManager.leafCert = nil
+					err := cs.handleREJMessage(tagMap)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(certManager.verifyServerProofCalled).To(BeFalse())
+				})
+
+				It("doesn't try to verify the signature if the server config is missing", func() {
+					cs.serverConfig = nil
+					err := cs.handleREJMessage(tagMap)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(certManager.verifyServerProofCalled).To(BeFalse())
+				})
+
+				It("doesn't try to verify the signature if the signature is missing", func() {
+					delete(tagMap, TagPROF)
+					err := cs.handleREJMessage(tagMap)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(certManager.verifyServerProofCalled).To(BeFalse())
+				})
 			})
 		})
 

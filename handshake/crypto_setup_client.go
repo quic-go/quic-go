@@ -156,24 +156,13 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 	}
 
 	if h.serverConfig != nil && len(h.proof) != 0 && h.certManager.GetLeafCert() != nil {
-		return h.verifyServerConfigSignature()
+		validProof := h.certManager.VerifyServerProof(h.proof, h.chloForSignature, h.serverConfig.Get())
+		if !validProof {
+			return qerr.ProofInvalid
+		}
+
+		h.serverVerified = true
 	}
-
-	return nil
-}
-
-func (h *cryptoSetupClient) verifyServerConfigSignature() error {
-	validProof, err := h.certManager.VerifyServerProof(h.proof, h.chloForSignature, h.serverConfig.Get())
-	if err != nil {
-		return qerr.Error(qerr.InvalidCryptoMessageParameter, "Certificate data invalid")
-	}
-	if !validProof {
-		return qerr.ProofInvalid
-	}
-
-	// TODO: verify certificate chain
-
-	h.serverVerified = true
 
 	return nil
 }
