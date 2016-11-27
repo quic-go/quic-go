@@ -3,6 +3,7 @@ package quic
 import (
 	"bytes"
 	"crypto/tls"
+	"errors"
 	"net"
 	"strings"
 	"sync"
@@ -153,10 +154,19 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 	s.sessionsMutex.RUnlock()
 
 	if !ok {
-		utils.Infof("Serving new connection: %x, version %d from %v", hdr.ConnectionID, hdr.VersionNumber, remoteAddr)
+		if !hdr.VersionFlag {
+			_, err = conn.WriteToUDP(writePublicReset(hdr.ConnectionID, hdr.PacketNumber, 0), remoteAddr)
+			return err
+		}
+		version := hdr.VersionNumber
+		if !protocol.IsSupportedVersion(version) {
+			return errors.New("Server BUG: negotiated version not supported")
+		}
+
+		utils.Infof("Serving new connection: %x, version %d from %v", hdr.ConnectionID, version, remoteAddr)
 		session, err = s.newSession(
 			&udpConn{conn: conn, currentAddr: remoteAddr},
-			hdr.VersionNumber,
+			version,
 			hdr.ConnectionID,
 			s.scfg,
 			s.streamCallback,
