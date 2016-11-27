@@ -237,8 +237,8 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 		return nil, err
 	}
 
-	nonce := make([]byte, 32)
-	if _, err = rand.Read(nonce); err != nil {
+	serverNonce := make([]byte, 32)
+	if _, err = rand.Read(serverNonce); err != nil {
 		return nil, err
 	}
 
@@ -247,10 +247,15 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 		return nil, err
 	}
 
+	clientNonce := cryptoData[TagNONC]
+	if len(clientNonce) != 32 {
+		return nil, qerr.Error(qerr.InvalidCryptoMessageParameter, "invalid client nonce length")
+	}
+
 	h.secureAEAD, err = h.keyDerivation(
 		false,
 		sharedSecret,
-		cryptoData[TagNONC],
+		clientNonce,
 		h.connID,
 		data,
 		h.scfg.Get(),
@@ -263,13 +268,14 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 
 	// Generate a new curve instance to derive the forward secure key
 	var fsNonce bytes.Buffer
-	fsNonce.Write(cryptoData[TagNONC])
-	fsNonce.Write(nonce)
+	fsNonce.Write(clientNonce)
+	fsNonce.Write(serverNonce)
 	ephermalKex := h.keyExchange()
 	ephermalSharedSecret, err := ephermalKex.CalculateSharedKey(cryptoData[TagPUBS])
 	if err != nil {
 		return nil, err
 	}
+
 	h.forwardSecureAEAD, err = h.keyDerivation(
 		true,
 		ephermalSharedSecret,
@@ -292,7 +298,7 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 	replyMap := h.connectionParametersManager.GetSHLOMap()
 	// add crypto parameters
 	replyMap[TagPUBS] = ephermalKex.PublicKey()
-	replyMap[TagSNO] = nonce
+	replyMap[TagSNO] = serverNonce
 	replyMap[TagVER] = protocol.SupportedVersionsAsTags
 
 	var reply bytes.Buffer

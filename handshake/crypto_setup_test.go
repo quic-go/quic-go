@@ -262,6 +262,18 @@ var _ = Describe("Crypto setup", func() {
 			Expect(aeadChanged).To(Receive())
 		})
 
+		It("rejects client nonces that have the wrong length", func() {
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagSNI:  []byte("quic.clemente.io"),
+				TagNONC: []byte("too short client nonce"),
+				TagSTK:  validSTK,
+				TagPUBS: nil,
+			})
+			err := cs.HandleCryptoStream()
+			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "invalid client nonce length")))
+		})
+
 		It("handles 0-RTT handshake", func() {
 			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
 				TagSCID: scfg.ID,
