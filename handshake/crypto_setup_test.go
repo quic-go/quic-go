@@ -150,7 +150,6 @@ var _ = Describe("Crypto setup", func() {
 		ip = net.ParseIP("1.2.3.4")
 		validSTK, err = mockStkSource{}.NewToken(ip)
 		Expect(err).NotTo(HaveOccurred())
-		nonce32 = make([]byte, 32)
 		expectedInitialNonceLen = 32
 		expectedFSNonceLen = 64
 		aeadChanged = make(chan struct{}, 1)
@@ -158,6 +157,8 @@ var _ = Describe("Crypto setup", func() {
 		kex = &mockKEX{}
 		signer = &mockSigner{}
 		scfg, err = NewServerConfig(kex, signer)
+		nonce32 = make([]byte, 32)
+		copy(nonce32[4:12], scfg.obit) // set the OBIT value at the right position
 		Expect(err).NotTo(HaveOccurred())
 		scfg.stkSource = &mockStkSource{}
 		v := protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
@@ -272,6 +273,19 @@ var _ = Describe("Crypto setup", func() {
 			})
 			err := cs.HandleCryptoStream()
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "invalid client nonce length")))
+		})
+
+		It("rejects client nonces that have the wrong OBIT value", func() {
+			nonce := make([]byte, 32) // the OBIT value is nonce[4:12] and here just initialized to 0
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagSNI:  []byte("quic.clemente.io"),
+				TagNONC: nonce,
+				TagSTK:  validSTK,
+				TagPUBS: nil,
+			})
+			err := cs.HandleCryptoStream()
+			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "OBIT not matching")))
 		})
 
 		It("handles 0-RTT handshake", func() {

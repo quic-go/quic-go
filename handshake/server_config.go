@@ -9,9 +9,10 @@ import (
 
 // ServerConfig is a server config
 type ServerConfig struct {
+	ID        []byte
+	obit      []byte
 	kex       crypto.KeyExchange
 	signer    crypto.Signer
-	ID        []byte
 	stkSource crypto.StkSource
 }
 
@@ -33,9 +34,10 @@ func NewServerConfig(kex crypto.KeyExchange, signer crypto.Signer) (*ServerConfi
 	}
 
 	return &ServerConfig{
+		ID:        id,
+		obit:      []byte{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7},
 		kex:       kex,
 		signer:    signer,
-		ID:        id,
 		stkSource: stkSource,
 	}, nil
 }
@@ -48,7 +50,7 @@ func (s *ServerConfig) Get() []byte {
 		TagKEXS: []byte("C255"),
 		TagAEAD: []byte("AESG"),
 		TagPUBS: append([]byte{0x20, 0x00, 0x00}, s.kex.PublicKey()...),
-		TagOBIT: {0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7},
+		TagOBIT: s.obit,
 		TagEXPY: {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
 	})
 	return serverConfig.Bytes()

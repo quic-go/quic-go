@@ -248,8 +248,9 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 	}
 
 	clientNonce := cryptoData[TagNONC]
-	if len(clientNonce) != 32 {
-		return nil, qerr.Error(qerr.InvalidCryptoMessageParameter, "invalid client nonce length")
+	err = h.validateClientNonce(clientNonce)
+	if err != nil {
+		return nil, err
 	}
 
 	h.secureAEAD, err = h.keyDerivation(
@@ -330,4 +331,14 @@ func (h *CryptoSetup) UnlockForSealing() {
 // HandshakeComplete returns true after the first forward secure packet was received form the client.
 func (h *CryptoSetup) HandshakeComplete() bool {
 	return h.receivedForwardSecurePacket
+}
+
+func (h *CryptoSetup) validateClientNonce(nonce []byte) error {
+	if len(nonce) != 32 {
+		return qerr.Error(qerr.InvalidCryptoMessageParameter, "invalid client nonce length")
+	}
+	if !bytes.Equal(nonce[4:12], h.scfg.obit) {
+		return qerr.Error(qerr.InvalidCryptoMessageParameter, "OBIT not matching")
+	}
+	return nil
 }
