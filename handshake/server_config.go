@@ -28,6 +28,12 @@ func NewServerConfig(kex crypto.KeyExchange, signer crypto.Signer) (*ServerConfi
 	if _, err = rand.Read(stkSecret); err != nil {
 		return nil, err
 	}
+
+	obit := make([]byte, 8)
+	if _, err = rand.Read(obit); err != nil {
+		return nil, err
+	}
+
 	stkSource, err := crypto.NewStkSource(stkSecret)
 	if err != nil {
 		return nil, err
@@ -35,7 +41,7 @@ func NewServerConfig(kex crypto.KeyExchange, signer crypto.Signer) (*ServerConfi
 
 	return &ServerConfig{
 		ID:        id,
-		obit:      []byte{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7},
+		obit:      obit,
 		kex:       kex,
 		signer:    signer,
 		stkSource: stkSource,
