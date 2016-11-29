@@ -78,6 +78,13 @@ var _ = Describe("Min / Max", func() {
 			Expect(MinTime(a, b)).To(Equal(a))
 			Expect(MinTime(b, a)).To(Equal(a))
 		})
+
+		It("returns the minimum bandwidth", func() {
+			a := protocol.Bandwidth(5)
+			b := protocol.Bandwidth(7)
+			Expect(MinBandwidth(a, b)).To(Equal(a))
+			Expect(MinBandwidth(b, a)).To(Equal(a))
+		})
 	})
 
 	It("returns the abs time", func() {

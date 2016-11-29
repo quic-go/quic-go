@@ -121,3 +121,11 @@ func MinPacketNumber(a, b protocol.PacketNumber) protocol.PacketNumber {
 	}
 	return b
 }
+
+// MinBandwidth returns the min bandwidth
+func MinBandwidth(a, b protocol.Bandwidth) protocol.Bandwidth {
+	if a < b {
+		return a
+	}
+	return b
+}

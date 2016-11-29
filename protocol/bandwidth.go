@@ -1,6 +1,9 @@
 package protocol
 
-import "time"
+import (
+	"math"
+	"time"
+)
 
 // Bandwidth of a connection
 type Bandwidth uint64
@@ -14,6 +17,9 @@ const (
 	BytesPerSecond = 8 * BitsPerSecond
 	// KBytesPerSecond is 1000 bytes per second
 	KBytesPerSecond = 1000 * BytesPerSecond
+
+	// BandwidthInfinite is an infinite bandwidth
+	BandwidthInfinite Bandwidth = math.MaxUint64
 )
 
 // BandwidthFromDelta calculates the bandwidth from a number of bytes and a time delta
