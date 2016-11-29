@@ -24,7 +24,7 @@ type SendAlgorithm interface {
 // SendAlgorithmWithDebugInfo adds some debug functions to SendAlgorithm
 type SendAlgorithmWithDebugInfo interface {
 	SendAlgorithm
-	BandwidthEstimate() Bandwidth
+	BandwidthEstimate() protocol.Bandwidth
 
 	// Stuff only used in testing
 

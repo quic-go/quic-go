@@ -248,13 +248,13 @@ func (c *cubicSender) isCwndLimited(bytesInFlight protocol.ByteCount) bool {
 }
 
 // BandwidthEstimate returns the current bandwidth estimate
-func (c *cubicSender) BandwidthEstimate() Bandwidth {
+func (c *cubicSender) BandwidthEstimate() protocol.Bandwidth {
 	srtt := c.rttStats.SmoothedRTT()
 	if srtt == 0 {
 		// If we haven't measured an rtt, the bandwidth estimate is unknown.
 		return 0
 	}
-	return BandwidthFromDelta(c.GetCongestionWindow(), srtt)
+	return protocol.BandwidthFromDelta(c.GetCongestionWindow(), srtt)
 }
 
 // HybridSlowStart returns the hybrid slow start instance for testing

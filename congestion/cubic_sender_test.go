@@ -143,7 +143,7 @@ var _ = Describe("Cubic Sender", func() {
 		}
 		cwnd := sender.GetCongestionWindow()
 		Expect(cwnd).To(Equal(defaultWindowTCP + protocol.DefaultTCPMSS*2*kNumberOfAcks))
-		Expect(sender.BandwidthEstimate()).To(Equal(BandwidthFromDelta(cwnd, rttStats.SmoothedRTT())))
+		Expect(sender.BandwidthEstimate()).To(Equal(protocol.BandwidthFromDelta(cwnd, rttStats.SmoothedRTT())))
 	})
 
 	It("slow start packet loss", func() {
@@ -422,7 +422,7 @@ var _ = Describe("Cubic Sender", func() {
 
 		Expect(rttStats.SmoothedRTT()).To(BeNumerically("~", kRttMs, time.Millisecond))
 		Expect(sender.RetransmissionDelay()).To(BeNumerically("~", expected_delay, time.Millisecond))
-		Expect(sender.BandwidthEstimate() / BytesPerSecond).To(Equal(Bandwidth(
+		Expect(sender.BandwidthEstimate() / protocol.BytesPerSecond).To(Equal(protocol.Bandwidth(
 			sender.GetCongestionWindow() * protocol.ByteCount(time.Second) / protocol.ByteCount(rttStats.SmoothedRTT()),
 		)))
 	})

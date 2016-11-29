@@ -1,4 +1,4 @@
-package congestion
+package protocol
 
 import (
 	"time"
