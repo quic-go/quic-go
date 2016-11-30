@@ -150,6 +150,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 		return ErrDuplicateOrOutOfOrderAck
 	}
 
+	priorInFlight := h.BytesInFlight()
 	h.largestReceivedPacketWithAck = withPacketNumber
 
 	// ignore repeated ACK (ACKs that don't have a higher LargestAcked than the last ACK)
@@ -238,7 +239,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 
 	h.congestion.OnCongestionEvent(
 		rttUpdated,
-		h.BytesInFlight(),
+		priorInFlight,
 		time.Time{},
 		ackedPackets,
 		lostPackets,
@@ -294,12 +295,14 @@ func (h *sentPacketHandler) MaybeQueueRTOs() {
 		return
 	}
 
+	priorInFlight := h.BytesInFlight()
+
 	// Always queue the two oldest packets
 	if h.packetHistory.Front() != nil {
-		h.queueRTO(h.packetHistory.Front())
+		h.queueRTO(h.packetHistory.Front(), priorInFlight)
 	}
 	if h.packetHistory.Front() != nil {
-		h.queueRTO(h.packetHistory.Front())
+		h.queueRTO(h.packetHistory.Front(), priorInFlight)
 	}
 
 	// Reset the RTO timer here, since it's not clear that this packet contained any retransmittable frames
@@ -307,13 +310,21 @@ func (h *sentPacketHandler) MaybeQueueRTOs() {
 	h.consecutiveRTOCount++
 }
 
-func (h *sentPacketHandler) queueRTO(el *PacketElement) {
+func (h *sentPacketHandler) queueRTO(el *PacketElement, priorInFlight protocol.ByteCount) {
 	packet := &el.Value
 	packetsLost := congestion.PacketVector{congestion.PacketInfo{
 		Number: packet.PacketNumber,
 		Length: packet.Length,
 	}}
-	h.congestion.OnCongestionEvent(false, h.BytesInFlight(), time.Time{}, nil, packetsLost)
+
+	h.congestion.OnCongestionEvent(
+		false,
+		priorInFlight,
+		time.Time{},
+		nil,
+		packetsLost,
+	)
+
 	h.congestion.OnRetransmissionTimeout(true)
 	utils.Debugf("\tQueueing packet 0x%x for retransmission (RTO)", packet.PacketNumber)
 	h.queuePacketForRetransmission(el)

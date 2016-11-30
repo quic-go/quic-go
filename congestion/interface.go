@@ -11,7 +11,7 @@ type SendAlgorithm interface {
 	TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCount) time.Duration
 	OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) bool
 	GetCongestionWindow() protocol.ByteCount
-	OnCongestionEvent(rttUpdated bool, bytesInFlight protocol.ByteCount, eventTime time.Time, ackedPackets PacketVector, lostPackets PacketVector)
+	OnCongestionEvent(rttUpdated bool, priorInFlight protocol.ByteCount, eventTime time.Time, ackedPackets PacketVector, lostPackets PacketVector)
 	SetNumEmulatedConnections(n int)
 	OnRetransmissionTimeout(packetsRetransmitted bool)
 	OnConnectionMigration()
