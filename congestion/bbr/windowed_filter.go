@@ -1,14 +1,12 @@
 package bbr
 
-import (
-	"time"
+import "github.com/lucas-clemente/quic-go/protocol"
 
-	"github.com/lucas-clemente/quic-go/protocol"
-)
+type roundTripCount uint64
 
 type sample struct {
 	bandwidth protocol.Bandwidth
-	time      time.Time
+	time      roundTripCount
 }
 
 // This only implements the maxFilter, for bandwidths
@@ -41,14 +39,14 @@ type sample struct {
 
 type windowedFilter struct {
 	// Time length of window
-	windowLength time.Duration
+	windowLength roundTripCount
 	// Best estimate is element 0.
 	estimates [3]sample
 
 	compare func(a, b protocol.Bandwidth) bool
 }
 
-func newWindowedFilter(windowLength time.Duration) windowedFilter {
+func newWindowedFilter(windowLength roundTripCount) windowedFilter {
 	return windowedFilter{
 		windowLength: windowLength,
 		compare: func(a, b protocol.Bandwidth) bool { // this results in a max filter
@@ -59,10 +57,10 @@ func newWindowedFilter(windowLength time.Duration) windowedFilter {
 
 // Update updates best estimates with |sample|, and expires and updates best
 // estimates as necessary.
-func (w *windowedFilter) Update(newBandwidth protocol.Bandwidth, newTime time.Time) {
+func (w *windowedFilter) Update(newBandwidth protocol.Bandwidth, newTime roundTripCount) {
 	// Reset all estimates if they have not yet been initialized, if new sample
 	// is a new best, or if the newest recorded estimate is too old.
-	if w.estimates[0].bandwidth == 0 || w.compare(newBandwidth, w.estimates[0].bandwidth) || newTime.Sub(w.estimates[2].time) > w.windowLength {
+	if w.estimates[0].bandwidth == 0 || w.compare(newBandwidth, w.estimates[0].bandwidth) || newTime-w.estimates[2].time > w.windowLength {
 		w.Reset(newBandwidth, newTime)
 		return
 	}
@@ -80,7 +78,7 @@ func (w *windowedFilter) Update(newBandwidth protocol.Bandwidth, newTime time.Ti
 	}
 
 	// Expire and update estimates as necessary.
-	if newTime.Sub(w.estimates[0].time) > w.windowLength {
+	if newTime-w.estimates[0].time > w.windowLength {
 		// The best estimate hasn't been updated for an entire window, so promote
 		// second and third best estimates.
 		w.estimates[0] = w.estimates[1]
@@ -90,14 +88,14 @@ func (w *windowedFilter) Update(newBandwidth protocol.Bandwidth, newTime time.Ti
 		// outside the window as well, since it may also have been recorded a
 		// long time ago. Don't need to iterate once more since we cover that
 		// case at the beginning of the method.
-		if newTime.Sub(w.estimates[0].time) > w.windowLength {
+		if newTime-w.estimates[0].time > w.windowLength {
 			w.estimates[0] = w.estimates[1]
 			w.estimates[1] = w.estimates[2]
 		}
 		return
 	}
 
-	if w.estimates[1].bandwidth == w.estimates[0].bandwidth && newTime.Sub(w.estimates[1].time) > (w.windowLength>>2) {
+	if w.estimates[1].bandwidth == w.estimates[0].bandwidth && newTime-w.estimates[1].time > (w.windowLength>>2) {
 		// A quarter of the window has passed without a better sample, so the
 		// second-best estimate is taken from the second quarter of the window.
 		w.estimates[2] = newSample
@@ -105,7 +103,7 @@ func (w *windowedFilter) Update(newBandwidth protocol.Bandwidth, newTime time.Ti
 		return
 	}
 
-	if w.estimates[2].bandwidth == w.estimates[1].bandwidth && newTime.Sub(w.estimates[2].time) > (w.windowLength>>1) {
+	if w.estimates[2].bandwidth == w.estimates[1].bandwidth && newTime-w.estimates[2].time > (w.windowLength>>1) {
 		// We've passed a half of the window without a better estimate, so take
 		// a third-best estimate from the second half of the window.
 		w.estimates[2] = newSample
@@ -113,7 +111,7 @@ func (w *windowedFilter) Update(newBandwidth protocol.Bandwidth, newTime time.Ti
 }
 
 // Reset resets all estimates to new sample.
-func (w *windowedFilter) Reset(newBandwidth protocol.Bandwidth, newTime time.Time) {
+func (w *windowedFilter) Reset(newBandwidth protocol.Bandwidth, newTime roundTripCount) {
 	newSample := sample{bandwidth: newBandwidth, time: newTime}
 	w.estimates[0] = newSample
 	w.estimates[1] = newSample

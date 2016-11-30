@@ -1,8 +1,6 @@
 package bbr
 
 import (
-	"time"
-
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -12,12 +10,12 @@ import (
 var _ = Describe("Windowed Filter", func() {
 	var (
 		filter    windowedFilter
-		startTime time.Time
+		startTime roundTripCount
 	)
 
 	BeforeEach(func() {
-		filter = newWindowedFilter(99 * time.Millisecond)
-		startTime = time.Now()
+		filter = newWindowedFilter(99)
+		startTime = 0
 	})
 
 	// Sets up windowed_max_bw_ to have the following values:
@@ -30,7 +28,7 @@ var _ = Describe("Windowed Filter", func() {
 
 		for i := 0; i < 5; i++ {
 			filter.Update(bwSample, now)
-			now = now.Add(25 * time.Millisecond)
+			now += 25
 			bwSample -= 100 * protocol.BitsPerSecond
 		}
 
@@ -41,7 +39,7 @@ var _ = Describe("Windowed Filter", func() {
 
 	// updates the filter with a lot of small values in order
 	// to ensure that it is not susceptible to noise.
-	updateWithIrrelevantSamples := func(maxValue protocol.Bandwidth, t time.Time) {
+	updateWithIrrelevantSamples := func(maxValue protocol.Bandwidth, t roundTripCount) {
 		for i := 0; i < 1000; i++ {
 			filter.Update(protocol.Bandwidth(i)%maxValue, t)
 		}
@@ -55,14 +53,14 @@ var _ = Describe("Windowed Filter", func() {
 	})
 
 	It("handles a monotonically decreasing max", func() {
-		now := startTime.Add(-time.Hour)
+		now := startTime
 		bwSample := 1000 * protocol.BitsPerSecond // 1000 bits per second
 		filter.Update(bwSample, now)
 		Expect(filter.GetBest()).To(Equal(bwSample))
 
 		// Gradually decrease the bw samples and ensure the windowed max bw starts decreasing
 		for i := 0; i < 6; i++ {
-			now = now.Add(25 * time.Millisecond)
+			now += 25
 			bwSample -= 100 * protocol.BitsPerSecond
 			filter.Update(bwSample, now)
 			if i < 3 {
@@ -80,7 +78,7 @@ var _ = Describe("Windowed Filter", func() {
 		// BW sample higher than the third-choice max sets that, but nothing else.
 		bwSample := filter.GetThirdBest() + 50*protocol.BitsPerSecond
 		// Latest sample was recorded at 100ms.
-		now := startTime.Add(101 * time.Millisecond)
+		now := startTime + 101
 		filter.Update(bwSample, now)
 		Expect(filter.GetThirdBest()).To(Equal(bwSample))
 		Expect(filter.GetSecondBest()).To(Equal(700 * protocol.BitsPerSecond))
@@ -93,7 +91,7 @@ var _ = Describe("Windowed Filter", func() {
 		// the third-choice max.
 		bwSample := filter.GetSecondBest() + 50*protocol.BitsPerSecond
 		// Latest sample was recorded at 100ms.
-		now := startTime.Add(101 * time.Millisecond)
+		now := startTime + 101
 		filter.Update(bwSample, now)
 		Expect(filter.GetThirdBest()).To(Equal(bwSample))
 		Expect(filter.GetSecondBest()).To(Equal(bwSample))
@@ -106,7 +104,7 @@ var _ = Describe("Windowed Filter", func() {
 		// the second and third-choice maxs
 		bwSample := filter.GetBest() + 50*protocol.BitsPerSecond
 		// Latest sample was recorded at 100ms.
-		now := startTime.Add(101 * time.Millisecond)
+		now := startTime + 101
 		filter.Update(bwSample, now)
 		Expect(filter.GetThirdBest()).To(Equal(bwSample))
 		Expect(filter.GetSecondBest()).To(Equal(bwSample))
@@ -119,7 +117,7 @@ var _ = Describe("Windowed Filter", func() {
 		oldSecondBest := filter.GetSecondBest()
 		bwSample := oldThirdBest - 50*protocol.BitsPerSecond
 		// Best max sample was recorded at 25ms, so expiry time is 124ms.
-		now := startTime.Add(125 * time.Millisecond)
+		now := startTime + 125
 		filter.Update(bwSample, now)
 		Expect(filter.GetThirdBest()).To(Equal(bwSample))
 		Expect(filter.GetSecondBest()).To(Equal(oldThirdBest))
@@ -131,7 +129,7 @@ var _ = Describe("Windowed Filter", func() {
 		oldThirdBest := filter.GetThirdBest()
 		bwSample := oldThirdBest - 50*protocol.BitsPerSecond
 		// Second best max sample was recorded at 75ms, so expiry time is 174ms.
-		now := startTime.Add(175 * time.Millisecond)
+		now := startTime + 175
 		filter.Update(bwSample, now)
 		Expect(filter.GetThirdBest()).To(Equal(bwSample))
 		Expect(filter.GetSecondBest()).To(Equal(bwSample))
@@ -142,7 +140,7 @@ var _ = Describe("Windowed Filter", func() {
 		initialize()
 		bwSample := filter.GetThirdBest() - 50*protocol.BitsPerSecond
 		// Third best max sample was recorded at 100ms, so expiry time is 199ms.
-		now := startTime.Add(200 * time.Millisecond)
+		now := startTime + 200
 		filter.Update(bwSample, now)
 		Expect(filter.GetThirdBest()).To(Equal(bwSample))
 		Expect(filter.GetSecondBest()).To(Equal(bwSample))
@@ -154,33 +152,33 @@ var _ = Describe("Windowed Filter", func() {
 	// trips.
 	It("expires counter based max", func() {
 		// Create a window which starts at t = 0 and expires after two cycles.
-		filter = newWindowedFilter(2 * time.Second)
-		now := startTime
+		filter = newWindowedFilter(2)
+		var now roundTripCount
 
 		// Insert 50000 at t = 1.
 		best := protocol.Bandwidth(50000)
-		now = now.Add(time.Second)
+		now = 1
 		filter.Update(best, now)
 		Expect(filter.GetBest()).To(Equal(best))
 		updateWithIrrelevantSamples(20, now)
 		Expect(filter.GetBest()).To(Equal(best))
 
 		// Insert 40000 at t = 2.  Nothing is expected to expire.
-		now = now.Add(time.Second)
+		now = 2
 		filter.Update(40000, now)
 		Expect(filter.GetBest()).To(Equal(best))
 		updateWithIrrelevantSamples(20, now)
 		Expect(filter.GetBest()).To(Equal(best))
 
 		// Insert 30000 at t = 3.  Nothing is expected to expire yet.
-		now = now.Add(time.Second)
+		now = 3
 		filter.Update(30000, now)
 		Expect(filter.GetBest()).To(Equal(best))
 		updateWithIrrelevantSamples(20, now)
 		Expect(filter.GetBest()).To(Equal(best))
 
 		// Insert 20000 at t = 4.  50000 at t = 1 expires, so 40000 becomes the new maximum.
-		now = now.Add(time.Second)
+		now = 4
 		newBest := protocol.Bandwidth(40000)
 		filter.Update(20000, now)
 		Expect(filter.GetBest()).To(Equal(newBest))
