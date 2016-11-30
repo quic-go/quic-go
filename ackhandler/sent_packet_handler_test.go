@@ -32,7 +32,7 @@ func (m *mockCongestion) GetCongestionWindow() protocol.ByteCount {
 	return protocol.DefaultTCPMSS
 }
 
-func (m *mockCongestion) OnCongestionEvent(rttUpdated bool, bytesInFlight protocol.ByteCount, _ time.Time, ackedPackets congestion.PacketVector, lostPackets congestion.PacketVector) {
+func (m *mockCongestion) OnCongestionEvent(rttUpdated bool, bytesInFlight, _ protocol.ByteCount, _ time.Time, ackedPackets congestion.PacketVector, lostPackets congestion.PacketVector, _ protocol.PacketNumber) {
 	m.nCalls++
 	m.argsOnCongestionEvent = []interface{}{rttUpdated, bytesInFlight, ackedPackets, lostPackets}
 }
