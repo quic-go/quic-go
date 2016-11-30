@@ -239,6 +239,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 	h.congestion.OnCongestionEvent(
 		rttUpdated,
 		h.BytesInFlight(),
+		time.Time{},
 		ackedPackets,
 		lostPackets,
 	)
@@ -312,7 +313,7 @@ func (h *sentPacketHandler) queueRTO(el *PacketElement) {
 		Number: packet.PacketNumber,
 		Length: packet.Length,
 	}}
-	h.congestion.OnCongestionEvent(false, h.BytesInFlight(), nil, packetsLost)
+	h.congestion.OnCongestionEvent(false, h.BytesInFlight(), time.Time{}, nil, packetsLost)
 	h.congestion.OnRetransmissionTimeout(true)
 	utils.Debugf("\tQueueing packet 0x%x for retransmission (RTO)", packet.PacketNumber)
 	h.queuePacketForRetransmission(el)

@@ -65,7 +65,7 @@ var _ = Describe("Cubic Sender", func() {
 			ackedPacketNumber++
 			ackedPackets = append(ackedPackets, PacketInfo{Number: ackedPacketNumber, Length: packetLength})
 		}
-		sender.OnCongestionEvent(true, bytesInFlight, ackedPackets, lostPackets)
+		sender.OnCongestionEvent(true, bytesInFlight, time.Time{}, ackedPackets, lostPackets)
 		bytesInFlight -= protocol.ByteCount(n) * packetLength
 		clock.Advance(time.Millisecond)
 	}
@@ -77,7 +77,7 @@ var _ = Describe("Cubic Sender", func() {
 			ackedPacketNumber++
 			lostPackets = append(lostPackets, PacketInfo{Number: ackedPacketNumber, Length: packetLength})
 		}
-		sender.OnCongestionEvent(false, bytesInFlight, ackedPackets, lostPackets)
+		sender.OnCongestionEvent(false, bytesInFlight, time.Time{}, ackedPackets, lostPackets)
 		bytesInFlight -= protocol.ByteCount(n) * packetLength
 	}
 
@@ -87,7 +87,7 @@ var _ = Describe("Cubic Sender", func() {
 		var lostPackets PacketVector = PacketVector([]PacketInfo{
 			{Number: number, Length: protocol.DefaultTCPMSS},
 		})
-		sender.OnCongestionEvent(false, bytesInFlight, ackedPackets, lostPackets)
+		sender.OnCongestionEvent(false, bytesInFlight, time.Time{}, ackedPackets, lostPackets)
 		bytesInFlight -= protocol.DefaultTCPMSS
 	}
 

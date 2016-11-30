@@ -130,7 +130,7 @@ func (c *cubicSender) SlowstartThreshold() protocol.PacketNumber {
 // latest_rtt sample has been taken, |byte_in_flight| the bytes in flight
 // prior to the congestion event.  |ackedPackets| and |lostPackets| are
 // any packets considered acked or lost as a result of the congestion event.
-func (c *cubicSender) OnCongestionEvent(rttUpdated bool, bytesInFlight protocol.ByteCount, ackedPackets PacketVector, lostPackets PacketVector) {
+func (c *cubicSender) OnCongestionEvent(rttUpdated bool, bytesInFlight protocol.ByteCount, _ time.Time, ackedPackets PacketVector, lostPackets PacketVector) {
 	if rttUpdated && c.InSlowStart() && c.hybridSlowStart.ShouldExitSlowStart(c.rttStats.LatestRTT(), c.rttStats.MinRTT(), c.GetCongestionWindow()/protocol.DefaultTCPMSS) {
 		c.ExitSlowstart()
 	}
