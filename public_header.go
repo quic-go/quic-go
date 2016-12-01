@@ -27,7 +27,8 @@ type PublicHeader struct {
 	TruncateConnectionID bool
 	PacketNumberLen      protocol.PacketNumberLen
 	PacketNumber         protocol.PacketNumber
-	VersionNumber        protocol.VersionNumber
+	VersionNumber        protocol.VersionNumber   // VersionNumber sent by the client
+	SupportedVersions    []protocol.VersionNumber // VersionNumbers sent by the server
 	DiversificationNonce []byte
 }
 
@@ -169,13 +170,27 @@ func ParsePublicHeader(b io.ByteReader, packetSentBy protocol.Perspective) (*Pub
 	}
 
 	// Version (optional)
-	if header.VersionFlag && !header.ResetFlag {
-		var versionTag uint32
-		versionTag, err = utils.ReadUint32(b)
-		if err != nil {
-			return nil, err
+	if !header.ResetFlag {
+		if header.VersionFlag {
+			if packetSentBy == protocol.PerspectiveClient {
+				var versionTag uint32
+				versionTag, err = utils.ReadUint32(b)
+				if err != nil {
+					return nil, err
+				}
+				header.VersionNumber = protocol.VersionTagToNumber(versionTag)
+			} else { // parse the version negotiaton packet
+				header.SupportedVersions = make([]protocol.VersionNumber, 0)
+				for {
+					var versionTag uint32
+					versionTag, err = utils.ReadUint32(b)
+					if err != nil {
+						break
+					}
+					header.SupportedVersions = append(header.SupportedVersions, protocol.VersionTagToNumber(versionTag))
+				}
+			}
 		}
-		header.VersionNumber = protocol.VersionTagToNumber(versionTag)
 	}
 
 	// Packet number

@@ -18,6 +18,7 @@ var _ = Describe("Public Header", func() {
 			Expect(hdr.ResetFlag).To(BeFalse())
 			Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x4cfa9f9b668619f6)))
 			Expect(hdr.VersionNumber).To(Equal(protocol.Version34))
+			Expect(hdr.SupportedVersions).To(BeEmpty())
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(1)))
 			Expect(b.Len()).To(BeZero())
 		})
@@ -70,6 +71,15 @@ var _ = Describe("Public Header", func() {
 			})
 			_, err := ParsePublicHeader(b, protocol.PerspectiveClient)
 			Expect(err).To(MatchError("diversification nonces should only be sent by servers"))
+		})
+
+		It("parses version negotiation packets sent by the server", func() {
+			data := composeVersionNegotiation(0x1337)
+			hdr, err := ParsePublicHeader(bytes.NewReader(data), protocol.PerspectiveServer)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(hdr.VersionFlag).To(BeTrue())
+			Expect(hdr.VersionNumber).To(BeZero()) // unitialized
+			Expect(hdr.SupportedVersions).To(Equal(protocol.SupportedVersions))
 		})
 
 		Context("Packet Number lengths", func() {
