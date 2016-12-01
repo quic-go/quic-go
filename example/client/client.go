@@ -16,6 +16,7 @@ func main() {
 	}
 
 	err = client.Listen()
+	defer client.Close()
 	if err != nil {
 		panic(err)
 	}

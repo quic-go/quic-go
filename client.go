@@ -22,7 +22,7 @@ type Client struct {
 	connectionID protocol.ConnectionID
 	version      protocol.VersionNumber
 
-	session *Session
+	session packetHandler
 }
 
 var errHostname = errors.New("Invalid hostname")
@@ -97,6 +97,12 @@ func (c *Client) Listen() error {
 	}
 }
 
+// Close closes the connection
+func (c *Client) Close() error {
+	_ = c.session.Close(nil)
+	return c.conn.Close()
+}
+
 func (c *Client) handlePacket(packet []byte) error {
 	if protocol.ByteCount(len(packet)) > protocol.MaxPacketSize {
 		return qerr.PacketTooLarge
@@ -123,5 +129,4 @@ func (c *Client) handlePacket(packet []byte) error {
 
 func (c *Client) closeCallback(id protocol.ConnectionID) {
 	utils.Infof("Connection %x closed.", id)
-	c.conn.Close()
 }
