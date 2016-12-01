@@ -403,6 +403,17 @@ var _ = Describe("Crypto setup", func() {
 			Expect(tags[TagNONC]).To(Equal(cs.nonc))
 			Expect(tags[TagPUBS]).To(Equal(kex.PublicKey()))
 		})
+
+		It("doesn't send more than MaxClientHellos CHLOs", func() {
+			Expect(cs.clientHelloCounter).To(BeZero())
+			for i := 1; i <= protocol.MaxClientHellos; i++ {
+				err := cs.sendCHLO()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cs.clientHelloCounter).To(Equal(i))
+			}
+			err := cs.sendCHLO()
+			Expect(err).To(MatchError(qerr.Error(qerr.CryptoTooManyRejects, fmt.Sprintf("More than %d rejects", protocol.MaxClientHellos))))
+		})
 	})
 
 	Context("escalating crypto", func() {

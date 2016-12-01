@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"time"
 
@@ -32,10 +33,11 @@ type cryptoSetupClient struct {
 	lastSentCHLO         []byte
 	certManager          crypto.CertManager
 
-	serverVerified    bool // has the certificate chain and the proof already been verified
-	keyDerivation     KeyDerivationFunction
-	secureAEAD        crypto.AEAD
-	forwardSecureAEAD crypto.AEAD
+	clientHelloCounter int
+	serverVerified     bool // has the certificate chain and the proof already been verified
+	keyDerivation      KeyDerivationFunction
+	secureAEAD         crypto.AEAD
+	forwardSecureAEAD  crypto.AEAD
 }
 
 var _ crypto.AEAD = &cryptoSetupClient{}
@@ -72,9 +74,12 @@ func (h *cryptoSetupClient) HandleCryptoStream() error {
 			return err
 		}
 
-		err = h.sendCHLO()
-		if err != nil {
-			return err
+		// send CHLOs until the forward secure encryption is established
+		if h.forwardSecureAEAD == nil {
+			err = h.sendCHLO()
+			if err != nil {
+				return err
+			}
 		}
 
 		var shloData bytes.Buffer
@@ -260,6 +265,11 @@ func (h *cryptoSetupClient) HandshakeComplete() bool {
 }
 
 func (h *cryptoSetupClient) sendCHLO() error {
+	h.clientHelloCounter++
+	if h.clientHelloCounter > protocol.MaxClientHellos {
+		return qerr.Error(qerr.CryptoTooManyRejects, fmt.Sprintf("More than %d rejects", protocol.MaxClientHellos))
+	}
+
 	b := &bytes.Buffer{}
 
 	tags := h.getTags()
