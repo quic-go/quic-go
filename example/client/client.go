@@ -15,5 +15,8 @@ func main() {
 		panic(err)
 	}
 
-	client.Listen()
+	err = client.Listen()
+	if err != nil {
+		panic(err)
+	}
 }

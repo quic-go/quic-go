@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -73,7 +74,7 @@ func NewClient(addr string) (*Client, error) {
 }
 
 // Listen listens
-func (c *Client) Listen() {
+func (c *Client) Listen() error {
 	go c.session.run()
 
 	for {
@@ -82,7 +83,10 @@ func (c *Client) Listen() {
 
 		n, _, err := c.conn.ReadFromUDP(data)
 		if err != nil {
-			panic(err)
+			if strings.HasSuffix(err.Error(), "use of closed network connection") {
+				return nil
+			}
+			return err
 		}
 		data = data[:n]
 
