@@ -156,6 +156,7 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 
 		err = h.certManager.Verify(h.hostname)
 		if err != nil {
+			utils.Infof("Certificate validation failed: %s", err.Error())
 			return qerr.ProofInvalid
 		}
 	}
@@ -163,6 +164,7 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 	if h.serverConfig != nil && len(h.proof) != 0 && h.certManager.GetLeafCert() != nil {
 		validProof := h.certManager.VerifyServerProof(h.proof, h.chloForSignature, h.serverConfig.Get())
 		if !validProof {
+			utils.Infof("Server proof verification failed")
 			return qerr.ProofInvalid
 		}
 
