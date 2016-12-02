@@ -29,6 +29,16 @@ var _ = Describe("AckFrame", func() {
 			Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(3)))
 		})
 
+		It("parses a frame where the largest acked is 0", func() {
+			b := bytes.NewReader([]byte{0x40, 0x0, 0xff, 0xff, 0x0, 0x0})
+			frame, err := ParseAckFrame(b, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0)))
+			Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(0)))
+			Expect(frame.HasMissingRanges()).To(BeFalse())
+			Expect(b.Len()).To(BeZero())
+		})
+
 		It("parses a frame with a 48 bit packet number", func() {
 			b := bytes.NewReader([]byte{0x4c, 0x37, 0x13, 0xad, 0xfb, 0xca, 0xde, 0x0, 0x0, 0x5, 0x1, 0, 0, 0, 0, 0})
 			frame, err := ParseAckFrame(b, 0)
