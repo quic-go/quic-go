@@ -157,14 +157,19 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Pub
 	}
 
 	if packetSentBy == protocol.PerspectiveServer && publicFlagByte&0x04 > 0 {
-		header.DiversificationNonce = make([]byte, 32)
-		for i := 0; i < 32; i++ {
-			var val byte
-			val, err = b.ReadByte()
-			if err != nil {
-				return nil, err
+		// TODO: remove the if once the Google servers send the correct value
+		// assume that a packet doesn't contain a diversification nonce if the version flag or the reset flag is set, no matter what the public flag says
+		// see https://github.com/lucas-clemente/quic-go/issues/232
+		if !header.VersionFlag && !header.ResetFlag {
+			header.DiversificationNonce = make([]byte, 32)
+			for i := 0; i < 32; i++ {
+				var val byte
+				val, err = b.ReadByte()
+				if err != nil {
+					return nil, err
+				}
+				header.DiversificationNonce[i] = val
 			}
-			header.DiversificationNonce[i] = val
 		}
 	}
 
