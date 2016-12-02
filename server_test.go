@@ -47,7 +47,7 @@ var _ = Describe("Server", func() {
 				newSession: newMockSession,
 			}
 			b := &bytes.Buffer{}
-			utils.WriteUint32(b, protocol.VersionNumberToTag(protocol.Version36))
+			utils.WriteUint32(b, protocol.VersionNumberToTag(protocol.SupportedVersions[0]))
 			firstPacket = []byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c}
 			firstPacket = append(append(firstPacket, b.Bytes()...), 0x01)
 		})
@@ -102,6 +102,23 @@ var _ = Describe("Server", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(server.sessions).To(HaveLen(1))
 			Expect(server.sessions[0x4cfa9f9b668619f6]).To(BeNil())
+		})
+
+		It("ignores delayed packets with mismatching versions", func() {
+			err := server.handlePacket(nil, nil, firstPacket)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(server.sessions[0x4cfa9f9b668619f6].(*mockSession).packetCount).To(Equal(1))
+			b := &bytes.Buffer{}
+			// add an unsupported version
+			utils.WriteUint32(b, protocol.VersionNumberToTag(protocol.SupportedVersions[0]-2))
+			data := []byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c}
+			data = append(append(data, b.Bytes()...), 0x01)
+			err = server.handlePacket(nil, nil, data)
+			Expect(err).ToNot(HaveOccurred())
+			// if we didn't ignore the packet, the server would try to send a version negotation packet, which would make the test panic because it doesn't have a udpConn
+			// TODO: test that really doesn't send anything on the udpConn
+			// make sure the packet was *not* passed to session.handlePacket()
+			Expect(server.sessions[0x4cfa9f9b668619f6].(*mockSession).packetCount).To(Equal(1))
 		})
 
 		It("errors on invalid public header", func() {

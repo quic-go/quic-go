@@ -142,16 +142,23 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 	}
 	hdr.Raw = packet[:len(packet)-r.Len()]
 
+	s.sessionsMutex.RLock()
+	session, ok := s.sessions[hdr.ConnectionID]
+	s.sessionsMutex.RUnlock()
+
+	// a session is only created once the client sent a supported version
+	// if we receive a packet for a connection that already has session, it's probably an old packet that was sent by the client before the version was negotiated
+	// it is safe to drop it
+	if ok && hdr.VersionFlag && !protocol.IsSupportedVersion(hdr.VersionNumber) {
+		return nil
+	}
+
 	// Send Version Negotiation Packet if the client is speaking a different protocol version
 	if hdr.VersionFlag && !protocol.IsSupportedVersion(hdr.VersionNumber) {
 		utils.Infof("Client offered version %d, sending VersionNegotiationPacket", hdr.VersionNumber)
 		_, err = conn.WriteToUDP(composeVersionNegotiation(hdr.ConnectionID), remoteAddr)
 		return err
 	}
-
-	s.sessionsMutex.RLock()
-	session, ok := s.sessions[hdr.ConnectionID]
-	s.sessionsMutex.RUnlock()
 
 	if !ok {
 		if !hdr.VersionFlag {
