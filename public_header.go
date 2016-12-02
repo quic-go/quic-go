@@ -187,7 +187,11 @@ func ParsePublicHeader(b io.ByteReader, packetSentBy protocol.Perspective) (*Pub
 					if err != nil {
 						break
 					}
-					header.SupportedVersions = append(header.SupportedVersions, protocol.VersionTagToNumber(versionTag))
+					v := protocol.VersionTagToNumber(versionTag)
+					if !protocol.IsSupportedVersion(v) {
+						v = protocol.VersionUnsupported
+					}
+					header.SupportedVersions = append(header.SupportedVersions, v)
 				}
 			}
 		}

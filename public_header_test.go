@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"encoding/binary"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
@@ -73,13 +74,45 @@ var _ = Describe("Public Header", func() {
 			Expect(err).To(MatchError("diversification nonces should only be sent by servers"))
 		})
 
-		It("parses version negotiation packets sent by the server", func() {
-			data := composeVersionNegotiation(0x1337)
-			hdr, err := ParsePublicHeader(bytes.NewReader(data), protocol.PerspectiveServer)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(hdr.VersionFlag).To(BeTrue())
-			Expect(hdr.VersionNumber).To(BeZero()) // unitialized
-			Expect(hdr.SupportedVersions).To(Equal(protocol.SupportedVersions))
+		Context("version negotiation packets", func() {
+			appendVersion := func(data []byte, v protocol.VersionNumber) []byte {
+				data = append(data, []byte{0, 0, 0, 0}...)
+				binary.LittleEndian.PutUint32(data[len(data)-4:], protocol.VersionNumberToTag(v))
+				return data
+			}
+
+			It("parses version negotiation packets sent by the server", func() {
+				b := bytes.NewReader(composeVersionNegotiation(0x1337))
+				hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(hdr.VersionFlag).To(BeTrue())
+				Expect(hdr.VersionNumber).To(BeZero()) // unitialized
+				Expect(hdr.SupportedVersions).To(Equal(protocol.SupportedVersions))
+				Expect(b.Len()).To(BeZero())
+			})
+
+			It("parses a version negotiation packet that contains 0 versions", func() {
+				b := bytes.NewReader([]byte{0x9, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c})
+				hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(hdr.VersionFlag).To(BeTrue())
+				Expect(hdr.VersionNumber).To(BeZero()) // unitialized
+				Expect(hdr.SupportedVersions).To(BeEmpty())
+				Expect(b.Len()).To(BeZero())
+			})
+
+			It("sets version numbers to unsupported, if we don't support them", func() {
+				data := []byte{0x9, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c}
+				data = appendVersion(data, 1) // unsupported version
+				data = appendVersion(data, protocol.SupportedVersions[0])
+				data = appendVersion(data, 1337) // unsupported version
+				b := bytes.NewReader(data)
+				hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(hdr.VersionFlag).To(BeTrue())
+				Expect(hdr.SupportedVersions).To(Equal([]protocol.VersionNumber{protocol.VersionUnsupported, protocol.SupportedVersions[0], protocol.VersionUnsupported}))
+				Expect(b.Len()).To(BeZero())
+			})
 		})
 
 		Context("Packet Number lengths", func() {
