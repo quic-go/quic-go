@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -112,6 +113,14 @@ var _ = Describe("Public Header", func() {
 				Expect(hdr.VersionFlag).To(BeTrue())
 				Expect(hdr.SupportedVersions).To(Equal([]protocol.VersionNumber{protocol.VersionUnsupported, protocol.SupportedVersions[0], protocol.VersionUnsupported}))
 				Expect(b.Len()).To(BeZero())
+			})
+
+			It("errors on invalid version tags", func() {
+				data := composeVersionNegotiation(0x1337)
+				data = append(data, []byte{0x13, 0x37}...)
+				b := bytes.NewReader(data)
+				_, err := ParsePublicHeader(b, protocol.PerspectiveServer)
+				Expect(err).To(MatchError(qerr.InvalidVersionNegotiationPacket))
 			})
 		})
 
