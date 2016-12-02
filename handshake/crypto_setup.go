@@ -102,6 +102,11 @@ func (h *CryptoSetup) handleMessage(chloData []byte, cryptoData map[Tag][]byte) 
 		return false, qerr.Error(qerr.CryptoMessageParameterNotFound, "SNI required")
 	}
 
+	_, ok = cryptoData[TagVER]
+	if !ok {
+		return false, qerr.Error(qerr.InvalidCryptoMessageParameter, "client hello missing version tag")
+	}
+
 	var reply []byte
 	var err error
 	if !h.isInchoateCHLO(cryptoData) {
