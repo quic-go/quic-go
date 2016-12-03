@@ -274,12 +274,15 @@ func (h *cryptoSetupClient) sendCHLO() error {
 
 	b := &bytes.Buffer{}
 
-	tags := h.getTags()
+	tags, err := h.getTags()
+	if err != nil {
+		return err
+	}
 	h.addPadding(tags)
 
 	WriteHandshakeMessage(b, TagCHLO, tags)
 
-	_, err := h.cryptoStream.Write(b.Bytes())
+	_, err = h.cryptoStream.Write(b.Bytes())
 	if err != nil {
 		return err
 	}
@@ -289,7 +292,7 @@ func (h *cryptoSetupClient) sendCHLO() error {
 	return nil
 }
 
-func (h *cryptoSetupClient) getTags() map[Tag][]byte {
+func (h *cryptoSetupClient) getTags() (map[Tag][]byte, error) {
 	tags := make(map[Tag][]byte)
 	tags[TagSNI] = []byte(h.hostname)
 	tags[TagPDMD] = []byte("X509")
@@ -311,12 +314,17 @@ func (h *cryptoSetupClient) getTags() map[Tag][]byte {
 
 		leafCert := h.certManager.GetLeafCert()
 		if leafCert != nil {
+			certHash, _ := h.certManager.GetLeafCertHash()
+			xlct := make([]byte, 8, 8)
+			binary.LittleEndian.PutUint64(xlct, certHash)
+
 			tags[TagNONC] = h.nonc
+			tags[TagXLCT] = xlct
 			tags[TagPUBS] = h.serverConfig.kex.PublicKey() // TODO: check if 3 bytes need to be prepended
 		}
 	}
 
-	return tags
+	return tags, nil
 }
 
 // add a TagPAD to a tagMap, such that the total size will be bigger than the ClientHelloMinimumSize

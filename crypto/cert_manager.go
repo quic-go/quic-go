@@ -3,6 +3,7 @@ package crypto
 import (
 	"crypto/x509"
 	"errors"
+	"hash/fnv"
 
 	"github.com/lucas-clemente/quic-go/qerr"
 )
@@ -11,6 +12,7 @@ import (
 type CertManager interface {
 	SetData([]byte) error
 	GetLeafCert() []byte
+	GetLeafCertHash() (uint64, error)
 	VerifyServerProof(proof, chlo, serverConfigData []byte) bool
 	Verify(hostname string) error
 }
@@ -49,12 +51,27 @@ func (c *certManager) SetData(data []byte) error {
 }
 
 // GetLeafCert returns the leaf certificate of the certificate chain
-// it errors if the certificate chain has not yet been set
+// it returns nil if the certificate chain has not yet been set
 func (c *certManager) GetLeafCert() []byte {
 	if len(c.chain) == 0 {
 		return nil
 	}
 	return c.chain[0].Raw
+}
+
+// GetLeafCertHash calculates the FNV1a_64 hash of the leaf certificate
+func (c *certManager) GetLeafCertHash() (uint64, error) {
+	leafCert := c.GetLeafCert()
+	if leafCert == nil {
+		return 0, errNoCertificateChain
+	}
+
+	h := fnv.New64a()
+	_, err := h.Write(leafCert)
+	if err != nil {
+		return 0, err
+	}
+	return h.Sum64(), nil
 }
 
 // VerifyServerProof verifies the signature of the server config

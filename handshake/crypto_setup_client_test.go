@@ -44,7 +44,9 @@ type mockCertManager struct {
 	setDataCalledWith []byte
 	setDataError      error
 
-	leafCert []byte
+	leafCert          []byte
+	leafCertHash      uint64
+	leafCertHashError error
 
 	verifyServerProofResult bool
 	verifyServerProofCalled bool
@@ -60,6 +62,10 @@ func (m *mockCertManager) SetData(data []byte) error {
 
 func (m *mockCertManager) GetLeafCert() []byte {
 	return m.leafCert
+}
+
+func (m *mockCertManager) GetLeafCertHash() (uint64, error) {
+	return m.leafCertHash, m.leafCertHashError
 }
 
 func (m *mockCertManager) VerifyServerProof(proof, chlo, serverConfigData []byte) bool {
@@ -355,7 +361,8 @@ var _ = Describe("Crypto setup", func() {
 
 		It("has the right values for an inchoate CHLO", func() {
 			cs.hostname = "sni-hostname"
-			tags := cs.getTags()
+			tags, err := cs.getTags()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(string(tags[TagSNI])).To(Equal(cs.hostname))
 			Expect(tags[TagPDMD]).To(Equal([]byte("X509")))
 			Expect(tags[TagVER]).To(Equal([]byte("Q036")))
@@ -364,44 +371,53 @@ var _ = Describe("Crypto setup", func() {
 		It("includes the server config id, if available", func() {
 			id := []byte("foobar")
 			cs.serverConfig = &serverConfigClient{ID: id}
-			tags := cs.getTags()
+			tags, err := cs.getTags()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(tags[TagSCID]).To(Equal(id))
 		})
 
 		It("includes the source address token, if available", func() {
 			cs.stk = []byte("sourceaddresstoken")
-			tags := cs.getTags()
+			tags, err := cs.getTags()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(tags[TagSTK]).To(Equal(cs.stk))
 		})
 
 		It("includes the server nonce, if available", func() {
 			cs.sno = []byte("foobar")
-			tags := cs.getTags()
+			tags, err := cs.getTags()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(tags[TagSNO]).To(Equal(cs.sno))
 		})
 
 		It("doesn't include optional values, if not available", func() {
-			tags := cs.getTags()
+			tags, err := cs.getTags()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(tags).ToNot(HaveKey(TagSCID))
 			Expect(tags).ToNot(HaveKey(TagSNO))
 			Expect(tags).ToNot(HaveKey(TagSTK))
 		})
 
 		It("doesn't change any values after reading the certificate, if the server config is missing", func() {
-			tags := cs.getTags()
+			tags, err := cs.getTags()
+			Expect(err).ToNot(HaveOccurred())
 			certManager.leafCert = []byte("leafcert")
 			Expect(cs.getTags()).To(Equal(tags))
 		})
 
-		It("sends a client nonce and a public value after reading the certificate and the server config", func() {
+		It("sends a client nonce, a public value and the cert hash after reading the certificate and the server config", func() {
 			certManager.leafCert = []byte("leafcert")
 			cs.nonc = []byte("client-nonce")
 			kex, err := crypto.NewCurve25519KEX()
 			Expect(err).ToNot(HaveOccurred())
 			cs.serverConfig = &serverConfigClient{kex: kex}
-			tags := cs.getTags()
+			xlct := []byte{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8}
+			certManager.leafCertHash = binary.LittleEndian.Uint64(xlct)
+			tags, err := cs.getTags()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(tags[TagNONC]).To(Equal(cs.nonc))
 			Expect(tags[TagPUBS]).To(Equal(kex.PublicKey()))
+			Expect(tags[TagXLCT]).To(Equal(xlct))
 		})
 
 		It("doesn't send more than MaxClientHellos CHLOs", func() {

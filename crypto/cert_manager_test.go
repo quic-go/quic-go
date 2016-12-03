@@ -85,6 +85,24 @@ var _ = Describe("Cert Manager", func() {
 		})
 	})
 
+	Context("getting the leaf cert hash", func() {
+		It("calculates the FVN1a 64 hash", func() {
+			cm.chain = make([]*x509.Certificate, 1)
+			cm.chain[0] = &x509.Certificate{
+				Raw: []byte("test fnv hash"),
+			}
+			hash, err := cm.GetLeafCertHash()
+			Expect(err).ToNot(HaveOccurred())
+			// hash calculated on http://www.nitrxgen.net/hashgen/
+			Expect(hash).To(Equal(uint64(0x4770f6141fa0f5ad)))
+		})
+
+		It("errors if the certificate chain is not loaded", func() {
+			_, err := cm.GetLeafCertHash()
+			Expect(err).To(MatchError(errNoCertificateChain))
+		})
+	})
+
 	Context("verifying the server config signature", func() {
 		It("returns false when the chain hasn't been set yet", func() {
 			valid := cm.VerifyServerProof([]byte("proof"), []byte("chlo"), []byte("scfg"))
