@@ -144,6 +144,7 @@ var _ = Describe("Crypto setup", func() {
 		ip          net.IP
 		validSTK    []byte
 		aead        []byte
+		kexs        []byte
 	)
 
 	BeforeEach(func() {
@@ -160,6 +161,7 @@ var _ = Describe("Crypto setup", func() {
 		scfg, err = NewServerConfig(kex, signer)
 		nonce32 = make([]byte, 32)
 		aead = []byte("AESG")
+		kexs = []byte("C255")
 		copy(nonce32[4:12], scfg.obit) // set the OBIT value at the right position
 		Expect(err).NotTo(HaveOccurred())
 		scfg.stkSource = &mockStkSource{}
@@ -232,6 +234,7 @@ var _ = Describe("Crypto setup", func() {
 				TagPUBS: []byte("pubs-c"),
 				TagNONC: nonce32,
 				TagAEAD: aead,
+				TagKEXS: kexs,
 			})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(response).To(HavePrefix("SHLO"))
@@ -258,6 +261,7 @@ var _ = Describe("Crypto setup", func() {
 				TagNONC: nonce32,
 				TagSTK:  validSTK,
 				TagAEAD: aead,
+				TagKEXS: kexs,
 				TagPUBS: nil,
 			})
 			err := cs.HandleCryptoStream()
@@ -299,6 +303,7 @@ var _ = Describe("Crypto setup", func() {
 				TagNONC: nonce32,
 				TagSTK:  validSTK,
 				TagAEAD: aead,
+				TagKEXS: kexs,
 				TagPUBS: nil,
 			})
 			err := cs.HandleCryptoStream()
@@ -343,6 +348,7 @@ var _ = Describe("Crypto setup", func() {
 				TagPUBS: []byte("pubs"),
 				TagNONC: nonce32,
 				TagSTK:  validSTK,
+				TagKEXS: kexs,
 			})
 			err := cs.HandleCryptoStream()
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoNoSupport, "Unsupported AEAD or KEXS")))
@@ -356,6 +362,34 @@ var _ = Describe("Crypto setup", func() {
 				TagNONC: nonce32,
 				TagSTK:  validSTK,
 				TagAEAD: []byte("wrong"),
+				TagKEXS: kexs,
+			})
+			err := cs.HandleCryptoStream()
+			Expect(err).To(MatchError(qerr.Error(qerr.CryptoNoSupport, "Unsupported AEAD or KEXS")))
+		})
+
+		It("errors if the KEXS tag is missing", func() {
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagSNI:  []byte("quic.clemente.io"),
+				TagPUBS: []byte("pubs"),
+				TagNONC: nonce32,
+				TagSTK:  validSTK,
+				TagAEAD: aead,
+			})
+			err := cs.HandleCryptoStream()
+			Expect(err).To(MatchError(qerr.Error(qerr.CryptoNoSupport, "Unsupported AEAD or KEXS")))
+		})
+
+		It("errors if the KEXS tag has the wrong value", func() {
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagSNI:  []byte("quic.clemente.io"),
+				TagPUBS: []byte("pubs"),
+				TagNONC: nonce32,
+				TagSTK:  validSTK,
+				TagAEAD: aead,
+				TagKEXS: []byte("wrong"),
 			})
 			err := cs.HandleCryptoStream()
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoNoSupport, "Unsupported AEAD or KEXS")))
@@ -398,6 +432,7 @@ var _ = Describe("Crypto setup", func() {
 				TagPUBS: []byte("pubs-c"),
 				TagNONC: nonce32,
 				TagAEAD: aead,
+				TagKEXS: kexs,
 			})
 			Expect(err).ToNot(HaveOccurred())
 		}

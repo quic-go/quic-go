@@ -258,6 +258,11 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 		return nil, qerr.Error(qerr.CryptoNoSupport, "Unsupported AEAD or KEXS")
 	}
 
+	kexs := cryptoData[TagKEXS]
+	if !bytes.Equal(kexs, []byte("C255")) {
+		return nil, qerr.Error(qerr.CryptoNoSupport, "Unsupported AEAD or KEXS")
+	}
+
 	h.secureAEAD, err = h.keyDerivation(
 		false,
 		sharedSecret,
