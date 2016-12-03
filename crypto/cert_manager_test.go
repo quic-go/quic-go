@@ -42,6 +42,11 @@ var _ = Describe("Cert Manager", func() {
 		Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "Certificate data invalid")))
 	})
 
+	It("gets the common certificate hashes", func() {
+		ccs := cm.GetCommonCertificateHashes()
+		Expect(ccs).ToNot(BeEmpty())
+	})
+
 	Context("setting the data", func() {
 		It("decompresses a certificate chain", func() {
 			chain := [][]byte{cert1, cert2}

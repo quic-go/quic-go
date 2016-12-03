@@ -254,6 +254,16 @@ func splitHashes(hashes []byte) ([]uint64, error) {
 	return res, nil
 }
 
+func getCommonCertificateHashes() []byte {
+	ccs := make([]byte, 8*len(certSets), 8*len(certSets))
+	i := 0
+	for certSetHash := range certSets {
+		binary.LittleEndian.PutUint64(ccs[i*8:(i+1)*8], certSetHash)
+		i++
+	}
+	return ccs
+}
+
 // HashCert calculates the FNV1a hash of a certificate
 func HashCert(cert []byte) uint64 {
 	h := fnv.New64a()

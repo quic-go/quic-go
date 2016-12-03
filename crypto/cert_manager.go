@@ -11,6 +11,7 @@ import (
 // CertManager manages the certificates sent by the server
 type CertManager interface {
 	SetData([]byte) error
+	GetCommonCertificateHashes() []byte
 	GetLeafCert() []byte
 	GetLeafCertHash() (uint64, error)
 	VerifyServerProof(proof, chlo, serverConfigData []byte) bool
@@ -48,6 +49,10 @@ func (c *certManager) SetData(data []byte) error {
 
 	c.chain = chain
 	return nil
+}
+
+func (c *certManager) GetCommonCertificateHashes() []byte {
+	return getCommonCertificateHashes()
 }
 
 // GetLeafCert returns the leaf certificate of the certificate chain

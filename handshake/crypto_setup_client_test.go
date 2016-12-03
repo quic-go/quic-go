@@ -44,6 +44,8 @@ type mockCertManager struct {
 	setDataCalledWith []byte
 	setDataError      error
 
+	commonCertificateHashes []byte
+
 	leafCert          []byte
 	leafCertHash      uint64
 	leafCertHashError error
@@ -58,6 +60,10 @@ type mockCertManager struct {
 func (m *mockCertManager) SetData(data []byte) error {
 	m.setDataCalledWith = data
 	return m.setDataError
+}
+
+func (m *mockCertManager) GetCommonCertificateHashes() []byte {
+	return m.commonCertificateHashes
 }
 
 func (m *mockCertManager) GetLeafCert() []byte {
@@ -361,11 +367,20 @@ var _ = Describe("Crypto setup", func() {
 
 		It("has the right values for an inchoate CHLO", func() {
 			cs.hostname = "sni-hostname"
+			certManager.commonCertificateHashes = []byte("common certs")
 			tags, err := cs.getTags()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(string(tags[TagSNI])).To(Equal(cs.hostname))
 			Expect(tags[TagPDMD]).To(Equal([]byte("X509")))
 			Expect(tags[TagVER]).To(Equal([]byte("Q036")))
+			Expect(tags[TagCCS]).To(Equal(certManager.commonCertificateHashes))
+		})
+
+		It("doesn't send a CCS if there are no common certificate sets available", func() {
+			certManager.commonCertificateHashes = nil
+			tags, err := cs.getTags()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(tags).ToNot(HaveKey(TagCCS))
 		})
 
 		It("includes the server config id, if available", func() {

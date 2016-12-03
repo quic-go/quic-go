@@ -297,6 +297,11 @@ func (h *cryptoSetupClient) getTags() (map[Tag][]byte, error) {
 	tags[TagSNI] = []byte(h.hostname)
 	tags[TagPDMD] = []byte("X509")
 
+	ccs := h.certManager.GetCommonCertificateHashes()
+	if len(ccs) > 0 {
+		tags[TagCCS] = ccs
+	}
+
 	versionTag := make([]byte, 4, 4)
 	binary.LittleEndian.PutUint32(versionTag, protocol.VersionNumberToTag(h.version))
 	tags[TagVER] = versionTag

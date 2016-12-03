@@ -272,4 +272,23 @@ var _ = Describe("Cert compression and decompression", func() {
 		_, err = compressChain(chain, nil, []byte("foo"))
 		Expect(err).To(MatchError("expected a multiple of 8 bytes for CCS / CCRT hashes"))
 	})
+
+	Context("common certificate hashes", func() {
+		It("gets the hashes", func() {
+			ccs := getCommonCertificateHashes()
+			Expect(ccs).ToNot(BeEmpty())
+			hashes, err := splitHashes(ccs)
+			Expect(err).ToNot(HaveOccurred())
+			for _, hash := range hashes {
+				Expect(certSets).To(HaveKey(hash))
+			}
+		})
+
+		It("returns an empty slice if there are not common sets", func() {
+			certSets = make(map[uint64]certSet)
+			ccs := getCommonCertificateHashes()
+			Expect(ccs).ToNot(BeNil())
+			Expect(ccs).To(HaveLen(0))
+		})
+	})
 })
