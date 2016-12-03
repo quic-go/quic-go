@@ -4,7 +4,8 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
+	"path"
+	"runtime"
 	"strconv"
 
 	. "github.com/onsi/ginkgo"
@@ -16,7 +17,11 @@ var _ = Describe("error codes", func() {
 	It("has a string representation for every error code", func() {
 		// We parse the error code file, extract all constants, and verify that
 		// each of them has a string version. Go FTW!
-		filename := os.Getenv("GOPATH") + "/src/github.com/lucas-clemente/quic-go/qerr/error_codes.go"
+		_, thisfile, _, ok := runtime.Caller(0)
+		if !ok {
+			panic("Failed to get current frame")
+		}
+		filename := path.Join(path.Dir(thisfile), "error_codes.go")
 		fileAst, err := parser.ParseFile(token.NewFileSet(), filename, nil, 0)
 		Expect(err).NotTo(HaveOccurred())
 		constSpecs := fileAst.Decls[0].(*ast.GenDecl).Specs

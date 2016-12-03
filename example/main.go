@@ -10,7 +10,8 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
-	"os"
+	"path"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -99,6 +100,15 @@ func init() {
 	})
 }
 
+func getBuildDir() string {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		panic("Failed to get current frame")
+	}
+
+	return path.Dir(filename)
+}
+
 func main() {
 	// defer profile.Start().Stop()
 	go func() {
@@ -109,7 +119,7 @@ func main() {
 	verbose := flag.Bool("v", false, "verbose")
 	bs := binds{}
 	flag.Var(&bs, "bind", "bind to")
-	certPath := flag.String("certpath", os.Getenv("GOPATH")+"/src/github.com/lucas-clemente/quic-go/example/", "certificate directory")
+	certPath := flag.String("certpath", getBuildDir(), "certificate directory")
 	www := flag.String("www", "/var/www", "www data")
 	tcp := flag.Bool("tcp", false, "also listen on TCP")
 	flag.Parse()

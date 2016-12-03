@@ -33,9 +33,6 @@ func (s *mockSession) RemoteAddr() *net.UDPAddr {
 }
 
 var _ = Describe("H2 server", func() {
-	certPath := os.Getenv("GOPATH")
-	certPath += "/src/github.com/lucas-clemente/quic-go/example/"
-
 	var (
 		s          *Server
 		session    *mockSession
@@ -243,7 +240,7 @@ var _ = Describe("H2 server", func() {
 	})
 
 	It("should error when ListenAndServeTLS is called with s.Server nil", func() {
-		err := (&Server{}).ListenAndServeTLS(certPath+"fullchain.pem", certPath+"privkey.pem")
+		err := (&Server{}).ListenAndServeTLS(testdata.GetCertificatePaths())
 		Expect(err).To(MatchError("use of h2quic.Server without http.Server"))
 	})
 
@@ -296,7 +293,7 @@ var _ = Describe("H2 server", func() {
 			for i := 0; i < 2; i++ {
 				go func() {
 					defer GinkgoRecover()
-					err := s.ListenAndServeTLS(certPath+"fullchain.pem", certPath+"privkey.pem")
+					err := s.ListenAndServeTLS(testdata.GetCertificatePaths())
 					if err != nil {
 						cErr <- err
 					}
@@ -325,7 +322,8 @@ var _ = Describe("H2 server", func() {
 		c, err := net.ListenUDP("udp", udpAddr)
 		Expect(err).NotTo(HaveOccurred())
 		defer c.Close()
-		err = ListenAndServeQUIC(addr, certPath+"fullchain.pem", certPath+"privkey.pem", nil)
+		fullpem, privkey := testdata.GetCertificatePaths()
+		err = ListenAndServeQUIC(addr, fullpem, privkey, nil)
 		// Check that it's an EADDRINUSE
 		Expect(err).ToNot(BeNil())
 		opErr, ok := err.(*net.OpError)
