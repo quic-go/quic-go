@@ -111,7 +111,8 @@ func decompressChain(data []byte) ([][]byte, error) {
 
 		switch et {
 		case entryCached:
-			panic("not yet implemented")
+			// we're not sending any certificate hashes in the CHLO, so there shouldn't be any cached certificates in the chain
+			return nil, errors.New("unexpected cached certificate")
 		case entryCommon:
 			e := entry{t: entryCommon}
 			e.h, err = utils.ReadUint64(r)
