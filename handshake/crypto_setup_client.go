@@ -325,6 +325,8 @@ func (h *cryptoSetupClient) getTags() (map[Tag][]byte, error) {
 
 			tags[TagNONC] = h.nonc
 			tags[TagXLCT] = xlct
+			tags[TagKEXS] = []byte("C255")
+			tags[TagAEAD] = []byte("AESG")
 			tags[TagPUBS] = h.serverConfig.kex.PublicKey() // TODO: check if 3 bytes need to be prepended
 		}
 	}

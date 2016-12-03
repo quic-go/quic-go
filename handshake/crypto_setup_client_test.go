@@ -420,7 +420,7 @@ var _ = Describe("Crypto setup", func() {
 			Expect(cs.getTags()).To(Equal(tags))
 		})
 
-		It("sends a client nonce, a public value and the cert hash after reading the certificate and the server config", func() {
+		It("sends a the values needed for a full CHLO after reading the certificate and the server config", func() {
 			certManager.leafCert = []byte("leafcert")
 			cs.nonc = []byte("client-nonce")
 			kex, err := crypto.NewCurve25519KEX()
@@ -433,6 +433,8 @@ var _ = Describe("Crypto setup", func() {
 			Expect(tags[TagNONC]).To(Equal(cs.nonc))
 			Expect(tags[TagPUBS]).To(Equal(kex.PublicKey()))
 			Expect(tags[TagXLCT]).To(Equal(xlct))
+			Expect(tags[TagKEXS]).To(Equal([]byte("C255")))
+			Expect(tags[TagAEAD]).To(Equal([]byte("AESG")))
 		})
 
 		It("doesn't send more than MaxClientHellos CHLOs", func() {
