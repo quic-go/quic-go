@@ -22,8 +22,8 @@ const (
 
 type entry struct {
 	t entryType
-	h uint64
-	i uint32
+	h uint64 // set hash
+	i uint32 // index
 }
 
 func compressChain(chain [][]byte, pCommonSetHashes, pCachedHashes []byte) ([]byte, error) {
@@ -91,9 +91,11 @@ func compressChain(chain [][]byte, pCommonSetHashes, pCachedHashes []byte) ([]by
 
 func decompressChain(data []byte) ([][]byte, error) {
 	var chain [][]byte
+	var entries []entry
 	r := bytes.NewReader(data)
 
 	var numCerts int
+	var hasCompressedCerts bool
 	for {
 		entryTypeByte, err := r.ReadByte()
 		if entryTypeByte == 0 {
@@ -111,9 +113,28 @@ func decompressChain(data []byte) ([][]byte, error) {
 		case entryCached:
 			panic("not yet implemented")
 		case entryCommon:
-			panic("not yet implemented")
+			e := entry{t: entryCommon}
+			e.h, err = utils.ReadUint64(r)
+			if err != nil {
+				return nil, err
+			}
+			e.i, err = utils.ReadUint32(r)
+			if err != nil {
+				return nil, err
+			}
+			certSet, ok := certSets[e.h]
+			if !ok {
+				return nil, errors.New("unknown certSet")
+			}
+			if e.i >= uint32(len(certSet)) {
+				return nil, errors.New("certificate not found in certSet")
+			}
+			entries = append(entries, e)
+			chain = append(chain, certSet[e.i])
 		case entryCompressed:
-			continue
+			hasCompressedCerts = true
+			entries = append(entries, entry{t: entryCompressed})
+			chain = append(chain, nil)
 		default:
 			return nil, errors.New("unknown entryType")
 		}
@@ -123,35 +144,50 @@ func decompressChain(data []byte) ([][]byte, error) {
 		return make([][]byte, 0, 0), nil
 	}
 
-	uncompressedLength, err := utils.ReadUint32(r)
-	if err != nil {
-		return nil, err
-	}
+	if hasCompressedCerts {
+		uncompressedLength, err := utils.ReadUint32(r)
+		if err != nil {
+			fmt.Println(4)
+			return nil, err
+		}
 
-	gz, err := zlib.NewReaderDict(r, certDictZlib)
-	if err != nil {
-		return nil, err
-	}
-	defer gz.Close()
-
-	var totalLength uint32
-	for totalLength < uncompressedLength {
-		lenBytes := make([]byte, 4)
-		_, err := gz.Read(lenBytes)
+		zlibDict := buildZlibDictForEntries(entries, chain)
+		gz, err := zlib.NewReaderDict(r, zlibDict)
 		if err != nil {
 			return nil, err
 		}
-		certLen := binary.LittleEndian.Uint32(lenBytes)
+		defer gz.Close()
 
-		cert := make([]byte, certLen)
-		n, err := gz.Read(cert)
-		if uint32(n) != certLen && err != nil {
-			return nil, err
+		var totalLength uint32
+		var certIndex int
+		for totalLength < uncompressedLength {
+			lenBytes := make([]byte, 4)
+			_, err := gz.Read(lenBytes)
+			if err != nil {
+				return nil, err
+			}
+			certLen := binary.LittleEndian.Uint32(lenBytes)
+
+			cert := make([]byte, certLen)
+			n, err := gz.Read(cert)
+			if uint32(n) != certLen && err != nil {
+				return nil, err
+			}
+
+			for {
+				if certIndex >= len(entries) {
+					return nil, errors.New("CertCompression BUG: no element to save uncompressed certificate")
+				}
+				if entries[certIndex].t == entryCompressed {
+					chain[certIndex] = cert
+					certIndex++
+					break
+				}
+				certIndex++
+			}
+
+			totalLength += 4 + certLen
 		}
-
-		chain = append(chain, cert)
-
-		totalLength += 4 + certLen
 	}
 
 	return chain, nil
