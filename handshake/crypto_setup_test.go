@@ -143,6 +143,7 @@ var _ = Describe("Crypto setup", func() {
 		nonce32     []byte
 		ip          net.IP
 		validSTK    []byte
+		aead        []byte
 	)
 
 	BeforeEach(func() {
@@ -158,6 +159,7 @@ var _ = Describe("Crypto setup", func() {
 		signer = &mockSigner{}
 		scfg, err = NewServerConfig(kex, signer)
 		nonce32 = make([]byte, 32)
+		aead = []byte("AESG")
 		copy(nonce32[4:12], scfg.obit) // set the OBIT value at the right position
 		Expect(err).NotTo(HaveOccurred())
 		scfg.stkSource = &mockStkSource{}
@@ -229,6 +231,7 @@ var _ = Describe("Crypto setup", func() {
 			response, err := cs.handleCHLO("", []byte("chlo-data"), map[Tag][]byte{
 				TagPUBS: []byte("pubs-c"),
 				TagNONC: nonce32,
+				TagAEAD: aead,
 			})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(response).To(HavePrefix("SHLO"))
@@ -254,6 +257,7 @@ var _ = Describe("Crypto setup", func() {
 				TagSNI:  []byte("quic.clemente.io"),
 				TagNONC: nonce32,
 				TagSTK:  validSTK,
+				TagAEAD: aead,
 				TagPUBS: nil,
 			})
 			err := cs.HandleCryptoStream()
@@ -294,6 +298,7 @@ var _ = Describe("Crypto setup", func() {
 				TagSNI:  []byte("quic.clemente.io"),
 				TagNONC: nonce32,
 				TagSTK:  validSTK,
+				TagAEAD: aead,
 				TagPUBS: nil,
 			})
 			err := cs.HandleCryptoStream()
@@ -330,6 +335,31 @@ var _ = Describe("Crypto setup", func() {
 			_, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize-1), nil)
 			Expect(err).To(MatchError("CryptoInvalidValueLength: CHLO too small"))
 		})
+
+		It("errors if the AEAD tag is missing", func() {
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagSNI:  []byte("quic.clemente.io"),
+				TagPUBS: []byte("pubs"),
+				TagNONC: nonce32,
+				TagSTK:  validSTK,
+			})
+			err := cs.HandleCryptoStream()
+			Expect(err).To(MatchError(qerr.Error(qerr.CryptoNoSupport, "Unsupported AEAD or KEXS")))
+		})
+
+		It("errors if the AEAD tag has the wrong value", func() {
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagSNI:  []byte("quic.clemente.io"),
+				TagPUBS: []byte("pubs"),
+				TagNONC: nonce32,
+				TagSTK:  validSTK,
+				TagAEAD: []byte("wrong"),
+			})
+			err := cs.HandleCryptoStream()
+			Expect(err).To(MatchError(qerr.Error(qerr.CryptoNoSupport, "Unsupported AEAD or KEXS")))
+		})
 	})
 
 	It("errors without SNI", func() {
@@ -364,7 +394,11 @@ var _ = Describe("Crypto setup", func() {
 		foobarFNVSigned := []byte{0x18, 0x6f, 0x44, 0xba, 0x97, 0x35, 0xd, 0x6f, 0xbf, 0x64, 0x3c, 0x79, 0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72}
 
 		doCHLO := func() {
-			_, err := cs.handleCHLO("", []byte("chlo-data"), map[Tag][]byte{TagPUBS: []byte("pubs-c"), TagNONC: nonce32})
+			_, err := cs.handleCHLO("", []byte("chlo-data"), map[Tag][]byte{
+				TagPUBS: []byte("pubs-c"),
+				TagNONC: nonce32,
+				TagAEAD: aead,
+			})
 			Expect(err).ToNot(HaveOccurred())
 		}
 
