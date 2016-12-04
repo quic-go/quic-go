@@ -93,6 +93,8 @@ func (c *Client) Listen() error {
 		err = c.handlePacket(data)
 		if err != nil {
 			utils.Errorf("error handling packet: %s", err.Error())
+			c.session.Close(err)
+			return err
 		}
 	}
 }

@@ -20,14 +20,19 @@ type mockSession struct {
 	connectionID protocol.ConnectionID
 	packetCount  int
 	closed       bool
+	closeReason  error
 }
 
 func (s *mockSession) handlePacket(*receivedPacket) {
 	s.packetCount++
 }
 
-func (s *mockSession) run()              {}
-func (s *mockSession) Close(error) error { s.closed = true; return nil }
+func (s *mockSession) run() {}
+func (s *mockSession) Close(e error) error {
+	s.closed = true
+	s.closeReason = e
+	return nil
+}
 
 func newMockSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) (packetHandler, error) {
 	return &mockSession{
