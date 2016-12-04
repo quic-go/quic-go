@@ -355,10 +355,17 @@ func (h *cryptoSetupClient) maybeUpgradeCrypto() error {
 
 	if h.secureAEAD == nil && (h.serverConfig != nil && len(h.serverConfig.sharedSecret) > 0 && len(h.nonc) > 0 && len(leafCert) > 0 && len(h.diversificationNonce) > 0 && len(h.lastSentCHLO) > 0) {
 		var err error
+		var nonce []byte
+		if h.sno == nil {
+			nonce = h.nonc
+		} else {
+			nonce = append(h.nonc, h.sno...)
+		}
+
 		h.secureAEAD, err = h.keyDerivation(
 			false,
 			h.serverConfig.sharedSecret,
-			h.nonc,
+			nonce,
 			h.connID,
 			h.lastSentCHLO,
 			h.serverConfig.Get(),

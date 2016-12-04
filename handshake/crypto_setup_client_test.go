@@ -511,6 +511,15 @@ var _ = Describe("Crypto setup", func() {
 			Expect(keyDerivationCalledWith.pers).To(Equal(protocol.PerspectiveClient))
 		})
 
+		It("uses the server nonce, if the server sent one", func() {
+			cs.serverVerified = true
+			cs.sno = []byte("server nonce")
+			err := cs.maybeUpgradeCrypto()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cs.secureAEAD).ToNot(BeNil())
+			Expect(keyDerivationCalledWith.nonces).To(Equal(append(cs.nonc, cs.sno...)))
+		})
+
 		It("doesn't create a secureAEAD if the certificate is not yet verified, even if it has all necessary values", func() {
 			err := cs.maybeUpgradeCrypto()
 			Expect(err).ToNot(HaveOccurred())
