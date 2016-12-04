@@ -181,14 +181,20 @@ func (h *cryptoSetupClient) handleSHLOMessage(cryptoData map[Tag][]byte) error {
 		return qerr.Error(qerr.CryptoEncryptionLevelIncorrect, "unencrypted SHLO message")
 	}
 
+	if sno, ok := cryptoData[TagSNO]; ok {
+		h.sno = sno
+	}
+
 	serverPubs, ok := cryptoData[TagPUBS]
 	if !ok {
 		return qerr.Error(qerr.CryptoMessageParameterNotFound, "PUBS")
 	}
 
-	if sno, ok := cryptoData[TagSNO]; ok {
-		h.sno = sno
+	_, ok = cryptoData[TagVER]
+	if !ok {
+		return qerr.Error(qerr.InvalidCryptoMessageParameter, "server hello missing version list")
 	}
+	// TODO: verify versions
 
 	nonce := append(h.nonc, h.sno...)
 

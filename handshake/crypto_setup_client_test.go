@@ -334,8 +334,10 @@ var _ = Describe("Crypto setup", func() {
 		var tagMap map[Tag][]byte
 
 		BeforeEach(func() {
-			tagMap = make(map[Tag][]byte)
-			tagMap[TagPUBS] = []byte{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f}
+			tagMap = map[Tag][]byte{
+				TagPUBS: []byte{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f},
+				TagVER:  protocol.SupportedVersionsAsTags,
+			}
 			kex, err := crypto.NewCurve25519KEX()
 			Expect(err).ToNot(HaveOccurred())
 			serverConfig := &serverConfigClient{
@@ -355,6 +357,12 @@ var _ = Describe("Crypto setup", func() {
 			delete(tagMap, TagPUBS)
 			err := cs.handleSHLOMessage(tagMap)
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoMessageParameterNotFound, "PUBS")))
+		})
+
+		It("rejects SHLOs without a version list", func() {
+			delete(tagMap, TagVER)
+			err := cs.handleSHLOMessage(tagMap)
+			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "server hello missing version list")))
 		})
 
 		It("reads the server nonce, if set", func() {
