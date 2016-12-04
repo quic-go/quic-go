@@ -342,6 +342,13 @@ var _ = Describe("Crypto setup", func() {
 				kex: kex,
 			}
 			cs.serverConfig = serverConfig
+			cs.receivedSecurePacket = true
+		})
+
+		It("rejects unencrypted SHLOs", func() {
+			cs.receivedSecurePacket = false
+			err := cs.handleSHLOMessage(tagMap)
+			Expect(err).To(MatchError(qerr.Error(qerr.CryptoEncryptionLevelIncorrect, "unencrypted SHLO message")))
 		})
 
 		It("rejects SHLOs without a PUBS", func() {

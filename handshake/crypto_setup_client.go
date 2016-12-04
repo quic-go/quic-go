@@ -36,8 +36,10 @@ type cryptoSetupClient struct {
 	clientHelloCounter int
 	serverVerified     bool // has the certificate chain and the proof already been verified
 	keyDerivation      KeyDerivationFunction
-	secureAEAD         crypto.AEAD
-	forwardSecureAEAD  crypto.AEAD
+
+	receivedSecurePacket bool
+	secureAEAD           crypto.AEAD
+	forwardSecureAEAD    crypto.AEAD
 }
 
 var _ crypto.AEAD = &cryptoSetupClient{}
@@ -175,6 +177,10 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 }
 
 func (h *cryptoSetupClient) handleSHLOMessage(cryptoData map[Tag][]byte) error {
+	if !h.receivedSecurePacket {
+		return qerr.Error(qerr.CryptoEncryptionLevelIncorrect, "unencrypted SHLO message")
+	}
+
 	serverPubs, ok := cryptoData[TagPUBS]
 	if !ok {
 		return qerr.Error(qerr.CryptoMessageParameterNotFound, "PUBS")
@@ -219,13 +225,18 @@ func (h *cryptoSetupClient) Open(dst, src []byte, packetNumber protocol.PacketNu
 		}
 		return nil, err
 	}
+
 	if h.secureAEAD != nil {
 		data, err := h.secureAEAD.Open(dst, src, packetNumber, associatedData)
 		if err == nil {
+			h.receivedSecurePacket = true
 			return data, nil
 		}
-		return nil, err
+		if h.receivedSecurePacket {
+			return nil, err
+		}
 	}
+
 	return (&crypto.NullAEAD{}).Open(dst, src, packetNumber, associatedData)
 }
 
