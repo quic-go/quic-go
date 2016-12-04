@@ -40,6 +40,18 @@ func pemBlockForCert(certDER []byte) *pem.Block {
 	return &pem.Block{Type: "CERTIFICATE", Bytes: certDER}
 }
 
+type keyDerivationValues struct {
+	forwardSecure bool
+	sharedSecret  []byte
+	nonces        []byte
+	connID        protocol.ConnectionID
+	chlo          []byte
+	scfg          []byte
+	cert          []byte
+	divNonce      []byte
+	pers          protocol.Perspective
+}
+
 type mockCertManager struct {
 	setDataCalledWith []byte
 	setDataError      error
@@ -88,14 +100,31 @@ var _ = Describe("Crypto setup", func() {
 	var cs *cryptoSetupClient
 	var certManager *mockCertManager
 	var stream *mockStream
+	var keyDerivationCalledWith *keyDerivationValues
 
 	BeforeEach(func() {
+		keyDerivation := func(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte, pers protocol.Perspective) (crypto.AEAD, error) {
+			keyDerivationCalledWith = &keyDerivationValues{
+				forwardSecure: forwardSecure,
+				sharedSecret:  sharedSecret,
+				nonces:        nonces,
+				connID:        connID,
+				chlo:          chlo,
+				scfg:          scfg,
+				cert:          cert,
+				divNonce:      divNonce,
+				pers:          pers,
+			}
+			return crypto.DeriveKeysAESGCM(forwardSecure, sharedSecret, nonces, connID, chlo, scfg, cert, divNonce, pers)
+		}
+
 		stream = &mockStream{}
 		certManager = &mockCertManager{}
 		csInt, err := NewCryptoSetupClient("hostname", 0, protocol.Version36, stream)
 		Expect(err).ToNot(HaveOccurred())
 		cs = csInt.(*cryptoSetupClient)
 		cs.certManager = certManager
+		cs.keyDerivation = keyDerivation
 	})
 
 	Context("Reading REJ", func() {
@@ -471,6 +500,15 @@ var _ = Describe("Crypto setup", func() {
 			err := cs.maybeUpgradeCrypto()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.secureAEAD).ToNot(BeNil())
+			Expect(keyDerivationCalledWith.forwardSecure).To(BeFalse())
+			Expect(keyDerivationCalledWith.sharedSecret).To(Equal(cs.serverConfig.sharedSecret))
+			Expect(keyDerivationCalledWith.nonces).To(Equal(cs.nonc))
+			Expect(keyDerivationCalledWith.connID).To(Equal(cs.connID))
+			Expect(keyDerivationCalledWith.chlo).To(Equal(cs.lastSentCHLO))
+			Expect(keyDerivationCalledWith.scfg).To(Equal(cs.serverConfig.Get()))
+			Expect(keyDerivationCalledWith.cert).To(Equal(certManager.leafCert))
+			Expect(keyDerivationCalledWith.divNonce).To(Equal(cs.diversificationNonce))
+			Expect(keyDerivationCalledWith.pers).To(Equal(protocol.PerspectiveClient))
 		})
 
 		It("doesn't create a secureAEAD if the certificate is not yet verified, even if it has all necessary values", func() {
