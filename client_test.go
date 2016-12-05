@@ -150,6 +150,7 @@ var _ = Describe("Client", func() {
 			Expect(session.packetCount).To(BeZero())
 			err := client.handlePacket(getVersionNegotiation([]protocol.VersionNumber{newVersion}))
 			Expect(client.version).To(Equal(newVersion))
+			Expect(client.versionNegotiated).To(BeTrue())
 			// it swapped the sessions
 			Expect(client.session).ToNot(Equal(session))
 			Expect(err).ToNot(HaveOccurred())
@@ -163,6 +164,16 @@ var _ = Describe("Client", func() {
 		It("errors if no matching version is found", func() {
 			err := client.handlePacket(getVersionNegotiation([]protocol.VersionNumber{1}))
 			Expect(err).To(MatchError(qerr.VersionNegotiationMismatch))
+		})
+
+		It("ignores delayed version negotiation packets", func() {
+			// if the version was not yet negotiated, handlePacket would return a VersionNegotiationMismatch error, see above test
+			client.versionNegotiated = true
+			Expect(session.packetCount).To(BeZero())
+			err := client.handlePacket(getVersionNegotiation([]protocol.VersionNumber{1}))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(client.versionNegotiated).To(BeTrue())
+			Expect(session.packetCount).To(BeZero())
 		})
 
 		It("errors if the server should have accepted the offered version", func() {

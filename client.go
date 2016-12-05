@@ -20,8 +20,9 @@ type Client struct {
 	conn     *net.UDPConn
 	hostname string
 
-	connectionID protocol.ConnectionID
-	version      protocol.VersionNumber
+	connectionID      protocol.ConnectionID
+	version           protocol.VersionNumber
+	versionNegotiated bool
 
 	session packetHandler
 }
@@ -123,7 +124,10 @@ func (c *Client) handlePacket(packet []byte) error {
 	}
 	hdr.Raw = packet[:len(packet)-r.Len()]
 
-	// TODO: ignore delayed / duplicated version negotiation packets
+	// ignore delayed / duplicated version negotiation packets
+	if c.versionNegotiated && hdr.VersionFlag {
+		return nil
+	}
 
 	if hdr.VersionFlag {
 		// check if the server sent the offered version in supported versions
@@ -140,6 +144,7 @@ func (c *Client) handlePacket(packet []byte) error {
 
 		utils.Infof("Switching to QUIC version %d", highestSupportedVersion)
 		c.version = highestSupportedVersion
+		c.versionNegotiated = true
 		c.session.Close(errCloseSessionForNewVersion)
 		err = c.createNewSession()
 		if err != nil {
