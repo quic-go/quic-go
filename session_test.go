@@ -590,6 +590,14 @@ var _ = Describe("Session", func() {
 			Expect(err.Error()).To(ContainSubstring(testErr.Error()))
 			Expect(session.runClosed).ToNot(Receive()) // channel should be drained by Close()
 		})
+
+		It("closes the session in order to replace it with another QUIC version", func() {
+			session.Close(errCloseSessionForNewVersion)
+			Expect(closeCallbackCalled).To(BeFalse())
+			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore))
+			Expect(atomic.LoadUint32(&session.closed) != 0).To(BeTrue())
+			Expect(conn.written).To(BeEmpty()) // no CONNECTION_CLOSE or PUBLIC_RESET sent
+		})
 	})
 
 	Context("receiving packets", func() {

@@ -16,8 +16,9 @@ import (
 
 // A Client of QUIC
 type Client struct {
-	addr *net.UDPAddr
-	conn *net.UDPConn
+	addr     *net.UDPAddr
+	conn     *net.UDPConn
+	hostname string
 
 	connectionID protocol.ConnectionID
 	version      protocol.VersionNumber
@@ -26,6 +27,11 @@ type Client struct {
 }
 
 var errHostname = errors.New("Invalid hostname")
+
+var (
+	errCloseSessionForNewVersion = errors.New("closing session in order to recreate it with a new version")
+	errInvalidVersionNegotiation = qerr.Error(qerr.InvalidVersionNegotiationPacket, "Server already supports client's version and should have accepted the connection.")
+)
 
 // NewClient makes a new client
 func NewClient(addr string) (*Client, error) {
@@ -54,18 +60,17 @@ func NewClient(addr string) (*Client, error) {
 	rand.Seed(time.Now().UTC().UnixNano())
 	connectionID := protocol.ConnectionID(rand.Int63())
 
-	utils.Infof("Starting new connection to %s (%s), connectionID %x", host, udpAddr.String(), connectionID)
-
 	client := &Client{
 		addr:         udpAddr,
 		conn:         conn,
-		version:      protocol.Version36,
+		hostname:     hostname,
+		version:      protocol.SupportedVersions[len(protocol.SupportedVersions)-1], // use the highest supported version by default
 		connectionID: connectionID,
 	}
 
-	streamCallback := func(session *Session, stream utils.Stream) {}
+	utils.Infof("Starting new connection to %s (%s), connectionID %x, version %d", host, udpAddr.String(), connectionID, client.version)
 
-	client.session, err = newClientSession(conn, udpAddr, hostname, client.version, client.connectionID, streamCallback, client.closeCallback)
+	err = client.createNewSession()
 	if err != nil {
 		return nil, err
 	}
@@ -75,8 +80,6 @@ func NewClient(addr string) (*Client, error) {
 
 // Listen listens
 func (c *Client) Listen() error {
-	go c.session.run()
-
 	for {
 		data := getPacketBuffer()
 		data = data[:protocol.MaxPacketSize]
@@ -120,6 +123,32 @@ func (c *Client) handlePacket(packet []byte) error {
 	}
 	hdr.Raw = packet[:len(packet)-r.Len()]
 
+	// TODO: ignore delayed / duplicated version negotiation packets
+
+	if hdr.VersionFlag {
+		// check if the server sent the offered version in supported versions
+		for _, v := range hdr.SupportedVersions {
+			if v == c.version {
+				return errInvalidVersionNegotiation
+			}
+		}
+
+		ok, highestSupportedVersion := protocol.HighestSupportedVersion(hdr.SupportedVersions)
+		if !ok {
+			return qerr.VersionNegotiationMismatch
+		}
+
+		utils.Infof("Switching to QUIC version %d", highestSupportedVersion)
+		c.version = highestSupportedVersion
+		c.session.Close(errCloseSessionForNewVersion)
+		err = c.createNewSession()
+		if err != nil {
+			return err
+		}
+
+		return nil // version negotiation packets have no payload
+	}
+
 	c.session.handlePacket(&receivedPacket{
 		remoteAddr:   c.addr,
 		publicHeader: hdr,
@@ -128,6 +157,19 @@ func (c *Client) handlePacket(packet []byte) error {
 	})
 	return nil
 }
+
+func (c *Client) createNewSession() error {
+	var err error
+	c.session, err = newClientSession(c.conn, c.addr, c.hostname, c.version, c.connectionID, c.streamCallback, c.closeCallback)
+	if err != nil {
+		return err
+	}
+
+	go c.session.run()
+	return nil
+}
+
+func (c *Client) streamCallback(session *Session, stream utils.Stream) {}
 
 func (c *Client) closeCallback(id protocol.ConnectionID) {
 	utils.Infof("Connection %x closed.", id)

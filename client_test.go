@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"encoding/binary"
 	"net"
 
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -17,9 +18,19 @@ var _ = Describe("Client", func() {
 
 	BeforeEach(func() {
 		client = &Client{}
-		session = &mockSession{}
+		session = &mockSession{connectionID: 0x1337}
+		client.connectionID = 0x1337
 		client.session = session
+		client.version = protocol.Version36
 	})
+
+	startUDPConn := func() {
+		var err error
+		client.addr, err = net.ResolveUDPAddr("udp", "127.0.0.1:0")
+		Expect(err).ToNot(HaveOccurred())
+		client.conn, err = net.ListenUDP("udp", client.addr)
+		Expect(err).NotTo(HaveOccurred())
+	}
 
 	It("errors on invalid public header", func() {
 		err := client.handlePacket(nil)
@@ -42,6 +53,17 @@ var _ = Describe("Client", func() {
 		Expect(session.closeReason).To(BeNil())
 	})
 
+	It("creates new sessions with the right parameters", func() {
+		startUDPConn()
+		client.session = nil
+		client.hostname = "hostname"
+		err := client.createNewSession()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(client.session).ToNot(BeNil())
+		Expect(client.session.(*Session).connectionID).To(Equal(client.connectionID))
+		Expect(client.session.(*Session).version).To(Equal(client.version))
+	})
+
 	Context("handling packets", func() {
 		It("errors on too large packets", func() {
 			err := client.handlePacket(bytes.Repeat([]byte{'f'}, int(protocol.MaxPacketSize+1)))
@@ -49,11 +71,7 @@ var _ = Describe("Client", func() {
 		})
 
 		It("handles packets", func(done Done) {
-			var err error
-			client.addr, err = net.ResolveUDPAddr("udp", "127.0.0.1:0")
-			Expect(err).ToNot(HaveOccurred())
-			client.conn, err = net.ListenUDP("udp", client.addr)
-			Expect(err).NotTo(HaveOccurred())
+			startUDPConn()
 			serverConn, err := net.DialUDP("udp", nil, client.conn.LocalAddr().(*net.UDPAddr))
 			Expect(err).NotTo(HaveOccurred())
 
@@ -84,11 +102,7 @@ var _ = Describe("Client", func() {
 		})
 
 		It("closes the session when encountering an error while handling a packet", func(done Done) {
-			var err error
-			client.addr, err = net.ResolveUDPAddr("udp", "127.0.0.1:0")
-			Expect(err).ToNot(HaveOccurred())
-			client.conn, err = net.ListenUDP("udp", client.addr)
-			Expect(err).NotTo(HaveOccurred())
+			startUDPConn()
 			serverConn, err := net.DialUDP("udp", nil, client.conn.LocalAddr().(*net.UDPAddr))
 			Expect(err).NotTo(HaveOccurred())
 
@@ -109,6 +123,51 @@ var _ = Describe("Client", func() {
 
 			err = client.Close()
 			Expect(err).ToNot(HaveOccurred())
+		})
+	})
+
+	Context("version negotiation", func() {
+		getVersionNegotiation := func(versions []protocol.VersionNumber) []byte {
+			oldVersionNegotiationPacket := composeVersionNegotiation(0x1337)
+			oldSupportVersionTags := protocol.SupportedVersionsAsTags
+			var b bytes.Buffer
+			for _, v := range versions {
+				s := make([]byte, 4)
+				binary.LittleEndian.PutUint32(s, protocol.VersionNumberToTag(v))
+				b.Write(s)
+			}
+			protocol.SupportedVersionsAsTags = b.Bytes()
+			packet := composeVersionNegotiation(client.connectionID)
+			protocol.SupportedVersionsAsTags = oldSupportVersionTags
+			Expect(composeVersionNegotiation(0x1337)).To(Equal(oldVersionNegotiationPacket))
+			return packet
+		}
+
+		It("changes the version after receiving a version negotiation packet", func() {
+			startUDPConn()
+			newVersion := protocol.Version35
+			Expect(newVersion).ToNot(Equal(client.version))
+			Expect(session.packetCount).To(BeZero())
+			err := client.handlePacket(getVersionNegotiation([]protocol.VersionNumber{newVersion}))
+			Expect(client.version).To(Equal(newVersion))
+			// it swapped the sessions
+			Expect(client.session).ToNot(Equal(session))
+			Expect(err).ToNot(HaveOccurred())
+			// it didn't pass the version negoation packet to the session (since it has no payload)
+			Expect(session.packetCount).To(BeZero())
+
+			err = client.Close()
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("errors if no matching version is found", func() {
+			err := client.handlePacket(getVersionNegotiation([]protocol.VersionNumber{1}))
+			Expect(err).To(MatchError(qerr.VersionNegotiationMismatch))
+		})
+
+		It("errors if the server should have accepted the offered version", func() {
+			err := client.handlePacket(getVersionNegotiation([]protocol.VersionNumber{client.version}))
+			Expect(err).To(MatchError(errInvalidVersionNegotiation))
 		})
 	})
 })

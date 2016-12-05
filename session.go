@@ -480,6 +480,15 @@ func (s *Session) closeImpl(e error, remoteClose bool) error {
 		return errSessionAlreadyClosed
 	}
 
+	if e == errCloseSessionForNewVersion {
+		s.closeStreamsWithError(e)
+		// when the run loop exits, it will call the closeCallback
+		// replace it with an noop function to make sure this doesn't have any effect
+		s.closeCallback = func(protocol.ConnectionID) {}
+		s.closeChan <- nil
+		return nil
+	}
+
 	if e == nil {
 		e = qerr.PeerGoingAway
 	}
