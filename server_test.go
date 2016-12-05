@@ -29,8 +29,8 @@ func (s *mockSession) handlePacket(*receivedPacket) {
 
 func (s *mockSession) run() {}
 func (s *mockSession) Close(e error) error {
-	s.closed = true
 	s.closeReason = e
+	s.closed = true
 	return nil
 }
 
