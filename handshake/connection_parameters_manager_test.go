@@ -14,24 +14,6 @@ var _ = Describe("ConnectionsParameterManager", func() {
 		cpm = NewConnectionParamatersManager()
 	})
 
-	It("stores and retrieves a value", func() {
-		tcid := []byte{0x13, 0x37}
-		values := map[Tag][]byte{
-			TagTCID: tcid,
-		}
-
-		cpm.SetFromMap(values)
-
-		val, err := cpm.getRawValue(TagTCID)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(val).To(Equal(tcid))
-	})
-
-	It("returns an error for a tag that is not set", func() {
-		_, err := cpm.getRawValue(TagKEXS)
-		Expect(err).To(MatchError(errTagNotInConnectionParameterMap))
-	})
-
 	Context("SHLO", func() {
 		It("returns all parameters necessary for the SHLO", func() {
 			entryMap := cpm.GetSHLOMap()

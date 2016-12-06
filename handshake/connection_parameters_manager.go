@@ -2,7 +2,6 @@ package handshake
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
 	"sync"
 	"time"
@@ -16,11 +15,11 @@ import (
 // Warning: Writes may only be done from the crypto stream, see the comment
 // in GetSHLOMap().
 type ConnectionParametersManager struct {
-	params map[Tag][]byte
-	mutex  sync.RWMutex
+	mutex sync.RWMutex
 
 	flowControlNegotiated bool // have the flow control parameters for sending already been negotiated
 
+	truncateConnectionID               bool
 	maxStreamsPerConnection            uint32
 	idleConnectionStateLifetime        time.Duration
 	sendStreamFlowControlWindow        protocol.ByteCount
@@ -40,7 +39,6 @@ var (
 // NewConnectionParamatersManager creates a new connection parameters manager
 func NewConnectionParamatersManager() *ConnectionParametersManager {
 	return &ConnectionParametersManager{
-		params: make(map[Tag][]byte),
 		idleConnectionStateLifetime:        protocol.DefaultIdleTimeout,
 		sendStreamFlowControlWindow:        protocol.InitialStreamFlowControlWindow,     // can only be changed by the client
 		sendConnectionFlowControlWindow:    protocol.InitialConnectionFlowControlWindow, // can only be changed by the client
@@ -58,7 +56,11 @@ func (h *ConnectionParametersManager) SetFromMap(params map[Tag][]byte) error {
 	for key, value := range params {
 		switch key {
 		case TagTCID:
-			h.params[key] = value
+			clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
+			if err != nil {
+				return ErrMalformedTag
+			}
+			h.truncateConnectionID = (clientValue == 0)
 		case TagMSPC:
 			clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
 			if err != nil {
@@ -107,18 +109,6 @@ func (h *ConnectionParametersManager) negotiateMaxStreamsPerConnection(clientVal
 
 func (h *ConnectionParametersManager) negotiateIdleConnectionStateLifetime(clientValue time.Duration) time.Duration {
 	return utils.MinDuration(clientValue, protocol.MaxIdleTimeout)
-}
-
-// getRawValue gets the byte-slice for a tag
-func (h *ConnectionParametersManager) getRawValue(tag Tag) ([]byte, error) {
-	h.mutex.RLock()
-	rawValue, ok := h.params[tag]
-	h.mutex.RUnlock()
-
-	if !ok {
-		return nil, errTagNotInConnectionParameterMap
-	}
-	return rawValue, nil
 }
 
 // GetSHLOMap gets all values (except crypto values) needed for the SHLO
@@ -187,16 +177,7 @@ func (h *ConnectionParametersManager) GetIdleConnectionStateLifetime() time.Dura
 
 // TruncateConnectionID determines if the client requests truncated ConnectionIDs
 func (h *ConnectionParametersManager) TruncateConnectionID() bool {
-	rawValue, err := h.getRawValue(TagTCID)
-	if err != nil {
-		return false
-	}
-	if len(rawValue) != 4 {
-		return false
-	}
-	value := binary.LittleEndian.Uint32(rawValue)
-	if value == 0 {
-		return true
-	}
-	return false
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+	return h.truncateConnectionID
 }
