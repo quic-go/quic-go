@@ -269,7 +269,7 @@ func (s *Session) handlePacketImpl(p *receivedPacket) error {
 		hdr.PacketNumber,
 	)
 	if utils.Debug() {
-		utils.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x", hdr.PacketNumber, len(data)+len(hdr.Raw), hdr.ConnectionID)
+		utils.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x @ %s", hdr.PacketNumber, len(data)+len(hdr.Raw), hdr.ConnectionID, time.Now().Format("15:04:05.000"))
 	}
 
 	// TODO: Only do this after authenticating
@@ -576,7 +576,7 @@ func (s *Session) logPacket(packet *packedPacket) {
 		return
 	}
 	if utils.Debug() {
-		utils.Debugf("-> Sending packet 0x%x (%d bytes)", packet.number, len(packet.raw))
+		utils.Debugf("-> Sending packet 0x%x (%d bytes) @ %s", packet.number, len(packet.raw), time.Now().Format("15:04:05.000"))
 		for _, frame := range packet.frames {
 			frames.LogFrame(frame, true)
 		}
