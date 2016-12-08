@@ -1,9 +1,7 @@
 package flowcontrol
 
 import (
-	"reflect"
 	"time"
-	"unsafe"
 
 	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -12,11 +10,39 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-// set private variables of the ConnectionParametersManager
-// those are normally read from the server parameter constants in the constructor of the ConnectionParametersManager
-func setConnectionParametersManagerWindow(cpm handshake.ConnectionParametersManager, name string, value protocol.ByteCount) {
-	*(*protocol.ByteCount)(unsafe.Pointer(reflect.ValueOf(cpm).Elem().FieldByName(name).UnsafeAddr())) = value
+type mockConnectionParametersManager struct {
+	sendStreamFlowControlWindow        protocol.ByteCount
+	sendConnectionFlowControlWindow    protocol.ByteCount
+	receiveStreamFlowControlWindow     protocol.ByteCount
+	receiveConnectionFlowControlWindow protocol.ByteCount
 }
+
+func (m *mockConnectionParametersManager) SetFromMap(map[handshake.Tag][]byte) error {
+	panic("not implemented")
+}
+func (m *mockConnectionParametersManager) GetSHLOMap() map[handshake.Tag][]byte {
+	panic("not implemented")
+}
+func (m *mockConnectionParametersManager) GetSendStreamFlowControlWindow() protocol.ByteCount {
+	return m.sendStreamFlowControlWindow
+}
+func (m *mockConnectionParametersManager) GetSendConnectionFlowControlWindow() protocol.ByteCount {
+	return m.sendConnectionFlowControlWindow
+}
+func (m *mockConnectionParametersManager) GetReceiveStreamFlowControlWindow() protocol.ByteCount {
+	return m.receiveStreamFlowControlWindow
+}
+func (m *mockConnectionParametersManager) GetReceiveConnectionFlowControlWindow() protocol.ByteCount {
+	return m.receiveConnectionFlowControlWindow
+}
+func (m *mockConnectionParametersManager) GetMaxOutgoingStreams() uint32 { panic("not implemented") }
+func (m *mockConnectionParametersManager) GetMaxIncomingStreams() uint32 { panic("not implemented") }
+func (m *mockConnectionParametersManager) GetIdleConnectionStateLifetime() time.Duration {
+	panic("not implemented")
+}
+func (m *mockConnectionParametersManager) TruncateConnectionID() bool { panic("not implemented") }
+
+var _ handshake.ConnectionParametersManager = &mockConnectionParametersManager{}
 
 var _ = Describe("Flow controller", func() {
 	var controller *flowController
@@ -27,16 +53,17 @@ var _ = Describe("Flow controller", func() {
 	})
 
 	Context("Constructor", func() {
-		var cpm handshake.ConnectionParametersManager
+		var cpm *mockConnectionParametersManager
 		var rttStats *congestion.RTTStats
 
 		BeforeEach(func() {
-			cpm = handshake.NewConnectionParamatersManager(protocol.VersionWhatever)
+			cpm = &mockConnectionParametersManager{
+				sendStreamFlowControlWindow:        1000,
+				receiveStreamFlowControlWindow:     2000,
+				sendConnectionFlowControlWindow:    3000,
+				receiveConnectionFlowControlWindow: 4000,
+			}
 			rttStats = &congestion.RTTStats{}
-			setConnectionParametersManagerWindow(cpm, "sendStreamFlowControlWindow", 1000)
-			setConnectionParametersManagerWindow(cpm, "receiveStreamFlowControlWindow", 2000)
-			setConnectionParametersManagerWindow(cpm, "sendConnectionFlowControlWindow", 3000)
-			setConnectionParametersManagerWindow(cpm, "receiveConnectionFlowControlWindow", 4000)
 		})
 
 		It("reads the stream send and receive windows when acting as stream-level flow controller", func() {
@@ -65,12 +92,13 @@ var _ = Describe("Flow controller", func() {
 	})
 
 	Context("send flow control", func() {
-		var cpm handshake.ConnectionParametersManager
+		var cpm *mockConnectionParametersManager
 
 		BeforeEach(func() {
-			cpm = handshake.NewConnectionParamatersManager(protocol.VersionWhatever)
-			setConnectionParametersManagerWindow(cpm, "sendStreamFlowControlWindow", 1000)
-			setConnectionParametersManagerWindow(cpm, "sendConnectionFlowControlWindow", 3000)
+			cpm = &mockConnectionParametersManager{
+				sendStreamFlowControlWindow:     1000,
+				sendConnectionFlowControlWindow: 3000,
+			}
 			controller.connectionParameters = cpm
 		})
 
@@ -113,14 +141,14 @@ var _ = Describe("Flow controller", func() {
 			controller.streamID = 5
 			Expect(controller.getSendFlowControlWindow()).To(Equal(protocol.ByteCount(1000)))
 			// make sure the value is not cached
-			setConnectionParametersManagerWindow(cpm, "sendStreamFlowControlWindow", 2000)
+			cpm.sendStreamFlowControlWindow = 2000
 			Expect(controller.getSendFlowControlWindow()).To(Equal(protocol.ByteCount(2000)))
 		})
 
 		It("stops asking the ConnectionParametersManager for the flow control stream window size once a window update has arrived", func() {
 			controller.streamID = 5
 			Expect(controller.UpdateSendWindow(8000))
-			setConnectionParametersManagerWindow(cpm, "sendStreamFlowControlWindow", 9000)
+			cpm.sendStreamFlowControlWindow = 9000
 			Expect(controller.getSendFlowControlWindow()).To(Equal(protocol.ByteCount(8000)))
 		})
 
@@ -128,14 +156,14 @@ var _ = Describe("Flow controller", func() {
 			controller.streamID = 0
 			Expect(controller.getSendFlowControlWindow()).To(Equal(protocol.ByteCount(3000)))
 			// make sure the value is not cached
-			setConnectionParametersManagerWindow(cpm, "sendConnectionFlowControlWindow", 5000)
+			cpm.sendConnectionFlowControlWindow = 5000
 			Expect(controller.getSendFlowControlWindow()).To(Equal(protocol.ByteCount(5000)))
 		})
 
 		It("stops asking the ConnectionParametersManager for the connection flow control window size once a window update has arrived", func() {
 			controller.streamID = 0
 			Expect(controller.UpdateSendWindow(7000))
-			setConnectionParametersManagerWindow(cpm, "sendConnectionFlowControlWindow", 9000)
+			cpm.sendConnectionFlowControlWindow = 9000
 			Expect(controller.getSendFlowControlWindow()).To(Equal(protocol.ByteCount(7000)))
 		})
 	})

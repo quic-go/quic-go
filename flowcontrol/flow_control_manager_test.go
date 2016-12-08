@@ -13,9 +13,10 @@ var _ = Describe("Flow Control Manager", func() {
 	var cpm handshake.ConnectionParametersManager
 
 	BeforeEach(func() {
-		cpm = handshake.NewConnectionParamatersManager(protocol.VersionWhatever)
-		setConnectionParametersManagerWindow(cpm, "receiveStreamFlowControlWindow", 0x100)
-		setConnectionParametersManagerWindow(cpm, "receiveConnectionFlowControlWindow", 0x200)
+		cpm = &mockConnectionParametersManager{
+			receiveStreamFlowControlWindow:     0x100,
+			receiveConnectionFlowControlWindow: 0x200,
+		}
 		fcm = NewFlowControlManager(cpm, &congestion.RTTStats{}).(*flowControlManager)
 	})
 
