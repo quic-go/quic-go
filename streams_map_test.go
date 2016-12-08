@@ -2,6 +2,8 @@ package quic
 
 import (
 	"errors"
+	"math"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -10,6 +12,38 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+type mockConnectionParametersManager struct {
+	maxIncomingStreams uint32
+	idleTime           time.Duration
+}
+
+func (m *mockConnectionParametersManager) SetFromMap(map[handshake.Tag][]byte) error {
+	panic("not implemented")
+}
+func (m *mockConnectionParametersManager) GetSHLOMap() map[handshake.Tag][]byte {
+	panic("not implemented")
+}
+func (m *mockConnectionParametersManager) GetSendStreamFlowControlWindow() protocol.ByteCount {
+	return math.MaxUint64
+}
+func (m *mockConnectionParametersManager) GetSendConnectionFlowControlWindow() protocol.ByteCount {
+	return math.MaxUint64
+}
+func (m *mockConnectionParametersManager) GetReceiveStreamFlowControlWindow() protocol.ByteCount {
+	return math.MaxUint64
+}
+func (m *mockConnectionParametersManager) GetReceiveConnectionFlowControlWindow() protocol.ByteCount {
+	return math.MaxUint64
+}
+func (m *mockConnectionParametersManager) GetMaxOutgoingStreams() uint32 { panic("not implemented") }
+func (m *mockConnectionParametersManager) GetMaxIncomingStreams() uint32 { return m.maxIncomingStreams }
+func (m *mockConnectionParametersManager) GetIdleConnectionStateLifetime() time.Duration {
+	return m.idleTime
+}
+func (m *mockConnectionParametersManager) TruncateConnectionID() bool { return false }
+
+var _ handshake.ConnectionParametersManager = &mockConnectionParametersManager{}
+
 var _ = Describe("Streams Map", func() {
 	var (
 		cpm handshake.ConnectionParametersManager
@@ -17,7 +51,9 @@ var _ = Describe("Streams Map", func() {
 	)
 
 	BeforeEach(func() {
-		cpm = handshake.NewConnectionParamatersManager(protocol.VersionWhatever)
+		cpm = &mockConnectionParametersManager{
+			maxIncomingStreams: 75,
+		}
 		m = newStreamsMap(nil, cpm)
 	})
 
@@ -73,7 +109,7 @@ var _ = Describe("Streams Map", func() {
 					_, err := m.GetOrOpenStream(protocol.StreamID(i*2 + 1))
 					Expect(err).NotTo(HaveOccurred())
 				}
-				_, err := m.GetOrOpenStream(protocol.StreamID(maxNumStreams))
+				_, err := m.GetOrOpenStream(protocol.StreamID(2*maxNumStreams + 2))
 				Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 			})
 

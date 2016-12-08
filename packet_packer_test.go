@@ -23,7 +23,7 @@ var _ = Describe("Packet packer", func() {
 		fcm.sendWindowSizes[5] = protocol.MaxByteCount
 		fcm.sendWindowSizes[7] = protocol.MaxByteCount
 
-		cpm := handshake.NewConnectionParamatersManager(protocol.VersionWhatever)
+		cpm := &mockConnectionParametersManager{}
 		streamFramer = newStreamFramer(newStreamsMap(nil, cpm), fcm)
 
 		packer = &packetPacker{

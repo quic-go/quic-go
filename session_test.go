@@ -94,6 +94,7 @@ var _ = Describe("Session", func() {
 		streamCallbackCalled bool
 		closeCallbackCalled  bool
 		conn                 *mockConnection
+		cpm                  *mockConnectionParametersManager
 	)
 
 	BeforeEach(func() {
@@ -118,6 +119,9 @@ var _ = Describe("Session", func() {
 		Expect(err).NotTo(HaveOccurred())
 		session = pSession.(*Session)
 		Expect(session.streamsMap.NumberOfStreams()).To(Equal(1)) // Crypto stream
+
+		cpm = &mockConnectionParametersManager{idleTime: 60 * time.Second}
+		session.connectionParameters = cpm
 	})
 
 	Context("when handling stream frames", func() {
@@ -765,9 +769,7 @@ var _ = Describe("Session", func() {
 
 		It("does not use ICSL before handshake", func(done Done) {
 			session.lastNetworkActivityTime = time.Now().Add(-time.Minute)
-			session.connectionParameters.SetFromMap(map[handshake.Tag][]byte{
-				handshake.TagICSL: {0xff, 0xff, 0xff, 0xff},
-			})
+			cpm.idleTime = 99999 * time.Second
 			session.packer.connectionParameters = session.connectionParameters
 			session.run() // Would normally not return
 			Expect(conn.written[0]).To(ContainSubstring("No recent network activity."))
@@ -778,9 +780,7 @@ var _ = Describe("Session", func() {
 			// session.lastNetworkActivityTime = time.Now().Add(-time.Minute)
 			*(*bool)(unsafe.Pointer(reflect.ValueOf(session.cryptoSetup).Elem().FieldByName("receivedForwardSecurePacket").UnsafeAddr())) = true
 			*(*crypto.AEAD)(unsafe.Pointer(reflect.ValueOf(session.cryptoSetup).Elem().FieldByName("forwardSecureAEAD").UnsafeAddr())) = &crypto.NullAEAD{}
-			session.connectionParameters.SetFromMap(map[handshake.Tag][]byte{
-				handshake.TagICSL: {0, 0, 0, 0},
-			})
+			cpm.idleTime = 0 * time.Millisecond
 			session.packer.connectionParameters = session.connectionParameters
 			session.run() // Would normally not return
 			Expect(conn.written[0]).To(ContainSubstring("No recent network activity."))

@@ -4,7 +4,6 @@ import (
 	"bytes"
 
 	"github.com/lucas-clemente/quic-go/frames"
-	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -32,7 +31,7 @@ var _ = Describe("Stream Framer", func() {
 		stream1 = &stream{streamID: 10}
 		stream2 = &stream{streamID: 11}
 
-		streamsMap = newStreamsMap(nil, handshake.NewConnectionParamatersManager(protocol.VersionWhatever))
+		streamsMap = newStreamsMap(nil, &mockConnectionParametersManager{})
 		streamsMap.putStream(stream1)
 		streamsMap.putStream(stream2)
 
