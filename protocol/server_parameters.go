@@ -34,8 +34,8 @@ const MaxReceiveConnectionFlowControlWindow ByteCount = 1.5 * (1 << 20) // 1.5 M
 // MaxStreamsPerConnection is the maximum value accepted for the number of streams per connection
 const MaxStreamsPerConnection = 100
 
-// MaxIncomingDynamicStreams is the maximum value accepted for the incoming number of dynamic streams per connection
-const MaxIncomingDynamicStreams = 100
+// MaxIncomingDynamicStreamsPerConnection is the maximum value accepted for the incoming number of dynamic streams per connection
+const MaxIncomingDynamicStreamsPerConnection = 100
 
 // MaxStreamsMultiplier is the slack the client is allowed for the maximum number of streams per connection, needed e.g. when packets are out of order or dropped. The minimum of this procentual increase and the absolute increment specified by MaxStreamsMinimumIncrement is used.
 const MaxStreamsMultiplier = 1.1

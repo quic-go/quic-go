@@ -110,7 +110,7 @@ var _ = Describe("Stream", func() {
 	BeforeEach(func() {
 		onDataCalled = false
 		var streamID protocol.StreamID = 1337
-		cpm := handshake.NewConnectionParamatersManager()
+		cpm := handshake.NewConnectionParamatersManager(protocol.VersionWhatever)
 		flowControlManager := flowcontrol.NewFlowControlManager(cpm, &congestion.RTTStats{})
 		flowControlManager.NewStream(streamID, true)
 		str, _ = newStream(streamID, onData, flowControlManager)

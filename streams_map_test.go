@@ -3,6 +3,7 @@ package quic
 import (
 	"errors"
 
+	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 	. "github.com/onsi/ginkgo"
@@ -11,11 +12,13 @@ import (
 
 var _ = Describe("Streams Map", func() {
 	var (
-		m *streamsMap
+		cpm *handshake.ConnectionParametersManager
+		m   *streamsMap
 	)
 
 	BeforeEach(func() {
-		m = newStreamsMap(nil)
+		cpm = handshake.NewConnectionParamatersManager(protocol.VersionWhatever)
+		m = newStreamsMap(nil, cpm)
 	})
 
 	Context("getting and creating streams", func() {
@@ -59,17 +62,23 @@ var _ = Describe("Streams Map", func() {
 		})
 
 		Context("counting streams", func() {
+			var maxNumStreams int
+
+			BeforeEach(func() {
+				maxNumStreams = int(cpm.GetMaxIncomingStreams())
+			})
+
 			It("errors when too many streams are opened", func() {
-				for i := 0; i < m.maxNumStreams; i++ {
+				for i := 0; i < maxNumStreams; i++ {
 					_, err := m.GetOrOpenStream(protocol.StreamID(i*2 + 1))
 					Expect(err).NotTo(HaveOccurred())
 				}
-				_, err := m.GetOrOpenStream(protocol.StreamID(m.maxNumStreams))
+				_, err := m.GetOrOpenStream(protocol.StreamID(maxNumStreams))
 				Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 			})
 
 			It("does not error when many streams are opened and closed", func() {
-				for i := 2; i < 10*m.maxNumStreams; i++ {
+				for i := 2; i < 10*maxNumStreams; i++ {
 					_, err := m.GetOrOpenStream(protocol.StreamID(i*2 + 1))
 					Expect(err).NotTo(HaveOccurred())
 					m.RemoveStream(protocol.StreamID(i*2 + 1))

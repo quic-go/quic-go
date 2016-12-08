@@ -23,11 +23,12 @@ var _ = Describe("Packet packer", func() {
 		fcm.sendWindowSizes[5] = protocol.MaxByteCount
 		fcm.sendWindowSizes[7] = protocol.MaxByteCount
 
-		streamFramer = newStreamFramer(newStreamsMap(nil), fcm)
+		cpm := handshake.NewConnectionParamatersManager(protocol.VersionWhatever)
+		streamFramer = newStreamFramer(newStreamsMap(nil, cpm), fcm)
 
 		packer = &packetPacker{
 			cryptoSetup:                 &handshake.CryptoSetup{},
-			connectionParametersManager: handshake.NewConnectionParamatersManager(),
+			connectionParametersManager: cpm,
 			packetNumberGenerator:       newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
 			streamFramer:                streamFramer,
 		}

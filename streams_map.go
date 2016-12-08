@@ -5,13 +5,15 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
-	"github.com/lucas-clemente/quic-go/utils"
 )
 
 type streamsMap struct {
 	mutex sync.RWMutex
+
+	connectionParameters *handshake.ConnectionParametersManager
 
 	streams     map[protocol.StreamID]*stream
 	openStreams []protocol.StreamID
@@ -19,8 +21,9 @@ type streamsMap struct {
 	highestStreamOpenedByClient          protocol.StreamID
 	streamsOpenedAfterLastGarbageCollect int
 
-	newStream     newStreamLambda
-	maxNumStreams int
+	newStream              newStreamLambda
+	maxOpenOutgoingStreams uint32
+	maxIncomingStreams     uint32
 
 	roundRobinIndex int
 }
@@ -32,14 +35,12 @@ var (
 	errMapAccess = errors.New("streamsMap: Error accessing the streams map")
 )
 
-func newStreamsMap(newStream newStreamLambda) *streamsMap {
-	maxNumStreams := utils.Max(int(float32(protocol.MaxIncomingDynamicStreams)*protocol.MaxStreamsMultiplier), int(protocol.MaxIncomingDynamicStreams))
-
+func newStreamsMap(newStream newStreamLambda, cpm *handshake.ConnectionParametersManager) *streamsMap {
 	return &streamsMap{
-		streams:       map[protocol.StreamID]*stream{},
-		openStreams:   make([]protocol.StreamID, 0, maxNumStreams),
-		newStream:     newStream,
-		maxNumStreams: maxNumStreams,
+		streams:              map[protocol.StreamID]*stream{},
+		openStreams:          make([]protocol.StreamID, 0),
+		newStream:            newStream,
+		connectionParameters: cpm,
 	}
 }
 
@@ -61,7 +62,7 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 	if ok {
 		return s, nil
 	}
-	if len(m.openStreams) == m.maxNumStreams {
+	if uint32(len(m.openStreams)) == m.connectionParameters.GetMaxIncomingStreams() {
 		return nil, qerr.TooManyOpenStreams
 	}
 	if id%2 == 0 {

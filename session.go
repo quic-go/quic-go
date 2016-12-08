@@ -94,7 +94,7 @@ type Session struct {
 
 // newSession makes a new session
 func newSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) (packetHandler, error) {
-	connectionParametersManager := handshake.NewConnectionParamatersManager()
+	connectionParametersManager := handshake.NewConnectionParamatersManager(v)
 
 	var sentPacketHandler ackhandler.SentPacketHandler
 	var receivedPacketHandler ackhandler.ReceivedPacketHandler
@@ -130,7 +130,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		sessionCreationTime:     now,
 	}
 
-	session.streamsMap = newStreamsMap(session.newStream)
+	session.streamsMap = newStreamsMap(session.newStream, session.connectionParametersManager)
 
 	cryptoStream, _ := session.GetOrOpenStream(1)
 	var err error

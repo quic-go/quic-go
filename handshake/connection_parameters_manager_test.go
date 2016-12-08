@@ -11,7 +11,7 @@ import (
 var _ = Describe("ConnectionsParameterManager", func() {
 	var cpm *ConnectionParametersManager
 	BeforeEach(func() {
-		cpm = NewConnectionParamatersManager()
+		cpm = NewConnectionParamatersManager(protocol.Version36)
 	})
 
 	Context("SHLO", func() {
@@ -20,6 +20,12 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			Expect(entryMap).To(HaveKey(TagICSL))
 			Expect(entryMap).To(HaveKey(TagMSPC))
 			Expect(entryMap).To(HaveKey(TagMIDS))
+		})
+
+		It("doesn't add the MaximumIncomingDynamicStreams tag for QUIC 34", func() {
+			cpm.version = protocol.Version34
+			entryMap := cpm.GetSHLOMap()
+			Expect(entryMap).ToNot(HaveKey(TagMIDS))
 		})
 
 		It("sets the stream-level flow control windows in SHLO", func() {
@@ -43,17 +49,20 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			Expect(entryMap[TagICSL]).To(Equal([]byte{0xAD, 0xFB, 0xCA, 0xDE}))
 		})
 
-		It("sets the maximum streams per connection in SHLO", func() {
-			cpm.maxStreamsPerConnection = 0xDEADBEEF
+		It("sets the negotiated value for maximum streams in the SHLO", func() {
+			val := 50
+			Expect(val).To(BeNumerically("<", protocol.MaxStreamsPerConnection))
+			err := cpm.SetFromMap(map[Tag][]byte{TagMSPC: []byte{byte(val), 0, 0, 0}})
+			Expect(err).ToNot(HaveOccurred())
 			entryMap := cpm.GetSHLOMap()
-			Expect(entryMap).To(HaveKey(TagMSPC))
-			Expect(entryMap[TagMSPC]).To(Equal([]byte{0xEF, 0xBE, 0xAD, 0xDE}))
+			Expect(entryMap[TagMSPC]).To(Equal([]byte{byte(val), 0, 0, 0}))
 		})
 
-		It("sets the maximum incoming dynamic streams per connection in SHLO", func() {
+		It("always sends its own value for the maximum incoming dynamic streams in the SHLO", func() {
+			err := cpm.SetFromMap(map[Tag][]byte{TagMIDS: []byte{5, 0, 0, 0}})
+			Expect(err).ToNot(HaveOccurred())
 			entryMap := cpm.GetSHLOMap()
-			Expect(entryMap).To(HaveKey(TagMIDS))
-			Expect(entryMap[TagMIDS]).To(Equal([]byte{100, 0, 0, 0}))
+			Expect(entryMap[TagMIDS]).To(Equal([]byte{byte(protocol.MaxIncomingDynamicStreamsPerConnection), 0, 0, 0}))
 		})
 	})
 
@@ -182,24 +191,6 @@ var _ = Describe("ConnectionsParameterManager", func() {
 	})
 
 	Context("max streams per connection", func() {
-		It("negotiates correctly when the client wants a larger number", func() {
-			Expect(cpm.negotiateMaxStreamsPerConnection(protocol.MaxStreamsPerConnection + 10)).To(Equal(uint32(protocol.MaxStreamsPerConnection)))
-		})
-
-		It("negotiates correctly when the client wants a smaller number", func() {
-			Expect(cpm.negotiateMaxStreamsPerConnection(protocol.MaxStreamsPerConnection - 1)).To(Equal(uint32(protocol.MaxStreamsPerConnection - 1)))
-		})
-
-		It("sets the negotiated max streams per connection value", func() {
-			// this test only works if the value given here is smaller than protocol.MaxStreamsPerConnection
-			values := map[Tag][]byte{
-				TagMSPC: {2, 0, 0, 0},
-			}
-			err := cpm.SetFromMap(values)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cpm.GetMaxStreamsPerConnection()).To(Equal(uint32(2)))
-		})
-
 		It("errors when given an invalid max streams per connection value", func() {
 			values := map[Tag][]byte{
 				TagMSPC: {2, 0, 0}, // 1 byte too short
@@ -208,10 +199,59 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			Expect(err).To(MatchError(ErrMalformedTag))
 		})
 
-		It("gets the max streams per connection value", func() {
-			var value uint32 = 0xDECAFBAD
-			cpm.maxStreamsPerConnection = value
-			Expect(cpm.GetMaxStreamsPerConnection()).To(Equal(value))
+		It("errors when given an invalid max dynamic incoming streams per connection value", func() {
+			values := map[Tag][]byte{
+				TagMIDS: {2, 0, 0}, // 1 byte too short
+			}
+			err := cpm.SetFromMap(values)
+			Expect(err).To(MatchError(ErrMalformedTag))
 		})
+
+		Context("outgoing connections", func() {
+			It("sets the negotiated max streams per connection value", func() {
+				// this test only works if the value given here is smaller than protocol.MaxStreamsPerConnection
+				err := cpm.SetFromMap(map[Tag][]byte{
+					TagMIDS: {2, 0, 0, 0},
+					TagMSPC: {1, 0, 0, 0},
+				})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cpm.GetMaxOutgoingStreams()).To(Equal(uint32(2)))
+			})
+
+			It("uses the the MSPC value, if no MIDS is given", func() {
+				err := cpm.SetFromMap(map[Tag][]byte{TagMIDS: {3, 0, 0, 0}})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cpm.GetMaxOutgoingStreams()).To(Equal(uint32(3)))
+			})
+
+			It("uses the MSPC value for QUIC 34", func() {
+				cpm.version = protocol.Version34
+				err := cpm.SetFromMap(map[Tag][]byte{
+					TagMIDS: {2, 0, 0, 0},
+					TagMSPC: {1, 0, 0, 0},
+				})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cpm.GetMaxOutgoingStreams()).To(Equal(uint32(1)))
+			})
+		})
+
+		Context("incoming connections", func() {
+			It("always uses the constant value, no matter what the client sent", func() {
+				err := cpm.SetFromMap(map[Tag][]byte{
+					TagMSPC: {3, 0, 0, 0},
+					TagMIDS: {3, 0, 0, 0},
+				})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cpm.GetMaxIncomingStreams()).To(BeNumerically(">", protocol.MaxStreamsPerConnection))
+			})
+
+			It("uses the negotiated MSCP value, for QUIC 34", func() {
+				cpm.version = protocol.Version34
+				err := cpm.SetFromMap(map[Tag][]byte{TagMSPC: {60, 0, 0, 0}})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cpm.GetMaxIncomingStreams()).To(BeNumerically("~", 60*protocol.MaxStreamsMultiplier, 10))
+			})
+		})
+
 	})
 })

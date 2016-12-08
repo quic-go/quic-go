@@ -17,15 +17,19 @@ import (
 type ConnectionParametersManager struct {
 	mutex sync.RWMutex
 
-	flowControlNegotiated bool // have the flow control parameters for sending already been negotiated
+	version protocol.VersionNumber
 
-	truncateConnectionID               bool
-	maxStreamsPerConnection            uint32
-	idleConnectionStateLifetime        time.Duration
-	sendStreamFlowControlWindow        protocol.ByteCount
-	sendConnectionFlowControlWindow    protocol.ByteCount
-	receiveStreamFlowControlWindow     protocol.ByteCount
-	receiveConnectionFlowControlWindow protocol.ByteCount
+	flowControlNegotiated                bool
+	hasReceivedMaxIncomingDynamicStreams bool
+
+	truncateConnectionID                   bool
+	maxStreamsPerConnection                uint32
+	maxIncomingDynamicStreamsPerConnection uint32
+	idleConnectionStateLifetime            time.Duration
+	sendStreamFlowControlWindow            protocol.ByteCount
+	sendConnectionFlowControlWindow        protocol.ByteCount
+	receiveStreamFlowControlWindow         protocol.ByteCount
+	receiveConnectionFlowControlWindow     protocol.ByteCount
 }
 
 var errTagNotInConnectionParameterMap = errors.New("ConnectionParametersManager: Tag not found in ConnectionsParameter map")
@@ -37,14 +41,16 @@ var (
 )
 
 // NewConnectionParamatersManager creates a new connection parameters manager
-func NewConnectionParamatersManager() *ConnectionParametersManager {
+func NewConnectionParamatersManager(v protocol.VersionNumber) *ConnectionParametersManager {
 	return &ConnectionParametersManager{
-		idleConnectionStateLifetime:        protocol.DefaultIdleTimeout,
-		sendStreamFlowControlWindow:        protocol.InitialStreamFlowControlWindow,     // can only be changed by the client
-		sendConnectionFlowControlWindow:    protocol.InitialConnectionFlowControlWindow, // can only be changed by the client
-		receiveStreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
-		receiveConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
-		maxStreamsPerConnection:            protocol.MaxStreamsPerConnection,
+		version:                                v,
+		idleConnectionStateLifetime:            protocol.DefaultIdleTimeout,
+		sendStreamFlowControlWindow:            protocol.InitialStreamFlowControlWindow,     // can only be changed by the client
+		sendConnectionFlowControlWindow:        protocol.InitialConnectionFlowControlWindow, // can only be changed by the client
+		receiveStreamFlowControlWindow:         protocol.ReceiveStreamFlowControlWindow,
+		receiveConnectionFlowControlWindow:     protocol.ReceiveConnectionFlowControlWindow,
+		maxStreamsPerConnection:                protocol.MaxStreamsPerConnection, // this is the value negotiated based on what the client sent
+		maxIncomingDynamicStreamsPerConnection: protocol.MaxStreamsPerConnection, // "incoming" seen from the client's perspective
 	}
 }
 
@@ -67,6 +73,13 @@ func (h *ConnectionParametersManager) SetFromMap(params map[Tag][]byte) error {
 				return ErrMalformedTag
 			}
 			h.maxStreamsPerConnection = h.negotiateMaxStreamsPerConnection(clientValue)
+		case TagMIDS:
+			clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
+			if err != nil {
+				return ErrMalformedTag
+			}
+			h.maxIncomingDynamicStreamsPerConnection = h.negotiateMaxIncomingDynamicStreamsPerConnection(clientValue)
+			h.hasReceivedMaxIncomingDynamicStreams = true
 		case TagICSL:
 			clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
 			if err != nil {
@@ -107,6 +120,10 @@ func (h *ConnectionParametersManager) negotiateMaxStreamsPerConnection(clientVal
 	return utils.MinUint32(clientValue, protocol.MaxStreamsPerConnection)
 }
 
+func (h *ConnectionParametersManager) negotiateMaxIncomingDynamicStreamsPerConnection(clientValue uint32) uint32 {
+	return utils.MinUint32(clientValue, protocol.MaxIncomingDynamicStreamsPerConnection)
+}
+
 func (h *ConnectionParametersManager) negotiateIdleConnectionStateLifetime(clientValue time.Duration) time.Duration {
 	return utils.MinDuration(clientValue, protocol.MaxIdleTimeout)
 }
@@ -118,19 +135,24 @@ func (h *ConnectionParametersManager) GetSHLOMap() map[Tag][]byte {
 	cfcw := bytes.NewBuffer([]byte{})
 	utils.WriteUint32(cfcw, uint32(h.GetReceiveConnectionFlowControlWindow()))
 	mspc := bytes.NewBuffer([]byte{})
-	utils.WriteUint32(mspc, h.GetMaxStreamsPerConnection())
-	mids := bytes.NewBuffer([]byte{})
-	utils.WriteUint32(mids, protocol.MaxIncomingDynamicStreams)
+	utils.WriteUint32(mspc, h.maxStreamsPerConnection)
 	icsl := bytes.NewBuffer([]byte{})
 	utils.WriteUint32(icsl, uint32(h.GetIdleConnectionStateLifetime()/time.Second))
 
-	return map[Tag][]byte{
+	tags := map[Tag][]byte{
 		TagICSL: icsl.Bytes(),
 		TagMSPC: mspc.Bytes(),
-		TagMIDS: mids.Bytes(),
 		TagCFCW: cfcw.Bytes(),
 		TagSFCW: sfcw.Bytes(),
 	}
+
+	if h.version > protocol.Version34 {
+		mids := bytes.NewBuffer([]byte{})
+		utils.WriteUint32(mids, protocol.MaxIncomingDynamicStreamsPerConnection)
+		tags[TagMIDS] = mids.Bytes()
+	}
+
+	return tags
 }
 
 // GetSendStreamFlowControlWindow gets the size of the stream-level flow control window for sending data
@@ -161,11 +183,30 @@ func (h *ConnectionParametersManager) GetReceiveConnectionFlowControlWindow() pr
 	return h.receiveConnectionFlowControlWindow
 }
 
-// GetMaxStreamsPerConnection gets the maximum number of streams per connection
-func (h *ConnectionParametersManager) GetMaxStreamsPerConnection() uint32 {
+// GetMaxOutgoingStreams gets the maximum number of outgoing streams per connection
+func (h *ConnectionParametersManager) GetMaxOutgoingStreams() uint32 {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
+
+	if h.version > protocol.Version34 && h.hasReceivedMaxIncomingDynamicStreams {
+		return h.maxIncomingDynamicStreamsPerConnection
+	}
 	return h.maxStreamsPerConnection
+}
+
+// GetMaxIncomingStreams get the maximum number of incoming streams per connection
+func (h *ConnectionParametersManager) GetMaxIncomingStreams() uint32 {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+
+	var val uint32
+	if h.version <= protocol.Version34 {
+		val = h.maxStreamsPerConnection
+	} else {
+		val = protocol.MaxIncomingDynamicStreamsPerConnection
+	}
+
+	return utils.MaxUint32(val+protocol.MaxStreamsMinimumIncrement, uint32(float64(val)*protocol.MaxStreamsMultiplier))
 }
 
 // GetIdleConnectionStateLifetime gets the idle timeout
