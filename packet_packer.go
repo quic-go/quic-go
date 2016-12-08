@@ -23,20 +23,20 @@ type packetPacker struct {
 
 	packetNumberGenerator *packetNumberGenerator
 
-	connectionParametersManager *handshake.ConnectionParametersManager
+	connectionParameters handshake.ConnectionParametersManager
 
 	streamFramer  *streamFramer
 	controlFrames []frames.Frame
 }
 
-func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.CryptoSetup, connectionParametersHandler *handshake.ConnectionParametersManager, streamFramer *streamFramer, version protocol.VersionNumber) *packetPacker {
+func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.CryptoSetup, connectionParameters handshake.ConnectionParametersManager, streamFramer *streamFramer, version protocol.VersionNumber) *packetPacker {
 	return &packetPacker{
-		cryptoSetup:                 cryptoSetup,
-		connectionID:                connectionID,
-		connectionParametersManager: connectionParametersHandler,
-		version:                     version,
-		streamFramer:                streamFramer,
-		packetNumberGenerator:       newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
+		cryptoSetup:           cryptoSetup,
+		connectionID:          connectionID,
+		connectionParameters:  connectionParameters,
+		version:               version,
+		streamFramer:          streamFramer,
+		packetNumberGenerator: newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
 	}
 }
 
@@ -65,7 +65,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		ConnectionID:         p.connectionID,
 		PacketNumber:         currentPacketNumber,
 		PacketNumberLen:      packetNumberLen,
-		TruncateConnectionID: p.connectionParametersManager.TruncateConnectionID(),
+		TruncateConnectionID: p.connectionParameters.TruncateConnectionID(),
 		DiversificationNonce: p.cryptoSetup.DiversificationNonce(),
 	}
 

@@ -14,7 +14,7 @@ import (
 
 // set private variables of the ConnectionParametersManager
 // those are normally read from the server parameter constants in the constructor of the ConnectionParametersManager
-func setConnectionParametersManagerWindow(cpm *handshake.ConnectionParametersManager, name string, value protocol.ByteCount) {
+func setConnectionParametersManagerWindow(cpm handshake.ConnectionParametersManager, name string, value protocol.ByteCount) {
 	*(*protocol.ByteCount)(unsafe.Pointer(reflect.ValueOf(cpm).Elem().FieldByName(name).UnsafeAddr())) = value
 }
 
@@ -27,11 +27,11 @@ var _ = Describe("Flow controller", func() {
 	})
 
 	Context("Constructor", func() {
-		var cpm *handshake.ConnectionParametersManager
+		var cpm handshake.ConnectionParametersManager
 		var rttStats *congestion.RTTStats
 
 		BeforeEach(func() {
-			cpm = &handshake.ConnectionParametersManager{}
+			cpm = handshake.NewConnectionParamatersManager(protocol.VersionWhatever)
 			rttStats = &congestion.RTTStats{}
 			setConnectionParametersManagerWindow(cpm, "sendStreamFlowControlWindow", 1000)
 			setConnectionParametersManagerWindow(cpm, "receiveStreamFlowControlWindow", 2000)
@@ -65,13 +65,13 @@ var _ = Describe("Flow controller", func() {
 	})
 
 	Context("send flow control", func() {
-		var cpm *handshake.ConnectionParametersManager
+		var cpm handshake.ConnectionParametersManager
 
 		BeforeEach(func() {
-			cpm = &handshake.ConnectionParametersManager{}
+			cpm = handshake.NewConnectionParamatersManager(protocol.VersionWhatever)
 			setConnectionParametersManagerWindow(cpm, "sendStreamFlowControlWindow", 1000)
 			setConnectionParametersManagerWindow(cpm, "sendConnectionFlowControlWindow", 3000)
-			controller.connectionParametersManager = cpm
+			controller.connectionParameters = cpm
 		})
 
 		It("adds bytes sent", func() {

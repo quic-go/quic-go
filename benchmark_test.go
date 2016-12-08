@@ -70,7 +70,7 @@ func setAEAD(cs *handshake.CryptoSetup, aead crypto.AEAD) {
 	*(*crypto.AEAD)(unsafe.Pointer(reflect.ValueOf(cs).Elem().FieldByName("forwardSecureAEAD").UnsafeAddr())) = aead
 }
 
-func setFlowControlParameters(mgr *handshake.ConnectionParametersManager) {
+func setFlowControlParameters(mgr handshake.ConnectionParametersManager) {
 	sfcw := make([]byte, 4)
 	cfcw := make([]byte, 4)
 	binary.LittleEndian.PutUint32(sfcw, uint32(protocol.ReceiveStreamFlowControlWindow))
@@ -121,8 +121,8 @@ var _ = Describe("Benchmarks", func() {
 				setAEAD(session1.cryptoSetup, aead)
 				setAEAD(session2.cryptoSetup, aead)
 
-				setFlowControlParameters(session1.connectionParametersManager)
-				setFlowControlParameters(session2.connectionParametersManager)
+				setFlowControlParameters(session1.connectionParameters)
+				setFlowControlParameters(session2.connectionParameters)
 
 				go session1.run()
 				go session2.run()

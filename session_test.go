@@ -765,10 +765,10 @@ var _ = Describe("Session", func() {
 
 		It("does not use ICSL before handshake", func(done Done) {
 			session.lastNetworkActivityTime = time.Now().Add(-time.Minute)
-			session.connectionParametersManager.SetFromMap(map[handshake.Tag][]byte{
+			session.connectionParameters.SetFromMap(map[handshake.Tag][]byte{
 				handshake.TagICSL: {0xff, 0xff, 0xff, 0xff},
 			})
-			session.packer.connectionParametersManager = session.connectionParametersManager
+			session.packer.connectionParameters = session.connectionParameters
 			session.run() // Would normally not return
 			Expect(conn.written[0]).To(ContainSubstring("No recent network activity."))
 			close(done)
@@ -778,10 +778,10 @@ var _ = Describe("Session", func() {
 			// session.lastNetworkActivityTime = time.Now().Add(-time.Minute)
 			*(*bool)(unsafe.Pointer(reflect.ValueOf(session.cryptoSetup).Elem().FieldByName("receivedForwardSecurePacket").UnsafeAddr())) = true
 			*(*crypto.AEAD)(unsafe.Pointer(reflect.ValueOf(session.cryptoSetup).Elem().FieldByName("forwardSecureAEAD").UnsafeAddr())) = &crypto.NullAEAD{}
-			session.connectionParametersManager.SetFromMap(map[handshake.Tag][]byte{
+			session.connectionParameters.SetFromMap(map[handshake.Tag][]byte{
 				handshake.TagICSL: {0, 0, 0, 0},
 			})
-			session.packer.connectionParametersManager = session.connectionParametersManager
+			session.packer.connectionParameters = session.connectionParameters
 			session.run() // Would normally not return
 			Expect(conn.written[0]).To(ContainSubstring("No recent network activity."))
 			close(done)

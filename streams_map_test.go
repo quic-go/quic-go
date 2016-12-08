@@ -12,7 +12,7 @@ import (
 
 var _ = Describe("Streams Map", func() {
 	var (
-		cpm *handshake.ConnectionParametersManager
+		cpm handshake.ConnectionParametersManager
 		m   *streamsMap
 	)
 

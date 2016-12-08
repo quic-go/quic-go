@@ -27,10 +27,10 @@ var _ = Describe("Packet packer", func() {
 		streamFramer = newStreamFramer(newStreamsMap(nil, cpm), fcm)
 
 		packer = &packetPacker{
-			cryptoSetup:                 &handshake.CryptoSetup{},
-			connectionParametersManager: cpm,
-			packetNumberGenerator:       newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
-			streamFramer:                streamFramer,
+			cryptoSetup:           &handshake.CryptoSetup{},
+			connectionParameters:  cpm,
+			packetNumberGenerator: newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
+			streamFramer:          streamFramer,
 		}
 		publicHeaderLen = 1 + 8 + 2 // 1 flag byte, 8 connection ID, 2 packet number
 		packer.version = protocol.Version34

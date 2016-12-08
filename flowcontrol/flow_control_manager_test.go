@@ -10,10 +10,10 @@ import (
 
 var _ = Describe("Flow Control Manager", func() {
 	var fcm *flowControlManager
-	var cpm *handshake.ConnectionParametersManager
+	var cpm handshake.ConnectionParametersManager
 
 	BeforeEach(func() {
-		cpm = &handshake.ConnectionParametersManager{}
+		cpm = handshake.NewConnectionParamatersManager(protocol.VersionWhatever)
 		setConnectionParametersManagerWindow(cpm, "receiveStreamFlowControlWindow", 0x100)
 		setConnectionParametersManagerWindow(cpm, "receiveConnectionFlowControlWindow", 0x200)
 		fcm = NewFlowControlManager(cpm, &congestion.RTTStats{}).(*flowControlManager)

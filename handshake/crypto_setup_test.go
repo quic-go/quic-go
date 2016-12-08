@@ -138,7 +138,7 @@ var _ = Describe("Crypto setup", func() {
 		scfg        *ServerConfig
 		cs          *CryptoSetup
 		stream      *mockStream
-		cpm         *ConnectionParametersManager
+		cpm         ConnectionParametersManager
 		aeadChanged chan struct{}
 		nonce32     []byte
 		ip          net.IP

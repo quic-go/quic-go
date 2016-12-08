@@ -38,7 +38,7 @@ type CryptoSetup struct {
 
 	cryptoStream utils.Stream
 
-	connectionParametersManager *ConnectionParametersManager
+	connectionParameters ConnectionParametersManager
 
 	mutex sync.RWMutex
 }
@@ -52,19 +52,19 @@ func NewCryptoSetup(
 	version protocol.VersionNumber,
 	scfg *ServerConfig,
 	cryptoStream utils.Stream,
-	connectionParametersManager *ConnectionParametersManager,
+	connectionParameters ConnectionParametersManager,
 	aeadChanged chan struct{},
 ) (*CryptoSetup, error) {
 	return &CryptoSetup{
-		connID:                      connID,
-		ip:                          ip,
-		version:                     version,
-		scfg:                        scfg,
-		keyDerivation:               crypto.DeriveKeysAESGCM,
-		keyExchange:                 getEphermalKEX,
-		cryptoStream:                cryptoStream,
-		connectionParametersManager: connectionParametersManager,
-		aeadChanged:                 aeadChanged,
+		connID:               connID,
+		ip:                   ip,
+		version:              version,
+		scfg:                 scfg,
+		keyDerivation:        crypto.DeriveKeysAESGCM,
+		keyExchange:          getEphermalKEX,
+		cryptoStream:         cryptoStream,
+		connectionParameters: connectionParameters,
+		aeadChanged:          aeadChanged,
 	}, nil
 }
 
@@ -301,12 +301,12 @@ func (h *CryptoSetup) handleCHLO(sni string, data []byte, cryptoData map[Tag][]b
 		return nil, err
 	}
 
-	err = h.connectionParametersManager.SetFromMap(cryptoData)
+	err = h.connectionParameters.SetFromMap(cryptoData)
 	if err != nil {
 		return nil, err
 	}
 
-	replyMap := h.connectionParametersManager.GetSHLOMap()
+	replyMap := h.connectionParameters.GetSHLOMap()
 	// add crypto parameters
 	replyMap[TagPUBS] = ephermalKex.PublicKey()
 	replyMap[TagSNO] = serverNonce

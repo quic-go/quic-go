@@ -13,7 +13,7 @@ import (
 type streamsMap struct {
 	mutex sync.RWMutex
 
-	connectionParameters *handshake.ConnectionParametersManager
+	connectionParameters handshake.ConnectionParametersManager
 
 	streams     map[protocol.StreamID]*stream
 	openStreams []protocol.StreamID
@@ -35,12 +35,12 @@ var (
 	errMapAccess = errors.New("streamsMap: Error accessing the streams map")
 )
 
-func newStreamsMap(newStream newStreamLambda, cpm *handshake.ConnectionParametersManager) *streamsMap {
+func newStreamsMap(newStream newStreamLambda, connectionParameters handshake.ConnectionParametersManager) *streamsMap {
 	return &streamsMap{
 		streams:              map[protocol.StreamID]*stream{},
 		openStreams:          make([]protocol.StreamID, 0),
 		newStream:            newStream,
-		connectionParameters: cpm,
+		connectionParameters: connectionParameters,
 	}
 }
 

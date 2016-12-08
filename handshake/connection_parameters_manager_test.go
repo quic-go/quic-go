@@ -9,9 +9,9 @@ import (
 )
 
 var _ = Describe("ConnectionsParameterManager", func() {
-	var cpm *ConnectionParametersManager
+	var cpm *connectionParametersManager
 	BeforeEach(func() {
-		cpm = NewConnectionParamatersManager(protocol.Version36)
+		cpm = NewConnectionParamatersManager(protocol.Version36).(*connectionParametersManager)
 	})
 
 	Context("SHLO", func() {

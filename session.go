@@ -77,7 +77,7 @@ type Session struct {
 
 	delayedAckOriginTime time.Time
 
-	connectionParametersManager *handshake.ConnectionParametersManager
+	connectionParameters handshake.ConnectionParametersManager
 
 	lastRcvdPacketNumber protocol.PacketNumber
 	// Used to calculate the next packet number from the truncated wire
@@ -94,7 +94,7 @@ type Session struct {
 
 // newSession makes a new session
 func newSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) (packetHandler, error) {
-	connectionParametersManager := handshake.NewConnectionParamatersManager(v)
+	connectionParameters := handshake.NewConnectionParamatersManager(v)
 
 	var sentPacketHandler ackhandler.SentPacketHandler
 	var receivedPacketHandler ackhandler.ReceivedPacketHandler
@@ -103,7 +103,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 
 	sentPacketHandler = ackhandler.NewSentPacketHandler(rttStats)
 	receivedPacketHandler = ackhandler.NewReceivedPacketHandler()
-	flowControlManager := flowcontrol.NewFlowControlManager(connectionParametersManager, rttStats)
+	flowControlManager := flowcontrol.NewFlowControlManager(connectionParameters, rttStats)
 
 	now := time.Now()
 	session := &Session{
@@ -114,10 +114,10 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		streamCallback: streamCallback,
 		closeCallback:  closeCallback,
 
-		connectionParametersManager: connectionParametersManager,
-		sentPacketHandler:           sentPacketHandler,
-		receivedPacketHandler:       receivedPacketHandler,
-		flowControlManager:          flowControlManager,
+		connectionParameters:  connectionParameters,
+		sentPacketHandler:     sentPacketHandler,
+		receivedPacketHandler: receivedPacketHandler,
+		flowControlManager:    flowControlManager,
 
 		receivedPackets:      make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets),
 		closeChan:            make(chan *qerr.QuicError, 1),
@@ -130,17 +130,17 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		sessionCreationTime:     now,
 	}
 
-	session.streamsMap = newStreamsMap(session.newStream, session.connectionParametersManager)
+	session.streamsMap = newStreamsMap(session.newStream, session.connectionParameters)
 
 	cryptoStream, _ := session.GetOrOpenStream(1)
 	var err error
-	session.cryptoSetup, err = handshake.NewCryptoSetup(connectionID, conn.RemoteAddr().IP, v, sCfg, cryptoStream, session.connectionParametersManager, session.aeadChanged)
+	session.cryptoSetup, err = handshake.NewCryptoSetup(connectionID, conn.RemoteAddr().IP, v, sCfg, cryptoStream, session.connectionParameters, session.aeadChanged)
 	if err != nil {
 		return nil, err
 	}
 
 	session.streamFramer = newStreamFramer(session.streamsMap, flowControlManager)
-	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.connectionParametersManager, session.streamFramer, v)
+	session.packer = newPacketPacker(connectionID, session.cryptoSetup, session.connectionParameters, session.streamFramer, v)
 	session.unpacker = &packetUnpacker{aead: session.cryptoSetup, version: v}
 
 	return session, err
@@ -247,7 +247,7 @@ func (s *Session) maybeResetTimer() {
 
 func (s *Session) idleTimeout() time.Duration {
 	if s.cryptoSetup.HandshakeComplete() {
-		return s.connectionParametersManager.GetIdleConnectionStateLifetime()
+		return s.connectionParameters.GetIdleConnectionStateLifetime()
 	}
 	return protocol.InitialIdleTimeout
 }

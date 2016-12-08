@@ -11,10 +11,22 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
-// ConnectionParametersManager stores the connection parameters
-// Warning: Writes may only be done from the crypto stream, see the comment
-// in GetSHLOMap().
-type ConnectionParametersManager struct {
+// ConnectionParametersManager negotiates and stores the connection parameters
+type ConnectionParametersManager interface {
+	SetFromMap(map[Tag][]byte) error
+	GetSHLOMap() map[Tag][]byte
+
+	GetSendStreamFlowControlWindow() protocol.ByteCount
+	GetSendConnectionFlowControlWindow() protocol.ByteCount
+	GetReceiveStreamFlowControlWindow() protocol.ByteCount
+	GetReceiveConnectionFlowControlWindow() protocol.ByteCount
+	GetMaxOutgoingStreams() uint32
+	GetMaxIncomingStreams() uint32
+	GetIdleConnectionStateLifetime() time.Duration
+	TruncateConnectionID() bool
+}
+
+type connectionParametersManager struct {
 	mutex sync.RWMutex
 
 	version protocol.VersionNumber
@@ -32,6 +44,8 @@ type ConnectionParametersManager struct {
 	receiveConnectionFlowControlWindow     protocol.ByteCount
 }
 
+var _ ConnectionParametersManager = &connectionParametersManager{}
+
 var errTagNotInConnectionParameterMap = errors.New("ConnectionParametersManager: Tag not found in ConnectionsParameter map")
 
 // ErrMalformedTag is returned when the tag value cannot be read
@@ -41,8 +55,8 @@ var (
 )
 
 // NewConnectionParamatersManager creates a new connection parameters manager
-func NewConnectionParamatersManager(v protocol.VersionNumber) *ConnectionParametersManager {
-	return &ConnectionParametersManager{
+func NewConnectionParamatersManager(v protocol.VersionNumber) ConnectionParametersManager {
+	return &connectionParametersManager{
 		version:                                v,
 		idleConnectionStateLifetime:            protocol.DefaultIdleTimeout,
 		sendStreamFlowControlWindow:            protocol.InitialStreamFlowControlWindow,     // can only be changed by the client
@@ -55,7 +69,7 @@ func NewConnectionParamatersManager(v protocol.VersionNumber) *ConnectionParamet
 }
 
 // SetFromMap reads all params
-func (h *ConnectionParametersManager) SetFromMap(params map[Tag][]byte) error {
+func (h *connectionParametersManager) SetFromMap(params map[Tag][]byte) error {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
@@ -116,20 +130,20 @@ func (h *ConnectionParametersManager) SetFromMap(params map[Tag][]byte) error {
 	return nil
 }
 
-func (h *ConnectionParametersManager) negotiateMaxStreamsPerConnection(clientValue uint32) uint32 {
+func (h *connectionParametersManager) negotiateMaxStreamsPerConnection(clientValue uint32) uint32 {
 	return utils.MinUint32(clientValue, protocol.MaxStreamsPerConnection)
 }
 
-func (h *ConnectionParametersManager) negotiateMaxIncomingDynamicStreamsPerConnection(clientValue uint32) uint32 {
+func (h *connectionParametersManager) negotiateMaxIncomingDynamicStreamsPerConnection(clientValue uint32) uint32 {
 	return utils.MinUint32(clientValue, protocol.MaxIncomingDynamicStreamsPerConnection)
 }
 
-func (h *ConnectionParametersManager) negotiateIdleConnectionStateLifetime(clientValue time.Duration) time.Duration {
+func (h *connectionParametersManager) negotiateIdleConnectionStateLifetime(clientValue time.Duration) time.Duration {
 	return utils.MinDuration(clientValue, protocol.MaxIdleTimeout)
 }
 
 // GetSHLOMap gets all values (except crypto values) needed for the SHLO
-func (h *ConnectionParametersManager) GetSHLOMap() map[Tag][]byte {
+func (h *connectionParametersManager) GetSHLOMap() map[Tag][]byte {
 	sfcw := bytes.NewBuffer([]byte{})
 	utils.WriteUint32(sfcw, uint32(h.GetReceiveStreamFlowControlWindow()))
 	cfcw := bytes.NewBuffer([]byte{})
@@ -156,35 +170,35 @@ func (h *ConnectionParametersManager) GetSHLOMap() map[Tag][]byte {
 }
 
 // GetSendStreamFlowControlWindow gets the size of the stream-level flow control window for sending data
-func (h *ConnectionParametersManager) GetSendStreamFlowControlWindow() protocol.ByteCount {
+func (h *connectionParametersManager) GetSendStreamFlowControlWindow() protocol.ByteCount {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	return h.sendStreamFlowControlWindow
 }
 
 // GetSendConnectionFlowControlWindow gets the size of the stream-level flow control window for sending data
-func (h *ConnectionParametersManager) GetSendConnectionFlowControlWindow() protocol.ByteCount {
+func (h *connectionParametersManager) GetSendConnectionFlowControlWindow() protocol.ByteCount {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	return h.sendConnectionFlowControlWindow
 }
 
 // GetReceiveStreamFlowControlWindow gets the size of the stream-level flow control window for receiving data
-func (h *ConnectionParametersManager) GetReceiveStreamFlowControlWindow() protocol.ByteCount {
+func (h *connectionParametersManager) GetReceiveStreamFlowControlWindow() protocol.ByteCount {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	return h.receiveStreamFlowControlWindow
 }
 
 // GetReceiveConnectionFlowControlWindow gets the size of the stream-level flow control window for receiving data
-func (h *ConnectionParametersManager) GetReceiveConnectionFlowControlWindow() protocol.ByteCount {
+func (h *connectionParametersManager) GetReceiveConnectionFlowControlWindow() protocol.ByteCount {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	return h.receiveConnectionFlowControlWindow
 }
 
 // GetMaxOutgoingStreams gets the maximum number of outgoing streams per connection
-func (h *ConnectionParametersManager) GetMaxOutgoingStreams() uint32 {
+func (h *connectionParametersManager) GetMaxOutgoingStreams() uint32 {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 
@@ -195,7 +209,7 @@ func (h *ConnectionParametersManager) GetMaxOutgoingStreams() uint32 {
 }
 
 // GetMaxIncomingStreams get the maximum number of incoming streams per connection
-func (h *ConnectionParametersManager) GetMaxIncomingStreams() uint32 {
+func (h *connectionParametersManager) GetMaxIncomingStreams() uint32 {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 
@@ -210,14 +224,14 @@ func (h *ConnectionParametersManager) GetMaxIncomingStreams() uint32 {
 }
 
 // GetIdleConnectionStateLifetime gets the idle timeout
-func (h *ConnectionParametersManager) GetIdleConnectionStateLifetime() time.Duration {
+func (h *connectionParametersManager) GetIdleConnectionStateLifetime() time.Duration {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	return h.idleConnectionStateLifetime
 }
 
 // TruncateConnectionID determines if the client requests truncated ConnectionIDs
-func (h *ConnectionParametersManager) TruncateConnectionID() bool {
+func (h *connectionParametersManager) TruncateConnectionID() bool {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	return h.truncateConnectionID

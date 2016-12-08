@@ -12,8 +12,8 @@ import (
 type flowController struct {
 	streamID protocol.StreamID
 
-	connectionParametersManager *handshake.ConnectionParametersManager
-	rttStats                    *congestion.RTTStats
+	connectionParameters handshake.ConnectionParametersManager
+	rttStats             *congestion.RTTStats
 
 	bytesSent             protocol.ByteCount
 	sendFlowControlWindow protocol.ByteCount
@@ -28,19 +28,19 @@ type flowController struct {
 }
 
 // newFlowController gets a new flow controller
-func newFlowController(streamID protocol.StreamID, connectionParametersManager *handshake.ConnectionParametersManager, rttStats *congestion.RTTStats) *flowController {
+func newFlowController(streamID protocol.StreamID, connectionParameters handshake.ConnectionParametersManager, rttStats *congestion.RTTStats) *flowController {
 	fc := flowController{
-		streamID:                    streamID,
-		connectionParametersManager: connectionParametersManager,
-		rttStats:                    rttStats,
+		streamID:             streamID,
+		connectionParameters: connectionParameters,
+		rttStats:             rttStats,
 	}
 
 	if streamID == 0 {
-		fc.receiveFlowControlWindow = connectionParametersManager.GetReceiveConnectionFlowControlWindow()
+		fc.receiveFlowControlWindow = connectionParameters.GetReceiveConnectionFlowControlWindow()
 		fc.receiveFlowControlWindowIncrement = fc.receiveFlowControlWindow
 		fc.maxReceiveFlowControlWindowIncrement = protocol.MaxReceiveConnectionFlowControlWindow
 	} else {
-		fc.receiveFlowControlWindow = connectionParametersManager.GetReceiveStreamFlowControlWindow()
+		fc.receiveFlowControlWindow = connectionParameters.GetReceiveStreamFlowControlWindow()
 		fc.receiveFlowControlWindowIncrement = fc.receiveFlowControlWindow
 		fc.maxReceiveFlowControlWindowIncrement = protocol.MaxReceiveStreamFlowControlWindow
 	}
@@ -51,9 +51,9 @@ func newFlowController(streamID protocol.StreamID, connectionParametersManager *
 func (c *flowController) getSendFlowControlWindow() protocol.ByteCount {
 	if c.sendFlowControlWindow == 0 {
 		if c.streamID == 0 {
-			return c.connectionParametersManager.GetSendConnectionFlowControlWindow()
+			return c.connectionParameters.GetSendConnectionFlowControlWindow()
 		}
-		return c.connectionParametersManager.GetSendStreamFlowControlWindow()
+		return c.connectionParameters.GetSendStreamFlowControlWindow()
 	}
 	return c.sendFlowControlWindow
 }

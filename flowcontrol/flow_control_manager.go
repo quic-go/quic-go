@@ -11,8 +11,8 @@ import (
 )
 
 type flowControlManager struct {
-	connectionParametersManager *handshake.ConnectionParametersManager
-	rttStats                    *congestion.RTTStats
+	connectionParameters handshake.ConnectionParametersManager
+	rttStats             *congestion.RTTStats
 
 	streamFlowController               map[protocol.StreamID]*flowController
 	contributesToConnectionFlowControl map[protocol.StreamID]bool
@@ -29,15 +29,15 @@ var (
 var errMapAccess = errors.New("Error accessing the flowController map.")
 
 // NewFlowControlManager creates a new flow control manager
-func NewFlowControlManager(connectionParametersManager *handshake.ConnectionParametersManager, rttStats *congestion.RTTStats) FlowControlManager {
+func NewFlowControlManager(connectionParameters handshake.ConnectionParametersManager, rttStats *congestion.RTTStats) FlowControlManager {
 	fcm := flowControlManager{
-		connectionParametersManager:        connectionParametersManager,
+		connectionParameters:               connectionParameters,
 		rttStats:                           rttStats,
 		streamFlowController:               make(map[protocol.StreamID]*flowController),
 		contributesToConnectionFlowControl: make(map[protocol.StreamID]bool),
 	}
 	// initialize connection level flow controller
-	fcm.streamFlowController[0] = newFlowController(0, connectionParametersManager, rttStats)
+	fcm.streamFlowController[0] = newFlowController(0, connectionParameters, rttStats)
 	fcm.contributesToConnectionFlowControl[0] = false
 	return &fcm
 }
@@ -51,7 +51,7 @@ func (f *flowControlManager) NewStream(streamID protocol.StreamID, contributesTo
 		return
 	}
 
-	f.streamFlowController[streamID] = newFlowController(streamID, f.connectionParametersManager, f.rttStats)
+	f.streamFlowController[streamID] = newFlowController(streamID, f.connectionParameters, f.rttStats)
 	f.contributesToConnectionFlowControl[streamID] = contributesToConnectionFlow
 }
 
