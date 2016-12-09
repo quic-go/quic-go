@@ -120,7 +120,8 @@ var _ = Describe("Crypto setup", func() {
 
 		stream = &mockStream{}
 		certManager = &mockCertManager{}
-		csInt, err := NewCryptoSetupClient("hostname", 0, protocol.Version36, stream)
+		version := protocol.Version36
+		csInt, err := NewCryptoSetupClient("hostname", 0, version, stream, NewConnectionParamatersManager(protocol.PerspectiveClient, version))
 		Expect(err).ToNot(HaveOccurred())
 		cs = csInt.(*cryptoSetupClient)
 		cs.certManager = certManager
@@ -418,6 +419,17 @@ var _ = Describe("Crypto setup", func() {
 			Expect(tags[TagPDMD]).To(Equal([]byte("X509")))
 			Expect(tags[TagVER]).To(Equal([]byte("Q036")))
 			Expect(tags[TagCCS]).To(Equal(certManager.commonCertificateHashes))
+		})
+
+		It("adds the tags returned from the connectionParametersManager to the CHLO", func() {
+			cpmTags, err := cs.connectionParameters.GetCHLOMap()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cpmTags).ToNot(BeEmpty())
+			tags, err := cs.getTags()
+			Expect(err).ToNot(HaveOccurred())
+			for t := range cpmTags {
+				Expect(tags).To(HaveKey(t))
+			}
 		})
 
 		It("doesn't send a CCS if there are no common certificate sets available", func() {

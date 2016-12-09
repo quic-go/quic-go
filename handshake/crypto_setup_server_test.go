@@ -171,7 +171,7 @@ var _ = Describe("Crypto setup", func() {
 		Expect(err).NotTo(HaveOccurred())
 		scfg.stkSource = &mockStkSource{}
 		v := protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
-		cpm = NewConnectionParamatersManager(protocol.VersionWhatever)
+		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.VersionWhatever)
 		csInt, err := NewCryptoSetup(protocol.ConnectionID(42), ip, v, scfg, stream, cpm, aeadChanged)
 		Expect(err).NotTo(HaveOccurred())
 		cs = csInt.(*cryptoSetupServer)

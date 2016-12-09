@@ -14,7 +14,8 @@ import (
 // ConnectionParametersManager negotiates and stores the connection parameters
 type ConnectionParametersManager interface {
 	SetFromMap(map[Tag][]byte) error
-	GetSHLOMap() map[Tag][]byte
+	GetSHLOMap() (map[Tag][]byte, error)
+	GetCHLOMap() (map[Tag][]byte, error)
 
 	GetSendStreamFlowControlWindow() protocol.ByteCount
 	GetSendConnectionFlowControlWindow() protocol.ByteCount
@@ -29,7 +30,8 @@ type ConnectionParametersManager interface {
 type connectionParametersManager struct {
 	mutex sync.RWMutex
 
-	version protocol.VersionNumber
+	version     protocol.VersionNumber
+	perspective protocol.Perspective
 
 	flowControlNegotiated                bool
 	hasReceivedMaxIncomingDynamicStreams bool
@@ -55,8 +57,9 @@ var (
 )
 
 // NewConnectionParamatersManager creates a new connection parameters manager
-func NewConnectionParamatersManager(v protocol.VersionNumber) ConnectionParametersManager {
+func NewConnectionParamatersManager(pers protocol.Perspective, v protocol.VersionNumber) ConnectionParametersManager {
 	return &connectionParametersManager{
+		perspective:                            pers,
 		version:                                v,
 		idleConnectionStateLifetime:            protocol.DefaultIdleTimeout,
 		sendStreamFlowControlWindow:            protocol.InitialStreamFlowControlWindow,     // can only be changed by the client
@@ -142,8 +145,13 @@ func (h *connectionParametersManager) negotiateIdleConnectionStateLifetime(clien
 	return utils.MinDuration(clientValue, protocol.MaxIdleTimeout)
 }
 
-// GetSHLOMap gets all values (except crypto values) needed for the SHLO
-func (h *connectionParametersManager) GetSHLOMap() map[Tag][]byte {
+// GetSHLOMap gets all parameters needed for the SHLO
+// if the client sent us parameters earlier, these are the negotiated values
+func (h *connectionParametersManager) GetSHLOMap() (map[Tag][]byte, error) {
+	if h.perspective != protocol.PerspectiveServer {
+		return nil, errors.New("ConnectionParametersManager BUG: GetSHLOMap should only be called for a server")
+	}
+
 	sfcw := bytes.NewBuffer([]byte{})
 	utils.WriteUint32(sfcw, uint32(h.GetReceiveStreamFlowControlWindow()))
 	cfcw := bytes.NewBuffer([]byte{})
@@ -166,7 +174,39 @@ func (h *connectionParametersManager) GetSHLOMap() map[Tag][]byte {
 		tags[TagMIDS] = mids.Bytes()
 	}
 
-	return tags
+	return tags, nil
+}
+
+// GetCHLOMap gets all parameters needed for the CHLO
+// these are the values the client is suggesting to the server. The negotiation is done by the server
+func (h *connectionParametersManager) GetCHLOMap() (map[Tag][]byte, error) {
+	if h.perspective != protocol.PerspectiveClient {
+		return nil, errors.New("ConnectionParametersManager BUG: GetCHLOMap should only be called for a client")
+	}
+
+	sfcw := bytes.NewBuffer([]byte{})
+	utils.WriteUint32(sfcw, uint32(protocol.InitialStreamFlowControlWindow))
+	cfcw := bytes.NewBuffer([]byte{})
+	utils.WriteUint32(cfcw, uint32(protocol.InitialConnectionFlowControlWindow))
+	mspc := bytes.NewBuffer([]byte{})
+	utils.WriteUint32(mspc, protocol.MaxStreamsPerConnection)
+	icsl := bytes.NewBuffer([]byte{})
+	utils.WriteUint32(icsl, uint32(protocol.DefaultIdleTimeout/time.Second))
+
+	tags := map[Tag][]byte{
+		TagICSL: icsl.Bytes(),
+		TagMSPC: mspc.Bytes(),
+		TagCFCW: cfcw.Bytes(),
+		TagSFCW: sfcw.Bytes(),
+	}
+
+	if h.version > protocol.Version34 {
+		mids := bytes.NewBuffer([]byte{})
+		utils.WriteUint32(mids, protocol.MaxIncomingDynamicStreamsPerConnection)
+		tags[TagMIDS] = mids.Bytes()
+	}
+
+	return tags, nil
 }
 
 // GetSendStreamFlowControlWindow gets the size of the stream-level flow control window for sending data

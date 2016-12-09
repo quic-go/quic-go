@@ -40,6 +40,8 @@ type cryptoSetupClient struct {
 	receivedSecurePacket bool
 	secureAEAD           crypto.AEAD
 	forwardSecureAEAD    crypto.AEAD
+
+	connectionParameters ConnectionParametersManager
 }
 
 var _ crypto.AEAD = &cryptoSetupClient{}
@@ -57,15 +59,16 @@ func NewCryptoSetupClient(
 	connID protocol.ConnectionID,
 	version protocol.VersionNumber,
 	cryptoStream utils.Stream,
+	connectionParameters ConnectionParametersManager,
 ) (CryptoSetup, error) {
 	return &cryptoSetupClient{
-		hostname:     hostname,
-		connID:       connID,
-		version:      version,
-		cryptoStream: cryptoStream,
-		certManager:  crypto.NewCertManager(),
-
-		keyDerivation: crypto.DeriveKeysAESGCM,
+		hostname:             hostname,
+		connID:               connID,
+		version:              version,
+		cryptoStream:         cryptoStream,
+		certManager:          crypto.NewCertManager(),
+		connectionParameters: connectionParameters,
+		keyDerivation:        crypto.DeriveKeysAESGCM,
 	}, nil
 }
 
@@ -310,7 +313,10 @@ func (h *cryptoSetupClient) sendCHLO() error {
 }
 
 func (h *cryptoSetupClient) getTags() (map[Tag][]byte, error) {
-	tags := make(map[Tag][]byte)
+	tags, err := h.connectionParameters.GetCHLOMap()
+	if err != nil {
+		return nil, err
+	}
 	tags[TagSNI] = []byte(h.hostname)
 	tags[TagPDMD] = []byte("X509")
 

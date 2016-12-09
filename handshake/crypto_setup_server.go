@@ -340,7 +340,10 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 		return nil, err
 	}
 
-	replyMap := h.connectionParameters.GetSHLOMap()
+	replyMap, err := h.connectionParameters.GetSHLOMap()
+	if err != nil {
+		return nil, err
+	}
 	// add crypto parameters
 	replyMap[TagPUBS] = ephermalKex.PublicKey()
 	replyMap[TagSNO] = serverNonce

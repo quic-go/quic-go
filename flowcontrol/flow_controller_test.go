@@ -20,7 +20,10 @@ type mockConnectionParametersManager struct {
 func (m *mockConnectionParametersManager) SetFromMap(map[handshake.Tag][]byte) error {
 	panic("not implemented")
 }
-func (m *mockConnectionParametersManager) GetSHLOMap() map[handshake.Tag][]byte {
+func (m *mockConnectionParametersManager) GetSHLOMap() (map[handshake.Tag][]byte, error) {
+	panic("not implemented")
+}
+func (m *mockConnectionParametersManager) GetCHLOMap() (map[handshake.Tag][]byte, error) {
 	panic("not implemented")
 }
 func (m *mockConnectionParametersManager) GetSendStreamFlowControlWindow() protocol.ByteCount {

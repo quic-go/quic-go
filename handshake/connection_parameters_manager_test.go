@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"encoding/binary"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -11,12 +12,13 @@ import (
 var _ = Describe("ConnectionsParameterManager", func() {
 	var cpm *connectionParametersManager
 	BeforeEach(func() {
-		cpm = NewConnectionParamatersManager(protocol.Version36).(*connectionParametersManager)
+		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.Version36).(*connectionParametersManager)
 	})
 
 	Context("SHLO", func() {
 		It("returns all parameters necessary for the SHLO", func() {
-			entryMap := cpm.GetSHLOMap()
+			entryMap, err := cpm.GetSHLOMap()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(entryMap).To(HaveKey(TagICSL))
 			Expect(entryMap).To(HaveKey(TagMSPC))
 			Expect(entryMap).To(HaveKey(TagMIDS))
@@ -24,27 +26,31 @@ var _ = Describe("ConnectionsParameterManager", func() {
 
 		It("doesn't add the MaximumIncomingDynamicStreams tag for QUIC 34", func() {
 			cpm.version = protocol.Version34
-			entryMap := cpm.GetSHLOMap()
+			entryMap, err := cpm.GetSHLOMap()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(entryMap).ToNot(HaveKey(TagMIDS))
 		})
 
 		It("sets the stream-level flow control windows in SHLO", func() {
 			cpm.receiveStreamFlowControlWindow = 0xDEADBEEF
-			entryMap := cpm.GetSHLOMap()
+			entryMap, err := cpm.GetSHLOMap()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(entryMap).To(HaveKey(TagSFCW))
 			Expect(entryMap[TagSFCW]).To(Equal([]byte{0xEF, 0xBE, 0xAD, 0xDE}))
 		})
 
 		It("sets the connection-level flow control windows in SHLO", func() {
 			cpm.receiveConnectionFlowControlWindow = 0xDECAFBAD
-			entryMap := cpm.GetSHLOMap()
+			entryMap, err := cpm.GetSHLOMap()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(entryMap).To(HaveKey(TagCFCW))
 			Expect(entryMap[TagCFCW]).To(Equal([]byte{0xAD, 0xFB, 0xCA, 0xDE}))
 		})
 
 		It("sets the connection-level flow control windows in SHLO", func() {
 			cpm.idleConnectionStateLifetime = 0xDECAFBAD * time.Second
-			entryMap := cpm.GetSHLOMap()
+			entryMap, err := cpm.GetSHLOMap()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(entryMap).To(HaveKey(TagICSL))
 			Expect(entryMap[TagICSL]).To(Equal([]byte{0xAD, 0xFB, 0xCA, 0xDE}))
 		})
@@ -54,15 +60,57 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			Expect(val).To(BeNumerically("<", protocol.MaxStreamsPerConnection))
 			err := cpm.SetFromMap(map[Tag][]byte{TagMSPC: []byte{byte(val), 0, 0, 0}})
 			Expect(err).ToNot(HaveOccurred())
-			entryMap := cpm.GetSHLOMap()
+			entryMap, err := cpm.GetSHLOMap()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(entryMap[TagMSPC]).To(Equal([]byte{byte(val), 0, 0, 0}))
 		})
 
 		It("always sends its own value for the maximum incoming dynamic streams in the SHLO", func() {
 			err := cpm.SetFromMap(map[Tag][]byte{TagMIDS: []byte{5, 0, 0, 0}})
 			Expect(err).ToNot(HaveOccurred())
-			entryMap := cpm.GetSHLOMap()
+			entryMap, err := cpm.GetSHLOMap()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(entryMap[TagMIDS]).To(Equal([]byte{byte(protocol.MaxIncomingDynamicStreamsPerConnection), 0, 0, 0}))
+		})
+
+		It("errors if called from a client", func() {
+			cpm.perspective = protocol.PerspectiveClient
+			_, err := cpm.GetSHLOMap()
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	Context("CHLO", func() {
+		BeforeEach(func() {
+			cpm.perspective = protocol.PerspectiveClient
+		})
+
+		It("has the right values", func() {
+			entryMap, err := cpm.GetCHLOMap()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(entryMap).To(HaveKey(TagICSL))
+			Expect(binary.LittleEndian.Uint32(entryMap[TagICSL])).To(Equal(uint32(protocol.DefaultIdleTimeout / time.Second)))
+			Expect(entryMap).To(HaveKey(TagMSPC))
+			Expect(binary.LittleEndian.Uint32(entryMap[TagMSPC])).To(Equal(uint32(protocol.MaxStreamsPerConnection)))
+			Expect(entryMap).To(HaveKey(TagMIDS))
+			Expect(binary.LittleEndian.Uint32(entryMap[TagMIDS])).To(Equal(uint32(protocol.MaxIncomingDynamicStreamsPerConnection)))
+			Expect(entryMap).To(HaveKey(TagSFCW))
+			Expect(binary.LittleEndian.Uint32(entryMap[TagSFCW])).To(Equal(uint32(protocol.InitialStreamFlowControlWindow)))
+			Expect(entryMap).To(HaveKey(TagCFCW))
+			Expect(binary.LittleEndian.Uint32(entryMap[TagCFCW])).To(Equal(uint32(protocol.InitialConnectionFlowControlWindow)))
+		})
+
+		It("doesn't add the MIDS tag for QUIC 34", func() {
+			cpm.version = protocol.Version34
+			entryMap, err := cpm.GetCHLOMap()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(entryMap).ToNot(HaveKey(TagMIDS))
+		})
+
+		It("errors if called from a server", func() {
+			cpm.perspective = protocol.PerspectiveServer
+			_, err := cpm.GetCHLOMap()
+			Expect(err).To(HaveOccurred())
 		})
 	})
 
