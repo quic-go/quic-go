@@ -283,7 +283,7 @@ func (h *cryptoSetupClient) UnlockForSealing() {
 }
 
 func (h *cryptoSetupClient) HandshakeComplete() bool {
-	return false
+	return h.forwardSecureAEAD != nil
 }
 
 func (h *cryptoSetupClient) sendCHLO() error {

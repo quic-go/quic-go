@@ -352,18 +352,21 @@ var _ = Describe("Crypto setup", func() {
 			cs.receivedSecurePacket = false
 			err := cs.handleSHLOMessage(tagMap)
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoEncryptionLevelIncorrect, "unencrypted SHLO message")))
+			Expect(cs.HandshakeComplete()).To(BeFalse())
 		})
 
 		It("rejects SHLOs without a PUBS", func() {
 			delete(tagMap, TagPUBS)
 			err := cs.handleSHLOMessage(tagMap)
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoMessageParameterNotFound, "PUBS")))
+			Expect(cs.HandshakeComplete()).To(BeFalse())
 		})
 
 		It("rejects SHLOs without a version list", func() {
 			delete(tagMap, TagVER)
 			err := cs.handleSHLOMessage(tagMap)
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "server hello missing version list")))
+			Expect(cs.HandshakeComplete()).To(BeFalse())
 		})
 
 		It("reads the server nonce, if set", func() {
@@ -378,6 +381,7 @@ var _ = Describe("Crypto setup", func() {
 			err := cs.handleSHLOMessage(tagMap)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.forwardSecureAEAD).ToNot(BeNil())
+			Expect(cs.HandshakeComplete()).To(BeTrue())
 		})
 	})
 
@@ -536,6 +540,7 @@ var _ = Describe("Crypto setup", func() {
 			Expect(keyDerivationCalledWith.cert).To(Equal(certManager.leafCert))
 			Expect(keyDerivationCalledWith.divNonce).To(Equal(cs.diversificationNonce))
 			Expect(keyDerivationCalledWith.pers).To(Equal(protocol.PerspectiveClient))
+			Expect(cs.HandshakeComplete()).To(BeFalse())
 		})
 
 		It("uses the server nonce, if the server sent one", func() {
@@ -545,6 +550,7 @@ var _ = Describe("Crypto setup", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.secureAEAD).ToNot(BeNil())
 			Expect(keyDerivationCalledWith.nonces).To(Equal(append(cs.nonc, cs.sno...)))
+			Expect(cs.HandshakeComplete()).To(BeFalse())
 		})
 
 		It("doesn't create a secureAEAD if the certificate is not yet verified, even if it has all necessary values", func() {
@@ -556,6 +562,7 @@ var _ = Describe("Crypto setup", func() {
 			err = cs.maybeUpgradeCrypto()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.secureAEAD).ToNot(BeNil())
+			Expect(cs.HandshakeComplete()).To(BeFalse())
 		})
 
 		It("tries to escalate before reading a handshake message", func() {
@@ -566,6 +573,7 @@ var _ = Describe("Crypto setup", func() {
 			// this is because the mockStream doesn't block if there's no data to read
 			Expect(err).To(MatchError(qerr.HandshakeFailed))
 			Expect(cs.secureAEAD).ToNot(BeNil())
+			Expect(cs.HandshakeComplete()).To(BeFalse())
 		})
 
 		It("tries to escalate the crypto after receiving a diversification nonce", func() {
@@ -575,6 +583,7 @@ var _ = Describe("Crypto setup", func() {
 			err := cs.SetDiversificationNonce([]byte("div"))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.secureAEAD).ToNot(BeNil())
+			Expect(cs.HandshakeComplete()).To(BeFalse())
 		})
 	})
 
