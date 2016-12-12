@@ -121,7 +121,7 @@ var _ = Describe("Crypto setup", func() {
 		stream = &mockStream{}
 		certManager = &mockCertManager{}
 		version := protocol.Version36
-		csInt, err := NewCryptoSetupClient("hostname", 0, version, stream, NewConnectionParamatersManager(protocol.PerspectiveClient, version))
+		csInt, err := NewCryptoSetupClient("hostname", 0, version, stream, NewConnectionParamatersManager(protocol.PerspectiveClient, version), make(chan struct{}, 1))
 		Expect(err).ToNot(HaveOccurred())
 		cs = csInt.(*cryptoSetupClient)
 		cs.certManager = certManager
@@ -353,6 +353,7 @@ var _ = Describe("Crypto setup", func() {
 			err := cs.handleSHLOMessage(tagMap)
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoEncryptionLevelIncorrect, "unencrypted SHLO message")))
 			Expect(cs.HandshakeComplete()).To(BeFalse())
+			Expect(cs.aeadChanged).ToNot(Receive())
 		})
 
 		It("rejects SHLOs without a PUBS", func() {
@@ -382,6 +383,7 @@ var _ = Describe("Crypto setup", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.forwardSecureAEAD).ToNot(BeNil())
 			Expect(cs.HandshakeComplete()).To(BeTrue())
+			Expect(cs.aeadChanged).To(Receive())
 		})
 	})
 
@@ -541,6 +543,7 @@ var _ = Describe("Crypto setup", func() {
 			Expect(keyDerivationCalledWith.divNonce).To(Equal(cs.diversificationNonce))
 			Expect(keyDerivationCalledWith.pers).To(Equal(protocol.PerspectiveClient))
 			Expect(cs.HandshakeComplete()).To(BeFalse())
+			Expect(cs.aeadChanged).To(Receive())
 		})
 
 		It("uses the server nonce, if the server sent one", func() {
@@ -551,18 +554,21 @@ var _ = Describe("Crypto setup", func() {
 			Expect(cs.secureAEAD).ToNot(BeNil())
 			Expect(keyDerivationCalledWith.nonces).To(Equal(append(cs.nonc, cs.sno...)))
 			Expect(cs.HandshakeComplete()).To(BeFalse())
+			Expect(cs.aeadChanged).To(Receive())
 		})
 
 		It("doesn't create a secureAEAD if the certificate is not yet verified, even if it has all necessary values", func() {
 			err := cs.maybeUpgradeCrypto()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.secureAEAD).To(BeNil())
+			Expect(cs.aeadChanged).ToNot(Receive())
 			cs.serverVerified = true
 			// make sure we really had all necessary values before, and only serverVerified was missing
 			err = cs.maybeUpgradeCrypto()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.secureAEAD).ToNot(BeNil())
 			Expect(cs.HandshakeComplete()).To(BeFalse())
+			Expect(cs.aeadChanged).To(Receive())
 		})
 
 		It("tries to escalate before reading a handshake message", func() {
@@ -583,6 +589,7 @@ var _ = Describe("Crypto setup", func() {
 			err := cs.SetDiversificationNonce([]byte("div"))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.secureAEAD).ToNot(BeNil())
+			Expect(cs.aeadChanged).To(Receive())
 			Expect(cs.HandshakeComplete()).To(BeFalse())
 		})
 	})

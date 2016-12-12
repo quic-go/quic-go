@@ -138,7 +138,7 @@ func newClientSession(conn *net.UDPConn, addr *net.UDPAddr, hostname string, v p
 
 	cryptoStream, _ := session.GetOrOpenStream(1)
 	var err error
-	session.cryptoSetup, err = handshake.NewCryptoSetupClient(hostname, connectionID, v, cryptoStream, session.connectionParameters)
+	session.cryptoSetup, err = handshake.NewCryptoSetupClient(hostname, connectionID, v, cryptoStream, session.connectionParameters, session.aeadChanged)
 	if err != nil {
 		return nil, err
 	}

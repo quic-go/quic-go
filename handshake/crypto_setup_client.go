@@ -40,6 +40,7 @@ type cryptoSetupClient struct {
 	receivedSecurePacket bool
 	secureAEAD           crypto.AEAD
 	forwardSecureAEAD    crypto.AEAD
+	aeadChanged          chan struct{}
 
 	connectionParameters ConnectionParametersManager
 }
@@ -60,6 +61,7 @@ func NewCryptoSetupClient(
 	version protocol.VersionNumber,
 	cryptoStream utils.Stream,
 	connectionParameters ConnectionParametersManager,
+	aeadChanged chan struct{},
 ) (CryptoSetup, error) {
 	return &cryptoSetupClient{
 		hostname:             hostname,
@@ -69,6 +71,7 @@ func NewCryptoSetupClient(
 		certManager:          crypto.NewCertManager(),
 		connectionParameters: connectionParameters,
 		keyDerivation:        crypto.DeriveKeysAESGCM,
+		aeadChanged:          aeadChanged,
 	}, nil
 }
 
@@ -222,6 +225,8 @@ func (h *cryptoSetupClient) handleSHLOMessage(cryptoData map[Tag][]byte) error {
 	if err != nil {
 		return err
 	}
+
+	h.aeadChanged <- struct{}{}
 
 	return nil
 }
@@ -399,6 +404,8 @@ func (h *cryptoSetupClient) maybeUpgradeCrypto() error {
 		if err != nil {
 			return err
 		}
+
+		h.aeadChanged <- struct{}{}
 	}
 
 	return nil
