@@ -80,7 +80,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	// TODO: stop sending version numbers once a version has been negotiated
 	if p.perspective == protocol.PerspectiveClient {
 		responsePublicHeader.VersionFlag = true
-		responsePublicHeader.VersionNumber = protocol.Version36
+		responsePublicHeader.VersionNumber = p.version
 	}
 
 	publicHeaderLength, err := responsePublicHeader.GetLength(p.perspective)
