@@ -13,6 +13,7 @@ import (
 type streamsMap struct {
 	mutex sync.RWMutex
 
+	perspective          protocol.Perspective
 	connectionParameters handshake.ConnectionParametersManager
 
 	streams     map[protocol.StreamID]*stream
@@ -38,8 +39,9 @@ var (
 	errMapAccess = errors.New("streamsMap: Error accessing the streams map")
 )
 
-func newStreamsMap(newStream newStreamLambda, connectionParameters handshake.ConnectionParametersManager) *streamsMap {
+func newStreamsMap(newStream newStreamLambda, pers protocol.Perspective, connectionParameters handshake.ConnectionParametersManager) *streamsMap {
 	return &streamsMap{
+		perspective:          pers,
 		streams:              map[protocol.StreamID]*stream{},
 		openStreams:          make([]protocol.StreamID, 0),
 		newStream:            newStream,
@@ -68,8 +70,11 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 	if m.numIncomingStreams >= m.connectionParameters.GetMaxIncomingStreams() {
 		return nil, qerr.TooManyOpenStreams
 	}
-	if id%2 == 0 {
+	if m.perspective == protocol.PerspectiveServer && id%2 == 0 {
 		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d from client-side", id))
+	}
+	if m.perspective == protocol.PerspectiveClient && id%2 == 1 {
+		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d from server-side", id))
 	}
 	if id+protocol.MaxNewStreamIDDelta < m.highestStreamOpenedByClient {
 		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d, which is a lot smaller than the highest opened stream, %d", id, m.highestStreamOpenedByClient))
@@ -79,7 +84,12 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 	if err != nil {
 		return nil, err
 	}
-	m.numIncomingStreams++
+
+	if m.perspective == protocol.PerspectiveServer {
+		m.numIncomingStreams++
+	} else {
+		m.numOutgoingStreams++
+	}
 
 	if id > m.highestStreamOpenedByClient {
 		m.highestStreamOpenedByClient = id
@@ -97,8 +107,11 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 
 // OpenStream opens a stream from the server's side
 func (m *streamsMap) OpenStream(id protocol.StreamID) (*stream, error) {
-	if id%2 == 1 {
+	if m.perspective == protocol.PerspectiveServer && id%2 == 1 {
 		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d from server-side", id))
+	}
+	if m.perspective == protocol.PerspectiveClient && id%2 == 0 {
+		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d from client-side", id))
 	}
 
 	m.mutex.Lock()
@@ -115,7 +128,12 @@ func (m *streamsMap) OpenStream(id protocol.StreamID) (*stream, error) {
 	if err != nil {
 		return nil, err
 	}
-	m.numOutgoingStreams++
+
+	if m.perspective == protocol.PerspectiveServer {
+		m.numOutgoingStreams++
+	} else {
+		m.numIncomingStreams++
+	}
 
 	m.putStream(s)
 	return s, nil

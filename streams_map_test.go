@@ -59,7 +59,7 @@ var _ = Describe("Streams Map", func() {
 			maxIncomingStreams: 75,
 			maxOutgoingStreams: 60,
 		}
-		m = newStreamsMap(nil, cpm)
+		m = newStreamsMap(nil, protocol.PerspectiveServer, cpm)
 	})
 
 	Context("getting and creating streams", func() {
@@ -77,7 +77,7 @@ var _ = Describe("Streams Map", func() {
 			Expect(m.numOutgoingStreams).To(BeZero())
 		})
 
-		Context("client-side streams", func() {
+		Context("client-side streams, as a server", func() {
 			It("rejects streams with even IDs", func() {
 				_, err := m.GetOrOpenStream(6)
 				Expect(err).To(MatchError("InvalidStreamID: attempted to open stream 6 from client-side"))
@@ -129,7 +129,26 @@ var _ = Describe("Streams Map", func() {
 			})
 		})
 
-		Context("server-side streams", func() {
+		Context("client-side streams, as a client", func() {
+			BeforeEach(func() {
+				m.perspective = protocol.PerspectiveClient
+			})
+
+			It("rejects streams with odd IDs", func() {
+				_, err := m.GetOrOpenStream(5)
+				Expect(err).To(MatchError("InvalidStreamID: attempted to open stream 5 from server-side"))
+			})
+
+			It("gets new streams", func() {
+				s, err := m.GetOrOpenStream(6)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(s.StreamID()).To(Equal(protocol.StreamID(6)))
+				Expect(m.numOutgoingStreams).To(Equal(uint32(1)))
+				Expect(m.numIncomingStreams).To(BeZero())
+			})
+		})
+
+		Context("server-side streams, as a server", func() {
 			It("rejects streams with odd IDs", func() {
 				_, err := m.OpenStream(5)
 				Expect(err).To(MatchError("InvalidStreamID: attempted to open stream 5 from server-side"))
@@ -185,6 +204,26 @@ var _ = Describe("Streams Map", func() {
 						Expect(err).ToNot(HaveOccurred())
 					}
 				})
+			})
+		})
+
+		Context("server-side streams, as a client", func() {
+			BeforeEach(func() {
+				m.perspective = protocol.PerspectiveClient
+			})
+
+			It("rejects streams with even IDs", func() {
+				_, err := m.OpenStream(6)
+				Expect(err).To(MatchError("InvalidStreamID: attempted to open stream 6 from client-side"))
+			})
+
+			It("opens a new stream", func() {
+				s, err := m.OpenStream(7)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(s).ToNot(BeNil())
+				Expect(s.StreamID()).To(Equal(protocol.StreamID(7)))
+				Expect(m.numOutgoingStreams).To(BeZero())
+				Expect(m.numIncomingStreams).To(Equal(uint32(1)))
 			})
 		})
 

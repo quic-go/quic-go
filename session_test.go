@@ -159,7 +159,7 @@ var _ = Describe("Session", func() {
 			func(protocol.ConnectionID) { closeCallbackCalled = true },
 		)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(clientSession.streamsMap.openStreams).To(HaveLen(1))
+		Expect(clientSession.streamsMap.openStreams).To(HaveLen(1)) // Crypto stream
 
 	})
 

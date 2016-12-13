@@ -41,7 +41,7 @@ var _ = Describe("Packet packer", func() {
 		fcm.sendWindowSizes[7] = protocol.MaxByteCount
 
 		cpm := &mockConnectionParametersManager{}
-		streamFramer = newStreamFramer(newStreamsMap(nil, cpm), fcm)
+		streamFramer = newStreamFramer(newStreamsMap(nil, protocol.PerspectiveServer, cpm), fcm)
 
 		packer = &packetPacker{
 			cryptoSetup:           &mockCryptoSetup{},

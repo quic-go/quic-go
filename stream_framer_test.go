@@ -31,7 +31,7 @@ var _ = Describe("Stream Framer", func() {
 		stream1 = &stream{streamID: 10}
 		stream2 = &stream{streamID: 11}
 
-		streamsMap = newStreamsMap(nil, &mockConnectionParametersManager{})
+		streamsMap = newStreamsMap(nil, protocol.PerspectiveServer, &mockConnectionParametersManager{})
 		streamsMap.putStream(stream1)
 		streamsMap.putStream(stream2)
 

@@ -136,7 +136,7 @@ func newClientSession(conn *net.UDPConn, addr *net.UDPAddr, hostname string, v p
 	session.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(session.ackAlarmChanged)
 	session.setup()
 
-	cryptoStream, _ := session.GetOrOpenStream(1)
+	cryptoStream, _ := session.OpenStream(1)
 	var err error
 	session.cryptoSetup, err = handshake.NewCryptoSetupClient(hostname, connectionID, v, cryptoStream, session.connectionParameters, session.aeadChanged)
 	if err != nil {
@@ -174,7 +174,7 @@ func (s *Session) setup() {
 	s.lastNetworkActivityTime = now
 	s.sessionCreationTime = now
 
-	s.streamsMap = newStreamsMap(s.newStream, s.connectionParameters)
+	s.streamsMap = newStreamsMap(s.newStream, s.perspective, s.connectionParameters)
 	s.streamFramer = newStreamFramer(s.streamsMap, s.flowControlManager)
 }
 
