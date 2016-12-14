@@ -47,6 +47,7 @@ var _ = Describe("Request", func() {
 		rw.WriteRequest(req, 1337)
 		headerFrame, headerFields := decode(headerStream.Bytes())
 		Expect(headerFrame.StreamID).To(Equal(uint32(1337)))
+		Expect(headerFrame.HasPriority()).To(BeTrue())
 		Expect(headerFields).To(HaveKeyWithValue(":authority", "quic.clemente.io"))
 		Expect(headerFields).To(HaveKeyWithValue(":method", "GET"))
 		Expect(headerFields).To(HaveKeyWithValue(":path", "/index.html?foo=bar"))

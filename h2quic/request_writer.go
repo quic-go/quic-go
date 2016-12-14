@@ -42,6 +42,7 @@ func (w *requestWriter) WriteRequest(req *http.Request, dataStreamID protocol.St
 		StreamID:      uint32(dataStreamID),
 		EndHeaders:    true,
 		BlockFragment: w.hbuf.Bytes(),
+		Priority:      http2.PriorityParam{Weight: 0xff},
 	})
 }
 
