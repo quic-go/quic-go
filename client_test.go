@@ -150,6 +150,20 @@ var _ = Describe("Client", func() {
 			return packet
 		}
 
+		It("recognizes that a packet without VersionFlag means that the server accepted the suggested version", func() {
+			ph := PublicHeader{
+				PacketNumber:    1,
+				PacketNumberLen: protocol.PacketNumberLen2,
+				ConnectionID:    0x1337,
+			}
+			b := &bytes.Buffer{}
+			err := ph.Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
+			Expect(err).ToNot(HaveOccurred())
+			err = client.handlePacket(b.Bytes())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(client.versionNegotiated).To(BeTrue())
+		})
+
 		It("changes the version after receiving a version negotiation packet", func() {
 			startUDPConn()
 			newVersion := protocol.Version35

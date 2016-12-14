@@ -129,6 +129,12 @@ func (c *Client) handlePacket(packet []byte) error {
 		return nil
 	}
 
+	// this is the first packet after the client sent a packet with the VersionFlag set
+	// if the server doesn't send a version negotiation packet, it supports the suggested version
+	if !hdr.VersionFlag && !c.versionNegotiated {
+		c.versionNegotiated = true
+	}
+
 	if hdr.VersionFlag {
 		// check if the server sent the offered version in supported versions
 		for _, v := range hdr.SupportedVersions {
