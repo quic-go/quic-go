@@ -124,7 +124,10 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 	if err != nil {
 		return err
 	}
-	h2headersFrame := h2frame.(*http2.HeadersFrame)
+	h2headersFrame, ok := h2frame.(*http2.HeadersFrame)
+	if !ok {
+		return qerr.Error(qerr.InvalidHeadersStreamData, "expected a header frame")
+	}
 	if !h2headersFrame.HeadersEnded() {
 		return errors.New("http2 header continuation not implemented")
 	}

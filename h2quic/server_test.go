@@ -127,6 +127,17 @@ var _ = Describe("H2 server", func() {
 			Eventually(func() bool { return handlerCalled }).Should(BeTrue())
 			Expect(dataStream.remoteClosed).To(BeFalse())
 		})
+
+
+		It("errors when non-header frames are received", func() {
+			headerStream.Write([]byte{
+				0x0, 0x0, 0x06, 0x0, 0x0, 0x0, 0x0, 0x0, 0x5,
+				'f', 'o', 'o', 'b', 'a', 'r',
+			})
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			println(err.Error())
+			Expect(err).To(MatchError("InvalidHeadersStreamData: expected a header frame"))
+		})
 	})
 
 	It("handles the header stream", func() {
