@@ -24,8 +24,13 @@ type Client struct {
 	version           protocol.VersionNumber
 	versionNegotiated bool
 
+	versionNegotiateCallback VersionNegotiateCallback
+
 	session packetHandler
 }
+
+// VersionNegotiateCallback is called once the client has a negotiated version
+type VersionNegotiateCallback func() error
 
 var errHostname = errors.New("Invalid hostname")
 
@@ -35,7 +40,7 @@ var (
 )
 
 // NewClient makes a new client
-func NewClient(addr string) (*Client, error) {
+func NewClient(addr string, versionNegotiateCallback VersionNegotiateCallback) (*Client, error) {
 	hostname, err := utils.HostnameFromAddr(addr)
 	if err != nil || len(hostname) == 0 {
 		return nil, errHostname
@@ -62,11 +67,12 @@ func NewClient(addr string) (*Client, error) {
 	connectionID := protocol.ConnectionID(rand.Int63())
 
 	client := &Client{
-		addr:         udpAddr,
-		conn:         conn,
-		hostname:     hostname,
-		version:      protocol.SupportedVersions[len(protocol.SupportedVersions)-1], // use the highest supported version by default
-		connectionID: connectionID,
+		addr:                     udpAddr,
+		conn:                     conn,
+		hostname:                 hostname,
+		version:                  protocol.SupportedVersions[len(protocol.SupportedVersions)-1], // use the highest supported version by default
+		connectionID:             connectionID,
+		versionNegotiateCallback: versionNegotiateCallback,
 	}
 
 	utils.Infof("Starting new connection to %s (%s), connectionID %x, version %d", host, udpAddr.String(), connectionID, client.version)
@@ -133,6 +139,10 @@ func (c *Client) handlePacket(packet []byte) error {
 	// if the server doesn't send a version negotiation packet, it supports the suggested version
 	if !hdr.VersionFlag && !c.versionNegotiated {
 		c.versionNegotiated = true
+		err = c.versionNegotiateCallback()
+		if err != nil {
+			return err
+		}
 	}
 
 	if hdr.VersionFlag {
@@ -151,8 +161,13 @@ func (c *Client) handlePacket(packet []byte) error {
 		utils.Infof("Switching to QUIC version %d", highestSupportedVersion)
 		c.version = highestSupportedVersion
 		c.versionNegotiated = true
+
 		c.session.Close(errCloseSessionForNewVersion)
 		err = c.createNewSession()
+		if err != nil {
+			return err
+		}
+		err = c.versionNegotiateCallback()
 		if err != nil {
 			return err
 		}
