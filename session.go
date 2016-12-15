@@ -37,6 +37,10 @@ var (
 // StreamCallback gets a stream frame and returns a reply frame
 type StreamCallback func(*Session, utils.Stream)
 
+// CryptoChangeCallback is called every time the encryption level changes
+// Once the callback has been called with isForwardSecure = true, it is guarantueed to not be called with isForwardSecure = false after that
+type CryptoChangeCallback func(isForwardSecure bool)
+
 // closeCallback is called when a session is closed
 type closeCallback func(id protocol.ConnectionID)
 
@@ -46,8 +50,9 @@ type Session struct {
 	perspective  protocol.Perspective
 	version      protocol.VersionNumber
 
-	streamCallback StreamCallback
-	closeCallback  closeCallback
+	streamCallback       StreamCallback
+	closeCallback        closeCallback
+	cryptoChangeCallback CryptoChangeCallback
 
 	conn connection
 
@@ -104,6 +109,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 
 		streamCallback:       streamCallback,
 		closeCallback:        closeCallback,
+		cryptoChangeCallback: func(bool) {},
 		connectionParameters: handshake.NewConnectionParamatersManager(protocol.PerspectiveServer, v),
 	}
 
@@ -121,7 +127,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	return session, err
 }
 
-func newClientSession(conn *net.UDPConn, addr *net.UDPAddr, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, streamCallback StreamCallback, closeCallback closeCallback) (*Session, error) {
+func newClientSession(conn *net.UDPConn, addr *net.UDPAddr, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, streamCallback StreamCallback, closeCallback closeCallback, cryptoChangeCallback CryptoChangeCallback) (*Session, error) {
 	session := &Session{
 		conn:         &udpConn{conn: conn, currentAddr: addr},
 		connectionID: connectionID,
@@ -130,6 +136,7 @@ func newClientSession(conn *net.UDPConn, addr *net.UDPAddr, hostname string, v p
 
 		streamCallback:       streamCallback,
 		closeCallback:        closeCallback,
+		cryptoChangeCallback: cryptoChangeCallback,
 		connectionParameters: handshake.NewConnectionParamatersManager(protocol.PerspectiveClient, v),
 	}
 
@@ -226,6 +233,7 @@ runLoop:
 			putPacketBuffer(p.publicHeader.Raw)
 		case <-s.aeadChanged:
 			s.tryDecryptingQueuedPackets()
+			s.cryptoChangeCallback(s.cryptoSetup.HandshakeComplete())
 		}
 
 		if err != nil {

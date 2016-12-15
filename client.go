@@ -24,6 +24,7 @@ type Client struct {
 	version           protocol.VersionNumber
 	versionNegotiated bool
 
+	cryptoChangeCallback     CryptoChangeCallback
 	versionNegotiateCallback VersionNegotiateCallback
 
 	session packetHandler
@@ -40,7 +41,7 @@ var (
 )
 
 // NewClient makes a new client
-func NewClient(addr string, versionNegotiateCallback VersionNegotiateCallback) (*Client, error) {
+func NewClient(addr string, cryptoChangeCallback CryptoChangeCallback, versionNegotiateCallback VersionNegotiateCallback) (*Client, error) {
 	hostname, err := utils.HostnameFromAddr(addr)
 	if err != nil || len(hostname) == 0 {
 		return nil, errHostname
@@ -72,6 +73,7 @@ func NewClient(addr string, versionNegotiateCallback VersionNegotiateCallback) (
 		hostname:                 hostname,
 		version:                  protocol.SupportedVersions[len(protocol.SupportedVersions)-1], // use the highest supported version by default
 		connectionID:             connectionID,
+		cryptoChangeCallback:     cryptoChangeCallback,
 		versionNegotiateCallback: versionNegotiateCallback,
 	}
 
@@ -186,7 +188,7 @@ func (c *Client) handlePacket(packet []byte) error {
 
 func (c *Client) createNewSession() error {
 	var err error
-	c.session, err = newClientSession(c.conn, c.addr, c.hostname, c.version, c.connectionID, c.streamCallback, c.closeCallback)
+	c.session, err = newClientSession(c.conn, c.addr, c.hostname, c.version, c.connectionID, c.streamCallback, c.closeCallback, c.cryptoChangeCallback)
 	if err != nil {
 		return err
 	}

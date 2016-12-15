@@ -157,6 +157,7 @@ var _ = Describe("Session", func() {
 			0,
 			func(*Session, utils.Stream) { streamCallbackCalled = true },
 			func(protocol.ConnectionID) { closeCallbackCalled = true },
+			func(isForwardSecure bool) {},
 		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(clientSession.streamsMap.openStreams).To(HaveLen(1)) // Crypto stream
@@ -1029,6 +1030,35 @@ var _ = Describe("Session", func() {
 		session.tryDecryptingQueuedPackets()
 		Expect(session.undecryptablePackets).To(BeEmpty())
 		Expect(session.receivedPackets).To(Receive())
+	})
+
+	It("calls the cryptoChangeCallback when the AEAD changes", func(done Done) {
+		var callbackCalled bool
+		var callbackCalledWith bool
+		cb := func(p bool) {
+			callbackCalled = true
+			callbackCalledWith = p
+		}
+		session.cryptoChangeCallback = cb
+		session.cryptoSetup = &mockCryptoSetup{handshakeComplete: false}
+		session.aeadChanged <- struct{}{}
+		go session.run()
+		Eventually(func() bool { return callbackCalled }).Should(BeTrue())
+		Expect(callbackCalledWith).To(BeFalse())
+		close(done)
+	})
+
+	It("calls the cryptoChangeCallback when the AEAD changes to forward secure encryption", func(done Done) {
+		var callbackCalledWith bool
+		cb := func(p bool) {
+			callbackCalledWith = p
+		}
+		session.cryptoChangeCallback = cb
+		session.cryptoSetup = &mockCryptoSetup{handshakeComplete: true}
+		session.aeadChanged <- struct{}{}
+		go session.run()
+		Eventually(func() bool { return callbackCalledWith }).Should(BeTrue())
+		close(done)
 	})
 
 	Context("timeouts", func() {

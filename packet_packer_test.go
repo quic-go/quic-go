@@ -11,9 +11,10 @@ import (
 
 type mockCryptoSetup struct {
 	diversificationNonce []byte
+	handshakeComplete    bool
 }
 
-func (m *mockCryptoSetup) HandleCryptoStream() error { panic("not implemented") }
+func (m *mockCryptoSetup) HandleCryptoStream() error { return nil }
 
 func (m *mockCryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {
 	return nil, nil
@@ -23,7 +24,7 @@ func (m *mockCryptoSetup) Seal(dst, src []byte, packetNumber protocol.PacketNumb
 }
 func (m *mockCryptoSetup) LockForSealing()                      {}
 func (m *mockCryptoSetup) UnlockForSealing()                    {}
-func (m *mockCryptoSetup) HandshakeComplete() bool              { panic("not implemented") }
+func (m *mockCryptoSetup) HandshakeComplete() bool              { return m.handshakeComplete }
 func (m *mockCryptoSetup) DiversificationNonce() []byte         { return m.diversificationNonce }
 func (m *mockCryptoSetup) SetDiversificationNonce([]byte) error { panic("not implemented") }
 

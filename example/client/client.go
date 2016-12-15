@@ -10,7 +10,7 @@ func main() {
 
 	utils.SetLogLevel(utils.LogLevelDebug)
 
-	client, err := quic.NewClient(addr, func() error { return nil })
+	client, err := quic.NewClient(addr, func(bool) {}, func() error { return nil })
 	if err != nil {
 		panic(err)
 	}
