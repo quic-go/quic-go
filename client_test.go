@@ -41,6 +41,13 @@ var _ = Describe("Client", func() {
 		Expect(err).NotTo(HaveOccurred())
 	}
 
+	It("sets the correct hostname for new clients", func() {
+		var err error
+		client, err = NewClient("quic.clemente.io:1337", nil, nil)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(client.hostname).To(Equal("quic.clemente.io"))
+	})
+
 	It("errors on invalid public header", func() {
 		err := client.handlePacket(nil)
 		Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.InvalidPacketHeader))

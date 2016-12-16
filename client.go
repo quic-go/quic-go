@@ -5,7 +5,6 @@ import (
 	"errors"
 	"math/rand"
 	"net"
-	"net/url"
 	"strings"
 	"time"
 
@@ -41,18 +40,7 @@ var (
 )
 
 // NewClient makes a new client
-func NewClient(addr string, cryptoChangeCallback CryptoChangeCallback, versionNegotiateCallback VersionNegotiateCallback) (*Client, error) {
-	hostname, err := utils.HostnameFromAddr(addr)
-	if err != nil || len(hostname) == 0 {
-		return nil, errHostname
-	}
-
-	p, err := url.Parse(addr)
-	if err != nil {
-		return nil, err
-	}
-	host := p.Host
-
+func NewClient(host string, cryptoChangeCallback CryptoChangeCallback, versionNegotiateCallback VersionNegotiateCallback) (*Client, error) {
 	udpAddr, err := net.ResolveUDPAddr("udp", host)
 	if err != nil {
 		return nil, err
@@ -66,6 +54,11 @@ func NewClient(addr string, cryptoChangeCallback CryptoChangeCallback, versionNe
 	// TODO: generate cryptographically secure random ConnectionID
 	rand.Seed(time.Now().UTC().UnixNano())
 	connectionID := protocol.ConnectionID(rand.Int63())
+
+	hostname, _, err := net.SplitHostPort(host)
+	if err != nil {
+		return nil, err
+	}
 
 	client := &Client{
 		addr:                     udpAddr,
