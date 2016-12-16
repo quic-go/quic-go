@@ -82,6 +82,12 @@ var _ = Describe("Client", func() {
 		Expect(err).ToNot(HaveOccurred())
 	})
 
+	It("opens a stream", func() {
+		stream, err := client.OpenStream(1337)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(stream.StreamID()).To(Equal(protocol.StreamID(1337)))
+	})
+
 	Context("handling packets", func() {
 		It("errors on too large packets", func() {
 			err := client.handlePacket(bytes.Repeat([]byte{'f'}, int(protocol.MaxPacketSize+1)))

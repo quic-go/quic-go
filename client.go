@@ -111,6 +111,11 @@ func (c *Client) Listen() error {
 	}
 }
 
+// OpenStream opens a stream, for client-side created streams (i.e. odd streamIDs)
+func (c *Client) OpenStream(id protocol.StreamID) (utils.Stream, error) {
+	return c.session.OpenStream(id)
+}
+
 // Close closes the connection
 func (c *Client) Close() error {
 	_ = c.session.Close(nil)

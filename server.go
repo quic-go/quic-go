@@ -19,6 +19,7 @@ import (
 // packetHandler handles packets
 type packetHandler interface {
 	handlePacket(*receivedPacket)
+	OpenStream(protocol.StreamID) (utils.Stream, error)
 	run()
 	Close(error) error
 }
