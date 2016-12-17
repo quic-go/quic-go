@@ -3,7 +3,9 @@ package quic
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"net"
+	"runtime"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
@@ -59,6 +61,7 @@ var _ = Describe("Client", func() {
 	})
 
 	It("properly closes the client", func(done Done) {
+		numGoRoutines := runtime.NumGoroutine()
 		startUDPConn()
 		var stoppedListening bool
 		go func() {
@@ -67,11 +70,13 @@ var _ = Describe("Client", func() {
 			stoppedListening = true
 		}()
 
-		err := client.Close()
+		testErr := errors.New("test error")
+		err := client.Close(testErr)
 		Expect(err).ToNot(HaveOccurred())
 		Eventually(session.closed).Should(BeTrue())
-		Expect(session.closeReason).To(BeNil())
+		Expect(session.closeReason).To(MatchError(testErr))
 		Eventually(func() bool { return stoppedListening }).Should(BeTrue())
+		Eventually(runtime.NumGoroutine()).Should(Equal(numGoRoutines))
 		close(done)
 	})
 
@@ -85,7 +90,7 @@ var _ = Describe("Client", func() {
 		Expect(client.session.(*Session).connectionID).To(Equal(client.connectionID))
 		Expect(client.session.(*Session).version).To(Equal(client.version))
 
-		err = client.Close()
+		err = client.Close(nil)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
@@ -130,7 +135,7 @@ var _ = Describe("Client", func() {
 			Expect(session.closed).To(BeFalse())
 			Eventually(func() bool { return stoppedListening }).Should(BeFalse())
 
-			err = client.Close()
+			err = client.Close(nil)
 			Expect(err).ToNot(HaveOccurred())
 			close(done)
 		})
@@ -202,7 +207,7 @@ var _ = Describe("Client", func() {
 			// it didn't pass the version negoation packet to the session (since it has no payload)
 			Expect(session.packetCount).To(BeZero())
 
-			err = client.Close()
+			err = client.Close(nil)
 			Expect(err).ToNot(HaveOccurred())
 		})
 

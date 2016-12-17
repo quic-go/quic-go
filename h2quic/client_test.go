@@ -14,8 +14,8 @@ type mockQuicClient struct {
 	streams map[protocol.StreamID]*mockStream
 }
 
-func (m *mockQuicClient) Close() error  { panic("not implemented") }
-func (m *mockQuicClient) Listen() error { panic("not implemented") }
+func (m *mockQuicClient) Close(error) error { panic("not implemented") }
+func (m *mockQuicClient) Listen() error     { panic("not implemented") }
 func (m *mockQuicClient) OpenStream(id protocol.StreamID) (utils.Stream, error) {
 	_, ok := m.streams[id]
 	if ok {

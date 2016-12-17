@@ -110,8 +110,8 @@ func (c *Client) OpenStream(id protocol.StreamID) (utils.Stream, error) {
 }
 
 // Close closes the connection
-func (c *Client) Close() error {
-	_ = c.session.Close(nil)
+func (c *Client) Close(e error) error {
+	_ = c.session.Close(e)
 	return c.conn.Close()
 }
 

@@ -16,7 +16,7 @@ import (
 
 type quicClient interface {
 	OpenStream(protocol.StreamID) (utils.Stream, error)
-	Close() error
+	Close(error) error
 	Listen() error
 }
 
