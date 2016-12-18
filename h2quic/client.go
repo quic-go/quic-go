@@ -2,15 +2,19 @@ package h2quic
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
 
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/hpack"
 	"golang.org/x/net/idna"
 
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
@@ -22,7 +26,7 @@ type quicClient interface {
 
 // Client is a HTTP2 client doing QUIC requests
 type Client struct {
-	mutex             sync.Mutex
+	mutex             sync.RWMutex
 	cryptoChangedCond sync.Cond
 
 	hostname        string
@@ -30,6 +34,7 @@ type Client struct {
 
 	client              quicClient
 	headerStream        utils.Stream
+	headerErr           *qerr.QuicError
 	highestOpenedStream protocol.StreamID
 	requestWriter       *requestWriter
 
@@ -81,7 +86,55 @@ func (c *Client) versionNegotiateCallback() error {
 		return err
 	}
 	c.requestWriter = newRequestWriter(c.headerStream)
+	go c.handleHeaderStream()
 	return nil
+}
+
+func (c *Client) handleHeaderStream() {
+	decoder := hpack.NewDecoder(4096, func(hf hpack.HeaderField) {})
+	h2framer := http2.NewFramer(nil, c.headerStream)
+
+	var lastStream protocol.StreamID
+
+	for {
+		frame, err := h2framer.ReadFrame()
+		if err != nil {
+			c.headerErr = qerr.Error(qerr.InvalidStreamData, "cannot read frame")
+			break
+		}
+		lastStream = protocol.StreamID(frame.Header().StreamID)
+		hframe, ok := frame.(*http2.HeadersFrame)
+		if !ok {
+			c.headerErr = qerr.Error(qerr.InvalidHeadersStreamData, "not a headers frame")
+			break
+		}
+		mhframe := &http2.MetaHeadersFrame{HeadersFrame: hframe}
+		mhframe.Fields, err = decoder.DecodeFull(hframe.HeaderBlockFragment())
+		if err != nil {
+			c.headerErr = qerr.Error(qerr.InvalidHeadersStreamData, "cannot read header fields")
+			break
+		}
+
+		c.mutex.RLock()
+		headerChan, ok := c.responses[protocol.StreamID(hframe.StreamID)]
+		c.mutex.RUnlock()
+		if !ok {
+			c.headerErr = qerr.Error(qerr.InternalError, fmt.Sprintf("h2client BUG: response channel for stream %d not found", lastStream))
+			break
+		}
+
+		rsp := &http.Response{}
+		// TODO: fill in the right values
+		headerChan <- rsp
+	}
+
+	// stop all running request
+	utils.Debugf("Error handling header stream %d: %s", lastStream, c.headerErr.Error())
+	c.mutex.Lock()
+	for _, responseChan := range c.responses {
+		responseChan <- nil
+	}
+	c.mutex.Unlock()
 }
 
 // Do executes a request and returns a response
@@ -101,6 +154,9 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	for c.encryptionLevel != protocol.EncryptionForwardSecure {
 		c.cryptoChangedCond.Wait()
 	}
+
+	hdrChan := make(chan *http.Response)
+	c.responses[dataStreamID] = hdrChan
 	_, err := c.client.OpenStream(dataStreamID)
 	if err != nil {
 		return nil, err
@@ -111,9 +167,20 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	}
 	c.mutex.Unlock()
 
-	// TODO: get the response
+	var rsp *http.Response
+	select {
+	case rsp = <-hdrChan:
+		c.mutex.Lock()
+		delete(c.responses, dataStreamID)
+		c.mutex.Unlock()
+	}
 
-	return nil, nil
+	// if an error occured on the header stream
+	if rsp == nil {
+		return nil, c.headerErr
+	}
+
+	return rsp, nil
 }
 
 // copied from net/transport.go
