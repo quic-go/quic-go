@@ -41,6 +41,8 @@ type Client struct {
 	responses map[protocol.StreamID]chan *http.Response
 }
 
+var _ h2quicClient = &Client{}
+
 // NewClient creates a new client
 func NewClient(hostname string) (*Client, error) {
 	c := &Client{
