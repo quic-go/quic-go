@@ -123,8 +123,10 @@ func (c *Client) handleHeaderStream() {
 			break
 		}
 
-		rsp := &http.Response{}
-		// TODO: fill in the right values
+		rsp, err := responseFromHeaders(mhframe)
+		if err != nil {
+			c.headerErr = qerr.Error(qerr.InternalError, err.Error())
+		}
 		headerChan <- rsp
 	}
 
@@ -157,7 +159,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 
 	hdrChan := make(chan *http.Response)
 	c.responses[dataStreamID] = hdrChan
-	_, err := c.client.OpenStream(dataStreamID)
+	dataStream, err := c.client.OpenStream(dataStreamID)
 	if err != nil {
 		return nil, err
 	}
@@ -167,20 +169,36 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	}
 	c.mutex.Unlock()
 
-	var rsp *http.Response
+	var res *http.Response
 	select {
-	case rsp = <-hdrChan:
+	case res = <-hdrChan:
 		c.mutex.Lock()
 		delete(c.responses, dataStreamID)
 		c.mutex.Unlock()
 	}
 
 	// if an error occured on the header stream
-	if rsp == nil {
+	if res == nil {
 		return nil, c.headerErr
 	}
 
-	return rsp, nil
+	// TODO: correctly set this variable
+	var streamEnded bool
+	isHead := (req.Method == "HEAD")
+
+	res = setLength(res, isHead, streamEnded)
+	utils.Debugf("%#v", res)
+
+	if streamEnded || isHead {
+		res.Body = noBody
+	} else {
+		res.Body = dataStream
+	}
+
+	res.Request = req
+	// TODO: correctly handle gzipped responses
+
+	return res, nil
 }
 
 // copied from net/transport.go

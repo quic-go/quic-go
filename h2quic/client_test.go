@@ -115,6 +115,9 @@ var _ = Describe("Client", func() {
 			Eventually(func() bool { return doReturned }).Should(BeTrue())
 			Expect(doErr).ToNot(HaveOccurred())
 			Expect(doRsp).To(Equal(rsp))
+			Expect(doRsp.Body).ToNot(BeNil())
+			Expect(doRsp.ContentLength).To(BeEquivalentTo(-1))
+			Expect(doRsp.Request).To(Equal(req))
 			close(done)
 		})
 
@@ -162,16 +165,21 @@ var _ = Describe("Client", func() {
 				client.responses[23] = make(chan *http.Response)
 			})
 
-			It("reads a response", func() {
-				headerStream.dataToRead.Write([]byte{
-					0x0, 0x0, 0x11, 0x1, 0x5, 0x0, 0x0, 0x0, 23,
-					// Taken from https://http2.github.io/http2-spec/compression.html#request.examples.with.huffman.coding
-					0x82, 0x86, 0x84, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff,
-				})
+			It("reads header values from a response", func() {
+				// Taken from https://http2.github.io/http2-spec/compression.html#request.examples.with.huffman.coding
+				data := []byte{0x48, 0x03, 0x33, 0x30, 0x32, 0x58, 0x07, 0x70, 0x72, 0x69, 0x76, 0x61, 0x74, 0x65, 0x61, 0x1d, 0x4d, 0x6f, 0x6e, 0x2c, 0x20, 0x32, 0x31, 0x20, 0x4f, 0x63, 0x74, 0x20, 0x32, 0x30, 0x31, 0x33, 0x20, 0x32, 0x30, 0x3a, 0x31, 0x33, 0x3a, 0x32, 0x31, 0x20, 0x47, 0x4d, 0x54, 0x6e, 0x17, 0x68, 0x74, 0x74, 0x70, 0x73, 0x3a, 0x2f, 0x2f, 0x77, 0x77, 0x77, 0x2e, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x2e, 0x63, 0x6f, 0x6d}
+				headerStream.dataToRead.Write([]byte{0x0, 0x0, byte(len(data)), 0x1, 0x5, 0x0, 0x0, 0x0, 23})
+				headerStream.dataToRead.Write(data)
 				go client.handleHeaderStream()
 				var rsp *http.Response
 				Eventually(client.responses[23]).Should(Receive(&rsp))
 				Expect(rsp).ToNot(BeNil())
+				Expect(rsp.Proto).To(Equal("HTTP/2.0"))
+				Expect(rsp.ProtoMajor).To(BeEquivalentTo(2))
+				Expect(rsp.StatusCode).To(BeEquivalentTo(302))
+				Expect(rsp.Status).To(Equal("302 Found"))
+				Expect(rsp.Header).To(HaveKeyWithValue("Location", []string{"https://www.example.com"}))
+				Expect(rsp.Header).To(HaveKeyWithValue("Cache-Control", []string{"private"}))
 			})
 
 			It("errors if the H2 frame is not a HeadersFrame", func() {
