@@ -145,7 +145,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	if req.URL.Scheme != "https" {
 		return nil, errors.New("quic http2: unsupported scheme")
 	}
-	if authorityAddr("https", req.Host) != c.hostname {
+	if authorityAddr("https", hostnameFromRequest(req)) != c.hostname {
 		utils.Debugf("%s vs %s", req.Host, c.hostname)
 		return nil, errors.New("h2quic Client BUG: Do called for the wrong client")
 	}
