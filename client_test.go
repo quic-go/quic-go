@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"runtime"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
@@ -61,6 +62,7 @@ var _ = Describe("Client", func() {
 	})
 
 	It("properly closes the client", func(done Done) {
+		time.Sleep(10 * time.Millisecond) // Wait for old goroutines to finish
 		numGoRoutines := runtime.NumGoroutine()
 		startUDPConn()
 		var stoppedListening bool
