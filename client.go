@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -22,6 +23,7 @@ type Client struct {
 	connectionID      protocol.ConnectionID
 	version           protocol.VersionNumber
 	versionNegotiated bool
+	closed            uint32 // atomic bool
 
 	cryptoChangeCallback     CryptoChangeCallback
 	versionNegotiateCallback VersionNegotiateCallback
@@ -111,6 +113,11 @@ func (c *Client) OpenStream(id protocol.StreamID) (utils.Stream, error) {
 
 // Close closes the connection
 func (c *Client) Close(e error) error {
+	// Only close once
+	if !atomic.CompareAndSwapUint32(&c.closed, 0, 1) {
+		return nil
+	}
+
 	_ = c.session.Close(e)
 	return c.conn.Close()
 }

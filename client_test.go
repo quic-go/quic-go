@@ -77,9 +77,18 @@ var _ = Describe("Client", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Eventually(session.closed).Should(BeTrue())
 		Expect(session.closeReason).To(MatchError(testErr))
+		Expect(client.closed).To(Equal(uint32(1)))
 		Eventually(func() bool { return stoppedListening }).Should(BeTrue())
 		Eventually(runtime.NumGoroutine()).Should(Equal(numGoRoutines))
 		close(done)
+	})
+
+	It("only closes the client once", func() {
+		client.closed = 1
+		err := client.Close(errors.New("test error"))
+		Expect(err).ToNot(HaveOccurred())
+		Eventually(session.closed).Should(BeFalse())
+		Expect(session.closeReason).ToNot(HaveOccurred())
 	})
 
 	It("creates new sessions with the right parameters", func() {
