@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
@@ -16,6 +17,7 @@ import (
 )
 
 type requestWriter struct {
+	mutex        sync.Mutex
 	headerStream utils.Stream
 
 	henc *hpack.Encoder
@@ -36,6 +38,10 @@ func (w *requestWriter) WriteRequest(req *http.Request, dataStreamID protocol.St
 	// TODO: add support for trailers
 	// TODO: add support for gzip compression
 	// TODO: write continuation frames, if the header frame is too long
+
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
 	w.encodeHeaders(req, false, "", actualContentLength(req))
 	h2framer := http2.NewFramer(w.headerStream, nil)
 	return h2framer.WriteHeaders(http2.HeadersFrameParam{

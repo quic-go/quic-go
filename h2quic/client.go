@@ -158,9 +158,10 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	for c.encryptionLevel != protocol.EncryptionForwardSecure {
 		c.cryptoChangedCond.Wait()
 	}
-
 	hdrChan := make(chan *http.Response)
 	c.responses[dataStreamID] = hdrChan
+	c.mutex.Unlock()
+
 	dataStream, err := c.client.OpenStream(dataStreamID)
 	if err != nil {
 		return nil, err
@@ -169,7 +170,6 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	c.mutex.Unlock()
 
 	var res *http.Response
 	select {
