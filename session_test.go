@@ -424,10 +424,10 @@ var _ = Describe("Session", func() {
 
 		It("shuts down without error", func() {
 			session.Close(nil)
-			Expect(closeCallbackCalled).To(BeTrue())
 			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore))
 			Expect(conn.written).To(HaveLen(1))
 			Expect(conn.written[0][len(conn.written[0])-7:]).To(Equal([]byte{0x02, byte(qerr.PeerGoingAway), 0, 0, 0, 0, 0}))
+			Expect(closeCallbackCalled).To(BeTrue())
 		})
 
 		It("only closes once", func() {
@@ -442,8 +442,8 @@ var _ = Describe("Session", func() {
 			s, err := session.GetOrOpenStream(5)
 			Expect(err).NotTo(HaveOccurred())
 			session.Close(testErr)
-			Expect(closeCallbackCalled).To(BeTrue())
 			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore))
+			Expect(closeCallbackCalled).To(BeTrue())
 			n, err := s.Read([]byte{0})
 			Expect(n).To(BeZero())
 			Expect(err.Error()).To(ContainSubstring(testErr.Error()))
@@ -757,6 +757,7 @@ var _ = Describe("Session", func() {
 			session.lastNetworkActivityTime = time.Now().Add(-time.Hour)
 			session.run() // Would normally not return
 			Expect(conn.written[0]).To(ContainSubstring("No recent network activity."))
+			Expect(closeCallbackCalled).To(BeTrue())
 			close(done)
 		})
 
@@ -764,6 +765,7 @@ var _ = Describe("Session", func() {
 			session.sessionCreationTime = time.Now().Add(-time.Hour)
 			session.run() // Would normally not return
 			Expect(conn.written[0]).To(ContainSubstring("Crypto handshake did not complete in time."))
+			Expect(closeCallbackCalled).To(BeTrue())
 			close(done)
 		})
 
@@ -773,6 +775,7 @@ var _ = Describe("Session", func() {
 			session.packer.connectionParameters = session.connectionParameters
 			session.run() // Would normally not return
 			Expect(conn.written[0]).To(ContainSubstring("No recent network activity."))
+			Expect(closeCallbackCalled).To(BeTrue())
 			close(done)
 		})
 
@@ -784,6 +787,7 @@ var _ = Describe("Session", func() {
 			session.packer.connectionParameters = session.connectionParameters
 			session.run() // Would normally not return
 			Expect(conn.written[0]).To(ContainSubstring("No recent network activity."))
+			Expect(closeCallbackCalled).To(BeTrue())
 			close(done)
 		})
 	})
