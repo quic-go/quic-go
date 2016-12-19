@@ -162,12 +162,15 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	c.responses[dataStreamID] = hdrChan
 	c.mutex.Unlock()
 
+	// TODO: think about what to do with a TooManyOpenStreams error. Wait and retry?
 	dataStream, err := c.client.OpenStream(dataStreamID)
 	if err != nil {
+		c.Close(err)
 		return nil, err
 	}
 	err = c.requestWriter.WriteRequest(req, dataStreamID)
 	if err != nil {
+		c.Close(err)
 		return nil, err
 	}
 
@@ -181,6 +184,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 
 	// if an error occured on the header stream
 	if res == nil {
+		c.Close(c.headerErr)
 		return nil, c.headerErr
 	}
 
@@ -201,6 +205,11 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	// TODO: correctly handle gzipped responses
 
 	return res, nil
+}
+
+// Close closes the client
+func (c *Client) Close(e error) {
+	_ = c.client.Close(e)
 }
 
 // copied from net/transport.go

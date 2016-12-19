@@ -14,11 +14,12 @@ import (
 )
 
 type mockQuicClient struct {
-	streams map[protocol.StreamID]*mockStream
+	streams  map[protocol.StreamID]*mockStream
+	closeErr error
 }
 
-func (m *mockQuicClient) Close(error) error { panic("not implemented") }
-func (m *mockQuicClient) Listen() error     { panic("not implemented") }
+func (m *mockQuicClient) Close(e error) error { m.closeErr = e; return nil }
+func (m *mockQuicClient) Listen() error       { panic("not implemented") }
 func (m *mockQuicClient) OpenStream(id protocol.StreamID) (utils.Stream, error) {
 	_, ok := m.streams[id]
 	if ok {
@@ -119,6 +120,28 @@ var _ = Describe("Client", func() {
 			Expect(doRsp.ContentLength).To(BeEquivalentTo(-1))
 			Expect(doRsp.Request).To(Equal(req))
 			close(done)
+		})
+
+		It("closes the quic client when encountering an error on the header stream", func() {
+			req, err := http.NewRequest("https", "https://quic.clemente.io:1337/file1.dat", nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			headerStream.dataToRead.Write([]byte("invalid response"))
+			go client.handleHeaderStream()
+
+			var doRsp *http.Response
+			var doErr error
+			var doReturned bool
+			go func() {
+				doRsp, doErr = client.Do(req)
+				doReturned = true
+			}()
+
+			Eventually(func() bool { return doReturned }).Should(BeTrue())
+			Expect(client.headerErr).To(HaveOccurred())
+			Expect(doErr).To(MatchError(client.headerErr))
+			Expect(doRsp).To(BeNil())
+			Expect(client.client.(*mockQuicClient).closeErr).To(MatchError(client.headerErr))
 		})
 
 		Context("validating the address", func() {
