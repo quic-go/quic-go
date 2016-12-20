@@ -32,6 +32,7 @@ type receivedPacket struct {
 var (
 	errRstStreamOnInvalidStream   = errors.New("RST_STREAM received for unknown stream")
 	errWindowUpdateOnClosedStream = errors.New("WINDOW_UPDATE received for an already closed stream")
+	errSessionAlreadyClosed       = errors.New("Cannot close Session. It was already closed before.")
 )
 
 // StreamCallback gets a stream frame and returns a reply frame
@@ -153,7 +154,7 @@ func (s *Session) run() {
 	// Start the crypto stream handler
 	go func() {
 		if err := s.cryptoSetup.HandleCryptoStream(); err != nil {
-			s.close(err)
+			s.Close(err)
 		}
 	}()
 
@@ -416,26 +417,28 @@ func (s *Session) handleAckFrame(frame *frames.AckFrame) error {
 // It waits until the run loop has stopped before returning
 func (s *Session) Close(e error) error {
 	err := s.closeImpl(e, false)
-
-	if atomic.LoadUint32(&s.closed) == 1 {
-		return err
+	if err == errSessionAlreadyClosed {
+		return nil
 	}
 
-	select {
-	case <-s.runClosed:
-		return err
-	}
+	// wait for the run loop to finish
+	<-s.runClosed
+	return err
 }
 
 // close the connection. Use this when called from the run loop
 func (s *Session) close(e error) error {
-	return s.closeImpl(e, false)
+	err := s.closeImpl(e, false)
+	if err == errSessionAlreadyClosed {
+		return nil
+	}
+	return err
 }
 
 func (s *Session) closeImpl(e error, remoteClose bool) error {
 	// Only close once
 	if !atomic.CompareAndSwapUint32(&s.closed, 0, 1) {
-		return nil
+		return errSessionAlreadyClosed
 	}
 
 	if e == nil {
@@ -671,7 +674,7 @@ func (s *Session) tryQueueingUndecryptablePacket(p *receivedPacket) {
 	}
 	utils.Infof("Queueing packet 0x%x for later decryption", p.publicHeader.PacketNumber)
 	if len(s.undecryptablePackets)+1 >= protocol.MaxUndecryptablePackets {
-		s.Close(qerr.Error(qerr.DecryptionFailure, "too many undecryptable packets received"))
+		s.close(qerr.Error(qerr.DecryptionFailure, "too many undecryptable packets received"))
 	}
 	s.undecryptablePackets = append(s.undecryptablePackets, p)
 }
