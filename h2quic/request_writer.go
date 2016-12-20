@@ -34,7 +34,7 @@ func newRequestWriter(headerStream utils.Stream) *requestWriter {
 	return rw
 }
 
-func (w *requestWriter) WriteRequest(req *http.Request, dataStreamID protocol.StreamID) error {
+func (w *requestWriter) WriteRequest(req *http.Request, dataStreamID protocol.StreamID, requestGzip bool) error {
 	// TODO: add support for trailers
 	// TODO: add support for gzip compression
 	// TODO: write continuation frames, if the header frame is too long
@@ -42,7 +42,7 @@ func (w *requestWriter) WriteRequest(req *http.Request, dataStreamID protocol.St
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
-	w.encodeHeaders(req, false, "", actualContentLength(req))
+	w.encodeHeaders(req, requestGzip, "", actualContentLength(req))
 	h2framer := http2.NewFramer(w.headerStream, nil)
 	return h2framer.WriteHeaders(http2.HeadersFrameParam{
 		StreamID:      uint32(dataStreamID),

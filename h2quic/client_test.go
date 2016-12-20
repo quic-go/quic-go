@@ -1,9 +1,12 @@
 package h2quic
 
 import (
+	"bytes"
+	"compress/gzip"
 	"net/http"
 
 	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/hpack"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
@@ -88,19 +91,41 @@ var _ = Describe("Client", func() {
 	})
 
 	Context("Doing requests", func() {
+		var request *http.Request
+
+		getRequest := func(data []byte) *http2.MetaHeadersFrame {
+			r := bytes.NewReader(data)
+			decoder := hpack.NewDecoder(4096, func(hf hpack.HeaderField) {})
+			h2framer := http2.NewFramer(nil, r)
+			frame, err := h2framer.ReadFrame()
+			Expect(err).ToNot(HaveOccurred())
+			mhframe := &http2.MetaHeadersFrame{HeadersFrame: frame.(*http2.HeadersFrame)}
+			mhframe.Fields, err = decoder.DecodeFull(mhframe.HeadersFrame.HeaderBlockFragment())
+			Expect(err).ToNot(HaveOccurred())
+			return mhframe
+		}
+
+		getHeaderFields := func(f *http2.MetaHeadersFrame) map[string]string {
+			fields := make(map[string]string)
+			for _, hf := range f.Fields {
+				fields[hf.Name] = hf.Value
+			}
+			return fields
+		}
+
 		BeforeEach(func() {
+			var err error
 			client.encryptionLevel = protocol.EncryptionForwardSecure
+			request, err = http.NewRequest("https", "https://quic.clemente.io:1337/file1.dat", nil)
+			Expect(err).ToNot(HaveOccurred())
 		})
 
 		It("does a request", func(done Done) {
-			req, err := http.NewRequest("https", "https://quic.clemente.io:1337/file1.dat", nil)
-			Expect(err).ToNot(HaveOccurred())
-
 			var doRsp *http.Response
 			var doErr error
 			var doReturned bool
 			go func() {
-				doRsp, doErr = client.Do(req)
+				doRsp, doErr = client.Do(request)
 				doReturned = true
 			}()
 
@@ -118,14 +143,11 @@ var _ = Describe("Client", func() {
 			Expect(doRsp).To(Equal(rsp))
 			Expect(doRsp.Body).ToNot(BeNil())
 			Expect(doRsp.ContentLength).To(BeEquivalentTo(-1))
-			Expect(doRsp.Request).To(Equal(req))
+			Expect(doRsp.Request).To(Equal(request))
 			close(done)
 		})
 
 		It("closes the quic client when encountering an error on the header stream", func() {
-			req, err := http.NewRequest("https", "https://quic.clemente.io:1337/file1.dat", nil)
-			Expect(err).ToNot(HaveOccurred())
-
 			headerStream.dataToRead.Write([]byte("invalid response"))
 			go client.handleHeaderStream()
 
@@ -133,7 +155,7 @@ var _ = Describe("Client", func() {
 			var doErr error
 			var doReturned bool
 			go func() {
-				doRsp, doErr = client.Do(req)
+				doRsp, doErr = client.Do(request)
 				doReturned = true
 			}()
 
@@ -177,6 +199,81 @@ var _ = Describe("Client", func() {
 				Consistently(doReturned).Should(BeFalse())
 				Expect(doErr).ToNot(HaveOccurred())
 				close(done)
+			})
+		})
+
+		Context("gzip compression", func() {
+			var gzippedData []byte // a gzipped foobar
+			var response *http.Response
+
+			BeforeEach(func() {
+				var b bytes.Buffer
+				w := gzip.NewWriter(&b)
+				w.Write([]byte("foobar"))
+				w.Close()
+				gzippedData = b.Bytes()
+				response = &http.Response{
+					StatusCode: 200,
+					Header:     http.Header{"Content-Length": []string{"1000"}},
+				}
+			})
+
+			It("adds the gzip header to requests", func() {
+				var doRsp *http.Response
+				var doErr error
+				go func() { doRsp, doErr = client.Do(request) }()
+
+				Eventually(func() chan *http.Response { return client.responses[5] }).ShouldNot(BeNil())
+				qClient.streams[5].dataToRead.Write(gzippedData)
+				response.Header.Add("Content-Encoding", "gzip")
+				client.responses[5] <- response
+				Eventually(func() *http.Response { return doRsp }).ShouldNot(BeNil())
+				Expect(doErr).ToNot(HaveOccurred())
+				headers := getHeaderFields(getRequest(headerStream.dataWritten.Bytes()))
+				Expect(headers).To(HaveKeyWithValue("accept-encoding", "gzip"))
+				Expect(doRsp.ContentLength).To(BeEquivalentTo(-1))
+				Expect(doRsp.Header.Get("Content-Encoding")).To(BeEmpty())
+				Expect(doRsp.Header.Get("Content-Length")).To(BeEmpty())
+				data := make([]byte, 6)
+				doRsp.Body.Read(data)
+				Expect(data).To(Equal([]byte("foobar")))
+			})
+
+			It("only decompresses the response if the response contains the right content-encoding header", func() {
+				var doRsp *http.Response
+				var doErr error
+				go func() { doRsp, doErr = client.Do(request) }()
+
+				Eventually(func() chan *http.Response { return client.responses[5] }).ShouldNot(BeNil())
+				qClient.streams[5].dataToRead.Write([]byte("not gzipped"))
+				client.responses[5] <- response
+				Eventually(func() *http.Response { return doRsp }).ShouldNot(BeNil())
+				Expect(doErr).ToNot(HaveOccurred())
+				headers := getHeaderFields(getRequest(headerStream.dataWritten.Bytes()))
+				Expect(headers).To(HaveKeyWithValue("accept-encoding", "gzip"))
+				data := make([]byte, 11)
+				doRsp.Body.Read(data)
+				Expect(doRsp.ContentLength).ToNot(BeEquivalentTo(-1))
+				Expect(data).To(Equal([]byte("not gzipped")))
+			})
+
+			It("doesn't add the gzip header for requests that have the accept-enconding set", func() {
+				request.Header.Add("accept-encoding", "gzip")
+				var doRsp *http.Response
+				var doErr error
+				go func() { doRsp, doErr = client.Do(request) }()
+
+				Eventually(func() chan *http.Response { return client.responses[5] }).ShouldNot(BeNil())
+				qClient.streams[5].dataToRead.Write([]byte("gzipped data"))
+				client.responses[5] <- response
+				Eventually(func() *http.Response { return doRsp }).ShouldNot(BeNil())
+				Expect(doErr).ToNot(HaveOccurred())
+				headers := getHeaderFields(getRequest(headerStream.dataWritten.Bytes()))
+				Expect(headers).To(HaveKeyWithValue("accept-encoding", "gzip"))
+				data := make([]byte, 12)
+				doRsp.Body.Read(data)
+				Expect(doRsp.ContentLength).ToNot(BeEquivalentTo(-1))
+				Expect(data).To(Equal([]byte("gzipped data")))
 			})
 		})
 

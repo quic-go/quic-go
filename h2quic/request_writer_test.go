@@ -44,7 +44,7 @@ var _ = Describe("Request", func() {
 	It("writes a GET request", func() {
 		req, err := http.NewRequest("GET", "https://quic.clemente.io/index.html?foo=bar", nil)
 		Expect(err).ToNot(HaveOccurred())
-		rw.WriteRequest(req, 1337)
+		rw.WriteRequest(req, 1337, false)
 		headerFrame, headerFields := decode(headerStream.dataWritten.Bytes())
 		Expect(headerFrame.StreamID).To(Equal(uint32(1337)))
 		Expect(headerFrame.HasPriority()).To(BeTrue())
@@ -52,6 +52,15 @@ var _ = Describe("Request", func() {
 		Expect(headerFields).To(HaveKeyWithValue(":method", "GET"))
 		Expect(headerFields).To(HaveKeyWithValue(":path", "/index.html?foo=bar"))
 		Expect(headerFields).To(HaveKeyWithValue(":scheme", "https"))
+		Expect(headerFields).ToNot(HaveKey("accept-encoding"))
+	})
+
+	It("requests gzip compression, if requested", func() {
+		req, err := http.NewRequest("GET", "https://quic.clemente.io/index.html?foo=bar", nil)
+		Expect(err).ToNot(HaveOccurred())
+		rw.WriteRequest(req, 1337, true)
+		_, headerFields := decode(headerStream.dataWritten.Bytes())
+		Expect(headerFields).To(HaveKeyWithValue("accept-encoding", "gzip"))
 	})
 
 	It("writes a POST request", func() {
@@ -59,7 +68,7 @@ var _ = Describe("Request", func() {
 		form.Add("foo", "bar")
 		req, err := http.NewRequest("POST", "https://quic.clemente.io/upload.html", strings.NewReader(form.Encode()))
 		Expect(err).ToNot(HaveOccurred())
-		rw.WriteRequest(req, 5)
+		rw.WriteRequest(req, 5, false)
 		_, headerFields := decode(headerStream.dataWritten.Bytes())
 		Expect(headerFields).To(HaveKeyWithValue(":method", "POST"))
 		Expect(headerFields).To(HaveKey("content-length"))
@@ -81,7 +90,7 @@ var _ = Describe("Request", func() {
 		}
 		req.AddCookie(cookie1)
 		req.AddCookie(cookie2)
-		rw.WriteRequest(req, 11)
+		rw.WriteRequest(req, 11, false)
 		_, headerFields := decode(headerStream.dataWritten.Bytes())
 		Expect(headerFields).To(HaveKeyWithValue("cookie", "Cookie #1=Value #1; Cookie #2=Value #2"))
 	})

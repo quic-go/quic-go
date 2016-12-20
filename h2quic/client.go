@@ -168,7 +168,12 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		c.Close(err)
 		return nil, err
 	}
-	err = c.requestWriter.WriteRequest(req, dataStreamID)
+
+	var requestedGzip bool
+	if req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" && req.Method != "HEAD" {
+		requestedGzip = true
+	}
+	err = c.requestWriter.WriteRequest(req, dataStreamID, requestedGzip)
 	if err != nil {
 		c.Close(err)
 		return nil, err
@@ -199,6 +204,13 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		res.Body = noBody
 	} else {
 		res.Body = dataStream
+		if requestedGzip && res.Header.Get("Content-Encoding") == "gzip" {
+			res.Header.Del("Content-Encoding")
+			res.Header.Del("Content-Length")
+			res.ContentLength = -1
+			res.Body = &gzipReader{body: res.Body}
+			setUncompressed(res)
+		}
 	}
 
 	res.Request = req
