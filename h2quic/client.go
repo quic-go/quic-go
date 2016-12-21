@@ -29,6 +29,8 @@ type Client struct {
 	mutex             sync.RWMutex
 	cryptoChangedCond sync.Cond
 
+	t *QuicRoundTripper
+
 	hostname        string
 	encryptionLevel protocol.EncryptionLevel
 
@@ -44,8 +46,9 @@ type Client struct {
 var _ h2quicClient = &Client{}
 
 // NewClient creates a new client
-func NewClient(hostname string) (*Client, error) {
+func NewClient(t *QuicRoundTripper, hostname string) (*Client, error) {
 	c := &Client{
+		t:                   t,
 		hostname:            authorityAddr("https", hostname),
 		highestOpenedStream: 3,
 		responses:           make(map[protocol.StreamID]chan *http.Response),
@@ -170,7 +173,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	}
 
 	var requestedGzip bool
-	if req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" && req.Method != "HEAD" {
+	if !c.t.disableCompression() && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" && req.Method != "HEAD" {
 		requestedGzip = true
 	}
 	err = c.requestWriter.WriteRequest(req, dataStreamID, requestedGzip)

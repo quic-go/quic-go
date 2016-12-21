@@ -33,4 +33,10 @@ var _ = Describe("RoundTripper", func() {
 		Expect(rsp.Request).To(Equal(req1))
 		Expect(rt.clients).To(HaveLen(1))
 	})
+
+	It("disable compression", func() {
+		Expect(rt.disableCompression()).To(BeFalse())
+		rt.DisableCompression = true
+		Expect(rt.disableCompression()).To(BeTrue())
+	})
 })

@@ -43,15 +43,17 @@ var _ quicClient = &mockQuicClient{}
 
 var _ = Describe("Client", func() {
 	var (
-		client       *Client
-		qClient      *mockQuicClient
-		headerStream *mockStream
+		client        *Client
+		qClient       *mockQuicClient
+		headerStream  *mockStream
+		quicTransport *QuicRoundTripper
 	)
 
 	BeforeEach(func() {
 		var err error
+		quicTransport = &QuicRoundTripper{}
 		hostname := "quic.clemente.io:1337"
-		client, err = NewClient(hostname)
+		client, err = NewClient(quicTransport, hostname)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(client.hostname).To(Equal(hostname))
 		qClient = newMockQuicClient()
@@ -65,7 +67,7 @@ var _ = Describe("Client", func() {
 
 	It("adds the port to the hostname, if none is given", func() {
 		var err error
-		client, err = NewClient("quic.clemente.io")
+		client, err = NewClient(quicTransport, "quic.clemente.io")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(client.hostname).To(Equal("quic.clemente.io:443"))
 	})
@@ -183,7 +185,7 @@ var _ = Describe("Client", func() {
 
 			It("adds the port for request URLs without one", func(done Done) {
 				var err error
-				client, err = NewClient("quic.clemente.io")
+				client, err = NewClient(quicTransport, "quic.clemente.io")
 				Expect(err).ToNot(HaveOccurred())
 				req, err := http.NewRequest("https", "https://quic.clemente.io/foobar.html", nil)
 				Expect(err).ToNot(HaveOccurred())
@@ -237,6 +239,18 @@ var _ = Describe("Client", func() {
 				data := make([]byte, 6)
 				doRsp.Body.Read(data)
 				Expect(data).To(Equal([]byte("foobar")))
+			})
+
+			It("doesn't add gzip if the header disable it", func() {
+				quicTransport.DisableCompression = true
+				var doRsp *http.Response
+				var doErr error
+				go func() { doRsp, doErr = client.Do(request) }()
+
+				Eventually(func() chan *http.Response { return client.responses[5] }).ShouldNot(BeNil())
+				Expect(doErr).ToNot(HaveOccurred())
+				headers := getHeaderFields(getRequest(headerStream.dataWritten.Bytes()))
+				Expect(headers).ToNot(HaveKey("accept-encoding"))
 			})
 
 			It("only decompresses the response if the response contains the right content-encoding header", func() {

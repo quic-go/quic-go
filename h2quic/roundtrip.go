@@ -13,6 +13,16 @@ type h2quicClient interface {
 type QuicRoundTripper struct {
 	mutex sync.Mutex
 
+	// DisableCompression, if true, prevents the Transport from
+	// requesting compression with an "Accept-Encoding: gzip"
+	// request header when the Request contains no existing
+	// Accept-Encoding value. If the Transport requests gzip on
+	// its own and gets a gzipped response, it's transparently
+	// decoded in the Response.Body. However, if the user
+	// explicitly requested gzip it is not automatically
+	// uncompressed.
+	DisableCompression bool
+
 	clients map[string]h2quicClient
 }
 
@@ -39,11 +49,15 @@ func (r *QuicRoundTripper) getClient(hostname string) (h2quicClient, error) {
 	client, ok := r.clients[hostname]
 	if !ok {
 		var err error
-		client, err = NewClient(hostname)
+		client, err = NewClient(r, hostname)
 		if err != nil {
 			return nil, err
 		}
 		r.clients[hostname] = client
 	}
 	return client, nil
+}
+
+func (r *QuicRoundTripper) disableCompression() bool {
+	return r.DisableCompression
 }
