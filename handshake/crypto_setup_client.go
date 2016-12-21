@@ -226,6 +226,11 @@ func (h *cryptoSetupClient) handleSHLOMessage(cryptoData map[Tag][]byte) error {
 		return err
 	}
 
+	err = h.connectionParameters.SetFromMap(cryptoData)
+	if err != nil {
+		return qerr.InvalidCryptoMessageParameter
+	}
+
 	h.aeadChanged <- struct{}{}
 
 	return nil

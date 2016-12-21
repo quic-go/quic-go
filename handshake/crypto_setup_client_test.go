@@ -385,6 +385,19 @@ var _ = Describe("Crypto setup", func() {
 			Expect(cs.HandshakeComplete()).To(BeTrue())
 			Expect(cs.aeadChanged).To(Receive())
 		})
+
+		It("reads the connection paramaters", func() {
+			tagMap[TagICSL] = []byte{3, 0, 0, 0} // 3 seconds
+			err := cs.handleSHLOMessage(tagMap)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cs.connectionParameters.GetIdleConnectionStateLifetime()).To(Equal(3 * time.Second))
+		})
+
+		It("errors if it can't read a connection parameter", func() {
+			tagMap[TagICSL] = []byte{3, 0, 0} // 1 byte too short
+			err := cs.handleSHLOMessage(tagMap)
+			Expect(err).To(MatchError(qerr.InvalidCryptoMessageParameter))
+		})
 	})
 
 	Context("CHLO generation", func() {
