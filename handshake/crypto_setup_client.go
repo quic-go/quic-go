@@ -318,7 +318,7 @@ func (h *cryptoSetupClient) sendCHLO() error {
 }
 
 func (h *cryptoSetupClient) getTags() (map[Tag][]byte, error) {
-	tags, err := h.connectionParameters.GetCHLOMap()
+	tags, err := h.connectionParameters.GetHelloMap()
 	if err != nil {
 		return nil, err
 	}

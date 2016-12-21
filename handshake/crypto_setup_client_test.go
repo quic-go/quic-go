@@ -428,7 +428,7 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		It("adds the tags returned from the connectionParametersManager to the CHLO", func() {
-			cpmTags, err := cs.connectionParameters.GetCHLOMap()
+			cpmTags, err := cs.connectionParameters.GetHelloMap()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cpmTags).ToNot(BeEmpty())
 			tags, err := cs.getTags()

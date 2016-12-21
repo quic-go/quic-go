@@ -12,15 +12,23 @@ import (
 )
 
 // ConnectionParametersManager negotiates and stores the connection parameters
+// A ConnectionParametersManager can be used for a server as well as a client
+// For the server:
+// 1. call SetFromMap with the values received in the CHLO. This sets the corresponding values here, subject to negotiation
+// 2. call GetHelloMap to get the values to send in the SHLO
+// For the client:
+// 1. call GetHelloMap to get the values to send in a CHLO
+// 2. call SetFromMap with the values received in the SHLO
 type ConnectionParametersManager interface {
 	SetFromMap(map[Tag][]byte) error
-	GetSHLOMap() (map[Tag][]byte, error)
-	GetCHLOMap() (map[Tag][]byte, error)
+	GetHelloMap() (map[Tag][]byte, error)
 
 	GetSendStreamFlowControlWindow() protocol.ByteCount
 	GetSendConnectionFlowControlWindow() protocol.ByteCount
 	GetReceiveStreamFlowControlWindow() protocol.ByteCount
+	GetMaxReceiveStreamFlowControlWindow() protocol.ByteCount
 	GetReceiveConnectionFlowControlWindow() protocol.ByteCount
+	GetMaxReceiveConnectionFlowControlWindow() protocol.ByteCount
 	GetMaxOutgoingStreams() uint32
 	GetMaxIncomingStreams() uint32
 	GetIdleConnectionStateLifetime() time.Duration
@@ -58,17 +66,26 @@ var (
 
 // NewConnectionParamatersManager creates a new connection parameters manager
 func NewConnectionParamatersManager(pers protocol.Perspective, v protocol.VersionNumber) ConnectionParametersManager {
-	return &connectionParametersManager{
-		perspective:                            pers,
-		version:                                v,
-		idleConnectionStateLifetime:            protocol.DefaultIdleTimeout,
-		sendStreamFlowControlWindow:            protocol.InitialStreamFlowControlWindow,     // can only be changed by the client
-		sendConnectionFlowControlWindow:        protocol.InitialConnectionFlowControlWindow, // can only be changed by the client
-		receiveStreamFlowControlWindow:         protocol.ReceiveStreamFlowControlWindow,
-		receiveConnectionFlowControlWindow:     protocol.ReceiveConnectionFlowControlWindow,
-		maxStreamsPerConnection:                protocol.MaxStreamsPerConnection, // this is the value negotiated based on what the client sent
-		maxIncomingDynamicStreamsPerConnection: protocol.MaxStreamsPerConnection, // "incoming" seen from the client's perspective
+	h := &connectionParametersManager{
+		perspective:                        pers,
+		version:                            v,
+		sendStreamFlowControlWindow:        protocol.InitialStreamFlowControlWindow,     // can only be changed by the client
+		sendConnectionFlowControlWindow:    protocol.InitialConnectionFlowControlWindow, // can only be changed by the client
+		receiveStreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
+		receiveConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
 	}
+
+	if h.perspective == protocol.PerspectiveServer {
+		h.idleConnectionStateLifetime = protocol.DefaultIdleTimeout
+		h.maxStreamsPerConnection = protocol.MaxStreamsPerConnection                // this is the value negotiated based on what the client sent
+		h.maxIncomingDynamicStreamsPerConnection = protocol.MaxStreamsPerConnection // "incoming" seen from the client's perspective
+	} else {
+		h.idleConnectionStateLifetime = protocol.MaxIdleTimeoutClient
+		h.maxStreamsPerConnection = protocol.MaxStreamsPerConnection                // this is the value negotiated based on what the client sent
+		h.maxIncomingDynamicStreamsPerConnection = protocol.MaxStreamsPerConnection // "incoming" seen from the server's perspective
+	}
+
+	return h
 }
 
 // SetFromMap reads all params
@@ -76,7 +93,7 @@ func (h *connectionParametersManager) SetFromMap(params map[Tag][]byte) error {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
-	if value, ok := params[TagTCID]; ok {
+	if value, ok := params[TagTCID]; ok && h.perspective == protocol.PerspectiveServer {
 		clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
 		if err != nil {
 			return ErrMalformedTag
@@ -144,16 +161,14 @@ func (h *connectionParametersManager) negotiateMaxIncomingDynamicStreamsPerConne
 }
 
 func (h *connectionParametersManager) negotiateIdleConnectionStateLifetime(clientValue time.Duration) time.Duration {
-	return utils.MinDuration(clientValue, protocol.MaxIdleTimeout)
+	if h.perspective == protocol.PerspectiveServer {
+		return utils.MinDuration(clientValue, protocol.MaxIdleTimeoutServer)
+	}
+	return utils.MinDuration(clientValue, protocol.MaxIdleTimeoutClient)
 }
 
-// GetSHLOMap gets all parameters needed for the SHLO
-// if the client sent us parameters earlier, these are the negotiated values
-func (h *connectionParametersManager) GetSHLOMap() (map[Tag][]byte, error) {
-	if h.perspective != protocol.PerspectiveServer {
-		return nil, errors.New("ConnectionParametersManager BUG: GetSHLOMap should only be called for a server")
-	}
-
+// GetHelloMap gets all parameters needed for the Hello message
+func (h *connectionParametersManager) GetHelloMap() (map[Tag][]byte, error) {
 	sfcw := bytes.NewBuffer([]byte{})
 	utils.WriteUint32(sfcw, uint32(h.GetReceiveStreamFlowControlWindow()))
 	cfcw := bytes.NewBuffer([]byte{})
@@ -162,38 +177,6 @@ func (h *connectionParametersManager) GetSHLOMap() (map[Tag][]byte, error) {
 	utils.WriteUint32(mspc, h.maxStreamsPerConnection)
 	icsl := bytes.NewBuffer([]byte{})
 	utils.WriteUint32(icsl, uint32(h.GetIdleConnectionStateLifetime()/time.Second))
-
-	tags := map[Tag][]byte{
-		TagICSL: icsl.Bytes(),
-		TagMSPC: mspc.Bytes(),
-		TagCFCW: cfcw.Bytes(),
-		TagSFCW: sfcw.Bytes(),
-	}
-
-	if h.version > protocol.Version34 {
-		mids := bytes.NewBuffer([]byte{})
-		utils.WriteUint32(mids, protocol.MaxIncomingDynamicStreamsPerConnection)
-		tags[TagMIDS] = mids.Bytes()
-	}
-
-	return tags, nil
-}
-
-// GetCHLOMap gets all parameters needed for the CHLO
-// these are the values the client is suggesting to the server. The negotiation is done by the server
-func (h *connectionParametersManager) GetCHLOMap() (map[Tag][]byte, error) {
-	if h.perspective != protocol.PerspectiveClient {
-		return nil, errors.New("ConnectionParametersManager BUG: GetCHLOMap should only be called for a client")
-	}
-
-	sfcw := bytes.NewBuffer([]byte{})
-	utils.WriteUint32(sfcw, uint32(protocol.InitialStreamFlowControlWindow))
-	cfcw := bytes.NewBuffer([]byte{})
-	utils.WriteUint32(cfcw, uint32(protocol.InitialConnectionFlowControlWindow))
-	mspc := bytes.NewBuffer([]byte{})
-	utils.WriteUint32(mspc, protocol.MaxStreamsPerConnection)
-	icsl := bytes.NewBuffer([]byte{})
-	utils.WriteUint32(icsl, uint32(protocol.DefaultIdleTimeout/time.Second))
 
 	tags := map[Tag][]byte{
 		TagICSL: icsl.Bytes(),
@@ -232,11 +215,27 @@ func (h *connectionParametersManager) GetReceiveStreamFlowControlWindow() protoc
 	return h.receiveStreamFlowControlWindow
 }
 
+// GetMaxReceiveStreamFlowControlWindow gets the maximum size of the stream-level flow control window for sending data
+func (h *connectionParametersManager) GetMaxReceiveStreamFlowControlWindow() protocol.ByteCount {
+	if h.perspective == protocol.PerspectiveServer {
+		return protocol.MaxReceiveStreamFlowControlWindowServer
+	}
+	return protocol.MaxReceiveStreamFlowControlWindowClient
+}
+
 // GetReceiveConnectionFlowControlWindow gets the size of the stream-level flow control window for receiving data
 func (h *connectionParametersManager) GetReceiveConnectionFlowControlWindow() protocol.ByteCount {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	return h.receiveConnectionFlowControlWindow
+}
+
+// GetMaxReceiveConnectionFlowControlWindow gets the maximum size of the stream-level flow control window for sending data
+func (h *connectionParametersManager) GetMaxReceiveConnectionFlowControlWindow() protocol.ByteCount {
+	if h.perspective == protocol.PerspectiveServer {
+		return protocol.MaxReceiveConnectionFlowControlWindowServer
+	}
+	return protocol.MaxReceiveConnectionFlowControlWindowClient
 }
 
 // GetMaxOutgoingStreams gets the maximum number of outgoing streams per connection
@@ -274,6 +273,10 @@ func (h *connectionParametersManager) GetIdleConnectionStateLifetime() time.Dura
 
 // TruncateConnectionID determines if the client requests truncated ConnectionIDs
 func (h *connectionParametersManager) TruncateConnectionID() bool {
+	if h.perspective == protocol.PerspectiveClient {
+		return false
+	}
+
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	return h.truncateConnectionID

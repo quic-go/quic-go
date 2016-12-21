@@ -21,10 +21,7 @@ type mockConnectionParametersManager struct {
 func (m *mockConnectionParametersManager) SetFromMap(map[handshake.Tag][]byte) error {
 	panic("not implemented")
 }
-func (m *mockConnectionParametersManager) GetSHLOMap() (map[handshake.Tag][]byte, error) {
-	panic("not implemented")
-}
-func (m *mockConnectionParametersManager) GetCHLOMap() (map[handshake.Tag][]byte, error) {
+func (m *mockConnectionParametersManager) GetHelloMap() (map[handshake.Tag][]byte, error) {
 	panic("not implemented")
 }
 func (m *mockConnectionParametersManager) GetSendStreamFlowControlWindow() protocol.ByteCount {
@@ -36,7 +33,13 @@ func (m *mockConnectionParametersManager) GetSendConnectionFlowControlWindow() p
 func (m *mockConnectionParametersManager) GetReceiveStreamFlowControlWindow() protocol.ByteCount {
 	return math.MaxUint64
 }
+func (m *mockConnectionParametersManager) GetMaxReceiveStreamFlowControlWindow() protocol.ByteCount {
+	return math.MaxUint64
+}
 func (m *mockConnectionParametersManager) GetReceiveConnectionFlowControlWindow() protocol.ByteCount {
+	return math.MaxUint64
+}
+func (m *mockConnectionParametersManager) GetMaxReceiveConnectionFlowControlWindow() protocol.ByteCount {
 	return math.MaxUint64
 }
 func (m *mockConnectionParametersManager) GetMaxOutgoingStreams() uint32 { return m.maxOutgoingStreams }

@@ -11,19 +11,18 @@ import (
 )
 
 type mockConnectionParametersManager struct {
-	sendStreamFlowControlWindow        protocol.ByteCount
-	sendConnectionFlowControlWindow    protocol.ByteCount
-	receiveStreamFlowControlWindow     protocol.ByteCount
-	receiveConnectionFlowControlWindow protocol.ByteCount
+	sendStreamFlowControlWindow           protocol.ByteCount
+	sendConnectionFlowControlWindow       protocol.ByteCount
+	receiveStreamFlowControlWindow        protocol.ByteCount
+	maxReceiveStreamFlowControlWindow     protocol.ByteCount
+	receiveConnectionFlowControlWindow    protocol.ByteCount
+	maxReceiveConnectionFlowControlWindow protocol.ByteCount
 }
 
 func (m *mockConnectionParametersManager) SetFromMap(map[handshake.Tag][]byte) error {
 	panic("not implemented")
 }
-func (m *mockConnectionParametersManager) GetSHLOMap() (map[handshake.Tag][]byte, error) {
-	panic("not implemented")
-}
-func (m *mockConnectionParametersManager) GetCHLOMap() (map[handshake.Tag][]byte, error) {
+func (m *mockConnectionParametersManager) GetHelloMap() (map[handshake.Tag][]byte, error) {
 	panic("not implemented")
 }
 func (m *mockConnectionParametersManager) GetSendStreamFlowControlWindow() protocol.ByteCount {
@@ -35,8 +34,14 @@ func (m *mockConnectionParametersManager) GetSendConnectionFlowControlWindow() p
 func (m *mockConnectionParametersManager) GetReceiveStreamFlowControlWindow() protocol.ByteCount {
 	return m.receiveStreamFlowControlWindow
 }
+func (m *mockConnectionParametersManager) GetMaxReceiveStreamFlowControlWindow() protocol.ByteCount {
+	return m.maxReceiveStreamFlowControlWindow
+}
 func (m *mockConnectionParametersManager) GetReceiveConnectionFlowControlWindow() protocol.ByteCount {
 	return m.receiveConnectionFlowControlWindow
+}
+func (m *mockConnectionParametersManager) GetMaxReceiveConnectionFlowControlWindow() protocol.ByteCount {
+	return m.maxReceiveConnectionFlowControlWindow
 }
 func (m *mockConnectionParametersManager) GetMaxOutgoingStreams() uint32 { panic("not implemented") }
 func (m *mockConnectionParametersManager) GetMaxIncomingStreams() uint32 { panic("not implemented") }
@@ -61,10 +66,12 @@ var _ = Describe("Flow controller", func() {
 
 		BeforeEach(func() {
 			cpm = &mockConnectionParametersManager{
-				sendStreamFlowControlWindow:        1000,
-				receiveStreamFlowControlWindow:     2000,
-				sendConnectionFlowControlWindow:    3000,
-				receiveConnectionFlowControlWindow: 4000,
+				sendStreamFlowControlWindow:           1000,
+				receiveStreamFlowControlWindow:        2000,
+				sendConnectionFlowControlWindow:       3000,
+				receiveConnectionFlowControlWindow:    4000,
+				maxReceiveStreamFlowControlWindow:     8000,
+				maxReceiveConnectionFlowControlWindow: 9000,
 			}
 			rttStats = &congestion.RTTStats{}
 		})
@@ -73,14 +80,14 @@ var _ = Describe("Flow controller", func() {
 			fc := newFlowController(5, cpm, rttStats)
 			Expect(fc.streamID).To(Equal(protocol.StreamID(5)))
 			Expect(fc.receiveFlowControlWindow).To(Equal(protocol.ByteCount(2000)))
-			Expect(fc.maxReceiveFlowControlWindowIncrement).To(Equal(protocol.MaxReceiveStreamFlowControlWindow))
+			Expect(fc.maxReceiveFlowControlWindowIncrement).To(Equal(cpm.GetMaxReceiveStreamFlowControlWindow()))
 		})
 
 		It("reads the stream send and receive windows when acting as connection-level flow controller", func() {
 			fc := newFlowController(0, cpm, rttStats)
 			Expect(fc.streamID).To(Equal(protocol.StreamID(0)))
 			Expect(fc.receiveFlowControlWindow).To(Equal(protocol.ByteCount(4000)))
-			Expect(fc.maxReceiveFlowControlWindowIncrement).To(Equal(protocol.MaxReceiveConnectionFlowControlWindow))
+			Expect(fc.maxReceiveFlowControlWindowIncrement).To(Equal(cpm.GetMaxReceiveConnectionFlowControlWindow()))
 		})
 
 		It("does not set the stream flow control windows for sending", func() {
