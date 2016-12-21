@@ -76,52 +76,54 @@ func (h *connectionParametersManager) SetFromMap(params map[Tag][]byte) error {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
-	for key, value := range params {
-		switch key {
-		case TagTCID:
-			clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
-			if err != nil {
-				return ErrMalformedTag
-			}
-			h.truncateConnectionID = (clientValue == 0)
-		case TagMSPC:
-			clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
-			if err != nil {
-				return ErrMalformedTag
-			}
-			h.maxStreamsPerConnection = h.negotiateMaxStreamsPerConnection(clientValue)
-		case TagMIDS:
-			clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
-			if err != nil {
-				return ErrMalformedTag
-			}
-			h.maxIncomingDynamicStreamsPerConnection = h.negotiateMaxIncomingDynamicStreamsPerConnection(clientValue)
-			h.hasReceivedMaxIncomingDynamicStreams = true
-		case TagICSL:
-			clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
-			if err != nil {
-				return ErrMalformedTag
-			}
-			h.idleConnectionStateLifetime = h.negotiateIdleConnectionStateLifetime(time.Duration(clientValue) * time.Second)
-		case TagSFCW:
-			if h.flowControlNegotiated {
-				return ErrFlowControlRenegotiationNotSupported
-			}
-			sendStreamFlowControlWindow, err := utils.ReadUint32(bytes.NewBuffer(value))
-			if err != nil {
-				return ErrMalformedTag
-			}
-			h.sendStreamFlowControlWindow = protocol.ByteCount(sendStreamFlowControlWindow)
-		case TagCFCW:
-			if h.flowControlNegotiated {
-				return ErrFlowControlRenegotiationNotSupported
-			}
-			sendConnectionFlowControlWindow, err := utils.ReadUint32(bytes.NewBuffer(value))
-			if err != nil {
-				return ErrMalformedTag
-			}
-			h.sendConnectionFlowControlWindow = protocol.ByteCount(sendConnectionFlowControlWindow)
+	if value, ok := params[TagTCID]; ok {
+		clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
+		if err != nil {
+			return ErrMalformedTag
 		}
+		h.truncateConnectionID = (clientValue == 0)
+	}
+	if value, ok := params[TagMSPC]; ok {
+		clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
+		if err != nil {
+			return ErrMalformedTag
+		}
+		h.maxStreamsPerConnection = h.negotiateMaxStreamsPerConnection(clientValue)
+	}
+	if value, ok := params[TagMIDS]; ok {
+		clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
+		if err != nil {
+			return ErrMalformedTag
+		}
+		h.maxIncomingDynamicStreamsPerConnection = h.negotiateMaxIncomingDynamicStreamsPerConnection(clientValue)
+		h.hasReceivedMaxIncomingDynamicStreams = true
+	}
+	if value, ok := params[TagICSL]; ok {
+		clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
+		if err != nil {
+			return ErrMalformedTag
+		}
+		h.idleConnectionStateLifetime = h.negotiateIdleConnectionStateLifetime(time.Duration(clientValue) * time.Second)
+	}
+	if value, ok := params[TagSFCW]; ok {
+		if h.flowControlNegotiated {
+			return ErrFlowControlRenegotiationNotSupported
+		}
+		sendStreamFlowControlWindow, err := utils.ReadUint32(bytes.NewBuffer(value))
+		if err != nil {
+			return ErrMalformedTag
+		}
+		h.sendStreamFlowControlWindow = protocol.ByteCount(sendStreamFlowControlWindow)
+	}
+	if value, ok := params[TagCFCW]; ok {
+		if h.flowControlNegotiated {
+			return ErrFlowControlRenegotiationNotSupported
+		}
+		sendConnectionFlowControlWindow, err := utils.ReadUint32(bytes.NewBuffer(value))
+		if err != nil {
+			return ErrMalformedTag
+		}
+		h.sendConnectionFlowControlWindow = protocol.ByteCount(sendConnectionFlowControlWindow)
 	}
 
 	_, containsSFCW := params[TagSFCW]
