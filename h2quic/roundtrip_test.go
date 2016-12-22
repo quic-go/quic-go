@@ -105,5 +105,13 @@ var _ = Describe("RoundTripper", func() {
 			_, err := rt.RoundTrip(req1)
 			Expect(err.Error()).To(ContainSubstring("quic: invalid http header field value"))
 		})
+
+		It("rejects requests with an invalid request method", func() {
+			req1.Method = "foobär"
+			req1.Body = &mockBody{}
+			_, err := rt.RoundTrip(req1)
+			Expect(err).To(MatchError("quic: invalid method \"foobär\""))
+			Expect(req1.Body.(*mockBody).closed).To(BeTrue())
+		})
 	})
 })

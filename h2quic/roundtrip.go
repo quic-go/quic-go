@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 
 	"golang.org/x/net/lex/httplex"
@@ -63,6 +64,11 @@ func (r *QuicRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 		return nil, fmt.Errorf("quic: unsupported protocol scheme: %s", req.URL.Scheme)
 	}
 
+	if req.Method != "" && !validMethod(req.Method) {
+		closeRequestBody(req)
+		return nil, fmt.Errorf("quic: invalid method %q", req.Method)
+	}
+
 	hostname := authorityAddr("https", hostnameFromRequest(req))
 	client, err := r.getClient(hostname)
 	if err != nil {
@@ -99,4 +105,26 @@ func closeRequestBody(req *http.Request) {
 	if req.Body != nil {
 		req.Body.Close()
 	}
+}
+
+func validMethod(method string) bool {
+	/*
+				     Method         = "OPTIONS"                ; Section 9.2
+		   		                    | "GET"                    ; Section 9.3
+		   		                    | "HEAD"                   ; Section 9.4
+		   		                    | "POST"                   ; Section 9.5
+		   		                    | "PUT"                    ; Section 9.6
+		   		                    | "DELETE"                 ; Section 9.7
+		   		                    | "TRACE"                  ; Section 9.8
+		   		                    | "CONNECT"                ; Section 9.9
+		   		                    | extension-method
+		   		   extension-method = token
+		   		     token          = 1*<any CHAR except CTLs or separators>
+	*/
+	return len(method) > 0 && strings.IndexFunc(method, isNotToken) == -1
+}
+
+// copied from net/http/http.go
+func isNotToken(r rune) bool {
+	return !httplex.IsTokenRune(r)
 }
