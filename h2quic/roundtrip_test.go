@@ -39,34 +39,6 @@ var _ = Describe("RoundTripper", func() {
 		Expect(err).ToNot(HaveOccurred())
 	})
 
-	It("rejects requests without a URL", func() {
-		req1.URL = nil
-		_, err := rt.RoundTrip(req1)
-		Expect(err).To(MatchError("quic: nil Request.URL"))
-	})
-
-	It("rejects request without a URL Host", func() {
-		req1.URL.Host = ""
-		req1.Body = &mockBody{}
-		_, err := rt.RoundTrip(req1)
-		Expect(err).To(MatchError("quic: no Host in request URL"))
-		Expect(req1.Body.(*mockBody).closed).To(BeTrue())
-	})
-
-	It("closes the body for rejected requests", func() {
-		req1.URL = nil
-		req1.Body = &mockBody{}
-		_, err := rt.RoundTrip(req1)
-		Expect(err).To(MatchError("quic: nil Request.URL"))
-		Expect(req1.Body.(*mockBody).closed).To(BeTrue())
-	})
-
-	It("rejects requests without a header", func() {
-		req1.Header = nil
-		_, err := rt.RoundTrip(req1)
-		Expect(err).To(MatchError("quic: nil Request.Header"))
-	})
-
 	It("reuses existing clients", func() {
 		rt.clients = make(map[string]h2quicClient)
 		rt.clients["www.example.org:443"] = &mockQuicRoundTripper{}
@@ -79,5 +51,59 @@ var _ = Describe("RoundTripper", func() {
 		Expect(rt.disableCompression()).To(BeFalse())
 		rt.DisableCompression = true
 		Expect(rt.disableCompression()).To(BeTrue())
+	})
+
+	Context("validating request", func() {
+		It("rejects plain HTTP requests", func() {
+			req, err := http.NewRequest("GET", "http://www.example.org/", nil)
+			req.Body = &mockBody{}
+			Expect(err).ToNot(HaveOccurred())
+			_, err = rt.RoundTrip(req)
+			Expect(err).To(MatchError("quic: unsupported protocol scheme: http"))
+			Expect(req.Body.(*mockBody).closed).To(BeTrue())
+		})
+
+		It("rejects requests without a URL", func() {
+			req1.URL = nil
+			req1.Body = &mockBody{}
+			_, err := rt.RoundTrip(req1)
+			Expect(err).To(MatchError("quic: nil Request.URL"))
+			Expect(req1.Body.(*mockBody).closed).To(BeTrue())
+		})
+
+		It("rejects request without a URL Host", func() {
+			req1.URL.Host = ""
+			req1.Body = &mockBody{}
+			_, err := rt.RoundTrip(req1)
+			Expect(err).To(MatchError("quic: no Host in request URL"))
+			Expect(req1.Body.(*mockBody).closed).To(BeTrue())
+		})
+
+		It("doesn't try to close the body if the request doesn't have one", func() {
+			req1.URL = nil
+			Expect(req1.Body).To(BeNil())
+			_, err := rt.RoundTrip(req1)
+			Expect(err).To(MatchError("quic: nil Request.URL"))
+		})
+
+		It("rejects requests without a header", func() {
+			req1.Header = nil
+			req1.Body = &mockBody{}
+			_, err := rt.RoundTrip(req1)
+			Expect(err).To(MatchError("quic: nil Request.Header"))
+			Expect(req1.Body.(*mockBody).closed).To(BeTrue())
+		})
+
+		It("rejects requests with invalid header name fields", func() {
+			req1.Header.Add("foobär", "value")
+			_, err := rt.RoundTrip(req1)
+			Expect(err).To(MatchError("quic: invalid http header field name \"foobär\""))
+		})
+
+		It("rejects requests with invalid header name values", func() {
+			req1.Header.Add("foo", string([]byte{0x7}))
+			_, err := rt.RoundTrip(req1)
+			Expect(err.Error()).To(ContainSubstring("quic: invalid http header field value"))
+		})
 	})
 })

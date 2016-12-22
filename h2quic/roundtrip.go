@@ -2,8 +2,11 @@ package h2quic
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"sync"
+
+	"golang.org/x/net/lex/httplex"
 )
 
 type h2quicClient interface {
@@ -42,6 +45,22 @@ func (r *QuicRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 	if req.Header == nil {
 		closeRequestBody(req)
 		return nil, errors.New("quic: nil Request.Header")
+	}
+
+	if req.URL.Scheme == "https" {
+		for k, vv := range req.Header {
+			if !httplex.ValidHeaderFieldName(k) {
+				return nil, fmt.Errorf("quic: invalid http header field name %q", k)
+			}
+			for _, v := range vv {
+				if !httplex.ValidHeaderFieldValue(v) {
+					return nil, fmt.Errorf("quic: invalid http header field value %q for key %v", v, k)
+				}
+			}
+		}
+	} else {
+		closeRequestBody(req)
+		return nil, fmt.Errorf("quic: unsupported protocol scheme: %s", req.URL.Scheme)
 	}
 
 	hostname := authorityAddr("https", hostnameFromRequest(req))
