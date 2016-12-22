@@ -359,6 +359,63 @@ var _ = Describe("Crypto setup", func() {
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "client hello missing version tag")))
 		})
 
+		It("rejects CHLOs with a version tag that has the wrong length", func() {
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagSNI:  []byte("quic.clemente.io"),
+				TagPUBS: []byte("pubs"),
+				TagNONC: nonce32,
+				TagSTK:  validSTK,
+				TagKEXS: kexs,
+				TagAEAD: aead,
+				TagVER:  []byte{0x13, 0x37}, // should be 4 bytes
+			})
+			err := cs.HandleCryptoStream()
+			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "incorrect version tag")))
+		})
+
+		It("detects version downgrade attacks", func() {
+			highestSupportedVersion := protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
+			lowestSupportedVersion := protocol.SupportedVersions[0]
+			Expect(highestSupportedVersion).ToNot(Equal(lowestSupportedVersion))
+			cs.version = highestSupportedVersion
+			b := make([]byte, 4)
+			binary.LittleEndian.PutUint32(b, protocol.VersionNumberToTag(lowestSupportedVersion))
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagSNI:  []byte("quic.clemente.io"),
+				TagPUBS: []byte("pubs"),
+				TagNONC: nonce32,
+				TagSTK:  validSTK,
+				TagKEXS: kexs,
+				TagAEAD: aead,
+				TagVER:  b,
+			})
+			err := cs.HandleCryptoStream()
+			Expect(err).To(MatchError(qerr.Error(qerr.VersionNegotiationMismatch, "Downgrade attack detected")))
+		})
+
+		It("accepts a non-matching version tag in the CHLO, if it is an unsupported version", func() {
+			supportedVersion := protocol.SupportedVersions[0]
+			unsupportedVersion := supportedVersion + 1000
+			Expect(protocol.IsSupportedVersion(unsupportedVersion)).To(BeFalse())
+			cs.version = supportedVersion
+			b := make([]byte, 4)
+			binary.LittleEndian.PutUint32(b, protocol.VersionNumberToTag(unsupportedVersion))
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagSNI:  []byte("quic.clemente.io"),
+				TagPUBS: []byte("pubs"),
+				TagNONC: nonce32,
+				TagSTK:  validSTK,
+				TagKEXS: kexs,
+				TagAEAD: aead,
+				TagVER:  b,
+			})
+			err := cs.HandleCryptoStream()
+			Expect(err).ToNot(HaveOccurred())
+		})
+
 		It("errors if the AEAD tag is missing", func() {
 			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
 				TagSCID: scfg.ID,
