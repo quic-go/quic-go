@@ -1,6 +1,7 @@
 package h2quic
 
 import (
+	"errors"
 	"net/http"
 	"sync"
 )
@@ -30,6 +31,19 @@ var _ http.RoundTripper = &QuicRoundTripper{}
 
 // RoundTrip does a round trip
 func (r *QuicRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.URL == nil {
+		closeRequestBody(req)
+		return nil, errors.New("quic: nil Request.URL")
+	}
+	if req.URL.Host == "" {
+		closeRequestBody(req)
+		return nil, errors.New("quic: no Host in request URL")
+	}
+	if req.Header == nil {
+		closeRequestBody(req)
+		return nil, errors.New("quic: nil Request.Header")
+	}
+
 	hostname := authorityAddr("https", hostnameFromRequest(req))
 	client, err := r.getClient(hostname)
 	if err != nil {
@@ -60,4 +74,10 @@ func (r *QuicRoundTripper) getClient(hostname string) (h2quicClient, error) {
 
 func (r *QuicRoundTripper) disableCompression() bool {
 	return r.DisableCompression
+}
+
+func closeRequestBody(req *http.Request) {
+	if req.Body != nil {
+		req.Body.Close()
+	}
 }

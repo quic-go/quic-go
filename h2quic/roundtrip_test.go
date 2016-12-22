@@ -13,6 +13,19 @@ func (m *mockQuicRoundTripper) Do(req *http.Request) (*http.Response, error) {
 	return &http.Response{Request: req}, nil
 }
 
+type mockBody struct {
+	closed bool
+}
+
+func (m *mockBody) Read([]byte) (int, error) {
+	panic("not implemented")
+}
+
+func (m *mockBody) Close() error {
+	m.closed = true
+	return nil
+}
+
 var _ = Describe("RoundTripper", func() {
 	var (
 		rt   *QuicRoundTripper
@@ -24,6 +37,34 @@ var _ = Describe("RoundTripper", func() {
 		var err error
 		req1, err = http.NewRequest("GET", "https://www.example.org/file1.html", nil)
 		Expect(err).ToNot(HaveOccurred())
+	})
+
+	It("rejects requests without a URL", func() {
+		req1.URL = nil
+		_, err := rt.RoundTrip(req1)
+		Expect(err).To(MatchError("quic: nil Request.URL"))
+	})
+
+	It("rejects request without a URL Host", func() {
+		req1.URL.Host = ""
+		req1.Body = &mockBody{}
+		_, err := rt.RoundTrip(req1)
+		Expect(err).To(MatchError("quic: no Host in request URL"))
+		Expect(req1.Body.(*mockBody).closed).To(BeTrue())
+	})
+
+	It("closes the body for rejected requests", func() {
+		req1.URL = nil
+		req1.Body = &mockBody{}
+		_, err := rt.RoundTrip(req1)
+		Expect(err).To(MatchError("quic: nil Request.URL"))
+		Expect(req1.Body.(*mockBody).closed).To(BeTrue())
+	})
+
+	It("rejects requests without a header", func() {
+		req1.Header = nil
+		_, err := rt.RoundTrip(req1)
+		Expect(err).To(MatchError("quic: nil Request.Header"))
 	})
 
 	It("reuses existing clients", func() {
