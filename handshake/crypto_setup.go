@@ -3,6 +3,7 @@ package handshake
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/binary"
 	"io"
 	"net"
 	"sync"
@@ -100,6 +101,22 @@ func (h *CryptoSetup) handleMessage(chloData []byte, cryptoData map[Tag][]byte) 
 	sni := string(sniSlice)
 	if sni == "" {
 		return false, qerr.Error(qerr.CryptoMessageParameterNotFound, "SNI required")
+	}
+
+	// prevent version downgrade attacks
+	// see https://groups.google.com/a/chromium.org/forum/#!topic/proto-quic/N-de9j63tCk for a discussion and examples
+	verSlice, ok := cryptoData[TagVER]
+	if !ok {
+		return false, qerr.Error(qerr.InvalidCryptoMessageParameter, "client hello missing version tag")
+	}
+	if len(verSlice) != 4 {
+		return false, qerr.Error(qerr.InvalidCryptoMessageParameter, "incorrect version tag")
+	}
+	verTag := binary.LittleEndian.Uint32(verSlice)
+	ver := protocol.VersionTagToNumber(verTag)
+	// If the client's preferred version is not the version we are currently speaking, then the client went through a version negotiation.  In this case, we need to make sure that we actually do not support this version and that it wasn't a downgrade attack.
+	if ver != h.version && protocol.IsSupportedVersion(ver) {
+		return false, qerr.Error(qerr.VersionNegotiationMismatch, "Downgrade attack detected")
 	}
 
 	var reply []byte

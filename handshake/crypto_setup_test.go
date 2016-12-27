@@ -2,6 +2,7 @@ package handshake
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"net"
 
@@ -141,6 +142,7 @@ var _ = Describe("Crypto setup", func() {
 		cpm         ConnectionParametersManager
 		aeadChanged chan struct{}
 		nonce32     []byte
+		versionTag  []byte
 		ip          net.IP
 		validSTK    []byte
 		aead        []byte
@@ -163,6 +165,8 @@ var _ = Describe("Crypto setup", func() {
 		aead = []byte("AESG")
 		kexs = []byte("C255")
 		copy(nonce32[4:12], scfg.obit) // set the OBIT value at the right position
+		versionTag = make([]byte, 4)
+		binary.LittleEndian.PutUint32(versionTag, protocol.VersionNumberToTag(protocol.VersionWhatever))
 		Expect(err).NotTo(HaveOccurred())
 		scfg.stkSource = &mockStkSource{}
 		v := protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
@@ -254,6 +258,7 @@ var _ = Describe("Crypto setup", func() {
 				TagSNI: []byte("quic.clemente.io"),
 				TagSTK: validSTK,
 				TagPAD: bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize),
+				TagVER: versionTag,
 			})
 			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
 				TagSCID: scfg.ID,
@@ -263,6 +268,7 @@ var _ = Describe("Crypto setup", func() {
 				TagAEAD: aead,
 				TagKEXS: kexs,
 				TagPUBS: nil,
+				TagVER:  versionTag,
 			})
 			err := cs.HandleCryptoStream()
 			Expect(err).NotTo(HaveOccurred())
@@ -278,6 +284,7 @@ var _ = Describe("Crypto setup", func() {
 				TagNONC: []byte("too short client nonce"),
 				TagSTK:  validSTK,
 				TagPUBS: nil,
+				TagVER:  versionTag,
 			})
 			err := cs.HandleCryptoStream()
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "invalid client nonce length")))
@@ -291,6 +298,7 @@ var _ = Describe("Crypto setup", func() {
 				TagNONC: nonce,
 				TagSTK:  validSTK,
 				TagPUBS: nil,
+				TagVER:  versionTag,
 			})
 			err := cs.HandleCryptoStream()
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "OBIT not matching")))
@@ -305,6 +313,7 @@ var _ = Describe("Crypto setup", func() {
 				TagAEAD: aead,
 				TagKEXS: kexs,
 				TagPUBS: nil,
+				TagVER:  versionTag,
 			})
 			err := cs.HandleCryptoStream()
 			Expect(err).NotTo(HaveOccurred())
@@ -341,6 +350,72 @@ var _ = Describe("Crypto setup", func() {
 			Expect(err).To(MatchError("CryptoInvalidValueLength: CHLO too small"))
 		})
 
+		It("rejects CHLOs without the version tag", func() {
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagSNI:  []byte("quic.clemente.io"),
+			})
+			err := cs.HandleCryptoStream()
+			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "client hello missing version tag")))
+		})
+
+		It("rejects CHLOs with a version tag that has the wrong length", func() {
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagSNI:  []byte("quic.clemente.io"),
+				TagPUBS: []byte("pubs"),
+				TagNONC: nonce32,
+				TagSTK:  validSTK,
+				TagKEXS: kexs,
+				TagAEAD: aead,
+				TagVER:  []byte{0x13, 0x37}, // should be 4 bytes
+			})
+			err := cs.HandleCryptoStream()
+			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "incorrect version tag")))
+		})
+
+		It("detects version downgrade attacks", func() {
+			highestSupportedVersion := protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
+			lowestSupportedVersion := protocol.SupportedVersions[0]
+			Expect(highestSupportedVersion).ToNot(Equal(lowestSupportedVersion))
+			cs.version = highestSupportedVersion
+			b := make([]byte, 4)
+			binary.LittleEndian.PutUint32(b, protocol.VersionNumberToTag(lowestSupportedVersion))
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagSNI:  []byte("quic.clemente.io"),
+				TagPUBS: []byte("pubs"),
+				TagNONC: nonce32,
+				TagSTK:  validSTK,
+				TagKEXS: kexs,
+				TagAEAD: aead,
+				TagVER:  b,
+			})
+			err := cs.HandleCryptoStream()
+			Expect(err).To(MatchError(qerr.Error(qerr.VersionNegotiationMismatch, "Downgrade attack detected")))
+		})
+
+		It("accepts a non-matching version tag in the CHLO, if it is an unsupported version", func() {
+			supportedVersion := protocol.SupportedVersions[0]
+			unsupportedVersion := supportedVersion + 1000
+			Expect(protocol.IsSupportedVersion(unsupportedVersion)).To(BeFalse())
+			cs.version = supportedVersion
+			b := make([]byte, 4)
+			binary.LittleEndian.PutUint32(b, protocol.VersionNumberToTag(unsupportedVersion))
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagSNI:  []byte("quic.clemente.io"),
+				TagPUBS: []byte("pubs"),
+				TagNONC: nonce32,
+				TagSTK:  validSTK,
+				TagKEXS: kexs,
+				TagAEAD: aead,
+				TagVER:  b,
+			})
+			err := cs.HandleCryptoStream()
+			Expect(err).ToNot(HaveOccurred())
+		})
+
 		It("errors if the AEAD tag is missing", func() {
 			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
 				TagSCID: scfg.ID,
@@ -349,6 +424,7 @@ var _ = Describe("Crypto setup", func() {
 				TagNONC: nonce32,
 				TagSTK:  validSTK,
 				TagKEXS: kexs,
+				TagVER:  versionTag,
 			})
 			err := cs.HandleCryptoStream()
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoNoSupport, "Unsupported AEAD or KEXS")))
@@ -363,6 +439,7 @@ var _ = Describe("Crypto setup", func() {
 				TagSTK:  validSTK,
 				TagAEAD: []byte("wrong"),
 				TagKEXS: kexs,
+				TagVER:  versionTag,
 			})
 			err := cs.HandleCryptoStream()
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoNoSupport, "Unsupported AEAD or KEXS")))
@@ -376,6 +453,7 @@ var _ = Describe("Crypto setup", func() {
 				TagNONC: nonce32,
 				TagSTK:  validSTK,
 				TagAEAD: aead,
+				TagVER:  versionTag,
 			})
 			err := cs.HandleCryptoStream()
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoNoSupport, "Unsupported AEAD or KEXS")))
@@ -390,6 +468,7 @@ var _ = Describe("Crypto setup", func() {
 				TagSTK:  validSTK,
 				TagAEAD: aead,
 				TagKEXS: []byte("wrong"),
+				TagVER:  versionTag,
 			})
 			err := cs.HandleCryptoStream()
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoNoSupport, "Unsupported AEAD or KEXS")))
@@ -518,6 +597,7 @@ var _ = Describe("Crypto setup", func() {
 		It("requires STK", func() {
 			done, err := cs.handleMessage(bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), map[Tag][]byte{
 				TagSNI: []byte("foo"),
+				TagVER: versionTag,
 			})
 			Expect(done).To(BeFalse())
 			Expect(err).To(BeNil())
@@ -528,6 +608,7 @@ var _ = Describe("Crypto setup", func() {
 			done, err := cs.handleMessage(bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), map[Tag][]byte{
 				TagSTK: validSTK,
 				TagSNI: []byte("foo"),
+				TagVER: versionTag,
 			})
 			Expect(done).To(BeFalse())
 			Expect(err).To(BeNil())
@@ -537,6 +618,7 @@ var _ = Describe("Crypto setup", func() {
 			done, err := cs.handleMessage(bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), map[Tag][]byte{
 				TagSNI: []byte("foo"),
 				TagSTK: []byte("token \x04\x03\x03\x01"),
+				TagVER: versionTag,
 			})
 			Expect(done).To(BeFalse())
 			Expect(err).To(BeNil())
