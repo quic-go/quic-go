@@ -393,7 +393,6 @@ func (s *Session) handleWindowUpdateFrame(frame *frames.WindowUpdateFrame) error
 	return err
 }
 
-// TODO: Handle frame.byteOffset
 func (s *Session) handleRstStreamFrame(frame *frames.RstStreamFrame) error {
 	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
 	if err != nil {
@@ -401,6 +400,10 @@ func (s *Session) handleRstStreamFrame(frame *frames.RstStreamFrame) error {
 	}
 	if str == nil {
 		return errRstStreamOnInvalidStream
+	}
+	err = s.flowControlManager.ResetStream(frame.StreamID, frame.ByteOffset)
+	if err != nil {
+		return err
 	}
 	s.closeStreamWithError(str, fmt.Errorf("RST_STREAM received with code %d", frame.ErrorCode))
 	return nil

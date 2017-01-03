@@ -62,7 +62,7 @@ func (m *mockFlowControlHandler) AddBytesRead(streamID protocol.StreamID, n prot
 }
 
 func (m *mockFlowControlHandler) ResetStream(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
-	panic("not implemented")
+	return m.UpdateHighestReceived(streamID, byteOffset)
 }
 
 func (m *mockFlowControlHandler) UpdateHighestReceived(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
