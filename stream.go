@@ -158,13 +158,20 @@ func (s *stream) Write(p []byte) (int, error) {
 
 func (s *stream) lenOfDataForWriting() protocol.ByteCount {
 	s.mutex.Lock()
-	l := protocol.ByteCount(len(s.dataForWriting))
+	var l protocol.ByteCount
+	if s.err == nil {
+		l = protocol.ByteCount(len(s.dataForWriting))
+	}
 	s.mutex.Unlock()
 	return l
 }
 
 func (s *stream) getDataForWriting(maxBytes protocol.ByteCount) []byte {
 	s.mutex.Lock()
+	if s.err != nil {
+		s.mutex.Unlock()
+		return nil
+	}
 	if s.dataForWriting == nil {
 		s.mutex.Unlock()
 		return nil
@@ -207,7 +214,6 @@ func (s *stream) sentFin() {
 func (s *stream) AddStreamFrame(frame *frames.StreamFrame) error {
 	maxOffset := frame.Offset + frame.DataLen()
 	err := s.flowControlManager.UpdateHighestReceived(s.streamID, maxOffset)
-
 	if err != nil {
 		return err
 	}

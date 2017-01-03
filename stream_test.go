@@ -548,6 +548,19 @@ var _ = Describe("Stream", func() {
 				Expect(n).To(BeZero())
 				Expect(err).To(MatchError(testErr))
 			})
+
+			It("doesn't get data for writing if an error occurred", func() {
+				go func() {
+					_, err := str.Write([]byte("foobar"))
+					Expect(err).To(MatchError(testErr))
+				}()
+				Eventually(func() []byte { return str.dataForWriting }).ShouldNot(BeNil())
+				Expect(str.lenOfDataForWriting()).ToNot(BeZero())
+				str.RegisterError(testErr)
+				data := str.getDataForWriting(6)
+				Expect(data).To(BeNil())
+				Expect(str.lenOfDataForWriting()).To(BeZero())
+			})
 		})
 
 		Context("when CloseRemote is called", func() {
