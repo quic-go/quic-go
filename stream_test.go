@@ -25,6 +25,7 @@ type mockFlowControlHandler struct {
 
 	highestReceivedForStream protocol.StreamID
 	highestReceived          protocol.ByteCount
+	flowControlViolation     error
 
 	triggerStreamWindowUpdate     bool
 	triggerConnectionWindowUpdate bool
@@ -65,6 +66,9 @@ func (m *mockFlowControlHandler) ResetStream(streamID protocol.StreamID, byteOff
 }
 
 func (m *mockFlowControlHandler) UpdateHighestReceived(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
+	if m.flowControlViolation != nil {
+		return m.flowControlViolation
+	}
 	m.highestReceivedForStream = streamID
 	m.highestReceived = byteOffset
 	return nil
@@ -416,9 +420,19 @@ var _ = Describe("Stream", func() {
 			}
 			err := str.AddStreamFrame(&frame)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(err).ToNot(HaveOccurred())
 			Expect(str.flowControlManager.(*mockFlowControlHandler).highestReceivedForStream).To(Equal(str.streamID))
 			Expect(str.flowControlManager.(*mockFlowControlHandler).highestReceived).To(Equal(protocol.ByteCount(2 + 6)))
+		})
+
+		It("errors when a StreamFrames causes a flow control violation", func() {
+			testErr := errors.New("flow control violation")
+			str.flowControlManager.(*mockFlowControlHandler).flowControlViolation = testErr
+			frame := frames.StreamFrame{
+				Offset: 2,
+				Data:   []byte("foobar"),
+			}
+			err := str.AddStreamFrame(&frame)
+			Expect(err).To(MatchError(testErr))
 		})
 	})
 

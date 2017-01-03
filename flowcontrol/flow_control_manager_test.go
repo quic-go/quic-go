@@ -82,13 +82,13 @@ var _ = Describe("Flow Control Manager", func() {
 		Context("flow control violations", func() {
 			It("errors when encountering a stream level flow control violation", func() {
 				err := fcm.UpdateHighestReceived(4, 0x101)
-				Expect(err).To(MatchError(ErrStreamFlowControlViolation))
+				Expect(err).To(MatchError(qerr.Error(qerr.FlowControlReceivedTooMuchData, "Received 257 bytes on stream 4, allowed 256 bytes"))) // 0x100 = 256, 0x101 = 257
 			})
 
 			It("errors when encountering a connection-level flow control violation", func() {
 				fcm.streamFlowController[4].receiveFlowControlWindow = 0x300
 				err := fcm.UpdateHighestReceived(4, 0x201)
-				Expect(err).To(MatchError(ErrConnectionFlowControlViolation))
+				Expect(err).To(MatchError(qerr.Error(qerr.FlowControlReceivedTooMuchData, "Received 513 bytes for the connection, allowed 512 bytes"))) // 0x200 = 512, 0x201 = 513
 			})
 		})
 
@@ -162,13 +162,13 @@ var _ = Describe("Flow Control Manager", func() {
 		Context("flow control violations", func() {
 			It("errors when encountering a stream level flow control violation", func() {
 				err := fcm.ResetStream(4, 0x101)
-				Expect(err).To(MatchError(ErrStreamFlowControlViolation))
+				Expect(err).To(MatchError(qerr.Error(qerr.FlowControlReceivedTooMuchData, "Received 257 bytes on stream 4, allowed 256 bytes"))) // 0x100 = 256, 0x101 = 257
 			})
 
 			It("errors when encountering a connection-level flow control violation", func() {
 				fcm.streamFlowController[4].receiveFlowControlWindow = 0x300
 				err := fcm.ResetStream(4, 0x201)
-				Expect(err).To(MatchError(ErrConnectionFlowControlViolation))
+				Expect(err).To(MatchError(qerr.Error(qerr.FlowControlReceivedTooMuchData, "Received 513 bytes for the connection, allowed 512 bytes"))) // 0x200 = 512, 0x201 = 513
 			})
 		})
 	})

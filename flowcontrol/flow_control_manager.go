@@ -2,6 +2,7 @@ package flowcontrol
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/lucas-clemente/quic-go/congestion"
@@ -20,12 +21,7 @@ type flowControlManager struct {
 	mutex                              sync.RWMutex
 }
 
-var (
-	// ErrStreamFlowControlViolation is a stream flow control violation
-	ErrStreamFlowControlViolation = errors.New("Stream level flow control violation")
-	// ErrConnectionFlowControlViolation is a connection level flow control violation
-	ErrConnectionFlowControlViolation = errors.New("Connection level flow control violation")
-)
+var _ FlowControlManager = &flowControlManager{}
 
 var errMapAccess = errors.New("Error accessing the flowController map.")
 
@@ -81,14 +77,14 @@ func (f *flowControlManager) ResetStream(streamID protocol.StreamID, byteOffset 
 	}
 
 	if streamFlowController.CheckFlowControlViolation() {
-		return ErrStreamFlowControlViolation
+		return qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes on stream %d, allowed %d bytes", byteOffset, streamID, streamFlowController.receiveFlowControlWindow))
 	}
 
 	if f.contributesToConnectionFlowControl[streamID] {
 		connectionFlowController := f.streamFlowController[0]
 		connectionFlowController.IncrementHighestReceived(increment)
 		if connectionFlowController.CheckFlowControlViolation() {
-			return ErrConnectionFlowControlViolation
+			return qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes for the connection, allowed %d bytes", byteOffset, connectionFlowController.receiveFlowControlWindow))
 		}
 	}
 
@@ -111,14 +107,14 @@ func (f *flowControlManager) UpdateHighestReceived(streamID protocol.StreamID, b
 	increment, _ := streamFlowController.UpdateHighestReceived(byteOffset)
 
 	if streamFlowController.CheckFlowControlViolation() {
-		return ErrStreamFlowControlViolation
+		return qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes on stream %d, allowed %d bytes", byteOffset, streamID, streamFlowController.receiveFlowControlWindow))
 	}
 
 	if f.contributesToConnectionFlowControl[streamID] {
 		connectionFlowController := f.streamFlowController[0]
 		connectionFlowController.IncrementHighestReceived(increment)
 		if connectionFlowController.CheckFlowControlViolation() {
-			return ErrConnectionFlowControlViolation
+			return qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes for the connection, allowed %d bytes", byteOffset, connectionFlowController.receiveFlowControlWindow))
 		}
 	}
 

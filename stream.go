@@ -9,7 +9,6 @@ import (
 	"github.com/lucas-clemente/quic-go/flowcontrol"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
@@ -209,12 +208,6 @@ func (s *stream) AddStreamFrame(frame *frames.StreamFrame) error {
 	maxOffset := frame.Offset + frame.DataLen()
 	err := s.flowControlManager.UpdateHighestReceived(s.streamID, maxOffset)
 
-	if err == flowcontrol.ErrStreamFlowControlViolation {
-		return qerr.FlowControlReceivedTooMuchData
-	}
-	if err == flowcontrol.ErrConnectionFlowControlViolation {
-		return qerr.FlowControlReceivedTooMuchData
-	}
 	if err != nil {
 		return err
 	}
