@@ -63,32 +63,32 @@ func (f *flowControlManager) RemoveStream(streamID protocol.StreamID) {
 // ResetStream should be called when receiving a RstStreamFrame
 // it updates the byte offset to the value in the RstStreamFrame
 // streamID must not be 0 here
-func (f *flowControlManager) ResetStream(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
+func (f *flowControlManager) ResetStream(streamID protocol.StreamID, byteOffset protocol.ByteCount) (protocol.ByteCount, error) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 
 	streamFlowController, err := f.getFlowController(streamID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	increment, err := streamFlowController.UpdateHighestReceived(byteOffset)
 	if err != nil {
-		return qerr.StreamDataAfterTermination
+		return 0, qerr.StreamDataAfterTermination
 	}
 
 	if streamFlowController.CheckFlowControlViolation() {
-		return qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes on stream %d, allowed %d bytes", byteOffset, streamID, streamFlowController.receiveFlowControlWindow))
+		return 0, qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes on stream %d, allowed %d bytes", byteOffset, streamID, streamFlowController.receiveFlowControlWindow))
 	}
 
 	if f.contributesToConnectionFlowControl[streamID] {
 		connectionFlowController := f.streamFlowController[0]
 		connectionFlowController.IncrementHighestReceived(increment)
 		if connectionFlowController.CheckFlowControlViolation() {
-			return qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes for the connection, allowed %d bytes", byteOffset, connectionFlowController.receiveFlowControlWindow))
+			return 0, qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes for the connection, allowed %d bytes", byteOffset, connectionFlowController.receiveFlowControlWindow))
 		}
 	}
 
-	return nil
+	return streamFlowController.GetBytesSent(), nil
 }
 
 // UpdateHighestReceived updates the highest received byte offset for a stream

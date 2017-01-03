@@ -401,11 +401,11 @@ func (s *Session) handleRstStreamFrame(frame *frames.RstStreamFrame) error {
 	if str == nil {
 		return errRstStreamOnInvalidStream
 	}
-	err = s.flowControlManager.ResetStream(frame.StreamID, frame.ByteOffset)
+	s.closeStreamWithError(str, fmt.Errorf("RST_STREAM received with code %d", frame.ErrorCode))
+	_, err = s.flowControlManager.ResetStream(frame.StreamID, frame.ByteOffset)
 	if err != nil {
 		return err
 	}
-	s.closeStreamWithError(str, fmt.Errorf("RST_STREAM received with code %d", frame.ErrorCode))
 	return nil
 }
 

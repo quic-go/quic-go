@@ -61,8 +61,8 @@ func (m *mockFlowControlHandler) AddBytesRead(streamID protocol.StreamID, n prot
 	return nil
 }
 
-func (m *mockFlowControlHandler) ResetStream(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
-	return m.UpdateHighestReceived(streamID, byteOffset)
+func (m *mockFlowControlHandler) ResetStream(streamID protocol.StreamID, byteOffset protocol.ByteCount) (protocol.ByteCount, error) {
+	return 0, m.UpdateHighestReceived(streamID, byteOffset)
 }
 
 func (m *mockFlowControlHandler) UpdateHighestReceived(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
