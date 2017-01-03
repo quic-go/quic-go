@@ -7,6 +7,7 @@ import (
 	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
@@ -63,6 +64,37 @@ func (f *flowControlManager) RemoveStream(streamID protocol.StreamID) {
 	f.mutex.Unlock()
 }
 
+// ResetStream should be called when receiving a RstStreamFrame
+// it updates the byte offset to the value in the RstStreamFrame
+// streamID must not be 0 here
+func (f *flowControlManager) ResetStream(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+
+	streamFlowController, err := f.getFlowController(streamID)
+	if err != nil {
+		return err
+	}
+	increment, err := streamFlowController.UpdateHighestReceived(byteOffset)
+	if err != nil {
+		return qerr.StreamDataAfterTermination
+	}
+
+	if streamFlowController.CheckFlowControlViolation() {
+		return ErrStreamFlowControlViolation
+	}
+
+	if f.contributesToConnectionFlowControl[streamID] {
+		connectionFlowController := f.streamFlowController[0]
+		connectionFlowController.IncrementHighestReceived(increment)
+		if connectionFlowController.CheckFlowControlViolation() {
+			return ErrConnectionFlowControlViolation
+		}
+	}
+
+	return nil
+}
+
 // UpdateHighestReceived updates the highest received byte offset for a stream
 // it adds the number of additional bytes to connection level flow control
 // streamID must not be 0 here
@@ -74,7 +106,9 @@ func (f *flowControlManager) UpdateHighestReceived(streamID protocol.StreamID, b
 	if err != nil {
 		return err
 	}
-	increment := streamFlowController.UpdateHighestReceived(byteOffset)
+	// UpdateHighestReceived returns an ErrReceivedSmallerByteOffset when StreamFrames got reordered
+	// this error can be ignored here
+	increment, _ := streamFlowController.UpdateHighestReceived(byteOffset)
 
 	if streamFlowController.CheckFlowControlViolation() {
 		return ErrStreamFlowControlViolation

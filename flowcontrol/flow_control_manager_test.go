@@ -4,6 +4,7 @@ import (
 	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -50,7 +51,7 @@ var _ = Describe("Flow Control Manager", func() {
 			fcm.NewStream(6, true)
 		})
 
-		It("updates the connection level flow controller if the stream does not contribute", func() {
+		It("updates the connection level flow controller if the stream contributes", func() {
 			err := fcm.UpdateHighestReceived(4, 0x100)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(fcm.streamFlowController[0].highestReceived).To(Equal(protocol.ByteCount(0x100)))
@@ -69,7 +70,7 @@ var _ = Describe("Flow Control Manager", func() {
 			err := fcm.UpdateHighestReceived(1, 0x100)
 			// fcm.streamFlowController[4].receiveFlowControlWindow = 0x1000
 			Expect(err).ToNot(HaveOccurred())
-			Expect(fcm.streamFlowController[0].highestReceived).To(Equal(protocol.ByteCount(0)))
+			Expect(fcm.streamFlowController[0].highestReceived).To(BeZero())
 			Expect(fcm.streamFlowController[1].highestReceived).To(Equal(protocol.ByteCount(0x100)))
 		})
 
@@ -121,6 +122,53 @@ var _ = Describe("Flow Control Manager", func() {
 				} else {
 					Expect(updates[2].Offset).ToNot(Equal(protocol.ByteCount(0x200)))
 				}
+			})
+		})
+	})
+
+	Context("resetting a stream", func() {
+		BeforeEach(func() {
+			fcm.NewStream(1, false)
+			fcm.NewStream(4, true)
+			fcm.NewStream(6, true)
+		})
+
+		It("updates the connection level flow controller if the stream contributes", func() {
+			err := fcm.ResetStream(4, 0x100)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(fcm.streamFlowController[0].highestReceived).To(Equal(protocol.ByteCount(0x100)))
+			Expect(fcm.streamFlowController[4].highestReceived).To(Equal(protocol.ByteCount(0x100)))
+		})
+
+		It("does not update the connection level flow controller if the stream does not contribute", func() {
+			err := fcm.ResetStream(1, 0x100)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(fcm.streamFlowController[0].highestReceived).To(BeZero())
+			Expect(fcm.streamFlowController[1].highestReceived).To(Equal(protocol.ByteCount(0x100)))
+		})
+
+		It("errors if the byteOffset is smaller than a byteOffset that set earlier", func() {
+			err := fcm.UpdateHighestReceived(4, 0x100)
+			Expect(err).ToNot(HaveOccurred())
+			err = fcm.ResetStream(4, 0x50)
+			Expect(err).To(MatchError(qerr.StreamDataAfterTermination))
+		})
+
+		It("returns an error when called with an unknown stream", func() {
+			err := fcm.ResetStream(1337, 0x1337)
+			Expect(err).To(MatchError(errMapAccess))
+		})
+
+		Context("flow control violations", func() {
+			It("errors when encountering a stream level flow control violation", func() {
+				err := fcm.ResetStream(4, 0x101)
+				Expect(err).To(MatchError(ErrStreamFlowControlViolation))
+			})
+
+			It("errors when encountering a connection-level flow control violation", func() {
+				fcm.streamFlowController[4].receiveFlowControlWindow = 0x300
+				err := fcm.ResetStream(4, 0x201)
+				Expect(err).To(MatchError(ErrConnectionFlowControlViolation))
 			})
 		})
 	})
