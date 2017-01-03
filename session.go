@@ -317,7 +317,6 @@ func (s *Session) handleFrames(fs []frames.Frame) error {
 		switch frame := ff.(type) {
 		case *frames.StreamFrame:
 			err = s.handleStreamFrame(frame)
-			// TODO: send RstStreamFrame
 		case *frames.AckFrame:
 			err = s.handleAckFrame(frame)
 		case *frames.ConnectionCloseFrame:
@@ -369,7 +368,8 @@ func (s *Session) handleStreamFrame(frame *frames.StreamFrame) error {
 		return err
 	}
 	if str == nil {
-		// Stream is closed, ignore
+		// Stream is closed and already garbage collected
+		// ignore this StreamFrame
 		return nil
 	}
 	err = str.AddStreamFrame(frame)
@@ -401,10 +401,19 @@ func (s *Session) handleRstStreamFrame(frame *frames.RstStreamFrame) error {
 	if str == nil {
 		return errRstStreamOnInvalidStream
 	}
+
+	shouldSendRst := !str.finishedWriting()
 	s.closeStreamWithError(str, fmt.Errorf("RST_STREAM received with code %d", frame.ErrorCode))
-	_, err = s.flowControlManager.ResetStream(frame.StreamID, frame.ByteOffset)
+	bytesSent, err := s.flowControlManager.ResetStream(frame.StreamID, frame.ByteOffset)
 	if err != nil {
 		return err
+	}
+
+	if shouldSendRst {
+		s.packer.QueueControlFrameForNextPacket(&frames.RstStreamFrame{
+			StreamID:   frame.StreamID,
+			ByteOffset: bytesSent,
+		})
 	}
 	return nil
 }
