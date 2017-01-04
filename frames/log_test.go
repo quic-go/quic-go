@@ -3,7 +3,9 @@ package frames
 import (
 	"bytes"
 	"os"
+	"time"
 
+	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 
 	. "github.com/onsi/ginkgo"
@@ -43,7 +45,39 @@ var _ = Describe("Frame logging", func() {
 	})
 
 	It("logs stream frames", func() {
-		LogFrame(&StreamFrame{}, false)
-		Expect(string(buf.Bytes())).To(Equal("\t<- &frames.StreamFrame{StreamID: 0, FinBit: false, Offset: 0x0, Data length: 0x0, Offset + Data length: 0x0}\n"))
+		frame := &StreamFrame{
+			StreamID: 42,
+			Offset:   0x1337,
+			Data:     bytes.Repeat([]byte{'f'}, 0x100),
+		}
+		LogFrame(frame, false)
+		Expect(string(buf.Bytes())).To(Equal("\t<- &frames.StreamFrame{StreamID: 42, FinBit: false, Offset: 0x1337, Data length: 0x100, Offset + Data length: 0x1437}\n"))
+	})
+
+	It("logs ACK frames", func() {
+		frame := &AckFrame{
+			LargestAcked: 0x1337,
+			LowestAcked:  0x42,
+			DelayTime:    1 * time.Millisecond,
+		}
+		LogFrame(frame, false)
+		Expect(string(buf.Bytes())).To(Equal("\t<- &frames.AckFrame{LargestAcked: 0x1337, LowestAcked: 0x42, AckRanges: []frames.AckRange(nil), DelayTime: 1ms}\n"))
+	})
+
+	It("logs incoming StopWaiting frames", func() {
+		frame := &StopWaitingFrame{
+			LeastUnacked: 0x1337,
+		}
+		LogFrame(frame, false)
+		Expect(string(buf.Bytes())).To(Equal("\t<- &frames.StopWaitingFrame{LeastUnacked: 0x1337}\n"))
+	})
+
+	It("logs outgoing StopWaiting frames", func() {
+		frame := &StopWaitingFrame{
+			LeastUnacked:    0x1337,
+			PacketNumberLen: protocol.PacketNumberLen4,
+		}
+		LogFrame(frame, true)
+		Expect(string(buf.Bytes())).To(Equal("\t-> &frames.StopWaitingFrame{LeastUnacked: 0x1337, PacketNumberLen: 0x4}\n"))
 	})
 })
