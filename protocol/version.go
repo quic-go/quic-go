@@ -3,7 +3,6 @@ package protocol
 import (
 	"bytes"
 	"encoding/binary"
-	"sort"
 	"strconv"
 )
 
@@ -52,30 +51,25 @@ func IsSupportedVersion(v VersionNumber) bool {
 	return false
 }
 
-type byVersionNumber []VersionNumber
-
-func (a byVersionNumber) Len() int           { return len(a) }
-func (a byVersionNumber) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a byVersionNumber) Less(i, j int) bool { return a[i] < a[j] }
-
 // HighestSupportedVersion finds the highest version number that is both present in other and in SupportedVersions
 // the versions in other do not need to be ordered
 // it returns true and the version number, if there is one, otherwise false
 func HighestSupportedVersion(other []VersionNumber) (bool, VersionNumber) {
-	sort.Sort(byVersionNumber(other))
-
-	i := len(other) - 1             // index of other
-	j := len(SupportedVersions) - 1 // index of SupportedVersions
-	for i >= 0 && j >= 0 {
-		if other[i] == SupportedVersions[j] {
-			return true, SupportedVersions[j]
-		}
-		if other[i] > SupportedVersions[j] {
-			i--
-		} else {
-			j--
+	var otherSupported []VersionNumber
+	for _, ver := range other {
+		if ver != VersionUnsupported {
+			otherSupported = append(otherSupported, ver)
 		}
 	}
+
+	for i := len(SupportedVersions) - 1; i >= 0; i-- {
+		for _, ver := range otherSupported {
+			if ver == SupportedVersions[i] {
+				return true, ver
+			}
+		}
+	}
+
 	return false, 0
 }
 
