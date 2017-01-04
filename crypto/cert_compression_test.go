@@ -13,7 +13,7 @@ import (
 )
 
 func byteHash(d []byte) []byte {
-	h := fnv.New64()
+	h := fnv.New64a()
 	h.Write(d)
 	s := h.Sum64()
 	res := make([]byte, 8)

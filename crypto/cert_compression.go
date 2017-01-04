@@ -150,7 +150,7 @@ func splitHashes(hashes []byte) ([]uint64, error) {
 }
 
 func hashCert(cert []byte) uint64 {
-	h := fnv.New64()
+	h := fnv.New64a()
 	h.Write(cert)
 	return h.Sum64()
 }
