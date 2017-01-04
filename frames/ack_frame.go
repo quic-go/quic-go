@@ -27,8 +27,10 @@ type AckFrame struct {
 	LowestAcked  protocol.PacketNumber
 	AckRanges    []AckRange // has to be ordered. The ACK range with the highest FirstPacketNumber goes first, the ACK range with the lowest FirstPacketNumber goes last
 
+	// time when the LargestAcked was receiveid
+	// this field Will not be set for received ACKs frames
+	PacketReceivedTime time.Time
 	DelayTime          time.Duration
-	PacketReceivedTime time.Time // only for received packets. Will not be modified for received ACKs frames
 }
 
 // ParseAckFrame reads an ACK frame

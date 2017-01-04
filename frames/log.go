@@ -11,17 +11,18 @@ func LogFrame(frame Frame, sent bool) {
 	if sent {
 		dir = "->"
 	}
-	if f, ok := frame.(*StreamFrame); ok {
+	switch f := frame.(type) {
+	case *StreamFrame:
 		utils.Debugf("\t%s &frames.StreamFrame{StreamID: %d, FinBit: %t, Offset: 0x%x, Data length: 0x%x, Offset + Data length: 0x%x}", dir, f.StreamID, f.FinBit, f.Offset, f.DataLen(), f.Offset+f.DataLen())
-		return
-	}
-	if f, ok := frame.(*StopWaitingFrame); ok {
+	case *StopWaitingFrame:
 		if sent {
 			utils.Debugf("\t%s &frames.StopWaitingFrame{LeastUnacked: 0x%x, PacketNumberLen: 0x%x}", dir, f.LeastUnacked, f.PacketNumberLen)
 		} else {
 			utils.Debugf("\t%s &frames.StopWaitingFrame{LeastUnacked: 0x%x}", dir, f.LeastUnacked)
 		}
-		return
+	case *AckFrame:
+		utils.Debugf("\t%s &frames.AckFrame{LargestAcked: 0x%x, LowestAcked: 0x%x, AckRanges: %#v, DelayTime: %s}", dir, f.LargestAcked, f.LowestAcked, f.AckRanges, f.DelayTime.String())
+	default:
+		utils.Debugf("\t%s %#v", dir, frame)
 	}
-	utils.Debugf("\t%s %#v", dir, frame)
 }
