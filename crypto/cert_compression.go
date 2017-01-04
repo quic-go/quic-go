@@ -41,7 +41,7 @@ func compressChain(chain [][]byte, pCommonSetHashes, pCachedHashes []byte) ([]by
 
 	chainHashes := make([]uint64, len(chain))
 	for i := range chain {
-		chainHashes[i] = hashCert(chain[i])
+		chainHashes[i] = HashCert(chain[i])
 	}
 
 	entries := buildEntries(chain, chainHashes, cachedHashes, setHashes)
@@ -149,7 +149,8 @@ func splitHashes(hashes []byte) ([]uint64, error) {
 	return res, nil
 }
 
-func hashCert(cert []byte) uint64 {
+// HashCert calculates the FNV1a hash of a certificate
+func HashCert(cert []byte) uint64 {
 	h := fnv.New64a()
 	h.Write(cert)
 	return h.Sum64()

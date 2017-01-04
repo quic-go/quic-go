@@ -121,7 +121,13 @@ func (h *CryptoSetup) handleMessage(chloData []byte, cryptoData map[Tag][]byte) 
 
 	var reply []byte
 	var err error
-	if !h.isInchoateCHLO(cryptoData) {
+
+	certUncompressed, err := h.scfg.signer.GetLeafCert(sni)
+	if err != nil {
+		return false, err
+	}
+
+	if !h.isInchoateCHLO(cryptoData, certUncompressed) {
 		// We have a CHLO with a proper server config ID, do a 0-RTT handshake
 		reply, err = h.handleCHLO(sni, chloData, cryptoData)
 		if err != nil {
@@ -185,12 +191,20 @@ func (h *CryptoSetup) Seal(dst, src []byte, packetNumber protocol.PacketNumber, 
 	}
 }
 
-func (h *CryptoSetup) isInchoateCHLO(cryptoData map[Tag][]byte) bool {
+func (h *CryptoSetup) isInchoateCHLO(cryptoData map[Tag][]byte, cert []byte) bool {
+	if _, ok := cryptoData[TagPUBS]; !ok {
+		return true
+	}
 	scid, ok := cryptoData[TagSCID]
 	if !ok || !bytes.Equal(h.scfg.ID, scid) {
 		return true
 	}
-	if _, ok := cryptoData[TagPUBS]; !ok {
+	xlctTag, ok := cryptoData[TagXLCT]
+	if !ok || len(xlctTag) != 8 {
+		return true
+	}
+	xlct := binary.LittleEndian.Uint64(xlctTag)
+	if crypto.HashCert(cert) != xlct {
 		return true
 	}
 	if err := h.scfg.stkSource.VerifyToken(h.ip, cryptoData[TagSTK]); err != nil {

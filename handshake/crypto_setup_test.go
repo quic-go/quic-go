@@ -204,6 +204,17 @@ var _ = Describe("Crypto setup", func() {
 	})
 
 	Context("when responding to client messages", func() {
+		var cert []byte
+		var xlct []byte
+
+		BeforeEach(func() {
+			xlct = make([]byte, 8)
+			var err error
+			cert, err = cs.scfg.signer.GetLeafCert("")
+			Expect(err).ToNot(HaveOccurred())
+			binary.LittleEndian.PutUint64(xlct, crypto.HashCert(cert))
+		})
+
 		It("generates REJ messages", func() {
 			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), nil)
 			Expect(err).ToNot(HaveOccurred())
@@ -265,6 +276,7 @@ var _ = Describe("Crypto setup", func() {
 				TagSNI:  []byte("quic.clemente.io"),
 				TagNONC: nonce32,
 				TagSTK:  validSTK,
+				TagXLCT: xlct,
 				TagAEAD: aead,
 				TagKEXS: kexs,
 				TagPUBS: nil,
@@ -283,6 +295,7 @@ var _ = Describe("Crypto setup", func() {
 				TagSNI:  []byte("quic.clemente.io"),
 				TagNONC: []byte("too short client nonce"),
 				TagSTK:  validSTK,
+				TagXLCT: xlct,
 				TagPUBS: nil,
 				TagVER:  versionTag,
 			})
@@ -297,6 +310,7 @@ var _ = Describe("Crypto setup", func() {
 				TagSNI:  []byte("quic.clemente.io"),
 				TagNONC: nonce,
 				TagSTK:  validSTK,
+				TagXLCT: xlct,
 				TagPUBS: nil,
 				TagVER:  versionTag,
 			})
@@ -310,6 +324,7 @@ var _ = Describe("Crypto setup", func() {
 				TagSNI:  []byte("quic.clemente.io"),
 				TagNONC: nonce32,
 				TagSTK:  validSTK,
+				TagXLCT: xlct,
 				TagAEAD: aead,
 				TagKEXS: kexs,
 				TagPUBS: nil,
@@ -323,18 +338,50 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		It("recognizes inchoate CHLOs missing SCID", func() {
-			Expect(cs.isInchoateCHLO(map[Tag][]byte{TagPUBS: nil, TagSTK: validSTK})).To(BeTrue())
+			Expect(cs.isInchoateCHLO(map[Tag][]byte{
+				TagPUBS: nil,
+				TagSTK:  validSTK,
+			}, cert)).To(BeTrue())
 		})
 
 		It("recognizes inchoate CHLOs missing PUBS", func() {
-			Expect(cs.isInchoateCHLO(map[Tag][]byte{TagSCID: scfg.ID, TagSTK: validSTK})).To(BeTrue())
+			Expect(cs.isInchoateCHLO(map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagSTK:  validSTK,
+			}, cert)).To(BeTrue())
 		})
 
 		It("recognizes inchoate CHLOs with invalid tokens", func() {
 			Expect(cs.isInchoateCHLO(map[Tag][]byte{
 				TagSCID: scfg.ID,
 				TagPUBS: nil,
-			})).To(BeTrue())
+			}, cert)).To(BeTrue())
+		})
+
+		It("recognizes inchoate CHLOs with missing XLCT", func() {
+			Expect(cs.isInchoateCHLO(map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagPUBS: nil,
+				TagSTK:  validSTK,
+			}, cert)).To(BeTrue())
+		})
+
+		It("recognizes inchoate CHLOs with wrong length XLCT", func() {
+			Expect(cs.isInchoateCHLO(map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagPUBS: nil,
+				TagSTK:  validSTK,
+				TagXLCT: xlct[1:],
+			}, cert)).To(BeTrue())
+		})
+
+		It("recognizes inchoate CHLOs with wrong XLCT", func() {
+			Expect(cs.isInchoateCHLO(map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagPUBS: nil,
+				TagSTK:  validSTK,
+				TagXLCT: bytes.Repeat([]byte{'f'}, 8),
+			}, cert)).To(BeTrue())
 		})
 
 		It("recognizes proper CHLOs", func() {
@@ -342,7 +389,8 @@ var _ = Describe("Crypto setup", func() {
 				TagSCID: scfg.ID,
 				TagPUBS: nil,
 				TagSTK:  validSTK,
-			})).To(BeFalse())
+				TagXLCT: xlct,
+			}, cert)).To(BeFalse())
 		})
 
 		It("errors on too short inchoate CHLOs", func() {
@@ -408,6 +456,7 @@ var _ = Describe("Crypto setup", func() {
 				TagPUBS: []byte("pubs"),
 				TagNONC: nonce32,
 				TagSTK:  validSTK,
+				TagXLCT: xlct,
 				TagKEXS: kexs,
 				TagAEAD: aead,
 				TagVER:  b,
@@ -423,6 +472,7 @@ var _ = Describe("Crypto setup", func() {
 				TagPUBS: []byte("pubs"),
 				TagNONC: nonce32,
 				TagSTK:  validSTK,
+				TagXLCT: xlct,
 				TagKEXS: kexs,
 				TagVER:  versionTag,
 			})
@@ -437,6 +487,7 @@ var _ = Describe("Crypto setup", func() {
 				TagPUBS: []byte("pubs"),
 				TagNONC: nonce32,
 				TagSTK:  validSTK,
+				TagXLCT: xlct,
 				TagAEAD: []byte("wrong"),
 				TagKEXS: kexs,
 				TagVER:  versionTag,
@@ -452,6 +503,7 @@ var _ = Describe("Crypto setup", func() {
 				TagPUBS: []byte("pubs"),
 				TagNONC: nonce32,
 				TagSTK:  validSTK,
+				TagXLCT: xlct,
 				TagAEAD: aead,
 				TagVER:  versionTag,
 			})
@@ -466,6 +518,7 @@ var _ = Describe("Crypto setup", func() {
 				TagPUBS: []byte("pubs"),
 				TagNONC: nonce32,
 				TagSTK:  validSTK,
+				TagXLCT: xlct,
 				TagAEAD: aead,
 				TagKEXS: []byte("wrong"),
 				TagVER:  versionTag,
