@@ -1,6 +1,7 @@
 package flowcontrol
 
 import (
+	"errors"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/congestion"
@@ -26,6 +27,9 @@ type flowController struct {
 	receiveFlowControlWindowIncrement    protocol.ByteCount
 	maxReceiveFlowControlWindowIncrement protocol.ByteCount
 }
+
+// ErrReceivedSmallerByteOffset occurs if the ByteOffset received is smaller than a ByteOffset that was set previously
+var ErrReceivedSmallerByteOffset = errors.New("Received a smaller byte offset")
 
 // newFlowController gets a new flow controller
 func newFlowController(streamID protocol.StreamID, connectionParameters handshake.ConnectionParametersManager, rttStats *congestion.RTTStats) *flowController {
@@ -62,6 +66,10 @@ func (c *flowController) AddBytesSent(n protocol.ByteCount) {
 	c.bytesSent += n
 }
 
+func (c *flowController) GetBytesSent() protocol.ByteCount {
+	return c.bytesSent
+}
+
 // UpdateSendWindow should be called after receiving a WindowUpdateFrame
 // it returns true if the window was actually updated
 func (c *flowController) UpdateSendWindow(newOffset protocol.ByteCount) bool {
@@ -87,13 +95,19 @@ func (c *flowController) SendWindowOffset() protocol.ByteCount {
 
 // UpdateHighestReceived updates the highestReceived value, if the byteOffset is higher
 // Should **only** be used for the stream-level FlowController
-func (c *flowController) UpdateHighestReceived(byteOffset protocol.ByteCount) protocol.ByteCount {
+// it returns an ErrReceivedSmallerByteOffset if the received byteOffset is smaller than any byteOffset received before
+// This error occurs every time StreamFrames get reordered and has to be ignored in that case
+// It should only be treated as an error when resetting a stream
+func (c *flowController) UpdateHighestReceived(byteOffset protocol.ByteCount) (protocol.ByteCount, error) {
+	if byteOffset == c.highestReceived {
+		return 0, nil
+	}
 	if byteOffset > c.highestReceived {
 		increment := byteOffset - c.highestReceived
 		c.highestReceived = byteOffset
-		return increment
+		return increment, nil
 	}
-	return 0
+	return 0, ErrReceivedSmallerByteOffset
 }
 
 // IncrementHighestReceived adds an increment to the highestReceived value

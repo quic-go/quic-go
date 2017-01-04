@@ -25,6 +25,7 @@ type mockFlowControlHandler struct {
 
 	highestReceivedForStream protocol.StreamID
 	highestReceived          protocol.ByteCount
+	flowControlViolation     error
 
 	triggerStreamWindowUpdate     bool
 	triggerConnectionWindowUpdate bool
@@ -60,7 +61,14 @@ func (m *mockFlowControlHandler) AddBytesRead(streamID protocol.StreamID, n prot
 	return nil
 }
 
+func (m *mockFlowControlHandler) ResetStream(streamID protocol.StreamID, byteOffset protocol.ByteCount) (protocol.ByteCount, error) {
+	return m.bytesSent, m.UpdateHighestReceived(streamID, byteOffset)
+}
+
 func (m *mockFlowControlHandler) UpdateHighestReceived(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
+	if m.flowControlViolation != nil {
+		return m.flowControlViolation
+	}
 	m.highestReceivedForStream = streamID
 	m.highestReceived = byteOffset
 	return nil
@@ -412,9 +420,19 @@ var _ = Describe("Stream", func() {
 			}
 			err := str.AddStreamFrame(&frame)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(err).ToNot(HaveOccurred())
 			Expect(str.flowControlManager.(*mockFlowControlHandler).highestReceivedForStream).To(Equal(str.streamID))
 			Expect(str.flowControlManager.(*mockFlowControlHandler).highestReceived).To(Equal(protocol.ByteCount(2 + 6)))
+		})
+
+		It("errors when a StreamFrames causes a flow control violation", func() {
+			testErr := errors.New("flow control violation")
+			str.flowControlManager.(*mockFlowControlHandler).flowControlViolation = testErr
+			frame := frames.StreamFrame{
+				Offset: 2,
+				Data:   []byte("foobar"),
+			}
+			err := str.AddStreamFrame(&frame)
+			Expect(err).To(MatchError(testErr))
 		})
 	})
 
@@ -529,6 +547,19 @@ var _ = Describe("Stream", func() {
 				n, err = str.Read(b)
 				Expect(n).To(BeZero())
 				Expect(err).To(MatchError(testErr))
+			})
+
+			It("doesn't get data for writing if an error occurred", func() {
+				go func() {
+					_, err := str.Write([]byte("foobar"))
+					Expect(err).To(MatchError(testErr))
+				}()
+				Eventually(func() []byte { return str.dataForWriting }).ShouldNot(BeNil())
+				Expect(str.lenOfDataForWriting()).ToNot(BeZero())
+				str.RegisterError(testErr)
+				data := str.getDataForWriting(6)
+				Expect(data).To(BeNil())
+				Expect(str.lenOfDataForWriting()).To(BeZero())
 			})
 		})
 

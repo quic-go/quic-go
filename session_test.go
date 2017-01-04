@@ -317,6 +317,57 @@ var _ = Describe("Session", func() {
 			Expect(err).To(MatchError("RST_STREAM received with code 42"))
 		})
 
+		It("queues a RST_STERAM frame with the correct offset", func() {
+			_, err := session.GetOrOpenStream(5)
+			Expect(err).ToNot(HaveOccurred())
+			session.flowControlManager = newMockFlowControlHandler()
+			session.flowControlManager.(*mockFlowControlHandler).bytesSent = 0x1337
+			err = session.handleRstStreamFrame(&frames.RstStreamFrame{
+				StreamID: 5,
+			})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(session.packer.controlFrames).To(HaveLen(1))
+			Expect(session.packer.controlFrames[0].(*frames.RstStreamFrame)).To(Equal(&frames.RstStreamFrame{
+				StreamID:   5,
+				ByteOffset: 0x1337,
+			}))
+		})
+
+		It("doesn't queue a RST_STREAM for a stream that it already sent a FIN on", func() {
+			str, err := session.GetOrOpenStream(5)
+			str.(*stream).sentFin()
+			str.Close()
+			err = session.handleRstStreamFrame(&frames.RstStreamFrame{
+				StreamID: 5,
+			})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(session.packer.controlFrames).To(BeEmpty())
+		})
+
+		It("passes the byte offset to the flow controller", func() {
+			session.streamsMap.GetOrOpenStream(5)
+			session.flowControlManager = newMockFlowControlHandler()
+			err := session.handleRstStreamFrame(&frames.RstStreamFrame{
+				StreamID:   5,
+				ByteOffset: 0x1337,
+			})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(session.flowControlManager.(*mockFlowControlHandler).highestReceivedForStream).To(Equal(protocol.StreamID(5)))
+			Expect(session.flowControlManager.(*mockFlowControlHandler).highestReceived).To(Equal(protocol.ByteCount(0x1337)))
+		})
+
+		It("returns errors from the flow controller", func() {
+			session.streamsMap.GetOrOpenStream(5)
+			session.flowControlManager = newMockFlowControlHandler()
+			testErr := errors.New("flow control violation")
+			session.flowControlManager.(*mockFlowControlHandler).flowControlViolation = testErr
+			err := session.handleRstStreamFrame(&frames.RstStreamFrame{
+				StreamID:   5,
+				ByteOffset: 0x1337,
+			})
+			Expect(err).To(MatchError(testErr))
+		})
+
 		It("ignores the error when the stream is not known", func() {
 			err := session.handleFrames([]frames.Frame{&frames.RstStreamFrame{
 				StreamID:  5,

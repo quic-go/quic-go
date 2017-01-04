@@ -108,6 +108,11 @@ var _ = Describe("Flow controller", func() {
 			Expect(controller.bytesSent).To(Equal(protocol.ByteCount(5 + 6)))
 		})
 
+		It("gets the bytesSent", func() {
+			controller.bytesSent = 8
+			Expect(controller.GetBytesSent()).To(Equal(protocol.ByteCount(8)))
+		})
+
 		It("gets the size of the remaining flow control window", func() {
 			controller.bytesSent = 5
 			controller.sendFlowControlWindow = 12
@@ -206,16 +211,25 @@ var _ = Describe("Flow controller", func() {
 
 		It("updates the highestReceived", func() {
 			controller.highestReceived = 1337
-			increment := controller.UpdateHighestReceived(1338)
+			increment, err := controller.UpdateHighestReceived(1338)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(increment).To(Equal(protocol.ByteCount(1338 - 1337)))
 			Expect(controller.highestReceived).To(Equal(protocol.ByteCount(1338)))
 		})
 
 		It("does not decrease the highestReceived", func() {
 			controller.highestReceived = 1337
-			increment := controller.UpdateHighestReceived(1000)
-			Expect(increment).To(Equal(protocol.ByteCount(0)))
+			increment, err := controller.UpdateHighestReceived(1000)
+			Expect(err).To(MatchError(ErrReceivedSmallerByteOffset))
+			Expect(increment).To(BeZero())
 			Expect(controller.highestReceived).To(Equal(protocol.ByteCount(1337)))
+		})
+
+		It("does not error when setting the same byte offset", func() {
+			controller.highestReceived = 1337
+			increment, err := controller.UpdateHighestReceived(1337)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(increment).To(BeZero())
 		})
 
 		It("increases the highestReceived by a given increment", func() {
