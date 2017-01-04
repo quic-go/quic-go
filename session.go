@@ -127,7 +127,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	return session, err
 }
 
-func newClientSession(conn *net.UDPConn, addr *net.UDPAddr, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, streamCallback StreamCallback, closeCallback closeCallback, cryptoChangeCallback CryptoChangeCallback) (*Session, error) {
+func newClientSession(conn *net.UDPConn, addr *net.UDPAddr, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, streamCallback StreamCallback, closeCallback closeCallback, cryptoChangeCallback CryptoChangeCallback, negotiatedVersions []protocol.VersionNumber) (*Session, error) {
 	session := &Session{
 		conn:         &udpConn{conn: conn, currentAddr: addr},
 		connectionID: connectionID,
@@ -145,7 +145,7 @@ func newClientSession(conn *net.UDPConn, addr *net.UDPAddr, hostname string, v p
 
 	cryptoStream, _ := session.OpenStream(1)
 	var err error
-	session.cryptoSetup, err = handshake.NewCryptoSetupClient(hostname, connectionID, v, cryptoStream, session.connectionParameters, session.aeadChanged)
+	session.cryptoSetup, err = handshake.NewCryptoSetupClient(hostname, connectionID, v, cryptoStream, session.connectionParameters, session.aeadChanged, negotiatedVersions)
 	if err != nil {
 		return nil, err
 	}

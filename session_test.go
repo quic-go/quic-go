@@ -158,6 +158,7 @@ var _ = Describe("Session", func() {
 			func(*Session, utils.Stream) { streamCallbackCalled = true },
 			func(protocol.ConnectionID) { closeCallbackCalled = true },
 			func(isForwardSecure bool) {},
+			nil,
 		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(clientSession.streamsMap.openStreams).To(HaveLen(1)) // Crypto stream

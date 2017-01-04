@@ -15,6 +15,7 @@ import (
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
+	"github.com/lucas-clemente/quic-go/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -121,7 +122,7 @@ var _ = Describe("Crypto setup", func() {
 		stream = &mockStream{}
 		certManager = &mockCertManager{}
 		version := protocol.Version36
-		csInt, err := NewCryptoSetupClient("hostname", 0, version, stream, NewConnectionParamatersManager(protocol.PerspectiveClient, version), make(chan struct{}, 1))
+		csInt, err := NewCryptoSetupClient("hostname", 0, version, stream, NewConnectionParamatersManager(protocol.PerspectiveClient, version), make(chan struct{}, 1), nil)
 		Expect(err).ToNot(HaveOccurred())
 		cs = csInt.(*cryptoSetupClient)
 		cs.certManager = certManager
@@ -187,6 +188,48 @@ var _ = Describe("Crypto setup", func() {
 			err := cs.handleREJMessage(tagMap)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.sno).To(Equal(nonc))
+		})
+
+		Context("validating the Version list", func() {
+			It("doesn't care about the version list if there was no version negotiation", func() {
+				Expect(cs.validateVersionList([]byte{0})).To(BeTrue())
+			})
+
+			It("detects a downgrade attack if the number of versions is unequal", func() {
+				cs.negotiatedVersions = []protocol.VersionNumber{protocol.VersionWhatever}
+				Expect(cs.validateVersionList(bytes.Repeat([]byte{'f'}, 8))).To(BeFalse())
+			})
+
+			It("detects a downgrade attack", func() {
+				cs.negotiatedVersions = []protocol.VersionNumber{protocol.Version36}
+				b := &bytes.Buffer{}
+				utils.WriteUint32(b, protocol.VersionNumberToTag(protocol.Version35))
+				Expect(cs.validateVersionList(b.Bytes())).To(BeFalse())
+			})
+
+			It("errors if the version tags are invalid", func() {
+				cs.negotiatedVersions = []protocol.VersionNumber{protocol.VersionWhatever}
+				Expect(cs.validateVersionList([]byte{0, 1, 2})).To(BeFalse())
+			})
+
+			It("doesn't care about unsupported versions", func() {
+				cs.negotiatedVersions = []protocol.VersionNumber{protocol.VersionUnsupported, protocol.Version36, protocol.VersionUnsupported}
+				b := &bytes.Buffer{}
+				b.Write([]byte{0, 0, 0, 0})
+				utils.WriteUint32(b, protocol.VersionNumberToTag(protocol.Version36))
+				b.Write([]byte{0x13, 0x37, 0x13, 0x37})
+				Expect(cs.validateVersionList(b.Bytes())).To(BeTrue())
+			})
+
+			It("returns the right error when detecting a downgrade attack", func() {
+				cs.negotiatedVersions = []protocol.VersionNumber{protocol.VersionWhatever}
+				cs.receivedSecurePacket = true
+				err := cs.handleSHLOMessage(map[Tag][]byte{
+					TagPUBS: []byte{0},
+					TagVER:  []byte{0, 1},
+				})
+				Expect(err).To(MatchError(qerr.Error(qerr.VersionNegotiationMismatch, "Downgrade attack detected")))
+			})
 		})
 
 		Context("Certificates", func() {
@@ -368,6 +411,16 @@ var _ = Describe("Crypto setup", func() {
 			err := cs.handleSHLOMessage(tagMap)
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "server hello missing version list")))
 			Expect(cs.HandshakeComplete()).To(BeFalse())
+		})
+
+		It("accepts a SHLO after a version negotiation", func() {
+			cs.negotiatedVersions = []protocol.VersionNumber{protocol.Version36}
+			cs.receivedSecurePacket = true
+			b := &bytes.Buffer{}
+			utils.WriteUint32(b, protocol.VersionNumberToTag(protocol.Version36))
+			tagMap[TagVER] = b.Bytes()
+			err := cs.handleSHLOMessage(tagMap)
+			Expect(err).ToNot(HaveOccurred())
 		})
 
 		It("reads the server nonce, if set", func() {

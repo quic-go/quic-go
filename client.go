@@ -74,7 +74,7 @@ func NewClient(host string, cryptoChangeCallback CryptoChangeCallback, versionNe
 
 	utils.Infof("Starting new connection to %s (%s), connectionID %x, version %d", host, udpAddr.String(), connectionID, client.version)
 
-	err = client.createNewSession()
+	err = client.createNewSession(nil)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +170,7 @@ func (c *Client) handlePacket(packet []byte) error {
 		c.versionNegotiated = true
 
 		c.session.Close(errCloseSessionForNewVersion)
-		err = c.createNewSession()
+		err = c.createNewSession(hdr.SupportedVersions)
 		if err != nil {
 			return err
 		}
@@ -191,9 +191,9 @@ func (c *Client) handlePacket(packet []byte) error {
 	return nil
 }
 
-func (c *Client) createNewSession() error {
+func (c *Client) createNewSession(negotiatedVersions []protocol.VersionNumber) error {
 	var err error
-	c.session, err = newClientSession(c.conn, c.addr, c.hostname, c.version, c.connectionID, c.streamCallback, c.closeCallback, c.cryptoChangeCallback)
+	c.session, err = newClientSession(c.conn, c.addr, c.hostname, c.version, c.connectionID, c.streamCallback, c.closeCallback, c.cryptoChangeCallback, negotiatedVersions)
 	if err != nil {
 		return err
 	}

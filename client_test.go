@@ -5,8 +5,10 @@ import (
 	"encoding/binary"
 	"errors"
 	"net"
+	"reflect"
 	"runtime"
 	"time"
+	"unsafe"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
@@ -44,11 +46,12 @@ var _ = Describe("Client", func() {
 		Expect(err).NotTo(HaveOccurred())
 	}
 
-	It("sets the correct hostname for new clients", func() {
+	It("creates a new client", func() {
 		var err error
 		client, err = NewClient("quic.clemente.io:1337", nil, nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(client.hostname).To(Equal("quic.clemente.io"))
+		Expect(*(*[]protocol.VersionNumber)(unsafe.Pointer(reflect.ValueOf(client.session.(*Session).cryptoSetup).Elem().FieldByName("negotiatedVersions").UnsafeAddr()))).To(BeNil())
 	})
 
 	It("errors on invalid public header", func() {
@@ -95,7 +98,7 @@ var _ = Describe("Client", func() {
 		startUDPConn()
 		client.session = nil
 		client.hostname = "hostname"
-		err := client.createNewSession()
+		err := client.createNewSession(nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(client.session).ToNot(BeNil())
 		Expect(client.session.(*Session).connectionID).To(Equal(client.connectionID))
@@ -217,6 +220,7 @@ var _ = Describe("Client", func() {
 			Expect(err).ToNot(HaveOccurred())
 			// it didn't pass the version negoation packet to the session (since it has no payload)
 			Expect(session.packetCount).To(BeZero())
+			Expect(*(*[]protocol.VersionNumber)(unsafe.Pointer(reflect.ValueOf(client.session.(*Session).cryptoSetup).Elem().FieldByName("negotiatedVersions").UnsafeAddr()))).To(Equal([]protocol.VersionNumber{35}))
 
 			err = client.Close(nil)
 			Expect(err).ToNot(HaveOccurred())

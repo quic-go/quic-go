@@ -16,9 +16,10 @@ import (
 )
 
 type cryptoSetupClient struct {
-	hostname string
-	connID   protocol.ConnectionID
-	version  protocol.VersionNumber
+	hostname           string
+	connID             protocol.ConnectionID
+	version            protocol.VersionNumber
+	negotiatedVersions []protocol.VersionNumber
 
 	cryptoStream utils.Stream
 
@@ -62,6 +63,7 @@ func NewCryptoSetupClient(
 	cryptoStream utils.Stream,
 	connectionParameters ConnectionParametersManager,
 	aeadChanged chan struct{},
+	negotiatedVersions []protocol.VersionNumber,
 ) (CryptoSetup, error) {
 	return &cryptoSetupClient{
 		hostname:             hostname,
@@ -72,6 +74,7 @@ func NewCryptoSetupClient(
 		connectionParameters: connectionParameters,
 		keyDerivation:        crypto.DeriveKeysAESGCM,
 		aeadChanged:          aeadChanged,
+		negotiatedVersions:   negotiatedVersions,
 	}, nil
 }
 
@@ -196,11 +199,13 @@ func (h *cryptoSetupClient) handleSHLOMessage(cryptoData map[Tag][]byte) error {
 		return qerr.Error(qerr.CryptoMessageParameterNotFound, "PUBS")
 	}
 
-	_, ok = cryptoData[TagVER]
+	verTag, ok := cryptoData[TagVER]
 	if !ok {
 		return qerr.Error(qerr.InvalidCryptoMessageParameter, "server hello missing version list")
 	}
-	// TODO: verify versions
+	if !h.validateVersionList(verTag) {
+		return qerr.Error(qerr.VersionNegotiationMismatch, "Downgrade attack detected")
+	}
 
 	nonce := append(h.nonc, h.sno...)
 
@@ -234,6 +239,31 @@ func (h *cryptoSetupClient) handleSHLOMessage(cryptoData map[Tag][]byte) error {
 	h.aeadChanged <- struct{}{}
 
 	return nil
+}
+
+func (h *cryptoSetupClient) validateVersionList(verTags []byte) bool {
+	if len(h.negotiatedVersions) == 0 {
+		return true
+	}
+	if len(verTags)%4 != 0 || len(verTags)/4 != len(h.negotiatedVersions) {
+		return false
+	}
+
+	b := bytes.NewReader(verTags)
+	for _, negotiatedVersion := range h.negotiatedVersions {
+		verTag, err := utils.ReadUint32(b)
+		if err != nil { // should never occur, since the length was already checked
+			return false
+		}
+		ver := protocol.VersionTagToNumber(verTag)
+		if !protocol.IsSupportedVersion(ver) {
+			ver = protocol.VersionUnsupported
+		}
+		if ver != negotiatedVersion {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *cryptoSetupClient) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {
