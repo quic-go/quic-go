@@ -13,6 +13,7 @@ type VersionNumber int
 const (
 	Version35 VersionNumber = 35 + iota
 	Version36
+	Version37
 	VersionWhatever    = 0 // for when the version doesn't matter
 	VersionUnsupported = -1
 )

@@ -28,6 +28,7 @@ type cryptoSetupServer struct {
 	scfg                 *ServerConfig
 	diversificationNonce []byte
 
+	nullAEAD                    crypto.AEAD
 	secureAEAD                  crypto.AEAD
 	forwardSecureAEAD           crypto.AEAD
 	receivedForwardSecurePacket bool
@@ -69,6 +70,7 @@ func NewCryptoSetup(
 		scfg:                 scfg,
 		keyDerivation:        crypto.DeriveKeysAESGCM,
 		keyExchange:          getEphermalKEX,
+		nullAEAD:             crypto.NewNullAEAD(protocol.PerspectiveServer, version),
 		cryptoStream:         cryptoStream,
 		connectionParameters: connectionParametersManager,
 		aeadChanged:          aeadChanged,
@@ -184,8 +186,7 @@ func (h *cryptoSetupServer) Open(dst, src []byte, packetNumber protocol.PacketNu
 			return nil, protocol.EncryptionUnspecified, err
 		}
 	}
-	nullAEAD := &crypto.NullAEAD{}
-	res, err := nullAEAD.Open(dst, src, packetNumber, associatedData)
+	res, err := h.nullAEAD.Open(dst, src, packetNumber, associatedData)
 	if err != nil {
 		return res, protocol.EncryptionUnspecified, err
 	}
@@ -225,7 +226,7 @@ func (h *cryptoSetupServer) GetSealerWithEncryptionLevel(encLevel protocol.Encry
 }
 
 func (h *cryptoSetupServer) sealUnencrypted(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
-	return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData)
+	return h.nullAEAD.Seal(dst, src, packetNumber, associatedData)
 }
 
 func (h *cryptoSetupServer) sealSecure(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {

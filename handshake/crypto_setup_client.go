@@ -44,6 +44,7 @@ type cryptoSetupClient struct {
 	keyExchange        KeyExchangeFunction
 
 	receivedSecurePacket bool
+	nullAEAD             crypto.AEAD
 	secureAEAD           crypto.AEAD
 	forwardSecureAEAD    crypto.AEAD
 	aeadChanged          chan protocol.EncryptionLevel
@@ -79,6 +80,7 @@ func NewCryptoSetupClient(
 		connectionParameters: connectionParameters,
 		keyDerivation:        crypto.DeriveKeysAESGCM,
 		keyExchange:          getEphermalKEX,
+		nullAEAD:             crypto.NewNullAEAD(protocol.PerspectiveClient, version),
 		aeadChanged:          aeadChanged,
 		negotiatedVersions:   negotiatedVersions,
 	}, nil
@@ -300,8 +302,7 @@ func (h *cryptoSetupClient) Open(dst, src []byte, packetNumber protocol.PacketNu
 			return nil, protocol.EncryptionUnspecified, err
 		}
 	}
-	nullAEAD := &crypto.NullAEAD{}
-	res, err := nullAEAD.Open(dst, src, packetNumber, associatedData)
+	res, err := h.nullAEAD.Open(dst, src, packetNumber, associatedData)
 	if err != nil {
 		return nil, protocol.EncryptionUnspecified, err
 	}
@@ -340,7 +341,7 @@ func (h *cryptoSetupClient) GetSealerWithEncryptionLevel(encLevel protocol.Encry
 }
 
 func (h *cryptoSetupClient) sealUnencrypted(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
-	return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData)
+	return h.nullAEAD.Seal(dst, src, packetNumber, associatedData)
 }
 
 func (h *cryptoSetupClient) sealSecure(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
