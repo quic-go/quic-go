@@ -3,6 +3,7 @@ package h2quic
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -186,18 +187,39 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 
-	var res *http.Response
-	select {
-	case res = <-hdrChan:
-		c.mutex.Lock()
-		delete(c.responses, dataStreamID)
-		c.mutex.Unlock()
+	resc := make(chan error, 1)
+	if hasBody {
+		go func() {
+			resc <- c.writeRequestBody(dataStream, req.Body)
+		}()
 	}
 
-	// if an error occured on the header stream
-	if res == nil {
-		c.Close(c.headerErr)
-		return nil, c.headerErr
+	var res *http.Response
+
+	var receivedResponse bool
+	var bodySent bool
+
+	if !hasBody {
+		bodySent = true
+	}
+
+	for !(bodySent && receivedResponse) {
+		select {
+		case res = <-hdrChan:
+			receivedResponse = true
+			c.mutex.Lock()
+			delete(c.responses, dataStreamID)
+			c.mutex.Unlock()
+			if res == nil { // an error occured on the header stream
+				c.Close(c.headerErr)
+				return nil, c.headerErr
+			}
+		case err := <-resc:
+			bodySent = true
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	// TODO: correctly set this variable
@@ -205,7 +227,6 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	isHead := (req.Method == "HEAD")
 
 	res = setLength(res, isHead, streamEnded)
-	utils.Debugf("%#v", res)
 
 	if streamEnded || isHead {
 		res.Body = noBody
@@ -223,6 +244,23 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	res.Request = req
 
 	return res, nil
+}
+
+func (c *Client) writeRequestBody(dataStream utils.Stream, body io.ReadCloser) (err error) {
+	defer func() {
+		cerr := body.Close()
+		if err == nil {
+			// TODO: what to do with dataStream here? Maybe reset it?
+			err = cerr
+		}
+	}()
+
+	_, err = io.Copy(dataStream, body)
+	if err != nil {
+		// TODO: what to do with dataStream here? Maybe reset it?
+		return err
+	}
+	return dataStream.Close()
 }
 
 // Close closes the client

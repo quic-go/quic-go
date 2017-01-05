@@ -3,6 +3,7 @@ package h2quic
 import (
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"net/http"
 
 	"golang.org/x/net/http2"
@@ -217,6 +218,75 @@ var _ = Describe("Client", func() {
 			Eventually(func() []byte { return headerStream.dataWritten.Bytes() }).ShouldNot(BeNil())
 			mhf := getRequest(headerStream.dataWritten.Bytes())
 			Expect(mhf.HeadersFrame.StreamEnded()).To(BeFalse())
+		})
+
+		Context("requests containing a Body", func() {
+			var requestBody []byte
+			var response *http.Response
+
+			BeforeEach(func() {
+				requestBody = []byte("request body")
+				body := &mockBody{}
+				body.SetData(requestBody)
+				request.Body = body
+				response = &http.Response{
+					StatusCode: 200,
+					Header:     http.Header{"Content-Length": []string{"1000"}},
+				}
+			})
+
+			It("sends a request", func() {
+				var doRsp *http.Response
+				var doErr error
+				var doReturned bool
+				go func() {
+					doRsp, doErr = client.Do(request)
+					doReturned = true
+				}()
+				Eventually(func() chan *http.Response { return client.responses[5] }).ShouldNot(BeNil())
+				client.responses[5] <- response
+				dataStream := qClient.streams[5]
+				Eventually(func() bool { return doReturned }).Should(BeTrue())
+				Expect(dataStream.dataWritten.Bytes()).To(Equal(requestBody))
+				Expect(dataStream.closed).To(BeTrue())
+				Expect(request.Body.(*mockBody).closed).To(BeTrue())
+				Expect(doErr).ToNot(HaveOccurred())
+				Expect(doRsp).To(Equal(response))
+			})
+
+			It("returns the error that occurred when reading the body", func() {
+				testErr := errors.New("testErr")
+				request.Body.(*mockBody).readErr = testErr
+
+				var doRsp *http.Response
+				var doErr error
+				var doReturned bool
+				go func() {
+					doRsp, doErr = client.Do(request)
+					doReturned = true
+				}()
+				Eventually(func() bool { return doReturned }).Should(BeTrue())
+				Expect(doErr).To(MatchError(testErr))
+				Expect(doRsp).To(BeNil())
+				Expect(request.Body.(*mockBody).closed).To(BeTrue())
+			})
+
+			It("returns the error that occurred when closing the body", func() {
+				testErr := errors.New("testErr")
+				request.Body.(*mockBody).closeErr = testErr
+
+				var doRsp *http.Response
+				var doErr error
+				var doReturned bool
+				go func() {
+					doRsp, doErr = client.Do(request)
+					doReturned = true
+				}()
+				Eventually(func() bool { return doReturned }).Should(BeTrue())
+				Expect(doErr).To(MatchError(testErr))
+				Expect(doRsp).To(BeNil())
+				Expect(request.Body.(*mockBody).closed).To(BeTrue())
+			})
 		})
 
 		Context("gzip compression", func() {

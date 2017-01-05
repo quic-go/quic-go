@@ -1,6 +1,8 @@
 package h2quic
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 
 	. "github.com/onsi/ginkgo"
@@ -14,17 +16,30 @@ func (m *mockQuicRoundTripper) Do(req *http.Request) (*http.Response, error) {
 }
 
 type mockBody struct {
-	closed bool
+	reader   bytes.Reader
+	readErr  error
+	closeErr error
+	closed   bool
 }
 
-func (m *mockBody) Read([]byte) (int, error) {
-	panic("not implemented")
+func (m *mockBody) Read(p []byte) (int, error) {
+	if m.readErr != nil {
+		return 0, m.readErr
+	}
+	return m.reader.Read(p)
+}
+
+func (m *mockBody) SetData(data []byte) {
+	m.reader = *bytes.NewReader(data)
 }
 
 func (m *mockBody) Close() error {
 	m.closed = true
-	return nil
+	return m.closeErr
 }
+
+// make sure the mockBody can be used as a http.Request.Body
+var _ io.ReadCloser = &mockBody{}
 
 var _ = Describe("RoundTripper", func() {
 	var (
