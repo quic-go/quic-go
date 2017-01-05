@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
@@ -16,6 +17,8 @@ import (
 )
 
 type cryptoSetupClient struct {
+	mutex sync.RWMutex
+
 	hostname           string
 	connID             protocol.ConnectionID
 	version            protocol.VersionNumber
@@ -186,6 +189,9 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 }
 
 func (h *cryptoSetupClient) handleSHLOMessage(cryptoData map[Tag][]byte) error {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+
 	if !h.receivedSecurePacket {
 		return qerr.Error(qerr.CryptoEncryptionLevelIncorrect, "unencrypted SHLO message")
 	}
@@ -323,7 +329,10 @@ func (h *cryptoSetupClient) UnlockForSealing() {
 }
 
 func (h *cryptoSetupClient) HandshakeComplete() bool {
-	return h.forwardSecureAEAD != nil
+	h.mutex.RLock()
+	complete := h.forwardSecureAEAD != nil
+	h.mutex.RUnlock()
+	return complete
 }
 
 func (h *cryptoSetupClient) sendCHLO() error {
@@ -413,6 +422,9 @@ func (h *cryptoSetupClient) maybeUpgradeCrypto() error {
 	if !h.serverVerified {
 		return nil
 	}
+
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
 
 	leafCert := h.certManager.GetLeafCert()
 
