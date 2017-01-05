@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"sync"
-	"sync/atomic"
 
 	"github.com/lucas-clemente/quic-go/flowcontrol"
 	"github.com/lucas-clemente/quic-go/frames"
@@ -16,6 +15,8 @@ import (
 //
 // Read() and Write() may be called concurrently, but multiple calls to Read() or Write() individually must be synchronized manually.
 type stream struct {
+	mutex sync.Mutex
+
 	streamID protocol.StreamID
 	onData   func()
 
@@ -23,14 +24,13 @@ type stream struct {
 	writeOffset    protocol.ByteCount
 	readOffset     protocol.ByteCount
 
-	// Once set, err must not be changed!
-	err   error
-	mutex sync.Mutex
+	// Once set, the errors must not be changed!
+	readErr  error
+	writeErr error
 
-	// eof is set if we are finished reading
-	eof int32 // really a bool
-	// closed is set when we are finished writing
-	closed int32 // really a bool
+	cancelled       utils.AtomicBool
+	finishedReading utils.AtomicBool
+	finishedWriting utils.AtomicBool
 
 	frameQueue        *streamFrameSorter
 	newFrameOrErrCond sync.Cond
@@ -59,7 +59,10 @@ func newStream(StreamID protocol.StreamID, onData func(), flowControlManager flo
 
 // Read implements io.Reader. It is not thread safe!
 func (s *stream) Read(p []byte) (int, error) {
-	if atomic.LoadInt32(&s.eof) != 0 {
+	if s.cancelled.Get() {
+		return 0, s.readErr
+	}
+	if s.finishedReading.Get() {
 		return 0, io.EOF
 	}
 
@@ -70,14 +73,14 @@ func (s *stream) Read(p []byte) (int, error) {
 
 		if frame == nil && bytesRead > 0 {
 			s.mutex.Unlock()
-			return bytesRead, s.err
+			return bytesRead, s.readErr
 		}
 
 		var err error
 		for {
 			// Stop waiting on errors
-			if s.err != nil {
-				err = s.err
+			if s.readErr != nil {
+				err = s.readErr
 				break
 			}
 			if frame != nil {
@@ -90,8 +93,10 @@ func (s *stream) Read(p []byte) (int, error) {
 		s.mutex.Unlock()
 		// Here, either frame != nil xor err != nil
 
+		// fmt.Printf("err: %#v, frame: %#v\n", err, frame)
+
 		if frame == nil {
-			atomic.StoreInt32(&s.eof, 1)
+			s.finishedReading.Set(true)
 			// We have an err and no data, return the error
 			return bytesRead, err
 		}
@@ -119,7 +124,7 @@ func (s *stream) Read(p []byte) (int, error) {
 			s.frameQueue.Pop()
 			s.mutex.Unlock()
 			if fin {
-				atomic.StoreInt32(&s.eof, 1)
+				s.finishedReading.Set(true)
 				return bytesRead, io.EOF
 			}
 		}
@@ -132,8 +137,8 @@ func (s *stream) Write(p []byte) (int, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	if s.err != nil {
-		return 0, s.err
+	if s.writeErr != nil {
+		return 0, s.writeErr
 	}
 
 	if len(p) == 0 {
@@ -145,12 +150,12 @@ func (s *stream) Write(p []byte) (int, error) {
 
 	s.onData()
 
-	for s.dataForWriting != nil && s.err == nil {
+	for s.dataForWriting != nil && s.writeErr == nil {
 		s.doneWritingOrErrCond.Wait()
 	}
 
-	if s.err != nil {
-		return 0, s.err
+	if s.writeErr != nil {
+		return 0, s.writeErr
 	}
 
 	return len(p), nil
@@ -159,7 +164,7 @@ func (s *stream) Write(p []byte) (int, error) {
 func (s *stream) lenOfDataForWriting() protocol.ByteCount {
 	s.mutex.Lock()
 	var l protocol.ByteCount
-	if s.err == nil {
+	if s.writeErr == nil {
 		l = protocol.ByteCount(len(s.dataForWriting))
 	}
 	s.mutex.Unlock()
@@ -168,7 +173,7 @@ func (s *stream) lenOfDataForWriting() protocol.ByteCount {
 
 func (s *stream) getDataForWriting(maxBytes protocol.ByteCount) []byte {
 	s.mutex.Lock()
-	if s.err != nil {
+	if s.writeErr != nil {
 		s.mutex.Unlock()
 		return nil
 	}
@@ -192,14 +197,14 @@ func (s *stream) getDataForWriting(maxBytes protocol.ByteCount) []byte {
 
 // Close implements io.Closer
 func (s *stream) Close() error {
-	atomic.StoreInt32(&s.closed, 1)
+	s.finishedWriting.Set(true)
 	s.onData()
 	return nil
 }
 
 func (s *stream) shouldSendFin() bool {
 	s.mutex.Lock()
-	res := atomic.LoadInt32(&s.closed) != 0 && !s.finSent && s.err == nil && s.dataForWriting == nil
+	res := s.finishedWriting.Get() && !s.finSent && s.writeErr == nil && s.dataForWriting == nil
 	s.mutex.Unlock()
 	return res
 }
@@ -233,32 +238,50 @@ func (s *stream) CloseRemote(offset protocol.ByteCount) {
 	s.AddStreamFrame(&frames.StreamFrame{FinBit: true, Offset: offset})
 }
 
-// RegisterError is called by session to indicate that an error occurred and the
-// stream should be closed.
-func (s *stream) RegisterError(err error) {
-	atomic.StoreInt32(&s.closed, 1)
+// Cancel is called by session to indicate that an error occurred
+// The stream should will be closed immediately
+func (s *stream) Cancel(err error) {
+	s.finishedReading.Set(true)
+	s.finishedWriting.Set(true)
+	s.cancelled.Set(true)
+
 	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	if s.err != nil { // s.err must not be changed!
-		return
+	// errors must not be changed!
+	if s.readErr == nil {
+		s.readErr = err
+		s.newFrameOrErrCond.Signal()
 	}
-	s.err = err
-	s.doneWritingOrErrCond.Signal()
-	s.newFrameOrErrCond.Signal()
+	if s.writeErr == nil {
+		s.writeErr = err
+		s.doneWritingOrErrCond.Signal()
+	}
+	s.mutex.Unlock()
 }
 
-func (s *stream) finishedReading() bool {
-	return atomic.LoadInt32(&s.eof) != 0
+// resets the stream remotely
+func (s *stream) RegisterRemoteError(err error) {
+	s.finishedWriting.Set(true)
+	s.mutex.Lock()
+	// errors must not be changed!
+	if s.writeErr == nil {
+		s.writeErr = err
+		s.doneWritingOrErrCond.Signal()
+	}
+	s.mutex.Unlock()
 }
 
-func (s *stream) finishedWriting() bool {
+func (s *stream) finishedRead() bool {
+	return s.finishedReading.Get()
+}
+
+func (s *stream) finishedWriteAndSentFin() bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	return s.err != nil || (atomic.LoadInt32(&s.closed) != 0 && s.finSent)
+	return s.writeErr != nil || (s.finishedWriting.Get() && s.finSent)
 }
 
 func (s *stream) finished() bool {
-	return s.finishedReading() && s.finishedWriting()
+	return s.finishedRead() && s.finishedWriteAndSentFin()
 }
 
 func (s *stream) StreamID() protocol.StreamID {

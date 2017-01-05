@@ -402,8 +402,8 @@ func (s *Session) handleRstStreamFrame(frame *frames.RstStreamFrame) error {
 		return errRstStreamOnInvalidStream
 	}
 
-	shouldSendRst := !str.finishedWriting()
-	s.closeStreamWithError(str, fmt.Errorf("RST_STREAM received with code %d", frame.ErrorCode))
+	shouldSendRst := !str.finishedWriteAndSentFin()
+	str.RegisterRemoteError(fmt.Errorf("RST_STREAM received with code %d", frame.ErrorCode))
 	bytesSent, err := s.flowControlManager.ResetStream(frame.StreamID, frame.ByteOffset)
 	if err != nil {
 		return err
@@ -485,13 +485,9 @@ func (s *Session) closeImpl(e error, remoteClose bool) error {
 
 func (s *Session) closeStreamsWithError(err error) {
 	s.streamsMap.Iterate(func(str *stream) (bool, error) {
-		s.closeStreamWithError(str, err)
+		str.Cancel(err)
 		return true, nil
 	})
-}
-
-func (s *Session) closeStreamWithError(str *stream, err error) {
-	str.RegisterError(err)
 }
 
 func (s *Session) sendPacket() error {

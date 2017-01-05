@@ -288,6 +288,149 @@ var _ = Describe("Stream", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(onDataCalled).To(BeTrue())
 		})
+
+		Context("closing", func() {
+			Context("with FIN bit", func() {
+				It("returns EOFs", func() {
+					frame := frames.StreamFrame{
+						Offset: 0,
+						Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
+						FinBit: true,
+					}
+					str.AddStreamFrame(&frame)
+					b := make([]byte, 4)
+					n, err := str.Read(b)
+					Expect(err).To(MatchError(io.EOF))
+					Expect(n).To(Equal(4))
+					Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
+					n, err = str.Read(b)
+					Expect(n).To(BeZero())
+					Expect(err).To(MatchError(io.EOF))
+				})
+
+				It("handles out-of-order frames", func() {
+					frame1 := frames.StreamFrame{
+						Offset: 2,
+						Data:   []byte{0xBE, 0xEF},
+						FinBit: true,
+					}
+					frame2 := frames.StreamFrame{
+						Offset: 0,
+						Data:   []byte{0xDE, 0xAD},
+					}
+					err := str.AddStreamFrame(&frame1)
+					Expect(err).ToNot(HaveOccurred())
+					err = str.AddStreamFrame(&frame2)
+					Expect(err).ToNot(HaveOccurred())
+					b := make([]byte, 4)
+					n, err := str.Read(b)
+					Expect(err).To(MatchError(io.EOF))
+					Expect(n).To(Equal(4))
+					Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
+					n, err = str.Read(b)
+					Expect(n).To(BeZero())
+					Expect(err).To(MatchError(io.EOF))
+				})
+
+				It("returns EOFs with partial read", func() {
+					frame := frames.StreamFrame{
+						Offset: 0,
+						Data:   []byte{0xDE, 0xAD},
+						FinBit: true,
+					}
+					err := str.AddStreamFrame(&frame)
+					Expect(err).ToNot(HaveOccurred())
+					b := make([]byte, 4)
+					n, err := str.Read(b)
+					Expect(err).To(MatchError(io.EOF))
+					Expect(n).To(Equal(2))
+					Expect(b[:n]).To(Equal([]byte{0xDE, 0xAD}))
+				})
+
+				It("handles immediate FINs", func() {
+					frame := frames.StreamFrame{
+						Offset: 0,
+						Data:   []byte{},
+						FinBit: true,
+					}
+					err := str.AddStreamFrame(&frame)
+					Expect(err).ToNot(HaveOccurred())
+					b := make([]byte, 4)
+					n, err := str.Read(b)
+					Expect(n).To(BeZero())
+					Expect(err).To(MatchError(io.EOF))
+				})
+			})
+
+			Context("when CloseRemote is called", func() {
+				It("closes", func() {
+					str.CloseRemote(0)
+					b := make([]byte, 8)
+					n, err := str.Read(b)
+					Expect(n).To(BeZero())
+					Expect(err).To(MatchError(io.EOF))
+				})
+			})
+		})
+
+		Context("cancelling the stream", func() {
+			testErr := errors.New("test error")
+
+			It("immediately returns all reads", func() {
+				var readReturned bool
+				var n int
+				var err error
+				b := make([]byte, 4)
+				go func() {
+					n, err = str.Read(b)
+					readReturned = true
+				}()
+				Consistently(func() bool { return readReturned }).Should(BeFalse())
+				str.Cancel(testErr)
+				Eventually(func() bool { return readReturned }).Should(BeTrue())
+				Expect(n).To(BeZero())
+				Expect(err).To(MatchError(testErr))
+			})
+
+			It("errors for all following reads", func() {
+				str.Cancel(testErr)
+				b := make([]byte, 1)
+				n, err := str.Read(b)
+				Expect(n).To(BeZero())
+				Expect(err).To(MatchError(testErr))
+			})
+		})
+	})
+
+	Context("resetting", func() {
+		testErr := errors.New("received RST_STREAM")
+
+		It("continues reading after receiving a remote error", func() {
+			frame := frames.StreamFrame{
+				Offset: 0,
+				Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
+			}
+			str.AddStreamFrame(&frame)
+			str.RegisterRemoteError(testErr)
+			b := make([]byte, 4)
+			_, err := str.Read(b)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("stops writing after receiving a remote error", func() {
+			var writeReturned bool
+			var n int
+			var err error
+
+			go func() {
+				n, err = str.Write([]byte("foobar"))
+				writeReturned = true
+			}()
+			str.RegisterRemoteError(testErr)
+			Eventually(func() bool { return writeReturned }).Should(BeTrue())
+			Expect(n).To(BeZero())
+			Expect(err).To(MatchError(testErr))
+		})
 	})
 
 	Context("writing", func() {
@@ -336,15 +479,6 @@ var _ = Describe("Stream", func() {
 			Expect(str.lenOfDataForWriting()).To(Equal(protocol.ByteCount(0)))
 		})
 
-		It("returns remote errors", func(done Done) {
-			testErr := errors.New("test")
-			str.RegisterError(testErr)
-			n, err := str.Write([]byte("foo"))
-			Expect(n).To(BeZero())
-			Expect(err).To(MatchError(testErr))
-			close(done)
-		})
-
 		It("getDataForWriting returns nil if no data is available", func() {
 			Expect(str.getDataForWriting(1000)).To(BeNil())
 		})
@@ -372,39 +506,63 @@ var _ = Describe("Stream", func() {
 			Expect(n).To(BeZero())
 			Expect(err).ToNot(HaveOccurred())
 		})
-	})
 
-	Context("closing", func() {
-		It("sets closed when calling Close", func() {
-			str.Close()
-			Expect(str.closed).ToNot(BeZero())
+		Context("closing", func() {
+			It("sets finishedWriting when calling Close", func() {
+				str.Close()
+				Expect(str.finishedWriting.Get()).To(BeTrue())
+			})
+
+			It("allows FIN", func() {
+				str.Close()
+				Expect(str.shouldSendFin()).To(BeTrue())
+			})
+
+			It("does not allow FIN when there's still data", func() {
+				str.dataForWriting = []byte("foobar")
+				str.Close()
+				Expect(str.shouldSendFin()).To(BeFalse())
+			})
+
+			It("does not allow FIN when the stream is not closed", func() {
+				Expect(str.shouldSendFin()).To(BeFalse())
+			})
+
+			It("does not allow FIN after an error", func() {
+				str.Cancel(errors.New("test"))
+				Expect(str.shouldSendFin()).To(BeFalse())
+			})
+
+			It("does not allow FIN twice", func() {
+				str.Close()
+				Expect(str.shouldSendFin()).To(BeTrue())
+				str.sentFin()
+				Expect(str.shouldSendFin()).To(BeFalse())
+			})
 		})
 
-		It("allows FIN", func() {
-			str.Close()
-			Expect(str.shouldSendFin()).To(BeTrue())
-		})
+		Context("cancelling", func() {
+			testErr := errors.New("test")
 
-		It("does not allow FIN when there's still data", func() {
-			str.dataForWriting = []byte("foobar")
-			str.Close()
-			Expect(str.shouldSendFin()).To(BeFalse())
-		})
+			It("returns errors when the stream is cancelled", func() {
+				str.Cancel(testErr)
+				n, err := str.Write([]byte("foo"))
+				Expect(n).To(BeZero())
+				Expect(err).To(MatchError(testErr))
+			})
 
-		It("does not allow FIN when the stream is not closed", func() {
-			Expect(str.shouldSendFin()).To(BeFalse())
-		})
-
-		It("does not allow FIN after an error", func() {
-			str.RegisterError(errors.New("test"))
-			Expect(str.shouldSendFin()).To(BeFalse())
-		})
-
-		It("does not allow FIN twice", func() {
-			str.Close()
-			Expect(str.shouldSendFin()).To(BeTrue())
-			str.sentFin()
-			Expect(str.shouldSendFin()).To(BeFalse())
+			It("doesn't get data for writing if an error occurred", func() {
+				go func() {
+					_, err := str.Write([]byte("foobar"))
+					Expect(err).To(MatchError(testErr))
+				}()
+				Eventually(func() []byte { return str.dataForWriting }).ShouldNot(BeNil())
+				Expect(str.lenOfDataForWriting()).ToNot(BeZero())
+				str.Cancel(testErr)
+				data := str.getDataForWriting(6)
+				Expect(data).To(BeNil())
+				Expect(str.lenOfDataForWriting()).To(BeZero())
+			})
 		})
 	})
 
@@ -436,141 +594,4 @@ var _ = Describe("Stream", func() {
 		})
 	})
 
-	Context("closing", func() {
-		Context("with fin bit", func() {
-			It("returns EOFs", func() {
-				frame := frames.StreamFrame{
-					Offset: 0,
-					Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
-					FinBit: true,
-				}
-				str.AddStreamFrame(&frame)
-				b := make([]byte, 4)
-				n, err := str.Read(b)
-				Expect(err).To(MatchError(io.EOF))
-				Expect(n).To(Equal(4))
-				Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
-				n, err = str.Read(b)
-				Expect(n).To(BeZero())
-				Expect(err).To(MatchError(io.EOF))
-			})
-
-			It("handles out-of-order frames", func() {
-				frame1 := frames.StreamFrame{
-					Offset: 2,
-					Data:   []byte{0xBE, 0xEF},
-					FinBit: true,
-				}
-				frame2 := frames.StreamFrame{
-					Offset: 0,
-					Data:   []byte{0xDE, 0xAD},
-				}
-				err := str.AddStreamFrame(&frame1)
-				Expect(err).ToNot(HaveOccurred())
-				err = str.AddStreamFrame(&frame2)
-				Expect(err).ToNot(HaveOccurred())
-				b := make([]byte, 4)
-				n, err := str.Read(b)
-				Expect(err).To(MatchError(io.EOF))
-				Expect(n).To(Equal(4))
-				Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
-				n, err = str.Read(b)
-				Expect(n).To(BeZero())
-				Expect(err).To(MatchError(io.EOF))
-			})
-
-			It("returns EOFs with partial read", func() {
-				frame := frames.StreamFrame{
-					Offset: 0,
-					Data:   []byte{0xDE, 0xAD},
-					FinBit: true,
-				}
-				err := str.AddStreamFrame(&frame)
-				Expect(err).ToNot(HaveOccurred())
-				b := make([]byte, 4)
-				n, err := str.Read(b)
-				Expect(err).To(MatchError(io.EOF))
-				Expect(n).To(Equal(2))
-				Expect(b[:n]).To(Equal([]byte{0xDE, 0xAD}))
-			})
-
-			It("handles immediate FINs", func() {
-				frame := frames.StreamFrame{
-					Offset: 0,
-					Data:   []byte{},
-					FinBit: true,
-				}
-				err := str.AddStreamFrame(&frame)
-				Expect(err).ToNot(HaveOccurred())
-				b := make([]byte, 4)
-				n, err := str.Read(b)
-				Expect(n).To(BeZero())
-				Expect(err).To(MatchError(io.EOF))
-			})
-		})
-
-		Context("with remote errors", func() {
-			testErr := errors.New("test error")
-
-			It("returns EOF if data is read before", func() {
-				frame := frames.StreamFrame{
-					Offset: 0,
-					Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
-					FinBit: true,
-				}
-				err := str.AddStreamFrame(&frame)
-				Expect(err).ToNot(HaveOccurred())
-				str.RegisterError(testErr)
-				b := make([]byte, 4)
-				n, err := str.Read(b)
-				Expect(err).To(MatchError(io.EOF))
-				Expect(n).To(Equal(4))
-				Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
-				n, err = str.Read(b)
-				Expect(n).To(BeZero())
-				Expect(err).To(MatchError(io.EOF))
-			})
-
-			It("returns errors", func() {
-				frame := frames.StreamFrame{
-					Offset: 0,
-					Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
-				}
-				err := str.AddStreamFrame(&frame)
-				Expect(err).ToNot(HaveOccurred())
-				str.RegisterError(testErr)
-				b := make([]byte, 4)
-				n, err := str.Read(b)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(n).To(Equal(4))
-				Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
-				n, err = str.Read(b)
-				Expect(n).To(BeZero())
-				Expect(err).To(MatchError(testErr))
-			})
-
-			It("doesn't get data for writing if an error occurred", func() {
-				go func() {
-					_, err := str.Write([]byte("foobar"))
-					Expect(err).To(MatchError(testErr))
-				}()
-				Eventually(func() []byte { return str.dataForWriting }).ShouldNot(BeNil())
-				Expect(str.lenOfDataForWriting()).ToNot(BeZero())
-				str.RegisterError(testErr)
-				data := str.getDataForWriting(6)
-				Expect(data).To(BeNil())
-				Expect(str.lenOfDataForWriting()).To(BeZero())
-			})
-		})
-
-		Context("when CloseRemote is called", func() {
-			It("closes", func() {
-				str.CloseRemote(0)
-				b := make([]byte, 8)
-				n, err := str.Read(b)
-				Expect(n).To(BeZero())
-				Expect(err).To(MatchError(io.EOF))
-			})
-		})
-	})
 })

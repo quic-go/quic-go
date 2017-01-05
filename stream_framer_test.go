@@ -239,7 +239,7 @@ var _ = Describe("Stream Framer", func() {
 		Context("sending FINs", func() {
 			It("sends FINs when streams are closed", func() {
 				stream1.writeOffset = 42
-				stream1.closed = 1
+				stream1.finishedWriting.Set(true)
 				fs := framer.PopStreamFrames(1000)
 				Expect(fs).To(HaveLen(1))
 				Expect(fs[0].StreamID).To(Equal(stream1.streamID))
@@ -250,7 +250,7 @@ var _ = Describe("Stream Framer", func() {
 
 			It("sends FINs when flow-control blocked", func() {
 				stream1.writeOffset = 42
-				stream1.closed = 1
+				stream1.finishedWriting.Set(true)
 				fcm.sendWindowSizes[stream1.StreamID()] = 42
 				fs := framer.PopStreamFrames(1000)
 				Expect(fs).To(HaveLen(1))
@@ -262,7 +262,7 @@ var _ = Describe("Stream Framer", func() {
 
 			It("bundles FINs with data", func() {
 				stream1.dataForWriting = []byte("foobar")
-				stream1.closed = 1
+				stream1.finishedWriting.Set(true)
 				fs := framer.PopStreamFrames(1000)
 				Expect(fs).To(HaveLen(1))
 				Expect(fs[0].StreamID).To(Equal(stream1.streamID))
@@ -401,7 +401,7 @@ var _ = Describe("Stream Framer", func() {
 			frames := framer.PopStreamFrames(1000)
 			Expect(frames).To(HaveLen(1))
 			Expect(frames[0].FinBit).To(BeFalse())
-			stream1.closed = 1
+			stream1.finishedWriting.Set(true)
 			frames = framer.PopStreamFrames(1000)
 			Expect(frames).To(HaveLen(1))
 			Expect(frames[0].FinBit).To(BeTrue())

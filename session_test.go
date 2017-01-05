@@ -233,7 +233,7 @@ var _ = Describe("Session", func() {
 			Expect(err).To(MatchError("Error accessing the flowController map."))
 		})
 
-		It("closes streams with error", func() {
+		It("cancels streams with error", func() {
 			testErr := errors.New("test")
 			session.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
@@ -245,17 +245,18 @@ var _ = Describe("Session", func() {
 			Expect(streamCallbackCalled).To(BeTrue())
 			p := make([]byte, 4)
 			_, err := str.Read(p)
+			Expect(err).ToNot(HaveOccurred())
 			session.closeStreamsWithError(testErr)
 			_, err = str.Read(p)
 			Expect(err).To(MatchError(testErr))
 			session.garbageCollectStreams()
-			Expect(session.streamsMap.openStreams).To(HaveLen(1))
+			Expect(session.streamsMap.openStreams).To(BeEmpty())
 			str, err = session.streamsMap.GetOrOpenStream(5)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(str).To(BeNil())
 		})
 
-		It("closes empty streams with error", func() {
+		It("cancels empty streams with error", func() {
 			testErr := errors.New("test")
 			session.GetOrOpenStream(5)
 			Expect(session.streamsMap.openStreams).To(HaveLen(2))
@@ -301,7 +302,7 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("handling RST_STREAM frames", func() {
-		It("closes the receiving streams for writing and reading", func() {
+		It("closes the streams for writing", func() {
 			s, err := session.GetOrOpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
 			err = session.handleRstStreamFrame(&frames.RstStreamFrame{
@@ -312,9 +313,25 @@ var _ = Describe("Session", func() {
 			n, err := s.Write([]byte{0})
 			Expect(n).To(BeZero())
 			Expect(err).To(MatchError("RST_STREAM received with code 42"))
-			n, err = s.Read([]byte{0})
-			Expect(n).To(BeZero())
-			Expect(err).To(MatchError("RST_STREAM received with code 42"))
+		})
+
+		It("doesn't close the stream for reading", func() {
+			s, err := session.GetOrOpenStream(5)
+			Expect(err).ToNot(HaveOccurred())
+			session.handleStreamFrame(&frames.StreamFrame{
+				StreamID: 5,
+				Data:     []byte("foobar"),
+			})
+			err = session.handleRstStreamFrame(&frames.RstStreamFrame{
+				StreamID:   5,
+				ErrorCode:  42,
+				ByteOffset: 6,
+			})
+			Expect(err).ToNot(HaveOccurred())
+			b := make([]byte, 3)
+			n, err := s.Read(b)
+			Expect(n).To(Equal(3))
+			Expect(err).ToNot(HaveOccurred())
 		})
 
 		It("queues a RST_STERAM frame with the correct offset", func() {
