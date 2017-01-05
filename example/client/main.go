@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"flag"
+	"io"
 	"net/http"
 	"sync"
 
@@ -34,6 +36,14 @@ func main() {
 				panic(err)
 			}
 			utils.Infof("Got response for %s: %#v", addr, rsp)
+
+			body := &bytes.Buffer{}
+			_, err = io.Copy(body, rsp.Body)
+			if err != nil {
+				panic(err)
+			}
+			utils.Infof("Request Body:")
+			utils.Infof("%s", body.Bytes())
 			wg.Done()
 		}(addr)
 	}
