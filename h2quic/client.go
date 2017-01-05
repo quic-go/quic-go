@@ -155,6 +155,8 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		return nil, errors.New("h2quic Client BUG: Do called for the wrong client")
 	}
 
+	hasBody := (req.Body != nil)
+
 	c.mutex.Lock()
 	c.highestOpenedStream += 2
 	dataStreamID := c.highestOpenedStream
@@ -176,7 +178,9 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	if !c.t.disableCompression() && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" && req.Method != "HEAD" {
 		requestedGzip = true
 	}
-	err = c.requestWriter.WriteRequest(req, dataStreamID, requestedGzip)
+	// TODO: add support for trailers
+	endStream := !hasBody
+	err = c.requestWriter.WriteRequest(req, dataStreamID, endStream, requestedGzip)
 	if err != nil {
 		c.Close(err)
 		return nil, err
@@ -217,7 +221,6 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	}
 
 	res.Request = req
-	// TODO: correctly handle gzipped responses
 
 	return res, nil
 }

@@ -204,6 +204,21 @@ var _ = Describe("Client", func() {
 			})
 		})
 
+		It("sets the EndStream header for requests without a body", func() {
+			go func() { client.Do(request) }()
+			Eventually(func() []byte { return headerStream.dataWritten.Bytes() }).ShouldNot(BeNil())
+			mhf := getRequest(headerStream.dataWritten.Bytes())
+			Expect(mhf.HeadersFrame.StreamEnded()).To(BeTrue())
+		})
+
+		It("sets the EndStream header to false for requests with a body", func() {
+			request.Body = &mockBody{}
+			go func() { client.Do(request) }()
+			Eventually(func() []byte { return headerStream.dataWritten.Bytes() }).ShouldNot(BeNil())
+			mhf := getRequest(headerStream.dataWritten.Bytes())
+			Expect(mhf.HeadersFrame.StreamEnded()).To(BeFalse())
+		})
+
 		Context("gzip compression", func() {
 			var gzippedData []byte // a gzipped foobar
 			var response *http.Response

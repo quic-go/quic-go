@@ -34,7 +34,7 @@ func newRequestWriter(headerStream utils.Stream) *requestWriter {
 	return rw
 }
 
-func (w *requestWriter) WriteRequest(req *http.Request, dataStreamID protocol.StreamID, requestGzip bool) error {
+func (w *requestWriter) WriteRequest(req *http.Request, dataStreamID protocol.StreamID, endStream, requestGzip bool) error {
 	// TODO: add support for trailers
 	// TODO: add support for gzip compression
 	// TODO: write continuation frames, if the header frame is too long
@@ -47,6 +47,7 @@ func (w *requestWriter) WriteRequest(req *http.Request, dataStreamID protocol.St
 	return h2framer.WriteHeaders(http2.HeadersFrameParam{
 		StreamID:      uint32(dataStreamID),
 		EndHeaders:    true,
+		EndStream:     endStream,
 		BlockFragment: w.hbuf.Bytes(),
 		Priority:      http2.PriorityParam{Weight: 0xff},
 	})

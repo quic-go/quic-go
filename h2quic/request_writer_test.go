@@ -44,7 +44,7 @@ var _ = Describe("Request", func() {
 	It("writes a GET request", func() {
 		req, err := http.NewRequest("GET", "https://quic.clemente.io/index.html?foo=bar", nil)
 		Expect(err).ToNot(HaveOccurred())
-		rw.WriteRequest(req, 1337, false)
+		rw.WriteRequest(req, 1337, true, false)
 		headerFrame, headerFields := decode(headerStream.dataWritten.Bytes())
 		Expect(headerFrame.StreamID).To(Equal(uint32(1337)))
 		Expect(headerFrame.HasPriority()).To(BeTrue())
@@ -55,10 +55,26 @@ var _ = Describe("Request", func() {
 		Expect(headerFields).ToNot(HaveKey("accept-encoding"))
 	})
 
+	It("sets the EndStream header", func() {
+		req, err := http.NewRequest("GET", "https://quic.clemente.io/", nil)
+		Expect(err).ToNot(HaveOccurred())
+		rw.WriteRequest(req, 1337, true, false)
+		headerFrame, _ := decode(headerStream.dataWritten.Bytes())
+		Expect(headerFrame.StreamEnded()).To(BeTrue())
+	})
+
+	It("doesn't set the EndStream header, if requested", func() {
+		req, err := http.NewRequest("GET", "https://quic.clemente.io/", nil)
+		Expect(err).ToNot(HaveOccurred())
+		rw.WriteRequest(req, 1337, false, false)
+		headerFrame, _ := decode(headerStream.dataWritten.Bytes())
+		Expect(headerFrame.StreamEnded()).To(BeFalse())
+	})
+
 	It("requests gzip compression, if requested", func() {
 		req, err := http.NewRequest("GET", "https://quic.clemente.io/index.html?foo=bar", nil)
 		Expect(err).ToNot(HaveOccurred())
-		rw.WriteRequest(req, 1337, true)
+		rw.WriteRequest(req, 1337, true, true)
 		_, headerFields := decode(headerStream.dataWritten.Bytes())
 		Expect(headerFields).To(HaveKeyWithValue("accept-encoding", "gzip"))
 	})
@@ -68,7 +84,7 @@ var _ = Describe("Request", func() {
 		form.Add("foo", "bar")
 		req, err := http.NewRequest("POST", "https://quic.clemente.io/upload.html", strings.NewReader(form.Encode()))
 		Expect(err).ToNot(HaveOccurred())
-		rw.WriteRequest(req, 5, false)
+		rw.WriteRequest(req, 5, true, false)
 		_, headerFields := decode(headerStream.dataWritten.Bytes())
 		Expect(headerFields).To(HaveKeyWithValue(":method", "POST"))
 		Expect(headerFields).To(HaveKey("content-length"))
@@ -90,7 +106,7 @@ var _ = Describe("Request", func() {
 		}
 		req.AddCookie(cookie1)
 		req.AddCookie(cookie2)
-		rw.WriteRequest(req, 11, false)
+		rw.WriteRequest(req, 11, true, false)
 		_, headerFields := decode(headerStream.dataWritten.Bytes())
 		Expect(headerFields).To(HaveKeyWithValue("cookie", "Cookie #1=Value #1; Cookie #2=Value #2"))
 	})
