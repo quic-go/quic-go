@@ -19,6 +19,8 @@ type stream struct {
 
 	streamID protocol.StreamID
 	onData   func()
+	// onReset is a callback that should send a RST_STREAM
+	onReset func(protocol.StreamID, protocol.ByteCount)
 
 	readPosInFrame int
 	writeOffset    protocol.ByteCount
@@ -43,15 +45,17 @@ type stream struct {
 
 	dataForWriting       []byte
 	finSent              utils.AtomicBool
+	rstSent              utils.AtomicBool
 	doneWritingOrErrCond sync.Cond
 
 	flowControlManager flowcontrol.FlowControlManager
 }
 
 // newStream creates a new Stream
-func newStream(StreamID protocol.StreamID, onData func(), flowControlManager flowcontrol.FlowControlManager) (*stream, error) {
+func newStream(StreamID protocol.StreamID, onData func(), onReset func(protocol.StreamID, protocol.ByteCount), flowControlManager flowcontrol.FlowControlManager) (*stream, error) {
 	s := &stream{
 		onData:             onData,
+		onReset:            onReset,
 		streamID:           StreamID,
 		flowControlManager: flowControlManager,
 		frameQueue:         newStreamFrameSorter(),
@@ -207,6 +211,13 @@ func (s *stream) Close() error {
 	return nil
 }
 
+func (s *stream) shouldSendReset() bool {
+	if s.rstSent.Get() {
+		return false
+	}
+	return (s.resetLocally.Get() || s.resetRemotely.Get()) && !s.finishedWriteAndSentFin()
+}
+
 func (s *stream) shouldSendFin() bool {
 	s.mutex.Lock()
 	res := s.finishedWriting.Get() && !s.finSent.Get() && s.err == nil && s.dataForWriting == nil
@@ -257,6 +268,9 @@ func (s *stream) Cancel(err error) {
 
 // resets the stream locally
 func (s *stream) Reset(err error) {
+	if s.resetLocally.Get() {
+		return
+	}
 	s.mutex.Lock()
 	s.resetLocally.Set(true)
 	// errors must not be changed!
@@ -265,17 +279,28 @@ func (s *stream) Reset(err error) {
 		s.newFrameOrErrCond.Signal()
 		s.doneWritingOrErrCond.Signal()
 	}
+	if s.shouldSendReset() {
+		s.onReset(s.streamID, s.writeOffset)
+		s.rstSent.Set(true)
+	}
 	s.mutex.Unlock()
 }
 
 // resets the stream remotely
 func (s *stream) RegisterRemoteError(err error) {
+	if s.resetRemotely.Get() {
+		return
+	}
 	s.mutex.Lock()
 	s.resetRemotely.Set(true)
 	// errors must not be changed!
 	if s.err == nil {
 		s.err = err
 		s.doneWritingOrErrCond.Signal()
+	}
+	if s.shouldSendReset() {
+		s.onReset(s.streamID, s.writeOffset)
+		s.rstSent.Set(true)
 	}
 	s.mutex.Unlock()
 }

@@ -335,10 +335,9 @@ var _ = Describe("Session", func() {
 		})
 
 		It("queues a RST_STERAM frame with the correct offset", func() {
-			_, err := session.GetOrOpenStream(5)
+			str, err := session.GetOrOpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
-			session.flowControlManager = newMockFlowControlHandler()
-			session.flowControlManager.(*mockFlowControlHandler).bytesSent = 0x1337
+			str.(*stream).writeOffset = 0x1337
 			err = session.handleRstStreamFrame(&frames.RstStreamFrame{
 				StreamID: 5,
 			})
@@ -392,6 +391,34 @@ var _ = Describe("Session", func() {
 			}})
 			Expect(err).NotTo(HaveOccurred())
 		})
+
+		It("queues a RST_STREAM when a stream gets reset locally", func() {
+			testErr := errors.New("testErr")
+			str, err := session.streamsMap.GetOrOpenStream(5)
+			str.writeOffset = 0x1337
+			Expect(err).ToNot(HaveOccurred())
+			str.Reset(testErr)
+			Expect(session.packer.controlFrames).To(HaveLen(1))
+			Expect(session.packer.controlFrames[0]).To(Equal(&frames.RstStreamFrame{
+				StreamID:   5,
+				ByteOffset: 0x1337,
+			}))
+		})
+
+		It("doesn't queue another RST_STREAM, when it receives an RST_STREAM as a response for the first", func() {
+			testErr := errors.New("testErr")
+			str, err := session.streamsMap.GetOrOpenStream(5)
+			Expect(err).ToNot(HaveOccurred())
+			str.Reset(testErr)
+			Expect(session.packer.controlFrames).To(HaveLen(1))
+			err = session.handleRstStreamFrame(&frames.RstStreamFrame{
+				StreamID:   5,
+				ByteOffset: 0x42,
+			})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(session.packer.controlFrames).To(HaveLen(1))
+		})
+
 	})
 
 	Context("handling WINDOW_UPDATE frames", func() {

@@ -402,20 +402,8 @@ func (s *Session) handleRstStreamFrame(frame *frames.RstStreamFrame) error {
 		return errRstStreamOnInvalidStream
 	}
 
-	shouldSendRst := !str.finishedWriteAndSentFin()
 	str.RegisterRemoteError(fmt.Errorf("RST_STREAM received with code %d", frame.ErrorCode))
-	bytesSent, err := s.flowControlManager.ResetStream(frame.StreamID, frame.ByteOffset)
-	if err != nil {
-		return err
-	}
-
-	if shouldSendRst {
-		s.packer.QueueControlFrameForNextPacket(&frames.RstStreamFrame{
-			StreamID:   frame.StreamID,
-			ByteOffset: bytesSent,
-		})
-	}
-	return nil
+	return s.flowControlManager.ResetStream(frame.StreamID, frame.ByteOffset)
 }
 
 func (s *Session) handleAckFrame(frame *frames.AckFrame) error {
@@ -625,8 +613,16 @@ func (s *Session) OpenStream(id protocol.StreamID) (utils.Stream, error) {
 	return s.streamsMap.OpenStream(id)
 }
 
+func (s *Session) queueResetStreamFrame(id protocol.StreamID, offset protocol.ByteCount) {
+	s.packer.QueueControlFrameForNextPacket(&frames.RstStreamFrame{
+		StreamID:   id,
+		ByteOffset: offset,
+	})
+	s.scheduleSending()
+}
+
 func (s *Session) newStream(id protocol.StreamID) (*stream, error) {
-	stream, err := newStream(id, s.scheduleSending, s.flowControlManager)
+	stream, err := newStream(id, s.scheduleSending, s.queueResetStreamFrame, s.flowControlManager)
 	if err != nil {
 		return nil, err
 	}

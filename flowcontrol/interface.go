@@ -13,7 +13,7 @@ type FlowControlManager interface {
 	NewStream(streamID protocol.StreamID, contributesToConnectionFlow bool)
 	RemoveStream(streamID protocol.StreamID)
 	// methods needed for receiving data
-	ResetStream(streamID protocol.StreamID, byteOffset protocol.ByteCount) (protocol.ByteCount, error)
+	ResetStream(streamID protocol.StreamID, byteOffset protocol.ByteCount) error
 	UpdateHighestReceived(streamID protocol.StreamID, byteOffset protocol.ByteCount) error
 	AddBytesRead(streamID protocol.StreamID, n protocol.ByteCount) error
 	GetWindowUpdates() []WindowUpdate

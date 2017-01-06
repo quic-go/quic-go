@@ -63,32 +63,43 @@ func (f *flowControlManager) RemoveStream(streamID protocol.StreamID) {
 // ResetStream should be called when receiving a RstStreamFrame
 // it updates the byte offset to the value in the RstStreamFrame
 // streamID must not be 0 here
-func (f *flowControlManager) ResetStream(streamID protocol.StreamID, byteOffset protocol.ByteCount) (protocol.ByteCount, error) {
+func (f *flowControlManager) ResetStream(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 
 	streamFlowController, err := f.getFlowController(streamID)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	increment, err := streamFlowController.UpdateHighestReceived(byteOffset)
 	if err != nil {
-		return 0, qerr.StreamDataAfterTermination
+		return qerr.StreamDataAfterTermination
 	}
 
 	if streamFlowController.CheckFlowControlViolation() {
-		return 0, qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes on stream %d, allowed %d bytes", byteOffset, streamID, streamFlowController.receiveFlowControlWindow))
+		return qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes on stream %d, allowed %d bytes", byteOffset, streamID, streamFlowController.receiveFlowControlWindow))
 	}
 
 	if f.contributesToConnectionFlowControl[streamID] {
 		connectionFlowController := f.streamFlowController[0]
 		connectionFlowController.IncrementHighestReceived(increment)
 		if connectionFlowController.CheckFlowControlViolation() {
-			return 0, qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes for the connection, allowed %d bytes", byteOffset, connectionFlowController.receiveFlowControlWindow))
+			return qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes for the connection, allowed %d bytes", byteOffset, connectionFlowController.receiveFlowControlWindow))
 		}
 	}
 
-	return streamFlowController.GetBytesSent(), nil
+	return nil
+}
+
+func (f *flowControlManager) GetBytesSent(streamID protocol.StreamID) (protocol.ByteCount, error) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+
+	fc, err := f.getFlowController(streamID)
+	if err != nil {
+		return 0, err
+	}
+	return fc.GetBytesSent(), nil
 }
 
 // UpdateHighestReceived updates the highest received byte offset for a stream
