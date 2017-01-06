@@ -629,10 +629,6 @@ func (s *Session) OpenStream(id protocol.StreamID) (utils.Stream, error) {
 	return s.streamsMap.OpenStream(id)
 }
 
-func (s *Session) newStreamImpl(id protocol.StreamID) (*stream, error) {
-	return s.streamsMap.GetOrOpenStream(id)
-}
-
 func (s *Session) newStream(id protocol.StreamID) (*stream, error) {
 	stream, err := newStream(id, s.scheduleSending, s.flowControlManager)
 	if err != nil {

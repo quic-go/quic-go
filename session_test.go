@@ -257,7 +257,7 @@ var _ = Describe("Session", func() {
 
 		It("closes empty streams with error", func() {
 			testErr := errors.New("test")
-			session.newStreamImpl(5)
+			session.GetOrOpenStream(5)
 			Expect(session.streamsMap.openStreams).To(HaveLen(2))
 			str, _ := session.streamsMap.GetOrOpenStream(5)
 			Expect(str).ToNot(BeNil())
@@ -274,7 +274,7 @@ var _ = Describe("Session", func() {
 			// since the stream doesn't yet exist, this will throw an error
 			err := session.flowControlManager.UpdateHighestReceived(5, 1000)
 			Expect(err).To(HaveOccurred())
-			session.newStreamImpl(5)
+			session.GetOrOpenStream(5)
 			err = session.flowControlManager.UpdateHighestReceived(5, 2000)
 			Expect(err).ToNot(HaveOccurred())
 		})
