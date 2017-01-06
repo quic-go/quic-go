@@ -244,9 +244,8 @@ func (s *stream) CloseRemote(offset protocol.ByteCount) {
 // Cancel is called by session to indicate that an error occurred
 // The stream should will be closed immediately
 func (s *stream) Cancel(err error) {
-	s.cancelled.Set(true)
-
 	s.mutex.Lock()
+	s.cancelled.Set(true)
 	// errors must not be changed!
 	if s.err == nil {
 		s.err = err
@@ -258,8 +257,8 @@ func (s *stream) Cancel(err error) {
 
 // resets the stream locally
 func (s *stream) Reset(err error) {
-	s.resetLocally.Set(true)
 	s.mutex.Lock()
+	s.resetLocally.Set(true)
 	// errors must not be changed!
 	if s.err == nil {
 		s.err = err
@@ -271,8 +270,8 @@ func (s *stream) Reset(err error) {
 
 // resets the stream remotely
 func (s *stream) RegisterRemoteError(err error) {
-	s.resetRemotely.Set(true)
 	s.mutex.Lock()
+	s.resetRemotely.Set(true)
 	// errors must not be changed!
 	if s.err == nil {
 		s.err = err
