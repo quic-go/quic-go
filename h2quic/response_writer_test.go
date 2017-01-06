@@ -17,6 +17,7 @@ type mockStream struct {
 }
 
 func (mockStream) Close() error                             { return nil }
+func (mockStream) Reset(error)                              { panic("not implemented") }
 func (s *mockStream) CloseRemote(offset protocol.ByteCount) { s.remoteClosed = true }
 func (s mockStream) StreamID() protocol.StreamID            { return s.id }
 

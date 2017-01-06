@@ -13,4 +13,5 @@ type Stream interface {
 	io.Closer
 	StreamID() protocol.StreamID
 	CloseRemote(offset protocol.ByteCount)
+	Reset(error)
 }

@@ -403,33 +403,90 @@ var _ = Describe("Stream", func() {
 	})
 
 	Context("resetting", func() {
-		testErr := errors.New("received RST_STREAM")
+		testErr := errors.New("testErr")
 
-		It("continues reading after receiving a remote error", func() {
-			frame := frames.StreamFrame{
-				Offset: 0,
-				Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
-			}
-			str.AddStreamFrame(&frame)
-			str.RegisterRemoteError(testErr)
-			b := make([]byte, 4)
-			_, err := str.Read(b)
-			Expect(err).ToNot(HaveOccurred())
+		Context("reset by the peer", func() {
+			It("continues reading after receiving a remote error", func() {
+				frame := frames.StreamFrame{
+					Offset: 0,
+					Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
+				}
+				str.AddStreamFrame(&frame)
+				str.RegisterRemoteError(testErr)
+				b := make([]byte, 4)
+				_, err := str.Read(b)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("stops writing after receiving a remote error", func() {
+				var writeReturned bool
+				var n int
+				var err error
+
+				go func() {
+					n, err = str.Write([]byte("foobar"))
+					writeReturned = true
+				}()
+				str.RegisterRemoteError(testErr)
+				Eventually(func() bool { return writeReturned }).Should(BeTrue())
+				Expect(n).To(BeZero())
+				Expect(err).To(MatchError(testErr))
+			})
 		})
 
-		It("stops writing after receiving a remote error", func() {
-			var writeReturned bool
-			var n int
-			var err error
+		Context("reset locally", func() {
+			It("stops writing", func() {
+				var writeReturned bool
+				var n int
+				var err error
 
-			go func() {
-				n, err = str.Write([]byte("foobar"))
-				writeReturned = true
-			}()
-			str.RegisterRemoteError(testErr)
-			Eventually(func() bool { return writeReturned }).Should(BeTrue())
-			Expect(n).To(BeZero())
-			Expect(err).To(MatchError(testErr))
+				go func() {
+					n, err = str.Write([]byte("foobar"))
+					writeReturned = true
+				}()
+				Consistently(func() bool { return writeReturned }).Should(BeFalse())
+				str.Reset(testErr)
+				data := str.getDataForWriting(6)
+				Expect(data).To(BeNil())
+				Eventually(func() bool { return writeReturned }).Should(BeTrue())
+				Expect(n).To(BeZero())
+				Expect(err).To(MatchError(testErr))
+			})
+
+			It("doesn't allow further writes", func() {
+				str.Reset(testErr)
+				n, err := str.Write([]byte("foobar"))
+				Expect(n).To(BeZero())
+				Expect(err).To(MatchError(testErr))
+			})
+
+			It("stops reading", func() {
+				var readReturned bool
+				var n int
+				var err error
+
+				go func() {
+					b := make([]byte, 4)
+					n, err = str.Read(b)
+					readReturned = true
+				}()
+				Consistently(func() bool { return readReturned }).Should(BeFalse())
+				str.Reset(testErr)
+				Eventually(func() bool { return readReturned }).Should(BeTrue())
+				Expect(n).To(BeZero())
+				Expect(err).To(MatchError(testErr))
+			})
+
+			It("doesn't allow further reads", func() {
+				str.AddStreamFrame(&frames.StreamFrame{
+					Data: []byte("foobar"),
+				})
+				str.Reset(testErr)
+				b := make([]byte, 6)
+				n, err := str.Read(b)
+				Expect(n).To(BeZero())
+				Expect(err).To(MatchError(testErr))
+			})
 		})
 	})
 
