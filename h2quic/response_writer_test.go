@@ -92,4 +92,12 @@ var _ = Describe("Response Writer", func() {
 		w.WriteHeader(500)
 		Expect(headerStream.Bytes()).To(Equal([]byte{0x0, 0x0, 0x1, 0x1, 0x4, 0x0, 0x0, 0x0, 0x5, 0x88})) // 0x88 is 200
 	})
+
+	It("doesn't allow writes if the status code doesn't allow a body", func() {
+		w.WriteHeader(304)
+		n, err := w.Write([]byte("foobar"))
+		Expect(n).To(BeZero())
+		Expect(err).To(MatchError(http.ErrBodyNotAllowed))
+		Expect(dataStream.Bytes()).To(HaveLen(0))
+	})
 })
