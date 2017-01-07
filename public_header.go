@@ -138,22 +138,24 @@ func ParsePublicHeader(b io.ByteReader) (*PublicHeader, error) {
 		return nil, errInvalidConnectionID
 	}
 
-	// Version (optional)
-	if header.VersionFlag {
-		var versionTag uint32
-		versionTag, err = utils.ReadUint32(b)
+	if !header.ResetFlag {
+		// Version (optional)
+		if header.VersionFlag {
+			var versionTag uint32
+			versionTag, err = utils.ReadUint32(b)
+			if err != nil {
+				return nil, err
+			}
+			header.VersionNumber = protocol.VersionTagToNumber(versionTag)
+		}
+
+		// Packet number
+		packetNumber, err := utils.ReadUintN(b, uint8(header.PacketNumberLen))
 		if err != nil {
 			return nil, err
 		}
-		header.VersionNumber = protocol.VersionTagToNumber(versionTag)
+		header.PacketNumber = protocol.PacketNumber(packetNumber)
 	}
-
-	// Packet number
-	packetNumber, err := utils.ReadUintN(b, uint8(header.PacketNumberLen))
-	if err != nil {
-		return nil, err
-	}
-	header.PacketNumber = protocol.PacketNumber(packetNumber)
 
 	return header, nil
 }

@@ -66,6 +66,16 @@ var _ = Describe("Public Header", func() {
 			Expect(b.Len()).To(BeZero())
 		})
 
+		It("parses a public reset packet", func() {
+			b := bytes.NewReader([]byte{0xa, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08})
+			hdr, err := ParsePublicHeader(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(hdr.ResetFlag).To(BeTrue())
+			Expect(hdr.VersionFlag).To(BeFalse())
+			Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x0807060504030201)))
+			Expect(b.Len()).To(BeZero())
+		})
+
 		PIt("rejects diversification nonces sent by the client", func() {
 			b := bytes.NewReader([]byte{0x0c, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c,
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1,
