@@ -130,6 +130,33 @@ var _ = Describe("Server", func() {
 			err := server.handlePacket(nil, nil, bytes.Repeat([]byte{'a'}, int(protocol.MaxPacketSize)+1))
 			Expect(err).To(MatchError(qerr.PacketTooLarge))
 		})
+
+		It("ignores public resets for unknown connections", func() {
+			err := server.handlePacket(nil, nil, writePublicReset(999, 1, 1337))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(server.sessions).To(BeEmpty())
+		})
+
+		It("ignores public resets for known connections", func() {
+			err := server.handlePacket(nil, nil, firstPacket)
+			Expect(server.sessions).To(HaveLen(1))
+			Expect(server.sessions[0x4cfa9f9b668619f6].(*mockSession).packetCount).To(Equal(1))
+			err = server.handlePacket(nil, nil, writePublicReset(0x4cfa9f9b668619f6, 1, 1337))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(server.sessions).To(HaveLen(1))
+			Expect(server.sessions[0x4cfa9f9b668619f6].(*mockSession).packetCount).To(Equal(1))
+		})
+
+		It("ignores invalid public resets for known connections", func() {
+			err := server.handlePacket(nil, nil, firstPacket)
+			Expect(server.sessions).To(HaveLen(1))
+			Expect(server.sessions[0x4cfa9f9b668619f6].(*mockSession).packetCount).To(Equal(1))
+			data := writePublicReset(0x4cfa9f9b668619f6, 1, 1337)
+			err = server.handlePacket(nil, nil, data[:len(data)-2])
+			Expect(err).ToNot(HaveOccurred())
+			Expect(server.sessions).To(HaveLen(1))
+			Expect(server.sessions[0x4cfa9f9b668619f6].(*mockSession).packetCount).To(Equal(1))
+		})
 	})
 
 	It("setups and responds with version negotiation", func(done Done) {

@@ -146,6 +146,22 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 	session, ok := s.sessions[hdr.ConnectionID]
 	s.sessionsMutex.RUnlock()
 
+	// ignore all Public Reset packets
+	if hdr.ResetFlag {
+		if ok {
+			var pr *publicReset
+			pr, err = parsePublicReset(r)
+			if err != nil {
+				utils.Infof("Received a Public Reset for connection %x. An error occurred parsing the packet.")
+			} else {
+				utils.Infof("Received a Public Reset for connection %x, rejected packet number: 0x%x.", hdr.ConnectionID, pr.rejectedPacketNumber)
+			}
+		} else {
+			utils.Infof("Received Public Reset for unknown connection %x.", hdr.ConnectionID)
+		}
+		return nil
+	}
+
 	// a session is only created once the client sent a supported version
 	// if we receive a packet for a connection that already has session, it's probably an old packet that was sent by the client before the version was negotiated
 	// it is safe to drop it
