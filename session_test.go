@@ -347,6 +347,7 @@ var _ = Describe("Session", func() {
 				StreamID:   5,
 				ByteOffset: 0x1337,
 			}))
+			Expect(str.(*stream).finished()).To(BeTrue())
 		})
 
 		It("doesn't queue a RST_STREAM for a stream that it already sent a FIN on", func() {
@@ -358,6 +359,7 @@ var _ = Describe("Session", func() {
 			})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(session.packer.controlFrames).To(BeEmpty())
+			Expect(str.(*stream).finished()).To(BeTrue())
 		})
 
 		It("passes the byte offset to the flow controller", func() {
@@ -403,6 +405,7 @@ var _ = Describe("Session", func() {
 				StreamID:   5,
 				ByteOffset: 0x1337,
 			}))
+			Expect(str.finished()).To(BeFalse())
 		})
 
 		It("doesn't queue another RST_STREAM, when it receives an RST_STREAM as a response for the first", func() {
@@ -418,7 +421,6 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(session.packer.controlFrames).To(HaveLen(1))
 		})
-
 	})
 
 	Context("handling WINDOW_UPDATE frames", func() {

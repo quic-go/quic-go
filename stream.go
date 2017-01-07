@@ -310,7 +310,11 @@ func (s *stream) finishedWriteAndSentFin() bool {
 }
 
 func (s *stream) finished() bool {
-	return s.cancelled.Get() || (s.finishedReading.Get() && s.finishedWriteAndSentFin())
+	return s.cancelled.Get() ||
+		(s.finishedReading.Get() && s.finishedWriteAndSentFin()) ||
+		(s.resetRemotely.Get() && s.rstSent.Get()) ||
+		(s.finishedReading.Get() && s.rstSent.Get()) ||
+		(s.finishedWriteAndSentFin() && s.resetRemotely.Get())
 }
 
 func (s *stream) StreamID() protocol.StreamID {

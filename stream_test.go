@@ -732,4 +732,60 @@ var _ = Describe("Stream", func() {
 		})
 	})
 
+	Context("closing", func() {
+		testErr := errors.New("testErr")
+
+		finishReading := func() {
+			err := str.AddStreamFrame(&frames.StreamFrame{FinBit: true})
+			Expect(err).ToNot(HaveOccurred())
+			b := make([]byte, 100)
+			_, err = str.Read(b)
+			Expect(err).To(MatchError(io.EOF))
+		}
+
+		It("is finished after it is canceled", func() {
+			str.Cancel(testErr)
+			Expect(str.finished()).To(BeTrue())
+		})
+
+		It("is not finished if it is only closed for writing", func() {
+			str.Close()
+			str.sentFin()
+			Expect(str.finished()).To(BeFalse())
+		})
+
+		It("is not finished if it is only closed for reading", func() {
+			finishReading()
+			Expect(str.finished()).To(BeFalse())
+		})
+
+		It("is finished after receiving a RST and sending one", func() {
+			// this directly sends a rst
+			str.RegisterRemoteError(testErr)
+			Expect(str.rstSent.Get()).To(BeTrue())
+			Expect(str.finished()).To(BeTrue())
+		})
+
+		It("is finished after being locally reset and receiving a RST in response", func() {
+			str.Reset(testErr)
+			Expect(str.finished()).To(BeFalse())
+			str.RegisterRemoteError(testErr)
+			Expect(str.finished()).To(BeTrue())
+		})
+
+		It("is finished after finishing writing and receiving a RST", func() {
+			str.Close()
+			str.sentFin()
+			str.RegisterRemoteError(testErr)
+			Expect(str.finished()).To(BeTrue())
+		})
+
+		It("is finished after finishing reading and being locally reset", func() {
+			finishReading()
+			Expect(str.finished()).To(BeFalse())
+			str.Reset(testErr)
+			Expect(str.finished()).To(BeTrue())
+		})
+	})
+
 })
