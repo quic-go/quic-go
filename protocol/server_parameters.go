@@ -97,5 +97,9 @@ const MaxIdleTimeout = 1 * time.Minute
 // MaxTimeForCryptoHandshake is the default timeout for a connection until the crypto handshake succeeds.
 const MaxTimeForCryptoHandshake = 10 * time.Second
 
+// ClosedSessionDeleteTimeout the server ignores packets arriving on a connection that is already closed
+// after this time all information about the old connection will be deleted
+const ClosedSessionDeleteTimeout = time.Minute
+
 // NumCachedCertificates is the number of cached compressed certificate chains, each taking ~1K space
 const NumCachedCertificates = 128

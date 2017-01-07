@@ -33,8 +33,9 @@ type Server struct {
 	signer crypto.Signer
 	scfg   *handshake.ServerConfig
 
-	sessions      map[protocol.ConnectionID]packetHandler
-	sessionsMutex sync.RWMutex
+	sessions                  map[protocol.ConnectionID]packetHandler
+	sessionsMutex             sync.RWMutex
+	deleteClosedSessionsAfter time.Duration
 
 	streamCallback StreamCallback
 
@@ -63,12 +64,13 @@ func NewServer(addr string, tlsConfig *tls.Config, cb StreamCallback) (*Server, 
 	}
 
 	return &Server{
-		addr:           udpAddr,
-		signer:         signer,
-		scfg:           scfg,
-		streamCallback: cb,
-		sessions:       map[protocol.ConnectionID]packetHandler{},
-		newSession:     newSession,
+		addr:                      udpAddr,
+		signer:                    signer,
+		scfg:                      scfg,
+		streamCallback:            cb,
+		sessions:                  map[protocol.ConnectionID]packetHandler{},
+		newSession:                newSession,
+		deleteClosedSessionsAfter: protocol.ClosedSessionDeleteTimeout,
 	}, nil
 }
 
@@ -220,6 +222,12 @@ func (s *Server) closeCallback(id protocol.ConnectionID) {
 	s.sessionsMutex.Lock()
 	s.sessions[id] = nil
 	s.sessionsMutex.Unlock()
+
+	time.AfterFunc(s.deleteClosedSessionsAfter, func() {
+		s.sessionsMutex.Lock()
+		delete(s.sessions, id)
+		s.sessionsMutex.Unlock()
+	})
 }
 
 func composeVersionNegotiation(connectionID protocol.ConnectionID) []byte {

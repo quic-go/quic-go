@@ -3,6 +3,7 @@ package quic
 import (
 	"bytes"
 	"net"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/handshake"
@@ -82,10 +83,21 @@ var _ = Describe("Server", func() {
 			err := server.handlePacket(nil, nil, append(firstPacket, (&crypto.NullAEAD{}).Seal(nil, nil, 0, firstPacket)...))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(server.sessions).To(HaveLen(1))
+			Expect(server.sessions[0x4cfa9f9b668619f6]).ToNot(BeNil())
 			server.closeCallback(0x4cfa9f9b668619f6)
 			// The server should now have closed the session, leaving a nil value in the sessions map
 			Expect(server.sessions).To(HaveLen(1))
 			Expect(server.sessions[0x4cfa9f9b668619f6]).To(BeNil())
+		})
+
+		It("deletes nil session entries after a wait time", func() {
+			server.deleteClosedSessionsAfter = 15 * time.Millisecond
+			err := server.handlePacket(nil, nil, append(firstPacket, (&crypto.NullAEAD{}).Seal(nil, nil, 0, firstPacket)...))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(server.sessions).To(HaveLen(1))
+			server.closeCallback(0x4cfa9f9b668619f6)
+			Consistently(func() map[protocol.ConnectionID]packetHandler { return server.sessions }, 10*time.Millisecond, time.Millisecond).Should(HaveKey(protocol.ConnectionID(0x4cfa9f9b668619f6)))
+			Eventually(func() map[protocol.ConnectionID]packetHandler { return server.sessions }, 100*time.Millisecond).ShouldNot(HaveKey(protocol.ConnectionID(0x4cfa9f9b668619f6)))
 		})
 
 		It("closes sessions when Close is called", func() {
@@ -157,6 +169,14 @@ var _ = Describe("Server", func() {
 			Expect(server.sessions).To(HaveLen(1))
 			Expect(server.sessions[0x4cfa9f9b668619f6].(*mockSession).packetCount).To(Equal(1))
 		})
+	})
+
+	It("setups with the right values", func() {
+		server, err := NewServer("", testdata.GetTLSConfig(), nil)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(server.deleteClosedSessionsAfter).To(Equal(protocol.ClosedSessionDeleteTimeout))
+		Expect(server.sessions).ToNot(BeNil())
+		Expect(server.scfg).ToNot(BeNil())
 	})
 
 	It("setups and responds with version negotiation", func(done Done) {
