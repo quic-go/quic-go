@@ -315,4 +315,23 @@ var _ = Describe("receivedPacketHistory", func() {
 			Expect(ackRanges[2]).To(Equal(frames.AckRange{FirstPacketNumber: 1, LastPacketNumber: 2}))
 		})
 	})
+
+	Context("Getting the highest ACK range", func() {
+		It("returns the zero value if there are no ranges", func() {
+			Expect(hist.GetHighestAckRange()).To(BeZero())
+		})
+
+		It("gets a single ACK range", func() {
+			hist.ReceivedPacket(4)
+			hist.ReceivedPacket(5)
+			Expect(hist.GetHighestAckRange()).To(Equal(frames.AckRange{FirstPacketNumber: 4, LastPacketNumber: 5}))
+		})
+
+		It("gets the highest of multiple ACK ranges", func() {
+			hist.ReceivedPacket(3)
+			hist.ReceivedPacket(6)
+			hist.ReceivedPacket(7)
+			Expect(hist.GetHighestAckRange()).To(Equal(frames.AckRange{FirstPacketNumber: 6, LastPacketNumber: 7}))
+		})
+	})
 })
