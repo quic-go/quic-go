@@ -109,6 +109,7 @@ func (s *mockStream) Write(p []byte) (int, error) {
 }
 
 func (s *mockStream) Close() error                       { panic("not implemented") }
+func (s *mockStream) Reset(error)                        { panic("not implemented") }
 func (mockStream) CloseRemote(offset protocol.ByteCount) { panic("not implemented") }
 func (s mockStream) StreamID() protocol.StreamID         { panic("not implemented") }
 

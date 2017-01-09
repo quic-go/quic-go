@@ -136,16 +136,14 @@ var _ = Describe("Flow Control Manager", func() {
 		})
 
 		It("updates the connection level flow controller if the stream contributes", func() {
-			bytesSent, err := fcm.ResetStream(4, 0x100)
-			Expect(bytesSent).To(Equal(protocol.ByteCount(0x42)))
+			err := fcm.ResetStream(4, 0x100)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(fcm.streamFlowController[0].highestReceived).To(Equal(protocol.ByteCount(0x100)))
 			Expect(fcm.streamFlowController[4].highestReceived).To(Equal(protocol.ByteCount(0x100)))
 		})
 
 		It("does not update the connection level flow controller if the stream does not contribute", func() {
-			bytesSent, err := fcm.ResetStream(1, 0x100)
-			Expect(bytesSent).To(Equal(protocol.ByteCount(0x41)))
+			err := fcm.ResetStream(1, 0x100)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(fcm.streamFlowController[0].highestReceived).To(BeZero())
 			Expect(fcm.streamFlowController[1].highestReceived).To(Equal(protocol.ByteCount(0x100)))
@@ -154,24 +152,24 @@ var _ = Describe("Flow Control Manager", func() {
 		It("errors if the byteOffset is smaller than a byteOffset that set earlier", func() {
 			err := fcm.UpdateHighestReceived(4, 0x100)
 			Expect(err).ToNot(HaveOccurred())
-			_, err = fcm.ResetStream(4, 0x50)
+			err = fcm.ResetStream(4, 0x50)
 			Expect(err).To(MatchError(qerr.StreamDataAfterTermination))
 		})
 
 		It("returns an error when called with an unknown stream", func() {
-			_, err := fcm.ResetStream(1337, 0x1337)
+			err := fcm.ResetStream(1337, 0x1337)
 			Expect(err).To(MatchError(errMapAccess))
 		})
 
 		Context("flow control violations", func() {
 			It("errors when encountering a stream level flow control violation", func() {
-				_, err := fcm.ResetStream(4, 0x101)
+				err := fcm.ResetStream(4, 0x101)
 				Expect(err).To(MatchError(qerr.Error(qerr.FlowControlReceivedTooMuchData, "Received 257 bytes on stream 4, allowed 256 bytes"))) // 0x100 = 256, 0x101 = 257
 			})
 
 			It("errors when encountering a connection-level flow control violation", func() {
 				fcm.streamFlowController[4].receiveFlowControlWindow = 0x300
-				_, err := fcm.ResetStream(4, 0x201)
+				err := fcm.ResetStream(4, 0x201)
 				Expect(err).To(MatchError(qerr.Error(qerr.FlowControlReceivedTooMuchData, "Received 513 bytes for the connection, allowed 512 bytes"))) // 0x200 = 512, 0x201 = 513
 			})
 		})
