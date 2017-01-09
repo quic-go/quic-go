@@ -120,7 +120,10 @@ func (s *stream) Read(p []byte) (int, error) {
 		bytesRead += m
 		s.readOffset += protocol.ByteCount(m)
 
-		s.flowControlManager.AddBytesRead(s.streamID, protocol.ByteCount(m))
+		// when a RST_STREAM was received, the was already informed about the final byteOffset for this stream
+		if !s.resetRemotely.Get() {
+			s.flowControlManager.AddBytesRead(s.streamID, protocol.ByteCount(m))
+		}
 		s.onData() // so that a possible WINDOW_UPDATE is sent
 
 		if s.readPosInFrame >= int(frame.DataLen()) {

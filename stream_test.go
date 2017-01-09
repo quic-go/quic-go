@@ -64,6 +64,7 @@ func (m *mockFlowControlHandler) AddBytesRead(streamID protocol.StreamID, n prot
 }
 
 func (m *mockFlowControlHandler) ResetStream(streamID protocol.StreamID, byteOffset protocol.ByteCount) error {
+	m.bytesRead = byteOffset
 	return m.UpdateHighestReceived(streamID, byteOffset)
 }
 
@@ -492,6 +493,22 @@ var _ = Describe("Stream", func() {
 				Expect(err).To(MatchError(io.EOF))
 				Expect(b[:1]).To(Equal([]byte{0xef}))
 				Expect(n).To(Equal(1))
+			})
+
+			It("doesn't inform the flow controller about bytes read after receiving the remote error", func() {
+				str.flowControlManager = newMockFlowControlHandler()
+				frame := frames.StreamFrame{
+					Offset:   0,
+					StreamID: 5,
+					Data:     []byte{0xDE, 0xAD, 0xBE, 0xEF},
+				}
+				str.AddStreamFrame(&frame)
+				str.flowControlManager.ResetStream(5, 4)
+				str.RegisterRemoteError(testErr)
+				b := make([]byte, 3)
+				_, err := str.Read(b)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(str.flowControlManager.(*mockFlowControlHandler).bytesRead).To(BeEquivalentTo(4))
 			})
 
 			It("stops writing after receiving a remote error", func() {
