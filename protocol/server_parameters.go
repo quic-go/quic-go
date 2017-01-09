@@ -71,6 +71,12 @@ const MaxTrackedReceivedPackets = 2 * DefaultMaxCongestionWindow
 // MaxTrackedReceivedAckRanges is the maximum number of ACK ranges tracked
 const MaxTrackedReceivedAckRanges = DefaultMaxCongestionWindow
 
+// MaxPacketsReceivedBeforeAckSend is the number of packets that can be received before an ACK frame is sent
+const MaxPacketsReceivedBeforeAckSend = 20
+
+// RetransmittablePacketsBeforeAck is the number of retransmittable that an ACK is sent for
+const RetransmittablePacketsBeforeAck = 2
+
 // MaxStreamFrameSorterGaps is the maximum number of gaps between received StreamFrames
 // prevents DoS attacks against the streamFrameSorter
 const MaxStreamFrameSorterGaps = 1000

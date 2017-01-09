@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -77,7 +76,7 @@ type Session struct {
 	undecryptablePackets []*receivedPacket
 	aeadChanged          chan struct{}
 
-	delayedAckOriginTime time.Time
+	nextAckScheduledTime time.Time
 
 	connectionParameters handshake.ConnectionParametersManager
 
@@ -99,12 +98,9 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	connectionParameters := handshake.NewConnectionParamatersManager(v)
 
 	var sentPacketHandler ackhandler.SentPacketHandler
-	var receivedPacketHandler ackhandler.ReceivedPacketHandler
-
 	rttStats := &congestion.RTTStats{}
 
 	sentPacketHandler = ackhandler.NewSentPacketHandler(rttStats)
-	receivedPacketHandler = ackhandler.NewReceivedPacketHandler()
 	flowControlManager := flowcontrol.NewFlowControlManager(connectionParameters, rttStats)
 
 	now := time.Now()
@@ -116,10 +112,9 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		streamCallback: streamCallback,
 		closeCallback:  closeCallback,
 
-		connectionParameters:  connectionParameters,
-		sentPacketHandler:     sentPacketHandler,
-		receivedPacketHandler: receivedPacketHandler,
-		flowControlManager:    flowControlManager,
+		connectionParameters: connectionParameters,
+		sentPacketHandler:    sentPacketHandler,
+		flowControlManager:   flowControlManager,
 
 		receivedPackets:      make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets),
 		closeChan:            make(chan *qerr.QuicError, 1),
@@ -133,6 +128,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		sessionCreationTime:     now,
 	}
 
+	session.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(session.ackAlarmChanged)
 	session.streamsMap = newStreamsMap(session.newStream, session.connectionParameters)
 
 	cryptoStream, _ := session.GetOrOpenStream(1)
@@ -195,9 +191,6 @@ runLoop:
 			// This is a bit unclean, but works properly, since the packet always
 			// begins with the public header and we never copy it.
 			putPacketBuffer(p.publicHeader.Raw)
-			if s.delayedAckOriginTime.IsZero() {
-				s.delayedAckOriginTime = p.rcvTime
-			}
 		case <-s.aeadChanged:
 			s.tryDecryptingQueuedPackets()
 		}
@@ -225,8 +218,8 @@ runLoop:
 func (s *Session) maybeResetTimer() {
 	nextDeadline := s.lastNetworkActivityTime.Add(s.idleTimeout())
 
-	if !s.delayedAckOriginTime.IsZero() {
-		nextDeadline = utils.MinTime(nextDeadline, s.delayedAckOriginTime.Add(protocol.AckSendDelay))
+	if !s.nextAckScheduledTime.IsZero() {
+		nextDeadline = utils.MinTime(nextDeadline, s.nextAckScheduledTime)
 	}
 	if rtoTime := s.sentPacketHandler.TimeOfFirstRTO(); !rtoTime.IsZero() {
 		nextDeadline = utils.MinTime(nextDeadline, rtoTime)
@@ -291,7 +284,7 @@ func (s *Session) handlePacketImpl(p *receivedPacket) error {
 	// Only do this after decrypting, so we are sure the packet is not attacker-controlled
 	s.largestRcvdPacketNumber = utils.MaxPacketNumber(s.largestRcvdPacketNumber, hdr.PacketNumber)
 
-	err = s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber)
+	err = s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, packet.IsRetransmittable())
 	// ignore duplicate packets
 	if err == ackhandler.ErrDuplicatePacket {
 		utils.Infof("Ignoring packet 0x%x due to ErrDuplicatePacket", hdr.PacketNumber)
@@ -514,45 +507,26 @@ func (s *Session) sendPacket() error {
 		if err != nil {
 			return err
 		}
-
 		for _, wuf := range windowUpdateFrames {
 			controlFrames = append(controlFrames, wuf)
 		}
-
-		ack, err := s.receivedPacketHandler.GetAckFrame(false)
-		if err != nil {
-			return err
-		}
+		ack := s.receivedPacketHandler.GetAckFrame()
 		if ack != nil {
 			controlFrames = append(controlFrames, ack)
 		}
-
-		// Check whether we are allowed to send a packet containing only an ACK
-		maySendOnlyAck := time.Now().Sub(s.delayedAckOriginTime) > protocol.AckSendDelay
-		if runtime.GOOS == "windows" {
-			maySendOnlyAck = true
-		}
-
 		hasRetransmission := s.streamFramer.HasFramesForRetransmission()
-
 		var stopWaitingFrame *frames.StopWaitingFrame
 		if ack != nil || hasRetransmission {
 			stopWaitingFrame = s.sentPacketHandler.GetStopWaitingFrame(hasRetransmission)
 		}
-		packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, s.sentPacketHandler.GetLeastUnacked(), maySendOnlyAck)
+		packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, s.sentPacketHandler.GetLeastUnacked())
 		if err != nil {
 			return err
 		}
 		if packet == nil {
 			return nil
 		}
-
-		// Pop the ACK frame now that we are sure we're gonna send it
-		_, err = s.receivedPacketHandler.GetAckFrame(true)
-		if err != nil {
-			return err
-		}
-
+		// send every window update twice
 		for _, f := range windowUpdateFrames {
 			s.packer.QueueControlFrameForNextPacket(f)
 		}
@@ -567,13 +541,13 @@ func (s *Session) sendPacket() error {
 		}
 
 		s.logPacket(packet)
-		s.delayedAckOriginTime = time.Time{}
 
 		err = s.conn.write(packet.raw)
 		putPacketBuffer(packet.raw)
 		if err != nil {
 			return err
 		}
+		s.nextAckScheduledTime = time.Time{}
 	}
 }
 
@@ -693,6 +667,11 @@ func (s *Session) getWindowUpdateFrames() ([]*frames.WindowUpdateFrame, error) {
 		res[i] = &frames.WindowUpdateFrame{StreamID: u.StreamID, ByteOffset: u.Offset}
 	}
 	return res, nil
+}
+
+func (s *Session) ackAlarmChanged(t time.Time) {
+	s.nextAckScheduledTime = t
+	s.maybeResetTimer()
 }
 
 // RemoteAddr returns the net.UDPAddr of the client

@@ -41,14 +41,14 @@ func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.
 }
 
 func (p *packetPacker) PackConnectionClose(frame *frames.ConnectionCloseFrame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
-	return p.packPacket(nil, []frames.Frame{frame}, leastUnacked, true, false)
+	return p.packPacket(nil, []frames.Frame{frame}, leastUnacked, true)
 }
 
-func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, leastUnacked protocol.PacketNumber, maySendOnlyAck bool) (*packedPacket, error) {
-	return p.packPacket(stopWaitingFrame, controlFrames, leastUnacked, false, maySendOnlyAck)
+func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
+	return p.packPacket(stopWaitingFrame, controlFrames, leastUnacked, false)
 }
 
-func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, leastUnacked protocol.PacketNumber, onlySendOneControlFrame, maySendOnlyAck bool) (*packedPacket, error) {
+func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, leastUnacked protocol.PacketNumber, onlySendOneControlFrame bool) (*packedPacket, error) {
 	if len(controlFrames) > 0 {
 		p.controlFrames = append(p.controlFrames, controlFrames...)
 	}
@@ -96,18 +96,6 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 	// Don't send out packets that only contain a StopWaitingFrame
 	if !onlySendOneControlFrame && len(payloadFrames) == 1 && stopWaitingFrame != nil {
 		return nil, nil
-	}
-	// Don't send out packets that only contain an ACK (plus optional STOP_WAITING), if requested
-	if !maySendOnlyAck {
-		if len(payloadFrames) == 1 {
-			if _, ok := payloadFrames[0].(*frames.AckFrame); ok {
-				return nil, nil
-			}
-		} else if len(payloadFrames) == 2 && stopWaitingFrame != nil {
-			if _, ok := payloadFrames[1].(*frames.AckFrame); ok {
-				return nil, nil
-			}
-		}
 	}
 
 	raw := getPacketBuffer()
