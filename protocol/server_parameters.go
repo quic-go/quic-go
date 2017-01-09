@@ -12,8 +12,9 @@ const InitialCongestionWindow = 32
 // session queues for later until it sends a public reset.
 const MaxUndecryptablePackets = 10
 
-// AckSendDelay is the maximal time delay applied to packets containing only ACKs
-const AckSendDelay = 5 * time.Millisecond
+// AckSendDelay is the maximum delay that can be applied to an ACK for a retransmittable packet
+// This is the value Chromium is using
+const AckSendDelay = 25 * time.Millisecond
 
 // ReceiveStreamFlowControlWindow is the stream-level flow control window for receiving data
 // This is the value that Google servers are using
