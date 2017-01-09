@@ -427,8 +427,71 @@ var _ = Describe("Stream", func() {
 				str.AddStreamFrame(&frame)
 				str.RegisterRemoteError(testErr)
 				b := make([]byte, 4)
+				n, err := str.Read(b)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(n).To(Equal(4))
+			})
+
+			It("reads a delayed StreamFrame that arrives after receiving a remote error", func() {
+				str.RegisterRemoteError(testErr)
+				frame := frames.StreamFrame{
+					Offset: 0,
+					Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
+				}
+				err := str.AddStreamFrame(&frame)
+				Expect(err).ToNot(HaveOccurred())
+				b := make([]byte, 4)
+				n, err := str.Read(b)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(n).To(Equal(4))
+			})
+
+			It("returns the error if reading past the offset of the frame received", func() {
+				frame := frames.StreamFrame{
+					Offset: 0,
+					Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
+				}
+				str.AddStreamFrame(&frame)
+				str.RegisterRemoteError(testErr)
+				b := make([]byte, 10)
+				n, err := str.Read(b)
+				Expect(b[0:4]).To(Equal(frame.Data))
+				Expect(err).To(MatchError(testErr))
+				Expect(n).To(Equal(4))
+			})
+
+			It("returns an EOF when reading past the offset, if the stream received a finbit", func() {
+				frame := frames.StreamFrame{
+					Offset: 0,
+					Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
+					FinBit: true,
+				}
+				str.AddStreamFrame(&frame)
+				str.RegisterRemoteError(testErr)
+				b := make([]byte, 10)
+				n, err := str.Read(b)
+				Expect(b[:4]).To(Equal(frame.Data))
+				Expect(err).To(MatchError(io.EOF))
+				Expect(n).To(Equal(4))
+			})
+
+			It("continues reading in small chunks after receiving a remote error", func() {
+				frame := frames.StreamFrame{
+					Offset: 0,
+					Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
+					FinBit: true,
+				}
+				str.AddStreamFrame(&frame)
+				str.RegisterRemoteError(testErr)
+				b := make([]byte, 3)
 				_, err := str.Read(b)
 				Expect(err).ToNot(HaveOccurred())
+				Expect(b).To(Equal([]byte{0xde, 0xad, 0xbe}))
+				b = make([]byte, 3)
+				n, err := str.Read(b)
+				Expect(err).To(MatchError(io.EOF))
+				Expect(b[:1]).To(Equal([]byte{0xef}))
+				Expect(n).To(Equal(1))
 			})
 
 			It("stops writing after receiving a remote error", func() {
