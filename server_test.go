@@ -91,13 +91,13 @@ var _ = Describe("Server", func() {
 		})
 
 		It("deletes nil session entries after a wait time", func() {
-			server.deleteClosedSessionsAfter = 15 * time.Millisecond
+			server.deleteClosedSessionsAfter = 25 * time.Millisecond
 			err := server.handlePacket(nil, nil, append(firstPacket, (&crypto.NullAEAD{}).Seal(nil, nil, 0, firstPacket)...))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(server.sessions).To(HaveLen(1))
 			server.closeCallback(0x4cfa9f9b668619f6)
-			Consistently(func() map[protocol.ConnectionID]packetHandler { return server.sessions }, 10*time.Millisecond, time.Millisecond).Should(HaveKey(protocol.ConnectionID(0x4cfa9f9b668619f6)))
-			Eventually(func() map[protocol.ConnectionID]packetHandler { return server.sessions }, 100*time.Millisecond).ShouldNot(HaveKey(protocol.ConnectionID(0x4cfa9f9b668619f6)))
+			Expect(server.sessions).To(HaveKey(protocol.ConnectionID(0x4cfa9f9b668619f6)))
+			Eventually(func() map[protocol.ConnectionID]packetHandler { return server.sessions }).ShouldNot(HaveKey(protocol.ConnectionID(0x4cfa9f9b668619f6)))
 		})
 
 		It("closes sessions when Close is called", func() {
