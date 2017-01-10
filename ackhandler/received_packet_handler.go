@@ -18,24 +18,36 @@ var (
 var errInvalidPacketNumber = errors.New("ReceivedPacketHandler: Invalid packet number")
 
 type receivedPacketHandler struct {
-	largestObserved    protocol.PacketNumber
-	ignorePacketsBelow protocol.PacketNumber
-	currentAckFrame    *frames.AckFrame
-	stateChanged       bool // has an ACK for this state already been sent? Will be set to false every time a new packet arrives, and to false every time an ACK is sent
+	largestObserved             protocol.PacketNumber
+	ignorePacketsBelow          protocol.PacketNumber
+	largestObservedReceivedTime time.Time
 
 	packetHistory *receivedPacketHistory
 
-	largestObservedReceivedTime time.Time
+	ackSendDelay time.Duration
+
+	packetsReceivedSinceLastAck                int
+	retransmittablePacketsReceivedSinceLastAck int
+	ackQueued                                  bool
+	ackAlarm                                   time.Time
+	ackAlarmResetCallback                      func(time.Time)
+	lastAck                                    *frames.AckFrame
 }
 
 // NewReceivedPacketHandler creates a new receivedPacketHandler
-func NewReceivedPacketHandler() ReceivedPacketHandler {
+func NewReceivedPacketHandler(ackAlarmResetCallback func(time.Time)) ReceivedPacketHandler {
+	// create a stopped timer, see https://github.com/golang/go/issues/12721#issuecomment-143010182
+	timer := time.NewTimer(0)
+	<-timer.C
+
 	return &receivedPacketHandler{
-		packetHistory: newReceivedPacketHistory(),
+		packetHistory:         newReceivedPacketHistory(),
+		ackAlarmResetCallback: ackAlarmResetCallback,
+		ackSendDelay:          protocol.AckSendDelay,
 	}
 }
 
-func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumber) error {
+func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumber, shouldInstigateAck bool) error {
 	if packetNumber == 0 {
 		return errInvalidPacketNumber
 	}
@@ -55,14 +67,12 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 		return err
 	}
 
-	h.stateChanged = true
-	h.currentAckFrame = nil
-
 	if packetNumber > h.largestObserved {
 		h.largestObserved = packetNumber
 		h.largestObservedReceivedTime = time.Now()
 	}
 
+	h.maybeQueueAck(packetNumber, shouldInstigateAck)
 	return nil
 }
 
@@ -78,29 +88,79 @@ func (h *receivedPacketHandler) ReceivedStopWaiting(f *frames.StopWaitingFrame) 
 	return nil
 }
 
-func (h *receivedPacketHandler) GetAckFrame(dequeue bool) (*frames.AckFrame, error) {
-	if !h.stateChanged {
-		return nil, nil
+func (h *receivedPacketHandler) maybeQueueAck(packetNumber protocol.PacketNumber, shouldInstigateAck bool) {
+	var ackAlarmSet bool
+	h.packetsReceivedSinceLastAck++
+
+	if shouldInstigateAck {
+		h.retransmittablePacketsReceivedSinceLastAck++
 	}
 
-	if dequeue {
-		h.stateChanged = false
+	// always ack the first packet
+	if h.lastAck == nil {
+		h.ackQueued = true
 	}
 
-	if h.currentAckFrame != nil {
-		return h.currentAckFrame, nil
+	// Always send an ack every 20 packets in order to allow the peer to discard
+	// information from the SentPacketManager and provide an RTT measurement.
+	if h.packetsReceivedSinceLastAck >= protocol.MaxPacketsReceivedBeforeAckSend {
+		h.ackQueued = true
+	}
+
+	// if the packet number is smaller than the largest acked packet, it must have been reported missing with the last ACK
+	// note that it cannot be a duplicate because they're already filtered out by ReceivedPacket()
+	if h.lastAck != nil && packetNumber < h.lastAck.LargestAcked {
+		h.ackQueued = true
+	}
+
+	// check if a new missing range above the previously was created
+	if h.lastAck != nil && h.packetHistory.GetHighestAckRange().FirstPacketNumber > h.lastAck.LargestAcked {
+		h.ackQueued = true
+	}
+
+	if !h.ackQueued && shouldInstigateAck {
+		if h.retransmittablePacketsReceivedSinceLastAck >= protocol.RetransmittablePacketsBeforeAck {
+			h.ackQueued = true
+		} else {
+			if h.ackAlarm.IsZero() {
+				h.ackAlarm = time.Now().Add(h.ackSendDelay)
+				ackAlarmSet = true
+			}
+		}
+	}
+
+	if h.ackQueued {
+		// cancel the ack alarm
+		h.ackAlarm = time.Time{}
+		ackAlarmSet = false
+	}
+
+	if ackAlarmSet {
+		h.ackAlarmResetCallback(h.ackAlarm)
+	}
+}
+
+func (h *receivedPacketHandler) GetAckFrame() *frames.AckFrame {
+	if !h.ackQueued && (h.ackAlarm.IsZero() || h.ackAlarm.After(time.Now())) {
+		return nil
 	}
 
 	ackRanges := h.packetHistory.GetAckRanges()
-	h.currentAckFrame = &frames.AckFrame{
+	ack := &frames.AckFrame{
 		LargestAcked:       h.largestObserved,
 		LowestAcked:        ackRanges[len(ackRanges)-1].FirstPacketNumber,
 		PacketReceivedTime: h.largestObservedReceivedTime,
 	}
 
 	if len(ackRanges) > 1 {
-		h.currentAckFrame.AckRanges = ackRanges
+		ack.AckRanges = ackRanges
 	}
 
-	return h.currentAckFrame, nil
+	h.lastAck = ack
+	h.ackAlarm = time.Time{}
+	h.ackQueued = false
+	h.packetsReceivedSinceLastAck = 0
+	h.retransmittablePacketsReceivedSinceLastAck = 0
+
+	return ack
 }

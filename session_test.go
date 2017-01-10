@@ -88,6 +88,22 @@ func newMockSentPacketHandler() ackhandler.SentPacketHandler {
 	return &mockSentPacketHandler{}
 }
 
+var _ ackhandler.SentPacketHandler = &mockSentPacketHandler{}
+
+type mockReceivedPacketHandler struct {
+	nextAckFrame *frames.AckFrame
+}
+
+func (m *mockReceivedPacketHandler) GetAckFrame() *frames.AckFrame { return m.nextAckFrame }
+func (m *mockReceivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumber, shouldInstigateAck bool) error {
+	panic("not implemented")
+}
+func (m *mockReceivedPacketHandler) ReceivedStopWaiting(*frames.StopWaitingFrame) error {
+	panic("not implemented")
+}
+
+var _ ackhandler.ReceivedPacketHandler = &mockReceivedPacketHandler{}
+
 var _ = Describe("Session", func() {
 	var (
 		session              *Session
@@ -602,7 +618,7 @@ var _ = Describe("Session", func() {
 	Context("sending packets", func() {
 		It("sends ack frames", func() {
 			packetNumber := protocol.PacketNumber(0x035E)
-			session.receivedPacketHandler.ReceivedPacket(packetNumber)
+			session.receivedPacketHandler.ReceivedPacket(packetNumber, true)
 			err := session.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(conn.written).To(HaveLen(1))
@@ -734,6 +750,17 @@ var _ = Describe("Session", func() {
 			s.(*stream).getDataForWriting(1000) // unblock
 		})
 
+		It("sets the timer to the ack timer", func() {
+			rph := &mockReceivedPacketHandler{}
+			rph.nextAckFrame = &frames.AckFrame{LargestAcked: 0x1337}
+			session.receivedPacketHandler = rph
+			go session.run()
+			session.ackAlarmChanged(time.Now().Add(10 * time.Millisecond))
+			time.Sleep(10 * time.Millisecond)
+			Eventually(func() int { return len(conn.written) }).ShouldNot(BeZero())
+			Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x37, 0x13})))
+		})
+
 		Context("bundling of small packets", func() {
 			It("bundles two small frames of different streams into one packet", func() {
 				s1, err := session.GetOrOpenStream(5)
@@ -783,7 +810,7 @@ var _ = Describe("Session", func() {
 
 			It("sends a queued ACK frame only once", func() {
 				packetNumber := protocol.PacketNumber(0x1337)
-				session.receivedPacketHandler.ReceivedPacket(packetNumber)
+				session.receivedPacketHandler.ReceivedPacket(packetNumber, true)
 
 				s, err := session.GetOrOpenStream(5)
 				Expect(err).NotTo(HaveOccurred())

@@ -133,3 +133,13 @@ func (h *receivedPacketHistory) GetAckRanges() []frames.AckRange {
 
 	return ackRanges
 }
+
+func (h *receivedPacketHistory) GetHighestAckRange() frames.AckRange {
+	ackRange := frames.AckRange{}
+	if h.ranges.Len() > 0 {
+		r := h.ranges.Back().Value
+		ackRange.FirstPacketNumber = r.Start
+		ackRange.LastPacketNumber = r.End
+	}
+	return ackRange
+}
