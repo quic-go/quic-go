@@ -40,26 +40,29 @@ func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.
 	}
 }
 
-func (p *packetPacker) PackConnectionClose(frame *frames.ConnectionCloseFrame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
-	return p.packPacket(nil, []frames.Frame{frame}, leastUnacked, true)
+// PackConnectionClose packs a packet that ONLY contains a ConnectionCloseFrame
+func (p *packetPacker) PackConnectionClose(ccf *frames.ConnectionCloseFrame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
+	// in case the connection is closed, all queued control frames aren't of any use anymore
+	// discard them and queue the ConnectionCloseFrame
+	p.controlFrames = []frames.Frame{ccf}
+	return p.packPacket(nil, leastUnacked)
 }
 
+// PackPacket packs a new packet
+// the stopWaitingFrame is *guaranteed* to be included in the next packet
+// the other controlFrames are sent in the next packet, but might be queued and sent in the next packet if the packet would overflow MaxPacketSize otherwise
 func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
-	return p.packPacket(stopWaitingFrame, controlFrames, leastUnacked, false)
+	p.controlFrames = append(p.controlFrames, controlFrames...)
+	return p.packPacket(stopWaitingFrame, leastUnacked)
 }
 
-func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, leastUnacked protocol.PacketNumber, onlySendOneControlFrame bool) (*packedPacket, error) {
-	if len(controlFrames) > 0 {
-		p.controlFrames = append(p.controlFrames, controlFrames...)
-	}
-
-	currentPacketNumber := p.packetNumberGenerator.Peek()
-
+func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
 	// cryptoSetup needs to be locked here, so that the AEADs are not changed between
 	// calling DiversificationNonce() and Seal().
 	p.cryptoSetup.LockForSealing()
 	defer p.cryptoSetup.UnlockForSealing()
 
+	currentPacketNumber := p.packetNumberGenerator.Peek()
 	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(currentPacketNumber, leastUnacked)
 	responsePublicHeader := &PublicHeader{
 		ConnectionID:         p.connectionID,
@@ -79,9 +82,15 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		stopWaitingFrame.PacketNumberLen = packetNumberLen
 	}
 
+	// we're packing a ConnectionClose, don't add any StreamFrames
+	var isConnectionClose bool
+	if len(p.controlFrames) == 1 {
+		_, isConnectionClose = p.controlFrames[0].(*frames.ConnectionCloseFrame)
+	}
+
 	var payloadFrames []frames.Frame
-	if onlySendOneControlFrame {
-		payloadFrames = []frames.Frame{controlFrames[0]}
+	if isConnectionClose {
+		payloadFrames = []frames.Frame{p.controlFrames[0]}
 	} else {
 		payloadFrames, err = p.composeNextPacket(stopWaitingFrame, publicHeaderLength)
 		if err != nil {
@@ -94,7 +103,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 		return nil, nil
 	}
 	// Don't send out packets that only contain a StopWaitingFrame
-	if !onlySendOneControlFrame && len(payloadFrames) == 1 && stopWaitingFrame != nil {
+	if len(payloadFrames) == 1 && stopWaitingFrame != nil {
 		return nil, nil
 	}
 

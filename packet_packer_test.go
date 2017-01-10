@@ -57,7 +57,7 @@ var _ = Describe("Packet packer", func() {
 		Expect(p.raw).To(ContainSubstring(string(b.Bytes())))
 	})
 
-	It("packs a ConnectionCloseFrame", func() {
+	It("packs a ConnectionClose", func() {
 		ccf := frames.ConnectionCloseFrame{
 			ErrorCode:    0x1337,
 			ReasonPhrase: "foobar",
@@ -68,22 +68,27 @@ var _ = Describe("Packet packer", func() {
 		Expect(p.frames[0]).To(Equal(&ccf))
 	})
 
-	It("ignores all other frames when called with onlySendOneControlFrame=true", func() {
+	It("doesn't send any other frames when sending a ConnectionClose", func() {
 		ccf := frames.ConnectionCloseFrame{
 			ErrorCode:    0x1337,
 			ReasonPhrase: "foobar",
 		}
-		p, err := packer.packPacket(&frames.StopWaitingFrame{LeastUnacked: 13}, []frames.Frame{&ccf, &frames.WindowUpdateFrame{StreamID: 37}}, 0, true)
+		packer.controlFrames = []frames.Frame{&frames.WindowUpdateFrame{StreamID: 37}}
+		streamFramer.AddFrameForRetransmission(&frames.StreamFrame{
+			StreamID: 5,
+			Data:     []byte("foobar"),
+		})
+		p, err := packer.PackConnectionClose(&ccf, 0)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(p.frames).To(HaveLen(1))
 		Expect(p.frames[0]).To(Equal(&ccf))
 	})
 
 	It("packs only control frames", func() {
-		p, err := packer.PackPacket(nil, []frames.Frame{&frames.RstStreamFrame{}}, 0)
+		p, err := packer.PackPacket(nil, []frames.Frame{&frames.RstStreamFrame{}, &frames.WindowUpdateFrame{}}, 0)
 		Expect(p).ToNot(BeNil())
 		Expect(err).ToNot(HaveOccurred())
-		Expect(p.frames).To(HaveLen(1))
+		Expect(p.frames).To(HaveLen(2))
 		Expect(p.raw).NotTo(BeEmpty())
 	})
 
@@ -412,5 +417,14 @@ var _ = Describe("Packet packer", func() {
 		p, err := packer.PackPacket(nil, []frames.Frame{&frames.AckFrame{}}, 0)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(p).ToNot(BeNil())
+	})
+
+	It("queues a control frame to be sent in the next packet", func() {
+		wuf := &frames.WindowUpdateFrame{StreamID: 5}
+		packer.QueueControlFrameForNextPacket(wuf)
+		p, err := packer.PackPacket(nil, nil, 0)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(p.frames).To(HaveLen(1))
+		Expect(p.frames[0]).To(Equal(wuf))
 	})
 })
