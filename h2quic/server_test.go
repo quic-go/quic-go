@@ -79,6 +79,7 @@ var _ = Describe("H2 server", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(func() bool { return handlerCalled }).Should(BeTrue())
 			Expect(dataStream.remoteClosed).To(BeTrue())
+			Expect(dataStream.reset).To(BeFalse())
 		})
 
 		It("returns 200 with an empty handler", func() {
@@ -111,7 +112,7 @@ var _ = Describe("H2 server", func() {
 			}).Should(Equal([]byte{0x0, 0x0, 0x1, 0x1, 0x4, 0x0, 0x0, 0x0, 0x5, 0x8e})) // 0x82 is 500
 		})
 
-		It("does not close the dataStream when end of stream is not set", func() {
+		It("resets the dataStream when client sends a body in GET request", func() {
 			var handlerCalled bool
 			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				Expect(r.Host).To(Equal("www.example.com"))
@@ -126,6 +127,41 @@ var _ = Describe("H2 server", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(func() bool { return handlerCalled }).Should(BeTrue())
 			Expect(dataStream.remoteClosed).To(BeFalse())
+			Expect(dataStream.reset).To(BeTrue())
+		})
+
+		It("resets the dataStream when the body of POST request is not read", func() {
+			var handlerCalled bool
+			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				Expect(r.Host).To(Equal("www.example.com"))
+				Expect(r.Method).To(Equal("POST"))
+				handlerCalled = true
+			})
+			headerStream.Write([]byte{0x0, 0x0, 0x20, 0x1, 0x24, 0x0, 0x0, 0x0, 0x5, 0x0, 0x0, 0x0, 0x0, 0xff, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff, 0x83, 0x84, 0x87, 0x5c, 0x1, 0x37, 0x7a, 0x85, 0xed, 0x69, 0x88, 0xb4, 0xc7})
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(func() bool { return handlerCalled }).Should(BeTrue())
+			Expect(dataStream.remoteClosed).To(BeFalse())
+			Expect(dataStream.reset).To(BeTrue())
+		})
+
+		It("closes the dataStream if the body of POST request was read", func() {
+			var handlerCalled bool
+			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				Expect(r.Host).To(Equal("www.example.com"))
+				Expect(r.Method).To(Equal("POST"))
+				handlerCalled = true
+				// read the request body
+				b := make([]byte, 1000)
+				n, _ := r.Body.Read(b)
+				Expect(n).ToNot(BeZero())
+			})
+			headerStream.Write([]byte{0x0, 0x0, 0x20, 0x1, 0x24, 0x0, 0x0, 0x0, 0x5, 0x0, 0x0, 0x0, 0x0, 0xff, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff, 0x83, 0x84, 0x87, 0x5c, 0x1, 0x37, 0x7a, 0x85, 0xed, 0x69, 0x88, 0xb4, 0xc7})
+			dataStream.Write([]byte("foo=bar"))
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(func() bool { return handlerCalled }).Should(BeTrue())
+			Expect(dataStream.reset).To(BeFalse())
 		})
 
 		It("errors when non-header frames are received", func() {
