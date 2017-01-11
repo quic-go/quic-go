@@ -31,6 +31,7 @@ type cryptoSetupServer struct {
 	secureAEAD                  crypto.AEAD
 	forwardSecureAEAD           crypto.AEAD
 	receivedForwardSecurePacket bool
+	sentSHLO                    bool
 	receivedSecurePacket        bool
 	aeadChanged                 chan protocol.EncryptionLevel
 
@@ -187,9 +188,12 @@ func (h *cryptoSetupServer) Open(dst, src []byte, packetNumber protocol.PacketNu
 
 // Seal a message, call LockForSealing() before!
 func (h *cryptoSetupServer) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel) {
-	if h.receivedForwardSecurePacket {
+	if h.forwardSecureAEAD != nil && h.sentSHLO {
 		return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionForwardSecure
 	} else if h.secureAEAD != nil {
+		// secureAEAD and forwardSecureAEAD are created at the same time (when receiving the CHLO)
+		// make sure that the SHLO isn't sent forward-secure
+		h.sentSHLO = true
 		return h.secureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionSecure
 	} else {
 		return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData), protocol.EncryptionUnencrypted
@@ -375,6 +379,7 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 	replyMap[TagSNO] = serverNonce
 	replyMap[TagVER] = protocol.SupportedVersionsAsTags
 
+	// note that the SHLO *has* to fit into one packet
 	var reply bytes.Buffer
 	WriteHandshakeMessage(&reply, TagSHLO, replyMap)
 	utils.Debugf("Sending SHLO:\n%s", printHandshakeMessage(replyMap))
@@ -386,7 +391,7 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 
 // DiversificationNonce returns a diversification nonce if required in the next packet to be Seal'ed. See LockForSealing()!
 func (h *cryptoSetupServer) DiversificationNonce() []byte {
-	if h.receivedForwardSecurePacket || h.secureAEAD == nil {
+	if h.secureAEAD == nil || h.sentSHLO {
 		return nil
 	}
 	return h.diversificationNonce

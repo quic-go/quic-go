@@ -68,6 +68,7 @@ func (c *linkedConnection) Close() error                         { return nil }
 
 func setAEAD(cs handshake.CryptoSetup, aead crypto.AEAD) {
 	*(*bool)(unsafe.Pointer(reflect.ValueOf(cs).Elem().FieldByName("receivedForwardSecurePacket").UnsafeAddr())) = true
+	*(*bool)(unsafe.Pointer(reflect.ValueOf(cs).Elem().FieldByName("sentSHLO").UnsafeAddr())) = true
 	*(*crypto.AEAD)(unsafe.Pointer(reflect.ValueOf(cs).Elem().FieldByName("forwardSecureAEAD").UnsafeAddr())) = aead
 }
 
