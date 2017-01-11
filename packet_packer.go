@@ -104,7 +104,8 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	if isConnectionClose {
 		payloadFrames = []frames.Frame{p.controlFrames[0]}
 	} else {
-		payloadFrames, err = p.composeNextPacket(stopWaitingFrame, publicHeaderLength)
+		maxSize := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLength
+		payloadFrames, err = p.composeNextPacket(stopWaitingFrame, maxSize)
 		if err != nil {
 			return nil, err
 		}
@@ -164,11 +165,9 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	}, nil
 }
 
-func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFrame, publicHeaderLength protocol.ByteCount) ([]frames.Frame, error) {
+func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFrame, maxFrameSize protocol.ByteCount) ([]frames.Frame, error) {
 	var payloadLength protocol.ByteCount
 	var payloadFrames []frames.Frame
-
-	maxFrameSize := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLength
 
 	if stopWaitingFrame != nil {
 		payloadFrames = append(payloadFrames, stopWaitingFrame)

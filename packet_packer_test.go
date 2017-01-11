@@ -37,6 +37,7 @@ var _ = Describe("Packet packer", func() {
 	var (
 		packer          *packetPacker
 		publicHeaderLen protocol.ByteCount
+		maxFrameSize    protocol.ByteCount
 		streamFramer    *streamFramer
 	)
 
@@ -57,6 +58,7 @@ var _ = Describe("Packet packer", func() {
 			perspective:           protocol.PerspectiveServer,
 		}
 		publicHeaderLen = 1 + 8 + 2 // 1 flag byte, 8 connection ID, 2 packet number
+		maxFrameSize = protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen
 		packer.version = protocol.Version34
 	})
 
@@ -222,10 +224,10 @@ var _ = Describe("Packet packer", func() {
 			controlFrames = append(controlFrames, f)
 		}
 		packer.controlFrames = controlFrames
-		payloadFrames, err := packer.composeNextPacket(nil, publicHeaderLen)
+		payloadFrames, err := packer.composeNextPacket(nil, maxFrameSize)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(payloadFrames).To(HaveLen(maxFramesPerPacket))
-		payloadFrames, err = packer.composeNextPacket(nil, publicHeaderLen)
+		payloadFrames, err = packer.composeNextPacket(nil, maxFrameSize)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(payloadFrames).To(BeEmpty())
 	})
@@ -241,10 +243,10 @@ var _ = Describe("Packet packer", func() {
 			controlFrames = append(controlFrames, blockedFrame)
 		}
 		packer.controlFrames = controlFrames
-		payloadFrames, err := packer.composeNextPacket(nil, publicHeaderLen)
+		payloadFrames, err := packer.composeNextPacket(nil, maxFrameSize)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(payloadFrames).To(HaveLen(maxFramesPerPacket))
-		payloadFrames, err = packer.composeNextPacket(nil, publicHeaderLen)
+		payloadFrames, err = packer.composeNextPacket(nil, maxFrameSize)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(payloadFrames).To(HaveLen(10))
 	})
@@ -275,14 +277,14 @@ var _ = Describe("Packet packer", func() {
 				DataLenPresent: false,
 			}
 			minLength, _ := f.MinLength(0)
-			maxStreamFrameDataLen := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen - minLength
+			maxStreamFrameDataLen := maxFrameSize - minLength
 			f.Data = bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen))
 			streamFramer.AddFrameForRetransmission(f)
-			payloadFrames, err := packer.composeNextPacket(nil, publicHeaderLen)
+			payloadFrames, err := packer.composeNextPacket(nil, maxFrameSize)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(payloadFrames).To(HaveLen(1))
 			Expect(payloadFrames[0].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
-			payloadFrames, err = packer.composeNextPacket(nil, publicHeaderLen)
+			payloadFrames, err = packer.composeNextPacket(nil, maxFrameSize)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(payloadFrames).To(BeEmpty())
 		})
@@ -353,17 +355,17 @@ var _ = Describe("Packet packer", func() {
 			maxStreamFrameDataLen := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen - minLength
 			f.Data = bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen)+200)
 			streamFramer.AddFrameForRetransmission(f)
-			payloadFrames, err := packer.composeNextPacket(nil, publicHeaderLen)
+			payloadFrames, err := packer.composeNextPacket(nil, maxFrameSize)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(payloadFrames).To(HaveLen(1))
 			Expect(payloadFrames[0].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
 			Expect(payloadFrames[0].(*frames.StreamFrame).Data).To(HaveLen(int(maxStreamFrameDataLen)))
-			payloadFrames, err = packer.composeNextPacket(nil, publicHeaderLen)
+			payloadFrames, err = packer.composeNextPacket(nil, maxFrameSize)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(payloadFrames).To(HaveLen(1))
 			Expect(payloadFrames[0].(*frames.StreamFrame).Data).To(HaveLen(200))
 			Expect(payloadFrames[0].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
-			payloadFrames, err = packer.composeNextPacket(nil, publicHeaderLen)
+			payloadFrames, err = packer.composeNextPacket(nil, maxFrameSize)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(payloadFrames).To(BeEmpty())
 		})
@@ -426,10 +428,10 @@ var _ = Describe("Packet packer", func() {
 			f.Data = bytes.Repeat([]byte{'f'}, int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLen-minLength+2)) // + 2 since MinceLength is 1 bigger than the actual StreamFrame header
 
 			streamFramer.AddFrameForRetransmission(f)
-			payloadFrames, err := packer.composeNextPacket(nil, publicHeaderLen)
+			payloadFrames, err := packer.composeNextPacket(nil, maxFrameSize)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(payloadFrames).To(HaveLen(1))
-			payloadFrames, err = packer.composeNextPacket(nil, publicHeaderLen)
+			payloadFrames, err = packer.composeNextPacket(nil, maxFrameSize)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(payloadFrames).To(HaveLen(1))
 		})
@@ -494,7 +496,7 @@ var _ = Describe("Packet packer", func() {
 				Data:     bytes.Repeat([]byte{'f'}, length),
 			}
 			streamFramer.AddFrameForRetransmission(f)
-			_, err := packer.composeNextPacket(nil, publicHeaderLen)
+			_, err := packer.composeNextPacket(nil, maxFrameSize)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(packer.controlFrames[0]).To(Equal(&frames.BlockedFrame{StreamID: 5}))
 		})
@@ -507,7 +509,7 @@ var _ = Describe("Packet packer", func() {
 				Data:     bytes.Repeat([]byte{'f'}, length),
 			}
 			streamFramer.AddFrameForRetransmission(f)
-			p, err := packer.composeNextPacket(nil, publicHeaderLen)
+			p, err := packer.composeNextPacket(nil, maxFrameSize)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p).To(HaveLen(1))
 			Expect(p[0].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
@@ -520,7 +522,7 @@ var _ = Describe("Packet packer", func() {
 				Data:     []byte("foobar"),
 			}
 			streamFramer.AddFrameForRetransmission(f)
-			_, err := packer.composeNextPacket(nil, publicHeaderLen)
+			_, err := packer.composeNextPacket(nil, maxFrameSize)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(packer.controlFrames[0]).To(Equal(&frames.BlockedFrame{StreamID: 0}))
 		})
