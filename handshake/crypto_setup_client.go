@@ -349,6 +349,7 @@ func (h *cryptoSetupClient) sendCHLO() error {
 	}
 	h.addPadding(tags)
 
+	utils.Debugf("Sending CHLO:\n%s", printHandshakeMessage(tags))
 	WriteHandshakeMessage(b, TagCHLO, tags)
 
 	_, err = h.cryptoStream.Write(b.Bytes())
