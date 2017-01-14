@@ -501,6 +501,14 @@ func (s *Session) sendPacket() error {
 				switch frame.(type) {
 				case *frames.StreamFrame:
 					s.streamFramer.AddFrameForRetransmission(frame.(*frames.StreamFrame))
+				case *frames.WindowUpdateFrame:
+					// only retransmit WindowUpdates if the stream is not yet closed and the we haven't sent another WindowUpdate with a higher ByteOffset for the stream
+					var currentOffset protocol.ByteCount
+					f := frame.(*frames.WindowUpdateFrame)
+					currentOffset, err = s.flowControlManager.GetReceiveWindow(f.StreamID)
+					if err == nil && f.ByteOffset >= currentOffset {
+						controlFrames = append(controlFrames, frame)
+					}
 				default:
 					controlFrames = append(controlFrames, frame)
 				}

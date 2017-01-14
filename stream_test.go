@@ -23,6 +23,7 @@ type mockFlowControlHandler struct {
 	bytesRead                     protocol.ByteCount
 	bytesSent                     protocol.ByteCount
 
+	receiveWindow            protocol.ByteCount
 	highestReceivedForStream protocol.StreamID
 	highestReceived          protocol.ByteCount
 	flowControlViolation     error
@@ -55,6 +56,10 @@ func (m *mockFlowControlHandler) GetWindowUpdates() (res []flowcontrol.WindowUpd
 		res = append(res, flowcontrol.WindowUpdate{StreamID: 0, Offset: 0x1337})
 	}
 	return res
+}
+
+func (m *mockFlowControlHandler) GetReceiveWindow(protocol.StreamID) (protocol.ByteCount, error) {
+	return m.receiveWindow, nil
 }
 
 func (m *mockFlowControlHandler) AddBytesRead(streamID protocol.StreamID, n protocol.ByteCount) error {

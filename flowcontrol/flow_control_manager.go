@@ -162,6 +162,16 @@ func (f *flowControlManager) GetWindowUpdates() (res []WindowUpdate) {
 	return res
 }
 
+func (f *flowControlManager) GetReceiveWindow(streamID protocol.StreamID) (protocol.ByteCount, error) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	flowController, err := f.getFlowController(streamID)
+	if err != nil {
+		return 0, err
+	}
+	return flowController.receiveFlowControlWindow, nil
+}
+
 // streamID must not be 0 here
 func (f *flowControlManager) AddBytesSent(streamID protocol.StreamID, n protocol.ByteCount) error {
 	// Only lock the part reading from the map, since send-windows are only accessed from the session goroutine.

@@ -735,6 +735,71 @@ var _ = Describe("Session", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(sph.(*mockSentPacketHandler).maybeQueueRTOsCalled).To(BeTrue())
 		})
+
+		It("retransmits a WindowUpdates if it hasn't already sent a WindowUpdate with a higher ByteOffset", func() {
+			_, err := session.GetOrOpenStream(5)
+			Expect(err).ToNot(HaveOccurred())
+			fc := newMockFlowControlHandler()
+			fc.receiveWindow = 0x1000
+			session.flowControlManager = fc
+			sph := newMockSentPacketHandler()
+			session.sentPacketHandler = sph
+			wuf := &frames.WindowUpdateFrame{
+				StreamID:   5,
+				ByteOffset: 0x1000,
+			}
+			sph.(*mockSentPacketHandler).retransmissionQueue = []*ackhandler.Packet{{
+				Frames: []frames.Frame{wuf},
+			}}
+			err = session.sendPacket()
+			Expect(err).ToNot(HaveOccurred())
+			sentPackets := sph.(*mockSentPacketHandler).sentPackets
+			Expect(sentPackets).To(HaveLen(1))
+			Expect(sentPackets[0].Frames).To(ContainElement(wuf))
+		})
+
+		It("doesn't retransmit WindowUpdates if it already sent a WindowUpdate with a higher ByteOffset", func() {
+			_, err := session.GetOrOpenStream(5)
+			Expect(err).ToNot(HaveOccurred())
+			fc := newMockFlowControlHandler()
+			fc.receiveWindow = 0x2000
+			session.flowControlManager = fc
+			sph := newMockSentPacketHandler()
+			session.sentPacketHandler = sph
+			sph.(*mockSentPacketHandler).retransmissionQueue = []*ackhandler.Packet{{
+				Frames: []frames.Frame{&frames.WindowUpdateFrame{
+					StreamID:   5,
+					ByteOffset: 0x1000,
+				}},
+			}}
+			err = session.sendPacket()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(sph.(*mockSentPacketHandler).sentPackets).To(BeEmpty())
+		})
+
+		It("doesn't retransmit WindowUpdates for closed streams", func() {
+			str, err := session.GetOrOpenStream(5)
+			Expect(err).ToNot(HaveOccurred())
+			// close the stream
+			str.(*stream).sentFin()
+			str.Close()
+			str.(*stream).RegisterRemoteError(nil)
+			session.garbageCollectStreams()
+			_, err = session.flowControlManager.SendWindowSize(5)
+			Expect(err).To(MatchError("Error accessing the flowController map."))
+			sph := newMockSentPacketHandler()
+			session.sentPacketHandler = sph
+			sph.(*mockSentPacketHandler).retransmissionQueue = []*ackhandler.Packet{{
+				Frames: []frames.Frame{&frames.WindowUpdateFrame{
+					StreamID:   5,
+					ByteOffset: 0x1337,
+				}},
+			}}
+			err = session.sendPacket()
+			Expect(err).ToNot(HaveOccurred())
+			sentPackets := sph.(*mockSentPacketHandler).sentPackets
+			Expect(sentPackets).To(BeEmpty())
+		})
 	})
 
 	Context("scheduling sending", func() {
