@@ -140,9 +140,9 @@ var _ = Describe("H2 server", func() {
 			headerStream.Write([]byte{0x0, 0x0, 0x20, 0x1, 0x24, 0x0, 0x0, 0x0, 0x5, 0x0, 0x0, 0x0, 0x0, 0xff, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff, 0x83, 0x84, 0x87, 0x5c, 0x1, 0x37, 0x7a, 0x85, 0xed, 0x69, 0x88, 0xb4, 0xc7})
 			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
 			Expect(err).NotTo(HaveOccurred())
-			Eventually(func() bool { return handlerCalled }).Should(BeTrue())
-			Expect(dataStream.remoteClosed).To(BeFalse())
-			Expect(dataStream.reset).To(BeTrue())
+			Eventually(func() bool { return dataStream.reset }).Should(BeTrue())
+			Consistently(func() bool { return dataStream.remoteClosed }).Should(BeFalse())
+			Expect(handlerCalled).To(BeTrue())
 		})
 
 		It("closes the dataStream if the body of POST request was read", func() {
