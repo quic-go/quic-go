@@ -488,6 +488,16 @@ func (s *Session) sendPacket() error {
 
 		var controlFrames []frames.Frame
 
+		// get WindowUpdate frames
+		// this call triggers the flow controller to increase the flow control windows, if necessary
+		windowUpdateFrames, err := s.getWindowUpdateFrames()
+		if err != nil {
+			return err
+		}
+		for _, wuf := range windowUpdateFrames {
+			controlFrames = append(controlFrames, wuf)
+		}
+
 		// check for retransmissions first
 		for {
 			retransmitPacket := s.sentPacketHandler.DequeuePacketForRetransmission()
@@ -515,13 +525,6 @@ func (s *Session) sendPacket() error {
 			}
 		}
 
-		windowUpdateFrames, err := s.getWindowUpdateFrames()
-		if err != nil {
-			return err
-		}
-		for _, wuf := range windowUpdateFrames {
-			controlFrames = append(controlFrames, wuf)
-		}
 		ack := s.receivedPacketHandler.GetAckFrame()
 		if ack != nil {
 			controlFrames = append(controlFrames, ack)
