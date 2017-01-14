@@ -25,7 +25,8 @@ import (
 )
 
 type mockConnection struct {
-	written [][]byte
+	remoteAddr net.IP
+	written    [][]byte
 }
 
 func (m *mockConnection) write(p []byte) error {
@@ -35,12 +36,21 @@ func (m *mockConnection) write(p []byte) error {
 	return nil
 }
 
-func (*mockConnection) setCurrentRemoteAddr(addr interface{}) {}
-func (*mockConnection) RemoteAddr() *net.UDPAddr              { return &net.UDPAddr{} }
+func (m *mockConnection) setCurrentRemoteAddr(addr interface{}) {
+	if ip, ok := addr.(net.IP); ok {
+		m.remoteAddr = ip
+	}
+}
+func (*mockConnection) RemoteAddr() *net.UDPAddr { return &net.UDPAddr{} }
 
-type mockUnpacker struct{}
+type mockUnpacker struct {
+	unpackErr error
+}
 
 func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data []byte) (*unpackedPacket, error) {
+	if m.unpackErr != nil {
+		return nil, m.unpackErr
+	}
 	return &unpackedPacket{
 		frames: nil,
 	}, nil
@@ -612,6 +622,51 @@ var _ = Describe("Session", func() {
 			hdr.PacketNumber = 5
 			err = session.handlePacketImpl(&receivedPacket{publicHeader: hdr})
 			Expect(err).ToNot(HaveOccurred())
+		})
+
+		Context("updating the remote address", func() {
+			It("sets the remote address", func() {
+				remoteIP := net.IPv4(192, 168, 0, 100)
+				Expect(session.conn.(*mockConnection).remoteAddr).ToNot(Equal(remoteIP))
+				p := receivedPacket{
+					remoteAddr:   remoteIP,
+					publicHeader: &PublicHeader{PacketNumber: 1337},
+				}
+				err := session.handlePacketImpl(&p)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(session.conn.(*mockConnection).remoteAddr).To(Equal(remoteIP))
+			})
+
+			It("doesn't change the remote address if authenticating the packet fails", func() {
+				remoteIP := net.IPv4(192, 168, 0, 100)
+				attackerIP := net.IPv4(192, 168, 0, 102)
+				session.conn.(*mockConnection).remoteAddr = remoteIP
+				// use the real packetUnpacker here, to make sure this test fails if the error code for failed decryption changes
+				session.unpacker = &packetUnpacker{}
+				session.unpacker.(*packetUnpacker).aead = &crypto.NullAEAD{}
+				p := receivedPacket{
+					remoteAddr:   attackerIP,
+					publicHeader: &PublicHeader{PacketNumber: 1337},
+				}
+				err := session.handlePacketImpl(&p)
+				quicErr := err.(*qerr.QuicError)
+				Expect(quicErr.ErrorCode).To(Equal(qerr.DecryptionFailure))
+				Expect(session.conn.(*mockConnection).remoteAddr).To(Equal(remoteIP))
+			})
+
+			It("sets the remote address, if the packet is authenticated, but unpacking fails for another reason", func() {
+				testErr := errors.New("testErr")
+				remoteIP := net.IPv4(192, 168, 0, 100)
+				Expect(session.conn.(*mockConnection).remoteAddr).ToNot(Equal(remoteIP))
+				p := receivedPacket{
+					remoteAddr:   remoteIP,
+					publicHeader: &PublicHeader{PacketNumber: 1337},
+				}
+				session.unpacker.(*mockUnpacker).unpackErr = testErr
+				err := session.handlePacketImpl(&p)
+				Expect(err).To(MatchError(testErr))
+				Expect(session.conn.(*mockConnection).remoteAddr).To(Equal(remoteIP))
+			})
 		})
 	})
 
