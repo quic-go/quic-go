@@ -7,88 +7,45 @@ import (
 )
 
 var _ = Describe("Packet", func() {
-	Context("getFramesForRetransmission", func() {
-		var packet Packet
-		var streamFrame1, streamFrame2 *frames.StreamFrame
-		var ackFrame1, ackFrame2 *frames.AckFrame
-		var stopWaitingFrame *frames.StopWaitingFrame
-		var rstStreamFrame *frames.RstStreamFrame
-		var windowUpdateFrame *frames.WindowUpdateFrame
+	Context("getting frames for retransmission", func() {
+		ackFrame := &frames.AckFrame{LargestAcked: 13}
+		stopWaitingFrame := &frames.StopWaitingFrame{LeastUnacked: 7331}
+		windowUpdateFrame := &frames.WindowUpdateFrame{StreamID: 999}
 
-		BeforeEach(func() {
-			streamFrame1 = &frames.StreamFrame{
-				StreamID: 5,
-				Data:     []byte{0x13, 0x37},
+		streamFrame := &frames.StreamFrame{
+			StreamID: 5,
+			Data:     []byte{0x13, 0x37},
+		}
+
+		rstStreamFrame := &frames.RstStreamFrame{
+			StreamID:  555,
+			ErrorCode: 1337,
+		}
+
+		It("returns nil if there are no retransmittable frames", func() {
+			packet := &Packet{
+				Frames: []frames.Frame{ackFrame, stopWaitingFrame},
 			}
-			streamFrame2 = &frames.StreamFrame{
-				StreamID: 6,
-				Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
-			}
-			ackFrame1 = &frames.AckFrame{
-				LargestAcked: 13,
-			}
-			ackFrame2 = &frames.AckFrame{
-				LargestAcked: 333,
-			}
-			rstStreamFrame = &frames.RstStreamFrame{
-				StreamID:  555,
-				ErrorCode: 1337,
-			}
-			stopWaitingFrame = &frames.StopWaitingFrame{
-				LeastUnacked: 7331,
-			}
-			windowUpdateFrame = &frames.WindowUpdateFrame{
-				StreamID: 999,
-			}
-			packet = Packet{
-				PacketNumber: 1337,
-				Frames:       []frames.Frame{windowUpdateFrame, streamFrame1, ackFrame1, streamFrame2, rstStreamFrame, ackFrame2, stopWaitingFrame},
-			}
+			Expect(packet.GetFramesForRetransmission()).To(BeNil())
 		})
 
-		It("gets all StreamFrames", func() {
-			streamFrames := packet.GetStreamFramesForRetransmission()
-			Expect(streamFrames).To(HaveLen(2))
-			Expect(streamFrames).To(ContainElement(streamFrame1))
-			Expect(streamFrames).To(ContainElement(streamFrame2))
-		})
-
-		It("gets all control frames", func() {
-			controlFrames := packet.GetControlFramesForRetransmission()
-			Expect(controlFrames).To(HaveLen(2))
-			Expect(controlFrames).To(ContainElement(rstStreamFrame))
-			Expect(controlFrames).To(ContainElement(windowUpdateFrame))
-		})
-
-		It("does not return any ACK frames", func() {
-			controlFrames := packet.GetControlFramesForRetransmission()
-			Expect(controlFrames).ToNot(ContainElement(ackFrame1))
-			Expect(controlFrames).ToNot(ContainElement(ackFrame2))
-		})
-
-		It("does not return any ACK frames", func() {
-			controlFrames := packet.GetControlFramesForRetransmission()
-			Expect(controlFrames).ToNot(ContainElement(stopWaitingFrame))
-		})
-
-		It("returns an empty slice of StreamFrames if no StreamFrames are queued", func() {
-			// overwrite the globally defined packet here
-			packet := Packet{
-				PacketNumber: 1337,
-				Frames:       []frames.Frame{ackFrame1, rstStreamFrame},
+		It("returns all retransmittable frames", func() {
+			packet := &Packet{
+				Frames: []frames.Frame{
+					windowUpdateFrame,
+					ackFrame,
+					stopWaitingFrame,
+					streamFrame,
+					rstStreamFrame,
+				},
 			}
-			streamFrames := packet.GetStreamFramesForRetransmission()
-			Expect(streamFrames).To(BeEmpty())
+			fs := packet.GetFramesForRetransmission()
+			Expect(fs).To(ContainElement(streamFrame))
+			Expect(fs).To(ContainElement(rstStreamFrame))
+			Expect(fs).To(ContainElement(windowUpdateFrame))
+			Expect(fs).ToNot(ContainElement(stopWaitingFrame))
+			Expect(fs).ToNot(ContainElement(ackFrame))
 		})
 
-		It("returns an empty slice of control frames if no applicable control frames are queued", func() {
-			// overwrite the globally defined packet here
-			packet := Packet{
-				PacketNumber: 1337,
-				Frames:       []frames.Frame{streamFrame1, ackFrame1, stopWaitingFrame},
-			}
-			controlFrames := packet.GetControlFramesForRetransmission()
-			Expect(controlFrames).To(BeEmpty())
-		})
 	})
 })

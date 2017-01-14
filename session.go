@@ -497,9 +497,13 @@ func (s *Session) sendPacket() error {
 			utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 
 			// resend the frames that were in the packet
-			controlFrames = append(controlFrames, retransmitPacket.GetControlFramesForRetransmission()...)
-			for _, streamFrame := range retransmitPacket.GetStreamFramesForRetransmission() {
-				s.streamFramer.AddFrameForRetransmission(streamFrame)
+			for _, frame := range retransmitPacket.GetFramesForRetransmission() {
+				switch frame.(type) {
+				case *frames.StreamFrame:
+					s.streamFramer.AddFrameForRetransmission(frame.(*frames.StreamFrame))
+				default:
+					controlFrames = append(controlFrames, frame)
+				}
 			}
 		}
 
