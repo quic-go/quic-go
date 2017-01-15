@@ -1,5 +1,9 @@
 sudo: required
 
+addons:
+  hosts:
+    - quic.clemente.io
+
 language: go
 
 services:
