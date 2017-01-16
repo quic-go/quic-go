@@ -334,12 +334,12 @@ var _ = Describe("Client", func() {
 
 			It("doesn't add gzip if the header disable it", func() {
 				quicTransport.DisableCompression = true
-				var doRsp *http.Response
 				var doErr error
-				go func() { doRsp, doErr = client.Do(request) }()
+				go func() { _, doErr = client.Do(request) }()
 
 				Eventually(func() chan *http.Response { return client.responses[5] }).ShouldNot(BeNil())
 				Expect(doErr).ToNot(HaveOccurred())
+				Eventually(func() []byte { return headerStream.dataWritten.Bytes() }).ShouldNot(BeEmpty())
 				headers := getHeaderFields(getRequest(headerStream.dataWritten.Bytes()))
 				Expect(headers).ToNot(HaveKey("accept-encoding"))
 			})
