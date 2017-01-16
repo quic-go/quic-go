@@ -151,9 +151,6 @@ var _ = Describe("Client", func() {
 		})
 
 		It("closes the quic client when encountering an error on the header stream", func() {
-			headerStream.dataToRead.Write([]byte("invalid response"))
-			go client.handleHeaderStream()
-
 			var doRsp *http.Response
 			var doErr error
 			var doReturned bool
@@ -161,6 +158,15 @@ var _ = Describe("Client", func() {
 				doRsp, doErr = client.Do(request)
 				doReturned = true
 			}()
+
+			Eventually(func() chan *http.Response {
+				client.mutex.RLock()
+				defer client.mutex.RUnlock()
+				return client.responses[5]
+			}).ShouldNot(BeNil())
+
+			headerStream.dataToRead.Write([]byte("invalid response"))
+			client.handleHeaderStream()
 
 			Eventually(func() bool { return doReturned }).Should(BeTrue())
 			Expect(client.headerErr).To(HaveOccurred())
