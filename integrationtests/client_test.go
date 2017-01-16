@@ -29,4 +29,24 @@ var _ = Describe("Client tests", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(string(body)).To(Equal("Hello, World!\n"))
 	})
+
+	It("downloads a small file", func() {
+		dataMan.GenerateData(dataLen)
+		resp, err := client.Get("https://quic.clemente.io:" + port + "/data")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(200))
+		body, err := ioutil.ReadAll(resp.Body)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(body).To(Equal(dataMan.GetData()))
+	})
+
+	It("downloads a large file", func() {
+		dataMan.GenerateData(dataLongLen)
+		resp, err := client.Get("https://quic.clemente.io:" + port + "/data")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(200))
+		body, err := ioutil.ReadAll(resp.Body)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(body).To(Equal(dataMan.GetData()))
+	})
 })
