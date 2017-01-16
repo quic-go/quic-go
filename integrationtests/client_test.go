@@ -1,6 +1,7 @@
 package integrationtests
 
 import (
+	"bytes"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -43,6 +44,17 @@ var _ = Describe("Client tests", func() {
 	It("downloads a large file", func() {
 		dataMan.GenerateData(dataLongLen)
 		resp, err := client.Get("https://quic.clemente.io:" + port + "/data")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(200))
+		body, err := ioutil.ReadAll(resp.Body)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(body).To(Equal(dataMan.GetData()))
+	})
+
+	It("uploads a file", func() {
+		dataMan.GenerateData(dataLen)
+		data := bytes.NewReader(dataMan.GetData())
+		resp, err := client.Post("https://quic.clemente.io:"+port+"/echo", "text/plain", data)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(resp.StatusCode).To(Equal(200))
 		body, err := ioutil.ReadAll(resp.Body)
