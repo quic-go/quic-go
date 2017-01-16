@@ -3,6 +3,7 @@ package integrationtests
 import (
 	"bytes"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 
@@ -17,6 +18,11 @@ var _ = Describe("Client tests", func() {
 	BeforeEach(func() {
 		err := os.Setenv("HOSTALIASES", "quic.clemente.io 127.0.0.1")
 		Expect(err).ToNot(HaveOccurred())
+		addr, err := net.ResolveUDPAddr("udp4", "quic.clemente.io:0")
+		Expect(err).ToNot(HaveOccurred())
+		if addr.String() != "127.0.0.1:0" {
+			Fail("quic.clemente.io does not resolve to 127.0.0.1. Consider adding it to /etc/hosts.")
+		}
 		client = &http.Client{
 			Transport: &h2quic.QuicRoundTripper{},
 		}
