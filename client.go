@@ -3,7 +3,6 @@ package quic
 import (
 	"bytes"
 	"errors"
-	"math/rand"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -52,9 +51,10 @@ func NewClient(host string, cryptoChangeCallback CryptoChangeCallback, versionNe
 		return nil, err
 	}
 
-	// TODO: generate cryptographically secure random ConnectionID
-	rand.Seed(time.Now().UTC().UnixNano())
-	connectionID := protocol.ConnectionID(rand.Int63())
+	connectionID, err := utils.GenerateConnectionID()
+	if err != nil {
+		return nil, err
+	}
 
 	hostname, _, err := net.SplitHostPort(host)
 	if err != nil {
