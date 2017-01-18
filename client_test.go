@@ -228,7 +228,7 @@ var _ = Describe("Client", func() {
 
 		It("errors if no matching version is found", func() {
 			err := client.handlePacket(getVersionNegotiation([]protocol.VersionNumber{1}))
-			Expect(err).To(MatchError(qerr.VersionNegotiationMismatch))
+			Expect(err).To(MatchError(qerr.InvalidVersion))
 		})
 
 		It("ignores delayed version negotiation packets", func() {
@@ -244,7 +244,7 @@ var _ = Describe("Client", func() {
 
 		It("errors if the server should have accepted the offered version", func() {
 			err := client.handlePacket(getVersionNegotiation([]protocol.VersionNumber{client.version}))
-			Expect(err).To(MatchError(errInvalidVersionNegotiation))
+			Expect(err).To(MatchError(qerr.Error(qerr.InvalidVersionNegotiationPacket, "Server already supports client's version and should have accepted the connection.")))
 		})
 	})
 })

@@ -38,7 +38,6 @@ var errHostname = errors.New("Invalid hostname")
 
 var (
 	errCloseSessionForNewVersion = errors.New("closing session in order to recreate it with a new version")
-	errInvalidVersionNegotiation = qerr.Error(qerr.InvalidVersionNegotiationPacket, "Server already supports client's version and should have accepted the connection.")
 )
 
 // NewClient makes a new client
@@ -153,11 +152,19 @@ func (c *Client) handlePacket(packet []byte) error {
 	}
 
 	if hdr.VersionFlag {
-		// check if the server sent the offered version in supported versions
+		var hasCommonVersion bool // check if we're supporting any of the offered versions
 		for _, v := range hdr.SupportedVersions {
+			// check if the server sent the offered version in supported versions
 			if v == c.version {
-				return errInvalidVersionNegotiation
+				return qerr.Error(qerr.InvalidVersionNegotiationPacket, "Server already supports client's version and should have accepted the connection.")
 			}
+			if v != protocol.VersionUnsupported {
+				hasCommonVersion = true
+			}
+		}
+		if !hasCommonVersion {
+			utils.Infof("No common version found.")
+			return qerr.InvalidVersion
 		}
 
 		ok, highestSupportedVersion := protocol.HighestSupportedVersion(hdr.SupportedVersions)
