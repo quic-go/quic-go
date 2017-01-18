@@ -18,8 +18,9 @@ type packedPacket struct {
 
 type packetPacker struct {
 	connectionID protocol.ConnectionID
+	perspective  protocol.Perspective
 	version      protocol.VersionNumber
-	cryptoSetup  *handshake.CryptoSetup
+	cryptoSetup  handshake.CryptoSetup
 
 	packetNumberGenerator *packetNumberGenerator
 
@@ -29,11 +30,12 @@ type packetPacker struct {
 	controlFrames []frames.Frame
 }
 
-func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup *handshake.CryptoSetup, connectionParameters handshake.ConnectionParametersManager, streamFramer *streamFramer, version protocol.VersionNumber) *packetPacker {
+func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup handshake.CryptoSetup, connectionParameters handshake.ConnectionParametersManager, streamFramer *streamFramer, perspective protocol.Perspective, version protocol.VersionNumber) *packetPacker {
 	return &packetPacker{
 		cryptoSetup:           cryptoSetup,
 		connectionID:          connectionID,
 		connectionParameters:  connectionParameters,
+		perspective:           perspective,
 		version:               version,
 		streamFramer:          streamFramer,
 		packetNumberGenerator: newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
@@ -69,10 +71,19 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 		PacketNumber:         currentPacketNumber,
 		PacketNumberLen:      packetNumberLen,
 		TruncateConnectionID: p.connectionParameters.TruncateConnectionID(),
-		DiversificationNonce: p.cryptoSetup.DiversificationNonce(),
 	}
 
-	publicHeaderLength, err := responsePublicHeader.GetLength()
+	if p.perspective == protocol.PerspectiveServer {
+		responsePublicHeader.DiversificationNonce = p.cryptoSetup.DiversificationNonce()
+	}
+
+	// TODO: stop sending version numbers once a version has been negotiated
+	if p.perspective == protocol.PerspectiveClient {
+		responsePublicHeader.VersionFlag = true
+		responsePublicHeader.VersionNumber = p.version
+	}
+
+	publicHeaderLength, err := responsePublicHeader.GetLength(p.perspective)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +121,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	raw := getPacketBuffer()
 	buffer := bytes.NewBuffer(raw)
 
-	if err = responsePublicHeader.Write(buffer, p.version); err != nil {
+	if err = responsePublicHeader.Write(buffer, p.version, p.perspective); err != nil {
 		return nil, err
 	}
 

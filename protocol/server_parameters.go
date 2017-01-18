@@ -24,13 +24,21 @@ const ReceiveStreamFlowControlWindow ByteCount = (1 << 10) * 32 // 32 kB
 // This is the value that Google servers are using
 const ReceiveConnectionFlowControlWindow ByteCount = (1 << 10) * 48 // 48 kB
 
-// MaxReceiveStreamFlowControlWindow is the maximum stream-level flow control window for receiving data
+// MaxReceiveStreamFlowControlWindowServer is the maximum stream-level flow control window for receiving data
 // This is the value that Google servers are using
-const MaxReceiveStreamFlowControlWindow ByteCount = 1 * (1 << 20) // 1 MB
+const MaxReceiveStreamFlowControlWindowServer ByteCount = 1 * (1 << 20) // 1 MB
 
-// MaxReceiveConnectionFlowControlWindow is the connection-level flow control window for receiving data
+// MaxReceiveConnectionFlowControlWindowServer is the connection-level flow control window for receiving data
 // This is the value that Google servers are using
-const MaxReceiveConnectionFlowControlWindow ByteCount = 1.5 * (1 << 20) // 1.5 MB
+const MaxReceiveConnectionFlowControlWindowServer ByteCount = 1.5 * (1 << 20) // 1.5 MB
+
+// MaxReceiveStreamFlowControlWindowClient is the maximum stream-level flow control window for receiving data, for the client
+// This is the value that Chromium is using
+const MaxReceiveStreamFlowControlWindowClient ByteCount = 6 * (1 << 20) // 6 MB
+
+// MaxReceiveConnectionFlowControlWindowClient is the connection-level flow control window for receiving data, for the server
+// This is the value that Google servers are using
+const MaxReceiveConnectionFlowControlWindowClient ByteCount = 15 * (1 << 20) // 15 MB
 
 // MaxStreamsPerConnection is the maximum value accepted for the number of streams per connection
 const MaxStreamsPerConnection = 100
@@ -87,7 +95,7 @@ const MaxStreamFrameSorterGaps = 1000
 const CryptoMaxParams = 128
 
 // CryptoParameterMaxLength is the upper limit for the length of a parameter in a crypto message.
-const CryptoParameterMaxLength = 2000
+const CryptoParameterMaxLength = 4000
 
 // EphermalKeyLifetime is the lifetime of the ephermal key during the handshake, see handshake.getEphermalKEX.
 const EphermalKeyLifetime = time.Minute
@@ -95,11 +103,14 @@ const EphermalKeyLifetime = time.Minute
 // InitialIdleTimeout is the timeout before the handshake succeeds.
 const InitialIdleTimeout = 5 * time.Second
 
-// DefaultIdleTimeout is the default idle timeout.
+// DefaultIdleTimeout is the default idle timeout, for the server
 const DefaultIdleTimeout = 30 * time.Second
 
-// MaxIdleTimeout is the maximum idle timeout that can be negotiated.
-const MaxIdleTimeout = 1 * time.Minute
+// MaxIdleTimeoutServer is the maximum idle timeout that can be negotiated, for the server
+const MaxIdleTimeoutServer = 1 * time.Minute
+
+// MaxIdleTimeoutClient is the idle timeout that the client suggests to the server
+const MaxIdleTimeoutClient = 2 * time.Minute
 
 // MaxTimeForCryptoHandshake is the default timeout for a connection until the crypto handshake succeeds.
 const MaxTimeForCryptoHandshake = 10 * time.Second

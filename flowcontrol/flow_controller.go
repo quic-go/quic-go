@@ -42,11 +42,11 @@ func newFlowController(streamID protocol.StreamID, connectionParameters handshak
 	if streamID == 0 {
 		fc.receiveFlowControlWindow = connectionParameters.GetReceiveConnectionFlowControlWindow()
 		fc.receiveFlowControlWindowIncrement = fc.receiveFlowControlWindow
-		fc.maxReceiveFlowControlWindowIncrement = protocol.MaxReceiveConnectionFlowControlWindow
+		fc.maxReceiveFlowControlWindowIncrement = connectionParameters.GetMaxReceiveConnectionFlowControlWindow()
 	} else {
 		fc.receiveFlowControlWindow = connectionParameters.GetReceiveStreamFlowControlWindow()
 		fc.receiveFlowControlWindowIncrement = fc.receiveFlowControlWindow
-		fc.maxReceiveFlowControlWindowIncrement = protocol.MaxReceiveStreamFlowControlWindow
+		fc.maxReceiveFlowControlWindowIncrement = connectionParameters.GetMaxReceiveStreamFlowControlWindow()
 	}
 
 	return &fc

@@ -117,6 +117,7 @@ var _ ackhandler.ReceivedPacketHandler = &mockReceivedPacketHandler{}
 var _ = Describe("Session", func() {
 	var (
 		session              *Session
+		clientSession        *Session
 		streamCallbackCalled bool
 		closeCallbackCalled  bool
 		conn                 *mockConnection
@@ -128,11 +129,10 @@ var _ = Describe("Session", func() {
 		streamCallbackCalled = false
 		closeCallbackCalled = false
 
-		signer, err := crypto.NewProofSource(testdata.GetTLSConfig())
-		Expect(err).ToNot(HaveOccurred())
+		certChain := crypto.NewCertChain(testdata.GetTLSConfig())
 		kex, err := crypto.NewCurve25519KEX()
 		Expect(err).NotTo(HaveOccurred())
-		scfg, err := handshake.NewServerConfig(kex, signer)
+		scfg, err := handshake.NewServerConfig(kex, certChain)
 		Expect(err).NotTo(HaveOccurred())
 		pSession, err := newSession(
 			conn,
@@ -148,6 +148,21 @@ var _ = Describe("Session", func() {
 
 		cpm = &mockConnectionParametersManager{idleTime: 60 * time.Second}
 		session.connectionParameters = cpm
+
+		clientSession, err = newClientSession(
+			&net.UDPConn{},
+			&net.UDPAddr{},
+			"hostname",
+			protocol.Version35,
+			0,
+			func(*Session, utils.Stream) { streamCallbackCalled = true },
+			func(protocol.ConnectionID) { closeCallbackCalled = true },
+			func(isForwardSecure bool) {},
+			nil,
+		)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(clientSession.streamsMap.openStreams).To(HaveLen(1)) // Crypto stream
+
 	})
 
 	Context("when handling stream frames", func() {
@@ -577,6 +592,14 @@ var _ = Describe("Session", func() {
 			Expect(err.Error()).To(ContainSubstring(testErr.Error()))
 			Expect(session.runClosed).ToNot(Receive()) // channel should be drained by Close()
 		})
+
+		It("closes the session in order to replace it with another QUIC version", func() {
+			session.Close(errCloseSessionForNewVersion)
+			Expect(closeCallbackCalled).To(BeFalse())
+			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore))
+			Expect(atomic.LoadUint32(&session.closed) != 0).To(BeTrue())
+			Expect(conn.written).To(BeEmpty()) // no CONNECTION_CLOSE or PUBLIC_RESET sent
+		})
 	})
 
 	Context("receiving packets", func() {
@@ -584,6 +607,7 @@ var _ = Describe("Session", func() {
 
 		BeforeEach(func() {
 			session.unpacker = &mockUnpacker{}
+			clientSession.unpacker = &mockUnpacker{}
 			hdr = &PublicHeader{PacketNumberLen: protocol.PacketNumberLen6}
 		})
 
@@ -622,6 +646,14 @@ var _ = Describe("Session", func() {
 			hdr.PacketNumber = 5
 			err = session.handlePacketImpl(&receivedPacket{publicHeader: hdr})
 			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("passes the diversification nonce to the cryptoSetup, if it is a client", func() {
+			hdr.PacketNumber = 5
+			hdr.DiversificationNonce = []byte("foobar")
+			err := clientSession.handlePacketImpl(&receivedPacket{publicHeader: hdr})
+			Expect(err).ToNot(HaveOccurred())
+			Expect((*[]byte)(unsafe.Pointer(reflect.ValueOf(clientSession.cryptoSetup).Elem().FieldByName("diversificationNonce").UnsafeAddr()))).To(Equal(&hdr.DiversificationNonce))
 		})
 
 		Context("updating the remote address", func() {
@@ -999,6 +1031,35 @@ var _ = Describe("Session", func() {
 		session.tryDecryptingQueuedPackets()
 		Expect(session.undecryptablePackets).To(BeEmpty())
 		Expect(session.receivedPackets).To(Receive())
+	})
+
+	It("calls the cryptoChangeCallback when the AEAD changes", func(done Done) {
+		var callbackCalled bool
+		var callbackCalledWith bool
+		cb := func(p bool) {
+			callbackCalled = true
+			callbackCalledWith = p
+		}
+		session.cryptoChangeCallback = cb
+		session.cryptoSetup = &mockCryptoSetup{handshakeComplete: false}
+		session.aeadChanged <- struct{}{}
+		go session.run()
+		Eventually(func() bool { return callbackCalled }).Should(BeTrue())
+		Expect(callbackCalledWith).To(BeFalse())
+		close(done)
+	})
+
+	It("calls the cryptoChangeCallback when the AEAD changes to forward secure encryption", func(done Done) {
+		var callbackCalledWith bool
+		cb := func(p bool) {
+			callbackCalledWith = p
+		}
+		session.cryptoChangeCallback = cb
+		session.cryptoSetup = &mockCryptoSetup{handshakeComplete: true}
+		session.aeadChanged <- struct{}{}
+		go session.run()
+		Eventually(func() bool { return callbackCalledWith }).Should(BeTrue())
+		close(done)
 	})
 
 	Context("timeouts", func() {

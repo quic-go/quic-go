@@ -126,7 +126,7 @@ func (p *UDPProxy) runProxy() error {
 
 		raw := buffer[0:n]
 		r := bytes.NewReader(raw)
-		hdr, err := quic.ParsePublicHeader(r)
+		hdr, err := quic.ParsePublicHeader(r, protocol.PerspectiveClient)
 		if err != nil {
 			return err
 		}
@@ -154,7 +154,7 @@ func (p *UDPProxy) runConnection(conn *connection) error {
 
 		// TODO: Switch back to using the public header once Chrome properly sets the type byte.
 		// r := bytes.NewReader(raw)
-		// , err := quic.ParsePublicHeader(r)
+		// , err := quic.ParsePublicHeader(r, protocol.PerspectiveServer)
 		// if err != nil {
 		// return err
 		// }

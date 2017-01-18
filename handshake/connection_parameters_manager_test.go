@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"encoding/binary"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -9,14 +10,23 @@ import (
 )
 
 var _ = Describe("ConnectionsParameterManager", func() {
-	var cpm *connectionParametersManager
+	var cpm *connectionParametersManager // a connectionParametersManager for a server
+	var cpmClient *connectionParametersManager
+
 	BeforeEach(func() {
-		cpm = NewConnectionParamatersManager(protocol.Version36).(*connectionParametersManager)
+		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.Version36).(*connectionParametersManager)
+		cpmClient = NewConnectionParamatersManager(protocol.PerspectiveClient, protocol.Version36).(*connectionParametersManager)
 	})
 
 	Context("SHLO", func() {
+		BeforeEach(func() {
+			// these tests should only use the server connectionParametersManager. Make them panic if they don't
+			cpmClient = nil
+		})
+
 		It("returns all parameters necessary for the SHLO", func() {
-			entryMap := cpm.GetSHLOMap()
+			entryMap, err := cpm.GetHelloMap()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(entryMap).To(HaveKey(TagICSL))
 			Expect(entryMap).To(HaveKey(TagMSPC))
 			Expect(entryMap).To(HaveKey(TagMIDS))
@@ -24,27 +34,31 @@ var _ = Describe("ConnectionsParameterManager", func() {
 
 		It("doesn't add the MaximumIncomingDynamicStreams tag for QUIC 34", func() {
 			cpm.version = protocol.Version34
-			entryMap := cpm.GetSHLOMap()
+			entryMap, err := cpm.GetHelloMap()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(entryMap).ToNot(HaveKey(TagMIDS))
 		})
 
 		It("sets the stream-level flow control windows in SHLO", func() {
 			cpm.receiveStreamFlowControlWindow = 0xDEADBEEF
-			entryMap := cpm.GetSHLOMap()
+			entryMap, err := cpm.GetHelloMap()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(entryMap).To(HaveKey(TagSFCW))
 			Expect(entryMap[TagSFCW]).To(Equal([]byte{0xEF, 0xBE, 0xAD, 0xDE}))
 		})
 
 		It("sets the connection-level flow control windows in SHLO", func() {
 			cpm.receiveConnectionFlowControlWindow = 0xDECAFBAD
-			entryMap := cpm.GetSHLOMap()
+			entryMap, err := cpm.GetHelloMap()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(entryMap).To(HaveKey(TagCFCW))
 			Expect(entryMap[TagCFCW]).To(Equal([]byte{0xAD, 0xFB, 0xCA, 0xDE}))
 		})
 
 		It("sets the connection-level flow control windows in SHLO", func() {
 			cpm.idleConnectionStateLifetime = 0xDECAFBAD * time.Second
-			entryMap := cpm.GetSHLOMap()
+			entryMap, err := cpm.GetHelloMap()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(entryMap).To(HaveKey(TagICSL))
 			Expect(entryMap[TagICSL]).To(Equal([]byte{0xAD, 0xFB, 0xCA, 0xDE}))
 		})
@@ -54,15 +68,46 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			Expect(val).To(BeNumerically("<", protocol.MaxStreamsPerConnection))
 			err := cpm.SetFromMap(map[Tag][]byte{TagMSPC: []byte{byte(val), 0, 0, 0}})
 			Expect(err).ToNot(HaveOccurred())
-			entryMap := cpm.GetSHLOMap()
+			entryMap, err := cpm.GetHelloMap()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(entryMap[TagMSPC]).To(Equal([]byte{byte(val), 0, 0, 0}))
 		})
 
 		It("always sends its own value for the maximum incoming dynamic streams in the SHLO", func() {
 			err := cpm.SetFromMap(map[Tag][]byte{TagMIDS: []byte{5, 0, 0, 0}})
 			Expect(err).ToNot(HaveOccurred())
-			entryMap := cpm.GetSHLOMap()
+			entryMap, err := cpm.GetHelloMap()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(entryMap[TagMIDS]).To(Equal([]byte{byte(protocol.MaxIncomingDynamicStreamsPerConnection), 0, 0, 0}))
+		})
+	})
+
+	Context("CHLO", func() {
+		BeforeEach(func() {
+			// these tests should only use the client connectionParametersManager. Make them panic if they don't
+			cpm = nil
+		})
+
+		It("has the right values", func() {
+			entryMap, err := cpmClient.GetHelloMap()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(entryMap).To(HaveKey(TagICSL))
+			Expect(binary.LittleEndian.Uint32(entryMap[TagICSL])).To(BeEquivalentTo(protocol.MaxIdleTimeoutClient / time.Second))
+			Expect(entryMap).To(HaveKey(TagMSPC))
+			Expect(binary.LittleEndian.Uint32(entryMap[TagMSPC])).To(BeEquivalentTo(protocol.MaxStreamsPerConnection))
+			Expect(entryMap).To(HaveKey(TagMIDS))
+			Expect(binary.LittleEndian.Uint32(entryMap[TagMIDS])).To(BeEquivalentTo(protocol.MaxIncomingDynamicStreamsPerConnection))
+			Expect(entryMap).To(HaveKey(TagSFCW))
+			Expect(binary.LittleEndian.Uint32(entryMap[TagSFCW])).To(BeEquivalentTo(protocol.ReceiveStreamFlowControlWindow))
+			Expect(entryMap).To(HaveKey(TagCFCW))
+			Expect(binary.LittleEndian.Uint32(entryMap[TagCFCW])).To(BeEquivalentTo(protocol.ReceiveConnectionFlowControlWindow))
+		})
+
+		It("doesn't add the MIDS tag for QUIC 34", func() {
+			cpmClient.version = protocol.Version34
+			entryMap, err := cpmClient.GetHelloMap()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(entryMap).ToNot(HaveKey(TagMIDS))
 		})
 	})
 
@@ -72,62 +117,69 @@ var _ = Describe("ConnectionsParameterManager", func() {
 		})
 
 		It("reads the tag for truncated connection IDs", func() {
-			values := map[Tag][]byte{
-				TagTCID: {0, 0, 0, 0},
-			}
+			values := map[Tag][]byte{TagTCID: {0, 0, 0, 0}}
 			cpm.SetFromMap(values)
 			Expect(cpm.TruncateConnectionID()).To(BeTrue())
+		})
+
+		It("ignores the TCID tag, as a client", func() {
+			values := map[Tag][]byte{TagTCID: {0, 0, 0, 0}}
+			cpmClient.SetFromMap(values)
+			Expect(cpmClient.TruncateConnectionID()).To(BeFalse())
+		})
+
+		It("errors when given an invalid value", func() {
+			values := map[Tag][]byte{TagTCID: {2, 0, 0}} // 1 byte too short
+			err := cpm.SetFromMap(values)
+			Expect(err).To(MatchError(ErrMalformedTag))
 		})
 	})
 
 	Context("flow control", func() {
-		It("has the correct default stream-level flow control window for sending", func() {
+		It("has the correct default flow control windows for sending", func() {
 			Expect(cpm.GetSendStreamFlowControlWindow()).To(Equal(protocol.InitialStreamFlowControlWindow))
-		})
-
-		It("has the correct default connection-level flow control window for sending", func() {
 			Expect(cpm.GetSendConnectionFlowControlWindow()).To(Equal(protocol.InitialConnectionFlowControlWindow))
+			Expect(cpmClient.GetSendStreamFlowControlWindow()).To(Equal(protocol.InitialStreamFlowControlWindow))
+			Expect(cpmClient.GetSendConnectionFlowControlWindow()).To(Equal(protocol.InitialConnectionFlowControlWindow))
 		})
 
-		It("has the correct default stream-level flow control window for receiving", func() {
+		It("has the correct default flow control windows for receiving", func() {
 			Expect(cpm.GetReceiveStreamFlowControlWindow()).To(Equal(protocol.ReceiveStreamFlowControlWindow))
+			Expect(cpm.GetReceiveConnectionFlowControlWindow()).To(Equal(protocol.ReceiveConnectionFlowControlWindow))
+			Expect(cpmClient.GetReceiveStreamFlowControlWindow()).To(Equal(protocol.ReceiveStreamFlowControlWindow))
+			Expect(cpmClient.GetReceiveConnectionFlowControlWindow()).To(Equal(protocol.ReceiveConnectionFlowControlWindow))
 		})
 
-		It("has the correct default connection-level flow control window for receiving", func() {
-			Expect(cpm.GetReceiveConnectionFlowControlWindow()).To(Equal(protocol.ReceiveConnectionFlowControlWindow))
+		It("has the correct maximum flow control windows", func() {
+			Expect(cpm.GetMaxReceiveStreamFlowControlWindow()).To(Equal(protocol.MaxReceiveStreamFlowControlWindowServer))
+			Expect(cpm.GetMaxReceiveConnectionFlowControlWindow()).To(Equal(protocol.MaxReceiveConnectionFlowControlWindowServer))
+			Expect(cpmClient.GetMaxReceiveStreamFlowControlWindow()).To(Equal(protocol.MaxReceiveStreamFlowControlWindowClient))
+			Expect(cpmClient.GetMaxReceiveConnectionFlowControlWindow()).To(Equal(protocol.MaxReceiveConnectionFlowControlWindowClient))
 		})
 
 		It("sets a new stream-level flow control window for sending", func() {
-			values := map[Tag][]byte{
-				TagSFCW: {0xDE, 0xAD, 0xBE, 0xEF},
-			}
+			values := map[Tag][]byte{TagSFCW: {0xDE, 0xAD, 0xBE, 0xEF}}
 			err := cpm.SetFromMap(values)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cpm.GetSendStreamFlowControlWindow()).To(Equal(protocol.ByteCount(0xEFBEADDE)))
 		})
 
 		It("does not change the stream-level flow control window when given an invalid value", func() {
-			values := map[Tag][]byte{
-				TagSFCW: {0xDE, 0xAD, 0xBE}, // 1 byte too short
-			}
+			values := map[Tag][]byte{TagSFCW: {0xDE, 0xAD, 0xBE}} // 1 byte too short
 			err := cpm.SetFromMap(values)
 			Expect(err).To(MatchError(ErrMalformedTag))
 			Expect(cpm.GetSendStreamFlowControlWindow()).To(Equal(protocol.InitialStreamFlowControlWindow))
 		})
 
 		It("sets a new connection-level flow control window for sending", func() {
-			values := map[Tag][]byte{
-				TagCFCW: {0xDE, 0xAD, 0xBE, 0xEF},
-			}
+			values := map[Tag][]byte{TagCFCW: {0xDE, 0xAD, 0xBE, 0xEF}}
 			err := cpm.SetFromMap(values)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cpm.GetSendConnectionFlowControlWindow()).To(Equal(protocol.ByteCount(0xEFBEADDE)))
 		})
 
 		It("does not change the connection-level flow control window when given an invalid value", func() {
-			values := map[Tag][]byte{
-				TagSFCW: {0xDE, 0xAD, 0xBE}, // 1 byte too short
-			}
+			values := map[Tag][]byte{TagCFCW: {0xDE, 0xAD, 0xBE}} // 1 byte too short
 			err := cpm.SetFromMap(values)
 			Expect(err).To(MatchError(ErrMalformedTag))
 			Expect(cpm.GetSendStreamFlowControlWindow()).To(Equal(protocol.InitialConnectionFlowControlWindow))
@@ -156,12 +208,14 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			Expect(cpm.GetIdleConnectionStateLifetime()).To(Equal(protocol.DefaultIdleTimeout))
 		})
 
-		It("negotiates correctly when the client wants a longer lifetime", func() {
-			Expect(cpm.negotiateIdleConnectionStateLifetime(protocol.MaxIdleTimeout + 10*time.Second)).To(Equal(protocol.MaxIdleTimeout))
+		It("negotiates correctly when the peer wants a longer lifetime", func() {
+			Expect(cpm.negotiateIdleConnectionStateLifetime(protocol.MaxIdleTimeoutServer + 10*time.Second)).To(Equal(protocol.MaxIdleTimeoutServer))
+			Expect(cpmClient.negotiateIdleConnectionStateLifetime(protocol.MaxIdleTimeoutClient + 10*time.Second)).To(Equal(protocol.MaxIdleTimeoutClient))
 		})
 
-		It("negotiates correctly when the client wants a shorter lifetime", func() {
-			Expect(cpm.negotiateIdleConnectionStateLifetime(protocol.MaxIdleTimeout - 1*time.Second)).To(Equal(protocol.MaxIdleTimeout - 1*time.Second))
+		It("negotiates correctly when the peer wants a shorter lifetime", func() {
+			Expect(cpm.negotiateIdleConnectionStateLifetime(protocol.MaxIdleTimeoutServer - 1*time.Second)).To(Equal(protocol.MaxIdleTimeoutServer - 1*time.Second))
+			Expect(cpmClient.negotiateIdleConnectionStateLifetime(protocol.MaxIdleTimeoutClient - 1*time.Second)).To(Equal(protocol.MaxIdleTimeoutClient - 1*time.Second))
 		})
 
 		It("sets the negotiated lifetime", func() {
@@ -188,21 +242,23 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			cpm.idleConnectionStateLifetime = value
 			Expect(cpm.GetIdleConnectionStateLifetime()).To(Equal(value))
 		})
+
+		It("errors when given an invalid value", func() {
+			values := map[Tag][]byte{TagICSL: {2, 0, 0}} // 1 byte too short
+			err := cpm.SetFromMap(values)
+			Expect(err).To(MatchError(ErrMalformedTag))
+		})
 	})
 
 	Context("max streams per connection", func() {
 		It("errors when given an invalid max streams per connection value", func() {
-			values := map[Tag][]byte{
-				TagMSPC: {2, 0, 0}, // 1 byte too short
-			}
+			values := map[Tag][]byte{TagMSPC: {2, 0, 0}} // 1 byte too short
 			err := cpm.SetFromMap(values)
 			Expect(err).To(MatchError(ErrMalformedTag))
 		})
 
 		It("errors when given an invalid max dynamic incoming streams per connection value", func() {
-			values := map[Tag][]byte{
-				TagMIDS: {2, 0, 0}, // 1 byte too short
-			}
+			values := map[Tag][]byte{TagMIDS: {2, 0, 0}} // 1 byte too short
 			err := cpm.SetFromMap(values)
 			Expect(err).To(MatchError(ErrMalformedTag))
 		})
@@ -252,6 +308,5 @@ var _ = Describe("ConnectionsParameterManager", func() {
 				Expect(cpm.GetMaxIncomingStreams()).To(BeNumerically("~", 60*protocol.MaxStreamsMultiplier, 10))
 			})
 		})
-
 	})
 })

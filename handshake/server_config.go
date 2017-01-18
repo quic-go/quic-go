@@ -9,15 +9,15 @@ import (
 
 // ServerConfig is a server config
 type ServerConfig struct {
+	kex       crypto.KeyExchange
+	certChain crypto.CertChain
 	ID        []byte
 	obit      []byte
-	kex       crypto.KeyExchange
-	signer    crypto.Signer
 	stkSource crypto.StkSource
 }
 
 // NewServerConfig creates a new server config
-func NewServerConfig(kex crypto.KeyExchange, signer crypto.Signer) (*ServerConfig, error) {
+func NewServerConfig(kex crypto.KeyExchange, certChain crypto.CertChain) (*ServerConfig, error) {
 	id := make([]byte, 16)
 	_, err := rand.Read(id)
 	if err != nil {
@@ -40,10 +40,10 @@ func NewServerConfig(kex crypto.KeyExchange, signer crypto.Signer) (*ServerConfi
 	}
 
 	return &ServerConfig{
+		kex:       kex,
+		certChain: certChain,
 		ID:        id,
 		obit:      obit,
-		kex:       kex,
-		signer:    signer,
 		stkSource: stkSource,
 	}, nil
 }
@@ -64,10 +64,10 @@ func (s *ServerConfig) Get() []byte {
 
 // Sign the server config and CHLO with the server's keyData
 func (s *ServerConfig) Sign(sni string, chlo []byte) ([]byte, error) {
-	return s.signer.SignServerProof(sni, chlo, s.Get())
+	return s.certChain.SignServerProof(sni, chlo, s.Get())
 }
 
 // GetCertsCompressed returns the certificate data
 func (s *ServerConfig) GetCertsCompressed(sni string, commonSetHashes, compressedHashes []byte) ([]byte, error) {
-	return s.signer.GetCertsCompressed(sni, commonSetHashes, compressedHashes)
+	return s.certChain.GetCertsCompressed(sni, commonSetHashes, compressedHashes)
 }

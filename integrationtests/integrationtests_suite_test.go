@@ -100,7 +100,9 @@ func setupHTTPHandlers() {
 
 	http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
 		defer GinkgoRecover()
-		_, err := io.Copy(w, r.Body)
+		body, err := ioutil.ReadAll(r.Body)
+		Expect(err).NotTo(HaveOccurred())
+		_, err = w.Write(body)
 		Expect(err).NotTo(HaveOccurred())
 	})
 

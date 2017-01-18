@@ -40,7 +40,7 @@ func newLinkedConnection(other *Session) *linkedConnection {
 				return
 			}
 			r := bytes.NewReader(packet)
-			hdr, err := ParsePublicHeader(r)
+			hdr, err := ParsePublicHeader(r, protocol.PerspectiveClient)
 			if err != nil {
 				Expect(err).NotTo(HaveOccurred())
 			}
@@ -65,7 +65,7 @@ func (c *linkedConnection) write(p []byte) error {
 func (*linkedConnection) setCurrentRemoteAddr(addr interface{}) {}
 func (*linkedConnection) RemoteAddr() *net.UDPAddr              { return &net.UDPAddr{} }
 
-func setAEAD(cs *handshake.CryptoSetup, aead crypto.AEAD) {
+func setAEAD(cs handshake.CryptoSetup, aead crypto.AEAD) {
 	*(*bool)(unsafe.Pointer(reflect.ValueOf(cs).Elem().FieldByName("receivedForwardSecurePacket").UnsafeAddr())) = true
 	*(*crypto.AEAD)(unsafe.Pointer(reflect.ValueOf(cs).Elem().FieldByName("forwardSecureAEAD").UnsafeAddr())) = aead
 }

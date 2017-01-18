@@ -2,6 +2,7 @@ package h2quic
 
 import (
 	"net/http"
+	"net/url"
 
 	"golang.org/x/net/http2/hpack"
 
@@ -89,5 +90,32 @@ var _ = Describe("Request", func() {
 		}
 		_, err := requestFromHeaders(headers)
 		Expect(err).To(MatchError(":path, :authority and :method must not be empty"))
+	})
+
+	Context("extracting the hostname from a request", func() {
+		var url *url.URL
+
+		BeforeEach(func() {
+			var err error
+			url, err = url.Parse("https://quic.clemente.io:1337")
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("uses req.Host if available", func() {
+			req := &http.Request{
+				Host: "www.example.org",
+				URL:  url,
+			}
+			Expect(hostnameFromRequest(req)).To(Equal("www.example.org"))
+		})
+
+		It("uses req.URL.Host if req.Host is not set", func() {
+			req := &http.Request{URL: url}
+			Expect(hostnameFromRequest(req)).To(Equal("quic.clemente.io:1337"))
+		})
+
+		It("returns an empty hostname if nothing is set", func() {
+			Expect(hostnameFromRequest(&http.Request{})).To(BeEmpty())
+		})
 	})
 })

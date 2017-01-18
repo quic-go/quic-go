@@ -19,6 +19,7 @@ import (
 // packetHandler handles packets
 type packetHandler interface {
 	handlePacket(*receivedPacket)
+	OpenStream(protocol.StreamID) (utils.Stream, error)
 	run()
 	Close(error) error
 }
@@ -30,8 +31,8 @@ type Server struct {
 	conn      *net.UDPConn
 	connMutex sync.Mutex
 
-	signer crypto.Signer
-	scfg   *handshake.ServerConfig
+	certChain crypto.CertChain
+	scfg      *handshake.ServerConfig
 
 	sessions                  map[protocol.ConnectionID]packetHandler
 	sessionsMutex             sync.RWMutex
@@ -44,16 +45,13 @@ type Server struct {
 
 // NewServer makes a new server
 func NewServer(addr string, tlsConfig *tls.Config, cb StreamCallback) (*Server, error) {
-	signer, err := crypto.NewProofSource(tlsConfig)
-	if err != nil {
-		return nil, err
-	}
+	certChain := crypto.NewCertChain(tlsConfig)
 
 	kex, err := crypto.NewCurve25519KEX()
 	if err != nil {
 		return nil, err
 	}
-	scfg, err := handshake.NewServerConfig(kex, signer)
+	scfg, err := handshake.NewServerConfig(kex, certChain)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +63,7 @@ func NewServer(addr string, tlsConfig *tls.Config, cb StreamCallback) (*Server, 
 
 	return &Server{
 		addr:                      udpAddr,
-		signer:                    signer,
+		certChain:                 certChain,
 		scfg:                      scfg,
 		streamCallback:            cb,
 		sessions:                  map[protocol.ConnectionID]packetHandler{},
@@ -138,7 +136,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 
 	r := bytes.NewReader(packet)
 
-	hdr, err := ParsePublicHeader(r)
+	hdr, err := ParsePublicHeader(r, protocol.PerspectiveClient)
 	if err != nil {
 		return qerr.Error(qerr.InvalidPacketHeader, err.Error())
 	}
@@ -237,7 +235,7 @@ func composeVersionNegotiation(connectionID protocol.ConnectionID) []byte {
 		PacketNumber: 1,
 		VersionFlag:  true,
 	}
-	err := responsePublicHeader.Write(fullReply, protocol.Version35)
+	err := responsePublicHeader.Write(fullReply, protocol.Version35, protocol.PerspectiveServer)
 	if err != nil {
 		utils.Errorf("error composing version negotiation packet: %s", err.Error())
 	}

@@ -13,7 +13,7 @@ var _ = Describe("Request body", func() {
 
 	BeforeEach(func() {
 		stream = &mockStream{}
-		stream.Write([]byte("foobar")) // provides data to be read
+		stream.dataToRead.Write([]byte("foobar")) // provides data to be read
 		rb = newRequestBody(stream)
 	})
 

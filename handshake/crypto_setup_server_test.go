@@ -82,7 +82,7 @@ func (mockAEAD) DiversificationNonce() []byte { return nil }
 var expectedInitialNonceLen int
 var expectedFSNonceLen int
 
-func mockKeyDerivation(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte) (crypto.AEAD, error) {
+func mockKeyDerivation(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte, pers protocol.Perspective) (crypto.AEAD, error) {
 	if forwardSecure {
 		Expect(nonces).To(HaveLen(expectedFSNonceLen))
 	} else {
@@ -138,7 +138,7 @@ var _ = Describe("Crypto setup", func() {
 		kex         *mockKEX
 		signer      *mockSigner
 		scfg        *ServerConfig
-		cs          *CryptoSetup
+		cs          *cryptoSetupServer
 		stream      *mockStream
 		cpm         ConnectionParametersManager
 		aeadChanged chan struct{}
@@ -171,9 +171,10 @@ var _ = Describe("Crypto setup", func() {
 		Expect(err).NotTo(HaveOccurred())
 		scfg.stkSource = &mockStkSource{}
 		v := protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
-		cpm = NewConnectionParamatersManager(protocol.Version36)
-		cs, err = NewCryptoSetup(protocol.ConnectionID(42), ip, v, scfg, stream, cpm, aeadChanged)
+		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.VersionWhatever)
+		csInt, err := NewCryptoSetup(protocol.ConnectionID(42), ip, v, scfg, stream, cpm, aeadChanged)
 		Expect(err).NotTo(HaveOccurred())
+		cs = csInt.(*cryptoSetupServer)
 		cs.keyDerivation = mockKeyDerivation
 		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
 	})
@@ -211,7 +212,7 @@ var _ = Describe("Crypto setup", func() {
 		BeforeEach(func() {
 			xlct = make([]byte, 8)
 			var err error
-			cert, err = cs.scfg.signer.GetLeafCert("")
+			cert, err = cs.scfg.certChain.GetLeafCert("")
 			Expect(err).ToNot(HaveOccurred())
 			binary.LittleEndian.PutUint64(xlct, crypto.HashCert(cert))
 		})

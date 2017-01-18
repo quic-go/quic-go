@@ -4,11 +4,29 @@ import (
 	"bytes"
 
 	"github.com/lucas-clemente/quic-go/frames"
-	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+type mockCryptoSetup struct {
+	diversificationNonce []byte
+	handshakeComplete    bool
+}
+
+func (m *mockCryptoSetup) HandleCryptoStream() error { return nil }
+
+func (m *mockCryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {
+	return nil, nil
+}
+func (m *mockCryptoSetup) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
+	return append(src, bytes.Repeat([]byte{0}, 12)...)
+}
+func (m *mockCryptoSetup) LockForSealing()                      {}
+func (m *mockCryptoSetup) UnlockForSealing()                    {}
+func (m *mockCryptoSetup) HandshakeComplete() bool              { return m.handshakeComplete }
+func (m *mockCryptoSetup) DiversificationNonce() []byte         { return m.diversificationNonce }
+func (m *mockCryptoSetup) SetDiversificationNonce([]byte) error { panic("not implemented") }
 
 var _ = Describe("Packet packer", func() {
 	var (
@@ -24,13 +42,14 @@ var _ = Describe("Packet packer", func() {
 		fcm.sendWindowSizes[7] = protocol.MaxByteCount
 
 		cpm := &mockConnectionParametersManager{}
-		streamFramer = newStreamFramer(newStreamsMap(nil, cpm), fcm)
+		streamFramer = newStreamFramer(newStreamsMap(nil, protocol.PerspectiveServer, cpm), fcm)
 
 		packer = &packetPacker{
-			cryptoSetup:           &handshake.CryptoSetup{},
+			cryptoSetup:           &mockCryptoSetup{},
 			connectionParameters:  cpm,
 			packetNumberGenerator: newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
 			streamFramer:          streamFramer,
+			perspective:           protocol.PerspectiveServer,
 		}
 		publicHeaderLen = 1 + 8 + 2 // 1 flag byte, 8 connection ID, 2 packet number
 		packer.version = protocol.Version34
@@ -55,6 +74,19 @@ var _ = Describe("Packet packer", func() {
 		f.Write(b, 0)
 		Expect(p.frames).To(HaveLen(1))
 		Expect(p.raw).To(ContainSubstring(string(b.Bytes())))
+	})
+
+	It("includes a diversification nonce, when acting as a server", func() {
+		nonce := bytes.Repeat([]byte{'e'}, 32)
+		packer.cryptoSetup.(*mockCryptoSetup).diversificationNonce = nonce
+		f := &frames.StreamFrame{
+			StreamID: 5,
+			Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
+		}
+		streamFramer.AddFrameForRetransmission(f)
+		p, err := packer.PackPacket(nil, []frames.Frame{}, 0)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(p.raw).To(ContainSubstring(string(nonce)))
 	})
 
 	It("packs a ConnectionClose", func() {
@@ -133,6 +165,20 @@ var _ = Describe("Packet packer", func() {
 		p, err := packer.PackPacket(nil, []frames.Frame{}, 0)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(p).ToNot(BeNil())
+	})
+
+	It("adds the version flag to the public header", func() {
+		packer.perspective = protocol.PerspectiveClient
+		packer.controlFrames = []frames.Frame{&frames.BlockedFrame{StreamID: 0}}
+		packer.connectionID = 0x1337
+		packer.version = 123
+		p, err := packer.PackPacket(nil, []frames.Frame{}, 0)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(p).ToNot(BeNil())
+		hdr, err := ParsePublicHeader(bytes.NewReader(p.raw), protocol.PerspectiveClient)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(hdr.VersionFlag).To(BeTrue())
+		Expect(hdr.VersionNumber).To(Equal(packer.version))
 	})
 
 	It("packs many control frames into 1 packets", func() {

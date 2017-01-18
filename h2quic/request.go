@@ -68,3 +68,13 @@ func requestFromHeaders(headers []hpack.HeaderField) (*http.Request, error) {
 		TLS:           &tls.ConnectionState{},
 	}, nil
 }
+
+func hostnameFromRequest(req *http.Request) string {
+	if len(req.Host) > 0 {
+		return req.Host
+	}
+	if req.URL != nil {
+		return req.URL.Host
+	}
+	return ""
+}
