@@ -112,6 +112,7 @@ func (s *Server) handleStream(session streamCreator, stream utils.Stream) {
 				if _, ok := err.(*qerr.QuicError); !ok {
 					utils.Errorf("error handling h2 request: %s", err.Error())
 				}
+				session.Close(qerr.Error(qerr.InvalidHeadersStreamData, err.Error()))
 				return
 			}
 		}
