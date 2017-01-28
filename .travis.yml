@@ -11,7 +11,7 @@ services:
 
 go:
   - 1.6.4
-  - 1.7.4
+  - 1.7.5
   - 1.8rc1
 
 # first part of the GOARCH workaround
