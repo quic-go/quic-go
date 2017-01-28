@@ -162,7 +162,8 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 		_, _ = dataStream.Read([]byte{0}) // read the eof
 	}
 
-	req.Body = newRequestBody(dataStream)
+	reqBody := newRequestBody(dataStream)
+	req.Body = reqBody
 
 	responseWriter := newResponseWriter(headerStream, headerStreamMutex, dataStream, protocol.StreamID(h2headersFrame.StreamID))
 
@@ -191,7 +192,7 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 			responseWriter.WriteHeader(200)
 		}
 		if responseWriter.dataStream != nil {
-			if !streamEnded && !req.Body.(*requestBody).requestRead {
+			if !streamEnded && !reqBody.requestRead {
 				responseWriter.dataStream.Reset(nil)
 			}
 			responseWriter.dataStream.Close()
