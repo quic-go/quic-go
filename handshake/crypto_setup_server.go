@@ -250,7 +250,7 @@ func (h *cryptoSetupServer) handleInchoateCHLO(sni string, chlo []byte, cryptoDa
 
 	var serverReply bytes.Buffer
 	WriteHandshakeMessage(&serverReply, TagREJ, replyMap)
-	utils.Debugf("Sending REJ:\n%s", printHandshakeMessage(cryptoData))
+	utils.Debugf("Sending REJ:\n%s", printHandshakeMessage(replyMap))
 	return serverReply.Bytes(), nil
 }
 
@@ -351,7 +351,7 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 
 	var reply bytes.Buffer
 	WriteHandshakeMessage(&reply, TagSHLO, replyMap)
-	utils.Debugf("Sending SHLO:\n%s", printHandshakeMessage(cryptoData))
+	utils.Debugf("Sending SHLO:\n%s", printHandshakeMessage(replyMap))
 
 	h.aeadChanged <- struct{}{}
 
