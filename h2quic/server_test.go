@@ -134,8 +134,8 @@ var _ = Describe("H2 server", func() {
 			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(func() bool { return handlerCalled }).Should(BeTrue())
+			Eventually(func() bool { return dataStream.reset }).Should(BeTrue())
 			Expect(dataStream.remoteClosed).To(BeFalse())
-			Expect(dataStream.reset).To(BeTrue())
 		})
 
 		It("resets the dataStream when the body of POST request is not read", func() {
