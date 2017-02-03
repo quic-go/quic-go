@@ -73,7 +73,7 @@ func NewCryptoSetupClient(
 		connID:               connID,
 		version:              version,
 		cryptoStream:         cryptoStream,
-		certManager:          crypto.NewCertManager(),
+		certManager:          crypto.NewCertManager(nil),
 		connectionParameters: connectionParameters,
 		keyDerivation:        crypto.DeriveKeysAESGCM,
 		aeadChanged:          aeadChanged,

@@ -1,9 +1,11 @@
 package crypto
 
 import (
+	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"hash/fnv"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/qerr"
 )
@@ -19,7 +21,8 @@ type CertManager interface {
 }
 
 type certManager struct {
-	chain []*x509.Certificate
+	chain  []*x509.Certificate
+	config *tls.Config
 }
 
 var _ CertManager = &certManager{}
@@ -27,8 +30,8 @@ var _ CertManager = &certManager{}
 var errNoCertificateChain = errors.New("CertManager BUG: No certicifate chain loaded")
 
 // NewCertManager creates a new CertManager
-func NewCertManager() CertManager {
-	return &certManager{}
+func NewCertManager(tlsConfig *tls.Config) CertManager {
+	return &certManager{config: tlsConfig}
 }
 
 // SetData takes the byte-slice sent in the SHLO and decompresses it into the certificate chain
@@ -95,8 +98,24 @@ func (c *certManager) Verify(hostname string) error {
 		return errNoCertificateChain
 	}
 
+	if c.config != nil && c.config.InsecureSkipVerify {
+		return nil
+	}
+
 	leafCert := c.chain[0]
-	opts := x509.VerifyOptions{DNSName: hostname}
+
+	var opts x509.VerifyOptions
+	if c.config != nil {
+		opts.Roots = c.config.RootCAs
+		opts.DNSName = c.config.ServerName
+		if c.config.Time == nil {
+			opts.CurrentTime = time.Now()
+		} else {
+			opts.CurrentTime = c.config.Time()
+		}
+	} else {
+		opts.DNSName = hostname
+	}
 
 	// the first certificate is the leaf certificate, all others are intermediates
 	if len(c.chain) > 1 {

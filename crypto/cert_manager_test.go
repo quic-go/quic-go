@@ -25,7 +25,7 @@ var _ = Describe("Cert Manager", func() {
 
 	BeforeEach(func() {
 		var err error
-		cm = NewCertManager().(*certManager)
+		cm = NewCertManager(nil).(*certManager)
 		key1, err = rsa.GenerateKey(rand.Reader, 768)
 		Expect(err).ToNot(HaveOccurred())
 		key2, err = rsa.GenerateKey(rand.Reader, 768)
@@ -35,6 +35,12 @@ var _ = Describe("Cert Manager", func() {
 		Expect(err).ToNot(HaveOccurred())
 		cert2, err = x509.CreateCertificate(rand.Reader, template, template, &key2.PublicKey, key2)
 		Expect(err).ToNot(HaveOccurred())
+	})
+
+	It("saves a client TLS config", func() {
+		tlsConf := &tls.Config{ServerName: "quic.clemente.io"}
+		cm = NewCertManager(tlsConf).(*certManager)
+		Expect(cm.config.ServerName).To(Equal("quic.clemente.io"))
 	})
 
 	It("errors when given invalid data", func() {
@@ -238,6 +244,112 @@ var _ = Describe("Cert Manager", func() {
 			err = cm.Verify("quic.clemente.io")
 			_, ok := err.(x509.UnknownAuthorityError)
 			Expect(ok).To(BeTrue())
+		})
+
+		It("doesn't do any certificate verification if InsecureSkipVerify is set", func() {
+			if runtime.GOOS == "windows" {
+				// certificate validation works different on windows, see https://golang.org/src/crypto/x509/verify.go line 238
+				Skip("windows")
+			}
+
+			template := &x509.Certificate{
+				SerialNumber: big.NewInt(1),
+			}
+
+			leafCert := getCertificate(template)
+			cm.config = &tls.Config{
+				InsecureSkipVerify: true,
+			}
+			cm.chain = []*x509.Certificate{leafCert}
+			err := cm.Verify("quic.clemente.io")
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("uses a different hostname from a client TLS config", func() {
+			if runtime.GOOS == "windows" {
+				// certificate validation works different on windows, see https://golang.org/src/crypto/x509/verify.go line 238
+				Skip("windows")
+			}
+
+			template := &x509.Certificate{
+				SerialNumber: big.NewInt(1),
+				NotBefore:    time.Now().Add(-time.Hour),
+				NotAfter:     time.Now().Add(time.Hour),
+				Subject:      pkix.Name{CommonName: "google.com"},
+			}
+
+			leafCert := getCertificate(template)
+			cm.chain = []*x509.Certificate{leafCert}
+			cm.config = &tls.Config{
+				ServerName: "google.com",
+			}
+			err := cm.Verify("quic.clemente.io")
+			_, ok := err.(x509.UnknownAuthorityError)
+			Expect(ok).To(BeTrue())
+		})
+
+		It("rejects certificates with a different hostname than specified in the client TLS config", func() {
+			if runtime.GOOS == "windows" {
+				// certificate validation works different on windows, see https://golang.org/src/crypto/x509/verify.go line 238
+				Skip("windows")
+			}
+
+			template := &x509.Certificate{
+				SerialNumber: big.NewInt(1),
+				NotBefore:    time.Now().Add(-time.Hour),
+				NotAfter:     time.Now().Add(time.Hour),
+				Subject:      pkix.Name{CommonName: "quic.clemente.io"},
+			}
+
+			leafCert := getCertificate(template)
+			cm.chain = []*x509.Certificate{leafCert}
+			cm.config = &tls.Config{
+				ServerName: "google.com",
+			}
+			err := cm.Verify("quic.clemente.io")
+			_, ok := err.(x509.HostnameError)
+			Expect(ok).To(BeTrue())
+		})
+
+		It("uses the time specified in a client TLS config", func() {
+			if runtime.GOOS == "windows" {
+				// certificate validation works different on windows, see https://golang.org/src/crypto/x509/verify.go line 238
+				Skip("windows")
+			}
+
+			template := &x509.Certificate{
+				SerialNumber: big.NewInt(1),
+				NotBefore:    time.Now().Add(-25 * time.Hour),
+				NotAfter:     time.Now().Add(-23 * time.Hour),
+			}
+			leafCert := getCertificate(template)
+			cm.chain = []*x509.Certificate{leafCert}
+			cm.config = &tls.Config{
+				Time: func() time.Time { return time.Now().Add(-24 * time.Hour) },
+			}
+			err := cm.Verify("quic.clemente.io")
+			_, ok := err.(x509.UnknownAuthorityError)
+			Expect(ok).To(BeTrue())
+		})
+
+		It("rejects certificates that are expired at the time specified in a client TLS config", func() {
+			if runtime.GOOS == "windows" {
+				// certificate validation works different on windows, see https://golang.org/src/crypto/x509/verify.go line 238
+				Skip("windows")
+			}
+
+			template := &x509.Certificate{
+				SerialNumber: big.NewInt(1),
+				NotBefore:    time.Now().Add(-time.Hour),
+				NotAfter:     time.Now().Add(time.Hour),
+			}
+			leafCert := getCertificate(template)
+			cm.chain = []*x509.Certificate{leafCert}
+			cm.config = &tls.Config{
+				Time: func() time.Time { return time.Now().Add(-24 * time.Hour) },
+			}
+			err := cm.Verify("quic.clemente.io")
+			Expect(err.(x509.CertificateInvalidError).Reason).To(Equal(x509.Expired))
 		})
 	})
 })
