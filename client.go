@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"crypto/tls"
 	"errors"
 	"net"
 	"strings"
@@ -24,6 +25,7 @@ type Client struct {
 	versionNegotiated bool
 	closed            uint32 // atomic bool
 
+	tlsConfig                *tls.Config
 	cryptoChangeCallback     CryptoChangeCallback
 	versionNegotiateCallback VersionNegotiateCallback
 
@@ -40,7 +42,7 @@ var (
 )
 
 // NewClient makes a new client
-func NewClient(host string, cryptoChangeCallback CryptoChangeCallback, versionNegotiateCallback VersionNegotiateCallback) (*Client, error) {
+func NewClient(host string, tlsConfig *tls.Config, cryptoChangeCallback CryptoChangeCallback, versionNegotiateCallback VersionNegotiateCallback) (*Client, error) {
 	udpAddr, err := net.ResolveUDPAddr("udp", host)
 	if err != nil {
 		return nil, err
@@ -67,6 +69,7 @@ func NewClient(host string, cryptoChangeCallback CryptoChangeCallback, versionNe
 		hostname:                 hostname,
 		version:                  protocol.SupportedVersions[len(protocol.SupportedVersions)-1], // use the highest supported version by default
 		connectionID:             connectionID,
+		tlsConfig:                tlsConfig,
 		cryptoChangeCallback:     cryptoChangeCallback,
 		versionNegotiateCallback: versionNegotiateCallback,
 	}
@@ -200,7 +203,7 @@ func (c *Client) handlePacket(packet []byte) error {
 
 func (c *Client) createNewSession(negotiatedVersions []protocol.VersionNumber) error {
 	var err error
-	c.session, err = newClientSession(c.conn, c.addr, c.hostname, c.version, c.connectionID, c.streamCallback, c.closeCallback, c.cryptoChangeCallback, negotiatedVersions)
+	c.session, err = newClientSession(c.conn, c.addr, c.hostname, c.version, c.connectionID, c.tlsConfig, c.streamCallback, c.closeCallback, c.cryptoChangeCallback, negotiatedVersions)
 	if err != nil {
 		return err
 	}

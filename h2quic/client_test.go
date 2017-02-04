@@ -54,7 +54,7 @@ var _ = Describe("Client", func() {
 		var err error
 		quicTransport = &QuicRoundTripper{}
 		hostname := "quic.clemente.io:1337"
-		client, err = NewClient(quicTransport, hostname)
+		client, err = NewClient(quicTransport, nil, hostname)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(client.hostname).To(Equal(hostname))
 		qClient = newMockQuicClient()
@@ -68,7 +68,7 @@ var _ = Describe("Client", func() {
 
 	It("adds the port to the hostname, if none is given", func() {
 		var err error
-		client, err = NewClient(quicTransport, "quic.clemente.io")
+		client, err = NewClient(quicTransport, nil, "quic.clemente.io")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(client.hostname).To(Equal("quic.clemente.io:443"))
 	})
@@ -192,7 +192,7 @@ var _ = Describe("Client", func() {
 
 			It("adds the port for request URLs without one", func(done Done) {
 				var err error
-				client, err = NewClient(quicTransport, "quic.clemente.io")
+				client, err = NewClient(quicTransport, nil, "quic.clemente.io")
 				Expect(err).ToNot(HaveOccurred())
 				req, err := http.NewRequest("https", "https://quic.clemente.io/foobar.html", nil)
 				Expect(err).ToNot(HaveOccurred())

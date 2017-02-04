@@ -155,6 +155,7 @@ var _ = Describe("Session", func() {
 			"hostname",
 			protocol.Version35,
 			0,
+			nil,
 			func(*Session, utils.Stream) { streamCallbackCalled = true },
 			func(protocol.ConnectionID) { closeCallbackCalled = true },
 			func(isForwardSecure bool) {},

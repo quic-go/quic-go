@@ -1,6 +1,7 @@
 package h2quic
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -47,7 +48,7 @@ type Client struct {
 var _ h2quicClient = &Client{}
 
 // NewClient creates a new client
-func NewClient(t *QuicRoundTripper, hostname string) (*Client, error) {
+func NewClient(t *QuicRoundTripper, tlsConfig *tls.Config, hostname string) (*Client, error) {
 	c := &Client{
 		t:                   t,
 		hostname:            authorityAddr("https", hostname),
@@ -57,7 +58,7 @@ func NewClient(t *QuicRoundTripper, hostname string) (*Client, error) {
 	c.cryptoChangedCond = sync.Cond{L: &c.mutex}
 
 	var err error
-	c.client, err = quic.NewClient(c.hostname, c.cryptoChangeCallback, c.versionNegotiateCallback)
+	c.client, err = quic.NewClient(c.hostname, tlsConfig, c.cryptoChangeCallback, c.versionNegotiateCallback)
 	if err != nil {
 		return nil, err
 	}

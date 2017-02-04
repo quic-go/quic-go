@@ -3,6 +3,7 @@ package handshake
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -64,6 +65,7 @@ func NewCryptoSetupClient(
 	connID protocol.ConnectionID,
 	version protocol.VersionNumber,
 	cryptoStream utils.Stream,
+	tlsConfig *tls.Config,
 	connectionParameters ConnectionParametersManager,
 	aeadChanged chan struct{},
 	negotiatedVersions []protocol.VersionNumber,
@@ -73,7 +75,7 @@ func NewCryptoSetupClient(
 		connID:               connID,
 		version:              version,
 		cryptoStream:         cryptoStream,
-		certManager:          crypto.NewCertManager(nil),
+		certManager:          crypto.NewCertManager(tlsConfig),
 		connectionParameters: connectionParameters,
 		keyDerivation:        crypto.DeriveKeysAESGCM,
 		aeadChanged:          aeadChanged,

@@ -48,7 +48,7 @@ var _ = Describe("Client", func() {
 
 	It("creates a new client", func() {
 		var err error
-		client, err = NewClient("quic.clemente.io:1337", nil, nil)
+		client, err = NewClient("quic.clemente.io:1337", nil, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(client.hostname).To(Equal("quic.clemente.io"))
 		Expect(*(*[]protocol.VersionNumber)(unsafe.Pointer(reflect.ValueOf(client.session.(*Session).cryptoSetup).Elem().FieldByName("negotiatedVersions").UnsafeAddr()))).To(BeNil())

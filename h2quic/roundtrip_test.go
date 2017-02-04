@@ -57,7 +57,8 @@ var _ = Describe("RoundTripper", func() {
 	It("reuses existing clients", func() {
 		rt.clients = make(map[string]h2quicClient)
 		rt.clients["www.example.org:443"] = &mockQuicRoundTripper{}
-		rsp, _ := rt.RoundTrip(req1)
+		rsp, err := rt.RoundTrip(req1)
+		Expect(err).ToNot(HaveOccurred())
 		Expect(rsp.Request).To(Equal(req1))
 		Expect(rt.clients).To(HaveLen(1))
 	})
