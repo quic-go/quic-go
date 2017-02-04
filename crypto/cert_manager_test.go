@@ -142,15 +142,18 @@ var _ = Describe("Cert Manager", func() {
 	})
 
 	Context("verifying the certificate chain", func() {
-		getCertificate := func(template *x509.Certificate) *x509.Certificate {
+		generateCertificate := func(template, parent *x509.Certificate, pubKey *rsa.PublicKey, privKey *rsa.PrivateKey) *x509.Certificate {
+			certDER, err := x509.CreateCertificate(rand.Reader, template, parent, pubKey, privKey)
+			Expect(err).ToNot(HaveOccurred())
+			cert, err := x509.ParseCertificate(certDER)
+			Expect(err).ToNot(HaveOccurred())
+			return cert
+		}
+
+		getCertificate := func(template *x509.Certificate) (*rsa.PrivateKey, *x509.Certificate) {
 			key, err := rsa.GenerateKey(rand.Reader, 1024)
 			Expect(err).ToNot(HaveOccurred())
-
-			certDER, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
-			Expect(err).ToNot(HaveOccurred())
-			leafCert, err := x509.ParseCertificate(certDER)
-			Expect(err).ToNot(HaveOccurred())
-			return leafCert
+			return key, generateCertificate(template, template, &key.PublicKey, key)
 		}
 
 		It("accepts a valid certificate", func() {
@@ -178,7 +181,7 @@ var _ = Describe("Cert Manager", func() {
 				NotBefore:    time.Now().Add(-25 * time.Hour),
 				NotAfter:     time.Now().Add(-time.Hour),
 			}
-			leafCert := getCertificate(template)
+			_, leafCert := getCertificate(template)
 
 			cm.chain = []*x509.Certificate{leafCert}
 			err := cm.Verify("")
@@ -197,7 +200,7 @@ var _ = Describe("Cert Manager", func() {
 				NotBefore:    time.Now().Add(time.Hour),
 				NotAfter:     time.Now().Add(25 * time.Hour),
 			}
-			leafCert := getCertificate(template)
+			_, leafCert := getCertificate(template)
 
 			cm.chain = []*x509.Certificate{leafCert}
 			err := cm.Verify("")
@@ -217,7 +220,7 @@ var _ = Describe("Cert Manager", func() {
 				NotAfter:     time.Now().Add(time.Hour),
 				Subject:      pkix.Name{CommonName: "google.com"},
 			}
-			leafCert := getCertificate(template)
+			_, leafCert := getCertificate(template)
 
 			cm.chain = []*x509.Certificate{leafCert}
 			err := cm.Verify("quic.clemente.io")
@@ -256,7 +259,7 @@ var _ = Describe("Cert Manager", func() {
 				SerialNumber: big.NewInt(1),
 			}
 
-			leafCert := getCertificate(template)
+			_, leafCert := getCertificate(template)
 			cm.config = &tls.Config{
 				InsecureSkipVerify: true,
 			}
@@ -278,7 +281,7 @@ var _ = Describe("Cert Manager", func() {
 				Subject:      pkix.Name{CommonName: "google.com"},
 			}
 
-			leafCert := getCertificate(template)
+			_, leafCert := getCertificate(template)
 			cm.chain = []*x509.Certificate{leafCert}
 			cm.config = &tls.Config{
 				ServerName: "google.com",
@@ -301,7 +304,7 @@ var _ = Describe("Cert Manager", func() {
 				Subject:      pkix.Name{CommonName: "quic.clemente.io"},
 			}
 
-			leafCert := getCertificate(template)
+			_, leafCert := getCertificate(template)
 			cm.chain = []*x509.Certificate{leafCert}
 			cm.config = &tls.Config{
 				ServerName: "google.com",
@@ -322,7 +325,7 @@ var _ = Describe("Cert Manager", func() {
 				NotBefore:    time.Now().Add(-25 * time.Hour),
 				NotAfter:     time.Now().Add(-23 * time.Hour),
 			}
-			leafCert := getCertificate(template)
+			_, leafCert := getCertificate(template)
 			cm.chain = []*x509.Certificate{leafCert}
 			cm.config = &tls.Config{
 				Time: func() time.Time { return time.Now().Add(-24 * time.Hour) },
@@ -343,13 +346,49 @@ var _ = Describe("Cert Manager", func() {
 				NotBefore:    time.Now().Add(-time.Hour),
 				NotAfter:     time.Now().Add(time.Hour),
 			}
-			leafCert := getCertificate(template)
+			_, leafCert := getCertificate(template)
 			cm.chain = []*x509.Certificate{leafCert}
 			cm.config = &tls.Config{
 				Time: func() time.Time { return time.Now().Add(-24 * time.Hour) },
 			}
 			err := cm.Verify("quic.clemente.io")
 			Expect(err.(x509.CertificateInvalidError).Reason).To(Equal(x509.Expired))
+		})
+
+		It("uses the Root CA given in the client config", func() {
+			if runtime.GOOS == "windows" {
+				// certificate validation works different on windows, see https://golang.org/src/crypto/x509/verify.go line 238
+				Skip("windows")
+			}
+
+			templateRoot := &x509.Certificate{
+				SerialNumber: big.NewInt(1),
+				NotBefore:    time.Now().Add(-time.Hour),
+				NotAfter:     time.Now().Add(time.Hour),
+				IsCA:         true,
+				BasicConstraintsValid: true,
+			}
+			rootKey, rootCert := getCertificate(templateRoot)
+			template := &x509.Certificate{
+				SerialNumber: big.NewInt(1),
+				NotBefore:    time.Now().Add(-time.Hour),
+				NotAfter:     time.Now().Add(time.Hour),
+				Subject:      pkix.Name{CommonName: "google.com"},
+			}
+			key, err := rsa.GenerateKey(rand.Reader, 1024)
+			Expect(err).ToNot(HaveOccurred())
+			leafCert := generateCertificate(template, rootCert, &key.PublicKey, rootKey)
+
+			rootCAPool := x509.NewCertPool()
+			rootCAPool.AddCert(rootCert)
+
+			cm.chain = []*x509.Certificate{leafCert}
+			cm.config = &tls.Config{
+				RootCAs:    rootCAPool,
+				ServerName: "google.com",
+			}
+			err = cm.Verify("quic.clemente.io")
+			Expect(err).ToNot(HaveOccurred())
 		})
 	})
 })
