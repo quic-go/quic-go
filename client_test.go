@@ -211,12 +211,14 @@ var _ = Describe("Client", func() {
 			newVersion := protocol.Version35
 			Expect(newVersion).ToNot(Equal(client.version))
 			Expect(session.packetCount).To(BeZero())
+			client.connectionID = 0x1337
 			err := client.handlePacket(getVersionNegotiation([]protocol.VersionNumber{newVersion}))
 			Expect(client.version).To(Equal(newVersion))
 			Expect(client.versionNegotiated).To(BeTrue())
 			Expect(versionNegotiateCallbackCalled).To(BeTrue())
 			// it swapped the sessions
 			Expect(client.session).ToNot(Equal(session))
+			Expect(client.connectionID).ToNot(Equal(0x1337)) // it generated a new connection ID
 			Expect(err).ToNot(HaveOccurred())
 			// it didn't pass the version negoation packet to the session (since it has no payload)
 			Expect(session.packetCount).To(BeZero())

@@ -175,9 +175,14 @@ func (c *Client) handlePacket(packet []byte) error {
 			return qerr.VersionNegotiationMismatch
 		}
 
-		utils.Infof("Switching to QUIC version %d", highestSupportedVersion)
+		// switch to negotiated version
 		c.version = highestSupportedVersion
 		c.versionNegotiated = true
+		c.connectionID, err = utils.GenerateConnectionID()
+		if err != nil {
+			return err
+		}
+		utils.Infof("Switching to QUIC version %d. New connection ID: %x", highestSupportedVersion, c.connectionID)
 
 		c.session.Close(errCloseSessionForNewVersion)
 		err = c.createNewSession(hdr.SupportedVersions)
