@@ -1,6 +1,7 @@
 package congestion
 
 import (
+	"math"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -26,23 +27,37 @@ var _ = Describe("Cubic", func() {
 
 	It("works above origin", func() {
 		// Convex growth.
-		rtt_min := 100 * time.Millisecond
+		const rtt_min = 100 * time.Millisecond
+		const rtt_min_s = float32(rtt_min/time.Millisecond) / 1000.0
 		current_cwnd := protocol.PacketNumber(10)
-		expected_cwnd := current_cwnd + 1
+		// Without the signed-integer, cubic-convex fix, we mistakenly
+		// increment cwnd after only one_ms_ and a single ack.
+		expected_cwnd := current_cwnd
 		// Initialize the state.
 		clock.Advance(time.Millisecond)
-		Expect(cubic.CongestionWindowAfterAck(current_cwnd, rtt_min)).To(Equal(expected_cwnd))
+		initial_time := clock.Now()
+		current_cwnd = cubic.CongestionWindowAfterAck(current_cwnd, rtt_min)
+		Expect(current_cwnd).To(Equal(expected_cwnd))
 		current_cwnd = expected_cwnd
+		initial_cwnd := current_cwnd
 		// Normal TCP phase.
-		for i := 0; i < 48; i++ {
-			for n := uint64(1); n < uint64(float32(current_cwnd)/kNConnectionAlpha); n++ {
+		// The maximum number of expected reno RTTs can be calculated by
+		// finding the point where the cubic curve and the reno curve meet.
+		max_reno_rtts := int(math.Sqrt(float64(kNConnectionAlpha/(0.4*rtt_min_s*rtt_min_s*rtt_min_s))) - 1)
+		for i := 0; i < max_reno_rtts; i++ {
+			max_per_ack_cwnd := current_cwnd
+			for n := uint64(1); n < uint64(float32(max_per_ack_cwnd)/kNConnectionAlpha); n++ {
 				// Call once per ACK.
-				Expect(cubic.CongestionWindowAfterAck(current_cwnd, rtt_min)).To(BeNumerically("~", current_cwnd, 1))
+				next_cwnd := cubic.CongestionWindowAfterAck(current_cwnd, rtt_min)
+				Expect(next_cwnd).To(Equal(current_cwnd))
 			}
 			clock.Advance(100 * time.Millisecond)
 			current_cwnd = cubic.CongestionWindowAfterAck(current_cwnd, rtt_min)
-			Expect(current_cwnd).To(BeNumerically("~", expected_cwnd, 1))
+			// When we fix convex mode and the uint64 arithmetic, we
+			// increase the expected_cwnd only after after the first 100ms,
+			// rather than after the initial 1ms.
 			expected_cwnd++
+			Expect(current_cwnd).To(Equal(expected_cwnd))
 		}
 		// Cubic phase.
 		for i := 0; i < 52; i++ {
@@ -54,16 +69,16 @@ var _ = Describe("Cubic", func() {
 			current_cwnd = cubic.CongestionWindowAfterAck(current_cwnd, rtt_min)
 		}
 		// Total time elapsed so far; add min_rtt (0.1s) here as well.
-		elapsed_time_s := 10.0 + 0.1
+		elapsed_time_s := float32(clock.Now().Sub(initial_time)+rtt_min) / float32(time.Second)
 		// |expected_cwnd| is initial value of cwnd + K * t^3, where K = 0.4.
-		expected_cwnd = protocol.PacketNumber(11 + (elapsed_time_s*elapsed_time_s*elapsed_time_s*410)/1024)
+		expected_cwnd = initial_cwnd + protocol.PacketNumber((elapsed_time_s*elapsed_time_s*elapsed_time_s*410)/1024)
 		Expect(current_cwnd).To(Equal(expected_cwnd))
 	})
 
 	It("manages loss events", func() {
 		rtt_min := 100 * time.Millisecond
 		current_cwnd := protocol.PacketNumber(422)
-		expected_cwnd := current_cwnd + 1
+		expected_cwnd := current_cwnd
 		// Initialize the state.
 		clock.Advance(time.Millisecond)
 		Expect(cubic.CongestionWindowAfterAck(current_cwnd, rtt_min)).To(Equal(expected_cwnd))
@@ -77,7 +92,7 @@ var _ = Describe("Cubic", func() {
 		// Concave growth.
 		rtt_min := 100 * time.Millisecond
 		current_cwnd := protocol.PacketNumber(422)
-		expected_cwnd := current_cwnd + 1
+		expected_cwnd := current_cwnd
 		// Initialize the state.
 		clock.Advance(time.Millisecond)
 		Expect(cubic.CongestionWindowAfterAck(current_cwnd, rtt_min)).To(Equal(expected_cwnd))
