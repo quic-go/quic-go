@@ -16,16 +16,16 @@ type flowController struct {
 	connectionParameters handshake.ConnectionParametersManager
 	rttStats             *congestion.RTTStats
 
-	bytesSent             protocol.ByteCount
-	sendFlowControlWindow protocol.ByteCount
+	bytesSent  protocol.ByteCount
+	sendWindow protocol.ByteCount
 
 	lastWindowUpdateTime time.Time
 
-	bytesRead                            protocol.ByteCount
-	highestReceived                      protocol.ByteCount
-	receiveFlowControlWindow             protocol.ByteCount
-	receiveFlowControlWindowIncrement    protocol.ByteCount
-	maxReceiveFlowControlWindowIncrement protocol.ByteCount
+	bytesRead                 protocol.ByteCount
+	highestReceived           protocol.ByteCount
+	receiveWindow             protocol.ByteCount
+	receiveWindowIncrement    protocol.ByteCount
+	maxReceiveWindowIncrement protocol.ByteCount
 }
 
 // ErrReceivedSmallerByteOffset occurs if the ByteOffset received is smaller than a ByteOffset that was set previously
@@ -40,26 +40,26 @@ func newFlowController(streamID protocol.StreamID, connectionParameters handshak
 	}
 
 	if streamID == 0 {
-		fc.receiveFlowControlWindow = connectionParameters.GetReceiveConnectionFlowControlWindow()
-		fc.receiveFlowControlWindowIncrement = fc.receiveFlowControlWindow
-		fc.maxReceiveFlowControlWindowIncrement = connectionParameters.GetMaxReceiveConnectionFlowControlWindow()
+		fc.receiveWindow = connectionParameters.GetReceiveConnectionFlowControlWindow()
+		fc.receiveWindowIncrement = fc.receiveWindow
+		fc.maxReceiveWindowIncrement = connectionParameters.GetMaxReceiveConnectionFlowControlWindow()
 	} else {
-		fc.receiveFlowControlWindow = connectionParameters.GetReceiveStreamFlowControlWindow()
-		fc.receiveFlowControlWindowIncrement = fc.receiveFlowControlWindow
-		fc.maxReceiveFlowControlWindowIncrement = connectionParameters.GetMaxReceiveStreamFlowControlWindow()
+		fc.receiveWindow = connectionParameters.GetReceiveStreamFlowControlWindow()
+		fc.receiveWindowIncrement = fc.receiveWindow
+		fc.maxReceiveWindowIncrement = connectionParameters.GetMaxReceiveStreamFlowControlWindow()
 	}
 
 	return &fc
 }
 
-func (c *flowController) getSendFlowControlWindow() protocol.ByteCount {
-	if c.sendFlowControlWindow == 0 {
+func (c *flowController) getSendWindow() protocol.ByteCount {
+	if c.sendWindow == 0 {
 		if c.streamID == 0 {
 			return c.connectionParameters.GetSendConnectionFlowControlWindow()
 		}
 		return c.connectionParameters.GetSendStreamFlowControlWindow()
 	}
-	return c.sendFlowControlWindow
+	return c.sendWindow
 }
 
 func (c *flowController) AddBytesSent(n protocol.ByteCount) {
@@ -73,24 +73,24 @@ func (c *flowController) GetBytesSent() protocol.ByteCount {
 // UpdateSendWindow should be called after receiving a WindowUpdateFrame
 // it returns true if the window was actually updated
 func (c *flowController) UpdateSendWindow(newOffset protocol.ByteCount) bool {
-	if newOffset > c.sendFlowControlWindow {
-		c.sendFlowControlWindow = newOffset
+	if newOffset > c.sendWindow {
+		c.sendWindow = newOffset
 		return true
 	}
 	return false
 }
 
 func (c *flowController) SendWindowSize() protocol.ByteCount {
-	sendFlowControlWindow := c.getSendFlowControlWindow()
+	sendWindow := c.getSendWindow()
 
-	if c.bytesSent > sendFlowControlWindow { // should never happen, but make sure we don't do an underflow here
+	if c.bytesSent > sendWindow { // should never happen, but make sure we don't do an underflow here
 		return 0
 	}
-	return sendFlowControlWindow - c.bytesSent
+	return sendWindow - c.bytesSent
 }
 
 func (c *flowController) SendWindowOffset() protocol.ByteCount {
-	return c.getSendFlowControlWindow()
+	return c.getSendWindow()
 }
 
 // UpdateHighestReceived updates the highestReceived value, if the byteOffset is higher
@@ -120,25 +120,23 @@ func (c *flowController) AddBytesRead(n protocol.ByteCount) {
 	c.bytesRead += n
 }
 
-// MaybeTriggerWindowUpdate determines if it is necessary to send a WindowUpdate
+// MaybeUpdateWindow determines if it is necessary to send a WindowUpdate
 // if so, it returns true and the offset of the window
-func (c *flowController) MaybeTriggerWindowUpdate() (bool, protocol.ByteCount) {
-	diff := c.receiveFlowControlWindow - c.bytesRead
+func (c *flowController) MaybeUpdateWindow() (bool, protocol.ByteCount) {
+	diff := c.receiveWindow - c.bytesRead
 
 	// Chromium implements the same threshold
-	if diff < (c.receiveFlowControlWindowIncrement / 2) {
+	if diff < (c.receiveWindowIncrement / 2) {
 		c.maybeAdjustWindowIncrement()
 		c.lastWindowUpdateTime = time.Now()
-
-		c.receiveFlowControlWindow = c.bytesRead + c.receiveFlowControlWindowIncrement
-
-		return true, c.receiveFlowControlWindow
+		c.receiveWindow = c.bytesRead + c.receiveWindowIncrement
+		return true, c.receiveWindow
 	}
 
 	return false, 0
 }
 
-// maybeAdjustWindowIncrement increases the receiveFlowControlWindowIncrement if we're sending WindowUpdates too often
+// maybeAdjustWindowIncrement increases the receiveWindowIncrement if we're sending WindowUpdates too often
 func (c *flowController) maybeAdjustWindowIncrement() {
 	if c.lastWindowUpdateTime.IsZero() {
 		return
@@ -156,12 +154,12 @@ func (c *flowController) maybeAdjustWindowIncrement() {
 		return
 	}
 
-	oldWindowSize := c.receiveFlowControlWindowIncrement
-	c.receiveFlowControlWindowIncrement = utils.MinByteCount(2*c.receiveFlowControlWindowIncrement, c.maxReceiveFlowControlWindowIncrement)
+	oldWindowSize := c.receiveWindowIncrement
+	c.receiveWindowIncrement = utils.MinByteCount(2*c.receiveWindowIncrement, c.maxReceiveWindowIncrement)
 
 	// debug log, if the window size was actually increased
-	if oldWindowSize < c.receiveFlowControlWindowIncrement {
-		newWindowSize := c.receiveFlowControlWindowIncrement / (1 << 10)
+	if oldWindowSize < c.receiveWindowIncrement {
+		newWindowSize := c.receiveWindowIncrement / (1 << 10)
 		if c.streamID == 0 {
 			utils.Debugf("Increasing receive flow control window for the connection to %d kB", newWindowSize)
 		} else {
@@ -171,7 +169,7 @@ func (c *flowController) maybeAdjustWindowIncrement() {
 }
 
 func (c *flowController) CheckFlowControlViolation() bool {
-	if c.highestReceived > c.receiveFlowControlWindow {
+	if c.highestReceived > c.receiveWindow {
 		return true
 	}
 	return false
