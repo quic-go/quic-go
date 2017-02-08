@@ -88,6 +88,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("closes and deletes sessions", func() {
+			server.deleteClosedSessionsAfter = time.Second // make sure that the nil value for the closed session doesn't get deleted in this test
 			err := server.handlePacket(nil, nil, append(firstPacket, (&crypto.NullAEAD{}).Seal(nil, nil, 0, firstPacket)...))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(server.sessions).To(HaveLen(1))
