@@ -1,6 +1,8 @@
 package flowcontrol
 
 import (
+	"time"
+
 	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -15,8 +17,10 @@ var _ = Describe("Flow Control Manager", func() {
 
 	BeforeEach(func() {
 		cpm = &mockConnectionParametersManager{
-			receiveStreamFlowControlWindow:     100,
-			receiveConnectionFlowControlWindow: 200,
+			receiveStreamFlowControlWindow:        100,
+			receiveConnectionFlowControlWindow:    200,
+			maxReceiveStreamFlowControlWindow:     9999999,
+			maxReceiveConnectionFlowControlWindow: 9999999,
 		}
 		fcm = NewFlowControlManager(cpm, &congestion.RTTStats{}).(*flowControlManager)
 	})
@@ -112,6 +116,14 @@ var _ = Describe("Flow Control Manager", func() {
 		})
 
 		Context("window updates", func() {
+			// update the congestion such that it returns a given value for the smoothed RTT
+			setRtt := func(t time.Duration) {
+				for _, controller := range fcm.streamFlowController {
+					controller.rttStats.UpdateRTT(t, 0, time.Now())
+					Expect(controller.rttStats.SmoothedRTT()).To(Equal(t)) // make sure it worked
+				}
+			}
+
 			It("gets stream level window updates", func() {
 				err := fcm.UpdateHighestReceived(4, 100)
 				Expect(err).ToNot(HaveOccurred())
@@ -119,8 +131,7 @@ var _ = Describe("Flow Control Manager", func() {
 				Expect(err).ToNot(HaveOccurred())
 				updates := fcm.GetWindowUpdates()
 				Expect(updates).To(HaveLen(1))
-				Expect(updates[0].StreamID).To(Equal(protocol.StreamID(4)))
-				Expect(updates[0].Offset).To(Equal(protocol.ByteCount(190)))
+				Expect(updates[0]).To(Equal(WindowUpdate{StreamID: 4, Offset: 190}))
 			})
 
 			It("gets connection level window updates", func() {
@@ -140,6 +151,33 @@ var _ = Describe("Flow Control Manager", func() {
 			It("errors when AddBytesRead is called for a stream doesn't exist", func() {
 				err := fcm.AddBytesRead(17, 1000)
 				Expect(err).To(MatchError(errMapAccess))
+			})
+
+			It("increases the connection-level window, when a stream window was increased by autotuning", func() {
+				setRtt(10 * time.Millisecond)
+				fcm.streamFlowController[4].lastWindowUpdateTime = time.Now().Add(-1 * time.Millisecond)
+				err := fcm.UpdateHighestReceived(4, 100)
+				Expect(err).ToNot(HaveOccurred())
+				err = fcm.AddBytesRead(4, 90)
+				Expect(err).ToNot(HaveOccurred())
+				updates := fcm.GetWindowUpdates()
+				Expect(updates).To(HaveLen(2))
+				connLevelIncrement := protocol.ByteCount(protocol.ConnectionFlowControlMultiplier * 200) // 300
+				Expect(updates).To(ContainElement(WindowUpdate{StreamID: 4, Offset: 290}))
+				Expect(updates).To(ContainElement(WindowUpdate{StreamID: 0, Offset: 90 + connLevelIncrement}))
+			})
+
+			It("doesn't increase the connection-level window, when a non-contributing stream window was increased by autotuning", func() {
+				setRtt(10 * time.Millisecond)
+				fcm.streamFlowController[1].lastWindowUpdateTime = time.Now().Add(-1 * time.Millisecond)
+				err := fcm.UpdateHighestReceived(1, 100)
+				Expect(err).ToNot(HaveOccurred())
+				err = fcm.AddBytesRead(1, 90)
+				Expect(err).ToNot(HaveOccurred())
+				updates := fcm.GetWindowUpdates()
+				Expect(updates).To(HaveLen(1))
+				Expect(updates).To(ContainElement(WindowUpdate{StreamID: 1, Offset: 290}))
+				// the only window update is for stream 1, thus there's no connection-level window update
 			})
 		})
 	})

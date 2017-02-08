@@ -144,12 +144,27 @@ func (f *flowControlManager) AddBytesRead(streamID protocol.StreamID, n protocol
 func (f *flowControlManager) GetWindowUpdates() (res []WindowUpdate) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
+	connFlowController := f.streamFlowController[0]
+
+	// get WindowUpdates for streams
 	for id, fc := range f.streamFlowController {
-		if necessary, offset := fc.MaybeUpdateWindow(); necessary {
+		if id == 0 { // connection-level updates are dealt with later
+			continue
+		}
+		if necessary, newIncrement, offset := fc.MaybeUpdateWindow(); necessary {
 			res = append(res, WindowUpdate{StreamID: id, Offset: offset})
+			contributes, _ := f.contributesToConnectionFlowControl[id]
+			if contributes && newIncrement != 0 {
+				connFlowController.EnsureMinimumWindowIncrement(protocol.ByteCount(float64(newIncrement) * protocol.ConnectionFlowControlMultiplier))
+			}
 		}
 	}
-	return res
+	// get a WindowUpdate for the connection
+	if necessary, _, offset := connFlowController.MaybeUpdateWindow(); necessary {
+		res = append(res, WindowUpdate{StreamID: 0, Offset: offset})
+	}
+
+	return
 }
 
 func (f *flowControlManager) GetReceiveWindow(streamID protocol.StreamID) (protocol.ByteCount, error) {

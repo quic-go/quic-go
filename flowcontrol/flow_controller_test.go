@@ -197,7 +197,7 @@ var _ = Describe("Flow controller", func() {
 			controller.lastWindowUpdateTime = time.Now().Add(-time.Hour)
 			readPosition := receiveWindow - receiveWindowIncrement/2 + 1
 			controller.bytesRead = readPosition
-			updateNecessary, offset := controller.MaybeUpdateWindow()
+			updateNecessary, _, offset := controller.MaybeUpdateWindow()
 			Expect(updateNecessary).To(BeTrue())
 			Expect(offset).To(Equal(readPosition + receiveWindowIncrement))
 			Expect(controller.receiveWindow).To(Equal(readPosition + receiveWindowIncrement))
@@ -209,7 +209,7 @@ var _ = Describe("Flow controller", func() {
 			controller.lastWindowUpdateTime = lastWindowUpdateTime
 			readPosition := receiveWindow - receiveWindow/2 - 1
 			controller.bytesRead = readPosition
-			updateNecessary, _ := controller.MaybeUpdateWindow()
+			updateNecessary, _, _ := controller.MaybeUpdateWindow()
 			Expect(updateNecessary).To(BeFalse())
 			Expect(controller.lastWindowUpdateTime).To(Equal(lastWindowUpdateTime))
 		})
@@ -305,6 +305,46 @@ var _ = Describe("Flow controller", func() {
 				Expect(controller.receiveWindowIncrement).To(Equal(controller.maxReceiveWindowIncrement)) // 3000
 				controller.maybeAdjustWindowIncrement()
 				Expect(controller.receiveWindowIncrement).To(Equal(controller.maxReceiveWindowIncrement)) // 3000
+			})
+
+			It("returns the new increment when updating the window", func() {
+				setRtt(10 * time.Millisecond)
+				controller.bytesRead = 9900 // receive window is 10000
+				controller.lastWindowUpdateTime = time.Now().Add(-19 * time.Millisecond)
+				necessary, newIncrement, offset := controller.MaybeUpdateWindow()
+				Expect(necessary).To(BeTrue())
+				Expect(newIncrement).To(Equal(2 * oldIncrement))
+				Expect(controller.receiveWindowIncrement).To(Equal(newIncrement))
+				Expect(offset).To(Equal(protocol.ByteCount(9900 + newIncrement)))
+			})
+
+			It("only returns the increment if it was increased", func() {
+				setRtt(10 * time.Millisecond)
+				controller.bytesRead = 9900 // receive window is 10000
+				controller.lastWindowUpdateTime = time.Now().Add(-21 * time.Millisecond)
+				necessary, newIncrement, offset := controller.MaybeUpdateWindow()
+				Expect(necessary).To(BeTrue())
+				Expect(newIncrement).To(BeZero())
+				Expect(controller.receiveWindowIncrement).To(Equal(oldIncrement))
+				Expect(offset).To(Equal(protocol.ByteCount(9900 + oldIncrement)))
+			})
+
+			Context("setting the minimum increment", func() {
+				It("sets the minimum window increment", func() {
+					controller.EnsureMinimumWindowIncrement(1000)
+					Expect(controller.receiveWindowIncrement).To(Equal(protocol.ByteCount(1000)))
+				})
+
+				It("doesn't reduce the window increment", func() {
+					controller.EnsureMinimumWindowIncrement(1)
+					Expect(controller.receiveWindowIncrement).To(Equal(oldIncrement))
+				})
+
+				It("doens't increase the increment beyong the maxReceiveWindowIncrement", func() {
+					max := controller.maxReceiveWindowIncrement
+					controller.EnsureMinimumWindowIncrement(2 * max)
+					Expect(controller.receiveWindowIncrement).To(Equal(max))
+				})
 			})
 		})
 	})

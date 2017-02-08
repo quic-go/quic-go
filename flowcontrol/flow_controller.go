@@ -116,20 +116,28 @@ func (c *flowController) AddBytesRead(n protocol.ByteCount) {
 	c.bytesRead += n
 }
 
-// MaybeUpdateWindow determines if it is necessary to send a WindowUpdate
-// if so, it returns true and the offset of the window
-func (c *flowController) MaybeUpdateWindow() (bool, protocol.ByteCount) {
+// MaybeUpdateWindow updates the receive window, if necessary
+// if the receive window increment is changed, the new value is returned, otherwise a 0
+// the last return value is the new offset of the receive window
+func (c *flowController) MaybeUpdateWindow() (bool, protocol.ByteCount /* new increment */, protocol.ByteCount /* new offset */) {
 	diff := c.receiveWindow - c.bytesRead
 
 	// Chromium implements the same threshold
 	if diff < (c.receiveWindowIncrement / 2) {
+		var newWindowIncrement protocol.ByteCount
+		oldWindowIncrement := c.receiveWindowIncrement
+
 		c.maybeAdjustWindowIncrement()
+		if c.receiveWindowIncrement != oldWindowIncrement {
+			newWindowIncrement = c.receiveWindowIncrement
+		}
+
 		c.lastWindowUpdateTime = time.Now()
 		c.receiveWindow = c.bytesRead + c.receiveWindowIncrement
-		return true, c.receiveWindow
+		return true, newWindowIncrement, c.receiveWindow
 	}
 
-	return false, 0
+	return false, 0, 0
 }
 
 // maybeAdjustWindowIncrement increases the receiveWindowIncrement if we're sending WindowUpdates too often
@@ -161,6 +169,15 @@ func (c *flowController) maybeAdjustWindowIncrement() {
 		} else {
 			utils.Debugf("Increasing receive flow control window increment for stream %d to %d kB", c.streamID, newWindowSize)
 		}
+	}
+}
+
+// EnsureMinimumWindowIncrement sets a minimum window increment
+// it is intended be used for the connection-level flow controller
+// it should make sure that the connection-level window is increased when a stream-level window grows
+func (c *flowController) EnsureMinimumWindowIncrement(inc protocol.ByteCount) {
+	if inc > c.receiveWindowIncrement {
+		c.receiveWindowIncrement = utils.MinByteCount(inc, c.maxReceiveWindowIncrement)
 	}
 }
 
