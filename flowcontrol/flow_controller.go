@@ -11,7 +11,8 @@ import (
 )
 
 type flowController struct {
-	streamID protocol.StreamID
+	streamID                protocol.StreamID
+	contributesToConnection bool // does the stream contribute to connection level flow control
 
 	connectionParameters handshake.ConnectionParametersManager
 	rttStats             *congestion.RTTStats
@@ -32,11 +33,12 @@ type flowController struct {
 var ErrReceivedSmallerByteOffset = errors.New("Received a smaller byte offset")
 
 // newFlowController gets a new flow controller
-func newFlowController(streamID protocol.StreamID, connectionParameters handshake.ConnectionParametersManager, rttStats *congestion.RTTStats) *flowController {
+func newFlowController(streamID protocol.StreamID, contributesToConnection bool, connectionParameters handshake.ConnectionParametersManager, rttStats *congestion.RTTStats) *flowController {
 	fc := flowController{
-		streamID:             streamID,
-		connectionParameters: connectionParameters,
-		rttStats:             rttStats,
+		streamID:                streamID,
+		contributesToConnection: contributesToConnection,
+		connectionParameters:    connectionParameters,
+		rttStats:                rttStats,
 	}
 
 	if streamID == 0 {
@@ -50,6 +52,10 @@ func newFlowController(streamID protocol.StreamID, connectionParameters handshak
 	}
 
 	return &fc
+}
+
+func (c *flowController) ContributesToConnection() bool {
+	return c.contributesToConnection
 }
 
 func (c *flowController) getSendWindow() protocol.ByteCount {

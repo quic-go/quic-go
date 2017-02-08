@@ -27,15 +27,16 @@ var _ = Describe("Flow Control Manager", func() {
 
 	It("creates a connection level flow controller", func() {
 		Expect(fcm.streamFlowController).To(HaveKey(protocol.StreamID(0)))
-		Expect(fcm.contributesToConnectionFlowControl).To(HaveKey(protocol.StreamID(0)))
+		Expect(fcm.streamFlowController[0].ContributesToConnection()).To(BeFalse())
 	})
 
 	Context("creating new streams", func() {
 		It("creates a new stream", func() {
 			fcm.NewStream(5, false)
 			Expect(fcm.streamFlowController).To(HaveKey(protocol.StreamID(5)))
-			Expect(fcm.streamFlowController[5]).ToNot(BeNil())
-			Expect(fcm.contributesToConnectionFlowControl).To(HaveKeyWithValue(protocol.StreamID(5), false))
+			fc := fcm.streamFlowController[5]
+			Expect(fc.streamID).To(Equal(protocol.StreamID(5)))
+			Expect(fc.ContributesToConnection()).To(BeFalse())
 		})
 
 		It("doesn't create a new flow controller if called for an existing stream", func() {
@@ -43,8 +44,9 @@ var _ = Describe("Flow Control Manager", func() {
 			Expect(fcm.streamFlowController).To(HaveKey(protocol.StreamID(5)))
 			fcm.streamFlowController[5].bytesRead = 0x1337
 			fcm.NewStream(5, false)
-			Expect(fcm.streamFlowController[5].bytesRead).To(BeEquivalentTo(0x1337))
-			Expect(fcm.contributesToConnectionFlowControl).To(HaveKeyWithValue(protocol.StreamID(5), true))
+			fc := fcm.streamFlowController[5]
+			Expect(fc.bytesRead).To(BeEquivalentTo(0x1337))
+			Expect(fc.ContributesToConnection()).To(BeTrue())
 		})
 	})
 
@@ -53,7 +55,6 @@ var _ = Describe("Flow Control Manager", func() {
 		Expect(fcm.streamFlowController).To(HaveKey(protocol.StreamID(5)))
 		fcm.RemoveStream(5)
 		Expect(fcm.streamFlowController).ToNot(HaveKey(protocol.StreamID(5)))
-		Expect(fcm.contributesToConnectionFlowControl).ToNot(HaveKey(protocol.StreamID(5)))
 	})
 
 	Context("receiving data", func() {

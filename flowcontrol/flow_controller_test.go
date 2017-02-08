@@ -77,27 +77,34 @@ var _ = Describe("Flow controller", func() {
 		})
 
 		It("reads the stream send and receive windows when acting as stream-level flow controller", func() {
-			fc := newFlowController(5, cpm, rttStats)
+			fc := newFlowController(5, true, cpm, rttStats)
 			Expect(fc.streamID).To(Equal(protocol.StreamID(5)))
 			Expect(fc.receiveWindow).To(Equal(protocol.ByteCount(2000)))
 			Expect(fc.maxReceiveWindowIncrement).To(Equal(cpm.GetMaxReceiveStreamFlowControlWindow()))
 		})
 
 		It("reads the stream send and receive windows when acting as connection-level flow controller", func() {
-			fc := newFlowController(0, cpm, rttStats)
+			fc := newFlowController(0, false, cpm, rttStats)
 			Expect(fc.streamID).To(Equal(protocol.StreamID(0)))
 			Expect(fc.receiveWindow).To(Equal(protocol.ByteCount(4000)))
 			Expect(fc.maxReceiveWindowIncrement).To(Equal(cpm.GetMaxReceiveConnectionFlowControlWindow()))
 		})
 
 		It("does not set the stream flow control windows for sending", func() {
-			fc := newFlowController(5, cpm, rttStats)
+			fc := newFlowController(5, true, cpm, rttStats)
 			Expect(fc.sendWindow).To(BeZero())
 		})
 
 		It("does not set the connection flow control windows for sending", func() {
-			fc := newFlowController(0, cpm, rttStats)
+			fc := newFlowController(0, false, cpm, rttStats)
 			Expect(fc.sendWindow).To(BeZero())
+		})
+
+		It("says if it contributes to connection-level flow control", func() {
+			fc := newFlowController(1, false, cpm, rttStats)
+			Expect(fc.ContributesToConnection()).To(BeFalse())
+			fc = newFlowController(5, true, cpm, rttStats)
+			Expect(fc.ContributesToConnection()).To(BeTrue())
 		})
 	})
 

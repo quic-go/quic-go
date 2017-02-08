@@ -16,9 +16,8 @@ type flowControlManager struct {
 	connectionParameters handshake.ConnectionParametersManager
 	rttStats             *congestion.RTTStats
 
-	streamFlowController               map[protocol.StreamID]*flowController
-	contributesToConnectionFlowControl map[protocol.StreamID]bool
-	mutex                              sync.RWMutex
+	streamFlowController map[protocol.StreamID]*flowController
+	mutex                sync.RWMutex
 }
 
 var _ FlowControlManager = &flowControlManager{}
@@ -28,20 +27,18 @@ var errMapAccess = errors.New("Error accessing the flowController map.")
 // NewFlowControlManager creates a new flow control manager
 func NewFlowControlManager(connectionParameters handshake.ConnectionParametersManager, rttStats *congestion.RTTStats) FlowControlManager {
 	fcm := flowControlManager{
-		connectionParameters:               connectionParameters,
-		rttStats:                           rttStats,
-		streamFlowController:               make(map[protocol.StreamID]*flowController),
-		contributesToConnectionFlowControl: make(map[protocol.StreamID]bool),
+		connectionParameters: connectionParameters,
+		rttStats:             rttStats,
+		streamFlowController: make(map[protocol.StreamID]*flowController),
 	}
 	// initialize connection level flow controller
-	fcm.streamFlowController[0] = newFlowController(0, connectionParameters, rttStats)
-	fcm.contributesToConnectionFlowControl[0] = false
+	fcm.streamFlowController[0] = newFlowController(0, false, connectionParameters, rttStats)
 	return &fcm
 }
 
 // NewStream creates new flow controllers for a stream
 // it does nothing if the stream already exists
-func (f *flowControlManager) NewStream(streamID protocol.StreamID, contributesToConnectionFlow bool) {
+func (f *flowControlManager) NewStream(streamID protocol.StreamID, contributesToConnection bool) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 
@@ -49,15 +46,13 @@ func (f *flowControlManager) NewStream(streamID protocol.StreamID, contributesTo
 		return
 	}
 
-	f.streamFlowController[streamID] = newFlowController(streamID, f.connectionParameters, f.rttStats)
-	f.contributesToConnectionFlowControl[streamID] = contributesToConnectionFlow
+	f.streamFlowController[streamID] = newFlowController(streamID, contributesToConnection, f.connectionParameters, f.rttStats)
 }
 
 // RemoveStream removes a closed stream from flow control
 func (f *flowControlManager) RemoveStream(streamID protocol.StreamID) {
 	f.mutex.Lock()
 	delete(f.streamFlowController, streamID)
-	delete(f.contributesToConnectionFlowControl, streamID)
 	f.mutex.Unlock()
 }
 
@@ -81,7 +76,7 @@ func (f *flowControlManager) ResetStream(streamID protocol.StreamID, byteOffset 
 		return qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes on stream %d, allowed %d bytes", byteOffset, streamID, streamFlowController.receiveWindow))
 	}
 
-	if f.contributesToConnectionFlowControl[streamID] {
+	if streamFlowController.ContributesToConnection() {
 		connFlowController := f.streamFlowController[0]
 		connFlowController.IncrementHighestReceived(increment)
 		if connFlowController.CheckFlowControlViolation() {
@@ -111,7 +106,7 @@ func (f *flowControlManager) UpdateHighestReceived(streamID protocol.StreamID, b
 		return qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes on stream %d, allowed %d bytes", byteOffset, streamID, streamFlowController.receiveWindow))
 	}
 
-	if f.contributesToConnectionFlowControl[streamID] {
+	if streamFlowController.ContributesToConnection() {
 		connFlowController := f.streamFlowController[0]
 		connFlowController.IncrementHighestReceived(increment)
 		if connFlowController.CheckFlowControlViolation() {
@@ -127,14 +122,13 @@ func (f *flowControlManager) AddBytesRead(streamID protocol.StreamID, n protocol
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 
-	streamFlowController, err := f.getFlowController(streamID)
+	fc, err := f.getFlowController(streamID)
 	if err != nil {
 		return err
 	}
 
-	streamFlowController.AddBytesRead(n)
-
-	if f.contributesToConnectionFlowControl[streamID] {
+	fc.AddBytesRead(n)
+	if fc.ContributesToConnection() {
 		f.streamFlowController[0].AddBytesRead(n)
 	}
 
@@ -153,8 +147,7 @@ func (f *flowControlManager) GetWindowUpdates() (res []WindowUpdate) {
 		}
 		if necessary, newIncrement, offset := fc.MaybeUpdateWindow(); necessary {
 			res = append(res, WindowUpdate{StreamID: id, Offset: offset})
-			contributes, _ := f.contributesToConnectionFlowControl[id]
-			if contributes && newIncrement != 0 {
+			if fc.ContributesToConnection() && newIncrement != 0 {
 				connFlowController.EnsureMinimumWindowIncrement(protocol.ByteCount(float64(newIncrement) * protocol.ConnectionFlowControlMultiplier))
 			}
 		}
@@ -181,15 +174,14 @@ func (f *flowControlManager) GetReceiveWindow(streamID protocol.StreamID) (proto
 func (f *flowControlManager) AddBytesSent(streamID protocol.StreamID, n protocol.ByteCount) error {
 	// Only lock the part reading from the map, since send-windows are only accessed from the session goroutine.
 	f.mutex.Lock()
-	streamFlowController, err := f.getFlowController(streamID)
+	fc, err := f.getFlowController(streamID)
 	f.mutex.Unlock()
 	if err != nil {
 		return err
 	}
 
-	streamFlowController.AddBytesSent(n)
-
-	if f.contributesToConnectionFlowControl[streamID] {
+	fc.AddBytesSent(n)
+	if fc.ContributesToConnection() {
 		f.streamFlowController[0].AddBytesSent(n)
 	}
 
@@ -200,18 +192,14 @@ func (f *flowControlManager) AddBytesSent(streamID protocol.StreamID, n protocol
 func (f *flowControlManager) SendWindowSize(streamID protocol.StreamID) (protocol.ByteCount, error) {
 	// Only lock the part reading from the map, since send-windows are only accessed from the session goroutine.
 	f.mutex.RLock()
-	streamFlowController, err := f.getFlowController(streamID)
+	fc, err := f.getFlowController(streamID)
 	f.mutex.RUnlock()
 	if err != nil {
 		return 0, err
 	}
-	res := streamFlowController.SendWindowSize()
+	res := fc.SendWindowSize()
 
-	contributes, ok := f.contributesToConnectionFlowControl[streamID]
-	if !ok {
-		return 0, errMapAccess
-	}
-	if contributes {
+	if fc.ContributesToConnection() {
 		res = utils.MinByteCount(res, f.streamFlowController[0].SendWindowSize())
 	}
 
