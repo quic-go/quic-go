@@ -40,6 +40,7 @@ func NewFlowControlManager(connectionParameters handshake.ConnectionParametersMa
 }
 
 // NewStream creates new flow controllers for a stream
+// it does nothing if the stream already exists
 func (f *flowControlManager) NewStream(streamID protocol.StreamID, contributesToConnectionFlow bool) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
