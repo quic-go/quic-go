@@ -77,27 +77,34 @@ var _ = Describe("Flow controller", func() {
 		})
 
 		It("reads the stream send and receive windows when acting as stream-level flow controller", func() {
-			fc := newFlowController(5, cpm, rttStats)
+			fc := newFlowController(5, true, cpm, rttStats)
 			Expect(fc.streamID).To(Equal(protocol.StreamID(5)))
-			Expect(fc.receiveFlowControlWindow).To(Equal(protocol.ByteCount(2000)))
-			Expect(fc.maxReceiveFlowControlWindowIncrement).To(Equal(cpm.GetMaxReceiveStreamFlowControlWindow()))
+			Expect(fc.receiveWindow).To(Equal(protocol.ByteCount(2000)))
+			Expect(fc.maxReceiveWindowIncrement).To(Equal(cpm.GetMaxReceiveStreamFlowControlWindow()))
 		})
 
 		It("reads the stream send and receive windows when acting as connection-level flow controller", func() {
-			fc := newFlowController(0, cpm, rttStats)
+			fc := newFlowController(0, false, cpm, rttStats)
 			Expect(fc.streamID).To(Equal(protocol.StreamID(0)))
-			Expect(fc.receiveFlowControlWindow).To(Equal(protocol.ByteCount(4000)))
-			Expect(fc.maxReceiveFlowControlWindowIncrement).To(Equal(cpm.GetMaxReceiveConnectionFlowControlWindow()))
+			Expect(fc.receiveWindow).To(Equal(protocol.ByteCount(4000)))
+			Expect(fc.maxReceiveWindowIncrement).To(Equal(cpm.GetMaxReceiveConnectionFlowControlWindow()))
 		})
 
 		It("does not set the stream flow control windows for sending", func() {
-			fc := newFlowController(5, cpm, rttStats)
-			Expect(fc.sendFlowControlWindow).To(BeZero())
+			fc := newFlowController(5, true, cpm, rttStats)
+			Expect(fc.sendWindow).To(BeZero())
 		})
 
 		It("does not set the connection flow control windows for sending", func() {
-			fc := newFlowController(0, cpm, rttStats)
-			Expect(fc.sendFlowControlWindow).To(BeZero())
+			fc := newFlowController(0, false, cpm, rttStats)
+			Expect(fc.sendWindow).To(BeZero())
+		})
+
+		It("says if it contributes to connection-level flow control", func() {
+			fc := newFlowController(1, false, cpm, rttStats)
+			Expect(fc.ContributesToConnection()).To(BeFalse())
+			fc = newFlowController(5, true, cpm, rttStats)
+			Expect(fc.ContributesToConnection()).To(BeTrue())
 		})
 	})
 
@@ -118,20 +125,15 @@ var _ = Describe("Flow controller", func() {
 			Expect(controller.bytesSent).To(Equal(protocol.ByteCount(5 + 6)))
 		})
 
-		It("gets the bytesSent", func() {
-			controller.bytesSent = 8
-			Expect(controller.GetBytesSent()).To(Equal(protocol.ByteCount(8)))
-		})
-
 		It("gets the size of the remaining flow control window", func() {
 			controller.bytesSent = 5
-			controller.sendFlowControlWindow = 12
+			controller.sendWindow = 12
 			Expect(controller.SendWindowSize()).To(Equal(protocol.ByteCount(12 - 5)))
 		})
 
 		It("gets the offset of the flow control window", func() {
 			controller.bytesSent = 5
-			controller.sendFlowControlWindow = 12
+			controller.sendWindow = 12
 			Expect(controller.SendWindowOffset()).To(Equal(protocol.ByteCount(12)))
 		})
 
@@ -154,42 +156,42 @@ var _ = Describe("Flow controller", func() {
 
 		It("asks the ConnectionParametersManager for the stream flow control window size", func() {
 			controller.streamID = 5
-			Expect(controller.getSendFlowControlWindow()).To(Equal(protocol.ByteCount(1000)))
+			Expect(controller.getSendWindow()).To(Equal(protocol.ByteCount(1000)))
 			// make sure the value is not cached
 			cpm.sendStreamFlowControlWindow = 2000
-			Expect(controller.getSendFlowControlWindow()).To(Equal(protocol.ByteCount(2000)))
+			Expect(controller.getSendWindow()).To(Equal(protocol.ByteCount(2000)))
 		})
 
 		It("stops asking the ConnectionParametersManager for the flow control stream window size once a window update has arrived", func() {
 			controller.streamID = 5
 			Expect(controller.UpdateSendWindow(8000))
 			cpm.sendStreamFlowControlWindow = 9000
-			Expect(controller.getSendFlowControlWindow()).To(Equal(protocol.ByteCount(8000)))
+			Expect(controller.getSendWindow()).To(Equal(protocol.ByteCount(8000)))
 		})
 
 		It("asks the ConnectionParametersManager for the connection flow control window size", func() {
 			controller.streamID = 0
-			Expect(controller.getSendFlowControlWindow()).To(Equal(protocol.ByteCount(3000)))
+			Expect(controller.getSendWindow()).To(Equal(protocol.ByteCount(3000)))
 			// make sure the value is not cached
 			cpm.sendConnectionFlowControlWindow = 5000
-			Expect(controller.getSendFlowControlWindow()).To(Equal(protocol.ByteCount(5000)))
+			Expect(controller.getSendWindow()).To(Equal(protocol.ByteCount(5000)))
 		})
 
 		It("stops asking the ConnectionParametersManager for the connection flow control window size once a window update has arrived", func() {
 			controller.streamID = 0
 			Expect(controller.UpdateSendWindow(7000))
 			cpm.sendConnectionFlowControlWindow = 9000
-			Expect(controller.getSendFlowControlWindow()).To(Equal(protocol.ByteCount(7000)))
+			Expect(controller.getSendWindow()).To(Equal(protocol.ByteCount(7000)))
 		})
 	})
 
 	Context("receive flow control", func() {
-		var receiveFlowControlWindow protocol.ByteCount = 10000
-		var receiveFlowControlWindowIncrement protocol.ByteCount = 600
+		var receiveWindow protocol.ByteCount = 10000
+		var receiveWindowIncrement protocol.ByteCount = 600
 
 		BeforeEach(func() {
-			controller.receiveFlowControlWindow = receiveFlowControlWindow
-			controller.receiveFlowControlWindowIncrement = receiveFlowControlWindowIncrement
+			controller.receiveWindow = receiveWindow
+			controller.receiveWindowIncrement = receiveWindowIncrement
 		})
 
 		It("adds bytes read", func() {
@@ -200,21 +202,21 @@ var _ = Describe("Flow controller", func() {
 
 		It("triggers a window update when necessary", func() {
 			controller.lastWindowUpdateTime = time.Now().Add(-time.Hour)
-			readPosition := receiveFlowControlWindow - receiveFlowControlWindowIncrement/2 + 1
+			readPosition := receiveWindow - receiveWindowIncrement/2 + 1
 			controller.bytesRead = readPosition
-			updateNecessary, offset := controller.MaybeTriggerWindowUpdate()
+			updateNecessary, _, offset := controller.MaybeUpdateWindow()
 			Expect(updateNecessary).To(BeTrue())
-			Expect(offset).To(Equal(readPosition + receiveFlowControlWindowIncrement))
-			Expect(controller.receiveFlowControlWindow).To(Equal(readPosition + receiveFlowControlWindowIncrement))
+			Expect(offset).To(Equal(readPosition + receiveWindowIncrement))
+			Expect(controller.receiveWindow).To(Equal(readPosition + receiveWindowIncrement))
 			Expect(controller.lastWindowUpdateTime).To(BeTemporally("~", time.Now(), 5*time.Millisecond))
 		})
 
 		It("doesn't trigger a window update when not necessary", func() {
 			lastWindowUpdateTime := time.Now().Add(-time.Hour)
 			controller.lastWindowUpdateTime = lastWindowUpdateTime
-			readPosition := receiveFlowControlWindow - receiveFlowControlWindow/2 - 1
+			readPosition := receiveWindow - receiveWindow/2 - 1
 			controller.bytesRead = readPosition
-			updateNecessary, _ := controller.MaybeTriggerWindowUpdate()
+			updateNecessary, _, _ := controller.MaybeUpdateWindow()
 			Expect(updateNecessary).To(BeFalse())
 			Expect(controller.lastWindowUpdateTime).To(Equal(lastWindowUpdateTime))
 		})
@@ -249,12 +251,12 @@ var _ = Describe("Flow controller", func() {
 		})
 
 		It("detects a flow control violation", func() {
-			controller.UpdateHighestReceived(receiveFlowControlWindow + 1)
+			controller.UpdateHighestReceived(receiveWindow + 1)
 			Expect(controller.CheckFlowControlViolation()).To(BeTrue())
 		})
 
 		It("does not give a flow control violation when using the window completely", func() {
-			controller.UpdateHighestReceived(receiveFlowControlWindow)
+			controller.UpdateHighestReceived(receiveWindow)
 			Expect(controller.CheckFlowControlViolation()).To(BeFalse())
 		})
 
@@ -262,8 +264,8 @@ var _ = Describe("Flow controller", func() {
 			var oldIncrement protocol.ByteCount
 
 			BeforeEach(func() {
-				oldIncrement = controller.receiveFlowControlWindowIncrement
-				controller.maxReceiveFlowControlWindowIncrement = 3000
+				oldIncrement = controller.receiveWindowIncrement
+				controller.maxReceiveWindowIncrement = 3000
 			})
 
 			// update the congestion such that it returns a given value for the smoothed RTT
@@ -274,42 +276,82 @@ var _ = Describe("Flow controller", func() {
 
 			It("doesn't increase the increment for a new stream", func() {
 				controller.maybeAdjustWindowIncrement()
-				Expect(controller.receiveFlowControlWindowIncrement).To(Equal(oldIncrement))
+				Expect(controller.receiveWindowIncrement).To(Equal(oldIncrement))
 			})
 
 			It("doesn't increase the increment when no RTT estimate is available", func() {
 				setRtt(0)
 				controller.lastWindowUpdateTime = time.Now()
 				controller.maybeAdjustWindowIncrement()
-				Expect(controller.receiveFlowControlWindowIncrement).To(Equal(oldIncrement))
+				Expect(controller.receiveWindowIncrement).To(Equal(oldIncrement))
 			})
 
 			It("increases the increment when the last WindowUpdate was sent less than two RTTs ago", func() {
 				setRtt(10 * time.Millisecond)
 				controller.lastWindowUpdateTime = time.Now().Add(-19 * time.Millisecond)
 				controller.maybeAdjustWindowIncrement()
-				Expect(controller.receiveFlowControlWindowIncrement).To(Equal(2 * oldIncrement))
+				Expect(controller.receiveWindowIncrement).To(Equal(2 * oldIncrement))
 			})
 
 			It("doesn't increase the increase increment when the last WindowUpdate was sent more than two RTTs ago", func() {
 				setRtt(10 * time.Millisecond)
 				controller.lastWindowUpdateTime = time.Now().Add(-21 * time.Millisecond)
 				controller.maybeAdjustWindowIncrement()
-				Expect(controller.receiveFlowControlWindowIncrement).To(Equal(oldIncrement))
+				Expect(controller.receiveWindowIncrement).To(Equal(oldIncrement))
 			})
 
-			It("doesn't increase the increment to a value higher than the maxReceiveFlowControlWindowIncrement", func() {
+			It("doesn't increase the increment to a value higher than the maxReceiveWindowIncrement", func() {
 				setRtt(10 * time.Millisecond)
 				controller.lastWindowUpdateTime = time.Now().Add(-19 * time.Millisecond)
 				controller.maybeAdjustWindowIncrement()
-				Expect(controller.receiveFlowControlWindowIncrement).To(Equal(2 * oldIncrement)) // 1200
+				Expect(controller.receiveWindowIncrement).To(Equal(2 * oldIncrement)) // 1200
 				// because the lastWindowUpdateTime is updated by MaybeTriggerWindowUpdate(), we can just call maybeAdjustWindowIncrement() multiple times and get an increase of the increment every time
 				controller.maybeAdjustWindowIncrement()
-				Expect(controller.receiveFlowControlWindowIncrement).To(Equal(2 * 2 * oldIncrement)) // 2400
+				Expect(controller.receiveWindowIncrement).To(Equal(2 * 2 * oldIncrement)) // 2400
 				controller.maybeAdjustWindowIncrement()
-				Expect(controller.receiveFlowControlWindowIncrement).To(Equal(controller.maxReceiveFlowControlWindowIncrement)) // 3000
+				Expect(controller.receiveWindowIncrement).To(Equal(controller.maxReceiveWindowIncrement)) // 3000
 				controller.maybeAdjustWindowIncrement()
-				Expect(controller.receiveFlowControlWindowIncrement).To(Equal(controller.maxReceiveFlowControlWindowIncrement)) // 3000
+				Expect(controller.receiveWindowIncrement).To(Equal(controller.maxReceiveWindowIncrement)) // 3000
+			})
+
+			It("returns the new increment when updating the window", func() {
+				setRtt(10 * time.Millisecond)
+				controller.bytesRead = 9900 // receive window is 10000
+				controller.lastWindowUpdateTime = time.Now().Add(-19 * time.Millisecond)
+				necessary, newIncrement, offset := controller.MaybeUpdateWindow()
+				Expect(necessary).To(BeTrue())
+				Expect(newIncrement).To(Equal(2 * oldIncrement))
+				Expect(controller.receiveWindowIncrement).To(Equal(newIncrement))
+				Expect(offset).To(Equal(protocol.ByteCount(9900 + newIncrement)))
+			})
+
+			It("only returns the increment if it was increased", func() {
+				setRtt(10 * time.Millisecond)
+				controller.bytesRead = 9900 // receive window is 10000
+				controller.lastWindowUpdateTime = time.Now().Add(-21 * time.Millisecond)
+				necessary, newIncrement, offset := controller.MaybeUpdateWindow()
+				Expect(necessary).To(BeTrue())
+				Expect(newIncrement).To(BeZero())
+				Expect(controller.receiveWindowIncrement).To(Equal(oldIncrement))
+				Expect(offset).To(Equal(protocol.ByteCount(9900 + oldIncrement)))
+			})
+
+			Context("setting the minimum increment", func() {
+				It("sets the minimum window increment", func() {
+					controller.EnsureMinimumWindowIncrement(1000)
+					Expect(controller.receiveWindowIncrement).To(Equal(protocol.ByteCount(1000)))
+				})
+
+				It("doesn't reduce the window increment", func() {
+					controller.EnsureMinimumWindowIncrement(1)
+					Expect(controller.receiveWindowIncrement).To(Equal(oldIncrement))
+				})
+
+				It("doens't increase the increment beyong the maxReceiveWindowIncrement", func() {
+					max := controller.maxReceiveWindowIncrement
+					controller.EnsureMinimumWindowIncrement(2 * max)
+					Expect(controller.receiveWindowIncrement).To(Equal(max))
+				})
 			})
 		})
 	})
