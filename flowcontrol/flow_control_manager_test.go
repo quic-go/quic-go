@@ -26,8 +26,8 @@ var _ = Describe("Flow Control Manager", func() {
 	})
 
 	It("creates a connection level flow controller", func() {
-		Expect(fcm.streamFlowController).To(HaveKey(protocol.StreamID(0)))
-		Expect(fcm.streamFlowController[0].ContributesToConnection()).To(BeFalse())
+		Expect(fcm.streamFlowController).ToNot(HaveKey(protocol.StreamID(0)))
+		Expect(fcm.connFlowController.ContributesToConnection()).To(BeFalse())
 	})
 
 	Context("creating new streams", func() {
@@ -67,7 +67,7 @@ var _ = Describe("Flow Control Manager", func() {
 		It("updates the connection level flow controller if the stream contributes", func() {
 			err := fcm.UpdateHighestReceived(4, 100)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(fcm.streamFlowController[0].highestReceived).To(Equal(protocol.ByteCount(100)))
+			Expect(fcm.connFlowController.highestReceived).To(Equal(protocol.ByteCount(100)))
 			Expect(fcm.streamFlowController[4].highestReceived).To(Equal(protocol.ByteCount(100)))
 		})
 
@@ -76,14 +76,14 @@ var _ = Describe("Flow Control Manager", func() {
 			Expect(err).ToNot(HaveOccurred())
 			err = fcm.UpdateHighestReceived(6, 50)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(fcm.streamFlowController[0].highestReceived).To(Equal(protocol.ByteCount(100 + 50)))
+			Expect(fcm.connFlowController.highestReceived).To(Equal(protocol.ByteCount(100 + 50)))
 		})
 
 		It("does not update the connection level flow controller if the stream does not contribute", func() {
 			err := fcm.UpdateHighestReceived(1, 100)
 			// fcm.streamFlowController[4].receiveWindow = 0x1000
 			Expect(err).ToNot(HaveOccurred())
-			Expect(fcm.streamFlowController[0].highestReceived).To(BeZero())
+			Expect(fcm.connFlowController.highestReceived).To(BeZero())
 			Expect(fcm.streamFlowController[1].highestReceived).To(Equal(protocol.ByteCount(100)))
 		})
 
@@ -195,14 +195,14 @@ var _ = Describe("Flow Control Manager", func() {
 		It("updates the connection level flow controller if the stream contributes", func() {
 			err := fcm.ResetStream(4, 100)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(fcm.streamFlowController[0].highestReceived).To(Equal(protocol.ByteCount(100)))
+			Expect(fcm.connFlowController.highestReceived).To(Equal(protocol.ByteCount(100)))
 			Expect(fcm.streamFlowController[4].highestReceived).To(Equal(protocol.ByteCount(100)))
 		})
 
 		It("does not update the connection level flow controller if the stream does not contribute", func() {
 			err := fcm.ResetStream(1, 100)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(fcm.streamFlowController[0].highestReceived).To(BeZero())
+			Expect(fcm.connFlowController.highestReceived).To(BeZero())
 			Expect(fcm.streamFlowController[1].highestReceived).To(Equal(protocol.ByteCount(100)))
 		})
 
@@ -243,7 +243,7 @@ var _ = Describe("Flow Control Manager", func() {
 			Expect(err).ToNot(HaveOccurred())
 			err = fcm.AddBytesSent(5, 500)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(fcm.streamFlowController[0].bytesSent).To(Equal(protocol.ByteCount(200 + 500)))
+			Expect(fcm.connFlowController.bytesSent).To(Equal(protocol.ByteCount(200 + 500)))
 		})
 
 		It("errors when called for a stream doesn't exist", func() {
