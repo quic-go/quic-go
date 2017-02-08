@@ -66,10 +66,6 @@ func (c *flowController) AddBytesSent(n protocol.ByteCount) {
 	c.bytesSent += n
 }
 
-func (c *flowController) GetBytesSent() protocol.ByteCount {
-	return c.bytesSent
-}
-
 // UpdateSendWindow should be called after receiving a WindowUpdateFrame
 // it returns true if the window was actually updated
 func (c *flowController) UpdateSendWindow(newOffset protocol.ByteCount) bool {

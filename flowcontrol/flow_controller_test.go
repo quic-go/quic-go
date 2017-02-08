@@ -118,11 +118,6 @@ var _ = Describe("Flow controller", func() {
 			Expect(controller.bytesSent).To(Equal(protocol.ByteCount(5 + 6)))
 		})
 
-		It("gets the bytesSent", func() {
-			controller.bytesSent = 8
-			Expect(controller.GetBytesSent()).To(Equal(protocol.ByteCount(8)))
-		})
-
 		It("gets the size of the remaining flow control window", func() {
 			controller.bytesSent = 5
 			controller.sendWindow = 12

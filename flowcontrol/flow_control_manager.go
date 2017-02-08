@@ -91,17 +91,6 @@ func (f *flowControlManager) ResetStream(streamID protocol.StreamID, byteOffset 
 	return nil
 }
 
-func (f *flowControlManager) GetBytesSent(streamID protocol.StreamID) (protocol.ByteCount, error) {
-	f.mutex.Lock()
-	defer f.mutex.Unlock()
-
-	fc, err := f.getFlowController(streamID)
-	if err != nil {
-		return 0, err
-	}
-	return fc.GetBytesSent(), nil
-}
-
 // UpdateHighestReceived updates the highest received byte offset for a stream
 // it adds the number of additional bytes to connection level flow control
 // streamID must not be 0 here
