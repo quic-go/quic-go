@@ -144,7 +144,7 @@ func newClientSession(conn *net.UDPConn, addr *net.UDPAddr, hostname string, v p
 	session.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(session.ackAlarmChanged)
 	session.setup()
 
-	cryptoStream, _ := session.OpenStream(1)
+	cryptoStream, _ := session.OpenStream()
 	var err error
 	session.cryptoSetup, err = handshake.NewCryptoSetupClient(hostname, connectionID, v, cryptoStream, tlsConfig, session.connectionParameters, session.aeadChanged, negotiatedVersions)
 	if err != nil {
@@ -666,9 +666,9 @@ func (s *Session) GetOrOpenStream(id protocol.StreamID) (utils.Stream, error) {
 	return nil, err
 }
 
-// OpenStream opens a stream from the server's side
-func (s *Session) OpenStream(id protocol.StreamID) (utils.Stream, error) {
-	return s.streamsMap.OpenStream(id)
+// OpenStream opens a stream
+func (s *Session) OpenStream() (utils.Stream, error) {
+	return s.streamsMap.OpenStream()
 }
 
 func (s *Session) queueResetStreamFrame(id protocol.StreamID, offset protocol.ByteCount) {

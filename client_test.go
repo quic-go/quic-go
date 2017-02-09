@@ -109,9 +109,9 @@ var _ = Describe("Client", func() {
 	})
 
 	It("opens a stream", func() {
-		stream, err := client.OpenStream(1337)
+		stream, err := client.OpenStream()
 		Expect(err).ToNot(HaveOccurred())
-		Expect(stream.StreamID()).To(Equal(protocol.StreamID(1337)))
+		Expect(stream).ToNot(BeNil())
 	})
 
 	Context("handling packets", func() {

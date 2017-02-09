@@ -18,25 +18,25 @@ import (
 )
 
 type mockQuicClient struct {
-	streams  map[protocol.StreamID]*mockStream
-	closeErr error
+	nextStream protocol.StreamID
+	streams    map[protocol.StreamID]*mockStream
+	closeErr   error
 }
 
 func (m *mockQuicClient) Close(e error) error { m.closeErr = e; return nil }
 func (m *mockQuicClient) Listen() error       { panic("not implemented") }
-func (m *mockQuicClient) OpenStream(id protocol.StreamID) (utils.Stream, error) {
-	_, ok := m.streams[id]
-	if ok {
-		panic("Stream already exists")
-	}
+func (m *mockQuicClient) OpenStream() (utils.Stream, error) {
+	id := m.nextStream
 	ms := &mockStream{id: id}
 	m.streams[id] = ms
+	m.nextStream += 2
 	return ms, nil
 }
 
 func newMockQuicClient() *mockQuicClient {
 	return &mockQuicClient{
-		streams: make(map[protocol.StreamID]*mockStream),
+		streams:    make(map[protocol.StreamID]*mockStream),
+		nextStream: 5,
 	}
 }
 
@@ -77,6 +77,7 @@ var _ = Describe("Client", func() {
 		// delete the headerStream openend in the BeforeEach
 		client.headerStream = nil
 		delete(qClient.streams, 3)
+		qClient.nextStream = 3
 		Expect(client.headerStream).To(BeNil()) // header stream not yet opened
 		// now start the actual test
 		err := client.versionNegotiateCallback()
@@ -133,7 +134,6 @@ var _ = Describe("Client", func() {
 			}()
 
 			Eventually(func() []byte { return headerStream.dataWritten.Bytes() }).ShouldNot(BeEmpty())
-			Expect(client.highestOpenedStream).To(Equal(protocol.StreamID(5)))
 			Expect(qClient.streams).Should(HaveKey(protocol.StreamID(5)))
 			Expect(client.responses).To(HaveKey(protocol.StreamID(5)))
 			rsp := &http.Response{

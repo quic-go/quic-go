@@ -19,7 +19,9 @@ type streamsMap struct {
 	streams     map[protocol.StreamID]*stream
 	openStreams []protocol.StreamID
 
-	highestStreamOpenedByClient          protocol.StreamID
+	nextStream                protocol.StreamID // StreamID of the next Stream that will be returned by OpenStream()
+	highestStreamOpenedByPeer protocol.StreamID
+
 	streamsOpenedAfterLastGarbageCollect int
 
 	newStream newStreamLambda
@@ -40,13 +42,21 @@ var (
 )
 
 func newStreamsMap(newStream newStreamLambda, pers protocol.Perspective, connectionParameters handshake.ConnectionParametersManager) *streamsMap {
-	return &streamsMap{
+	sm := streamsMap{
 		perspective:          pers,
 		streams:              map[protocol.StreamID]*stream{},
 		openStreams:          make([]protocol.StreamID, 0),
 		newStream:            newStream,
 		connectionParameters: connectionParameters,
 	}
+
+	if pers == protocol.PerspectiveClient {
+		sm.nextStream = 1
+	} else {
+		sm.nextStream = 2
+	}
+
+	return &sm
 }
 
 // GetOrOpenStream either returns an existing stream, a newly opened stream, or nil if a stream with the provided ID is already closed.
@@ -76,8 +86,8 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 	if m.perspective == protocol.PerspectiveClient && id%2 == 1 {
 		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d from server-side", id))
 	}
-	if id+protocol.MaxNewStreamIDDelta < m.highestStreamOpenedByClient {
-		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d, which is a lot smaller than the highest opened stream, %d", id, m.highestStreamOpenedByClient))
+	if id+protocol.MaxNewStreamIDDelta < m.highestStreamOpenedByPeer {
+		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d, which is a lot smaller than the highest opened stream, %d", id, m.highestStreamOpenedByPeer))
 	}
 
 	s, err := m.newStream(id)
@@ -91,8 +101,8 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 		m.numOutgoingStreams++
 	}
 
-	if id > m.highestStreamOpenedByClient {
-		m.highestStreamOpenedByClient = id
+	if id > m.highestStreamOpenedByPeer {
+		m.highestStreamOpenedByPeer = id
 	}
 
 	// maybe trigger garbage collection of streams map
@@ -105,21 +115,12 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 	return s, nil
 }
 
-// OpenStream opens a stream from the server's side
-func (m *streamsMap) OpenStream(id protocol.StreamID) (*stream, error) {
-	if m.perspective == protocol.PerspectiveServer && id%2 == 1 {
-		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d from server-side", id))
-	}
-	if m.perspective == protocol.PerspectiveClient && id%2 == 0 {
-		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d from client-side", id))
-	}
-
+// OpenStream opens the next available stream
+func (m *streamsMap) OpenStream() (*stream, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	_, ok := m.streams[id]
-	if ok {
-		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d, which is already open", id))
-	}
+
+	id := m.nextStream
 	if m.numOutgoingStreams >= m.connectionParameters.GetMaxOutgoingStreams() {
 		return nil, qerr.TooManyOpenStreams
 	}
@@ -135,6 +136,7 @@ func (m *streamsMap) OpenStream(id protocol.StreamID) (*stream, error) {
 		m.numIncomingStreams++
 	}
 
+	m.nextStream += 2
 	m.putStream(s)
 	return s, nil
 }
@@ -256,7 +258,7 @@ func (m *streamsMap) garbageCollectClosedStreams() {
 
 		// server-side streams can be gargage collected immediately
 		// client-side streams need to be kept as nils in the streams map for a bit longer, in order to prevent a client from reopening closed streams
-		if id%2 == 0 || id+protocol.MaxNewStreamIDDelta <= m.highestStreamOpenedByClient {
+		if id%2 == 0 || id+protocol.MaxNewStreamIDDelta <= m.highestStreamOpenedByPeer {
 			delete(m.streams, id)
 		}
 	}

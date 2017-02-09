@@ -34,8 +34,8 @@ func (s *mockSession) Close(e error) error {
 	return nil
 }
 
-func (s *mockSession) OpenStream(id protocol.StreamID) (utils.Stream, error) {
-	return &stream{streamID: id}, nil
+func (s *mockSession) OpenStream() (utils.Stream, error) {
+	return &stream{streamID: 1337}, nil
 }
 func newMockSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) (packetHandler, error) {
 	return &mockSession{
