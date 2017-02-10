@@ -17,14 +17,12 @@ type streamsMap struct {
 	connectionParameters handshake.ConnectionParametersManager
 
 	streams map[protocol.StreamID]*stream
-	// TODO: remove this
-	openStreams []protocol.StreamID
+	// needed for round-robin scheduling
+	openStreams     []protocol.StreamID
+	roundRobinIndex uint32
 
 	nextStream                protocol.StreamID // StreamID of the next Stream that will be returned by OpenStream()
 	highestStreamOpenedByPeer protocol.StreamID
-
-	// TODO: remove this
-	streamsOpenedAfterLastGarbageCollect int
 
 	newStream newStreamLambda
 
@@ -32,8 +30,6 @@ type streamsMap struct {
 	numOutgoingStreams uint32
 	maxIncomingStreams uint32
 	numIncomingStreams uint32
-
-	roundRobinIndex uint32
 }
 
 type streamLambda func(*stream) (bool, error)
@@ -96,12 +92,6 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 			break
 		}
 		sid -= 2
-	}
-
-	// maybe trigger garbage collection of streams map
-	m.streamsOpenedAfterLastGarbageCollect++
-	if m.streamsOpenedAfterLastGarbageCollect%protocol.MaxNewStreamIDDelta == 0 {
-		m.garbageCollectClosedStreams()
 	}
 
 	return m.streams[id], nil
@@ -194,7 +184,7 @@ func (m *streamsMap) RoundRobinIterate(fn streamLambda) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	numStreams := uint32(len(m.openStreams))
+	numStreams := uint32(len(m.streams))
 	startIndex := m.roundRobinIndex
 
 	for _, i := range []protocol.StreamID{1, 3} {
@@ -209,7 +199,6 @@ func (m *streamsMap) RoundRobinIterate(fn streamLambda) error {
 
 	for i := uint32(0); i < numStreams; i++ {
 		streamID := m.openStreams[(i+startIndex)%numStreams]
-
 		if streamID == 1 || streamID == 3 {
 			continue
 		}
@@ -231,9 +220,6 @@ func (m *streamsMap) iterateFunc(streamID protocol.StreamID, fn streamLambda) (b
 	if !ok {
 		return true, errMapAccess
 	}
-	if str == nil {
-		return false, fmt.Errorf("BUG: Stream %d is closed, but still in openStreams map", streamID)
-	}
 	return fn(str)
 }
 
@@ -245,7 +231,6 @@ func (m *streamsMap) putStream(s *stream) error {
 
 	m.streams[id] = s
 	m.openStreams = append(m.openStreams, id)
-
 	return nil
 }
 
@@ -256,7 +241,6 @@ func (m *streamsMap) RemoveStream(id protocol.StreamID) error {
 		return fmt.Errorf("attempted to remove non-existing stream: %d", id)
 	}
 
-	m.streams[id] = nil
 	if id%2 == 0 {
 		m.numOutgoingStreams--
 	} else {
@@ -275,22 +259,6 @@ func (m *streamsMap) RemoveStream(id protocol.StreamID) error {
 		}
 	}
 
+	delete(m.streams, id)
 	return nil
-}
-
-// garbageCollectClosedStreams deletes nil values in the streams if they are smaller than protocol.MaxNewStreamIDDelta than the highest stream opened by the client
-// note that this garbage collection is relatively expensive, since it iterates over the whole streams map. It should not be called every time a stream is openend or closed
-func (m *streamsMap) garbageCollectClosedStreams() {
-	for id, str := range m.streams {
-		if str != nil {
-			continue
-		}
-
-		// server-side streams can be gargage collected immediately
-		// client-side streams need to be kept as nils in the streams map for a bit longer, in order to prevent a client from reopening closed streams
-		if id%2 == 0 || id+protocol.MaxNewStreamIDDelta <= m.highestStreamOpenedByPeer {
-			delete(m.streams, id)
-		}
-	}
-	m.streamsOpenedAfterLastGarbageCollect = 0
 }
