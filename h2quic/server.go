@@ -154,6 +154,10 @@ func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream,
 	if err != nil {
 		return err
 	}
+	// this can happen if the client immediately closes the data stream after sending the request and the runtime processes the reset before the request
+	if dataStream == nil {
+		return nil
+	}
 
 	var streamEnded bool
 	if h2headersFrame.StreamEnded() {
