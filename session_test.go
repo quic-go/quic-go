@@ -172,12 +172,12 @@ var _ = Describe("Session", func() {
 				StreamID: 5,
 				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
 			})
-			Expect(session.streamsMap.openStreams).To(HaveLen(2))
 			Expect(streamCallbackCalled).To(BeTrue())
 			p := make([]byte, 4)
-			str, _ := session.streamsMap.GetOrOpenStream(5)
+			str, err := session.streamsMap.GetOrOpenStream(5)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(str).ToNot(BeNil())
-			_, err := str.Read(p)
+			_, err = str.Read(p)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
 		})
@@ -197,14 +197,14 @@ var _ = Describe("Session", func() {
 				StreamID: 5,
 				Data:     []byte{0xde, 0xca},
 			})
-			Expect(session.streamsMap.openStreams).To(HaveLen(2))
+			numOpenStreams := len(session.streamsMap.openStreams)
 			Expect(streamCallbackCalled).To(BeTrue())
 			session.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
 				Offset:   2,
 				Data:     []byte{0xfb, 0xad},
 			})
-			Expect(session.streamsMap.openStreams).To(HaveLen(2))
+			Expect(session.streamsMap.openStreams).To(HaveLen(numOpenStreams))
 			p := make([]byte, 4)
 			str, _ := session.streamsMap.GetOrOpenStream(5)
 			Expect(str).ToNot(BeNil())
@@ -218,8 +218,8 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 			str.Close()
 			session.garbageCollectStreams()
-			Expect(session.streamsMap.openStreams).To(HaveLen(2))
-			str, _ = session.streamsMap.GetOrOpenStream(5)
+			str, err = session.streamsMap.GetOrOpenStream(5)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(str).ToNot(BeNil())
 		})
 
@@ -229,7 +229,7 @@ var _ = Describe("Session", func() {
 				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
 				FinBit:   true,
 			})
-			Expect(session.streamsMap.openStreams).To(HaveLen(2))
+			numOpenStreams := len(session.streamsMap.openStreams)
 			str, _ := session.streamsMap.GetOrOpenStream(5)
 			Expect(str).ToNot(BeNil())
 			Expect(streamCallbackCalled).To(BeTrue())
@@ -238,7 +238,7 @@ var _ = Describe("Session", func() {
 			Expect(err).To(MatchError(io.EOF))
 			Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
 			session.garbageCollectStreams()
-			Expect(session.streamsMap.openStreams).To(HaveLen(2))
+			Expect(session.streamsMap.openStreams).To(HaveLen(numOpenStreams))
 			str, _ = session.streamsMap.GetOrOpenStream(5)
 			Expect(str).ToNot(BeNil())
 		})
@@ -249,7 +249,7 @@ var _ = Describe("Session", func() {
 				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
 				FinBit:   true,
 			})
-			Expect(session.streamsMap.openStreams).To(HaveLen(2))
+			numOpenStreams := len(session.streamsMap.openStreams)
 			str, _ := session.streamsMap.GetOrOpenStream(5)
 			Expect(str).ToNot(BeNil())
 			Expect(streamCallbackCalled).To(BeTrue())
@@ -258,7 +258,7 @@ var _ = Describe("Session", func() {
 			Expect(err).To(MatchError(io.EOF))
 			Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
 			session.garbageCollectStreams()
-			Expect(session.streamsMap.openStreams).To(HaveLen(2))
+			Expect(session.streamsMap.openStreams).To(HaveLen(numOpenStreams))
 			str, _ = session.streamsMap.GetOrOpenStream(5)
 			Expect(str).ToNot(BeNil())
 			// We still need to close the stream locally
@@ -266,7 +266,7 @@ var _ = Describe("Session", func() {
 			// ... and simulate that we actually the FIN
 			str.sentFin()
 			session.garbageCollectStreams()
-			Expect(session.streamsMap.openStreams).To(HaveLen(1))
+			Expect(len(session.streamsMap.openStreams)).To(BeNumerically("<", numOpenStreams))
 			str, err = session.streamsMap.GetOrOpenStream(5)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(str).To(BeNil())
@@ -276,23 +276,23 @@ var _ = Describe("Session", func() {
 		})
 
 		It("cancels streams with error", func() {
+			session.garbageCollectStreams()
 			testErr := errors.New("test")
 			session.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
 				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
 			})
-			Expect(session.streamsMap.openStreams).To(HaveLen(2))
-			str, _ := session.streamsMap.GetOrOpenStream(5)
+			str, err := session.streamsMap.GetOrOpenStream(5)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(str).ToNot(BeNil())
 			Expect(streamCallbackCalled).To(BeTrue())
 			p := make([]byte, 4)
-			_, err := str.Read(p)
+			_, err = str.Read(p)
 			Expect(err).ToNot(HaveOccurred())
 			session.closeStreamsWithError(testErr)
 			_, err = str.Read(p)
 			Expect(err).To(MatchError(testErr))
 			session.garbageCollectStreams()
-			Expect(session.streamsMap.openStreams).To(BeEmpty())
 			str, err = session.streamsMap.GetOrOpenStream(5)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(str).To(BeNil())
@@ -301,11 +301,11 @@ var _ = Describe("Session", func() {
 		It("cancels empty streams with error", func() {
 			testErr := errors.New("test")
 			session.GetOrOpenStream(5)
-			Expect(session.streamsMap.openStreams).To(HaveLen(2))
-			str, _ := session.streamsMap.GetOrOpenStream(5)
+			str, err := session.streamsMap.GetOrOpenStream(5)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(str).ToNot(BeNil())
 			session.closeStreamsWithError(testErr)
-			_, err := str.Read([]byte{0})
+			_, err = str.Read([]byte{0})
 			Expect(err).To(MatchError(testErr))
 			session.garbageCollectStreams()
 			str, err = session.streamsMap.GetOrOpenStream(5)
@@ -1180,7 +1180,7 @@ var _ = Describe("Session", func() {
 
 	Context("counting streams", func() {
 		It("errors when too many streams are opened", func() {
-			for i := 2; i <= 110; i++ {
+			for i := 0; i < 110; i++ {
 				_, err := session.GetOrOpenStream(protocol.StreamID(i*2 + 1))
 				Expect(err).NotTo(HaveOccurred())
 			}

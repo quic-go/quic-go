@@ -16,12 +16,14 @@ type streamsMap struct {
 	perspective          protocol.Perspective
 	connectionParameters handshake.ConnectionParametersManager
 
-	streams     map[protocol.StreamID]*stream
+	streams map[protocol.StreamID]*stream
+	// TODO: remove this
 	openStreams []protocol.StreamID
 
 	nextStream                protocol.StreamID // StreamID of the next Stream that will be returned by OpenStream()
 	highestStreamOpenedByPeer protocol.StreamID
 
+	// TODO: remove this
 	streamsOpenedAfterLastGarbageCollect int
 
 	newStream newStreamLambda
@@ -69,7 +71,7 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 		return s, nil // s may be nil
 	}
 
-	// ... we don't have an existing stream, try opening a new one
+	// ... we don't have an existing stream
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	// We need to check whether another invocation has already created a stream (between RUnlock() and Lock()).
@@ -77,6 +79,35 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 	if ok {
 		return s, nil
 	}
+
+	if id <= m.highestStreamOpenedByPeer {
+		return nil, nil
+	}
+
+	highestOpened := m.highestStreamOpenedByPeer
+	sid := id
+	// sid is always odd
+	for sid > highestOpened {
+		_, err := m.openRemoteStream(sid)
+		if err != nil {
+			return nil, err
+		}
+		if sid == 1 {
+			break
+		}
+		sid -= 2
+	}
+
+	// maybe trigger garbage collection of streams map
+	m.streamsOpenedAfterLastGarbageCollect++
+	if m.streamsOpenedAfterLastGarbageCollect%protocol.MaxNewStreamIDDelta == 0 {
+		m.garbageCollectClosedStreams()
+	}
+
+	return m.streams[id], nil
+}
+
+func (m *streamsMap) openRemoteStream(id protocol.StreamID) (*stream, error) {
 	if m.numIncomingStreams >= m.connectionParameters.GetMaxIncomingStreams() {
 		return nil, qerr.TooManyOpenStreams
 	}
@@ -103,12 +134,6 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 
 	if id > m.highestStreamOpenedByPeer {
 		m.highestStreamOpenedByPeer = id
-	}
-
-	// maybe trigger garbage collection of streams map
-	m.streamsOpenedAfterLastGarbageCollect++
-	if m.streamsOpenedAfterLastGarbageCollect%protocol.MaxNewStreamIDDelta == 0 {
-		m.garbageCollectClosedStreams()
 	}
 
 	m.putStream(s)
@@ -145,7 +170,12 @@ func (m *streamsMap) Iterate(fn streamLambda) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	for _, streamID := range m.openStreams {
+	openStreams := make([]protocol.StreamID, len(m.openStreams), len(m.openStreams))
+	for i, streamID := range m.openStreams { // copy openStreams
+		openStreams[i] = streamID
+	}
+
+	for _, streamID := range openStreams {
 		cont, err := m.iterateFunc(streamID, fn)
 		if err != nil {
 			return err

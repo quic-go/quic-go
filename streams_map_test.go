@@ -79,9 +79,9 @@ var _ = Describe("Streams Map", func() {
 
 			Context("client-side streams", func() {
 				It("gets new streams", func() {
-					s, err := m.GetOrOpenStream(5)
+					s, err := m.GetOrOpenStream(1)
 					Expect(err).NotTo(HaveOccurred())
-					Expect(s.StreamID()).To(Equal(protocol.StreamID(5)))
+					Expect(s.StreamID()).To(Equal(protocol.StreamID(1)))
 					Expect(m.numIncomingStreams).To(BeEquivalentTo(1))
 					Expect(m.numOutgoingStreams).To(BeZero())
 				})
@@ -94,10 +94,11 @@ var _ = Describe("Streams Map", func() {
 				It("gets existing streams", func() {
 					s, err := m.GetOrOpenStream(5)
 					Expect(err).NotTo(HaveOccurred())
+					numStreams := m.numIncomingStreams
 					s, err = m.GetOrOpenStream(5)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(s.StreamID()).To(Equal(protocol.StreamID(5)))
-					Expect(m.numIncomingStreams).To(BeEquivalentTo(1))
+					Expect(m.numIncomingStreams).To(Equal(numStreams))
 				})
 
 				It("returns nil for closed streams", func() {
@@ -108,7 +109,24 @@ var _ = Describe("Streams Map", func() {
 					s, err = m.GetOrOpenStream(5)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(s).To(BeNil())
-					Expect(m.numIncomingStreams).To(BeZero())
+				})
+
+				It("opens skipped streams", func() {
+					_, err := m.GetOrOpenStream(5)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(m.streams).To(HaveKey(protocol.StreamID(1)))
+					Expect(m.streams).To(HaveKey(protocol.StreamID(3)))
+					Expect(m.streams).To(HaveKey(protocol.StreamID(5)))
+				})
+
+				It("doesn't reopen an already closed stream", func() {
+					_, err := m.GetOrOpenStream(5)
+					Expect(err).ToNot(HaveOccurred())
+					err = m.RemoveStream(5)
+					Expect(err).ToNot(HaveOccurred())
+					str, err := m.GetOrOpenStream(5)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(str).To(BeNil())
 				})
 
 				Context("counting streams", func() {
@@ -124,6 +142,11 @@ var _ = Describe("Streams Map", func() {
 							Expect(err).NotTo(HaveOccurred())
 						}
 						_, err := m.GetOrOpenStream(protocol.StreamID(2*maxNumStreams + 2))
+						Expect(err).To(MatchError(qerr.TooManyOpenStreams))
+					})
+
+					It("errors when too many streams are opened implicitely", func() {
+						_, err := m.GetOrOpenStream(protocol.StreamID(maxNumStreams*2 + 1))
 						Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 					})
 
@@ -197,11 +220,19 @@ var _ = Describe("Streams Map", func() {
 				})
 
 				It("gets new streams", func() {
-					s, err := m.GetOrOpenStream(6)
+					s, err := m.GetOrOpenStream(2)
 					Expect(err).NotTo(HaveOccurred())
-					Expect(s.StreamID()).To(Equal(protocol.StreamID(6)))
+					Expect(s.StreamID()).To(Equal(protocol.StreamID(2)))
 					Expect(m.numOutgoingStreams).To(BeEquivalentTo(1))
 					Expect(m.numIncomingStreams).To(BeZero())
+				})
+
+				It("opens skipped streams", func() {
+					_, err := m.GetOrOpenStream(6)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(m.streams).To(HaveKey(protocol.StreamID(2)))
+					Expect(m.streams).To(HaveKey(protocol.StreamID(4)))
+					Expect(m.streams).To(HaveKey(protocol.StreamID(6)))
 				})
 			})
 
@@ -231,6 +262,7 @@ var _ = Describe("Streams Map", func() {
 			setNewStreamsMap(protocol.PerspectiveServer)
 		})
 
+		// TODO: remove when removing the openStreams slice
 		Context("DoS mitigation", func() {
 			It("opens and closes a lot of streams", func() {
 				for i := 1; i < 2*protocol.MaxNewStreamIDDelta; i += 2 {
@@ -243,7 +275,7 @@ var _ = Describe("Streams Map", func() {
 				}
 			})
 
-			It("prevents opening of streams with very low StreamIDs, if higher streams have already been opened", func() {
+			PIt("prevents opening of streams with very low StreamIDs, if higher streams have already been opened", func() {
 				for i := 1; i < protocol.MaxNewStreamIDDelta+14; i += 2 {
 					if i == 11 || i == 13 {
 						continue
