@@ -8,6 +8,7 @@ import (
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
+	"github.com/lucas-clemente/quic-go/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -210,6 +211,114 @@ var _ = Describe("Streams Map", func() {
 					})
 				})
 			})
+
+			Context("accepting streams", func() {
+				It("does nothing if no stream is opened", func() {
+					var accepted bool
+					go func() {
+						_, _ = m.AcceptStream()
+						accepted = true
+					}()
+					Consistently(func() bool { return accepted }).Should(BeFalse())
+				})
+
+				It("accepts stream 1 first", func() {
+					var str utils.Stream
+					go func() {
+						defer GinkgoRecover()
+						var err error
+						str, err = m.AcceptStream()
+						Expect(err).ToNot(HaveOccurred())
+					}()
+					_, err := m.GetOrOpenStream(1)
+					Expect(err).ToNot(HaveOccurred())
+					Eventually(func() utils.Stream { return str }).ShouldNot(BeNil())
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
+				})
+
+				It("returns an implicitly opened stream, if a stream number is skipped", func() {
+					var str utils.Stream
+					go func() {
+						defer GinkgoRecover()
+						var err error
+						str, err = m.AcceptStream()
+						Expect(err).ToNot(HaveOccurred())
+					}()
+					_, err := m.GetOrOpenStream(5)
+					Expect(err).ToNot(HaveOccurred())
+					Eventually(func() utils.Stream { return str }).ShouldNot(BeNil())
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
+				})
+
+				It("returns to multiple accepts", func() {
+					var str1, str2 utils.Stream
+					go func() {
+						defer GinkgoRecover()
+						var err error
+						str1, err = m.AcceptStream()
+						Expect(err).ToNot(HaveOccurred())
+					}()
+					go func() {
+						defer GinkgoRecover()
+						var err error
+						str2, err = m.AcceptStream()
+						Expect(err).ToNot(HaveOccurred())
+					}()
+					_, err := m.GetOrOpenStream(3) // opens stream 1 and 3
+					Expect(err).ToNot(HaveOccurred())
+					Eventually(func() utils.Stream { return str1 }).ShouldNot(BeNil())
+					Eventually(func() utils.Stream { return str2 }).ShouldNot(BeNil())
+					Expect(str1.StreamID()).ToNot(Equal(str2.StreamID()))
+					Expect(str1.StreamID() + str2.StreamID()).To(BeEquivalentTo(1 + 3))
+				})
+
+				It("waits a new stream is available", func() {
+					var str utils.Stream
+					go func() {
+						defer GinkgoRecover()
+						var err error
+						str, err = m.AcceptStream()
+						Expect(err).ToNot(HaveOccurred())
+					}()
+					Consistently(func() utils.Stream { return str }).Should(BeNil())
+					_, err := m.GetOrOpenStream(1)
+					Expect(err).ToNot(HaveOccurred())
+					Eventually(func() utils.Stream { return str }).ShouldNot(BeNil())
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
+				})
+
+				It("returns multiple streams on subsequent Accept calls, if available", func() {
+					var str utils.Stream
+					go func() {
+						defer GinkgoRecover()
+						var err error
+						str, err = m.AcceptStream()
+						Expect(err).ToNot(HaveOccurred())
+					}()
+					_, err := m.GetOrOpenStream(3)
+					Expect(err).ToNot(HaveOccurred())
+					Eventually(func() utils.Stream { return str }).ShouldNot(BeNil())
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
+					str, err = m.AcceptStream()
+					Expect(err).ToNot(HaveOccurred())
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
+				})
+
+				It("blocks after accepting a stream", func() {
+					var accepted bool
+					_, err := m.GetOrOpenStream(1)
+					Expect(err).ToNot(HaveOccurred())
+					str, err := m.AcceptStream()
+					Expect(err).ToNot(HaveOccurred())
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
+					go func() {
+						defer GinkgoRecover()
+						_, _ = m.AcceptStream()
+						accepted = true
+					}()
+					Consistently(func() bool { return accepted }).Should(BeFalse())
+				})
+			})
 		})
 
 		Context("as a client", func() {
@@ -256,6 +365,22 @@ var _ = Describe("Streams Map", func() {
 					s2, err := m.OpenStream()
 					Expect(err).ToNot(HaveOccurred())
 					Expect(s2.StreamID()).To(Equal(s1.StreamID() + 2))
+				})
+			})
+
+			Context("accepting streams", func() {
+				It("accepts stream 2 first", func() {
+					var str utils.Stream
+					go func() {
+						defer GinkgoRecover()
+						var err error
+						str, err = m.AcceptStream()
+						Expect(err).ToNot(HaveOccurred())
+					}()
+					_, err := m.GetOrOpenStream(2)
+					Expect(err).ToNot(HaveOccurred())
+					Eventually(func() utils.Stream { return str }).ShouldNot(BeNil())
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(2)))
 				})
 			})
 		})

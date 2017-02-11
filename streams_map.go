@@ -8,6 +8,7 @@ import (
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
+	"github.com/lucas-clemente/quic-go/utils"
 )
 
 type streamsMap struct {
@@ -23,6 +24,8 @@ type streamsMap struct {
 
 	nextStream                protocol.StreamID // StreamID of the next Stream that will be returned by OpenStream()
 	highestStreamOpenedByPeer protocol.StreamID
+	nextStreamCond            sync.Cond
+	nextStreamToAccept        protocol.StreamID
 
 	newStream newStreamLambda
 
@@ -47,11 +50,14 @@ func newStreamsMap(newStream newStreamLambda, pers protocol.Perspective, connect
 		newStream:            newStream,
 		connectionParameters: connectionParameters,
 	}
+	sm.nextStreamCond.L = &sm.mutex
 
 	if pers == protocol.PerspectiveClient {
 		sm.nextStream = 1
+		sm.nextStreamToAccept = 2
 	} else {
 		sm.nextStream = 2
+		sm.nextStreamToAccept = 1
 	}
 
 	return &sm
@@ -94,6 +100,7 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 		sid -= 2
 	}
 
+	m.nextStreamCond.Broadcast()
 	return m.streams[id], nil
 }
 
@@ -154,6 +161,25 @@ func (m *streamsMap) OpenStream() (*stream, error) {
 	m.nextStream += 2
 	m.putStream(s)
 	return s, nil
+}
+
+// AcceptStream returns the next stream opened by the peer
+// it blocks until a new stream is opened
+// TODO: implement error conditions
+func (m *streamsMap) AcceptStream() (utils.Stream, error) {
+	m.mutex.Lock()
+	var str utils.Stream
+	for {
+		var ok bool
+		str, ok = m.streams[m.nextStreamToAccept]
+		if ok {
+			break
+		}
+		m.nextStreamCond.Wait()
+	}
+	m.nextStreamToAccept += 2
+	m.mutex.Unlock()
+	return str, nil
 }
 
 func (m *streamsMap) Iterate(fn streamLambda) error {
