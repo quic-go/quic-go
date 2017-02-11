@@ -318,6 +318,24 @@ var _ = Describe("Streams Map", func() {
 					}()
 					Consistently(func() bool { return accepted }).Should(BeFalse())
 				})
+
+				It("stops waiting when an error is registered", func() {
+					testErr := errors.New("testErr")
+					var acceptErr error
+					go func() {
+						_, acceptErr = m.AcceptStream()
+					}()
+					Consistently(func() error { return acceptErr }).ShouldNot(HaveOccurred())
+					m.CloseWithError(testErr)
+					Eventually(func() error { return acceptErr }).Should(MatchError(testErr))
+				})
+
+				It("immediately returns when Accept is called after an error was registered", func() {
+					testErr := errors.New("testErr")
+					m.CloseWithError(testErr)
+					_, err := m.AcceptStream()
+					Expect(err).To(MatchError(testErr))
+				})
 			})
 		})
 

@@ -24,7 +24,8 @@ type streamsMap struct {
 
 	nextStream                protocol.StreamID // StreamID of the next Stream that will be returned by OpenStream()
 	highestStreamOpenedByPeer protocol.StreamID
-	nextStreamCond            sync.Cond
+	nextStreamOrErrCond       sync.Cond
+	closeErr                  error
 	nextStreamToAccept        protocol.StreamID
 
 	newStream newStreamLambda
@@ -50,7 +51,7 @@ func newStreamsMap(newStream newStreamLambda, pers protocol.Perspective, connect
 		newStream:            newStream,
 		connectionParameters: connectionParameters,
 	}
-	sm.nextStreamCond.L = &sm.mutex
+	sm.nextStreamOrErrCond.L = &sm.mutex
 
 	if pers == protocol.PerspectiveClient {
 		sm.nextStream = 1
@@ -100,7 +101,7 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 		sid -= 2
 	}
 
-	m.nextStreamCond.Broadcast()
+	m.nextStreamOrErrCond.Broadcast()
 	return m.streams[id], nil
 }
 
@@ -165,20 +166,22 @@ func (m *streamsMap) OpenStream() (*stream, error) {
 
 // AcceptStream returns the next stream opened by the peer
 // it blocks until a new stream is opened
-// TODO: implement error conditions
 func (m *streamsMap) AcceptStream() (utils.Stream, error) {
 	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	var str utils.Stream
 	for {
 		var ok bool
+		if m.closeErr != nil {
+			return nil, m.closeErr
+		}
 		str, ok = m.streams[m.nextStreamToAccept]
 		if ok {
 			break
 		}
-		m.nextStreamCond.Wait()
+		m.nextStreamOrErrCond.Wait()
 	}
 	m.nextStreamToAccept += 2
-	m.mutex.Unlock()
 	return str, nil
 }
 
@@ -287,4 +290,11 @@ func (m *streamsMap) RemoveStream(id protocol.StreamID) error {
 
 	delete(m.streams, id)
 	return nil
+}
+
+func (m *streamsMap) CloseWithError(err error) {
+	m.mutex.Lock()
+	m.closeErr = err
+	m.nextStreamOrErrCond.Broadcast()
+	m.mutex.Unlock()
 }
