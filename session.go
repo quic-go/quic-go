@@ -490,6 +490,7 @@ func (s *Session) closeImpl(e error, remoteClose bool) error {
 	}
 
 	if e == errCloseSessionForNewVersion {
+		s.streamsMap.CloseWithError(e)
 		s.closeStreamsWithError(e)
 		// when the run loop exits, it will call the closeCallback
 		// replace it with an noop function to make sure this doesn't have any effect
@@ -511,6 +512,7 @@ func (s *Session) closeImpl(e error, remoteClose bool) error {
 		utils.Errorf("Closing session with error: %s", e.Error())
 	}
 
+	s.streamsMap.CloseWithError(quicErr)
 	s.closeStreamsWithError(quicErr)
 
 	if remoteClose {
@@ -664,6 +666,11 @@ func (s *Session) GetOrOpenStream(id protocol.StreamID) (utils.Stream, error) {
 	}
 	// make sure to return an actual nil value here, not an utils.Stream with value nil
 	return nil, err
+}
+
+// AcceptStream returns the next stream openend by the peer
+func (s *Session) AcceptStream() (utils.Stream, error) {
+	return s.streamsMap.AcceptStream()
 }
 
 // OpenStream opens a stream

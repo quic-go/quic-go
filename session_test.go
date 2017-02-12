@@ -549,6 +549,59 @@ var _ = Describe("Session", func() {
 		Expect(err).To(MatchError(qerr.Error(42, "foobar")))
 	})
 
+	Context("accepting streams", func() {
+		It("waits for new streams", func() {
+			// stream 1 was already opened
+			str, err := session.AcceptStream()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
+			str = nil
+
+			go func() {
+				defer GinkgoRecover()
+				var err error
+				str, err = session.AcceptStream()
+				Expect(err).ToNot(HaveOccurred())
+			}()
+			Consistently(func() utils.Stream { return str }).Should(BeNil())
+			session.handleStreamFrame(&frames.StreamFrame{
+				StreamID: 3,
+			})
+			Eventually(func() utils.Stream { return str }).ShouldNot(BeNil())
+			Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
+		})
+
+		It("stops accepting when the session is closed", func() {
+			session.AcceptStream() // accept stream 1
+
+			testErr := errors.New("testErr")
+			var err error
+			go func() {
+				_, err = session.AcceptStream()
+			}()
+			go session.run()
+			Consistently(func() error { return err }).ShouldNot(HaveOccurred())
+			session.Close(testErr)
+			Eventually(func() error { return err }).Should(HaveOccurred())
+			Expect(err).To(MatchError(qerr.ToQuicError(testErr)))
+		})
+
+		It("stops accepting when the session is closed after version negotiation", func() {
+			session.AcceptStream() // accept stream 1
+
+			testErr := errCloseSessionForNewVersion
+			var err error
+			go func() {
+				_, err = session.AcceptStream()
+			}()
+			go session.run()
+			Consistently(func() error { return err }).ShouldNot(HaveOccurred())
+			session.Close(testErr)
+			Eventually(func() error { return err }).Should(HaveOccurred())
+			Expect(err).To(MatchError(testErr))
+		})
+	})
+
 	Context("closing", func() {
 		var (
 			nGoRoutinesBefore int
