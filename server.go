@@ -127,6 +127,11 @@ func (s *Server) Close() error {
 	return conn.Close()
 }
 
+// Addr returns the server's network address
+func (s *Server) Addr() net.Addr {
+	return s.addr
+}
+
 func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet []byte) error {
 	if protocol.ByteCount(len(packet)) > protocol.MaxPacketSize {
 		return qerr.PacketTooLarge

@@ -61,6 +61,14 @@ var _ = Describe("Server", func() {
 			firstPacket = append(append(firstPacket, b.Bytes()...), 0x01)
 		})
 
+		It("returns the address", func() {
+			server.addr = &net.UDPAddr{
+				IP:   net.IPv4(192, 168, 13, 37),
+				Port: 1234,
+			}
+			Expect(server.Addr().String()).To(Equal("192.168.13.37:1234"))
+		})
+
 		It("composes version negotiation packets", func() {
 			expected := append(
 				[]byte{0x01 | 0x08, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
