@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"io"
-	"net"
 	"sync"
 
 	"github.com/lucas-clemente/quic-go/crypto"
@@ -23,7 +22,7 @@ type KeyExchangeFunction func() crypto.KeyExchange
 // The CryptoSetupServer handles all things crypto for the Session
 type cryptoSetupServer struct {
 	connID               protocol.ConnectionID
-	ip                   net.IP
+	sourceAddr           []byte
 	version              protocol.VersionNumber
 	scfg                 *ServerConfig
 	diversificationNonce []byte
@@ -49,7 +48,7 @@ var _ crypto.AEAD = &cryptoSetupServer{}
 // NewCryptoSetup creates a new CryptoSetup instance for a server
 func NewCryptoSetup(
 	connID protocol.ConnectionID,
-	ip net.IP,
+	sourceAddr []byte,
 	version protocol.VersionNumber,
 	scfg *ServerConfig,
 	cryptoStream utils.Stream,
@@ -58,7 +57,7 @@ func NewCryptoSetup(
 ) (CryptoSetup, error) {
 	return &cryptoSetupServer{
 		connID:               connID,
-		ip:                   ip,
+		sourceAddr:           sourceAddr,
 		version:              version,
 		scfg:                 scfg,
 		keyDerivation:        crypto.DeriveKeysAESGCM,
@@ -207,7 +206,7 @@ func (h *cryptoSetupServer) isInchoateCHLO(cryptoData map[Tag][]byte, cert []byt
 	if crypto.HashCert(cert) != xlct {
 		return true
 	}
-	if err := h.scfg.stkSource.VerifyToken(h.ip, cryptoData[TagSTK]); err != nil {
+	if err := h.scfg.stkSource.VerifyToken(h.sourceAddr, cryptoData[TagSTK]); err != nil {
 		utils.Infof("STK invalid: %s", err.Error())
 		return true
 	}
@@ -219,7 +218,7 @@ func (h *cryptoSetupServer) handleInchoateCHLO(sni string, chlo []byte, cryptoDa
 		return nil, qerr.Error(qerr.CryptoInvalidValueLength, "CHLO too small")
 	}
 
-	token, err := h.scfg.stkSource.NewToken(h.ip)
+	token, err := h.scfg.stkSource.NewToken(h.sourceAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +229,7 @@ func (h *cryptoSetupServer) handleInchoateCHLO(sni string, chlo []byte, cryptoDa
 		TagSVID: []byte("quic-go"),
 	}
 
-	if h.scfg.stkSource.VerifyToken(h.ip, cryptoData[TagSTK]) == nil {
+	if h.scfg.stkSource.VerifyToken(h.sourceAddr, cryptoData[TagSTK]) == nil {
 		proof, err := h.scfg.Sign(sni, chlo)
 		if err != nil {
 			return nil, err

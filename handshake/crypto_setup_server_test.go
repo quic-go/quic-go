@@ -115,11 +115,11 @@ func (s mockStream) StreamID() protocol.StreamID         { panic("not implemente
 
 type mockStkSource struct{}
 
-func (mockStkSource) NewToken(ip net.IP) ([]byte, error) {
-	return append([]byte("token "), ip...), nil
+func (mockStkSource) NewToken(sourceAddr []byte) ([]byte, error) {
+	return append([]byte("token "), sourceAddr...), nil
 }
 
-func (mockStkSource) VerifyToken(ip net.IP, token []byte) error {
+func (mockStkSource) VerifyToken(sourceAddr []byte, token []byte) error {
 	split := bytes.Split(token, []byte(" "))
 	if len(split) != 2 {
 		return errors.New("stk required")
@@ -127,7 +127,7 @@ func (mockStkSource) VerifyToken(ip net.IP, token []byte) error {
 	if !bytes.Equal(split[0], []byte("token")) {
 		return errors.New("no prefix match")
 	}
-	if !bytes.Equal(split[1], ip) {
+	if !bytes.Equal(split[1], sourceAddr) {
 		return errors.New("ip wrong")
 	}
 	return nil
@@ -144,7 +144,7 @@ var _ = Describe("Crypto setup", func() {
 		aeadChanged chan struct{}
 		nonce32     []byte
 		versionTag  []byte
-		ip          net.IP
+		sourceAddr  []byte
 		validSTK    []byte
 		aead        []byte
 		kexs        []byte
@@ -152,8 +152,8 @@ var _ = Describe("Crypto setup", func() {
 
 	BeforeEach(func() {
 		var err error
-		ip = net.ParseIP("1.2.3.4")
-		validSTK, err = mockStkSource{}.NewToken(ip)
+		sourceAddr = net.ParseIP("1.2.3.4")
+		validSTK, err = mockStkSource{}.NewToken(sourceAddr)
 		Expect(err).NotTo(HaveOccurred())
 		expectedInitialNonceLen = 32
 		expectedFSNonceLen = 64
@@ -172,7 +172,7 @@ var _ = Describe("Crypto setup", func() {
 		scfg.stkSource = &mockStkSource{}
 		v := protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
 		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.VersionWhatever)
-		csInt, err := NewCryptoSetup(protocol.ConnectionID(42), ip, v, scfg, stream, cpm, aeadChanged)
+		csInt, err := NewCryptoSetup(protocol.ConnectionID(42), sourceAddr, v, scfg, stream, cpm, aeadChanged)
 		Expect(err).NotTo(HaveOccurred())
 		cs = csInt.(*cryptoSetupServer)
 		cs.keyDerivation = mockKeyDerivation
