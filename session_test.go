@@ -1155,6 +1155,29 @@ var _ = Describe("Session", func() {
 		Expect(conn.written[0]).To(ContainSubstring("foobar"))
 	})
 
+	Context("getting streams", func() {
+		It("returns a new stream", func() {
+			str, err := session.GetOrOpenStream(11)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(str).ToNot(BeNil())
+			Expect(str.StreamID()).To(Equal(protocol.StreamID(11)))
+		})
+
+		It("returns a nil-value (not an interface with value nil) for closed streams", func() {
+			_, err := session.GetOrOpenStream(9)
+			Expect(err).ToNot(HaveOccurred())
+			session.streamsMap.RemoveStream(9)
+			session.garbageCollectStreams()
+			Expect(session.streamsMap.GetOrOpenStream(9)).To(BeNil())
+			str, err := session.GetOrOpenStream(9)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(str).To(BeNil())
+			// make sure that the returned value is a plain nil, not an utils.Stream with value nil
+			_, ok := str.(utils.Stream)
+			Expect(ok).To(BeFalse())
+		})
+	})
+
 	Context("counting streams", func() {
 		It("errors when too many streams are opened", func() {
 			for i := 2; i <= 110; i++ {

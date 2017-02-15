@@ -658,7 +658,12 @@ func (s *Session) logPacket(packet *packedPacket) {
 // GetOrOpenStream either returns an existing stream, a newly opened stream, or nil if a stream with the provided ID is already closed.
 // Newly opened streams should only originate from the client. To open a stream from the server, OpenStream should be used.
 func (s *Session) GetOrOpenStream(id protocol.StreamID) (utils.Stream, error) {
-	return s.streamsMap.GetOrOpenStream(id)
+	str, err := s.streamsMap.GetOrOpenStream(id)
+	if str != nil {
+		return str, err
+	}
+	// make sure to return an actual nil value here, not an utils.Stream with value nil
+	return nil, err
 }
 
 // OpenStream opens a stream from the server's side
