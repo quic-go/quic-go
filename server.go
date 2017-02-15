@@ -132,7 +132,7 @@ func (s *Server) Addr() net.Addr {
 	return s.addr
 }
 
-func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet []byte) error {
+func (s *Server) handlePacket(pconn net.PacketConn, remoteAddr *net.UDPAddr, packet []byte) error {
 	if protocol.ByteCount(len(packet)) > protocol.MaxPacketSize {
 		return qerr.PacketTooLarge
 	}
@@ -177,13 +177,13 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 	// Send Version Negotiation Packet if the client is speaking a different protocol version
 	if hdr.VersionFlag && !protocol.IsSupportedVersion(hdr.VersionNumber) {
 		utils.Infof("Client offered version %d, sending VersionNegotiationPacket", hdr.VersionNumber)
-		_, err = conn.WriteToUDP(composeVersionNegotiation(hdr.ConnectionID), remoteAddr)
+		_, err = pconn.WriteTo(composeVersionNegotiation(hdr.ConnectionID), remoteAddr)
 		return err
 	}
 
 	if !ok {
 		if !hdr.VersionFlag {
-			_, err = conn.WriteToUDP(writePublicReset(hdr.ConnectionID, hdr.PacketNumber, 0), remoteAddr)
+			_, err = pconn.WriteTo(writePublicReset(hdr.ConnectionID, hdr.PacketNumber, 0), remoteAddr)
 			return err
 		}
 		version := hdr.VersionNumber
@@ -193,7 +193,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 
 		utils.Infof("Serving new connection: %x, version %d from %v", hdr.ConnectionID, version, remoteAddr)
 		session, err = s.newSession(
-			&udpConn{conn: conn, currentAddr: remoteAddr},
+			&conn{pconn: pconn, currentAddr: remoteAddr},
 			version,
 			hdr.ConnectionID,
 			s.scfg,

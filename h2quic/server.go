@@ -22,7 +22,7 @@ import (
 type streamCreator interface {
 	GetOrOpenStream(protocol.StreamID) (utils.Stream, error)
 	Close(error) error
-	RemoteAddr() *net.UDPAddr
+	RemoteAddr() net.Addr
 }
 
 // Server is a HTTP2 server listening for QUIC connections.

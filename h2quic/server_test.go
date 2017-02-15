@@ -36,7 +36,7 @@ func (s *mockSession) Close(e error) error {
 	s.closedWithError = e
 	return nil
 }
-func (s *mockSession) RemoteAddr() *net.UDPAddr {
+func (s *mockSession) RemoteAddr() net.Addr {
 	return &net.UDPAddr{IP: []byte{127, 0, 0, 1}, Port: 42}
 }
 

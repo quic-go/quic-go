@@ -23,7 +23,7 @@ type unpacker interface {
 }
 
 type receivedPacket struct {
-	remoteAddr   interface{}
+	remoteAddr   net.Addr
 	publicHeader *PublicHeader
 	data         []byte
 	rcvTime      time.Time
@@ -116,8 +116,14 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 
 	session.setup()
 	cryptoStream, _ := session.GetOrOpenStream(1)
+	var sourceAddr []byte
+	if udpAddr, ok := conn.RemoteAddr().(*net.UDPAddr); ok {
+		sourceAddr = udpAddr.IP
+	} else {
+		sourceAddr = []byte(conn.RemoteAddr().String())
+	}
 	var err error
-	session.cryptoSetup, err = handshake.NewCryptoSetup(connectionID, conn.RemoteAddr().IP, v, sCfg, cryptoStream, session.connectionParameters, session.aeadChanged)
+	session.cryptoSetup, err = handshake.NewCryptoSetup(connectionID, sourceAddr, v, sCfg, cryptoStream, session.connectionParameters, session.aeadChanged)
 	if err != nil {
 		return nil, err
 	}
@@ -128,9 +134,9 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	return session, err
 }
 
-func newClientSession(conn *net.UDPConn, addr *net.UDPAddr, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, tlsConfig *tls.Config, streamCallback StreamCallback, closeCallback closeCallback, cryptoChangeCallback CryptoChangeCallback, negotiatedVersions []protocol.VersionNumber) (*Session, error) {
+func newClientSession(pconn net.PacketConn, addr net.Addr, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, tlsConfig *tls.Config, streamCallback StreamCallback, closeCallback closeCallback, cryptoChangeCallback CryptoChangeCallback, negotiatedVersions []protocol.VersionNumber) (*Session, error) {
 	session := &Session{
-		conn:         &udpConn{conn: conn, currentAddr: addr},
+		conn:         &conn{pconn: pconn, currentAddr: addr},
 		connectionID: connectionID,
 		perspective:  protocol.PerspectiveClient,
 		version:      v,
@@ -765,7 +771,7 @@ func (s *Session) ackAlarmChanged(t time.Time) {
 	s.maybeResetTimer()
 }
 
-// RemoteAddr returns the net.UDPAddr of the client
-func (s *Session) RemoteAddr() *net.UDPAddr {
+// RemoteAddr returns the net.Addr of the client
+func (s *Session) RemoteAddr() net.Addr {
 	return s.conn.RemoteAddr()
 }

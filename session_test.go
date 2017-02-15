@@ -25,7 +25,7 @@ import (
 )
 
 type mockConnection struct {
-	remoteAddr net.IP
+	remoteAddr net.Addr
 	written    [][]byte
 }
 
@@ -36,12 +36,10 @@ func (m *mockConnection) write(p []byte) error {
 	return nil
 }
 
-func (m *mockConnection) setCurrentRemoteAddr(addr interface{}) {
-	if ip, ok := addr.(net.IP); ok {
-		m.remoteAddr = ip
-	}
+func (m *mockConnection) setCurrentRemoteAddr(addr net.Addr) {
+	m.remoteAddr = addr
 }
-func (*mockConnection) RemoteAddr() *net.UDPAddr { return &net.UDPAddr{} }
+func (*mockConnection) RemoteAddr() net.Addr { return &net.UDPAddr{} }
 
 type mockUnpacker struct {
 	unpackErr error
@@ -120,22 +118,23 @@ var _ = Describe("Session", func() {
 		clientSession        *Session
 		streamCallbackCalled bool
 		closeCallbackCalled  bool
-		conn                 *mockConnection
+		scfg                 *handshake.ServerConfig
+		mconn                *mockConnection
 		cpm                  *mockConnectionParametersManager
 	)
 
 	BeforeEach(func() {
-		conn = &mockConnection{}
+		mconn = &mockConnection{}
 		streamCallbackCalled = false
 		closeCallbackCalled = false
 
 		certChain := crypto.NewCertChain(testdata.GetTLSConfig())
 		kex, err := crypto.NewCurve25519KEX()
 		Expect(err).NotTo(HaveOccurred())
-		scfg, err := handshake.NewServerConfig(kex, certChain)
+		scfg, err = handshake.NewServerConfig(kex, certChain)
 		Expect(err).NotTo(HaveOccurred())
 		pSession, err := newSession(
-			conn,
+			mconn,
 			protocol.Version35,
 			0,
 			scfg,
@@ -163,7 +162,38 @@ var _ = Describe("Session", func() {
 		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(clientSession.streamsMap.openStreams).To(HaveLen(1)) // Crypto stream
+	})
 
+	Context("source address", func() {
+		It("uses the IP address if given an UDP connection", func() {
+			conn := &conn{currentAddr: &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200)[12:], Port: 1337}}
+			session, err := newSession(
+				conn,
+				protocol.VersionWhatever,
+				0,
+				scfg,
+				func(*Session, utils.Stream) { streamCallbackCalled = true },
+				func(protocol.ConnectionID) { closeCallbackCalled = true },
+			)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(*(*[]byte)(unsafe.Pointer(reflect.ValueOf(session.(*Session).cryptoSetup).Elem().FieldByName("sourceAddr").UnsafeAddr()))).To(Equal([]byte{192, 168, 100, 200}))
+		})
+
+		It("uses the string representation of the remote addresses if not given a UDP connection", func() {
+			conn := &conn{
+				currentAddr: &net.TCPAddr{IP: net.IPv4(192, 168, 100, 200)[12:], Port: 1337},
+			}
+			session, err := newSession(
+				conn,
+				protocol.VersionWhatever,
+				0,
+				scfg,
+				func(*Session, utils.Stream) { streamCallbackCalled = true },
+				func(protocol.ConnectionID) { closeCallbackCalled = true },
+			)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(*(*[]byte)(unsafe.Pointer(reflect.ValueOf(session.(*Session).cryptoSetup).Elem().FieldByName("sourceAddr").UnsafeAddr()))).To(Equal([]byte("192.168.100.200:1337")))
+		})
 	})
 
 	Context("when handling stream frames", func() {
@@ -617,8 +647,8 @@ var _ = Describe("Session", func() {
 		It("shuts down without error", func() {
 			session.Close(nil)
 			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore))
-			Expect(conn.written).To(HaveLen(1))
-			Expect(conn.written[0][len(conn.written[0])-7:]).To(Equal([]byte{0x02, byte(qerr.PeerGoingAway), 0, 0, 0, 0, 0}))
+			Expect(mconn.written).To(HaveLen(1))
+			Expect(mconn.written[0][len(mconn.written[0])-7:]).To(Equal([]byte{0x02, byte(qerr.PeerGoingAway), 0, 0, 0, 0, 0}))
 			Expect(closeCallbackCalled).To(BeTrue())
 			Expect(session.runClosed).ToNot(Receive()) // channel should be drained by Close()
 		})
@@ -627,7 +657,7 @@ var _ = Describe("Session", func() {
 			session.Close(nil)
 			session.Close(nil)
 			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore))
-			Expect(conn.written).To(HaveLen(1))
+			Expect(mconn.written).To(HaveLen(1))
 			Expect(session.runClosed).ToNot(Receive()) // channel should be drained by Close()
 		})
 
@@ -652,7 +682,7 @@ var _ = Describe("Session", func() {
 			Expect(closeCallbackCalled).To(BeFalse())
 			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore))
 			Expect(atomic.LoadUint32(&session.closed) != 0).To(BeTrue())
-			Expect(conn.written).To(BeEmpty()) // no CONNECTION_CLOSE or PUBLIC_RESET sent
+			Expect(mconn.written).To(BeEmpty()) // no CONNECTION_CLOSE or PUBLIC_RESET sent
 		})
 	})
 
@@ -712,7 +742,7 @@ var _ = Describe("Session", func() {
 
 		Context("updating the remote address", func() {
 			It("sets the remote address", func() {
-				remoteIP := net.IPv4(192, 168, 0, 100)
+				remoteIP := &net.IPAddr{IP: net.IPv4(192, 168, 0, 100)}
 				Expect(session.conn.(*mockConnection).remoteAddr).ToNot(Equal(remoteIP))
 				p := receivedPacket{
 					remoteAddr:   remoteIP,
@@ -724,8 +754,8 @@ var _ = Describe("Session", func() {
 			})
 
 			It("doesn't change the remote address if authenticating the packet fails", func() {
-				remoteIP := net.IPv4(192, 168, 0, 100)
-				attackerIP := net.IPv4(192, 168, 0, 102)
+				remoteIP := &net.IPAddr{IP: net.IPv4(192, 168, 0, 100)}
+				attackerIP := &net.IPAddr{IP: net.IPv4(192, 168, 0, 102)}
 				session.conn.(*mockConnection).remoteAddr = remoteIP
 				// use the real packetUnpacker here, to make sure this test fails if the error code for failed decryption changes
 				session.unpacker = &packetUnpacker{}
@@ -742,7 +772,7 @@ var _ = Describe("Session", func() {
 
 			It("sets the remote address, if the packet is authenticated, but unpacking fails for another reason", func() {
 				testErr := errors.New("testErr")
-				remoteIP := net.IPv4(192, 168, 0, 100)
+				remoteIP := &net.IPAddr{IP: net.IPv4(192, 168, 0, 100)}
 				Expect(session.conn.(*mockConnection).remoteAddr).ToNot(Equal(remoteIP))
 				p := receivedPacket{
 					remoteAddr:   remoteIP,
@@ -762,8 +792,8 @@ var _ = Describe("Session", func() {
 			session.receivedPacketHandler.ReceivedPacket(packetNumber, true)
 			err := session.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(conn.written).To(HaveLen(1))
-			Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x5E, 0x03})))
+			Expect(mconn.written).To(HaveLen(1))
+			Expect(mconn.written[0]).To(ContainSubstring(string([]byte{0x5E, 0x03})))
 		})
 
 		It("sends two WindowUpdate frames", func() {
@@ -776,16 +806,16 @@ var _ = Describe("Session", func() {
 			Expect(err).NotTo(HaveOccurred())
 			err = session.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(conn.written).To(HaveLen(2))
-			Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x04, 0x05, 0, 0, 0})))
-			Expect(conn.written[1]).To(ContainSubstring(string([]byte{0x04, 0x05, 0, 0, 0})))
+			Expect(mconn.written).To(HaveLen(2))
+			Expect(mconn.written[0]).To(ContainSubstring(string([]byte{0x04, 0x05, 0, 0, 0})))
+			Expect(mconn.written[1]).To(ContainSubstring(string([]byte{0x04, 0x05, 0, 0, 0})))
 		})
 
 		It("sends public reset", func() {
 			err := session.sendPublicReset(1)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(conn.written).To(HaveLen(1))
-			Expect(conn.written[0]).To(ContainSubstring(string([]byte("PRST"))))
+			Expect(mconn.written).To(HaveLen(1))
+			Expect(mconn.written[0]).To(ContainSubstring(string([]byte("PRST"))))
 		})
 	})
 
@@ -808,9 +838,9 @@ var _ = Describe("Session", func() {
 
 			err := session.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(conn.written).To(HaveLen(1))
+			Expect(mconn.written).To(HaveLen(1))
 			Expect(sph.(*mockSentPacketHandler).requestedStopWaiting).To(BeTrue())
-			Expect(conn.written[0]).To(ContainSubstring("foobar1234567"))
+			Expect(mconn.written[0]).To(ContainSubstring("foobar1234567"))
 		})
 
 		It("sends a StreamFrame from a packet queued for retransmission", func() {
@@ -839,9 +869,9 @@ var _ = Describe("Session", func() {
 
 			err := session.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(conn.written).To(HaveLen(1))
-			Expect(conn.written[0]).To(ContainSubstring("foobar"))
-			Expect(conn.written[0]).To(ContainSubstring("loremipsum"))
+			Expect(mconn.written).To(HaveLen(1))
+			Expect(mconn.written[0]).To(ContainSubstring("foobar"))
+			Expect(mconn.written[0]).To(ContainSubstring("loremipsum"))
 		})
 
 		It("always attaches a StopWaiting to a packet that contains a retransmission", func() {
@@ -859,7 +889,7 @@ var _ = Describe("Session", func() {
 
 			err := session.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(conn.written).To(HaveLen(2))
+			Expect(mconn.written).To(HaveLen(2))
 			sentPackets := sph.(*mockSentPacketHandler).sentPackets
 			Expect(sentPackets).To(HaveLen(2))
 			_, ok := sentPackets[0].Frames[0].(*frames.StopWaitingFrame)
@@ -963,8 +993,8 @@ var _ = Describe("Session", func() {
 			go session.run()
 			session.ackAlarmChanged(time.Now().Add(10 * time.Millisecond))
 			time.Sleep(10 * time.Millisecond)
-			Eventually(func() int { return len(conn.written) }).ShouldNot(BeZero())
-			Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x37, 0x13})))
+			Eventually(func() int { return len(mconn.written) }).ShouldNot(BeZero())
+			Expect(mconn.written[0]).To(ContainSubstring(string([]byte{0x37, 0x13})))
 		})
 
 		Context("bundling of small packets", func() {
@@ -981,9 +1011,9 @@ var _ = Describe("Session", func() {
 				session.scheduleSending()
 				go session.run()
 
-				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(1))
-				Expect(conn.written[0]).To(ContainSubstring("foobar1"))
-				Expect(conn.written[0]).To(ContainSubstring("foobar2"))
+				Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(1))
+				Expect(mconn.written[0]).To(ContainSubstring("foobar1"))
+				Expect(mconn.written[0]).To(ContainSubstring("foobar2"))
 			})
 
 			It("sends out two big frames in two packets", func() {
@@ -999,7 +1029,7 @@ var _ = Describe("Session", func() {
 				}()
 				_, err = s2.Write(bytes.Repeat([]byte{'e'}, 1000))
 				Expect(err).ToNot(HaveOccurred())
-				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(2))
+				Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(2))
 			})
 
 			It("sends out two small frames that are written to long after one another into two packets", func() {
@@ -1008,10 +1038,10 @@ var _ = Describe("Session", func() {
 				go session.run()
 				_, err = s.Write([]byte("foobar1"))
 				Expect(err).NotTo(HaveOccurred())
-				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(1))
+				Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(1))
 				_, err = s.Write([]byte("foobar2"))
 				Expect(err).NotTo(HaveOccurred())
-				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(2))
+				Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(2))
 			})
 
 			It("sends a queued ACK frame only once", func() {
@@ -1023,13 +1053,13 @@ var _ = Describe("Session", func() {
 				go session.run()
 				_, err = s.Write([]byte("foobar1"))
 				Expect(err).NotTo(HaveOccurred())
-				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(1))
+				Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(1))
 				_, err = s.Write([]byte("foobar2"))
 				Expect(err).NotTo(HaveOccurred())
 
-				Eventually(func() [][]byte { return conn.written }).Should(HaveLen(2))
-				Expect(conn.written[0]).To(ContainSubstring(string([]byte{0x37, 0x13})))
-				Expect(conn.written[1]).ToNot(ContainSubstring(string([]byte{0x37, 0x13})))
+				Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(2))
+				Expect(mconn.written[0]).To(ContainSubstring(string([]byte{0x37, 0x13})))
+				Expect(mconn.written[1]).ToNot(ContainSubstring(string([]byte{0x37, 0x13})))
 			})
 		})
 	})
@@ -1058,8 +1088,8 @@ var _ = Describe("Session", func() {
 		}
 		session.run()
 
-		Expect(conn.written).To(HaveLen(1))
-		Expect(conn.written[0]).To(ContainSubstring(string([]byte("PRST"))))
+		Expect(mconn.written).To(HaveLen(1))
+		Expect(mconn.written[0]).To(ContainSubstring(string([]byte("PRST"))))
 		Expect(session.runClosed).To(Receive())
 	})
 
@@ -1120,7 +1150,7 @@ var _ = Describe("Session", func() {
 		It("times out due to no network activity", func(done Done) {
 			session.lastNetworkActivityTime = time.Now().Add(-time.Hour)
 			session.run() // Would normally not return
-			Expect(conn.written[0]).To(ContainSubstring("No recent network activity."))
+			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
 			Expect(closeCallbackCalled).To(BeTrue())
 			Expect(session.runClosed).To(Receive())
 			close(done)
@@ -1129,7 +1159,7 @@ var _ = Describe("Session", func() {
 		It("times out due to non-completed crypto handshake", func(done Done) {
 			session.sessionCreationTime = time.Now().Add(-time.Hour)
 			session.run() // Would normally not return
-			Expect(conn.written[0]).To(ContainSubstring("Crypto handshake did not complete in time."))
+			Expect(mconn.written[0]).To(ContainSubstring("Crypto handshake did not complete in time."))
 			Expect(closeCallbackCalled).To(BeTrue())
 			Expect(session.runClosed).To(Receive())
 			close(done)
@@ -1140,7 +1170,7 @@ var _ = Describe("Session", func() {
 			cpm.idleTime = 99999 * time.Second
 			session.packer.connectionParameters = session.connectionParameters
 			session.run() // Would normally not return
-			Expect(conn.written[0]).To(ContainSubstring("No recent network activity."))
+			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
 			Expect(closeCallbackCalled).To(BeTrue())
 			Expect(session.runClosed).To(Receive())
 			close(done)
@@ -1153,7 +1183,7 @@ var _ = Describe("Session", func() {
 			cpm.idleTime = 0 * time.Millisecond
 			session.packer.connectionParameters = session.connectionParameters
 			session.run() // Would normally not return
-			Expect(conn.written[0]).To(ContainSubstring("No recent network activity."))
+			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
 			Expect(closeCallbackCalled).To(BeTrue())
 			Expect(session.runClosed).To(Receive())
 			close(done)
@@ -1204,8 +1234,8 @@ var _ = Describe("Session", func() {
 		Expect(err).NotTo(HaveOccurred())
 		go session.run()
 		session.scheduleSending()
-		Eventually(func() [][]byte { return conn.written }).ShouldNot(BeEmpty())
-		Expect(conn.written[0]).To(ContainSubstring("foobar"))
+		Eventually(func() [][]byte { return mconn.written }).ShouldNot(BeEmpty())
+		Expect(mconn.written[0]).To(ContainSubstring("foobar"))
 	})
 
 	Context("getting streams", func() {
