@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"io"
 	"net"
 	"time"
 
@@ -10,18 +11,27 @@ import (
 )
 
 type mockPacketConn struct {
+	dataToRead    []byte
+	dataReadFrom  net.Addr
 	dataWritten   bytes.Buffer
 	dataWrittenTo net.Addr
+	closed        bool
 }
 
-func (c *mockPacketConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
-	panic("not implemented")
+func (c *mockPacketConn) ReadFrom(b []byte) (int, net.Addr, error) {
+	if c.dataToRead == nil { // block if there's no data
+		time.Sleep(time.Hour)
+		return 0, nil, io.EOF
+	}
+	n := copy(b, c.dataToRead)
+	c.dataToRead = nil
+	return n, c.dataReadFrom, nil
 }
 func (c *mockPacketConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
 	c.dataWrittenTo = addr
 	return c.dataWritten.Write(b)
 }
-func (c *mockPacketConn) Close() error                       { panic("not implemented") }
+func (c *mockPacketConn) Close() error                       { c.closed = true; return nil }
 func (c *mockPacketConn) LocalAddr() net.Addr                { panic("not implemented") }
 func (c *mockPacketConn) SetDeadline(t time.Time) error      { panic("not implemented") }
 func (c *mockPacketConn) SetReadDeadline(t time.Time) error  { panic("not implemented") }

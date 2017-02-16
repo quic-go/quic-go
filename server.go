@@ -28,7 +28,7 @@ type packetHandler interface {
 type Server struct {
 	addr *net.UDPAddr
 
-	conn      *net.UDPConn
+	conn      net.PacketConn
 	connMutex sync.Mutex
 
 	certChain crypto.CertChain
@@ -81,8 +81,8 @@ func (s *Server) ListenAndServe() error {
 	return s.Serve(conn)
 }
 
-// Serve on an existing UDP connection.
-func (s *Server) Serve(conn *net.UDPConn) error {
+// Serve on an existing PacketConn
+func (s *Server) Serve(conn net.PacketConn) error {
 	s.connMutex.Lock()
 	s.conn = conn
 	s.connMutex.Unlock()
@@ -90,7 +90,7 @@ func (s *Server) Serve(conn *net.UDPConn) error {
 	for {
 		data := getPacketBuffer()
 		data = data[:protocol.MaxPacketSize]
-		n, remoteAddr, err := conn.ReadFromUDP(data)
+		n, remoteAddr, err := conn.ReadFrom(data)
 		if err != nil {
 			if strings.HasSuffix(err.Error(), "use of closed network connection") {
 				return nil
@@ -132,7 +132,7 @@ func (s *Server) Addr() net.Addr {
 	return s.addr
 }
 
-func (s *Server) handlePacket(pconn net.PacketConn, remoteAddr *net.UDPAddr, packet []byte) error {
+func (s *Server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet []byte) error {
 	if protocol.ByteCount(len(packet)) > protocol.MaxPacketSize {
 		return qerr.PacketTooLarge
 	}
