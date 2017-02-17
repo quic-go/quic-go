@@ -20,7 +20,6 @@ import (
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/utils"
 )
 
 type linkedConnection struct {
@@ -98,14 +97,14 @@ var _ = Describe("Benchmarks", func() {
 				connID := protocol.ConnectionID(mrand.Uint32())
 
 				c1 := newLinkedConnection(nil)
-				session1I, err := newSession(c1, version, connID, nil, func(Session, utils.Stream) {}, func(id protocol.ConnectionID) {})
+				session1I, err := newSession(c1, version, connID, nil, func(id protocol.ConnectionID) {})
 				if err != nil {
 					Expect(err).NotTo(HaveOccurred())
 				}
 				session1 := session1I.(*session)
 
 				c2 := newLinkedConnection(session1)
-				session2I, err := newSession(c2, version, connID, nil, func(Session, utils.Stream) {}, func(id protocol.ConnectionID) {})
+				session2I, err := newSession(c2, version, connID, nil, func(id protocol.ConnectionID) {})
 				if err != nil {
 					Expect(err).NotTo(HaveOccurred())
 				}

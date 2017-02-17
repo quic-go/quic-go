@@ -65,10 +65,6 @@ func NewClient(t *QuicRoundTripper, tlsConfig *tls.Config, hostname string) (*Cl
 	return c, nil
 }
 
-func (c *Client) handleStreamCb(session *quic.Session, stream utils.Stream) {
-	utils.Debugf("Handling stream %d", stream.StreamID())
-}
-
 func (c *Client) cryptoChangeCallback(isForwardSecure bool) {
 	c.cryptoChangedCond.L.Lock()
 	defer c.cryptoChangedCond.L.Unlock()

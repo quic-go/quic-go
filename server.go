@@ -36,9 +36,7 @@ type server struct {
 	sessionsMutex             sync.RWMutex
 	deleteClosedSessionsAfter time.Duration
 
-	streamCallback StreamCallback
-
-	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) (packetHandler, error)
+	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, closeCallback closeCallback) (packetHandler, error)
 }
 
 var _ Listener = &server{}
@@ -60,7 +58,6 @@ func NewListener(config *Config) (Listener, error) {
 		config:                    config,
 		certChain:                 certChain,
 		scfg:                      scfg,
-		streamCallback:            func(Session, utils.Stream) {},
 		sessions:                  map[protocol.ConnectionID]packetHandler{},
 		newSession:                newSession,
 		deleteClosedSessionsAfter: protocol.ClosedSessionDeleteTimeout,
@@ -195,7 +192,6 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 			version,
 			hdr.ConnectionID,
 			s.scfg,
-			s.streamCallback,
 			s.closeCallback,
 		)
 		if err != nil {

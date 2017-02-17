@@ -35,9 +35,6 @@ var (
 	errSessionAlreadyClosed       = errors.New("Cannot close session. It was already closed before.")
 )
 
-// StreamCallback gets a stream frame and returns a reply frame
-type StreamCallback func(Session, utils.Stream)
-
 // CryptoChangeCallback is called every time the encryption level changes
 // Once the callback has been called with isForwardSecure = true, it is guarantueed to not be called with isForwardSecure = false after that
 type CryptoChangeCallback func(isForwardSecure bool)
@@ -51,7 +48,6 @@ type session struct {
 	perspective  protocol.Perspective
 	version      protocol.VersionNumber
 
-	streamCallback       StreamCallback
 	closeCallback        closeCallback
 	cryptoChangeCallback CryptoChangeCallback
 
@@ -103,14 +99,13 @@ type session struct {
 var _ Session = &session{}
 
 // newSession makes a new session
-func newSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) (packetHandler, error) {
+func newSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, closeCallback closeCallback) (packetHandler, error) {
 	s := &session{
 		conn:         conn,
 		connectionID: connectionID,
 		perspective:  protocol.PerspectiveServer,
 		version:      v,
 
-		streamCallback:       streamCallback,
 		closeCallback:        closeCallback,
 		cryptoChangeCallback: func(bool) {},
 		connectionParameters: handshake.NewConnectionParamatersManager(protocol.PerspectiveServer, v),
@@ -137,14 +132,13 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	return s, err
 }
 
-func newClientSession(pconn net.PacketConn, addr net.Addr, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, tlsConfig *tls.Config, streamCallback StreamCallback, closeCallback closeCallback, cryptoChangeCallback CryptoChangeCallback, negotiatedVersions []protocol.VersionNumber) (*session, error) {
+func newClientSession(pconn net.PacketConn, addr net.Addr, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, tlsConfig *tls.Config, closeCallback closeCallback, cryptoChangeCallback CryptoChangeCallback, negotiatedVersions []protocol.VersionNumber) (*session, error) {
 	s := &session{
 		conn:         &conn{pconn: pconn, currentAddr: addr},
 		connectionID: connectionID,
 		perspective:  protocol.PerspectiveClient,
 		version:      v,
 
-		streamCallback:       streamCallback,
 		closeCallback:        closeCallback,
 		cryptoChangeCallback: cryptoChangeCallback,
 		connectionParameters: handshake.NewConnectionParamatersManager(protocol.PerspectiveClient, v),
@@ -707,8 +701,6 @@ func (s *session) newStream(id protocol.StreamID) (*stream, error) {
 	} else {
 		s.flowControlManager.NewStream(id, true)
 	}
-
-	s.streamCallback(s, stream)
 
 	return stream, nil
 }

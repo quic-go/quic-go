@@ -208,7 +208,7 @@ func (c *Client) handlePacket(packet []byte) error {
 
 func (c *Client) createNewSession(negotiatedVersions []protocol.VersionNumber) error {
 	var err error
-	c.session, err = newClientSession(c.conn, c.addr, c.hostname, c.version, c.connectionID, c.tlsConfig, c.streamCallback, c.closeCallback, c.cryptoChangeCallback, negotiatedVersions)
+	c.session, err = newClientSession(c.conn, c.addr, c.hostname, c.version, c.connectionID, c.tlsConfig, c.closeCallback, c.cryptoChangeCallback, negotiatedVersions)
 	if err != nil {
 		return err
 	}
@@ -216,8 +216,6 @@ func (c *Client) createNewSession(negotiatedVersions []protocol.VersionNumber) e
 	go c.session.run()
 	return nil
 }
-
-func (c *Client) streamCallback(Session, utils.Stream) {}
 
 func (c *Client) closeCallback(id protocol.ConnectionID) {
 	utils.Infof("Connection %x closed.", id)

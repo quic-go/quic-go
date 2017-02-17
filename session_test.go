@@ -114,18 +114,16 @@ var _ ackhandler.ReceivedPacketHandler = &mockReceivedPacketHandler{}
 
 var _ = Describe("Session", func() {
 	var (
-		sess                 *session
-		clientSess           *session
-		streamCallbackCalled bool
-		closeCallbackCalled  bool
-		scfg                 *handshake.ServerConfig
-		mconn                *mockConnection
-		cpm                  *mockConnectionParametersManager
+		sess                *session
+		clientSess          *session
+		closeCallbackCalled bool
+		scfg                *handshake.ServerConfig
+		mconn               *mockConnection
+		cpm                 *mockConnectionParametersManager
 	)
 
 	BeforeEach(func() {
 		mconn = &mockConnection{}
-		streamCallbackCalled = false
 		closeCallbackCalled = false
 
 		certChain := crypto.NewCertChain(testdata.GetTLSConfig())
@@ -138,7 +136,6 @@ var _ = Describe("Session", func() {
 			protocol.Version35,
 			0,
 			scfg,
-			func(Session, utils.Stream) { streamCallbackCalled = true },
 			func(protocol.ConnectionID) { closeCallbackCalled = true },
 		)
 		Expect(err).NotTo(HaveOccurred())
@@ -155,7 +152,6 @@ var _ = Describe("Session", func() {
 			protocol.Version35,
 			0,
 			nil,
-			func(Session, utils.Stream) { streamCallbackCalled = true },
 			func(protocol.ConnectionID) { closeCallbackCalled = true },
 			func(isForwardSecure bool) {},
 			nil,
@@ -172,7 +168,6 @@ var _ = Describe("Session", func() {
 				protocol.VersionWhatever,
 				0,
 				scfg,
-				func(Session, utils.Stream) { streamCallbackCalled = true },
 				func(protocol.ConnectionID) { closeCallbackCalled = true },
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -188,7 +183,6 @@ var _ = Describe("Session", func() {
 				protocol.VersionWhatever,
 				0,
 				scfg,
-				func(Session, utils.Stream) { streamCallbackCalled = true },
 				func(protocol.ConnectionID) { closeCallbackCalled = true },
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -202,7 +196,6 @@ var _ = Describe("Session", func() {
 				StreamID: 5,
 				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
 			})
-			Expect(streamCallbackCalled).To(BeTrue())
 			p := make([]byte, 4)
 			str, err := sess.streamsMap.GetOrOpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
@@ -228,7 +221,6 @@ var _ = Describe("Session", func() {
 				Data:     []byte{0xde, 0xca},
 			})
 			numOpenStreams := len(sess.streamsMap.openStreams)
-			Expect(streamCallbackCalled).To(BeTrue())
 			sess.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
 				Offset:   2,
@@ -262,7 +254,6 @@ var _ = Describe("Session", func() {
 			numOpenStreams := len(sess.streamsMap.openStreams)
 			str, _ := sess.streamsMap.GetOrOpenStream(5)
 			Expect(str).ToNot(BeNil())
-			Expect(streamCallbackCalled).To(BeTrue())
 			p := make([]byte, 4)
 			_, err := str.Read(p)
 			Expect(err).To(MatchError(io.EOF))
@@ -282,7 +273,6 @@ var _ = Describe("Session", func() {
 			numOpenStreams := len(sess.streamsMap.openStreams)
 			str, _ := sess.streamsMap.GetOrOpenStream(5)
 			Expect(str).ToNot(BeNil())
-			Expect(streamCallbackCalled).To(BeTrue())
 			p := make([]byte, 4)
 			_, err := str.Read(p)
 			Expect(err).To(MatchError(io.EOF))
@@ -315,7 +305,6 @@ var _ = Describe("Session", func() {
 			str, err := sess.streamsMap.GetOrOpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(str).ToNot(BeNil())
-			Expect(streamCallbackCalled).To(BeTrue())
 			p := make([]byte, 4)
 			_, err = str.Read(p)
 			Expect(err).ToNot(HaveOccurred())
