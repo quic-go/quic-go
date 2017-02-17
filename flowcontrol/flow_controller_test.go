@@ -352,6 +352,17 @@ var _ = Describe("Flow controller", func() {
 					controller.EnsureMinimumWindowIncrement(2 * max)
 					Expect(controller.receiveWindowIncrement).To(Equal(max))
 				})
+
+				It("doesn't auto-tune the window after the increment was increased", func() {
+					setRtt(10 * time.Millisecond)
+					controller.bytesRead = 9900 // receive window is 10000
+					controller.lastWindowUpdateTime = time.Now().Add(-10 * time.Millisecond)
+					controller.EnsureMinimumWindowIncrement(912)
+					necessary, newIncrement, offset := controller.MaybeUpdateWindow()
+					Expect(necessary).To(BeTrue())
+					Expect(newIncrement).To(BeZero()) // no auto-tuning
+					Expect(offset).To(Equal(protocol.ByteCount(9900 + 912)))
+				})
 			})
 		})
 	})

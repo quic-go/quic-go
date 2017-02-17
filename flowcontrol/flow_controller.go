@@ -184,6 +184,7 @@ func (c *flowController) maybeAdjustWindowIncrement() {
 func (c *flowController) EnsureMinimumWindowIncrement(inc protocol.ByteCount) {
 	if inc > c.receiveWindowIncrement {
 		c.receiveWindowIncrement = utils.MinByteCount(inc, c.maxReceiveWindowIncrement)
+		c.lastWindowUpdateTime = time.Time{} // disables autotuning for the next window update
 	}
 }
 
