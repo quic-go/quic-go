@@ -581,12 +581,7 @@ var _ = Describe("Session", func() {
 
 	Context("accepting streams", func() {
 		It("waits for new streams", func() {
-			// stream 1 was already opened
-			str, err := sess.AcceptStream()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
-			str = nil
-
+			var str utils.Stream
 			go func() {
 				defer GinkgoRecover()
 				var err error
@@ -602,8 +597,6 @@ var _ = Describe("Session", func() {
 		})
 
 		It("stops accepting when the session is closed", func() {
-			sess.AcceptStream() // accept stream 1
-
 			testErr := errors.New("testErr")
 			var err error
 			go func() {
@@ -617,8 +610,6 @@ var _ = Describe("Session", func() {
 		})
 
 		It("stops accepting when the session is closed after version negotiation", func() {
-			sess.AcceptStream() // accept stream 1
-
 			testErr := errCloseSessionForNewVersion
 			var err error
 			go func() {

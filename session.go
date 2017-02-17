@@ -118,6 +118,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 
 	s.setup()
 	cryptoStream, _ := s.GetOrOpenStream(1)
+	_, _ = s.AcceptStream() // don't expose the crypto stream
 	var sourceAddr []byte
 	if udpAddr, ok := conn.RemoteAddr().(*net.UDPAddr); ok {
 		sourceAddr = udpAddr.IP
