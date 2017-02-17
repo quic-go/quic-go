@@ -49,7 +49,7 @@ func main() {
 			fileName :=strings.Replace(rsp.Request.URL.Path, "/", "-", -1)
       dst, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE, 0644)
       if err != nil {
-        return
+        panic(err)
       }
       defer dst.Close()
       io.Copy(dst,body)
