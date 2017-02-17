@@ -2,7 +2,6 @@ package quic
 
 import (
 	"bytes"
-	"crypto/tls"
 	"errors"
 	"net"
 	"strings"
@@ -18,15 +17,14 @@ import (
 
 // packetHandler handles packets
 type packetHandler interface {
+	Session
 	handlePacket(*receivedPacket)
-	OpenStream() (utils.Stream, error)
 	run()
-	Close(error) error
 }
 
-// A Server of QUIC
-type Server struct {
-	addr *net.UDPAddr
+// A Listener of QUIC
+type server struct {
+	config *Config
 
 	conn      net.PacketConn
 	connMutex sync.Mutex
@@ -43,9 +41,11 @@ type Server struct {
 	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) (packetHandler, error)
 }
 
-// NewServer makes a new server
-func NewServer(addr string, tlsConfig *tls.Config, cb StreamCallback) (*Server, error) {
-	certChain := crypto.NewCertChain(tlsConfig)
+var _ Listener = &server{}
+
+// NewListener makes a new listener
+func NewListener(config *Config) (Listener, error) {
+	certChain := crypto.NewCertChain(config.TLSConfig)
 
 	kex, err := crypto.NewCurve25519KEX()
 	if err != nil {
@@ -56,33 +56,19 @@ func NewServer(addr string, tlsConfig *tls.Config, cb StreamCallback) (*Server, 
 		return nil, err
 	}
 
-	udpAddr, err := net.ResolveUDPAddr("udp", addr)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Server{
-		addr:                      udpAddr,
+	return &server{
+		config:                    config,
 		certChain:                 certChain,
 		scfg:                      scfg,
-		streamCallback:            cb,
+		streamCallback:            func(Session, utils.Stream) {},
 		sessions:                  map[protocol.ConnectionID]packetHandler{},
 		newSession:                newSession,
 		deleteClosedSessionsAfter: protocol.ClosedSessionDeleteTimeout,
 	}, nil
 }
 
-// ListenAndServe listens and serves a connection
-func (s *Server) ListenAndServe() error {
-	conn, err := net.ListenUDP("udp", s.addr)
-	if err != nil {
-		return err
-	}
-	return s.Serve(conn)
-}
-
-// Serve on an existing PacketConn
-func (s *Server) Serve(conn net.PacketConn) error {
+// Listen listens on an existing PacketConn
+func (s *server) Listen(conn net.PacketConn) error {
 	s.connMutex.Lock()
 	s.conn = conn
 	s.connMutex.Unlock()
@@ -104,8 +90,20 @@ func (s *Server) Serve(conn net.PacketConn) error {
 	}
 }
 
+func (s *server) ListenAddr(addr string) error {
+	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return err
+	}
+	conn, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		return err
+	}
+	return s.Listen(conn)
+}
+
 // Close the server
-func (s *Server) Close() error {
+func (s *server) Close() error {
 	s.sessionsMutex.Lock()
 	for _, session := range s.sessions {
 		if session != nil {
@@ -128,11 +126,11 @@ func (s *Server) Close() error {
 }
 
 // Addr returns the server's network address
-func (s *Server) Addr() net.Addr {
-	return s.addr
+func (s *server) Addr() net.Addr {
+	return s.conn.LocalAddr()
 }
 
-func (s *Server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet []byte) error {
+func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet []byte) error {
 	if protocol.ByteCount(len(packet)) > protocol.MaxPacketSize {
 		return qerr.PacketTooLarge
 	}
@@ -207,6 +205,7 @@ func (s *Server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 		s.sessionsMutex.Lock()
 		s.sessions[hdr.ConnectionID] = session
 		s.sessionsMutex.Unlock()
+		go s.config.ConnState(session, ConnStateVersionNegotiated)
 	}
 	if session == nil {
 		// Late packet for closed session
@@ -221,7 +220,7 @@ func (s *Server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	return nil
 }
 
-func (s *Server) closeCallback(id protocol.ConnectionID) {
+func (s *server) closeCallback(id protocol.ConnectionID) {
 	s.sessionsMutex.Lock()
 	s.sessions[id] = nil
 	s.sessionsMutex.Unlock()

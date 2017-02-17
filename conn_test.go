@@ -11,6 +11,7 @@ import (
 )
 
 type mockPacketConn struct {
+	addr          net.Addr
 	dataToRead    []byte
 	dataReadFrom  net.Addr
 	dataWritten   bytes.Buffer
@@ -32,7 +33,7 @@ func (c *mockPacketConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
 	return c.dataWritten.Write(b)
 }
 func (c *mockPacketConn) Close() error                       { c.closed = true; return nil }
-func (c *mockPacketConn) LocalAddr() net.Addr                { panic("not implemented") }
+func (c *mockPacketConn) LocalAddr() net.Addr                { return c.addr }
 func (c *mockPacketConn) SetDeadline(t time.Time) error      { panic("not implemented") }
 func (c *mockPacketConn) SetReadDeadline(t time.Time) error  { panic("not implemented") }
 func (c *mockPacketConn) SetWriteDeadline(t time.Time) error { panic("not implemented") }

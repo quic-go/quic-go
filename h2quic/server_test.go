@@ -26,12 +26,16 @@ type mockSession struct {
 	closed          bool
 	closedWithError error
 	dataStream      utils.Stream
+	streamToAccept  utils.Stream
 }
 
 func (s *mockSession) GetOrOpenStream(id protocol.StreamID) (utils.Stream, error) {
 	return s.dataStream, nil
 }
 func (s *mockSession) AcceptStream() (utils.Stream, error) {
+	return s.streamToAccept, nil
+}
+func (s *mockSession) OpenStream() (utils.Stream, error) {
 	panic("not implemented")
 }
 func (s *mockSession) Close(e error) error {
@@ -230,7 +234,8 @@ var _ = Describe("H2 server", func() {
 			// Taken from https://http2.github.io/http2-spec/compression.html#request.examples.with.huffman.coding
 			0x82, 0x86, 0x84, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff,
 		})
-		s.handleStream(session, headerStream)
+		session.streamToAccept = headerStream
+		go s.handleHeaderStream(session)
 		Eventually(func() bool { return handlerCalled }).Should(BeTrue())
 	})
 
@@ -241,26 +246,24 @@ var _ = Describe("H2 server", func() {
 		})
 		headerStream := &mockStream{id: 3}
 		headerStream.dataToRead.Write(bytes.Repeat([]byte{0}, 100))
-		s.handleStream(session, headerStream)
+		session.streamToAccept = headerStream
+		go s.handleHeaderStream(session)
 		Consistently(func() bool { return handlerCalled }).Should(BeFalse())
 		Eventually(func() bool { return session.closed }).Should(BeTrue())
 		Expect(session.closedWithError).To(MatchError(qerr.Error(qerr.InvalidHeadersStreamData, "connection error: PROTOCOL_ERROR")))
 	})
 
-	It("ignores other streams", func() {
-		var handlerCalled bool
-		s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			Expect(r.Host).To(Equal("www.example.com"))
-			handlerCalled = true
-		})
-		headerStream := &mockStream{id: 5}
+	It("errors if the accepted header stream has the wrong stream ID", func() {
+		headerStream := &mockStream{id: 1}
 		headerStream.dataToRead.Write([]byte{
 			0x0, 0x0, 0x11, 0x1, 0x4, 0x0, 0x0, 0x0, 0x5,
 			// Taken from https://http2.github.io/http2-spec/compression.html#request.examples.with.huffman.coding
 			0x82, 0x86, 0x84, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff,
 		})
-		s.handleStream(session, headerStream)
-		Consistently(func() bool { return handlerCalled }).Should(BeFalse())
+		session.streamToAccept = headerStream
+		go s.handleHeaderStream(session)
+		Eventually(func() bool { return session.closed }).Should(BeTrue())
+		Expect(session.closedWithError).To(MatchError(qerr.Error(qerr.InternalError, "h2quic server BUG: header stream does not have stream ID 3")))
 	})
 
 	It("supports closing after first request", func() {
@@ -272,8 +275,9 @@ var _ = Describe("H2 server", func() {
 			// Taken from https://http2.github.io/http2-spec/compression.html#request.examples.with.huffman.coding
 			0x82, 0x86, 0x84, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff,
 		})
+		session.streamToAccept = headerStream
 		Expect(session.closed).To(BeFalse())
-		s.handleStream(session, headerStream)
+		go s.handleHeaderStream(session)
 		Eventually(func() bool { return session.closed }).Should(BeTrue())
 	})
 
@@ -289,7 +293,8 @@ var _ = Describe("H2 server", func() {
 			// Taken from https://http2.github.io/http2-spec/compression.html#request.examples.with.huffman.coding
 			0x82, 0x86, 0x84, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff,
 		})
-		s.handleStream(session, headerStream)
+		session.streamToAccept = headerStream
+		go s.handleHeaderStream(session)
 		Eventually(func() bool { return handlerCalled }).Should(BeTrue())
 	})
 
