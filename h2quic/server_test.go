@@ -31,6 +31,9 @@ type mockSession struct {
 func (s *mockSession) GetOrOpenStream(id protocol.StreamID) (utils.Stream, error) {
 	return s.dataStream, nil
 }
+func (s *mockSession) AcceptStream() (utils.Stream, error) {
+	panic("not implemented")
+}
 func (s *mockSession) Close(e error) error {
 	s.closed = true
 	s.closedWithError = e

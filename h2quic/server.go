@@ -20,6 +20,7 @@ import (
 )
 
 type streamCreator interface {
+	AcceptStream() (utils.Stream, error)
 	GetOrOpenStream(protocol.StreamID) (utils.Stream, error)
 	Close(error) error
 	RemoteAddr() net.Addr
@@ -91,7 +92,7 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn *net.UDPConn) error {
 }
 
 func (s *Server) handleStreamCb(session quic.Session, stream utils.Stream) {
-	s.handleStream(session, stream)
+	s.handleStream(session.(streamCreator), stream)
 }
 
 func (s *Server) handleStream(session streamCreator, stream utils.Stream) {

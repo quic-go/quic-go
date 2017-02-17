@@ -3,7 +3,6 @@ package quic
 import (
 	"net"
 
-	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
@@ -20,6 +19,4 @@ type Session interface {
 	// OpenStreamSync() (utils.Stream, error)
 	RemoteAddr() net.Addr
 	Close(error) error
-	// TODO: remove this
-	GetOrOpenStream(protocol.StreamID) (utils.Stream, error)
 }
