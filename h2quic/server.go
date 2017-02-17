@@ -90,7 +90,7 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn *net.UDPConn) error {
 	return server.Serve(conn)
 }
 
-func (s *Server) handleStreamCb(session *quic.Session, stream utils.Stream) {
+func (s *Server) handleStreamCb(session quic.Session, stream utils.Stream) {
 	s.handleStream(session, stream)
 }
 

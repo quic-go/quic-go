@@ -24,11 +24,11 @@ import (
 )
 
 type linkedConnection struct {
-	other *Session
+	other *session
 	c     chan []byte
 }
 
-func newLinkedConnection(other *Session) *linkedConnection {
+func newLinkedConnection(other *session) *linkedConnection {
 	c := make(chan []byte, 500)
 	conn := &linkedConnection{
 		c:     c,
@@ -98,18 +98,18 @@ var _ = Describe("Benchmarks", func() {
 				connID := protocol.ConnectionID(mrand.Uint32())
 
 				c1 := newLinkedConnection(nil)
-				session1I, err := newSession(c1, version, connID, nil, func(*Session, utils.Stream) {}, func(id protocol.ConnectionID) {})
+				session1I, err := newSession(c1, version, connID, nil, func(Session, utils.Stream) {}, func(id protocol.ConnectionID) {})
 				if err != nil {
 					Expect(err).NotTo(HaveOccurred())
 				}
-				session1 := session1I.(*Session)
+				session1 := session1I.(*session)
 
 				c2 := newLinkedConnection(session1)
-				session2I, err := newSession(c2, version, connID, nil, func(*Session, utils.Stream) {}, func(id protocol.ConnectionID) {})
+				session2I, err := newSession(c2, version, connID, nil, func(Session, utils.Stream) {}, func(id protocol.ConnectionID) {})
 				if err != nil {
 					Expect(err).NotTo(HaveOccurred())
 				}
-				session2 := session2I.(*Session)
+				session2 := session2I.(*session)
 				c1.other = session2
 
 				key := make([]byte, 16)

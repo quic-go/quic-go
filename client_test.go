@@ -20,7 +20,7 @@ import (
 var _ = Describe("Client", func() {
 	var (
 		client                         *Client
-		session                        *mockSession
+		sess                           *mockSession
 		versionNegotiateCallbackCalled bool
 	)
 
@@ -32,9 +32,9 @@ var _ = Describe("Client", func() {
 				return nil
 			},
 		}
-		session = &mockSession{connectionID: 0x1337}
+		sess = &mockSession{connectionID: 0x1337}
 		client.connectionID = 0x1337
-		client.session = session
+		client.session = sess
 		client.version = protocol.Version36
 	})
 
@@ -51,7 +51,7 @@ var _ = Describe("Client", func() {
 		client, err = NewClient("quic.clemente.io:1337", nil, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(client.hostname).To(Equal("quic.clemente.io"))
-		Expect(*(*[]protocol.VersionNumber)(unsafe.Pointer(reflect.ValueOf(client.session.(*Session).cryptoSetup).Elem().FieldByName("negotiatedVersions").UnsafeAddr()))).To(BeNil())
+		Expect(*(*[]protocol.VersionNumber)(unsafe.Pointer(reflect.ValueOf(client.session.(*session).cryptoSetup).Elem().FieldByName("negotiatedVersions").UnsafeAddr()))).To(BeNil())
 	})
 
 	It("errors on invalid public header", func() {
@@ -78,8 +78,8 @@ var _ = Describe("Client", func() {
 		testErr := errors.New("test error")
 		err := client.Close(testErr)
 		Expect(err).ToNot(HaveOccurred())
-		Eventually(session.closed).Should(BeTrue())
-		Expect(session.closeReason).To(MatchError(testErr))
+		Eventually(sess.closed).Should(BeTrue())
+		Expect(sess.closeReason).To(MatchError(testErr))
 		Expect(client.closed).To(Equal(uint32(1)))
 		Eventually(func() bool { return stoppedListening }).Should(BeTrue())
 		Eventually(runtime.NumGoroutine()).Should(Equal(numGoRoutines))
@@ -90,8 +90,8 @@ var _ = Describe("Client", func() {
 		client.closed = 1
 		err := client.Close(errors.New("test error"))
 		Expect(err).ToNot(HaveOccurred())
-		Eventually(session.closed).Should(BeFalse())
-		Expect(session.closeReason).ToNot(HaveOccurred())
+		Eventually(sess.closed).Should(BeFalse())
+		Expect(sess.closeReason).ToNot(HaveOccurred())
 	})
 
 	It("creates new sessions with the right parameters", func() {
@@ -101,8 +101,8 @@ var _ = Describe("Client", func() {
 		err := client.createNewSession(nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(client.session).ToNot(BeNil())
-		Expect(client.session.(*Session).connectionID).To(Equal(client.connectionID))
-		Expect(client.session.(*Session).version).To(Equal(client.version))
+		Expect(client.session.(*session).connectionID).To(Equal(client.connectionID))
+		Expect(client.session.(*session).version).To(Equal(client.version))
 
 		err = client.Close(nil)
 		Expect(err).ToNot(HaveOccurred())
@@ -133,7 +133,7 @@ var _ = Describe("Client", func() {
 				stoppedListening = true
 			}()
 
-			Expect(session.packetCount).To(BeZero())
+			Expect(sess.packetCount).To(BeZero())
 			ph := PublicHeader{
 				PacketNumber:    1,
 				PacketNumberLen: protocol.PacketNumberLen2,
@@ -145,8 +145,8 @@ var _ = Describe("Client", func() {
 			_, err = serverConn.Write(b.Bytes())
 			Expect(err).ToNot(HaveOccurred())
 
-			Eventually(func() int { return session.packetCount }).Should(Equal(1))
-			Expect(session.closed).To(BeFalse())
+			Eventually(func() int { return sess.packetCount }).Should(Equal(1))
+			Expect(sess.closed).To(BeFalse())
 			Eventually(func() bool { return stoppedListening }).Should(BeFalse())
 
 			err = client.Close(nil)
@@ -168,8 +168,8 @@ var _ = Describe("Client", func() {
 
 			listenErr = client.Listen()
 			Expect(listenErr).To(HaveOccurred())
-			Eventually(session.closed).Should(BeTrue())
-			Expect(session.closeReason).To(MatchError(listenErr))
+			Eventually(sess.closed).Should(BeTrue())
+			Expect(sess.closeReason).To(MatchError(listenErr))
 			close(done)
 		})
 	})
@@ -210,19 +210,19 @@ var _ = Describe("Client", func() {
 			startUDPConn()
 			newVersion := protocol.Version35
 			Expect(newVersion).ToNot(Equal(client.version))
-			Expect(session.packetCount).To(BeZero())
+			Expect(sess.packetCount).To(BeZero())
 			client.connectionID = 0x1337
 			err := client.handlePacket(getVersionNegotiation([]protocol.VersionNumber{newVersion}))
 			Expect(client.version).To(Equal(newVersion))
 			Expect(client.versionNegotiated).To(BeTrue())
 			Expect(versionNegotiateCallbackCalled).To(BeTrue())
 			// it swapped the sessions
-			Expect(client.session).ToNot(Equal(session))
+			Expect(client.session).ToNot(Equal(sess))
 			Expect(client.connectionID).ToNot(Equal(0x1337)) // it generated a new connection ID
 			Expect(err).ToNot(HaveOccurred())
 			// it didn't pass the version negoation packet to the session (since it has no payload)
-			Expect(session.packetCount).To(BeZero())
-			Expect(*(*[]protocol.VersionNumber)(unsafe.Pointer(reflect.ValueOf(client.session.(*Session).cryptoSetup).Elem().FieldByName("negotiatedVersions").UnsafeAddr()))).To(Equal([]protocol.VersionNumber{35}))
+			Expect(sess.packetCount).To(BeZero())
+			Expect(*(*[]protocol.VersionNumber)(unsafe.Pointer(reflect.ValueOf(client.session.(*session).cryptoSetup).Elem().FieldByName("negotiatedVersions").UnsafeAddr()))).To(Equal([]protocol.VersionNumber{35}))
 
 			err = client.Close(nil)
 			Expect(err).ToNot(HaveOccurred())
@@ -236,11 +236,11 @@ var _ = Describe("Client", func() {
 		It("ignores delayed version negotiation packets", func() {
 			// if the version was not yet negotiated, handlePacket would return a VersionNegotiationMismatch error, see above test
 			client.versionNegotiated = true
-			Expect(session.packetCount).To(BeZero())
+			Expect(sess.packetCount).To(BeZero())
 			err := client.handlePacket(getVersionNegotiation([]protocol.VersionNumber{1}))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(client.versionNegotiated).To(BeTrue())
-			Expect(session.packetCount).To(BeZero())
+			Expect(sess.packetCount).To(BeZero())
 			Expect(versionNegotiateCallbackCalled).To(BeFalse())
 		})
 

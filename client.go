@@ -217,7 +217,7 @@ func (c *Client) createNewSession(negotiatedVersions []protocol.VersionNumber) e
 	return nil
 }
 
-func (c *Client) streamCallback(session *Session, stream utils.Stream) {}
+func (c *Client) streamCallback(Session, utils.Stream) {}
 
 func (c *Client) closeCallback(id protocol.ConnectionID) {
 	utils.Infof("Connection %x closed.", id)
