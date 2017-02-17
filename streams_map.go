@@ -87,18 +87,25 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 		return nil, nil
 	}
 
-	highestOpened := m.highestStreamOpenedByPeer
-	sid := id
-	// sid is always odd
-	for sid > highestOpened {
+	if m.perspective == protocol.PerspectiveServer && id%2 == 0 {
+		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d from client-side", id))
+	}
+	if m.perspective == protocol.PerspectiveClient && id%2 == 1 {
+		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d from server-side", id))
+	}
+
+	// sid is the next stream that will be opened
+	sid := m.highestStreamOpenedByPeer + 2
+	// if there is no stream opened yet, and this is the server, stream 1 should be openend
+	if sid == 2 && m.perspective == protocol.PerspectiveServer {
+		sid = 1
+	}
+
+	for ; sid <= id; sid += 2 {
 		_, err := m.openRemoteStream(sid)
 		if err != nil {
 			return nil, err
 		}
-		if sid == 1 {
-			break
-		}
-		sid -= 2
 	}
 
 	m.nextStreamOrErrCond.Broadcast()
@@ -108,12 +115,6 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 func (m *streamsMap) openRemoteStream(id protocol.StreamID) (*stream, error) {
 	if m.numIncomingStreams >= m.connectionParameters.GetMaxIncomingStreams() {
 		return nil, qerr.TooManyOpenStreams
-	}
-	if m.perspective == protocol.PerspectiveServer && id%2 == 0 {
-		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d from client-side", id))
-	}
-	if m.perspective == protocol.PerspectiveClient && id%2 == 1 {
-		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d from server-side", id))
 	}
 	if id+protocol.MaxNewStreamIDDelta < m.highestStreamOpenedByPeer {
 		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d, which is a lot smaller than the highest opened stream, %d", id, m.highestStreamOpenedByPeer))

@@ -146,7 +146,7 @@ var _ = Describe("Streams Map", func() {
 							_, err := m.GetOrOpenStream(protocol.StreamID(i*2 + 1))
 							Expect(err).NotTo(HaveOccurred())
 						}
-						_, err := m.GetOrOpenStream(protocol.StreamID(2*maxNumStreams + 2))
+						_, err := m.GetOrOpenStream(protocol.StreamID(2*maxNumStreams + 3))
 						Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 					})
 
