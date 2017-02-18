@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/publicheader"
 )
 
 // Connection is a UDP connection
@@ -126,7 +126,7 @@ func (p *UDPProxy) runProxy() error {
 
 		raw := buffer[0:n]
 		r := bytes.NewReader(raw)
-		hdr, err := quic.ParsePublicHeader(r, protocol.PerspectiveClient)
+		hdr, err := publicheader.ParsePublicHeader(r, protocol.PerspectiveClient)
 		if err != nil {
 			return err
 		}

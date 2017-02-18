@@ -11,6 +11,7 @@ import (
 	"unsafe"
 
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/publicheader"
 	"github.com/lucas-clemente/quic-go/qerr"
 
 	. "github.com/onsi/ginkgo"
@@ -134,7 +135,7 @@ var _ = Describe("Client", func() {
 			}()
 
 			Expect(session.packetCount).To(BeZero())
-			ph := PublicHeader{
+			ph := publicheader.PublicHeader{
 				PacketNumber:    1,
 				PacketNumberLen: protocol.PacketNumberLen2,
 				ConnectionID:    0x1337,
@@ -176,7 +177,7 @@ var _ = Describe("Client", func() {
 
 	Context("version negotiation", func() {
 		getVersionNegotiation := func(versions []protocol.VersionNumber) []byte {
-			oldVersionNegotiationPacket := composeVersionNegotiation(0x1337)
+			oldVersionNegotiationPacket := publicheader.ComposeVersionNegotiation(0x1337)
 			oldSupportVersionTags := protocol.SupportedVersionsAsTags
 			var b bytes.Buffer
 			for _, v := range versions {
@@ -185,14 +186,14 @@ var _ = Describe("Client", func() {
 				b.Write(s)
 			}
 			protocol.SupportedVersionsAsTags = b.Bytes()
-			packet := composeVersionNegotiation(client.connectionID)
+			packet := publicheader.ComposeVersionNegotiation(client.connectionID)
 			protocol.SupportedVersionsAsTags = oldSupportVersionTags
-			Expect(composeVersionNegotiation(0x1337)).To(Equal(oldVersionNegotiationPacket))
+			Expect(publicheader.ComposeVersionNegotiation(0x1337)).To(Equal(oldVersionNegotiationPacket))
 			return packet
 		}
 
 		It("recognizes that a packet without VersionFlag means that the server accepted the suggested version", func() {
-			ph := PublicHeader{
+			ph := publicheader.PublicHeader{
 				PacketNumber:    1,
 				PacketNumberLen: protocol.PacketNumberLen2,
 				ConnectionID:    0x1337,

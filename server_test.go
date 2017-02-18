@@ -61,14 +61,6 @@ var _ = Describe("Server", func() {
 			firstPacket = append(append(firstPacket, b.Bytes()...), 0x01)
 		})
 
-		It("composes version negotiation packets", func() {
-			expected := append(
-				[]byte{0x01 | 0x08, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
-				protocol.SupportedVersionsAsTags...,
-			)
-			Expect(composeVersionNegotiation(1)).To(Equal(expected))
-		})
-
 		It("creates new sessions", func() {
 			err := server.handlePacket(nil, nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())

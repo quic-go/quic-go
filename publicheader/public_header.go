@@ -1,4 +1,4 @@
-package quic
+package publicheader
 
 import (
 	"bytes"
@@ -181,9 +181,9 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Pub
 				}
 				header.VersionNumber = protocol.VersionTagToNumber(versionTag)
 			} else { // parse the version negotiaton packet
-			if b.Len()%4 != 0 {
-				return nil, qerr.InvalidVersionNegotiationPacket
-			}
+				if b.Len()%4 != 0 {
+					return nil, qerr.InvalidVersionNegotiationPacket
+				}
 				header.SupportedVersions = make([]protocol.VersionNumber, 0)
 				for {
 					var versionTag uint32

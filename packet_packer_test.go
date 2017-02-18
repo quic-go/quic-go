@@ -5,6 +5,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/publicheader"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -176,7 +177,7 @@ var _ = Describe("Packet packer", func() {
 		p, err := packer.PackPacket(nil, []frames.Frame{}, 0)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(p).ToNot(BeNil())
-		hdr, err := ParsePublicHeader(bytes.NewReader(p.raw), protocol.PerspectiveClient)
+		hdr, err := publicheader.ParsePublicHeader(bytes.NewReader(p.raw), protocol.PerspectiveClient)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.VersionFlag).To(BeTrue())
 		Expect(hdr.VersionNumber).To(Equal(packer.version))
@@ -190,7 +191,7 @@ var _ = Describe("Packet packer", func() {
 		p, err := packer.PackPacket(nil, []frames.Frame{}, 0)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(p).ToNot(BeNil())
-		hdr, err := ParsePublicHeader(bytes.NewReader(p.raw), protocol.PerspectiveClient)
+		hdr, err := publicheader.ParsePublicHeader(bytes.NewReader(p.raw), protocol.PerspectiveClient)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.VersionFlag).To(BeFalse())
 	})

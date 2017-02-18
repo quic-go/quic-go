@@ -6,6 +6,7 @@ import (
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/publicheader"
 	"github.com/lucas-clemente/quic-go/qerr"
 
 	. "github.com/onsi/ginkgo"
@@ -15,7 +16,7 @@ import (
 var _ = Describe("Packet unpacker", func() {
 	var (
 		unpacker *packetUnpacker
-		hdr      *PublicHeader
+		hdr      *publicheader.PublicHeader
 		hdrBin   []byte
 		aead     crypto.AEAD
 		data     []byte
@@ -24,7 +25,7 @@ var _ = Describe("Packet unpacker", func() {
 
 	BeforeEach(func() {
 		aead = &crypto.NullAEAD{}
-		hdr = &PublicHeader{
+		hdr = &publicheader.PublicHeader{
 			PacketNumber:    10,
 			PacketNumberLen: 1,
 		}

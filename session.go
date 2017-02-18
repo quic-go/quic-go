@@ -14,17 +14,18 @@ import (
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/publicheader"
 	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
 type unpacker interface {
-	Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data []byte) (*unpackedPacket, error)
+	Unpack(publicHeaderBinary []byte, hdr *publicheader.PublicHeader, data []byte) (*unpackedPacket, error)
 }
 
 type receivedPacket struct {
 	remoteAddr   interface{}
-	publicHeader *PublicHeader
+	publicHeader *publicheader.PublicHeader
 	data         []byte
 	rcvTime      time.Time
 }

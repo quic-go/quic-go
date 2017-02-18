@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/publicheader"
 	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
 )
@@ -133,7 +134,7 @@ func (c *Client) handlePacket(packet []byte) error {
 
 	r := bytes.NewReader(packet)
 
-	hdr, err := ParsePublicHeader(r, protocol.PerspectiveServer)
+	hdr, err := publicheader.ParsePublicHeader(r, protocol.PerspectiveServer)
 	if err != nil {
 		return qerr.Error(qerr.InvalidPacketHeader, err.Error())
 	}
