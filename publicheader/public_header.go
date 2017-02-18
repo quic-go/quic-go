@@ -109,9 +109,9 @@ func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pe
 	return nil
 }
 
-// ParsePublicHeader parses a QUIC packet's public header
+// Parse parses a QUIC packet's public header
 // the packetSentBy is the perspective of the peer that sent this PublicHeader, i.e. if we're the server, packetSentBy should be PerspectiveClient
-func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*PublicHeader, error) {
+func Parse(b *bytes.Reader, packetSentBy protocol.Perspective) (*PublicHeader, error) {
 	header := &PublicHeader{}
 
 	// First byte

@@ -41,7 +41,7 @@ func newLinkedConnection(other *Session) *linkedConnection {
 				return
 			}
 			r := bytes.NewReader(packet)
-			hdr, err := publicheader.ParsePublicHeader(r, protocol.PerspectiveClient)
+			hdr, err := publicheader.Parse(r, protocol.PerspectiveClient)
 			if err != nil {
 				Expect(err).NotTo(HaveOccurred())
 			}
