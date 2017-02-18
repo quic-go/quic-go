@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
+	"go/build"
 	"io"
 	"io/ioutil"
 	"mime/multipart"
@@ -13,6 +14,8 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"runtime"
+
 	"strconv"
 	"time"
 
@@ -35,10 +38,11 @@ const (
 )
 
 var (
-	server    *h2quic.Server
-	dataMan   dataManager
-	port      string
-	uploadDir string
+	server     *h2quic.Server
+	dataMan    dataManager
+	port       string
+	uploadDir  string
+	clientPath string
 
 	docker *gexec.Session
 )
@@ -68,6 +72,12 @@ var _ = BeforeEach(func() {
 	Expect(err).ToNot(HaveOccurred())
 	err = os.MkdirAll(uploadDir, os.ModeDir|0777)
 	Expect(err).ToNot(HaveOccurred())
+
+	clientPath = fmt.Sprintf(
+		"%s/src/github.com/lucas-clemente/quic-clients/client-%s-debug",
+		build.Default.GOPATH,
+		runtime.GOOS,
+	)
 })
 
 var _ = AfterEach(func() {

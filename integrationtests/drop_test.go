@@ -3,9 +3,7 @@ package integrationtests
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"os/exec"
-	"runtime"
 	"strconv"
 	"time"
 
@@ -27,12 +25,6 @@ var _ = Describe("Drop Proxy", func() {
 
 	runDropTest := func(incomingPacketDropper, outgoingPacketDropper proxy.DropCallback, version protocol.VersionNumber) {
 		proxyPort := 12345
-
-		clientPath := fmt.Sprintf(
-			"%s/src/github.com/lucas-clemente/quic-clients/client-%s-debug",
-			os.Getenv("GOPATH"),
-			runtime.GOOS,
-		)
 
 		iPort, _ := strconv.Atoi(port)
 		var err error
