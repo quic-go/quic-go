@@ -48,7 +48,7 @@ var _ = Describe("Packet unpacker", func() {
 		Expect(packet.frames).To(Equal([]frames.Frame{f}))
 	})
 
-	It("unpacks stream frames", func() {
+	It("unpacks STREAM frames", func() {
 		f := &frames.StreamFrame{
 			StreamID: 1,
 			Data:     []byte("foobar"),
@@ -84,11 +84,25 @@ var _ = Describe("Packet unpacker", func() {
 		Expect(err).To(MatchError("unimplemented: CONGESTION_FEEDBACK"))
 	})
 
-	It("handles pad frames", func() {
-		setData([]byte{0, 0, 0})
+	It("handles PADDING frames", func() {
+		setData([]byte{0, 0, 0}) // 3 bytes PADDING
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.frames).To(BeEmpty())
+	})
+
+	It("handles PADDING between two other frames", func() {
+		f := &frames.PingFrame{}
+		err := f.Write(buf, protocol.VersionWhatever)
+		Expect(err).ToNot(HaveOccurred())
+		_, err = buf.Write(bytes.Repeat([]byte{0}, 10)) // 10 bytes PADDING
+		Expect(err).ToNot(HaveOccurred())
+		err = f.Write(buf, protocol.VersionWhatever)
+		Expect(err).ToNot(HaveOccurred())
+		setData(buf.Bytes())
+		packet, err := unpacker.Unpack(hdrBin, hdr, data)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(packet.frames).To(HaveLen(2))
 	})
 
 	It("unpacks RST_STREAM frames", func() {

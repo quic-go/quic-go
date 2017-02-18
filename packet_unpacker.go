@@ -33,9 +33,11 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, da
 	fs := make([]frames.Frame, 0, 2)
 
 	// Read all frames in the packet
-ReadLoop:
 	for r.Len() > 0 {
 		typeByte, _ := r.ReadByte()
+		if typeByte == 0x0 { // PADDING frame
+			continue
+		}
 		r.UnreadByte()
 
 		var frame frames.Frame
@@ -53,8 +55,6 @@ ReadLoop:
 			err = errors.New("unimplemented: CONGESTION_FEEDBACK")
 		} else {
 			switch typeByte {
-			case 0x0: // PAD, end of frames
-				break ReadLoop
 			case 0x01:
 				frame, err = frames.ParseRstStreamFrame(r)
 				if err != nil {
