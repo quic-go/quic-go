@@ -6,9 +6,11 @@ import (
 )
 
 type connection interface {
-	write([]byte) error
-	setCurrentRemoteAddr(net.Addr)
+	Write([]byte) error
+	Read([]byte) (int, net.Addr, error)
+	Close() error
 	RemoteAddr() net.Addr
+	SetCurrentRemoteAddr(net.Addr)
 }
 
 type conn struct {
@@ -20,12 +22,16 @@ type conn struct {
 
 var _ connection = &conn{}
 
-func (c *conn) write(p []byte) error {
+func (c *conn) Write(p []byte) error {
 	_, err := c.pconn.WriteTo(p, c.currentAddr)
 	return err
 }
 
-func (c *conn) setCurrentRemoteAddr(addr net.Addr) {
+func (c *conn) Read(p []byte) (int, net.Addr, error) {
+	return c.pconn.ReadFrom(p)
+}
+
+func (c *conn) SetCurrentRemoteAddr(addr net.Addr) {
 	c.mutex.Lock()
 	c.currentAddr = addr
 	c.mutex.Unlock()
@@ -36,4 +42,8 @@ func (c *conn) RemoteAddr() net.Addr {
 	addr := c.currentAddr
 	c.mutex.RUnlock()
 	return addr
+}
+
+func (c *conn) Close() error {
+	return c.pconn.Close()
 }

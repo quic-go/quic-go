@@ -50,7 +50,7 @@ func newLinkedConnection(other *session) *linkedConnection {
 	return conn
 }
 
-func (c *linkedConnection) write(p []byte) error {
+func (c *linkedConnection) Write(p []byte) error {
 	packet := getPacketBuffer()
 	packet = packet[:len(p)]
 	copy(packet, p)
@@ -61,8 +61,10 @@ func (c *linkedConnection) write(p []byte) error {
 	return nil
 }
 
-func (*linkedConnection) setCurrentRemoteAddr(addr net.Addr) {}
-func (*linkedConnection) RemoteAddr() net.Addr               { return &net.UDPAddr{} }
+func (c *linkedConnection) Read(p []byte) (int, net.Addr, error) { panic("not implemented") }
+func (*linkedConnection) SetCurrentRemoteAddr(addr net.Addr)     {}
+func (*linkedConnection) RemoteAddr() net.Addr                   { return &net.UDPAddr{} }
+func (c *linkedConnection) Close() error                         { return nil }
 
 func setAEAD(cs handshake.CryptoSetup, aead crypto.AEAD) {
 	*(*bool)(unsafe.Pointer(reflect.ValueOf(cs).Elem().FieldByName("receivedForwardSecurePacket").UnsafeAddr())) = true

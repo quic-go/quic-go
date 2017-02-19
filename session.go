@@ -332,7 +332,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 	}
 	if s.perspective == protocol.PerspectiveServer {
 		// update the remote address, even if unpacking failed for any other reason than a decryption error
-		s.conn.setCurrentRemoteAddr(p.remoteAddr)
+		s.conn.SetCurrentRemoteAddr(p.remoteAddr)
 	}
 	if err != nil {
 		return err
@@ -626,7 +626,7 @@ func (s *session) sendPacket() error {
 
 		s.logPacket(packet)
 
-		err = s.conn.write(packet.raw)
+		err = s.conn.Write(packet.raw)
 		putPacketBuffer(packet.raw)
 		if err != nil {
 			return err
@@ -644,7 +644,7 @@ func (s *session) sendConnectionClose(quicErr *qerr.QuicError) error {
 		return errors.New("Session BUG: expected packet not to be nil")
 	}
 	s.logPacket(packet)
-	return s.conn.write(packet.raw)
+	return s.conn.Write(packet.raw)
 }
 
 func (s *session) logPacket(packet *packedPacket) {
@@ -723,7 +723,7 @@ func (s *session) garbageCollectStreams() {
 
 func (s *session) sendPublicReset(rejectedPacketNumber protocol.PacketNumber) error {
 	utils.Infof("Sending public reset for connection %x, packet number %d", s.connectionID, rejectedPacketNumber)
-	return s.conn.write(writePublicReset(s.connectionID, rejectedPacketNumber, 0))
+	return s.conn.Write(writePublicReset(s.connectionID, rejectedPacketNumber, 0))
 }
 
 // scheduleSending signals that we have data for sending

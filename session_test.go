@@ -29,17 +29,19 @@ type mockConnection struct {
 	written    [][]byte
 }
 
-func (m *mockConnection) write(p []byte) error {
+func (m *mockConnection) Write(p []byte) error {
 	b := make([]byte, len(p))
 	copy(b, p)
 	m.written = append(m.written, b)
 	return nil
 }
+func (m *mockConnection) Read([]byte) (int, net.Addr, error) { panic("not implemented") }
 
-func (m *mockConnection) setCurrentRemoteAddr(addr net.Addr) {
+func (m *mockConnection) SetCurrentRemoteAddr(addr net.Addr) {
 	m.remoteAddr = addr
 }
 func (*mockConnection) RemoteAddr() net.Addr { return &net.UDPAddr{} }
+func (*mockConnection) Close() error         { panic("not implemented") }
 
 type mockUnpacker struct {
 	unpackErr error
