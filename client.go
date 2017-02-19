@@ -16,8 +16,7 @@ import (
 
 // A Client of QUIC
 type Client struct {
-	addr     *net.UDPAddr
-	conn     *net.UDPConn
+	conn     connection
 	hostname string
 
 	connectionID      protocol.ConnectionID
@@ -48,7 +47,7 @@ func NewClient(host string, tlsConfig *tls.Config, cryptoChangeCallback CryptoCh
 		return nil, err
 	}
 
-	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
+	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
 	if err != nil {
 		return nil, err
 	}
@@ -64,8 +63,7 @@ func NewClient(host string, tlsConfig *tls.Config, cryptoChangeCallback CryptoCh
 	}
 
 	client := &Client{
-		addr:                     udpAddr,
-		conn:                     conn,
+		conn:                     &conn{pconn: udpConn, currentAddr: udpAddr},
 		hostname:                 hostname,
 		version:                  protocol.SupportedVersions[len(protocol.SupportedVersions)-1], // use the highest supported version by default
 		connectionID:             connectionID,
@@ -90,7 +88,7 @@ func (c *Client) Listen() error {
 		data := getPacketBuffer()
 		data = data[:protocol.MaxPacketSize]
 
-		n, _, err := c.conn.ReadFromUDP(data)
+		n, addr, err := c.conn.Read(data)
 		if err != nil {
 			if strings.HasSuffix(err.Error(), "use of closed network connection") {
 				return nil
@@ -99,7 +97,7 @@ func (c *Client) Listen() error {
 		}
 		data = data[:n]
 
-		err = c.handlePacket(data)
+		err = c.handlePacket(addr, data)
 		if err != nil {
 			utils.Errorf("error handling packet: %s", err.Error())
 			c.session.Close(err)
@@ -124,7 +122,7 @@ func (c *Client) Close(e error) error {
 	return c.conn.Close()
 }
 
-func (c *Client) handlePacket(packet []byte) error {
+func (c *Client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 	if protocol.ByteCount(len(packet)) > protocol.MaxPacketSize {
 		return qerr.PacketTooLarge
 	}
@@ -198,7 +196,7 @@ func (c *Client) handlePacket(packet []byte) error {
 	}
 
 	c.session.handlePacket(&receivedPacket{
-		remoteAddr:   c.addr,
+		remoteAddr:   remoteAddr,
 		publicHeader: hdr,
 		data:         packet[len(packet)-r.Len():],
 		rcvTime:      rcvTime,
@@ -208,7 +206,15 @@ func (c *Client) handlePacket(packet []byte) error {
 
 func (c *Client) createNewSession(negotiatedVersions []protocol.VersionNumber) error {
 	var err error
-	c.session, err = newClientSession(c.conn, c.addr, c.hostname, c.version, c.connectionID, c.tlsConfig, c.closeCallback, c.cryptoChangeCallback, negotiatedVersions)
+	c.session, err = newClientSession(
+		c.conn,
+		c.hostname,
+		c.version,
+		c.connectionID,
+		c.tlsConfig,
+		c.closeCallback,
+		c.cryptoChangeCallback,
+		negotiatedVersions)
 	if err != nil {
 		return err
 	}

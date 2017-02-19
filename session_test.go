@@ -148,8 +148,7 @@ var _ = Describe("Session", func() {
 		sess.connectionParameters = cpm
 
 		clientSess, err = newClientSession(
-			&net.UDPConn{},
-			&net.UDPAddr{},
+			nil,
 			"hostname",
 			protocol.Version35,
 			0,
