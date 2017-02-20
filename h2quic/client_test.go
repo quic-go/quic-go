@@ -9,9 +9,9 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 
+	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
-	"github.com/lucas-clemente/quic-go/utils"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -25,7 +25,7 @@ type mockQuicClient struct {
 
 func (m *mockQuicClient) Close(e error) error { m.closeErr = e; return nil }
 func (m *mockQuicClient) Listen() error       { panic("not implemented") }
-func (m *mockQuicClient) OpenStream() (utils.Stream, error) {
+func (m *mockQuicClient) OpenStream() (quic.Stream, error) {
 	id := m.nextStream
 	ms := &mockStream{id: id}
 	m.streams[id] = ms

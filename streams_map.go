@@ -8,7 +8,6 @@ import (
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
-	"github.com/lucas-clemente/quic-go/utils"
 )
 
 type streamsMap struct {
@@ -193,10 +192,10 @@ func (m *streamsMap) OpenStreamSync() (*stream, error) {
 
 // AcceptStream returns the next stream opened by the peer
 // it blocks until a new stream is opened
-func (m *streamsMap) AcceptStream() (utils.Stream, error) {
+func (m *streamsMap) AcceptStream() (*stream, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	var str utils.Stream
+	var str *stream
 	for {
 		var ok bool
 		if m.closeErr != nil {

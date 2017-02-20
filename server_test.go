@@ -32,13 +32,13 @@ func (s *mockSession) Close(e error) error {
 	s.closed = true
 	return nil
 }
-func (s *mockSession) AcceptStream() (utils.Stream, error) {
+func (s *mockSession) AcceptStream() (Stream, error) {
 	panic("not implemented")
 }
-func (s *mockSession) OpenStream() (utils.Stream, error) {
+func (s *mockSession) OpenStream() (Stream, error) {
 	return &stream{streamID: 1337}, nil
 }
-func (s *mockSession) OpenStreamSync() (utils.Stream, error) {
+func (s *mockSession) OpenStreamSync() (Stream, error) {
 	panic("not implemented")
 }
 func (s *mockSession) RemoteAddr() net.Addr {

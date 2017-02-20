@@ -107,7 +107,7 @@ func (c *Client) Listen() error {
 }
 
 // OpenStream opens a stream, for client-side created streams (i.e. odd streamIDs)
-func (c *Client) OpenStream() (utils.Stream, error) {
+func (c *Client) OpenStream() (Stream, error) {
 	return c.session.OpenStream()
 }
 

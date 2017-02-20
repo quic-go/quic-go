@@ -21,7 +21,6 @@ import (
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/testdata"
-	"github.com/lucas-clemente/quic-go/utils"
 )
 
 type mockConnection struct {
@@ -571,18 +570,18 @@ var _ = Describe("Session", func() {
 
 	Context("accepting streams", func() {
 		It("waits for new streams", func() {
-			var str utils.Stream
+			var str Stream
 			go func() {
 				defer GinkgoRecover()
 				var err error
 				str, err = sess.AcceptStream()
 				Expect(err).ToNot(HaveOccurred())
 			}()
-			Consistently(func() utils.Stream { return str }).Should(BeNil())
+			Consistently(func() Stream { return str }).Should(BeNil())
 			sess.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 3,
 			})
-			Eventually(func() utils.Stream { return str }).ShouldNot(BeNil())
+			Eventually(func() Stream { return str }).ShouldNot(BeNil())
 			Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
 		})
 
@@ -1236,8 +1235,8 @@ var _ = Describe("Session", func() {
 			str, err := sess.GetOrOpenStream(9)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(str).To(BeNil())
-			// make sure that the returned value is a plain nil, not an utils.Stream with value nil
-			_, ok := str.(utils.Stream)
+			// make sure that the returned value is a plain nil, not an Stream with value nil
+			_, ok := str.(Stream)
 			Expect(ok).To(BeFalse())
 		})
 

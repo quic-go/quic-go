@@ -36,7 +36,7 @@ type cryptoSetupServer struct {
 	keyDerivation KeyDerivationFunction
 	keyExchange   KeyExchangeFunction
 
-	cryptoStream utils.Stream
+	cryptoStream io.ReadWriter
 
 	connectionParameters ConnectionParametersManager
 
@@ -51,7 +51,7 @@ func NewCryptoSetup(
 	sourceAddr []byte,
 	version protocol.VersionNumber,
 	scfg *ServerConfig,
-	cryptoStream utils.Stream,
+	cryptoStream io.ReadWriter,
 	connectionParametersManager ConnectionParametersManager,
 	aeadChanged chan struct{},
 ) (CryptoSetup, error) {

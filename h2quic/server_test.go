@@ -13,10 +13,10 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 
+	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/testdata"
-	"github.com/lucas-clemente/quic-go/utils"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -25,20 +25,20 @@ import (
 type mockSession struct {
 	closed          bool
 	closedWithError error
-	dataStream      utils.Stream
-	streamToAccept  utils.Stream
+	dataStream      quic.Stream
+	streamToAccept  quic.Stream
 }
 
-func (s *mockSession) GetOrOpenStream(id protocol.StreamID) (utils.Stream, error) {
+func (s *mockSession) GetOrOpenStream(id protocol.StreamID) (quic.Stream, error) {
 	return s.dataStream, nil
 }
-func (s *mockSession) AcceptStream() (utils.Stream, error) {
+func (s *mockSession) AcceptStream() (quic.Stream, error) {
 	return s.streamToAccept, nil
 }
-func (s *mockSession) OpenStream() (utils.Stream, error) {
+func (s *mockSession) OpenStream() (quic.Stream, error) {
 	panic("not implemented")
 }
-func (s *mockSession) OpenStreamSync() (utils.Stream, error) {
+func (s *mockSession) OpenStreamSync() (quic.Stream, error) {
 	panic("not implemented")
 }
 func (s *mockSession) Close(e error) error {

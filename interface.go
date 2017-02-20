@@ -2,21 +2,32 @@ package quic
 
 import (
 	"crypto/tls"
+	"io"
 	"net"
 
-	"github.com/lucas-clemente/quic-go/utils"
+	"github.com/lucas-clemente/quic-go/protocol"
 )
+
+// Stream is the interface for QUIC streams
+type Stream interface {
+	io.Reader
+	io.Writer
+	io.Closer
+	StreamID() protocol.StreamID
+	CloseRemote(offset protocol.ByteCount)
+	Reset(error)
+}
 
 // A Session is a QUIC Session
 type Session interface {
 	// get the next stream opened by the client
 	// first stream returned has StreamID 3
-	AcceptStream() (utils.Stream, error)
+	AcceptStream() (Stream, error)
 	// guaranteed to return the smallest unopened stream
 	// special error for "too many streams, retry later"
-	OpenStream() (utils.Stream, error)
+	OpenStream() (Stream, error)
 	// blocks until a new stream can be opened, if the maximum number of stream is opened
-	OpenStreamSync() (utils.Stream, error)
+	OpenStreamSync() (Stream, error)
 	RemoteAddr() net.Addr
 	Close(error) error
 }

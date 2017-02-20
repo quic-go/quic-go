@@ -21,7 +21,7 @@ import (
 
 type streamCreator interface {
 	quic.Session
-	GetOrOpenStream(protocol.StreamID) (utils.Stream, error)
+	GetOrOpenStream(protocol.StreamID) (quic.Stream, error)
 }
 
 // Server is a HTTP2 server listening for QUIC connections.
@@ -128,7 +128,7 @@ func (s *Server) handleHeaderStream(session streamCreator) {
 	}()
 }
 
-func (s *Server) handleRequest(session streamCreator, headerStream utils.Stream, headerStreamMutex *sync.Mutex, hpackDecoder *hpack.Decoder, h2framer *http2.Framer) error {
+func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, headerStreamMutex *sync.Mutex, hpackDecoder *hpack.Decoder, h2framer *http2.Framer) error {
 	h2frame, err := h2framer.ReadFrame()
 	if err != nil {
 		return err
