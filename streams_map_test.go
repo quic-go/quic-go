@@ -175,6 +175,13 @@ var _ = Describe("Streams Map", func() {
 					Expect(m.numOutgoingStreams).To(BeEquivalentTo(1))
 				})
 
+				It("errors if the stream can't be created", func() {
+					testErr := errors.New("test error")
+					m.newStream = func(protocol.StreamID) (*stream, error) { return nil, testErr }
+					_, err := m.OpenStream()
+					Expect(err).To(MatchError(testErr))
+				})
+
 				Context("counting streams", func() {
 					var maxNumStreams int
 
@@ -208,6 +215,49 @@ var _ = Describe("Streams Map", func() {
 							_, err := m.GetOrOpenStream(protocol.StreamID(2*i + 1))
 							Expect(err).ToNot(HaveOccurred())
 						}
+					})
+				})
+
+				Context("opening streams synchronously", func() {
+					var maxNumStreams int
+
+					BeforeEach(func() {
+						maxNumStreams = int(cpm.GetMaxOutgoingStreams())
+					})
+
+					openMaxNumStreams := func() {
+						for i := 1; i <= maxNumStreams; i++ {
+							_, err := m.OpenStream()
+							Expect(err).NotTo(HaveOccurred())
+						}
+						_, err := m.OpenStream()
+						Expect(err).To(MatchError(qerr.TooManyOpenStreams))
+					}
+
+					It("waits until another stream is closed", func() {
+						openMaxNumStreams()
+						var returned bool
+						var str *stream
+						go func() {
+							defer GinkgoRecover()
+							var err error
+							str, err = m.OpenStreamSync()
+							Expect(err).ToNot(HaveOccurred())
+							returned = true
+						}()
+
+						Consistently(func() bool { return returned }).Should(BeFalse())
+						err := m.RemoveStream(6)
+						Expect(err).ToNot(HaveOccurred())
+						Eventually(func() bool { return returned }).Should(BeTrue())
+						Expect(str.StreamID()).To(Equal(protocol.StreamID(2*maxNumStreams + 2)))
+					})
+
+					It("errors if the stream can't be created", func() {
+						testErr := errors.New("test error")
+						m.newStream = func(protocol.StreamID) (*stream, error) { return nil, testErr }
+						_, err := m.OpenStreamSync()
+						Expect(err).To(MatchError(testErr))
 					})
 				})
 			})

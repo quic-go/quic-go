@@ -25,8 +25,10 @@ type streamsMap struct {
 	nextStream                protocol.StreamID // StreamID of the next Stream that will be returned by OpenStream()
 	highestStreamOpenedByPeer protocol.StreamID
 	nextStreamOrErrCond       sync.Cond
-	closeErr                  error
-	nextStreamToAccept        protocol.StreamID
+	openStreamCond            sync.Cond
+
+	closeErr           error
+	nextStreamToAccept protocol.StreamID
 
 	newStream newStreamLambda
 
@@ -52,6 +54,7 @@ func newStreamsMap(newStream newStreamLambda, pers protocol.Perspective, connect
 		connectionParameters: connectionParameters,
 	}
 	sm.nextStreamOrErrCond.L = &sm.mutex
+	sm.openStreamCond.L = &sm.mutex
 
 	if pers == protocol.PerspectiveClient {
 		sm.nextStream = 1
@@ -139,11 +142,7 @@ func (m *streamsMap) openRemoteStream(id protocol.StreamID) (*stream, error) {
 	return s, nil
 }
 
-// OpenStream opens the next available stream
-func (m *streamsMap) OpenStream() (*stream, error) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
+func (m *streamsMap) openStreamImpl() (*stream, error) {
 	id := m.nextStream
 	if m.numOutgoingStreams >= m.connectionParameters.GetMaxOutgoingStreams() {
 		return nil, qerr.TooManyOpenStreams
@@ -163,6 +162,30 @@ func (m *streamsMap) OpenStream() (*stream, error) {
 	m.nextStream += 2
 	m.putStream(s)
 	return s, nil
+}
+
+// OpenStream opens the next available stream
+func (m *streamsMap) OpenStream() (*stream, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	return m.openStreamImpl()
+}
+
+func (m *streamsMap) OpenStreamSync() (*stream, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	for {
+		str, err := m.openStreamImpl()
+		if err == nil {
+			return str, err
+		}
+		if err != nil && err != qerr.TooManyOpenStreams {
+			return nil, err
+		}
+		m.openStreamCond.Wait()
+	}
 }
 
 // AcceptStream returns the next stream opened by the peer
@@ -290,6 +313,7 @@ func (m *streamsMap) RemoveStream(id protocol.StreamID) error {
 	}
 
 	delete(m.streams, id)
+	m.openStreamCond.Signal()
 	return nil
 }
 
