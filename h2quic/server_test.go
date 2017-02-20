@@ -38,6 +38,9 @@ func (s *mockSession) AcceptStream() (utils.Stream, error) {
 func (s *mockSession) OpenStream() (utils.Stream, error) {
 	panic("not implemented")
 }
+func (s *mockSession) OpenStreamSync() (utils.Stream, error) {
+	panic("not implemented")
+}
 func (s *mockSession) Close(e error) error {
 	s.closed = true
 	s.closedWithError = e

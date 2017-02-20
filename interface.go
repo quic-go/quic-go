@@ -15,9 +15,8 @@ type Session interface {
 	// guaranteed to return the smallest unopened stream
 	// special error for "too many streams, retry later"
 	OpenStream() (utils.Stream, error)
-	// TODO: implement this
 	// blocks until a new stream can be opened, if the maximum number of stream is opened
-	// OpenStreamSync() (utils.Stream, error)
+	OpenStreamSync() (utils.Stream, error)
 	RemoteAddr() net.Addr
 	Close(error) error
 }

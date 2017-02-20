@@ -681,6 +681,10 @@ func (s *session) OpenStream() (utils.Stream, error) {
 	return s.streamsMap.OpenStream()
 }
 
+func (s *session) OpenStreamSync() (utils.Stream, error) {
+	return s.streamsMap.OpenStreamSync()
+}
+
 func (s *session) queueResetStreamFrame(id protocol.StreamID, offset protocol.ByteCount) {
 	s.packer.QueueControlFrameForNextPacket(&frames.RstStreamFrame{
 		StreamID:   id,

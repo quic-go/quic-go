@@ -38,6 +38,9 @@ func (s *mockSession) AcceptStream() (utils.Stream, error) {
 func (s *mockSession) OpenStream() (utils.Stream, error) {
 	return &stream{streamID: 1337}, nil
 }
+func (s *mockSession) OpenStreamSync() (utils.Stream, error) {
+	panic("not implemented")
+}
 func (s *mockSession) RemoteAddr() net.Addr {
 	panic("not implemented")
 }

@@ -1240,6 +1240,13 @@ var _ = Describe("Session", func() {
 			_, ok := str.(utils.Stream)
 			Expect(ok).To(BeFalse())
 		})
+
+		// all relevant tests for this are in the streamsMap
+		It("opens streams synchronously", func() {
+			str, err := sess.OpenStreamSync()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(str).ToNot(BeNil())
+		})
 	})
 
 	Context("counting streams", func() {
