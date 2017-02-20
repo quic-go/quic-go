@@ -3,9 +3,7 @@ package integrationtests
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"os/exec"
-	"runtime"
 	"strconv"
 	"sync"
 
@@ -23,12 +21,6 @@ var _ = Describe("Integration tests", func() {
 	BeforeEach(func() {
 		dataMan.GenerateData(dataLen)
 	})
-
-	clientPath := fmt.Sprintf(
-		"%s/src/github.com/lucas-clemente/quic-clients/client-%s-debug",
-		os.Getenv("GOPATH"),
-		runtime.GOOS,
-	)
 
 	for i := range protocol.SupportedVersions {
 		version := protocol.SupportedVersions[i]

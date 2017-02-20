@@ -13,6 +13,9 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
+	"runtime"
+
 	"strconv"
 	"time"
 
@@ -35,10 +38,11 @@ const (
 )
 
 var (
-	server    *h2quic.Server
-	dataMan   dataManager
-	port      string
-	uploadDir string
+	server     *h2quic.Server
+	dataMan    dataManager
+	port       string
+	uploadDir  string
+	clientPath string
 
 	docker *gexec.Session
 )
@@ -68,6 +72,12 @@ var _ = BeforeEach(func() {
 	Expect(err).ToNot(HaveOccurred())
 	err = os.MkdirAll(uploadDir, os.ModeDir|0777)
 	Expect(err).ToNot(HaveOccurred())
+
+	_, thisfile, _, ok := runtime.Caller(0)
+	if !ok {
+		Fail("Failed to get current path")
+	}
+	clientPath = filepath.Join(thisfile, fmt.Sprintf("../../../quic-clients/client-%s-debug", runtime.GOOS))
 })
 
 var _ = AfterEach(func() {
