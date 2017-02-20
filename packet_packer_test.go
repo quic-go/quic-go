@@ -167,8 +167,9 @@ var _ = Describe("Packet packer", func() {
 		Expect(p).ToNot(BeNil())
 	})
 
-	It("adds the version flag to the public header", func() {
+	It("adds the version flag to the public header before the crypto handshake is finished", func() {
 		packer.perspective = protocol.PerspectiveClient
+		packer.cryptoSetup.(*mockCryptoSetup).handshakeComplete = false
 		packer.controlFrames = []frames.Frame{&frames.BlockedFrame{StreamID: 0}}
 		packer.connectionID = 0x1337
 		packer.version = 123
@@ -179,6 +180,19 @@ var _ = Describe("Packet packer", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.VersionFlag).To(BeTrue())
 		Expect(hdr.VersionNumber).To(Equal(packer.version))
+	})
+
+	It("doesn't add the version flag to the public header after the crypto handshake is completed", func() {
+		packer.perspective = protocol.PerspectiveClient
+		packer.cryptoSetup.(*mockCryptoSetup).handshakeComplete = true
+		packer.controlFrames = []frames.Frame{&frames.BlockedFrame{StreamID: 0}}
+		packer.connectionID = 0x1337
+		p, err := packer.PackPacket(nil, []frames.Frame{}, 0)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(p).ToNot(BeNil())
+		hdr, err := ParsePublicHeader(bytes.NewReader(p.raw), protocol.PerspectiveClient)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(hdr.VersionFlag).To(BeFalse())
 	})
 
 	It("packs many control frames into 1 packets", func() {

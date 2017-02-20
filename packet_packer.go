@@ -77,8 +77,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 		responsePublicHeader.DiversificationNonce = p.cryptoSetup.DiversificationNonce()
 	}
 
-	// TODO: stop sending version numbers once a version has been negotiated
-	if p.perspective == protocol.PerspectiveClient {
+	if p.perspective == protocol.PerspectiveClient && !p.cryptoSetup.HandshakeComplete() {
 		responsePublicHeader.VersionFlag = true
 		responsePublicHeader.VersionNumber = p.version
 	}
