@@ -259,6 +259,29 @@ var _ = Describe("Streams Map", func() {
 						_, err := m.OpenStreamSync()
 						Expect(err).To(MatchError(testErr))
 					})
+
+					It("stops waiting when an error is registered", func() {
+						openMaxNumStreams()
+						testErr := errors.New("test error")
+						var err error
+						var returned bool
+						go func() {
+							_, err = m.OpenStreamSync()
+							returned = true
+						}()
+
+						Consistently(func() bool { return returned }).Should(BeFalse())
+						m.CloseWithError(testErr)
+						Eventually(func() bool { return returned }).Should(BeTrue())
+						Expect(err).To(MatchError(testErr))
+					})
+
+					It("immediately returns when OpenStreamSync is called after an error was registered", func() {
+						testErr := errors.New("test error")
+						m.CloseWithError(testErr)
+						_, err := m.OpenStreamSync()
+						Expect(err).To(MatchError(testErr))
+					})
 				})
 			})
 
