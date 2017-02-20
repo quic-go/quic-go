@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
-	"go/build"
 	"io"
 	"io/ioutil"
 	"mime/multipart"
@@ -14,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"runtime"
 
 	"strconv"
@@ -73,11 +73,11 @@ var _ = BeforeEach(func() {
 	err = os.MkdirAll(uploadDir, os.ModeDir|0777)
 	Expect(err).ToNot(HaveOccurred())
 
-	clientPath = fmt.Sprintf(
-		"%s/src/github.com/lucas-clemente/quic-clients/client-%s-debug",
-		build.Default.GOPATH,
-		runtime.GOOS,
-	)
+	_, thisfile, _, ok := runtime.Caller(0)
+	if !ok {
+		Fail("Failed to get current path")
+	}
+	clientPath = filepath.Join(thisfile, fmt.Sprintf("../../../quic-clients/client-%s-debug", runtime.GOOS))
 })
 
 var _ = AfterEach(func() {
