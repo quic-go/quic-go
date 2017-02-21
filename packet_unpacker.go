@@ -8,6 +8,7 @@ import (
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/publicheader"
 	"github.com/lucas-clemente/quic-go/qerr"
 )
 
@@ -16,7 +17,7 @@ type packetUnpacker struct {
 	aead    crypto.AEAD
 }
 
-func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data []byte) (*unpackedPacket, error) {
+func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *publicheader.PublicHeader, data []byte) (*unpackedPacket, error) {
 	buf := getPacketBuffer()
 	defer putPacketBuffer(buf)
 	decrypted, err := u.aead.Open(buf, data, hdr.PacketNumber, publicHeaderBinary)

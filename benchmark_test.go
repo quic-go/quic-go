@@ -20,6 +20,7 @@ import (
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/publicheader"
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
@@ -40,7 +41,7 @@ func newLinkedConnection(other *Session) *linkedConnection {
 				return
 			}
 			r := bytes.NewReader(packet)
-			hdr, err := ParsePublicHeader(r, protocol.PerspectiveClient)
+			hdr, err := publicheader.Parse(r, protocol.PerspectiveClient)
 			if err != nil {
 				Expect(err).NotTo(HaveOccurred())
 			}

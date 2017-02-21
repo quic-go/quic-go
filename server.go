@@ -12,6 +12,7 @@ import (
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/publicheader"
 	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
 )
@@ -136,7 +137,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 
 	r := bytes.NewReader(packet)
 
-	hdr, err := ParsePublicHeader(r, protocol.PerspectiveClient)
+	hdr, err := publicheader.Parse(r, protocol.PerspectiveClient)
 	if err != nil {
 		return qerr.Error(qerr.InvalidPacketHeader, err.Error())
 	}
@@ -172,7 +173,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 	// Send Version Negotiation Packet if the client is speaking a different protocol version
 	if hdr.VersionFlag && !protocol.IsSupportedVersion(hdr.VersionNumber) {
 		utils.Infof("Client offered version %d, sending VersionNegotiationPacket", hdr.VersionNumber)
-		_, err = conn.WriteToUDP(composeVersionNegotiation(hdr.ConnectionID), remoteAddr)
+		_, err = conn.WriteToUDP(publicheader.ComposeVersionNegotiation(hdr.ConnectionID), remoteAddr)
 		return err
 	}
 
@@ -226,19 +227,4 @@ func (s *Server) closeCallback(id protocol.ConnectionID) {
 		delete(s.sessions, id)
 		s.sessionsMutex.Unlock()
 	})
-}
-
-func composeVersionNegotiation(connectionID protocol.ConnectionID) []byte {
-	fullReply := &bytes.Buffer{}
-	responsePublicHeader := PublicHeader{
-		ConnectionID: connectionID,
-		PacketNumber: 1,
-		VersionFlag:  true,
-	}
-	err := responsePublicHeader.Write(fullReply, protocol.Version35, protocol.PerspectiveServer)
-	if err != nil {
-		utils.Errorf("error composing version negotiation packet: %s", err.Error())
-	}
-	fullReply.Write(protocol.SupportedVersionsAsTags)
-	return fullReply.Bytes()
 }

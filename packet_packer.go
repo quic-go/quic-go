@@ -8,6 +8,7 @@ import (
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/publicheader"
 )
 
 type packedPacket struct {
@@ -66,7 +67,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 
 	currentPacketNumber := p.packetNumberGenerator.Peek()
 	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(currentPacketNumber, leastUnacked)
-	responsePublicHeader := &PublicHeader{
+	responsePublicHeader := &publicheader.PublicHeader{
 		ConnectionID:         p.connectionID,
 		PacketNumber:         currentPacketNumber,
 		PacketNumberLen:      packetNumberLen,

@@ -19,6 +19,7 @@ import (
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/publicheader"
 	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/testdata"
 	"github.com/lucas-clemente/quic-go/utils"
@@ -47,7 +48,7 @@ type mockUnpacker struct {
 	unpackErr error
 }
 
-func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data []byte) (*unpackedPacket, error) {
+func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *publicheader.PublicHeader, data []byte) (*unpackedPacket, error) {
 	if m.unpackErr != nil {
 		return nil, m.unpackErr
 	}
@@ -604,12 +605,12 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("receiving packets", func() {
-		var hdr *PublicHeader
+		var hdr *publicheader.PublicHeader
 
 		BeforeEach(func() {
 			session.unpacker = &mockUnpacker{}
 			clientSession.unpacker = &mockUnpacker{}
-			hdr = &PublicHeader{PacketNumberLen: protocol.PacketNumberLen6}
+			hdr = &publicheader.PublicHeader{PacketNumberLen: protocol.PacketNumberLen6}
 		})
 
 		It("sets the {last,largest}RcvdPacketNumber", func() {
@@ -663,7 +664,7 @@ var _ = Describe("Session", func() {
 				Expect(session.conn.(*mockConnection).remoteAddr).ToNot(Equal(remoteIP))
 				p := receivedPacket{
 					remoteAddr:   remoteIP,
-					publicHeader: &PublicHeader{PacketNumber: 1337},
+					publicHeader: &publicheader.PublicHeader{PacketNumber: 1337},
 				}
 				err := session.handlePacketImpl(&p)
 				Expect(err).ToNot(HaveOccurred())
@@ -679,7 +680,7 @@ var _ = Describe("Session", func() {
 				session.unpacker.(*packetUnpacker).aead = &crypto.NullAEAD{}
 				p := receivedPacket{
 					remoteAddr:   attackerIP,
-					publicHeader: &PublicHeader{PacketNumber: 1337},
+					publicHeader: &publicheader.PublicHeader{PacketNumber: 1337},
 				}
 				err := session.handlePacketImpl(&p)
 				quicErr := err.(*qerr.QuicError)
@@ -693,7 +694,7 @@ var _ = Describe("Session", func() {
 				Expect(session.conn.(*mockConnection).remoteAddr).ToNot(Equal(remoteIP))
 				p := receivedPacket{
 					remoteAddr:   remoteIP,
-					publicHeader: &PublicHeader{PacketNumber: 1337},
+					publicHeader: &publicheader.PublicHeader{PacketNumber: 1337},
 				}
 				session.unpacker.(*mockUnpacker).unpackErr = testErr
 				err := session.handlePacketImpl(&p)
@@ -998,7 +999,7 @@ var _ = Describe("Session", func() {
 	It("sends public reset after too many undecryptable packets", func() {
 		// Write protocol.MaxUndecryptablePackets and expect a public reset to happen
 		for i := 0; i < protocol.MaxUndecryptablePackets; i++ {
-			hdr := &PublicHeader{
+			hdr := &publicheader.PublicHeader{
 				PacketNumber: protocol.PacketNumber(i + 1),
 			}
 			session.handlePacket(&receivedPacket{publicHeader: hdr, data: []byte("foobar")})
@@ -1013,7 +1014,7 @@ var _ = Describe("Session", func() {
 	It("ignores undecryptable packets after the handshake is complete", func() {
 		*(*bool)(unsafe.Pointer(reflect.ValueOf(session.cryptoSetup).Elem().FieldByName("receivedForwardSecurePacket").UnsafeAddr())) = true
 		for i := 0; i < protocol.MaxUndecryptablePackets; i++ {
-			hdr := &PublicHeader{
+			hdr := &publicheader.PublicHeader{
 				PacketNumber: protocol.PacketNumber(i + 1),
 			}
 			session.handlePacket(&receivedPacket{publicHeader: hdr, data: []byte("foobar")})
@@ -1026,7 +1027,7 @@ var _ = Describe("Session", func() {
 
 	It("unqueues undecryptable packets for later decryption", func() {
 		session.undecryptablePackets = []*receivedPacket{{
-			publicHeader: &PublicHeader{PacketNumber: protocol.PacketNumber(42)},
+			publicHeader: &publicheader.PublicHeader{PacketNumber: protocol.PacketNumber(42)},
 		}}
 		Expect(session.receivedPackets).NotTo(Receive())
 		session.tryDecryptingQueuedPackets()

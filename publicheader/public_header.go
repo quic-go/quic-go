@@ -1,4 +1,4 @@
-package quic
+package publicheader
 
 import (
 	"bytes"
@@ -109,9 +109,9 @@ func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pe
 	return nil
 }
 
-// ParsePublicHeader parses a QUIC packet's public header
+// Parse parses a QUIC packet's public header
 // the packetSentBy is the perspective of the peer that sent this PublicHeader, i.e. if we're the server, packetSentBy should be PerspectiveClient
-func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*PublicHeader, error) {
+func Parse(b *bytes.Reader, packetSentBy protocol.Perspective) (*PublicHeader, error) {
 	header := &PublicHeader{}
 
 	// First byte
@@ -181,9 +181,9 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Pub
 				}
 				header.VersionNumber = protocol.VersionTagToNumber(versionTag)
 			} else { // parse the version negotiaton packet
-			if b.Len()%4 != 0 {
-				return nil, qerr.InvalidVersionNegotiationPacket
-			}
+				if b.Len()%4 != 0 {
+					return nil, qerr.InvalidVersionNegotiationPacket
+				}
 				header.SupportedVersions = make([]protocol.VersionNumber, 0)
 				for {
 					var versionTag uint32
