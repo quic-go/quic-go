@@ -41,10 +41,22 @@ type server struct {
 
 var _ Listener = &server{}
 
-// NewListener makes a new listener
-func NewListener(config *Config) (Listener, error) {
-	certChain := crypto.NewCertChain(config.TLSConfig)
+// ListenAddr listens for QUIC connections on a given address
+func ListenAddr(addr string, config *Config) (Listener, error) {
+	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		return nil, err
+	}
+	return Listen(conn, config)
+}
 
+// Listen listens for QUIC connections on a given net.PacketConn
+func Listen(conn net.PacketConn, config *Config) (Listener, error) {
+	certChain := crypto.NewCertChain(config.TLSConfig)
 	kex, err := crypto.NewCurve25519KEX()
 	if err != nil {
 		return nil, err
@@ -55,6 +67,7 @@ func NewListener(config *Config) (Listener, error) {
 	}
 
 	return &server{
+		conn:                      conn,
 		config:                    config,
 		certChain:                 certChain,
 		scfg:                      scfg,
@@ -65,15 +78,11 @@ func NewListener(config *Config) (Listener, error) {
 }
 
 // Listen listens on an existing PacketConn
-func (s *server) Listen(conn net.PacketConn) error {
-	s.connMutex.Lock()
-	s.conn = conn
-	s.connMutex.Unlock()
-
+func (s *server) Serve() error {
 	for {
 		data := getPacketBuffer()
 		data = data[:protocol.MaxPacketSize]
-		n, remoteAddr, err := conn.ReadFrom(data)
+		n, remoteAddr, err := s.conn.ReadFrom(data)
 		if err != nil {
 			if strings.HasSuffix(err.Error(), "use of closed network connection") {
 				return nil
@@ -81,22 +90,10 @@ func (s *server) Listen(conn net.PacketConn) error {
 			return err
 		}
 		data = data[:n]
-		if err := s.handlePacket(conn, remoteAddr, data); err != nil {
+		if err := s.handlePacket(s.conn, remoteAddr, data); err != nil {
 			utils.Errorf("error handling packet: %s", err.Error())
 		}
 	}
-}
-
-func (s *server) ListenAddr(addr string) error {
-	udpAddr, err := net.ResolveUDPAddr("udp", addr)
-	if err != nil {
-		return err
-	}
-	conn, err := net.ListenUDP("udp", udpAddr)
-	if err != nil {
-		return err
-	}
-	return s.Listen(conn)
 }
 
 // Close the server
@@ -111,15 +108,10 @@ func (s *server) Close() error {
 	}
 	s.sessionsMutex.Unlock()
 
-	s.connMutex.Lock()
-	conn := s.conn
-	s.conn = nil
-	s.connMutex.Unlock()
-
-	if conn == nil {
+	if s.conn == nil {
 		return nil
 	}
-	return conn.Close()
+	return s.conn.Close()
 }
 
 // Addr returns the server's network address
@@ -201,7 +193,9 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 		s.sessionsMutex.Lock()
 		s.sessions[hdr.ConnectionID] = session
 		s.sessionsMutex.Unlock()
-		go s.config.ConnState(session, ConnStateVersionNegotiated)
+		if s.config.ConnState != nil {
+			go s.config.ConnState(session, ConnStateVersionNegotiated)
+		}
 	}
 	if session == nil {
 		// Late packet for closed session

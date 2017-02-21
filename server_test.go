@@ -55,35 +55,43 @@ func newMockSession(conn connection, v protocol.VersionNumber, connectionID prot
 
 var _ = Describe("Server", func() {
 	var (
-		serv            *server
 		conn            *mockPacketConn
+		config          *Config
 		connStateStatus ConnState
 		connStateCalled bool
-		firstPacket     []byte // a valid first packet for a new connection with connectionID 0x4cfa9f9b668619f6 (= connID)
-		connID          = protocol.ConnectionID(0x4cfa9f9b668619f6)
 		udpAddr         = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
 	)
 
 	BeforeEach(func() {
-		serv = &server{
-			sessions:   map[protocol.ConnectionID]packetHandler{},
-			newSession: newMockSession,
-			conn:       &mockPacketConn{},
-			config: &Config{
-				ConnState: func(_ Session, cs ConnState) {
-					connStateStatus = cs
-					connStateCalled = true
-				},
+		conn = &mockPacketConn{}
+		config = &Config{
+			ConnState: func(_ Session, cs ConnState) {
+				connStateStatus = cs
+				connStateCalled = true
 			},
 		}
-		conn = serv.conn.(*mockPacketConn)
-		b := &bytes.Buffer{}
-		utils.WriteUint32(b, protocol.VersionNumberToTag(protocol.SupportedVersions[0]))
-		firstPacket = []byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c}
-		firstPacket = append(append(firstPacket, b.Bytes()...), 0x01)
 	})
 
 	Context("with mock session", func() {
+		var (
+			serv        *server
+			firstPacket []byte // a valid first packet for a new connection with connectionID 0x4cfa9f9b668619f6 (= connID)
+			connID      = protocol.ConnectionID(0x4cfa9f9b668619f6)
+		)
+
+		BeforeEach(func() {
+			serv = &server{
+				sessions:   make(map[protocol.ConnectionID]packetHandler),
+				newSession: newMockSession,
+				conn:       conn,
+				config:     config,
+			}
+			b := &bytes.Buffer{}
+			utils.WriteUint32(b, protocol.VersionNumberToTag(protocol.SupportedVersions[0]))
+			firstPacket = []byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c}
+			firstPacket = append(append(firstPacket, b.Bytes()...), 0x01)
+		})
+
 		It("returns the address", func() {
 			conn.addr = &net.UDPAddr{
 				IP:   net.IPv4(192, 168, 13, 37),
@@ -218,7 +226,7 @@ var _ = Describe("Server", func() {
 		config := Config{
 			ConnState: func(_ Session, _ ConnState) {},
 		}
-		ln, err := NewListener(&config)
+		ln, err := Listen(conn, &config)
 		server := ln.(*server)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(server.deleteClosedSessionsAfter).To(Equal(protocol.ClosedSessionDeleteTimeout))
@@ -228,26 +236,22 @@ var _ = Describe("Server", func() {
 	})
 
 	It("listens on a given address", func() {
-		var listenReturned bool
 		addr := "127.0.0.1:13579"
-		serv.conn = nil
-		go func() {
-			defer GinkgoRecover()
-			err := serv.ListenAddr(addr)
-			Expect(err).ToNot(HaveOccurred())
-			listenReturned = true
-		}()
-		Eventually(func() net.PacketConn { return serv.conn }).ShouldNot(BeNil())
+		ln, err := ListenAddr(addr, config)
+		Expect(err).ToNot(HaveOccurred())
+		serv := ln.(*server)
 		Expect(serv.Addr().String()).To(Equal(addr))
-		Consistently(func() bool { return listenReturned }).Should(BeFalse())
 	})
 
 	It("setups and responds with version negotiation", func() {
 		conn.dataToRead = []byte{0x09, 0x01, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x01, 'Q', '0', '0', '0', 0x01}
 		conn.dataReadFrom = udpAddr
+		ln, err := Listen(conn, config)
+		Expect(err).ToNot(HaveOccurred())
+
 		go func() {
 			defer GinkgoRecover()
-			err := serv.Listen(conn)
+			err := ln.Serve()
 			Expect(err).ToNot(HaveOccurred())
 		}()
 
@@ -263,15 +267,17 @@ var _ = Describe("Server", func() {
 	It("sends a PublicReset for new connections that don't have the VersionFlag set", func() {
 		conn.dataReadFrom = udpAddr
 		conn.dataToRead = []byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x01}
+		ln, err := Listen(conn, config)
+		Expect(err).ToNot(HaveOccurred())
 		go func() {
 			defer GinkgoRecover()
-			err := serv.Listen(conn)
+			err := ln.Serve()
 			Expect(err).ToNot(HaveOccurred())
 		}()
 
 		Eventually(func() int { return conn.dataWritten.Len() }).ShouldNot(BeZero())
 		Expect(conn.dataWrittenTo).To(Equal(udpAddr))
 		Expect(conn.dataWritten.Bytes()[0] & 0x02).ToNot(BeZero()) // check that the ResetFlag is set
-		Expect(serv.sessions).To(BeEmpty())
+		Expect(ln.(*server).sessions).To(BeEmpty())
 	})
 })

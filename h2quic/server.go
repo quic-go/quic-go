@@ -84,17 +84,20 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn *net.UDPConn) error {
 			}
 		},
 	}
-	ln, err := quic.NewListener(&config)
+	var ln quic.Listener
+	var err error
+	if conn == nil {
+		ln, err = quic.ListenAddr(s.Addr, &config)
+	} else {
+		ln, err = quic.Listen(conn, &config)
+	}
 	if err != nil {
 		s.listenerMutex.Unlock()
 		return err
 	}
 	s.listener = ln
 	s.listenerMutex.Unlock()
-	if conn == nil {
-		return ln.ListenAddr(s.Addr)
-	}
-	return ln.Listen(conn)
+	return ln.Serve()
 }
 
 func (s *Server) handleHeaderStream(session streamCreator) {

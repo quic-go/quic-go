@@ -59,6 +59,5 @@ type Config struct {
 type Listener interface {
 	Close() error
 	Addr() net.Addr
-	ListenAddr(addr string) error
-	Listen(conn net.PacketConn) error
+	Serve() error
 }
