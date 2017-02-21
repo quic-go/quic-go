@@ -162,7 +162,7 @@ var _ = Describe("Client", func() {
 			var listenErr error
 			go func() {
 				defer GinkgoRecover()
-				_, err = serverConn.Write(bytes.Repeat([]byte{'f'}, 100))
+				_, err = serverConn.Write(bytes.Repeat([]byte{0xff}, 100))
 				Expect(err).ToNot(HaveOccurred())
 			}()
 

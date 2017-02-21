@@ -25,10 +25,19 @@ var _ = Describe("Public Header", func() {
 			Expect(b.Len()).To(BeZero())
 		})
 
-		It("does not accept 0-byte connection ID", func() {
+		It("does not accept truncated connection ID as a server", func() {
 			b := bytes.NewReader([]byte{0x00, 0x01})
 			_, err := ParsePublicHeader(b, protocol.PerspectiveClient)
 			Expect(err).To(MatchError(errReceivedTruncatedConnectionID))
+		})
+
+		It("accepts a truncated connection ID as a client", func() {
+			b := bytes.NewReader([]byte{0x00, 0x01})
+			hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(hdr.TruncateConnectionID).To(BeTrue())
+			Expect(hdr.ConnectionID).To(BeZero())
+			Expect(b.Len()).To(BeZero())
 		})
 
 		It("rejects 0 as a connection ID", func() {

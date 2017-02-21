@@ -128,7 +128,8 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Pub
 	// 	return nil, errors.New("diversification nonces should only be sent by servers")
 	// }
 
-	if publicFlagByte&0x08 == 0 {
+	header.TruncateConnectionID = publicFlagByte&0x08 == 0
+	if header.TruncateConnectionID && packetSentBy == protocol.PerspectiveClient {
 		return nil, errReceivedTruncatedConnectionID
 	}
 
@@ -146,14 +147,16 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Pub
 	}
 
 	// Connection ID
-	connID, err := utils.ReadUint64(b)
-	if err != nil {
-		return nil, err
-	}
-
-	header.ConnectionID = protocol.ConnectionID(connID)
-	if header.ConnectionID == 0 {
-		return nil, errInvalidConnectionID
+	if !header.TruncateConnectionID {
+		var connID uint64
+		connID, err = utils.ReadUint64(b)
+		if err != nil {
+			return nil, err
+		}
+		header.ConnectionID = protocol.ConnectionID(connID)
+		if header.ConnectionID == 0 {
+			return nil, errInvalidConnectionID
+		}
 	}
 
 	if packetSentBy == protocol.PerspectiveServer && publicFlagByte&0x04 > 0 {
@@ -181,9 +184,9 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Pub
 				}
 				header.VersionNumber = protocol.VersionTagToNumber(versionTag)
 			} else { // parse the version negotiaton packet
-			if b.Len()%4 != 0 {
-				return nil, qerr.InvalidVersionNegotiationPacket
-			}
+				if b.Len()%4 != 0 {
+					return nil, qerr.InvalidVersionNegotiationPacket
+				}
 				header.SupportedVersions = make([]protocol.VersionNumber, 0)
 				for {
 					var versionTag uint32
