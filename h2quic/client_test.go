@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"errors"
+	"net"
 	"net/http"
 
 	"golang.org/x/net/http2"
@@ -17,85 +18,73 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type mockQuicClient struct {
-	nextStream protocol.StreamID
-	streams    map[protocol.StreamID]*mockStream
-	closeErr   error
-}
-
-func (m *mockQuicClient) Close(e error) error { m.closeErr = e; return nil }
-func (m *mockQuicClient) Listen() error       { panic("not implemented") }
-func (m *mockQuicClient) OpenStream() (quic.Stream, error) {
-	id := m.nextStream
-	ms := &mockStream{id: id}
-	m.streams[id] = ms
-	m.nextStream += 2
-	return ms, nil
-}
-
-func newMockQuicClient() *mockQuicClient {
-	return &mockQuicClient{
-		streams:    make(map[protocol.StreamID]*mockStream),
-		nextStream: 5,
-	}
-}
-
-var _ quicClient = &mockQuicClient{}
-
 var _ = Describe("Client", func() {
 	var (
 		client        *Client
-		qClient       *mockQuicClient
+		session       *mockSession
 		headerStream  *mockStream
 		quicTransport *QuicRoundTripper
 	)
 
 	BeforeEach(func() {
-		var err error
 		quicTransport = &QuicRoundTripper{}
 		hostname := "quic.clemente.io:1337"
-		client, err = NewClient(quicTransport, nil, hostname)
-		Expect(err).ToNot(HaveOccurred())
+		client = NewClient(quicTransport, nil, hostname)
 		Expect(client.hostname).To(Equal(hostname))
-		qClient = newMockQuicClient()
-		client.client = qClient
+		session = &mockSession{}
+		client.session = session
 
-		headerStream = &mockStream{}
-		qClient.streams[3] = headerStream
+		headerStream = &mockStream{id: 3}
 		client.headerStream = headerStream
 		client.requestWriter = newRequestWriter(headerStream)
 	})
 
 	It("adds the port to the hostname, if none is given", func() {
-		var err error
-		client, err = NewClient(quicTransport, nil, "quic.clemente.io")
-		Expect(err).ToNot(HaveOccurred())
+		client = NewClient(quicTransport, nil, "quic.clemente.io")
 		Expect(client.hostname).To(Equal("quic.clemente.io:443"))
+	})
+
+	It("dials", func() {
+		udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+		Expect(err).ToNot(HaveOccurred())
+		client = NewClient(quicTransport, nil, udpConn.LocalAddr().String())
+		go client.Dial()
+		data := make([]byte, 100)
+		_, err = udpConn.Read(data)
+		hdr, err := quic.ParsePublicHeader(bytes.NewReader(data), protocol.PerspectiveClient)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(hdr.VersionFlag).To(BeTrue())
+		Expect(hdr.ConnectionID).ToNot(BeNil())
+	})
+
+	It("saves the session when the ConnState callback is called", func() {
+		client.session = nil // unset the session set in BeforeEach
+		client.config.ConnState(session, quic.ConnStateForwardSecure)
+		Expect(client.session).To(Equal(session))
 	})
 
 	It("opens the header stream only after the version has been negotiated", func() {
 		// delete the headerStream openend in the BeforeEach
 		client.headerStream = nil
-		delete(qClient.streams, 3)
-		qClient.nextStream = 3
+		session.streamToOpen = headerStream
 		Expect(client.headerStream).To(BeNil()) // header stream not yet opened
 		// now start the actual test
-		err := client.versionNegotiateCallback()
-		Expect(err).ToNot(HaveOccurred())
+		client.config.ConnState(session, quic.ConnStateVersionNegotiated)
 		Expect(client.headerStream).ToNot(BeNil())
 		Expect(client.headerStream.StreamID()).To(Equal(protocol.StreamID(3)))
 	})
 
 	It("sets the correct crypto level", func() {
 		Expect(client.encryptionLevel).To(Equal(protocol.Unencrypted))
-		client.cryptoChangeCallback(false)
+		client.config.ConnState(session, quic.ConnStateSecure)
 		Expect(client.encryptionLevel).To(Equal(protocol.EncryptionSecure))
-		client.cryptoChangeCallback(true)
+		client.config.ConnState(session, quic.ConnStateForwardSecure)
 		Expect(client.encryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
 	})
 
 	Context("Doing requests", func() {
 		var request *http.Request
+		var dataStream *mockStream
 
 		getRequest := func(data []byte) *http2.MetaHeadersFrame {
 			r := bytes.NewReader(data)
@@ -122,6 +111,9 @@ var _ = Describe("Client", func() {
 			client.encryptionLevel = protocol.EncryptionForwardSecure
 			request, err = http.NewRequest("https", "https://quic.clemente.io:1337/file1.dat", nil)
 			Expect(err).ToNot(HaveOccurred())
+
+			dataStream = &mockStream{id: 5}
+			session.streamToOpen = dataStream
 		})
 
 		It("does a request", func(done Done) {
@@ -134,7 +126,6 @@ var _ = Describe("Client", func() {
 			}()
 
 			Eventually(func() []byte { return headerStream.dataWritten.Bytes() }).ShouldNot(BeEmpty())
-			Expect(qClient.streams).Should(HaveKey(protocol.StreamID(5)))
 			Expect(client.responses).To(HaveKey(protocol.StreamID(5)))
 			rsp := &http.Response{
 				Status:     "418 I'm a teapot",
@@ -144,7 +135,7 @@ var _ = Describe("Client", func() {
 			Eventually(func() bool { return doReturned }).Should(BeTrue())
 			Expect(doErr).ToNot(HaveOccurred())
 			Expect(doRsp).To(Equal(rsp))
-			Expect(doRsp.Body).ToNot(BeNil())
+			Expect(doRsp.Body).To(Equal(dataStream))
 			Expect(doRsp.ContentLength).To(BeEquivalentTo(-1))
 			Expect(doRsp.Request).To(Equal(request))
 			close(done)
@@ -172,7 +163,7 @@ var _ = Describe("Client", func() {
 			Expect(client.headerErr).To(HaveOccurred())
 			Expect(doErr).To(MatchError(client.headerErr))
 			Expect(doRsp).To(BeNil())
-			Expect(client.client.(*mockQuicClient).closeErr).To(MatchError(client.headerErr))
+			Expect(client.session.(*mockSession).closedWithError).To(MatchError(client.headerErr))
 		})
 
 		Context("validating the address", func() {
@@ -192,8 +183,7 @@ var _ = Describe("Client", func() {
 
 			It("adds the port for request URLs without one", func(done Done) {
 				var err error
-				client, err = NewClient(quicTransport, nil, "quic.clemente.io")
-				Expect(err).ToNot(HaveOccurred())
+				client = NewClient(quicTransport, nil, "quic.clemente.io")
 				req, err := http.NewRequest("https", "https://quic.clemente.io/foobar.html", nil)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -251,7 +241,6 @@ var _ = Describe("Client", func() {
 				}()
 				Eventually(func() chan *http.Response { return client.responses[5] }).ShouldNot(BeNil())
 				client.responses[5] <- response
-				dataStream := qClient.streams[5]
 				Eventually(func() bool { return doReturned }).Should(BeTrue())
 				Expect(dataStream.dataWritten.Bytes()).To(Equal(requestBody))
 				Expect(dataStream.closed).To(BeTrue())
@@ -317,7 +306,7 @@ var _ = Describe("Client", func() {
 				go func() { doRsp, doErr = client.Do(request) }()
 
 				Eventually(func() chan *http.Response { return client.responses[5] }).ShouldNot(BeNil())
-				qClient.streams[5].dataToRead.Write(gzippedData)
+				dataStream.dataToRead.Write(gzippedData)
 				response.Header.Add("Content-Encoding", "gzip")
 				client.responses[5] <- response
 				Eventually(func() *http.Response { return doRsp }).ShouldNot(BeNil())
@@ -350,7 +339,7 @@ var _ = Describe("Client", func() {
 				go func() { doRsp, doErr = client.Do(request) }()
 
 				Eventually(func() chan *http.Response { return client.responses[5] }).ShouldNot(BeNil())
-				qClient.streams[5].dataToRead.Write([]byte("not gzipped"))
+				dataStream.dataToRead.Write([]byte("not gzipped"))
 				client.responses[5] <- response
 				Eventually(func() *http.Response { return doRsp }).ShouldNot(BeNil())
 				Expect(doErr).ToNot(HaveOccurred())
@@ -369,7 +358,7 @@ var _ = Describe("Client", func() {
 				go func() { doRsp, doErr = client.Do(request) }()
 
 				Eventually(func() chan *http.Response { return client.responses[5] }).ShouldNot(BeNil())
-				qClient.streams[5].dataToRead.Write([]byte("gzipped data"))
+				dataStream.dataToRead.Write([]byte("gzipped data"))
 				client.responses[5] <- response
 				Eventually(func() *http.Response { return doRsp }).ShouldNot(BeNil())
 				Expect(doErr).ToNot(HaveOccurred())

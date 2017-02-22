@@ -27,6 +27,7 @@ type mockSession struct {
 	closedWithError error
 	dataStream      quic.Stream
 	streamToAccept  quic.Stream
+	streamToOpen    quic.Stream
 }
 
 func (s *mockSession) GetOrOpenStream(id protocol.StreamID) (quic.Stream, error) {
@@ -36,7 +37,7 @@ func (s *mockSession) AcceptStream() (quic.Stream, error) {
 	return s.streamToAccept, nil
 }
 func (s *mockSession) OpenStream() (quic.Stream, error) {
-	panic("not implemented")
+	return s.streamToOpen, nil
 }
 func (s *mockSession) OpenStreamSync() (quic.Stream, error) {
 	panic("not implemented")

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -14,25 +15,25 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
-// A Client of QUIC
-type Client struct {
+type client struct {
+	mutex               sync.Mutex
+	connStateChangeCond sync.Cond
+
 	conn     connection
 	hostname string
+
+	config *Config
 
 	connectionID      protocol.ConnectionID
 	version           protocol.VersionNumber
 	versionNegotiated bool
 	closed            uint32 // atomic bool
 
-	tlsConfig                *tls.Config
-	cryptoChangeCallback     CryptoChangeCallback
-	versionNegotiateCallback VersionNegotiateCallback
+	tlsConfig            *tls.Config
+	cryptoChangeCallback CryptoChangeCallback
 
 	session packetHandler
 }
-
-// VersionNegotiateCallback is called once the client has a negotiated version
-type VersionNegotiateCallback func() error
 
 var errHostname = errors.New("Invalid hostname")
 
@@ -40,19 +41,9 @@ var (
 	errCloseSessionForNewVersion = errors.New("closing session in order to recreate it with a new version")
 )
 
-// NewClient makes a new client
-func NewClient(host string, tlsConfig *tls.Config, cryptoChangeCallback CryptoChangeCallback, versionNegotiateCallback VersionNegotiateCallback) (*Client, error) {
-	udpAddr, err := net.ResolveUDPAddr("udp", host)
-	if err != nil {
-		return nil, err
-	}
-
-	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
-	if err != nil {
-		return nil, err
-	}
-
-	connectionID, err := utils.GenerateConnectionID()
+// Dial establishes a new QUIC connection to a server
+func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config) (Session, error) {
+	connID, err := utils.GenerateConnectionID()
 	if err != nil {
 		return nil, err
 	}
@@ -62,28 +53,65 @@ func NewClient(host string, tlsConfig *tls.Config, cryptoChangeCallback CryptoCh
 		return nil, err
 	}
 
-	client := &Client{
-		conn:                     &conn{pconn: udpConn, currentAddr: udpAddr},
-		hostname:                 hostname,
-		version:                  protocol.SupportedVersions[len(protocol.SupportedVersions)-1], // use the highest supported version by default
-		connectionID:             connectionID,
-		tlsConfig:                tlsConfig,
-		cryptoChangeCallback:     cryptoChangeCallback,
-		versionNegotiateCallback: versionNegotiateCallback,
+	c := &client{
+		conn:         &conn{pconn: pconn, currentAddr: remoteAddr},
+		connectionID: connID,
+		hostname:     hostname,
+		config:       config,
+		version:      protocol.SupportedVersions[len(protocol.SupportedVersions)-1], // use the highest supported version by default
 	}
 
-	utils.Infof("Starting new connection to %s (%s), connectionID %x, version %d", host, udpAddr.String(), connectionID, client.version)
+	c.connStateChangeCond.L = &c.mutex
 
-	err = client.createNewSession(nil)
+	c.cryptoChangeCallback = func(isForwardSecure bool) {
+		var state ConnState
+		if isForwardSecure {
+			state = ConnStateForwardSecure
+		} else {
+			state = ConnStateSecure
+		}
+
+		if c.config.ConnState != nil {
+			go config.ConnState(c.session, state)
+		}
+	}
+
+	err = c.createNewSession(nil)
 	if err != nil {
 		return nil, err
 	}
 
-	return client, nil
+	utils.Infof("Starting new connection to %s (%s), connectionID %x, version %d", hostname, c.conn.RemoteAddr().String(), c.connectionID, c.version)
+
+	// TODO: handle errors
+	go c.Listen()
+
+	c.mutex.Lock()
+	for !c.versionNegotiated {
+		c.connStateChangeCond.Wait()
+	}
+	c.mutex.Unlock()
+
+	return c.session, nil
+}
+
+// DialAddr establishes a new QUIC connection to a server
+func DialAddr(hostname string, config *Config) (Session, error) {
+	udpAddr, err := net.ResolveUDPAddr("udp", hostname)
+	if err != nil {
+		return nil, err
+	}
+
+	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
+	if err != nil {
+		return nil, err
+	}
+
+	return Dial(udpConn, udpAddr, hostname, config)
 }
 
 // Listen listens
-func (c *Client) Listen() error {
+func (c *client) Listen() error {
 	for {
 		data := getPacketBuffer()
 		data = data[:protocol.MaxPacketSize]
@@ -106,13 +134,8 @@ func (c *Client) Listen() error {
 	}
 }
 
-// OpenStream opens a stream, for client-side created streams (i.e. odd streamIDs)
-func (c *Client) OpenStream() (Stream, error) {
-	return c.session.OpenStream()
-}
-
 // Close closes the connection
-func (c *Client) Close(e error) error {
+func (c *client) Close(e error) error {
 	// Only close once
 	if !atomic.CompareAndSwapUint32(&c.closed, 0, 1) {
 		return nil
@@ -122,7 +145,7 @@ func (c *Client) Close(e error) error {
 	return c.conn.Close()
 }
 
-func (c *Client) handlePacket(remoteAddr net.Addr, packet []byte) error {
+func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 	if protocol.ByteCount(len(packet)) > protocol.MaxPacketSize {
 		return qerr.PacketTooLarge
 	}
@@ -145,10 +168,12 @@ func (c *Client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 	// this is the first packet after the client sent a packet with the VersionFlag set
 	// if the server doesn't send a version negotiation packet, it supports the suggested version
 	if !hdr.VersionFlag && !c.versionNegotiated {
+		c.mutex.Lock()
 		c.versionNegotiated = true
-		err = c.versionNegotiateCallback()
-		if err != nil {
-			return err
+		c.connStateChangeCond.Signal()
+		c.mutex.Unlock()
+		if c.config.ConnState != nil {
+			go c.config.ConnState(c.session, ConnStateVersionNegotiated)
 		}
 	}
 
@@ -187,7 +212,9 @@ func (c *Client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 		if err != nil {
 			return err
 		}
-		err = c.versionNegotiateCallback()
+		if c.config.ConnState != nil {
+			go c.config.ConnState(c.session, ConnStateVersionNegotiated)
+		}
 		if err != nil {
 			return err
 		}
@@ -204,14 +231,14 @@ func (c *Client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 	return nil
 }
 
-func (c *Client) createNewSession(negotiatedVersions []protocol.VersionNumber) error {
+func (c *client) createNewSession(negotiatedVersions []protocol.VersionNumber) error {
 	var err error
 	c.session, err = newClientSession(
 		c.conn,
 		c.hostname,
 		c.version,
 		c.connectionID,
-		c.tlsConfig,
+		c.config.TLSConfig,
 		c.closeCallback,
 		c.cryptoChangeCallback,
 		negotiatedVersions)
@@ -223,6 +250,6 @@ func (c *Client) createNewSession(negotiatedVersions []protocol.VersionNumber) e
 	return nil
 }
 
-func (c *Client) closeCallback(id protocol.ConnectionID) {
+func (c *client) closeCallback(id protocol.ConnectionID) {
 	utils.Infof("Connection %x closed.", id)
 }

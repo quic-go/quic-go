@@ -11,6 +11,9 @@ import (
 
 type mockQuicRoundTripper struct{}
 
+func (m *mockQuicRoundTripper) Dial() error {
+	return nil
+}
 func (m *mockQuicRoundTripper) Do(req *http.Request) (*http.Response, error) {
 	return &http.Response{Request: req}, nil
 }
