@@ -408,13 +408,14 @@ var _ = Describe("Client", func() {
 			})
 
 			It("errors if the H2 frame is not a HeadersFrame", func() {
+				h2framer.WritePing(true, [8]byte{0, 0, 0, 0, 0, 0, 0, 0})
+
 				var handlerReturned bool
 				go func() {
 					client.handleHeaderStream()
 					handlerReturned = true
 				}()
 
-				h2framer.WritePing(true, [8]byte{0, 0, 0, 0, 0, 0, 0, 0})
 				var rsp *http.Response
 				Eventually(client.responses[23]).Should(Receive(&rsp))
 				Expect(rsp).To(BeNil())
@@ -423,17 +424,17 @@ var _ = Describe("Client", func() {
 			})
 
 			It("errors if it can't read the HPACK encoded header fields", func() {
-				var handlerReturned bool
-				go func() {
-					client.handleHeaderStream()
-					handlerReturned = true
-				}()
-
 				h2framer.WriteHeaders(http2.HeadersFrameParam{
 					StreamID:      23,
 					EndHeaders:    true,
 					BlockFragment: []byte("invalid HPACK data"),
 				})
+
+				var handlerReturned bool
+				go func() {
+					client.handleHeaderStream()
+					handlerReturned = true
+				}()
 
 				var rsp *http.Response
 				Eventually(client.responses[23]).Should(Receive(&rsp))
