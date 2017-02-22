@@ -67,34 +67,28 @@ var _ = Describe("Client", func() {
 		Expect(err).To(MatchError(qerr.PacketTooLarge))
 	})
 
-	PIt("properly closes the client", func(done Done) {
+	// this test requires a real session (because it calls the close callback) and a real UDP conn (because it unblocks and errors when it is closed)
+	It("properly closes", func(done Done) {
+		udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+		Expect(err).ToNot(HaveOccurred())
+		cl.conn = &conn{pconn: udpConn}
+		err = cl.createNewSession(nil)
 		testErr := errors.New("test error")
 		time.Sleep(10 * time.Millisecond) // Wait for old goroutines to finish
 		numGoRoutines := runtime.NumGoroutine()
 
 		var stoppedListening bool
 		go func() {
-			cl.Listen()
+			cl.listen()
 			stoppedListening = true
 		}()
 
-		err := cl.Close(testErr)
+		err = cl.session.Close(testErr)
 		Expect(err).ToNot(HaveOccurred())
-		Eventually(sess.closed).Should(BeTrue())
-		Expect(sess.closeReason).To(MatchError(testErr))
-		Expect(cl.closed).To(Equal(uint32(1)))
 		Eventually(func() bool { return stoppedListening }).Should(BeTrue())
 		Eventually(runtime.NumGoroutine()).Should(Equal(numGoRoutines))
 		close(done)
 	}, 10)
-
-	It("only closes the client once", func() {
-		cl.closed = 1
-		err := cl.Close(errors.New("test error"))
-		Expect(err).ToNot(HaveOccurred())
-		Eventually(sess.closed).Should(BeFalse())
-		Expect(sess.closeReason).ToNot(HaveOccurred())
-	})
 
 	It("creates new sessions with the right parameters", func() {
 		cl.session = nil
@@ -104,9 +98,6 @@ var _ = Describe("Client", func() {
 		Expect(cl.session).ToNot(BeNil())
 		Expect(cl.session.(*session).connectionID).To(Equal(cl.connectionID))
 		Expect(cl.session.(*session).version).To(Equal(cl.version))
-
-		err = cl.Close(nil)
-		Expect(err).ToNot(HaveOccurred())
 	})
 
 	Context("handling packets", func() {
@@ -129,7 +120,7 @@ var _ = Describe("Client", func() {
 			Expect(sess.packetCount).To(BeZero())
 			var stoppedListening bool
 			go func() {
-				cl.Listen()
+				cl.listen()
 				// it should continue listening when receiving valid packets
 				stoppedListening = true
 			}()
@@ -142,7 +133,7 @@ var _ = Describe("Client", func() {
 		It("closes the session when encountering an error while handling a packet", func() {
 			Expect(sess.closeReason).ToNot(HaveOccurred())
 			packetConn.dataToRead = bytes.Repeat([]byte{0xff}, 100)
-			cl.Listen()
+			cl.listen()
 			Expect(sess.closed).To(BeTrue())
 			Expect(sess.closeReason).To(HaveOccurred())
 		})
@@ -150,7 +141,7 @@ var _ = Describe("Client", func() {
 		It("closes the session when encountering an error while reading from the connection", func() {
 			testErr := errors.New("test error")
 			packetConn.readErr = testErr
-			cl.Listen()
+			cl.listen()
 			Expect(sess.closed).To(BeTrue())
 			Expect(sess.closeReason).To(MatchError(testErr))
 		})
@@ -204,9 +195,6 @@ var _ = Describe("Client", func() {
 			// it didn't pass the version negoation packet to the session (since it has no payload)
 			Expect(sess.packetCount).To(BeZero())
 			Expect(*(*[]protocol.VersionNumber)(unsafe.Pointer(reflect.ValueOf(cl.session.(*session).cryptoSetup).Elem().FieldByName("negotiatedVersions").UnsafeAddr()))).To(Equal([]protocol.VersionNumber{35}))
-
-			err = cl.Close(nil)
-			Expect(err).ToNot(HaveOccurred())
 		})
 
 		It("errors if no matching version is found", func() {

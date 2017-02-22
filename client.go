@@ -7,7 +7,6 @@ import (
 	"net"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -27,7 +26,6 @@ type client struct {
 	connectionID      protocol.ConnectionID
 	version           protocol.VersionNumber
 	versionNegotiated bool
-	closed            uint32 // atomic bool
 
 	tlsConfig            *tls.Config
 	cryptoChangeCallback CryptoChangeCallback
@@ -83,7 +81,7 @@ func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config
 
 	utils.Infof("Starting new connection to %s (%s), connectionID %x, version %d", hostname, c.conn.RemoteAddr().String(), c.connectionID, c.version)
 
-	go c.Listen()
+	go c.listen()
 
 	c.mutex.Lock()
 	for !c.versionNegotiated {
@@ -110,7 +108,7 @@ func DialAddr(hostname string, config *Config) (Session, error) {
 }
 
 // Listen listens
-func (c *client) Listen() {
+func (c *client) listen() {
 	for {
 		data := getPacketBuffer()
 		data = data[:protocol.MaxPacketSize]
@@ -131,17 +129,6 @@ func (c *client) Listen() {
 			return
 		}
 	}
-}
-
-// Close closes the connection
-func (c *client) Close(e error) error {
-	// Only close once
-	if !atomic.CompareAndSwapUint32(&c.closed, 0, 1) {
-		return nil
-	}
-
-	_ = c.session.Close(e)
-	return c.conn.Close()
 }
 
 func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
@@ -249,6 +236,7 @@ func (c *client) createNewSession(negotiatedVersions []protocol.VersionNumber) e
 	return nil
 }
 
-func (c *client) closeCallback(id protocol.ConnectionID) {
-	utils.Infof("Connection %x closed.", id)
+func (c *client) closeCallback(_ protocol.ConnectionID) {
+	utils.Infof("Connection %x closed.", c.connectionID)
+	c.conn.Close()
 }
