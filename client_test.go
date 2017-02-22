@@ -74,9 +74,7 @@ var _ = Describe("Client", func() {
 
 		var stoppedListening bool
 		go func() {
-			defer GinkgoRecover()
-			err := cl.Listen()
-			Expect(err).ToNot(HaveOccurred())
+			cl.Listen()
 			stoppedListening = true
 		}()
 
@@ -131,7 +129,7 @@ var _ = Describe("Client", func() {
 			Expect(sess.packetCount).To(BeZero())
 			var stoppedListening bool
 			go func() {
-				_ = cl.Listen()
+				cl.Listen()
 				// it should continue listening when receiving valid packets
 				stoppedListening = true
 			}()
@@ -142,11 +140,19 @@ var _ = Describe("Client", func() {
 		})
 
 		It("closes the session when encountering an error while handling a packet", func() {
+			Expect(sess.closeReason).ToNot(HaveOccurred())
 			packetConn.dataToRead = bytes.Repeat([]byte{0xff}, 100)
-			listenErr := cl.Listen()
-			Expect(listenErr).To(HaveOccurred())
+			cl.Listen()
 			Expect(sess.closed).To(BeTrue())
-			Expect(sess.closeReason).To(MatchError(listenErr))
+			Expect(sess.closeReason).To(HaveOccurred())
+		})
+
+		It("closes the session when encountering an error while reading from the connection", func() {
+			testErr := errors.New("test error")
+			packetConn.readErr = testErr
+			cl.Listen()
+			Expect(sess.closed).To(BeTrue())
+			Expect(sess.closeReason).To(MatchError(testErr))
 		})
 	})
 

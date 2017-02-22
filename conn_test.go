@@ -14,12 +14,16 @@ type mockPacketConn struct {
 	addr          net.Addr
 	dataToRead    []byte
 	dataReadFrom  net.Addr
+	readErr       error
 	dataWritten   bytes.Buffer
 	dataWrittenTo net.Addr
 	closed        bool
 }
 
 func (c *mockPacketConn) ReadFrom(b []byte) (int, net.Addr, error) {
+	if c.readErr != nil {
+		return 0, nil, c.readErr
+	}
 	if c.dataToRead == nil { // block if there's no data
 		time.Sleep(time.Hour)
 		return 0, nil, io.EOF

@@ -83,7 +83,6 @@ func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config
 
 	utils.Infof("Starting new connection to %s (%s), connectionID %x, version %d", hostname, c.conn.RemoteAddr().String(), c.connectionID, c.version)
 
-	// TODO: handle errors
 	go c.Listen()
 
 	c.mutex.Lock()
@@ -111,17 +110,17 @@ func DialAddr(hostname string, config *Config) (Session, error) {
 }
 
 // Listen listens
-func (c *client) Listen() error {
+func (c *client) Listen() {
 	for {
 		data := getPacketBuffer()
 		data = data[:protocol.MaxPacketSize]
 
 		n, addr, err := c.conn.Read(data)
 		if err != nil {
-			if strings.HasSuffix(err.Error(), "use of closed network connection") {
-				return nil
+			if !strings.HasSuffix(err.Error(), "use of closed network connection") {
+				c.session.Close(err)
 			}
-			return err
+			return
 		}
 		data = data[:n]
 
@@ -129,7 +128,7 @@ func (c *client) Listen() error {
 		if err != nil {
 			utils.Errorf("error handling packet: %s", err.Error())
 			c.session.Close(err)
-			return err
+			return
 		}
 	}
 }
