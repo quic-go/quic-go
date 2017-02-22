@@ -64,14 +64,29 @@ var _ = Describe("Client", func() {
 	})
 
 	It("opens the header stream only after the version has been negotiated", func() {
-		// delete the headerStream openend in the BeforeEach
-		client.headerStream = nil
+		client.headerStream = nil // unset the headerStream openend in the BeforeEach
 		session.streamToOpen = headerStream
 		Expect(client.headerStream).To(BeNil()) // header stream not yet opened
 		// now start the actual test
 		client.config.ConnState(session, quic.ConnStateVersionNegotiated)
 		Expect(client.headerStream).ToNot(BeNil())
 		Expect(client.headerStream.StreamID()).To(Equal(protocol.StreamID(3)))
+	})
+
+	It("errors if it can't open the header stream", func() {
+		testErr := errors.New("test error")
+		client.headerStream = nil // unset the headerStream openend in the BeforeEach
+		session.streamOpenErr = testErr
+		client.config.ConnState(session, quic.ConnStateVersionNegotiated)
+		Expect(session.closed).To(BeTrue())
+		Expect(session.closedWithError).To(MatchError(testErr))
+	})
+
+	It("errors if the header stream has the wrong StreamID", func() {
+		session.streamToOpen = &mockStream{id: 1337}
+		client.config.ConnState(session, quic.ConnStateVersionNegotiated)
+		Expect(session.closed).To(BeTrue())
+		Expect(session.closedWithError).To(MatchError("h2quic Client BUG: StreamID of Header Stream is not 3"))
 	})
 
 	It("sets the correct crypto level", func() {

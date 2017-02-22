@@ -69,8 +69,10 @@ func (c *Client) connStateCallback(sess quic.Session, state quic.ConnState) {
 	}
 	switch state {
 	case quic.ConnStateVersionNegotiated:
-		// TODO: handle errors
-		c.versionNegotiateCallback()
+		err := c.versionNegotiateCallback()
+		if err != nil {
+			c.Close(err)
+		}
 	case quic.ConnStateSecure:
 		c.encryptionLevel = protocol.EncryptionSecure
 		utils.Debugf("is secure")

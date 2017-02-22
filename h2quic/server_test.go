@@ -28,6 +28,7 @@ type mockSession struct {
 	dataStream      quic.Stream
 	streamToAccept  quic.Stream
 	streamToOpen    quic.Stream
+	streamOpenErr   error
 }
 
 func (s *mockSession) GetOrOpenStream(id protocol.StreamID) (quic.Stream, error) {
@@ -37,6 +38,9 @@ func (s *mockSession) AcceptStream() (quic.Stream, error) {
 	return s.streamToAccept, nil
 }
 func (s *mockSession) OpenStream() (quic.Stream, error) {
+	if s.streamOpenErr != nil {
+		return nil, s.streamOpenErr
+	}
 	return s.streamToOpen, nil
 }
 func (s *mockSession) OpenStreamSync() (quic.Stream, error) {
