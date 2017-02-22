@@ -2,7 +2,6 @@ package quic
 
 import (
 	"bytes"
-	"crypto/tls"
 	"errors"
 	"net"
 	"strings"
@@ -21,14 +20,11 @@ type client struct {
 	conn     connection
 	hostname string
 
-	config *Config
+	config    *Config
+	connState ConnState
 
-	connectionID      protocol.ConnectionID
-	version           protocol.VersionNumber
-	versionNegotiated bool
-
-	tlsConfig            *tls.Config
-	cryptoChangeCallback CryptoChangeCallback
+	connectionID protocol.ConnectionID
+	version      protocol.VersionNumber
 
 	session packetHandler
 }
@@ -61,19 +57,6 @@ func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config
 
 	c.connStateChangeCond.L = &c.mutex
 
-	c.cryptoChangeCallback = func(isForwardSecure bool) {
-		var state ConnState
-		if isForwardSecure {
-			state = ConnStateForwardSecure
-		} else {
-			state = ConnStateSecure
-		}
-
-		if c.config.ConnState != nil {
-			go config.ConnState(c.session, state)
-		}
-	}
-
 	err = c.createNewSession(nil)
 	if err != nil {
 		return nil, err
@@ -84,7 +67,13 @@ func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config
 	go c.listen()
 
 	c.mutex.Lock()
-	for !c.versionNegotiated {
+	for {
+		if c.config.ConnState != nil && c.connState >= ConnStateVersionNegotiated {
+			break
+		}
+		if c.config.ConnState == nil && c.connState == ConnStateForwardSecure {
+			break
+		}
 		c.connStateChangeCond.Wait()
 	}
 	c.mutex.Unlock()
@@ -147,15 +136,15 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 	hdr.Raw = packet[:len(packet)-r.Len()]
 
 	// ignore delayed / duplicated version negotiation packets
-	if c.versionNegotiated && hdr.VersionFlag {
+	if c.connState >= ConnStateVersionNegotiated && hdr.VersionFlag {
 		return nil
 	}
 
 	// this is the first packet after the client sent a packet with the VersionFlag set
 	// if the server doesn't send a version negotiation packet, it supports the suggested version
-	if !hdr.VersionFlag && !c.versionNegotiated {
+	if !hdr.VersionFlag && c.connState == ConnStateInitial {
 		c.mutex.Lock()
-		c.versionNegotiated = true
+		c.connState = ConnStateVersionNegotiated
 		c.connStateChangeCond.Signal()
 		c.mutex.Unlock()
 		if c.config.ConnState != nil {
@@ -186,7 +175,7 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 
 		// switch to negotiated version
 		c.version = highestSupportedVersion
-		c.versionNegotiated = true
+		c.connState = ConnStateVersionNegotiated
 		c.connectionID, err = utils.GenerateConnectionID()
 		if err != nil {
 			return err
@@ -215,6 +204,19 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 		rcvTime:      rcvTime,
 	})
 	return nil
+}
+
+func (c *client) cryptoChangeCallback(isForwardSecure bool) {
+	var state ConnState
+	if isForwardSecure {
+		state = ConnStateForwardSecure
+	} else {
+		state = ConnStateSecure
+	}
+
+	if c.config.ConnState != nil {
+		go c.config.ConnState(c.session, state)
+	}
 }
 
 func (c *client) createNewSession(negotiatedVersions []protocol.VersionNumber) error {

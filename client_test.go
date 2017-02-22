@@ -57,6 +57,21 @@ var _ = Describe("Client", func() {
 		Expect(*(*string)(unsafe.Pointer(reflect.ValueOf(sess.(*session).cryptoSetup).Elem().FieldByName("hostname").UnsafeAddr()))).To(Equal("quic.clemente.io"))
 	})
 
+	// TODO: actually test this
+	// now we're only testing that Dial doesn't return directly after version negotiation
+	It("only returns once a forward-secure connection is established if no ConnState is defined", func() {
+		packetConn.dataToRead = []byte{0x0, 0x1, 0x0}
+		config.ConnState = nil
+		var dialReturned bool
+		go func() {
+			defer GinkgoRecover()
+			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", config)
+			Expect(err).ToNot(HaveOccurred())
+			dialReturned = true
+		}()
+		Consistently(func() bool { return dialReturned }).Should(BeFalse())
+	})
+
 	It("errors on invalid public header", func() {
 		err := cl.handlePacket(nil, nil)
 		Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.InvalidPacketHeader))
@@ -175,7 +190,7 @@ var _ = Describe("Client", func() {
 			Expect(err).ToNot(HaveOccurred())
 			err = cl.handlePacket(nil, b.Bytes())
 			Expect(err).ToNot(HaveOccurred())
-			Expect(cl.versionNegotiated).To(BeTrue())
+			Expect(cl.connState).To(Equal(ConnStateVersionNegotiated))
 			Eventually(func() bool { return versionNegotiateConnStateCalled }).Should(BeTrue())
 		})
 
@@ -186,7 +201,7 @@ var _ = Describe("Client", func() {
 			cl.connectionID = 0x1337
 			err := cl.handlePacket(nil, getVersionNegotiation([]protocol.VersionNumber{newVersion}))
 			Expect(cl.version).To(Equal(newVersion))
-			Expect(cl.versionNegotiated).To(BeTrue())
+			Expect(cl.connState).To(Equal(ConnStateVersionNegotiated))
 			Eventually(func() bool { return versionNegotiateConnStateCalled }).Should(BeTrue())
 			// it swapped the sessions
 			Expect(cl.session).ToNot(Equal(sess))
@@ -204,11 +219,11 @@ var _ = Describe("Client", func() {
 
 		It("ignores delayed version negotiation packets", func() {
 			// if the version was not yet negotiated, handlePacket would return a VersionNegotiationMismatch error, see above test
-			cl.versionNegotiated = true
+			cl.connState = ConnStateVersionNegotiated
 			Expect(sess.packetCount).To(BeZero())
 			err := cl.handlePacket(nil, getVersionNegotiation([]protocol.VersionNumber{1}))
 			Expect(err).ToNot(HaveOccurred())
-			Expect(cl.versionNegotiated).To(BeTrue())
+			Expect(cl.connState).To(Equal(ConnStateVersionNegotiated))
 			Expect(sess.packetCount).To(BeZero())
 			Consistently(func() bool { return versionNegotiateConnStateCalled }).Should(BeFalse())
 		})

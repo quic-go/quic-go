@@ -35,9 +35,9 @@ var (
 	errSessionAlreadyClosed       = errors.New("Cannot close session. It was already closed before.")
 )
 
-// CryptoChangeCallback is called every time the encryption level changes
+// cryptoChangeCallback is called every time the encryption level changes
 // Once the callback has been called with isForwardSecure = true, it is guarantueed to not be called with isForwardSecure = false after that
-type CryptoChangeCallback func(isForwardSecure bool)
+type cryptoChangeCallback func(isForwardSecure bool)
 
 // closeCallback is called when a session is closed
 type closeCallback func(id protocol.ConnectionID)
@@ -49,7 +49,7 @@ type session struct {
 	version      protocol.VersionNumber
 
 	closeCallback        closeCallback
-	cryptoChangeCallback CryptoChangeCallback
+	cryptoChangeCallback cryptoChangeCallback
 
 	conn connection
 
@@ -132,7 +132,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	return s, err
 }
 
-func newClientSession(conn connection, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, tlsConfig *tls.Config, closeCallback closeCallback, cryptoChangeCallback CryptoChangeCallback, negotiatedVersions []protocol.VersionNumber) (*session, error) {
+func newClientSession(conn connection, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, tlsConfig *tls.Config, closeCallback closeCallback, cryptoChangeCallback cryptoChangeCallback, negotiatedVersions []protocol.VersionNumber) (*session, error) {
 	s := &session{
 		conn:         conn,
 		connectionID: connectionID,

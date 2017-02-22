@@ -36,8 +36,10 @@ type Session interface {
 type ConnState int
 
 const (
+	// ConnStateInitial is the initial state
+	ConnStateInitial ConnState = iota
 	// ConnStateVersionNegotiated means that version negotiation is complete
-	ConnStateVersionNegotiated ConnState = iota
+	ConnStateVersionNegotiated
 	// ConnStateSecure means that the connection is encrypted
 	ConnStateSecure
 	// ConnStateForwardSecure means that the connection is forward secure
