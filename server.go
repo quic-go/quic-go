@@ -2,7 +2,6 @@ package quic
 
 import (
 	"bytes"
-	"crypto/tls"
 	"errors"
 	"net"
 	"strings"
@@ -18,17 +17,16 @@ import (
 
 // packetHandler handles packets
 type packetHandler interface {
+	Session
 	handlePacket(*receivedPacket)
-	OpenStream(protocol.StreamID) (utils.Stream, error)
 	run()
-	Close(error) error
 }
 
-// A Server of QUIC
-type Server struct {
-	addr *net.UDPAddr
+// A Listener of QUIC
+type server struct {
+	config *Config
 
-	conn      *net.UDPConn
+	conn      net.PacketConn
 	connMutex sync.Mutex
 
 	certChain crypto.CertChain
@@ -38,15 +36,27 @@ type Server struct {
 	sessionsMutex             sync.RWMutex
 	deleteClosedSessionsAfter time.Duration
 
-	streamCallback StreamCallback
-
-	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) (packetHandler, error)
+	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, closeCallback closeCallback) (packetHandler, error)
 }
 
-// NewServer makes a new server
-func NewServer(addr string, tlsConfig *tls.Config, cb StreamCallback) (*Server, error) {
-	certChain := crypto.NewCertChain(tlsConfig)
+var _ Listener = &server{}
 
+// ListenAddr listens for QUIC connections on a given address
+func ListenAddr(addr string, config *Config) (Listener, error) {
+	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		return nil, err
+	}
+	return Listen(conn, config)
+}
+
+// Listen listens for QUIC connections on a given net.PacketConn
+func Listen(conn net.PacketConn, config *Config) (Listener, error) {
+	certChain := crypto.NewCertChain(config.TLSConfig)
 	kex, err := crypto.NewCurve25519KEX()
 	if err != nil {
 		return nil, err
@@ -56,41 +66,23 @@ func NewServer(addr string, tlsConfig *tls.Config, cb StreamCallback) (*Server, 
 		return nil, err
 	}
 
-	udpAddr, err := net.ResolveUDPAddr("udp", addr)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Server{
-		addr:                      udpAddr,
+	return &server{
+		conn:                      conn,
+		config:                    config,
 		certChain:                 certChain,
 		scfg:                      scfg,
-		streamCallback:            cb,
 		sessions:                  map[protocol.ConnectionID]packetHandler{},
 		newSession:                newSession,
 		deleteClosedSessionsAfter: protocol.ClosedSessionDeleteTimeout,
 	}, nil
 }
 
-// ListenAndServe listens and serves a connection
-func (s *Server) ListenAndServe() error {
-	conn, err := net.ListenUDP("udp", s.addr)
-	if err != nil {
-		return err
-	}
-	return s.Serve(conn)
-}
-
-// Serve on an existing UDP connection.
-func (s *Server) Serve(conn *net.UDPConn) error {
-	s.connMutex.Lock()
-	s.conn = conn
-	s.connMutex.Unlock()
-
+// Listen listens on an existing PacketConn
+func (s *server) Serve() error {
 	for {
 		data := getPacketBuffer()
 		data = data[:protocol.MaxPacketSize]
-		n, remoteAddr, err := conn.ReadFromUDP(data)
+		n, remoteAddr, err := s.conn.ReadFrom(data)
 		if err != nil {
 			if strings.HasSuffix(err.Error(), "use of closed network connection") {
 				return nil
@@ -98,14 +90,14 @@ func (s *Server) Serve(conn *net.UDPConn) error {
 			return err
 		}
 		data = data[:n]
-		if err := s.handlePacket(conn, remoteAddr, data); err != nil {
+		if err := s.handlePacket(s.conn, remoteAddr, data); err != nil {
 			utils.Errorf("error handling packet: %s", err.Error())
 		}
 	}
 }
 
 // Close the server
-func (s *Server) Close() error {
+func (s *server) Close() error {
 	s.sessionsMutex.Lock()
 	for _, session := range s.sessions {
 		if session != nil {
@@ -116,18 +108,18 @@ func (s *Server) Close() error {
 	}
 	s.sessionsMutex.Unlock()
 
-	s.connMutex.Lock()
-	conn := s.conn
-	s.conn = nil
-	s.connMutex.Unlock()
-
-	if conn == nil {
+	if s.conn == nil {
 		return nil
 	}
-	return conn.Close()
+	return s.conn.Close()
 }
 
-func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet []byte) error {
+// Addr returns the server's network address
+func (s *server) Addr() net.Addr {
+	return s.conn.LocalAddr()
+}
+
+func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet []byte) error {
 	if protocol.ByteCount(len(packet)) > protocol.MaxPacketSize {
 		return qerr.PacketTooLarge
 	}
@@ -172,13 +164,13 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 	// Send Version Negotiation Packet if the client is speaking a different protocol version
 	if hdr.VersionFlag && !protocol.IsSupportedVersion(hdr.VersionNumber) {
 		utils.Infof("Client offered version %d, sending VersionNegotiationPacket", hdr.VersionNumber)
-		_, err = conn.WriteToUDP(composeVersionNegotiation(hdr.ConnectionID), remoteAddr)
+		_, err = pconn.WriteTo(composeVersionNegotiation(hdr.ConnectionID), remoteAddr)
 		return err
 	}
 
 	if !ok {
 		if !hdr.VersionFlag {
-			_, err = conn.WriteToUDP(writePublicReset(hdr.ConnectionID, hdr.PacketNumber, 0), remoteAddr)
+			_, err = pconn.WriteTo(writePublicReset(hdr.ConnectionID, hdr.PacketNumber, 0), remoteAddr)
 			return err
 		}
 		version := hdr.VersionNumber
@@ -188,11 +180,10 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 
 		utils.Infof("Serving new connection: %x, version %d from %v", hdr.ConnectionID, version, remoteAddr)
 		session, err = s.newSession(
-			&udpConn{conn: conn, currentAddr: remoteAddr},
+			&conn{pconn: pconn, currentAddr: remoteAddr},
 			version,
 			hdr.ConnectionID,
 			s.scfg,
-			s.streamCallback,
 			s.closeCallback,
 		)
 		if err != nil {
@@ -202,6 +193,9 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 		s.sessionsMutex.Lock()
 		s.sessions[hdr.ConnectionID] = session
 		s.sessionsMutex.Unlock()
+		if s.config.ConnState != nil {
+			go s.config.ConnState(session, ConnStateVersionNegotiated)
+		}
 	}
 	if session == nil {
 		// Late packet for closed session
@@ -216,7 +210,7 @@ func (s *Server) handlePacket(conn *net.UDPConn, remoteAddr *net.UDPAddr, packet
 	return nil
 }
 
-func (s *Server) closeCallback(id protocol.ConnectionID) {
+func (s *server) closeCallback(id protocol.ConnectionID) {
 	s.sessionsMutex.Lock()
 	s.sessions[id] = nil
 	s.sessionsMutex.Unlock()

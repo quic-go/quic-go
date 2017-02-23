@@ -25,7 +25,7 @@ type cryptoSetupClient struct {
 	version            protocol.VersionNumber
 	negotiatedVersions []protocol.VersionNumber
 
-	cryptoStream utils.Stream
+	cryptoStream io.ReadWriter
 
 	serverConfig *serverConfigClient
 
@@ -64,7 +64,7 @@ func NewCryptoSetupClient(
 	hostname string,
 	connID protocol.ConnectionID,
 	version protocol.VersionNumber,
-	cryptoStream utils.Stream,
+	cryptoStream io.ReadWriter,
 	tlsConfig *tls.Config,
 	connectionParameters ConnectionParametersManager,
 	aeadChanged chan struct{},

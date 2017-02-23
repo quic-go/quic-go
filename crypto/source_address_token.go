@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -21,21 +20,21 @@ import (
 // StkSource is used to create and verify source address tokens
 type StkSource interface {
 	// NewToken creates a new token for a given IP address
-	NewToken(ip net.IP) ([]byte, error)
+	NewToken(sourceAddress []byte) ([]byte, error)
 	// VerifyToken verifies if a token matches a given IP address and is not outdated
-	VerifyToken(ip net.IP, data []byte) error
+	VerifyToken(sourceAddress []byte, data []byte) error
 }
 
 type sourceAddressToken struct {
-	ip net.IP
+	sourceAddr []byte
 	// unix timestamp in seconds
 	timestamp uint64
 }
 
 func (t *sourceAddressToken) serialize() []byte {
-	res := make([]byte, 8+len(t.ip))
+	res := make([]byte, 8+len(t.sourceAddr))
 	binary.LittleEndian.PutUint64(res, t.timestamp)
-	copy(res[8:], t.ip)
+	copy(res[8:], t.sourceAddr)
 	return res
 }
 
@@ -44,8 +43,8 @@ func parseToken(data []byte) (*sourceAddressToken, error) {
 		return nil, fmt.Errorf("invalid STK length: %d", len(data))
 	}
 	return &sourceAddressToken{
-		ip:        data[8:],
-		timestamp: binary.LittleEndian.Uint64(data),
+		sourceAddr: data[8:],
+		timestamp:  binary.LittleEndian.Uint64(data),
 	}, nil
 }
 
@@ -76,14 +75,14 @@ func NewStkSource(secret []byte) (StkSource, error) {
 	return &stkSource{aead: aead}, nil
 }
 
-func (s *stkSource) NewToken(ip net.IP) ([]byte, error) {
+func (s *stkSource) NewToken(sourceAddr []byte) ([]byte, error) {
 	return encryptToken(s.aead, &sourceAddressToken{
-		ip:        ip,
-		timestamp: uint64(time.Now().Unix()),
+		sourceAddr: sourceAddr,
+		timestamp:  uint64(time.Now().Unix()),
 	})
 }
 
-func (s *stkSource) VerifyToken(ip net.IP, data []byte) error {
+func (s *stkSource) VerifyToken(sourceAddr []byte, data []byte) error {
 	if len(data) < stkNonceSize {
 		return errors.New("STK too short")
 	}
@@ -99,8 +98,8 @@ func (s *stkSource) VerifyToken(ip net.IP, data []byte) error {
 		return err
 	}
 
-	if subtle.ConstantTimeCompare(token.ip, ip) != 1 {
-		return errors.New("invalid ip in STK")
+	if subtle.ConstantTimeCompare(token.sourceAddr, sourceAddr) != 1 {
+		return errors.New("invalid source address in STK")
 	}
 
 	if time.Now().Unix() > int64(token.timestamp)+protocol.STKExpiryTimeSec {

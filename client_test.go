@@ -19,158 +19,162 @@ import (
 
 var _ = Describe("Client", func() {
 	var (
-		client                         *Client
-		session                        *mockSession
-		versionNegotiateCallbackCalled bool
+		cl                              *client
+		config                          *Config
+		sess                            *mockSession
+		packetConn                      *mockPacketConn
+		addr                            net.Addr
+		versionNegotiateConnStateCalled bool
 	)
 
 	BeforeEach(func() {
-		versionNegotiateCallbackCalled = false
-		client = &Client{
-			versionNegotiateCallback: func() error {
-				versionNegotiateCallbackCalled = true
-				return nil
+		versionNegotiateConnStateCalled = false
+		packetConn = &mockPacketConn{}
+		config = &Config{
+			ConnState: func(_ Session, state ConnState) {
+				if state == ConnStateVersionNegotiated {
+					versionNegotiateConnStateCalled = true
+				}
 			},
 		}
-		session = &mockSession{connectionID: 0x1337}
-		client.connectionID = 0x1337
-		client.session = session
-		client.version = protocol.Version36
+		addr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
+		sess = &mockSession{connectionID: 0x1337}
+		cl = &client{
+			config:       config,
+			connectionID: 0x1337,
+			session:      sess,
+			version:      protocol.Version36,
+			conn:         &conn{pconn: packetConn, currentAddr: addr},
+		}
 	})
 
-	startUDPConn := func() {
-		var err error
-		client.addr, err = net.ResolveUDPAddr("udp", "127.0.0.1:0")
-		Expect(err).ToNot(HaveOccurred())
-		client.conn, err = net.ListenUDP("udp", client.addr)
-		Expect(err).NotTo(HaveOccurred())
-	}
+	Context("Dialing", func() {
+		It("creates a new client", func() {
+			packetConn.dataToRead = []byte{0x0, 0x1, 0x0}
+			var err error
+			sess, err := Dial(packetConn, addr, "quic.clemente.io:1337", config)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(*(*[]protocol.VersionNumber)(unsafe.Pointer(reflect.ValueOf(sess.(*session).cryptoSetup).Elem().FieldByName("negotiatedVersions").UnsafeAddr()))).To(BeNil())
+			Expect(*(*string)(unsafe.Pointer(reflect.ValueOf(sess.(*session).cryptoSetup).Elem().FieldByName("hostname").UnsafeAddr()))).To(Equal("quic.clemente.io"))
+		})
 
-	It("creates a new client", func() {
-		var err error
-		client, err = NewClient("quic.clemente.io:1337", nil, nil, nil)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(client.hostname).To(Equal("quic.clemente.io"))
-		Expect(*(*[]protocol.VersionNumber)(unsafe.Pointer(reflect.ValueOf(client.session.(*Session).cryptoSetup).Elem().FieldByName("negotiatedVersions").UnsafeAddr()))).To(BeNil())
+		It("errors when receiving an invalid first packet from the server", func() {
+			packetConn.dataToRead = []byte{0xff}
+			sess, err := Dial(packetConn, addr, "quic.clemente.io:1337", config)
+			Expect(err).To(HaveOccurred())
+			Expect(sess).To(BeNil())
+		})
+
+		It("errors when receiving an error from the connection", func() {
+			testErr := errors.New("connection error")
+			packetConn.readErr = testErr
+			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", config)
+			Expect(err).To(MatchError(testErr))
+		})
+
+		// TODO: actually test this
+		// now we're only testing that Dial doesn't return directly after version negotiation
+		It("only returns once a forward-secure connection is established if no ConnState is defined", func() {
+			packetConn.dataToRead = []byte{0x0, 0x1, 0x0}
+			config.ConnState = nil
+			var dialReturned bool
+			go func() {
+				defer GinkgoRecover()
+				_, err := Dial(packetConn, addr, "quic.clemente.io:1337", config)
+				Expect(err).ToNot(HaveOccurred())
+				dialReturned = true
+			}()
+			Consistently(func() bool { return dialReturned }).Should(BeFalse())
+		})
 	})
 
 	It("errors on invalid public header", func() {
-		err := client.handlePacket(nil)
+		err := cl.handlePacket(nil, nil)
 		Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.InvalidPacketHeader))
 	})
 
 	It("errors on large packets", func() {
-		err := client.handlePacket(bytes.Repeat([]byte{'a'}, int(protocol.MaxPacketSize)+1))
+		err := cl.handlePacket(nil, bytes.Repeat([]byte{'a'}, int(protocol.MaxPacketSize)+1))
 		Expect(err).To(MatchError(qerr.PacketTooLarge))
 	})
 
-	It("properly closes the client", func(done Done) {
+	// this test requires a real session (because it calls the close callback) and a real UDP conn (because it unblocks and errors when it is closed)
+	It("properly closes", func(done Done) {
+		udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+		Expect(err).ToNot(HaveOccurred())
+		cl.conn = &conn{pconn: udpConn}
+		err = cl.createNewSession(nil)
+		testErr := errors.New("test error")
 		time.Sleep(10 * time.Millisecond) // Wait for old goroutines to finish
 		numGoRoutines := runtime.NumGoroutine()
-		startUDPConn()
+
 		var stoppedListening bool
 		go func() {
-			err := client.Listen()
-			Expect(err).ToNot(HaveOccurred())
+			cl.listen()
 			stoppedListening = true
 		}()
 
-		testErr := errors.New("test error")
-		err := client.Close(testErr)
+		err = cl.session.Close(testErr)
 		Expect(err).ToNot(HaveOccurred())
-		Eventually(session.closed).Should(BeTrue())
-		Expect(session.closeReason).To(MatchError(testErr))
-		Expect(client.closed).To(Equal(uint32(1)))
 		Eventually(func() bool { return stoppedListening }).Should(BeTrue())
 		Eventually(runtime.NumGoroutine()).Should(Equal(numGoRoutines))
 		close(done)
-	})
-
-	It("only closes the client once", func() {
-		client.closed = 1
-		err := client.Close(errors.New("test error"))
-		Expect(err).ToNot(HaveOccurred())
-		Eventually(session.closed).Should(BeFalse())
-		Expect(session.closeReason).ToNot(HaveOccurred())
-	})
+	}, 10)
 
 	It("creates new sessions with the right parameters", func() {
-		startUDPConn()
-		client.session = nil
-		client.hostname = "hostname"
-		err := client.createNewSession(nil)
+		cl.session = nil
+		cl.hostname = "hostname"
+		err := cl.createNewSession(nil)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(client.session).ToNot(BeNil())
-		Expect(client.session.(*Session).connectionID).To(Equal(client.connectionID))
-		Expect(client.session.(*Session).version).To(Equal(client.version))
-
-		err = client.Close(nil)
-		Expect(err).ToNot(HaveOccurred())
-	})
-
-	It("opens a stream", func() {
-		stream, err := client.OpenStream(1337)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(stream.StreamID()).To(Equal(protocol.StreamID(1337)))
+		Expect(cl.session).ToNot(BeNil())
+		Expect(cl.session.(*session).connectionID).To(Equal(cl.connectionID))
+		Expect(cl.session.(*session).version).To(Equal(cl.version))
 	})
 
 	Context("handling packets", func() {
 		It("errors on too large packets", func() {
-			err := client.handlePacket(bytes.Repeat([]byte{'f'}, int(protocol.MaxPacketSize+1)))
+			err := cl.handlePacket(nil, bytes.Repeat([]byte{'f'}, int(protocol.MaxPacketSize+1)))
 			Expect(err).To(MatchError(qerr.PacketTooLarge))
 		})
 
-		It("handles packets", func(done Done) {
-			startUDPConn()
-			serverConn, err := net.DialUDP("udp", nil, client.conn.LocalAddr().(*net.UDPAddr))
-			Expect(err).NotTo(HaveOccurred())
-
-			var stoppedListening bool
-			go func() {
-				defer GinkgoRecover()
-				_ = client.Listen()
-				// it should continue listening when receiving valid packets
-				stoppedListening = true
-			}()
-
-			Expect(session.packetCount).To(BeZero())
+		It("handles packets", func() {
 			ph := PublicHeader{
 				PacketNumber:    1,
 				PacketNumberLen: protocol.PacketNumberLen2,
 				ConnectionID:    0x1337,
 			}
 			b := &bytes.Buffer{}
-			err = ph.Write(b, protocol.Version36, protocol.PerspectiveServer)
+			err := ph.Write(b, protocol.Version36, protocol.PerspectiveServer)
 			Expect(err).ToNot(HaveOccurred())
-			_, err = serverConn.Write(b.Bytes())
-			Expect(err).ToNot(HaveOccurred())
+			packetConn.dataToRead = b.Bytes()
 
-			Eventually(func() int { return session.packetCount }).Should(Equal(1))
-			Expect(session.closed).To(BeFalse())
-			Eventually(func() bool { return stoppedListening }).Should(BeFalse())
-
-			err = client.Close(nil)
-			Expect(err).ToNot(HaveOccurred())
-			close(done)
-		})
-
-		It("closes the session when encountering an error while handling a packet", func(done Done) {
-			startUDPConn()
-			serverConn, err := net.DialUDP("udp", nil, client.conn.LocalAddr().(*net.UDPAddr))
-			Expect(err).NotTo(HaveOccurred())
-
-			var listenErr error
+			Expect(sess.packetCount).To(BeZero())
+			var stoppedListening bool
 			go func() {
-				defer GinkgoRecover()
-				_, err = serverConn.Write(bytes.Repeat([]byte{0xff}, 100))
-				Expect(err).ToNot(HaveOccurred())
+				cl.listen()
+				// it should continue listening when receiving valid packets
+				stoppedListening = true
 			}()
 
-			listenErr = client.Listen()
-			Expect(listenErr).To(HaveOccurred())
-			Eventually(session.closed).Should(BeTrue())
-			Expect(session.closeReason).To(MatchError(listenErr))
-			close(done)
+			Eventually(func() int { return sess.packetCount }).Should(Equal(1))
+			Expect(sess.closed).To(BeFalse())
+			Consistently(func() bool { return stoppedListening }).Should(BeFalse())
+		})
+
+		It("closes the session when encountering an error while handling a packet", func() {
+			Expect(sess.closeReason).ToNot(HaveOccurred())
+			packetConn.dataToRead = bytes.Repeat([]byte{0xff}, 100)
+			cl.listen()
+			Expect(sess.closed).To(BeTrue())
+			Expect(sess.closeReason).To(HaveOccurred())
+		})
+
+		It("closes the session when encountering an error while reading from the connection", func() {
+			testErr := errors.New("test error")
+			packetConn.readErr = testErr
+			cl.listen()
+			Expect(sess.closed).To(BeTrue())
+			Expect(sess.closeReason).To(MatchError(testErr))
 		})
 	})
 
@@ -185,7 +189,7 @@ var _ = Describe("Client", func() {
 				b.Write(s)
 			}
 			protocol.SupportedVersionsAsTags = b.Bytes()
-			packet := composeVersionNegotiation(client.connectionID)
+			packet := composeVersionNegotiation(cl.connectionID)
 			protocol.SupportedVersionsAsTags = oldSupportVersionTags
 			Expect(composeVersionNegotiation(0x1337)).To(Equal(oldVersionNegotiationPacket))
 			return packet
@@ -200,52 +204,48 @@ var _ = Describe("Client", func() {
 			b := &bytes.Buffer{}
 			err := ph.Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
 			Expect(err).ToNot(HaveOccurred())
-			err = client.handlePacket(b.Bytes())
+			err = cl.handlePacket(nil, b.Bytes())
 			Expect(err).ToNot(HaveOccurred())
-			Expect(client.versionNegotiated).To(BeTrue())
-			Expect(versionNegotiateCallbackCalled).To(BeTrue())
+			Expect(cl.connState).To(Equal(ConnStateVersionNegotiated))
+			Eventually(func() bool { return versionNegotiateConnStateCalled }).Should(BeTrue())
 		})
 
 		It("changes the version after receiving a version negotiation packet", func() {
-			startUDPConn()
 			newVersion := protocol.Version35
-			Expect(newVersion).ToNot(Equal(client.version))
-			Expect(session.packetCount).To(BeZero())
-			client.connectionID = 0x1337
-			err := client.handlePacket(getVersionNegotiation([]protocol.VersionNumber{newVersion}))
-			Expect(client.version).To(Equal(newVersion))
-			Expect(client.versionNegotiated).To(BeTrue())
-			Expect(versionNegotiateCallbackCalled).To(BeTrue())
+			Expect(newVersion).ToNot(Equal(cl.version))
+			Expect(sess.packetCount).To(BeZero())
+			cl.connectionID = 0x1337
+			err := cl.handlePacket(nil, getVersionNegotiation([]protocol.VersionNumber{newVersion}))
+			Expect(cl.version).To(Equal(newVersion))
+			Expect(cl.connState).To(Equal(ConnStateVersionNegotiated))
+			Eventually(func() bool { return versionNegotiateConnStateCalled }).Should(BeTrue())
 			// it swapped the sessions
-			Expect(client.session).ToNot(Equal(session))
-			Expect(client.connectionID).ToNot(Equal(0x1337)) // it generated a new connection ID
+			Expect(cl.session).ToNot(Equal(sess))
+			Expect(cl.connectionID).ToNot(Equal(0x1337)) // it generated a new connection ID
 			Expect(err).ToNot(HaveOccurred())
 			// it didn't pass the version negoation packet to the session (since it has no payload)
-			Expect(session.packetCount).To(BeZero())
-			Expect(*(*[]protocol.VersionNumber)(unsafe.Pointer(reflect.ValueOf(client.session.(*Session).cryptoSetup).Elem().FieldByName("negotiatedVersions").UnsafeAddr()))).To(Equal([]protocol.VersionNumber{35}))
-
-			err = client.Close(nil)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(sess.packetCount).To(BeZero())
+			Expect(*(*[]protocol.VersionNumber)(unsafe.Pointer(reflect.ValueOf(cl.session.(*session).cryptoSetup).Elem().FieldByName("negotiatedVersions").UnsafeAddr()))).To(Equal([]protocol.VersionNumber{35}))
 		})
 
 		It("errors if no matching version is found", func() {
-			err := client.handlePacket(getVersionNegotiation([]protocol.VersionNumber{1}))
+			err := cl.handlePacket(nil, getVersionNegotiation([]protocol.VersionNumber{1}))
 			Expect(err).To(MatchError(qerr.InvalidVersion))
 		})
 
 		It("ignores delayed version negotiation packets", func() {
 			// if the version was not yet negotiated, handlePacket would return a VersionNegotiationMismatch error, see above test
-			client.versionNegotiated = true
-			Expect(session.packetCount).To(BeZero())
-			err := client.handlePacket(getVersionNegotiation([]protocol.VersionNumber{1}))
+			cl.connState = ConnStateVersionNegotiated
+			Expect(sess.packetCount).To(BeZero())
+			err := cl.handlePacket(nil, getVersionNegotiation([]protocol.VersionNumber{1}))
 			Expect(err).ToNot(HaveOccurred())
-			Expect(client.versionNegotiated).To(BeTrue())
-			Expect(session.packetCount).To(BeZero())
-			Expect(versionNegotiateCallbackCalled).To(BeFalse())
+			Expect(cl.connState).To(Equal(ConnStateVersionNegotiated))
+			Expect(sess.packetCount).To(BeZero())
+			Consistently(func() bool { return versionNegotiateConnStateCalled }).Should(BeFalse())
 		})
 
 		It("errors if the server should have accepted the offered version", func() {
-			err := client.handlePacket(getVersionNegotiation([]protocol.VersionNumber{client.version}))
+			err := cl.handlePacket(nil, getVersionNegotiation([]protocol.VersionNumber{cl.version}))
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidVersionNegotiationPacket, "Server already supports client's version and should have accepted the connection.")))
 		})
 	})

@@ -20,15 +20,14 @@ import (
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/utils"
 )
 
 type linkedConnection struct {
-	other *Session
+	other *session
 	c     chan []byte
 }
 
-func newLinkedConnection(other *Session) *linkedConnection {
+func newLinkedConnection(other *session) *linkedConnection {
 	c := make(chan []byte, 500)
 	conn := &linkedConnection{
 		c:     c,
@@ -51,7 +50,7 @@ func newLinkedConnection(other *Session) *linkedConnection {
 	return conn
 }
 
-func (c *linkedConnection) write(p []byte) error {
+func (c *linkedConnection) Write(p []byte) error {
 	packet := getPacketBuffer()
 	packet = packet[:len(p)]
 	copy(packet, p)
@@ -62,8 +61,10 @@ func (c *linkedConnection) write(p []byte) error {
 	return nil
 }
 
-func (*linkedConnection) setCurrentRemoteAddr(addr interface{}) {}
-func (*linkedConnection) RemoteAddr() *net.UDPAddr              { return &net.UDPAddr{} }
+func (c *linkedConnection) Read(p []byte) (int, net.Addr, error) { panic("not implemented") }
+func (*linkedConnection) SetCurrentRemoteAddr(addr net.Addr)     {}
+func (*linkedConnection) RemoteAddr() net.Addr                   { return &net.UDPAddr{} }
+func (c *linkedConnection) Close() error                         { return nil }
 
 func setAEAD(cs handshake.CryptoSetup, aead crypto.AEAD) {
 	*(*bool)(unsafe.Pointer(reflect.ValueOf(cs).Elem().FieldByName("receivedForwardSecurePacket").UnsafeAddr())) = true
@@ -98,18 +99,18 @@ var _ = Describe("Benchmarks", func() {
 				connID := protocol.ConnectionID(mrand.Uint32())
 
 				c1 := newLinkedConnection(nil)
-				session1I, err := newSession(c1, version, connID, nil, func(*Session, utils.Stream) {}, func(id protocol.ConnectionID) {})
+				session1I, err := newSession(c1, version, connID, nil, func(id protocol.ConnectionID) {})
 				if err != nil {
 					Expect(err).NotTo(HaveOccurred())
 				}
-				session1 := session1I.(*Session)
+				session1 := session1I.(*session)
 
 				c2 := newLinkedConnection(session1)
-				session2I, err := newSession(c2, version, connID, nil, func(*Session, utils.Stream) {}, func(id protocol.ConnectionID) {})
+				session2I, err := newSession(c2, version, connID, nil, func(id protocol.ConnectionID) {})
 				if err != nil {
 					Expect(err).NotTo(HaveOccurred())
 				}
-				session2 := session2I.(*Session)
+				session2 := session2I.(*session)
 				c1.other = session2
 
 				key := make([]byte, 16)

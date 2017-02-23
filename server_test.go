@@ -9,7 +9,6 @@ import (
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
-	"github.com/lucas-clemente/quic-go/testdata"
 	"github.com/lucas-clemente/quic-go/utils"
 
 	. "github.com/onsi/ginkgo"
@@ -33,32 +32,72 @@ func (s *mockSession) Close(e error) error {
 	s.closed = true
 	return nil
 }
-
-func (s *mockSession) OpenStream(id protocol.StreamID) (utils.Stream, error) {
-	return &stream{streamID: id}, nil
+func (s *mockSession) AcceptStream() (Stream, error) {
+	panic("not implemented")
 }
-func newMockSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, streamCallback StreamCallback, closeCallback closeCallback) (packetHandler, error) {
+func (s *mockSession) OpenStream() (Stream, error) {
+	return &stream{streamID: 1337}, nil
+}
+func (s *mockSession) OpenStreamSync() (Stream, error) {
+	panic("not implemented")
+}
+func (s *mockSession) RemoteAddr() net.Addr {
+	panic("not implemented")
+}
+
+var _ Session = &mockSession{}
+
+func newMockSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, closeCallback closeCallback) (packetHandler, error) {
 	return &mockSession{
 		connectionID: connectionID,
 	}, nil
 }
 
 var _ = Describe("Server", func() {
-	Describe("with mock session", func() {
+	var (
+		conn            *mockPacketConn
+		config          *Config
+		connStateStatus ConnState
+		connStateCalled bool
+		udpAddr         = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
+	)
+
+	BeforeEach(func() {
+		conn = &mockPacketConn{}
+		config = &Config{
+			ConnState: func(_ Session, cs ConnState) {
+				connStateStatus = cs
+				connStateCalled = true
+			},
+		}
+	})
+
+	Context("with mock session", func() {
 		var (
-			server      *Server
-			firstPacket []byte // a valid first packet for a new connection with connectionID 0x4cfa9f9b668619f6
+			serv        *server
+			firstPacket []byte // a valid first packet for a new connection with connectionID 0x4cfa9f9b668619f6 (= connID)
+			connID      = protocol.ConnectionID(0x4cfa9f9b668619f6)
 		)
 
 		BeforeEach(func() {
-			server = &Server{
-				sessions:   map[protocol.ConnectionID]packetHandler{},
+			serv = &server{
+				sessions:   make(map[protocol.ConnectionID]packetHandler),
 				newSession: newMockSession,
+				conn:       conn,
+				config:     config,
 			}
 			b := &bytes.Buffer{}
 			utils.WriteUint32(b, protocol.VersionNumberToTag(protocol.SupportedVersions[0]))
 			firstPacket = []byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c}
 			firstPacket = append(append(firstPacket, b.Bytes()...), 0x01)
+		})
+
+		It("returns the address", func() {
+			conn.addr = &net.UDPAddr{
+				IP:   net.IPv4(192, 168, 13, 37),
+				Port: 1234,
+			}
+			Expect(serv.Addr().String()).To(Equal("192.168.13.37:1234"))
 		})
 
 		It("composes version negotiation packets", func() {
@@ -70,230 +109,175 @@ var _ = Describe("Server", func() {
 		})
 
 		It("creates new sessions", func() {
-			err := server.handlePacket(nil, nil, firstPacket)
+			err := serv.handlePacket(nil, nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(server.sessions).To(HaveLen(1))
-			Expect(server.sessions[0x4cfa9f9b668619f6].(*mockSession).connectionID).To(Equal(protocol.ConnectionID(0x4cfa9f9b668619f6)))
-			Expect(server.sessions[0x4cfa9f9b668619f6].(*mockSession).packetCount).To(Equal(1))
+			Expect(serv.sessions).To(HaveLen(1))
+			Expect(serv.sessions[connID].(*mockSession).connectionID).To(Equal(connID))
+			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
+			Eventually(func() bool { return connStateCalled }).Should(BeTrue())
+			Expect(connStateStatus).To(Equal(ConnStateVersionNegotiated))
 		})
 
 		It("assigns packets to existing sessions", func() {
-			err := server.handlePacket(nil, nil, firstPacket)
+			err := serv.handlePacket(nil, nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
-			err = server.handlePacket(nil, nil, []byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x01})
+			err = serv.handlePacket(nil, nil, []byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x01})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(server.sessions).To(HaveLen(1))
-			Expect(server.sessions[0x4cfa9f9b668619f6].(*mockSession).connectionID).To(Equal(protocol.ConnectionID(0x4cfa9f9b668619f6)))
-			Expect(server.sessions[0x4cfa9f9b668619f6].(*mockSession).packetCount).To(Equal(2))
+			Expect(serv.sessions).To(HaveLen(1))
+			Expect(serv.sessions[connID].(*mockSession).connectionID).To(Equal(connID))
+			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(2))
 		})
 
 		It("closes and deletes sessions", func() {
-			server.deleteClosedSessionsAfter = time.Second // make sure that the nil value for the closed session doesn't get deleted in this test
-			err := server.handlePacket(nil, nil, append(firstPacket, (&crypto.NullAEAD{}).Seal(nil, nil, 0, firstPacket)...))
+			serv.deleteClosedSessionsAfter = time.Second // make sure that the nil value for the closed session doesn't get deleted in this test
+			err := serv.handlePacket(nil, nil, append(firstPacket, (&crypto.NullAEAD{}).Seal(nil, nil, 0, firstPacket)...))
 			Expect(err).ToNot(HaveOccurred())
-			Expect(server.sessions).To(HaveLen(1))
-			Expect(server.sessions[0x4cfa9f9b668619f6]).ToNot(BeNil())
-			server.closeCallback(0x4cfa9f9b668619f6)
+			Expect(serv.sessions).To(HaveLen(1))
+			Expect(serv.sessions[connID]).ToNot(BeNil())
+			serv.closeCallback(connID)
 			// The server should now have closed the session, leaving a nil value in the sessions map
-			Expect(server.sessions).To(HaveLen(1))
-			Expect(server.sessions[0x4cfa9f9b668619f6]).To(BeNil())
+			Expect(serv.sessions).To(HaveLen(1))
+			Expect(serv.sessions[connID]).To(BeNil())
 		})
 
 		It("deletes nil session entries after a wait time", func() {
-			server.deleteClosedSessionsAfter = 25 * time.Millisecond
-			err := server.handlePacket(nil, nil, append(firstPacket, (&crypto.NullAEAD{}).Seal(nil, nil, 0, firstPacket)...))
+			serv.deleteClosedSessionsAfter = 25 * time.Millisecond
+			err := serv.handlePacket(nil, nil, append(firstPacket, (&crypto.NullAEAD{}).Seal(nil, nil, 0, firstPacket)...))
 			Expect(err).ToNot(HaveOccurred())
-			Expect(server.sessions).To(HaveLen(1))
-			server.closeCallback(0x4cfa9f9b668619f6)
-			Expect(server.sessions).To(HaveKey(protocol.ConnectionID(0x4cfa9f9b668619f6)))
-			Eventually(func() map[protocol.ConnectionID]packetHandler { return server.sessions }).ShouldNot(HaveKey(protocol.ConnectionID(0x4cfa9f9b668619f6)))
+			Expect(serv.sessions).To(HaveLen(1))
+			serv.closeCallback(connID)
+			Expect(serv.sessions).To(HaveKey(connID))
+			Eventually(func() map[protocol.ConnectionID]packetHandler { return serv.sessions }).ShouldNot(HaveKey(connID))
 		})
 
-		It("closes sessions when Close is called", func() {
+		It("closes sessions and the connection when Close is called", func() {
 			session := &mockSession{}
-			server.sessions[1] = session
-			err := server.Close()
+			serv.sessions[1] = session
+			err := serv.Close()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(session.closed).To(BeTrue())
+			Expect(conn.closed).To(BeTrue())
 		})
 
 		It("ignores packets for closed sessions", func() {
-			server.sessions[0x4cfa9f9b668619f6] = nil
-			err := server.handlePacket(nil, nil, []byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x01})
+			serv.sessions[connID] = nil
+			err := serv.handlePacket(nil, nil, []byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x01})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(server.sessions).To(HaveLen(1))
-			Expect(server.sessions[0x4cfa9f9b668619f6]).To(BeNil())
+			Expect(serv.sessions).To(HaveLen(1))
+			Expect(serv.sessions[connID]).To(BeNil())
 		})
 
 		It("ignores delayed packets with mismatching versions", func() {
-			err := server.handlePacket(nil, nil, firstPacket)
+			err := serv.handlePacket(nil, nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(server.sessions[0x4cfa9f9b668619f6].(*mockSession).packetCount).To(Equal(1))
+			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
 			b := &bytes.Buffer{}
 			// add an unsupported version
 			utils.WriteUint32(b, protocol.VersionNumberToTag(protocol.SupportedVersions[0]-2))
 			data := []byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c}
 			data = append(append(data, b.Bytes()...), 0x01)
-			err = server.handlePacket(nil, nil, data)
+			err = serv.handlePacket(nil, nil, data)
 			Expect(err).ToNot(HaveOccurred())
 			// if we didn't ignore the packet, the server would try to send a version negotation packet, which would make the test panic because it doesn't have a udpConn
-			// TODO: test that really doesn't send anything on the udpConn
+			Expect(conn.dataWritten.Bytes()).To(BeEmpty())
 			// make sure the packet was *not* passed to session.handlePacket()
-			Expect(server.sessions[0x4cfa9f9b668619f6].(*mockSession).packetCount).To(Equal(1))
+			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
 		})
 
 		It("errors on invalid public header", func() {
-			err := server.handlePacket(nil, nil, nil)
+			err := serv.handlePacket(nil, nil, nil)
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.InvalidPacketHeader))
 		})
 
 		It("errors on large packets", func() {
-			err := server.handlePacket(nil, nil, bytes.Repeat([]byte{'a'}, int(protocol.MaxPacketSize)+1))
+			err := serv.handlePacket(nil, nil, bytes.Repeat([]byte{'a'}, int(protocol.MaxPacketSize)+1))
 			Expect(err).To(MatchError(qerr.PacketTooLarge))
 		})
 
 		It("ignores public resets for unknown connections", func() {
-			err := server.handlePacket(nil, nil, writePublicReset(999, 1, 1337))
+			err := serv.handlePacket(nil, nil, writePublicReset(999, 1, 1337))
 			Expect(err).ToNot(HaveOccurred())
-			Expect(server.sessions).To(BeEmpty())
+			Expect(serv.sessions).To(BeEmpty())
 		})
 
 		It("ignores public resets for known connections", func() {
-			err := server.handlePacket(nil, nil, firstPacket)
-			Expect(server.sessions).To(HaveLen(1))
-			Expect(server.sessions[0x4cfa9f9b668619f6].(*mockSession).packetCount).To(Equal(1))
-			err = server.handlePacket(nil, nil, writePublicReset(0x4cfa9f9b668619f6, 1, 1337))
+			err := serv.handlePacket(nil, nil, firstPacket)
+			Expect(serv.sessions).To(HaveLen(1))
+			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
+			err = serv.handlePacket(nil, nil, writePublicReset(connID, 1, 1337))
 			Expect(err).ToNot(HaveOccurred())
-			Expect(server.sessions).To(HaveLen(1))
-			Expect(server.sessions[0x4cfa9f9b668619f6].(*mockSession).packetCount).To(Equal(1))
+			Expect(serv.sessions).To(HaveLen(1))
+			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
 		})
 
 		It("ignores invalid public resets for known connections", func() {
-			err := server.handlePacket(nil, nil, firstPacket)
-			Expect(server.sessions).To(HaveLen(1))
-			Expect(server.sessions[0x4cfa9f9b668619f6].(*mockSession).packetCount).To(Equal(1))
-			data := writePublicReset(0x4cfa9f9b668619f6, 1, 1337)
-			err = server.handlePacket(nil, nil, data[:len(data)-2])
+			err := serv.handlePacket(nil, nil, firstPacket)
+			Expect(serv.sessions).To(HaveLen(1))
+			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
+			data := writePublicReset(connID, 1, 1337)
+			err = serv.handlePacket(nil, nil, data[:len(data)-2])
 			Expect(err).ToNot(HaveOccurred())
-			Expect(server.sessions).To(HaveLen(1))
-			Expect(server.sessions[0x4cfa9f9b668619f6].(*mockSession).packetCount).To(Equal(1))
+			Expect(serv.sessions).To(HaveLen(1))
+			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
 		})
 	})
 
 	It("setups with the right values", func() {
-		server, err := NewServer("", testdata.GetTLSConfig(), nil)
+		config := Config{
+			ConnState: func(_ Session, _ ConnState) {},
+		}
+		ln, err := Listen(conn, &config)
+		server := ln.(*server)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(server.deleteClosedSessionsAfter).To(Equal(protocol.ClosedSessionDeleteTimeout))
 		Expect(server.sessions).ToNot(BeNil())
 		Expect(server.scfg).ToNot(BeNil())
+		Expect(server.config).To(Equal(&config))
 	})
 
-	It("setups and responds with version negotiation", func(done Done) {
-		addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	It("listens on a given address", func() {
+		addr := "127.0.0.1:13579"
+		ln, err := ListenAddr(addr, config)
 		Expect(err).ToNot(HaveOccurred())
+		serv := ln.(*server)
+		Expect(serv.Addr().String()).To(Equal(addr))
+	})
 
-		server, err := NewServer("", testdata.GetTLSConfig(), nil)
+	It("setups and responds with version negotiation", func() {
+		conn.dataToRead = []byte{0x09, 0x01, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x01, 'Q', '0', '0', '0', 0x01}
+		conn.dataReadFrom = udpAddr
+		ln, err := Listen(conn, config)
 		Expect(err).ToNot(HaveOccurred())
-
-		serverConn, err := net.ListenUDP("udp", addr)
-		Expect(err).NotTo(HaveOccurred())
-
-		addr = serverConn.LocalAddr().(*net.UDPAddr)
 
 		go func() {
 			defer GinkgoRecover()
-			err2 := server.Serve(serverConn)
-			Expect(err2).ToNot(HaveOccurred())
-			close(done)
+			err := ln.Serve()
+			Expect(err).ToNot(HaveOccurred())
 		}()
 
-		clientConn, err := net.DialUDP("udp", nil, addr)
-		Expect(err).ToNot(HaveOccurred())
-
-		_, err = clientConn.Write([]byte{0x09, 0x01, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x01, 'Q', '0', '0', '0', 0x01})
-		Expect(err).NotTo(HaveOccurred())
-		data := make([]byte, 1000)
-		var n int
-		n, _, err = clientConn.ReadFromUDP(data)
-		Expect(err).NotTo(HaveOccurred())
-		data = data[:n]
+		Eventually(func() int { return conn.dataWritten.Len() }).ShouldNot(BeZero())
+		Expect(conn.dataWrittenTo).To(Equal(udpAddr))
 		expected := append(
 			[]byte{0x9, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
 			protocol.SupportedVersionsAsTags...,
 		)
-		Expect(data).To(Equal(expected))
-
-		err = server.Close()
-		Expect(err).ToNot(HaveOccurred())
+		Expect(conn.dataWritten.Bytes()).To(Equal(expected))
 	})
 
-	It("sends a public reset for new connections that don't have the VersionFlag set", func(done Done) {
-		addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	It("sends a PublicReset for new connections that don't have the VersionFlag set", func() {
+		conn.dataReadFrom = udpAddr
+		conn.dataToRead = []byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x01}
+		ln, err := Listen(conn, config)
 		Expect(err).ToNot(HaveOccurred())
-
-		server, err := NewServer("", testdata.GetTLSConfig(), nil)
-		Expect(err).ToNot(HaveOccurred())
-
-		serverConn, err := net.ListenUDP("udp", addr)
-		Expect(err).NotTo(HaveOccurred())
-
-		addr = serverConn.LocalAddr().(*net.UDPAddr)
-
 		go func() {
 			defer GinkgoRecover()
-			err2 := server.Serve(serverConn)
-			Expect(err2).ToNot(HaveOccurred())
-			close(done)
+			err := ln.Serve()
+			Expect(err).ToNot(HaveOccurred())
 		}()
 
-		clientConn, err := net.DialUDP("udp", nil, addr)
-		Expect(err).ToNot(HaveOccurred())
-
-		_, err = clientConn.Write([]byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x01})
-		Expect(err).ToNot(HaveOccurred())
-		data := make([]byte, 1000)
-		var n int
-		n, _, err = clientConn.ReadFromUDP(data)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(n).ToNot(BeZero())
-		Expect(data[0] & 0x02).ToNot(BeZero()) // check that the ResetFlag is set
-		Expect(server.sessions).To(BeEmpty())
-
-		err = server.Close()
-		Expect(err).ToNot(HaveOccurred())
-	})
-
-	It("setups and responds with error on invalid frame", func(done Done) {
-		addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
-		Expect(err).ToNot(HaveOccurred())
-
-		server, err := NewServer("", testdata.GetTLSConfig(), nil)
-		Expect(err).ToNot(HaveOccurred())
-
-		serverConn, err := net.ListenUDP("udp", addr)
-		Expect(err).NotTo(HaveOccurred())
-
-		addr = serverConn.LocalAddr().(*net.UDPAddr)
-
-		go func() {
-			defer GinkgoRecover()
-			err2 := server.Serve(serverConn)
-			Expect(err2).ToNot(HaveOccurred())
-			close(done)
-		}()
-
-		clientConn, err := net.DialUDP("udp", nil, addr)
-		Expect(err).ToNot(HaveOccurred())
-
-		_, err = clientConn.Write([]byte{0x09, 0x01, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x01, 'Q', '0', '0', '0', 0x01, 0x00})
-		Expect(err).NotTo(HaveOccurred())
-		data := make([]byte, 1000)
-		var n int
-		n, _, err = clientConn.ReadFromUDP(data)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(n).ToNot(BeZero())
-
-		err = server.Close()
-		Expect(err).ToNot(HaveOccurred())
+		Eventually(func() int { return conn.dataWritten.Len() }).ShouldNot(BeZero())
+		Expect(conn.dataWrittenTo).To(Equal(udpAddr))
+		Expect(conn.dataWritten.Bytes()[0] & 0x02).ToNot(BeZero()) // check that the ResetFlag is set
+		Expect(ln.(*server).sessions).To(BeEmpty())
 	})
 })

@@ -20,27 +20,22 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
-type quicClient interface {
-	OpenStream(protocol.StreamID) (utils.Stream, error)
-	Close(error) error
-	Listen() error
-}
-
 // Client is a HTTP2 client doing QUIC requests
 type Client struct {
 	mutex             sync.RWMutex
 	cryptoChangedCond sync.Cond
+
+	config *quic.Config
 
 	t *QuicRoundTripper
 
 	hostname        string
 	encryptionLevel protocol.EncryptionLevel
 
-	client              quicClient
-	headerStream        utils.Stream
-	headerErr           *qerr.QuicError
-	highestOpenedStream protocol.StreamID
-	requestWriter       *requestWriter
+	session       quic.Session
+	headerStream  quic.Stream
+	headerErr     *qerr.QuicError
+	requestWriter *requestWriter
 
 	responses map[protocol.StreamID]chan *http.Response
 }
@@ -48,49 +43,57 @@ type Client struct {
 var _ h2quicClient = &Client{}
 
 // NewClient creates a new client
-func NewClient(t *QuicRoundTripper, tlsConfig *tls.Config, hostname string) (*Client, error) {
+func NewClient(t *QuicRoundTripper, tlsConfig *tls.Config, hostname string) *Client {
 	c := &Client{
-		t:                   t,
-		hostname:            authorityAddr("https", hostname),
-		highestOpenedStream: 3,
-		responses:           make(map[protocol.StreamID]chan *http.Response),
+		t:         t,
+		hostname:  authorityAddr("https", hostname),
+		responses: make(map[protocol.StreamID]chan *http.Response),
 	}
 	c.cryptoChangedCond = sync.Cond{L: &c.mutex}
-
-	var err error
-	c.client, err = quic.NewClient(c.hostname, tlsConfig, c.cryptoChangeCallback, c.versionNegotiateCallback)
-	if err != nil {
-		return nil, err
+	c.config = &quic.Config{
+		ConnState: c.connStateCallback,
 	}
-
-	go c.client.Listen()
-	return c, nil
+	return c
 }
 
-func (c *Client) handleStreamCb(session *quic.Session, stream utils.Stream) {
-	utils.Debugf("Handling stream %d", stream.StreamID())
+// Dial dials the connection
+func (c *Client) Dial() error {
+	_, err := quic.DialAddr(c.hostname, c.config)
+	return err
 }
 
-func (c *Client) cryptoChangeCallback(isForwardSecure bool) {
-	c.cryptoChangedCond.L.Lock()
-	defer c.cryptoChangedCond.L.Unlock()
-
-	if isForwardSecure {
-		c.encryptionLevel = protocol.EncryptionForwardSecure
-		utils.Debugf("is forward secure")
-	} else {
+func (c *Client) connStateCallback(sess quic.Session, state quic.ConnState) {
+	c.mutex.Lock()
+	if c.session == nil {
+		c.session = sess
+	}
+	switch state {
+	case quic.ConnStateVersionNegotiated:
+		err := c.versionNegotiateCallback()
+		if err != nil {
+			c.Close(err)
+		}
+	case quic.ConnStateSecure:
 		c.encryptionLevel = protocol.EncryptionSecure
 		utils.Debugf("is secure")
+		c.cryptoChangedCond.Broadcast()
+	case quic.ConnStateForwardSecure:
+		c.encryptionLevel = protocol.EncryptionForwardSecure
+		utils.Debugf("is forward secure")
+		c.cryptoChangedCond.Broadcast()
 	}
-	c.cryptoChangedCond.Broadcast()
+	c.mutex.Unlock()
 }
 
 func (c *Client) versionNegotiateCallback() error {
 	var err error
 	// once the version has been negotiated, open the header stream
-	c.headerStream, err = c.client.OpenStream(3)
+	c.headerStream, err = c.session.OpenStream()
 	if err != nil {
 		return err
+	}
+	if c.headerStream.StreamID() != 3 {
+		return errors.New("h2quic Client BUG: StreamID of Header Stream is not 3")
 	}
 	c.requestWriter = newRequestWriter(c.headerStream)
 	go c.handleHeaderStream()
@@ -160,21 +163,18 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	hasBody := (req.Body != nil)
 
 	c.mutex.Lock()
-	c.highestOpenedStream += 2
-	dataStreamID := c.highestOpenedStream
 	for c.encryptionLevel != protocol.EncryptionForwardSecure {
 		c.cryptoChangedCond.Wait()
 	}
 	hdrChan := make(chan *http.Response)
-	c.responses[dataStreamID] = hdrChan
-	c.mutex.Unlock()
-
 	// TODO: think about what to do with a TooManyOpenStreams error. Wait and retry?
-	dataStream, err := c.client.OpenStream(dataStreamID)
+	dataStream, err := c.session.OpenStream()
 	if err != nil {
 		c.Close(err)
 		return nil, err
 	}
+	c.responses[dataStream.StreamID()] = hdrChan
+	c.mutex.Unlock()
 
 	var requestedGzip bool
 	if !c.t.disableCompression() && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" && req.Method != "HEAD" {
@@ -182,7 +182,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	}
 	// TODO: add support for trailers
 	endStream := !hasBody
-	err = c.requestWriter.WriteRequest(req, dataStreamID, endStream, requestedGzip)
+	err = c.requestWriter.WriteRequest(req, dataStream.StreamID(), endStream, requestedGzip)
 	if err != nil {
 		c.Close(err)
 		return nil, err
@@ -209,7 +209,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		case res = <-hdrChan:
 			receivedResponse = true
 			c.mutex.Lock()
-			delete(c.responses, dataStreamID)
+			delete(c.responses, dataStream.StreamID())
 			c.mutex.Unlock()
 			if res == nil { // an error occured on the header stream
 				c.Close(c.headerErr)
@@ -247,7 +247,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	return res, nil
 }
 
-func (c *Client) writeRequestBody(dataStream utils.Stream, body io.ReadCloser) (err error) {
+func (c *Client) writeRequestBody(dataStream quic.Stream, body io.ReadCloser) (err error) {
 	defer func() {
 		cerr := body.Close()
 		if err == nil {
@@ -266,7 +266,7 @@ func (c *Client) writeRequestBody(dataStream utils.Stream, body io.ReadCloser) (
 
 // Close closes the client
 func (c *Client) Close(e error) {
-	_ = c.client.Close(e)
+	_ = c.session.Close(e)
 }
 
 // copied from net/transport.go

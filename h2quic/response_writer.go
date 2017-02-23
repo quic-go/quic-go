@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
 	"golang.org/x/net/http2"
@@ -15,9 +16,9 @@ import (
 
 type responseWriter struct {
 	dataStreamID protocol.StreamID
-	dataStream   utils.Stream
+	dataStream   quic.Stream
 
-	headerStream      utils.Stream
+	headerStream      quic.Stream
 	headerStreamMutex *sync.Mutex
 
 	header        http.Header
@@ -25,7 +26,7 @@ type responseWriter struct {
 	headerWritten bool
 }
 
-func newResponseWriter(headerStream utils.Stream, headerStreamMutex *sync.Mutex, dataStream utils.Stream, dataStreamID protocol.StreamID) *responseWriter {
+func newResponseWriter(headerStream quic.Stream, headerStreamMutex *sync.Mutex, dataStream quic.Stream, dataStreamID protocol.StreamID) *responseWriter {
 	return &responseWriter{
 		header:            http.Header{},
 		headerStream:      headerStream,
