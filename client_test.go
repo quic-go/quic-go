@@ -48,28 +48,44 @@ var _ = Describe("Client", func() {
 		}
 	})
 
-	It("creates a new client", func() {
-		packetConn.dataToRead = []byte{0x0, 0x1, 0x0}
-		var err error
-		sess, err := Dial(packetConn, addr, "quic.clemente.io:1337", config)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(*(*[]protocol.VersionNumber)(unsafe.Pointer(reflect.ValueOf(sess.(*session).cryptoSetup).Elem().FieldByName("negotiatedVersions").UnsafeAddr()))).To(BeNil())
-		Expect(*(*string)(unsafe.Pointer(reflect.ValueOf(sess.(*session).cryptoSetup).Elem().FieldByName("hostname").UnsafeAddr()))).To(Equal("quic.clemente.io"))
-	})
-
-	// TODO: actually test this
-	// now we're only testing that Dial doesn't return directly after version negotiation
-	It("only returns once a forward-secure connection is established if no ConnState is defined", func() {
-		packetConn.dataToRead = []byte{0x0, 0x1, 0x0}
-		config.ConnState = nil
-		var dialReturned bool
-		go func() {
-			defer GinkgoRecover()
-			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", config)
+	Context("Dialing", func() {
+		It("creates a new client", func() {
+			packetConn.dataToRead = []byte{0x0, 0x1, 0x0}
+			var err error
+			sess, err := Dial(packetConn, addr, "quic.clemente.io:1337", config)
 			Expect(err).ToNot(HaveOccurred())
-			dialReturned = true
-		}()
-		Consistently(func() bool { return dialReturned }).Should(BeFalse())
+			Expect(*(*[]protocol.VersionNumber)(unsafe.Pointer(reflect.ValueOf(sess.(*session).cryptoSetup).Elem().FieldByName("negotiatedVersions").UnsafeAddr()))).To(BeNil())
+			Expect(*(*string)(unsafe.Pointer(reflect.ValueOf(sess.(*session).cryptoSetup).Elem().FieldByName("hostname").UnsafeAddr()))).To(Equal("quic.clemente.io"))
+		})
+
+		It("errors when receiving an invalid first packet from the server", func() {
+			packetConn.dataToRead = []byte{0xff}
+			sess, err := Dial(packetConn, addr, "quic.clemente.io:1337", config)
+			Expect(err).To(HaveOccurred())
+			Expect(sess).To(BeNil())
+		})
+
+		It("errors when receiving an error from the connection", func() {
+			testErr := errors.New("connection error")
+			packetConn.readErr = testErr
+			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", config)
+			Expect(err).To(MatchError(testErr))
+		})
+
+		// TODO: actually test this
+		// now we're only testing that Dial doesn't return directly after version negotiation
+		It("only returns once a forward-secure connection is established if no ConnState is defined", func() {
+			packetConn.dataToRead = []byte{0x0, 0x1, 0x0}
+			config.ConnState = nil
+			var dialReturned bool
+			go func() {
+				defer GinkgoRecover()
+				_, err := Dial(packetConn, addr, "quic.clemente.io:1337", config)
+				Expect(err).ToNot(HaveOccurred())
+				dialReturned = true
+			}()
+			Consistently(func() bool { return dialReturned }).Should(BeFalse())
+		})
 	})
 
 	It("errors on invalid public header", func() {

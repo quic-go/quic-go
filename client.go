@@ -14,8 +14,9 @@ import (
 )
 
 type client struct {
-	mutex               sync.Mutex
-	connStateChangeCond sync.Cond
+	mutex                    sync.Mutex
+	connStateChangeOrErrCond sync.Cond
+	listenErr                error
 
 	conn     connection
 	hostname string
@@ -55,7 +56,7 @@ func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config
 		version:      protocol.SupportedVersions[len(protocol.SupportedVersions)-1], // use the highest supported version by default
 	}
 
-	c.connStateChangeCond.L = &c.mutex
+	c.connStateChangeOrErrCond.L = &c.mutex
 
 	err = c.createNewSession(nil)
 	if err != nil {
@@ -67,16 +68,20 @@ func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config
 	go c.listen()
 
 	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
 	for {
+		if c.listenErr != nil {
+			return nil, c.listenErr
+		}
 		if c.config.ConnState != nil && c.connState >= ConnStateVersionNegotiated {
 			break
 		}
 		if c.config.ConnState == nil && c.connState == ConnStateForwardSecure {
 			break
 		}
-		c.connStateChangeCond.Wait()
+		c.connStateChangeOrErrCond.Wait()
 	}
-	c.mutex.Unlock()
 
 	return c.session, nil
 }
@@ -98,16 +103,20 @@ func DialAddr(hostname string, config *Config) (Session, error) {
 
 // Listen listens
 func (c *client) listen() {
+	var err error
+
 	for {
+		var n int
+		var addr net.Addr
 		data := getPacketBuffer()
 		data = data[:protocol.MaxPacketSize]
 
-		n, addr, err := c.conn.Read(data)
+		n, addr, err = c.conn.Read(data)
 		if err != nil {
 			if !strings.HasSuffix(err.Error(), "use of closed network connection") {
 				c.session.Close(err)
 			}
-			return
+			break
 		}
 		data = data[:n]
 
@@ -115,9 +124,14 @@ func (c *client) listen() {
 		if err != nil {
 			utils.Errorf("error handling packet: %s", err.Error())
 			c.session.Close(err)
-			return
+			break
 		}
 	}
+
+	c.mutex.Lock()
+	c.listenErr = err
+	c.connStateChangeOrErrCond.Signal()
+	c.mutex.Unlock()
 }
 
 func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
@@ -145,7 +159,7 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 	if !hdr.VersionFlag && c.connState == ConnStateInitial {
 		c.mutex.Lock()
 		c.connState = ConnStateVersionNegotiated
-		c.connStateChangeCond.Signal()
+		c.connStateChangeOrErrCond.Signal()
 		c.mutex.Unlock()
 		if c.config.ConnState != nil {
 			go c.config.ConnState(c.session, ConnStateVersionNegotiated)
