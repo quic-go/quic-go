@@ -103,7 +103,7 @@ var _ = Describe("Client", func() {
 			Consistently(func() bool { return returned }).Should(BeFalse())
 			// switch to a forward-secure connection
 			client.cryptoChangeCallback(nil, true)
-			Eventually(func() bool { return returned }).Should(BeFalse())
+			Eventually(func() bool { return returned }).Should(BeTrue())
 		})
 	})
 
