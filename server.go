@@ -36,7 +36,7 @@ type server struct {
 	sessionsMutex             sync.RWMutex
 	deleteClosedSessionsAfter time.Duration
 
-	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, closeCallback closeCallback) (packetHandler, error)
+	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, closeCallback closeCallback, cryptoChangeCallback cryptoChangeCallback) (packetHandler, error)
 }
 
 var _ Listener = &server{}
@@ -185,6 +185,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 			hdr.ConnectionID,
 			s.scfg,
 			s.closeCallback,
+			s.cryptoChangeCallback,
 		)
 		if err != nil {
 			return err
@@ -208,6 +209,18 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 		rcvTime:      rcvTime,
 	})
 	return nil
+}
+
+func (s *server) cryptoChangeCallback(session Session, isForwardSecure bool) {
+	var state ConnState
+	if isForwardSecure {
+		state = ConnStateForwardSecure
+	} else {
+		state = ConnStateSecure
+	}
+	if s.config.ConnState != nil {
+		go s.config.ConnState(session, state)
+	}
 }
 
 func (s *server) closeCallback(id protocol.ConnectionID) {

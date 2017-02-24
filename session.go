@@ -37,7 +37,7 @@ var (
 
 // cryptoChangeCallback is called every time the encryption level changes
 // Once the callback has been called with isForwardSecure = true, it is guarantueed to not be called with isForwardSecure = false after that
-type cryptoChangeCallback func(isForwardSecure bool)
+type cryptoChangeCallback func(session Session, isForwardSecure bool)
 
 // closeCallback is called when a session is closed
 type closeCallback func(id protocol.ConnectionID)
@@ -99,7 +99,7 @@ type session struct {
 var _ Session = &session{}
 
 // newSession makes a new session
-func newSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, closeCallback closeCallback) (packetHandler, error) {
+func newSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, closeCallback closeCallback, cryptoChangeCallback cryptoChangeCallback) (packetHandler, error) {
 	s := &session{
 		conn:         conn,
 		connectionID: connectionID,
@@ -107,7 +107,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		version:      v,
 
 		closeCallback:        closeCallback,
-		cryptoChangeCallback: func(bool) {},
+		cryptoChangeCallback: cryptoChangeCallback,
 		connectionParameters: handshake.NewConnectionParamatersManager(protocol.PerspectiveServer, v),
 	}
 
@@ -237,7 +237,7 @@ runLoop:
 			putPacketBuffer(p.publicHeader.Raw)
 		case <-s.aeadChanged:
 			s.tryDecryptingQueuedPackets()
-			s.cryptoChangeCallback(s.cryptoSetup.HandshakeComplete())
+			s.cryptoChangeCallback(s, s.cryptoSetup.HandshakeComplete())
 		}
 
 		if err != nil {

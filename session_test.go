@@ -138,6 +138,7 @@ var _ = Describe("Session", func() {
 			0,
 			scfg,
 			func(protocol.ConnectionID) { closeCallbackCalled = true },
+			func(Session, bool) {},
 		)
 		Expect(err).NotTo(HaveOccurred())
 		sess = pSess.(*session)
@@ -153,7 +154,7 @@ var _ = Describe("Session", func() {
 			0,
 			nil,
 			func(protocol.ConnectionID) { closeCallbackCalled = true },
-			func(isForwardSecure bool) {},
+			func(Session, bool) {},
 			nil,
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -169,6 +170,7 @@ var _ = Describe("Session", func() {
 				0,
 				scfg,
 				func(protocol.ConnectionID) { closeCallbackCalled = true },
+				func(Session, bool) {},
 			)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(*(*[]byte)(unsafe.Pointer(reflect.ValueOf(sess.(*session).cryptoSetup).Elem().FieldByName("sourceAddr").UnsafeAddr()))).To(Equal([]byte{192, 168, 100, 200}))
@@ -184,6 +186,7 @@ var _ = Describe("Session", func() {
 				0,
 				scfg,
 				func(protocol.ConnectionID) { closeCallbackCalled = true },
+				func(Session, bool) {},
 			)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(*(*[]byte)(unsafe.Pointer(reflect.ValueOf(sess.(*session).cryptoSetup).Elem().FieldByName("sourceAddr").UnsafeAddr()))).To(Equal([]byte("192.168.100.200:1337")))
@@ -1100,9 +1103,11 @@ var _ = Describe("Session", func() {
 	It("calls the cryptoChangeCallback when the AEAD changes", func(done Done) {
 		var callbackCalled bool
 		var callbackCalledWith bool
-		cb := func(p bool) {
+		var callbackSession Session
+		cb := func(s Session, p bool) {
 			callbackCalled = true
 			callbackCalledWith = p
+			callbackSession = s
 		}
 		sess.cryptoChangeCallback = cb
 		sess.cryptoSetup = &mockCryptoSetup{handshakeComplete: false}
@@ -1110,12 +1115,15 @@ var _ = Describe("Session", func() {
 		go sess.run()
 		Eventually(func() bool { return callbackCalled }).Should(BeTrue())
 		Expect(callbackCalledWith).To(BeFalse())
+		Expect(callbackSession).To(Equal(sess))
 		close(done)
 	})
 
 	It("calls the cryptoChangeCallback when the AEAD changes to forward secure encryption", func(done Done) {
 		var callbackCalledWith bool
-		cb := func(p bool) {
+		var callbackSession Session
+		cb := func(s Session, p bool) {
+			callbackSession = s
 			callbackCalledWith = p
 		}
 		sess.cryptoChangeCallback = cb
@@ -1123,6 +1131,7 @@ var _ = Describe("Session", func() {
 		sess.aeadChanged <- struct{}{}
 		go sess.run()
 		Eventually(func() bool { return callbackCalledWith }).Should(BeTrue())
+		Expect(callbackSession).To(Equal(sess))
 		close(done)
 	})
 

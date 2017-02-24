@@ -220,7 +220,7 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 	return nil
 }
 
-func (c *client) cryptoChangeCallback(isForwardSecure bool) {
+func (c *client) cryptoChangeCallback(_ Session, isForwardSecure bool) {
 	var state ConnState
 	if isForwardSecure {
 		state = ConnStateForwardSecure

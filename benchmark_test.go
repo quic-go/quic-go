@@ -99,14 +99,14 @@ var _ = Describe("Benchmarks", func() {
 				connID := protocol.ConnectionID(mrand.Uint32())
 
 				c1 := newLinkedConnection(nil)
-				session1I, err := newSession(c1, version, connID, nil, func(id protocol.ConnectionID) {})
+				session1I, err := newSession(c1, version, connID, nil, func(id protocol.ConnectionID) {}, func(Session, bool) {})
 				if err != nil {
 					Expect(err).NotTo(HaveOccurred())
 				}
 				session1 := session1I.(*session)
 
 				c2 := newLinkedConnection(session1)
-				session2I, err := newSession(c2, version, connID, nil, func(id protocol.ConnectionID) {})
+				session2I, err := newSession(c2, version, connID, nil, func(id protocol.ConnectionID) {}, func(Session, bool) {})
 				if err != nil {
 					Expect(err).NotTo(HaveOccurred())
 				}

@@ -47,7 +47,7 @@ func (s *mockSession) RemoteAddr() net.Addr {
 
 var _ Session = &mockSession{}
 
-func newMockSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, closeCallback closeCallback) (packetHandler, error) {
+func newMockSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, closeCallback closeCallback, cryptoChangeCallback cryptoChangeCallback) (packetHandler, error) {
 	return &mockSession{
 		connectionID: connectionID,
 	}, nil
@@ -55,17 +55,20 @@ func newMockSession(conn connection, v protocol.VersionNumber, connectionID prot
 
 var _ = Describe("Server", func() {
 	var (
-		conn            *mockPacketConn
-		config          *Config
-		connStateStatus ConnState
-		connStateCalled bool
-		udpAddr         = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
+		conn             *mockPacketConn
+		config           *Config
+		connStateSession Session
+		connStateStatus  ConnState
+		connStateCalled  bool
+		udpAddr          = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
 	)
 
 	BeforeEach(func() {
+		connStateCalled = false
 		conn = &mockPacketConn{}
 		config = &Config{
-			ConnState: func(_ Session, cs ConnState) {
+			ConnState: func(s Session, cs ConnState) {
+				connStateSession = s
 				connStateStatus = cs
 				connStateCalled = true
 			},
@@ -112,10 +115,28 @@ var _ = Describe("Server", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
-			Expect(serv.sessions[connID].(*mockSession).connectionID).To(Equal(connID))
-			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
+			sess := serv.sessions[connID].(*mockSession)
+			Expect(sess.connectionID).To(Equal(connID))
+			Expect(sess.packetCount).To(Equal(1))
 			Eventually(func() bool { return connStateCalled }).Should(BeTrue())
+			Expect(connStateSession).To(Equal(sess))
 			Expect(connStateStatus).To(Equal(ConnStateVersionNegotiated))
+		})
+
+		It("calls the ConnState callback when the connection is secure", func() {
+			sess := &mockSession{}
+			serv.cryptoChangeCallback(sess, false)
+			Eventually(func() bool { return connStateCalled }).Should(BeTrue())
+			Expect(connStateSession).To(Equal(sess))
+			Expect(connStateStatus).To(Equal(ConnStateSecure))
+		})
+
+		It("calls the ConnState callback when the connection is forward-secure", func() {
+			sess := &mockSession{}
+			serv.cryptoChangeCallback(sess, true)
+			Eventually(func() bool { return connStateCalled }).Should(BeTrue())
+			Expect(connStateStatus).To(Equal(ConnStateForwardSecure))
+			Expect(connStateSession).To(Equal(sess))
 		})
 
 		It("assigns packets to existing sessions", func() {
