@@ -185,13 +185,13 @@ func (h *cryptoSetupServer) Open(dst, src []byte, packetNumber protocol.PacketNu
 }
 
 // Seal a message, call LockForSealing() before!
-func (h *cryptoSetupServer) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
+func (h *cryptoSetupServer) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel) {
 	if h.receivedForwardSecurePacket {
-		return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData)
+		return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionForwardSecure
 	} else if h.secureAEAD != nil {
-		return h.secureAEAD.Seal(dst, src, packetNumber, associatedData)
+		return h.secureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionSecure
 	} else {
-		return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData)
+		return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData), protocol.EncryptionUnencrypted
 	}
 }
 

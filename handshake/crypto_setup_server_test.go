@@ -573,7 +573,9 @@ var _ = Describe("Crypto setup", func() {
 
 		Context("null encryption", func() {
 			It("is used initially", func() {
-				Expect(cs.Seal(nil, []byte("foobar"), 0, []byte{})).To(Equal(foobarFNVSigned))
+				d, enc := cs.Seal(nil, []byte("foobar"), 0, []byte{})
+				Expect(d).To(Equal(foobarFNVSigned))
+				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
 			})
 
 			It("is accepted initially", func() {
@@ -605,16 +607,18 @@ var _ = Describe("Crypto setup", func() {
 
 			It("is not used after CHLO", func() {
 				doCHLO()
-				d := cs.Seal(nil, []byte("foobar"), 0, []byte{})
+				d, enc := cs.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).ToNot(Equal(foobarFNVSigned))
+				Expect(enc).ToNot(Equal(protocol.EncryptionUnencrypted))
 			})
 		})
 
 		Context("initial encryption", func() {
 			It("is used after CHLO", func() {
 				doCHLO()
-				d := cs.Seal(nil, []byte("foobar"), 0, []byte{})
+				d, enc := cs.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal([]byte("foobar  normal sec")))
+				Expect(enc).To(Equal(protocol.EncryptionSecure))
 			})
 
 			It("is accepted after CHLO", func() {
@@ -629,8 +633,9 @@ var _ = Describe("Crypto setup", func() {
 				doCHLO()
 				_, _, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
-				d := cs.Seal(nil, []byte("foobar"), 0, []byte{})
+				d, enc := cs.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal([]byte("foobar forward sec")))
+				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
 			})
 
 			It("is not accepted after receiving forward secure packet", func() {
@@ -649,8 +654,9 @@ var _ = Describe("Crypto setup", func() {
 				_, enc, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
 				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
 				Expect(err).ToNot(HaveOccurred())
-				d := cs.Seal(nil, []byte("foobar"), 0, []byte{})
+				d, enc := cs.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal([]byte("foobar forward sec")))
+				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
 			})
 		})
 	})

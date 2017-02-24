@@ -6,7 +6,7 @@ import "github.com/lucas-clemente/quic-go/protocol"
 type CryptoSetup interface {
 	HandleCryptoStream() error
 	Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error)
-	Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte
+	Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel)
 	LockForSealing()
 	UnlockForSealing()
 	HandshakeComplete() bool

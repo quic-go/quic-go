@@ -20,8 +20,8 @@ func (m *mockAEAD) Open(dst, src []byte, packetNumber protocol.PacketNumber, ass
 	res, err := (&crypto.NullAEAD{}).Open(dst, src, packetNumber, associatedData)
 	return res, m.encLevelOpen, err
 }
-func (m *mockAEAD) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
-	return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData)
+func (m *mockAEAD) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel) {
+	return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData), protocol.EncryptionUnspecified
 }
 
 var _ quicAEAD = &mockAEAD{}
@@ -47,7 +47,7 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	setData := func(p []byte) {
-		data = unpacker.aead.Seal(nil, p, 0, hdrBin)
+		data, _ = unpacker.aead.Seal(nil, p, 0, hdrBin)
 	}
 
 	It("does not read read a private flag for QUIC Version >= 34", func() {

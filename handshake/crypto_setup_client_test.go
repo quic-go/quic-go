@@ -676,7 +676,9 @@ var _ = Describe("Crypto setup", func() {
 
 		Context("null encryption", func() {
 			It("is used initially", func() {
-				Expect(cs.Seal(nil, []byte("foobar"), 0, []byte{})).To(Equal(foobarFNVSigned))
+				d, enc := cs.Seal(nil, []byte("foobar"), 0, []byte{})
+				Expect(d).To(Equal(foobarFNVSigned))
+				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
 			})
 
 			It("is accepted initially", func() {
@@ -709,8 +711,9 @@ var _ = Describe("Crypto setup", func() {
 			It("is used immediately when available", func() {
 				doCompleteREJ()
 				cs.receivedSecurePacket = false
-				d := cs.Seal(nil, []byte("foobar"), 0, []byte{})
+				d, enc := cs.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal([]byte("foobar  normal sec")))
+				Expect(enc).To(Equal(protocol.EncryptionSecure))
 			})
 
 			It("is accepted", func() {
@@ -736,8 +739,9 @@ var _ = Describe("Crypto setup", func() {
 				_, enc, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
-				d := cs.Seal(nil, []byte("foobar"), 0, []byte{})
+				d, enc := cs.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal([]byte("foobar forward sec")))
+				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
 			})
 		})
 	})

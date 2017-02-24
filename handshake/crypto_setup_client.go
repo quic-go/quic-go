@@ -302,14 +302,14 @@ func (h *cryptoSetupClient) Open(dst, src []byte, packetNumber protocol.PacketNu
 	return res, protocol.EncryptionUnencrypted, nil
 }
 
-func (h *cryptoSetupClient) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
+func (h *cryptoSetupClient) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel) {
 	if h.forwardSecureAEAD != nil {
-		return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData)
+		return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionForwardSecure
 	}
 	if h.secureAEAD != nil {
-		return h.secureAEAD.Seal(dst, src, packetNumber, associatedData)
+		return h.secureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionSecure
 	}
-	return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData)
+	return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData), protocol.EncryptionUnencrypted
 }
 
 func (h *cryptoSetupClient) DiversificationNonce() []byte {

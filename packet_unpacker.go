@@ -12,7 +12,7 @@ import (
 
 type quicAEAD interface {
 	Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error)
-	Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte
+	Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel)
 }
 
 type packetUnpacker struct {
