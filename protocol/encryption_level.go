@@ -14,3 +14,15 @@ const (
 	// EncryptionForwardSecure is forward secure
 	EncryptionForwardSecure
 )
+
+func (e EncryptionLevel) String() string {
+	switch e {
+	case EncryptionUnencrypted:
+		return "unencrypted"
+	case EncryptionSecure:
+		return "encrypted (not forward-secure)"
+	case EncryptionForwardSecure:
+		return "forward-secure"
+	}
+	return "unknown"
+}
