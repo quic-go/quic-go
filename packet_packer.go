@@ -11,9 +11,10 @@ import (
 )
 
 type packedPacket struct {
-	number protocol.PacketNumber
-	raw    []byte
-	frames []frames.Frame
+	number          protocol.PacketNumber
+	raw             []byte
+	frames          []frames.Frame
+	encryptionLevel protocol.EncryptionLevel
 }
 
 type packetPacker struct {
@@ -138,7 +139,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	}
 
 	raw = raw[0:buffer.Len()]
-	p.cryptoSetup.Seal(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], currentPacketNumber, raw[:payloadStartIndex])
+	_, encryptionLevel := p.cryptoSetup.Seal(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], currentPacketNumber, raw[:payloadStartIndex])
 	raw = raw[0 : buffer.Len()+12]
 
 	num := p.packetNumberGenerator.Pop()
@@ -147,9 +148,10 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	}
 
 	return &packedPacket{
-		number: currentPacketNumber,
-		raw:    raw,
-		frames: payloadFrames,
+		number:          currentPacketNumber,
+		raw:             raw,
+		frames:          payloadFrames,
+		encryptionLevel: encryptionLevel,
 	}, nil
 }
 
