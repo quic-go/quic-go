@@ -65,6 +65,25 @@ func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config
 
 	utils.Infof("Starting new connection to %s (%s), connectionID %x, version %d", hostname, c.conn.RemoteAddr().String(), c.connectionID, c.version)
 
+	return c.establishConnection()
+}
+
+// DialAddr establishes a new QUIC connection to a server
+func DialAddr(hostname string, config *Config) (Session, error) {
+	udpAddr, err := net.ResolveUDPAddr("udp", hostname)
+	if err != nil {
+		return nil, err
+	}
+
+	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
+	if err != nil {
+		return nil, err
+	}
+
+	return Dial(udpConn, udpAddr, hostname, config)
+}
+
+func (c *client) establishConnection() (Session, error) {
 	go c.listen()
 
 	c.mutex.Lock()
@@ -84,21 +103,6 @@ func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config
 	}
 
 	return c.session, nil
-}
-
-// DialAddr establishes a new QUIC connection to a server
-func DialAddr(hostname string, config *Config) (Session, error) {
-	udpAddr, err := net.ResolveUDPAddr("udp", hostname)
-	if err != nil {
-		return nil, err
-	}
-
-	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
-	if err != nil {
-		return nil, err
-	}
-
-	return Dial(udpConn, udpAddr, hostname, config)
 }
 
 // Listen listens
@@ -227,6 +231,11 @@ func (c *client) cryptoChangeCallback(_ Session, isForwardSecure bool) {
 	} else {
 		state = ConnStateSecure
 	}
+
+	c.mutex.Lock()
+	c.connState = state
+	c.connStateChangeOrErrCond.Signal()
+	c.mutex.Unlock()
 
 	if c.config.ConnState != nil {
 		go c.config.ConnState(c.session, state)

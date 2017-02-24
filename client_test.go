@@ -72,9 +72,8 @@ var _ = Describe("Client", func() {
 			Expect(err).To(MatchError(testErr))
 		})
 
-		// TODO: actually test this
 		// now we're only testing that Dial doesn't return directly after version negotiation
-		It("only returns once a forward-secure connection is established if no ConnState is defined", func() {
+		It("doesn't return after version negotiation is established if no ConnState is defined", func() {
 			packetConn.dataToRead = []byte{0x0, 0x1, 0x0}
 			config.ConnState = nil
 			var dialReturned bool
@@ -85,6 +84,26 @@ var _ = Describe("Client", func() {
 				dialReturned = true
 			}()
 			Consistently(func() bool { return dialReturned }).Should(BeFalse())
+		})
+
+		It("only establishes a connection once it is forward-secure if no ConnState is defined", func() {
+			config.ConnState = nil
+			client := &client{conn: &conn{pconn: packetConn, currentAddr: addr}, config: config}
+			client.connStateChangeOrErrCond.L = &client.mutex
+			var returned bool
+			go func() {
+				defer GinkgoRecover()
+				_, err := client.establishConnection()
+				Expect(err).ToNot(HaveOccurred())
+				returned = true
+			}()
+			Consistently(func() bool { return returned }).Should(BeFalse())
+			// switch to a secure connection
+			client.cryptoChangeCallback(nil, false)
+			Consistently(func() bool { return returned }).Should(BeFalse())
+			// switch to a forward-secure connection
+			client.cryptoChangeCallback(nil, true)
+			Eventually(func() bool { return returned }).Should(BeFalse())
 		})
 	})
 
