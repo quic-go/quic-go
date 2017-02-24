@@ -12,11 +12,13 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type mockAEAD struct{}
+type mockAEAD struct {
+	encLevelOpen protocol.EncryptionLevel
+}
 
 func (m *mockAEAD) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error) {
 	res, err := (&crypto.NullAEAD{}).Open(dst, src, packetNumber, associatedData)
-	return res, protocol.EncryptionUnspecified, err
+	return res, m.encLevelOpen, err
 }
 func (m *mockAEAD) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
 	return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData)
@@ -56,6 +58,17 @@ var _ = Describe("Packet unpacker", func() {
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.frames).To(Equal([]frames.Frame{f}))
+	})
+
+	It("saves the encryption level", func() {
+		f := &frames.ConnectionCloseFrame{ReasonPhrase: "foo"}
+		err := f.Write(buf, 0)
+		Expect(err).ToNot(HaveOccurred())
+		setData(buf.Bytes())
+		unpacker.aead.(*mockAEAD).encLevelOpen = protocol.EncryptionSecure
+		packet, err := unpacker.Unpack(hdrBin, hdr, data)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(packet.encryptionLevel).To(Equal(protocol.EncryptionSecure))
 	})
 
 	It("unpacks STREAM frames", func() {
