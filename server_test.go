@@ -182,7 +182,12 @@ var _ = Describe("Server", func() {
 			Expect(serv.sessions).To(HaveLen(1))
 			serv.closeCallback(connID)
 			Expect(serv.sessions).To(HaveKey(connID))
-			Eventually(func() map[protocol.ConnectionID]packetHandler { return serv.sessions }).ShouldNot(HaveKey(connID))
+			Eventually(func() bool {
+				serv.sessionsMutex.Lock()
+				_, ok := serv.sessions[connID]
+				serv.sessionsMutex.Unlock()
+				return ok
+			}).Should(BeFalse())
 		})
 
 		It("closes sessions and the connection when Close is called", func() {
