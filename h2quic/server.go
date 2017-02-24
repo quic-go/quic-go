@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lucas-clemente/quic-go"
+	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/utils"
@@ -22,6 +22,10 @@ import (
 type streamCreator interface {
 	quic.Session
 	GetOrOpenStream(protocol.StreamID) (quic.Stream, error)
+}
+
+type remoteCloser interface {
+	CloseRemote(protocol.ByteCount)
 }
 
 // Server is a HTTP2 server listening for QUIC connections.
@@ -173,7 +177,7 @@ func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, 
 
 	var streamEnded bool
 	if h2headersFrame.StreamEnded() {
-		dataStream.CloseRemote(0)
+		dataStream.(remoteCloser).CloseRemote(0)
 		streamEnded = true
 		_, _ = dataStream.Read([]byte{0}) // read the eof
 	}
