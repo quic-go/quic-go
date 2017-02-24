@@ -49,6 +49,11 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, da
 			frame, err = frames.ParseStreamFrame(r)
 			if err != nil {
 				err = qerr.Error(qerr.InvalidStreamData, err.Error())
+			} else {
+				streamID := frame.(*frames.StreamFrame).StreamID
+				if streamID != 1 && encryptionLevel <= protocol.EncryptionUnencrypted {
+					err = qerr.Error(qerr.UnencryptedStreamData, fmt.Sprintf("received unencrypted stream data on stream %d", streamID))
+				}
 			}
 		} else if typeByte&0xc0 == 0x40 {
 			frame, err = frames.ParseAckFrame(r, u.version)

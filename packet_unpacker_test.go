@@ -71,19 +71,6 @@ var _ = Describe("Packet unpacker", func() {
 		Expect(packet.encryptionLevel).To(Equal(protocol.EncryptionSecure))
 	})
 
-	It("unpacks STREAM frames", func() {
-		f := &frames.StreamFrame{
-			StreamID: 1,
-			Data:     []byte("foobar"),
-		}
-		err := f.Write(buf, 0)
-		Expect(err).ToNot(HaveOccurred())
-		setData(buf.Bytes())
-		packet, err := unpacker.Unpack(hdrBin, hdr, data)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(Equal([]frames.Frame{f}))
-	})
-
 	It("unpacks ACK frames", func() {
 		unpacker.version = protocol.Version34
 		f := &frames.AckFrame{
@@ -234,5 +221,48 @@ var _ = Describe("Packet unpacker", func() {
 			_, err := unpacker.Unpack(hdrBin, hdr, data)
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(e))
 		}
+	})
+
+	Context("unpacking STREAM frames", func() {
+		It("unpacks unencrypted STREAM frames on stream 1", func() {
+			unpacker.aead.(*mockAEAD).encLevelOpen = protocol.EncryptionUnencrypted
+			f := &frames.StreamFrame{
+				StreamID: 1,
+				Data:     []byte("foobar"),
+			}
+			err := f.Write(buf, 0)
+			Expect(err).ToNot(HaveOccurred())
+			setData(buf.Bytes())
+			packet, err := unpacker.Unpack(hdrBin, hdr, data)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packet.frames).To(Equal([]frames.Frame{f}))
+		})
+
+		It("unpacks encrypted STREAM frames on stream 1", func() {
+			unpacker.aead.(*mockAEAD).encLevelOpen = protocol.EncryptionSecure
+			f := &frames.StreamFrame{
+				StreamID: 1,
+				Data:     []byte("foobar"),
+			}
+			err := f.Write(buf, 0)
+			Expect(err).ToNot(HaveOccurred())
+			setData(buf.Bytes())
+			packet, err := unpacker.Unpack(hdrBin, hdr, data)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packet.frames).To(Equal([]frames.Frame{f}))
+		})
+
+		It("does not unpack unencrypted STREAM frames on higher streams", func() {
+			unpacker.aead.(*mockAEAD).encLevelOpen = protocol.EncryptionUnencrypted
+			f := &frames.StreamFrame{
+				StreamID: 3,
+				Data:     []byte("foobar"),
+			}
+			err := f.Write(buf, 0)
+			Expect(err).ToNot(HaveOccurred())
+			setData(buf.Bytes())
+			_, err = unpacker.Unpack(hdrBin, hdr, data)
+			Expect(err).To(MatchError(qerr.Error(qerr.UnencryptedStreamData, "received unencrypted stream data on stream 3")))
+		})
 	})
 })
