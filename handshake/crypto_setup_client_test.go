@@ -102,8 +102,13 @@ var _ = Describe("Crypto setup", func() {
 	var certManager *mockCertManager
 	var stream *mockStream
 	var keyDerivationCalledWith *keyDerivationValues
+	var shloMap map[Tag][]byte
 
 	BeforeEach(func() {
+		shloMap = map[Tag][]byte{
+			TagPUBS: []byte{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f},
+			TagVER:  protocol.SupportedVersionsAsTags,
+		}
 		keyDerivation := func(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte, pers protocol.Perspective) (crypto.AEAD, error) {
 			keyDerivationCalledWith = &keyDerivationValues{
 				forwardSecure: forwardSecure,
@@ -116,7 +121,7 @@ var _ = Describe("Crypto setup", func() {
 				divNonce:      divNonce,
 				pers:          pers,
 			}
-			return crypto.DeriveKeysAESGCM(forwardSecure, sharedSecret, nonces, connID, chlo, scfg, cert, divNonce, pers)
+			return &mockAEAD{forwardSecure: forwardSecure, sharedSecret: sharedSecret}, nil
 		}
 
 		stream = &mockStream{}
@@ -127,6 +132,7 @@ var _ = Describe("Crypto setup", func() {
 		cs = csInt.(*cryptoSetupClient)
 		cs.certManager = certManager
 		cs.keyDerivation = keyDerivation
+		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
 	})
 
 	Context("Reading REJ", func() {
@@ -375,13 +381,7 @@ var _ = Describe("Crypto setup", func() {
 	})
 
 	Context("Reading SHLO", func() {
-		var tagMap map[Tag][]byte
-
 		BeforeEach(func() {
-			tagMap = map[Tag][]byte{
-				TagPUBS: []byte{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f},
-				TagVER:  protocol.SupportedVersionsAsTags,
-			}
 			kex, err := crypto.NewCurve25519KEX()
 			Expect(err).ToNot(HaveOccurred())
 			serverConfig := &serverConfigClient{
@@ -393,22 +393,22 @@ var _ = Describe("Crypto setup", func() {
 
 		It("rejects unencrypted SHLOs", func() {
 			cs.receivedSecurePacket = false
-			err := cs.handleSHLOMessage(tagMap)
+			err := cs.handleSHLOMessage(shloMap)
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoEncryptionLevelIncorrect, "unencrypted SHLO message")))
 			Expect(cs.HandshakeComplete()).To(BeFalse())
 			Expect(cs.aeadChanged).ToNot(Receive())
 		})
 
 		It("rejects SHLOs without a PUBS", func() {
-			delete(tagMap, TagPUBS)
-			err := cs.handleSHLOMessage(tagMap)
+			delete(shloMap, TagPUBS)
+			err := cs.handleSHLOMessage(shloMap)
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoMessageParameterNotFound, "PUBS")))
 			Expect(cs.HandshakeComplete()).To(BeFalse())
 		})
 
 		It("rejects SHLOs without a version list", func() {
-			delete(tagMap, TagVER)
-			err := cs.handleSHLOMessage(tagMap)
+			delete(shloMap, TagVER)
+			err := cs.handleSHLOMessage(shloMap)
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "server hello missing version list")))
 			Expect(cs.HandshakeComplete()).To(BeFalse())
 		})
@@ -418,21 +418,21 @@ var _ = Describe("Crypto setup", func() {
 			cs.receivedSecurePacket = true
 			b := &bytes.Buffer{}
 			utils.WriteUint32(b, protocol.VersionNumberToTag(protocol.Version36))
-			tagMap[TagVER] = b.Bytes()
-			err := cs.handleSHLOMessage(tagMap)
+			shloMap[TagVER] = b.Bytes()
+			err := cs.handleSHLOMessage(shloMap)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
 		It("reads the server nonce, if set", func() {
-			tagMap[TagSNO] = []byte("server nonce")
-			err := cs.handleSHLOMessage(tagMap)
+			shloMap[TagSNO] = []byte("server nonce")
+			err := cs.handleSHLOMessage(shloMap)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(cs.sno).To(Equal(tagMap[TagSNO]))
+			Expect(cs.sno).To(Equal(shloMap[TagSNO]))
 		})
 
 		It("creates a forwardSecureAEAD", func() {
-			tagMap[TagSNO] = []byte("server nonce")
-			err := cs.handleSHLOMessage(tagMap)
+			shloMap[TagSNO] = []byte("server nonce")
+			err := cs.handleSHLOMessage(shloMap)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.forwardSecureAEAD).ToNot(BeNil())
 			Expect(cs.HandshakeComplete()).To(BeTrue())
@@ -440,15 +440,15 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		It("reads the connection paramaters", func() {
-			tagMap[TagICSL] = []byte{3, 0, 0, 0} // 3 seconds
-			err := cs.handleSHLOMessage(tagMap)
+			shloMap[TagICSL] = []byte{3, 0, 0, 0} // 3 seconds
+			err := cs.handleSHLOMessage(shloMap)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.connectionParameters.GetIdleConnectionStateLifetime()).To(Equal(3 * time.Second))
 		})
 
 		It("errors if it can't read a connection parameter", func() {
-			tagMap[TagICSL] = []byte{3, 0, 0} // 1 byte too short
-			err := cs.handleSHLOMessage(tagMap)
+			shloMap[TagICSL] = []byte{3, 0, 0} // 1 byte too short
+			err := cs.handleSHLOMessage(shloMap)
 			Expect(err).To(MatchError(qerr.InvalidCryptoMessageParameter))
 		})
 	})
@@ -578,6 +578,21 @@ var _ = Describe("Crypto setup", func() {
 	})
 
 	Context("escalating crypto", func() {
+		foobarFNVSigned := []byte{0x18, 0x6f, 0x44, 0xba, 0x97, 0x35, 0xd, 0x6f, 0xbf, 0x64, 0x3c, 0x79, 0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72}
+
+		doCompleteREJ := func() {
+			cs.serverVerified = true
+			err := cs.maybeUpgradeCrypto()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cs.secureAEAD).ToNot(BeNil())
+		}
+
+		doSHLO := func() {
+			cs.receivedSecurePacket = true
+			err := cs.handleSHLOMessage(shloMap)
+			Expect(err).ToNot(HaveOccurred())
+		}
+
 		// sets all values necessary for escalating to secureAEAD
 		BeforeEach(func() {
 			kex, err := crypto.NewCurve25519KEX()
@@ -657,6 +672,67 @@ var _ = Describe("Crypto setup", func() {
 			Expect(cs.secureAEAD).ToNot(BeNil())
 			Expect(cs.aeadChanged).To(Receive())
 			Expect(cs.HandshakeComplete()).To(BeFalse())
+		})
+
+		Context("null encryption", func() {
+			It("is used initially", func() {
+				Expect(cs.Seal(nil, []byte("foobar"), 0, []byte{})).To(Equal(foobarFNVSigned))
+			})
+
+			It("is accepted initially", func() {
+				d, err := cs.Open(nil, foobarFNVSigned, 0, []byte{})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(d).To(Equal([]byte("foobar")))
+			})
+
+			It("is accepted before the server sent an encrypted packet", func() {
+				doCompleteREJ()
+				cs.receivedSecurePacket = false
+				Expect(cs.secureAEAD).ToNot(BeNil())
+				d, err := cs.Open(nil, foobarFNVSigned, 0, []byte{})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(d).To(Equal([]byte("foobar")))
+			})
+
+			It("is not accepted after the server sent an encrypted packet", func() {
+				doCompleteREJ()
+				cs.receivedSecurePacket = true
+				_, err := cs.Open(nil, foobarFNVSigned, 0, []byte{})
+				Expect(err).To(MatchError("authentication failed"))
+			})
+		})
+
+		Context("initial encryption", func() {
+			It("is used immediately when available", func() {
+				doCompleteREJ()
+				cs.receivedSecurePacket = false
+				d := cs.Seal(nil, []byte("foobar"), 0, []byte{})
+				Expect(d).To(Equal([]byte("foobar  normal sec")))
+			})
+
+			It("is accepted", func() {
+				doCompleteREJ()
+				d, err := cs.Open(nil, []byte("encrypted"), 0, []byte{})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(d).To(Equal([]byte("decrypted")))
+				Expect(cs.receivedSecurePacket).To(BeTrue())
+			})
+
+			It("is not used after receiving the SHLO", func() {
+				doSHLO()
+				_, err := cs.Open(nil, []byte("encrypted"), 0, []byte{})
+				Expect(err).To(MatchError("authentication failed"))
+			})
+		})
+
+		Context("forward-secure encryption", func() {
+			It("is used after receiving the SHLO", func() {
+				doSHLO()
+				_, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
+				Expect(err).ToNot(HaveOccurred())
+				d := cs.Seal(nil, []byte("foobar"), 0, []byte{})
+				Expect(d).To(Equal([]byte("foobar forward sec")))
+			})
 		})
 	})
 
