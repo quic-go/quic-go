@@ -742,7 +742,7 @@ var _ = Describe("Session", func() {
 				sess.conn.(*mockConnection).remoteAddr = remoteIP
 				// use the real packetUnpacker here, to make sure this test fails if the error code for failed decryption changes
 				sess.unpacker = &packetUnpacker{}
-				sess.unpacker.(*packetUnpacker).aead = &crypto.NullAEAD{}
+				sess.unpacker.(*packetUnpacker).aead = &mockAEAD{}
 				p := receivedPacket{
 					remoteAddr:   attackerIP,
 					publicHeader: &PublicHeader{PacketNumber: 1337},

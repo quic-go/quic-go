@@ -90,7 +90,7 @@ var _ = Describe("Client", func() {
 	})
 
 	It("sets the correct crypto level", func() {
-		Expect(client.encryptionLevel).To(Equal(protocol.Unencrypted))
+		Expect(client.encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
 		client.config.ConnState(session, quic.ConnStateSecure)
 		Expect(client.encryptionLevel).To(Equal(protocol.EncryptionSecure))
 		client.config.ConnState(session, quic.ConnStateForwardSecure)

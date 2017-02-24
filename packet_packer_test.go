@@ -16,8 +16,8 @@ type mockCryptoSetup struct {
 
 func (m *mockCryptoSetup) HandleCryptoStream() error { return nil }
 
-func (m *mockCryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {
-	return nil, nil
+func (m *mockCryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error) {
+	return nil, protocol.EncryptionUnspecified, nil
 }
 func (m *mockCryptoSetup) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
 	return append(src, bytes.Repeat([]byte{0}, 12)...)

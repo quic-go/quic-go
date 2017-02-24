@@ -12,30 +12,40 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+type mockAEAD struct{}
+
+func (m *mockAEAD) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error) {
+	res, err := (&crypto.NullAEAD{}).Open(dst, src, packetNumber, associatedData)
+	return res, protocol.EncryptionUnspecified, err
+}
+func (m *mockAEAD) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
+	return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData)
+}
+
+var _ quicAEAD = &mockAEAD{}
+
 var _ = Describe("Packet unpacker", func() {
 	var (
 		unpacker *packetUnpacker
 		hdr      *PublicHeader
 		hdrBin   []byte
-		aead     crypto.AEAD
 		data     []byte
 		buf      *bytes.Buffer
 	)
 
 	BeforeEach(func() {
-		aead = &crypto.NullAEAD{}
 		hdr = &PublicHeader{
 			PacketNumber:    10,
 			PacketNumberLen: 1,
 		}
 		hdrBin = []byte{0x04, 0x4c, 0x01}
-		unpacker = &packetUnpacker{aead: aead}
+		unpacker = &packetUnpacker{aead: &mockAEAD{}}
 		data = nil
 		buf = &bytes.Buffer{}
 	})
 
 	setData := func(p []byte) {
-		data = aead.Seal(nil, p, 0, hdrBin)
+		data = unpacker.aead.Seal(nil, p, 0, hdrBin)
 	}
 
 	It("does not read read a private flag for QUIC Version >= 34", func() {

@@ -5,21 +5,25 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 )
 
+type quicAEAD interface {
+	Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error)
+	Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte
+}
+
 type packetUnpacker struct {
 	version protocol.VersionNumber
-	aead    crypto.AEAD
+	aead    quicAEAD
 }
 
 func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data []byte) (*unpackedPacket, error) {
 	buf := getPacketBuffer()
 	defer putPacketBuffer(buf)
-	decrypted, err := u.aead.Open(buf, data, hdr.PacketNumber, publicHeaderBinary)
+	decrypted, _, err := u.aead.Open(buf, data, hdr.PacketNumber, publicHeaderBinary)
 	if err != nil {
 		// Wrap err in quicError so that public reset is sent by session
 		return nil, qerr.Error(qerr.DecryptionFailure, err.Error())

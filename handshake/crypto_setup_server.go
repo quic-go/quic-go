@@ -43,7 +43,7 @@ type cryptoSetupServer struct {
 	mutex sync.RWMutex
 }
 
-var _ crypto.AEAD = &cryptoSetupServer{}
+var _ CryptoSetup = &cryptoSetupServer{}
 
 // NewCryptoSetup creates a new CryptoSetup instance for a server
 func NewCryptoSetup(
@@ -152,7 +152,7 @@ func (h *cryptoSetupServer) handleMessage(chloData []byte, cryptoData map[Tag][]
 }
 
 // Open a message
-func (h *cryptoSetupServer) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {
+func (h *cryptoSetupServer) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error) {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 
@@ -160,23 +160,28 @@ func (h *cryptoSetupServer) Open(dst, src []byte, packetNumber protocol.PacketNu
 		res, err := h.forwardSecureAEAD.Open(dst, src, packetNumber, associatedData)
 		if err == nil {
 			h.receivedForwardSecurePacket = true
-			return res, nil
+			return res, protocol.EncryptionForwardSecure, nil
 		}
 		if h.receivedForwardSecurePacket {
-			return nil, err
+			return nil, protocol.EncryptionUnspecified, err
 		}
 	}
 	if h.secureAEAD != nil {
 		res, err := h.secureAEAD.Open(dst, src, packetNumber, associatedData)
 		if err == nil {
 			h.receivedSecurePacket = true
-			return res, nil
+			return res, protocol.EncryptionSecure, nil
 		}
 		if h.receivedSecurePacket {
-			return nil, err
+			return nil, protocol.EncryptionUnspecified, err
 		}
 	}
-	return (&crypto.NullAEAD{}).Open(dst, src, packetNumber, associatedData)
+	nullAEAD := &crypto.NullAEAD{}
+	res, err := nullAEAD.Open(dst, src, packetNumber, associatedData)
+	if err != nil {
+		return res, protocol.EncryptionUnspecified, err
+	}
+	return res, protocol.EncryptionUnencrypted, err
 }
 
 // Seal a message, call LockForSealing() before!

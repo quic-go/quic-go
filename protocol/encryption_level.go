@@ -5,8 +5,10 @@ package protocol
 type EncryptionLevel int
 
 const (
-	// Unencrypted is not encrypted
-	Unencrypted EncryptionLevel = iota
+	// EncryptionUnspecified is a not specified encryption level
+	EncryptionUnspecified EncryptionLevel = iota
+	// EncryptionUnencrypted is not encrypted
+	EncryptionUnencrypted
 	// EncryptionSecure is encrypted, but not forward secure
 	EncryptionSecure
 	// EncryptionForwardSecure is forward secure
