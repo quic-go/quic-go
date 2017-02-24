@@ -55,24 +55,14 @@ func newMockSession(conn connection, v protocol.VersionNumber, connectionID prot
 
 var _ = Describe("Server", func() {
 	var (
-		conn             *mockPacketConn
-		config           *Config
-		connStateSession Session
-		connStateStatus  ConnState
-		connStateCalled  bool
-		udpAddr          = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
+		conn    *mockPacketConn
+		config  *Config
+		udpAddr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
 	)
 
 	BeforeEach(func() {
-		connStateCalled = false
 		conn = &mockPacketConn{}
-		config = &Config{
-			ConnState: func(s Session, cs ConnState) {
-				connStateSession = s
-				connStateStatus = cs
-				connStateCalled = true
-			},
-		}
+		config = &Config{}
 	})
 
 	Context("with mock session", func() {
@@ -112,6 +102,14 @@ var _ = Describe("Server", func() {
 		})
 
 		It("creates new sessions", func() {
+			var connStateCalled bool
+			var connStateStatus ConnState
+			var connStateSession Session
+			config.ConnState = func(s Session, state ConnState) {
+				connStateStatus = state
+				connStateSession = s
+				connStateCalled = true
+			}
 			err := serv.handlePacket(nil, nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
@@ -124,6 +122,14 @@ var _ = Describe("Server", func() {
 		})
 
 		It("calls the ConnState callback when the connection is secure", func() {
+			var connStateCalled bool
+			var connStateStatus ConnState
+			var connStateSession Session
+			config.ConnState = func(s Session, state ConnState) {
+				connStateStatus = state
+				connStateSession = s
+				connStateCalled = true
+			}
 			sess := &mockSession{}
 			serv.cryptoChangeCallback(sess, false)
 			Eventually(func() bool { return connStateCalled }).Should(BeTrue())
@@ -132,6 +138,14 @@ var _ = Describe("Server", func() {
 		})
 
 		It("calls the ConnState callback when the connection is forward-secure", func() {
+			var connStateCalled bool
+			var connStateStatus ConnState
+			var connStateSession Session
+			config.ConnState = func(s Session, state ConnState) {
+				connStateStatus = state
+				connStateSession = s
+				connStateCalled = true
+			}
 			sess := &mockSession{}
 			serv.cryptoChangeCallback(sess, true)
 			Eventually(func() bool { return connStateCalled }).Should(BeTrue())
