@@ -8,6 +8,7 @@ import (
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 )
 
 type packedPacket struct {
@@ -127,7 +128,11 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 
 	payloadStartIndex := buffer.Len()
 
+	var hasNonCryptoStreamData bool // does this frame contain any stream frame on a stream > 1
 	for _, frame := range payloadFrames {
+		if sf, ok := frame.(*frames.StreamFrame); ok && sf.StreamID != 1 {
+			hasNonCryptoStreamData = true
+		}
 		err := frame.Write(buffer, p.version)
 		if err != nil {
 			return nil, err
@@ -141,6 +146,10 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	raw = raw[0:buffer.Len()]
 	_, encryptionLevel := p.cryptoSetup.Seal(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], currentPacketNumber, raw[:payloadStartIndex])
 	raw = raw[0 : buffer.Len()+12]
+
+	if hasNonCryptoStreamData && encryptionLevel <= protocol.EncryptionUnencrypted {
+		return nil, qerr.AttemptToSendUnencryptedStreamData
+	}
 
 	num := p.packetNumberGenerator.Pop()
 	if num != currentPacketNumber {

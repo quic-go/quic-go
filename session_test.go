@@ -803,6 +803,10 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("retransmissions", func() {
+		BeforeEach(func() {
+			sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure}
+		})
+
 		It("sends a StreamFrame from a packet queued for retransmission", func() {
 			// a StopWaitingFrame is added, so make sure the packet number of the new package is higher than the packet number of the retransmitted packet
 			sess.packer.packetNumberGenerator.next = 0x1337 + 9
@@ -954,9 +958,41 @@ var _ = Describe("Session", func() {
 			sentPackets := sph.(*mockSentPacketHandler).sentPackets
 			Expect(sentPackets).To(BeEmpty())
 		})
+
+		It("retransmits RTO packets", func() {
+			// We simulate consistently low RTTs, so that the test works faster
+			n := protocol.PacketNumber(10)
+			for p := protocol.PacketNumber(1); p < n; p++ {
+				err := sess.sentPacketHandler.SentPacket(&ackhandler.Packet{PacketNumber: p, Length: 1})
+				Expect(err).NotTo(HaveOccurred())
+				time.Sleep(time.Microsecond)
+				ack := &frames.AckFrame{}
+				ack.LargestAcked = p
+				err = sess.sentPacketHandler.ReceivedAck(ack, p, time.Now())
+				Expect(err).NotTo(HaveOccurred())
+			}
+			sess.packer.packetNumberGenerator.next = n + 1
+			// Now, we send a single packet, and expect that it was retransmitted later
+			err := sess.sentPacketHandler.SentPacket(&ackhandler.Packet{
+				PacketNumber: n,
+				Length:       1,
+				Frames: []frames.Frame{&frames.StreamFrame{
+					Data: []byte("foobar"),
+				}},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			go sess.run()
+			sess.scheduleSending()
+			Eventually(func() [][]byte { return mconn.written }).ShouldNot(BeEmpty())
+			Expect(mconn.written[0]).To(ContainSubstring("foobar"))
+		})
 	})
 
 	Context("scheduling sending", func() {
+		BeforeEach(func() {
+			sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure}
+		})
+
 		It("sends after writing to a stream", func(done Done) {
 			Expect(sess.sendingScheduled).NotTo(Receive())
 			s, err := sess.GetOrOpenStream(3)
@@ -1198,34 +1234,6 @@ var _ = Describe("Session", func() {
 		}
 		close(done)
 	}, 0.5)
-
-	It("retransmits RTO packets", func() {
-		// We simulate consistently low RTTs, so that the test works faster
-		n := protocol.PacketNumber(10)
-		for p := protocol.PacketNumber(1); p < n; p++ {
-			err := sess.sentPacketHandler.SentPacket(&ackhandler.Packet{PacketNumber: p, Length: 1})
-			Expect(err).NotTo(HaveOccurred())
-			time.Sleep(time.Microsecond)
-			ack := &frames.AckFrame{}
-			ack.LargestAcked = p
-			err = sess.sentPacketHandler.ReceivedAck(ack, p, time.Now())
-			Expect(err).NotTo(HaveOccurred())
-		}
-		sess.packer.packetNumberGenerator.next = n + 1
-		// Now, we send a single packet, and expect that it was retransmitted later
-		err := sess.sentPacketHandler.SentPacket(&ackhandler.Packet{
-			PacketNumber: n,
-			Length:       1,
-			Frames: []frames.Frame{&frames.StreamFrame{
-				Data: []byte("foobar"),
-			}},
-		})
-		Expect(err).NotTo(HaveOccurred())
-		go sess.run()
-		sess.scheduleSending()
-		Eventually(func() [][]byte { return mconn.written }).ShouldNot(BeEmpty())
-		Expect(mconn.written[0]).To(ContainSubstring("foobar"))
-	})
 
 	Context("getting streams", func() {
 		It("returns a new stream", func() {
