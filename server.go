@@ -41,7 +41,8 @@ type server struct {
 
 var _ Listener = &server{}
 
-// ListenAddr listens for QUIC connections on a given address
+// ListenAddr creates a QUIC server listening on a given address.
+// The listener is not active until Serve() is called.
 func ListenAddr(addr string, config *Config) (Listener, error) {
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
@@ -54,7 +55,8 @@ func ListenAddr(addr string, config *Config) (Listener, error) {
 	return Listen(conn, config)
 }
 
-// Listen listens for QUIC connections on a given net.PacketConn
+// Listen listens for QUIC connections on a given net.PacketConn.
+// The listener is not active until Serve() is called.
 func Listen(conn net.PacketConn, config *Config) (Listener, error) {
 	certChain := crypto.NewCertChain(config.TLSConfig)
 	kex, err := crypto.NewCurve25519KEX()
