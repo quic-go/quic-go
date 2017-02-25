@@ -24,6 +24,9 @@ func (m *mockCryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumb
 func (m *mockCryptoSetup) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel) {
 	return append(src, bytes.Repeat([]byte{0}, 12)...), m.encLevelSeal
 }
+func (m *mockCryptoSetup) SealWith(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte, encLevel protocol.EncryptionLevel) ([]byte, protocol.EncryptionLevel, error) {
+	panic("not implemented")
+}
 func (m *mockCryptoSetup) LockForSealing()                      {}
 func (m *mockCryptoSetup) UnlockForSealing()                    {}
 func (m *mockCryptoSetup) HandshakeComplete() bool              { return m.handshakeComplete }

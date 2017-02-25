@@ -7,6 +7,7 @@ type CryptoSetup interface {
 	HandleCryptoStream() error
 	Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error)
 	Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel)
+	SealWith(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte, forceEncryptionLevel protocol.EncryptionLevel) ([]byte, protocol.EncryptionLevel, error)
 	LockForSealing()
 	UnlockForSealing()
 	HandshakeComplete() bool

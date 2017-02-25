@@ -659,6 +659,48 @@ var _ = Describe("Crypto setup", func() {
 				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
 			})
 		})
+
+		Context("forcing encryption levels", func() {
+			It("forces null encryption", func() {
+				d, enc, err := cs.SealWith(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionUnencrypted)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(d).To(Equal(foobarFNVSigned))
+				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
+			})
+
+			It("forces initial encryption", func() {
+				doCHLO()
+				d, enc, err := cs.SealWith(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionSecure)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(d).To(Equal([]byte("foobar  normal sec")))
+				Expect(enc).To(Equal(protocol.EncryptionSecure))
+			})
+
+			It("errors of no AEAD for initial encryption is available", func() {
+				_, enc, err := cs.SealWith(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionSecure)
+				Expect(err).To(MatchError("CryptoSetupServer: no secureAEAD"))
+				Expect(enc).To(Equal(protocol.EncryptionUnspecified))
+			})
+
+			It("forces forward-secure encryption", func() {
+				doCHLO()
+				d, enc, err := cs.SealWith(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionForwardSecure)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(d).To(Equal([]byte("foobar forward sec")))
+				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
+			})
+
+			It("errors of no AEAD for forward-secure encryption is available", func() {
+				_, enc, err := cs.SealWith(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionForwardSecure)
+				Expect(err).To(MatchError("CryptoSetupServer: no forwardSecureAEAD"))
+				Expect(enc).To(Equal(protocol.EncryptionUnspecified))
+			})
+
+			It("errors if no encryption level is specified", func() {
+				_, _, err := cs.SealWith(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionUnspecified)
+				Expect(err).To(MatchError("no encryption level specified"))
+			})
+		})
 	})
 
 	Context("STK verification and creation", func() {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"io"
 	"sync"
 
@@ -193,6 +194,25 @@ func (h *cryptoSetupServer) Seal(dst, src []byte, packetNumber protocol.PacketNu
 	} else {
 		return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData), protocol.EncryptionUnencrypted
 	}
+}
+
+func (h *cryptoSetupServer) SealWith(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte, forceEncryptionLevel protocol.EncryptionLevel) ([]byte, protocol.EncryptionLevel, error) {
+	switch forceEncryptionLevel {
+	case protocol.EncryptionUnencrypted:
+		return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData), protocol.EncryptionUnencrypted, nil
+	case protocol.EncryptionSecure:
+		if h.secureAEAD == nil {
+			return nil, protocol.EncryptionUnspecified, errors.New("CryptoSetupServer: no secureAEAD")
+		}
+		return h.secureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionSecure, nil
+	case protocol.EncryptionForwardSecure:
+		if h.forwardSecureAEAD == nil {
+			return nil, protocol.EncryptionUnspecified, errors.New("CryptoSetupServer: no forwardSecureAEAD")
+		}
+		return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionForwardSecure, nil
+	}
+
+	return nil, protocol.EncryptionUnspecified, errors.New("no encryption level specified")
 }
 
 func (h *cryptoSetupServer) isInchoateCHLO(cryptoData map[Tag][]byte, cert []byte) bool {
