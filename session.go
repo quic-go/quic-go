@@ -582,21 +582,39 @@ func (s *session) sendPacket() error {
 			}
 			utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 
-			// resend the frames that were in the packet
-			for _, frame := range retransmitPacket.GetFramesForRetransmission() {
-				switch frame.(type) {
-				case *frames.StreamFrame:
-					s.streamFramer.AddFrameForRetransmission(frame.(*frames.StreamFrame))
-				case *frames.WindowUpdateFrame:
-					// only retransmit WindowUpdates if the stream is not yet closed and the we haven't sent another WindowUpdate with a higher ByteOffset for the stream
-					var currentOffset protocol.ByteCount
-					f := frame.(*frames.WindowUpdateFrame)
-					currentOffset, err = s.flowControlManager.GetReceiveWindow(f.StreamID)
-					if err == nil && f.ByteOffset >= currentOffset {
+			if retransmitPacket.EncryptionLevel != protocol.EncryptionForwardSecure {
+				utils.Debugf("\tDequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
+				stopWaitingFrame := s.sentPacketHandler.GetStopWaitingFrame(true)
+				var packet *packedPacket
+				packet, err = s.packer.RetransmitNonForwardSecurePacket(stopWaitingFrame, retransmitPacket)
+				if err != nil {
+					return err
+				}
+				if packet == nil {
+					continue
+				}
+				err = s.sendPackedPacket(packet)
+				if err != nil {
+					return err
+				}
+				continue
+			} else {
+				// resend the frames that were in the packet
+				for _, frame := range retransmitPacket.GetFramesForRetransmission() {
+					switch frame.(type) {
+					case *frames.StreamFrame:
+						s.streamFramer.AddFrameForRetransmission(frame.(*frames.StreamFrame))
+					case *frames.WindowUpdateFrame:
+						// only retransmit WindowUpdates if the stream is not yet closed and the we haven't sent another WindowUpdate with a higher ByteOffset for the stream
+						var currentOffset protocol.ByteCount
+						f := frame.(*frames.WindowUpdateFrame)
+						currentOffset, err = s.flowControlManager.GetReceiveWindow(f.StreamID)
+						if err == nil && f.ByteOffset >= currentOffset {
+							controlFrames = append(controlFrames, frame)
+						}
+					default:
 						controlFrames = append(controlFrames, frame)
 					}
-				default:
-					controlFrames = append(controlFrames, frame)
 				}
 			}
 		}
@@ -622,25 +640,30 @@ func (s *session) sendPacket() error {
 			s.packer.QueueControlFrameForNextPacket(f)
 		}
 
-		err = s.sentPacketHandler.SentPacket(&ackhandler.Packet{
-			PacketNumber:    packet.number,
-			Frames:          packet.frames,
-			Length:          protocol.ByteCount(len(packet.raw)),
-			EncryptionLevel: packet.encryptionLevel,
-		})
-		if err != nil {
-			return err
-		}
-
-		s.logPacket(packet)
-
-		err = s.conn.Write(packet.raw)
-		putPacketBuffer(packet.raw)
+		err = s.sendPackedPacket(packet)
 		if err != nil {
 			return err
 		}
 		s.nextAckScheduledTime = time.Time{}
 	}
+}
+
+func (s *session) sendPackedPacket(packet *packedPacket) error {
+	err := s.sentPacketHandler.SentPacket(&ackhandler.Packet{
+		PacketNumber:    packet.number,
+		Frames:          packet.frames,
+		Length:          protocol.ByteCount(len(packet.raw)),
+		EncryptionLevel: packet.encryptionLevel,
+	})
+	if err != nil {
+		return err
+	}
+
+	s.logPacket(packet)
+
+	err = s.conn.Write(packet.raw)
+	putPacketBuffer(packet.raw)
+	return err
 }
 
 func (s *session) sendConnectionClose(quicErr *qerr.QuicError) error {
