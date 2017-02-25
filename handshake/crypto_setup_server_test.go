@@ -336,7 +336,11 @@ var _ = Describe("Crypto setup", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stream.dataWritten.Bytes()).To(HavePrefix("SHLO"))
 			Expect(stream.dataWritten.Bytes()).ToNot(ContainSubstring("REJ"))
-			Expect(aeadChanged).To(Receive())
+			var encLevel protocol.EncryptionLevel
+			Expect(aeadChanged).To(Receive(&encLevel))
+			Expect(encLevel).To(Equal(protocol.EncryptionSecure))
+			Expect(aeadChanged).To(Receive(&encLevel))
+			Expect(encLevel).To(Equal(protocol.EncryptionForwardSecure))
 		})
 
 		It("recognizes inchoate CHLOs missing SCID", func() {

@@ -60,6 +60,7 @@ var _ = Describe("Packet packer", func() {
 		publicHeaderLen = 1 + 8 + 2 // 1 flag byte, 8 connection ID, 2 packet number
 		maxFrameSize = protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen
 		packer.version = protocol.Version34
+		packer.isForwardSecure = true
 	})
 
 	It("returns nil when no packet is queued", func() {
@@ -312,6 +313,18 @@ var _ = Describe("Packet packer", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.frames).To(HaveLen(1))
 			Expect(p.frames[0].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
+		})
+
+		It("packs smaller packets when it is not yet forward-secure", func() {
+			packer.isForwardSecure = false
+			f := &frames.StreamFrame{
+				StreamID: 3,
+				Data:     bytes.Repeat([]byte{'f'}, int(protocol.MaxPacketSize)),
+			}
+			streamFramer.AddFrameForRetransmission(f)
+			p, err := packer.PackPacket(nil, nil, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p.raw).To(HaveLen(int(protocol.MaxPacketSize - protocol.NonForwardSecurePacketSizeReduction)))
 		})
 
 		It("packs multiple small stream frames into single packet", func() {

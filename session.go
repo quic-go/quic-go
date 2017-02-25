@@ -236,6 +236,9 @@ runLoop:
 			// begins with the public header and we never copy it.
 			putPacketBuffer(p.publicHeader.Raw)
 		case l := <-s.aeadChanged:
+			if l == protocol.EncryptionForwardSecure {
+				s.packer.SetForwardSecure()
+			}
 			s.tryDecryptingQueuedPackets()
 			s.cryptoChangeCallback(s, l == protocol.EncryptionForwardSecure)
 		}
