@@ -141,7 +141,7 @@ var _ = Describe("Crypto setup", func() {
 		cs          *cryptoSetupServer
 		stream      *mockStream
 		cpm         ConnectionParametersManager
-		aeadChanged chan struct{}
+		aeadChanged chan protocol.EncryptionLevel
 		nonce32     []byte
 		versionTag  []byte
 		sourceAddr  []byte
@@ -157,7 +157,7 @@ var _ = Describe("Crypto setup", func() {
 		Expect(err).NotTo(HaveOccurred())
 		expectedInitialNonceLen = 32
 		expectedFSNonceLen = 64
-		aeadChanged = make(chan struct{}, 1)
+		aeadChanged = make(chan protocol.EncryptionLevel, 2)
 		stream = &mockStream{}
 		kex = &mockKEX{}
 		signer = &mockSigner{}
