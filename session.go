@@ -623,9 +623,10 @@ func (s *session) sendPacket() error {
 		}
 
 		err = s.sentPacketHandler.SentPacket(&ackhandler.Packet{
-			PacketNumber: packet.number,
-			Frames:       packet.frames,
-			Length:       protocol.ByteCount(len(packet.raw)),
+			PacketNumber:    packet.number,
+			Frames:          packet.frames,
+			Length:          protocol.ByteCount(len(packet.raw)),
+			EncryptionLevel: packet.encryptionLevel,
 		})
 		if err != nil {
 			return err

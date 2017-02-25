@@ -800,6 +800,28 @@ var _ = Describe("Session", func() {
 			Expect(mconn.written).To(HaveLen(1))
 			Expect(mconn.written[0]).To(ContainSubstring(string([]byte("PRST"))))
 		})
+
+		It("informs the SentPacketHandler about sent packets", func() {
+			sess.sentPacketHandler = newMockSentPacketHandler()
+			sess.packer.packetNumberGenerator.next = 0x1337 + 9
+			sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionSecure}
+
+			f := &frames.StreamFrame{
+				StreamID: 5,
+				Data:     []byte("foobar"),
+			}
+			sess.streamFramer.AddFrameForRetransmission(f)
+			_, err := sess.GetOrOpenStream(5)
+			Expect(err).ToNot(HaveOccurred())
+			err = sess.sendPacket()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mconn.written).To(HaveLen(1))
+			sentPackets := sess.sentPacketHandler.(*mockSentPacketHandler).sentPackets
+			Expect(sentPackets).To(HaveLen(1))
+			Expect(sentPackets[0].Frames).To(ContainElement(f))
+			Expect(sentPackets[0].EncryptionLevel).To(Equal(protocol.EncryptionSecure))
+			Expect(sentPackets[0].Length).To(BeEquivalentTo(len(mconn.written[0])))
+		})
 	})
 
 	Context("retransmissions", func() {
