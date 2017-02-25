@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"errors"
 	"net"
 	"time"
 
@@ -207,6 +208,28 @@ var _ = Describe("Server", func() {
 			Expect(serv.sessions[connID]).To(BeNil())
 		})
 
+		It("closes properly", func() {
+			ln, err := ListenAddr("127.0.0.1:0", config)
+			Expect(err).ToNot(HaveOccurred())
+
+			var returned bool
+			go func() {
+				defer GinkgoRecover()
+				err := ln.Serve()
+				Expect(err).ToNot(HaveOccurred())
+				returned = true
+			}()
+			ln.Close()
+			Eventually(func() bool { return returned }).Should(BeTrue())
+		})
+
+		It("errors when encountering a connection error", func() {
+			testErr := errors.New("connection error")
+			conn.readErr = testErr
+			err := serv.Serve()
+			Expect(err).To(MatchError(testErr))
+		})
+
 		It("ignores delayed packets with mismatching versions", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
@@ -296,6 +319,18 @@ var _ = Describe("Server", func() {
 		Expect(err).ToNot(HaveOccurred())
 		serv := ln.(*server)
 		Expect(serv.Addr().String()).To(Equal(addr))
+	})
+
+	It("errors if given an invalid address", func() {
+		addr := "127.0.0.1"
+		_, err := ListenAddr(addr, config)
+		Expect(err).To(BeAssignableToTypeOf(&net.AddrError{}))
+	})
+
+	It("errors if given an invalid address", func() {
+		addr := "1.1.1.1:1111"
+		_, err := ListenAddr(addr, config)
+		Expect(err).To(BeAssignableToTypeOf(&net.OpError{}))
 	})
 
 	It("setups and responds with version negotiation", func() {
