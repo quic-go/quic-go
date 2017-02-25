@@ -260,6 +260,21 @@ var _ = Describe("Server", func() {
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
 		})
+
+		It("doesn't respond with a version negotiation packet if the first packet is too small", func() {
+			b := &bytes.Buffer{}
+			hdr := PublicHeader{
+				VersionFlag:     true,
+				ConnectionID:    0x1337,
+				PacketNumber:    1,
+				PacketNumberLen: protocol.PacketNumberLen2,
+			}
+			hdr.Write(b, 13 /* not a valid QUIC version */, protocol.PerspectiveClient)
+			b.Write(bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSize-1)) // this packet is 1 byte too small
+			err := serv.handlePacket(conn, udpAddr, b.Bytes())
+			Expect(err).To(MatchError("dropping small packet with unknown version"))
+			Expect(conn.dataWritten.Len()).Should(BeZero())
+		})
 	})
 
 	It("setups with the right values", func() {
@@ -284,24 +299,34 @@ var _ = Describe("Server", func() {
 	})
 
 	It("setups and responds with version negotiation", func() {
-		conn.dataToRead = []byte{0x09, 0x01, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x01, 'Q', '0', '0', '0', 0x01}
+		b := &bytes.Buffer{}
+		hdr := PublicHeader{
+			VersionFlag:     true,
+			ConnectionID:    0x1337,
+			PacketNumber:    1,
+			PacketNumberLen: protocol.PacketNumberLen2,
+		}
+		hdr.Write(b, 13 /* not a valid QUIC version */, protocol.PerspectiveClient)
+		b.Write(bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSize)) // add a fake CHLO
+		conn.dataToRead = b.Bytes()
 		conn.dataReadFrom = udpAddr
 		ln, err := Listen(conn, config)
 		Expect(err).ToNot(HaveOccurred())
 
+		var returned bool
 		go func() {
-			defer GinkgoRecover()
-			err := ln.Serve()
-			Expect(err).ToNot(HaveOccurred())
+			ln.Serve()
+			returned = true
 		}()
 
 		Eventually(func() int { return conn.dataWritten.Len() }).ShouldNot(BeZero())
 		Expect(conn.dataWrittenTo).To(Equal(udpAddr))
 		expected := append(
-			[]byte{0x9, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
+			[]byte{0x9, 0x37, 0x13, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
 			protocol.SupportedVersionsAsTags...,
 		)
 		Expect(conn.dataWritten.Bytes()).To(Equal(expected))
+		Expect(returned).To(BeFalse())
 	})
 
 	It("sends a PublicReset for new connections that don't have the VersionFlag set", func() {

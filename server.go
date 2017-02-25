@@ -163,6 +163,10 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 
 	// Send Version Negotiation Packet if the client is speaking a different protocol version
 	if hdr.VersionFlag && !protocol.IsSupportedVersion(hdr.VersionNumber) {
+		// drop packets that are too small to be valid first packets
+		if len(packet) < protocol.ClientHelloMinimumSize+len(hdr.Raw) {
+			return errors.New("dropping small packet with unknown version")
+		}
 		utils.Infof("Client offered version %d, sending VersionNegotiationPacket", hdr.VersionNumber)
 		_, err = pconn.WriteTo(composeVersionNegotiation(hdr.ConnectionID), remoteAddr)
 		return err
