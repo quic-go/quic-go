@@ -320,11 +320,15 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		s.largestRcvdPacketNumber,
 		hdr.PacketNumber,
 	)
-	if utils.Debug() {
-		utils.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x @ %s", hdr.PacketNumber, len(data)+len(hdr.Raw), hdr.ConnectionID, time.Now().Format("15:04:05.000"))
-	}
 
 	packet, err := s.unpacker.Unpack(hdr.Raw, hdr, data)
+	if utils.Debug() {
+		if err != nil {
+			utils.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x @ %s", hdr.PacketNumber, len(data)+len(hdr.Raw), hdr.ConnectionID, time.Now().Format("15:04:05.000"))
+		} else {
+			utils.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x, %s @ %s", hdr.PacketNumber, len(data)+len(hdr.Raw), hdr.ConnectionID, packet.encryptionLevel, time.Now().Format("15:04:05.000"))
+		}
+	}
 	// if the decryption failed, this might be a packet sent by an attacker
 	// don't update the remote address
 	if quicErr, ok := err.(*qerr.QuicError); ok && quicErr.ErrorCode == qerr.DecryptionFailure {
@@ -653,7 +657,7 @@ func (s *session) logPacket(packet *packedPacket) {
 		return
 	}
 	if utils.Debug() {
-		utils.Debugf("-> Sending packet 0x%x (%d bytes) @ %s", packet.number, len(packet.raw), time.Now().Format("15:04:05.000"))
+		utils.Debugf("-> Sending packet 0x%x (%d bytes), %s, @ %s", packet.number, len(packet.raw), packet.encryptionLevel, time.Now().Format("15:04:05.000"))
 		for _, frame := range packet.frames {
 			frames.LogFrame(frame, true)
 		}

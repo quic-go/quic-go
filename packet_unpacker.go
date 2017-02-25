@@ -5,21 +5,25 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 )
 
+type quicAEAD interface {
+	Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error)
+	Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel)
+}
+
 type packetUnpacker struct {
 	version protocol.VersionNumber
-	aead    crypto.AEAD
+	aead    quicAEAD
 }
 
 func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data []byte) (*unpackedPacket, error) {
 	buf := getPacketBuffer()
 	defer putPacketBuffer(buf)
-	decrypted, err := u.aead.Open(buf, data, hdr.PacketNumber, publicHeaderBinary)
+	decrypted, encryptionLevel, err := u.aead.Open(buf, data, hdr.PacketNumber, publicHeaderBinary)
 	if err != nil {
 		// Wrap err in quicError so that public reset is sent by session
 		return nil, qerr.Error(qerr.DecryptionFailure, err.Error())
@@ -45,6 +49,11 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, da
 			frame, err = frames.ParseStreamFrame(r)
 			if err != nil {
 				err = qerr.Error(qerr.InvalidStreamData, err.Error())
+			} else {
+				streamID := frame.(*frames.StreamFrame).StreamID
+				if streamID != 1 && encryptionLevel <= protocol.EncryptionUnencrypted {
+					err = qerr.Error(qerr.UnencryptedStreamData, fmt.Sprintf("received unencrypted stream data on stream %d", streamID))
+				}
 			}
 		} else if typeByte&0xc0 == 0x40 {
 			frame, err = frames.ParseAckFrame(r, u.version)
@@ -100,6 +109,7 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, da
 	}
 
 	return &unpackedPacket{
-		frames: fs,
+		encryptionLevel: encryptionLevel,
+		frames:          fs,
 	}, nil
 }

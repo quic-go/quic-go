@@ -51,7 +51,6 @@ type cryptoSetupClient struct {
 	connectionParameters ConnectionParametersManager
 }
 
-var _ crypto.AEAD = &cryptoSetupClient{}
 var _ CryptoSetup = &cryptoSetupClient{}
 
 var (
@@ -276,37 +275,41 @@ func (h *cryptoSetupClient) validateVersionList(verTags []byte) bool {
 	return true
 }
 
-func (h *cryptoSetupClient) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {
+func (h *cryptoSetupClient) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error) {
 	if h.forwardSecureAEAD != nil {
 		data, err := h.forwardSecureAEAD.Open(dst, src, packetNumber, associatedData)
 		if err == nil {
-			return data, nil
+			return data, protocol.EncryptionForwardSecure, nil
 		}
-		return nil, err
+		return nil, protocol.EncryptionUnspecified, err
 	}
 
 	if h.secureAEAD != nil {
 		data, err := h.secureAEAD.Open(dst, src, packetNumber, associatedData)
 		if err == nil {
 			h.receivedSecurePacket = true
-			return data, nil
+			return data, protocol.EncryptionSecure, nil
 		}
 		if h.receivedSecurePacket {
-			return nil, err
+			return nil, protocol.EncryptionUnspecified, err
 		}
 	}
-
-	return (&crypto.NullAEAD{}).Open(dst, src, packetNumber, associatedData)
+	nullAEAD := &crypto.NullAEAD{}
+	res, err := nullAEAD.Open(dst, src, packetNumber, associatedData)
+	if err != nil {
+		return nil, protocol.EncryptionUnspecified, err
+	}
+	return res, protocol.EncryptionUnencrypted, nil
 }
 
-func (h *cryptoSetupClient) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
+func (h *cryptoSetupClient) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel) {
 	if h.forwardSecureAEAD != nil {
-		return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData)
+		return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionForwardSecure
 	}
 	if h.secureAEAD != nil {
-		return h.secureAEAD.Seal(dst, src, packetNumber, associatedData)
+		return h.secureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionSecure
 	}
-	return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData)
+	return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData), protocol.EncryptionUnencrypted
 }
 
 func (h *cryptoSetupClient) DiversificationNonce() []byte {

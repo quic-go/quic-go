@@ -12,15 +12,16 @@ import (
 type mockCryptoSetup struct {
 	diversificationNonce []byte
 	handshakeComplete    bool
+	encLevelSeal         protocol.EncryptionLevel
 }
 
 func (m *mockCryptoSetup) HandleCryptoStream() error { return nil }
 
-func (m *mockCryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {
-	return nil, nil
+func (m *mockCryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error) {
+	return nil, protocol.EncryptionUnspecified, nil
 }
-func (m *mockCryptoSetup) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
-	return append(src, bytes.Repeat([]byte{0}, 12)...)
+func (m *mockCryptoSetup) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel) {
+	return append(src, bytes.Repeat([]byte{0}, 12)...), m.encLevelSeal
 }
 func (m *mockCryptoSetup) LockForSealing()                      {}
 func (m *mockCryptoSetup) UnlockForSealing()                    {}
@@ -74,6 +75,18 @@ var _ = Describe("Packet packer", func() {
 		f.Write(b, 0)
 		Expect(p.frames).To(HaveLen(1))
 		Expect(p.raw).To(ContainSubstring(string(b.Bytes())))
+	})
+
+	It("stores the encryption level a packet was sealed with", func() {
+		packer.cryptoSetup.(*mockCryptoSetup).encLevelSeal = protocol.EncryptionSecure
+		f := &frames.StreamFrame{
+			StreamID: 5,
+			Data:     []byte("foobar"),
+		}
+		streamFramer.AddFrameForRetransmission(f)
+		p, err := packer.PackPacket(nil, []frames.Frame{}, 0)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(p.encryptionLevel).To(Equal(protocol.EncryptionSecure))
 	})
 
 	It("includes a diversification nonce, when acting as a server", func() {

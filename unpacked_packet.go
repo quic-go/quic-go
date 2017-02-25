@@ -1,9 +1,13 @@
 package quic
 
-import "github.com/lucas-clemente/quic-go/frames"
+import (
+	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/protocol"
+)
 
 type unpackedPacket struct {
-	frames []frames.Frame
+	encryptionLevel protocol.EncryptionLevel
+	frames          []frames.Frame
 }
 
 func (u *unpackedPacket) IsRetransmittable() bool {

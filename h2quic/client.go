@@ -45,9 +45,10 @@ var _ h2quicClient = &Client{}
 // NewClient creates a new client
 func NewClient(t *QuicRoundTripper, tlsConfig *tls.Config, hostname string) *Client {
 	c := &Client{
-		t:         t,
-		hostname:  authorityAddr("https", hostname),
-		responses: make(map[protocol.StreamID]chan *http.Response),
+		t:               t,
+		hostname:        authorityAddr("https", hostname),
+		responses:       make(map[protocol.StreamID]chan *http.Response),
+		encryptionLevel: protocol.EncryptionUnencrypted,
 	}
 	c.cryptoChangedCond = sync.Cond{L: &c.mutex}
 	c.config = &quic.Config{

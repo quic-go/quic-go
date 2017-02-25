@@ -12,30 +12,42 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+type mockAEAD struct {
+	encLevelOpen protocol.EncryptionLevel
+}
+
+func (m *mockAEAD) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error) {
+	res, err := (&crypto.NullAEAD{}).Open(dst, src, packetNumber, associatedData)
+	return res, m.encLevelOpen, err
+}
+func (m *mockAEAD) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel) {
+	return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData), protocol.EncryptionUnspecified
+}
+
+var _ quicAEAD = &mockAEAD{}
+
 var _ = Describe("Packet unpacker", func() {
 	var (
 		unpacker *packetUnpacker
 		hdr      *PublicHeader
 		hdrBin   []byte
-		aead     crypto.AEAD
 		data     []byte
 		buf      *bytes.Buffer
 	)
 
 	BeforeEach(func() {
-		aead = &crypto.NullAEAD{}
 		hdr = &PublicHeader{
 			PacketNumber:    10,
 			PacketNumberLen: 1,
 		}
 		hdrBin = []byte{0x04, 0x4c, 0x01}
-		unpacker = &packetUnpacker{aead: aead}
+		unpacker = &packetUnpacker{aead: &mockAEAD{}}
 		data = nil
 		buf = &bytes.Buffer{}
 	})
 
 	setData := func(p []byte) {
-		data = aead.Seal(nil, p, 0, hdrBin)
+		data, _ = unpacker.aead.Seal(nil, p, 0, hdrBin)
 	}
 
 	It("does not read read a private flag for QUIC Version >= 34", func() {
@@ -48,17 +60,15 @@ var _ = Describe("Packet unpacker", func() {
 		Expect(packet.frames).To(Equal([]frames.Frame{f}))
 	})
 
-	It("unpacks STREAM frames", func() {
-		f := &frames.StreamFrame{
-			StreamID: 1,
-			Data:     []byte("foobar"),
-		}
+	It("saves the encryption level", func() {
+		f := &frames.ConnectionCloseFrame{ReasonPhrase: "foo"}
 		err := f.Write(buf, 0)
 		Expect(err).ToNot(HaveOccurred())
 		setData(buf.Bytes())
+		unpacker.aead.(*mockAEAD).encLevelOpen = protocol.EncryptionSecure
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(Equal([]frames.Frame{f}))
+		Expect(packet.encryptionLevel).To(Equal(protocol.EncryptionSecure))
 	})
 
 	It("unpacks ACK frames", func() {
@@ -211,5 +221,48 @@ var _ = Describe("Packet unpacker", func() {
 			_, err := unpacker.Unpack(hdrBin, hdr, data)
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(e))
 		}
+	})
+
+	Context("unpacking STREAM frames", func() {
+		It("unpacks unencrypted STREAM frames on stream 1", func() {
+			unpacker.aead.(*mockAEAD).encLevelOpen = protocol.EncryptionUnencrypted
+			f := &frames.StreamFrame{
+				StreamID: 1,
+				Data:     []byte("foobar"),
+			}
+			err := f.Write(buf, 0)
+			Expect(err).ToNot(HaveOccurred())
+			setData(buf.Bytes())
+			packet, err := unpacker.Unpack(hdrBin, hdr, data)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packet.frames).To(Equal([]frames.Frame{f}))
+		})
+
+		It("unpacks encrypted STREAM frames on stream 1", func() {
+			unpacker.aead.(*mockAEAD).encLevelOpen = protocol.EncryptionSecure
+			f := &frames.StreamFrame{
+				StreamID: 1,
+				Data:     []byte("foobar"),
+			}
+			err := f.Write(buf, 0)
+			Expect(err).ToNot(HaveOccurred())
+			setData(buf.Bytes())
+			packet, err := unpacker.Unpack(hdrBin, hdr, data)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packet.frames).To(Equal([]frames.Frame{f}))
+		})
+
+		It("does not unpack unencrypted STREAM frames on higher streams", func() {
+			unpacker.aead.(*mockAEAD).encLevelOpen = protocol.EncryptionUnencrypted
+			f := &frames.StreamFrame{
+				StreamID: 3,
+				Data:     []byte("foobar"),
+			}
+			err := f.Write(buf, 0)
+			Expect(err).ToNot(HaveOccurred())
+			setData(buf.Bytes())
+			_, err = unpacker.Unpack(hdrBin, hdr, data)
+			Expect(err).To(MatchError(qerr.Error(qerr.UnencryptedStreamData, "received unencrypted stream data on stream 3")))
+		})
 	})
 })

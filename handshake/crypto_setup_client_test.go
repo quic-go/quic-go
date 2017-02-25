@@ -676,29 +676,34 @@ var _ = Describe("Crypto setup", func() {
 
 		Context("null encryption", func() {
 			It("is used initially", func() {
-				Expect(cs.Seal(nil, []byte("foobar"), 0, []byte{})).To(Equal(foobarFNVSigned))
+				d, enc := cs.Seal(nil, []byte("foobar"), 0, []byte{})
+				Expect(d).To(Equal(foobarFNVSigned))
+				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
 			})
 
 			It("is accepted initially", func() {
-				d, err := cs.Open(nil, foobarFNVSigned, 0, []byte{})
+				d, enc, err := cs.Open(nil, foobarFNVSigned, 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(d).To(Equal([]byte("foobar")))
+				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
 			})
 
 			It("is accepted before the server sent an encrypted packet", func() {
 				doCompleteREJ()
 				cs.receivedSecurePacket = false
 				Expect(cs.secureAEAD).ToNot(BeNil())
-				d, err := cs.Open(nil, foobarFNVSigned, 0, []byte{})
+				d, enc, err := cs.Open(nil, foobarFNVSigned, 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(d).To(Equal([]byte("foobar")))
+				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
 			})
 
 			It("is not accepted after the server sent an encrypted packet", func() {
 				doCompleteREJ()
 				cs.receivedSecurePacket = true
-				_, err := cs.Open(nil, foobarFNVSigned, 0, []byte{})
+				_, enc, err := cs.Open(nil, foobarFNVSigned, 0, []byte{})
 				Expect(err).To(MatchError("authentication failed"))
+				Expect(enc).To(Equal(protocol.EncryptionUnspecified))
 			})
 		})
 
@@ -706,32 +711,37 @@ var _ = Describe("Crypto setup", func() {
 			It("is used immediately when available", func() {
 				doCompleteREJ()
 				cs.receivedSecurePacket = false
-				d := cs.Seal(nil, []byte("foobar"), 0, []byte{})
+				d, enc := cs.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal([]byte("foobar  normal sec")))
+				Expect(enc).To(Equal(protocol.EncryptionSecure))
 			})
 
 			It("is accepted", func() {
 				doCompleteREJ()
-				d, err := cs.Open(nil, []byte("encrypted"), 0, []byte{})
+				d, enc, err := cs.Open(nil, []byte("encrypted"), 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(d).To(Equal([]byte("decrypted")))
+				Expect(enc).To(Equal(protocol.EncryptionSecure))
 				Expect(cs.receivedSecurePacket).To(BeTrue())
 			})
 
 			It("is not used after receiving the SHLO", func() {
 				doSHLO()
-				_, err := cs.Open(nil, []byte("encrypted"), 0, []byte{})
+				_, enc, err := cs.Open(nil, []byte("encrypted"), 0, []byte{})
 				Expect(err).To(MatchError("authentication failed"))
+				Expect(enc).To(Equal(protocol.EncryptionUnspecified))
 			})
 		})
 
 		Context("forward-secure encryption", func() {
 			It("is used after receiving the SHLO", func() {
 				doSHLO()
-				_, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
+				_, enc, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
-				d := cs.Seal(nil, []byte("foobar"), 0, []byte{})
+				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
+				d, enc := cs.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal([]byte("foobar forward sec")))
+				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
 			})
 		})
 	})
