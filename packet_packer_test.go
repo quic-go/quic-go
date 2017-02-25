@@ -5,6 +5,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -46,7 +47,7 @@ var _ = Describe("Packet packer", func() {
 		streamFramer = newStreamFramer(newStreamsMap(nil, protocol.PerspectiveServer, cpm), fcm)
 
 		packer = &packetPacker{
-			cryptoSetup:           &mockCryptoSetup{},
+			cryptoSetup:           &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure},
 			connectionParameters:  cpm,
 			packetNumberGenerator: newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
 			streamFramer:          streamFramer,
@@ -428,6 +429,56 @@ var _ = Describe("Packet packer", func() {
 			payloadFrames, err = packer.composeNextPacket(nil, publicHeaderLen)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(payloadFrames).To(HaveLen(1))
+		})
+
+		It("refuses to send unencrypted stream data on a data stream", func() {
+			packer.cryptoSetup.(*mockCryptoSetup).encLevelSeal = protocol.EncryptionUnencrypted
+			f := &frames.StreamFrame{
+				StreamID: 3,
+				Data:     []byte("foobar"),
+			}
+			streamFramer.AddFrameForRetransmission(f)
+			_, err := packer.PackPacket(nil, nil, 0)
+			Expect(err).To(MatchError(qerr.AttemptToSendUnencryptedStreamData))
+		})
+
+		It("sends encrypted, non forward-secure, stream data on a data stream", func() {
+			packer.cryptoSetup.(*mockCryptoSetup).encLevelSeal = protocol.EncryptionSecure
+			f := &frames.StreamFrame{
+				StreamID: 5,
+				Data:     []byte("foobar"),
+			}
+			streamFramer.AddFrameForRetransmission(f)
+			p, err := packer.PackPacket(nil, nil, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionSecure))
+			Expect(p.frames[0]).To(Equal(f))
+		})
+
+		It("sends unencrypted stream data on the crypto stream", func() {
+			packer.cryptoSetup.(*mockCryptoSetup).encLevelSeal = protocol.EncryptionUnencrypted
+			f := &frames.StreamFrame{
+				StreamID: 1,
+				Data:     []byte("foobar"),
+			}
+			streamFramer.AddFrameForRetransmission(f)
+			p, err := packer.PackPacket(nil, nil, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
+			Expect(p.frames[0]).To(Equal(f))
+		})
+
+		It("sends encrypted stream data on the crypto stream", func() {
+			packer.cryptoSetup.(*mockCryptoSetup).encLevelSeal = protocol.EncryptionSecure
+			f := &frames.StreamFrame{
+				StreamID: 1,
+				Data:     []byte("foobar"),
+			}
+			streamFramer.AddFrameForRetransmission(f)
+			p, err := packer.PackPacket(nil, nil, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionSecure))
+			Expect(p.frames[0]).To(Equal(f))
 		})
 	})
 
