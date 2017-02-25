@@ -1274,7 +1274,7 @@ var _ = Describe("Session", func() {
 				err = s.Close()
 				Expect(err).NotTo(HaveOccurred())
 				s.(*stream).sentFin()
-				s.CloseRemote(0)
+				s.(*stream).CloseRemote(0)
 				_, err = s.Read([]byte("a"))
 				Expect(err).To(MatchError(io.EOF))
 				sess.garbageCollectStreams()
