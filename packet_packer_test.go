@@ -3,6 +3,7 @@ package quic
 import (
 	"bytes"
 
+	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
@@ -25,7 +26,7 @@ func (m *mockCryptoSetup) Seal(dst, src []byte, packetNumber protocol.PacketNumb
 	return append(src, bytes.Repeat([]byte{0}, 12)...), m.encLevelSeal
 }
 func (m *mockCryptoSetup) SealWith(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte, encLevel protocol.EncryptionLevel) ([]byte, protocol.EncryptionLevel, error) {
-	panic("not implemented")
+	return append(src, bytes.Repeat([]byte{0}, 12)...), encLevel, nil
 }
 func (m *mockCryptoSetup) LockForSealing()                      {}
 func (m *mockCryptoSetup) UnlockForSealing()                    {}
@@ -568,5 +569,99 @@ var _ = Describe("Packet packer", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(p.frames).To(HaveLen(1))
 		Expect(p.frames[0]).To(Equal(wuf))
+	})
+
+	Context("retransmitting of handshake packets", func() {
+		swf := &frames.StopWaitingFrame{LeastUnacked: 1}
+		sf := &frames.StreamFrame{
+			StreamID: 1,
+			Data:     []byte("foobar"),
+		}
+
+		It("packs a retransmission for a packet sent with no encryption", func() {
+			packet := &ackhandler.Packet{
+				EncryptionLevel: protocol.EncryptionUnencrypted,
+				Frames:          []frames.Frame{sf},
+			}
+			p, err := packer.RetransmitNonForwardSecurePacket(swf, packet)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p.frames).To(ContainElement(sf))
+			Expect(p.frames).To(ContainElement(swf))
+			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
+		})
+
+		It("packs a retransmission for a packet sent with initial encryption", func() {
+			packet := &ackhandler.Packet{
+				EncryptionLevel: protocol.EncryptionSecure,
+				Frames:          []frames.Frame{sf},
+			}
+			p, err := packer.RetransmitNonForwardSecurePacket(swf, packet)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p.frames).To(ContainElement(sf))
+			Expect(p.frames).To(ContainElement(swf))
+			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionSecure))
+		})
+
+		It("removes non-retransmittable frames", func() {
+			wuf := &frames.WindowUpdateFrame{StreamID: 5, ByteOffset: 10}
+			packet := &ackhandler.Packet{
+				EncryptionLevel: protocol.EncryptionSecure,
+				Frames: []frames.Frame{
+					sf,
+					&frames.StopWaitingFrame{},
+					wuf,
+					&frames.AckFrame{},
+				},
+			}
+			p, err := packer.RetransmitNonForwardSecurePacket(swf, packet)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p.frames).To(HaveLen(3))
+			Expect(p.frames).To(ContainElement(sf))
+			Expect(p.frames).To(ContainElement(swf))
+			Expect(p.frames).To(ContainElement(wuf))
+			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionSecure))
+		})
+
+		It("doesn't pack a packet for a non-retransmittable packet", func() {
+			packet := &ackhandler.Packet{
+				EncryptionLevel: protocol.EncryptionSecure,
+				Frames:          []frames.Frame{&frames.AckFrame{}, &frames.StopWaitingFrame{}},
+			}
+			p, err := packer.RetransmitNonForwardSecurePacket(swf, packet)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p).To(BeNil())
+		})
+
+		// this should never happen, since non forward-secure packets are limited to a size smaller than MaxPacketSize, such that it is always possible to retransmit them without splitting the StreamFrame
+		// (note that the retransmitted packet needs to have enough space for the StopWaitingFrame)
+		It("refuses to send a packet larger than MaxPacketSize", func() {
+			packet := &ackhandler.Packet{
+				EncryptionLevel: protocol.EncryptionSecure,
+				Frames: []frames.Frame{
+					&frames.StreamFrame{
+						StreamID: 1,
+						Data:     bytes.Repeat([]byte{'f'}, int(protocol.MaxPacketSize-5)),
+					},
+				},
+			}
+			_, err := packer.RetransmitNonForwardSecurePacket(swf, packet)
+			Expect(err).To(MatchError("PacketPacker BUG: packet too large"))
+		})
+
+		It("refuses to retransmit packets that were sent with forward-secure encryption", func() {
+			p := &ackhandler.Packet{
+				EncryptionLevel: protocol.EncryptionForwardSecure,
+			}
+			_, err := packer.RetransmitNonForwardSecurePacket(nil, p)
+			Expect(err).To(MatchError("PacketPacker BUG: forward-secure encrypted handshake packets don't need special treatment"))
+		})
+
+		It("refuses to retransmit packets without a StopWaitingFrame", func() {
+			p := &ackhandler.Packet{
+				EncryptionLevel: protocol.EncryptionSecure,
+			}
+			_, err := packer.RetransmitNonForwardSecurePacket(nil, p)
+			Expect(err).To(MatchError("PacketPacker BUG: Handshake retransmissions must contain a StopWaitingFrame"))
+		})
 	})
 })
