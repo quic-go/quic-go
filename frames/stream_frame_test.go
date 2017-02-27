@@ -65,6 +65,19 @@ var _ = Describe("StreamFrame", func() {
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidStreamData, "data len too large")))
 		})
 
+		It("rejects frames that overflow the offset", func() {
+			// Offset + len(Data) overflows MaxByteCount
+			f := &StreamFrame{
+				StreamID: 1,
+				Offset:   protocol.MaxByteCount,
+				Data:     []byte{'f'},
+			}
+			b := &bytes.Buffer{}
+			f.Write(b, protocol.VersionWhatever)
+			_, err := ParseStreamFrame(bytes.NewReader(b.Bytes()))
+			Expect(err).To(MatchError(qerr.Error(qerr.InvalidStreamData, "data overflows maximum offset")))
+		})
+
 		It("errors on EOFs", func() {
 			data := []byte{0xa4, 0x1, 0x2a, 0x00, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'}
 			_, err := ParseStreamFrame(bytes.NewReader(data))

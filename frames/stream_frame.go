@@ -79,7 +79,11 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 		}
 	}
 
-	if !frame.FinBit && len(frame.Data) == 0 {
+	if frame.Offset+frame.DataLen() < frame.Offset {
+		return nil, qerr.Error(qerr.InvalidStreamData, "data overflows maximum offset")
+	}
+
+	if !frame.FinBit && frame.DataLen() == 0 {
 		return nil, qerr.EmptyStreamFrameNoFin
 	}
 
