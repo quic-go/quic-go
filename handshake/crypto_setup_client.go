@@ -46,7 +46,7 @@ type cryptoSetupClient struct {
 	receivedSecurePacket bool
 	secureAEAD           crypto.AEAD
 	forwardSecureAEAD    crypto.AEAD
-	aeadChanged          chan struct{}
+	aeadChanged          chan protocol.EncryptionLevel
 
 	connectionParameters ConnectionParametersManager
 }
@@ -67,7 +67,7 @@ func NewCryptoSetupClient(
 	cryptoStream io.ReadWriter,
 	tlsConfig *tls.Config,
 	connectionParameters ConnectionParametersManager,
-	aeadChanged chan struct{},
+	aeadChanged chan protocol.EncryptionLevel,
 	negotiatedVersions []protocol.VersionNumber,
 ) (CryptoSetup, error) {
 	return &cryptoSetupClient{
@@ -245,7 +245,7 @@ func (h *cryptoSetupClient) handleSHLOMessage(cryptoData map[Tag][]byte) error {
 		return qerr.InvalidCryptoMessageParameter
 	}
 
-	h.aeadChanged <- struct{}{}
+	h.aeadChanged <- protocol.EncryptionForwardSecure
 
 	return nil
 }
@@ -460,7 +460,7 @@ func (h *cryptoSetupClient) maybeUpgradeCrypto() error {
 			return err
 		}
 
-		h.aeadChanged <- struct{}{}
+		h.aeadChanged <- protocol.EncryptionSecure
 	}
 
 	return nil

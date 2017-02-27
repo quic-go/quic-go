@@ -127,7 +127,7 @@ var _ = Describe("Crypto setup", func() {
 		stream = &mockStream{}
 		certManager = &mockCertManager{}
 		version := protocol.Version36
-		csInt, err := NewCryptoSetupClient("hostname", 0, version, stream, nil, NewConnectionParamatersManager(protocol.PerspectiveClient, version), make(chan struct{}, 1), nil)
+		csInt, err := NewCryptoSetupClient("hostname", 0, version, stream, nil, NewConnectionParamatersManager(protocol.PerspectiveClient, version), make(chan protocol.EncryptionLevel, 2), nil)
 		Expect(err).ToNot(HaveOccurred())
 		cs = csInt.(*cryptoSetupClient)
 		cs.certManager = certManager

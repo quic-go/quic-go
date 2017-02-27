@@ -1146,8 +1146,7 @@ var _ = Describe("Session", func() {
 			callbackSession = s
 		}
 		sess.cryptoChangeCallback = cb
-		sess.cryptoSetup = &mockCryptoSetup{handshakeComplete: false}
-		sess.aeadChanged <- struct{}{}
+		sess.aeadChanged <- protocol.EncryptionSecure
 		go sess.run()
 		Eventually(func() bool { return callbackCalled }).Should(BeTrue())
 		Expect(callbackCalledWith).To(BeFalse())
@@ -1164,7 +1163,7 @@ var _ = Describe("Session", func() {
 		}
 		sess.cryptoChangeCallback = cb
 		sess.cryptoSetup = &mockCryptoSetup{handshakeComplete: true}
-		sess.aeadChanged <- struct{}{}
+		sess.aeadChanged <- protocol.EncryptionForwardSecure
 		go sess.run()
 		Eventually(func() bool { return callbackCalledWith }).Should(BeTrue())
 		Expect(callbackSession).To(Equal(sess))
