@@ -17,7 +17,7 @@ type streamFrameSorter struct {
 
 var (
 	errTooManyGapsInReceivedStreamData = errors.New("Too many gaps in received StreamFrame data")
-	errDuplicateStreamData             = errors.New("Overlapping Stream Data")
+	errDuplicateStreamData             = errors.New("Duplicate Stream Data")
 	errEmptyStreamData                 = errors.New("Stream Data empty")
 )
 
@@ -31,15 +31,7 @@ func newStreamFrameSorter() *streamFrameSorter {
 }
 
 func (s *streamFrameSorter) Push(frame *frames.StreamFrame) error {
-	_, ok := s.queuedFrames[frame.Offset]
-	if ok {
-		return errDuplicateStreamData
-	}
-
-	start := frame.Offset
-	end := frame.Offset + frame.DataLen()
-
-	if start == end {
+	if frame.DataLen() == 0 {
 		if frame.FinBit {
 			s.queuedFrames[frame.Offset] = frame
 			return nil
@@ -47,50 +39,57 @@ func (s *streamFrameSorter) Push(frame *frames.StreamFrame) error {
 		return errEmptyStreamData
 	}
 
-	var foundInGap bool
+	if _, ok := s.queuedFrames[frame.Offset]; ok {
+		return errDuplicateStreamData
+	}
 
-	for gap := s.gaps.Front(); gap != nil; gap = gap.Next() {
-		// the complete frame lies before or after the gap
-		if end <= gap.Value.Start || start > gap.Value.End {
-			continue
-		}
+	start := frame.Offset
+	end := frame.Offset + frame.DataLen()
 
-		if start < gap.Value.Start {
-			return qerr.Error(qerr.OverlappingStreamData, "start of gap in stream chunk")
-		}
+	if end <= s.gaps.Front().Value.Start {
+		return errDuplicateStreamData
+	}
 
-		if start < gap.Value.End && end > gap.Value.End {
-			return qerr.Error(qerr.OverlappingStreamData, "end of gap in stream chunk")
-		}
-
-		foundInGap = true
-
-		if start == gap.Value.Start {
-			if end == gap.Value.End {
-				s.gaps.Remove(gap)
-				break
-			}
-			if end < gap.Value.End {
-				gap.Value.Start = end
-				break
-			}
-		}
-
-		if end == gap.Value.End {
-			gap.Value.End = start
-			break
-		}
-
-		if end < gap.Value.End {
-			intv := utils.ByteInterval{Start: end, End: gap.Value.End}
-			s.gaps.InsertAfter(intv, gap)
-			gap.Value.End = start
+	// skip all gaps that are before this stream frame
+	var gap *utils.ByteIntervalElement
+	for gap = s.gaps.Front(); gap != nil; gap = gap.Next() {
+		if end > gap.Value.Start && start <= gap.Value.End {
 			break
 		}
 	}
 
-	if !foundInGap {
-		return errDuplicateStreamData
+	if gap == nil {
+		return errors.New("StreamFrameSorter BUG: no gap found")
+	}
+
+	if start < gap.Value.Start {
+		return qerr.Error(qerr.OverlappingStreamData, "start of gap in stream chunk")
+	}
+
+	if end > gap.Value.End {
+		return qerr.Error(qerr.OverlappingStreamData, "end of gap in stream chunk")
+	}
+
+	if start == gap.Value.Start {
+		if end == gap.Value.End {
+			// the frame completely fills this gap
+			// delete the gap
+			s.gaps.Remove(gap)
+		} else if end < gap.Value.End {
+			// the frame covers the beginning of the gap
+			// adjust the Start value to shrink the gap
+			gap.Value.Start = end
+		}
+	} else if end == gap.Value.End {
+		// the frame covers the end of the gap
+		// adjust the End value to shrink the gap
+		gap.Value.End = start
+	} else {
+		// the frame lies within the current gap, splitting it into two
+		// insert a new gap and adjust the current one
+		intv := utils.ByteInterval{Start: end, End: gap.Value.End}
+		s.gaps.InsertAfter(intv, gap)
+		gap.Value.End = start
 	}
 
 	if s.gaps.Len() > protocol.MaxStreamFrameSorterGaps {
