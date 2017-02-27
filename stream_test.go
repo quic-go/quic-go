@@ -281,19 +281,23 @@ var _ = Describe("Stream", func() {
 			Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
 		})
 
-		It("rejects a StreamFrames with an overlapping data range", func() {
+		It("doesn't rejects a StreamFrames with an overlapping data range", func() {
 			frame1 := frames.StreamFrame{
 				Offset: 0,
-				Data:   []byte("ab"),
+				Data:   []byte("foob"),
 			}
 			frame2 := frames.StreamFrame{
-				Offset: 1,
-				Data:   []byte("xy"),
+				Offset: 2,
+				Data:   []byte("obar"),
 			}
 			err := str.AddStreamFrame(&frame1)
 			Expect(err).ToNot(HaveOccurred())
 			err = str.AddStreamFrame(&frame2)
-			Expect(err).To(MatchError("OverlappingStreamData: start of gap in stream chunk"))
+			b := make([]byte, 6)
+			n, err := str.Read(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(n).To(Equal(6))
+			Expect(b).To(Equal([]byte("foobar")))
 		})
 
 		It("calls onData", func() {

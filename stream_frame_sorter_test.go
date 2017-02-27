@@ -1,6 +1,8 @@
 package quic
 
 import (
+	"bytes"
+
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/utils"
@@ -245,13 +247,6 @@ var _ = Describe("StreamFrame sorter", func() {
 
 			Context("Overlapping Stream Data detection", func() {
 				// create gaps: 0-5, 10-15, 20-25, 30-inf
-				expectedGaps := []utils.ByteInterval{
-					{Start: 0, End: 5},
-					{Start: 10, End: 15},
-					{Start: 20, End: 25},
-					{Start: 30, End: protocol.MaxByteCount},
-				}
-
 				BeforeEach(func() {
 					err := s.Push(&frames.StreamFrame{Offset: 5, Data: []byte("12345")})
 					Expect(err).ToNot(HaveOccurred())
@@ -259,143 +254,304 @@ var _ = Describe("StreamFrame sorter", func() {
 					Expect(err).ToNot(HaveOccurred())
 					err = s.Push(&frames.StreamFrame{Offset: 25, Data: []byte("12345")})
 					Expect(err).ToNot(HaveOccurred())
+					checkGaps([]utils.ByteInterval{
+						{Start: 0, End: 5},
+						{Start: 10, End: 15},
+						{Start: 20, End: 25},
+						{Start: 30, End: protocol.MaxByteCount},
+					})
 				})
 
-				It("rejects a frame with offset 0 that overlaps at the end", func() {
+				It("cuts a frame with offset 0 that overlaps at the end", func() {
 					f := &frames.StreamFrame{
 						Offset: 0,
 						Data:   []byte("foobar"),
 					}
 					err := s.Push(f)
-					Expect(err).To(MatchError("OverlappingStreamData: end of gap in stream chunk"))
-					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(0)))
-					checkGaps(expectedGaps)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(0)))
+					Expect(s.queuedFrames[0].Data).To(Equal([]byte("fooba")))
+					Expect(s.queuedFrames[0].Data).To(HaveCap(5))
+					checkGaps([]utils.ByteInterval{
+						{Start: 10, End: 15},
+						{Start: 20, End: 25},
+						{Start: 30, End: protocol.MaxByteCount},
+					})
 				})
 
-				It("rejects a frame that overlaps at the end", func() {
-					// 4 to 6
+				It("cuts a frame that overlaps at the end", func() {
+					// 4 to 7
 					f := &frames.StreamFrame{
 						Offset: 4,
-						Data:   []byte("12"),
+						Data:   []byte("foo"),
 					}
 					err := s.Push(f)
-					Expect(err).To(MatchError("OverlappingStreamData: end of gap in stream chunk"))
-					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(4)))
-					checkGaps(expectedGaps)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(4)))
+					Expect(s.queuedFrames[4].Data).To(Equal([]byte("f")))
+					Expect(s.queuedFrames[4].Data).To(HaveCap(1))
+					checkGaps([]utils.ByteInterval{
+						{Start: 0, End: 4},
+						{Start: 10, End: 15},
+						{Start: 20, End: 25},
+						{Start: 30, End: protocol.MaxByteCount},
+					})
 				})
 
-				It("rejects a frame that completely fills a gap, but overlaps at the end", func() {
+				It("cuts a frame that completely fills a gap, but overlaps at the end", func() {
 					// 10 to 16
 					f := &frames.StreamFrame{
 						Offset: 10,
 						Data:   []byte("foobar"),
 					}
 					err := s.Push(f)
-					Expect(err).To(MatchError("OverlappingStreamData: end of gap in stream chunk"))
-					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(10)))
-					checkGaps(expectedGaps)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(10)))
+					Expect(s.queuedFrames[10].Data).To(Equal([]byte("fooba")))
+					Expect(s.queuedFrames[10].Data).To(HaveCap(5))
+					checkGaps([]utils.ByteInterval{
+						{Start: 0, End: 5},
+						{Start: 20, End: 25},
+						{Start: 30, End: protocol.MaxByteCount},
+					})
 				})
 
-				It("rejects a frame that overlaps at the beginning", func() {
+				It("cuts a frame that overlaps at the beginning", func() {
 					// 8 to 14
 					f := &frames.StreamFrame{
 						Offset: 8,
 						Data:   []byte("foobar"),
 					}
 					err := s.Push(f)
-					Expect(err).To(MatchError("OverlappingStreamData: start of gap in stream chunk"))
+					Expect(err).ToNot(HaveOccurred())
 					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(8)))
-					checkGaps(expectedGaps)
+					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(10)))
+					Expect(s.queuedFrames[10].Data).To(Equal([]byte("obar")))
+					Expect(s.queuedFrames[10].Data).To(HaveCap(4))
+					checkGaps([]utils.ByteInterval{
+						{Start: 0, End: 5},
+						{Start: 14, End: 15},
+						{Start: 20, End: 25},
+						{Start: 30, End: protocol.MaxByteCount},
+					})
 				})
 
-				It("rejects a frame that overlaps at the beginning and at the end, starting in a gap", func() {
-					// 2 to 11
+				It("processes a frame that overlaps at the beginning and at the end, starting in a gap", func() {
+					// 2 to 12
 					f := &frames.StreamFrame{
 						Offset: 2,
-						Data:   []byte("123456789"),
+						Data:   []byte("1234567890"),
 					}
 					err := s.Push(f)
-					Expect(err).To(MatchError("OverlappingStreamData: end of gap in stream chunk"))
-					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(2)))
-					checkGaps(expectedGaps)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(5)))
+					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(2)))
+					Expect(s.queuedFrames[2].Data).To(Equal([]byte("1234567890")))
+					checkGaps([]utils.ByteInterval{
+						{Start: 0, End: 2},
+						{Start: 12, End: 15},
+						{Start: 20, End: 25},
+						{Start: 30, End: protocol.MaxByteCount},
+					})
 				})
 
-				It("rejects a frame that overlaps at the beginning and at the end, starting in data already received", func() {
+				It("processes a frame that overlaps at the beginning and at the end, starting in a gap, ending in data", func() {
+					// 2 to 17
+					f := &frames.StreamFrame{
+						Offset: 2,
+						Data:   []byte("123456789012345"),
+					}
+					err := s.Push(f)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(5)))
+					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(2)))
+					Expect(s.queuedFrames[2].Data).To(Equal([]byte("1234567890123")))
+					Expect(s.queuedFrames[2].Data).To(HaveCap(13))
+					checkGaps([]utils.ByteInterval{
+						{Start: 0, End: 2},
+						{Start: 20, End: 25},
+						{Start: 30, End: protocol.MaxByteCount},
+					})
+				})
+
+				It("processes a frame that overlaps at the beginning and at the end, starting in a gap, ending in data", func() {
+					// 5 to 22
+					f := &frames.StreamFrame{
+						Offset: 5,
+						Data:   []byte("12345678901234567"),
+					}
+					err := s.Push(f)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(5)))
+					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(15)))
+					Expect(s.queuedFrames[10].Data).To(Equal([]byte("678901234567")))
+					checkGaps([]utils.ByteInterval{
+						{Start: 0, End: 5},
+						{Start: 22, End: 25},
+						{Start: 30, End: protocol.MaxByteCount},
+					})
+				})
+
+				It("processes a frame that closes multiple gaps", func() {
+					// 2 to 27
+					f := &frames.StreamFrame{
+						Offset: 2,
+						Data:   bytes.Repeat([]byte{'e'}, 25),
+					}
+					err := s.Push(f)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(5)))
+					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(15)))
+					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(25)))
+					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(2)))
+					Expect(s.queuedFrames[2].Data).To(Equal(bytes.Repeat([]byte{'e'}, 23)))
+					Expect(s.queuedFrames[2].Data).To(HaveCap(23))
+					checkGaps([]utils.ByteInterval{
+						{Start: 0, End: 2},
+						{Start: 30, End: protocol.MaxByteCount},
+					})
+				})
+
+				It("processes a frame that closes multiple gaps", func() {
+					// 5 to 27
+					f := &frames.StreamFrame{
+						Offset: 5,
+						Data:   bytes.Repeat([]byte{'d'}, 22),
+					}
+					err := s.Push(f)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(5)))
+					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(15)))
+					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(25)))
+					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(10)))
+					Expect(s.queuedFrames[10].Data).To(Equal(bytes.Repeat([]byte{'d'}, 15)))
+					Expect(s.queuedFrames[10].Data).To(HaveCap(15))
+					checkGaps([]utils.ByteInterval{
+						{Start: 0, End: 5},
+						{Start: 30, End: protocol.MaxByteCount},
+					})
+				})
+
+				It("processes a frame that covers multiple gaps and ends at the end of a gap", func() {
+					// 1 to 15
+					f := &frames.StreamFrame{
+						Offset: 1,
+						Data:   bytes.Repeat([]byte{'f'}, 14),
+					}
+					err := s.Push(f)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(1)))
+					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(15)))
+					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(5)))
+					Expect(s.queuedFrames[1].Data).To(Equal(f.Data))
+					checkGaps([]utils.ByteInterval{
+						{Start: 0, End: 1},
+						{Start: 20, End: 25},
+						{Start: 30, End: protocol.MaxByteCount},
+					})
+				})
+
+				It("processes a frame that closes all gaps (except for the last one)", func() {
+					// 0 to 32
+					f := &frames.StreamFrame{
+						Offset: 0,
+						Data:   bytes.Repeat([]byte{'f'}, 32),
+					}
+					err := s.Push(f)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(s.queuedFrames).To(HaveLen(1))
+					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(0)))
+					Expect(s.queuedFrames[0].Data).To(Equal(f.Data))
+					checkGaps([]utils.ByteInterval{
+						{Start: 32, End: protocol.MaxByteCount},
+					})
+				})
+
+				It("cuts a frame that overlaps at the beginning and at the end, starting in data already received", func() {
 					// 8 to 17
 					f := &frames.StreamFrame{
 						Offset: 8,
 						Data:   []byte("123456789"),
 					}
 					err := s.Push(f)
-					Expect(err).To(MatchError("OverlappingStreamData: start of gap in stream chunk"))
+					Expect(err).ToNot(HaveOccurred())
 					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(8)))
-					checkGaps(expectedGaps)
+					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(10)))
+					Expect(s.queuedFrames[10].Data).To(Equal([]byte("34567")))
+					Expect(s.queuedFrames[10].Data).To(HaveCap(5))
+					checkGaps([]utils.ByteInterval{
+						{Start: 0, End: 5},
+						{Start: 20, End: 25},
+						{Start: 30, End: protocol.MaxByteCount},
+					})
 				})
 
-				It("rejects a frame that completely covers two gaps", func() {
+				It("cuts a frame that completely covers two gaps", func() {
 					// 10 to 20
 					f := &frames.StreamFrame{
 						Offset: 10,
 						Data:   []byte("1234567890"),
 					}
 					err := s.Push(f)
-					Expect(err).To(MatchError("OverlappingStreamData: end of gap in stream chunk"))
-					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(10)))
-					checkGaps(expectedGaps)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(10)))
+					Expect(s.queuedFrames[10].Data).To(Equal([]byte("12345")))
+					Expect(s.queuedFrames[10].Data).To(HaveCap(5))
+					checkGaps([]utils.ByteInterval{
+						{Start: 0, End: 5},
+						{Start: 20, End: 25},
+						{Start: 30, End: protocol.MaxByteCount},
+					})
 				})
 			})
 
-			Context("Duplicate data detection", func() {
-				var expectedGaps []utils.ByteInterval
+			Context("duplicate data", func() {
+				expectedGaps := []utils.ByteInterval{
+					{Start: 5, End: 10},
+					{Start: 15, End: protocol.MaxByteCount},
+				}
 
 				BeforeEach(func() {
 					// create gaps: 5-10, 15-20, 25-inf
-					expectedGaps = expectedGaps[:0]
-					expectedGaps = append(expectedGaps, utils.ByteInterval{Start: 5, End: 10})
 					err := s.Push(&frames.StreamFrame{Offset: 0, Data: []byte("12345")})
 					Expect(err).ToNot(HaveOccurred())
-					expectedGaps = append(expectedGaps, utils.ByteInterval{Start: 15, End: protocol.MaxByteCount})
 					err = s.Push(&frames.StreamFrame{Offset: 10, Data: []byte("12345")})
 					Expect(err).ToNot(HaveOccurred())
+					checkGaps(expectedGaps)
 				})
 
-				It("detects a complete duplicate frame", func() {
-					err := s.Push(&frames.StreamFrame{Offset: 0, Data: []byte("12345")})
-					Expect(err).To(MatchError(errDuplicateStreamData))
+				AfterEach(func() {
+					// check that the gaps were not modified
 					checkGaps(expectedGaps)
 				})
 
 				It("does not modify data when receiving a duplicate", func() {
-					err := s.Push(&frames.StreamFrame{Offset: 0, Data: []byte("67890")})
+					err := s.Push(&frames.StreamFrame{Offset: 0, Data: []byte("fffff")})
 					Expect(err).To(MatchError(errDuplicateStreamData))
-					Expect(s.queuedFrames[0].Data).To(Equal([]byte("12345")))
-					checkGaps(expectedGaps)
+					Expect(s.queuedFrames[0].Data).ToNot(Equal([]byte("fffff")))
 				})
 
 				It("detects a duplicate frame that is smaller than the original, starting at the beginning", func() {
 					// 10 to 12
 					err := s.Push(&frames.StreamFrame{Offset: 10, Data: []byte("12")})
 					Expect(err).To(MatchError(errDuplicateStreamData))
-					Expect(s.queuedFrames[10].DataLen()).To(Equal(protocol.ByteCount(5)))
-					checkGaps(expectedGaps)
+					Expect(s.queuedFrames[10].Data).To(HaveLen(5))
 				})
 
 				It("detects a duplicate frame that is smaller than the original, somewhere in the middle", func() {
 					// 1 to 4
 					err := s.Push(&frames.StreamFrame{Offset: 1, Data: []byte("123")})
 					Expect(err).To(MatchError(errDuplicateStreamData))
-					Expect(s.queuedFrames[0].DataLen()).To(Equal(protocol.ByteCount(5)))
+					Expect(s.queuedFrames[0].Data).To(HaveLen(5))
 					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(1)))
-					checkGaps(expectedGaps)
 				})
 
 				It("detects a duplicate frame that is smaller than the original, with aligned end", func() {
 					// 3 to 5
 					err := s.Push(&frames.StreamFrame{Offset: 3, Data: []byte("12")})
 					Expect(err).To(MatchError(errDuplicateStreamData))
-					Expect(s.queuedFrames[0].DataLen()).To(Equal(protocol.ByteCount(5)))
-					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(8)))
-					checkGaps(expectedGaps)
+					Expect(s.queuedFrames[0].Data).To(HaveLen(5))
+					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(3)))
 				})
 			})
 
