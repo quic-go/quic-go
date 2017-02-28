@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"sync"
 
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/hpack"
+
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -40,29 +43,50 @@ var _ = Describe("Response Writer", func() {
 		w = newResponseWriter(headerStream, &sync.Mutex{}, dataStream, 5)
 	})
 
+	decodeHeaderFields := func() map[string][]string {
+		fields := make(map[string][]string)
+		decoder := hpack.NewDecoder(4096, func(hf hpack.HeaderField) {})
+		h2framer := http2.NewFramer(nil, bytes.NewReader(headerStream.dataWritten.Bytes()))
+
+		frame, err := h2framer.ReadFrame()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(frame).To(BeAssignableToTypeOf(&http2.HeadersFrame{}))
+		hframe := frame.(*http2.HeadersFrame)
+		mhframe := &http2.MetaHeadersFrame{HeadersFrame: hframe}
+		Expect(mhframe.StreamID).To(BeEquivalentTo(5))
+		mhframe.Fields, err = decoder.DecodeFull(hframe.HeaderBlockFragment())
+		Expect(err).ToNot(HaveOccurred())
+		for _, p := range mhframe.Fields {
+			fields[p.Name] = append(fields[p.Name], p.Value)
+		}
+		return fields
+	}
+
 	It("writes status", func() {
 		w.WriteHeader(http.StatusTeapot)
-		Expect(headerStream.dataWritten.Bytes()).To(Equal([]byte{
-			0x0, 0x0, 0x5, 0x1, 0x4, 0x0, 0x0, 0x0, 0x5, 'H', 0x3, '4', '1', '8',
-		}))
+		fields := decodeHeaderFields()
+		Expect(fields).To(HaveLen(1))
+		Expect(fields).To(HaveKeyWithValue(":status", []string{"418"}))
 	})
 
 	It("writes headers", func() {
 		w.Header().Add("content-length", "42")
 		w.WriteHeader(http.StatusTeapot)
-		Expect(headerStream.dataWritten.Bytes()).To(Equal([]byte{
-			0x0, 0x0, 0x9, 0x1, 0x4, 0x0, 0x0, 0x0, 0x5, 0x48, 0x3, 0x34, 0x31, 0x38, 0x5c, 0x2, 0x34, 0x32,
-		}))
+		fields := decodeHeaderFields()
+		Expect(fields).To(HaveKeyWithValue("content-length", []string{"42"}))
 	})
 
 	It("writes multiple headers with the same name", func() {
-		w.Header().Add("set-cookie", "test1=1; Max-Age=7200; path=/")
-		w.Header().Add("set-cookie", "test2=2; Max-Age=7200; path=/")
+		const cookie1 = "test1=1; Max-Age=7200; path=/"
+		const cookie2 = "test2=2; Max-Age=7200; path=/"
+		w.Header().Add("set-cookie", cookie1)
+		w.Header().Add("set-cookie", cookie2)
 		w.WriteHeader(http.StatusTeapot)
-		Expect(headerStream.dataWritten.Bytes()).To(Equal([]byte{0x00, 0x00, 0x33, 0x01, 0x04, 0x00, 0x00, 0x00, 0x05,
-			0x48, 0x03, 0x34, 0x31, 0x38, 0x77, 0x95, 0x49, 0x50, 0x90, 0xc0, 0x1f, 0xb5, 0x34, 0x0f, 0xca, 0xd0, 0xcc,
-			0x58, 0x1d, 0x10, 0x01, 0xf6, 0xa5, 0x63, 0x4c, 0xf0, 0x31, 0x77, 0x95, 0x49, 0x50, 0x91, 0x40, 0x2f, 0xb5,
-			0x34, 0x0f, 0xca, 0xd0, 0xcc, 0x58, 0x1d, 0x10, 0x01, 0xf6, 0xa5, 0x63, 0x4c, 0xf0, 0x31}))
+		fields := decodeHeaderFields()
+		Expect(fields).To(HaveKey("set-cookie"))
+		cookies := fields["set-cookie"]
+		Expect(cookies).To(ContainElement(cookie1))
+		Expect(cookies).To(ContainElement(cookie2))
 	})
 
 	It("writes data", func() {
@@ -70,13 +94,10 @@ var _ = Describe("Response Writer", func() {
 		Expect(n).To(Equal(6))
 		Expect(err).ToNot(HaveOccurred())
 		// Should have written 200 on the header stream
-		Expect(headerStream.dataWritten.Bytes()).To(Equal([]byte{
-			0x0, 0x0, 0x1, 0x1, 0x4, 0x0, 0x0, 0x0, 0x5, 0x88,
-		}))
+		fields := decodeHeaderFields()
+		Expect(fields).To(HaveKeyWithValue(":status", []string{"200"}))
 		// And foobar on the data stream
-		Expect(dataStream.dataWritten.Bytes()).To(Equal([]byte{
-			0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72,
-		}))
+		Expect(dataStream.dataWritten.Bytes()).To(Equal([]byte("foobar")))
 	})
 
 	It("writes data after WriteHeader is called", func() {
@@ -85,19 +106,18 @@ var _ = Describe("Response Writer", func() {
 		Expect(n).To(Equal(6))
 		Expect(err).ToNot(HaveOccurred())
 		// Should have written 418 on the header stream
-		Expect(headerStream.dataWritten.Bytes()).To(Equal([]byte{
-			0x0, 0x0, 0x5, 0x1, 0x4, 0x0, 0x0, 0x0, 0x5, 'H', 0x3, '4', '1', '8',
-		}))
+		fields := decodeHeaderFields()
+		Expect(fields).To(HaveKeyWithValue(":status", []string{"418"}))
 		// And foobar on the data stream
-		Expect(dataStream.dataWritten.Bytes()).To(Equal([]byte{
-			0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72,
-		}))
+		Expect(dataStream.dataWritten.Bytes()).To(Equal([]byte("foobar")))
 	})
 
 	It("does not WriteHeader() twice", func() {
 		w.WriteHeader(200)
 		w.WriteHeader(500)
-		Expect(headerStream.dataWritten.Bytes()).To(Equal([]byte{0x0, 0x0, 0x1, 0x1, 0x4, 0x0, 0x0, 0x0, 0x5, 0x88})) // 0x88 is 200
+		fields := decodeHeaderFields()
+		Expect(fields).To(HaveLen(1))
+		Expect(fields).To(HaveKeyWithValue(":status", []string{"200"}))
 	})
 
 	It("doesn't allow writes if the status code doesn't allow a body", func() {
