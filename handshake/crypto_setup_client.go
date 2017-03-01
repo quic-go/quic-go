@@ -312,7 +312,26 @@ func (h *cryptoSetupClient) Seal(dst, src []byte, packetNumber protocol.PacketNu
 	return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData), protocol.EncryptionUnencrypted
 }
 
-func (h *cryptoSetupClient) DiversificationNonce() []byte {
+func (h *cryptoSetupClient) SealWith(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte, forceEncryptionLevel protocol.EncryptionLevel) ([]byte, protocol.EncryptionLevel, error) {
+	switch forceEncryptionLevel {
+	case protocol.EncryptionUnencrypted:
+		return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData), protocol.EncryptionUnencrypted, nil
+	case protocol.EncryptionSecure:
+		if h.secureAEAD == nil {
+			return nil, protocol.EncryptionUnspecified, errors.New("CryptoSetupClient: no secureAEAD")
+		}
+		return h.secureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionSecure, nil
+	case protocol.EncryptionForwardSecure:
+		if h.forwardSecureAEAD == nil {
+			return nil, protocol.EncryptionUnspecified, errors.New("CryptoSetupClient: no forwardSecureAEAD")
+		}
+		return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionForwardSecure, nil
+	}
+
+	return nil, protocol.EncryptionUnspecified, errors.New("no encryption level specified")
+}
+
+func (h *cryptoSetupClient) DiversificationNonce(bool) []byte {
 	panic("not needed for cryptoSetupClient")
 }
 

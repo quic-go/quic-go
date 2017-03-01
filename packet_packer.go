@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -23,6 +24,8 @@ type packetPacker struct {
 	perspective  protocol.Perspective
 	version      protocol.VersionNumber
 	cryptoSetup  handshake.CryptoSetup
+	// as long as packets are not sent with forward-secure encryption, we limit the MaxPacketSize such that they can be retransmitted as a whole
+	isForwardSecure bool
 
 	packetNumberGenerator *packetNumberGenerator
 
@@ -49,7 +52,19 @@ func (p *packetPacker) PackConnectionClose(ccf *frames.ConnectionCloseFrame, lea
 	// in case the connection is closed, all queued control frames aren't of any use anymore
 	// discard them and queue the ConnectionCloseFrame
 	p.controlFrames = []frames.Frame{ccf}
-	return p.packPacket(nil, leastUnacked)
+	return p.packPacket(nil, leastUnacked, nil)
+}
+
+//  RetransmitNonForwardSecurePacket retransmits a handshake packet, that was sent with less than forward-secure encryption
+func (p *packetPacker) RetransmitNonForwardSecurePacket(stopWaitingFrame *frames.StopWaitingFrame, packet *ackhandler.Packet) (*packedPacket, error) {
+	if packet.EncryptionLevel == protocol.EncryptionForwardSecure {
+		return nil, errors.New("PacketPacker BUG: forward-secure encrypted handshake packets don't need special treatment")
+	}
+	if stopWaitingFrame == nil {
+		return nil, errors.New("PacketPacker BUG: Handshake retransmissions must contain a StopWaitingFrame")
+	}
+
+	return p.packPacket(stopWaitingFrame, 0, packet)
 }
 
 // PackPacket packs a new packet
@@ -57,10 +72,12 @@ func (p *packetPacker) PackConnectionClose(ccf *frames.ConnectionCloseFrame, lea
 // the other controlFrames are sent in the next packet, but might be queued and sent in the next packet if the packet would overflow MaxPacketSize otherwise
 func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
 	p.controlFrames = append(p.controlFrames, controlFrames...)
-	return p.packPacket(stopWaitingFrame, leastUnacked)
+	return p.packPacket(stopWaitingFrame, leastUnacked, nil)
 }
 
-func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
+func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, leastUnacked protocol.PacketNumber, packetToRetransmit *ackhandler.Packet) (*packedPacket, error) {
+	// packetToRetransmit is only set for handshake retransmissions
+	isHandshakeRetransmission := (packetToRetransmit != nil)
 	// cryptoSetup needs to be locked here, so that the AEADs are not changed between
 	// calling DiversificationNonce() and Seal().
 	p.cryptoSetup.LockForSealing()
@@ -76,7 +93,8 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	}
 
 	if p.perspective == protocol.PerspectiveServer {
-		responsePublicHeader.DiversificationNonce = p.cryptoSetup.DiversificationNonce()
+		force := isHandshakeRetransmission && (packetToRetransmit.EncryptionLevel == protocol.EncryptionSecure)
+		responsePublicHeader.DiversificationNonce = p.cryptoSetup.DiversificationNonce(force)
 	}
 
 	if p.perspective == protocol.PerspectiveClient && !p.cryptoSetup.HandshakeComplete() {
@@ -101,10 +119,26 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	}
 
 	var payloadFrames []frames.Frame
-	if isConnectionClose {
+	if isHandshakeRetransmission {
+		payloadFrames = append(payloadFrames, stopWaitingFrame)
+		// don't retransmit Acks and StopWaitings
+		for _, f := range packetToRetransmit.Frames {
+			switch f.(type) {
+			case *frames.AckFrame:
+				continue
+			case *frames.StopWaitingFrame:
+				continue
+			}
+			payloadFrames = append(payloadFrames, f)
+		}
+	} else if isConnectionClose {
 		payloadFrames = []frames.Frame{p.controlFrames[0]}
 	} else {
-		payloadFrames, err = p.composeNextPacket(stopWaitingFrame, publicHeaderLength)
+		maxSize := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLength
+		if !p.isForwardSecure {
+			maxSize -= protocol.NonForwardSecurePacketSizeReduction
+		}
+		payloadFrames, err = p.composeNextPacket(stopWaitingFrame, maxSize)
 		if err != nil {
 			return nil, err
 		}
@@ -133,7 +167,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 		if sf, ok := frame.(*frames.StreamFrame); ok && sf.StreamID != 1 {
 			hasNonCryptoStreamData = true
 		}
-		err := frame.Write(buffer, p.version)
+		err = frame.Write(buffer, p.version)
 		if err != nil {
 			return nil, err
 		}
@@ -144,7 +178,16 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	}
 
 	raw = raw[0:buffer.Len()]
-	_, encryptionLevel := p.cryptoSetup.Seal(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], currentPacketNumber, raw[:payloadStartIndex])
+	var encryptionLevel protocol.EncryptionLevel
+	if isHandshakeRetransmission {
+		var err error
+		_, encryptionLevel, err = p.cryptoSetup.SealWith(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], currentPacketNumber, raw[:payloadStartIndex], packetToRetransmit.EncryptionLevel)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		_, encryptionLevel = p.cryptoSetup.Seal(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], currentPacketNumber, raw[:payloadStartIndex])
+	}
 	raw = raw[0 : buffer.Len()+12]
 
 	if hasNonCryptoStreamData && encryptionLevel <= protocol.EncryptionUnencrypted {
@@ -164,11 +207,9 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	}, nil
 }
 
-func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFrame, publicHeaderLength protocol.ByteCount) ([]frames.Frame, error) {
+func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFrame, maxFrameSize protocol.ByteCount) ([]frames.Frame, error) {
 	var payloadLength protocol.ByteCount
 	var payloadFrames []frames.Frame
-
-	maxFrameSize := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLength
 
 	if stopWaitingFrame != nil {
 		payloadFrames = append(payloadFrames, stopWaitingFrame)
@@ -218,4 +259,8 @@ func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFra
 
 func (p *packetPacker) QueueControlFrameForNextPacket(f frames.Frame) {
 	p.controlFrames = append(p.controlFrames, f)
+}
+
+func (p *packetPacker) SetForwardSecure() {
+	p.isForwardSecure = true
 }

@@ -800,192 +800,261 @@ var _ = Describe("Session", func() {
 			Expect(mconn.written).To(HaveLen(1))
 			Expect(mconn.written[0]).To(ContainSubstring(string([]byte("PRST"))))
 		})
+
+		It("informs the SentPacketHandler about sent packets", func() {
+			sess.sentPacketHandler = newMockSentPacketHandler()
+			sess.packer.packetNumberGenerator.next = 0x1337 + 9
+			sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionSecure}
+
+			f := &frames.StreamFrame{
+				StreamID: 5,
+				Data:     []byte("foobar"),
+			}
+			sess.streamFramer.AddFrameForRetransmission(f)
+			_, err := sess.GetOrOpenStream(5)
+			Expect(err).ToNot(HaveOccurred())
+			err = sess.sendPacket()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mconn.written).To(HaveLen(1))
+			sentPackets := sess.sentPacketHandler.(*mockSentPacketHandler).sentPackets
+			Expect(sentPackets).To(HaveLen(1))
+			Expect(sentPackets[0].Frames).To(ContainElement(f))
+			Expect(sentPackets[0].EncryptionLevel).To(Equal(protocol.EncryptionSecure))
+			Expect(sentPackets[0].Length).To(BeEquivalentTo(len(mconn.written[0])))
+		})
 	})
 
 	Context("retransmissions", func() {
+		var sph *mockSentPacketHandler
 		BeforeEach(func() {
+			// a StopWaitingFrame is added, so make sure the packet number of the new package is higher than the packet number of the retransmitted packet
+			sess.packer.packetNumberGenerator.next = 0x1337 + 10
+			sph = newMockSentPacketHandler().(*mockSentPacketHandler)
+			sess.sentPacketHandler = sph
 			sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure}
 		})
 
-		It("sends a StreamFrame from a packet queued for retransmission", func() {
-			// a StopWaitingFrame is added, so make sure the packet number of the new package is higher than the packet number of the retransmitted packet
-			sess.packer.packetNumberGenerator.next = 0x1337 + 9
+		Context("for handshake packets", func() {
+			It("retransmits an unencrypted packet", func() {
+				sf := &frames.StreamFrame{StreamID: 1, Data: []byte("foobar")}
+				sph.retransmissionQueue = []*ackhandler.Packet{{
+					Frames:          []frames.Frame{sf},
+					EncryptionLevel: protocol.EncryptionUnencrypted,
+				}}
+				err := sess.sendPacket()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(mconn.written).To(HaveLen(1))
+				sentPackets := sph.sentPackets
+				Expect(sentPackets).To(HaveLen(1))
+				Expect(sentPackets[0].EncryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
+				Expect(sentPackets[0].Frames).To(HaveLen(2))
+				Expect(sentPackets[0].Frames[1]).To(Equal(sf))
+				swf := sentPackets[0].Frames[0].(*frames.StopWaitingFrame)
+				Expect(swf.LeastUnacked).To(Equal(protocol.PacketNumber(0x1337)))
+			})
 
-			f := frames.StreamFrame{
-				StreamID: 0x5,
-				Data:     []byte("foobar1234567"),
-			}
-			p := ackhandler.Packet{
-				PacketNumber: 0x1337,
-				Frames:       []frames.Frame{&f},
-			}
-			sph := newMockSentPacketHandler()
-			sph.(*mockSentPacketHandler).retransmissionQueue = []*ackhandler.Packet{&p}
-			sess.sentPacketHandler = sph
+			It("doesn't retransmit non-retransmittable packets", func() {
+				sph.retransmissionQueue = []*ackhandler.Packet{{
+					Frames: []frames.Frame{
+						&frames.AckFrame{},
+						&frames.StopWaitingFrame{},
+					},
+					EncryptionLevel: protocol.EncryptionUnencrypted,
+				}}
+				err := sess.sendPacket()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(mconn.written).To(BeEmpty())
+			})
 
-			err := sess.sendPacket()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(mconn.written).To(HaveLen(1))
-			Expect(sph.(*mockSentPacketHandler).requestedStopWaiting).To(BeTrue())
-			Expect(mconn.written[0]).To(ContainSubstring("foobar1234567"))
+			It("retransmit a packet encrypted with the initial encryption", func() {
+				sf := &frames.StreamFrame{StreamID: 1, Data: []byte("foobar")}
+				sph.retransmissionQueue = []*ackhandler.Packet{{
+					Frames:          []frames.Frame{sf},
+					EncryptionLevel: protocol.EncryptionSecure,
+				}}
+				err := sess.sendPacket()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(mconn.written).To(HaveLen(1))
+				sentPackets := sph.sentPackets
+				Expect(sentPackets).To(HaveLen(1))
+				Expect(sentPackets[0].EncryptionLevel).To(Equal(protocol.EncryptionSecure))
+				Expect(sentPackets[0].Frames).To(HaveLen(2))
+				Expect(sentPackets[0].Frames).To(ContainElement(sf))
+			})
 		})
 
-		It("sends a StreamFrame from a packet queued for retransmission", func() {
-			// a StopWaitingFrame is added, so make sure the packet number of the new package is higher than the packet number of the retransmitted packet
-			sess.packer.packetNumberGenerator.next = 0x1337 + 9
+		Context("for packets after the handshake", func() {
+			BeforeEach(func() {
+				sess.packer.SetForwardSecure()
+			})
 
-			f1 := frames.StreamFrame{
-				StreamID: 0x5,
-				Data:     []byte("foobar"),
-			}
-			f2 := frames.StreamFrame{
-				StreamID: 0x7,
-				Data:     []byte("loremipsum"),
-			}
-			p1 := ackhandler.Packet{
-				PacketNumber: 0x1337,
-				Frames:       []frames.Frame{&f1},
-			}
-			p2 := ackhandler.Packet{
-				PacketNumber: 0x1338,
-				Frames:       []frames.Frame{&f2},
-			}
-			sph := newMockSentPacketHandler()
-			sph.(*mockSentPacketHandler).retransmissionQueue = []*ackhandler.Packet{&p1, &p2}
-			sess.sentPacketHandler = sph
+			It("sends a StreamFrame from a packet queued for retransmission", func() {
+				f := frames.StreamFrame{
+					StreamID: 0x5,
+					Data:     []byte("foobar1234567"),
+				}
+				p := ackhandler.Packet{
+					PacketNumber:    0x1337,
+					Frames:          []frames.Frame{&f},
+					EncryptionLevel: protocol.EncryptionForwardSecure,
+				}
+				sph.retransmissionQueue = []*ackhandler.Packet{&p}
 
-			err := sess.sendPacket()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(mconn.written).To(HaveLen(1))
-			Expect(mconn.written[0]).To(ContainSubstring("foobar"))
-			Expect(mconn.written[0]).To(ContainSubstring("loremipsum"))
-		})
+				err := sess.sendPacket()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(mconn.written).To(HaveLen(1))
+				Expect(sph.requestedStopWaiting).To(BeTrue())
+				Expect(mconn.written[0]).To(ContainSubstring("foobar1234567"))
+			})
 
-		It("always attaches a StopWaiting to a packet that contains a retransmission", func() {
-			// make sure the packet number of the new package is higher than the packet number of the retransmitted packet
-			sess.packer.packetNumberGenerator.next = 0x1337 + 9
+			It("sends a StreamFrame from a packet queued for retransmission", func() {
+				f1 := frames.StreamFrame{
+					StreamID: 0x5,
+					Data:     []byte("foobar"),
+				}
+				f2 := frames.StreamFrame{
+					StreamID: 0x7,
+					Data:     []byte("loremipsum"),
+				}
+				p1 := ackhandler.Packet{
+					PacketNumber:    0x1337,
+					Frames:          []frames.Frame{&f1},
+					EncryptionLevel: protocol.EncryptionForwardSecure,
+				}
+				p2 := ackhandler.Packet{
+					PacketNumber:    0x1338,
+					Frames:          []frames.Frame{&f2},
+					EncryptionLevel: protocol.EncryptionForwardSecure,
+				}
+				sph.retransmissionQueue = []*ackhandler.Packet{&p1, &p2}
 
-			f := &frames.StreamFrame{
-				StreamID: 0x5,
-				Data:     bytes.Repeat([]byte{'f'}, int(1.5*float32(protocol.MaxPacketSize))),
-			}
-			sess.streamFramer.AddFrameForRetransmission(f)
+				err := sess.sendPacket()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(mconn.written).To(HaveLen(1))
+				Expect(mconn.written[0]).To(ContainSubstring("foobar"))
+				Expect(mconn.written[0]).To(ContainSubstring("loremipsum"))
+			})
 
-			sph := newMockSentPacketHandler()
-			sess.sentPacketHandler = sph
+			It("always attaches a StopWaiting to a packet that contains a retransmission", func() {
+				f := &frames.StreamFrame{
+					StreamID: 0x5,
+					Data:     bytes.Repeat([]byte{'f'}, int(1.5*float32(protocol.MaxPacketSize))),
+				}
+				sess.streamFramer.AddFrameForRetransmission(f)
 
-			err := sess.sendPacket()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(mconn.written).To(HaveLen(2))
-			sentPackets := sph.(*mockSentPacketHandler).sentPackets
-			Expect(sentPackets).To(HaveLen(2))
-			_, ok := sentPackets[0].Frames[0].(*frames.StopWaitingFrame)
-			Expect(ok).To(BeTrue())
-			_, ok = sentPackets[1].Frames[0].(*frames.StopWaitingFrame)
-			Expect(ok).To(BeTrue())
-		})
+				err := sess.sendPacket()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(mconn.written).To(HaveLen(2))
+				sentPackets := sph.sentPackets
+				Expect(sentPackets).To(HaveLen(2))
+				_, ok := sentPackets[0].Frames[0].(*frames.StopWaitingFrame)
+				Expect(ok).To(BeTrue())
+				_, ok = sentPackets[1].Frames[0].(*frames.StopWaitingFrame)
+				Expect(ok).To(BeTrue())
+			})
 
-		It("calls MaybeQueueRTOs even if congestion blocked, so that bytesInFlight is updated", func() {
-			sph := newMockSentPacketHandler()
-			sph.(*mockSentPacketHandler).congestionLimited = true
-			sess.sentPacketHandler = sph
-			err := sess.sendPacket()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(sph.(*mockSentPacketHandler).maybeQueueRTOsCalled).To(BeTrue())
-		})
+			It("calls MaybeQueueRTOs even if congestion blocked, so that bytesInFlight is updated", func() {
+				sph.congestionLimited = true
+				sess.sentPacketHandler = sph
+				err := sess.sendPacket()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(sph.maybeQueueRTOsCalled).To(BeTrue())
+			})
 
-		It("retransmits a WindowUpdates if it hasn't already sent a WindowUpdate with a higher ByteOffset", func() {
-			_, err := sess.GetOrOpenStream(5)
-			Expect(err).ToNot(HaveOccurred())
-			fc := newMockFlowControlHandler()
-			fc.receiveWindow = 0x1000
-			sess.flowControlManager = fc
-			sph := newMockSentPacketHandler()
-			sess.sentPacketHandler = sph
-			wuf := &frames.WindowUpdateFrame{
-				StreamID:   5,
-				ByteOffset: 0x1000,
-			}
-			sph.(*mockSentPacketHandler).retransmissionQueue = []*ackhandler.Packet{{
-				Frames: []frames.Frame{wuf},
-			}}
-			err = sess.sendPacket()
-			Expect(err).ToNot(HaveOccurred())
-			sentPackets := sph.(*mockSentPacketHandler).sentPackets
-			Expect(sentPackets).To(HaveLen(1))
-			Expect(sentPackets[0].Frames).To(ContainElement(wuf))
-		})
-
-		It("doesn't retransmit WindowUpdates if it already sent a WindowUpdate with a higher ByteOffset", func() {
-			_, err := sess.GetOrOpenStream(5)
-			Expect(err).ToNot(HaveOccurred())
-			fc := newMockFlowControlHandler()
-			fc.receiveWindow = 0x2000
-			sess.flowControlManager = fc
-			sph := newMockSentPacketHandler()
-			sess.sentPacketHandler = sph
-			sph.(*mockSentPacketHandler).retransmissionQueue = []*ackhandler.Packet{{
-				Frames: []frames.Frame{&frames.WindowUpdateFrame{
+			It("retransmits a WindowUpdates if it hasn't already sent a WindowUpdate with a higher ByteOffset", func() {
+				_, err := sess.GetOrOpenStream(5)
+				Expect(err).ToNot(HaveOccurred())
+				fc := newMockFlowControlHandler()
+				fc.receiveWindow = 0x1000
+				sess.flowControlManager = fc
+				wuf := &frames.WindowUpdateFrame{
 					StreamID:   5,
 					ByteOffset: 0x1000,
-				}},
-			}}
-			err = sess.sendPacket()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(sph.(*mockSentPacketHandler).sentPackets).To(BeEmpty())
-		})
+				}
+				sph.retransmissionQueue = []*ackhandler.Packet{{
+					Frames:          []frames.Frame{wuf},
+					EncryptionLevel: protocol.EncryptionForwardSecure,
+				}}
+				err = sess.sendPacket()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(sph.sentPackets).To(HaveLen(1))
+				Expect(sph.sentPackets[0].Frames).To(ContainElement(wuf))
+			})
 
-		It("doesn't retransmit WindowUpdates for closed streams", func() {
-			str, err := sess.GetOrOpenStream(5)
-			Expect(err).ToNot(HaveOccurred())
-			// close the stream
-			str.(*stream).sentFin()
-			str.Close()
-			str.(*stream).RegisterRemoteError(nil)
-			sess.garbageCollectStreams()
-			_, err = sess.flowControlManager.SendWindowSize(5)
-			Expect(err).To(MatchError("Error accessing the flowController map."))
-			sph := newMockSentPacketHandler()
-			sess.sentPacketHandler = sph
-			sph.(*mockSentPacketHandler).retransmissionQueue = []*ackhandler.Packet{{
-				Frames: []frames.Frame{&frames.WindowUpdateFrame{
-					StreamID:   5,
-					ByteOffset: 0x1337,
-				}},
-			}}
-			err = sess.sendPacket()
-			Expect(err).ToNot(HaveOccurred())
-			sentPackets := sph.(*mockSentPacketHandler).sentPackets
-			Expect(sentPackets).To(BeEmpty())
-		})
+			It("doesn't retransmit WindowUpdates if it already sent a WindowUpdate with a higher ByteOffset", func() {
+				_, err := sess.GetOrOpenStream(5)
+				Expect(err).ToNot(HaveOccurred())
+				fc := newMockFlowControlHandler()
+				fc.receiveWindow = 0x2000
+				sess.flowControlManager = fc
+				sph.retransmissionQueue = []*ackhandler.Packet{{
+					Frames: []frames.Frame{&frames.WindowUpdateFrame{
+						StreamID:   5,
+						ByteOffset: 0x1000,
+					}},
+					EncryptionLevel: protocol.EncryptionForwardSecure,
+				}}
+				err = sess.sendPacket()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(sph.sentPackets).To(BeEmpty())
+			})
 
-		It("retransmits RTO packets", func() {
-			// We simulate consistently low RTTs, so that the test works faster
-			n := protocol.PacketNumber(10)
-			for p := protocol.PacketNumber(1); p < n; p++ {
-				err := sess.sentPacketHandler.SentPacket(&ackhandler.Packet{PacketNumber: p, Length: 1})
-				Expect(err).NotTo(HaveOccurred())
-				time.Sleep(time.Microsecond)
-				ack := &frames.AckFrame{}
-				ack.LargestAcked = p
-				err = sess.sentPacketHandler.ReceivedAck(ack, p, time.Now())
-				Expect(err).NotTo(HaveOccurred())
-			}
-			sess.packer.packetNumberGenerator.next = n + 1
-			// Now, we send a single packet, and expect that it was retransmitted later
+			It("doesn't retransmit WindowUpdates for closed streams", func() {
+				str, err := sess.GetOrOpenStream(5)
+				Expect(err).ToNot(HaveOccurred())
+				// close the stream
+				str.(*stream).sentFin()
+				str.Close()
+				str.(*stream).RegisterRemoteError(nil)
+				sess.garbageCollectStreams()
+				_, err = sess.flowControlManager.SendWindowSize(5)
+				Expect(err).To(MatchError("Error accessing the flowController map."))
+				sph.retransmissionQueue = []*ackhandler.Packet{{
+					Frames: []frames.Frame{&frames.WindowUpdateFrame{
+						StreamID:   5,
+						ByteOffset: 0x1337,
+					}},
+					EncryptionLevel: protocol.EncryptionForwardSecure,
+				}}
+				err = sess.sendPacket()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(sph.sentPackets).To(BeEmpty())
+			})
+		})
+	})
+
+	It("retransmits RTO packets", func() {
+		sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure}
+		// We simulate consistently low RTTs, so that the test works faster
+		n := protocol.PacketNumber(10)
+		for p := protocol.PacketNumber(1); p < n; p++ {
 			err := sess.sentPacketHandler.SentPacket(&ackhandler.Packet{
-				PacketNumber: n,
-				Length:       1,
-				Frames: []frames.Frame{&frames.StreamFrame{
-					Data: []byte("foobar"),
-				}},
+				PacketNumber:    p,
+				Length:          1,
+				EncryptionLevel: protocol.EncryptionForwardSecure,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			go sess.run()
-			sess.scheduleSending()
-			Eventually(func() [][]byte { return mconn.written }).ShouldNot(BeEmpty())
-			Expect(mconn.written[0]).To(ContainSubstring("foobar"))
+			time.Sleep(time.Microsecond)
+			ack := &frames.AckFrame{}
+			ack.LargestAcked = p
+			err = sess.sentPacketHandler.ReceivedAck(ack, p, time.Now())
+			Expect(err).NotTo(HaveOccurred())
+		}
+		sess.packer.packetNumberGenerator.next = n + 1
+		// Now, we send a single packet, and expect that it was retransmitted later
+		err := sess.sentPacketHandler.SentPacket(&ackhandler.Packet{
+			PacketNumber: n,
+			Length:       1,
+			Frames: []frames.Frame{&frames.StreamFrame{
+				Data: []byte("foobar"),
+			}},
+			EncryptionLevel: protocol.EncryptionForwardSecure,
 		})
+		Expect(err).NotTo(HaveOccurred())
+		go sess.run()
+		sess.scheduleSending()
+		Eventually(func() [][]byte { return mconn.written }).ShouldNot(BeEmpty())
+		Expect(mconn.written[0]).To(ContainSubstring("foobar"))
 	})
 
 	Context("scheduling sending", func() {
@@ -1081,6 +1150,14 @@ var _ = Describe("Session", func() {
 				Expect(mconn.written[1]).ToNot(ContainSubstring(string([]byte{0x37, 0x13})))
 			})
 		})
+	})
+
+	It("tells the packetPacker when forward-secure encryption is used", func() {
+		go sess.run()
+		sess.aeadChanged <- protocol.EncryptionSecure
+		Consistently(func() bool { return sess.packer.isForwardSecure }).Should(BeFalse())
+		sess.aeadChanged <- protocol.EncryptionForwardSecure
+		Eventually(func() bool { return sess.packer.isForwardSecure }).Should(BeTrue())
 	})
 
 	It("closes when crypto stream errors", func() {

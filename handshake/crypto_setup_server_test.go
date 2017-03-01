@@ -185,23 +185,28 @@ var _ = Describe("Crypto setup", func() {
 			cs.secureAEAD = &mockAEAD{}
 			cs.receivedForwardSecurePacket = false
 
-			Expect(cs.DiversificationNonce()).To(BeEmpty())
+			Expect(cs.DiversificationNonce(false)).To(BeEmpty())
 			// Div nonce is created after CHLO
 			cs.handleCHLO("", nil, map[Tag][]byte{TagNONC: nonce32})
 		})
 
 		It("returns diversification nonces", func() {
-			Expect(cs.DiversificationNonce()).To(HaveLen(32))
+			Expect(cs.DiversificationNonce(false)).To(HaveLen(32))
 		})
 
-		It("does not return nonce for FS packets", func() {
-			cs.receivedForwardSecurePacket = true
-			Expect(cs.DiversificationNonce()).To(BeEmpty())
+		It("does not return nonce after sending the SHLO", func() {
+			cs.sentSHLO = true
+			Expect(cs.DiversificationNonce(false)).To(BeEmpty())
+		})
+
+		It("returns a nonce for a retransmission, even after sending the SHLO", func() {
+			cs.sentSHLO = true
+			Expect(cs.DiversificationNonce(true)).To(HaveLen(32))
 		})
 
 		It("does not return nonce for unencrypted packets", func() {
 			cs.secureAEAD = nil
-			Expect(cs.DiversificationNonce()).To(BeEmpty())
+			Expect(cs.DiversificationNonce(false)).To(BeEmpty())
 		})
 	})
 
@@ -336,7 +341,11 @@ var _ = Describe("Crypto setup", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stream.dataWritten.Bytes()).To(HavePrefix("SHLO"))
 			Expect(stream.dataWritten.Bytes()).ToNot(ContainSubstring("REJ"))
-			Expect(aeadChanged).To(Receive())
+			var encLevel protocol.EncryptionLevel
+			Expect(aeadChanged).To(Receive(&encLevel))
+			Expect(encLevel).To(Equal(protocol.EncryptionSecure))
+			Expect(aeadChanged).To(Receive(&encLevel))
+			Expect(encLevel).To(Equal(protocol.EncryptionForwardSecure))
 		})
 
 		It("recognizes inchoate CHLOs missing SCID", func() {
@@ -629,15 +638,6 @@ var _ = Describe("Crypto setup", func() {
 				Expect(d).To(Equal([]byte("decrypted")))
 			})
 
-			It("is not used after receiving forward secure packet", func() {
-				doCHLO()
-				_, _, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
-				Expect(err).ToNot(HaveOccurred())
-				d, enc := cs.Seal(nil, []byte("foobar"), 0, []byte{})
-				Expect(d).To(Equal([]byte("foobar forward sec")))
-				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
-			})
-
 			It("is not accepted after receiving forward secure packet", func() {
 				doCHLO()
 				_, _, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
@@ -649,14 +649,66 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		Context("forward secure encryption", func() {
-			It("is used after receiving forward secure packet", func() {
+			It("is used after sending out one packet with initial encryption", func() {
 				doCHLO()
-				_, enc, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
-				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
-				Expect(err).ToNot(HaveOccurred())
+				_, enc := cs.Seal(nil, []byte("SHLO"), 0, []byte{})
+				Expect(enc).To(Equal(protocol.EncryptionSecure))
 				d, enc := cs.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal([]byte("foobar forward sec")))
 				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
+			})
+
+			It("regards the handshake as complete once it receives a forward encrypted packet", func() {
+				doCHLO()
+				_, enc := cs.Seal(nil, []byte("SHLO"), 0, []byte{})
+				Expect(enc).To(Equal(protocol.EncryptionSecure))
+				_, enc = cs.Seal(nil, []byte("foobar"), 0, []byte{})
+				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
+				Expect(cs.HandshakeComplete()).To(BeFalse())
+				cs.receivedForwardSecurePacket = true
+				Expect(cs.HandshakeComplete()).To(BeTrue())
+			})
+		})
+
+		Context("forcing encryption levels", func() {
+			It("forces null encryption", func() {
+				d, enc, err := cs.SealWith(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionUnencrypted)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(d).To(Equal(foobarFNVSigned))
+				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
+			})
+
+			It("forces initial encryption", func() {
+				doCHLO()
+				d, enc, err := cs.SealWith(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionSecure)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(d).To(Equal([]byte("foobar  normal sec")))
+				Expect(enc).To(Equal(protocol.EncryptionSecure))
+			})
+
+			It("errors of no AEAD for initial encryption is available", func() {
+				_, enc, err := cs.SealWith(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionSecure)
+				Expect(err).To(MatchError("CryptoSetupServer: no secureAEAD"))
+				Expect(enc).To(Equal(protocol.EncryptionUnspecified))
+			})
+
+			It("forces forward-secure encryption", func() {
+				doCHLO()
+				d, enc, err := cs.SealWith(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionForwardSecure)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(d).To(Equal([]byte("foobar forward sec")))
+				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
+			})
+
+			It("errors of no AEAD for forward-secure encryption is available", func() {
+				_, enc, err := cs.SealWith(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionForwardSecure)
+				Expect(err).To(MatchError("CryptoSetupServer: no forwardSecureAEAD"))
+				Expect(enc).To(Equal(protocol.EncryptionUnspecified))
+			})
+
+			It("errors if no encryption level is specified", func() {
+				_, _, err := cs.SealWith(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionUnspecified)
+				Expect(err).To(MatchError("no encryption level specified"))
 			})
 		})
 	})
