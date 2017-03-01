@@ -84,6 +84,7 @@ var _ = Describe("Proof", func() {
 		})
 
 		It("uses NameToCertificate entries", func() {
+			config.Certificates = []tls.Certificate{cert, cert} // two entries so the long path is used
 			config.NameToCertificate = map[string]*tls.Certificate{
 				"quic.clemente.io": &cert,
 			}
@@ -94,6 +95,7 @@ var _ = Describe("Proof", func() {
 		})
 
 		It("uses NameToCertificate entries with wildcard", func() {
+			config.Certificates = []tls.Certificate{cert, cert} // two entries so the long path is used
 			config.NameToCertificate = map[string]*tls.Certificate{
 				"*.clemente.io": &cert,
 			}
