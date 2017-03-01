@@ -93,7 +93,8 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	}
 
 	if p.perspective == protocol.PerspectiveServer {
-		responsePublicHeader.DiversificationNonce = p.cryptoSetup.DiversificationNonce()
+		force := isHandshakeRetransmission && (packetToRetransmit.EncryptionLevel == protocol.EncryptionSecure)
+		responsePublicHeader.DiversificationNonce = p.cryptoSetup.DiversificationNonce(force)
 	}
 
 	if p.perspective == protocol.PerspectiveClient && !p.cryptoSetup.HandshakeComplete() {

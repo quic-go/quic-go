@@ -12,6 +12,6 @@ type CryptoSetup interface {
 	UnlockForSealing()
 	HandshakeComplete() bool
 	// TODO: clean up this interface
-	DiversificationNonce() []byte         // only needed for cryptoSetupServer
-	SetDiversificationNonce([]byte) error // only needed for cryptoSetupClient
+	DiversificationNonce(force bool) []byte // only needed for cryptoSetupServer
+	SetDiversificationNonce([]byte) error   // only needed for cryptoSetupClient
 }

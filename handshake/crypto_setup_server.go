@@ -390,11 +390,11 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 }
 
 // DiversificationNonce returns a diversification nonce if required in the next packet to be Seal'ed. See LockForSealing()!
-func (h *cryptoSetupServer) DiversificationNonce() []byte {
-	if h.secureAEAD == nil || h.sentSHLO {
-		return nil
+func (h *cryptoSetupServer) DiversificationNonce(force bool) []byte {
+	if force || (h.secureAEAD != nil && !h.sentSHLO) {
+		return h.diversificationNonce
 	}
-	return h.diversificationNonce
+	return nil
 }
 
 func (h *cryptoSetupServer) SetDiversificationNonce(data []byte) error {

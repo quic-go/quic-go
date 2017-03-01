@@ -12,9 +12,10 @@ import (
 )
 
 type mockCryptoSetup struct {
-	diversificationNonce []byte
-	handshakeComplete    bool
-	encLevelSeal         protocol.EncryptionLevel
+	divNonce          []byte
+	forcedDivNonce    bool
+	handshakeComplete bool
+	encLevelSeal      protocol.EncryptionLevel
 }
 
 func (m *mockCryptoSetup) HandleCryptoStream() error { return nil }
@@ -28,10 +29,13 @@ func (m *mockCryptoSetup) Seal(dst, src []byte, packetNumber protocol.PacketNumb
 func (m *mockCryptoSetup) SealWith(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte, encLevel protocol.EncryptionLevel) ([]byte, protocol.EncryptionLevel, error) {
 	return append(src, bytes.Repeat([]byte{0}, 12)...), encLevel, nil
 }
-func (m *mockCryptoSetup) LockForSealing()                      {}
-func (m *mockCryptoSetup) UnlockForSealing()                    {}
-func (m *mockCryptoSetup) HandshakeComplete() bool              { return m.handshakeComplete }
-func (m *mockCryptoSetup) DiversificationNonce() []byte         { return m.diversificationNonce }
+func (m *mockCryptoSetup) LockForSealing()         {}
+func (m *mockCryptoSetup) UnlockForSealing()       {}
+func (m *mockCryptoSetup) HandshakeComplete() bool { return m.handshakeComplete }
+func (m *mockCryptoSetup) DiversificationNonce(force bool) []byte {
+	m.forcedDivNonce = force
+	return m.divNonce
+}
 func (m *mockCryptoSetup) SetDiversificationNonce([]byte) error { panic("not implemented") }
 
 var _ = Describe("Packet packer", func() {
@@ -54,6 +58,7 @@ var _ = Describe("Packet packer", func() {
 		packer = &packetPacker{
 			cryptoSetup:           &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure},
 			connectionParameters:  cpm,
+			connectionID:          0x1337,
 			packetNumberGenerator: newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
 			streamFramer:          streamFramer,
 			perspective:           protocol.PerspectiveServer,
@@ -99,7 +104,7 @@ var _ = Describe("Packet packer", func() {
 
 	It("includes a diversification nonce, when acting as a server", func() {
 		nonce := bytes.Repeat([]byte{'e'}, 32)
-		packer.cryptoSetup.(*mockCryptoSetup).diversificationNonce = nonce
+		packer.cryptoSetup.(*mockCryptoSetup).divNonce = nonce
 		f := &frames.StreamFrame{
 			StreamID: 5,
 			Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
@@ -588,6 +593,8 @@ var _ = Describe("Packet packer", func() {
 			Expect(p.frames).To(ContainElement(sf))
 			Expect(p.frames).To(ContainElement(swf))
 			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
+			// unencrypted packets don't need a diversification nonce
+			Expect(packer.cryptoSetup.(*mockCryptoSetup).forcedDivNonce).To(BeFalse())
 		})
 
 		It("packs a retransmission for a packet sent with initial encryption", func() {
@@ -600,6 +607,17 @@ var _ = Describe("Packet packer", func() {
 			Expect(p.frames).To(ContainElement(sf))
 			Expect(p.frames).To(ContainElement(swf))
 			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionSecure))
+		})
+
+		It("includes the diversification nonce on packets sent with initial encryption", func() {
+			packet := &ackhandler.Packet{
+				EncryptionLevel: protocol.EncryptionSecure,
+				Frames:          []frames.Frame{sf},
+			}
+			p, err := packer.RetransmitNonForwardSecurePacket(swf, packet)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionSecure))
+			Expect(packer.cryptoSetup.(*mockCryptoSetup).forcedDivNonce).To(BeTrue())
 		})
 
 		It("removes non-retransmittable frames", func() {

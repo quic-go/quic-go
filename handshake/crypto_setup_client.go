@@ -331,7 +331,7 @@ func (h *cryptoSetupClient) SealWith(dst, src []byte, packetNumber protocol.Pack
 	return nil, protocol.EncryptionUnspecified, errors.New("no encryption level specified")
 }
 
-func (h *cryptoSetupClient) DiversificationNonce() []byte {
+func (h *cryptoSetupClient) DiversificationNonce(bool) []byte {
 	panic("not needed for cryptoSetupClient")
 }
 

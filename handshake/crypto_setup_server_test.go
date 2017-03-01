@@ -185,23 +185,28 @@ var _ = Describe("Crypto setup", func() {
 			cs.secureAEAD = &mockAEAD{}
 			cs.receivedForwardSecurePacket = false
 
-			Expect(cs.DiversificationNonce()).To(BeEmpty())
+			Expect(cs.DiversificationNonce(false)).To(BeEmpty())
 			// Div nonce is created after CHLO
 			cs.handleCHLO("", nil, map[Tag][]byte{TagNONC: nonce32})
 		})
 
 		It("returns diversification nonces", func() {
-			Expect(cs.DiversificationNonce()).To(HaveLen(32))
+			Expect(cs.DiversificationNonce(false)).To(HaveLen(32))
 		})
 
 		It("does not return nonce after sending the SHLO", func() {
 			cs.sentSHLO = true
-			Expect(cs.DiversificationNonce()).To(BeEmpty())
+			Expect(cs.DiversificationNonce(false)).To(BeEmpty())
+		})
+
+		It("returns a nonce for a retransmission, even after sending the SHLO", func() {
+			cs.sentSHLO = true
+			Expect(cs.DiversificationNonce(true)).To(HaveLen(32))
 		})
 
 		It("does not return nonce for unencrypted packets", func() {
 			cs.secureAEAD = nil
-			Expect(cs.DiversificationNonce()).To(BeEmpty())
+			Expect(cs.DiversificationNonce(false)).To(BeEmpty())
 		})
 	})
 
