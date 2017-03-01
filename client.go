@@ -36,7 +36,8 @@ var (
 	errCloseSessionForNewVersion = errors.New("closing session in order to recreate it with a new version")
 )
 
-// Dial establishes a new QUIC connection to a server
+// Dial establishes a new QUIC connection to a server using a net.PacketConn.
+// The host parameter is used for SNI.
 func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config) (Session, error) {
 	connID, err := utils.GenerateConnectionID()
 	if err != nil {
@@ -68,9 +69,10 @@ func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config
 	return c.establishConnection()
 }
 
-// DialAddr establishes a new QUIC connection to a server
-func DialAddr(hostname string, config *Config) (Session, error) {
-	udpAddr, err := net.ResolveUDPAddr("udp", hostname)
+// DialAddr establishes a new QUIC connection to a server.
+// The hostname for SNI is taken from the given address.
+func DialAddr(addr string, config *Config) (Session, error) {
+	udpAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +82,7 @@ func DialAddr(hostname string, config *Config) (Session, error) {
 		return nil, err
 	}
 
-	return Dial(udpConn, udpAddr, hostname, config)
+	return Dial(udpConn, udpAddr, addr, config)
 }
 
 func (c *client) establishConnection() (Session, error) {

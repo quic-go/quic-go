@@ -8,26 +8,31 @@ import (
 	"github.com/lucas-clemente/quic-go/protocol"
 )
 
-// Stream is the interface for QUIC streams
+// Stream is the interface implemented by QUIC streams
 type Stream interface {
 	io.Reader
 	io.Writer
 	io.Closer
 	StreamID() protocol.StreamID
+	// Reset closes the stream with an error.
 	Reset(error)
 }
 
-// A Session is a QUIC Session
+// A Session is a QUIC connection between two peers.
 type Session interface {
-	// get the next stream opened by the client
-	// first stream returned has StreamID 3
+	// AcceptStream returns the next stream opened by the peer, blocking until one is available.
+	// Since stream 1 is reserved for the crypto stream, the first stream is either 2 (for a client) or 3 (for a server).
 	AcceptStream() (Stream, error)
-	// guaranteed to return the smallest unopened stream
-	// special error for "too many streams, retry later"
+	// OpenStream opens a new QUIC stream, returning a special error when the peeer's concurrent stream limit is reached.
+	// New streams always have the smallest possible stream ID.
+	// TODO: Enable testing for the special error
 	OpenStream() (Stream, error)
-	// blocks until a new stream can be opened, if the maximum number of stream is opened
+	// OpenStreamSync opens a new QUIC stream, blocking until the peer's concurrent stream limit allows a new stream to be opened.
+	// It always picks the smallest possible stream ID.
 	OpenStreamSync() (Stream, error)
+	// RemoteAddr returns the address of the peer.
 	RemoteAddr() net.Addr
+	// Close closes the connection. The error will be sent to the remote peer in a CONNECTION_CLOSE frame. An error value of nil is allowed and will cause a normal PeerGoingAway to be sent.
 	Close(error) error
 }
 
@@ -45,20 +50,25 @@ const (
 	ConnStateForwardSecure
 )
 
-// ConnStateCallback is called every time the connection moves to another connection state
-// the callback is called in a new go routine
+// ConnStateCallback is called every time the connection moves to another connection state.
 type ConnStateCallback func(Session, ConnState)
 
-// Config is the configuration for QUIC
+// Config contains all configuration data needed for a QUIC server or client.
+// More config parameters (such as timeouts) will be added soon, see e.g. https://github.com/lucas-clemente/quic-go/issues/441.
 type Config struct {
 	TLSConfig *tls.Config
-	// will be called in a separate goroutine
+	// ConnStateCallback will be called when the QUIC version is successfully negotiated or when the encryption level changes.
+	// If this field is not set, the Dial functions will return only when the connection is forward secure.
+	// Callbacks have to be thread-safe, since they might be called in separate goroutines.
 	ConnState ConnStateCallback
 }
 
-// A Listener listens for incoming QUIC connections
+// A Listener for incoming QUIC connections
 type Listener interface {
+	// Close the server, sending CONNECTION_CLOSE frames to each peer.
 	Close() error
+	// Addr returns the local network addr that the server is listening on.
 	Addr() net.Addr
+	// Serve starts the main server loop, and blocks until a network error occurs or the server is closed.
 	Serve() error
 }
