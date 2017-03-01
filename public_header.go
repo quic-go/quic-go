@@ -17,7 +17,7 @@ var (
 	errGetLengthNotForVersionNegotiation = errors.New("PublicHeader: GetLength cannot be called for VersionNegotiation packets")
 )
 
-// The PublicHeader of a QUIC packet.
+// The PublicHeader of a QUIC packet. Warning: This struct should not be considered stable and will change soon.
 type PublicHeader struct {
 	Raw                  []byte
 	ConnectionID         protocol.ConnectionID

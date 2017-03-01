@@ -32,7 +32,7 @@ type Session interface {
 	OpenStreamSync() (Stream, error)
 	// RemoteAddr returns the address of the peer.
 	RemoteAddr() net.Addr
-	// Close closes the connection. An error value of nil is allowed.
+	// Close closes the connection. The error will be sent to the remote peer in a CONNECTION_CLOSE frame. An error value of nil is allowed and will cause a normal PeerGoingAway to be sent.
 	Close(error) error
 }
 
@@ -54,11 +54,12 @@ const (
 type ConnStateCallback func(Session, ConnState)
 
 // Config contains all configuration data needed for a QUIC server or client.
+// More config parameters (such as timeouts) will be added soon, see e.g. https://github.com/lucas-clemente/quic-go/issues/441.
 type Config struct {
 	TLSConfig *tls.Config
 	// ConnStateCallback will be called when the QUIC version is successfully negotiated or when the encryption level changes.
 	// If this field is not set, the Dial functions will return only when the connection is forward secure.
-	// The callback may be called in a separate goroutine.
+	// Callbacks have to be thread-safe, since they might be called in separate goroutines.
 	ConnState ConnStateCallback
 }
 
