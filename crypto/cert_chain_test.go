@@ -127,5 +127,16 @@ var _ = Describe("Proof", func() {
 			_, err := cc.GetLeafCert("invalid domain")
 			Expect(err).To(MatchError(errNoMatchingCertificate))
 		})
+
+		It("respects GetConfigForClient", func() {
+			nestedConfig := &tls.Config{Certificates: []tls.Certificate{cert}}
+			config.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
+				Expect(chi.ServerName).To(Equal("quic.clemente.io"))
+				return nestedConfig, nil
+			}
+			resultCert, err := cc.getCertForSNI("quic.clemente.io")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(*resultCert).To(Equal(cert))
+		})
 	})
 })

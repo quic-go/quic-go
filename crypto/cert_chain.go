@@ -57,6 +57,15 @@ func (c *certChain) GetLeafCert(sni string) ([]byte, error) {
 
 func (cc *certChain) getCertForSNI(sni string) (*tls.Certificate, error) {
 	c := cc.config
+	if c.GetConfigForClient != nil {
+		var err error
+		c, err = c.GetConfigForClient(&tls.ClientHelloInfo{
+			ServerName: sni,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
 	// The rest of this function is mostly copied from crypto/tls.getCertificate
 
 	if c.GetCertificate != nil {
