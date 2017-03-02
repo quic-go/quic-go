@@ -512,7 +512,7 @@ var _ = Describe("StreamFrame sorter", func() {
 				}
 
 				BeforeEach(func() {
-					// create gaps: 5-10, 15-20, 25-inf
+					// create gaps: 5-10, 15-inf
 					err := s.Push(&frames.StreamFrame{Offset: 0, Data: []byte("12345")})
 					Expect(err).ToNot(HaveOccurred())
 					err = s.Push(&frames.StreamFrame{Offset: 10, Data: []byte("12345")})
@@ -544,6 +544,22 @@ var _ = Describe("StreamFrame sorter", func() {
 					Expect(err).To(MatchError(errDuplicateStreamData))
 					Expect(s.queuedFrames[0].Data).To(HaveLen(5))
 					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(1)))
+				})
+
+				It("detects a duplicate frame that is smaller than the original, somewhere in the middle in the last block", func() {
+					// 11 to 14
+					err := s.Push(&frames.StreamFrame{Offset: 11, Data: []byte("123")})
+					Expect(err).To(MatchError(errDuplicateStreamData))
+					Expect(s.queuedFrames[10].Data).To(HaveLen(5))
+					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(11)))
+				})
+
+				It("detects a duplicate frame that is smaller than the original, with aligned end in the last block", func() {
+					// 11 to 14
+					err := s.Push(&frames.StreamFrame{Offset: 11, Data: []byte("1234")})
+					Expect(err).To(MatchError(errDuplicateStreamData))
+					Expect(s.queuedFrames[10].Data).To(HaveLen(5))
+					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(11)))
 				})
 
 				It("detects a duplicate frame that is smaller than the original, with aligned end", func() {

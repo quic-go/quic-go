@@ -51,14 +51,13 @@ func (s *streamFrameSorter) Push(frame *frames.StreamFrame) error {
 	start := frame.Offset
 	end := frame.Offset + frame.DataLen()
 
-	// the frame is a duplicate. Ignore it
-	if end <= s.gaps.Front().Value.Start {
-		return errDuplicateStreamData
-	}
-
 	// skip all gaps that are before this stream frame
 	var gap *utils.ByteIntervalElement
 	for gap = s.gaps.Front(); gap != nil; gap = gap.Next() {
+		// the frame is a duplicate. Ignore it
+		if end <= gap.Value.Start {
+			return errDuplicateStreamData
+		}
 		if end > gap.Value.Start && start <= gap.Value.End {
 			break
 		}
