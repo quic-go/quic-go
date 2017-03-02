@@ -5,6 +5,7 @@ import (
 	"compress/flate"
 	"compress/zlib"
 	"crypto/tls"
+	"reflect"
 
 	"github.com/lucas-clemente/quic-go/testdata"
 
@@ -129,11 +130,16 @@ var _ = Describe("Proof", func() {
 		})
 
 		It("respects GetConfigForClient", func() {
+			if !reflect.ValueOf(tls.Config{}).FieldByName("GetConfigForClient").IsValid() {
+				// Pre 1.8, we don't have to do anything
+				return
+			}
 			nestedConfig := &tls.Config{Certificates: []tls.Certificate{cert}}
-			config.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
+			l := func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
 				Expect(chi.ServerName).To(Equal("quic.clemente.io"))
 				return nestedConfig, nil
 			}
+			reflect.ValueOf(config).Elem().FieldByName("GetConfigForClient").Set(reflect.ValueOf(l))
 			resultCert, err := cc.getCertForSNI("quic.clemente.io")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(*resultCert).To(Equal(cert))
