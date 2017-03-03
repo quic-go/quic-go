@@ -1,4 +1,4 @@
-# A QUIC server implementation in pure Go
+# A QUIC implementation in pure Go
 
 <img src="docs/quic.png" width=303 height=124>
 
@@ -7,26 +7,20 @@
 [![Windows Build Status](https://img.shields.io/appveyor/ci/lucas-clemente/quic-go/master.svg?style=flat-square&label=windows+build)](https://ci.appveyor.com/project/lucas-clemente/quic-go/branch/master)
 [![Code Coverage](https://img.shields.io/codecov/c/github/lucas-clemente/quic-go/master.svg?style=flat-square)](https://codecov.io/gh/lucas-clemente/quic-go/)
 
-quic-go is an implementation of the [QUIC](https://en.wikipedia.org/wiki/QUIC) protocol in Go. While we're not far from being feature complete, there's still work to do regarding performance and security. At the moment, we do not recommend use in production systems. We appreciate any feedback :)
+quic-go is an implementation of the [QUIC](https://en.wikipedia.org/wiki/QUIC) protocol in Go.
 
 ## Roadmap
 
-Done:
+quic-go is compatible with the current version(s) of Google Chrome and QUIC as deployed on Google's servers. We're actively tracking the development of the Chrome code to ensure compatibility as the protocol evolves. In that process, we're dropping support for old QUIC versions.
+As Google's QUIC versions are expected to converge towards the [IETF QUIC draft](https://github.com/quicwg/base-drafts), quic-go will eventually implement that draft.
 
-- Basic protocol with support for QUIC version 34-36
-- QUIC client
-- HTTP/2 support
-- Crypto (RSA / ECDSA certificates, Curve25519 for key exchange, AES-GCM or Chacha20-Poly1305 as stream cipher)
-- Loss detection and retransmission (currently fast retransmission & RTO)
-- Flow Control
-- Congestion control using cubic
 
 Major TODOs:
 
-- Security, especially DoS protections
-- Performance
 - Better packet loss detection
 - Connection migration
+- Client-side 0-RTT support
+- BBR congestion control
 
 ## Guides
 
