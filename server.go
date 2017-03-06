@@ -83,7 +83,7 @@ func Listen(conn net.PacketConn, config *Config) (Listener, error) {
 func (s *server) Serve() error {
 	for {
 		data := getPacketBuffer()
-		data = data[:protocol.MaxPacketSize]
+		data = data[:protocol.MaxReceivePacketSize]
 		n, remoteAddr, err := s.conn.ReadFrom(data)
 		if err != nil {
 			if strings.HasSuffix(err.Error(), "use of closed network connection") {
@@ -122,7 +122,7 @@ func (s *server) Addr() net.Addr {
 }
 
 func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet []byte) error {
-	if protocol.ByteCount(len(packet)) > protocol.MaxPacketSize {
+	if protocol.ByteCount(len(packet)) > protocol.MaxReceivePacketSize {
 		return qerr.PacketTooLarge
 	}
 

@@ -36,12 +36,14 @@ type ByteCount uint64
 // MaxByteCount is the maximum value of a ByteCount
 const MaxByteCount = math.MaxUint64
 
-// MaxPacketSize is the maximum packet size, including the public header
-// This is the value used by Chromium for a QUIC packet sent using IPv6 (for IPv4 it would be 1370)
-const MaxPacketSize ByteCount = 1350
+// CryptoStreamID is the ID of the crypto stream
+const CryptoStreamID StreamID = 1
 
-// MaxFrameAndPublicHeaderSize is the maximum size of a QUIC frame plus PublicHeader
-const MaxFrameAndPublicHeaderSize = MaxPacketSize - 12 /*crypto signature*/
+// MaxReceivePacketSize maximum packet size of any QUIC packet, based on
+// ethernet's max size, minus the IP and UDP headers. IPv6 has a 40 byte header,
+// UDP adds an additional 8 bytes.  This is a total overhead of 48 bytes.
+// Ethernet's max packet size is 1500 bytes,  1500 - 48 = 1452.
+const MaxReceivePacketSize ByteCount = 1452
 
 // DefaultTCPMSS is the default maximum packet size used in the Linux TCP implementation.
 // Used in QUIC for congestion window computations in bytes.

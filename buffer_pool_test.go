@@ -11,7 +11,7 @@ var _ = Describe("Buffer Pool", func() {
 	It("returns buffers of correct len and cap", func() {
 		buf := getPacketBuffer()
 		Expect(buf).To(HaveLen(0))
-		Expect(buf).To(HaveCap(int(protocol.MaxPacketSize)))
+		Expect(buf).To(HaveCap(int(protocol.MaxReceivePacketSize)))
 	})
 
 	It("zeroes put buffers' length", func() {
@@ -20,7 +20,7 @@ var _ = Describe("Buffer Pool", func() {
 			putPacketBuffer(buf[0:10])
 			buf = getPacketBuffer()
 			Expect(buf).To(HaveLen(0))
-			Expect(buf).To(HaveCap(int(protocol.MaxPacketSize)))
+			Expect(buf).To(HaveCap(int(protocol.MaxReceivePacketSize)))
 		}
 	})
 

@@ -112,11 +112,6 @@ var _ = Describe("Client", func() {
 		Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.InvalidPacketHeader))
 	})
 
-	It("errors on large packets", func() {
-		err := cl.handlePacket(nil, bytes.Repeat([]byte{'a'}, int(protocol.MaxPacketSize)+1))
-		Expect(err).To(MatchError(qerr.PacketTooLarge))
-	})
-
 	// this test requires a real session (because it calls the close callback) and a real UDP conn (because it unblocks and errors when it is closed)
 	It("properly closes", func(done Done) {
 		udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
@@ -152,7 +147,7 @@ var _ = Describe("Client", func() {
 
 	Context("handling packets", func() {
 		It("errors on too large packets", func() {
-			err := cl.handlePacket(nil, bytes.Repeat([]byte{'f'}, int(protocol.MaxPacketSize+1)))
+			err := cl.handlePacket(nil, bytes.Repeat([]byte{'f'}, int(protocol.MaxReceivePacketSize+1)))
 			Expect(err).To(MatchError(qerr.PacketTooLarge))
 		})
 

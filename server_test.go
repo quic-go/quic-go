@@ -253,7 +253,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("errors on large packets", func() {
-			err := serv.handlePacket(nil, nil, bytes.Repeat([]byte{'a'}, int(protocol.MaxPacketSize)+1))
+			err := serv.handlePacket(nil, nil, bytes.Repeat([]byte{'a'}, int(protocol.MaxReceivePacketSize)+1))
 			Expect(err).To(MatchError(qerr.PacketTooLarge))
 		})
 
