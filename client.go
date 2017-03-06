@@ -115,7 +115,7 @@ func (c *client) listen() {
 		var n int
 		var addr net.Addr
 		data := getPacketBuffer()
-		data = data[:protocol.MaxPacketSize]
+		data = data[:protocol.MaxReceivePacketSize]
 
 		n, addr, err = c.conn.Read(data)
 		if err != nil {
@@ -141,7 +141,7 @@ func (c *client) listen() {
 }
 
 func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
-	if protocol.ByteCount(len(packet)) > protocol.MaxPacketSize {
+	if protocol.ByteCount(len(packet)) > protocol.MaxReceivePacketSize {
 		return qerr.PacketTooLarge
 	}
 
