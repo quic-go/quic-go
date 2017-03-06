@@ -181,6 +181,21 @@ var _ = Describe("Client", func() {
 			Expect(client.session.(*mockSession).closedWithError).To(MatchError(client.headerErr))
 		})
 
+		It("blocks if no stream is available", func() {
+			session.blockOpenStreamSync = true
+			var doReturned bool
+			go func() {
+				defer GinkgoRecover()
+				_, err := client.Do(request)
+				Expect(err).ToNot(HaveOccurred())
+				doReturned = true
+			}()
+			headerStream.dataToRead.Write([]byte("invalid response"))
+			go client.handleHeaderStream()
+
+			Consistently(func() bool { return doReturned }).Should(BeFalse())
+		})
+
 		Context("validating the address", func() {
 			It("refuses to do requests for the wrong host", func() {
 				req, err := http.NewRequest("https", "https://quic.clemente.io:1336/foobar.html", nil)

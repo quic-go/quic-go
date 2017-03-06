@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"sync"
 	"syscall"
+	"time"
 
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
@@ -23,12 +24,13 @@ import (
 )
 
 type mockSession struct {
-	closed          bool
-	closedWithError error
-	dataStream      quic.Stream
-	streamToAccept  quic.Stream
-	streamToOpen    quic.Stream
-	streamOpenErr   error
+	closed              bool
+	closedWithError     error
+	dataStream          quic.Stream
+	streamToAccept      quic.Stream
+	streamToOpen        quic.Stream
+	blockOpenStreamSync bool
+	streamOpenErr       error
 }
 
 func (s *mockSession) GetOrOpenStream(id protocol.StreamID) (quic.Stream, error) {
@@ -44,7 +46,10 @@ func (s *mockSession) OpenStream() (quic.Stream, error) {
 	return s.streamToOpen, nil
 }
 func (s *mockSession) OpenStreamSync() (quic.Stream, error) {
-	panic("not implemented")
+	if s.blockOpenStreamSync {
+		time.Sleep(time.Hour)
+	}
+	return s.OpenStream()
 }
 func (s *mockSession) Close(e error) error {
 	s.closed = true

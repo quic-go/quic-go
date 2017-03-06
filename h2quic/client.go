@@ -168,8 +168,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		c.cryptoChangedCond.Wait()
 	}
 	hdrChan := make(chan *http.Response)
-	// TODO: think about what to do with a TooManyOpenStreams error. Wait and retry?
-	dataStream, err := c.session.OpenStream()
+	dataStream, err := c.session.OpenStreamSync()
 	if err != nil {
 		c.Close(err)
 		return nil, err
