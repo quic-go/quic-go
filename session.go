@@ -76,8 +76,12 @@ type session struct {
 	runClosed chan struct{}
 	closed    uint32 // atomic bool
 
-	undecryptablePackets []*receivedPacket
-	aeadChanged          chan protocol.EncryptionLevel
+	// when we receive too many undecryptable packets during the handshake, we send a Public reset
+	// but only after a time of protocol.PublicResetTimeout has passed
+	undecryptablePackets                   []*receivedPacket
+	receivedTooManyUndecrytablePacketsTime time.Time
+
+	aeadChanged chan protocol.EncryptionLevel
 
 	nextAckScheduledTime time.Time
 
@@ -250,10 +254,14 @@ runLoop:
 		if err := s.sendPacket(); err != nil {
 			s.close(err)
 		}
-		if time.Now().Sub(s.lastNetworkActivityTime) >= s.idleTimeout() {
+		now := time.Now()
+		if !s.receivedTooManyUndecrytablePacketsTime.IsZero() && s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout).Before(now) {
+			s.close(qerr.Error(qerr.DecryptionFailure, "too many undecryptable packets received"))
+		}
+		if now.Sub(s.lastNetworkActivityTime) >= s.idleTimeout() {
 			s.close(qerr.Error(qerr.NetworkIdleTimeout, "No recent network activity."))
 		}
-		if !s.cryptoSetup.HandshakeComplete() && time.Now().Sub(s.sessionCreationTime) >= protocol.MaxTimeForCryptoHandshake {
+		if !s.cryptoSetup.HandshakeComplete() && now.Sub(s.sessionCreationTime) >= protocol.MaxTimeForCryptoHandshake {
 			s.close(qerr.Error(qerr.NetworkIdleTimeout, "Crypto handshake did not complete in time."))
 		}
 		s.garbageCollectStreams()
@@ -275,6 +283,9 @@ func (s *session) maybeResetTimer() {
 	if !s.cryptoSetup.HandshakeComplete() {
 		handshakeDeadline := s.sessionCreationTime.Add(protocol.MaxTimeForCryptoHandshake)
 		nextDeadline = utils.MinTime(nextDeadline, handshakeDeadline)
+	}
+	if !s.receivedTooManyUndecrytablePacketsTime.IsZero() {
+		nextDeadline = utils.MinTime(nextDeadline, s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout))
 	}
 
 	if nextDeadline.Equal(s.currentDeadline) {
@@ -774,8 +785,10 @@ func (s *session) tryQueueingUndecryptablePacket(p *receivedPacket) {
 		return
 	}
 	utils.Infof("Queueing packet 0x%x for later decryption", p.publicHeader.PacketNumber)
-	if len(s.undecryptablePackets)+1 >= protocol.MaxUndecryptablePackets {
-		s.close(qerr.Error(qerr.DecryptionFailure, "too many undecryptable packets received"))
+	if len(s.undecryptablePackets)+1 >= protocol.MaxUndecryptablePackets && s.receivedTooManyUndecrytablePacketsTime.IsZero() {
+		s.receivedTooManyUndecrytablePacketsTime = time.Now()
+		s.maybeResetTimer()
+		return
 	}
 	s.undecryptablePackets = append(s.undecryptablePackets, p)
 }
