@@ -1174,43 +1174,63 @@ var _ = Describe("Session", func() {
 		Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.InvalidCryptoMessageType))
 	})
 
-	It("sends public reset after too many undecryptable packets", func() {
-		// Write protocol.MaxUndecryptablePackets and expect a public reset to happen
-		for i := 0; i < protocol.MaxUndecryptablePackets; i++ {
-			hdr := &PublicHeader{
-				PacketNumber: protocol.PacketNumber(i + 1),
+	Context("sending a Public Reset when receiving undecryptable packets during the handshake", func() {
+		It("doesn't immediately send a Public Reset after receiving too many undecryptable packets", func() {
+			go sess.run()
+			for i := 0; i < protocol.MaxUndecryptablePackets; i++ {
+				hdr := &PublicHeader{
+					PacketNumber: protocol.PacketNumber(i + 1),
+				}
+				sess.handlePacket(&receivedPacket{publicHeader: hdr, data: []byte("foobar")})
 			}
-			sess.handlePacket(&receivedPacket{publicHeader: hdr, data: []byte("foobar")})
-		}
-		sess.run()
+			sess.scheduleSending()
+			Consistently(func() [][]byte { return mconn.written }).Should(HaveLen(0))
+		})
 
-		Expect(mconn.written).To(HaveLen(1))
-		Expect(mconn.written[0]).To(ContainSubstring(string([]byte("PRST"))))
-		Expect(sess.runClosed).To(Receive())
-	})
-
-	It("ignores undecryptable packets after the handshake is complete", func() {
-		*(*bool)(unsafe.Pointer(reflect.ValueOf(sess.cryptoSetup).Elem().FieldByName("receivedForwardSecurePacket").UnsafeAddr())) = true
-		for i := 0; i < protocol.MaxUndecryptablePackets; i++ {
-			hdr := &PublicHeader{
-				PacketNumber: protocol.PacketNumber(i + 1),
+		It("sets a deadline to send a Public Reset after receiving too many undecryptable packets", func() {
+			go sess.run()
+			for i := 0; i < protocol.MaxUndecryptablePackets; i++ {
+				hdr := &PublicHeader{
+					PacketNumber: protocol.PacketNumber(i + 1),
+				}
+				sess.handlePacket(&receivedPacket{publicHeader: hdr, data: []byte("foobar")})
 			}
-			sess.handlePacket(&receivedPacket{publicHeader: hdr, data: []byte("foobar")})
-		}
-		go sess.run()
-		Consistently(sess.undecryptablePackets).Should(HaveLen(0))
-		sess.closeImpl(nil, true)
-		Eventually(sess.runClosed).Should(Receive())
-	})
+			Eventually(func() time.Time { return sess.receivedTooManyUndecrytablePacketsTime }).Should(BeTemporally("~", time.Now(), 10*time.Millisecond))
+		})
 
-	It("unqueues undecryptable packets for later decryption", func() {
-		sess.undecryptablePackets = []*receivedPacket{{
-			publicHeader: &PublicHeader{PacketNumber: protocol.PacketNumber(42)},
-		}}
-		Expect(sess.receivedPackets).NotTo(Receive())
-		sess.tryDecryptingQueuedPackets()
-		Expect(sess.undecryptablePackets).To(BeEmpty())
-		Expect(sess.receivedPackets).To(Receive())
+		It("sends a Public Reset after a timeout", func() {
+			sess.receivedTooManyUndecrytablePacketsTime = time.Now().Add(-protocol.PublicResetTimeout)
+			go sess.run()
+			time.Sleep(10 * time.Millisecond) // wait for the run loop to spin up
+			sess.scheduleSending()            // wake up the run loop
+			Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(1))
+			Expect(mconn.written[0]).To(ContainSubstring(string([]byte("PRST"))))
+			Expect(sess.runClosed).To(Receive())
+		})
+
+		It("ignores undecryptable packets after the handshake is complete", func() {
+			*(*bool)(unsafe.Pointer(reflect.ValueOf(sess.cryptoSetup).Elem().FieldByName("receivedForwardSecurePacket").UnsafeAddr())) = true
+			for i := 0; i < protocol.MaxUndecryptablePackets; i++ {
+				hdr := &PublicHeader{
+					PacketNumber: protocol.PacketNumber(i + 1),
+				}
+				sess.handlePacket(&receivedPacket{publicHeader: hdr, data: []byte("foobar")})
+			}
+			go sess.run()
+			Consistently(sess.undecryptablePackets).Should(HaveLen(0))
+			sess.closeImpl(nil, true)
+			Eventually(sess.runClosed).Should(Receive())
+		})
+
+		It("unqueues undecryptable packets for later decryption", func() {
+			sess.undecryptablePackets = []*receivedPacket{{
+				publicHeader: &PublicHeader{PacketNumber: protocol.PacketNumber(42)},
+			}}
+			Expect(sess.receivedPackets).NotTo(Receive())
+			sess.tryDecryptingQueuedPackets()
+			Expect(sess.undecryptablePackets).To(BeEmpty())
+			Expect(sess.receivedPackets).To(Receive())
+		})
 	})
 
 	It("calls the cryptoChangeCallback when the AEAD changes", func(done Done) {

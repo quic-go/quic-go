@@ -23,6 +23,10 @@ const InitialCongestionWindow = 32
 // session queues for later until it sends a public reset.
 const MaxUndecryptablePackets = 10
 
+// PublicResetTimeout is the time to wait before sending a Public Reset when receiving too many undecryptable packets during the handshake
+// This timeout allows the Go scheduler to switch to the Go rountine that reads the crypto stream and to escalate the crypto
+const PublicResetTimeout = 500 * time.Millisecond
+
 // AckSendDelay is the maximum delay that can be applied to an ACK for a retransmittable packet
 // This is the value Chromium is using
 const AckSendDelay = 25 * time.Millisecond
