@@ -30,6 +30,8 @@ type Session interface {
 	// OpenStreamSync opens a new QUIC stream, blocking until the peer's concurrent stream limit allows a new stream to be opened.
 	// It always picks the smallest possible stream ID.
 	OpenStreamSync() (Stream, error)
+	// LocalAddr returns the local address.
+	LocalAddr() net.Addr
 	// RemoteAddr returns the address of the peer.
 	RemoteAddr() net.Addr
 	// Close closes the connection. The error will be sent to the remote peer in a CONNECTION_CLOSE frame. An error value of nil is allowed and will cause a normal PeerGoingAway to be sent.
