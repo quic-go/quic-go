@@ -25,6 +25,7 @@ import (
 
 type mockConnection struct {
 	remoteAddr net.Addr
+	localAddr  net.Addr
 	written    [][]byte
 }
 
@@ -39,9 +40,9 @@ func (m *mockConnection) Read([]byte) (int, net.Addr, error) { panic("not implem
 func (m *mockConnection) SetCurrentRemoteAddr(addr net.Addr) {
 	m.remoteAddr = addr
 }
-func (*mockConnection) LocalAddr() net.Addr  { panic("not implemented") }
-func (*mockConnection) RemoteAddr() net.Addr { return &net.UDPAddr{} }
-func (*mockConnection) Close() error         { panic("not implemented") }
+func (m *mockConnection) LocalAddr() net.Addr  { return m.localAddr }
+func (m *mockConnection) RemoteAddr() net.Addr { return m.remoteAddr }
+func (*mockConnection) Close() error           { panic("not implemented") }
 
 type mockUnpacker struct {
 	unpackErr error
@@ -125,7 +126,9 @@ var _ = Describe("Session", func() {
 	)
 
 	BeforeEach(func() {
-		mconn = &mockConnection{}
+		mconn = &mockConnection{
+			remoteAddr: &net.UDPAddr{},
+		}
 		closeCallbackCalled = false
 
 		certChain := crypto.NewCertChain(testdata.GetTLSConfig())
@@ -1426,5 +1429,17 @@ var _ = Describe("Session", func() {
 			Expect(frames[0].StreamID).To(Equal(protocol.StreamID(0)))
 			Expect(frames[0].ByteOffset).To(Equal(protocol.ReceiveConnectionFlowControlWindow * 2))
 		})
+	})
+
+	It("returns the local address", func() {
+		addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
+		mconn.localAddr = addr
+		Expect(sess.LocalAddr()).To(Equal(addr))
+	})
+
+	It("returns the remote address", func() {
+		addr := &net.UDPAddr{IP: net.IPv4(1, 2, 7, 1), Port: 7331}
+		mconn.remoteAddr = addr
+		Expect(sess.RemoteAddr()).To(Equal(addr))
 	})
 })
