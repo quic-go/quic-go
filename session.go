@@ -814,6 +814,10 @@ func (s *session) ackAlarmChanged(t time.Time) {
 	s.maybeResetTimer()
 }
 
+func (s *session) LocalAddr() net.Addr {
+	return s.conn.LocalAddr()
+}
+
 // RemoteAddr returns the net.Addr of the client
 func (s *session) RemoteAddr() net.Addr {
 	return s.conn.RemoteAddr()

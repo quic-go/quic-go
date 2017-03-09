@@ -82,6 +82,15 @@ var _ = Describe("Connection", func() {
 		Expect(c.RemoteAddr().String()).To(Equal("192.168.100.200:1337"))
 	})
 
+	It("gets the local address", func() {
+		addr := &net.UDPAddr{
+			IP:   net.IPv4(192, 168, 0, 1),
+			Port: 1234,
+		}
+		packetConn.addr = addr
+		Expect(c.LocalAddr()).To(Equal(addr))
+	})
+
 	It("changes the remote address", func() {
 		addr := &net.UDPAddr{
 			IP:   net.IPv4(127, 0, 0, 1),

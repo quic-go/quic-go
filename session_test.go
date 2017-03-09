@@ -39,6 +39,7 @@ func (m *mockConnection) Read([]byte) (int, net.Addr, error) { panic("not implem
 func (m *mockConnection) SetCurrentRemoteAddr(addr net.Addr) {
 	m.remoteAddr = addr
 }
+func (*mockConnection) LocalAddr() net.Addr  { panic("not implemented") }
 func (*mockConnection) RemoteAddr() net.Addr { return &net.UDPAddr{} }
 func (*mockConnection) Close() error         { panic("not implemented") }
 

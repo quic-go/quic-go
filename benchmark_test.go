@@ -63,6 +63,7 @@ func (c *linkedConnection) Write(p []byte) error {
 
 func (c *linkedConnection) Read(p []byte) (int, net.Addr, error) { panic("not implemented") }
 func (*linkedConnection) SetCurrentRemoteAddr(addr net.Addr)     {}
+func (*linkedConnection) LocalAddr() net.Addr                    { panic("not implemented") }
 func (*linkedConnection) RemoteAddr() net.Addr                   { return &net.UDPAddr{} }
 func (c *linkedConnection) Close() error                         { return nil }
 
