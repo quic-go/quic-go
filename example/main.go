@@ -130,8 +130,8 @@ func main() {
 		utils.SetLogLevel(utils.LogLevelInfo)
 	}
 
-	certFile := *certPath + "/fullchain.pem"
-	keyFile := *certPath + "/privkey.pem"
+	certFile := *certPath + "/server.crt"
+	keyFile := *certPath + "/server.key"
 
 	http.Handle("/", http.FileServer(http.Dir(*www)))
 

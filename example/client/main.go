@@ -9,7 +9,10 @@ import (
 
 	"github.com/lucas-clemente/quic-go/h2quic"
 	"github.com/lucas-clemente/quic-go/utils"
+	"crypto/tls"
 )
+
+
 
 func main() {
 	verbose := flag.Bool("v", false, "verbose")
@@ -23,7 +26,9 @@ func main() {
 	}
 
 	hclient := &http.Client{
-		Transport: &h2quic.QuicRoundTripper{},
+		Transport: &h2quic.QuicRoundTripper{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify : true},
+		},
 	}
 
 	var wg sync.WaitGroup
