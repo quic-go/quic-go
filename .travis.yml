@@ -1,13 +1,10 @@
-sudo: required
+dist: trusty
 
 addons:
   hosts:
     - quic.clemente.io
 
 language: go
-
-services:
-  - docker
 
 go:
   - 1.7.x
@@ -30,6 +27,8 @@ before_install:
   - go get github.com/onsi/gomega
   - export GOARCH=$TRAVIS_GOARCH
   - go env # for debugging
+  - "export DISPLAY=:99.0"
+  - "Xvfb $DISPLAY &"
 
 script:
   - .travis/script.sh
