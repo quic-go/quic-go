@@ -128,7 +128,7 @@ func (s *Server) handleHeaderStream(session streamCreator) {
 				if _, ok := err.(*qerr.QuicError); !ok {
 					utils.Errorf("error handling h2 request: %s", err.Error())
 				}
-				session.Close(qerr.Error(qerr.InvalidHeadersStreamData, err.Error()))
+				session.Close(err)
 				return
 			}
 		}
@@ -138,7 +138,7 @@ func (s *Server) handleHeaderStream(session streamCreator) {
 func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, headerStreamMutex *sync.Mutex, hpackDecoder *hpack.Decoder, h2framer *http2.Framer) error {
 	h2frame, err := h2framer.ReadFrame()
 	if err != nil {
-		return err
+		return qerr.Error(qerr.HeadersStreamDataDecompressFailure, "cannot read frame")
 	}
 	h2headersFrame, ok := h2frame.(*http2.HeadersFrame)
 	if !ok {

@@ -182,7 +182,7 @@ var _ = Describe("Client", func() {
 			client.handleHeaderStream()
 
 			Eventually(func() bool { return doReturned }).Should(BeTrue())
-			Expect(client.headerErr).To(HaveOccurred())
+			Expect(client.headerErr).To(MatchError(qerr.Error(qerr.HeadersStreamDataDecompressFailure, "cannot read frame")))
 			Expect(doErr).To(MatchError(client.headerErr))
 			Expect(doRsp).To(BeNil())
 			Expect(client.session.(*mockSession).closedWithError).To(MatchError(client.headerErr))
