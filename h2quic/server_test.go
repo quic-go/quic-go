@@ -266,7 +266,7 @@ var _ = Describe("H2 server", func() {
 		go s.handleHeaderStream(session)
 		Consistently(func() bool { return handlerCalled }).Should(BeFalse())
 		Eventually(func() bool { return session.closed }).Should(BeTrue())
-		Expect(session.closedWithError).To(MatchError(qerr.Error(qerr.InvalidHeadersStreamData, "connection error: PROTOCOL_ERROR")))
+		Expect(session.closedWithError).To(MatchError(qerr.Error(qerr.HeadersStreamDataDecompressFailure, "cannot read frame")))
 	})
 
 	It("errors if the accepted header stream has the wrong stream ID", func() {

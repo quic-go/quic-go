@@ -110,7 +110,7 @@ func (c *Client) handleHeaderStream() {
 	for {
 		frame, err := h2framer.ReadFrame()
 		if err != nil {
-			c.headerErr = qerr.Error(qerr.InvalidStreamData, "cannot read frame")
+			c.headerErr = qerr.Error(qerr.HeadersStreamDataDecompressFailure, "cannot read frame")
 			break
 		}
 		lastStream = protocol.StreamID(frame.Header().StreamID)
