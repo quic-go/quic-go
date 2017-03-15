@@ -53,6 +53,7 @@ func NewClient(t *QuicRoundTripper, tlsConfig *tls.Config, hostname string) *Cli
 	c.cryptoChangedCond = sync.Cond{L: &c.mutex}
 	c.config = &quic.Config{
 		ConnState: c.connStateCallback,
+		TLSConfig: tlsConfig,
 	}
 	return c
 }

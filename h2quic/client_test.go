@@ -3,6 +3,7 @@ package h2quic
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/tls"
 	"errors"
 	"net"
 	"net/http"
@@ -37,6 +38,12 @@ var _ = Describe("Client", func() {
 		headerStream = &mockStream{id: 3}
 		client.headerStream = headerStream
 		client.requestWriter = newRequestWriter(headerStream)
+	})
+
+	It("saves the TLS config", func() {
+		tlsConf := &tls.Config{InsecureSkipVerify: true}
+		client = NewClient(&QuicRoundTripper{}, tlsConf, "")
+		Expect(client.config.TLSConfig).To(Equal(tlsConf))
 	})
 
 	It("adds the port to the hostname, if none is given", func() {
