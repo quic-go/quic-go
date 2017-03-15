@@ -116,7 +116,8 @@ func (c *client) listen() {
 		var addr net.Addr
 		data := getPacketBuffer()
 		data = data[:protocol.MaxReceivePacketSize]
-
+		// The packet size should not exceed protocol.MaxReceivePacketSize bytes
+		// If it does, we only read a truncated packet, which will then end up undecryptable
 		n, addr, err = c.conn.Read(data)
 		if err != nil {
 			if !strings.HasSuffix(err.Error(), "use of closed network connection") {
@@ -141,14 +142,9 @@ func (c *client) listen() {
 }
 
 func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
-	if protocol.ByteCount(len(packet)) > protocol.MaxReceivePacketSize {
-		return qerr.PacketTooLarge
-	}
-
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
-
 	hdr, err := ParsePublicHeader(r, protocol.PerspectiveServer)
 	if err != nil {
 		return qerr.Error(qerr.InvalidPacketHeader, err.Error())

@@ -255,11 +255,6 @@ var _ = Describe("Server", func() {
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.InvalidPacketHeader))
 		})
 
-		It("errors on large packets", func() {
-			err := serv.handlePacket(nil, nil, bytes.Repeat([]byte{'a'}, int(protocol.MaxReceivePacketSize)+1))
-			Expect(err).To(MatchError(qerr.PacketTooLarge))
-		})
-
 		It("ignores public resets for unknown connections", func() {
 			err := serv.handlePacket(nil, nil, writePublicReset(999, 1, 1337))
 			Expect(err).ToNot(HaveOccurred())
