@@ -146,11 +146,6 @@ var _ = Describe("Client", func() {
 	})
 
 	Context("handling packets", func() {
-		It("errors on too large packets", func() {
-			err := cl.handlePacket(nil, bytes.Repeat([]byte{'f'}, int(protocol.MaxReceivePacketSize+1)))
-			Expect(err).To(MatchError(qerr.PacketTooLarge))
-		})
-
 		It("handles packets", func() {
 			ph := PublicHeader{
 				PacketNumber:    1,
