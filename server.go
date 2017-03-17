@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"net"
-	"strings"
 	"sync"
 	"time"
 
@@ -88,9 +87,6 @@ func (s *server) Serve() error {
 		// If it does, we only read a truncated packet, which will then end up undecryptable
 		n, remoteAddr, err := s.conn.ReadFrom(data)
 		if err != nil {
-			if strings.HasSuffix(err.Error(), "use of closed network connection") {
-				return nil
-			}
 			return err
 		}
 		data = data[:n]

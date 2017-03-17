@@ -219,7 +219,8 @@ var _ = Describe("Server", func() {
 			go func() {
 				defer GinkgoRecover()
 				err := ln.Serve()
-				Expect(err).ToNot(HaveOccurred())
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("use of closed network connection"))
 				returned = true
 			}()
 			ln.Close()
