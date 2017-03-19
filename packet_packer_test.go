@@ -65,7 +65,7 @@ var _ = Describe("Packet packer", func() {
 		}
 		publicHeaderLen = 1 + 8 + 2 // 1 flag byte, 8 connection ID, 2 packet number
 		maxFrameSize = protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen
-		packer.version = protocol.Version34
+		packer.version = protocol.VersionWhatever
 		packer.isForwardSecure = true
 	})
 

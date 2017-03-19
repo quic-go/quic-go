@@ -32,13 +32,6 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			Expect(entryMap).To(HaveKey(TagMIDS))
 		})
 
-		It("doesn't add the MaximumIncomingDynamicStreams tag for QUIC 34", func() {
-			cpm.version = protocol.Version34
-			entryMap, err := cpm.GetHelloMap()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(entryMap).ToNot(HaveKey(TagMIDS))
-		})
-
 		It("sets the stream-level flow control windows in SHLO", func() {
 			cpm.receiveStreamFlowControlWindow = 0xDEADBEEF
 			entryMap, err := cpm.GetHelloMap()
@@ -101,13 +94,6 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			Expect(binary.LittleEndian.Uint32(entryMap[TagSFCW])).To(BeEquivalentTo(protocol.ReceiveStreamFlowControlWindow))
 			Expect(entryMap).To(HaveKey(TagCFCW))
 			Expect(binary.LittleEndian.Uint32(entryMap[TagCFCW])).To(BeEquivalentTo(protocol.ReceiveConnectionFlowControlWindow))
-		})
-
-		It("doesn't add the MIDS tag for QUIC 34", func() {
-			cpmClient.version = protocol.Version34
-			entryMap, err := cpmClient.GetHelloMap()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(entryMap).ToNot(HaveKey(TagMIDS))
 		})
 	})
 
@@ -279,16 +265,6 @@ var _ = Describe("ConnectionsParameterManager", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(cpm.GetMaxOutgoingStreams()).To(Equal(uint32(3)))
 			})
-
-			It("uses the MSPC value for QUIC 34", func() {
-				cpm.version = protocol.Version34
-				err := cpm.SetFromMap(map[Tag][]byte{
-					TagMIDS: {2, 0, 0, 0},
-					TagMSPC: {1, 0, 0, 0},
-				})
-				Expect(err).ToNot(HaveOccurred())
-				Expect(cpm.GetMaxOutgoingStreams()).To(Equal(uint32(1)))
-			})
 		})
 
 		Context("incoming connections", func() {
@@ -299,13 +275,6 @@ var _ = Describe("ConnectionsParameterManager", func() {
 				})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(cpm.GetMaxIncomingStreams()).To(BeNumerically(">", protocol.MaxStreamsPerConnection))
-			})
-
-			It("uses the negotiated MSCP value, for QUIC 34", func() {
-				cpm.version = protocol.Version34
-				err := cpm.SetFromMap(map[Tag][]byte{TagMSPC: {60, 0, 0, 0}})
-				Expect(err).ToNot(HaveOccurred())
-				Expect(cpm.GetMaxIncomingStreams()).To(BeNumerically("~", 60*protocol.MaxStreamsMultiplier, 10))
 			})
 		})
 	})

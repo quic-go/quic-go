@@ -26,7 +26,7 @@ var _ = Describe("UDP Proxy", func() {
 			ConnectionID:         1337,
 			TruncateConnectionID: false,
 		}
-		hdr.Write(b, protocol.Version34, protocol.PerspectiveServer)
+		hdr.Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
 		raw := b.Bytes()
 		raw = append(raw, payload...)
 		return raw
