@@ -3,6 +3,7 @@ package quic
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"reflect"
@@ -670,6 +671,15 @@ var _ = Describe("Session", func() {
 			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore))
 			Expect(atomic.LoadUint32(&sess.closed) != 0).To(BeTrue())
 			Expect(mconn.written).To(BeEmpty()) // no CONNECTION_CLOSE or PUBLIC_RESET sent
+		})
+
+		It("sends a Public Reset if the client is initiating the head-of-line blocking experiment", func() {
+			sess.Close(handshake.ErrHOLExperiment)
+			Expect(closeCallbackCalled).To(BeTrue())
+			Expect(mconn.written).To(HaveLen(1))
+			fmt.Println(string(mconn.written[0]))
+			Expect(mconn.written[0][0] & 0x02).ToNot(BeZero()) // Public Reset
+			Expect(sess.runClosed).ToNot(Receive())            // channel should be drained by Close()
 		})
 	})
 
