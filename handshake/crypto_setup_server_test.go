@@ -222,6 +222,14 @@ var _ = Describe("Crypto setup", func() {
 			binary.LittleEndian.PutUint64(xlct, crypto.HashCert(cert))
 		})
 
+		It("doesn't support Chrome's head-of-line blocking experiment", func() {
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
+				TagFHL2: []byte("foobar"),
+			})
+			err := cs.HandleCryptoStream()
+			Expect(err).To(MatchError(ErrHOLExperiment))
+		})
+
 		It("generates REJ messages", func() {
 			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), nil)
 			Expect(err).ToNot(HaveOccurred())

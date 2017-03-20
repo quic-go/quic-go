@@ -542,7 +542,7 @@ func (s *session) closeImpl(e error, remoteClose bool) error {
 		return nil
 	}
 
-	if quicErr.ErrorCode == qerr.DecryptionFailure {
+	if quicErr.ErrorCode == qerr.DecryptionFailure || quicErr == handshake.ErrHOLExperiment {
 		// If we send a public reset, don't send a CONNECTION_CLOSE
 		s.closeChan <- nil
 		return s.sendPublicReset(s.lastRcvdPacketNumber)
