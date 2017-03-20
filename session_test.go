@@ -3,7 +3,6 @@ package quic
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"reflect"
@@ -677,7 +676,6 @@ var _ = Describe("Session", func() {
 			sess.Close(handshake.ErrHOLExperiment)
 			Expect(closeCallbackCalled).To(BeTrue())
 			Expect(mconn.written).To(HaveLen(1))
-			fmt.Println(string(mconn.written[0]))
 			Expect(mconn.written[0][0] & 0x02).ToNot(BeZero()) // Public Reset
 			Expect(sess.runClosed).ToNot(Receive())            // channel should be drained by Close()
 		})
