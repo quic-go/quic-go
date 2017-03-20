@@ -41,8 +41,7 @@ type connectionParametersManager struct {
 	version     protocol.VersionNumber
 	perspective protocol.Perspective
 
-	flowControlNegotiated                bool
-	hasReceivedMaxIncomingDynamicStreams bool
+	flowControlNegotiated bool
 
 	truncateConnectionID                   bool
 	maxStreamsPerConnection                uint32
@@ -113,7 +112,6 @@ func (h *connectionParametersManager) SetFromMap(params map[Tag][]byte) error {
 			return ErrMalformedTag
 		}
 		h.maxIncomingDynamicStreamsPerConnection = h.negotiateMaxIncomingDynamicStreamsPerConnection(clientValue)
-		h.hasReceivedMaxIncomingDynamicStreams = true
 	}
 	if value, ok := params[TagICSL]; ok {
 		clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
@@ -175,23 +173,18 @@ func (h *connectionParametersManager) GetHelloMap() (map[Tag][]byte, error) {
 	utils.WriteUint32(cfcw, uint32(h.GetReceiveConnectionFlowControlWindow()))
 	mspc := bytes.NewBuffer([]byte{})
 	utils.WriteUint32(mspc, h.maxStreamsPerConnection)
+	mids := bytes.NewBuffer([]byte{})
+	utils.WriteUint32(mids, protocol.MaxIncomingDynamicStreamsPerConnection)
 	icsl := bytes.NewBuffer([]byte{})
 	utils.WriteUint32(icsl, uint32(h.GetIdleConnectionStateLifetime()/time.Second))
 
-	tags := map[Tag][]byte{
+	return map[Tag][]byte{
 		TagICSL: icsl.Bytes(),
 		TagMSPC: mspc.Bytes(),
+		TagMIDS: mids.Bytes(),
 		TagCFCW: cfcw.Bytes(),
 		TagSFCW: sfcw.Bytes(),
-	}
-
-	if h.version > protocol.Version34 {
-		mids := bytes.NewBuffer([]byte{})
-		utils.WriteUint32(mids, protocol.MaxIncomingDynamicStreamsPerConnection)
-		tags[TagMIDS] = mids.Bytes()
-	}
-
-	return tags, nil
+	}, nil
 }
 
 // GetSendStreamFlowControlWindow gets the size of the stream-level flow control window for sending data
@@ -243,10 +236,7 @@ func (h *connectionParametersManager) GetMaxOutgoingStreams() uint32 {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 
-	if h.version > protocol.Version34 && h.hasReceivedMaxIncomingDynamicStreams {
-		return h.maxIncomingDynamicStreamsPerConnection
-	}
-	return h.maxStreamsPerConnection
+	return h.maxIncomingDynamicStreamsPerConnection
 }
 
 // GetMaxIncomingStreams get the maximum number of incoming streams per connection
@@ -254,14 +244,8 @@ func (h *connectionParametersManager) GetMaxIncomingStreams() uint32 {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 
-	var val uint32
-	if h.version <= protocol.Version34 {
-		val = h.maxStreamsPerConnection
-	} else {
-		val = protocol.MaxIncomingDynamicStreamsPerConnection
-	}
-
-	return utils.MaxUint32(val+protocol.MaxStreamsMinimumIncrement, uint32(float64(val)*protocol.MaxStreamsMultiplier))
+	maxStreams := protocol.MaxIncomingDynamicStreamsPerConnection
+	return utils.MaxUint32(uint32(maxStreams)+protocol.MaxStreamsMinimumIncrement, uint32(float64(maxStreams)*protocol.MaxStreamsMultiplier))
 }
 
 // GetIdleConnectionStateLifetime gets the idle timeout

@@ -72,12 +72,12 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	It("unpacks ACK frames", func() {
-		unpacker.version = protocol.Version34
+		unpacker.version = protocol.VersionWhatever
 		f := &frames.AckFrame{
 			LargestAcked: 0x13,
 			LowestAcked:  1,
 		}
-		err := f.Write(buf, protocol.Version34)
+		err := f.Write(buf, protocol.VersionWhatever)
 		Expect(err).ToNot(HaveOccurred())
 		setData(buf.Bytes())
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)

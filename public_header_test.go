@@ -19,7 +19,7 @@ var _ = Describe("Public Header", func() {
 			Expect(hdr.VersionFlag).To(BeTrue())
 			Expect(hdr.ResetFlag).To(BeFalse())
 			Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x4cfa9f9b668619f6)))
-			Expect(hdr.VersionNumber).To(Equal(protocol.Version34))
+			Expect(hdr.VersionNumber).To(Equal(protocol.VersionNumber(34)))
 			Expect(hdr.SupportedVersions).To(BeEmpty())
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(1)))
 			Expect(b.Len()).To(BeZero())
