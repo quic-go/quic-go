@@ -92,7 +92,10 @@ func (h *cryptoSetupClient) HandleCryptoStream() error {
 		}
 
 		// send CHLOs until the forward secure encryption is established
-		if h.forwardSecureAEAD == nil {
+		h.mutex.RLock()
+		sendCHLO := h.forwardSecureAEAD == nil
+		h.mutex.RUnlock()
+		if sendCHLO {
 			err = h.sendCHLO()
 			if err != nil {
 				return err
@@ -276,6 +279,9 @@ func (h *cryptoSetupClient) validateVersionList(verTags []byte) bool {
 }
 
 func (h *cryptoSetupClient) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error) {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+
 	if h.forwardSecureAEAD != nil {
 		data, err := h.forwardSecureAEAD.Open(dst, src, packetNumber, associatedData)
 		if err == nil {
@@ -302,36 +308,50 @@ func (h *cryptoSetupClient) Open(dst, src []byte, packetNumber protocol.PacketNu
 	return res, protocol.EncryptionUnencrypted, nil
 }
 
-func (h *cryptoSetupClient) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel) {
+func (h *cryptoSetupClient) GetSealer() (protocol.EncryptionLevel, Sealer) {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+
 	if h.forwardSecureAEAD != nil {
-		return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionForwardSecure
+		return protocol.EncryptionForwardSecure, h.sealForwardSecure
+	} else if h.secureAEAD != nil {
+		return protocol.EncryptionSecure, h.sealSecure
+	} else {
+		return protocol.EncryptionUnencrypted, h.sealUnencrypted
 	}
-	if h.secureAEAD != nil {
-		return h.secureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionSecure
-	}
-	return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData), protocol.EncryptionUnencrypted
 }
 
-func (h *cryptoSetupClient) SealWith(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte, forceEncryptionLevel protocol.EncryptionLevel) ([]byte, protocol.EncryptionLevel, error) {
-	switch forceEncryptionLevel {
+func (h *cryptoSetupClient) GetSealerWithEncryptionLevel(encLevel protocol.EncryptionLevel) (Sealer, error) {
+	switch encLevel {
 	case protocol.EncryptionUnencrypted:
-		return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData), protocol.EncryptionUnencrypted, nil
+		return h.sealUnencrypted, nil
 	case protocol.EncryptionSecure:
 		if h.secureAEAD == nil {
-			return nil, protocol.EncryptionUnspecified, errors.New("CryptoSetupClient: no secureAEAD")
+			return nil, errors.New("CryptoSetupClient: no secureAEAD")
 		}
-		return h.secureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionSecure, nil
+		return h.sealSecure, nil
 	case protocol.EncryptionForwardSecure:
 		if h.forwardSecureAEAD == nil {
-			return nil, protocol.EncryptionUnspecified, errors.New("CryptoSetupClient: no forwardSecureAEAD")
+			return nil, errors.New("CryptoSetupClient: no forwardSecureAEAD")
 		}
-		return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionForwardSecure, nil
+		return h.sealForwardSecure, nil
 	}
-
-	return nil, protocol.EncryptionUnspecified, errors.New("no encryption level specified")
+	return nil, errors.New("CryptoSetupClient: no encryption level specified")
 }
 
-func (h *cryptoSetupClient) DiversificationNonce(bool) []byte {
+func (h *cryptoSetupClient) sealUnencrypted(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
+	return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData)
+}
+
+func (h *cryptoSetupClient) sealSecure(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
+	return h.secureAEAD.Seal(dst, src, packetNumber, associatedData)
+}
+
+func (h *cryptoSetupClient) sealForwardSecure(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
+	return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData)
+}
+
+func (h *cryptoSetupClient) DiversificationNonce() []byte {
 	panic("not needed for cryptoSetupClient")
 }
 
@@ -346,19 +366,11 @@ func (h *cryptoSetupClient) SetDiversificationNonce(data []byte) error {
 	return nil
 }
 
-func (h *cryptoSetupClient) LockForSealing() {
-
-}
-
-func (h *cryptoSetupClient) UnlockForSealing() {
-
-}
-
 func (h *cryptoSetupClient) HandshakeComplete() bool {
 	h.mutex.RLock()
-	complete := h.forwardSecureAEAD != nil
-	h.mutex.RUnlock()
-	return complete
+	defer h.mutex.RUnlock()
+
+	return h.forwardSecureAEAD != nil
 }
 
 func (h *cryptoSetupClient) sendCHLO() error {

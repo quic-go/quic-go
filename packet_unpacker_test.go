@@ -47,7 +47,7 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	setData := func(p []byte) {
-		data, _ = unpacker.aead.Seal(nil, p, 0, hdrBin)
+		data, _ = unpacker.aead.(*mockAEAD).Seal(nil, p, 0, hdrBin)
 	}
 
 	It("does not read read a private flag for QUIC Version >= 34", func() {

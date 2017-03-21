@@ -676,9 +676,10 @@ var _ = Describe("Crypto setup", func() {
 
 		Context("null encryption", func() {
 			It("is used initially", func() {
-				d, enc := cs.Seal(nil, []byte("foobar"), 0, []byte{})
-				Expect(d).To(Equal(foobarFNVSigned))
+				enc, seal := cs.GetSealer()
 				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
+				d := seal(nil, []byte("foobar"), 0, []byte{})
+				Expect(d).To(Equal(foobarFNVSigned))
 			})
 
 			It("is accepted initially", func() {
@@ -711,9 +712,10 @@ var _ = Describe("Crypto setup", func() {
 			It("is used immediately when available", func() {
 				doCompleteREJ()
 				cs.receivedSecurePacket = false
-				d, enc := cs.Seal(nil, []byte("foobar"), 0, []byte{})
-				Expect(d).To(Equal([]byte("foobar  normal sec")))
+				enc, seal := cs.GetSealer()
 				Expect(enc).To(Equal(protocol.EncryptionSecure))
+				d := seal(nil, []byte("foobar"), 0, []byte{})
+				Expect(d).To(Equal([]byte("foobar  normal sec")))
 			})
 
 			It("is accepted", func() {
@@ -739,51 +741,53 @@ var _ = Describe("Crypto setup", func() {
 				_, enc, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
-				d, enc := cs.Seal(nil, []byte("foobar"), 0, []byte{})
-				Expect(d).To(Equal([]byte("foobar forward sec")))
+				enc, seal := cs.GetSealer()
 				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
+				d := seal(nil, []byte("foobar"), 0, []byte{})
+				Expect(d).To(Equal([]byte("foobar forward sec")))
 			})
 		})
 
 		Context("forcing encryption levels", func() {
 			It("forces null encryption", func() {
-				d, enc, err := cs.SealWith(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionUnencrypted)
+				seal, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionUnencrypted)
 				Expect(err).ToNot(HaveOccurred())
+				d := seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal(foobarFNVSigned))
-				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
 			})
 
 			It("forces initial encryption", func() {
 				doCompleteREJ()
-				d, enc, err := cs.SealWith(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionSecure)
+				seal, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionSecure)
 				Expect(err).ToNot(HaveOccurred())
+				d := seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal([]byte("foobar  normal sec")))
-				Expect(enc).To(Equal(protocol.EncryptionSecure))
 			})
 
 			It("errors of no AEAD for initial encryption is available", func() {
-				_, enc, err := cs.SealWith(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionSecure)
+				seal, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionSecure)
 				Expect(err).To(MatchError("CryptoSetupClient: no secureAEAD"))
-				Expect(enc).To(Equal(protocol.EncryptionUnspecified))
+				Expect(seal).To(BeNil())
 			})
 
 			It("forces forward-secure encryption", func() {
 				doSHLO()
-				d, enc, err := cs.SealWith(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionForwardSecure)
+				seal, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionForwardSecure)
 				Expect(err).ToNot(HaveOccurred())
+				d := seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal([]byte("foobar forward sec")))
-				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
 			})
 
 			It("errors of no AEAD for forward-secure encryption is available", func() {
-				_, enc, err := cs.SealWith(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionForwardSecure)
+				seal, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionForwardSecure)
 				Expect(err).To(MatchError("CryptoSetupClient: no forwardSecureAEAD"))
-				Expect(enc).To(Equal(protocol.EncryptionUnspecified))
+				Expect(seal).To(BeNil())
 			})
 
 			It("errors if no encryption level is specified", func() {
-				_, _, err := cs.SealWith(nil, []byte("foobar"), 0, []byte{}, protocol.EncryptionUnspecified)
-				Expect(err).To(MatchError("no encryption level specified"))
+				seal, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionUnspecified)
+				Expect(err).To(MatchError("CryptoSetupClient: no encryption level specified"))
+				Expect(seal).To(BeNil())
 			})
 		})
 	})
