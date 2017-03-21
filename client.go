@@ -150,11 +150,14 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 		return qerr.Error(qerr.InvalidPacketHeader, err.Error())
 	}
 	hdr.Raw = packet[:len(packet)-r.Len()]
-
+	
+	c.mutex.Lock()
 	// ignore delayed / duplicated version negotiation packets
 	if c.connState >= ConnStateVersionNegotiated && hdr.VersionFlag {
+		c.mutex.Unlock()
 		return nil
 	}
+	c.mutex.Unlock()
 
 	// this is the first packet after the client sent a packet with the VersionFlag set
 	// if the server doesn't send a version negotiation packet, it supports the suggested version
