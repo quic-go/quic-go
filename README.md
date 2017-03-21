@@ -46,7 +46,7 @@ Using Chrome:
 
 ### Using the example client
 
-    go run example/client/main.go https://quic.clemente.io
+    go run example/client/main.go https://clemente.io
 
 ## Usage
 
