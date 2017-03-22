@@ -257,7 +257,7 @@ func (h *cryptoSetupServer) isInchoateCHLO(cryptoData map[Tag][]byte, cert []byt
 		return true
 	}
 	if err := h.scfg.stkSource.VerifyToken(h.sourceAddr, cryptoData[TagSTK]); err != nil {
-		utils.Infof("STK invalid: %s", err.Error())
+		utils.Debugf("STK invalid: %s", err.Error())
 		return true
 	}
 	return false

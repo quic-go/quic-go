@@ -15,7 +15,8 @@ import (
 )
 
 type mockKEX struct {
-	ephermal bool
+	ephermal       bool
+	sharedKeyError error
 }
 
 func (m *mockKEX) PublicKey() []byte {
@@ -26,6 +27,9 @@ func (m *mockKEX) PublicKey() []byte {
 }
 
 func (m *mockKEX) CalculateSharedKey(otherPublic []byte) ([]byte, error) {
+	if m.sharedKeyError != nil {
+		return nil, m.sharedKeyError
+	}
 	if m.ephermal {
 		return []byte("shared ephermal"), nil
 	}
@@ -113,13 +117,18 @@ func (s *mockStream) Reset(error)                        { panic("not implemente
 func (mockStream) CloseRemote(offset protocol.ByteCount) { panic("not implemented") }
 func (s mockStream) StreamID() protocol.StreamID         { panic("not implemented") }
 
-type mockStkSource struct{}
+type mockStkSource struct {
+	verifyErr error
+}
 
 func (mockStkSource) NewToken(sourceAddr []byte) ([]byte, error) {
 	return append([]byte("token "), sourceAddr...), nil
 }
 
-func (mockStkSource) VerifyToken(sourceAddr []byte, token []byte) error {
+func (s mockStkSource) VerifyToken(sourceAddr []byte, token []byte) error {
+	if s.verifyErr != nil {
+		return s.verifyErr
+	}
 	split := bytes.Split(token, []byte(" "))
 	if len(split) != 2 {
 		return errors.New("stk required")
@@ -198,6 +207,7 @@ var _ = Describe("Crypto setup", func() {
 	Context("when responding to client messages", func() {
 		var cert []byte
 		var xlct []byte
+		var fullCHLO map[Tag][]byte
 
 		BeforeEach(func() {
 			xlct = make([]byte, 8)
@@ -205,6 +215,17 @@ var _ = Describe("Crypto setup", func() {
 			cert, err = cs.scfg.certChain.GetLeafCert("")
 			Expect(err).ToNot(HaveOccurred())
 			binary.LittleEndian.PutUint64(xlct, crypto.HashCert(cert))
+			fullCHLO = map[Tag][]byte{
+				TagSCID: scfg.ID,
+				TagSNI:  []byte("quic.clemente.io"),
+				TagNONC: nonce32,
+				TagSTK:  validSTK,
+				TagXLCT: xlct,
+				TagAEAD: aead,
+				TagKEXS: kexs,
+				TagPUBS: bytes.Repeat([]byte{'e'}, 31),
+				TagVER:  versionTag,
+			}
 		})
 
 		It("doesn't support Chrome's head-of-line blocking experiment", func() {
@@ -271,17 +292,7 @@ var _ = Describe("Crypto setup", func() {
 				TagPAD: bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize),
 				TagVER: versionTag,
 			})
-			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
-				TagSCID: scfg.ID,
-				TagSNI:  []byte("quic.clemente.io"),
-				TagNONC: nonce32,
-				TagSTK:  validSTK,
-				TagXLCT: xlct,
-				TagAEAD: aead,
-				TagKEXS: kexs,
-				TagPUBS: nil,
-				TagVER:  versionTag,
-			})
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, fullCHLO)
 			err := cs.HandleCryptoStream()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stream.dataWritten.Bytes()).To(HavePrefix("REJ"))
@@ -290,46 +301,29 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		It("rejects client nonces that have the wrong length", func() {
-			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
-				TagSCID: scfg.ID,
-				TagSNI:  []byte("quic.clemente.io"),
-				TagNONC: []byte("too short client nonce"),
-				TagSTK:  validSTK,
-				TagXLCT: xlct,
-				TagPUBS: nil,
-				TagVER:  versionTag,
-			})
+			fullCHLO[TagNONC] = []byte("too short client nonce")
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, fullCHLO)
 			err := cs.HandleCryptoStream()
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "invalid client nonce length")))
 		})
 
 		It("rejects client nonces that have the wrong OBIT value", func() {
-			nonce := make([]byte, 32) // the OBIT value is nonce[4:12] and here just initialized to 0
-			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
-				TagSCID: scfg.ID,
-				TagSNI:  []byte("quic.clemente.io"),
-				TagNONC: nonce,
-				TagSTK:  validSTK,
-				TagXLCT: xlct,
-				TagPUBS: nil,
-				TagVER:  versionTag,
-			})
+			fullCHLO[TagNONC] = make([]byte, 32) // the OBIT value is nonce[4:12] and here just initialized to 0
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, fullCHLO)
 			err := cs.HandleCryptoStream()
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "OBIT not matching")))
 		})
 
+		It("errors if it can't calculate a shared key", func() {
+			testErr := errors.New("test error")
+			kex.sharedKeyError = testErr
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, fullCHLO)
+			err := cs.HandleCryptoStream()
+			Expect(err).To(MatchError(testErr))
+		})
+
 		It("handles 0-RTT handshake", func() {
-			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
-				TagSCID: scfg.ID,
-				TagSNI:  []byte("quic.clemente.io"),
-				TagNONC: nonce32,
-				TagSTK:  validSTK,
-				TagXLCT: xlct,
-				TagAEAD: aead,
-				TagKEXS: kexs,
-				TagPUBS: nil,
-				TagVER:  versionTag,
-			})
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, fullCHLO)
 			err := cs.HandleCryptoStream()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stream.dataWritten.Bytes()).To(HavePrefix("SHLO"))
@@ -342,59 +336,38 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		It("recognizes inchoate CHLOs missing SCID", func() {
-			Expect(cs.isInchoateCHLO(map[Tag][]byte{
-				TagPUBS: nil,
-				TagSTK:  validSTK,
-			}, cert)).To(BeTrue())
+			delete(fullCHLO, TagSCID)
+			Expect(cs.isInchoateCHLO(fullCHLO, cert)).To(BeTrue())
 		})
 
 		It("recognizes inchoate CHLOs missing PUBS", func() {
-			Expect(cs.isInchoateCHLO(map[Tag][]byte{
-				TagSCID: scfg.ID,
-				TagSTK:  validSTK,
-			}, cert)).To(BeTrue())
-		})
-
-		It("recognizes inchoate CHLOs with invalid tokens", func() {
-			Expect(cs.isInchoateCHLO(map[Tag][]byte{
-				TagSCID: scfg.ID,
-				TagPUBS: nil,
-			}, cert)).To(BeTrue())
+			delete(fullCHLO, TagPUBS)
+			Expect(cs.isInchoateCHLO(fullCHLO, cert)).To(BeTrue())
 		})
 
 		It("recognizes inchoate CHLOs with missing XLCT", func() {
-			Expect(cs.isInchoateCHLO(map[Tag][]byte{
-				TagSCID: scfg.ID,
-				TagPUBS: nil,
-				TagSTK:  validSTK,
-			}, cert)).To(BeTrue())
+			delete(fullCHLO, TagXLCT)
+			Expect(cs.isInchoateCHLO(fullCHLO, cert)).To(BeTrue())
 		})
 
 		It("recognizes inchoate CHLOs with wrong length XLCT", func() {
-			Expect(cs.isInchoateCHLO(map[Tag][]byte{
-				TagSCID: scfg.ID,
-				TagPUBS: nil,
-				TagSTK:  validSTK,
-				TagXLCT: xlct[1:],
-			}, cert)).To(BeTrue())
+			fullCHLO[TagXLCT] = bytes.Repeat([]byte{'f'}, 7) // should be 8 bytes
+			Expect(cs.isInchoateCHLO(fullCHLO, cert)).To(BeTrue())
 		})
 
 		It("recognizes inchoate CHLOs with wrong XLCT", func() {
-			Expect(cs.isInchoateCHLO(map[Tag][]byte{
-				TagSCID: scfg.ID,
-				TagPUBS: nil,
-				TagSTK:  validSTK,
-				TagXLCT: bytes.Repeat([]byte{'f'}, 8),
-			}, cert)).To(BeTrue())
+			fullCHLO[TagXLCT] = bytes.Repeat([]byte{'f'}, 8)
+			Expect(cs.isInchoateCHLO(fullCHLO, cert)).To(BeTrue())
+		})
+
+		It("recognizes inchoate CHLOs with an invalid STK", func() {
+			testErr := errors.New("STK invalid")
+			scfg.stkSource.(*mockStkSource).verifyErr = testErr
+			Expect(cs.isInchoateCHLO(fullCHLO, cert)).To(BeTrue())
 		})
 
 		It("recognizes proper CHLOs", func() {
-			Expect(cs.isInchoateCHLO(map[Tag][]byte{
-				TagSCID: scfg.ID,
-				TagPUBS: nil,
-				TagSTK:  validSTK,
-				TagXLCT: xlct,
-			}, cert)).To(BeFalse())
+			Expect(cs.isInchoateCHLO(fullCHLO, cert)).To(BeFalse())
 		})
 
 		It("errors on too short inchoate CHLOs", func() {
@@ -412,16 +385,8 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		It("rejects CHLOs with a version tag that has the wrong length", func() {
-			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
-				TagSCID: scfg.ID,
-				TagSNI:  []byte("quic.clemente.io"),
-				TagPUBS: []byte("pubs"),
-				TagNONC: nonce32,
-				TagSTK:  validSTK,
-				TagKEXS: kexs,
-				TagAEAD: aead,
-				TagVER:  []byte{0x13, 0x37}, // should be 4 bytes
-			})
+			fullCHLO[TagVER] = []byte{0x13, 0x37} // should be 4 bytes
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, fullCHLO)
 			err := cs.HandleCryptoStream()
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "incorrect version tag")))
 		})
@@ -433,16 +398,8 @@ var _ = Describe("Crypto setup", func() {
 			cs.version = highestSupportedVersion
 			b := make([]byte, 4)
 			binary.LittleEndian.PutUint32(b, protocol.VersionNumberToTag(lowestSupportedVersion))
-			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
-				TagSCID: scfg.ID,
-				TagSNI:  []byte("quic.clemente.io"),
-				TagPUBS: []byte("pubs"),
-				TagNONC: nonce32,
-				TagSTK:  validSTK,
-				TagKEXS: kexs,
-				TagAEAD: aead,
-				TagVER:  b,
-			})
+			fullCHLO[TagVER] = b
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, fullCHLO)
 			err := cs.HandleCryptoStream()
 			Expect(err).To(MatchError(qerr.Error(qerr.VersionNegotiationMismatch, "Downgrade attack detected")))
 		})
@@ -454,79 +411,36 @@ var _ = Describe("Crypto setup", func() {
 			cs.version = supportedVersion
 			b := make([]byte, 4)
 			binary.LittleEndian.PutUint32(b, protocol.VersionNumberToTag(unsupportedVersion))
-			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
-				TagSCID: scfg.ID,
-				TagSNI:  []byte("quic.clemente.io"),
-				TagPUBS: []byte("pubs"),
-				TagNONC: nonce32,
-				TagSTK:  validSTK,
-				TagXLCT: xlct,
-				TagKEXS: kexs,
-				TagAEAD: aead,
-				TagVER:  b,
-			})
+			fullCHLO[TagVER] = b
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, fullCHLO)
 			err := cs.HandleCryptoStream()
 			Expect(err).ToNot(HaveOccurred())
 		})
 
 		It("errors if the AEAD tag is missing", func() {
-			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
-				TagSCID: scfg.ID,
-				TagSNI:  []byte("quic.clemente.io"),
-				TagPUBS: []byte("pubs"),
-				TagNONC: nonce32,
-				TagSTK:  validSTK,
-				TagXLCT: xlct,
-				TagKEXS: kexs,
-				TagVER:  versionTag,
-			})
+			delete(fullCHLO, TagAEAD)
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, fullCHLO)
 			err := cs.HandleCryptoStream()
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoNoSupport, "Unsupported AEAD or KEXS")))
 		})
 
 		It("errors if the AEAD tag has the wrong value", func() {
-			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
-				TagSCID: scfg.ID,
-				TagSNI:  []byte("quic.clemente.io"),
-				TagPUBS: []byte("pubs"),
-				TagNONC: nonce32,
-				TagSTK:  validSTK,
-				TagXLCT: xlct,
-				TagAEAD: []byte("wrong"),
-				TagKEXS: kexs,
-				TagVER:  versionTag,
-			})
+			fullCHLO[TagAEAD] = []byte("wrong")
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, fullCHLO)
 			err := cs.HandleCryptoStream()
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoNoSupport, "Unsupported AEAD or KEXS")))
 		})
 
 		It("errors if the KEXS tag is missing", func() {
-			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
-				TagSCID: scfg.ID,
-				TagSNI:  []byte("quic.clemente.io"),
-				TagPUBS: []byte("pubs"),
-				TagNONC: nonce32,
-				TagSTK:  validSTK,
-				TagXLCT: xlct,
-				TagAEAD: aead,
-				TagVER:  versionTag,
-			})
+			delete(fullCHLO, TagKEXS)
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, fullCHLO)
 			err := cs.HandleCryptoStream()
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoNoSupport, "Unsupported AEAD or KEXS")))
 		})
 
 		It("errors if the KEXS tag has the wrong value", func() {
-			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, map[Tag][]byte{
-				TagSCID: scfg.ID,
-				TagSNI:  []byte("quic.clemente.io"),
-				TagPUBS: []byte("pubs"),
-				TagNONC: nonce32,
-				TagSTK:  validSTK,
-				TagXLCT: xlct,
-				TagAEAD: aead,
-				TagKEXS: []byte("wrong"),
-				TagVER:  versionTag,
-			})
+			fullCHLO[TagKEXS] = []byte("wrong")
+			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, fullCHLO)
 			err := cs.HandleCryptoStream()
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoNoSupport, "Unsupported AEAD or KEXS")))
 		})
