@@ -75,13 +75,23 @@ func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, con
 	return p.packPacket(stopWaitingFrame, leastUnacked, nil)
 }
 
-func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, leastUnacked protocol.PacketNumber, packetToRetransmit *ackhandler.Packet) (*packedPacket, error) {
-	// packetToRetransmit is only set for handshake retransmissions
-	isHandshakeRetransmission := (packetToRetransmit != nil)
-	// cryptoSetup needs to be locked here, so that the AEADs are not changed between
-	// calling DiversificationNonce() and Seal().
-	p.cryptoSetup.LockForSealing()
-	defer p.cryptoSetup.UnlockForSealing()
+func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, leastUnacked protocol.PacketNumber, handshakePacketToRetransmit *ackhandler.Packet) (*packedPacket, error) {
+	// handshakePacketToRetransmit is only set for handshake retransmissions
+	isHandshakeRetransmission := (handshakePacketToRetransmit != nil)
+
+	var sealFunc handshake.Sealer
+	var encLevel protocol.EncryptionLevel
+
+	if isHandshakeRetransmission {
+		var err error
+		encLevel = handshakePacketToRetransmit.EncryptionLevel
+		sealFunc, err = p.cryptoSetup.GetSealerWithEncryptionLevel(encLevel)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		encLevel, sealFunc = p.cryptoSetup.GetSealer()
+	}
 
 	currentPacketNumber := p.packetNumberGenerator.Peek()
 	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(currentPacketNumber, leastUnacked)
@@ -92,12 +102,11 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 		TruncateConnectionID: p.connectionParameters.TruncateConnectionID(),
 	}
 
-	if p.perspective == protocol.PerspectiveServer {
-		force := isHandshakeRetransmission && (packetToRetransmit.EncryptionLevel == protocol.EncryptionSecure)
-		responsePublicHeader.DiversificationNonce = p.cryptoSetup.DiversificationNonce(force)
+	if p.perspective == protocol.PerspectiveServer && encLevel == protocol.EncryptionSecure {
+		responsePublicHeader.DiversificationNonce = p.cryptoSetup.DiversificationNonce()
 	}
 
-	if p.perspective == protocol.PerspectiveClient && !p.cryptoSetup.HandshakeComplete() {
+	if p.perspective == protocol.PerspectiveClient && encLevel != protocol.EncryptionForwardSecure {
 		responsePublicHeader.VersionFlag = true
 		responsePublicHeader.VersionNumber = p.version
 	}
@@ -122,7 +131,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	if isHandshakeRetransmission {
 		payloadFrames = append(payloadFrames, stopWaitingFrame)
 		// don't retransmit Acks and StopWaitings
-		for _, f := range packetToRetransmit.Frames {
+		for _, f := range handshakePacketToRetransmit.Frames {
 			switch f.(type) {
 			case *frames.AckFrame:
 				continue
@@ -178,19 +187,10 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	}
 
 	raw = raw[0:buffer.Len()]
-	var encryptionLevel protocol.EncryptionLevel
-	if isHandshakeRetransmission {
-		var err error
-		_, encryptionLevel, err = p.cryptoSetup.SealWith(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], currentPacketNumber, raw[:payloadStartIndex], packetToRetransmit.EncryptionLevel)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		_, encryptionLevel = p.cryptoSetup.Seal(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], currentPacketNumber, raw[:payloadStartIndex])
-	}
+	_ = sealFunc(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], currentPacketNumber, raw[:payloadStartIndex])
 	raw = raw[0 : buffer.Len()+12]
 
-	if hasNonCryptoStreamData && encryptionLevel <= protocol.EncryptionUnencrypted {
+	if hasNonCryptoStreamData && encLevel <= protocol.EncryptionUnencrypted {
 		return nil, qerr.AttemptToSendUnencryptedStreamData
 	}
 
@@ -203,7 +203,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 		number:          currentPacketNumber,
 		raw:             raw,
 		frames:          payloadFrames,
-		encryptionLevel: encryptionLevel,
+		encryptionLevel: encLevel,
 	}, nil
 }
 
