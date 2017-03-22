@@ -475,7 +475,11 @@ var _ = Describe("Crypto setup", func() {
 	})
 
 	Context("escalating crypto", func() {
-		foobarFNVSigned := []byte{0x18, 0x6f, 0x44, 0xba, 0x97, 0x35, 0xd, 0x6f, 0xbf, 0x64, 0x3c, 0x79, 0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72}
+		var foobarFNVSigned []byte
+
+		BeforeEach(func() {
+			foobarFNVSigned = []byte{0x18, 0x6f, 0x44, 0xba, 0x97, 0x35, 0xd, 0x6f, 0xbf, 0x64, 0x3c, 0x79, 0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72}
+		})
 
 		doCHLO := func() {
 			_, err := cs.handleCHLO("", []byte("chlo-data"), map[Tag][]byte{
@@ -500,6 +504,13 @@ var _ = Describe("Crypto setup", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(d).To(Equal([]byte("foobar")))
 				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
+			})
+
+			It("errors if the has the wrong hash", func() {
+				foobarFNVSigned[0]++
+				_, enc, err := cs.Open(nil, foobarFNVSigned, 0, []byte{})
+				Expect(err).To(MatchError("NullAEAD: failed to authenticate received data"))
+				Expect(enc).To(Equal(protocol.EncryptionUnspecified))
 			})
 
 			It("is still accepted after CHLO", func() {

@@ -578,7 +578,7 @@ var _ = Describe("Crypto setup", func() {
 	})
 
 	Context("escalating crypto", func() {
-		foobarFNVSigned := []byte{0x18, 0x6f, 0x44, 0xba, 0x97, 0x35, 0xd, 0x6f, 0xbf, 0x64, 0x3c, 0x79, 0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72}
+		var foobarFNVSigned []byte
 
 		doCompleteREJ := func() {
 			cs.serverVerified = true
@@ -595,6 +595,7 @@ var _ = Describe("Crypto setup", func() {
 
 		// sets all values necessary for escalating to secureAEAD
 		BeforeEach(func() {
+			foobarFNVSigned = []byte{0x18, 0x6f, 0x44, 0xba, 0x97, 0x35, 0xd, 0x6f, 0xbf, 0x64, 0x3c, 0x79, 0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72}
 			kex, err := crypto.NewCurve25519KEX()
 			Expect(err).ToNot(HaveOccurred())
 			cs.serverConfig = &serverConfigClient{
@@ -704,6 +705,13 @@ var _ = Describe("Crypto setup", func() {
 				cs.receivedSecurePacket = true
 				_, enc, err := cs.Open(nil, foobarFNVSigned, 0, []byte{})
 				Expect(err).To(MatchError("authentication failed"))
+				Expect(enc).To(Equal(protocol.EncryptionUnspecified))
+			})
+
+			It("errors if the has the wrong hash", func() {
+				foobarFNVSigned[0]++
+				_, enc, err := cs.Open(nil, foobarFNVSigned, 0, []byte{})
+				Expect(err).To(MatchError("NullAEAD: failed to authenticate received data"))
 				Expect(enc).To(Equal(protocol.EncryptionUnspecified))
 			})
 		})
