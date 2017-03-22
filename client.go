@@ -186,24 +186,16 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 }
 
 func (c *client) handlePacketWithVersionFlag(hdr *PublicHeader) error {
-	var hasCommonVersion bool // check if we're supporting any of the offered versions
 	for _, v := range hdr.SupportedVersions {
 		// check if the server sent the offered version in supported versions
 		if v == c.version {
 			return qerr.Error(qerr.InvalidVersionNegotiationPacket, "Server already supports client's version and should have accepted the connection.")
 		}
-		if v != protocol.VersionUnsupported {
-			hasCommonVersion = true
-		}
-	}
-	if !hasCommonVersion {
-		utils.Infof("No common version found.")
-		return qerr.InvalidVersion
 	}
 
 	ok, highestSupportedVersion := protocol.HighestSupportedVersion(hdr.SupportedVersions)
 	if !ok {
-		return qerr.VersionNegotiationMismatch
+		return qerr.InvalidVersion
 	}
 
 	// switch to negotiated version
@@ -223,9 +215,6 @@ func (c *client) handlePacketWithVersionFlag(hdr *PublicHeader) error {
 	}
 	if c.config.ConnState != nil {
 		go c.config.ConnState(c.session, ConnStateVersionNegotiated)
-	}
-	if err != nil {
-		return err
 	}
 
 	return nil // version negotiation packets have no payload
