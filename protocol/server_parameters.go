@@ -78,9 +78,6 @@ const MaxNewStreamIDDelta = 4 * MaxStreamsPerConnection
 // MaxSessionUnprocessedPackets is the max number of packets stored in each session that are not yet processed.
 const MaxSessionUnprocessedPackets = DefaultMaxCongestionWindow
 
-// RetransmissionThreshold + 1 is the number of times a packet has to be NACKed so that it gets retransmitted
-const RetransmissionThreshold = 3
-
 // SkipPacketAveragePeriodLength is the average period length in which one packet number is skipped to prevent an Optimistic ACK attack
 const SkipPacketAveragePeriodLength PacketNumber = 500
 
