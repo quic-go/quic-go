@@ -6,7 +6,8 @@ import (
 	"io"
 	"net"
 	"reflect"
-	"runtime"
+	"runtime/pprof"
+	"strings"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -115,6 +116,12 @@ func (m *mockReceivedPacketHandler) ReceivedStopWaiting(*frames.StopWaitingFrame
 
 var _ ackhandler.ReceivedPacketHandler = &mockReceivedPacketHandler{}
 
+func areSessionsRunning() bool {
+	var b bytes.Buffer
+	pprof.Lookup("goroutine").WriteTo(&b, 1)
+	return strings.Contains(b.String(), "quic-go.(*session).run")
+}
+
 var _ = Describe("Session", func() {
 	var (
 		sess                *session
@@ -126,6 +133,8 @@ var _ = Describe("Session", func() {
 	)
 
 	BeforeEach(func() {
+		Eventually(areSessionsRunning).Should(BeFalse())
+
 		mconn = &mockConnection{
 			remoteAddr: &net.UDPAddr{},
 		}
@@ -163,6 +172,10 @@ var _ = Describe("Session", func() {
 		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(clientSess.streamsMap.openStreams).To(HaveLen(1)) // Crypto stream
+	})
+
+	AfterEach(func() {
+		Eventually(areSessionsRunning).Should(BeFalse())
 	})
 
 	Context("source address", func() {
@@ -620,20 +633,15 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("closing", func() {
-		var (
-			nGoRoutinesBefore int
-		)
-
 		BeforeEach(func() {
-			time.Sleep(10 * time.Millisecond) // Wait for old goroutines to finish
-			nGoRoutinesBefore = runtime.NumGoroutine()
+			Eventually(areSessionsRunning).Should(BeFalse())
 			go sess.run()
-			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore + 2))
+			Eventually(areSessionsRunning).Should(BeTrue())
 		})
 
 		It("shuts down without error", func() {
 			sess.Close(nil)
-			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore))
+			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(mconn.written).To(HaveLen(1))
 			Expect(mconn.written[0][len(mconn.written[0])-7:]).To(Equal([]byte{0x02, byte(qerr.PeerGoingAway), 0, 0, 0, 0, 0}))
 			Expect(closeCallbackCalled).To(BeTrue())
@@ -643,7 +651,7 @@ var _ = Describe("Session", func() {
 		It("only closes once", func() {
 			sess.Close(nil)
 			sess.Close(nil)
-			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore))
+			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(mconn.written).To(HaveLen(1))
 			Expect(sess.runClosed).ToNot(Receive()) // channel should be drained by Close()
 		})
@@ -653,7 +661,7 @@ var _ = Describe("Session", func() {
 			s, err := sess.GetOrOpenStream(5)
 			Expect(err).NotTo(HaveOccurred())
 			sess.Close(testErr)
-			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore))
+			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(closeCallbackCalled).To(BeTrue())
 			n, err := s.Read([]byte{0})
 			Expect(n).To(BeZero())
@@ -667,7 +675,7 @@ var _ = Describe("Session", func() {
 		It("closes the session in order to replace it with another QUIC version", func() {
 			sess.Close(errCloseSessionForNewVersion)
 			Expect(closeCallbackCalled).To(BeFalse())
-			Eventually(func() int { return runtime.NumGoroutine() }).Should(Equal(nGoRoutinesBefore))
+			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(atomic.LoadUint32(&sess.closed) != 0).To(BeTrue())
 			Expect(mconn.written).To(BeEmpty()) // no CONNECTION_CLOSE or PUBLIC_RESET sent
 		})
@@ -1064,6 +1072,7 @@ var _ = Describe("Session", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 		go sess.run()
+		defer sess.Close(nil)
 		sess.scheduleSending()
 		Eventually(func() [][]byte { return mconn.written }).ShouldNot(BeEmpty())
 		Expect(mconn.written[0]).To(ContainSubstring("foobar"))
@@ -1091,6 +1100,7 @@ var _ = Describe("Session", func() {
 			rph.nextAckFrame = &frames.AckFrame{LargestAcked: 0x1337}
 			sess.receivedPacketHandler = rph
 			go sess.run()
+			defer sess.Close(nil)
 			sess.ackAlarmChanged(time.Now().Add(10 * time.Millisecond))
 			time.Sleep(10 * time.Millisecond)
 			Eventually(func() int { return len(mconn.written) }).ShouldNot(BeZero())
@@ -1110,6 +1120,7 @@ var _ = Describe("Session", func() {
 
 				sess.scheduleSending()
 				go sess.run()
+				defer sess.Close(nil)
 
 				Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(1))
 				Expect(mconn.written[0]).To(ContainSubstring("foobar1"))
@@ -1122,10 +1133,10 @@ var _ = Describe("Session", func() {
 				s2, err := sess.GetOrOpenStream(7)
 				Expect(err).NotTo(HaveOccurred())
 				go sess.run()
+				defer sess.Close(nil)
 				go func() {
 					defer GinkgoRecover()
-					_, err2 := s1.Write(bytes.Repeat([]byte{'e'}, 1000))
-					Expect(err2).ToNot(HaveOccurred())
+					s1.Write(bytes.Repeat([]byte{'e'}, 1000))
 				}()
 				_, err = s2.Write(bytes.Repeat([]byte{'e'}, 1000))
 				Expect(err).ToNot(HaveOccurred())
@@ -1136,6 +1147,7 @@ var _ = Describe("Session", func() {
 				s, err := sess.GetOrOpenStream(5)
 				Expect(err).NotTo(HaveOccurred())
 				go sess.run()
+				defer sess.Close(nil)
 				_, err = s.Write([]byte("foobar1"))
 				Expect(err).NotTo(HaveOccurred())
 				Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(1))
@@ -1151,6 +1163,7 @@ var _ = Describe("Session", func() {
 				s, err := sess.GetOrOpenStream(5)
 				Expect(err).NotTo(HaveOccurred())
 				go sess.run()
+				defer sess.Close(nil)
 				_, err = s.Write([]byte("foobar1"))
 				Expect(err).NotTo(HaveOccurred())
 				Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(1))
@@ -1166,6 +1179,7 @@ var _ = Describe("Session", func() {
 
 	It("tells the packetPacker when forward-secure encryption is used", func() {
 		go sess.run()
+		defer sess.Close(nil)
 		sess.aeadChanged <- protocol.EncryptionSecure
 		Consistently(func() bool { return sess.packer.isForwardSecure }).Should(BeFalse())
 		sess.aeadChanged <- protocol.EncryptionForwardSecure
@@ -1257,6 +1271,7 @@ var _ = Describe("Session", func() {
 		sess.cryptoChangeCallback = cb
 		sess.aeadChanged <- protocol.EncryptionSecure
 		go sess.run()
+		defer sess.Close(nil)
 		Eventually(func() bool { return callbackCalled }).Should(BeTrue())
 		Expect(callbackCalledWith).To(BeFalse())
 		Expect(callbackSession).To(Equal(sess))
@@ -1274,6 +1289,7 @@ var _ = Describe("Session", func() {
 		sess.cryptoSetup = &mockCryptoSetup{handshakeComplete: true}
 		sess.aeadChanged <- protocol.EncryptionForwardSecure
 		go sess.run()
+		defer sess.Close(nil)
 		Eventually(func() bool { return callbackCalledWith }).Should(BeTrue())
 		Expect(callbackSession).To(Equal(sess))
 		close(done)
