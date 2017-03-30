@@ -119,6 +119,11 @@ func (c *flowController) IncrementHighestReceived(increment protocol.ByteCount) 
 }
 
 func (c *flowController) AddBytesRead(n protocol.ByteCount) {
+	// pretend we sent a WindowUpdate when reading the first byte
+	// this way auto-tuning of the window increment already works for the first WindowUpdate
+	if c.bytesRead == 0 {
+		c.lastWindowUpdateTime = time.Now()
+	}
 	c.bytesRead += n
 }
 

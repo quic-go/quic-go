@@ -316,7 +316,7 @@ var _ = Describe("Flow controller", func() {
 
 			It("returns the new increment when updating the window", func() {
 				setRtt(10 * time.Millisecond)
-				controller.bytesRead = 9900 // receive window is 10000
+				controller.AddBytesRead(9900) // receive window is 10000
 				controller.lastWindowUpdateTime = time.Now().Add(-19 * time.Millisecond)
 				necessary, newIncrement, offset := controller.MaybeUpdateWindow()
 				Expect(necessary).To(BeTrue())
@@ -325,9 +325,26 @@ var _ = Describe("Flow controller", func() {
 				Expect(offset).To(Equal(protocol.ByteCount(9900 + newIncrement)))
 			})
 
+			It("increases the increment sent in the first WindowUpdate, if data is read fast enough", func() {
+				setRtt(10 * time.Millisecond)
+				controller.AddBytesRead(9900)
+				necessary, newIncrement, _ := controller.MaybeUpdateWindow()
+				Expect(necessary).To(BeTrue())
+				Expect(newIncrement).To(Equal(2 * oldIncrement))
+			})
+
+			It("doesn't increamse the increment sent in the first WindowUpdate, if data is read slowly", func() {
+				setRtt(2 * time.Millisecond)
+				controller.AddBytesRead(9900)
+				time.Sleep(5 * time.Millisecond) // more than 2x RTT
+				necessary, newIncrement, _ := controller.MaybeUpdateWindow()
+				Expect(necessary).To(BeTrue())
+				Expect(newIncrement).To(BeZero())
+			})
+
 			It("only returns the increment if it was increased", func() {
 				setRtt(10 * time.Millisecond)
-				controller.bytesRead = 9900 // receive window is 10000
+				controller.AddBytesRead(9900) // receive window is 10000
 				controller.lastWindowUpdateTime = time.Now().Add(-21 * time.Millisecond)
 				necessary, newIncrement, offset := controller.MaybeUpdateWindow()
 				Expect(necessary).To(BeTrue())
