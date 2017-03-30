@@ -131,8 +131,6 @@ var _ = Describe("Session", func() {
 		cryptoSetup   *mockCryptoSetup
 		handshakeChan <-chan handshakeEvent
 		aeadChanged   chan<- protocol.EncryptionLevel
-
-		cryptoSetupSourceAddr []byte
 	)
 
 	BeforeEach(func() {
@@ -141,7 +139,7 @@ var _ = Describe("Session", func() {
 		cryptoSetup = &mockCryptoSetup{}
 		newCryptoSetup = func(
 			_ protocol.ConnectionID,
-			sourceAddr []byte,
+			_ net.Addr,
 			_ protocol.VersionNumber,
 			_ *handshake.ServerConfig,
 			_ io.ReadWriter,
@@ -149,7 +147,6 @@ var _ = Describe("Session", func() {
 			_ []protocol.VersionNumber,
 			aeadChangedP chan<- protocol.EncryptionLevel,
 		) (handshake.CryptoSetup, error) {
-			cryptoSetupSourceAddr = sourceAddr
 			aeadChanged = aeadChangedP
 			return cryptoSetup, nil
 		}
@@ -181,36 +178,6 @@ var _ = Describe("Session", func() {
 	AfterEach(func() {
 		newCryptoSetup = handshake.NewCryptoSetup
 		Eventually(areSessionsRunning).Should(BeFalse())
-	})
-
-	Context("source address", func() {
-		It("uses the IP address if given an UDP connection", func() {
-			conn := &conn{currentAddr: &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200)[12:], Port: 1337}}
-			_, _, err := newSession(
-				conn,
-				protocol.VersionWhatever,
-				0,
-				scfg,
-				populateServerConfig(&Config{}),
-			)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cryptoSetupSourceAddr).To(Equal([]byte{192, 168, 100, 200}))
-		})
-
-		It("uses the string representation of the remote addresses if not given a UDP connection", func() {
-			conn := &conn{
-				currentAddr: &net.TCPAddr{IP: net.IPv4(192, 168, 100, 200)[12:], Port: 1337},
-			}
-			_, _, err := newSession(
-				conn,
-				protocol.VersionWhatever,
-				0,
-				scfg,
-				populateServerConfig(&Config{}),
-			)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cryptoSetupSourceAddr).To(Equal([]byte("192.168.100.200:1337")))
-		})
 	})
 
 	Context("when handling stream frames", func() {

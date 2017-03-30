@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"net"
 	"sync"
 
 	"github.com/lucas-clemente/quic-go/crypto"
@@ -58,7 +59,7 @@ var ErrHOLExperiment = qerr.Error(qerr.InvalidCryptoMessageParameter, "HOL exper
 // NewCryptoSetup creates a new CryptoSetup instance for a server
 func NewCryptoSetup(
 	connID protocol.ConnectionID,
-	sourceAddr []byte,
+	remoteAddr net.Addr,
 	version protocol.VersionNumber,
 	scfg *ServerConfig,
 	cryptoStream io.ReadWriter,
@@ -66,6 +67,13 @@ func NewCryptoSetup(
 	supportedVersions []protocol.VersionNumber,
 	aeadChanged chan<- protocol.EncryptionLevel,
 ) (CryptoSetup, error) {
+	var sourceAddr []byte
+	if udpAddr, ok := remoteAddr.(*net.UDPAddr); ok {
+		sourceAddr = udpAddr.IP
+	} else {
+		sourceAddr = []byte(remoteAddr.String())
+	}
+
 	return &cryptoSetupServer{
 		connID:               connID,
 		sourceAddr:           sourceAddr,
@@ -263,7 +271,8 @@ func (h *cryptoSetupServer) isInchoateCHLO(cryptoData map[Tag][]byte, cert []byt
 	if crypto.HashCert(cert) != xlct {
 		return true
 	}
-	if err := h.scfg.stkSource.VerifyToken(h.sourceAddr, cryptoData[TagSTK]); err != nil {
+	stk := cryptoData[TagSTK]
+	if err := h.scfg.stkSource.VerifyToken(h.sourceAddr, stk); err != nil {
 		utils.Debugf("STK invalid: %s", err.Error())
 		return true
 	}
