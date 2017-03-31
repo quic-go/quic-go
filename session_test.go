@@ -75,11 +75,9 @@ func (h *mockSentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacke
 }
 
 func (h *mockSentPacketHandler) GetLeastUnacked() protocol.PacketNumber { return 1 }
-func (h *mockSentPacketHandler) CheckForError() error                   { return nil }
-
-func (h *mockSentPacketHandler) GetAlarmTimeout() time.Time { panic("not implemented") }
-func (h *mockSentPacketHandler) OnAlarm()                   { panic("not implemented") }
-func (h *mockSentPacketHandler) SendingAllowed() bool       { return !h.congestionLimited }
+func (h *mockSentPacketHandler) GetAlarmTimeout() time.Time             { panic("not implemented") }
+func (h *mockSentPacketHandler) OnAlarm()                               { panic("not implemented") }
+func (h *mockSentPacketHandler) SendingAllowed() bool                   { return !h.congestionLimited }
 
 func (h *mockSentPacketHandler) GetStopWaitingFrame(force bool) *frames.StopWaitingFrame {
 	h.requestedStopWaiting = true
@@ -1329,18 +1327,6 @@ var _ = Describe("Session", func() {
 			Expect(sess.runClosed).To(Receive())
 			close(done)
 		})
-	})
-
-	It("errors when the SentPacketHandler has too many packets tracked", func() {
-		streamFrame := frames.StreamFrame{StreamID: 5, Data: []byte("foobar")}
-		for i := protocol.PacketNumber(1); i < protocol.MaxTrackedSentPackets+10; i++ {
-			packet := ackhandler.Packet{PacketNumber: protocol.PacketNumber(i), Frames: []frames.Frame{&streamFrame}, Length: 1}
-			err := sess.sentPacketHandler.SentPacket(&packet)
-			Expect(err).ToNot(HaveOccurred())
-		}
-		// now sess.sentPacketHandler.CheckForError will return an error
-		err := sess.sendPacket()
-		Expect(err).To(MatchError(ackhandler.ErrTooManyTrackedSentPackets))
 	})
 
 	It("stores up to MaxSessionUnprocessedPackets packets", func(done Done) {

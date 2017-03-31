@@ -567,11 +567,6 @@ func (s *session) closeStreamsWithError(err error) {
 func (s *session) sendPacket() error {
 	// Repeatedly try sending until we don't have any more data, or run out of the congestion window
 	for {
-		err := s.sentPacketHandler.CheckForError()
-		if err != nil {
-			return err
-		}
-
 		if !s.sentPacketHandler.SendingAllowed() {
 			return nil
 		}

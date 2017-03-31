@@ -94,6 +94,10 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 		return errPacketNumberNotIncreasing
 	}
 
+	if protocol.PacketNumber(len(h.retransmissionQueue)+h.packetHistory.Len()+1) > protocol.MaxTrackedSentPackets {
+		return ErrTooManyTrackedSentPackets
+	}
+
 	for p := h.lastSentPacketNumber + 1; p < packet.PacketNumber; p++ {
 		h.skippedPackets = append(h.skippedPackets, p)
 
@@ -332,14 +336,6 @@ func (h *sentPacketHandler) SendingAllowed() bool {
 	congestionLimited := h.bytesInFlight > h.congestion.GetCongestionWindow()
 	maxTrackedLimited := protocol.PacketNumber(len(h.retransmissionQueue)+h.packetHistory.Len()) >= protocol.MaxTrackedSentPackets
 	return !(congestionLimited || maxTrackedLimited)
-}
-
-func (h *sentPacketHandler) CheckForError() error {
-	length := len(h.retransmissionQueue) + h.packetHistory.Len()
-	if protocol.PacketNumber(length) > protocol.MaxTrackedSentPackets {
-		return ErrTooManyTrackedSentPackets
-	}
-	return nil
 }
 
 func (h *sentPacketHandler) retransmitOldestTwoPackets() {

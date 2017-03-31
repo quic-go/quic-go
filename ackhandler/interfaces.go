@@ -19,9 +19,6 @@ type SentPacketHandler interface {
 
 	GetAlarmTimeout() time.Time
 	OnAlarm()
-
-	// TODO(lclemente): Remove this now that the logic is simpler
-	CheckForError() error
 }
 
 // ReceivedPacketHandler handles ACKs needed to send for incoming packets

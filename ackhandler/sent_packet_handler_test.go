@@ -207,12 +207,14 @@ var _ = Describe("SentPacketHandler", func() {
 
 	Context("DoS mitigation", func() {
 		It("checks the size of the packet history, for unacked packets", func() {
-			for i := protocol.PacketNumber(1); i < protocol.MaxTrackedSentPackets+10; i++ {
-				packet := Packet{PacketNumber: protocol.PacketNumber(i), Frames: []frames.Frame{&streamFrame}, Length: 1}
+			i := protocol.PacketNumber(1)
+			for ; i <= protocol.MaxTrackedSentPackets; i++ {
+				packet := Packet{PacketNumber: protocol.PacketNumber(i), Length: 1}
 				err := handler.SentPacket(&packet)
 				Expect(err).ToNot(HaveOccurred())
 			}
-			err := handler.CheckForError()
+			packet := Packet{PacketNumber: protocol.PacketNumber(i), Length: 1}
+			err := handler.SentPacket(&packet)
 			Expect(err).To(MatchError(ErrTooManyTrackedSentPackets))
 		})
 
