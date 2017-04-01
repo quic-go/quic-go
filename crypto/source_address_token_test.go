@@ -1,10 +1,10 @@
 package crypto
 
 import (
+	"math"
 	"net"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -62,57 +62,69 @@ var _ = Describe("Source Address Tokens", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should generate new tokens", func() {
+		It("generates new tokens", func() {
 			token, err := source.NewToken(ip4)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(token).ToNot(BeEmpty())
 		})
 
-		It("should generate and verify ipv4 tokens", func() {
+		It("generates and verifies ipv4 tokens", func() {
 			stk, err := source.NewToken(ip4)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stk).ToNot(BeEmpty())
-			err = source.VerifyToken(ip4, stk)
+			_, err = source.VerifyToken(ip4, stk)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should generate and verify ipv6 tokens", func() {
+		It("generates and verify ipv6 tokens", func() {
 			stk, err := source.NewToken(ip6)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stk).ToNot(BeEmpty())
-			err = source.VerifyToken(ip6, stk)
+			_, err = source.VerifyToken(ip6, stk)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should reject empty tokens", func() {
-			err := source.VerifyToken(ip4, nil)
+		It("rejects empty tokens", func() {
+			_, err := source.VerifyToken(ip4, nil)
 			Expect(err).To(HaveOccurred())
 		})
 
-		It("should reject invalid tokens", func() {
-			err := source.VerifyToken(ip4, []byte("foobar"))
+		It("rejects invalid tokens", func() {
+			_, err := source.VerifyToken(ip4, []byte("foobar"))
 			Expect(err).To(HaveOccurred())
 		})
 
-		It("should reject outdated tokens", func() {
-			stk, err := encryptToken(source.aead, &sourceAddressToken{
-				sourceAddr: ip4,
-				timestamp:  uint64(time.Now().Unix() - protocol.STKExpiryTimeSec - 1),
-			})
-			Expect(err).NotTo(HaveOccurred())
-			err = source.VerifyToken(ip4, stk)
-			Expect(err).To(MatchError("STK expired"))
-		})
-
-		It("should reject tokens with wrong IP addresses", func() {
+		It("rejects tokens with wrong IP addresses", func() {
 			otherIP := net.ParseIP("4.3.2.1")
 			stk, err := encryptToken(source.aead, &sourceAddressToken{
 				sourceAddr: otherIP,
 				timestamp:  uint64(time.Now().Unix()),
 			})
 			Expect(err).NotTo(HaveOccurred())
-			err = source.VerifyToken(ip4, stk)
+			_, err = source.VerifyToken(ip4, stk)
 			Expect(err).To(MatchError("invalid source address in STK"))
+		})
+
+		It("rejects overflowing timestamps", func() {
+			stk, err := encryptToken(source.aead, &sourceAddressToken{
+				sourceAddr: ip4,
+				timestamp:  math.MaxUint64,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			_, err = source.VerifyToken(ip4, stk)
+			Expect(err).To(MatchError("invalid timestamp"))
+		})
+
+		It("returns the timestamp encoded in the token", func() {
+			timestamp := time.Now().Add(-time.Hour)
+			stk, err := encryptToken(source.aead, &sourceAddressToken{
+				sourceAddr: ip4,
+				timestamp:  uint64(timestamp.Unix()),
+			})
+			Expect(err).NotTo(HaveOccurred())
+			t, err := source.VerifyToken(ip4, stk)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(t).To(BeTemporally("~", timestamp, time.Second))
 		})
 	})
 })

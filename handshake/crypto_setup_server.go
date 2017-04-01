@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -271,12 +272,19 @@ func (h *cryptoSetupServer) isInchoateCHLO(cryptoData map[Tag][]byte, cert []byt
 	if crypto.HashCert(cert) != xlct {
 		return true
 	}
-	stk := cryptoData[TagSTK]
-	if err := h.scfg.stkSource.VerifyToken(h.sourceAddr, stk); err != nil {
+	return !h.verifySTK(cryptoData[TagSTK])
+}
+
+func (h *cryptoSetupServer) verifySTK(stk []byte) bool {
+	stkTime, err := h.scfg.stkSource.VerifyToken(h.sourceAddr, stk)
+	if err != nil {
 		utils.Debugf("STK invalid: %s", err.Error())
-		return true
+		return false
 	}
-	return false
+	if time.Now().After(stkTime.Add(protocol.STKExpiryTimeSec * time.Second)) {
+		return false
+	}
+	return true
 }
 
 func (h *cryptoSetupServer) handleInchoateCHLO(sni string, chlo []byte, cryptoData map[Tag][]byte) ([]byte, error) {
@@ -295,7 +303,7 @@ func (h *cryptoSetupServer) handleInchoateCHLO(sni string, chlo []byte, cryptoDa
 		TagSVID: []byte("quic-go"),
 	}
 
-	if h.scfg.stkSource.VerifyToken(h.sourceAddr, cryptoData[TagSTK]) == nil {
+	if h.verifySTK(cryptoData[TagSTK]) {
 		proof, err := h.scfg.Sign(sni, chlo)
 		if err != nil {
 			return nil, err

@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"net"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -127,27 +128,33 @@ func (s mockStream) StreamID() protocol.StreamID         { panic("not implemente
 
 type mockStkSource struct {
 	verifyErr error
+	stkTime   time.Time
 }
+
+var _ crypto.StkSource = &mockStkSource{}
 
 func (mockStkSource) NewToken(sourceAddr []byte) ([]byte, error) {
 	return append([]byte("token "), sourceAddr...), nil
 }
 
-func (s mockStkSource) VerifyToken(sourceAddr []byte, token []byte) error {
+func (s mockStkSource) VerifyToken(sourceAddr []byte, token []byte) (time.Time, error) {
 	if s.verifyErr != nil {
-		return s.verifyErr
+		return time.Time{}, s.verifyErr
 	}
 	split := bytes.Split(token, []byte(" "))
 	if len(split) != 2 {
-		return errors.New("stk required")
+		return time.Time{}, errors.New("stk required")
 	}
 	if !bytes.Equal(split[0], []byte("token")) {
-		return errors.New("no prefix match")
+		return time.Time{}, errors.New("no prefix match")
 	}
 	if !bytes.Equal(split[1], sourceAddr) {
-		return errors.New("ip wrong")
+		return time.Time{}, errors.New("ip wrong")
 	}
-	return nil
+	if !s.stkTime.IsZero() {
+		return s.stkTime, nil
+	}
+	return time.Now(), nil
 }
 
 var _ = Describe("Server Crypto Setup", func() {
@@ -430,6 +437,11 @@ var _ = Describe("Server Crypto Setup", func() {
 		It("recognizes inchoate CHLOs with an invalid STK", func() {
 			testErr := errors.New("STK invalid")
 			scfg.stkSource.(*mockStkSource).verifyErr = testErr
+			Expect(cs.isInchoateCHLO(fullCHLO, cert)).To(BeTrue())
+		})
+
+		It("REJ messages that have an expired STK", func() {
+			cs.scfg.stkSource.(*mockStkSource).stkTime = time.Now().Add(-protocol.STKExpiryTimeSec * time.Second).Add(-time.Second)
 			Expect(cs.isInchoateCHLO(fullCHLO, cert)).To(BeTrue())
 		})
 

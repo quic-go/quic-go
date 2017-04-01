@@ -10,9 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"time"
-
-	"github.com/lucas-clemente/quic-go/protocol"
 
 	"golang.org/x/crypto/hkdf"
 )
@@ -21,8 +20,8 @@ import (
 type StkSource interface {
 	// NewToken creates a new token for a given IP address
 	NewToken(sourceAddress []byte) ([]byte, error)
-	// VerifyToken verifies if a token matches a given IP address and is not outdated
-	VerifyToken(sourceAddress []byte, data []byte) error
+	// VerifyToken verifies if a token matches a given IP address
+	VerifyToken(sourceAddress []byte, data []byte) (time.Time, error)
 }
 
 type sourceAddressToken struct {
@@ -82,31 +81,31 @@ func (s *stkSource) NewToken(sourceAddr []byte) ([]byte, error) {
 	})
 }
 
-func (s *stkSource) VerifyToken(sourceAddr []byte, data []byte) error {
+func (s *stkSource) VerifyToken(sourceAddr []byte, data []byte) (time.Time, error) {
 	if len(data) < stkNonceSize {
-		return errors.New("STK too short")
+		return time.Time{}, errors.New("STK too short")
 	}
 	nonce := data[:stkNonceSize]
 
 	res, err := s.aead.Open(nil, nonce, data[stkNonceSize:], nil)
 	if err != nil {
-		return err
+		return time.Time{}, err
 	}
 
 	token, err := parseToken(res)
 	if err != nil {
-		return err
+		return time.Time{}, err
 	}
 
 	if subtle.ConstantTimeCompare(token.sourceAddr, sourceAddr) != 1 {
-		return errors.New("invalid source address in STK")
+		return time.Time{}, errors.New("invalid source address in STK")
 	}
 
-	if time.Now().Unix() > int64(token.timestamp)+protocol.STKExpiryTimeSec {
-		return errors.New("STK expired")
+	if token.timestamp > math.MaxInt64 {
+		return time.Time{}, errors.New("invalid timestamp")
 	}
 
-	return nil
+	return time.Unix(int64(token.timestamp), 0), nil
 }
 
 func deriveKey(secret []byte) ([]byte, error) {
