@@ -281,7 +281,7 @@ func (h *cryptoSetupServer) verifySTK(stk []byte) bool {
 		utils.Debugf("STK invalid: %s", err.Error())
 		return false
 	}
-	if time.Now().After(stkTime.Add(protocol.STKExpiryTimeSec * time.Second)) {
+	if time.Now().After(stkTime.Add(protocol.STKExpiryTime)) {
 		return false
 	}
 	return true

@@ -441,7 +441,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		})
 
 		It("REJ messages that have an expired STK", func() {
-			cs.scfg.stkSource.(*mockStkSource).stkTime = time.Now().Add(-protocol.STKExpiryTimeSec * time.Second).Add(-time.Second)
+			cs.scfg.stkSource.(*mockStkSource).stkTime = time.Now().Add(-protocol.STKExpiryTime).Add(-time.Second)
 			Expect(cs.isInchoateCHLO(fullCHLO, cert)).To(BeTrue())
 		})
 
