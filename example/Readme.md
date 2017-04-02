@@ -1,7 +1,24 @@
 # About the certificate
 
-Yes, this folder contains a private key and a certificate for quic.clemente.io.
+The self-signed server.crt and server.key were generated with localhost common name, for other hostnames see steps below to generate self-signed certificate. In a production environment you will need to submit a CSR to a certificate authority to generate trusted cert and ensure InsecureSkipVerify is not set in TLSClientConfig of QuicRoundTripper.
 
-Unfortunately we need a valid certificate for the integration tests with Chrome and `quic_client`. No important data is served on the "real" `quic.clemente.io` (only a test page), and the MITM problem is imho negligible.
+---
 
-If you figure out a way to test with Chrome without having a cert and key here, let us now in an issue.
+##### Generate private key (.key)
+
+```sh
+# Key considerations for algorithm "RSA" ≥ 2048-bit
+openssl genrsa -out server.key 2048
+
+# Key considerations for algorithm "ECDSA" ≥ secp384r1
+# List ECDSA the supported curves (openssl ecparam -list_curves)
+openssl ecparam -genkey -name secp384r1 -out server.key
+```
+
+##### Generation of self-signed(x509) public key (PEM-encodings `.pem`|`.crt`) based on the private (`.key`)
+
+```sh
+openssl req -new -x509 -sha256 -key server.key -out server.crt -days 3650
+```
+
+---
