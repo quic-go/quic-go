@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/chestnutprog/quic-go/utils"
 	_ "github.com/lucas-clemente/quic-clients" // download clients
 	"github.com/lucas-clemente/quic-go/integrationtests/proxy"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -24,6 +25,7 @@ var _ = Describe("non-zero RTT", func() {
 	var rttProxy *proxy.UDPProxy
 
 	runRTTTest := func(rtt time.Duration, version protocol.VersionNumber) {
+		utils.SetLogLevel(utils.LogLevelDebug)
 		proxyPort := 12345
 
 		iPort, _ := strconv.Atoi(port)
@@ -44,6 +46,7 @@ var _ = Describe("non-zero RTT", func() {
 		defer session.Kill()
 		Eventually(session, 4).Should(Exit(0))
 		Expect(bytes.Contains(session.Out.Contents(), dataMan.GetData())).To(BeTrue())
+		utils.SetLogLevel(utils.LogLevelError)
 	}
 
 	AfterEach(func() {
