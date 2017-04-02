@@ -9,5 +9,5 @@ import (
 
 func TestCrypto(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "AckHandler (New) Suite")
+	RunSpecs(t, "AckHandler Suite")
 }

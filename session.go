@@ -32,7 +32,7 @@ type receivedPacket struct {
 var (
 	errRstStreamOnInvalidStream   = errors.New("RST_STREAM received for unknown stream")
 	errWindowUpdateOnClosedStream = errors.New("WINDOW_UPDATE received for an already closed stream")
-	errSessionAlreadyClosed       = errors.New("Cannot close session. It was already closed before.")
+	errSessionAlreadyClosed       = errors.New("cannot close session; it was already closed before")
 )
 
 // cryptoChangeCallback is called every time the encryption level changes
@@ -251,10 +251,16 @@ runLoop:
 			s.close(err)
 		}
 
+		now := time.Now()
+		if s.sentPacketHandler.GetAlarmTimeout().Before(now) {
+			// This could cause packets to be retransmitted, so check it before trying
+			// to send packets.
+			s.sentPacketHandler.OnAlarm()
+		}
+
 		if err := s.sendPacket(); err != nil {
 			s.close(err)
 		}
-		now := time.Now()
 		if !s.receivedTooManyUndecrytablePacketsTime.IsZero() && s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout).Before(now) {
 			s.close(qerr.Error(qerr.DecryptionFailure, "too many undecryptable packets received"))
 		}
@@ -277,8 +283,8 @@ func (s *session) maybeResetTimer() {
 	if !s.nextAckScheduledTime.IsZero() {
 		nextDeadline = utils.MinTime(nextDeadline, s.nextAckScheduledTime)
 	}
-	if rtoTime := s.sentPacketHandler.TimeOfFirstRTO(); !rtoTime.IsZero() {
-		nextDeadline = utils.MinTime(nextDeadline, rtoTime)
+	if lossTime := s.sentPacketHandler.GetAlarmTimeout(); !lossTime.IsZero() {
+		nextDeadline = utils.MinTime(nextDeadline, lossTime)
 	}
 	if !s.cryptoSetup.HandshakeComplete() {
 		handshakeDeadline := s.sessionCreationTime.Add(protocol.MaxTimeForCryptoHandshake)
@@ -561,14 +567,6 @@ func (s *session) closeStreamsWithError(err error) {
 func (s *session) sendPacket() error {
 	// Repeatedly try sending until we don't have any more data, or run out of the congestion window
 	for {
-		err := s.sentPacketHandler.CheckForError()
-		if err != nil {
-			return err
-		}
-
-		// Do this before checking the congestion, since we might de-congestionize here :)
-		s.sentPacketHandler.MaybeQueueRTOs()
-
 		if !s.sentPacketHandler.SendingAllowed() {
 			return nil
 		}

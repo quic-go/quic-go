@@ -62,7 +62,6 @@ type mockSentPacketHandler struct {
 	retransmissionQueue  []*ackhandler.Packet
 	sentPackets          []*ackhandler.Packet
 	congestionLimited    bool
-	maybeQueueRTOsCalled bool
 	requestedStopWaiting bool
 }
 
@@ -70,21 +69,19 @@ func (h *mockSentPacketHandler) SentPacket(packet *ackhandler.Packet) error {
 	h.sentPackets = append(h.sentPackets, packet)
 	return nil
 }
+
 func (h *mockSentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNumber protocol.PacketNumber, recvTime time.Time) error {
 	return nil
 }
-func (h *mockSentPacketHandler) BytesInFlight() protocol.ByteCount      { return 0 }
+
 func (h *mockSentPacketHandler) GetLeastUnacked() protocol.PacketNumber { return 1 }
+func (h *mockSentPacketHandler) GetAlarmTimeout() time.Time             { panic("not implemented") }
+func (h *mockSentPacketHandler) OnAlarm()                               { panic("not implemented") }
+func (h *mockSentPacketHandler) SendingAllowed() bool                   { return !h.congestionLimited }
+
 func (h *mockSentPacketHandler) GetStopWaitingFrame(force bool) *frames.StopWaitingFrame {
 	h.requestedStopWaiting = true
 	return &frames.StopWaitingFrame{LeastUnacked: 0x1337}
-}
-func (h *mockSentPacketHandler) SendingAllowed() bool      { return !h.congestionLimited }
-func (h *mockSentPacketHandler) CheckForError() error      { return nil }
-func (h *mockSentPacketHandler) TimeOfFirstRTO() time.Time { panic("not implemented") }
-
-func (h *mockSentPacketHandler) MaybeQueueRTOs() {
-	h.maybeQueueRTOsCalled = true
 }
 
 func (h *mockSentPacketHandler) DequeuePacketForRetransmission() *ackhandler.Packet {
@@ -433,6 +430,7 @@ var _ = Describe("Session", func() {
 
 		It("doesn't queue a RST_STREAM for a stream that it already sent a FIN on", func() {
 			str, err := sess.GetOrOpenStream(5)
+			Expect(err).NotTo(HaveOccurred())
 			str.(*stream).sentFin()
 			str.Close()
 			err = sess.handleRstStreamFrame(&frames.RstStreamFrame{
@@ -973,14 +971,6 @@ var _ = Describe("Session", func() {
 				Expect(ok).To(BeTrue())
 			})
 
-			It("calls MaybeQueueRTOs even if congestion blocked, so that bytesInFlight is updated", func() {
-				sph.congestionLimited = true
-				sess.sentPacketHandler = sph
-				err := sess.sendPacket()
-				Expect(err).NotTo(HaveOccurred())
-				Expect(sph.maybeQueueRTOsCalled).To(BeTrue())
-			})
-
 			It("retransmits a WindowUpdates if it hasn't already sent a WindowUpdate with a higher ByteOffset", func() {
 				_, err := sess.GetOrOpenStream(5)
 				Expect(err).ToNot(HaveOccurred())
@@ -1337,18 +1327,6 @@ var _ = Describe("Session", func() {
 			Expect(sess.runClosed).To(Receive())
 			close(done)
 		})
-	})
-
-	It("errors when the SentPacketHandler has too many packets tracked", func() {
-		streamFrame := frames.StreamFrame{StreamID: 5, Data: []byte("foobar")}
-		for i := protocol.PacketNumber(1); i < protocol.MaxTrackedSentPackets+10; i++ {
-			packet := ackhandler.Packet{PacketNumber: protocol.PacketNumber(i), Frames: []frames.Frame{&streamFrame}, Length: 1}
-			err := sess.sentPacketHandler.SentPacket(&packet)
-			Expect(err).ToNot(HaveOccurred())
-		}
-		// now sess.sentPacketHandler.CheckForError will return an error
-		err := sess.sendPacket()
-		Expect(err).To(MatchError(ackhandler.ErrTooManyTrackedSentPackets))
 	})
 
 	It("stores up to MaxSessionUnprocessedPackets packets", func(done Done) {

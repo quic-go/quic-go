@@ -12,18 +12,13 @@ type SentPacketHandler interface {
 	SentPacket(packet *Packet) error
 	ReceivedAck(ackFrame *frames.AckFrame, withPacketNumber protocol.PacketNumber, recvTime time.Time) error
 
+	SendingAllowed() bool
 	GetStopWaitingFrame(force bool) *frames.StopWaitingFrame
-
-	MaybeQueueRTOs()
 	DequeuePacketForRetransmission() (packet *Packet)
-
-	BytesInFlight() protocol.ByteCount
 	GetLeastUnacked() protocol.PacketNumber
 
-	SendingAllowed() bool
-	CheckForError() error
-
-	TimeOfFirstRTO() time.Time
+	GetAlarmTimeout() time.Time
+	OnAlarm()
 }
 
 // ReceivedPacketHandler handles ACKs needed to send for incoming packets

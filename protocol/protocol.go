@@ -1,9 +1,6 @@
 package protocol
 
-import (
-	"math"
-	"time"
-)
+import "math"
 
 // A PacketNumber in QUIC
 type PacketNumber uint64
@@ -54,15 +51,6 @@ const InitialStreamFlowControlWindow ByteCount = (1 << 14) // 16 kB
 
 // InitialConnectionFlowControlWindow is the initial connection-level flow control window for sending
 const InitialConnectionFlowControlWindow ByteCount = (1 << 14) // 16 kB
-
-// DefaultRetransmissionTime is the RTO time on new connections
-const DefaultRetransmissionTime = 500 * time.Millisecond
-
-// MinRetransmissionTime is the minimum RTO time
-const MinRetransmissionTime = 200 * time.Millisecond
-
-// MaxRetransmissionTime is the maximum RTO time
-const MaxRetransmissionTime = 60 * time.Second
 
 // ClientHelloMinimumSize is the minimum size the server expects an inchoate CHLO to have.
 const ClientHelloMinimumSize = 1024

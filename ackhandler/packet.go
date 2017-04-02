@@ -15,8 +15,6 @@ type Packet struct {
 	Length          protocol.ByteCount
 	EncryptionLevel protocol.EncryptionLevel
 
-	MissingReports uint8
-
 	SendTime time.Time
 }
 
