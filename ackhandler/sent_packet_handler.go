@@ -152,24 +152,23 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 
 	rttUpdated := h.maybeUpdateRTT(ackFrame.LargestAcked, ackFrame.DelayTime, rcvTime)
 
+	if rttUpdated {
+		h.congestion.MaybeExitSlowStart()
+	}
+
 	ackedPackets, err := h.determineNewlyAckedPackets(ackFrame)
 	if err != nil {
 		return err
 	}
 
 	if len(ackedPackets) > 0 {
-		var ackedPacketsCongestion congestion.PacketVector
 		for _, p := range ackedPackets {
 			h.onPacketAcked(p)
-			ackedPacketsCongestion = append(ackedPacketsCongestion, congestion.PacketInfo{
-				Number: p.Value.PacketNumber,
-				Length: p.Value.Length,
-			})
+			h.congestion.OnPacketAcked(p.Value.PacketNumber, p.Value.Length, h.bytesInFlight)
 		}
-		h.congestion.OnCongestionEvent(rttUpdated, h.bytesInFlight, ackedPacketsCongestion, nil)
 	}
 
-	h.detectLostPackets(rttUpdated)
+	h.detectLostPackets()
 	h.updateLossDetectionAlarm()
 
 	h.garbageCollectSkippedPackets()
@@ -249,8 +248,7 @@ func (h *sentPacketHandler) updateLossDetectionAlarm() {
 	}
 }
 
-// TODO(lucas-clemente): Introducing congestion.MaybeExitSlowStart() would allow us to call through for each packet and eliminate both the rttUpdated param and the packet slices passed to the congestion
-func (h *sentPacketHandler) detectLostPackets(rttUpdated bool) {
+func (h *sentPacketHandler) detectLostPackets() {
 	h.lossTime = time.Time{}
 	now := time.Now()
 
@@ -275,15 +273,10 @@ func (h *sentPacketHandler) detectLostPackets(rttUpdated bool) {
 	}
 
 	if len(lostPackets) > 0 {
-		var lostPacketsCongestion congestion.PacketVector
 		for _, p := range lostPackets {
 			h.queuePacketForRetransmission(p)
-			lostPacketsCongestion = append(lostPacketsCongestion, congestion.PacketInfo{
-				Number: p.Value.PacketNumber,
-				Length: p.Value.Length,
-			})
+			h.congestion.OnPacketLost(p.Value.PacketNumber, p.Value.Length, h.bytesInFlight)
 		}
-		h.congestion.OnCongestionEvent(rttUpdated, h.bytesInFlight, nil, lostPacketsCongestion)
 	}
 }
 
@@ -292,7 +285,7 @@ func (h *sentPacketHandler) OnAlarm() {
 	// TODO(#497): TLP
 	if !h.lossTime.IsZero() {
 		// Early retransmit or time loss detection
-		h.detectLostPackets(false /* rttUpdated */)
+		h.detectLostPackets()
 	} else {
 		// RTO
 		h.retransmitOldestTwoPackets()
@@ -349,13 +342,9 @@ func (h *sentPacketHandler) retransmitOldestTwoPackets() {
 
 func (h *sentPacketHandler) queueRTO(el *PacketElement) {
 	packet := &el.Value
-	packetsLost := congestion.PacketVector{congestion.PacketInfo{
-		Number: packet.PacketNumber,
-		Length: packet.Length,
-	}}
 	utils.Debugf("\tQueueing packet 0x%x for retransmission (RTO)", packet.PacketNumber)
 	h.queuePacketForRetransmission(el)
-	h.congestion.OnCongestionEvent(false, h.bytesInFlight, nil, packetsLost)
+	h.congestion.OnPacketLost(packet.PacketNumber, packet.Length, h.bytesInFlight)
 	h.congestion.OnRetransmissionTimeout(true)
 }
 
