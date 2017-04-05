@@ -4,15 +4,16 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"sync"
 )
-
-var out io.Writer = os.Stdout
 
 // LogLevel of quic-go
 type LogLevel uint8
 
 const (
+	logEnv = "QUIC_GO_LOG_LEVEL"
+
 	// LogLevelDebug enables debug logs (e.g. packet contents)
 	LogLevelDebug LogLevel = iota
 	// LogLevelInfo enables info logs (e.g. packets)
@@ -23,9 +24,12 @@ const (
 	LogLevelNothing
 )
 
-var logLevel = LogLevelNothing
+var (
+	logLevel           = LogLevelNothing
+	out      io.Writer = os.Stdout
 
-var mutex sync.Mutex
+	mutex sync.Mutex
+)
 
 // SetLogWriter sets the log writer.
 func SetLogWriter(w io.Writer) {
@@ -67,4 +71,20 @@ func Errorf(format string, args ...interface{}) {
 // Debug returns true if the log level is LogLevelDebug
 func Debug() bool {
 	return logLevel == LogLevelDebug
+}
+
+func init() {
+	readLoggingEnv()
+}
+
+func readLoggingEnv() {
+	env := os.Getenv(logEnv)
+	if env == "" {
+		return
+	}
+	level, err := strconv.Atoi(env)
+	if err != nil {
+		return
+	}
+	logLevel = LogLevel(level)
 }
