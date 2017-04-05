@@ -71,8 +71,7 @@ func init() {
 	// maximum accepted file size is 1 GB
 	http.HandleFunc("/demo/upload", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
-			var err error
-			err = r.ParseMultipartForm(1 << 30) // 1 GB
+			err := r.ParseMultipartForm(1 << 30) // 1 GB
 			if err == nil {
 				var file multipart.File
 				file, _, err = r.FormFile("uploadfile")
@@ -86,7 +85,7 @@ func init() {
 						fmt.Fprintf(w, "%x", md5)
 						return
 					}
-					err = errors.New("Couldn't get uploaded file size.")
+					err = errors.New("couldn't get uploaded file size")
 				}
 			}
 			if err != nil {

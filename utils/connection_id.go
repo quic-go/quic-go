@@ -9,7 +9,7 @@ import (
 
 // GenerateConnectionID generates a connection ID using cryptographic random
 func GenerateConnectionID() (protocol.ConnectionID, error) {
-	b := make([]byte, 8, 8)
+	b := make([]byte, 8)
 	_, err := rand.Read(b)
 	if err != nil {
 		return 0, err
