@@ -25,8 +25,7 @@ type packetHandler interface {
 type server struct {
 	config *Config
 
-	conn      net.PacketConn
-	connMutex sync.Mutex
+	conn net.PacketConn
 
 	certChain crypto.CertChain
 	scfg      *handshake.ServerConfig

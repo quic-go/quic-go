@@ -2,14 +2,9 @@ package handshake
 
 import (
 	"bytes"
-	"crypto/ecdsa"
-	"crypto/rsa"
-	"crypto/x509"
 	"encoding/binary"
-	"encoding/pem"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
@@ -19,27 +14,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
-
-// taken from https://golang.org/src/crypto/tls/generate_cert.go
-func pemBlockForKey(priv interface{}) *pem.Block {
-	switch k := priv.(type) {
-	case *rsa.PrivateKey:
-		return &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(k)}
-	case *ecdsa.PrivateKey:
-		b, err := x509.MarshalECPrivateKey(k)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Unable to marshal ECDSA private key: %v", err)
-			os.Exit(2)
-		}
-		return &pem.Block{Type: "EC PRIVATE KEY", Bytes: b}
-	default:
-		return nil
-	}
-}
-
-func pemBlockForCert(certDER []byte) *pem.Block {
-	return &pem.Block{Type: "CERTIFICATE", Bytes: certDER}
-}
 
 type keyDerivationValues struct {
 	forwardSecure bool
