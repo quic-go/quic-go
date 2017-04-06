@@ -11,10 +11,12 @@ import (
 )
 
 type mockCongestion struct {
-	nCalls                  int
 	argsOnPacketSent        []interface{}
-	argsOnCongestionEvent   []interface{}
+	maybeExitSlowStart      bool
 	onRetransmissionTimeout bool
+	getCongestionWindow     bool
+	packetsAcked            [][]interface{}
+	packetsLost             [][]interface{}
 }
 
 func (m *mockCongestion) TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCount) time.Duration {
@@ -22,23 +24,20 @@ func (m *mockCongestion) TimeUntilSend(now time.Time, bytesInFlight protocol.Byt
 }
 
 func (m *mockCongestion) OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) bool {
-	m.nCalls++
 	m.argsOnPacketSent = []interface{}{sentTime, bytesInFlight, packetNumber, bytes, isRetransmittable}
 	return false
 }
 
 func (m *mockCongestion) GetCongestionWindow() protocol.ByteCount {
-	m.nCalls++
+	m.getCongestionWindow = true
 	return protocol.DefaultTCPMSS
 }
 
-func (m *mockCongestion) OnCongestionEvent(rttUpdated bool, bytesInFlight protocol.ByteCount, ackedPackets congestion.PacketVector, lostPackets congestion.PacketVector) {
-	m.nCalls++
-	m.argsOnCongestionEvent = []interface{}{rttUpdated, bytesInFlight, ackedPackets, lostPackets}
+func (m *mockCongestion) MaybeExitSlowStart() {
+	m.maybeExitSlowStart = true
 }
 
 func (m *mockCongestion) OnRetransmissionTimeout(packetsRetransmitted bool) {
-	m.nCalls++
 	m.onRetransmissionTimeout = true
 }
 
@@ -49,6 +48,14 @@ func (m *mockCongestion) RetransmissionDelay() time.Duration {
 func (m *mockCongestion) SetNumEmulatedConnections(n int)         { panic("not implemented") }
 func (m *mockCongestion) OnConnectionMigration()                  { panic("not implemented") }
 func (m *mockCongestion) SetSlowStartLargeReduction(enabled bool) { panic("not implemented") }
+
+func (m *mockCongestion) OnPacketAcked(n protocol.PacketNumber, l protocol.ByteCount, bif protocol.ByteCount) {
+	m.packetsAcked = append(m.packetsAcked, []interface{}{n, l, bif})
+}
+
+func (m *mockCongestion) OnPacketLost(n protocol.PacketNumber, l protocol.ByteCount, bif protocol.ByteCount) {
+	m.packetsLost = append(m.packetsLost, []interface{}{n, l, bif})
+}
 
 var _ = Describe("SentPacketHandler", func() {
 	var (
@@ -627,38 +634,36 @@ var _ = Describe("SentPacketHandler", func() {
 			}
 			err := handler.SentPacket(p)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(cong.nCalls).To(Equal(1))
 			Expect(cong.argsOnPacketSent[1]).To(Equal(protocol.ByteCount(42)))
 			Expect(cong.argsOnPacketSent[2]).To(Equal(protocol.PacketNumber(1)))
 			Expect(cong.argsOnPacketSent[3]).To(Equal(protocol.ByteCount(42)))
 			Expect(cong.argsOnPacketSent[4]).To(BeTrue())
 		})
 
-		It("should call OnCongestionEvent for ACKs", func() {
+		It("should call MaybeExitSlowStart and OnPacketAcked", func() {
 			handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
 			handler.SentPacket(&Packet{PacketNumber: 2, Frames: []frames.Frame{}, Length: 1})
-			Expect(cong.nCalls).To(Equal(2))
 			err := handler.ReceivedAck(&frames.AckFrame{LargestAcked: 1, LowestAcked: 1}, 1, time.Now())
 			Expect(err).NotTo(HaveOccurred())
-			Expect(cong.nCalls).To(Equal(3))
-			Expect(cong.argsOnCongestionEvent[0]).To(BeTrue())
-			Expect(cong.argsOnCongestionEvent[1]).To(Equal(protocol.ByteCount(1)))
-			Expect(cong.argsOnCongestionEvent[2]).To(Equal(congestion.PacketVector{{Number: 1, Length: 1}}))
-			Expect(cong.argsOnCongestionEvent[3]).To(BeEmpty())
+			Expect(cong.maybeExitSlowStart).To(BeTrue())
+			Expect(cong.packetsAcked).To(BeEquivalentTo([][]interface{}{
+				{protocol.PacketNumber(1), protocol.ByteCount(1), protocol.ByteCount(1)},
+			}))
+			Expect(cong.packetsLost).To(BeEmpty())
 		})
 
-		It("should call OnCongestionEvent for losses", func() {
+		It("should call MaybeExitSlowStart and OnPacketLost", func() {
 			handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
 			handler.SentPacket(&Packet{PacketNumber: 2, Frames: []frames.Frame{}, Length: 1})
 			handler.SentPacket(&Packet{PacketNumber: 3, Frames: []frames.Frame{}, Length: 1})
-			Expect(cong.nCalls).To(Equal(3))
 			handler.OnAlarm() // RTO, meaning 2 lost packets
-			Expect(cong.nCalls).To(Equal(3 + 4 /* 2* (OnCongestionEvent+OnRTO)*/))
+			Expect(cong.maybeExitSlowStart).To(BeFalse())
 			Expect(cong.onRetransmissionTimeout).To(BeTrue())
-			Expect(cong.argsOnCongestionEvent[0]).To(BeFalse())
-			Expect(cong.argsOnCongestionEvent[1]).To(Equal(protocol.ByteCount(1)))
-			Expect(cong.argsOnCongestionEvent[2]).To(BeEmpty())
-			Expect(cong.argsOnCongestionEvent[3]).To(Equal(congestion.PacketVector{{Number: 2, Length: 1}}))
+			Expect(cong.packetsAcked).To(BeEmpty())
+			Expect(cong.packetsLost).To(BeEquivalentTo([][]interface{}{
+				{protocol.PacketNumber(1), protocol.ByteCount(1), protocol.ByteCount(2)},
+				{protocol.PacketNumber(2), protocol.ByteCount(1), protocol.ByteCount(1)},
+			}))
 		})
 
 		It("allows or denies sending based on congestion", func() {

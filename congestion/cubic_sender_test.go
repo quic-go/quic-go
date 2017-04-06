@@ -59,35 +59,26 @@ var _ = Describe("Cubic Sender", func() {
 	// Normal is that TCP acks every other segment.
 	AckNPacketsLen := func(n int, packetLength protocol.ByteCount) {
 		rttStats.UpdateRTT(60*time.Millisecond, 0, clock.Now())
-		var ackedPackets PacketVector
-		var lostPackets PacketVector
+		sender.MaybeExitSlowStart()
 		for i := 0; i < n; i++ {
 			ackedPacketNumber++
-			ackedPackets = append(ackedPackets, PacketInfo{Number: ackedPacketNumber, Length: packetLength})
+			sender.OnPacketAcked(ackedPacketNumber, packetLength, bytesInFlight)
 		}
-		sender.OnCongestionEvent(true, bytesInFlight, ackedPackets, lostPackets)
 		bytesInFlight -= protocol.ByteCount(n) * packetLength
 		clock.Advance(time.Millisecond)
 	}
 
 	LoseNPacketsLen := func(n int, packetLength protocol.ByteCount) {
-		var ackedPackets PacketVector
-		var lostPackets PacketVector
 		for i := 0; i < n; i++ {
 			ackedPacketNumber++
-			lostPackets = append(lostPackets, PacketInfo{Number: ackedPacketNumber, Length: packetLength})
+			sender.OnPacketLost(ackedPacketNumber, packetLength, bytesInFlight)
 		}
-		sender.OnCongestionEvent(false, bytesInFlight, ackedPackets, lostPackets)
 		bytesInFlight -= protocol.ByteCount(n) * packetLength
 	}
 
 	// Does not increment acked_packet_number_.
 	LosePacket := func(number protocol.PacketNumber) {
-		var ackedPackets PacketVector
-		var lostPackets PacketVector = PacketVector([]PacketInfo{
-			{Number: number, Length: protocol.DefaultTCPMSS},
-		})
-		sender.OnCongestionEvent(false, bytesInFlight, ackedPackets, lostPackets)
+		sender.OnPacketLost(number, protocol.DefaultTCPMSS, bytesInFlight)
 		bytesInFlight -= protocol.DefaultTCPMSS
 	}
 
