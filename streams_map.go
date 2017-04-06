@@ -31,9 +31,7 @@ type streamsMap struct {
 
 	newStream newStreamLambda
 
-	maxOutgoingStreams uint32
 	numOutgoingStreams uint32
-	maxIncomingStreams uint32
 	numIncomingStreams uint32
 }
 

@@ -2,7 +2,6 @@ package handshake
 
 import (
 	"bytes"
-	"errors"
 	"sync"
 	"time"
 
@@ -54,8 +53,6 @@ type connectionParametersManager struct {
 }
 
 var _ ConnectionParametersManager = &connectionParametersManager{}
-
-var errTagNotInConnectionParameterMap = errors.New("ConnectionParametersManager: Tag not found in ConnectionsParameter map")
 
 // ErrMalformedTag is returned when the tag value cannot be read
 var (

@@ -33,8 +33,6 @@ func (m *mockCryptoSetup) GetSealerWithEncryptionLevel(protocol.EncryptionLevel)
 		return append(src, bytes.Repeat([]byte{0}, 12)...)
 	}, nil
 }
-func (m *mockCryptoSetup) LockForSealing()         {}
-func (m *mockCryptoSetup) UnlockForSealing()       {}
 func (m *mockCryptoSetup) HandshakeComplete() bool { return m.handshakeComplete }
 func (m *mockCryptoSetup) DiversificationNonce() []byte {
 	return m.divNonce

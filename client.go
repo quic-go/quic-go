@@ -30,8 +30,6 @@ type client struct {
 	session packetHandler
 }
 
-var errHostname = errors.New("Invalid hostname")
-
 var (
 	errCloseSessionForNewVersion = errors.New("closing session in order to recreate it with a new version")
 )

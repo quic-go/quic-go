@@ -81,8 +81,6 @@ func (m *mockAEAD) Open(dst, src []byte, packetNumber protocol.PacketNumber, ass
 	return nil, errors.New("authentication failed")
 }
 
-func (mockAEAD) DiversificationNonce() []byte { return nil }
-
 var expectedInitialNonceLen int
 var expectedFSNonceLen int
 
