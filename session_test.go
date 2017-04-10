@@ -1193,7 +1193,7 @@ var _ = Describe("Session", func() {
 	Context("sending a Public Reset when receiving undecryptable packets during the handshake", func() {
 		It("doesn't immediately send a Public Reset after receiving too many undecryptable packets", func() {
 			go sess.run()
-			for i := 0; i < protocol.MaxUndecryptablePackets; i++ {
+			for i := 0; i < protocol.MaxUndecryptablePackets+1; i++ {
 				hdr := &PublicHeader{
 					PacketNumber: protocol.PacketNumber(i + 1),
 				}
@@ -1205,13 +1205,26 @@ var _ = Describe("Session", func() {
 
 		It("sets a deadline to send a Public Reset after receiving too many undecryptable packets", func() {
 			go sess.run()
-			for i := 0; i < protocol.MaxUndecryptablePackets; i++ {
+			for i := 0; i < protocol.MaxUndecryptablePackets+1; i++ {
 				hdr := &PublicHeader{
 					PacketNumber: protocol.PacketNumber(i + 1),
 				}
 				sess.handlePacket(&receivedPacket{publicHeader: hdr, data: []byte("foobar")})
 			}
 			Eventually(func() time.Time { return sess.receivedTooManyUndecrytablePacketsTime }).Should(BeTemporally("~", time.Now(), 10*time.Millisecond))
+		})
+
+		It("drops undecryptable packets when the undecrytable packet queue is full", func() {
+			go sess.run()
+			for i := 0; i < protocol.MaxUndecryptablePackets+10; i++ {
+				hdr := &PublicHeader{
+					PacketNumber: protocol.PacketNumber(i + 1),
+				}
+				sess.handlePacket(&receivedPacket{publicHeader: hdr, data: []byte("foobar")})
+			}
+			Eventually(func() []*receivedPacket { return sess.undecryptablePackets }).Should(HaveLen(protocol.MaxUndecryptablePackets))
+			// check that old packets are kept, and the new packets are dropped
+			Expect(sess.undecryptablePackets[0].publicHeader.PacketNumber).To(Equal(protocol.PacketNumber(1)))
 		})
 
 		It("sends a Public Reset after a timeout", func() {
@@ -1226,7 +1239,7 @@ var _ = Describe("Session", func() {
 
 		It("ignores undecryptable packets after the handshake is complete", func() {
 			*(*bool)(unsafe.Pointer(reflect.ValueOf(sess.cryptoSetup).Elem().FieldByName("receivedForwardSecurePacket").UnsafeAddr())) = true
-			for i := 0; i < protocol.MaxUndecryptablePackets; i++ {
+			for i := 0; i < protocol.MaxUndecryptablePackets+1; i++ {
 				hdr := &PublicHeader{
 					PacketNumber: protocol.PacketNumber(i + 1),
 				}
