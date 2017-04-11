@@ -261,7 +261,7 @@ runLoop:
 		if err := s.sendPacket(); err != nil {
 			s.close(err)
 		}
-		if !s.receivedTooManyUndecrytablePacketsTime.IsZero() && s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout).Before(now) {
+		if !s.receivedTooManyUndecrytablePacketsTime.IsZero() && s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout).Before(now) && len(s.undecryptablePackets) != 0 {
 			s.close(qerr.Error(qerr.DecryptionFailure, "too many undecryptable packets received"))
 		}
 		if now.Sub(s.lastNetworkActivityTime) >= s.idleTimeout() {
