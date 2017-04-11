@@ -1191,32 +1191,51 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("sending a Public Reset when receiving undecryptable packets during the handshake", func() {
-		It("doesn't immediately send a Public Reset after receiving too many undecryptable packets", func() {
-			go sess.run()
-			for i := 0; i < protocol.MaxUndecryptablePackets; i++ {
+		// sends protocol.MaxUndecryptablePackets+1 undecrytable packets
+		// this completely fills up the undecryptable packets queue and triggers the public reset timer
+		sendUndecryptablePackets := func() {
+			for i := 0; i < protocol.MaxUndecryptablePackets+1; i++ {
 				hdr := &PublicHeader{
 					PacketNumber: protocol.PacketNumber(i + 1),
 				}
 				sess.handlePacket(&receivedPacket{publicHeader: hdr, data: []byte("foobar")})
 			}
+		}
+
+		BeforeEach(func() {
+			sess.unpacker = &mockUnpacker{unpackErr: qerr.Error(qerr.DecryptionFailure, "")}
+			sess.cryptoSetup = &mockCryptoSetup{}
+		})
+
+		It("doesn't immediately send a Public Reset after receiving too many undecryptable packets", func() {
+			go sess.run()
+			sendUndecryptablePackets()
 			sess.scheduleSending()
 			Consistently(func() [][]byte { return mconn.written }).Should(HaveLen(0))
 		})
 
 		It("sets a deadline to send a Public Reset after receiving too many undecryptable packets", func() {
 			go sess.run()
-			for i := 0; i < protocol.MaxUndecryptablePackets; i++ {
-				hdr := &PublicHeader{
-					PacketNumber: protocol.PacketNumber(i + 1),
-				}
-				sess.handlePacket(&receivedPacket{publicHeader: hdr, data: []byte("foobar")})
-			}
+			sendUndecryptablePackets()
 			Eventually(func() time.Time { return sess.receivedTooManyUndecrytablePacketsTime }).Should(BeTemporally("~", time.Now(), 10*time.Millisecond))
+			sess.Close(nil)
+		})
+
+		It("drops undecryptable packets when the undecrytable packet queue is full", func() {
+			go sess.run()
+			sendUndecryptablePackets()
+			Eventually(func() []*receivedPacket { return sess.undecryptablePackets }).Should(HaveLen(protocol.MaxUndecryptablePackets))
+			// check that old packets are kept, and the new packets are dropped
+			Expect(sess.undecryptablePackets[0].publicHeader.PacketNumber).To(Equal(protocol.PacketNumber(1)))
+			sess.Close(nil)
 		})
 
 		It("sends a Public Reset after a timeout", func() {
-			sess.receivedTooManyUndecrytablePacketsTime = time.Now().Add(-protocol.PublicResetTimeout)
 			go sess.run()
+			sendUndecryptablePackets()
+			Eventually(func() time.Time { return sess.receivedTooManyUndecrytablePacketsTime }).Should(BeTemporally("~", time.Now(), time.Millisecond))
+			// speed up this test by manually setting back the time when too many packets were received
+			sess.receivedTooManyUndecrytablePacketsTime = time.Now().Add(-protocol.PublicResetTimeout)
 			time.Sleep(10 * time.Millisecond) // wait for the run loop to spin up
 			sess.scheduleSending()            // wake up the run loop
 			Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(1))
@@ -1224,16 +1243,22 @@ var _ = Describe("Session", func() {
 			Expect(sess.runClosed).To(Receive())
 		})
 
-		It("ignores undecryptable packets after the handshake is complete", func() {
-			*(*bool)(unsafe.Pointer(reflect.ValueOf(sess.cryptoSetup).Elem().FieldByName("receivedForwardSecurePacket").UnsafeAddr())) = true
-			for i := 0; i < protocol.MaxUndecryptablePackets; i++ {
-				hdr := &PublicHeader{
-					PacketNumber: protocol.PacketNumber(i + 1),
-				}
-				sess.handlePacket(&receivedPacket{publicHeader: hdr, data: []byte("foobar")})
-			}
+		It("doesn't send a Public Reset if decrypting them suceeded during the timeout", func() {
 			go sess.run()
-			Consistently(sess.undecryptablePackets).Should(HaveLen(0))
+			sess.receivedTooManyUndecrytablePacketsTime = time.Now().Add(-protocol.PublicResetTimeout).Add(-time.Millisecond)
+			sess.scheduleSending() // wake up the run loop
+			// there are no packets in the undecryptable packet queue
+			// in reality, this happens when the trial decryption succeeded during the Public Reset timeout
+			Consistently(func() [][]byte { return mconn.written }).ShouldNot(HaveLen(1))
+			Expect(sess.runClosed).ToNot(Receive())
+			sess.Close(nil)
+		})
+
+		It("ignores undecryptable packets after the handshake is complete", func() {
+			sess.cryptoSetup.(*mockCryptoSetup).handshakeComplete = true
+			go sess.run()
+			sendUndecryptablePackets()
+			Consistently(sess.undecryptablePackets).Should(BeEmpty())
 			sess.closeImpl(nil, true)
 			Eventually(sess.runClosed).Should(Receive())
 		})

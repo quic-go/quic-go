@@ -261,7 +261,7 @@ runLoop:
 		if err := s.sendPacket(); err != nil {
 			s.close(err)
 		}
-		if !s.receivedTooManyUndecrytablePacketsTime.IsZero() && s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout).Before(now) {
+		if !s.receivedTooManyUndecrytablePacketsTime.IsZero() && s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout).Before(now) && len(s.undecryptablePackets) != 0 {
 			s.close(qerr.Error(qerr.DecryptionFailure, "too many undecryptable packets received"))
 		}
 		if now.Sub(s.lastNetworkActivityTime) >= s.idleTimeout() {
@@ -782,12 +782,16 @@ func (s *session) tryQueueingUndecryptablePacket(p *receivedPacket) {
 	if s.cryptoSetup.HandshakeComplete() {
 		return
 	}
-	utils.Infof("Queueing packet 0x%x for later decryption", p.publicHeader.PacketNumber)
-	if len(s.undecryptablePackets)+1 >= protocol.MaxUndecryptablePackets && s.receivedTooManyUndecrytablePacketsTime.IsZero() {
-		s.receivedTooManyUndecrytablePacketsTime = time.Now()
-		s.maybeResetTimer()
+	if len(s.undecryptablePackets)+1 > protocol.MaxUndecryptablePackets {
+		// if this is the first time the undecryptablePackets runs full, start the timer to send a Public Reset
+		if s.receivedTooManyUndecrytablePacketsTime.IsZero() {
+			s.receivedTooManyUndecrytablePacketsTime = time.Now()
+			s.maybeResetTimer()
+		}
+		utils.Infof("Dropping undecrytable packet 0x%x (undecryptable packet queue full)", p.publicHeader.PacketNumber)
 		return
 	}
+	utils.Infof("Queueing packet 0x%x for later decryption", p.publicHeader.PacketNumber)
 	s.undecryptablePackets = append(s.undecryptablePackets, p)
 }
 
