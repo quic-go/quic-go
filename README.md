@@ -14,16 +14,9 @@ quic-go is an implementation of the [QUIC](https://en.wikipedia.org/wiki/QUIC) p
 quic-go is compatible with the current version(s) of Google Chrome and QUIC as deployed on Google's servers. We're actively tracking the development of the Chrome code to ensure compatibility as the protocol evolves. In that process, we're dropping support for old QUIC versions.
 As Google's QUIC versions are expected to converge towards the [IETF QUIC draft](https://github.com/quicwg/base-drafts), quic-go will eventually implement that draft.
 
-quic-go should be built with Go 1.7 or newer.
-
-Major TODOs:
-
-- Better packet loss detection
-- Connection migration
-- Client-side 0-RTT support
-- BBR congestion control
-
 ## Guides
+
+We currently support Go 1.7+.
 
 Installing deps:
 
@@ -69,3 +62,7 @@ http.Client{
   Transport: &h2quic.QuicRoundTripper{},
 }
 ```
+
+## Contributing
+
+We are always happy to welcome new contributors! We have a number of self-contained issues that are suitable for first-time contributors, they are tagged with [want-help](https://github.com/lucas-clemente/quic-go/issues?q=is%3Aopen+is%3Aissue+label%3Awant-help). If you have any questions, please feel free to reach out by opening an issue or leaving a comment.
