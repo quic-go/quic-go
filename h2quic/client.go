@@ -239,7 +239,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 			res.Header.Del("Content-Length")
 			res.ContentLength = -1
 			res.Body = &gzipReader{body: res.Body}
-			setUncompressed(res)
+			res.Uncompressed = true
 		}
 	}
 
