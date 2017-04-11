@@ -68,7 +68,3 @@ http.Client{
   Transport: &h2quic.QuicRoundTripper{},
 }
 ```
-
-## Building on Windows
-
-Due to the low Windows timer resolution (see [StackOverflow question](http://stackoverflow.com/questions/37706834/high-resolution-timers-millisecond-precision-in-go-on-windows)) available with Go 1.6.x, some optimizations might not work when compiled with this version of the compiler. Please use Go 1.7 on Windows.
