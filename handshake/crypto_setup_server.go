@@ -156,10 +156,7 @@ func (h *cryptoSetupServer) handleMessage(chloData []byte, cryptoData map[Tag][]
 		return false, err
 	}
 	_, err = h.cryptoStream.Write(reply)
-	if err != nil {
-		return false, err
-	}
-	return false, nil
+	return false, err
 }
 
 // Open a message

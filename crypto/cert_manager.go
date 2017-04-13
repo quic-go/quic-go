@@ -41,7 +41,7 @@ func (c *certManager) SetData(data []byte) error {
 		return qerr.Error(qerr.InvalidCryptoMessageParameter, "Certificate data invalid")
 	}
 
-	chain := make([]*x509.Certificate, len(byteChain), len(byteChain))
+	chain := make([]*x509.Certificate, len(byteChain))
 	for i, data := range byteChain {
 		cert, err := x509.ParseCertificate(data)
 		if err != nil {

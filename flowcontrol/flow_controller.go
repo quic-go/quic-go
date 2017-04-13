@@ -162,7 +162,7 @@ func (c *flowController) maybeAdjustWindowIncrement() {
 		return
 	}
 
-	timeSinceLastWindowUpdate := time.Now().Sub(c.lastWindowUpdateTime)
+	timeSinceLastWindowUpdate := time.Since(c.lastWindowUpdateTime)
 
 	// interval between the window updates is sufficiently large, no need to increase the increment
 	if timeSinceLastWindowUpdate >= 2*rtt {
@@ -194,8 +194,5 @@ func (c *flowController) EnsureMinimumWindowIncrement(inc protocol.ByteCount) {
 }
 
 func (c *flowController) CheckFlowControlViolation() bool {
-	if c.highestReceived > c.receiveWindow {
-		return true
-	}
-	return false
+	return c.highestReceived > c.receiveWindow
 }

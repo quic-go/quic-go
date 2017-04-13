@@ -169,8 +169,7 @@ func (s *session) setup() {
 	s.rttStats = &congestion.RTTStats{}
 	flowControlManager := flowcontrol.NewFlowControlManager(s.connectionParameters, s.rttStats)
 
-	var sentPacketHandler ackhandler.SentPacketHandler
-	sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats)
+	sentPacketHandler := ackhandler.NewSentPacketHandler(s.rttStats)
 
 	now := time.Now()
 
@@ -447,11 +446,7 @@ func (s *session) handleStreamFrame(frame *frames.StreamFrame) error {
 		// ignore this StreamFrame
 		return nil
 	}
-	err = str.AddStreamFrame(frame)
-	if err != nil {
-		return err
-	}
-	return nil
+	return str.AddStreamFrame(frame)
 }
 
 func (s *session) handleWindowUpdateFrame(frame *frames.WindowUpdateFrame) error {
@@ -482,10 +477,7 @@ func (s *session) handleRstStreamFrame(frame *frames.RstStreamFrame) error {
 }
 
 func (s *session) handleAckFrame(frame *frames.AckFrame) error {
-	if err := s.sentPacketHandler.ReceivedAck(frame, s.lastRcvdPacketNumber, s.lastNetworkActivityTime); err != nil {
-		return err
-	}
-	return nil
+	return s.sentPacketHandler.ReceivedAck(frame, s.lastRcvdPacketNumber, s.lastNetworkActivityTime)
 }
 
 // Close the connection. If err is nil it will be set to qerr.PeerGoingAway.

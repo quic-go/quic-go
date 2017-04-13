@@ -413,7 +413,7 @@ func (h *cryptoSetupClient) getTags() (map[Tag][]byte, error) {
 		tags[TagCCS] = ccs
 	}
 
-	versionTag := make([]byte, 4, 4)
+	versionTag := make([]byte, 4)
 	binary.LittleEndian.PutUint32(versionTag, protocol.VersionNumberToTag(h.version))
 	tags[TagVER] = versionTag
 
@@ -431,7 +431,7 @@ func (h *cryptoSetupClient) getTags() (map[Tag][]byte, error) {
 		leafCert := h.certManager.GetLeafCert()
 		if leafCert != nil {
 			certHash, _ := h.certManager.GetLeafCertHash()
-			xlct := make([]byte, 8, 8)
+			xlct := make([]byte, 8)
 			binary.LittleEndian.PutUint64(xlct, certHash)
 
 			tags[TagNONC] = h.nonc
