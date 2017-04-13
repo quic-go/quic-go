@@ -85,7 +85,7 @@ var _ = Describe("Server Config", func() {
 		})
 	})
 
-	Context("Reading values fromt the TagMap", func() {
+	Context("Reading values from the TagMap", func() {
 		var scfg *serverConfigClient
 
 		BeforeEach(func() {
@@ -218,7 +218,7 @@ var _ = Describe("Server Config", func() {
 				tagMap[TagEXPY] = []byte{0xdc, 0x89, 0x0e, 0x59, 0, 0, 0, 0} // UNIX Timestamp 0x590e89dc = 1494125020
 				err := scfg.parseValues(tagMap)
 				Expect(err).ToNot(HaveOccurred())
-				year, month, day := scfg.expiry.Date()
+				year, month, day := scfg.expiry.UTC().Date()
 				Expect(year).To(Equal(2017))
 				Expect(month).To(Equal(time.Month(5)))
 				Expect(day).To(Equal(7))
