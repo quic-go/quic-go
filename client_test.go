@@ -120,15 +120,15 @@ var _ = Describe("Client", func() {
 		Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.InvalidPacketHeader))
 	})
 
-	// this test requires a real session (because it calls the close callback) and a real UDP conn (because it unblocks and errors when it is closed)
+	// this test requires a real session (because it calls the close callback)
+	// and a real UDP conn (because it unblocks and errors when it is closed)
 	It("properly closes", func(done Done) {
 		Eventually(areSessionsRunning).Should(BeFalse())
 		udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
 		Expect(err).ToNot(HaveOccurred())
-		cl.conn = &conn{pconn: udpConn}
+		cl.conn = &conn{pconn: udpConn, currentAddr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}}
 		err = cl.createNewSession(nil)
-		Expect(err).NotTo(HaveOccurred())
-		testErr := errors.New("test error")
+		Expect(err).ToNot(HaveOccurred())
 		Eventually(areSessionsRunning).Should(BeTrue())
 
 		var stoppedListening bool
@@ -137,6 +137,7 @@ var _ = Describe("Client", func() {
 			stoppedListening = true
 		}()
 
+		testErr := errors.New("test error")
 		err = cl.session.Close(testErr)
 		Expect(err).ToNot(HaveOccurred())
 		Eventually(func() bool { return stoppedListening }).Should(BeTrue())
