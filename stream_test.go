@@ -135,11 +135,9 @@ var _ = Describe("Stream", func() {
 			mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(2))
 			mockFcm.EXPECT().AddBytesRead(streamID, protocol.ByteCount(2))
 			go func() {
-				frame := frames.StreamFrame{
-					Offset: 0,
-					Data:   []byte{0xDE, 0xAD},
-				}
-				time.Sleep(time.Millisecond)
+				defer GinkgoRecover()
+				frame := frames.StreamFrame{Data: []byte{0xDE, 0xAD}}
+				time.Sleep(10 * time.Millisecond)
 				err := str.AddStreamFrame(&frame)
 				Expect(err).ToNot(HaveOccurred())
 			}()
