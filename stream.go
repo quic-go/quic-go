@@ -1,9 +1,11 @@
 package quic
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/flowcontrol"
 	"github.com/lucas-clemente/quic-go/frames"
@@ -40,8 +42,9 @@ type stream struct {
 	// resetRemotely is set if RegisterRemoteError() is called
 	resetRemotely utils.AtomicBool
 
-	frameQueue *streamFrameSorter
-	readChan   chan struct{}
+	frameQueue   *streamFrameSorter
+	readChan     chan struct{}
+	readDeadline time.Time
 
 	dataForWriting []byte
 	finSent        utils.AtomicBool
@@ -50,6 +53,8 @@ type stream struct {
 
 	flowControlManager flowcontrol.FlowControlManager
 }
+
+var errDeadline = errors.New("deadline exceeded")
 
 // newStream creates a new Stream
 func newStream(StreamID protocol.StreamID,
@@ -83,10 +88,10 @@ func (s *stream) Read(p []byte) (int, error) {
 	for bytesRead < len(p) {
 		s.mutex.Lock()
 		frame := s.frameQueue.Head()
-		s.mutex.Unlock()
-
 		if frame == nil && bytesRead > 0 {
-			return bytesRead, s.err
+			err = s.err
+			s.mutex.Unlock()
+			return bytesRead, err
 		}
 
 		var err error
@@ -96,15 +101,31 @@ func (s *stream) Read(p []byte) (int, error) {
 				err = s.err
 				break
 			}
+
+			deadline := s.readDeadline
+			if !deadline.IsZero() && !time.Now().Before(deadline) {
+				err = errDeadline
+				break
+			}
+
 			if frame != nil {
 				s.readPosInFrame = int(s.readOffset - frame.Offset)
 				break
 			}
-			<-s.readChan
+
+			s.mutex.Unlock()
+			if deadline.IsZero() {
+				<-s.readChan
+			} else {
+				select {
+				case <-s.readChan:
+				case <-time.After(deadline.Sub(time.Now())):
+				}
+			}
 			s.mutex.Lock()
 			frame = s.frameQueue.Head()
-			s.mutex.Unlock()
 		}
+		s.mutex.Unlock()
 
 		if err != nil {
 			return bytesRead, err
@@ -270,6 +291,21 @@ func (s *stream) signalWrite() {
 	case s.writeChan <- struct{}{}:
 	default:
 	}
+}
+
+// SetReadDeadline sets the deadline for future Read calls and
+// any currently-blocked Read call.
+// A zero value for t means Read will not time out.
+func (s *stream) SetReadDeadline(t time.Time) error {
+	s.mutex.Lock()
+	oldDeadline := s.readDeadline
+	s.readDeadline = t
+	s.mutex.Unlock()
+	// if the new deadline is before the currently set deadline, wake up Read()
+	if t.Before(oldDeadline) {
+		s.signalRead()
+	}
+	return nil
 }
 
 // CloseRemote makes the stream receive a "virtual" FIN stream frame at a given offset
