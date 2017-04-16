@@ -12,7 +12,8 @@ import (
 var _ = Describe("StreamFrame", func() {
 	Context("when parsing", func() {
 		It("accepts sample frame", func() {
-			b := bytes.NewReader([]byte{0xa0, 0x1, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'})
+			// a STREAM frame, plus 3 additional bytes, not belonging to this frame
+			b := bytes.NewReader([]byte{0xa0, 0x1, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r' /* additional bytes */, 'f', 'o', 'o'})
 			frame, err := ParseStreamFrame(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.FinBit).To(BeFalse())
@@ -20,6 +21,7 @@ var _ = Describe("StreamFrame", func() {
 			Expect(frame.Offset).To(BeZero())
 			Expect(frame.DataLenPresent).To(BeTrue())
 			Expect(frame.Data).To(Equal([]byte("foobar")))
+			Expect(b.Len()).To(Equal(3))
 		})
 
 		It("accepts frame without data length", func() {
@@ -31,15 +33,28 @@ var _ = Describe("StreamFrame", func() {
 			Expect(frame.Offset).To(BeZero())
 			Expect(frame.DataLenPresent).To(BeFalse())
 			Expect(frame.Data).To(Equal([]byte("foobar")))
+			Expect(b.Len()).To(BeZero())
 		})
 
-		It("accepts empty frame with finbit set", func() {
-			b := bytes.NewReader([]byte{0x80 ^ 0x40 ^ 0x20, 0x1, 0, 0})
+		It("accepts an empty frame with FinBit set, with data length set", func() {
+			// the STREAM frame, plus 3 additional bytes, not belonging to this frame
+			b := bytes.NewReader([]byte{0x80 ^ 0x40 ^ 0x20, 0x1 /* stream id */, 0, 0, 'f', 'o', 'o'})
 			frame, err := ParseStreamFrame(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.FinBit).To(BeTrue())
 			Expect(frame.DataLenPresent).To(BeTrue())
-			Expect(frame.Data).To(HaveLen(0))
+			Expect(frame.Data).To(BeEmpty())
+			Expect(b.Len()).To(Equal(3))
+		})
+
+		It("accepts an empty frame with the FinBit set", func() {
+			b := bytes.NewReader([]byte{0x80 ^ 0x40, 0x1 /* stream id */, 'f', 'o', 'o', 'b', 'a', 'r'})
+			frame, err := ParseStreamFrame(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame.FinBit).To(BeTrue())
+			Expect(frame.DataLenPresent).To(BeFalse())
+			Expect(frame.Data).To(Equal([]byte("foobar")))
+			Expect(b.Len()).To(BeZero())
 		})
 
 		It("accepts frames with offsets", func() {
@@ -51,6 +66,7 @@ var _ = Describe("StreamFrame", func() {
 			Expect(frame.Offset).To(Equal(protocol.ByteCount(42)))
 			Expect(frame.DataLenPresent).To(BeTrue())
 			Expect(frame.Data).To(Equal([]byte("foobar")))
+			Expect(b.Len()).To(BeZero())
 		})
 
 		It("errors on empty stream frames that don't have the FinBit set", func() {

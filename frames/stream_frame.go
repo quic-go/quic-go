@@ -64,7 +64,7 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 		return nil, qerr.Error(qerr.InvalidStreamData, "data len too large")
 	}
 
-	if dataLen == 0 {
+	if !frame.DataLenPresent {
 		// The rest of the packet is data
 		dataLen = uint16(r.Len())
 	}
