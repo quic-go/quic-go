@@ -662,37 +662,43 @@ var _ = Describe("Stream", func() {
 
 	Context("writing", func() {
 		It("writes and gets all data at once", func(done Done) {
+			var writeReturned bool
 			go func() {
 				n, err := str.Write([]byte("foobar"))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(n).To(Equal(6))
-				close(done)
+				writeReturned = true
 			}()
 			Eventually(func() []byte {
 				str.mutex.Lock()
 				defer str.mutex.Unlock()
 				return str.dataForWriting
 			}).Should(Equal([]byte("foobar")))
+			Consistently(func() bool { return writeReturned }).Should(BeFalse())
 			Expect(onDataCalled).To(BeTrue())
 			Expect(str.lenOfDataForWriting()).To(Equal(protocol.ByteCount(6)))
 			data := str.getDataForWriting(1000)
 			Expect(data).To(Equal([]byte("foobar")))
 			Expect(str.writeOffset).To(Equal(protocol.ByteCount(6)))
 			Expect(str.dataForWriting).To(BeNil())
+			Eventually(func() bool { return writeReturned }).Should(BeTrue())
+			close(done)
 		})
 
 		It("writes and gets data in two turns", func(done Done) {
+			var writeReturned bool
 			go func() {
 				n, err := str.Write([]byte("foobar"))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(n).To(Equal(6))
-				close(done)
+				writeReturned = true
 			}()
 			Eventually(func() []byte {
 				str.mutex.Lock()
 				defer str.mutex.Unlock()
 				return str.dataForWriting
 			}).Should(Equal([]byte("foobar")))
+			Consistently(func() bool { return writeReturned }).Should(BeFalse())
 			Expect(str.lenOfDataForWriting()).To(Equal(protocol.ByteCount(6)))
 			data := str.getDataForWriting(3)
 			Expect(data).To(Equal([]byte("foo")))
@@ -704,6 +710,8 @@ var _ = Describe("Stream", func() {
 			Expect(str.writeOffset).To(Equal(protocol.ByteCount(6)))
 			Expect(str.dataForWriting).To(BeNil())
 			Expect(str.lenOfDataForWriting()).To(Equal(protocol.ByteCount(0)))
+			Eventually(func() bool { return writeReturned }).Should(BeTrue())
+			close(done)
 		})
 
 		It("getDataForWriting returns nil if no data is available", func() {
