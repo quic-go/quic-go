@@ -104,6 +104,13 @@ var _ = Describe("Client", func() {
 		Expect(client.encryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
 	})
 
+	It("sets the correct crypto level, if the ConnStateCallback is called in the wrong order", func() {
+		client.config.ConnState(session, quic.ConnStateForwardSecure)
+		Expect(client.encryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
+		client.config.ConnState(session, quic.ConnStateSecure)
+		Expect(client.encryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
+	})
+
 	Context("Doing requests", func() {
 		var request *http.Request
 		var dataStream *mockStream
