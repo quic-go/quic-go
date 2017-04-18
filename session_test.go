@@ -1217,7 +1217,7 @@ var _ = Describe("Session", func() {
 		It("sets a deadline to send a Public Reset after receiving too many undecryptable packets", func() {
 			go sess.run()
 			sendUndecryptablePackets()
-			Eventually(func() time.Time { return sess.receivedTooManyUndecrytablePacketsTime }).Should(BeTemporally("~", time.Now(), 10*time.Millisecond))
+			Eventually(func() time.Time { return sess.receivedTooManyUndecrytablePacketsTime }).Should(BeTemporally("~", time.Now(), 20*time.Millisecond))
 			sess.Close(nil)
 		})
 
@@ -1233,14 +1233,14 @@ var _ = Describe("Session", func() {
 		It("sends a Public Reset after a timeout", func() {
 			go sess.run()
 			sendUndecryptablePackets()
-			Eventually(func() time.Time { return sess.receivedTooManyUndecrytablePacketsTime }).Should(BeTemporally("~", time.Now(), time.Millisecond))
+			Eventually(func() time.Time { return sess.receivedTooManyUndecrytablePacketsTime }).Should(BeTemporally("~", time.Now(), 10*time.Millisecond))
 			// speed up this test by manually setting back the time when too many packets were received
 			sess.receivedTooManyUndecrytablePacketsTime = time.Now().Add(-protocol.PublicResetTimeout)
 			time.Sleep(10 * time.Millisecond) // wait for the run loop to spin up
 			sess.scheduleSending()            // wake up the run loop
 			Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(1))
 			Expect(mconn.written[0]).To(ContainSubstring(string([]byte("PRST"))))
-			Expect(sess.runClosed).To(Receive())
+			Eventually(sess.runClosed).Should(Receive())
 		})
 
 		It("doesn't send a Public Reset if decrypting them suceeded during the timeout", func() {
