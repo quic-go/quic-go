@@ -32,8 +32,7 @@ before_install:
   - go env # for debugging
 
 script:
-  # Retry building up to 3 times as documented here: https://docs.travis-ci.com/user/common-build-problems/#travis_retry
-  - travis_retry .travis/script.sh
+  - .travis/script.sh
 
 after_success:
   - .travis/after_success.sh
