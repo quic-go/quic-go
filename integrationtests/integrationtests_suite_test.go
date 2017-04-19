@@ -42,7 +42,8 @@ var (
 	dataMan    dataManager
 	port       string
 	uploadDir  string
-	clientPath string
+	clientPath string // path of the quic_client
+	serverPath string // path of the quic_server
 
 	docker *gexec.Session
 )
@@ -78,6 +79,7 @@ var _ = BeforeEach(func() {
 		Fail("Failed to get current path")
 	}
 	clientPath = filepath.Join(thisfile, fmt.Sprintf("../../../quic-clients/client-%s-debug", runtime.GOOS))
+	serverPath = filepath.Join(thisfile, fmt.Sprintf("../../../quic-clients/server-%s-debug", runtime.GOOS))
 })
 
 var _ = AfterEach(func() {
