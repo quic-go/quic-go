@@ -69,8 +69,11 @@ func newStream(StreamID protocol.StreamID, onData func(), onReset func(protocol.
 
 // Read implements io.Reader. It is not thread safe!
 func (s *stream) Read(p []byte) (int, error) {
+	s.mutex.Lock()
+	err := s.err
+	s.mutex.Unlock()
 	if s.cancelled.Get() || s.resetLocally.Get() {
-		return 0, s.err
+		return 0, err
 	}
 	if s.finishedReading.Get() {
 		return 0, io.EOF
