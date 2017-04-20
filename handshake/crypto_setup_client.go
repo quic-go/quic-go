@@ -247,9 +247,11 @@ func (h *cryptoSetupClient) handleSHLOMessage(cryptoData map[Tag][]byte) error {
 	if err != nil {
 		return qerr.InvalidCryptoMessageParameter
 	}
-
+	
+	h.mutex.Unlock()
 	h.aeadChanged <- protocol.EncryptionForwardSecure
-
+	h.mutex.Lock()
+	
 	return nil
 }
 
