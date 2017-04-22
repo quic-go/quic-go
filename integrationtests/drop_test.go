@@ -3,6 +3,7 @@ package integrationtests
 import (
 	"bytes"
 	"fmt"
+	"math/rand"
 	"os/exec"
 	"strconv"
 	"time"
@@ -24,7 +25,7 @@ var _ = Describe("Drop Proxy", func() {
 	var dropproxy *proxy.UDPProxy
 
 	runDropTest := func(incomingPacketDropper, outgoingPacketDropper proxy.DropCallback, version protocol.VersionNumber) {
-		proxyPort := 12345
+		proxyPort := 50000 + int(rand.Int63n(10000))
 
 		iPort, _ := strconv.Atoi(port)
 		var err error

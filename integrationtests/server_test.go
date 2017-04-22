@@ -25,8 +25,6 @@ import (
 )
 
 var _ = Describe("Server tests", func() {
-	mrand.Seed(time.Now().UnixNano())
-
 	var (
 		serverPort string
 		tmpDir     string
