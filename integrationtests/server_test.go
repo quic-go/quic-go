@@ -38,11 +38,10 @@ var _ = Describe("Server tests", func() {
 		key, err := rsa.GenerateKey(rand.Reader, 1024)
 		Expect(err).ToNot(HaveOccurred())
 
-		t := time.Now().Add(-time.Minute)
 		templateRoot := &x509.Certificate{
 			SerialNumber: big.NewInt(1),
-			NotBefore:    t,
-			NotAfter:     t.Add(time.Hour),
+			NotBefore:    time.Now().Add(-time.Hour),
+			NotAfter:     time.Now().Add(time.Hour),
 			IsCA:         true,
 			BasicConstraintsValid: true,
 		}
@@ -130,10 +129,11 @@ var _ = Describe("Server tests", func() {
 		// this CA is used to sign the server's key
 		// it is set as a valid CA in the QUIC client
 		rootKey, CACert := generateCA()
+		// generate the server certificate
 		template := &x509.Certificate{
 			SerialNumber: big.NewInt(1),
-			NotBefore:    time.Now(),
-			NotAfter:     time.Now().Add(time.Hour),
+			NotBefore:    time.Now().Add(-30 * time.Minute),
+			NotAfter:     time.Now().Add(30 * time.Minute),
 			Subject:      pkix.Name{CommonName: "quic.clemente.io"},
 		}
 		certDER, err := x509.CreateCertificate(rand.Reader, template, CACert, &key.PublicKey, rootKey)
