@@ -38,6 +38,10 @@ Using Chrome:
 
     /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --user-data-dir=/tmp/chrome --no-proxy-server --enable-quic --origin-to-force-quic-on=quic.clemente.io:443 --host-resolver-rules='MAP quic.clemente.io:443 127.0.0.1:6121' https://quic.clemente.io
 
+### QUIC without HTTP/2
+
+Take a look at [this echo example](example/echo/echo.go).
+
 ### Using the example client
 
     go run example/client/main.go https://clemente.io
