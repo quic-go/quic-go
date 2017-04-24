@@ -3,6 +3,7 @@ package integrationtests
 import (
 	"bytes"
 	"fmt"
+	"math/rand"
 	"os/exec"
 	"strconv"
 	"time"
@@ -24,7 +25,7 @@ var _ = Describe("non-zero RTT", func() {
 	var rttProxy *proxy.UDPProxy
 
 	runRTTTest := func(rtt time.Duration, version protocol.VersionNumber) {
-		proxyPort := 12345
+		proxyPort := 50000 + int(rand.Int63n(10000))
 
 		iPort, _ := strconv.Atoi(port)
 		var err error

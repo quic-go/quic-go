@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -57,6 +58,9 @@ var _ = BeforeSuite(func() {
 	setupHTTPHandlers()
 	setupQuicServer()
 	setupSelenium()
+
+	// seed the random number generator used to generate random port numbers
+	rand.Seed(time.Now().UnixNano())
 })
 
 var _ = AfterSuite(func() {
