@@ -3,6 +3,7 @@ package integrationtests
 import (
 	"bytes"
 	"fmt"
+	"math/rand"
 	"os/exec"
 	"strconv"
 	"time"
@@ -16,26 +17,62 @@ import (
 	. "github.com/onsi/gomega/gexec"
 )
 
+// get a random duration between min and max
+func getRandomDuration(min, max time.Duration) time.Duration {
+	return min + time.Duration(rand.Int63n(int64(max-min)))
+}
+
+var _ = Describe("Random Duration Generator", func() {
+	rand.Seed(time.Now().UnixNano())
+	It("gets a random RTT", func() {
+		var min time.Duration = time.Hour
+		var max time.Duration
+
+		var sum time.Duration
+		rep := 10000
+		for i := 0; i < rep; i++ {
+			val := getRandomDuration(100*time.Millisecond, 500*time.Millisecond)
+			sum += val
+			if val < min {
+				min = val
+			}
+			if val > max {
+				max = val
+			}
+		}
+		avg := sum / time.Duration(rep)
+		fmt.Println(avg)
+		Expect(avg).To(BeNumerically("~", 300*time.Millisecond, 5*time.Millisecond))
+		Expect(min).To(BeNumerically(">=", 100*time.Millisecond))
+		Expect(min).To(BeNumerically("<", 105*time.Millisecond))
+		Expect(max).To(BeNumerically(">", 495*time.Millisecond))
+		Expect(max).To(BeNumerically("<=", 500*time.Millisecond))
+	})
+})
+
 var _ = Describe("Random RTT", func() {
 	BeforeEach(func() {
 		dataMan.GenerateData(dataLen)
 	})
 
-	var rttProxy *proxy.UDPProxy
+	var proxy *quicproxy.QuicProxy
 
 	runRTTTest := func(minRtt, maxRtt time.Duration, version protocol.VersionNumber) {
-		proxyPort := 12345
-
-		iPort, _ := strconv.Atoi(port)
+		rand.Seed(time.Now().UnixNano())
 		var err error
-		rttProxy, err = proxy.NewUDPProxy(proxyPort, "localhost", iPort, nil, nil, minRtt, maxRtt)
+		proxy, err = quicproxy.NewQuicProxy("localhost:", quicproxy.Opts{
+			RemoteAddr: "localhost:" + port,
+			DelayPacket: func(_ quicproxy.Direction, _ protocol.PacketNumber) time.Duration {
+				return getRandomDuration(minRtt, maxRtt)
+			},
+		})
 		Expect(err).ToNot(HaveOccurred())
 
 		command := exec.Command(
 			clientPath,
 			"--quic-version="+strconv.Itoa(int(version)),
 			"--host=127.0.0.1",
-			"--port="+strconv.Itoa(proxyPort),
+			"--port="+strconv.Itoa(proxy.LocalPort()),
 			"https://quic.clemente.io/data",
 		)
 
@@ -47,7 +84,8 @@ var _ = Describe("Random RTT", func() {
 	}
 
 	AfterEach(func() {
-		rttProxy.Stop()
+		err := proxy.Close()
+		Expect(err).ToNot(HaveOccurred())
 		time.Sleep(time.Millisecond)
 	})
 

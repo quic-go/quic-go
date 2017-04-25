@@ -21,21 +21,23 @@ var _ = Describe("non-zero RTT", func() {
 		dataMan.GenerateData(dataLen)
 	})
 
-	var rttProxy *proxy.UDPProxy
+	var proxy *quicproxy.QuicProxy
 
 	runRTTTest := func(rtt time.Duration, version protocol.VersionNumber) {
-		proxyPort := 12345
-
-		iPort, _ := strconv.Atoi(port)
 		var err error
-		rttProxy, err = proxy.NewUDPProxy(proxyPort, "localhost", iPort, nil, nil, rtt, rtt)
+		proxy, err = quicproxy.NewQuicProxy("localhost:", quicproxy.Opts{
+			RemoteAddr: "localhost:" + port,
+			DelayPacket: func(_ quicproxy.Direction, _ protocol.PacketNumber) time.Duration {
+				return rtt / 2
+			},
+		})
 		Expect(err).ToNot(HaveOccurred())
 
 		command := exec.Command(
 			clientPath,
 			"--quic-version="+strconv.Itoa(int(version)),
 			"--host=127.0.0.1",
-			"--port="+strconv.Itoa(proxyPort),
+			"--port="+strconv.Itoa(proxy.LocalPort()),
 			"https://quic.clemente.io/data",
 		)
 
@@ -47,7 +49,8 @@ var _ = Describe("non-zero RTT", func() {
 	}
 
 	AfterEach(func() {
-		rttProxy.Stop()
+		err := proxy.Close()
+		Expect(err).ToNot(HaveOccurred())
 		time.Sleep(time.Millisecond)
 	})
 

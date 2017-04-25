@@ -1,4 +1,4 @@
-package proxy
+package quicproxy
 
 import (
 	. "github.com/onsi/ginkgo"
@@ -9,5 +9,5 @@ import (
 
 func TestQuicGo(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "UDP Proxy")
+	RunSpecs(t, "QUIC Proxy")
 }
