@@ -21,7 +21,7 @@ const (
 // SupportedVersions lists the versions that the server supports
 // must be in sorted order
 var SupportedVersions = []VersionNumber{
-	Version35, Version36,
+	Version35, Version36, Version37,
 }
 
 // SupportedVersionsAsTags is needed for the SHLO crypto message
