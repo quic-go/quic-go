@@ -242,8 +242,10 @@ var _ = Describe("Client", func() {
 			Expect(cl.session).ToNot(Equal(sess))
 			Expect(cl.connectionID).ToNot(Equal(0x1337)) // it generated a new connection ID
 			Expect(err).ToNot(HaveOccurred())
-			// it didn't pass the version negoation packet to the session (since it has no payload)
+			// it didn't pass the version negoation packet to the old session (since it has no payload)
 			Expect(sess.packetCount).To(BeZero())
+			// if the version negotiation packet was passed to the new session, it would end up as an undecryptable packet there
+			Expect(cl.session.(*session).undecryptablePackets).To(BeEmpty())
 			Expect(*(*[]protocol.VersionNumber)(unsafe.Pointer(reflect.ValueOf(cl.session.(*session).cryptoSetup).Elem().FieldByName("negotiatedVersions").UnsafeAddr()))).To(Equal([]protocol.VersionNumber{35}))
 		})
 

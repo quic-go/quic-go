@@ -168,10 +168,8 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 	}
 
 	if hdr.VersionFlag {
-		err = c.handlePacketWithVersionFlag(hdr)
-		if err != nil {
-			return err
-		}
+		// version negotiation packets have no payload
+		return c.handlePacketWithVersionFlag(hdr)
 	}
 
 	c.session.handlePacket(&receivedPacket{
@@ -215,7 +213,7 @@ func (c *client) handlePacketWithVersionFlag(hdr *PublicHeader) error {
 		go c.config.ConnState(c.session, ConnStateVersionNegotiated)
 	}
 
-	return nil // version negotiation packets have no payload
+	return nil
 }
 
 func (c *client) cryptoChangeCallback(_ Session, isForwardSecure bool) {
