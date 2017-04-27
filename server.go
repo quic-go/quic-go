@@ -18,7 +18,7 @@ import (
 type packetHandler interface {
 	Session
 	handlePacket(*receivedPacket)
-	run()
+	run() error
 }
 
 // A Listener of QUIC
@@ -34,7 +34,7 @@ type server struct {
 	sessionsMutex             sync.RWMutex
 	deleteClosedSessionsAfter time.Duration
 
-	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, closeCallback closeCallback, cryptoChangeCallback cryptoChangeCallback) (packetHandler, error)
+	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, cryptoChangeCallback cryptoChangeCallback) (packetHandler, error)
 }
 
 var _ Listener = &server{}
@@ -182,16 +182,22 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 			version,
 			hdr.ConnectionID,
 			s.scfg,
-			s.closeCallback,
 			s.cryptoChangeCallback,
 		)
 		if err != nil {
 			return err
 		}
-		go session.run()
 		s.sessionsMutex.Lock()
 		s.sessions[hdr.ConnectionID] = session
 		s.sessionsMutex.Unlock()
+
+		go func() {
+			// session.run() returns as soon as the session is closed
+			_ = session.run()
+
+			s.removeConnection(hdr.ConnectionID)
+		}()
+
 		if s.config.ConnState != nil {
 			go s.config.ConnState(session, ConnStateVersionNegotiated)
 		}
@@ -221,7 +227,7 @@ func (s *server) cryptoChangeCallback(session Session, isForwardSecure bool) {
 	}
 }
 
-func (s *server) closeCallback(id protocol.ConnectionID) {
+func (s *server) removeConnection(id protocol.ConnectionID) {
 	s.sessionsMutex.Lock()
 	s.sessions[id] = nil
 	s.sessionsMutex.Unlock()

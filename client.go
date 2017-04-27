@@ -244,18 +244,27 @@ func (c *client) createNewSession(negotiatedVersions []protocol.VersionNumber) e
 		c.version,
 		c.connectionID,
 		c.config.TLSConfig,
-		c.closeCallback,
 		c.cryptoChangeCallback,
-		negotiatedVersions)
+		negotiatedVersions,
+	)
 	if err != nil {
 		return err
 	}
 
-	go c.session.run()
-	return nil
-}
+	go func() {
+		// session.run() returns as soon as the session is closed
+		err := c.session.run()
+		if err == errCloseSessionForNewVersion {
+			return
+		}
 
-func (c *client) closeCallback(_ protocol.ConnectionID) {
-	utils.Infof("Connection %x closed.", c.connectionID)
-	c.conn.Close()
+		c.mutex.Lock()
+		c.listenErr = err
+		c.connStateChangeOrErrCond.Signal()
+		c.mutex.Unlock()
+
+		utils.Infof("Connection %x closed.", c.connectionID)
+		c.conn.Close()
+	}()
+	return nil
 }

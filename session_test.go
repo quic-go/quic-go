@@ -121,12 +121,11 @@ func areSessionsRunning() bool {
 
 var _ = Describe("Session", func() {
 	var (
-		sess                *session
-		clientSess          *session
-		closeCallbackCalled bool
-		scfg                *handshake.ServerConfig
-		mconn               *mockConnection
-		cpm                 *mockConnectionParametersManager
+		sess       *session
+		clientSess *session
+		scfg       *handshake.ServerConfig
+		mconn      *mockConnection
+		cpm        *mockConnectionParametersManager
 	)
 
 	BeforeEach(func() {
@@ -135,8 +134,6 @@ var _ = Describe("Session", func() {
 		mconn = &mockConnection{
 			remoteAddr: &net.UDPAddr{},
 		}
-		closeCallbackCalled = false
-
 		certChain := crypto.NewCertChain(testdata.GetTLSConfig())
 		kex, err := crypto.NewCurve25519KEX()
 		Expect(err).NotTo(HaveOccurred())
@@ -147,7 +144,6 @@ var _ = Describe("Session", func() {
 			protocol.Version35,
 			0,
 			scfg,
-			func(protocol.ConnectionID) { closeCallbackCalled = true },
 			func(Session, bool) {},
 		)
 		Expect(err).NotTo(HaveOccurred())
@@ -163,7 +159,6 @@ var _ = Describe("Session", func() {
 			protocol.Version35,
 			0,
 			nil,
-			func(protocol.ConnectionID) { closeCallbackCalled = true },
 			func(Session, bool) {},
 			nil,
 		)
@@ -183,7 +178,6 @@ var _ = Describe("Session", func() {
 				protocol.VersionWhatever,
 				0,
 				scfg,
-				func(protocol.ConnectionID) { closeCallbackCalled = true },
 				func(Session, bool) {},
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -199,7 +193,6 @@ var _ = Describe("Session", func() {
 				protocol.VersionWhatever,
 				0,
 				scfg,
-				func(protocol.ConnectionID) { closeCallbackCalled = true },
 				func(Session, bool) {},
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -642,7 +635,6 @@ var _ = Describe("Session", func() {
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(mconn.written).To(HaveLen(1))
 			Expect(mconn.written[0][len(mconn.written[0])-7:]).To(Equal([]byte{0x02, byte(qerr.PeerGoingAway), 0, 0, 0, 0, 0}))
-			Expect(closeCallbackCalled).To(BeTrue())
 			Expect(sess.runClosed).ToNot(Receive()) // channel should be drained by Close()
 		})
 
@@ -660,7 +652,6 @@ var _ = Describe("Session", func() {
 			Expect(err).NotTo(HaveOccurred())
 			sess.Close(testErr)
 			Eventually(areSessionsRunning).Should(BeFalse())
-			Expect(closeCallbackCalled).To(BeTrue())
 			n, err := s.Read([]byte{0})
 			Expect(n).To(BeZero())
 			Expect(err.Error()).To(ContainSubstring(testErr.Error()))
@@ -672,7 +663,6 @@ var _ = Describe("Session", func() {
 
 		It("closes the session in order to replace it with another QUIC version", func() {
 			sess.Close(errCloseSessionForNewVersion)
-			Expect(closeCallbackCalled).To(BeFalse())
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(atomic.LoadUint32(&sess.closed) != 0).To(BeTrue())
 			Expect(mconn.written).To(BeEmpty()) // no CONNECTION_CLOSE or PUBLIC_RESET sent
@@ -680,7 +670,6 @@ var _ = Describe("Session", func() {
 
 		It("sends a Public Reset if the client is initiating the head-of-line blocking experiment", func() {
 			sess.Close(handshake.ErrHOLExperiment)
-			Expect(closeCallbackCalled).To(BeTrue())
 			Expect(mconn.written).To(HaveLen(1))
 			Expect(mconn.written[0][0] & 0x02).ToNot(BeZero()) // Public Reset
 			Expect(sess.runClosed).ToNot(Receive())            // channel should be drained by Close()
@@ -1315,7 +1304,6 @@ var _ = Describe("Session", func() {
 			sess.lastNetworkActivityTime = time.Now().Add(-time.Hour)
 			sess.run() // Would normally not return
 			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
-			Expect(closeCallbackCalled).To(BeTrue())
 			Expect(sess.runClosed).To(Receive())
 			close(done)
 		})
@@ -1324,7 +1312,6 @@ var _ = Describe("Session", func() {
 			sess.sessionCreationTime = time.Now().Add(-time.Hour)
 			sess.run() // Would normally not return
 			Expect(mconn.written[0]).To(ContainSubstring("Crypto handshake did not complete in time."))
-			Expect(closeCallbackCalled).To(BeTrue())
 			Expect(sess.runClosed).To(Receive())
 			close(done)
 		})
@@ -1335,7 +1322,6 @@ var _ = Describe("Session", func() {
 			sess.packer.connectionParameters = sess.connectionParameters
 			sess.run() // Would normally not return
 			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
-			Expect(closeCallbackCalled).To(BeTrue())
 			Expect(sess.runClosed).To(Receive())
 			close(done)
 		})
@@ -1348,7 +1334,6 @@ var _ = Describe("Session", func() {
 			sess.packer.connectionParameters = sess.connectionParameters
 			sess.run() // Would normally not return
 			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
-			Expect(closeCallbackCalled).To(BeTrue())
 			Expect(sess.runClosed).To(Receive())
 			close(done)
 		})

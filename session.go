@@ -39,16 +39,12 @@ var (
 // Once the callback has been called with isForwardSecure = true, it is guarantueed to not be called with isForwardSecure = false after that
 type cryptoChangeCallback func(session Session, isForwardSecure bool)
 
-// closeCallback is called when a session is closed
-type closeCallback func(id protocol.ConnectionID)
-
 // A Session is a QUIC session
 type session struct {
 	connectionID protocol.ConnectionID
 	perspective  protocol.Perspective
 	version      protocol.VersionNumber
 
-	closeCallback        closeCallback
 	cryptoChangeCallback cryptoChangeCallback
 
 	conn connection
@@ -73,6 +69,8 @@ type session struct {
 	// closeChan is used to notify the run loop that it should terminate.
 	// If the value is not nil, the error is sent as a CONNECTION_CLOSE.
 	closeChan chan *qerr.QuicError
+	// the error this session was closed with
+	closeErr  error
 	runClosed chan struct{}
 	closed    uint32 // atomic bool
 
@@ -103,14 +101,13 @@ type session struct {
 var _ Session = &session{}
 
 // newSession makes a new session
-func newSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, closeCallback closeCallback, cryptoChangeCallback cryptoChangeCallback) (packetHandler, error) {
+func newSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, cryptoChangeCallback cryptoChangeCallback) (packetHandler, error) {
 	s := &session{
 		conn:         conn,
 		connectionID: connectionID,
 		perspective:  protocol.PerspectiveServer,
 		version:      v,
 
-		closeCallback:        closeCallback,
 		cryptoChangeCallback: cryptoChangeCallback,
 		connectionParameters: handshake.NewConnectionParamatersManager(protocol.PerspectiveServer, v),
 	}
@@ -136,14 +133,13 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	return s, err
 }
 
-func newClientSession(conn connection, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, tlsConfig *tls.Config, closeCallback closeCallback, cryptoChangeCallback cryptoChangeCallback, negotiatedVersions []protocol.VersionNumber) (*session, error) {
+func newClientSession(conn connection, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, tlsConfig *tls.Config, cryptoChangeCallback cryptoChangeCallback, negotiatedVersions []protocol.VersionNumber) (*session, error) {
 	s := &session{
 		conn:         conn,
 		connectionID: connectionID,
 		perspective:  protocol.PerspectiveClient,
 		version:      v,
 
-		closeCallback:        closeCallback,
 		cryptoChangeCallback: cryptoChangeCallback,
 		connectionParameters: handshake.NewConnectionParamatersManager(protocol.PerspectiveClient, v),
 	}
@@ -193,7 +189,7 @@ func (s *session) setup() {
 }
 
 // run the session main loop
-func (s *session) run() {
+func (s *session) run() error {
 	// Start the crypto stream handler
 	go func() {
 		if err := s.cryptoSetup.HandleCryptoStream(); err != nil {
@@ -272,8 +268,8 @@ runLoop:
 		s.garbageCollectStreams()
 	}
 
-	s.closeCallback(s.connectionID)
 	s.runClosed <- struct{}{}
+	return s.closeErr
 }
 
 func (s *session) maybeResetTimer() {
@@ -507,13 +503,11 @@ func (s *session) closeImpl(e error, remoteClose bool) error {
 	if !atomic.CompareAndSwapUint32(&s.closed, 0, 1) {
 		return errSessionAlreadyClosed
 	}
+	s.closeErr = e
 
 	if e == errCloseSessionForNewVersion {
 		s.streamsMap.CloseWithError(e)
 		s.closeStreamsWithError(e)
-		// when the run loop exits, it will call the closeCallback
-		// replace it with an noop function to make sure this doesn't have any effect
-		s.closeCallback = func(protocol.ConnectionID) {}
 		s.closeChan <- nil
 		return nil
 	}
