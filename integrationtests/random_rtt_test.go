@@ -41,7 +41,6 @@ var _ = Describe("Random Duration Generator", func() {
 			}
 		}
 		avg := sum / time.Duration(rep)
-		fmt.Println(avg)
 		Expect(avg).To(BeNumerically("~", 300*time.Millisecond, 5*time.Millisecond))
 		Expect(min).To(BeNumerically(">=", 100*time.Millisecond))
 		Expect(min).To(BeNumerically("<", 105*time.Millisecond))
