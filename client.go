@@ -183,9 +183,11 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 
 func (c *client) handlePacketWithVersionFlag(hdr *PublicHeader) error {
 	for _, v := range hdr.SupportedVersions {
-		// check if the server sent the offered version in supported versions
 		if v == c.version {
-			return qerr.Error(qerr.InvalidVersionNegotiationPacket, "Server already supports client's version and should have accepted the connection.")
+			// the version negotiation packet contains the version that we offered
+			// this might be a packet sent by an attacker (or by a terribly broken server implementation)
+			// ignore it
+			return nil
 		}
 	}
 

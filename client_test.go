@@ -265,9 +265,11 @@ var _ = Describe("Client", func() {
 			Consistently(func() bool { return versionNegotiateConnStateCalled }).Should(BeFalse())
 		})
 
-		It("errors if the server should have accepted the offered version", func() {
-			err := cl.handlePacket(nil, getVersionNegotiation([]protocol.VersionNumber{cl.version}))
-			Expect(err).To(MatchError(qerr.Error(qerr.InvalidVersionNegotiationPacket, "Server already supports client's version and should have accepted the connection.")))
+		It("drops version negotiation packets that contain the offered version", func() {
+			ver := cl.version
+			err := cl.handlePacket(nil, getVersionNegotiation([]protocol.VersionNumber{ver}))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cl.version).To(Equal(ver))
 		})
 	})
 })
