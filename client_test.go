@@ -2,7 +2,6 @@ package quic
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
 	"net"
 	"reflect"
@@ -198,22 +197,6 @@ var _ = Describe("Client", func() {
 	})
 
 	Context("version negotiation", func() {
-		getVersionNegotiation := func(versions []protocol.VersionNumber) []byte {
-			oldVersionNegotiationPacket := composeVersionNegotiation(0x1337)
-			oldSupportVersionTags := protocol.SupportedVersionsAsTags
-			var b bytes.Buffer
-			for _, v := range versions {
-				s := make([]byte, 4)
-				binary.LittleEndian.PutUint32(s, protocol.VersionNumberToTag(v))
-				b.Write(s)
-			}
-			protocol.SupportedVersionsAsTags = b.Bytes()
-			packet := composeVersionNegotiation(cl.connectionID)
-			protocol.SupportedVersionsAsTags = oldSupportVersionTags
-			Expect(composeVersionNegotiation(0x1337)).To(Equal(oldVersionNegotiationPacket))
-			return packet
-		}
-
 		It("recognizes that a packet without VersionFlag means that the server accepted the suggested version", func() {
 			ph := PublicHeader{
 				PacketNumber:    1,
@@ -234,7 +217,7 @@ var _ = Describe("Client", func() {
 			Expect(newVersion).ToNot(Equal(cl.version))
 			Expect(sess.packetCount).To(BeZero())
 			cl.connectionID = 0x1337
-			err := cl.handlePacket(nil, getVersionNegotiation([]protocol.VersionNumber{newVersion}))
+			err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{newVersion}))
 			Expect(cl.version).To(Equal(newVersion))
 			Expect(cl.connState).To(Equal(ConnStateVersionNegotiated))
 			Eventually(func() bool { return versionNegotiateConnStateCalled }).Should(BeTrue())
@@ -250,7 +233,7 @@ var _ = Describe("Client", func() {
 		})
 
 		It("errors if no matching version is found", func() {
-			err := cl.handlePacket(nil, getVersionNegotiation([]protocol.VersionNumber{1}))
+			err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{1}))
 			Expect(err).To(MatchError(qerr.InvalidVersion))
 		})
 
@@ -258,7 +241,7 @@ var _ = Describe("Client", func() {
 			// if the version was not yet negotiated, handlePacket would return a VersionNegotiationMismatch error, see above test
 			cl.connState = ConnStateVersionNegotiated
 			Expect(sess.packetCount).To(BeZero())
-			err := cl.handlePacket(nil, getVersionNegotiation([]protocol.VersionNumber{1}))
+			err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{1}))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cl.connState).To(Equal(ConnStateVersionNegotiated))
 			Expect(sess.packetCount).To(BeZero())
@@ -267,7 +250,7 @@ var _ = Describe("Client", func() {
 
 		It("drops version negotiation packets that contain the offered version", func() {
 			ver := cl.version
-			err := cl.handlePacket(nil, getVersionNegotiation([]protocol.VersionNumber{ver}))
+			err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{ver}))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cl.version).To(Equal(ver))
 		})

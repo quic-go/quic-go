@@ -270,7 +270,7 @@ func (h *cryptoSetupClient) validateVersionList(verTags []byte) bool {
 			return false
 		}
 		ver := protocol.VersionTagToNumber(verTag)
-		if !protocol.IsSupportedVersion(ver) {
+		if !protocol.IsSupportedVersion(protocol.SupportedVersions, ver) {
 			ver = protocol.VersionUnsupported
 		}
 		if ver != negotiatedVersion {

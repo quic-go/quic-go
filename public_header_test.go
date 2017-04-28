@@ -92,7 +92,7 @@ var _ = Describe("Public Header", func() {
 			}
 
 			It("parses version negotiation packets sent by the server", func() {
-				b := bytes.NewReader(composeVersionNegotiation(0x1337))
+				b := bytes.NewReader(composeVersionNegotiation(0x1337, protocol.SupportedVersions))
 				hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(hdr.VersionFlag).To(BeTrue())
@@ -125,7 +125,7 @@ var _ = Describe("Public Header", func() {
 			})
 
 			It("errors on invalid version tags", func() {
-				data := composeVersionNegotiation(0x1337)
+				data := composeVersionNegotiation(0x1337, protocol.SupportedVersions)
 				data = append(data, []byte{0x13, 0x37}...)
 				b := bytes.NewReader(data)
 				_, err := ParsePublicHeader(b, protocol.PerspectiveServer)

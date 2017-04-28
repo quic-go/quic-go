@@ -145,6 +145,7 @@ var _ = Describe("Session", func() {
 			0,
 			scfg,
 			func(Session, bool) {},
+			nil,
 		)
 		Expect(err).NotTo(HaveOccurred())
 		sess = pSess.(*session)
@@ -179,6 +180,7 @@ var _ = Describe("Session", func() {
 				0,
 				scfg,
 				func(Session, bool) {},
+				nil,
 			)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(*(*[]byte)(unsafe.Pointer(reflect.ValueOf(sess.(*session).cryptoSetup).Elem().FieldByName("sourceAddr").UnsafeAddr()))).To(Equal([]byte{192, 168, 100, 200}))
@@ -194,6 +196,7 @@ var _ = Describe("Session", func() {
 				0,
 				scfg,
 				func(Session, bool) {},
+				nil,
 			)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(*(*[]byte)(unsafe.Pointer(reflect.ValueOf(sess.(*session).cryptoSetup).Elem().FieldByName("sourceAddr").UnsafeAddr()))).To(Equal([]byte("192.168.100.200:1337")))

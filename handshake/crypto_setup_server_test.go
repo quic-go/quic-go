@@ -9,6 +9,7 @@ import (
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
+	"github.com/lucas-clemente/quic-go/utils"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -140,22 +141,23 @@ func (s mockStkSource) VerifyToken(sourceAddr []byte, token []byte) error {
 	return nil
 }
 
-var _ = Describe("Crypto setup", func() {
+var _ = Describe("Server Crypto Setup", func() {
 	var (
-		kex         *mockKEX
-		signer      *mockSigner
-		scfg        *ServerConfig
-		cs          *cryptoSetupServer
-		stream      *mockStream
-		cpm         ConnectionParametersManager
-		aeadChanged chan protocol.EncryptionLevel
-		nonce32     []byte
-		versionTag  []byte
-		sourceAddr  []byte
-		validSTK    []byte
-		aead        []byte
-		kexs        []byte
-		version     protocol.VersionNumber
+		kex               *mockKEX
+		signer            *mockSigner
+		scfg              *ServerConfig
+		cs                *cryptoSetupServer
+		stream            *mockStream
+		cpm               ConnectionParametersManager
+		aeadChanged       chan protocol.EncryptionLevel
+		nonce32           []byte
+		versionTag        []byte
+		sourceAddr        []byte
+		validSTK          []byte
+		aead              []byte
+		kexs              []byte
+		version           protocol.VersionNumber
+		supportedVersions []protocol.VersionNumber
 	)
 
 	BeforeEach(func() {
@@ -179,8 +181,9 @@ var _ = Describe("Crypto setup", func() {
 		Expect(err).NotTo(HaveOccurred())
 		scfg.stkSource = &mockStkSource{}
 		version = protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
+		supportedVersions = []protocol.VersionNumber{version, 98, 99}
 		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.VersionWhatever)
-		csInt, err := NewCryptoSetup(protocol.ConnectionID(42), sourceAddr, version, scfg, stream, cpm, aeadChanged)
+		csInt, err := NewCryptoSetup(protocol.ConnectionID(42), sourceAddr, version, scfg, stream, cpm, supportedVersions, aeadChanged)
 		Expect(err).NotTo(HaveOccurred())
 		cs = csInt.(*cryptoSetupServer)
 		cs.keyDerivation = mockKeyDerivation
@@ -275,7 +278,11 @@ var _ = Describe("Crypto setup", func() {
 			Expect(response).To(HavePrefix("SHLO"))
 			Expect(response).To(ContainSubstring("ephermal pub"))
 			Expect(response).To(ContainSubstring("SNO\x00"))
-			Expect(response).To(ContainSubstring(string(protocol.SupportedVersionsAsTags)))
+			for _, v := range supportedVersions {
+				b := &bytes.Buffer{}
+				utils.WriteUint32(b, protocol.VersionNumberToTag(v))
+				Expect(response).To(ContainSubstring(string(b.Bytes())))
+			}
 			Expect(cs.secureAEAD).ToNot(BeNil())
 			Expect(cs.secureAEAD.(*mockAEAD).forwardSecure).To(BeFalse())
 			Expect(cs.secureAEAD.(*mockAEAD).sharedSecret).To(Equal([]byte("shared key")))
@@ -391,8 +398,8 @@ var _ = Describe("Crypto setup", func() {
 		})
 
 		It("detects version downgrade attacks", func() {
-			highestSupportedVersion := protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
-			lowestSupportedVersion := protocol.SupportedVersions[0]
+			highestSupportedVersion := supportedVersions[len(protocol.SupportedVersions)-1]
+			lowestSupportedVersion := supportedVersions[0]
 			Expect(highestSupportedVersion).ToNot(Equal(lowestSupportedVersion))
 			cs.version = highestSupportedVersion
 			b := make([]byte, 4)
@@ -406,7 +413,7 @@ var _ = Describe("Crypto setup", func() {
 		It("accepts a non-matching version tag in the CHLO, if it is an unsupported version", func() {
 			supportedVersion := protocol.SupportedVersions[0]
 			unsupportedVersion := supportedVersion + 1000
-			Expect(protocol.IsSupportedVersion(unsupportedVersion)).To(BeFalse())
+			Expect(protocol.IsSupportedVersion(supportedVersions, unsupportedVersion)).To(BeFalse())
 			cs.version = supportedVersion
 			b := make([]byte, 4)
 			binary.LittleEndian.PutUint32(b, protocol.VersionNumberToTag(unsupportedVersion))

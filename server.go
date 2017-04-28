@@ -34,7 +34,7 @@ type server struct {
 	sessionsMutex             sync.RWMutex
 	deleteClosedSessionsAfter time.Duration
 
-	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, cryptoChangeCallback cryptoChangeCallback) (packetHandler, error)
+	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, cryptoChangeCallback cryptoChangeCallback, supportedVersions []protocol.VersionNumber) (packetHandler, error)
 }
 
 var _ Listener = &server{}
@@ -68,13 +68,26 @@ func Listen(conn net.PacketConn, config *Config) (Listener, error) {
 
 	return &server{
 		conn:                      conn,
-		config:                    config,
+		config:                    populateConfig(config),
 		certChain:                 certChain,
 		scfg:                      scfg,
 		sessions:                  map[protocol.ConnectionID]packetHandler{},
 		newSession:                newSession,
 		deleteClosedSessionsAfter: protocol.ClosedSessionDeleteTimeout,
 	}, nil
+}
+
+func populateConfig(config *Config) *Config {
+	versions := config.Versions
+	if len(versions) == 0 {
+		versions = protocol.SupportedVersions
+	}
+
+	return &Config{
+		TLSConfig: config.TLSConfig,
+		ConnState: config.ConnState,
+		Versions:  versions,
+	}
 }
 
 // Listen listens on an existing PacketConn
@@ -152,18 +165,18 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	// a session is only created once the client sent a supported version
 	// if we receive a packet for a connection that already has session, it's probably an old packet that was sent by the client before the version was negotiated
 	// it is safe to drop it
-	if ok && hdr.VersionFlag && !protocol.IsSupportedVersion(hdr.VersionNumber) {
+	if ok && hdr.VersionFlag && !protocol.IsSupportedVersion(s.config.Versions, hdr.VersionNumber) {
 		return nil
 	}
 
 	// Send Version Negotiation Packet if the client is speaking a different protocol version
-	if hdr.VersionFlag && !protocol.IsSupportedVersion(hdr.VersionNumber) {
+	if hdr.VersionFlag && !protocol.IsSupportedVersion(s.config.Versions, hdr.VersionNumber) {
 		// drop packets that are too small to be valid first packets
 		if len(packet) < protocol.ClientHelloMinimumSize+len(hdr.Raw) {
 			return errors.New("dropping small packet with unknown version")
 		}
 		utils.Infof("Client offered version %d, sending VersionNegotiationPacket", hdr.VersionNumber)
-		_, err = pconn.WriteTo(composeVersionNegotiation(hdr.ConnectionID), remoteAddr)
+		_, err = pconn.WriteTo(composeVersionNegotiation(hdr.ConnectionID, s.config.Versions), remoteAddr)
 		return err
 	}
 
@@ -173,7 +186,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 			return err
 		}
 		version := hdr.VersionNumber
-		if !protocol.IsSupportedVersion(version) {
+		if !protocol.IsSupportedVersion(s.config.Versions, version) {
 			return errors.New("Server BUG: negotiated version not supported")
 		}
 
@@ -184,6 +197,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 			hdr.ConnectionID,
 			s.scfg,
 			s.cryptoChangeCallback,
+			s.config.Versions,
 		)
 		if err != nil {
 			return err
@@ -240,17 +254,19 @@ func (s *server) removeConnection(id protocol.ConnectionID) {
 	})
 }
 
-func composeVersionNegotiation(connectionID protocol.ConnectionID) []byte {
+func composeVersionNegotiation(connectionID protocol.ConnectionID, versions []protocol.VersionNumber) []byte {
 	fullReply := &bytes.Buffer{}
 	responsePublicHeader := PublicHeader{
 		ConnectionID: connectionID,
 		PacketNumber: 1,
 		VersionFlag:  true,
 	}
-	err := responsePublicHeader.Write(fullReply, protocol.Version35, protocol.PerspectiveServer)
+	err := responsePublicHeader.Write(fullReply, protocol.VersionWhatever, protocol.PerspectiveServer)
 	if err != nil {
 		utils.Errorf("error composing version negotiation packet: %s", err.Error())
 	}
-	fullReply.Write(protocol.SupportedVersionsAsTags)
+	for _, v := range versions {
+		utils.WriteUint32(fullReply, protocol.VersionNumberToTag(v))
+	}
 	return fullReply.Bytes()
 }

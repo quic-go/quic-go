@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"crypto/tls"
 	"errors"
 	"net"
 	"time"
@@ -55,7 +56,7 @@ func (s *mockSession) RemoteAddr() net.Addr {
 
 var _ Session = &mockSession{}
 
-func newMockSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, cryptoChangeCallback cryptoChangeCallback) (packetHandler, error) {
+func newMockSession(_ connection, _ protocol.VersionNumber, connectionID protocol.ConnectionID, _ *handshake.ServerConfig, _ cryptoChangeCallback, _ []protocol.VersionNumber) (packetHandler, error) {
 	return &mockSession{
 		connectionID: connectionID,
 		stopRunLoop:  make(chan struct{}),
@@ -71,7 +72,10 @@ var _ = Describe("Server", func() {
 
 	BeforeEach(func() {
 		conn = &mockPacketConn{}
-		config = &Config{}
+		config = &Config{
+			TLSConfig: &tls.Config{},
+			Versions:  protocol.SupportedVersions,
+		}
 	})
 
 	Context("with mock session", func() {
@@ -105,9 +109,9 @@ var _ = Describe("Server", func() {
 		It("composes version negotiation packets", func() {
 			expected := append(
 				[]byte{0x01 | 0x08, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
-				protocol.SupportedVersionsAsTags...,
+				[]byte{'Q', '0', '9', '9'}...,
 			)
-			Expect(composeVersionNegotiation(1)).To(Equal(expected))
+			Expect(composeVersionNegotiation(1, []protocol.VersionNumber{99})).To(Equal(expected))
 		})
 
 		It("creates new sessions", func() {
@@ -320,16 +324,29 @@ var _ = Describe("Server", func() {
 	})
 
 	It("setups with the right values", func() {
+		var connStateCallback ConnStateCallback = func(_ Session, _ ConnState) {}
+		supportedVersions := []protocol.VersionNumber{1, 3, 5}
 		config := Config{
-			ConnState: func(_ Session, _ ConnState) {},
+			TLSConfig: &tls.Config{},
+			ConnState: connStateCallback,
+			Versions:  supportedVersions,
 		}
 		ln, err := Listen(conn, &config)
-		server := ln.(*server)
 		Expect(err).ToNot(HaveOccurred())
+		server := ln.(*server)
 		Expect(server.deleteClosedSessionsAfter).To(Equal(protocol.ClosedSessionDeleteTimeout))
 		Expect(server.sessions).ToNot(BeNil())
 		Expect(server.scfg).ToNot(BeNil())
-		Expect(server.config).To(Equal(&config))
+		Expect(server.config.ConnState).ToNot(BeNil())
+		Expect(server.config.Versions).To(Equal(supportedVersions))
+	})
+
+	It("fills in default values if options are not set in the Config", func() {
+		config := Config{TLSConfig: &tls.Config{}}
+		ln, err := Listen(conn, &config)
+		Expect(err).ToNot(HaveOccurred())
+		server := ln.(*server)
+		Expect(server.config.Versions).To(Equal(protocol.SupportedVersions))
 	})
 
 	It("listens on a given address", func() {
@@ -353,6 +370,7 @@ var _ = Describe("Server", func() {
 	})
 
 	It("setups and responds with version negotiation", func() {
+		config.Versions = []protocol.VersionNumber{99}
 		b := &bytes.Buffer{}
 		hdr := PublicHeader{
 			VersionFlag:     true,
@@ -375,9 +393,11 @@ var _ = Describe("Server", func() {
 
 		Eventually(func() int { return conn.dataWritten.Len() }).ShouldNot(BeZero())
 		Expect(conn.dataWrittenTo).To(Equal(udpAddr))
+		b = &bytes.Buffer{}
+		utils.WriteUint32(b, protocol.VersionNumberToTag(99))
 		expected := append(
 			[]byte{0x9, 0x37, 0x13, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
-			protocol.SupportedVersionsAsTags...,
+			b.Bytes()...,
 		)
 		Expect(conn.dataWritten.Bytes()).To(Equal(expected))
 		Expect(returned).To(BeFalse())

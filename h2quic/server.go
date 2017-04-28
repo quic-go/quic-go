@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -39,6 +40,8 @@ type Server struct {
 
 	listenerMutex sync.Mutex
 	listener      quic.Listener
+
+	supportedVersionsAsString string
 }
 
 // ListenAndServe listens on the UDP address s.Addr and calls s.Handler to handle HTTP/2 requests on incoming connections.
@@ -79,6 +82,7 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn *net.UDPConn) error {
 		s.listenerMutex.Unlock()
 		return errors.New("ListenAndServe may only be called once")
 	}
+
 	config := quic.Config{
 		TLSConfig: tlsConfig,
 		ConnState: func(session quic.Session, connState quic.ConnState) {
@@ -87,7 +91,9 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn *net.UDPConn) error {
 				s.handleHeaderStream(sess)
 			}
 		},
+		Versions: protocol.SupportedVersions,
 	}
+
 	var ln quic.Listener
 	var err error
 	if conn == nil {
@@ -267,8 +273,17 @@ func (s *Server) SetQuicHeaders(hdr http.Header) error {
 		atomic.StoreUint32(&s.port, port)
 	}
 
+	if s.supportedVersionsAsString == "" {
+		for i := len(protocol.SupportedVersions) - 1; i >= 0; i-- {
+			s.supportedVersionsAsString += strconv.Itoa(int(protocol.SupportedVersions[i]))
+			if i != 0 {
+				s.supportedVersionsAsString += ","
+			}
+		}
+	}
+
 	hdr.Add("Alternate-Protocol", fmt.Sprintf("%d:quic", port))
-	hdr.Add("Alt-Svc", fmt.Sprintf(`quic=":%d"; ma=2592000; v="%s"`, port, protocol.SupportedVersionsAsString))
+	hdr.Add("Alt-Svc", fmt.Sprintf(`quic=":%d"; ma=2592000; v="%s"`, port, s.supportedVersionsAsString))
 
 	return nil
 }

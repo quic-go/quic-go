@@ -14,17 +14,10 @@ var _ = Describe("Version", func() {
 		Expect(VersionNumberToTag(VersionNumber(123))).To(Equal(uint32('Q' + '1'<<8 + '2'<<16 + '3'<<24)))
 	})
 
-	It("has proper tag list", func() {
-		Expect(SupportedVersionsAsTags).To(Equal([]byte("Q035Q036Q037")))
-	})
-
-	It("has proper version list", func() {
-		Expect(SupportedVersionsAsString).To(Equal("37,36,35"))
-	})
-
 	It("recognizes supported versions", func() {
-		Expect(IsSupportedVersion(0)).To(BeFalse())
-		Expect(IsSupportedVersion(SupportedVersions[0])).To(BeTrue())
+		Expect(IsSupportedVersion(SupportedVersions, 0)).To(BeFalse())
+		Expect(IsSupportedVersion(SupportedVersions, SupportedVersions[0])).To(BeTrue())
+		Expect(IsSupportedVersion(SupportedVersions, SupportedVersions[len(SupportedVersions)-1])).To(BeTrue())
 	})
 
 	It("has supported versions in sorted order", func() {
