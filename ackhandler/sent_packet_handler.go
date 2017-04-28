@@ -328,6 +328,11 @@ func (h *sentPacketHandler) GetStopWaitingFrame(force bool) *frames.StopWaitingF
 func (h *sentPacketHandler) SendingAllowed() bool {
 	congestionLimited := h.bytesInFlight > h.congestion.GetCongestionWindow()
 	maxTrackedLimited := protocol.PacketNumber(len(h.retransmissionQueue)+h.packetHistory.Len()) >= protocol.MaxTrackedSentPackets
+	if congestionLimited {
+		utils.Debugf("Congestion limited: bytes in flight %d, window %d",
+			h.bytesInFlight,
+			h.congestion.GetCongestionWindow())
+	}
 	return !(congestionLimited || maxTrackedLimited)
 }
 
@@ -342,7 +347,11 @@ func (h *sentPacketHandler) retransmitOldestTwoPackets() {
 
 func (h *sentPacketHandler) queueRTO(el *PacketElement) {
 	packet := &el.Value
-	utils.Debugf("\tQueueing packet 0x%x for retransmission (RTO)", packet.PacketNumber)
+	utils.Debugf(
+		"\tQueueing packet 0x%x for retransmission (RTO), %d outstanding",
+		packet.PacketNumber,
+		h.packetHistory.Len(),
+	)
 	h.queuePacketForRetransmission(el)
 	h.congestion.OnPacketLost(packet.PacketNumber, packet.Length, h.bytesInFlight)
 	h.congestion.OnRetransmissionTimeout(true)
@@ -352,11 +361,7 @@ func (h *sentPacketHandler) queuePacketForRetransmission(packetElement *PacketEl
 	packet := &packetElement.Value
 	h.bytesInFlight -= packet.Length
 	h.retransmissionQueue = append(h.retransmissionQueue, packet)
-
 	h.packetHistory.Remove(packetElement)
-
-	// strictly speaking, this is only necessary for RTO retransmissions
-	// this is because FastRetransmissions are triggered by missing ranges in ACKs, and then the LargestAcked will already be higher than the packet number of the retransmitted packet
 	h.stopWaitingManager.QueuedRetransmissionForPacketNumber(packet.PacketNumber)
 }
 
