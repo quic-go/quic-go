@@ -67,10 +67,7 @@ type session struct {
 	receivedPackets  chan *receivedPacket
 	sendingScheduled chan struct{}
 	// closeChan is used to notify the run loop that it should terminate.
-	// If the value is not nil, the error is sent as a CONNECTION_CLOSE.
-	closeChan chan *qerr.QuicError
-	// the error this session was closed with
-	closeErr  error
+	closeChan chan error
 	runClosed chan struct{}
 	closed    uint32 // atomic bool
 
@@ -174,7 +171,7 @@ func (s *session) setup() {
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.ackAlarmChanged)
 
 	s.receivedPackets = make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets)
-	s.closeChan = make(chan *qerr.QuicError, 1)
+	s.closeChan = make(chan error, 1)
 	s.sendingScheduled = make(chan struct{}, 1)
 	s.undecryptablePackets = make([]*receivedPacket, 0, protocol.MaxUndecryptablePackets)
 	s.aeadChanged = make(chan protocol.EncryptionLevel, 2)
@@ -197,14 +194,12 @@ func (s *session) run() error {
 		}
 	}()
 
+	var closeErr error
 runLoop:
 	for {
 		// Close immediately if requested
 		select {
-		case errForConnClose := <-s.closeChan:
-			if errForConnClose != nil {
-				s.sendConnectionClose(errForConnClose)
-			}
+		case closeErr = <-s.closeChan:
 			break runLoop
 		default:
 		}
@@ -213,10 +208,7 @@ runLoop:
 
 		var err error
 		select {
-		case errForConnClose := <-s.closeChan:
-			if errForConnClose != nil {
-				s.sendConnectionClose(errForConnClose)
-			}
+		case closeErr = <-s.closeChan:
 			break runLoop
 		case <-s.timer.C:
 			s.timerRead = true
@@ -269,7 +261,7 @@ runLoop:
 	}
 
 	s.runClosed <- struct{}{}
-	return s.closeErr
+	return closeErr
 }
 
 func (s *session) maybeResetTimer() {
@@ -503,17 +495,19 @@ func (s *session) closeImpl(e error, remoteClose bool) error {
 	if !atomic.CompareAndSwapUint32(&s.closed, 0, 1) {
 		return errSessionAlreadyClosed
 	}
-	s.closeErr = e
+
+	if e == nil {
+		e = qerr.PeerGoingAway
+	}
+
+	defer func() {
+		s.closeChan <- e
+	}()
 
 	if e == errCloseSessionForNewVersion {
 		s.streamsMap.CloseWithError(e)
 		s.closeStreamsWithError(e)
-		s.closeChan <- nil
 		return nil
-	}
-
-	if e == nil {
-		e = qerr.PeerGoingAway
 	}
 
 	quicErr := qerr.ToQuicError(e)
@@ -529,17 +523,14 @@ func (s *session) closeImpl(e error, remoteClose bool) error {
 	s.closeStreamsWithError(quicErr)
 
 	if remoteClose {
-		// If this is a remote close we don't need to send a CONNECTION_CLOSE
-		s.closeChan <- nil
+		// If this is a remote close we're done here
 		return nil
 	}
 
 	if quicErr.ErrorCode == qerr.DecryptionFailure || quicErr == handshake.ErrHOLExperiment {
-		// If we send a public reset, don't send a CONNECTION_CLOSE
-		s.closeChan <- nil
 		return s.sendPublicReset(s.lastRcvdPacketNumber)
 	}
-	s.closeChan <- quicErr
+	s.sendConnectionClose(quicErr)
 	return nil
 }
 
