@@ -39,15 +39,17 @@ func IsSupportedVersion(supported []VersionNumber, v VersionNumber) bool {
 	return false
 }
 
-// HighestSupportedVersion finds the highest version number that is both present in other and in SupportedVersions
-// it returns true and the version number, if there is one, otherwise false
-func HighestSupportedVersion(ours, theirs []VersionNumber) (bool, VersionNumber) {
+// ChooseSupportedVersion finds the best version in the overlap of ours and theirs
+// ours is a slice of versions that we support, sorted by our preference (descending)
+// theirs is a slice of versions offered by the peer. The order does not matter
+// if no suitable version is found, it returns VersionUnsupported
+func ChooseSupportedVersion(ours, theirs []VersionNumber) VersionNumber {
 	for _, ourVer := range ours {
 		for _, theirVer := range theirs {
 			if ourVer == theirVer {
-				return true, ourVer
+				return ourVer
 			}
 		}
 	}
-	return false, VersionUnsupported
+	return VersionUnsupported
 }

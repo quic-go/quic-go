@@ -30,30 +30,22 @@ var _ = Describe("Version", func() {
 		It("finds the supported version", func() {
 			supportedVersions := []VersionNumber{1, 2, 3}
 			other := []VersionNumber{6, 5, 4, 3}
-			found, ver := HighestSupportedVersion(supportedVersions, other)
-			Expect(found).To(BeTrue())
-			Expect(ver).To(Equal(VersionNumber(3)))
+			Expect(ChooseSupportedVersion(supportedVersions, other)).To(Equal(VersionNumber(3)))
 		})
 
 		It("picks the preferred version", func() {
 			supportedVersions := []VersionNumber{2, 1, 3}
 			other := []VersionNumber{3, 6, 1, 8, 2, 10}
-			found, ver := HighestSupportedVersion(supportedVersions, other)
-			Expect(found).To(BeTrue())
-			Expect(ver).To(Equal(VersionNumber(2)))
+			Expect(ChooseSupportedVersion(supportedVersions, other)).To(Equal(VersionNumber(2)))
 		})
 
 		It("handles empty inputs", func() {
 			supportedVersions := []VersionNumber{102, 101}
-			found, _ := HighestSupportedVersion(supportedVersions, nil)
-			Expect(found).To(BeFalse())
-			found, _ = HighestSupportedVersion(supportedVersions, []VersionNumber{})
-			Expect(found).To(BeFalse())
+			Expect(ChooseSupportedVersion(supportedVersions, nil)).To(Equal(VersionUnsupported))
+			Expect(ChooseSupportedVersion(supportedVersions, []VersionNumber{})).To(Equal(VersionUnsupported))
 			supportedVersions = []VersionNumber{}
-			found, _ = HighestSupportedVersion(supportedVersions, []VersionNumber{1, 2})
-			Expect(found).To(BeFalse())
-			found, _ = HighestSupportedVersion(supportedVersions, []VersionNumber{})
-			Expect(found).To(BeFalse())
+			Expect(ChooseSupportedVersion(supportedVersions, []VersionNumber{1, 2})).To(Equal(VersionUnsupported))
+			Expect(ChooseSupportedVersion(supportedVersions, []VersionNumber{})).To(Equal(VersionUnsupported))
 		})
 	})
 })

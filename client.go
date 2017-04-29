@@ -205,20 +205,20 @@ func (c *client) handlePacketWithVersionFlag(hdr *PublicHeader) error {
 		}
 	}
 
-	ok, highestSupportedVersion := protocol.HighestSupportedVersion(c.config.Versions, hdr.SupportedVersions)
-	if !ok {
+	newVersion := protocol.ChooseSupportedVersion(c.config.Versions, hdr.SupportedVersions)
+	if newVersion == protocol.VersionUnsupported {
 		return qerr.InvalidVersion
 	}
 
 	// switch to negotiated version
-	c.version = highestSupportedVersion
+	c.version = newVersion
 	c.connState = ConnStateVersionNegotiated
 	var err error
 	c.connectionID, err = utils.GenerateConnectionID()
 	if err != nil {
 		return err
 	}
-	utils.Infof("Switching to QUIC version %d. New connection ID: %x", highestSupportedVersion, c.connectionID)
+	utils.Infof("Switching to QUIC version %d. New connection ID: %x", newVersion, c.connectionID)
 
 	c.session.Close(errCloseSessionForNewVersion)
 	err = c.createNewSession(hdr.SupportedVersions)
