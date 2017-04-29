@@ -68,7 +68,7 @@ func Listen(conn net.PacketConn, config *Config) (Listener, error) {
 
 	return &server{
 		conn:                      conn,
-		config:                    populateConfig(config),
+		config:                    populateServerConfig(config),
 		certChain:                 certChain,
 		scfg:                      scfg,
 		sessions:                  map[protocol.ConnectionID]packetHandler{},
@@ -77,7 +77,7 @@ func Listen(conn net.PacketConn, config *Config) (Listener, error) {
 	}, nil
 }
 
-func populateConfig(config *Config) *Config {
+func populateServerConfig(config *Config) *Config {
 	versions := config.Versions
 	if len(versions) == 0 {
 		versions = protocol.SupportedVersions

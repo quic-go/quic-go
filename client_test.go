@@ -34,6 +34,7 @@ var _ = Describe("Client", func() {
 					versionNegotiateConnStateCalled = true
 				}
 			},
+			Versions: []protocol.VersionNumber{protocol.SupportedVersions[0], 77, 78},
 		}
 		addr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
 		sess = &mockSession{connectionID: 0x1337}
@@ -41,7 +42,7 @@ var _ = Describe("Client", func() {
 			config:       config,
 			connectionID: 0x1337,
 			session:      sess,
-			version:      protocol.Version36,
+			version:      protocol.SupportedVersions[0],
 			conn:         &conn{pconn: packetConn, currentAddr: addr},
 		}
 	})
@@ -56,12 +57,16 @@ var _ = Describe("Client", func() {
 	Context("Dialing", func() {
 		It("creates a new client", func() {
 			packetConn.dataToRead = []byte{0x0, 0x1, 0x0}
-			var err error
 			sess, err := Dial(packetConn, addr, "quic.clemente.io:1337", config)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(*(*[]protocol.VersionNumber)(unsafe.Pointer(reflect.ValueOf(sess.(*session).cryptoSetup).Elem().FieldByName("negotiatedVersions").UnsafeAddr()))).To(BeNil())
 			Expect(*(*string)(unsafe.Pointer(reflect.ValueOf(sess.(*session).cryptoSetup).Elem().FieldByName("hostname").UnsafeAddr()))).To(Equal("quic.clemente.io"))
 			sess.Close(nil)
+		})
+
+		It("uses all supported versions, if none are specified in the quic.Config", func() {
+			c := populateClientConfig(&Config{})
+			Expect(c.Versions).To(Equal(protocol.SupportedVersions))
 		})
 
 		It("errors when receiving an invalid first packet from the server", func() {
@@ -213,11 +218,13 @@ var _ = Describe("Client", func() {
 		})
 
 		It("changes the version after receiving a version negotiation packet", func() {
-			newVersion := protocol.Version35
+			newVersion := protocol.VersionNumber(77)
+			Expect(config.Versions).To(ContainElement(newVersion))
 			Expect(newVersion).ToNot(Equal(cl.version))
 			Expect(sess.packetCount).To(BeZero())
 			cl.connectionID = 0x1337
 			err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{newVersion}))
+			Expect(err).ToNot(HaveOccurred())
 			Expect(cl.version).To(Equal(newVersion))
 			Expect(cl.connState).To(Equal(ConnStateVersionNegotiated))
 			Eventually(func() bool { return versionNegotiateConnStateCalled }).Should(BeTrue())
@@ -229,12 +236,26 @@ var _ = Describe("Client", func() {
 			Expect(sess.packetCount).To(BeZero())
 			// if the version negotiation packet was passed to the new session, it would end up as an undecryptable packet there
 			Expect(cl.session.(*session).undecryptablePackets).To(BeEmpty())
-			Expect(*(*[]protocol.VersionNumber)(unsafe.Pointer(reflect.ValueOf(cl.session.(*session).cryptoSetup).Elem().FieldByName("negotiatedVersions").UnsafeAddr()))).To(Equal([]protocol.VersionNumber{35}))
+			Expect(*(*[]protocol.VersionNumber)(unsafe.Pointer(reflect.ValueOf(cl.session.(*session).cryptoSetup).Elem().FieldByName("negotiatedVersions").UnsafeAddr()))).To(Equal([]protocol.VersionNumber{newVersion}))
 		})
 
 		It("errors if no matching version is found", func() {
 			err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{1}))
 			Expect(err).To(MatchError(qerr.InvalidVersion))
+		})
+
+		It("errors if the version is supported by quic-go, but disabled by the quic.Config", func() {
+			v := protocol.SupportedVersions[1]
+			Expect(v).ToNot(Equal(cl.version))
+			Expect(config.Versions).ToNot(ContainElement(v))
+			err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{v}))
+			Expect(err).To(MatchError(qerr.InvalidVersion))
+		})
+
+		It("changes to the version preferred by the quic.Config", func() {
+			err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{config.Versions[2], config.Versions[1]}))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cl.version).To(Equal(config.Versions[1]))
 		})
 
 		It("ignores delayed version negotiation packets", func() {

@@ -27,39 +27,33 @@ var _ = Describe("Version", func() {
 	})
 
 	Context("highest supported version", func() {
-		var initialSupportedVersions []VersionNumber
-
-		BeforeEach(func() {
-			initialSupportedVersions = make([]VersionNumber, len(SupportedVersions))
-			copy(initialSupportedVersions, SupportedVersions)
-		})
-
-		AfterEach(func() {
-			SupportedVersions = initialSupportedVersions
-		})
-
 		It("finds the supported version", func() {
-			SupportedVersions = []VersionNumber{3, 2, 1}
-			other := []VersionNumber{3, 4, 5, 6}
-			found, ver := HighestSupportedVersion(other)
+			supportedVersions := []VersionNumber{1, 2, 3}
+			other := []VersionNumber{6, 5, 4, 3}
+			found, ver := HighestSupportedVersion(supportedVersions, other)
 			Expect(found).To(BeTrue())
 			Expect(ver).To(Equal(VersionNumber(3)))
 		})
 
-		It("picks the highest supported version", func() {
-			SupportedVersions = []VersionNumber{7, 6, 3, 2, 1}
+		It("picks the preferred version", func() {
+			supportedVersions := []VersionNumber{2, 1, 3}
 			other := []VersionNumber{3, 6, 1, 8, 2, 10}
-			found, ver := HighestSupportedVersion(other)
+			found, ver := HighestSupportedVersion(supportedVersions, other)
 			Expect(found).To(BeTrue())
-			Expect(ver).To(Equal(VersionNumber(6)))
+			Expect(ver).To(Equal(VersionNumber(2)))
 		})
 
 		It("handles empty inputs", func() {
-			SupportedVersions = []VersionNumber{102, 101}
-			Expect(HighestSupportedVersion([]VersionNumber{})).To(BeFalse())
-			SupportedVersions = []VersionNumber{}
-			Expect(HighestSupportedVersion([]VersionNumber{1, 2})).To(BeFalse())
-			Expect(HighestSupportedVersion([]VersionNumber{})).To(BeFalse())
+			supportedVersions := []VersionNumber{102, 101}
+			found, _ := HighestSupportedVersion(supportedVersions, nil)
+			Expect(found).To(BeFalse())
+			found, _ = HighestSupportedVersion(supportedVersions, []VersionNumber{})
+			Expect(found).To(BeFalse())
+			supportedVersions = []VersionNumber{}
+			found, _ = HighestSupportedVersion(supportedVersions, []VersionNumber{1, 2})
+			Expect(found).To(BeFalse())
+			found, _ = HighestSupportedVersion(supportedVersions, []VersionNumber{})
+			Expect(found).To(BeFalse())
 		})
 	})
 })

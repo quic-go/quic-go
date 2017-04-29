@@ -8,8 +8,8 @@ const (
 	Version35 VersionNumber = 35 + iota
 	Version36
 	Version37
-	VersionWhatever    = 0 // for when the version doesn't matter
-	VersionUnsupported = -1
+	VersionWhatever    VersionNumber = 0 // for when the version doesn't matter
+	VersionUnsupported VersionNumber = -1
 )
 
 // SupportedVersions lists the versions that the server supports
@@ -40,16 +40,14 @@ func IsSupportedVersion(supported []VersionNumber, v VersionNumber) bool {
 }
 
 // HighestSupportedVersion finds the highest version number that is both present in other and in SupportedVersions
-// the versions in other do not need to be ordered
 // it returns true and the version number, if there is one, otherwise false
-func HighestSupportedVersion(other []VersionNumber) (bool, VersionNumber) {
-	for _, v := range SupportedVersions {
-		for _, ver := range other {
-			if ver == v {
-				return true, ver
+func HighestSupportedVersion(ours, theirs []VersionNumber) (bool, VersionNumber) {
+	for _, ourVer := range ours {
+		for _, theirVer := range theirs {
+			if ourVer == theirVer {
+				return true, ourVer
 			}
 		}
 	}
-
-	return false, 0
+	return false, VersionUnsupported
 }

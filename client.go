@@ -47,12 +47,13 @@ func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config
 		return nil, err
 	}
 
+	clientConfig := populateClientConfig(config)
 	c := &client{
 		conn:         &conn{pconn: pconn, currentAddr: remoteAddr},
 		connectionID: connID,
 		hostname:     hostname,
-		config:       config,
-		version:      protocol.SupportedVersions[len(protocol.SupportedVersions)-1], // use the highest supported version by default
+		config:       clientConfig,
+		version:      clientConfig.Versions[0],
 	}
 
 	c.connStateChangeOrErrCond.L = &c.mutex
@@ -65,6 +66,19 @@ func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config
 	utils.Infof("Starting new connection to %s (%s), connectionID %x, version %d", hostname, c.conn.RemoteAddr().String(), c.connectionID, c.version)
 
 	return c.establishConnection()
+}
+
+func populateClientConfig(config *Config) *Config {
+	versions := config.Versions
+	if len(versions) == 0 {
+		versions = protocol.SupportedVersions
+	}
+
+	return &Config{
+		TLSConfig: config.TLSConfig,
+		ConnState: config.ConnState,
+		Versions:  versions,
+	}
 }
 
 // DialAddr establishes a new QUIC connection to a server.
@@ -191,7 +205,7 @@ func (c *client) handlePacketWithVersionFlag(hdr *PublicHeader) error {
 		}
 	}
 
-	ok, highestSupportedVersion := protocol.HighestSupportedVersion(hdr.SupportedVersions)
+	ok, highestSupportedVersion := protocol.HighestSupportedVersion(c.config.Versions, hdr.SupportedVersions)
 	if !ok {
 		return qerr.InvalidVersion
 	}
