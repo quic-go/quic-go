@@ -17,11 +17,13 @@ type mockAEAD struct {
 }
 
 func (m *mockAEAD) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error) {
-	res, err := (&crypto.NullAEAD{}).Open(dst, src, packetNumber, associatedData)
+	nullAEAD := crypto.NewNullAEAD(protocol.PerspectiveServer, protocol.VersionWhatever)
+	res, err := nullAEAD.Open(dst, src, packetNumber, associatedData)
 	return res, m.encLevelOpen, err
 }
 func (m *mockAEAD) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel) {
-	return (&crypto.NullAEAD{}).Seal(dst, src, packetNumber, associatedData), protocol.EncryptionUnspecified
+	nullAEAD := crypto.NewNullAEAD(protocol.PerspectiveServer, protocol.VersionWhatever)
+	return nullAEAD.Seal(dst, src, packetNumber, associatedData), protocol.EncryptionUnspecified
 }
 
 var _ quicAEAD = &mockAEAD{}

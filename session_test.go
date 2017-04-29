@@ -1343,7 +1343,7 @@ var _ = Describe("Session", func() {
 		It("uses ICSL after handshake", func(done Done) {
 			// sess.lastNetworkActivityTime = time.Now().Add(-time.Minute)
 			*(*bool)(unsafe.Pointer(reflect.ValueOf(sess.cryptoSetup).Elem().FieldByName("receivedForwardSecurePacket").UnsafeAddr())) = true
-			*(*crypto.AEAD)(unsafe.Pointer(reflect.ValueOf(sess.cryptoSetup).Elem().FieldByName("forwardSecureAEAD").UnsafeAddr())) = &crypto.NullAEAD{}
+			*(*crypto.AEAD)(unsafe.Pointer(reflect.ValueOf(sess.cryptoSetup).Elem().FieldByName("forwardSecureAEAD").UnsafeAddr())) = crypto.NewNullAEAD(protocol.PerspectiveServer, protocol.VersionWhatever)
 			cpm.idleTime = 0 * time.Millisecond
 			sess.packer.connectionParameters = sess.connectionParameters
 			sess.run() // Would normally not return
