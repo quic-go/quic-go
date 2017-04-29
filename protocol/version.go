@@ -43,15 +43,8 @@ func IsSupportedVersion(supported []VersionNumber, v VersionNumber) bool {
 // the versions in other do not need to be ordered
 // it returns true and the version number, if there is one, otherwise false
 func HighestSupportedVersion(other []VersionNumber) (bool, VersionNumber) {
-	var otherSupported []VersionNumber
-	for _, ver := range other {
-		if ver != VersionUnsupported {
-			otherSupported = append(otherSupported, ver)
-		}
-	}
-
 	for _, v := range SupportedVersions {
-		for _, ver := range otherSupported {
+		for _, ver := range other {
 			if ver == v {
 				return true, ver
 			}

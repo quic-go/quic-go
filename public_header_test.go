@@ -111,16 +111,16 @@ var _ = Describe("Public Header", func() {
 				Expect(b.Len()).To(BeZero())
 			})
 
-			It("sets version numbers to unsupported, if we don't support them", func() {
+			It("reads version negotiation packets containing unsupported versions", func() {
 				data := []byte{0x9, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c}
 				data = appendVersion(data, 1) // unsupported version
 				data = appendVersion(data, protocol.SupportedVersions[0])
-				data = appendVersion(data, 1337) // unsupported version
+				data = appendVersion(data, 99) // unsupported version
 				b := bytes.NewReader(data)
 				hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(hdr.VersionFlag).To(BeTrue())
-				Expect(hdr.SupportedVersions).To(Equal([]protocol.VersionNumber{protocol.VersionUnsupported, protocol.SupportedVersions[0], protocol.VersionUnsupported}))
+				Expect(hdr.SupportedVersions).To(Equal([]protocol.VersionNumber{1, protocol.SupportedVersions[0], 99}))
 				Expect(b.Len()).To(BeZero())
 			})
 
