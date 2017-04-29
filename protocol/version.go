@@ -13,9 +13,9 @@ const (
 )
 
 // SupportedVersions lists the versions that the server supports
-// must be in sorted order
+// must be in sorted descending order
 var SupportedVersions = []VersionNumber{
-	Version35, Version36, Version37,
+	Version37, Version36, Version35,
 }
 
 // VersionNumberToTag maps version numbers ('32') to tags ('Q032')
@@ -50,9 +50,9 @@ func HighestSupportedVersion(other []VersionNumber) (bool, VersionNumber) {
 		}
 	}
 
-	for i := len(SupportedVersions) - 1; i >= 0; i-- {
+	for _, v := range SupportedVersions {
 		for _, ver := range otherSupported {
-			if ver == SupportedVersions[i] {
+			if ver == v {
 				return true, ver
 			}
 		}

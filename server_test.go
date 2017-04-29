@@ -264,7 +264,7 @@ var _ = Describe("Server", func() {
 			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
 			b := &bytes.Buffer{}
 			// add an unsupported version
-			utils.WriteUint32(b, protocol.VersionNumberToTag(protocol.SupportedVersions[0]-2))
+			utils.WriteUint32(b, protocol.VersionNumberToTag(protocol.SupportedVersions[0]+1))
 			data := []byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c}
 			data = append(append(data, b.Bytes()...), 0x01)
 			err = serv.handlePacket(nil, nil, data)

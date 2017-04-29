@@ -22,7 +22,7 @@ var _ = Describe("Version", func() {
 
 	It("has supported versions in sorted order", func() {
 		for i := 0; i < len(SupportedVersions)-1; i++ {
-			Expect(SupportedVersions[i]).To(BeNumerically("<", SupportedVersions[i+1]))
+			Expect(SupportedVersions[i]).To(BeNumerically(">", SupportedVersions[i+1]))
 		}
 	})
 
@@ -39,7 +39,7 @@ var _ = Describe("Version", func() {
 		})
 
 		It("finds the supported version", func() {
-			SupportedVersions = []VersionNumber{1, 2, 3}
+			SupportedVersions = []VersionNumber{3, 2, 1}
 			other := []VersionNumber{3, 4, 5, 6}
 			found, ver := HighestSupportedVersion(other)
 			Expect(found).To(BeTrue())
@@ -47,7 +47,7 @@ var _ = Describe("Version", func() {
 		})
 
 		It("picks the highest supported version", func() {
-			SupportedVersions = []VersionNumber{1, 2, 3, 6, 7}
+			SupportedVersions = []VersionNumber{7, 6, 3, 2, 1}
 			other := []VersionNumber{3, 6, 1, 8, 2, 10}
 			found, ver := HighestSupportedVersion(other)
 			Expect(found).To(BeTrue())
@@ -55,7 +55,7 @@ var _ = Describe("Version", func() {
 		})
 
 		It("handles empty inputs", func() {
-			SupportedVersions = []VersionNumber{101, 102}
+			SupportedVersions = []VersionNumber{102, 101}
 			Expect(HighestSupportedVersion([]VersionNumber{})).To(BeFalse())
 			SupportedVersions = []VersionNumber{}
 			Expect(HighestSupportedVersion([]VersionNumber{1, 2})).To(BeFalse())

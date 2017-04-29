@@ -274,9 +274,9 @@ func (s *Server) SetQuicHeaders(hdr http.Header) error {
 	}
 
 	if s.supportedVersionsAsString == "" {
-		for i := len(protocol.SupportedVersions) - 1; i >= 0; i-- {
-			s.supportedVersionsAsString += strconv.Itoa(int(protocol.SupportedVersions[i]))
-			if i != 0 {
+		for i, v := range protocol.SupportedVersions {
+			s.supportedVersionsAsString += strconv.Itoa(int(v))
+			if i != len(protocol.SupportedVersions)-1 {
 				s.supportedVersionsAsString += ","
 			}
 		}
