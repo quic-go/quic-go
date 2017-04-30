@@ -50,6 +50,7 @@ type stream struct {
 	finSent        utils.AtomicBool
 	rstSent        utils.AtomicBool
 	writeChan      chan struct{}
+	writeDeadline  time.Time
 
 	flowControlManager flowcontrol.FlowControlManager
 }
@@ -168,38 +169,48 @@ func (s *stream) Read(p []byte) (int, error) {
 
 func (s *stream) Write(p []byte) (int, error) {
 	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
 	if s.resetLocally.Get() || s.err != nil {
-		err := s.err
-		s.mutex.Unlock()
-		return 0, err
+		return 0, s.err
 	}
 	if len(p) == 0 {
-		s.mutex.Unlock()
 		return 0, nil
 	}
 
 	s.dataForWriting = make([]byte, len(p))
 	copy(s.dataForWriting, p)
 	s.onData()
-	s.mutex.Unlock()
 
+	var err error
 	for {
-		s.mutex.Lock()
-		if s.dataForWriting == nil || s.err != nil {
-			s.mutex.Unlock()
+		deadline := s.writeDeadline
+		if !deadline.IsZero() && !time.Now().Before(deadline) {
+			err = errDeadline
 			break
 		}
+		if s.dataForWriting == nil || s.err != nil {
+			break
+		}
+
 		s.mutex.Unlock()
-		<-s.writeChan
+		if deadline.IsZero() {
+			<-s.writeChan
+		} else {
+			select {
+			case <-s.writeChan:
+			case <-time.After(deadline.Sub(time.Now())):
+			}
+		}
+		s.mutex.Lock()
 	}
 
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
+	if err != nil {
+		return 0, err
+	}
 	if s.err != nil {
 		return len(p) - len(s.dataForWriting), s.err
 	}
-
 	return len(p), nil
 }
 
@@ -305,6 +316,31 @@ func (s *stream) SetReadDeadline(t time.Time) error {
 	if t.Before(oldDeadline) {
 		s.signalRead()
 	}
+	return nil
+}
+
+// SetWriteDeadline sets the deadline for future Write calls
+// and any currently-blocked Write call.
+// Even if write times out, it may return n > 0, indicating that
+// some of the data was successfully written.
+// A zero value for t means Write will not time out.
+func (s *stream) SetWriteDeadline(t time.Time) error {
+	s.mutex.Lock()
+	oldDeadline := s.writeDeadline
+	s.writeDeadline = t
+	s.mutex.Unlock()
+	if t.Before(oldDeadline) {
+		s.signalWrite()
+	}
+	return nil
+}
+
+// SetDeadline sets the read and write deadlines associated
+// with the connection. It is equivalent to calling both
+// SetReadDeadline and SetWriteDeadline.
+func (s *stream) SetDeadline(t time.Time) error {
+	_ = s.SetReadDeadline(t)  // SetReadDeadline never errors
+	_ = s.SetWriteDeadline(t) // SetWriteDeadline never errors
 	return nil
 }
 

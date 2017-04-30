@@ -252,7 +252,7 @@ var _ = Describe("Stream", func() {
 				Expect(n).To(BeZero())
 			})
 
-			It("unblocks read after the deadline", func() {
+			It("unblocks after the deadline", func() {
 				deadline := time.Now().Add(200 * time.Millisecond)
 				str.SetReadDeadline(deadline)
 				b := make([]byte, 6)
@@ -297,6 +297,18 @@ var _ = Describe("Stream", func() {
 				_, err := str.Read(b)
 				Expect(err).To(MatchError(errDeadline))
 				Expect(time.Now()).To(BeTemporally("~", deadline2, 50*time.Millisecond))
+			})
+
+			It("sets a read deadline, when SetDeadline is called", func() {
+				mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(6)).AnyTimes()
+				f := &frames.StreamFrame{Data: []byte("foobar")}
+				err := str.AddStreamFrame(f)
+				Expect(err).ToNot(HaveOccurred())
+				str.SetDeadline(time.Now().Add(-time.Second))
+				b := make([]byte, 6)
+				n, err := str.Read(b)
+				Expect(err).To(MatchError(errDeadline))
+				Expect(n).To(BeZero())
 			})
 		})
 
@@ -761,6 +773,66 @@ var _ = Describe("Stream", func() {
 			n, err := str.Write([]byte(""))
 			Expect(n).To(BeZero())
 			Expect(err).ToNot(HaveOccurred())
+		})
+
+		Context("deadlines", func() {
+			It("returns an error when Write is called after the deadline", func() {
+				str.SetWriteDeadline(time.Now().Add(-time.Second))
+				n, err := str.Write([]byte("foobar"))
+				Expect(err).To(MatchError(errDeadline))
+				Expect(n).To(BeZero())
+			})
+
+			It("unblocks after the deadline", func() {
+				deadline := time.Now().Add(200 * time.Millisecond)
+				str.SetWriteDeadline(deadline)
+				n, err := str.Write([]byte("foobar"))
+				Expect(err).To(MatchError(errDeadline))
+				Expect(n).To(BeZero())
+				Expect(time.Now()).To(BeTemporally("~", deadline, 50*time.Millisecond))
+			})
+
+			It("doesn't unblock if the deadline is changed before the first one expires", func() {
+				deadline1 := time.Now().Add(200 * time.Millisecond)
+				deadline2 := time.Now().Add(400 * time.Millisecond)
+				str.SetWriteDeadline(deadline1)
+				go func() {
+					defer GinkgoRecover()
+					time.Sleep(50 * time.Millisecond)
+					str.SetWriteDeadline(deadline2)
+					// make sure that this was actually execute before the deadline expires
+					Expect(time.Now()).To(BeTemporally("<", deadline1))
+				}()
+				runtime.Gosched()
+				n, err := str.Write([]byte("foobar"))
+				Expect(err).To(MatchError(errDeadline))
+				Expect(n).To(BeZero())
+				Expect(time.Now()).To(BeTemporally("~", deadline2, 50*time.Millisecond))
+			})
+
+			It("unblocks earlier, when a new deadline is set", func() {
+				deadline1 := time.Now().Add(1200 * time.Millisecond)
+				deadline2 := time.Now().Add(300 * time.Millisecond)
+				go func() {
+					defer GinkgoRecover()
+					time.Sleep(50 * time.Millisecond)
+					str.SetWriteDeadline(deadline2)
+					// make sure that this was actually execute before the deadline expires
+					Expect(time.Now()).To(BeTemporally("<", deadline2))
+				}()
+				str.SetWriteDeadline(deadline1)
+				runtime.Gosched()
+				_, err := str.Write([]byte("foobar"))
+				Expect(err).To(MatchError(errDeadline))
+				Expect(time.Now()).To(BeTemporally("~", deadline2, 50*time.Millisecond))
+			})
+
+			It("sets a read deadline, when SetDeadline is called", func() {
+				str.SetDeadline(time.Now().Add(-time.Second))
+				n, err := str.Write([]byte("foobar"))
+				Expect(err).To(MatchError(errDeadline))
+				Expect(n).To(BeZero())
+			})
 		})
 
 		Context("closing", func() {
