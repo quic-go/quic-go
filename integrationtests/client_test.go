@@ -43,16 +43,17 @@ var _ = Describe("Client tests", func() {
 				protocol.SupportedVersions = []protocol.VersionNumber{version}
 			})
 
-			It("downloads a hello", func() {
+			It("downloads a hello", func(done Done) {
 				resp, err := client.Get("https://quic.clemente.io:" + port + "/hello")
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
 				body, err := ioutil.ReadAll(resp.Body)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(string(body)).To(Equal("Hello, World!\n"))
-			})
+				close(done)
+			}, 3)
 
-			It("downloads a small file", func() {
+			It("downloads a small file", func(done Done) {
 				dataMan.GenerateData(dataLen)
 				resp, err := client.Get("https://quic.clemente.io:" + port + "/data")
 				Expect(err).ToNot(HaveOccurred())
@@ -60,9 +61,10 @@ var _ = Describe("Client tests", func() {
 				body, err := ioutil.ReadAll(resp.Body)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(body).To(Equal(dataMan.GetData()))
-			})
+				close(done)
+			}, 5)
 
-			It("downloads a large file", func() {
+			It("downloads a large file", func(done Done) {
 				dataMan.GenerateData(dataLongLen)
 				resp, err := client.Get("https://quic.clemente.io:" + port + "/data")
 				Expect(err).ToNot(HaveOccurred())
@@ -70,9 +72,10 @@ var _ = Describe("Client tests", func() {
 				body, err := ioutil.ReadAll(resp.Body)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(body).To(Equal(dataMan.GetData()))
-			})
+				close(done)
+			}, 20)
 
-			It("uploads a file", func() {
+			It("uploads a file", func(done Done) {
 				dataMan.GenerateData(dataLen)
 				data := bytes.NewReader(dataMan.GetData())
 				resp, err := client.Post("https://quic.clemente.io:"+port+"/echo", "text/plain", data)
@@ -81,7 +84,8 @@ var _ = Describe("Client tests", func() {
 				body, err := ioutil.ReadAll(resp.Body)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(body).To(Equal(dataMan.GetData()))
-			})
+				close(done)
+			}, 5)
 		})
 	}
 })
