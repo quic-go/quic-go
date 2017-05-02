@@ -83,8 +83,14 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 
 func (w *responseWriter) Flush() {}
 
+// TODO: Implement a functional CloseNotify method.
+func (w *responseWriter) CloseNotify() <-chan bool { return make(<-chan bool) }
+
 // test that we implement http.Flusher
 var _ http.Flusher = &responseWriter{}
+
+// test that we implement http.CloseNotifier
+var _ http.CloseNotifier = &responseWriter{}
 
 // copied from http2/http2.go
 // bodyAllowedForStatus reports whether a given response status code
