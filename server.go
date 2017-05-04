@@ -86,6 +86,7 @@ func (s *server) Serve() error {
 		// If it does, we only read a truncated packet, which will then end up undecryptable
 		n, remoteAddr, err := s.conn.ReadFrom(data)
 		if err != nil {
+			_ = s.Close()
 			return err
 		}
 		data = data[:n]

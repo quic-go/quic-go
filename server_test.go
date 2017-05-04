@@ -236,6 +236,17 @@ var _ = Describe("Server", func() {
 			Expect(err).To(MatchError(testErr))
 		})
 
+		It("closes all sessions when encountering a connection error", func() {
+			err := serv.handlePacket(nil, nil, firstPacket)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(serv.sessions).To(HaveKey(connID))
+			Expect(serv.sessions[connID].(*mockSession).closed).To(BeFalse())
+			testErr := errors.New("connection error")
+			conn.readErr = testErr
+			_ = serv.Serve()
+			Expect(serv.sessions[connID].(*mockSession).closed).To(BeTrue())
+		})
+
 		It("ignores delayed packets with mismatching versions", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
