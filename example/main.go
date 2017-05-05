@@ -121,6 +121,8 @@ func main() {
 	certPath := flag.String("certpath", getBuildDir(), "certificate directory")
 	www := flag.String("www", "/var/www", "www data")
 	tcp := flag.Bool("tcp", false, "also listen on TCP")
+	cert :=flag.String("cert", "fullchain.pem", "certificate cert file")
+  key :=flag.String("key", "privkey.pem", "certificate key file")
 	flag.Parse()
 
 	if *verbose {
@@ -129,8 +131,8 @@ func main() {
 		utils.SetLogLevel(utils.LogLevelInfo)
 	}
 
-	certFile := *certPath + "/fullchain.pem"
-	keyFile := *certPath + "/privkey.pem"
+	certFile := *certPath + "/" + *cert
+	keyFile := *certPath + "/" + *key
 
 	http.Handle("/", http.FileServer(http.Dir(*www)))
 
