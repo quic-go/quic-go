@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -220,6 +221,9 @@ runLoop:
 		case p := <-s.receivedPackets:
 			err = s.handlePacketImpl(p)
 			if qErr, ok := err.(*qerr.QuicError); ok && qErr.ErrorCode == qerr.DecryptionFailure {
+				// allow other go routines to run
+				// this helps reading from the crypto stream (and escalating the crypto level) when a burst of packets arrives
+				runtime.Gosched()
 				s.tryQueueingUndecryptablePacket(p)
 				continue
 			}
