@@ -33,26 +33,22 @@ func main() {
 func echoServer() error {
 	cfgServer := &quic.Config{
 		TLSConfig: generateTLSConfig(),
-		ConnState: func(sess quic.Session, cs quic.ConnState) {
-			// Ignore unless the handshake is finished
-			if cs != quic.ConnStateForwardSecure {
-				return
-			}
-			go func() {
-				stream, err := sess.AcceptStream()
-				if err != nil {
-					panic(err)
-				}
-				// Echo through the loggingWriter
-				go io.Copy(loggingWriter{stream}, stream)
-			}()
-		},
 	}
 	listener, err := quic.ListenAddr(addr, cfgServer)
 	if err != nil {
 		return err
 	}
-	return listener.Serve()
+	sess, err := listener.Accept()
+	if err != nil {
+		return err
+	}
+	stream, err := sess.AcceptStream()
+	if err != nil {
+		panic(err)
+	}
+	// Echo through the loggingWriter
+	_, err = io.Copy(loggingWriter{stream}, stream)
+	return err
 }
 
 func clientMain() error {

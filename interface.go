@@ -79,6 +79,6 @@ type Listener interface {
 	Close() error
 	// Addr returns the local network addr that the server is listening on.
 	Addr() net.Addr
-	// Serve starts the main server loop, and blocks until a network error occurs or the server is closed.
-	Serve() error
+	// Accept returns new sessions. It should be called in a loop.
+	Accept() (Session, error)
 }

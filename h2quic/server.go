@@ -85,13 +85,7 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn *net.UDPConn) error {
 
 	config := quic.Config{
 		TLSConfig: tlsConfig,
-		ConnState: func(session quic.Session, connState quic.ConnState) {
-			sess := session.(streamCreator)
-			if connState == quic.ConnStateVersionNegotiated {
-				s.handleHeaderStream(sess)
-			}
-		},
-		Versions: protocol.SupportedVersions,
+		Versions:  protocol.SupportedVersions,
 	}
 
 	var ln quic.Listener
@@ -107,7 +101,14 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn *net.UDPConn) error {
 	}
 	s.listener = ln
 	s.listenerMutex.Unlock()
-	return ln.Serve()
+
+	for {
+		sess, err := ln.Accept()
+		if err != nil {
+			return err
+		}
+		go s.handleHeaderStream(sess.(streamCreator))
+	}
 }
 
 func (s *Server) handleHeaderStream(session streamCreator) {

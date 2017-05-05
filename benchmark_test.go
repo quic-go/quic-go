@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -27,33 +28,32 @@ var _ = Describe("Benchmarks", func() {
 			Measure("transferring a file", func(b Benchmarker) {
 				rand.Read(data) // no need to check for an error. math.Rand.Read never errors
 
-				// start the server
-				sconf := &Config{
-					TLSConfig: testdata.GetTLSConfig(),
-					ConnState: func(sess Session, cs ConnState) {
-						if cs != ConnStateForwardSecure {
-							return
-						}
+				var ln Listener
 
-						defer GinkgoRecover()
-						str, err := sess.OpenStream()
-						Expect(err).ToNot(HaveOccurred())
-						_, err = str.Write(data)
-						Expect(err).ToNot(HaveOccurred())
-						err = str.Close()
-						Expect(err).ToNot(HaveOccurred())
-					},
-				}
-				ln, err := ListenAddr("localhost:0", sconf)
-				Expect(err).ToNot(HaveOccurred())
-				// Serve will error as soon as ln is closed. Ignore all errors here
-				go ln.Serve()
+				serverAddr := make(chan net.Addr)
+				// start the server
+				go func() {
+					defer GinkgoRecover()
+					var err error
+					ln, err = ListenAddr("localhost:0", &Config{TLSConfig: testdata.GetTLSConfig()})
+					Expect(err).ToNot(HaveOccurred())
+					serverAddr <- ln.Addr()
+					sess, err := ln.Accept()
+					Expect(err).ToNot(HaveOccurred())
+					str, err := sess.OpenStream()
+					Expect(err).ToNot(HaveOccurred())
+					_, err = str.Write(data)
+					Expect(err).ToNot(HaveOccurred())
+					err = str.Close()
+					Expect(err).ToNot(HaveOccurred())
+				}()
 
 				// start the client
-				cconf := &Config{
+				conf := &Config{
 					TLSConfig: &tls.Config{InsecureSkipVerify: true},
 				}
-				sess, err := DialAddr(ln.Addr().String(), cconf)
+				addr := <-serverAddr
+				sess, err := DialAddr(addr.String(), conf)
 				Expect(err).ToNot(HaveOccurred())
 				str, err := sess.AcceptStream()
 				Expect(err).ToNot(HaveOccurred())

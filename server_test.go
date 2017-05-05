@@ -87,10 +87,12 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			serv = &server{
-				sessions:   make(map[protocol.ConnectionID]packetHandler),
-				newSession: newMockSession,
-				conn:       conn,
-				config:     config,
+				sessions:     make(map[protocol.ConnectionID]packetHandler),
+				newSession:   newMockSession,
+				conn:         conn,
+				config:       config,
+				sessionQueue: make(chan Session, 5),
+				errorChan:    make(chan struct{}),
 			}
 			b := &bytes.Buffer{}
 			utils.WriteUint32(b, protocol.VersionNumberToTag(protocol.SupportedVersions[0]))
@@ -115,56 +117,29 @@ var _ = Describe("Server", func() {
 		})
 
 		It("creates new sessions", func() {
-			var connStateCalled bool
-			var connStateStatus ConnState
-			var connStateSession Session
-			config.ConnState = func(s Session, state ConnState) {
-				connStateStatus = state
-				connStateSession = s
-				connStateCalled = true
-			}
 			err := serv.handlePacket(nil, nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			sess := serv.sessions[connID].(*mockSession)
 			Expect(sess.connectionID).To(Equal(connID))
 			Expect(sess.packetCount).To(Equal(1))
-			Eventually(func() bool { return connStateCalled }).Should(BeTrue())
-			Expect(connStateSession).To(Equal(sess))
-			Expect(connStateStatus).To(Equal(ConnStateVersionNegotiated))
 		})
 
-		It("calls the ConnState callback when the connection is secure", func() {
-			var connStateCalled bool
-			var connStateStatus ConnState
-			var connStateSession Session
-			config.ConnState = func(s Session, state ConnState) {
-				connStateStatus = state
-				connStateSession = s
-				connStateCalled = true
-			}
+		It("accepts a session once the connection it is forward secure", func(done Done) {
+			var acceptedSess Session
+			go func() {
+				defer GinkgoRecover()
+				var err error
+				acceptedSess, err = serv.Accept()
+				Expect(err).ToNot(HaveOccurred())
+			}()
 			sess := &mockSession{}
-			serv.cryptoChangeCallback(sess, false)
-			Eventually(func() bool { return connStateCalled }).Should(BeTrue())
-			Expect(connStateSession).To(Equal(sess))
-			Expect(connStateStatus).To(Equal(ConnStateSecure))
-		})
-
-		It("calls the ConnState callback when the connection is forward-secure", func() {
-			var connStateCalled bool
-			var connStateStatus ConnState
-			var connStateSession Session
-			config.ConnState = func(s Session, state ConnState) {
-				connStateStatus = state
-				connStateSession = s
-				connStateCalled = true
-			}
-			sess := &mockSession{}
+			// serv.cryptoChangeCallback(sess, false)
+			// Consistently(func() Session { return acceptedSess }).Should(BeNil())
 			serv.cryptoChangeCallback(sess, true)
-			Eventually(func() bool { return connStateCalled }).Should(BeTrue())
-			Expect(connStateStatus).To(Equal(ConnStateForwardSecure))
-			Expect(connStateSession).To(Equal(sess))
-		})
+			Eventually(func() Session { return acceptedSess }).Should(Equal(sess))
+			close(done)
+		}, 0.5)
 
 		It("assigns packets to existing sessions", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)
@@ -231,7 +206,7 @@ var _ = Describe("Server", func() {
 			var returned bool
 			go func() {
 				defer GinkgoRecover()
-				err := ln.Serve()
+				_, err := ln.Accept()
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("use of closed network connection"))
 				returned = true
@@ -240,12 +215,15 @@ var _ = Describe("Server", func() {
 			Eventually(func() bool { return returned }).Should(BeTrue())
 		})
 
-		It("errors when encountering a connection error", func() {
+		It("errors when encountering a connection error", func(done Done) {
 			testErr := errors.New("connection error")
 			conn.readErr = testErr
-			err := serv.Serve()
+			go serv.serve()
+			_, err := serv.Accept()
 			Expect(err).To(MatchError(testErr))
-		})
+			Expect(serv.Close()).To(Succeed())
+			close(done)
+		}, 0.5)
 
 		It("closes all sessions when encountering a connection error", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)
@@ -254,8 +232,9 @@ var _ = Describe("Server", func() {
 			Expect(serv.sessions[connID].(*mockSession).closed).To(BeFalse())
 			testErr := errors.New("connection error")
 			conn.readErr = testErr
-			_ = serv.Serve()
-			Expect(serv.sessions[connID].(*mockSession).closed).To(BeTrue())
+			go serv.serve()
+			Eventually(func() bool { return serv.sessions[connID].(*mockSession).closed }).Should(BeTrue())
+			Expect(serv.Close()).To(Succeed())
 		})
 
 		It("ignores delayed packets with mismatching versions", func() {
@@ -324,20 +303,17 @@ var _ = Describe("Server", func() {
 	})
 
 	It("setups with the right values", func() {
-		var connStateCallback ConnStateCallback = func(_ Session, _ ConnState) {}
 		supportedVersions := []protocol.VersionNumber{1, 3, 5}
 		config := Config{
 			TLSConfig: &tls.Config{},
-			ConnState: connStateCallback,
 			Versions:  supportedVersions,
 		}
 		ln, err := Listen(conn, &config)
-		Expect(err).ToNot(HaveOccurred())
 		server := ln.(*server)
+		Expect(err).ToNot(HaveOccurred())
 		Expect(server.deleteClosedSessionsAfter).To(Equal(protocol.ClosedSessionDeleteTimeout))
 		Expect(server.sessions).ToNot(BeNil())
 		Expect(server.scfg).ToNot(BeNil())
-		Expect(server.config.ConnState).ToNot(BeNil())
 		Expect(server.config.Versions).To(Equal(supportedVersions))
 	})
 
@@ -387,7 +363,7 @@ var _ = Describe("Server", func() {
 
 		var returned bool
 		go func() {
-			ln.Serve()
+			ln.Accept()
 			returned = true
 		}()
 
@@ -400,7 +376,7 @@ var _ = Describe("Server", func() {
 			b.Bytes()...,
 		)
 		Expect(conn.dataWritten.Bytes()).To(Equal(expected))
-		Expect(returned).To(BeFalse())
+		Consistently(func() bool { return returned }).Should(BeFalse())
 	})
 
 	It("sends a PublicReset for new connections that don't have the VersionFlag set", func() {
@@ -410,7 +386,7 @@ var _ = Describe("Server", func() {
 		Expect(err).ToNot(HaveOccurred())
 		go func() {
 			defer GinkgoRecover()
-			err := ln.Serve()
+			_, err := ln.Accept()
 			Expect(err).ToNot(HaveOccurred())
 		}()
 

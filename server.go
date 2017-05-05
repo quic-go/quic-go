@@ -34,6 +34,10 @@ type server struct {
 	sessionsMutex             sync.RWMutex
 	deleteClosedSessionsAfter time.Duration
 
+	serverError  error
+	sessionQueue chan Session
+	errorChan    chan struct{}
+
 	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, cryptoChangeCallback cryptoChangeCallback, config *Config) (packetHandler, error)
 }
 
@@ -66,7 +70,7 @@ func Listen(conn net.PacketConn, config *Config) (Listener, error) {
 		return nil, err
 	}
 
-	return &server{
+	s := &server{
 		conn:                      conn,
 		config:                    populateServerConfig(config),
 		certChain:                 certChain,
@@ -74,7 +78,11 @@ func Listen(conn net.PacketConn, config *Config) (Listener, error) {
 		sessions:                  map[protocol.ConnectionID]packetHandler{},
 		newSession:                newSession,
 		deleteClosedSessionsAfter: protocol.ClosedSessionDeleteTimeout,
-	}, nil
+		sessionQueue:              make(chan Session, 5),
+		errorChan:                 make(chan struct{}),
+	}
+	go s.serve()
+	return s, nil
 }
 
 func populateServerConfig(config *Config) *Config {
@@ -85,13 +93,12 @@ func populateServerConfig(config *Config) *Config {
 
 	return &Config{
 		TLSConfig: config.TLSConfig,
-		ConnState: config.ConnState,
 		Versions:  versions,
 	}
 }
 
-// Listen listens on an existing PacketConn
-func (s *server) Serve() error {
+// serve listens on an existing PacketConn
+func (s *server) serve() {
 	for {
 		data := getPacketBuffer()
 		data = data[:protocol.MaxReceivePacketSize]
@@ -99,13 +106,26 @@ func (s *server) Serve() error {
 		// If it does, we only read a truncated packet, which will then end up undecryptable
 		n, remoteAddr, err := s.conn.ReadFrom(data)
 		if err != nil {
+			s.serverError = err
+			close(s.errorChan)
 			_ = s.Close()
-			return err
+			return
 		}
 		data = data[:n]
 		if err := s.handlePacket(s.conn, remoteAddr, data); err != nil {
 			utils.Errorf("error handling packet: %s", err.Error())
 		}
+	}
+		}
+
+// Accept returns newly openend sessions
+func (s *server) Accept() (Session, error) {
+	var sess Session
+	select {
+	case sess = <-s.sessionQueue:
+		return sess, nil
+	case <-s.errorChan:
+		return nil, s.serverError
 	}
 }
 
@@ -212,10 +232,6 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 
 			s.removeConnection(hdr.ConnectionID)
 		}()
-
-		if s.config.ConnState != nil {
-			go s.config.ConnState(session, ConnStateVersionNegotiated)
-		}
 	}
 	if session == nil {
 		// Late packet for closed session
@@ -231,14 +247,8 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 }
 
 func (s *server) cryptoChangeCallback(session Session, isForwardSecure bool) {
-	var state ConnState
 	if isForwardSecure {
-		state = ConnStateForwardSecure
-	} else {
-		state = ConnStateSecure
-	}
-	if s.config.ConnState != nil {
-		go s.config.ConnState(session, state)
+		s.sessionQueue <- session
 	}
 }
 
