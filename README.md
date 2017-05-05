@@ -18,9 +18,9 @@ As Google's QUIC versions are expected to converge towards the [IETF QUIC draft]
 
 We currently support Go 1.7+.
 
-Installing deps:
+Installing and updating dependencies:
 
-    go get -t
+    go get -t -u ./...
 
 Running tests:
 
