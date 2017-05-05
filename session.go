@@ -182,7 +182,7 @@ func (s *session) setup() {
 	s.sendingScheduled = make(chan struct{}, 1)
 	s.undecryptablePackets = make([]*receivedPacket, 0, protocol.MaxUndecryptablePackets)
 	s.aeadChanged = make(chan protocol.EncryptionLevel, 2)
-	s.runClosed = make(chan struct{}, 1)
+	s.runClosed = make(chan struct{})
 
 	s.timer = time.NewTimer(0)
 	s.lastNetworkActivityTime = now
@@ -274,7 +274,7 @@ runLoop:
 		s.garbageCollectStreams()
 	}
 
-	s.runClosed <- struct{}{}
+	close(s.runClosed)
 	return closeErr
 }
 

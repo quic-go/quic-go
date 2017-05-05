@@ -646,7 +646,7 @@ var _ = Describe("Session", func() {
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(mconn.written).To(HaveLen(1))
 			Expect(mconn.written[0][len(mconn.written[0])-7:]).To(Equal([]byte{0x02, byte(qerr.PeerGoingAway), 0, 0, 0, 0, 0}))
-			Expect(sess.runClosed).ToNot(Receive()) // channel should be drained by Close()
+			Expect(sess.runClosed).To(BeClosed())
 		})
 
 		It("only closes once", func() {
@@ -654,7 +654,7 @@ var _ = Describe("Session", func() {
 			sess.Close(nil)
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(mconn.written).To(HaveLen(1))
-			Expect(sess.runClosed).ToNot(Receive()) // channel should be drained by Close()
+			Expect(sess.runClosed).To(BeClosed())
 		})
 
 		It("closes streams with proper error", func() {
@@ -669,7 +669,7 @@ var _ = Describe("Session", func() {
 			n, err = s.Write([]byte{0})
 			Expect(n).To(BeZero())
 			Expect(err.Error()).To(ContainSubstring(testErr.Error()))
-			Expect(sess.runClosed).ToNot(Receive()) // channel should be drained by Close()
+			Expect(sess.runClosed).To(BeClosed())
 		})
 
 		It("closes the session in order to replace it with another QUIC version", func() {
@@ -683,7 +683,7 @@ var _ = Describe("Session", func() {
 			sess.Close(handshake.ErrHOLExperiment)
 			Expect(mconn.written).To(HaveLen(1))
 			Expect(mconn.written[0][0] & 0x02).ToNot(BeZero()) // Public Reset
-			Expect(sess.runClosed).ToNot(Receive())            // channel should be drained by Close()
+			Expect(sess.runClosed).To(BeClosed())
 		})
 	})
 
@@ -1230,7 +1230,7 @@ var _ = Describe("Session", func() {
 			sess.scheduleSending()            // wake up the run loop
 			Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(1))
 			Expect(mconn.written[0]).To(ContainSubstring(string([]byte("PRST"))))
-			Eventually(sess.runClosed).Should(Receive())
+			Eventually(sess.runClosed).Should(BeClosed())
 		})
 
 		It("doesn't send a Public Reset if decrypting them suceeded during the timeout", func() {
@@ -1250,7 +1250,7 @@ var _ = Describe("Session", func() {
 			sendUndecryptablePackets()
 			Consistently(sess.undecryptablePackets).Should(BeEmpty())
 			sess.closeImpl(nil, true)
-			Eventually(sess.runClosed).Should(Receive())
+			Eventually(sess.runClosed).Should(BeClosed())
 		})
 
 		It("unqueues undecryptable packets for later decryption", func() {
@@ -1305,7 +1305,7 @@ var _ = Describe("Session", func() {
 			sess.lastNetworkActivityTime = time.Now().Add(-time.Hour)
 			sess.run() // Would normally not return
 			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
-			Expect(sess.runClosed).To(Receive())
+			Expect(sess.runClosed).To(BeClosed())
 			close(done)
 		})
 
@@ -1313,7 +1313,7 @@ var _ = Describe("Session", func() {
 			sess.sessionCreationTime = time.Now().Add(-time.Hour)
 			sess.run() // Would normally not return
 			Expect(mconn.written[0]).To(ContainSubstring("Crypto handshake did not complete in time."))
-			Expect(sess.runClosed).To(Receive())
+			Expect(sess.runClosed).To(BeClosed())
 			close(done)
 		})
 
@@ -1323,7 +1323,7 @@ var _ = Describe("Session", func() {
 			sess.packer.connectionParameters = sess.connectionParameters
 			sess.run() // Would normally not return
 			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
-			Expect(sess.runClosed).To(Receive())
+			Expect(sess.runClosed).To(BeClosed())
 			close(done)
 		})
 
@@ -1333,7 +1333,7 @@ var _ = Describe("Session", func() {
 			sess.packer.connectionParameters = sess.connectionParameters
 			sess.run() // Would normally not return
 			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
-			Expect(sess.runClosed).To(Receive())
+			Expect(sess.runClosed).To(BeClosed())
 			close(done)
 		})
 	})
