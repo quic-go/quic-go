@@ -1437,6 +1437,29 @@ var _ = Describe("Session", func() {
 		close(done)
 	})
 
+	Context("keep-alives", func() {
+		It("sends a ping packet", func() {
+			sess.config.KeepAlive = true
+			sess.lastNetworkActivityTime = time.Now().Add(-(sess.idleTimeout() / 2))
+			go sess.run()
+			defer sess.Close(nil)
+			time.Sleep(60 * time.Millisecond)
+			Eventually(func() [][]byte { return mconn.written }).ShouldNot(BeEmpty())
+			Eventually(func() byte {
+				// -12 because of the crypto tag. This should be 7 (the frame id for a ping frame).
+				s := mconn.written[0]
+				return s[len(s)-12-1]
+			}).Should(Equal(byte(0x07)))
+		})
+
+		It("doesn't send a ping packet if keep-alive is disabled", func() {
+			sess.lastNetworkActivityTime = time.Now().Add(-(sess.idleTimeout() / 2))
+			go sess.run()
+			defer sess.Close(nil)
+			Consistently(func() [][]byte { return mconn.written }).Should(BeEmpty())
+		})
+	})
+
 	Context("timeouts", func() {
 		It("times out due to no network activity", func(done Done) {
 			sess.lastNetworkActivityTime = time.Now().Add(-time.Hour)
