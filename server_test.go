@@ -21,13 +21,17 @@ type mockSession struct {
 	packetCount  int
 	closed       bool
 	closeReason  error
+	stopRunLoop  chan struct{} // run returns as soon as this channel receives a value
 }
 
 func (s *mockSession) handlePacket(*receivedPacket) {
 	s.packetCount++
 }
 
-func (s *mockSession) run() {}
+func (s *mockSession) run() error {
+	<-s.stopRunLoop
+	return s.closeReason
+}
 func (s *mockSession) Close(e error) error {
 	s.closeReason = e
 	s.closed = true
@@ -51,9 +55,10 @@ func (s *mockSession) RemoteAddr() net.Addr {
 
 var _ Session = &mockSession{}
 
-func newMockSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, closeCallback closeCallback, cryptoChangeCallback cryptoChangeCallback) (packetHandler, error) {
+func newMockSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, cryptoChangeCallback cryptoChangeCallback) (packetHandler, error) {
 	return &mockSession{
 		connectionID: connectionID,
+		stopRunLoop:  make(chan struct{}),
 	}, nil
 }
 
@@ -174,9 +179,10 @@ var _ = Describe("Server", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions[connID]).ToNot(BeNil())
-			serv.closeCallback(connID)
+			// make session.run() return
+			serv.sessions[connID].(*mockSession).stopRunLoop <- struct{}{}
 			// The server should now have closed the session, leaving a nil value in the sessions map
-			Expect(serv.sessions).To(HaveLen(1))
+			Consistently(func() map[protocol.ConnectionID]packetHandler { return serv.sessions }).Should(HaveLen(1))
 			Expect(serv.sessions[connID]).To(BeNil())
 		})
 
@@ -186,8 +192,9 @@ var _ = Describe("Server", func() {
 			err := serv.handlePacket(nil, nil, append(firstPacket, nullAEAD.Seal(nil, nil, 0, firstPacket)...))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
-			serv.closeCallback(connID)
 			Expect(serv.sessions).To(HaveKey(connID))
+			// make session.run() return
+			serv.sessions[connID].(*mockSession).stopRunLoop <- struct{}{}
 			Eventually(func() bool {
 				serv.sessionsMutex.Lock()
 				_, ok := serv.sessions[connID]
