@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/md5"
 	"encoding/hex"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -22,6 +23,7 @@ import (
 	"github.com/lucas-clemente/quic-go/h2quic"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/testdata"
+	"github.com/lucas-clemente/quic-go/utils"
 	"github.com/tebeka/selenium"
 
 	. "github.com/onsi/ginkgo"
@@ -45,6 +47,9 @@ var (
 	clientPath string // path of the quic_client
 	serverPath string // path of the quic_server
 
+	logFileName string // the log file set in the ginkgo flags
+	logFile     *os.File
+
 	docker *gexec.Session
 )
 
@@ -66,6 +71,12 @@ var _ = AfterSuite(func() {
 	stopSelenium()
 }, 10)
 
+// read the logfile command line flag
+// to set call ginkgo -- -logfile=log.txt
+func init() {
+	flag.StringVar(&logFileName, "logfile", "", "log file")
+}
+
 var _ = BeforeEach(func() {
 	// create a new uploadDir for every test
 	var err error
@@ -80,6 +91,13 @@ var _ = BeforeEach(func() {
 	}
 	clientPath = filepath.Join(thisfile, fmt.Sprintf("../../../quic-clients/client-%s-debug", runtime.GOOS))
 	serverPath = filepath.Join(thisfile, fmt.Sprintf("../../../quic-clients/server-%s-debug", runtime.GOOS))
+
+	if len(logFileName) > 0 {
+		logFile, err = os.Create("./log.txt")
+		Expect(err).ToNot(HaveOccurred())
+		utils.SetLogWriter(logFile)
+		utils.SetLogLevel(utils.LogLevelDebug)
+	}
 })
 
 var _ = AfterEach(func() {
@@ -91,6 +109,10 @@ var _ = AfterEach(func() {
 
 	// remove downloaded file in docker container
 	removeDownload("data")
+
+	if len(logFileName) > 0 {
+		_ = logFile.Close()
+	}
 })
 
 func setupHTTPHandlers() {
