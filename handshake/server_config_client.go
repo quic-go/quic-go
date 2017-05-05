@@ -57,8 +57,6 @@ func (s *serverConfigClient) parseValues(tagMap map[Tag][]byte) error {
 	s.ID = scfgID
 
 	// KEXS
-	// TODO: allow for P256 in the list
-	// TODO: setup Key Exchange
 	kexs, ok := tagMap[TagKEXS]
 	if !ok {
 		return qerr.Error(qerr.CryptoMessageParameterNotFound, "KEXS")
@@ -66,7 +64,13 @@ func (s *serverConfigClient) parseValues(tagMap map[Tag][]byte) error {
 	if len(kexs)%4 != 0 {
 		return qerr.Error(qerr.CryptoInvalidValueLength, "KEXS")
 	}
-	if !bytes.Equal(kexs, []byte("C255")) {
+	var c255Found bool
+	for i := 0; i < len(kexs)/4; i++ {
+		if bytes.Equal(kexs[4*i:4*i+4], []byte("C255")) {
+			c255Found = true
+		}
+	}
+	if !c255Found {
 		return qerr.Error(qerr.CryptoNoSupport, "KEXS")
 	}
 
