@@ -552,10 +552,7 @@ func (s *session) sendPacket() error {
 
 		// get WindowUpdate frames
 		// this call triggers the flow controller to increase the flow control windows, if necessary
-		windowUpdateFrames, err := s.getWindowUpdateFrames()
-		if err != nil {
-			return err
-		}
+		windowUpdateFrames := s.getWindowUpdateFrames()
 		for _, wuf := range windowUpdateFrames {
 			controlFrames = append(controlFrames, wuf)
 		}
@@ -572,7 +569,7 @@ func (s *session) sendPacket() error {
 				utils.Debugf("\tDequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 				stopWaitingFrame := s.sentPacketHandler.GetStopWaitingFrame(true)
 				var packet *packedPacket
-				packet, err = s.packer.RetransmitNonForwardSecurePacket(stopWaitingFrame, retransmitPacket)
+				packet, err := s.packer.RetransmitNonForwardSecurePacket(stopWaitingFrame, retransmitPacket)
 				if err != nil {
 					return err
 				}
@@ -594,7 +591,7 @@ func (s *session) sendPacket() error {
 						// only retransmit WindowUpdates if the stream is not yet closed and the we haven't sent another WindowUpdate with a higher ByteOffset for the stream
 						var currentOffset protocol.ByteCount
 						f := frame.(*frames.WindowUpdateFrame)
-						currentOffset, err = s.flowControlManager.GetReceiveWindow(f.StreamID)
+						currentOffset, err := s.flowControlManager.GetReceiveWindow(f.StreamID)
 						if err == nil && f.ByteOffset >= currentOffset {
 							controlFrames = append(controlFrames, frame)
 						}
@@ -779,13 +776,13 @@ func (s *session) tryDecryptingQueuedPackets() {
 	s.undecryptablePackets = s.undecryptablePackets[:0]
 }
 
-func (s *session) getWindowUpdateFrames() ([]*frames.WindowUpdateFrame, error) {
+func (s *session) getWindowUpdateFrames() []*frames.WindowUpdateFrame {
 	updates := s.flowControlManager.GetWindowUpdates()
 	res := make([]*frames.WindowUpdateFrame, len(updates))
 	for i, u := range updates {
 		res[i] = &frames.WindowUpdateFrame{StreamID: u.StreamID, ByteOffset: u.Offset}
 	}
-	return res, nil
+	return res
 }
 
 func (s *session) ackAlarmChanged(t time.Time) {
