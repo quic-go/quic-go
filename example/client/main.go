@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"sync"
+  "strings"
+  "os"
 
 	"github.com/lucas-clemente/quic-go/h2quic"
 	"github.com/lucas-clemente/quic-go/utils"
@@ -42,8 +44,15 @@ func main() {
 			if err != nil {
 				panic(err)
 			}
-			utils.Infof("Request Body:")
-			utils.Infof("%s", body.Bytes())
+	//		utils.Infof("Request Body:")
+	//		utils.Infof("%s", body.Bytes())
+			fileName :=strings.Replace(rsp.Request.URL.Path, "/", "-", -1)
+      dst, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE, 0644)
+      if err != nil {
+        panic(err)
+      }
+      defer dst.Close()
+      io.Copy(dst,body)
 			wg.Done()
 		}(addr)
 	}
