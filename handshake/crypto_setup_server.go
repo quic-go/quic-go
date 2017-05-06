@@ -208,6 +208,9 @@ func (h *cryptoSetupServer) GetSealer() (protocol.EncryptionLevel, Sealer) {
 }
 
 func (h *cryptoSetupServer) GetSealerWithEncryptionLevel(encLevel protocol.EncryptionLevel) (Sealer, error) {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+
 	switch encLevel {
 	case protocol.EncryptionUnencrypted:
 		return h.sealUnencrypted, nil
