@@ -403,9 +403,7 @@ var _ = Describe("Client", func() {
 					handlerReturned = true
 				}()
 
-				var rsp *http.Response
-				Eventually(client.responses[23]).Should(Receive(&rsp))
-				Expect(rsp).To(BeNil())
+				Eventually(client.responses[23]).Should(BeClosed())
 				Expect(client.headerErr).To(MatchError(qerr.Error(qerr.InvalidHeadersStreamData, "not a headers frame")))
 				Eventually(func() bool { return handlerReturned }).Should(BeTrue())
 			})
@@ -423,9 +421,7 @@ var _ = Describe("Client", func() {
 					handlerReturned = true
 				}()
 
-				var rsp *http.Response
-				Eventually(client.responses[23]).Should(Receive(&rsp))
-				Expect(rsp).To(BeNil())
+				Eventually(client.responses[23]).Should(BeClosed())
 				Expect(client.headerErr).To(MatchError(qerr.Error(qerr.InvalidHeadersStreamData, "cannot read header fields")))
 				Eventually(func() bool { return handlerReturned }).Should(BeTrue())
 			})

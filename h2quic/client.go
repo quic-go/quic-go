@@ -123,7 +123,7 @@ func (c *Client) handleHeaderStream() {
 	utils.Debugf("Error handling header stream %d: %s", lastStream, c.headerErr.Error())
 	c.mutex.Lock()
 	for _, responseChan := range c.responses {
-		responseChan <- nil
+		close(responseChan)
 	}
 	c.mutex.Unlock()
 }
@@ -142,14 +142,14 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	hasBody := (req.Body != nil)
 
 	<-c.dialChan // wait until the handshake has completed
-	hdrChan := make(chan *http.Response)
+	responseChan := make(chan *http.Response)
 	dataStream, err := c.session.OpenStreamSync()
 	if err != nil {
 		c.Close(err)
 		return nil, err
 	}
 	c.mutex.Lock()
-	c.responses[dataStream.StreamID()] = hdrChan
+	c.responses[dataStream.StreamID()] = responseChan
 	c.mutex.Unlock()
 
 	var requestedGzip bool
@@ -182,7 +182,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 
 	for !(bodySent && receivedResponse) {
 		select {
-		case res = <-hdrChan:
+		case res = <-responseChan:
 			receivedResponse = true
 			c.mutex.Lock()
 			delete(c.responses, dataStream.StreamID())
