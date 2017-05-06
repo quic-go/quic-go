@@ -22,8 +22,7 @@ import (
 
 // Client is a HTTP2 client doing QUIC requests
 type Client struct {
-	mutex             sync.RWMutex
-	cryptoChangedCond sync.Cond
+	mutex sync.RWMutex
 
 	config *quic.Config
 
@@ -31,6 +30,7 @@ type Client struct {
 
 	hostname        string
 	encryptionLevel protocol.EncryptionLevel
+	dialChan        chan struct{} // will be closed once the handshake is complete and the header stream has been opened
 
 	session       quic.Session
 	headerStream  quic.Stream
@@ -44,57 +44,27 @@ var _ h2quicClient = &Client{}
 
 // NewClient creates a new client
 func NewClient(t *QuicRoundTripper, tlsConfig *tls.Config, hostname string) *Client {
-	c := &Client{
+	return &Client{
 		t:               t,
 		hostname:        authorityAddr("https", hostname),
 		responses:       make(map[protocol.StreamID]chan *http.Response),
 		encryptionLevel: protocol.EncryptionUnencrypted,
+		config: &quic.Config{
+			TLSConfig:                     tlsConfig,
+			RequestConnectionIDTruncation: true,
+		},
+		dialChan: make(chan struct{}),
 	}
-	c.cryptoChangedCond = sync.Cond{L: &c.mutex}
-	c.config = &quic.Config{
-		ConnState:                     c.connStateCallback,
-		TLSConfig:                     tlsConfig,
-		RequestConnectionIDTruncation: true,
-	}
-	return c
 }
 
 // Dial dials the connection
 func (c *Client) Dial() error {
-	_, err := quic.DialAddr(c.hostname, c.config)
-	return err
-}
-
-// connStateCallback is the ConnStateCallback passed to the quic.Dial
-// this function is called in a separate go-routine
-func (c *Client) connStateCallback(sess quic.Session, state quic.ConnState) {
-	c.mutex.Lock()
-	if c.session == nil {
-		c.session = sess
-	}
-	switch state {
-	case quic.ConnStateVersionNegotiated:
-		err := c.versionNegotiateCallback()
-		if err != nil {
-			c.Close(err)
-		}
-	case quic.ConnStateSecure:
-		utils.Debugf("is secure")
-		// only save the encryption level if it is now higher than it was before
-		if c.encryptionLevel < protocol.EncryptionSecure {
-			c.encryptionLevel = protocol.EncryptionSecure
-		}
-		c.cryptoChangedCond.Broadcast()
-	case quic.ConnStateForwardSecure:
-		utils.Debugf("is forward secure")
-		c.encryptionLevel = protocol.EncryptionForwardSecure
-		c.cryptoChangedCond.Broadcast()
-	}
-	c.mutex.Unlock()
-}
-
-func (c *Client) versionNegotiateCallback() error {
 	var err error
+	c.session, err = quic.DialAddr(c.hostname, c.config)
+	if err != nil {
+		return err
+	}
+
 	// once the version has been negotiated, open the header stream
 	c.headerStream, err = c.session.OpenStream()
 	if err != nil {
@@ -105,6 +75,7 @@ func (c *Client) versionNegotiateCallback() error {
 	}
 	c.requestWriter = newRequestWriter(c.headerStream)
 	go c.handleHeaderStream()
+	close(c.dialChan)
 	return nil
 }
 
@@ -170,16 +141,14 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 
 	hasBody := (req.Body != nil)
 
-	c.mutex.Lock()
-	for c.encryptionLevel != protocol.EncryptionForwardSecure {
-		c.cryptoChangedCond.Wait()
-	}
+	<-c.dialChan // wait until the handshake has completed
 	hdrChan := make(chan *http.Response)
 	dataStream, err := c.session.OpenStreamSync()
 	if err != nil {
 		c.Close(err)
 		return nil, err
 	}
+	c.mutex.Lock()
 	c.responses[dataStream.StreamID()] = hdrChan
 	c.mutex.Unlock()
 

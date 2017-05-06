@@ -64,53 +64,6 @@ var _ = Describe("Client", func() {
 		Expect(hdr.ConnectionID).ToNot(BeNil())
 	})
 
-	It("saves the session when the ConnState callback is called", func() {
-		client.session = nil // unset the session set in BeforeEach
-		client.config.ConnState(session, quic.ConnStateForwardSecure)
-		Expect(client.session).To(Equal(session))
-	})
-
-	It("opens the header stream only after the version has been negotiated", func() {
-		client.headerStream = nil // unset the headerStream openend in the BeforeEach
-		session.streamToOpen = headerStream
-		Expect(client.headerStream).To(BeNil()) // header stream not yet opened
-		// now start the actual test
-		client.config.ConnState(session, quic.ConnStateVersionNegotiated)
-		Expect(client.headerStream).ToNot(BeNil())
-		Expect(client.headerStream.StreamID()).To(Equal(protocol.StreamID(3)))
-	})
-
-	It("errors if it can't open the header stream", func() {
-		testErr := errors.New("test error")
-		client.headerStream = nil // unset the headerStream openend in the BeforeEach
-		session.streamOpenErr = testErr
-		client.config.ConnState(session, quic.ConnStateVersionNegotiated)
-		Expect(session.closed).To(BeTrue())
-		Expect(session.closedWithError).To(MatchError(testErr))
-	})
-
-	It("errors if the header stream has the wrong StreamID", func() {
-		session.streamToOpen = &mockStream{id: 1337}
-		client.config.ConnState(session, quic.ConnStateVersionNegotiated)
-		Expect(session.closed).To(BeTrue())
-		Expect(session.closedWithError).To(MatchError("h2quic Client BUG: StreamID of Header Stream is not 3"))
-	})
-
-	It("sets the correct crypto level", func() {
-		Expect(client.encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
-		client.config.ConnState(session, quic.ConnStateSecure)
-		Expect(client.encryptionLevel).To(Equal(protocol.EncryptionSecure))
-		client.config.ConnState(session, quic.ConnStateForwardSecure)
-		Expect(client.encryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
-	})
-
-	It("sets the correct crypto level, if the ConnStateCallback is called in the wrong order", func() {
-		client.config.ConnState(session, quic.ConnStateForwardSecure)
-		Expect(client.encryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
-		client.config.ConnState(session, quic.ConnStateSecure)
-		Expect(client.encryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
-	})
-
 	Context("Doing requests", func() {
 		var request *http.Request
 		var dataStream *mockStream
@@ -143,6 +96,7 @@ var _ = Describe("Client", func() {
 
 			dataStream = &mockStream{id: 5}
 			session.streamToOpen = dataStream
+			close(client.dialChan)
 		})
 
 		It("does a request", func(done Done) {
