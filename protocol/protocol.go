@@ -57,3 +57,11 @@ const ClientHelloMinimumSize = 1024
 // * one failure due to an incorrect or missing source-address token
 // * one failure due the server's certificate chain being unavailible and the server being unwilling to send it without a valid source-address token
 const MaxClientHellos = 3
+
+// MaxFrameAndPublicHeaderSize is the maximum size of a QUIC frame plus PublicHeader
+const MaxFrameAndPublicHeaderSize = MaxPacketSize - 12 /*crypto signature*/
+
+// MaxPublicHeaderSize is the maximum size of the Public Header for a packet
+// this value can only be reached by a Public Header sent by the server
+// Public Headers sent by a client are always smaller
+const MaxPublicHeaderSize ByteCount = 1 /* public flag */ + 8 /* connection id */ + 32 /* diversification nonce */ + 6 /* maximum packet number length */

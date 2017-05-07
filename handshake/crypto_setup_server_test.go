@@ -323,6 +323,7 @@ var _ = Describe("Server Crypto Setup", func() {
 			Expect(stream.dataWritten.Bytes()).To(HavePrefix("REJ"))
 			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
 			Expect(stream.dataWritten.Bytes()).To(ContainSubstring("SHLO"))
+			Expect(cs.wroteSHLO).To(BeTrue())
 			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionForwardSecure)))
 			Expect(aeadChanged).ToNot(Receive())
 			Expect(aeadChanged).ToNot(BeClosed())
@@ -606,11 +607,24 @@ var _ = Describe("Server Crypto Setup", func() {
 				Expect(err).To(MatchError("authentication failed"))
 				Expect(enc).To(Equal(protocol.EncryptionUnspecified))
 			})
+
+			// the switch to forward-secure encryption happens *after* the SHLO has been writtin
+			It("is used after sending out one packet with initial encryption", func() {
+				doCHLO()
+				enc, seal := cs.GetSealer()
+				Expect(enc).To(Equal(protocol.EncryptionSecure))
+				_ = seal(nil, []byte("SHLO"), 0, []byte{})
+				enc, seal = cs.GetSealer()
+				Expect(enc).To(Equal(protocol.EncryptionSecure))
+				d := seal(nil, []byte("foobar"), 0, []byte{})
+				Expect(d).To(Equal([]byte("foobar  normal sec")))
+			})
 		})
 
 		Context("forward secure encryption", func() {
-			It("is used after sending out one packet with initial encryption", func() {
+			It("is used after writing the SHLO and sending out one packet with initial encryption", func() {
 				doCHLO()
+				cs.wroteSHLO = true
 				enc, seal := cs.GetSealer()
 				Expect(enc).To(Equal(protocol.EncryptionSecure))
 				_ = seal(nil, []byte("SHLO"), 0, []byte{})

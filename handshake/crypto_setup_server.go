@@ -22,6 +22,8 @@ type KeyExchangeFunction func() crypto.KeyExchange
 
 // The CryptoSetupServer handles all things crypto for the Session
 type cryptoSetupServer struct {
+	mutex sync.RWMutex
+
 	connID               protocol.ConnectionID
 	sourceAddr           []byte
 	scfg                 *ServerConfig
@@ -35,6 +37,7 @@ type cryptoSetupServer struct {
 	forwardSecureAEAD           crypto.AEAD
 	receivedForwardSecurePacket bool
 	sentSHLO                    bool
+	wroteSHLO                   bool
 	receivedSecurePacket        bool
 	aeadChanged                 chan<- protocol.EncryptionLevel
 
@@ -44,8 +47,6 @@ type cryptoSetupServer struct {
 	cryptoStream io.ReadWriter
 
 	connectionParameters ConnectionParametersManager
-
-	mutex sync.RWMutex
 }
 
 var _ CryptoSetup = &cryptoSetupServer{}
@@ -152,6 +153,9 @@ func (h *cryptoSetupServer) handleMessage(chloData []byte, cryptoData map[Tag][]
 		if err != nil {
 			return false, err
 		}
+		h.mutex.Lock()
+		h.wroteSHLO = true
+		h.mutex.Unlock()
 		return true, nil
 	}
 
@@ -200,10 +204,10 @@ func (h *cryptoSetupServer) Open(dst, src []byte, packetNumber protocol.PacketNu
 }
 
 func (h *cryptoSetupServer) GetSealer() (protocol.EncryptionLevel, Sealer) {
-	h.mutex.RLock()
-	defer h.mutex.RUnlock()
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
 
-	if h.forwardSecureAEAD != nil && h.sentSHLO {
+	if h.forwardSecureAEAD != nil && h.sentSHLO && h.wroteSHLO {
 		return protocol.EncryptionForwardSecure, h.sealForwardSecure
 	} else if h.secureAEAD != nil {
 		// secureAEAD and forwardSecureAEAD are created at the same time (when receiving the CHLO)
@@ -214,8 +218,8 @@ func (h *cryptoSetupServer) GetSealer() (protocol.EncryptionLevel, Sealer) {
 }
 
 func (h *cryptoSetupServer) GetSealerWithEncryptionLevel(encLevel protocol.EncryptionLevel) (Sealer, error) {
-	h.mutex.RLock()
-	defer h.mutex.RUnlock()
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
 
 	switch encLevel {
 	case protocol.EncryptionUnencrypted:

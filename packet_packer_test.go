@@ -361,7 +361,7 @@ var _ = Describe("Packet packer", func() {
 			streamFramer.AddFrameForRetransmission(f)
 			p, err := packer.PackPacket(nil, nil, 0)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(p.raw).To(HaveLen(int(protocol.MaxPacketSize - protocol.NonForwardSecurePacketSizeReduction)))
+			Expect(len(p.raw)).To(BeNumerically("<=", protocol.MaxPacketSize-protocol.NonForwardSecurePacketSizeReduction-protocol.MaxPublicHeaderSize+12))
 		})
 
 		It("packs multiple small stream frames into single packet", func() {
@@ -696,7 +696,8 @@ var _ = Describe("Packet packer", func() {
 				},
 			}
 			_, err := packer.RetransmitNonForwardSecurePacket(swf, packet)
-			Expect(err).To(MatchError("PacketPacker BUG: packet too large"))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("PacketPacker BUG: packet too large"))
 		})
 
 		It("refuses to retransmit packets that were sent with forward-secure encryption", func() {
