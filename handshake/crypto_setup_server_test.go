@@ -595,9 +595,9 @@ var _ = Describe("Server Crypto Setup", func() {
 				doCHLO()
 				_, _, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
-				Expect(cs.aeadChanged).To(Receive()) // consume the protocol.EncryptionSecure
-				Expect(cs.aeadChanged).To(Receive()) // consume the protocol.EncryptionForwardSecure
-				Expect(cs.aeadChanged).To(BeClosed())
+				Expect(aeadChanged).To(Receive()) // consume the protocol.EncryptionSecure
+				Expect(aeadChanged).To(Receive()) // consume the protocol.EncryptionForwardSecure
+				Expect(aeadChanged).To(BeClosed())
 			})
 		})
 

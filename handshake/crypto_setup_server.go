@@ -36,7 +36,7 @@ type cryptoSetupServer struct {
 	receivedForwardSecurePacket bool
 	sentSHLO                    bool
 	receivedSecurePacket        bool
-	aeadChanged                 chan protocol.EncryptionLevel
+	aeadChanged                 chan<- protocol.EncryptionLevel
 
 	keyDerivation KeyDerivationFunction
 	keyExchange   KeyExchangeFunction
@@ -64,7 +64,7 @@ func NewCryptoSetup(
 	cryptoStream io.ReadWriter,
 	connectionParametersManager ConnectionParametersManager,
 	supportedVersions []protocol.VersionNumber,
-	aeadChanged chan protocol.EncryptionLevel,
+	aeadChanged chan<- protocol.EncryptionLevel,
 ) (CryptoSetup, error) {
 	return &cryptoSetupServer{
 		connID:               connID,

@@ -47,7 +47,7 @@ type cryptoSetupClient struct {
 	nullAEAD             crypto.AEAD
 	secureAEAD           crypto.AEAD
 	forwardSecureAEAD    crypto.AEAD
-	aeadChanged          chan protocol.EncryptionLevel
+	aeadChanged          chan<- protocol.EncryptionLevel
 
 	connectionParameters ConnectionParametersManager
 }
@@ -68,7 +68,7 @@ func NewCryptoSetupClient(
 	cryptoStream io.ReadWriter,
 	tlsConfig *tls.Config,
 	connectionParameters ConnectionParametersManager,
-	aeadChanged chan protocol.EncryptionLevel,
+	aeadChanged chan<- protocol.EncryptionLevel,
 	negotiatedVersions []protocol.VersionNumber,
 ) (CryptoSetup, error) {
 	return &cryptoSetupClient{
