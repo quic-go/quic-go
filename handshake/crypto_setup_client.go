@@ -251,6 +251,7 @@ func (h *cryptoSetupClient) handleSHLOMessage(cryptoData map[Tag][]byte) error {
 	}
 
 	h.aeadChanged <- protocol.EncryptionForwardSecure
+	close(h.aeadChanged)
 
 	return nil
 }
@@ -368,13 +369,6 @@ func (h *cryptoSetupClient) SetDiversificationNonce(data []byte) error {
 		return errConflictingDiversificationNonces
 	}
 	return nil
-}
-
-func (h *cryptoSetupClient) HandshakeComplete() bool {
-	h.mutex.RLock()
-	defer h.mutex.RUnlock()
-
-	return h.forwardSecureAEAD != nil
 }
 
 func (h *cryptoSetupClient) sendCHLO() error {

@@ -173,7 +173,10 @@ func (h *cryptoSetupServer) Open(dst, src []byte, packetNumber protocol.PacketNu
 	if h.forwardSecureAEAD != nil {
 		res, err := h.forwardSecureAEAD.Open(dst, src, packetNumber, associatedData)
 		if err == nil {
-			h.receivedForwardSecurePacket = true
+			if !h.receivedForwardSecurePacket { // this is the first forward secure packet we receive from the client
+				h.receivedForwardSecurePacket = true
+				close(h.aeadChanged)
+			}
 			return res, protocol.EncryptionForwardSecure, nil
 		}
 		if h.receivedForwardSecurePacket {
@@ -426,11 +429,6 @@ func (h *cryptoSetupServer) DiversificationNonce() []byte {
 
 func (h *cryptoSetupServer) SetDiversificationNonce(data []byte) error {
 	panic("not needed for cryptoSetupServer")
-}
-
-// HandshakeComplete returns true after the first forward secure packet was received form the client.
-func (h *cryptoSetupServer) HandshakeComplete() bool {
-	return h.receivedForwardSecurePacket
 }
 
 func (h *cryptoSetupServer) validateClientNonce(nonce []byte) error {

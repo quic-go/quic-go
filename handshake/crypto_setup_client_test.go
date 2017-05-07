@@ -369,22 +369,22 @@ var _ = Describe("Client Crypto Setup", func() {
 			cs.receivedSecurePacket = false
 			err := cs.handleSHLOMessage(shloMap)
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoEncryptionLevelIncorrect, "unencrypted SHLO message")))
-			Expect(cs.HandshakeComplete()).To(BeFalse())
 			Expect(cs.aeadChanged).ToNot(Receive())
+			Expect(cs.aeadChanged).ToNot(BeClosed())
 		})
 
 		It("rejects SHLOs without a PUBS", func() {
 			delete(shloMap, TagPUBS)
 			err := cs.handleSHLOMessage(shloMap)
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoMessageParameterNotFound, "PUBS")))
-			Expect(cs.HandshakeComplete()).To(BeFalse())
+			Expect(cs.aeadChanged).ToNot(BeClosed())
 		})
 
 		It("rejects SHLOs without a version list", func() {
 			delete(shloMap, TagVER)
 			err := cs.handleSHLOMessage(shloMap)
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "server hello missing version list")))
-			Expect(cs.HandshakeComplete()).To(BeFalse())
+			Expect(cs.aeadChanged).ToNot(BeClosed())
 		})
 
 		It("accepts a SHLO after a version negotiation", func() {
@@ -409,8 +409,8 @@ var _ = Describe("Client Crypto Setup", func() {
 			err := cs.handleSHLOMessage(shloMap)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.forwardSecureAEAD).ToNot(BeNil())
-			Expect(cs.HandshakeComplete()).To(BeTrue())
-			Expect(cs.aeadChanged).To(Receive())
+			Expect(cs.aeadChanged).To(Receive(Equal(protocol.EncryptionForwardSecure)))
+			Expect(cs.aeadChanged).To(BeClosed())
 		})
 
 		It("reads the connection paramaters", func() {
@@ -598,8 +598,9 @@ var _ = Describe("Client Crypto Setup", func() {
 			Expect(keyDerivationCalledWith.cert).To(Equal(certManager.leafCert))
 			Expect(keyDerivationCalledWith.divNonce).To(Equal(cs.diversificationNonce))
 			Expect(keyDerivationCalledWith.pers).To(Equal(protocol.PerspectiveClient))
-			Expect(cs.HandshakeComplete()).To(BeFalse())
-			Expect(cs.aeadChanged).To(Receive())
+			Expect(cs.aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
+			Expect(cs.aeadChanged).ToNot(Receive())
+			Expect(cs.aeadChanged).ToNot(BeClosed())
 		})
 
 		It("uses the server nonce, if the server sent one", func() {
@@ -609,8 +610,9 @@ var _ = Describe("Client Crypto Setup", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.secureAEAD).ToNot(BeNil())
 			Expect(keyDerivationCalledWith.nonces).To(Equal(append(cs.nonc, cs.sno...)))
-			Expect(cs.HandshakeComplete()).To(BeFalse())
 			Expect(cs.aeadChanged).To(Receive())
+			Expect(cs.aeadChanged).ToNot(Receive())
+			Expect(cs.aeadChanged).ToNot(BeClosed())
 		})
 
 		It("doesn't create a secureAEAD if the certificate is not yet verified, even if it has all necessary values", func() {
@@ -623,8 +625,9 @@ var _ = Describe("Client Crypto Setup", func() {
 			err = cs.maybeUpgradeCrypto()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.secureAEAD).ToNot(BeNil())
-			Expect(cs.HandshakeComplete()).To(BeFalse())
-			Expect(cs.aeadChanged).To(Receive())
+			Expect(cs.aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
+			Expect(cs.aeadChanged).ToNot(Receive())
+			Expect(cs.aeadChanged).ToNot(BeClosed())
 		})
 
 		It("tries to escalate before reading a handshake message", func() {
@@ -635,7 +638,9 @@ var _ = Describe("Client Crypto Setup", func() {
 			// this is because the mockStream doesn't block if there's no data to read
 			Expect(err).To(MatchError(qerr.HandshakeFailed))
 			Expect(cs.secureAEAD).ToNot(BeNil())
-			Expect(cs.HandshakeComplete()).To(BeFalse())
+			Expect(cs.aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
+			Expect(cs.aeadChanged).ToNot(Receive())
+			Expect(cs.aeadChanged).ToNot(BeClosed())
 		})
 
 		It("tries to escalate the crypto after receiving a diversification nonce", func() {
@@ -645,8 +650,9 @@ var _ = Describe("Client Crypto Setup", func() {
 			err := cs.SetDiversificationNonce([]byte("div"))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.secureAEAD).ToNot(BeNil())
-			Expect(cs.aeadChanged).To(Receive())
-			Expect(cs.HandshakeComplete()).To(BeFalse())
+			Expect(cs.aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
+			Expect(cs.aeadChanged).ToNot(Receive())
+			Expect(cs.aeadChanged).ToNot(BeClosed())
 		})
 
 		Context("null encryption", func() {

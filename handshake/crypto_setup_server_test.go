@@ -302,8 +302,11 @@ var _ = Describe("Server Crypto Setup", func() {
 			err := cs.HandleCryptoStream()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stream.dataWritten.Bytes()).To(HavePrefix("REJ"))
+			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
 			Expect(stream.dataWritten.Bytes()).To(ContainSubstring("SHLO"))
-			Expect(aeadChanged).To(Receive())
+			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionForwardSecure)))
+			Expect(aeadChanged).ToNot(Receive())
+			Expect(aeadChanged).ToNot(BeClosed())
 		})
 
 		It("rejects client nonces that have the wrong length", func() {
@@ -334,11 +337,8 @@ var _ = Describe("Server Crypto Setup", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stream.dataWritten.Bytes()).To(HavePrefix("SHLO"))
 			Expect(stream.dataWritten.Bytes()).ToNot(ContainSubstring("REJ"))
-			var encLevel protocol.EncryptionLevel
-			Expect(aeadChanged).To(Receive(&encLevel))
-			Expect(encLevel).To(Equal(protocol.EncryptionSecure))
-			Expect(aeadChanged).To(Receive(&encLevel))
-			Expect(encLevel).To(Equal(protocol.EncryptionForwardSecure))
+			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
+			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionForwardSecure)))
 		})
 
 		It("recognizes inchoate CHLOs missing SCID", func() {
@@ -593,15 +593,11 @@ var _ = Describe("Server Crypto Setup", func() {
 
 			It("regards the handshake as complete once it receives a forward encrypted packet", func() {
 				doCHLO()
-				enc, seal := cs.GetSealer()
-				Expect(enc).To(Equal(protocol.EncryptionSecure))
-				_ = seal(nil, []byte("SHLO"), 0, []byte{})
-				enc, seal = cs.GetSealer()
-				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
-				_ = seal(nil, []byte("foobar"), 0, []byte{})
-				Expect(cs.HandshakeComplete()).To(BeFalse())
-				cs.receivedForwardSecurePacket = true
-				Expect(cs.HandshakeComplete()).To(BeTrue())
+				_, _, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cs.aeadChanged).To(Receive()) // consume the protocol.EncryptionSecure
+				Expect(cs.aeadChanged).To(Receive()) // consume the protocol.EncryptionForwardSecure
+				Expect(cs.aeadChanged).To(BeClosed())
 			})
 		})
 

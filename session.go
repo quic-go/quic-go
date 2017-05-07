@@ -76,7 +76,10 @@ type session struct {
 	undecryptablePackets                   []*receivedPacket
 	receivedTooManyUndecrytablePacketsTime time.Time
 
-	aeadChanged chan protocol.EncryptionLevel
+	// this channel is passed to the CryptoSetup and receives the current encryption level
+	// it is closed as soon as the handshake is complete
+	aeadChanged       chan protocol.EncryptionLevel
+	handshakeComplete bool
 
 	nextAckScheduledTime time.Time
 
@@ -98,7 +101,7 @@ type session struct {
 var _ Session = &session{}
 
 // newSession makes a new session
-func newSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig,  cryptoChangeCallback cryptoChangeCallback, supportedVersions []protocol.VersionNumber) (packetHandler, error) {
+func newSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, cryptoChangeCallback cryptoChangeCallback, supportedVersions []protocol.VersionNumber) (packetHandler, error) {
 	s := &session{
 		conn:         conn,
 		connectionID: connectionID,
@@ -195,6 +198,8 @@ func (s *session) run() error {
 	}()
 
 	var closeErr error
+	aeadChanged := s.aeadChanged
+
 runLoop:
 	for {
 		// Close immediately if requested
@@ -226,12 +231,17 @@ runLoop:
 			// This is a bit unclean, but works properly, since the packet always
 			// begins with the public header and we never copy it.
 			putPacketBuffer(p.publicHeader.Raw)
-		case l := <-s.aeadChanged:
-			if l == protocol.EncryptionForwardSecure {
-				s.packer.SetForwardSecure()
+		case l, ok := <-aeadChanged:
+			if !ok {
+				s.handshakeComplete = true
+				aeadChanged = nil // prevent this case from ever being selected again
+			} else {
+				if l == protocol.EncryptionForwardSecure {
+					s.packer.SetForwardSecure()
+				}
+				s.tryDecryptingQueuedPackets()
+				s.cryptoChangeCallback(s, l == protocol.EncryptionForwardSecure)
 			}
-			s.tryDecryptingQueuedPackets()
-			s.cryptoChangeCallback(s, l == protocol.EncryptionForwardSecure)
 		}
 
 		if err != nil {
@@ -254,7 +264,7 @@ runLoop:
 		if now.Sub(s.lastNetworkActivityTime) >= s.idleTimeout() {
 			s.close(qerr.Error(qerr.NetworkIdleTimeout, "No recent network activity."))
 		}
-		if !s.cryptoSetup.HandshakeComplete() && now.Sub(s.sessionCreationTime) >= protocol.MaxTimeForCryptoHandshake {
+		if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= protocol.MaxTimeForCryptoHandshake {
 			s.close(qerr.Error(qerr.NetworkIdleTimeout, "Crypto handshake did not complete in time."))
 		}
 		s.garbageCollectStreams()
@@ -273,7 +283,7 @@ func (s *session) maybeResetTimer() {
 	if lossTime := s.sentPacketHandler.GetAlarmTimeout(); !lossTime.IsZero() {
 		nextDeadline = utils.MinTime(nextDeadline, lossTime)
 	}
-	if !s.cryptoSetup.HandshakeComplete() {
+	if !s.handshakeComplete {
 		handshakeDeadline := s.sessionCreationTime.Add(protocol.MaxTimeForCryptoHandshake)
 		nextDeadline = utils.MinTime(nextDeadline, handshakeDeadline)
 	}
@@ -298,7 +308,7 @@ func (s *session) maybeResetTimer() {
 }
 
 func (s *session) idleTimeout() time.Duration {
-	if s.cryptoSetup.HandshakeComplete() {
+	if s.handshakeComplete {
 		return s.connectionParameters.GetIdleConnectionStateLifetime()
 	}
 	return protocol.InitialIdleTimeout
@@ -753,7 +763,7 @@ func (s *session) scheduleSending() {
 }
 
 func (s *session) tryQueueingUndecryptablePacket(p *receivedPacket) {
-	if s.cryptoSetup.HandshakeComplete() {
+	if s.handshakeComplete {
 		return
 	}
 	if len(s.undecryptablePackets)+1 > protocol.MaxUndecryptablePackets {
