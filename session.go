@@ -78,7 +78,7 @@ type session struct {
 
 	// this channel is passed to the CryptoSetup and receives the current encryption level
 	// it is closed as soon as the handshake is complete
-	aeadChanged       chan protocol.EncryptionLevel
+	aeadChanged       <-chan protocol.EncryptionLevel
 	handshakeComplete bool
 
 	nextAckScheduledTime time.Time
@@ -121,8 +121,10 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	} else {
 		sourceAddr = []byte(conn.RemoteAddr().String())
 	}
+	aeadChanged := make(chan protocol.EncryptionLevel, 2)
+	s.aeadChanged = aeadChanged
 	var err error
-	s.cryptoSetup, err = handshake.NewCryptoSetup(connectionID, sourceAddr, v, sCfg, cryptoStream, s.connectionParameters, supportedVersions, s.aeadChanged)
+	s.cryptoSetup, err = handshake.NewCryptoSetup(connectionID, sourceAddr, v, sCfg, cryptoStream, s.connectionParameters, supportedVersions, aeadChanged)
 	if err != nil {
 		return nil, err
 	}
@@ -147,9 +149,11 @@ func newClientSession(conn connection, hostname string, v protocol.VersionNumber
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.ackAlarmChanged)
 	s.setup()
 
+	aeadChanged := make(chan protocol.EncryptionLevel, 2)
+	s.aeadChanged = aeadChanged
 	cryptoStream, _ := s.OpenStream()
 	var err error
-	s.cryptoSetup, err = handshake.NewCryptoSetupClient(hostname, connectionID, v, cryptoStream, tlsConfig, s.connectionParameters, s.aeadChanged, negotiatedVersions)
+	s.cryptoSetup, err = handshake.NewCryptoSetupClient(hostname, connectionID, v, cryptoStream, tlsConfig, s.connectionParameters, aeadChanged, negotiatedVersions)
 	if err != nil {
 		return nil, err
 	}
