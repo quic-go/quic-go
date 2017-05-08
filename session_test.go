@@ -593,6 +593,59 @@ var _ = Describe("Session", func() {
 		close(done)
 	})
 
+	Context("waiting until the handshake completes", func() {
+		It("waits until the handshake is complete", func(done Done) {
+			go sess.run()
+
+			var waitReturned bool
+			go func() {
+				defer GinkgoRecover()
+				err := sess.WaitUntilHandshakeComplete()
+				Expect(err).ToNot(HaveOccurred())
+				waitReturned = true
+			}()
+			aeadChanged <- protocol.EncryptionForwardSecure
+			Consistently(func() bool { return waitReturned }).Should(BeFalse())
+			close(aeadChanged)
+			Eventually(func() bool { return waitReturned }).Should(BeTrue())
+			Expect(sess.Close(nil)).To(Succeed())
+			close(done)
+		})
+
+		It("errors if the handshake fails", func(done Done) {
+			testErr := errors.New("crypto error")
+			sess.cryptoSetup = &mockCryptoSetup{handleErr: testErr}
+			go sess.run()
+			err := sess.WaitUntilHandshakeComplete()
+			Expect(err).To(MatchError(testErr))
+			close(done)
+		}, 0.5)
+
+		It("returns when Close is called", func(done Done) {
+			testErr := errors.New("close error")
+			go sess.run()
+			var waitReturned bool
+			go func() {
+				defer GinkgoRecover()
+				err := sess.WaitUntilHandshakeComplete()
+				Expect(err).To(MatchError(testErr))
+				waitReturned = true
+			}()
+			sess.Close(testErr)
+			Eventually(func() bool { return waitReturned }).Should(BeTrue())
+			close(done)
+		})
+
+		It("doesn't wait if the handshake is already completed", func(done Done) {
+			go sess.run()
+			close(aeadChanged)
+			err := sess.WaitUntilHandshakeComplete()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(sess.Close(nil)).To(Succeed())
+			close(done)
+		})
+	})
+
 	Context("accepting streams", func() {
 		It("waits for new streams", func() {
 			var str Stream

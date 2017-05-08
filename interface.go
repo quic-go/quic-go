@@ -38,6 +38,13 @@ type Session interface {
 	Close(error) error
 }
 
+// A NonFWSession is a QUIC connection between two peers half-way through the handshake.
+// The communication is encrypted, but not yet forward secure.
+type NonFWSession interface {
+	Session
+	WaitUntilHandshakeComplete() error
+}
+
 // Config contains all configuration data needed for a QUIC server or client.
 // More config parameters (such as timeouts) will be added soon, see e.g. https://github.com/lucas-clemente/quic-go/issues/441.
 type Config struct {

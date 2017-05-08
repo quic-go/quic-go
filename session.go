@@ -83,8 +83,10 @@ type session struct {
 
 	// this channel is passed to the CryptoSetup and receives the current encryption level
 	// it is closed as soon as the handshake is complete
-	aeadChanged       <-chan protocol.EncryptionLevel
-	handshakeComplete bool
+	aeadChanged        <-chan protocol.EncryptionLevel
+	handshakeComplete  bool
+	handshakeChan      chan struct{} // will be closed as soon as the handshake completes
+	handshakeErrorChan chan error
 
 	nextAckScheduledTime time.Time
 
@@ -215,6 +217,8 @@ func (s *session) setup() {
 	s.undecryptablePackets = make([]*receivedPacket, 0, protocol.MaxUndecryptablePackets)
 	s.aeadChanged = make(chan protocol.EncryptionLevel, 2)
 	s.runClosed = make(chan struct{})
+	s.handshakeChan = make(chan struct{})
+	s.handshakeErrorChan = make(chan error, 1)
 
 	s.timer = time.NewTimer(0)
 	s.lastNetworkActivityTime = now
@@ -274,6 +278,7 @@ runLoop:
 			if !ok {
 				s.handshakeComplete = true
 				aeadChanged = nil // prevent this case from ever being selected again
+				close(s.handshakeChan)
 			} else {
 				if l == protocol.EncryptionForwardSecure {
 					s.packer.SetForwardSecure()
@@ -305,6 +310,7 @@ runLoop:
 		s.garbageCollectStreams()
 	}
 
+	s.handshakeErrorChan <- closeErr.err
 	s.handleCloseError(closeErr)
 	close(s.runClosed)
 	return closeErr.err
@@ -749,6 +755,15 @@ func (s *session) OpenStream() (Stream, error) {
 
 func (s *session) OpenStreamSync() (Stream, error) {
 	return s.streamsMap.OpenStreamSync()
+}
+
+func (s *session) WaitUntilHandshakeComplete() error {
+	select {
+	case <-s.handshakeChan:
+		return nil
+	case err := <-s.handshakeErrorChan:
+		return err
+	}
 }
 
 func (s *session) queueResetStreamFrame(id protocol.StreamID, offset protocol.ByteCount) {
