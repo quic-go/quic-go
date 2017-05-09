@@ -56,7 +56,7 @@ func (s *mockSession) RemoteAddr() net.Addr {
 
 var _ Session = &mockSession{}
 
-func newMockSession(_ connection, _ protocol.VersionNumber, connectionID protocol.ConnectionID, _ *handshake.ServerConfig, _ cryptoChangeCallback, _ []protocol.VersionNumber) (packetHandler, error) {
+func newMockSession(_ connection, _ protocol.VersionNumber, connectionID protocol.ConnectionID, _ *handshake.ServerConfig, _ cryptoChangeCallback, _ *Config) (packetHandler, error) {
 	return &mockSession{
 		connectionID: connectionID,
 		stopRunLoop:  make(chan struct{}),

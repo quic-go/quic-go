@@ -150,7 +150,7 @@ var _ = Describe("Session", func() {
 			0,
 			scfg,
 			func(Session, bool) {},
-			nil,
+			populateServerConfig(&Config{}),
 		)
 		Expect(err).NotTo(HaveOccurred())
 		sess = pSess.(*session)
@@ -167,8 +167,8 @@ var _ = Describe("Session", func() {
 			"hostname",
 			protocol.Version35,
 			0,
-			nil,
 			func(Session, bool) {},
+			populateClientConfig(&Config{}),
 			nil,
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -188,7 +188,7 @@ var _ = Describe("Session", func() {
 				0,
 				scfg,
 				func(Session, bool) {},
-				nil,
+				populateServerConfig(&Config{}),
 			)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(*(*[]byte)(unsafe.Pointer(reflect.ValueOf(sess.(*session).cryptoSetup).Elem().FieldByName("sourceAddr").UnsafeAddr()))).To(Equal([]byte{192, 168, 100, 200}))
@@ -204,7 +204,7 @@ var _ = Describe("Session", func() {
 				0,
 				scfg,
 				func(Session, bool) {},
-				nil,
+				populateServerConfig(&Config{}),
 			)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(*(*[]byte)(unsafe.Pointer(reflect.ValueOf(sess.(*session).cryptoSetup).Elem().FieldByName("sourceAddr").UnsafeAddr()))).To(Equal([]byte("192.168.100.200:1337")))

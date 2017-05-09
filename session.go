@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -49,6 +48,7 @@ type session struct {
 	connectionID protocol.ConnectionID
 	perspective  protocol.Perspective
 	version      protocol.VersionNumber
+	config       *Config
 
 	cryptoChangeCallback cryptoChangeCallback
 
@@ -106,12 +106,20 @@ type session struct {
 var _ Session = &session{}
 
 // newSession makes a new session
-func newSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, cryptoChangeCallback cryptoChangeCallback, supportedVersions []protocol.VersionNumber) (packetHandler, error) {
+func newSession(
+	conn connection,
+	v protocol.VersionNumber,
+	connectionID protocol.ConnectionID,
+	sCfg *handshake.ServerConfig,
+	cryptoChangeCallback cryptoChangeCallback,
+	config *Config,
+) (packetHandler, error) {
 	s := &session{
 		conn:         conn,
 		connectionID: connectionID,
 		perspective:  protocol.PerspectiveServer,
 		version:      v,
+		config:       config,
 
 		cryptoChangeCallback: cryptoChangeCallback,
 		connectionParameters: handshake.NewConnectionParamatersManager(protocol.PerspectiveServer, v),
@@ -129,7 +137,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	aeadChanged := make(chan protocol.EncryptionLevel, 2)
 	s.aeadChanged = aeadChanged
 	var err error
-	s.cryptoSetup, err = handshake.NewCryptoSetup(connectionID, sourceAddr, v, sCfg, cryptoStream, s.connectionParameters, supportedVersions, aeadChanged)
+	s.cryptoSetup, err = handshake.NewCryptoSetup(connectionID, sourceAddr, v, sCfg, cryptoStream, s.connectionParameters, config.Versions, aeadChanged)
 	if err != nil {
 		return nil, err
 	}
@@ -140,12 +148,21 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 	return s, err
 }
 
-func newClientSession(conn connection, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, tlsConfig *tls.Config, cryptoChangeCallback cryptoChangeCallback, negotiatedVersions []protocol.VersionNumber) (*session, error) {
+func newClientSession(
+	conn connection,
+	hostname string,
+	v protocol.VersionNumber,
+	connectionID protocol.ConnectionID,
+	cryptoChangeCallback cryptoChangeCallback,
+	config *Config,
+	negotiatedVersions []protocol.VersionNumber,
+) (*session, error) {
 	s := &session{
 		conn:         conn,
 		connectionID: connectionID,
 		perspective:  protocol.PerspectiveClient,
 		version:      v,
+		config:       config,
 
 		cryptoChangeCallback: cryptoChangeCallback,
 		connectionParameters: handshake.NewConnectionParamatersManager(protocol.PerspectiveClient, v),
@@ -158,7 +175,7 @@ func newClientSession(conn connection, hostname string, v protocol.VersionNumber
 	s.aeadChanged = aeadChanged
 	cryptoStream, _ := s.OpenStream()
 	var err error
-	s.cryptoSetup, err = handshake.NewCryptoSetupClient(hostname, connectionID, v, cryptoStream, tlsConfig, s.connectionParameters, aeadChanged, negotiatedVersions)
+	s.cryptoSetup, err = handshake.NewCryptoSetupClient(hostname, connectionID, v, cryptoStream, config.TLSConfig, s.connectionParameters, aeadChanged, negotiatedVersions)
 	if err != nil {
 		return nil, err
 	}

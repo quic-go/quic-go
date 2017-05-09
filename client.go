@@ -257,8 +257,8 @@ func (c *client) createNewSession(negotiatedVersions []protocol.VersionNumber) e
 		c.hostname,
 		c.version,
 		c.connectionID,
-		c.config.TLSConfig,
 		c.cryptoChangeCallback,
+		c.config,
 		negotiatedVersions,
 	)
 	if err != nil {
