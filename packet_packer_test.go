@@ -13,9 +13,8 @@ import (
 )
 
 type mockCryptoSetup struct {
-	divNonce          []byte
-	handshakeComplete bool
-	encLevelSeal      protocol.EncryptionLevel
+	divNonce     []byte
+	encLevelSeal protocol.EncryptionLevel
 }
 
 func (m *mockCryptoSetup) HandleCryptoStream() error { return nil }
@@ -33,7 +32,6 @@ func (m *mockCryptoSetup) GetSealerWithEncryptionLevel(protocol.EncryptionLevel)
 		return append(src, bytes.Repeat([]byte{0}, 12)...)
 	}, nil
 }
-func (m *mockCryptoSetup) HandshakeComplete() bool { return m.handshakeComplete }
 func (m *mockCryptoSetup) DiversificationNonce() []byte {
 	return m.divNonce
 }

@@ -125,11 +125,12 @@ func areSessionsRunning() bool {
 
 var _ = Describe("Session", func() {
 	var (
-		sess       *session
-		clientSess *session
-		scfg       *handshake.ServerConfig
-		mconn      *mockConnection
-		cpm        *mockConnectionParametersManager
+		sess        *session
+		clientSess  *session
+		scfg        *handshake.ServerConfig
+		mconn       *mockConnection
+		cpm         *mockConnectionParametersManager
+		aeadChanged chan<- protocol.EncryptionLevel
 	)
 
 	BeforeEach(func() {
@@ -154,6 +155,9 @@ var _ = Describe("Session", func() {
 		Expect(err).NotTo(HaveOccurred())
 		sess = pSess.(*session)
 		Expect(sess.streamsMap.openStreams).To(HaveLen(1)) // Crypto stream
+		// we need an aeadChanged chan that we can write to
+		// since type assertions on chans are not possible, we have to extract it from the CryptoSetup
+		aeadChanged = *(*chan<- protocol.EncryptionLevel)(unsafe.Pointer(reflect.ValueOf(sess.cryptoSetup).Elem().FieldByName("aeadChanged").UnsafeAddr()))
 
 		cpm = &mockConnectionParametersManager{idleTime: 60 * time.Second}
 		sess.connectionParameters = cpm
@@ -1156,9 +1160,9 @@ var _ = Describe("Session", func() {
 	It("tells the packetPacker when forward-secure encryption is used", func() {
 		go sess.run()
 		defer sess.Close(nil)
-		sess.aeadChanged <- protocol.EncryptionSecure
+		aeadChanged <- protocol.EncryptionSecure
 		Consistently(func() bool { return sess.packer.isForwardSecure }).Should(BeFalse())
-		sess.aeadChanged <- protocol.EncryptionForwardSecure
+		aeadChanged <- protocol.EncryptionForwardSecure
 		Eventually(func() bool { return sess.packer.isForwardSecure }).Should(BeTrue())
 	})
 
@@ -1241,7 +1245,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("ignores undecryptable packets after the handshake is complete", func() {
-			sess.cryptoSetup.(*mockCryptoSetup).handshakeComplete = true
+			close(aeadChanged)
 			go sess.run()
 			sendUndecryptablePackets()
 			Consistently(sess.undecryptablePackets).Should(BeEmpty())
@@ -1270,7 +1274,7 @@ var _ = Describe("Session", func() {
 			callbackSession = s
 		}
 		sess.cryptoChangeCallback = cb
-		sess.aeadChanged <- protocol.EncryptionSecure
+		aeadChanged <- protocol.EncryptionSecure
 		go sess.run()
 		defer sess.Close(nil)
 		Eventually(func() bool { return callbackCalled }).Should(BeTrue())
@@ -1287,8 +1291,8 @@ var _ = Describe("Session", func() {
 			callbackCalledWith = p
 		}
 		sess.cryptoChangeCallback = cb
-		sess.cryptoSetup = &mockCryptoSetup{handshakeComplete: true}
-		sess.aeadChanged <- protocol.EncryptionForwardSecure
+		aeadChanged <- protocol.EncryptionForwardSecure
+		close(aeadChanged)
 		go sess.run()
 		defer sess.Close(nil)
 		Eventually(func() bool { return callbackCalledWith }).Should(BeTrue())
@@ -1324,9 +1328,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("uses ICSL after handshake", func(done Done) {
-			// sess.lastNetworkActivityTime = time.Now().Add(-time.Minute)
-			*(*bool)(unsafe.Pointer(reflect.ValueOf(sess.cryptoSetup).Elem().FieldByName("receivedForwardSecurePacket").UnsafeAddr())) = true
-			*(*crypto.AEAD)(unsafe.Pointer(reflect.ValueOf(sess.cryptoSetup).Elem().FieldByName("forwardSecureAEAD").UnsafeAddr())) = crypto.NewNullAEAD(protocol.PerspectiveServer, protocol.VersionWhatever)
+			close(aeadChanged)
 			cpm.idleTime = 0 * time.Millisecond
 			sess.packer.connectionParameters = sess.connectionParameters
 			sess.run() // Would normally not return

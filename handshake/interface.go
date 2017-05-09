@@ -9,7 +9,6 @@ type Sealer func(dst, src []byte, packetNumber protocol.PacketNumber, associated
 type CryptoSetup interface {
 	Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error)
 	HandleCryptoStream() error
-	HandshakeComplete() bool
 	// TODO: clean up this interface
 	DiversificationNonce() []byte         // only needed for cryptoSetupServer
 	SetDiversificationNonce([]byte) error // only needed for cryptoSetupClient
