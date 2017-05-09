@@ -75,9 +75,10 @@ func populateClientConfig(config *Config) *Config {
 	}
 
 	return &Config{
-		TLSConfig: config.TLSConfig,
-		ConnState: config.ConnState,
-		Versions:  versions,
+		TLSConfig:                     config.TLSConfig,
+		ConnState:                     config.ConnState,
+		Versions:                      versions,
+		RequestConnectionIDTruncation: config.RequestConnectionIDTruncation,
 	}
 }
 

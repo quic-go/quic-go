@@ -749,6 +749,20 @@ var _ = Describe("Session", func() {
 			Expect(clientSess.Close(nil)).To(Succeed())
 		})
 
+		It("passes the transport parameters to the cryptoSetup, as a client", func() {
+			s, err := newClientSession(
+				nil,
+				"hostname",
+				protocol.Version35,
+				0,
+				func(Session, bool) {},
+				populateClientConfig(&Config{RequestConnectionIDTruncation: true}),
+				nil,
+			)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(*(*bool)(unsafe.Pointer(reflect.ValueOf(s.cryptoSetup).Elem().FieldByName("params").Elem().FieldByName("RequestConnectionIDTruncation").UnsafeAddr()))).To(BeTrue())
+		})
+
 		Context("updating the remote address", func() {
 			It("sets the remote address", func() {
 				remoteIP := &net.IPAddr{IP: net.IPv4(192, 168, 0, 100)}

@@ -51,6 +51,7 @@ type cryptoSetupClient struct {
 	forwardSecureAEAD    crypto.AEAD
 	aeadChanged          chan<- protocol.EncryptionLevel
 
+	params               *TransportParameters
 	connectionParameters ConnectionParametersManager
 }
 
@@ -71,6 +72,7 @@ func NewCryptoSetupClient(
 	tlsConfig *tls.Config,
 	connectionParameters ConnectionParametersManager,
 	aeadChanged chan<- protocol.EncryptionLevel,
+	params *TransportParameters,
 	negotiatedVersions []protocol.VersionNumber,
 ) (CryptoSetup, error) {
 	return &cryptoSetupClient{
@@ -86,6 +88,7 @@ func NewCryptoSetupClient(
 		aeadChanged:          aeadChanged,
 		negotiatedVersions:   negotiatedVersions,
 		divNonceChan:         make(chan []byte),
+		params:               params,
 	}, nil
 }
 
@@ -428,10 +431,12 @@ func (h *cryptoSetupClient) getTags() (map[Tag][]byte, error) {
 	binary.LittleEndian.PutUint32(versionTag, protocol.VersionNumberToTag(h.version))
 	tags[TagVER] = versionTag
 
+	if h.params.RequestConnectionIDTruncation {
+		tags[TagTCID] = []byte{0, 0, 0, 0}
+	}
 	if len(h.stk) > 0 {
 		tags[TagSTK] = h.stk
 	}
-
 	if len(h.sno) > 0 {
 		tags[TagSNO] = h.sno
 	}

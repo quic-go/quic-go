@@ -105,7 +105,17 @@ var _ = Describe("Client Crypto Setup", func() {
 		certManager = &mockCertManager{}
 		version := protocol.Version36
 		aeadChanged = make(chan protocol.EncryptionLevel, 2)
-		csInt, err := NewCryptoSetupClient("hostname", 0, version, stream, nil, NewConnectionParamatersManager(protocol.PerspectiveClient, version), aeadChanged, nil)
+		csInt, err := NewCryptoSetupClient(
+			"hostname",
+			0,
+			version,
+			stream,
+			nil,
+			NewConnectionParamatersManager(protocol.PerspectiveClient, version),
+			aeadChanged,
+			&TransportParameters{},
+			nil,
+		)
 		Expect(err).ToNot(HaveOccurred())
 		cs = csInt.(*cryptoSetupClient)
 		cs.certManager = certManager
@@ -468,6 +478,14 @@ var _ = Describe("Client Crypto Setup", func() {
 			Expect(tags[TagPDMD]).To(Equal([]byte("X509")))
 			Expect(tags[TagVER]).To(Equal([]byte("Q036")))
 			Expect(tags[TagCCS]).To(Equal(certManager.commonCertificateHashes))
+			Expect(tags).ToNot(HaveKey(TagTCID))
+		})
+
+		It("requests to truncate the connection ID", func() {
+			cs.params.RequestConnectionIDTruncation = true
+			tags, err := cs.getTags()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(tags).To(HaveKeyWithValue(TagTCID, []byte{0, 0, 0, 0}))
 		})
 
 		It("adds the tags returned from the connectionParametersManager to the CHLO", func() {

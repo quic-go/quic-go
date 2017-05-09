@@ -175,7 +175,17 @@ func newClientSession(
 	s.aeadChanged = aeadChanged
 	cryptoStream, _ := s.OpenStream()
 	var err error
-	s.cryptoSetup, err = handshake.NewCryptoSetupClient(hostname, connectionID, v, cryptoStream, config.TLSConfig, s.connectionParameters, aeadChanged, negotiatedVersions)
+	s.cryptoSetup, err = handshake.NewCryptoSetupClient(
+		hostname,
+		connectionID,
+		v,
+		cryptoStream,
+		config.TLSConfig,
+		s.connectionParameters,
+		aeadChanged,
+		&handshake.TransportParameters{RequestConnectionIDTruncation: config.RequestConnectionIDTruncation},
+		negotiatedVersions,
+	)
 	if err != nil {
 		return nil, err
 	}
