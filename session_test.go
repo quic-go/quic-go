@@ -1030,22 +1030,12 @@ var _ = Describe("Session", func() {
 	})
 
 	It("retransmits RTO packets", func() {
+		n := protocol.PacketNumber(10)
 		sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure}
 		// We simulate consistently low RTTs, so that the test works faster
-		n := protocol.PacketNumber(10)
-		for p := protocol.PacketNumber(1); p < n; p++ {
-			err := sess.sentPacketHandler.SentPacket(&ackhandler.Packet{
-				PacketNumber:    p,
-				Length:          1,
-				EncryptionLevel: protocol.EncryptionForwardSecure,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			time.Sleep(time.Microsecond)
-			ack := &frames.AckFrame{}
-			ack.LargestAcked = p
-			err = sess.sentPacketHandler.ReceivedAck(ack, p, time.Now())
-			Expect(err).NotTo(HaveOccurred())
-		}
+		rtt := time.Millisecond
+		sess.rttStats.UpdateRTT(rtt, 0, time.Now())
+		Expect(sess.rttStats.SmoothedRTT()).To(Equal(rtt)) // make sure it worked
 		sess.packer.packetNumberGenerator.next = n + 1
 		// Now, we send a single packet, and expect that it was retransmitted later
 		err := sess.sentPacketHandler.SentPacket(&ackhandler.Packet{
@@ -1060,7 +1050,7 @@ var _ = Describe("Session", func() {
 		go sess.run()
 		defer sess.Close(nil)
 		sess.scheduleSending()
-		Eventually(func() [][]byte { return mconn.written }).ShouldNot(BeEmpty())
+		Eventually(func() int { return len(mconn.written) }).ShouldNot(BeZero())
 		Expect(mconn.written[0]).To(ContainSubstring("foobar"))
 	})
 
