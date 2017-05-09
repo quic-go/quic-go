@@ -38,7 +38,7 @@ var _ = Describe("Client", func() {
 			version:       protocol.SupportedVersions[0],
 			conn:          &conn{pconn: packetConn, currentAddr: addr},
 			errorChan:     make(chan struct{}),
-			handshakeChan: make(chan struct{}),
+			handshakeChan: make(chan handshakeEvent),
 		}
 	})
 

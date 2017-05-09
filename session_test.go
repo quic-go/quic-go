@@ -162,12 +162,11 @@ var _ = Describe("Session", func() {
 		cpm = &mockConnectionParametersManager{idleTime: 60 * time.Second}
 		sess.connectionParameters = cpm
 
-		clientSess, err = newClientSession(
+		clientSess, _, err = newClientSession(
 			mconn,
 			"hostname",
 			protocol.Version35,
 			0,
-			func(Session, bool) {},
 			populateClientConfig(&Config{}),
 			nil,
 		)
@@ -817,12 +816,11 @@ var _ = Describe("Session", func() {
 		})
 
 		It("passes the transport parameters to the cryptoSetup, as a client", func() {
-			s, err := newClientSession(
+			s, _, err := newClientSession(
 				nil,
 				"hostname",
 				protocol.Version35,
 				0,
-				func(Session, bool) {},
 				populateClientConfig(&Config{RequestConnectionIDTruncation: true}),
 				nil,
 			)

@@ -3,6 +3,7 @@ package quic
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -17,11 +18,11 @@ type client struct {
 	mutex     sync.Mutex
 	listenErr error
 
-	conn      connection
-	hostname  string
-	errorChan chan struct{}
+	conn     connection
+	hostname string
 
-	handshakeChan chan struct{} // is closed as soon as the handshake completes
+	errorChan     chan struct{}
+	handshakeChan <-chan handshakeEvent
 
 	config            *Config
 	versionNegotiated bool // has version negotiation completed yet
@@ -50,9 +51,9 @@ func DialAddr(addr string, config *Config) (Session, error) {
 	return Dial(udpConn, udpAddr, addr, config)
 }
 
-// Dial establishes a new QUIC connection to a server using a net.PacketConn.
+// DialNonFWSecure establishes a new non-forward-secure QUIC connection to a server using a net.PacketConn.
 // The host parameter is used for SNI.
-func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config) (Session, error) {
+func DialNonFWSecure(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config) (NonFWSession, error) {
 	connID, err := utils.GenerateConnectionID()
 	if err != nil {
 		return nil, err
@@ -65,13 +66,12 @@ func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config
 
 	clientConfig := populateClientConfig(config)
 	c := &client{
-		conn:          &conn{pconn: pconn, currentAddr: remoteAddr},
-		connectionID:  connID,
-		hostname:      hostname,
-		config:        clientConfig,
-		version:       clientConfig.Versions[0],
-		errorChan:     make(chan struct{}),
-		handshakeChan: make(chan struct{}),
+		conn:         &conn{pconn: pconn, currentAddr: remoteAddr},
+		connectionID: connID,
+		hostname:     hostname,
+		config:       clientConfig,
+		version:      clientConfig.Versions[0],
+		errorChan:    make(chan struct{}),
 	}
 
 	err = c.createNewSession(nil)
@@ -81,7 +81,21 @@ func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config
 
 	utils.Infof("Starting new connection to %s (%s), connectionID %x, version %d", hostname, c.conn.RemoteAddr().String(), c.connectionID, c.version)
 
-	return c.establishConnection()
+	return c.session.(NonFWSession), c.establishSecureConnection()
+}
+
+// Dial establishes a new QUIC connection to a server using a net.PacketConn.
+// The host parameter is used for SNI.
+func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config) (Session, error) {
+	sess, err := DialNonFWSecure(pconn, remoteAddr, host, config)
+	if err != nil {
+		return nil, err
+	}
+	err = sess.WaitUntilHandshakeComplete()
+	if err != nil {
+		return nil, err
+	}
+	return sess, nil
 }
 
 func populateClientConfig(config *Config) *Config {
@@ -97,14 +111,21 @@ func populateClientConfig(config *Config) *Config {
 	}
 }
 
-func (c *client) establishConnection() (Session, error) {
+// establishSecureConnection returns as soon as the connection is secure (as opposed to forward-secure)
+func (c *client) establishSecureConnection() error {
 	go c.listen()
 
 	select {
 	case <-c.errorChan:
-		return nil, c.listenErr
-	case <-c.handshakeChan:
-		return c.session, nil
+		return c.listenErr
+	case ev := <-c.handshakeChan:
+		if ev.err != nil {
+			return ev.err
+		}
+		if ev.encLevel != protocol.EncryptionSecure {
+			return fmt.Errorf("Client BUG: Expected encryption level to be secure, was %s", ev.encLevel)
+		}
+		return nil
 	}
 }
 
@@ -204,20 +225,13 @@ func (c *client) handlePacketWithVersionFlag(hdr *PublicHeader) error {
 	return c.createNewSession(hdr.SupportedVersions)
 }
 
-func (c *client) cryptoChangeCallback(_ Session, isForwardSecure bool) {
-	if isForwardSecure {
-		close(c.handshakeChan)
-	}
-}
-
 func (c *client) createNewSession(negotiatedVersions []protocol.VersionNumber) error {
 	var err error
-	c.session, err = newClientSession(
+	c.session, c.handshakeChan, err = newClientSession(
 		c.conn,
 		c.hostname,
 		c.version,
 		c.connectionID,
-		c.cryptoChangeCallback,
 		c.config,
 		negotiatedVersions,
 	)
