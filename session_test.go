@@ -1166,17 +1166,17 @@ var _ = Describe("Session", func() {
 	})
 
 	It("closes when crypto stream errors", func() {
-		go sess.run()
-		s, err := sess.GetOrOpenStream(3)
-		Expect(err).NotTo(HaveOccurred())
-		err = sess.handleStreamFrame(&frames.StreamFrame{
+		var runErr error
+		go func() {
+			runErr = sess.run()
+		}()
+		err := sess.handleStreamFrame(&frames.StreamFrame{
 			StreamID: 1,
 			Data:     []byte("4242\x00\x00\x00\x00"),
 		})
 		Expect(err).NotTo(HaveOccurred())
-		Eventually(func() bool { return atomic.LoadUint32(&sess.closed) != 0 }).Should(BeTrue())
-		_, err = s.Write([]byte{})
-		Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.InvalidCryptoMessageType))
+		Eventually(func() error { return runErr }).Should(HaveOccurred())
+		Expect(runErr.(qerr.ErrorCode)).To(Equal(qerr.InvalidCryptoMessageType))
 	})
 
 	Context("sending a Public Reset when receiving undecryptable packets during the handshake", func() {
