@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/frames"
@@ -20,6 +21,8 @@ type packedPacket struct {
 }
 
 type packetPacker struct {
+	mutex sync.Mutex
+
 	connectionID protocol.ConnectionID
 	perspective  protocol.Perspective
 	version      protocol.VersionNumber
@@ -49,6 +52,9 @@ func newPacketPacker(connectionID protocol.ConnectionID, cryptoSetup handshake.C
 
 // PackConnectionClose packs a packet that ONLY contains a ConnectionCloseFrame
 func (p *packetPacker) PackConnectionClose(ccf *frames.ConnectionCloseFrame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
 	// in case the connection is closed, all queued control frames aren't of any use anymore
 	// discard them and queue the ConnectionCloseFrame
 	p.controlFrames = []frames.Frame{ccf}
@@ -71,6 +77,9 @@ func (p *packetPacker) RetransmitNonForwardSecurePacket(stopWaitingFrame *frames
 // the stopWaitingFrame is *guaranteed* to be included in the next packet
 // the other controlFrames are sent in the next packet, but might be queued and sent in the next packet if the packet would overflow MaxPacketSize otherwise
 func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
 	p.controlFrames = append(p.controlFrames, controlFrames...)
 	return p.packPacket(stopWaitingFrame, leastUnacked, nil)
 }
