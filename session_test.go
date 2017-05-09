@@ -103,7 +103,11 @@ type mockReceivedPacketHandler struct {
 	nextAckFrame *frames.AckFrame
 }
 
-func (m *mockReceivedPacketHandler) GetAckFrame() *frames.AckFrame { return m.nextAckFrame }
+func (m *mockReceivedPacketHandler) GetAckFrame() *frames.AckFrame {
+	f := m.nextAckFrame
+	m.nextAckFrame = nil
+	return f
+}
 func (m *mockReceivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumber, shouldInstigateAck bool) error {
 	panic("not implemented")
 }
