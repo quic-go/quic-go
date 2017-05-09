@@ -24,9 +24,11 @@ type KeyExchangeFunction func() crypto.KeyExchange
 type cryptoSetupServer struct {
 	connID               protocol.ConnectionID
 	sourceAddr           []byte
-	version              protocol.VersionNumber
 	scfg                 *ServerConfig
 	diversificationNonce []byte
+
+	version           protocol.VersionNumber
+	supportedVersions []protocol.VersionNumber
 
 	nullAEAD                    crypto.AEAD
 	secureAEAD                  crypto.AEAD
@@ -61,12 +63,14 @@ func NewCryptoSetup(
 	scfg *ServerConfig,
 	cryptoStream io.ReadWriter,
 	connectionParametersManager ConnectionParametersManager,
+	supportedVersions []protocol.VersionNumber,
 	aeadChanged chan protocol.EncryptionLevel,
 ) (CryptoSetup, error) {
 	return &cryptoSetupServer{
 		connID:               connID,
 		sourceAddr:           sourceAddr,
 		version:              version,
+		supportedVersions:    supportedVersions,
 		scfg:                 scfg,
 		keyDerivation:        crypto.DeriveKeysAESGCM,
 		keyExchange:          getEphermalKEX,
@@ -127,7 +131,7 @@ func (h *cryptoSetupServer) handleMessage(chloData []byte, cryptoData map[Tag][]
 	verTag := binary.LittleEndian.Uint32(verSlice)
 	ver := protocol.VersionTagToNumber(verTag)
 	// If the client's preferred version is not the version we are currently speaking, then the client went through a version negotiation.  In this case, we need to make sure that we actually do not support this version and that it wasn't a downgrade attack.
-	if ver != h.version && protocol.IsSupportedVersion(ver) {
+	if ver != h.version && protocol.IsSupportedVersion(h.supportedVersions, ver) {
 		return false, qerr.Error(qerr.VersionNegotiationMismatch, "Downgrade attack detected")
 	}
 
@@ -397,9 +401,13 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 		return nil, err
 	}
 	// add crypto parameters
+	verTag := &bytes.Buffer{}
+	for _, v := range h.supportedVersions {
+		utils.WriteUint32(verTag, protocol.VersionNumberToTag(v))
+	}
 	replyMap[TagPUBS] = ephermalKex.PublicKey()
 	replyMap[TagSNO] = serverNonce
-	replyMap[TagVER] = protocol.SupportedVersionsAsTags
+	replyMap[TagVER] = verTag.Bytes()
 
 	// note that the SHLO *has* to fit into one packet
 	var reply bytes.Buffer

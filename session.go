@@ -98,7 +98,7 @@ type session struct {
 var _ Session = &session{}
 
 // newSession makes a new session
-func newSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, cryptoChangeCallback cryptoChangeCallback) (packetHandler, error) {
+func newSession(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig,  cryptoChangeCallback cryptoChangeCallback, supportedVersions []protocol.VersionNumber) (packetHandler, error) {
 	s := &session{
 		conn:         conn,
 		connectionID: connectionID,
@@ -119,7 +119,7 @@ func newSession(conn connection, v protocol.VersionNumber, connectionID protocol
 		sourceAddr = []byte(conn.RemoteAddr().String())
 	}
 	var err error
-	s.cryptoSetup, err = handshake.NewCryptoSetup(connectionID, sourceAddr, v, sCfg, cryptoStream, s.connectionParameters, s.aeadChanged)
+	s.cryptoSetup, err = handshake.NewCryptoSetup(connectionID, sourceAddr, v, sCfg, cryptoStream, s.connectionParameters, supportedVersions, s.aeadChanged)
 	if err != nil {
 		return nil, err
 	}

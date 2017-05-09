@@ -14,59 +14,38 @@ var _ = Describe("Version", func() {
 		Expect(VersionNumberToTag(VersionNumber(123))).To(Equal(uint32('Q' + '1'<<8 + '2'<<16 + '3'<<24)))
 	})
 
-	It("has proper tag list", func() {
-		Expect(SupportedVersionsAsTags).To(Equal([]byte("Q035Q036Q037")))
-	})
-
-	It("has proper version list", func() {
-		Expect(SupportedVersionsAsString).To(Equal("37,36,35"))
-	})
-
 	It("recognizes supported versions", func() {
-		Expect(IsSupportedVersion(0)).To(BeFalse())
-		Expect(IsSupportedVersion(SupportedVersions[0])).To(BeTrue())
+		Expect(IsSupportedVersion(SupportedVersions, 0)).To(BeFalse())
+		Expect(IsSupportedVersion(SupportedVersions, SupportedVersions[0])).To(BeTrue())
+		Expect(IsSupportedVersion(SupportedVersions, SupportedVersions[len(SupportedVersions)-1])).To(BeTrue())
 	})
 
 	It("has supported versions in sorted order", func() {
 		for i := 0; i < len(SupportedVersions)-1; i++ {
-			Expect(SupportedVersions[i]).To(BeNumerically("<", SupportedVersions[i+1]))
+			Expect(SupportedVersions[i]).To(BeNumerically(">", SupportedVersions[i+1]))
 		}
 	})
 
 	Context("highest supported version", func() {
-		var initialSupportedVersions []VersionNumber
-
-		BeforeEach(func() {
-			initialSupportedVersions = make([]VersionNumber, len(SupportedVersions))
-			copy(initialSupportedVersions, SupportedVersions)
-		})
-
-		AfterEach(func() {
-			SupportedVersions = initialSupportedVersions
-		})
-
 		It("finds the supported version", func() {
-			SupportedVersions = []VersionNumber{1, 2, 3}
-			other := []VersionNumber{3, 4, 5, 6}
-			found, ver := HighestSupportedVersion(other)
-			Expect(found).To(BeTrue())
-			Expect(ver).To(Equal(VersionNumber(3)))
+			supportedVersions := []VersionNumber{1, 2, 3}
+			other := []VersionNumber{6, 5, 4, 3}
+			Expect(ChooseSupportedVersion(supportedVersions, other)).To(Equal(VersionNumber(3)))
 		})
 
-		It("picks the highest supported version", func() {
-			SupportedVersions = []VersionNumber{1, 2, 3, 6, 7}
+		It("picks the preferred version", func() {
+			supportedVersions := []VersionNumber{2, 1, 3}
 			other := []VersionNumber{3, 6, 1, 8, 2, 10}
-			found, ver := HighestSupportedVersion(other)
-			Expect(found).To(BeTrue())
-			Expect(ver).To(Equal(VersionNumber(6)))
+			Expect(ChooseSupportedVersion(supportedVersions, other)).To(Equal(VersionNumber(2)))
 		})
 
 		It("handles empty inputs", func() {
-			SupportedVersions = []VersionNumber{101, 102}
-			Expect(HighestSupportedVersion([]VersionNumber{})).To(BeFalse())
-			SupportedVersions = []VersionNumber{}
-			Expect(HighestSupportedVersion([]VersionNumber{1, 2})).To(BeFalse())
-			Expect(HighestSupportedVersion([]VersionNumber{})).To(BeFalse())
+			supportedVersions := []VersionNumber{102, 101}
+			Expect(ChooseSupportedVersion(supportedVersions, nil)).To(Equal(VersionUnsupported))
+			Expect(ChooseSupportedVersion(supportedVersions, []VersionNumber{})).To(Equal(VersionUnsupported))
+			supportedVersions = []VersionNumber{}
+			Expect(ChooseSupportedVersion(supportedVersions, []VersionNumber{1, 2})).To(Equal(VersionUnsupported))
+			Expect(ChooseSupportedVersion(supportedVersions, []VersionNumber{})).To(Equal(VersionUnsupported))
 		})
 	})
 })
