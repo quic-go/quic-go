@@ -85,17 +85,16 @@ func NewCryptoSetup(
 func (h *cryptoSetupServer) HandleCryptoStream() error {
 	for {
 		var chloData bytes.Buffer
-		messageTag, cryptoData, err := ParseHandshakeMessage(io.TeeReader(h.cryptoStream, &chloData))
+		message, err := ParseHandshakeMessage(io.TeeReader(h.cryptoStream, &chloData))
 		if err != nil {
 			return qerr.HandshakeFailed
 		}
-		if messageTag != TagCHLO {
+		if message.Tag != TagCHLO {
 			return qerr.InvalidCryptoMessageType
 		}
 
-		utils.Debugf("Got CHLO:\n%s", printHandshakeMessage(cryptoData))
-
-		done, err := h.handleMessage(chloData.Bytes(), cryptoData)
+		utils.Debugf("Got %s", message)
+		done, err := h.handleMessage(chloData.Bytes(), message.Data)
 		if err != nil {
 			return err
 		}
@@ -305,9 +304,14 @@ func (h *cryptoSetupServer) handleInchoateCHLO(sni string, chlo []byte, cryptoDa
 		replyMap[TagCERT] = certCompressed
 	}
 
+	message := HandshakeMessage{
+		Tag:  TagREJ,
+		Data: replyMap,
+	}
+
 	var serverReply bytes.Buffer
-	WriteHandshakeMessage(&serverReply, TagREJ, replyMap)
-	utils.Debugf("Sending REJ:\n%s", printHandshakeMessage(replyMap))
+	message.Write(&serverReply)
+	utils.Debugf("Sending %s", message)
 	return serverReply.Bytes(), nil
 }
 
@@ -413,9 +417,13 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 	replyMap[TagVER] = verTag.Bytes()
 
 	// note that the SHLO *has* to fit into one packet
+	message := HandshakeMessage{
+		Tag:  TagSHLO,
+		Data: replyMap,
+	}
 	var reply bytes.Buffer
-	WriteHandshakeMessage(&reply, TagSHLO, replyMap)
-	utils.Debugf("Sending SHLO:\n%s", printHandshakeMessage(replyMap))
+	message.Write(&reply)
+	utils.Debugf("Sending %s", message)
 
 	h.aeadChanged <- protocol.EncryptionForwardSecure
 

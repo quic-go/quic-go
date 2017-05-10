@@ -104,35 +104,27 @@ func (h *cryptoSetupClient) HandleCryptoStream() error {
 			}
 		}
 
-		messageTag, cryptoData, err := ParseHandshakeMessage(h.cryptoStream)
+		message, err := ParseHandshakeMessage(h.cryptoStream)
 		if err != nil {
 			return qerr.HandshakeFailed
 		}
 
-		if messageTag != TagSHLO && messageTag != TagREJ {
+		utils.Debugf("Got %s", message)
+		switch message.Tag {
+		case TagREJ:
+			err = h.handleREJMessage(message.Data)
+		case TagSHLO:
+			err = h.handleSHLOMessage(message.Data)
+		default:
 			return qerr.InvalidCryptoMessageType
 		}
-
-		if messageTag == TagSHLO {
-			utils.Debugf("Got SHLO:\n%s", printHandshakeMessage(cryptoData))
-			err = h.handleSHLOMessage(cryptoData)
-			if err != nil {
-				return err
-			}
-		}
-
-		if messageTag == TagREJ {
-			err = h.handleREJMessage(cryptoData)
-			if err != nil {
-				return err
-			}
+		if err != nil {
+			return err
 		}
 	}
 }
 
 func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
-	utils.Debugf("Got REJ:\n%s", printHandshakeMessage(cryptoData))
-
 	var err error
 
 	if stk, ok := cryptoData[TagSTK]; ok {
@@ -382,9 +374,13 @@ func (h *cryptoSetupClient) sendCHLO() error {
 		return err
 	}
 	h.addPadding(tags)
+	message := HandshakeMessage{
+		Tag:  TagCHLO,
+		Data: tags,
+	}
 
-	utils.Debugf("Sending CHLO:\n%s", printHandshakeMessage(tags))
-	WriteHandshakeMessage(b, TagCHLO, tags)
+	utils.Debugf("Sending %s", message)
+	message.Write(b)
 
 	_, err = h.cryptoStream.Write(b.Bytes())
 	if err != nil {

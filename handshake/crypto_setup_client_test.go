@@ -121,14 +121,14 @@ var _ = Describe("Client Crypto Setup", func() {
 		})
 
 		It("rejects handshake messages with the wrong message tag", func() {
-			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, tagMap)
+			HandshakeMessage{Tag: TagCHLO, Data: tagMap}.Write(&stream.dataToRead)
 			err := cs.HandleCryptoStream()
 			Expect(err).To(MatchError(qerr.InvalidCryptoMessageType))
 		})
 
 		It("errors on invalid handshake messages", func() {
 			b := &bytes.Buffer{}
-			WriteHandshakeMessage(b, TagCHLO, tagMap)
+			HandshakeMessage{Tag: TagCHLO, Data: tagMap}.Write(b)
 			stream.dataToRead.Write(b.Bytes()[:b.Len()-2]) // cut the handshake message
 			err := cs.HandleCryptoStream()
 			// note that if this was a complete handshake message, HandleCryptoStream would fail with a qerr.InvalidCryptoMessageType
@@ -138,7 +138,7 @@ var _ = Describe("Client Crypto Setup", func() {
 		It("passes the message on for parsing, and reads the source address token", func() {
 			stk := []byte("foobar")
 			tagMap[TagSTK] = stk
-			WriteHandshakeMessage(&stream.dataToRead, TagREJ, tagMap)
+			HandshakeMessage{Tag: TagREJ, Data: tagMap}.Write(&stream.dataToRead)
 			// this will throw a qerr.HandshakeFailed due to an EOF in WriteHandshakeMessage
 			// this is because the mockStream doesn't block if there's no data to read
 			err := cs.HandleCryptoStream()
@@ -301,7 +301,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			It("reads a server config", func() {
 				b := &bytes.Buffer{}
 				scfg := getDefaultServerConfigClient()
-				WriteHandshakeMessage(b, TagSCFG, scfg)
+				HandshakeMessage{Tag: TagSCFG, Data: scfg}.Write(b)
 				tagMap[TagSCFG] = b.Bytes()
 				err := cs.handleREJMessage(tagMap)
 				Expect(err).ToNot(HaveOccurred())
@@ -313,7 +313,7 @@ var _ = Describe("Client Crypto Setup", func() {
 				b := &bytes.Buffer{}
 				scfg := getDefaultServerConfigClient()
 				scfg[TagEXPY] = []byte{0x80, 0x54, 0x72, 0x4F, 0, 0, 0, 0} // 2012-03-28
-				WriteHandshakeMessage(b, TagSCFG, scfg)
+				HandshakeMessage{Tag: TagSCFG, Data: scfg}.Write(b)
 				tagMap[TagSCFG] = b.Bytes()
 				// make sure we actually set TagEXPY correct
 				serverConfig, err := parseServerConfig(b.Bytes())
@@ -326,7 +326,7 @@ var _ = Describe("Client Crypto Setup", func() {
 
 			It("generates a client nonce after reading a server config", func() {
 				b := &bytes.Buffer{}
-				WriteHandshakeMessage(b, TagSCFG, getDefaultServerConfigClient())
+				HandshakeMessage{Tag: TagSCFG, Data: getDefaultServerConfigClient()}.Write(b)
 				tagMap[TagSCFG] = b.Bytes()
 				err := cs.handleREJMessage(tagMap)
 				Expect(err).ToNot(HaveOccurred())
@@ -335,7 +335,7 @@ var _ = Describe("Client Crypto Setup", func() {
 
 			It("only generates a client nonce once, when reading multiple server configs", func() {
 				b := &bytes.Buffer{}
-				WriteHandshakeMessage(b, TagSCFG, getDefaultServerConfigClient())
+				HandshakeMessage{Tag: TagSCFG, Data: getDefaultServerConfigClient()}.Write(b)
 				tagMap[TagSCFG] = b.Bytes()
 				err := cs.handleREJMessage(tagMap)
 				Expect(err).ToNot(HaveOccurred())
@@ -348,7 +348,7 @@ var _ = Describe("Client Crypto Setup", func() {
 
 			It("passes on errors from reading the server config", func() {
 				b := &bytes.Buffer{}
-				WriteHandshakeMessage(b, TagSHLO, make(map[Tag][]byte))
+				HandshakeMessage{Tag: TagSHLO, Data: make(map[Tag][]byte)}.Write(b)
 				tagMap[TagSCFG] = b.Bytes()
 				_, origErr := parseServerConfig(b.Bytes())
 				err := cs.handleREJMessage(tagMap)

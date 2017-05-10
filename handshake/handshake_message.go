@@ -12,27 +12,35 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
+// A HandshakeMessage is a handshake message
+type HandshakeMessage struct {
+	Tag  Tag
+	Data map[Tag][]byte
+}
+
+var _ fmt.Stringer = &HandshakeMessage{}
+
 // ParseHandshakeMessage reads a crypto message
-func ParseHandshakeMessage(r io.Reader) (Tag, map[Tag][]byte, error) {
+func ParseHandshakeMessage(r io.Reader) (HandshakeMessage, error) {
 	slice4 := make([]byte, 4)
 
 	if _, err := io.ReadFull(r, slice4); err != nil {
-		return 0, nil, err
+		return HandshakeMessage{}, err
 	}
 	messageTag := Tag(binary.LittleEndian.Uint32(slice4))
 
 	if _, err := io.ReadFull(r, slice4); err != nil {
-		return 0, nil, err
+		return HandshakeMessage{}, err
 	}
 	nPairs := binary.LittleEndian.Uint32(slice4)
 
 	if nPairs > protocol.CryptoMaxParams {
-		return 0, nil, qerr.CryptoTooManyEntries
+		return HandshakeMessage{}, qerr.CryptoTooManyEntries
 	}
 
 	index := make([]byte, nPairs*8)
 	if _, err := io.ReadFull(r, index); err != nil {
-		return 0, nil, err
+		return HandshakeMessage{}, err
 	}
 
 	resultMap := map[Tag][]byte{}
@@ -44,24 +52,27 @@ func ParseHandshakeMessage(r io.Reader) (Tag, map[Tag][]byte, error) {
 
 		dataLen := dataEnd - dataStart
 		if dataLen > protocol.CryptoParameterMaxLength {
-			return 0, nil, qerr.Error(qerr.CryptoInvalidValueLength, "value too long")
+			return HandshakeMessage{}, qerr.Error(qerr.CryptoInvalidValueLength, "value too long")
 		}
 
 		data := make([]byte, dataLen)
 		if _, err := io.ReadFull(r, data); err != nil {
-			return 0, nil, err
+			return HandshakeMessage{}, err
 		}
 
 		resultMap[tag] = data
 		dataStart = dataEnd
 	}
 
-	return messageTag, resultMap, nil
+	return HandshakeMessage{
+		Tag:  messageTag,
+		Data: resultMap}, nil
 }
 
-// WriteHandshakeMessage writes a crypto message
-func WriteHandshakeMessage(b *bytes.Buffer, messageTag Tag, data map[Tag][]byte) {
-	utils.WriteUint32(b, uint32(messageTag))
+// Write writes a crypto message
+func (h HandshakeMessage) Write(b *bytes.Buffer) {
+	data := h.Data
+	utils.WriteUint32(b, uint32(h.Tag))
 	utils.WriteUint16(b, uint16(len(data)))
 	utils.WriteUint16(b, 0)
 
@@ -93,10 +104,10 @@ func WriteHandshakeMessage(b *bytes.Buffer, messageTag Tag, data map[Tag][]byte)
 	copy(b.Bytes()[indexStart:], indexData)
 }
 
-func printHandshakeMessage(data map[Tag][]byte) string {
-	var res string
+func (h HandshakeMessage) String() string {
 	var pad string
-	for k, v := range data {
+	res := tagToString(h.Tag) + ":\n"
+	for k, v := range h.Data {
 		if k == TagPAD {
 			pad = fmt.Sprintf("\t%s: (%d bytes)\n", tagToString(k), len(v))
 		} else {
@@ -107,7 +118,6 @@ func printHandshakeMessage(data map[Tag][]byte) string {
 	if len(pad) > 0 {
 		res += pad
 	}
-
 	return res
 }
 
