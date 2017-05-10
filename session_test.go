@@ -582,12 +582,15 @@ var _ = Describe("Session", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("handles CONNECTION_CLOSE frames", func() {
+	It("handles CONNECTION_CLOSE frames", func(done Done) {
+		go sess.run()
 		str, _ := sess.GetOrOpenStream(5)
 		err := sess.handleFrames([]frames.Frame{&frames.ConnectionCloseFrame{ErrorCode: 42, ReasonPhrase: "foobar"}})
 		Expect(err).NotTo(HaveOccurred())
+		Eventually(sess.runClosed).Should(BeClosed())
 		_, err = str.Read([]byte{0})
 		Expect(err).To(MatchError(qerr.Error(42, "foobar")))
+		close(done)
 	})
 
 	Context("accepting streams", func() {
@@ -621,16 +624,17 @@ var _ = Describe("Session", func() {
 		})
 
 		It("stops accepting when the session is closed after version negotiation", func() {
-			testErr := errCloseSessionForNewVersion
 			var err error
 			go func() {
 				_, err = sess.AcceptStream()
 			}()
 			go sess.run()
 			Consistently(func() error { return err }).ShouldNot(HaveOccurred())
-			sess.Close(testErr)
+			Expect(sess.runClosed).ToNot(BeClosed())
+			sess.Close(errCloseSessionForNewVersion)
 			Eventually(func() error { return err }).Should(HaveOccurred())
-			Expect(err).To(MatchError(testErr))
+			Expect(err).To(MatchError(errCloseSessionForNewVersion))
+			Eventually(sess.runClosed).Should(BeClosed())
 		})
 	})
 
@@ -1249,8 +1253,7 @@ var _ = Describe("Session", func() {
 			go sess.run()
 			sendUndecryptablePackets()
 			Consistently(sess.undecryptablePackets).Should(BeEmpty())
-			sess.closeImpl(nil, true)
-			Eventually(sess.runClosed).Should(BeClosed())
+			Expect(sess.Close(nil)).To(Succeed())
 		})
 
 		It("unqueues undecryptable packets for later decryption", func() {
