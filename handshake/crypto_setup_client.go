@@ -104,9 +104,7 @@ func (h *cryptoSetupClient) HandleCryptoStream() error {
 			}
 		}
 
-		var shloData bytes.Buffer
-
-		messageTag, cryptoData, err := ParseHandshakeMessage(io.TeeReader(h.cryptoStream, &shloData))
+		messageTag, cryptoData, err := ParseHandshakeMessage(h.cryptoStream)
 		if err != nil {
 			return qerr.HandshakeFailed
 		}
