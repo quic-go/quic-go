@@ -127,6 +127,18 @@ var _ = Describe("Server Config", func() {
 				Expect(err).To(MatchError("CryptoNoSupport: KEXS"))
 			})
 
+			It("recognizes C255 in the list of KEXS, at the first position", func() {
+				tagMap[TagKEXS] = []byte("P256C255")
+				err := scfg.parseValues(tagMap)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("recognizes C255 in the list of KEXS, not at the first position", func() {
+				tagMap[TagKEXS] = []byte("C255P256")
+				err := scfg.parseValues(tagMap)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
 			It("errors if the KEXS is missing", func() {
 				delete(tagMap, TagKEXS)
 				err := scfg.parseValues(tagMap)
