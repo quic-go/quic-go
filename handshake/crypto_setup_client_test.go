@@ -101,7 +101,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			return &mockAEAD{forwardSecure: forwardSecure, sharedSecret: sharedSecret}, nil
 		}
 
-		stream = &mockStream{}
+		stream = newMockStream()
 		certManager = &mockCertManager{}
 		version := protocol.Version36
 		aeadChanged = make(chan protocol.EncryptionLevel, 2)
@@ -111,6 +111,10 @@ var _ = Describe("Client Crypto Setup", func() {
 		cs.certManager = certManager
 		cs.keyDerivation = keyDerivation
 		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
+	})
+
+	AfterEach(func() {
+		close(stream.unblockRead)
 	})
 
 	Context("Reading REJ", func() {
@@ -127,23 +131,18 @@ var _ = Describe("Client Crypto Setup", func() {
 		})
 
 		It("errors on invalid handshake messages", func() {
-			b := &bytes.Buffer{}
-			HandshakeMessage{Tag: TagCHLO, Data: tagMap}.Write(b)
-			stream.dataToRead.Write(b.Bytes()[:b.Len()-2]) // cut the handshake message
+			stream.dataToRead.Write([]byte("invalid message"))
 			err := cs.HandleCryptoStream()
-			// note that if this was a complete handshake message, HandleCryptoStream would fail with a qerr.InvalidCryptoMessageType
-			Expect(err).To(MatchError(qerr.HandshakeFailed))
+			Expect(err).To(HaveOccurred())
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.HandshakeFailed))
 		})
 
 		It("passes the message on for parsing, and reads the source address token", func() {
 			stk := []byte("foobar")
 			tagMap[TagSTK] = stk
 			HandshakeMessage{Tag: TagREJ, Data: tagMap}.Write(&stream.dataToRead)
-			// this will throw a qerr.HandshakeFailed due to an EOF in WriteHandshakeMessage
-			// this is because the mockStream doesn't block if there's no data to read
-			err := cs.HandleCryptoStream()
-			Expect(err).To(MatchError(qerr.HandshakeFailed))
-			Expect(cs.stk).Should(Equal(stk))
+			go cs.HandleCryptoStream()
+			Eventually(func() []byte { return cs.stk }).Should(Equal(stk))
 		})
 
 		It("saves the proof", func() {
@@ -637,26 +636,26 @@ var _ = Describe("Client Crypto Setup", func() {
 		It("tries to escalate before reading a handshake message", func() {
 			Expect(cs.secureAEAD).To(BeNil())
 			cs.serverVerified = true
-			err := cs.HandleCryptoStream()
-			// this will throw a qerr.HandshakeFailed due to an EOF in WriteHandshakeMessage
-			// this is because the mockStream doesn't block if there's no data to read
-			Expect(err).To(MatchError(qerr.HandshakeFailed))
+			go cs.HandleCryptoStream()
+			Eventually(aeadChanged).Should(Receive(Equal(protocol.EncryptionSecure)))
 			Expect(cs.secureAEAD).ToNot(BeNil())
-			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
 			Expect(aeadChanged).ToNot(Receive())
 			Expect(aeadChanged).ToNot(BeClosed())
 		})
 
-		It("tries to escalate the crypto after receiving a diversification nonce", func() {
+		It("tries to escalate the crypto after receiving a diversification nonce", func(done Done) {
+			go cs.HandleCryptoStream()
+			time.Sleep(50 * time.Millisecond) // wait for the first maybeUpgradeCrypto to finish
 			cs.diversificationNonce = nil
 			cs.serverVerified = true
 			Expect(cs.secureAEAD).To(BeNil())
 			err := cs.SetDiversificationNonce([]byte("div"))
 			Expect(err).ToNot(HaveOccurred())
+			Eventually(aeadChanged).Should(Receive(Equal(protocol.EncryptionSecure)))
 			Expect(cs.secureAEAD).ToNot(BeNil())
-			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
 			Expect(aeadChanged).ToNot(Receive())
 			Expect(aeadChanged).ToNot(BeClosed())
+			close(done)
 		})
 
 		Context("null encryption", func() {
@@ -785,6 +784,11 @@ var _ = Describe("Client Crypto Setup", func() {
 	})
 
 	Context("Diversification Nonces", func() {
+		BeforeEach(func() {
+			go cs.HandleCryptoStream()
+			time.Sleep(50 * time.Millisecond) // wait for the first maybeUpdateCrypto to finish
+		})
+
 		It("sets a diversification nonce", func() {
 			nonce := []byte("foobar")
 			err := cs.SetDiversificationNonce(nonce)

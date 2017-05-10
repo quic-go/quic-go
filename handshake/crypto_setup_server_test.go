@@ -95,12 +95,21 @@ func mockKeyDerivation(forwardSecure bool, sharedSecret, nonces []byte, connID p
 }
 
 type mockStream struct {
+	unblockRead chan struct{} // close this chan to unblock Read
 	dataToRead  bytes.Buffer
 	dataWritten bytes.Buffer
 }
 
+func newMockStream() *mockStream {
+	return &mockStream{unblockRead: make(chan struct{})}
+}
+
 func (s *mockStream) Read(p []byte) (int, error) {
-	return s.dataToRead.Read(p)
+	n, _ := s.dataToRead.Read(p)
+	if n == 0 { // block if there's no data
+		<-s.unblockRead
+	}
+	return n, nil // never return an EOF
 }
 
 func (s *mockStream) ReadByte() (byte, error) {
@@ -168,7 +177,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		expectedInitialNonceLen = 32
 		expectedFSNonceLen = 64
 		aeadChanged = make(chan protocol.EncryptionLevel, 2)
-		stream = &mockStream{}
+		stream = newMockStream()
 		kex = &mockKEX{}
 		signer = &mockSigner{}
 		scfg, err = NewServerConfig(kex, signer)
@@ -188,6 +197,10 @@ var _ = Describe("Server Crypto Setup", func() {
 		cs = csInt.(*cryptoSetupServer)
 		cs.keyDerivation = mockKeyDerivation
 		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
+	})
+
+	AfterEach(func() {
+		close(stream.unblockRead)
 	})
 
 	Context("diversification nonce", func() {
@@ -485,6 +498,7 @@ var _ = Describe("Server Crypto Setup", func() {
 	})
 
 	It("errors with invalid message", func() {
+		stream.dataToRead.Write([]byte("invalid message"))
 		err := cs.HandleCryptoStream()
 		Expect(err).To(MatchError(qerr.HandshakeFailed))
 	})

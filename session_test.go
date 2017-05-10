@@ -163,7 +163,7 @@ var _ = Describe("Session", func() {
 		sess.connectionParameters = cpm
 
 		clientSess, err = newClientSession(
-			nil,
+			mconn,
 			"hostname",
 			protocol.Version35,
 			0,
@@ -738,11 +738,14 @@ var _ = Describe("Session", func() {
 		})
 
 		It("passes the diversification nonce to the cryptoSetup, if it is a client", func() {
+			go clientSess.run()
+			time.Sleep(50 * time.Millisecond)
 			hdr.PacketNumber = 5
 			hdr.DiversificationNonce = []byte("foobar")
 			err := clientSess.handlePacketImpl(&receivedPacket{publicHeader: hdr})
 			Expect(err).ToNot(HaveOccurred())
 			Expect((*[]byte)(unsafe.Pointer(reflect.ValueOf(clientSess.cryptoSetup).Elem().FieldByName("diversificationNonce").UnsafeAddr()))).To(Equal(&hdr.DiversificationNonce))
+			Expect(clientSess.Close(nil)).To(Succeed())
 		})
 
 		Context("updating the remote address", func() {

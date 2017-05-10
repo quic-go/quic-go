@@ -29,14 +29,16 @@ type cryptoSetupClient struct {
 
 	serverConfig *serverConfigClient
 
-	stk                  []byte
-	sno                  []byte
-	nonc                 []byte
-	proof                []byte
+	stk              []byte
+	sno              []byte
+	nonc             []byte
+	proof            []byte
+	chloForSignature []byte
+	lastSentCHLO     []byte
+	certManager      crypto.CertManager
+
+	divNonceChan         chan struct{}
 	diversificationNonce []byte
-	chloForSignature     []byte
-	lastSentCHLO         []byte
-	certManager          crypto.CertManager
 
 	clientHelloCounter int
 	serverVerified     bool // has the certificate chain and the proof already been verified
@@ -83,20 +85,35 @@ func NewCryptoSetupClient(
 		nullAEAD:             crypto.NewNullAEAD(protocol.PerspectiveClient, version),
 		aeadChanged:          aeadChanged,
 		negotiatedVersions:   negotiatedVersions,
+		divNonceChan:         make(chan struct{}),
 	}, nil
 }
 
 func (h *cryptoSetupClient) HandleCryptoStream() error {
+	messageChan := make(chan HandshakeMessage)
+	errorChan := make(chan error)
+
+	go func() {
+		for {
+			message, err := ParseHandshakeMessage(h.cryptoStream)
+			if err != nil {
+				errorChan <- qerr.Error(qerr.HandshakeFailed, err.Error())
+				return
+			}
+			messageChan <- message
+		}
+	}()
+
 	for {
 		err := h.maybeUpgradeCrypto()
 		if err != nil {
 			return err
 		}
 
-		// send CHLOs until the forward secure encryption is established
 		h.mutex.RLock()
-		sendCHLO := h.forwardSecureAEAD == nil
+		sendCHLO := h.secureAEAD == nil
 		h.mutex.RUnlock()
+
 		if sendCHLO {
 			err = h.sendCHLO()
 			if err != nil {
@@ -104,9 +121,14 @@ func (h *cryptoSetupClient) HandleCryptoStream() error {
 			}
 		}
 
-		message, err := ParseHandshakeMessage(h.cryptoStream)
-		if err != nil {
-			return qerr.HandshakeFailed
+		var message HandshakeMessage
+		select {
+		case <-h.divNonceChan:
+			// there's no message to process, but we should try upgrading the crypto again
+			continue
+		case message = <-messageChan:
+		case err = <-errorChan:
+			return err
 		}
 
 		utils.Debugf("Got %s", message)
@@ -351,9 +373,13 @@ func (h *cryptoSetupClient) DiversificationNonce() []byte {
 }
 
 func (h *cryptoSetupClient) SetDiversificationNonce(data []byte) error {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+
 	if len(h.diversificationNonce) == 0 {
 		h.diversificationNonce = data
-		return h.maybeUpgradeCrypto()
+		h.divNonceChan <- struct{}{}
+		return nil
 	}
 	if !bytes.Equal(h.diversificationNonce, data) {
 		return errConflictingDiversificationNonces
@@ -458,7 +484,6 @@ func (h *cryptoSetupClient) maybeUpgradeCrypto() error {
 	defer h.mutex.Unlock()
 
 	leafCert := h.certManager.GetLeafCert()
-
 	if h.secureAEAD == nil && (h.serverConfig != nil && len(h.serverConfig.sharedSecret) > 0 && len(h.nonc) > 0 && len(leafCert) > 0 && len(h.diversificationNonce) > 0 && len(h.lastSentCHLO) > 0) {
 		var err error
 		var nonce []byte
