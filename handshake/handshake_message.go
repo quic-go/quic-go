@@ -82,17 +82,8 @@ func (h HandshakeMessage) Write(b *bytes.Buffer) {
 	indexData := make([]byte, 8*len(data))
 	b.Write(indexData) // Will be updated later
 
-	// Sort the tags
-	tags := make([]uint32, len(data))
-	i := 0
-	for t := range data {
-		tags[i] = uint32(t)
-		i++
-	}
-	sort.Sort(utils.Uint32Slice(tags))
-
 	offset := uint32(0)
-	for i, t := range tags {
+	for i, t := range h.getTagsSorted() {
 		v := data[Tag(t)]
 		b.Write(v)
 		offset += uint32(len(v))
@@ -104,14 +95,26 @@ func (h HandshakeMessage) Write(b *bytes.Buffer) {
 	copy(b.Bytes()[indexStart:], indexData)
 }
 
+func (h *HandshakeMessage) getTagsSorted() []uint32 {
+	tags := make([]uint32, len(h.Data))
+	i := 0
+	for t := range h.Data {
+		tags[i] = uint32(t)
+		i++
+	}
+	sort.Sort(utils.Uint32Slice(tags))
+	return tags
+}
+
 func (h HandshakeMessage) String() string {
 	var pad string
 	res := tagToString(h.Tag) + ":\n"
-	for k, v := range h.Data {
-		if k == TagPAD {
-			pad = fmt.Sprintf("\t%s: (%d bytes)\n", tagToString(k), len(v))
+	for _, t := range h.getTagsSorted() {
+		tag := Tag(t)
+		if tag == TagPAD {
+			pad = fmt.Sprintf("\t%s: (%d bytes)\n", tagToString(tag), len(h.Data[tag]))
 		} else {
-			res += fmt.Sprintf("\t%s: %#v\n", tagToString(k), string(v))
+			res += fmt.Sprintf("\t%s: %#v\n", tagToString(tag), string(h.Data[tag]))
 		}
 	}
 
