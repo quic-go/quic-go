@@ -28,16 +28,16 @@ var (
 
 // parseServerConfig parses a server config
 func parseServerConfig(data []byte) (*serverConfigClient, error) {
-	tag, tagMap, err := ParseHandshakeMessage(bytes.NewReader(data))
+	message, err := ParseHandshakeMessage(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
-	if tag != TagSCFG {
+	if message.Tag != TagSCFG {
 		return nil, errMessageNotServerConfig
 	}
 
 	scfg := &serverConfigClient{raw: data}
-	err = scfg.parseValues(tagMap)
+	err = scfg.parseValues(message.Data)
 	if err != nil {
 		return nil, err
 	}

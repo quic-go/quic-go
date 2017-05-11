@@ -49,7 +49,7 @@ var _ = Describe("public reset", func() {
 		})
 
 		It("rejects packets with the wrong tag", func() {
-			handshake.WriteHandshakeMessage(b, handshake.TagREJ, nil)
+			handshake.HandshakeMessage{Tag: handshake.TagREJ, Data: nil}.Write(b)
 			_, err := parsePublicReset(bytes.NewReader(b.Bytes()))
 			Expect(err).To(MatchError("wrong public reset tag"))
 		})
@@ -58,7 +58,7 @@ var _ = Describe("public reset", func() {
 			data := map[handshake.Tag][]byte{
 				handshake.TagRSEQ: []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
 			}
-			handshake.WriteHandshakeMessage(b, handshake.TagPRST, data)
+			handshake.HandshakeMessage{Tag: handshake.TagPRST, Data: data}.Write(b)
 			_, err := parsePublicReset(bytes.NewReader(b.Bytes()))
 			Expect(err).To(MatchError("RNON missing"))
 		})
@@ -68,7 +68,7 @@ var _ = Describe("public reset", func() {
 				handshake.TagRSEQ: []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
 				handshake.TagRNON: []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13},
 			}
-			handshake.WriteHandshakeMessage(b, handshake.TagPRST, data)
+			handshake.HandshakeMessage{Tag: handshake.TagPRST, Data: data}.Write(b)
 			_, err := parsePublicReset(bytes.NewReader(b.Bytes()))
 			Expect(err).To(MatchError("invalid RNON tag"))
 		})
@@ -77,7 +77,7 @@ var _ = Describe("public reset", func() {
 			data := map[handshake.Tag][]byte{
 				handshake.TagRNON: []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
 			}
-			handshake.WriteHandshakeMessage(b, handshake.TagPRST, data)
+			handshake.HandshakeMessage{Tag: handshake.TagPRST, Data: data}.Write(b)
 			_, err := parsePublicReset(bytes.NewReader(b.Bytes()))
 			Expect(err).To(MatchError("RSEQ missing"))
 		})
@@ -87,7 +87,7 @@ var _ = Describe("public reset", func() {
 				handshake.TagRSEQ: []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13},
 				handshake.TagRNON: []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
 			}
-			handshake.WriteHandshakeMessage(b, handshake.TagPRST, data)
+			handshake.HandshakeMessage{Tag: handshake.TagPRST, Data: data}.Write(b)
 			_, err := parsePublicReset(bytes.NewReader(b.Bytes()))
 			Expect(err).To(MatchError("invalid RSEQ tag"))
 		})

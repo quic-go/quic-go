@@ -101,7 +101,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			return &mockAEAD{forwardSecure: forwardSecure, sharedSecret: sharedSecret}, nil
 		}
 
-		stream = &mockStream{}
+		stream = newMockStream()
 		certManager = &mockCertManager{}
 		version := protocol.Version36
 		aeadChanged = make(chan protocol.EncryptionLevel, 2)
@@ -113,6 +113,10 @@ var _ = Describe("Client Crypto Setup", func() {
 		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
 	})
 
+	AfterEach(func() {
+		close(stream.unblockRead)
+	})
+
 	Context("Reading REJ", func() {
 		var tagMap map[Tag][]byte
 
@@ -121,29 +125,24 @@ var _ = Describe("Client Crypto Setup", func() {
 		})
 
 		It("rejects handshake messages with the wrong message tag", func() {
-			WriteHandshakeMessage(&stream.dataToRead, TagCHLO, tagMap)
+			HandshakeMessage{Tag: TagCHLO, Data: tagMap}.Write(&stream.dataToRead)
 			err := cs.HandleCryptoStream()
 			Expect(err).To(MatchError(qerr.InvalidCryptoMessageType))
 		})
 
 		It("errors on invalid handshake messages", func() {
-			b := &bytes.Buffer{}
-			WriteHandshakeMessage(b, TagCHLO, tagMap)
-			stream.dataToRead.Write(b.Bytes()[:b.Len()-2]) // cut the handshake message
+			stream.dataToRead.Write([]byte("invalid message"))
 			err := cs.HandleCryptoStream()
-			// note that if this was a complete handshake message, HandleCryptoStream would fail with a qerr.InvalidCryptoMessageType
-			Expect(err).To(MatchError(qerr.HandshakeFailed))
+			Expect(err).To(HaveOccurred())
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.HandshakeFailed))
 		})
 
 		It("passes the message on for parsing, and reads the source address token", func() {
 			stk := []byte("foobar")
 			tagMap[TagSTK] = stk
-			WriteHandshakeMessage(&stream.dataToRead, TagREJ, tagMap)
-			// this will throw a qerr.HandshakeFailed due to an EOF in WriteHandshakeMessage
-			// this is because the mockStream doesn't block if there's no data to read
-			err := cs.HandleCryptoStream()
-			Expect(err).To(MatchError(qerr.HandshakeFailed))
-			Expect(cs.stk).Should(Equal(stk))
+			HandshakeMessage{Tag: TagREJ, Data: tagMap}.Write(&stream.dataToRead)
+			go cs.HandleCryptoStream()
+			Eventually(func() []byte { return cs.stk }).Should(Equal(stk))
 		})
 
 		It("saves the proof", func() {
@@ -301,7 +300,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			It("reads a server config", func() {
 				b := &bytes.Buffer{}
 				scfg := getDefaultServerConfigClient()
-				WriteHandshakeMessage(b, TagSCFG, scfg)
+				HandshakeMessage{Tag: TagSCFG, Data: scfg}.Write(b)
 				tagMap[TagSCFG] = b.Bytes()
 				err := cs.handleREJMessage(tagMap)
 				Expect(err).ToNot(HaveOccurred())
@@ -313,7 +312,7 @@ var _ = Describe("Client Crypto Setup", func() {
 				b := &bytes.Buffer{}
 				scfg := getDefaultServerConfigClient()
 				scfg[TagEXPY] = []byte{0x80, 0x54, 0x72, 0x4F, 0, 0, 0, 0} // 2012-03-28
-				WriteHandshakeMessage(b, TagSCFG, scfg)
+				HandshakeMessage{Tag: TagSCFG, Data: scfg}.Write(b)
 				tagMap[TagSCFG] = b.Bytes()
 				// make sure we actually set TagEXPY correct
 				serverConfig, err := parseServerConfig(b.Bytes())
@@ -326,7 +325,7 @@ var _ = Describe("Client Crypto Setup", func() {
 
 			It("generates a client nonce after reading a server config", func() {
 				b := &bytes.Buffer{}
-				WriteHandshakeMessage(b, TagSCFG, getDefaultServerConfigClient())
+				HandshakeMessage{Tag: TagSCFG, Data: getDefaultServerConfigClient()}.Write(b)
 				tagMap[TagSCFG] = b.Bytes()
 				err := cs.handleREJMessage(tagMap)
 				Expect(err).ToNot(HaveOccurred())
@@ -335,7 +334,7 @@ var _ = Describe("Client Crypto Setup", func() {
 
 			It("only generates a client nonce once, when reading multiple server configs", func() {
 				b := &bytes.Buffer{}
-				WriteHandshakeMessage(b, TagSCFG, getDefaultServerConfigClient())
+				HandshakeMessage{Tag: TagSCFG, Data: getDefaultServerConfigClient()}.Write(b)
 				tagMap[TagSCFG] = b.Bytes()
 				err := cs.handleREJMessage(tagMap)
 				Expect(err).ToNot(HaveOccurred())
@@ -348,7 +347,7 @@ var _ = Describe("Client Crypto Setup", func() {
 
 			It("passes on errors from reading the server config", func() {
 				b := &bytes.Buffer{}
-				WriteHandshakeMessage(b, TagSHLO, make(map[Tag][]byte))
+				HandshakeMessage{Tag: TagSHLO, Data: make(map[Tag][]byte)}.Write(b)
 				tagMap[TagSCFG] = b.Bytes()
 				_, origErr := parseServerConfig(b.Bytes())
 				err := cs.handleREJMessage(tagMap)
@@ -637,26 +636,28 @@ var _ = Describe("Client Crypto Setup", func() {
 		It("tries to escalate before reading a handshake message", func() {
 			Expect(cs.secureAEAD).To(BeNil())
 			cs.serverVerified = true
-			err := cs.HandleCryptoStream()
-			// this will throw a qerr.HandshakeFailed due to an EOF in WriteHandshakeMessage
-			// this is because the mockStream doesn't block if there's no data to read
-			Expect(err).To(MatchError(qerr.HandshakeFailed))
+			go cs.HandleCryptoStream()
+			Eventually(aeadChanged).Should(Receive(Equal(protocol.EncryptionSecure)))
 			Expect(cs.secureAEAD).ToNot(BeNil())
-			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
 			Expect(aeadChanged).ToNot(Receive())
 			Expect(aeadChanged).ToNot(BeClosed())
 		})
 
-		It("tries to escalate the crypto after receiving a diversification nonce", func() {
+		It("tries to escalate the crypto after receiving a diversification nonce", func(done Done) {
+			go func() {
+				defer GinkgoRecover()
+				cs.HandleCryptoStream()
+				Fail("HandleCryptoStream should not have returned")
+			}()
 			cs.diversificationNonce = nil
 			cs.serverVerified = true
 			Expect(cs.secureAEAD).To(BeNil())
-			err := cs.SetDiversificationNonce([]byte("div"))
-			Expect(err).ToNot(HaveOccurred())
+			cs.SetDiversificationNonce([]byte("div"))
+			Eventually(aeadChanged).Should(Receive(Equal(protocol.EncryptionSecure)))
 			Expect(cs.secureAEAD).ToNot(BeNil())
-			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
 			Expect(aeadChanged).ToNot(Receive())
 			Expect(aeadChanged).ToNot(BeClosed())
+			close(done)
 		})
 
 		Context("null encryption", func() {
@@ -786,28 +787,32 @@ var _ = Describe("Client Crypto Setup", func() {
 
 	Context("Diversification Nonces", func() {
 		It("sets a diversification nonce", func() {
+			go cs.HandleCryptoStream()
 			nonce := []byte("foobar")
-			err := cs.SetDiversificationNonce(nonce)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cs.diversificationNonce).To(Equal(nonce))
+			cs.SetDiversificationNonce(nonce)
+			Eventually(func() []byte { return cs.diversificationNonce }).Should(Equal(nonce))
 		})
 
-		It("doesn't do anything when called multiple times with the same nonce", func() {
+		It("doesn't do anything when called multiple times with the same nonce", func(done Done) {
+			go cs.HandleCryptoStream()
 			nonce := []byte("foobar")
-			err := cs.SetDiversificationNonce(nonce)
-			Expect(err).ToNot(HaveOccurred())
-			err = cs.SetDiversificationNonce(nonce)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cs.diversificationNonce).To(Equal(nonce))
+			cs.SetDiversificationNonce(nonce)
+			cs.SetDiversificationNonce(nonce)
+			Eventually(func() []byte { return cs.diversificationNonce }).Should(Equal(nonce))
+			close(done)
 		})
 
 		It("rejects a different diversification nonce", func() {
+			var err error
+			go func() {
+				err = cs.HandleCryptoStream()
+			}()
+
 			nonce1 := []byte("foobar")
 			nonce2 := []byte("raboof")
-			err := cs.SetDiversificationNonce(nonce1)
-			Expect(err).ToNot(HaveOccurred())
-			err = cs.SetDiversificationNonce(nonce2)
-			Expect(err).To(MatchError(errConflictingDiversificationNonces))
+			cs.SetDiversificationNonce(nonce1)
+			cs.SetDiversificationNonce(nonce2)
+			Eventually(func() error { return err }).Should(MatchError(errConflictingDiversificationNonces))
 		})
 	})
 

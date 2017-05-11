@@ -11,15 +11,15 @@ import (
 var _ = Describe("Handshake Message", func() {
 	Context("when parsing", func() {
 		It("parses sample CHLO message", func() {
-			tag, msg, err := ParseHandshakeMessage(bytes.NewReader(sampleCHLO))
+			msg, err := ParseHandshakeMessage(bytes.NewReader(sampleCHLO))
 			Expect(err).ToNot(HaveOccurred())
-			Expect(tag).To(Equal(TagCHLO))
-			Expect(msg).To(Equal(sampleCHLOMap))
+			Expect(msg.Tag).To(Equal(TagCHLO))
+			Expect(msg.Data).To(Equal(sampleCHLOMap))
 		})
 
 		It("rejects large numbers of pairs", func() {
 			r := bytes.NewReader([]byte("CHLO\xff\xff\xff\xff"))
-			_, _, err := ParseHandshakeMessage(r)
+			_, err := ParseHandshakeMessage(r)
 			Expect(err).To(MatchError(qerr.CryptoTooManyEntries))
 		})
 
@@ -30,7 +30,7 @@ var _ = Describe("Handshake Message", func() {
 				0, 0, 0, 0,
 				0xff, 0xff, 0xff, 0xff,
 			})
-			_, _, err := ParseHandshakeMessage(r)
+			_, err := ParseHandshakeMessage(r)
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoInvalidValueLength, "value too long")))
 		})
 	})
@@ -38,8 +38,34 @@ var _ = Describe("Handshake Message", func() {
 	Context("when writing", func() {
 		It("writes sample message", func() {
 			b := &bytes.Buffer{}
-			WriteHandshakeMessage(b, TagCHLO, sampleCHLOMap)
+			HandshakeMessage{Tag: TagCHLO, Data: sampleCHLOMap}.Write(b)
 			Expect(b.Bytes()).To(Equal(sampleCHLO))
+		})
+	})
+
+	Context("string representation", func() {
+		It("has a string representation", func() {
+			str := HandshakeMessage{
+				Tag: TagSHLO,
+				Data: map[Tag][]byte{
+					TagAEAD: []byte("foobar"),
+					TagEXPY: []byte("raboof"),
+				},
+			}.String()
+			Expect(str[:4]).To(Equal("SHLO"))
+			Expect(str).To(ContainSubstring("AEAD: \"foobar\""))
+			Expect(str).To(ContainSubstring("EXPY: \"raboof\""))
+		})
+
+		It("lists padding separately", func() {
+			str := HandshakeMessage{
+				Tag: TagSHLO,
+				Data: map[Tag][]byte{
+					TagPAD: bytes.Repeat([]byte{0}, 1337),
+				},
+			}.String()
+			Expect(str).To(ContainSubstring("PAD"))
+			Expect(str).To(ContainSubstring("1337 bytes"))
 		})
 	})
 })
