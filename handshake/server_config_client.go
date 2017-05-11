@@ -110,13 +110,21 @@ func (s *serverConfigClient) parseValues(tagMap map[Tag][]byte) error {
 
 		err := binary.Read(bytes.NewReader([]byte{pubs[i], pubs[i+1], pubs[i+2], 0x00}), binary.LittleEndian, &last_len);
 		if err != nil {
+			return qerr.Error(qerr.CryptoInvalidValueLength, "PUBS not decodable")
+		}
+		if last_len == 0 {
 			return qerr.Error(qerr.CryptoInvalidValueLength, "PUBS")
 		}
+
+		if i+3+int(last_len) > len(pubs) {
+			return qerr.Error(qerr.CryptoInvalidValueLength, "PUBS")
+		}
+
 		pubs_kexs = append(pubs_kexs, struct{Length uint32; Value []byte}{last_len, pubs[i+3:i+3+int(last_len)]})
 	}
 
 	if c255Foundat >= len(pubs_kexs) {
-		return qerr.Error(qerr.CryptoInvalidValueLength, "KEXS not in PUBS")
+		return qerr.Error(qerr.CryptoMessageParameterNotFound, "KEXS not in PUBS")
 	}
 
 	if pubs_kexs[c255Foundat].Length != 32 {
