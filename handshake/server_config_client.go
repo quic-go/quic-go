@@ -57,7 +57,6 @@ func (s *serverConfigClient) parseValues(tagMap map[Tag][]byte) error {
 	s.ID = scfgID
 
 	// KEXS
-	// TODO: allow for P256 in the list
 	// TODO: setup Key Exchange
 	kexs, ok := tagMap[TagKEXS]
 	if !ok {
@@ -66,7 +65,15 @@ func (s *serverConfigClient) parseValues(tagMap map[Tag][]byte) error {
 	if len(kexs)%4 != 0 {
 		return qerr.Error(qerr.CryptoInvalidValueLength, "KEXS")
 	}
-	if !bytes.Equal(kexs, []byte("C255")) {
+	c255Foundat := -1
+
+	for i := 0; i < len(kexs)/4; i++ {
+		if bytes.Equal(kexs[4*i:4*i+4], []byte("C255")) {
+			c255Foundat = i
+			break
+		}
+	}
+	if (c255Foundat < 0) {
 		return qerr.Error(qerr.CryptoNoSupport, "KEXS")
 	}
 
@@ -90,12 +97,29 @@ func (s *serverConfigClient) parseValues(tagMap map[Tag][]byte) error {
 	}
 
 	// PUBS
-	// TODO: save this value
 	pubs, ok := tagMap[TagPUBS]
 	if !ok {
 		return qerr.Error(qerr.CryptoMessageParameterNotFound, "PUBS")
 	}
-	if len(pubs) != 35 {
+
+	var pubs_kexs []struct{Length uint32; Value []byte}
+	var last_len uint32
+
+	for i := 0; i < len(pubs)-3; i += int(last_len)+3 {
+		// the PUBS value is always prepended by 3 byte little endian length field
+
+		err := binary.Read(bytes.NewReader([]byte{pubs[i], pubs[i+1], pubs[i+2], 0x00}), binary.LittleEndian, &last_len);
+		if err != nil {
+			return qerr.Error(qerr.CryptoInvalidValueLength, "PUBS")
+		}
+		pubs_kexs = append(pubs_kexs, struct{Length uint32; Value []byte}{last_len, pubs[i+3:i+3+int(last_len)]})
+	}
+
+	if c255Foundat >= len(pubs_kexs) {
+		return qerr.Error(qerr.CryptoInvalidValueLength, "KEXS not in PUBS")
+	}
+
+	if pubs_kexs[c255Foundat].Length != 32 {
 		return qerr.Error(qerr.CryptoInvalidValueLength, "PUBS")
 	}
 
@@ -105,8 +129,8 @@ func (s *serverConfigClient) parseValues(tagMap map[Tag][]byte) error {
 		return err
 	}
 
-	// the PUBS value is always prepended by []byte{0x20, 0x00, 0x00}
-	s.sharedSecret, err = s.kex.CalculateSharedKey(pubs[3:])
+
+	s.sharedSecret, err = s.kex.CalculateSharedKey(pubs_kexs[c255Foundat].Value)
 	if err != nil {
 		return err
 	}
