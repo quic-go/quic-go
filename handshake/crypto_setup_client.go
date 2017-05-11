@@ -37,7 +37,7 @@ type cryptoSetupClient struct {
 	lastSentCHLO     []byte
 	certManager      crypto.CertManager
 
-	divNonceChan         chan struct{}
+	divNonceChan         chan []byte
 	diversificationNonce []byte
 
 	clientHelloCounter int
@@ -85,7 +85,7 @@ func NewCryptoSetupClient(
 		nullAEAD:             crypto.NewNullAEAD(protocol.PerspectiveClient, version),
 		aeadChanged:          aeadChanged,
 		negotiatedVersions:   negotiatedVersions,
-		divNonceChan:         make(chan struct{}),
+		divNonceChan:         make(chan []byte),
 	}, nil
 }
 
@@ -123,7 +123,11 @@ func (h *cryptoSetupClient) HandleCryptoStream() error {
 
 		var message HandshakeMessage
 		select {
-		case <-h.divNonceChan:
+		case divNonce := <-h.divNonceChan:
+			if len(h.diversificationNonce) != 0 && !bytes.Equal(h.diversificationNonce, divNonce) {
+				return errConflictingDiversificationNonces
+			}
+			h.diversificationNonce = divNonce
 			// there's no message to process, but we should try upgrading the crypto again
 			continue
 		case message = <-messageChan:
@@ -372,19 +376,8 @@ func (h *cryptoSetupClient) DiversificationNonce() []byte {
 	panic("not needed for cryptoSetupClient")
 }
 
-func (h *cryptoSetupClient) SetDiversificationNonce(data []byte) error {
-	h.mutex.Lock()
-	defer h.mutex.Unlock()
-
-	if len(h.diversificationNonce) == 0 {
-		h.diversificationNonce = data
-		h.divNonceChan <- struct{}{}
-		return nil
-	}
-	if !bytes.Equal(h.diversificationNonce, data) {
-		return errConflictingDiversificationNonces
-	}
-	return nil
+func (h *cryptoSetupClient) SetDiversificationNonce(data []byte) {
+	h.divNonceChan <- data
 }
 
 func (h *cryptoSetupClient) sendCHLO() error {

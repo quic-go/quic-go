@@ -644,13 +644,15 @@ var _ = Describe("Client Crypto Setup", func() {
 		})
 
 		It("tries to escalate the crypto after receiving a diversification nonce", func(done Done) {
-			go cs.HandleCryptoStream()
-			time.Sleep(50 * time.Millisecond) // wait for the first maybeUpgradeCrypto to finish
+			go func() {
+				defer GinkgoRecover()
+				cs.HandleCryptoStream()
+				Fail("HandleCryptoStream should not have returned")
+			}()
 			cs.diversificationNonce = nil
 			cs.serverVerified = true
 			Expect(cs.secureAEAD).To(BeNil())
-			err := cs.SetDiversificationNonce([]byte("div"))
-			Expect(err).ToNot(HaveOccurred())
+			cs.SetDiversificationNonce([]byte("div"))
 			Eventually(aeadChanged).Should(Receive(Equal(protocol.EncryptionSecure)))
 			Expect(cs.secureAEAD).ToNot(BeNil())
 			Expect(aeadChanged).ToNot(Receive())
@@ -784,34 +786,33 @@ var _ = Describe("Client Crypto Setup", func() {
 	})
 
 	Context("Diversification Nonces", func() {
-		BeforeEach(func() {
-			go cs.HandleCryptoStream()
-			time.Sleep(50 * time.Millisecond) // wait for the first maybeUpdateCrypto to finish
-		})
-
 		It("sets a diversification nonce", func() {
+			go cs.HandleCryptoStream()
 			nonce := []byte("foobar")
-			err := cs.SetDiversificationNonce(nonce)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cs.diversificationNonce).To(Equal(nonce))
+			cs.SetDiversificationNonce(nonce)
+			Eventually(func() []byte { return cs.diversificationNonce }).Should(Equal(nonce))
 		})
 
-		It("doesn't do anything when called multiple times with the same nonce", func() {
+		It("doesn't do anything when called multiple times with the same nonce", func(done Done) {
+			go cs.HandleCryptoStream()
 			nonce := []byte("foobar")
-			err := cs.SetDiversificationNonce(nonce)
-			Expect(err).ToNot(HaveOccurred())
-			err = cs.SetDiversificationNonce(nonce)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cs.diversificationNonce).To(Equal(nonce))
+			cs.SetDiversificationNonce(nonce)
+			cs.SetDiversificationNonce(nonce)
+			Eventually(func() []byte { return cs.diversificationNonce }).Should(Equal(nonce))
+			close(done)
 		})
 
 		It("rejects a different diversification nonce", func() {
+			var err error
+			go func() {
+				err = cs.HandleCryptoStream()
+			}()
+
 			nonce1 := []byte("foobar")
 			nonce2 := []byte("raboof")
-			err := cs.SetDiversificationNonce(nonce1)
-			Expect(err).ToNot(HaveOccurred())
-			err = cs.SetDiversificationNonce(nonce2)
-			Expect(err).To(MatchError(errConflictingDiversificationNonces))
+			cs.SetDiversificationNonce(nonce1)
+			cs.SetDiversificationNonce(nonce2)
+			Eventually(func() error { return err }).Should(MatchError(errConflictingDiversificationNonces))
 		})
 	})
 

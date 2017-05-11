@@ -435,7 +435,7 @@ func (h *cryptoSetupServer) DiversificationNonce() []byte {
 	return h.diversificationNonce
 }
 
-func (h *cryptoSetupServer) SetDiversificationNonce(data []byte) error {
+func (h *cryptoSetupServer) SetDiversificationNonce(data []byte) {
 	panic("not needed for cryptoSetupServer")
 }
 
