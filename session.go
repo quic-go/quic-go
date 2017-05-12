@@ -154,14 +154,15 @@ func newSession(
 	return s, handshakeChan, err
 }
 
-func newClientSession(
+// declare this as a variable, such that we can it mock it in the tests
+var newClientSession = func(
 	conn connection,
 	hostname string,
 	v protocol.VersionNumber,
 	connectionID protocol.ConnectionID,
 	config *Config,
 	negotiatedVersions []protocol.VersionNumber,
-) (*session, <-chan handshakeEvent, error) {
+) (packetHandler, <-chan handshakeEvent, error) {
 	s := &session{
 		conn:         conn,
 		connectionID: connectionID,

@@ -1520,8 +1520,7 @@ var _ = Describe("Client Session", func() {
 		mconn = &mockConnection{
 			remoteAddr: &net.UDPAddr{},
 		}
-		var err error
-		sess, _, err = newClientSession(
+		sessP, _, err := newClientSession(
 			mconn,
 			"hostname",
 			protocol.Version35,
@@ -1529,6 +1528,7 @@ var _ = Describe("Client Session", func() {
 			populateClientConfig(&Config{}),
 			nil,
 		)
+		sess = sessP.(*session)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(sess.streamsMap.openStreams).To(HaveLen(1)) // Crypto stream
 		// we need an aeadChanged chan that we can write to

@@ -18,12 +18,13 @@ import (
 )
 
 type mockSession struct {
-	connectionID  protocol.ConnectionID
-	packetCount   int
-	closed        bool
-	closeReason   error
-	stopRunLoop   chan struct{} // run returns as soon as this channel receives a value
-	handshakeChan chan handshakeEvent
+	connectionID      protocol.ConnectionID
+	packetCount       int
+	closed            bool
+	closeReason       error
+	stopRunLoop       chan struct{} // run returns as soon as this channel receives a value
+	handshakeChan     chan handshakeEvent
+	handshakeComplete chan error // for WaitUntilHandshakeComplete
 }
 
 func (s *mockSession) handlePacket(*receivedPacket) {
@@ -34,9 +35,16 @@ func (s *mockSession) run() error {
 	<-s.stopRunLoop
 	return s.closeReason
 }
+func (s *mockSession) WaitUntilHandshakeComplete() error {
+	return <-s.handshakeComplete
+}
 func (s *mockSession) Close(e error) error {
+	if s.closed {
+		return nil
+	}
 	s.closeReason = e
 	s.closed = true
+	close(s.stopRunLoop)
 	return nil
 }
 func (s *mockSession) AcceptStream() (Stream, error) {
@@ -56,6 +64,7 @@ func (s *mockSession) RemoteAddr() net.Addr {
 }
 
 var _ Session = &mockSession{}
+var _ NonFWSession = &mockSession{}
 
 func newMockSession(
 	_ connection,
@@ -65,9 +74,10 @@ func newMockSession(
 	_ *Config,
 ) (packetHandler, <-chan handshakeEvent, error) {
 	s := mockSession{
-		connectionID:  connectionID,
-		handshakeChan: make(chan handshakeEvent),
-		stopRunLoop:   make(chan struct{}),
+		connectionID:      connectionID,
+		handshakeChan:     make(chan handshakeEvent),
+		handshakeComplete: make(chan error),
+		stopRunLoop:       make(chan struct{}),
 	}
 	return &s, s.handshakeChan, nil
 }
@@ -211,11 +221,11 @@ var _ = Describe("Server", func() {
 		})
 
 		It("closes sessions and the connection when Close is called", func() {
-			session := &mockSession{}
+			session, _, _ := newMockSession(nil, 0, 0, nil, nil)
 			serv.sessions[1] = session
 			err := serv.Close()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(session.closed).To(BeTrue())
+			Expect(session.(*mockSession).closed).To(BeTrue())
 			Expect(conn.closed).To(BeTrue())
 		})
 
@@ -254,14 +264,14 @@ var _ = Describe("Server", func() {
 		}, 0.5)
 
 		It("closes all sessions when encountering a connection error", func() {
-			err := serv.handlePacket(nil, nil, firstPacket)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(serv.sessions).To(HaveKey(connID))
-			Expect(serv.sessions[connID].(*mockSession).closed).To(BeFalse())
+			session, _, _ := newMockSession(nil, 0, 0, nil, nil)
+			serv.sessions[0x12345] = session
+			Expect(serv.sessions[0x12345].(*mockSession).closed).To(BeFalse())
 			testErr := errors.New("connection error")
 			conn.readErr = testErr
 			go serv.serve()
-			Eventually(func() bool { return serv.sessions[connID].(*mockSession).closed }).Should(BeTrue())
+			Eventually(func() Session { return serv.sessions[connID] }).Should(BeNil())
+			Eventually(func() bool { return session.(*mockSession).closed }).Should(BeTrue())
 			Expect(serv.Close()).To(Succeed())
 		})
 
