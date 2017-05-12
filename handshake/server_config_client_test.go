@@ -15,7 +15,7 @@ func getDefaultServerConfigClient() map[Tag][]byte {
 		TagSCID: bytes.Repeat([]byte{'F'}, 16),
 		TagKEXS: []byte("C255"),
 		TagAEAD: []byte("AESG"),
-		TagPUBS: bytes.Repeat([]byte{0}, 35),
+		TagPUBS: append([]byte{0x20, 0x00, 0x00}, bytes.Repeat([]byte{0}, 32)...),
 		TagOBIT: bytes.Repeat([]byte{0}, 8),
 		TagEXPY: []byte{0x0, 0x6c, 0x57, 0x78, 0, 0, 0, 0}, // 2033-12-24
 	}
@@ -124,7 +124,7 @@ var _ = Describe("Server Config", func() {
 			It("rejects KEXS values other than C255", func() {
 				tagMap[TagKEXS] = []byte("P256")
 				err := scfg.parseValues(tagMap)
-				Expect(err).To(MatchError("CryptoNoSupport: KEXS"))
+				Expect(err).To(MatchError("CryptoNoSupport: KEXS: Could not find C255, other key exchanges are not supported"))
 			})
 
 			It("errors if the KEXS is missing", func() {
@@ -182,6 +182,25 @@ var _ = Describe("Server Config", func() {
 				tagMap[TagPUBS] = bytes.Repeat([]byte{'F'}, 100) // completely wrong length
 				err := scfg.parseValues(tagMap)
 				Expect(err).To(MatchError("CryptoInvalidValueLength: PUBS"))
+			})
+
+			It("rejects PUBS values that have a zero length", func() {
+				tagMap[TagPUBS] = bytes.Repeat([]byte{0}, 100) // completely wrong length
+				err := scfg.parseValues(tagMap)
+				Expect(err).To(MatchError("CryptoInvalidValueLength: PUBS"))
+			})
+
+			It("ensure that C255 Pubs must not be at the first index", func() {
+				serverKex, err := crypto.NewCurve25519KEX()
+				Expect(err).ToNot(HaveOccurred())
+				tagMap[TagKEXS] = []byte("P256C255") // have another KEXS before C255
+				// 3 byte len + 1 byte empty + C255
+				tagMap[TagPUBS] = append([]byte{0x01, 0x00, 0x00, 0x00}, append([]byte{0x20, 0x00, 0x00}, serverKex.PublicKey()...)...)
+				err = scfg.parseValues(tagMap)
+				Expect(err).ToNot(HaveOccurred())
+				sharedSecret, err := serverKex.CalculateSharedKey(scfg.kex.PublicKey())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(scfg.sharedSecret).To(Equal(sharedSecret))
 			})
 
 			It("errors if the PUBS is missing", func() {
