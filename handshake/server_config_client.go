@@ -73,8 +73,8 @@ func (s *serverConfigClient) parseValues(tagMap map[Tag][]byte) error {
 			break
 		}
 	}
-	if (c255Foundat < 0) {
-		return qerr.Error(qerr.CryptoNoSupport, "KEXS")
+	if c255Foundat < 0 {
+		return qerr.Error(qerr.CryptoNoSupport, "KEXS: Could not find C255, other key exchanges are not supported")
 	}
 
 	// AEAD
