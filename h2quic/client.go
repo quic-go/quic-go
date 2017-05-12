@@ -24,7 +24,8 @@ import (
 type Client struct {
 	mutex sync.RWMutex
 
-	config *quic.Config
+	dialAddr func(hostname string, config *quic.Config) (quic.Session, error)
+	config   *quic.Config
 
 	t *QuicRoundTripper
 
@@ -46,6 +47,7 @@ var _ h2quicClient = &Client{}
 func NewClient(t *QuicRoundTripper, tlsConfig *tls.Config, hostname string) *Client {
 	return &Client{
 		t:               t,
+		dialAddr:        quic.DialAddr,
 		hostname:        authorityAddr("https", hostname),
 		responses:       make(map[protocol.StreamID]chan *http.Response),
 		encryptionLevel: protocol.EncryptionUnencrypted,
@@ -60,7 +62,7 @@ func NewClient(t *QuicRoundTripper, tlsConfig *tls.Config, hostname string) *Cli
 // Dial dials the connection
 func (c *Client) Dial() error {
 	var err error
-	c.session, err = quic.DialAddr(c.hostname, c.config)
+	c.session, err = c.dialAddr(c.hostname, c.config)
 	if err != nil {
 		return err
 	}
