@@ -125,12 +125,13 @@ func areSessionsRunning() bool {
 
 var _ = Describe("Session", func() {
 	var (
-		sess        *session
-		clientSess  *session
-		scfg        *handshake.ServerConfig
-		mconn       *mockConnection
-		cpm         *mockConnectionParametersManager
-		aeadChanged chan<- protocol.EncryptionLevel
+		sess          *session
+		clientSess    *session
+		scfg          *handshake.ServerConfig
+		mconn         *mockConnection
+		cpm           *mockConnectionParametersManager
+		aeadChanged   chan<- protocol.EncryptionLevel
+		handshakeChan <-chan handshakeEvent
 	)
 
 	BeforeEach(func() {
@@ -144,12 +145,12 @@ var _ = Describe("Session", func() {
 		Expect(err).NotTo(HaveOccurred())
 		scfg, err = handshake.NewServerConfig(kex, certChain)
 		Expect(err).NotTo(HaveOccurred())
-		pSess, err := newSession(
+		var pSess Session
+		pSess, handshakeChan, err = newSession(
 			mconn,
 			protocol.Version35,
 			0,
 			scfg,
-			func(Session, bool) {},
 			populateServerConfig(&Config{}),
 		)
 		Expect(err).NotTo(HaveOccurred())
@@ -181,12 +182,11 @@ var _ = Describe("Session", func() {
 	Context("source address", func() {
 		It("uses the IP address if given an UDP connection", func() {
 			conn := &conn{currentAddr: &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200)[12:], Port: 1337}}
-			sess, err := newSession(
+			sess, _, err := newSession(
 				conn,
 				protocol.VersionWhatever,
 				0,
 				scfg,
-				func(Session, bool) {},
 				populateServerConfig(&Config{}),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -197,12 +197,11 @@ var _ = Describe("Session", func() {
 			conn := &conn{
 				currentAddr: &net.TCPAddr{IP: net.IPv4(192, 168, 100, 200)[12:], Port: 1337},
 			}
-			sess, err := newSession(
+			sess, _, err := newSession(
 				conn,
 				protocol.VersionWhatever,
 				0,
 				scfg,
-				func(Session, bool) {},
 				populateServerConfig(&Config{}),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -1244,13 +1243,14 @@ var _ = Describe("Session", func() {
 		})
 	})
 
-	It("tells the packetPacker when forward-secure encryption is used", func() {
+	It("tells the packetPacker when forward-secure encryption is used", func(done Done) {
 		go sess.run()
-		defer sess.Close(nil)
 		aeadChanged <- protocol.EncryptionSecure
 		Consistently(func() bool { return sess.packer.isForwardSecure }).Should(BeFalse())
 		aeadChanged <- protocol.EncryptionForwardSecure
 		Eventually(func() bool { return sess.packer.isForwardSecure }).Should(BeTrue())
+		Expect(sess.Close(nil)).To(Succeed())
+		close(done)
 	})
 
 	It("closes when crypto stream errors", func() {
@@ -1350,39 +1350,45 @@ var _ = Describe("Session", func() {
 		})
 	})
 
-	It("calls the cryptoChangeCallback when the AEAD changes", func(done Done) {
-		var callbackCalled bool
-		var callbackCalledWith bool
-		var callbackSession Session
-		cb := func(s Session, p bool) {
-			callbackCalled = true
-			callbackCalledWith = p
-			callbackSession = s
-		}
-		sess.cryptoChangeCallback = cb
-		aeadChanged <- protocol.EncryptionSecure
+	It("send a handshake event on the handshakeChan when the AEAD changes to secure", func(done Done) {
 		go sess.run()
-		defer sess.Close(nil)
-		Eventually(func() bool { return callbackCalled }).Should(BeTrue())
-		Expect(callbackCalledWith).To(BeFalse())
-		Expect(callbackSession).To(Equal(sess))
+		aeadChanged <- protocol.EncryptionSecure
+		Eventually(handshakeChan).Should(Receive(&handshakeEvent{encLevel: protocol.EncryptionSecure}))
+		Expect(sess.Close(nil)).To(Succeed())
 		close(done)
 	})
 
-	It("calls the cryptoChangeCallback when the AEAD changes to forward secure encryption", func(done Done) {
-		var callbackCalledWith bool
-		var callbackSession Session
-		cb := func(s Session, p bool) {
-			callbackSession = s
-			callbackCalledWith = p
-		}
-		sess.cryptoChangeCallback = cb
-		aeadChanged <- protocol.EncryptionForwardSecure
-		close(aeadChanged)
+	It("send a handshake event on the handshakeChan when the AEAD changes to forward-secure", func(done Done) {
 		go sess.run()
-		defer sess.Close(nil)
-		Eventually(func() bool { return callbackCalledWith }).Should(BeTrue())
-		Expect(callbackSession).To(Equal(sess))
+		aeadChanged <- protocol.EncryptionForwardSecure
+		Eventually(handshakeChan).Should(Receive(&handshakeEvent{encLevel: protocol.EncryptionForwardSecure}))
+		Expect(sess.Close(nil)).To(Succeed())
+		close(done)
+	})
+
+	It("closes the handshakeChan when the handshake completes", func(done Done) {
+		go sess.run()
+		close(aeadChanged)
+		Eventually(handshakeChan).Should(BeClosed())
+		Expect(sess.Close(nil)).To(Succeed())
+		close(done)
+	})
+
+	It("passes errors to the handshakeChan", func(done Done) {
+		testErr := errors.New("handshake error")
+		go sess.run()
+		Expect(sess.Close(nil)).To(Succeed())
+		Expect(handshakeChan).To(Receive(&handshakeEvent{err: testErr}))
+		close(done)
+	})
+
+	It("does not block if an error occurs", func(done Done) {
+		// this test basically tests that the handshakeChan has a capacity of 3
+		// The session needs to run (and close) properly, even if no one is receiving from the handshakeChan
+		go sess.run()
+		aeadChanged <- protocol.EncryptionSecure
+		aeadChanged <- protocol.EncryptionForwardSecure
+		Expect(sess.Close(nil)).To(Succeed())
 		close(done)
 	})
 

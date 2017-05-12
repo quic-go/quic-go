@@ -18,11 +18,12 @@ import (
 )
 
 type mockSession struct {
-	connectionID protocol.ConnectionID
-	packetCount  int
-	closed       bool
-	closeReason  error
-	stopRunLoop  chan struct{} // run returns as soon as this channel receives a value
+	connectionID  protocol.ConnectionID
+	packetCount   int
+	closed        bool
+	closeReason   error
+	stopRunLoop   chan struct{} // run returns as soon as this channel receives a value
+	handshakeChan chan handshakeEvent
 }
 
 func (s *mockSession) handlePacket(*receivedPacket) {
@@ -56,11 +57,19 @@ func (s *mockSession) RemoteAddr() net.Addr {
 
 var _ Session = &mockSession{}
 
-func newMockSession(_ connection, _ protocol.VersionNumber, connectionID protocol.ConnectionID, _ *handshake.ServerConfig, _ cryptoChangeCallback, _ *Config) (packetHandler, error) {
-	return &mockSession{
-		connectionID: connectionID,
-		stopRunLoop:  make(chan struct{}),
-	}, nil
+func newMockSession(
+	_ connection,
+	_ protocol.VersionNumber,
+	connectionID protocol.ConnectionID,
+	_ *handshake.ServerConfig,
+	_ *Config,
+) (packetHandler, <-chan handshakeEvent, error) {
+	s := mockSession{
+		connectionID:  connectionID,
+		handshakeChan: make(chan handshakeEvent),
+		stopRunLoop:   make(chan struct{}),
+	}
+	return &s, s.handshakeChan, nil
 }
 
 var _ = Describe("Server", func() {
@@ -133,13 +142,32 @@ var _ = Describe("Server", func() {
 				acceptedSess, err = serv.Accept()
 				Expect(err).ToNot(HaveOccurred())
 			}()
-			sess := &mockSession{}
-			// serv.cryptoChangeCallback(sess, false)
-			// Consistently(func() Session { return acceptedSess }).Should(BeNil())
-			serv.cryptoChangeCallback(sess, true)
+			err := serv.handlePacket(nil, nil, firstPacket)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(serv.sessions).To(HaveLen(1))
+			sess := serv.sessions[connID].(*mockSession)
+			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
+			Consistently(func() Session { return acceptedSess }).Should(BeNil())
+			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionForwardSecure}
 			Eventually(func() Session { return acceptedSess }).Should(Equal(sess))
 			close(done)
 		}, 0.5)
+
+		It("doesn't accept session that error during the handshake", func(done Done) {
+			var accepted bool
+			go func() {
+				defer GinkgoRecover()
+				serv.Accept()
+				accepted = true
+			}()
+			err := serv.handlePacket(nil, nil, firstPacket)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(serv.sessions).To(HaveLen(1))
+			sess := serv.sessions[connID].(*mockSession)
+			sess.handshakeChan <- handshakeEvent{err: errors.New("handshake failed")}
+			Consistently(func() bool { return accepted }).Should(BeFalse())
+			close(done)
+		})
 
 		It("assigns packets to existing sessions", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)

@@ -34,10 +34,6 @@ var (
 	errSessionAlreadyClosed       = errors.New("cannot close session; it was already closed before")
 )
 
-// cryptoChangeCallback is called every time the encryption level changes
-// Once the callback has been called with isForwardSecure = true, it is guarantueed to not be called with isForwardSecure = false after that
-type cryptoChangeCallback func(session Session, isForwardSecure bool)
-
 type handshakeEvent struct {
 	encLevel protocol.EncryptionLevel
 	err      error
@@ -54,8 +50,6 @@ type session struct {
 	perspective  protocol.Perspective
 	version      protocol.VersionNumber
 	config       *Config
-
-	cryptoChangeCallback cryptoChangeCallback
 
 	conn connection
 
@@ -95,6 +89,7 @@ type session struct {
 	handshakeCompleteChan chan error
 	// handshakeChan receives handshake events and is closed as soon the handshake completes
 	// the receiving end of this channel is passed to the creator of the session
+	// it receives at most 3 handshake events: 2 when the encryption level changes, and one error
 	handshakeChan chan<- handshakeEvent
 
 	nextAckScheduledTime time.Time
@@ -122,9 +117,8 @@ func newSession(
 	v protocol.VersionNumber,
 	connectionID protocol.ConnectionID,
 	sCfg *handshake.ServerConfig,
-	cryptoChangeCallback cryptoChangeCallback,
 	config *Config,
-) (packetHandler, error) {
+) (packetHandler, <-chan handshakeEvent, error) {
 	s := &session{
 		conn:         conn,
 		connectionID: connectionID,
@@ -132,7 +126,6 @@ func newSession(
 		version:      v,
 		config:       config,
 
-		cryptoChangeCallback: cryptoChangeCallback,
 		connectionParameters: handshake.NewConnectionParamatersManager(protocol.PerspectiveServer, v),
 	}
 
@@ -147,18 +140,18 @@ func newSession(
 	}
 	aeadChanged := make(chan protocol.EncryptionLevel, 2)
 	s.aeadChanged = aeadChanged
-	handshakeChan := make(chan handshakeEvent, 1)
+	handshakeChan := make(chan handshakeEvent, 3)
 	s.handshakeChan = handshakeChan
 	var err error
 	s.cryptoSetup, err = handshake.NewCryptoSetup(connectionID, sourceAddr, v, sCfg, cryptoStream, s.connectionParameters, config.Versions, aeadChanged)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	s.packer = newPacketPacker(connectionID, s.cryptoSetup, s.connectionParameters, s.streamFramer, s.perspective, s.version)
 	s.unpacker = &packetUnpacker{aead: s.cryptoSetup, version: s.version}
 
-	return s, err
+	return s, handshakeChan, err
 }
 
 func newClientSession(
@@ -184,7 +177,7 @@ func newClientSession(
 
 	aeadChanged := make(chan protocol.EncryptionLevel, 2)
 	s.aeadChanged = aeadChanged
-	handshakeChan := make(chan handshakeEvent, 1)
+	handshakeChan := make(chan handshakeEvent, 3)
 	s.handshakeChan = handshakeChan
 	cryptoStream, _ := s.OpenStream()
 	var err error
@@ -295,12 +288,7 @@ runLoop:
 					s.packer.SetForwardSecure()
 				}
 				s.tryDecryptingQueuedPackets()
-				// TODO: remove this, when removing the cryptoChangeCallback for the server
-				if s.perspective == protocol.PerspectiveServer {
-					s.cryptoChangeCallback(s, l == protocol.EncryptionForwardSecure)
-				} else {
-					s.handshakeChan <- handshakeEvent{encLevel: l}
-				}
+				s.handshakeChan <- handshakeEvent{encLevel: l}
 			}
 		}
 

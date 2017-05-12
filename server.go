@@ -38,7 +38,7 @@ type server struct {
 	sessionQueue chan Session
 	errorChan    chan struct{}
 
-	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, cryptoChangeCallback cryptoChangeCallback, config *Config) (packetHandler, error)
+	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, config *Config) (packetHandler, <-chan handshakeEvent, error)
 }
 
 var _ Listener = &server{}
@@ -211,12 +211,12 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 		}
 
 		utils.Infof("Serving new connection: %x, version %d from %v", hdr.ConnectionID, version, remoteAddr)
-		session, err = s.newSession(
+		var handshakeChan <-chan handshakeEvent
+		session, handshakeChan, err = s.newSession(
 			&conn{pconn: pconn, currentAddr: remoteAddr},
 			version,
 			hdr.ConnectionID,
 			s.scfg,
-			s.cryptoChangeCallback,
 			s.config,
 		)
 		if err != nil {
@@ -229,8 +229,20 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 		go func() {
 			// session.run() returns as soon as the session is closed
 			_ = session.run()
-
 			s.removeConnection(hdr.ConnectionID)
+		}()
+
+		go func() {
+			for {
+				ev := <-handshakeChan
+				if ev.err != nil {
+					return
+				}
+				if ev.encLevel == protocol.EncryptionForwardSecure {
+					break
+				}
+			}
+			s.sessionQueue <- session
 		}()
 	}
 	if session == nil {
@@ -244,12 +256,6 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 		rcvTime:      rcvTime,
 	})
 	return nil
-}
-
-func (s *server) cryptoChangeCallback(session Session, isForwardSecure bool) {
-	if isForwardSecure {
-		s.sessionQueue <- session
-	}
 }
 
 func (s *server) removeConnection(id protocol.ConnectionID) {
