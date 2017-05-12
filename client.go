@@ -51,6 +51,20 @@ func DialAddr(addr string, config *Config) (Session, error) {
 	return Dial(udpConn, udpAddr, addr, config)
 }
 
+// DialAddrNonFWSecure establishes a new QUIC connection to a server.
+// The hostname for SNI is taken from the given address.
+func DialAddrNonFWSecure(addr string, config *Config) (NonFWSession, error) {
+	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return nil, err
+	}
+	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
+	if err != nil {
+		return nil, err
+	}
+	return DialNonFWSecure(udpConn, udpAddr, addr, config)
+}
+
 // DialNonFWSecure establishes a new non-forward-secure QUIC connection to a server using a net.PacketConn.
 // The host parameter is used for SNI.
 func DialNonFWSecure(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config) (NonFWSession, error) {

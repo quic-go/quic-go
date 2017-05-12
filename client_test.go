@@ -82,6 +82,20 @@ var _ = Describe("Client", func() {
 			close(done)
 		})
 
+		It("dials a non-forward-secure address", func(done Done) {
+			var dialedSess Session
+			go func() {
+				defer GinkgoRecover()
+				var err error
+				dialedSess, err = DialAddrNonFWSecure("localhost:18901", config)
+				Expect(err).ToNot(HaveOccurred())
+			}()
+			Consistently(func() Session { return dialedSess }).Should(BeNil())
+			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
+			Eventually(func() Session { return dialedSess }).ShouldNot(BeNil())
+			close(done)
+		})
+
 		It("Dial only returns after the handshake is complete", func(done Done) {
 			var dialedSess Session
 			go func() {
