@@ -5,7 +5,6 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -20,20 +19,20 @@ import (
 type StkSource interface {
 	// NewToken creates a new token for a given IP address
 	NewToken(sourceAddress []byte) ([]byte, error)
-	// VerifyToken verifies if a token matches a given IP address
-	VerifyToken(sourceAddress []byte, data []byte) (time.Time, error)
+	// DecodeToken decodes a token and returns the source address and the timestamp
+	DecodeToken(data []byte) ([]byte, time.Time, error)
 }
 
 type sourceAddressToken struct {
-	sourceAddr []byte
+	data []byte
 	// unix timestamp in seconds
 	timestamp uint64
 }
 
 func (t *sourceAddressToken) serialize() []byte {
-	res := make([]byte, 8+len(t.sourceAddr))
+	res := make([]byte, 8+len(t.data))
 	binary.LittleEndian.PutUint64(res, t.timestamp)
-	copy(res[8:], t.sourceAddr)
+	copy(res[8:], t.data)
 	return res
 }
 
@@ -42,8 +41,8 @@ func parseToken(data []byte) (*sourceAddressToken, error) {
 		return nil, fmt.Errorf("invalid STK length: %d", len(data))
 	}
 	return &sourceAddressToken{
-		sourceAddr: data[8:],
-		timestamp:  binary.LittleEndian.Uint64(data),
+		data:      data[8:],
+		timestamp: binary.LittleEndian.Uint64(data),
 	}, nil
 }
 
@@ -78,38 +77,31 @@ func NewStkSource() (StkSource, error) {
 	return &stkSource{aead: aead}, nil
 }
 
-func (s *stkSource) NewToken(sourceAddr []byte) ([]byte, error) {
+func (s *stkSource) NewToken(data []byte) ([]byte, error) {
 	return encryptToken(s.aead, &sourceAddressToken{
-		sourceAddr: sourceAddr,
-		timestamp:  uint64(time.Now().Unix()),
+		data:      data,
+		timestamp: uint64(time.Now().Unix()),
 	})
 }
 
-func (s *stkSource) VerifyToken(sourceAddr []byte, data []byte) (time.Time, error) {
+func (s *stkSource) DecodeToken(data []byte) ([]byte, time.Time, error) {
 	if len(data) < stkNonceSize {
-		return time.Time{}, errors.New("STK too short")
+		return nil, time.Time{}, errors.New("STK too short")
 	}
 	nonce := data[:stkNonceSize]
-
 	res, err := s.aead.Open(nil, nonce, data[stkNonceSize:], nil)
 	if err != nil {
-		return time.Time{}, err
+		return nil, time.Time{}, err
 	}
 
 	token, err := parseToken(res)
 	if err != nil {
-		return time.Time{}, err
+		return nil, time.Time{}, err
 	}
-
-	if subtle.ConstantTimeCompare(token.sourceAddr, sourceAddr) != 1 {
-		return time.Time{}, errors.New("invalid source address in STK")
-	}
-
 	if token.timestamp > math.MaxInt64 {
-		return time.Time{}, errors.New("invalid timestamp")
+		return nil, time.Time{}, errors.New("invalid timestamp")
 	}
-
-	return time.Unix(int64(token.timestamp), 0), nil
+	return token.data, time.Unix(int64(token.timestamp), 0), nil
 }
 
 func deriveKey(secret []byte) ([]byte, error) {

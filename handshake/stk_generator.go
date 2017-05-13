@@ -1,6 +1,8 @@
 package handshake
 
 import (
+	"crypto/subtle"
+	"errors"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
@@ -28,6 +30,13 @@ func (g *STKGenerator) NewToken(sourceAddr []byte) ([]byte, error) {
 }
 
 // VerifyToken verifies an STK token
-func (g *STKGenerator) VerifyToken(sourceAddr []byte, token []byte) (time.Time, error) {
-	return g.stkSource.VerifyToken(sourceAddr, token)
+func (g *STKGenerator) VerifyToken(sourceAddr []byte, data []byte) (time.Time, error) {
+	tokenAddr, timestamp, err := g.stkSource.DecodeToken(data)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if subtle.ConstantTimeCompare(sourceAddr, tokenAddr) != 1 {
+		return time.Time{}, errors.New("invalid source address in STK")
+	}
+	return timestamp, nil
 }

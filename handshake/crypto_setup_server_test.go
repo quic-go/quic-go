@@ -127,7 +127,7 @@ func (mockStream) CloseRemote(offset protocol.ByteCount) { panic("not implemente
 func (s mockStream) StreamID() protocol.StreamID         { panic("not implemented") }
 
 type mockStkSource struct {
-	verifyErr error
+	decodeErr error
 	stkTime   time.Time
 }
 
@@ -137,24 +137,18 @@ func (mockStkSource) NewToken(sourceAddr []byte) ([]byte, error) {
 	return append([]byte("token "), sourceAddr...), nil
 }
 
-func (s mockStkSource) VerifyToken(sourceAddr []byte, token []byte) (time.Time, error) {
-	if s.verifyErr != nil {
-		return time.Time{}, s.verifyErr
+func (s mockStkSource) DecodeToken(data []byte) ([]byte, time.Time, error) {
+	if s.decodeErr != nil {
+		return nil, time.Time{}, s.decodeErr
 	}
-	split := bytes.Split(token, []byte(" "))
-	if len(split) != 2 {
-		return time.Time{}, errors.New("stk required")
+	if len(data) < 6 {
+		return nil, time.Time{}, errors.New("token too short")
 	}
-	if !bytes.Equal(split[0], []byte("token")) {
-		return time.Time{}, errors.New("no prefix match")
+	t := s.stkTime
+	if t.IsZero() {
+		t = time.Now()
 	}
-	if !bytes.Equal(split[1], sourceAddr) {
-		return time.Time{}, errors.New("ip wrong")
-	}
-	if !s.stkTime.IsZero() {
-		return s.stkTime, nil
-	}
-	return time.Now(), nil
+	return data[6:], t, nil
 }
 
 var _ = Describe("Server Crypto Setup", func() {
@@ -436,7 +430,7 @@ var _ = Describe("Server Crypto Setup", func() {
 
 		It("recognizes inchoate CHLOs with an invalid STK", func() {
 			testErr := errors.New("STK invalid")
-			cs.stkGenerator.stkSource.(*mockStkSource).verifyErr = testErr
+			cs.stkGenerator.stkSource.(*mockStkSource).decodeErr = testErr
 			Expect(cs.isInchoateCHLO(fullCHLO, cert)).To(BeTrue())
 		})
 
@@ -730,33 +724,42 @@ var _ = Describe("Server Crypto Setup", func() {
 
 	Context("STK verification and creation", func() {
 		It("requires STK", func() {
-			done, err := cs.handleMessage(bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), map[Tag][]byte{
-				TagSNI: []byte("foo"),
-				TagVER: versionTag,
-			})
+			done, err := cs.handleMessage(
+				bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize),
+				map[Tag][]byte{
+					TagSNI: []byte("foo"),
+					TagVER: versionTag,
+				},
+			)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(done).To(BeFalse())
-			Expect(err).To(BeNil())
 			Expect(stream.dataWritten.Bytes()).To(ContainSubstring(string(validSTK)))
 		})
 
 		It("works with proper STK", func() {
-			done, err := cs.handleMessage(bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), map[Tag][]byte{
-				TagSTK: validSTK,
-				TagSNI: []byte("foo"),
-				TagVER: versionTag,
-			})
+			done, err := cs.handleMessage(
+				bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize),
+				map[Tag][]byte{
+					TagSTK: validSTK,
+					TagSNI: []byte("foo"),
+					TagVER: versionTag,
+				},
+			)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(done).To(BeFalse())
-			Expect(err).To(BeNil())
 		})
 
 		It("errors if IP does not match", func() {
-			done, err := cs.handleMessage(bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), map[Tag][]byte{
-				TagSNI: []byte("foo"),
-				TagSTK: []byte("token \x04\x03\x03\x01"),
-				TagVER: versionTag,
-			})
+			done, err := cs.handleMessage(
+				bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize),
+				map[Tag][]byte{
+					TagSNI: []byte("foo"),
+					TagSTK: []byte("token \x04\x03\x03\x01"),
+					TagVER: versionTag,
+				},
+			)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(done).To(BeFalse())
-			Expect(err).To(BeNil())
 			Expect(stream.dataWritten.Bytes()).To(ContainSubstring(string(validSTK)))
 		})
 	})

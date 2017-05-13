@@ -17,7 +17,7 @@ var _ = Describe("Source Address Tokens", func() {
 	Context("tokens", func() {
 		It("serializes", func() {
 			ip := []byte{127, 0, 0, 1}
-			token := &sourceAddressToken{sourceAddr: ip, timestamp: 0xdeadbeef}
+			token := &sourceAddressToken{data: ip, timestamp: 0xdeadbeef}
 			Expect(token.serialize()).To(Equal([]byte{
 				0xef, 0xbe, 0xad, 0xde, 0x00, 0x00, 0x00, 0x00,
 				127, 0, 0, 1,
@@ -30,7 +30,7 @@ var _ = Describe("Source Address Tokens", func() {
 				127, 0, 0, 1,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(token.sourceAddr).To(Equal([]byte{127, 0, 0, 1}))
+			Expect(token.data).To(Equal([]byte{127, 0, 0, 1}))
 			Expect(token.timestamp).To(Equal(uint64(0xdeadbeef)))
 		})
 
@@ -70,57 +70,48 @@ var _ = Describe("Source Address Tokens", func() {
 			stk, err := source.NewToken(ip4)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stk).ToNot(BeEmpty())
-			_, err = source.VerifyToken(ip4, stk)
+			decodedIP, _, err := source.DecodeToken(stk)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(decodedIP).To(BeEquivalentTo(ip4))
 		})
 
 		It("generates and verify ipv6 tokens", func() {
 			stk, err := source.NewToken(ip6)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stk).ToNot(BeEmpty())
-			_, err = source.VerifyToken(ip6, stk)
+			decodedIP, _, err := source.DecodeToken(stk)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(decodedIP).To(BeEquivalentTo(ip6))
 		})
 
 		It("rejects empty tokens", func() {
-			_, err := source.VerifyToken(ip4, nil)
-			Expect(err).To(HaveOccurred())
+			_, _, err := source.DecodeToken([]byte{})
+			Expect(err).To(MatchError("STK too short"))
 		})
 
 		It("rejects invalid tokens", func() {
-			_, err := source.VerifyToken(ip4, []byte("foobar"))
+			_, _, err := source.DecodeToken([]byte("foobar"))
 			Expect(err).To(HaveOccurred())
-		})
-
-		It("rejects tokens with wrong IP addresses", func() {
-			otherIP := net.ParseIP("4.3.2.1")
-			stk, err := encryptToken(source.aead, &sourceAddressToken{
-				sourceAddr: otherIP,
-				timestamp:  uint64(time.Now().Unix()),
-			})
-			Expect(err).NotTo(HaveOccurred())
-			_, err = source.VerifyToken(ip4, stk)
-			Expect(err).To(MatchError("invalid source address in STK"))
 		})
 
 		It("rejects overflowing timestamps", func() {
 			stk, err := encryptToken(source.aead, &sourceAddressToken{
-				sourceAddr: ip4,
-				timestamp:  math.MaxUint64,
+				data:      ip4,
+				timestamp: math.MaxUint64,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			_, err = source.VerifyToken(ip4, stk)
+			_, _, err = source.DecodeToken(stk)
 			Expect(err).To(MatchError("invalid timestamp"))
 		})
 
 		It("returns the timestamp encoded in the token", func() {
 			timestamp := time.Now().Add(-time.Hour)
 			stk, err := encryptToken(source.aead, &sourceAddressToken{
-				sourceAddr: ip4,
-				timestamp:  uint64(timestamp.Unix()),
+				data:      ip4,
+				timestamp: uint64(timestamp.Unix()),
 			})
 			Expect(err).NotTo(HaveOccurred())
-			t, err := source.VerifyToken(ip4, stk)
+			_, t, err := source.DecodeToken(stk)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(t).To(BeTemporally("~", timestamp, time.Second))
 		})
