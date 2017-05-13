@@ -58,7 +58,11 @@ const stkKeySize = 16
 const stkNonceSize = 16
 
 // NewStkSource creates a source for source address tokens
-func NewStkSource(secret []byte) (StkSource, error) {
+func NewStkSource() (StkSource, error) {
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return nil, err
+	}
 	key, err := deriveKey(secret)
 	if err != nil {
 		return nil, err

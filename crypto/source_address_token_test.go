@@ -43,7 +43,6 @@ var _ = Describe("Source Address Tokens", func() {
 	Context("source", func() {
 		var (
 			source *stkSource
-			secret []byte
 			ip4    net.IP
 			ip6    net.IP
 		)
@@ -56,8 +55,7 @@ var _ = Describe("Source Address Tokens", func() {
 			ip6 = net.ParseIP("2001:0db8:0000:0000:0000:ff00:0042:8329")
 			Expect(ip6).NotTo(BeEmpty())
 
-			secret = []byte("TESTING")
-			sourceI, err := NewStkSource(secret)
+			sourceI, err := NewStkSource()
 			source = sourceI.(*stkSource)
 			Expect(err).NotTo(HaveOccurred())
 		})

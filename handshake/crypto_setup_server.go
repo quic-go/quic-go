@@ -27,6 +27,7 @@ type cryptoSetupServer struct {
 	connID               protocol.ConnectionID
 	sourceAddr           []byte
 	scfg                 *ServerConfig
+	stkGenerator         *STKGenerator
 	diversificationNonce []byte
 
 	version           protocol.VersionNumber
@@ -68,6 +69,11 @@ func NewCryptoSetup(
 	supportedVersions []protocol.VersionNumber,
 	aeadChanged chan<- protocol.EncryptionLevel,
 ) (CryptoSetup, error) {
+	stkGenerator, err := NewSTKGenerator()
+	if err != nil {
+		return nil, err
+	}
+
 	var sourceAddr []byte
 	if udpAddr, ok := remoteAddr.(*net.UDPAddr); ok {
 		sourceAddr = udpAddr.IP
@@ -81,6 +87,7 @@ func NewCryptoSetup(
 		version:              version,
 		supportedVersions:    supportedVersions,
 		scfg:                 scfg,
+		stkGenerator:         stkGenerator,
 		keyDerivation:        crypto.DeriveKeysAESGCM,
 		keyExchange:          getEphermalKEX,
 		nullAEAD:             crypto.NewNullAEAD(protocol.PerspectiveServer, version),
@@ -276,7 +283,7 @@ func (h *cryptoSetupServer) isInchoateCHLO(cryptoData map[Tag][]byte, cert []byt
 }
 
 func (h *cryptoSetupServer) verifySTK(stk []byte) bool {
-	stkTime, err := h.scfg.stkSource.VerifyToken(h.sourceAddr, stk)
+	stkTime, err := h.stkGenerator.VerifyToken(h.sourceAddr, stk)
 	if err != nil {
 		utils.Debugf("STK invalid: %s", err.Error())
 		return false
@@ -292,7 +299,7 @@ func (h *cryptoSetupServer) handleInchoateCHLO(sni string, chlo []byte, cryptoDa
 		return nil, qerr.Error(qerr.CryptoInvalidValueLength, "CHLO too small")
 	}
 
-	token, err := h.scfg.stkSource.NewToken(h.sourceAddr)
+	token, err := h.stkGenerator.NewToken(h.sourceAddr)
 	if err != nil {
 		return nil, err
 	}

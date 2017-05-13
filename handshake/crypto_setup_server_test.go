@@ -194,7 +194,6 @@ var _ = Describe("Server Crypto Setup", func() {
 		versionTag = make([]byte, 4)
 		binary.LittleEndian.PutUint32(versionTag, protocol.VersionNumberToTag(protocol.VersionWhatever))
 		Expect(err).NotTo(HaveOccurred())
-		scfg.stkSource = &mockStkSource{}
 		version = protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
 		supportedVersions = []protocol.VersionNumber{version, 98, 99}
 		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.VersionWhatever)
@@ -210,6 +209,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		)
 		Expect(err).NotTo(HaveOccurred())
 		cs = csInt.(*cryptoSetupServer)
+		cs.stkGenerator.stkSource = &mockStkSource{}
 		cs.keyDerivation = mockKeyDerivation
 		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
 	})
@@ -436,12 +436,12 @@ var _ = Describe("Server Crypto Setup", func() {
 
 		It("recognizes inchoate CHLOs with an invalid STK", func() {
 			testErr := errors.New("STK invalid")
-			scfg.stkSource.(*mockStkSource).verifyErr = testErr
+			cs.stkGenerator.stkSource.(*mockStkSource).verifyErr = testErr
 			Expect(cs.isInchoateCHLO(fullCHLO, cert)).To(BeTrue())
 		})
 
 		It("REJ messages that have an expired STK", func() {
-			cs.scfg.stkSource.(*mockStkSource).stkTime = time.Now().Add(-protocol.STKExpiryTime).Add(-time.Second)
+			cs.stkGenerator.stkSource.(*mockStkSource).stkTime = time.Now().Add(-protocol.STKExpiryTime).Add(-time.Second)
 			Expect(cs.isInchoateCHLO(fullCHLO, cert)).To(BeTrue())
 		})
 

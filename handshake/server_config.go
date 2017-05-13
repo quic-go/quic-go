@@ -13,7 +13,6 @@ type ServerConfig struct {
 	certChain crypto.CertChain
 	ID        []byte
 	obit      []byte
-	stkSource crypto.StkSource
 }
 
 // NewServerConfig creates a new server config
@@ -24,18 +23,8 @@ func NewServerConfig(kex crypto.KeyExchange, certChain crypto.CertChain) (*Serve
 		return nil, err
 	}
 
-	stkSecret := make([]byte, 32)
-	if _, err = rand.Read(stkSecret); err != nil {
-		return nil, err
-	}
-
 	obit := make([]byte, 8)
 	if _, err = rand.Read(obit); err != nil {
-		return nil, err
-	}
-
-	stkSource, err := crypto.NewStkSource(stkSecret)
-	if err != nil {
 		return nil, err
 	}
 
@@ -44,7 +33,6 @@ func NewServerConfig(kex crypto.KeyExchange, certChain crypto.CertChain) (*Serve
 		certChain: certChain,
 		ID:        id,
 		obit:      obit,
-		stkSource: stkSource,
 	}, nil
 }
 
