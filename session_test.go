@@ -708,6 +708,20 @@ var _ = Describe("Session", func() {
 			Expect(sess.largestRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
 		})
 
+		It("closes when handling a packet fails", func(done Done) {
+			testErr := errors.New("unpack error")
+			hdr.PacketNumber = 5
+			var runErr error
+			go func() {
+				runErr = sess.run()
+			}()
+			sess.unpacker.(*mockUnpacker).unpackErr = testErr
+			sess.handlePacket(&receivedPacket{publicHeader: hdr})
+			Eventually(func() error { return runErr }).Should(MatchError(testErr))
+			Expect(sess.runClosed).To(BeClosed())
+			close(done)
+		})
+
 		It("sets the {last,largest}RcvdPacketNumber, for an out-of-order packet", func() {
 			hdr.PacketNumber = 5
 			err := sess.handlePacketImpl(&receivedPacket{publicHeader: hdr})
