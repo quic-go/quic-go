@@ -25,7 +25,7 @@ type KeyExchangeFunction func() crypto.KeyExchange
 // The CryptoSetupServer handles all things crypto for the Session
 type cryptoSetupServer struct {
 	connID               protocol.ConnectionID
-	sourceAddr           []byte
+	remoteAddr           net.Addr
 	scfg                 *ServerConfig
 	stkGenerator         *STKGenerator
 	diversificationNonce []byte
@@ -74,16 +74,9 @@ func NewCryptoSetup(
 		return nil, err
 	}
 
-	var sourceAddr []byte
-	if udpAddr, ok := remoteAddr.(*net.UDPAddr); ok {
-		sourceAddr = udpAddr.IP
-	} else {
-		sourceAddr = []byte(remoteAddr.String())
-	}
-
 	return &cryptoSetupServer{
 		connID:               connID,
-		sourceAddr:           sourceAddr,
+		remoteAddr:           remoteAddr,
 		version:              version,
 		supportedVersions:    supportedVersions,
 		scfg:                 scfg,
@@ -283,7 +276,7 @@ func (h *cryptoSetupServer) isInchoateCHLO(cryptoData map[Tag][]byte, cert []byt
 }
 
 func (h *cryptoSetupServer) verifySTK(stk []byte) bool {
-	stkTime, err := h.stkGenerator.VerifyToken(h.sourceAddr, stk)
+	stkTime, err := h.stkGenerator.VerifyToken(h.remoteAddr, stk)
 	if err != nil {
 		utils.Debugf("STK invalid: %s", err.Error())
 		return false
@@ -299,7 +292,7 @@ func (h *cryptoSetupServer) handleInchoateCHLO(sni string, chlo []byte, cryptoDa
 		return nil, qerr.Error(qerr.CryptoInvalidValueLength, "CHLO too small")
 	}
 
-	token, err := h.stkGenerator.NewToken(h.sourceAddr)
+	token, err := h.stkGenerator.NewToken(h.remoteAddr)
 	if err != nil {
 		return nil, err
 	}

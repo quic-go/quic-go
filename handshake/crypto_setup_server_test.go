@@ -228,40 +228,6 @@ var _ = Describe("Server Crypto Setup", func() {
 		})
 	})
 
-	Context("source address token", func() {
-		It("uses the IP address when the remote address is a UDP address", func() {
-			remoteAddr := &net.UDPAddr{IP: net.IPv4(1, 3, 3, 7), Port: 1337}
-			cs, err := NewCryptoSetup(
-				protocol.ConnectionID(42),
-				remoteAddr,
-				protocol.VersionWhatever,
-				scfg,
-				stream,
-				cpm,
-				supportedVersions,
-				aeadChanged,
-			)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cs.(*cryptoSetupServer).sourceAddr).To(BeEquivalentTo(remoteAddr.IP))
-		})
-
-		It("works with remote address that are not UDP", func() {
-			remoteAddr := &net.TCPAddr{IP: net.IPv4(1, 3, 3, 7), Port: 1337}
-			cs, err := NewCryptoSetup(
-				protocol.ConnectionID(42),
-				remoteAddr,
-				protocol.VersionWhatever,
-				scfg,
-				stream,
-				cpm,
-				supportedVersions,
-				aeadChanged,
-			)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cs.(*cryptoSetupServer).sourceAddr).To(BeEquivalentTo("1.3.3.7:1337"))
-		})
-	})
-
 	Context("when responding to client messages", func() {
 		var cert []byte
 		var xlct []byte

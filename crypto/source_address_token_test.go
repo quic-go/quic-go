@@ -36,7 +36,7 @@ var _ = Describe("Source Address Tokens", func() {
 
 		It("rejects tokens of wrong size", func() {
 			_, err := parseToken(nil)
-			Expect(err).To(MatchError("invalid STK length: 0"))
+			Expect(err).To(MatchError("STK too short: 0"))
 		})
 	})
 
