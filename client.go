@@ -75,9 +75,10 @@ func populateClientConfig(config *Config) *Config {
 	}
 
 	return &Config{
-		TLSConfig: config.TLSConfig,
-		ConnState: config.ConnState,
-		Versions:  versions,
+		TLSConfig:                     config.TLSConfig,
+		ConnState:                     config.ConnState,
+		Versions:                      versions,
+		RequestConnectionIDTruncation: config.RequestConnectionIDTruncation,
 	}
 }
 
@@ -257,8 +258,8 @@ func (c *client) createNewSession(negotiatedVersions []protocol.VersionNumber) e
 		c.hostname,
 		c.version,
 		c.connectionID,
-		c.config.TLSConfig,
 		c.cryptoChangeCallback,
+		c.config,
 		negotiatedVersions,
 	)
 	if err != nil {

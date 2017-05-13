@@ -67,6 +67,10 @@ type Config struct {
 	// If not set, it uses all versions available.
 	// Warning: This API should not be considered stable and will change soon.
 	Versions []protocol.VersionNumber
+	// Ask the server to truncate the connection ID sent in the Public Header.
+	// This saves 8 bytes in the Public Header in every packet. However, if the IP address of the server changes, the connection cannot be migrated.
+	// Currently only valid for the client.
+	RequestConnectionIDTruncation bool
 }
 
 // A Listener for incoming QUIC connections

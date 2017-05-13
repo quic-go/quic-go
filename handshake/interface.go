@@ -16,3 +16,8 @@ type CryptoSetup interface {
 	GetSealer() (protocol.EncryptionLevel, Sealer)
 	GetSealerWithEncryptionLevel(protocol.EncryptionLevel) (Sealer, error)
 }
+
+// TransportParameters are parameters sent to the peer during the handshake
+type TransportParameters struct {
+	RequestConnectionIDTruncation bool
+}
