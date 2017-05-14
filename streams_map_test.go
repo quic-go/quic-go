@@ -181,6 +181,13 @@ var _ = Describe("Streams Map", func() {
 					Expect(err).To(MatchError(testErr))
 				})
 
+				It("returns the error when the streamsMap was closed", func() {
+					testErr := errors.New("test error")
+					m.CloseWithError(testErr)
+					_, err := m.OpenStream()
+					Expect(err).To(MatchError(testErr))
+				})
+
 				Context("counting streams", func() {
 					var maxNumStreams int
 
