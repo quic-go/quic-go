@@ -34,10 +34,8 @@ func (m *mockCryptoSetup) GetSealerWithEncryptionLevel(protocol.EncryptionLevel)
 		return append(src, bytes.Repeat([]byte{0}, 12)...)
 	}, nil
 }
-func (m *mockCryptoSetup) DiversificationNonce() []byte {
-	return m.divNonce
-}
-func (m *mockCryptoSetup) SetDiversificationNonce([]byte) { panic("not implemented") }
+func (m *mockCryptoSetup) DiversificationNonce() []byte            { return m.divNonce }
+func (m *mockCryptoSetup) SetDiversificationNonce(divNonce []byte) { m.divNonce = divNonce }
 
 var _ handshake.CryptoSetup = &mockCryptoSetup{}
 
