@@ -31,6 +31,7 @@ type Client struct {
 
 	hostname        string
 	encryptionLevel protocol.EncryptionLevel
+	handshakeErr    error
 	dialChan        chan struct{} // will be closed once the handshake is complete and the header stream has been opened
 
 	session       quic.Session
@@ -60,8 +61,12 @@ func NewClient(t *QuicRoundTripper, tlsConfig *tls.Config, hostname string) *Cli
 }
 
 // Dial dials the connection
-func (c *Client) Dial() error {
-	var err error
+func (c *Client) Dial() (err error) {
+	defer func() {
+		c.handshakeErr = err
+		close(c.dialChan)
+	}()
+
 	c.session, err = c.dialAddr(c.hostname, c.config)
 	if err != nil {
 		return err
@@ -77,8 +82,7 @@ func (c *Client) Dial() error {
 	}
 	c.requestWriter = newRequestWriter(c.headerStream)
 	go c.handleHeaderStream()
-	close(c.dialChan)
-	return nil
+	return
 }
 
 func (c *Client) handleHeaderStream() {
@@ -143,7 +147,12 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 
 	hasBody := (req.Body != nil)
 
-	<-c.dialChan // wait until the handshake has completed
+	// wait until the handshake is complete
+	<-c.dialChan
+	if c.handshakeErr != nil {
+		return nil, c.handshakeErr
+	}
+
 	responseChan := make(chan *http.Response)
 	dataStream, err := c.session.OpenStreamSync()
 	if err != nil {

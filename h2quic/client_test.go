@@ -92,6 +92,23 @@ var _ = Describe("Client", func() {
 		Expect(err).To(MatchError(testErr))
 	})
 
+	It("returns a request when dial fails", func() {
+		testErr := errors.New("dial error")
+		client.dialAddr = func(hostname string, conf *quic.Config) (quic.Session, error) {
+			return nil, testErr
+		}
+		request, err := http.NewRequest("https", "https://quic.clemente.io:1337/file1.dat", nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		var doErr error
+		go func() {
+			_, doErr = client.Do(request)
+		}()
+		err = client.Dial()
+		Expect(err).To(MatchError(testErr))
+		Eventually(func() error { return doErr }).Should(MatchError(testErr))
+	})
+
 	Context("Doing requests", func() {
 		var request *http.Request
 		var dataStream *mockStream
