@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"time"
 )
 
 // LogLevel of quic-go
@@ -25,8 +26,9 @@ const (
 )
 
 var (
-	logLevel           = LogLevelNothing
-	out      io.Writer = os.Stdout
+	logLevel             = LogLevelNothing
+	out        io.Writer = os.Stdout
+	timeFormat           = "15:04:05.000"
 
 	mutex sync.Mutex
 )
@@ -41,10 +43,17 @@ func SetLogLevel(level LogLevel) {
 	logLevel = level
 }
 
+// SetLogTimeFormat sets the format of the timestamp
+// an empty string disables the logging of timestamps
+func SetLogTimeFormat(format string) {
+	timeFormat = format
+}
+
 // Debugf logs something
 func Debugf(format string, args ...interface{}) {
 	if logLevel == LogLevelDebug {
 		mutex.Lock()
+		logTimestamp()
 		fmt.Fprintf(out, format+"\n", args...)
 		mutex.Unlock()
 	}
@@ -54,6 +63,7 @@ func Debugf(format string, args ...interface{}) {
 func Infof(format string, args ...interface{}) {
 	if logLevel <= LogLevelInfo {
 		mutex.Lock()
+		logTimestamp()
 		fmt.Fprintf(out, format+"\n", args...)
 		mutex.Unlock()
 	}
@@ -63,8 +73,15 @@ func Infof(format string, args ...interface{}) {
 func Errorf(format string, args ...interface{}) {
 	if logLevel <= LogLevelError {
 		mutex.Lock()
+		logTimestamp()
 		fmt.Fprintf(out, format+"\n", args...)
 		mutex.Unlock()
+	}
+}
+
+func logTimestamp() {
+	if len(timeFormat) > 0 {
+		fmt.Fprintf(out, time.Now().Format(timeFormat)+" ")
 	}
 }
 

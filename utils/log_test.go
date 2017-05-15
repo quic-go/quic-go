@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"os"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -36,7 +37,9 @@ var _ = Describe("Log", func() {
 		Debugf("debug")
 		Infof("info")
 		Errorf("err")
-		Expect(b.Bytes()).To(Equal([]byte("err\n")))
+		Expect(b.Bytes()).To(ContainSubstring("err\n"))
+		Expect(b.Bytes()).ToNot(ContainSubstring("info"))
+		Expect(b.Bytes()).ToNot(ContainSubstring("debug"))
 	})
 
 	It("log level info", func() {
@@ -44,7 +47,9 @@ var _ = Describe("Log", func() {
 		Debugf("debug")
 		Infof("info")
 		Errorf("err")
-		Expect(b.Bytes()).To(Equal([]byte("info\nerr\n")))
+		Expect(b.Bytes()).To(ContainSubstring("err\n"))
+		Expect(b.Bytes()).To(ContainSubstring("info\n"))
+		Expect(b.Bytes()).ToNot(ContainSubstring("debug"))
 	})
 
 	It("log level debug", func() {
@@ -52,7 +57,26 @@ var _ = Describe("Log", func() {
 		Debugf("debug")
 		Infof("info")
 		Errorf("err")
-		Expect(b.Bytes()).To(Equal([]byte("debug\ninfo\nerr\n")))
+		Expect(b.Bytes()).To(ContainSubstring("err\n"))
+		Expect(b.Bytes()).To(ContainSubstring("info\n"))
+		Expect(b.Bytes()).To(ContainSubstring("debug\n"))
+	})
+
+	It("doesn't add a timestamp if the time format is empty", func() {
+		SetLogLevel(LogLevelDebug)
+		SetLogTimeFormat("")
+		Debugf("debug")
+		Expect(b.Bytes()).To(Equal([]byte("debug\n")))
+	})
+
+	It("adds a timestamp", func() {
+		format := "Jan 2, 2006 at 3:04:05pm (MST)"
+		SetLogTimeFormat(format)
+		SetLogLevel(LogLevelInfo)
+		Infof("info")
+		t, err := time.Parse(format, string(b.Bytes()[:b.Len()-6]))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(t).To(BeTemporally("~", time.Now(), 2*time.Second))
 	})
 
 	It("says whether debug is enabled", func() {
