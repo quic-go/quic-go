@@ -166,6 +166,9 @@ func (m *streamsMap) OpenStream() (*stream, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
+	if m.closeErr != nil {
+		return nil, m.closeErr
+	}
 	return m.openStreamImpl()
 }
 
