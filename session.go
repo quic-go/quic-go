@@ -265,7 +265,7 @@ runLoop:
 					continue
 				}
 				s.close(err)
-				break runLoop
+				continue
 			}
 			// This is a bit unclean, but works properly, since the packet always
 			// begins with the public header and we never copy it.
