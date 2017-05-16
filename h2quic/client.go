@@ -22,15 +22,17 @@ import (
 
 // Client is a HTTP2 client doing QUIC requests
 type Client struct {
-	mutex             sync.RWMutex
-	cryptoChangedCond sync.Cond
+	mutex sync.RWMutex
 
-	config *quic.Config
+	dialAddr func(hostname string, config *quic.Config) (quic.Session, error)
+	config   *quic.Config
 
 	t *QuicRoundTripper
 
 	hostname        string
 	encryptionLevel protocol.EncryptionLevel
+	handshakeErr    error
+	dialChan        chan struct{} // will be closed once the handshake is complete and the header stream has been opened
 
 	session       quic.Session
 	headerStream  quic.Stream
@@ -44,57 +46,32 @@ var _ h2quicClient = &Client{}
 
 // NewClient creates a new client
 func NewClient(t *QuicRoundTripper, tlsConfig *tls.Config, hostname string) *Client {
-	c := &Client{
+	return &Client{
 		t:               t,
+		dialAddr:        quic.DialAddr,
 		hostname:        authorityAddr("https", hostname),
 		responses:       make(map[protocol.StreamID]chan *http.Response),
 		encryptionLevel: protocol.EncryptionUnencrypted,
+		config: &quic.Config{
+			TLSConfig:                     tlsConfig,
+			RequestConnectionIDTruncation: true,
+		},
+		dialChan: make(chan struct{}),
 	}
-	c.cryptoChangedCond = sync.Cond{L: &c.mutex}
-	c.config = &quic.Config{
-		ConnState:                     c.connStateCallback,
-		TLSConfig:                     tlsConfig,
-		RequestConnectionIDTruncation: true,
-	}
-	return c
 }
 
 // Dial dials the connection
-func (c *Client) Dial() error {
-	_, err := quic.DialAddr(c.hostname, c.config)
-	return err
-}
+func (c *Client) Dial() (err error) {
+	defer func() {
+		c.handshakeErr = err
+		close(c.dialChan)
+	}()
 
-// connStateCallback is the ConnStateCallback passed to the quic.Dial
-// this function is called in a separate go-routine
-func (c *Client) connStateCallback(sess quic.Session, state quic.ConnState) {
-	c.mutex.Lock()
-	if c.session == nil {
-		c.session = sess
+	c.session, err = c.dialAddr(c.hostname, c.config)
+	if err != nil {
+		return err
 	}
-	switch state {
-	case quic.ConnStateVersionNegotiated:
-		err := c.versionNegotiateCallback()
-		if err != nil {
-			c.Close(err)
-		}
-	case quic.ConnStateSecure:
-		utils.Debugf("is secure")
-		// only save the encryption level if it is now higher than it was before
-		if c.encryptionLevel < protocol.EncryptionSecure {
-			c.encryptionLevel = protocol.EncryptionSecure
-		}
-		c.cryptoChangedCond.Broadcast()
-	case quic.ConnStateForwardSecure:
-		utils.Debugf("is forward secure")
-		c.encryptionLevel = protocol.EncryptionForwardSecure
-		c.cryptoChangedCond.Broadcast()
-	}
-	c.mutex.Unlock()
-}
 
-func (c *Client) versionNegotiateCallback() error {
-	var err error
 	// once the version has been negotiated, open the header stream
 	c.headerStream, err = c.session.OpenStream()
 	if err != nil {
@@ -105,7 +82,7 @@ func (c *Client) versionNegotiateCallback() error {
 	}
 	c.requestWriter = newRequestWriter(c.headerStream)
 	go c.handleHeaderStream()
-	return nil
+	return
 }
 
 func (c *Client) handleHeaderStream() {
@@ -152,7 +129,7 @@ func (c *Client) handleHeaderStream() {
 	utils.Debugf("Error handling header stream %d: %s", lastStream, c.headerErr.Error())
 	c.mutex.Lock()
 	for _, responseChan := range c.responses {
-		responseChan <- nil
+		close(responseChan)
 	}
 	c.mutex.Unlock()
 }
@@ -170,17 +147,20 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 
 	hasBody := (req.Body != nil)
 
-	c.mutex.Lock()
-	for c.encryptionLevel != protocol.EncryptionForwardSecure {
-		c.cryptoChangedCond.Wait()
+	// wait until the handshake is complete
+	<-c.dialChan
+	if c.handshakeErr != nil {
+		return nil, c.handshakeErr
 	}
-	hdrChan := make(chan *http.Response)
+
+	responseChan := make(chan *http.Response)
 	dataStream, err := c.session.OpenStreamSync()
 	if err != nil {
 		c.Close(err)
 		return nil, err
 	}
-	c.responses[dataStream.StreamID()] = hdrChan
+	c.mutex.Lock()
+	c.responses[dataStream.StreamID()] = responseChan
 	c.mutex.Unlock()
 
 	var requestedGzip bool
@@ -213,7 +193,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 
 	for !(bodySent && receivedResponse) {
 		select {
-		case res = <-hdrChan:
+		case res = <-responseChan:
 			receivedResponse = true
 			c.mutex.Lock()
 			delete(c.responses, dataStream.StreamID())

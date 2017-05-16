@@ -125,12 +125,12 @@ func areSessionsRunning() bool {
 
 var _ = Describe("Session", func() {
 	var (
-		sess        *session
-		clientSess  *session
-		scfg        *handshake.ServerConfig
-		mconn       *mockConnection
-		cpm         *mockConnectionParametersManager
-		aeadChanged chan<- protocol.EncryptionLevel
+		sess          *session
+		scfg          *handshake.ServerConfig
+		mconn         *mockConnection
+		cpm           *mockConnectionParametersManager
+		aeadChanged   chan<- protocol.EncryptionLevel
+		handshakeChan <-chan handshakeEvent
 	)
 
 	BeforeEach(func() {
@@ -144,12 +144,12 @@ var _ = Describe("Session", func() {
 		Expect(err).NotTo(HaveOccurred())
 		scfg, err = handshake.NewServerConfig(kex, certChain)
 		Expect(err).NotTo(HaveOccurred())
-		pSess, err := newSession(
+		var pSess Session
+		pSess, handshakeChan, err = newSession(
 			mconn,
 			protocol.Version35,
 			0,
 			scfg,
-			func(Session, bool) {},
 			populateServerConfig(&Config{}),
 		)
 		Expect(err).NotTo(HaveOccurred())
@@ -161,18 +161,6 @@ var _ = Describe("Session", func() {
 
 		cpm = &mockConnectionParametersManager{idleTime: 60 * time.Second}
 		sess.connectionParameters = cpm
-
-		clientSess, err = newClientSession(
-			mconn,
-			"hostname",
-			protocol.Version35,
-			0,
-			func(Session, bool) {},
-			populateClientConfig(&Config{}),
-			nil,
-		)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(clientSess.streamsMap.openStreams).To(HaveLen(1)) // Crypto stream
 	})
 
 	AfterEach(func() {
@@ -182,12 +170,11 @@ var _ = Describe("Session", func() {
 	Context("source address", func() {
 		It("uses the IP address if given an UDP connection", func() {
 			conn := &conn{currentAddr: &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200)[12:], Port: 1337}}
-			sess, err := newSession(
+			sess, _, err := newSession(
 				conn,
 				protocol.VersionWhatever,
 				0,
 				scfg,
-				func(Session, bool) {},
 				populateServerConfig(&Config{}),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -198,12 +185,11 @@ var _ = Describe("Session", func() {
 			conn := &conn{
 				currentAddr: &net.TCPAddr{IP: net.IPv4(192, 168, 100, 200)[12:], Port: 1337},
 			}
-			sess, err := newSession(
+			sess, _, err := newSession(
 				conn,
 				protocol.VersionWhatever,
 				0,
 				scfg,
-				func(Session, bool) {},
 				populateServerConfig(&Config{}),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -593,6 +579,59 @@ var _ = Describe("Session", func() {
 		close(done)
 	})
 
+	Context("waiting until the handshake completes", func() {
+		It("waits until the handshake is complete", func(done Done) {
+			go sess.run()
+
+			var waitReturned bool
+			go func() {
+				defer GinkgoRecover()
+				err := sess.WaitUntilHandshakeComplete()
+				Expect(err).ToNot(HaveOccurred())
+				waitReturned = true
+			}()
+			aeadChanged <- protocol.EncryptionForwardSecure
+			Consistently(func() bool { return waitReturned }).Should(BeFalse())
+			close(aeadChanged)
+			Eventually(func() bool { return waitReturned }).Should(BeTrue())
+			Expect(sess.Close(nil)).To(Succeed())
+			close(done)
+		})
+
+		It("errors if the handshake fails", func(done Done) {
+			testErr := errors.New("crypto error")
+			sess.cryptoSetup = &mockCryptoSetup{handleErr: testErr}
+			go sess.run()
+			err := sess.WaitUntilHandshakeComplete()
+			Expect(err).To(MatchError(testErr))
+			close(done)
+		}, 0.5)
+
+		It("returns when Close is called", func(done Done) {
+			testErr := errors.New("close error")
+			go sess.run()
+			var waitReturned bool
+			go func() {
+				defer GinkgoRecover()
+				err := sess.WaitUntilHandshakeComplete()
+				Expect(err).To(MatchError(testErr))
+				waitReturned = true
+			}()
+			sess.Close(testErr)
+			Eventually(func() bool { return waitReturned }).Should(BeTrue())
+			close(done)
+		})
+
+		It("doesn't wait if the handshake is already completed", func(done Done) {
+			go sess.run()
+			close(aeadChanged)
+			err := sess.WaitUntilHandshakeComplete()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(sess.Close(nil)).To(Succeed())
+			close(done)
+		})
+	})
+
 	Context("accepting streams", func() {
 		It("waits for new streams", func() {
 			var str Stream
@@ -696,7 +735,6 @@ var _ = Describe("Session", func() {
 
 		BeforeEach(func() {
 			sess.unpacker = &mockUnpacker{}
-			clientSess.unpacker = &mockUnpacker{}
 			hdr = &PublicHeader{PacketNumberLen: protocol.PacketNumberLen6}
 		})
 
@@ -749,32 +787,6 @@ var _ = Describe("Session", func() {
 			hdr.PacketNumber = 5
 			err = sess.handlePacketImpl(&receivedPacket{publicHeader: hdr})
 			Expect(err).ToNot(HaveOccurred())
-		})
-
-		It("passes the diversification nonce to the cryptoSetup, if it is a client", func() {
-			go clientSess.run()
-			hdr.PacketNumber = 5
-			hdr.DiversificationNonce = []byte("foobar")
-			err := clientSess.handlePacketImpl(&receivedPacket{publicHeader: hdr})
-			Expect(err).ToNot(HaveOccurred())
-			Eventually(func() []byte {
-				return *(*[]byte)(unsafe.Pointer(reflect.ValueOf(clientSess.cryptoSetup).Elem().FieldByName("diversificationNonce").UnsafeAddr()))
-			}).Should(Equal(hdr.DiversificationNonce))
-			Expect(clientSess.Close(nil)).To(Succeed())
-		})
-
-		It("passes the transport parameters to the cryptoSetup, as a client", func() {
-			s, err := newClientSession(
-				nil,
-				"hostname",
-				protocol.Version35,
-				0,
-				func(Session, bool) {},
-				populateClientConfig(&Config{RequestConnectionIDTruncation: true}),
-				nil,
-			)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(*(*bool)(unsafe.Pointer(reflect.ValueOf(s.cryptoSetup).Elem().FieldByName("params").Elem().FieldByName("RequestConnectionIDTruncation").UnsafeAddr()))).To(BeTrue())
 		})
 
 		Context("updating the remote address", func() {
@@ -1193,13 +1205,14 @@ var _ = Describe("Session", func() {
 		})
 	})
 
-	It("tells the packetPacker when forward-secure encryption is used", func() {
+	It("tells the packetPacker when forward-secure encryption is used", func(done Done) {
 		go sess.run()
-		defer sess.Close(nil)
 		aeadChanged <- protocol.EncryptionSecure
 		Consistently(func() bool { return sess.packer.isForwardSecure }).Should(BeFalse())
 		aeadChanged <- protocol.EncryptionForwardSecure
 		Eventually(func() bool { return sess.packer.isForwardSecure }).Should(BeTrue())
+		Expect(sess.Close(nil)).To(Succeed())
+		close(done)
 	})
 
 	It("closes when crypto stream errors", func() {
@@ -1299,39 +1312,45 @@ var _ = Describe("Session", func() {
 		})
 	})
 
-	It("calls the cryptoChangeCallback when the AEAD changes", func(done Done) {
-		var callbackCalled bool
-		var callbackCalledWith bool
-		var callbackSession Session
-		cb := func(s Session, p bool) {
-			callbackCalled = true
-			callbackCalledWith = p
-			callbackSession = s
-		}
-		sess.cryptoChangeCallback = cb
-		aeadChanged <- protocol.EncryptionSecure
+	It("send a handshake event on the handshakeChan when the AEAD changes to secure", func(done Done) {
 		go sess.run()
-		defer sess.Close(nil)
-		Eventually(func() bool { return callbackCalled }).Should(BeTrue())
-		Expect(callbackCalledWith).To(BeFalse())
-		Expect(callbackSession).To(Equal(sess))
+		aeadChanged <- protocol.EncryptionSecure
+		Eventually(handshakeChan).Should(Receive(&handshakeEvent{encLevel: protocol.EncryptionSecure}))
+		Expect(sess.Close(nil)).To(Succeed())
 		close(done)
 	})
 
-	It("calls the cryptoChangeCallback when the AEAD changes to forward secure encryption", func(done Done) {
-		var callbackCalledWith bool
-		var callbackSession Session
-		cb := func(s Session, p bool) {
-			callbackSession = s
-			callbackCalledWith = p
-		}
-		sess.cryptoChangeCallback = cb
-		aeadChanged <- protocol.EncryptionForwardSecure
-		close(aeadChanged)
+	It("send a handshake event on the handshakeChan when the AEAD changes to forward-secure", func(done Done) {
 		go sess.run()
-		defer sess.Close(nil)
-		Eventually(func() bool { return callbackCalledWith }).Should(BeTrue())
-		Expect(callbackSession).To(Equal(sess))
+		aeadChanged <- protocol.EncryptionForwardSecure
+		Eventually(handshakeChan).Should(Receive(&handshakeEvent{encLevel: protocol.EncryptionForwardSecure}))
+		Expect(sess.Close(nil)).To(Succeed())
+		close(done)
+	})
+
+	It("closes the handshakeChan when the handshake completes", func(done Done) {
+		go sess.run()
+		close(aeadChanged)
+		Eventually(handshakeChan).Should(BeClosed())
+		Expect(sess.Close(nil)).To(Succeed())
+		close(done)
+	})
+
+	It("passes errors to the handshakeChan", func(done Done) {
+		testErr := errors.New("handshake error")
+		go sess.run()
+		Expect(sess.Close(nil)).To(Succeed())
+		Expect(handshakeChan).To(Receive(&handshakeEvent{err: testErr}))
+		close(done)
+	})
+
+	It("does not block if an error occurs", func(done Done) {
+		// this test basically tests that the handshakeChan has a capacity of 3
+		// The session needs to run (and close) properly, even if no one is receiving from the handshakeChan
+		go sess.run()
+		aeadChanged <- protocol.EncryptionSecure
+		aeadChanged <- protocol.EncryptionForwardSecure
+		Expect(sess.Close(nil)).To(Succeed())
 		close(done)
 	})
 
@@ -1485,5 +1504,66 @@ var _ = Describe("Session", func() {
 		addr := &net.UDPAddr{IP: net.IPv4(1, 2, 7, 1), Port: 7331}
 		mconn.remoteAddr = addr
 		Expect(sess.RemoteAddr()).To(Equal(addr))
+	})
+})
+
+var _ = Describe("Client Session", func() {
+	var (
+		sess        *session
+		mconn       *mockConnection
+		aeadChanged chan<- protocol.EncryptionLevel
+	)
+
+	BeforeEach(func() {
+		Eventually(areSessionsRunning).Should(BeFalse())
+
+		mconn = &mockConnection{
+			remoteAddr: &net.UDPAddr{},
+		}
+		sessP, _, err := newClientSession(
+			mconn,
+			"hostname",
+			protocol.Version35,
+			0,
+			populateClientConfig(&Config{}),
+			nil,
+		)
+		sess = sessP.(*session)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(sess.streamsMap.openStreams).To(HaveLen(1)) // Crypto stream
+		// we need an aeadChanged chan that we can write to
+		// since type assertions on chans are not possible, we have to extract it from the CryptoSetup
+		aeadChanged = *(*chan<- protocol.EncryptionLevel)(unsafe.Pointer(reflect.ValueOf(sess.cryptoSetup).Elem().FieldByName("aeadChanged").UnsafeAddr()))
+	})
+
+	Context("receiving packets", func() {
+		var hdr *PublicHeader
+
+		BeforeEach(func() {
+			hdr = &PublicHeader{PacketNumberLen: protocol.PacketNumberLen6}
+			sess.unpacker = &mockUnpacker{}
+		})
+
+		It("passes the diversification nonce to the cryptoSetup", func() {
+			go sess.run()
+			hdr.PacketNumber = 5
+			hdr.DiversificationNonce = []byte("foobar")
+			err := sess.handlePacketImpl(&receivedPacket{publicHeader: hdr})
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(func() []byte {
+				return *(*[]byte)(unsafe.Pointer(reflect.ValueOf(sess.cryptoSetup).Elem().FieldByName("diversificationNonce").UnsafeAddr()))
+			}).Should(Equal(hdr.DiversificationNonce))
+			Expect(sess.Close(nil)).To(Succeed())
+		})
+	})
+
+	It("does not block if an error occurs", func(done Done) {
+		// this test basically tests that the handshakeChan has a capacity of 3
+		// The session needs to run (and close) properly, even if no one is receiving from the handshakeChan
+		go sess.run()
+		aeadChanged <- protocol.EncryptionSecure
+		aeadChanged <- protocol.EncryptionForwardSecure
+		Expect(sess.Close(nil)).To(Succeed())
+		close(done)
 	})
 })

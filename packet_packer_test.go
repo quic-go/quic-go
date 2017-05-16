@@ -13,12 +13,14 @@ import (
 )
 
 type mockCryptoSetup struct {
+	handleErr    error
 	divNonce     []byte
 	encLevelSeal protocol.EncryptionLevel
 }
 
-func (m *mockCryptoSetup) HandleCryptoStream() error { return nil }
-
+func (m *mockCryptoSetup) HandleCryptoStream() error {
+	return m.handleErr
+}
 func (m *mockCryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error) {
 	return nil, protocol.EncryptionUnspecified, nil
 }

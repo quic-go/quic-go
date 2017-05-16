@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"net"
-	"reflect"
-	"unsafe"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
@@ -16,35 +14,37 @@ import (
 
 var _ = Describe("Client", func() {
 	var (
-		cl                              *client
-		config                          *Config
-		sess                            *mockSession
-		packetConn                      *mockPacketConn
-		addr                            net.Addr
-		versionNegotiateConnStateCalled bool
+		cl         *client
+		config     *Config
+		sess       *mockSession
+		packetConn *mockPacketConn
+		addr       net.Addr
+
+		originalClientSessConstructor func(conn connection, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, config *Config, negotiatedVersions []protocol.VersionNumber) (packetHandler, <-chan handshakeEvent, error)
 	)
 
 	BeforeEach(func() {
+		originalClientSessConstructor = newClientSession
 		Eventually(areSessionsRunning).Should(BeFalse())
-		versionNegotiateConnStateCalled = false
+		msess, _, _ := newMockSession(nil, 0, 0, nil, nil)
+		sess = msess.(*mockSession)
 		packetConn = &mockPacketConn{}
 		config = &Config{
-			ConnState: func(_ Session, state ConnState) {
-				if state == ConnStateVersionNegotiated {
-					versionNegotiateConnStateCalled = true
-				}
-			},
 			Versions: []protocol.VersionNumber{protocol.SupportedVersions[0], 77, 78},
 		}
 		addr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
-		sess = &mockSession{connectionID: 0x1337}
 		cl = &client{
 			config:       config,
 			connectionID: 0x1337,
 			session:      sess,
 			version:      protocol.SupportedVersions[0],
 			conn:         &conn{pconn: packetConn, currentAddr: addr},
+			errorChan:    make(chan struct{}),
 		}
+	})
+
+	AfterEach(func() {
+		newClientSession = originalClientSessConstructor
 	})
 
 	AfterEach(func() {
@@ -55,13 +55,102 @@ var _ = Describe("Client", func() {
 	})
 
 	Context("Dialing", func() {
-		It("creates a new client", func() {
-			packetConn.dataToRead = []byte{0x0, 0x1, 0x0}
-			sess, err := Dial(packetConn, addr, "quic.clemente.io:1337", config)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(*(*[]protocol.VersionNumber)(unsafe.Pointer(reflect.ValueOf(sess.(*session).cryptoSetup).Elem().FieldByName("negotiatedVersions").UnsafeAddr()))).To(BeNil())
-			Expect(*(*string)(unsafe.Pointer(reflect.ValueOf(sess.(*session).cryptoSetup).Elem().FieldByName("hostname").UnsafeAddr()))).To(Equal("quic.clemente.io"))
-			sess.Close(nil)
+		BeforeEach(func() {
+			newClientSession = func(
+				_ connection,
+				_ string,
+				_ protocol.VersionNumber,
+				_ protocol.ConnectionID,
+				_ *Config,
+				_ []protocol.VersionNumber,
+			) (packetHandler, <-chan handshakeEvent, error) {
+				return sess, sess.handshakeChan, nil
+			}
+		})
+
+		It("dials non-forward-secure", func(done Done) {
+			var dialedSess Session
+			go func() {
+				defer GinkgoRecover()
+				var err error
+				dialedSess, err = DialNonFWSecure(packetConn, addr, "quic.clemente.io:1337", config)
+				Expect(err).ToNot(HaveOccurred())
+			}()
+			Consistently(func() Session { return dialedSess }).Should(BeNil())
+			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
+			Eventually(func() Session { return dialedSess }).ShouldNot(BeNil())
+			close(done)
+		})
+
+		It("dials a non-forward-secure address", func(done Done) {
+			var dialedSess Session
+			go func() {
+				defer GinkgoRecover()
+				var err error
+				dialedSess, err = DialAddrNonFWSecure("localhost:18901", config)
+				Expect(err).ToNot(HaveOccurred())
+			}()
+			Consistently(func() Session { return dialedSess }).Should(BeNil())
+			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
+			Eventually(func() Session { return dialedSess }).ShouldNot(BeNil())
+			close(done)
+		})
+
+		It("Dial only returns after the handshake is complete", func(done Done) {
+			var dialedSess Session
+			go func() {
+				defer GinkgoRecover()
+				var err error
+				dialedSess, err = Dial(packetConn, addr, "quic.clemente.io:1337", config)
+				Expect(err).ToNot(HaveOccurred())
+			}()
+			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
+			Consistently(func() Session { return dialedSess }).Should(BeNil())
+			close(sess.handshakeComplete)
+			Eventually(func() Session { return dialedSess }).ShouldNot(BeNil())
+			close(done)
+		})
+
+		It("resolves the address", func(done Done) {
+			var cconn connection
+			newClientSession = func(
+				conn connection,
+				_ string,
+				_ protocol.VersionNumber,
+				_ protocol.ConnectionID,
+				_ *Config,
+				_ []protocol.VersionNumber,
+			) (packetHandler, <-chan handshakeEvent, error) {
+				cconn = conn
+				return sess, nil, nil
+			}
+			go DialAddr("localhost:17890", &Config{})
+			Eventually(func() connection { return cconn }).ShouldNot(BeNil())
+			Expect(cconn.RemoteAddr().String()).To(Equal("127.0.0.1:17890"))
+			close(done)
+		})
+
+		It("returns an error that occurs while waiting for the connection to become secure", func(done Done) {
+			testErr := errors.New("early handshake error")
+			var dialErr error
+			go func() {
+				_, dialErr = Dial(packetConn, addr, "quic.clemente.io:1337", config)
+			}()
+			sess.handshakeChan <- handshakeEvent{err: testErr}
+			Eventually(func() error { return dialErr }).Should(MatchError(testErr))
+			close(done)
+		})
+
+		It("returns an error that occurs while waiting for the handshake to complete", func(done Done) {
+			testErr := errors.New("late handshake error")
+			var dialErr error
+			go func() {
+				_, dialErr = Dial(packetConn, addr, "quic.clemente.io:1337", config)
+			}()
+			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
+			sess.handshakeComplete <- testErr
+			Eventually(func() error { return dialErr }).Should(MatchError(testErr))
+			close(done)
 		})
 
 		It("uses all supported versions, if none are specified in the quic.Config", func() {
@@ -69,53 +158,121 @@ var _ = Describe("Client", func() {
 			Expect(c.Versions).To(Equal(protocol.SupportedVersions))
 		})
 
-		It("errors when receiving an invalid first packet from the server", func() {
+		It("errors when receiving an invalid first packet from the server", func(done Done) {
 			packetConn.dataToRead = []byte{0xff}
-			sess, err := Dial(packetConn, addr, "quic.clemente.io:1337", config)
+			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", config)
 			Expect(err).To(HaveOccurred())
-			Expect(sess).To(BeNil())
+			close(done)
 		})
 
-		It("errors when receiving an error from the connection", func() {
+		It("errors when receiving an error from the connection", func(done Done) {
 			testErr := errors.New("connection error")
 			packetConn.readErr = testErr
 			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", config)
 			Expect(err).To(MatchError(testErr))
+			close(done)
 		})
 
-		// now we're only testing that Dial doesn't return directly after version negotiation
-		PIt("doesn't return after version negotiation is established if no ConnState is defined", func() {
-			// TODO(#506): Fix test
-			packetConn.dataToRead = []byte{0x0, 0x1, 0x0}
-			config.ConnState = nil
-			var dialReturned bool
-			go func() {
-				defer GinkgoRecover()
-				_, err := Dial(packetConn, addr, "quic.clemente.io:1337", config)
-				Expect(err).ToNot(HaveOccurred())
-				dialReturned = true
-			}()
-			Consistently(func() bool { return dialReturned }).Should(BeFalse())
+		It("errors if it can't create a session", func() {
+			testErr := errors.New("error creating session")
+			newClientSession = func(
+				_ connection,
+				_ string,
+				_ protocol.VersionNumber,
+				_ protocol.ConnectionID,
+				_ *Config,
+				_ []protocol.VersionNumber,
+			) (packetHandler, <-chan handshakeEvent, error) {
+				return nil, nil, testErr
+			}
+			_, err := DialNonFWSecure(packetConn, addr, "quic.clemente.io:1337", config)
+			Expect(err).To(MatchError(testErr))
 		})
 
-		It("only establishes a connection once it is forward-secure if no ConnState is defined", func() {
-			config.ConnState = nil
-			client := &client{conn: &conn{pconn: packetConn, currentAddr: addr}, config: config}
-			client.connStateChangeOrErrCond.L = &client.mutex
-			var returned bool
-			go func() {
-				defer GinkgoRecover()
-				_, err := client.establishConnection()
+		Context("version negotiation", func() {
+			It("recognizes that a packet without VersionFlag means that the server accepted the suggested version", func() {
+				ph := PublicHeader{
+					PacketNumber:    1,
+					PacketNumberLen: protocol.PacketNumberLen2,
+					ConnectionID:    0x1337,
+				}
+				b := &bytes.Buffer{}
+				err := ph.Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
 				Expect(err).ToNot(HaveOccurred())
-				returned = true
-			}()
-			Consistently(func() bool { return returned }).Should(BeFalse())
-			// switch to a secure connection
-			client.cryptoChangeCallback(nil, false)
-			Consistently(func() bool { return returned }).Should(BeFalse())
-			// switch to a forward-secure connection
-			client.cryptoChangeCallback(nil, true)
-			Eventually(func() bool { return returned }).Should(BeTrue())
+				err = cl.handlePacket(nil, b.Bytes())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cl.versionNegotiated).To(BeTrue())
+			})
+
+			It("changes the version after receiving a version negotiation packet", func() {
+				var negotiatedVersions []protocol.VersionNumber
+				newClientSession = func(
+					_ connection,
+					_ string,
+					_ protocol.VersionNumber,
+					connectionID protocol.ConnectionID,
+					_ *Config,
+					negotiatedVersionsP []protocol.VersionNumber,
+				) (packetHandler, <-chan handshakeEvent, error) {
+					negotiatedVersions = negotiatedVersionsP
+					return &mockSession{
+						connectionID: connectionID,
+					}, nil, nil
+				}
+
+				newVersion := protocol.VersionNumber(77)
+				Expect(config.Versions).To(ContainElement(newVersion))
+				Expect(newVersion).ToNot(Equal(cl.version))
+				Expect(sess.packetCount).To(BeZero())
+				cl.connectionID = 0x1337
+				err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{newVersion}))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cl.version).To(Equal(newVersion))
+				Expect(cl.versionNegotiated).To(BeTrue())
+				// it swapped the sessions
+				// Expect(cl.session).ToNot(Equal(sess))
+				Expect(cl.connectionID).ToNot(Equal(0x1337)) // it generated a new connection ID
+				Expect(err).ToNot(HaveOccurred())
+				// it didn't pass the version negoation packet to the old session (since it has no payload)
+				Expect(sess.packetCount).To(BeZero())
+				Expect(negotiatedVersions).To(Equal([]protocol.VersionNumber{newVersion}))
+			})
+
+			It("errors if no matching version is found", func() {
+				err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{1}))
+				Expect(err).To(MatchError(qerr.InvalidVersion))
+			})
+
+			It("errors if the version is supported by quic-go, but disabled by the quic.Config", func() {
+				v := protocol.SupportedVersions[1]
+				Expect(v).ToNot(Equal(cl.version))
+				Expect(config.Versions).ToNot(ContainElement(v))
+				err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{v}))
+				Expect(err).To(MatchError(qerr.InvalidVersion))
+			})
+
+			It("changes to the version preferred by the quic.Config", func() {
+				err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{config.Versions[2], config.Versions[1]}))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cl.version).To(Equal(config.Versions[1]))
+			})
+
+			It("ignores delayed version negotiation packets", func() {
+				// if the version was not yet negotiated, handlePacket would return a VersionNegotiationMismatch error, see above test
+				cl.versionNegotiated = true
+				Expect(sess.packetCount).To(BeZero())
+				err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{1}))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cl.versionNegotiated).To(BeTrue())
+				Expect(sess.packetCount).To(BeZero())
+			})
+
+			It("drops version negotiation packets that contain the offered version", func() {
+				ver := cl.version
+				err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{ver}))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cl.version).To(Equal(ver))
+			})
 		})
 	})
 
@@ -124,39 +281,37 @@ var _ = Describe("Client", func() {
 		Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.InvalidPacketHeader))
 	})
 
-	// this test requires a real session (because it calls the close callback)
-	// and a real UDP conn (because it unblocks and errors when it is closed)
-	It("properly closes", func(done Done) {
-		Eventually(areSessionsRunning).Should(BeFalse())
-		udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
-		Expect(err).ToNot(HaveOccurred())
-		cl.conn = &conn{pconn: udpConn, currentAddr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}}
-		err = cl.createNewSession(nil)
-		Expect(err).ToNot(HaveOccurred())
-		Eventually(areSessionsRunning).Should(BeTrue())
-
-		var stoppedListening bool
+	It("creates new sessions with the right parameters", func(done Done) {
+		c := make(chan struct{})
+		var cconn connection
+		var hostname string
+		var version protocol.VersionNumber
+		var conf *Config
+		newClientSession = func(
+			connP connection,
+			hostnameP string,
+			versionP protocol.VersionNumber,
+			_ protocol.ConnectionID,
+			configP *Config,
+			_ []protocol.VersionNumber,
+		) (packetHandler, <-chan handshakeEvent, error) {
+			cconn = connP
+			hostname = hostnameP
+			version = versionP
+			conf = configP
+			close(c)
+			return sess, nil, nil
+		}
 		go func() {
-			cl.listen()
-			stoppedListening = true
+			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", config)
+			Expect(err).ToNot(HaveOccurred())
 		}()
-
-		testErr := errors.New("test error")
-		err = cl.session.Close(testErr)
-		Expect(err).ToNot(HaveOccurred())
-		Eventually(func() bool { return stoppedListening }).Should(BeTrue())
-		Eventually(areSessionsRunning).Should(BeFalse())
+		<-c
+		Expect(cconn.(*conn).pconn).To(Equal(packetConn))
+		Expect(hostname).To(Equal("quic.clemente.io"))
+		Expect(version).To(Equal(cl.version))
+		Expect(conf).To(Equal(config))
 		close(done)
-	}, 10)
-
-	It("creates new sessions with the right parameters", func() {
-		cl.session = nil
-		cl.hostname = "hostname"
-		err := cl.createNewSession(nil)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(cl.session).ToNot(BeNil())
-		Expect(cl.session.(*session).connectionID).To(Equal(cl.connectionID))
-		Expect(cl.session.(*session).version).To(Equal(cl.version))
 	})
 
 	Context("handling packets", func() {
@@ -198,82 +353,6 @@ var _ = Describe("Client", func() {
 			cl.listen()
 			Expect(sess.closed).To(BeTrue())
 			Expect(sess.closeReason).To(MatchError(testErr))
-		})
-	})
-
-	Context("version negotiation", func() {
-		It("recognizes that a packet without VersionFlag means that the server accepted the suggested version", func() {
-			ph := PublicHeader{
-				PacketNumber:    1,
-				PacketNumberLen: protocol.PacketNumberLen2,
-				ConnectionID:    0x1337,
-			}
-			b := &bytes.Buffer{}
-			err := ph.Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
-			Expect(err).ToNot(HaveOccurred())
-			err = cl.handlePacket(nil, b.Bytes())
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cl.connState).To(Equal(ConnStateVersionNegotiated))
-			Eventually(func() bool { return versionNegotiateConnStateCalled }).Should(BeTrue())
-		})
-
-		It("changes the version after receiving a version negotiation packet", func() {
-			newVersion := protocol.VersionNumber(77)
-			Expect(config.Versions).To(ContainElement(newVersion))
-			Expect(newVersion).ToNot(Equal(cl.version))
-			Expect(sess.packetCount).To(BeZero())
-			cl.connectionID = 0x1337
-			err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{newVersion}))
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cl.version).To(Equal(newVersion))
-			Expect(cl.connState).To(Equal(ConnStateVersionNegotiated))
-			Eventually(func() bool { return versionNegotiateConnStateCalled }).Should(BeTrue())
-			// it swapped the sessions
-			Expect(cl.session).ToNot(Equal(sess))
-			Expect(cl.connectionID).ToNot(Equal(0x1337)) // it generated a new connection ID
-			Expect(err).ToNot(HaveOccurred())
-			// it didn't pass the version negoation packet to the old session (since it has no payload)
-			Expect(sess.packetCount).To(BeZero())
-			// if the version negotiation packet was passed to the new session, it would end up as an undecryptable packet there
-			Expect(cl.session.(*session).undecryptablePackets).To(BeEmpty())
-			Expect(*(*[]protocol.VersionNumber)(unsafe.Pointer(reflect.ValueOf(cl.session.(*session).cryptoSetup).Elem().FieldByName("negotiatedVersions").UnsafeAddr()))).To(Equal([]protocol.VersionNumber{newVersion}))
-		})
-
-		It("errors if no matching version is found", func() {
-			err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{1}))
-			Expect(err).To(MatchError(qerr.InvalidVersion))
-		})
-
-		It("errors if the version is supported by quic-go, but disabled by the quic.Config", func() {
-			v := protocol.SupportedVersions[1]
-			Expect(v).ToNot(Equal(cl.version))
-			Expect(config.Versions).ToNot(ContainElement(v))
-			err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{v}))
-			Expect(err).To(MatchError(qerr.InvalidVersion))
-		})
-
-		It("changes to the version preferred by the quic.Config", func() {
-			err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{config.Versions[2], config.Versions[1]}))
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cl.version).To(Equal(config.Versions[1]))
-		})
-
-		It("ignores delayed version negotiation packets", func() {
-			// if the version was not yet negotiated, handlePacket would return a VersionNegotiationMismatch error, see above test
-			cl.connState = ConnStateVersionNegotiated
-			Expect(sess.packetCount).To(BeZero())
-			err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{1}))
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cl.connState).To(Equal(ConnStateVersionNegotiated))
-			Expect(sess.packetCount).To(BeZero())
-			Consistently(func() bool { return versionNegotiateConnStateCalled }).Should(BeFalse())
-		})
-
-		It("drops version negotiation packets that contain the offered version", func() {
-			ver := cl.version
-			err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{ver}))
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cl.version).To(Equal(ver))
 		})
 	})
 })

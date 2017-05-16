@@ -38,31 +38,17 @@ type Session interface {
 	Close(error) error
 }
 
-// ConnState is the status of the connection
-type ConnState int
-
-const (
-	// ConnStateInitial is the initial state
-	ConnStateInitial ConnState = iota
-	// ConnStateVersionNegotiated means that version negotiation is complete
-	ConnStateVersionNegotiated
-	// ConnStateSecure means that the connection is encrypted
-	ConnStateSecure
-	// ConnStateForwardSecure means that the connection is forward secure
-	ConnStateForwardSecure
-)
-
-// ConnStateCallback is called every time the connection moves to another connection state.
-type ConnStateCallback func(Session, ConnState)
+// A NonFWSession is a QUIC connection between two peers half-way through the handshake.
+// The communication is encrypted, but not yet forward secure.
+type NonFWSession interface {
+	Session
+	WaitUntilHandshakeComplete() error
+}
 
 // Config contains all configuration data needed for a QUIC server or client.
 // More config parameters (such as timeouts) will be added soon, see e.g. https://github.com/lucas-clemente/quic-go/issues/441.
 type Config struct {
 	TLSConfig *tls.Config
-	// ConnStateCallback will be called when the QUIC version is successfully negotiated or when the encryption level changes.
-	// If this field is not set, the Dial functions will return only when the connection is forward secure.
-	// Callbacks have to be thread-safe, since they might be called in separate goroutines.
-	ConnState ConnStateCallback
 	// The QUIC versions that can be negotiated.
 	// If not set, it uses all versions available.
 	// Warning: This API should not be considered stable and will change soon.
@@ -79,6 +65,6 @@ type Listener interface {
 	Close() error
 	// Addr returns the local network addr that the server is listening on.
 	Addr() net.Addr
-	// Serve starts the main server loop, and blocks until a network error occurs or the server is closed.
-	Serve() error
+	// Accept returns new sessions. It should be called in a loop.
+	Accept() (Session, error)
 }

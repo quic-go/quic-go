@@ -3,6 +3,7 @@ package quic
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -14,15 +15,17 @@ import (
 )
 
 type client struct {
-	mutex                    sync.Mutex
-	connStateChangeOrErrCond sync.Cond
-	listenErr                error
+	mutex     sync.Mutex
+	listenErr error
 
 	conn     connection
 	hostname string
 
-	config    *Config
-	connState ConnState
+	errorChan     chan struct{}
+	handshakeChan <-chan handshakeEvent
+
+	config            *Config
+	versionNegotiated bool // has version negotiation completed yet
 
 	connectionID protocol.ConnectionID
 	version      protocol.VersionNumber
@@ -34,9 +37,37 @@ var (
 	errCloseSessionForNewVersion = errors.New("closing session in order to recreate it with a new version")
 )
 
-// Dial establishes a new QUIC connection to a server using a net.PacketConn.
+// DialAddr establishes a new QUIC connection to a server.
+// The hostname for SNI is taken from the given address.
+func DialAddr(addr string, config *Config) (Session, error) {
+	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return nil, err
+	}
+	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
+	if err != nil {
+		return nil, err
+	}
+	return Dial(udpConn, udpAddr, addr, config)
+}
+
+// DialAddrNonFWSecure establishes a new QUIC connection to a server.
+// The hostname for SNI is taken from the given address.
+func DialAddrNonFWSecure(addr string, config *Config) (NonFWSession, error) {
+	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return nil, err
+	}
+	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
+	if err != nil {
+		return nil, err
+	}
+	return DialNonFWSecure(udpConn, udpAddr, addr, config)
+}
+
+// DialNonFWSecure establishes a new non-forward-secure QUIC connection to a server using a net.PacketConn.
 // The host parameter is used for SNI.
-func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config) (Session, error) {
+func DialNonFWSecure(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config) (NonFWSession, error) {
 	connID, err := utils.GenerateConnectionID()
 	if err != nil {
 		return nil, err
@@ -54,9 +85,8 @@ func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config
 		hostname:     hostname,
 		config:       clientConfig,
 		version:      clientConfig.Versions[0],
+		errorChan:    make(chan struct{}),
 	}
-
-	c.connStateChangeOrErrCond.L = &c.mutex
 
 	err = c.createNewSession(nil)
 	if err != nil {
@@ -65,7 +95,21 @@ func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config
 
 	utils.Infof("Starting new connection to %s (%s), connectionID %x, version %d", hostname, c.conn.RemoteAddr().String(), c.connectionID, c.version)
 
-	return c.establishConnection()
+	return c.session.(NonFWSession), c.establishSecureConnection()
+}
+
+// Dial establishes a new QUIC connection to a server using a net.PacketConn.
+// The host parameter is used for SNI.
+func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config) (Session, error) {
+	sess, err := DialNonFWSecure(pconn, remoteAddr, host, config)
+	if err != nil {
+		return nil, err
+	}
+	err = sess.WaitUntilHandshakeComplete()
+	if err != nil {
+		return nil, err
+	}
+	return sess, nil
 }
 
 func populateClientConfig(config *Config) *Config {
@@ -76,48 +120,27 @@ func populateClientConfig(config *Config) *Config {
 
 	return &Config{
 		TLSConfig:                     config.TLSConfig,
-		ConnState:                     config.ConnState,
 		Versions:                      versions,
 		RequestConnectionIDTruncation: config.RequestConnectionIDTruncation,
 	}
 }
 
-// DialAddr establishes a new QUIC connection to a server.
-// The hostname for SNI is taken from the given address.
-func DialAddr(addr string, config *Config) (Session, error) {
-	udpAddr, err := net.ResolveUDPAddr("udp", addr)
-	if err != nil {
-		return nil, err
-	}
-
-	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
-	if err != nil {
-		return nil, err
-	}
-
-	return Dial(udpConn, udpAddr, addr, config)
-}
-
-func (c *client) establishConnection() (Session, error) {
+// establishSecureConnection returns as soon as the connection is secure (as opposed to forward-secure)
+func (c *client) establishSecureConnection() error {
 	go c.listen()
 
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	for {
-		if c.listenErr != nil {
-			return nil, c.listenErr
+	select {
+	case <-c.errorChan:
+		return c.listenErr
+	case ev := <-c.handshakeChan:
+		if ev.err != nil {
+			return ev.err
 		}
-		if c.config.ConnState != nil && c.connState >= ConnStateVersionNegotiated {
-			break
+		if ev.encLevel != protocol.EncryptionSecure {
+			return fmt.Errorf("Client BUG: Expected encryption level to be secure, was %s", ev.encLevel)
 		}
-		if c.config.ConnState == nil && c.connState == ConnStateForwardSecure {
-			break
-		}
-		c.connStateChangeOrErrCond.Wait()
+		return nil
 	}
-
-	return c.session, nil
 }
 
 // Listen listens
@@ -147,11 +170,6 @@ func (c *client) listen() {
 			break
 		}
 	}
-
-	c.mutex.Lock()
-	c.listenErr = err
-	c.connStateChangeOrErrCond.Signal()
-	c.mutex.Unlock()
 }
 
 func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
@@ -168,18 +186,14 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 	defer c.mutex.Unlock()
 
 	// ignore delayed / duplicated version negotiation packets
-	if c.connState >= ConnStateVersionNegotiated && hdr.VersionFlag {
+	if c.versionNegotiated && hdr.VersionFlag {
 		return nil
 	}
 
 	// this is the first packet after the client sent a packet with the VersionFlag set
 	// if the server doesn't send a version negotiation packet, it supports the suggested version
-	if !hdr.VersionFlag && c.connState == ConnStateInitial {
-		c.connState = ConnStateVersionNegotiated
-		c.connStateChangeOrErrCond.Signal()
-		if c.config.ConnState != nil {
-			go c.config.ConnState(c.session, ConnStateVersionNegotiated)
-		}
+	if !hdr.VersionFlag && !c.versionNegotiated {
+		c.versionNegotiated = true
 	}
 
 	if hdr.VersionFlag {
@@ -213,7 +227,7 @@ func (c *client) handlePacketWithVersionFlag(hdr *PublicHeader) error {
 
 	// switch to negotiated version
 	c.version = newVersion
-	c.connState = ConnStateVersionNegotiated
+	c.versionNegotiated = true
 	var err error
 	c.connectionID, err = utils.GenerateConnectionID()
 	if err != nil {
@@ -222,43 +236,16 @@ func (c *client) handlePacketWithVersionFlag(hdr *PublicHeader) error {
 	utils.Infof("Switching to QUIC version %d. New connection ID: %x", newVersion, c.connectionID)
 
 	c.session.Close(errCloseSessionForNewVersion)
-	err = c.createNewSession(hdr.SupportedVersions)
-	if err != nil {
-		return err
-	}
-	if c.config.ConnState != nil {
-		go c.config.ConnState(c.session, ConnStateVersionNegotiated)
-	}
-
-	return nil
-}
-
-func (c *client) cryptoChangeCallback(_ Session, isForwardSecure bool) {
-	var state ConnState
-	if isForwardSecure {
-		state = ConnStateForwardSecure
-	} else {
-		state = ConnStateSecure
-	}
-
-	c.mutex.Lock()
-	c.connState = state
-	c.connStateChangeOrErrCond.Signal()
-	c.mutex.Unlock()
-
-	if c.config.ConnState != nil {
-		go c.config.ConnState(c.session, state)
-	}
+	return c.createNewSession(hdr.SupportedVersions)
 }
 
 func (c *client) createNewSession(negotiatedVersions []protocol.VersionNumber) error {
 	var err error
-	c.session, err = newClientSession(
+	c.session, c.handshakeChan, err = newClientSession(
 		c.conn,
 		c.hostname,
 		c.version,
 		c.connectionID,
-		c.cryptoChangeCallback,
 		c.config,
 		negotiatedVersions,
 	)
@@ -272,11 +259,8 @@ func (c *client) createNewSession(negotiatedVersions []protocol.VersionNumber) e
 		if err == errCloseSessionForNewVersion {
 			return
 		}
-
-		c.mutex.Lock()
 		c.listenErr = err
-		c.connStateChangeOrErrCond.Signal()
-		c.mutex.Unlock()
+		close(c.errorChan)
 
 		utils.Infof("Connection %x closed.", c.connectionID)
 		c.conn.Close()

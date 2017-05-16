@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"crypto/tls"
 	"errors"
-	"net"
 	"net/http"
 
 	"golang.org/x/net/http2"
@@ -52,63 +51,62 @@ var _ = Describe("Client", func() {
 	})
 
 	It("dials", func() {
-		udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+		client = NewClient(quicTransport, nil, "localhost")
+		session.streamToOpen = &mockStream{id: 3}
+		client.dialAddr = func(hostname string, conf *quic.Config) (quic.Session, error) {
+			return session, nil
+		}
+		err := client.Dial()
 		Expect(err).ToNot(HaveOccurred())
-		client = NewClient(quicTransport, nil, udpConn.LocalAddr().String())
-		go client.Dial()
-		data := make([]byte, 100)
-		_, err = udpConn.Read(data)
-		hdr, err := quic.ParsePublicHeader(bytes.NewReader(data), protocol.PerspectiveClient)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(hdr.VersionFlag).To(BeTrue())
-		Expect(hdr.ConnectionID).ToNot(BeNil())
-	})
-
-	It("saves the session when the ConnState callback is called", func() {
-		client.session = nil // unset the session set in BeforeEach
-		client.config.ConnState(session, quic.ConnStateForwardSecure)
 		Expect(client.session).To(Equal(session))
 	})
 
-	It("opens the header stream only after the version has been negotiated", func() {
-		client.headerStream = nil // unset the headerStream openend in the BeforeEach
-		session.streamToOpen = headerStream
-		Expect(client.headerStream).To(BeNil()) // header stream not yet opened
-		// now start the actual test
-		client.config.ConnState(session, quic.ConnStateVersionNegotiated)
-		Expect(client.headerStream).ToNot(BeNil())
-		Expect(client.headerStream.StreamID()).To(Equal(protocol.StreamID(3)))
+	It("errors when dialing fails", func() {
+		testErr := errors.New("handshake error")
+		client = NewClient(quicTransport, nil, "localhost")
+		client.dialAddr = func(hostname string, conf *quic.Config) (quic.Session, error) {
+			return nil, testErr
+		}
+		err := client.Dial()
+		Expect(err).To(MatchError(testErr))
 	})
 
-	It("errors if it can't open the header stream", func() {
-		testErr := errors.New("test error")
-		client.headerStream = nil // unset the headerStream openend in the BeforeEach
+	It("errors if the header stream has the wrong stream ID", func() {
+		client = NewClient(quicTransport, nil, "localhost")
+		session.streamToOpen = &mockStream{id: 2}
+		client.dialAddr = func(hostname string, conf *quic.Config) (quic.Session, error) {
+			return session, nil
+		}
+		err := client.Dial()
+		Expect(err).To(MatchError("h2quic Client BUG: StreamID of Header Stream is not 3"))
+	})
+
+	It("errors if it can't open a stream", func() {
+		testErr := errors.New("you shall not pass")
+		client = NewClient(quicTransport, nil, "localhost")
 		session.streamOpenErr = testErr
-		client.config.ConnState(session, quic.ConnStateVersionNegotiated)
-		Expect(session.closed).To(BeTrue())
-		Expect(session.closedWithError).To(MatchError(testErr))
+		client.dialAddr = func(hostname string, conf *quic.Config) (quic.Session, error) {
+			return session, nil
+		}
+		err := client.Dial()
+		Expect(err).To(MatchError(testErr))
 	})
 
-	It("errors if the header stream has the wrong StreamID", func() {
-		session.streamToOpen = &mockStream{id: 1337}
-		client.config.ConnState(session, quic.ConnStateVersionNegotiated)
-		Expect(session.closed).To(BeTrue())
-		Expect(session.closedWithError).To(MatchError("h2quic Client BUG: StreamID of Header Stream is not 3"))
-	})
+	It("returns a request when dial fails", func() {
+		testErr := errors.New("dial error")
+		client.dialAddr = func(hostname string, conf *quic.Config) (quic.Session, error) {
+			return nil, testErr
+		}
+		request, err := http.NewRequest("https", "https://quic.clemente.io:1337/file1.dat", nil)
+		Expect(err).ToNot(HaveOccurred())
 
-	It("sets the correct crypto level", func() {
-		Expect(client.encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
-		client.config.ConnState(session, quic.ConnStateSecure)
-		Expect(client.encryptionLevel).To(Equal(protocol.EncryptionSecure))
-		client.config.ConnState(session, quic.ConnStateForwardSecure)
-		Expect(client.encryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
-	})
-
-	It("sets the correct crypto level, if the ConnStateCallback is called in the wrong order", func() {
-		client.config.ConnState(session, quic.ConnStateForwardSecure)
-		Expect(client.encryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
-		client.config.ConnState(session, quic.ConnStateSecure)
-		Expect(client.encryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
+		var doErr error
+		go func() {
+			_, doErr = client.Do(request)
+		}()
+		err = client.Dial()
+		Expect(err).To(MatchError(testErr))
+		Eventually(func() error { return doErr }).Should(MatchError(testErr))
 	})
 
 	Context("Doing requests", func() {
@@ -143,6 +141,7 @@ var _ = Describe("Client", func() {
 
 			dataStream = &mockStream{id: 5}
 			session.streamToOpen = dataStream
+			close(client.dialChan)
 		})
 
 		It("does a request", func(done Done) {
@@ -449,9 +448,7 @@ var _ = Describe("Client", func() {
 					handlerReturned = true
 				}()
 
-				var rsp *http.Response
-				Eventually(client.responses[23]).Should(Receive(&rsp))
-				Expect(rsp).To(BeNil())
+				Eventually(client.responses[23]).Should(BeClosed())
 				Expect(client.headerErr).To(MatchError(qerr.Error(qerr.InvalidHeadersStreamData, "not a headers frame")))
 				Eventually(func() bool { return handlerReturned }).Should(BeTrue())
 			})
@@ -469,9 +466,7 @@ var _ = Describe("Client", func() {
 					handlerReturned = true
 				}()
 
-				var rsp *http.Response
-				Eventually(client.responses[23]).Should(Receive(&rsp))
-				Expect(rsp).To(BeNil())
+				Eventually(client.responses[23]).Should(BeClosed())
 				Expect(client.headerErr).To(MatchError(qerr.Error(qerr.InvalidHeadersStreamData, "cannot read header fields")))
 				Eventually(func() bool { return handlerReturned }).Should(BeTrue())
 			})
