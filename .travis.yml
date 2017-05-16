@@ -10,8 +10,8 @@ services:
   - docker
 
 go:
-  - 1.7.5
-  - 1.8.1
+  - 1.7.x
+  - 1.8.x
 
 # first part of the GOARCH workaround
 # setting the GOARCH directly doesn't work, since the value will be overwritten later
