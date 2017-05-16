@@ -34,6 +34,11 @@ var (
 	errSessionAlreadyClosed       = errors.New("cannot close session; it was already closed before")
 )
 
+var (
+	newCryptoSetup       = handshake.NewCryptoSetup
+	newCryptoSetupClient = handshake.NewCryptoSetupClient
+)
+
 type handshakeEvent struct {
 	encLevel protocol.EncryptionLevel
 	err      error
@@ -143,7 +148,16 @@ func newSession(
 	handshakeChan := make(chan handshakeEvent, 3)
 	s.handshakeChan = handshakeChan
 	var err error
-	s.cryptoSetup, err = handshake.NewCryptoSetup(connectionID, sourceAddr, v, sCfg, cryptoStream, s.connectionParameters, config.Versions, aeadChanged)
+	s.cryptoSetup, err = newCryptoSetup(
+		connectionID,
+		sourceAddr,
+		v,
+		sCfg,
+		cryptoStream,
+		s.connectionParameters,
+		config.Versions,
+		aeadChanged,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -182,7 +196,7 @@ var newClientSession = func(
 	s.handshakeChan = handshakeChan
 	cryptoStream, _ := s.OpenStream()
 	var err error
-	s.cryptoSetup, err = handshake.NewCryptoSetupClient(
+	s.cryptoSetup, err = newCryptoSetupClient(
 		hostname,
 		connectionID,
 		v,
