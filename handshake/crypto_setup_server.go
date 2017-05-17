@@ -243,7 +243,11 @@ func (h *cryptoSetupServer) sealUnencrypted(dst, src []byte, packetNumber protoc
 }
 
 func (h *cryptoSetupServer) sealSecure(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
-	h.sentSHLO = true
+	h.mutex.Lock()
+	if h.wroteSHLO {
+		h.sentSHLO = true
+	}
+	h.mutex.Unlock()
 	return h.secureAEAD.Seal(dst, src, packetNumber, associatedData)
 }
 
