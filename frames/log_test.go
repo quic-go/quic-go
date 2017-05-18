@@ -2,6 +2,7 @@ package frames
 
 import (
 	"bytes"
+	"log"
 	"os"
 	"time"
 
@@ -20,12 +21,12 @@ var _ = Describe("Frame logging", func() {
 	BeforeEach(func() {
 		buf.Reset()
 		utils.SetLogLevel(utils.LogLevelDebug)
-		utils.SetLogWriter(&buf)
+		log.SetOutput(&buf)
 	})
 
 	AfterSuite(func() {
 		utils.SetLogLevel(utils.LogLevelNothing)
-		utils.SetLogWriter(os.Stdout)
+		log.SetOutput(os.Stdout)
 	})
 
 	It("doesn't log when debug is disabled", func() {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -78,6 +79,9 @@ func init() {
 }
 
 var _ = BeforeEach(func() {
+	// set custom time format for logs
+	utils.SetLogTimeFormat("15:04:05.000")
+
 	// create a new uploadDir for every test
 	var err error
 	uploadDir, err = ioutil.TempDir("", "quic-upload-dest")
@@ -95,7 +99,7 @@ var _ = BeforeEach(func() {
 	if len(logFileName) > 0 {
 		logFile, err = os.Create("./log.txt")
 		Expect(err).ToNot(HaveOccurred())
-		utils.SetLogWriter(logFile)
+		log.SetOutput(logFile)
 		utils.SetLogLevel(utils.LogLevelDebug)
 	}
 })

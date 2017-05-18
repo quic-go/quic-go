@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"log"
 	"os"
 	"time"
 
@@ -12,16 +13,20 @@ import (
 var _ = Describe("Log", func() {
 	var (
 		b *bytes.Buffer
+
+		initialTimeFormat string
 	)
 
 	BeforeEach(func() {
 		b = bytes.NewBuffer([]byte{})
-		out = b
+		log.SetOutput(b)
+		initialTimeFormat = timeFormat
 	})
 
 	AfterEach(func() {
-		out = os.Stdout
+		log.SetOutput(os.Stdout)
 		SetLogLevel(LogLevelNothing)
+		timeFormat = initialTimeFormat
 	})
 
 	It("log level nothing", func() {
