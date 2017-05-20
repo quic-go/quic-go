@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
+	"reflect"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
@@ -342,17 +343,20 @@ var _ = Describe("Server", func() {
 
 	It("setups with the right values", func() {
 		supportedVersions := []protocol.VersionNumber{1, 3, 5}
+		acceptSTK := func(_ net.Addr, _ *STK) bool { return true }
 		config := Config{
 			TLSConfig: &tls.Config{},
 			Versions:  supportedVersions,
+			AcceptSTK: acceptSTK,
 		}
 		ln, err := Listen(conn, &config)
-		server := ln.(*server)
 		Expect(err).ToNot(HaveOccurred())
+		server := ln.(*server)
 		Expect(server.deleteClosedSessionsAfter).To(Equal(protocol.ClosedSessionDeleteTimeout))
 		Expect(server.sessions).ToNot(BeNil())
 		Expect(server.scfg).ToNot(BeNil())
 		Expect(server.config.Versions).To(Equal(supportedVersions))
+		Expect(reflect.ValueOf(server.config.AcceptSTK)).To(Equal(reflect.ValueOf(acceptSTK)))
 	})
 
 	It("fills in default values if options are not set in the Config", func() {
@@ -361,6 +365,7 @@ var _ = Describe("Server", func() {
 		Expect(err).ToNot(HaveOccurred())
 		server := ln.(*server)
 		Expect(server.config.Versions).To(Equal(protocol.SupportedVersions))
+		Expect(reflect.ValueOf(server.config.AcceptSTK)).To(Equal(reflect.ValueOf(defaultAcceptSTK)))
 	})
 
 	It("listens on a given address", func() {
@@ -432,5 +437,57 @@ var _ = Describe("Server", func() {
 		Expect(conn.dataWrittenTo).To(Equal(udpAddr))
 		Expect(conn.dataWritten.Bytes()[0] & 0x02).ToNot(BeZero()) // check that the ResetFlag is set
 		Expect(ln.(*server).sessions).To(BeEmpty())
+	})
+})
+
+var _ = Describe("default source address verification", func() {
+	It("accepts a token", func() {
+		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1)}
+		stk := &STK{
+			remoteAddr: "192.168.0.1",
+			sentTime:   time.Now().Add(-protocol.STKExpiryTime).Add(time.Second), // will expire in 1 second
+		}
+		Expect(defaultAcceptSTK(remoteAddr, stk)).To(BeTrue())
+	})
+
+	It("requests verification if no token is provided", func() {
+		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1)}
+		Expect(defaultAcceptSTK(remoteAddr, nil)).To(BeFalse())
+	})
+
+	It("rejects a token if the address doesn't match", func() {
+		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1)}
+		stk := &STK{
+			remoteAddr: "127.0.0.1",
+			sentTime:   time.Now(),
+		}
+		Expect(defaultAcceptSTK(remoteAddr, stk)).To(BeFalse())
+	})
+
+	It("accepts a token for a remote address is not a UDP address", func() {
+		remoteAddr := &net.TCPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
+		stk := &STK{
+			remoteAddr: "192.168.0.1:1337",
+			sentTime:   time.Now(),
+		}
+		Expect(defaultAcceptSTK(remoteAddr, stk)).To(BeTrue())
+	})
+
+	It("rejects an invalid token for a remote address is not a UDP address", func() {
+		remoteAddr := &net.TCPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
+		stk := &STK{
+			remoteAddr: "192.168.0.1:7331", // mismatching port
+			sentTime:   time.Now(),
+		}
+		Expect(defaultAcceptSTK(remoteAddr, stk)).To(BeFalse())
+	})
+
+	It("rejects an expired token", func() {
+		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1)}
+		stk := &STK{
+			remoteAddr: "192.168.0.1",
+			sentTime:   time.Now().Add(-protocol.STKExpiryTime).Add(-time.Second), // expired 1 second ago
+		}
+		Expect(defaultAcceptSTK(remoteAddr, stk)).To(BeFalse())
 	})
 })

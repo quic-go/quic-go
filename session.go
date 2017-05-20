@@ -141,6 +141,15 @@ func newSession(
 	s.aeadChanged = aeadChanged
 	handshakeChan := make(chan handshakeEvent, 3)
 	s.handshakeChan = handshakeChan
+	verifySourceAddr := func(clientAddr net.Addr, hstk *handshake.STK) bool {
+		if hstk == nil {
+			return config.AcceptSTK(clientAddr, nil)
+		}
+		return config.AcceptSTK(
+			clientAddr,
+			&STK{remoteAddr: hstk.RemoteAddr, sentTime: hstk.SentTime},
+		)
+	}
 	var err error
 	s.cryptoSetup, err = newCryptoSetup(
 		connectionID,
@@ -150,6 +159,7 @@ func newSession(
 		cryptoStream,
 		s.connectionParameters,
 		config.Versions,
+		verifySourceAddr,
 		aeadChanged,
 	)
 	if err != nil {

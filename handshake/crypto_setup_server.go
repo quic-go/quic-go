@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -32,6 +31,8 @@ type cryptoSetupServer struct {
 
 	version           protocol.VersionNumber
 	supportedVersions []protocol.VersionNumber
+
+	acceptSTKCallback func(net.Addr, *STK) bool
 
 	nullAEAD                    crypto.AEAD
 	secureAEAD                  crypto.AEAD
@@ -67,6 +68,7 @@ func NewCryptoSetup(
 	cryptoStream io.ReadWriter,
 	connectionParametersManager ConnectionParametersManager,
 	supportedVersions []protocol.VersionNumber,
+	acceptSTK func(net.Addr, *STK) bool,
 	aeadChanged chan<- protocol.EncryptionLevel,
 ) (CryptoSetup, error) {
 	stkGenerator, err := NewSTKGenerator()
@@ -86,6 +88,7 @@ func NewCryptoSetup(
 		nullAEAD:             crypto.NewNullAEAD(protocol.PerspectiveServer, version),
 		cryptoStream:         cryptoStream,
 		connectionParameters: connectionParametersManager,
+		acceptSTKCallback:    acceptSTK,
 		aeadChanged:          aeadChanged,
 	}, nil
 }
@@ -272,19 +275,16 @@ func (h *cryptoSetupServer) isInchoateCHLO(cryptoData map[Tag][]byte, cert []byt
 	if crypto.HashCert(cert) != xlct {
 		return true
 	}
-	return !h.verifySTK(cryptoData[TagSTK])
+	return !h.acceptSTK(cryptoData[TagSTK])
 }
 
-func (h *cryptoSetupServer) verifySTK(stk []byte) bool {
-	stkTime, err := h.stkGenerator.VerifyToken(h.remoteAddr, stk)
+func (h *cryptoSetupServer) acceptSTK(token []byte) bool {
+	stk, err := h.stkGenerator.DecodeToken(token)
 	if err != nil {
 		utils.Debugf("STK invalid: %s", err.Error())
 		return false
 	}
-	if time.Now().After(stkTime.Add(protocol.STKExpiryTime)) {
-		return false
-	}
-	return true
+	return h.acceptSTKCallback(h.remoteAddr, stk)
 }
 
 func (h *cryptoSetupServer) handleInchoateCHLO(sni string, chlo []byte, cryptoData map[Tag][]byte) ([]byte, error) {
@@ -303,7 +303,7 @@ func (h *cryptoSetupServer) handleInchoateCHLO(sni string, chlo []byte, cryptoDa
 		TagSVID: []byte("quic-go"),
 	}
 
-	if h.verifySTK(cryptoData[TagSTK]) {
+	if h.acceptSTK(cryptoData[TagSTK]) {
 		proof, err := h.scfg.Sign(sni, chlo)
 		if err != nil {
 			return nil, err

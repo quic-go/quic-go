@@ -24,58 +24,49 @@ var _ = Describe("STK Generator", func() {
 		Expect(token).ToNot(BeEmpty())
 	})
 
+	It("works with nil tokens", func() {
+		stk, err := stkGen.DecodeToken(nil)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(stk).To(BeNil())
+	})
+
 	It("accepts a valid STK", func() {
-		raddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
-		token, err := stkGen.NewToken(raddr)
-		Expect(err).ToNot(HaveOccurred())
-		t, err := stkGen.VerifyToken(raddr, token)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(t).To(BeTemporally("~", time.Now(), time.Second))
-	})
-
-	It("works with an IPv6 address", func() {
-		ip := net.ParseIP("2001:db8::68")
-		Expect(ip).ToNot(BeNil())
-		raddr := &net.UDPAddr{IP: ip, Port: 1337}
-		token, err := stkGen.NewToken(raddr)
-		Expect(err).ToNot(HaveOccurred())
-		t, err := stkGen.VerifyToken(raddr, token)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(t).To(BeTemporally("~", time.Now(), time.Second))
-	})
-
-	It("does not care about the port", func() {
 		ip := net.IPv4(192, 168, 0, 1)
 		token, err := stkGen.NewToken(&net.UDPAddr{IP: ip, Port: 1337})
 		Expect(err).ToNot(HaveOccurred())
-		_, err = stkGen.VerifyToken(&net.UDPAddr{IP: ip, Port: 7331}, token)
+		stk, err := stkGen.DecodeToken(token)
 		Expect(err).ToNot(HaveOccurred())
+		Expect(stk.RemoteAddr).To(Equal("192.168.0.1"))
+		Expect(stk.SentTime).To(BeTemporally("~", time.Now(), time.Second))
 	})
 
-	It("rejects an STK for the wrong address", func() {
-		ip := net.ParseIP("1.2.3.4")
-		otherIP := net.ParseIP("4.3.2.1")
-		token, err := stkGen.NewToken(&net.UDPAddr{IP: ip, Port: 1337})
-		Expect(err).NotTo(HaveOccurred())
-		_, err = stkGen.VerifyToken(&net.UDPAddr{IP: otherIP, Port: 1337}, token)
-		Expect(err).To(MatchError("invalid source address in STK"))
+	It("works with an IPv6 addresses ", func() {
+		addresses := []string{
+			"2001:db8::68",
+			"2001:0000:4136:e378:8000:63bf:3fff:fdd2",
+			"2001::1",
+			"ff01:0:0:0:0:0:0:2",
+		}
+		for _, addr := range addresses {
+			ip := net.ParseIP(addr)
+			Expect(ip).ToNot(BeNil())
+			raddr := &net.UDPAddr{IP: ip, Port: 1337}
+			token, err := stkGen.NewToken(raddr)
+			Expect(err).ToNot(HaveOccurred())
+			stk, err := stkGen.DecodeToken(token)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(stk.RemoteAddr).To(Equal(ip.String()))
+			Expect(stk.SentTime).To(BeTemporally("~", time.Now(), time.Second))
+		}
 	})
 
-	It("works with an address that is not a UDP address", func() {
-		raddr := &net.TCPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
+	It("uses the string representation an address that is not a UDP address", func() {
+		raddr := &net.TCPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 1337}
 		token, err := stkGen.NewToken(raddr)
 		Expect(err).ToNot(HaveOccurred())
-		t, err := stkGen.VerifyToken(raddr, token)
+		stk, err := stkGen.DecodeToken(token)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(t).To(BeTemporally("~", time.Now(), time.Second))
-	})
-
-	It("uses the string representation of an address that is not a UDP address", func() {
-		// when using the string representation, the port matters
-		ip := net.IPv4(192, 168, 0, 1)
-		token, err := stkGen.NewToken(&net.TCPAddr{IP: ip, Port: 1337})
-		Expect(err).ToNot(HaveOccurred())
-		_, err = stkGen.VerifyToken(&net.TCPAddr{IP: ip, Port: 7331}, token)
-		Expect(err).To(MatchError("invalid source address in STK"))
+		Expect(stk.RemoteAddr).To(Equal("192.168.13.37:1337"))
+		Expect(stk.SentTime).To(BeTemporally("~", time.Now(), time.Second))
 	})
 })

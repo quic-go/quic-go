@@ -2,13 +2,17 @@ package handshake
 
 import (
 	"bytes"
-	"crypto/subtle"
-	"errors"
 	"net"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 )
+
+// An STK is a source address token
+type STK struct {
+	RemoteAddr string
+	SentTime   time.Time
+}
 
 // An STKGenerator generates STKs
 type STKGenerator struct {
@@ -31,16 +35,20 @@ func (g *STKGenerator) NewToken(raddr net.Addr) ([]byte, error) {
 	return g.stkSource.NewToken(encodeRemoteAddr(raddr))
 }
 
-// VerifyToken verifies an STK token
-func (g *STKGenerator) VerifyToken(raddr net.Addr, data []byte) (time.Time, error) {
-	data, timestamp, err := g.stkSource.DecodeToken(data)
+// DecodeToken decodes an STK token
+func (g *STKGenerator) DecodeToken(data []byte) (*STK, error) {
+	// if the client didn't send any STK, DecodeToken will be called with a nil-slice
+	if len(data) == 0 {
+		return nil, nil
+	}
+	remote, timestamp, err := g.stkSource.DecodeToken(data)
 	if err != nil {
-		return time.Time{}, err
+		return nil, err
 	}
-	if subtle.ConstantTimeCompare(encodeRemoteAddr(raddr), data) != 1 {
-		return time.Time{}, errors.New("invalid source address in STK")
-	}
-	return timestamp, nil
+	return &STK{
+		RemoteAddr: decodeRemoteAddr(remote),
+		SentTime:   timestamp,
+	}, nil
 }
 
 // encodeRemoteAddr encodes a remote address such that it can be saved in the STK
@@ -54,4 +62,11 @@ func encodeRemoteAddr(remoteAddr net.Addr) []byte {
 	// if the address is not a UDP address, prepend 16 bytes
 	// that way it can be distinguished from an IP address
 	return append(bytes.Repeat([]byte{0}, 16), []byte(remoteAddr.String())...)
+}
+
+func decodeRemoteAddr(data []byte) string {
+	if len(data) <= 16 {
+		return net.IP(data).String()
+	}
+	return string(data[16:])
 }

@@ -85,15 +85,36 @@ func Listen(conn net.PacketConn, config *Config) (Listener, error) {
 	return s, nil
 }
 
+var defaultAcceptSTK = func(clientAddr net.Addr, stk *STK) bool {
+	if stk == nil {
+		return false
+	}
+	if time.Now().After(stk.sentTime.Add(protocol.STKExpiryTime)) {
+		return false
+	}
+	var sourceAddr string
+	if udpAddr, ok := clientAddr.(*net.UDPAddr); ok {
+		sourceAddr = udpAddr.IP.String()
+	} else {
+		sourceAddr = clientAddr.String()
+	}
+	return sourceAddr == stk.remoteAddr
+}
+
 func populateServerConfig(config *Config) *Config {
 	versions := config.Versions
 	if len(versions) == 0 {
 		versions = protocol.SupportedVersions
 	}
+	vsa := defaultAcceptSTK
+	if config.AcceptSTK != nil {
+		vsa = config.AcceptSTK
+	}
 
 	return &Config{
 		TLSConfig: config.TLSConfig,
 		Versions:  versions,
+		AcceptSTK: vsa,
 	}
 }
 
@@ -116,7 +137,7 @@ func (s *server) serve() {
 			utils.Errorf("error handling packet: %s", err.Error())
 		}
 	}
-		}
+}
 
 // Accept returns newly openend sessions
 func (s *server) Accept() (Session, error) {
