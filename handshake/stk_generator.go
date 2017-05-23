@@ -1,11 +1,15 @@
 package handshake
 
 import (
-	"bytes"
 	"net"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
+)
+
+const (
+	stkPrefixIP byte = iota
+	stkPrefixString
 )
 
 // An STK is a source address token
@@ -52,21 +56,17 @@ func (g *STKGenerator) DecodeToken(data []byte) (*STK, error) {
 }
 
 // encodeRemoteAddr encodes a remote address such that it can be saved in the STK
-// it ensures that we're binary compatible with Google's implementation of STKs
 func encodeRemoteAddr(remoteAddr net.Addr) []byte {
-	// if the address is a UDP address, just use the byte representation of the IP address
-	// the length of an IP address is 4 bytes (for IPv4) or 16 bytes (for IPv6)
 	if udpAddr, ok := remoteAddr.(*net.UDPAddr); ok {
-		return udpAddr.IP
+		return append([]byte{stkPrefixIP}, udpAddr.IP...)
 	}
-	// if the address is not a UDP address, prepend 16 bytes
-	// that way it can be distinguished from an IP address
-	return append(bytes.Repeat([]byte{0}, 16), []byte(remoteAddr.String())...)
+	return append([]byte{stkPrefixString}, []byte(remoteAddr.String())...)
 }
 
+// decodeRemoteAddr decodes the remote address saved in the STK
 func decodeRemoteAddr(data []byte) string {
-	if len(data) <= 16 {
-		return net.IP(data).String()
+	if data[0] == stkPrefixIP {
+		return net.IP(data[1:]).String()
 	}
-	return string(data[16:])
+	return string(data[1:])
 }

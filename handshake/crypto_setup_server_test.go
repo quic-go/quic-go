@@ -173,8 +173,6 @@ var _ = Describe("Server Crypto Setup", func() {
 	BeforeEach(func() {
 		var err error
 		remoteAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234}
-		validSTK, err = mockStkSource{}.NewToken(remoteAddr.IP)
-		Expect(err).NotTo(HaveOccurred())
 		expectedInitialNonceLen = 32
 		expectedFSNonceLen = 64
 		aeadChanged = make(chan protocol.EncryptionLevel, 2)
@@ -206,6 +204,8 @@ var _ = Describe("Server Crypto Setup", func() {
 		Expect(err).NotTo(HaveOccurred())
 		cs = csInt.(*cryptoSetupServer)
 		cs.stkGenerator.stkSource = &mockStkSource{}
+		validSTK, err = cs.stkGenerator.NewToken(remoteAddr)
+		Expect(err).NotTo(HaveOccurred())
 		sourceAddrValid = true
 		cs.acceptSTKCallback = func(_ net.Addr, _ *STK) bool { return sourceAddrValid }
 		cs.keyDerivation = mockKeyDerivation
