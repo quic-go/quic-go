@@ -1,6 +1,8 @@
 package handshake
 
 import (
+	"encoding/asn1"
+	"fmt"
 	"net"
 	"time"
 
@@ -16,6 +18,12 @@ const (
 type STK struct {
 	RemoteAddr string
 	SentTime   time.Time
+}
+
+// token is the struct that is used for ASN1 serialization and deserialization
+type token struct {
+	Data      []byte
+	Timestamp int64
 }
 
 // An STKGenerator generates STKs
@@ -36,22 +44,38 @@ func NewSTKGenerator() (*STKGenerator, error) {
 
 // NewToken generates a new STK token for a given source address
 func (g *STKGenerator) NewToken(raddr net.Addr) ([]byte, error) {
-	return g.stkSource.NewToken(encodeRemoteAddr(raddr))
-}
-
-// DecodeToken decodes an STK token
-func (g *STKGenerator) DecodeToken(data []byte) (*STK, error) {
-	// if the client didn't send any STK, DecodeToken will be called with a nil-slice
-	if len(data) == 0 {
-		return nil, nil
-	}
-	remote, timestamp, err := g.stkSource.DecodeToken(data)
+	data, err := asn1.Marshal(token{
+		Data:      encodeRemoteAddr(raddr),
+		Timestamp: time.Now().Unix(),
+	})
 	if err != nil {
 		return nil, err
 	}
+	return g.stkSource.NewToken(data)
+}
+
+// DecodeToken decodes an STK token
+func (g *STKGenerator) DecodeToken(encrypted []byte) (*STK, error) {
+	// if the client didn't send any STK, DecodeToken will be called with a nil-slice
+	if len(encrypted) == 0 {
+		return nil, nil
+	}
+
+	data, err := g.stkSource.DecodeToken(encrypted)
+	if err != nil {
+		return nil, err
+	}
+	t := &token{}
+	rest, err := asn1.Unmarshal(data, t)
+	if err != nil {
+		return nil, err
+	}
+	if len(rest) != 0 {
+		return nil, fmt.Errorf("rest when unpacking token: %d", len(rest))
+	}
 	return &STK{
-		RemoteAddr: decodeRemoteAddr(remote),
-		SentTime:   timestamp,
+		RemoteAddr: decodeRemoteAddr(t.Data),
+		SentTime:   time.Unix(t.Timestamp, 0),
 	}, nil
 }
 

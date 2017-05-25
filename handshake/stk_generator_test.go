@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"encoding/asn1"
 	"net"
 	"time"
 
@@ -38,6 +39,28 @@ var _ = Describe("STK Generator", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(stk.RemoteAddr).To(Equal("192.168.0.1"))
 		Expect(stk.SentTime).To(BeTemporally("~", time.Now(), time.Second))
+	})
+
+	It("rejects invalid tokens", func() {
+		_, err := stkGen.DecodeToken([]byte("invalid token"))
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("rejects tokens that cannot be decoded", func() {
+		token, err := stkGen.stkSource.NewToken([]byte("foobar"))
+		Expect(err).ToNot(HaveOccurred())
+		_, err = stkGen.DecodeToken(token)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("rejects tokens that can be decoded, but have additional payload", func() {
+		t, err := asn1.Marshal(token{Data: []byte("foobar")})
+		Expect(err).ToNot(HaveOccurred())
+		t = append(t, []byte("rest")...)
+		enc, err := stkGen.stkSource.NewToken(t)
+		Expect(err).ToNot(HaveOccurred())
+		_, err = stkGen.DecodeToken(enc)
+		Expect(err).To(MatchError("rest when unpacking token: 4"))
 	})
 
 	It("works with an IPv6 addresses ", func() {

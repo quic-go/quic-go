@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"net"
-	"time"
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -127,8 +126,8 @@ func (mockStream) CloseRemote(offset protocol.ByteCount) { panic("not implemente
 func (s mockStream) StreamID() protocol.StreamID         { panic("not implemented") }
 
 type mockStkSource struct {
+	data      []byte
 	decodeErr error
-	stkTime   time.Time
 }
 
 var _ crypto.StkSource = &mockStkSource{}
@@ -137,18 +136,14 @@ func (mockStkSource) NewToken(sourceAddr []byte) ([]byte, error) {
 	return append([]byte("token "), sourceAddr...), nil
 }
 
-func (s mockStkSource) DecodeToken(data []byte) ([]byte, time.Time, error) {
+func (s mockStkSource) DecodeToken(data []byte) ([]byte, error) {
 	if s.decodeErr != nil {
-		return nil, time.Time{}, s.decodeErr
+		return nil, s.decodeErr
 	}
 	if len(data) < 6 {
-		return nil, time.Time{}, errors.New("token too short")
+		return nil, errors.New("token too short")
 	}
-	t := s.stkTime
-	if t.IsZero() {
-		t = time.Now()
-	}
-	return data[6:], t, nil
+	return data[6:], nil
 }
 
 var _ = Describe("Server Crypto Setup", func() {
