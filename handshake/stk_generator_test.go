@@ -63,6 +63,16 @@ var _ = Describe("STK Generator", func() {
 		Expect(err).To(MatchError("rest when unpacking token: 4"))
 	})
 
+	// we don't generate tokens that have no data, but we should be able to handle them if we receive one for whatever reason
+	It("doesn't panic if a tokens has no data", func() {
+		t, err := asn1.Marshal(token{Data: []byte("")})
+		Expect(err).ToNot(HaveOccurred())
+		enc, err := stkGen.stkSource.NewToken(t)
+		Expect(err).ToNot(HaveOccurred())
+		_, err = stkGen.DecodeToken(enc)
+		Expect(err).ToNot(HaveOccurred())
+	})
+
 	It("works with an IPv6 addresses ", func() {
 		addresses := []string{
 			"2001:db8::68",

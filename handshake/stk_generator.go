@@ -89,6 +89,10 @@ func encodeRemoteAddr(remoteAddr net.Addr) []byte {
 
 // decodeRemoteAddr decodes the remote address saved in the STK
 func decodeRemoteAddr(data []byte) string {
+	// data will never be empty for an STK that we generated. Check it to be on the safe side
+	if len(data) == 0 {
+		return ""
+	}
 	if data[0] == stkPrefixIP {
 		return net.IP(data[1:]).String()
 	}
