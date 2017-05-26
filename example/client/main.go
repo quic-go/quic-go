@@ -21,6 +21,7 @@ func main() {
 	} else {
 		utils.SetLogLevel(utils.LogLevelInfo)
 	}
+	utils.SetLogTimeFormat("")
 
 	hclient := &http.Client{
 		Transport: &h2quic.QuicRoundTripper{},
