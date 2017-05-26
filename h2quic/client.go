@@ -20,8 +20,8 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
-// Client is a HTTP2 client doing QUIC requests
-type Client struct {
+// client is a HTTP2 client doing QUIC requests
+type client struct {
 	mutex sync.RWMutex
 
 	dialAddr func(hostname string, config *quic.Config) (quic.Session, error)
@@ -42,11 +42,11 @@ type Client struct {
 	responses map[protocol.StreamID]chan *http.Response
 }
 
-var _ h2quicClient = &Client{}
+var _ h2quicClient = &client{}
 
-// NewClient creates a new client
-func NewClient(t *QuicRoundTripper, tlsConfig *tls.Config, hostname string) *Client {
-	return &Client{
+// newClient creates a new client
+func newClient(t *QuicRoundTripper, tlsConfig *tls.Config, hostname string) *client {
+	return &client{
 		t:               t,
 		dialAddr:        quic.DialAddr,
 		hostname:        authorityAddr("https", hostname),
@@ -61,7 +61,7 @@ func NewClient(t *QuicRoundTripper, tlsConfig *tls.Config, hostname string) *Cli
 }
 
 // Dial dials the connection
-func (c *Client) Dial() (err error) {
+func (c *client) Dial() (err error) {
 	defer func() {
 		c.handshakeErr = err
 		close(c.dialChan)
@@ -85,7 +85,7 @@ func (c *Client) Dial() (err error) {
 	return
 }
 
-func (c *Client) handleHeaderStream() {
+func (c *client) handleHeaderStream() {
 	decoder := hpack.NewDecoder(4096, func(hf hpack.HeaderField) {})
 	h2framer := http2.NewFramer(nil, c.headerStream)
 
@@ -135,7 +135,7 @@ func (c *Client) handleHeaderStream() {
 }
 
 // Do executes a request and returns a response
-func (c *Client) Do(req *http.Request) (*http.Response, error) {
+func (c *client) Do(req *http.Request) (*http.Response, error) {
 	// TODO: add port to address, if it doesn't have one
 	if req.URL.Scheme != "https" {
 		return nil, errors.New("quic http2: unsupported scheme")
@@ -234,7 +234,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	return res, nil
 }
 
-func (c *Client) writeRequestBody(dataStream quic.Stream, body io.ReadCloser) (err error) {
+func (c *client) writeRequestBody(dataStream quic.Stream, body io.ReadCloser) (err error) {
 	defer func() {
 		cerr := body.Close()
 		if err == nil {
@@ -252,7 +252,7 @@ func (c *Client) writeRequestBody(dataStream quic.Stream, body io.ReadCloser) (e
 }
 
 // Close closes the client
-func (c *Client) Close(e error) {
+func (c *client) Close(e error) {
 	_ = c.session.Close(e)
 }
 

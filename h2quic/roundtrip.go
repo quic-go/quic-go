@@ -93,7 +93,7 @@ func (r *QuicRoundTripper) getClient(hostname string) (h2quicClient, error) {
 
 	client, ok := r.clients[hostname]
 	if !ok {
-		client = NewClient(r, r.TLSClientConfig, hostname)
+		client = newClient(r, r.TLSClientConfig, hostname)
 		err := client.Dial()
 		if err != nil {
 			return nil, err
