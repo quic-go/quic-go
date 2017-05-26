@@ -103,6 +103,12 @@ var _ = Describe("Flow Control Manager", func() {
 			Expect(err).To(MatchError(errMapAccess))
 		})
 
+		It("gets the offset of the connection-level receive window", func() {
+			offset, err := fcm.GetReceiveWindow(0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(offset).To(Equal(protocol.ByteCount(200)))
+		})
+
 		Context("flow control violations", func() {
 			It("errors when encountering a stream level flow control violation", func() {
 				err := fcm.UpdateHighestReceived(4, 101)
