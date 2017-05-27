@@ -126,28 +126,24 @@ func (mockStream) CloseRemote(offset protocol.ByteCount) { panic("not implemente
 func (s mockStream) StreamID() protocol.StreamID         { panic("not implemented") }
 
 type mockStkSource struct {
-	verifyErr error
+	data      []byte
+	decodeErr error
 }
+
+var _ crypto.StkSource = &mockStkSource{}
 
 func (mockStkSource) NewToken(sourceAddr []byte) ([]byte, error) {
 	return append([]byte("token "), sourceAddr...), nil
 }
 
-func (s mockStkSource) VerifyToken(sourceAddr []byte, token []byte) error {
-	if s.verifyErr != nil {
-		return s.verifyErr
+func (s mockStkSource) DecodeToken(data []byte) ([]byte, error) {
+	if s.decodeErr != nil {
+		return nil, s.decodeErr
 	}
-	split := bytes.Split(token, []byte(" "))
-	if len(split) != 2 {
-		return errors.New("stk required")
+	if len(data) < 6 {
+		return nil, errors.New("token too short")
 	}
-	if !bytes.Equal(split[0], []byte("token")) {
-		return errors.New("no prefix match")
-	}
-	if !bytes.Equal(split[1], sourceAddr) {
-		return errors.New("ip wrong")
-	}
-	return nil
+	return data[6:], nil
 }
 
 var _ = Describe("Server Crypto Setup", func() {
@@ -161,19 +157,17 @@ var _ = Describe("Server Crypto Setup", func() {
 		aeadChanged       chan protocol.EncryptionLevel
 		nonce32           []byte
 		versionTag        []byte
-		sourceAddr        []byte
 		validSTK          []byte
 		aead              []byte
 		kexs              []byte
 		version           protocol.VersionNumber
 		supportedVersions []protocol.VersionNumber
+		sourceAddrValid   bool
 	)
 
 	BeforeEach(func() {
 		var err error
-		sourceAddr = net.ParseIP("1.2.3.4")
-		validSTK, err = mockStkSource{}.NewToken(sourceAddr)
-		Expect(err).NotTo(HaveOccurred())
+		remoteAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234}
 		expectedInitialNonceLen = 32
 		expectedFSNonceLen = 64
 		aeadChanged = make(chan protocol.EncryptionLevel, 2)
@@ -188,13 +182,27 @@ var _ = Describe("Server Crypto Setup", func() {
 		versionTag = make([]byte, 4)
 		binary.LittleEndian.PutUint32(versionTag, protocol.VersionNumberToTag(protocol.VersionWhatever))
 		Expect(err).NotTo(HaveOccurred())
-		scfg.stkSource = &mockStkSource{}
 		version = protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
 		supportedVersions = []protocol.VersionNumber{version, 98, 99}
 		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.VersionWhatever)
-		csInt, err := NewCryptoSetup(protocol.ConnectionID(42), sourceAddr, version, scfg, stream, cpm, supportedVersions, aeadChanged)
+		csInt, err := NewCryptoSetup(
+			protocol.ConnectionID(42),
+			remoteAddr,
+			version,
+			scfg,
+			stream,
+			cpm,
+			supportedVersions,
+			nil,
+			aeadChanged,
+		)
 		Expect(err).NotTo(HaveOccurred())
 		cs = csInt.(*cryptoSetupServer)
+		cs.stkGenerator.stkSource = &mockStkSource{}
+		validSTK, err = cs.stkGenerator.NewToken(remoteAddr)
+		Expect(err).NotTo(HaveOccurred())
+		sourceAddrValid = true
+		cs.acceptSTKCallback = func(_ net.Addr, _ *STK) bool { return sourceAddrValid }
 		cs.keyDerivation = mockKeyDerivation
 		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
 	})
@@ -255,14 +263,18 @@ var _ = Describe("Server Crypto Setup", func() {
 		})
 
 		It("generates REJ messages", func() {
+			sourceAddrValid = false
 			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(response).To(HavePrefix("REJ"))
 			Expect(response).To(ContainSubstring("initial public"))
+			Expect(response).ToNot(ContainSubstring("certcompressed"))
+			Expect(response).ToNot(ContainSubstring("proof"))
 			Expect(signer.gotCHLO).To(BeFalse())
 		})
 
 		It("REJ messages don't include cert or proof without STK", func() {
+			sourceAddrValid = false
 			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(response).To(HavePrefix("REJ"))
@@ -272,6 +284,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		})
 
 		It("REJ messages include cert and proof with valid STK", func() {
+			sourceAddrValid = true
 			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), map[Tag][]byte{
 				TagSTK: validSTK,
 				TagSNI: []byte("foo"),
@@ -387,7 +400,7 @@ var _ = Describe("Server Crypto Setup", func() {
 
 		It("recognizes inchoate CHLOs with an invalid STK", func() {
 			testErr := errors.New("STK invalid")
-			scfg.stkSource.(*mockStkSource).verifyErr = testErr
+			cs.stkGenerator.stkSource.(*mockStkSource).decodeErr = testErr
 			Expect(cs.isInchoateCHLO(fullCHLO, cert)).To(BeTrue())
 		})
 
@@ -676,34 +689,30 @@ var _ = Describe("Server Crypto Setup", func() {
 
 	Context("STK verification and creation", func() {
 		It("requires STK", func() {
-			done, err := cs.handleMessage(bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), map[Tag][]byte{
-				TagSNI: []byte("foo"),
-				TagVER: versionTag,
-			})
+			sourceAddrValid = false
+			done, err := cs.handleMessage(
+				bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize),
+				map[Tag][]byte{
+					TagSNI: []byte("foo"),
+					TagVER: versionTag,
+				},
+			)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(done).To(BeFalse())
-			Expect(err).To(BeNil())
 			Expect(stream.dataWritten.Bytes()).To(ContainSubstring(string(validSTK)))
 		})
 
 		It("works with proper STK", func() {
-			done, err := cs.handleMessage(bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), map[Tag][]byte{
-				TagSTK: validSTK,
-				TagSNI: []byte("foo"),
-				TagVER: versionTag,
-			})
+			sourceAddrValid = true
+			done, err := cs.handleMessage(
+				bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize),
+				map[Tag][]byte{
+					TagSNI: []byte("foo"),
+					TagVER: versionTag,
+				},
+			)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(done).To(BeFalse())
-			Expect(err).To(BeNil())
-		})
-
-		It("errors if IP does not match", func() {
-			done, err := cs.handleMessage(bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), map[Tag][]byte{
-				TagSNI: []byte("foo"),
-				TagSTK: []byte("token \x04\x03\x03\x01"),
-				TagVER: versionTag,
-			})
-			Expect(done).To(BeFalse())
-			Expect(err).To(BeNil())
-			Expect(stream.dataWritten.Bytes()).To(ContainSubstring(string(validSTK)))
 		})
 	})
 })

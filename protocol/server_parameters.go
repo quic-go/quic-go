@@ -84,8 +84,8 @@ const SkipPacketAveragePeriodLength PacketNumber = 500
 // MaxTrackedSkippedPackets is the maximum number of skipped packet numbers the SentPacketHandler keep track of for Optimistic ACK attack mitigation
 const MaxTrackedSkippedPackets = 10
 
-// STKExpiryTimeSec is the valid time of a source address token in seconds
-const STKExpiryTimeSec = 24 * 60 * 60
+// STKExpiryTime is the valid time of a source address token
+const STKExpiryTime = 24 * time.Hour
 
 // MaxTrackedSentPackets is maximum number of sent packets saved for either later retransmission or entropy calculation
 const MaxTrackedSentPackets = 2 * DefaultMaxCongestionWindow

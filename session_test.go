@@ -131,8 +131,6 @@ var _ = Describe("Session", func() {
 		cryptoSetup   *mockCryptoSetup
 		handshakeChan <-chan handshakeEvent
 		aeadChanged   chan<- protocol.EncryptionLevel
-
-		cryptoSetupSourceAddr []byte
 	)
 
 	BeforeEach(func() {
@@ -141,15 +139,15 @@ var _ = Describe("Session", func() {
 		cryptoSetup = &mockCryptoSetup{}
 		newCryptoSetup = func(
 			_ protocol.ConnectionID,
-			sourceAddr []byte,
+			_ net.Addr,
 			_ protocol.VersionNumber,
 			_ *handshake.ServerConfig,
 			_ io.ReadWriter,
 			_ handshake.ConnectionParametersManager,
 			_ []protocol.VersionNumber,
+			_ func(net.Addr, *handshake.STK) bool,
 			aeadChangedP chan<- protocol.EncryptionLevel,
 		) (handshake.CryptoSetup, error) {
-			cryptoSetupSourceAddr = sourceAddr
 			aeadChanged = aeadChangedP
 			return cryptoSetup, nil
 		}
@@ -183,33 +181,61 @@ var _ = Describe("Session", func() {
 		Eventually(areSessionsRunning).Should(BeFalse())
 	})
 
-	Context("source address", func() {
-		It("uses the IP address if given an UDP connection", func() {
-			conn := &conn{currentAddr: &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200)[12:], Port: 1337}}
-			_, _, err := newSession(
-				conn,
-				protocol.VersionWhatever,
+	Context("source address validation", func() {
+		var (
+			stkVerify       func(net.Addr, *handshake.STK) bool
+			paramClientAddr net.Addr
+			paramSTK        *STK
+		)
+		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 1000}
+
+		BeforeEach(func() {
+			newCryptoSetup = func(
+				_ protocol.ConnectionID,
+				_ net.Addr,
+				_ protocol.VersionNumber,
+				_ *handshake.ServerConfig,
+				_ io.ReadWriter,
+				_ handshake.ConnectionParametersManager,
+				_ []protocol.VersionNumber,
+				stkFunc func(net.Addr, *handshake.STK) bool,
+				_ chan<- protocol.EncryptionLevel,
+			) (handshake.CryptoSetup, error) {
+				stkVerify = stkFunc
+				return cryptoSetup, nil
+			}
+
+			conf := populateServerConfig(&Config{})
+			conf.AcceptSTK = func(clientAddr net.Addr, stk *STK) bool {
+				paramClientAddr = clientAddr
+				paramSTK = stk
+				return false
+			}
+			pSess, _, err := newSession(
+				mconn,
+				protocol.Version35,
 				0,
 				scfg,
-				populateServerConfig(&Config{}),
+				conf,
 			)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cryptoSetupSourceAddr).To(Equal([]byte{192, 168, 100, 200}))
+			Expect(err).NotTo(HaveOccurred())
+			sess = pSess.(*session)
 		})
 
-		It("uses the string representation of the remote addresses if not given a UDP connection", func() {
-			conn := &conn{
-				currentAddr: &net.TCPAddr{IP: net.IPv4(192, 168, 100, 200)[12:], Port: 1337},
-			}
-			_, _, err := newSession(
-				conn,
-				protocol.VersionWhatever,
-				0,
-				scfg,
-				populateServerConfig(&Config{}),
-			)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cryptoSetupSourceAddr).To(Equal([]byte("192.168.100.200:1337")))
+		It("calls the callback with the right parameters when the client didn't send an STK", func() {
+			stkVerify(remoteAddr, nil)
+			Expect(paramClientAddr).To(Equal(remoteAddr))
+			Expect(paramSTK).To(BeNil())
+		})
+
+		It("calls the callback with the STK when the client sent an STK", func() {
+			stkAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
+			sentTime := time.Now().Add(-time.Hour)
+			stkVerify(remoteAddr, &handshake.STK{SentTime: sentTime, RemoteAddr: stkAddr.String()})
+			Expect(paramClientAddr).To(Equal(remoteAddr))
+			Expect(paramSTK).ToNot(BeNil())
+			Expect(paramSTK.remoteAddr).To(Equal(stkAddr.String()))
+			Expect(paramSTK.sentTime).To(Equal(sentTime))
 		})
 	})
 

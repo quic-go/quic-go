@@ -137,25 +137,29 @@ func newSession(
 	s.setup()
 	cryptoStream, _ := s.GetOrOpenStream(1)
 	_, _ = s.AcceptStream() // don't expose the crypto stream
-	var sourceAddr []byte
-	if udpAddr, ok := conn.RemoteAddr().(*net.UDPAddr); ok {
-		sourceAddr = udpAddr.IP
-	} else {
-		sourceAddr = []byte(conn.RemoteAddr().String())
-	}
 	aeadChanged := make(chan protocol.EncryptionLevel, 2)
 	s.aeadChanged = aeadChanged
 	handshakeChan := make(chan handshakeEvent, 3)
 	s.handshakeChan = handshakeChan
+	verifySourceAddr := func(clientAddr net.Addr, hstk *handshake.STK) bool {
+		if hstk == nil {
+			return config.AcceptSTK(clientAddr, nil)
+		}
+		return config.AcceptSTK(
+			clientAddr,
+			&STK{remoteAddr: hstk.RemoteAddr, sentTime: hstk.SentTime},
+		)
+	}
 	var err error
 	s.cryptoSetup, err = newCryptoSetup(
 		connectionID,
-		sourceAddr,
+		conn.RemoteAddr(),
 		v,
 		sCfg,
 		cryptoStream,
 		s.connectionParameters,
 		config.Versions,
+		verifySourceAddr,
 		aeadChanged,
 	)
 	if err != nil {

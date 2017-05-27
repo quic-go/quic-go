@@ -5,47 +5,18 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
-	"time"
-
-	"github.com/lucas-clemente/quic-go/protocol"
 
 	"golang.org/x/crypto/hkdf"
 )
 
 // StkSource is used to create and verify source address tokens
 type StkSource interface {
-	// NewToken creates a new token for a given IP address
-	NewToken(sourceAddress []byte) ([]byte, error)
-	// VerifyToken verifies if a token matches a given IP address and is not outdated
-	VerifyToken(sourceAddress []byte, data []byte) error
-}
-
-type sourceAddressToken struct {
-	sourceAddr []byte
-	// unix timestamp in seconds
-	timestamp uint64
-}
-
-func (t *sourceAddressToken) serialize() []byte {
-	res := make([]byte, 8+len(t.sourceAddr))
-	binary.LittleEndian.PutUint64(res, t.timestamp)
-	copy(res[8:], t.sourceAddr)
-	return res
-}
-
-func parseToken(data []byte) (*sourceAddressToken, error) {
-	if len(data) != 8+4 && len(data) != 8+16 {
-		return nil, fmt.Errorf("invalid STK length: %d", len(data))
-	}
-	return &sourceAddressToken{
-		sourceAddr: data[8:],
-		timestamp:  binary.LittleEndian.Uint64(data),
-	}, nil
+	// NewToken creates a new token
+	NewToken([]byte) ([]byte, error)
+	// DecodeToken decodes a token
+	DecodeToken([]byte) ([]byte, error)
 }
 
 type stkSource struct {
@@ -59,7 +30,11 @@ const stkKeySize = 16
 const stkNonceSize = 16
 
 // NewStkSource creates a source for source address tokens
-func NewStkSource(secret []byte) (StkSource, error) {
+func NewStkSource() (StkSource, error) {
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return nil, err
+	}
 	key, err := deriveKey(secret)
 	if err != nil {
 		return nil, err
@@ -75,38 +50,20 @@ func NewStkSource(secret []byte) (StkSource, error) {
 	return &stkSource{aead: aead}, nil
 }
 
-func (s *stkSource) NewToken(sourceAddr []byte) ([]byte, error) {
-	return encryptToken(s.aead, &sourceAddressToken{
-		sourceAddr: sourceAddr,
-		timestamp:  uint64(time.Now().Unix()),
-	})
+func (s *stkSource) NewToken(data []byte) ([]byte, error) {
+	nonce := make([]byte, stkNonceSize)
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, err
+	}
+	return s.aead.Seal(nonce, nonce, data, nil), nil
 }
 
-func (s *stkSource) VerifyToken(sourceAddr []byte, data []byte) error {
-	if len(data) < stkNonceSize {
-		return errors.New("STK too short")
+func (s *stkSource) DecodeToken(p []byte) ([]byte, error) {
+	if len(p) < stkNonceSize {
+		return nil, fmt.Errorf("STK too short: %d", len(p))
 	}
-	nonce := data[:stkNonceSize]
-
-	res, err := s.aead.Open(nil, nonce, data[stkNonceSize:], nil)
-	if err != nil {
-		return err
-	}
-
-	token, err := parseToken(res)
-	if err != nil {
-		return err
-	}
-
-	if subtle.ConstantTimeCompare(token.sourceAddr, sourceAddr) != 1 {
-		return errors.New("invalid source address in STK")
-	}
-
-	if time.Now().Unix() > int64(token.timestamp)+protocol.STKExpiryTimeSec {
-		return errors.New("STK expired")
-	}
-
-	return nil
+	nonce := p[:stkNonceSize]
+	return s.aead.Open(nil, nonce, p[stkNonceSize:], nil)
 }
 
 func deriveKey(secret []byte) ([]byte, error) {
@@ -116,12 +73,4 @@ func deriveKey(secret []byte) ([]byte, error) {
 		return nil, err
 	}
 	return key, nil
-}
-
-func encryptToken(aead cipher.AEAD, token *sourceAddressToken) ([]byte, error) {
-	nonce := make([]byte, stkNonceSize)
-	if _, err := rand.Read(nonce); err != nil {
-		return nil, err
-	}
-	return aead.Seal(nonce, nonce, token.serialize(), nil), nil
 }

@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"io"
 	"net"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 )
@@ -45,6 +46,18 @@ type NonFWSession interface {
 	WaitUntilHandshakeComplete() error
 }
 
+// An STK is a Source Address token.
+// It is issued by the server and sent to the client. For the client, it is an opaque blob.
+// The client can send the STK in subsequent handshakes to prove ownership of its IP address.
+type STK struct {
+	// The remote address this token was issued for.
+	// If the server is run on a net.UDPConn, this is the string representation of the IP address (net.IP.String())
+	// Otherwise, this is the string representation of the net.Addr (net.Addr.String())
+	remoteAddr string
+	// The time that the STK was issued (resolution 1 second)
+	sentTime time.Time
+}
+
 // Config contains all configuration data needed for a QUIC server or client.
 // More config parameters (such as timeouts) will be added soon, see e.g. https://github.com/lucas-clemente/quic-go/issues/441.
 type Config struct {
@@ -54,9 +67,15 @@ type Config struct {
 	// Warning: This API should not be considered stable and will change soon.
 	Versions []protocol.VersionNumber
 	// Ask the server to truncate the connection ID sent in the Public Header.
+	// If not set, the default checks if
 	// This saves 8 bytes in the Public Header in every packet. However, if the IP address of the server changes, the connection cannot be migrated.
 	// Currently only valid for the client.
 	RequestConnectionIDTruncation bool
+	// AcceptSTK determines if an STK is accepted.
+	// It is called with stk = nil if the client didn't send an STK.
+	// If not set, it verifies that the address matches, and that the STK was issued within the last 24 hours
+	// This option is only valid for the server.
+	AcceptSTK func(clientAddr net.Addr, stk *STK) bool
 }
 
 // A Listener for incoming QUIC connections
