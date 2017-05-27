@@ -3,6 +3,7 @@ package handshaketests
 import (
 	"crypto/tls"
 	"fmt"
+	"net"
 	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
@@ -98,5 +99,25 @@ var _ = Describe("Handshake integration tets", func() {
 		fmt.Println("#### is non fw secure ###")
 		Expect(err).ToNot(HaveOccurred())
 		expectDurationInRTTs(2)
+	})
+
+	It("is forward-secure after 2 RTTs when the server doesn't require an STK", func() {
+		serverConfig.AcceptSTK = func(_ net.Addr, _ *quic.STK) bool {
+			return true
+		}
+		runServerAndProxy()
+		_, err := quic.DialAddr(proxy.LocalAddr().String(), &quic.Config{TLSConfig: &tls.Config{InsecureSkipVerify: true}})
+		Expect(err).ToNot(HaveOccurred())
+		expectDurationInRTTs(2)
+	})
+
+	It("doesn't complete the handshake when the server never accepts the STK", func() {
+		serverConfig.AcceptSTK = func(_ net.Addr, _ *quic.STK) bool {
+			return false
+		}
+		runServerAndProxy()
+		_, err := quic.DialAddr(proxy.LocalAddr().String(), &quic.Config{TLSConfig: &tls.Config{InsecureSkipVerify: true}})
+		Expect(err).To(HaveOccurred())
+		Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.CryptoTooManyRejects))
 	})
 })
