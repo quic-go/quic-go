@@ -64,7 +64,7 @@ func dropTests(
 	dropInARow protocol.PacketNumber,
 	runDropTest func(dropCallback quicproxy.DropCallback, version protocol.VersionNumber),
 	version protocol.VersionNumber) {
-	FContext("dropping multiple packets after the crypto handshake", func() {
+	Context("dropping multiple packets after the crypto handshake", func() {
 		dropper := func(p protocol.PacketNumber) bool {
 			if p <= 10 { // don't interfere with the crypto handshake
 				return false
