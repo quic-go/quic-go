@@ -1403,7 +1403,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("times out due to non-completed crypto handshake", func(done Done) {
-			sess.sessionCreationTime = time.Now().Add(-time.Hour)
+			sess.sessionCreationTime = time.Now().Add(-protocol.DefaultHandshakeTimeout).Add(-time.Second)
 			sess.run() // Would normally not return
 			Expect(mconn.written[0]).To(ContainSubstring("Crypto handshake did not complete in time."))
 			Expect(sess.runClosed).To(BeClosed())

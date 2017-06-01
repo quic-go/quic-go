@@ -128,8 +128,8 @@ const MaxIdleTimeoutServer = 1 * time.Minute
 // MaxIdleTimeoutClient is the idle timeout that the client suggests to the server
 const MaxIdleTimeoutClient = 2 * time.Minute
 
-// MaxTimeForCryptoHandshake is the default timeout for a connection until the crypto handshake succeeds.
-const MaxTimeForCryptoHandshake = 10 * time.Second
+// DefaultHandshakeTimeout is the default timeout for a connection until the crypto handshake succeeds.
+const DefaultHandshakeTimeout = 10 * time.Second
 
 // ClosedSessionDeleteTimeout the server ignores packets arriving on a connection that is already closed
 // after this time all information about the old connection will be deleted
