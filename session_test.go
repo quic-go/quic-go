@@ -1396,7 +1396,8 @@ var _ = Describe("Session", func() {
 	Context("timeouts", func() {
 		It("times out due to no network activity", func(done Done) {
 			sess.lastNetworkActivityTime = time.Now().Add(-time.Hour)
-			sess.run() // Would normally not return
+			err := sess.run() // Would normally not return
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
 			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
 			Expect(sess.runClosed).To(BeClosed())
 			close(done)
@@ -1404,7 +1405,8 @@ var _ = Describe("Session", func() {
 
 		It("times out due to non-completed crypto handshake", func(done Done) {
 			sess.sessionCreationTime = time.Now().Add(-protocol.DefaultHandshakeTimeout).Add(-time.Second)
-			sess.run() // Would normally not return
+			err := sess.run() // Would normally not return
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.HandshakeTimeout))
 			Expect(mconn.written[0]).To(ContainSubstring("Crypto handshake did not complete in time."))
 			Expect(sess.runClosed).To(BeClosed())
 			close(done)
@@ -1414,7 +1416,8 @@ var _ = Describe("Session", func() {
 			sess.lastNetworkActivityTime = time.Now().Add(-time.Minute)
 			cpm.idleTime = 99999 * time.Second
 			sess.packer.connectionParameters = sess.connectionParameters
-			sess.run() // Would normally not return
+			err := sess.run() // Would normally not return
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
 			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
 			Expect(sess.runClosed).To(BeClosed())
 			close(done)
@@ -1424,7 +1427,8 @@ var _ = Describe("Session", func() {
 			close(aeadChanged)
 			cpm.idleTime = 0 * time.Millisecond
 			sess.packer.connectionParameters = sess.connectionParameters
-			sess.run() // Would normally not return
+			err := sess.run() // Would normally not return
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
 			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
 			Expect(sess.runClosed).To(BeClosed())
 			close(done)
