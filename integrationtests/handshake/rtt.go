@@ -120,4 +120,15 @@ var _ = Describe("Handshake integration tets", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.CryptoTooManyRejects))
 	})
+
+	It("doesn't complete the handshake when the handshake timeout is too short", func() {
+		serverConfig.HandshakeTimeout = 2 * rtt
+		runServerAndProxy()
+		_, err := quic.DialAddr(proxy.LocalAddr().String(), &quic.Config{TLSConfig: &tls.Config{InsecureSkipVerify: true}})
+		Expect(err).To(HaveOccurred())
+		Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.HandshakeTimeout))
+		// 2 RTTs during the timeout
+		// plus 1 RTT: the timer starts 0.5 RTTs after sending the first packet, and the CONNECTION_CLOSE needs another 0.5 RTTs to reach the client
+		expectDurationInRTTs(3)
+	})
 })
