@@ -66,12 +66,6 @@ var _ = Describe("RoundTripper", func() {
 		Expect(rt.clients).To(HaveLen(1))
 	})
 
-	It("disable compression", func() {
-		Expect(rt.disableCompression()).To(BeFalse())
-		rt.DisableCompression = true
-		Expect(rt.disableCompression()).To(BeTrue())
-	})
-
 	Context("validating request", func() {
 		It("rejects plain HTTP requests", func() {
 			req, err := http.NewRequest("GET", "http://www.example.org/", nil)

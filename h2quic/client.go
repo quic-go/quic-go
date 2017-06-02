@@ -20,14 +20,17 @@ import (
 	"github.com/lucas-clemente/quic-go/utils"
 )
 
+type roundTripperOpts struct {
+	DisableCompression bool
+}
+
 // client is a HTTP2 client doing QUIC requests
 type client struct {
 	mutex sync.RWMutex
 
 	dialAddr func(hostname string, config *quic.Config) (quic.Session, error)
 	config   *quic.Config
-
-	t *QuicRoundTripper
+	opts     *roundTripperOpts
 
 	hostname        string
 	encryptionLevel protocol.EncryptionLevel
@@ -45,9 +48,8 @@ type client struct {
 var _ h2quicClient = &client{}
 
 // newClient creates a new client
-func newClient(t *QuicRoundTripper, tlsConfig *tls.Config, hostname string) *client {
+func newClient(tlsConfig *tls.Config, hostname string, opts *roundTripperOpts) *client {
 	return &client{
-		t:               t,
 		dialAddr:        quic.DialAddr,
 		hostname:        authorityAddr("https", hostname),
 		responses:       make(map[protocol.StreamID]chan *http.Response),
@@ -56,6 +58,7 @@ func newClient(t *QuicRoundTripper, tlsConfig *tls.Config, hostname string) *cli
 			TLSConfig:                     tlsConfig,
 			RequestConnectionIDTruncation: true,
 		},
+		opts:     opts,
 		dialChan: make(chan struct{}),
 	}
 }
@@ -164,7 +167,7 @@ func (c *client) Do(req *http.Request) (*http.Response, error) {
 	c.mutex.Unlock()
 
 	var requestedGzip bool
-	if !c.t.disableCompression() && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" && req.Method != "HEAD" {
+	if !c.opts.DisableCompression && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" && req.Method != "HEAD" {
 		requestedGzip = true
 	}
 	// TODO: add support for trailers

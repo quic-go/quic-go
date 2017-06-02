@@ -93,7 +93,7 @@ func (r *QuicRoundTripper) getClient(hostname string) (h2quicClient, error) {
 
 	client, ok := r.clients[hostname]
 	if !ok {
-		client = newClient(r, r.TLSClientConfig, hostname)
+		client = newClient(r.TLSClientConfig, hostname, &roundTripperOpts{DisableCompression: r.DisableCompression})
 		err := client.Dial()
 		if err != nil {
 			return nil, err
@@ -101,10 +101,6 @@ func (r *QuicRoundTripper) getClient(hostname string) (h2quicClient, error) {
 		r.clients[hostname] = client
 	}
 	return client, nil
-}
-
-func (r *QuicRoundTripper) disableCompression() bool {
-	return r.DisableCompression
 }
 
 func closeRequestBody(req *http.Request) {
