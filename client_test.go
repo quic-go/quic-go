@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"net"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
@@ -153,9 +154,21 @@ var _ = Describe("Client", func() {
 			close(done)
 		})
 
-		It("uses all supported versions, if none are specified in the quic.Config", func() {
+		It("setups with the right values", func() {
+			config := &Config{
+				HandshakeTimeout:              1337 * time.Minute,
+				RequestConnectionIDTruncation: true,
+			}
+			c := populateClientConfig(config)
+			Expect(c.HandshakeTimeout).To(Equal(1337 * time.Minute))
+			Expect(c.RequestConnectionIDTruncation).To(BeTrue())
+		})
+
+		It("fills in default values if options are not set in the Config", func() {
 			c := populateClientConfig(&Config{})
 			Expect(c.Versions).To(Equal(protocol.SupportedVersions))
+			Expect(c.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
+			Expect(c.RequestConnectionIDTruncation).To(BeFalse())
 		})
 
 		It("errors when receiving an invalid first packet from the server", func(done Done) {
@@ -310,7 +323,7 @@ var _ = Describe("Client", func() {
 		Expect(cconn.(*conn).pconn).To(Equal(packetConn))
 		Expect(hostname).To(Equal("quic.clemente.io"))
 		Expect(version).To(Equal(cl.version))
-		Expect(conf).To(Equal(config))
+		Expect(conf.Versions).To(Equal(config.Versions))
 		close(done)
 	})
 

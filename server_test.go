@@ -345,9 +345,10 @@ var _ = Describe("Server", func() {
 		supportedVersions := []protocol.VersionNumber{1, 3, 5}
 		acceptSTK := func(_ net.Addr, _ *STK) bool { return true }
 		config := Config{
-			TLSConfig: &tls.Config{},
-			Versions:  supportedVersions,
-			AcceptSTK: acceptSTK,
+			TLSConfig:        &tls.Config{},
+			Versions:         supportedVersions,
+			AcceptSTK:        acceptSTK,
+			HandshakeTimeout: 1337 * time.Hour,
 		}
 		ln, err := Listen(conn, &config)
 		Expect(err).ToNot(HaveOccurred())
@@ -356,6 +357,7 @@ var _ = Describe("Server", func() {
 		Expect(server.sessions).ToNot(BeNil())
 		Expect(server.scfg).ToNot(BeNil())
 		Expect(server.config.Versions).To(Equal(supportedVersions))
+		Expect(server.config.HandshakeTimeout).To(Equal(1337 * time.Hour))
 		Expect(reflect.ValueOf(server.config.AcceptSTK)).To(Equal(reflect.ValueOf(acceptSTK)))
 	})
 
@@ -365,6 +367,7 @@ var _ = Describe("Server", func() {
 		Expect(err).ToNot(HaveOccurred())
 		server := ln.(*server)
 		Expect(server.config.Versions).To(Equal(protocol.SupportedVersions))
+		Expect(server.config.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
 		Expect(reflect.ValueOf(server.config.AcceptSTK)).To(Equal(reflect.ValueOf(defaultAcceptSTK)))
 	})
 

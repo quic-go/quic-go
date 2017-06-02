@@ -118,9 +118,15 @@ func populateClientConfig(config *Config) *Config {
 		versions = protocol.SupportedVersions
 	}
 
+	handshakeTimeout := protocol.DefaultHandshakeTimeout
+	if config.HandshakeTimeout != 0 {
+		handshakeTimeout = config.HandshakeTimeout
+	}
+
 	return &Config{
 		TLSConfig:                     config.TLSConfig,
 		Versions:                      versions,
+		HandshakeTimeout:              handshakeTimeout,
 		RequestConnectionIDTruncation: config.RequestConnectionIDTruncation,
 	}
 }

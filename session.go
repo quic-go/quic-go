@@ -327,8 +327,8 @@ runLoop:
 		if now.Sub(s.lastNetworkActivityTime) >= s.idleTimeout() {
 			s.close(qerr.Error(qerr.NetworkIdleTimeout, "No recent network activity."))
 		}
-		if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= protocol.MaxTimeForCryptoHandshake {
-			s.close(qerr.Error(qerr.NetworkIdleTimeout, "Crypto handshake did not complete in time."))
+		if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= s.config.HandshakeTimeout {
+			s.close(qerr.Error(qerr.HandshakeTimeout, "Crypto handshake did not complete in time."))
 		}
 		s.garbageCollectStreams()
 	}
@@ -354,7 +354,7 @@ func (s *session) maybeResetTimer() {
 		nextDeadline = utils.MinTime(nextDeadline, lossTime)
 	}
 	if !s.handshakeComplete {
-		handshakeDeadline := s.sessionCreationTime.Add(protocol.MaxTimeForCryptoHandshake)
+		handshakeDeadline := s.sessionCreationTime.Add(s.config.HandshakeTimeout)
 		nextDeadline = utils.MinTime(nextDeadline, handshakeDeadline)
 	}
 	if !s.receivedTooManyUndecrytablePacketsTime.IsZero() {

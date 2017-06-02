@@ -106,15 +106,22 @@ func populateServerConfig(config *Config) *Config {
 	if len(versions) == 0 {
 		versions = protocol.SupportedVersions
 	}
+
 	vsa := defaultAcceptSTK
 	if config.AcceptSTK != nil {
 		vsa = config.AcceptSTK
 	}
 
+	handshakeTimeout := protocol.DefaultHandshakeTimeout
+	if config.HandshakeTimeout != 0 {
+		handshakeTimeout = config.HandshakeTimeout
+	}
+
 	return &Config{
-		TLSConfig: config.TLSConfig,
-		Versions:  versions,
-		AcceptSTK: vsa,
+		TLSConfig:        config.TLSConfig,
+		Versions:         versions,
+		HandshakeTimeout: handshakeTimeout,
+		AcceptSTK:        vsa,
 	}
 }
 
