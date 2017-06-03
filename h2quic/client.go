@@ -144,8 +144,7 @@ func (c *client) Do(req *http.Request) (*http.Response, error) {
 		return nil, errors.New("quic http2: unsupported scheme")
 	}
 	if authorityAddr("https", hostnameFromRequest(req)) != c.hostname {
-		utils.Debugf("%s vs %s", req.Host, c.hostname)
-		return nil, errors.New("h2quic Client BUG: Do called for the wrong client")
+		return nil, fmt.Errorf("h2quic Client BUG: RoundTrip called for the wrong client (expected %s, got %s)", c.hostname, req.Host)
 	}
 
 	hasBody := (req.Body != nil)

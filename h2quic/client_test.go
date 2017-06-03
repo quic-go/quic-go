@@ -212,7 +212,7 @@ var _ = Describe("Client", func() {
 				req, err := http.NewRequest("https", "https://quic.clemente.io:1336/foobar.html", nil)
 				Expect(err).ToNot(HaveOccurred())
 				_, err = client.Do(req)
-				Expect(err).To(MatchError("h2quic Client BUG: Do called for the wrong client"))
+				Expect(err).To(MatchError("h2quic Client BUG: RoundTrip called for the wrong client (expected quic.clemente.io:1337, got quic.clemente.io:1336)"))
 			})
 
 			It("refuses to do plain HTTP requests", func() {
