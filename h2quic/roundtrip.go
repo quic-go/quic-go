@@ -11,11 +11,6 @@ import (
 	"golang.org/x/net/lex/httplex"
 )
 
-type h2quicClient interface {
-	Dial() error
-	Do(*http.Request) (*http.Response, error)
-}
-
 // QuicRoundTripper implements the http.RoundTripper interface
 type QuicRoundTripper struct {
 	mutex sync.Mutex
@@ -34,7 +29,7 @@ type QuicRoundTripper struct {
 	// tls.Client. If nil, the default configuration is used.
 	TLSClientConfig *tls.Config
 
-	clients map[string]h2quicClient
+	clients map[string]http.RoundTripper
 }
 
 var _ http.RoundTripper = &QuicRoundTripper{}
@@ -76,31 +71,23 @@ func (r *QuicRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 	}
 
 	hostname := authorityAddr("https", hostnameFromRequest(req))
-	client, err := r.getClient(hostname)
-	if err != nil {
-		return nil, err
-	}
-	return client.Do(req)
+	return r.getClient(hostname).RoundTrip(req)
 }
 
-func (r *QuicRoundTripper) getClient(hostname string) (h2quicClient, error) {
+func (r *QuicRoundTripper) getClient(hostname string) http.RoundTripper {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
 	if r.clients == nil {
-		r.clients = make(map[string]h2quicClient)
+		r.clients = make(map[string]http.RoundTripper)
 	}
 
 	client, ok := r.clients[hostname]
 	if !ok {
 		client = newClient(r.TLSClientConfig, hostname, &roundTripperOpts{DisableCompression: r.DisableCompression})
-		err := client.Dial()
-		if err != nil {
-			return nil, err
-		}
 		r.clients[hostname] = client
 	}
-	return client, nil
+	return client
 }
 
 func closeRequestBody(req *http.Request) {

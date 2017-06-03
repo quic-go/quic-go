@@ -35,7 +35,7 @@ type client struct {
 	hostname        string
 	encryptionLevel protocol.EncryptionLevel
 	handshakeErr    error
-	dialChan        chan struct{} // will be closed once the handshake is complete and the header stream has been opened
+	dialOnce        sync.Once
 
 	session       quic.Session
 	headerStream  quic.Stream
@@ -45,7 +45,7 @@ type client struct {
 	responses map[protocol.StreamID]chan *http.Response
 }
 
-var _ h2quicClient = &client{}
+var _ http.RoundTripper = &client{}
 
 // newClient creates a new client
 func newClient(tlsConfig *tls.Config, hostname string, opts *roundTripperOpts) *client {
@@ -58,18 +58,13 @@ func newClient(tlsConfig *tls.Config, hostname string, opts *roundTripperOpts) *
 			TLSConfig:                     tlsConfig,
 			RequestConnectionIDTruncation: true,
 		},
-		opts:     opts,
-		dialChan: make(chan struct{}),
+		opts: opts,
 	}
 }
 
-// Dial dials the connection
-func (c *client) Dial() (err error) {
-	defer func() {
-		c.handshakeErr = err
-		close(c.dialChan)
-	}()
-
+// dial dials the connection
+func (c *client) dial() error {
+	var err error
 	c.session, err = c.dialAddr(c.hostname, c.config)
 	if err != nil {
 		return err
@@ -85,7 +80,7 @@ func (c *client) Dial() (err error) {
 	}
 	c.requestWriter = newRequestWriter(c.headerStream)
 	go c.handleHeaderStream()
-	return
+	return nil
 }
 
 func (c *client) handleHeaderStream() {
@@ -137,8 +132,8 @@ func (c *client) handleHeaderStream() {
 	c.mutex.Unlock()
 }
 
-// Do executes a request and returns a response
-func (c *client) Do(req *http.Request) (*http.Response, error) {
+// Roundtrip executes a request and returns a response
+func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	// TODO: add port to address, if it doesn't have one
 	if req.URL.Scheme != "https" {
 		return nil, errors.New("quic http2: unsupported scheme")
@@ -147,13 +142,15 @@ func (c *client) Do(req *http.Request) (*http.Response, error) {
 		return nil, fmt.Errorf("h2quic Client BUG: RoundTrip called for the wrong client (expected %s, got %s)", c.hostname, req.Host)
 	}
 
-	hasBody := (req.Body != nil)
+	c.dialOnce.Do(func() {
+		c.handshakeErr = c.dial()
+	})
 
-	// wait until the handshake is complete
-	<-c.dialChan
 	if c.handshakeErr != nil {
 		return nil, c.handshakeErr
 	}
+
+	hasBody := (req.Body != nil)
 
 	responseChan := make(chan *http.Response)
 	dataStream, err := c.session.OpenStreamSync()
@@ -232,7 +229,6 @@ func (c *client) Do(req *http.Request) (*http.Response, error) {
 	}
 
 	res.Request = req
-
 	return res, nil
 }
 
