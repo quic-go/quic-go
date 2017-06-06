@@ -333,7 +333,11 @@ func (h *sentPacketHandler) SendingAllowed() bool {
 			h.bytesInFlight,
 			h.congestion.GetCongestionWindow())
 	}
-	return !(congestionLimited || maxTrackedLimited)
+	// Workaround for #555:
+	// Always allow sending of retransmissions. This should probably be limited
+	// to RTOs, but we currently don't have a nice way of distinguishing them.
+	haveRetransmissions := len(h.retransmissionQueue) > 0
+	return !maxTrackedLimited && (!congestionLimited || haveRetransmissions)
 }
 
 func (h *sentPacketHandler) retransmitOldestTwoPackets() {

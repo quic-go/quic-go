@@ -678,6 +678,14 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.retransmissionQueue = make([]*Packet, protocol.MaxTrackedSentPackets)
 			Expect(handler.SendingAllowed()).To(BeFalse())
 		})
+
+		It("allows sending if there are retransmisisons outstanding", func() {
+			err := handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: protocol.DefaultTCPMSS + 1})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(handler.SendingAllowed()).To(BeFalse())
+			handler.retransmissionQueue = []*Packet{nil}
+			Expect(handler.SendingAllowed()).To(BeTrue())
+		})
 	})
 
 	Context("calculating RTO", func() {
