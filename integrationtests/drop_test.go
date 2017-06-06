@@ -49,22 +49,25 @@ var _ = Describe("Drop Proxy", func() {
 		Expect(proxy.Close()).To(Succeed())
 	})
 
-	for i := range protocol.SupportedVersions {
-		version := protocol.SupportedVersions[i]
+	Context("after the crypto handshake", func() {
+		for i := range protocol.SupportedVersions {
+			version := protocol.SupportedVersions[i]
 
-		Context(fmt.Sprintf("with quic version %d", version), func() {
-			dropTests(4, 1, runDropTest, version)
-			dropTests(100, 10, runDropTest, version)
-		})
-	}
+			Context(fmt.Sprintf("with quic version %d", version), func() {
+				dropTests("dropping every 4th packet", 4, 1, runDropTest, version)
+				dropTests("dropping 10 packets every 100 packets", 100, 10, runDropTest, version)
+			})
+		}
+	})
 })
 
 func dropTests(
+	context string,
 	interval protocol.PacketNumber,
 	dropInARow protocol.PacketNumber,
 	runDropTest func(dropCallback quicproxy.DropCallback, version protocol.VersionNumber),
 	version protocol.VersionNumber) {
-	Context("dropping multiple packets after the crypto handshake", func() {
+	Context(context, func() {
 		dropper := func(p protocol.PacketNumber) bool {
 			if p <= 10 { // don't interfere with the crypto handshake
 				return false
@@ -77,6 +80,7 @@ func dropTests(
 				return d == quicproxy.DirectionOutgoing && dropper(p)
 			}, version)
 		})
+
 		It("gets a file when many incoming packets are dropped", func() {
 			runDropTest(func(d quicproxy.Direction, p protocol.PacketNumber) bool {
 				return d == quicproxy.DirectionIncoming && dropper(p)
