@@ -40,6 +40,7 @@ type client struct {
 	session       quic.Session
 	headerStream  quic.Stream
 	headerErr     *qerr.QuicError
+	headerErrored chan struct{} // this channel is closed if an error occurs on the header stream
 	requestWriter *requestWriter
 
 	responses map[protocol.StreamID]chan *http.Response
@@ -58,7 +59,8 @@ func newClient(tlsConfig *tls.Config, hostname string, opts *roundTripperOpts) *
 			TLSConfig:                     tlsConfig,
 			RequestConnectionIDTruncation: true,
 		},
-		opts: opts,
+		opts:          opts,
+		headerErrored: make(chan struct{}),
 	}
 }
 
@@ -109,7 +111,7 @@ func (c *client) handleHeaderStream() {
 		}
 
 		c.mutex.RLock()
-		headerChan, ok := c.responses[protocol.StreamID(hframe.StreamID)]
+		responseChan, ok := c.responses[protocol.StreamID(hframe.StreamID)]
 		c.mutex.RUnlock()
 		if !ok {
 			c.headerErr = qerr.Error(qerr.InternalError, fmt.Sprintf("h2client BUG: response channel for stream %d not found", lastStream))
@@ -120,16 +122,12 @@ func (c *client) handleHeaderStream() {
 		if err != nil {
 			c.headerErr = qerr.Error(qerr.InternalError, err.Error())
 		}
-		headerChan <- rsp
+		responseChan <- rsp
 	}
 
 	// stop all running request
 	utils.Debugf("Error handling header stream %d: %s", lastStream, c.headerErr.Error())
-	c.mutex.Lock()
-	for _, responseChan := range c.responses {
-		close(responseChan)
-	}
-	c.mutex.Unlock()
+	close(c.headerErrored)
 }
 
 // Roundtrip executes a request and returns a response
@@ -197,15 +195,15 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 			c.mutex.Lock()
 			delete(c.responses, dataStream.StreamID())
 			c.mutex.Unlock()
-			if res == nil { // an error occured on the header stream
-				c.Close(c.headerErr)
-				return nil, c.headerErr
-			}
 		case err := <-resc:
 			bodySent = true
 			if err != nil {
 				return nil, err
 			}
+		case <-c.headerErrored:
+			// an error occured on the header stream
+			c.Close(c.headerErr)
+			return nil, c.headerErr
 		}
 	}
 
