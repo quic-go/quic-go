@@ -11,10 +11,7 @@ import (
 
 type mockQuicRoundTripper struct{}
 
-func (m *mockQuicRoundTripper) Dial() error {
-	return nil
-}
-func (m *mockQuicRoundTripper) Do(req *http.Request) (*http.Response, error) {
+func (m *mockQuicRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return &http.Response{Request: req}, nil
 }
 
@@ -58,18 +55,12 @@ var _ = Describe("RoundTripper", func() {
 	})
 
 	It("reuses existing clients", func() {
-		rt.clients = make(map[string]h2quicClient)
+		rt.clients = make(map[string]http.RoundTripper)
 		rt.clients["www.example.org:443"] = &mockQuicRoundTripper{}
 		rsp, err := rt.RoundTrip(req1)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(rsp.Request).To(Equal(req1))
 		Expect(rt.clients).To(HaveLen(1))
-	})
-
-	It("disable compression", func() {
-		Expect(rt.disableCompression()).To(BeFalse())
-		rt.DisableCompression = true
-		Expect(rt.disableCompression()).To(BeTrue())
 	})
 
 	Context("validating request", func() {

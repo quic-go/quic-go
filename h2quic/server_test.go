@@ -28,7 +28,7 @@ type mockSession struct {
 	closedWithError     error
 	dataStream          quic.Stream
 	streamToAccept      quic.Stream
-	streamToOpen        quic.Stream
+	streamsToOpen       []quic.Stream
 	blockOpenStreamSync bool
 	streamOpenErr       error
 }
@@ -36,14 +36,14 @@ type mockSession struct {
 func (s *mockSession) GetOrOpenStream(id protocol.StreamID) (quic.Stream, error) {
 	return s.dataStream, nil
 }
-func (s *mockSession) AcceptStream() (quic.Stream, error) {
-	return s.streamToAccept, nil
-}
+func (s *mockSession) AcceptStream() (quic.Stream, error) { return s.streamToAccept, nil }
 func (s *mockSession) OpenStream() (quic.Stream, error) {
 	if s.streamOpenErr != nil {
 		return nil, s.streamOpenErr
 	}
-	return s.streamToOpen, nil
+	str := s.streamsToOpen[0]
+	s.streamsToOpen = s.streamsToOpen[1:]
+	return str, nil
 }
 func (s *mockSession) OpenStreamSync() (quic.Stream, error) {
 	if s.blockOpenStreamSync {
@@ -76,7 +76,8 @@ var _ = Describe("H2 server", func() {
 				TLSConfig: testdata.GetTLSConfig(),
 			},
 		}
-		dataStream = &mockStream{}
+		dataStream = newMockStream(0)
+		close(dataStream.unblockRead)
 		session = &mockSession{dataStream: dataStream}
 	})
 
