@@ -58,7 +58,7 @@ var _ = Describe("Handshake integration tets", func() {
 	}
 
 	expectDurationInRTTs := func(num int) {
-		testDuration := time.Now().Sub(testStartedAt)
+		testDuration := time.Since(testStartedAt)
 		expectedDuration := time.Duration(num) * rtt
 		Expect(testDuration).To(SatisfyAll(
 			BeNumerically(">=", expectedDuration),

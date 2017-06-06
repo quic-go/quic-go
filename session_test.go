@@ -906,7 +906,7 @@ var _ = Describe("Session", func() {
 			err := sess.sendPublicReset(1)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mconn.written).To(HaveLen(1))
-			Expect(mconn.written[0]).To(ContainSubstring(string([]byte("PRST"))))
+			Expect(mconn.written[0]).To(ContainSubstring("PRST"))
 		})
 
 		It("informs the SentPacketHandler about sent packets", func() {
@@ -1317,7 +1317,7 @@ var _ = Describe("Session", func() {
 			time.Sleep(10 * time.Millisecond) // wait for the run loop to spin up
 			sess.scheduleSending()            // wake up the run loop
 			Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(1))
-			Expect(mconn.written[0]).To(ContainSubstring(string([]byte("PRST"))))
+			Expect(mconn.written[0]).To(ContainSubstring("PRST"))
 			Eventually(sess.runClosed).Should(BeClosed())
 		})
 
