@@ -8,7 +8,6 @@ import (
 	"net"
 	"runtime/pprof"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -357,9 +356,9 @@ var _ = Describe("Session", func() {
 			p := make([]byte, 4)
 			_, err = str.Read(p)
 			Expect(err).ToNot(HaveOccurred())
-			sess.closeStreamsWithError(testErr)
+			sess.handleCloseError(closeError{err: testErr, remote: true})
 			_, err = str.Read(p)
-			Expect(err).To(MatchError(testErr))
+			Expect(err).To(MatchError(qerr.Error(qerr.InternalError, testErr.Error())))
 			sess.garbageCollectStreams()
 			str, err = sess.streamsMap.GetOrOpenStream(5)
 			Expect(err).NotTo(HaveOccurred())
@@ -372,9 +371,9 @@ var _ = Describe("Session", func() {
 			str, err := sess.streamsMap.GetOrOpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(str).ToNot(BeNil())
-			sess.closeStreamsWithError(testErr)
+			sess.handleCloseError(closeError{err: testErr, remote: true})
 			_, err = str.Read([]byte{0})
-			Expect(err).To(MatchError(testErr))
+			Expect(err).To(MatchError(qerr.Error(qerr.InternalError, testErr.Error())))
 			sess.garbageCollectStreams()
 			str, err = sess.streamsMap.GetOrOpenStream(5)
 			Expect(err).NotTo(HaveOccurred())
@@ -714,7 +713,7 @@ var _ = Describe("Session", func() {
 			Expect(sess.runClosed).ToNot(BeClosed())
 			sess.Close(errCloseSessionForNewVersion)
 			Eventually(func() error { return err }).Should(HaveOccurred())
-			Expect(err).To(MatchError(errCloseSessionForNewVersion))
+			Expect(err).To(MatchError(qerr.Error(qerr.InternalError, errCloseSessionForNewVersion.Error())))
 			Eventually(sess.runClosed).Should(BeClosed())
 		})
 	})
@@ -760,7 +759,6 @@ var _ = Describe("Session", func() {
 		It("closes the session in order to replace it with another QUIC version", func() {
 			sess.Close(errCloseSessionForNewVersion)
 			Eventually(areSessionsRunning).Should(BeFalse())
-			Expect(atomic.LoadUint32(&sess.closed) != 0).To(BeTrue())
 			Expect(mconn.written).To(BeEmpty()) // no CONNECTION_CLOSE or PUBLIC_RESET sent
 		})
 

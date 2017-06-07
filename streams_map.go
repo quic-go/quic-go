@@ -319,8 +319,11 @@ func (m *streamsMap) RemoveStream(id protocol.StreamID) error {
 
 func (m *streamsMap) CloseWithError(err error) {
 	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	m.closeErr = err
 	m.nextStreamOrErrCond.Broadcast()
 	m.openStreamOrErrCond.Broadcast()
-	m.mutex.Unlock()
+	for _, s := range m.openStreams {
+		m.streams[s].Cancel(err)
+	}
 }
