@@ -55,24 +55,16 @@ type session struct {
 	version      protocol.VersionNumber
 	config       *Config
 
-	conn connection
-
-	streamsMap *streamsMap
-
-	rttStats *congestion.RTTStats
-
-	sentPacketHandler     ackhandler.SentPacketHandler
-	receivedPacketHandler ackhandler.ReceivedPacketHandler
-
-	flowControlManager flowcontrol.FlowControlManager
-
-	unpacker unpacker
-	packer   *packetPacker
+	conn                 connection
+	streamsMap           *streamsMap
+	rttStats             *congestion.RTTStats
+	sentPacketHandler    ackhandler.SentPacketHandler
+	flowControlManager   flowcontrol.FlowControlManager
+	cryptoSetup          handshake.CryptoSetup
+	connectionParameters handshake.ConnectionParametersManager
 
 	sessionSender   sessionSender
 	sessionReceiver sessionReceiver
-
-	cryptoSetup handshake.CryptoSetup
 
 	receivedPackets  chan *receivedPacket
 	sendingScheduled chan struct{}
@@ -97,8 +89,6 @@ type session struct {
 	// the receiving end of this channel is passed to the creator of the session
 	// it receives at most 3 handshake events: 2 when the encryption level changes, and one error
 	handshakeChan chan<- handshakeEvent
-
-	connectionParameters handshake.ConnectionParametersManager
 
 	sessionCreationTime time.Time
 
@@ -169,7 +159,7 @@ func (s *session) setup(
 	s.connectionParameters = handshake.NewConnectionParamatersManager(s.perspective, s.version)
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats)
 	s.flowControlManager = flowcontrol.NewFlowControlManager(s.connectionParameters, s.rttStats)
-	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.ackAlarmChanged)
+	receivedPacketHandler := ackhandler.NewReceivedPacketHandler(s.ackAlarmChanged)
 	s.streamsMap = newStreamsMap(s.newStream, s.perspective, s.connectionParameters)
 
 	var err error
@@ -213,13 +203,15 @@ func (s *session) setup(
 	}
 
 	streamFramer := newStreamFramer(s.streamsMap, s.flowControlManager)
-	s.packer = newPacketPacker(s.connectionID, s.cryptoSetup, s.connectionParameters, streamFramer, s.perspective, s.version)
-	s.unpacker = &packetUnpacker{aead: s.cryptoSetup, version: s.version}
 
-	s.sessionSender = newSessionSender(s.conn, s.sentPacketHandler,
-		s.receivedPacketHandler, streamFramer, s.packer, s.flowControlManager)
+	packer := newPacketPacker(s.connectionID, s.cryptoSetup, s.connectionParameters, streamFramer,
+		s.perspective, s.version)
+	s.sessionSender = newSessionSender(s.conn, s.sentPacketHandler, receivedPacketHandler,
+		streamFramer, packer, s.flowControlManager)
+
+	unpacker := &packetUnpacker{aead: s.cryptoSetup, version: s.version}
 	s.sessionReceiver = newSessionReceiver(s.perspective, s.conn, s.sentPacketHandler,
-		s.receivedPacketHandler, s.streamsMap, streamFramer, s.unpacker, s.cryptoSetup,
+		receivedPacketHandler, s.streamsMap, streamFramer, unpacker, s.cryptoSetup,
 		s.flowControlManager, s.closeRemote)
 
 	return s, handshakeChan, nil
@@ -279,7 +271,7 @@ runLoop:
 				close(s.handshakeCompleteChan)
 			} else {
 				if l == protocol.EncryptionForwardSecure {
-					s.packer.SetForwardSecure()
+					s.sessionSender.packer.SetForwardSecure()
 				}
 				s.tryDecryptingQueuedPackets()
 				s.handshakeChan <- handshakeEvent{encLevel: l}
@@ -455,7 +447,7 @@ func (s *session) WaitUntilHandshakeComplete() error {
 }
 
 func (s *session) queueResetStreamFrame(id protocol.StreamID, offset protocol.ByteCount) {
-	s.packer.QueueControlFrameForNextPacket(&frames.RstStreamFrame{
+	s.sessionSender.packer.QueueControlFrameForNextPacket(&frames.RstStreamFrame{
 		StreamID:   id,
 		ByteOffset: offset,
 	})

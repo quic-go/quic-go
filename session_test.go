@@ -451,8 +451,8 @@ var _ = Describe("Session", func() {
 				StreamID: 5,
 			})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(sess.packer.controlFrames).To(HaveLen(1))
-			Expect(sess.packer.controlFrames[0].(*frames.RstStreamFrame)).To(Equal(&frames.RstStreamFrame{
+			Expect(sess.sessionSender.packer.controlFrames).To(HaveLen(1))
+			Expect(sess.sessionSender.packer.controlFrames[0].(*frames.RstStreamFrame)).To(Equal(&frames.RstStreamFrame{
 				StreamID:   5,
 				ByteOffset: 0x1337,
 			}))
@@ -468,7 +468,7 @@ var _ = Describe("Session", func() {
 				StreamID: 5,
 			})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(sess.packer.controlFrames).To(BeEmpty())
+			Expect(sess.sessionSender.packer.controlFrames).To(BeEmpty())
 			Expect(str.(*stream).finished()).To(BeTrue())
 		})
 
@@ -510,8 +510,8 @@ var _ = Describe("Session", func() {
 			str.writeOffset = 0x1337
 			Expect(err).ToNot(HaveOccurred())
 			str.Reset(testErr)
-			Expect(sess.packer.controlFrames).To(HaveLen(1))
-			Expect(sess.packer.controlFrames[0]).To(Equal(&frames.RstStreamFrame{
+			Expect(sess.sessionSender.packer.controlFrames).To(HaveLen(1))
+			Expect(sess.sessionSender.packer.controlFrames[0]).To(Equal(&frames.RstStreamFrame{
 				StreamID:   5,
 				ByteOffset: 0x1337,
 			}))
@@ -523,13 +523,13 @@ var _ = Describe("Session", func() {
 			str, err := sess.streamsMap.GetOrOpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
 			str.Reset(testErr)
-			Expect(sess.packer.controlFrames).To(HaveLen(1))
+			Expect(sess.sessionSender.packer.controlFrames).To(HaveLen(1))
 			err = sess.sessionReceiver.handleRstStreamFrame(&frames.RstStreamFrame{
 				StreamID:   5,
 				ByteOffset: 0x42,
 			})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(sess.packer.controlFrames).To(HaveLen(1))
+			Expect(sess.sessionSender.packer.controlFrames).To(HaveLen(1))
 		})
 	})
 
@@ -774,8 +774,7 @@ var _ = Describe("Session", func() {
 		var hdr *PublicHeader
 
 		BeforeEach(func() {
-			sess.unpacker = &mockUnpacker{}
-			sess.sessionReceiver.unpacker = sess.unpacker
+			sess.sessionReceiver.unpacker = &mockUnpacker{}
 			hdr = &PublicHeader{PacketNumberLen: protocol.PacketNumberLen6}
 		})
 
@@ -794,7 +793,7 @@ var _ = Describe("Session", func() {
 			go func() {
 				runErr = sess.run()
 			}()
-			sess.unpacker.(*mockUnpacker).unpackErr = testErr
+			sess.sessionReceiver.unpacker.(*mockUnpacker).unpackErr = testErr
 			sess.handlePacket(&receivedPacket{publicHeader: hdr})
 			Eventually(func() error { return runErr }).Should(MatchError(testErr))
 			Expect(sess.runClosed).To(BeClosed())
@@ -823,7 +822,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("ignores packets smaller than the highest LeastUnacked of a StopWaiting", func() {
-			err := sess.receivedPacketHandler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 10})
+			err := sess.sessionReceiver.receivedPacketHandler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 10})
 			Expect(err).ToNot(HaveOccurred())
 			hdr.PacketNumber = 5
 			err = sess.sessionReceiver.handlePacketImpl(&receivedPacket{publicHeader: hdr})
@@ -848,9 +847,8 @@ var _ = Describe("Session", func() {
 				attackerIP := &net.IPAddr{IP: net.IPv4(192, 168, 0, 102)}
 				sess.conn.(*mockConnection).remoteAddr = remoteIP
 				// use the real packetUnpacker here, to make sure this test fails if the error code for failed decryption changes
-				sess.unpacker = &packetUnpacker{}
-				sess.sessionReceiver.unpacker = sess.unpacker
-				sess.unpacker.(*packetUnpacker).aead = &mockAEAD{}
+				sess.sessionReceiver.unpacker = &packetUnpacker{}
+				sess.sessionReceiver.unpacker.(*packetUnpacker).aead = &mockAEAD{}
 				p := receivedPacket{
 					remoteAddr:   attackerIP,
 					publicHeader: &PublicHeader{PacketNumber: 1337},
@@ -869,7 +867,7 @@ var _ = Describe("Session", func() {
 					remoteAddr:   remoteIP,
 					publicHeader: &PublicHeader{PacketNumber: 1337},
 				}
-				sess.unpacker.(*mockUnpacker).unpackErr = testErr
+				sess.sessionReceiver.unpacker.(*mockUnpacker).unpackErr = testErr
 				err := sess.sessionReceiver.handlePacketImpl(&p)
 				Expect(err).To(MatchError(testErr))
 				Expect(sess.conn.(*mockConnection).remoteAddr).To(Equal(remoteIP))
@@ -880,7 +878,7 @@ var _ = Describe("Session", func() {
 	Context("sending packets", func() {
 		It("sends ack frames", func() {
 			packetNumber := protocol.PacketNumber(0x035E)
-			sess.receivedPacketHandler.ReceivedPacket(packetNumber, true)
+			sess.sessionSender.receivedPacketHandler.ReceivedPacket(packetNumber, true)
 			err := sess.sessionSender.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mconn.written).To(HaveLen(1))
@@ -912,8 +910,8 @@ var _ = Describe("Session", func() {
 		It("informs the SentPacketHandler about sent packets", func() {
 			sess.sentPacketHandler = newMockSentPacketHandler()
 			sess.sessionSender.sentPacketHandler = sess.sentPacketHandler
-			sess.packer.packetNumberGenerator.next = 0x1337 + 9
-			sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionSecure}
+			sess.sessionSender.packer.packetNumberGenerator.next = 0x1337 + 9
+			sess.sessionSender.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionSecure}
 
 			f := &frames.StreamFrame{
 				StreamID: 5,
@@ -937,11 +935,11 @@ var _ = Describe("Session", func() {
 		var sph *mockSentPacketHandler
 		BeforeEach(func() {
 			// a StopWaitingFrame is added, so make sure the packet number of the new package is higher than the packet number of the retransmitted packet
-			sess.packer.packetNumberGenerator.next = 0x1337 + 10
+			sess.sessionSender.packer.packetNumberGenerator.next = 0x1337 + 10
 			sph = newMockSentPacketHandler().(*mockSentPacketHandler)
 			sess.sentPacketHandler = sph
 			sess.sessionSender.sentPacketHandler = sph
-			sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure}
+			sess.sessionSender.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure}
 		})
 
 		Context("for handshake packets", func() {
@@ -995,7 +993,7 @@ var _ = Describe("Session", func() {
 
 		Context("for packets after the handshake", func() {
 			BeforeEach(func() {
-				sess.packer.SetForwardSecure()
+				sess.sessionSender.packer.SetForwardSecure()
 			})
 
 			It("sends a StreamFrame from a packet queued for retransmission", func() {
@@ -1128,12 +1126,12 @@ var _ = Describe("Session", func() {
 
 	It("retransmits RTO packets", func() {
 		n := protocol.PacketNumber(10)
-		sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure}
+		sess.sessionSender.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure}
 		// We simulate consistently low RTTs, so that the test works faster
 		rtt := time.Millisecond
 		sess.rttStats.UpdateRTT(rtt, 0, time.Now())
 		Expect(sess.rttStats.SmoothedRTT()).To(Equal(rtt)) // make sure it worked
-		sess.packer.packetNumberGenerator.next = n + 1
+		sess.sessionSender.packer.packetNumberGenerator.next = n + 1
 		// Now, we send a single packet, and expect that it was retransmitted later
 		err := sess.sentPacketHandler.SentPacket(&ackhandler.Packet{
 			PacketNumber: n,
@@ -1153,7 +1151,7 @@ var _ = Describe("Session", func() {
 
 	Context("scheduling sending", func() {
 		BeforeEach(func() {
-			sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure}
+			sess.sessionSender.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure}
 		})
 
 		It("sends after writing to a stream", func(done Done) {
@@ -1171,7 +1169,6 @@ var _ = Describe("Session", func() {
 		It("sets the timer to the ack timer", func() {
 			rph := &mockReceivedPacketHandler{}
 			rph.nextAckFrame = &frames.AckFrame{LargestAcked: 0x1337}
-			sess.receivedPacketHandler = rph
 			sess.sessionSender.receivedPacketHandler = rph
 			sess.sessionReceiver.receivedPacketHandler = rph
 			go sess.run()
@@ -1233,7 +1230,7 @@ var _ = Describe("Session", func() {
 
 			It("sends a queued ACK frame only once", func() {
 				packetNumber := protocol.PacketNumber(0x1337)
-				sess.receivedPacketHandler.ReceivedPacket(packetNumber, true)
+				sess.sessionSender.receivedPacketHandler.ReceivedPacket(packetNumber, true)
 
 				s, err := sess.GetOrOpenStream(5)
 				Expect(err).NotTo(HaveOccurred())
@@ -1255,9 +1252,9 @@ var _ = Describe("Session", func() {
 	It("tells the packetPacker when forward-secure encryption is used", func(done Done) {
 		go sess.run()
 		aeadChanged <- protocol.EncryptionSecure
-		Consistently(func() bool { return sess.packer.isForwardSecure }).Should(BeFalse())
+		Consistently(func() bool { return sess.sessionSender.packer.isForwardSecure }).Should(BeFalse())
 		aeadChanged <- protocol.EncryptionForwardSecure
-		Eventually(func() bool { return sess.packer.isForwardSecure }).Should(BeTrue())
+		Eventually(func() bool { return sess.sessionSender.packer.isForwardSecure }).Should(BeTrue())
 		Expect(sess.Close(nil)).To(Succeed())
 		close(done)
 	})
@@ -1286,9 +1283,8 @@ var _ = Describe("Session", func() {
 		}
 
 		BeforeEach(func() {
-			sess.unpacker = &mockUnpacker{unpackErr: qerr.Error(qerr.DecryptionFailure, "")}
+			sess.sessionReceiver.unpacker = &mockUnpacker{unpackErr: qerr.Error(qerr.DecryptionFailure, "")}
 			sess.cryptoSetup = &mockCryptoSetup{}
-			sess.sessionReceiver.unpacker = sess.unpacker
 			sess.sessionReceiver.cryptoSetup = sess.cryptoSetup
 		})
 
@@ -1422,7 +1418,7 @@ var _ = Describe("Session", func() {
 		It("does not use ICSL before handshake", func(done Done) {
 			sess.sessionReceiver.lastNetworkActivityTime = time.Now().Add(-time.Minute)
 			cpm.idleTime = 99999 * time.Second
-			sess.packer.connectionParameters = sess.connectionParameters
+			sess.sessionSender.packer.connectionParameters = sess.connectionParameters
 			err := sess.run() // Would normally not return
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
 			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
@@ -1433,7 +1429,7 @@ var _ = Describe("Session", func() {
 		It("uses ICSL after handshake", func(done Done) {
 			close(aeadChanged)
 			cpm.idleTime = 0 * time.Millisecond
-			sess.packer.connectionParameters = sess.connectionParameters
+			sess.sessionSender.packer.connectionParameters = sess.connectionParameters
 			err := sess.run() // Would normally not return
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
 			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
@@ -1610,8 +1606,7 @@ var _ = Describe("Client Session", func() {
 
 		BeforeEach(func() {
 			hdr = &PublicHeader{PacketNumberLen: protocol.PacketNumberLen6}
-			sess.unpacker = &mockUnpacker{}
-			sess.sessionReceiver.unpacker = sess.unpacker
+			sess.sessionReceiver.unpacker = &mockUnpacker{}
 		})
 
 		It("passes the diversification nonce to the cryptoSetup", func() {
