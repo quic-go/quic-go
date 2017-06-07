@@ -29,6 +29,13 @@ var _ = Describe("Log", func() {
 		timeFormat = initialTimeFormat
 	})
 
+	It("the log level has the correct numeric value", func() {
+		Expect(LogLevelNothing).To(BeEquivalentTo(0))
+		Expect(LogLevelError).To(BeEquivalentTo(1))
+		Expect(LogLevelInfo).To(BeEquivalentTo(2))
+		Expect(LogLevelDebug).To(BeEquivalentTo(3))
+	})
+
 	It("log level nothing", func() {
 		SetLogLevel(LogLevelNothing)
 		Debugf("debug")
@@ -92,7 +99,7 @@ var _ = Describe("Log", func() {
 
 	It("reads log level from env", func() {
 		Expect(logLevel).To(Equal(LogLevelNothing))
-		os.Setenv(logEnv, "1")
+		os.Setenv(logEnv, "3")
 		readLoggingEnv()
 		Expect(logLevel).To(Equal(LogLevelDebug))
 	})

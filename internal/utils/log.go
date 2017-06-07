@@ -13,14 +13,14 @@ type LogLevel uint8
 const (
 	logEnv = "QUIC_GO_LOG_LEVEL"
 
-	// LogLevelDebug enables debug logs (e.g. packet contents)
-	LogLevelDebug LogLevel = iota
-	// LogLevelInfo enables info logs (e.g. packets)
-	LogLevelInfo
-	// LogLevelError enables err logs
-	LogLevelError
 	// LogLevelNothing disables
-	LogLevelNothing
+	LogLevelNothing LogLevel = 0
+	// LogLevelError enables err logs
+	LogLevelError LogLevel = 1
+	// LogLevelInfo enables info logs (e.g. packets)
+	LogLevelInfo LogLevel = 2
+	// LogLevelDebug enables debug logs (e.g. packet contents)
+	LogLevelDebug LogLevel = 3
 )
 
 var (
@@ -49,14 +49,14 @@ func Debugf(format string, args ...interface{}) {
 
 // Infof logs something
 func Infof(format string, args ...interface{}) {
-	if logLevel <= LogLevelInfo {
+	if logLevel >= LogLevelInfo {
 		logMessage(format, args...)
 	}
 }
 
 // Errorf logs something
 func Errorf(format string, args ...interface{}) {
-	if logLevel <= LogLevelError {
+	if logLevel >= LogLevelError {
 		logMessage(format, args...)
 	}
 }
