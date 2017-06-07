@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/utils"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 // PrrSender implements the Proportional Rate Reduction (PRR) per RFC 6937
