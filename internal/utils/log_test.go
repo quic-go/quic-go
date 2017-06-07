@@ -97,20 +97,37 @@ var _ = Describe("Log", func() {
 		Expect(Debug()).To(BeTrue())
 	})
 
-	It("reads log level from env", func() {
-		Expect(logLevel).To(Equal(LogLevelNothing))
-		os.Setenv(logEnv, "3")
-		readLoggingEnv()
-		Expect(logLevel).To(Equal(LogLevelDebug))
-	})
+	Context("reading from env", func() {
+		BeforeEach(func() {
+			Expect(logLevel).To(Equal(LogLevelNothing))
+		})
 
-	It("does not error reading invalid log levels from env", func() {
-		Expect(logLevel).To(Equal(LogLevelNothing))
-		os.Setenv(logEnv, "")
-		readLoggingEnv()
-		Expect(logLevel).To(Equal(LogLevelNothing))
-		os.Setenv(logEnv, "asdf")
-		readLoggingEnv()
-		Expect(logLevel).To(Equal(LogLevelNothing))
+		It("reads DEBUG", func() {
+			os.Setenv(logEnv, "DEBUG")
+			readLoggingEnv()
+			Expect(logLevel).To(Equal(LogLevelDebug))
+		})
+
+		It("reads INFO", func() {
+			os.Setenv(logEnv, "INFO")
+			readLoggingEnv()
+			Expect(logLevel).To(Equal(LogLevelInfo))
+		})
+
+		It("reads ERROR", func() {
+			os.Setenv(logEnv, "ERROR")
+			readLoggingEnv()
+			Expect(logLevel).To(Equal(LogLevelError))
+		})
+
+		It("does not error reading invalid log levels from env", func() {
+			Expect(logLevel).To(Equal(LogLevelNothing))
+			os.Setenv(logEnv, "")
+			readLoggingEnv()
+			Expect(logLevel).To(Equal(LogLevelNothing))
+			os.Setenv(logEnv, "asdf")
+			readLoggingEnv()
+			Expect(logLevel).To(Equal(LogLevelNothing))
+		})
 	})
 })
