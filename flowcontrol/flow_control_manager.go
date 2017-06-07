@@ -157,6 +157,11 @@ func (f *flowControlManager) GetReceiveWindow(streamID protocol.StreamID) (proto
 	f.mutex.RLock()
 	defer f.mutex.RUnlock()
 
+	// StreamID can be 0 when retransmitting
+	if streamID == 0 {
+		return f.connFlowController.receiveWindow, nil
+	}
+
 	flowController, err := f.getFlowController(streamID)
 	if err != nil {
 		return 0, err
