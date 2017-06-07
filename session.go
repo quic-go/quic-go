@@ -109,9 +109,7 @@ type session struct {
 	sessionCreationTime     time.Time
 	lastNetworkActivityTime time.Time
 
-	timer           *time.Timer
-	currentDeadline time.Time
-	timerRead       bool
+	timer *utils.Timer
 }
 
 var _ Session = &session{}
@@ -169,7 +167,7 @@ func (s *session) setup(
 	s.sendingScheduled = make(chan struct{}, 1)
 	s.undecryptablePackets = make([]*receivedPacket, 0, protocol.MaxUndecryptablePackets)
 
-	s.timer = time.NewTimer(0)
+	s.timer = utils.NewTimer()
 	now := time.Now()
 	s.lastNetworkActivityTime = now
 	s.sessionCreationTime = now
@@ -254,8 +252,8 @@ runLoop:
 		select {
 		case closeErr = <-s.closeChan:
 			break runLoop
-		case <-s.timer.C:
-			s.timerRead = true
+		case <-s.timer.Chan():
+			s.timer.SetRead()
 			// We do all the interesting stuff after the switch statement, so
 			// nothing to see here.
 		case <-s.sendingScheduled:
@@ -323,36 +321,23 @@ runLoop:
 }
 
 func (s *session) maybeResetTimer() {
-	nextDeadline := s.lastNetworkActivityTime.Add(s.idleTimeout())
+	deadline := s.lastNetworkActivityTime.Add(s.idleTimeout())
 
 	if !s.nextAckScheduledTime.IsZero() {
-		nextDeadline = utils.MinTime(nextDeadline, s.nextAckScheduledTime)
+		deadline = utils.MinTime(deadline, s.nextAckScheduledTime)
 	}
 	if lossTime := s.sentPacketHandler.GetAlarmTimeout(); !lossTime.IsZero() {
-		nextDeadline = utils.MinTime(nextDeadline, lossTime)
+		deadline = utils.MinTime(deadline, lossTime)
 	}
 	if !s.handshakeComplete {
 		handshakeDeadline := s.sessionCreationTime.Add(s.config.HandshakeTimeout)
-		nextDeadline = utils.MinTime(nextDeadline, handshakeDeadline)
+		deadline = utils.MinTime(deadline, handshakeDeadline)
 	}
 	if !s.receivedTooManyUndecrytablePacketsTime.IsZero() {
-		nextDeadline = utils.MinTime(nextDeadline, s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout))
+		deadline = utils.MinTime(deadline, s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout))
 	}
 
-	if nextDeadline.Equal(s.currentDeadline) {
-		// No need to reset the timer
-		return
-	}
-
-	// We need to drain the timer if the value from its channel was not read yet.
-	// See https://groups.google.com/forum/#!topic/golang-dev/c9UUfASVPoU
-	if !s.timer.Stop() && !s.timerRead {
-		<-s.timer.C
-	}
-	s.timer.Reset(nextDeadline.Sub(time.Now()))
-
-	s.timerRead = false
-	s.currentDeadline = nextDeadline
+	s.timer.Reset(deadline)
 }
 
 func (s *session) idleTimeout() time.Duration {
