@@ -879,7 +879,7 @@ var _ = Describe("Session", func() {
 		It("sends ack frames", func() {
 			packetNumber := protocol.PacketNumber(0x035E)
 			sess.receivedPacketHandler.ReceivedPacket(packetNumber, true)
-			err := sess.sendPacket()
+			err := sess.sessionSender.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mconn.written).To(HaveLen(1))
 			Expect(mconn.written[0]).To(ContainSubstring(string([]byte{0x5E, 0x03})))
@@ -889,11 +889,11 @@ var _ = Describe("Session", func() {
 			_, err := sess.GetOrOpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
 			sess.flowControlManager.AddBytesRead(5, protocol.ReceiveStreamFlowControlWindow)
-			err = sess.sendPacket()
+			err = sess.sessionSender.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
-			err = sess.sendPacket()
+			err = sess.sessionSender.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
-			err = sess.sendPacket()
+			err = sess.sessionSender.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mconn.written).To(HaveLen(2))
 			Expect(mconn.written[0]).To(ContainSubstring(string([]byte{0x04, 0x05, 0, 0, 0})))
@@ -909,6 +909,7 @@ var _ = Describe("Session", func() {
 
 		It("informs the SentPacketHandler about sent packets", func() {
 			sess.sentPacketHandler = newMockSentPacketHandler()
+			sess.sessionSender.sentPacketHandler = sess.sentPacketHandler
 			sess.packer.packetNumberGenerator.next = 0x1337 + 9
 			sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionSecure}
 
@@ -916,10 +917,10 @@ var _ = Describe("Session", func() {
 				StreamID: 5,
 				Data:     []byte("foobar"),
 			}
-			sess.streamFramer.AddFrameForRetransmission(f)
+			sess.sessionSender.streamFramer.AddFrameForRetransmission(f)
 			_, err := sess.GetOrOpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
-			err = sess.sendPacket()
+			err = sess.sessionSender.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mconn.written).To(HaveLen(1))
 			sentPackets := sess.sentPacketHandler.(*mockSentPacketHandler).sentPackets
@@ -937,6 +938,7 @@ var _ = Describe("Session", func() {
 			sess.packer.packetNumberGenerator.next = 0x1337 + 10
 			sph = newMockSentPacketHandler().(*mockSentPacketHandler)
 			sess.sentPacketHandler = sph
+			sess.sessionSender.sentPacketHandler = sph
 			sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure}
 		})
 
@@ -947,7 +949,7 @@ var _ = Describe("Session", func() {
 					Frames:          []frames.Frame{sf},
 					EncryptionLevel: protocol.EncryptionUnencrypted,
 				}}
-				err := sess.sendPacket()
+				err := sess.sessionSender.sendPacket()
 				Expect(err).ToNot(HaveOccurred())
 				Expect(mconn.written).To(HaveLen(1))
 				sentPackets := sph.sentPackets
@@ -967,7 +969,7 @@ var _ = Describe("Session", func() {
 					},
 					EncryptionLevel: protocol.EncryptionUnencrypted,
 				}}
-				err := sess.sendPacket()
+				err := sess.sessionSender.sendPacket()
 				Expect(err).ToNot(HaveOccurred())
 				Expect(mconn.written).To(BeEmpty())
 			})
@@ -978,7 +980,7 @@ var _ = Describe("Session", func() {
 					Frames:          []frames.Frame{sf},
 					EncryptionLevel: protocol.EncryptionSecure,
 				}}
-				err := sess.sendPacket()
+				err := sess.sessionSender.sendPacket()
 				Expect(err).ToNot(HaveOccurred())
 				Expect(mconn.written).To(HaveLen(1))
 				sentPackets := sph.sentPackets
@@ -1006,7 +1008,7 @@ var _ = Describe("Session", func() {
 				}
 				sph.retransmissionQueue = []*ackhandler.Packet{&p}
 
-				err := sess.sendPacket()
+				err := sess.sessionSender.sendPacket()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(mconn.written).To(HaveLen(1))
 				Expect(sph.requestedStopWaiting).To(BeTrue())
@@ -1034,7 +1036,7 @@ var _ = Describe("Session", func() {
 				}
 				sph.retransmissionQueue = []*ackhandler.Packet{&p1, &p2}
 
-				err := sess.sendPacket()
+				err := sess.sessionSender.sendPacket()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(mconn.written).To(HaveLen(1))
 				Expect(mconn.written[0]).To(ContainSubstring("foobar"))
@@ -1046,9 +1048,9 @@ var _ = Describe("Session", func() {
 					StreamID: 0x5,
 					Data:     bytes.Repeat([]byte{'f'}, int(1.5*float32(protocol.MaxPacketSize))),
 				}
-				sess.streamFramer.AddFrameForRetransmission(f)
+				sess.sessionSender.streamFramer.AddFrameForRetransmission(f)
 
-				err := sess.sendPacket()
+				err := sess.sessionSender.sendPacket()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(mconn.written).To(HaveLen(2))
 				sentPackets := sph.sentPackets
@@ -1059,12 +1061,13 @@ var _ = Describe("Session", func() {
 				Expect(ok).To(BeTrue())
 			})
 
-			It("retransmits a WindowUpdates if it hasn't already sent a WindowUpdate with a higher ByteOffset", func() {
+			It("retransmits a WindowUpdate if it hasn't already sent a WindowUpdate with a higher ByteOffset", func() {
 				_, err := sess.GetOrOpenStream(5)
 				Expect(err).ToNot(HaveOccurred())
 				fc := newMockFlowControlHandler()
 				fc.receiveWindow = 0x1000
 				sess.flowControlManager = fc
+				sess.sessionSender.flowControlManager = fc
 				wuf := &frames.WindowUpdateFrame{
 					StreamID:   5,
 					ByteOffset: 0x1000,
@@ -1073,7 +1076,7 @@ var _ = Describe("Session", func() {
 					Frames:          []frames.Frame{wuf},
 					EncryptionLevel: protocol.EncryptionForwardSecure,
 				}}
-				err = sess.sendPacket()
+				err = sess.sessionSender.sendPacket()
 				Expect(err).ToNot(HaveOccurred())
 				Expect(sph.sentPackets).To(HaveLen(1))
 				Expect(sph.sentPackets[0].Frames).To(ContainElement(wuf))
@@ -1092,7 +1095,7 @@ var _ = Describe("Session", func() {
 					}},
 					EncryptionLevel: protocol.EncryptionForwardSecure,
 				}}
-				err = sess.sendPacket()
+				err = sess.sessionSender.sendPacket()
 				Expect(err).ToNot(HaveOccurred())
 				Expect(sph.sentPackets).To(BeEmpty())
 			})
@@ -1114,7 +1117,7 @@ var _ = Describe("Session", func() {
 					}},
 					EncryptionLevel: protocol.EncryptionForwardSecure,
 				}}
-				err = sess.sendPacket()
+				err = sess.sessionSender.sendPacket()
 				Expect(err).ToNot(HaveOccurred())
 				Expect(sph.sentPackets).To(BeEmpty())
 			})
@@ -1167,6 +1170,7 @@ var _ = Describe("Session", func() {
 			rph := &mockReceivedPacketHandler{}
 			rph.nextAckFrame = &frames.AckFrame{LargestAcked: 0x1337}
 			sess.receivedPacketHandler = rph
+			sess.sessionSender.receivedPacketHandler = rph
 			go sess.run()
 			defer sess.Close(nil)
 			sess.ackAlarmChanged(time.Now().Add(10 * time.Millisecond))
@@ -1517,7 +1521,7 @@ var _ = Describe("Session", func() {
 		It("gets stream level window updates", func() {
 			err := sess.flowControlManager.AddBytesRead(1, protocol.ReceiveStreamFlowControlWindow)
 			Expect(err).NotTo(HaveOccurred())
-			frames := sess.getWindowUpdateFrames()
+			frames := sess.sessionSender.getWindowUpdateFrames()
 			Expect(frames).To(HaveLen(1))
 			Expect(frames[0].StreamID).To(Equal(protocol.StreamID(1)))
 			Expect(frames[0].ByteOffset).To(Equal(protocol.ReceiveStreamFlowControlWindow * 2))
@@ -1528,7 +1532,7 @@ var _ = Describe("Session", func() {
 			Expect(err).NotTo(HaveOccurred())
 			err = sess.flowControlManager.AddBytesRead(5, protocol.ReceiveConnectionFlowControlWindow)
 			Expect(err).NotTo(HaveOccurred())
-			frames := sess.getWindowUpdateFrames()
+			frames := sess.sessionSender.getWindowUpdateFrames()
 			Expect(frames).To(HaveLen(1))
 			Expect(frames[0].StreamID).To(Equal(protocol.StreamID(0)))
 			Expect(frames[0].ByteOffset).To(Equal(protocol.ReceiveConnectionFlowControlWindow * 2))

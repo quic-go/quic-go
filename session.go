@@ -64,12 +64,13 @@ type session struct {
 
 	sentPacketHandler     ackhandler.SentPacketHandler
 	receivedPacketHandler ackhandler.ReceivedPacketHandler
-	streamFramer          *streamFramer
 
 	flowControlManager flowcontrol.FlowControlManager
 
 	unpacker unpacker
 	packer   *packetPacker
+
+	sessionSender sessionSender
 
 	cryptoSetup handshake.CryptoSetup
 
@@ -96,8 +97,6 @@ type session struct {
 	// the receiving end of this channel is passed to the creator of the session
 	// it receives at most 3 handshake events: 2 when the encryption level changes, and one error
 	handshakeChan chan<- handshakeEvent
-
-	nextAckScheduledTime time.Time
 
 	connectionParameters handshake.ConnectionParametersManager
 
@@ -180,7 +179,6 @@ func (s *session) setup(
 	s.flowControlManager = flowcontrol.NewFlowControlManager(s.connectionParameters, s.rttStats)
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.ackAlarmChanged)
 	s.streamsMap = newStreamsMap(s.newStream, s.perspective, s.connectionParameters)
-	s.streamFramer = newStreamFramer(s.streamsMap, s.flowControlManager)
 
 	var err error
 	if s.perspective == protocol.PerspectiveServer {
@@ -222,8 +220,12 @@ func (s *session) setup(
 		return nil, nil, err
 	}
 
-	s.packer = newPacketPacker(s.connectionID, s.cryptoSetup, s.connectionParameters, s.streamFramer, s.perspective, s.version)
+	streamFramer := newStreamFramer(s.streamsMap, s.flowControlManager)
+	s.packer = newPacketPacker(s.connectionID, s.cryptoSetup, s.connectionParameters, streamFramer, s.perspective, s.version)
 	s.unpacker = &packetUnpacker{aead: s.cryptoSetup, version: s.version}
+
+	s.sessionSender = newSessionSender(s.conn, s.sentPacketHandler,
+		s.receivedPacketHandler, streamFramer, s.packer, s.flowControlManager)
 
 	return s, handshakeChan, nil
 }
@@ -296,7 +298,7 @@ runLoop:
 			s.sentPacketHandler.OnAlarm()
 		}
 
-		if err := s.sendPacket(); err != nil {
+		if err := s.sessionSender.sendPacket(); err != nil {
 			s.closeLocal(err)
 		}
 		if !s.receivedTooManyUndecrytablePacketsTime.IsZero() && s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout).Before(now) && len(s.undecryptablePackets) != 0 {
@@ -325,8 +327,8 @@ runLoop:
 func (s *session) maybeResetTimer() {
 	nextDeadline := s.lastNetworkActivityTime.Add(s.idleTimeout())
 
-	if !s.nextAckScheduledTime.IsZero() {
-		nextDeadline = utils.MinTime(nextDeadline, s.nextAckScheduledTime)
+	if !s.sessionSender.getNextAckScheduledTime().IsZero() {
+		nextDeadline = utils.MinTime(nextDeadline, s.sessionSender.getNextAckScheduledTime())
 	}
 	if lossTime := s.sentPacketHandler.GetAlarmTimeout(); !lossTime.IsZero() {
 		nextDeadline = utils.MinTime(nextDeadline, lossTime)
@@ -575,140 +577,7 @@ func (s *session) handleCloseError(closeErr closeError) error {
 	if quicErr.ErrorCode == qerr.DecryptionFailure || quicErr == handshake.ErrHOLExperiment {
 		return s.sendPublicReset(s.lastRcvdPacketNumber)
 	}
-	return s.sendConnectionClose(quicErr)
-}
-
-func (s *session) sendPacket() error {
-	// Repeatedly try sending until we don't have any more data, or run out of the congestion window
-	for {
-		if !s.sentPacketHandler.SendingAllowed() {
-			return nil
-		}
-
-		var controlFrames []frames.Frame
-
-		// get WindowUpdate frames
-		// this call triggers the flow controller to increase the flow control windows, if necessary
-		windowUpdateFrames := s.getWindowUpdateFrames()
-		for _, wuf := range windowUpdateFrames {
-			controlFrames = append(controlFrames, wuf)
-		}
-
-		// check for retransmissions first
-		for {
-			retransmitPacket := s.sentPacketHandler.DequeuePacketForRetransmission()
-			if retransmitPacket == nil {
-				break
-			}
-			utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
-
-			if retransmitPacket.EncryptionLevel != protocol.EncryptionForwardSecure {
-				utils.Debugf("\tDequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
-				stopWaitingFrame := s.sentPacketHandler.GetStopWaitingFrame(true)
-				var packet *packedPacket
-				packet, err := s.packer.RetransmitNonForwardSecurePacket(stopWaitingFrame, retransmitPacket)
-				if err != nil {
-					return err
-				}
-				if packet == nil {
-					continue
-				}
-				err = s.sendPackedPacket(packet)
-				if err != nil {
-					return err
-				}
-				continue
-			} else {
-				// resend the frames that were in the packet
-				for _, frame := range retransmitPacket.GetFramesForRetransmission() {
-					switch frame.(type) {
-					case *frames.StreamFrame:
-						s.streamFramer.AddFrameForRetransmission(frame.(*frames.StreamFrame))
-					case *frames.WindowUpdateFrame:
-						// only retransmit WindowUpdates if the stream is not yet closed and the we haven't sent another WindowUpdate with a higher ByteOffset for the stream
-						var currentOffset protocol.ByteCount
-						f := frame.(*frames.WindowUpdateFrame)
-						currentOffset, err := s.flowControlManager.GetReceiveWindow(f.StreamID)
-						if err == nil && f.ByteOffset >= currentOffset {
-							controlFrames = append(controlFrames, frame)
-						}
-					default:
-						controlFrames = append(controlFrames, frame)
-					}
-				}
-			}
-		}
-
-		ack := s.receivedPacketHandler.GetAckFrame()
-		if ack != nil {
-			controlFrames = append(controlFrames, ack)
-		}
-		hasRetransmission := s.streamFramer.HasFramesForRetransmission()
-		var stopWaitingFrame *frames.StopWaitingFrame
-		if ack != nil || hasRetransmission {
-			stopWaitingFrame = s.sentPacketHandler.GetStopWaitingFrame(hasRetransmission)
-		}
-		packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, s.sentPacketHandler.GetLeastUnacked())
-		if err != nil {
-			return err
-		}
-		if packet == nil {
-			return nil
-		}
-		// send every window update twice
-		for _, f := range windowUpdateFrames {
-			s.packer.QueueControlFrameForNextPacket(f)
-		}
-
-		err = s.sendPackedPacket(packet)
-		if err != nil {
-			return err
-		}
-		s.nextAckScheduledTime = time.Time{}
-	}
-}
-
-func (s *session) sendPackedPacket(packet *packedPacket) error {
-	err := s.sentPacketHandler.SentPacket(&ackhandler.Packet{
-		PacketNumber:    packet.number,
-		Frames:          packet.frames,
-		Length:          protocol.ByteCount(len(packet.raw)),
-		EncryptionLevel: packet.encryptionLevel,
-	})
-	if err != nil {
-		return err
-	}
-
-	s.logPacket(packet)
-
-	err = s.conn.Write(packet.raw)
-	putPacketBuffer(packet.raw)
-	return err
-}
-
-func (s *session) sendConnectionClose(quicErr *qerr.QuicError) error {
-	packet, err := s.packer.PackConnectionClose(&frames.ConnectionCloseFrame{ErrorCode: quicErr.ErrorCode, ReasonPhrase: quicErr.ErrorMessage}, s.sentPacketHandler.GetLeastUnacked())
-	if err != nil {
-		return err
-	}
-	if packet == nil {
-		return errors.New("Session BUG: expected packet not to be nil")
-	}
-	s.logPacket(packet)
-	return s.conn.Write(packet.raw)
-}
-
-func (s *session) logPacket(packet *packedPacket) {
-	if !utils.Debug() {
-		// We don't need to allocate the slices for calling the format functions
-		return
-	}
-	if utils.Debug() {
-		utils.Debugf("-> Sending packet 0x%x (%d bytes), %s", packet.number, len(packet.raw), packet.encryptionLevel)
-		for _, frame := range packet.frames {
-			frames.LogFrame(frame, true)
-		}
-	}
+	return s.sessionSender.sendConnectionClose(quicErr)
 }
 
 // GetOrOpenStream either returns an existing stream, a newly opened stream, or nil if a stream with the provided ID is already closed.
@@ -817,17 +686,8 @@ func (s *session) tryDecryptingQueuedPackets() {
 	s.undecryptablePackets = s.undecryptablePackets[:0]
 }
 
-func (s *session) getWindowUpdateFrames() []*frames.WindowUpdateFrame {
-	updates := s.flowControlManager.GetWindowUpdates()
-	res := make([]*frames.WindowUpdateFrame, len(updates))
-	for i, u := range updates {
-		res[i] = &frames.WindowUpdateFrame{StreamID: u.StreamID, ByteOffset: u.Offset}
-	}
-	return res
-}
-
 func (s *session) ackAlarmChanged(t time.Time) {
-	s.nextAckScheduledTime = t
+	s.sessionSender.setNextAckScheduledTime(t)
 	s.maybeResetTimer()
 }
 
