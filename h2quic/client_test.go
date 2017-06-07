@@ -165,6 +165,7 @@ var _ = Describe("Client", func() {
 				StatusCode: 418,
 			}
 			Expect(client.responses[5]).ToNot(BeClosed())
+			Expect(client.headerErrored).ToNot(BeClosed())
 			client.responses[5] <- rsp
 			Eventually(func() bool { return doReturned }).Should(BeTrue())
 			Expect(doErr).ToNot(HaveOccurred())
@@ -177,6 +178,7 @@ var _ = Describe("Client", func() {
 		})
 
 		It("closes the quic client when encountering an error on the header stream", func(done Done) {
+			headerStream.dataToRead.Write(bytes.Repeat([]byte{0}, 100))
 			var doReturned bool
 			go func() {
 				defer GinkgoRecover()
@@ -187,12 +189,30 @@ var _ = Describe("Client", func() {
 				doReturned = true
 			}()
 
-			headerStream.dataToRead.Write(bytes.Repeat([]byte{0}, 100))
 			Eventually(func() bool { return doReturned }).Should(BeTrue())
 			Expect(client.headerErr).To(MatchError(qerr.Error(qerr.HeadersStreamDataDecompressFailure, "cannot read frame")))
 			Expect(client.session.(*mockSession).closedWithError).To(MatchError(client.headerErr))
 			close(done)
 		}, 2)
+
+		It("returns subsequent request if there was an error on the header stream before", func(done Done) {
+			expectedErr := qerr.Error(qerr.HeadersStreamDataDecompressFailure, "cannot read frame")
+			session.streamsToOpen = []quic.Stream{headerStream, dataStream, newMockStream(7)}
+			headerStream.dataToRead.Write(bytes.Repeat([]byte{0}, 100))
+			var firstReqReturned bool
+			go func() {
+				defer GinkgoRecover()
+				_, err := client.RoundTrip(request)
+				Expect(err).To(MatchError(expectedErr))
+				firstReqReturned = true
+			}()
+
+			Eventually(func() bool { return firstReqReturned }).Should(BeTrue())
+			// now that the first request failed due to an error on the header stream, try another request
+			_, err := client.RoundTrip(request)
+			Expect(err).To(MatchError(expectedErr))
+			close(done)
+		})
 
 		It("blocks if no stream is available", func() {
 			session.streamsToOpen = []quic.Stream{headerStream}
@@ -455,7 +475,7 @@ var _ = Describe("Client", func() {
 					handlerReturned = true
 				}()
 
-				Eventually(client.responses[23]).Should(BeClosed())
+				Eventually(client.headerErrored).Should(BeClosed())
 				Expect(client.headerErr).To(MatchError(qerr.Error(qerr.InvalidHeadersStreamData, "not a headers frame")))
 				Eventually(func() bool { return handlerReturned }).Should(BeTrue())
 			})
@@ -473,7 +493,7 @@ var _ = Describe("Client", func() {
 					handlerReturned = true
 				}()
 
-				Eventually(client.responses[23]).Should(BeClosed())
+				Eventually(client.headerErrored).Should(BeClosed())
 				Expect(client.headerErr).To(MatchError(qerr.Error(qerr.InvalidHeadersStreamData, "cannot read header fields")))
 				Eventually(func() bool { return handlerReturned }).Should(BeTrue())
 			})
