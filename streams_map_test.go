@@ -59,8 +59,8 @@ var _ = Describe("Streams Map", func() {
 
 	setNewStreamsMap := func(p protocol.Perspective) {
 		m = newStreamsMap(nil, p, cpm)
-		m.newStream = func(id protocol.StreamID) (*stream, error) {
-			return &stream{streamID: id}, nil
+		m.newStream = func(id protocol.StreamID) *stream {
+			return &stream{streamID: id}
 		}
 	}
 
@@ -174,13 +174,6 @@ var _ = Describe("Streams Map", func() {
 					Expect(m.numOutgoingStreams).To(BeEquivalentTo(1))
 				})
 
-				It("errors if the stream can't be created", func() {
-					testErr := errors.New("test error")
-					m.newStream = func(protocol.StreamID) (*stream, error) { return nil, testErr }
-					_, err := m.OpenStream()
-					Expect(err).To(MatchError(testErr))
-				})
-
 				It("returns the error when the streamsMap was closed", func() {
 					testErr := errors.New("test error")
 					m.CloseWithError(testErr)
@@ -257,13 +250,6 @@ var _ = Describe("Streams Map", func() {
 						Expect(err).ToNot(HaveOccurred())
 						Eventually(func() bool { return returned }).Should(BeTrue())
 						Expect(str.StreamID()).To(Equal(protocol.StreamID(2*maxNumStreams + 2)))
-					})
-
-					It("errors if the stream can't be created", func() {
-						testErr := errors.New("test error")
-						m.newStream = func(protocol.StreamID) (*stream, error) { return nil, testErr }
-						_, err := m.OpenStreamSync()
-						Expect(err).To(MatchError(testErr))
 					})
 
 					It("stops waiting when an error is registered", func() {

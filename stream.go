@@ -52,7 +52,10 @@ type stream struct {
 }
 
 // newStream creates a new Stream
-func newStream(StreamID protocol.StreamID, onData func(), onReset func(protocol.StreamID, protocol.ByteCount), flowControlManager flowcontrol.FlowControlManager) (*stream, error) {
+func newStream(StreamID protocol.StreamID,
+	onData func(),
+	onReset func(protocol.StreamID, protocol.ByteCount),
+	flowControlManager flowcontrol.FlowControlManager) *stream {
 	s := &stream{
 		onData:             onData,
 		onReset:            onReset,
@@ -60,11 +63,9 @@ func newStream(StreamID protocol.StreamID, onData func(), onReset func(protocol.
 		flowControlManager: flowControlManager,
 		frameQueue:         newStreamFrameSorter(),
 	}
-
 	s.newFrameOrErrCond.L = &s.mutex
 	s.doneWritingOrErrCond.L = &s.mutex
-
-	return s, nil
+	return s
 }
 
 // Read implements io.Reader. It is not thread safe!

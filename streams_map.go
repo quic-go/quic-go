@@ -36,7 +36,7 @@ type streamsMap struct {
 }
 
 type streamLambda func(*stream) (bool, error)
-type newStreamLambda func(protocol.StreamID) (*stream, error)
+type newStreamLambda func(protocol.StreamID) *stream
 
 var (
 	errMapAccess = errors.New("streamsMap: Error accessing the streams map")
@@ -120,11 +120,6 @@ func (m *streamsMap) openRemoteStream(id protocol.StreamID) (*stream, error) {
 		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d, which is a lot smaller than the highest opened stream, %d", id, m.highestStreamOpenedByPeer))
 	}
 
-	s, err := m.newStream(id)
-	if err != nil {
-		return nil, err
-	}
-
 	if m.perspective == protocol.PerspectiveServer {
 		m.numIncomingStreams++
 	} else {
@@ -135,6 +130,7 @@ func (m *streamsMap) openRemoteStream(id protocol.StreamID) (*stream, error) {
 		m.highestStreamOpenedByPeer = id
 	}
 
+	s := m.newStream(id)
 	m.putStream(s)
 	return s, nil
 }
@@ -145,11 +141,6 @@ func (m *streamsMap) openStreamImpl() (*stream, error) {
 		return nil, qerr.TooManyOpenStreams
 	}
 
-	s, err := m.newStream(id)
-	if err != nil {
-		return nil, err
-	}
-
 	if m.perspective == protocol.PerspectiveServer {
 		m.numOutgoingStreams++
 	} else {
@@ -157,6 +148,7 @@ func (m *streamsMap) openStreamImpl() (*stream, error) {
 	}
 
 	m.nextStream += 2
+	s := m.newStream(id)
 	m.putStream(s)
 	return s, nil
 }
