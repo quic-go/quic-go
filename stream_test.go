@@ -139,7 +139,7 @@ var _ = Describe("Stream", func() {
 		cpm := &mockConnectionParametersManager{}
 		flowControlManager := flowcontrol.NewFlowControlManager(cpm, &congestion.RTTStats{})
 		flowControlManager.NewStream(streamID, true)
-		str, _ = newStream(streamID, onData, onReset, flowControlManager)
+		str = newStream(streamID, onData, onReset, flowControlManager)
 	})
 
 	It("gets stream id", func() {

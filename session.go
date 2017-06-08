@@ -733,20 +733,14 @@ func (s *session) queueResetStreamFrame(id protocol.StreamID, offset protocol.By
 	s.scheduleSending()
 }
 
-func (s *session) newStream(id protocol.StreamID) (*stream, error) {
-	stream, err := newStream(id, s.scheduleSending, s.queueResetStreamFrame, s.flowControlManager)
-	if err != nil {
-		return nil, err
-	}
-
+func (s *session) newStream(id protocol.StreamID) *stream {
 	// TODO: find a better solution for determining which streams contribute to connection level flow control
 	if id == 1 || id == 3 {
 		s.flowControlManager.NewStream(id, false)
 	} else {
 		s.flowControlManager.NewStream(id, true)
 	}
-
-	return stream, nil
+	return newStream(id, s.scheduleSending, s.queueResetStreamFrame, s.flowControlManager)
 }
 
 // garbageCollectStreams goes through all streams and removes EOF'ed streams
