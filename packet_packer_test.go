@@ -48,13 +48,8 @@ var _ = Describe("Packet packer", func() {
 	)
 
 	BeforeEach(func() {
-		fcm := newMockFlowControlHandler()
-		fcm.sendWindowSizes[3] = protocol.MaxByteCount
-		fcm.sendWindowSizes[5] = protocol.MaxByteCount
-		fcm.sendWindowSizes[7] = protocol.MaxByteCount
-
 		cpm := &mockConnectionParametersManager{}
-		streamFramer = newStreamFramer(newStreamsMap(nil, protocol.PerspectiveServer, cpm), fcm)
+		streamFramer = newStreamFramer(newStreamsMap(nil, protocol.PerspectiveServer, cpm), nil)
 
 		packer = &packetPacker{
 			cryptoSetup:           &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure},

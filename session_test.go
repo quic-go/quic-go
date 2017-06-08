@@ -17,6 +17,7 @@ import (
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
+	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/testdata"
@@ -474,21 +475,22 @@ var _ = Describe("Session", func() {
 
 		It("passes the byte offset to the flow controller", func() {
 			sess.streamsMap.GetOrOpenStream(5)
-			sess.flowControlManager = newMockFlowControlHandler()
+			fcm := mocks.NewMockFlowControlManager(mockCtrl)
+			sess.flowControlManager = fcm
+			fcm.EXPECT().ResetStream(protocol.StreamID(5), protocol.ByteCount(0x1337))
 			err := sess.handleRstStreamFrame(&frames.RstStreamFrame{
 				StreamID:   5,
 				ByteOffset: 0x1337,
 			})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(sess.flowControlManager.(*mockFlowControlHandler).highestReceivedForStream).To(Equal(protocol.StreamID(5)))
-			Expect(sess.flowControlManager.(*mockFlowControlHandler).highestReceived).To(Equal(protocol.ByteCount(0x1337)))
 		})
 
 		It("returns errors from the flow controller", func() {
-			sess.streamsMap.GetOrOpenStream(5)
-			sess.flowControlManager = newMockFlowControlHandler()
 			testErr := errors.New("flow control violation")
-			sess.flowControlManager.(*mockFlowControlHandler).flowControlViolation = testErr
+			sess.streamsMap.GetOrOpenStream(5)
+			fcm := mocks.NewMockFlowControlManager(mockCtrl)
+			sess.flowControlManager = fcm
+			fcm.EXPECT().ResetStream(protocol.StreamID(5), protocol.ByteCount(0x1337)).Return(testErr)
 			err := sess.handleRstStreamFrame(&frames.RstStreamFrame{
 				StreamID:   5,
 				ByteOffset: 0x1337,
@@ -1062,9 +1064,11 @@ var _ = Describe("Session", func() {
 			It("retransmits a WindowUpdates if it hasn't already sent a WindowUpdate with a higher ByteOffset", func() {
 				_, err := sess.GetOrOpenStream(5)
 				Expect(err).ToNot(HaveOccurred())
-				fc := newMockFlowControlHandler()
-				fc.receiveWindow = 0x1000
-				sess.flowControlManager = fc
+				fcm := mocks.NewMockFlowControlManager(mockCtrl)
+				sess.flowControlManager = fcm
+				fcm.EXPECT().GetWindowUpdates()
+				fcm.EXPECT().GetReceiveWindow(protocol.StreamID(5)).Return(protocol.ByteCount(0x1000), nil)
+				fcm.EXPECT().GetWindowUpdates()
 				wuf := &frames.WindowUpdateFrame{
 					StreamID:   5,
 					ByteOffset: 0x1000,
@@ -1082,9 +1086,10 @@ var _ = Describe("Session", func() {
 			It("doesn't retransmit WindowUpdates if it already sent a WindowUpdate with a higher ByteOffset", func() {
 				_, err := sess.GetOrOpenStream(5)
 				Expect(err).ToNot(HaveOccurred())
-				fc := newMockFlowControlHandler()
-				fc.receiveWindow = 0x2000
-				sess.flowControlManager = fc
+				fcm := mocks.NewMockFlowControlManager(mockCtrl)
+				sess.flowControlManager = fcm
+				fcm.EXPECT().GetWindowUpdates()
+				fcm.EXPECT().GetReceiveWindow(protocol.StreamID(5)).Return(protocol.ByteCount(0x2000), nil)
 				sph.retransmissionQueue = []*ackhandler.Packet{{
 					Frames: []frames.Frame{&frames.WindowUpdateFrame{
 						StreamID:   5,
