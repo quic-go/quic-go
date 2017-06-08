@@ -40,24 +40,6 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(err).To(MatchError(errInvalidPacketNumber))
 		})
 
-		It("rejects a duplicate package", func() {
-			for i := 1; i < 5; i++ {
-				err := handler.ReceivedPacket(protocol.PacketNumber(i), true)
-				Expect(err).ToNot(HaveOccurred())
-			}
-			err := handler.ReceivedPacket(4, true)
-			Expect(err).To(MatchError(ErrDuplicatePacket))
-		})
-
-		It("ignores a packet with PacketNumber less than the LeastUnacked of a previously received StopWaiting", func() {
-			err := handler.ReceivedPacket(5, true)
-			Expect(err).ToNot(HaveOccurred())
-			err = handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 10})
-			Expect(err).ToNot(HaveOccurred())
-			err = handler.ReceivedPacket(9, true)
-			Expect(err).To(MatchError(ErrPacketSmallerThanLastStopWaiting))
-		})
-
 		It("does not ignore a packet with PacketNumber equal to LeastUnacked of a previously received StopWaiting", func() {
 			err := handler.ReceivedPacket(5, true)
 			Expect(err).ToNot(HaveOccurred())
@@ -272,6 +254,19 @@ var _ = Describe("receivedPacketHandler", func() {
 				Expect(ack.AckRanges).To(HaveLen(2))
 				Expect(ack.AckRanges[0]).To(Equal(frames.AckRange{FirstPacketNumber: 4, LastPacketNumber: 4}))
 				Expect(ack.AckRanges[1]).To(Equal(frames.AckRange{FirstPacketNumber: 1, LastPacketNumber: 1}))
+			})
+
+			It("doesn't add delayed packets to the packetHistory", func() {
+				err := handler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: protocol.PacketNumber(6)})
+				Expect(err).ToNot(HaveOccurred())
+				err = handler.ReceivedPacket(4, true)
+				Expect(err).ToNot(HaveOccurred())
+				err = handler.ReceivedPacket(10, true)
+				Expect(err).ToNot(HaveOccurred())
+				ack := handler.GetAckFrame()
+				Expect(ack).ToNot(BeNil())
+				Expect(ack.LargestAcked).To(Equal(protocol.PacketNumber(10)))
+				Expect(ack.LowestAcked).To(Equal(protocol.PacketNumber(10)))
 			})
 
 			It("deletes packets from the packetHistory after receiving a StopWaiting, after continuously received packets", func() {
