@@ -813,7 +813,7 @@ var _ = Describe("Session", func() {
 			Expect(sess.largestRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
 		})
 
-		It("ignores duplicate packets", func() {
+		It("handles duplicate packets", func() {
 			hdr.PacketNumber = 5
 			err := sess.handlePacketImpl(&receivedPacket{publicHeader: hdr})
 			Expect(err).ToNot(HaveOccurred())
@@ -821,7 +821,7 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("ignores packets smaller than the highest LeastUnacked of a StopWaiting", func() {
+		It("handles packets smaller than the highest LeastUnacked of a StopWaiting", func() {
 			err := sess.receivedPacketHandler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 10})
 			Expect(err).ToNot(HaveOccurred())
 			hdr.PacketNumber = 5

@@ -8,13 +8,6 @@ import (
 	"github.com/lucas-clemente/quic-go/protocol"
 )
 
-var (
-	// ErrDuplicatePacket occurres when a duplicate packet is received
-	ErrDuplicatePacket = errors.New("ReceivedPacketHandler: Duplicate Packet")
-	// ErrPacketSmallerThanLastStopWaiting occurs when a packet arrives with a packet number smaller than the largest LeastUnacked of a StopWaitingFrame. If this error occurs, the packet should be ignored
-	ErrPacketSmallerThanLastStopWaiting = errors.New("ReceivedPacketHandler: Packet number smaller than highest StopWaiting")
-)
-
 var errInvalidPacketNumber = errors.New("ReceivedPacketHandler: Invalid packet number")
 
 type receivedPacketHandler struct {
@@ -52,19 +45,10 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 		return errInvalidPacketNumber
 	}
 
-	// if the packet number is smaller than the largest LeastUnacked value of a StopWaiting we received, we cannot detect if this packet has a duplicate number
-	// the packet has to be ignored anyway
-	if packetNumber <= h.ignorePacketsBelow {
-		return ErrPacketSmallerThanLastStopWaiting
-	}
-
-	if h.packetHistory.IsDuplicate(packetNumber) {
-		return ErrDuplicatePacket
-	}
-
-	err := h.packetHistory.ReceivedPacket(packetNumber)
-	if err != nil {
-		return err
+	if packetNumber > h.ignorePacketsBelow {
+		if err := h.packetHistory.ReceivedPacket(packetNumber); err != nil {
+			return err
+		}
 	}
 
 	if packetNumber > h.largestObserved {
