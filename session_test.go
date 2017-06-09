@@ -17,6 +17,7 @@ import (
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
+	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/mocks/mocks_fc"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
@@ -127,7 +128,7 @@ var _ = Describe("Session", func() {
 		sess          *session
 		scfg          *handshake.ServerConfig
 		mconn         *mockConnection
-		cpm           *mockConnectionParametersManager
+		mockCpm       *mocks.MockConnectionParametersManager
 		cryptoSetup   *mockCryptoSetup
 		handshakeChan <-chan handshakeEvent
 		aeadChanged   chan<- protocol.EncryptionLevel
@@ -172,8 +173,9 @@ var _ = Describe("Session", func() {
 		sess = pSess.(*session)
 		Expect(sess.streamsMap.openStreams).To(HaveLen(1)) // Crypto stream
 
-		cpm = &mockConnectionParametersManager{idleTime: 60 * time.Second}
-		sess.connectionParameters = cpm
+		mockCpm = mocks.NewMockConnectionParametersManager(mockCtrl)
+		mockCpm.EXPECT().GetIdleConnectionStateLifetime().Return(time.Minute).AnyTimes()
+		sess.connectionParameters = mockCpm
 	})
 
 	AfterEach(func() {
@@ -1417,8 +1419,11 @@ var _ = Describe("Session", func() {
 
 		It("does not use ICSL before handshake", func(done Done) {
 			sess.lastNetworkActivityTime = time.Now().Add(-time.Minute)
-			cpm.idleTime = 99999 * time.Second
-			sess.packer.connectionParameters = sess.connectionParameters
+			mockCpm = mocks.NewMockConnectionParametersManager(mockCtrl)
+			mockCpm.EXPECT().GetIdleConnectionStateLifetime().Return(9999 * time.Second).AnyTimes()
+			mockCpm.EXPECT().TruncateConnectionID().Return(false).AnyTimes()
+			sess.connectionParameters = mockCpm
+			sess.packer.connectionParameters = mockCpm
 			err := sess.run() // Would normally not return
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
 			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
@@ -1428,8 +1433,12 @@ var _ = Describe("Session", func() {
 
 		It("uses ICSL after handshake", func(done Done) {
 			close(aeadChanged)
-			cpm.idleTime = 0 * time.Millisecond
-			sess.packer.connectionParameters = sess.connectionParameters
+			mockCpm = mocks.NewMockConnectionParametersManager(mockCtrl)
+			mockCpm.EXPECT().GetIdleConnectionStateLifetime().Return(0 * time.Second)
+			mockCpm.EXPECT().TruncateConnectionID().Return(false).AnyTimes()
+			sess.connectionParameters = mockCpm
+			sess.packer.connectionParameters = mockCpm
+			mockCpm.EXPECT().GetIdleConnectionStateLifetime().Return(0 * time.Second).AnyTimes()
 			err := sess.run() // Would normally not return
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
 			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))

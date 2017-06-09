@@ -2,55 +2,13 @@ package quic
 
 import (
 	"errors"
-	"math"
-	"time"
 
-	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
-
-type mockConnectionParametersManager struct {
-	maxIncomingStreams uint32
-	maxOutgoingStreams uint32
-	idleTime           time.Duration
-}
-
-func (m *mockConnectionParametersManager) SetFromMap(map[handshake.Tag][]byte) error {
-	panic("not implemented")
-}
-func (m *mockConnectionParametersManager) GetHelloMap() (map[handshake.Tag][]byte, error) {
-	panic("not implemented")
-}
-func (m *mockConnectionParametersManager) GetSendStreamFlowControlWindow() protocol.ByteCount {
-	return math.MaxUint64
-}
-func (m *mockConnectionParametersManager) GetSendConnectionFlowControlWindow() protocol.ByteCount {
-	return math.MaxUint64
-}
-func (m *mockConnectionParametersManager) GetReceiveStreamFlowControlWindow() protocol.ByteCount {
-	return math.MaxUint64
-}
-func (m *mockConnectionParametersManager) GetMaxReceiveStreamFlowControlWindow() protocol.ByteCount {
-	return math.MaxUint64
-}
-func (m *mockConnectionParametersManager) GetReceiveConnectionFlowControlWindow() protocol.ByteCount {
-	return math.MaxUint64
-}
-func (m *mockConnectionParametersManager) GetMaxReceiveConnectionFlowControlWindow() protocol.ByteCount {
-	return math.MaxUint64
-}
-func (m *mockConnectionParametersManager) GetMaxOutgoingStreams() uint32 { return m.maxOutgoingStreams }
-func (m *mockConnectionParametersManager) GetMaxIncomingStreams() uint32 { return m.maxIncomingStreams }
-func (m *mockConnectionParametersManager) GetIdleConnectionStateLifetime() time.Duration {
-	return m.idleTime
-}
-func (m *mockConnectionParametersManager) TruncateConnectionID() bool { return false }
-
-var _ handshake.ConnectionParametersManager = &mockConnectionParametersManager{}
 
 var _ = Describe("Streams Map", func() {
 	const (
