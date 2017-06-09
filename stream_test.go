@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/frames"
-	"github.com/lucas-clemente/quic-go/internal/mocks"
+	"github.com/lucas-clemente/quic-go/internal/mocks/mocks_fc"
 	"github.com/lucas-clemente/quic-go/protocol"
 
 	. "github.com/onsi/ginkgo"
@@ -24,7 +24,7 @@ var _ = Describe("Stream", func() {
 		resetCalledForStream protocol.StreamID
 		resetCalledAtOffset  protocol.ByteCount
 
-		mockFcm *mocks.MockFlowControlManager
+		mockFcm *mocks_fc.MockFlowControlManager
 	)
 
 	onData := func() {
@@ -40,7 +40,7 @@ var _ = Describe("Stream", func() {
 	BeforeEach(func() {
 		onDataCalled = false
 		resetCalled = false
-		mockFcm = mocks.NewMockFlowControlManager(mockCtrl)
+		mockFcm = mocks_fc.NewMockFlowControlManager(mockCtrl)
 		str = newStream(streamID, onData, onReset, mockFcm)
 	})
 

@@ -4,7 +4,7 @@ import (
 	"bytes"
 
 	"github.com/lucas-clemente/quic-go/frames"
-	"github.com/lucas-clemente/quic-go/internal/mocks"
+	"github.com/lucas-clemente/quic-go/internal/mocks/mocks_fc"
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -21,7 +21,7 @@ var _ = Describe("Stream Framer", func() {
 		framer                                   *streamFramer
 		streamsMap                               *streamsMap
 		stream1, stream2                         *stream
-		mockFcm                                  *mocks.MockFlowControlManager
+		mockFcm                                  *mocks_fc.MockFlowControlManager
 	)
 
 	BeforeEach(func() {
@@ -41,7 +41,7 @@ var _ = Describe("Stream Framer", func() {
 		streamsMap.putStream(stream1)
 		streamsMap.putStream(stream2)
 
-		mockFcm = mocks.NewMockFlowControlManager(mockCtrl)
+		mockFcm = mocks_fc.NewMockFlowControlManager(mockCtrl)
 		framer = newStreamFramer(streamsMap, mockFcm)
 	})
 
