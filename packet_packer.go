@@ -141,8 +141,10 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 		return nil, nil
 	}
 	// Don't send out packets that only contain a StopWaitingFrame
-	if len(payloadFrames) == 1 && stopWaitingFrame != nil {
-		return nil, nil
+	if len(payloadFrames) == 1 {
+		if _, ok := payloadFrames[0].(*frames.StopWaitingFrame); ok {
+			return nil, nil
+		}
 	}
 
 	raw := getPacketBuffer()
