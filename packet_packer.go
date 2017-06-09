@@ -79,42 +79,8 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	// handshakePacketToRetransmit is only set for handshake retransmissions
 	isHandshakeRetransmission := (handshakePacketToRetransmit != nil)
 
-	var sealFunc handshake.Sealer
-	var encLevel protocol.EncryptionLevel
-
-	if isHandshakeRetransmission {
-		var err error
-		encLevel = handshakePacketToRetransmit.EncryptionLevel
-		sealFunc, err = p.cryptoSetup.GetSealerWithEncryptionLevel(encLevel)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		encLevel, sealFunc = p.cryptoSetup.GetSealer()
-	}
-
 	currentPacketNumber := p.packetNumberGenerator.Peek()
 	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(currentPacketNumber, leastUnacked)
-	responsePublicHeader := &PublicHeader{
-		ConnectionID:         p.connectionID,
-		PacketNumber:         currentPacketNumber,
-		PacketNumberLen:      packetNumberLen,
-		TruncateConnectionID: p.connectionParameters.TruncateConnectionID(),
-	}
-
-	if p.perspective == protocol.PerspectiveServer && encLevel == protocol.EncryptionSecure {
-		responsePublicHeader.DiversificationNonce = p.cryptoSetup.DiversificationNonce()
-	}
-
-	if p.perspective == protocol.PerspectiveClient && encLevel != protocol.EncryptionForwardSecure {
-		responsePublicHeader.VersionFlag = true
-		responsePublicHeader.VersionNumber = p.version
-	}
-
-	publicHeaderLength, err := responsePublicHeader.GetLength(p.perspective)
-	if err != nil {
-		return nil, err
-	}
 
 	if stopWaitingFrame != nil {
 		stopWaitingFrame.PacketNumber = currentPacketNumber
@@ -125,6 +91,18 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	var isConnectionClose bool
 	if len(p.controlFrames) == 1 {
 		_, isConnectionClose = p.controlFrames[0].(*frames.ConnectionCloseFrame)
+	}
+
+	responsePublicHeader := &PublicHeader{
+		ConnectionID:         p.connectionID,
+		PacketNumber:         currentPacketNumber,
+		PacketNumberLen:      packetNumberLen,
+		TruncateConnectionID: p.connectionParameters.TruncateConnectionID(),
+	}
+
+	publicHeaderLength, err := responsePublicHeader.GetLength(p.perspective)
+	if err != nil {
+		return nil, err
 	}
 
 	var payloadFrames []frames.Frame
@@ -143,9 +121,15 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	} else if isConnectionClose {
 		payloadFrames = []frames.Frame{p.controlFrames[0]}
 	} else {
-		maxSize := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLength
+		var err error
+		maxSize := protocol.MaxFrameAndPublicHeaderSize
 		if !p.isForwardSecure {
 			maxSize -= protocol.NonForwardSecurePacketSizeReduction
+			// at this moment, we don't know yet if we need to include a diversification nonce in the PublicHeader
+			// to be on the safe side, subtract the maximum size of the public header
+			maxSize -= protocol.MaxPublicHeaderSize
+		} else {
+			maxSize -= publicHeaderLength
 		}
 		payloadFrames, err = p.composeNextPacket(stopWaitingFrame, maxSize)
 		if err != nil {
@@ -160,6 +144,29 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	// Don't send out packets that only contain a StopWaitingFrame
 	if len(payloadFrames) == 1 && stopWaitingFrame != nil {
 		return nil, nil
+	}
+
+	var sealFunc handshake.Sealer
+	var encLevel protocol.EncryptionLevel
+
+	if isHandshakeRetransmission {
+		var err error
+		encLevel = handshakePacketToRetransmit.EncryptionLevel
+		sealFunc, err = p.cryptoSetup.GetSealerWithEncryptionLevel(encLevel)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		encLevel, sealFunc = p.cryptoSetup.GetSealer()
+	}
+
+	if p.perspective == protocol.PerspectiveServer && encLevel == protocol.EncryptionSecure {
+		responsePublicHeader.DiversificationNonce = p.cryptoSetup.DiversificationNonce()
+	}
+
+	if p.perspective == protocol.PerspectiveClient && encLevel != protocol.EncryptionForwardSecure {
+		responsePublicHeader.VersionFlag = true
+		responsePublicHeader.VersionNumber = p.version
 	}
 
 	raw := getPacketBuffer()
@@ -183,7 +190,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	}
 
 	if protocol.ByteCount(buffer.Len()+12) > protocol.MaxPacketSize {
-		return nil, errors.New("PacketPacker BUG: packet too large")
+		return nil, fmt.Errorf("PacketPacker BUG: packet too large (%d, maximum: %d)", buffer.Len()+12, protocol.MaxPacketSize)
 	}
 
 	raw = raw[0:buffer.Len()]

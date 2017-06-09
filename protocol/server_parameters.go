@@ -6,9 +6,6 @@ import "time"
 // This is the value used by Chromium for a QUIC packet sent using IPv6 (for IPv4 it would be 1370)
 const MaxPacketSize ByteCount = 1350
 
-// MaxFrameAndPublicHeaderSize is the maximum size of a QUIC frame plus PublicHeader
-const MaxFrameAndPublicHeaderSize = MaxPacketSize - 12 /*crypto signature*/
-
 // NonForwardSecurePacketSizeReduction is the number of bytes a non forward-secure packet has to be smaller than a forward-secure packet
 // This makes sure that those packets can always be retransmitted without splitting the contained StreamFrames
 const NonForwardSecurePacketSizeReduction = 50
