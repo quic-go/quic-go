@@ -31,7 +31,6 @@ type receivedPacket struct {
 var (
 	errRstStreamOnInvalidStream   = errors.New("RST_STREAM received for unknown stream")
 	errWindowUpdateOnClosedStream = errors.New("WINDOW_UPDATE received for an already closed stream")
-	errSessionAlreadyClosed       = errors.New("cannot close session; it was already closed before")
 )
 
 var (
