@@ -79,46 +79,29 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	// handshakePacketToRetransmit is only set for handshake retransmissions
 	isHandshakeRetransmission := (handshakePacketToRetransmit != nil)
 
-	var sealFunc handshake.Sealer
+	var sealer handshake.Sealer
 	var encLevel protocol.EncryptionLevel
 
 	if isHandshakeRetransmission {
 		var err error
 		encLevel = handshakePacketToRetransmit.EncryptionLevel
-		sealFunc, err = p.cryptoSetup.GetSealerWithEncryptionLevel(encLevel)
+		sealer, err = p.cryptoSetup.GetSealerWithEncryptionLevel(encLevel)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		encLevel, sealFunc = p.cryptoSetup.GetSealer()
+		encLevel, sealer = p.cryptoSetup.GetSealer()
 	}
 
-	currentPacketNumber := p.packetNumberGenerator.Peek()
-	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(currentPacketNumber, leastUnacked)
-	responsePublicHeader := &PublicHeader{
-		ConnectionID:         p.connectionID,
-		PacketNumber:         currentPacketNumber,
-		PacketNumberLen:      packetNumberLen,
-		TruncateConnectionID: p.connectionParameters.TruncateConnectionID(),
-	}
-
-	if p.perspective == protocol.PerspectiveServer && encLevel == protocol.EncryptionSecure {
-		responsePublicHeader.DiversificationNonce = p.cryptoSetup.DiversificationNonce()
-	}
-
-	if p.perspective == protocol.PerspectiveClient && encLevel != protocol.EncryptionForwardSecure {
-		responsePublicHeader.VersionFlag = true
-		responsePublicHeader.VersionNumber = p.version
-	}
-
-	publicHeaderLength, err := responsePublicHeader.GetLength(p.perspective)
+	publicHeader := p.getPublicHeader(leastUnacked, encLevel)
+	publicHeaderLength, err := publicHeader.GetLength(p.perspective)
 	if err != nil {
 		return nil, err
 	}
 
 	if stopWaitingFrame != nil {
-		stopWaitingFrame.PacketNumber = currentPacketNumber
-		stopWaitingFrame.PacketNumberLen = packetNumberLen
+		stopWaitingFrame.PacketNumber = publicHeader.PacketNumber
+		stopWaitingFrame.PacketNumberLen = publicHeader.PacketNumberLen
 	}
 
 	// we're packing a ConnectionClose, don't add any StreamFrames
@@ -165,7 +148,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	raw := getPacketBuffer()
 	buffer := bytes.NewBuffer(raw)
 
-	if err = responsePublicHeader.Write(buffer, p.version, p.perspective); err != nil {
+	if err = publicHeader.Write(buffer, p.version, p.perspective); err != nil {
 		return nil, err
 	}
 
@@ -187,7 +170,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	}
 
 	raw = raw[0:buffer.Len()]
-	_ = sealFunc(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], currentPacketNumber, raw[:payloadStartIndex])
+	_ = sealer(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], publicHeader.PacketNumber, raw[:payloadStartIndex])
 	raw = raw[0 : buffer.Len()+12]
 
 	if hasNonCryptoStreamData && encLevel <= protocol.EncryptionUnencrypted {
@@ -195,12 +178,12 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	}
 
 	num := p.packetNumberGenerator.Pop()
-	if num != currentPacketNumber {
+	if num != publicHeader.PacketNumber {
 		return nil, errors.New("PacketPacker BUG: Peeked and Popped packet numbers do not match.")
 	}
 
 	return &packedPacket{
-		number:          currentPacketNumber,
+		number:          publicHeader.PacketNumber,
 		raw:             raw,
 		frames:          payloadFrames,
 		encryptionLevel: encLevel,
@@ -263,4 +246,25 @@ func (p *packetPacker) QueueControlFrameForNextPacket(f frames.Frame) {
 
 func (p *packetPacker) SetForwardSecure() {
 	p.isForwardSecure = true
+}
+
+func (p *packetPacker) getPublicHeader(leastUnacked protocol.PacketNumber, encLevel protocol.EncryptionLevel) *PublicHeader {
+	pnum := p.packetNumberGenerator.Peek()
+	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(pnum, leastUnacked)
+	publicHeader := &PublicHeader{
+		ConnectionID:         p.connectionID,
+		PacketNumber:         pnum,
+		PacketNumberLen:      packetNumberLen,
+		TruncateConnectionID: p.connectionParameters.TruncateConnectionID(),
+	}
+
+	if p.perspective == protocol.PerspectiveServer && encLevel == protocol.EncryptionSecure {
+		publicHeader.DiversificationNonce = p.cryptoSetup.DiversificationNonce()
+	}
+	if p.perspective == protocol.PerspectiveClient && encLevel != protocol.EncryptionForwardSecure {
+		publicHeader.VersionFlag = true
+		publicHeader.VersionNumber = p.version
+	}
+
+	return publicHeader
 }
