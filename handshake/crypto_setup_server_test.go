@@ -551,6 +551,13 @@ var _ = Describe("Server Crypto Setup", func() {
 				Expect(d).To(Equal(foobarServerFNVSigned))
 			})
 
+			It("is used for crypto stream", func() {
+				enc, seal := cs.GetSealerForCryptoStream()
+				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
+				d := seal(nil, []byte("foobar"), 0, []byte{})
+				Expect(d).To(Equal(foobarServerFNVSigned))
+			})
+
 			It("is accepted initially", func() {
 				d, enc, err := cs.Open(nil, foobarClientFNVSigned, 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
@@ -595,14 +602,6 @@ var _ = Describe("Server Crypto Setup", func() {
 		})
 
 		Context("initial encryption", func() {
-			It("is used after CHLO", func() {
-				doCHLO()
-				enc, seal := cs.GetSealer()
-				Expect(enc).To(Equal(protocol.EncryptionSecure))
-				d := seal(nil, []byte("foobar"), 0, []byte{})
-				Expect(d).To(Equal([]byte("foobar  normal sec")))
-			})
-
 			It("is accepted after CHLO", func() {
 				doCHLO()
 				d, enc, err := cs.Open(nil, []byte("encrypted"), 0, []byte{})
@@ -619,15 +618,20 @@ var _ = Describe("Server Crypto Setup", func() {
 				Expect(err).To(MatchError("authentication failed"))
 				Expect(enc).To(Equal(protocol.EncryptionUnspecified))
 			})
+
+			It("is used for crypto stream", func() {
+				doCHLO()
+				enc, seal := cs.GetSealerForCryptoStream()
+				Expect(enc).To(Equal(protocol.EncryptionSecure))
+				d := seal(nil, []byte("foobar"), 0, []byte{})
+				Expect(d).To(Equal([]byte("foobar  normal sec")))
+			})
 		})
 
 		Context("forward secure encryption", func() {
-			It("is used after sending out one packet with initial encryption", func() {
+			It("is used after the CHLO", func() {
 				doCHLO()
 				enc, seal := cs.GetSealer()
-				Expect(enc).To(Equal(protocol.EncryptionSecure))
-				_ = seal(nil, []byte("SHLO"), 0, []byte{})
-				enc, seal = cs.GetSealer()
 				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
 				d := seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal([]byte("foobar forward sec")))

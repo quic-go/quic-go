@@ -332,7 +332,6 @@ func (h *cryptoSetupClient) Open(dst, src []byte, packetNumber protocol.PacketNu
 func (h *cryptoSetupClient) GetSealer() (protocol.EncryptionLevel, Sealer) {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
-
 	if h.forwardSecureAEAD != nil {
 		return protocol.EncryptionForwardSecure, h.sealForwardSecure
 	} else if h.secureAEAD != nil {
@@ -340,6 +339,10 @@ func (h *cryptoSetupClient) GetSealer() (protocol.EncryptionLevel, Sealer) {
 	} else {
 		return protocol.EncryptionUnencrypted, h.sealUnencrypted
 	}
+}
+
+func (h *cryptoSetupClient) GetSealerForCryptoStream() (protocol.EncryptionLevel, Sealer) {
+	return protocol.EncryptionUnencrypted, h.sealUnencrypted
 }
 
 func (h *cryptoSetupClient) GetSealerWithEncryptionLevel(encLevel protocol.EncryptionLevel) (Sealer, error) {

@@ -45,6 +45,28 @@ func (f *streamFramer) HasFramesForRetransmission() bool {
 	return len(f.retransmissionQueue) > 0
 }
 
+func (f *streamFramer) HasCryptoStreamFrame() bool {
+	// TODO(#657): Flow control
+	cs, _ := f.streamsMap.GetOrOpenStream(1)
+	return cs.lenOfDataForWriting() > 0
+}
+
+// TODO(lclemente): This is somewhat duplicate with the normal path for generating frames.
+// TODO(#657): Flow control
+func (f *streamFramer) PopCryptoStreamFrame(maxLen protocol.ByteCount) *frames.StreamFrame {
+	if !f.HasCryptoStreamFrame() {
+		return nil
+	}
+	cs, _ := f.streamsMap.GetOrOpenStream(1)
+	frame := &frames.StreamFrame{
+		StreamID: 1,
+		Offset:   cs.writeOffset,
+	}
+	frameHeaderBytes, _ := frame.MinLength(protocol.VersionWhatever) // can never error
+	frame.Data = cs.getDataForWriting(maxLen - frameHeaderBytes)
+	return frame
+}
+
 func (f *streamFramer) maybePopFramesForRetransmission(maxLen protocol.ByteCount) (res []*frames.StreamFrame, currentLen protocol.ByteCount) {
 	for len(f.retransmissionQueue) > 0 {
 		frame := f.retransmissionQueue[0]
@@ -76,7 +98,7 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 	var currentLen protocol.ByteCount
 
 	fn := func(s *stream) (bool, error) {
-		if s == nil {
+		if s == nil || s.streamID == 1 /* crypto stream is handled separately */ {
 			return true, nil
 		}
 

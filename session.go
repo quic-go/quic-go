@@ -219,7 +219,8 @@ func (s *session) setup(
 		return nil, nil, err
 	}
 
-	s.packer = newPacketPacker(s.connectionID, s.cryptoSetup, s.connectionParameters, s.streamFramer, s.perspective, s.version)
+	s.packer = newPacketPacker(s.connectionID, s.cryptoSetup, s.connectionParameters, s.streamFramer,
+		s.perspective, s.version)
 	s.unpacker = &packetUnpacker{aead: s.cryptoSetup, version: s.version}
 
 	return s, handshakeChan, nil
@@ -278,9 +279,6 @@ runLoop:
 				close(s.handshakeChan)
 				close(s.handshakeCompleteChan)
 			} else {
-				if l == protocol.EncryptionForwardSecure {
-					s.packer.SetForwardSecure()
-				}
 				s.tryDecryptingQueuedPackets()
 				s.handshakeChan <- handshakeEvent{encLevel: l}
 			}

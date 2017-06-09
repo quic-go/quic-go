@@ -686,6 +686,13 @@ var _ = Describe("Client Crypto Setup", func() {
 				Expect(d).To(Equal(foobarFNVSigned))
 			})
 
+			It("is used for the crypto stream", func() {
+				enc, seal := cs.GetSealerForCryptoStream()
+				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
+				d := seal(nil, []byte("foobar"), 0, []byte{})
+				Expect(d).To(Equal(foobarFNVSigned))
+			})
+
 			It("is accepted initially", func() {
 				d, enc, err := cs.Open(nil, foobarFNVSigned, 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
@@ -744,6 +751,14 @@ var _ = Describe("Client Crypto Setup", func() {
 				Expect(err).To(MatchError("authentication failed"))
 				Expect(enc).To(Equal(protocol.EncryptionUnspecified))
 			})
+
+			It("is not used for the crypto stream", func() {
+				doCompleteREJ()
+				enc, seal := cs.GetSealerForCryptoStream()
+				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
+				d := seal(nil, []byte("foobar"), 0, []byte{})
+				Expect(d).To(Equal(foobarFNVSigned))
+			})
 		})
 
 		Context("forward-secure encryption", func() {
@@ -756,6 +771,14 @@ var _ = Describe("Client Crypto Setup", func() {
 				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
 				d := seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal([]byte("foobar forward sec")))
+			})
+
+			It("is not used for the crypto stream", func() {
+				doSHLO()
+				enc, seal := cs.GetSealerForCryptoStream()
+				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
+				d := seal(nil, []byte("foobar"), 0, []byte{})
+				Expect(d).To(Equal(foobarFNVSigned))
 			})
 		})
 
