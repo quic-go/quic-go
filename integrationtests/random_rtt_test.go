@@ -78,7 +78,7 @@ var _ = Describe("Random RTT", func() {
 		session, err := Start(command, nil, GinkgoWriter)
 		Expect(err).NotTo(HaveOccurred())
 		defer session.Kill()
-		Eventually(session, 4).Should(Exit(0))
+		Eventually(session, 20).Should(Exit(0))
 		Expect(bytes.Contains(session.Out.Contents(), dataMan.GetData())).To(BeTrue())
 	}
 

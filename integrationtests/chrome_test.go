@@ -119,7 +119,7 @@ var _ = Describe("Chrome tests", func() {
 					return nil
 				}, 5).ShouldNot(HaveOccurred())
 				close(done)
-			}, 10)
+			}, 20)
 
 			It("downloads a small file", func() {
 				dataMan.GenerateData(dataLen)
