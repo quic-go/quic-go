@@ -1341,7 +1341,7 @@ var _ = Describe("Session", func() {
 			close(aeadChanged)
 			go sess.run()
 			sendUndecryptablePackets()
-			Consistently(sess.undecryptablePackets).Should(BeEmpty())
+			Consistently(func() []*receivedPacket { return sess.undecryptablePackets }).Should(BeEmpty())
 			Expect(sess.Close(nil)).To(Succeed())
 		})
 
