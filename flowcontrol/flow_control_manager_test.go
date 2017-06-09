@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/congestion"
-	"github.com/lucas-clemente/quic-go/handshake"
+	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 	. "github.com/onsi/ginkgo"
@@ -13,16 +13,14 @@ import (
 
 var _ = Describe("Flow Control Manager", func() {
 	var fcm *flowControlManager
-	var cpm handshake.ConnectionParametersManager
 
 	BeforeEach(func() {
-		cpm = &mockConnectionParametersManager{
-			receiveStreamFlowControlWindow:        100,
-			receiveConnectionFlowControlWindow:    200,
-			maxReceiveStreamFlowControlWindow:     9999999,
-			maxReceiveConnectionFlowControlWindow: 9999999,
-		}
-		fcm = NewFlowControlManager(cpm, &congestion.RTTStats{}).(*flowControlManager)
+		mockCpm := mocks.NewMockConnectionParametersManager(mockCtrl)
+		mockCpm.EXPECT().GetReceiveStreamFlowControlWindow().AnyTimes().Return(protocol.ByteCount(100))
+		mockCpm.EXPECT().GetReceiveConnectionFlowControlWindow().AnyTimes().Return(protocol.ByteCount(200))
+		mockCpm.EXPECT().GetMaxReceiveStreamFlowControlWindow().AnyTimes().Return(protocol.MaxByteCount)
+		mockCpm.EXPECT().GetMaxReceiveConnectionFlowControlWindow().AnyTimes().Return(protocol.MaxByteCount)
+		fcm = NewFlowControlManager(mockCpm, &congestion.RTTStats{}).(*flowControlManager)
 	})
 
 	It("creates a connection level flow controller", func() {
