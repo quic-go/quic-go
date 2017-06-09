@@ -1179,7 +1179,7 @@ var _ = Describe("Session", func() {
 			sess.ackAlarmChanged(time.Now().Add(10 * time.Millisecond))
 			time.Sleep(10 * time.Millisecond)
 			Eventually(func() int { return len(mconn.written) }).ShouldNot(BeZero())
-			Expect(mconn.written[0]).To(ContainSubstring(string([]byte{0x37, 0x13})))
+			Eventually(func() []byte { return mconn.written[0] }).Should(ContainSubstring(string([]byte{0x37, 0x13})))
 		})
 
 		Context("bundling of small packets", func() {
@@ -1198,8 +1198,8 @@ var _ = Describe("Session", func() {
 				defer sess.Close(nil)
 
 				Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(1))
-				Expect(mconn.written[0]).To(ContainSubstring("foobar1"))
-				Expect(mconn.written[0]).To(ContainSubstring("foobar2"))
+				Eventually(func() []byte { return mconn.written[0] }).Should(ContainSubstring("foobar1"))
+				Eventually(func() []byte { return mconn.written[0] }).Should(ContainSubstring("foobar2"))
 			})
 
 			It("sends out two big frames in two packets", func() {
@@ -1246,8 +1246,8 @@ var _ = Describe("Session", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(2))
-				Expect(mconn.written[0]).To(ContainSubstring(string([]byte{0x37, 0x13})))
-				Expect(mconn.written[1]).ToNot(ContainSubstring(string([]byte{0x37, 0x13})))
+				Eventually(func() []byte { return mconn.written[0] }).Should(ContainSubstring(string([]byte{0x37, 0x13})))
+				Eventually(func() []byte { return mconn.written[1] }).ShouldNot(ContainSubstring(string([]byte{0x37, 0x13})))
 			})
 		})
 	})
@@ -1322,7 +1322,7 @@ var _ = Describe("Session", func() {
 			time.Sleep(10 * time.Millisecond) // wait for the run loop to spin up
 			sess.scheduleSending()            // wake up the run loop
 			Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(1))
-			Expect(mconn.written[0]).To(ContainSubstring("PRST"))
+			Eventually(func() []byte { return mconn.written[0] }).Should(ContainSubstring("PRST"))
 			Eventually(sess.runClosed).Should(BeClosed())
 		})
 
