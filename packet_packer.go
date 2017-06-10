@@ -189,8 +189,11 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 	}, nil
 }
 
-func (p *packetPacker) composeNextPacket(stopWaitingFrame *frames.StopWaitingFrame,
-	maxFrameSize protocol.ByteCount, canSendStreamFrames bool) ([]frames.Frame, error) {
+func (p *packetPacker) composeNextPacket(
+	stopWaitingFrame *frames.StopWaitingFrame,
+	maxFrameSize protocol.ByteCount,
+	canSendStreamFrames bool,
+) ([]frames.Frame, error) {
 	var payloadLength protocol.ByteCount
 	var payloadFrames []frames.Frame
 

@@ -219,8 +219,13 @@ func (s *session) setup(
 		return nil, nil, err
 	}
 
-	s.packer = newPacketPacker(s.connectionID, s.cryptoSetup, s.connectionParameters, s.streamFramer,
-		s.perspective, s.version)
+	s.packer = newPacketPacker(s.connectionID,
+		s.cryptoSetup,
+		s.connectionParameters,
+		s.streamFramer,
+		s.perspective,
+		s.version,
+	)
 	s.unpacker = &packetUnpacker{aead: s.cryptoSetup, version: s.version}
 
 	return s, handshakeChan, nil
