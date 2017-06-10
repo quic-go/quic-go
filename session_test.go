@@ -914,7 +914,7 @@ var _ = Describe("Session", func() {
 		It("informs the SentPacketHandler about sent packets", func() {
 			sess.sentPacketHandler = newMockSentPacketHandler()
 			sess.packer.packetNumberGenerator.next = 0x1337 + 9
-			sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionSecure}
+			sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure}
 
 			f := &frames.StreamFrame{
 				StreamID: 5,
@@ -929,7 +929,7 @@ var _ = Describe("Session", func() {
 			sentPackets := sess.sentPacketHandler.(*mockSentPacketHandler).sentPackets
 			Expect(sentPackets).To(HaveLen(1))
 			Expect(sentPackets[0].Frames).To(ContainElement(f))
-			Expect(sentPackets[0].EncryptionLevel).To(Equal(protocol.EncryptionSecure))
+			Expect(sentPackets[0].EncryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
 			Expect(sentPackets[0].Length).To(BeEquivalentTo(len(mconn.written[0])))
 		})
 	})
@@ -994,10 +994,6 @@ var _ = Describe("Session", func() {
 		})
 
 		Context("for packets after the handshake", func() {
-			BeforeEach(func() {
-				sess.packer.SetForwardSecure()
-			})
-
 			It("sends a StreamFrame from a packet queued for retransmission", func() {
 				f := frames.StreamFrame{
 					StreamID: 0x5,
@@ -1250,16 +1246,6 @@ var _ = Describe("Session", func() {
 				Expect(mconn.written[1]).ToNot(ContainSubstring(string([]byte{0x37, 0x13})))
 			})
 		})
-	})
-
-	It("tells the packetPacker when forward-secure encryption is used", func(done Done) {
-		go sess.run()
-		aeadChanged <- protocol.EncryptionSecure
-		Consistently(func() bool { return sess.packer.isForwardSecure }).Should(BeFalse())
-		aeadChanged <- protocol.EncryptionForwardSecure
-		Eventually(func() bool { return sess.packer.isForwardSecure }).Should(BeTrue())
-		Expect(sess.Close(nil)).To(Succeed())
-		close(done)
 	})
 
 	It("closes when crypto stream errors", func() {

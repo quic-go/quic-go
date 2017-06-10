@@ -8,15 +8,15 @@ import (
 	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/qerr"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 type mockCryptoSetup struct {
-	handleErr    error
-	divNonce     []byte
-	encLevelSeal protocol.EncryptionLevel
+	handleErr          error
+	divNonce           []byte
+	encLevelSeal       protocol.EncryptionLevel
+	encLevelSealCrypto protocol.EncryptionLevel
 }
 
 func (m *mockCryptoSetup) HandleCryptoStream() error {
@@ -27,6 +27,11 @@ func (m *mockCryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumb
 }
 func (m *mockCryptoSetup) GetSealer() (protocol.EncryptionLevel, handshake.Sealer) {
 	return m.encLevelSeal, func(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
+		return append(src, bytes.Repeat([]byte{0}, 12)...)
+	}
+}
+func (m *mockCryptoSetup) GetSealerForCryptoStream() (protocol.EncryptionLevel, handshake.Sealer) {
+	return m.encLevelSealCrypto, func(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
 		return append(src, bytes.Repeat([]byte{0}, 12)...)
 	}
 }
@@ -46,13 +51,19 @@ var _ = Describe("Packet packer", func() {
 		publicHeaderLen protocol.ByteCount
 		maxFrameSize    protocol.ByteCount
 		streamFramer    *streamFramer
+		cryptoStream    *stream
 	)
 
 	BeforeEach(func() {
 		mockCpm := mocks.NewMockConnectionParametersManager(mockCtrl)
 		mockCpm.EXPECT().TruncateConnectionID().Return(false).AnyTimes()
 
-		streamFramer = newStreamFramer(newStreamsMap(nil, protocol.PerspectiveServer, nil), nil)
+		cryptoStream = &stream{}
+
+		streamsMap := newStreamsMap(nil, protocol.PerspectiveServer, nil)
+		streamsMap.streams[1] = cryptoStream
+		streamsMap.openStreams = []protocol.StreamID{1}
+		streamFramer = newStreamFramer(streamsMap, nil)
 
 		packer = &packetPacker{
 			cryptoSetup:           &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure},
@@ -65,7 +76,6 @@ var _ = Describe("Packet packer", func() {
 		publicHeaderLen = 1 + 8 + 2 // 1 flag byte, 8 connection ID, 2 packet number
 		maxFrameSize = protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen
 		packer.version = protocol.VersionWhatever
-		packer.isForwardSecure = true
 	})
 
 	It("returns nil when no packet is queued", func() {
@@ -90,7 +100,7 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	It("stores the encryption level a packet was sealed with", func() {
-		packer.cryptoSetup.(*mockCryptoSetup).encLevelSeal = protocol.EncryptionSecure
+		packer.cryptoSetup.(*mockCryptoSetup).encLevelSeal = protocol.EncryptionForwardSecure
 		f := &frames.StreamFrame{
 			StreamID: 5,
 			Data:     []byte("foobar"),
@@ -98,7 +108,7 @@ var _ = Describe("Packet packer", func() {
 		streamFramer.AddFrameForRetransmission(f)
 		p, err := packer.PackPacket(nil, []frames.Frame{}, 0)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(p.encryptionLevel).To(Equal(protocol.EncryptionSecure))
+		Expect(p.encryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
 	})
 
 	Context("diversificaton nonces", func() {
@@ -107,40 +117,27 @@ var _ = Describe("Packet packer", func() {
 		BeforeEach(func() {
 			nonce = bytes.Repeat([]byte{'e'}, 32)
 			packer.cryptoSetup.(*mockCryptoSetup).divNonce = nonce
-			f := &frames.StreamFrame{
-				StreamID: 1,
-				Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
-			}
-			streamFramer.AddFrameForRetransmission(f)
 		})
 
 		It("doesn't include a div nonce, when sending a packet with initial encryption", func() {
-			packer.cryptoSetup.(*mockCryptoSetup).encLevelSeal = protocol.EncryptionUnencrypted
-			p, err := packer.PackPacket(nil, []frames.Frame{}, 0)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(p.raw).ToNot(ContainSubstring(string(nonce)))
+			ph := packer.getPublicHeader(1, protocol.EncryptionUnencrypted)
+			Expect(ph.DiversificationNonce).To(BeEmpty())
 		})
 
 		It("includes a div nonce, when sending a packet with secure encryption", func() {
-			packer.cryptoSetup.(*mockCryptoSetup).encLevelSeal = protocol.EncryptionSecure
-			p, err := packer.PackPacket(nil, []frames.Frame{}, 0)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(p.raw).To(ContainSubstring(string(nonce)))
+			ph := packer.getPublicHeader(1, protocol.EncryptionSecure)
+			Expect(ph.DiversificationNonce).To(Equal(nonce))
 		})
 
 		It("doesn't include a div nonce, when sending a packet with forward-secure encryption", func() {
-			packer.cryptoSetup.(*mockCryptoSetup).encLevelSeal = protocol.EncryptionUnencrypted
-			p, err := packer.PackPacket(nil, []frames.Frame{}, 0)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(p.raw).ToNot(ContainSubstring(string(nonce)))
+			ph := packer.getPublicHeader(1, protocol.EncryptionForwardSecure)
+			Expect(ph.DiversificationNonce).To(BeEmpty())
 		})
 
 		It("doesn't send a div nonce as a client", func() {
 			packer.perspective = protocol.PerspectiveClient
-			packer.cryptoSetup.(*mockCryptoSetup).encLevelSeal = protocol.EncryptionSecure
-			p, err := packer.PackPacket(nil, []frames.Frame{}, 0)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(p.raw).ToNot(ContainSubstring(string(nonce)))
+			ph := packer.getPublicHeader(1, protocol.EncryptionSecure)
+			Expect(ph.DiversificationNonce).To(BeEmpty())
 		})
 	})
 
@@ -260,10 +257,10 @@ var _ = Describe("Packet packer", func() {
 			controlFrames = append(controlFrames, f)
 		}
 		packer.controlFrames = controlFrames
-		payloadFrames, err := packer.composeNextPacket(nil, maxFrameSize)
+		payloadFrames, err := packer.composeNextPacket(nil, maxFrameSize, false)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(payloadFrames).To(HaveLen(maxFramesPerPacket))
-		payloadFrames, err = packer.composeNextPacket(nil, maxFrameSize)
+		payloadFrames, err = packer.composeNextPacket(nil, maxFrameSize, false)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(payloadFrames).To(BeEmpty())
 	})
@@ -279,10 +276,10 @@ var _ = Describe("Packet packer", func() {
 			controlFrames = append(controlFrames, blockedFrame)
 		}
 		packer.controlFrames = controlFrames
-		payloadFrames, err := packer.composeNextPacket(nil, maxFrameSize)
+		payloadFrames, err := packer.composeNextPacket(nil, maxFrameSize, false)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(payloadFrames).To(HaveLen(maxFramesPerPacket))
-		payloadFrames, err = packer.composeNextPacket(nil, maxFrameSize)
+		payloadFrames, err = packer.composeNextPacket(nil, maxFrameSize, false)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(payloadFrames).To(HaveLen(10))
 	})
@@ -316,11 +313,11 @@ var _ = Describe("Packet packer", func() {
 			maxStreamFrameDataLen := maxFrameSize - minLength
 			f.Data = bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen))
 			streamFramer.AddFrameForRetransmission(f)
-			payloadFrames, err := packer.composeNextPacket(nil, maxFrameSize)
+			payloadFrames, err := packer.composeNextPacket(nil, maxFrameSize, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(payloadFrames).To(HaveLen(1))
 			Expect(payloadFrames[0].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
-			payloadFrames, err = packer.composeNextPacket(nil, maxFrameSize)
+			payloadFrames, err = packer.composeNextPacket(nil, maxFrameSize, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(payloadFrames).To(BeEmpty())
 		})
@@ -348,18 +345,6 @@ var _ = Describe("Packet packer", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.frames).To(HaveLen(1))
 			Expect(p.frames[0].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
-		})
-
-		It("packs smaller packets when it is not yet forward-secure", func() {
-			packer.isForwardSecure = false
-			f := &frames.StreamFrame{
-				StreamID: 3,
-				Data:     bytes.Repeat([]byte{'f'}, int(protocol.MaxPacketSize)),
-			}
-			streamFramer.AddFrameForRetransmission(f)
-			p, err := packer.PackPacket(nil, nil, 0)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(p.raw).To(HaveLen(int(protocol.MaxPacketSize - protocol.NonForwardSecurePacketSizeReduction)))
 		})
 
 		It("packs multiple small stream frames into single packet", func() {
@@ -403,17 +388,17 @@ var _ = Describe("Packet packer", func() {
 			maxStreamFrameDataLen := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen - minLength
 			f.Data = bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen)+200)
 			streamFramer.AddFrameForRetransmission(f)
-			payloadFrames, err := packer.composeNextPacket(nil, maxFrameSize)
+			payloadFrames, err := packer.composeNextPacket(nil, maxFrameSize, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(payloadFrames).To(HaveLen(1))
 			Expect(payloadFrames[0].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
 			Expect(payloadFrames[0].(*frames.StreamFrame).Data).To(HaveLen(int(maxStreamFrameDataLen)))
-			payloadFrames, err = packer.composeNextPacket(nil, maxFrameSize)
+			payloadFrames, err = packer.composeNextPacket(nil, maxFrameSize, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(payloadFrames).To(HaveLen(1))
 			Expect(payloadFrames[0].(*frames.StreamFrame).Data).To(HaveLen(200))
 			Expect(payloadFrames[0].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
-			payloadFrames, err = packer.composeNextPacket(nil, maxFrameSize)
+			payloadFrames, err = packer.composeNextPacket(nil, maxFrameSize, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(payloadFrames).To(BeEmpty())
 		})
@@ -476,10 +461,10 @@ var _ = Describe("Packet packer", func() {
 			f.Data = bytes.Repeat([]byte{'f'}, int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLen-minLength+2)) // + 2 since MinceLength is 1 bigger than the actual StreamFrame header
 
 			streamFramer.AddFrameForRetransmission(f)
-			payloadFrames, err := packer.composeNextPacket(nil, maxFrameSize)
+			payloadFrames, err := packer.composeNextPacket(nil, maxFrameSize, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(payloadFrames).To(HaveLen(1))
-			payloadFrames, err = packer.composeNextPacket(nil, maxFrameSize)
+			payloadFrames, err = packer.composeNextPacket(nil, maxFrameSize, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(payloadFrames).To(HaveLen(1))
 		})
@@ -491,11 +476,13 @@ var _ = Describe("Packet packer", func() {
 				Data:     []byte("foobar"),
 			}
 			streamFramer.AddFrameForRetransmission(f)
-			_, err := packer.PackPacket(nil, nil, 0)
-			Expect(err).To(MatchError(qerr.AttemptToSendUnencryptedStreamData))
+			p, err := packer.PackPacket(nil, nil, 0)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(p).To(BeNil())
 		})
 
-		It("sends encrypted, non forward-secure, stream data on a data stream", func() {
+		It("sends non forward-secure data as the client", func() {
+			packer.perspective = protocol.PerspectiveClient
 			packer.cryptoSetup.(*mockCryptoSetup).encLevelSeal = protocol.EncryptionSecure
 			f := &frames.StreamFrame{
 				StreamID: 5,
@@ -508,30 +495,46 @@ var _ = Describe("Packet packer", func() {
 			Expect(p.frames[0]).To(Equal(f))
 		})
 
-		It("sends unencrypted stream data on the crypto stream", func() {
-			packer.cryptoSetup.(*mockCryptoSetup).encLevelSeal = protocol.EncryptionUnencrypted
+		It("does not send non forward-secure data as the server", func() {
+			packer.cryptoSetup.(*mockCryptoSetup).encLevelSeal = protocol.EncryptionSecure
 			f := &frames.StreamFrame{
-				StreamID: 1,
+				StreamID: 5,
 				Data:     []byte("foobar"),
 			}
 			streamFramer.AddFrameForRetransmission(f)
+			p, err := packer.PackPacket(nil, nil, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p).To(BeNil())
+		})
+
+		It("sends unencrypted stream data on the crypto stream", func() {
+			packer.cryptoSetup.(*mockCryptoSetup).encLevelSealCrypto = protocol.EncryptionUnencrypted
+			cryptoStream.dataForWriting = []byte("foobar")
 			p, err := packer.PackPacket(nil, nil, 0)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
-			Expect(p.frames[0]).To(Equal(f))
+			Expect(p.frames).To(HaveLen(1))
+			Expect(p.frames[0]).To(Equal(&frames.StreamFrame{StreamID: 1, Data: []byte("foobar")}))
 		})
 
 		It("sends encrypted stream data on the crypto stream", func() {
-			packer.cryptoSetup.(*mockCryptoSetup).encLevelSeal = protocol.EncryptionSecure
-			f := &frames.StreamFrame{
-				StreamID: 1,
-				Data:     []byte("foobar"),
-			}
-			streamFramer.AddFrameForRetransmission(f)
+			packer.cryptoSetup.(*mockCryptoSetup).encLevelSealCrypto = protocol.EncryptionSecure
+			cryptoStream.dataForWriting = []byte("foobar")
 			p, err := packer.PackPacket(nil, nil, 0)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionSecure))
-			Expect(p.frames[0]).To(Equal(f))
+			Expect(p.frames).To(HaveLen(1))
+			Expect(p.frames[0]).To(Equal(&frames.StreamFrame{StreamID: 1, Data: []byte("foobar")}))
+		})
+
+		It("does not pack stream frames if not allowed", func() {
+			packer.cryptoSetup.(*mockCryptoSetup).encLevelSeal = protocol.EncryptionUnencrypted
+			packer.QueueControlFrameForNextPacket(&frames.AckFrame{})
+			streamFramer.AddFrameForRetransmission(&frames.StreamFrame{StreamID: 3, Data: []byte("foobar")})
+			p, err := packer.PackPacket(nil, nil, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p.frames).To(HaveLen(1))
+			Expect(func() { _ = p.frames[0].(*frames.AckFrame) }).NotTo(Panic())
 		})
 	})
 
@@ -544,7 +547,7 @@ var _ = Describe("Packet packer", func() {
 				Data:     bytes.Repeat([]byte{'f'}, length),
 			}
 			streamFramer.AddFrameForRetransmission(f)
-			_, err := packer.composeNextPacket(nil, maxFrameSize)
+			_, err := packer.composeNextPacket(nil, maxFrameSize, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(packer.controlFrames[0]).To(Equal(&frames.BlockedFrame{StreamID: 5}))
 		})
@@ -557,7 +560,7 @@ var _ = Describe("Packet packer", func() {
 				Data:     bytes.Repeat([]byte{'f'}, length),
 			}
 			streamFramer.AddFrameForRetransmission(f)
-			p, err := packer.composeNextPacket(nil, maxFrameSize)
+			p, err := packer.composeNextPacket(nil, maxFrameSize, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p).To(HaveLen(1))
 			Expect(p[0].(*frames.StreamFrame).DataLenPresent).To(BeFalse())
@@ -570,7 +573,7 @@ var _ = Describe("Packet packer", func() {
 				Data:     []byte("foobar"),
 			}
 			streamFramer.AddFrameForRetransmission(f)
-			_, err := packer.composeNextPacket(nil, maxFrameSize)
+			_, err := packer.composeNextPacket(nil, maxFrameSize, true)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(packer.controlFrames[0]).To(Equal(&frames.BlockedFrame{StreamID: 0}))
 		})
