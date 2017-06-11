@@ -3,7 +3,7 @@ package qerr
 import (
 	"fmt"
 
-	"github.com/lucas-clemente/quic-go/utils"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 // ErrorCode can be used as a normal error without reason.
