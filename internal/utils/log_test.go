@@ -15,6 +15,7 @@ var _ = Describe("Log", func() {
 		b *bytes.Buffer
 
 		initialTimeFormat string
+		initialPrefix     string
 		testPrefix        = "[QUIC-GO]"
 	)
 
@@ -22,12 +23,14 @@ var _ = Describe("Log", func() {
 		b = bytes.NewBuffer([]byte{})
 		log.SetOutput(b)
 		initialTimeFormat = timeFormat
+		initialPrefix = logPrefix
 	})
 
 	AfterEach(func() {
 		log.SetOutput(os.Stdout)
 		SetLogLevel(LogLevelNothing)
 		timeFormat = initialTimeFormat
+		logPrefix = initialPrefix
 	})
 
 	It("the log level has the correct numeric value", func() {
