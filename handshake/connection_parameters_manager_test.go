@@ -13,12 +13,13 @@ import (
 var _ = Describe("ConnectionsParameterManager", func() {
 	var cpm *connectionParametersManager // a connectionParametersManager for a server
 	var cpmClient *connectionParametersManager
-	var maxStreamsInTest uint32
+	maxStreamsInTest := uint32(74)
 	const MB = 1 << 20
 	maxReceiveStreamFlowControlWindowServer := protocol.ByteCount(math.Floor(1.1 * MB))     // default is 1 MB
 	maxReceiveConnectionFlowControlWindowServer := protocol.ByteCount(math.Floor(1.5 * MB)) // default is 1.5 MB
 	maxReceiveStreamFlowControlWindowClient := protocol.ByteCount(math.Floor(6.4 * MB))     // default is 6 MB
 	maxReceiveConnectionFlowControlWindowClient := protocol.ByteCount(math.Floor(13 * MB))  // default is 15 MB
+
 	BeforeEach(func() {
 		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.Version36, maxStreamsInTest,
 			maxReceiveStreamFlowControlWindowServer, maxReceiveConnectionFlowControlWindowServer,
