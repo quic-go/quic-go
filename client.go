@@ -130,6 +130,10 @@ func populateClientConfig(config *Config) *Config {
 		handshakeTimeout = config.HandshakeTimeout
 	}
 
+	maxIncomingDynamicStreamsPerConnection := config.MaxIncomingDynamicStreamsPerConnection
+	if maxIncomingDynamicStreamsPerConnection == 0 {
+		maxIncomingDynamicStreamsPerConnection = protocol.DefaultMaxIncomingDynamicStreamsPerConnection
+	}
 	maxReceiveStreamFlowControlWindow := config.MaxReceiveStreamFlowControlWindow
 	if maxReceiveStreamFlowControlWindow == 0 {
 		maxReceiveStreamFlowControlWindow = protocol.DefaultMaxReceiveStreamFlowControlWindowClient
@@ -140,12 +144,13 @@ func populateClientConfig(config *Config) *Config {
 	}
 
 	return &Config{
-		TLSConfig:                             config.TLSConfig,
-		Versions:                              versions,
-		HandshakeTimeout:                      handshakeTimeout,
-		RequestConnectionIDTruncation:         config.RequestConnectionIDTruncation,
-		MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindow,
-		MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindow,
+		TLSConfig:                              config.TLSConfig,
+		Versions:                               versions,
+		HandshakeTimeout:                       handshakeTimeout,
+		RequestConnectionIDTruncation:          config.RequestConnectionIDTruncation,
+		MaxIncomingDynamicStreamsPerConnection: maxIncomingDynamicStreamsPerConnection,
+		MaxReceiveStreamFlowControlWindow:      maxReceiveStreamFlowControlWindow,
+		MaxReceiveConnectionFlowControlWindow:  maxReceiveConnectionFlowControlWindow,
 	}
 }
 

@@ -13,16 +13,17 @@ import (
 var _ = Describe("ConnectionsParameterManager", func() {
 	var cpm *connectionParametersManager // a connectionParametersManager for a server
 	var cpmClient *connectionParametersManager
+	var maxStreamsInTest uint32
 	const MB = 1 << 20
 	maxReceiveStreamFlowControlWindowServer := protocol.ByteCount(math.Floor(1.1 * MB))     // default is 1 MB
 	maxReceiveConnectionFlowControlWindowServer := protocol.ByteCount(math.Floor(1.5 * MB)) // default is 1.5 MB
 	maxReceiveStreamFlowControlWindowClient := protocol.ByteCount(math.Floor(6.4 * MB))     // default is 6 MB
 	maxReceiveConnectionFlowControlWindowClient := protocol.ByteCount(math.Floor(13 * MB))  // default is 15 MB
 	BeforeEach(func() {
-		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.Version36,
+		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.Version36, maxStreamsInTest,
 			maxReceiveStreamFlowControlWindowServer, maxReceiveConnectionFlowControlWindowServer,
 		).(*connectionParametersManager)
-		cpmClient = NewConnectionParamatersManager(protocol.PerspectiveClient, protocol.Version36,
+		cpmClient = NewConnectionParamatersManager(protocol.PerspectiveClient, protocol.Version36, maxStreamsInTest,
 			maxReceiveStreamFlowControlWindowClient, maxReceiveConnectionFlowControlWindowClient,
 		).(*connectionParametersManager)
 	})
@@ -80,7 +81,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			Expect(err).ToNot(HaveOccurred())
 			entryMap, err := cpm.GetHelloMap()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(entryMap[TagMIDS]).To(Equal([]byte{byte(protocol.MaxIncomingDynamicStreamsPerConnection), 0, 0, 0}))
+			Expect(entryMap[TagMIDS]).To(Equal([]byte{byte(maxStreamsInTest), 0, 0, 0}))
 		})
 	})
 
@@ -98,7 +99,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			Expect(entryMap).To(HaveKey(TagMSPC))
 			Expect(binary.LittleEndian.Uint32(entryMap[TagMSPC])).To(BeEquivalentTo(protocol.MaxStreamsPerConnection))
 			Expect(entryMap).To(HaveKey(TagMIDS))
-			Expect(binary.LittleEndian.Uint32(entryMap[TagMIDS])).To(BeEquivalentTo(protocol.MaxIncomingDynamicStreamsPerConnection))
+			Expect(binary.LittleEndian.Uint32(entryMap[TagMIDS])).To(BeEquivalentTo(maxStreamsInTest))
 			Expect(entryMap).To(HaveKey(TagSFCW))
 			Expect(binary.LittleEndian.Uint32(entryMap[TagSFCW])).To(BeEquivalentTo(protocol.ReceiveStreamFlowControlWindow))
 			Expect(entryMap).To(HaveKey(TagCFCW))

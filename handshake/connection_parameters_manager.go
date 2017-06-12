@@ -42,16 +42,18 @@ type connectionParametersManager struct {
 
 	flowControlNegotiated bool
 
-	truncateConnectionID                   bool
-	maxStreamsPerConnection                uint32
-	maxIncomingDynamicStreamsPerConnection uint32
-	idleConnectionStateLifetime            time.Duration
-	sendStreamFlowControlWindow            protocol.ByteCount
-	sendConnectionFlowControlWindow        protocol.ByteCount
-	receiveStreamFlowControlWindow         protocol.ByteCount
-	receiveConnectionFlowControlWindow     protocol.ByteCount
-	maxReceiveStreamFlowControlWindow      protocol.ByteCount
-	maxReceiveConnectionFlowControlWindow  protocol.ByteCount
+	truncateConnectionID                             bool
+	maxStreamsPerConnection                          uint32
+	maxIncomingDynamicStreamsPerConnection           uint32
+	configuredMaxIncomingDynamicStreamsPerConnection uint32
+	idleConnectionStateLifetime                      time.Duration
+
+	sendStreamFlowControlWindow           protocol.ByteCount
+	sendConnectionFlowControlWindow       protocol.ByteCount
+	receiveStreamFlowControlWindow        protocol.ByteCount
+	receiveConnectionFlowControlWindow    protocol.ByteCount
+	maxReceiveStreamFlowControlWindow     protocol.ByteCount
+	maxReceiveConnectionFlowControlWindow protocol.ByteCount
 }
 
 var _ ConnectionParametersManager = &connectionParametersManager{}
@@ -64,12 +66,14 @@ var (
 
 // NewConnectionParamatersManager creates a new connection parameters manager
 func NewConnectionParamatersManager(
-	pers protocol.Perspective, v protocol.VersionNumber,
+	pers protocol.Perspective, v protocol.VersionNumber, maxIncomingDynamicStreamsPerConnection uint32,
 	maxReceiveStreamFlowControlWindow protocol.ByteCount, maxReceiveConnectionFlowControlWindow protocol.ByteCount,
 ) ConnectionParametersManager {
 	h := &connectionParametersManager{
-		perspective:                           pers,
-		version:                               v,
+		perspective: pers,
+		version:     v,
+		configuredMaxIncomingDynamicStreamsPerConnection: maxIncomingDynamicStreamsPerConnection,
+
 		sendStreamFlowControlWindow:           protocol.InitialStreamFlowControlWindow,     // can only be changed by the client
 		sendConnectionFlowControlWindow:       protocol.InitialConnectionFlowControlWindow, // can only be changed by the client
 		receiveStreamFlowControlWindow:        protocol.ReceiveStreamFlowControlWindow,
@@ -159,7 +163,7 @@ func (h *connectionParametersManager) negotiateMaxStreamsPerConnection(clientVal
 }
 
 func (h *connectionParametersManager) negotiateMaxIncomingDynamicStreamsPerConnection(clientValue uint32) uint32 {
-	return utils.MinUint32(clientValue, protocol.MaxIncomingDynamicStreamsPerConnection)
+	return utils.MinUint32(clientValue, h.configuredMaxIncomingDynamicStreamsPerConnection)
 }
 
 func (h *connectionParametersManager) negotiateIdleConnectionStateLifetime(clientValue time.Duration) time.Duration {
@@ -178,7 +182,7 @@ func (h *connectionParametersManager) GetHelloMap() (map[Tag][]byte, error) {
 	mspc := bytes.NewBuffer([]byte{})
 	utils.WriteUint32(mspc, h.maxStreamsPerConnection)
 	mids := bytes.NewBuffer([]byte{})
-	utils.WriteUint32(mids, protocol.MaxIncomingDynamicStreamsPerConnection)
+	utils.WriteUint32(mids, h.configuredMaxIncomingDynamicStreamsPerConnection)
 	icsl := bytes.NewBuffer([]byte{})
 	utils.WriteUint32(icsl, uint32(h.GetIdleConnectionStateLifetime()/time.Second))
 
@@ -242,7 +246,7 @@ func (h *connectionParametersManager) GetMaxIncomingStreams() uint32 {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 
-	maxStreams := protocol.MaxIncomingDynamicStreamsPerConnection
+	maxStreams := h.configuredMaxIncomingDynamicStreamsPerConnection
 	return utils.MaxUint32(uint32(maxStreams)+protocol.MaxStreamsMinimumIncrement, uint32(float64(maxStreams)*protocol.MaxStreamsMultiplier))
 }
 

@@ -130,7 +130,7 @@ func newSession(
 		version:      v,
 		config:       config,
 	}
-	return s.setup(sCfg, "", nil)
+	return s.setup(sCfg, "", nil, 0)
 }
 
 // declare this as a variable, such that we can it mock it in the tests
@@ -149,13 +149,14 @@ var newClientSession = func(
 		version:      v,
 		config:       config,
 	}
-	return s.setup(nil, hostname, negotiatedVersions)
+	return s.setup(nil, hostname, negotiatedVersions, config.MaxIncomingDynamicStreamsPerConnection)
 }
 
 func (s *session) setup(
 	scfg *handshake.ServerConfig,
 	hostname string,
 	negotiatedVersions []protocol.VersionNumber,
+	maxIncomingDynamicStreamsPerConnection uint32,
 ) (packetHandler, <-chan handshakeEvent, error) {
 	aeadChanged := make(chan protocol.EncryptionLevel, 2)
 	s.aeadChanged = aeadChanged
@@ -174,7 +175,7 @@ func (s *session) setup(
 	s.sessionCreationTime = now
 
 	s.rttStats = &congestion.RTTStats{}
-	s.connectionParameters = handshake.NewConnectionParamatersManager(s.perspective, s.version,
+	s.connectionParameters = handshake.NewConnectionParamatersManager(s.perspective, s.version, maxIncomingDynamicStreamsPerConnection,
 		s.config.MaxReceiveStreamFlowControlWindow, s.config.MaxReceiveConnectionFlowControlWindow)
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats)
 	s.flowControlManager = flowcontrol.NewFlowControlManager(s.connectionParameters, s.rttStats)

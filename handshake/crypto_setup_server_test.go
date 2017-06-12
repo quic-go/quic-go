@@ -184,7 +184,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		Expect(err).NotTo(HaveOccurred())
 		version = protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
 		supportedVersions = []protocol.VersionNumber{version, 98, 99}
-		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.VersionWhatever,
+		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.VersionWhatever, protocol.DefaultMaxIncomingDynamicStreamsPerConnection,
 			protocol.DefaultMaxReceiveStreamFlowControlWindowServer, protocol.DefaultMaxReceiveConnectionFlowControlWindowServer,
 		)
 		csInt, err := NewCryptoSetup(

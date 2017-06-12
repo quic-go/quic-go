@@ -62,8 +62,8 @@ const ConnectionFlowControlMultiplier = 1.5
 // MaxStreamsPerConnection is the maximum value accepted for the number of streams per connection
 const MaxStreamsPerConnection = 100
 
-// MaxIncomingDynamicStreamsPerConnection is the maximum value accepted for the incoming number of dynamic streams per connection
-const MaxIncomingDynamicStreamsPerConnection = 100
+// DefaultMaxIncomingDynamicStreamsPerConnection is the default maximum value accepted for the incoming number of dynamic streams per connection
+const DefaultMaxIncomingDynamicStreamsPerConnection = 100
 
 // MaxStreamsMultiplier is the slack the client is allowed for the maximum number of streams per connection, needed e.g. when packets are out of order or dropped. The minimum of this procentual increase and the absolute increment specified by MaxStreamsMinimumIncrement is used.
 const MaxStreamsMultiplier = 1.1

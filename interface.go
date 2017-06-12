@@ -82,6 +82,9 @@ type Config struct {
 	// If not set, it verifies that the address matches, and that the STK was issued within the last 24 hours.
 	// This option is only valid for the server.
 	AcceptSTK func(clientAddr net.Addr, stk *STK) bool
+	// MaxIncomingDynamicStreamsPerConnection is the maximum value accepted for the incoming number of dynamic streams per connection
+	// If set to zero, the default value of 100 will be used.
+	MaxIncomingDynamicStreamsPerConnection uint32
 	// MaxReceiveStreamFlowControlWindow is the maximum stream-level flow control window for receiving data.
 	// If this value is zero, it will default to 1 MB for the server and 6 MB for the client.
 	MaxReceiveStreamFlowControlWindow protocol.ByteCount

@@ -174,19 +174,23 @@ var _ = Describe("Client", func() {
 		})
 
 		It("setups with the right values", func() {
+			maxStreamsInTest := uint32(74)
 			config := &Config{
-				HandshakeTimeout:              1337 * time.Minute,
-				RequestConnectionIDTruncation: true,
+				HandshakeTimeout:                       1337 * time.Minute,
+				RequestConnectionIDTruncation:          true,
+				MaxIncomingDynamicStreamsPerConnection: maxStreamsInTest,
 			}
 			c := populateClientConfig(config)
 			Expect(c.HandshakeTimeout).To(Equal(1337 * time.Minute))
 			Expect(c.RequestConnectionIDTruncation).To(BeTrue())
+			Expect(c.MaxIncomingDynamicStreamsPerConnection).To(Equal(maxStreamsInTest))
 		})
 
 		It("fills in default values if options are not set in the Config", func() {
 			c := populateClientConfig(&Config{})
 			Expect(c.Versions).To(Equal(protocol.SupportedVersions))
 			Expect(c.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
+			Expect(c.MaxIncomingDynamicStreamsPerConnection).To(Equal(uint32(protocol.DefaultMaxIncomingDynamicStreamsPerConnection)))
 			Expect(c.RequestConnectionIDTruncation).To(BeFalse())
 		})
 

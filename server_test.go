@@ -346,12 +346,14 @@ var _ = Describe("Server", func() {
 
 	It("setups with the right values", func() {
 		supportedVersions := []protocol.VersionNumber{1, 3, 5}
+		maxStreamsInTest := uint32(74)
 		acceptSTK := func(_ net.Addr, _ *STK) bool { return true }
 		config := Config{
-			TLSConfig:        &tls.Config{},
-			Versions:         supportedVersions,
-			AcceptSTK:        acceptSTK,
-			HandshakeTimeout: 1337 * time.Hour,
+			TLSConfig:                              &tls.Config{},
+			Versions:                               supportedVersions,
+			AcceptSTK:                              acceptSTK,
+			HandshakeTimeout:                       1337 * time.Hour,
+			MaxIncomingDynamicStreamsPerConnection: maxStreamsInTest,
 		}
 		ln, err := Listen(conn, &config)
 		Expect(err).ToNot(HaveOccurred())
@@ -361,6 +363,7 @@ var _ = Describe("Server", func() {
 		Expect(server.scfg).ToNot(BeNil())
 		Expect(server.config.Versions).To(Equal(supportedVersions))
 		Expect(server.config.HandshakeTimeout).To(Equal(1337 * time.Hour))
+		Expect(server.config.MaxIncomingDynamicStreamsPerConnection).To(Equal(maxStreamsInTest))
 		Expect(reflect.ValueOf(server.config.AcceptSTK)).To(Equal(reflect.ValueOf(acceptSTK)))
 	})
 
@@ -371,6 +374,7 @@ var _ = Describe("Server", func() {
 		server := ln.(*server)
 		Expect(server.config.Versions).To(Equal(protocol.SupportedVersions))
 		Expect(server.config.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
+		Expect(server.config.MaxIncomingDynamicStreamsPerConnection).To(Equal(uint32(protocol.DefaultMaxIncomingDynamicStreamsPerConnection)))
 		Expect(reflect.ValueOf(server.config.AcceptSTK)).To(Equal(reflect.ValueOf(defaultAcceptSTK)))
 	})
 
