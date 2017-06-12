@@ -10,7 +10,8 @@ import (
 // LogLevel of quic-go
 type LogLevel uint8
 
-const logEnv = "QUIC_GO_LOG_LEVEL"
+const logEnvLvl = "QUIC_GO_LOG_LEVEL"
+const logEnvPrefix = "QUIC_GO_LOG_PREFIX"
 
 const (
 	// LogLevelNothing disables
@@ -26,6 +27,7 @@ const (
 var (
 	logLevel   = LogLevelNothing
 	timeFormat = ""
+	logPrefix  = ""
 )
 
 // SetLogLevel sets the log level
@@ -38,6 +40,11 @@ func SetLogLevel(level LogLevel) {
 func SetLogTimeFormat(format string) {
 	log.SetFlags(0) // disable timestamp logging done by the log package
 	timeFormat = format
+}
+
+// SetLogPrefix adds a prefix to each log (after the timestamp)
+func SetLogPrefix(prefix string) {
+	logPrefix = prefix
 }
 
 // Debugf logs something
@@ -62,11 +69,14 @@ func Errorf(format string, args ...interface{}) {
 }
 
 func logMessage(format string, args ...interface{}) {
+	logFormat := ""
 	if len(timeFormat) > 0 {
-		log.Printf(time.Now().Format(timeFormat)+" "+format, args...)
-	} else {
-		log.Printf(format, args...)
+		logFormat += time.Now().Format(timeFormat) + " "
 	}
+	if len(logPrefix) > 0 {
+		logFormat += logPrefix + " "
+	}
+	log.Printf(logFormat+format, args...)
 }
 
 // Debug returns true if the log level is LogLevelDebug
@@ -79,7 +89,8 @@ func init() {
 }
 
 func readLoggingEnv() {
-	switch os.Getenv(logEnv) {
+	// Level
+	switch os.Getenv(logEnvLvl) {
 	case "":
 		return
 	case "DEBUG":
@@ -91,4 +102,6 @@ func readLoggingEnv() {
 	default:
 		fmt.Fprintln(os.Stderr, "invalid quic-go log level, see https://github.com/lucas-clemente/quic-go/wiki/Logging")
 	}
+	// Prefix
+	SetLogPrefix(os.Getenv(logEnvPrefix))
 }
