@@ -78,7 +78,7 @@ func (f *flowControlManager) ResetStream(streamID protocol.StreamID, byteOffset 
 	if streamFlowController.ContributesToConnection() {
 		f.connFlowController.IncrementHighestReceived(increment)
 		if f.connFlowController.CheckFlowControlViolation() {
-			return qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes for the connection, allowed %d bytes", byteOffset, f.connFlowController.receiveWindow))
+			return qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes for the connection, allowed %d bytes", f.connFlowController.highestReceived, f.connFlowController.receiveWindow))
 		}
 	}
 
@@ -107,7 +107,7 @@ func (f *flowControlManager) UpdateHighestReceived(streamID protocol.StreamID, b
 	if streamFlowController.ContributesToConnection() {
 		f.connFlowController.IncrementHighestReceived(increment)
 		if f.connFlowController.CheckFlowControlViolation() {
-			return qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes for the connection, allowed %d bytes", byteOffset, f.connFlowController.receiveWindow))
+			return qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes for the connection, allowed %d bytes", f.connFlowController.highestReceived, f.connFlowController.receiveWindow))
 		}
 	}
 
