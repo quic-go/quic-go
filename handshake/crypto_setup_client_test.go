@@ -112,7 +112,6 @@ var _ = Describe("Client Crypto Setup", func() {
 			stream,
 			nil,
 			NewConnectionParamatersManager(protocol.PerspectiveClient, version,
-				protocol.DefaultMaxReceiveStreamFlowControlWindowServer, protocol.DefaultMaxReceiveConnectionFlowControlWindowServer,
 				protocol.DefaultMaxReceiveStreamFlowControlWindowClient, protocol.DefaultMaxReceiveConnectionFlowControlWindowClient,
 			),
 			aeadChanged,

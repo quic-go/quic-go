@@ -21,10 +21,8 @@ var _ = Describe("ConnectionsParameterManager", func() {
 	BeforeEach(func() {
 		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.Version36,
 			maxReceiveStreamFlowControlWindowServer, maxReceiveConnectionFlowControlWindowServer,
-			maxReceiveStreamFlowControlWindowClient, maxReceiveConnectionFlowControlWindowClient,
 		).(*connectionParametersManager)
 		cpmClient = NewConnectionParamatersManager(protocol.PerspectiveClient, protocol.Version36,
-			maxReceiveStreamFlowControlWindowServer, maxReceiveConnectionFlowControlWindowServer,
 			maxReceiveStreamFlowControlWindowClient, maxReceiveConnectionFlowControlWindowClient,
 		).(*connectionParametersManager)
 	})
@@ -155,8 +153,8 @@ var _ = Describe("ConnectionsParameterManager", func() {
 		})
 
 		It("defaults to the correct maximum flow control windows", func() {
-			cpmDefault := NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.Version36, 0, 0, 0, 0).(*connectionParametersManager)
-			cpmClientDefault := NewConnectionParamatersManager(protocol.PerspectiveClient, protocol.Version36, 0, 0, 0, 0).(*connectionParametersManager)
+			cpmDefault := NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.Version36, 0, 0).(*connectionParametersManager)
+			cpmClientDefault := NewConnectionParamatersManager(protocol.PerspectiveClient, protocol.Version36, 0, 0).(*connectionParametersManager)
 			Expect(cpmDefault.GetMaxReceiveStreamFlowControlWindow()).To(Equal(protocol.DefaultMaxReceiveStreamFlowControlWindowServer))
 			Expect(cpmDefault.GetMaxReceiveConnectionFlowControlWindow()).To(Equal(protocol.DefaultMaxReceiveConnectionFlowControlWindowServer))
 			Expect(cpmClientDefault.GetMaxReceiveStreamFlowControlWindow()).To(Equal(protocol.DefaultMaxReceiveStreamFlowControlWindowClient))

@@ -50,11 +50,8 @@ type connectionParametersManager struct {
 	sendConnectionFlowControlWindow        protocol.ByteCount
 	receiveStreamFlowControlWindow         protocol.ByteCount
 	receiveConnectionFlowControlWindow     protocol.ByteCount
-
-	maxReceiveStreamFlowControlWindowServer     protocol.ByteCount
-	maxReceiveConnectionFlowControlWindowServer protocol.ByteCount
-	maxReceiveStreamFlowControlWindowClient     protocol.ByteCount
-	maxReceiveConnectionFlowControlWindowClient protocol.ByteCount
+	maxReceiveStreamFlowControlWindow      protocol.ByteCount
+	maxReceiveConnectionFlowControlWindow  protocol.ByteCount
 }
 
 var _ ConnectionParametersManager = &connectionParametersManager{}
@@ -68,34 +65,17 @@ var (
 // NewConnectionParamatersManager creates a new connection parameters manager
 func NewConnectionParamatersManager(
 	pers protocol.Perspective, v protocol.VersionNumber,
-	maxReceiveStreamFlowControlWindowServer protocol.ByteCount, maxReceiveConnectionFlowControlWindowServer protocol.ByteCount,
-	maxReceiveStreamFlowControlWindowClient protocol.ByteCount, maxReceiveConnectionFlowControlWindowClient protocol.ByteCount,
+	maxReceiveStreamFlowControlWindow protocol.ByteCount, maxReceiveConnectionFlowControlWindow protocol.ByteCount,
 ) ConnectionParametersManager {
-	if maxReceiveStreamFlowControlWindowServer == 0 {
-		maxReceiveStreamFlowControlWindowServer = protocol.DefaultMaxReceiveStreamFlowControlWindowServer
-	}
-	if maxReceiveConnectionFlowControlWindowServer == 0 {
-		maxReceiveConnectionFlowControlWindowServer = protocol.DefaultMaxReceiveConnectionFlowControlWindowServer
-	}
-	if maxReceiveStreamFlowControlWindowClient == 0 {
-		maxReceiveStreamFlowControlWindowClient = protocol.DefaultMaxReceiveStreamFlowControlWindowClient
-	}
-	if maxReceiveConnectionFlowControlWindowClient == 0 {
-		maxReceiveConnectionFlowControlWindowClient = protocol.DefaultMaxReceiveConnectionFlowControlWindowClient
-	}
-
 	h := &connectionParametersManager{
-		perspective:                        pers,
-		version:                            v,
-		sendStreamFlowControlWindow:        protocol.InitialStreamFlowControlWindow,     // can only be changed by the client
-		sendConnectionFlowControlWindow:    protocol.InitialConnectionFlowControlWindow, // can only be changed by the client
-		receiveStreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
-		receiveConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
-
-		maxReceiveStreamFlowControlWindowServer:     maxReceiveStreamFlowControlWindowServer,
-		maxReceiveConnectionFlowControlWindowServer: maxReceiveConnectionFlowControlWindowServer,
-		maxReceiveStreamFlowControlWindowClient:     maxReceiveStreamFlowControlWindowClient,
-		maxReceiveConnectionFlowControlWindowClient: maxReceiveConnectionFlowControlWindowClient,
+		perspective:                           pers,
+		version:                               v,
+		sendStreamFlowControlWindow:           protocol.InitialStreamFlowControlWindow,     // can only be changed by the client
+		sendConnectionFlowControlWindow:       protocol.InitialConnectionFlowControlWindow, // can only be changed by the client
+		receiveStreamFlowControlWindow:        protocol.ReceiveStreamFlowControlWindow,
+		receiveConnectionFlowControlWindow:    protocol.ReceiveConnectionFlowControlWindow,
+		maxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindow,
+		maxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindow,
 	}
 
 	if h.perspective == protocol.PerspectiveServer {
@@ -234,10 +214,7 @@ func (h *connectionParametersManager) GetReceiveStreamFlowControlWindow() protoc
 
 // GetMaxReceiveStreamFlowControlWindow gets the maximum size of the stream-level flow control window for sending data
 func (h *connectionParametersManager) GetMaxReceiveStreamFlowControlWindow() protocol.ByteCount {
-	if h.perspective == protocol.PerspectiveServer {
-		return h.maxReceiveStreamFlowControlWindowServer
-	}
-	return h.maxReceiveStreamFlowControlWindowClient
+	return h.maxReceiveStreamFlowControlWindow
 }
 
 // GetReceiveConnectionFlowControlWindow gets the size of the stream-level flow control window for receiving data
@@ -249,10 +226,7 @@ func (h *connectionParametersManager) GetReceiveConnectionFlowControlWindow() pr
 
 // GetMaxReceiveConnectionFlowControlWindow gets the maximum size of the stream-level flow control window for sending data
 func (h *connectionParametersManager) GetMaxReceiveConnectionFlowControlWindow() protocol.ByteCount {
-	if h.perspective == protocol.PerspectiveServer {
-		return h.maxReceiveConnectionFlowControlWindowServer
-	}
-	return h.maxReceiveConnectionFlowControlWindowClient
+	return h.maxReceiveConnectionFlowControlWindow
 }
 
 // GetMaxOutgoingStreams gets the maximum number of outgoing streams per connection

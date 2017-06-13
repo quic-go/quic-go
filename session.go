@@ -173,8 +173,7 @@ func (s *session) setup(
 
 	s.rttStats = &congestion.RTTStats{}
 	s.connectionParameters = handshake.NewConnectionParamatersManager(s.perspective, s.version,
-		s.config.MaxReceiveStreamFlowControlWindowServer, s.config.MaxReceiveConnectionFlowControlWindowServer,
-		s.config.MaxReceiveStreamFlowControlWindowClient, s.config.MaxReceiveConnectionFlowControlWindowClient)
+		s.config.MaxReceiveStreamFlowControlWindow, s.config.MaxReceiveConnectionFlowControlWindow)
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats)
 	s.flowControlManager = flowcontrol.NewFlowControlManager(s.connectionParameters, s.rttStats)
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.ackAlarmChanged)
