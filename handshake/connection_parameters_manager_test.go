@@ -300,7 +300,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 					TagMIDS: {3, 0, 0, 0},
 				})
 				Expect(err).ToNot(HaveOccurred())
-				Expect(cpm.GetMaxIncomingStreams()).To(BeNumerically(">", protocol.MaxStreamsPerConnection))
+				Expect(cpm.GetMaxIncomingStreams()).To(BeNumerically(">", maxStreamsInTest))
 			})
 		})
 	})
