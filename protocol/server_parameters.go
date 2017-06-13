@@ -39,11 +39,11 @@ const ReceiveStreamFlowControlWindow ByteCount = (1 << 10) * 32 // 32 kB
 // This is the value that Google servers are using
 const ReceiveConnectionFlowControlWindow ByteCount = (1 << 10) * 48 // 48 kB
 
-// MaxReceiveStreamFlowControlWindowServer is the maximum stream-level flow control window for receiving data
+// MaxReceiveStreamFlowControlWindowServer is the maximum stream-level flow control window for receiving data, for the server
 // This is the value that Google servers are using
 const MaxReceiveStreamFlowControlWindowServer ByteCount = 1 * (1 << 20) // 1 MB
 
-// MaxReceiveConnectionFlowControlWindowServer is the connection-level flow control window for receiving data
+// MaxReceiveConnectionFlowControlWindowServer is the connection-level flow control window for receiving data, for the server
 // This is the value that Google servers are using
 const MaxReceiveConnectionFlowControlWindowServer ByteCount = 1.5 * (1 << 20) // 1.5 MB
 
@@ -51,7 +51,7 @@ const MaxReceiveConnectionFlowControlWindowServer ByteCount = 1.5 * (1 << 20) //
 // This is the value that Chromium is using
 const MaxReceiveStreamFlowControlWindowClient ByteCount = 6 * (1 << 20) // 6 MB
 
-// MaxReceiveConnectionFlowControlWindowClient is the connection-level flow control window for receiving data, for the server
+// MaxReceiveConnectionFlowControlWindowClient is the connection-level flow control window for receiving data, for the client
 // This is the value that Google servers are using
 const MaxReceiveConnectionFlowControlWindowClient ByteCount = 15 * (1 << 20) // 15 MB
 
