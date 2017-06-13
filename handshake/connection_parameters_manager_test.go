@@ -152,15 +152,6 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			Expect(cpmClient.GetMaxReceiveConnectionFlowControlWindow()).To(Equal(maxReceiveConnectionFlowControlWindowClient))
 		})
 
-		It("defaults to the correct maximum flow control windows", func() {
-			cpmDefault := NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.Version36, 0, 0).(*connectionParametersManager)
-			cpmClientDefault := NewConnectionParamatersManager(protocol.PerspectiveClient, protocol.Version36, 0, 0).(*connectionParametersManager)
-			Expect(cpmDefault.GetMaxReceiveStreamFlowControlWindow()).To(Equal(protocol.DefaultMaxReceiveStreamFlowControlWindowServer))
-			Expect(cpmDefault.GetMaxReceiveConnectionFlowControlWindow()).To(Equal(protocol.DefaultMaxReceiveConnectionFlowControlWindowServer))
-			Expect(cpmClientDefault.GetMaxReceiveStreamFlowControlWindow()).To(Equal(protocol.DefaultMaxReceiveStreamFlowControlWindowClient))
-			Expect(cpmClientDefault.GetMaxReceiveConnectionFlowControlWindow()).To(Equal(protocol.DefaultMaxReceiveConnectionFlowControlWindowClient))
-		})
-
 		It("sets a new stream-level flow control window for sending", func() {
 			values := map[Tag][]byte{TagSFCW: {0xDE, 0xAD, 0xBE, 0xEF}}
 			err := cpm.SetFromMap(values)
