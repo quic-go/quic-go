@@ -374,7 +374,6 @@ var _ = Describe("Server", func() {
 		server := ln.(*server)
 		Expect(server.config.Versions).To(Equal(protocol.SupportedVersions))
 		Expect(server.config.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
-		Expect(server.config.MaxIncomingDynamicStreamsPerConnection).To(Equal(uint32(protocol.DefaultMaxIncomingDynamicStreamsPerConnection)))
 		Expect(reflect.ValueOf(server.config.AcceptSTK)).To(Equal(reflect.ValueOf(defaultAcceptSTK)))
 	})
 
