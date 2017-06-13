@@ -2,6 +2,7 @@ package handshake
 
 import (
 	"encoding/binary"
+	"math"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -12,10 +13,20 @@ import (
 var _ = Describe("ConnectionsParameterManager", func() {
 	var cpm *connectionParametersManager // a connectionParametersManager for a server
 	var cpmClient *connectionParametersManager
-
+	const MB = 1 << 20
+	maxReceiveStreamFlowControlWindowServer := protocol.ByteCount(math.Floor(1.1 * MB))     // default is 1 MB
+	maxReceiveConnectionFlowControlWindowServer := protocol.ByteCount(math.Floor(1.5 * MB)) // default is 1.5 MB
+	maxReceiveStreamFlowControlWindowClient := protocol.ByteCount(math.Floor(6.4 * MB))     // default is 6 MB
+	maxReceiveConnectionFlowControlWindowClient := protocol.ByteCount(math.Floor(13 * MB))  // default is 15 MB
 	BeforeEach(func() {
-		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.Version36).(*connectionParametersManager)
-		cpmClient = NewConnectionParamatersManager(protocol.PerspectiveClient, protocol.Version36).(*connectionParametersManager)
+		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.Version36,
+			maxReceiveStreamFlowControlWindowServer, maxReceiveConnectionFlowControlWindowServer,
+			maxReceiveStreamFlowControlWindowClient, maxReceiveConnectionFlowControlWindowClient,
+		).(*connectionParametersManager)
+		cpmClient = NewConnectionParamatersManager(protocol.PerspectiveClient, protocol.Version36,
+			maxReceiveStreamFlowControlWindowServer, maxReceiveConnectionFlowControlWindowServer,
+			maxReceiveStreamFlowControlWindowClient, maxReceiveConnectionFlowControlWindowClient,
+		).(*connectionParametersManager)
 	})
 
 	Context("SHLO", func() {
@@ -137,10 +148,19 @@ var _ = Describe("ConnectionsParameterManager", func() {
 		})
 
 		It("has the correct maximum flow control windows", func() {
-			Expect(cpm.GetMaxReceiveStreamFlowControlWindow()).To(Equal(protocol.MaxReceiveStreamFlowControlWindowServer))
-			Expect(cpm.GetMaxReceiveConnectionFlowControlWindow()).To(Equal(protocol.MaxReceiveConnectionFlowControlWindowServer))
-			Expect(cpmClient.GetMaxReceiveStreamFlowControlWindow()).To(Equal(protocol.MaxReceiveStreamFlowControlWindowClient))
-			Expect(cpmClient.GetMaxReceiveConnectionFlowControlWindow()).To(Equal(protocol.MaxReceiveConnectionFlowControlWindowClient))
+			Expect(cpm.GetMaxReceiveStreamFlowControlWindow()).To(Equal(maxReceiveStreamFlowControlWindowServer))
+			Expect(cpm.GetMaxReceiveConnectionFlowControlWindow()).To(Equal(maxReceiveConnectionFlowControlWindowServer))
+			Expect(cpmClient.GetMaxReceiveStreamFlowControlWindow()).To(Equal(maxReceiveStreamFlowControlWindowClient))
+			Expect(cpmClient.GetMaxReceiveConnectionFlowControlWindow()).To(Equal(maxReceiveConnectionFlowControlWindowClient))
+		})
+
+		It("defaults to the correct maximum flow control windows", func() {
+			cpmDefault := NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.Version36, 0, 0, 0, 0).(*connectionParametersManager)
+			cpmClientDefault := NewConnectionParamatersManager(protocol.PerspectiveClient, protocol.Version36, 0, 0, 0, 0).(*connectionParametersManager)
+			Expect(cpmDefault.GetMaxReceiveStreamFlowControlWindow()).To(Equal(protocol.DefaultMaxReceiveStreamFlowControlWindowServer))
+			Expect(cpmDefault.GetMaxReceiveConnectionFlowControlWindow()).To(Equal(protocol.DefaultMaxReceiveConnectionFlowControlWindowServer))
+			Expect(cpmClientDefault.GetMaxReceiveStreamFlowControlWindow()).To(Equal(protocol.DefaultMaxReceiveStreamFlowControlWindowClient))
+			Expect(cpmClientDefault.GetMaxReceiveConnectionFlowControlWindow()).To(Equal(protocol.DefaultMaxReceiveConnectionFlowControlWindowClient))
 		})
 
 		It("sets a new stream-level flow control window for sending", func() {

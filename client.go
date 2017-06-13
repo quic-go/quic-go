@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
-	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 type client struct {
@@ -124,10 +124,14 @@ func populateClientConfig(config *Config) *Config {
 	}
 
 	return &Config{
-		TLSConfig:                     config.TLSConfig,
-		Versions:                      versions,
-		HandshakeTimeout:              handshakeTimeout,
-		RequestConnectionIDTruncation: config.RequestConnectionIDTruncation,
+		TLSConfig:                                   config.TLSConfig,
+		Versions:                                    versions,
+		HandshakeTimeout:                            handshakeTimeout,
+		RequestConnectionIDTruncation:               config.RequestConnectionIDTruncation,
+		MaxReceiveStreamFlowControlWindowServer:     config.MaxReceiveStreamFlowControlWindowServer,
+		MaxReceiveConnectionFlowControlWindowServer: config.MaxReceiveConnectionFlowControlWindowServer,
+		MaxReceiveStreamFlowControlWindowClient:     config.MaxReceiveStreamFlowControlWindowClient,
+		MaxReceiveConnectionFlowControlWindowClient: config.MaxReceiveConnectionFlowControlWindowClient,
 	}
 }
 

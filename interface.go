@@ -80,6 +80,18 @@ type Config struct {
 	// If not set, it verifies that the address matches, and that the STK was issued within the last 24 hours
 	// This option is only valid for the server.
 	AcceptSTK func(clientAddr net.Addr, stk *STK) bool
+	// MaxReceiveStreamFlowControlWindowServer is the maximum stream-level flow control window for receiving data, for the server
+	// If this value is zero, the timeout is set to protocol.DefaultMaxReceiveStreamFlowControlWindowServer
+	MaxReceiveStreamFlowControlWindowServer protocol.ByteCount
+	// MaxReceiveConnectionFlowControlWindowServer is the connection-level flow control window for receiving data, for the server
+	// If this value is zero, the timeout is set to protocol.DefaultMaxReceiveConnectionFlowControlWindowServer
+	MaxReceiveConnectionFlowControlWindowServer protocol.ByteCount
+	// MaxReceiveStreamFlowControlWindowClient is the maximum stream-level flow control window for receiving data, for the client
+	// If this value is zero, the timeout is set to protocol.DefaultMaxReceiveStreamFlowControlWindowClient
+	MaxReceiveStreamFlowControlWindowClient protocol.ByteCount
+	// MaxReceiveConnectionFlowControlWindowClient is the connection-level flow control window for receiving data, for the client
+	// If this value is zero, the timeout is set to protocol.DefaultMaxReceiveConnectionFlowControlWindowClient
+	MaxReceiveConnectionFlowControlWindowClient protocol.ByteCount
 }
 
 // A Listener for incoming QUIC connections
