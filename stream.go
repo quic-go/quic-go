@@ -171,7 +171,7 @@ func (s *stream) Write(p []byte) (int, error) {
 	}
 
 	if s.err != nil {
-		return 0, s.err
+		return len(p) - len(s.dataForWriting), s.err
 	}
 
 	return len(p), nil
