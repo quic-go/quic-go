@@ -7,9 +7,9 @@ import (
 	"net"
 
 	"github.com/lucas-clemente/quic-go/crypto"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
-	"github.com/lucas-clemente/quic-go/internal/utils"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -184,7 +184,9 @@ var _ = Describe("Server Crypto Setup", func() {
 		Expect(err).NotTo(HaveOccurred())
 		version = protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
 		supportedVersions = []protocol.VersionNumber{version, 98, 99}
-		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.VersionWhatever)
+		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.VersionWhatever,
+			protocol.DefaultMaxReceiveStreamFlowControlWindowServer, protocol.DefaultMaxReceiveConnectionFlowControlWindowServer,
+		)
 		csInt, err := NewCryptoSetup(
 			protocol.ConnectionID(42),
 			remoteAddr,

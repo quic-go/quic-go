@@ -9,9 +9,9 @@ import (
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/handshake"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
-	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 // packetHandler handles packets
@@ -117,11 +117,22 @@ func populateServerConfig(config *Config) *Config {
 		handshakeTimeout = config.HandshakeTimeout
 	}
 
+	maxReceiveStreamFlowControlWindow := config.MaxReceiveStreamFlowControlWindow
+	if maxReceiveStreamFlowControlWindow == 0 {
+		maxReceiveStreamFlowControlWindow = protocol.DefaultMaxReceiveStreamFlowControlWindowServer
+	}
+	maxReceiveConnectionFlowControlWindow := config.MaxReceiveConnectionFlowControlWindow
+	if maxReceiveConnectionFlowControlWindow == 0 {
+		maxReceiveConnectionFlowControlWindow = protocol.DefaultMaxReceiveConnectionFlowControlWindowServer
+	}
+
 	return &Config{
-		TLSConfig:        config.TLSConfig,
-		Versions:         versions,
-		HandshakeTimeout: handshakeTimeout,
-		AcceptSTK:        vsa,
+		TLSConfig:                             config.TLSConfig,
+		Versions:                              versions,
+		HandshakeTimeout:                      handshakeTimeout,
+		AcceptSTK:                             vsa,
+		MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindow,
+		MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindow,
 	}
 }
 

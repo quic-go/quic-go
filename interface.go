@@ -76,9 +76,15 @@ type Config struct {
 	HandshakeTimeout time.Duration
 	// AcceptSTK determines if an STK is accepted.
 	// It is called with stk = nil if the client didn't send an STK.
-	// If not set, it verifies that the address matches, and that the STK was issued within the last 24 hours
+	// If not set, it verifies that the address matches, and that the STK was issued within the last 24 hours.
 	// This option is only valid for the server.
 	AcceptSTK func(clientAddr net.Addr, stk *STK) bool
+	// MaxReceiveStreamFlowControlWindow is the maximum stream-level flow control window for receiving data.
+	// If this value is zero, it will default to 1 MB for the server and 6 MB for the client.
+	MaxReceiveStreamFlowControlWindow protocol.ByteCount
+	// MaxReceiveConnectionFlowControlWindow is the connection-level flow control window for receiving data.
+	// If this value is zero, it will default to 1.5 MB for the server and 15 MB for the client.
+	MaxReceiveConnectionFlowControlWindow protocol.ByteCount
 }
 
 // A Listener for incoming QUIC connections

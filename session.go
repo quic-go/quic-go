@@ -12,9 +12,9 @@ import (
 	"github.com/lucas-clemente/quic-go/flowcontrol"
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
-	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 type unpacker interface {
@@ -172,7 +172,8 @@ func (s *session) setup(
 	s.sessionCreationTime = now
 
 	s.rttStats = &congestion.RTTStats{}
-	s.connectionParameters = handshake.NewConnectionParamatersManager(s.perspective, s.version)
+	s.connectionParameters = handshake.NewConnectionParamatersManager(s.perspective, s.version,
+		s.config.MaxReceiveStreamFlowControlWindow, s.config.MaxReceiveConnectionFlowControlWindow)
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats)
 	s.flowControlManager = flowcontrol.NewFlowControlManager(s.connectionParameters, s.rttStats)
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.ackAlarmChanged)
