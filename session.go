@@ -130,7 +130,7 @@ func newSession(
 		version:      v,
 		config:       config,
 	}
-	return s.setup(sCfg, "", nil, 0)
+	return s.setup(sCfg, "", nil, config.MaxIncomingDynamicStreamsPerConnection)
 }
 
 // declare this as a variable, such that we can it mock it in the tests
