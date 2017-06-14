@@ -579,6 +579,10 @@ func (s *session) sendPacket() error {
 			utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 
 			if retransmitPacket.EncryptionLevel != protocol.EncryptionForwardSecure {
+				if s.handshakeComplete {
+					// Don't retransmit handshake packets when the handshake is complete
+					continue
+				}
 				utils.Debugf("\tDequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 				stopWaitingFrame := s.sentPacketHandler.GetStopWaitingFrame(true)
 				var packet *packedPacket
