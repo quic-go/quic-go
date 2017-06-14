@@ -112,7 +112,8 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 		maxLen := maxBytes - currentLen - frameHeaderBytes
 
 		var sendWindowSize protocol.ByteCount
-		if s.lenOfDataForWriting() != 0 {
+		lenStreamData := s.lenOfDataForWriting()
+		if lenStreamData != 0 {
 			sendWindowSize, _ = f.flowControlManager.SendWindowSize(s.streamID)
 			maxLen = utils.MinByteCount(maxLen, sendWindowSize)
 		}
@@ -121,7 +122,12 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 			return true, nil
 		}
 
-		data := s.getDataForWriting(maxLen)
+		var data []byte
+		if lenStreamData != 0 {
+			// Only getDataForWriting() if we didn't have data earlier, so that we
+			// don't send without FC approval (if a Write() raced).
+			data = s.getDataForWriting(maxLen)
+		}
 
 		// This is unlikely, but check it nonetheless, the scheduler might have jumped in. Seems to happen in ~20% of cases in the tests.
 		shouldSendFin := s.shouldSendFin()
