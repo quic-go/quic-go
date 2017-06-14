@@ -15,18 +15,22 @@ var _ = Describe("Log", func() {
 		b *bytes.Buffer
 
 		initialTimeFormat string
+		initialPrefix     string
+		testPrefix        = "[QUIC-GO]"
 	)
 
 	BeforeEach(func() {
 		b = bytes.NewBuffer([]byte{})
 		log.SetOutput(b)
 		initialTimeFormat = timeFormat
+		initialPrefix = logPrefix
 	})
 
 	AfterEach(func() {
 		log.SetOutput(os.Stdout)
 		SetLogLevel(LogLevelNothing)
 		timeFormat = initialTimeFormat
+		logPrefix = initialPrefix
 	})
 
 	It("the log level has the correct numeric value", func() {
@@ -91,6 +95,14 @@ var _ = Describe("Log", func() {
 		Expect(t).To(BeTemporally("~", time.Now(), 2*time.Second))
 	})
 
+	It("adds a prefix", func() {
+		SetLogPrefix(testPrefix)
+		SetLogLevel(LogLevelInfo)
+		Infof("info")
+		logOutput := string(b.Bytes())
+		Expect(logOutput).To(ContainSubstring(testPrefix))
+	})
+
 	It("says whether debug is enabled", func() {
 		Expect(Debug()).To(BeFalse())
 		SetLogLevel(LogLevelDebug)
@@ -103,31 +115,37 @@ var _ = Describe("Log", func() {
 		})
 
 		It("reads DEBUG", func() {
-			os.Setenv(logEnv, "DEBUG")
+			os.Setenv(logEnvLvl, "DEBUG")
 			readLoggingEnv()
 			Expect(logLevel).To(Equal(LogLevelDebug))
 		})
 
 		It("reads INFO", func() {
-			os.Setenv(logEnv, "INFO")
+			os.Setenv(logEnvLvl, "INFO")
 			readLoggingEnv()
 			Expect(logLevel).To(Equal(LogLevelInfo))
 		})
 
 		It("reads ERROR", func() {
-			os.Setenv(logEnv, "ERROR")
+			os.Setenv(logEnvLvl, "ERROR")
 			readLoggingEnv()
 			Expect(logLevel).To(Equal(LogLevelError))
 		})
 
 		It("does not error reading invalid log levels from env", func() {
 			Expect(logLevel).To(Equal(LogLevelNothing))
-			os.Setenv(logEnv, "")
+			os.Setenv(logEnvLvl, "")
 			readLoggingEnv()
 			Expect(logLevel).To(Equal(LogLevelNothing))
-			os.Setenv(logEnv, "asdf")
+			os.Setenv(logEnvLvl, "asdf")
 			readLoggingEnv()
 			Expect(logLevel).To(Equal(LogLevelNothing))
+		})
+
+		It("reads the log prefix: "+testPrefix, func() {
+			os.Setenv(logEnvPrefix, testPrefix)
+			readLoggingEnv()
+			Expect(logPrefix).To(Equal(testPrefix))
 		})
 	})
 })
