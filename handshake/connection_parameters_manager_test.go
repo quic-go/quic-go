@@ -20,21 +20,6 @@ var _ = Describe("ConnectionsParameterManager", func() {
 	maxReceiveStreamFlowControlWindowClient := protocol.ByteCount(math.Floor(6.4 * MB))     // default is 6 MB
 	maxReceiveConnectionFlowControlWindowClient := protocol.ByteCount(math.Floor(13 * MB))  // default is 15 MB
 
-	It("fills in default values if options are not set", func() {
-		// Server
-		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.Version36, 0).(*connectionParametersManager)
-		err := cpm.SetFromMap(map[Tag][]byte{TagMIDS: []byte{5, 0, 0, 0}})
-		Expect(err).ToNot(HaveOccurred())
-		entryMap, err := cpm.GetHelloMap()
-		Expect(err).ToNot(HaveOccurred())
-		Expect(entryMap[TagMIDS]).To(Equal([]byte{byte(protocol.DefaultMaxIncomingDynamicStreamsPerConnection), 0, 0, 0}))
-		// Client
-		cpmClient = NewConnectionParamatersManager(protocol.PerspectiveClient, protocol.Version36, 0).(*connectionParametersManager)
-		entryMap, err = cpmClient.GetHelloMap()
-		Expect(err).ToNot(HaveOccurred())
-		Expect(binary.LittleEndian.Uint32(entryMap[TagMIDS])).To(BeEquivalentTo(protocol.DefaultMaxIncomingDynamicStreamsPerConnection))
-	})
-
 	BeforeEach(func() {
 		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.Version36, maxStreamsInTest,
 			maxReceiveStreamFlowControlWindowServer, maxReceiveConnectionFlowControlWindowServer,

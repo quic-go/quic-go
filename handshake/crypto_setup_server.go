@@ -47,7 +47,6 @@ type cryptoSetupServer struct {
 
 	cryptoStream io.ReadWriter
 
-	params               *TransportParameters
 	connectionParameters ConnectionParametersManager
 
 	mutex sync.RWMutex

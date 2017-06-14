@@ -190,6 +190,7 @@ var _ = Describe("Client", func() {
 			c := populateClientConfig(&Config{})
 			Expect(c.Versions).To(Equal(protocol.SupportedVersions))
 			Expect(c.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
+			Expect(c.MaxIncomingDynamicStreamsPerConnection).To(Equal(uint32(protocol.DefaultMaxIncomingDynamicStreamsPerConnection)))
 			Expect(c.RequestConnectionIDTruncation).To(BeFalse())
 		})
 
