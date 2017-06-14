@@ -86,7 +86,7 @@ var _ = Describe("Server tests", func() {
 				"--certificate_file="+filepath.Join(tmpDir, "cert.pem"),
 				"--port="+serverPort,
 			)
-			session, err = Start(command, GinkgoWriter, GinkgoWriter)
+			session, err = Start(command, nil, GinkgoWriter)
 			Expect(err).NotTo(HaveOccurred())
 		}()
 	}
