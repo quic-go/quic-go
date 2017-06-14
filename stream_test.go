@@ -478,6 +478,23 @@ var _ = Describe("Stream", func() {
 				Expect(err).To(MatchError(testErr))
 			})
 
+			It("returns how much was written when recieving a remote error", func() {
+				var writeReturned bool
+				var n int
+				var err error
+
+				go func() {
+					n, err = str.Write([]byte("foobar"))
+					writeReturned = true
+				}()
+
+				Eventually(func() []byte { return str.getDataForWriting(4) }).ShouldNot(BeEmpty())
+				str.RegisterRemoteError(testErr)
+				Eventually(func() bool { return writeReturned }).Should(BeTrue())
+				Expect(err).To(MatchError(testErr))
+				Expect(n).To(Equal(4))
+			})
+
 			It("calls onReset when receiving a remote error", func() {
 				var writeReturned bool
 				str.writeOffset = 0x1000
