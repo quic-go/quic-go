@@ -20,7 +20,7 @@ import (
 	. "github.com/onsi/gomega/gexec"
 )
 
-var _ = FDescribe("non-zero RTT", func() {
+var _ = Describe("non-zero RTT", func() {
 	BeforeEach(func() {
 		dataMan.GenerateData(dataLen)
 	})
@@ -67,14 +67,15 @@ var _ = FDescribe("non-zero RTT", func() {
 				runRTTTest(10*time.Millisecond, version, 20)
 			})
 		})
-
-		Context(fmt.Sprintf("with quic version %d", version), func() {
-			It("gets a large file with 75ms RTT", func() {
-				dataMan.GenerateData(dataLongLen)
-				utils.SetLogLevel(utils.LogLevelDebug)
-
+	}
+	version := protocol.Version35
+	Context(fmt.Sprintf("with quic version %d", version), func() {
+		fileSizes := [...]int{dataLen, 5 * 1024 * 1024, dataLongLen}
+		for _, fileSize := range fileSizes {
+			fileSizeMB := fmt.Sprintf("%.2f", float64(fileSize)/1024/1024)
+			It("gets a "+fileSizeMB+"MB file with 75ms RTT", func() {
 				rtt := 75 * time.Millisecond
-				testname := "./large_rtt_" + rtt.String() + "_Q" + fmt.Sprint(version) + ".log"
+				testname := "./large_rtt_" + rtt.String() + "_Q" + fmt.Sprint(version) + "_" + fileSizeMB + "MB.log"
 
 				f, err := os.Create(testname)
 				defer f.Close()
@@ -82,11 +83,13 @@ var _ = FDescribe("non-zero RTT", func() {
 					panic(err)
 				}
 				log.SetOutput(bufio.NewWriter(f))
+				utils.SetLogLevel(utils.LogLevelDebug)
 
+				dataMan.GenerateData(fileSize)
 				runRTTTest(rtt, version, 30) // run test with larger timeout
 
 				utils.SetLogLevel(utils.LogLevelNothing)
 			})
-		})
-	}
+		}
+	})
 })
