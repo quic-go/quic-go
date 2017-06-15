@@ -61,14 +61,10 @@ func TestIntegration(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	setupHTTPHandlers()
-	setupQuicServer()
 	setupSelenium()
 })
 
 var _ = AfterSuite(func() {
-	err := server.Close()
-	Expect(err).NotTo(HaveOccurred())
-
 	stopSelenium()
 }, 10)
 
@@ -104,7 +100,11 @@ var _ = BeforeEach(func() {
 	}
 })
 
+var _ = JustBeforeEach(startQuicServer)
+
 var _ = AfterEach(func() {
+	stopQuicServer()
+
 	// remove uploadDir
 	if len(uploadDir) < 20 {
 		panic("uploadDir too short")
@@ -187,7 +187,7 @@ func setupHTTPHandlers() {
 	})
 }
 
-func setupQuicServer() {
+func startQuicServer() {
 	server = &h2quic.Server{
 		Server: &http.Server{
 			TLSConfig: testdata.GetTLSConfig(),
@@ -204,6 +204,10 @@ func setupQuicServer() {
 		defer GinkgoRecover()
 		server.Serve(conn)
 	}()
+}
+
+func stopQuicServer() {
+	Expect(server.Close()).NotTo(HaveOccurred())
 }
 
 func setupSelenium() {
