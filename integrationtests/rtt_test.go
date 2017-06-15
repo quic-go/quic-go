@@ -66,30 +66,20 @@ var _ = Describe("non-zero RTT", func() {
 			It("gets a file with 10ms RTT", func() {
 				runRTTTest(10*time.Millisecond, version, 20)
 			})
+
+			fileSizes := [...]int{dataLen, 5 * 1024 * 1024, dataLongLen}
+			for _, fileSize := range fileSizes {
+				fileSizeMB := fmt.Sprintf("%.2f", float64(fileSize)/1024/1024)
+				It("gets a "+fileSizeMB+"MB file with 75ms RTT", func() {
+					flags := log.Flags()
+					log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
+					utils.SetLogLevel(utils.LogLevelDebug)
+					dataMan.GenerateData(fileSize)
+					runRTTTest(rtt, version, 30) // run test with larger timeout
+					utils.SetLogLevel(utils.LogLevelNothing)
+					log.SetFlags(flags)
+				})
+			}
 		})
 	}
-	version := protocol.Version35
-	Context(fmt.Sprintf("with quic version %d", version), func() {
-		fileSizes := [...]int{dataLen, 5 * 1024 * 1024, dataLongLen}
-		for _, fileSize := range fileSizes {
-			fileSizeMB := fmt.Sprintf("%.2f", float64(fileSize)/1024/1024)
-			It("gets a "+fileSizeMB+"MB file with 75ms RTT", func() {
-				rtt := 75 * time.Millisecond
-				testname := "./large_rtt_" + rtt.String() + "_Q" + fmt.Sprint(version) + "_" + fileSizeMB + "MB.log"
-
-				f, err := os.Create(testname)
-				defer f.Close()
-				if err != nil {
-					panic(err)
-				}
-				log.SetOutput(bufio.NewWriter(f))
-				utils.SetLogLevel(utils.LogLevelDebug)
-
-				dataMan.GenerateData(fileSize)
-				runRTTTest(rtt, version, 30) // run test with larger timeout
-
-				utils.SetLogLevel(utils.LogLevelNothing)
-			})
-		}
-	})
 })
