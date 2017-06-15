@@ -1,14 +1,18 @@
 package integrationtests
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
+	"log"
+	"os"
 	"os/exec"
 	"strconv"
 	"time"
 
 	_ "github.com/lucas-clemente/quic-clients" // download clients
 	"github.com/lucas-clemente/quic-go/integrationtests/proxy"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
 
 	. "github.com/onsi/ginkgo"
@@ -16,14 +20,15 @@ import (
 	. "github.com/onsi/gomega/gexec"
 )
 
-var _ = Describe("non-zero RTT", func() {
+var _ = FDescribe("non-zero RTT", func() {
 	BeforeEach(func() {
 		dataMan.GenerateData(dataLen)
 	})
 
 	var proxy *quicproxy.QuicProxy
 
-	runRTTTest := func(rtt time.Duration, version protocol.VersionNumber) {
+	// Default timeout_s was 20
+	runRTTTest := func(rtt time.Duration, version protocol.VersionNumber, timeout_s int) {
 		var err error
 		proxy, err = quicproxy.NewQuicProxy("localhost:", quicproxy.Opts{
 			RemoteAddr: "localhost:" + port,
@@ -44,7 +49,7 @@ var _ = Describe("non-zero RTT", func() {
 		session, err := Start(command, nil, GinkgoWriter)
 		Expect(err).NotTo(HaveOccurred())
 		defer session.Kill()
-		Eventually(session, 20).Should(Exit(0))
+		Eventually(session, timeout_s).Should(Exit(0))
 		Expect(bytes.Contains(session.Out.Contents(), dataMan.GetData())).To(BeTrue())
 	}
 
@@ -59,7 +64,28 @@ var _ = Describe("non-zero RTT", func() {
 
 		Context(fmt.Sprintf("with quic version %d", version), func() {
 			It("gets a file with 10ms RTT", func() {
-				runRTTTest(10*time.Millisecond, version)
+				runRTTTest(10*time.Millisecond, version, 20)
+			})
+		})
+
+		Context(fmt.Sprintf("with quic version %d", version), func() {
+			It("gets a large file with 75ms RTT", func() {
+				dataMan.GenerateData(dataLongLen)
+				utils.SetLogLevel(utils.LogLevelDebug)
+
+				rtt := 75 * time.Millisecond
+				testname := "./large_rtt_" + rtt.String() + "_Q" + fmt.Sprint(version) + ".log"
+
+				f, err := os.Create(testname)
+				defer f.Close()
+				if err != nil {
+					panic(err)
+				}
+				log.SetOutput(bufio.NewWriter(f))
+
+				runRTTTest(rtt, version, 30) // run test with larger timeout
+
+				utils.SetLogLevel(utils.LogLevelNothing)
 			})
 		})
 	}
