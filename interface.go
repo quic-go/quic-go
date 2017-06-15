@@ -37,6 +37,9 @@ type Session interface {
 	RemoteAddr() net.Addr
 	// Close closes the connection. The error will be sent to the remote peer in a CONNECTION_CLOSE frame. An error value of nil is allowed and will cause a normal PeerGoingAway to be sent.
 	Close(error) error
+	// WaitUntilClosed() blocks until the session is closed.
+	// Warning: This API should not be considered stable and might change soon.
+	WaitUntilClosed()
 }
 
 // A NonFWSession is a QUIC connection between two peers half-way through the handshake.

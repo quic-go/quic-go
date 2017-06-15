@@ -39,6 +39,9 @@ func (s *mockSession) run() error {
 func (s *mockSession) WaitUntilHandshakeComplete() error {
 	return <-s.handshakeComplete
 }
+func (*mockSession) WaitUntilClosed() {
+	panic("not implemented")
+}
 func (s *mockSession) Close(e error) error {
 	if s.closed {
 		return nil

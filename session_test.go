@@ -772,6 +772,17 @@ var _ = Describe("Session", func() {
 			Expect(mconn.written[0][0] & 0x02).ToNot(BeZero()) // Public Reset
 			Expect(sess.runClosed).To(BeClosed())
 		})
+
+		It("unblocks WaitUntilClosed when the run loop exists", func() {
+			returned := make(chan struct{})
+			go func() {
+				sess.WaitUntilClosed()
+				close(returned)
+			}()
+			Consistently(returned).ShouldNot(BeClosed())
+			sess.Close(nil)
+			Eventually(returned).Should(BeClosed())
+		})
 	})
 
 	Context("receiving packets", func() {
