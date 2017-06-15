@@ -79,6 +79,9 @@ var _ = Describe("Chrome tests", func() {
 				}
 				supportedVersionsBefore = protocol.SupportedVersions
 				protocol.SupportedVersions = []protocol.VersionNumber{version}
+			})
+
+			JustBeforeEach(func() {
 				wd = getWebdriverForVersion(version)
 			})
 
