@@ -257,7 +257,16 @@ var _ = Describe("QUIC Proxy", func() {
 		})
 
 		Context("Delay Callback", func() {
+			expectDelay := func(startTime time.Time, rtt time.Duration, numRTTs int) {
+				expectedReceiveTime := startTime.Add(time.Duration(numRTTs) * rtt)
+				Expect(time.Now()).To(SatisfyAll(
+					BeTemporally(">=", expectedReceiveTime),
+					BeTemporally("<", expectedReceiveTime.Add(rtt/2)),
+				))
+			}
+
 			It("delays incoming packets", func() {
+				delay := 300 * time.Millisecond
 				opts := Opts{
 					RemoteAddr: serverAddr,
 					// delay packet 1 by 200 ms
@@ -267,7 +276,7 @@ var _ = Describe("QUIC Proxy", func() {
 						if d == DirectionOutgoing {
 							return 0
 						}
-						return time.Duration(200*p) * time.Millisecond
+						return time.Duration(p) * delay
 					},
 				}
 				startProxy(opts)
@@ -279,14 +288,15 @@ var _ = Describe("QUIC Proxy", func() {
 					Expect(err).ToNot(HaveOccurred())
 				}
 				Eventually(func() []packetData { return serverReceivedPackets }).Should(HaveLen(1))
-				Expect(time.Now()).To(BeTemporally("~", start.Add(200*time.Millisecond), 50*time.Millisecond))
+				expectDelay(start, delay, 1)
 				Eventually(func() []packetData { return serverReceivedPackets }).Should(HaveLen(2))
-				Expect(time.Now()).To(BeTemporally("~", start.Add(400*time.Millisecond), 50*time.Millisecond))
+				expectDelay(start, delay, 2)
 				Eventually(func() []packetData { return serverReceivedPackets }).Should(HaveLen(3))
-				Expect(time.Now()).To(BeTemporally("~", start.Add(600*time.Millisecond), 50*time.Millisecond))
+				expectDelay(start, delay, 3)
 			})
 
 			It("delays outgoing packets", func() {
+				delay := 300 * time.Millisecond
 				opts := Opts{
 					RemoteAddr: serverAddr,
 					// delay packet 1 by 200 ms
@@ -296,7 +306,7 @@ var _ = Describe("QUIC Proxy", func() {
 						if d == DirectionIncoming {
 							return 0
 						}
-						return time.Duration(200*p) * time.Millisecond
+						return time.Duration(p) * delay
 					},
 				}
 				startProxy(opts)
@@ -324,13 +334,13 @@ var _ = Describe("QUIC Proxy", func() {
 				}
 				// the packets should have arrived immediately at the server
 				Eventually(func() []packetData { return serverReceivedPackets }).Should(HaveLen(3))
-				Expect(time.Now()).To(BeTemporally("~", start, 50*time.Millisecond))
+				expectDelay(start, delay, 0)
 				Eventually(func() []packetData { return clientReceivedPackets }).Should(HaveLen(1))
-				Expect(time.Now()).To(BeTemporally("~", start.Add(200*time.Millisecond), 50*time.Millisecond))
+				expectDelay(start, delay, 1)
 				Eventually(func() []packetData { return clientReceivedPackets }).Should(HaveLen(2))
-				Expect(time.Now()).To(BeTemporally("~", start.Add(400*time.Millisecond), 50*time.Millisecond))
+				expectDelay(start, delay, 2)
 				Eventually(func() []packetData { return clientReceivedPackets }).Should(HaveLen(3))
-				Expect(time.Now()).To(BeTemporally("~", start.Add(600*time.Millisecond), 50*time.Millisecond))
+				expectDelay(start, delay, 3)
 			})
 		})
 	})
