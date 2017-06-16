@@ -25,7 +25,7 @@ var _ = Describe("Handshake integration tets", func() {
 		testStartedAt time.Time
 	)
 
-	rtt := 300 * time.Millisecond
+	rtt := 350 * time.Millisecond
 
 	BeforeEach(func() {
 		serverConfig = &quic.Config{TLSConfig: testdata.GetTLSConfig()}
@@ -62,7 +62,7 @@ var _ = Describe("Handshake integration tets", func() {
 		expectedDuration := time.Duration(num) * rtt
 		Expect(testDuration).To(SatisfyAll(
 			BeNumerically(">=", expectedDuration),
-			BeNumerically("<", expectedDuration+rtt/3),
+			BeNumerically("<", expectedDuration+rtt/2),
 		))
 	}
 
