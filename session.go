@@ -76,6 +76,8 @@ type session struct {
 	sendingScheduled chan struct{}
 	// closeChan is used to notify the run loop that it should terminate.
 	closeChan chan closeError
+	// runClosed is closed once the run loop exits
+	// it is used to block Close() and WaitUntilClosed()
 	runClosed chan struct{}
 	closeOnce sync.Once
 
@@ -321,6 +323,10 @@ runLoop:
 	s.handleCloseError(closeErr)
 	close(s.runClosed)
 	return closeErr.err
+}
+
+func (s *session) WaitUntilClosed() {
+	<-s.runClosed
 }
 
 func (s *session) maybeResetTimer() {
