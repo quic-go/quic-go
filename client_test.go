@@ -29,7 +29,7 @@ var _ = Describe("Client", func() {
 		Eventually(areSessionsRunning).Should(BeFalse())
 		msess, _, _ := newMockSession(nil, 0, 0, nil, nil)
 		sess = msess.(*mockSession)
-		packetConn = &mockPacketConn{}
+		packetConn = &mockPacketConn{addr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1234}}
 		config = &Config{
 			Versions: []protocol.VersionNumber{protocol.SupportedVersions[0], 77, 78},
 		}

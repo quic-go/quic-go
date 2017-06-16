@@ -1290,7 +1290,11 @@ var _ = Describe("Session", func() {
 				hdr := &PublicHeader{
 					PacketNumber: protocol.PacketNumber(i + 1),
 				}
-				sess.handlePacket(&receivedPacket{publicHeader: hdr, data: []byte("foobar")})
+				sess.handlePacket(&receivedPacket{
+					publicHeader: hdr,
+					remoteAddr:   &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1234},
+					data:         []byte("foobar"),
+				})
 			}
 		}
 

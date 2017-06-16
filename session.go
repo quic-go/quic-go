@@ -690,7 +690,7 @@ func (s *session) logPacket(packet *packedPacket) {
 		return
 	}
 	if utils.Debug() {
-		utils.Debugf("-> Sending packet 0x%x (%d bytes), %s", packet.number, len(packet.raw), packet.encryptionLevel)
+		utils.Debugf("-> Sending packet 0x%x (%d bytes) for connection %x, %s", packet.number, len(packet.raw), s.connectionID, packet.encryptionLevel)
 		for _, frame := range packet.frames {
 			frames.LogFrame(frame, true)
 		}
@@ -775,6 +775,7 @@ func (s *session) scheduleSending() {
 
 func (s *session) tryQueueingUndecryptablePacket(p *receivedPacket) {
 	if s.handshakeComplete {
+		utils.Debugf("Received undecryptable packet from %s after the handshake: %#v, %d bytes data", p.remoteAddr.String(), p.publicHeader, len(p.data))
 		return
 	}
 	if len(s.undecryptablePackets)+1 > protocol.MaxUndecryptablePackets {
