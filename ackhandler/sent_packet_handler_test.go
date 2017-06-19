@@ -777,8 +777,12 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.GetAlarmTimeout().Sub(time.Now())).To(BeNumerically("~", handler.computeRTOTimeout(), time.Minute))
 
 			handler.OnAlarm()
-			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
-			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
+			p := handler.DequeuePacketForRetransmission()
+			Expect(p).ToNot(BeNil())
+			Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(1)))
+			p = handler.DequeuePacketForRetransmission()
+			Expect(p).ToNot(BeNil())
+			Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(2)))
 
 			Expect(handler.rtoCount).To(BeEquivalentTo(1))
 		})

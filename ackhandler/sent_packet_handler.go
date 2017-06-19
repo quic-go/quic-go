@@ -310,10 +310,11 @@ func (h *sentPacketHandler) DequeuePacketForRetransmission() *Packet {
 	if len(h.retransmissionQueue) == 0 {
 		return nil
 	}
-	queueLen := len(h.retransmissionQueue)
-	// packets are usually NACKed in descending order. So use the slice as a stack
-	packet := h.retransmissionQueue[queueLen-1]
-	h.retransmissionQueue = h.retransmissionQueue[:queueLen-1]
+	packet := h.retransmissionQueue[0]
+	// Shift the slice and don't retain anything that isn't needed.
+	copy(h.retransmissionQueue, h.retransmissionQueue[1:])
+	h.retransmissionQueue[len(h.retransmissionQueue)-1] = nil
+	h.retransmissionQueue = h.retransmissionQueue[:len(h.retransmissionQueue)-1]
 	return packet
 }
 
