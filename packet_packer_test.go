@@ -671,36 +671,6 @@ var _ = Describe("Packet packer", func() {
 			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionSecure))
 		})
 
-		It("removes non-retransmittable frames", func() {
-			wuf := &frames.WindowUpdateFrame{StreamID: 5, ByteOffset: 10}
-			packet := &ackhandler.Packet{
-				EncryptionLevel: protocol.EncryptionSecure,
-				Frames: []frames.Frame{
-					sf,
-					&frames.StopWaitingFrame{},
-					wuf,
-					&frames.AckFrame{},
-				},
-			}
-			p, err := packer.RetransmitNonForwardSecurePacket(packet)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(p.frames).To(HaveLen(3))
-			Expect(p.frames).To(ContainElement(sf))
-			Expect(p.frames).To(ContainElement(swf))
-			Expect(p.frames).To(ContainElement(wuf))
-			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionSecure))
-		})
-
-		It("doesn't pack a packet for a non-retransmittable packet", func() {
-			packet := &ackhandler.Packet{
-				EncryptionLevel: protocol.EncryptionSecure,
-				Frames:          []frames.Frame{&frames.AckFrame{}, &frames.StopWaitingFrame{}},
-			}
-			p, err := packer.RetransmitNonForwardSecurePacket(packet)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(p).To(BeNil())
-		})
-
 		// this should never happen, since non forward-secure packets are limited to a size smaller than MaxPacketSize, such that it is always possible to retransmit them without splitting the StreamFrame
 		// (note that the retransmitted packet needs to have enough space for the StopWaitingFrame)
 		It("refuses to send a packet larger than MaxPacketSize", func() {

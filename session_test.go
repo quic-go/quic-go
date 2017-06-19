@@ -974,19 +974,6 @@ var _ = Describe("Session", func() {
 				Expect(swf.LeastUnacked).To(Equal(protocol.PacketNumber(0x1337)))
 			})
 
-			It("doesn't retransmit non-retransmittable packets", func() {
-				sph.retransmissionQueue = []*ackhandler.Packet{{
-					Frames: []frames.Frame{
-						&frames.AckFrame{},
-						&frames.StopWaitingFrame{},
-					},
-					EncryptionLevel: protocol.EncryptionUnencrypted,
-				}}
-				err := sess.sendPacket()
-				Expect(err).ToNot(HaveOccurred())
-				Expect(mconn.written).To(BeEmpty())
-			})
-
 			It("retransmit a packet encrypted with the initial encryption", func() {
 				sf := &frames.StreamFrame{StreamID: 1, Data: []byte("foobar")}
 				sph.retransmissionQueue = []*ackhandler.Packet{{

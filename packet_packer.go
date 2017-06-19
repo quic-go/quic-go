@@ -118,17 +118,8 @@ func (p *packetPacker) packPacket(leastUnacked protocol.PacketNumber, handshakeP
 		if p.stopWaiting == nil {
 			return nil, errors.New("PacketPacker BUG: Handshake retransmissions must contain a StopWaitingFrame")
 		}
-		payloadFrames = append(payloadFrames, p.stopWaiting)
-		// don't retransmit Acks and StopWaitings
-		for _, f := range handshakePacketToRetransmit.Frames {
-			switch f.(type) {
-			case *frames.AckFrame:
-				continue
-			case *frames.StopWaitingFrame:
-				continue
-			}
-			payloadFrames = append(payloadFrames, f)
-		}
+		payloadFrames = []frames.Frame{p.stopWaiting}
+		payloadFrames = append(payloadFrames, handshakePacketToRetransmit.Frames...)
 	} else if isCryptoStreamFrame {
 		maxLen := protocol.MaxFrameAndPublicHeaderSize - protocol.NonForwardSecurePacketSizeReduction - publicHeaderLength
 		payloadFrames = []frames.Frame{p.streamFramer.PopCryptoStreamFrame(maxLen)}
