@@ -106,26 +106,27 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 		}
 	}
 
-	now := time.Now()
-	packet.SendTime = now
-	if packet.Length == 0 {
-		return errors.New("SentPacketHandler: packet cannot be empty")
-	}
-	h.bytesInFlight += packet.Length
-
 	h.lastSentPacketNumber = packet.PacketNumber
-	h.packetHistory.PushBack(*packet)
+	now := time.Now()
+
+	packet.Frames = stripNonRetransmittableFrames(packet.Frames)
+	isRetransmittable := len(packet.Frames) != 0
+
+	if isRetransmittable {
+		packet.SendTime = now
+		h.bytesInFlight += packet.Length
+		h.packetHistory.PushBack(*packet)
+	}
 
 	h.congestion.OnPacketSent(
 		now,
 		h.bytesInFlight,
 		packet.PacketNumber,
 		packet.Length,
-		true, /* TODO: is retransmittable */
+		isRetransmittable,
 	)
 
 	h.updateLossDetectionAlarm()
-
 	return nil
 }
 

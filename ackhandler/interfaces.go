@@ -9,6 +9,7 @@ import (
 
 // SentPacketHandler handles ACKs received for outgoing packets
 type SentPacketHandler interface {
+	// SentPacket may modify the packet
 	SentPacket(packet *Packet) error
 	ReceivedAck(ackFrame *frames.AckFrame, withPacketNumber protocol.PacketNumber, recvTime time.Time) error
 
