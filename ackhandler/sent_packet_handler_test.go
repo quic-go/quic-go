@@ -57,6 +57,10 @@ func (m *mockCongestion) OnPacketLost(n protocol.PacketNumber, l protocol.ByteCo
 	m.packetsLost = append(m.packetsLost, []interface{}{n, l, bif})
 }
 
+func retransmittablePacket(num protocol.PacketNumber) *Packet {
+	return &Packet{PacketNumber: num, Length: 1, Frames: []frames.Frame{&frames.PingFrame{}}}
+}
+
 var _ = Describe("SentPacketHandler", func() {
 	var (
 		handler     *sentPacketHandler
@@ -131,6 +135,12 @@ var _ = Describe("SentPacketHandler", func() {
 			err := handler.SentPacket(&packet)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.packetHistory.Front().Value.SendTime.Unix()).To(BeNumerically("~", time.Now().Unix(), 1))
+		})
+
+		It("does not store non-retransmittable packets", func() {
+			err := handler.SentPacket(&Packet{PacketNumber: 1, Length: 1})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.packetHistory.Len()).To(BeZero())
 		})
 
 		Context("skipped packet numbers", func() {
@@ -216,12 +226,10 @@ var _ = Describe("SentPacketHandler", func() {
 		It("checks the size of the packet history, for unacked packets", func() {
 			i := protocol.PacketNumber(1)
 			for ; i <= protocol.MaxTrackedSentPackets; i++ {
-				packet := Packet{PacketNumber: protocol.PacketNumber(i), Length: 1}
-				err := handler.SentPacket(&packet)
+				err := handler.SentPacket(retransmittablePacket(i))
 				Expect(err).ToNot(HaveOccurred())
 			}
-			packet := Packet{PacketNumber: protocol.PacketNumber(i), Length: 1}
-			err := handler.SentPacket(&packet)
+			err := handler.SentPacket(retransmittablePacket(i))
 			Expect(err).To(MatchError(ErrTooManyTrackedSentPackets))
 		})
 
@@ -631,6 +639,7 @@ var _ = Describe("SentPacketHandler", func() {
 			p := &Packet{
 				PacketNumber: 1,
 				Length:       42,
+				Frames:       []frames.Frame{&frames.PingFrame{}},
 			}
 			err := handler.SentPacket(p)
 			Expect(err).NotTo(HaveOccurred())
@@ -641,8 +650,8 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("should call MaybeExitSlowStart and OnPacketAcked", func() {
-			handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
-			handler.SentPacket(&Packet{PacketNumber: 2, Frames: []frames.Frame{}, Length: 1})
+			handler.SentPacket(retransmittablePacket(1))
+			handler.SentPacket(retransmittablePacket(2))
 			err := handler.ReceivedAck(&frames.AckFrame{LargestAcked: 1, LowestAcked: 1}, 1, time.Now())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cong.maybeExitSlowStart).To(BeTrue())
@@ -653,9 +662,9 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("should call MaybeExitSlowStart and OnPacketLost", func() {
-			handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: 1})
-			handler.SentPacket(&Packet{PacketNumber: 2, Frames: []frames.Frame{}, Length: 1})
-			handler.SentPacket(&Packet{PacketNumber: 3, Frames: []frames.Frame{}, Length: 1})
+			handler.SentPacket(retransmittablePacket(1))
+			handler.SentPacket(retransmittablePacket(2))
+			handler.SentPacket(retransmittablePacket(3))
 			handler.OnAlarm() // RTO, meaning 2 lost packets
 			Expect(cong.maybeExitSlowStart).To(BeFalse())
 			Expect(cong.onRetransmissionTimeout).To(BeTrue())
@@ -668,7 +677,11 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("allows or denies sending based on congestion", func() {
 			Expect(handler.SendingAllowed()).To(BeTrue())
-			err := handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: protocol.DefaultTCPMSS + 1})
+			err := handler.SentPacket(&Packet{
+				PacketNumber: 1,
+				Frames:       []frames.Frame{&frames.PingFrame{}},
+				Length:       protocol.DefaultTCPMSS + 1,
+			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(handler.SendingAllowed()).To(BeFalse())
 		})
@@ -680,7 +693,11 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("allows sending if there are retransmisisons outstanding", func() {
-			err := handler.SentPacket(&Packet{PacketNumber: 1, Frames: []frames.Frame{}, Length: protocol.DefaultTCPMSS + 1})
+			err := handler.SentPacket(&Packet{
+				PacketNumber: 1,
+				Frames:       []frames.Frame{&frames.PingFrame{}},
+				Length:       protocol.DefaultTCPMSS + 1,
+			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(handler.SendingAllowed()).To(BeFalse())
 			handler.retransmissionQueue = []*Packet{nil}
@@ -724,9 +741,9 @@ var _ = Describe("SentPacketHandler", func() {
 
 	Context("Delay-based loss detection", func() {
 		It("detects a packet as lost", func() {
-			err := handler.SentPacket(&Packet{PacketNumber: 1, Length: 1})
+			err := handler.SentPacket(retransmittablePacket(1))
 			Expect(err).NotTo(HaveOccurred())
-			err = handler.SentPacket(&Packet{PacketNumber: 2, Length: 1})
+			err = handler.SentPacket(retransmittablePacket(2))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(handler.lossTime.IsZero()).To(BeTrue())
 
@@ -747,9 +764,9 @@ var _ = Describe("SentPacketHandler", func() {
 		It("does not detect packets as lost without ACKs", func() {
 			err := handler.SentPacket(&Packet{PacketNumber: 1, Length: 1})
 			Expect(err).NotTo(HaveOccurred())
-			err = handler.SentPacket(&Packet{PacketNumber: 2, Length: 1})
+			err = handler.SentPacket(retransmittablePacket(2))
 			Expect(err).NotTo(HaveOccurred())
-			err = handler.SentPacket(&Packet{PacketNumber: 3, Length: 1})
+			err = handler.SentPacket(retransmittablePacket(3))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(handler.lossTime.IsZero()).To(BeTrue())
 
@@ -767,9 +784,9 @@ var _ = Describe("SentPacketHandler", func() {
 
 	Context("RTO retransmission", func() {
 		It("queues two packets if RTO expires", func() {
-			err := handler.SentPacket(&Packet{PacketNumber: 1, Length: 1})
+			err := handler.SentPacket(retransmittablePacket(1))
 			Expect(err).NotTo(HaveOccurred())
-			err = handler.SentPacket(&Packet{PacketNumber: 2, Length: 1})
+			err = handler.SentPacket(retransmittablePacket(2))
 			Expect(err).NotTo(HaveOccurred())
 
 			handler.rttStats.UpdateRTT(time.Hour, 0, time.Now())
@@ -777,8 +794,12 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.GetAlarmTimeout().Sub(time.Now())).To(BeNumerically("~", handler.computeRTOTimeout(), time.Minute))
 
 			handler.OnAlarm()
-			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
-			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
+			p := handler.DequeuePacketForRetransmission()
+			Expect(p).ToNot(BeNil())
+			Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(1)))
+			p = handler.DequeuePacketForRetransmission()
+			Expect(p).ToNot(BeNil())
+			Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(2)))
 
 			Expect(handler.rtoCount).To(BeEquivalentTo(1))
 		})

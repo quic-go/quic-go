@@ -293,7 +293,7 @@ runLoop:
 		}
 
 		now := time.Now()
-		if s.sentPacketHandler.GetAlarmTimeout().Before(now) {
+		if timeout := s.sentPacketHandler.GetAlarmTimeout(); !timeout.IsZero() && timeout.Before(now) {
 			// This could cause packets to be retransmitted, so check it before trying
 			// to send packets.
 			s.sentPacketHandler.OnAlarm()
@@ -405,7 +405,8 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 	// Only do this after decrypting, so we are sure the packet is not attacker-controlled
 	s.largestRcvdPacketNumber = utils.MaxPacketNumber(s.largestRcvdPacketNumber, hdr.PacketNumber)
 
-	if err = s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, packet.IsRetransmittable()); err != nil {
+	isRetransmittable := ackhandler.HasRetransmittableFrames(packet.frames)
+	if err = s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, isRetransmittable); err != nil {
 		return err
 	}
 
