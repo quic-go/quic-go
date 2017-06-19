@@ -29,6 +29,7 @@ type packetPacker struct {
 	streamFramer          *streamFramer
 
 	controlFrames []frames.Frame
+	stopWaiting   *frames.StopWaitingFrame
 }
 
 func newPacketPacker(connectionID protocol.ConnectionID,
@@ -54,28 +55,25 @@ func (p *packetPacker) PackConnectionClose(ccf *frames.ConnectionCloseFrame, lea
 	// in case the connection is closed, all queued control frames aren't of any use anymore
 	// discard them and queue the ConnectionCloseFrame
 	p.controlFrames = []frames.Frame{ccf}
-	return p.packPacket(nil, leastUnacked, nil)
+	return p.packPacket(leastUnacked, nil)
 }
 
 //  RetransmitNonForwardSecurePacket retransmits a handshake packet, that was sent with less than forward-secure encryption
-func (p *packetPacker) RetransmitNonForwardSecurePacket(stopWaitingFrame *frames.StopWaitingFrame, packet *ackhandler.Packet) (*packedPacket, error) {
+func (p *packetPacker) RetransmitNonForwardSecurePacket(packet *ackhandler.Packet) (*packedPacket, error) {
 	if packet.EncryptionLevel == protocol.EncryptionForwardSecure {
 		return nil, errors.New("PacketPacker BUG: forward-secure encrypted handshake packets don't need special treatment")
 	}
-	if stopWaitingFrame == nil {
-		return nil, errors.New("PacketPacker BUG: Handshake retransmissions must contain a StopWaitingFrame")
-	}
-	return p.packPacket(stopWaitingFrame, 0, packet)
+
+	return p.packPacket(0, packet)
 }
 
 // PackPacket packs a new packet
-// the stopWaitingFrame is *guaranteed* to be included in the next packet
 // the other controlFrames are sent in the next packet, but might be queued and sent in the next packet if the packet would overflow MaxPacketSize otherwise
-func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
-	return p.packPacket(stopWaitingFrame, leastUnacked, nil)
+func (p *packetPacker) PackPacket(leastUnacked protocol.PacketNumber) (*packedPacket, error) {
+	return p.packPacket(leastUnacked, nil)
 }
 
-func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, leastUnacked protocol.PacketNumber, handshakePacketToRetransmit *ackhandler.Packet) (*packedPacket, error) {
+func (p *packetPacker) packPacket(leastUnacked protocol.PacketNumber, handshakePacketToRetransmit *ackhandler.Packet) (*packedPacket, error) {
 	// handshakePacketToRetransmit is only set for handshake retransmissions
 	isHandshakeRetransmission := (handshakePacketToRetransmit != nil)
 	isCryptoStreamFrame := p.streamFramer.HasCryptoStreamFrame()
@@ -103,9 +101,9 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 		return nil, err
 	}
 
-	if stopWaitingFrame != nil {
-		stopWaitingFrame.PacketNumber = publicHeader.PacketNumber
-		stopWaitingFrame.PacketNumberLen = publicHeader.PacketNumberLen
+	if p.stopWaiting != nil {
+		p.stopWaiting.PacketNumber = publicHeader.PacketNumber
+		p.stopWaiting.PacketNumberLen = publicHeader.PacketNumberLen
 	}
 
 	// we're packing a ConnectionClose, don't add any StreamFrames
@@ -116,7 +114,11 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 
 	var payloadFrames []frames.Frame
 	if isHandshakeRetransmission {
-		payloadFrames = append(payloadFrames, stopWaitingFrame)
+		// Find the SWF
+		if p.stopWaiting == nil {
+			return nil, errors.New("PacketPacker BUG: Handshake retransmissions must contain a StopWaitingFrame")
+		}
+		payloadFrames = append(payloadFrames, p.stopWaiting)
 		// don't retransmit Acks and StopWaitings
 		for _, f := range handshakePacketToRetransmit.Frames {
 			switch f.(type) {
@@ -134,7 +136,7 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 		payloadFrames = []frames.Frame{p.streamFramer.PopCryptoStreamFrame(maxLen)}
 	} else {
 		maxSize := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLength
-		payloadFrames, err = p.composeNextPacket(stopWaitingFrame, maxSize, p.canSendData(encLevel))
+		payloadFrames, err = p.composeNextPacket(maxSize, p.canSendData(encLevel))
 		if err != nil {
 			return nil, err
 		}
@@ -145,11 +147,11 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 		return nil, nil
 	}
 	// Don't send out packets that only contain a StopWaitingFrame
-	if len(payloadFrames) == 1 {
-		if _, ok := payloadFrames[0].(*frames.StopWaitingFrame); ok {
-			return nil, nil
-		}
+	if len(payloadFrames) == 1 && p.stopWaiting != nil {
+		return nil, nil
 	}
+
+	p.stopWaiting = nil
 
 	raw := getPacketBuffer()
 	buffer := bytes.NewBuffer(raw)
@@ -189,25 +191,21 @@ func (p *packetPacker) packPacket(stopWaitingFrame *frames.StopWaitingFrame, lea
 }
 
 func (p *packetPacker) composeNextPacket(
-	stopWaitingFrame *frames.StopWaitingFrame,
 	maxFrameSize protocol.ByteCount,
 	canSendStreamFrames bool,
 ) ([]frames.Frame, error) {
 	var payloadLength protocol.ByteCount
 	var payloadFrames []frames.Frame
 
-	if stopWaitingFrame != nil {
-		payloadFrames = append(payloadFrames, stopWaitingFrame)
-		minLength, err := stopWaitingFrame.MinLength(p.version)
+	if p.stopWaiting != nil {
+		p.controlFrames = append(p.controlFrames, p.stopWaiting)
+	}
+	for len(p.controlFrames) > 0 {
+		frame := p.controlFrames[len(p.controlFrames)-1]
+		minLength, err := frame.MinLength(p.version)
 		if err != nil {
 			return nil, err
 		}
-		payloadLength += minLength
-	}
-
-	for len(p.controlFrames) > 0 {
-		frame := p.controlFrames[len(p.controlFrames)-1]
-		minLength, _ := frame.MinLength(p.version) // controlFrames does not contain any StopWaitingFrames. So it will *never* return an error
 		if payloadLength+minLength > maxFrameSize {
 			break
 		}
@@ -247,7 +245,11 @@ func (p *packetPacker) composeNextPacket(
 }
 
 func (p *packetPacker) QueueControlFrameForNextPacket(f frames.Frame) {
-	p.controlFrames = append(p.controlFrames, f)
+	if swf, ok := f.(*frames.StopWaitingFrame); ok {
+		p.stopWaiting = swf
+	} else {
+		p.controlFrames = append(p.controlFrames, f)
+	}
 }
 
 func (p *packetPacker) getPublicHeader(leastUnacked protocol.PacketNumber, encLevel protocol.EncryptionLevel) *PublicHeader {

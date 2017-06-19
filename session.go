@@ -589,9 +589,9 @@ func (s *session) sendPacket() error {
 					continue
 				}
 				utils.Debugf("\tDequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
-				stopWaitingFrame := s.sentPacketHandler.GetStopWaitingFrame(true)
+				s.packer.QueueControlFrameForNextPacket(s.sentPacketHandler.GetStopWaitingFrame(true))
 				var packet *packedPacket
-				packet, err := s.packer.RetransmitNonForwardSecurePacket(stopWaitingFrame, retransmitPacket)
+				packet, err := s.packer.RetransmitNonForwardSecurePacket(retransmitPacket)
 				if err != nil {
 					return err
 				}
@@ -629,11 +629,13 @@ func (s *session) sendPacket() error {
 			s.packer.QueueControlFrameForNextPacket(ack)
 		}
 		hasRetransmission := s.streamFramer.HasFramesForRetransmission()
-		var stopWaitingFrame *frames.StopWaitingFrame
 		if ack != nil || hasRetransmission {
-			stopWaitingFrame = s.sentPacketHandler.GetStopWaitingFrame(hasRetransmission)
+			swf := s.sentPacketHandler.GetStopWaitingFrame(hasRetransmission)
+			if swf != nil {
+				s.packer.QueueControlFrameForNextPacket(swf)
+			}
 		}
-		packet, err := s.packer.PackPacket(stopWaitingFrame, s.sentPacketHandler.GetLeastUnacked())
+		packet, err := s.packer.PackPacket(s.sentPacketHandler.GetLeastUnacked())
 		if err != nil {
 			return err
 		}
