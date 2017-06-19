@@ -71,8 +71,7 @@ func (p *packetPacker) RetransmitNonForwardSecurePacket(stopWaitingFrame *frames
 // PackPacket packs a new packet
 // the stopWaitingFrame is *guaranteed* to be included in the next packet
 // the other controlFrames are sent in the next packet, but might be queued and sent in the next packet if the packet would overflow MaxPacketSize otherwise
-func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, controlFrames []frames.Frame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
-	p.controlFrames = append(p.controlFrames, controlFrames...)
+func (p *packetPacker) PackPacket(stopWaitingFrame *frames.StopWaitingFrame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
 	return p.packPacket(stopWaitingFrame, leastUnacked, nil)
 }
 
