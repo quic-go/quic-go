@@ -64,38 +64,42 @@ func (p *packetPacker) PackConnectionClose(ccf *frames.ConnectionCloseFrame, lea
 	}, err
 }
 
-//  RetransmitNonForwardSecurePacket retransmits a handshake packet, that was sent with less than forward-secure encryption
+// RetransmitNonForwardSecurePacket retransmits a handshake packet, that was sent with less than forward-secure encryption
 func (p *packetPacker) RetransmitNonForwardSecurePacket(packet *ackhandler.Packet) (*packedPacket, error) {
 	if packet.EncryptionLevel == protocol.EncryptionForwardSecure {
 		return nil, errors.New("PacketPacker BUG: forward-secure encrypted handshake packets don't need special treatment")
 	}
-
-	return p.packPacket(0, packet)
+	sealer, err := p.cryptoSetup.GetSealerWithEncryptionLevel(packet.EncryptionLevel)
+	if err != nil {
+		return nil, err
+	}
+	if p.stopWaiting == nil {
+		return nil, errors.New("PacketPacker BUG: Handshake retransmissions must contain a StopWaitingFrame")
+	}
+	ph := p.getPublicHeader(0, packet.EncryptionLevel)
+	p.stopWaiting.PacketNumber = ph.PacketNumber
+	p.stopWaiting.PacketNumberLen = ph.PacketNumberLen
+	frames := append([]frames.Frame{p.stopWaiting}, packet.Frames...)
+	p.stopWaiting = nil
+	raw, err := p.writeAndSealPacket(ph, frames, sealer)
+	return &packedPacket{
+		number:          ph.PacketNumber,
+		raw:             raw,
+		frames:          frames,
+		encryptionLevel: packet.EncryptionLevel,
+	}, err
 }
 
 // PackPacket packs a new packet
 // the other controlFrames are sent in the next packet, but might be queued and sent in the next packet if the packet would overflow MaxPacketSize otherwise
 func (p *packetPacker) PackPacket(leastUnacked protocol.PacketNumber) (*packedPacket, error) {
-	return p.packPacket(leastUnacked, nil)
-}
-
-func (p *packetPacker) packPacket(leastUnacked protocol.PacketNumber, handshakePacketToRetransmit *ackhandler.Packet) (*packedPacket, error) {
-	// handshakePacketToRetransmit is only set for handshake retransmissions
-	isHandshakeRetransmission := (handshakePacketToRetransmit != nil)
 	isCryptoStreamFrame := p.streamFramer.HasCryptoStreamFrame()
 
 	var sealer handshake.Sealer
 	var encLevel protocol.EncryptionLevel
 
 	// TODO(#656): Only do this for the crypto stream
-	if isHandshakeRetransmission {
-		var err error
-		encLevel = handshakePacketToRetransmit.EncryptionLevel
-		sealer, err = p.cryptoSetup.GetSealerWithEncryptionLevel(encLevel)
-		if err != nil {
-			return nil, err
-		}
-	} else if isCryptoStreamFrame {
+	if isCryptoStreamFrame {
 		encLevel, sealer = p.cryptoSetup.GetSealerForCryptoStream()
 	} else {
 		encLevel, sealer = p.cryptoSetup.GetSealer()
@@ -113,14 +117,7 @@ func (p *packetPacker) packPacket(leastUnacked protocol.PacketNumber, handshakeP
 	}
 
 	var payloadFrames []frames.Frame
-	if isHandshakeRetransmission {
-		// Find the SWF
-		if p.stopWaiting == nil {
-			return nil, errors.New("PacketPacker BUG: Handshake retransmissions must contain a StopWaitingFrame")
-		}
-		payloadFrames = []frames.Frame{p.stopWaiting}
-		payloadFrames = append(payloadFrames, handshakePacketToRetransmit.Frames...)
-	} else if isCryptoStreamFrame {
+	if isCryptoStreamFrame {
 		maxLen := protocol.MaxFrameAndPublicHeaderSize - protocol.NonForwardSecurePacketSizeReduction - publicHeaderLength
 		payloadFrames = []frames.Frame{p.streamFramer.PopCryptoStreamFrame(maxLen)}
 	} else {
