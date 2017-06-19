@@ -293,7 +293,7 @@ runLoop:
 		}
 
 		now := time.Now()
-		if s.sentPacketHandler.GetAlarmTimeout().Before(now) {
+		if timeout := s.sentPacketHandler.GetAlarmTimeout(); !timeout.IsZero() && timeout.Before(now) {
 			// This could cause packets to be retransmitted, so check it before trying
 			// to send packets.
 			s.sentPacketHandler.OnAlarm()
