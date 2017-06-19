@@ -153,33 +153,9 @@ func (p *packetPacker) packPacket(leastUnacked protocol.PacketNumber, handshakeP
 
 	p.stopWaiting = nil
 
-	raw := getPacketBuffer()
-	buffer := bytes.NewBuffer(raw)
-
-	if err = publicHeader.Write(buffer, p.version, p.perspective); err != nil {
+	raw, err := p.writeAndSealPacket(publicHeader, payloadFrames, sealer)
+	if err != nil {
 		return nil, err
-	}
-
-	payloadStartIndex := buffer.Len()
-
-	for _, frame := range payloadFrames {
-		err = frame.Write(buffer, p.version)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if protocol.ByteCount(buffer.Len()+12) > protocol.MaxPacketSize {
-		return nil, errors.New("PacketPacker BUG: packet too large")
-	}
-
-	raw = raw[0:buffer.Len()]
-	_ = sealer(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], publicHeader.PacketNumber, raw[:payloadStartIndex])
-	raw = raw[0 : buffer.Len()+12]
-
-	num := p.packetNumberGenerator.Pop()
-	if num != publicHeader.PacketNumber {
-		return nil, errors.New("packetPacker BUG: Peeked and Popped packet numbers do not match")
 	}
 
 	return &packedPacket{
@@ -271,6 +247,40 @@ func (p *packetPacker) getPublicHeader(leastUnacked protocol.PacketNumber, encLe
 	}
 
 	return publicHeader
+}
+
+func (p *packetPacker) writeAndSealPacket(
+	publicHeader *PublicHeader,
+	payloadFrames []frames.Frame,
+	sealer handshake.Sealer,
+) ([]byte, error) {
+	raw := getPacketBuffer()
+	buffer := bytes.NewBuffer(raw)
+
+	if err := publicHeader.Write(buffer, p.version, p.perspective); err != nil {
+		return nil, err
+	}
+	payloadStartIndex := buffer.Len()
+	for _, frame := range payloadFrames {
+		err := frame.Write(buffer, p.version)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if protocol.ByteCount(buffer.Len()+12) > protocol.MaxPacketSize {
+		return nil, errors.New("PacketPacker BUG: packet too large")
+	}
+
+	raw = raw[0:buffer.Len()]
+	_ = sealer(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], publicHeader.PacketNumber, raw[:payloadStartIndex])
+	raw = raw[0 : buffer.Len()+12]
+
+	num := p.packetNumberGenerator.Pop()
+	if num != publicHeader.PacketNumber {
+		return nil, errors.New("packetPacker BUG: Peeked and Popped packet numbers do not match")
+	}
+
+	return raw, nil
 }
 
 func (p *packetPacker) canSendData(encLevel protocol.EncryptionLevel) bool {
