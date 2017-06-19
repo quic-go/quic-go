@@ -52,10 +52,16 @@ func newPacketPacker(connectionID protocol.ConnectionID,
 
 // PackConnectionClose packs a packet that ONLY contains a ConnectionCloseFrame
 func (p *packetPacker) PackConnectionClose(ccf *frames.ConnectionCloseFrame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
-	// in case the connection is closed, all queued control frames aren't of any use anymore
-	// discard them and queue the ConnectionCloseFrame
-	p.controlFrames = []frames.Frame{ccf}
-	return p.packPacket(leastUnacked, nil)
+	frames := []frames.Frame{ccf}
+	encLevel, sealer := p.cryptoSetup.GetSealer()
+	ph := p.getPublicHeader(leastUnacked, encLevel)
+	raw, err := p.writeAndSealPacket(ph, frames, sealer)
+	return &packedPacket{
+		number:          ph.PacketNumber,
+		raw:             raw,
+		frames:          frames,
+		encryptionLevel: encLevel,
+	}, err
 }
 
 //  RetransmitNonForwardSecurePacket retransmits a handshake packet, that was sent with less than forward-secure encryption
@@ -106,12 +112,6 @@ func (p *packetPacker) packPacket(leastUnacked protocol.PacketNumber, handshakeP
 		p.stopWaiting.PacketNumberLen = publicHeader.PacketNumberLen
 	}
 
-	// we're packing a ConnectionClose, don't add any StreamFrames
-	var isConnectionClose bool
-	if len(p.controlFrames) == 1 {
-		_, isConnectionClose = p.controlFrames[0].(*frames.ConnectionCloseFrame)
-	}
-
 	var payloadFrames []frames.Frame
 	if isHandshakeRetransmission {
 		// Find the SWF
@@ -129,8 +129,6 @@ func (p *packetPacker) packPacket(leastUnacked protocol.PacketNumber, handshakeP
 			}
 			payloadFrames = append(payloadFrames, f)
 		}
-	} else if isConnectionClose {
-		payloadFrames = []frames.Frame{p.controlFrames[0]}
 	} else if isCryptoStreamFrame {
 		maxLen := protocol.MaxFrameAndPublicHeaderSize - protocol.NonForwardSecurePacketSizeReduction - publicHeaderLength
 		payloadFrames = []frames.Frame{p.streamFramer.PopCryptoStreamFrame(maxLen)}
