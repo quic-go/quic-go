@@ -562,13 +562,14 @@ func (s *session) handleCloseError(closeErr closeError) error {
 }
 
 func (s *session) sendPacket() error {
+	s.packer.SetLeastUnacked(s.sentPacketHandler.GetLeastUnacked())
+
 	// Get WindowUpdate frames
 	// this call triggers the flow controller to increase the flow control windows, if necessary
 	windowUpdateFrames := s.getWindowUpdateFrames()
 	for _, wuf := range windowUpdateFrames {
 		s.packer.QueueControlFrameForNextPacket(wuf)
 	}
-
 	// Repeatedly try sending until we don't have any more data, or run out of the congestion window
 	for {
 		if !s.sentPacketHandler.SendingAllowed() {
@@ -581,7 +582,7 @@ func (s *session) sendPacket() error {
 			if swf != nil {
 				s.packer.QueueControlFrameForNextPacket(swf)
 			}
-			packet, err := s.packer.PackAckPacket(s.sentPacketHandler.GetLeastUnacked(), ack)
+			packet, err := s.packer.PackAckPacket(ack)
 			if err != nil {
 				return err
 			}
@@ -640,7 +641,7 @@ func (s *session) sendPacket() error {
 				s.packer.QueueControlFrameForNextPacket(swf)
 			}
 		}
-		packet, err := s.packer.PackPacket(s.sentPacketHandler.GetLeastUnacked())
+		packet, err := s.packer.PackPacket()
 		if err != nil || packet == nil {
 			return err
 		}
@@ -676,7 +677,11 @@ func (s *session) sendPackedPacket(packet *packedPacket) error {
 }
 
 func (s *session) sendConnectionClose(quicErr *qerr.QuicError) error {
-	packet, err := s.packer.PackConnectionClose(&frames.ConnectionCloseFrame{ErrorCode: quicErr.ErrorCode, ReasonPhrase: quicErr.ErrorMessage}, s.sentPacketHandler.GetLeastUnacked())
+	s.packer.SetLeastUnacked(s.sentPacketHandler.GetLeastUnacked())
+	packet, err := s.packer.PackConnectionClose(&frames.ConnectionCloseFrame{
+		ErrorCode:    quicErr.ErrorCode,
+		ReasonPhrase: quicErr.ErrorMessage,
+	})
 	if err != nil {
 		return err
 	}
