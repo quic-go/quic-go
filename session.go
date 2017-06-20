@@ -570,19 +570,24 @@ func (s *session) sendPacket() error {
 	for _, wuf := range windowUpdateFrames {
 		s.packer.QueueControlFrameForNextPacket(wuf)
 	}
+
+	ack := s.receivedPacketHandler.GetAckFrame()
+	if ack != nil {
+		s.packer.QueueControlFrameForNextPacket(ack)
+	}
+
 	// Repeatedly try sending until we don't have any more data, or run out of the congestion window
 	for {
 		if !s.sentPacketHandler.SendingAllowed() {
-			// If we aren't allowed to send, at least try sending an ACK frame
-			ack := s.receivedPacketHandler.GetAckFrame()
 			if ack == nil {
 				return nil
 			}
+			// If we aren't allowed to send, at least try sending an ACK frame
 			swf := s.sentPacketHandler.GetStopWaitingFrame(false)
 			if swf != nil {
 				s.packer.QueueControlFrameForNextPacket(swf)
 			}
-			packet, err := s.packer.PackAckPacket(ack)
+			packet, err := s.packer.PackAckPacket()
 			if err != nil {
 				return err
 			}
@@ -603,7 +608,7 @@ func (s *session) sendPacket() error {
 				}
 				utils.Debugf("\tDequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 				s.packer.QueueControlFrameForNextPacket(s.sentPacketHandler.GetStopWaitingFrame(true))
-				packet, err := s.packer.RetransmitNonForwardSecurePacket(retransmitPacket)
+				packet, err := s.packer.PackHandshakeRetransmission(retransmitPacket)
 				if err != nil {
 					return err
 				}
@@ -630,10 +635,6 @@ func (s *session) sendPacket() error {
 			}
 		}
 
-		ack := s.receivedPacketHandler.GetAckFrame()
-		if ack != nil {
-			s.packer.QueueControlFrameForNextPacket(ack)
-		}
 		hasRetransmission := s.streamFramer.HasFramesForRetransmission()
 		if ack != nil || hasRetransmission {
 			swf := s.sentPacketHandler.GetStopWaitingFrame(hasRetransmission)
@@ -654,6 +655,7 @@ func (s *session) sendPacket() error {
 			s.packer.QueueControlFrameForNextPacket(f)
 		}
 		windowUpdateFrames = nil
+		ack = nil
 		s.nextAckScheduledTime = time.Time{}
 	}
 }

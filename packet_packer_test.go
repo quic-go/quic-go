@@ -638,7 +638,7 @@ var _ = Describe("Packet packer", func() {
 				EncryptionLevel: protocol.EncryptionUnencrypted,
 				Frames:          []frames.Frame{sf},
 			}
-			p, err := packer.RetransmitNonForwardSecurePacket(packet)
+			p, err := packer.PackHandshakeRetransmission(packet)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.frames).To(ContainElement(sf))
 			Expect(p.frames).To(ContainElement(swf))
@@ -652,7 +652,7 @@ var _ = Describe("Packet packer", func() {
 				EncryptionLevel: protocol.EncryptionSecure,
 				Frames:          []frames.Frame{sf},
 			}
-			p, err := packer.RetransmitNonForwardSecurePacket(packet)
+			p, err := packer.PackHandshakeRetransmission(packet)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.frames).To(ContainElement(sf))
 			Expect(p.frames).To(ContainElement(swf))
@@ -667,7 +667,7 @@ var _ = Describe("Packet packer", func() {
 				EncryptionLevel: protocol.EncryptionSecure,
 				Frames:          []frames.Frame{sf},
 			}
-			p, err := packer.RetransmitNonForwardSecurePacket(packet)
+			p, err := packer.PackHandshakeRetransmission(packet)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionSecure))
 		})
@@ -684,7 +684,7 @@ var _ = Describe("Packet packer", func() {
 					},
 				},
 			}
-			_, err := packer.RetransmitNonForwardSecurePacket(packet)
+			_, err := packer.PackHandshakeRetransmission(packet)
 			Expect(err).To(MatchError("PacketPacker BUG: packet too large"))
 		})
 
@@ -692,13 +692,13 @@ var _ = Describe("Packet packer", func() {
 			p := &ackhandler.Packet{
 				EncryptionLevel: protocol.EncryptionForwardSecure,
 			}
-			_, err := packer.RetransmitNonForwardSecurePacket(p)
+			_, err := packer.PackHandshakeRetransmission(p)
 			Expect(err).To(MatchError("PacketPacker BUG: forward-secure encrypted handshake packets don't need special treatment"))
 		})
 
 		It("refuses to retransmit packets without a StopWaitingFrame", func() {
 			packer.stopWaiting = nil
-			_, err := packer.RetransmitNonForwardSecurePacket(&ackhandler.Packet{
+			_, err := packer.PackHandshakeRetransmission(&ackhandler.Packet{
 				EncryptionLevel: protocol.EncryptionSecure,
 			})
 			Expect(err).To(MatchError("PacketPacker BUG: Handshake retransmissions must contain a StopWaitingFrame"))
@@ -707,14 +707,16 @@ var _ = Describe("Packet packer", func() {
 
 	Context("packing ACK packets", func() {
 		It("packs ACK packets", func() {
-			p, err := packer.PackAckPacket(&frames.AckFrame{})
+			packer.QueueControlFrameForNextPacket(&frames.AckFrame{})
+			p, err := packer.PackAckPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(p.frames).To(Equal([]frames.Frame{&frames.AckFrame{DelayTime: math.MaxInt64}}))
 		})
 
 		It("packs ACK packets with SWFs", func() {
+			packer.QueueControlFrameForNextPacket(&frames.AckFrame{})
 			packer.QueueControlFrameForNextPacket(&frames.StopWaitingFrame{})
-			p, err := packer.PackAckPacket(&frames.AckFrame{})
+			p, err := packer.PackAckPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(p.frames).To(Equal([]frames.Frame{
 				&frames.AckFrame{DelayTime: math.MaxInt64},

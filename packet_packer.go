@@ -30,6 +30,7 @@ type packetPacker struct {
 
 	controlFrames []frames.Frame
 	stopWaiting   *frames.StopWaitingFrame
+	ackFrame      *frames.AckFrame
 	leastUnacked  protocol.PacketNumber
 }
 
@@ -65,16 +66,20 @@ func (p *packetPacker) PackConnectionClose(ccf *frames.ConnectionCloseFrame) (*p
 	}, err
 }
 
-func (p *packetPacker) PackAckPacket(ackframe *frames.AckFrame) (*packedPacket, error) {
+func (p *packetPacker) PackAckPacket() (*packedPacket, error) {
+	if p.ackFrame == nil {
+		return nil, errors.New("packet packer BUG: no ack frame queued")
+	}
 	encLevel, sealer := p.cryptoSetup.GetSealer()
 	ph := p.getPublicHeader(encLevel)
-	frames := []frames.Frame{ackframe}
+	frames := []frames.Frame{p.ackFrame}
 	if p.stopWaiting != nil {
 		p.stopWaiting.PacketNumber = ph.PacketNumber
 		p.stopWaiting.PacketNumberLen = ph.PacketNumberLen
 		frames = append(frames, p.stopWaiting)
 		p.stopWaiting = nil
 	}
+	p.ackFrame = nil
 	raw, err := p.writeAndSealPacket(ph, frames, sealer)
 	return &packedPacket{
 		number:          ph.PacketNumber,
@@ -84,8 +89,8 @@ func (p *packetPacker) PackAckPacket(ackframe *frames.AckFrame) (*packedPacket, 
 	}, err
 }
 
-// RetransmitNonForwardSecurePacket retransmits a handshake packet, that was sent with less than forward-secure encryption
-func (p *packetPacker) RetransmitNonForwardSecurePacket(packet *ackhandler.Packet) (*packedPacket, error) {
+// PackHandshakeRetransmission retransmits a handshake packet, that was sent with less than forward-secure encryption
+func (p *packetPacker) PackHandshakeRetransmission(packet *ackhandler.Packet) (*packedPacket, error) {
 	if packet.EncryptionLevel == protocol.EncryptionForwardSecure {
 		return nil, errors.New("PacketPacker BUG: forward-secure encrypted handshake packets don't need special treatment")
 	}
@@ -144,6 +149,7 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 		return nil, nil
 	}
 	p.stopWaiting = nil
+	p.ackFrame = nil
 
 	raw, err := p.writeAndSealPacket(publicHeader, payloadFrames, sealer)
 	if err != nil {
@@ -185,9 +191,24 @@ func (p *packetPacker) composeNextPacket(
 	var payloadLength protocol.ByteCount
 	var payloadFrames []frames.Frame
 
+	// STOP_WAITING and ACK will always fit
 	if p.stopWaiting != nil {
-		p.controlFrames = append(p.controlFrames, p.stopWaiting)
+		payloadFrames = append(payloadFrames, p.stopWaiting)
+		l, err := p.stopWaiting.MinLength(p.version)
+		if err != nil {
+			return nil, err
+		}
+		payloadLength += l
 	}
+	if p.ackFrame != nil {
+		payloadFrames = append(payloadFrames, p.ackFrame)
+		l, err := p.ackFrame.MinLength(p.version)
+		if err != nil {
+			return nil, err
+		}
+		payloadLength += l
+	}
+
 	for len(p.controlFrames) > 0 {
 		frame := p.controlFrames[len(p.controlFrames)-1]
 		minLength, err := frame.MinLength(p.version)
@@ -232,10 +253,13 @@ func (p *packetPacker) composeNextPacket(
 	return payloadFrames, nil
 }
 
-func (p *packetPacker) QueueControlFrameForNextPacket(f frames.Frame) {
-	if swf, ok := f.(*frames.StopWaitingFrame); ok {
-		p.stopWaiting = swf
-	} else {
+func (p *packetPacker) QueueControlFrameForNextPacket(frame frames.Frame) {
+	switch f := frame.(type) {
+	case *frames.StopWaitingFrame:
+		p.stopWaiting = f
+	case *frames.AckFrame:
+		p.ackFrame = f
+	default:
 		p.controlFrames = append(p.controlFrames, f)
 	}
 }
