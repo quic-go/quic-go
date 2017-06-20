@@ -568,13 +568,11 @@ func (s *session) sendPacket() error {
 			return nil
 		}
 
-		var controlFrames []frames.Frame
-
 		// get WindowUpdate frames
 		// this call triggers the flow controller to increase the flow control windows, if necessary
 		windowUpdateFrames := s.getWindowUpdateFrames()
 		for _, wuf := range windowUpdateFrames {
-			controlFrames = append(controlFrames, wuf)
+			s.packer.QueueControlFrameForNextPacket(wuf)
 		}
 
 		// check for retransmissions first
@@ -591,9 +589,9 @@ func (s *session) sendPacket() error {
 					continue
 				}
 				utils.Debugf("\tDequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
-				stopWaitingFrame := s.sentPacketHandler.GetStopWaitingFrame(true)
+				s.packer.QueueControlFrameForNextPacket(s.sentPacketHandler.GetStopWaitingFrame(true))
 				var packet *packedPacket
-				packet, err := s.packer.RetransmitNonForwardSecurePacket(stopWaitingFrame, retransmitPacket)
+				packet, err := s.packer.RetransmitNonForwardSecurePacket(retransmitPacket)
 				if err != nil {
 					return err
 				}
@@ -617,10 +615,10 @@ func (s *session) sendPacket() error {
 						f := frame.(*frames.WindowUpdateFrame)
 						currentOffset, err := s.flowControlManager.GetReceiveWindow(f.StreamID)
 						if err == nil && f.ByteOffset >= currentOffset {
-							controlFrames = append(controlFrames, frame)
+							s.packer.QueueControlFrameForNextPacket(f)
 						}
 					default:
-						controlFrames = append(controlFrames, frame)
+						s.packer.QueueControlFrameForNextPacket(frame)
 					}
 				}
 			}
@@ -628,14 +626,16 @@ func (s *session) sendPacket() error {
 
 		ack := s.receivedPacketHandler.GetAckFrame()
 		if ack != nil {
-			controlFrames = append(controlFrames, ack)
+			s.packer.QueueControlFrameForNextPacket(ack)
 		}
 		hasRetransmission := s.streamFramer.HasFramesForRetransmission()
-		var stopWaitingFrame *frames.StopWaitingFrame
 		if ack != nil || hasRetransmission {
-			stopWaitingFrame = s.sentPacketHandler.GetStopWaitingFrame(hasRetransmission)
+			swf := s.sentPacketHandler.GetStopWaitingFrame(hasRetransmission)
+			if swf != nil {
+				s.packer.QueueControlFrameForNextPacket(swf)
+			}
 		}
-		packet, err := s.packer.PackPacket(stopWaitingFrame, controlFrames, s.sentPacketHandler.GetLeastUnacked())
+		packet, err := s.packer.PackPacket(s.sentPacketHandler.GetLeastUnacked())
 		if err != nil {
 			return err
 		}
