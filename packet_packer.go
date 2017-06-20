@@ -253,7 +253,7 @@ func (p *packetPacker) composeNextPacket(
 	return payloadFrames, nil
 }
 
-func (p *packetPacker) QueueControlFrameForNextPacket(frame frames.Frame) {
+func (p *packetPacker) QueueControlFrame(frame frames.Frame) {
 	switch f := frame.(type) {
 	case *frames.StopWaitingFrame:
 		p.stopWaiting = f

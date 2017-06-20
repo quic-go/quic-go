@@ -568,12 +568,12 @@ func (s *session) sendPacket() error {
 	// this call triggers the flow controller to increase the flow control windows, if necessary
 	windowUpdateFrames := s.getWindowUpdateFrames()
 	for _, wuf := range windowUpdateFrames {
-		s.packer.QueueControlFrameForNextPacket(wuf)
+		s.packer.QueueControlFrame(wuf)
 	}
 
 	ack := s.receivedPacketHandler.GetAckFrame()
 	if ack != nil {
-		s.packer.QueueControlFrameForNextPacket(ack)
+		s.packer.QueueControlFrame(ack)
 	}
 
 	// Repeatedly try sending until we don't have any more data, or run out of the congestion window
@@ -585,7 +585,7 @@ func (s *session) sendPacket() error {
 			// If we aren't allowed to send, at least try sending an ACK frame
 			swf := s.sentPacketHandler.GetStopWaitingFrame(false)
 			if swf != nil {
-				s.packer.QueueControlFrameForNextPacket(swf)
+				s.packer.QueueControlFrame(swf)
 			}
 			packet, err := s.packer.PackAckPacket()
 			if err != nil {
@@ -607,7 +607,7 @@ func (s *session) sendPacket() error {
 					continue
 				}
 				utils.Debugf("\tDequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
-				s.packer.QueueControlFrameForNextPacket(s.sentPacketHandler.GetStopWaitingFrame(true))
+				s.packer.QueueControlFrame(s.sentPacketHandler.GetStopWaitingFrame(true))
 				packet, err := s.packer.PackHandshakeRetransmission(retransmitPacket)
 				if err != nil {
 					return err
@@ -626,10 +626,10 @@ func (s *session) sendPacket() error {
 						// only retransmit WindowUpdates if the stream is not yet closed and the we haven't sent another WindowUpdate with a higher ByteOffset for the stream
 						currentOffset, err := s.flowControlManager.GetReceiveWindow(f.StreamID)
 						if err == nil && f.ByteOffset >= currentOffset {
-							s.packer.QueueControlFrameForNextPacket(f)
+							s.packer.QueueControlFrame(f)
 						}
 					default:
-						s.packer.QueueControlFrameForNextPacket(frame)
+						s.packer.QueueControlFrame(frame)
 					}
 				}
 			}
@@ -639,7 +639,7 @@ func (s *session) sendPacket() error {
 		if ack != nil || hasRetransmission {
 			swf := s.sentPacketHandler.GetStopWaitingFrame(hasRetransmission)
 			if swf != nil {
-				s.packer.QueueControlFrameForNextPacket(swf)
+				s.packer.QueueControlFrame(swf)
 			}
 		}
 		packet, err := s.packer.PackPacket()
@@ -652,7 +652,7 @@ func (s *session) sendPacket() error {
 
 		// send every window update twice
 		for _, f := range windowUpdateFrames {
-			s.packer.QueueControlFrameForNextPacket(f)
+			s.packer.QueueControlFrame(f)
 		}
 		windowUpdateFrames = nil
 		ack = nil
@@ -737,7 +737,7 @@ func (s *session) WaitUntilHandshakeComplete() error {
 }
 
 func (s *session) queueResetStreamFrame(id protocol.StreamID, offset protocol.ByteCount) {
-	s.packer.QueueControlFrameForNextPacket(&frames.RstStreamFrame{
+	s.packer.QueueControlFrame(&frames.RstStreamFrame{
 		StreamID:   id,
 		ByteOffset: offset,
 	})

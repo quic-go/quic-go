@@ -170,8 +170,8 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	It("packs only control frames", func() {
-		packer.QueueControlFrameForNextPacket(&frames.RstStreamFrame{})
-		packer.QueueControlFrameForNextPacket(&frames.WindowUpdateFrame{})
+		packer.QueueControlFrame(&frames.RstStreamFrame{})
+		packer.QueueControlFrame(&frames.WindowUpdateFrame{})
 		p, err := packer.PackPacket()
 		Expect(p).ToNot(BeNil())
 		Expect(err).ToNot(HaveOccurred())
@@ -180,11 +180,11 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	It("increases the packet number", func() {
-		packer.QueueControlFrameForNextPacket(&frames.RstStreamFrame{})
+		packer.QueueControlFrame(&frames.RstStreamFrame{})
 		p1, err := packer.PackPacket()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(p1).ToNot(BeNil())
-		packer.QueueControlFrameForNextPacket(&frames.RstStreamFrame{})
+		packer.QueueControlFrame(&frames.RstStreamFrame{})
 		p2, err := packer.PackPacket()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(p2).ToNot(BeNil())
@@ -194,8 +194,8 @@ var _ = Describe("Packet packer", func() {
 	It("packs a StopWaitingFrame first", func() {
 		packer.packetNumberGenerator.next = 15
 		swf := &frames.StopWaitingFrame{LeastUnacked: 10}
-		packer.QueueControlFrameForNextPacket(&frames.RstStreamFrame{})
-		packer.QueueControlFrameForNextPacket(swf)
+		packer.QueueControlFrame(&frames.RstStreamFrame{})
+		packer.QueueControlFrame(swf)
 		p, err := packer.PackPacket()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(p).ToNot(BeNil())
@@ -207,8 +207,8 @@ var _ = Describe("Packet packer", func() {
 		packetNumber := protocol.PacketNumber(0xDECAFB) // will result in a 4 byte packet number
 		packer.packetNumberGenerator.next = packetNumber
 		swf := &frames.StopWaitingFrame{LeastUnacked: packetNumber - 0x100}
-		packer.QueueControlFrameForNextPacket(&frames.RstStreamFrame{})
-		packer.QueueControlFrameForNextPacket(swf)
+		packer.QueueControlFrame(&frames.RstStreamFrame{})
+		packer.QueueControlFrame(swf)
 		p, err := packer.PackPacket()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(p.frames[0].(*frames.StopWaitingFrame).PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
@@ -216,7 +216,7 @@ var _ = Describe("Packet packer", func() {
 
 	It("does not pack a packet containing only a StopWaitingFrame", func() {
 		swf := &frames.StopWaitingFrame{LeastUnacked: 10}
-		packer.QueueControlFrameForNextPacket(swf)
+		packer.QueueControlFrame(swf)
 		p, err := packer.PackPacket()
 		Expect(p).To(BeNil())
 		Expect(err).ToNot(HaveOccurred())
@@ -539,7 +539,7 @@ var _ = Describe("Packet packer", func() {
 
 		It("does not pack stream frames if not allowed", func() {
 			packer.cryptoSetup.(*mockCryptoSetup).encLevelSeal = protocol.EncryptionUnencrypted
-			packer.QueueControlFrameForNextPacket(&frames.AckFrame{})
+			packer.QueueControlFrame(&frames.AckFrame{})
 			streamFramer.AddFrameForRetransmission(&frames.StreamFrame{StreamID: 3, Data: []byte("foobar")})
 			p, err := packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
@@ -590,7 +590,7 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	It("returns nil if we only have a single STOP_WAITING", func() {
-		packer.QueueControlFrameForNextPacket(&frames.StopWaitingFrame{})
+		packer.QueueControlFrame(&frames.StopWaitingFrame{})
 		p, err := packer.PackPacket()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(p).To(BeNil())
@@ -598,7 +598,7 @@ var _ = Describe("Packet packer", func() {
 
 	It("packs a single ACK", func() {
 		ack := &frames.AckFrame{LargestAcked: 42}
-		packer.QueueControlFrameForNextPacket(ack)
+		packer.QueueControlFrame(ack)
 		p, err := packer.PackPacket()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(p).ToNot(BeNil())
@@ -607,7 +607,7 @@ var _ = Describe("Packet packer", func() {
 
 	It("does not return nil if we only have a single ACK but request it to be sent", func() {
 		ack := &frames.AckFrame{}
-		packer.QueueControlFrameForNextPacket(ack)
+		packer.QueueControlFrame(ack)
 		p, err := packer.PackPacket()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(p).ToNot(BeNil())
@@ -615,7 +615,7 @@ var _ = Describe("Packet packer", func() {
 
 	It("queues a control frame to be sent in the next packet", func() {
 		wuf := &frames.WindowUpdateFrame{StreamID: 5}
-		packer.QueueControlFrameForNextPacket(wuf)
+		packer.QueueControlFrame(wuf)
 		p, err := packer.PackPacket()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(p.frames).To(HaveLen(1))
@@ -630,7 +630,7 @@ var _ = Describe("Packet packer", func() {
 		}
 
 		BeforeEach(func() {
-			packer.QueueControlFrameForNextPacket(swf)
+			packer.QueueControlFrame(swf)
 		})
 
 		It("packs a retransmission for a packet sent with no encryption", func() {
@@ -707,15 +707,15 @@ var _ = Describe("Packet packer", func() {
 
 	Context("packing ACK packets", func() {
 		It("packs ACK packets", func() {
-			packer.QueueControlFrameForNextPacket(&frames.AckFrame{})
+			packer.QueueControlFrame(&frames.AckFrame{})
 			p, err := packer.PackAckPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(p.frames).To(Equal([]frames.Frame{&frames.AckFrame{DelayTime: math.MaxInt64}}))
 		})
 
 		It("packs ACK packets with SWFs", func() {
-			packer.QueueControlFrameForNextPacket(&frames.AckFrame{})
-			packer.QueueControlFrameForNextPacket(&frames.StopWaitingFrame{})
+			packer.QueueControlFrame(&frames.AckFrame{})
+			packer.QueueControlFrame(&frames.StopWaitingFrame{})
 			p, err := packer.PackAckPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(p.frames).To(Equal([]frames.Frame{
