@@ -22,6 +22,13 @@ var _ = Describe("Quic error", func() {
 		})
 	})
 
+	Context("TimeoutError", func() {
+		It("works as timeout error", func() {
+			err := Error(HandshakeTimeout, "handshake timeout")
+			Expect(err.Timeout()).Should(BeTrue())
+		})
+	})
+
 	Context("ToQuicError", func() {
 		It("leaves QuicError unchanged", func() {
 			err := Error(DecryptionFailure, "foo")
