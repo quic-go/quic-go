@@ -268,52 +268,6 @@ var _ = Describe("Cert Manager", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("uses a different hostname from a client TLS config", func() {
-			if runtime.GOOS == "windows" {
-				// certificate validation works different on windows, see https://golang.org/src/crypto/x509/verify.go line 238
-				Skip("windows")
-			}
-
-			template := &x509.Certificate{
-				SerialNumber: big.NewInt(1),
-				NotBefore:    time.Now().Add(-time.Hour),
-				NotAfter:     time.Now().Add(time.Hour),
-				Subject:      pkix.Name{CommonName: "google.com"},
-			}
-
-			_, leafCert := getCertificate(template)
-			cm.chain = []*x509.Certificate{leafCert}
-			cm.config = &tls.Config{
-				ServerName: "google.com",
-			}
-			err := cm.Verify("quic.clemente.io")
-			_, ok := err.(x509.UnknownAuthorityError)
-			Expect(ok).To(BeTrue())
-		})
-
-		It("rejects certificates with a different hostname than specified in the client TLS config", func() {
-			if runtime.GOOS == "windows" {
-				// certificate validation works different on windows, see https://golang.org/src/crypto/x509/verify.go line 238
-				Skip("windows")
-			}
-
-			template := &x509.Certificate{
-				SerialNumber: big.NewInt(1),
-				NotBefore:    time.Now().Add(-time.Hour),
-				NotAfter:     time.Now().Add(time.Hour),
-				Subject:      pkix.Name{CommonName: "quic.clemente.io"},
-			}
-
-			_, leafCert := getCertificate(template)
-			cm.chain = []*x509.Certificate{leafCert}
-			cm.config = &tls.Config{
-				ServerName: "google.com",
-			}
-			err := cm.Verify("quic.clemente.io")
-			_, ok := err.(x509.HostnameError)
-			Expect(ok).To(BeTrue())
-		})
-
 		It("uses the time specified in a client TLS config", func() {
 			if runtime.GOOS == "windows" {
 				// certificate validation works different on windows, see https://golang.org/src/crypto/x509/verify.go line 238
@@ -324,6 +278,7 @@ var _ = Describe("Cert Manager", func() {
 				SerialNumber: big.NewInt(1),
 				NotBefore:    time.Now().Add(-25 * time.Hour),
 				NotAfter:     time.Now().Add(-23 * time.Hour),
+				Subject:      pkix.Name{CommonName: "quic.clemente.io"},
 			}
 			_, leafCert := getCertificate(template)
 			cm.chain = []*x509.Certificate{leafCert}
@@ -384,10 +339,9 @@ var _ = Describe("Cert Manager", func() {
 
 			cm.chain = []*x509.Certificate{leafCert}
 			cm.config = &tls.Config{
-				RootCAs:    rootCAPool,
-				ServerName: "google.com",
+				RootCAs: rootCAPool,
 			}
-			err = cm.Verify("quic.clemente.io")
+			err = cm.Verify("google.com")
 			Expect(err).ToNot(HaveOccurred())
 		})
 	})

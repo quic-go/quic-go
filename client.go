@@ -73,9 +73,16 @@ func DialNonFWSecure(pconn net.PacketConn, remoteAddr net.Addr, host string, con
 		return nil, err
 	}
 
-	hostname, _, err := net.SplitHostPort(host)
-	if err != nil {
-		return nil, err
+	var hostname string
+	if config.TLSConfig != nil {
+		hostname = config.TLSConfig.ServerName
+	}
+
+	if hostname == "" {
+		hostname, _, err = net.SplitHostPort(host)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	clientConfig := populateClientConfig(config)
