@@ -57,7 +57,8 @@ type session struct {
 	version      protocol.VersionNumber
 	config       *Config
 
-	conn connection
+	conn     connection
+	sendChan chan []byte
 
 	streamsMap *streamsMap
 
@@ -173,6 +174,7 @@ func (s *session) setup(
 	s.sendingScheduled = make(chan struct{}, 1)
 	s.undecryptablePackets = make([]*receivedPacket, 0, protocol.MaxUndecryptablePackets)
 	s.ctx, s.ctxCancel = context.WithCancel(context.Background())
+	s.sendChan = make(chan []byte, 3 /* chosen by experimentation */)
 
 	s.timer = utils.NewTimer()
 	now := time.Now()
@@ -271,6 +273,14 @@ func (s *session) run() error {
 			s.Close(err)
 		}
 	}()
+
+	go func() {
+		for b := range s.sendChan {
+			s.conn.Write(b)
+			putPacketBuffer(b)
+		}
+	}()
+	defer close(s.sendChan)
 
 	var closeErr closeError
 	aeadChanged := s.aeadChanged
@@ -708,7 +718,6 @@ func (s *session) sendPacket() error {
 }
 
 func (s *session) sendPackedPacket(packet *packedPacket) error {
-	defer putPacketBuffer(packet.raw)
 	err := s.sentPacketHandler.SentPacket(&ackhandler.Packet{
 		PacketNumber:    packet.number,
 		Frames:          packet.frames,
@@ -719,7 +728,8 @@ func (s *session) sendPackedPacket(packet *packedPacket) error {
 		return err
 	}
 	s.logPacket(packet)
-	return s.conn.Write(packet.raw)
+	s.sendChan <- packet.raw
+	return nil
 }
 
 func (s *session) sendConnectionClose(quicErr *qerr.QuicError) error {
