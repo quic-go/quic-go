@@ -594,7 +594,6 @@ func (s *session) sendPacket() error {
 			if retransmitPacket == nil {
 				break
 			}
-			utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 
 			if retransmitPacket.EncryptionLevel != protocol.EncryptionForwardSecure {
 				if s.handshakeComplete {
@@ -603,29 +602,22 @@ func (s *session) sendPacket() error {
 				}
 				utils.Debugf("\tDequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 				s.packer.QueueControlFrameForNextPacket(s.sentPacketHandler.GetStopWaitingFrame(true))
-				var packet *packedPacket
 				packet, err := s.packer.RetransmitNonForwardSecurePacket(retransmitPacket)
 				if err != nil {
 					return err
 				}
-				if packet == nil {
-					continue
-				}
-				err = s.sendPackedPacket(packet)
-				if err != nil {
+				if err = s.sendPackedPacket(packet); err != nil {
 					return err
 				}
-				continue
 			} else {
+				utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 				// resend the frames that were in the packet
 				for _, frame := range retransmitPacket.GetFramesForRetransmission() {
-					switch frame.(type) {
+					switch f := frame.(type) {
 					case *frames.StreamFrame:
-						s.streamFramer.AddFrameForRetransmission(frame.(*frames.StreamFrame))
+						s.streamFramer.AddFrameForRetransmission(f)
 					case *frames.WindowUpdateFrame:
 						// only retransmit WindowUpdates if the stream is not yet closed and the we haven't sent another WindowUpdate with a higher ByteOffset for the stream
-						var currentOffset protocol.ByteCount
-						f := frame.(*frames.WindowUpdateFrame)
 						currentOffset, err := s.flowControlManager.GetReceiveWindow(f.StreamID)
 						if err == nil && f.ByteOffset >= currentOffset {
 							s.packer.QueueControlFrameForNextPacket(f)
@@ -649,22 +641,18 @@ func (s *session) sendPacket() error {
 			}
 		}
 		packet, err := s.packer.PackPacket(s.sentPacketHandler.GetLeastUnacked())
-		if err != nil {
+		if err != nil || packet == nil {
 			return err
 		}
-		if packet == nil {
-			return nil
+		if err = s.sendPackedPacket(packet); err != nil {
+			return err
 		}
+
 		// send every window update twice
 		for _, f := range windowUpdateFrames {
 			s.packer.QueueControlFrameForNextPacket(f)
 		}
 		windowUpdateFrames = nil
-
-		err = s.sendPackedPacket(packet)
-		if err != nil {
-			return err
-		}
 		s.nextAckScheduledTime = time.Time{}
 	}
 }
