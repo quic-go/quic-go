@@ -572,7 +572,20 @@ func (s *session) sendPacket() error {
 	// Repeatedly try sending until we don't have any more data, or run out of the congestion window
 	for {
 		if !s.sentPacketHandler.SendingAllowed() {
-			return nil
+			// If we aren't allowed to send, at least try sending an ACK frame
+			ack := s.receivedPacketHandler.GetAckFrame()
+			if ack == nil {
+				return nil
+			}
+			swf := s.sentPacketHandler.GetStopWaitingFrame(false)
+			if swf != nil {
+				s.packer.QueueControlFrameForNextPacket(swf)
+			}
+			packet, err := s.packer.PackAckPacket(s.sentPacketHandler.GetLeastUnacked(), ack)
+			if err != nil {
+				return err
+			}
+			return s.sendPackedPacket(packet)
 		}
 
 		// check for retransmissions first

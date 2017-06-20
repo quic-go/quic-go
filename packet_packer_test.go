@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"math"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/frames"
@@ -701,6 +702,24 @@ var _ = Describe("Packet packer", func() {
 				EncryptionLevel: protocol.EncryptionSecure,
 			})
 			Expect(err).To(MatchError("PacketPacker BUG: Handshake retransmissions must contain a StopWaitingFrame"))
+		})
+	})
+
+	Context("packing ACK packets", func() {
+		It("packs ACK packets", func() {
+			p, err := packer.PackAckPacket(0, &frames.AckFrame{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(p.frames).To(Equal([]frames.Frame{&frames.AckFrame{DelayTime: math.MaxInt64}}))
+		})
+
+		It("packs ACK packets with SWFs", func() {
+			packer.QueueControlFrameForNextPacket(&frames.StopWaitingFrame{})
+			p, err := packer.PackAckPacket(0, &frames.AckFrame{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(p.frames).To(Equal([]frames.Frame{
+				&frames.AckFrame{DelayTime: math.MaxInt64},
+				&frames.StopWaitingFrame{PacketNumber: 1, PacketNumberLen: 2},
+			}))
 		})
 	})
 })

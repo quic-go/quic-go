@@ -64,6 +64,25 @@ func (p *packetPacker) PackConnectionClose(ccf *frames.ConnectionCloseFrame, lea
 	}, err
 }
 
+func (p *packetPacker) PackAckPacket(leastUnacked protocol.PacketNumber, ackframe *frames.AckFrame) (*packedPacket, error) {
+	encLevel, sealer := p.cryptoSetup.GetSealer()
+	ph := p.getPublicHeader(leastUnacked, encLevel)
+	frames := []frames.Frame{ackframe}
+	if p.stopWaiting != nil {
+		p.stopWaiting.PacketNumber = ph.PacketNumber
+		p.stopWaiting.PacketNumberLen = ph.PacketNumberLen
+		frames = append(frames, p.stopWaiting)
+		p.stopWaiting = nil
+	}
+	raw, err := p.writeAndSealPacket(ph, frames, sealer)
+	return &packedPacket{
+		number:          ph.PacketNumber,
+		raw:             raw,
+		frames:          frames,
+		encryptionLevel: encLevel,
+	}, err
+}
+
 // RetransmitNonForwardSecurePacket retransmits a handshake packet, that was sent with less than forward-secure encryption
 func (p *packetPacker) RetransmitNonForwardSecurePacket(packet *ackhandler.Packet) (*packedPacket, error) {
 	if packet.EncryptionLevel == protocol.EncryptionForwardSecure {
