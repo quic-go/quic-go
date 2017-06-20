@@ -1,18 +1,14 @@
 package integrationtests
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
-	"log"
-	"os"
 	"os/exec"
 	"strconv"
 	"time"
 
 	_ "github.com/lucas-clemente/quic-clients" // download clients
 	"github.com/lucas-clemente/quic-go/integrationtests/proxy"
-	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
 
 	. "github.com/onsi/ginkgo"
@@ -27,8 +23,7 @@ var _ = Describe("non-zero RTT", func() {
 
 	var proxy *quicproxy.QuicProxy
 
-	// Default timeout_s was 20
-	runRTTTest := func(rtt time.Duration, version protocol.VersionNumber, timeout_s int) {
+	runRTTTest := func(rtt time.Duration, version protocol.VersionNumber) {
 		var err error
 		proxy, err = quicproxy.NewQuicProxy("localhost:", quicproxy.Opts{
 			RemoteAddr: "localhost:" + port,
@@ -49,7 +44,7 @@ var _ = Describe("non-zero RTT", func() {
 		session, err := Start(command, nil, GinkgoWriter)
 		Expect(err).NotTo(HaveOccurred())
 		defer session.Kill()
-		Eventually(session, timeout_s).Should(Exit(0))
+		Eventually(session, 20).Should(Exit(0))
 		Expect(bytes.Contains(session.Out.Contents(), dataMan.GetData())).To(BeTrue())
 	}
 
@@ -63,21 +58,11 @@ var _ = Describe("non-zero RTT", func() {
 		version := protocol.SupportedVersions[i]
 
 		Context(fmt.Sprintf("with quic version %d", version), func() {
-			It("gets a file with 10ms RTT", func() {
-				runRTTTest(10*time.Millisecond, version, 20)
-			})
-
-			fileSizes := [...]int{dataLen, 5 * 1024 * 1024, dataLongLen}
-			for _, fileSize := range fileSizes {
-				fileSizeMB := fmt.Sprintf("%.2f", float64(fileSize)/1024/1024)
-				It("gets a "+fileSizeMB+"MB file with 75ms RTT", func() {
-					flags := log.Flags()
-					log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
-					utils.SetLogLevel(utils.LogLevelDebug)
-					dataMan.GenerateData(fileSize)
-					runRTTTest(rtt, version, 30) // run test with larger timeout
-					utils.SetLogLevel(utils.LogLevelNothing)
-					log.SetFlags(flags)
+			roundTrips := [...]int{10, 50, 100, 200}
+			for _, rtt := range roundTrips {
+				It(fmt.Sprintf("gets a 500kB file with %dms RTT", rtt), func() {
+					dataMan.GenerateData(dataLen)
+					runRTTTest(time.Duration(rtt)*time.Millisecond, version)
 				})
 			}
 		})
