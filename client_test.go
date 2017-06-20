@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"crypto/tls"
 	"errors"
 	"net"
 	"time"
@@ -128,6 +129,24 @@ var _ = Describe("Client", func() {
 			go DialAddr("localhost:17890", &Config{})
 			Eventually(func() connection { return cconn }).ShouldNot(BeNil())
 			Expect(cconn.RemoteAddr().String()).To(Equal("127.0.0.1:17890"))
+			close(done)
+		})
+
+		It("uses the tls.Config.ServerName as the hostname, if present", func(done Done) {
+			var hostname string
+			newClientSession = func(
+				_ connection,
+				h string,
+				_ protocol.VersionNumber,
+				_ protocol.ConnectionID,
+				_ *Config,
+				_ []protocol.VersionNumber,
+			) (packetHandler, <-chan handshakeEvent, error) {
+				hostname = h
+				return sess, nil, nil
+			}
+			go DialAddr("localhost:17890", &Config{TLSConfig: &tls.Config{ServerName: "foobar"}})
+			Eventually(func() string { return hostname }).Should(Equal("foobar"))
 			close(done)
 		})
 
