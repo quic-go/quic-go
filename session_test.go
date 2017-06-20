@@ -1069,14 +1069,13 @@ var _ = Describe("Session", func() {
 				Expect(ok).To(BeTrue())
 			})
 
-			It("retransmits a WindowUpdates if it hasn't already sent a WindowUpdate with a higher ByteOffset", func() {
+			It("retransmits a WindowUpdate if it hasn't already sent a WindowUpdate with a higher ByteOffset", func() {
 				_, err := sess.GetOrOpenStream(5)
 				Expect(err).ToNot(HaveOccurred())
 				fcm := mocks_fc.NewMockFlowControlManager(mockCtrl)
 				sess.flowControlManager = fcm
 				fcm.EXPECT().GetWindowUpdates()
 				fcm.EXPECT().GetReceiveWindow(protocol.StreamID(5)).Return(protocol.ByteCount(0x1000), nil)
-				fcm.EXPECT().GetWindowUpdates()
 				wuf := &frames.WindowUpdateFrame{
 					StreamID:   5,
 					ByteOffset: 0x1000,

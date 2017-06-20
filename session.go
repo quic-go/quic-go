@@ -562,17 +562,17 @@ func (s *session) handleCloseError(closeErr closeError) error {
 }
 
 func (s *session) sendPacket() error {
+	// Get WindowUpdate frames
+	// this call triggers the flow controller to increase the flow control windows, if necessary
+	windowUpdateFrames := s.getWindowUpdateFrames()
+	for _, wuf := range windowUpdateFrames {
+		s.packer.QueueControlFrameForNextPacket(wuf)
+	}
+
 	// Repeatedly try sending until we don't have any more data, or run out of the congestion window
 	for {
 		if !s.sentPacketHandler.SendingAllowed() {
 			return nil
-		}
-
-		// get WindowUpdate frames
-		// this call triggers the flow controller to increase the flow control windows, if necessary
-		windowUpdateFrames := s.getWindowUpdateFrames()
-		for _, wuf := range windowUpdateFrames {
-			s.packer.QueueControlFrameForNextPacket(wuf)
 		}
 
 		// check for retransmissions first
@@ -646,6 +646,7 @@ func (s *session) sendPacket() error {
 		for _, f := range windowUpdateFrames {
 			s.packer.QueueControlFrameForNextPacket(f)
 		}
+		windowUpdateFrames = nil
 
 		err = s.sendPackedPacket(packet)
 		if err != nil {
