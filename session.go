@@ -562,26 +562,32 @@ func (s *session) handleCloseError(closeErr closeError) error {
 }
 
 func (s *session) sendPacket() error {
+	s.packer.SetLeastUnacked(s.sentPacketHandler.GetLeastUnacked())
+
 	// Get WindowUpdate frames
 	// this call triggers the flow controller to increase the flow control windows, if necessary
 	windowUpdateFrames := s.getWindowUpdateFrames()
 	for _, wuf := range windowUpdateFrames {
-		s.packer.QueueControlFrameForNextPacket(wuf)
+		s.packer.QueueControlFrame(wuf)
+	}
+
+	ack := s.receivedPacketHandler.GetAckFrame()
+	if ack != nil {
+		s.packer.QueueControlFrame(ack)
 	}
 
 	// Repeatedly try sending until we don't have any more data, or run out of the congestion window
 	for {
 		if !s.sentPacketHandler.SendingAllowed() {
-			// If we aren't allowed to send, at least try sending an ACK frame
-			ack := s.receivedPacketHandler.GetAckFrame()
 			if ack == nil {
 				return nil
 			}
+			// If we aren't allowed to send, at least try sending an ACK frame
 			swf := s.sentPacketHandler.GetStopWaitingFrame(false)
 			if swf != nil {
-				s.packer.QueueControlFrameForNextPacket(swf)
+				s.packer.QueueControlFrame(swf)
 			}
-			packet, err := s.packer.PackAckPacket(s.sentPacketHandler.GetLeastUnacked(), ack)
+			packet, err := s.packer.PackAckPacket()
 			if err != nil {
 				return err
 			}
@@ -594,7 +600,6 @@ func (s *session) sendPacket() error {
 			if retransmitPacket == nil {
 				break
 			}
-			utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 
 			if retransmitPacket.EncryptionLevel != protocol.EncryptionForwardSecure {
 				if s.handshakeComplete {
@@ -602,69 +607,55 @@ func (s *session) sendPacket() error {
 					continue
 				}
 				utils.Debugf("\tDequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
-				s.packer.QueueControlFrameForNextPacket(s.sentPacketHandler.GetStopWaitingFrame(true))
-				var packet *packedPacket
-				packet, err := s.packer.RetransmitNonForwardSecurePacket(retransmitPacket)
+				s.packer.QueueControlFrame(s.sentPacketHandler.GetStopWaitingFrame(true))
+				packet, err := s.packer.PackHandshakeRetransmission(retransmitPacket)
 				if err != nil {
 					return err
 				}
-				if packet == nil {
-					continue
-				}
-				err = s.sendPackedPacket(packet)
-				if err != nil {
+				if err = s.sendPackedPacket(packet); err != nil {
 					return err
 				}
-				continue
 			} else {
+				utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 				// resend the frames that were in the packet
 				for _, frame := range retransmitPacket.GetFramesForRetransmission() {
-					switch frame.(type) {
+					switch f := frame.(type) {
 					case *frames.StreamFrame:
-						s.streamFramer.AddFrameForRetransmission(frame.(*frames.StreamFrame))
+						s.streamFramer.AddFrameForRetransmission(f)
 					case *frames.WindowUpdateFrame:
 						// only retransmit WindowUpdates if the stream is not yet closed and the we haven't sent another WindowUpdate with a higher ByteOffset for the stream
-						var currentOffset protocol.ByteCount
-						f := frame.(*frames.WindowUpdateFrame)
 						currentOffset, err := s.flowControlManager.GetReceiveWindow(f.StreamID)
 						if err == nil && f.ByteOffset >= currentOffset {
-							s.packer.QueueControlFrameForNextPacket(f)
+							s.packer.QueueControlFrame(f)
 						}
 					default:
-						s.packer.QueueControlFrameForNextPacket(frame)
+						s.packer.QueueControlFrame(frame)
 					}
 				}
 			}
 		}
 
-		ack := s.receivedPacketHandler.GetAckFrame()
-		if ack != nil {
-			s.packer.QueueControlFrameForNextPacket(ack)
-		}
 		hasRetransmission := s.streamFramer.HasFramesForRetransmission()
 		if ack != nil || hasRetransmission {
 			swf := s.sentPacketHandler.GetStopWaitingFrame(hasRetransmission)
 			if swf != nil {
-				s.packer.QueueControlFrameForNextPacket(swf)
+				s.packer.QueueControlFrame(swf)
 			}
 		}
-		packet, err := s.packer.PackPacket(s.sentPacketHandler.GetLeastUnacked())
-		if err != nil {
+		packet, err := s.packer.PackPacket()
+		if err != nil || packet == nil {
 			return err
 		}
-		if packet == nil {
-			return nil
+		if err = s.sendPackedPacket(packet); err != nil {
+			return err
 		}
+
 		// send every window update twice
 		for _, f := range windowUpdateFrames {
-			s.packer.QueueControlFrameForNextPacket(f)
+			s.packer.QueueControlFrame(f)
 		}
 		windowUpdateFrames = nil
-
-		err = s.sendPackedPacket(packet)
-		if err != nil {
-			return err
-		}
+		ack = nil
 		s.nextAckScheduledTime = time.Time{}
 	}
 }
@@ -688,7 +679,11 @@ func (s *session) sendPackedPacket(packet *packedPacket) error {
 }
 
 func (s *session) sendConnectionClose(quicErr *qerr.QuicError) error {
-	packet, err := s.packer.PackConnectionClose(&frames.ConnectionCloseFrame{ErrorCode: quicErr.ErrorCode, ReasonPhrase: quicErr.ErrorMessage}, s.sentPacketHandler.GetLeastUnacked())
+	s.packer.SetLeastUnacked(s.sentPacketHandler.GetLeastUnacked())
+	packet, err := s.packer.PackConnectionClose(&frames.ConnectionCloseFrame{
+		ErrorCode:    quicErr.ErrorCode,
+		ReasonPhrase: quicErr.ErrorMessage,
+	})
 	if err != nil {
 		return err
 	}
@@ -742,7 +737,7 @@ func (s *session) WaitUntilHandshakeComplete() error {
 }
 
 func (s *session) queueResetStreamFrame(id protocol.StreamID, offset protocol.ByteCount) {
-	s.packer.QueueControlFrameForNextPacket(&frames.RstStreamFrame{
+	s.packer.QueueControlFrame(&frames.RstStreamFrame{
 		StreamID:   id,
 		ByteOffset: offset,
 	})

@@ -30,6 +30,8 @@ type packetPacker struct {
 
 	controlFrames []frames.Frame
 	stopWaiting   *frames.StopWaitingFrame
+	ackFrame      *frames.AckFrame
+	leastUnacked  protocol.PacketNumber
 }
 
 func newPacketPacker(connectionID protocol.ConnectionID,
@@ -51,10 +53,10 @@ func newPacketPacker(connectionID protocol.ConnectionID,
 }
 
 // PackConnectionClose packs a packet that ONLY contains a ConnectionCloseFrame
-func (p *packetPacker) PackConnectionClose(ccf *frames.ConnectionCloseFrame, leastUnacked protocol.PacketNumber) (*packedPacket, error) {
+func (p *packetPacker) PackConnectionClose(ccf *frames.ConnectionCloseFrame) (*packedPacket, error) {
 	frames := []frames.Frame{ccf}
 	encLevel, sealer := p.cryptoSetup.GetSealer()
-	ph := p.getPublicHeader(leastUnacked, encLevel)
+	ph := p.getPublicHeader(encLevel)
 	raw, err := p.writeAndSealPacket(ph, frames, sealer)
 	return &packedPacket{
 		number:          ph.PacketNumber,
@@ -64,16 +66,20 @@ func (p *packetPacker) PackConnectionClose(ccf *frames.ConnectionCloseFrame, lea
 	}, err
 }
 
-func (p *packetPacker) PackAckPacket(leastUnacked protocol.PacketNumber, ackframe *frames.AckFrame) (*packedPacket, error) {
+func (p *packetPacker) PackAckPacket() (*packedPacket, error) {
+	if p.ackFrame == nil {
+		return nil, errors.New("packet packer BUG: no ack frame queued")
+	}
 	encLevel, sealer := p.cryptoSetup.GetSealer()
-	ph := p.getPublicHeader(leastUnacked, encLevel)
-	frames := []frames.Frame{ackframe}
+	ph := p.getPublicHeader(encLevel)
+	frames := []frames.Frame{p.ackFrame}
 	if p.stopWaiting != nil {
 		p.stopWaiting.PacketNumber = ph.PacketNumber
 		p.stopWaiting.PacketNumberLen = ph.PacketNumberLen
 		frames = append(frames, p.stopWaiting)
 		p.stopWaiting = nil
 	}
+	p.ackFrame = nil
 	raw, err := p.writeAndSealPacket(ph, frames, sealer)
 	return &packedPacket{
 		number:          ph.PacketNumber,
@@ -83,8 +89,8 @@ func (p *packetPacker) PackAckPacket(leastUnacked protocol.PacketNumber, ackfram
 	}, err
 }
 
-// RetransmitNonForwardSecurePacket retransmits a handshake packet, that was sent with less than forward-secure encryption
-func (p *packetPacker) RetransmitNonForwardSecurePacket(packet *ackhandler.Packet) (*packedPacket, error) {
+// PackHandshakeRetransmission retransmits a handshake packet, that was sent with less than forward-secure encryption
+func (p *packetPacker) PackHandshakeRetransmission(packet *ackhandler.Packet) (*packedPacket, error) {
 	if packet.EncryptionLevel == protocol.EncryptionForwardSecure {
 		return nil, errors.New("PacketPacker BUG: forward-secure encrypted handshake packets don't need special treatment")
 	}
@@ -95,7 +101,7 @@ func (p *packetPacker) RetransmitNonForwardSecurePacket(packet *ackhandler.Packe
 	if p.stopWaiting == nil {
 		return nil, errors.New("PacketPacker BUG: Handshake retransmissions must contain a StopWaitingFrame")
 	}
-	ph := p.getPublicHeader(0, packet.EncryptionLevel)
+	ph := p.getPublicHeader(packet.EncryptionLevel)
 	p.stopWaiting.PacketNumber = ph.PacketNumber
 	p.stopWaiting.PacketNumberLen = ph.PacketNumberLen
 	frames := append([]frames.Frame{p.stopWaiting}, packet.Frames...)
@@ -111,14 +117,14 @@ func (p *packetPacker) RetransmitNonForwardSecurePacket(packet *ackhandler.Packe
 
 // PackPacket packs a new packet
 // the other controlFrames are sent in the next packet, but might be queued and sent in the next packet if the packet would overflow MaxPacketSize otherwise
-func (p *packetPacker) PackPacket(leastUnacked protocol.PacketNumber) (*packedPacket, error) {
+func (p *packetPacker) PackPacket() (*packedPacket, error) {
 	if p.streamFramer.HasCryptoStreamFrame() {
-		return p.packCryptoPacket(leastUnacked)
+		return p.packCryptoPacket()
 	}
 
 	encLevel, sealer := p.cryptoSetup.GetSealer()
 
-	publicHeader := p.getPublicHeader(leastUnacked, encLevel)
+	publicHeader := p.getPublicHeader(encLevel)
 	publicHeaderLength, err := publicHeader.GetLength(p.perspective)
 	if err != nil {
 		return nil, err
@@ -143,6 +149,7 @@ func (p *packetPacker) PackPacket(leastUnacked protocol.PacketNumber) (*packedPa
 		return nil, nil
 	}
 	p.stopWaiting = nil
+	p.ackFrame = nil
 
 	raw, err := p.writeAndSealPacket(publicHeader, payloadFrames, sealer)
 	if err != nil {
@@ -156,9 +163,9 @@ func (p *packetPacker) PackPacket(leastUnacked protocol.PacketNumber) (*packedPa
 	}, nil
 }
 
-func (p *packetPacker) packCryptoPacket(leastUnacked protocol.PacketNumber) (*packedPacket, error) {
+func (p *packetPacker) packCryptoPacket() (*packedPacket, error) {
 	encLevel, sealer := p.cryptoSetup.GetSealerForCryptoStream()
-	publicHeader := p.getPublicHeader(leastUnacked, encLevel)
+	publicHeader := p.getPublicHeader(encLevel)
 	publicHeaderLength, err := publicHeader.GetLength(p.perspective)
 	if err != nil {
 		return nil, err
@@ -184,9 +191,24 @@ func (p *packetPacker) composeNextPacket(
 	var payloadLength protocol.ByteCount
 	var payloadFrames []frames.Frame
 
+	// STOP_WAITING and ACK will always fit
 	if p.stopWaiting != nil {
-		p.controlFrames = append(p.controlFrames, p.stopWaiting)
+		payloadFrames = append(payloadFrames, p.stopWaiting)
+		l, err := p.stopWaiting.MinLength(p.version)
+		if err != nil {
+			return nil, err
+		}
+		payloadLength += l
 	}
+	if p.ackFrame != nil {
+		payloadFrames = append(payloadFrames, p.ackFrame)
+		l, err := p.ackFrame.MinLength(p.version)
+		if err != nil {
+			return nil, err
+		}
+		payloadLength += l
+	}
+
 	for len(p.controlFrames) > 0 {
 		frame := p.controlFrames[len(p.controlFrames)-1]
 		minLength, err := frame.MinLength(p.version)
@@ -231,17 +253,20 @@ func (p *packetPacker) composeNextPacket(
 	return payloadFrames, nil
 }
 
-func (p *packetPacker) QueueControlFrameForNextPacket(f frames.Frame) {
-	if swf, ok := f.(*frames.StopWaitingFrame); ok {
-		p.stopWaiting = swf
-	} else {
+func (p *packetPacker) QueueControlFrame(frame frames.Frame) {
+	switch f := frame.(type) {
+	case *frames.StopWaitingFrame:
+		p.stopWaiting = f
+	case *frames.AckFrame:
+		p.ackFrame = f
+	default:
 		p.controlFrames = append(p.controlFrames, f)
 	}
 }
 
-func (p *packetPacker) getPublicHeader(leastUnacked protocol.PacketNumber, encLevel protocol.EncryptionLevel) *PublicHeader {
+func (p *packetPacker) getPublicHeader(encLevel protocol.EncryptionLevel) *PublicHeader {
 	pnum := p.packetNumberGenerator.Peek()
-	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(pnum, leastUnacked)
+	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(pnum, p.leastUnacked)
 	publicHeader := &PublicHeader{
 		ConnectionID:         p.connectionID,
 		PacketNumber:         pnum,
@@ -299,4 +324,8 @@ func (p *packetPacker) canSendData(encLevel protocol.EncryptionLevel) bool {
 		return encLevel >= protocol.EncryptionSecure
 	}
 	return encLevel == protocol.EncryptionForwardSecure
+}
+
+func (p *packetPacker) SetLeastUnacked(leastUnacked protocol.PacketNumber) {
+	p.leastUnacked = leastUnacked
 }
