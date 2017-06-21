@@ -31,6 +31,16 @@ func (e *QuicError) Error() string {
 	return fmt.Sprintf("%s: %s", e.ErrorCode.String(), e.ErrorMessage)
 }
 
+func (e *QuicError) Timeout() bool {
+	switch e.ErrorCode {
+	case NetworkIdleTimeout,
+		HandshakeTimeout,
+		TimeoutsWithOpenStreams:
+		return true
+	}
+	return false
+}
+
 // ToQuicError converts an arbitrary error to a QuicError. It leaves QuicErrors
 // unchanged, and properly handles `ErrorCode`s.
 func ToQuicError(err error) *QuicError {
