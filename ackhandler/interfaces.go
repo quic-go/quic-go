@@ -27,5 +27,6 @@ type ReceivedPacketHandler interface {
 	ReceivedPacket(packetNumber protocol.PacketNumber, shouldInstigateAck bool) error
 	ReceivedStopWaiting(*frames.StopWaitingFrame) error
 
+	GetAlarmTimeout() time.Time
 	GetAckFrame() *frames.AckFrame
 }

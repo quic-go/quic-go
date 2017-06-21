@@ -23,16 +23,14 @@ type receivedPacketHandler struct {
 	retransmittablePacketsReceivedSinceLastAck int
 	ackQueued                                  bool
 	ackAlarm                                   time.Time
-	ackAlarmResetCallback                      func(time.Time)
 	lastAck                                    *frames.AckFrame
 }
 
 // NewReceivedPacketHandler creates a new receivedPacketHandler
-func NewReceivedPacketHandler(ackAlarmResetCallback func(time.Time)) ReceivedPacketHandler {
+func NewReceivedPacketHandler() ReceivedPacketHandler {
 	return &receivedPacketHandler{
-		packetHistory:         newReceivedPacketHistory(),
-		ackAlarmResetCallback: ackAlarmResetCallback,
-		ackSendDelay:          protocol.AckSendDelay,
+		packetHistory: newReceivedPacketHistory(),
+		ackSendDelay:  protocol.AckSendDelay,
 	}
 }
 
@@ -69,7 +67,6 @@ func (h *receivedPacketHandler) ReceivedStopWaiting(f *frames.StopWaitingFrame) 
 }
 
 func (h *receivedPacketHandler) maybeQueueAck(packetNumber protocol.PacketNumber, shouldInstigateAck bool) {
-	var ackAlarmSet bool
 	h.packetsReceivedSinceLastAck++
 
 	if shouldInstigateAck {
@@ -104,7 +101,6 @@ func (h *receivedPacketHandler) maybeQueueAck(packetNumber protocol.PacketNumber
 		} else {
 			if h.ackAlarm.IsZero() {
 				h.ackAlarm = time.Now().Add(h.ackSendDelay)
-				ackAlarmSet = true
 			}
 		}
 	}
@@ -112,11 +108,6 @@ func (h *receivedPacketHandler) maybeQueueAck(packetNumber protocol.PacketNumber
 	if h.ackQueued {
 		// cancel the ack alarm
 		h.ackAlarm = time.Time{}
-		ackAlarmSet = false
-	}
-
-	if ackAlarmSet {
-		h.ackAlarmResetCallback(h.ackAlarm)
 	}
 }
 
@@ -144,3 +135,5 @@ func (h *receivedPacketHandler) GetAckFrame() *frames.AckFrame {
 
 	return ack
 }
+
+func (h *receivedPacketHandler) GetAlarmTimeout() time.Time { return h.ackAlarm }

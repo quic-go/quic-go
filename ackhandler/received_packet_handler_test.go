@@ -12,17 +12,11 @@ import (
 
 var _ = Describe("receivedPacketHandler", func() {
 	var (
-		handler                *receivedPacketHandler
-		ackAlarmCallbackCalled bool
+		handler *receivedPacketHandler
 	)
 
-	ackAlarmCallback := func(time.Time) {
-		ackAlarmCallbackCalled = true
-	}
-
 	BeforeEach(func() {
-		ackAlarmCallbackCalled = false
-		handler = NewReceivedPacketHandler(ackAlarmCallback).(*receivedPacketHandler)
+		handler = NewReceivedPacketHandler().(*receivedPacketHandler)
 	})
 
 	Context("accepting packets", func() {
@@ -135,14 +129,13 @@ var _ = Describe("receivedPacketHandler", func() {
 				}
 				Expect(handler.GetAckFrame()).ToNot(BeNil())
 				Expect(handler.ackQueued).To(BeFalse())
-				ackAlarmCallbackCalled = false
 			}
 
 			It("always queues an ACK for the first packet", func() {
 				err := handler.ReceivedPacket(1, false)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.ackQueued).To(BeTrue())
-				Expect(ackAlarmCallbackCalled).To(BeFalse())
+				Expect(handler.GetAlarmTimeout()).To(BeZero())
 			})
 
 			It("only queues one ACK for many non-retransmittable packets", func() {
@@ -155,7 +148,7 @@ var _ = Describe("receivedPacketHandler", func() {
 				err := handler.ReceivedPacket(10+protocol.MaxPacketsReceivedBeforeAckSend, false)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.ackQueued).To(BeTrue())
-				Expect(ackAlarmCallbackCalled).To(BeFalse())
+				Expect(handler.GetAlarmTimeout()).To(BeZero())
 			})
 
 			It("queues an ACK for every second retransmittable packet, if they are arriving fast", func() {
@@ -163,12 +156,11 @@ var _ = Describe("receivedPacketHandler", func() {
 				err := handler.ReceivedPacket(11, true)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.ackQueued).To(BeFalse())
-				Expect(ackAlarmCallbackCalled).To(BeTrue())
-				ackAlarmCallbackCalled = false
+				Expect(handler.GetAlarmTimeout()).NotTo(BeZero())
 				err = handler.ReceivedPacket(12, true)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.ackQueued).To(BeTrue())
-				Expect(ackAlarmCallbackCalled).To(BeFalse())
+				Expect(handler.GetAlarmTimeout()).To(BeZero())
 			})
 
 			It("only sets the timer when receiving a retransmittable packets", func() {
@@ -181,7 +173,7 @@ var _ = Describe("receivedPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.ackQueued).To(BeFalse())
 				Expect(handler.ackAlarm).ToNot(BeZero())
-				Expect(ackAlarmCallbackCalled).To(BeTrue())
+				Expect(handler.GetAlarmTimeout()).NotTo(BeZero())
 			})
 
 			It("queues an ACK if it was reported missing before", func() {
