@@ -29,10 +29,6 @@ type receivedPacketHandler struct {
 
 // NewReceivedPacketHandler creates a new receivedPacketHandler
 func NewReceivedPacketHandler(ackAlarmResetCallback func(time.Time)) ReceivedPacketHandler {
-	// create a stopped timer, see https://github.com/golang/go/issues/12721#issuecomment-143010182
-	timer := time.NewTimer(0)
-	<-timer.C
-
 	return &receivedPacketHandler{
 		packetHistory:         newReceivedPacketHistory(),
 		ackAlarmResetCallback: ackAlarmResetCallback,
