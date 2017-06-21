@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/net/lex/httplex"
 )
@@ -24,6 +25,11 @@ type QuicRoundTripper struct {
 	// explicitly requested gzip it is not automatically
 	// uncompressed.
 	DisableCompression bool
+
+	// HandshakeTimeout is the maximum duration that the cryptographic handshake may take.
+	// If the timeout is exceeded, the connection is closed.
+	// If this value is zero, the timeout is set to 10 seconds.
+	HandshakeTimeout time.Duration
 
 	// TLSClientConfig specifies the TLS configuration to use with
 	// tls.Client. If nil, the default configuration is used.
@@ -84,7 +90,11 @@ func (r *QuicRoundTripper) getClient(hostname string) http.RoundTripper {
 
 	client, ok := r.clients[hostname]
 	if !ok {
-		client = newClient(r.TLSClientConfig, hostname, &roundTripperOpts{DisableCompression: r.DisableCompression})
+		opts := &roundTripperOpts{
+			DisableCompression: r.DisableCompression,
+			HandshakeTimeout:   r.HandshakeTimeout,
+		}
+		client = newClient(r.TLSClientConfig, hostname, opts)
 		r.clients[hostname] = client
 	}
 	return client

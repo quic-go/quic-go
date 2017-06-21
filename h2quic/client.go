@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
@@ -22,6 +23,7 @@ import (
 
 type roundTripperOpts struct {
 	DisableCompression bool
+	HandshakeTimeout   time.Duration
 }
 
 // client is a HTTP2 client doing QUIC requests
@@ -57,6 +59,7 @@ func newClient(tlsConfig *tls.Config, hostname string, opts *roundTripperOpts) *
 		encryptionLevel: protocol.EncryptionUnencrypted,
 		config: &quic.Config{
 			TLSConfig:                     tlsConfig,
+			HandshakeTimeout:              opts.HandshakeTimeout,
 			RequestConnectionIDTruncation: true,
 		},
 		opts:          opts,
