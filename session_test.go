@@ -900,6 +900,17 @@ var _ = Describe("Session", func() {
 			Expect(mconn.written[0]).To(ContainSubstring(string([]byte{0x5E, 0x03})))
 		})
 
+		It("sends ACK frames when congestion limited", func() {
+			sess.sentPacketHandler = &mockSentPacketHandler{congestionLimited: true}
+			sess.packer.packetNumberGenerator.next = 0x1338
+			packetNumber := protocol.PacketNumber(0x035E)
+			sess.receivedPacketHandler.ReceivedPacket(packetNumber, true)
+			err := sess.sendPacket()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mconn.written).To(HaveLen(1))
+			Expect(mconn.written[0]).To(ContainSubstring(string([]byte{0x5E, 0x03})))
+		})
+
 		It("sends two WindowUpdate frames", func() {
 			_, err := sess.GetOrOpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
