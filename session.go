@@ -98,8 +98,6 @@ type session struct {
 	// it receives at most 3 handshake events: 2 when the encryption level changes, and one error
 	handshakeChan chan<- handshakeEvent
 
-	nextAckScheduledTime time.Time
-
 	connectionParameters handshake.ConnectionParametersManager
 
 	lastRcvdPacketNumber protocol.PacketNumber
@@ -178,7 +176,7 @@ func (s *session) setup(
 		s.config.MaxReceiveStreamFlowControlWindow, s.config.MaxReceiveConnectionFlowControlWindow)
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats)
 	s.flowControlManager = flowcontrol.NewFlowControlManager(s.connectionParameters, s.rttStats)
-	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.ackAlarmChanged)
+	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler()
 	s.streamsMap = newStreamsMap(s.newStream, s.perspective, s.connectionParameters)
 	s.streamFramer = newStreamFramer(s.streamsMap, s.flowControlManager)
 
@@ -332,8 +330,8 @@ func (s *session) WaitUntilClosed() {
 func (s *session) maybeResetTimer() {
 	deadline := s.lastNetworkActivityTime.Add(s.idleTimeout())
 
-	if !s.nextAckScheduledTime.IsZero() {
-		deadline = utils.MinTime(deadline, s.nextAckScheduledTime)
+	if ackAlarm := s.receivedPacketHandler.GetAlarmTimeout(); !ackAlarm.IsZero() {
+		deadline = utils.MinTime(deadline, ackAlarm)
 	}
 	if lossTime := s.sentPacketHandler.GetAlarmTimeout(); !lossTime.IsZero() {
 		deadline = utils.MinTime(deadline, lossTime)
@@ -656,7 +654,6 @@ func (s *session) sendPacket() error {
 		}
 		windowUpdateFrames = nil
 		ack = nil
-		s.nextAckScheduledTime = time.Time{}
 	}
 }
 
@@ -815,11 +812,6 @@ func (s *session) getWindowUpdateFrames() []*frames.WindowUpdateFrame {
 		res[i] = &frames.WindowUpdateFrame{StreamID: u.StreamID, ByteOffset: u.Offset}
 	}
 	return res
-}
-
-func (s *session) ackAlarmChanged(t time.Time) {
-	s.nextAckScheduledTime = t
-	s.maybeResetTimer()
 }
 
 func (s *session) LocalAddr() net.Addr {

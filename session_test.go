@@ -101,6 +101,7 @@ var _ ackhandler.SentPacketHandler = &mockSentPacketHandler{}
 
 type mockReceivedPacketHandler struct {
 	nextAckFrame *frames.AckFrame
+	ackAlarm     time.Time
 }
 
 func (m *mockReceivedPacketHandler) GetAckFrame() *frames.AckFrame {
@@ -114,6 +115,7 @@ func (m *mockReceivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketN
 func (m *mockReceivedPacketHandler) ReceivedStopWaiting(*frames.StopWaitingFrame) error {
 	panic("not implemented")
 }
+func (m *mockReceivedPacketHandler) GetAlarmTimeout() time.Time { return m.ackAlarm }
 
 var _ ackhandler.ReceivedPacketHandler = &mockReceivedPacketHandler{}
 
@@ -1187,12 +1189,11 @@ var _ = Describe("Session", func() {
 		})
 
 		It("sets the timer to the ack timer", func() {
-			rph := &mockReceivedPacketHandler{}
+			rph := &mockReceivedPacketHandler{ackAlarm: time.Now().Add(10 * time.Millisecond)}
 			rph.nextAckFrame = &frames.AckFrame{LargestAcked: 0x1337}
 			sess.receivedPacketHandler = rph
 			go sess.run()
 			defer sess.Close(nil)
-			sess.ackAlarmChanged(time.Now().Add(10 * time.Millisecond))
 			time.Sleep(10 * time.Millisecond)
 			Eventually(func() int { return len(mconn.written) }).ShouldNot(BeZero())
 			Expect(mconn.written[0]).To(ContainSubstring(string([]byte{0x37, 0x13})))
