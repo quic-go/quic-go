@@ -394,10 +394,9 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("ignores streams that existed previously", func() {
+		It("ignores STREAM frames for closed streams (client-side)", func() {
 			sess.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
-				Data:     []byte{},
 				FinBit:   true,
 			})
 			str, _ := sess.streamsMap.GetOrOpenStream(5)
@@ -407,11 +406,38 @@ var _ = Describe("Session", func() {
 			str.Close()
 			str.sentFin()
 			sess.garbageCollectStreams()
+			str, _ = sess.streamsMap.GetOrOpenStream(5)
+			Expect(str).To(BeNil()) // make sure the stream is gone
 			err = sess.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
-				Data:     []byte{},
+				Data:     []byte("foobar"),
 			})
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("ignores STREAM frames for closed streams (server-side)", func() {
+			ostr, err := sess.OpenStream()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(ostr.StreamID()).To(Equal(protocol.StreamID(2)))
+			err = sess.handleStreamFrame(&frames.StreamFrame{
+				StreamID: 2,
+				FinBit:   true,
+			})
+			Expect(err).ToNot(HaveOccurred())
+			str, _ := sess.streamsMap.GetOrOpenStream(2)
+			Expect(str).ToNot(BeNil())
+			_, err = str.Read([]byte{0})
+			Expect(err).To(MatchError(io.EOF))
+			str.Close()
+			str.sentFin()
+			sess.garbageCollectStreams()
+			str, _ = sess.streamsMap.GetOrOpenStream(2)
+			Expect(str).To(BeNil()) // make sure the stream is gone
+			err = sess.handleStreamFrame(&frames.StreamFrame{
+				StreamID: 2,
+				FinBit:   true,
+			})
+			Expect(err).ToNot(HaveOccurred())
 		})
 	})
 
