@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"time"
 
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
@@ -73,6 +74,16 @@ var _ = Describe("Client", func() {
 		}
 		_, err := client.RoundTrip(req)
 		Expect(err).To(MatchError(testErr))
+	})
+
+	It("errors when set handshake timeout", func() {
+		transport := QuicRoundTripper{
+			// set 1ms timeout to enforce error
+			HandshakeTimeout: 1 * time.Millisecond,
+		}
+
+		_, err := transport.RoundTrip(req)
+		Expect(err).To(HaveOccurred())
 	})
 
 	It("errors if the header stream has the wrong stream ID", func() {
