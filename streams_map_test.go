@@ -57,6 +57,13 @@ var _ = Describe("Streams Map", func() {
 					Expect(err).To(MatchError("InvalidStreamID: attempted to open stream 6 from client-side"))
 				})
 
+				It("rejects streams with even IDs, which are lower thatn the highest client-side stream", func() {
+					_, err := m.GetOrOpenStream(5)
+					Expect(err).NotTo(HaveOccurred())
+					_, err = m.GetOrOpenStream(4)
+					Expect(err).To(MatchError("InvalidStreamID: attempted to open stream 4 from client-side"))
+				})
+
 				It("gets existing streams", func() {
 					s, err := m.GetOrOpenStream(5)
 					Expect(err).NotTo(HaveOccurred())
@@ -135,6 +142,17 @@ var _ = Describe("Streams Map", func() {
 					m.CloseWithError(testErr)
 					_, err := m.OpenStream()
 					Expect(err).To(MatchError(testErr))
+				})
+
+				It("doesn't reopen an already closed stream", func() {
+					str, err := m.OpenStream()
+					Expect(err).ToNot(HaveOccurred())
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(2)))
+					err = m.RemoveStream(2)
+					Expect(err).ToNot(HaveOccurred())
+					str, err = m.GetOrOpenStream(2)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(str).To(BeNil())
 				})
 
 				Context("counting streams", func() {
@@ -353,9 +371,16 @@ var _ = Describe("Streams Map", func() {
 				setNewStreamsMap(protocol.PerspectiveClient)
 			})
 
-			Context("client-side streams, as a client", func() {
+			Context("client-side streams", func() {
 				It("rejects streams with odd IDs", func() {
 					_, err := m.GetOrOpenStream(5)
+					Expect(err).To(MatchError("InvalidStreamID: attempted to open stream 5 from server-side"))
+				})
+
+				It("rejects streams with odds IDs, which are lower thatn the highest server-side stream", func() {
+					_, err := m.GetOrOpenStream(6)
+					Expect(err).NotTo(HaveOccurred())
+					_, err = m.GetOrOpenStream(5)
 					Expect(err).To(MatchError("InvalidStreamID: attempted to open stream 5 from server-side"))
 				})
 
@@ -373,6 +398,17 @@ var _ = Describe("Streams Map", func() {
 					Expect(m.streams).To(HaveKey(protocol.StreamID(2)))
 					Expect(m.streams).To(HaveKey(protocol.StreamID(4)))
 					Expect(m.streams).To(HaveKey(protocol.StreamID(6)))
+				})
+
+				It("doesn't reopen an already closed stream", func() {
+					str, err := m.OpenStream()
+					Expect(err).ToNot(HaveOccurred())
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
+					err = m.RemoveStream(1)
+					Expect(err).ToNot(HaveOccurred())
+					str, err = m.GetOrOpenStream(1)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(str).To(BeNil())
 				})
 			})
 
@@ -392,6 +428,16 @@ var _ = Describe("Streams Map", func() {
 					s2, err := m.OpenStream()
 					Expect(err).ToNot(HaveOccurred())
 					Expect(s2.StreamID()).To(Equal(s1.StreamID() + 2))
+				})
+
+				It("doesn't reopen an already closed stream", func() {
+					_, err := m.GetOrOpenStream(4)
+					Expect(err).ToNot(HaveOccurred())
+					err = m.RemoveStream(4)
+					Expect(err).ToNot(HaveOccurred())
+					str, err := m.GetOrOpenStream(4)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(str).To(BeNil())
 				})
 			})
 
