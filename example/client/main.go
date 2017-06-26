@@ -24,7 +24,7 @@ func main() {
 	utils.SetLogTimeFormat("")
 
 	hclient := &http.Client{
-		Transport: &h2quic.QuicRoundTripper{},
+		Transport: &h2quic.RoundTripper{},
 	}
 
 	var wg sync.WaitGroup

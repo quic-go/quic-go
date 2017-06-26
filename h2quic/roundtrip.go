@@ -11,8 +11,8 @@ import (
 	"golang.org/x/net/lex/httplex"
 )
 
-// QuicRoundTripper implements the http.RoundTripper interface
-type QuicRoundTripper struct {
+// RoundTripper implements the http.RoundTripper interface
+type RoundTripper struct {
 	mutex sync.Mutex
 
 	// DisableCompression, if true, prevents the Transport from
@@ -32,10 +32,10 @@ type QuicRoundTripper struct {
 	clients map[string]http.RoundTripper
 }
 
-var _ http.RoundTripper = &QuicRoundTripper{}
+var _ http.RoundTripper = &RoundTripper{}
 
 // RoundTrip does a round trip
-func (r *QuicRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+func (r *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.URL == nil {
 		closeRequestBody(req)
 		return nil, errors.New("quic: nil Request.URL")
@@ -74,7 +74,7 @@ func (r *QuicRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 	return r.getClient(hostname).RoundTrip(req)
 }
 
-func (r *QuicRoundTripper) getClient(hostname string) http.RoundTripper {
+func (r *RoundTripper) getClient(hostname string) http.RoundTripper {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 

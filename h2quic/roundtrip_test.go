@@ -9,9 +9,9 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type mockQuicRoundTripper struct{}
+type mockRoundTripper struct{}
 
-func (m *mockQuicRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return &http.Response{Request: req}, nil
 }
 
@@ -43,12 +43,12 @@ var _ io.ReadCloser = &mockBody{}
 
 var _ = Describe("RoundTripper", func() {
 	var (
-		rt   *QuicRoundTripper
+		rt   *RoundTripper
 		req1 *http.Request
 	)
 
 	BeforeEach(func() {
-		rt = &QuicRoundTripper{}
+		rt = &RoundTripper{}
 		var err error
 		req1, err = http.NewRequest("GET", "https://www.example.org/file1.html", nil)
 		Expect(err).ToNot(HaveOccurred())
@@ -56,7 +56,7 @@ var _ = Describe("RoundTripper", func() {
 
 	It("reuses existing clients", func() {
 		rt.clients = make(map[string]http.RoundTripper)
-		rt.clients["www.example.org:443"] = &mockQuicRoundTripper{}
+		rt.clients["www.example.org:443"] = &mockRoundTripper{}
 		rsp, err := rt.RoundTrip(req1)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(rsp.Request).To(Equal(req1))

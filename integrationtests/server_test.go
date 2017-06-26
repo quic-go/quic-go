@@ -148,7 +148,7 @@ var _ = Describe("Server tests", func() {
 		certPool := x509.NewCertPool()
 		certPool.AddCert(CACert)
 		client = &http.Client{
-			Transport: &h2quic.QuicRoundTripper{
+			Transport: &h2quic.RoundTripper{
 				TLSClientConfig: &tls.Config{RootCAs: certPool},
 			},
 		}

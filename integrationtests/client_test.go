@@ -27,7 +27,7 @@ var _ = Describe("Client tests", func() {
 			Fail("quic.clemente.io does not resolve to 127.0.0.1. Consider adding it to /etc/hosts.")
 		}
 		client = &http.Client{
-			Transport: &h2quic.QuicRoundTripper{},
+			Transport: &h2quic.RoundTripper{},
 		}
 	})
 
