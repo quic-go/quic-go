@@ -59,11 +59,11 @@ h2quic.ListenAndServeQUIC("localhost:4242", "/path/to/cert/chain.pem", "/path/to
 
 ### As a client
 
-See the [example client](example/client/main.go). Use a `QuicRoundTripper` as a `Transport` in a `http.Client`.
+See the [example client](example/client/main.go). Use a `h2quic.RoundTripper` as a `Transport` in a `http.Client`.
 
 ```go
 http.Client{
-  Transport: &h2quic.QuicRoundTripper{},
+  Transport: &h2quic.RoundTripper{},
 }
 ```
 
