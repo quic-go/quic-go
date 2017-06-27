@@ -100,6 +100,8 @@ var _ = Describe("STK Generator", func() {
 		stk, err := stkGen.DecodeToken(token)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(stk.RemoteAddr).To(Equal("192.168.13.37:1337"))
-		Expect(stk.SentTime).To(BeTemporally("~", time.Now(), time.Second))
+		// the time resolution of the STK is just 1 second
+		// if STK generation and this check happen in "different seconds", the difference will be between 1 and 2 seconds
+		Expect(stk.SentTime).To(BeTemporally("~", time.Now(), 2*time.Second))
 	})
 })
