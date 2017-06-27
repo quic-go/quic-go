@@ -363,7 +363,7 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 			sess.handleCloseError(closeError{err: testErr, remote: true})
 			_, err = str.Read(p)
-			Expect(err).To(MatchError(qerr.Error(qerr.InternalError, testErr.Error())))
+			Expect(err.(*net.OpError).Err).To(MatchError(qerr.Error(qerr.InternalError, testErr.Error())))
 			sess.garbageCollectStreams()
 			str, err = sess.streamsMap.GetOrOpenStream(5)
 			Expect(err).NotTo(HaveOccurred())
@@ -378,7 +378,7 @@ var _ = Describe("Session", func() {
 			Expect(str).ToNot(BeNil())
 			sess.handleCloseError(closeError{err: testErr, remote: true})
 			_, err = str.Read([]byte{0})
-			Expect(err).To(MatchError(qerr.Error(qerr.InternalError, testErr.Error())))
+			Expect(err.(*net.OpError).Err).To(MatchError(qerr.Error(qerr.InternalError, testErr.Error())))
 			sess.garbageCollectStreams()
 			str, err = sess.streamsMap.GetOrOpenStream(5)
 			Expect(err).NotTo(HaveOccurred())
@@ -452,7 +452,7 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 			n, err := s.Write([]byte{0})
 			Expect(n).To(BeZero())
-			Expect(err).To(MatchError("RST_STREAM received with code 42"))
+			Expect(err.(*net.OpError).Err).To(MatchError(qerr.ToQuicError(errors.New("RST_STREAM received with code 42"))))
 		})
 
 		It("doesn't close the stream for reading", func() {
@@ -648,7 +648,7 @@ var _ = Describe("Session", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(sess.runClosed).Should(BeClosed())
 		_, err = str.Read([]byte{0})
-		Expect(err).To(MatchError(qerr.Error(42, "foobar")))
+		Expect(err.(*net.OpError).Err).To(MatchError(qerr.Error(42, "foobar")))
 		close(done)
 	})
 
@@ -732,7 +732,7 @@ var _ = Describe("Session", func() {
 			Consistently(func() error { return err }).ShouldNot(HaveOccurred())
 			sess.Close(testErr)
 			Eventually(func() error { return err }).Should(HaveOccurred())
-			Expect(err).To(MatchError(qerr.ToQuicError(testErr)))
+			Expect(err.(*net.OpError).Err).To(MatchError(qerr.ToQuicError(testErr)))
 		})
 
 		It("stops accepting when the session is closed after version negotiation", func() {
@@ -745,7 +745,7 @@ var _ = Describe("Session", func() {
 			Expect(sess.runClosed).ToNot(BeClosed())
 			sess.Close(errCloseSessionForNewVersion)
 			Eventually(func() error { return err }).Should(HaveOccurred())
-			Expect(err).To(MatchError(qerr.Error(qerr.InternalError, errCloseSessionForNewVersion.Error())))
+			Expect(err.(*net.OpError).Err).To(MatchError(qerr.Error(qerr.InternalError, errCloseSessionForNewVersion.Error())))
 			Eventually(sess.runClosed).Should(BeClosed())
 		})
 	})
@@ -1439,7 +1439,7 @@ var _ = Describe("Session", func() {
 		It("times out due to no network activity", func(done Done) {
 			sess.lastNetworkActivityTime = time.Now().Add(-time.Hour)
 			err := sess.run() // Would normally not return
-			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
+			Expect(err.(*net.OpError).Err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
 			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
 			Expect(sess.runClosed).To(BeClosed())
 			close(done)
@@ -1448,7 +1448,7 @@ var _ = Describe("Session", func() {
 		It("times out due to non-completed crypto handshake", func(done Done) {
 			sess.sessionCreationTime = time.Now().Add(-protocol.DefaultHandshakeTimeout).Add(-time.Second)
 			err := sess.run() // Would normally not return
-			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.HandshakeTimeout))
+			Expect(err.(*net.OpError).Err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.HandshakeTimeout))
 			Expect(mconn.written[0]).To(ContainSubstring("Crypto handshake did not complete in time."))
 			Expect(sess.runClosed).To(BeClosed())
 			close(done)
@@ -1462,7 +1462,7 @@ var _ = Describe("Session", func() {
 			sess.connectionParameters = mockCpm
 			sess.packer.connectionParameters = mockCpm
 			err := sess.run() // Would normally not return
-			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
+			Expect(err.(*net.OpError).Err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
 			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
 			Expect(sess.runClosed).To(BeClosed())
 			close(done)
@@ -1477,7 +1477,7 @@ var _ = Describe("Session", func() {
 			sess.packer.connectionParameters = mockCpm
 			mockCpm.EXPECT().GetIdleConnectionStateLifetime().Return(0 * time.Second).AnyTimes()
 			err := sess.run() // Would normally not return
-			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
+			Expect(err.(*net.OpError).Err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
 			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
 			Expect(sess.runClosed).To(BeClosed())
 			close(done)
@@ -1529,7 +1529,7 @@ var _ = Describe("Session", func() {
 				Expect(err).NotTo(HaveOccurred())
 			}
 			_, err := sess.GetOrOpenStream(protocol.StreamID(301))
-			Expect(err).To(MatchError(qerr.TooManyOpenStreams))
+			Expect(err.(*net.OpError).Err).To(MatchError(qerr.ToQuicError(qerr.TooManyOpenStreams)))
 		})
 
 		It("does not error when many streams are opened and closed", func() {

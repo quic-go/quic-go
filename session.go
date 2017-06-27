@@ -272,7 +272,7 @@ runLoop:
 					s.tryQueueingUndecryptablePacket(p)
 					continue
 				}
-				s.closeLocal(err)
+				s.closeLocal(s.wrapOpError(err))
 				continue
 			}
 			// This is a bit unclean, but works properly, since the packet always
@@ -298,16 +298,16 @@ runLoop:
 		}
 
 		if err := s.sendPacket(); err != nil {
-			s.closeLocal(err)
+			s.closeLocal(s.wrapOpError(err))
 		}
 		if !s.receivedTooManyUndecrytablePacketsTime.IsZero() && s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout).Before(now) && len(s.undecryptablePackets) != 0 {
-			s.closeLocal(qerr.Error(qerr.DecryptionFailure, "too many undecryptable packets received"))
+			s.closeLocal(s.wrapOpError(qerr.Error(qerr.DecryptionFailure, "too many undecryptable packets received")))
 		}
 		if now.Sub(s.lastNetworkActivityTime) >= s.idleTimeout() {
-			s.closeLocal(qerr.Error(qerr.NetworkIdleTimeout, "No recent network activity."))
+			s.closeLocal(s.wrapOpError(qerr.Error(qerr.NetworkIdleTimeout, "No recent network activity.")))
 		}
 		if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= s.config.HandshakeTimeout {
-			s.closeLocal(qerr.Error(qerr.HandshakeTimeout, "Crypto handshake did not complete in time."))
+			s.closeLocal(s.wrapOpError(qerr.Error(qerr.HandshakeTimeout, "Crypto handshake did not complete in time.")))
 		}
 		s.garbageCollectStreams()
 	}
@@ -499,7 +499,7 @@ func (s *session) handleRstStreamFrame(frame *frames.RstStreamFrame) error {
 		return errRstStreamOnInvalidStream
 	}
 
-	str.RegisterRemoteError(fmt.Errorf("RST_STREAM received with code %d", frame.ErrorCode))
+	str.RegisterRemoteError(s.wrapOpError(fmt.Errorf("RST_STREAM received with code %d", frame.ErrorCode)))
 	return s.flowControlManager.ResetStream(frame.StreamID, frame.ByteOffset)
 }
 
@@ -525,16 +525,61 @@ func (s *session) Close(e error) error {
 	return nil
 }
 
+func (s *session) wrapOpError(e error) *net.OpError {
+	if e == nil {
+		return nil
+	}
+
+	if ne, ok := e.(*net.OpError); ok {
+		return ne
+	}
+
+	qe := qerr.ToQuicError(e)
+
+	err := &net.OpError{
+		Net: "udp",
+		Err: qe,
+	}
+
+	switch qe.ErrorCode {
+	case qerr.AttemptToSendUnencryptedStreamData,
+		qerr.EncryptionFailure,
+		qerr.PacketTooLarge,
+		qerr.InvalidStreamID,
+		qerr.TooManyOpenStreams,
+		qerr.TooManyAvailableStreams,
+		qerr.PacketWriteError,
+		qerr.FlowControlSentTooMuchData,
+		qerr.TooManyOutstandingSentPackets,
+		qerr.ConnectionCancelled,
+		qerr.FailedToSerializePacket:
+		err.Op = "write"
+	default:
+		err.Op = "read"
+	}
+
+	if s.conn != nil {
+		err.Addr = s.conn.RemoteAddr()
+		err.Source = s.conn.LocalAddr()
+	}
+
+	return err
+}
+
 func (s *session) handleCloseError(closeErr closeError) error {
 	if closeErr.err == nil {
 		closeErr.err = qerr.PeerGoingAway
 	}
 
+	var netOpErr *net.OpError
 	var quicErr *qerr.QuicError
 	var ok bool
-	if quicErr, ok = closeErr.err.(*qerr.QuicError); !ok {
+	if netOpErr, ok = closeErr.err.(*net.OpError); ok {
+		quicErr = qerr.ToQuicError(netOpErr.Err)
+	} else if quicErr, ok = closeErr.err.(*qerr.QuicError); !ok {
 		quicErr = qerr.ToQuicError(closeErr.err)
 	}
+
 	// Don't log 'normal' reasons
 	if quicErr.ErrorCode == qerr.PeerGoingAway || quicErr.ErrorCode == qerr.NetworkIdleTimeout {
 		utils.Infof("Closing connection %x", s.connectionID)
@@ -542,7 +587,7 @@ func (s *session) handleCloseError(closeErr closeError) error {
 		utils.Errorf("Closing session with error: %s", closeErr.err.Error())
 	}
 
-	s.streamsMap.CloseWithError(quicErr)
+	s.streamsMap.CloseWithError(s.wrapOpError(closeErr.err))
 
 	if closeErr.err == errCloseSessionForNewVersion {
 		return nil
@@ -708,11 +753,18 @@ func (s *session) logPacket(packet *packedPacket) {
 // Newly opened streams should only originate from the client. To open a stream from the server, OpenStream should be used.
 func (s *session) GetOrOpenStream(id protocol.StreamID) (Stream, error) {
 	str, err := s.streamsMap.GetOrOpenStream(id)
+
+	var ne *net.OpError
+
+	if err != nil {
+		ne = s.wrapOpError(qerr.ToQuicError(err))
+	}
+
 	if str != nil {
-		return str, err
+		return str, ne
 	}
 	// make sure to return an actual nil value here, not an Stream with value nil
-	return nil, err
+	return nil, ne
 }
 
 // AcceptStream returns the next stream openend by the peer
