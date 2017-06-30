@@ -22,13 +22,13 @@ var _ = Describe("Client", func() {
 		packetConn *mockPacketConn
 		addr       net.Addr
 
-		originalClientSessConstructor func(conn connection, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, config *Config, negotiatedVersions []protocol.VersionNumber) (packetHandler, <-chan handshakeEvent, error)
+		originalClientSessConstructor func(conn connection, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, tlsConf *tls.Config, config *Config, negotiatedVersions []protocol.VersionNumber) (packetHandler, <-chan handshakeEvent, error)
 	)
 
 	BeforeEach(func() {
 		originalClientSessConstructor = newClientSession
 		Eventually(areSessionsRunning).Should(BeFalse())
-		msess, _, _ := newMockSession(nil, 0, 0, nil, nil)
+		msess, _, _ := newMockSession(nil, 0, 0, nil, nil, nil)
 		sess = msess.(*mockSession)
 		packetConn = &mockPacketConn{addr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1234}}
 		config = &Config{
@@ -63,6 +63,7 @@ var _ = Describe("Client", func() {
 				_ string,
 				_ protocol.VersionNumber,
 				_ protocol.ConnectionID,
+				_ *tls.Config,
 				_ *Config,
 				_ []protocol.VersionNumber,
 			) (packetHandler, <-chan handshakeEvent, error) {
@@ -75,7 +76,7 @@ var _ = Describe("Client", func() {
 			go func() {
 				defer GinkgoRecover()
 				var err error
-				dialedSess, err = DialNonFWSecure(packetConn, addr, "quic.clemente.io:1337", config)
+				dialedSess, err = DialNonFWSecure(packetConn, addr, "quic.clemente.io:1337", nil, config)
 				Expect(err).ToNot(HaveOccurred())
 			}()
 			Consistently(func() Session { return dialedSess }).Should(BeNil())
@@ -89,7 +90,7 @@ var _ = Describe("Client", func() {
 			go func() {
 				defer GinkgoRecover()
 				var err error
-				dialedSess, err = DialAddrNonFWSecure("localhost:18901", config)
+				dialedSess, err = DialAddrNonFWSecure("localhost:18901", nil, config)
 				Expect(err).ToNot(HaveOccurred())
 			}()
 			Consistently(func() Session { return dialedSess }).Should(BeNil())
@@ -103,7 +104,7 @@ var _ = Describe("Client", func() {
 			go func() {
 				defer GinkgoRecover()
 				var err error
-				dialedSess, err = Dial(packetConn, addr, "quic.clemente.io:1337", config)
+				dialedSess, err = Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
 				Expect(err).ToNot(HaveOccurred())
 			}()
 			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
@@ -120,13 +121,14 @@ var _ = Describe("Client", func() {
 				_ string,
 				_ protocol.VersionNumber,
 				_ protocol.ConnectionID,
+				_ *tls.Config,
 				_ *Config,
 				_ []protocol.VersionNumber,
 			) (packetHandler, <-chan handshakeEvent, error) {
 				cconn = conn
 				return sess, nil, nil
 			}
-			go DialAddr("localhost:17890", &Config{})
+			go DialAddr("localhost:17890", nil, &Config{})
 			Eventually(func() connection { return cconn }).ShouldNot(BeNil())
 			Expect(cconn.RemoteAddr().String()).To(Equal("127.0.0.1:17890"))
 			close(done)
@@ -139,13 +141,14 @@ var _ = Describe("Client", func() {
 				h string,
 				_ protocol.VersionNumber,
 				_ protocol.ConnectionID,
+				_ *tls.Config,
 				_ *Config,
 				_ []protocol.VersionNumber,
 			) (packetHandler, <-chan handshakeEvent, error) {
 				hostname = h
 				return sess, nil, nil
 			}
-			go DialAddr("localhost:17890", &Config{TLSConfig: &tls.Config{ServerName: "foobar"}})
+			go DialAddr("localhost:17890", &tls.Config{ServerName: "foobar"}, nil)
 			Eventually(func() string { return hostname }).Should(Equal("foobar"))
 			close(done)
 		})
@@ -154,7 +157,7 @@ var _ = Describe("Client", func() {
 			testErr := errors.New("early handshake error")
 			var dialErr error
 			go func() {
-				_, dialErr = Dial(packetConn, addr, "quic.clemente.io:1337", config)
+				_, dialErr = Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
 			}()
 			sess.handshakeChan <- handshakeEvent{err: testErr}
 			Eventually(func() error { return dialErr }).Should(MatchError(testErr))
@@ -165,7 +168,7 @@ var _ = Describe("Client", func() {
 			testErr := errors.New("late handshake error")
 			var dialErr error
 			go func() {
-				_, dialErr = Dial(packetConn, addr, "quic.clemente.io:1337", config)
+				_, dialErr = Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
 			}()
 			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
 			sess.handshakeComplete <- testErr
@@ -192,7 +195,7 @@ var _ = Describe("Client", func() {
 
 		It("errors when receiving an invalid first packet from the server", func(done Done) {
 			packetConn.dataToRead = []byte{0xff}
-			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", config)
+			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
 			Expect(err).To(HaveOccurred())
 			close(done)
 		})
@@ -200,7 +203,7 @@ var _ = Describe("Client", func() {
 		It("errors when receiving an error from the connection", func(done Done) {
 			testErr := errors.New("connection error")
 			packetConn.readErr = testErr
-			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", config)
+			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
 			Expect(err).To(MatchError(testErr))
 			close(done)
 		})
@@ -212,12 +215,13 @@ var _ = Describe("Client", func() {
 				_ string,
 				_ protocol.VersionNumber,
 				_ protocol.ConnectionID,
+				_ *tls.Config,
 				_ *Config,
 				_ []protocol.VersionNumber,
 			) (packetHandler, <-chan handshakeEvent, error) {
 				return nil, nil, testErr
 			}
-			_, err := DialNonFWSecure(packetConn, addr, "quic.clemente.io:1337", config)
+			_, err := DialNonFWSecure(packetConn, addr, "quic.clemente.io:1337", nil, config)
 			Expect(err).To(MatchError(testErr))
 		})
 
@@ -243,6 +247,7 @@ var _ = Describe("Client", func() {
 					_ string,
 					_ protocol.VersionNumber,
 					connectionID protocol.ConnectionID,
+					_ *tls.Config,
 					_ *Config,
 					negotiatedVersionsP []protocol.VersionNumber,
 				) (packetHandler, <-chan handshakeEvent, error) {
@@ -324,6 +329,7 @@ var _ = Describe("Client", func() {
 			hostnameP string,
 			versionP protocol.VersionNumber,
 			_ protocol.ConnectionID,
+			_ *tls.Config,
 			configP *Config,
 			_ []protocol.VersionNumber,
 		) (packetHandler, <-chan handshakeEvent, error) {
@@ -335,7 +341,7 @@ var _ = Describe("Client", func() {
 			return sess, nil, nil
 		}
 		go func() {
-			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", config)
+			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
 			Expect(err).ToNot(HaveOccurred())
 		}()
 		<-c

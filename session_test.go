@@ -169,6 +169,7 @@ var _ = Describe("Session", func() {
 			protocol.Version35,
 			0,
 			scfg,
+			nil,
 			populateServerConfig(&Config{}),
 		)
 		Expect(err).NotTo(HaveOccurred())
@@ -220,6 +221,7 @@ var _ = Describe("Session", func() {
 				protocol.Version35,
 				0,
 				scfg,
+				nil,
 				conf,
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -1635,6 +1637,7 @@ var _ = Describe("Client Session", func() {
 			"hostname",
 			protocol.Version35,
 			0,
+			nil,
 			populateClientConfig(&Config{}),
 			nil,
 		)

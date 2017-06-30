@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"crypto/tls"
 	"io"
 	"net"
 	"time"
@@ -64,7 +63,6 @@ type STK struct {
 // Config contains all configuration data needed for a QUIC server or client.
 // More config parameters (such as timeouts) will be added soon, see e.g. https://github.com/lucas-clemente/quic-go/issues/441.
 type Config struct {
-	TLSConfig *tls.Config
 	// The QUIC versions that can be negotiated.
 	// If not set, it uses all versions available.
 	// Warning: This API should not be considered stable and will change soon.

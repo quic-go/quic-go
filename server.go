@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"crypto/tls"
 	"errors"
 	"net"
 	"sync"
@@ -23,7 +24,8 @@ type packetHandler interface {
 
 // A Listener of QUIC
 type server struct {
-	config *Config
+	tlsConf *tls.Config
+	config  *Config
 
 	conn net.PacketConn
 
@@ -38,14 +40,15 @@ type server struct {
 	sessionQueue chan Session
 	errorChan    chan struct{}
 
-	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, config *Config) (packetHandler, <-chan handshakeEvent, error)
+	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, tlsConf *tls.Config, config *Config) (packetHandler, <-chan handshakeEvent, error)
 }
 
 var _ Listener = &server{}
 
 // ListenAddr creates a QUIC server listening on a given address.
 // The listener is not active until Serve() is called.
-func ListenAddr(addr string, config *Config) (Listener, error) {
+// The tls.Config must not be nil, the quic.Config may be nil.
+func ListenAddr(addr string, tlsConf *tls.Config, config *Config) (Listener, error) {
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, err
@@ -54,13 +57,14 @@ func ListenAddr(addr string, config *Config) (Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Listen(conn, config)
+	return Listen(conn, tlsConf, config)
 }
 
 // Listen listens for QUIC connections on a given net.PacketConn.
 // The listener is not active until Serve() is called.
-func Listen(conn net.PacketConn, config *Config) (Listener, error) {
-	certChain := crypto.NewCertChain(config.TLSConfig)
+// The tls.Config must not be nil, the quic.Config may be nil.
+func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener, error) {
+	certChain := crypto.NewCertChain(tlsConf)
 	kex, err := crypto.NewCurve25519KEX()
 	if err != nil {
 		return nil, err
@@ -72,6 +76,7 @@ func Listen(conn net.PacketConn, config *Config) (Listener, error) {
 
 	s := &server{
 		conn:                      conn,
+		tlsConf:                   tlsConf,
 		config:                    populateServerConfig(config),
 		certChain:                 certChain,
 		scfg:                      scfg,
@@ -101,7 +106,12 @@ var defaultAcceptSTK = func(clientAddr net.Addr, stk *STK) bool {
 	return sourceAddr == stk.remoteAddr
 }
 
+// populateServerConfig populates fields in the quic.Config with their default values, if none are set
+// it may be called with nil
 func populateServerConfig(config *Config) *Config {
+	if config == nil {
+		config = &Config{}
+	}
 	versions := config.Versions
 	if len(versions) == 0 {
 		versions = protocol.SupportedVersions
@@ -127,7 +137,6 @@ func populateServerConfig(config *Config) *Config {
 	}
 
 	return &Config{
-		TLSConfig:                             config.TLSConfig,
 		Versions:                              versions,
 		HandshakeTimeout:                      handshakeTimeout,
 		AcceptSTK:                             vsa,
@@ -256,6 +265,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 			version,
 			hdr.ConnectionID,
 			s.scfg,
+			s.tlsConf,
 			s.config,
 		)
 		if err != nil {

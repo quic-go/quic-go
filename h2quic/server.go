@@ -84,16 +84,15 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn *net.UDPConn) error {
 	}
 
 	config := quic.Config{
-		TLSConfig: tlsConfig,
-		Versions:  protocol.SupportedVersions,
+		Versions: protocol.SupportedVersions,
 	}
 
 	var ln quic.Listener
 	var err error
 	if conn == nil {
-		ln, err = quic.ListenAddr(s.Addr, &config)
+		ln, err = quic.ListenAddr(s.Addr, tlsConfig, &config)
 	} else {
-		ln, err = quic.Listen(conn, &config)
+		ln, err = quic.Listen(conn, tlsConfig, &config)
 	}
 	if err != nil {
 		s.listenerMutex.Unlock()

@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -53,6 +54,7 @@ type session struct {
 	connectionID protocol.ConnectionID
 	perspective  protocol.Perspective
 	version      protocol.VersionNumber
+	tlsConf      *tls.Config
 	config       *Config
 
 	conn connection
@@ -119,6 +121,7 @@ func newSession(
 	v protocol.VersionNumber,
 	connectionID protocol.ConnectionID,
 	sCfg *handshake.ServerConfig,
+	tlsConf *tls.Config,
 	config *Config,
 ) (packetHandler, <-chan handshakeEvent, error) {
 	s := &session{
@@ -137,6 +140,7 @@ var newClientSession = func(
 	hostname string,
 	v protocol.VersionNumber,
 	connectionID protocol.ConnectionID,
+	tlsConf *tls.Config,
 	config *Config,
 	negotiatedVersions []protocol.VersionNumber,
 ) (packetHandler, <-chan handshakeEvent, error) {
@@ -145,6 +149,7 @@ var newClientSession = func(
 		connectionID: connectionID,
 		perspective:  protocol.PerspectiveClient,
 		version:      v,
+		tlsConf:      tlsConf,
 		config:       config,
 	}
 	return s.setup(nil, hostname, negotiatedVersions)
@@ -209,7 +214,7 @@ func (s *session) setup(
 			s.connectionID,
 			s.version,
 			cryptoStream,
-			s.config.TLSConfig,
+			s.tlsConf,
 			s.connectionParameters,
 			aeadChanged,
 			&handshake.TransportParameters{RequestConnectionIDTruncation: s.config.RequestConnectionIDTruncation},
