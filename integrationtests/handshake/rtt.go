@@ -11,8 +11,8 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
-	"github.com/lucas-clemente/quic-go/testdata"
 
+	"github.com/lucas-clemente/quic-go/testdata"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -24,11 +24,10 @@ var _ = Describe("Handshake integration tets", func() {
 		serverConfig  *quic.Config
 		testStartedAt time.Time
 	)
-
 	rtt := 350 * time.Millisecond
 
 	BeforeEach(func() {
-		serverConfig = &quic.Config{TLSConfig: testdata.GetTLSConfig()}
+		serverConfig = &quic.Config{}
 	})
 
 	AfterEach(func() {
@@ -39,7 +38,7 @@ var _ = Describe("Handshake integration tets", func() {
 	runServerAndProxy := func() {
 		var err error
 		// start the server
-		server, err = quic.ListenAddr("localhost:0", serverConfig)
+		server, err = quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), serverConfig)
 		Expect(err).ToNot(HaveOccurred())
 		// start the proxy
 		proxy, err = quicproxy.NewQuicProxy("localhost:0", quicproxy.Opts{
@@ -73,7 +72,7 @@ var _ = Describe("Handshake integration tets", func() {
 		clientConfig := &quic.Config{
 			Versions: protocol.SupportedVersions[1:2],
 		}
-		_, err := quic.DialAddr(proxy.LocalAddr().String(), clientConfig)
+		_, err := quic.DialAddr(proxy.LocalAddr().String(), nil, clientConfig)
 		Expect(err).To(HaveOccurred())
 		Expect(err.(qerr.ErrorCode)).To(Equal(qerr.InvalidVersion))
 		expectDurationInRTTs(1)
@@ -84,7 +83,7 @@ var _ = Describe("Handshake integration tets", func() {
 	// 1 RTT to become forward-secure
 	It("is forward-secure after 3 RTTs", func() {
 		runServerAndProxy()
-		_, err := quic.DialAddr(proxy.LocalAddr().String(), &quic.Config{TLSConfig: &tls.Config{InsecureSkipVerify: true}})
+		_, err := quic.DialAddr(proxy.LocalAddr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
 		Expect(err).ToNot(HaveOccurred())
 		expectDurationInRTTs(3)
 	})
@@ -95,7 +94,7 @@ var _ = Describe("Handshake integration tets", func() {
 	PIt("is secure after 2 RTTs", func() {
 		utils.SetLogLevel(utils.LogLevelDebug)
 		runServerAndProxy()
-		_, err := quic.DialAddrNonFWSecure(proxy.LocalAddr().String(), &quic.Config{TLSConfig: &tls.Config{InsecureSkipVerify: true}})
+		_, err := quic.DialAddrNonFWSecure(proxy.LocalAddr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
 		fmt.Println("#### is non fw secure ###")
 		Expect(err).ToNot(HaveOccurred())
 		expectDurationInRTTs(2)
@@ -106,7 +105,7 @@ var _ = Describe("Handshake integration tets", func() {
 			return true
 		}
 		runServerAndProxy()
-		_, err := quic.DialAddr(proxy.LocalAddr().String(), &quic.Config{TLSConfig: &tls.Config{InsecureSkipVerify: true}})
+		_, err := quic.DialAddr(proxy.LocalAddr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
 		Expect(err).ToNot(HaveOccurred())
 		expectDurationInRTTs(2)
 	})
@@ -116,7 +115,7 @@ var _ = Describe("Handshake integration tets", func() {
 			return false
 		}
 		runServerAndProxy()
-		_, err := quic.DialAddr(proxy.LocalAddr().String(), &quic.Config{TLSConfig: &tls.Config{InsecureSkipVerify: true}})
+		_, err := quic.DialAddr(proxy.LocalAddr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
 		Expect(err).To(HaveOccurred())
 		Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.CryptoTooManyRejects))
 	})
@@ -124,7 +123,7 @@ var _ = Describe("Handshake integration tets", func() {
 	It("doesn't complete the handshake when the handshake timeout is too short", func() {
 		serverConfig.HandshakeTimeout = 2 * rtt
 		runServerAndProxy()
-		_, err := quic.DialAddr(proxy.LocalAddr().String(), &quic.Config{TLSConfig: &tls.Config{InsecureSkipVerify: true}})
+		_, err := quic.DialAddr(proxy.LocalAddr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
 		Expect(err).To(HaveOccurred())
 		Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.HandshakeTimeout))
 		// 2 RTTs during the timeout

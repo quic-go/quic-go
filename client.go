@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -24,6 +25,7 @@ type client struct {
 	errorChan     chan struct{}
 	handshakeChan <-chan handshakeEvent
 
+	tlsConf           *tls.Config
 	config            *Config
 	versionNegotiated bool // has version negotiation completed yet
 
@@ -39,7 +41,7 @@ var (
 
 // DialAddr establishes a new QUIC connection to a server.
 // The hostname for SNI is taken from the given address.
-func DialAddr(addr string, config *Config) (Session, error) {
+func DialAddr(addr string, tlsConf *tls.Config, config *Config) (Session, error) {
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, err
@@ -48,12 +50,16 @@ func DialAddr(addr string, config *Config) (Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Dial(udpConn, udpAddr, addr, config)
+	return Dial(udpConn, udpAddr, addr, tlsConf, config)
 }
 
 // DialAddrNonFWSecure establishes a new QUIC connection to a server.
 // The hostname for SNI is taken from the given address.
-func DialAddrNonFWSecure(addr string, config *Config) (NonFWSession, error) {
+func DialAddrNonFWSecure(
+	addr string,
+	tlsConf *tls.Config,
+	config *Config,
+) (NonFWSession, error) {
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, err
@@ -62,20 +68,26 @@ func DialAddrNonFWSecure(addr string, config *Config) (NonFWSession, error) {
 	if err != nil {
 		return nil, err
 	}
-	return DialNonFWSecure(udpConn, udpAddr, addr, config)
+	return DialNonFWSecure(udpConn, udpAddr, addr, tlsConf, config)
 }
 
 // DialNonFWSecure establishes a new non-forward-secure QUIC connection to a server using a net.PacketConn.
 // The host parameter is used for SNI.
-func DialNonFWSecure(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config) (NonFWSession, error) {
+func DialNonFWSecure(
+	pconn net.PacketConn,
+	remoteAddr net.Addr,
+	host string,
+	tlsConf *tls.Config,
+	config *Config,
+) (NonFWSession, error) {
 	connID, err := utils.GenerateConnectionID()
 	if err != nil {
 		return nil, err
 	}
 
 	var hostname string
-	if config.TLSConfig != nil {
-		hostname = config.TLSConfig.ServerName
+	if tlsConf != nil {
+		hostname = tlsConf.ServerName
 	}
 
 	if hostname == "" {
@@ -90,6 +102,7 @@ func DialNonFWSecure(pconn net.PacketConn, remoteAddr net.Addr, host string, con
 		conn:         &conn{pconn: pconn, currentAddr: remoteAddr},
 		connectionID: connID,
 		hostname:     hostname,
+		tlsConf:      tlsConf,
 		config:       clientConfig,
 		version:      clientConfig.Versions[0],
 		errorChan:    make(chan struct{}),
@@ -107,8 +120,14 @@ func DialNonFWSecure(pconn net.PacketConn, remoteAddr net.Addr, host string, con
 
 // Dial establishes a new QUIC connection to a server using a net.PacketConn.
 // The host parameter is used for SNI.
-func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config) (Session, error) {
-	sess, err := DialNonFWSecure(pconn, remoteAddr, host, config)
+func Dial(
+	pconn net.PacketConn,
+	remoteAddr net.Addr,
+	host string,
+	tlsConf *tls.Config,
+	config *Config,
+) (Session, error) {
+	sess, err := DialNonFWSecure(pconn, remoteAddr, host, tlsConf, config)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +138,12 @@ func Dial(pconn net.PacketConn, remoteAddr net.Addr, host string, config *Config
 	return sess, nil
 }
 
+// populateClientConfig populates fields in the quic.Config with their default values, if none are set
+// it may be called with nil
 func populateClientConfig(config *Config) *Config {
+	if config == nil {
+		config = &Config{}
+	}
 	versions := config.Versions
 	if len(versions) == 0 {
 		versions = protocol.SupportedVersions
@@ -140,7 +164,6 @@ func populateClientConfig(config *Config) *Config {
 	}
 
 	return &Config{
-		TLSConfig:                             config.TLSConfig,
 		Versions:                              versions,
 		HandshakeTimeout:                      handshakeTimeout,
 		RequestConnectionIDTruncation:         config.RequestConnectionIDTruncation,
@@ -270,6 +293,7 @@ func (c *client) createNewSession(negotiatedVersions []protocol.VersionNumber) e
 		c.hostname,
 		c.version,
 		c.connectionID,
+		c.tlsConf,
 		c.config,
 		negotiatedVersions,
 	)

@@ -35,7 +35,7 @@ var _ = Describe("Benchmarks", func() {
 				go func() {
 					defer GinkgoRecover()
 					var err error
-					ln, err = ListenAddr("localhost:0", &Config{TLSConfig: testdata.GetTLSConfig()})
+					ln, err = ListenAddr("localhost:0", testdata.GetTLSConfig(), nil)
 					Expect(err).ToNot(HaveOccurred())
 					serverAddr <- ln.Addr()
 					sess, err := ln.Accept()
@@ -49,11 +49,8 @@ var _ = Describe("Benchmarks", func() {
 				}()
 
 				// start the client
-				conf := &Config{
-					TLSConfig: &tls.Config{InsecureSkipVerify: true},
-				}
 				addr := <-serverAddr
-				sess, err := DialAddr(addr.String(), conf)
+				sess, err := DialAddr(addr.String(), &tls.Config{InsecureSkipVerify: true}, nil)
 				Expect(err).ToNot(HaveOccurred())
 				str, err := sess.AcceptStream()
 				Expect(err).ToNot(HaveOccurred())
