@@ -25,6 +25,7 @@ type roundTripperOpts struct {
 }
 
 var dialAddr = quic.DialAddr
+var methodHEAD = "HEAD"
 
 // client is a HTTP2 client doing QUIC requests
 type client struct {
@@ -168,7 +169,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	c.mutex.Unlock()
 
 	var requestedGzip bool
-	if !c.opts.DisableCompression && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" && req.Method != "HEAD" {
+	if !c.opts.DisableCompression && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" && req.Method != methodHEAD {
 		requestedGzip = true
 	}
 	// TODO: add support for trailers
@@ -216,7 +217,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	// TODO: correctly set this variable
 	var streamEnded bool
-	isHead := (req.Method == "HEAD")
+	isHead := (req.Method == methodHEAD)
 
 	res = setLength(res, isHead, streamEnded)
 

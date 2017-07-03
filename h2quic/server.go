@@ -232,14 +232,14 @@ func (s *Server) handleHeadersFrame(h2headersFrame *http2.HeadersFrame, session 
 		req = req.WithContext(dataStream.Context())
 		reqBody := newRequestBody(dataStream)
 		req.Body = reqBody
-
 		req.RemoteAddr = session.RemoteAddr().String()
-		responseWriter := newResponseWriter(headerStream, headerStreamMutex, dataStream, protocol.StreamID(h2headersFrame.StreamID), settings)
 
 		handler := s.Handler
 		if handler == nil {
 			handler = http.DefaultServeMux
 		}
+		responseWriter := newResponseWriter(headerStream, headerStreamMutex, dataStream, protocol.StreamID(h2headersFrame.StreamID), settings, session, handler.ServeHTTP)
+
 		panicked := false
 		func() {
 			defer func() {
