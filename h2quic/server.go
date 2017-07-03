@@ -197,13 +197,13 @@ func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, 
 	reqBody := newRequestBody(dataStream)
 	req.Body = reqBody
 
-	responseWriter := newResponseWriter(headerStream, headerStreamMutex, dataStream, protocol.StreamID(h2headersFrame.StreamID))
+	handler := s.Handler
+	if handler == nil {
+		handler = http.DefaultServeMux
+	}
+	responseWriter := newResponseWriter(headerStream, headerStreamMutex, dataStream, protocol.StreamID(h2headersFrame.StreamID), session, handler.ServeHTTP)
 
 	go func() {
-		handler := s.Handler
-		if handler == nil {
-			handler = http.DefaultServeMux
-		}
 		panicked := false
 		func() {
 			defer func() {
