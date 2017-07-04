@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -97,10 +98,11 @@ func (w *responseWriter) Flush() {}
 // This is a NOP. Use http.Request.Context
 func (w *responseWriter) CloseNotify() <-chan bool { return make(<-chan bool) }
 
-// When Push is called, two things must happen:
-// 1. write a http2.PushPromiseFrame on the headerStream
-// 2. open a new stream (via quic.Session.OpenStream or quic.Session.OpenStreamSync) and
-//    write the pushed data to that stream (not sure if you need to frame it or not).
+// Should do:
+// - construct a valid HTTP2 header for a request for the file to push.
+// - open a new stream (maybe this should be done after sending the promise, but then how do we know the new streamID?)
+// - send a PUSH_PROMISE containing the streamID of the new stream and the HTTP2 header
+// - use the header to create a http request and use it in ServeHTTP(w ResponseWriter, r *Request) to serve the file to push.
 func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
 	// Default options.
 	if opts.Method == "" {
@@ -155,23 +157,21 @@ func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
 		}
 	}
 	// Write push promise header
-	p := http2.PushPromiseParam{
-		StreamID:      uint32(w.headerStream.StreamID()),
-		PromiseID:     uint32(newDataStreamID),
-		BlockFragment: headers.Bytes(),
-		// EndHeaders: ,
-		// PadLength: , ignore
+	pushPromiseFrame, err := PushPromiseFrame(newDataStreamID, headers.Bytes())
+	if err != nil {
+		return err
 	}
-	headerFramer := http2.NewFramer(w.headerStream, nil)
 	w.headerStreamMutex.Lock()
-	err = headerFramer.WritePushPromise(p)
+	n, err := w.headerStream.Write(pushPromiseFrame)
 	w.headerStreamMutex.Unlock() // Do not defer as we will first call ServeHTTP(), which will need the mutex
 	if err != nil {
 		return err
 	}
-	// TODO
+	if n != len(pushPromiseFrame) {
+		return io.ErrShortWrite
+	}
 	// golang net/http2 constructs a 'fake' http2 request and feeds it to the serve() loop to let it be processed as a normal request.
-	// But we will, for now, just handle it here:
+	// But we will, for now, just ServeHTTP() it here:
 	pushRequest, err := requestFromHTTPHeader(opts.Header, path, authority, opts.Method, contentLengthStr)
 	if err != nil {
 		return err
