@@ -2,6 +2,7 @@ package h2quic
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
 	"net/http"
 	"sync"
@@ -161,7 +162,6 @@ var _ = Describe("Response Writer", func() {
 		var _ http.Pusher = &responseWriter{}
 		method := "GET"
 		fakePushData := "Pushed something"
-
 		// HandlerFunc for pusher
 		handlerFunc := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			defer GinkgoRecover()
@@ -175,9 +175,9 @@ var _ = Describe("Response Writer", func() {
 		w = newResponseWriter(headerStream, &sync.Mutex{}, dataStream, dataStream.id, session, handlerFunc)
 
 		// add stream to open to the session so we can push:
-		pushStreamID := protocol.StreamID(6)
-		pushStreamA := newMockStream(pushStreamID)
-		session.streamsToOpen = []quic.Stream{pushStreamA}
+		pushStreamID := protocol.StreamID(2)
+		pushStream := newMockStream(pushStreamID)
+		session.streamsToOpen = []quic.Stream{pushStream}
 
 		// Push
 		opts := &http.PushOptions{
@@ -188,10 +188,46 @@ var _ = Describe("Response Writer", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		// Check headerStream for push promise
-		testPushPromiseFrame(pushStreamID, headerStream.dataWritten.Bytes(), -1)
-		// TODO: check headerStream for correct request header
+		headerFrame := headerStream.dataWritten.Bytes()
+		indexStart := 3            // skip length (3 bytes)
+		indexEnd := indexStart + 1 // frame type is 1 byte
+		frameType := http2.FrameType(headerFrame[indexStart:indexEnd][0])
+		Expect(frameType).To(Equal(http2.FramePushPromise))
+		// headerStream ID
+		indexStart = indexEnd + 1 // skip flags (1 byte)
+		indexEnd = indexStart + 4 // streamID is 4 bytes
+		streamID := binary.BigEndian.Uint32(headerFrame[indexStart:indexEnd])
+		Expect(streamID).To(BeEquivalentTo(dataStream.StreamID()))
+		// PromisedID
+		indexStart = indexEnd
+		indexEnd = indexStart + 4 // promisedID is 4 bytes
+		promisedID := binary.BigEndian.Uint32(headerFrame[indexStart:indexEnd])
+		Expect(promisedID).To(BeEquivalentTo(pushStreamID))
+		// promise fields Fields
+		fields := decodePushPromiseFields(headerFrame)
+		Expect(fields[":method"][0]).To(Equal(method))
+		Expect(fields[":authority"][0]).To(Equal(serverAddr))
+		Expect(fields[":path"][0]).To(Equal(pushTarget))
 
 		// Check new dataStream for pushed resource
-		Expect(pushStreamA.dataWritten.Bytes()).To(Equal([]byte(fakePushData)))
+		Expect(pushStream.dataWritten.Bytes()).To(Equal([]byte(fakePushData)))
 	})
 })
+
+func decodePushPromiseFields(headerData []byte) map[string][]string {
+	fields := make(map[string][]string)
+	decoder := hpack.NewDecoder(4096, func(hf hpack.HeaderField) {})
+	h2framer := http2.NewFramer(nil, bytes.NewReader(headerData))
+
+	frame, err := h2framer.ReadFrame()
+	Expect(err).ToNot(HaveOccurred())
+	Expect(frame).To(BeAssignableToTypeOf(&http2.PushPromiseFrame{}))
+
+	hframe := frame.(*http2.PushPromiseFrame)
+	headerFields, err := decoder.DecodeFull(hframe.HeaderBlockFragment())
+	Expect(err).ToNot(HaveOccurred())
+	for _, p := range headerFields {
+		fields[p.Name] = append(fields[p.Name], p.Value)
+	}
+	return fields
+}
