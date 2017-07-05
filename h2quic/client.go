@@ -59,6 +59,7 @@ func newClient(tlsConfig *tls.Config, hostname string, opts *roundTripperOpts) *
 		tlsConf:         tlsConfig,
 		config: &quic.Config{
 			RequestConnectionIDTruncation: true,
+			KeepAlive:                     true,
 		},
 		opts:          opts,
 		headerErrored: make(chan struct{}),

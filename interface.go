@@ -86,6 +86,8 @@ type Config struct {
 	// MaxReceiveConnectionFlowControlWindow is the connection-level flow control window for receiving data.
 	// If this value is zero, it will default to 1.5 MB for the server and 15 MB for the client.
 	MaxReceiveConnectionFlowControlWindow protocol.ByteCount
+	// KeepAlive defines whether this peer will periodically send PING frames to keep the connection alive.
+	KeepAlive bool
 }
 
 // A Listener for incoming QUIC connections
