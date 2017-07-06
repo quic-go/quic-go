@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"fmt"
+
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
@@ -46,8 +48,7 @@ var _ = Describe("QUIC Proxy", func() {
 			addr, err := net.ResolveUDPAddr("udp", "localhost:"+strconv.Itoa(proxy.LocalPort()))
 			Expect(err).ToNot(HaveOccurred())
 			_, err = net.ListenUDP("udp", addr)
-			Expect(err).To(MatchError("listen udp 127.0.0.1:" + strconv.Itoa(proxy.LocalPort()) + ": bind: address already in use"))
-
+			Expect(err).To(MatchError(fmt.Sprintf("listen udp 127.0.0.1:%d: bind: address already in use", proxy.LocalPort())))
 			Expect(proxy.Close()).To(Succeed()) // stopping is tested in the next test
 		})
 
@@ -61,9 +62,12 @@ var _ = Describe("QUIC Proxy", func() {
 			// check that the proxy port is not in use anymore
 			addr, err := net.ResolveUDPAddr("udp", "localhost:"+strconv.Itoa(port))
 			Expect(err).ToNot(HaveOccurred())
-			ln, err := net.ListenUDP("udp", addr)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(ln.Close()).To(Succeed())
+			// sometimes it takes a while for the OS to free the port
+			Eventually(func() error {
+				ln, err := net.ListenUDP("udp", addr)
+				defer ln.Close()
+				return err
+			}).ShouldNot(HaveOccurred())
 		})
 
 		It("has the correct LocalAddr and LocalPort", func() {
