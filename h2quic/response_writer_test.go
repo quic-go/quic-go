@@ -68,11 +68,10 @@ var _ = Describe("Response Writer", func() {
 		headerStream *mockStream
 		dataStream   *mockStream
 		session      *mockSession
+		requestHost  string
 	)
-	pushTarget := "/push_example"
-	requestHost := "www.example.com"
-
 	BeforeEach(func() {
+		requestHost = "www.request.com"
 		headerStream = &mockStream{}
 		headerStream.id = protocol.StreamID(3)
 		dataStream = &mockStream{}
@@ -167,61 +166,101 @@ var _ = Describe("Response Writer", func() {
 		Expect(dataStream.dataWritten.Bytes()).To(HaveLen(0))
 	})
 
-	It("pushes", func() {
-		// test that we implement http.Pusher
-		var _ http.Pusher = &responseWriter{}
-		method := "GET"
-		fakePushData := "Pushed something"
-		// HandlerFunc for pusher
-		handlerFunc := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			defer GinkgoRecover()
-			url := r.URL.String()
-			Expect(url).To(ContainSubstring(pushTarget))
-			Expect(r.Method).To(Equal(method))
-			n, err := w.Write([]byte(fakePushData))
-			Expect(err).ToNot(HaveOccurred())
-			Expect(n).To(Equal(len(fakePushData)))
+	Context("Server push", func() {
+		var (
+			method       string
+			fakePushData string
+			pushStream   *mockStream
+			opts         *http.PushOptions
+			pushTarget   string
+		)
+		BeforeEach(func() {
+			// test that we implement http.Pusher
+			var _ http.Pusher = &responseWriter{}
+			method = "GET"
+			fakePushData = "Pushed something"
+			pushTarget = "/push_example"
+			// HandlerFunc for pusher
+			handlerFunc := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer GinkgoRecover()
+				Expect(r.Method).To(Equal(method))
+				n, err := w.Write([]byte(fakePushData))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(n).To(Equal(len(fakePushData)))
+			})
+			w = newResponseWriter(headerStream, &sync.Mutex{}, dataStream, dataStream.id, newSessionSettings(), session, handlerFunc, requestHost)
+			opts = &http.PushOptions{
+				Method: method,
+				Header: http.Header{},
+			}
+			// add stream to open to the session so we can push:
+			pushStream = newMockStream(2)
+			session.streamsToOpen = []quic.Stream{pushStream}
 		})
-		w = newResponseWriter(headerStream, &sync.Mutex{}, dataStream, dataStream.id, newSessionSettings(), session, handlerFunc, requestHost)
 
-		// add stream to open to the session so we can push:
-		pushStreamID := protocol.StreamID(2)
-		pushStream := newMockStream(pushStreamID)
-		session.streamsToOpen = []quic.Stream{pushStream}
+		It("sends a valid PUSH_PROMISE frame", func() {
+			err := w.Push(pushTarget, opts)
+			Expect(err).ToNot(HaveOccurred())
+			// Check headerStream for push promise
+			headerFrame := headerStream.dataWritten.Bytes()
+			indexStart := 3            // skip length (3 bytes)
+			indexEnd := indexStart + 1 // frame type is 1 byte
+			frameType := http2.FrameType(headerFrame[indexStart:indexEnd][0])
+			Expect(frameType).To(Equal(http2.FramePushPromise))
+			// headerStream ID
+			indexStart = indexEnd + 1 // skip flags (1 byte)
+			indexEnd = indexStart + 4 // streamID is 4 bytes
+			streamID := binary.BigEndian.Uint32(headerFrame[indexStart:indexEnd])
+			Expect(streamID).To(BeEquivalentTo(dataStream.StreamID()))
+			// PromisedID
+			indexStart = indexEnd
+			indexEnd = indexStart + 4 // promisedID is 4 bytes
+			promisedID := binary.BigEndian.Uint32(headerFrame[indexStart:indexEnd])
+			Expect(promisedID).To(BeEquivalentTo(pushStream.id))
+		})
 
-		// Push
-		opts := &http.PushOptions{
-			Method: method,
-			Header: http.Header{},
-		}
-		err := w.Push(pushTarget, opts)
-		Expect(err).ToNot(HaveOccurred())
+		It("Sends a valid header in the PUSH_PROMISE", func() {
+			err := w.Push(pushTarget, opts)
+			Expect(err).ToNot(HaveOccurred())
+			fields := decodePushPromiseFields(headerStream.dataWritten.Bytes())
+			Expect(fields[":method"][0]).To(Equal(method))
+			Expect(fields[":authority"][0]).To(Equal(requestHost))
+			Expect(fields[":path"][0]).To(Equal(pushTarget))
+			Expect(fields[":scheme"][0]).To(Equal("https"))
+		})
 
-		// Check headerStream for push promise
-		headerFrame := headerStream.dataWritten.Bytes()
-		indexStart := 3            // skip length (3 bytes)
-		indexEnd := indexStart + 1 // frame type is 1 byte
-		frameType := http2.FrameType(headerFrame[indexStart:indexEnd][0])
-		Expect(frameType).To(Equal(http2.FramePushPromise))
-		// headerStream ID
-		indexStart = indexEnd + 1 // skip flags (1 byte)
-		indexEnd = indexStart + 4 // streamID is 4 bytes
-		streamID := binary.BigEndian.Uint32(headerFrame[indexStart:indexEnd])
-		Expect(streamID).To(BeEquivalentTo(dataStream.StreamID()))
-		// PromisedID
-		indexStart = indexEnd
-		indexEnd = indexStart + 4 // promisedID is 4 bytes
-		promisedID := binary.BigEndian.Uint32(headerFrame[indexStart:indexEnd])
-		Expect(promisedID).To(BeEquivalentTo(pushStreamID))
-		// promise fields Fields
-		fields := decodePushPromiseFields(headerFrame)
-		Expect(fields[":method"][0]).To(Equal(method))
-		Expect(fields[":authority"][0]).To(Equal(requestHost))
-		Expect(fields[":path"][0]).To(Equal(pushTarget))
-		Expect(fields[":scheme"][0]).To(Equal("https"))
+		It("pushes", func() {
+			err := w.Push(pushTarget, opts)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(pushStream.dataWritten.Bytes()).To(Equal([]byte(fakePushData)))
+			Expect(pushStream.closed).To(BeTrue())
+		})
 
-		// Check new dataStream for pushed resource
-		Expect(pushStream.dataWritten.Bytes()).To(Equal([]byte(fakePushData)))
+		It("pushes targets with a scheme", func() {
+			pushTarget = "https://www.push.com/push_example"
+			err := w.Push(pushTarget, opts)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(pushStream.dataWritten.Bytes()).To(Equal([]byte(fakePushData)))
+			Expect(pushStream.closed).To(BeTrue())
+		})
+
+		It("Does not push when there is no available stream", func() {
+			session.streamsToOpen = []quic.Stream{}
+			err := w.Push(pushTarget, opts)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("Does not send push_promise on a server initiated stream", func() {
+			headerStream.id = 4
+			err := w.Push(pushTarget, opts)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("Does not send push resource on a client initiated stream", func() {
+			pushStream.id = 7
+			err := w.Push(pushTarget, opts)
+			Expect(err).To(HaveOccurred())
+		})
 	})
 })
 

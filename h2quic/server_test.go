@@ -42,7 +42,7 @@ func (s *mockSession) GetOrOpenStream(id protocol.StreamID) (quic.Stream, error)
 }
 func (s *mockSession) AcceptStream() (quic.Stream, error) { return s.streamToAccept, nil }
 func (s *mockSession) OpenStream() (quic.Stream, error) {
-	if s.streamOpenErr != nil {
+	if s.streamOpenErr != nil || len(s.streamsToOpen) <= 0 {
 		return nil, s.streamOpenErr
 	}
 	str := s.streamsToOpen[0]
