@@ -38,44 +38,42 @@ var _ = Describe("QUIC Proxy", func() {
 
 	Context("Proxy setup and teardown", func() {
 		It("sets up the UDPProxy", func() {
-			proxy, err := NewQuicProxy("localhost:13370", Opts{RemoteAddr: serverAddr})
+			proxy, err := NewQuicProxy("localhost:0", Opts{RemoteAddr: serverAddr})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(proxy.clientDict).To(HaveLen(0))
 
-			// check that port 13370 is in use
-			addr, err := net.ResolveUDPAddr("udp", "localhost:13370")
+			// check that the proxy port is in use
+			addr, err := net.ResolveUDPAddr("udp", "localhost:"+strconv.Itoa(proxy.LocalPort()))
 			Expect(err).ToNot(HaveOccurred())
 			_, err = net.ListenUDP("udp", addr)
-			Expect(err).To(MatchError("listen udp 127.0.0.1:13370: bind: address already in use"))
+			Expect(err).To(MatchError("listen udp 127.0.0.1:" + strconv.Itoa(proxy.LocalPort()) + ": bind: address already in use"))
 
-			err = proxy.Close() // stopping is tested in the next test
-			Expect(err).ToNot(HaveOccurred())
+			Expect(proxy.Close()).To(Succeed()) // stopping is tested in the next test
 		})
 
 		It("stops the UDPProxy", func() {
-			proxy, err := NewQuicProxy("localhost:13371", Opts{RemoteAddr: serverAddr})
+			proxy, err := NewQuicProxy("localhost:0", Opts{RemoteAddr: serverAddr})
 			Expect(err).ToNot(HaveOccurred())
+			port := proxy.LocalPort()
 			err = proxy.Close()
 			Expect(err).ToNot(HaveOccurred())
 
-			// check that port 13371 is not in use anymore
-			addr, err := net.ResolveUDPAddr("udp", "localhost:13371")
+			// check that the proxy port is not in use anymore
+			addr, err := net.ResolveUDPAddr("udp", "localhost:"+strconv.Itoa(port))
 			Expect(err).ToNot(HaveOccurred())
 			ln, err := net.ListenUDP("udp", addr)
 			Expect(err).ToNot(HaveOccurred())
-			err = ln.Close()
-			Expect(err).ToNot(HaveOccurred())
+			Expect(ln.Close()).To(Succeed())
 		})
 
 		It("has the correct LocalAddr and LocalPort", func() {
-			proxy, err := NewQuicProxy("localhost:13372", Opts{RemoteAddr: serverAddr})
+			proxy, err := NewQuicProxy("localhost:0", Opts{RemoteAddr: serverAddr})
 			Expect(err).ToNot(HaveOccurred())
 
-			Expect(proxy.LocalAddr().String()).To(Equal("127.0.0.1:13372"))
-			Expect(proxy.LocalPort()).To(Equal(13372))
+			Expect(proxy.LocalAddr().String()).To(Equal("127.0.0.1:" + strconv.Itoa(proxy.LocalPort())))
+			Expect(proxy.LocalPort()).ToNot(BeZero())
 
-			err = proxy.Close()
-			Expect(err).ToNot(HaveOccurred())
+			Expect(proxy.Close()).To(Succeed())
 		})
 	})
 
@@ -88,10 +86,9 @@ var _ = Describe("QUIC Proxy", func() {
 			proxy                 *QuicProxy
 		)
 
-		// start the proxy on port 10001
 		startProxy := func(opts Opts) {
 			var err error
-			proxy, err = NewQuicProxy("localhost:10001", opts)
+			proxy, err = NewQuicProxy("localhost:0", opts)
 			Expect(err).ToNot(HaveOccurred())
 			clientConn, err = net.DialUDP("udp", nil, proxy.LocalAddr().(*net.UDPAddr))
 			Expect(err).ToNot(HaveOccurred())
