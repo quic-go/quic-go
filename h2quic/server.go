@@ -187,12 +187,7 @@ func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, 
 		return nil
 	}
 
-	var streamEnded bool
-	if h2headersFrame.StreamEnded() {
-		dataStream.(remoteCloser).CloseRemote(0)
-		streamEnded = true
-		_, _ = dataStream.Read([]byte{0}) // read the eof
-	}
+	streamEnded := hasStreamEnded(h2headersFrame, dataStream)
 
 	reqBody := newRequestBody(dataStream)
 	req.Body = reqBody
@@ -201,34 +196,10 @@ func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, 
 	if handler == nil {
 		handler = http.DefaultServeMux
 	}
-	responseWriter := newResponseWriter(headerStream, headerStreamMutex, dataStream, protocol.StreamID(h2headersFrame.StreamID), session, handler.ServeHTTP)
+	responseWriter := newResponseWriter(headerStream, headerStreamMutex, dataStream, protocol.StreamID(h2headersFrame.StreamID), session, handler.ServeHTTP, req.Host)
 
 	go func() {
-		panicked := false
-		func() {
-			defer func() {
-				if p := recover(); p != nil {
-					// Copied from net/http/server.go
-					const size = 64 << 10
-					buf := make([]byte, size)
-					buf = buf[:runtime.Stack(buf, false)]
-					utils.Errorf("http: panic serving: %v\n%s", p, buf)
-					panicked = true
-				}
-			}()
-			handler.ServeHTTP(responseWriter, req)
-		}()
-		if panicked {
-			responseWriter.WriteHeader(500)
-		} else {
-			responseWriter.WriteHeader(200)
-		}
-		if responseWriter.dataStream != nil {
-			if !streamEnded && !reqBody.requestRead {
-				responseWriter.dataStream.Reset(nil)
-			}
-			responseWriter.dataStream.Close()
-		}
+		serveHTTP(handler, responseWriter, req, streamEnded, reqBody)
 		if s.CloseAfterFirstRequest {
 			time.Sleep(100 * time.Millisecond)
 			session.Close(nil)
@@ -236,6 +207,44 @@ func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, 
 	}()
 
 	return nil
+}
+
+func serveHTTP(handler http.Handler, responseWriter *responseWriter, req *http.Request, streamEnded bool, reqBody *requestBody) {
+	panicked := false
+	func() {
+		defer func() {
+			if p := recover(); p != nil {
+				// Copied from net/http/server.go
+				const size = 64 << 10
+				buf := make([]byte, size)
+				buf = buf[:runtime.Stack(buf, false)]
+				utils.Errorf("http: panic serving: %v\n%s", p, buf)
+				panicked = true
+			}
+		}()
+		handler.ServeHTTP(responseWriter, req)
+	}()
+	if panicked {
+		responseWriter.WriteHeader(500)
+	} else {
+		responseWriter.WriteHeader(200)
+	}
+	if responseWriter.dataStream != nil {
+		if !streamEnded && !reqBody.requestRead {
+			responseWriter.dataStream.Reset(nil)
+		}
+		responseWriter.dataStream.Close()
+	}
+}
+
+func hasStreamEnded(h2headersFrame *http2.HeadersFrame, dataStream quic.Stream) bool {
+	var streamEnded bool
+	if h2headersFrame.StreamEnded() {
+		dataStream.(remoteCloser).CloseRemote(0)
+		streamEnded = true
+		_, _ = dataStream.Read([]byte{0}) // read the eof
+	}
+	return streamEnded
 }
 
 // Close the server immediately, aborting requests and sending CONNECTION_CLOSE frames to connected clients.

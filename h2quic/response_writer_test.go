@@ -61,6 +61,7 @@ var _ = Describe("Response Writer", func() {
 		session      *mockSession
 	)
 	pushTarget := "/push_example"
+	requestHost := "www.example.com"
 
 	BeforeEach(func() {
 		headerStream = &mockStream{}
@@ -69,7 +70,7 @@ var _ = Describe("Response Writer", func() {
 		dataStream.id = protocol.StreamID(5)
 		session = &mockSession{}
 		handlerFunc := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
-		w = newResponseWriter(headerStream, &sync.Mutex{}, dataStream, dataStream.id, session, handlerFunc)
+		w = newResponseWriter(headerStream, &sync.Mutex{}, dataStream, dataStream.id, session, handlerFunc, requestHost)
 	})
 
 	decodeHeaderFields := func() map[string][]string {
@@ -172,7 +173,7 @@ var _ = Describe("Response Writer", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(n).To(Equal(len(fakePushData)))
 		})
-		w = newResponseWriter(headerStream, &sync.Mutex{}, dataStream, dataStream.id, session, handlerFunc)
+		w = newResponseWriter(headerStream, &sync.Mutex{}, dataStream, dataStream.id, session, handlerFunc, requestHost)
 
 		// add stream to open to the session so we can push:
 		pushStreamID := protocol.StreamID(2)
@@ -206,8 +207,9 @@ var _ = Describe("Response Writer", func() {
 		// promise fields Fields
 		fields := decodePushPromiseFields(headerFrame)
 		Expect(fields[":method"][0]).To(Equal(method))
-		Expect(fields[":authority"][0]).To(Equal(serverAddr))
+		Expect(fields[":authority"][0]).To(Equal(requestHost))
 		Expect(fields[":path"][0]).To(Equal(pushTarget))
+		Expect(fields[":scheme"][0]).To(Equal("https"))
 
 		// Check new dataStream for pushed resource
 		Expect(pushStream.dataWritten.Bytes()).To(Equal([]byte(fakePushData)))
