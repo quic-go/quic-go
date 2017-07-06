@@ -10,6 +10,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
+	"github.com/lucas-clemente/quic-go/qtrace"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -197,6 +198,7 @@ var _ = Describe("Server Crypto Setup", func() {
 			supportedVersions,
 			nil,
 			aeadChanged,
+			qtrace.Tracer{},
 		)
 		Expect(err).NotTo(HaveOccurred())
 		cs = csInt.(*cryptoSetupServer)

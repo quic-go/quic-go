@@ -11,6 +11,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
+	"github.com/lucas-clemente/quic-go/qtrace"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -117,6 +118,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			aeadChanged,
 			&TransportParameters{},
 			nil,
+			qtrace.Tracer{},
 		)
 		Expect(err).ToNot(HaveOccurred())
 		cs = csInt.(*cryptoSetupClient)
