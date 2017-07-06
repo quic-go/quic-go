@@ -142,6 +142,7 @@ func populateServerConfig(config *Config) *Config {
 		AcceptSTK:                             vsa,
 		MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindow,
 		MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindow,
+		QuicTracer:                            config.QuicTracer,
 	}
 }
 

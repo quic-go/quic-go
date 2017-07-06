@@ -209,6 +209,7 @@ func (s *session) setup(
 			s.config.Versions,
 			verifySourceAddr,
 			aeadChanged,
+			s.config.QuicTracer,
 		)
 	} else {
 		cryptoStream, _ := s.OpenStream()
@@ -222,6 +223,7 @@ func (s *session) setup(
 			aeadChanged,
 			&handshake.TransportParameters{RequestConnectionIDTruncation: s.config.RequestConnectionIDTruncation},
 			negotiatedVersions,
+			s.config.QuicTracer,
 		)
 	}
 	if err != nil {
@@ -399,6 +401,10 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 	)
 
 	packet, err := s.unpacker.Unpack(hdr.Raw, hdr, data)
+	if err == nil && packet != nil && s.config.QuicTracer.GotPacket != nil {
+		s.config.QuicTracer.GotPacket(packet.encryptionLevel, packet.frames)
+	}
+
 	if utils.Debug() {
 		if err != nil {
 			utils.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x", hdr.PacketNumber, len(data)+len(hdr.Raw), hdr.ConnectionID)
@@ -435,6 +441,10 @@ func (s *session) handleFrames(fs []frames.Frame) error {
 	for _, ff := range fs {
 		var err error
 		frames.LogFrame(ff, false)
+		if s.config.QuicTracer.GotFrame != nil {
+			s.config.QuicTracer.GotFrame(ff)
+		}
+
 		switch frame := ff.(type) {
 		case *frames.StreamFrame:
 			err = s.handleStreamFrame(frame)
@@ -712,6 +722,16 @@ func (s *session) sendConnectionClose(quicErr *qerr.QuicError) error {
 }
 
 func (s *session) logPacket(packet *packedPacket) {
+	if packet != nil && s.config.QuicTracer.SentPacket != nil {
+		s.config.QuicTracer.SentPacket(packet.number, packet.raw, packet.frames, packet.encryptionLevel)
+	}
+
+	for _, frame := range packet.frames {
+		if s.config.QuicTracer.SentFrame != nil {
+			s.config.QuicTracer.SentFrame(frame)
+		}
+	}
+
 	if !utils.Debug() {
 		// We don't need to allocate the slices for calling the format functions
 		return

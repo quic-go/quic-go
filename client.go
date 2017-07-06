@@ -170,6 +170,7 @@ func populateClientConfig(config *Config) *Config {
 		MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindow,
 		MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindow,
 		KeepAlive: config.KeepAlive,
+		QuicTracer:                            config.QuicTracer,
 	}
 }
 

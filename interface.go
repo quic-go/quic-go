@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qtrace"
 )
 
 // Stream is the interface implemented by QUIC streams
@@ -88,6 +89,8 @@ type Config struct {
 	MaxReceiveConnectionFlowControlWindow protocol.ByteCount
 	// KeepAlive defines whether this peer will periodically send PING frames to keep the connection alive.
 	KeepAlive bool
+	// The QuicTrace interface to receive packets and infomations from a quic session
+	QuicTracer qtrace.Tracer
 }
 
 // A Listener for incoming QUIC connections

@@ -22,6 +22,7 @@ import (
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 	"github.com/lucas-clemente/quic-go/testdata"
+	"github.com/lucas-clemente/quic-go/qtrace"
 )
 
 type mockConnection struct {
@@ -150,6 +151,7 @@ var _ = Describe("Session", func() {
 			_ []protocol.VersionNumber,
 			_ func(net.Addr, *handshake.STK) bool,
 			aeadChangedP chan<- protocol.EncryptionLevel,
+			_ qtrace.Tracer,
 		) (handshake.CryptoSetup, error) {
 			aeadChanged = aeadChangedP
 			return cryptoSetup, nil
@@ -205,6 +207,7 @@ var _ = Describe("Session", func() {
 				_ []protocol.VersionNumber,
 				stkFunc func(net.Addr, *handshake.STK) bool,
 				_ chan<- protocol.EncryptionLevel,
+				_ qtrace.Tracer,
 			) (handshake.CryptoSetup, error) {
 				stkVerify = stkFunc
 				return cryptoSetup, nil
@@ -1647,6 +1650,7 @@ var _ = Describe("Client Session", func() {
 			aeadChangedP chan<- protocol.EncryptionLevel,
 			_ *handshake.TransportParameters,
 			_ []protocol.VersionNumber,
+			_ qtrace.Tracer,
 		) (handshake.CryptoSetup, error) {
 			aeadChanged = aeadChangedP
 			return cryptoSetup, nil

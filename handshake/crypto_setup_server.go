@@ -13,6 +13,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
+	"github.com/lucas-clemente/quic-go/qtrace"
 )
 
 // KeyDerivationFunction is used for key derivation
@@ -28,6 +29,7 @@ type cryptoSetupServer struct {
 	scfg                 *ServerConfig
 	stkGenerator         *STKGenerator
 	diversificationNonce []byte
+	QuicTracer           qtrace.Tracer
 
 	version           protocol.VersionNumber
 	supportedVersions []protocol.VersionNumber
@@ -70,6 +72,7 @@ func NewCryptoSetup(
 	supportedVersions []protocol.VersionNumber,
 	acceptSTK func(net.Addr, *STK) bool,
 	aeadChanged chan<- protocol.EncryptionLevel,
+	QuicTracer qtrace.Tracer,
 ) (CryptoSetup, error) {
 	stkGenerator, err := NewSTKGenerator()
 	if err != nil {
@@ -90,6 +93,7 @@ func NewCryptoSetup(
 		connectionParameters: connectionParametersManager,
 		acceptSTKCallback:    acceptSTK,
 		aeadChanged:          aeadChanged,
+		QuicTracer:           QuicTracer,
 	}, nil
 }
 
@@ -106,6 +110,10 @@ func (h *cryptoSetupServer) HandleCryptoStream() error {
 		}
 
 		utils.Debugf("Got %s", message)
+		if h.QuicTracer.ServerGotHandshakeMsg != nil {
+			h.QuicTracer.ServerGotHandshakeMsg(interface{}(message))
+		}
+
 		done, err := h.handleMessage(chloData.Bytes(), message.Data)
 		if err != nil {
 			return err
@@ -331,7 +339,12 @@ func (h *cryptoSetupServer) handleInchoateCHLO(sni string, chlo []byte, cryptoDa
 
 	var serverReply bytes.Buffer
 	message.Write(&serverReply)
+
 	utils.Debugf("Sending %s", message)
+	if h.QuicTracer.ServerSentInchoateCHLO != nil {
+		h.QuicTracer.ServerSentInchoateCHLO(interface{}(message))
+	}
+
 	return serverReply.Bytes(), nil
 }
 
@@ -443,7 +456,11 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 	}
 	var reply bytes.Buffer
 	message.Write(&reply)
+
 	utils.Debugf("Sending %s", message)
+	if h.QuicTracer.ServerSentCHLO != nil {
+		h.QuicTracer.ServerSentCHLO(interface{}(message))
+	}
 
 	h.aeadChanged <- protocol.EncryptionForwardSecure
 
