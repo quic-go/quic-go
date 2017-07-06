@@ -222,12 +222,7 @@ func (s *Server) handleHeadersFrame(h2headersFrame *http2.HeadersFrame, session 
 	// head-of-line blocking. Potentially blocking code is run in a separate
 	// goroutine, enabling handleRequest to return before the code is executed.
 	go func() {
-		streamEnded := h2headersFrame.StreamEnded()
-		if streamEnded {
-			dataStream.(remoteCloser).CloseRemote(0)
-			streamEnded = true
-			_, _ = dataStream.Read([]byte{0}) // read the eof
-		}
+		streamEnded := hasStreamEnded(h2headersFrame, dataStream)
 
 		req = req.WithContext(dataStream.Context())
 		reqBody := newRequestBody(dataStream)
@@ -238,34 +233,9 @@ func (s *Server) handleHeadersFrame(h2headersFrame *http2.HeadersFrame, session 
 		if handler == nil {
 			handler = http.DefaultServeMux
 		}
-		responseWriter := newResponseWriter(headerStream, headerStreamMutex, dataStream, protocol.StreamID(h2headersFrame.StreamID), settings, session, handler.ServeHTTP)
+		responseWriter := newResponseWriter(headerStream, headerStreamMutex, dataStream, protocol.StreamID(h2headersFrame.StreamID), settings, session, handler.ServeHTTP, req.Host)
 
-		panicked := false
-		func() {
-			defer func() {
-				if p := recover(); p != nil {
-					// Copied from net/http/server.go
-					const size = 64 << 10
-					buf := make([]byte, size)
-					buf = buf[:runtime.Stack(buf, false)]
-					utils.Errorf("http: panic serving: %v\n%s", p, buf)
-					panicked = true
-				}
-			}()
-			handler.ServeHTTP(responseWriter, req)
-		}()
-		if panicked {
-			responseWriter.WriteHeader(500)
-		} else {
-			responseWriter.WriteHeader(200)
-		}
-		if responseWriter.dataStream != nil {
-			if !streamEnded && !reqBody.requestRead {
-				// in gQUIC, the error code doesn't matter, so just use 0 here
-				responseWriter.dataStream.CancelRead(0)
-			}
-			responseWriter.dataStream.Close()
-		}
+		serveHTTP(handler, responseWriter, req, streamEnded, reqBody)
 		if s.CloseAfterFirstRequest {
 			time.Sleep(100 * time.Millisecond)
 			session.Close(nil)
@@ -294,6 +264,45 @@ func (s *Server) handleSettingsFrame(h2SettingsFrame *http2.SettingsFrame, sessi
 		settings.maxHeaderListSize = settingMaxHeaderListSize
 	}
 	return nil
+}
+
+func serveHTTP(handler http.Handler, responseWriter *responseWriter, req *http.Request, streamEnded bool, reqBody *requestBody) {
+	panicked := false
+	func() {
+		defer func() {
+			if p := recover(); p != nil {
+				// Copied from net/http/server.go
+				const size = 64 << 10
+				buf := make([]byte, size)
+				buf = buf[:runtime.Stack(buf, false)]
+				utils.Errorf("http: panic serving: %v\n%s", p, buf)
+				panicked = true
+			}
+		}()
+		handler.ServeHTTP(responseWriter, req)
+	}()
+	if panicked {
+		responseWriter.WriteHeader(500)
+	} else {
+		responseWriter.WriteHeader(200)
+	}
+	if responseWriter.dataStream != nil {
+		if !streamEnded && !reqBody.requestRead {
+			// in gQUIC, the error code doesn't matter, so just use 0 here
+			responseWriter.dataStream.CancelRead(0)
+		}
+		responseWriter.dataStream.Close()
+	}
+}
+
+func hasStreamEnded(h2headersFrame *http2.HeadersFrame, dataStream quic.Stream) bool {
+	var streamEnded bool
+	if h2headersFrame.StreamEnded() {
+		dataStream.(remoteCloser).CloseRemote(0)
+		streamEnded = true
+		_, _ = dataStream.Read([]byte{0}) // read the eof
+	}
+	return streamEnded
 }
 
 // Close the server immediately, aborting requests and sending CONNECTION_CLOSE frames to connected clients.

@@ -24,8 +24,10 @@ type responseWriter struct {
 	headerStream      quic.Stream
 	headerStreamMutex *sync.Mutex
 
+	// Server Push
 	session     streamCreator
 	handlerFunc http.HandlerFunc
+	requestHost string
 
 	header        http.Header
 	status        int // status code passed to WriteHeader
@@ -34,7 +36,7 @@ type responseWriter struct {
 	settings *sessionSettings
 }
 
-func newResponseWriter(headerStream quic.Stream, headerStreamMutex *sync.Mutex, dataStream quic.Stream, dataStreamID protocol.StreamID, settings *sessionSettings, session streamCreator, handlerFunc http.HandlerFunc) *responseWriter {
+func newResponseWriter(headerStream quic.Stream, headerStreamMutex *sync.Mutex, dataStream quic.Stream, dataStreamID protocol.StreamID, settings *sessionSettings, session streamCreator, handlerFunc http.HandlerFunc, requestHost string) *responseWriter {
 	return &responseWriter{
 		header:            http.Header{},
 		headerStream:      headerStream,
@@ -44,6 +46,7 @@ func newResponseWriter(headerStream quic.Stream, headerStreamMutex *sync.Mutex, 
 		settings:          settings,
 		session:           session,
 		handlerFunc:       handlerFunc,
+		requestHost:       requestHost,
 	}
 }
 
@@ -107,7 +110,7 @@ func (w *responseWriter) CloseNotify() <-chan bool { return make(<-chan bool) }
 // - check for recursive pushes: "PUSH_PROMISE frames MUST only be sent on a peer-initiated stream."
 // - check if HTTP2 request header is valid
 func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
-	// Default options.
+	// Default options. Copied from net/http2/server.go
 	if opts.Method == "" {
 		opts.Method = "GET"
 	}
@@ -117,7 +120,7 @@ func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
 	if opts.Method != "GET" && opts.Method != methodHEAD {
 		return fmt.Errorf("method %q must be GET or HEAD", opts.Method)
 	}
-	// Validate the target.
+	// Validate the target. Copied from net/http2/server.go
 	u, err := url.Parse(target)
 	if err != nil {
 		return err
@@ -128,7 +131,7 @@ func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
 			return fmt.Errorf("target must be an absolute URL or an absolute path: %q", target)
 		}
 		u.Scheme = wantScheme
-		u.Host = "www.example.com" // TODO: get from server?
+		u.Host = w.requestHost
 	} else {
 		if u.Scheme != wantScheme {
 			return fmt.Errorf("cannot push URL with scheme %q from request with scheme %q", u.Scheme, wantScheme)
@@ -141,10 +144,6 @@ func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
 		if strings.HasPrefix(k, ":") {
 			return fmt.Errorf("promised request headers cannot include pseudo header %q", k)
 		}
-		// These headers are meaningful only if the request has a body,
-		// but PUSH_PROMISE requests cannot have a body.
-		// http://tools.ietf.org/html/rfc7540#section-8.2
-		// Also disallow Host, since the promised URL must be absolute.
 		switch strings.ToLower(k) {
 		case "content-length", "content-encoding", "trailer", "te", "expect", "host":
 			return fmt.Errorf("promised request headers cannot include %q", k)
@@ -152,20 +151,21 @@ func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
 	}
 	authority := u.Host
 	path := u.RequestURI()
-	contentLengthStr := "" // TODO
+	contentLengthStr := "0" // a request does not have content
 	// Construct HTTP headers for request in push promise
 	var headers bytes.Buffer
 	enc := hpack.NewEncoder(&headers)
 	enc.WriteField(hpack.HeaderField{Name: ":method", Value: opts.Method})
 	enc.WriteField(hpack.HeaderField{Name: ":path", Value: path})
 	enc.WriteField(hpack.HeaderField{Name: ":authority", Value: authority})
+	enc.WriteField(hpack.HeaderField{Name: ":scheme", Value: u.Scheme})
 	for k, v := range opts.Header {
 		for index := range v {
 			enc.WriteField(hpack.HeaderField{Name: strings.ToLower(k), Value: v[index]})
 		}
 	}
 	// Get new data stream
-	newDataStream, err := w.session.OpenStreamSync()
+	newDataStream, err := w.session.OpenStream()
 	if err != nil {
 		return err
 	}
@@ -188,13 +188,15 @@ func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
 		return err
 	}
 	// golang net/http2 constructs a 'fake' http2 request and feeds it to the serve() loop to let it be processed as a normal request.
-	// But we will, for now, just ServeHTTP() it here:
+	// But we will, for now, just serveHTTP() it here:
 	pushRequest, err := requestFromHTTPHeader(opts.Header, path, authority, opts.Method, contentLengthStr)
 	if err != nil {
 		return err
 	}
-	pushRequestResponseWriter := newResponseWriter(w.headerStream, w.headerStreamMutex, newDataStream, newDataStreamID, w.settings, w.session, w.handlerFunc)
-	w.handlerFunc.ServeHTTP(pushRequestResponseWriter, pushRequest)
+	reqBody := newRequestBody(newDataStream)
+	pushRequest.Body = reqBody
+	pushRequestResponseWriter := newResponseWriter(w.headerStream, w.headerStreamMutex, newDataStream, newDataStreamID, w.settings, w.session, w.handlerFunc, w.requestHost)
+	serveHTTP(w.handlerFunc, pushRequestResponseWriter, pushRequest, true, reqBody)
 	return nil
 }
 
