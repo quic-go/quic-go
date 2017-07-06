@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -14,6 +15,10 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
+)
+
+const (
+	nChromeRetries = 8
 )
 
 func getChromePath() string {
@@ -24,10 +29,20 @@ func getChromePath() string {
 }
 
 func chromeTest(version protocol.VersionNumber, url string, blockUntilDone func()) {
+	// Chrome sometimes starts but doesn't send any HTTP requests for no apparent reason.
+	// Retry starting it a couple of times.
+	for i := 0; i < nChromeRetries; i++ {
+		if chromeTestImpl(version, url, blockUntilDone) {
+			return
+		}
+	}
+	Fail("Chrome didn't hit the testing endpoints")
+}
+
+func chromeTestImpl(version protocol.VersionNumber, url string, blockUntilDone func()) bool {
 	userDataDir, err := ioutil.TempDir("", "quic-go-test-chrome-dir")
 	Expect(err).NotTo(HaveOccurred())
 	defer os.RemoveAll(userDataDir)
-
 	path := getChromePath()
 	args := []string{
 		"--disable-gpu",
@@ -46,7 +61,19 @@ func chromeTest(version protocol.VersionNumber, url string, blockUntilDone func(
 	session, err := gexec.Start(command, GinkgoWriter, GinkgoWriter)
 	Expect(err).NotTo(HaveOccurred())
 	defer session.Kill()
+	const pollInterval = 100 * time.Millisecond
+	const pollDuration = 10 * time.Second
+	for i := 0; i < int(pollDuration/pollInterval); i++ {
+		time.Sleep(pollInterval)
+		if testEndpointCalled {
+			break
+		}
+	}
+	if !testEndpointCalled {
+		return false
+	}
 	blockUntilDone()
+	return true
 }
 
 var _ = Describe("Chrome tests", func() {

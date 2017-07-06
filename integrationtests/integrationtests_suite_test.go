@@ -33,13 +33,14 @@ const (
 )
 
 var (
-	server         *h2quic.Server
-	dataMan        dataManager
-	port           string
-	clientPath     string
-	serverPath     string
-	nFilesUploaded int32
-	doneCalled     bool
+	server             *h2quic.Server
+	dataMan            dataManager
+	port               string
+	clientPath         string
+	serverPath         string
+	nFilesUploaded     int32
+	testEndpointCalled bool
+	doneCalled         bool
 
 	logFileName string // the log file set in the ginkgo flags
 	logFile     *os.File
@@ -88,6 +89,7 @@ var _ = AfterEach(func() {
 
 	nFilesUploaded = 0
 	doneCalled = false
+	testEndpointCalled = false
 })
 
 func setupHTTPHandlers() {
@@ -133,6 +135,7 @@ func setupHTTPHandlers() {
 		response = strings.Replace(response, "NUM", r.URL.Query().Get("num"), -1)
 		_, err := io.WriteString(w, response)
 		Expect(err).NotTo(HaveOccurred())
+		testEndpointCalled = true
 	})
 
 	// Requires the len & num GET parameters, e.g. /downloadtest?len=100&num=1
@@ -143,6 +146,7 @@ func setupHTTPHandlers() {
 		response = strings.Replace(response, "NUM", r.URL.Query().Get("num"), -1)
 		_, err := io.WriteString(w, response)
 		Expect(err).NotTo(HaveOccurred())
+		testEndpointCalled = true
 	})
 
 	http.HandleFunc("/uploadhandler", func(w http.ResponseWriter, r *http.Request) {
