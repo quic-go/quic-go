@@ -13,6 +13,7 @@ import (
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 )
@@ -99,14 +100,15 @@ func (w *responseWriter) CloseNotify() <-chan bool { return make(<-chan bool) }
 
 // Should do:
 // - construct a valid HTTP2 header for a request for the file to push.
-// - open a new stream (maybe this should be done after sending the promise, but then how do we know the new streamID?)
+// - open a new stream (server side)
 // - send a PUSH_PROMISE containing the streamID of the new stream and the HTTP2 header
 // - use the header to create a http request and use it in ServeHTTP(w ResponseWriter, r *Request) to serve the file to push.
 // TODO (a lot of these are taken from golang.org/x/net/http2/server.go: push(target string, opts pushOptions) )
-// - get host/authority
 // - check for recursive pushes: "PUSH_PROMISE frames MUST only be sent on a peer-initiated stream."
-// - check if HTTP2 request header is valid
 func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
+	if w.headerStream.StreamID()%2 == 0 {
+		return http2.ErrRecursivePush
+	}
 	// Default options. Copied from net/http2/server.go
 	if opts.Method == "" {
 		opts.Method = "GET"
@@ -146,6 +148,9 @@ func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
 			return fmt.Errorf("promised request headers cannot include %q", k)
 		}
 	}
+	if err = checkValidHTTP2RequestHeaders(opts.Header); err != nil {
+		return err
+	}
 	authority := u.Host
 	path := u.RequestURI()
 	contentLengthStr := "0" // a request does not have content
@@ -164,12 +169,18 @@ func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
 	// Get new data stream
 	newDataStream, err := w.session.OpenStream()
 	if err != nil {
+		if err == qerr.TooManyOpenStreams {
+			err = http2.ErrPushLimitReached
+		}
 		return err
 	}
 	if newDataStream == nil {
 		return fmt.Errorf("Got invalid data stream")
 	}
 	newDataStreamID := newDataStream.StreamID()
+	if newDataStreamID%2 != 0 {
+		return fmt.Errorf("Cannot push on client side stream")
+	}
 	// Write push promise header
 	p := http2.PushPromiseParam{
 		StreamID:      uint32(w.dataStreamID),
@@ -178,6 +189,9 @@ func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
 		EndHeaders:    true,
 	}
 	headerFramer := http2.NewFramer(w.headerStream, nil)
+
+	utils.Debugf("Sending PUSH_PROMISE for target '%s' on stream %d, promised on stream %d", target, w.headerStream.StreamID(), newDataStreamID)
+
 	w.headerStreamMutex.Lock()
 	err = headerFramer.WritePushPromise(p)
 	w.headerStreamMutex.Unlock() // Do not defer as we will first call ServeHTTP(), which will need the mutex
@@ -190,6 +204,7 @@ func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
 	if err != nil {
 		return err
 	}
+	pushRequest.RemoteAddr = w.session.RemoteAddr().String()
 	reqBody := newRequestBody(newDataStream)
 	pushRequest.Body = reqBody
 	pushRequestResponseWriter := newResponseWriter(w.headerStream, w.headerStreamMutex, newDataStream, newDataStreamID, w.session, w.handlerFunc, w.requestHost)
@@ -219,4 +234,25 @@ func bodyAllowedForStatus(status int) bool {
 		return false
 	}
 	return true
+}
+
+// Copied from net/http2/server.go
+func checkValidHTTP2RequestHeaders(h http.Header) error {
+	var connHeaders = []string{
+		"Connection",
+		"Keep-Alive",
+		"Proxy-Connection",
+		"Transfer-Encoding",
+		"Upgrade",
+	}
+	for _, k := range connHeaders {
+		if _, ok := h[k]; ok {
+			return fmt.Errorf("request header %q is not valid in HTTP/2", k)
+		}
+	}
+	te := h["Te"]
+	if len(te) > 0 && (len(te) > 1 || (te[0] != "trailers" && te[0] != "")) {
+		return errors.New(`request header "TE" may only be "trailers" in HTTP/2`)
+	}
+	return nil
 }
