@@ -29,7 +29,7 @@ type cryptoSetupClient struct {
 	cryptoStream io.ReadWriter
 
 	serverConfig *serverConfigClient
-	QuicTracer qtrace.Tracer
+	QuicTracer *qtrace.Tracer
 
 	stk              []byte
 	sno              []byte
@@ -76,7 +76,7 @@ func NewCryptoSetupClient(
 	aeadChanged chan<- protocol.EncryptionLevel,
 	params *TransportParameters,
 	negotiatedVersions []protocol.VersionNumber,
-	QuicTracer qtrace.Tracer,
+	QuicTracer *qtrace.Tracer,
 ) (CryptoSetup, error) {
 	return &cryptoSetupClient{
 		hostname:             hostname,
@@ -143,7 +143,7 @@ func (h *cryptoSetupClient) HandleCryptoStream() error {
 		}
 
 		utils.Debugf("Got %s", message)
-		if h.QuicTracer.ClientGotHandshakeMsg != nil {
+		if h.QuicTracer != nil && h.QuicTracer.ClientGotHandshakeMsg != nil {
 			h.QuicTracer.ClientGotHandshakeMsg(interface{}(message))
 		}
 
@@ -413,7 +413,7 @@ func (h *cryptoSetupClient) sendCHLO() error {
 	}
 
 	utils.Debugf("Sending %s", message)
-	if h.QuicTracer.ClientSentCHLO != nil {
+	if h.QuicTracer != nil && h.QuicTracer.ClientSentCHLO != nil {
 		h.QuicTracer.ClientSentCHLO(interface{}(message))
 	}
 	message.Write(b)

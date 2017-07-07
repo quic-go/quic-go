@@ -209,7 +209,7 @@ func (s *session) setup(
 			s.config.Versions,
 			verifySourceAddr,
 			aeadChanged,
-			s.config.QuicTracer,
+			&s.config.QuicTracer,
 		)
 	} else {
 		cryptoStream, _ := s.OpenStream()
@@ -223,7 +223,7 @@ func (s *session) setup(
 			aeadChanged,
 			&handshake.TransportParameters{RequestConnectionIDTruncation: s.config.RequestConnectionIDTruncation},
 			negotiatedVersions,
-			s.config.QuicTracer,
+			&s.config.QuicTracer,
 		)
 	}
 	if err != nil {

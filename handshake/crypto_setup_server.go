@@ -29,7 +29,7 @@ type cryptoSetupServer struct {
 	scfg                 *ServerConfig
 	stkGenerator         *STKGenerator
 	diversificationNonce []byte
-	QuicTracer           qtrace.Tracer
+	QuicTracer           *qtrace.Tracer
 
 	version           protocol.VersionNumber
 	supportedVersions []protocol.VersionNumber
@@ -72,7 +72,7 @@ func NewCryptoSetup(
 	supportedVersions []protocol.VersionNumber,
 	acceptSTK func(net.Addr, *STK) bool,
 	aeadChanged chan<- protocol.EncryptionLevel,
-	QuicTracer qtrace.Tracer,
+	QuicTracer *qtrace.Tracer,
 ) (CryptoSetup, error) {
 	stkGenerator, err := NewSTKGenerator()
 	if err != nil {
@@ -110,7 +110,7 @@ func (h *cryptoSetupServer) HandleCryptoStream() error {
 		}
 
 		utils.Debugf("Got %s", message)
-		if h.QuicTracer.ServerGotHandshakeMsg != nil {
+		if h.QuicTracer != nil && h.QuicTracer.ServerGotHandshakeMsg != nil {
 			h.QuicTracer.ServerGotHandshakeMsg(interface{}(message))
 		}
 
@@ -341,7 +341,7 @@ func (h *cryptoSetupServer) handleInchoateCHLO(sni string, chlo []byte, cryptoDa
 	message.Write(&serverReply)
 
 	utils.Debugf("Sending %s", message)
-	if h.QuicTracer.ServerSentInchoateCHLO != nil {
+	if h.QuicTracer != nil && h.QuicTracer.ServerSentInchoateCHLO != nil {
 		h.QuicTracer.ServerSentInchoateCHLO(interface{}(message))
 	}
 
@@ -458,7 +458,7 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 	message.Write(&reply)
 
 	utils.Debugf("Sending %s", message)
-	if h.QuicTracer.ServerSentCHLO != nil {
+	if h.QuicTracer != nil && h.QuicTracer.ServerSentCHLO != nil {
 		h.QuicTracer.ServerSentCHLO(interface{}(message))
 	}
 
