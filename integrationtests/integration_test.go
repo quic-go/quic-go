@@ -34,7 +34,7 @@ var _ = Describe("Integration tests", func() {
 					"--port="+port,
 					"https://quic.clemente.io/hello",
 				)
-				session, err := Start(command, GinkgoWriter, GinkgoWriter)
+				session, err := Start(command, nil, GinkgoWriter)
 				Expect(err).NotTo(HaveOccurred())
 				defer session.Kill()
 				Eventually(session, 5).Should(Exit(0))
@@ -51,7 +51,7 @@ var _ = Describe("Integration tests", func() {
 					"--body=foo",
 					"https://quic.clemente.io/echo",
 				)
-				session, err := Start(command, GinkgoWriter, GinkgoWriter)
+				session, err := Start(command, nil, GinkgoWriter)
 				Expect(err).NotTo(HaveOccurred())
 				defer session.Kill()
 				Eventually(session, 5).Should(Exit(0))

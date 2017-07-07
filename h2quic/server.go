@@ -69,11 +69,11 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 }
 
 // Serve an existing UDP connection.
-func (s *Server) Serve(conn *net.UDPConn) error {
+func (s *Server) Serve(conn net.PacketConn) error {
 	return s.serveImpl(s.TLSConfig, conn)
 }
 
-func (s *Server) serveImpl(tlsConfig *tls.Config, conn *net.UDPConn) error {
+func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 	if s.Server == nil {
 		return errors.New("use of h2quic.Server without http.Server")
 	}
