@@ -58,6 +58,8 @@ type cubicSender struct {
 
 	initialCongestionWindow    protocol.PacketNumber
 	initialMaxCongestionWindow protocol.PacketNumber
+
+	lastPacketSentOn time.Time
 }
 
 // NewCubicSender makes a new cubic sender
@@ -77,14 +79,17 @@ func NewCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestio
 }
 
 func (c *cubicSender) TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCount) time.Duration {
+	packetSize := protocol.ByteCount(10) // TODO add to args
+	cwnd := c.GetCongestionWindow()
 	if c.InRecovery() {
 		// PRR is used when in recovery.
-		return c.prr.TimeUntilSend(c.GetCongestionWindow(), bytesInFlight, c.GetSlowStartThreshold())
+		return c.prr.TimeUntilSend(cwnd, bytesInFlight, c.GetSlowStartThreshold())
 	}
-	if c.GetCongestionWindow() > bytesInFlight {
-		return 0
+	if bytesInFlight > cwnd {
+		return utils.InfDuration
 	}
-	return utils.InfDuration
+	timeToSend := c.lastPacketSentOn.Add((time.Duration(packetSize) * c.rttStats.SmoothedRTT()) / time.Duration(cwnd))
+	return timeToSend.Sub(now)
 }
 
 func (c *cubicSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) bool {
@@ -98,6 +103,7 @@ func (c *cubicSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.By
 	}
 	c.largestSentPacketNumber = packetNumber
 	c.hybridSlowStart.OnPacketSent(packetNumber)
+	c.lastPacketSentOn = sentTime
 	return true
 }
 
