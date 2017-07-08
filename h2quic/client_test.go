@@ -25,9 +25,11 @@ var _ = Describe("Client", func() {
 		session      *mockSession
 		headerStream *mockStream
 		req          *http.Request
+		origDialAddr = dialAddr
 	)
 
 	BeforeEach(func() {
+		origDialAddr = dialAddr
 		hostname := "quic.clemente.io:1337"
 		client = newClient(nil, hostname, &roundTripperOpts{})
 		Expect(client.hostname).To(Equal(hostname))
@@ -40,6 +42,10 @@ var _ = Describe("Client", func() {
 		var err error
 		req, err = http.NewRequest("GET", "https://localhost:1337", nil)
 		Expect(err).ToNot(HaveOccurred())
+	})
+
+	AfterEach(func() {
+		dialAddr = origDialAddr
 	})
 
 	It("saves the TLS config", func() {
@@ -56,7 +62,7 @@ var _ = Describe("Client", func() {
 	It("dials", func(done Done) {
 		client = newClient(nil, "localhost:1337", &roundTripperOpts{})
 		session.streamsToOpen = []quic.Stream{newMockStream(3), newMockStream(5)}
-		client.dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
+		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
 			return session, nil
 		}
 		close(headerStream.unblockRead)
@@ -68,7 +74,7 @@ var _ = Describe("Client", func() {
 	It("errors when dialing fails", func() {
 		testErr := errors.New("handshake error")
 		client = newClient(nil, "localhost:1337", &roundTripperOpts{})
-		client.dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
+		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
 			return nil, testErr
 		}
 		_, err := client.RoundTrip(req)
@@ -78,7 +84,7 @@ var _ = Describe("Client", func() {
 	It("errors if the header stream has the wrong stream ID", func() {
 		client = newClient(nil, "localhost:1337", &roundTripperOpts{})
 		session.streamsToOpen = []quic.Stream{&mockStream{id: 2}}
-		client.dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
+		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
 			return session, nil
 		}
 		_, err := client.RoundTrip(req)
@@ -89,7 +95,7 @@ var _ = Describe("Client", func() {
 		testErr := errors.New("you shall not pass")
 		client = newClient(nil, "localhost:1337", &roundTripperOpts{})
 		session.streamOpenErr = testErr
-		client.dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
+		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
 			return session, nil
 		}
 		_, err := client.RoundTrip(req)
@@ -98,7 +104,7 @@ var _ = Describe("Client", func() {
 
 	It("returns a request when dial fails", func() {
 		testErr := errors.New("dial error")
-		client.dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
+		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
 			return nil, testErr
 		}
 		request, err := http.NewRequest("https", "https://quic.clemente.io:1337/file1.dat", nil)
@@ -140,7 +146,7 @@ var _ = Describe("Client", func() {
 		BeforeEach(func() {
 			var err error
 			client.encryptionLevel = protocol.EncryptionForwardSecure
-			client.dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
+			dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
 				return session, nil
 			}
 			dataStream = newMockStream(5)

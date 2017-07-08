@@ -2,9 +2,12 @@ package h2quic
 
 import (
 	"bytes"
+	"crypto/tls"
+	"errors"
 	"io"
 	"net/http"
 
+	quic "github.com/lucas-clemente/quic-go"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -54,13 +57,43 @@ var _ = Describe("RoundTripper", func() {
 		Expect(err).ToNot(HaveOccurred())
 	})
 
-	It("reuses existing clients", func() {
-		rt.clients = make(map[string]http.RoundTripper)
-		rt.clients["www.example.org:443"] = &mockRoundTripper{}
-		rsp, err := rt.RoundTrip(req1)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(rsp.Request).To(Equal(req1))
-		Expect(rt.clients).To(HaveLen(1))
+	Context("dialing hosts", func() {
+		origDialAddr := dialAddr
+		streamOpenErr := errors.New("error opening stream")
+
+		BeforeEach(func() {
+			origDialAddr = dialAddr
+			dialAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.Session, error) {
+				// return an error when trying to open a stream
+				// we don't want to test all the dial logic here, just that dialing happens at all
+				return &mockSession{streamOpenErr: streamOpenErr}, nil
+			}
+		})
+
+		AfterEach(func() {
+			dialAddr = origDialAddr
+		})
+
+		It("creates new clients", func() {
+			req, err := http.NewRequest("GET", "https://quic.clemente.io/foobar.html", nil)
+			Expect(err).ToNot(HaveOccurred())
+			_, err = rt.RoundTrip(req)
+			Expect(err).To(MatchError(streamOpenErr))
+			Expect(rt.clients).To(HaveLen(1))
+		})
+
+		It("reuses existing clients", func() {
+			req, err := http.NewRequest("GET", "https://quic.clemente.io/file1.html", nil)
+			Expect(err).ToNot(HaveOccurred())
+			_, err = rt.RoundTrip(req)
+			Expect(err).To(MatchError(streamOpenErr))
+			Expect(rt.clients).To(HaveLen(1))
+			req2, err := http.NewRequest("GET", "https://quic.clemente.io/file2.html", nil)
+			Expect(err).ToNot(HaveOccurred())
+			_, err = rt.RoundTrip(req2)
+			Expect(err).To(MatchError(streamOpenErr))
+			Expect(rt.clients).To(HaveLen(1))
+		})
 	})
 
 	Context("validating request", func() {
