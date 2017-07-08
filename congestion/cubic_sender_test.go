@@ -43,15 +43,15 @@ var _ = Describe("Cubic Sender", func() {
 	})
 
 	SendAvailableSendWindowLen := func(packetLength protocol.ByteCount) int {
-		// Send as long as TimeUntilSend returns Zero.
+		// Send as long as TimeUntilSend returns Zero or negative.
 		packets_sent := 0
-		can_send := sender.TimeUntilSend(clock.Now(), bytesInFlight) == 0
+		can_send := sender.TimeUntilSend(clock.Now(), bytesInFlight, packetLength) <= 0
 		for can_send {
 			sender.OnPacketSent(clock.Now(), bytesInFlight, packetNumber, packetLength, true)
 			packetNumber++
 			packets_sent++
 			bytesInFlight += packetLength
-			can_send = sender.TimeUntilSend(clock.Now(), bytesInFlight) == 0
+			can_send = sender.TimeUntilSend(clock.Now(), bytesInFlight, packetLength) <= 0
 		}
 		return packets_sent
 	}
@@ -90,24 +90,24 @@ var _ = Describe("Cubic Sender", func() {
 		// At startup make sure we are at the default.
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
 		// At startup make sure we can send.
-		Expect(sender.TimeUntilSend(clock.Now(), 0)).To(BeZero())
+		Expect(sender.TimeUntilSend(clock.Now(), 0, protocol.DefaultTCPMSS)).To(BeNumerically("<=", 0))
 		// Make sure we can send.
-		Expect(sender.TimeUntilSend(clock.Now(), 0)).To(BeZero())
+		Expect(sender.TimeUntilSend(clock.Now(), 0, protocol.DefaultTCPMSS)).To(BeNumerically("<=", 0))
 		// And that window is un-affected.
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
 
 		// Fill the send window with data, then verify that we can't send.
 		SendAvailableSendWindow()
-		Expect(sender.TimeUntilSend(clock.Now(), sender.GetCongestionWindow())).ToNot(BeZero())
+		Expect(sender.TimeUntilSend(clock.Now(), sender.GetCongestionWindow(), protocol.DefaultTCPMSS)).ToNot(BeNumerically("<=", 0))
 	})
 
 	It("application limited slow start", func() {
 		// Send exactly 10 packets and ensure the CWND ends at 14 packets.
 		const kNumberOfAcks = 5
 		// At startup make sure we can send.
-		Expect(sender.TimeUntilSend(clock.Now(), 0)).To(BeZero())
+		Expect(sender.TimeUntilSend(clock.Now(), 0, protocol.DefaultTCPMSS)).To(BeNumerically("<=", 0))
 		// Make sure we can send.
-		Expect(sender.TimeUntilSend(clock.Now(), 0)).To(BeZero())
+		Expect(sender.TimeUntilSend(clock.Now(), 0, protocol.DefaultTCPMSS)).To(BeNumerically("<=", 0))
 
 		SendAvailableSendWindow()
 		for i := 0; i < kNumberOfAcks; i++ {
@@ -122,10 +122,10 @@ var _ = Describe("Cubic Sender", func() {
 	It("exponential slow start", func() {
 		const kNumberOfAcks = 20
 		// At startup make sure we can send.
-		Expect(sender.TimeUntilSend(clock.Now(), 0)).To(BeZero())
+		Expect(sender.TimeUntilSend(clock.Now(), 0, protocol.DefaultTCPMSS)).To(BeNumerically("<=", 0))
 		Expect(sender.BandwidthEstimate()).To(BeZero())
 		// Make sure we can send.
-		Expect(sender.TimeUntilSend(clock.Now(), 0)).To(BeZero())
+		Expect(sender.TimeUntilSend(clock.Now(), 0, protocol.DefaultTCPMSS)).To(BeNumerically("<=", 0))
 
 		for i := 0; i < kNumberOfAcks; i++ {
 			// Send our full send window.
@@ -267,7 +267,7 @@ var _ = Describe("Cubic Sender", func() {
 		// Simulate abandoning all packets by supplying a bytes_in_flight of 0.
 		// PRR should now allow a packet to be sent, even though prr's state
 		// variables believe it has sent enough packets.
-		Expect(sender.TimeUntilSend(clock.Now(), 0)).To(BeZero())
+		Expect(sender.TimeUntilSend(clock.Now(), 0, protocol.DefaultTCPMSS)).To(BeNumerically("<=", 0))
 	})
 
 	It("slow start packet loss PRR", func() {
@@ -340,7 +340,7 @@ var _ = Describe("Cubic Sender", func() {
 		LoseNPackets(int(num_packets_to_lose))
 		// Immediately after the loss, ensure at least one packet can be sent.
 		// Losses without subsequent acks can occur with timer based loss detection.
-		Expect(sender.TimeUntilSend(clock.Now(), bytesInFlight)).To(BeZero())
+		Expect(sender.TimeUntilSend(clock.Now(), bytesInFlight, protocol.DefaultTCPMSS)).To(BeNumerically("<=", 0))
 		AckNPackets(1)
 
 		// We should now have fallen out of slow start with a reduced window.
@@ -771,13 +771,13 @@ var _ = Describe("Cubic Sender", func() {
 	//   sender.OnRetransmissionTimeout(true);
 	//   Expect( sender.congestion_window()).To(Equal(1u))
 	//   EXPECT_TRUE(
-	//       sender.TimeUntilSend(QuicTime::Zero(), protocol.DefaultTCPMSS).IsZero());
+	//       sender.TimeUntilSend(QuicTime::Zero(), protocol.DefaultTCPMSS).IsZero()); // BeNumerically("<=", 0)
 	//   EXPECT_TRUE(
-	//       sender.TimeUntilSend(QuicTime::Zero(), 2 * protocol.DefaultTCPMSS).IsZero());
+	//       sender.TimeUntilSend(QuicTime::Zero(), 2 * protocol.DefaultTCPMSS).IsZero()); // BeNumerically("<=", 0)
 	//   EXPECT_TRUE(
-	//       sender.TimeUntilSend(QuicTime::Zero(), 3 * protocol.DefaultTCPMSS).IsZero());
+	//       sender.TimeUntilSend(QuicTime::Zero(), 3 * protocol.DefaultTCPMSS).IsZero()); // BeNumerically("<=", 0)
 	//   EXPECT_FALSE(
-	//       sender.TimeUntilSend(QuicTime::Zero(), 4 * protocol.DefaultTCPMSS).IsZero());
+	//       sender.TimeUntilSend(QuicTime::Zero(), 4 * protocol.DefaultTCPMSS).IsZero()); // BeNumerically("<=", 0)
 	// }
 
 	It("reset after connection migration", func() {

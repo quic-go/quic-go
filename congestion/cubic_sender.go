@@ -78,18 +78,20 @@ func NewCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestio
 	}
 }
 
-func (c *cubicSender) TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCount) time.Duration {
-	packetSize := protocol.ByteCount(10) // TODO add to args
+// TimeToSend returns infinite if the congestion controller is congestion window limited, a time in the past if the packet can be sent immediately,
+// and a time in the future if sending is pacing limited.
+func (c *cubicSender) TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCount, packetLength protocol.ByteCount) time.Duration {
 	cwnd := c.GetCongestionWindow()
 	if c.InRecovery() {
 		// PRR is used when in recovery.
 		return c.prr.TimeUntilSend(cwnd, bytesInFlight, c.GetSlowStartThreshold())
 	}
-	if bytesInFlight > cwnd {
+	if cwnd <= bytesInFlight {
 		return utils.InfDuration
 	}
-	timeToSend := c.lastPacketSentOn.Add((time.Duration(packetSize) * c.rttStats.SmoothedRTT()) / time.Duration(cwnd))
-	return timeToSend.Sub(now)
+	timeToSend := c.lastPacketSentOn.Add((time.Duration(packetLength) * c.rttStats.SmoothedRTT()) / time.Duration(cwnd))
+	timeUntilSend := timeToSend.Sub(now)
+	return timeUntilSend
 }
 
 func (c *cubicSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) bool {
