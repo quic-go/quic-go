@@ -336,8 +336,8 @@ func (h *sentPacketHandler) GetStopWaitingFrame(force bool) *wire.StopWaitingFra
 	return h.stopWaitingManager.GetStopWaitingFrame(force)
 }
 
-func (h *sentPacketHandler) SendingAllowed() time.Duration {
-	timeUntilSend := h.congestion.TimeUntilSend(time.Now(), h.bytesInFlight, protocol.DefaultTCPMSS) // TODO change packetLength
+func (h *sentPacketHandler) TimeUntilSend(now time.Time, packetLength protocol.ByteCount) time.Duration {
+	timeUntilSend := h.congestion.TimeUntilSend(now, h.bytesInFlight, packetLength)
 	congestionLimited := timeUntilSend == utils.InfDuration
 	if congestionLimited {
 		utils.Debugf("Congestion limited: bytes in flight %d, window %d",

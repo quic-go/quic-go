@@ -98,7 +98,7 @@ func (h *mockSentPacketHandler) ShouldSendRetransmittablePacket() bool {
 	return b
 }
 
-func (h *mockSentPacketHandler) SendingAllowed() time.Duration {
+func (h *mockSentPacketHandler) TimeUntilSend(now time.Time, packetLength protocol.ByteCount) time.Duration {
 	if h.congestionLimited {
 		return utils.InfDuration
 	}

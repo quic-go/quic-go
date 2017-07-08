@@ -719,32 +719,34 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("allows or denies sending based on congestion", func() {
-			Expect(handler.SendingAllowed()).To(BeNumerically("<=", 0))
-			err := handler.SentPacket(&Packet{
+			packet := &Packet{
 				PacketNumber: 1,
 				Frames:       []wire.Frame{&wire.PingFrame{}},
 				Length:       protocol.DefaultTCPMSS + 1,
-			})
+			}
+			Expect(handler.TimeUntilSend(time.Now(), packet.Length)).To(BeNumerically("<=", 0))
+			err := handler.SentPacket(packet)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(handler.SendingAllowed()).To(BeNumerically("==", utils.InfDuration))
+			Expect(handler.TimeUntilSend(time.Now(), packet.Length)).To(BeNumerically("==", utils.InfDuration))
 		})
 
 		It("allows or denies sending based on the number of tracked packets", func() {
-			Expect(handler.SendingAllowed()).To(BeNumerically("<=", 0))
+			Expect(handler.TimeUntilSend(time.Now(), protocol.DefaultTCPMSS)).To(BeNumerically("<=", 0))
 			handler.retransmissionQueue = make([]*Packet, protocol.MaxTrackedSentPackets)
-			Expect(handler.SendingAllowed()).To(BeNumerically("==", utils.InfDuration))
+			Expect(handler.TimeUntilSend(time.Now(), protocol.DefaultTCPMSS)).To(BeNumerically("==", utils.InfDuration))
 		})
 
 		It("allows sending if there are retransmisisons outstanding", func() {
-			err := handler.SentPacket(&Packet{
+			packet := &Packet{
 				PacketNumber: 1,
 				Frames:       []wire.Frame{&wire.PingFrame{}},
 				Length:       protocol.DefaultTCPMSS + 1,
-			})
+			}
+			err := handler.SentPacket(packet)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(handler.SendingAllowed()).To(BeNumerically("==", utils.InfDuration))
+			Expect(handler.TimeUntilSend(time.Now(), packet.Length)).To(BeNumerically("==", utils.InfDuration))
 			handler.retransmissionQueue = []*Packet{nil}
-			Expect(handler.SendingAllowed()).To(BeNumerically("<=", 0))
+			Expect(handler.TimeUntilSend(time.Now(), packet.Length)).To(BeNumerically("<=", 0))
 		})
 	})
 
