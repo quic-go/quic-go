@@ -51,7 +51,7 @@ type client struct {
 var _ http.RoundTripper = &client{}
 
 // newClient creates a new client
-func newClient(tlsConfig *tls.Config, hostname string, opts *roundTripperOpts) *client {
+func newClient(hostname string, tlsConfig *tls.Config, opts *roundTripperOpts) *client {
 	return &client{
 		hostname:        authorityAddr("https", hostname),
 		responses:       make(map[protocol.StreamID]chan *http.Response),

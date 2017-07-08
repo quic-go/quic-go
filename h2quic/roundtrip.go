@@ -84,7 +84,7 @@ func (r *RoundTripper) getClient(hostname string) http.RoundTripper {
 
 	client, ok := r.clients[hostname]
 	if !ok {
-		client = newClient(r.TLSClientConfig, hostname, &roundTripperOpts{DisableCompression: r.DisableCompression})
+		client = newClient(hostname, r.TLSClientConfig, &roundTripperOpts{DisableCompression: r.DisableCompression})
 		r.clients[hostname] = client
 	}
 	return client
