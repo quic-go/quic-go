@@ -21,6 +21,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/mocks/mocks_fc"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qerr"
 )
@@ -90,11 +91,18 @@ func (h *mockSentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketN
 func (h *mockSentPacketHandler) GetLeastUnacked() protocol.PacketNumber { return 1 }
 func (h *mockSentPacketHandler) GetAlarmTimeout() time.Time             { panic("not implemented") }
 func (h *mockSentPacketHandler) OnAlarm()                               { panic("not implemented") }
-func (h *mockSentPacketHandler) SendingAllowed() bool                   { return !h.congestionLimited }
+
 func (h *mockSentPacketHandler) ShouldSendRetransmittablePacket() bool {
 	b := h.shouldSendRetransmittablePacket
 	h.shouldSendRetransmittablePacket = false
 	return b
+}
+
+func (h *mockSentPacketHandler) SendingAllowed() time.Duration {
+	if h.congestionLimited {
+		return utils.InfDuration
+	}
+	return 0
 }
 
 func (h *mockSentPacketHandler) GetStopWaitingFrame(force bool) *wire.StopWaitingFrame {

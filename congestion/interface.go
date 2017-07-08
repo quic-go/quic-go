@@ -8,8 +8,8 @@ import (
 
 // A SendAlgorithm performs congestion control and calculates the congestion window
 type SendAlgorithm interface {
-	// TimeToSend returns infinite if the congestion controller is congestion window limited, a time in the past if the packet can be sent immediately,
-	// and a time in the future if sending is pacing limited.
+	// TimeToSend returns infinite if the congestion controller is congestion window limited, a negative duration if the packet can be sent immediately
+	// and a positive duration if sending is pacing limited.
 	TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCount, packetLength protocol.ByteCount) time.Duration
 	OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) bool
 	GetCongestionWindow() protocol.ByteCount

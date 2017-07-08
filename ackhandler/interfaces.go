@@ -13,9 +13,11 @@ type SentPacketHandler interface {
 	SentPacket(packet *Packet) error
 	ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, recvTime time.Time) error
 
-	SendingAllowed() bool
-	GetStopWaitingFrame(force bool) *wire.StopWaitingFrame
 	ShouldSendRetransmittablePacket() bool
+	// SendingAllowed returns infinite if the congestion controller is congestion window limited, a negative duration if the packet can be sent immediately
+	// and a positive duration if sending is pacing limited.
+	SendingAllowed() time.Duration
+	GetStopWaitingFrame(force bool) *wire.StopWaitingFrame
 	DequeuePacketForRetransmission() (packet *Packet)
 	GetLeastUnacked() protocol.PacketNumber
 

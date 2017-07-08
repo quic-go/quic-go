@@ -78,8 +78,8 @@ func NewCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestio
 	}
 }
 
-// TimeToSend returns infinite if the congestion controller is congestion window limited, a time in the past if the packet can be sent immediately,
-// and a time in the future if sending is pacing limited.
+// TimeToSend returns infinite if the congestion controller is congestion window limited, a negative duration if the packet can be sent immediately
+// and a positive duration if sending is pacing limited.
 func (c *cubicSender) TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCount, packetLength protocol.ByteCount) time.Duration {
 	cwnd := c.GetCongestionWindow()
 	if c.InRecovery() {
@@ -91,6 +91,8 @@ func (c *cubicSender) TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCo
 	}
 	timeToSend := c.lastPacketSentOn.Add((time.Duration(packetLength) * c.rttStats.SmoothedRTT()) / time.Duration(cwnd))
 	timeUntilSend := timeToSend.Sub(now)
+	// fmt.Printf("delta T_last_sent = %s\nPacket length = %d\nRTT = %s\nCwnd = %d\nBytes in flight = %d\n", c.lastPacketSentOn.Sub(now), packetLength, c.rttStats.SmoothedRTT(), cwnd, bytesInFlight)
+	// fmt.Printf("Time until sent %s\n\n", timeUntilSend)
 	return timeUntilSend
 }
 

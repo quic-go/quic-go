@@ -336,19 +336,26 @@ func (h *sentPacketHandler) GetStopWaitingFrame(force bool) *wire.StopWaitingFra
 	return h.stopWaitingManager.GetStopWaitingFrame(force)
 }
 
-func (h *sentPacketHandler) SendingAllowed() bool {
-	congestionLimited := h.bytesInFlight > h.congestion.GetCongestionWindow()
-	maxTrackedLimited := protocol.PacketNumber(len(h.retransmissionQueue)+h.packetHistory.Len()) >= protocol.MaxTrackedSentPackets
+func (h *sentPacketHandler) SendingAllowed() time.Duration {
+	timeUntilSend := h.congestion.TimeUntilSend(time.Now(), h.bytesInFlight, protocol.DefaultTCPMSS) // TODO change packetLength
+	congestionLimited := timeUntilSend == utils.InfDuration
 	if congestionLimited {
 		utils.Debugf("Congestion limited: bytes in flight %d, window %d",
 			h.bytesInFlight,
 			h.congestion.GetCongestionWindow())
 	}
+	maxTrackedLimited := protocol.PacketNumber(len(h.retransmissionQueue)+h.packetHistory.Len()) >= protocol.MaxTrackedSentPackets
+	if maxTrackedLimited {
+		return utils.InfDuration
+	}
 	// Workaround for #555:
 	// Always allow sending of retransmissions. This should probably be limited
 	// to RTOs, but we currently don't have a nice way of distinguishing them.
 	haveRetransmissions := len(h.retransmissionQueue) > 0
-	return !maxTrackedLimited && (!congestionLimited || haveRetransmissions)
+	if timeUntilSend > 0 && haveRetransmissions {
+		return 0
+	}
+	return timeUntilSend
 }
 
 func (h *sentPacketHandler) retransmitOldestTwoPackets() {

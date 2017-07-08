@@ -605,7 +605,7 @@ func (s *session) sendPacket() error {
 
 	// Repeatedly try sending until we don't have any more data, or run out of the congestion window
 	for {
-		if !s.sentPacketHandler.SendingAllowed() {
+		if s.sentPacketHandler.SendingAllowed() > 0 {
 			if ack == nil {
 				return nil
 			}

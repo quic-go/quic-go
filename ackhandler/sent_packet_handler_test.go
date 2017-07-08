@@ -5,10 +5,13 @@ import (
 
 	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+const rtt = 60 * time.Millisecond
 
 type mockCongestion struct {
 	argsOnPacketSent        []interface{}
@@ -17,14 +20,26 @@ type mockCongestion struct {
 	getCongestionWindow     bool
 	packetsAcked            [][]interface{}
 	packetsLost             [][]interface{}
+	lastPacketSentOn        time.Time
 }
 
-func (m *mockCongestion) TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCount) time.Duration {
-	panic("not implemented")
+func (m *mockCongestion) TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCount, packetLength protocol.ByteCount) time.Duration {
+	cwnd := m.GetCongestionWindow()
+	// if m.InRecovery() { // TODO can we ignore this here?
+	// 	// PRR is used when in recovery.
+	// 	return c.prr.TimeUntilSend(cwnd, bytesInFlight, m.GetSlowStartThreshold())
+	// }
+	if cwnd <= bytesInFlight {
+		return utils.InfDuration
+	}
+	timeToSend := m.lastPacketSentOn.Add((time.Duration(packetLength) * rtt) / time.Duration(cwnd))
+	timeUntilSend := timeToSend.Sub(now)
+	return timeUntilSend
 }
 
 func (m *mockCongestion) OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) bool {
 	m.argsOnPacketSent = []interface{}{sentTime, bytesInFlight, packetNumber, bytes, isRetransmittable}
+	m.lastPacketSentOn = sentTime
 	return false
 }
 
@@ -704,20 +719,20 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("allows or denies sending based on congestion", func() {
-			Expect(handler.SendingAllowed()).To(BeTrue())
+			Expect(handler.SendingAllowed()).To(BeNumerically("<=", 0))
 			err := handler.SentPacket(&Packet{
 				PacketNumber: 1,
 				Frames:       []wire.Frame{&wire.PingFrame{}},
 				Length:       protocol.DefaultTCPMSS + 1,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(handler.SendingAllowed()).To(BeFalse())
+			Expect(handler.SendingAllowed()).To(BeNumerically("==", utils.InfDuration))
 		})
 
 		It("allows or denies sending based on the number of tracked packets", func() {
-			Expect(handler.SendingAllowed()).To(BeTrue())
+			Expect(handler.SendingAllowed()).To(BeNumerically("<=", 0))
 			handler.retransmissionQueue = make([]*Packet, protocol.MaxTrackedSentPackets)
-			Expect(handler.SendingAllowed()).To(BeFalse())
+			Expect(handler.SendingAllowed()).To(BeNumerically("==", utils.InfDuration))
 		})
 
 		It("allows sending if there are retransmisisons outstanding", func() {
@@ -727,9 +742,9 @@ var _ = Describe("SentPacketHandler", func() {
 				Length:       protocol.DefaultTCPMSS + 1,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(handler.SendingAllowed()).To(BeFalse())
+			Expect(handler.SendingAllowed()).To(BeNumerically("==", utils.InfDuration))
 			handler.retransmissionQueue = []*Packet{nil}
-			Expect(handler.SendingAllowed()).To(BeTrue())
+			Expect(handler.SendingAllowed()).To(BeNumerically("<=", 0))
 		})
 	})
 
