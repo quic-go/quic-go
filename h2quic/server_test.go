@@ -385,8 +385,7 @@ var _ = Describe("H2 server", func() {
 		})
 
 		AfterEach(func() {
-			err := s.Close()
-			Expect(err).NotTo(HaveOccurred())
+			Expect(s.Close()).To(Succeed())
 		})
 
 		It("may only be called once", func() {
@@ -405,6 +404,18 @@ var _ = Describe("H2 server", func() {
 			err = s.Close()
 			Expect(err).NotTo(HaveOccurred())
 		}, 0.5)
+
+		It("uses the quic.Config to start the quic server", func() {
+			conf := &quic.Config{HandshakeTimeout: time.Nanosecond}
+			var receivedConf *quic.Config
+			quicListenAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.Listener, error) {
+				receivedConf = config
+				return nil, errors.New("listen err")
+			}
+			s.QuicConfig = conf
+			go s.ListenAndServe()
+			Eventually(func() *quic.Config { return receivedConf }).Should(Equal(conf))
+		})
 	})
 
 	Context("ListenAndServeTLS", func() {

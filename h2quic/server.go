@@ -39,6 +39,10 @@ var (
 type Server struct {
 	*http.Server
 
+	// By providing a quic.Config, it is possible to set parameters of the QUIC connection.
+	// If nil, it uses reasonable default values.
+	QuicConfig *quic.Config
+
 	// Private flag for demo, do not use
 	CloseAfterFirstRequest bool
 
@@ -89,16 +93,12 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 		return errors.New("ListenAndServe may only be called once")
 	}
 
-	config := quic.Config{
-		Versions: protocol.SupportedVersions,
-	}
-
 	var ln quic.Listener
 	var err error
 	if conn == nil {
-		ln, err = quicListenAddr(s.Addr, tlsConfig, &config)
+		ln, err = quicListenAddr(s.Addr, tlsConfig, s.QuicConfig)
 	} else {
-		ln, err = quicListen(conn, tlsConfig, &config)
+		ln, err = quicListen(conn, tlsConfig, s.QuicConfig)
 	}
 	if err != nil {
 		s.listenerMutex.Unlock()
