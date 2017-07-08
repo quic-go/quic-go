@@ -15,6 +15,8 @@ import (
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 
+	"time"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -31,7 +33,7 @@ var _ = Describe("Client", func() {
 	BeforeEach(func() {
 		origDialAddr = dialAddr
 		hostname := "quic.clemente.io:1337"
-		client = newClient(hostname, nil, &roundTripperOpts{})
+		client = newClient(hostname, nil, &roundTripperOpts{}, nil)
 		Expect(client.hostname).To(Equal(hostname))
 		session = &mockSession{}
 		client.session = session
@@ -50,17 +52,29 @@ var _ = Describe("Client", func() {
 
 	It("saves the TLS config", func() {
 		tlsConf := &tls.Config{InsecureSkipVerify: true}
-		client = newClient("", tlsConf, &roundTripperOpts{})
+		client = newClient("", tlsConf, &roundTripperOpts{}, nil)
 		Expect(client.tlsConf).To(Equal(tlsConf))
 	})
 
+	It("saves the QUIC config", func() {
+		quicConf := &quic.Config{HandshakeTimeout: time.Nanosecond}
+		client = newClient("", &tls.Config{}, &roundTripperOpts{}, quicConf)
+		Expect(client.config).To(Equal(quicConf))
+	})
+
+	It("uses the default QUIC config if none is give", func() {
+		client = newClient("", &tls.Config{}, &roundTripperOpts{}, nil)
+		Expect(client.config).ToNot(BeNil())
+		Expect(client.config).To(Equal(defaultQuicConfig))
+	})
+
 	It("adds the port to the hostname, if none is given", func() {
-		client = newClient("quic.clemente.io", nil, &roundTripperOpts{})
+		client = newClient("quic.clemente.io", nil, &roundTripperOpts{}, nil)
 		Expect(client.hostname).To(Equal("quic.clemente.io:443"))
 	})
 
 	It("dials", func(done Done) {
-		client = newClient("localhost:1337", nil, &roundTripperOpts{})
+		client = newClient("localhost:1337", nil, &roundTripperOpts{}, nil)
 		session.streamsToOpen = []quic.Stream{newMockStream(3), newMockStream(5)}
 		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
 			return session, nil
@@ -73,7 +87,7 @@ var _ = Describe("Client", func() {
 
 	It("errors when dialing fails", func() {
 		testErr := errors.New("handshake error")
-		client = newClient("localhost:1337", nil, &roundTripperOpts{})
+		client = newClient("localhost:1337", nil, &roundTripperOpts{}, nil)
 		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
 			return nil, testErr
 		}
@@ -82,7 +96,7 @@ var _ = Describe("Client", func() {
 	})
 
 	It("errors if the header stream has the wrong stream ID", func() {
-		client = newClient("localhost:1337", nil, &roundTripperOpts{})
+		client = newClient("localhost:1337", nil, &roundTripperOpts{}, nil)
 		session.streamsToOpen = []quic.Stream{&mockStream{id: 2}}
 		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
 			return session, nil
@@ -93,7 +107,7 @@ var _ = Describe("Client", func() {
 
 	It("errors if it can't open a stream", func() {
 		testErr := errors.New("you shall not pass")
-		client = newClient("localhost:1337", nil, &roundTripperOpts{})
+		client = newClient("localhost:1337", nil, &roundTripperOpts{}, nil)
 		session.streamOpenErr = testErr
 		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
 			return session, nil
@@ -252,7 +266,7 @@ var _ = Describe("Client", func() {
 
 			It("adds the port for request URLs without one", func(done Done) {
 				var err error
-				client = newClient("quic.clemente.io", nil, &roundTripperOpts{})
+				client = newClient("quic.clemente.io", nil, &roundTripperOpts{}, nil)
 				req, err := http.NewRequest("https", "https://quic.clemente.io/foobar.html", nil)
 				Expect(err).ToNot(HaveOccurred())
 

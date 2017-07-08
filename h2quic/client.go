@@ -50,19 +50,30 @@ type client struct {
 
 var _ http.RoundTripper = &client{}
 
+var defaultQuicConfig = &quic.Config{
+	RequestConnectionIDTruncation: true,
+	KeepAlive:                     true,
+}
+
 // newClient creates a new client
-func newClient(hostname string, tlsConfig *tls.Config, opts *roundTripperOpts) *client {
+func newClient(
+	hostname string,
+	tlsConfig *tls.Config,
+	opts *roundTripperOpts,
+	quicConfig *quic.Config,
+) *client {
+	config := defaultQuicConfig
+	if quicConfig != nil {
+		config = quicConfig
+	}
 	return &client{
 		hostname:        authorityAddr("https", hostname),
 		responses:       make(map[protocol.StreamID]chan *http.Response),
 		encryptionLevel: protocol.EncryptionUnencrypted,
 		tlsConf:         tlsConfig,
-		config: &quic.Config{
-			RequestConnectionIDTruncation: true,
-			KeepAlive:                     true,
-		},
-		opts:          opts,
-		headerErrored: make(chan struct{}),
+		config:          config,
+		opts:            opts,
+		headerErrored:   make(chan struct{}),
 	}
 }
 

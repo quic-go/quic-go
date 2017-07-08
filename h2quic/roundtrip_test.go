@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
 	. "github.com/onsi/ginkgo"
@@ -80,6 +81,18 @@ var _ = Describe("RoundTripper", func() {
 			_, err = rt.RoundTrip(req)
 			Expect(err).To(MatchError(streamOpenErr))
 			Expect(rt.clients).To(HaveLen(1))
+		})
+
+		It("uses the quic.Config, if provided", func() {
+			config := &quic.Config{HandshakeTimeout: time.Millisecond}
+			var receivedConfig *quic.Config
+			dialAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.Session, error) {
+				receivedConfig = config
+				return nil, errors.New("err")
+			}
+			rt.QuicConfig = config
+			rt.RoundTrip(req1)
+			Expect(receivedConfig).To(Equal(config))
 		})
 
 		It("reuses existing clients", func() {

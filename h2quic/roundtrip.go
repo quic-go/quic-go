@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 
+	quic "github.com/lucas-clemente/quic-go"
+
 	"golang.org/x/net/lex/httplex"
 )
 
@@ -28,6 +30,10 @@ type RoundTripper struct {
 	// TLSClientConfig specifies the TLS configuration to use with
 	// tls.Client. If nil, the default configuration is used.
 	TLSClientConfig *tls.Config
+
+	// QuicConfig is the quic.Config used for dialing new connections.
+	// If nil, reasonable default values will be used.
+	QuicConfig *quic.Config
 
 	clients map[string]http.RoundTripper
 }
@@ -84,7 +90,7 @@ func (r *RoundTripper) getClient(hostname string) http.RoundTripper {
 
 	client, ok := r.clients[hostname]
 	if !ok {
-		client = newClient(hostname, r.TLSClientConfig, &roundTripperOpts{DisableCompression: r.DisableCompression})
+		client = newClient(hostname, r.TLSClientConfig, &roundTripperOpts{DisableCompression: r.DisableCompression}, r.QuicConfig)
 		r.clients[hostname] = client
 	}
 	return client
