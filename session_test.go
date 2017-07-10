@@ -246,7 +246,7 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("when handling stream frames", func() {
-		It("makes new streams", func() {
+		It("makes new streams", func(done Done) {
 			sess.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
 				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
@@ -258,6 +258,7 @@ var _ = Describe("Session", func() {
 			_, err = str.Read(p)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
+			close(done)
 		})
 
 		It("does not reject existing streams with even StreamIDs", func() {
@@ -270,7 +271,7 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("handles existing streams", func() {
+		It("handles existing streams", func(done Done) {
 			sess.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
 				Data:     []byte{0xde, 0xca},
@@ -288,6 +289,7 @@ var _ = Describe("Session", func() {
 			_, err := str.Read(p)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
+			close(done)
 		})
 
 		It("does not delete streams with Close()", func() {
@@ -300,7 +302,7 @@ var _ = Describe("Session", func() {
 			Expect(str).ToNot(BeNil())
 		})
 
-		It("does not delete streams with FIN bit", func() {
+		It("does not delete streams with FIN bit", func(done Done) {
 			sess.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
 				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
@@ -317,9 +319,10 @@ var _ = Describe("Session", func() {
 			Expect(sess.streamsMap.openStreams).To(HaveLen(numOpenStreams))
 			str, _ = sess.streamsMap.GetOrOpenStream(5)
 			Expect(str).ToNot(BeNil())
+			close(done)
 		})
 
-		It("deletes streams with FIN bit & close", func() {
+		It("deletes streams with FIN bit & close", func(done Done) {
 			sess.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
 				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
@@ -348,9 +351,10 @@ var _ = Describe("Session", func() {
 			// flow controller should have been notified
 			_, err = sess.flowControlManager.SendWindowSize(5)
 			Expect(err).To(MatchError("Error accessing the flowController map."))
+			close(done)
 		})
 
-		It("cancels streams with error", func() {
+		It("cancels streams with error", func(done Done) {
 			sess.garbageCollectStreams()
 			testErr := errors.New("test")
 			sess.handleStreamFrame(&frames.StreamFrame{
@@ -370,9 +374,10 @@ var _ = Describe("Session", func() {
 			str, err = sess.streamsMap.GetOrOpenStream(5)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(str).To(BeNil())
+			close(done)
 		})
 
-		It("cancels empty streams with error", func() {
+		It("cancels empty streams with error", func(done Done) {
 			testErr := errors.New("test")
 			sess.GetOrOpenStream(5)
 			str, err := sess.streamsMap.GetOrOpenStream(5)
@@ -385,6 +390,7 @@ var _ = Describe("Session", func() {
 			str, err = sess.streamsMap.GetOrOpenStream(5)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(str).To(BeNil())
+			close(done)
 		})
 
 		It("informs the FlowControlManager about new streams", func() {
@@ -396,7 +402,7 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("ignores STREAM frames for closed streams (client-side)", func() {
+		It("ignores STREAM frames for closed streams (client-side)", func(done Done) {
 			sess.handleStreamFrame(&frames.StreamFrame{
 				StreamID: 5,
 				FinBit:   true,
@@ -415,9 +421,10 @@ var _ = Describe("Session", func() {
 				Data:     []byte("foobar"),
 			})
 			Expect(err).ToNot(HaveOccurred())
+			close(done)
 		})
 
-		It("ignores STREAM frames for closed streams (server-side)", func() {
+		It("ignores STREAM frames for closed streams (server-side)", func(done Done) {
 			ostr, err := sess.OpenStream()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(ostr.StreamID()).To(Equal(protocol.StreamID(2)))
@@ -440,11 +447,12 @@ var _ = Describe("Session", func() {
 				FinBit:   true,
 			})
 			Expect(err).ToNot(HaveOccurred())
+			close(done)
 		})
 	})
 
 	Context("handling RST_STREAM frames", func() {
-		It("closes the streams for writing", func() {
+		It("closes the streams for writing", func(done Done) {
 			s, err := sess.GetOrOpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
 			err = sess.handleRstStreamFrame(&frames.RstStreamFrame{
@@ -455,9 +463,10 @@ var _ = Describe("Session", func() {
 			n, err := s.Write([]byte{0})
 			Expect(n).To(BeZero())
 			Expect(err).To(MatchError("RST_STREAM received with code 42"))
+			close(done)
 		})
 
-		It("doesn't close the stream for reading", func() {
+		It("doesn't close the stream for reading", func(done Done) {
 			s, err := sess.GetOrOpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
 			sess.handleStreamFrame(&frames.StreamFrame{
@@ -474,6 +483,7 @@ var _ = Describe("Session", func() {
 			n, err := s.Read(b)
 			Expect(n).To(Equal(3))
 			Expect(err).ToNot(HaveOccurred())
+			close(done)
 		})
 
 		It("queues a RST_STERAM frame with the correct offset", func() {
@@ -775,7 +785,7 @@ var _ = Describe("Session", func() {
 			Expect(sess.runClosed).To(BeClosed())
 		})
 
-		It("closes streams with proper error", func() {
+		It("closes streams with proper error", func(done Done) {
 			testErr := errors.New("test error")
 			s, err := sess.GetOrOpenStream(5)
 			Expect(err).NotTo(HaveOccurred())
@@ -788,6 +798,7 @@ var _ = Describe("Session", func() {
 			Expect(n).To(BeZero())
 			Expect(err.Error()).To(ContainSubstring(testErr.Error()))
 			Expect(sess.runClosed).To(BeClosed())
+			close(done)
 		})
 
 		It("closes the session in order to replace it with another QUIC version", func() {
@@ -1247,7 +1258,7 @@ var _ = Describe("Session", func() {
 				Expect(mconn.written[0]).To(ContainSubstring("foobar2"))
 			})
 
-			It("sends out two big frames in two packets", func() {
+			It("sends out two big frames in two packets", func(done Done) {
 				s1, err := sess.GetOrOpenStream(5)
 				Expect(err).NotTo(HaveOccurred())
 				s2, err := sess.GetOrOpenStream(7)
@@ -1261,9 +1272,10 @@ var _ = Describe("Session", func() {
 				_, err = s2.Write(bytes.Repeat([]byte{'e'}, 1000))
 				Expect(err).ToNot(HaveOccurred())
 				Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(2))
+				close(done)
 			})
 
-			It("sends out two small frames that are written to long after one another into two packets", func() {
+			It("sends out two small frames that are written to long after one another into two packets", func(done Done) {
 				s, err := sess.GetOrOpenStream(5)
 				Expect(err).NotTo(HaveOccurred())
 				go sess.run()
@@ -1274,9 +1286,10 @@ var _ = Describe("Session", func() {
 				_, err = s.Write([]byte("foobar2"))
 				Expect(err).NotTo(HaveOccurred())
 				Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(2))
+				close(done)
 			})
 
-			It("sends a queued ACK frame only once", func() {
+			It("sends a queued ACK frame only once", func(done Done) {
 				packetNumber := protocol.PacketNumber(0x1337)
 				sess.receivedPacketHandler.ReceivedPacket(packetNumber, true)
 
@@ -1293,6 +1306,7 @@ var _ = Describe("Session", func() {
 				Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(2))
 				Expect(mconn.written[0]).To(ContainSubstring(string([]byte{0x37, 0x13})))
 				Expect(mconn.written[1]).ToNot(ContainSubstring(string([]byte{0x37, 0x13})))
+				close(done)
 			})
 		})
 	})
