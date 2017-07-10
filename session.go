@@ -704,9 +704,6 @@ func (s *session) sendConnectionClose(quicErr *qerr.QuicError) error {
 	if err != nil {
 		return err
 	}
-	if packet == nil {
-		return errors.New("Session BUG: expected packet not to be nil")
-	}
 	s.logPacket(packet)
 	return s.conn.Write(packet.raw)
 }
