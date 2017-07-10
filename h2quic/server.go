@@ -29,9 +29,19 @@ type remoteCloser interface {
 	CloseRemote(protocol.ByteCount)
 }
 
+// allows mocking of quic.Listen and quic.ListenAddr
+var (
+	quicListen     = quic.Listen
+	quicListenAddr = quic.ListenAddr
+)
+
 // Server is a HTTP2 server listening for QUIC connections.
 type Server struct {
 	*http.Server
+
+	// By providing a quic.Config, it is possible to set parameters of the QUIC connection.
+	// If nil, it uses reasonable default values.
+	QuicConfig *quic.Config
 
 	// Private flag for demo, do not use
 	CloseAfterFirstRequest bool
@@ -83,16 +93,12 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 		return errors.New("ListenAndServe may only be called once")
 	}
 
-	config := quic.Config{
-		Versions: protocol.SupportedVersions,
-	}
-
 	var ln quic.Listener
 	var err error
 	if conn == nil {
-		ln, err = quic.ListenAddr(s.Addr, tlsConfig, &config)
+		ln, err = quicListenAddr(s.Addr, tlsConfig, s.QuicConfig)
 	} else {
-		ln, err = quic.Listen(conn, tlsConfig, &config)
+		ln, err = quicListen(conn, tlsConfig, s.QuicConfig)
 	}
 	if err != nil {
 		s.listenerMutex.Unlock()

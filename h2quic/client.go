@@ -24,14 +24,15 @@ type roundTripperOpts struct {
 	DisableCompression bool
 }
 
+var dialAddr = quic.DialAddr
+
 // client is a HTTP2 client doing QUIC requests
 type client struct {
 	mutex sync.RWMutex
 
-	dialAddr func(hostname string, tlsConf *tls.Config, config *quic.Config) (quic.Session, error)
-	tlsConf  *tls.Config
-	config   *quic.Config
-	opts     *roundTripperOpts
+	tlsConf *tls.Config
+	config  *quic.Config
+	opts    *roundTripperOpts
 
 	hostname        string
 	encryptionLevel protocol.EncryptionLevel
@@ -49,27 +50,37 @@ type client struct {
 
 var _ http.RoundTripper = &client{}
 
+var defaultQuicConfig = &quic.Config{
+	RequestConnectionIDTruncation: true,
+	KeepAlive:                     true,
+}
+
 // newClient creates a new client
-func newClient(tlsConfig *tls.Config, hostname string, opts *roundTripperOpts) *client {
+func newClient(
+	hostname string,
+	tlsConfig *tls.Config,
+	opts *roundTripperOpts,
+	quicConfig *quic.Config,
+) *client {
+	config := defaultQuicConfig
+	if quicConfig != nil {
+		config = quicConfig
+	}
 	return &client{
-		dialAddr:        quic.DialAddr,
 		hostname:        authorityAddr("https", hostname),
 		responses:       make(map[protocol.StreamID]chan *http.Response),
 		encryptionLevel: protocol.EncryptionUnencrypted,
 		tlsConf:         tlsConfig,
-		config: &quic.Config{
-			RequestConnectionIDTruncation: true,
-			KeepAlive:                     true,
-		},
-		opts:          opts,
-		headerErrored: make(chan struct{}),
+		config:          config,
+		opts:            opts,
+		headerErrored:   make(chan struct{}),
 	}
 }
 
 // dial dials the connection
 func (c *client) dial() error {
 	var err error
-	c.session, err = c.dialAddr(c.hostname, c.tlsConf, c.config)
+	c.session, err = dialAddr(c.hostname, c.tlsConf, c.config)
 	if err != nil {
 		return err
 	}

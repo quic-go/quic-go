@@ -2,13 +2,12 @@ package h2quic
 
 import (
 	"bytes"
+	"crypto/tls"
+	"errors"
 	"io"
 	"net"
 	"net/http"
-	"os"
-	"runtime"
 	"sync"
-	"syscall"
 	"time"
 
 	"golang.org/x/net/http2"
@@ -66,9 +65,10 @@ func (s *mockSession) WaitUntilClosed() { panic("not implemented") }
 
 var _ = Describe("H2 server", func() {
 	var (
-		s          *Server
-		session    *mockSession
-		dataStream *mockStream
+		s                  *Server
+		session            *mockSession
+		dataStream         *mockStream
+		origQuicListenAddr = quicListenAddr
 	)
 
 	BeforeEach(func() {
@@ -80,6 +80,11 @@ var _ = Describe("H2 server", func() {
 		dataStream = newMockStream(0)
 		close(dataStream.unblockRead)
 		session = &mockSession{dataStream: dataStream}
+		origQuicListenAddr = quicListenAddr
+	})
+
+	AfterEach(func() {
+		quicListenAddr = origQuicListenAddr
 	})
 
 	Context("handling requests", func() {
@@ -380,8 +385,7 @@ var _ = Describe("H2 server", func() {
 		})
 
 		AfterEach(func() {
-			err := s.Close()
-			Expect(err).NotTo(HaveOccurred())
+			Expect(s.Close()).To(Succeed())
 		})
 
 		It("may only be called once", func() {
@@ -399,8 +403,19 @@ var _ = Describe("H2 server", func() {
 			Expect(err).To(MatchError("ListenAndServe may only be called once"))
 			err = s.Close()
 			Expect(err).NotTo(HaveOccurred())
-
 		}, 0.5)
+
+		It("uses the quic.Config to start the quic server", func() {
+			conf := &quic.Config{HandshakeTimeout: time.Nanosecond}
+			var receivedConf *quic.Config
+			quicListenAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.Listener, error) {
+				receivedConf = config
+				return nil, errors.New("listen err")
+			}
+			s.QuicConfig = conf
+			go s.ListenAndServe()
+			Eventually(func() *quic.Config { return receivedConf }).Should(Equal(conf))
+		})
 	})
 
 	Context("ListenAndServeTLS", func() {
@@ -436,31 +451,13 @@ var _ = Describe("H2 server", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("at least errors in global ListenAndServeQUIC", func() {
-		// It's quite hard to test this, since we cannot properly shutdown the server
-		// once it's started. So, we open a socket on the same port before the test,
-		// so that ListenAndServeQUIC definitely fails. This way we know it at least
-		// created a socket on the proper address :)
-		const addr = "127.0.0.1:4826"
-		udpAddr, err := net.ResolveUDPAddr("udp", addr)
-		Expect(err).NotTo(HaveOccurred())
-		c, err := net.ListenUDP("udp", udpAddr)
-		Expect(err).NotTo(HaveOccurred())
-		defer c.Close()
-		fullpem, privkey := testdata.GetCertificatePaths()
-		err = ListenAndServeQUIC(addr, fullpem, privkey, nil)
-		// Check that it's an EADDRINUSE
-		Expect(err).ToNot(BeNil())
-		opErr, ok := err.(*net.OpError)
-		Expect(ok).To(BeTrue())
-		syscallErr, ok := opErr.Err.(*os.SyscallError)
-		Expect(ok).To(BeTrue())
-		if runtime.GOOS == "windows" {
-			// for some reason, Windows return a different error number, corresponding to an WSAEADDRINUSE error
-			// see https://msdn.microsoft.com/en-us/library/windows/desktop/ms681391(v=vs.85).aspx
-			Expect(syscallErr.Err).To(Equal(syscall.Errno(0x2740)))
-		} else {
-			Expect(syscallErr.Err).To(MatchError(syscall.EADDRINUSE))
+	It("errors when listening fails", func() {
+		testErr := errors.New("listen error")
+		quicListenAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.Listener, error) {
+			return nil, testErr
 		}
+		fullpem, privkey := testdata.GetCertificatePaths()
+		err := ListenAndServeQUIC("", fullpem, privkey, nil)
+		Expect(err).To(MatchError(testErr))
 	})
 })
