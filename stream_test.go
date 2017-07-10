@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"time"
 
+	"os"
+
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/internal/mocks/mocks_fc"
 	"github.com/lucas-clemente/quic-go/protocol"
@@ -26,6 +28,17 @@ var _ = Describe("Stream", func() {
 
 		mockFcm *mocks_fc.MockFlowControlManager
 	)
+
+	// in the tests for the stream deadlines we set a deadline
+	// and wait to make an assertion when Read / Write was unblocked
+	// on the CIs, the timing is a lot less precise, so scale every duration by this factor
+	scaleDuration := func(t time.Duration) time.Duration {
+		scaleFactor := 1
+		if os.Getenv("CI") == "true" {
+			scaleFactor = 20
+		}
+		return time.Duration(scaleFactor) * t
+	}
 
 	onData := func() {
 		onDataCalled = true
@@ -253,22 +266,22 @@ var _ = Describe("Stream", func() {
 			})
 
 			It("unblocks after the deadline", func() {
-				deadline := time.Now().Add(200 * time.Millisecond)
+				deadline := time.Now().Add(scaleDuration(50 * time.Millisecond))
 				str.SetReadDeadline(deadline)
 				b := make([]byte, 6)
 				n, err := str.Read(b)
 				Expect(err).To(MatchError(errDeadline))
 				Expect(n).To(BeZero())
-				Expect(time.Now()).To(BeTemporally("~", deadline, 50*time.Millisecond))
+				Expect(time.Now()).To(BeTemporally("~", deadline, scaleDuration(10*time.Millisecond)))
 			})
 
 			It("doesn't unblock if the deadline is changed before the first one expires", func() {
-				deadline1 := time.Now().Add(200 * time.Millisecond)
-				deadline2 := time.Now().Add(400 * time.Millisecond)
+				deadline1 := time.Now().Add(scaleDuration(50 * time.Millisecond))
+				deadline2 := time.Now().Add(scaleDuration(100 * time.Millisecond))
 				str.SetReadDeadline(deadline1)
 				go func() {
 					defer GinkgoRecover()
-					time.Sleep(50 * time.Millisecond)
+					time.Sleep(scaleDuration(20 * time.Millisecond))
 					str.SetReadDeadline(deadline2)
 					// make sure that this was actually execute before the deadline expires
 					Expect(time.Now()).To(BeTemporally("<", deadline1))
@@ -278,15 +291,15 @@ var _ = Describe("Stream", func() {
 				n, err := str.Read(b)
 				Expect(err).To(MatchError(errDeadline))
 				Expect(n).To(BeZero())
-				Expect(time.Now()).To(BeTemporally("~", deadline2, 50*time.Millisecond))
+				Expect(time.Now()).To(BeTemporally("~", deadline2, scaleDuration(20*time.Millisecond)))
 			})
 
 			It("unblocks earlier, when a new deadline is set", func() {
-				deadline1 := time.Now().Add(1200 * time.Millisecond)
-				deadline2 := time.Now().Add(300 * time.Millisecond)
+				deadline1 := time.Now().Add(scaleDuration(200 * time.Millisecond))
+				deadline2 := time.Now().Add(scaleDuration(50 * time.Millisecond))
 				go func() {
 					defer GinkgoRecover()
-					time.Sleep(50 * time.Millisecond)
+					time.Sleep(scaleDuration(10 * time.Millisecond))
 					str.SetReadDeadline(deadline2)
 					// make sure that this was actually execute before the deadline expires
 					Expect(time.Now()).To(BeTemporally("<", deadline2))
@@ -296,7 +309,7 @@ var _ = Describe("Stream", func() {
 				b := make([]byte, 10)
 				_, err := str.Read(b)
 				Expect(err).To(MatchError(errDeadline))
-				Expect(time.Now()).To(BeTemporally("~", deadline2, 50*time.Millisecond))
+				Expect(time.Now()).To(BeTemporally("~", deadline2, scaleDuration(25*time.Millisecond)))
 			})
 
 			It("sets a read deadline, when SetDeadline is called", func() {
@@ -784,21 +797,21 @@ var _ = Describe("Stream", func() {
 			})
 
 			It("unblocks after the deadline", func() {
-				deadline := time.Now().Add(200 * time.Millisecond)
+				deadline := time.Now().Add(scaleDuration(50 * time.Millisecond))
 				str.SetWriteDeadline(deadline)
 				n, err := str.Write([]byte("foobar"))
 				Expect(err).To(MatchError(errDeadline))
 				Expect(n).To(BeZero())
-				Expect(time.Now()).To(BeTemporally("~", deadline, 50*time.Millisecond))
+				Expect(time.Now()).To(BeTemporally("~", deadline, scaleDuration(20*time.Millisecond)))
 			})
 
 			It("doesn't unblock if the deadline is changed before the first one expires", func() {
-				deadline1 := time.Now().Add(200 * time.Millisecond)
-				deadline2 := time.Now().Add(400 * time.Millisecond)
+				deadline1 := time.Now().Add(scaleDuration(50 * time.Millisecond))
+				deadline2 := time.Now().Add(scaleDuration(100 * time.Millisecond))
 				str.SetWriteDeadline(deadline1)
 				go func() {
 					defer GinkgoRecover()
-					time.Sleep(50 * time.Millisecond)
+					time.Sleep(scaleDuration(20 * time.Millisecond))
 					str.SetWriteDeadline(deadline2)
 					// make sure that this was actually execute before the deadline expires
 					Expect(time.Now()).To(BeTemporally("<", deadline1))
@@ -807,15 +820,15 @@ var _ = Describe("Stream", func() {
 				n, err := str.Write([]byte("foobar"))
 				Expect(err).To(MatchError(errDeadline))
 				Expect(n).To(BeZero())
-				Expect(time.Now()).To(BeTemporally("~", deadline2, 50*time.Millisecond))
+				Expect(time.Now()).To(BeTemporally("~", deadline2, scaleDuration(20*time.Millisecond)))
 			})
 
 			It("unblocks earlier, when a new deadline is set", func() {
-				deadline1 := time.Now().Add(1200 * time.Millisecond)
-				deadline2 := time.Now().Add(300 * time.Millisecond)
+				deadline1 := time.Now().Add(scaleDuration(200 * time.Millisecond))
+				deadline2 := time.Now().Add(scaleDuration(50 * time.Millisecond))
 				go func() {
 					defer GinkgoRecover()
-					time.Sleep(50 * time.Millisecond)
+					time.Sleep(scaleDuration(10 * time.Millisecond))
 					str.SetWriteDeadline(deadline2)
 					// make sure that this was actually execute before the deadline expires
 					Expect(time.Now()).To(BeTemporally("<", deadline2))
@@ -824,7 +837,7 @@ var _ = Describe("Stream", func() {
 				runtime.Gosched()
 				_, err := str.Write([]byte("foobar"))
 				Expect(err).To(MatchError(errDeadline))
-				Expect(time.Now()).To(BeTemporally("~", deadline2, 50*time.Millisecond))
+				Expect(time.Now()).To(BeTemporally("~", deadline2, scaleDuration(20*time.Millisecond)))
 			})
 
 			It("sets a read deadline, when SetDeadline is called", func() {
