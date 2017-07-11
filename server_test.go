@@ -23,6 +23,7 @@ type mockSession struct {
 	packetCount       int
 	closed            bool
 	closeReason       error
+	closedRemote      bool
 	stopRunLoop       chan struct{} // run returns as soon as this channel receives a value
 	handshakeChan     chan handshakeEvent
 	handshakeComplete chan error // for WaitUntilHandshakeComplete
@@ -50,6 +51,12 @@ func (s *mockSession) Close(e error) error {
 	s.closed = true
 	close(s.stopRunLoop)
 	return nil
+}
+func (s *mockSession) closeRemote(e error) {
+	s.closeReason = e
+	s.closed = true
+	s.closedRemote = true
+	close(s.stopRunLoop)
 }
 func (s *mockSession) AcceptStream() (Stream, error) {
 	panic("not implemented")

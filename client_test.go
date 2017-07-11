@@ -30,11 +30,14 @@ var _ = Describe("Client", func() {
 		Eventually(areSessionsRunning).Should(BeFalse())
 		msess, _, _ := newMockSession(nil, 0, 0, nil, nil, nil)
 		sess = msess.(*mockSession)
-		packetConn = &mockPacketConn{addr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1234}}
+		addr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
+		packetConn = &mockPacketConn{
+			addr:         &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1234},
+			dataReadFrom: addr,
+		}
 		config = &Config{
 			Versions: []protocol.VersionNumber{protocol.SupportedVersions[0], 77, 78},
 		}
-		addr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
 		cl = &client{
 			config:       config,
 			connectionID: 0x1337,
@@ -379,7 +382,7 @@ var _ = Describe("Client", func() {
 
 		It("closes the session when encountering an error while handling a packet", func() {
 			Expect(sess.closeReason).ToNot(HaveOccurred())
-			packetConn.dataToRead = bytes.Repeat([]byte{0xff}, 100)
+			packetConn.dataToRead = []byte("invalid packet")
 			cl.listen()
 			Expect(sess.closed).To(BeTrue())
 			Expect(sess.closeReason).To(HaveOccurred())
@@ -391,6 +394,39 @@ var _ = Describe("Client", func() {
 			cl.listen()
 			Expect(sess.closed).To(BeTrue())
 			Expect(sess.closeReason).To(MatchError(testErr))
+		})
+	})
+
+	Context("Public Reset handling", func() {
+		It("closes the session when receiving a Public Reset", func() {
+			err := cl.handlePacket(addr, writePublicReset(cl.connectionID, 1, 0))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cl.session.(*mockSession).closed).To(BeTrue())
+			Expect(cl.session.(*mockSession).closedRemote).To(BeTrue())
+			Expect(cl.session.(*mockSession).closeReason.(*qerr.QuicError).ErrorCode).To(Equal(qerr.PublicReset))
+		})
+
+		It("ignores Public Resets with the wrong connection ID", func() {
+			err := cl.handlePacket(addr, writePublicReset(cl.connectionID+1, 1, 0))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cl.session.(*mockSession).closed).To(BeFalse())
+			Expect(cl.session.(*mockSession).closedRemote).To(BeFalse())
+		})
+
+		It("ignores Public Resets from the wrong remote address", func() {
+			spoofedAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 5678}
+			err := cl.handlePacket(spoofedAddr, writePublicReset(cl.connectionID, 1, 0))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cl.session.(*mockSession).closed).To(BeFalse())
+			Expect(cl.session.(*mockSession).closedRemote).To(BeFalse())
+		})
+
+		It("ignores unparseable Public Resets", func() {
+			pr := writePublicReset(cl.connectionID, 1, 0)
+			err := cl.handlePacket(addr, pr[:len(pr)-5])
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cl.session.(*mockSession).closed).To(BeFalse())
+			Expect(cl.session.(*mockSession).closedRemote).To(BeFalse())
 		})
 	})
 })

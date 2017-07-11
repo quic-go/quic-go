@@ -233,6 +233,24 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
+	if hdr.ResetFlag {
+		cr := c.conn.RemoteAddr()
+		// check if the remote address and the connection ID match
+		// otherwise this might be an attacker trying to inject a PUBLIC_RESET to kill the connection
+		if cr.Network() != remoteAddr.Network() || cr.String() != remoteAddr.String() || hdr.ConnectionID != c.connectionID {
+			utils.Infof("Received a spoofed Public Reset. Ignoring.")
+			return nil
+		}
+		pr, err := parsePublicReset(r)
+		if err != nil {
+			utils.Infof("Received a Public Reset for connection %x. An error occurred parsing the packet.")
+			return nil
+		}
+		utils.Infof("Received Public Reset, rejected packet number: %#x.", pr.rejectedPacketNumber)
+		c.session.closeRemote(qerr.Error(qerr.PublicReset, fmt.Sprintf("Received a Public Reset for packet number %#x", pr.rejectedPacketNumber)))
+		return nil
+	}
+
 	// ignore delayed / duplicated version negotiation packets
 	if c.versionNegotiated && hdr.VersionFlag {
 		return nil
