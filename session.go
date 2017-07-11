@@ -441,7 +441,7 @@ func (s *session) handleFrames(fs []frames.Frame) error {
 		case *frames.AckFrame:
 			err = s.handleAckFrame(frame)
 		case *frames.ConnectionCloseFrame:
-			s.close(qerr.Error(frame.ErrorCode, frame.ReasonPhrase), true)
+			s.closeRemote(qerr.Error(frame.ErrorCode, frame.ReasonPhrase))
 		case *frames.GoawayFrame:
 			err = errors.New("unimplemented: handling GOAWAY frames")
 		case *frames.StopWaitingFrame:
@@ -527,20 +527,22 @@ func (s *session) handleAckFrame(frame *frames.AckFrame) error {
 	return s.sentPacketHandler.ReceivedAck(frame, s.lastRcvdPacketNumber, s.lastNetworkActivityTime)
 }
 
-func (s *session) close(e error, remoteClose bool) {
+func (s *session) closeLocal(e error) {
 	s.closeOnce.Do(func() {
-		s.closeChan <- closeError{err: e, remote: remoteClose}
+		s.closeChan <- closeError{err: e, remote: false}
 	})
 }
 
-func (s *session) closeLocal(e error) {
-	s.close(e, false)
+func (s *session) closeRemote(e error) {
+	s.closeOnce.Do(func() {
+		s.closeChan <- closeError{err: e, remote: true}
+	})
 }
 
 // Close the connection. If err is nil it will be set to qerr.PeerGoingAway.
 // It waits until the run loop has stopped before returning
 func (s *session) Close(e error) error {
-	s.close(e, false)
+	s.closeLocal(e)
 	<-s.runClosed
 	return nil
 }
