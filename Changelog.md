@@ -12,4 +12,5 @@
 - Changed the log level environment variable to only accept strings ("DEBUG", "INFO", "ERROR"), see [the wiki](https://github.com/lucas-clemente/quic-go/wiki/Logging) for more details.
 - Rename the `h2quic.QuicRoundTripper` to `h2quic.RoundTripper`
 - Changed `h2quic.Server.Serve()` to accept a `net.PacketConn`
+- Drop support for Go 1.7.
 - Various bugfixes
