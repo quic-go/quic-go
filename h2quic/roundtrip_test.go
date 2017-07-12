@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"runtime"
 	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
@@ -13,11 +14,19 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type mockRoundTripper struct{}
+type mockClient struct {
+	closed bool
+}
 
-func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+func (m *mockClient) RoundTrip(req *http.Request) (*http.Response, error) {
 	return &http.Response{Request: req}, nil
 }
+func (m *mockClient) Close() error {
+	m.closed = true
+	return nil
+}
+
+var _ roundTripCloser = &mockClient{}
 
 type mockBody struct {
 	reader   bytes.Reader
@@ -168,6 +177,36 @@ var _ = Describe("RoundTripper", func() {
 			_, err := rt.RoundTrip(req1)
 			Expect(err).To(MatchError("quic: invalid method \"foobär\""))
 			Expect(req1.Body.(*mockBody).closed).To(BeTrue())
+		})
+	})
+
+	Context("closing", func() {
+		It("closes", func() {
+			rt.clients = make(map[string]roundTripCloser)
+			cl := &mockClient{}
+			rt.clients["foo.bar"] = cl
+			err := rt.Close()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(len(rt.clients)).To(BeZero())
+			Expect(cl.closed).To(BeTrue())
+		})
+
+		It("closes a RoundTripper that has never been used", func() {
+			Expect(len(rt.clients)).To(BeZero())
+			err := rt.Close()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(len(rt.clients)).To(BeZero())
+		})
+
+		It("runs Close when the RoundTripper is garbage collected", func() {
+			// this is set by getClient, but we can't do that while at the same time injecting the mockClient
+			runtime.SetFinalizer(rt, finalizer)
+			rt.clients = make(map[string]roundTripCloser)
+			cl := &mockClient{}
+			rt.clients["foo.bar"] = cl
+			rt = nil // lose the references to the RoundTripper, such that it can be garbage collected
+			runtime.GC()
+			Eventually(func() bool { return cl.closed }).Should(BeTrue())
 		})
 	})
 })
