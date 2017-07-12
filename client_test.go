@@ -196,13 +196,6 @@ var _ = Describe("Client", func() {
 			Expect(c.RequestConnectionIDTruncation).To(BeFalse())
 		})
 
-		It("errors when receiving an invalid first packet from the server", func(done Done) {
-			packetConn.dataToRead = []byte{0xff}
-			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
-			Expect(err).To(HaveOccurred())
-			close(done)
-		})
-
 		It("errors when receiving an error from the connection", func(done Done) {
 			testErr := errors.New("connection error")
 			packetConn.readErr = testErr
@@ -238,8 +231,7 @@ var _ = Describe("Client", func() {
 				b := &bytes.Buffer{}
 				err := ph.Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
 				Expect(err).ToNot(HaveOccurred())
-				err = cl.handlePacket(nil, b.Bytes())
-				Expect(err).ToNot(HaveOccurred())
+				cl.handlePacket(nil, b.Bytes())
 				Expect(cl.versionNegotiated).To(BeTrue())
 			})
 
@@ -265,35 +257,34 @@ var _ = Describe("Client", func() {
 				Expect(newVersion).ToNot(Equal(cl.version))
 				Expect(sess.packetCount).To(BeZero())
 				cl.connectionID = 0x1337
-				err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{newVersion}))
-				Expect(err).ToNot(HaveOccurred())
+				cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{newVersion}))
 				Expect(cl.version).To(Equal(newVersion))
 				Expect(cl.versionNegotiated).To(BeTrue())
 				// it swapped the sessions
 				// Expect(cl.session).ToNot(Equal(sess))
 				Expect(cl.connectionID).ToNot(Equal(0x1337)) // it generated a new connection ID
-				Expect(err).ToNot(HaveOccurred())
 				// it didn't pass the version negoation packet to the old session (since it has no payload)
 				Expect(sess.packetCount).To(BeZero())
 				Expect(negotiatedVersions).To(Equal([]protocol.VersionNumber{newVersion}))
 			})
 
 			It("errors if no matching version is found", func() {
-				err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{1}))
-				Expect(err).To(MatchError(qerr.InvalidVersion))
+				cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{1}))
+				Expect(cl.session.(*mockSession).closed).To(BeTrue())
+				Expect(cl.session.(*mockSession).closeReason).To(MatchError(qerr.InvalidVersion))
 			})
 
 			It("errors if the version is supported by quic-go, but disabled by the quic.Config", func() {
 				v := protocol.SupportedVersions[1]
 				Expect(v).ToNot(Equal(cl.version))
 				Expect(config.Versions).ToNot(ContainElement(v))
-				err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{v}))
-				Expect(err).To(MatchError(qerr.InvalidVersion))
+				cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{v}))
+				Expect(cl.session.(*mockSession).closed).To(BeTrue())
+				Expect(cl.session.(*mockSession).closeReason).To(MatchError(qerr.InvalidVersion))
 			})
 
 			It("changes to the version preferred by the quic.Config", func() {
-				err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{config.Versions[2], config.Versions[1]}))
-				Expect(err).ToNot(HaveOccurred())
+				cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{config.Versions[2], config.Versions[1]}))
 				Expect(cl.version).To(Equal(config.Versions[1]))
 			})
 
@@ -301,24 +292,22 @@ var _ = Describe("Client", func() {
 				// if the version was not yet negotiated, handlePacket would return a VersionNegotiationMismatch error, see above test
 				cl.versionNegotiated = true
 				Expect(sess.packetCount).To(BeZero())
-				err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{1}))
-				Expect(err).ToNot(HaveOccurred())
+				cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{1}))
 				Expect(cl.versionNegotiated).To(BeTrue())
 				Expect(sess.packetCount).To(BeZero())
 			})
 
 			It("drops version negotiation packets that contain the offered version", func() {
 				ver := cl.version
-				err := cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{ver}))
-				Expect(err).ToNot(HaveOccurred())
+				cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{ver}))
 				Expect(cl.version).To(Equal(ver))
 			})
 		})
 	})
 
-	It("errors on invalid public header", func() {
-		err := cl.handlePacket(nil, nil)
-		Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.InvalidPacketHeader))
+	It("ignores packets with an invalid public header", func() {
+		cl.handlePacket(addr, []byte("invalid packet"))
+		Expect(cl.session.(*mockSession).closed).To(BeFalse())
 	})
 
 	It("creates new sessions with the right parameters", func(done Done) {
@@ -380,14 +369,6 @@ var _ = Describe("Client", func() {
 			Consistently(func() bool { return stoppedListening }).Should(BeFalse())
 		})
 
-		It("closes the session when encountering an error while handling a packet", func() {
-			Expect(sess.closeReason).ToNot(HaveOccurred())
-			packetConn.dataToRead = []byte("invalid packet")
-			cl.listen()
-			Expect(sess.closed).To(BeTrue())
-			Expect(sess.closeReason).To(HaveOccurred())
-		})
-
 		It("closes the session when encountering an error while reading from the connection", func() {
 			testErr := errors.New("test error")
 			packetConn.readErr = testErr
@@ -399,32 +380,28 @@ var _ = Describe("Client", func() {
 
 	Context("Public Reset handling", func() {
 		It("closes the session when receiving a Public Reset", func() {
-			err := cl.handlePacket(addr, writePublicReset(cl.connectionID, 1, 0))
-			Expect(err).ToNot(HaveOccurred())
+			cl.handlePacket(addr, writePublicReset(cl.connectionID, 1, 0))
 			Expect(cl.session.(*mockSession).closed).To(BeTrue())
 			Expect(cl.session.(*mockSession).closedRemote).To(BeTrue())
 			Expect(cl.session.(*mockSession).closeReason.(*qerr.QuicError).ErrorCode).To(Equal(qerr.PublicReset))
 		})
 
 		It("ignores Public Resets with the wrong connection ID", func() {
-			err := cl.handlePacket(addr, writePublicReset(cl.connectionID+1, 1, 0))
-			Expect(err).ToNot(HaveOccurred())
+			cl.handlePacket(addr, writePublicReset(cl.connectionID+1, 1, 0))
 			Expect(cl.session.(*mockSession).closed).To(BeFalse())
 			Expect(cl.session.(*mockSession).closedRemote).To(BeFalse())
 		})
 
 		It("ignores Public Resets from the wrong remote address", func() {
 			spoofedAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 5678}
-			err := cl.handlePacket(spoofedAddr, writePublicReset(cl.connectionID, 1, 0))
-			Expect(err).ToNot(HaveOccurred())
+			cl.handlePacket(spoofedAddr, writePublicReset(cl.connectionID, 1, 0))
 			Expect(cl.session.(*mockSession).closed).To(BeFalse())
 			Expect(cl.session.(*mockSession).closedRemote).To(BeFalse())
 		})
 
 		It("ignores unparseable Public Resets", func() {
 			pr := writePublicReset(cl.connectionID, 1, 0)
-			err := cl.handlePacket(addr, pr[:len(pr)-5])
-			Expect(err).ToNot(HaveOccurred())
+			cl.handlePacket(addr, pr[:len(pr)-5])
 			Expect(cl.session.(*mockSession).closed).To(BeFalse())
 			Expect(cl.session.(*mockSession).closedRemote).To(BeFalse())
 		})
