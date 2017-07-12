@@ -1438,7 +1438,8 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("keep-alives", func() {
-		It("sends a ping packet", func() {
+		It("sends a PING", func() {
+			sess.handshakeComplete = true
 			sess.config.KeepAlive = true
 			sess.lastNetworkActivityTime = time.Now().Add(-(sess.idleTimeout() / 2))
 			go sess.run()
@@ -1452,7 +1453,17 @@ var _ = Describe("Session", func() {
 			}).Should(Equal(byte(0x07)))
 		})
 
-		It("doesn't send a ping packet if keep-alive is disabled", func() {
+		It("doesn't send a PING packet if keep-alive is disabled", func() {
+			sess.handshakeComplete = true
+			sess.lastNetworkActivityTime = time.Now().Add(-(sess.idleTimeout() / 2))
+			go sess.run()
+			defer sess.Close(nil)
+			Consistently(func() [][]byte { return mconn.written }).Should(BeEmpty())
+		})
+
+		It("doesn't send a PING if the handshake isn't completed yet", func() {
+			sess.handshakeComplete = false
+			sess.config.KeepAlive = true
 			sess.lastNetworkActivityTime = time.Now().Add(-(sess.idleTimeout() / 2))
 			go sess.run()
 			defer sess.Close(nil)
