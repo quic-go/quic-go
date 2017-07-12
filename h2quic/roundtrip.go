@@ -11,6 +11,8 @@ import (
 
 	quic "github.com/lucas-clemente/quic-go"
 
+	"runtime"
+
 	"golang.org/x/net/lex/httplex"
 )
 
@@ -91,6 +93,7 @@ func (r *RoundTripper) getClient(hostname string) http.RoundTripper {
 	defer r.mutex.Unlock()
 
 	if r.clients == nil {
+		runtime.SetFinalizer(r, finalizer)
 		r.clients = make(map[string]roundTripCloser)
 	}
 
@@ -100,6 +103,10 @@ func (r *RoundTripper) getClient(hostname string) http.RoundTripper {
 		r.clients[hostname] = client
 	}
 	return client
+}
+
+func finalizer(r *RoundTripper) {
+	_ = r.Close()
 }
 
 // Close closes the QUIC connections that this RoundTripper has used
