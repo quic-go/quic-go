@@ -166,7 +166,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	responseChan := make(chan *http.Response)
 	dataStream, err := c.session.OpenStreamSync()
 	if err != nil {
-		c.Close(err)
+		_ = c.CloseWithError(err)
 		return nil, err
 	}
 	c.mutex.Lock()
@@ -181,7 +181,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	endStream := !hasBody
 	err = c.requestWriter.WriteRequest(req, dataStream.StreamID(), endStream, requestedGzip)
 	if err != nil {
-		c.Close(err)
+		_ = c.CloseWithError(err)
 		return nil, err
 	}
 
@@ -215,7 +215,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 			}
 		case <-c.headerErrored:
 			// an error occured on the header stream
-			c.Close(c.headerErr)
+			_ = c.CloseWithError(c.headerErr)
 			return nil, c.headerErr
 		}
 	}
@@ -261,8 +261,15 @@ func (c *client) writeRequestBody(dataStream quic.Stream, body io.ReadCloser) (e
 }
 
 // Close closes the client
-func (c *client) Close(e error) {
-	_ = c.session.Close(e)
+func (c *client) CloseWithError(e error) error {
+	if c.session == nil {
+		return nil
+	}
+	return c.session.Close(e)
+}
+
+func (c *client) Close() error {
+	return c.CloseWithError(nil)
 }
 
 // copied from net/transport.go

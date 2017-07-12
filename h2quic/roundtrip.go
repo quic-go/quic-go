@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -12,6 +13,11 @@ import (
 
 	"golang.org/x/net/lex/httplex"
 )
+
+type roundTripCloser interface {
+	http.RoundTripper
+	io.Closer
+}
 
 // RoundTripper implements the http.RoundTripper interface
 type RoundTripper struct {
@@ -35,10 +41,10 @@ type RoundTripper struct {
 	// If nil, reasonable default values will be used.
 	QuicConfig *quic.Config
 
-	clients map[string]http.RoundTripper
+	clients map[string]roundTripCloser
 }
 
-var _ http.RoundTripper = &RoundTripper{}
+var _ roundTripCloser = &RoundTripper{}
 
 // RoundTrip does a round trip
 func (r *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -85,7 +91,7 @@ func (r *RoundTripper) getClient(hostname string) http.RoundTripper {
 	defer r.mutex.Unlock()
 
 	if r.clients == nil {
-		r.clients = make(map[string]http.RoundTripper)
+		r.clients = make(map[string]roundTripCloser)
 	}
 
 	client, ok := r.clients[hostname]
@@ -94,6 +100,19 @@ func (r *RoundTripper) getClient(hostname string) http.RoundTripper {
 		r.clients[hostname] = client
 	}
 	return client
+}
+
+// Close closes the QUIC connections that this RoundTripper has used
+func (r *RoundTripper) Close() error {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	for _, client := range r.clients {
+		if err := client.Close(); err != nil {
+			return err
+		}
+	}
+	r.clients = nil
+	return nil
 }
 
 func closeRequestBody(req *http.Request) {
