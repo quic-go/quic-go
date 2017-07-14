@@ -10,6 +10,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
+	"github.com/lucas-clemente/quic-go/qtrace"
 )
 
 // A HandshakeMessage is a handshake message
@@ -133,4 +134,15 @@ func tagToString(tag Tag) string {
 		}
 	}
 	return string(b)
+}
+
+func HandshakeMessage2Tracer(h HandshakeMessage) qtrace.TracerHandshakeMessage {
+	var erg qtrace.TracerHandshakeMessage
+	erg.Tag = uint32(h.Tag)
+	erg.Data = make(map[uint32][]byte)
+
+	for k, v := range h.Data {
+		erg.Data[uint32(k)] = v
+	}
+	return erg
 }

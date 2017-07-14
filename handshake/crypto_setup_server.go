@@ -111,7 +111,7 @@ func (h *cryptoSetupServer) HandleCryptoStream() error {
 
 		utils.Debugf("Got %s", message)
 		if h.QuicTracer != nil && h.QuicTracer.ServerGotHandshakeMsg != nil {
-			h.QuicTracer.ServerGotHandshakeMsg(interface{}(message))
+			h.QuicTracer.ServerGotHandshakeMsg(HandshakeMessage2Tracer(message))
 		}
 
 		done, err := h.handleMessage(chloData.Bytes(), message.Data)
@@ -342,7 +342,7 @@ func (h *cryptoSetupServer) handleInchoateCHLO(sni string, chlo []byte, cryptoDa
 
 	utils.Debugf("Sending %s", message)
 	if h.QuicTracer != nil && h.QuicTracer.ServerSentInchoateCHLO != nil {
-		h.QuicTracer.ServerSentInchoateCHLO(interface{}(message))
+		h.QuicTracer.ServerSentInchoateCHLO(HandshakeMessage2Tracer(message))
 	}
 
 	return serverReply.Bytes(), nil
@@ -459,7 +459,7 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 
 	utils.Debugf("Sending %s", message)
 	if h.QuicTracer != nil && h.QuicTracer.ServerSentCHLO != nil {
-		h.QuicTracer.ServerSentCHLO(interface{}(message))
+		h.QuicTracer.ServerSentCHLO(HandshakeMessage2Tracer(message))
 	}
 
 	h.aeadChanged <- protocol.EncryptionForwardSecure

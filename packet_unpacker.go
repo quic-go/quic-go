@@ -8,6 +8,7 @@ import (
 	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
+	"github.com/lucas-clemente/quic-go/qtrace"
 )
 
 type unpackedPacket struct {
@@ -22,6 +23,7 @@ type quicAEAD interface {
 type packetUnpacker struct {
 	version protocol.VersionNumber
 	aead    quicAEAD
+	quicTracer *qtrace.Tracer
 }
 
 func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data []byte) (*unpackedPacket, error) {
@@ -32,6 +34,11 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, da
 		// Wrap err in quicError so that public reset is sent by session
 		return nil, qerr.Error(qerr.DecryptionFailure, err.Error())
 	}
+
+	if u.quicTracer != nil && u.quicTracer.GotPacket != nil {
+		u.quicTracer.GotPacket(decrypted, int(encryptionLevel))
+	}
+
 	r := bytes.NewReader(decrypted)
 
 	if r.Len() == 0 {

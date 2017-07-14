@@ -144,7 +144,7 @@ func (h *cryptoSetupClient) HandleCryptoStream() error {
 
 		utils.Debugf("Got %s", message)
 		if h.QuicTracer != nil && h.QuicTracer.ClientGotHandshakeMsg != nil {
-			h.QuicTracer.ClientGotHandshakeMsg(interface{}(message))
+			h.QuicTracer.ClientGotHandshakeMsg(HandshakeMessage2Tracer(message))
 		}
 
 		switch message.Tag {
@@ -414,7 +414,7 @@ func (h *cryptoSetupClient) sendCHLO() error {
 
 	utils.Debugf("Sending %s", message)
 	if h.QuicTracer != nil && h.QuicTracer.ClientSentCHLO != nil {
-		h.QuicTracer.ClientSentCHLO(interface{}(message))
+		h.QuicTracer.ClientSentCHLO(HandshakeMessage2Tracer(message))
 	}
 	message.Write(b)
 

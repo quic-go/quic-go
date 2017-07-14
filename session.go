@@ -236,8 +236,9 @@ func (s *session) setup(
 		s.streamFramer,
 		s.perspective,
 		s.version,
+		&s.config.QuicTracer,
 	)
-	s.unpacker = &packetUnpacker{aead: s.cryptoSetup, version: s.version}
+	s.unpacker = &packetUnpacker{aead: s.cryptoSetup, version: s.version, quicTracer: &s.config.QuicTracer}
 
 	return s, handshakeChan, nil
 }
@@ -401,9 +402,6 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 	)
 
 	packet, err := s.unpacker.Unpack(hdr.Raw, hdr, data)
-	if err == nil && packet != nil && s.config.QuicTracer.GotPacket != nil {
-		s.config.QuicTracer.GotPacket(packet.encryptionLevel, packet.frames)
-	}
 
 	if utils.Debug() {
 		if err != nil {
@@ -441,9 +439,6 @@ func (s *session) handleFrames(fs []frames.Frame) error {
 	for _, ff := range fs {
 		var err error
 		frames.LogFrame(ff, false)
-		if s.config.QuicTracer.GotFrame != nil {
-			s.config.QuicTracer.GotFrame(ff)
-		}
 
 		switch frame := ff.(type) {
 		case *frames.StreamFrame:
@@ -722,16 +717,6 @@ func (s *session) sendConnectionClose(quicErr *qerr.QuicError) error {
 }
 
 func (s *session) logPacket(packet *packedPacket) {
-	if packet != nil && s.config.QuicTracer.SentPacket != nil {
-		s.config.QuicTracer.SentPacket(packet.number, packet.raw, packet.frames, packet.encryptionLevel)
-	}
-
-	for _, frame := range packet.frames {
-		if s.config.QuicTracer.SentFrame != nil {
-			s.config.QuicTracer.SentFrame(frame)
-		}
-	}
-
 	if !utils.Debug() {
 		// We don't need to allocate the slices for calling the format functions
 		return

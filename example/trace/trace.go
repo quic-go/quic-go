@@ -13,9 +13,6 @@ import (
 
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/qtrace"
-	"github.com/lucas-clemente/quic-go/frames"
-	"github.com/lucas-clemente/quic-go/protocol"
-	"github.com/lucas-clemente/quic-go/handshake"
 )
 
 const addr = "localhost:4242"
@@ -28,8 +25,6 @@ func main() {
 		QuicTracer: qtrace.Tracer{
 			GotPacket:              GotPacket,
 			SentPacket:             SentPacket,
-			GotFrame:               GotFrame,
-			SentFrame:              SentFrame,
 			ClientSentCHLO:         HandshakeMsg,
 			ClientGotHandshakeMsg:  HandshakeMsg,
 			ServerSentCHLO:         HandshakeMsg,
@@ -124,38 +119,20 @@ func generateTLSConfig() *tls.Config {
 /*********************
  *** Trace Handler ***
  *********************/
-func GotPacket(encryptionLevel protocol.EncryptionLevel, frames []frames.Frame){
+func GotPacket(raw []byte, encryptionLevel int){
 	fmt.Println("GotPacket:")
 	fmt.Println("  Encryption:\t", encryptionLevel)
-	for k, v := range frames {
-		fmt.Println("  Frame:\t", k, v)
-	}
-}
-
-func SentPacket(number protocol.PacketNumber, raw []byte, frames []frames.Frame, encryptionLevel protocol.EncryptionLevel){
-	fmt.Println("SentPacket ")
-	fmt.Println("  Encryption:\t", encryptionLevel)
-	fmt.Println("  Number:\t", number)
 	fmt.Println("  Raw:\t\t", len(raw), "Bytes")
-	for k, v := range frames {
-		fmt.Println("  Frame:\t", k, v)
-	}
 }
 
-func GotFrame(frame frames.Frame){
-	fmt.Println("GotFrame")
-	fmt.Println("  Frame:\t", frame)
+func SentPacket(raw []byte, encryptionLevel int, number uint64){
+	fmt.Println("SentPacket ")
+	fmt.Println("  Number:\t", number)
+	fmt.Println("  Encryption:\t", encryptionLevel)
+	fmt.Println("  Raw:\t\t", len(raw), "Bytes")
 }
 
-func SentFrame(frame frames.Frame){
-	fmt.Println("SentFrame")
-	fmt.Println("  Frame:\t", frame)
-}
-
-func HandshakeMsg(x interface{}){
-	message, ok := x.(handshake.HandshakeMessage)
-	if ok {
-		fmt.Println("HandshakeMsg")
-		fmt.Println("  Message:\t\t", message)
-	}
+func HandshakeMsg(message qtrace.TracerHandshakeMessage){
+	fmt.Println("HandshakeMsg")
+	fmt.Println("  Message:\t\t", message)
 }
