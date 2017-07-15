@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"runtime"
+	"strconv"
 	"time"
 
 	"os"
@@ -34,9 +35,10 @@ var _ = Describe("Stream", func() {
 	// on the CIs, the timing is a lot less precise, so scale every duration by this factor
 	scaleDuration := func(t time.Duration) time.Duration {
 		scaleFactor := 1
-		if os.Getenv("CI") == "true" {
-			scaleFactor = 20
+		if f, err := strconv.Atoi(os.Getenv("TIMESCALE_FACTOR")); err == nil { // parsing "" errors, so this works fine if the env is not set
+			scaleFactor = f
 		}
+		Expect(scaleFactor).ToNot(BeZero())
 		return time.Duration(scaleFactor) * t
 	}
 
