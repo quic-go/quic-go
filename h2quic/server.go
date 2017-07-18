@@ -260,7 +260,6 @@ func (s *Server) CloseGracefully(timeout time.Duration) error {
 
 // SetQuicHeaders can be used to set the proper headers that announce that this server supports QUIC.
 // The values that are set depend on the port information from s.Server.Addr, and currently look like this (if Addr has port 443):
-//  Alternate-Protocol: 443:quic
 //  Alt-Svc: quic=":443"; ma=2592000; v="33,32,31,30"
 func (s *Server) SetQuicHeaders(hdr http.Header) error {
 	port := atomic.LoadUint32(&s.port)
@@ -288,7 +287,6 @@ func (s *Server) SetQuicHeaders(hdr http.Header) error {
 		}
 	}
 
-	hdr.Add("Alternate-Protocol", fmt.Sprintf("%d:quic", port))
 	hdr.Add("Alt-Svc", fmt.Sprintf(`quic=":%d"; ma=2592000; v="%s"`, port, s.supportedVersionsAsString))
 
 	return nil
