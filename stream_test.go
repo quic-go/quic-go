@@ -255,6 +255,11 @@ var _ = Describe("Stream", func() {
 		})
 
 		Context("deadlines", func() {
+			It("the deadline error has the right net.Error properties", func() {
+				Expect(errDeadline.Temporary()).To(BeTrue())
+				Expect(errDeadline.Timeout()).To(BeTrue())
+			})
+
 			It("returns an error when Read is called after the deadline", func() {
 				mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(6)).AnyTimes()
 				f := &frames.StreamFrame{Data: []byte("foobar")}

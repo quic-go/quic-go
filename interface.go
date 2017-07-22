@@ -10,7 +10,13 @@ import (
 
 // Stream is the interface implemented by QUIC streams
 type Stream interface {
+	// Read reads data from the stream.
+	// Read can be made to time out and return a net.Error with Timeout() == true
+	// after a fixed time limit; see SetDeadline and SetReadDeadline.
 	io.Reader
+	// Write writes data to the stream.
+	// Write can be made to time out and return a net.Error with Timeout() == true
+	// after a fixed time limit; see SetDeadline and SetWriteDeadline.
 	io.Writer
 	io.Closer
 	StreamID() protocol.StreamID
