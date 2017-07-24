@@ -46,10 +46,22 @@ type RoundTripper struct {
 	clients map[string]roundTripCloser
 }
 
+// RoundTripOpt are options for the Transport.RoundTripOpt method.
+type RoundTripOpt struct {
+	// OnlyCachedConn controls whether the RoundTripper may
+	// create a new QUIC connection. If set true and
+	// no cached connection is available, RoundTrip
+	// will return ErrNoCachedConn.
+	OnlyCachedConn bool
+}
+
 var _ roundTripCloser = &RoundTripper{}
 
-// RoundTrip does a round trip
-func (r *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+// ErrNoCachedConn is returned when RoundTripper.OnlyCachedConn is set
+var ErrNoCachedConn = errors.New("h2quic: no cached connection was available")
+
+// RoundTripOpt is like RoundTrip, but takes options.
+func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
 	if req.URL == nil {
 		closeRequestBody(req)
 		return nil, errors.New("quic: nil Request.URL")
@@ -85,10 +97,19 @@ func (r *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	hostname := authorityAddr("https", hostnameFromRequest(req))
-	return r.getClient(hostname).RoundTrip(req)
+	cl, err := r.getClient(hostname, opt.OnlyCachedConn)
+	if err != nil {
+		return nil, err
+	}
+	return cl.RoundTrip(req)
 }
 
-func (r *RoundTripper) getClient(hostname string) http.RoundTripper {
+// RoundTrip does a round trip.
+func (r *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return r.RoundTripOpt(req, RoundTripOpt{})
+}
+
+func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTripper, error) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
@@ -99,10 +120,13 @@ func (r *RoundTripper) getClient(hostname string) http.RoundTripper {
 
 	client, ok := r.clients[hostname]
 	if !ok {
+		if onlyCached {
+			return nil, ErrNoCachedConn
+		}
 		client = newClient(hostname, r.TLSClientConfig, &roundTripperOpts{DisableCompression: r.DisableCompression}, r.QuicConfig)
 		r.clients[hostname] = client
 	}
-	return client
+	return client, nil
 }
 
 func finalizer(r *RoundTripper) {
