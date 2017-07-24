@@ -21,6 +21,7 @@ import (
 	"github.com/lucas-clemente/quic-go/h2quic"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gbytes"
 	. "github.com/onsi/gomega/gexec"
 )
 
@@ -161,7 +162,7 @@ var _ = Describe("Server tests", func() {
 		tmpDir = ""
 	})
 
-	It("downloads a hello", func(done Done) {
+	It("downloads a hello", func() {
 		data := []byte("Hello world!\n")
 		createDownloadFile("hello", data)
 
@@ -171,13 +172,12 @@ var _ = Describe("Server tests", func() {
 		rsp, err := client.Get("https://quic.clemente.io:" + serverPort + "/hello")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(rsp.StatusCode).To(Equal(200))
-		body, err := ioutil.ReadAll(rsp.Body)
+		body, err := ioutil.ReadAll(gbytes.TimeoutReader(rsp.Body, 5*time.Second))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(body).To(Equal(data))
-		close(done)
-	}, 5)
+	})
 
-	It("downloads a small file", func(done Done) {
+	It("downloads a small file", func() {
 		dataMan.GenerateData(dataLen)
 		data := dataMan.GetData()
 		createDownloadFile("file.dat", data)
@@ -188,13 +188,12 @@ var _ = Describe("Server tests", func() {
 		rsp, err := client.Get("https://quic.clemente.io:" + serverPort + "/file.dat")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(rsp.StatusCode).To(Equal(200))
-		body, err := ioutil.ReadAll(rsp.Body)
+		body, err := ioutil.ReadAll(gbytes.TimeoutReader(rsp.Body, 5*time.Second))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(body).To(Equal(data))
-		close(done)
-	}, 5)
+	})
 
-	It("downloads a large file", func(done Done) {
+	It("downloads a large file", func() {
 		dataMan.GenerateData(dataLongLen)
 		data := dataMan.GetData()
 		createDownloadFile("file.dat", data)
@@ -205,9 +204,8 @@ var _ = Describe("Server tests", func() {
 		rsp, err := client.Get("https://quic.clemente.io:" + serverPort + "/file.dat")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(rsp.StatusCode).To(Equal(200))
-		body, err := ioutil.ReadAll(rsp.Body)
+		body, err := ioutil.ReadAll(gbytes.TimeoutReader(rsp.Body, 20*time.Second))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(body).To(Equal(data))
-		close(done)
-	}, 20)
+	})
 })

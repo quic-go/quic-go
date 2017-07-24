@@ -7,11 +7,13 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/h2quic"
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gbytes"
 )
 
 var _ = Describe("Client tests", func() {
@@ -43,49 +45,45 @@ var _ = Describe("Client tests", func() {
 				protocol.SupportedVersions = []protocol.VersionNumber{version}
 			})
 
-			It("downloads a hello", func(done Done) {
+			It("downloads a hello", func() {
 				resp, err := client.Get("https://quic.clemente.io:" + port + "/hello")
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
-				body, err := ioutil.ReadAll(resp.Body)
+				body, err := ioutil.ReadAll(gbytes.TimeoutReader(resp.Body, 3*time.Second))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(string(body)).To(Equal("Hello, World!\n"))
-				close(done)
-			}, 3)
+			})
 
-			It("downloads a small file", func(done Done) {
+			It("downloads a small file", func() {
 				dataMan.GenerateData(dataLen)
 				resp, err := client.Get("https://quic.clemente.io:" + port + "/data")
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
-				body, err := ioutil.ReadAll(resp.Body)
+				body, err := ioutil.ReadAll(gbytes.TimeoutReader(resp.Body, 5*time.Second))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(body).To(Equal(dataMan.GetData()))
-				close(done)
-			}, 5)
+			})
 
-			It("downloads a large file", func(done Done) {
+			It("downloads a large file", func() {
 				dataMan.GenerateData(dataLongLen)
 				resp, err := client.Get("https://quic.clemente.io:" + port + "/data")
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
-				body, err := ioutil.ReadAll(resp.Body)
+				body, err := ioutil.ReadAll(gbytes.TimeoutReader(resp.Body, 20*time.Second))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(body).To(Equal(dataMan.GetData()))
-				close(done)
-			}, 20)
+			})
 
-			It("uploads a file", func(done Done) {
+			It("uploads a file", func() {
 				dataMan.GenerateData(dataLen)
 				data := bytes.NewReader(dataMan.GetData())
 				resp, err := client.Post("https://quic.clemente.io:"+port+"/echo", "text/plain", data)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
-				body, err := ioutil.ReadAll(resp.Body)
+				body, err := ioutil.ReadAll(gbytes.TimeoutReader(resp.Body, 5*time.Second))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(body).To(Equal(dataMan.GetData()))
-				close(done)
-			}, 5)
+			})
 		})
 	}
 })
