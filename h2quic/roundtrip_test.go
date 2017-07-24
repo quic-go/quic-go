@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"runtime"
 	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
@@ -196,17 +195,6 @@ var _ = Describe("RoundTripper", func() {
 			err := rt.Close()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(rt.clients)).To(BeZero())
-		})
-
-		It("runs Close when the RoundTripper is garbage collected", func() {
-			// this is set by getClient, but we can't do that while at the same time injecting the mockClient
-			runtime.SetFinalizer(rt, finalizer)
-			rt.clients = make(map[string]roundTripCloser)
-			cl := &mockClient{}
-			rt.clients["foo.bar"] = cl
-			rt = nil // lose the references to the RoundTripper, such that it can be garbage collected
-			runtime.GC()
-			Eventually(func() bool { return cl.closed }).Should(BeTrue())
 		})
 	})
 })
