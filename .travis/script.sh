@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -ex
 
 go get -t ./...
 if [ ${TESTMODE} == "unit" ]; then
