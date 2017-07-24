@@ -1377,7 +1377,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("ignores undecryptable packets after the handshake is complete", func() {
-			close(aeadChanged)
+			sess.handshakeComplete = true
 			go sess.run()
 			sendUndecryptablePackets()
 			Consistently(sess.undecryptablePackets).Should(BeEmpty())
