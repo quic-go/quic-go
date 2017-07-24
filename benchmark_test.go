@@ -31,6 +31,7 @@ var _ = Describe("Benchmarks", func() {
 				var ln Listener
 
 				serverAddr := make(chan net.Addr)
+				handshakeChan := make(chan struct{})
 				// start the server
 				go func() {
 					defer GinkgoRecover()
@@ -40,6 +41,9 @@ var _ = Describe("Benchmarks", func() {
 					serverAddr <- ln.Addr()
 					sess, err := ln.Accept()
 					Expect(err).ToNot(HaveOccurred())
+					// wait for the client to complete the handshake before sending the data
+					// this should not be necessary, but due to timing issues on the CIs, this is necessary to avoid sending too many undecryptable packets
+					<-handshakeChan
 					str, err := sess.OpenStream()
 					Expect(err).ToNot(HaveOccurred())
 					_, err = str.Write(data)
@@ -52,6 +56,7 @@ var _ = Describe("Benchmarks", func() {
 				addr := <-serverAddr
 				sess, err := DialAddr(addr.String(), &tls.Config{InsecureSkipVerify: true}, nil)
 				Expect(err).ToNot(HaveOccurred())
+				close(handshakeChan)
 				str, err := sess.AcceptStream()
 				Expect(err).ToNot(HaveOccurred())
 
