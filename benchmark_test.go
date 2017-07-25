@@ -7,7 +7,6 @@ import (
 	"io"
 	"math/rand"
 	"net"
-	"time"
 
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/testdata"
@@ -18,18 +17,15 @@ import (
 var _ = Describe("Benchmarks", func() {
 	dataLen := 50 /* MB */ * (1 << 20)
 	data := make([]byte, dataLen)
-
-	rand.Seed(time.Now().UnixNano())
+	rand.Seed(GinkgoRandomSeed())
+	rand.Read(data) // no need to check for an error. math.Rand.Read never errors
 
 	for i := range protocol.SupportedVersions {
 		version := protocol.SupportedVersions[i]
 
 		Context(fmt.Sprintf("with version %d", version), func() {
 			Measure("transferring a file", func(b Benchmarker) {
-				rand.Read(data) // no need to check for an error. math.Rand.Read never errors
-
 				var ln Listener
-
 				serverAddr := make(chan net.Addr)
 				// start the server
 				go func() {
