@@ -15,63 +15,65 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Benchmarks", func() {
-	dataLen := 50 /* MB */ * (1 << 20)
-	data := make([]byte, dataLen)
-	rand.Seed(GinkgoRandomSeed())
-	rand.Read(data) // no need to check for an error. math.Rand.Read never errors
+func init() {
+	var _ = Describe("Benchmarks", func() {
+		dataLen := size * /* MB */ (1 << 20)
+		data := make([]byte, dataLen)
+		rand.Seed(GinkgoRandomSeed())
+		rand.Read(data) // no need to check for an error. math.Rand.Read never errors
 
-	for i := range protocol.SupportedVersions {
-		version := protocol.SupportedVersions[i]
+		for i := range protocol.SupportedVersions {
+			version := protocol.SupportedVersions[i]
 
-		Context(fmt.Sprintf("with version %d", version), func() {
-			Measure("transferring a file", func(b Benchmarker) {
-				var ln quic.Listener
-				serverAddr := make(chan net.Addr)
-				handshakeChan := make(chan struct{})
-				// start the server
-				go func() {
-					defer GinkgoRecover()
-					var err error
-					ln, err = quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), nil)
+			Context(fmt.Sprintf("with version %d", version), func() {
+				Measure(fmt.Sprintf("transferring a %d MB file", size), func(b Benchmarker) {
+					var ln quic.Listener
+					serverAddr := make(chan net.Addr)
+					handshakeChan := make(chan struct{})
+					// start the server
+					go func() {
+						defer GinkgoRecover()
+						var err error
+						ln, err = quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), nil)
+						Expect(err).ToNot(HaveOccurred())
+						serverAddr <- ln.Addr()
+						sess, err := ln.Accept()
+						Expect(err).ToNot(HaveOccurred())
+						// wait for the client to complete the handshake before sending the data
+						// this should not be necessary, but due to timing issues on the CIs, this is necessary to avoid sending too many undecryptable packets
+						<-handshakeChan
+						str, err := sess.OpenStream()
+						Expect(err).ToNot(HaveOccurred())
+						_, err = str.Write(data)
+						Expect(err).ToNot(HaveOccurred())
+						err = str.Close()
+						Expect(err).ToNot(HaveOccurred())
+					}()
+
+					// start the client
+					addr := <-serverAddr
+					sess, err := quic.DialAddr(addr.String(), &tls.Config{InsecureSkipVerify: true}, nil)
 					Expect(err).ToNot(HaveOccurred())
-					serverAddr <- ln.Addr()
-					sess, err := ln.Accept()
+					close(handshakeChan)
+					str, err := sess.AcceptStream()
 					Expect(err).ToNot(HaveOccurred())
-					// wait for the client to complete the handshake before sending the data
-					// this should not be necessary, but due to timing issues on the CIs, this is necessary to avoid sending too many undecryptable packets
-					<-handshakeChan
-					str, err := sess.OpenStream()
-					Expect(err).ToNot(HaveOccurred())
-					_, err = str.Write(data)
-					Expect(err).ToNot(HaveOccurred())
-					err = str.Close()
-					Expect(err).ToNot(HaveOccurred())
-				}()
 
-				// start the client
-				addr := <-serverAddr
-				sess, err := quic.DialAddr(addr.String(), &tls.Config{InsecureSkipVerify: true}, nil)
-				Expect(err).ToNot(HaveOccurred())
-				close(handshakeChan)
-				str, err := sess.AcceptStream()
-				Expect(err).ToNot(HaveOccurred())
+					buf := &bytes.Buffer{}
+					// measure the time it takes to download the dataLen bytes
+					// note we're measuring the time for the transfer, i.e. excluding the handshake
+					runtime := b.Time("transfer time", func() {
+						_, err := io.Copy(buf, str)
+						Expect(err).NotTo(HaveOccurred())
+					})
+					// this is *a lot* faster than Expect(buf.Bytes()).To(Equal(data))
+					Expect(bytes.Equal(buf.Bytes(), data)).To(BeTrue())
 
-				buf := &bytes.Buffer{}
-				// measure the time it takes to download the dataLen bytes
-				// note we're measuring the time for the transfer, i.e. excluding the handshake
-				runtime := b.Time("transfer time", func() {
-					_, err := io.Copy(buf, str)
-					Expect(err).NotTo(HaveOccurred())
-				})
-				// this is *a lot* faster than Expect(buf.Bytes()).To(Equal(data))
-				Expect(bytes.Equal(buf.Bytes(), data)).To(BeTrue())
+					b.RecordValue("transfer rate [MB/s]", float64(dataLen)/1e6/runtime.Seconds())
 
-				b.RecordValue("transfer rate [MB/s]", float64(dataLen)/1e6/runtime.Seconds())
-
-				ln.Close()
-				sess.Close(nil)
-			}, 6)
-		})
-	}
-})
+					ln.Close()
+					sess.Close(nil)
+				}, samples)
+			})
+		}
+	})
+}
