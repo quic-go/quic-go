@@ -1,4 +1,4 @@
-package quic
+package benchmark
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net"
 
+	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/testdata"
 	. "github.com/onsi/ginkgo"
@@ -25,14 +26,14 @@ var _ = Describe("Benchmarks", func() {
 
 		Context(fmt.Sprintf("with version %d", version), func() {
 			Measure("transferring a file", func(b Benchmarker) {
-				var ln Listener
+				var ln quic.Listener
 				serverAddr := make(chan net.Addr)
 				handshakeChan := make(chan struct{})
 				// start the server
 				go func() {
 					defer GinkgoRecover()
 					var err error
-					ln, err = ListenAddr("localhost:0", testdata.GetTLSConfig(), nil)
+					ln, err = quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), nil)
 					Expect(err).ToNot(HaveOccurred())
 					serverAddr <- ln.Addr()
 					sess, err := ln.Accept()
@@ -50,7 +51,7 @@ var _ = Describe("Benchmarks", func() {
 
 				// start the client
 				addr := <-serverAddr
-				sess, err := DialAddr(addr.String(), &tls.Config{InsecureSkipVerify: true}, nil)
+				sess, err := quic.DialAddr(addr.String(), &tls.Config{InsecureSkipVerify: true}, nil)
 				Expect(err).ToNot(HaveOccurred())
 				close(handshakeChan)
 				str, err := sess.AcceptStream()
