@@ -64,7 +64,7 @@ var _ = Describe("Stream", func() {
 	})
 
 	Context("reading", func() {
-		It("reads a single StreamFrame", func() {
+		It("reads a single StreamFrame", func(done Done) {
 			mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(4))
 			mockFcm.EXPECT().AddBytesRead(streamID, protocol.ByteCount(4))
 			frame := frames.StreamFrame{
@@ -78,9 +78,10 @@ var _ = Describe("Stream", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(n).To(Equal(4))
 			Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
+			close(done)
 		})
 
-		It("reads a single StreamFrame in multiple goes", func() {
+		It("reads a single StreamFrame in multiple goes", func(done Done) {
 			mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(4))
 			mockFcm.EXPECT().AddBytesRead(streamID, protocol.ByteCount(2))
 			mockFcm.EXPECT().AddBytesRead(streamID, protocol.ByteCount(2))
@@ -99,9 +100,10 @@ var _ = Describe("Stream", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(n).To(Equal(2))
 			Expect(b).To(Equal([]byte{0xBE, 0xEF}))
+			close(done)
 		})
 
-		It("reads all data available", func() {
+		It("reads all data available", func(done Done) {
 			mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(2))
 			mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(4))
 			mockFcm.EXPECT().AddBytesRead(streamID, protocol.ByteCount(2)).Times(2)
@@ -122,9 +124,10 @@ var _ = Describe("Stream", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(n).To(Equal(4))
 			Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00}))
+			close(done)
 		})
 
-		It("assembles multiple StreamFrames", func() {
+		It("assembles multiple StreamFrames", func(done Done) {
 			mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(2))
 			mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(4))
 			mockFcm.EXPECT().AddBytesRead(streamID, protocol.ByteCount(2)).Times(2)
@@ -145,9 +148,10 @@ var _ = Describe("Stream", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(n).To(Equal(4))
 			Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
+			close(done)
 		})
 
-		It("waits until data is available", func() {
+		It("waits until data is available", func(done Done) {
 			mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(2))
 			mockFcm.EXPECT().AddBytesRead(streamID, protocol.ByteCount(2))
 			go func() {
@@ -161,9 +165,10 @@ var _ = Describe("Stream", func() {
 			n, err := str.Read(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(n).To(Equal(2))
+			close(done)
 		})
 
-		It("handles StreamFrames in wrong order", func() {
+		It("handles StreamFrames in wrong order", func(done Done) {
 			mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(2))
 			mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(4))
 			mockFcm.EXPECT().AddBytesRead(streamID, protocol.ByteCount(2)).Times(2)
@@ -184,9 +189,10 @@ var _ = Describe("Stream", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(n).To(Equal(4))
 			Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
+			close(done)
 		})
 
-		It("ignores duplicate StreamFrames", func() {
+		It("ignores duplicate StreamFrames", func(done Done) {
 			mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(2))
 			mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(2))
 			mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(4))
@@ -214,9 +220,10 @@ var _ = Describe("Stream", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(n).To(Equal(4))
 			Expect(b).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF}))
+			close(done)
 		})
 
-		It("doesn't rejects a StreamFrames with an overlapping data range", func() {
+		It("doesn't rejects a StreamFrames with an overlapping data range", func(done Done) {
 			mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(4))
 			mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(6))
 			mockFcm.EXPECT().AddBytesRead(streamID, protocol.ByteCount(2))
@@ -238,9 +245,10 @@ var _ = Describe("Stream", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(n).To(Equal(6))
 			Expect(b).To(Equal([]byte("foobar")))
+			close(done)
 		})
 
-		It("calls onData", func() {
+		It("calls onData", func(done Done) {
 			mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(4))
 			mockFcm.EXPECT().AddBytesRead(streamID, protocol.ByteCount(4))
 			frame := frames.StreamFrame{
@@ -252,6 +260,7 @@ var _ = Describe("Stream", func() {
 			_, err := str.Read(b)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(onDataCalled).To(BeTrue())
+			close(done)
 		})
 
 		Context("deadlines", func() {
@@ -334,7 +343,7 @@ var _ = Describe("Stream", func() {
 
 		Context("closing", func() {
 			Context("with FIN bit", func() {
-				It("returns EOFs", func() {
+				It("returns EOFs", func(done Done) {
 					mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(4))
 					mockFcm.EXPECT().AddBytesRead(streamID, protocol.ByteCount(4))
 					frame := frames.StreamFrame{
@@ -351,9 +360,10 @@ var _ = Describe("Stream", func() {
 					n, err = str.Read(b)
 					Expect(n).To(BeZero())
 					Expect(err).To(MatchError(io.EOF))
+					close(done)
 				})
 
-				It("handles out-of-order frames", func() {
+				It("handles out-of-order frames", func(done Done) {
 					mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(2))
 					mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(4))
 					mockFcm.EXPECT().AddBytesRead(streamID, protocol.ByteCount(2)).Times(2)
@@ -378,9 +388,10 @@ var _ = Describe("Stream", func() {
 					n, err = str.Read(b)
 					Expect(n).To(BeZero())
 					Expect(err).To(MatchError(io.EOF))
+					close(done)
 				})
 
-				It("returns EOFs with partial read", func() {
+				It("returns EOFs with partial read", func(done Done) {
 					mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(2))
 					mockFcm.EXPECT().AddBytesRead(streamID, protocol.ByteCount(2))
 					frame := frames.StreamFrame{
@@ -395,9 +406,10 @@ var _ = Describe("Stream", func() {
 					Expect(err).To(MatchError(io.EOF))
 					Expect(n).To(Equal(2))
 					Expect(b[:n]).To(Equal([]byte{0xDE, 0xAD}))
+					close(done)
 				})
 
-				It("handles immediate FINs", func() {
+				It("handles immediate FINs", func(done Done) {
 					mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(0))
 					mockFcm.EXPECT().AddBytesRead(streamID, protocol.ByteCount(0))
 					frame := frames.StreamFrame{
@@ -411,11 +423,12 @@ var _ = Describe("Stream", func() {
 					n, err := str.Read(b)
 					Expect(n).To(BeZero())
 					Expect(err).To(MatchError(io.EOF))
+					close(done)
 				})
 			})
 
 			Context("when CloseRemote is called", func() {
-				It("closes", func() {
+				It("closes", func(done Done) {
 					mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(0))
 					mockFcm.EXPECT().AddBytesRead(streamID, protocol.ByteCount(0))
 					str.CloseRemote(0)
@@ -423,6 +436,7 @@ var _ = Describe("Stream", func() {
 					n, err := str.Read(b)
 					Expect(n).To(BeZero())
 					Expect(err).To(MatchError(io.EOF))
+					close(done)
 				})
 			})
 		})
@@ -430,7 +444,7 @@ var _ = Describe("Stream", func() {
 		Context("cancelling the stream", func() {
 			testErr := errors.New("test error")
 
-			It("immediately returns all reads", func() {
+			It("immediately returns all reads", func(done Done) {
 				var readReturned bool
 				var n int
 				var err error
@@ -444,14 +458,16 @@ var _ = Describe("Stream", func() {
 				Eventually(func() bool { return readReturned }).Should(BeTrue())
 				Expect(n).To(BeZero())
 				Expect(err).To(MatchError(testErr))
+				close(done)
 			})
 
-			It("errors for all following reads", func() {
+			It("errors for all following reads", func(done Done) {
 				str.Cancel(testErr)
 				b := make([]byte, 1)
 				n, err := str.Read(b)
 				Expect(n).To(BeZero())
 				Expect(err).To(MatchError(testErr))
+				close(done)
 			})
 		})
 	})
@@ -460,7 +476,7 @@ var _ = Describe("Stream", func() {
 		testErr := errors.New("testErr")
 
 		Context("reset by the peer", func() {
-			It("continues reading after receiving a remote error", func() {
+			It("continues reading after receiving a remote error", func(done Done) {
 				mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(4))
 				frame := frames.StreamFrame{
 					Offset: 0,
@@ -472,9 +488,10 @@ var _ = Describe("Stream", func() {
 				n, err := str.Read(b)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(n).To(Equal(4))
+				close(done)
 			})
 
-			It("reads a delayed StreamFrame that arrives after receiving a remote error", func() {
+			It("reads a delayed StreamFrame that arrives after receiving a remote error", func(done Done) {
 				mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(4))
 				str.RegisterRemoteError(testErr)
 				frame := frames.StreamFrame{
@@ -487,9 +504,10 @@ var _ = Describe("Stream", func() {
 				n, err := str.Read(b)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(n).To(Equal(4))
+				close(done)
 			})
 
-			It("returns the error if reading past the offset of the frame received", func() {
+			It("returns the error if reading past the offset of the frame received", func(done Done) {
 				mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(4))
 				frame := frames.StreamFrame{
 					Offset: 0,
@@ -502,9 +520,10 @@ var _ = Describe("Stream", func() {
 				Expect(b[0:4]).To(Equal(frame.Data))
 				Expect(err).To(MatchError(testErr))
 				Expect(n).To(Equal(4))
+				close(done)
 			})
 
-			It("returns an EOF when reading past the offset, if the stream received a finbit", func() {
+			It("returns an EOF when reading past the offset, if the stream received a finbit", func(done Done) {
 				mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(4))
 				frame := frames.StreamFrame{
 					Offset: 0,
@@ -518,9 +537,10 @@ var _ = Describe("Stream", func() {
 				Expect(b[:4]).To(Equal(frame.Data))
 				Expect(err).To(MatchError(io.EOF))
 				Expect(n).To(Equal(4))
+				close(done)
 			})
 
-			It("continues reading in small chunks after receiving a remote error", func() {
+			It("continues reading in small chunks after receiving a remote error", func(done Done) {
 				mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(4))
 				frame := frames.StreamFrame{
 					Offset: 0,
@@ -538,9 +558,10 @@ var _ = Describe("Stream", func() {
 				Expect(err).To(MatchError(io.EOF))
 				Expect(b[:1]).To(Equal([]byte{0xef}))
 				Expect(n).To(Equal(1))
+				close(done)
 			})
 
-			It("doesn't inform the flow controller about bytes read after receiving the remote error", func() {
+			It("doesn't inform the flow controller about bytes read after receiving the remote error", func(done Done) {
 				mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(4))
 				// No AddBytesRead()
 				frame := frames.StreamFrame{
@@ -553,9 +574,10 @@ var _ = Describe("Stream", func() {
 				b := make([]byte, 3)
 				_, err := str.Read(b)
 				Expect(err).ToNot(HaveOccurred())
+				close(done)
 			})
 
-			It("stops writing after receiving a remote error", func() {
+			It("stops writing after receiving a remote error", func(done Done) {
 				var writeReturned bool
 				var n int
 				var err error
@@ -568,9 +590,10 @@ var _ = Describe("Stream", func() {
 				Eventually(func() bool { return writeReturned }).Should(BeTrue())
 				Expect(n).To(BeZero())
 				Expect(err).To(MatchError(testErr))
+				close(done)
 			})
 
-			It("returns how much was written when recieving a remote error", func() {
+			It("returns how much was written when recieving a remote error", func(done Done) {
 				var writeReturned bool
 				var n int
 				var err error
@@ -585,9 +608,10 @@ var _ = Describe("Stream", func() {
 				Eventually(func() bool { return writeReturned }).Should(BeTrue())
 				Expect(err).To(MatchError(testErr))
 				Expect(n).To(Equal(4))
+				close(done)
 			})
 
-			It("calls onReset when receiving a remote error", func() {
+			It("calls onReset when receiving a remote error", func(done Done) {
 				var writeReturned bool
 				str.writeOffset = 0x1000
 				go func() {
@@ -599,6 +623,7 @@ var _ = Describe("Stream", func() {
 				Expect(resetCalledForStream).To(Equal(protocol.StreamID(1337)))
 				Expect(resetCalledAtOffset).To(Equal(protocol.ByteCount(0x1000)))
 				Eventually(func() bool { return writeReturned }).Should(BeTrue())
+				close(done)
 			})
 
 			It("doesn't call onReset if it already sent a FIN", func() {
@@ -626,7 +651,7 @@ var _ = Describe("Stream", func() {
 		})
 
 		Context("reset locally", func() {
-			It("stops writing", func() {
+			It("stops writing", func(done Done) {
 				var writeReturned bool
 				var n int
 				var err error
@@ -641,17 +666,19 @@ var _ = Describe("Stream", func() {
 				Eventually(func() bool { return writeReturned }).Should(BeTrue())
 				Expect(n).To(BeZero())
 				Expect(err).To(MatchError(testErr))
+				close(done)
 			})
 
-			It("doesn't allow further writes", func() {
+			It("doesn't allow further writes", func(done Done) {
 				str.Reset(testErr)
 				n, err := str.Write([]byte("foobar"))
 				Expect(n).To(BeZero())
 				Expect(err).To(MatchError(testErr))
 				Expect(str.getDataForWriting(6)).To(BeNil())
+				close(done)
 			})
 
-			It("stops reading", func() {
+			It("stops reading", func(done Done) {
 				var readReturned bool
 				var n int
 				var err error
@@ -666,9 +693,10 @@ var _ = Describe("Stream", func() {
 				Eventually(func() bool { return readReturned }).Should(BeTrue())
 				Expect(n).To(BeZero())
 				Expect(err).To(MatchError(testErr))
+				close(done)
 			})
 
-			It("doesn't allow further reads", func() {
+			It("doesn't allow further reads", func(done Done) {
 				mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(6))
 				str.AddStreamFrame(&frames.StreamFrame{
 					Data: []byte("foobar"),
@@ -678,6 +706,7 @@ var _ = Describe("Stream", func() {
 				n, err := str.Read(b)
 				Expect(n).To(BeZero())
 				Expect(err).To(MatchError(testErr))
+				close(done)
 			})
 
 			It("calls onReset", func() {
@@ -767,11 +796,12 @@ var _ = Describe("Stream", func() {
 			close(done)
 		})
 
-		It("getDataForWriting returns nil if no data is available", func() {
+		It("getDataForWriting returns nil if no data is available", func(done Done) {
 			Expect(str.getDataForWriting(1000)).To(BeNil())
+			close(done)
 		})
 
-		It("copies the slice while writing", func() {
+		It("copies the slice while writing", func(done Done) {
 			s := []byte("foo")
 			go func() {
 				n, err := str.Write(s)
@@ -781,18 +811,21 @@ var _ = Describe("Stream", func() {
 			Eventually(func() protocol.ByteCount { return str.lenOfDataForWriting() }).ShouldNot(BeZero())
 			s[0] = 'v'
 			Expect(str.getDataForWriting(3)).To(Equal([]byte("foo")))
+			close(done)
 		})
 
-		It("returns when given a nil input", func() {
+		It("returns when given a nil input", func(done Done) {
 			n, err := str.Write(nil)
 			Expect(n).To(BeZero())
 			Expect(err).ToNot(HaveOccurred())
+			close(done)
 		})
 
-		It("returns when given an empty slice", func() {
+		It("returns when given an empty slice", func(done Done) {
 			n, err := str.Write([]byte(""))
 			Expect(n).To(BeZero())
 			Expect(err).ToNot(HaveOccurred())
+			close(done)
 		})
 
 		Context("deadlines", func() {
@@ -892,14 +925,15 @@ var _ = Describe("Stream", func() {
 		Context("cancelling", func() {
 			testErr := errors.New("test")
 
-			It("returns errors when the stream is cancelled", func() {
+			It("returns errors when the stream is cancelled", func(done Done) {
 				str.Cancel(testErr)
 				n, err := str.Write([]byte("foo"))
 				Expect(n).To(BeZero())
 				Expect(err).To(MatchError(testErr))
+				close(done)
 			})
 
-			It("doesn't get data for writing if an error occurred", func() {
+			It("doesn't get data for writing if an error occurred", func(done Done) {
 				go func() {
 					_, err := str.Write([]byte("foobar"))
 					Expect(err).To(MatchError(testErr))
@@ -910,6 +944,7 @@ var _ = Describe("Stream", func() {
 				data := str.getDataForWriting(6)
 				Expect(data).To(BeNil())
 				Expect(str.lenOfDataForWriting()).To(BeZero())
+				close(done)
 			})
 		})
 	})
