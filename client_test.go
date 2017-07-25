@@ -75,50 +75,53 @@ var _ = Describe("Client", func() {
 		})
 
 		It("dials non-forward-secure", func(done Done) {
-			var dialedSess Session
+			dialed := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				var err error
-				dialedSess, err = DialNonFWSecure(packetConn, addr, "quic.clemente.io:1337", nil, config)
+				s, err := DialNonFWSecure(packetConn, addr, "quic.clemente.io:1337", nil, config)
 				Expect(err).ToNot(HaveOccurred())
+				Expect(s).ToNot(BeNil())
+				close(dialed)
 			}()
-			Consistently(func() Session { return dialedSess }).Should(BeNil())
+			Consistently(dialed).ShouldNot(BeClosed())
 			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
-			Eventually(func() Session { return dialedSess }).ShouldNot(BeNil())
+			Eventually(dialed).Should(BeClosed())
 			close(done)
 		})
 
 		It("dials a non-forward-secure address", func(done Done) {
-			var dialedSess Session
+			dialed := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				var err error
-				dialedSess, err = DialAddrNonFWSecure("localhost:18901", nil, config)
+				s, err := DialAddrNonFWSecure("localhost:18901", nil, config)
 				Expect(err).ToNot(HaveOccurred())
+				Expect(s).ToNot(BeNil())
+				close(dialed)
 			}()
-			Consistently(func() Session { return dialedSess }).Should(BeNil())
+			Consistently(dialed).ShouldNot(BeClosed())
 			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
-			Eventually(func() Session { return dialedSess }).ShouldNot(BeNil())
+			Eventually(dialed).Should(BeClosed())
 			close(done)
 		})
 
 		It("Dial only returns after the handshake is complete", func(done Done) {
-			var dialedSess Session
+			dialed := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				var err error
-				dialedSess, err = Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
+				s, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
 				Expect(err).ToNot(HaveOccurred())
+				Expect(s).ToNot(BeNil())
+				close(dialed)
 			}()
 			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
-			Consistently(func() Session { return dialedSess }).Should(BeNil())
+			Consistently(dialed).ShouldNot(BeClosed())
 			close(sess.handshakeComplete)
-			Eventually(func() Session { return dialedSess }).ShouldNot(BeNil())
+			Eventually(dialed).Should(BeClosed())
 			close(done)
 		})
 
 		It("resolves the address", func(done Done) {
-			var cconn connection
+			remoteAddrChan := make(chan string)
 			newClientSession = func(
 				conn connection,
 				_ string,
@@ -128,17 +131,16 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ []protocol.VersionNumber,
 			) (packetHandler, <-chan handshakeEvent, error) {
-				cconn = conn
+				remoteAddrChan <- conn.RemoteAddr().String()
 				return sess, nil, nil
 			}
 			go DialAddr("localhost:17890", nil, &Config{})
-			Eventually(func() connection { return cconn }).ShouldNot(BeNil())
-			Expect(cconn.RemoteAddr().String()).To(Equal("127.0.0.1:17890"))
+			Eventually(remoteAddrChan).Should(Receive(Equal("127.0.0.1:17890")))
 			close(done)
 		})
 
 		It("uses the tls.Config.ServerName as the hostname, if present", func(done Done) {
-			var hostname string
+			hostnameChan := make(chan string)
 			newClientSession = func(
 				_ connection,
 				h string,
@@ -148,11 +150,11 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ []protocol.VersionNumber,
 			) (packetHandler, <-chan handshakeEvent, error) {
-				hostname = h
+				hostnameChan <- h
 				return sess, nil, nil
 			}
 			go DialAddr("localhost:17890", &tls.Config{ServerName: "foobar"}, nil)
-			Eventually(func() string { return hostname }).Should(Equal("foobar"))
+			Eventually(hostnameChan).Should(Receive(Equal("foobar")))
 			close(done)
 		})
 
@@ -161,10 +163,10 @@ var _ = Describe("Client", func() {
 			var dialErr error
 			go func() {
 				_, dialErr = Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
+				Expect(dialErr).To(MatchError(testErr))
+				close(done)
 			}()
 			sess.handshakeChan <- handshakeEvent{err: testErr}
-			Eventually(func() error { return dialErr }).Should(MatchError(testErr))
-			close(done)
 		})
 
 		It("returns an error that occurs while waiting for the handshake to complete", func(done Done) {
@@ -172,11 +174,11 @@ var _ = Describe("Client", func() {
 			var dialErr error
 			go func() {
 				_, dialErr = Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
+				Expect(dialErr).To(MatchError(testErr))
+				close(done)
 			}()
 			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
 			sess.handshakeComplete <- testErr
-			Eventually(func() error { return dialErr }).Should(MatchError(testErr))
-			close(done)
 		})
 
 		It("setups with the right values", func() {
@@ -336,7 +338,7 @@ var _ = Describe("Client", func() {
 			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
 			Expect(err).ToNot(HaveOccurred())
 		}()
-		<-c
+		Eventually(c).Should(BeClosed())
 		Expect(cconn.(*conn).pconn).To(Equal(packetConn))
 		Expect(hostname).To(Equal("quic.clemente.io"))
 		Expect(version).To(Equal(cl.version))
@@ -357,16 +359,16 @@ var _ = Describe("Client", func() {
 			packetConn.dataToRead = b.Bytes()
 
 			Expect(sess.packetCount).To(BeZero())
-			var stoppedListening bool
+			stoppedListening := make(chan struct{})
 			go func() {
 				cl.listen()
 				// it should continue listening when receiving valid packets
-				stoppedListening = true
+				close(stoppedListening)
 			}()
 
 			Eventually(func() int { return sess.packetCount }).Should(Equal(1))
 			Expect(sess.closed).To(BeFalse())
-			Consistently(func() bool { return stoppedListening }).Should(BeFalse())
+			Consistently(stoppedListening).ShouldNot(BeClosed())
 		})
 
 		It("closes the session when encountering an error while reading from the connection", func() {
