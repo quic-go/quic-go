@@ -115,6 +115,13 @@ var _ = Describe("RoundTripper", func() {
 			Expect(err).To(MatchError(streamOpenErr))
 			Expect(rt.clients).To(HaveLen(1))
 		})
+
+		It("doesn't create new clients if RoundTripOpt.OnlyCachedConn is set", func() {
+			req, err := http.NewRequest("GET", "https://quic.clemente.io/foobar.html", nil)
+			Expect(err).ToNot(HaveOccurred())
+			_, err = rt.RoundTripOpt(req, RoundTripOpt{OnlyCachedConn: true})
+			Expect(err).To(MatchError(ErrNoCachedConn))
+		})
 	})
 
 	Context("validating request", func() {
