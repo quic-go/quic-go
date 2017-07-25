@@ -28,7 +28,8 @@ install:
 
 build_script:
   - rm -r integrationtests
-  - ginkgo -r --randomizeAllSpecs --randomizeSuites --trace --progress
+  - ginkgo -r --randomizeAllSpecs --randomizeSuites --trace --progress -skipPackage benchmark
+  - ginkgo --randomizeAllSpecs --randomizeSuites --trace --progress benchmark -- -samples=1
 
 test: off
 
