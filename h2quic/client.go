@@ -117,13 +117,13 @@ func (c *client) handleHeaderStream() {
 		lastStream = protocol.StreamID(frame.Header().StreamID)
 		hframe, ok := frame.(*http2.HeadersFrame)
 		if !ok {
-			pushFrame, ok := frame.(*http2.PushPromiseFrame)
-			if !ok {
+			pushFrame, pushOk := frame.(*http2.PushPromiseFrame)
+			if !pushOk {
 				c.headerErr = qerr.Error(qerr.InvalidHeadersStreamData, "not a headers or push_promise frame")
 				break
 			}
 			utils.Infof("Received PUSH_PROMISE on stream %d, push will be on stream %d, for original data on stream %d", c.headerStream.StreamID(), pushFrame.PromiseID, pushFrame.StreamID)
-			err := c.handlePushPromise(decoder, pushFrame)
+			err = c.handlePushPromise(decoder, pushFrame)
 			if err != nil {
 				break
 			}
@@ -149,6 +149,7 @@ func (c *client) handleHeaderStream() {
 			break
 		}
 
+		utils.Debugf("Waiting on putting in channel: handleHeaderStream")
 		responseChan <- rsp
 	}
 
@@ -191,10 +192,14 @@ func (c *client) receivePushData(responseChan chan *http.Response, req *http.Req
 	for !receivedResponse {
 		select {
 		case res = <-responseChan:
+			utils.Debugf("Read from channel: receivePushData")
 			receivedResponse = true
+			utils.Debugf("Waiting for mutex: receivePushData")
 			c.mutex.Lock()
 			delete(c.responses, pushStreamID)
 			c.mutex.Unlock()
+			utils.Debugf("Released mutex: receivePushData")
+			utils.Infof("Got header response for push stream %d", pushStreamID)
 		case <-c.headerErrored:
 			// an error occured on the header stream
 			_ = c.CloseWithError(c.headerErr)
@@ -203,9 +208,8 @@ func (c *client) receivePushData(responseChan chan *http.Response, req *http.Req
 	}
 
 	// TODO: correctly set this variable
-	var streamEnded bool
-	isHead := (req.Method == methodHEAD)
-
+	// var streamEnded bool
+	// isHead := (req.Method == "HEAD")
 	res = setLength(res, false, true)
 
 	if session, ok := c.session.(streamCreator); ok {
@@ -215,24 +219,29 @@ func (c *client) receivePushData(responseChan chan *http.Response, req *http.Req
 			_ = c.CloseWithError(err)
 			return
 		}
-		if streamEnded || isHead {
-			res.Body = noBody
-		} else {
-			res.Body = dataStream
-			if res.Header.Get("Content-Encoding") == "gzip" {
-				res.Header.Del("Content-Encoding")
-				res.Header.Del("Content-Length")
-				res.ContentLength = -1
-				res.Body = &gzipReader{body: res.Body}
-				res.Uncompressed = true
-			}
+		if dataStream == nil {
+			utils.Errorf("Received nil stream for streamID %d", pushStreamID)
+			return
 		}
+		// if streamEnded || isHead {
+		// 	res.Body = noBody
+		// } else {
+		res.Body = dataStream
+		// if res.Header.Get("Content-Encoding") == "gzip" {
+		// 	res.Header.Del("Content-Encoding")
+		// 	res.Header.Del("Content-Length")
+		// 	res.ContentLength = -1
+		// 	res.Body = &gzipReader{body: res.Body}
+		// 	res.Uncompressed = true
+		// }
+		// }
+
 		// Add to cache
 		res.Request = req
 		c.mutex.Lock()
-		c.pushedResponses[req.URL.String()] = res
+		c.pushedResponses[req.URL.Path] = res
 		c.mutex.Unlock()
-		utils.Infof("Added response for request '%s' to cache", req.URL.String())
+		utils.Infof("Added response for request '%s' to cache", req.URL.Path)
 	} else {
 		utils.Errorf("Could not convert c.session to streamCreator")
 	}
@@ -249,13 +258,14 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	c.mutex.Lock()
-	if response, ok := c.pushedResponses[req.URL.String()]; ok {
-		delete(c.pushedResponses, req.URL.String())
+	if response, ok := c.pushedResponses[req.URL.Path]; ok {
+		delete(c.pushedResponses, req.URL.Path)
 		c.mutex.Unlock()
-		utils.Infof("Added response for request '%s' to cache", req.URL.String())
+		utils.Infof("######## Fetched response for request '%s' from cache", req.URL.Path)
 		return response, nil
 	}
 	c.mutex.Unlock()
+	utils.Infof("######## Requesting from upstream: %s", req.URL.Path)
 
 	c.dialOnce.Do(func() {
 		c.handshakeErr = c.dial()
@@ -308,6 +318,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	for !(bodySent && receivedResponse) {
 		select {
 		case res = <-responseChan:
+			utils.Debugf("Read from channel: roundtrip")
 			receivedResponse = true
 			c.mutex.Lock()
 			delete(c.responses, dataStream.StreamID())
