@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"net"
@@ -40,9 +41,6 @@ func (s *mockSession) run() error {
 func (s *mockSession) WaitUntilHandshakeComplete() error {
 	return <-s.handshakeComplete
 }
-func (*mockSession) WaitUntilClosed() {
-	panic("not implemented")
-}
 func (s *mockSession) Close(e error) error {
 	if s.closed {
 		return nil
@@ -58,21 +56,14 @@ func (s *mockSession) closeRemote(e error) {
 	s.closedRemote = true
 	close(s.stopRunLoop)
 }
-func (s *mockSession) AcceptStream() (Stream, error) {
-	panic("not implemented")
-}
 func (s *mockSession) OpenStream() (Stream, error) {
 	return &stream{streamID: 1337}, nil
 }
-func (s *mockSession) OpenStreamSync() (Stream, error) {
-	panic("not implemented")
-}
-func (s *mockSession) LocalAddr() net.Addr {
-	panic("not implemented")
-}
-func (s *mockSession) RemoteAddr() net.Addr {
-	panic("not implemented")
-}
+func (s *mockSession) AcceptStream() (Stream, error)   { panic("not implemented") }
+func (s *mockSession) OpenStreamSync() (Stream, error) { panic("not implemented") }
+func (s *mockSession) LocalAddr() net.Addr             { panic("not implemented") }
+func (s *mockSession) RemoteAddr() net.Addr            { panic("not implemented") }
+func (*mockSession) Context() context.Context          { panic("not implemented") }
 
 var _ Session = &mockSession{}
 var _ NonFWSession = &mockSession{}

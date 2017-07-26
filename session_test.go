@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"io"
@@ -648,7 +649,7 @@ var _ = Describe("Session", func() {
 		str, _ := sess.GetOrOpenStream(5)
 		err := sess.handleFrames([]frames.Frame{&frames.ConnectionCloseFrame{ErrorCode: 42, ReasonPhrase: "foobar"}})
 		Expect(err).NotTo(HaveOccurred())
-		Eventually(sess.runClosed).Should(BeClosed())
+		Eventually(sess.Context().Done()).Should(BeClosed())
 		_, err = str.Read([]byte{0})
 		Expect(err).To(MatchError(qerr.Error(42, "foobar")))
 		close(done)
@@ -744,11 +745,11 @@ var _ = Describe("Session", func() {
 			}()
 			go sess.run()
 			Consistently(func() error { return err }).ShouldNot(HaveOccurred())
-			Expect(sess.runClosed).ToNot(BeClosed())
+			Expect(sess.Context().Done()).ToNot(BeClosed())
 			sess.Close(errCloseSessionForNewVersion)
 			Eventually(func() error { return err }).Should(HaveOccurred())
 			Expect(err).To(MatchError(qerr.Error(qerr.InternalError, errCloseSessionForNewVersion.Error())))
-			Eventually(sess.runClosed).Should(BeClosed())
+			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 	})
 
@@ -764,7 +765,7 @@ var _ = Describe("Session", func() {
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(mconn.written).To(HaveLen(1))
 			Expect(mconn.written[0]).To(ContainSubstring(string([]byte{0x02, byte(qerr.PeerGoingAway), 0, 0, 0, 0, 0})))
-			Expect(sess.runClosed).To(BeClosed())
+			Expect(sess.Context().Done()).To(BeClosed())
 		})
 
 		It("only closes once", func() {
@@ -772,7 +773,7 @@ var _ = Describe("Session", func() {
 			sess.Close(nil)
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(mconn.written).To(HaveLen(1))
-			Expect(sess.runClosed).To(BeClosed())
+			Expect(sess.Context().Done()).To(BeClosed())
 		})
 
 		It("closes streams with proper error", func() {
@@ -787,7 +788,7 @@ var _ = Describe("Session", func() {
 			n, err = s.Write([]byte{0})
 			Expect(n).To(BeZero())
 			Expect(err.Error()).To(ContainSubstring(testErr.Error()))
-			Expect(sess.runClosed).To(BeClosed())
+			Expect(sess.Context().Done()).To(BeClosed())
 		})
 
 		It("closes the session in order to replace it with another QUIC version", func() {
@@ -800,13 +801,16 @@ var _ = Describe("Session", func() {
 			sess.Close(handshake.ErrHOLExperiment)
 			Expect(mconn.written).To(HaveLen(1))
 			Expect(mconn.written[0][0] & 0x02).ToNot(BeZero()) // Public Reset
-			Expect(sess.runClosed).To(BeClosed())
+			Expect(sess.Context().Done()).To(BeClosed())
 		})
 
-		It("unblocks WaitUntilClosed when the run loop exists", func() {
+		It("cancels the context when the run loop exists", func() {
 			returned := make(chan struct{})
 			go func() {
-				sess.WaitUntilClosed()
+				defer GinkgoRecover()
+				ctx := sess.Context()
+				<-ctx.Done()
+				Expect(ctx.Err()).To(MatchError(context.Canceled))
 				close(returned)
 			}()
 			Consistently(returned).ShouldNot(BeClosed())
@@ -841,7 +845,7 @@ var _ = Describe("Session", func() {
 			sess.unpacker.(*mockUnpacker).unpackErr = testErr
 			sess.handlePacket(&receivedPacket{publicHeader: hdr})
 			Eventually(func() error { return runErr }).Should(MatchError(testErr))
-			Expect(sess.runClosed).To(BeClosed())
+			Expect(sess.Context().Done()).To(BeClosed())
 			close(done)
 		})
 
@@ -1362,7 +1366,7 @@ var _ = Describe("Session", func() {
 			sess.scheduleSending()            // wake up the run loop
 			Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(1))
 			Expect(mconn.written[0]).To(ContainSubstring("PRST"))
-			Eventually(sess.runClosed).Should(BeClosed())
+			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
 		It("doesn't send a Public Reset if decrypting them suceeded during the timeout", func() {
@@ -1372,7 +1376,7 @@ var _ = Describe("Session", func() {
 			// there are no packets in the undecryptable packet queue
 			// in reality, this happens when the trial decryption succeeded during the Public Reset timeout
 			Consistently(func() [][]byte { return mconn.written }).ShouldNot(HaveLen(1))
-			Expect(sess.runClosed).ToNot(Receive())
+			Expect(sess.Context().Done()).ToNot(Receive())
 			sess.Close(nil)
 		})
 
@@ -1477,7 +1481,7 @@ var _ = Describe("Session", func() {
 			err := sess.run() // Would normally not return
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
 			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
-			Expect(sess.runClosed).To(BeClosed())
+			Expect(sess.Context().Done()).To(BeClosed())
 			close(done)
 		})
 
@@ -1486,7 +1490,7 @@ var _ = Describe("Session", func() {
 			err := sess.run() // Would normally not return
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.HandshakeTimeout))
 			Expect(mconn.written[0]).To(ContainSubstring("Crypto handshake did not complete in time."))
-			Expect(sess.runClosed).To(BeClosed())
+			Expect(sess.Context().Done()).To(BeClosed())
 			close(done)
 		})
 
@@ -1500,7 +1504,7 @@ var _ = Describe("Session", func() {
 			err := sess.run() // Would normally not return
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
 			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
-			Expect(sess.runClosed).To(BeClosed())
+			Expect(sess.Context().Done()).To(BeClosed())
 			close(done)
 		})
 
@@ -1515,7 +1519,7 @@ var _ = Describe("Session", func() {
 			err := sess.run() // Would normally not return
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
 			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
-			Expect(sess.runClosed).To(BeClosed())
+			Expect(sess.Context().Done()).To(BeClosed())
 			close(done)
 		})
 	})

@@ -2,6 +2,7 @@ package h2quic
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"io"
@@ -61,7 +62,7 @@ func (s *mockSession) LocalAddr() net.Addr {
 func (s *mockSession) RemoteAddr() net.Addr {
 	return &net.UDPAddr{IP: []byte{127, 0, 0, 1}, Port: 42}
 }
-func (s *mockSession) WaitUntilClosed() { panic("not implemented") }
+func (s *mockSession) Context() context.Context { panic("not implemented") }
 
 var _ = Describe("H2 server", func() {
 	var (
@@ -323,7 +324,7 @@ var _ = Describe("H2 server", func() {
 
 	Context("setting http headers", func() {
 		expected := http.Header{
-			"Alt-Svc":            {`quic=":443"; ma=2592000; v="37,36,35"`},
+			"Alt-Svc": {`quic=":443"; ma=2592000; v="37,36,35"`},
 		}
 
 		It("sets proper headers with numeric port", func() {
