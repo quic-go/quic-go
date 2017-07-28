@@ -111,6 +111,9 @@ func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
 	if w.headerStream.StreamID()%2 == 0 { // Copied from net/http2/server.go
 		return http2.ErrRecursivePush
 	}
+	if opts == nil {
+		opts = &http.PushOptions{}
+	}
 	// Default options. Copied from net/http2/server.go
 	if opts.Method == "" {
 		opts.Method = "GET"
