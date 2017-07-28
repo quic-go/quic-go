@@ -101,15 +101,14 @@ func (w *responseWriter) Flush() {}
 // This is a NOP. Use http.Request.Context
 func (w *responseWriter) CloseNotify() <-chan bool { return make(<-chan bool) }
 
-// Should do:
+// Push should do:
 // - construct a valid HTTP2 header for a request for the file to push.
 // - open a new stream (server side)
 // - send a PUSH_PROMISE containing the streamID of the new stream and the HTTP2 header
 // - use the header to create a http request and use it in ServeHTTP(w ResponseWriter, r *Request) to serve the file to push.
-// TODO (a lot of these are taken from golang.org/x/net/http2/server.go: push(target string, opts pushOptions) )
-// - check for recursive pushes: "PUSH_PROMISE frames MUST only be sent on a peer-initiated stream."
+// - TODO: check for recursive pushes.
 func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
-	if w.headerStream.StreamID()%2 == 0 {
+	if w.headerStream.StreamID()%2 == 0 { // Copied from net/http2/server.go
 		return http2.ErrRecursivePush
 	}
 	// Default options. Copied from net/http2/server.go
@@ -119,7 +118,7 @@ func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
 	if opts.Header == nil {
 		opts.Header = http.Header{}
 	}
-	if opts.Method != "GET" && opts.Method != methodHEAD {
+	if opts.Method != "GET" && opts.Method != http.MethodHead {
 		return fmt.Errorf("method %q must be GET or HEAD", opts.Method)
 	}
 	// Validate the target. Copied from net/http2/server.go
@@ -157,6 +156,7 @@ func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
 	authority := u.Host
 	path := u.RequestURI()
 	contentLengthStr := "0" // a request does not have content
+
 	// Construct HTTP headers for request in push promise
 	var headers bytes.Buffer
 	enc := hpack.NewEncoder(&headers)
@@ -169,38 +169,35 @@ func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
 			enc.WriteField(hpack.HeaderField{Name: strings.ToLower(k), Value: v[index]})
 		}
 	}
+
 	// Get new data stream
 	newDataStream, err := w.session.OpenStream()
 	if err != nil {
 		if err == qerr.TooManyOpenStreams {
-			err = http2.ErrPushLimitReached
+			return http2.ErrPushLimitReached
 		}
 		return err
-	}
-	if newDataStream == nil {
-		return fmt.Errorf("Got invalid data stream")
 	}
 	newDataStreamID := newDataStream.StreamID()
 	if newDataStreamID%2 != 0 {
 		return fmt.Errorf("Cannot push on client side stream")
 	}
+
 	// Write push promise header
-	p := http2.PushPromiseParam{
+	utils.Debugf("Sending PUSH_PROMISE for target '%s', promised on stream %d", target, newDataStreamID)
+	headerFramer := http2.NewFramer(w.headerStream, nil)
+	w.headerStreamMutex.Lock()
+	err = headerFramer.WritePushPromise(http2.PushPromiseParam{
 		StreamID:      uint32(w.dataStreamID),
 		PromiseID:     uint32(newDataStreamID),
 		BlockFragment: headers.Bytes(),
 		EndHeaders:    true,
-	}
-	headerFramer := http2.NewFramer(w.headerStream, nil)
-
-	utils.Debugf("Sending PUSH_PROMISE for target '%s' on stream %d, promised on stream %d", target, w.headerStream.StreamID(), newDataStreamID)
-
-	w.headerStreamMutex.Lock()
-	err = headerFramer.WritePushPromise(p)
+	})
 	w.headerStreamMutex.Unlock() // Do not defer as we will first call ServeHTTP(), which will need the mutex
 	if err != nil {
 		return err
 	}
+
 	// golang net/http2 constructs a 'fake' http2 request and feeds it to the serve() loop to let it be processed as a normal request.
 	// But we will, for now, just serveHTTP() it here:
 	pushRequest, err := requestFromHTTPHeader(opts.Header, path, authority, opts.Method, contentLengthStr)
