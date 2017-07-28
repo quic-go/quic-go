@@ -865,6 +865,12 @@ var _ = Describe("Stream", func() {
 				Expect(str.finishedWriting.Get()).To(BeTrue())
 			})
 
+			It("doesn't allow writes after it has been closed", func() {
+				str.Close()
+				_, err := strWithTimeout.Write([]byte("foobar"))
+				Expect(err).To(MatchError("write on closed stream 1337"))
+			})
+
 			It("allows FIN", func() {
 				str.Close()
 				Expect(str.shouldSendFin()).To(BeTrue())
