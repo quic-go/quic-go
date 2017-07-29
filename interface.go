@@ -23,6 +23,10 @@ type Stream interface {
 	StreamID() protocol.StreamID
 	// Reset closes the stream with an error.
 	Reset(error)
+	// The context is canceled as soon as the write-side of the stream is closed.
+	// This happens when Close() is called, or when the stream is reset (either locally or remotely).
+	// Warning: This API should not be considered stable and might change soon.
+	Context() context.Context
 	// SetReadDeadline sets the deadline for future Read calls and
 	// any currently-blocked Read call.
 	// A zero value for t means Read will not time out.
