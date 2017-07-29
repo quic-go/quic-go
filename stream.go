@@ -180,6 +180,9 @@ func (s *stream) Write(p []byte) (int, error) {
 	if s.resetLocally.Get() || s.err != nil {
 		return 0, s.err
 	}
+	if s.finishedWriting.Get() {
+		return 0, fmt.Errorf("write on closed stream %d", s.streamID)
+	}
 	if len(p) == 0 {
 		return 0, nil
 	}
