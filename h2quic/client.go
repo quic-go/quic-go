@@ -1,6 +1,7 @@
 package h2quic
 
 import (
+	"bytes"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -22,6 +23,15 @@ import (
 
 type roundTripperOpts struct {
 	DisableCompression bool
+}
+
+// nopCloser is a ReadCloser. It buffers the body from a push response so the dataStream is not flow limited.
+type nopCloser struct {
+	bytes.Buffer
+}
+
+func (*nopCloser) Close() error {
+	return nil
 }
 
 var dialAddr = quic.DialAddr
@@ -149,7 +159,6 @@ func (c *client) handleHeaderStream() {
 			break
 		}
 
-		utils.Debugf("Waiting on putting in channel: handleHeaderStream")
 		responseChan <- rsp
 	}
 
@@ -192,13 +201,10 @@ func (c *client) receivePushData(responseChan chan *http.Response, req *http.Req
 	for !receivedResponse {
 		select {
 		case res = <-responseChan:
-			utils.Debugf("Read from channel: receivePushData")
 			receivedResponse = true
-			utils.Debugf("Waiting for mutex: receivePushData")
 			c.mutex.Lock()
 			delete(c.responses, pushStreamID)
 			c.mutex.Unlock()
-			utils.Debugf("Released mutex: receivePushData")
 			utils.Infof("Got header response for push stream %d", pushStreamID)
 		case <-c.headerErrored:
 			// an error occured on the header stream
@@ -215,7 +221,7 @@ func (c *client) receivePushData(responseChan chan *http.Response, req *http.Req
 	if session, ok := c.session.(streamCreator); ok {
 		dataStream, err := session.GetOrOpenStream(pushStreamID)
 		if err != nil {
-			utils.Errorf("Could not open strean %d", pushStreamID)
+			utils.Errorf("Could not open stream %d", pushStreamID)
 			_ = c.CloseWithError(err)
 			return
 		}
@@ -226,7 +232,8 @@ func (c *client) receivePushData(responseChan chan *http.Response, req *http.Req
 		// if streamEnded || isHead {
 		// 	res.Body = noBody
 		// } else {
-		res.Body = dataStream
+		buf := new(nopCloser)
+		res.Body = buf
 		// if res.Header.Get("Content-Encoding") == "gzip" {
 		// 	res.Header.Del("Content-Encoding")
 		// 	res.Header.Del("Content-Length")
@@ -242,8 +249,12 @@ func (c *client) receivePushData(responseChan chan *http.Response, req *http.Req
 		c.pushedResponses[req.URL.Path] = res
 		c.mutex.Unlock()
 		utils.Infof("Added response for request '%s' to cache", req.URL.Path)
-	} else {
-		utils.Errorf("Could not convert c.session to streamCreator")
+
+		// Only read from stream after adding to cache as this is blocking IO!
+		_, err = buf.ReadFrom(dataStream) // if this returns the dataStream is closed
+		if err != nil {
+			utils.Errorf("Could not read from push data stream %d", dataStream.StreamID())
+		}
 	}
 }
 
@@ -318,7 +329,6 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	for !(bodySent && receivedResponse) {
 		select {
 		case res = <-responseChan:
-			utils.Debugf("Read from channel: roundtrip")
 			receivedResponse = true
 			c.mutex.Lock()
 			delete(c.responses, dataStream.StreamID())
