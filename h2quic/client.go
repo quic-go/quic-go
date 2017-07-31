@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"strings"
@@ -23,15 +24,6 @@ import (
 
 type roundTripperOpts struct {
 	DisableCompression bool
-}
-
-// nopCloser is a ReadCloser. It buffers the body from a push response so the dataStream is not flow limited.
-type nopCloser struct {
-	bytes.Buffer
-}
-
-func (*nopCloser) Close() error {
-	return nil
 }
 
 var dialAddr = quic.DialAddr
@@ -232,8 +224,12 @@ func (c *client) receivePushData(responseChan chan *http.Response, req *http.Req
 		// if streamEnded || isHead {
 		// 	res.Body = noBody
 		// } else {
-		buf := new(nopCloser)
-		res.Body = buf
+
+		cachedBody := &bytes.Buffer{}
+		if res.ContentLength > 0 {
+			cachedBody.Grow(int(res.ContentLength))
+		}
+		res.Body = ioutil.NopCloser(cachedBody)
 		// if res.Header.Get("Content-Encoding") == "gzip" {
 		// 	res.Header.Del("Content-Encoding")
 		// 	res.Header.Del("Content-Length")
@@ -251,7 +247,7 @@ func (c *client) receivePushData(responseChan chan *http.Response, req *http.Req
 		utils.Infof("Added response for request '%s' to cache", req.URL.Path)
 
 		// Only read from stream after adding to cache as this is blocking IO!
-		_, err = buf.ReadFrom(dataStream) // if this returns the dataStream is closed
+		_, err = cachedBody.ReadFrom(dataStream) // if this returns the dataStream is closed
 		if err != nil {
 			utils.Errorf("Could not read from push data stream %d", dataStream.StreamID())
 		}
