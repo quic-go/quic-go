@@ -2,7 +2,10 @@ package h2quic
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -10,6 +13,7 @@ import (
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/qerr"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 )
@@ -21,18 +25,26 @@ type responseWriter struct {
 	headerStream      quic.Stream
 	headerStreamMutex *sync.Mutex
 
+	// Server Push
+	session     streamCreator
+	handlerFunc http.HandlerFunc
+	requestHost string
+
 	header        http.Header
 	status        int // status code passed to WriteHeader
 	headerWritten bool
 }
 
-func newResponseWriter(headerStream quic.Stream, headerStreamMutex *sync.Mutex, dataStream quic.Stream, dataStreamID protocol.StreamID) *responseWriter {
+func newResponseWriter(headerStream quic.Stream, headerStreamMutex *sync.Mutex, dataStream quic.Stream, dataStreamID protocol.StreamID, session streamCreator, handlerFunc http.HandlerFunc, requestHost string) *responseWriter {
 	return &responseWriter{
 		header:            http.Header{},
 		headerStream:      headerStream,
 		headerStreamMutex: headerStreamMutex,
 		dataStream:        dataStream,
 		dataStreamID:      dataStreamID,
+		session:           session,
+		handlerFunc:       handlerFunc,
+		requestHost:       requestHost,
 	}
 }
 
@@ -86,11 +98,128 @@ func (w *responseWriter) Flush() {}
 // TODO: Implement a functional CloseNotify method.
 func (w *responseWriter) CloseNotify() <-chan bool { return make(<-chan bool) }
 
+// Push should do:
+// - construct a valid HTTP2 header for a request for the file to push.
+// - open a new stream (server side)
+// - send a PUSH_PROMISE containing the streamID of the new stream and the HTTP2 header
+// - use the header to create a http request and use it in ServeHTTP(w ResponseWriter, r *Request) to serve the file to push.
+// - TODO: check for recursive pushes.
+func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
+	if w.headerStream.StreamID()%2 == 0 { // Copied from net/http2/server.go
+		return http2.ErrRecursivePush
+	}
+	if opts == nil {
+		opts = &http.PushOptions{}
+	}
+	// Default options. Copied from net/http2/server.go
+	if opts.Method == "" {
+		opts.Method = "GET"
+	}
+	if opts.Header == nil {
+		opts.Header = http.Header{}
+	}
+	if opts.Method != "GET" && opts.Method != http.MethodHead {
+		return fmt.Errorf("method %q must be GET or HEAD", opts.Method)
+	}
+	// Validate the target. Copied from net/http2/server.go
+	u, err := url.Parse(target)
+	if err != nil {
+		return err
+	}
+	wantScheme := "https"
+	if u.Scheme == "" {
+		if !strings.HasPrefix(target, "/") {
+			return fmt.Errorf("target must be an absolute URL or an absolute path: %q", target)
+		}
+		u.Scheme = wantScheme
+		u.Host = w.requestHost
+	} else {
+		if u.Scheme != wantScheme {
+			return fmt.Errorf("cannot push URL with scheme %q from request with scheme %q", u.Scheme, wantScheme)
+		}
+		if u.Host == "" {
+			return errors.New("URL must have a host")
+		}
+	}
+	for k := range opts.Header {
+		if strings.HasPrefix(k, ":") {
+			return fmt.Errorf("promised request headers cannot include pseudo header %q", k)
+		}
+		switch strings.ToLower(k) {
+		case "content-length", "content-encoding", "trailer", "te", "expect", "host":
+			return fmt.Errorf("promised request headers cannot include %q", k)
+		}
+	}
+	if err = checkValidHTTP2RequestHeaders(opts.Header); err != nil {
+		return err
+	}
+	authority := u.Host
+	path := u.RequestURI()
+	contentLengthStr := "0" // a request does not have content
+
+	// Construct HTTP headers for request in push promise
+	var headers bytes.Buffer
+	enc := hpack.NewEncoder(&headers)
+	enc.WriteField(hpack.HeaderField{Name: ":method", Value: opts.Method})
+	enc.WriteField(hpack.HeaderField{Name: ":path", Value: path})
+	enc.WriteField(hpack.HeaderField{Name: ":authority", Value: authority})
+	enc.WriteField(hpack.HeaderField{Name: ":scheme", Value: u.Scheme})
+	for k, v := range opts.Header {
+		for index := range v {
+			enc.WriteField(hpack.HeaderField{Name: strings.ToLower(k), Value: v[index]})
+		}
+	}
+
+	// Get new data stream
+	newDataStream, err := w.session.OpenStream()
+	if err != nil {
+		if err == qerr.TooManyOpenStreams {
+			return http2.ErrPushLimitReached
+		}
+		return err
+	}
+	newDataStreamID := newDataStream.StreamID()
+	if newDataStreamID%2 != 0 {
+		return fmt.Errorf("Cannot push on client side stream")
+	}
+
+	// Write push promise header
+	utils.Debugf("Sending PUSH_PROMISE for target '%s', promised on stream %d", target, newDataStreamID)
+	headerFramer := http2.NewFramer(w.headerStream, nil)
+	w.headerStreamMutex.Lock()
+	err = headerFramer.WritePushPromise(http2.PushPromiseParam{
+		StreamID:      uint32(w.dataStreamID),
+		PromiseID:     uint32(newDataStreamID),
+		BlockFragment: headers.Bytes(),
+		EndHeaders:    true,
+	})
+	w.headerStreamMutex.Unlock() // Do not defer as we will first call ServeHTTP(), which will need the mutex
+	if err != nil {
+		return err
+	}
+
+	// golang net/http2 constructs a 'fake' http2 request and feeds it to the serve() loop to let it be processed as a normal request.
+	// But we will, for now, just serveHTTP() it here:
+	pushRequest, err := requestFromHTTPHeader(opts.Header, path, authority, opts.Method, contentLengthStr)
+	if err != nil {
+		return err
+	}
+	pushRequest.RemoteAddr = w.session.RemoteAddr().String()
+	reqBody := newRequestBody(newDataStream)
+	pushRequest.Body = reqBody
+	pushRequestResponseWriter := newResponseWriter(w.headerStream, w.headerStreamMutex, newDataStream, newDataStreamID, w.session, w.handlerFunc, w.requestHost)
+	serveHTTP(w.handlerFunc, pushRequestResponseWriter, pushRequest, true, reqBody)
+	return nil
+}
+
 // test that we implement http.Flusher
 var _ http.Flusher = &responseWriter{}
 
 // test that we implement http.CloseNotifier
 var _ http.CloseNotifier = &responseWriter{}
+
+// test that we implement http.Pusher
+var _ http.Pusher = &responseWriter{}
 
 // copied from http2/http2.go
 // bodyAllowedForStatus reports whether a given response status code
@@ -105,4 +234,25 @@ func bodyAllowedForStatus(status int) bool {
 		return false
 	}
 	return true
+}
+
+// Copied from net/http2/server.go
+func checkValidHTTP2RequestHeaders(h http.Header) error {
+	var connHeaders = []string{
+		"Connection",
+		"Keep-Alive",
+		"Proxy-Connection",
+		"Transfer-Encoding",
+		"Upgrade",
+	}
+	for _, k := range connHeaders {
+		if _, ok := h[k]; ok {
+			return fmt.Errorf("request header %q is not valid in HTTP/2", k)
+		}
+	}
+	te := h["Te"]
+	if len(te) > 0 && (len(te) > 1 || (te[0] != "trailers" && te[0] != "")) {
+		return errors.New(`request header "TE" may only be "trailers" in HTTP/2`)
+	}
+	return nil
 }

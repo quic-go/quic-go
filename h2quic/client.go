@@ -1,10 +1,12 @@
 package h2quic
 
 import (
+	"bytes"
 	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"strings"
@@ -46,6 +48,8 @@ type client struct {
 	requestWriter *requestWriter
 
 	responses map[protocol.StreamID]chan *http.Response
+
+	pushedResponses map[string]*http.Response
 }
 
 var _ http.RoundTripper = &client{}
@@ -69,6 +73,7 @@ func newClient(
 	return &client{
 		hostname:        authorityAddr("https", hostname),
 		responses:       make(map[protocol.StreamID]chan *http.Response),
+		pushedResponses: make(map[string]*http.Response),
 		encryptionLevel: protocol.EncryptionUnencrypted,
 		tlsConf:         tlsConfig,
 		config:          config,
@@ -110,17 +115,32 @@ func (c *client) handleHeaderStream() {
 			c.headerErr = qerr.Error(qerr.HeadersStreamDataDecompressFailure, "cannot read frame")
 			break
 		}
+		var mhframe *http2.MetaHeadersFrame
 		lastStream = protocol.StreamID(frame.Header().StreamID)
 		hframe, ok := frame.(*http2.HeadersFrame)
 		if !ok {
-			c.headerErr = qerr.Error(qerr.InvalidHeadersStreamData, "not a headers frame")
-			break
+			pushFrame, pushOk := frame.(*http2.PushPromiseFrame)
+			if !pushOk {
+				c.headerErr = qerr.Error(qerr.InvalidHeadersStreamData, "not a headers or push_promise frame")
+				break
+			}
+			utils.Infof("Received PUSH_PROMISE on stream %d, push will be on stream %d, for original data on stream %d", c.headerStream.StreamID(), pushFrame.PromiseID, pushFrame.StreamID)
+			err = c.handlePushPromise(decoder, pushFrame)
+			if err != nil {
+				break
+			}
+			continue
 		}
-		mhframe := &http2.MetaHeadersFrame{HeadersFrame: hframe}
+		mhframe = &http2.MetaHeadersFrame{HeadersFrame: hframe}
 		mhframe.Fields, err = decoder.DecodeFull(hframe.HeaderBlockFragment())
 		if err != nil {
 			c.headerErr = qerr.Error(qerr.InvalidHeadersStreamData, "cannot read header fields")
 			break
+		}
+
+		rsp, err := responseFromHeaders(mhframe)
+		if err != nil {
+			c.headerErr = qerr.Error(qerr.InternalError, err.Error())
 		}
 
 		c.mutex.RLock()
@@ -131,16 +151,107 @@ func (c *client) handleHeaderStream() {
 			break
 		}
 
-		rsp, err := responseFromHeaders(mhframe)
-		if err != nil {
-			c.headerErr = qerr.Error(qerr.InternalError, err.Error())
-		}
 		responseChan <- rsp
 	}
 
 	// stop all running request
 	utils.Debugf("Error handling header stream %d: %s", lastStream, c.headerErr.Error())
 	close(c.headerErrored)
+}
+
+func (c *client) handlePushPromise(decoder *hpack.Decoder, pushFrame *http2.PushPromiseFrame) error {
+	var err error
+	mhframe := &http2.MetaHeadersFrame{}
+	mhframe.Fields, err = decoder.DecodeFull(pushFrame.HeaderBlockFragment())
+	if err != nil {
+		c.headerErr = qerr.Error(qerr.InvalidHeadersStreamData, "cannot read header fields")
+		return errors.New(c.headerErr.Error())
+	}
+	req, err := requestFromHeaders(mhframe.Fields)
+	if err != nil {
+		c.headerErr = qerr.Error(qerr.InvalidHeadersStreamData, err.Error())
+		return err
+	}
+
+	pushStreamID := protocol.StreamID(pushFrame.PromiseID)
+	responseChan := make(chan *http.Response)
+
+	c.mutex.Lock()
+	c.responses[pushStreamID] = responseChan
+	c.mutex.Unlock()
+
+	// Now somebody needs to handle this responseChan for the arrival of the
+	go c.receivePushData(responseChan, req, pushStreamID)
+	return nil
+}
+
+func (c *client) receivePushData(responseChan chan *http.Response, req *http.Request, pushStreamID protocol.StreamID) {
+	utils.Infof("Waiting for pushed data in stream %d", pushStreamID)
+	var res *http.Response
+	var receivedResponse bool
+
+	for !receivedResponse {
+		select {
+		case res = <-responseChan:
+			receivedResponse = true
+			c.mutex.Lock()
+			delete(c.responses, pushStreamID)
+			c.mutex.Unlock()
+			utils.Infof("Got header response for push stream %d", pushStreamID)
+		case <-c.headerErrored:
+			// an error occured on the header stream
+			_ = c.CloseWithError(c.headerErr)
+			return
+		}
+	}
+
+	// TODO: correctly set this variable
+	// var streamEnded bool
+	// isHead := (req.Method == "HEAD")
+	res = setLength(res, false, true)
+
+	if session, ok := c.session.(streamCreator); ok {
+		dataStream, err := session.GetOrOpenStream(pushStreamID)
+		if err != nil {
+			utils.Errorf("Could not open stream %d", pushStreamID)
+			_ = c.CloseWithError(err)
+			return
+		}
+		if dataStream == nil {
+			utils.Errorf("Received nil stream for streamID %d", pushStreamID)
+			return
+		}
+		// if streamEnded || isHead {
+		// 	res.Body = noBody
+		// } else {
+
+		cachedBody := &bytes.Buffer{}
+		if res.ContentLength > 0 {
+			cachedBody.Grow(int(res.ContentLength))
+		}
+		res.Body = ioutil.NopCloser(cachedBody)
+		// if res.Header.Get("Content-Encoding") == "gzip" {
+		// 	res.Header.Del("Content-Encoding")
+		// 	res.Header.Del("Content-Length")
+		// 	res.ContentLength = -1
+		// 	res.Body = &gzipReader{body: res.Body}
+		// 	res.Uncompressed = true
+		// }
+		// }
+
+		// Add to cache
+		res.Request = req
+		c.mutex.Lock()
+		c.pushedResponses[req.URL.Path] = res
+		c.mutex.Unlock()
+		utils.Infof("Added response for request '%s' to cache", req.URL.Path)
+
+		// Only read from stream after adding to cache as this is blocking IO!
+		_, err = cachedBody.ReadFrom(dataStream) // if this returns the dataStream is closed
+		if err != nil {
+			utils.Errorf("Could not read from push data stream %d", dataStream.StreamID())
+		}
+	}
 }
 
 // Roundtrip executes a request and returns a response
@@ -152,6 +263,16 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	if authorityAddr("https", hostnameFromRequest(req)) != c.hostname {
 		return nil, fmt.Errorf("h2quic Client BUG: RoundTrip called for the wrong client (expected %s, got %s)", c.hostname, req.Host)
 	}
+
+	c.mutex.Lock()
+	if response, ok := c.pushedResponses[req.URL.Path]; ok {
+		delete(c.pushedResponses, req.URL.Path)
+		c.mutex.Unlock()
+		utils.Infof("######## Fetched response for request '%s' from cache", req.URL.Path)
+		return response, nil
+	}
+	c.mutex.Unlock()
+	utils.Infof("######## Requesting from upstream: %s", req.URL.Path)
 
 	c.dialOnce.Do(func() {
 		c.handshakeErr = c.dial()
@@ -174,7 +295,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	c.mutex.Unlock()
 
 	var requestedGzip bool
-	if !c.opts.DisableCompression && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" && req.Method != "HEAD" {
+	if !c.opts.DisableCompression && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" && req.Method != http.MethodHead {
 		requestedGzip = true
 	}
 	// TODO: add support for trailers
@@ -222,7 +343,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	// TODO: correctly set this variable
 	var streamEnded bool
-	isHead := (req.Method == "HEAD")
+	isHead := (req.Method == http.MethodHead)
 
 	res = setLength(res, isHead, streamEnded)
 

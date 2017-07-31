@@ -496,7 +496,7 @@ var _ = Describe("Client", func() {
 				}()
 
 				Eventually(client.headerErrored).Should(BeClosed())
-				Expect(client.headerErr).To(MatchError(qerr.Error(qerr.InvalidHeadersStreamData, "not a headers frame")))
+				Expect(client.headerErr).To(MatchError(qerr.Error(qerr.InvalidHeadersStreamData, "not a headers or push_promise frame")))
 				Eventually(func() bool { return handlerReturned }).Should(BeTrue())
 			})
 

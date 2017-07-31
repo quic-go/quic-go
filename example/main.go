@@ -97,6 +97,17 @@ func init() {
 				<input type="submit">
 			</form></body></html>`)
 	})
+
+	// Try pushing
+	http.HandleFunc("/demo/push_tile", func(w http.ResponseWriter, r *http.Request) {
+		pusher, hasPusher := w.(http.Pusher)
+		if !hasPusher {
+			utils.Infof("Cannot push")
+		}
+		pusher.Push("/demo/tile", nil)
+
+		io.WriteString(w, "<html><head><style>img{width:40px;height:40px;}</style></head><body><img src=\"/demo/tile\"></body></html>")
+	})
 }
 
 func getBuildDir() string {

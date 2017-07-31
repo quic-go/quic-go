@@ -31,7 +31,10 @@ func requestFromHeaders(headers []hpack.HeaderField) (*http.Request, error) {
 			}
 		}
 	}
+	return requestFromHTTPHeader(httpHeaders, path, authority, method, contentLengthStr)
+}
 
+func requestFromHTTPHeader(httpHeaders http.Header, path string, authority string, method string, contentLengthStr string) (*http.Request, error) {
 	// concatenate cookie headers, see https://tools.ietf.org/html/rfc6265#section-5.4
 	if len(httpHeaders["Cookie"]) > 0 {
 		httpHeaders.Set("Cookie", strings.Join(httpHeaders["Cookie"], "; "))
