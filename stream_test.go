@@ -435,6 +435,12 @@ var _ = Describe("Stream", func() {
 					Expect(n).To(BeZero())
 					Expect(err).To(MatchError(io.EOF))
 				})
+
+				It("doesn't cancel the context", func() {
+					mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(0))
+					str.CloseRemote(0)
+					Expect(str.Context().Done()).ToNot(BeClosed())
+				})
 			})
 		})
 
@@ -462,6 +468,12 @@ var _ = Describe("Stream", func() {
 				n, err := strWithTimeout.Read(b)
 				Expect(n).To(BeZero())
 				Expect(err).To(MatchError(testErr))
+			})
+
+			It("cancels the context", func() {
+				Expect(str.Context().Done()).ToNot(BeClosed())
+				str.Cancel(testErr)
+				Expect(str.Context().Done()).To(BeClosed())
 			})
 		})
 	})
@@ -713,6 +725,12 @@ var _ = Describe("Stream", func() {
 				str.Reset(testErr)
 				Expect(resetCalled).To(BeFalse())
 			})
+
+			It("cancels the context", func() {
+				Expect(str.Context().Done()).ToNot(BeClosed())
+				str.Reset(testErr)
+				Expect(str.Context().Done()).To(BeClosed())
+			})
 		})
 	})
 
@@ -958,6 +976,13 @@ var _ = Describe("Stream", func() {
 			Expect(str.finished()).To(BeFalse())
 		})
 
+		It("cancels the context after it is closed", func() {
+			Expect(str.Context().Done()).ToNot(BeClosed())
+			str.Close()
+			str.sentFin()
+			Expect(str.Context().Done()).To(BeClosed())
+		})
+
 		It("is not finished if it is only closed for reading", func() {
 			mockFcm.EXPECT().UpdateHighestReceived(streamID, protocol.ByteCount(0))
 			mockFcm.EXPECT().AddBytesRead(streamID, protocol.ByteCount(0))
@@ -970,6 +995,12 @@ var _ = Describe("Stream", func() {
 			str.RegisterRemoteError(testErr)
 			Expect(str.rstSent.Get()).To(BeTrue())
 			Expect(str.finished()).To(BeTrue())
+		})
+
+		It("cancels the context after receiving a RST", func() {
+			Expect(str.Context().Done()).ToNot(BeClosed())
+			str.RegisterRemoteError(testErr)
+			Expect(str.Context().Done()).To(BeClosed())
 		})
 
 		It("is finished after being locally reset and receiving a RST in response", func() {
