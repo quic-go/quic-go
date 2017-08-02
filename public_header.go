@@ -174,31 +174,31 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Pub
 	}
 
 	// Version (optional)
-	if !header.ResetFlag {
-		if header.VersionFlag {
-			if packetSentBy == protocol.PerspectiveClient {
+	if !header.ResetFlag && header.VersionFlag {
+		if packetSentBy == protocol.PerspectiveServer { // parse the version negotiaton packet
+			if b.Len()%4 != 0 {
+				return nil, qerr.InvalidVersionNegotiationPacket
+			}
+			header.SupportedVersions = make([]protocol.VersionNumber, 0)
+			for {
 				var versionTag uint32
 				versionTag, err = utils.LittleEndian.ReadUint32(b)
 				if err != nil {
-					return nil, err
+					break
 				}
-				header.VersionNumber = protocol.VersionTagToNumber(versionTag)
-			} else { // parse the version negotiaton packet
-				if b.Len()%4 != 0 {
-					return nil, qerr.InvalidVersionNegotiationPacket
-				}
-				header.SupportedVersions = make([]protocol.VersionNumber, 0)
-				for {
-					var versionTag uint32
-					versionTag, err = utils.LittleEndian.ReadUint32(b)
-					if err != nil {
-						break
-					}
-					v := protocol.VersionTagToNumber(versionTag)
-					header.SupportedVersions = append(header.SupportedVersions, v)
-				}
+				v := protocol.VersionTagToNumber(versionTag)
+				header.SupportedVersions = append(header.SupportedVersions, v)
 			}
+			// a version negotiation packet doesn't have a packet number
+			return header, nil
 		}
+		// packet was sent by the client. Read the version number
+		var versionTag uint32
+		versionTag, err = utils.LittleEndian.ReadUint32(b)
+		if err != nil {
+			return nil, err
+		}
+		header.VersionNumber = protocol.VersionTagToNumber(versionTag)
 	}
 
 	// Packet number
