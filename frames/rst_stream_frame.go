@@ -17,9 +17,9 @@ type RstStreamFrame struct {
 //Write writes a RST_STREAM frame
 func (f *RstStreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
 	b.WriteByte(0x01)
-	utils.WriteUint32(b, uint32(f.StreamID))
-	utils.WriteUint64(b, uint64(f.ByteOffset))
-	utils.WriteUint32(b, f.ErrorCode)
+	utils.LittleEndian.WriteUint32(b, uint32(f.StreamID))
+	utils.LittleEndian.WriteUint64(b, uint64(f.ByteOffset))
+	utils.LittleEndian.WriteUint32(b, f.ErrorCode)
 	return nil
 }
 
@@ -38,19 +38,19 @@ func ParseRstStreamFrame(r *bytes.Reader) (*RstStreamFrame, error) {
 		return nil, err
 	}
 
-	sid, err := utils.ReadUint32(r)
+	sid, err := utils.LittleEndian.ReadUint32(r)
 	if err != nil {
 		return nil, err
 	}
 	frame.StreamID = protocol.StreamID(sid)
 
-	byteOffset, err := utils.ReadUint64(r)
+	byteOffset, err := utils.LittleEndian.ReadUint64(r)
 	if err != nil {
 		return nil, err
 	}
 	frame.ByteOffset = protocol.ByteCount(byteOffset)
 
-	frame.ErrorCode, err = utils.ReadUint32(r)
+	frame.ErrorCode, err = utils.LittleEndian.ReadUint32(r)
 	if err != nil {
 		return nil, err
 	}

@@ -72,9 +72,9 @@ func ParseHandshakeMessage(r io.Reader) (HandshakeMessage, error) {
 // Write writes a crypto message
 func (h HandshakeMessage) Write(b *bytes.Buffer) {
 	data := h.Data
-	utils.WriteUint32(b, uint32(h.Tag))
-	utils.WriteUint16(b, uint16(len(data)))
-	utils.WriteUint16(b, 0)
+	utils.LittleEndian.WriteUint32(b, uint32(h.Tag))
+	utils.LittleEndian.WriteUint16(b, uint16(len(data)))
+	utils.LittleEndian.WriteUint16(b, 0)
 
 	// Save current position in the buffer, so that we can update the index in-place later
 	indexStart := b.Len()

@@ -18,8 +18,8 @@ func (f *WindowUpdateFrame) Write(b *bytes.Buffer, version protocol.VersionNumbe
 	typeByte := uint8(0x04)
 	b.WriteByte(typeByte)
 
-	utils.WriteUint32(b, uint32(f.StreamID))
-	utils.WriteUint64(b, uint64(f.ByteOffset))
+	utils.LittleEndian.WriteUint32(b, uint32(f.StreamID))
+	utils.LittleEndian.WriteUint64(b, uint64(f.ByteOffset))
 	return nil
 }
 
@@ -38,13 +38,13 @@ func ParseWindowUpdateFrame(r *bytes.Reader) (*WindowUpdateFrame, error) {
 		return nil, err
 	}
 
-	sid, err := utils.ReadUint32(r)
+	sid, err := utils.LittleEndian.ReadUint32(r)
 	if err != nil {
 		return nil, err
 	}
 	frame.StreamID = protocol.StreamID(sid)
 
-	byteOffset, err := utils.ReadUint64(r)
+	byteOffset, err := utils.LittleEndian.ReadUint64(r)
 	if err != nil {
 		return nil, err
 	}

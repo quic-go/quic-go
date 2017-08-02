@@ -114,7 +114,7 @@ var _ = Describe("Server", func() {
 				errorChan:    make(chan struct{}),
 			}
 			b := &bytes.Buffer{}
-			utils.WriteUint32(b, protocol.VersionNumberToTag(protocol.SupportedVersions[0]))
+			utils.LittleEndian.WriteUint32(b, protocol.VersionNumberToTag(protocol.SupportedVersions[0]))
 			firstPacket = []byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c}
 			firstPacket = append(append(firstPacket, b.Bytes()...), 0x01)
 		})
@@ -288,7 +288,7 @@ var _ = Describe("Server", func() {
 			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
 			b := &bytes.Buffer{}
 			// add an unsupported version
-			utils.WriteUint32(b, protocol.VersionNumberToTag(protocol.SupportedVersions[0]+1))
+			utils.LittleEndian.WriteUint32(b, protocol.VersionNumberToTag(protocol.SupportedVersions[0]+1))
 			data := []byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c}
 			data = append(append(data, b.Bytes()...), 0x01)
 			err = serv.handlePacket(nil, nil, data)
@@ -420,7 +420,7 @@ var _ = Describe("Server", func() {
 		Eventually(func() int { return conn.dataWritten.Len() }).ShouldNot(BeZero())
 		Expect(conn.dataWrittenTo).To(Equal(udpAddr))
 		b = &bytes.Buffer{}
-		utils.WriteUint32(b, protocol.VersionNumberToTag(99))
+		utils.LittleEndian.WriteUint32(b, protocol.VersionNumberToTag(99))
 		expected := append(
 			[]byte{0x9, 0x37, 0x13, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
 			b.Bytes()...,

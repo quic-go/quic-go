@@ -41,13 +41,13 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 	}
 	streamIDLen := typeByte&0x03 + 1
 
-	sid, err := utils.ReadUintN(r, streamIDLen)
+	sid, err := utils.LittleEndian.ReadUintN(r, streamIDLen)
 	if err != nil {
 		return nil, err
 	}
 	frame.StreamID = protocol.StreamID(sid)
 
-	offset, err := utils.ReadUintN(r, offsetLen)
+	offset, err := utils.LittleEndian.ReadUintN(r, offsetLen)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
 
 	var dataLen uint16
 	if frame.DataLenPresent {
-		dataLen, err = utils.ReadUint16(r)
+		dataLen, err = utils.LittleEndian.ReadUint16(r)
 		if err != nil {
 			return nil, err
 		}
@@ -118,11 +118,11 @@ func (f *StreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 	case 1:
 		b.WriteByte(uint8(f.StreamID))
 	case 2:
-		utils.WriteUint16(b, uint16(f.StreamID))
+		utils.LittleEndian.WriteUint16(b, uint16(f.StreamID))
 	case 3:
-		utils.WriteUint24(b, uint32(f.StreamID))
+		utils.LittleEndian.WriteUint24(b, uint32(f.StreamID))
 	case 4:
-		utils.WriteUint32(b, uint32(f.StreamID))
+		utils.LittleEndian.WriteUint32(b, uint32(f.StreamID))
 	default:
 		return errInvalidStreamIDLen
 	}
@@ -130,25 +130,25 @@ func (f *StreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 	switch offsetLength {
 	case 0:
 	case 2:
-		utils.WriteUint16(b, uint16(f.Offset))
+		utils.LittleEndian.WriteUint16(b, uint16(f.Offset))
 	case 3:
-		utils.WriteUint24(b, uint32(f.Offset))
+		utils.LittleEndian.WriteUint24(b, uint32(f.Offset))
 	case 4:
-		utils.WriteUint32(b, uint32(f.Offset))
+		utils.LittleEndian.WriteUint32(b, uint32(f.Offset))
 	case 5:
-		utils.WriteUint40(b, uint64(f.Offset))
+		utils.LittleEndian.WriteUint40(b, uint64(f.Offset))
 	case 6:
-		utils.WriteUint48(b, uint64(f.Offset))
+		utils.LittleEndian.WriteUint48(b, uint64(f.Offset))
 	case 7:
-		utils.WriteUint56(b, uint64(f.Offset))
+		utils.LittleEndian.WriteUint56(b, uint64(f.Offset))
 	case 8:
-		utils.WriteUint64(b, uint64(f.Offset))
+		utils.LittleEndian.WriteUint64(b, uint64(f.Offset))
 	default:
 		return errInvalidOffsetLen
 	}
 
 	if f.DataLenPresent {
-		utils.WriteUint16(b, uint16(len(f.Data)))
+		utils.LittleEndian.WriteUint16(b, uint16(len(f.Data)))
 	}
 
 	b.Write(f.Data)

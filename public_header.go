@@ -74,11 +74,11 @@ func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pe
 	b.WriteByte(publicFlagByte)
 
 	if !h.TruncateConnectionID {
-		utils.WriteUint64(b, uint64(h.ConnectionID))
+		utils.LittleEndian.WriteUint64(b, uint64(h.ConnectionID))
 	}
 
 	if h.VersionFlag && pers == protocol.PerspectiveClient {
-		utils.WriteUint32(b, protocol.VersionNumberToTag(h.VersionNumber))
+		utils.LittleEndian.WriteUint32(b, protocol.VersionNumberToTag(h.VersionNumber))
 	}
 
 	if len(h.DiversificationNonce) > 0 {
@@ -98,11 +98,11 @@ func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pe
 	case protocol.PacketNumberLen1:
 		b.WriteByte(uint8(h.PacketNumber))
 	case protocol.PacketNumberLen2:
-		utils.WriteUint16(b, uint16(h.PacketNumber))
+		utils.LittleEndian.WriteUint16(b, uint16(h.PacketNumber))
 	case protocol.PacketNumberLen4:
-		utils.WriteUint32(b, uint32(h.PacketNumber))
+		utils.LittleEndian.WriteUint32(b, uint32(h.PacketNumber))
 	case protocol.PacketNumberLen6:
-		utils.WriteUint48(b, uint64(h.PacketNumber))
+		utils.LittleEndian.WriteUint48(b, uint64(h.PacketNumber))
 	default:
 		return errPacketNumberLenNotSet
 	}
@@ -151,7 +151,7 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Pub
 	// Connection ID
 	if !header.TruncateConnectionID {
 		var connID uint64
-		connID, err = utils.ReadUint64(b)
+		connID, err = utils.LittleEndian.ReadUint64(b)
 		if err != nil {
 			return nil, err
 		}
@@ -178,7 +178,7 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Pub
 		if header.VersionFlag {
 			if packetSentBy == protocol.PerspectiveClient {
 				var versionTag uint32
-				versionTag, err = utils.ReadUint32(b)
+				versionTag, err = utils.LittleEndian.ReadUint32(b)
 				if err != nil {
 					return nil, err
 				}
@@ -190,7 +190,7 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Pub
 				header.SupportedVersions = make([]protocol.VersionNumber, 0)
 				for {
 					var versionTag uint32
-					versionTag, err = utils.ReadUint32(b)
+					versionTag, err = utils.LittleEndian.ReadUint32(b)
 					if err != nil {
 						break
 					}
@@ -203,7 +203,7 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Pub
 
 	// Packet number
 	if header.hasPacketNumber(packetSentBy) {
-		packetNumber, err := utils.ReadUintN(b, uint8(header.PacketNumberLen))
+		packetNumber, err := utils.LittleEndian.ReadUintN(b, uint8(header.PacketNumberLen))
 		if err != nil {
 			return nil, err
 		}

@@ -42,11 +42,11 @@ func (f *StopWaitingFrame) Write(b *bytes.Buffer, version protocol.VersionNumber
 	case protocol.PacketNumberLen1:
 		b.WriteByte(uint8(leastUnackedDelta))
 	case protocol.PacketNumberLen2:
-		utils.WriteUint16(b, uint16(leastUnackedDelta))
+		utils.LittleEndian.WriteUint16(b, uint16(leastUnackedDelta))
 	case protocol.PacketNumberLen4:
-		utils.WriteUint32(b, uint32(leastUnackedDelta))
+		utils.LittleEndian.WriteUint32(b, uint32(leastUnackedDelta))
 	case protocol.PacketNumberLen6:
-		utils.WriteUint48(b, leastUnackedDelta)
+		utils.LittleEndian.WriteUint48(b, leastUnackedDelta)
 	default:
 		return errPacketNumberLenNotSet
 	}
@@ -76,7 +76,7 @@ func ParseStopWaitingFrame(r *bytes.Reader, packetNumber protocol.PacketNumber, 
 		return nil, err
 	}
 
-	leastUnackedDelta, err := utils.ReadUintN(r, uint8(packetNumberLen))
+	leastUnackedDelta, err := utils.LittleEndian.ReadUintN(r, uint8(packetNumberLen))
 	if err != nil {
 		return nil, err
 	}

@@ -57,13 +57,13 @@ func ParseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 		missingSequenceNumberDeltaLen = 1
 	}
 
-	largestAcked, err := utils.ReadUintN(r, largestAckedLen)
+	largestAcked, err := utils.LittleEndian.ReadUintN(r, largestAckedLen)
 	if err != nil {
 		return nil, err
 	}
 	frame.LargestAcked = protocol.PacketNumber(largestAcked)
 
-	delay, err := utils.ReadUfloat16(r)
+	delay, err := utils.LittleEndian.ReadUfloat16(r)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func ParseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 		return nil, ErrInvalidAckRanges
 	}
 
-	ackBlockLength, err := utils.ReadUintN(r, missingSequenceNumberDeltaLen)
+	ackBlockLength, err := utils.LittleEndian.ReadUintN(r, missingSequenceNumberDeltaLen)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ func ParseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 				return nil, err
 			}
 
-			ackBlockLength, err = utils.ReadUintN(r, missingSequenceNumberDeltaLen)
+			ackBlockLength, err = utils.LittleEndian.ReadUintN(r, missingSequenceNumberDeltaLen)
 			if err != nil {
 				return nil, err
 			}
@@ -167,7 +167,7 @@ func ParseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 			return nil, err
 		}
 		// First Timestamp
-		_, err = utils.ReadUint32(r)
+		_, err = utils.LittleEndian.ReadUint32(r)
 		if err != nil {
 			return nil, err
 		}
@@ -180,7 +180,7 @@ func ParseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 			}
 
 			// Time Since Previous Timestamp
-			_, err = utils.ReadUint16(r)
+			_, err = utils.LittleEndian.ReadUint16(r)
 			if err != nil {
 				return nil, err
 			}
@@ -215,15 +215,15 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 	case protocol.PacketNumberLen1:
 		b.WriteByte(uint8(f.LargestAcked))
 	case protocol.PacketNumberLen2:
-		utils.WriteUint16(b, uint16(f.LargestAcked))
+		utils.LittleEndian.WriteUint16(b, uint16(f.LargestAcked))
 	case protocol.PacketNumberLen4:
-		utils.WriteUint32(b, uint32(f.LargestAcked))
+		utils.LittleEndian.WriteUint32(b, uint32(f.LargestAcked))
 	case protocol.PacketNumberLen6:
-		utils.WriteUint48(b, uint64(f.LargestAcked))
+		utils.LittleEndian.WriteUint48(b, uint64(f.LargestAcked))
 	}
 
 	f.DelayTime = time.Since(f.PacketReceivedTime)
-	utils.WriteUfloat16(b, uint64(f.DelayTime/time.Microsecond))
+	utils.LittleEndian.WriteUfloat16(b, uint64(f.DelayTime/time.Microsecond))
 
 	var numRanges uint64
 	var numRangesWritten uint64
@@ -253,11 +253,11 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 	case protocol.PacketNumberLen1:
 		b.WriteByte(uint8(firstAckBlockLength))
 	case protocol.PacketNumberLen2:
-		utils.WriteUint16(b, uint16(firstAckBlockLength))
+		utils.LittleEndian.WriteUint16(b, uint16(firstAckBlockLength))
 	case protocol.PacketNumberLen4:
-		utils.WriteUint32(b, uint32(firstAckBlockLength))
+		utils.LittleEndian.WriteUint32(b, uint32(firstAckBlockLength))
 	case protocol.PacketNumberLen6:
-		utils.WriteUint48(b, uint64(firstAckBlockLength))
+		utils.LittleEndian.WriteUint48(b, uint64(firstAckBlockLength))
 	}
 
 	for i, ackRange := range f.AckRanges {
@@ -279,11 +279,11 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 			case protocol.PacketNumberLen1:
 				b.WriteByte(uint8(length))
 			case protocol.PacketNumberLen2:
-				utils.WriteUint16(b, uint16(length))
+				utils.LittleEndian.WriteUint16(b, uint16(length))
 			case protocol.PacketNumberLen4:
-				utils.WriteUint32(b, uint32(length))
+				utils.LittleEndian.WriteUint32(b, uint32(length))
 			case protocol.PacketNumberLen6:
-				utils.WriteUint48(b, uint64(length))
+				utils.LittleEndian.WriteUint48(b, uint64(length))
 			}
 			numRangesWritten++
 		} else {
@@ -304,11 +304,11 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 				case protocol.PacketNumberLen1:
 					b.WriteByte(uint8(lengthWritten))
 				case protocol.PacketNumberLen2:
-					utils.WriteUint16(b, uint16(lengthWritten))
+					utils.LittleEndian.WriteUint16(b, uint16(lengthWritten))
 				case protocol.PacketNumberLen4:
-					utils.WriteUint32(b, uint32(lengthWritten))
+					utils.LittleEndian.WriteUint32(b, uint32(lengthWritten))
 				case protocol.PacketNumberLen6:
-					utils.WriteUint48(b, lengthWritten)
+					utils.LittleEndian.WriteUint48(b, lengthWritten)
 				}
 
 				numRangesWritten++

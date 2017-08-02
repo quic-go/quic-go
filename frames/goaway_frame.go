@@ -25,19 +25,19 @@ func ParseGoawayFrame(r *bytes.Reader) (*GoawayFrame, error) {
 		return nil, err
 	}
 
-	errorCode, err := utils.ReadUint32(r)
+	errorCode, err := utils.LittleEndian.ReadUint32(r)
 	if err != nil {
 		return nil, err
 	}
 	frame.ErrorCode = qerr.ErrorCode(errorCode)
 
-	lastGoodStream, err := utils.ReadUint32(r)
+	lastGoodStream, err := utils.LittleEndian.ReadUint32(r)
 	if err != nil {
 		return nil, err
 	}
 	frame.LastGoodStream = protocol.StreamID(lastGoodStream)
 
-	reasonPhraseLen, err := utils.ReadUint16(r)
+	reasonPhraseLen, err := utils.LittleEndian.ReadUint16(r)
 	if err != nil {
 		return nil, err
 	}
@@ -59,9 +59,9 @@ func (f *GoawayFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 	typeByte := uint8(0x03)
 	b.WriteByte(typeByte)
 
-	utils.WriteUint32(b, uint32(f.ErrorCode))
-	utils.WriteUint32(b, uint32(f.LastGoodStream))
-	utils.WriteUint16(b, uint16(len(f.ReasonPhrase)))
+	utils.LittleEndian.WriteUint32(b, uint32(f.ErrorCode))
+	utils.LittleEndian.WriteUint32(b, uint32(f.LastGoodStream))
+	utils.LittleEndian.WriteUint16(b, uint16(len(f.ReasonPhrase)))
 	b.WriteString(f.ReasonPhrase)
 
 	return nil
