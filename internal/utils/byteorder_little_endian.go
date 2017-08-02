@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 )
 
@@ -98,6 +99,9 @@ func (littleEndian) WriteUint64(b *bytes.Buffer, i uint64) {
 
 // WriteUint56 writes 56 bit of a uint64
 func (littleEndian) WriteUint56(b *bytes.Buffer, i uint64) {
+	if i >= (1 << 56) {
+		panic(fmt.Sprintf("%#x doesn't fit into 56 bits", i))
+	}
 	b.Write([]byte{
 		uint8(i), uint8(i >> 8), uint8(i >> 16), uint8(i >> 24),
 		uint8(i >> 32), uint8(i >> 40), uint8(i >> 48),
@@ -106,6 +110,9 @@ func (littleEndian) WriteUint56(b *bytes.Buffer, i uint64) {
 
 // WriteUint48 writes 48 bit of a uint64
 func (littleEndian) WriteUint48(b *bytes.Buffer, i uint64) {
+	if i >= (1 << 48) {
+		panic(fmt.Sprintf("%#x doesn't fit into 48 bits", i))
+	}
 	b.Write([]byte{
 		uint8(i), uint8(i >> 8), uint8(i >> 16), uint8(i >> 24),
 		uint8(i >> 32), uint8(i >> 40),
@@ -114,6 +121,9 @@ func (littleEndian) WriteUint48(b *bytes.Buffer, i uint64) {
 
 // WriteUint40 writes 40 bit of a uint64
 func (littleEndian) WriteUint40(b *bytes.Buffer, i uint64) {
+	if i >= (1 << 40) {
+		panic(fmt.Sprintf("%#x doesn't fit into 40 bits", i))
+	}
 	b.Write([]byte{
 		uint8(i), uint8(i >> 8), uint8(i >> 16),
 		uint8(i >> 24), uint8(i >> 32),
@@ -127,6 +137,9 @@ func (littleEndian) WriteUint32(b *bytes.Buffer, i uint32) {
 
 // WriteUint24 writes 24 bit of a uint32
 func (littleEndian) WriteUint24(b *bytes.Buffer, i uint32) {
+	if i >= (1 << 24) {
+		panic(fmt.Sprintf("%#x doesn't fit into 24 bits", i))
+	}
 	b.Write([]byte{uint8(i), uint8(i >> 8), uint8(i >> 16)})
 }
 

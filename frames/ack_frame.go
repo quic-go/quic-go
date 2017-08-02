@@ -219,7 +219,7 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 	case protocol.PacketNumberLen4:
 		utils.LittleEndian.WriteUint32(b, uint32(f.LargestAcked))
 	case protocol.PacketNumberLen6:
-		utils.LittleEndian.WriteUint48(b, uint64(f.LargestAcked))
+		utils.LittleEndian.WriteUint48(b, uint64(f.LargestAcked)&(1<<48-1))
 	}
 
 	f.DelayTime = time.Since(f.PacketReceivedTime)
@@ -257,7 +257,7 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 	case protocol.PacketNumberLen4:
 		utils.LittleEndian.WriteUint32(b, uint32(firstAckBlockLength))
 	case protocol.PacketNumberLen6:
-		utils.LittleEndian.WriteUint48(b, uint64(firstAckBlockLength))
+		utils.LittleEndian.WriteUint48(b, uint64(firstAckBlockLength)&(1<<48-1))
 	}
 
 	for i, ackRange := range f.AckRanges {
@@ -283,7 +283,7 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 			case protocol.PacketNumberLen4:
 				utils.LittleEndian.WriteUint32(b, uint32(length))
 			case protocol.PacketNumberLen6:
-				utils.LittleEndian.WriteUint48(b, uint64(length))
+				utils.LittleEndian.WriteUint48(b, uint64(length)&(1<<48-1))
 			}
 			numRangesWritten++
 		} else {
@@ -308,7 +308,7 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 				case protocol.PacketNumberLen4:
 					utils.LittleEndian.WriteUint32(b, uint32(lengthWritten))
 				case protocol.PacketNumberLen6:
-					utils.LittleEndian.WriteUint48(b, lengthWritten)
+					utils.LittleEndian.WriteUint48(b, lengthWritten&(1<<48-1))
 				}
 
 				numRangesWritten++

@@ -95,7 +95,8 @@ var _ = Describe("StopWaitingFrame", func() {
 					PacketNumber:    13,
 					PacketNumberLen: protocol.PacketNumberLen1,
 				}
-				frame.Write(b, 0)
+				err := frame.Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(b.Len()).To(Equal(2))
 				Expect(b.Bytes()[1]).To(Equal(uint8(3)))
 			})
@@ -107,7 +108,8 @@ var _ = Describe("StopWaitingFrame", func() {
 					PacketNumber:    0x1300,
 					PacketNumberLen: protocol.PacketNumberLen2,
 				}
-				frame.Write(b, 0)
+				err := frame.Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(b.Len()).To(Equal(3))
 				Expect(b.Bytes()[1:3]).To(Equal([]byte{0xF0, 0x12}))
 			})
@@ -119,19 +121,21 @@ var _ = Describe("StopWaitingFrame", func() {
 					PacketNumber:    0x12345678,
 					PacketNumberLen: protocol.PacketNumberLen4,
 				}
-				frame.Write(b, 0)
+				err := frame.Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(b.Len()).To(Equal(5))
 				Expect(b.Bytes()[1:5]).To(Equal([]byte{0x78, 0x46, 0x34, 0x12}))
 			})
 
-			It("writes a 6-byte LeastUnackedDelta", func() {
+			It("writes a 6-byte LeastUnackedDelta, for a delta that fits into 6 bytes", func() {
 				b := &bytes.Buffer{}
 				frame := &StopWaitingFrame{
 					LeastUnacked:    0x10,
 					PacketNumber:    0x123456789ABC,
 					PacketNumberLen: protocol.PacketNumberLen6,
 				}
-				frame.Write(b, 0)
+				err := frame.Write(b, 0)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(b.Len()).To(Equal(7))
 				Expect(b.Bytes()[1:7]).To(Equal([]byte{0xAC, 0x9A, 0x78, 0x56, 0x34, 0x12}))
 			})

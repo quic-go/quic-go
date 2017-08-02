@@ -83,10 +83,16 @@ var _ = Describe("Little Endian encoding / decoding", func() {
 		})
 
 		It("outputs a little endian", func() {
-			num := uint32(0xEFAC3512)
+			num := uint32(0x010203)
 			b := &bytes.Buffer{}
 			LittleEndian.WriteUint24(b, num)
-			Expect(b.Bytes()).To(Equal([]byte{0x12, 0x35, 0xAC}))
+			Expect(b.Bytes()).To(Equal([]byte{0x03, 0x02, 0x01}))
+		})
+
+		It("panics if the value doesn't fit into 24 bits", func() {
+			num := uint32(0x01020304)
+			b := &bytes.Buffer{}
+			Expect(func() { LittleEndian.WriteUint24(b, num) }).Should(Panic())
 		})
 	})
 
@@ -113,10 +119,16 @@ var _ = Describe("Little Endian encoding / decoding", func() {
 		})
 
 		It("outputs a little endian", func() {
-			num := uint64(0xDEADBEEFCAFE)
+			num := uint64(0x0102030405)
 			b := &bytes.Buffer{}
 			LittleEndian.WriteUint40(b, num)
-			Expect(b.Bytes()).To(Equal([]byte{0xFE, 0xCA, 0xEF, 0xBE, 0xAD}))
+			Expect(b.Bytes()).To(Equal([]byte{0x05, 0x04, 0x03, 0x02, 0x01}))
+		})
+
+		It("panics if the value doesn't fit into 40 bits", func() {
+			num := uint64(0x010203040506)
+			b := &bytes.Buffer{}
+			Expect(func() { LittleEndian.WriteUint40(b, num) }).Should(Panic())
 		})
 	})
 
@@ -134,12 +146,10 @@ var _ = Describe("Little Endian encoding / decoding", func() {
 			Expect(b.Bytes()).To(Equal([]byte{0xFE, 0xCA, 0xEF, 0xBE, 0xAD, 0xDE}))
 		})
 
-		It("doesn't care about the two higher order bytes", func() {
-			num := uint64(0x1337DEADBEEFCAFE)
+		It("panics if the value doesn't fit into 48 bits", func() {
+			num := uint64(0xDEADBEEFCAFE01)
 			b := &bytes.Buffer{}
-			LittleEndian.WriteUint48(b, num)
-			Expect(b.Len()).To(Equal(6))
-			Expect(b.Bytes()).To(Equal([]byte{0xFE, 0xCA, 0xEF, 0xBE, 0xAD, 0xDE}))
+			Expect(func() { LittleEndian.WriteUint48(b, num) }).Should(Panic())
 		})
 	})
 
@@ -151,10 +161,16 @@ var _ = Describe("Little Endian encoding / decoding", func() {
 		})
 
 		It("outputs a little endian", func() {
-			num := uint64(0xFFEEDDCCBBAA9988)
+			num := uint64(0xEEDDCCBBAA9988)
 			b := &bytes.Buffer{}
 			LittleEndian.WriteUint56(b, num)
 			Expect(b.Bytes()).To(Equal([]byte{0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE}))
+		})
+
+		It("panics if the value doesn't fit into 56 bits", func() {
+			num := uint64(0xEEDDCCBBAA998801)
+			b := &bytes.Buffer{}
+			Expect(func() { LittleEndian.WriteUint56(b, num) }).Should(Panic())
 		})
 	})
 

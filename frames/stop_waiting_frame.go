@@ -46,7 +46,7 @@ func (f *StopWaitingFrame) Write(b *bytes.Buffer, version protocol.VersionNumber
 	case protocol.PacketNumberLen4:
 		utils.LittleEndian.WriteUint32(b, uint32(leastUnackedDelta))
 	case protocol.PacketNumberLen6:
-		utils.LittleEndian.WriteUint48(b, leastUnackedDelta)
+		utils.LittleEndian.WriteUint48(b, leastUnackedDelta&(1<<48-1))
 	default:
 		return errPacketNumberLenNotSet
 	}

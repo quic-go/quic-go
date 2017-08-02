@@ -102,7 +102,7 @@ func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pe
 	case protocol.PacketNumberLen4:
 		utils.LittleEndian.WriteUint32(b, uint32(h.PacketNumber))
 	case protocol.PacketNumberLen6:
-		utils.LittleEndian.WriteUint48(b, uint64(h.PacketNumber))
+		utils.LittleEndian.WriteUint48(b, uint64(h.PacketNumber)&(1<<48-1))
 	default:
 		return errPacketNumberLenNotSet
 	}
