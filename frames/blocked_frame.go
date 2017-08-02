@@ -25,7 +25,7 @@ func (f *BlockedFrame) MinLength(version protocol.VersionNumber) (protocol.ByteC
 }
 
 // ParseBlockedFrame parses a BLOCKED frame
-func ParseBlockedFrame(r *bytes.Reader) (*BlockedFrame, error) {
+func ParseBlockedFrame(r *bytes.Reader, version protocol.VersionNumber) (*BlockedFrame, error) {
 	frame := &BlockedFrame{}
 
 	// read the TypeByte

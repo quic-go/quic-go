@@ -18,7 +18,7 @@ type ConnectionCloseFrame struct {
 }
 
 // ParseConnectionCloseFrame reads a CONNECTION_CLOSE frame
-func ParseConnectionCloseFrame(r *bytes.Reader) (*ConnectionCloseFrame, error) {
+func ParseConnectionCloseFrame(r *bytes.Reader, version protocol.VersionNumber) (*ConnectionCloseFrame, error) {
 	frame := &ConnectionCloseFrame{}
 
 	// read the TypeByte

@@ -29,7 +29,7 @@ func (f *RstStreamFrame) MinLength(version protocol.VersionNumber) (protocol.Byt
 }
 
 // ParseRstStreamFrame parses a RST_STREAM frame
-func ParseRstStreamFrame(r *bytes.Reader) (*RstStreamFrame, error) {
+func ParseRstStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*RstStreamFrame, error) {
 	frame := &RstStreamFrame{}
 
 	// read the TypeByte

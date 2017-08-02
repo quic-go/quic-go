@@ -12,7 +12,7 @@ var _ = Describe("WindowUpdateFrame", func() {
 	Context("when parsing", func() {
 		It("accepts sample frame", func() {
 			b := bytes.NewReader([]byte{0x04, 0xEF, 0xBE, 0xAD, 0xDE, 0x44, 0x33, 0x22, 0x11, 0xAD, 0xFB, 0xCA, 0xDE})
-			frame, err := ParseWindowUpdateFrame(b)
+			frame, err := ParseWindowUpdateFrame(b, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0xDEADBEEF)))
 			Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0xDECAFBAD11223344)))
@@ -21,10 +21,10 @@ var _ = Describe("WindowUpdateFrame", func() {
 
 		It("errors on EOFs", func() {
 			data := []byte{0x04, 0xEF, 0xBE, 0xAD, 0xDE, 0x44, 0x33, 0x22, 0x11, 0xAD, 0xFB, 0xCA, 0xDE}
-			_, err := ParseWindowUpdateFrame(bytes.NewReader(data))
+			_, err := ParseWindowUpdateFrame(bytes.NewReader(data), protocol.VersionWhatever)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := ParseWindowUpdateFrame(bytes.NewReader(data[0:i]))
+				_, err := ParseWindowUpdateFrame(bytes.NewReader(data[0:i]), protocol.VersionWhatever)
 				Expect(err).To(HaveOccurred())
 			}
 		})

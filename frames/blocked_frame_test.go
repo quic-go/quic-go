@@ -12,17 +12,17 @@ var _ = Describe("BlockedFrame", func() {
 	Context("when parsing", func() {
 		It("accepts sample frame", func() {
 			b := bytes.NewReader([]byte{0x05, 0xEF, 0xBE, 0xAD, 0xDE})
-			frame, err := ParseBlockedFrame(b)
+			frame, err := ParseBlockedFrame(b, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0xDEADBEEF)))
 		})
 
 		It("errors on EOFs", func() {
 			data := []byte{0x05, 0xEF, 0xBE, 0xAD, 0xDE}
-			_, err := ParseBlockedFrame(bytes.NewReader(data))
+			_, err := ParseBlockedFrame(bytes.NewReader(data), protocol.VersionWhatever)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := ParseBlockedFrame(bytes.NewReader(data[0:i]))
+				_, err := ParseBlockedFrame(bytes.NewReader(data[0:i]), protocol.VersionWhatever)
 				Expect(err).To(HaveOccurred())
 			}
 		})

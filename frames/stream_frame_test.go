@@ -14,7 +14,7 @@ var _ = Describe("StreamFrame", func() {
 		It("accepts sample frame", func() {
 			// a STREAM frame, plus 3 additional bytes, not belonging to this frame
 			b := bytes.NewReader([]byte{0xa0, 0x1, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r' /* additional bytes */, 'f', 'o', 'o'})
-			frame, err := ParseStreamFrame(b)
+			frame, err := ParseStreamFrame(b, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.FinBit).To(BeFalse())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(1)))
@@ -26,7 +26,7 @@ var _ = Describe("StreamFrame", func() {
 
 		It("accepts frame without data length", func() {
 			b := bytes.NewReader([]byte{0x80, 0x1, 'f', 'o', 'o', 'b', 'a', 'r'})
-			frame, err := ParseStreamFrame(b)
+			frame, err := ParseStreamFrame(b, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.FinBit).To(BeFalse())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(1)))
@@ -39,7 +39,7 @@ var _ = Describe("StreamFrame", func() {
 		It("accepts an empty frame with FinBit set, with data length set", func() {
 			// the STREAM frame, plus 3 additional bytes, not belonging to this frame
 			b := bytes.NewReader([]byte{0x80 ^ 0x40 ^ 0x20, 0x1 /* stream id */, 0, 0, 'f', 'o', 'o'})
-			frame, err := ParseStreamFrame(b)
+			frame, err := ParseStreamFrame(b, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.FinBit).To(BeTrue())
 			Expect(frame.DataLenPresent).To(BeTrue())
@@ -49,7 +49,7 @@ var _ = Describe("StreamFrame", func() {
 
 		It("accepts an empty frame with the FinBit set", func() {
 			b := bytes.NewReader([]byte{0x80 ^ 0x40, 0x1 /* stream id */, 'f', 'o', 'o', 'b', 'a', 'r'})
-			frame, err := ParseStreamFrame(b)
+			frame, err := ParseStreamFrame(b, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.FinBit).To(BeTrue())
 			Expect(frame.DataLenPresent).To(BeFalse())
@@ -59,7 +59,7 @@ var _ = Describe("StreamFrame", func() {
 
 		It("accepts frames with offsets", func() {
 			b := bytes.NewReader([]byte{0xa4, 0x1, 0x2a, 0x00, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'})
-			frame, err := ParseStreamFrame(b)
+			frame, err := ParseStreamFrame(b, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.FinBit).To(BeFalse())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(1)))
@@ -71,13 +71,13 @@ var _ = Describe("StreamFrame", func() {
 
 		It("errors on empty stream frames that don't have the FinBit set", func() {
 			b := bytes.NewReader([]byte{0x80 ^ 0x20, 0x1, 0, 0})
-			_, err := ParseStreamFrame(b)
+			_, err := ParseStreamFrame(b, protocol.VersionWhatever)
 			Expect(err).To(MatchError(qerr.EmptyStreamFrameNoFin))
 		})
 
 		It("rejects frames to too large dataLen", func() {
 			b := bytes.NewReader([]byte{0xa0, 0x1, 0xff, 0xf})
-			_, err := ParseStreamFrame(b)
+			_, err := ParseStreamFrame(b, protocol.VersionWhatever)
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidStreamData, "data len too large")))
 		})
 
@@ -90,16 +90,16 @@ var _ = Describe("StreamFrame", func() {
 			}
 			b := &bytes.Buffer{}
 			f.Write(b, protocol.VersionWhatever)
-			_, err := ParseStreamFrame(bytes.NewReader(b.Bytes()))
+			_, err := ParseStreamFrame(bytes.NewReader(b.Bytes()), protocol.VersionWhatever)
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidStreamData, "data overflows maximum offset")))
 		})
 
 		It("errors on EOFs", func() {
 			data := []byte{0xa4, 0x1, 0x2a, 0x00, 0x06, 0x00, 'f', 'o', 'o', 'b', 'a', 'r'}
-			_, err := ParseStreamFrame(bytes.NewReader(data))
+			_, err := ParseStreamFrame(bytes.NewReader(data), protocol.VersionWhatever)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := ParseStreamFrame(bytes.NewReader(data[0:i]))
+				_, err := ParseStreamFrame(bytes.NewReader(data[0:i]), protocol.VersionWhatever)
 				Expect(err).To(HaveOccurred())
 			}
 		})

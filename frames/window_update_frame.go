@@ -29,7 +29,7 @@ func (f *WindowUpdateFrame) MinLength(version protocol.VersionNumber) (protocol.
 }
 
 // ParseWindowUpdateFrame parses a RST_STREAM frame
-func ParseWindowUpdateFrame(r *bytes.Reader) (*WindowUpdateFrame, error) {
+func ParseWindowUpdateFrame(r *bytes.Reader, version protocol.VersionNumber) (*WindowUpdateFrame, error) {
 	frame := &WindowUpdateFrame{}
 
 	// read the TypeByte

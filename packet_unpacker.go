@@ -50,7 +50,7 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, da
 
 		var frame frames.Frame
 		if typeByte&0x80 == 0x80 {
-			frame, err = frames.ParseStreamFrame(r)
+			frame, err = frames.ParseStreamFrame(r, u.version)
 			if err != nil {
 				err = qerr.Error(qerr.InvalidStreamData, err.Error())
 			} else {
@@ -69,27 +69,27 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, da
 		} else {
 			switch typeByte {
 			case 0x01:
-				frame, err = frames.ParseRstStreamFrame(r)
+				frame, err = frames.ParseRstStreamFrame(r, u.version)
 				if err != nil {
 					err = qerr.Error(qerr.InvalidRstStreamData, err.Error())
 				}
 			case 0x02:
-				frame, err = frames.ParseConnectionCloseFrame(r)
+				frame, err = frames.ParseConnectionCloseFrame(r, u.version)
 				if err != nil {
 					err = qerr.Error(qerr.InvalidConnectionCloseData, err.Error())
 				}
 			case 0x03:
-				frame, err = frames.ParseGoawayFrame(r)
+				frame, err = frames.ParseGoawayFrame(r, u.version)
 				if err != nil {
 					err = qerr.Error(qerr.InvalidGoawayData, err.Error())
 				}
 			case 0x04:
-				frame, err = frames.ParseWindowUpdateFrame(r)
+				frame, err = frames.ParseWindowUpdateFrame(r, u.version)
 				if err != nil {
 					err = qerr.Error(qerr.InvalidWindowUpdateData, err.Error())
 				}
 			case 0x05:
-				frame, err = frames.ParseBlockedFrame(r)
+				frame, err = frames.ParseBlockedFrame(r, u.version)
 				if err != nil {
 					err = qerr.Error(qerr.InvalidBlockedData, err.Error())
 				}
@@ -99,7 +99,7 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, da
 					err = qerr.Error(qerr.InvalidStopWaitingData, err.Error())
 				}
 			case 0x07:
-				frame, err = frames.ParsePingFrame(r)
+				frame, err = frames.ParsePingFrame(r, u.version)
 			default:
 				err = qerr.Error(qerr.InvalidFrameData, fmt.Sprintf("unknown type byte 0x%x", typeByte))
 			}

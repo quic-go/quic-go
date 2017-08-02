@@ -25,7 +25,7 @@ var (
 )
 
 // ParseStreamFrame reads a stream frame. The type byte must not have been read yet.
-func ParseStreamFrame(r *bytes.Reader) (*StreamFrame, error) {
+func ParseStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*StreamFrame, error) {
 	frame := &StreamFrame{}
 
 	typeByte, err := r.ReadByte()
