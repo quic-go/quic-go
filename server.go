@@ -20,6 +20,7 @@ type packetHandler interface {
 	Session
 	handlePacket(*receivedPacket)
 	run() error
+	closeRemote(error)
 }
 
 // A Listener of QUIC

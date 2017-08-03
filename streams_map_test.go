@@ -29,7 +29,7 @@ var _ = Describe("Streams Map", func() {
 
 		m = newStreamsMap(nil, p, mockCpm)
 		m.newStream = func(id protocol.StreamID) *stream {
-			return &stream{streamID: id}
+			return newStream(id, nil, nil, nil)
 		}
 	}
 

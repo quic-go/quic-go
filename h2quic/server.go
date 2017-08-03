@@ -29,9 +29,19 @@ type remoteCloser interface {
 	CloseRemote(protocol.ByteCount)
 }
 
+// allows mocking of quic.Listen and quic.ListenAddr
+var (
+	quicListen     = quic.Listen
+	quicListenAddr = quic.ListenAddr
+)
+
 // Server is a HTTP2 server listening for QUIC connections.
 type Server struct {
 	*http.Server
+
+	// By providing a quic.Config, it is possible to set parameters of the QUIC connection.
+	// If nil, it uses reasonable default values.
+	QuicConfig *quic.Config
 
 	// Private flag for demo, do not use
 	CloseAfterFirstRequest bool
@@ -69,11 +79,11 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 }
 
 // Serve an existing UDP connection.
-func (s *Server) Serve(conn *net.UDPConn) error {
+func (s *Server) Serve(conn net.PacketConn) error {
 	return s.serveImpl(s.TLSConfig, conn)
 }
 
-func (s *Server) serveImpl(tlsConfig *tls.Config, conn *net.UDPConn) error {
+func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 	if s.Server == nil {
 		return errors.New("use of h2quic.Server without http.Server")
 	}
@@ -83,16 +93,12 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn *net.UDPConn) error {
 		return errors.New("ListenAndServe may only be called once")
 	}
 
-	config := quic.Config{
-		Versions: protocol.SupportedVersions,
-	}
-
 	var ln quic.Listener
 	var err error
 	if conn == nil {
-		ln, err = quic.ListenAddr(s.Addr, tlsConfig, &config)
+		ln, err = quicListenAddr(s.Addr, tlsConfig, s.QuicConfig)
 	} else {
-		ln, err = quic.Listen(conn, tlsConfig, &config)
+		ln, err = quicListen(conn, tlsConfig, s.QuicConfig)
 	}
 	if err != nil {
 		s.listenerMutex.Unlock()
@@ -254,7 +260,6 @@ func (s *Server) CloseGracefully(timeout time.Duration) error {
 
 // SetQuicHeaders can be used to set the proper headers that announce that this server supports QUIC.
 // The values that are set depend on the port information from s.Server.Addr, and currently look like this (if Addr has port 443):
-//  Alternate-Protocol: 443:quic
 //  Alt-Svc: quic=":443"; ma=2592000; v="33,32,31,30"
 func (s *Server) SetQuicHeaders(hdr http.Header) error {
 	port := atomic.LoadUint32(&s.port)
@@ -282,7 +287,6 @@ func (s *Server) SetQuicHeaders(hdr http.Header) error {
 		}
 	}
 
-	hdr.Add("Alternate-Protocol", fmt.Sprintf("%d:quic", port))
 	hdr.Add("Alt-Svc", fmt.Sprintf(`quic=":%d"; ma=2592000; v="%s"`, port, s.supportedVersionsAsString))
 
 	return nil

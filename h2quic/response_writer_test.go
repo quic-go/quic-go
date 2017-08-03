@@ -2,9 +2,11 @@ package h2quic
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"sync"
+	"time"
 
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
@@ -36,6 +38,10 @@ func (s *mockStream) Close() error                          { s.closed = true; r
 func (s *mockStream) Reset(error)                           { s.reset = true }
 func (s *mockStream) CloseRemote(offset protocol.ByteCount) { s.remoteClosed = true }
 func (s mockStream) StreamID() protocol.StreamID            { return s.id }
+func (s *mockStream) Context() context.Context              { panic("not implemented") }
+func (s *mockStream) SetDeadline(time.Time) error           { panic("not implemented") }
+func (s *mockStream) SetReadDeadline(time.Time) error       { panic("not implemented") }
+func (s *mockStream) SetWriteDeadline(time.Time) error      { panic("not implemented") }
 
 func (s *mockStream) Read(p []byte) (int, error) {
 	n, _ := s.dataToRead.Read(p)

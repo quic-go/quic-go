@@ -2,35 +2,27 @@ package integrationtests
 
 import (
 	"bytes"
-	"crypto/md5"
-	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
-	"mime/multipart"
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
-	"path"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"sync/atomic"
 
 	"strconv"
-	"time"
 
 	"github.com/lucas-clemente/quic-go/h2quic"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/testdata"
-	"github.com/tebeka/selenium"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/gbytes"
-	"github.com/onsi/gomega/gexec"
 
 	"testing"
 )
@@ -41,17 +33,17 @@ const (
 )
 
 var (
-	server     *h2quic.Server
-	dataMan    dataManager
-	port       string
-	uploadDir  string
-	clientPath string // path of the quic_client
-	serverPath string // path of the quic_server
+	server             *h2quic.Server
+	dataMan            dataManager
+	port               string
+	clientPath         string
+	serverPath         string
+	nFilesUploaded     int32
+	testEndpointCalled bool
+	doneCalled         bool
 
 	logFileName string // the log file set in the ginkgo flags
 	logFile     *os.File
-
-	docker *gexec.Session
 )
 
 func TestIntegration(t *testing.T) {
@@ -59,14 +51,7 @@ func TestIntegration(t *testing.T) {
 	RunSpecs(t, "Integration Tests Suite")
 }
 
-var _ = BeforeSuite(func() {
-	setupHTTPHandlers()
-	setupSelenium()
-})
-
-var _ = AfterSuite(func() {
-	stopSelenium()
-}, 10)
+var _ = BeforeSuite(setupHTTPHandlers)
 
 // read the logfile command line flag
 // to set call ginkgo -- -logfile=log.txt
@@ -77,14 +62,6 @@ func init() {
 var _ = BeforeEach(func() {
 	// set custom time format for logs
 	utils.SetLogTimeFormat("15:04:05.000")
-
-	// create a new uploadDir for every test
-	var err error
-	uploadDir, err = ioutil.TempDir("", "quic-upload-dest")
-	Expect(err).ToNot(HaveOccurred())
-	err = os.MkdirAll(uploadDir, os.ModeDir|0777)
-	Expect(err).ToNot(HaveOccurred())
-
 	_, thisfile, _, ok := runtime.Caller(0)
 	if !ok {
 		Fail("Failed to get current path")
@@ -93,6 +70,7 @@ var _ = BeforeEach(func() {
 	serverPath = filepath.Join(thisfile, fmt.Sprintf("../../../quic-clients/server-%s-debug", runtime.GOOS))
 
 	if len(logFileName) > 0 {
+		var err error
 		logFile, err = os.Create("./log.txt")
 		Expect(err).ToNot(HaveOccurred())
 		log.SetOutput(logFile)
@@ -105,18 +83,13 @@ var _ = JustBeforeEach(startQuicServer)
 var _ = AfterEach(func() {
 	stopQuicServer()
 
-	// remove uploadDir
-	if len(uploadDir) < 20 {
-		panic("uploadDir too short")
-	}
-	os.RemoveAll(uploadDir)
-
-	// remove downloaded file in docker container
-	removeDownload("data")
-
 	if len(logFileName) > 0 {
 		_ = logFile.Close()
 	}
+
+	nFilesUploaded = 0
+	doneCalled = false
+	testEndpointCalled = false
 })
 
 func setupHTTPHandlers() {
@@ -136,6 +109,16 @@ func setupHTTPHandlers() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	http.HandleFunc("/prdata", func(w http.ResponseWriter, r *http.Request) {
+		defer GinkgoRecover()
+		sl := r.URL.Query().Get("len")
+		l, err := strconv.Atoi(sl)
+		Expect(err).NotTo(HaveOccurred())
+		data := generatePRData(l)
+		_, err = w.Write(data)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
 		defer GinkgoRecover()
 		body, err := ioutil.ReadAll(r.Body)
@@ -144,46 +127,45 @@ func setupHTTPHandlers() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	// requires the num GET parameter, e.g. /uploadform?num=2
-	// will create num input fields for uploading files
-	http.HandleFunc("/uploadform", func(w http.ResponseWriter, r *http.Request) {
+	// Requires the len & num GET parameters, e.g. /uploadtest?len=100&num=1
+	http.HandleFunc("/uploadtest", func(w http.ResponseWriter, r *http.Request) {
 		defer GinkgoRecover()
-		num, err := strconv.Atoi(r.URL.Query().Get("num"))
-		Expect(err).ToNot(HaveOccurred())
-		response := "<html><body>\n<form id='form' action='https://quic.clemente.io/uploadhandler' method='post' enctype='multipart/form-data'>"
-		for i := 0; i < num; i++ {
-			response += "<input type='file' id='upload_" + strconv.Itoa(i) + "' name='uploadfile_" + strconv.Itoa(i) + "' />"
-		}
-		response += "</form><body></html>"
-		_, err = io.WriteString(w, response)
+		response := uploadHTML
+		response = strings.Replace(response, "LENGTH", r.URL.Query().Get("len"), -1)
+		response = strings.Replace(response, "NUM", r.URL.Query().Get("num"), -1)
+		_, err := io.WriteString(w, response)
 		Expect(err).NotTo(HaveOccurred())
+		testEndpointCalled = true
+	})
+
+	// Requires the len & num GET parameters, e.g. /downloadtest?len=100&num=1
+	http.HandleFunc("/downloadtest", func(w http.ResponseWriter, r *http.Request) {
+		defer GinkgoRecover()
+		response := downloadHTML
+		response = strings.Replace(response, "LENGTH", r.URL.Query().Get("len"), -1)
+		response = strings.Replace(response, "NUM", r.URL.Query().Get("num"), -1)
+		_, err := io.WriteString(w, response)
+		Expect(err).NotTo(HaveOccurred())
+		testEndpointCalled = true
 	})
 
 	http.HandleFunc("/uploadhandler", func(w http.ResponseWriter, r *http.Request) {
 		defer GinkgoRecover()
 
-		err := r.ParseMultipartForm(100 * (1 << 20)) // max. 100 MB
-		Expect(err).ToNot(HaveOccurred())
-
-		count := 0
-		for {
-			var file multipart.File
-			var handler *multipart.FileHeader
-			file, handler, err = r.FormFile("uploadfile_" + strconv.Itoa(count))
-			if err != nil {
-				break
-			}
-			count++
-			f, err2 := os.OpenFile(path.Join(uploadDir, handler.Filename), os.O_WRONLY|os.O_CREATE, 0666)
-			Expect(err2).ToNot(HaveOccurred())
-			io.Copy(f, file)
-			f.Close()
-			file.Close()
-		}
-		Expect(count).ToNot(BeZero()) // there have been at least one uploaded file in this request
-
-		_, err = io.WriteString(w, "")
+		l, err := strconv.Atoi(r.URL.Query().Get("len"))
 		Expect(err).NotTo(HaveOccurred())
+
+		defer r.Body.Close()
+		actual, err := ioutil.ReadAll(r.Body)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(bytes.Equal(actual, generatePRData(l))).To(BeTrue())
+
+		atomic.AddInt32(&nFilesUploaded, 1)
+	})
+
+	http.HandleFunc("/done", func(w http.ResponseWriter, r *http.Request) {
+		doneCalled = true
 	})
 }
 
@@ -210,137 +192,94 @@ func stopQuicServer() {
 	Expect(server.Close()).NotTo(HaveOccurred())
 }
 
-func setupSelenium() {
-	var err error
-	pullCmd := exec.Command("docker", "pull", "lclemente/standalone-chrome:dev")
-	pull, err := gexec.Start(pullCmd, GinkgoWriter, GinkgoWriter)
-	Expect(err).NotTo(HaveOccurred())
-	// Assuming a download at 10 Mbit/s
-	Eventually(pull, 10*time.Minute).Should(gexec.Exit(0))
-
-	dockerCmd := exec.Command(
-		"docker",
-		"run",
-		"-i",
-		"--rm",
-		"-p=4444:4444",
-		"--name", "quic-test-selenium",
-		"lclemente/standalone-chrome:dev",
-	)
-	docker, err = gexec.Start(dockerCmd, GinkgoWriter, GinkgoWriter)
-	Expect(err).NotTo(HaveOccurred())
-	Eventually(docker.Out, 10).Should(gbytes.Say("Selenium Server is up and running"))
+func waitForDone() {
+	Eventually(func() bool { return doneCalled }, 60).Should(BeTrue())
 }
 
-func stopSelenium() {
-	docker.Interrupt().Wait(10)
-}
-
-func getWebdriverForVersion(version protocol.VersionNumber) selenium.WebDriver {
-	caps := selenium.Capabilities{
-		"browserName": "chrome",
-		"chromeOptions": map[string]interface{}{
-			"args": []string{
-				"--enable-quic",
-				"--no-proxy-server",
-				"--origin-to-force-quic-on=quic.clemente.io:443",
-				fmt.Sprintf(`--host-resolver-rules=MAP quic.clemente.io:443 %s:%s`, GetLocalIP(), port),
-				fmt.Sprintf(`--quic-version=QUIC_VERSION_%d`, version),
-			},
-		},
+func waitForNUploaded(expected int) func() {
+	return func() {
+		Eventually(func() int32 {
+			return atomic.LoadInt32(&nFilesUploaded)
+		}, 60).Should(BeEquivalentTo(expected))
 	}
-	wd, err := selenium.NewRemote(caps, "http://localhost:4444/wd/hub")
-	Expect(err).NotTo(HaveOccurred())
-	return wd
 }
 
-func GetLocalIP() string {
-	// First, try finding interface docker0
-	i, err := net.InterfaceByName("docker0")
-	if err == nil {
-		var addrs []net.Addr
-		addrs, err = i.Addrs()
-		Expect(err).NotTo(HaveOccurred())
-		return addrs[0].(*net.IPNet).IP.String()
-	}
+const commonJS = `
+var buf = new ArrayBuffer(LENGTH);
+var prng = new Uint8Array(buf);
+var seed = 1;
+for (var i = 0; i < LENGTH; i++) {
+	// https://en.wikipedia.org/wiki/Lehmer_random_number_generator
+	seed = seed * 48271 % 2147483647;
+	prng[i] = seed;
+}
+`
 
-	addrs, err := net.InterfaceAddrs()
-	Expect(err).NotTo(HaveOccurred())
-	for _, address := range addrs {
-		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				return ipnet.IP.String()
-			}
+const uploadHTML = `
+<html>
+<body>
+<script>
+	console.log("Running DL test...");
+
+  ` + commonJS + `
+	for (var i = 0; i < NUM; i++) {
+		var req = new XMLHttpRequest();
+		req.open("POST", "/uploadhandler?len=" + LENGTH, true);
+		req.send(buf);
+	}
+</script>
+</body>
+</html>
+`
+
+const downloadHTML = `
+<html>
+<body>
+<script>
+	console.log("Running DL test...");
+	` + commonJS + `
+
+	function verify(data) {
+		if (data.length !== LENGTH) return false;
+		for (var i = 0; i < LENGTH; i++) {
+			if (data[i] !== prng[i]) return false;
 		}
+		return true;
 	}
-	panic("no addr")
-}
 
-func removeDownload(filename string) {
-	cmd := exec.Command("docker", "exec", "-i", "quic-test-selenium", "rm", "-f", "/home/seluser/Downloads/"+filename)
-	session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
-	Expect(err).NotTo(HaveOccurred())
-	Eventually(session, 5).Should(gexec.Exit(0))
-}
-
-// getDownloadSize gets the file size of a file in the /home/seluser/Downloads folder in the docker container
-func getDownloadSize(filename string) int {
-	var out bytes.Buffer
-	cmd := exec.Command("docker", "exec", "-i", "quic-test-selenium", "stat", "--printf=%s", "/home/seluser/Downloads/"+filename)
-	session, err := gexec.Start(cmd, &out, GinkgoWriter)
-	Expect(err).NotTo(HaveOccurred())
-	Eventually(session, 5).Should(gexec.Exit())
-	if session.ExitCode() != 0 {
-		return 0
+	var nOK = 0;
+	for (var i = 0; i < NUM; i++) {
+		let req = new XMLHttpRequest();
+		req.responseType = "arraybuffer";
+		req.open("POST", "/prdata?len=" + LENGTH, true);
+		req.onreadystatechange = function () {
+			if (req.readyState === XMLHttpRequest.DONE && req.status === 200) {
+				if (verify(new Uint8Array(req.response))) {
+					nOK++;
+					if (nOK === NUM) {
+						console.log("Done :)");
+						var reqDone = new XMLHttpRequest();
+						reqDone.open("GET", "/done");
+						reqDone.send();
+					}
+				}
+			}
+		};
+		req.send();
 	}
-	Expect(out.Bytes()).ToNot(BeEmpty())
-	size, err := strconv.Atoi(string(out.Bytes()))
-	Expect(err).NotTo(HaveOccurred())
-	return size
-}
+</script>
+</body>
+</html>
+`
 
-// getFileSize gets the file size of a file on the local file system
-func getFileSize(filename string) int {
-	file, err := os.Open(filename)
-	Expect(err).ToNot(HaveOccurred())
-	fi, err := file.Stat()
-	Expect(err).ToNot(HaveOccurred())
-	return int(fi.Size())
-}
-
-// getDownloadMD5 gets the md5 sum file of a file in the /home/seluser/Downloads folder in the docker container
-func getDownloadMD5(filename string) []byte {
-	var out bytes.Buffer
-	cmd := exec.Command("docker", "exec", "-i", "quic-test-selenium", "md5sum", "/home/seluser/Downloads/"+filename)
-	session, err := gexec.Start(cmd, &out, GinkgoWriter)
-	Expect(err).NotTo(HaveOccurred())
-	Eventually(session, 5).Should(gexec.Exit())
-	if session.ExitCode() != 0 {
-		return nil
+// Same as in the JS code, see
+// https://en.wikipedia.org/wiki/Lehmer_random_number_generator
+func generatePRData(l int) []byte {
+	res := make([]byte, l)
+	seed := uint64(1)
+	for i := 0; i < l; i++ {
+		seed = seed * 48271 % 2147483647
+		res[i] = byte(seed)
 	}
-	Expect(out.Bytes()).ToNot(BeEmpty())
-	res, err := hex.DecodeString(string(out.Bytes()[0:32]))
-	Expect(err).NotTo(HaveOccurred())
 	return res
-}
-
-// getFileMD5 gets the md5 sum of a file on the local file system
-func getFileMD5(filepath string) []byte {
-	var result []byte
-	file, err := os.Open(filepath)
-	Expect(err).ToNot(HaveOccurred())
-	defer file.Close()
-
-	hash := md5.New()
-	_, err = io.Copy(hash, file)
-	Expect(err).ToNot(HaveOccurred())
-	return hash.Sum(result)
-}
-
-// copyFileToDocker copies a file from the local file system into the /home/seluser/ directory in the docker container
-func copyFileToDocker(filepath string) {
-	cmd := exec.Command("docker", "cp", filepath, "quic-test-selenium:/home/seluser/")
-	session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
-	Expect(err).NotTo(HaveOccurred())
-	Eventually(session, 5).Should(gexec.Exit(0))
 }

@@ -5,6 +5,7 @@ os: Windows Server 2012 R2
 environment:
   GOPATH: c:\gopath
   CGO_ENABLED: 0
+  TIMESCALE_FACTOR: 20
   matrix:
     - GOARCH: 386
     - GOARCH: amd64
@@ -27,7 +28,8 @@ install:
 
 build_script:
   - rm -r integrationtests
-  - ginkgo -r --randomizeAllSpecs --randomizeSuites --trace --progress
+  - ginkgo -r --randomizeAllSpecs --randomizeSuites --trace --progress -skipPackage benchmark
+  - ginkgo --randomizeAllSpecs --randomizeSuites --trace --progress benchmark -- -samples=1
 
 test: off
 

@@ -3,7 +3,6 @@ package utils
 import (
 	"bytes"
 	"io"
-	"sort"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -193,11 +192,5 @@ var _ = Describe("Utils", func() {
 			_, err := ReadUintN(b, 3)
 			Expect(err).To(HaveOccurred())
 		})
-	})
-
-	It("sorts uint32 slices", func() {
-		s := Uint32Slice{1, 5, 2, 4, 3}
-		sort.Sort(s)
-		Expect(s).To(Equal(Uint32Slice{1, 2, 3, 4, 5}))
 	})
 })

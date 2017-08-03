@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"context"
 	"io"
 	"net"
 	"time"
@@ -11,12 +12,36 @@ import (
 
 // Stream is the interface implemented by QUIC streams
 type Stream interface {
+	// Read reads data from the stream.
+	// Read can be made to time out and return a net.Error with Timeout() == true
+	// after a fixed time limit; see SetDeadline and SetReadDeadline.
 	io.Reader
+	// Write writes data to the stream.
+	// Write can be made to time out and return a net.Error with Timeout() == true
+	// after a fixed time limit; see SetDeadline and SetWriteDeadline.
 	io.Writer
 	io.Closer
 	StreamID() protocol.StreamID
 	// Reset closes the stream with an error.
 	Reset(error)
+	// The context is canceled as soon as the write-side of the stream is closed.
+	// This happens when Close() is called, or when the stream is reset (either locally or remotely).
+	// Warning: This API should not be considered stable and might change soon.
+	Context() context.Context
+	// SetReadDeadline sets the deadline for future Read calls and
+	// any currently-blocked Read call.
+	// A zero value for t means Read will not time out.
+	SetReadDeadline(t time.Time) error
+	// SetWriteDeadline sets the deadline for future Write calls
+	// and any currently-blocked Write call.
+	// Even if write times out, it may return n > 0, indicating that
+	// some of the data was successfully written.
+	// A zero value for t means Write will not time out.
+	SetWriteDeadline(t time.Time) error
+	// SetDeadline sets the read and write deadlines associated
+	// with the connection. It is equivalent to calling both
+	// SetReadDeadline and SetWriteDeadline.
+	SetDeadline(t time.Time) error
 }
 
 // A Session is a QUIC connection between two peers.
@@ -37,9 +62,9 @@ type Session interface {
 	RemoteAddr() net.Addr
 	// Close closes the connection. The error will be sent to the remote peer in a CONNECTION_CLOSE frame. An error value of nil is allowed and will cause a normal PeerGoingAway to be sent.
 	Close(error) error
-	// WaitUntilClosed() blocks until the session is closed.
+	// The context is cancelled when the session is closed.
 	// Warning: This API should not be considered stable and might change soon.
-	WaitUntilClosed()
+	Context() context.Context
 }
 
 // A NonFWSession is a QUIC connection between two peers half-way through the handshake.

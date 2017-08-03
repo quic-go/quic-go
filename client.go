@@ -212,31 +212,46 @@ func (c *client) listen() {
 		}
 		data = data[:n]
 
-		err = c.handlePacket(addr, data)
-		if err != nil {
-			utils.Errorf("error handling packet: %s", err.Error())
-			c.session.Close(err)
-			break
-		}
+		c.handlePacket(addr, data)
 	}
 }
 
-func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
+func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
 	hdr, err := ParsePublicHeader(r, protocol.PerspectiveServer)
 	if err != nil {
-		return qerr.Error(qerr.InvalidPacketHeader, err.Error())
+		utils.Errorf("error parsing packet from %s: %s", remoteAddr.String(), err.Error())
+		// drop this packet if we can't parse the Public Header
+		return
 	}
 	hdr.Raw = packet[:len(packet)-r.Len()]
 
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
+	if hdr.ResetFlag {
+		cr := c.conn.RemoteAddr()
+		// check if the remote address and the connection ID match
+		// otherwise this might be an attacker trying to inject a PUBLIC_RESET to kill the connection
+		if cr.Network() != remoteAddr.Network() || cr.String() != remoteAddr.String() || hdr.ConnectionID != c.connectionID {
+			utils.Infof("Received a spoofed Public Reset. Ignoring.")
+			return
+		}
+		pr, err := parsePublicReset(r)
+		if err != nil {
+			utils.Infof("Received a Public Reset for connection %x. An error occurred parsing the packet.")
+			return
+		}
+		utils.Infof("Received Public Reset, rejected packet number: %#x.", pr.rejectedPacketNumber)
+		c.session.closeRemote(qerr.Error(qerr.PublicReset, fmt.Sprintf("Received a Public Reset for packet number %#x", pr.rejectedPacketNumber)))
+		return
+	}
+
 	// ignore delayed / duplicated version negotiation packets
 	if c.versionNegotiated && hdr.VersionFlag {
-		return nil
+		return
 	}
 
 	// this is the first packet after the client sent a packet with the VersionFlag set
@@ -247,7 +262,10 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 
 	if hdr.VersionFlag {
 		// version negotiation packets have no payload
-		return c.handlePacketWithVersionFlag(hdr)
+		if err := c.handlePacketWithVersionFlag(hdr); err != nil {
+			c.session.Close(err)
+		}
+		return
 	}
 
 	c.session.handlePacket(&receivedPacket{
@@ -256,7 +274,6 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 		data:         packet[len(packet)-r.Len():],
 		rcvTime:      rcvTime,
 	})
-	return nil
 }
 
 func (c *client) handlePacketWithVersionFlag(hdr *PublicHeader) error {
