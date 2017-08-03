@@ -1,4 +1,4 @@
-package handshaketests
+package self_test
 
 import (
 	. "github.com/onsi/ginkgo"
@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestHandshakes(t *testing.T) {
+func TestSelf(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Handshake integration tests")
+	RunSpecs(t, "Self integration tests")
 }

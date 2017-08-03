@@ -1,4 +1,4 @@
-package handshaketests
+package self_test
 
 import (
 	"crypto/tls"
@@ -17,13 +17,14 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Handshake integration tets", func() {
+var _ = Describe("Handshake RTT tests", func() {
 	var (
 		proxy         *quicproxy.QuicProxy
 		server        quic.Listener
 		serverConfig  *quic.Config
 		testStartedAt time.Time
 	)
+
 	rtt := 400 * time.Millisecond
 
 	BeforeEach(func() {
