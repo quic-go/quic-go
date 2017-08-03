@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	_ "github.com/lucas-clemente/quic-clients" // download clients
-	"github.com/lucas-clemente/quic-go/integrationtests/proxy"
+	"github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	"github.com/lucas-clemente/quic-go/protocol"
 
 	. "github.com/onsi/ginkgo"
