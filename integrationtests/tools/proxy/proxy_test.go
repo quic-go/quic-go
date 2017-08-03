@@ -40,7 +40,7 @@ var _ = Describe("QUIC Proxy", func() {
 
 	Context("Proxy setup and teardown", func() {
 		It("sets up the UDPProxy", func() {
-			proxy, err := NewQuicProxy("localhost:0", Opts{RemoteAddr: serverAddr})
+			proxy, err := NewQuicProxy("localhost:0", protocol.VersionWhatever, Opts{RemoteAddr: serverAddr})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(proxy.clientDict).To(HaveLen(0))
 
@@ -53,7 +53,7 @@ var _ = Describe("QUIC Proxy", func() {
 		})
 
 		It("stops the UDPProxy", func() {
-			proxy, err := NewQuicProxy("localhost:0", Opts{RemoteAddr: serverAddr})
+			proxy, err := NewQuicProxy("localhost:0", protocol.VersionWhatever, Opts{RemoteAddr: serverAddr})
 			Expect(err).ToNot(HaveOccurred())
 			port := proxy.LocalPort()
 			err = proxy.Close()
@@ -71,7 +71,7 @@ var _ = Describe("QUIC Proxy", func() {
 		})
 
 		It("has the correct LocalAddr and LocalPort", func() {
-			proxy, err := NewQuicProxy("localhost:0", Opts{RemoteAddr: serverAddr})
+			proxy, err := NewQuicProxy("localhost:0", protocol.VersionWhatever, Opts{RemoteAddr: serverAddr})
 			Expect(err).ToNot(HaveOccurred())
 
 			Expect(proxy.LocalAddr().String()).To(Equal("127.0.0.1:" + strconv.Itoa(proxy.LocalPort())))
@@ -92,7 +92,7 @@ var _ = Describe("QUIC Proxy", func() {
 
 		startProxy := func(opts Opts) {
 			var err error
-			proxy, err = NewQuicProxy("localhost:0", opts)
+			proxy, err = NewQuicProxy("localhost:0", protocol.VersionWhatever, opts)
 			Expect(err).ToNot(HaveOccurred())
 			clientConn, err = net.DialUDP("udp", nil, proxy.LocalAddr().(*net.UDPAddr))
 			Expect(err).ToNot(HaveOccurred())

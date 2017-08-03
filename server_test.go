@@ -59,11 +59,12 @@ func (s *mockSession) closeRemote(e error) {
 func (s *mockSession) OpenStream() (Stream, error) {
 	return &stream{streamID: 1337}, nil
 }
-func (s *mockSession) AcceptStream() (Stream, error)   { panic("not implemented") }
-func (s *mockSession) OpenStreamSync() (Stream, error) { panic("not implemented") }
-func (s *mockSession) LocalAddr() net.Addr             { panic("not implemented") }
-func (s *mockSession) RemoteAddr() net.Addr            { panic("not implemented") }
-func (*mockSession) Context() context.Context          { panic("not implemented") }
+func (s *mockSession) AcceptStream() (Stream, error)    { panic("not implemented") }
+func (s *mockSession) OpenStreamSync() (Stream, error)  { panic("not implemented") }
+func (s *mockSession) LocalAddr() net.Addr              { panic("not implemented") }
+func (s *mockSession) RemoteAddr() net.Addr             { panic("not implemented") }
+func (*mockSession) Context() context.Context           { panic("not implemented") }
+func (*mockSession) GetVersion() protocol.VersionNumber { return protocol.VersionWhatever }
 
 var _ Session = &mockSession{}
 var _ NonFWSession = &mockSession{}

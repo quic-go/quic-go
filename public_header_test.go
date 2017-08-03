@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 	. "github.com/onsi/ginkgo"
@@ -52,7 +53,7 @@ var _ = Describe("Public Header", func() {
 	Context("when parsing", func() {
 		It("accepts a sample client header", func() {
 			b := bytes.NewReader([]byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x51, 0x30, 0x33, 0x34, 0x01})
-			hdr, err := ParsePublicHeader(b, protocol.PerspectiveClient)
+			hdr, err := ParsePublicHeader(b, protocol.PerspectiveClient, protocol.VersionUnknown)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.VersionFlag).To(BeTrue())
 			Expect(hdr.ResetFlag).To(BeFalse())
@@ -65,13 +66,13 @@ var _ = Describe("Public Header", func() {
 
 		It("does not accept truncated connection ID as a server", func() {
 			b := bytes.NewReader([]byte{0x00, 0x01})
-			_, err := ParsePublicHeader(b, protocol.PerspectiveClient)
+			_, err := ParsePublicHeader(b, protocol.PerspectiveClient, protocol.VersionWhatever)
 			Expect(err).To(MatchError(errReceivedTruncatedConnectionID))
 		})
 
 		It("accepts a truncated connection ID as a client", func() {
 			b := bytes.NewReader([]byte{0x00, 0x01})
-			hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer)
+			hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.TruncateConnectionID).To(BeTrue())
 			Expect(hdr.ConnectionID).To(BeZero())
@@ -80,13 +81,13 @@ var _ = Describe("Public Header", func() {
 
 		It("rejects 0 as a connection ID", func() {
 			b := bytes.NewReader([]byte{0x09, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x51, 0x30, 0x33, 0x30, 0x01})
-			_, err := ParsePublicHeader(b, protocol.PerspectiveClient)
+			_, err := ParsePublicHeader(b, protocol.PerspectiveClient, protocol.VersionUnknown)
 			Expect(err).To(MatchError(errInvalidConnectionID))
 		})
 
 		It("reads a PublicReset packet", func() {
 			b := bytes.NewReader([]byte{0xa, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8})
-			hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer)
+			hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer, protocol.VersionUnknown)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.ResetFlag).To(BeTrue())
 			Expect(hdr.ConnectionID).ToNot(BeZero())
@@ -94,7 +95,7 @@ var _ = Describe("Public Header", func() {
 
 		It("parses a public reset packet", func() {
 			b := bytes.NewReader([]byte{0xa, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08})
-			hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer)
+			hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer, protocol.VersionUnknown)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.ResetFlag).To(BeTrue())
 			Expect(hdr.VersionFlag).To(BeFalse())
@@ -105,12 +106,17 @@ var _ = Describe("Public Header", func() {
 			divNonce := []byte{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f}
 			Expect(divNonce).To(HaveLen(32))
 			b := bytes.NewReader(append(append([]byte{0x0c, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c}, divNonce...), 0x37))
-			hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer)
+			hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.ConnectionID).To(Not(BeZero()))
 			Expect(hdr.DiversificationNonce).To(Equal(divNonce))
-			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x37)))
 			Expect(b.Len()).To(BeZero())
+		})
+
+		It("returns an unknown version error when receiving a packet without a version for which the version is not given", func() {
+			b := bytes.NewReader([]byte{0x10, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0xef})
+			_, err := ParsePublicHeader(b, protocol.PerspectiveServer, protocol.VersionUnknown)
+			Expect(err).To(MatchError(errPacketWithUnknownVersion))
 		})
 
 		PIt("rejects diversification nonces sent by the client", func() {
@@ -118,7 +124,7 @@ var _ = Describe("Public Header", func() {
 				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1,
 				0x01,
 			})
-			_, err := ParsePublicHeader(b, protocol.PerspectiveClient)
+			_, err := ParsePublicHeader(b, protocol.PerspectiveClient, protocol.VersionWhatever)
 			Expect(err).To(MatchError("diversification nonces should only be sent by servers"))
 		})
 
@@ -131,7 +137,7 @@ var _ = Describe("Public Header", func() {
 
 			It("parses version negotiation packets sent by the server", func() {
 				b := bytes.NewReader(composeVersionNegotiation(0x1337, protocol.SupportedVersions))
-				hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer)
+				hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer, protocol.VersionUnknown)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(hdr.VersionFlag).To(BeTrue())
 				Expect(hdr.VersionNumber).To(BeZero()) // unitialized
@@ -141,7 +147,7 @@ var _ = Describe("Public Header", func() {
 
 			It("parses a version negotiation packet that contains 0 versions", func() {
 				b := bytes.NewReader([]byte{0x9, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c})
-				hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer)
+				hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer, protocol.VersionUnknown)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(hdr.VersionFlag).To(BeTrue())
 				Expect(hdr.VersionNumber).To(BeZero()) // unitialized
@@ -155,7 +161,7 @@ var _ = Describe("Public Header", func() {
 				data = appendVersion(data, protocol.SupportedVersions[0])
 				data = appendVersion(data, 99) // unsupported version
 				b := bytes.NewReader(data)
-				hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer)
+				hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer, protocol.VersionUnknown)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(hdr.VersionFlag).To(BeTrue())
 				Expect(hdr.SupportedVersions).To(Equal([]protocol.VersionNumber{1, protocol.SupportedVersions[0], 99}))
@@ -166,42 +172,98 @@ var _ = Describe("Public Header", func() {
 				data := composeVersionNegotiation(0x1337, protocol.SupportedVersions)
 				data = append(data, []byte{0x13, 0x37}...)
 				b := bytes.NewReader(data)
-				_, err := ParsePublicHeader(b, protocol.PerspectiveServer)
+				_, err := ParsePublicHeader(b, protocol.PerspectiveServer, protocol.VersionUnknown)
 				Expect(err).To(MatchError(qerr.InvalidVersionNegotiationPacket))
 			})
 		})
 
 		Context("Packet Number lengths", func() {
-			It("accepts 1-byte packet numbers", func() {
-				b := bytes.NewReader([]byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xde})
-				hdr, err := ParsePublicHeader(b, protocol.PerspectiveClient)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0xde)))
-				Expect(b.Len()).To(BeZero())
+			Context("in little endian encoding", func() {
+				version := protocol.Version37
+
+				BeforeEach(func() {
+					Expect(utils.GetByteOrder(version)).To(Equal(utils.LittleEndian))
+				})
+
+				It("accepts 1-byte packet numbers", func() {
+					b := bytes.NewReader([]byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xde})
+					hdr, err := ParsePublicHeader(b, protocol.PerspectiveClient, version)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0xde)))
+					Expect(hdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen1))
+					Expect(b.Len()).To(BeZero())
+				})
+
+				It("accepts 2-byte packet numbers", func() {
+					b := bytes.NewReader([]byte{0x18, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xde, 0xca})
+					hdr, err := ParsePublicHeader(b, protocol.PerspectiveClient, version)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0xcade)))
+					Expect(hdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen2))
+					Expect(b.Len()).To(BeZero())
+				})
+
+				It("accepts 4-byte packet numbers", func() {
+					b := bytes.NewReader([]byte{0x28, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xad, 0xfb, 0xca, 0xde})
+					hdr, err := ParsePublicHeader(b, protocol.PerspectiveClient, version)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0xdecafbad)))
+					Expect(hdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
+					Expect(b.Len()).To(BeZero())
+				})
+
+				It("accepts 6-byte packet numbers", func() {
+					b := bytes.NewReader([]byte{0x38, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x23, 0x42, 0xad, 0xfb, 0xca, 0xde})
+					hdr, err := ParsePublicHeader(b, protocol.PerspectiveClient, version)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0xdecafbad4223)))
+					Expect(hdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen6))
+					Expect(b.Len()).To(BeZero())
+				})
 			})
 
-			It("accepts 2-byte packet numbers", func() {
-				b := bytes.NewReader([]byte{0x18, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xde, 0xca})
-				hdr, err := ParsePublicHeader(b, protocol.PerspectiveClient)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0xcade)))
-				Expect(b.Len()).To(BeZero())
-			})
+			Context("in big endian encoding", func() {
+				version := protocol.Version39
 
-			It("accepts 4-byte packet numbers", func() {
-				b := bytes.NewReader([]byte{0x28, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xad, 0xfb, 0xca, 0xde})
-				hdr, err := ParsePublicHeader(b, protocol.PerspectiveClient)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0xdecafbad)))
-				Expect(b.Len()).To(BeZero())
-			})
+				BeforeEach(func() {
+					Expect(utils.GetByteOrder(version)).To(Equal(utils.BigEndian))
+				})
 
-			It("accepts 6-byte packet numbers", func() {
-				b := bytes.NewReader([]byte{0x38, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x23, 0x42, 0xad, 0xfb, 0xca, 0xde})
-				hdr, err := ParsePublicHeader(b, protocol.PerspectiveClient)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0xdecafbad4223)))
-				Expect(b.Len()).To(BeZero())
+				It("accepts 1-byte packet numbers", func() {
+					b := bytes.NewReader([]byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xde})
+					hdr, err := ParsePublicHeader(b, protocol.PerspectiveClient, version)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0xde)))
+					Expect(hdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen1))
+					Expect(b.Len()).To(BeZero())
+				})
+
+				It("accepts 2-byte packet numbers", func() {
+					b := bytes.NewReader([]byte{0x18, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xde, 0xca})
+					hdr, err := ParsePublicHeader(b, protocol.PerspectiveClient, version)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0xdeca)))
+					Expect(hdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen2))
+					Expect(b.Len()).To(BeZero())
+				})
+
+				It("accepts 4-byte packet numbers", func() {
+					b := bytes.NewReader([]byte{0x28, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xad, 0xfb, 0xca, 0xde})
+					hdr, err := ParsePublicHeader(b, protocol.PerspectiveClient, version)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0xadfbcade)))
+					Expect(hdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
+					Expect(b.Len()).To(BeZero())
+				})
+
+				It("accepts 6-byte packet numbers", func() {
+					b := bytes.NewReader([]byte{0x38, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x23, 0x42, 0xad, 0xfb, 0xca, 0xde})
+					hdr, err := ParsePublicHeader(b, protocol.PerspectiveClient, version)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x2342adfbcade)))
+					Expect(hdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen6))
+					Expect(b.Len()).To(BeZero())
+				})
 			})
 		})
 	})
@@ -286,11 +348,8 @@ var _ = Describe("Public Header", func() {
 		It("throws an error if both Reset Flag and Version Flag are set", func() {
 			b := &bytes.Buffer{}
 			hdr := PublicHeader{
-				VersionFlag:     true,
-				ResetFlag:       true,
-				ConnectionID:    0x4cfa9f9b668619f6,
-				PacketNumber:    2,
-				PacketNumberLen: protocol.PacketNumberLen6,
+				VersionFlag: true,
+				ResetFlag:   true,
 			}
 			err := hdr.Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
 			Expect(err).To(MatchError(errResetAndVersionFlagSet))
@@ -470,52 +529,116 @@ var _ = Describe("Public Header", func() {
 				Expect(err).To(MatchError(errPacketNumberLenNotSet))
 			})
 
-			It("writes a header with a 1-byte packet number", func() {
-				b := &bytes.Buffer{}
-				hdr := PublicHeader{
-					ConnectionID:    0x4cfa9f9b668619f6,
-					PacketNumber:    0xDECAFBAD,
-					PacketNumberLen: protocol.PacketNumberLen1,
-				}
-				err := hdr.Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(b.Bytes()).To(Equal([]byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xAD}))
+			Context("in little endian", func() {
+				version := protocol.Version37
+
+				BeforeEach(func() {
+					Expect(utils.GetByteOrder(version)).To(Equal(utils.LittleEndian))
+				})
+
+				It("writes a header with a 1-byte packet number", func() {
+					b := &bytes.Buffer{}
+					hdr := PublicHeader{
+						ConnectionID:    0x4cfa9f9b668619f6,
+						PacketNumber:    0xDECAFBAD,
+						PacketNumberLen: protocol.PacketNumberLen1,
+					}
+					err := hdr.Write(b, version, protocol.PerspectiveServer)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(b.Bytes()).To(Equal([]byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xAD}))
+				})
+
+				It("writes a header with a 2-byte packet number", func() {
+					b := &bytes.Buffer{}
+					hdr := PublicHeader{
+						ConnectionID:    0x4cfa9f9b668619f6,
+						PacketNumber:    0xDECAFBAD,
+						PacketNumberLen: protocol.PacketNumberLen2,
+					}
+					err := hdr.Write(b, version, protocol.PerspectiveServer)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(b.Bytes()).To(Equal([]byte{0x18, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xad, 0xfb}))
+				})
+
+				It("writes a header with a 4-byte packet number", func() {
+					b := &bytes.Buffer{}
+					hdr := PublicHeader{
+						ConnectionID:    0x4cfa9f9b668619f6,
+						PacketNumber:    0x13DECAFBAD,
+						PacketNumberLen: protocol.PacketNumberLen4,
+					}
+					err := hdr.Write(b, version, protocol.PerspectiveServer)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(b.Bytes()).To(Equal([]byte{0x28, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xAD, 0xfb, 0xca, 0xde}))
+				})
+
+				It("writes a header with a 6-byte packet number", func() {
+					b := &bytes.Buffer{}
+					hdr := PublicHeader{
+						ConnectionID:    0x4cfa9f9b668619f6,
+						PacketNumber:    0xBE1337DECAFBAD,
+						PacketNumberLen: protocol.PacketNumberLen6,
+					}
+					err := hdr.Write(b, version, protocol.PerspectiveServer)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(b.Bytes()).To(Equal([]byte{0x38, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xad, 0xfb, 0xca, 0xde, 0x37, 0x13}))
+				})
 			})
 
-			It("writes a header with a 2-byte packet number", func() {
-				b := &bytes.Buffer{}
-				hdr := PublicHeader{
-					ConnectionID:    0x4cfa9f9b668619f6,
-					PacketNumber:    0xDECAFBAD,
-					PacketNumberLen: protocol.PacketNumberLen2,
-				}
-				err := hdr.Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(b.Bytes()).To(Equal([]byte{0x18, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xAD, 0xFB}))
-			})
+			Context("in big endian", func() {
+				version := protocol.Version39
 
-			It("writes a header with a 4-byte packet number", func() {
-				b := &bytes.Buffer{}
-				hdr := PublicHeader{
-					ConnectionID:    0x4cfa9f9b668619f6,
-					PacketNumber:    0x13DECAFBAD,
-					PacketNumberLen: protocol.PacketNumberLen4,
-				}
-				err := hdr.Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(b.Bytes()).To(Equal([]byte{0x28, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xAD, 0xFB, 0xCA, 0xDE}))
-			})
+				BeforeEach(func() {
+					Expect(utils.GetByteOrder(version)).To(Equal(utils.BigEndian))
+				})
 
-			It("writes a header with a 6-byte packet number", func() {
-				b := &bytes.Buffer{}
-				hdr := PublicHeader{
-					ConnectionID:    0x4cfa9f9b668619f6,
-					PacketNumber:    0xBE1337DECAFBAD,
-					PacketNumberLen: protocol.PacketNumberLen6,
-				}
-				err := hdr.Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(b.Bytes()).To(Equal([]byte{0x38, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xAD, 0xFB, 0xCA, 0xDE, 0x37, 0x13}))
+				It("writes a header with a 1-byte packet number", func() {
+					b := &bytes.Buffer{}
+					hdr := PublicHeader{
+						ConnectionID:    0x4cfa9f9b668619f6,
+						PacketNumber:    0xdecafbad,
+						PacketNumberLen: protocol.PacketNumberLen1,
+					}
+					err := hdr.Write(b, version, protocol.PerspectiveServer)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(b.Bytes()).To(Equal([]byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xad}))
+				})
+
+				It("writes a header with a 2-byte packet number", func() {
+					b := &bytes.Buffer{}
+					hdr := PublicHeader{
+						ConnectionID:    0x4cfa9f9b668619f6,
+						PacketNumber:    0xdecafbad,
+						PacketNumberLen: protocol.PacketNumberLen2,
+					}
+					err := hdr.Write(b, version, protocol.PerspectiveServer)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(b.Bytes()).To(Equal([]byte{0x18, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xfb, 0xad}))
+				})
+
+				It("writes a header with a 4-byte packet number", func() {
+					b := &bytes.Buffer{}
+					hdr := PublicHeader{
+						ConnectionID:    0x4cfa9f9b668619f6,
+						PacketNumber:    0x13decafbad,
+						PacketNumberLen: protocol.PacketNumberLen4,
+					}
+					err := hdr.Write(b, version, protocol.PerspectiveServer)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(b.Bytes()).To(Equal([]byte{0x28, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0xde, 0xca, 0xfb, 0xad}))
+				})
+
+				It("writes a header with a 6-byte packet number", func() {
+					b := &bytes.Buffer{}
+					hdr := PublicHeader{
+						ConnectionID:    0x4cfa9f9b668619f6,
+						PacketNumber:    0xbe1337decafbad,
+						PacketNumberLen: protocol.PacketNumberLen6,
+					}
+					err := hdr.Write(b, version, protocol.PerspectiveServer)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(b.Bytes()).To(Equal([]byte{0x38, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x13, 0x37, 0xde, 0xca, 0xfb, 0xad}))
+				})
 			})
 		})
 	})

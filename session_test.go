@@ -655,6 +655,11 @@ var _ = Describe("Session", func() {
 		close(done)
 	})
 
+	It("tells its versions", func() {
+		sess.version = 4242
+		Expect(sess.GetVersion()).To(Equal(protocol.VersionNumber(4242)))
+	})
+
 	Context("waiting until the handshake completes", func() {
 		It("waits until the handshake is complete", func(done Done) {
 			go sess.run()

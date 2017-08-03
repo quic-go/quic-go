@@ -16,6 +16,8 @@ var (
 	errReceivedTruncatedConnectionID     = qerr.Error(qerr.InvalidPacketHeader, "receiving packets with truncated ConnectionID is not supported")
 	errInvalidConnectionID               = qerr.Error(qerr.InvalidPacketHeader, "connection ID cannot be 0")
 	errGetLengthNotForVersionNegotiation = errors.New("PublicHeader: GetLength cannot be called for VersionNegotiation packets")
+	// this can happen when the server is restarted. The client will send a packet without a version number
+	errPacketWithUnknownVersion = errors.New("PublicHeader: Received a packet without version number, that we don't know the version for")
 )
 
 // The PublicHeader of a QUIC packet. Warning: This struct should not be considered stable and will change soon.
@@ -74,6 +76,7 @@ func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pe
 	b.WriteByte(publicFlagByte)
 
 	if !h.TruncateConnectionID {
+		// always read the connection ID in little endian
 		utils.LittleEndian.WriteUint64(b, uint64(h.ConnectionID))
 	}
 
@@ -98,11 +101,11 @@ func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pe
 	case protocol.PacketNumberLen1:
 		b.WriteByte(uint8(h.PacketNumber))
 	case protocol.PacketNumberLen2:
-		utils.LittleEndian.WriteUint16(b, uint16(h.PacketNumber))
+		utils.GetByteOrder(version).WriteUint16(b, uint16(h.PacketNumber))
 	case protocol.PacketNumberLen4:
-		utils.LittleEndian.WriteUint32(b, uint32(h.PacketNumber))
+		utils.GetByteOrder(version).WriteUint32(b, uint32(h.PacketNumber))
 	case protocol.PacketNumberLen6:
-		utils.LittleEndian.WriteUint48(b, uint64(h.PacketNumber)&(1<<48-1))
+		utils.GetByteOrder(version).WriteUint48(b, uint64(h.PacketNumber)&(1<<48-1))
 	default:
 		return errPacketNumberLenNotSet
 	}
@@ -142,7 +145,7 @@ func PeekConnectionID(b *bytes.Reader, packetSentBy protocol.Perspective) (proto
 // ParsePublicHeader parses a QUIC packet's public header.
 // The packetSentBy is the perspective of the peer that sent this PublicHeader, i.e. if we're the server, packetSentBy should be PerspectiveClient.
 // Warning: This API should not be considered stable and will change soon.
-func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*PublicHeader, error) {
+func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective, version protocol.VersionNumber) (*PublicHeader, error) {
 	header := &PublicHeader{}
 
 	// First byte
@@ -150,8 +153,11 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Pub
 	if err != nil {
 		return nil, err
 	}
-	header.VersionFlag = publicFlagByte&0x01 > 0
 	header.ResetFlag = publicFlagByte&0x02 > 0
+	header.VersionFlag = publicFlagByte&0x01 > 0
+	if version == protocol.VersionUnknown && !(header.VersionFlag || header.ResetFlag) {
+		return nil, errPacketWithUnknownVersion
+	}
 
 	// TODO: activate this check once Chrome sends the correct value
 	// see https://github.com/lucas-clemente/quic-go/issues/232
@@ -180,6 +186,7 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Pub
 	// Connection ID
 	if !header.TruncateConnectionID {
 		var connID uint64
+		// always write the connection ID in little endian
 		connID, err = utils.LittleEndian.ReadUint64(b)
 		if err != nil {
 			return nil, err
@@ -228,11 +235,12 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Pub
 			return nil, err
 		}
 		header.VersionNumber = protocol.VersionTagToNumber(versionTag)
+		version = header.VersionNumber
 	}
 
 	// Packet number
 	if header.hasPacketNumber(packetSentBy) {
-		packetNumber, err := utils.LittleEndian.ReadUintN(b, uint8(header.PacketNumberLen))
+		packetNumber, err := utils.GetByteOrder(version).ReadUintN(b, uint8(header.PacketNumberLen))
 		if err != nil {
 			return nil, err
 		}

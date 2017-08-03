@@ -9,8 +9,10 @@ const (
 	Version36
 	Version37
 	Version38
+	Version39
 	VersionWhatever    VersionNumber = 0 // for when the version doesn't matter
 	VersionUnsupported VersionNumber = -1
+	VersionUnknown     VersionNumber = -2
 )
 
 // SupportedVersions lists the versions that the server supports
