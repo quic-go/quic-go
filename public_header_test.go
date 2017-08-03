@@ -11,6 +11,44 @@ import (
 )
 
 var _ = Describe("Public Header", func() {
+	Context("parsing the connection ID", func() {
+		It("does not accept truncated connection ID as a server", func() {
+			b := bytes.NewReader([]byte{0x00, 0x01})
+			_, err := PeekConnectionID(b, protocol.PerspectiveClient)
+			Expect(err).To(MatchError(errReceivedTruncatedConnectionID))
+		})
+
+		It("gets the connection ID", func() {
+			b := bytes.NewReader([]byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x51, 0x30, 0x33, 0x34, 0x01})
+			len := b.Len()
+			connID, err := PeekConnectionID(b, protocol.PerspectiveClient)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(connID).To(Equal(protocol.ConnectionID(0x4cfa9f9b668619f6)))
+			Expect(b.Len()).To(Equal(len))
+		})
+
+		It("errors if the Public Header is too short", func() {
+			b := bytes.NewReader([]byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b})
+			_, err := PeekConnectionID(b, protocol.PerspectiveClient)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("errors if the Public Header is empty", func() {
+			b := bytes.NewReader([]byte{})
+			_, err := PeekConnectionID(b, protocol.PerspectiveClient)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("accepts a truncated connection ID as a client", func() {
+			b := bytes.NewReader([]byte{0x00, 0x01})
+			len := b.Len()
+			connID, err := PeekConnectionID(b, protocol.PerspectiveServer)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(connID).To(BeZero())
+			Expect(b.Len()).To(Equal(len))
+		})
+	})
+
 	Context("when parsing", func() {
 		It("accepts a sample client header", func() {
 			b := bytes.NewReader([]byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x51, 0x30, 0x33, 0x34, 0x01})

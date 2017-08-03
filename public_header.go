@@ -110,6 +110,35 @@ func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pe
 	return nil
 }
 
+// PeekConnectionID parses the connection ID from a QUIC packet's public header.
+// If no error occurs, it restores the read position in the bytes.Reader.
+func PeekConnectionID(b *bytes.Reader, packetSentBy protocol.Perspective) (protocol.ConnectionID, error) {
+	var connectionID protocol.ConnectionID
+	publicFlagByte, err := b.ReadByte()
+	if err != nil {
+		return 0, err
+	}
+	// unread the public flag byte
+	defer b.UnreadByte()
+
+	truncateConnectionID := publicFlagByte&0x08 == 0
+	if truncateConnectionID && packetSentBy == protocol.PerspectiveClient {
+		return 0, errReceivedTruncatedConnectionID
+	}
+	if !truncateConnectionID {
+		connID, err := utils.LittleEndian.ReadUint64(b)
+		if err != nil {
+			return 0, err
+		}
+		connectionID = protocol.ConnectionID(connID)
+		// unread the connection ID
+		for i := 0; i < 8; i++ {
+			b.UnreadByte()
+		}
+	}
+	return connectionID, nil
+}
+
 // ParsePublicHeader parses a QUIC packet's public header.
 // The packetSentBy is the perspective of the peer that sent this PublicHeader, i.e. if we're the server, packetSentBy should be PerspectiveClient.
 // Warning: This API should not be considered stable and will change soon.
