@@ -14,7 +14,7 @@ func init() {
 		panic("Failed to get current frame")
 	}
 
-	certPath = path.Join(path.Dir(path.Dir(filename)), "example")
+	certPath = path.Join(path.Dir(path.Dir(path.Dir(filename))), "example")
 }
 
 // GetCertificatePaths returns the paths to 'fullchain.pem' and 'privkey.pem' for the
