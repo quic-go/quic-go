@@ -4,6 +4,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	_ "github.com/lucas-clemente/quic-go/integrationtests/tools/testlog"
+
 	"testing"
 )
 

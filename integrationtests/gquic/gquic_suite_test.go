@@ -1,4 +1,4 @@
-package integrationtests
+package gquic_test
 
 import (
 	"fmt"
@@ -30,7 +30,7 @@ var (
 
 func TestIntegration(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Integration Tests Suite")
+	RunSpecs(t, "GQuic Tests Suite")
 }
 
 var _ = JustBeforeEach(testserver.StartQuicServer)
@@ -42,8 +42,8 @@ func init() {
 	if !ok {
 		panic("Failed to get current path")
 	}
-	clientPath = filepath.Join(thisfile, fmt.Sprintf("../../../quic-clients/client-%s-debug", runtime.GOOS))
-	serverPath = filepath.Join(thisfile, fmt.Sprintf("../../../quic-clients/server-%s-debug", runtime.GOOS))
+	clientPath = filepath.Join(thisfile, fmt.Sprintf("../../../../quic-clients/client-%s-debug", runtime.GOOS))
+	serverPath = filepath.Join(thisfile, fmt.Sprintf("../../../../quic-clients/server-%s-debug", runtime.GOOS))
 
 	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
 		defer GinkgoRecover()

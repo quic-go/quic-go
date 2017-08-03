@@ -1,4 +1,4 @@
-package integrationtests
+package gquic_test
 
 import (
 	"crypto/rand"
