@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/h2quic"
+	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -46,7 +47,7 @@ var _ = Describe("Client tests", func() {
 			})
 
 			It("downloads a hello", func() {
-				resp, err := client.Get("https://quic.clemente.io:" + port + "/hello")
+				resp, err := client.Get("https://quic.clemente.io:" + testserver.Port() + "/hello")
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
 				body, err := ioutil.ReadAll(gbytes.TimeoutReader(resp.Body, 3*time.Second))
@@ -56,7 +57,7 @@ var _ = Describe("Client tests", func() {
 
 			It("downloads a small file", func() {
 				dataMan.GenerateData(dataLen)
-				resp, err := client.Get("https://quic.clemente.io:" + port + "/data")
+				resp, err := client.Get("https://quic.clemente.io:" + testserver.Port() + "/data")
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
 				body, err := ioutil.ReadAll(gbytes.TimeoutReader(resp.Body, 5*time.Second))
@@ -66,7 +67,7 @@ var _ = Describe("Client tests", func() {
 
 			It("downloads a large file", func() {
 				dataMan.GenerateData(dataLongLen)
-				resp, err := client.Get("https://quic.clemente.io:" + port + "/data")
+				resp, err := client.Get("https://quic.clemente.io:" + testserver.Port() + "/data")
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
 				body, err := ioutil.ReadAll(gbytes.TimeoutReader(resp.Body, 20*time.Second))
@@ -77,7 +78,7 @@ var _ = Describe("Client tests", func() {
 			It("uploads a file", func() {
 				dataMan.GenerateData(dataLen)
 				data := bytes.NewReader(dataMan.GetData())
-				resp, err := client.Post("https://quic.clemente.io:"+port+"/echo", "text/plain", data)
+				resp, err := client.Post("https://quic.clemente.io:"+testserver.Port()+"/echo", "text/plain", data)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
 				body, err := ioutil.ReadAll(gbytes.TimeoutReader(resp.Body, 5*time.Second))

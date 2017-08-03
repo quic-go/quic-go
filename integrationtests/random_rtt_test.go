@@ -10,6 +10,7 @@ import (
 
 	_ "github.com/lucas-clemente/quic-clients" // download clients
 	"github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
+	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/protocol"
 
 	. "github.com/onsi/ginkgo"
@@ -60,7 +61,7 @@ var _ = Describe("Random RTT", func() {
 		rand.Seed(time.Now().UnixNano())
 		var err error
 		proxy, err = quicproxy.NewQuicProxy("localhost:", quicproxy.Opts{
-			RemoteAddr: "localhost:" + port,
+			RemoteAddr: "localhost:" + testserver.Port(),
 			DelayPacket: func(_ quicproxy.Direction, _ protocol.PacketNumber) time.Duration {
 				return getRandomDuration(minRtt, maxRtt)
 			},

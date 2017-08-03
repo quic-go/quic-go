@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/protocol"
 
 	_ "github.com/lucas-clemente/quic-clients" // download clients
@@ -31,7 +32,7 @@ var _ = Describe("Integration tests", func() {
 					clientPath,
 					"--quic-version="+strconv.Itoa(int(version)),
 					"--host=127.0.0.1",
-					"--port="+port,
+					"--port="+testserver.Port(),
 					"https://quic.clemente.io/hello",
 				)
 				session, err := Start(command, nil, GinkgoWriter)
@@ -47,7 +48,7 @@ var _ = Describe("Integration tests", func() {
 					clientPath,
 					"--quic-version="+strconv.Itoa(int(version)),
 					"--host=127.0.0.1",
-					"--port="+port,
+					"--port="+testserver.Port(),
 					"--body=foo",
 					"https://quic.clemente.io/echo",
 				)
@@ -64,7 +65,7 @@ var _ = Describe("Integration tests", func() {
 					clientPath,
 					"--quic-version="+strconv.Itoa(int(version)),
 					"--host=127.0.0.1",
-					"--port="+port,
+					"--port="+testserver.Port(),
 					"https://quic.clemente.io/data",
 				)
 				session, err := Start(command, nil, GinkgoWriter)
@@ -85,7 +86,7 @@ var _ = Describe("Integration tests", func() {
 							clientPath,
 							"--quic-version="+strconv.Itoa(int(version)),
 							"--host=127.0.0.1",
-							"--port="+port,
+							"--port="+testserver.Port(),
 							"https://quic.clemente.io/data",
 						)
 						session, err := Start(command, nil, GinkgoWriter)

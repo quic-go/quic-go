@@ -8,6 +8,7 @@ import (
 
 	_ "github.com/lucas-clemente/quic-clients" // download clients
 	"github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
+	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/protocol"
 
 	. "github.com/onsi/ginkgo"
@@ -25,7 +26,7 @@ var _ = Describe("Drop Proxy", func() {
 	runDropTest := func(dropCallback quicproxy.DropCallback, version protocol.VersionNumber) {
 		var err error
 		proxy, err = quicproxy.NewQuicProxy("localhost:0", quicproxy.Opts{
-			RemoteAddr: "localhost:" + port,
+			RemoteAddr: "localhost:" + testserver.Port(),
 			DropPacket: dropCallback,
 		})
 		Expect(err).ToNot(HaveOccurred())

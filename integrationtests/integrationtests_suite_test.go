@@ -4,17 +4,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"path/filepath"
 	"runtime"
 
-	"strconv"
-
-	"github.com/lucas-clemente/quic-go/h2quic"
-	"github.com/lucas-clemente/quic-go/internal/testdata"
-
 	_ "github.com/lucas-clemente/quic-go/integrationtests/tools/testlog"
+	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -28,9 +23,7 @@ const (
 )
 
 var (
-	server     *h2quic.Server
 	dataMan    dataManager
-	port       string
 	clientPath string
 	serverPath string
 )
@@ -40,23 +33,17 @@ func TestIntegration(t *testing.T) {
 	RunSpecs(t, "Integration Tests Suite")
 }
 
-var _ = BeforeSuite(setupHTTPHandlers)
+var _ = JustBeforeEach(testserver.StartQuicServer)
 
-var _ = BeforeEach(func() {
+var _ = AfterEach(testserver.StopQuicServer)
+
+func init() {
 	_, thisfile, _, ok := runtime.Caller(0)
 	if !ok {
-		Fail("Failed to get current path")
+		panic("Failed to get current path")
 	}
 	clientPath = filepath.Join(thisfile, fmt.Sprintf("../../../quic-clients/client-%s-debug", runtime.GOOS))
 	serverPath = filepath.Join(thisfile, fmt.Sprintf("../../../quic-clients/server-%s-debug", runtime.GOOS))
-})
-
-var _ = JustBeforeEach(startQuicServer)
-
-var _ = AfterEach(stopQuicServer)
-
-func setupHTTPHandlers() {
-	defer GinkgoRecover()
 
 	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
 		defer GinkgoRecover()
@@ -79,28 +66,4 @@ func setupHTTPHandlers() {
 		_, err = w.Write(body)
 		Expect(err).NotTo(HaveOccurred())
 	})
-
-}
-
-func startQuicServer() {
-	server = &h2quic.Server{
-		Server: &http.Server{
-			TLSConfig: testdata.GetTLSConfig(),
-		},
-	}
-
-	addr, err := net.ResolveUDPAddr("udp", "0.0.0.0:0")
-	Expect(err).NotTo(HaveOccurred())
-	conn, err := net.ListenUDP("udp", addr)
-	Expect(err).NotTo(HaveOccurred())
-	port = strconv.Itoa(conn.LocalAddr().(*net.UDPAddr).Port)
-
-	go func() {
-		defer GinkgoRecover()
-		server.Serve(conn)
-	}()
-}
-
-func stopQuicServer() {
-	Expect(server.Close()).NotTo(HaveOccurred())
 }

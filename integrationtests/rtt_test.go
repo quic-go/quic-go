@@ -9,6 +9,7 @@ import (
 
 	_ "github.com/lucas-clemente/quic-clients" // download clients
 	"github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
+	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/protocol"
 
 	. "github.com/onsi/ginkgo"
@@ -26,7 +27,7 @@ var _ = Describe("non-zero RTT", func() {
 	runRTTTest := func(rtt time.Duration, version protocol.VersionNumber) {
 		var err error
 		proxy, err = quicproxy.NewQuicProxy("localhost:", quicproxy.Opts{
-			RemoteAddr: "localhost:" + port,
+			RemoteAddr: "localhost:" + testserver.Port(),
 			DelayPacket: func(_ quicproxy.Direction, _ protocol.PacketNumber) time.Duration {
 				return rtt / 2
 			},
