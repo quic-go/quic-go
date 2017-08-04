@@ -13,7 +13,8 @@ import (
 type StopWaitingFrame struct {
 	LeastUnacked    protocol.PacketNumber
 	PacketNumberLen protocol.PacketNumberLen
-	PacketNumber    protocol.PacketNumber
+	// PacketNumber is the packet number of the packet that this StopWaitingFrame will be sent with
+	PacketNumber protocol.PacketNumber
 }
 
 var (
@@ -23,34 +24,28 @@ var (
 )
 
 func (f *StopWaitingFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
-	// packetNumber is the packet number of the packet that this StopWaitingFrame will be sent with
-	typeByte := uint8(0x06)
-	b.WriteByte(typeByte)
-
 	// make sure the PacketNumber was set
 	if f.PacketNumber == protocol.PacketNumber(0) {
 		return errPacketNumberNotSet
 	}
-
 	if f.LeastUnacked > f.PacketNumber {
 		return errLeastUnackedHigherThanPacketNumber
 	}
 
+	b.WriteByte(0x06)
 	leastUnackedDelta := uint64(f.PacketNumber - f.LeastUnacked)
-
 	switch f.PacketNumberLen {
 	case protocol.PacketNumberLen1:
 		b.WriteByte(uint8(leastUnackedDelta))
 	case protocol.PacketNumberLen2:
-		utils.LittleEndian.WriteUint16(b, uint16(leastUnackedDelta))
+		utils.GetByteOrder(version).WriteUint16(b, uint16(leastUnackedDelta))
 	case protocol.PacketNumberLen4:
-		utils.LittleEndian.WriteUint32(b, uint32(leastUnackedDelta))
+		utils.GetByteOrder(version).WriteUint32(b, uint32(leastUnackedDelta))
 	case protocol.PacketNumberLen6:
-		utils.LittleEndian.WriteUint48(b, leastUnackedDelta&(1<<48-1))
+		utils.GetByteOrder(version).WriteUint48(b, leastUnackedDelta&(1<<48-1))
 	default:
 		return errPacketNumberLenNotSet
 	}
-
 	return nil
 }
 
@@ -62,7 +57,6 @@ func (f *StopWaitingFrame) MinLength(version protocol.VersionNumber) (protocol.B
 		return 0, errPacketNumberLenNotSet
 	}
 	minLength += protocol.ByteCount(f.PacketNumberLen)
-
 	return minLength, nil
 }
 
@@ -71,21 +65,17 @@ func ParseStopWaitingFrame(r *bytes.Reader, packetNumber protocol.PacketNumber, 
 	frame := &StopWaitingFrame{}
 
 	// read the TypeByte
-	_, err := r.ReadByte()
-	if err != nil {
+	if _, err := r.ReadByte(); err != nil {
 		return nil, err
 	}
 
-	leastUnackedDelta, err := utils.LittleEndian.ReadUintN(r, uint8(packetNumberLen))
+	leastUnackedDelta, err := utils.GetByteOrder(version).ReadUintN(r, uint8(packetNumberLen))
 	if err != nil {
 		return nil, err
 	}
-
 	if leastUnackedDelta >= uint64(packetNumber) {
 		return nil, qerr.Error(qerr.InvalidStopWaitingData, "invalid LeastUnackedDelta")
 	}
-
 	frame.LeastUnacked = protocol.PacketNumber(uint64(packetNumber) - leastUnackedDelta)
-
 	return frame, nil
 }

@@ -35,19 +35,19 @@ func ParseStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*StreamF
 
 	frame.FinBit = typeByte&0x40 > 0
 	frame.DataLenPresent = typeByte&0x20 > 0
-	offsetLen := typeByte & 0x1C >> 2
+	offsetLen := typeByte & 0x1c >> 2
 	if offsetLen != 0 {
 		offsetLen++
 	}
-	streamIDLen := typeByte&0x03 + 1
+	streamIDLen := typeByte&0x3 + 1
 
-	sid, err := utils.LittleEndian.ReadUintN(r, streamIDLen)
+	sid, err := utils.GetByteOrder(version).ReadUintN(r, streamIDLen)
 	if err != nil {
 		return nil, err
 	}
 	frame.StreamID = protocol.StreamID(sid)
 
-	offset, err := utils.LittleEndian.ReadUintN(r, offsetLen)
+	offset, err := utils.GetByteOrder(version).ReadUintN(r, offsetLen)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func ParseStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*StreamF
 
 	var dataLen uint16
 	if frame.DataLenPresent {
-		dataLen, err = utils.LittleEndian.ReadUint16(r)
+		dataLen, err = utils.GetByteOrder(version).ReadUint16(r)
 		if err != nil {
 			return nil, err
 		}
@@ -79,11 +79,9 @@ func ParseStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*StreamF
 	if frame.Offset+frame.DataLen() < frame.Offset {
 		return nil, qerr.Error(qerr.InvalidStreamData, "data overflows maximum offset")
 	}
-
 	if !frame.FinBit && frame.DataLen() == 0 {
 		return nil, qerr.EmptyStreamFrameNoFin
 	}
-
 	return frame, nil
 }
 
@@ -94,17 +92,14 @@ func (f *StreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 	}
 
 	typeByte := uint8(0x80) // sets the leftmost bit to 1
-
 	if f.FinBit {
 		typeByte ^= 0x40
 	}
-
 	if f.DataLenPresent {
 		typeByte ^= 0x20
 	}
 
 	offsetLength := f.getOffsetLength()
-
 	if offsetLength > 0 {
 		typeByte ^= (uint8(offsetLength) - 1) << 2
 	}
@@ -118,11 +113,11 @@ func (f *StreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 	case 1:
 		b.WriteByte(uint8(f.StreamID))
 	case 2:
-		utils.LittleEndian.WriteUint16(b, uint16(f.StreamID))
+		utils.GetByteOrder(version).WriteUint16(b, uint16(f.StreamID))
 	case 3:
-		utils.LittleEndian.WriteUint24(b, uint32(f.StreamID))
+		utils.GetByteOrder(version).WriteUint24(b, uint32(f.StreamID))
 	case 4:
-		utils.LittleEndian.WriteUint32(b, uint32(f.StreamID))
+		utils.GetByteOrder(version).WriteUint32(b, uint32(f.StreamID))
 	default:
 		return errInvalidStreamIDLen
 	}
@@ -130,29 +125,28 @@ func (f *StreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 	switch offsetLength {
 	case 0:
 	case 2:
-		utils.LittleEndian.WriteUint16(b, uint16(f.Offset))
+		utils.GetByteOrder(version).WriteUint16(b, uint16(f.Offset))
 	case 3:
-		utils.LittleEndian.WriteUint24(b, uint32(f.Offset))
+		utils.GetByteOrder(version).WriteUint24(b, uint32(f.Offset))
 	case 4:
-		utils.LittleEndian.WriteUint32(b, uint32(f.Offset))
+		utils.GetByteOrder(version).WriteUint32(b, uint32(f.Offset))
 	case 5:
-		utils.LittleEndian.WriteUint40(b, uint64(f.Offset))
+		utils.GetByteOrder(version).WriteUint40(b, uint64(f.Offset))
 	case 6:
-		utils.LittleEndian.WriteUint48(b, uint64(f.Offset))
+		utils.GetByteOrder(version).WriteUint48(b, uint64(f.Offset))
 	case 7:
-		utils.LittleEndian.WriteUint56(b, uint64(f.Offset))
+		utils.GetByteOrder(version).WriteUint56(b, uint64(f.Offset))
 	case 8:
-		utils.LittleEndian.WriteUint64(b, uint64(f.Offset))
+		utils.GetByteOrder(version).WriteUint64(b, uint64(f.Offset))
 	default:
 		return errInvalidOffsetLen
 	}
 
 	if f.DataLenPresent {
-		utils.LittleEndian.WriteUint16(b, uint16(len(f.Data)))
+		utils.GetByteOrder(version).WriteUint16(b, uint16(len(f.Data)))
 	}
 
 	b.Write(f.Data)
-
 	return nil
 }
 
@@ -199,7 +193,6 @@ func (f *StreamFrame) MinLength(protocol.VersionNumber) (protocol.ByteCount, err
 	if f.DataLenPresent {
 		length += 2
 	}
-
 	return length, nil
 }
 

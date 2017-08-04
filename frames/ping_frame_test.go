@@ -14,7 +14,7 @@ var _ = Describe("PingFrame", func() {
 			b := bytes.NewReader([]byte{0x07})
 			_, err := ParsePingFrame(b, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(b.Len()).To(Equal(0))
+			Expect(b.Len()).To(BeZero())
 		})
 
 		It("errors on EOFs", func() {
@@ -27,7 +27,7 @@ var _ = Describe("PingFrame", func() {
 		It("writes a sample frame", func() {
 			b := &bytes.Buffer{}
 			frame := PingFrame{}
-			frame.Write(b, 0)
+			frame.Write(b, protocol.VersionWhatever)
 			Expect(b.Bytes()).To(Equal([]byte{0x07}))
 		})
 
