@@ -16,7 +16,7 @@ var _ = Describe("receivedPacketHandler", func() {
 	)
 
 	BeforeEach(func() {
-		handler = NewReceivedPacketHandler().(*receivedPacketHandler)
+		handler = NewReceivedPacketHandler(protocol.VersionWhatever).(*receivedPacketHandler)
 	})
 
 	Context("accepting packets", func() {
@@ -113,6 +113,16 @@ var _ = Describe("receivedPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.ackQueued).To(BeTrue())
 				Expect(handler.GetAlarmTimeout()).To(BeZero())
+			})
+
+			It("doesn't queue an ACK for non-retransmittable packets, for QUIC >= 39", func() {
+				receiveAndAck10Packets()
+				handler.version = protocol.Version39
+				for i := 11; i < 10+10*protocol.MaxPacketsReceivedBeforeAckSend; i++ {
+					err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(handler.ackQueued).To(BeFalse())
+				}
 			})
 
 			It("queues an ACK for every second retransmittable packet, if they are arriving fast", func() {
