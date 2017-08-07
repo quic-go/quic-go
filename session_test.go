@@ -60,10 +60,11 @@ func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data
 }
 
 type mockSentPacketHandler struct {
-	retransmissionQueue  []*ackhandler.Packet
-	sentPackets          []*ackhandler.Packet
-	congestionLimited    bool
-	requestedStopWaiting bool
+	retransmissionQueue             []*ackhandler.Packet
+	sentPackets                     []*ackhandler.Packet
+	congestionLimited               bool
+	requestedStopWaiting            bool
+	shouldSendRetransmittablePacket bool
 }
 
 func (h *mockSentPacketHandler) SentPacket(packet *ackhandler.Packet) error {
@@ -79,6 +80,11 @@ func (h *mockSentPacketHandler) GetLeastUnacked() protocol.PacketNumber { return
 func (h *mockSentPacketHandler) GetAlarmTimeout() time.Time             { panic("not implemented") }
 func (h *mockSentPacketHandler) OnAlarm()                               { panic("not implemented") }
 func (h *mockSentPacketHandler) SendingAllowed() bool                   { return !h.congestionLimited }
+func (h *mockSentPacketHandler) ShouldSendRetransmittablePacket() bool {
+	b := h.shouldSendRetransmittablePacket
+	h.shouldSendRetransmittablePacket = false
+	return b
+}
 
 func (h *mockSentPacketHandler) GetStopWaitingFrame(force bool) *frames.StopWaitingFrame {
 	h.requestedStopWaiting = true
@@ -947,6 +953,14 @@ var _ = Describe("Session", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mconn.written).To(HaveLen(1))
 			Expect(mconn.written[0]).To(ContainSubstring(string([]byte{0x5E, 0x03})))
+		})
+
+		It("sends a retransmittable packet when required by the SentPacketHandler", func() {
+			sess.sentPacketHandler = &mockSentPacketHandler{shouldSendRetransmittablePacket: true}
+			err := sess.sendPacket()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(mconn.written).To(HaveLen(1))
+			Expect(sess.sentPacketHandler.(*mockSentPacketHandler).sentPackets[0].Frames).To(ContainElement(&frames.PingFrame{}))
 		})
 
 		It("sends two WindowUpdate frames", func() {

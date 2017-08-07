@@ -40,6 +40,8 @@ type sentPacketHandler struct {
 	lastSentPacketNumber protocol.PacketNumber
 	skippedPackets       []protocol.PacketNumber
 
+	numNonRetransmittablePackets int // number of non-retransmittable packets since the last retransmittable packet
+
 	LargestAcked protocol.PacketNumber
 
 	largestReceivedPacketWithAck protocol.PacketNumber
@@ -89,6 +91,10 @@ func (h *sentPacketHandler) largestInOrderAcked() protocol.PacketNumber {
 	return h.LargestAcked
 }
 
+func (h *sentPacketHandler) ShouldSendRetransmittablePacket() bool {
+	return h.numNonRetransmittablePackets >= protocol.MaxNonRetransmittablePackets
+}
+
 func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 	if packet.PacketNumber <= h.lastSentPacketNumber {
 		return errPacketNumberNotIncreasing
@@ -116,6 +122,9 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 		packet.SendTime = now
 		h.bytesInFlight += packet.Length
 		h.packetHistory.PushBack(*packet)
+		h.numNonRetransmittablePackets = 0
+	} else {
+		h.numNonRetransmittablePackets++
 	}
 
 	h.congestion.OnPacketSent(

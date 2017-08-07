@@ -667,6 +667,10 @@ func (s *session) sendPacket() error {
 				s.packer.QueueControlFrame(swf)
 			}
 		}
+		// add a retransmittable frame
+		if s.sentPacketHandler.ShouldSendRetransmittablePacket() {
+			s.packer.QueueControlFrame(&frames.PingFrame{})
+		}
 		packet, err := s.packer.PackPacket()
 		if err != nil || packet == nil {
 			return err

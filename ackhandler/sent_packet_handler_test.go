@@ -61,6 +61,10 @@ func retransmittablePacket(num protocol.PacketNumber) *Packet {
 	return &Packet{PacketNumber: num, Length: 1, Frames: []frames.Frame{&frames.PingFrame{}}}
 }
 
+func nonRetransmittablePacket(num protocol.PacketNumber) *Packet {
+	return &Packet{PacketNumber: num, Length: 1, Frames: []frames.Frame{&frames.AckFrame{}}}
+}
+
 var _ = Describe("SentPacketHandler", func() {
 	var (
 		handler     *sentPacketHandler
@@ -219,6 +223,30 @@ var _ = Describe("SentPacketHandler", func() {
 					Expect(handler.skippedPackets).To(BeEmpty())
 				})
 			})
+		})
+	})
+
+	Context("forcing retransmittable packets", func() {
+		It("says that every 20th packet should be retransmittable", func() {
+			// send 19 non-retransmittable packets
+			for i := 1; i <= protocol.MaxNonRetransmittablePackets; i++ {
+				Expect(handler.ShouldSendRetransmittablePacket()).To(BeFalse())
+				err := handler.SentPacket(nonRetransmittablePacket(protocol.PacketNumber(i)))
+				Expect(err).ToNot(HaveOccurred())
+			}
+			Expect(handler.ShouldSendRetransmittablePacket()).To(BeTrue())
+		})
+
+		It("resets the counter when a retransmittable packet is sent", func() {
+			// send 19 non-retransmittable packets
+			for i := 1; i <= protocol.MaxNonRetransmittablePackets; i++ {
+				Expect(handler.ShouldSendRetransmittablePacket()).To(BeFalse())
+				err := handler.SentPacket(nonRetransmittablePacket(protocol.PacketNumber(i)))
+				Expect(err).ToNot(HaveOccurred())
+			}
+			err := handler.SentPacket(retransmittablePacket(20))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.ShouldSendRetransmittablePacket()).To(BeFalse())
 		})
 	})
 
