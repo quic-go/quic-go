@@ -435,7 +435,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		})
 
 		It("detects version downgrade attacks", func() {
-			highestSupportedVersion := supportedVersions[len(protocol.SupportedVersions)-1]
+			highestSupportedVersion := supportedVersions[len(supportedVersions)-1]
 			lowestSupportedVersion := supportedVersions[0]
 			Expect(highestSupportedVersion).ToNot(Equal(lowestSupportedVersion))
 			cs.version = highestSupportedVersion

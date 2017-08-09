@@ -5,9 +5,12 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -323,9 +326,22 @@ var _ = Describe("H2 server", func() {
 	})
 
 	Context("setting http headers", func() {
-		expected := http.Header{
-			"Alt-Svc": {`quic=":443"; ma=2592000; v="37,36,35"`},
+		var expected http.Header
+
+		getExpectedHeader := func(versions []protocol.VersionNumber) http.Header {
+			var versionsAsString []string
+			for _, v := range versions {
+				versionsAsString = append(versionsAsString, strconv.Itoa(int(v)))
+			}
+			return http.Header{
+				"Alt-Svc": {fmt.Sprintf(`quic=":443"; ma=2592000; v="%s"`, strings.Join(versionsAsString, ","))},
+			}
 		}
+
+		BeforeEach(func() {
+			Expect(getExpectedHeader([]protocol.VersionNumber{99, 90, 9})).To(Equal(http.Header{"Alt-Svc": {`quic=":443"; ma=2592000; v="99,90,9"`}}))
+			expected = getExpectedHeader(protocol.SupportedVersions)
+		})
 
 		It("sets proper headers with numeric port", func() {
 			s.Server.Addr = ":443"
