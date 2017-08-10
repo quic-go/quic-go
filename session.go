@@ -578,7 +578,9 @@ func (s *session) handleCloseError(closeErr closeError) error {
 		return nil
 	}
 
-	if quicErr.ErrorCode == qerr.DecryptionFailure || quicErr == handshake.ErrHOLExperiment {
+	if quicErr.ErrorCode == qerr.DecryptionFailure ||
+		quicErr == handshake.ErrHOLExperiment ||
+		quicErr == handshake.ErrNSTPExperiment {
 		return s.sendPublicReset(s.lastRcvdPacketNumber)
 	}
 	return s.sendConnectionClose(quicErr)

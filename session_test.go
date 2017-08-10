@@ -804,6 +804,13 @@ var _ = Describe("Session", func() {
 			Expect(sess.Context().Done()).To(BeClosed())
 		})
 
+		It("sends a Public Reset if the client is initiating the no STOP_WAITING experiment", func() {
+			sess.Close(handshake.ErrHOLExperiment)
+			Expect(mconn.written).To(HaveLen(1))
+			Expect(mconn.written[0][0] & 0x02).ToNot(BeZero()) // Public Reset
+			Expect(sess.Context().Done()).To(BeClosed())
+		})
+
 		It("cancels the context when the run loop exists", func() {
 			returned := make(chan struct{})
 			go func() {

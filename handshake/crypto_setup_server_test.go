@@ -264,6 +264,17 @@ var _ = Describe("Server Crypto Setup", func() {
 			Expect(err).To(MatchError(ErrHOLExperiment))
 		})
 
+		It("doesn't support Chrome's no STOP_WAITING experiment", func() {
+			HandshakeMessage{
+				Tag: TagCHLO,
+				Data: map[Tag][]byte{
+					TagNSTP: []byte("foobar"),
+				},
+			}.Write(&stream.dataToRead)
+			err := cs.HandleCryptoStream()
+			Expect(err).To(MatchError(ErrNSTPExperiment))
+		})
+
 		It("generates REJ messages", func() {
 			sourceAddrValid = false
 			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), nil)
