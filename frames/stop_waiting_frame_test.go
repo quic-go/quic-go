@@ -18,9 +18,16 @@ var _ = Describe("StopWaitingFrame", func() {
 			Expect(b.Len()).To(BeZero())
 		})
 
-		It("rejects frames with an invalid LeastUnackedDelta", func() {
+		It("rejects frames that would have a negative LeastUnacked value", func() {
 			b := bytes.NewReader([]byte{0x06, 0xD})
 			_, err := ParseStopWaitingFrame(b, 10, 1, protocol.VersionWhatever)
+			Expect(err).To(HaveOccurred())
+			Expect(b.Len()).To(BeZero())
+		})
+
+		It("rejects frames that would have 0 as LeastUnacked", func() {
+			b := bytes.NewReader([]byte{0x6, 0x8})
+			_, err := ParseStopWaitingFrame(b, 8, 1, protocol.VersionWhatever)
 			Expect(err).To(HaveOccurred())
 			Expect(b.Len()).To(BeZero())
 		})

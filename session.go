@@ -446,7 +446,9 @@ func (s *session) handleFrames(fs []frames.Frame) error {
 		case *frames.GoawayFrame:
 			err = errors.New("unimplemented: handling GOAWAY frames")
 		case *frames.StopWaitingFrame:
-			err = s.receivedPacketHandler.ReceivedStopWaiting(frame)
+			// LeastUnacked is guaranteed to have LeastUnacked > 0
+			// therefore this will never underflow
+			s.receivedPacketHandler.SetLowerLimit(frame.LeastUnacked - 1)
 		case *frames.RstStreamFrame:
 			err = s.handleRstStreamFrame(frame)
 		case *frames.WindowUpdateFrame:
@@ -576,7 +578,9 @@ func (s *session) handleCloseError(closeErr closeError) error {
 		return nil
 	}
 
-	if quicErr.ErrorCode == qerr.DecryptionFailure || quicErr == handshake.ErrHOLExperiment {
+	if quicErr.ErrorCode == qerr.DecryptionFailure ||
+		quicErr == handshake.ErrHOLExperiment ||
+		quicErr == handshake.ErrNSTPExperiment {
 		return s.sendPublicReset(s.lastRcvdPacketNumber)
 	}
 	return s.sendConnectionClose(quicErr)
