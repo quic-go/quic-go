@@ -18,6 +18,7 @@ const (
 // SupportedVersions lists the versions that the server supports
 // must be in sorted descending order
 var SupportedVersions = []VersionNumber{
+	Version39,
 	Version38,
 	Version37,
 	Version36,
