@@ -48,7 +48,7 @@ type Session interface {
 	// AcceptStream returns the next stream opened by the peer, blocking until one is available.
 	// Since stream 1 is reserved for the crypto stream, the first stream is either 2 (for a client) or 3 (for a server).
 	AcceptStream() (Stream, error)
-	// OpenStream opens a new QUIC stream, returning a special error when the peeer's concurrent stream limit is reached.
+	// OpenStream opens a new QUIC stream, returning a special error when the peer's concurrent stream limit is reached.
 	// New streams always have the smallest possible stream ID.
 	// TODO: Enable testing for the special error
 	OpenStream() (Stream, error)
