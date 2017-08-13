@@ -37,7 +37,7 @@ func requestFromHeaders(headers []hpack.HeaderField) (*http.Request, error) {
 		httpHeaders.Set("Cookie", strings.Join(httpHeaders["Cookie"], "; "))
 	}
 
-	if len(path) == 0 || len(authority) == 0 || len(method) == 0 {
+	if (len(path) == 0 && method != http.MethodConnect) || len(authority) == 0 || len(method) == 0 {
 		return nil, errors.New(":path, :authority and :method must not be empty")
 	}
 
