@@ -170,6 +170,7 @@ func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, 
 		return err
 	}
 
+	req.WithContext(session.Context())
 	req.RemoteAddr = session.RemoteAddr().String()
 
 	if utils.Debug() {

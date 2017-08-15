@@ -65,7 +65,9 @@ func (s *mockSession) LocalAddr() net.Addr {
 func (s *mockSession) RemoteAddr() net.Addr {
 	return &net.UDPAddr{IP: []byte{127, 0, 0, 1}, Port: 42}
 }
-func (s *mockSession) Context() context.Context { panic("not implemented") }
+func (s *mockSession) Context() context.Context {
+	return context.Background()
+}
 
 var _ = Describe("H2 server", func() {
 	var (
