@@ -12,7 +12,15 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+const (
+	dataLen     = 500 * 1024       // 500 KB
+	dataLenLong = 50 * 1024 * 1024 // 50 MB
+)
+
 var (
+	PRData     = GeneratePRData(dataLen)
+	PRDataLong = GeneratePRData(dataLenLong)
+
 	server *h2quic.Server
 	port   string
 )
@@ -21,10 +29,21 @@ func init() {
 	http.HandleFunc("/prdata", func(w http.ResponseWriter, r *http.Request) {
 		defer GinkgoRecover()
 		sl := r.URL.Query().Get("len")
-		l, err := strconv.Atoi(sl)
-		Expect(err).NotTo(HaveOccurred())
-		data := GeneratePRData(l)
-		_, err = w.Write(data)
+		if sl != "" {
+			var err error
+			l, err := strconv.Atoi(sl)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = w.Write(GeneratePRData(l))
+			Expect(err).NotTo(HaveOccurred())
+		} else {
+			_, err := w.Write(PRData)
+			Expect(err).NotTo(HaveOccurred())
+		}
+	})
+
+	http.HandleFunc("/prdatalong", func(w http.ResponseWriter, r *http.Request) {
+		defer GinkgoRecover()
+		_, err := w.Write(PRDataLong)
 		Expect(err).NotTo(HaveOccurred())
 	})
 }
