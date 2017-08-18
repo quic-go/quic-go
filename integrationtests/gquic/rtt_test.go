@@ -18,10 +18,6 @@ import (
 )
 
 var _ = Describe("non-zero RTT", func() {
-	BeforeEach(func() {
-		dataMan.GenerateData(dataLen)
-	})
-
 	var proxy *quicproxy.QuicProxy
 
 	runRTTTest := func(rtt time.Duration, version protocol.VersionNumber) {
@@ -39,14 +35,14 @@ var _ = Describe("non-zero RTT", func() {
 			"--quic-version="+strconv.Itoa(int(version)),
 			"--host=127.0.0.1",
 			"--port="+strconv.Itoa(proxy.LocalPort()),
-			"https://quic.clemente.io/data",
+			"https://quic.clemente.io/prdata",
 		)
 
 		session, err := Start(command, nil, GinkgoWriter)
 		Expect(err).NotTo(HaveOccurred())
 		defer session.Kill()
 		Eventually(session, 20).Should(Exit(0))
-		Expect(bytes.Contains(session.Out.Contents(), dataMan.GetData())).To(BeTrue())
+		Expect(bytes.Contains(session.Out.Contents(), testserver.PRData)).To(BeTrue())
 	}
 
 	AfterEach(func() {
@@ -62,7 +58,6 @@ var _ = Describe("non-zero RTT", func() {
 			roundTrips := [...]int{10, 50, 100, 200}
 			for _, rtt := range roundTrips {
 				It(fmt.Sprintf("gets a 500kB file with %dms RTT", rtt), func() {
-					dataMan.GenerateData(dataLen)
 					runRTTTest(time.Duration(rtt)*time.Millisecond, version)
 				})
 			}

@@ -2,9 +2,6 @@ package gquic_test
 
 import (
 	"fmt"
-	"io"
-	"io/ioutil"
-	"net/http"
 	"path/filepath"
 	"runtime"
 
@@ -17,13 +14,7 @@ import (
 	"testing"
 )
 
-const (
-	dataLen     = 500 * 1024       // 500 KB
-	dataLongLen = 50 * 1024 * 1024 // 50 MB
-)
-
 var (
-	dataMan    dataManager
 	clientPath string
 	serverPath string
 )
@@ -44,26 +35,4 @@ func init() {
 	}
 	clientPath = filepath.Join(thisfile, fmt.Sprintf("../../../../quic-clients/client-%s-debug", runtime.GOOS))
 	serverPath = filepath.Join(thisfile, fmt.Sprintf("../../../../quic-clients/server-%s-debug", runtime.GOOS))
-
-	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
-		defer GinkgoRecover()
-		_, err := io.WriteString(w, "Hello, World!\n")
-		Expect(err).NotTo(HaveOccurred())
-	})
-
-	http.HandleFunc("/data", func(w http.ResponseWriter, r *http.Request) {
-		defer GinkgoRecover()
-		data := dataMan.GetData()
-		Expect(data).ToNot(HaveLen(0))
-		_, err := w.Write(data)
-		Expect(err).NotTo(HaveOccurred())
-	})
-
-	http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
-		defer GinkgoRecover()
-		body, err := ioutil.ReadAll(r.Body)
-		Expect(err).NotTo(HaveOccurred())
-		_, err = w.Write(body)
-		Expect(err).NotTo(HaveOccurred())
-	})
 }

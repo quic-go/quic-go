@@ -1,6 +1,8 @@
 package testserver
 
 import (
+	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"strconv"
@@ -44,6 +46,20 @@ func init() {
 	http.HandleFunc("/prdatalong", func(w http.ResponseWriter, r *http.Request) {
 		defer GinkgoRecover()
 		_, err := w.Write(PRDataLong)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
+		defer GinkgoRecover()
+		_, err := io.WriteString(w, "Hello, World!\n")
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
+		defer GinkgoRecover()
+		body, err := ioutil.ReadAll(r.Body)
+		Expect(err).NotTo(HaveOccurred())
+		_, err = w.Write(body)
 		Expect(err).NotTo(HaveOccurred())
 	})
 }

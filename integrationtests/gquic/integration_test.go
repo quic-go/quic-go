@@ -19,10 +19,6 @@ import (
 )
 
 var _ = Describe("Integration tests", func() {
-	BeforeEach(func() {
-		dataMan.GenerateData(dataLen)
-	})
-
 	for i := range protocol.SupportedVersions {
 		version := protocol.SupportedVersions[i]
 
@@ -66,13 +62,13 @@ var _ = Describe("Integration tests", func() {
 					"--quic-version="+strconv.Itoa(int(version)),
 					"--host=127.0.0.1",
 					"--port="+testserver.Port(),
-					"https://quic.clemente.io/data",
+					"https://quic.clemente.io/prdata",
 				)
 				session, err := Start(command, nil, GinkgoWriter)
 				Expect(err).NotTo(HaveOccurred())
 				defer session.Kill()
 				Eventually(session, 10).Should(Exit(0))
-				Expect(bytes.Contains(session.Out.Contents(), dataMan.GetData())).To(BeTrue())
+				Expect(bytes.Contains(session.Out.Contents(), testserver.PRData)).To(BeTrue())
 			})
 
 			It("gets many copies of a file in parallel", func() {
@@ -87,13 +83,13 @@ var _ = Describe("Integration tests", func() {
 							"--quic-version="+strconv.Itoa(int(version)),
 							"--host=127.0.0.1",
 							"--port="+testserver.Port(),
-							"https://quic.clemente.io/data",
+							"https://quic.clemente.io/prdata",
 						)
 						session, err := Start(command, nil, GinkgoWriter)
 						Expect(err).NotTo(HaveOccurred())
 						defer session.Kill()
 						Eventually(session, 20).Should(Exit(0))
-						Expect(bytes.Contains(session.Out.Contents(), dataMan.GetData())).To(BeTrue())
+						Expect(bytes.Contains(session.Out.Contents(), testserver.PRData)).To(BeTrue())
 					}()
 				}
 				wg.Wait()

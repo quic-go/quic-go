@@ -18,6 +18,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
+
 	"github.com/lucas-clemente/quic-go/h2quic"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -178,9 +180,7 @@ var _ = Describe("Server tests", func() {
 	})
 
 	It("downloads a small file", func() {
-		dataMan.GenerateData(dataLen)
-		data := dataMan.GetData()
-		createDownloadFile("file.dat", data)
+		createDownloadFile("file.dat", testserver.PRData)
 
 		startServer()
 		defer stopServer()
@@ -190,13 +190,11 @@ var _ = Describe("Server tests", func() {
 		Expect(rsp.StatusCode).To(Equal(200))
 		body, err := ioutil.ReadAll(gbytes.TimeoutReader(rsp.Body, 5*time.Second))
 		Expect(err).ToNot(HaveOccurred())
-		Expect(body).To(Equal(data))
+		Expect(body).To(Equal(testserver.PRData))
 	})
 
 	It("downloads a large file", func() {
-		dataMan.GenerateData(dataLongLen)
-		data := dataMan.GetData()
-		createDownloadFile("file.dat", data)
+		createDownloadFile("file.dat", testserver.PRDataLong)
 
 		startServer()
 		defer stopServer()
@@ -206,6 +204,6 @@ var _ = Describe("Server tests", func() {
 		Expect(rsp.StatusCode).To(Equal(200))
 		body, err := ioutil.ReadAll(gbytes.TimeoutReader(rsp.Body, 20*time.Second))
 		Expect(err).ToNot(HaveOccurred())
-		Expect(body).To(Equal(data))
+		Expect(body).To(Equal(testserver.PRDataLong))
 	})
 })

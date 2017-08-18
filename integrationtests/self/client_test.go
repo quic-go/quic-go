@@ -1,4 +1,4 @@
-package gquic_test
+package self_test
 
 import (
 	"bytes"
@@ -32,9 +32,11 @@ var _ = Describe("Client tests", func() {
 		client = &http.Client{
 			Transport: &h2quic.RoundTripper{},
 		}
+		testserver.StartQuicServer()
 	})
 
 	AfterEach(func() {
+		testserver.StopQuicServer()
 		protocol.SupportedVersions = supportedVersions
 	})
 
@@ -56,34 +58,34 @@ var _ = Describe("Client tests", func() {
 			})
 
 			It("downloads a small file", func() {
-				dataMan.GenerateData(dataLen)
-				resp, err := client.Get("https://quic.clemente.io:" + testserver.Port() + "/data")
+				resp, err := client.Get("https://quic.clemente.io:" + testserver.Port() + "/prdata")
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
 				body, err := ioutil.ReadAll(gbytes.TimeoutReader(resp.Body, 5*time.Second))
 				Expect(err).ToNot(HaveOccurred())
-				Expect(body).To(Equal(dataMan.GetData()))
+				Expect(body).To(Equal(testserver.PRData))
 			})
 
 			It("downloads a large file", func() {
-				dataMan.GenerateData(dataLongLen)
-				resp, err := client.Get("https://quic.clemente.io:" + testserver.Port() + "/data")
+				resp, err := client.Get("https://quic.clemente.io:" + testserver.Port() + "/prdatalong")
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
 				body, err := ioutil.ReadAll(gbytes.TimeoutReader(resp.Body, 20*time.Second))
 				Expect(err).ToNot(HaveOccurred())
-				Expect(body).To(Equal(dataMan.GetData()))
+				Expect(body).To(Equal(testserver.PRDataLong))
 			})
 
 			It("uploads a file", func() {
-				dataMan.GenerateData(dataLen)
-				data := bytes.NewReader(dataMan.GetData())
-				resp, err := client.Post("https://quic.clemente.io:"+testserver.Port()+"/echo", "text/plain", data)
+				resp, err := client.Post(
+					"https://quic.clemente.io:"+testserver.Port()+"/echo",
+					"text/plain",
+					bytes.NewReader(testserver.PRData),
+				)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
 				body, err := ioutil.ReadAll(gbytes.TimeoutReader(resp.Body, 5*time.Second))
 				Expect(err).ToNot(HaveOccurred())
-				Expect(body).To(Equal(dataMan.GetData()))
+				Expect(bytes.Equal(body, testserver.PRData)).To(BeTrue())
 			})
 		})
 	}

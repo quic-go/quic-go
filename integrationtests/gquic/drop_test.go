@@ -16,11 +16,7 @@ import (
 	. "github.com/onsi/gomega/gexec"
 )
 
-var _ = Describe("Drop Proxy", func() {
-	BeforeEach(func() {
-		dataMan.GenerateData(dataLen)
-	})
-
+var _ = Describe("Drop tests", func() {
 	var proxy *quicproxy.QuicProxy
 
 	runDropTest := func(dropCallback quicproxy.DropCallback, version protocol.VersionNumber) {
@@ -36,14 +32,14 @@ var _ = Describe("Drop Proxy", func() {
 			"--quic-version="+strconv.Itoa(int(version)),
 			"--host=127.0.0.1",
 			"--port="+strconv.Itoa(proxy.LocalPort()),
-			"https://quic.clemente.io/data",
+			"https://quic.clemente.io/prdata",
 		)
 
 		session, err := Start(command, nil, GinkgoWriter)
 		Expect(err).NotTo(HaveOccurred())
 		defer session.Kill()
 		Eventually(session, 20).Should(Exit(0))
-		Expect(bytes.Contains(session.Out.Contents(), dataMan.GetData())).To(BeTrue())
+		Expect(bytes.Contains(session.Out.Contents(), testserver.PRData)).To(BeTrue())
 	}
 
 	AfterEach(func() {
