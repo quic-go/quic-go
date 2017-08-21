@@ -68,7 +68,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 		It("sets the negotiated value for maximum streams in the SHLO", func() {
 			val := 50
 			Expect(val).To(BeNumerically("<", protocol.MaxStreamsPerConnection))
-			err := cpm.SetFromMap(map[Tag][]byte{TagMSPC: []byte{byte(val), 0, 0, 0}})
+			err := cpm.SetFromMap(map[Tag][]byte{TagMSPC: {byte(val), 0, 0, 0}})
 			Expect(err).ToNot(HaveOccurred())
 			entryMap, err := cpm.GetHelloMap()
 			Expect(err).ToNot(HaveOccurred())
@@ -76,7 +76,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 		})
 
 		It("always sends its own value for the maximum incoming dynamic streams in the SHLO", func() {
-			err := cpm.SetFromMap(map[Tag][]byte{TagMIDS: []byte{5, 0, 0, 0}})
+			err := cpm.SetFromMap(map[Tag][]byte{TagMIDS: {5, 0, 0, 0}})
 			Expect(err).ToNot(HaveOccurred())
 			entryMap, err := cpm.GetHelloMap()
 			Expect(err).ToNot(HaveOccurred())
