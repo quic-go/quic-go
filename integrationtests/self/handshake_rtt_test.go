@@ -1,4 +1,4 @@
-package handshaketests
+package self_test
 
 import (
 	"crypto/tls"
@@ -7,23 +7,24 @@ import (
 	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/integrationtests/proxy"
+	"github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 
-	"github.com/lucas-clemente/quic-go/testdata"
+	"github.com/lucas-clemente/quic-go/internal/testdata"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Handshake integration tets", func() {
+var _ = Describe("Handshake RTT tests", func() {
 	var (
 		proxy         *quicproxy.QuicProxy
 		server        quic.Listener
 		serverConfig  *quic.Config
 		testStartedAt time.Time
 	)
+
 	rtt := 400 * time.Millisecond
 
 	BeforeEach(func() {

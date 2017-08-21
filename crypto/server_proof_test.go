@@ -11,14 +11,14 @@ import (
 	"encoding/asn1"
 	"math/big"
 
-	"github.com/lucas-clemente/quic-go/testdata"
+	"github.com/lucas-clemente/quic-go/internal/testdata"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Proof", func() {
-	It("gives valid signatures with the key in testdata", func() {
+	It("gives valid signatures with the key in internal/testdata", func() {
 		key := &testdata.GetTLSConfig().Certificates[0]
 		signature, err := signServerProof(key, []byte{'C', 'H', 'L', 'O'}, []byte{'S', 'C', 'F', 'G'})
 		Expect(err).ToNot(HaveOccurred())

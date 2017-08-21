@@ -1,4 +1,4 @@
-package integrationtests
+package gquic_test
 
 import (
 	"bytes"
@@ -7,7 +7,8 @@ import (
 	"strconv"
 
 	_ "github.com/lucas-clemente/quic-clients" // download clients
-	"github.com/lucas-clemente/quic-go/integrationtests/proxy"
+	"github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
+	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/protocol"
 
 	. "github.com/onsi/ginkgo"
@@ -15,17 +16,13 @@ import (
 	. "github.com/onsi/gomega/gexec"
 )
 
-var _ = Describe("Drop Proxy", func() {
-	BeforeEach(func() {
-		dataMan.GenerateData(dataLen)
-	})
-
+var _ = Describe("Drop tests", func() {
 	var proxy *quicproxy.QuicProxy
 
 	runDropTest := func(dropCallback quicproxy.DropCallback, version protocol.VersionNumber) {
 		var err error
 		proxy, err = quicproxy.NewQuicProxy("localhost:0", quicproxy.Opts{
-			RemoteAddr: "localhost:" + port,
+			RemoteAddr: "localhost:" + testserver.Port(),
 			DropPacket: dropCallback,
 		})
 		Expect(err).ToNot(HaveOccurred())
@@ -35,14 +32,14 @@ var _ = Describe("Drop Proxy", func() {
 			"--quic-version="+strconv.Itoa(int(version)),
 			"--host=127.0.0.1",
 			"--port="+strconv.Itoa(proxy.LocalPort()),
-			"https://quic.clemente.io/data",
+			"https://quic.clemente.io/prdata",
 		)
 
 		session, err := Start(command, nil, GinkgoWriter)
 		Expect(err).NotTo(HaveOccurred())
 		defer session.Kill()
 		Eventually(session, 20).Should(Exit(0))
-		Expect(bytes.Contains(session.Out.Contents(), dataMan.GetData())).To(BeTrue())
+		Expect(bytes.Contains(session.Out.Contents(), testserver.PRData)).To(BeTrue())
 	}
 
 	AfterEach(func() {

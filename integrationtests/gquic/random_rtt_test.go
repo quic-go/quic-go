@@ -1,4 +1,4 @@
-package integrationtests
+package gquic_test
 
 import (
 	"bytes"
@@ -9,7 +9,8 @@ import (
 	"time"
 
 	_ "github.com/lucas-clemente/quic-clients" // download clients
-	"github.com/lucas-clemente/quic-go/integrationtests/proxy"
+	"github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
+	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/protocol"
 
 	. "github.com/onsi/ginkgo"
@@ -50,17 +51,13 @@ var _ = Describe("Random Duration Generator", func() {
 })
 
 var _ = Describe("Random RTT", func() {
-	BeforeEach(func() {
-		dataMan.GenerateData(dataLen)
-	})
-
 	var proxy *quicproxy.QuicProxy
 
 	runRTTTest := func(minRtt, maxRtt time.Duration, version protocol.VersionNumber) {
 		rand.Seed(time.Now().UnixNano())
 		var err error
 		proxy, err = quicproxy.NewQuicProxy("localhost:", quicproxy.Opts{
-			RemoteAddr: "localhost:" + port,
+			RemoteAddr: "localhost:" + testserver.Port(),
 			DelayPacket: func(_ quicproxy.Direction, _ protocol.PacketNumber) time.Duration {
 				return getRandomDuration(minRtt, maxRtt)
 			},
@@ -72,14 +69,14 @@ var _ = Describe("Random RTT", func() {
 			"--quic-version="+strconv.Itoa(int(version)),
 			"--host=127.0.0.1",
 			"--port="+strconv.Itoa(proxy.LocalPort()),
-			"https://quic.clemente.io/data",
+			"https://quic.clemente.io/prdata",
 		)
 
 		session, err := Start(command, nil, GinkgoWriter)
 		Expect(err).NotTo(HaveOccurred())
 		defer session.Kill()
 		Eventually(session, 20).Should(Exit(0))
-		Expect(bytes.Contains(session.Out.Contents(), dataMan.GetData())).To(BeTrue())
+		Expect(bytes.Contains(session.Out.Contents(), testserver.PRData)).To(BeTrue())
 	}
 
 	AfterEach(func() {

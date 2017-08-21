@@ -1,132 +1,51 @@
-package integrationtests
+package chrome_test
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
-	"net"
 	"net/http"
 	"os"
-	"path/filepath"
+	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
-	"strconv"
-
-	"github.com/lucas-clemente/quic-go/h2quic"
+	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/testdata"
+	"github.com/lucas-clemente/quic-go/protocol"
+
+	_ "github.com/lucas-clemente/quic-go/integrationtests/tools/testlog"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gexec"
 
 	"testing"
 )
 
 const (
+	nChromeRetries = 8
+
 	dataLen     = 500 * 1024       // 500 KB
 	dataLongLen = 50 * 1024 * 1024 // 50 MB
 )
 
 var (
-	server             *h2quic.Server
-	dataMan            dataManager
-	port               string
-	clientPath         string
-	serverPath         string
 	nFilesUploaded     int32
 	testEndpointCalled bool
 	doneCalled         bool
-
-	logFileName string // the log file set in the ginkgo flags
-	logFile     *os.File
 )
 
-func TestIntegration(t *testing.T) {
+func TestChrome(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Integration Tests Suite")
+	RunSpecs(t, "Chrome Suite")
 }
 
-var _ = BeforeSuite(setupHTTPHandlers)
-
-// read the logfile command line flag
-// to set call ginkgo -- -logfile=log.txt
 func init() {
-	flag.StringVar(&logFileName, "logfile", "", "log file")
-}
-
-var _ = BeforeEach(func() {
-	// set custom time format for logs
-	utils.SetLogTimeFormat("15:04:05.000")
-	_, thisfile, _, ok := runtime.Caller(0)
-	if !ok {
-		Fail("Failed to get current path")
-	}
-	clientPath = filepath.Join(thisfile, fmt.Sprintf("../../../quic-clients/client-%s-debug", runtime.GOOS))
-	serverPath = filepath.Join(thisfile, fmt.Sprintf("../../../quic-clients/server-%s-debug", runtime.GOOS))
-
-	if len(logFileName) > 0 {
-		var err error
-		logFile, err = os.Create("./log.txt")
-		Expect(err).ToNot(HaveOccurred())
-		log.SetOutput(logFile)
-		utils.SetLogLevel(utils.LogLevelDebug)
-	}
-})
-
-var _ = JustBeforeEach(startQuicServer)
-
-var _ = AfterEach(func() {
-	stopQuicServer()
-
-	if len(logFileName) > 0 {
-		_ = logFile.Close()
-	}
-
-	nFilesUploaded = 0
-	doneCalled = false
-	testEndpointCalled = false
-})
-
-func setupHTTPHandlers() {
-	defer GinkgoRecover()
-
-	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
-		defer GinkgoRecover()
-		_, err := io.WriteString(w, "Hello, World!\n")
-		Expect(err).NotTo(HaveOccurred())
-	})
-
-	http.HandleFunc("/data", func(w http.ResponseWriter, r *http.Request) {
-		defer GinkgoRecover()
-		data := dataMan.GetData()
-		Expect(data).ToNot(HaveLen(0))
-		_, err := w.Write(data)
-		Expect(err).NotTo(HaveOccurred())
-	})
-
-	http.HandleFunc("/prdata", func(w http.ResponseWriter, r *http.Request) {
-		defer GinkgoRecover()
-		sl := r.URL.Query().Get("len")
-		l, err := strconv.Atoi(sl)
-		Expect(err).NotTo(HaveOccurred())
-		data := generatePRData(l)
-		_, err = w.Write(data)
-		Expect(err).NotTo(HaveOccurred())
-	})
-
-	http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
-		defer GinkgoRecover()
-		body, err := ioutil.ReadAll(r.Body)
-		Expect(err).NotTo(HaveOccurred())
-		_, err = w.Write(body)
-		Expect(err).NotTo(HaveOccurred())
-	})
-
 	// Requires the len & num GET parameters, e.g. /uploadtest?len=100&num=1
 	http.HandleFunc("/uploadtest", func(w http.ResponseWriter, r *http.Request) {
 		defer GinkgoRecover()
@@ -159,7 +78,7 @@ func setupHTTPHandlers() {
 		actual, err := ioutil.ReadAll(r.Body)
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(bytes.Equal(actual, generatePRData(l))).To(BeTrue())
+		Expect(bytes.Equal(actual, testserver.GeneratePRData(l))).To(BeTrue())
 
 		atomic.AddInt32(&nFilesUploaded, 1)
 	})
@@ -169,27 +88,69 @@ func setupHTTPHandlers() {
 	})
 }
 
-func startQuicServer() {
-	server = &h2quic.Server{
-		Server: &http.Server{
-			TLSConfig: testdata.GetTLSConfig(),
-		},
+var _ = JustBeforeEach(testserver.StartQuicServer)
+
+var _ = AfterEach(func() {
+	testserver.StopQuicServer()
+
+	nFilesUploaded = 0
+	doneCalled = false
+	testEndpointCalled = false
+})
+
+func getChromePath() string {
+	if runtime.GOOS == "darwin" {
+		return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 	}
-
-	addr, err := net.ResolveUDPAddr("udp", "0.0.0.0:0")
-	Expect(err).NotTo(HaveOccurred())
-	conn, err := net.ListenUDP("udp", addr)
-	Expect(err).NotTo(HaveOccurred())
-	port = strconv.Itoa(conn.LocalAddr().(*net.UDPAddr).Port)
-
-	go func() {
-		defer GinkgoRecover()
-		server.Serve(conn)
-	}()
+	return "google-chrome"
 }
 
-func stopQuicServer() {
-	Expect(server.Close()).NotTo(HaveOccurred())
+func chromeTest(version protocol.VersionNumber, url string, blockUntilDone func()) {
+	// Chrome sometimes starts but doesn't send any HTTP requests for no apparent reason.
+	// Retry starting it a couple of times.
+	for i := 0; i < nChromeRetries; i++ {
+		if chromeTestImpl(version, url, blockUntilDone) {
+			return
+		}
+	}
+	Fail("Chrome didn't hit the testing endpoints")
+}
+
+func chromeTestImpl(version protocol.VersionNumber, url string, blockUntilDone func()) bool {
+	userDataDir, err := ioutil.TempDir("", "quic-go-test-chrome-dir")
+	Expect(err).NotTo(HaveOccurred())
+	defer os.RemoveAll(userDataDir)
+	path := getChromePath()
+	args := []string{
+		"--disable-gpu",
+		"--no-first-run=true",
+		"--no-default-browser-check=true",
+		"--user-data-dir=" + userDataDir,
+		"--enable-quic=true",
+		"--no-proxy-server=true",
+		"--origin-to-force-quic-on=quic.clemente.io:443",
+		fmt.Sprintf(`--host-resolver-rules=MAP quic.clemente.io:443 localhost:%s`, testserver.Port()),
+		fmt.Sprintf("--quic-version=QUIC_VERSION_%d", version),
+		url,
+	}
+	utils.Infof("Running chrome: %s '%s'", getChromePath(), strings.Join(args, "' '"))
+	command := exec.Command(path, args...)
+	session, err := gexec.Start(command, GinkgoWriter, GinkgoWriter)
+	Expect(err).NotTo(HaveOccurred())
+	defer session.Kill()
+	const pollInterval = 100 * time.Millisecond
+	const pollDuration = 10 * time.Second
+	for i := 0; i < int(pollDuration/pollInterval); i++ {
+		time.Sleep(pollInterval)
+		if testEndpointCalled {
+			break
+		}
+	}
+	if !testEndpointCalled {
+		return false
+	}
+	blockUntilDone()
+	return true
 }
 
 func waitForDone() {
@@ -271,15 +232,3 @@ const downloadHTML = `
 </body>
 </html>
 `
-
-// Same as in the JS code, see
-// https://en.wikipedia.org/wiki/Lehmer_random_number_generator
-func generatePRData(l int) []byte {
-	res := make([]byte, l)
-	seed := uint64(1)
-	for i := 0; i < l; i++ {
-		seed = seed * 48271 % 2147483647
-		res[i] = byte(seed)
-	}
-	return res
-}

@@ -1,4 +1,4 @@
-package integrationtests
+package gquic_test
 
 import (
 	"bytes"
@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/protocol"
 
 	_ "github.com/lucas-clemente/quic-clients" // download clients
@@ -18,10 +19,6 @@ import (
 )
 
 var _ = Describe("Integration tests", func() {
-	BeforeEach(func() {
-		dataMan.GenerateData(dataLen)
-	})
-
 	for i := range protocol.SupportedVersions {
 		version := protocol.SupportedVersions[i]
 
@@ -31,7 +28,7 @@ var _ = Describe("Integration tests", func() {
 					clientPath,
 					"--quic-version="+strconv.Itoa(int(version)),
 					"--host=127.0.0.1",
-					"--port="+port,
+					"--port="+testserver.Port(),
 					"https://quic.clemente.io/hello",
 				)
 				session, err := Start(command, nil, GinkgoWriter)
@@ -47,7 +44,7 @@ var _ = Describe("Integration tests", func() {
 					clientPath,
 					"--quic-version="+strconv.Itoa(int(version)),
 					"--host=127.0.0.1",
-					"--port="+port,
+					"--port="+testserver.Port(),
 					"--body=foo",
 					"https://quic.clemente.io/echo",
 				)
@@ -64,14 +61,14 @@ var _ = Describe("Integration tests", func() {
 					clientPath,
 					"--quic-version="+strconv.Itoa(int(version)),
 					"--host=127.0.0.1",
-					"--port="+port,
-					"https://quic.clemente.io/data",
+					"--port="+testserver.Port(),
+					"https://quic.clemente.io/prdata",
 				)
 				session, err := Start(command, nil, GinkgoWriter)
 				Expect(err).NotTo(HaveOccurred())
 				defer session.Kill()
 				Eventually(session, 10).Should(Exit(0))
-				Expect(bytes.Contains(session.Out.Contents(), dataMan.GetData())).To(BeTrue())
+				Expect(bytes.Contains(session.Out.Contents(), testserver.PRData)).To(BeTrue())
 			})
 
 			It("gets many copies of a file in parallel", func() {
@@ -85,14 +82,14 @@ var _ = Describe("Integration tests", func() {
 							clientPath,
 							"--quic-version="+strconv.Itoa(int(version)),
 							"--host=127.0.0.1",
-							"--port="+port,
-							"https://quic.clemente.io/data",
+							"--port="+testserver.Port(),
+							"https://quic.clemente.io/prdata",
 						)
 						session, err := Start(command, nil, GinkgoWriter)
 						Expect(err).NotTo(HaveOccurred())
 						defer session.Kill()
 						Eventually(session, 20).Should(Exit(0))
-						Expect(bytes.Contains(session.Out.Contents(), dataMan.GetData())).To(BeTrue())
+						Expect(bytes.Contains(session.Out.Contents(), testserver.PRData)).To(BeTrue())
 					}()
 				}
 				wg.Wait()
