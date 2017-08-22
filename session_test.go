@@ -1538,6 +1538,15 @@ var _ = Describe("Session", func() {
 			close(done)
 		})
 
+		It("times out if the idle period is longer than half the handshake timeout", func(done Done) {
+			sess.lastNetworkActivityTime = time.Now().Add(-protocol.DefaultHandshakeTimeout / 2).Add(-time.Millisecond)
+			err := sess.run() // Would normally not return
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
+			Expect(mconn.written).To(Receive(ContainSubstring("No recent network activity.")))
+			Expect(sess.Context().Done()).To(BeClosed())
+			close(done)
+		})
+
 		It("uses ICSL after handshake", func(done Done) {
 			close(aeadChanged)
 			mockCpm = mocks.NewMockConnectionParametersManager(mockCtrl)

@@ -371,7 +371,7 @@ func (s *session) idleTimeout() time.Duration {
 	if s.handshakeComplete {
 		return s.connectionParameters.GetIdleConnectionStateLifetime()
 	}
-	return protocol.InitialIdleTimeout
+	return s.config.HandshakeTimeout / 2
 }
 
 func (s *session) handlePacketImpl(p *receivedPacket) error {
