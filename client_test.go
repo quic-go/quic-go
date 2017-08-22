@@ -184,10 +184,12 @@ var _ = Describe("Client", func() {
 		It("setups with the right values", func() {
 			config := &Config{
 				HandshakeTimeout:              1337 * time.Minute,
+				IdleTimeout:                   42 * time.Hour,
 				RequestConnectionIDTruncation: true,
 			}
 			c := populateClientConfig(config)
 			Expect(c.HandshakeTimeout).To(Equal(1337 * time.Minute))
+			Expect(c.IdleTimeout).To(Equal(42 * time.Hour))
 			Expect(c.RequestConnectionIDTruncation).To(BeTrue())
 		})
 
@@ -195,6 +197,7 @@ var _ = Describe("Client", func() {
 			c := populateClientConfig(&Config{})
 			Expect(c.Versions).To(Equal(protocol.SupportedVersions))
 			Expect(c.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
+			Expect(c.IdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
 			Expect(c.RequestConnectionIDTruncation).To(BeFalse())
 		})
 

@@ -64,8 +64,11 @@ var (
 
 // NewConnectionParamatersManager creates a new connection parameters manager
 func NewConnectionParamatersManager(
-	pers protocol.Perspective, v protocol.VersionNumber,
-	maxReceiveStreamFlowControlWindow protocol.ByteCount, maxReceiveConnectionFlowControlWindow protocol.ByteCount,
+	pers protocol.Perspective,
+	v protocol.VersionNumber,
+	maxReceiveStreamFlowControlWindow protocol.ByteCount,
+	maxReceiveConnectionFlowControlWindow protocol.ByteCount,
+	idleTimeout time.Duration,
 ) ConnectionParametersManager {
 	h := &connectionParametersManager{
 		perspective:                           pers,
@@ -78,12 +81,11 @@ func NewConnectionParamatersManager(
 		maxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindow,
 	}
 
+	h.idleConnectionStateLifetime = idleTimeout
 	if h.perspective == protocol.PerspectiveServer {
-		h.idleConnectionStateLifetime = protocol.DefaultIdleTimeout
 		h.maxStreamsPerConnection = protocol.MaxStreamsPerConnection                // this is the value negotiated based on what the client sent
 		h.maxIncomingDynamicStreamsPerConnection = protocol.MaxStreamsPerConnection // "incoming" seen from the client's perspective
 	} else {
-		h.idleConnectionStateLifetime = protocol.MaxIdleTimeoutClient
 		h.maxStreamsPerConnection = protocol.MaxStreamsPerConnection                // this is the value negotiated based on what the client sent
 		h.maxIncomingDynamicStreamsPerConnection = protocol.MaxStreamsPerConnection // "incoming" seen from the server's perspective
 	}
@@ -163,10 +165,7 @@ func (h *connectionParametersManager) negotiateMaxIncomingDynamicStreamsPerConne
 }
 
 func (h *connectionParametersManager) negotiateIdleConnectionStateLifetime(clientValue time.Duration) time.Duration {
-	if h.perspective == protocol.PerspectiveServer {
-		return utils.MinDuration(clientValue, protocol.MaxIdleTimeoutServer)
-	}
-	return utils.MinDuration(clientValue, protocol.MaxIdleTimeoutClient)
+	return utils.MinDuration(clientValue, h.idleConnectionStateLifetime)
 }
 
 // GetHelloMap gets all parameters needed for the Hello message

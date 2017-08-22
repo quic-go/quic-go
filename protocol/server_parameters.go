@@ -119,14 +119,8 @@ const CryptoParameterMaxLength = 4000
 // EphermalKeyLifetime is the lifetime of the ephermal key during the handshake, see handshake.getEphermalKEX.
 const EphermalKeyLifetime = time.Minute
 
-// DefaultIdleTimeout is the default idle timeout, for the server
+// DefaultIdleTimeout is the default idle timeout
 const DefaultIdleTimeout = 30 * time.Second
-
-// MaxIdleTimeoutServer is the maximum idle timeout that can be negotiated, for the server
-const MaxIdleTimeoutServer = 1 * time.Minute
-
-// MaxIdleTimeoutClient is the idle timeout that the client suggests to the server
-const MaxIdleTimeoutClient = 2 * time.Minute
 
 // DefaultHandshakeTimeout is the default timeout for a connection until the crypto handshake succeeds.
 const DefaultHandshakeTimeout = 10 * time.Second

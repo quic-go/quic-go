@@ -355,6 +355,7 @@ var _ = Describe("Server", func() {
 			Versions:         supportedVersions,
 			AcceptSTK:        acceptSTK,
 			HandshakeTimeout: 1337 * time.Hour,
+			IdleTimeout:      42 * time.Minute,
 		}
 		ln, err := Listen(conn, &tls.Config{}, &config)
 		Expect(err).ToNot(HaveOccurred())
@@ -364,6 +365,7 @@ var _ = Describe("Server", func() {
 		Expect(server.scfg).ToNot(BeNil())
 		Expect(server.config.Versions).To(Equal(supportedVersions))
 		Expect(server.config.HandshakeTimeout).To(Equal(1337 * time.Hour))
+		Expect(server.config.IdleTimeout).To(Equal(42 * time.Minute))
 		Expect(reflect.ValueOf(server.config.AcceptSTK)).To(Equal(reflect.ValueOf(acceptSTK)))
 	})
 
@@ -373,6 +375,7 @@ var _ = Describe("Server", func() {
 		server := ln.(*server)
 		Expect(server.config.Versions).To(Equal(protocol.SupportedVersions))
 		Expect(server.config.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
+		Expect(server.config.IdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
 		Expect(reflect.ValueOf(server.config.AcceptSTK)).To(Equal(reflect.ValueOf(defaultAcceptSTK)))
 	})
 

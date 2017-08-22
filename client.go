@@ -153,6 +153,10 @@ func populateClientConfig(config *Config) *Config {
 	if config.HandshakeTimeout != 0 {
 		handshakeTimeout = config.HandshakeTimeout
 	}
+	idleTimeout := protocol.DefaultIdleTimeout
+	if config.IdleTimeout != 0 {
+		idleTimeout = config.IdleTimeout
+	}
 
 	maxReceiveStreamFlowControlWindow := config.MaxReceiveStreamFlowControlWindow
 	if maxReceiveStreamFlowControlWindow == 0 {
@@ -166,6 +170,7 @@ func populateClientConfig(config *Config) *Config {
 	return &Config{
 		Versions:                              versions,
 		HandshakeTimeout:                      handshakeTimeout,
+		IdleTimeout:                           idleTimeout,
 		RequestConnectionIDTruncation:         config.RequestConnectionIDTruncation,
 		MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindow,
 		MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindow,

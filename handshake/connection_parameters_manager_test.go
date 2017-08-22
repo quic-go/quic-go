@@ -18,12 +18,21 @@ var _ = Describe("ConnectionsParameterManager", func() {
 	maxReceiveConnectionFlowControlWindowServer := protocol.ByteCount(math.Floor(1.5 * MB)) // default is 1.5 MB
 	maxReceiveStreamFlowControlWindowClient := protocol.ByteCount(math.Floor(6.4 * MB))     // default is 6 MB
 	maxReceiveConnectionFlowControlWindowClient := protocol.ByteCount(math.Floor(13 * MB))  // default is 15 MB
+	idleTimeout := 42 * time.Second
 	BeforeEach(func() {
-		cpm = NewConnectionParamatersManager(protocol.PerspectiveServer, protocol.Version36,
-			maxReceiveStreamFlowControlWindowServer, maxReceiveConnectionFlowControlWindowServer,
+		cpm = NewConnectionParamatersManager(
+			protocol.PerspectiveServer,
+			protocol.Version36,
+			maxReceiveStreamFlowControlWindowServer,
+			maxReceiveConnectionFlowControlWindowServer,
+			idleTimeout,
 		).(*connectionParametersManager)
-		cpmClient = NewConnectionParamatersManager(protocol.PerspectiveClient, protocol.Version36,
-			maxReceiveStreamFlowControlWindowClient, maxReceiveConnectionFlowControlWindowClient,
+		cpmClient = NewConnectionParamatersManager(
+			protocol.PerspectiveClient,
+			protocol.Version36,
+			maxReceiveStreamFlowControlWindowClient,
+			maxReceiveConnectionFlowControlWindowClient,
+			idleTimeout,
 		).(*connectionParametersManager)
 	})
 
@@ -94,7 +103,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			entryMap, err := cpmClient.GetHelloMap()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(entryMap).To(HaveKey(TagICSL))
-			Expect(binary.LittleEndian.Uint32(entryMap[TagICSL])).To(BeEquivalentTo(protocol.MaxIdleTimeoutClient / time.Second))
+			Expect(binary.LittleEndian.Uint32(entryMap[TagICSL])).To(BeEquivalentTo(idleTimeout / time.Second))
 			Expect(entryMap).To(HaveKey(TagMSPC))
 			Expect(binary.LittleEndian.Uint32(entryMap[TagMSPC])).To(BeEquivalentTo(protocol.MaxStreamsPerConnection))
 			Expect(entryMap).To(HaveKey(TagMIDS))
@@ -200,17 +209,15 @@ var _ = Describe("ConnectionsParameterManager", func() {
 
 	Context("idle connection state lifetime", func() {
 		It("has initial idle connection state lifetime", func() {
-			Expect(cpm.GetIdleConnectionStateLifetime()).To(Equal(protocol.DefaultIdleTimeout))
+			Expect(cpm.GetIdleConnectionStateLifetime()).To(Equal(idleTimeout))
 		})
 
 		It("negotiates correctly when the peer wants a longer lifetime", func() {
-			Expect(cpm.negotiateIdleConnectionStateLifetime(protocol.MaxIdleTimeoutServer + 10*time.Second)).To(Equal(protocol.MaxIdleTimeoutServer))
-			Expect(cpmClient.negotiateIdleConnectionStateLifetime(protocol.MaxIdleTimeoutClient + 10*time.Second)).To(Equal(protocol.MaxIdleTimeoutClient))
+			Expect(cpm.negotiateIdleConnectionStateLifetime(idleTimeout + 10*time.Second)).To(Equal(idleTimeout))
 		})
 
 		It("negotiates correctly when the peer wants a shorter lifetime", func() {
-			Expect(cpm.negotiateIdleConnectionStateLifetime(protocol.MaxIdleTimeoutServer - 1*time.Second)).To(Equal(protocol.MaxIdleTimeoutServer - 1*time.Second))
-			Expect(cpmClient.negotiateIdleConnectionStateLifetime(protocol.MaxIdleTimeoutClient - 1*time.Second)).To(Equal(protocol.MaxIdleTimeoutClient - 1*time.Second))
+			Expect(cpm.negotiateIdleConnectionStateLifetime(idleTimeout - 3*time.Second)).To(Equal(idleTimeout - 3*time.Second))
 		})
 
 		It("sets the negotiated lifetime", func() {
@@ -229,7 +236,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 			}
 			err := cpm.SetFromMap(values)
 			Expect(err).To(MatchError(ErrMalformedTag))
-			Expect(cpm.GetIdleConnectionStateLifetime()).To(Equal(protocol.DefaultIdleTimeout))
+			Expect(cpm.GetIdleConnectionStateLifetime()).To(Equal(idleTimeout))
 		})
 
 		It("gets idle connection state lifetime", func() {
