@@ -79,19 +79,17 @@ var _ = Describe("Server tests", func() {
 	// download files must be create *before* the quic_server is started
 	// the quic_server reads its data dir on startup, and only serves those files that were already present then
 	startServer := func() {
-		go func() {
-			defer GinkgoRecover()
-			var err error
-			command := exec.Command(
-				serverPath,
-				"--quic_response_cache_dir="+filepath.Join(tmpDir, "quic.clemente.io"),
-				"--key_file="+filepath.Join(tmpDir, "key.pkcs8"),
-				"--certificate_file="+filepath.Join(tmpDir, "cert.pem"),
-				"--port="+serverPort,
-			)
-			session, err = Start(command, nil, GinkgoWriter)
-			Expect(err).NotTo(HaveOccurred())
-		}()
+		defer GinkgoRecover()
+		var err error
+		command := exec.Command(
+			serverPath,
+			"--quic_response_cache_dir="+filepath.Join(tmpDir, "quic.clemente.io"),
+			"--key_file="+filepath.Join(tmpDir, "key.pkcs8"),
+			"--certificate_file="+filepath.Join(tmpDir, "cert.pem"),
+			"--port="+serverPort,
+		)
+		session, err = Start(command, nil, GinkgoWriter)
+		Expect(err).NotTo(HaveOccurred())
 	}
 
 	stopServer := func() {
