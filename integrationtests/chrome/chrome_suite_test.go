@@ -102,7 +102,14 @@ func getChromePath() string {
 	if runtime.GOOS == "darwin" {
 		return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 	}
-	return "google-chrome"
+	if path, err := exec.LookPath("google-chrome"); err == nil {
+		return path
+	}
+	if path, err := exec.LookPath("chromium-browser"); err == nil {
+		return path
+	}
+	Fail("No Chrome executable found.")
+	return ""
 }
 
 func chromeTest(version protocol.VersionNumber, url string, blockUntilDone func()) {
