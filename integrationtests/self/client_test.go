@@ -29,7 +29,7 @@ var _ = Describe("Client tests", func() {
 		if addr.String() != "127.0.0.1:0" {
 			Fail("quic.clemente.io does not resolve to 127.0.0.1. Consider adding it to /etc/hosts.")
 		}
-		testserver.StartQuicServer()
+		testserver.StartQuicServer(nil)
 	})
 
 	AfterEach(func() {

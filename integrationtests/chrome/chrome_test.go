@@ -11,20 +11,13 @@ import (
 
 var _ = Describe("Chrome tests", func() {
 	for i := range protocol.SupportedVersions {
-		version := protocol.SupportedVersions[i]
+		version = protocol.SupportedVersions[i]
 
 		Context(fmt.Sprintf("with quic version %d", version), func() {
-			supportedVersionsBefore := protocol.SupportedVersions
-
 			BeforeEach(func() {
 				if version == protocol.Version39 && os.Getenv("TRAVIS") == "true" {
 					Skip("The chrome version running on Travis doesn't support QUIC 39 yet.")
 				}
-				protocol.SupportedVersions = []protocol.VersionNumber{version}
-			})
-
-			AfterEach(func() {
-				protocol.SupportedVersions = supportedVersionsBefore
 			})
 
 			It("downloads a small file", func() {
