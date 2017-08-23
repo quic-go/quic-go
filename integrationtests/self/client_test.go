@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/h2quic"
 	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -19,7 +20,6 @@ import (
 
 var _ = Describe("Client tests", func() {
 	var client *http.Client
-	supportedVersions := append([]protocol.VersionNumber{}, protocol.SupportedVersions...)
 
 	BeforeEach(func() {
 		err := os.Setenv("HOSTALIASES", "quic.clemente.io 127.0.0.1")
@@ -29,23 +29,25 @@ var _ = Describe("Client tests", func() {
 		if addr.String() != "127.0.0.1:0" {
 			Fail("quic.clemente.io does not resolve to 127.0.0.1. Consider adding it to /etc/hosts.")
 		}
-		client = &http.Client{
-			Transport: &h2quic.RoundTripper{},
-		}
 		testserver.StartQuicServer()
 	})
 
 	AfterEach(func() {
 		testserver.StopQuicServer()
-		protocol.SupportedVersions = supportedVersions
 	})
 
-	for _, v := range supportedVersions {
+	for _, v := range protocol.SupportedVersions {
 		version := v
 
 		Context(fmt.Sprintf("with quic version %d", version), func() {
 			BeforeEach(func() {
-				protocol.SupportedVersions = []protocol.VersionNumber{version}
+				client = &http.Client{
+					Transport: &h2quic.RoundTripper{
+						QuicConfig: &quic.Config{
+							Versions: []protocol.VersionNumber{version},
+						},
+					},
+				}
 			})
 
 			It("downloads a hello", func() {
