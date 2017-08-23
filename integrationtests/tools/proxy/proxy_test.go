@@ -84,8 +84,8 @@ var _ = Describe("QUIC Proxy", func() {
 	Context("Proxy tests", func() {
 		var (
 			serverConn            *net.UDPConn
-			serverReceivedPackets []packetData
-			serverNumPacketsSent  int
+			serverNumPacketsSent  int32
+			serverReceivedPackets chan packetData
 			clientConn            *net.UDPConn
 			proxy                 *QuicProxy
 		)
@@ -98,9 +98,20 @@ var _ = Describe("QUIC Proxy", func() {
 			Expect(err).ToNot(HaveOccurred())
 		}
 
+		// getClientDict returns a copy of the clientDict map
+		getClientDict := func() map[string]*connection {
+			d := make(map[string]*connection)
+			proxy.mutex.Lock()
+			defer proxy.mutex.Unlock()
+			for k, v := range proxy.clientDict {
+				d[k] = v
+			}
+			return d
+		}
+
 		BeforeEach(func() {
-			serverReceivedPackets = serverReceivedPackets[:0]
-			serverNumPacketsSent = 0
+			serverReceivedPackets = make(chan packetData, 100)
+			atomic.StoreInt32(&serverNumPacketsSent, 0)
 
 			// setup a dump UDP server on port 7331
 			// in production this would be a QUIC server
@@ -118,10 +129,10 @@ var _ = Describe("QUIC Proxy", func() {
 						return
 					}
 					data := buf[0:n]
-					serverReceivedPackets = append(serverReceivedPackets, packetData(data))
+					serverReceivedPackets <- packetData(data)
 					// echo the packet
 					serverConn.WriteToUDP(data, addr)
-					serverNumPacketsSent++
+					atomic.AddInt32(&serverNumPacketsSent, 1)
 				}
 			}()
 		})
@@ -143,9 +154,9 @@ var _ = Describe("QUIC Proxy", func() {
 				_, err := clientConn.Write(makePacket(1, []byte("foobar")))
 				Expect(err).ToNot(HaveOccurred())
 
-				Eventually(func() map[string]*connection { return proxy.clientDict }).Should(HaveLen(1))
+				Eventually(getClientDict).Should(HaveLen(1))
 				var conn *connection
-				for _, conn = range proxy.clientDict {
+				for _, conn = range getClientDict() {
 					Expect(atomic.LoadUint64(&conn.incomingPacketCounter)).To(Equal(uint64(1)))
 				}
 
@@ -153,10 +164,10 @@ var _ = Describe("QUIC Proxy", func() {
 				_, err = clientConn.Write(makePacket(2, []byte("decafbad")))
 				Expect(err).ToNot(HaveOccurred())
 
-				Eventually(func() []packetData { return serverReceivedPackets }).Should(HaveLen(2))
-				Expect(proxy.clientDict).To(HaveLen(1))
-				Expect(string(serverReceivedPackets[0])).To(ContainSubstring("foobar"))
-				Expect(string(serverReceivedPackets[1])).To(ContainSubstring("decafbad"))
+				Eventually(serverReceivedPackets).Should(HaveLen(2))
+				Expect(getClientDict()).To(HaveLen(1))
+				Expect(string(<-serverReceivedPackets)).To(ContainSubstring("foobar"))
+				Expect(string(<-serverReceivedPackets)).To(ContainSubstring("decafbad"))
 			})
 
 			It("relays packets from the server to the client", func() {
@@ -165,10 +176,10 @@ var _ = Describe("QUIC Proxy", func() {
 				_, err := clientConn.Write(makePacket(1, []byte("foobar")))
 				Expect(err).ToNot(HaveOccurred())
 
-				Eventually(func() map[string]*connection { return proxy.clientDict }).Should(HaveLen(1))
+				Eventually(getClientDict).Should(HaveLen(1))
 				var key string
 				var conn *connection
-				for key, conn = range proxy.clientDict {
+				for key, conn = range getClientDict() {
 					Eventually(func() uint64 { return atomic.LoadUint64(&conn.outgoingPacketCounter) }).Should(Equal(uint64(1)))
 				}
 
@@ -176,10 +187,13 @@ var _ = Describe("QUIC Proxy", func() {
 				_, err = clientConn.Write(makePacket(2, []byte("decafbad")))
 				Expect(err).ToNot(HaveOccurred())
 
-				Expect(proxy.clientDict).To(HaveLen(1))
-				Eventually(func() uint64 { return proxy.clientDict[key].outgoingPacketCounter }).Should(BeEquivalentTo(2))
+				Expect(getClientDict()).To(HaveLen(1))
+				Eventually(func() uint64 {
+					conn := getClientDict()[key]
+					return atomic.LoadUint64(&conn.outgoingPacketCounter)
+				}).Should(BeEquivalentTo(2))
 
-				var clientReceivedPackets []packetData
+				clientReceivedPackets := make(chan packetData, 2)
 				// receive the packets echoed by the server on client side
 				go func() {
 					for {
@@ -190,16 +204,15 @@ var _ = Describe("QUIC Proxy", func() {
 							return
 						}
 						data := buf[0:n]
-						clientReceivedPackets = append(clientReceivedPackets, packetData(data))
+						clientReceivedPackets <- packetData(data)
 					}
 				}()
 
-				Eventually(func() []packetData { return serverReceivedPackets }).Should(HaveLen(2))
-				Expect(serverReceivedPackets).To(HaveLen(2))
-				Expect(serverNumPacketsSent).To(Equal(2))
-				Eventually(func() []packetData { return clientReceivedPackets }).Should(HaveLen(2))
-				Expect(string(clientReceivedPackets[0])).To(ContainSubstring("foobar"))
-				Expect(string(clientReceivedPackets[1])).To(ContainSubstring("decafbad"))
+				Eventually(serverReceivedPackets).Should(HaveLen(2))
+				Expect(atomic.LoadInt32(&serverNumPacketsSent)).To(BeEquivalentTo(2))
+				Eventually(clientReceivedPackets).Should(HaveLen(2))
+				Expect(string(<-clientReceivedPackets)).To(ContainSubstring("foobar"))
+				Expect(string(<-clientReceivedPackets)).To(ContainSubstring("decafbad"))
 			})
 		})
 
@@ -213,16 +226,16 @@ var _ = Describe("QUIC Proxy", func() {
 				}
 				startProxy(opts)
 
-				// send 6 packets
 				for i := 1; i <= 6; i++ {
 					_, err := clientConn.Write(makePacket(protocol.PacketNumber(i), []byte("foobar"+strconv.Itoa(i))))
 					Expect(err).ToNot(HaveOccurred())
 				}
-				Eventually(func() []packetData { return serverReceivedPackets }).Should(HaveLen(3))
-				Consistently(func() []packetData { return serverReceivedPackets }).Should(HaveLen(3))
+				Eventually(serverReceivedPackets).Should(HaveLen(3))
+				Consistently(serverReceivedPackets).Should(HaveLen(3))
 			})
 
 			It("drops outgoing packets", func() {
+				const numPackets = 6
 				opts := Opts{
 					RemoteAddr: serverAddr,
 					DropPacket: func(d Direction, p protocol.PacketNumber) bool {
@@ -231,7 +244,7 @@ var _ = Describe("QUIC Proxy", func() {
 				}
 				startProxy(opts)
 
-				var clientReceivedPackets []packetData
+				clientReceivedPackets := make(chan packetData, numPackets)
 				// receive the packets echoed by the server on client side
 				go func() {
 					for {
@@ -242,18 +255,17 @@ var _ = Describe("QUIC Proxy", func() {
 							return
 						}
 						data := buf[0:n]
-						clientReceivedPackets = append(clientReceivedPackets, packetData(data))
+						clientReceivedPackets <- packetData(data)
 					}
 				}()
 
-				// send 6 packets
-				for i := 1; i <= 6; i++ {
+				for i := 1; i <= numPackets; i++ {
 					_, err := clientConn.Write(makePacket(protocol.PacketNumber(i), []byte("foobar"+strconv.Itoa(i))))
 					Expect(err).ToNot(HaveOccurred())
 				}
 
-				Eventually(func() []packetData { return clientReceivedPackets }).Should(HaveLen(3))
-				Consistently(func() []packetData { return clientReceivedPackets }).Should(HaveLen(3))
+				Eventually(clientReceivedPackets).Should(HaveLen(numPackets / 2))
+				Consistently(clientReceivedPackets).Should(HaveLen(numPackets / 2))
 			})
 		})
 
@@ -288,15 +300,16 @@ var _ = Describe("QUIC Proxy", func() {
 					_, err := clientConn.Write(makePacket(protocol.PacketNumber(i), []byte("foobar"+strconv.Itoa(i))))
 					Expect(err).ToNot(HaveOccurred())
 				}
-				Eventually(func() []packetData { return serverReceivedPackets }).Should(HaveLen(1))
+				Eventually(serverReceivedPackets).Should(HaveLen(1))
 				expectDelay(start, delay, 1)
-				Eventually(func() []packetData { return serverReceivedPackets }).Should(HaveLen(2))
+				Eventually(serverReceivedPackets).Should(HaveLen(2))
 				expectDelay(start, delay, 2)
-				Eventually(func() []packetData { return serverReceivedPackets }).Should(HaveLen(3))
+				Eventually(serverReceivedPackets).Should(HaveLen(3))
 				expectDelay(start, delay, 3)
 			})
 
 			It("delays outgoing packets", func() {
+				const numPackets = 3
 				delay := 300 * time.Millisecond
 				opts := Opts{
 					RemoteAddr: serverAddr,
@@ -312,7 +325,7 @@ var _ = Describe("QUIC Proxy", func() {
 				}
 				startProxy(opts)
 
-				var clientReceivedPackets []packetData
+				clientReceivedPackets := make(chan packetData, numPackets)
 				// receive the packets echoed by the server on client side
 				go func() {
 					for {
@@ -323,24 +336,23 @@ var _ = Describe("QUIC Proxy", func() {
 							return
 						}
 						data := buf[0:n]
-						clientReceivedPackets = append(clientReceivedPackets, packetData(data))
+						clientReceivedPackets <- packetData(data)
 					}
 				}()
 
-				// send 3 packets
 				start := time.Now()
-				for i := 1; i <= 3; i++ {
+				for i := 1; i <= numPackets; i++ {
 					_, err := clientConn.Write(makePacket(protocol.PacketNumber(i), []byte("foobar"+strconv.Itoa(i))))
 					Expect(err).ToNot(HaveOccurred())
 				}
 				// the packets should have arrived immediately at the server
-				Eventually(func() []packetData { return serverReceivedPackets }).Should(HaveLen(3))
+				Eventually(serverReceivedPackets).Should(HaveLen(3))
 				expectDelay(start, delay, 0)
-				Eventually(func() []packetData { return clientReceivedPackets }).Should(HaveLen(1))
+				Eventually(clientReceivedPackets).Should(HaveLen(1))
 				expectDelay(start, delay, 1)
-				Eventually(func() []packetData { return clientReceivedPackets }).Should(HaveLen(2))
+				Eventually(clientReceivedPackets).Should(HaveLen(2))
 				expectDelay(start, delay, 2)
-				Eventually(func() []packetData { return clientReceivedPackets }).Should(HaveLen(3))
+				Eventually(clientReceivedPackets).Should(HaveLen(3))
 				expectDelay(start, delay, 3)
 			})
 		})
