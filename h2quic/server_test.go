@@ -65,7 +65,8 @@ func (s *mockSession) LocalAddr() net.Addr {
 func (s *mockSession) RemoteAddr() net.Addr {
 	return &net.UDPAddr{IP: []byte{127, 0, 0, 1}, Port: 42}
 }
-func (s *mockSession) Context() context.Context { panic("not implemented") }
+func (s *mockSession) Context() context.Context          { panic("not implemented") }
+func (*mockSession) ConnectionID() protocol.ConnectionID { return 0 }
 
 var _ = Describe("H2 server", func() {
 	var (
@@ -239,13 +240,13 @@ var _ = Describe("H2 server", func() {
 			Expect(dataStream.reset).To(BeFalse())
 		})
 
-		It("errors when non-header frames are received", func() {
+		It("errors when invalid frames are received", func() {
 			headerStream.dataToRead.Write([]byte{
 				0x0, 0x0, 0x06, 0x0, 0x0, 0x0, 0x0, 0x0, 0x5,
 				'f', 'o', 'o', 'b', 'a', 'r',
 			})
 			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
-			Expect(err).To(MatchError("InvalidHeadersStreamData: expected a header frame"))
+			Expect(err).To(MatchError("InvalidHeadersStreamData: Could not decode frame type"))
 		})
 	})
 

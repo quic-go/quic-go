@@ -52,6 +52,8 @@ type Server struct {
 	listener      quic.Listener
 
 	supportedVersionsAsString string
+
+	pushEnabled map[protocol.ConnectionID]bool
 }
 
 // ListenAndServe listens on the UDP address s.Addr and calls s.Handler to handle HTTP/2 requests on incoming connections.
@@ -87,6 +89,9 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 	if s.Server == nil {
 		return errors.New("use of h2quic.Server without http.Server")
 	}
+	if s.pushEnabled == nil {
+		s.pushEnabled = make(map[protocol.ConnectionID]bool)
+	}
 	s.listenerMutex.Lock()
 	if s.listener != nil {
 		s.listenerMutex.Unlock()
@@ -112,6 +117,7 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 		if err != nil {
 			return err
 		}
+		s.pushEnabled[sess.ConnectionID()] = true
 		go s.handleHeaderStream(sess.(streamCreator))
 	}
 }
@@ -153,9 +159,17 @@ func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, 
 		return qerr.Error(qerr.HeadersStreamDataDecompressFailure, "cannot read frame")
 	}
 	h2headersFrame, ok := h2frame.(*http2.HeadersFrame)
-	if !ok {
-		return qerr.Error(qerr.InvalidHeadersStreamData, "expected a header frame")
+	if ok {
+		return s.handleHeadersFrame(h2headersFrame, session, headerStream, headerStreamMutex, hpackDecoder)
 	}
+	h2SettingsFrame, ok := h2frame.(*http2.SettingsFrame)
+	if ok {
+		return s.handleSettingsFrame(h2SettingsFrame, session)
+	}
+	return qerr.Error(qerr.InvalidHeadersStreamData, "Could not decode frame type")
+}
+
+func (s *Server) handleHeadersFrame(h2headersFrame *http2.HeadersFrame, session streamCreator, headerStream quic.Stream, headerStreamMutex *sync.Mutex, hpackDecoder *hpack.Decoder) error {
 	if !h2headersFrame.HeadersEnded() {
 		return errors.New("http2 header continuation not implemented")
 	}
@@ -234,7 +248,30 @@ func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, 
 			session.Close(nil)
 		}
 	}()
+	return nil
+}
 
+func (s *Server) handleSettingsFrame(h2SettingsFrame *http2.SettingsFrame, session streamCreator) error {
+	// PUSH
+	// TODO: in the working draft there is no EnablePush setting! This is replaced by a separate MAX_PUSH_ID frame
+	pushEnabled, ok := h2SettingsFrame.Value(http2.SettingEnablePush)
+	if ok {
+		s.pushEnabled[session.ConnectionID()] = (pushEnabled != 0)
+	}
+	// SETTINGS_HEADER_TABLE_SIZE
+	settingHeaderTableSize, ok := h2SettingsFrame.Value(http2.SettingHeaderTableSize)
+	if ok {
+		if settingHeaderTableSize != 0 {
+			// MUST be zero
+			return qerr.InternalError
+		}
+	}
+	// SETTINGS_MAX_HEADER_LIST_SIZE
+	settingMaxHeaderListSize, ok := h2SettingsFrame.Value(http2.SettingMaxHeaderListSize)
+	if ok {
+		// TODO
+		_ = settingMaxHeaderListSize
+	}
 	return nil
 }
 
