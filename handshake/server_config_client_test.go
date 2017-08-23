@@ -17,7 +17,7 @@ func getDefaultServerConfigClient() map[Tag][]byte {
 		TagAEAD: []byte("AESG"),
 		TagPUBS: append([]byte{0x20, 0x00, 0x00}, bytes.Repeat([]byte{0}, 32)...),
 		TagOBIT: bytes.Repeat([]byte{0}, 8),
-		TagEXPY: []byte{0x0, 0x6c, 0x57, 0x78, 0, 0, 0, 0}, // 2033-12-24
+		TagEXPY: {0x0, 0x6c, 0x57, 0x78, 0, 0, 0, 0}, // 2033-12-24
 	}
 }
 

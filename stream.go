@@ -134,7 +134,7 @@ func (s *stream) Read(p []byte) (int, error) {
 			} else {
 				select {
 				case <-s.readChan:
-				case <-time.After(deadline.Sub(time.Now())):
+				case <-time.After(time.Until(deadline)):
 				}
 			}
 			s.mutex.Lock()
@@ -216,7 +216,7 @@ func (s *stream) Write(p []byte) (int, error) {
 		} else {
 			select {
 			case <-s.writeChan:
-			case <-time.After(deadline.Sub(time.Now())):
+			case <-time.After(time.Until(deadline)):
 			}
 		}
 		s.mutex.Lock()

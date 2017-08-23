@@ -753,8 +753,8 @@ var _ = Describe("SentPacketHandler", func() {
 
 			// RTT is around 1h now.
 			// The formula is (1+1/8) * RTT, so this should be around that number
-			Expect(handler.lossTime.Sub(time.Now())).To(BeNumerically("~", time.Hour*9/8, time.Minute))
-			Expect(handler.GetAlarmTimeout().Sub(time.Now())).To(BeNumerically("~", time.Hour*9/8, time.Minute))
+			Expect(time.Until(handler.lossTime)).To(BeNumerically("~", time.Hour*9/8, time.Minute))
+			Expect(time.Until(handler.GetAlarmTimeout())).To(BeNumerically("~", time.Hour*9/8, time.Minute))
 
 			handler.packetHistory.Front().Value.SendTime = time.Now().Add(-2 * time.Hour)
 			handler.OnAlarm()
@@ -773,7 +773,7 @@ var _ = Describe("SentPacketHandler", func() {
 			err = handler.ReceivedAck(&frames.AckFrame{LargestAcked: 1, LowestAcked: 1}, 1, time.Now().Add(time.Hour))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(handler.lossTime.IsZero()).To(BeTrue())
-			Expect(handler.GetAlarmTimeout().Sub(time.Now())).To(BeNumerically("~", handler.computeRTOTimeout(), time.Minute))
+			Expect(time.Until(handler.GetAlarmTimeout())).To(BeNumerically("~", handler.computeRTOTimeout(), time.Minute))
 
 			// This means RTO, so both packets should be lost
 			handler.OnAlarm()
@@ -791,7 +791,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 			handler.rttStats.UpdateRTT(time.Hour, 0, time.Now())
 			Expect(handler.lossTime.IsZero()).To(BeTrue())
-			Expect(handler.GetAlarmTimeout().Sub(time.Now())).To(BeNumerically("~", handler.computeRTOTimeout(), time.Minute))
+			Expect(time.Until(handler.GetAlarmTimeout())).To(BeNumerically("~", handler.computeRTOTimeout(), time.Minute))
 
 			handler.OnAlarm()
 			p := handler.DequeuePacketForRetransmission()

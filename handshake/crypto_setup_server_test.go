@@ -323,7 +323,7 @@ var _ = Describe("Server Crypto Setup", func() {
 			for _, v := range supportedVersions {
 				b := &bytes.Buffer{}
 				utils.WriteUint32(b, protocol.VersionNumberToTag(v))
-				Expect(response).To(ContainSubstring(string(b.Bytes())))
+				Expect(response).To(ContainSubstring(b.String()))
 			}
 			Expect(cs.secureAEAD).ToNot(BeNil())
 			Expect(cs.secureAEAD.(*mockAEAD).forwardSecure).To(BeFalse())
