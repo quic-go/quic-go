@@ -128,6 +128,7 @@ type Session interface {
 	// The context is cancelled when the session is closed.
 	// Warning: This API should not be considered stable and might change soon.
 	Context() context.Context
+	ConnectionID() protocol.ConnectionID
 }
 
 // Config contains all configuration data needed for a QUIC server or client.
