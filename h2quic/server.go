@@ -65,6 +65,8 @@ type Server struct {
 	closed        bool
 
 	supportedVersionsAsString string
+
+	pushEnabled map[protocol.ConnectionID]bool
 }
 
 // ListenAndServe listens on the UDP address s.Addr and calls s.Handler to handle HTTP/2 requests on incoming connections.
@@ -100,6 +102,9 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 	if s.Server == nil {
 		return errors.New("use of h2quic.Server without http.Server")
 	}
+	if s.pushEnabled == nil {
+		s.pushEnabled = make(map[protocol.ConnectionID]bool)
+	}
 	s.listenerMutex.Lock()
 	if s.closed {
 		s.listenerMutex.Unlock()
@@ -129,6 +134,7 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 		if err != nil {
 			return err
 		}
+		s.pushEnabled[sess.ConnectionID()] = true
 		go s.handleHeaderStream(sess.(streamCreator))
 	}
 }

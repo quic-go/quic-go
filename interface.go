@@ -131,6 +131,25 @@ type Session interface {
 	ConnectionID() protocol.ConnectionID
 }
 
+// A NonFWSession is a QUIC connection between two peers half-way through the handshake.
+// The communication is encrypted, but not yet forward secure.
+type NonFWSession interface {
+	Session
+	WaitUntilHandshakeComplete() error
+}
+
+// An STK is a Source Address token.
+// It is issued by the server and sent to the client. For the client, it is an opaque blob.
+// The client can send the STK in subsequent handshakes to prove ownership of its IP address.
+type STK struct {
+	// The remote address this token was issued for.
+	// If the server is run on a net.UDPConn, this is the string representation of the IP address (net.IP.String())
+	// Otherwise, this is the string representation of the net.Addr (net.Addr.String())
+	remoteAddr string
+	// The time that the STK was issued (resolution 1 second)
+	sentTime time.Time
+}
+
 // Config contains all configuration data needed for a QUIC server or client.
 type Config struct {
 	// The QUIC versions that can be negotiated.
