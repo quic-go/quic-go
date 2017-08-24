@@ -24,13 +24,16 @@ type receivedPacketHandler struct {
 	ackQueued                                  bool
 	ackAlarm                                   time.Time
 	lastAck                                    *frames.AckFrame
+
+	version protocol.VersionNumber
 }
 
 // NewReceivedPacketHandler creates a new receivedPacketHandler
-func NewReceivedPacketHandler() ReceivedPacketHandler {
+func NewReceivedPacketHandler(version protocol.VersionNumber) ReceivedPacketHandler {
 	return &receivedPacketHandler{
 		packetHistory: newReceivedPacketHistory(),
 		ackSendDelay:  protocol.AckSendDelay,
+		version:       version,
 	}
 }
 
@@ -74,10 +77,13 @@ func (h *receivedPacketHandler) maybeQueueAck(packetNumber protocol.PacketNumber
 		h.ackQueued = true
 	}
 
-	// Always send an ack every 20 packets in order to allow the peer to discard
-	// information from the SentPacketManager and provide an RTT measurement.
-	if h.packetsReceivedSinceLastAck >= protocol.MaxPacketsReceivedBeforeAckSend {
-		h.ackQueued = true
+	if h.version < protocol.Version39 {
+		// Always send an ack every 20 packets in order to allow the peer to discard
+		// information from the SentPacketManager and provide an RTT measurement.
+		// From QUIC 39, this is not needed anymore, since the peer will regularly send a retransmittable packet.
+		if h.packetsReceivedSinceLastAck >= protocol.MaxPacketsReceivedBeforeAckSend {
+			h.ackQueued = true
+		}
 	}
 
 	// if the packet number is smaller than the largest acked packet, it must have been reported missing with the last ACK

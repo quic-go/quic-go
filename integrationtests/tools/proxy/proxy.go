@@ -62,6 +62,8 @@ type Opts struct {
 type QuicProxy struct {
 	mutex sync.Mutex
 
+	version protocol.VersionNumber
+
 	conn       *net.UDPConn
 	serverAddr *net.UDPAddr
 
@@ -73,7 +75,7 @@ type QuicProxy struct {
 }
 
 // NewQuicProxy creates a new UDP proxy
-func NewQuicProxy(local string, opts Opts) (*QuicProxy, error) {
+func NewQuicProxy(local string, version protocol.VersionNumber, opts Opts) (*QuicProxy, error) {
 	laddr, err := net.ResolveUDPAddr("udp", local)
 	if err != nil {
 		return nil, err
@@ -103,6 +105,7 @@ func NewQuicProxy(local string, opts Opts) (*QuicProxy, error) {
 		serverAddr:  raddr,
 		dropPacket:  packetDropper,
 		delayPacket: packetDelayer,
+		version:     version,
 	}
 
 	go p.runProxy()
@@ -162,7 +165,7 @@ func (p *QuicProxy) runProxy() error {
 		atomic.AddUint64(&conn.incomingPacketCounter, 1)
 
 		r := bytes.NewReader(raw)
-		hdr, err := quic.ParsePublicHeader(r, protocol.PerspectiveClient)
+		hdr, err := quic.ParsePublicHeader(r, protocol.PerspectiveClient, protocol.VersionWhatever)
 		if err != nil {
 			return err
 		}

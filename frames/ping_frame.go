@@ -10,7 +10,7 @@ import (
 type PingFrame struct{}
 
 // ParsePingFrame parses a Ping frame
-func ParsePingFrame(r *bytes.Reader) (*PingFrame, error) {
+func ParsePingFrame(r *bytes.Reader, version protocol.VersionNumber) (*PingFrame, error) {
 	frame := &PingFrame{}
 
 	_, err := r.ReadByte()

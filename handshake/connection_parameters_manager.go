@@ -97,28 +97,28 @@ func (h *connectionParametersManager) SetFromMap(params map[Tag][]byte) error {
 	defer h.mutex.Unlock()
 
 	if value, ok := params[TagTCID]; ok && h.perspective == protocol.PerspectiveServer {
-		clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
+		clientValue, err := utils.LittleEndian.ReadUint32(bytes.NewBuffer(value))
 		if err != nil {
 			return ErrMalformedTag
 		}
 		h.truncateConnectionID = (clientValue == 0)
 	}
 	if value, ok := params[TagMSPC]; ok {
-		clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
+		clientValue, err := utils.LittleEndian.ReadUint32(bytes.NewBuffer(value))
 		if err != nil {
 			return ErrMalformedTag
 		}
 		h.maxStreamsPerConnection = h.negotiateMaxStreamsPerConnection(clientValue)
 	}
 	if value, ok := params[TagMIDS]; ok {
-		clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
+		clientValue, err := utils.LittleEndian.ReadUint32(bytes.NewBuffer(value))
 		if err != nil {
 			return ErrMalformedTag
 		}
 		h.maxIncomingDynamicStreamsPerConnection = h.negotiateMaxIncomingDynamicStreamsPerConnection(clientValue)
 	}
 	if value, ok := params[TagICSL]; ok {
-		clientValue, err := utils.ReadUint32(bytes.NewBuffer(value))
+		clientValue, err := utils.LittleEndian.ReadUint32(bytes.NewBuffer(value))
 		if err != nil {
 			return ErrMalformedTag
 		}
@@ -128,7 +128,7 @@ func (h *connectionParametersManager) SetFromMap(params map[Tag][]byte) error {
 		if h.flowControlNegotiated {
 			return ErrFlowControlRenegotiationNotSupported
 		}
-		sendStreamFlowControlWindow, err := utils.ReadUint32(bytes.NewBuffer(value))
+		sendStreamFlowControlWindow, err := utils.LittleEndian.ReadUint32(bytes.NewBuffer(value))
 		if err != nil {
 			return ErrMalformedTag
 		}
@@ -138,7 +138,7 @@ func (h *connectionParametersManager) SetFromMap(params map[Tag][]byte) error {
 		if h.flowControlNegotiated {
 			return ErrFlowControlRenegotiationNotSupported
 		}
-		sendConnectionFlowControlWindow, err := utils.ReadUint32(bytes.NewBuffer(value))
+		sendConnectionFlowControlWindow, err := utils.LittleEndian.ReadUint32(bytes.NewBuffer(value))
 		if err != nil {
 			return ErrMalformedTag
 		}
@@ -172,15 +172,15 @@ func (h *connectionParametersManager) negotiateIdleConnectionStateLifetime(clien
 // GetHelloMap gets all parameters needed for the Hello message
 func (h *connectionParametersManager) GetHelloMap() (map[Tag][]byte, error) {
 	sfcw := bytes.NewBuffer([]byte{})
-	utils.WriteUint32(sfcw, uint32(h.GetReceiveStreamFlowControlWindow()))
+	utils.LittleEndian.WriteUint32(sfcw, uint32(h.GetReceiveStreamFlowControlWindow()))
 	cfcw := bytes.NewBuffer([]byte{})
-	utils.WriteUint32(cfcw, uint32(h.GetReceiveConnectionFlowControlWindow()))
+	utils.LittleEndian.WriteUint32(cfcw, uint32(h.GetReceiveConnectionFlowControlWindow()))
 	mspc := bytes.NewBuffer([]byte{})
-	utils.WriteUint32(mspc, h.maxStreamsPerConnection)
+	utils.LittleEndian.WriteUint32(mspc, h.maxStreamsPerConnection)
 	mids := bytes.NewBuffer([]byte{})
-	utils.WriteUint32(mids, protocol.MaxIncomingDynamicStreamsPerConnection)
+	utils.LittleEndian.WriteUint32(mids, protocol.MaxIncomingDynamicStreamsPerConnection)
 	icsl := bytes.NewBuffer([]byte{})
-	utils.WriteUint32(icsl, uint32(h.GetIdleConnectionStateLifetime()/time.Second))
+	utils.LittleEndian.WriteUint32(icsl, uint32(h.GetIdleConnectionStateLifetime()/time.Second))
 
 	return map[Tag][]byte{
 		TagICSL: icsl.Bytes(),

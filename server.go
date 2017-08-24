@@ -19,6 +19,7 @@ import (
 type packetHandler interface {
 	Session
 	handlePacket(*receivedPacket)
+	GetVersion() protocol.VersionNumber
 	run() error
 	closeRemote(error)
 }
@@ -205,15 +206,34 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
-	hdr, err := ParsePublicHeader(r, protocol.PerspectiveClient)
+	connID, err := PeekConnectionID(r, protocol.PerspectiveClient)
+	if err != nil {
+		return qerr.Error(qerr.InvalidPacketHeader, err.Error())
+	}
+
+	s.sessionsMutex.RLock()
+	session, ok := s.sessions[connID]
+	s.sessionsMutex.RUnlock()
+
+	if ok && session == nil {
+		// Late packet for closed session
+		return nil
+	}
+
+	version := protocol.VersionUnknown
+	if ok {
+		version = session.GetVersion()
+	}
+
+	hdr, err := ParsePublicHeader(r, protocol.PerspectiveClient, version)
+	if err == errPacketWithUnknownVersion {
+		_, err = pconn.WriteTo(writePublicReset(connID, 0, 0), remoteAddr)
+		return err
+	}
 	if err != nil {
 		return qerr.Error(qerr.InvalidPacketHeader, err.Error())
 	}
 	hdr.Raw = packet[:len(packet)-r.Len()]
-
-	s.sessionsMutex.RLock()
-	session, ok := s.sessions[hdr.ConnectionID]
-	s.sessionsMutex.RUnlock()
 
 	// ignore all Public Reset packets
 	if hdr.ResetFlag {
@@ -250,10 +270,6 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	}
 
 	if !ok {
-		if !hdr.VersionFlag {
-			_, err = pconn.WriteTo(writePublicReset(hdr.ConnectionID, hdr.PacketNumber, 0), remoteAddr)
-			return err
-		}
 		version := hdr.VersionNumber
 		if !protocol.IsSupportedVersion(s.config.Versions, version) {
 			return errors.New("Server BUG: negotiated version not supported")
@@ -273,7 +289,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 			return err
 		}
 		s.sessionsMutex.Lock()
-		s.sessions[hdr.ConnectionID] = session
+		s.sessions[connID] = session
 		s.sessionsMutex.Unlock()
 
 		go func() {
@@ -294,10 +310,6 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 			}
 			s.sessionQueue <- session
 		}()
-	}
-	if session == nil {
-		// Late packet for closed session
-		return nil
 	}
 	session.handlePacket(&receivedPacket{
 		remoteAddr:   remoteAddr,
@@ -332,7 +344,7 @@ func composeVersionNegotiation(connectionID protocol.ConnectionID, versions []pr
 		utils.Errorf("error composing version negotiation packet: %s", err.Error())
 	}
 	for _, v := range versions {
-		utils.WriteUint32(fullReply, protocol.VersionNumberToTag(v))
+		utils.LittleEndian.WriteUint32(fullReply, protocol.VersionNumberToTag(v))
 	}
 	return fullReply.Bytes()
 }

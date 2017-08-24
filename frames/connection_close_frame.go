@@ -18,7 +18,7 @@ type ConnectionCloseFrame struct {
 }
 
 // ParseConnectionCloseFrame reads a CONNECTION_CLOSE frame
-func ParseConnectionCloseFrame(r *bytes.Reader) (*ConnectionCloseFrame, error) {
+func ParseConnectionCloseFrame(r *bytes.Reader, version protocol.VersionNumber) (*ConnectionCloseFrame, error) {
 	frame := &ConnectionCloseFrame{}
 
 	// read the TypeByte
@@ -27,13 +27,13 @@ func ParseConnectionCloseFrame(r *bytes.Reader) (*ConnectionCloseFrame, error) {
 		return nil, err
 	}
 
-	errorCode, err := utils.ReadUint32(r)
+	errorCode, err := utils.GetByteOrder(version).ReadUint32(r)
 	if err != nil {
 		return nil, err
 	}
 	frame.ErrorCode = qerr.ErrorCode(errorCode)
 
-	reasonPhraseLen, err := utils.ReadUint16(r)
+	reasonPhraseLen, err := utils.GetByteOrder(version).ReadUint16(r)
 	if err != nil {
 		return nil, err
 	}
@@ -59,14 +59,14 @@ func (f *ConnectionCloseFrame) MinLength(version protocol.VersionNumber) (protoc
 // Write writes an CONNECTION_CLOSE frame.
 func (f *ConnectionCloseFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
 	b.WriteByte(0x02)
-	utils.WriteUint32(b, uint32(f.ErrorCode))
+	utils.GetByteOrder(version).WriteUint32(b, uint32(f.ErrorCode))
 
 	if len(f.ReasonPhrase) > math.MaxUint16 {
 		return errors.New("ConnectionFrame: ReasonPhrase too long")
 	}
 
 	reasonPhraseLen := uint16(len(f.ReasonPhrase))
-	utils.WriteUint16(b, reasonPhraseLen)
+	utils.GetByteOrder(version).WriteUint16(b, reasonPhraseLen)
 	b.WriteString(f.ReasonPhrase)
 
 	return nil

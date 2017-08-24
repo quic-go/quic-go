@@ -15,7 +15,7 @@ type BlockedFrame struct {
 //Write writes a BlockedFrame frame
 func (f *BlockedFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
 	b.WriteByte(0x05)
-	utils.WriteUint32(b, uint32(f.StreamID))
+	utils.GetByteOrder(version).WriteUint32(b, uint32(f.StreamID))
 	return nil
 }
 
@@ -25,20 +25,17 @@ func (f *BlockedFrame) MinLength(version protocol.VersionNumber) (protocol.ByteC
 }
 
 // ParseBlockedFrame parses a BLOCKED frame
-func ParseBlockedFrame(r *bytes.Reader) (*BlockedFrame, error) {
+func ParseBlockedFrame(r *bytes.Reader, version protocol.VersionNumber) (*BlockedFrame, error) {
 	frame := &BlockedFrame{}
 
 	// read the TypeByte
-	_, err := r.ReadByte()
-	if err != nil {
+	if _, err := r.ReadByte(); err != nil {
 		return nil, err
 	}
-
-	sid, err := utils.ReadUint32(r)
+	sid, err := utils.GetByteOrder(version).ReadUint32(r)
 	if err != nil {
 		return nil, err
 	}
 	frame.StreamID = protocol.StreamID(sid)
-
 	return frame, nil
 }

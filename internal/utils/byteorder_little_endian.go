@@ -2,11 +2,19 @@ package utils
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 )
 
+// LittleEndian is the little-endian implementation of ByteOrder.
+var LittleEndian ByteOrder = littleEndian{}
+
+type littleEndian struct{}
+
+var _ ByteOrder = &littleEndian{}
+
 // ReadUintN reads N bytes
-func ReadUintN(b io.ByteReader, length uint8) (uint64, error) {
+func (littleEndian) ReadUintN(b io.ByteReader, length uint8) (uint64, error) {
 	var res uint64
 	for i := uint8(0); i < length; i++ {
 		bt, err := b.ReadByte()
@@ -19,7 +27,7 @@ func ReadUintN(b io.ByteReader, length uint8) (uint64, error) {
 }
 
 // ReadUint64 reads a uint64
-func ReadUint64(b io.ByteReader) (uint64, error) {
+func (littleEndian) ReadUint64(b io.ByteReader) (uint64, error) {
 	var b1, b2, b3, b4, b5, b6, b7, b8 uint8
 	var err error
 	if b1, err = b.ReadByte(); err != nil {
@@ -50,7 +58,7 @@ func ReadUint64(b io.ByteReader) (uint64, error) {
 }
 
 // ReadUint32 reads a uint32
-func ReadUint32(b io.ByteReader) (uint32, error) {
+func (littleEndian) ReadUint32(b io.ByteReader) (uint32, error) {
 	var b1, b2, b3, b4 uint8
 	var err error
 	if b1, err = b.ReadByte(); err != nil {
@@ -69,7 +77,7 @@ func ReadUint32(b io.ByteReader) (uint32, error) {
 }
 
 // ReadUint16 reads a uint16
-func ReadUint16(b io.ByteReader) (uint16, error) {
+func (littleEndian) ReadUint16(b io.ByteReader) (uint16, error) {
 	var b1, b2 uint8
 	var err error
 	if b1, err = b.ReadByte(); err != nil {
@@ -82,7 +90,7 @@ func ReadUint16(b io.ByteReader) (uint16, error) {
 }
 
 // WriteUint64 writes a uint64
-func WriteUint64(b *bytes.Buffer, i uint64) {
+func (littleEndian) WriteUint64(b *bytes.Buffer, i uint64) {
 	b.Write([]byte{
 		uint8(i), uint8(i >> 8), uint8(i >> 16), uint8(i >> 24),
 		uint8(i >> 32), uint8(i >> 40), uint8(i >> 48), uint8(i >> 56),
@@ -90,7 +98,10 @@ func WriteUint64(b *bytes.Buffer, i uint64) {
 }
 
 // WriteUint56 writes 56 bit of a uint64
-func WriteUint56(b *bytes.Buffer, i uint64) {
+func (littleEndian) WriteUint56(b *bytes.Buffer, i uint64) {
+	if i >= (1 << 56) {
+		panic(fmt.Sprintf("%#x doesn't fit into 56 bits", i))
+	}
 	b.Write([]byte{
 		uint8(i), uint8(i >> 8), uint8(i >> 16), uint8(i >> 24),
 		uint8(i >> 32), uint8(i >> 40), uint8(i >> 48),
@@ -98,7 +109,10 @@ func WriteUint56(b *bytes.Buffer, i uint64) {
 }
 
 // WriteUint48 writes 48 bit of a uint64
-func WriteUint48(b *bytes.Buffer, i uint64) {
+func (littleEndian) WriteUint48(b *bytes.Buffer, i uint64) {
+	if i >= (1 << 48) {
+		panic(fmt.Sprintf("%#x doesn't fit into 48 bits", i))
+	}
 	b.Write([]byte{
 		uint8(i), uint8(i >> 8), uint8(i >> 16), uint8(i >> 24),
 		uint8(i >> 32), uint8(i >> 40),
@@ -106,7 +120,10 @@ func WriteUint48(b *bytes.Buffer, i uint64) {
 }
 
 // WriteUint40 writes 40 bit of a uint64
-func WriteUint40(b *bytes.Buffer, i uint64) {
+func (littleEndian) WriteUint40(b *bytes.Buffer, i uint64) {
+	if i >= (1 << 40) {
+		panic(fmt.Sprintf("%#x doesn't fit into 40 bits", i))
+	}
 	b.Write([]byte{
 		uint8(i), uint8(i >> 8), uint8(i >> 16),
 		uint8(i >> 24), uint8(i >> 32),
@@ -114,16 +131,27 @@ func WriteUint40(b *bytes.Buffer, i uint64) {
 }
 
 // WriteUint32 writes a uint32
-func WriteUint32(b *bytes.Buffer, i uint32) {
+func (littleEndian) WriteUint32(b *bytes.Buffer, i uint32) {
 	b.Write([]byte{uint8(i), uint8(i >> 8), uint8(i >> 16), uint8(i >> 24)})
 }
 
 // WriteUint24 writes 24 bit of a uint32
-func WriteUint24(b *bytes.Buffer, i uint32) {
+func (littleEndian) WriteUint24(b *bytes.Buffer, i uint32) {
+	if i >= (1 << 24) {
+		panic(fmt.Sprintf("%#x doesn't fit into 24 bits", i))
+	}
 	b.Write([]byte{uint8(i), uint8(i >> 8), uint8(i >> 16)})
 }
 
 // WriteUint16 writes a uint16
-func WriteUint16(b *bytes.Buffer, i uint16) {
+func (littleEndian) WriteUint16(b *bytes.Buffer, i uint16) {
 	b.Write([]byte{uint8(i), uint8(i >> 8)})
+}
+
+func (l littleEndian) ReadUfloat16(b io.ByteReader) (uint64, error) {
+	return readUfloat16(b, l)
+}
+
+func (l littleEndian) WriteUfloat16(b *bytes.Buffer, val uint64) {
+	writeUfloat16(b, l, val)
 }

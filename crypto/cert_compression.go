@@ -51,10 +51,10 @@ func compressChain(chain [][]byte, pCommonSetHashes, pCachedHashes []byte) ([]by
 		res.WriteByte(uint8(e.t))
 		switch e.t {
 		case entryCached:
-			utils.WriteUint64(res, e.h)
+			utils.LittleEndian.WriteUint64(res, e.h)
 		case entryCommon:
-			utils.WriteUint64(res, e.h)
-			utils.WriteUint32(res, e.i)
+			utils.LittleEndian.WriteUint64(res, e.h)
+			utils.LittleEndian.WriteUint32(res, e.i)
 		case entryCompressed:
 			totalUncompressedLen += 4 + len(chain[i])
 		}
@@ -67,7 +67,7 @@ func compressChain(chain [][]byte, pCommonSetHashes, pCachedHashes []byte) ([]by
 			return nil, fmt.Errorf("cert compression failed: %s", err.Error())
 		}
 
-		utils.WriteUint32(res, uint32(totalUncompressedLen))
+		utils.LittleEndian.WriteUint32(res, uint32(totalUncompressedLen))
 
 		for i, e := range entries {
 			if e.t != entryCompressed {
@@ -115,11 +115,11 @@ func decompressChain(data []byte) ([][]byte, error) {
 			return nil, errors.New("unexpected cached certificate")
 		case entryCommon:
 			e := entry{t: entryCommon}
-			e.h, err = utils.ReadUint64(r)
+			e.h, err = utils.LittleEndian.ReadUint64(r)
 			if err != nil {
 				return nil, err
 			}
-			e.i, err = utils.ReadUint32(r)
+			e.i, err = utils.LittleEndian.ReadUint32(r)
 			if err != nil {
 				return nil, err
 			}
@@ -146,7 +146,7 @@ func decompressChain(data []byte) ([][]byte, error) {
 	}
 
 	if hasCompressedCerts {
-		uncompressedLength, err := utils.ReadUint32(r)
+		uncompressedLength, err := utils.LittleEndian.ReadUint32(r)
 		if err != nil {
 			fmt.Println(4)
 			return nil, err

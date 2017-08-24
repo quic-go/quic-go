@@ -437,7 +437,7 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 	// add crypto parameters
 	verTag := &bytes.Buffer{}
 	for _, v := range h.supportedVersions {
-		utils.WriteUint32(verTag, protocol.VersionNumberToTag(v))
+		utils.LittleEndian.WriteUint32(verTag, protocol.VersionNumberToTag(v))
 	}
 	replyMap[TagPUBS] = ephermalKex.PublicKey()
 	replyMap[TagSNO] = serverNonce

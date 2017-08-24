@@ -22,7 +22,7 @@ var _ = Describe("non-zero RTT", func() {
 
 	runRTTTest := func(rtt time.Duration, version protocol.VersionNumber) {
 		var err error
-		proxy, err = quicproxy.NewQuicProxy("localhost:", quicproxy.Opts{
+		proxy, err = quicproxy.NewQuicProxy("localhost:", version, quicproxy.Opts{
 			RemoteAddr: "localhost:" + testserver.Port(),
 			DelayPacket: func(_ quicproxy.Direction, _ protocol.PacketNumber) time.Duration {
 				return rtt / 2

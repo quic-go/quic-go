@@ -15,11 +15,9 @@ type WindowUpdateFrame struct {
 
 //Write writes a RST_STREAM frame
 func (f *WindowUpdateFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
-	typeByte := uint8(0x04)
-	b.WriteByte(typeByte)
-
-	utils.WriteUint32(b, uint32(f.StreamID))
-	utils.WriteUint64(b, uint64(f.ByteOffset))
+	b.WriteByte(0x4)
+	utils.GetByteOrder(version).WriteUint32(b, uint32(f.StreamID))
+	utils.GetByteOrder(version).WriteUint64(b, uint64(f.ByteOffset))
 	return nil
 }
 
@@ -29,26 +27,24 @@ func (f *WindowUpdateFrame) MinLength(version protocol.VersionNumber) (protocol.
 }
 
 // ParseWindowUpdateFrame parses a RST_STREAM frame
-func ParseWindowUpdateFrame(r *bytes.Reader) (*WindowUpdateFrame, error) {
+func ParseWindowUpdateFrame(r *bytes.Reader, version protocol.VersionNumber) (*WindowUpdateFrame, error) {
 	frame := &WindowUpdateFrame{}
 
 	// read the TypeByte
-	_, err := r.ReadByte()
-	if err != nil {
+	if _, err := r.ReadByte(); err != nil {
 		return nil, err
 	}
 
-	sid, err := utils.ReadUint32(r)
+	sid, err := utils.GetByteOrder(version).ReadUint32(r)
 	if err != nil {
 		return nil, err
 	}
 	frame.StreamID = protocol.StreamID(sid)
 
-	byteOffset, err := utils.ReadUint64(r)
+	byteOffset, err := utils.GetByteOrder(version).ReadUint64(r)
 	if err != nil {
 		return nil, err
 	}
 	frame.ByteOffset = protocol.ByteCount(byteOffset)
-
 	return frame, nil
 }

@@ -322,7 +322,7 @@ var _ = Describe("Server Crypto Setup", func() {
 			Expect(response).To(ContainSubstring("SNO\x00"))
 			for _, v := range supportedVersions {
 				b := &bytes.Buffer{}
-				utils.WriteUint32(b, protocol.VersionNumberToTag(v))
+				utils.LittleEndian.WriteUint32(b, protocol.VersionNumberToTag(v))
 				Expect(response).To(ContainSubstring(string(b.Bytes())))
 			}
 			Expect(cs.secureAEAD).ToNot(BeNil())

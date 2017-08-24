@@ -185,7 +185,7 @@ func (s *session) setup(
 		s.config.MaxReceiveStreamFlowControlWindow, s.config.MaxReceiveConnectionFlowControlWindow)
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats)
 	s.flowControlManager = flowcontrol.NewFlowControlManager(s.connectionParameters, s.rttStats)
-	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler()
+	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.version)
 	s.streamsMap = newStreamsMap(s.newStream, s.perspective, s.connectionParameters)
 	s.streamFramer = newStreamFramer(s.streamsMap, s.flowControlManager)
 
@@ -667,6 +667,10 @@ func (s *session) sendPacket() error {
 				s.packer.QueueControlFrame(swf)
 			}
 		}
+		// add a retransmittable frame
+		if s.sentPacketHandler.ShouldSendRetransmittablePacket() {
+			s.packer.QueueControlFrame(&frames.PingFrame{})
+		}
 		packet, err := s.packer.PackPacket()
 		if err != nil || packet == nil {
 			return err
@@ -840,4 +844,8 @@ func (s *session) LocalAddr() net.Addr {
 // RemoteAddr returns the net.Addr of the client
 func (s *session) RemoteAddr() net.Addr {
 	return s.conn.RemoteAddr()
+}
+
+func (s *session) GetVersion() protocol.VersionNumber {
+	return s.version
 }
