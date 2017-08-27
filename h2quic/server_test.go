@@ -86,6 +86,8 @@ var _ = Describe("H2 server", func() {
 				TLSConfig: testdata.GetTLSConfig(),
 			},
 		}
+		s.pushEnabled = make(map[protocol.ConnectionID]bool)
+		s.maxHeaderListSize = make(map[protocol.ConnectionID]uint32)
 		dataStream = newMockStream(0)
 		close(dataStream.unblockRead)
 		session = &mockSession{dataStream: dataStream}
@@ -339,6 +341,58 @@ var _ = Describe("H2 server", func() {
 		session.streamToAccept = headerStream
 		go s.handleHeaderStream(session)
 		Eventually(func() bool { return handlerCalled }).Should(BeTrue())
+	})
+
+	Context("HTTP/2 SETTINGS", func() {
+		var (
+			h2framer     *http2.Framer
+			hpackDecoder *hpack.Decoder
+			headerStream *mockStream
+		)
+
+		BeforeEach(func() {
+			headerStream = newMockStream(3)
+			hpackDecoder = hpack.NewDecoder(4096, nil)
+			h2framer = http2.NewFramer(nil, headerStream)
+		})
+
+		It("Handles a SETTINGS frame", func() {
+			headerStream.dataToRead.Write([]byte{
+				// length	  |type|flags| data stream id   |
+				0x0, 0x0, 0x0, 0x4, 0x0, 0x0, 0x0, 0x0, 0x0,
+			})
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("Disables pushes if requested", func() {
+			headerStream.dataToRead.Write([]byte{
+				// length	  |type|flags| data stream id   |
+				0x0, 0x0, 0x6, 0x4, 0x0, 0x0, 0x0, 0x0, 0x0,
+				// SETTINGS identifier			   | Value
+				0x0, uint8(http2.SettingEnablePush), 0x0, 0x0, 0x0, 0x0,
+			})
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			Expect(err).ToNot(HaveOccurred())
+			pushEnabled, ok := s.pushEnabled[session.ConnectionID()]
+			Expect(ok).To(Equal(true))
+			Expect(pushEnabled).To(Equal(false))
+		})
+
+		It("Sets the SETTINGS_MAX_HEADER_LIST_SIZE", func() {
+			maxHeaderListSize := uint32(123) // must be smaller than 255 to fit in uint8 later
+			headerStream.dataToRead.Write([]byte{
+				// length	  |type|flags| data stream id   |
+				0x0, 0x0, 0x6, 0x4, 0x0, 0x0, 0x0, 0x0, 0x0,
+				// SETTINGS identifier					  | Value
+				0x0, uint8(http2.SettingMaxHeaderListSize), 0x0, 0x0, 0x0, uint8(maxHeaderListSize),
+			})
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			Expect(err).ToNot(HaveOccurred())
+			maxHeaderListSizeFromConnection, ok := s.maxHeaderListSize[session.ConnectionID()]
+			Expect(ok).To(Equal(true))
+			Expect(maxHeaderListSizeFromConnection).To(Equal(maxHeaderListSize))
+		})
 	})
 
 	Context("setting http headers", func() {
