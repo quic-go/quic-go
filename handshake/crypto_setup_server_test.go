@@ -350,7 +350,6 @@ var _ = Describe("Server Crypto Setup", func() {
 			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
 			Expect(stream.dataWritten.Bytes()).To(ContainSubstring("SHLO"))
 			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionForwardSecure)))
-			Expect(aeadChanged).ToNot(Receive())
 			Expect(aeadChanged).ToNot(BeClosed())
 		})
 
@@ -384,6 +383,7 @@ var _ = Describe("Server Crypto Setup", func() {
 			Expect(stream.dataWritten.Bytes()).ToNot(ContainSubstring("REJ"))
 			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
 			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionForwardSecure)))
+			Expect(aeadChanged).ToNot(BeClosed())
 		})
 
 		It("recognizes inchoate CHLOs missing SCID", func() {
@@ -554,6 +554,8 @@ var _ = Describe("Server Crypto Setup", func() {
 				TagKEXS: kexs,
 			})
 			Expect(err).ToNot(HaveOccurred())
+			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
+			close(cs.sentSHLO)
 		}
 
 		Context("null encryption", func() {
@@ -654,8 +656,6 @@ var _ = Describe("Server Crypto Setup", func() {
 				doCHLO()
 				_, _, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
-				Expect(aeadChanged).To(Receive()) // consume the protocol.EncryptionSecure
-				Expect(aeadChanged).To(Receive()) // consume the protocol.EncryptionForwardSecure
 				Expect(aeadChanged).To(BeClosed())
 			})
 		})
