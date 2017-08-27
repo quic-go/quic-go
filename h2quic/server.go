@@ -54,7 +54,8 @@ type Server struct {
 
 	supportedVersionsAsString string
 
-	pushEnabled map[protocol.ConnectionID]bool
+	pushEnabled       map[protocol.ConnectionID]bool
+	maxHeaderListSize map[protocol.ConnectionID]uint32
 }
 
 // ListenAndServe listens on the UDP address s.Addr and calls s.Handler to handle HTTP/2 requests on incoming connections.
@@ -92,6 +93,9 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 	}
 	if s.pushEnabled == nil {
 		s.pushEnabled = make(map[protocol.ConnectionID]bool)
+	}
+	if s.maxHeaderListSize == nil {
+		s.maxHeaderListSize = make(map[protocol.ConnectionID]uint32)
 	}
 	s.listenerMutex.Lock()
 	if s.closed {
@@ -273,8 +277,7 @@ func (s *Server) handleSettingsFrame(h2SettingsFrame *http2.SettingsFrame, sessi
 	// SETTINGS_MAX_HEADER_LIST_SIZE
 	settingMaxHeaderListSize, ok := h2SettingsFrame.Value(http2.SettingMaxHeaderListSize)
 	if ok {
-		// TODO
-		_ = settingMaxHeaderListSize
+		s.maxHeaderListSize[session.ConnectionID()] = settingMaxHeaderListSize
 	}
 	return nil
 }
