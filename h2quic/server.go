@@ -222,7 +222,7 @@ func (s *Server) handleHeadersFrame(h2headersFrame *http2.HeadersFrame, session 
 	// head-of-line blocking. Potentially blocking code is run in a separate
 	// goroutine, enabling handleRequest to return before the code is executed.
 	go func() {
-		streamEnded := hasStreamEnded(h2headersFrame, dataStream)
+		streamEnded := handleStreamEnded(h2headersFrame, dataStream)
 
 		req = req.WithContext(dataStream.Context())
 		reqBody := newRequestBody(dataStream)
@@ -295,7 +295,7 @@ func serveHTTP(handler http.Handler, responseWriter *responseWriter, req *http.R
 	}
 }
 
-func hasStreamEnded(h2headersFrame *http2.HeadersFrame, dataStream quic.Stream) bool {
+func handleStreamEnded(h2headersFrame *http2.HeadersFrame, dataStream quic.Stream) bool {
 	var streamEnded bool
 	if h2headersFrame.StreamEnded() {
 		dataStream.(remoteCloser).CloseRemote(0)

@@ -232,6 +232,7 @@ var _ = Describe("Response Writer", func() {
 		It("pushes", func() {
 			err := w.Push(pushTarget, opts)
 			Expect(err).ToNot(HaveOccurred())
+			time.Sleep(time.Millisecond) // allow the server to push
 			Expect(pushStream.dataWritten.Bytes()).To(Equal([]byte(fakePushData)))
 			Expect(pushStream.closed).To(BeTrue())
 		})
@@ -240,6 +241,7 @@ var _ = Describe("Response Writer", func() {
 			pushTarget = "https://www.push.com/push_example"
 			err := w.Push(pushTarget, opts)
 			Expect(err).ToNot(HaveOccurred())
+			time.Sleep(time.Millisecond) // allow the server to push
 			Expect(pushStream.dataWritten.Bytes()).To(Equal([]byte(fakePushData)))
 			Expect(pushStream.closed).To(BeTrue())
 		})
@@ -252,12 +254,6 @@ var _ = Describe("Response Writer", func() {
 
 		It("Does not send push_promise on a server initiated stream", func() {
 			headerStream.id = 4
-			err := w.Push(pushTarget, opts)
-			Expect(err).To(HaveOccurred())
-		})
-
-		It("Does not send push resource on a client initiated stream", func() {
-			pushStream.id = 7
 			err := w.Push(pushTarget, opts)
 			Expect(err).To(HaveOccurred())
 		})

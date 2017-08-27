@@ -111,49 +111,12 @@ func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
 	if w.headerStream.StreamID()%2 == 0 { // Copied from net/http2/server.go
 		return http2.ErrRecursivePush
 	}
-	if opts == nil {
-		opts = &http.PushOptions{}
-	}
-	// Default options. Copied from net/http2/server.go
-	if opts.Method == "" {
-		opts.Method = "GET"
-	}
-	if opts.Header == nil {
-		opts.Header = http.Header{}
-	}
-	if opts.Method != "GET" && opts.Method != http.MethodHead {
-		return fmt.Errorf("method %q must be GET or HEAD", opts.Method)
-	}
-	// Validate the target. Copied from net/http2/server.go
-	u, err := url.Parse(target)
+	opts, err := ValidateOptions(opts)
 	if err != nil {
 		return err
 	}
-	wantScheme := "https"
-	if u.Scheme == "" {
-		if !strings.HasPrefix(target, "/") {
-			return fmt.Errorf("target must be an absolute URL or an absolute path: %q", target)
-		}
-		u.Scheme = wantScheme
-		u.Host = w.requestHost
-	} else {
-		if u.Scheme != wantScheme {
-			return fmt.Errorf("cannot push URL with scheme %q from request with scheme %q", u.Scheme, wantScheme)
-		}
-		if u.Host == "" {
-			return errors.New("URL must have a host")
-		}
-	}
-	for k := range opts.Header {
-		if strings.HasPrefix(k, ":") {
-			return fmt.Errorf("promised request headers cannot include pseudo header %q", k)
-		}
-		switch strings.ToLower(k) {
-		case "content-length", "content-encoding", "trailer", "te", "expect", "host":
-			return fmt.Errorf("promised request headers cannot include %q", k)
-		}
-	}
-	if err = checkValidHTTP2RequestHeaders(opts.Header); err != nil {
+	u, err := w.validateTarget(target, opts)
+	if err != nil {
 		return err
 	}
 	authority := u.Host
@@ -182,9 +145,6 @@ func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
 		return err
 	}
 	newDataStreamID := newDataStream.StreamID()
-	if newDataStreamID%2 != 0 {
-		return fmt.Errorf("Cannot push on client side stream")
-	}
 
 	// Write push promise header
 	utils.Debugf("Sending PUSH_PROMISE for target '%s', promised on stream %d", target, newDataStreamID)
@@ -211,7 +171,7 @@ func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
 	reqBody := newRequestBody(newDataStream)
 	pushRequest.Body = reqBody
 	pushRequestResponseWriter := newResponseWriter(w.headerStream, w.headerStreamMutex, newDataStream, newDataStreamID, w.settings, w.session, w.handlerFunc, w.requestHost)
-	serveHTTP(w.handlerFunc, pushRequestResponseWriter, pushRequest, true, reqBody)
+	go serveHTTP(w.handlerFunc, pushRequestResponseWriter, pushRequest, true, reqBody)
 	return nil
 }
 
@@ -258,4 +218,57 @@ func checkValidHTTP2RequestHeaders(h http.Header) error {
 		return errors.New(`request header "TE" may only be "trailers" in HTTP/2`)
 	}
 	return nil
+}
+
+func ValidateOptions(opts *http.PushOptions) (*http.PushOptions, error) {
+	if opts == nil {
+		opts = &http.PushOptions{}
+	}
+	// Default options. Copied from net/http2/server.go
+	if opts.Method == "" {
+		opts.Method = http.MethodGet
+	}
+	if opts.Header == nil {
+		opts.Header = http.Header{}
+	}
+	if opts.Method != http.MethodGet && opts.Method != http.MethodHead {
+		return nil, fmt.Errorf("method %q must be GET or HEAD", opts.Method)
+	}
+	return opts, nil
+}
+
+func (w *responseWriter) validateTarget(target string, opts *http.PushOptions) (*url.URL, error) {
+	// Validate the target. Copied from net/http2/server.go
+	u, err := url.Parse(target)
+	if err != nil {
+		return nil, err
+	}
+	wantScheme := "https"
+	if u.Scheme == "" {
+		if !strings.HasPrefix(target, "/") {
+			return nil, fmt.Errorf("target must be an absolute URL or an absolute path: %q", target)
+		}
+		u.Scheme = wantScheme
+		u.Host = w.requestHost
+	} else {
+		if u.Scheme != wantScheme {
+			return nil, fmt.Errorf("cannot push URL with scheme %q from request with scheme %q", u.Scheme, wantScheme)
+		}
+		if u.Host == "" {
+			return nil, errors.New("URL must have a host")
+		}
+	}
+	for k := range opts.Header {
+		if strings.HasPrefix(k, ":") {
+			return nil, fmt.Errorf("promised request headers cannot include pseudo header %q", k)
+		}
+		switch strings.ToLower(k) {
+		case "content-length", "content-encoding", "trailer", "te", "expect", "host":
+			return nil, fmt.Errorf("promised request headers cannot include %q", k)
+		}
+	}
+	if err = checkValidHTTP2RequestHeaders(opts.Header); err != nil {
+		return nil, err
+	}
+	return u, nil
 }
