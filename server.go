@@ -206,7 +206,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
-	connID, err := PeekConnectionID(r, protocol.PerspectiveClient)
+	connID, err := peekConnectionID(r, protocol.PerspectiveClient)
 	if err != nil {
 		return qerr.Error(qerr.InvalidPacketHeader, err.Error())
 	}

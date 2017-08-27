@@ -113,9 +113,9 @@ func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pe
 	return nil
 }
 
-// PeekConnectionID parses the connection ID from a QUIC packet's public header.
+// peekConnectionID parses the connection ID from a QUIC packet's public header.
 // If no error occurs, it restores the read position in the bytes.Reader.
-func PeekConnectionID(b *bytes.Reader, packetSentBy protocol.Perspective) (protocol.ConnectionID, error) {
+func peekConnectionID(b *bytes.Reader, packetSentBy protocol.Perspective) (protocol.ConnectionID, error) {
 	var connectionID protocol.ConnectionID
 	publicFlagByte, err := b.ReadByte()
 	if err != nil {
