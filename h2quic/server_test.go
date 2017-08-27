@@ -87,6 +87,8 @@ var _ = Describe("H2 server", func() {
 				TLSConfig: testdata.GetTLSConfig(),
 			},
 		}
+		s.pushEnabled = make(map[protocol.ConnectionID]bool)
+		s.maxHeaderListSize = make(map[protocol.ConnectionID]uint32)
 		dataStream = newMockStream(0)
 		close(dataStream.unblockRead)
 		session = &mockSession{dataStream: dataStream}
