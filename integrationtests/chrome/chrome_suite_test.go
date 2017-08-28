@@ -142,7 +142,7 @@ func chromeTestImpl(version protocol.VersionNumber, url string, blockUntilDone f
 	}
 	utils.Infof("Running chrome: %s '%s'", getChromePath(), strings.Join(args, "' '"))
 	command := exec.Command(path, args...)
-	session, err := gexec.Start(command, GinkgoWriter, GinkgoWriter)
+	session, err := gexec.Start(command, nil, nil)
 	Expect(err).NotTo(HaveOccurred())
 	defer session.Kill()
 	const pollInterval = 100 * time.Millisecond
