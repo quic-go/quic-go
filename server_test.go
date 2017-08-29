@@ -94,7 +94,7 @@ var _ = Describe("Server", func() {
 	)
 
 	BeforeEach(func() {
-		conn = &mockPacketConn{}
+		conn = &mockPacketConn{addr: &net.UDPAddr{}}
 		config = &Config{Versions: protocol.SupportedVersions}
 	})
 
