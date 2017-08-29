@@ -38,8 +38,8 @@ type cryptoSetupServer struct {
 	secureAEAD                  crypto.AEAD
 	forwardSecureAEAD           crypto.AEAD
 	receivedForwardSecurePacket bool
-	sentSHLO                    bool
 	receivedSecurePacket        bool
+	sentSHLO                    chan struct{} // this channel is closed as soon as the SHLO has been written
 	aeadChanged                 chan<- protocol.EncryptionLevel
 
 	keyDerivation KeyDerivationFunction
@@ -93,6 +93,7 @@ func NewCryptoSetup(
 		cryptoStream:         cryptoStream,
 		connectionParameters: connectionParametersManager,
 		acceptSTKCallback:    acceptSTK,
+		sentSHLO:             make(chan struct{}),
 		aeadChanged:          aeadChanged,
 	}, nil
 }
@@ -167,10 +168,11 @@ func (h *cryptoSetupServer) handleMessage(chloData []byte, cryptoData map[Tag][]
 		if err != nil {
 			return false, err
 		}
-		_, err = h.cryptoStream.Write(reply)
-		if err != nil {
+		if _, err := h.cryptoStream.Write(reply); err != nil {
 			return false, err
 		}
+		h.aeadChanged <- protocol.EncryptionForwardSecure
+		close(h.sentSHLO)
 		return true, nil
 	}
 
@@ -193,6 +195,8 @@ func (h *cryptoSetupServer) Open(dst, src []byte, packetNumber protocol.PacketNu
 		if err == nil {
 			if !h.receivedForwardSecurePacket { // this is the first forward secure packet we receive from the client
 				h.receivedForwardSecurePacket = true
+				// wait until protocol.EncryptionForwardSecure was sent on the aeadChan
+				<-h.sentSHLO
 				close(h.aeadChanged)
 			}
 			return res, protocol.EncryptionForwardSecure, nil
@@ -451,9 +455,6 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 	var reply bytes.Buffer
 	message.Write(&reply)
 	utils.Debugf("Sending %s", message)
-
-	h.aeadChanged <- protocol.EncryptionForwardSecure
-
 	return reply.Bytes(), nil
 }
 
