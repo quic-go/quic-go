@@ -6,8 +6,8 @@ import (
 	"errors"
 
 	"github.com/lucas-clemente/quic-go/handshake"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/protocol"
 )
 
 // A PublicReset is a PUBLIC_RESET

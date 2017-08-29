@@ -4,10 +4,11 @@
 package mocks
 
 import (
+	time "time"
+
 	gomock "github.com/golang/mock/gomock"
 	handshake "github.com/lucas-clemente/quic-go/handshake"
-	protocol "github.com/lucas-clemente/quic-go/protocol"
-	time "time"
+	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 )
 
 // Mock of ConnectionParametersManager interface

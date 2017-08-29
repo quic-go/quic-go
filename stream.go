@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/flowcontrol"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
-	"github.com/lucas-clemente/quic-go/protocol"
 )
 
 // A Stream assembles the data from StreamFrames and provides a super-convenient Read-Interface

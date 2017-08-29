@@ -1,6 +1,6 @@
 package crypto
 
-import "github.com/lucas-clemente/quic-go/protocol"
+import "github.com/lucas-clemente/quic-go/internal/protocol"
 
 // An AEAD implements QUIC's authenticated encryption and associated data
 type AEAD interface {
