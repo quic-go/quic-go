@@ -89,6 +89,7 @@ func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener,
 		errorChan:                 make(chan struct{}),
 	}
 	go s.serve()
+	utils.Debugf("Listening for %s connections on %s", conn.LocalAddr().Network(), conn.LocalAddr().String())
 	return s, nil
 }
 
