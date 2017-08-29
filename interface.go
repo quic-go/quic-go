@@ -102,7 +102,6 @@ type Config struct {
 	HandshakeTimeout time.Duration
 	// IdleTimeout is the maximum duration that may pass without any incoming network activity.
 	// This value only applies after the handshake has completed.
-	// Before that, the idle timeout is set to half the duration of the HandshakeTimeout.
 	// If the timeout is exceeded, the connection is closed.
 	// If this value is zero, the timeout is set to 30 seconds.
 	IdleTimeout time.Duration
