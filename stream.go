@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/flowcontrol"
+	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
