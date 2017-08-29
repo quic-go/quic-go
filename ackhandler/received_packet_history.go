@@ -2,9 +2,9 @@ package ackhandler
 
 import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
-	"github.com/lucas-clemente/quic-go/wire"
 )
 
 // The receivedPacketHistory stores if a packet number has already been received.
