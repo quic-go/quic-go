@@ -13,6 +13,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
+	"github.com/lucas-clemente/quic-go/wire"
 )
 
 type client struct {
@@ -224,7 +225,7 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
-	hdr, err := ParsePublicHeader(r, protocol.PerspectiveServer, c.version)
+	hdr, err := wire.ParsePublicHeader(r, protocol.PerspectiveServer, c.version)
 	if err != nil {
 		utils.Errorf("error parsing packet from %s: %s", remoteAddr.String(), err.Error())
 		// drop this packet if we can't parse the Public Header
@@ -280,7 +281,7 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 	})
 }
 
-func (c *client) handlePacketWithVersionFlag(hdr *PublicHeader) error {
+func (c *client) handlePacketWithVersionFlag(hdr *wire.PublicHeader) error {
 	for _, v := range hdr.SupportedVersions {
 		if v == c.version {
 			// the version negotiation packet contains the version that we offered

@@ -61,7 +61,7 @@ type mockUnpacker struct {
 	unpackErr error
 }
 
-func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data []byte) (*unpackedPacket, error) {
+func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *wire.PublicHeader, data []byte) (*unpackedPacket, error) {
 	if m.unpackErr != nil {
 		return nil, m.unpackErr
 	}
@@ -847,11 +847,11 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("receiving packets", func() {
-		var hdr *PublicHeader
+		var hdr *wire.PublicHeader
 
 		BeforeEach(func() {
 			sess.unpacker = &mockUnpacker{}
-			hdr = &PublicHeader{PacketNumberLen: protocol.PacketNumberLen6}
+			hdr = &wire.PublicHeader{PacketNumberLen: protocol.PacketNumberLen6}
 		})
 
 		It("sets the {last,largest}RcvdPacketNumber", func() {
@@ -903,7 +903,7 @@ var _ = Describe("Session", func() {
 				Expect(sess.conn.(*mockConnection).remoteAddr).ToNot(Equal(remoteIP))
 				p := receivedPacket{
 					remoteAddr:   remoteIP,
-					publicHeader: &PublicHeader{PacketNumber: 1337},
+					publicHeader: &wire.PublicHeader{PacketNumber: 1337},
 				}
 				err := sess.handlePacketImpl(&p)
 				Expect(err).ToNot(HaveOccurred())
@@ -919,7 +919,7 @@ var _ = Describe("Session", func() {
 				sess.unpacker.(*packetUnpacker).aead = &mockAEAD{}
 				p := receivedPacket{
 					remoteAddr:   attackerIP,
-					publicHeader: &PublicHeader{PacketNumber: 1337},
+					publicHeader: &wire.PublicHeader{PacketNumber: 1337},
 				}
 				err := sess.handlePacketImpl(&p)
 				quicErr := err.(*qerr.QuicError)
@@ -933,7 +933,7 @@ var _ = Describe("Session", func() {
 				Expect(sess.conn.(*mockConnection).remoteAddr).ToNot(Equal(remoteIP))
 				p := receivedPacket{
 					remoteAddr:   remoteIP,
-					publicHeader: &PublicHeader{PacketNumber: 1337},
+					publicHeader: &wire.PublicHeader{PacketNumber: 1337},
 				}
 				sess.unpacker.(*mockUnpacker).unpackErr = testErr
 				err := sess.handlePacketImpl(&p)
@@ -1347,7 +1347,7 @@ var _ = Describe("Session", func() {
 		// this completely fills up the undecryptable packets queue and triggers the public reset timer
 		sendUndecryptablePackets := func() {
 			for i := 0; i < protocol.MaxUndecryptablePackets+1; i++ {
-				hdr := &PublicHeader{
+				hdr := &wire.PublicHeader{
 					PacketNumber: protocol.PacketNumber(i + 1),
 				}
 				sess.handlePacket(&receivedPacket{
@@ -1420,7 +1420,7 @@ var _ = Describe("Session", func() {
 
 		It("unqueues undecryptable packets for later decryption", func() {
 			sess.undecryptablePackets = []*receivedPacket{{
-				publicHeader: &PublicHeader{PacketNumber: protocol.PacketNumber(42)},
+				publicHeader: &wire.PublicHeader{PacketNumber: protocol.PacketNumber(42)},
 			}}
 			Expect(sess.receivedPackets).NotTo(Receive())
 			sess.tryDecryptingQueuedPackets()
@@ -1722,10 +1722,10 @@ var _ = Describe("Client Session", func() {
 	})
 
 	Context("receiving packets", func() {
-		var hdr *PublicHeader
+		var hdr *wire.PublicHeader
 
 		BeforeEach(func() {
-			hdr = &PublicHeader{PacketNumberLen: protocol.PacketNumberLen6}
+			hdr = &wire.PublicHeader{PacketNumberLen: protocol.PacketNumberLen6}
 			sess.unpacker = &mockUnpacker{}
 		})
 

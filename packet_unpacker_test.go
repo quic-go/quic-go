@@ -31,14 +31,14 @@ var _ quicAEAD = &mockAEAD{}
 var _ = Describe("Packet unpacker", func() {
 	var (
 		unpacker *packetUnpacker
-		hdr      *PublicHeader
+		hdr      *wire.PublicHeader
 		hdrBin   []byte
 		data     []byte
 		buf      *bytes.Buffer
 	)
 
 	BeforeEach(func() {
-		hdr = &PublicHeader{
+		hdr = &wire.PublicHeader{
 			PacketNumber:    10,
 			PacketNumberLen: 1,
 		}

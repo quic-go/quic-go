@@ -1,4 +1,4 @@
-package quic
+package wire
 
 import (
 	"bytes"
@@ -11,13 +11,13 @@ import (
 )
 
 var (
-	errPacketNumberLenNotSet             = errors.New("PublicHeader: PacketNumberLen not set")
+	// ErrPacketWithUnknownVersion occurs when a packet with an unknown version is parsed.
+	// This can happen when the server is restarted. The client will send a packet without a version number.
+	ErrPacketWithUnknownVersion          = errors.New("PublicHeader: Received a packet without version number, that we don't know the version for")
 	errResetAndVersionFlagSet            = errors.New("PublicHeader: Reset Flag and Version Flag should not be set at the same time")
 	errReceivedTruncatedConnectionID     = qerr.Error(qerr.InvalidPacketHeader, "receiving packets with truncated ConnectionID is not supported")
 	errInvalidConnectionID               = qerr.Error(qerr.InvalidPacketHeader, "connection ID cannot be 0")
 	errGetLengthNotForVersionNegotiation = errors.New("PublicHeader: GetLength cannot be called for VersionNegotiation packets")
-	// this can happen when the server is restarted. The client will send a packet without a version number
-	errPacketWithUnknownVersion = errors.New("PublicHeader: Received a packet without version number, that we don't know the version for")
 )
 
 // The PublicHeader of a QUIC packet. Warning: This struct should not be considered stable and will change soon.
@@ -93,10 +93,6 @@ func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pe
 		return nil
 	}
 
-	if h.PacketNumberLen != protocol.PacketNumberLen1 && h.PacketNumberLen != protocol.PacketNumberLen2 && h.PacketNumberLen != protocol.PacketNumberLen4 && h.PacketNumberLen != protocol.PacketNumberLen6 {
-		return errPacketNumberLenNotSet
-	}
-
 	switch h.PacketNumberLen {
 	case protocol.PacketNumberLen1:
 		b.WriteByte(uint8(h.PacketNumber))
@@ -107,15 +103,15 @@ func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pe
 	case protocol.PacketNumberLen6:
 		utils.GetByteOrder(version).WriteUint48(b, uint64(h.PacketNumber)&(1<<48-1))
 	default:
-		return errPacketNumberLenNotSet
+		return errors.New("PublicHeader: PacketNumberLen not set")
 	}
 
 	return nil
 }
 
-// peekConnectionID parses the connection ID from a QUIC packet's public header.
+// PeekConnectionID parses the connection ID from a QUIC packet's public header.
 // If no error occurs, it restores the read position in the bytes.Reader.
-func peekConnectionID(b *bytes.Reader, packetSentBy protocol.Perspective) (protocol.ConnectionID, error) {
+func PeekConnectionID(b *bytes.Reader, packetSentBy protocol.Perspective) (protocol.ConnectionID, error) {
 	var connectionID protocol.ConnectionID
 	publicFlagByte, err := b.ReadByte()
 	if err != nil {
@@ -156,7 +152,7 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective, versi
 	header.ResetFlag = publicFlagByte&0x02 > 0
 	header.VersionFlag = publicFlagByte&0x01 > 0
 	if version == protocol.VersionUnknown && !(header.VersionFlag || header.ResetFlag) {
-		return nil, errPacketWithUnknownVersion
+		return nil, ErrPacketWithUnknownVersion
 	}
 
 	// TODO: activate this check once Chrome sends the correct value

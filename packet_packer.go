@@ -264,10 +264,10 @@ func (p *packetPacker) QueueControlFrame(frame wire.Frame) {
 	}
 }
 
-func (p *packetPacker) getPublicHeader(encLevel protocol.EncryptionLevel) *PublicHeader {
+func (p *packetPacker) getPublicHeader(encLevel protocol.EncryptionLevel) *wire.PublicHeader {
 	pnum := p.packetNumberGenerator.Peek()
 	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(pnum, p.leastUnacked)
-	publicHeader := &PublicHeader{
+	publicHeader := &wire.PublicHeader{
 		ConnectionID:         p.connectionID,
 		PacketNumber:         pnum,
 		PacketNumberLen:      packetNumberLen,
@@ -286,7 +286,7 @@ func (p *packetPacker) getPublicHeader(encLevel protocol.EncryptionLevel) *Publi
 }
 
 func (p *packetPacker) writeAndSealPacket(
-	publicHeader *PublicHeader,
+	publicHeader *wire.PublicHeader,
 	payloadFrames []wire.Frame,
 	sealer handshake.Sealer,
 ) ([]byte, error) {

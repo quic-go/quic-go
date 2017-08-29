@@ -9,8 +9,8 @@ import (
 
 	"fmt"
 
-	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/wire"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -22,7 +22,7 @@ var _ = Describe("QUIC Proxy", func() {
 
 	makePacket := func(p protocol.PacketNumber, payload []byte) []byte {
 		b := &bytes.Buffer{}
-		hdr := quic.PublicHeader{
+		hdr := wire.PublicHeader{
 			PacketNumber:         p,
 			PacketNumberLen:      protocol.PacketNumberLen6,
 			ConnectionID:         1337,

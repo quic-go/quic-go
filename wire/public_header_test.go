@@ -1,4 +1,4 @@
-package quic
+package wire
 
 import (
 	"bytes"
@@ -15,14 +15,14 @@ var _ = Describe("Public Header", func() {
 	Context("parsing the connection ID", func() {
 		It("does not accept truncated connection ID as a server", func() {
 			b := bytes.NewReader([]byte{0x00, 0x01})
-			_, err := peekConnectionID(b, protocol.PerspectiveClient)
+			_, err := PeekConnectionID(b, protocol.PerspectiveClient)
 			Expect(err).To(MatchError(errReceivedTruncatedConnectionID))
 		})
 
 		It("gets the connection ID", func() {
 			b := bytes.NewReader([]byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x51, 0x30, 0x33, 0x34, 0x01})
 			len := b.Len()
-			connID, err := peekConnectionID(b, protocol.PerspectiveClient)
+			connID, err := PeekConnectionID(b, protocol.PerspectiveClient)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(connID).To(Equal(protocol.ConnectionID(0x4cfa9f9b668619f6)))
 			Expect(b.Len()).To(Equal(len))
@@ -30,20 +30,20 @@ var _ = Describe("Public Header", func() {
 
 		It("errors if the Public Header is too short", func() {
 			b := bytes.NewReader([]byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b})
-			_, err := peekConnectionID(b, protocol.PerspectiveClient)
+			_, err := PeekConnectionID(b, protocol.PerspectiveClient)
 			Expect(err).To(HaveOccurred())
 		})
 
 		It("errors if the Public Header is empty", func() {
 			b := bytes.NewReader([]byte{})
-			_, err := peekConnectionID(b, protocol.PerspectiveClient)
+			_, err := PeekConnectionID(b, protocol.PerspectiveClient)
 			Expect(err).To(HaveOccurred())
 		})
 
 		It("accepts a truncated connection ID as a client", func() {
 			b := bytes.NewReader([]byte{0x00, 0x01})
 			len := b.Len()
-			connID, err := peekConnectionID(b, protocol.PerspectiveServer)
+			connID, err := PeekConnectionID(b, protocol.PerspectiveServer)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(connID).To(BeZero())
 			Expect(b.Len()).To(Equal(len))
@@ -116,7 +116,7 @@ var _ = Describe("Public Header", func() {
 		It("returns an unknown version error when receiving a packet without a version for which the version is not given", func() {
 			b := bytes.NewReader([]byte{0x10, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0xef})
 			_, err := ParsePublicHeader(b, protocol.PerspectiveServer, protocol.VersionUnknown)
-			Expect(err).To(MatchError(errPacketWithUnknownVersion))
+			Expect(err).To(MatchError(ErrPacketWithUnknownVersion))
 		})
 
 		PIt("rejects diversification nonces sent by the client", func() {
@@ -136,7 +136,7 @@ var _ = Describe("Public Header", func() {
 			}
 
 			It("parses version negotiation packets sent by the server", func() {
-				b := bytes.NewReader(composeVersionNegotiation(0x1337, protocol.SupportedVersions))
+				b := bytes.NewReader(ComposeVersionNegotiation(0x1337, protocol.SupportedVersions))
 				hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer, protocol.VersionUnknown)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(hdr.VersionFlag).To(BeTrue())
@@ -169,7 +169,7 @@ var _ = Describe("Public Header", func() {
 			})
 
 			It("errors on invalid version tags", func() {
-				data := composeVersionNegotiation(0x1337, protocol.SupportedVersions)
+				data := ComposeVersionNegotiation(0x1337, protocol.SupportedVersions)
 				data = append(data, []byte{0x13, 0x37}...)
 				b := bytes.NewReader(data)
 				_, err := ParsePublicHeader(b, protocol.PerspectiveServer, protocol.VersionUnknown)
@@ -300,7 +300,7 @@ var _ = Describe("Public Header", func() {
 			}
 			b := &bytes.Buffer{}
 			err := hdr.Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
-			Expect(err).To(MatchError(errPacketNumberLenNotSet))
+			Expect(err).To(MatchError("PublicHeader: PacketNumberLen not set"))
 		})
 
 		It("truncates the connection ID", func() {
@@ -526,7 +526,7 @@ var _ = Describe("Public Header", func() {
 					PacketNumber: 0xDECAFBAD,
 				}
 				err := hdr.Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
-				Expect(err).To(MatchError(errPacketNumberLenNotSet))
+				Expect(err).To(MatchError("PublicHeader: PacketNumberLen not set"))
 			})
 
 			Context("in little endian", func() {

@@ -14,6 +14,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
+	"github.com/lucas-clemente/quic-go/wire"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -126,14 +127,6 @@ var _ = Describe("Server", func() {
 				Port: 1234,
 			}
 			Expect(serv.Addr().String()).To(Equal("192.168.13.37:1234"))
-		})
-
-		It("composes version negotiation packets", func() {
-			expected := append(
-				[]byte{0x01 | 0x08, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
-				[]byte{'Q', '0', '9', '9'}...,
-			)
-			Expect(composeVersionNegotiation(1, []protocol.VersionNumber{99})).To(Equal(expected))
 		})
 
 		It("creates new sessions", func() {
@@ -334,7 +327,7 @@ var _ = Describe("Server", func() {
 
 		It("doesn't respond with a version negotiation packet if the first packet is too small", func() {
 			b := &bytes.Buffer{}
-			hdr := PublicHeader{
+			hdr := wire.PublicHeader{
 				VersionFlag:     true,
 				ConnectionID:    0x1337,
 				PacketNumber:    1,
@@ -402,7 +395,7 @@ var _ = Describe("Server", func() {
 	It("setups and responds with version negotiation", func() {
 		config.Versions = []protocol.VersionNumber{99}
 		b := &bytes.Buffer{}
-		hdr := PublicHeader{
+		hdr := wire.PublicHeader{
 			VersionFlag:     true,
 			ConnectionID:    0x1337,
 			PacketNumber:    1,

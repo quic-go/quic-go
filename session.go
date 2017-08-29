@@ -20,12 +20,12 @@ import (
 )
 
 type unpacker interface {
-	Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data []byte) (*unpackedPacket, error)
+	Unpack(publicHeaderBinary []byte, hdr *wire.PublicHeader, data []byte) (*unpackedPacket, error)
 }
 
 type receivedPacket struct {
 	remoteAddr   net.Addr
-	publicHeader *PublicHeader
+	publicHeader *wire.PublicHeader
 	data         []byte
 	rcvTime      time.Time
 }
