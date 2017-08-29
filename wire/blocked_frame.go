@@ -1,4 +1,4 @@
-package frames
+package wire
 
 import (
 	"bytes"

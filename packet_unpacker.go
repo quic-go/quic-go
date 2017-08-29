@@ -5,14 +5,14 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
+	"github.com/lucas-clemente/quic-go/wire"
 )
 
 type unpackedPacket struct {
 	encryptionLevel protocol.EncryptionLevel
-	frames          []frames.Frame
+	frames          []wire.Frame
 }
 
 type quicAEAD interface {
@@ -38,7 +38,7 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, da
 		return nil, qerr.MissingPayload
 	}
 
-	fs := make([]frames.Frame, 0, 2)
+	fs := make([]wire.Frame, 0, 2)
 
 	// Read all frames in the packet
 	for r.Len() > 0 {
@@ -48,19 +48,19 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, da
 		}
 		r.UnreadByte()
 
-		var frame frames.Frame
+		var frame wire.Frame
 		if typeByte&0x80 == 0x80 {
-			frame, err = frames.ParseStreamFrame(r, u.version)
+			frame, err = wire.ParseStreamFrame(r, u.version)
 			if err != nil {
 				err = qerr.Error(qerr.InvalidStreamData, err.Error())
 			} else {
-				streamID := frame.(*frames.StreamFrame).StreamID
+				streamID := frame.(*wire.StreamFrame).StreamID
 				if streamID != 1 && encryptionLevel <= protocol.EncryptionUnencrypted {
 					err = qerr.Error(qerr.UnencryptedStreamData, fmt.Sprintf("received unencrypted stream data on stream %d", streamID))
 				}
 			}
 		} else if typeByte&0xc0 == 0x40 {
-			frame, err = frames.ParseAckFrame(r, u.version)
+			frame, err = wire.ParseAckFrame(r, u.version)
 			if err != nil {
 				err = qerr.Error(qerr.InvalidAckData, err.Error())
 			}
@@ -69,37 +69,37 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, da
 		} else {
 			switch typeByte {
 			case 0x01:
-				frame, err = frames.ParseRstStreamFrame(r, u.version)
+				frame, err = wire.ParseRstStreamFrame(r, u.version)
 				if err != nil {
 					err = qerr.Error(qerr.InvalidRstStreamData, err.Error())
 				}
 			case 0x02:
-				frame, err = frames.ParseConnectionCloseFrame(r, u.version)
+				frame, err = wire.ParseConnectionCloseFrame(r, u.version)
 				if err != nil {
 					err = qerr.Error(qerr.InvalidConnectionCloseData, err.Error())
 				}
 			case 0x03:
-				frame, err = frames.ParseGoawayFrame(r, u.version)
+				frame, err = wire.ParseGoawayFrame(r, u.version)
 				if err != nil {
 					err = qerr.Error(qerr.InvalidGoawayData, err.Error())
 				}
 			case 0x04:
-				frame, err = frames.ParseWindowUpdateFrame(r, u.version)
+				frame, err = wire.ParseWindowUpdateFrame(r, u.version)
 				if err != nil {
 					err = qerr.Error(qerr.InvalidWindowUpdateData, err.Error())
 				}
 			case 0x05:
-				frame, err = frames.ParseBlockedFrame(r, u.version)
+				frame, err = wire.ParseBlockedFrame(r, u.version)
 				if err != nil {
 					err = qerr.Error(qerr.InvalidBlockedData, err.Error())
 				}
 			case 0x06:
-				frame, err = frames.ParseStopWaitingFrame(r, hdr.PacketNumber, hdr.PacketNumberLen, u.version)
+				frame, err = wire.ParseStopWaitingFrame(r, hdr.PacketNumber, hdr.PacketNumberLen, u.version)
 				if err != nil {
 					err = qerr.Error(qerr.InvalidStopWaitingData, err.Error())
 				}
 			case 0x07:
-				frame, err = frames.ParsePingFrame(r, u.version)
+				frame, err = wire.ParsePingFrame(r, u.version)
 			default:
 				err = qerr.Error(qerr.InvalidFrameData, fmt.Sprintf("unknown type byte 0x%x", typeByte))
 			}

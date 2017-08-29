@@ -1,4 +1,4 @@
-package frames
+package wire
 
 import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -11,7 +11,7 @@ import (
 
 func TestCrypto(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Frames Suite")
+	RunSpecs(t, "Wire Suite")
 }
 
 const (

@@ -1,4 +1,4 @@
-package frames
+package wire
 
 import (
 	"bytes"
@@ -37,12 +37,12 @@ var _ = Describe("Frame logging", func() {
 
 	It("logs sent frames", func() {
 		LogFrame(&RstStreamFrame{}, true)
-		Expect(buf.Bytes()).To(ContainSubstring("\t-> &frames.RstStreamFrame{StreamID:0x0, ErrorCode:0x0, ByteOffset:0x0}\n"))
+		Expect(buf.Bytes()).To(ContainSubstring("\t-> &wire.RstStreamFrame{StreamID:0x0, ErrorCode:0x0, ByteOffset:0x0}\n"))
 	})
 
 	It("logs received frames", func() {
 		LogFrame(&RstStreamFrame{}, false)
-		Expect(buf.Bytes()).To(ContainSubstring("\t<- &frames.RstStreamFrame{StreamID:0x0, ErrorCode:0x0, ByteOffset:0x0}\n"))
+		Expect(buf.Bytes()).To(ContainSubstring("\t<- &wire.RstStreamFrame{StreamID:0x0, ErrorCode:0x0, ByteOffset:0x0}\n"))
 	})
 
 	It("logs stream frames", func() {
@@ -52,7 +52,7 @@ var _ = Describe("Frame logging", func() {
 			Data:     bytes.Repeat([]byte{'f'}, 0x100),
 		}
 		LogFrame(frame, false)
-		Expect(buf.Bytes()).To(ContainSubstring("\t<- &frames.StreamFrame{StreamID: 42, FinBit: false, Offset: 0x1337, Data length: 0x100, Offset + Data length: 0x1437}\n"))
+		Expect(buf.Bytes()).To(ContainSubstring("\t<- &wire.StreamFrame{StreamID: 42, FinBit: false, Offset: 0x1337, Data length: 0x100, Offset + Data length: 0x1437}\n"))
 	})
 
 	It("logs ACK frames", func() {
@@ -62,7 +62,7 @@ var _ = Describe("Frame logging", func() {
 			DelayTime:    1 * time.Millisecond,
 		}
 		LogFrame(frame, false)
-		Expect(buf.Bytes()).To(ContainSubstring("\t<- &frames.AckFrame{LargestAcked: 0x1337, LowestAcked: 0x42, AckRanges: []frames.AckRange(nil), DelayTime: 1ms}\n"))
+		Expect(buf.Bytes()).To(ContainSubstring("\t<- &wire.AckFrame{LargestAcked: 0x1337, LowestAcked: 0x42, AckRanges: []wire.AckRange(nil), DelayTime: 1ms}\n"))
 	})
 
 	It("logs incoming StopWaiting frames", func() {
@@ -70,7 +70,7 @@ var _ = Describe("Frame logging", func() {
 			LeastUnacked: 0x1337,
 		}
 		LogFrame(frame, false)
-		Expect(buf.Bytes()).To(ContainSubstring("\t<- &frames.StopWaitingFrame{LeastUnacked: 0x1337}\n"))
+		Expect(buf.Bytes()).To(ContainSubstring("\t<- &wire.StopWaitingFrame{LeastUnacked: 0x1337}\n"))
 	})
 
 	It("logs outgoing StopWaiting frames", func() {
@@ -79,6 +79,6 @@ var _ = Describe("Frame logging", func() {
 			PacketNumberLen: protocol.PacketNumberLen4,
 		}
 		LogFrame(frame, true)
-		Expect(buf.Bytes()).To(ContainSubstring("\t-> &frames.StopWaitingFrame{LeastUnacked: 0x1337, PacketNumberLen: 0x4}\n"))
+		Expect(buf.Bytes()).To(ContainSubstring("\t-> &wire.StopWaitingFrame{LeastUnacked: 0x1337, PacketNumberLen: 0x4}\n"))
 	})
 })
