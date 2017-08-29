@@ -181,8 +181,13 @@ func (s *session) setup(
 	s.sessionCreationTime = now
 
 	s.rttStats = &congestion.RTTStats{}
-	s.connectionParameters = handshake.NewConnectionParamatersManager(s.perspective, s.version,
-		s.config.MaxReceiveStreamFlowControlWindow, s.config.MaxReceiveConnectionFlowControlWindow)
+	s.connectionParameters = handshake.NewConnectionParamatersManager(
+		s.perspective,
+		s.version,
+		s.config.MaxReceiveStreamFlowControlWindow,
+		s.config.MaxReceiveConnectionFlowControlWindow,
+		s.config.IdleTimeout,
+	)
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats)
 	s.flowControlManager = flowcontrol.NewFlowControlManager(s.connectionParameters, s.rttStats)
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.version)
@@ -318,11 +323,11 @@ runLoop:
 		if !s.receivedTooManyUndecrytablePacketsTime.IsZero() && s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout).Before(now) && len(s.undecryptablePackets) != 0 {
 			s.closeLocal(qerr.Error(qerr.DecryptionFailure, "too many undecryptable packets received"))
 		}
-		if now.Sub(s.lastNetworkActivityTime) >= s.idleTimeout() {
-			s.closeLocal(qerr.Error(qerr.NetworkIdleTimeout, "No recent network activity."))
-		}
 		if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= s.config.HandshakeTimeout {
 			s.closeLocal(qerr.Error(qerr.HandshakeTimeout, "Crypto handshake did not complete in time."))
+		}
+		if s.handshakeComplete && now.Sub(s.lastNetworkActivityTime) >= s.idleTimeout() {
+			s.closeLocal(qerr.Error(qerr.NetworkIdleTimeout, "No recent network activity."))
 		}
 		s.garbageCollectStreams()
 	}
@@ -368,10 +373,7 @@ func (s *session) maybeResetTimer() {
 }
 
 func (s *session) idleTimeout() time.Duration {
-	if s.handshakeComplete {
-		return s.connectionParameters.GetIdleConnectionStateLifetime()
-	}
-	return protocol.InitialIdleTimeout
+	return s.connectionParameters.GetIdleConnectionStateLifetime()
 }
 
 func (s *session) handlePacketImpl(p *receivedPacket) error {

@@ -8,6 +8,7 @@
 - Add a `quic.Config` option to request truncation of the connection ID from a server
 - Add a `quic.Config` option to configure the source address validation
 - Add a `quic.Config` option to configure the handshake timeout
+- Add a `quic.Config` option to configure the idle timeout
 - Add a `quic.Config` option to configure keep-alive
 - Implement `net.Conn`-style deadlines for streams
 - Remove the `tls.Config` from the `quic.Config`. The `tls.Config` must now be passed to the `Dial` and `Listen` functions as a separate parameter. See the [Godoc](https://godoc.org/github.com/lucas-clemente/quic-go) for details.

@@ -1507,6 +1507,7 @@ var _ = Describe("Session", func() {
 
 	Context("timeouts", func() {
 		It("times out due to no network activity", func(done Done) {
+			sess.handshakeComplete = true
 			sess.lastNetworkActivityTime = time.Now().Add(-time.Hour)
 			err := sess.run() // Would normally not return
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
@@ -1524,18 +1525,22 @@ var _ = Describe("Session", func() {
 			close(done)
 		})
 
-		It("does not use ICSL before handshake", func(done Done) {
+		It("does not use ICSL before handshake", func() {
+			defer sess.Close(nil)
 			sess.lastNetworkActivityTime = time.Now().Add(-time.Minute)
 			mockCpm = mocks.NewMockConnectionParametersManager(mockCtrl)
 			mockCpm.EXPECT().GetIdleConnectionStateLifetime().Return(9999 * time.Second).AnyTimes()
 			mockCpm.EXPECT().TruncateConnectionID().Return(false).AnyTimes()
 			sess.connectionParameters = mockCpm
 			sess.packer.connectionParameters = mockCpm
-			err := sess.run() // Would normally not return
-			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
-			Expect(mconn.written).To(Receive(ContainSubstring("No recent network activity.")))
-			Expect(sess.Context().Done()).To(BeClosed())
-			close(done)
+			// the handshake timeout is irrelevant here, since it depends on the time the session was created,
+			// and not on the last network activity
+			done := make(chan struct{})
+			go func() {
+				_ = sess.run()
+				close(done)
+			}()
+			Consistently(done).ShouldNot(BeClosed())
 		})
 
 		It("uses ICSL after handshake", func(done Done) {
