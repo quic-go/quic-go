@@ -244,13 +244,13 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 			utils.Infof("Received a spoofed Public Reset. Ignoring.")
 			return
 		}
-		pr, err := parsePublicReset(r)
+		pr, err := wire.ParsePublicReset(r)
 		if err != nil {
 			utils.Infof("Received a Public Reset for connection %x. An error occurred parsing the packet.")
 			return
 		}
-		utils.Infof("Received Public Reset, rejected packet number: %#x.", pr.rejectedPacketNumber)
-		c.session.closeRemote(qerr.Error(qerr.PublicReset, fmt.Sprintf("Received a Public Reset for packet number %#x", pr.rejectedPacketNumber)))
+		utils.Infof("Received Public Reset, rejected packet number: %#x.", pr.RejectedPacketNumber)
+		c.session.closeRemote(qerr.Error(qerr.PublicReset, fmt.Sprintf("Received a Public Reset for packet number %#x", pr.RejectedPacketNumber)))
 		return
 	}
 

@@ -1,4 +1,4 @@
-package quic
+package wire
 
 import (
 	"bytes"
@@ -10,12 +10,14 @@ import (
 	"github.com/lucas-clemente/quic-go/protocol"
 )
 
-type publicReset struct {
-	rejectedPacketNumber protocol.PacketNumber
-	nonce                uint64
+// A PublicReset is a PUBLIC_RESET
+type PublicReset struct {
+	RejectedPacketNumber protocol.PacketNumber
+	Nonce                uint64
 }
 
-func writePublicReset(connectionID protocol.ConnectionID, rejectedPacketNumber protocol.PacketNumber, nonceProof uint64) []byte {
+// WritePublicReset writes a Public Reset
+func WritePublicReset(connectionID protocol.ConnectionID, rejectedPacketNumber protocol.PacketNumber, nonceProof uint64) []byte {
 	b := &bytes.Buffer{}
 	b.WriteByte(0x0a)
 	utils.LittleEndian.WriteUint64(b, uint64(connectionID))
@@ -30,8 +32,9 @@ func writePublicReset(connectionID protocol.ConnectionID, rejectedPacketNumber p
 	return b.Bytes()
 }
 
-func parsePublicReset(r *bytes.Reader) (*publicReset, error) {
-	pr := publicReset{}
+// ParsePublicReset parses a Public Reset
+func ParsePublicReset(r *bytes.Reader) (*PublicReset, error) {
+	pr := PublicReset{}
 	msg, err := handshake.ParseHandshakeMessage(r)
 	if err != nil {
 		return nil, err
@@ -47,7 +50,7 @@ func parsePublicReset(r *bytes.Reader) (*publicReset, error) {
 	if len(rseq) != 8 {
 		return nil, errors.New("invalid RSEQ tag")
 	}
-	pr.rejectedPacketNumber = protocol.PacketNumber(binary.LittleEndian.Uint64(rseq))
+	pr.RejectedPacketNumber = protocol.PacketNumber(binary.LittleEndian.Uint64(rseq))
 
 	rnon, ok := msg.Data[handshake.TagRNON]
 	if !ok {
@@ -56,7 +59,7 @@ func parsePublicReset(r *bytes.Reader) (*publicReset, error) {
 	if len(rnon) != 8 {
 		return nil, errors.New("invalid RNON tag")
 	}
-	pr.nonce = binary.LittleEndian.Uint64(rnon)
+	pr.Nonce = binary.LittleEndian.Uint64(rnon)
 
 	return &pr, nil
 }

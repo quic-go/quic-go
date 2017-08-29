@@ -234,7 +234,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 
 	hdr, err := wire.ParsePublicHeader(r, protocol.PerspectiveClient, version)
 	if err == wire.ErrPacketWithUnknownVersion {
-		_, err = pconn.WriteTo(writePublicReset(connID, 0, 0), remoteAddr)
+		_, err = pconn.WriteTo(wire.WritePublicReset(connID, 0, 0), remoteAddr)
 		return err
 	}
 	if err != nil {
@@ -245,12 +245,12 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	// ignore all Public Reset packets
 	if hdr.ResetFlag {
 		if ok {
-			var pr *publicReset
-			pr, err = parsePublicReset(r)
+			var pr *wire.PublicReset
+			pr, err = wire.ParsePublicReset(r)
 			if err != nil {
 				utils.Infof("Received a Public Reset for connection %x. An error occurred parsing the packet.")
 			} else {
-				utils.Infof("Received a Public Reset for connection %x, rejected packet number: 0x%x.", hdr.ConnectionID, pr.rejectedPacketNumber)
+				utils.Infof("Received a Public Reset for connection %x, rejected packet number: 0x%x.", hdr.ConnectionID, pr.RejectedPacketNumber)
 			}
 		} else {
 			utils.Infof("Received Public Reset for unknown connection %x.", hdr.ConnectionID)

@@ -1,4 +1,4 @@
-package quic
+package wire
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ import (
 var _ = Describe("public reset", func() {
 	Context("writing", func() {
 		It("writes public reset packets", func() {
-			Expect(writePublicReset(0xdeadbeef, 0x8badf00d, 0xdecafbad)).To(Equal([]byte{
+			Expect(WritePublicReset(0xdeadbeef, 0x8badf00d, 0xdecafbad)).To(Equal([]byte{
 				0x0a,
 				0xef, 0xbe, 0xad, 0xde, 0x00, 0x00, 0x00, 0x00,
 				'P', 'R', 'S', 'T',
@@ -36,21 +36,21 @@ var _ = Describe("public reset", func() {
 		})
 
 		It("parses a public reset", func() {
-			packet := writePublicReset(0xdeadbeef, 0x8badf00d, 0xdecafbad)
-			pr, err := parsePublicReset(bytes.NewReader(packet[9:])) // 1 byte Public Flag, 8 bytes connection ID
+			packet := WritePublicReset(0xdeadbeef, 0x8badf00d, 0xdecafbad)
+			pr, err := ParsePublicReset(bytes.NewReader(packet[9:])) // 1 byte Public Flag, 8 bytes connection ID
 			Expect(err).ToNot(HaveOccurred())
-			Expect(pr.nonce).To(Equal(uint64(0xdecafbad)))
-			Expect(pr.rejectedPacketNumber).To(Equal(protocol.PacketNumber(0x8badf00d)))
+			Expect(pr.Nonce).To(Equal(uint64(0xdecafbad)))
+			Expect(pr.RejectedPacketNumber).To(Equal(protocol.PacketNumber(0x8badf00d)))
 		})
 
 		It("rejects packets that it can't parse", func() {
-			_, err := parsePublicReset(bytes.NewReader([]byte{}))
+			_, err := ParsePublicReset(bytes.NewReader([]byte{}))
 			Expect(err).To(MatchError(io.EOF))
 		})
 
 		It("rejects packets with the wrong tag", func() {
 			handshake.HandshakeMessage{Tag: handshake.TagREJ, Data: nil}.Write(b)
-			_, err := parsePublicReset(bytes.NewReader(b.Bytes()))
+			_, err := ParsePublicReset(bytes.NewReader(b.Bytes()))
 			Expect(err).To(MatchError("wrong public reset tag"))
 		})
 
@@ -59,7 +59,7 @@ var _ = Describe("public reset", func() {
 				handshake.TagRSEQ: []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
 			}
 			handshake.HandshakeMessage{Tag: handshake.TagPRST, Data: data}.Write(b)
-			_, err := parsePublicReset(bytes.NewReader(b.Bytes()))
+			_, err := ParsePublicReset(bytes.NewReader(b.Bytes()))
 			Expect(err).To(MatchError("RNON missing"))
 		})
 
@@ -69,7 +69,7 @@ var _ = Describe("public reset", func() {
 				handshake.TagRNON: []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13},
 			}
 			handshake.HandshakeMessage{Tag: handshake.TagPRST, Data: data}.Write(b)
-			_, err := parsePublicReset(bytes.NewReader(b.Bytes()))
+			_, err := ParsePublicReset(bytes.NewReader(b.Bytes()))
 			Expect(err).To(MatchError("invalid RNON tag"))
 		})
 
@@ -78,7 +78,7 @@ var _ = Describe("public reset", func() {
 				handshake.TagRNON: []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
 			}
 			handshake.HandshakeMessage{Tag: handshake.TagPRST, Data: data}.Write(b)
-			_, err := parsePublicReset(bytes.NewReader(b.Bytes()))
+			_, err := ParsePublicReset(bytes.NewReader(b.Bytes()))
 			Expect(err).To(MatchError("RSEQ missing"))
 		})
 
@@ -88,7 +88,7 @@ var _ = Describe("public reset", func() {
 				handshake.TagRNON: []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
 			}
 			handshake.HandshakeMessage{Tag: handshake.TagPRST, Data: data}.Write(b)
-			_, err := parsePublicReset(bytes.NewReader(b.Bytes()))
+			_, err := ParsePublicReset(bytes.NewReader(b.Bytes()))
 			Expect(err).To(MatchError("invalid RSEQ tag"))
 		})
 	})
