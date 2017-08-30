@@ -71,7 +71,7 @@ var _ = Describe("Response Writer", func() {
 	BeforeEach(func() {
 		headerStream = &mockStream{}
 		dataStream = &mockStream{}
-		w = newResponseWriter(headerStream, &sync.Mutex{}, dataStream, 5)
+		w = newResponseWriter(headerStream, &sync.Mutex{}, dataStream, 5, newSessionSettings())
 	})
 
 	decodeHeaderFields := func() map[string][]string {

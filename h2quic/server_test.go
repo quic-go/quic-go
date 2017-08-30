@@ -78,6 +78,7 @@ var _ = Describe("H2 server", func() {
 		session            *mockSession
 		dataStream         *mockStream
 		origQuicListenAddr = quicListenAddr
+		settings           *sessionSettings
 	)
 
 	BeforeEach(func() {
@@ -86,13 +87,12 @@ var _ = Describe("H2 server", func() {
 				TLSConfig: testdata.GetTLSConfig(),
 			},
 		}
-		s.pushEnabled = make(map[protocol.ConnectionID]bool)
-		s.maxHeaderListSize = make(map[protocol.ConnectionID]uint32)
 		dataStream = newMockStream(0)
 		close(dataStream.unblockRead)
 		session = &mockSession{dataStream: dataStream}
 		session.ctx, session.ctxCancel = context.WithCancel(context.Background())
 		origQuicListenAddr = quicListenAddr
+		settings = newSessionSettings()
 	})
 
 	AfterEach(func() {
@@ -125,7 +125,7 @@ var _ = Describe("H2 server", func() {
 				// Taken from https://http2.github.io/http2-spec/compression.html#request.examples.with.huffman.coding
 				0x82, 0x86, 0x84, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff,
 			})
-			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer, settings)
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(func() bool { return handlerCalled }).Should(BeTrue())
 			Expect(dataStream.remoteClosed).To(BeTrue())
@@ -139,7 +139,7 @@ var _ = Describe("H2 server", func() {
 				// Taken from https://http2.github.io/http2-spec/compression.html#request.examples.with.huffman.coding
 				0x82, 0x86, 0x84, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff,
 			})
-			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer, settings)
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(func() []byte {
 				return headerStream.dataWritten.Bytes()
@@ -155,7 +155,7 @@ var _ = Describe("H2 server", func() {
 				// Taken from https://http2.github.io/http2-spec/compression.html#request.examples.with.huffman.coding
 				0x82, 0x86, 0x84, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff,
 			})
-			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer, settings)
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(func() []byte {
 				return headerStream.dataWritten.Bytes()
@@ -173,7 +173,7 @@ var _ = Describe("H2 server", func() {
 				// Taken from https://http2.github.io/http2-spec/compression.html#request.examples.with.huffman.coding
 				0x82, 0x86, 0x84, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff,
 			})
-			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer, settings)
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(func() bool { return handlerCalled }).Should(BeTrue())
 			Eventually(func() bool { return dataStream.reset }).Should(BeTrue())
@@ -188,7 +188,7 @@ var _ = Describe("H2 server", func() {
 				handlerCalled = true
 			})
 			headerStream.dataToRead.Write([]byte{0x0, 0x0, 0x20, 0x1, 0x24, 0x0, 0x0, 0x0, 0x5, 0x0, 0x0, 0x0, 0x0, 0xff, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff, 0x83, 0x84, 0x87, 0x5c, 0x1, 0x37, 0x7a, 0x85, 0xed, 0x69, 0x88, 0xb4, 0xc7})
-			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer, settings)
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(func() bool { return dataStream.reset }).Should(BeTrue())
 			Consistently(func() bool { return dataStream.remoteClosed }).Should(BeFalse())
@@ -206,7 +206,7 @@ var _ = Describe("H2 server", func() {
 				// Taken from https://http2.github.io/http2-spec/compression.html#request.examples.with.huffman.coding
 				0x82, 0x86, 0x84, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff,
 			})
-			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer, settings)
 			Expect(err).NotTo(HaveOccurred())
 			Consistently(func() bool { return handlerCalled }).Should(BeFalse())
 		})
@@ -221,7 +221,7 @@ var _ = Describe("H2 server", func() {
 				handlerCalled = true
 			})
 			headerStream.dataToRead.Write([]byte{0x0, 0x0, 0x20, 0x1, 0x24, 0x0, 0x0, 0x0, 0x5, 0x0, 0x0, 0x0, 0x0, 0xff, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff, 0x83, 0x84, 0x87, 0x5c, 0x1, 0x37, 0x7a, 0x85, 0xed, 0x69, 0x88, 0xb4, 0xc7})
-			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer, settings)
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(func() bool { return dataStream.reset }).Should(BeTrue())
 			Consistently(func() bool { return dataStream.remoteClosed }).Should(BeFalse())
@@ -241,7 +241,7 @@ var _ = Describe("H2 server", func() {
 			})
 			headerStream.dataToRead.Write([]byte{0x0, 0x0, 0x20, 0x1, 0x24, 0x0, 0x0, 0x0, 0x5, 0x0, 0x0, 0x0, 0x0, 0xff, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff, 0x83, 0x84, 0x87, 0x5c, 0x1, 0x37, 0x7a, 0x85, 0xed, 0x69, 0x88, 0xb4, 0xc7})
 			dataStream.dataToRead.Write([]byte("foo=bar"))
-			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer, settings)
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(func() bool { return handlerCalled }).Should(BeTrue())
 			Expect(dataStream.reset).To(BeFalse())
@@ -252,7 +252,7 @@ var _ = Describe("H2 server", func() {
 				0x0, 0x0, 0x06, 0x0, 0x0, 0x0, 0x0, 0x0, 0x5,
 				'f', 'o', 'o', 'b', 'a', 'r',
 			})
-			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer, settings)
 			Expect(err).To(MatchError("InvalidHeadersStreamData: Could not decode frame type"))
 		})
 
@@ -271,7 +271,7 @@ var _ = Describe("H2 server", func() {
 				0x82, 0x86, 0x84, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff,
 			})
 			dataStream.Close()
-			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer, settings)
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(func() bool { return handlerCalled }).Should(BeTrue())
 			Expect(dataStream.remoteClosed).To(BeTrue())
@@ -361,7 +361,7 @@ var _ = Describe("H2 server", func() {
 				// length	  |type|flags| data stream id   |
 				0x0, 0x0, 0x0, 0x4, 0x0, 0x0, 0x0, 0x0, 0x0,
 			})
-			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			_, err := s.handleFirstRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -372,11 +372,9 @@ var _ = Describe("H2 server", func() {
 				// SETTINGS identifier			   | Value
 				0x0, uint8(http2.SettingEnablePush), 0x0, 0x0, 0x0, 0x0,
 			})
-			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			settings, err := s.handleFirstRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
 			Expect(err).ToNot(HaveOccurred())
-			pushEnabled, ok := s.pushEnabled[session.ConnectionID()]
-			Expect(ok).To(Equal(true))
-			Expect(pushEnabled).To(Equal(false))
+			Expect(settings.pushEnabled).To(Equal(false))
 		})
 
 		It("Sets the SETTINGS_MAX_HEADER_LIST_SIZE", func() {
@@ -387,11 +385,9 @@ var _ = Describe("H2 server", func() {
 				// SETTINGS identifier					  | Value
 				0x0, uint8(http2.SettingMaxHeaderListSize), 0x0, 0x0, 0x0, uint8(maxHeaderListSize),
 			})
-			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			settings, err := s.handleFirstRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
 			Expect(err).ToNot(HaveOccurred())
-			maxHeaderListSizeFromConnection, ok := s.maxHeaderListSize[session.ConnectionID()]
-			Expect(ok).To(Equal(true))
-			Expect(maxHeaderListSizeFromConnection).To(Equal(maxHeaderListSize))
+			Expect(settings.maxHeaderListSize).To(Equal(maxHeaderListSize))
 		})
 	})
 
