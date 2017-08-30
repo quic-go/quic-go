@@ -24,15 +24,18 @@ type responseWriter struct {
 	header        http.Header
 	status        int // status code passed to WriteHeader
 	headerWritten bool
+
+	settings *sessionSettings
 }
 
-func newResponseWriter(headerStream quic.Stream, headerStreamMutex *sync.Mutex, dataStream quic.Stream, dataStreamID protocol.StreamID) *responseWriter {
+func newResponseWriter(headerStream quic.Stream, headerStreamMutex *sync.Mutex, dataStream quic.Stream, dataStreamID protocol.StreamID, settings *sessionSettings) *responseWriter {
 	return &responseWriter{
 		header:            http.Header{},
 		headerStream:      headerStream,
 		headerStreamMutex: headerStreamMutex,
 		dataStream:        dataStream,
 		dataStreamID:      dataStreamID,
+		settings:          settings,
 	}
 }
 
