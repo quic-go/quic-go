@@ -135,8 +135,15 @@ var _ = Describe("Client", func() {
 				remoteAddrChan <- conn.RemoteAddr().String()
 				return sess, nil, nil
 			}
-			go DialAddr("localhost:17890", nil, &Config{})
+			dialed := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				DialAddr("localhost:17890", nil, &Config{HandshakeTimeout: time.Millisecond})
+				close(dialed)
+			}()
 			Eventually(remoteAddrChan).Should(Receive(Equal("127.0.0.1:17890")))
+			sess.Close(errors.New("peer doesn't reply"))
+			Eventually(dialed).Should(BeClosed())
 			close(done)
 		})
 
@@ -154,8 +161,15 @@ var _ = Describe("Client", func() {
 				hostnameChan <- h
 				return sess, nil, nil
 			}
-			go DialAddr("localhost:17890", &tls.Config{ServerName: "foobar"}, nil)
+			dialed := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				DialAddr("localhost:17890", &tls.Config{ServerName: "foobar"}, nil)
+				close(dialed)
+			}()
 			Eventually(hostnameChan).Should(Receive(Equal("foobar")))
+			sess.Close(errors.New("peer doesn't reply"))
+			Eventually(dialed).Should(BeClosed())
 			close(done)
 		})
 
@@ -163,6 +177,7 @@ var _ = Describe("Client", func() {
 			testErr := errors.New("early handshake error")
 			var dialErr error
 			go func() {
+				defer GinkgoRecover()
 				_, dialErr = Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
 				Expect(dialErr).To(MatchError(testErr))
 				close(done)
@@ -338,15 +353,19 @@ var _ = Describe("Client", func() {
 			close(c)
 			return sess, nil, nil
 		}
+		dialed := make(chan struct{})
 		go func() {
-			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
-			Expect(err).ToNot(HaveOccurred())
+			defer GinkgoRecover()
+			Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
+			close(dialed)
 		}()
 		Eventually(c).Should(BeClosed())
 		Expect(cconn.(*conn).pconn).To(Equal(packetConn))
 		Expect(hostname).To(Equal("quic.clemente.io"))
 		Expect(version).To(Equal(cl.version))
 		Expect(conf.Versions).To(Equal(config.Versions))
+		sess.Close(errors.New("peer doesn't reply"))
+		Eventually(dialed).Should(BeClosed())
 		close(done)
 	})
 
