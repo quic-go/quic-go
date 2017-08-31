@@ -6,8 +6,14 @@ import (
 	"net"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
+
+// The StreamID is the ID of a QUIC stream.
+type StreamID = protocol.StreamID
+
+// A VersionNumber is a QUIC version number.
+type VersionNumber = protocol.VersionNumber
 
 // Stream is the interface implemented by QUIC streams
 type Stream interface {
@@ -20,7 +26,7 @@ type Stream interface {
 	// after a fixed time limit; see SetDeadline and SetWriteDeadline.
 	io.Writer
 	io.Closer
-	StreamID() protocol.StreamID
+	StreamID() StreamID
 	// Reset closes the stream with an error.
 	Reset(error)
 	// The context is canceled as soon as the write-side of the stream is closed.
@@ -86,12 +92,11 @@ type STK struct {
 }
 
 // Config contains all configuration data needed for a QUIC server or client.
-// More config parameters (such as timeouts) will be added soon, see e.g. https://github.com/lucas-clemente/quic-go/issues/441.
 type Config struct {
 	// The QUIC versions that can be negotiated.
 	// If not set, it uses all versions available.
 	// Warning: This API should not be considered stable and will change soon.
-	Versions []protocol.VersionNumber
+	Versions []VersionNumber
 	// Ask the server to truncate the connection ID sent in the Public Header.
 	// This saves 8 bytes in the Public Header in every packet. However, if the IP address of the server changes, the connection cannot be migrated.
 	// Currently only valid for the client.
@@ -112,10 +117,10 @@ type Config struct {
 	AcceptSTK func(clientAddr net.Addr, stk *STK) bool
 	// MaxReceiveStreamFlowControlWindow is the maximum stream-level flow control window for receiving data.
 	// If this value is zero, it will default to 1 MB for the server and 6 MB for the client.
-	MaxReceiveStreamFlowControlWindow protocol.ByteCount
+	MaxReceiveStreamFlowControlWindow uint64
 	// MaxReceiveConnectionFlowControlWindow is the connection-level flow control window for receiving data.
 	// If this value is zero, it will default to 1.5 MB for the server and 15 MB for the client.
-	MaxReceiveConnectionFlowControlWindow protocol.ByteCount
+	MaxReceiveConnectionFlowControlWindow uint64
 	// KeepAlive defines whether this peer will periodically send PING frames to keep the connection alive.
 	KeepAlive bool
 }

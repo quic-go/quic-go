@@ -1,6 +1,6 @@
 package handshake
 
-import "github.com/lucas-clemente/quic-go/protocol"
+import "github.com/lucas-clemente/quic-go/internal/protocol"
 
 // Sealer seals a packet
 type Sealer func(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte

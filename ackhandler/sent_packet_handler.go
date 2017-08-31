@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/congestion"
-	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qerr"
 )
 
@@ -139,7 +139,7 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 	return nil
 }
 
-func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNumber protocol.PacketNumber, rcvTime time.Time) error {
+func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, rcvTime time.Time) error {
 	if ackFrame.LargestAcked > h.lastSentPacketNumber {
 		return errAckForUnsentPacket
 	}
@@ -187,7 +187,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 	return nil
 }
 
-func (h *sentPacketHandler) determineNewlyAckedPackets(ackFrame *frames.AckFrame) ([]*PacketElement, error) {
+func (h *sentPacketHandler) determineNewlyAckedPackets(ackFrame *wire.AckFrame) ([]*PacketElement, error) {
 	var ackedPackets []*PacketElement
 	ackRangeIndex := 0
 	for el := h.packetHistory.Front(); el != nil; el = el.Next() {
@@ -332,7 +332,7 @@ func (h *sentPacketHandler) GetLeastUnacked() protocol.PacketNumber {
 	return h.largestInOrderAcked() + 1
 }
 
-func (h *sentPacketHandler) GetStopWaitingFrame(force bool) *frames.StopWaitingFrame {
+func (h *sentPacketHandler) GetStopWaitingFrame(force bool) *wire.StopWaitingFrame {
 	return h.stopWaitingManager.GetStopWaitingFrame(force)
 }
 
@@ -391,7 +391,7 @@ func (h *sentPacketHandler) computeRTOTimeout() time.Duration {
 	return utils.MinDuration(rto, maxRTOTimeout)
 }
 
-func (h *sentPacketHandler) skippedPacketsAcked(ackFrame *frames.AckFrame) bool {
+func (h *sentPacketHandler) skippedPacketsAcked(ackFrame *wire.AckFrame) bool {
 	for _, p := range h.skippedPackets {
 		if ackFrame.AcksPacket(p) {
 			return true

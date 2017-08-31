@@ -6,15 +6,15 @@ import (
 	"fmt"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
-	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/handshake"
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 type packedPacket struct {
 	number          protocol.PacketNumber
 	raw             []byte
-	frames          []frames.Frame
+	frames          []wire.Frame
 	encryptionLevel protocol.EncryptionLevel
 }
 
@@ -28,9 +28,9 @@ type packetPacker struct {
 	connectionParameters  handshake.ConnectionParametersManager
 	streamFramer          *streamFramer
 
-	controlFrames []frames.Frame
-	stopWaiting   *frames.StopWaitingFrame
-	ackFrame      *frames.AckFrame
+	controlFrames []wire.Frame
+	stopWaiting   *wire.StopWaitingFrame
+	ackFrame      *wire.AckFrame
 	leastUnacked  protocol.PacketNumber
 }
 
@@ -53,8 +53,8 @@ func newPacketPacker(connectionID protocol.ConnectionID,
 }
 
 // PackConnectionClose packs a packet that ONLY contains a ConnectionCloseFrame
-func (p *packetPacker) PackConnectionClose(ccf *frames.ConnectionCloseFrame) (*packedPacket, error) {
-	frames := []frames.Frame{ccf}
+func (p *packetPacker) PackConnectionClose(ccf *wire.ConnectionCloseFrame) (*packedPacket, error) {
+	frames := []wire.Frame{ccf}
 	encLevel, sealer := p.cryptoSetup.GetSealer()
 	ph := p.getPublicHeader(encLevel)
 	raw, err := p.writeAndSealPacket(ph, frames, sealer)
@@ -72,7 +72,7 @@ func (p *packetPacker) PackAckPacket() (*packedPacket, error) {
 	}
 	encLevel, sealer := p.cryptoSetup.GetSealer()
 	ph := p.getPublicHeader(encLevel)
-	frames := []frames.Frame{p.ackFrame}
+	frames := []wire.Frame{p.ackFrame}
 	if p.stopWaiting != nil {
 		p.stopWaiting.PacketNumber = ph.PacketNumber
 		p.stopWaiting.PacketNumberLen = ph.PacketNumberLen
@@ -104,7 +104,7 @@ func (p *packetPacker) PackHandshakeRetransmission(packet *ackhandler.Packet) (*
 	ph := p.getPublicHeader(packet.EncryptionLevel)
 	p.stopWaiting.PacketNumber = ph.PacketNumber
 	p.stopWaiting.PacketNumberLen = ph.PacketNumberLen
-	frames := append([]frames.Frame{p.stopWaiting}, packet.Frames...)
+	frames := append([]wire.Frame{p.stopWaiting}, packet.Frames...)
 	p.stopWaiting = nil
 	raw, err := p.writeAndSealPacket(ph, frames, sealer)
 	return &packedPacket{
@@ -171,7 +171,7 @@ func (p *packetPacker) packCryptoPacket() (*packedPacket, error) {
 		return nil, err
 	}
 	maxLen := protocol.MaxFrameAndPublicHeaderSize - protocol.NonForwardSecurePacketSizeReduction - publicHeaderLength
-	frames := []frames.Frame{p.streamFramer.PopCryptoStreamFrame(maxLen)}
+	frames := []wire.Frame{p.streamFramer.PopCryptoStreamFrame(maxLen)}
 	raw, err := p.writeAndSealPacket(publicHeader, frames, sealer)
 	if err != nil {
 		return nil, err
@@ -187,9 +187,9 @@ func (p *packetPacker) packCryptoPacket() (*packedPacket, error) {
 func (p *packetPacker) composeNextPacket(
 	maxFrameSize protocol.ByteCount,
 	canSendStreamFrames bool,
-) ([]frames.Frame, error) {
+) ([]wire.Frame, error) {
 	var payloadLength protocol.ByteCount
-	var payloadFrames []frames.Frame
+	var payloadFrames []wire.Frame
 
 	// STOP_WAITING and ACK will always fit
 	if p.stopWaiting != nil {
@@ -253,21 +253,21 @@ func (p *packetPacker) composeNextPacket(
 	return payloadFrames, nil
 }
 
-func (p *packetPacker) QueueControlFrame(frame frames.Frame) {
+func (p *packetPacker) QueueControlFrame(frame wire.Frame) {
 	switch f := frame.(type) {
-	case *frames.StopWaitingFrame:
+	case *wire.StopWaitingFrame:
 		p.stopWaiting = f
-	case *frames.AckFrame:
+	case *wire.AckFrame:
 		p.ackFrame = f
 	default:
 		p.controlFrames = append(p.controlFrames, f)
 	}
 }
 
-func (p *packetPacker) getPublicHeader(encLevel protocol.EncryptionLevel) *PublicHeader {
+func (p *packetPacker) getPublicHeader(encLevel protocol.EncryptionLevel) *wire.PublicHeader {
 	pnum := p.packetNumberGenerator.Peek()
 	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(pnum, p.leastUnacked)
-	publicHeader := &PublicHeader{
+	publicHeader := &wire.PublicHeader{
 		ConnectionID:         p.connectionID,
 		PacketNumber:         pnum,
 		PacketNumberLen:      packetNumberLen,
@@ -286,8 +286,8 @@ func (p *packetPacker) getPublicHeader(encLevel protocol.EncryptionLevel) *Publi
 }
 
 func (p *packetPacker) writeAndSealPacket(
-	publicHeader *PublicHeader,
-	payloadFrames []frames.Frame,
+	publicHeader *wire.PublicHeader,
+	payloadFrames []wire.Frame,
 	sealer handshake.Sealer,
 ) ([]byte, error) {
 	raw := getPacketBuffer()

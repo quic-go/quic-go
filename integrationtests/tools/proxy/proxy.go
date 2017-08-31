@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 // Connection is a UDP connection
@@ -165,7 +165,7 @@ func (p *QuicProxy) runProxy() error {
 		atomic.AddUint64(&conn.incomingPacketCounter, 1)
 
 		r := bytes.NewReader(raw)
-		hdr, err := quic.ParsePublicHeader(r, protocol.PerspectiveClient, protocol.VersionWhatever)
+		hdr, err := wire.ParsePublicHeader(r, protocol.PerspectiveClient, protocol.VersionWhatever)
 		if err != nil {
 			return err
 		}
@@ -202,7 +202,7 @@ func (p *QuicProxy) runConnection(conn *connection) error {
 
 		// TODO: Switch back to using the public header once Chrome properly sets the type byte.
 		// r := bytes.NewReader(raw)
-		// , err := quic.ParsePublicHeader(r, protocol.PerspectiveServer)
+		// , err := wire.ParsePublicHeader(r, protocol.PerspectiveServer)
 		// if err != nil {
 		// return err
 		// }

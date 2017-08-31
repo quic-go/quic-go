@@ -11,8 +11,9 @@ import (
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/handshake"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qerr"
 
 	. "github.com/onsi/ginkgo"
@@ -126,14 +127,6 @@ var _ = Describe("Server", func() {
 				Port: 1234,
 			}
 			Expect(serv.Addr().String()).To(Equal("192.168.13.37:1234"))
-		})
-
-		It("composes version negotiation packets", func() {
-			expected := append(
-				[]byte{0x01 | 0x08, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
-				[]byte{'Q', '0', '9', '9'}...,
-			)
-			Expect(composeVersionNegotiation(1, []protocol.VersionNumber{99})).To(Equal(expected))
 		})
 
 		It("creates new sessions", func() {
@@ -306,7 +299,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("ignores public resets for unknown connections", func() {
-			err := serv.handlePacket(nil, nil, writePublicReset(999, 1, 1337))
+			err := serv.handlePacket(nil, nil, wire.WritePublicReset(999, 1, 1337))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(BeEmpty())
 		})
@@ -315,7 +308,7 @@ var _ = Describe("Server", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
-			err = serv.handlePacket(nil, nil, writePublicReset(connID, 1, 1337))
+			err = serv.handlePacket(nil, nil, wire.WritePublicReset(connID, 1, 1337))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
@@ -325,7 +318,7 @@ var _ = Describe("Server", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
-			data := writePublicReset(connID, 1, 1337)
+			data := wire.WritePublicReset(connID, 1, 1337)
 			err = serv.handlePacket(nil, nil, data[:len(data)-2])
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
@@ -334,7 +327,7 @@ var _ = Describe("Server", func() {
 
 		It("doesn't respond with a version negotiation packet if the first packet is too small", func() {
 			b := &bytes.Buffer{}
-			hdr := PublicHeader{
+			hdr := wire.PublicHeader{
 				VersionFlag:     true,
 				ConnectionID:    0x1337,
 				PacketNumber:    1,
@@ -402,7 +395,7 @@ var _ = Describe("Server", func() {
 	It("setups and responds with version negotiation", func() {
 		config.Versions = []protocol.VersionNumber{99}
 		b := &bytes.Buffer{}
-		hdr := PublicHeader{
+		hdr := wire.PublicHeader{
 			VersionFlag:     true,
 			ConnectionID:    0x1337,
 			PacketNumber:    1,

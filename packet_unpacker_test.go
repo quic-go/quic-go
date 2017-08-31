@@ -4,8 +4,8 @@ import (
 	"bytes"
 
 	"github.com/lucas-clemente/quic-go/crypto"
-	"github.com/lucas-clemente/quic-go/frames"
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qerr"
 
 	. "github.com/onsi/ginkgo"
@@ -31,14 +31,14 @@ var _ quicAEAD = &mockAEAD{}
 var _ = Describe("Packet unpacker", func() {
 	var (
 		unpacker *packetUnpacker
-		hdr      *PublicHeader
+		hdr      *wire.PublicHeader
 		hdrBin   []byte
 		data     []byte
 		buf      *bytes.Buffer
 	)
 
 	BeforeEach(func() {
-		hdr = &PublicHeader{
+		hdr = &wire.PublicHeader{
 			PacketNumber:    10,
 			PacketNumberLen: 1,
 		}
@@ -53,17 +53,17 @@ var _ = Describe("Packet unpacker", func() {
 	}
 
 	It("does not read read a private flag for QUIC Version >= 34", func() {
-		f := &frames.ConnectionCloseFrame{ReasonPhrase: "foo"}
+		f := &wire.ConnectionCloseFrame{ReasonPhrase: "foo"}
 		err := f.Write(buf, 0)
 		Expect(err).ToNot(HaveOccurred())
 		setData(buf.Bytes())
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(Equal([]frames.Frame{f}))
+		Expect(packet.frames).To(Equal([]wire.Frame{f}))
 	})
 
 	It("saves the encryption level", func() {
-		f := &frames.ConnectionCloseFrame{ReasonPhrase: "foo"}
+		f := &wire.ConnectionCloseFrame{ReasonPhrase: "foo"}
 		err := f.Write(buf, 0)
 		Expect(err).ToNot(HaveOccurred())
 		setData(buf.Bytes())
@@ -75,7 +75,7 @@ var _ = Describe("Packet unpacker", func() {
 
 	It("unpacks ACK frames", func() {
 		unpacker.version = protocol.VersionWhatever
-		f := &frames.AckFrame{
+		f := &wire.AckFrame{
 			LargestAcked: 0x13,
 			LowestAcked:  1,
 		}
@@ -85,7 +85,7 @@ var _ = Describe("Packet unpacker", func() {
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.frames).To(HaveLen(1))
-		readFrame := packet.frames[0].(*frames.AckFrame)
+		readFrame := packet.frames[0].(*wire.AckFrame)
 		Expect(readFrame).ToNot(BeNil())
 		Expect(readFrame.LargestAcked).To(Equal(protocol.PacketNumber(0x13)))
 	})
@@ -104,7 +104,7 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	It("handles PADDING between two other frames", func() {
-		f := &frames.PingFrame{}
+		f := &wire.PingFrame{}
 		err := f.Write(buf, protocol.VersionWhatever)
 		Expect(err).ToNot(HaveOccurred())
 		_, err = buf.Write(bytes.Repeat([]byte{0}, 10)) // 10 bytes PADDING
@@ -121,8 +121,8 @@ var _ = Describe("Packet unpacker", func() {
 		setData([]byte{0x01, 0xEF, 0xBE, 0xAD, 0xDE, 0x44, 0x33, 0x22, 0x11, 0xAD, 0xFB, 0xCA, 0xDE, 0x34, 0x12, 0x37, 0x13})
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(Equal([]frames.Frame{
-			&frames.RstStreamFrame{
+		Expect(packet.frames).To(Equal([]wire.Frame{
+			&wire.RstStreamFrame{
 				StreamID:   0xDEADBEEF,
 				ByteOffset: 0xDECAFBAD11223344,
 				ErrorCode:  0x13371234,
@@ -131,13 +131,13 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	It("unpacks CONNECTION_CLOSE frames", func() {
-		f := &frames.ConnectionCloseFrame{ReasonPhrase: "foo"}
+		f := &wire.ConnectionCloseFrame{ReasonPhrase: "foo"}
 		err := f.Write(buf, 0)
 		Expect(err).ToNot(HaveOccurred())
 		setData(buf.Bytes())
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(Equal([]frames.Frame{f}))
+		Expect(packet.frames).To(Equal([]wire.Frame{f}))
 	})
 
 	It("accepts GOAWAY frames", func() {
@@ -150,8 +150,8 @@ var _ = Describe("Packet unpacker", func() {
 		})
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(Equal([]frames.Frame{
-			&frames.GoawayFrame{
+		Expect(packet.frames).To(Equal([]wire.Frame{
+			&wire.GoawayFrame{
 				ErrorCode:      1,
 				LastGoodStream: 2,
 				ReasonPhrase:   "foo",
@@ -163,8 +163,8 @@ var _ = Describe("Packet unpacker", func() {
 		setData([]byte{0x04, 0xEF, 0xBE, 0xAD, 0xDE, 0x37, 0x13, 0, 0, 0, 0, 0xFE, 0xCA})
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(Equal([]frames.Frame{
-			&frames.WindowUpdateFrame{
+		Expect(packet.frames).To(Equal([]wire.Frame{
+			&wire.WindowUpdateFrame{
 				StreamID:   0xDEADBEEF,
 				ByteOffset: 0xCAFE000000001337,
 			},
@@ -175,10 +175,8 @@ var _ = Describe("Packet unpacker", func() {
 		setData([]byte{0x05, 0xEF, 0xBE, 0xAD, 0xDE})
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(Equal([]frames.Frame{
-			&frames.BlockedFrame{
-				StreamID: 0xDEADBEEF,
-			},
+		Expect(packet.frames).To(Equal([]wire.Frame{
+			&wire.BlockedFrame{StreamID: 0xDEADBEEF},
 		}))
 	})
 
@@ -186,10 +184,8 @@ var _ = Describe("Packet unpacker", func() {
 		setData([]byte{0x06, 0x03})
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(Equal([]frames.Frame{
-			&frames.StopWaitingFrame{
-				LeastUnacked: 7,
-			},
+		Expect(packet.frames).To(Equal([]wire.Frame{
+			&wire.StopWaitingFrame{LeastUnacked: 7},
 		}))
 	})
 
@@ -197,8 +193,8 @@ var _ = Describe("Packet unpacker", func() {
 		setData([]byte{0x07})
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(Equal([]frames.Frame{
-			&frames.PingFrame{},
+		Expect(packet.frames).To(Equal([]wire.Frame{
+			&wire.PingFrame{},
 		}))
 	})
 
@@ -228,7 +224,7 @@ var _ = Describe("Packet unpacker", func() {
 	Context("unpacking STREAM frames", func() {
 		It("unpacks unencrypted STREAM frames on stream 1", func() {
 			unpacker.aead.(*mockAEAD).encLevelOpen = protocol.EncryptionUnencrypted
-			f := &frames.StreamFrame{
+			f := &wire.StreamFrame{
 				StreamID: 1,
 				Data:     []byte("foobar"),
 			}
@@ -237,12 +233,12 @@ var _ = Describe("Packet unpacker", func() {
 			setData(buf.Bytes())
 			packet, err := unpacker.Unpack(hdrBin, hdr, data)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(packet.frames).To(Equal([]frames.Frame{f}))
+			Expect(packet.frames).To(Equal([]wire.Frame{f}))
 		})
 
 		It("unpacks encrypted STREAM frames on stream 1", func() {
 			unpacker.aead.(*mockAEAD).encLevelOpen = protocol.EncryptionSecure
-			f := &frames.StreamFrame{
+			f := &wire.StreamFrame{
 				StreamID: 1,
 				Data:     []byte("foobar"),
 			}
@@ -251,12 +247,12 @@ var _ = Describe("Packet unpacker", func() {
 			setData(buf.Bytes())
 			packet, err := unpacker.Unpack(hdrBin, hdr, data)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(packet.frames).To(Equal([]frames.Frame{f}))
+			Expect(packet.frames).To(Equal([]wire.Frame{f}))
 		})
 
 		It("does not unpack unencrypted STREAM frames on higher streams", func() {
 			unpacker.aead.(*mockAEAD).encLevelOpen = protocol.EncryptionUnencrypted
-			f := &frames.StreamFrame{
+			f := &wire.StreamFrame{
 				StreamID: 3,
 				Data:     []byte("foobar"),
 			}

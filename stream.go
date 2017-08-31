@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/flowcontrol"
-	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 // A Stream assembles the data from StreamFrames and provides a super-convenient Read-Interface
@@ -289,7 +289,7 @@ func (s *stream) sentFin() {
 }
 
 // AddStreamFrame adds a new stream frame
-func (s *stream) AddStreamFrame(frame *frames.StreamFrame) error {
+func (s *stream) AddStreamFrame(frame *wire.StreamFrame) error {
 	maxOffset := frame.Offset + frame.DataLen()
 	err := s.flowControlManager.UpdateHighestReceived(s.streamID, maxOffset)
 	if err != nil {
@@ -353,7 +353,7 @@ func (s *stream) SetDeadline(t time.Time) error {
 
 // CloseRemote makes the stream receive a "virtual" FIN stream frame at a given offset
 func (s *stream) CloseRemote(offset protocol.ByteCount) {
-	s.AddStreamFrame(&frames.StreamFrame{FinBit: true, Offset: offset})
+	s.AddStreamFrame(&wire.StreamFrame{FinBit: true, Offset: offset})
 }
 
 // Cancel is called by session to indicate that an error occurred

@@ -3,8 +3,8 @@ package ackhandler
 import (
 	"time"
 
-	"github.com/lucas-clemente/quic-go/frames"
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -221,8 +221,8 @@ var _ = Describe("receivedPacketHandler", func() {
 				Expect(ack.LargestAcked).To(Equal(protocol.PacketNumber(4)))
 				Expect(ack.LowestAcked).To(Equal(protocol.PacketNumber(1)))
 				Expect(ack.AckRanges).To(HaveLen(2))
-				Expect(ack.AckRanges[0]).To(Equal(frames.AckRange{FirstPacketNumber: 4, LastPacketNumber: 4}))
-				Expect(ack.AckRanges[1]).To(Equal(frames.AckRange{FirstPacketNumber: 1, LastPacketNumber: 1}))
+				Expect(ack.AckRanges[0]).To(Equal(wire.AckRange{FirstPacketNumber: 4, LastPacketNumber: 4}))
+				Expect(ack.AckRanges[1]).To(Equal(wire.AckRange{FirstPacketNumber: 1, LastPacketNumber: 1}))
 			})
 
 			It("accepts packets below the lower limit", func() {

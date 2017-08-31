@@ -16,7 +16,7 @@ As Google's QUIC versions are expected to converge towards the [IETF QUIC draft]
 
 ## Guides
 
-We currently support Go 1.8+.
+We currently support Go 1.9+.
 
 Installing and updating dependencies:
 

@@ -7,7 +7,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qerr"
 
 	. "github.com/onsi/ginkgo"
@@ -228,7 +229,7 @@ var _ = Describe("Client", func() {
 
 		Context("version negotiation", func() {
 			It("recognizes that a packet without VersionFlag means that the server accepted the suggested version", func() {
-				ph := PublicHeader{
+				ph := wire.PublicHeader{
 					PacketNumber:    1,
 					PacketNumberLen: protocol.PacketNumberLen2,
 					ConnectionID:    0x1337,
@@ -262,7 +263,7 @@ var _ = Describe("Client", func() {
 				Expect(newVersion).ToNot(Equal(cl.version))
 				Expect(sess.packetCount).To(BeZero())
 				cl.connectionID = 0x1337
-				cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{newVersion}))
+				cl.handlePacket(nil, wire.ComposeVersionNegotiation(0x1337, []protocol.VersionNumber{newVersion}))
 				Expect(cl.version).To(Equal(newVersion))
 				Expect(cl.versionNegotiated).To(BeTrue())
 				// it swapped the sessions
@@ -274,7 +275,7 @@ var _ = Describe("Client", func() {
 			})
 
 			It("errors if no matching version is found", func() {
-				cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{1}))
+				cl.handlePacket(nil, wire.ComposeVersionNegotiation(0x1337, []protocol.VersionNumber{1}))
 				Expect(cl.session.(*mockSession).closed).To(BeTrue())
 				Expect(cl.session.(*mockSession).closeReason).To(MatchError(qerr.InvalidVersion))
 			})
@@ -283,13 +284,13 @@ var _ = Describe("Client", func() {
 				v := protocol.SupportedVersions[1]
 				Expect(v).ToNot(Equal(cl.version))
 				Expect(config.Versions).ToNot(ContainElement(v))
-				cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{v}))
+				cl.handlePacket(nil, wire.ComposeVersionNegotiation(0x1337, []protocol.VersionNumber{v}))
 				Expect(cl.session.(*mockSession).closed).To(BeTrue())
 				Expect(cl.session.(*mockSession).closeReason).To(MatchError(qerr.InvalidVersion))
 			})
 
 			It("changes to the version preferred by the quic.Config", func() {
-				cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{config.Versions[2], config.Versions[1]}))
+				cl.handlePacket(nil, wire.ComposeVersionNegotiation(0x1337, []protocol.VersionNumber{config.Versions[2], config.Versions[1]}))
 				Expect(cl.version).To(Equal(config.Versions[1]))
 			})
 
@@ -297,14 +298,14 @@ var _ = Describe("Client", func() {
 				// if the version was not yet negotiated, handlePacket would return a VersionNegotiationMismatch error, see above test
 				cl.versionNegotiated = true
 				Expect(sess.packetCount).To(BeZero())
-				cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{1}))
+				cl.handlePacket(nil, wire.ComposeVersionNegotiation(0x1337, []protocol.VersionNumber{1}))
 				Expect(cl.versionNegotiated).To(BeTrue())
 				Expect(sess.packetCount).To(BeZero())
 			})
 
 			It("drops version negotiation packets that contain the offered version", func() {
 				ver := cl.version
-				cl.handlePacket(nil, composeVersionNegotiation(0x1337, []protocol.VersionNumber{ver}))
+				cl.handlePacket(nil, wire.ComposeVersionNegotiation(0x1337, []protocol.VersionNumber{ver}))
 				Expect(cl.version).To(Equal(ver))
 			})
 		})
@@ -351,7 +352,7 @@ var _ = Describe("Client", func() {
 
 	Context("handling packets", func() {
 		It("handles packets", func() {
-			ph := PublicHeader{
+			ph := wire.PublicHeader{
 				PacketNumber:    1,
 				PacketNumberLen: protocol.PacketNumberLen2,
 				ConnectionID:    0x1337,
@@ -385,27 +386,27 @@ var _ = Describe("Client", func() {
 
 	Context("Public Reset handling", func() {
 		It("closes the session when receiving a Public Reset", func() {
-			cl.handlePacket(addr, writePublicReset(cl.connectionID, 1, 0))
+			cl.handlePacket(addr, wire.WritePublicReset(cl.connectionID, 1, 0))
 			Expect(cl.session.(*mockSession).closed).To(BeTrue())
 			Expect(cl.session.(*mockSession).closedRemote).To(BeTrue())
 			Expect(cl.session.(*mockSession).closeReason.(*qerr.QuicError).ErrorCode).To(Equal(qerr.PublicReset))
 		})
 
 		It("ignores Public Resets with the wrong connection ID", func() {
-			cl.handlePacket(addr, writePublicReset(cl.connectionID+1, 1, 0))
+			cl.handlePacket(addr, wire.WritePublicReset(cl.connectionID+1, 1, 0))
 			Expect(cl.session.(*mockSession).closed).To(BeFalse())
 			Expect(cl.session.(*mockSession).closedRemote).To(BeFalse())
 		})
 
 		It("ignores Public Resets from the wrong remote address", func() {
 			spoofedAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 5678}
-			cl.handlePacket(spoofedAddr, writePublicReset(cl.connectionID, 1, 0))
+			cl.handlePacket(spoofedAddr, wire.WritePublicReset(cl.connectionID, 1, 0))
 			Expect(cl.session.(*mockSession).closed).To(BeFalse())
 			Expect(cl.session.(*mockSession).closedRemote).To(BeFalse())
 		})
 
 		It("ignores unparseable Public Resets", func() {
-			pr := writePublicReset(cl.connectionID, 1, 0)
+			pr := wire.WritePublicReset(cl.connectionID, 1, 0)
 			cl.handlePacket(addr, pr[:len(pr)-5])
 			Expect(cl.session.(*mockSession).closed).To(BeFalse())
 			Expect(cl.session.(*mockSession).closedRemote).To(BeFalse())

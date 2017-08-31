@@ -4,8 +4,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/frames"
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 var errInvalidPacketNumber = errors.New("ReceivedPacketHandler: Invalid packet number")
@@ -23,7 +23,7 @@ type receivedPacketHandler struct {
 	retransmittablePacketsReceivedSinceLastAck int
 	ackQueued                                  bool
 	ackAlarm                                   time.Time
-	lastAck                                    *frames.AckFrame
+	lastAck                                    *wire.AckFrame
 
 	version protocol.VersionNumber
 }
@@ -113,13 +113,13 @@ func (h *receivedPacketHandler) maybeQueueAck(packetNumber protocol.PacketNumber
 	}
 }
 
-func (h *receivedPacketHandler) GetAckFrame() *frames.AckFrame {
+func (h *receivedPacketHandler) GetAckFrame() *wire.AckFrame {
 	if !h.ackQueued && (h.ackAlarm.IsZero() || h.ackAlarm.After(time.Now())) {
 		return nil
 	}
 
 	ackRanges := h.packetHistory.GetAckRanges()
-	ack := &frames.AckFrame{
+	ack := &wire.AckFrame{
 		LargestAcked:       h.largestObserved,
 		LowestAcked:        ackRanges[len(ackRanges)-1].FirstPacketNumber,
 		PacketReceivedTime: h.largestObservedReceivedTime,

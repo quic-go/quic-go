@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"io"
 
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
 
 // A ByteOrder specifies how to convert byte sequences into 16-, 32-, or 64-bit unsigned integers.

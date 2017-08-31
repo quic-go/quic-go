@@ -10,8 +10,9 @@ import (
 
 	"github.com/lucas-clemente/quic-go/crypto"
 	"github.com/lucas-clemente/quic-go/handshake"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qerr"
 )
 
@@ -212,7 +213,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
-	connID, err := peekConnectionID(r, protocol.PerspectiveClient)
+	connID, err := wire.PeekConnectionID(r, protocol.PerspectiveClient)
 	if err != nil {
 		return qerr.Error(qerr.InvalidPacketHeader, err.Error())
 	}
@@ -231,9 +232,9 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 		version = session.GetVersion()
 	}
 
-	hdr, err := ParsePublicHeader(r, protocol.PerspectiveClient, version)
-	if err == errPacketWithUnknownVersion {
-		_, err = pconn.WriteTo(writePublicReset(connID, 0, 0), remoteAddr)
+	hdr, err := wire.ParsePublicHeader(r, protocol.PerspectiveClient, version)
+	if err == wire.ErrPacketWithUnknownVersion {
+		_, err = pconn.WriteTo(wire.WritePublicReset(connID, 0, 0), remoteAddr)
 		return err
 	}
 	if err != nil {
@@ -244,12 +245,12 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	// ignore all Public Reset packets
 	if hdr.ResetFlag {
 		if ok {
-			var pr *publicReset
-			pr, err = parsePublicReset(r)
+			var pr *wire.PublicReset
+			pr, err = wire.ParsePublicReset(r)
 			if err != nil {
 				utils.Infof("Received a Public Reset for connection %x. An error occurred parsing the packet.")
 			} else {
-				utils.Infof("Received a Public Reset for connection %x, rejected packet number: 0x%x.", hdr.ConnectionID, pr.rejectedPacketNumber)
+				utils.Infof("Received a Public Reset for connection %x, rejected packet number: 0x%x.", hdr.ConnectionID, pr.RejectedPacketNumber)
 			}
 		} else {
 			utils.Infof("Received Public Reset for unknown connection %x.", hdr.ConnectionID)
@@ -271,7 +272,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 			return errors.New("dropping small packet with unknown version")
 		}
 		utils.Infof("Client offered version %d, sending VersionNegotiationPacket", hdr.VersionNumber)
-		_, err = pconn.WriteTo(composeVersionNegotiation(hdr.ConnectionID, s.config.Versions), remoteAddr)
+		_, err = pconn.WriteTo(wire.ComposeVersionNegotiation(hdr.ConnectionID, s.config.Versions), remoteAddr)
 		return err
 	}
 
@@ -336,21 +337,4 @@ func (s *server) removeConnection(id protocol.ConnectionID) {
 		delete(s.sessions, id)
 		s.sessionsMutex.Unlock()
 	})
-}
-
-func composeVersionNegotiation(connectionID protocol.ConnectionID, versions []protocol.VersionNumber) []byte {
-	fullReply := &bytes.Buffer{}
-	responsePublicHeader := PublicHeader{
-		ConnectionID: connectionID,
-		PacketNumber: 1,
-		VersionFlag:  true,
-	}
-	err := responsePublicHeader.Write(fullReply, protocol.VersionWhatever, protocol.PerspectiveServer)
-	if err != nil {
-		utils.Errorf("error composing version negotiation packet: %s", err.Error())
-	}
-	for _, v := range versions {
-		utils.LittleEndian.WriteUint32(fullReply, protocol.VersionNumberToTag(v))
-	}
-	return fullReply.Bytes()
 }

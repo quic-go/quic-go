@@ -3,9 +3,9 @@ package quic
 import (
 	"bytes"
 
-	"github.com/lucas-clemente/quic-go/frames"
 	"github.com/lucas-clemente/quic-go/internal/mocks/mocks_fc"
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -17,7 +17,7 @@ var _ = Describe("Stream Framer", func() {
 	)
 
 	var (
-		retransmittedFrame1, retransmittedFrame2 *frames.StreamFrame
+		retransmittedFrame1, retransmittedFrame2 *wire.StreamFrame
 		framer                                   *streamFramer
 		streamsMap                               *streamsMap
 		stream1, stream2                         *stream
@@ -25,11 +25,11 @@ var _ = Describe("Stream Framer", func() {
 	)
 
 	BeforeEach(func() {
-		retransmittedFrame1 = &frames.StreamFrame{
+		retransmittedFrame1 = &wire.StreamFrame{
 			StreamID: 5,
 			Data:     []byte{0x13, 0x37},
 		}
-		retransmittedFrame2 = &frames.StreamFrame{
+		retransmittedFrame2 = &wire.StreamFrame{
 			StreamID: 6,
 			Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
 		}
@@ -165,7 +165,7 @@ var _ = Describe("Stream Framer", func() {
 
 		Context("splitting of frames", func() {
 			It("splits off nothing", func() {
-				f := &frames.StreamFrame{
+				f := &wire.StreamFrame{
 					StreamID: 1,
 					Data:     []byte("bar"),
 					Offset:   3,
@@ -176,7 +176,7 @@ var _ = Describe("Stream Framer", func() {
 			})
 
 			It("splits off initial frame", func() {
-				f := &frames.StreamFrame{
+				f := &wire.StreamFrame{
 					StreamID:       1,
 					Data:           []byte("foobar"),
 					DataLenPresent: true,
@@ -210,7 +210,7 @@ var _ = Describe("Stream Framer", func() {
 
 			It("never returns an empty stream frame", func() {
 				// this one frame will be split off from again and again in this test. Therefore, it has to be large enough (checked again at the end)
-				origFrame := &frames.StreamFrame{
+				origFrame := &wire.StreamFrame{
 					StreamID: 5,
 					Offset:   1,
 					FinBit:   false,
