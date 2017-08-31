@@ -184,8 +184,8 @@ func (s *session) setup(
 	s.connectionParameters = handshake.NewConnectionParamatersManager(
 		s.perspective,
 		s.version,
-		s.config.MaxReceiveStreamFlowControlWindow,
-		s.config.MaxReceiveConnectionFlowControlWindow,
+		protocol.ByteCount(s.config.MaxReceiveStreamFlowControlWindow),
+		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),
 		s.config.IdleTimeout,
 	)
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats)

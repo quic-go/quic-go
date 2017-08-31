@@ -33,27 +33,27 @@ const AckSendDelay = 25 * time.Millisecond
 
 // ReceiveStreamFlowControlWindow is the stream-level flow control window for receiving data
 // This is the value that Google servers are using
-const ReceiveStreamFlowControlWindow ByteCount = (1 << 10) * 32 // 32 kB
+const ReceiveStreamFlowControlWindow = (1 << 10) * 32 // 32 kB
 
 // ReceiveConnectionFlowControlWindow is the connection-level flow control window for receiving data
 // This is the value that Google servers are using
-const ReceiveConnectionFlowControlWindow ByteCount = (1 << 10) * 48 // 48 kB
+const ReceiveConnectionFlowControlWindow = (1 << 10) * 48 // 48 kB
 
 // DefaultMaxReceiveStreamFlowControlWindowServer is the default maximum stream-level flow control window for receiving data, for the server
 // This is the value that Google servers are using
-const DefaultMaxReceiveStreamFlowControlWindowServer ByteCount = 1 * (1 << 20) // 1 MB
+const DefaultMaxReceiveStreamFlowControlWindowServer = 1 * (1 << 20) // 1 MB
 
 // DefaultMaxReceiveConnectionFlowControlWindowServer is the default connection-level flow control window for receiving data, for the server
 // This is the value that Google servers are using
-const DefaultMaxReceiveConnectionFlowControlWindowServer ByteCount = 1.5 * (1 << 20) // 1.5 MB
+const DefaultMaxReceiveConnectionFlowControlWindowServer = 1.5 * (1 << 20) // 1.5 MB
 
 // DefaultMaxReceiveStreamFlowControlWindowClient is the default maximum stream-level flow control window for receiving data, for the client
 // This is the value that Chromium is using
-const DefaultMaxReceiveStreamFlowControlWindowClient ByteCount = 6 * (1 << 20) // 6 MB
+const DefaultMaxReceiveStreamFlowControlWindowClient = 6 * (1 << 20) // 6 MB
 
 // DefaultMaxReceiveConnectionFlowControlWindowClient is the default connection-level flow control window for receiving data, for the client
 // This is the value that Google servers are using
-const DefaultMaxReceiveConnectionFlowControlWindowClient ByteCount = 15 * (1 << 20) // 15 MB
+const DefaultMaxReceiveConnectionFlowControlWindowClient = 15 * (1 << 20) // 15 MB
 
 // ConnectionFlowControlMultiplier determines how much larger the connection flow control windows needs to be relative to any stream's flow control window
 // This is the value that Chromium is using

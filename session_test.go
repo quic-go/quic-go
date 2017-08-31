@@ -1646,7 +1646,7 @@ var _ = Describe("Session", func() {
 			frames := sess.getWindowUpdateFrames()
 			Expect(frames).To(HaveLen(1))
 			Expect(frames[0].StreamID).To(Equal(protocol.StreamID(1)))
-			Expect(frames[0].ByteOffset).To(Equal(protocol.ReceiveStreamFlowControlWindow * 2))
+			Expect(frames[0].ByteOffset).To(BeEquivalentTo(protocol.ReceiveStreamFlowControlWindow * 2))
 		})
 
 		It("gets connection level window updates", func() {
@@ -1657,7 +1657,7 @@ var _ = Describe("Session", func() {
 			frames := sess.getWindowUpdateFrames()
 			Expect(frames).To(HaveLen(1))
 			Expect(frames[0].StreamID).To(Equal(protocol.StreamID(0)))
-			Expect(frames[0].ByteOffset).To(Equal(protocol.ReceiveConnectionFlowControlWindow * 2))
+			Expect(frames[0].ByteOffset).To(BeEquivalentTo(protocol.ReceiveConnectionFlowControlWindow * 2))
 		})
 	})
 

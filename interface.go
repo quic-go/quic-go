@@ -12,9 +12,6 @@ import (
 // The StreamID is the ID of a QUIC stream.
 type StreamID = protocol.StreamID
 
-// A ByteCount is a number of bytes.
-type ByteCount = protocol.ByteCount
-
 // A VersionNumber is a QUIC version number.
 type VersionNumber = protocol.VersionNumber
 
@@ -120,10 +117,10 @@ type Config struct {
 	AcceptSTK func(clientAddr net.Addr, stk *STK) bool
 	// MaxReceiveStreamFlowControlWindow is the maximum stream-level flow control window for receiving data.
 	// If this value is zero, it will default to 1 MB for the server and 6 MB for the client.
-	MaxReceiveStreamFlowControlWindow ByteCount
+	MaxReceiveStreamFlowControlWindow uint64
 	// MaxReceiveConnectionFlowControlWindow is the connection-level flow control window for receiving data.
 	// If this value is zero, it will default to 1.5 MB for the server and 15 MB for the client.
-	MaxReceiveConnectionFlowControlWindow ByteCount
+	MaxReceiveConnectionFlowControlWindow uint64
 	// KeepAlive defines whether this peer will periodically send PING frames to keep the connection alive.
 	KeepAlive bool
 }
