@@ -55,7 +55,6 @@ type session struct {
 	connectionID protocol.ConnectionID
 	perspective  protocol.Perspective
 	version      protocol.VersionNumber
-	tlsConf      *tls.Config
 	config       *Config
 
 	conn connection
@@ -135,7 +134,7 @@ func newSession(
 		version:      v,
 		config:       config,
 	}
-	return s.setup(sCfg, "", nil)
+	return s.setup(sCfg, "", tlsConf, nil)
 }
 
 // declare this as a variable, such that we can it mock it in the tests
@@ -153,15 +152,15 @@ var newClientSession = func(
 		connectionID: connectionID,
 		perspective:  protocol.PerspectiveClient,
 		version:      v,
-		tlsConf:      tlsConf,
 		config:       config,
 	}
-	return s.setup(nil, hostname, negotiatedVersions)
+	return s.setup(nil, hostname, tlsConf, negotiatedVersions)
 }
 
 func (s *session) setup(
 	scfg *handshake.ServerConfig,
 	hostname string,
+	tlsConf *tls.Config,
 	negotiatedVersions []protocol.VersionNumber,
 ) (packetHandler, <-chan handshakeEvent, error) {
 	aeadChanged := make(chan protocol.EncryptionLevel, 2)
@@ -205,30 +204,52 @@ func (s *session) setup(
 			}
 			return s.config.AcceptSTK(clientAddr, stk)
 		}
-		s.cryptoSetup, err = newCryptoSetup(
-			s.connectionID,
-			s.conn.RemoteAddr(),
-			s.version,
-			scfg,
-			cryptoStream,
-			s.connectionParameters,
-			s.config.Versions,
-			verifySourceAddr,
-			aeadChanged,
-		)
+		if s.version == protocol.VersionTLS {
+			s.cryptoSetup, err = handshake.NewCryptoSetupTLS(
+				"",
+				s.perspective,
+				s.version,
+				tlsConf,
+				cryptoStream,
+				aeadChanged,
+			)
+		} else {
+			s.cryptoSetup, err = newCryptoSetup(
+				s.connectionID,
+				s.conn.RemoteAddr(),
+				s.version,
+				scfg,
+				cryptoStream,
+				s.connectionParameters,
+				s.config.Versions,
+				verifySourceAddr,
+				aeadChanged,
+			)
+		}
 	} else {
 		cryptoStream, _ := s.OpenStream()
-		s.cryptoSetup, err = newCryptoSetupClient(
-			hostname,
-			s.connectionID,
-			s.version,
-			cryptoStream,
-			s.tlsConf,
-			s.connectionParameters,
-			aeadChanged,
-			&handshake.TransportParameters{RequestConnectionIDTruncation: s.config.RequestConnectionIDTruncation},
-			negotiatedVersions,
-		)
+		if s.version == protocol.VersionTLS {
+			s.cryptoSetup, err = handshake.NewCryptoSetupTLS(
+				hostname,
+				s.perspective,
+				s.version,
+				tlsConf,
+				cryptoStream,
+				aeadChanged,
+			)
+		} else {
+			s.cryptoSetup, err = newCryptoSetupClient(
+				hostname,
+				s.connectionID,
+				s.version,
+				cryptoStream,
+				tlsConf,
+				s.connectionParameters,
+				aeadChanged,
+				&handshake.TransportParameters{RequestConnectionIDTruncation: s.config.RequestConnectionIDTruncation},
+				negotiatedVersions,
+			)
+		}
 	}
 	if err != nil {
 		return nil, nil, err

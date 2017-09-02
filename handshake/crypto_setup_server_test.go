@@ -91,7 +91,7 @@ func (m *mockAEAD) Overhead() int {
 var expectedInitialNonceLen int
 var expectedFSNonceLen int
 
-func mockKeyDerivation(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte, pers protocol.Perspective) (crypto.AEAD, error) {
+func mockQuicCryptoKeyDerivation(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte, pers protocol.Perspective) (crypto.AEAD, error) {
 	if forwardSecure {
 		Expect(nonces).To(HaveLen(expectedFSNonceLen))
 	} else {
@@ -214,7 +214,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		Expect(err).NotTo(HaveOccurred())
 		sourceAddrValid = true
 		cs.acceptSTKCallback = func(_ net.Addr, _ *STK) bool { return sourceAddrValid }
-		cs.keyDerivation = mockKeyDerivation
+		cs.keyDerivation = mockQuicCryptoKeyDerivation
 		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
 	})
 
@@ -685,7 +685,7 @@ var _ = Describe("Server Crypto Setup", func() {
 				Expect(d).To(Equal([]byte("foobar  normal sec")))
 			})
 
-			It("errors of no AEAD for initial encryption is available", func() {
+			It("errors if no AEAD for initial encryption is available", func() {
 				sealer, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionSecure)
 				Expect(err).To(MatchError("CryptoSetupServer: no secureAEAD"))
 				Expect(sealer).To(BeNil())
