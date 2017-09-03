@@ -59,6 +59,8 @@ type mockAEAD struct {
 	sharedSecret  []byte
 }
 
+var _ crypto.AEAD = &mockAEAD{}
+
 func (m *mockAEAD) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
 	if cap(dst) < len(src)+12 {
 		dst = make([]byte, len(src)+12)
@@ -80,6 +82,10 @@ func (m *mockAEAD) Open(dst, src []byte, packetNumber protocol.PacketNumber, ass
 		return []byte("decrypted"), nil
 	}
 	return nil, errors.New("authentication failed")
+}
+
+func (m *mockAEAD) Overhead() int {
+	return 12
 }
 
 var expectedInitialNonceLen int

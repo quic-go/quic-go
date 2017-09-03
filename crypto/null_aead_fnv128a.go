@@ -70,3 +70,7 @@ func (n *nullAEADFNV128a) Seal(dst, src []byte, packetNumber protocol.PacketNumb
 	binary.LittleEndian.PutUint32(dst[8:], uint32(high))
 	return dst
 }
+
+func (n *nullAEADFNV128a) Overhead() int {
+	return 12
+}

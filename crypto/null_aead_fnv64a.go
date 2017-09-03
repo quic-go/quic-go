@@ -44,3 +44,7 @@ func (n *nullAEADFNV64a) Seal(dst, src []byte, packetNumber protocol.PacketNumbe
 	binary.BigEndian.PutUint64(dst[len(src):], hash.Sum64())
 	return dst
 }
+
+func (n *nullAEADFNV64a) Overhead() int {
+	return 8
+}

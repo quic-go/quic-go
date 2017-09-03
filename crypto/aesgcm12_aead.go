@@ -66,3 +66,7 @@ func (aead *aeadAESGCM12) makeNonce(iv []byte, packetNumber protocol.PacketNumbe
 	binary.LittleEndian.PutUint64(res[4:12], uint64(packetNumber))
 	return res
 }
+
+func (aead *aeadAESGCM12) Overhead() int {
+	return aead.encrypter.Overhead()
+}

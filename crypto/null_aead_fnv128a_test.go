@@ -21,7 +21,9 @@ var _ = Describe("NullAEAD using FNV128a", func() {
 
 	It("seals", func() {
 		aead := NewNullAEAD(protocol.PerspectiveServer, protocol.Version36)
-		Expect(aead.Seal(nil, plainText, 0, aad)).To(Equal(append(hash36, plainText...)))
+		sealed := aead.Seal(nil, plainText, 0, aad)
+		Expect(sealed).To(Equal(append(hash36, plainText...)))
+		Expect(sealed).To(HaveLen(len(plainText) + aead.Overhead()))
 	})
 
 	It("rejects short ciphertexts", func() {

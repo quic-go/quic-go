@@ -53,10 +53,9 @@ var _ = Describe("AES-GCM", func() {
 				Expect(text).To(Equal([]byte("foobar")))
 			})
 
-			// TODO: understand what length to excpect here
-			PIt("has the proper length", func() {
+			It("has the proper length", func() {
 				b := bob.Seal(nil, []byte("foobar"), 42, []byte("aad"))
-				Expect(b).To(HaveLen(6 + 12))
+				Expect(b).To(HaveLen(6 + bob.Overhead()))
 			})
 
 			It("fails with wrong aad", func() {

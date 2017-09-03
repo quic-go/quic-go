@@ -49,7 +49,9 @@ var _ = Describe("NullAEAD using FNV128a", func() {
 	})
 
 	It("seals", func() {
-		Expect(aead.Seal(nil, plainText, 0, aad)).To(Equal(append(plainText, hash64...)))
+		sealed := aead.Seal(nil, plainText, 0, aad)
+		Expect(sealed).To(Equal(append(plainText, hash64...)))
+		Expect(sealed).To(HaveLen(len(plainText) + aead.Overhead()))
 	})
 
 	It("seals in-place", func() {
