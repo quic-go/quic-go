@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"crypto/cipher"
+	"encoding/binary"
 	"errors"
 
 	"github.com/lucas-clemente/aes12"
@@ -50,9 +51,16 @@ func NewAEADAESGCM(otherKey []byte, myKey []byte, otherIV []byte, myIV []byte) (
 }
 
 func (aead *aeadAESGCM) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {
-	return aead.decrypter.Open(dst, makeNonce(aead.otherIV, packetNumber), src, associatedData)
+	return aead.decrypter.Open(dst, aead.makeNonce(aead.otherIV, packetNumber), src, associatedData)
 }
 
 func (aead *aeadAESGCM) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
-	return aead.encrypter.Seal(dst, makeNonce(aead.myIV, packetNumber), src, associatedData)
+	return aead.encrypter.Seal(dst, aead.makeNonce(aead.myIV, packetNumber), src, associatedData)
+}
+
+func (aead *aeadAESGCM) makeNonce(iv []byte, packetNumber protocol.PacketNumber) []byte {
+	res := make([]byte, 12)
+	copy(res[0:4], iv)
+	binary.LittleEndian.PutUint64(res[4:12], uint64(packetNumber))
+	return res
 }
