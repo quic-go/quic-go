@@ -9,23 +9,23 @@ import (
 )
 
 // nullAEAD handles not-yet encrypted packets
-type nullAEAD struct {
+type nullAEADFNV128a struct {
 	perspective protocol.Perspective
 	version     protocol.VersionNumber
 }
 
-var _ AEAD = &nullAEAD{}
+var _ AEAD = &nullAEADFNV128a{}
 
 // NewNullAEAD creates a NullAEAD
 func NewNullAEAD(p protocol.Perspective, v protocol.VersionNumber) AEAD {
-	return &nullAEAD{
+	return &nullAEADFNV128a{
 		perspective: p,
 		version:     v,
 	}
 }
 
 // Open and verify the ciphertext
-func (n *nullAEAD) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {
+func (n *nullAEADFNV128a) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {
 	if len(src) < 12 {
 		return nil, errors.New("NullAEAD: ciphertext cannot be less than 12 bytes long")
 	}
@@ -52,7 +52,7 @@ func (n *nullAEAD) Open(dst, src []byte, packetNumber protocol.PacketNumber, ass
 }
 
 // Seal writes hash and ciphertext to the buffer
-func (n *nullAEAD) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
+func (n *nullAEADFNV128a) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
 	if cap(dst) < 12+len(src) {
 		dst = make([]byte, 12+len(src))
 	} else {
