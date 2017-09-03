@@ -142,18 +142,10 @@ func (s *Server) handleHeaderStream(session streamCreator) {
 
 	hpackDecoder := hpack.NewDecoder(4096, nil)
 	h2framer := http2.NewFramer(nil, stream)
+	settings := newSessionSettings()
 
 	go func() {
 		var headerStreamMutex sync.Mutex // Protects concurrent calls to Write()
-		// First request can be SETTINGS
-		settings, err := s.handleFirstRequest(session, stream, &headerStreamMutex, hpackDecoder, h2framer)
-		if err != nil {
-			if _, ok := err.(*qerr.QuicError); !ok {
-				utils.Errorf("error handling h2 request: %s", err.Error())
-			}
-			session.Close(err)
-			return
-		}
 		for {
 			if err = s.handleRequest(session, stream, &headerStreamMutex, hpackDecoder, h2framer, settings); err != nil {
 				// QuicErrors must originate from stream.Read() returning an error.
@@ -171,21 +163,6 @@ func (s *Server) handleHeaderStream(session streamCreator) {
 	}()
 }
 
-func (s *Server) handleFirstRequest(session streamCreator, headerStream quic.Stream, headerStreamMutex *sync.Mutex, hpackDecoder *hpack.Decoder, h2framer *http2.Framer) (*sessionSettings, error) {
-	h2frame, err := h2framer.ReadFrame()
-	if err != nil {
-		return nil, qerr.Error(qerr.HeadersStreamDataDecompressFailure, "cannot read frame")
-	}
-	switch frame := h2frame.(type) {
-	case *http2.SettingsFrame:
-		return s.handleSettingsFrame(frame, session)
-	case *http2.HeadersFrame:
-		return nil, s.handleHeadersFrame(frame, session, headerStream, headerStreamMutex, hpackDecoder, newSessionSettings())
-	default:
-		return nil, qerr.Error(qerr.InvalidHeadersStreamData, "Could not decode frame type")
-	}
-}
-
 func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, headerStreamMutex *sync.Mutex, hpackDecoder *hpack.Decoder, h2framer *http2.Framer, settings *sessionSettings) error {
 	h2frame, err := h2framer.ReadFrame()
 	if err != nil {
@@ -194,6 +171,8 @@ func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, 
 	switch frame := h2frame.(type) {
 	case *http2.HeadersFrame:
 		return s.handleHeadersFrame(frame, session, headerStream, headerStreamMutex, hpackDecoder, settings)
+	case *http2.SettingsFrame:
+		return s.handleSettingsFrame(frame, session, settings)
 	default:
 		return qerr.Error(qerr.InvalidHeadersStreamData, "Could not decode frame type")
 	}
@@ -285,8 +264,7 @@ func (s *Server) handleHeadersFrame(h2headersFrame *http2.HeadersFrame, session 
 	return nil
 }
 
-func (s *Server) handleSettingsFrame(h2SettingsFrame *http2.SettingsFrame, session streamCreator) (*sessionSettings, error) {
-	settings := newSessionSettings()
+func (s *Server) handleSettingsFrame(h2SettingsFrame *http2.SettingsFrame, session streamCreator, settings *sessionSettings) error {
 	// PUSH
 	pushEnabled, ok := h2SettingsFrame.Value(http2.SettingEnablePush)
 	if ok {
@@ -297,7 +275,7 @@ func (s *Server) handleSettingsFrame(h2SettingsFrame *http2.SettingsFrame, sessi
 	if ok {
 		if settingHeaderTableSize != 0 {
 			// MUST be zero
-			return nil, qerr.InternalError
+			return qerr.InternalError
 		}
 	}
 	// SETTINGS_MAX_HEADER_LIST_SIZE
@@ -305,7 +283,7 @@ func (s *Server) handleSettingsFrame(h2SettingsFrame *http2.SettingsFrame, sessi
 	if ok {
 		settings.maxHeaderListSize = settingMaxHeaderListSize
 	}
-	return settings, nil
+	return nil
 }
 
 // Close the server immediately, aborting requests and sending CONNECTION_CLOSE frames to connected clients.
