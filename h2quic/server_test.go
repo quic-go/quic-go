@@ -346,7 +346,7 @@ var _ = Describe("H2 server", func() {
 				// length	  |type|flags| data stream id   |
 				0x0, 0x0, 0x0, 0x4, 0x0, 0x0, 0x0, 0x0, 0x0,
 			})
-			_, err := s.handleFirstRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer, settings)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -357,7 +357,7 @@ var _ = Describe("H2 server", func() {
 				// SETTINGS identifier			   | Value
 				0x0, uint8(http2.SettingEnablePush), 0x0, 0x0, 0x0, 0x0,
 			})
-			settings, err := s.handleFirstRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer, settings)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(settings.pushEnabled).To(Equal(false))
 		})
@@ -370,7 +370,7 @@ var _ = Describe("H2 server", func() {
 				// SETTINGS identifier					  | Value
 				0x0, uint8(http2.SettingMaxHeaderListSize), 0x0, 0x0, 0x0, uint8(maxHeaderListSize),
 			})
-			settings, err := s.handleFirstRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer, settings)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(settings.maxHeaderListSize).To(Equal(maxHeaderListSize))
 		})
