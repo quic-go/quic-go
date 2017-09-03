@@ -100,7 +100,7 @@ var _ = Describe("QUIC Crypto Key Derivation", func() {
 				protocol.PerspectiveServer,
 			)
 			Expect(err).ToNot(HaveOccurred())
-			aesgcm := aead.(*aeadAESGCM)
+			aesgcm := aead.(*aeadAESGCM12)
 			// If the IVs match, the keys will match too, since the keys are read earlier
 			Expect(aesgcm.myIV).To(Equal([]byte{0x1c, 0xec, 0xac, 0x9b}))
 			Expect(aesgcm.otherIV).To(Equal([]byte{0x64, 0xef, 0x3c, 0x9}))
@@ -131,8 +131,8 @@ var _ = Describe("QUIC Crypto Key Derivation", func() {
 				protocol.PerspectiveServer,
 			)
 			Expect(err).ToNot(HaveOccurred())
-			aesgcm1 := aead1.(*aeadAESGCM)
-			aesgcm2 := aead2.(*aeadAESGCM)
+			aesgcm1 := aead1.(*aeadAESGCM12)
+			aesgcm2 := aead2.(*aeadAESGCM12)
 			Expect(aesgcm1.myIV).ToNot(Equal(aesgcm2.myIV))
 			Expect(aesgcm1.otherIV).To(Equal(aesgcm2.otherIV))
 		})
@@ -150,7 +150,7 @@ var _ = Describe("QUIC Crypto Key Derivation", func() {
 				protocol.PerspectiveClient,
 			)
 			Expect(err).ToNot(HaveOccurred())
-			aesgcm := aead.(*aeadAESGCM)
+			aesgcm := aead.(*aeadAESGCM12)
 			// If the IVs match, the keys will match too, since the keys are read earlier
 			Expect(aesgcm.otherIV).To(Equal([]byte{0x1c, 0xec, 0xac, 0x9b}))
 			Expect(aesgcm.myIV).To(Equal([]byte{0x64, 0xef, 0x3c, 0x9}))
@@ -169,7 +169,7 @@ var _ = Describe("QUIC Crypto Key Derivation", func() {
 				protocol.PerspectiveServer,
 			)
 			Expect(err).ToNot(HaveOccurred())
-			aesgcm := aead.(*aeadAESGCM)
+			aesgcm := aead.(*aeadAESGCM12)
 			// If the IVs match, the keys will match too, since the keys are read earlier
 			Expect(aesgcm.myIV).To(Equal([]byte{0x7, 0xad, 0xab, 0xb8}))
 			Expect(aesgcm.otherIV).To(Equal([]byte{0xf2, 0x7a, 0xcc, 0x42}))
@@ -188,7 +188,7 @@ var _ = Describe("QUIC Crypto Key Derivation", func() {
 				protocol.PerspectiveServer,
 			)
 			Expect(err).ToNot(HaveOccurred())
-			aesgcm := aead.(*aeadAESGCM)
+			aesgcm := aead.(*aeadAESGCM12)
 			// If the IVs match, the keys will match too, since the keys are read earlier
 			Expect(aesgcm.myIV).To(Equal([]byte{0x7, 0xad, 0xab, 0xb8}))
 			Expect(aesgcm.otherIV).To(Equal([]byte{0xf2, 0x7a, 0xcc, 0x42}))

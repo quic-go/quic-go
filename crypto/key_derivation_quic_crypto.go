@@ -30,7 +30,7 @@ func DeriveQuicCryptoAESKeys(forwardSecure bool, sharedSecret, nonces []byte, co
 	if err != nil {
 		return nil, err
 	}
-	return NewAEADAESGCM(otherKey, myKey, otherIV, myIV)
+	return NewAEADAESGCM12(otherKey, myKey, otherIV, myIV)
 }
 
 // deriveKeys derives the keys and the IVs
