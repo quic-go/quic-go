@@ -108,6 +108,9 @@ func (w *responseWriter) CloseNotify() <-chan bool { return make(<-chan bool) }
 // - use the header to create a http request and use it in ServeHTTP(w ResponseWriter, r *Request) to serve the file to push.
 // - TODO: check for recursive pushes.
 func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
+	if !w.settings.pushEnabled {
+		return http2.ErrPushLimitReached
+	}
 	if w.headerStream.StreamID()%2 == 0 { // Copied from net/http2/server.go
 		return http2.ErrRecursivePush
 	}

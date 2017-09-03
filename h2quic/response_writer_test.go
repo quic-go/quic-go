@@ -256,6 +256,12 @@ var _ = Describe("Response Writer", func() {
 			headerStream.id = 4
 			err := w.Push(pushTarget, opts)
 			Expect(err).To(HaveOccurred())
+
+		It("Does not push when not allowed", func() {
+			settings.pushEnabled = false // disallow push
+			err := w.Push(pushTarget, opts)
+			Expect(err).To(MatchError(http2.ErrPushLimitReached))
+			Expect(pushStream.dataWritten.Bytes()).To(Equal([]byte(nil)))
 		})
 	})
 })
