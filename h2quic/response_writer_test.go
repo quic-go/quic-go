@@ -249,13 +249,16 @@ var _ = Describe("Response Writer", func() {
 		It("Does not push when there is no available stream", func() {
 			session.streamsToOpen = []quic.Stream{}
 			err := w.Push(pushTarget, opts)
-			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError(http2.ErrPushLimitReached))
+			Expect(pushStream.dataWritten.Bytes()).To(Equal([]byte(nil)))
 		})
 
 		It("Does not send push_promise on a server initiated stream", func() {
 			headerStream.id = 4
 			err := w.Push(pushTarget, opts)
-			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError(http2.ErrRecursivePush))
+			Expect(pushStream.dataWritten.Bytes()).To(Equal([]byte(nil)))
+		})
 
 		It("Does not push when not allowed", func() {
 			settings.pushEnabled = false // disallow push
