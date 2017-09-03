@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("KeyDerivation", func() {
+var _ = Describe("QUIC Crypto Key Derivation", func() {
 	// Context("chacha20poly1305", func() {
 	// 	It("derives non-fs keys", func() {
 	// 		aead, err := DeriveKeysChacha20(
@@ -88,7 +88,7 @@ var _ = Describe("KeyDerivation", func() {
 
 	Context("AES-GCM", func() {
 		It("derives non-forward secure keys", func() {
-			aead, err := DeriveKeysAESGCM(
+			aead, err := DeriveQuicCryptoAESKeys(
 				false,
 				[]byte("0123456789012345678901"),
 				[]byte("nonce"),
@@ -107,7 +107,7 @@ var _ = Describe("KeyDerivation", func() {
 		})
 
 		It("uses the diversification nonce when generating non-forwared secure keys", func() {
-			aead1, err := DeriveKeysAESGCM(
+			aead1, err := DeriveQuicCryptoAESKeys(
 				false,
 				[]byte("0123456789012345678901"),
 				[]byte("nonce"),
@@ -119,7 +119,7 @@ var _ = Describe("KeyDerivation", func() {
 				protocol.PerspectiveServer,
 			)
 			Expect(err).ToNot(HaveOccurred())
-			aead2, err := DeriveKeysAESGCM(
+			aead2, err := DeriveQuicCryptoAESKeys(
 				false,
 				[]byte("0123456789012345678901"),
 				[]byte("nonce"),
@@ -138,7 +138,7 @@ var _ = Describe("KeyDerivation", func() {
 		})
 
 		It("derives non-forward secure keys, for the other side", func() {
-			aead, err := DeriveKeysAESGCM(
+			aead, err := DeriveQuicCryptoAESKeys(
 				false,
 				[]byte("0123456789012345678901"),
 				[]byte("nonce"),
@@ -157,7 +157,7 @@ var _ = Describe("KeyDerivation", func() {
 		})
 
 		It("derives forward secure keys", func() {
-			aead, err := DeriveKeysAESGCM(
+			aead, err := DeriveQuicCryptoAESKeys(
 				true,
 				[]byte("0123456789012345678901"),
 				[]byte("nonce"),
@@ -176,7 +176,7 @@ var _ = Describe("KeyDerivation", func() {
 		})
 
 		It("does not use div-nonce for FS key derivation", func() {
-			aead, err := DeriveKeysAESGCM(
+			aead, err := DeriveQuicCryptoAESKeys(
 				true,
 				[]byte("0123456789012345678901"),
 				[]byte("nonce"),

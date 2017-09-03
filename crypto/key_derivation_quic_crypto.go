@@ -20,8 +20,8 @@ import (
 // 	return NewAEADChacha20Poly1305(otherKey, myKey, otherIV, myIV)
 // }
 
-// DeriveKeysAESGCM derives the client and server keys and creates a matching AES-GCM AEAD instance
-func DeriveKeysAESGCM(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte, pers protocol.Perspective) (AEAD, error) {
+// DeriveQuicCryptoAESKeys derives the client and server keys and creates a matching AES-GCM AEAD instance
+func DeriveQuicCryptoAESKeys(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte, pers protocol.Perspective) (AEAD, error) {
 	var swap bool
 	if pers == protocol.PerspectiveClient {
 		swap = true

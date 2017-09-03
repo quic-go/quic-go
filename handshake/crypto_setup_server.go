@@ -15,8 +15,8 @@ import (
 	"github.com/lucas-clemente/quic-go/qerr"
 )
 
-// KeyDerivationFunction is used for key derivation
-type KeyDerivationFunction func(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte, pers protocol.Perspective) (crypto.AEAD, error)
+// QuicCryptoKeyDerivationFunction is used for key derivation
+type QuicCryptoKeyDerivationFunction func(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte, pers protocol.Perspective) (crypto.AEAD, error)
 
 // KeyExchangeFunction is used to make a new KEX
 type KeyExchangeFunction func() crypto.KeyExchange
@@ -42,7 +42,7 @@ type cryptoSetupServer struct {
 	sentSHLO                    chan struct{} // this channel is closed as soon as the SHLO has been written
 	aeadChanged                 chan<- protocol.EncryptionLevel
 
-	keyDerivation KeyDerivationFunction
+	keyDerivation QuicCryptoKeyDerivationFunction
 	keyExchange   KeyExchangeFunction
 
 	cryptoStream io.ReadWriter
@@ -87,7 +87,7 @@ func NewCryptoSetup(
 		supportedVersions:    supportedVersions,
 		scfg:                 scfg,
 		stkGenerator:         stkGenerator,
-		keyDerivation:        crypto.DeriveKeysAESGCM,
+		keyDerivation:        crypto.DeriveQuicCryptoAESKeys,
 		keyExchange:          getEphermalKEX,
 		nullAEAD:             crypto.NewNullAEAD(protocol.PerspectiveServer, version),
 		cryptoStream:         cryptoStream,
