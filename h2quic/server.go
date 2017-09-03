@@ -183,6 +183,8 @@ func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, 
 		return s.handleHeadersFrame(frame, session, headerStream, headerStreamMutex, hpackDecoder, settings)
 	case *http2.SettingsFrame:
 		return s.handleSettingsFrame(frame, session, settings)
+	case *http2.RSTStreamFrame:
+		return s.handleRSTStreamFrame(frame, session)
 	default:
 		return qerr.Error(qerr.InvalidHeadersStreamData, "Could not decode frame type")
 	}
@@ -266,6 +268,17 @@ func (s *Server) handleSettingsFrame(h2SettingsFrame *http2.SettingsFrame, sessi
 	return nil
 }
 
+func (s *Server) handleRSTStreamFrame(h2RSTStreamFrame *http2.RSTStreamFrame, session streamCreator) error {
+	streamToClose, err := session.GetOrOpenStream(protocol.StreamID(h2RSTStreamFrame.StreamID))
+	if err != nil {
+		return err
+	}
+	if streamToClose != nil {
+		return streamToClose.Close()
+	}
+	return nil
+}
+
 func serveHTTP(handler http.Handler, responseWriter *responseWriter, req *http.Request, streamEnded bool, reqBody *requestBody) {
 	panicked := false
 	func() {
@@ -287,7 +300,7 @@ func serveHTTP(handler http.Handler, responseWriter *responseWriter, req *http.R
 		responseWriter.WriteHeader(200)
 	}
 	if responseWriter.dataStream != nil {
-		if !streamEnded && !reqBody.requestRead {
+		if !streamEnded && reqBody != nil && !reqBody.requestRead {
 			// in gQUIC, the error code doesn't matter, so just use 0 here
 			responseWriter.dataStream.CancelRead(0)
 		}

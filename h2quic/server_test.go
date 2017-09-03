@@ -38,6 +38,12 @@ type mockSession struct {
 }
 
 func (s *mockSession) GetOrOpenStream(id protocol.StreamID) (quic.Stream, error) {
+	if s.dataStream == nil {
+		return nil, nil
+	}
+	if id != s.dataStream.StreamID() {
+		return nil, qerr.InvalidStreamID
+	}
 	return s.dataStream, nil
 }
 func (s *mockSession) AcceptStream() (quic.Stream, error) { return s.streamToAccept, nil }
@@ -92,7 +98,7 @@ var _ = Describe("H2 server", func() {
 		}
 		s.pushEnabled = make(map[protocol.ConnectionID]bool)
 		s.maxHeaderListSize = make(map[protocol.ConnectionID]uint32)
-		dataStream = newMockStream(0)
+		dataStream = newMockStream(5)
 		close(dataStream.unblockRead)
 		session = &mockSession{dataStream: dataStream}
 		session.ctx, session.ctxCancel = context.WithCancel(context.Background())
@@ -283,6 +289,18 @@ var _ = Describe("H2 server", func() {
 			Expect(dataStream.reset).To(BeFalse())
 		})
 
+		It("Closes the corresponding stream after receiving a RST_STREAM", func() {
+
+			headerStream.dataToRead.Write([]byte{
+				// length	  |type|flags| data stream id   |
+				0x0, 0x0, 0x4, 0x3, 0x0, 0x0, 0x0, 0x0, uint8(dataStream.StreamID() & 0xff), // assume dataStreamID smaller than 255
+				// Error Code
+				0x0, 0x0, 0x0, 0x0,
+			})
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer, settings)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(dataStream.closed).To(BeTrue())
+		})
 	})
 
 	It("handles the header stream", func() {

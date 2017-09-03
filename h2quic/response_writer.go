@@ -171,11 +171,10 @@ func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
 		return err
 	}
 	pushRequest.RemoteAddr = w.session.RemoteAddr().String()
-	reqBody := newRequestBody(newDataStream)
-	pushRequest.Body = reqBody
 	pushRequestResponseWriter := newResponseWriter(w.headerStream, w.headerStreamMutex, newDataStream, newDataStreamID, w.session, w.handler, w.requestHost, w.settings)
 
-	go serveHTTP(w.handler, pushRequestResponseWriter, pushRequest, true, reqBody)
+	// Serve the fake request
+	go serveHTTP(w.handler, pushRequestResponseWriter, pushRequest, true, nil)
 	return nil
 }
 
