@@ -27,7 +27,7 @@ type responseWriter struct {
 
 	// Server Push
 	session     streamCreator
-	handlerFunc http.HandlerFunc
+	handler     http.Handler
 	requestHost string
 
 	header        http.Header
@@ -37,7 +37,7 @@ type responseWriter struct {
 	settings *sessionSettings
 }
 
-func newResponseWriter(headerStream quic.Stream, headerStreamMutex *sync.Mutex, dataStream quic.Stream, dataStreamID protocol.StreamID, settings *sessionSettings, session streamCreator, handlerFunc http.HandlerFunc, requestHost string) *responseWriter {
+func newResponseWriter(headerStream quic.Stream, headerStreamMutex *sync.Mutex, dataStream quic.Stream, dataStreamID protocol.StreamID, session streamCreator, handler http.Handler, requestHost string, settings *sessionSettings) *responseWriter {
 	return &responseWriter{
 		header:            http.Header{},
 		headerStream:      headerStream,
@@ -46,7 +46,7 @@ func newResponseWriter(headerStream quic.Stream, headerStreamMutex *sync.Mutex, 
 		dataStreamID:      dataStreamID,
 		settings:          settings,
 		session:           session,
-		handlerFunc:       handlerFunc,
+		handler:           handler,
 		requestHost:       requestHost,
 	}
 }
@@ -173,8 +173,9 @@ func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
 	pushRequest.RemoteAddr = w.session.RemoteAddr().String()
 	reqBody := newRequestBody(newDataStream)
 	pushRequest.Body = reqBody
-	pushRequestResponseWriter := newResponseWriter(w.headerStream, w.headerStreamMutex, newDataStream, newDataStreamID, w.settings, w.session, w.handlerFunc, w.requestHost)
-	go serveHTTP(w.handlerFunc, pushRequestResponseWriter, pushRequest, true, reqBody)
+	pushRequestResponseWriter := newResponseWriter(w.headerStream, w.headerStreamMutex, newDataStream, newDataStreamID, w.session, w.handler, w.requestHost, w.settings)
+
+	go serveHTTP(w.handler, pushRequestResponseWriter, pushRequest, true, reqBody)
 	return nil
 }
 

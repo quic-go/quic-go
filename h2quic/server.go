@@ -233,7 +233,7 @@ func (s *Server) handleHeadersFrame(h2headersFrame *http2.HeadersFrame, session 
 		if handler == nil {
 			handler = http.DefaultServeMux
 		}
-		responseWriter := newResponseWriter(headerStream, headerStreamMutex, dataStream, protocol.StreamID(h2headersFrame.StreamID), settings, session, handler.ServeHTTP, req.Host)
+		responseWriter := newResponseWriter(headerStream, headerStreamMutex, dataStream, protocol.StreamID(h2headersFrame.StreamID), session, handler, req.Host, settings)
 
 		serveHTTP(handler, responseWriter, req, streamEnded, reqBody)
 		if s.CloseAfterFirstRequest {

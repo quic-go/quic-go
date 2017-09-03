@@ -69,6 +69,7 @@ var _ = Describe("Response Writer", func() {
 		dataStream   *mockStream
 		session      *mockSession
 		requestHost  string
+		settings     *sessionSettings
 	)
 	BeforeEach(func() {
 		requestHost = "www.request.com"
@@ -77,8 +78,9 @@ var _ = Describe("Response Writer", func() {
 		dataStream = &mockStream{}
 		dataStream.id = protocol.StreamID(5)
 		session = &mockSession{}
+		settings = newSessionSettings()
 		handlerFunc := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
-		w = newResponseWriter(headerStream, &sync.Mutex{}, dataStream, dataStream.id, newSessionSettings(), session, handlerFunc, requestHost)
+		w = newResponseWriter(headerStream, &sync.Mutex{}, dataStream, dataStream.id, session, handlerFunc, requestHost, settings)
 	})
 
 	decodeHeaderFields := func() map[string][]string {
@@ -188,7 +190,7 @@ var _ = Describe("Response Writer", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(n).To(Equal(len(fakePushData)))
 			})
-			w = newResponseWriter(headerStream, &sync.Mutex{}, dataStream, dataStream.id, newSessionSettings(), session, handlerFunc, requestHost)
+			w = newResponseWriter(headerStream, &sync.Mutex{}, dataStream, dataStream.id, session, handlerFunc, requestHost, settings)
 			opts = &http.PushOptions{
 				Method: method,
 				Header: http.Header{},
