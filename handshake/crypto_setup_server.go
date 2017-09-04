@@ -226,18 +226,18 @@ func (h *cryptoSetupServer) GetSealer() (protocol.EncryptionLevel, Sealer) {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	if h.forwardSecureAEAD != nil {
-		return protocol.EncryptionForwardSecure, h.sealForwardSecure
+		return protocol.EncryptionForwardSecure, h.forwardSecureAEAD
 	}
-	return protocol.EncryptionUnencrypted, h.sealUnencrypted
+	return protocol.EncryptionUnencrypted, h.nullAEAD
 }
 
 func (h *cryptoSetupServer) GetSealerForCryptoStream() (protocol.EncryptionLevel, Sealer) {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	if h.secureAEAD != nil {
-		return protocol.EncryptionSecure, h.sealSecure
+		return protocol.EncryptionSecure, h.secureAEAD
 	}
-	return protocol.EncryptionUnencrypted, h.sealUnencrypted
+	return protocol.EncryptionUnencrypted, h.nullAEAD
 }
 
 func (h *cryptoSetupServer) GetSealerWithEncryptionLevel(encLevel protocol.EncryptionLevel) (Sealer, error) {
@@ -246,31 +246,19 @@ func (h *cryptoSetupServer) GetSealerWithEncryptionLevel(encLevel protocol.Encry
 
 	switch encLevel {
 	case protocol.EncryptionUnencrypted:
-		return h.sealUnencrypted, nil
+		return h.nullAEAD, nil
 	case protocol.EncryptionSecure:
 		if h.secureAEAD == nil {
 			return nil, errors.New("CryptoSetupServer: no secureAEAD")
 		}
-		return h.sealSecure, nil
+		return h.secureAEAD, nil
 	case protocol.EncryptionForwardSecure:
 		if h.forwardSecureAEAD == nil {
 			return nil, errors.New("CryptoSetupServer: no forwardSecureAEAD")
 		}
-		return h.sealForwardSecure, nil
+		return h.forwardSecureAEAD, nil
 	}
 	return nil, errors.New("CryptoSetupServer: no encryption level specified")
-}
-
-func (h *cryptoSetupServer) sealUnencrypted(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
-	return h.nullAEAD.Seal(dst, src, packetNumber, associatedData)
-}
-
-func (h *cryptoSetupServer) sealSecure(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
-	return h.secureAEAD.Seal(dst, src, packetNumber, associatedData)
-}
-
-func (h *cryptoSetupServer) sealForwardSecure(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
-	return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData)
 }
 
 func (h *cryptoSetupServer) isInchoateCHLO(cryptoData map[Tag][]byte, cert []byte) bool {

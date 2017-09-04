@@ -13,12 +13,24 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+type mockSealer struct{}
+
+func (s *mockSealer) Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
+	return append(src, bytes.Repeat([]byte{0}, 12)...)
+}
+
+func (s *mockSealer) Overhead() int { return 12 }
+
+var _ handshake.Sealer = &mockSealer{}
+
 type mockCryptoSetup struct {
 	handleErr          error
 	divNonce           []byte
 	encLevelSeal       protocol.EncryptionLevel
 	encLevelSealCrypto protocol.EncryptionLevel
 }
+
+var _ handshake.CryptoSetup = &mockCryptoSetup{}
 
 func (m *mockCryptoSetup) HandleCryptoStream() error {
 	return m.handleErr
@@ -27,24 +39,16 @@ func (m *mockCryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumb
 	return nil, protocol.EncryptionUnspecified, nil
 }
 func (m *mockCryptoSetup) GetSealer() (protocol.EncryptionLevel, handshake.Sealer) {
-	return m.encLevelSeal, func(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
-		return append(src, bytes.Repeat([]byte{0}, 12)...)
-	}
+	return m.encLevelSeal, &mockSealer{}
 }
 func (m *mockCryptoSetup) GetSealerForCryptoStream() (protocol.EncryptionLevel, handshake.Sealer) {
-	return m.encLevelSealCrypto, func(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
-		return append(src, bytes.Repeat([]byte{0}, 12)...)
-	}
+	return m.encLevelSealCrypto, &mockSealer{}
 }
 func (m *mockCryptoSetup) GetSealerWithEncryptionLevel(protocol.EncryptionLevel) (handshake.Sealer, error) {
-	return func(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
-		return append(src, bytes.Repeat([]byte{0}, 12)...)
-	}, nil
+	return &mockSealer{}, nil
 }
 func (m *mockCryptoSetup) DiversificationNonce() []byte            { return m.divNonce }
 func (m *mockCryptoSetup) SetDiversificationNonce(divNonce []byte) { m.divNonce = divNonce }
-
-var _ handshake.CryptoSetup = &mockCryptoSetup{}
 
 var _ = Describe("Packet packer", func() {
 	var (
@@ -75,7 +79,7 @@ var _ = Describe("Packet packer", func() {
 			perspective:           protocol.PerspectiveServer,
 		}
 		publicHeaderLen = 1 + 8 + 2 // 1 flag byte, 8 connection ID, 2 packet number
-		maxFrameSize = protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen
+		maxFrameSize = protocol.MaxPacketSize - protocol.ByteCount((&mockSealer{}).Overhead()) - publicHeaderLen
 		packer.version = protocol.VersionWhatever
 	})
 
@@ -261,7 +265,7 @@ var _ = Describe("Packet packer", func() {
 		f := &wire.AckFrame{LargestAcked: 1}
 		b := &bytes.Buffer{}
 		f.Write(b, protocol.VersionWhatever)
-		maxFramesPerPacket := int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLen) / b.Len()
+		maxFramesPerPacket := int(maxFrameSize) / b.Len()
 		var controlFrames []wire.Frame
 		for i := 0; i < maxFramesPerPacket; i++ {
 			controlFrames = append(controlFrames, f)
@@ -280,7 +284,7 @@ var _ = Describe("Packet packer", func() {
 			StreamID: 0x1337,
 		}
 		minLength, _ := blockedFrame.MinLength(0)
-		maxFramesPerPacket := int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLen) / int(minLength)
+		maxFramesPerPacket := int(maxFrameSize) / int(minLength)
 		var controlFrames []wire.Frame
 		for i := 0; i < maxFramesPerPacket+10; i++ {
 			controlFrames = append(controlFrames, blockedFrame)
@@ -333,7 +337,7 @@ var _ = Describe("Packet packer", func() {
 		})
 
 		It("correctly handles a stream frame with one byte less than maximum size", func() {
-			maxStreamFrameDataLen := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen - (1 + 1 + 2) - 1
+			maxStreamFrameDataLen := maxFrameSize - (1 + 1 + 2) - 1
 			f1 := &wire.StreamFrame{
 				StreamID: 5,
 				Offset:   1,
@@ -395,7 +399,7 @@ var _ = Describe("Packet packer", func() {
 				Offset:   1,
 			}
 			minLength, _ := f.MinLength(0)
-			maxStreamFrameDataLen := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen - minLength
+			maxStreamFrameDataLen := maxFrameSize - minLength
 			f.Data = bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen)+200)
 			streamFramer.AddFrameForRetransmission(f)
 			payloadFrames, err := packer.composeNextPacket(maxFrameSize, true)
@@ -414,7 +418,7 @@ var _ = Describe("Packet packer", func() {
 		})
 
 		It("packs 2 stream frames that are too big for one packet correctly", func() {
-			maxStreamFrameDataLen := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLen - (1 + 1 + 2)
+			maxStreamFrameDataLen := maxFrameSize - (1 + 1 + 2)
 			f1 := &wire.StreamFrame{
 				StreamID: 5,
 				Data:     bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen)+100),
@@ -454,7 +458,7 @@ var _ = Describe("Packet packer", func() {
 				Offset:   1,
 			}
 			minLength, _ := f.MinLength(0)
-			f.Data = bytes.Repeat([]byte{'f'}, int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLen-minLength+1)) // + 1 since MinceLength is 1 bigger than the actual StreamFrame header
+			f.Data = bytes.Repeat([]byte{'f'}, int(maxFrameSize-minLength+1)) // + 1 since MinceLength is 1 bigger than the actual StreamFrame header
 			streamFramer.AddFrameForRetransmission(f)
 			p, err := packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
@@ -468,7 +472,7 @@ var _ = Describe("Packet packer", func() {
 				Offset:   1,
 			}
 			minLength, _ := f.MinLength(0)
-			f.Data = bytes.Repeat([]byte{'f'}, int(protocol.MaxFrameAndPublicHeaderSize-publicHeaderLen-minLength+2)) // + 2 since MinceLength is 1 bigger than the actual StreamFrame header
+			f.Data = bytes.Repeat([]byte{'f'}, int(maxFrameSize-minLength+2)) // + 2 since MinceLength is 1 bigger than the actual StreamFrame header
 
 			streamFramer.AddFrameForRetransmission(f)
 			payloadFrames, err := packer.composeNextPacket(maxFrameSize, true)

@@ -134,7 +134,7 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 		p.stopWaiting.PacketNumberLen = publicHeader.PacketNumberLen
 	}
 
-	maxSize := protocol.MaxFrameAndPublicHeaderSize - publicHeaderLength
+	maxSize := protocol.MaxPacketSize - protocol.ByteCount(sealer.Overhead()) - publicHeaderLength
 	payloadFrames, err := p.composeNextPacket(maxSize, p.canSendData(encLevel))
 	if err != nil {
 		return nil, err
@@ -170,7 +170,7 @@ func (p *packetPacker) packCryptoPacket() (*packedPacket, error) {
 	if err != nil {
 		return nil, err
 	}
-	maxLen := protocol.MaxFrameAndPublicHeaderSize - protocol.NonForwardSecurePacketSizeReduction - publicHeaderLength
+	maxLen := protocol.MaxPacketSize - protocol.ByteCount(sealer.Overhead()) - protocol.NonForwardSecurePacketSizeReduction - publicHeaderLength
 	frames := []wire.Frame{p.streamFramer.PopCryptoStreamFrame(maxLen)}
 	raw, err := p.writeAndSealPacket(publicHeader, frames, sealer)
 	if err != nil {
@@ -303,13 +303,13 @@ func (p *packetPacker) writeAndSealPacket(
 			return nil, err
 		}
 	}
-	if protocol.ByteCount(buffer.Len()+12) > protocol.MaxPacketSize {
+	if protocol.ByteCount(buffer.Len()+sealer.Overhead()) > protocol.MaxPacketSize {
 		return nil, errors.New("PacketPacker BUG: packet too large")
 	}
 
 	raw = raw[0:buffer.Len()]
-	_ = sealer(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], publicHeader.PacketNumber, raw[:payloadStartIndex])
-	raw = raw[0 : buffer.Len()+12]
+	_ = sealer.Seal(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], publicHeader.PacketNumber, raw[:payloadStartIndex])
+	raw = raw[0 : buffer.Len()+sealer.Overhead()]
 
 	num := p.packetNumberGenerator.Pop()
 	if num != publicHeader.PacketNumber {
