@@ -23,17 +23,20 @@ var _ = Describe("Handshake RTT tests", func() {
 		server        quic.Listener
 		serverConfig  *quic.Config
 		testStartedAt time.Time
+		acceptStopped chan struct{}
 	)
 
 	rtt := 400 * time.Millisecond
 
 	BeforeEach(func() {
+		acceptStopped = make(chan struct{})
 		serverConfig = &quic.Config{}
 	})
 
 	AfterEach(func() {
 		Expect(proxy.Close()).To(Succeed())
 		Expect(server.Close()).To(Succeed())
+		<-acceptStopped
 	})
 
 	runServerAndProxy := func() {
@@ -51,8 +54,13 @@ var _ = Describe("Handshake RTT tests", func() {
 		testStartedAt = time.Now()
 
 		go func() {
+			defer GinkgoRecover()
+			defer close(acceptStopped)
 			for {
-				_, _ = server.Accept()
+				_, err := server.Accept()
+				if err != nil {
+					return
+				}
 			}
 		}()
 	}

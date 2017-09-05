@@ -24,7 +24,9 @@ func TestIntegration(t *testing.T) {
 	RunSpecs(t, "GQuic Tests Suite")
 }
 
-var _ = JustBeforeEach(testserver.StartQuicServer)
+var _ = JustBeforeEach(func() {
+	testserver.StartQuicServer(nil)
+})
 
 var _ = AfterEach(testserver.StopQuicServer)
 

@@ -35,9 +35,10 @@ const (
 )
 
 var (
-	nFilesUploaded     int32
-	testEndpointCalled bool
-	doneCalled         bool
+	nFilesUploaded     int32 // should be used atomically
+	testEndpointCalled utils.AtomicBool
+	doneCalled         utils.AtomicBool
+	version            protocol.VersionNumber
 )
 
 func TestChrome(t *testing.T) {
@@ -54,7 +55,7 @@ func init() {
 		response = strings.Replace(response, "NUM", r.URL.Query().Get("num"), -1)
 		_, err := io.WriteString(w, response)
 		Expect(err).NotTo(HaveOccurred())
-		testEndpointCalled = true
+		testEndpointCalled.Set(true)
 	})
 
 	// Requires the len & num GET parameters, e.g. /downloadtest?len=100&num=1
@@ -65,7 +66,7 @@ func init() {
 		response = strings.Replace(response, "NUM", r.URL.Query().Get("num"), -1)
 		_, err := io.WriteString(w, response)
 		Expect(err).NotTo(HaveOccurred())
-		testEndpointCalled = true
+		testEndpointCalled.Set(true)
 	})
 
 	http.HandleFunc("/uploadhandler", func(w http.ResponseWriter, r *http.Request) {
@@ -84,18 +85,20 @@ func init() {
 	})
 
 	http.HandleFunc("/done", func(w http.ResponseWriter, r *http.Request) {
-		doneCalled = true
+		doneCalled.Set(true)
 	})
 }
 
-var _ = JustBeforeEach(testserver.StartQuicServer)
+var _ = JustBeforeEach(func() {
+	testserver.StartQuicServer([]protocol.VersionNumber{version})
+})
 
 var _ = AfterEach(func() {
 	testserver.StopQuicServer()
 
-	nFilesUploaded = 0
-	doneCalled = false
-	testEndpointCalled = false
+	atomic.StoreInt32(&nFilesUploaded, 0)
+	doneCalled.Set(false)
+	testEndpointCalled.Set(false)
 })
 
 func getChromePath() string {
@@ -149,11 +152,11 @@ func chromeTestImpl(version protocol.VersionNumber, url string, blockUntilDone f
 	const pollDuration = 10 * time.Second
 	for i := 0; i < int(pollDuration/pollInterval); i++ {
 		time.Sleep(pollInterval)
-		if testEndpointCalled {
+		if testEndpointCalled.Get() {
 			break
 		}
 	}
-	if !testEndpointCalled {
+	if !testEndpointCalled.Get() {
 		return false
 	}
 	blockUntilDone()
@@ -161,7 +164,7 @@ func chromeTestImpl(version protocol.VersionNumber, url string, blockUntilDone f
 }
 
 func waitForDone() {
-	Eventually(func() bool { return doneCalled }, 60).Should(BeTrue())
+	Eventually(func() bool { return doneCalled.Get() }, 60).Should(BeTrue())
 }
 
 func waitForNUploaded(expected int) func() {
