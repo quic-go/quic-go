@@ -268,7 +268,7 @@ func (s *Server) handleSettingsFrame(h2SettingsFrame *http2.SettingsFrame, sessi
 	if ok {
 		if settingHeaderTableSize != 0 {
 			// MUST be zero
-			return qerr.InternalError
+			return qerr.InvalidHeadersStreamData
 		}
 	}
 	// SETTINGS_MAX_HEADER_LIST_SIZE
