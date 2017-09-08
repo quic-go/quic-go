@@ -218,7 +218,7 @@ var _ = Describe("Stream Framer", func() {
 				}
 				framer.AddFrameForRetransmission(origFrame)
 
-				minFrameDataLen := protocol.MaxFrameAndPublicHeaderSize
+				minFrameDataLen := protocol.MaxPacketSize
 
 				for i := 0; i < 30; i++ {
 					frames, currentLen := framer.maybePopFramesForRetransmission(protocol.ByteCount(i))

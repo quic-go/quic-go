@@ -42,7 +42,7 @@ type cryptoSetupClient struct {
 
 	clientHelloCounter int
 	serverVerified     bool // has the certificate chain and the proof already been verified
-	keyDerivation      KeyDerivationFunction
+	keyDerivation      QuicCryptoKeyDerivationFunction
 	keyExchange        KeyExchangeFunction
 
 	receivedSecurePacket bool
@@ -82,7 +82,7 @@ func NewCryptoSetupClient(
 		cryptoStream:         cryptoStream,
 		certManager:          crypto.NewCertManager(tlsConfig),
 		connectionParameters: connectionParameters,
-		keyDerivation:        crypto.DeriveKeysAESGCM,
+		keyDerivation:        crypto.DeriveQuicCryptoAESKeys,
 		keyExchange:          getEphermalKEX,
 		nullAEAD:             crypto.NewNullAEAD(protocol.PerspectiveClient, version),
 		aeadChanged:          aeadChanged,
@@ -333,16 +333,16 @@ func (h *cryptoSetupClient) GetSealer() (protocol.EncryptionLevel, Sealer) {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	if h.forwardSecureAEAD != nil {
-		return protocol.EncryptionForwardSecure, h.sealForwardSecure
+		return protocol.EncryptionForwardSecure, h.forwardSecureAEAD
 	} else if h.secureAEAD != nil {
-		return protocol.EncryptionSecure, h.sealSecure
+		return protocol.EncryptionSecure, h.secureAEAD
 	} else {
-		return protocol.EncryptionUnencrypted, h.sealUnencrypted
+		return protocol.EncryptionUnencrypted, h.nullAEAD
 	}
 }
 
 func (h *cryptoSetupClient) GetSealerForCryptoStream() (protocol.EncryptionLevel, Sealer) {
-	return protocol.EncryptionUnencrypted, h.sealUnencrypted
+	return protocol.EncryptionUnencrypted, h.nullAEAD
 }
 
 func (h *cryptoSetupClient) GetSealerWithEncryptionLevel(encLevel protocol.EncryptionLevel) (Sealer, error) {
@@ -351,31 +351,19 @@ func (h *cryptoSetupClient) GetSealerWithEncryptionLevel(encLevel protocol.Encry
 
 	switch encLevel {
 	case protocol.EncryptionUnencrypted:
-		return h.sealUnencrypted, nil
+		return h.nullAEAD, nil
 	case protocol.EncryptionSecure:
 		if h.secureAEAD == nil {
 			return nil, errors.New("CryptoSetupClient: no secureAEAD")
 		}
-		return h.sealSecure, nil
+		return h.secureAEAD, nil
 	case protocol.EncryptionForwardSecure:
 		if h.forwardSecureAEAD == nil {
 			return nil, errors.New("CryptoSetupClient: no forwardSecureAEAD")
 		}
-		return h.sealForwardSecure, nil
+		return h.forwardSecureAEAD, nil
 	}
 	return nil, errors.New("CryptoSetupClient: no encryption level specified")
-}
-
-func (h *cryptoSetupClient) sealUnencrypted(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
-	return h.nullAEAD.Seal(dst, src, packetNumber, associatedData)
-}
-
-func (h *cryptoSetupClient) sealSecure(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
-	return h.secureAEAD.Seal(dst, src, packetNumber, associatedData)
-}
-
-func (h *cryptoSetupClient) sealForwardSecure(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte {
-	return h.forwardSecureAEAD.Seal(dst, src, packetNumber, associatedData)
 }
 
 func (h *cryptoSetupClient) DiversificationNonce() []byte {

@@ -6,4 +6,5 @@ import "github.com/lucas-clemente/quic-go/internal/protocol"
 type AEAD interface {
 	Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error)
 	Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte
+	Overhead() int
 }

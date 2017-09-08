@@ -1,197 +1,64 @@
 package crypto
 
 import (
-	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"crypto"
+	"errors"
 
+	"github.com/bifurcation/mint"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("KeyDerivation", func() {
-	// Context("chacha20poly1305", func() {
-	// 	It("derives non-fs keys", func() {
-	// 		aead, err := DeriveKeysChacha20(
-	// 			protocol.Version32,
-	// 			false,
-	// 			[]byte("0123456789012345678901"),
-	// 			[]byte("nonce"),
-	// 			protocol.ConnectionID(42),
-	// 			[]byte("chlo"),
-	// 			[]byte("scfg"),
-	// 			[]byte("cert"),
-	// 			nil,
-	// 		)
-	// 		Expect(err).ToNot(HaveOccurred())
-	// 		chacha := aead.(*aeadChacha20Poly1305)
-	// 		// If the IVs match, the keys will match too, since the keys are read earlier
-	// 		Expect(chacha.myIV).To(Equal([]byte{0xf0, 0xf5, 0x4c, 0xa8}))
-	// 		Expect(chacha.otherIV).To(Equal([]byte{0x75, 0xd8, 0xa2, 0x8d}))
-	// 	})
-	//
-	// 	It("derives fs keys", func() {
-	// 		aead, err := DeriveKeysChacha20(
-	// 			protocol.Version32,
-	// 			true,
-	// 			[]byte("0123456789012345678901"),
-	// 			[]byte("nonce"),
-	// 			protocol.ConnectionID(42),
-	// 			[]byte("chlo"),
-	// 			[]byte("scfg"),
-	// 			[]byte("cert"),
-	// 			nil,
-	// 		)
-	// 		Expect(err).ToNot(HaveOccurred())
-	// 		chacha := aead.(*aeadChacha20Poly1305)
-	// 		// If the IVs match, the keys will match too, since the keys are read earlier
-	// 		Expect(chacha.myIV).To(Equal([]byte{0xf5, 0x73, 0x11, 0x79}))
-	// 		Expect(chacha.otherIV).To(Equal([]byte{0xf7, 0x26, 0x4d, 0x2c}))
-	// 	})
-	//
-	// 	It("does not use diversification nonces in FS key derivation", func() {
-	// 		aead, err := DeriveKeysChacha20(
-	// 			protocol.Version33,
-	// 			true,
-	// 			[]byte("0123456789012345678901"),
-	// 			[]byte("nonce"),
-	// 			protocol.ConnectionID(42),
-	// 			[]byte("chlo"),
-	// 			[]byte("scfg"),
-	// 			[]byte("cert"),
-	// 			[]byte("divnonce"),
-	// 		)
-	// 		Expect(err).ToNot(HaveOccurred())
-	// 		chacha := aead.(*aeadChacha20Poly1305)
-	// 		// If the IVs match, the keys will match too, since the keys are read earlier
-	// 		Expect(chacha.myIV).To(Equal([]byte{0xf5, 0x73, 0x11, 0x79}))
-	// 		Expect(chacha.otherIV).To(Equal([]byte{0xf7, 0x26, 0x4d, 0x2c}))
-	// 	})
-	//
-	// 	It("uses diversification nonces in initial key derivation", func() {
-	// 		aead, err := DeriveKeysChacha20(
-	// 			protocol.Version33,
-	// 			false,
-	// 			[]byte("0123456789012345678901"),
-	// 			[]byte("nonce"),
-	// 			protocol.ConnectionID(42),
-	// 			[]byte("chlo"),
-	// 			[]byte("scfg"),
-	// 			[]byte("cert"),
-	// 			[]byte("divnonce"),
-	// 		)
-	// 		Expect(err).ToNot(HaveOccurred())
-	// 		chacha := aead.(*aeadChacha20Poly1305)
-	// 		// If the IVs match, the keys will match too, since the keys are read earlier
-	// 		Expect(chacha.myIV).To(Equal([]byte{0xc4, 0x12, 0x25, 0x64}))
-	// 		Expect(chacha.otherIV).To(Equal([]byte{0x75, 0xd8, 0xa2, 0x8d}))
-	// 	})
-	// })
+type mockMintController struct {
+	hash          crypto.Hash
+	computerError error
+}
 
-	Context("AES-GCM", func() {
-		It("derives non-forward secure keys", func() {
-			aead, err := DeriveKeysAESGCM(
-				false,
-				[]byte("0123456789012345678901"),
-				[]byte("nonce"),
-				protocol.ConnectionID(42),
-				[]byte("chlo"),
-				[]byte("scfg"),
-				[]byte("cert"),
-				[]byte("divnonce"),
-				protocol.PerspectiveServer,
-			)
-			Expect(err).ToNot(HaveOccurred())
-			aesgcm := aead.(*aeadAESGCM)
-			// If the IVs match, the keys will match too, since the keys are read earlier
-			Expect(aesgcm.myIV).To(Equal([]byte{0x1c, 0xec, 0xac, 0x9b}))
-			Expect(aesgcm.otherIV).To(Equal([]byte{0x64, 0xef, 0x3c, 0x9}))
-		})
+var _ MintController = &mockMintController{}
 
-		It("uses the diversification nonce when generating non-forwared secure keys", func() {
-			aead1, err := DeriveKeysAESGCM(
-				false,
-				[]byte("0123456789012345678901"),
-				[]byte("nonce"),
-				protocol.ConnectionID(42),
-				[]byte("chlo"),
-				[]byte("scfg"),
-				[]byte("cert"),
-				[]byte("divnonce"),
-				protocol.PerspectiveServer,
-			)
-			Expect(err).ToNot(HaveOccurred())
-			aead2, err := DeriveKeysAESGCM(
-				false,
-				[]byte("0123456789012345678901"),
-				[]byte("nonce"),
-				protocol.ConnectionID(42),
-				[]byte("chlo"),
-				[]byte("scfg"),
-				[]byte("cert"),
-				[]byte("ecnonvid"),
-				protocol.PerspectiveServer,
-			)
-			Expect(err).ToNot(HaveOccurred())
-			aesgcm1 := aead1.(*aeadAESGCM)
-			aesgcm2 := aead2.(*aeadAESGCM)
-			Expect(aesgcm1.myIV).ToNot(Equal(aesgcm2.myIV))
-			Expect(aesgcm1.otherIV).To(Equal(aesgcm2.otherIV))
-		})
+func (c *mockMintController) Handshake() mint.Alert { panic("not implemented") }
 
-		It("derives non-forward secure keys, for the other side", func() {
-			aead, err := DeriveKeysAESGCM(
-				false,
-				[]byte("0123456789012345678901"),
-				[]byte("nonce"),
-				protocol.ConnectionID(42),
-				[]byte("chlo"),
-				[]byte("scfg"),
-				[]byte("cert"),
-				[]byte("divnonce"),
-				protocol.PerspectiveClient,
-			)
-			Expect(err).ToNot(HaveOccurred())
-			aesgcm := aead.(*aeadAESGCM)
-			// If the IVs match, the keys will match too, since the keys are read earlier
-			Expect(aesgcm.otherIV).To(Equal([]byte{0x1c, 0xec, 0xac, 0x9b}))
-			Expect(aesgcm.myIV).To(Equal([]byte{0x64, 0xef, 0x3c, 0x9}))
-		})
+func (c *mockMintController) GetCipherSuite() mint.CipherSuiteParams {
+	return mint.CipherSuiteParams{
+		Hash:   c.hash,
+		KeyLen: 32,
+		IvLen:  12,
+	}
+}
 
-		It("derives forward secure keys", func() {
-			aead, err := DeriveKeysAESGCM(
-				true,
-				[]byte("0123456789012345678901"),
-				[]byte("nonce"),
-				protocol.ConnectionID(42),
-				[]byte("chlo"),
-				[]byte("scfg"),
-				[]byte("cert"),
-				nil,
-				protocol.PerspectiveServer,
-			)
-			Expect(err).ToNot(HaveOccurred())
-			aesgcm := aead.(*aeadAESGCM)
-			// If the IVs match, the keys will match too, since the keys are read earlier
-			Expect(aesgcm.myIV).To(Equal([]byte{0x7, 0xad, 0xab, 0xb8}))
-			Expect(aesgcm.otherIV).To(Equal([]byte{0xf2, 0x7a, 0xcc, 0x42}))
-		})
+func (c *mockMintController) ComputeExporter(label string, context []byte, keyLength int) ([]byte, error) {
+	if c.computerError != nil {
+		return nil, c.computerError
+	}
+	return append([]byte(label), context...), nil
+}
 
-		It("does not use div-nonce for FS key derivation", func() {
-			aead, err := DeriveKeysAESGCM(
-				true,
-				[]byte("0123456789012345678901"),
-				[]byte("nonce"),
-				protocol.ConnectionID(42),
-				[]byte("chlo"),
-				[]byte("scfg"),
-				[]byte("cert"),
-				[]byte("divnonce"),
-				protocol.PerspectiveServer,
-			)
-			Expect(err).ToNot(HaveOccurred())
-			aesgcm := aead.(*aeadAESGCM)
-			// If the IVs match, the keys will match too, since the keys are read earlier
-			Expect(aesgcm.myIV).To(Equal([]byte{0x7, 0xad, 0xab, 0xb8}))
-			Expect(aesgcm.otherIV).To(Equal([]byte{0xf2, 0x7a, 0xcc, 0x42}))
-		})
+var _ = Describe("Key Derivation", func() {
+	It("derives keys", func() {
+		clientAEAD, err := DeriveAESKeys(&mockMintController{hash: crypto.SHA256}, protocol.PerspectiveClient)
+		Expect(err).ToNot(HaveOccurred())
+		serverAEAD, err := DeriveAESKeys(&mockMintController{hash: crypto.SHA256}, protocol.PerspectiveServer)
+		Expect(err).ToNot(HaveOccurred())
+		ciphertext := clientAEAD.Seal(nil, []byte("foobar"), 0, []byte("aad"))
+		data, err := serverAEAD.Open(nil, ciphertext, 0, []byte("aad"))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(data).To(Equal([]byte("foobar")))
+	})
+
+	It("fails when different hash functions are used", func() {
+		clientAEAD, err := DeriveAESKeys(&mockMintController{hash: crypto.SHA256}, protocol.PerspectiveClient)
+		Expect(err).ToNot(HaveOccurred())
+		serverAEAD, err := DeriveAESKeys(&mockMintController{hash: crypto.SHA512}, protocol.PerspectiveServer)
+		Expect(err).ToNot(HaveOccurred())
+		ciphertext := clientAEAD.Seal(nil, []byte("foobar"), 0, []byte("aad"))
+		_, err = serverAEAD.Open(nil, ciphertext, 0, []byte("aad"))
+		Expect(err).To(MatchError("cipher: message authentication failed"))
+	})
+
+	It("fails when computing the exporter fails", func() {
+		testErr := errors.New("test error")
+		_, err := DeriveAESKeys(&mockMintController{hash: crypto.SHA256, computerError: testErr}, protocol.PerspectiveClient)
+		Expect(err).To(MatchError(testErr))
 	})
 })

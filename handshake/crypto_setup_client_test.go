@@ -685,16 +685,16 @@ var _ = Describe("Client Crypto Setup", func() {
 
 		Context("null encryption", func() {
 			It("is used initially", func() {
-				enc, seal := cs.GetSealer()
+				enc, sealer := cs.GetSealer()
 				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
-				d := seal(nil, []byte("foobar"), 0, []byte{})
+				d := sealer.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal(foobarFNVSigned))
 			})
 
 			It("is used for the crypto stream", func() {
-				enc, seal := cs.GetSealerForCryptoStream()
+				enc, sealer := cs.GetSealerForCryptoStream()
 				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
-				d := seal(nil, []byte("foobar"), 0, []byte{})
+				d := sealer.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal(foobarFNVSigned))
 			})
 
@@ -735,9 +735,9 @@ var _ = Describe("Client Crypto Setup", func() {
 			It("is used immediately when available", func() {
 				doCompleteREJ()
 				cs.receivedSecurePacket = false
-				enc, seal := cs.GetSealer()
+				enc, sealer := cs.GetSealer()
 				Expect(enc).To(Equal(protocol.EncryptionSecure))
-				d := seal(nil, []byte("foobar"), 0, []byte{})
+				d := sealer.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal([]byte("foobar  normal sec")))
 			})
 
@@ -759,9 +759,9 @@ var _ = Describe("Client Crypto Setup", func() {
 
 			It("is not used for the crypto stream", func() {
 				doCompleteREJ()
-				enc, seal := cs.GetSealerForCryptoStream()
+				enc, sealer := cs.GetSealerForCryptoStream()
 				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
-				d := seal(nil, []byte("foobar"), 0, []byte{})
+				d := sealer.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal(foobarFNVSigned))
 			})
 		})
@@ -772,61 +772,61 @@ var _ = Describe("Client Crypto Setup", func() {
 				_, enc, err := cs.Open(nil, []byte("forward secure encrypted"), 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
-				enc, seal := cs.GetSealer()
+				enc, sealer := cs.GetSealer()
 				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
-				d := seal(nil, []byte("foobar"), 0, []byte{})
+				d := sealer.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal([]byte("foobar forward sec")))
 			})
 
 			It("is not used for the crypto stream", func() {
 				doSHLO()
-				enc, seal := cs.GetSealerForCryptoStream()
+				enc, sealer := cs.GetSealerForCryptoStream()
 				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
-				d := seal(nil, []byte("foobar"), 0, []byte{})
+				d := sealer.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal(foobarFNVSigned))
 			})
 		})
 
 		Context("forcing encryption levels", func() {
 			It("forces null encryption", func() {
-				seal, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionUnencrypted)
+				sealer, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionUnencrypted)
 				Expect(err).ToNot(HaveOccurred())
-				d := seal(nil, []byte("foobar"), 0, []byte{})
+				d := sealer.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal(foobarFNVSigned))
 			})
 
 			It("forces initial encryption", func() {
 				doCompleteREJ()
-				seal, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionSecure)
+				sealer, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionSecure)
 				Expect(err).ToNot(HaveOccurred())
-				d := seal(nil, []byte("foobar"), 0, []byte{})
+				d := sealer.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal([]byte("foobar  normal sec")))
 			})
 
 			It("errors of no AEAD for initial encryption is available", func() {
-				seal, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionSecure)
+				sealer, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionSecure)
 				Expect(err).To(MatchError("CryptoSetupClient: no secureAEAD"))
-				Expect(seal).To(BeNil())
+				Expect(sealer).To(BeNil())
 			})
 
 			It("forces forward-secure encryption", func() {
 				doSHLO()
-				seal, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionForwardSecure)
+				sealer, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionForwardSecure)
 				Expect(err).ToNot(HaveOccurred())
-				d := seal(nil, []byte("foobar"), 0, []byte{})
+				d := sealer.Seal(nil, []byte("foobar"), 0, []byte{})
 				Expect(d).To(Equal([]byte("foobar forward sec")))
 			})
 
 			It("errors of no AEAD for forward-secure encryption is available", func() {
-				seal, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionForwardSecure)
+				sealer, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionForwardSecure)
 				Expect(err).To(MatchError("CryptoSetupClient: no forwardSecureAEAD"))
-				Expect(seal).To(BeNil())
+				Expect(sealer).To(BeNil())
 			})
 
 			It("errors if no encryption level is specified", func() {
-				seal, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionUnspecified)
+				sealer, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionUnspecified)
 				Expect(err).To(MatchError("CryptoSetupClient: no encryption level specified"))
-				Expect(seal).To(BeNil())
+				Expect(sealer).To(BeNil())
 			})
 		})
 	})
