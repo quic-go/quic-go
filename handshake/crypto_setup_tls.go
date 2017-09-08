@@ -12,11 +12,7 @@ import (
 )
 
 // KeyDerivationFunction is used for key derivation
-type KeyDerivationFunction func(crypto.MintState, protocol.Perspective) (crypto.AEAD, error)
-
-type mintHandshaker interface {
-	Handshake() mint.Alert
-}
+type KeyDerivationFunction func(crypto.MintController, protocol.Perspective) (crypto.AEAD, error)
 
 type cryptoSetupTLS struct {
 	mutex sync.RWMutex
@@ -25,9 +21,8 @@ type cryptoSetupTLS struct {
 
 	keyDerivation KeyDerivationFunction
 
-	mintConf  *mint.Config
-	mintState *mintState
-	conn      mintHandshaker
+	mintConf *mint.Config
+	conn     crypto.MintController
 
 	nullAEAD crypto.AEAD
 	aead     crypto.AEAD
@@ -58,8 +53,7 @@ func NewCryptoSetupTLS(
 	return &cryptoSetupTLS{
 		perspective:   perspective,
 		mintConf:      mintConf,
-		mintState:     &mintState{conn},
-		conn:          conn,
+		conn:          &mintController{conn},
 		nullAEAD:      crypto.NewNullAEAD(perspective, version),
 		keyDerivation: crypto.DeriveAESKeys,
 		aeadChanged:   aeadChanged,
@@ -72,7 +66,7 @@ func (h *cryptoSetupTLS) HandleCryptoStream() error {
 		return fmt.Errorf("TLS handshake error: %s (Alert %d)", alert.String(), alert)
 	}
 
-	aead, err := h.keyDerivation(h.mintState, h.perspective)
+	aead, err := h.keyDerivation(h.conn, h.perspective)
 	if err != nil {
 		return err
 	}

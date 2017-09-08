@@ -12,17 +12,21 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type fakeHandshaker struct {
+type fakeMintController struct {
 	result mint.Alert
 }
 
-var _ mintHandshaker = &fakeHandshaker{}
+var _ crypto.MintController = &fakeMintController{}
 
-func (h *fakeHandshaker) Handshake() mint.Alert {
+func (h *fakeMintController) Handshake() mint.Alert {
 	return h.result
 }
+func (h *fakeMintController) GetCipherSuite() mint.CipherSuiteParams { panic("not implemented") }
+func (h *fakeMintController) ComputeExporter(label string, context []byte, keyLength int) ([]byte, error) {
+	panic("not implemented")
+}
 
-func mockKeyDerivation(crypto.MintState, protocol.Perspective) (crypto.AEAD, error) {
+func mockKeyDerivation(crypto.MintController, protocol.Perspective) (crypto.AEAD, error) {
 	return &mockAEAD{forwardSecure: true}, nil
 }
 
@@ -48,13 +52,13 @@ var _ = Describe("TLS Crypto Setup", func() {
 
 	It("errors when the handshake fails", func() {
 		alert := mint.AlertBadRecordMAC
-		cs.conn = &fakeHandshaker{result: alert}
+		cs.conn = &fakeMintController{result: alert}
 		err := cs.HandleCryptoStream()
 		Expect(err).To(MatchError(fmt.Errorf("TLS handshake error: %s (Alert %d)", alert.String(), alert)))
 	})
 
 	It("derives keys", func() {
-		cs.conn = &fakeHandshaker{result: mint.AlertNoAlert}
+		cs.conn = &fakeMintController{result: mint.AlertNoAlert}
 		cs.keyDerivation = mockKeyDerivation
 		err := cs.HandleCryptoStream()
 		Expect(err).ToNot(HaveOccurred())
@@ -66,7 +70,7 @@ var _ = Describe("TLS Crypto Setup", func() {
 		var foobarFNVSigned []byte // a "foobar", FNV signed
 
 		doHandshake := func() {
-			cs.conn = &fakeHandshaker{result: mint.AlertNoAlert}
+			cs.conn = &fakeMintController{result: mint.AlertNoAlert}
 			cs.keyDerivation = mockKeyDerivation
 			err := cs.HandleCryptoStream()
 			Expect(err).ToNot(HaveOccurred())
