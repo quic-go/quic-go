@@ -22,14 +22,14 @@ var _ = Describe("ConnectionsParameterManager", func() {
 	BeforeEach(func() {
 		cpm = NewConnectionParamatersManager(
 			protocol.PerspectiveServer,
-			protocol.Version36,
+			protocol.VersionWhatever,
 			maxReceiveStreamFlowControlWindowServer,
 			maxReceiveConnectionFlowControlWindowServer,
 			idleTimeout,
 		).(*connectionParametersManager)
 		cpmClient = NewConnectionParamatersManager(
 			protocol.PerspectiveClient,
-			protocol.Version36,
+			protocol.VersionWhatever,
 			maxReceiveStreamFlowControlWindowClient,
 			maxReceiveConnectionFlowControlWindowClient,
 			idleTimeout,

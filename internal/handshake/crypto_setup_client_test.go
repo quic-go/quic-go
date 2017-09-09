@@ -107,7 +107,7 @@ var _ = Describe("Client Crypto Setup", func() {
 
 		stream = newMockStream()
 		certManager = &mockCertManager{}
-		version := protocol.Version36
+		version := protocol.Version37
 		aeadChanged = make(chan protocol.EncryptionLevel, 2)
 		csInt, err := NewCryptoSetupClient(
 			"hostname",
@@ -216,10 +216,11 @@ var _ = Describe("Client Crypto Setup", func() {
 			})
 
 			It("doesn't care about unsupported versions", func() {
-				cs.negotiatedVersions = []protocol.VersionNumber{protocol.VersionUnsupported, protocol.Version36, protocol.VersionUnsupported}
+				ver := protocol.SupportedVersions[0]
+				cs.negotiatedVersions = []protocol.VersionNumber{protocol.VersionUnsupported, ver, protocol.VersionUnsupported}
 				b := &bytes.Buffer{}
 				b.Write([]byte{0, 0, 0, 0})
-				utils.LittleEndian.WriteUint32(b, protocol.VersionNumberToTag(protocol.Version36))
+				utils.LittleEndian.WriteUint32(b, protocol.VersionNumberToTag(ver))
 				b.Write([]byte{0x13, 0x37, 0x13, 0x37})
 				Expect(cs.validateVersionList(b.Bytes())).To(BeTrue())
 			})
@@ -411,10 +412,11 @@ var _ = Describe("Client Crypto Setup", func() {
 		})
 
 		It("accepts a SHLO after a version negotiation", func() {
-			cs.negotiatedVersions = []protocol.VersionNumber{protocol.Version36}
+			ver := protocol.SupportedVersions[0]
+			cs.negotiatedVersions = []protocol.VersionNumber{ver}
 			cs.receivedSecurePacket = true
 			b := &bytes.Buffer{}
-			utils.LittleEndian.WriteUint32(b, protocol.VersionNumberToTag(protocol.Version36))
+			utils.LittleEndian.WriteUint32(b, protocol.VersionNumberToTag(ver))
 			shloMap[TagVER] = b.Bytes()
 			err := cs.handleSHLOMessage(shloMap)
 			Expect(err).ToNot(HaveOccurred())
@@ -486,7 +488,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(string(tags[TagSNI])).To(Equal(cs.hostname))
 			Expect(tags[TagPDMD]).To(Equal([]byte("X509")))
-			Expect(tags[TagVER]).To(Equal([]byte("Q036")))
+			Expect(tags[TagVER]).To(Equal([]byte("Q037")))
 			Expect(tags[TagCCS]).To(Equal(certManager.commonCertificateHashes))
 			Expect(tags).ToNot(HaveKey(TagTCID))
 		})

@@ -11,32 +11,37 @@ var _ = Describe("NullAEAD using FNV128a", func() {
 	plainText := []byte("They are endowed with reason and conscience and should act towards one another in a spirit of brotherhood.")
 	hash36 := []byte{0x98, 0x9b, 0x33, 0x3f, 0xe8, 0xde, 0x32, 0x5c, 0xa6, 0x7f, 0x9c, 0xf7}
 
-	It("opens", func() {
-		cipherText := append(hash36, plainText...)
-		aead := NewNullAEAD(protocol.PerspectiveServer, protocol.Version36)
-		res, err := aead.Open(nil, cipherText, 0, aad)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(res).To(Equal(plainText))
+	var aeadServer AEAD
+	var aeadClient AEAD
+
+	BeforeEach(func() {
+		aeadServer = NewNullAEAD(protocol.PerspectiveServer, protocol.Version37)
+		aeadClient = NewNullAEAD(protocol.PerspectiveClient, protocol.Version37)
 	})
 
-	It("seals", func() {
-		aead := NewNullAEAD(protocol.PerspectiveServer, protocol.Version36)
-		sealed := aead.Seal(nil, plainText, 0, aad)
-		Expect(sealed).To(Equal(append(hash36, plainText...)))
-		Expect(sealed).To(HaveLen(len(plainText) + aead.Overhead()))
+	It("seals and opens, client => server", func() {
+		cipherText := aeadClient.Seal(nil, plainText, 0, aad)
+		res, err := aeadServer.Open(nil, cipherText, 0, aad)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(res).To(Equal([]byte("They are endowed with reason and conscience and should act towards one another in a spirit of brotherhood.")))
+	})
+
+	It("seals and opens, server => client", func() {
+		cipherText := aeadServer.Seal(nil, plainText, 0, aad)
+		res, err := aeadClient.Open(nil, cipherText, 0, aad)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(res).To(Equal([]byte("They are endowed with reason and conscience and should act towards one another in a spirit of brotherhood.")))
 	})
 
 	It("rejects short ciphertexts", func() {
-		aead := NewNullAEAD(protocol.PerspectiveServer, protocol.Version36)
-		_, err := aead.Open(nil, nil, 0, nil)
+		_, err := aeadServer.Open(nil, nil, 0, nil)
 		Expect(err).To(MatchError("NullAEAD: ciphertext cannot be less than 12 bytes long"))
 	})
 
 	It("seals in-place", func() {
-		aead := NewNullAEAD(protocol.PerspectiveServer, protocol.Version36)
 		buf := make([]byte, 6, 12+6)
 		copy(buf, []byte("foobar"))
-		res := aead.Seal(buf[0:0], buf, 0, nil)
+		res := aeadServer.Seal(buf[0:0], buf, 0, nil)
 		buf = buf[:12+6]
 		Expect(buf[12:]).To(Equal([]byte("foobar")))
 		Expect(res[12:]).To(Equal([]byte("foobar")))
@@ -44,32 +49,7 @@ var _ = Describe("NullAEAD using FNV128a", func() {
 
 	It("fails", func() {
 		cipherText := append(append(hash36, plainText...), byte(0x42))
-		aead := NewNullAEAD(protocol.PerspectiveServer, protocol.Version36)
-		_, err := aead.Open(nil, cipherText, 0, aad)
+		_, err := aeadClient.Open(nil, cipherText, 0, aad)
 		Expect(err).To(HaveOccurred())
-	})
-
-	Context("including the perspective, for QUIC >= 37", func() {
-		var aeadServer AEAD
-		var aeadClient AEAD
-
-		BeforeEach(func() {
-			aeadServer = NewNullAEAD(protocol.PerspectiveServer, protocol.Version37)
-			aeadClient = NewNullAEAD(protocol.PerspectiveClient, protocol.Version37)
-		})
-
-		It("opens, for QUIC version >= 37, as a server", func() {
-			cipherText := aeadClient.Seal(nil, plainText, 0, aad)
-			res, err := aeadServer.Open(nil, cipherText, 0, aad)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(res).To(Equal([]byte("They are endowed with reason and conscience and should act towards one another in a spirit of brotherhood.")))
-		})
-
-		It("opens, for QUIC version >= 37, as a client", func() {
-			cipherText := aeadServer.Seal(nil, plainText, 0, aad)
-			res, err := aeadClient.Open(nil, cipherText, 0, aad)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(res).To(Equal([]byte("They are endowed with reason and conscience and should act towards one another in a spirit of brotherhood.")))
-		})
 	})
 })

@@ -508,7 +508,7 @@ var _ = Describe("Client", func() {
 				ConnectionID:    0x1337,
 			}
 			b := &bytes.Buffer{}
-			err := ph.Write(b, protocol.Version36, protocol.PerspectiveServer)
+			err := ph.Write(b, cl.version, protocol.PerspectiveServer)
 			Expect(err).ToNot(HaveOccurred())
 			packetConn.dataToRead = b.Bytes()
 

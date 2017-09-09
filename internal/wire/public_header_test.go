@@ -365,7 +365,7 @@ var _ = Describe("Public Header", func() {
 				b := &bytes.Buffer{}
 				hdr := PublicHeader{
 					VersionFlag:     true,
-					VersionNumber:   protocol.Version36,
+					VersionNumber:   protocol.Version38,
 					ConnectionID:    0x4cfa9f9b668619f6,
 					PacketNumber:    0x1337,
 					PacketNumberLen: protocol.PacketNumberLen6,
@@ -377,7 +377,7 @@ var _ = Describe("Public Header", func() {
 				firstByte, _ := b.ReadByte()
 				Expect(firstByte & 0x01).To(Equal(uint8(1)))
 				Expect(firstByte & 0x30).To(Equal(uint8(0x30)))
-				Expect(string(b.Bytes()[8:12])).To(Equal("Q036"))
+				Expect(string(b.Bytes()[8:12])).To(Equal("Q038"))
 				Expect(b.Bytes()[12:18]).To(Equal([]byte{0x37, 0x13, 0, 0, 0, 0}))
 			})
 		})
@@ -455,7 +455,7 @@ var _ = Describe("Public Header", func() {
 					PacketNumber:         0xDECAFBAD,
 					PacketNumberLen:      protocol.PacketNumberLen6,
 					VersionFlag:          true,
-					VersionNumber:        protocol.Version36,
+					VersionNumber:        versionLittleEndian,
 				}
 				length, err := hdr.GetLength(protocol.PerspectiveClient)
 				Expect(err).ToNot(HaveOccurred())

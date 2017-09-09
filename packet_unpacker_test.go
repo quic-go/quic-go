@@ -17,7 +17,7 @@ type mockAEAD struct {
 }
 
 func (m *mockAEAD) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error) {
-	nullAEAD := crypto.NewNullAEAD(protocol.PerspectiveServer, protocol.VersionWhatever)
+	nullAEAD := crypto.NewNullAEAD(protocol.PerspectiveClient, protocol.VersionWhatever)
 	res, err := nullAEAD.Open(dst, src, packetNumber, associatedData)
 	return res, m.encLevelOpen, err
 }
