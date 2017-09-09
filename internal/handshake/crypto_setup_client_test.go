@@ -98,7 +98,11 @@ var _ = Describe("Client Crypto Setup", func() {
 				divNonce:      divNonce,
 				pers:          pers,
 			}
-			return &mockAEAD{forwardSecure: forwardSecure, sharedSecret: sharedSecret}, nil
+			encLevel := protocol.EncryptionSecure
+			if forwardSecure {
+				encLevel = protocol.EncryptionForwardSecure
+			}
+			return &mockAEAD{encLevel: encLevel, sharedSecret: sharedSecret}, nil
 		}
 
 		stream = newMockStream()
@@ -126,6 +130,7 @@ var _ = Describe("Client Crypto Setup", func() {
 		cs.certManager = certManager
 		cs.keyDerivation = keyDerivation
 		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
+		cs.nullAEAD = &mockAEAD{encLevel: protocol.EncryptionUnencrypted}
 	})
 
 	AfterEach(func() {
@@ -578,8 +583,6 @@ var _ = Describe("Client Crypto Setup", func() {
 	})
 
 	Context("escalating crypto", func() {
-		var foobarFNVSigned []byte
-
 		doCompleteREJ := func() {
 			cs.serverVerified = true
 			err := cs.maybeUpgradeCrypto()
@@ -595,7 +598,6 @@ var _ = Describe("Client Crypto Setup", func() {
 
 		// sets all values necessary for escalating to secureAEAD
 		BeforeEach(func() {
-			foobarFNVSigned = []byte{0x18, 0x6f, 0x44, 0xba, 0x97, 0x35, 0xd, 0x6f, 0xbf, 0x64, 0x3c, 0x79, 0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72}
 			kex, err := crypto.NewCurve25519KEX()
 			Expect(err).ToNot(HaveOccurred())
 			cs.serverConfig = &serverConfigClient{
@@ -688,20 +690,20 @@ var _ = Describe("Client Crypto Setup", func() {
 				enc, sealer := cs.GetSealer()
 				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
 				d := sealer.Seal(nil, []byte("foobar"), 0, []byte{})
-				Expect(d).To(Equal(foobarFNVSigned))
+				Expect(d).To(Equal([]byte("foobar unencrypted")))
 			})
 
 			It("is used for the crypto stream", func() {
 				enc, sealer := cs.GetSealerForCryptoStream()
 				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
 				d := sealer.Seal(nil, []byte("foobar"), 0, []byte{})
-				Expect(d).To(Equal(foobarFNVSigned))
+				Expect(d).To(Equal([]byte("foobar unencrypted")))
 			})
 
 			It("is accepted initially", func() {
-				d, enc, err := cs.Open(nil, foobarFNVSigned, 0, []byte{})
+				d, enc, err := cs.Open(nil, []byte("unencrypted"), 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
-				Expect(d).To(Equal([]byte("foobar")))
+				Expect(d).To(Equal([]byte("decrypted")))
 				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
 			})
 
@@ -709,24 +711,23 @@ var _ = Describe("Client Crypto Setup", func() {
 				doCompleteREJ()
 				cs.receivedSecurePacket = false
 				Expect(cs.secureAEAD).ToNot(BeNil())
-				d, enc, err := cs.Open(nil, foobarFNVSigned, 0, []byte{})
+				d, enc, err := cs.Open(nil, []byte("unencrypted"), 0, []byte{})
 				Expect(err).ToNot(HaveOccurred())
-				Expect(d).To(Equal([]byte("foobar")))
+				Expect(d).To(Equal([]byte("decrypted")))
 				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
 			})
 
 			It("is not accepted after the server sent an encrypted packet", func() {
 				doCompleteREJ()
 				cs.receivedSecurePacket = true
-				_, enc, err := cs.Open(nil, foobarFNVSigned, 0, []byte{})
+				_, enc, err := cs.Open(nil, []byte("unecnrypted"), 0, []byte{})
 				Expect(err).To(MatchError("authentication failed"))
 				Expect(enc).To(Equal(protocol.EncryptionUnspecified))
 			})
 
 			It("errors if the has the wrong hash", func() {
-				foobarFNVSigned[0]++
-				_, enc, err := cs.Open(nil, foobarFNVSigned, 0, []byte{})
-				Expect(err).To(MatchError("NullAEAD: failed to authenticate received data"))
+				_, enc, err := cs.Open(nil, []byte("not unecnrypted"), 0, []byte{})
+				Expect(err).To(MatchError("authentication failed"))
 				Expect(enc).To(Equal(protocol.EncryptionUnspecified))
 			})
 		})
@@ -762,7 +763,7 @@ var _ = Describe("Client Crypto Setup", func() {
 				enc, sealer := cs.GetSealerForCryptoStream()
 				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
 				d := sealer.Seal(nil, []byte("foobar"), 0, []byte{})
-				Expect(d).To(Equal(foobarFNVSigned))
+				Expect(d).To(Equal([]byte("foobar unencrypted")))
 			})
 		})
 
@@ -783,7 +784,7 @@ var _ = Describe("Client Crypto Setup", func() {
 				enc, sealer := cs.GetSealerForCryptoStream()
 				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
 				d := sealer.Seal(nil, []byte("foobar"), 0, []byte{})
-				Expect(d).To(Equal(foobarFNVSigned))
+				Expect(d).To(Equal([]byte("foobar unencrypted")))
 			})
 		})
 
@@ -792,7 +793,7 @@ var _ = Describe("Client Crypto Setup", func() {
 				sealer, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionUnencrypted)
 				Expect(err).ToNot(HaveOccurred())
 				d := sealer.Seal(nil, []byte("foobar"), 0, []byte{})
-				Expect(d).To(Equal(foobarFNVSigned))
+				Expect(d).To(Equal([]byte("foobar unencrypted")))
 			})
 
 			It("forces initial encryption", func() {

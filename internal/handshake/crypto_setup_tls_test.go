@@ -27,7 +27,7 @@ func (h *fakeMintController) ComputeExporter(label string, context []byte, keyLe
 }
 
 func mockKeyDerivation(crypto.MintController, protocol.Perspective) (crypto.AEAD, error) {
-	return &mockAEAD{forwardSecure: true}, nil
+	return &mockAEAD{encLevel: protocol.EncryptionForwardSecure}, nil
 }
 
 var _ = Describe("TLS Crypto Setup", func() {
