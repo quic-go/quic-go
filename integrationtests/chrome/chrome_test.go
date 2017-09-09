@@ -2,7 +2,6 @@ package chrome_test
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 
@@ -14,12 +13,6 @@ var _ = Describe("Chrome tests", func() {
 		version = protocol.SupportedVersions[i]
 
 		Context(fmt.Sprintf("with quic version %d", version), func() {
-			BeforeEach(func() {
-				if version == protocol.Version39 && os.Getenv("TRAVIS") == "true" {
-					Skip("The chrome version running on Travis doesn't support QUIC 39 yet.")
-				}
-			})
-
 			It("downloads a small file", func() {
 				chromeTest(
 					version,
