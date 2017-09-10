@@ -58,7 +58,7 @@ var _ = Describe("Random RTT", func() {
 		var err error
 		proxy, err = quicproxy.NewQuicProxy("localhost:", version, &quicproxy.Opts{
 			RemoteAddr: "localhost:" + testserver.Port(),
-			DelayPacket: func(_ quicproxy.Direction, _ protocol.PacketNumber) time.Duration {
+			DelayPacket: func(_ quicproxy.Direction, _ uint64) time.Duration {
 				return getRandomDuration(minRtt, maxRtt)
 			},
 		})

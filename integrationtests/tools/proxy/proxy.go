@@ -1,14 +1,12 @@
 package quicproxy
 
 import (
-	"bytes"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 // Connection is a UDP connection
@@ -31,18 +29,18 @@ const (
 )
 
 // DropCallback is a callback that determines which packet gets dropped.
-type DropCallback func(Direction, protocol.PacketNumber) bool
+type DropCallback func(dir Direction, packetCount uint64) bool
 
 // NoDropper doesn't drop packets.
-var NoDropper DropCallback = func(Direction, protocol.PacketNumber) bool {
+var NoDropper DropCallback = func(Direction, uint64) bool {
 	return false
 }
 
 // DelayCallback is a callback that determines how much delay to apply to a packet.
-type DelayCallback func(Direction, protocol.PacketNumber) time.Duration
+type DelayCallback func(dir Direction, packetCount uint64) time.Duration
 
 // NoDelay doesn't apply a delay.
-var NoDelay DelayCallback = func(Direction, protocol.PacketNumber) time.Duration {
+var NoDelay DelayCallback = func(Direction, uint64) time.Duration {
 	return 0
 }
 
@@ -125,6 +123,7 @@ func (p *QuicProxy) LocalAddr() net.Addr {
 	return p.conn.LocalAddr()
 }
 
+// LocalPort is the UDP port number the proxy is listening on.
 func (p *QuicProxy) LocalPort() int {
 	return p.conn.LocalAddr().(*net.UDPAddr).Port
 }
@@ -165,20 +164,14 @@ func (p *QuicProxy) runProxy() error {
 		}
 		p.mutex.Unlock()
 
-		atomic.AddUint64(&conn.incomingPacketCounter, 1)
+		packetCount := atomic.AddUint64(&conn.incomingPacketCounter, 1)
 
-		r := bytes.NewReader(raw)
-		hdr, err := wire.ParsePublicHeader(r, protocol.PerspectiveClient, p.version)
-		if err != nil {
-			return err
-		}
-
-		if p.dropPacket(DirectionIncoming, hdr.PacketNumber) {
+		if p.dropPacket(DirectionIncoming, packetCount) {
 			continue
 		}
 
 		// Send the packet to the server
-		delay := p.delayPacket(DirectionIncoming, hdr.PacketNumber)
+		delay := p.delayPacket(DirectionIncoming, packetCount)
 		if delay != 0 {
 			time.AfterFunc(delay, func() {
 				// TODO: handle error
@@ -203,21 +196,13 @@ func (p *QuicProxy) runConnection(conn *connection) error {
 		}
 		raw := buffer[0:n]
 
-		// TODO: Switch back to using the public header once Chrome properly sets the type byte.
-		// r := bytes.NewReader(raw)
-		// , err := wire.ParsePublicHeader(r, protocol.PerspectiveServer)
-		// if err != nil {
-		// return err
-		// }
+		packetCount := atomic.AddUint64(&conn.outgoingPacketCounter, 1)
 
-		v := atomic.AddUint64(&conn.outgoingPacketCounter, 1)
-
-		packetNumber := protocol.PacketNumber(v)
-		if p.dropPacket(DirectionOutgoing, packetNumber) {
+		if p.dropPacket(DirectionOutgoing, packetCount) {
 			continue
 		}
 
-		delay := p.delayPacket(DirectionOutgoing, packetNumber)
+		delay := p.delayPacket(DirectionOutgoing, packetCount)
 		if delay != 0 {
 			time.AfterFunc(delay, func() {
 				// TODO: handle error

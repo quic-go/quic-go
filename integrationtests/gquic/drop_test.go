@@ -60,12 +60,12 @@ var _ = Describe("Drop tests", func() {
 
 func dropTests(
 	context string,
-	interval protocol.PacketNumber,
-	dropInARow protocol.PacketNumber,
+	interval uint64,
+	dropInARow uint64,
 	runDropTest func(dropCallback quicproxy.DropCallback, version protocol.VersionNumber),
 	version protocol.VersionNumber) {
 	Context(context, func() {
-		dropper := func(p protocol.PacketNumber) bool {
+		dropper := func(p uint64) bool {
 			if p <= 10 { // don't interfere with the crypto handshake
 				return false
 			}
@@ -73,13 +73,13 @@ func dropTests(
 		}
 
 		It("gets a file when many outgoing packets are dropped", func() {
-			runDropTest(func(d quicproxy.Direction, p protocol.PacketNumber) bool {
+			runDropTest(func(d quicproxy.Direction, p uint64) bool {
 				return d == quicproxy.DirectionOutgoing && dropper(p)
 			}, version)
 		})
 
 		It("gets a file when many incoming packets are dropped", func() {
-			runDropTest(func(d quicproxy.Direction, p protocol.PacketNumber) bool {
+			runDropTest(func(d quicproxy.Direction, p uint64) bool {
 				return d == quicproxy.DirectionIncoming && dropper(p)
 			}, version)
 		})

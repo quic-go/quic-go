@@ -214,7 +214,7 @@ var _ = Describe("QUIC Proxy", func() {
 			It("drops incoming packets", func() {
 				opts := &Opts{
 					RemoteAddr: serverConn.LocalAddr().String(),
-					DropPacket: func(d Direction, p protocol.PacketNumber) bool {
+					DropPacket: func(d Direction, p uint64) bool {
 						return d == DirectionIncoming && p%2 == 0
 					},
 				}
@@ -232,7 +232,7 @@ var _ = Describe("QUIC Proxy", func() {
 				const numPackets = 6
 				opts := &Opts{
 					RemoteAddr: serverConn.LocalAddr().String(),
-					DropPacket: func(d Direction, p protocol.PacketNumber) bool {
+					DropPacket: func(d Direction, p uint64) bool {
 						return d == DirectionOutgoing && p%2 == 0
 					},
 				}
@@ -279,7 +279,7 @@ var _ = Describe("QUIC Proxy", func() {
 					// delay packet 1 by 200 ms
 					// delay packet 2 by 400 ms
 					// ...
-					DelayPacket: func(d Direction, p protocol.PacketNumber) time.Duration {
+					DelayPacket: func(d Direction, p uint64) time.Duration {
 						if d == DirectionOutgoing {
 							return 0
 						}
@@ -310,7 +310,7 @@ var _ = Describe("QUIC Proxy", func() {
 					// delay packet 1 by 200 ms
 					// delay packet 2 by 400 ms
 					// ...
-					DelayPacket: func(d Direction, p protocol.PacketNumber) time.Duration {
+					DelayPacket: func(d Direction, p uint64) time.Duration {
 						if d == DirectionIncoming {
 							return 0
 						}
