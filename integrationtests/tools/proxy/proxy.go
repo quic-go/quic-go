@@ -75,7 +75,10 @@ type QuicProxy struct {
 }
 
 // NewQuicProxy creates a new UDP proxy
-func NewQuicProxy(local string, version protocol.VersionNumber, opts Opts) (*QuicProxy, error) {
+func NewQuicProxy(local string, version protocol.VersionNumber, opts *Opts) (*QuicProxy, error) {
+	if opts == nil {
+		opts = &Opts{}
+	}
 	laddr, err := net.ResolveUDPAddr("udp", local)
 	if err != nil {
 		return nil, err

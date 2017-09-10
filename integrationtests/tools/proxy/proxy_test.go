@@ -18,8 +18,6 @@ import (
 type packetData []byte
 
 var _ = Describe("QUIC Proxy", func() {
-	var serverAddr string
-
 	makePacket := func(p protocol.PacketNumber, payload []byte) []byte {
 		b := &bytes.Buffer{}
 		hdr := wire.PublicHeader{
@@ -34,13 +32,9 @@ var _ = Describe("QUIC Proxy", func() {
 		return raw
 	}
 
-	BeforeEach(func() {
-		serverAddr = "localhost:7331"
-	})
-
 	Context("Proxy setup and teardown", func() {
 		It("sets up the UDPProxy", func() {
-			proxy, err := NewQuicProxy("localhost:0", protocol.VersionWhatever, Opts{RemoteAddr: serverAddr})
+			proxy, err := NewQuicProxy("localhost:0", protocol.VersionWhatever, nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(proxy.clientDict).To(HaveLen(0))
 
@@ -53,7 +47,7 @@ var _ = Describe("QUIC Proxy", func() {
 		})
 
 		It("stops the UDPProxy", func() {
-			proxy, err := NewQuicProxy("localhost:0", protocol.VersionWhatever, Opts{RemoteAddr: serverAddr})
+			proxy, err := NewQuicProxy("localhost:0", protocol.VersionWhatever, nil)
 			Expect(err).ToNot(HaveOccurred())
 			port := proxy.LocalPort()
 			err = proxy.Close()
@@ -71,7 +65,7 @@ var _ = Describe("QUIC Proxy", func() {
 		})
 
 		It("has the correct LocalAddr and LocalPort", func() {
-			proxy, err := NewQuicProxy("localhost:0", protocol.VersionWhatever, Opts{RemoteAddr: serverAddr})
+			proxy, err := NewQuicProxy("localhost:0", protocol.VersionWhatever, nil)
 			Expect(err).ToNot(HaveOccurred())
 
 			Expect(proxy.LocalAddr().String()).To(Equal("127.0.0.1:" + strconv.Itoa(proxy.LocalPort())))
@@ -90,7 +84,7 @@ var _ = Describe("QUIC Proxy", func() {
 			proxy                 *QuicProxy
 		)
 
-		startProxy := func(opts Opts) {
+		startProxy := func(opts *Opts) {
 			var err error
 			proxy, err = NewQuicProxy("localhost:0", protocol.VersionWhatever, opts)
 			Expect(err).ToNot(HaveOccurred())
@@ -113,9 +107,9 @@ var _ = Describe("QUIC Proxy", func() {
 			serverReceivedPackets = make(chan packetData, 100)
 			atomic.StoreInt32(&serverNumPacketsSent, 0)
 
-			// setup a dump UDP server on port 7331
+			// setup a dump UDP server
 			// in production this would be a QUIC server
-			raddr, err := net.ResolveUDPAddr("udp", serverAddr)
+			raddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
 			Expect(err).ToNot(HaveOccurred())
 			serverConn, err = net.ListenUDP("udp", raddr)
 			Expect(err).ToNot(HaveOccurred())
@@ -149,7 +143,7 @@ var _ = Describe("QUIC Proxy", func() {
 
 		Context("no packet drop", func() {
 			It("relays packets from the client to the server", func() {
-				startProxy(Opts{RemoteAddr: serverAddr})
+				startProxy(&Opts{RemoteAddr: serverConn.LocalAddr().String()})
 				// send the first packet
 				_, err := clientConn.Write(makePacket(1, []byte("foobar")))
 				Expect(err).ToNot(HaveOccurred())
@@ -171,7 +165,7 @@ var _ = Describe("QUIC Proxy", func() {
 			})
 
 			It("relays packets from the server to the client", func() {
-				startProxy(Opts{RemoteAddr: serverAddr})
+				startProxy(&Opts{RemoteAddr: serverConn.LocalAddr().String()})
 				// send the first packet
 				_, err := clientConn.Write(makePacket(1, []byte("foobar")))
 				Expect(err).ToNot(HaveOccurred())
@@ -218,8 +212,8 @@ var _ = Describe("QUIC Proxy", func() {
 
 		Context("Drop Callbacks", func() {
 			It("drops incoming packets", func() {
-				opts := Opts{
-					RemoteAddr: serverAddr,
+				opts := &Opts{
+					RemoteAddr: serverConn.LocalAddr().String(),
 					DropPacket: func(d Direction, p protocol.PacketNumber) bool {
 						return d == DirectionIncoming && p%2 == 0
 					},
@@ -236,8 +230,8 @@ var _ = Describe("QUIC Proxy", func() {
 
 			It("drops outgoing packets", func() {
 				const numPackets = 6
-				opts := Opts{
-					RemoteAddr: serverAddr,
+				opts := &Opts{
+					RemoteAddr: serverConn.LocalAddr().String(),
 					DropPacket: func(d Direction, p protocol.PacketNumber) bool {
 						return d == DirectionOutgoing && p%2 == 0
 					},
@@ -280,8 +274,8 @@ var _ = Describe("QUIC Proxy", func() {
 
 			It("delays incoming packets", func() {
 				delay := 300 * time.Millisecond
-				opts := Opts{
-					RemoteAddr: serverAddr,
+				opts := &Opts{
+					RemoteAddr: serverConn.LocalAddr().String(),
 					// delay packet 1 by 200 ms
 					// delay packet 2 by 400 ms
 					// ...
@@ -311,8 +305,8 @@ var _ = Describe("QUIC Proxy", func() {
 			It("delays outgoing packets", func() {
 				const numPackets = 3
 				delay := 300 * time.Millisecond
-				opts := Opts{
-					RemoteAddr: serverAddr,
+				opts := &Opts{
+					RemoteAddr: serverConn.LocalAddr().String(),
 					// delay packet 1 by 200 ms
 					// delay packet 2 by 400 ms
 					// ...
