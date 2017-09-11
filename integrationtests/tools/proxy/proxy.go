@@ -165,7 +165,7 @@ func (p *QuicProxy) runProxy() error {
 		atomic.AddUint64(&conn.incomingPacketCounter, 1)
 
 		r := bytes.NewReader(raw)
-		hdr, err := wire.ParsePublicHeader(r, protocol.PerspectiveClient, protocol.VersionWhatever)
+		hdr, err := wire.ParsePublicHeader(r, protocol.PerspectiveClient, p.version)
 		if err != nil {
 			return err
 		}
