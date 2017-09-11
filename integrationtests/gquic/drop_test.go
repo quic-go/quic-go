@@ -3,6 +3,7 @@ package gquic_test
 import (
 	"bytes"
 	"fmt"
+	mrand "math/rand"
 	"os/exec"
 	"strconv"
 
@@ -56,6 +57,13 @@ var _ = Describe("Drop tests", func() {
 			return (p % interval) < dropInARow
 		}
 
+		stochasticDropper := func(p protocol.PacketNumber, freq int) bool {
+			if p <= 10 { // don't interfere with the crypto handshake
+				return false
+			}
+			return mrand.Int63n(int64(freq)) == 0
+		}
+
 		for _, v := range protocol.SupportedVersions {
 			version := v
 
@@ -66,6 +74,12 @@ var _ = Describe("Drop tests", func() {
 					It(fmt.Sprintf("downloads a file when every 5th packet is dropped in %s direction", d), func() {
 						runDropTest(func(d quicproxy.Direction, p uint64) bool {
 							return d.Is(direction) && deterministicDropper(p, 5, 1)
+						}, version)
+					})
+
+					It(fmt.Sprintf("downloads a file when 1/5th of all packet are dropped randomly in %s direction", d), func() {
+						runDropTest(func(d quicproxy.Direction, p protocol.PacketNumber) bool {
+							return d.Is(direction) && stochasticDropper(p, 5)
 						}, version)
 					})
 
