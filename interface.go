@@ -5,7 +5,8 @@ import (
 	"io"
 	"net"
 	"time"
-
+	
+	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
 
@@ -14,6 +15,9 @@ type StreamID = protocol.StreamID
 
 // A VersionNumber is a QUIC version number.
 type VersionNumber = protocol.VersionNumber
+
+// An STK can be used to verify the ownership of the client address.
+type STK = handshake.STK
 
 // Stream is the interface implemented by QUIC streams
 type Stream interface {
@@ -77,18 +81,6 @@ type Session interface {
 type NonFWSession interface {
 	Session
 	WaitUntilHandshakeComplete() error
-}
-
-// An STK is a Source Address token.
-// It is issued by the server and sent to the client. For the client, it is an opaque blob.
-// The client can send the STK in subsequent handshakes to prove ownership of its IP address.
-type STK struct {
-	// The remote address this token was issued for.
-	// If the server is run on a net.UDPConn, this is the string representation of the IP address (net.IP.String())
-	// Otherwise, this is the string representation of the net.Addr (net.Addr.String())
-	remoteAddr string
-	// The time that the STK was issued (resolution 1 second)
-	sentTime time.Time
 }
 
 // Config contains all configuration data needed for a QUIC server or client.

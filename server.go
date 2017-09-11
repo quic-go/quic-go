@@ -98,7 +98,7 @@ var defaultAcceptSTK = func(clientAddr net.Addr, stk *STK) bool {
 	if stk == nil {
 		return false
 	}
-	if time.Now().After(stk.sentTime.Add(protocol.STKExpiryTime)) {
+	if time.Now().After(stk.SentTime.Add(protocol.STKExpiryTime)) {
 		return false
 	}
 	var sourceAddr string
@@ -107,7 +107,7 @@ var defaultAcceptSTK = func(clientAddr net.Addr, stk *STK) bool {
 	} else {
 		sourceAddr = clientAddr.String()
 	}
-	return sourceAddr == stk.remoteAddr
+	return sourceAddr == stk.RemoteAddr
 }
 
 // populateServerConfig populates fields in the quic.Config with their default values, if none are set

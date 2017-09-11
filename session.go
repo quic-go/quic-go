@@ -197,11 +197,7 @@ func (s *session) setup(
 	if s.perspective == protocol.PerspectiveServer {
 		cryptoStream, _ := s.GetOrOpenStream(1)
 		_, _ = s.AcceptStream() // don't expose the crypto stream
-		verifySourceAddr := func(clientAddr net.Addr, hstk *handshake.STK) bool {
-			var stk *STK
-			if hstk != nil {
-				stk = &STK{remoteAddr: hstk.RemoteAddr, sentTime: hstk.SentTime}
-			}
+		verifySourceAddr := func(clientAddr net.Addr, stk *STK) bool {
 			return s.config.AcceptSTK(clientAddr, stk)
 		}
 		if s.version == protocol.VersionTLS {

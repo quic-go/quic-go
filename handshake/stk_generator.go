@@ -14,10 +14,16 @@ const (
 	stkPrefixString
 )
 
-// An STK is a source address token
+// An STK is a Source Address token.
+// It is issued by the server and sent to the client. For the client, it is an opaque blob.
+// The client can send the STK in subsequent handshakes to prove ownership of its IP address.
 type STK struct {
+	// The remote address this token was issued for.
+	// If the server is run on a net.UDPConn, this is the string representation of the IP address (net.IP.String())
+	// Otherwise, this is the string representation of the net.Addr (net.Addr.String())
 	RemoteAddr string
-	SentTime   time.Time
+	// The time that the STK was issued (resolution 1 second)
+	SentTime time.Time
 }
 
 // token is the struct that is used for ASN1 serialization and deserialization
