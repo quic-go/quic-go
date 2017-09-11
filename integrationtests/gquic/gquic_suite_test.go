@@ -2,6 +2,7 @@ package gquic_test
 
 import (
 	"fmt"
+	mrand "math/rand"
 	"path/filepath"
 	"runtime"
 
@@ -23,6 +24,10 @@ func TestIntegration(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "GQuic Tests Suite")
 }
+
+var _ = BeforeSuite(func() {
+	mrand.Seed(GinkgoRandomSeed())
+})
 
 var _ = JustBeforeEach(func() {
 	testserver.StartQuicServer(nil)
