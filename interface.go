@@ -17,7 +17,7 @@ type StreamID = protocol.StreamID
 type VersionNumber = protocol.VersionNumber
 
 // An STK can be used to verify the ownership of the client address.
-type STK = handshake.STK
+type STK = handshake.Cookie
 
 // Stream is the interface implemented by QUIC streams
 type Stream interface {

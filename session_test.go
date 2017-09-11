@@ -166,7 +166,7 @@ var _ = Describe("Session", func() {
 			_ io.ReadWriter,
 			_ handshake.ConnectionParametersManager,
 			_ []protocol.VersionNumber,
-			_ func(net.Addr, *handshake.STK) bool,
+			_ func(net.Addr, *STK) bool,
 			aeadChangedP chan<- protocol.EncryptionLevel,
 		) (handshake.CryptoSetup, error) {
 			aeadChanged = aeadChangedP
@@ -204,7 +204,7 @@ var _ = Describe("Session", func() {
 
 	Context("source address validation", func() {
 		var (
-			stkVerify       func(net.Addr, *handshake.STK) bool
+			stkVerify       func(net.Addr, *STK) bool
 			paramClientAddr net.Addr
 			paramSTK        *STK
 		)
@@ -219,7 +219,7 @@ var _ = Describe("Session", func() {
 				_ io.ReadWriter,
 				_ handshake.ConnectionParametersManager,
 				_ []protocol.VersionNumber,
-				stkFunc func(net.Addr, *handshake.STK) bool,
+				stkFunc func(net.Addr, *STK) bool,
 				_ chan<- protocol.EncryptionLevel,
 			) (handshake.CryptoSetup, error) {
 				stkVerify = stkFunc
@@ -253,7 +253,7 @@ var _ = Describe("Session", func() {
 		It("calls the callback with the STK when the client sent an STK", func() {
 			stkAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 			sentTime := time.Now().Add(-time.Hour)
-			stkVerify(remoteAddr, &handshake.STK{SentTime: sentTime, RemoteAddr: stkAddr.String()})
+			stkVerify(remoteAddr, &STK{SentTime: sentTime, RemoteAddr: stkAddr.String()})
 			Expect(paramClientAddr).To(Equal(remoteAddr))
 			Expect(paramSTK).ToNot(BeNil())
 			Expect(paramSTK.RemoteAddr).To(Equal(stkAddr.String()))

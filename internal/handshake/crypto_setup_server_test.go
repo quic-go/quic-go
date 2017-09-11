@@ -131,18 +131,18 @@ func (s *mockStream) Reset(error)                        { panic("not implemente
 func (mockStream) CloseRemote(offset protocol.ByteCount) { panic("not implemented") }
 func (s mockStream) StreamID() protocol.StreamID         { panic("not implemented") }
 
-type mockStkSource struct {
+type mockCookieSource struct {
 	data      []byte
 	decodeErr error
 }
 
-var _ crypto.StkSource = &mockStkSource{}
+var _ crypto.StkSource = &mockCookieSource{}
 
-func (mockStkSource) NewToken(sourceAddr []byte) ([]byte, error) {
+func (mockCookieSource) NewToken(sourceAddr []byte) ([]byte, error) {
 	return append([]byte("token "), sourceAddr...), nil
 }
 
-func (s mockStkSource) DecodeToken(data []byte) ([]byte, error) {
+func (s mockCookieSource) DecodeToken(data []byte) ([]byte, error) {
 	if s.decodeErr != nil {
 		return nil, s.decodeErr
 	}
@@ -209,11 +209,11 @@ var _ = Describe("Server Crypto Setup", func() {
 		)
 		Expect(err).NotTo(HaveOccurred())
 		cs = csInt.(*cryptoSetupServer)
-		cs.stkGenerator.stkSource = &mockStkSource{}
+		cs.stkGenerator.cookieSource = &mockCookieSource{}
 		validSTK, err = cs.stkGenerator.NewToken(remoteAddr)
 		Expect(err).NotTo(HaveOccurred())
 		sourceAddrValid = true
-		cs.acceptSTKCallback = func(_ net.Addr, _ *STK) bool { return sourceAddrValid }
+		cs.acceptSTKCallback = func(_ net.Addr, _ *Cookie) bool { return sourceAddrValid }
 		cs.keyDerivation = mockQuicCryptoKeyDerivation
 		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
 	})
@@ -422,7 +422,7 @@ var _ = Describe("Server Crypto Setup", func() {
 
 		It("recognizes inchoate CHLOs with an invalid STK", func() {
 			testErr := errors.New("STK invalid")
-			cs.stkGenerator.stkSource.(*mockStkSource).decodeErr = testErr
+			cs.stkGenerator.cookieSource.(*mockCookieSource).decodeErr = testErr
 			Expect(cs.isInchoateCHLO(fullCHLO, cert)).To(BeTrue())
 		})
 
