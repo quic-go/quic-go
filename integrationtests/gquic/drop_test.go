@@ -16,6 +16,8 @@ import (
 	. "github.com/onsi/gomega/gexec"
 )
 
+var directions = []quicproxy.Direction{quicproxy.DirectionIncoming, quicproxy.DirectionOutgoing, quicproxy.DirectionBoth}
+
 var _ = Describe("Drop tests", func() {
 	var proxy *quicproxy.QuicProxy
 
@@ -47,41 +49,33 @@ var _ = Describe("Drop tests", func() {
 	})
 
 	Context("after the crypto handshake", func() {
-		for i := range protocol.SupportedVersions {
-			version := protocol.SupportedVersions[i]
-
-			Context(fmt.Sprintf("with quic version %d", version), func() {
-				dropTests("dropping every 4th packet", 4, 1, runDropTest, version)
-				dropTests("dropping 10 packets every 100 packets", 100, 10, runDropTest, version)
-			})
-		}
-	})
-})
-
-func dropTests(
-	context string,
-	interval uint64,
-	dropInARow uint64,
-	runDropTest func(dropCallback quicproxy.DropCallback, version protocol.VersionNumber),
-	version protocol.VersionNumber) {
-	Context(context, func() {
-		dropper := func(p uint64) bool {
+		deterministicDropper := func(p, interval, dropInARow uint64) bool {
 			if p <= 10 { // don't interfere with the crypto handshake
 				return false
 			}
 			return (p % interval) < dropInARow
 		}
 
-		It("gets a file when many outgoing packets are dropped", func() {
-			runDropTest(func(d quicproxy.Direction, p uint64) bool {
-				return d == quicproxy.DirectionOutgoing && dropper(p)
-			}, version)
-		})
+		for _, v := range protocol.SupportedVersions {
+			version := v
 
-		It("gets a file when many incoming packets are dropped", func() {
-			runDropTest(func(d quicproxy.Direction, p uint64) bool {
-				return d == quicproxy.DirectionIncoming && dropper(p)
-			}, version)
-		})
+			Context(fmt.Sprintf("with QUIC version %d", version), func() {
+				for _, d := range directions {
+					direction := d
+
+					It(fmt.Sprintf("downloads a file when every 5th packet is dropped in %s direction", d), func() {
+						runDropTest(func(d quicproxy.Direction, p uint64) bool {
+							return d.Is(direction) && deterministicDropper(p, 5, 1)
+						}, version)
+					})
+
+					It(fmt.Sprintf("downloads a file when 10 packets every 100 packet are dropped in %s direction", d), func() {
+						runDropTest(func(d quicproxy.Direction, p uint64) bool {
+							return d.Is(direction) && deterministicDropper(p, 100, 10)
+						}, version)
+					})
+				}
+			})
+		}
 	})
-}
+})

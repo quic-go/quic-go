@@ -26,7 +26,29 @@ const (
 	DirectionIncoming Direction = iota
 	// DirectionOutgoing is the direction from the server to the client.
 	DirectionOutgoing
+	// DirectionBoth is both incoming and outgoing
+	DirectionBoth
 )
+
+func (d Direction) String() string {
+	switch d {
+	case DirectionIncoming:
+		return "incoming"
+	case DirectionOutgoing:
+		return "outgoing"
+	case DirectionBoth:
+		return "both"
+	default:
+		panic("unknown direction")
+	}
+}
+
+func (d Direction) Is(dir Direction) bool {
+	if d == DirectionBoth || dir == DirectionBoth {
+		return true
+	}
+	return d == dir
+}
 
 // DropCallback is a callback that determines which packet gets dropped.
 type DropCallback func(dir Direction, packetCount uint64) bool
