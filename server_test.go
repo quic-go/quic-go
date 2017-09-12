@@ -448,8 +448,8 @@ var _ = Describe("default source address verification", func() {
 	It("accepts a token", func() {
 		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1)}
 		stk := &STK{
-			remoteAddr: "192.168.0.1",
-			sentTime:   time.Now().Add(-protocol.STKExpiryTime).Add(time.Second), // will expire in 1 second
+			RemoteAddr: "192.168.0.1",
+			SentTime:   time.Now().Add(-protocol.STKExpiryTime).Add(time.Second), // will expire in 1 second
 		}
 		Expect(defaultAcceptSTK(remoteAddr, stk)).To(BeTrue())
 	})
@@ -462,8 +462,8 @@ var _ = Describe("default source address verification", func() {
 	It("rejects a token if the address doesn't match", func() {
 		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1)}
 		stk := &STK{
-			remoteAddr: "127.0.0.1",
-			sentTime:   time.Now(),
+			RemoteAddr: "127.0.0.1",
+			SentTime:   time.Now(),
 		}
 		Expect(defaultAcceptSTK(remoteAddr, stk)).To(BeFalse())
 	})
@@ -471,8 +471,8 @@ var _ = Describe("default source address verification", func() {
 	It("accepts a token for a remote address is not a UDP address", func() {
 		remoteAddr := &net.TCPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
 		stk := &STK{
-			remoteAddr: "192.168.0.1:1337",
-			sentTime:   time.Now(),
+			RemoteAddr: "192.168.0.1:1337",
+			SentTime:   time.Now(),
 		}
 		Expect(defaultAcceptSTK(remoteAddr, stk)).To(BeTrue())
 	})
@@ -480,8 +480,8 @@ var _ = Describe("default source address verification", func() {
 	It("rejects an invalid token for a remote address is not a UDP address", func() {
 		remoteAddr := &net.TCPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
 		stk := &STK{
-			remoteAddr: "192.168.0.1:7331", // mismatching port
-			sentTime:   time.Now(),
+			RemoteAddr: "192.168.0.1:7331", // mismatching port
+			SentTime:   time.Now(),
 		}
 		Expect(defaultAcceptSTK(remoteAddr, stk)).To(BeFalse())
 	})
@@ -489,8 +489,8 @@ var _ = Describe("default source address verification", func() {
 	It("rejects an expired token", func() {
 		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1)}
 		stk := &STK{
-			remoteAddr: "192.168.0.1",
-			sentTime:   time.Now().Add(-protocol.STKExpiryTime).Add(-time.Second), // expired 1 second ago
+			RemoteAddr: "192.168.0.1",
+			SentTime:   time.Now().Add(-protocol.STKExpiryTime).Add(-time.Second), // expired 1 second ago
 		}
 		Expect(defaultAcceptSTK(remoteAddr, stk)).To(BeFalse())
 	})

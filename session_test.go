@@ -256,8 +256,8 @@ var _ = Describe("Session", func() {
 			stkVerify(remoteAddr, &handshake.STK{SentTime: sentTime, RemoteAddr: stkAddr.String()})
 			Expect(paramClientAddr).To(Equal(remoteAddr))
 			Expect(paramSTK).ToNot(BeNil())
-			Expect(paramSTK.remoteAddr).To(Equal(stkAddr.String()))
-			Expect(paramSTK.sentTime).To(Equal(sentTime))
+			Expect(paramSTK.RemoteAddr).To(Equal(stkAddr.String()))
+			Expect(paramSTK.SentTime).To(Equal(sentTime))
 		})
 	})
 
