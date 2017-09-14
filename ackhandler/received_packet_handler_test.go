@@ -59,17 +59,6 @@ var _ = Describe("receivedPacketHandler", func() {
 			Expect(handler.largestObservedReceivedTime).To(Equal(timestamp))
 		})
 
-		It("doesn't store more than MaxTrackedReceivedPackets packets", func() {
-			err := handler.ReceivedPacket(1, true)
-			Expect(err).ToNot(HaveOccurred())
-			for i := protocol.PacketNumber(3); i < 3+protocol.MaxTrackedReceivedPackets-1; i++ {
-				err := handler.ReceivedPacket(protocol.PacketNumber(i), true)
-				Expect(err).ToNot(HaveOccurred())
-			}
-			err = handler.ReceivedPacket(protocol.PacketNumber(protocol.MaxTrackedReceivedPackets)+10, true)
-			Expect(err).To(MatchError(errTooManyOutstandingReceivedPackets))
-		})
-
 		It("passes on errors from receivedPacketHistory", func() {
 			var err error
 			for i := protocol.PacketNumber(0); i < 5*protocol.MaxTrackedReceivedAckRanges; i++ {
