@@ -23,6 +23,39 @@ func init() {
 		rand.Seed(GinkgoRandomSeed())
 		rand.Read(data) // no need to check for an error. math.Rand.Read never errors
 
+		Measure(fmt.Sprintf("transferring a %d MB file", size), func(b Benchmarker) {
+			serverAddr := make(chan *net.TCPAddr)
+			go func() {
+				defer GinkgoRecover()
+				laddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:0")
+				Expect(err).ToNot(HaveOccurred())
+				ln, err := net.ListenTCP("tcp", laddr)
+				Expect(err).ToNot(HaveOccurred())
+				serverAddr <- ln.Addr().(*net.TCPAddr)
+				sess, err := ln.Accept()
+				Expect(err).ToNot(HaveOccurred())
+				_, err = sess.Write(data)
+				Expect(err).ToNot(HaveOccurred())
+				err = sess.Close()
+				Expect(err).ToNot(HaveOccurred())
+			}()
+
+			addr := <-serverAddr
+			laddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:0")
+			Expect(err).ToNot(HaveOccurred())
+			str, err := net.DialTCP("tcp", laddr, addr)
+			Expect(err).ToNot(HaveOccurred())
+
+			buf := &bytes.Buffer{}
+			// measure the time it takes to download the dataLen bytes
+			runtime := b.Time("transfer time", func() {
+				_, err := io.Copy(buf, str)
+				Expect(err).NotTo(HaveOccurred())
+			})
+			Expect(buf.Bytes()).To(Equal(data))
+			b.RecordValue(tcpMeasurementLabel, float64(dataLen)/(1<<20)/runtime.Seconds())
+		}, samples)
+
 		for i := range protocol.SupportedVersions {
 			version := protocol.SupportedVersions[i]
 
@@ -76,7 +109,9 @@ func init() {
 					})
 					Expect(buf.Bytes()).To(Equal(data))
 
-					b.RecordValue("transfer rate [MB/s]", float64(dataLen)/1e6/runtime.Seconds())
+					transferRate := float64(dataLen) / 1e6 / runtime.Seconds()
+					b.RecordValue("transfer rate [MB/s]", transferRate)
+					b.RecordValue("comparison to TCP [%]", 100*transferRate/averageTCPTransferRate)
 
 					ln.Close()
 					sess.Close(nil)
