@@ -27,10 +27,11 @@ func init() {
 			serverAddr := make(chan *net.TCPAddr)
 			go func() {
 				defer GinkgoRecover()
-				laddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:0")
-				Expect(err).ToNot(HaveOccurred())
-				ln, err := net.ListenTCP("tcp", laddr)
-				Expect(err).ToNot(HaveOccurred())
+				ln, err := tls.Listen(
+					"tcp",
+					"127.0.0.1:0",
+					testdata.GetTLSConfig(),
+				)
 				serverAddr <- ln.Addr().(*net.TCPAddr)
 				sess, err := ln.Accept()
 				Expect(err).ToNot(HaveOccurred())
@@ -41,15 +42,13 @@ func init() {
 			}()
 
 			addr := <-serverAddr
-			laddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:0")
-			Expect(err).ToNot(HaveOccurred())
-			str, err := net.DialTCP("tcp", laddr, addr)
+			conn, err := tls.Dial("tcp", addr.String(), &tls.Config{InsecureSkipVerify: true})
 			Expect(err).ToNot(HaveOccurred())
 
 			buf := &bytes.Buffer{}
 			// measure the time it takes to download the dataLen bytes
 			runtime := b.Time("transfer time", func() {
-				_, err := io.Copy(buf, str)
+				_, err := io.Copy(buf, conn)
 				Expect(err).NotTo(HaveOccurred())
 			})
 			Expect(buf.Bytes()).To(Equal(data))
