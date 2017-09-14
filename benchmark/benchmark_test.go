@@ -65,8 +65,7 @@ func init() {
 						_, err := io.Copy(buf, str)
 						Expect(err).NotTo(HaveOccurred())
 					})
-					// this is *a lot* faster than Expect(buf.Bytes()).To(Equal(data))
-					Expect(bytes.Equal(buf.Bytes(), data)).To(BeTrue())
+					Expect(buf.Bytes()).To(Equal(data))
 
 					b.RecordValue("transfer rate [MB/s]", float64(dataLen)/1e6/runtime.Seconds())
 
