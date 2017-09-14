@@ -34,7 +34,11 @@ func init() {
 					go func() {
 						defer GinkgoRecover()
 						var err error
-						ln, err = quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), nil)
+						ln, err = quic.ListenAddr(
+							"localhost:0",
+							testdata.GetTLSConfig(),
+							&quic.Config{Versions: []protocol.VersionNumber{version}},
+						)
 						Expect(err).ToNot(HaveOccurred())
 						serverAddr <- ln.Addr()
 						sess, err := ln.Accept()
@@ -52,7 +56,11 @@ func init() {
 
 					// start the client
 					addr := <-serverAddr
-					sess, err := quic.DialAddr(addr.String(), &tls.Config{InsecureSkipVerify: true}, nil)
+					sess, err := quic.DialAddr(
+						addr.String(),
+						&tls.Config{InsecureSkipVerify: true},
+						&quic.Config{Versions: []protocol.VersionNumber{version}},
+					)
 					Expect(err).ToNot(HaveOccurred())
 					close(handshakeChan)
 					str, err := sess.AcceptStream()
