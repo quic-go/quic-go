@@ -17,7 +17,7 @@ import (
 
 func init() {
 	var _ = Describe("Benchmarks", func() {
-		dataLen := size * /* MB */ (1 << 20)
+		dataLen := size * /* MB */ 1e6
 		data := make([]byte, dataLen)
 		rand.Seed(GinkgoRandomSeed())
 		rand.Read(data) // no need to check for an error. math.Rand.Read never errors
