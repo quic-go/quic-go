@@ -87,9 +87,6 @@ const STKExpiryTime = 24 * time.Hour
 // MaxTrackedSentPackets is maximum number of sent packets saved for either later retransmission or entropy calculation
 const MaxTrackedSentPackets = 2 * DefaultMaxCongestionWindow
 
-// MaxTrackedReceivedPackets is the maximum number of received packets saved for doing the entropy calculations
-const MaxTrackedReceivedPackets = 2 * DefaultMaxCongestionWindow
-
 // MaxTrackedReceivedAckRanges is the maximum number of ACK ranges tracked
 const MaxTrackedReceivedAckRanges = DefaultMaxCongestionWindow
 
