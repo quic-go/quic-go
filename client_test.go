@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -353,6 +354,34 @@ var _ = Describe("Client", func() {
 
 				handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
 				Eventually(established).Should(BeClosed())
+			})
+
+			It("only accepts one version negotiation packet", func() {
+				sessionCounter := uint32(0)
+				newClientSession = func(
+					_ connection,
+					_ string,
+					_ protocol.VersionNumber,
+					connectionID protocol.ConnectionID,
+					_ *tls.Config,
+					_ *Config,
+					negotiatedVersionsP []protocol.VersionNumber,
+				) (packetHandler, <-chan handshakeEvent, error) {
+					atomic.AddUint32(&sessionCounter, 1)
+					return sess, nil, nil
+				}
+				go cl.establishSecureConnection()
+				Eventually(func() uint32 { return atomic.LoadUint32(&sessionCounter) }).Should(BeEquivalentTo(1))
+				newVersion := protocol.VersionNumber(77)
+				Expect(newVersion).ToNot(Equal(cl.version))
+				Expect(config.Versions).To(ContainElement(newVersion))
+				cl.handlePacket(nil, wire.ComposeVersionNegotiation(0x1337, []protocol.VersionNumber{newVersion}))
+				Expect(atomic.LoadUint32(&sessionCounter)).To(BeEquivalentTo(2))
+				newVersion = protocol.VersionNumber(78)
+				Expect(newVersion).ToNot(Equal(cl.version))
+				Expect(config.Versions).To(ContainElement(newVersion))
+				cl.handlePacket(nil, wire.ComposeVersionNegotiation(0x1337, []protocol.VersionNumber{newVersion}))
+				Expect(atomic.LoadUint32(&sessionCounter)).To(BeEquivalentTo(2))
 			})
 
 			It("errors if no matching version is found", func() {

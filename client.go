@@ -24,8 +24,9 @@ type client struct {
 
 	handshakeChan <-chan handshakeEvent
 
-	versionNegotiationChan chan struct{} // the versionNegotiationChan is closed as soon as the server accepted the suggested version
-	versionNegotiated      bool          // has version negotiation completed yet
+	versionNegotiationChan           chan struct{} // the versionNegotiationChan is closed as soon as the server accepted the suggested version
+	versionNegotiated                bool          // has version negotiation completed yet
+	receivedVersionNegotiationPacket bool
 
 	tlsConf *tls.Config
 	config  *Config
@@ -187,12 +188,10 @@ func (c *client) establishSecureConnection() error {
 	errorChan := make(chan struct{})
 	go func() {
 		// session.run() returns as soon as the session is closed
-		for {
+		runErr = c.session.run()
+		if runErr == errCloseSessionForNewVersion {
+			// run the new session
 			runErr = c.session.run()
-			if runErr == errCloseSessionForNewVersion {
-				continue
-			}
-			break
 		}
 		close(errorChan)
 		utils.Infof("Connection %x closed.", c.connectionID)
@@ -278,7 +277,7 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 	}
 
 	// ignore delayed / duplicated version negotiation packets
-	if c.versionNegotiated && hdr.VersionFlag {
+	if (c.receivedVersionNegotiationPacket || c.versionNegotiated) && hdr.VersionFlag {
 		return
 	}
 
@@ -314,6 +313,8 @@ func (c *client) handlePacketWithVersionFlag(hdr *wire.PublicHeader) error {
 			return nil
 		}
 	}
+
+	c.receivedVersionNegotiationPacket = true
 
 	newVersion := protocol.ChooseSupportedVersion(c.config.Versions, hdr.SupportedVersions)
 	if newVersion == protocol.VersionUnsupported {
