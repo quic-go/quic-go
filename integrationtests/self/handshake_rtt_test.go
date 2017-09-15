@@ -97,6 +97,16 @@ var _ = Describe("Handshake RTT tests", func() {
 		expectDurationInRTTs(3)
 	})
 
+	It("does version negotiation in 1 RTT", func() {
+		Expect(len(protocol.SupportedVersions)).To(BeNumerically(">", 1))
+		// the server doesn't support the highest supported version, which is the first one the client will try
+		serverConfig.Versions = protocol.SupportedVersions[1:]
+		runServerAndProxy()
+		_, err := quic.DialAddr(proxy.LocalAddr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
+		Expect(err).ToNot(HaveOccurred())
+		expectDurationInRTTs(4)
+	})
+
 	// 1 RTT for verifying the source address
 	// 1 RTT to become secure
 	// TODO (marten-seemann): enable this test (see #625)
