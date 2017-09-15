@@ -9,6 +9,7 @@ import (
 	"net"
 
 	quic "github.com/lucas-clemente/quic-go"
+	_ "github.com/lucas-clemente/quic-go/integrationtests/tools/testlog"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 	. "github.com/onsi/ginkgo"
@@ -17,7 +18,7 @@ import (
 
 func init() {
 	var _ = Describe("Benchmarks", func() {
-		dataLen := size * /* MB */ (1 << 20)
+		dataLen := size * /* MB */ 1e6
 		data := make([]byte, dataLen)
 		rand.Seed(GinkgoRandomSeed())
 		rand.Read(data) // no need to check for an error. math.Rand.Read never errors
@@ -34,7 +35,11 @@ func init() {
 					go func() {
 						defer GinkgoRecover()
 						var err error
-						ln, err = quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), nil)
+						ln, err = quic.ListenAddr(
+							"localhost:0",
+							testdata.GetTLSConfig(),
+							&quic.Config{Versions: []protocol.VersionNumber{version}},
+						)
 						Expect(err).ToNot(HaveOccurred())
 						serverAddr <- ln.Addr()
 						sess, err := ln.Accept()
@@ -52,7 +57,11 @@ func init() {
 
 					// start the client
 					addr := <-serverAddr
-					sess, err := quic.DialAddr(addr.String(), &tls.Config{InsecureSkipVerify: true}, nil)
+					sess, err := quic.DialAddr(
+						addr.String(),
+						&tls.Config{InsecureSkipVerify: true},
+						&quic.Config{Versions: []protocol.VersionNumber{version}},
+					)
 					Expect(err).ToNot(HaveOccurred())
 					close(handshakeChan)
 					str, err := sess.AcceptStream()
@@ -65,8 +74,7 @@ func init() {
 						_, err := io.Copy(buf, str)
 						Expect(err).NotTo(HaveOccurred())
 					})
-					// this is *a lot* faster than Expect(buf.Bytes()).To(Equal(data))
-					Expect(bytes.Equal(buf.Bytes(), data)).To(BeTrue())
+					Expect(buf.Bytes()).To(Equal(data))
 
 					b.RecordValue("transfer rate [MB/s]", float64(dataLen)/1e6/runtime.Seconds())
 
