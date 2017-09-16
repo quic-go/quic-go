@@ -253,6 +253,10 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 		// drop this packet if we can't parse the Public Header
 		return
 	}
+	// reject packets with truncated connection id if we didn't request truncation
+	if hdr.TruncateConnectionID && !c.config.RequestConnectionIDTruncation {
+		return
+	}
 	hdr.Raw = packet[:len(packet)-r.Len()]
 
 	c.mutex.Lock()

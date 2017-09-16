@@ -423,7 +423,21 @@ var _ = Describe("Client", func() {
 
 	It("ignores packets with an invalid public header", func() {
 		cl.handlePacket(addr, []byte("invalid packet"))
-		Expect(cl.session.(*mockSession).closed).To(BeFalse())
+		Expect(sess.packetCount).To(BeZero())
+		Expect(sess.closed).To(BeFalse())
+	})
+
+	It("ignores packets without connection id, if it didn't request connection id trunctation", func() {
+		cl.config.RequestConnectionIDTruncation = false
+		buf := &bytes.Buffer{}
+		(&wire.PublicHeader{
+			TruncateConnectionID: true,
+			PacketNumber:         1,
+			PacketNumberLen:      1,
+		}).Write(buf, protocol.VersionWhatever, protocol.PerspectiveServer)
+		cl.handlePacket(addr, buf.Bytes())
+		Expect(sess.packetCount).To(BeZero())
+		Expect(sess.closed).To(BeFalse())
 	})
 
 	It("creates new sessions with the right parameters", func(done Done) {
