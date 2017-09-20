@@ -38,6 +38,8 @@ type client struct {
 }
 
 var (
+	// make it possible to mock connection ID generation in the tests
+	generateConnectionID         = utils.GenerateConnectionID
 	errCloseSessionForNewVersion = errors.New("closing session in order to recreate it with a new version")
 )
 
@@ -82,7 +84,7 @@ func DialNonFWSecure(
 	tlsConf *tls.Config,
 	config *Config,
 ) (NonFWSession, error) {
-	connID, err := utils.GenerateConnectionID()
+	connID, err := generateConnectionID()
 	if err != nil {
 		return nil, err
 	}
@@ -255,6 +257,10 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 	}
 	// reject packets with truncated connection id if we didn't request truncation
 	if hdr.TruncateConnectionID && !c.config.RequestConnectionIDTruncation {
+		return
+	}
+	// reject packets with the wrong connection ID
+	if !hdr.TruncateConnectionID && hdr.ConnectionID != c.connectionID {
 		return
 	}
 	hdr.Raw = packet[:len(packet)-r.Len()]
