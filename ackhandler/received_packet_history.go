@@ -98,12 +98,12 @@ func (h *receivedPacketHistory) GetAckRanges() []wire.AckRange {
 		return nil
 	}
 
-	var ackRanges []wire.AckRange
-
+	ackRanges := make([]wire.AckRange, h.ranges.Len())
+	i := 0
 	for el := h.ranges.Back(); el != nil; el = el.Prev() {
-		ackRanges = append(ackRanges, wire.AckRange{FirstPacketNumber: el.Value.Start, LastPacketNumber: el.Value.End})
+		ackRanges[i] = wire.AckRange{FirstPacketNumber: el.Value.Start, LastPacketNumber: el.Value.End}
+		i++
 	}
-
 	return ackRanges
 }
 
