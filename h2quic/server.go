@@ -344,6 +344,9 @@ func ListenAndServe(addr, certFile, keyFile string, handler http.Handler) error 
 	}
 	defer tcpConn.Close()
 
+	tlsConn := tls.NewListener(tcpConn, config)
+	defer tlsConn.Close()
+
 	// Start the servers
 	httpServer := &http.Server{
 		Addr:      addr,
@@ -365,7 +368,7 @@ func ListenAndServe(addr, certFile, keyFile string, handler http.Handler) error 
 	hErr := make(chan error)
 	qErr := make(chan error)
 	go func() {
-		hErr <- httpServer.Serve(tcpConn)
+		hErr <- httpServer.Serve(tlsConn)
 	}()
 	go func() {
 		qErr <- quicServer.Serve(udpConn)
