@@ -2,6 +2,7 @@ package handshake
 
 import (
 	"bytes"
+	"net"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	. "github.com/onsi/ginkgo"
@@ -61,5 +62,11 @@ var _ = Describe("Fake Conn", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(stream.Bytes()).To(Equal([]byte("foobar")))
 		})
+	})
+
+	It("returns its remote address", func() {
+		addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
+		c.remoteAddr = addr
+		Expect(c.RemoteAddr()).To(Equal(addr))
 	})
 })
