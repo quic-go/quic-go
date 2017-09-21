@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/bifurcation/mint"
-	"github.com/lucas-clemente/quic-go/crypto"
+	"github.com/lucas-clemente/quic-go/internal/crypto"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
 

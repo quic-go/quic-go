@@ -5,8 +5,8 @@ import (
 	"io"
 	"net"
 	"time"
-	
-	"github.com/lucas-clemente/quic-go/handshake"
+
+	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
 
