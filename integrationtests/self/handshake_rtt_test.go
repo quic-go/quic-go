@@ -119,8 +119,8 @@ var _ = Describe("Handshake RTT tests", func() {
 		expectDurationInRTTs(2)
 	})
 
-	It("is forward-secure after 2 RTTs when the server doesn't require an STK", func() {
-		serverConfig.AcceptSTK = func(_ net.Addr, _ *quic.STK) bool {
+	It("is forward-secure after 2 RTTs when the server doesn't require a Cookie", func() {
+		serverConfig.AcceptCookie = func(_ net.Addr, _ *quic.Cookie) bool {
 			return true
 		}
 		runServerAndProxy()
@@ -129,8 +129,8 @@ var _ = Describe("Handshake RTT tests", func() {
 		expectDurationInRTTs(2)
 	})
 
-	It("doesn't complete the handshake when the server never accepts the STK", func() {
-		serverConfig.AcceptSTK = func(_ net.Addr, _ *quic.STK) bool {
+	It("doesn't complete the handshake when the server never accepts the Cookie", func() {
+		serverConfig.AcceptCookie = func(_ net.Addr, _ *quic.Cookie) bool {
 			return false
 		}
 		runServerAndProxy()

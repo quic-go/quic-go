@@ -94,11 +94,11 @@ func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener,
 	return s, nil
 }
 
-var defaultAcceptSTK = func(clientAddr net.Addr, stk *STK) bool {
-	if stk == nil {
+var defaultAcceptCookie = func(clientAddr net.Addr, cookie *Cookie) bool {
+	if cookie == nil {
 		return false
 	}
-	if time.Now().After(stk.SentTime.Add(protocol.STKExpiryTime)) {
+	if time.Now().After(cookie.SentTime.Add(protocol.CookieExpiryTime)) {
 		return false
 	}
 	var sourceAddr string
@@ -107,7 +107,7 @@ var defaultAcceptSTK = func(clientAddr net.Addr, stk *STK) bool {
 	} else {
 		sourceAddr = clientAddr.String()
 	}
-	return sourceAddr == stk.RemoteAddr
+	return sourceAddr == cookie.RemoteAddr
 }
 
 // populateServerConfig populates fields in the quic.Config with their default values, if none are set
@@ -121,9 +121,9 @@ func populateServerConfig(config *Config) *Config {
 		versions = protocol.SupportedVersions
 	}
 
-	vsa := defaultAcceptSTK
-	if config.AcceptSTK != nil {
-		vsa = config.AcceptSTK
+	vsa := defaultAcceptCookie
+	if config.AcceptCookie != nil {
+		vsa = config.AcceptCookie
 	}
 
 	handshakeTimeout := protocol.DefaultHandshakeTimeout
@@ -148,7 +148,7 @@ func populateServerConfig(config *Config) *Config {
 		Versions:                              versions,
 		HandshakeTimeout:                      handshakeTimeout,
 		IdleTimeout:                           idleTimeout,
-		AcceptSTK:                             vsa,
+		AcceptCookie:                          vsa,
 		MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindow,
 		MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindow,
 	}
