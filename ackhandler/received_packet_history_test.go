@@ -208,7 +208,7 @@ var _ = Describe("receivedPacketHistory", func() {
 			hist.ReceivedPacket(5)
 			ackRanges := hist.GetAckRanges()
 			Expect(ackRanges).To(HaveLen(1))
-			Expect(ackRanges[0]).To(Equal(wire.AckRange{FirstPacketNumber: 4, LastPacketNumber: 5}))
+			Expect(ackRanges[0]).To(Equal(wire.AckRange{First: 4, Last: 5}))
 		})
 
 		It("gets multiple ACK ranges", func() {
@@ -221,9 +221,9 @@ var _ = Describe("receivedPacketHistory", func() {
 			hist.ReceivedPacket(2)
 			ackRanges := hist.GetAckRanges()
 			Expect(ackRanges).To(HaveLen(3))
-			Expect(ackRanges[0]).To(Equal(wire.AckRange{FirstPacketNumber: 10, LastPacketNumber: 11}))
-			Expect(ackRanges[1]).To(Equal(wire.AckRange{FirstPacketNumber: 4, LastPacketNumber: 6}))
-			Expect(ackRanges[2]).To(Equal(wire.AckRange{FirstPacketNumber: 1, LastPacketNumber: 2}))
+			Expect(ackRanges[0]).To(Equal(wire.AckRange{First: 10, Last: 11}))
+			Expect(ackRanges[1]).To(Equal(wire.AckRange{First: 4, Last: 6}))
+			Expect(ackRanges[2]).To(Equal(wire.AckRange{First: 1, Last: 2}))
 		})
 	})
 
@@ -235,14 +235,14 @@ var _ = Describe("receivedPacketHistory", func() {
 		It("gets a single ACK range", func() {
 			hist.ReceivedPacket(4)
 			hist.ReceivedPacket(5)
-			Expect(hist.GetHighestAckRange()).To(Equal(wire.AckRange{FirstPacketNumber: 4, LastPacketNumber: 5}))
+			Expect(hist.GetHighestAckRange()).To(Equal(wire.AckRange{First: 4, Last: 5}))
 		})
 
 		It("gets the highest of multiple ACK ranges", func() {
 			hist.ReceivedPacket(3)
 			hist.ReceivedPacket(6)
 			hist.ReceivedPacket(7)
-			Expect(hist.GetHighestAckRange()).To(Equal(wire.AckRange{FirstPacketNumber: 6, LastPacketNumber: 7}))
+			Expect(hist.GetHighestAckRange()).To(Equal(wire.AckRange{First: 6, Last: 7}))
 		})
 	})
 })

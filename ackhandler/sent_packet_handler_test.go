@@ -355,8 +355,8 @@ var _ = Describe("SentPacketHandler", func() {
 					LargestAcked: 12,
 					LowestAcked:  5,
 					AckRanges: []wire.AckRange{
-						{FirstPacketNumber: 12, LastPacketNumber: 12},
-						{FirstPacketNumber: 5, LastPacketNumber: 10},
+						{First: 12, Last: 12},
+						{First: 5, Last: 10},
 					},
 				}
 				err := handler.ReceivedAck(&ack, 1337, time.Now())
@@ -403,8 +403,8 @@ var _ = Describe("SentPacketHandler", func() {
 					LargestAcked: 9,
 					LowestAcked:  2,
 					AckRanges: []wire.AckRange{ // packets 4 and 5 were lost
-						{FirstPacketNumber: 6, LastPacketNumber: 9},
-						{FirstPacketNumber: 2, LastPacketNumber: 3},
+						{First: 6, Last: 9},
+						{First: 2, Last: 3},
 					},
 				}
 				err := handler.ReceivedAck(&ack, 1, time.Now())
@@ -439,10 +439,10 @@ var _ = Describe("SentPacketHandler", func() {
 					LargestAcked: 9,
 					LowestAcked:  1,
 					AckRanges: []wire.AckRange{ // packets 2, 4 and 5, and 8 were lost
-						{FirstPacketNumber: 9, LastPacketNumber: 9},
-						{FirstPacketNumber: 6, LastPacketNumber: 7},
-						{FirstPacketNumber: 3, LastPacketNumber: 3},
-						{FirstPacketNumber: 1, LastPacketNumber: 1},
+						{First: 9, Last: 9},
+						{First: 6, Last: 7},
+						{First: 3, Last: 3},
+						{First: 1, Last: 1},
 					},
 				}
 				err := handler.ReceivedAck(&ack, 1, time.Now())
@@ -465,8 +465,8 @@ var _ = Describe("SentPacketHandler", func() {
 					LargestAcked: protocol.PacketNumber(largestObserved),
 					LowestAcked:  1,
 					AckRanges: []wire.AckRange{
-						{FirstPacketNumber: 4, LastPacketNumber: protocol.PacketNumber(largestObserved)},
-						{FirstPacketNumber: 1, LastPacketNumber: 2},
+						{First: 4, Last: protocol.PacketNumber(largestObserved)},
+						{First: 1, Last: 2},
 					},
 				}
 				err := handler.ReceivedAck(&ack1, 1, time.Now())
@@ -489,8 +489,8 @@ var _ = Describe("SentPacketHandler", func() {
 					LargestAcked: 6,
 					LowestAcked:  1,
 					AckRanges: []wire.AckRange{
-						{FirstPacketNumber: 4, LastPacketNumber: 6},
-						{FirstPacketNumber: 1, LastPacketNumber: 2},
+						{First: 4, Last: 6},
+						{First: 1, Last: 2},
 					},
 				}
 				err := handler.ReceivedAck(&ack1, 1, time.Now())
@@ -521,9 +521,9 @@ var _ = Describe("SentPacketHandler", func() {
 					LargestAcked: 10,
 					LowestAcked:  1,
 					AckRanges: []wire.AckRange{
-						{FirstPacketNumber: 8, LastPacketNumber: 10},
-						{FirstPacketNumber: 3, LastPacketNumber: 3},
-						{FirstPacketNumber: 1, LastPacketNumber: 1},
+						{First: 8, Last: 10},
+						{First: 3, Last: 3},
+						{First: 1, Last: 1},
 					},
 				}
 				err = handler.ReceivedAck(&ack2, 2, time.Now())
@@ -639,8 +639,8 @@ var _ = Describe("SentPacketHandler", func() {
 			LargestAcked: 3,
 			LowestAcked:  1,
 			AckRanges: []wire.AckRange{
-				{FirstPacketNumber: 3, LastPacketNumber: 3},
-				{FirstPacketNumber: 1, LastPacketNumber: 1},
+				{First: 3, Last: 3},
+				{First: 1, Last: 1},
 			},
 		}
 		err = handler.ReceivedAck(&ack, 1, time.Now())

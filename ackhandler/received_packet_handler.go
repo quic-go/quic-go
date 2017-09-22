@@ -93,7 +93,7 @@ func (h *receivedPacketHandler) maybeQueueAck(packetNumber protocol.PacketNumber
 	}
 
 	// check if a new missing range above the previously was created
-	if h.lastAck != nil && h.packetHistory.GetHighestAckRange().FirstPacketNumber > h.lastAck.LargestAcked {
+	if h.lastAck != nil && h.packetHistory.GetHighestAckRange().First > h.lastAck.LargestAcked {
 		h.ackQueued = true
 	}
 
@@ -121,7 +121,7 @@ func (h *receivedPacketHandler) GetAckFrame() *wire.AckFrame {
 	ackRanges := h.packetHistory.GetAckRanges()
 	ack := &wire.AckFrame{
 		LargestAcked:       h.largestObserved,
-		LowestAcked:        ackRanges[len(ackRanges)-1].FirstPacketNumber,
+		LowestAcked:        ackRanges[len(ackRanges)-1].First,
 		PacketReceivedTime: h.largestObservedReceivedTime,
 	}
 

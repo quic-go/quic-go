@@ -206,14 +206,14 @@ func (h *sentPacketHandler) determineNewlyAckedPackets(ackFrame *wire.AckFrame) 
 		if ackFrame.HasMissingRanges() {
 			ackRange := ackFrame.AckRanges[len(ackFrame.AckRanges)-1-ackRangeIndex]
 
-			for packetNumber > ackRange.LastPacketNumber && ackRangeIndex < len(ackFrame.AckRanges)-1 {
+			for packetNumber > ackRange.Last && ackRangeIndex < len(ackFrame.AckRanges)-1 {
 				ackRangeIndex++
 				ackRange = ackFrame.AckRanges[len(ackFrame.AckRanges)-1-ackRangeIndex]
 			}
 
-			if packetNumber >= ackRange.FirstPacketNumber { // packet i contained in ACK range
-				if packetNumber > ackRange.LastPacketNumber {
-					return nil, fmt.Errorf("BUG: ackhandler would have acked wrong packet 0x%x, while evaluating range 0x%x -> 0x%x", packetNumber, ackRange.FirstPacketNumber, ackRange.LastPacketNumber)
+			if packetNumber >= ackRange.First { // packet i contained in ACK range
+				if packetNumber > ackRange.Last {
+					return nil, fmt.Errorf("BUG: ackhandler would have acked wrong packet 0x%x, while evaluating range 0x%x -> 0x%x", packetNumber, ackRange.First, ackRange.Last)
 				}
 				ackedPackets = append(ackedPackets, el)
 			}
