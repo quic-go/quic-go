@@ -343,10 +343,10 @@ var _ = Describe("Server", func() {
 
 	It("setups with the right values", func() {
 		supportedVersions := []protocol.VersionNumber{1, 3, 5}
-		acceptSTK := func(_ net.Addr, _ *STK) bool { return true }
+		acceptCookie := func(_ net.Addr, _ *Cookie) bool { return true }
 		config := Config{
 			Versions:         supportedVersions,
-			AcceptSTK:        acceptSTK,
+			AcceptCookie:     acceptCookie,
 			HandshakeTimeout: 1337 * time.Hour,
 			IdleTimeout:      42 * time.Minute,
 		}
@@ -359,7 +359,7 @@ var _ = Describe("Server", func() {
 		Expect(server.config.Versions).To(Equal(supportedVersions))
 		Expect(server.config.HandshakeTimeout).To(Equal(1337 * time.Hour))
 		Expect(server.config.IdleTimeout).To(Equal(42 * time.Minute))
-		Expect(reflect.ValueOf(server.config.AcceptSTK)).To(Equal(reflect.ValueOf(acceptSTK)))
+		Expect(reflect.ValueOf(server.config.AcceptCookie)).To(Equal(reflect.ValueOf(acceptCookie)))
 	})
 
 	It("fills in default values if options are not set in the Config", func() {
@@ -369,7 +369,7 @@ var _ = Describe("Server", func() {
 		Expect(server.config.Versions).To(Equal(protocol.SupportedVersions))
 		Expect(server.config.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
 		Expect(server.config.IdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
-		Expect(reflect.ValueOf(server.config.AcceptSTK)).To(Equal(reflect.ValueOf(defaultAcceptSTK)))
+		Expect(reflect.ValueOf(server.config.AcceptCookie)).To(Equal(reflect.ValueOf(defaultAcceptCookie)))
 	})
 
 	It("listens on a given address", func() {
@@ -447,51 +447,51 @@ var _ = Describe("Server", func() {
 var _ = Describe("default source address verification", func() {
 	It("accepts a token", func() {
 		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1)}
-		stk := &STK{
+		cookie := &Cookie{
 			RemoteAddr: "192.168.0.1",
-			SentTime:   time.Now().Add(-protocol.STKExpiryTime).Add(time.Second), // will expire in 1 second
+			SentTime:   time.Now().Add(-protocol.CookieExpiryTime).Add(time.Second), // will expire in 1 second
 		}
-		Expect(defaultAcceptSTK(remoteAddr, stk)).To(BeTrue())
+		Expect(defaultAcceptCookie(remoteAddr, cookie)).To(BeTrue())
 	})
 
 	It("requests verification if no token is provided", func() {
 		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1)}
-		Expect(defaultAcceptSTK(remoteAddr, nil)).To(BeFalse())
+		Expect(defaultAcceptCookie(remoteAddr, nil)).To(BeFalse())
 	})
 
 	It("rejects a token if the address doesn't match", func() {
 		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1)}
-		stk := &STK{
+		cookie := &Cookie{
 			RemoteAddr: "127.0.0.1",
 			SentTime:   time.Now(),
 		}
-		Expect(defaultAcceptSTK(remoteAddr, stk)).To(BeFalse())
+		Expect(defaultAcceptCookie(remoteAddr, cookie)).To(BeFalse())
 	})
 
 	It("accepts a token for a remote address is not a UDP address", func() {
 		remoteAddr := &net.TCPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
-		stk := &STK{
+		cookie := &Cookie{
 			RemoteAddr: "192.168.0.1:1337",
 			SentTime:   time.Now(),
 		}
-		Expect(defaultAcceptSTK(remoteAddr, stk)).To(BeTrue())
+		Expect(defaultAcceptCookie(remoteAddr, cookie)).To(BeTrue())
 	})
 
 	It("rejects an invalid token for a remote address is not a UDP address", func() {
 		remoteAddr := &net.TCPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
-		stk := &STK{
+		cookie := &Cookie{
 			RemoteAddr: "192.168.0.1:7331", // mismatching port
 			SentTime:   time.Now(),
 		}
-		Expect(defaultAcceptSTK(remoteAddr, stk)).To(BeFalse())
+		Expect(defaultAcceptCookie(remoteAddr, cookie)).To(BeFalse())
 	})
 
 	It("rejects an expired token", func() {
 		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1)}
-		stk := &STK{
+		cookie := &Cookie{
 			RemoteAddr: "192.168.0.1",
-			SentTime:   time.Now().Add(-protocol.STKExpiryTime).Add(-time.Second), // expired 1 second ago
+			SentTime:   time.Now().Add(-protocol.CookieExpiryTime).Add(-time.Second), // expired 1 second ago
 		}
-		Expect(defaultAcceptSTK(remoteAddr, stk)).To(BeFalse())
+		Expect(defaultAcceptCookie(remoteAddr, cookie)).To(BeFalse())
 	})
 })

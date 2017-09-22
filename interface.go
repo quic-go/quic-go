@@ -16,8 +16,8 @@ type StreamID = protocol.StreamID
 // A VersionNumber is a QUIC version number.
 type VersionNumber = protocol.VersionNumber
 
-// An STK can be used to verify the ownership of the client address.
-type STK = handshake.STK
+// A Cookie can be used to verify the ownership of the client address.
+type Cookie = handshake.Cookie
 
 // Stream is the interface implemented by QUIC streams
 type Stream interface {
@@ -102,11 +102,11 @@ type Config struct {
 	// If the timeout is exceeded, the connection is closed.
 	// If this value is zero, the timeout is set to 30 seconds.
 	IdleTimeout time.Duration
-	// AcceptSTK determines if an STK is accepted.
-	// It is called with stk = nil if the client didn't send an STK.
-	// If not set, it verifies that the address matches, and that the STK was issued within the last 24 hours.
+	// AcceptCookie determines if a Cookie is accepted.
+	// It is called with cookie = nil if the client didn't send an Cookie.
+	// If not set, it verifies that the address matches, and that the Cookie was issued within the last 24 hours.
 	// This option is only valid for the server.
-	AcceptSTK func(clientAddr net.Addr, stk *STK) bool
+	AcceptCookie func(clientAddr net.Addr, cookie *Cookie) bool
 	// MaxReceiveStreamFlowControlWindow is the maximum stream-level flow control window for receiving data.
 	// If this value is zero, it will default to 1 MB for the server and 6 MB for the client.
 	MaxReceiveStreamFlowControlWindow uint64

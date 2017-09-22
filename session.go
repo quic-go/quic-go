@@ -197,8 +197,8 @@ func (s *session) setup(
 	if s.perspective == protocol.PerspectiveServer {
 		cryptoStream, _ := s.GetOrOpenStream(1)
 		_, _ = s.AcceptStream() // don't expose the crypto stream
-		verifySourceAddr := func(clientAddr net.Addr, stk *STK) bool {
-			return s.config.AcceptSTK(clientAddr, stk)
+		verifySourceAddr := func(clientAddr net.Addr, cookie *Cookie) bool {
+			return s.config.AcceptCookie(clientAddr, cookie)
 		}
 		if s.version == protocol.VersionTLS {
 			s.cryptoSetup, err = handshake.NewCryptoSetupTLS(

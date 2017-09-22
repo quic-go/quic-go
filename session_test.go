@@ -166,7 +166,7 @@ var _ = Describe("Session", func() {
 			_ io.ReadWriter,
 			_ handshake.ConnectionParametersManager,
 			_ []protocol.VersionNumber,
-			_ func(net.Addr, *handshake.STK) bool,
+			_ func(net.Addr, *Cookie) bool,
 			aeadChangedP chan<- protocol.EncryptionLevel,
 		) (handshake.CryptoSetup, error) {
 			aeadChanged = aeadChangedP
@@ -204,9 +204,9 @@ var _ = Describe("Session", func() {
 
 	Context("source address validation", func() {
 		var (
-			stkVerify       func(net.Addr, *handshake.STK) bool
+			cookieVerify    func(net.Addr, *Cookie) bool
 			paramClientAddr net.Addr
-			paramSTK        *STK
+			paramCookie     *Cookie
 		)
 		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 1000}
 
@@ -219,17 +219,17 @@ var _ = Describe("Session", func() {
 				_ io.ReadWriter,
 				_ handshake.ConnectionParametersManager,
 				_ []protocol.VersionNumber,
-				stkFunc func(net.Addr, *handshake.STK) bool,
+				cookieFunc func(net.Addr, *Cookie) bool,
 				_ chan<- protocol.EncryptionLevel,
 			) (handshake.CryptoSetup, error) {
-				stkVerify = stkFunc
+				cookieVerify = cookieFunc
 				return cryptoSetup, nil
 			}
 
 			conf := populateServerConfig(&Config{})
-			conf.AcceptSTK = func(clientAddr net.Addr, stk *STK) bool {
+			conf.AcceptCookie = func(clientAddr net.Addr, cookie *Cookie) bool {
 				paramClientAddr = clientAddr
-				paramSTK = stk
+				paramCookie = cookie
 				return false
 			}
 			pSess, _, err := newSession(
@@ -245,19 +245,19 @@ var _ = Describe("Session", func() {
 		})
 
 		It("calls the callback with the right parameters when the client didn't send an STK", func() {
-			stkVerify(remoteAddr, nil)
+			cookieVerify(remoteAddr, nil)
 			Expect(paramClientAddr).To(Equal(remoteAddr))
-			Expect(paramSTK).To(BeNil())
+			Expect(paramCookie).To(BeNil())
 		})
 
 		It("calls the callback with the STK when the client sent an STK", func() {
-			stkAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
+			cookieAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 			sentTime := time.Now().Add(-time.Hour)
-			stkVerify(remoteAddr, &handshake.STK{SentTime: sentTime, RemoteAddr: stkAddr.String()})
+			cookieVerify(remoteAddr, &Cookie{SentTime: sentTime, RemoteAddr: cookieAddr.String()})
 			Expect(paramClientAddr).To(Equal(remoteAddr))
-			Expect(paramSTK).ToNot(BeNil())
-			Expect(paramSTK.RemoteAddr).To(Equal(stkAddr.String()))
-			Expect(paramSTK.SentTime).To(Equal(sentTime))
+			Expect(paramCookie).ToNot(BeNil())
+			Expect(paramCookie.RemoteAddr).To(Equal(cookieAddr.String()))
+			Expect(paramCookie.SentTime).To(Equal(sentTime))
 		})
 	})
 

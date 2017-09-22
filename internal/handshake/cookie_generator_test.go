@@ -9,49 +9,49 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("STK Generator", func() {
-	var stkGen *STKGenerator
+var _ = Describe("Cookie Generator", func() {
+	var cookieGen *CookieGenerator
 
 	BeforeEach(func() {
 		var err error
-		stkGen, err = NewSTKGenerator()
+		cookieGen, err = NewCookieGenerator()
 		Expect(err).ToNot(HaveOccurred())
 	})
 
-	It("generates an STK", func() {
+	It("generates a Cookie", func() {
 		ip := net.IPv4(127, 0, 0, 1)
-		token, err := stkGen.NewToken(&net.UDPAddr{IP: ip, Port: 1337})
+		token, err := cookieGen.NewToken(&net.UDPAddr{IP: ip, Port: 1337})
 		Expect(err).ToNot(HaveOccurred())
 		Expect(token).ToNot(BeEmpty())
 	})
 
 	It("works with nil tokens", func() {
-		stk, err := stkGen.DecodeToken(nil)
+		cookie, err := cookieGen.DecodeToken(nil)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(stk).To(BeNil())
+		Expect(cookie).To(BeNil())
 	})
 
-	It("accepts a valid STK", func() {
+	It("accepts a valid cookie", func() {
 		ip := net.IPv4(192, 168, 0, 1)
-		token, err := stkGen.NewToken(&net.UDPAddr{IP: ip, Port: 1337})
+		token, err := cookieGen.NewToken(&net.UDPAddr{IP: ip, Port: 1337})
 		Expect(err).ToNot(HaveOccurred())
-		stk, err := stkGen.DecodeToken(token)
+		cookie, err := cookieGen.DecodeToken(token)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(stk.RemoteAddr).To(Equal("192.168.0.1"))
-		// the time resolution of the STK is just 1 second
-		// if STK generation and this check happen in "different seconds", the difference will be between 1 and 2 seconds
-		Expect(stk.SentTime).To(BeTemporally("~", time.Now(), 2*time.Second))
+		Expect(cookie.RemoteAddr).To(Equal("192.168.0.1"))
+		// the time resolution of the Cookie is just 1 second
+		// if Cookie generation and this check happen in "different seconds", the difference will be between 1 and 2 seconds
+		Expect(cookie.SentTime).To(BeTemporally("~", time.Now(), 2*time.Second))
 	})
 
 	It("rejects invalid tokens", func() {
-		_, err := stkGen.DecodeToken([]byte("invalid token"))
+		_, err := cookieGen.DecodeToken([]byte("invalid token"))
 		Expect(err).To(HaveOccurred())
 	})
 
 	It("rejects tokens that cannot be decoded", func() {
-		token, err := stkGen.stkSource.NewToken([]byte("foobar"))
+		token, err := cookieGen.cookieSource.NewToken([]byte("foobar"))
 		Expect(err).ToNot(HaveOccurred())
-		_, err = stkGen.DecodeToken(token)
+		_, err = cookieGen.DecodeToken(token)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -59,9 +59,9 @@ var _ = Describe("STK Generator", func() {
 		t, err := asn1.Marshal(token{Data: []byte("foobar")})
 		Expect(err).ToNot(HaveOccurred())
 		t = append(t, []byte("rest")...)
-		enc, err := stkGen.stkSource.NewToken(t)
+		enc, err := cookieGen.cookieSource.NewToken(t)
 		Expect(err).ToNot(HaveOccurred())
-		_, err = stkGen.DecodeToken(enc)
+		_, err = cookieGen.DecodeToken(enc)
 		Expect(err).To(MatchError("rest when unpacking token: 4"))
 	})
 
@@ -69,9 +69,9 @@ var _ = Describe("STK Generator", func() {
 	It("doesn't panic if a tokens has no data", func() {
 		t, err := asn1.Marshal(token{Data: []byte("")})
 		Expect(err).ToNot(HaveOccurred())
-		enc, err := stkGen.stkSource.NewToken(t)
+		enc, err := cookieGen.cookieSource.NewToken(t)
 		Expect(err).ToNot(HaveOccurred())
-		_, err = stkGen.DecodeToken(enc)
+		_, err = cookieGen.DecodeToken(enc)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
@@ -86,26 +86,26 @@ var _ = Describe("STK Generator", func() {
 			ip := net.ParseIP(addr)
 			Expect(ip).ToNot(BeNil())
 			raddr := &net.UDPAddr{IP: ip, Port: 1337}
-			token, err := stkGen.NewToken(raddr)
+			token, err := cookieGen.NewToken(raddr)
 			Expect(err).ToNot(HaveOccurred())
-			stk, err := stkGen.DecodeToken(token)
+			cookie, err := cookieGen.DecodeToken(token)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(stk.RemoteAddr).To(Equal(ip.String()))
-			// the time resolution of the STK is just 1 second
-			// if STK generation and this check happen in "different seconds", the difference will be between 1 and 2 seconds
-			Expect(stk.SentTime).To(BeTemporally("~", time.Now(), 2*time.Second))
+			Expect(cookie.RemoteAddr).To(Equal(ip.String()))
+			// the time resolution of the Cookie is just 1 second
+			// if Cookie generation and this check happen in "different seconds", the difference will be between 1 and 2 seconds
+			Expect(cookie.SentTime).To(BeTemporally("~", time.Now(), 2*time.Second))
 		}
 	})
 
 	It("uses the string representation an address that is not a UDP address", func() {
 		raddr := &net.TCPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 1337}
-		token, err := stkGen.NewToken(raddr)
+		token, err := cookieGen.NewToken(raddr)
 		Expect(err).ToNot(HaveOccurred())
-		stk, err := stkGen.DecodeToken(token)
+		cookie, err := cookieGen.DecodeToken(token)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(stk.RemoteAddr).To(Equal("192.168.13.37:1337"))
-		// the time resolution of the STK is just 1 second
-		// if STK generation and this check happen in "different seconds", the difference will be between 1 and 2 seconds
-		Expect(stk.SentTime).To(BeTemporally("~", time.Now(), 2*time.Second))
+		Expect(cookie.RemoteAddr).To(Equal("192.168.13.37:1337"))
+		// the time resolution of the Cookie is just 1 second
+		// if Cookie generation and this check happen in "different seconds", the difference will be between 1 and 2 seconds
+		Expect(cookie.SentTime).To(BeTemporally("~", time.Now(), 2*time.Second))
 	})
 })
