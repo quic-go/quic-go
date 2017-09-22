@@ -6,6 +6,15 @@ import (
 )
 
 var _ = Describe("Version", func() {
+	It("says if a version supports TLS", func() {
+		Expect(Version35.UsesTLS()).To(BeFalse())
+		Expect(Version36.UsesTLS()).To(BeFalse())
+		Expect(Version37.UsesTLS()).To(BeFalse())
+		Expect(Version38.UsesTLS()).To(BeFalse())
+		Expect(Version39.UsesTLS()).To(BeFalse())
+		Expect(VersionTLS.UsesTLS()).To(BeTrue())
+	})
+
 	It("converts tags to numbers", func() {
 		Expect(VersionTagToNumber('Q' + '1'<<8 + '2'<<16 + '3'<<24)).To(Equal(VersionNumber(123)))
 	})

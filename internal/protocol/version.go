@@ -26,6 +26,11 @@ var SupportedVersions = []VersionNumber{
 	Version35,
 }
 
+// UsesTLS says if this QUIC version uses TLS 1.3 for the handshake
+func (vn VersionNumber) UsesTLS() bool {
+	return vn == VersionTLS
+}
+
 // VersionNumberToTag maps version numbers ('32') to tags ('Q032')
 func VersionNumberToTag(vn VersionNumber) uint32 {
 	v := uint32(vn)

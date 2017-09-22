@@ -200,7 +200,7 @@ func (s *session) setup(
 		verifySourceAddr := func(clientAddr net.Addr, stk *STK) bool {
 			return s.config.AcceptSTK(clientAddr, stk)
 		}
-		if s.version == protocol.VersionTLS {
+		if s.version.UsesTLS() {
 			s.cryptoSetup, err = handshake.NewCryptoSetupTLS(
 				"",
 				s.perspective,
@@ -224,7 +224,7 @@ func (s *session) setup(
 		}
 	} else {
 		cryptoStream, _ := s.OpenStream()
-		if s.version == protocol.VersionTLS {
+		if s.version.UsesTLS() {
 			s.cryptoSetup, err = handshake.NewCryptoSetupTLS(
 				hostname,
 				s.perspective,
