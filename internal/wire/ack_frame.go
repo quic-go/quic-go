@@ -25,7 +25,7 @@ var (
 type AckFrame struct {
 	LargestAcked protocol.PacketNumber
 	LowestAcked  protocol.PacketNumber
-	AckRanges    []AckRange // has to be ordered. The ACK range with the highest FirstPacketNumber goes first, the ACK range with the lowest FirstPacketNumber goes last
+	AckRanges    []AckRange // has to be ordered. The highest ACK range goes first, the lowest ACK range goes last
 
 	// time when the LargestAcked was receiveid
 	// this field Will not be set for received ACKs frames
@@ -95,8 +95,8 @@ func ParseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 
 	if hasMissingRanges {
 		ackRange := AckRange{
-			FirstPacketNumber: protocol.PacketNumber(largestAcked-ackBlockLength) + 1,
-			LastPacketNumber:  frame.LargestAcked,
+			First: protocol.PacketNumber(largestAcked-ackBlockLength) + 1,
+			Last:  frame.LargestAcked,
 		}
 		frame.AckRanges = append(frame.AckRanges, ackRange)
 
@@ -117,14 +117,14 @@ func ParseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 			length := protocol.PacketNumber(ackBlockLength)
 
 			if inLongBlock {
-				frame.AckRanges[len(frame.AckRanges)-1].FirstPacketNumber -= protocol.PacketNumber(gap) + length
-				frame.AckRanges[len(frame.AckRanges)-1].LastPacketNumber -= protocol.PacketNumber(gap)
+				frame.AckRanges[len(frame.AckRanges)-1].First -= protocol.PacketNumber(gap) + length
+				frame.AckRanges[len(frame.AckRanges)-1].Last -= protocol.PacketNumber(gap)
 			} else {
 				lastRangeComplete = false
 				ackRange := AckRange{
-					LastPacketNumber: frame.AckRanges[len(frame.AckRanges)-1].FirstPacketNumber - protocol.PacketNumber(gap) - 1,
+					Last: frame.AckRanges[len(frame.AckRanges)-1].First - protocol.PacketNumber(gap) - 1,
 				}
-				ackRange.FirstPacketNumber = ackRange.LastPacketNumber - length + 1
+				ackRange.First = ackRange.Last - length + 1
 				frame.AckRanges = append(frame.AckRanges, ackRange)
 			}
 
@@ -135,13 +135,13 @@ func ParseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 			inLongBlock = (ackBlockLength == 0)
 		}
 
-		// if the last range was not complete, FirstPacketNumber and LastPacketNumber make no sense
+		// if the last range was not complete, First and Last make no sense
 		// remove the range from frame.AckRanges
 		if !lastRangeComplete {
 			frame.AckRanges = frame.AckRanges[:len(frame.AckRanges)-1]
 		}
 
-		frame.LowestAcked = frame.AckRanges[len(frame.AckRanges)-1].FirstPacketNumber
+		frame.LowestAcked = frame.AckRanges[len(frame.AckRanges)-1].First
 	} else {
 		if frame.LargestAcked == 0 {
 			frame.LowestAcked = 0
@@ -238,13 +238,13 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 	if !f.HasMissingRanges() {
 		firstAckBlockLength = f.LargestAcked - f.LowestAcked + 1
 	} else {
-		if f.LargestAcked != f.AckRanges[0].LastPacketNumber {
+		if f.LargestAcked != f.AckRanges[0].Last {
 			return errInconsistentAckLargestAcked
 		}
-		if f.LowestAcked != f.AckRanges[len(f.AckRanges)-1].FirstPacketNumber {
+		if f.LowestAcked != f.AckRanges[len(f.AckRanges)-1].First {
 			return errInconsistentAckLowestAcked
 		}
-		firstAckBlockLength = f.LargestAcked - f.AckRanges[0].FirstPacketNumber + 1
+		firstAckBlockLength = f.LargestAcked - f.AckRanges[0].First + 1
 		numRangesWritten++
 	}
 
@@ -264,8 +264,8 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 			continue
 		}
 
-		length := ackRange.LastPacketNumber - ackRange.FirstPacketNumber + 1
-		gap := f.AckRanges[i-1].FirstPacketNumber - ackRange.LastPacketNumber - 1
+		length := ackRange.Last - ackRange.First + 1
+		gap := f.AckRanges[i-1].First - ackRange.Last - 1
 
 		num := gap/0xFF + 1
 		if gap%0xFF == 0 {
@@ -361,13 +361,13 @@ func (f *AckFrame) validateAckRanges() bool {
 		return false
 	}
 
-	if f.AckRanges[0].LastPacketNumber != f.LargestAcked {
+	if f.AckRanges[0].Last != f.LargestAcked {
 		return false
 	}
 
 	// check the validity of every single ACK range
 	for _, ackRange := range f.AckRanges {
-		if ackRange.FirstPacketNumber > ackRange.LastPacketNumber {
+		if ackRange.First > ackRange.Last {
 			return false
 		}
 	}
@@ -378,10 +378,10 @@ func (f *AckFrame) validateAckRanges() bool {
 			continue
 		}
 		lastAckRange := f.AckRanges[i-1]
-		if lastAckRange.FirstPacketNumber <= ackRange.FirstPacketNumber {
+		if lastAckRange.First <= ackRange.First {
 			return false
 		}
-		if lastAckRange.FirstPacketNumber <= ackRange.LastPacketNumber+1 {
+		if lastAckRange.First <= ackRange.Last+1 {
 			return false
 		}
 	}
@@ -403,7 +403,7 @@ func (f *AckFrame) numWritableNackRanges() uint64 {
 		}
 
 		lastAckRange := f.AckRanges[i-1]
-		gap := lastAckRange.FirstPacketNumber - ackRange.LastPacketNumber - 1
+		gap := lastAckRange.First - ackRange.Last - 1
 		rangeLength := 1 + uint64(gap)/0xFF
 		if uint64(gap)%0xFF == 0 {
 			rangeLength--
@@ -424,7 +424,7 @@ func (f *AckFrame) getMissingSequenceNumberDeltaLen() protocol.PacketNumberLen {
 
 	if f.HasMissingRanges() {
 		for _, ackRange := range f.AckRanges {
-			rangeLength := ackRange.LastPacketNumber - ackRange.FirstPacketNumber + 1
+			rangeLength := ackRange.Last - ackRange.First + 1
 			if rangeLength > maxRangeLength {
 				maxRangeLength = rangeLength
 			}
@@ -455,7 +455,7 @@ func (f *AckFrame) AcksPacket(p protocol.PacketNumber) bool {
 	if f.HasMissingRanges() {
 		// TODO: this could be implemented as a binary search
 		for _, ackRange := range f.AckRanges {
-			if p >= ackRange.FirstPacketNumber && p <= ackRange.LastPacketNumber {
+			if p >= ackRange.First && p <= ackRange.Last {
 				return true
 			}
 		}

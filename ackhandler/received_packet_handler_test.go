@@ -210,8 +210,8 @@ var _ = Describe("receivedPacketHandler", func() {
 				Expect(ack.LargestAcked).To(Equal(protocol.PacketNumber(4)))
 				Expect(ack.LowestAcked).To(Equal(protocol.PacketNumber(1)))
 				Expect(ack.AckRanges).To(HaveLen(2))
-				Expect(ack.AckRanges[0]).To(Equal(wire.AckRange{FirstPacketNumber: 4, LastPacketNumber: 4}))
-				Expect(ack.AckRanges[1]).To(Equal(wire.AckRange{FirstPacketNumber: 1, LastPacketNumber: 1}))
+				Expect(ack.AckRanges[0]).To(Equal(wire.AckRange{First: 4, Last: 4}))
+				Expect(ack.AckRanges[1]).To(Equal(wire.AckRange{First: 1, Last: 1}))
 			})
 
 			It("accepts packets below the lower limit", func() {
