@@ -9,7 +9,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/lucas-clemente/quic-go/crypto"
+	"github.com/lucas-clemente/quic-go/internal/crypto"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/qerr"
@@ -26,13 +26,13 @@ type cryptoSetupServer struct {
 	connID               protocol.ConnectionID
 	remoteAddr           net.Addr
 	scfg                 *ServerConfig
-	stkGenerator         *STKGenerator
+	stkGenerator         *CookieGenerator
 	diversificationNonce []byte
 
 	version           protocol.VersionNumber
 	supportedVersions []protocol.VersionNumber
 
-	acceptSTKCallback func(net.Addr, *STK) bool
+	acceptSTKCallback func(net.Addr, *Cookie) bool
 
 	nullAEAD                    crypto.AEAD
 	secureAEAD                  crypto.AEAD
@@ -72,10 +72,10 @@ func NewCryptoSetup(
 	cryptoStream io.ReadWriter,
 	connectionParametersManager ConnectionParametersManager,
 	supportedVersions []protocol.VersionNumber,
-	acceptSTK func(net.Addr, *STK) bool,
+	acceptSTK func(net.Addr, *Cookie) bool,
 	aeadChanged chan<- protocol.EncryptionLevel,
 ) (CryptoSetup, error) {
-	stkGenerator, err := NewSTKGenerator()
+	stkGenerator, err := NewCookieGenerator()
 	if err != nil {
 		return nil, err
 	}

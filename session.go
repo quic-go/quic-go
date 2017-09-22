@@ -11,8 +11,8 @@ import (
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/congestion"
-	"github.com/lucas-clemente/quic-go/handshake"
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
+	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -197,8 +197,8 @@ func (s *session) setup(
 	if s.perspective == protocol.PerspectiveServer {
 		cryptoStream, _ := s.GetOrOpenStream(1)
 		_, _ = s.AcceptStream() // don't expose the crypto stream
-		verifySourceAddr := func(clientAddr net.Addr, stk *STK) bool {
-			return s.config.AcceptSTK(clientAddr, stk)
+		verifySourceAddr := func(clientAddr net.Addr, cookie *Cookie) bool {
+			return s.config.AcceptCookie(clientAddr, cookie)
 		}
 		if s.version == protocol.VersionTLS {
 			s.cryptoSetup, err = handshake.NewCryptoSetupTLS(
