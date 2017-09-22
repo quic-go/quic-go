@@ -349,6 +349,7 @@ var _ = Describe("Server", func() {
 			AcceptCookie:     acceptCookie,
 			HandshakeTimeout: 1337 * time.Hour,
 			IdleTimeout:      42 * time.Minute,
+			KeepAlive:        true,
 		}
 		ln, err := Listen(conn, &tls.Config{}, &config)
 		Expect(err).ToNot(HaveOccurred())
@@ -360,6 +361,7 @@ var _ = Describe("Server", func() {
 		Expect(server.config.HandshakeTimeout).To(Equal(1337 * time.Hour))
 		Expect(server.config.IdleTimeout).To(Equal(42 * time.Minute))
 		Expect(reflect.ValueOf(server.config.AcceptCookie)).To(Equal(reflect.ValueOf(acceptCookie)))
+		Expect(server.config.KeepAlive).To(BeTrue())
 	})
 
 	It("fills in default values if options are not set in the Config", func() {
@@ -370,6 +372,7 @@ var _ = Describe("Server", func() {
 		Expect(server.config.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
 		Expect(server.config.IdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
 		Expect(reflect.ValueOf(server.config.AcceptCookie)).To(Equal(reflect.ValueOf(defaultAcceptCookie)))
+		Expect(server.config.KeepAlive).To(BeFalse())
 	})
 
 	It("listens on a given address", func() {
