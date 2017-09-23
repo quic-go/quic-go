@@ -282,11 +282,12 @@ func (h *sentPacketHandler) detectLostPackets() {
 		}
 	}
 
-	if len(lostPackets) > 0 {
-		for _, p := range lostPackets {
-			h.queuePacketForRetransmission(p)
-			h.congestion.OnPacketLost(p.Value.PacketNumber, p.Value.Length, h.bytesInFlight)
-		}
+	for _, p := range lostPackets {
+		h.bytesInFlight -= p.Value.Length
+	}
+	for _, p := range lostPackets {
+		h.queuePacketForRetransmission(p)
+		h.congestion.OnPacketLost(p.Value.PacketNumber, p.Value.Length, h.bytesInFlight)
 	}
 }
 
@@ -374,7 +375,6 @@ func (h *sentPacketHandler) queueRTO(el *PacketElement) {
 
 func (h *sentPacketHandler) queuePacketForRetransmission(packetElement *PacketElement) {
 	packet := &packetElement.Value
-	h.bytesInFlight -= packet.Length
 	h.retransmissionQueue = append(h.retransmissionQueue, packet)
 	h.packetHistory.Remove(packetElement)
 	h.stopWaitingManager.QueuedRetransmissionForPacketNumber(packet.PacketNumber)
