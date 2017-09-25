@@ -52,7 +52,7 @@ type cryptoSetupClient struct {
 	aeadChanged          chan<- protocol.EncryptionLevel
 
 	requestConnIDTruncation bool
-	connectionParameters    ConnectionParametersManager
+	connectionParameters    *gquicConnectionParametersManager
 }
 
 var _ CryptoSetup = &cryptoSetupClient{}
@@ -73,7 +73,7 @@ func NewCryptoSetupClient(
 	aeadChanged chan<- protocol.EncryptionLevel,
 	negotiatedVersions []protocol.VersionNumber,
 ) (CryptoSetup, ConnectionParametersManager, error) {
-	cpm := NewConnectionParamatersManager(protocol.PerspectiveClient, version, params)
+	cpm := newGQUICConnectionParamatersManager(protocol.PerspectiveClient, version, params)
 	return &cryptoSetupClient{
 		hostname:                hostname,
 		connID:                  connID,

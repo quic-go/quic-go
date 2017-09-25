@@ -11,8 +11,8 @@ import (
 )
 
 var _ = Describe("ConnectionsParameterManager", func() {
-	var cpm *connectionParametersManager // a connectionParametersManager for a server
-	var cpmClient *connectionParametersManager
+	var cpm *gquicConnectionParametersManager // a connectionParametersManager for a server
+	var cpmClient *gquicConnectionParametersManager
 	const MB = 1 << 20
 	maxReceiveStreamFlowControlWindowServer := protocol.ByteCount(math.Floor(1.1 * MB))     // default is 1 MB
 	maxReceiveConnectionFlowControlWindowServer := protocol.ByteCount(math.Floor(1.5 * MB)) // default is 1.5 MB
@@ -20,7 +20,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 	maxReceiveConnectionFlowControlWindowClient := protocol.ByteCount(math.Floor(13 * MB))  // default is 15 MB
 	idleTimeout := 42 * time.Second
 	BeforeEach(func() {
-		cpm = NewConnectionParamatersManager(
+		cpm = newGQUICConnectionParamatersManager(
 			protocol.PerspectiveServer,
 			protocol.VersionWhatever,
 			&TransportParameters{
@@ -28,8 +28,8 @@ var _ = Describe("ConnectionsParameterManager", func() {
 				MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindowServer,
 				IdleTimeout:                           idleTimeout,
 			},
-		).(*connectionParametersManager)
-		cpmClient = NewConnectionParamatersManager(
+		)
+		cpmClient = newGQUICConnectionParamatersManager(
 			protocol.PerspectiveClient,
 			protocol.VersionWhatever,
 			&TransportParameters{
@@ -37,7 +37,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 				MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindowClient,
 				IdleTimeout:                           idleTimeout,
 			},
-		).(*connectionParametersManager)
+		)
 	})
 
 	Context("SHLO", func() {
@@ -139,7 +139,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 		It("errors when given an invalid value", func() {
 			values := map[Tag][]byte{TagTCID: {2, 0, 0}} // 1 byte too short
 			err := cpm.SetFromMap(values)
-			Expect(err).To(MatchError(ErrMalformedTag))
+			Expect(err).To(MatchError(errMalformedTag))
 		})
 	})
 
@@ -175,7 +175,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 		It("does not change the stream-level flow control window when given an invalid value", func() {
 			values := map[Tag][]byte{TagSFCW: {0xDE, 0xAD, 0xBE}} // 1 byte too short
 			err := cpm.SetFromMap(values)
-			Expect(err).To(MatchError(ErrMalformedTag))
+			Expect(err).To(MatchError(errMalformedTag))
 			Expect(cpm.GetSendStreamFlowControlWindow()).To(Equal(protocol.InitialStreamFlowControlWindow))
 		})
 
@@ -189,7 +189,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 		It("does not change the connection-level flow control window when given an invalid value", func() {
 			values := map[Tag][]byte{TagCFCW: {0xDE, 0xAD, 0xBE}} // 1 byte too short
 			err := cpm.SetFromMap(values)
-			Expect(err).To(MatchError(ErrMalformedTag))
+			Expect(err).To(MatchError(errMalformedTag))
 			Expect(cpm.GetSendStreamFlowControlWindow()).To(Equal(protocol.InitialConnectionFlowControlWindow))
 		})
 
@@ -205,7 +205,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 				TagSFCW: {0x13, 0x37, 0x13, 0x37},
 			}
 			err = cpm.SetFromMap(values)
-			Expect(err).To(MatchError(ErrFlowControlRenegotiationNotSupported))
+			Expect(err).To(MatchError(errFlowControlRenegotiationNotSupported))
 			Expect(cpm.GetSendStreamFlowControlWindow()).To(Equal(protocol.ByteCount(0xEFBEADDE)))
 			Expect(cpm.GetSendConnectionFlowControlWindow()).To(Equal(protocol.ByteCount(0xEFBEADDE)))
 		})
@@ -239,7 +239,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 				TagSFCW: {0xDE, 0xAD, 0xBE}, // 1 byte too short
 			}
 			err := cpm.SetFromMap(values)
-			Expect(err).To(MatchError(ErrMalformedTag))
+			Expect(err).To(MatchError(errMalformedTag))
 			Expect(cpm.GetIdleConnectionStateLifetime()).To(Equal(idleTimeout))
 		})
 
@@ -252,7 +252,7 @@ var _ = Describe("ConnectionsParameterManager", func() {
 		It("errors when given an invalid value", func() {
 			values := map[Tag][]byte{TagICSL: {2, 0, 0}} // 1 byte too short
 			err := cpm.SetFromMap(values)
-			Expect(err).To(MatchError(ErrMalformedTag))
+			Expect(err).To(MatchError(errMalformedTag))
 		})
 	})
 
@@ -260,13 +260,13 @@ var _ = Describe("ConnectionsParameterManager", func() {
 		It("errors when given an invalid max streams per connection value", func() {
 			values := map[Tag][]byte{TagMSPC: {2, 0, 0}} // 1 byte too short
 			err := cpm.SetFromMap(values)
-			Expect(err).To(MatchError(ErrMalformedTag))
+			Expect(err).To(MatchError(errMalformedTag))
 		})
 
 		It("errors when given an invalid max dynamic incoming streams per connection value", func() {
 			values := map[Tag][]byte{TagMIDS: {2, 0, 0}} // 1 byte too short
 			err := cpm.SetFromMap(values)
-			Expect(err).To(MatchError(ErrMalformedTag))
+			Expect(err).To(MatchError(errMalformedTag))
 		})
 
 		Context("outgoing connections", func() {

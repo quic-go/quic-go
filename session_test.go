@@ -143,15 +143,9 @@ func areSessionsRunning() bool {
 	return strings.Contains(b.String(), "quic-go.(*session).run")
 }
 
-type mockConnectionParametersManager struct {
-}
+type mockConnectionParametersManager struct{}
 
-func (m *mockConnectionParametersManager) SetFromMap(map[handshake.Tag][]byte) error {
-	panic("not implement")
-}
-func (m *mockConnectionParametersManager) GetHelloMap() (map[handshake.Tag][]byte, error) {
-	panic("not implement")
-}
+var _ handshake.ConnectionParametersManager = &mockConnectionParametersManager{}
 
 func (m *mockConnectionParametersManager) GetSendStreamFlowControlWindow() protocol.ByteCount {
 	return protocol.InitialStreamFlowControlWindow

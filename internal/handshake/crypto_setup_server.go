@@ -47,7 +47,7 @@ type cryptoSetupServer struct {
 
 	cryptoStream io.ReadWriter
 
-	connectionParameters ConnectionParametersManager
+	connectionParameters *gquicConnectionParametersManager
 
 	mutex sync.RWMutex
 }
@@ -79,7 +79,7 @@ func NewCryptoSetup(
 		return nil, nil, err
 	}
 
-	cpm := NewConnectionParamatersManager(protocol.PerspectiveServer, version, params)
+	cpm := newGQUICConnectionParamatersManager(protocol.PerspectiveServer, version, params)
 	return &cryptoSetupServer{
 		connID:               connID,
 		remoteAddr:           remoteAddr,

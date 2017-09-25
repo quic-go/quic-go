@@ -47,13 +47,14 @@ func NewCryptoSetupTLS(
 	}
 	mintConf.ServerName = hostname
 
+	// TODO: implement connection paramaters negotiation for TLS
 	return &cryptoSetupTLS{
 		perspective:   perspective,
 		mintConf:      mintConf,
 		nullAEAD:      crypto.NewNullAEAD(perspective, version),
 		keyDerivation: crypto.DeriveAESKeys,
 		aeadChanged:   aeadChanged,
-	}, NewConnectionParamatersManager(perspective, version, &TransportParameters{IdleTimeout: protocol.DefaultIdleTimeout}), nil
+	}, newGQUICConnectionParamatersManager(perspective, version, &TransportParameters{IdleTimeout: protocol.DefaultIdleTimeout}), nil
 }
 
 func (h *cryptoSetupTLS) HandleCryptoStream(cryptoStream io.ReadWriter) error {
