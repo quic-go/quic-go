@@ -214,7 +214,7 @@ func (c *client) establishSecureConnection() error {
 		if ev.err != nil {
 			return ev.err
 		}
-		if c.version.UsesTLS() && ev.encLevel != protocol.EncryptionSecure {
+		if !c.version.UsesTLS() && ev.encLevel != protocol.EncryptionSecure {
 			return fmt.Errorf("Client BUG: Expected encryption level to be secure, was %s", ev.encLevel)
 		}
 		return nil
