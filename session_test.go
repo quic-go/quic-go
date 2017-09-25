@@ -182,7 +182,7 @@ var _ = Describe("Session", func() {
 		var pSess Session
 		pSess, handshakeChan, err = newSession(
 			mconn,
-			protocol.Version35,
+			protocol.Version37,
 			0,
 			scfg,
 			nil,
@@ -234,7 +234,7 @@ var _ = Describe("Session", func() {
 			}
 			pSess, _, err := newSession(
 				mconn,
-				protocol.Version35,
+				protocol.Version37,
 				0,
 				scfg,
 				nil,
@@ -1706,7 +1706,7 @@ var _ = Describe("Client Session", func() {
 		sessP, _, err := newClientSession(
 			mconn,
 			"hostname",
-			protocol.Version35,
+			protocol.Version37,
 			0,
 			nil,
 			populateClientConfig(&Config{}),

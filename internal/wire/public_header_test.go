@@ -276,7 +276,7 @@ var _ = Describe("Public Header", func() {
 				PacketNumber:    2,
 				PacketNumberLen: protocol.PacketNumberLen6,
 			}
-			err := hdr.Write(b, protocol.Version35, protocol.PerspectiveServer)
+			err := hdr.Write(b, versionLittleEndian, protocol.PerspectiveServer)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b.Bytes()).To(Equal([]byte{0x38, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 2, 0, 0, 0, 0, 0}))
 		})
@@ -288,7 +288,7 @@ var _ = Describe("Public Header", func() {
 				PacketNumber:    0x1337,
 				PacketNumberLen: protocol.PacketNumberLen6,
 			}
-			err := hdr.Write(b, protocol.Version35, protocol.PerspectiveClient)
+			err := hdr.Write(b, versionLittleEndian, protocol.PerspectiveClient)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b.Bytes()).To(Equal([]byte{0x38, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x37, 0x13, 0, 0, 0, 0}))
 		})
@@ -316,18 +316,6 @@ var _ = Describe("Public Header", func() {
 			Expect(b.Bytes()).To(Equal([]byte{0x30, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0}))
 		})
 
-		It("writes proper v33 packets", func() {
-			b := &bytes.Buffer{}
-			hdr := PublicHeader{
-				ConnectionID:    0x4cfa9f9b668619f6,
-				PacketNumber:    1,
-				PacketNumberLen: protocol.PacketNumberLen1,
-			}
-			err := hdr.Write(b, protocol.Version35, protocol.PerspectiveServer)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(b.Bytes()).To(Equal([]byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x01}))
-		})
-
 		It("writes diversification nonces", func() {
 			b := &bytes.Buffer{}
 			hdr := PublicHeader{
@@ -336,7 +324,7 @@ var _ = Describe("Public Header", func() {
 				PacketNumberLen:      protocol.PacketNumberLen1,
 				DiversificationNonce: bytes.Repeat([]byte{1}, 32),
 			}
-			err := hdr.Write(b, protocol.Version35, protocol.PerspectiveServer)
+			err := hdr.Write(b, versionLittleEndian, protocol.PerspectiveServer)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b.Bytes()).To(Equal([]byte{
 				0x0c, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c,

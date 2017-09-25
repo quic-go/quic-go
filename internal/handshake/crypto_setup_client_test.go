@@ -199,9 +199,9 @@ var _ = Describe("Client Crypto Setup", func() {
 			})
 
 			It("detects a downgrade attack", func() {
-				cs.negotiatedVersions = []protocol.VersionNumber{protocol.Version36}
+				cs.negotiatedVersions = []protocol.VersionNumber{12}
 				b := &bytes.Buffer{}
-				utils.LittleEndian.WriteUint32(b, protocol.VersionNumberToTag(protocol.Version35))
+				utils.LittleEndian.WriteUint32(b, protocol.VersionNumberToTag(11))
 				Expect(cs.validateVersionList(b.Bytes())).To(BeFalse())
 			})
 

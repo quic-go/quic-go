@@ -224,7 +224,6 @@ var _ = Describe("Server Crypto Setup", func() {
 
 	Context("diversification nonce", func() {
 		BeforeEach(func() {
-			cs.version = protocol.Version35
 			cs.secureAEAD = &mockAEAD{}
 			cs.receivedForwardSecurePacket = false
 
