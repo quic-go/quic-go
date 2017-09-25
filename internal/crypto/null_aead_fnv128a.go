@@ -11,7 +11,6 @@ import (
 // nullAEAD handles not-yet encrypted packets
 type nullAEADFNV128a struct {
 	perspective protocol.Perspective
-	version     protocol.VersionNumber
 }
 
 var _ AEAD = &nullAEADFNV128a{}
@@ -25,12 +24,10 @@ func (n *nullAEADFNV128a) Open(dst, src []byte, packetNumber protocol.PacketNumb
 	hash := fnv128a.New()
 	hash.Write(associatedData)
 	hash.Write(src[12:])
-	if n.version >= protocol.Version37 {
-		if n.perspective == protocol.PerspectiveServer {
-			hash.Write([]byte("Client"))
-		} else {
-			hash.Write([]byte("Server"))
-		}
+	if n.perspective == protocol.PerspectiveServer {
+		hash.Write([]byte("Client"))
+	} else {
+		hash.Write([]byte("Server"))
 	}
 	testHigh, testLow := hash.Sum128()
 
@@ -55,12 +52,10 @@ func (n *nullAEADFNV128a) Seal(dst, src []byte, packetNumber protocol.PacketNumb
 	hash.Write(associatedData)
 	hash.Write(src)
 
-	if n.version >= protocol.Version37 {
-		if n.perspective == protocol.PerspectiveServer {
-			hash.Write([]byte("Server"))
-		} else {
-			hash.Write([]byte("Client"))
-		}
+	if n.perspective == protocol.PerspectiveServer {
+		hash.Write([]byte("Server"))
+	} else {
+		hash.Write([]byte("Client"))
 	}
 
 	high, low := hash.Sum128()

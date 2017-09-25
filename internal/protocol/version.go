@@ -5,8 +5,7 @@ type VersionNumber int
 
 // The version numbers, making grepping easier
 const (
-	Version36 VersionNumber = 36 + iota
-	Version37
+	Version37 VersionNumber = 37 + iota
 	Version38
 	Version39
 	VersionTLS         VersionNumber = 101
@@ -21,7 +20,6 @@ var SupportedVersions = []VersionNumber{
 	Version39,
 	Version38,
 	Version37,
-	Version36,
 }
 
 // UsesTLS says if this QUIC version uses TLS 1.3 for the handshake
