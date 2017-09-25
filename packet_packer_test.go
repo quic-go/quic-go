@@ -61,8 +61,8 @@ var _ = Describe("Packet packer", func() {
 	)
 
 	BeforeEach(func() {
-		mockCpm := mocks.NewMockConnectionParametersManager(mockCtrl)
-		mockCpm.EXPECT().TruncateConnectionID().Return(false).AnyTimes()
+		mockPn := mocks.NewMockParamsNegotiator(mockCtrl)
+		mockPn.EXPECT().TruncateConnectionID().Return(false).AnyTimes()
 
 		cryptoStream = &stream{}
 
@@ -73,7 +73,7 @@ var _ = Describe("Packet packer", func() {
 
 		packer = &packetPacker{
 			cryptoSetup:           &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure},
-			connectionParameters:  mockCpm,
+			connParams:            mockPn,
 			connectionID:          0x1337,
 			packetNumberGenerator: newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
 			streamFramer:          streamFramer,

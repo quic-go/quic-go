@@ -52,7 +52,7 @@ type cryptoSetupClient struct {
 	aeadChanged          chan<- protocol.EncryptionLevel
 
 	requestConnIDTruncation bool
-	connectionParameters    *gquicConnectionParametersManager
+	params                  *paramsNegotiatorGQUIC
 }
 
 var _ CryptoSetup = &cryptoSetupClient{}
@@ -72,14 +72,14 @@ func NewCryptoSetupClient(
 	params *TransportParameters,
 	aeadChanged chan<- protocol.EncryptionLevel,
 	negotiatedVersions []protocol.VersionNumber,
-) (CryptoSetup, ConnectionParametersManager, error) {
-	cpm := newGQUICConnectionParamatersManager(protocol.PerspectiveClient, version, params)
+) (CryptoSetup, ParamsNegotiator, error) {
+	pn := newParamsNegotiatorGQUIC(protocol.PerspectiveClient, version, params)
 	return &cryptoSetupClient{
 		hostname:                hostname,
 		connID:                  connID,
 		version:                 version,
 		certManager:             crypto.NewCertManager(tlsConfig),
-		connectionParameters:    cpm,
+		params:                  pn,
 		requestConnIDTruncation: params.RequestConnectionIDTruncation,
 		keyDerivation:           crypto.DeriveQuicCryptoAESKeys,
 		keyExchange:             getEphermalKEX,
@@ -87,7 +87,7 @@ func NewCryptoSetupClient(
 		aeadChanged:             aeadChanged,
 		negotiatedVersions:      negotiatedVersions,
 		divNonceChan:            make(chan []byte),
-	}, cpm, nil
+	}, pn, nil
 }
 
 func (h *cryptoSetupClient) HandleCryptoStream(stream io.ReadWriter) error {
@@ -264,7 +264,7 @@ func (h *cryptoSetupClient) handleSHLOMessage(cryptoData map[Tag][]byte) error {
 		return err
 	}
 
-	err = h.connectionParameters.SetFromMap(cryptoData)
+	err = h.params.SetFromMap(cryptoData)
 	if err != nil {
 		return qerr.InvalidCryptoMessageParameter
 	}
@@ -405,7 +405,7 @@ func (h *cryptoSetupClient) sendCHLO() error {
 }
 
 func (h *cryptoSetupClient) getTags() (map[Tag][]byte, error) {
-	tags, err := h.connectionParameters.GetHelloMap()
+	tags, err := h.params.GetHelloMap()
 	if err != nil {
 		return nil, err
 	}

@@ -8,9 +8,9 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
-// ConnectionParametersManager negotiates and stores the connection parameters.
-// A ConnectionParametersManager can be used for a server as well as a client.
-type ConnectionParametersManager interface {
+// The ParamsNegotiator negotiates and stores the connection parameters.
+// It can be used for a server as well as a client.
+type ParamsNegotiator interface {
 	GetSendStreamFlowControlWindow() protocol.ByteCount
 	GetSendConnectionFlowControlWindow() protocol.ByteCount
 	GetReceiveStreamFlowControlWindow() protocol.ByteCount
@@ -31,7 +31,7 @@ type ConnectionParametersManager interface {
 // For the client:
 // 1. call GetHelloMap to get the values to send in a CHLO
 // 2. call SetFromMap with the values received in the SHLO
-type baseConnectionParametersManager struct {
+type paramsNegotiatorBase struct {
 	mutex sync.RWMutex
 
 	version     protocol.VersionNumber
@@ -51,7 +51,7 @@ type baseConnectionParametersManager struct {
 	maxReceiveConnectionFlowControlWindow  protocol.ByteCount
 }
 
-func (h *baseConnectionParametersManager) init(params *TransportParameters) {
+func (h *paramsNegotiatorBase) init(params *TransportParameters) {
 	h.sendStreamFlowControlWindow = protocol.InitialStreamFlowControlWindow         // can only be changed by the client
 	h.sendConnectionFlowControlWindow = protocol.InitialConnectionFlowControlWindow // can only be changed by the client
 	h.receiveStreamFlowControlWindow = protocol.ReceiveStreamFlowControlWindow
@@ -69,62 +69,62 @@ func (h *baseConnectionParametersManager) init(params *TransportParameters) {
 	}
 }
 
-func (h *baseConnectionParametersManager) negotiateMaxStreamsPerConnection(clientValue uint32) uint32 {
+func (h *paramsNegotiatorBase) negotiateMaxStreamsPerConnection(clientValue uint32) uint32 {
 	return utils.MinUint32(clientValue, protocol.MaxStreamsPerConnection)
 }
 
-func (h *baseConnectionParametersManager) negotiateMaxIncomingDynamicStreamsPerConnection(clientValue uint32) uint32 {
+func (h *paramsNegotiatorBase) negotiateMaxIncomingDynamicStreamsPerConnection(clientValue uint32) uint32 {
 	return utils.MinUint32(clientValue, protocol.MaxIncomingDynamicStreamsPerConnection)
 }
 
-func (h *baseConnectionParametersManager) negotiateIdleConnectionStateLifetime(clientValue time.Duration) time.Duration {
+func (h *paramsNegotiatorBase) negotiateIdleConnectionStateLifetime(clientValue time.Duration) time.Duration {
 	return utils.MinDuration(clientValue, h.idleConnectionStateLifetime)
 }
 
 // GetSendStreamFlowControlWindow gets the size of the stream-level flow control window for sending data
-func (h *baseConnectionParametersManager) GetSendStreamFlowControlWindow() protocol.ByteCount {
+func (h *paramsNegotiatorBase) GetSendStreamFlowControlWindow() protocol.ByteCount {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	return h.sendStreamFlowControlWindow
 }
 
 // GetSendConnectionFlowControlWindow gets the size of the stream-level flow control window for sending data
-func (h *baseConnectionParametersManager) GetSendConnectionFlowControlWindow() protocol.ByteCount {
+func (h *paramsNegotiatorBase) GetSendConnectionFlowControlWindow() protocol.ByteCount {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	return h.sendConnectionFlowControlWindow
 }
 
-func (h *baseConnectionParametersManager) GetReceiveStreamFlowControlWindow() protocol.ByteCount {
+func (h *paramsNegotiatorBase) GetReceiveStreamFlowControlWindow() protocol.ByteCount {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	return h.receiveStreamFlowControlWindow
 }
 
 // GetMaxReceiveStreamFlowControlWindow gets the maximum size of the stream-level flow control window for sending data
-func (h *baseConnectionParametersManager) GetMaxReceiveStreamFlowControlWindow() protocol.ByteCount {
+func (h *paramsNegotiatorBase) GetMaxReceiveStreamFlowControlWindow() protocol.ByteCount {
 	return h.maxReceiveStreamFlowControlWindow
 }
 
 // GetReceiveConnectionFlowControlWindow gets the size of the stream-level flow control window for receiving data
-func (h *baseConnectionParametersManager) GetReceiveConnectionFlowControlWindow() protocol.ByteCount {
+func (h *paramsNegotiatorBase) GetReceiveConnectionFlowControlWindow() protocol.ByteCount {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	return h.receiveConnectionFlowControlWindow
 }
 
-func (h *baseConnectionParametersManager) GetMaxReceiveConnectionFlowControlWindow() protocol.ByteCount {
+func (h *paramsNegotiatorBase) GetMaxReceiveConnectionFlowControlWindow() protocol.ByteCount {
 	return h.maxReceiveConnectionFlowControlWindow
 }
 
-func (h *baseConnectionParametersManager) GetMaxOutgoingStreams() uint32 {
+func (h *paramsNegotiatorBase) GetMaxOutgoingStreams() uint32 {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 
 	return h.maxIncomingDynamicStreamsPerConnection
 }
 
-func (h *baseConnectionParametersManager) GetMaxIncomingStreams() uint32 {
+func (h *paramsNegotiatorBase) GetMaxIncomingStreams() uint32 {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 
@@ -132,13 +132,13 @@ func (h *baseConnectionParametersManager) GetMaxIncomingStreams() uint32 {
 	return utils.MaxUint32(uint32(maxStreams)+protocol.MaxStreamsMinimumIncrement, uint32(float64(maxStreams)*protocol.MaxStreamsMultiplier))
 }
 
-func (h *baseConnectionParametersManager) GetIdleConnectionStateLifetime() time.Duration {
+func (h *paramsNegotiatorBase) GetIdleConnectionStateLifetime() time.Duration {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	return h.idleConnectionStateLifetime
 }
 
-func (h *baseConnectionParametersManager) TruncateConnectionID() bool {
+func (h *paramsNegotiatorBase) TruncateConnectionID() bool {
 	if h.perspective == protocol.PerspectiveClient {
 		return false
 	}

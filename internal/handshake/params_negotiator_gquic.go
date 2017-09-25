@@ -9,21 +9,21 @@ import (
 	"github.com/lucas-clemente/quic-go/qerr"
 )
 
-var _ ConnectionParametersManager = &baseConnectionParametersManager{}
-
 // errMalformedTag is returned when the tag value cannot be read
 var (
 	errMalformedTag                         = qerr.Error(qerr.InvalidCryptoMessageParameter, "malformed Tag value")
 	errFlowControlRenegotiationNotSupported = qerr.Error(qerr.InvalidCryptoMessageParameter, "renegotiation of flow control parameters not supported")
 )
 
-type gquicConnectionParametersManager struct {
-	baseConnectionParametersManager
+type paramsNegotiatorGQUIC struct {
+	paramsNegotiatorBase
 }
 
-// newConnectionParamatersManager creates a new connection parameters manager
-func newGQUICConnectionParamatersManager(pers protocol.Perspective, v protocol.VersionNumber, params *TransportParameters) *gquicConnectionParametersManager {
-	h := &gquicConnectionParametersManager{}
+var _ ParamsNegotiator = &paramsNegotiatorGQUIC{}
+
+// newParamsNegotiatorGQUIC creates a new connection parameters manager
+func newParamsNegotiatorGQUIC(pers protocol.Perspective, v protocol.VersionNumber, params *TransportParameters) *paramsNegotiatorGQUIC {
+	h := &paramsNegotiatorGQUIC{}
 	h.perspective = pers
 	h.version = v
 	h.init(params)
@@ -31,7 +31,7 @@ func newGQUICConnectionParamatersManager(pers protocol.Perspective, v protocol.V
 }
 
 // SetFromMap reads all params.
-func (h *gquicConnectionParametersManager) SetFromMap(params map[Tag][]byte) error {
+func (h *paramsNegotiatorGQUIC) SetFromMap(params map[Tag][]byte) error {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
@@ -94,7 +94,7 @@ func (h *gquicConnectionParametersManager) SetFromMap(params map[Tag][]byte) err
 }
 
 // GetHelloMap gets all parameters needed for the Hello message.
-func (h *gquicConnectionParametersManager) GetHelloMap() (map[Tag][]byte, error) {
+func (h *paramsNegotiatorGQUIC) GetHelloMap() (map[Tag][]byte, error) {
 	sfcw := bytes.NewBuffer([]byte{})
 	utils.LittleEndian.WriteUint32(sfcw, uint32(h.GetReceiveStreamFlowControlWindow()))
 	cfcw := bytes.NewBuffer([]byte{})

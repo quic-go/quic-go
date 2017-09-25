@@ -47,7 +47,7 @@ type cryptoSetupServer struct {
 
 	cryptoStream io.ReadWriter
 
-	connectionParameters *gquicConnectionParametersManager
+	params *paramsNegotiatorGQUIC
 
 	mutex sync.RWMutex
 }
@@ -73,28 +73,28 @@ func NewCryptoSetup(
 	supportedVersions []protocol.VersionNumber,
 	acceptSTK func(net.Addr, *Cookie) bool,
 	aeadChanged chan<- protocol.EncryptionLevel,
-) (CryptoSetup, ConnectionParametersManager, error) {
+) (CryptoSetup, ParamsNegotiator, error) {
 	stkGenerator, err := NewCookieGenerator()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	cpm := newGQUICConnectionParamatersManager(protocol.PerspectiveServer, version, params)
+	pn := newParamsNegotiatorGQUIC(protocol.PerspectiveServer, version, params)
 	return &cryptoSetupServer{
-		connID:               connID,
-		remoteAddr:           remoteAddr,
-		version:              version,
-		supportedVersions:    supportedVersions,
-		scfg:                 scfg,
-		stkGenerator:         stkGenerator,
-		keyDerivation:        crypto.DeriveQuicCryptoAESKeys,
-		keyExchange:          getEphermalKEX,
-		nullAEAD:             crypto.NewNullAEAD(protocol.PerspectiveServer, version),
-		connectionParameters: cpm,
-		acceptSTKCallback:    acceptSTK,
-		sentSHLO:             make(chan struct{}),
-		aeadChanged:          aeadChanged,
-	}, cpm, nil
+		connID:            connID,
+		remoteAddr:        remoteAddr,
+		version:           version,
+		supportedVersions: supportedVersions,
+		scfg:              scfg,
+		stkGenerator:      stkGenerator,
+		keyDerivation:     crypto.DeriveQuicCryptoAESKeys,
+		keyExchange:       getEphermalKEX,
+		nullAEAD:          crypto.NewNullAEAD(protocol.PerspectiveServer, version),
+		params:            pn,
+		acceptSTKCallback: acceptSTK,
+		sentSHLO:          make(chan struct{}),
+		aeadChanged:       aeadChanged,
+	}, pn, nil
 }
 
 // HandleCryptoStream reads and writes messages on the crypto stream
@@ -418,12 +418,11 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 		return nil, err
 	}
 
-	err = h.connectionParameters.SetFromMap(cryptoData)
-	if err != nil {
+	if err := h.params.SetFromMap(cryptoData); err != nil {
 		return nil, err
 	}
 
-	replyMap, err := h.connectionParameters.GetHelloMap()
+	replyMap, err := h.params.GetHelloMap()
 	if err != nil {
 		return nil, err
 	}

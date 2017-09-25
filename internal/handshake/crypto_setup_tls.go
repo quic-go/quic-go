@@ -40,7 +40,7 @@ func NewCryptoSetupTLS(
 	version protocol.VersionNumber,
 	tlsConfig *tls.Config,
 	aeadChanged chan<- protocol.EncryptionLevel,
-) (CryptoSetup, ConnectionParametersManager, error) {
+) (CryptoSetup, ParamsNegotiator, error) {
 	mintConf, err := tlsToMintConfig(tlsConfig, perspective)
 	if err != nil {
 		return nil, nil, err
@@ -54,7 +54,7 @@ func NewCryptoSetupTLS(
 		nullAEAD:      crypto.NewNullAEAD(perspective, version),
 		keyDerivation: crypto.DeriveAESKeys,
 		aeadChanged:   aeadChanged,
-	}, newGQUICConnectionParamatersManager(perspective, version, &TransportParameters{IdleTimeout: protocol.DefaultIdleTimeout}), nil
+	}, newParamsNegotiatorGQUIC(perspective, version, &TransportParameters{IdleTimeout: protocol.DefaultIdleTimeout}), nil
 }
 
 func (h *cryptoSetupTLS) HandleCryptoStream(cryptoStream io.ReadWriter) error {

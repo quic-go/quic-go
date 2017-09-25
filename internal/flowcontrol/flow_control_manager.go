@@ -13,8 +13,8 @@ import (
 )
 
 type flowControlManager struct {
-	connectionParameters handshake.ConnectionParametersManager
-	rttStats             *congestion.RTTStats
+	connParams handshake.ParamsNegotiator
+	rttStats   *congestion.RTTStats
 
 	streamFlowController map[protocol.StreamID]*flowController
 	connFlowController   *flowController
@@ -26,12 +26,12 @@ var _ FlowControlManager = &flowControlManager{}
 var errMapAccess = errors.New("Error accessing the flowController map.")
 
 // NewFlowControlManager creates a new flow control manager
-func NewFlowControlManager(connectionParameters handshake.ConnectionParametersManager, rttStats *congestion.RTTStats) FlowControlManager {
+func NewFlowControlManager(connParams handshake.ParamsNegotiator, rttStats *congestion.RTTStats) FlowControlManager {
 	return &flowControlManager{
-		connectionParameters: connectionParameters,
+		connParams:           connParams,
 		rttStats:             rttStats,
 		streamFlowController: make(map[protocol.StreamID]*flowController),
-		connFlowController:   newFlowController(0, false, connectionParameters, rttStats),
+		connFlowController:   newFlowController(0, false, connParams, rttStats),
 	}
 }
 
@@ -45,7 +45,7 @@ func (f *flowControlManager) NewStream(streamID protocol.StreamID, contributesTo
 		return
 	}
 
-	f.streamFlowController[streamID] = newFlowController(streamID, contributesToConnection, f.connectionParameters, f.rttStats)
+	f.streamFlowController[streamID] = newFlowController(streamID, contributesToConnection, f.connParams, f.rttStats)
 }
 
 // RemoveStream removes a closed stream from flow control

@@ -15,12 +15,12 @@ var _ = Describe("Flow Control Manager", func() {
 	var fcm *flowControlManager
 
 	BeforeEach(func() {
-		mockCpm := mocks.NewMockConnectionParametersManager(mockCtrl)
-		mockCpm.EXPECT().GetReceiveStreamFlowControlWindow().AnyTimes().Return(protocol.ByteCount(100))
-		mockCpm.EXPECT().GetReceiveConnectionFlowControlWindow().AnyTimes().Return(protocol.ByteCount(200))
-		mockCpm.EXPECT().GetMaxReceiveStreamFlowControlWindow().AnyTimes().Return(protocol.MaxByteCount)
-		mockCpm.EXPECT().GetMaxReceiveConnectionFlowControlWindow().AnyTimes().Return(protocol.MaxByteCount)
-		fcm = NewFlowControlManager(mockCpm, &congestion.RTTStats{}).(*flowControlManager)
+		mockPn := mocks.NewMockParamsNegotiator(mockCtrl)
+		mockPn.EXPECT().GetReceiveStreamFlowControlWindow().AnyTimes().Return(protocol.ByteCount(100))
+		mockPn.EXPECT().GetReceiveConnectionFlowControlWindow().AnyTimes().Return(protocol.ByteCount(200))
+		mockPn.EXPECT().GetMaxReceiveStreamFlowControlWindow().AnyTimes().Return(protocol.MaxByteCount)
+		mockPn.EXPECT().GetMaxReceiveConnectionFlowControlWindow().AnyTimes().Return(protocol.MaxByteCount)
+		fcm = NewFlowControlManager(mockPn, &congestion.RTTStats{}).(*flowControlManager)
 	})
 
 	It("creates a connection level flow controller", func() {

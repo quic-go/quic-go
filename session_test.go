@@ -143,36 +143,34 @@ func areSessionsRunning() bool {
 	return strings.Contains(b.String(), "quic-go.(*session).run")
 }
 
-type mockConnectionParametersManager struct{}
+type mockParamsNegotiator struct{}
 
-var _ handshake.ConnectionParametersManager = &mockConnectionParametersManager{}
+var _ handshake.ParamsNegotiator = &mockParamsNegotiator{}
 
-func (m *mockConnectionParametersManager) GetSendStreamFlowControlWindow() protocol.ByteCount {
+func (m *mockParamsNegotiator) GetSendStreamFlowControlWindow() protocol.ByteCount {
 	return protocol.InitialStreamFlowControlWindow
 }
-func (m *mockConnectionParametersManager) GetSendConnectionFlowControlWindow() protocol.ByteCount {
+func (m *mockParamsNegotiator) GetSendConnectionFlowControlWindow() protocol.ByteCount {
 	return protocol.InitialConnectionFlowControlWindow
 }
-func (m *mockConnectionParametersManager) GetReceiveStreamFlowControlWindow() protocol.ByteCount {
+func (m *mockParamsNegotiator) GetReceiveStreamFlowControlWindow() protocol.ByteCount {
 	return protocol.ReceiveStreamFlowControlWindow
 }
-func (m *mockConnectionParametersManager) GetMaxReceiveStreamFlowControlWindow() protocol.ByteCount {
+func (m *mockParamsNegotiator) GetMaxReceiveStreamFlowControlWindow() protocol.ByteCount {
 	return protocol.DefaultMaxReceiveStreamFlowControlWindowServer
 }
-func (m *mockConnectionParametersManager) GetReceiveConnectionFlowControlWindow() protocol.ByteCount {
+func (m *mockParamsNegotiator) GetReceiveConnectionFlowControlWindow() protocol.ByteCount {
 	return protocol.ReceiveConnectionFlowControlWindow
 }
-func (m *mockConnectionParametersManager) GetMaxReceiveConnectionFlowControlWindow() protocol.ByteCount {
+func (m *mockParamsNegotiator) GetMaxReceiveConnectionFlowControlWindow() protocol.ByteCount {
 	return protocol.DefaultMaxReceiveConnectionFlowControlWindowServer
 }
-func (m *mockConnectionParametersManager) GetMaxOutgoingStreams() uint32 { return 100 }
-func (m *mockConnectionParametersManager) GetMaxIncomingStreams() uint32 { return 100 }
-func (m *mockConnectionParametersManager) GetIdleConnectionStateLifetime() time.Duration {
+func (m *mockParamsNegotiator) GetMaxOutgoingStreams() uint32 { return 100 }
+func (m *mockParamsNegotiator) GetMaxIncomingStreams() uint32 { return 100 }
+func (m *mockParamsNegotiator) GetIdleConnectionStateLifetime() time.Duration {
 	return time.Hour
 }
-func (m *mockConnectionParametersManager) TruncateConnectionID() bool { return false }
-
-var _ handshake.ConnectionParametersManager = &mockConnectionParametersManager{}
+func (m *mockParamsNegotiator) TruncateConnectionID() bool { return false }
 
 var _ = Describe("Session", func() {
 	var (
@@ -197,9 +195,9 @@ var _ = Describe("Session", func() {
 			_ []protocol.VersionNumber,
 			_ func(net.Addr, *Cookie) bool,
 			aeadChangedP chan<- protocol.EncryptionLevel,
-		) (handshake.CryptoSetup, handshake.ConnectionParametersManager, error) {
+		) (handshake.CryptoSetup, handshake.ParamsNegotiator, error) {
 			aeadChanged = aeadChangedP
-			return cryptoSetup, &mockConnectionParametersManager{}, nil
+			return cryptoSetup, &mockParamsNegotiator{}, nil
 		}
 
 		mconn = newMockConnection()
@@ -221,7 +219,7 @@ var _ = Describe("Session", func() {
 		sess = pSess.(*session)
 		Expect(sess.streamsMap.openStreams).To(BeEmpty()) // the crypto stream is opened in session.run()
 
-		sess.connectionParameters = &mockConnectionParametersManager{}
+		sess.connParams = &mockParamsNegotiator{}
 	})
 
 	AfterEach(func() {
@@ -247,9 +245,9 @@ var _ = Describe("Session", func() {
 				_ []protocol.VersionNumber,
 				cookieFunc func(net.Addr, *Cookie) bool,
 				_ chan<- protocol.EncryptionLevel,
-			) (handshake.CryptoSetup, handshake.ConnectionParametersManager, error) {
+			) (handshake.CryptoSetup, handshake.ParamsNegotiator, error) {
 				cookieVerify = cookieFunc
-				return cryptoSetup, &mockConnectionParametersManager{}, nil
+				return cryptoSetup, &mockParamsNegotiator{}, nil
 			}
 
 			conf := populateServerConfig(&Config{})
@@ -1559,11 +1557,11 @@ var _ = Describe("Session", func() {
 		It("does not use ICSL before handshake", func() {
 			defer sess.Close(nil)
 			sess.lastNetworkActivityTime = time.Now().Add(-time.Minute)
-			mockCpm := mocks.NewMockConnectionParametersManager(mockCtrl)
-			mockCpm.EXPECT().GetIdleConnectionStateLifetime().Return(9999 * time.Second).AnyTimes()
-			mockCpm.EXPECT().TruncateConnectionID().Return(false).AnyTimes()
-			sess.connectionParameters = mockCpm
-			sess.packer.connectionParameters = mockCpm
+			mockPn := mocks.NewMockParamsNegotiator(mockCtrl)
+			mockPn.EXPECT().GetIdleConnectionStateLifetime().Return(9999 * time.Second).AnyTimes()
+			mockPn.EXPECT().TruncateConnectionID().Return(false).AnyTimes()
+			sess.connParams = mockPn
+			sess.packer.connParams = mockPn
 			// the handshake timeout is irrelevant here, since it depends on the time the session was created,
 			// and not on the last network activity
 			done := make(chan struct{})
@@ -1576,12 +1574,12 @@ var _ = Describe("Session", func() {
 
 		It("uses ICSL after handshake", func(done Done) {
 			close(aeadChanged)
-			mockCpm := mocks.NewMockConnectionParametersManager(mockCtrl)
-			mockCpm.EXPECT().GetIdleConnectionStateLifetime().Return(0 * time.Second)
-			mockCpm.EXPECT().TruncateConnectionID().Return(false).AnyTimes()
-			sess.connectionParameters = mockCpm
-			sess.packer.connectionParameters = mockCpm
-			mockCpm.EXPECT().GetIdleConnectionStateLifetime().Return(0 * time.Second).AnyTimes()
+			mockPn := mocks.NewMockParamsNegotiator(mockCtrl)
+			mockPn.EXPECT().GetIdleConnectionStateLifetime().Return(0 * time.Second)
+			mockPn.EXPECT().TruncateConnectionID().Return(false).AnyTimes()
+			sess.connParams = mockPn
+			sess.packer.connParams = mockPn
+			mockPn.EXPECT().GetIdleConnectionStateLifetime().Return(0 * time.Second).AnyTimes()
 			err := sess.run() // Would normally not return
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
 			Expect(mconn.written).To(Receive(ContainSubstring("No recent network activity.")))
@@ -1630,8 +1628,8 @@ var _ = Describe("Session", func() {
 
 	Context("counting streams", func() {
 		It("errors when too many streams are opened", func() {
-			mockCpm := mocks.NewMockConnectionParametersManager(mockCtrl)
-			mockCpm.EXPECT().GetMaxIncomingStreams().Return(uint32(10)).AnyTimes()
+			mockPn := mocks.NewMockParamsNegotiator(mockCtrl)
+			mockPn.EXPECT().GetMaxIncomingStreams().Return(uint32(10)).AnyTimes()
 			for i := 0; i < 10; i++ {
 				_, err := sess.GetOrOpenStream(protocol.StreamID(i*2 + 1))
 				Expect(err).NotTo(HaveOccurred())
@@ -1641,8 +1639,8 @@ var _ = Describe("Session", func() {
 		})
 
 		It("does not error when many streams are opened and closed", func() {
-			mockCpm := mocks.NewMockConnectionParametersManager(mockCtrl)
-			mockCpm.EXPECT().GetMaxIncomingStreams().Return(uint32(10)).AnyTimes()
+			mockPn := mocks.NewMockParamsNegotiator(mockCtrl)
+			mockPn.EXPECT().GetMaxIncomingStreams().Return(uint32(10)).AnyTimes()
 			for i := 2; i <= 1000; i++ {
 				s, err := sess.GetOrOpenStream(protocol.StreamID(i*2 + 1))
 				Expect(err).NotTo(HaveOccurred())
@@ -1732,9 +1730,9 @@ var _ = Describe("Client Session", func() {
 			_ *handshake.TransportParameters,
 			aeadChangedP chan<- protocol.EncryptionLevel,
 			_ []protocol.VersionNumber,
-		) (handshake.CryptoSetup, handshake.ConnectionParametersManager, error) {
+		) (handshake.CryptoSetup, handshake.ParamsNegotiator, error) {
 			aeadChanged = aeadChangedP
-			return cryptoSetup, &mockConnectionParametersManager{}, nil
+			return cryptoSetup, &mockParamsNegotiator{}, nil
 		}
 
 		mconn = newMockConnection()

@@ -100,7 +100,7 @@ type session struct {
 	// it receives at most 3 handshake events: 2 when the encryption level changes, and one error
 	handshakeChan chan<- handshakeEvent
 
-	connectionParameters handshake.ConnectionParametersManager
+	connParams handshake.ParamsNegotiator
 
 	lastRcvdPacketNumber protocol.PacketNumber
 	// Used to calculate the next packet number from the truncated wire
@@ -194,7 +194,7 @@ func (s *session) setup(
 			return s.config.AcceptCookie(clientAddr, cookie)
 		}
 		if s.version.UsesTLS() {
-			s.cryptoSetup, s.connectionParameters, err = handshake.NewCryptoSetupTLS(
+			s.cryptoSetup, s.connParams, err = handshake.NewCryptoSetupTLS(
 				"",
 				s.perspective,
 				s.version,
@@ -202,7 +202,7 @@ func (s *session) setup(
 				aeadChanged,
 			)
 		} else {
-			s.cryptoSetup, s.connectionParameters, err = newCryptoSetup(
+			s.cryptoSetup, s.connParams, err = newCryptoSetup(
 				s.connectionID,
 				s.conn.RemoteAddr(),
 				s.version,
@@ -215,7 +215,7 @@ func (s *session) setup(
 		}
 	} else {
 		if s.version.UsesTLS() {
-			s.cryptoSetup, s.connectionParameters, err = handshake.NewCryptoSetupTLS(
+			s.cryptoSetup, s.connParams, err = handshake.NewCryptoSetupTLS(
 				hostname,
 				s.perspective,
 				s.version,
@@ -224,7 +224,7 @@ func (s *session) setup(
 			)
 		} else {
 			transportParams.RequestConnectionIDTruncation = s.config.RequestConnectionIDTruncation
-			s.cryptoSetup, s.connectionParameters, err = newCryptoSetupClient(
+			s.cryptoSetup, s.connParams, err = newCryptoSetupClient(
 				hostname,
 				s.connectionID,
 				s.version,
@@ -239,12 +239,12 @@ func (s *session) setup(
 		return nil, nil, err
 	}
 
-	s.flowControlManager = flowcontrol.NewFlowControlManager(s.connectionParameters, s.rttStats)
-	s.streamsMap = newStreamsMap(s.newStream, s.perspective, s.connectionParameters)
+	s.flowControlManager = flowcontrol.NewFlowControlManager(s.connParams, s.rttStats)
+	s.streamsMap = newStreamsMap(s.newStream, s.perspective, s.connParams)
 	s.streamFramer = newStreamFramer(s.streamsMap, s.flowControlManager)
 	s.packer = newPacketPacker(s.connectionID,
 		s.cryptoSetup,
-		s.connectionParameters,
+		s.connParams,
 		s.streamFramer,
 		s.perspective,
 		s.version,
@@ -389,7 +389,7 @@ func (s *session) maybeResetTimer() {
 }
 
 func (s *session) idleTimeout() time.Duration {
-	return s.connectionParameters.GetIdleConnectionStateLifetime()
+	return s.connParams.GetIdleConnectionStateLifetime()
 }
 
 func (s *session) handlePacketImpl(p *receivedPacket) error {

@@ -13,8 +13,8 @@ import (
 type streamsMap struct {
 	mutex sync.RWMutex
 
-	perspective          protocol.Perspective
-	connectionParameters handshake.ConnectionParametersManager
+	connParams  handshake.ParamsNegotiator
+	perspective protocol.Perspective
 
 	streams map[protocol.StreamID]*stream
 	// needed for round-robin scheduling
@@ -42,13 +42,13 @@ var (
 	errMapAccess = errors.New("streamsMap: Error accessing the streams map")
 )
 
-func newStreamsMap(newStream newStreamLambda, pers protocol.Perspective, connectionParameters handshake.ConnectionParametersManager) *streamsMap {
+func newStreamsMap(newStream newStreamLambda, pers protocol.Perspective, connParams handshake.ParamsNegotiator) *streamsMap {
 	sm := streamsMap{
-		perspective:          pers,
-		streams:              map[protocol.StreamID]*stream{},
-		openStreams:          make([]protocol.StreamID, 0),
-		newStream:            newStream,
-		connectionParameters: connectionParameters,
+		perspective: pers,
+		streams:     map[protocol.StreamID]*stream{},
+		openStreams: make([]protocol.StreamID, 0),
+		newStream:   newStream,
+		connParams:  connParams,
 	}
 	sm.nextStreamOrErrCond.L = &sm.mutex
 	sm.openStreamOrErrCond.L = &sm.mutex
@@ -125,7 +125,7 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 }
 
 func (m *streamsMap) openRemoteStream(id protocol.StreamID) (*stream, error) {
-	if m.numIncomingStreams >= m.connectionParameters.GetMaxIncomingStreams() {
+	if m.numIncomingStreams >= m.connParams.GetMaxIncomingStreams() {
 		return nil, qerr.TooManyOpenStreams
 	}
 	if id+protocol.MaxNewStreamIDDelta < m.highestStreamOpenedByPeer {
@@ -149,7 +149,7 @@ func (m *streamsMap) openRemoteStream(id protocol.StreamID) (*stream, error) {
 
 func (m *streamsMap) openStreamImpl() (*stream, error) {
 	id := m.nextStream
-	if m.numOutgoingStreams >= m.connectionParameters.GetMaxOutgoingStreams() {
+	if m.numOutgoingStreams >= m.connParams.GetMaxOutgoingStreams() {
 		return nil, qerr.TooManyOpenStreams
 	}
 

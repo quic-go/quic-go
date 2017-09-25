@@ -440,7 +440,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			shloMap[TagICSL] = []byte{3, 0, 0, 0} // 3 seconds
 			err := cs.handleSHLOMessage(shloMap)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(cs.connectionParameters.GetIdleConnectionStateLifetime()).To(Equal(3 * time.Second))
+			Expect(cs.params.GetIdleConnectionStateLifetime()).To(Equal(3 * time.Second))
 		})
 
 		It("errors if it can't read a connection parameter", func() {
@@ -499,12 +499,12 @@ var _ = Describe("Client Crypto Setup", func() {
 		})
 
 		It("adds the tags returned from the connectionParametersManager to the CHLO", func() {
-			cpmTags, err := cs.connectionParameters.GetHelloMap()
+			pnTags, err := cs.params.GetHelloMap()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(cpmTags).ToNot(BeEmpty())
+			Expect(pnTags).ToNot(BeEmpty())
 			tags, err := cs.getTags()
 			Expect(err).ToNot(HaveOccurred())
-			for t := range cpmTags {
+			for t := range pnTags {
 				Expect(tags).To(HaveKey(t))
 			}
 		})
