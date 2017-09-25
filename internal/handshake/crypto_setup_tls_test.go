@@ -34,33 +34,42 @@ var _ = Describe("TLS Crypto Setup", func() {
 	var (
 		cs          *cryptoSetupTLS
 		aeadChanged chan protocol.EncryptionLevel
+
+		mintControllerConstructor = newMintController
 	)
 
 	BeforeEach(func() {
 		aeadChanged = make(chan protocol.EncryptionLevel, 2)
-		csInt, err := NewCryptoSetupTLS(
+		csInt, _, err := NewCryptoSetupTLS(
 			"",
 			protocol.PerspectiveServer,
 			protocol.VersionTLS,
 			testdata.GetTLSConfig(),
-			nil,
 			aeadChanged,
 		)
 		Expect(err).ToNot(HaveOccurred())
 		cs = csInt.(*cryptoSetupTLS)
 	})
 
+	AfterEach(func() {
+		newMintController = mintControllerConstructor
+	})
+
 	It("errors when the handshake fails", func() {
 		alert := mint.AlertBadRecordMAC
-		cs.conn = &fakeMintController{result: alert}
-		err := cs.HandleCryptoStream()
+		newMintController = func(*mint.Conn) crypto.MintController {
+			return &fakeMintController{result: alert}
+		}
+		err := cs.HandleCryptoStream(nil)
 		Expect(err).To(MatchError(fmt.Errorf("TLS handshake error: %s (Alert %d)", alert.String(), alert)))
 	})
 
 	It("derives keys", func() {
-		cs.conn = &fakeMintController{result: mint.AlertNoAlert}
+		newMintController = func(*mint.Conn) crypto.MintController {
+			return &fakeMintController{result: mint.AlertNoAlert}
+		}
 		cs.keyDerivation = mockKeyDerivation
-		err := cs.HandleCryptoStream()
+		err := cs.HandleCryptoStream(nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionForwardSecure)))
 		Expect(aeadChanged).To(BeClosed())
@@ -70,9 +79,11 @@ var _ = Describe("TLS Crypto Setup", func() {
 		var foobarFNVSigned []byte // a "foobar", FNV signed
 
 		doHandshake := func() {
-			cs.conn = &fakeMintController{result: mint.AlertNoAlert}
+			newMintController = func(*mint.Conn) crypto.MintController {
+				return &fakeMintController{result: mint.AlertNoAlert}
+			}
 			cs.keyDerivation = mockKeyDerivation
-			err := cs.HandleCryptoStream()
+			err := cs.HandleCryptoStream(nil)
 			Expect(err).ToNot(HaveOccurred())
 		}
 

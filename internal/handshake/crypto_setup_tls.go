@@ -22,12 +22,15 @@ type cryptoSetupTLS struct {
 	keyDerivation KeyDerivationFunction
 
 	mintConf *mint.Config
-	conn     crypto.MintController
 
 	nullAEAD crypto.AEAD
 	aead     crypto.AEAD
 
 	aeadChanged chan<- protocol.EncryptionLevel
+}
+
+var newMintController = func(conn *mint.Conn) crypto.MintController {
+	return &mintController{conn}
 }
 
 // NewCryptoSetupTLS creates a new CryptoSetup instance for a server
@@ -36,37 +39,37 @@ func NewCryptoSetupTLS(
 	perspective protocol.Perspective,
 	version protocol.VersionNumber,
 	tlsConfig *tls.Config,
-	cryptoStream io.ReadWriter,
 	aeadChanged chan<- protocol.EncryptionLevel,
-) (CryptoSetup, error) {
+) (CryptoSetup, ConnectionParametersManager, error) {
 	mintConf, err := tlsToMintConfig(tlsConfig, perspective)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	mintConf.ServerName = hostname
-	var conn *mint.Conn
-	if perspective == protocol.PerspectiveServer {
-		conn = mint.Server(&fakeConn{cryptoStream}, mintConf)
-	} else {
-		conn = mint.Client(&fakeConn{cryptoStream}, mintConf)
-	}
+
 	return &cryptoSetupTLS{
 		perspective:   perspective,
 		mintConf:      mintConf,
-		conn:          &mintController{conn},
 		nullAEAD:      crypto.NewNullAEAD(perspective, version),
 		keyDerivation: crypto.DeriveAESKeys,
 		aeadChanged:   aeadChanged,
-	}, nil
+	}, NewConnectionParamatersManager(perspective, version, &TransportParameters{IdleTimeout: protocol.DefaultIdleTimeout}), nil
 }
 
-func (h *cryptoSetupTLS) HandleCryptoStream() error {
-	alert := h.conn.Handshake()
-	if alert != mint.AlertNoAlert {
+func (h *cryptoSetupTLS) HandleCryptoStream(cryptoStream io.ReadWriter) error {
+	var conn *mint.Conn
+	if h.perspective == protocol.PerspectiveServer {
+		conn = mint.Server(&fakeConn{cryptoStream}, h.mintConf)
+	} else {
+		conn = mint.Client(&fakeConn{cryptoStream}, h.mintConf)
+	}
+	mc := newMintController(conn)
+
+	if alert := mc.Handshake(); alert != mint.AlertNoAlert {
 		return fmt.Errorf("TLS handshake error: %s (Alert %d)", alert.String(), alert)
 	}
 
-	aead, err := h.keyDerivation(h.conn, h.perspective)
+	aead, err := h.keyDerivation(mc, h.perspective)
 	if err != nil {
 		return err
 	}

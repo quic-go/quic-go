@@ -66,9 +66,7 @@ var (
 func NewConnectionParamatersManager(
 	pers protocol.Perspective,
 	v protocol.VersionNumber,
-	maxReceiveStreamFlowControlWindow protocol.ByteCount,
-	maxReceiveConnectionFlowControlWindow protocol.ByteCount,
-	idleTimeout time.Duration,
+	params *TransportParameters,
 ) ConnectionParametersManager {
 	h := &connectionParametersManager{
 		perspective:                           pers,
@@ -77,11 +75,11 @@ func NewConnectionParamatersManager(
 		sendConnectionFlowControlWindow:       protocol.InitialConnectionFlowControlWindow, // can only be changed by the client
 		receiveStreamFlowControlWindow:        protocol.ReceiveStreamFlowControlWindow,
 		receiveConnectionFlowControlWindow:    protocol.ReceiveConnectionFlowControlWindow,
-		maxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindow,
-		maxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindow,
+		maxReceiveStreamFlowControlWindow:     params.MaxReceiveStreamFlowControlWindow,
+		maxReceiveConnectionFlowControlWindow: params.MaxReceiveConnectionFlowControlWindow,
 	}
 
-	h.idleConnectionStateLifetime = idleTimeout
+	h.idleConnectionStateLifetime = params.IdleTimeout
 	if h.perspective == protocol.PerspectiveServer {
 		h.maxStreamsPerConnection = protocol.MaxStreamsPerConnection                // this is the value negotiated based on what the client sent
 		h.maxIncomingDynamicStreamsPerConnection = protocol.MaxStreamsPerConnection // "incoming" seen from the client's perspective

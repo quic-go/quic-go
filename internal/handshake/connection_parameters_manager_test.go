@@ -23,16 +23,20 @@ var _ = Describe("ConnectionsParameterManager", func() {
 		cpm = NewConnectionParamatersManager(
 			protocol.PerspectiveServer,
 			protocol.VersionWhatever,
-			maxReceiveStreamFlowControlWindowServer,
-			maxReceiveConnectionFlowControlWindowServer,
-			idleTimeout,
+			&TransportParameters{
+				MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindowServer,
+				MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindowServer,
+				IdleTimeout:                           idleTimeout,
+			},
 		).(*connectionParametersManager)
 		cpmClient = NewConnectionParamatersManager(
 			protocol.PerspectiveClient,
 			protocol.VersionWhatever,
-			maxReceiveStreamFlowControlWindowClient,
-			maxReceiveConnectionFlowControlWindowClient,
-			idleTimeout,
+			&TransportParameters{
+				MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindowClient,
+				MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindowClient,
+				IdleTimeout:                           idleTimeout,
+			},
 		).(*connectionParametersManager)
 	})
 

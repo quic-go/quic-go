@@ -180,69 +180,57 @@ func (s *session) setup(
 	s.sessionCreationTime = now
 
 	s.rttStats = &congestion.RTTStats{}
-	s.connectionParameters = handshake.NewConnectionParamatersManager(
-		s.perspective,
-		s.version,
-		protocol.ByteCount(s.config.MaxReceiveStreamFlowControlWindow),
-		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),
-		s.config.IdleTimeout,
-	)
+	transportParams := &handshake.TransportParameters{
+		MaxReceiveStreamFlowControlWindow:     protocol.ByteCount(s.config.MaxReceiveStreamFlowControlWindow),
+		MaxReceiveConnectionFlowControlWindow: protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),
+		IdleTimeout:                           s.config.IdleTimeout,
+	}
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats)
-	s.flowControlManager = flowcontrol.NewFlowControlManager(s.connectionParameters, s.rttStats)
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.version)
-	s.streamsMap = newStreamsMap(s.newStream, s.perspective, s.connectionParameters)
-	s.streamFramer = newStreamFramer(s.streamsMap, s.flowControlManager)
 
 	var err error
 	if s.perspective == protocol.PerspectiveServer {
-		cryptoStream, _ := s.GetOrOpenStream(1)
-		_, _ = s.AcceptStream() // don't expose the crypto stream
 		verifySourceAddr := func(clientAddr net.Addr, cookie *Cookie) bool {
 			return s.config.AcceptCookie(clientAddr, cookie)
 		}
 		if s.version.UsesTLS() {
-			s.cryptoSetup, err = handshake.NewCryptoSetupTLS(
+			s.cryptoSetup, s.connectionParameters, err = handshake.NewCryptoSetupTLS(
 				"",
 				s.perspective,
 				s.version,
 				tlsConf,
-				cryptoStream,
 				aeadChanged,
 			)
 		} else {
-			s.cryptoSetup, err = newCryptoSetup(
+			s.cryptoSetup, s.connectionParameters, err = newCryptoSetup(
 				s.connectionID,
 				s.conn.RemoteAddr(),
 				s.version,
 				scfg,
-				cryptoStream,
-				s.connectionParameters,
+				transportParams,
 				s.config.Versions,
 				verifySourceAddr,
 				aeadChanged,
 			)
 		}
 	} else {
-		cryptoStream, _ := s.OpenStream()
 		if s.version.UsesTLS() {
-			s.cryptoSetup, err = handshake.NewCryptoSetupTLS(
+			s.cryptoSetup, s.connectionParameters, err = handshake.NewCryptoSetupTLS(
 				hostname,
 				s.perspective,
 				s.version,
 				tlsConf,
-				cryptoStream,
 				aeadChanged,
 			)
 		} else {
-			s.cryptoSetup, err = newCryptoSetupClient(
+			transportParams.RequestConnectionIDTruncation = s.config.RequestConnectionIDTruncation
+			s.cryptoSetup, s.connectionParameters, err = newCryptoSetupClient(
 				hostname,
 				s.connectionID,
 				s.version,
-				cryptoStream,
 				tlsConf,
-				s.connectionParameters,
+				transportParams,
 				aeadChanged,
-				&handshake.TransportParameters{RequestConnectionIDTruncation: s.config.RequestConnectionIDTruncation},
 				negotiatedVersions,
 			)
 		}
@@ -251,6 +239,9 @@ func (s *session) setup(
 		return nil, nil, err
 	}
 
+	s.flowControlManager = flowcontrol.NewFlowControlManager(s.connectionParameters, s.rttStats)
+	s.streamsMap = newStreamsMap(s.newStream, s.perspective, s.connectionParameters)
+	s.streamFramer = newStreamFramer(s.streamsMap, s.flowControlManager)
 	s.packer = newPacketPacker(s.connectionID,
 		s.cryptoSetup,
 		s.connectionParameters,
@@ -266,8 +257,16 @@ func (s *session) setup(
 // run the session main loop
 func (s *session) run() error {
 	// Start the crypto stream handler
+	var cryptoStream Stream
+	if s.perspective == protocol.PerspectiveServer {
+		cryptoStream, _ = s.GetOrOpenStream(1)
+		_, _ = s.AcceptStream() // don't expose the crypto stream
+	} else {
+		cryptoStream, _ = s.OpenStream()
+	}
+
 	go func() {
-		if err := s.cryptoSetup.HandleCryptoStream(); err != nil {
+		if err := s.cryptoSetup.HandleCryptoStream(cryptoStream); err != nil {
 			s.Close(err)
 		}
 	}()

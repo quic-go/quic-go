@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"io"
 	"math"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
@@ -32,7 +33,7 @@ type mockCryptoSetup struct {
 
 var _ handshake.CryptoSetup = &mockCryptoSetup{}
 
-func (m *mockCryptoSetup) HandleCryptoStream() error {
+func (m *mockCryptoSetup) HandleCryptoStream(io.ReadWriter) error {
 	return m.handleErr
 }
 func (m *mockCryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error) {
