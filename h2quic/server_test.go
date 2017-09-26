@@ -2,22 +2,25 @@ package h2quic
 
 import (
 	"bytes"
+	"context"
+	"crypto/tls"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"os"
-	"runtime"
+	"strconv"
+	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 
 	quic "github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/qerr"
-	"github.com/lucas-clemente/quic-go/testdata"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -31,6 +34,8 @@ type mockSession struct {
 	streamsToOpen       []quic.Stream
 	blockOpenStreamSync bool
 	streamOpenErr       error
+	ctx                 context.Context
+	ctxCancel           context.CancelFunc
 }
 
 func (s *mockSession) GetOrOpenStream(id protocol.StreamID) (quic.Stream, error) {
@@ -54,6 +59,7 @@ func (s *mockSession) OpenStreamSync() (quic.Stream, error) {
 func (s *mockSession) Close(e error) error {
 	s.closed = true
 	s.closedWithError = e
+	s.ctxCancel()
 	return nil
 }
 func (s *mockSession) LocalAddr() net.Addr {
@@ -62,13 +68,16 @@ func (s *mockSession) LocalAddr() net.Addr {
 func (s *mockSession) RemoteAddr() net.Addr {
 	return &net.UDPAddr{IP: []byte{127, 0, 0, 1}, Port: 42}
 }
-func (s *mockSession) WaitUntilClosed() { panic("not implemented") }
+func (s *mockSession) Context() context.Context {
+	return s.ctx
+}
 
 var _ = Describe("H2 server", func() {
 	var (
-		s          *Server
-		session    *mockSession
-		dataStream *mockStream
+		s                  *Server
+		session            *mockSession
+		dataStream         *mockStream
+		origQuicListenAddr = quicListenAddr
 	)
 
 	BeforeEach(func() {
@@ -80,6 +89,12 @@ var _ = Describe("H2 server", func() {
 		dataStream = newMockStream(0)
 		close(dataStream.unblockRead)
 		session = &mockSession{dataStream: dataStream}
+		session.ctx, session.ctxCancel = context.WithCancel(context.Background())
+		origQuicListenAddr = quicListenAddr
+	})
+
+	AfterEach(func() {
+		quicListenAddr = origQuicListenAddr
 	})
 
 	Context("handling requests", func() {
@@ -238,6 +253,29 @@ var _ = Describe("H2 server", func() {
 			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
 			Expect(err).To(MatchError("InvalidHeadersStreamData: expected a header frame"))
 		})
+
+		It("Cancels the request context when the datstream is closed", func() {
+			var handlerCalled bool
+			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer GinkgoRecover()
+				err := r.Context().Err()
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(Equal("context canceled"))
+				handlerCalled = true
+			})
+			headerStream.dataToRead.Write([]byte{
+				0x0, 0x0, 0x11, 0x1, 0x5, 0x0, 0x0, 0x0, 0x5,
+				// Taken from https://http2.github.io/http2-spec/compression.html#request.examples.with.huffman.coding
+				0x82, 0x86, 0x84, 0x41, 0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff,
+			})
+			dataStream.Close()
+			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(func() bool { return handlerCalled }).Should(BeTrue())
+			Expect(dataStream.remoteClosed).To(BeTrue())
+			Expect(dataStream.reset).To(BeFalse())
+		})
+
 	})
 
 	It("handles the header stream", func() {
@@ -317,10 +355,22 @@ var _ = Describe("H2 server", func() {
 	})
 
 	Context("setting http headers", func() {
-		expected := http.Header{
-			"Alt-Svc":            {`quic=":443"; ma=2592000; v="37,36,35"`},
-			"Alternate-Protocol": {`443:quic`},
+		var expected http.Header
+
+		getExpectedHeader := func(versions []protocol.VersionNumber) http.Header {
+			var versionsAsString []string
+			for _, v := range versions {
+				versionsAsString = append(versionsAsString, strconv.Itoa(int(v)))
+			}
+			return http.Header{
+				"Alt-Svc": {fmt.Sprintf(`quic=":443"; ma=2592000; v="%s"`, strings.Join(versionsAsString, ","))},
+			}
 		}
+
+		BeforeEach(func() {
+			Expect(getExpectedHeader([]protocol.VersionNumber{99, 90, 9})).To(Equal(http.Header{"Alt-Svc": {`quic=":443"; ma=2592000; v="99,90,9"`}}))
+			expected = getExpectedHeader(protocol.SupportedVersions)
+		})
 
 		It("sets proper headers with numeric port", func() {
 			s.Server.Addr = ":443"
@@ -380,8 +430,7 @@ var _ = Describe("H2 server", func() {
 		})
 
 		AfterEach(func() {
-			err := s.Close()
-			Expect(err).NotTo(HaveOccurred())
+			Expect(s.Close()).To(Succeed())
 		})
 
 		It("may only be called once", func() {
@@ -399,8 +448,19 @@ var _ = Describe("H2 server", func() {
 			Expect(err).To(MatchError("ListenAndServe may only be called once"))
 			err = s.Close()
 			Expect(err).NotTo(HaveOccurred())
-
 		}, 0.5)
+
+		It("uses the quic.Config to start the quic server", func() {
+			conf := &quic.Config{HandshakeTimeout: time.Nanosecond}
+			var receivedConf *quic.Config
+			quicListenAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.Listener, error) {
+				receivedConf = config
+				return nil, errors.New("listen err")
+			}
+			s.QuicConfig = conf
+			go s.ListenAndServe()
+			Eventually(func() *quic.Config { return receivedConf }).Should(Equal(conf))
+		})
 	})
 
 	Context("ListenAndServeTLS", func() {
@@ -436,31 +496,13 @@ var _ = Describe("H2 server", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("at least errors in global ListenAndServeQUIC", func() {
-		// It's quite hard to test this, since we cannot properly shutdown the server
-		// once it's started. So, we open a socket on the same port before the test,
-		// so that ListenAndServeQUIC definitely fails. This way we know it at least
-		// created a socket on the proper address :)
-		const addr = "127.0.0.1:4826"
-		udpAddr, err := net.ResolveUDPAddr("udp", addr)
-		Expect(err).NotTo(HaveOccurred())
-		c, err := net.ListenUDP("udp", udpAddr)
-		Expect(err).NotTo(HaveOccurred())
-		defer c.Close()
-		fullpem, privkey := testdata.GetCertificatePaths()
-		err = ListenAndServeQUIC(addr, fullpem, privkey, nil)
-		// Check that it's an EADDRINUSE
-		Expect(err).ToNot(BeNil())
-		opErr, ok := err.(*net.OpError)
-		Expect(ok).To(BeTrue())
-		syscallErr, ok := opErr.Err.(*os.SyscallError)
-		Expect(ok).To(BeTrue())
-		if runtime.GOOS == "windows" {
-			// for some reason, Windows return a different error number, corresponding to an WSAEADDRINUSE error
-			// see https://msdn.microsoft.com/en-us/library/windows/desktop/ms681391(v=vs.85).aspx
-			Expect(syscallErr.Err).To(Equal(syscall.Errno(0x2740)))
-		} else {
-			Expect(syscallErr.Err).To(MatchError(syscall.EADDRINUSE))
+	It("errors when listening fails", func() {
+		testErr := errors.New("listen error")
+		quicListenAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.Listener, error) {
+			return nil, testErr
 		}
+		fullpem, privkey := testdata.GetCertificatePaths()
+		err := ListenAndServeQUIC("", fullpem, privkey, nil)
+		Expect(err).To(MatchError(testErr))
 	})
 })

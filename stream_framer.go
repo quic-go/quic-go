@@ -1,10 +1,10 @@
 package quic
 
 import (
-	"github.com/lucas-clemente/quic-go/flowcontrol"
-	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 type streamFramer struct {
@@ -12,8 +12,8 @@ type streamFramer struct {
 
 	flowControlManager flowcontrol.FlowControlManager
 
-	retransmissionQueue []*frames.StreamFrame
-	blockedFrameQueue   []*frames.BlockedFrame
+	retransmissionQueue []*wire.StreamFrame
+	blockedFrameQueue   []*wire.BlockedFrame
 }
 
 func newStreamFramer(streamsMap *streamsMap, flowControlManager flowcontrol.FlowControlManager) *streamFramer {
@@ -23,16 +23,16 @@ func newStreamFramer(streamsMap *streamsMap, flowControlManager flowcontrol.Flow
 	}
 }
 
-func (f *streamFramer) AddFrameForRetransmission(frame *frames.StreamFrame) {
+func (f *streamFramer) AddFrameForRetransmission(frame *wire.StreamFrame) {
 	f.retransmissionQueue = append(f.retransmissionQueue, frame)
 }
 
-func (f *streamFramer) PopStreamFrames(maxLen protocol.ByteCount) []*frames.StreamFrame {
+func (f *streamFramer) PopStreamFrames(maxLen protocol.ByteCount) []*wire.StreamFrame {
 	fs, currentLen := f.maybePopFramesForRetransmission(maxLen)
 	return append(fs, f.maybePopNormalFrames(maxLen-currentLen)...)
 }
 
-func (f *streamFramer) PopBlockedFrame() *frames.BlockedFrame {
+func (f *streamFramer) PopBlockedFrame() *wire.BlockedFrame {
 	if len(f.blockedFrameQueue) == 0 {
 		return nil
 	}
@@ -53,12 +53,12 @@ func (f *streamFramer) HasCryptoStreamFrame() bool {
 
 // TODO(lclemente): This is somewhat duplicate with the normal path for generating frames.
 // TODO(#657): Flow control
-func (f *streamFramer) PopCryptoStreamFrame(maxLen protocol.ByteCount) *frames.StreamFrame {
+func (f *streamFramer) PopCryptoStreamFrame(maxLen protocol.ByteCount) *wire.StreamFrame {
 	if !f.HasCryptoStreamFrame() {
 		return nil
 	}
 	cs, _ := f.streamsMap.GetOrOpenStream(1)
-	frame := &frames.StreamFrame{
+	frame := &wire.StreamFrame{
 		StreamID: 1,
 		Offset:   cs.writeOffset,
 	}
@@ -67,7 +67,7 @@ func (f *streamFramer) PopCryptoStreamFrame(maxLen protocol.ByteCount) *frames.S
 	return frame
 }
 
-func (f *streamFramer) maybePopFramesForRetransmission(maxLen protocol.ByteCount) (res []*frames.StreamFrame, currentLen protocol.ByteCount) {
+func (f *streamFramer) maybePopFramesForRetransmission(maxLen protocol.ByteCount) (res []*wire.StreamFrame, currentLen protocol.ByteCount) {
 	for len(f.retransmissionQueue) > 0 {
 		frame := f.retransmissionQueue[0]
 		frame.DataLenPresent = true
@@ -93,8 +93,8 @@ func (f *streamFramer) maybePopFramesForRetransmission(maxLen protocol.ByteCount
 	return
 }
 
-func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []*frames.StreamFrame) {
-	frame := &frames.StreamFrame{DataLenPresent: true}
+func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []*wire.StreamFrame) {
+	frame := &wire.StreamFrame{DataLenPresent: true}
 	var currentLen protocol.ByteCount
 
 	fn := func(s *stream) (bool, error) {
@@ -146,10 +146,10 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 		// Finally, check if we are now FC blocked and should queue a BLOCKED frame
 		if f.flowControlManager.RemainingConnectionWindowSize() == 0 {
 			// We are now connection-level FC blocked
-			f.blockedFrameQueue = append(f.blockedFrameQueue, &frames.BlockedFrame{StreamID: 0})
+			f.blockedFrameQueue = append(f.blockedFrameQueue, &wire.BlockedFrame{StreamID: 0})
 		} else if !frame.FinBit && sendWindowSize-frame.DataLen() == 0 {
 			// We are now stream-level FC blocked
-			f.blockedFrameQueue = append(f.blockedFrameQueue, &frames.BlockedFrame{StreamID: s.StreamID()})
+			f.blockedFrameQueue = append(f.blockedFrameQueue, &wire.BlockedFrame{StreamID: s.StreamID()})
 		}
 
 		res = append(res, frame)
@@ -159,7 +159,7 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 			return false, nil
 		}
 
-		frame = &frames.StreamFrame{DataLenPresent: true}
+		frame = &wire.StreamFrame{DataLenPresent: true}
 		return true, nil
 	}
 
@@ -169,7 +169,7 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 }
 
 // maybeSplitOffFrame removes the first n bytes and returns them as a separate frame. If n >= len(frame), nil is returned and nothing is modified.
-func maybeSplitOffFrame(frame *frames.StreamFrame, n protocol.ByteCount) *frames.StreamFrame {
+func maybeSplitOffFrame(frame *wire.StreamFrame, n protocol.ByteCount) *wire.StreamFrame {
 	if n >= frame.DataLen() {
 		return nil
 	}
@@ -179,7 +179,7 @@ func maybeSplitOffFrame(frame *frames.StreamFrame, n protocol.ByteCount) *frames
 		frame.Offset += n
 	}()
 
-	return &frames.StreamFrame{
+	return &wire.StreamFrame{
 		FinBit:         false,
 		StreamID:       frame.StreamID,
 		Offset:         frame.Offset,

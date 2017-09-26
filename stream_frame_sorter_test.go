@@ -3,9 +3,9 @@ package quic
 import (
 	"bytes"
 
-	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -32,7 +32,7 @@ var _ = Describe("StreamFrame sorter", func() {
 
 	Context("Push", func() {
 		It("inserts and pops a single frame", func() {
-			f := &frames.StreamFrame{
+			f := &wire.StreamFrame{
 				Offset: 0,
 				Data:   []byte("foobar"),
 			}
@@ -44,11 +44,11 @@ var _ = Describe("StreamFrame sorter", func() {
 		})
 
 		It("inserts and pops two consecutive frame", func() {
-			f1 := &frames.StreamFrame{
+			f1 := &wire.StreamFrame{
 				Offset: 0,
 				Data:   []byte("foobar"),
 			}
-			f2 := &frames.StreamFrame{
+			f2 := &wire.StreamFrame{
 				Offset: 6,
 				Data:   []byte("foobar2"),
 			}
@@ -62,14 +62,14 @@ var _ = Describe("StreamFrame sorter", func() {
 		})
 
 		It("rejects empty frames", func() {
-			f := &frames.StreamFrame{}
+			f := &wire.StreamFrame{}
 			err := s.Push(f)
 			Expect(err).To(MatchError(errEmptyStreamData))
 		})
 
 		Context("FinBit handling", func() {
 			It("saves a FinBit frame at offset 0", func() {
-				f := &frames.StreamFrame{
+				f := &wire.StreamFrame{
 					Offset: 0,
 					FinBit: true,
 				}
@@ -79,13 +79,13 @@ var _ = Describe("StreamFrame sorter", func() {
 			})
 
 			It("sets the FinBit if a stream is closed after receiving some data", func() {
-				f1 := &frames.StreamFrame{
+				f1 := &wire.StreamFrame{
 					Offset: 0,
 					Data:   []byte("foobar"),
 				}
 				err := s.Push(f1)
 				Expect(err).ToNot(HaveOccurred())
-				f2 := &frames.StreamFrame{
+				f2 := &wire.StreamFrame{
 					Offset: 6,
 					FinBit: true,
 				}
@@ -98,7 +98,7 @@ var _ = Describe("StreamFrame sorter", func() {
 
 		Context("Gap handling", func() {
 			It("finds the first gap", func() {
-				f := &frames.StreamFrame{
+				f := &wire.StreamFrame{
 					Offset: 10,
 					Data:   []byte("foobar"),
 				}
@@ -111,7 +111,7 @@ var _ = Describe("StreamFrame sorter", func() {
 			})
 
 			It("correctly sets the first gap for a frame with offset 0", func() {
-				f := &frames.StreamFrame{
+				f := &wire.StreamFrame{
 					Offset: 0,
 					Data:   []byte("foobar"),
 				}
@@ -123,13 +123,13 @@ var _ = Describe("StreamFrame sorter", func() {
 			})
 
 			It("finds the two gaps", func() {
-				f1 := &frames.StreamFrame{
+				f1 := &wire.StreamFrame{
 					Offset: 10,
 					Data:   []byte("foobar"),
 				}
 				err := s.Push(f1)
 				Expect(err).ToNot(HaveOccurred())
-				f2 := &frames.StreamFrame{
+				f2 := &wire.StreamFrame{
 					Offset: 20,
 					Data:   []byte("foobar"),
 				}
@@ -143,13 +143,13 @@ var _ = Describe("StreamFrame sorter", func() {
 			})
 
 			It("finds the two gaps in reverse order", func() {
-				f1 := &frames.StreamFrame{
+				f1 := &wire.StreamFrame{
 					Offset: 20,
 					Data:   []byte("foobar"),
 				}
 				err := s.Push(f1)
 				Expect(err).ToNot(HaveOccurred())
-				f2 := &frames.StreamFrame{
+				f2 := &wire.StreamFrame{
 					Offset: 10,
 					Data:   []byte("foobar"),
 				}
@@ -163,13 +163,13 @@ var _ = Describe("StreamFrame sorter", func() {
 			})
 
 			It("shrinks a gap when it is partially filled", func() {
-				f1 := &frames.StreamFrame{
+				f1 := &wire.StreamFrame{
 					Offset: 10,
 					Data:   []byte("test"),
 				}
 				err := s.Push(f1)
 				Expect(err).ToNot(HaveOccurred())
-				f2 := &frames.StreamFrame{
+				f2 := &wire.StreamFrame{
 					Offset: 4,
 					Data:   []byte("foobar"),
 				}
@@ -182,13 +182,13 @@ var _ = Describe("StreamFrame sorter", func() {
 			})
 
 			It("deletes a gap at the beginning, when it is filled", func() {
-				f1 := &frames.StreamFrame{
+				f1 := &wire.StreamFrame{
 					Offset: 6,
 					Data:   []byte("test"),
 				}
 				err := s.Push(f1)
 				Expect(err).ToNot(HaveOccurred())
-				f2 := &frames.StreamFrame{
+				f2 := &wire.StreamFrame{
 					Offset: 0,
 					Data:   []byte("foobar"),
 				}
@@ -200,19 +200,19 @@ var _ = Describe("StreamFrame sorter", func() {
 			})
 
 			It("deletes a gap in the middle, when it is filled", func() {
-				f1 := &frames.StreamFrame{
+				f1 := &wire.StreamFrame{
 					Offset: 0,
 					Data:   []byte("test"),
 				}
 				err := s.Push(f1)
 				Expect(err).ToNot(HaveOccurred())
-				f2 := &frames.StreamFrame{
+				f2 := &wire.StreamFrame{
 					Offset: 10,
 					Data:   []byte("test2"),
 				}
 				err = s.Push(f2)
 				Expect(err).ToNot(HaveOccurred())
-				f3 := &frames.StreamFrame{
+				f3 := &wire.StreamFrame{
 					Offset: 4,
 					Data:   []byte("foobar"),
 				}
@@ -225,13 +225,13 @@ var _ = Describe("StreamFrame sorter", func() {
 			})
 
 			It("splits a gap into two", func() {
-				f1 := &frames.StreamFrame{
+				f1 := &wire.StreamFrame{
 					Offset: 100,
 					Data:   []byte("test"),
 				}
 				err := s.Push(f1)
 				Expect(err).ToNot(HaveOccurred())
-				f2 := &frames.StreamFrame{
+				f2 := &wire.StreamFrame{
 					Offset: 50,
 					Data:   []byte("foobar"),
 				}
@@ -248,11 +248,11 @@ var _ = Describe("StreamFrame sorter", func() {
 			Context("Overlapping Stream Data detection", func() {
 				// create gaps: 0-5, 10-15, 20-25, 30-inf
 				BeforeEach(func() {
-					err := s.Push(&frames.StreamFrame{Offset: 5, Data: []byte("12345")})
+					err := s.Push(&wire.StreamFrame{Offset: 5, Data: []byte("12345")})
 					Expect(err).ToNot(HaveOccurred())
-					err = s.Push(&frames.StreamFrame{Offset: 15, Data: []byte("12345")})
+					err = s.Push(&wire.StreamFrame{Offset: 15, Data: []byte("12345")})
 					Expect(err).ToNot(HaveOccurred())
-					err = s.Push(&frames.StreamFrame{Offset: 25, Data: []byte("12345")})
+					err = s.Push(&wire.StreamFrame{Offset: 25, Data: []byte("12345")})
 					Expect(err).ToNot(HaveOccurred())
 					checkGaps([]utils.ByteInterval{
 						{Start: 0, End: 5},
@@ -263,7 +263,7 @@ var _ = Describe("StreamFrame sorter", func() {
 				})
 
 				It("cuts a frame with offset 0 that overlaps at the end", func() {
-					f := &frames.StreamFrame{
+					f := &wire.StreamFrame{
 						Offset: 0,
 						Data:   []byte("foobar"),
 					}
@@ -281,7 +281,7 @@ var _ = Describe("StreamFrame sorter", func() {
 
 				It("cuts a frame that overlaps at the end", func() {
 					// 4 to 7
-					f := &frames.StreamFrame{
+					f := &wire.StreamFrame{
 						Offset: 4,
 						Data:   []byte("foo"),
 					}
@@ -300,7 +300,7 @@ var _ = Describe("StreamFrame sorter", func() {
 
 				It("cuts a frame that completely fills a gap, but overlaps at the end", func() {
 					// 10 to 16
-					f := &frames.StreamFrame{
+					f := &wire.StreamFrame{
 						Offset: 10,
 						Data:   []byte("foobar"),
 					}
@@ -318,7 +318,7 @@ var _ = Describe("StreamFrame sorter", func() {
 
 				It("cuts a frame that overlaps at the beginning", func() {
 					// 8 to 14
-					f := &frames.StreamFrame{
+					f := &wire.StreamFrame{
 						Offset: 8,
 						Data:   []byte("foobar"),
 					}
@@ -338,7 +338,7 @@ var _ = Describe("StreamFrame sorter", func() {
 
 				It("processes a frame that overlaps at the beginning and at the end, starting in a gap", func() {
 					// 2 to 12
-					f := &frames.StreamFrame{
+					f := &wire.StreamFrame{
 						Offset: 2,
 						Data:   []byte("1234567890"),
 					}
@@ -357,7 +357,7 @@ var _ = Describe("StreamFrame sorter", func() {
 
 				It("processes a frame that overlaps at the beginning and at the end, starting in a gap, ending in data", func() {
 					// 2 to 17
-					f := &frames.StreamFrame{
+					f := &wire.StreamFrame{
 						Offset: 2,
 						Data:   []byte("123456789012345"),
 					}
@@ -376,7 +376,7 @@ var _ = Describe("StreamFrame sorter", func() {
 
 				It("processes a frame that overlaps at the beginning and at the end, starting in a gap, ending in data", func() {
 					// 5 to 22
-					f := &frames.StreamFrame{
+					f := &wire.StreamFrame{
 						Offset: 5,
 						Data:   []byte("12345678901234567"),
 					}
@@ -394,7 +394,7 @@ var _ = Describe("StreamFrame sorter", func() {
 
 				It("processes a frame that closes multiple gaps", func() {
 					// 2 to 27
-					f := &frames.StreamFrame{
+					f := &wire.StreamFrame{
 						Offset: 2,
 						Data:   bytes.Repeat([]byte{'e'}, 25),
 					}
@@ -414,7 +414,7 @@ var _ = Describe("StreamFrame sorter", func() {
 
 				It("processes a frame that closes multiple gaps", func() {
 					// 5 to 27
-					f := &frames.StreamFrame{
+					f := &wire.StreamFrame{
 						Offset: 5,
 						Data:   bytes.Repeat([]byte{'d'}, 22),
 					}
@@ -434,7 +434,7 @@ var _ = Describe("StreamFrame sorter", func() {
 
 				It("processes a frame that covers multiple gaps and ends at the end of a gap", func() {
 					// 1 to 15
-					f := &frames.StreamFrame{
+					f := &wire.StreamFrame{
 						Offset: 1,
 						Data:   bytes.Repeat([]byte{'f'}, 14),
 					}
@@ -453,7 +453,7 @@ var _ = Describe("StreamFrame sorter", func() {
 
 				It("processes a frame that closes all gaps (except for the last one)", func() {
 					// 0 to 32
-					f := &frames.StreamFrame{
+					f := &wire.StreamFrame{
 						Offset: 0,
 						Data:   bytes.Repeat([]byte{'f'}, 32),
 					}
@@ -469,7 +469,7 @@ var _ = Describe("StreamFrame sorter", func() {
 
 				It("cuts a frame that overlaps at the beginning and at the end, starting in data already received", func() {
 					// 8 to 17
-					f := &frames.StreamFrame{
+					f := &wire.StreamFrame{
 						Offset: 8,
 						Data:   []byte("123456789"),
 					}
@@ -488,7 +488,7 @@ var _ = Describe("StreamFrame sorter", func() {
 
 				It("cuts a frame that completely covers two gaps", func() {
 					// 10 to 20
-					f := &frames.StreamFrame{
+					f := &wire.StreamFrame{
 						Offset: 10,
 						Data:   []byte("1234567890"),
 					}
@@ -513,9 +513,9 @@ var _ = Describe("StreamFrame sorter", func() {
 
 				BeforeEach(func() {
 					// create gaps: 5-10, 15-inf
-					err := s.Push(&frames.StreamFrame{Offset: 0, Data: []byte("12345")})
+					err := s.Push(&wire.StreamFrame{Offset: 0, Data: []byte("12345")})
 					Expect(err).ToNot(HaveOccurred())
-					err = s.Push(&frames.StreamFrame{Offset: 10, Data: []byte("12345")})
+					err = s.Push(&wire.StreamFrame{Offset: 10, Data: []byte("12345")})
 					Expect(err).ToNot(HaveOccurred())
 					checkGaps(expectedGaps)
 				})
@@ -526,21 +526,21 @@ var _ = Describe("StreamFrame sorter", func() {
 				})
 
 				It("does not modify data when receiving a duplicate", func() {
-					err := s.Push(&frames.StreamFrame{Offset: 0, Data: []byte("fffff")})
+					err := s.Push(&wire.StreamFrame{Offset: 0, Data: []byte("fffff")})
 					Expect(err).To(MatchError(errDuplicateStreamData))
 					Expect(s.queuedFrames[0].Data).ToNot(Equal([]byte("fffff")))
 				})
 
 				It("detects a duplicate frame that is smaller than the original, starting at the beginning", func() {
 					// 10 to 12
-					err := s.Push(&frames.StreamFrame{Offset: 10, Data: []byte("12")})
+					err := s.Push(&wire.StreamFrame{Offset: 10, Data: []byte("12")})
 					Expect(err).To(MatchError(errDuplicateStreamData))
 					Expect(s.queuedFrames[10].Data).To(HaveLen(5))
 				})
 
 				It("detects a duplicate frame that is smaller than the original, somewhere in the middle", func() {
 					// 1 to 4
-					err := s.Push(&frames.StreamFrame{Offset: 1, Data: []byte("123")})
+					err := s.Push(&wire.StreamFrame{Offset: 1, Data: []byte("123")})
 					Expect(err).To(MatchError(errDuplicateStreamData))
 					Expect(s.queuedFrames[0].Data).To(HaveLen(5))
 					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(1)))
@@ -548,7 +548,7 @@ var _ = Describe("StreamFrame sorter", func() {
 
 				It("detects a duplicate frame that is smaller than the original, somewhere in the middle in the last block", func() {
 					// 11 to 14
-					err := s.Push(&frames.StreamFrame{Offset: 11, Data: []byte("123")})
+					err := s.Push(&wire.StreamFrame{Offset: 11, Data: []byte("123")})
 					Expect(err).To(MatchError(errDuplicateStreamData))
 					Expect(s.queuedFrames[10].Data).To(HaveLen(5))
 					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(11)))
@@ -556,7 +556,7 @@ var _ = Describe("StreamFrame sorter", func() {
 
 				It("detects a duplicate frame that is smaller than the original, with aligned end in the last block", func() {
 					// 11 to 14
-					err := s.Push(&frames.StreamFrame{Offset: 11, Data: []byte("1234")})
+					err := s.Push(&wire.StreamFrame{Offset: 11, Data: []byte("1234")})
 					Expect(err).To(MatchError(errDuplicateStreamData))
 					Expect(s.queuedFrames[10].Data).To(HaveLen(5))
 					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(11)))
@@ -564,7 +564,7 @@ var _ = Describe("StreamFrame sorter", func() {
 
 				It("detects a duplicate frame that is smaller than the original, with aligned end", func() {
 					// 3 to 5
-					err := s.Push(&frames.StreamFrame{Offset: 3, Data: []byte("12")})
+					err := s.Push(&wire.StreamFrame{Offset: 3, Data: []byte("12")})
 					Expect(err).To(MatchError(errDuplicateStreamData))
 					Expect(s.queuedFrames[0].Data).To(HaveLen(5))
 					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(3)))
@@ -574,7 +574,7 @@ var _ = Describe("StreamFrame sorter", func() {
 			Context("DoS protection", func() {
 				It("errors when too many gaps are created", func() {
 					for i := 0; i < protocol.MaxStreamFrameSorterGaps; i++ {
-						f := &frames.StreamFrame{
+						f := &wire.StreamFrame{
 							Data:   []byte("foobar"),
 							Offset: protocol.ByteCount(i * 7),
 						}
@@ -582,7 +582,7 @@ var _ = Describe("StreamFrame sorter", func() {
 						Expect(err).ToNot(HaveOccurred())
 					}
 					Expect(s.gaps.Len()).To(Equal(protocol.MaxStreamFrameSorterGaps))
-					f := &frames.StreamFrame{
+					f := &wire.StreamFrame{
 						Data:   []byte("foobar"),
 						Offset: protocol.ByteCount(protocol.MaxStreamFrameSorterGaps*7) + 100,
 					}

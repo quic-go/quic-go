@@ -82,13 +82,13 @@ var _ = Describe("Log", func() {
 	})
 
 	It("adds a timestamp", func() {
-		format := "Jan 2, 2006 at 3:04:05pm (MST)"
+		format := "Jan 2, 2006"
 		SetLogTimeFormat(format)
 		SetLogLevel(LogLevelInfo)
 		Infof("info")
 		t, err := time.Parse(format, string(b.Bytes()[:b.Len()-6]))
 		Expect(err).ToNot(HaveOccurred())
-		Expect(t).To(BeTemporally("~", time.Now(), 2*time.Second))
+		Expect(t).To(BeTemporally("~", time.Now(), 25*time.Hour))
 	})
 
 	It("says whether debug is enabled", func() {

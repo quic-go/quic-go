@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"io"
@@ -14,27 +15,38 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
-	"github.com/lucas-clemente/quic-go/crypto"
-	"github.com/lucas-clemente/quic-go/frames"
-	"github.com/lucas-clemente/quic-go/handshake"
+	"github.com/lucas-clemente/quic-go/internal/crypto"
+	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/mocks/mocks_fc"
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/testdata"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qerr"
-	"github.com/lucas-clemente/quic-go/testdata"
 	"github.com/lucas-clemente/quic-go/qtrace"
 )
 
 type mockConnection struct {
 	remoteAddr net.Addr
 	localAddr  net.Addr
-	written    [][]byte
+	written    chan []byte
+}
+
+func newMockConnection() *mockConnection {
+	return &mockConnection{
+		remoteAddr: &net.UDPAddr{},
+		written:    make(chan []byte, 100),
+	}
 }
 
 func (m *mockConnection) Write(p []byte) error {
 	b := make([]byte, len(p))
 	copy(b, p)
-	m.written = append(m.written, b)
+	select {
+	case m.written <- b:
+	default:
+		panic("mockConnection channel full")
+	}
 	return nil
 }
 func (m *mockConnection) Read([]byte) (int, net.Addr, error) { panic("not implemented") }
@@ -50,7 +62,7 @@ type mockUnpacker struct {
 	unpackErr error
 }
 
-func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data []byte) (*unpackedPacket, error) {
+func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *wire.PublicHeader, data []byte) (*unpackedPacket, error) {
 	if m.unpackErr != nil {
 		return nil, m.unpackErr
 	}
@@ -60,10 +72,11 @@ func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *PublicHeader, data
 }
 
 type mockSentPacketHandler struct {
-	retransmissionQueue  []*ackhandler.Packet
-	sentPackets          []*ackhandler.Packet
-	congestionLimited    bool
-	requestedStopWaiting bool
+	retransmissionQueue             []*ackhandler.Packet
+	sentPackets                     []*ackhandler.Packet
+	congestionLimited               bool
+	requestedStopWaiting            bool
+	shouldSendRetransmittablePacket bool
 }
 
 func (h *mockSentPacketHandler) SentPacket(packet *ackhandler.Packet) error {
@@ -71,7 +84,7 @@ func (h *mockSentPacketHandler) SentPacket(packet *ackhandler.Packet) error {
 	return nil
 }
 
-func (h *mockSentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNumber protocol.PacketNumber, recvTime time.Time) error {
+func (h *mockSentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, recvTime time.Time) error {
 	return nil
 }
 
@@ -79,10 +92,15 @@ func (h *mockSentPacketHandler) GetLeastUnacked() protocol.PacketNumber { return
 func (h *mockSentPacketHandler) GetAlarmTimeout() time.Time             { panic("not implemented") }
 func (h *mockSentPacketHandler) OnAlarm()                               { panic("not implemented") }
 func (h *mockSentPacketHandler) SendingAllowed() bool                   { return !h.congestionLimited }
+func (h *mockSentPacketHandler) ShouldSendRetransmittablePacket() bool {
+	b := h.shouldSendRetransmittablePacket
+	h.shouldSendRetransmittablePacket = false
+	return b
+}
 
-func (h *mockSentPacketHandler) GetStopWaitingFrame(force bool) *frames.StopWaitingFrame {
+func (h *mockSentPacketHandler) GetStopWaitingFrame(force bool) *wire.StopWaitingFrame {
 	h.requestedStopWaiting = true
-	return &frames.StopWaitingFrame{LeastUnacked: 0x1337}
+	return &wire.StopWaitingFrame{LeastUnacked: 0x1337}
 }
 
 func (h *mockSentPacketHandler) DequeuePacketForRetransmission() *ackhandler.Packet {
@@ -101,11 +119,11 @@ func newMockSentPacketHandler() ackhandler.SentPacketHandler {
 var _ ackhandler.SentPacketHandler = &mockSentPacketHandler{}
 
 type mockReceivedPacketHandler struct {
-	nextAckFrame *frames.AckFrame
+	nextAckFrame *wire.AckFrame
 	ackAlarm     time.Time
 }
 
-func (m *mockReceivedPacketHandler) GetAckFrame() *frames.AckFrame {
+func (m *mockReceivedPacketHandler) GetAckFrame() *wire.AckFrame {
 	f := m.nextAckFrame
 	m.nextAckFrame = nil
 	return f
@@ -113,7 +131,7 @@ func (m *mockReceivedPacketHandler) GetAckFrame() *frames.AckFrame {
 func (m *mockReceivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumber, shouldInstigateAck bool) error {
 	panic("not implemented")
 }
-func (m *mockReceivedPacketHandler) ReceivedStopWaiting(*frames.StopWaitingFrame) error {
+func (m *mockReceivedPacketHandler) SetLowerLimit(protocol.PacketNumber) {
 	panic("not implemented")
 }
 func (m *mockReceivedPacketHandler) GetAlarmTimeout() time.Time { return m.ackAlarm }
@@ -149,7 +167,7 @@ var _ = Describe("Session", func() {
 			_ io.ReadWriter,
 			_ handshake.ConnectionParametersManager,
 			_ []protocol.VersionNumber,
-			_ func(net.Addr, *handshake.STK) bool,
+			_ func(net.Addr, *Cookie) bool,
 			aeadChangedP chan<- protocol.EncryptionLevel,
 			_ *qtrace.Tracer,
 		) (handshake.CryptoSetup, error) {
@@ -157,9 +175,7 @@ var _ = Describe("Session", func() {
 			return cryptoSetup, nil
 		}
 
-		mconn = &mockConnection{
-			remoteAddr: &net.UDPAddr{},
-		}
+		mconn = newMockConnection()
 		certChain := crypto.NewCertChain(testdata.GetTLSConfig())
 		kex, err := crypto.NewCurve25519KEX()
 		Expect(err).NotTo(HaveOccurred())
@@ -168,7 +184,7 @@ var _ = Describe("Session", func() {
 		var pSess Session
 		pSess, handshakeChan, err = newSession(
 			mconn,
-			protocol.Version35,
+			protocol.Version37,
 			0,
 			scfg,
 			nil,
@@ -190,9 +206,9 @@ var _ = Describe("Session", func() {
 
 	Context("source address validation", func() {
 		var (
-			stkVerify       func(net.Addr, *handshake.STK) bool
+			cookieVerify    func(net.Addr, *Cookie) bool
 			paramClientAddr net.Addr
-			paramSTK        *STK
+			paramCookie     *Cookie
 		)
 		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 1000}
 
@@ -205,23 +221,23 @@ var _ = Describe("Session", func() {
 				_ io.ReadWriter,
 				_ handshake.ConnectionParametersManager,
 				_ []protocol.VersionNumber,
-				stkFunc func(net.Addr, *handshake.STK) bool,
+				cookieFunc func(net.Addr, *Cookie) bool,
 				_ chan<- protocol.EncryptionLevel,
 				_ *qtrace.Tracer,
 			) (handshake.CryptoSetup, error) {
-				stkVerify = stkFunc
+				cookieVerify = cookieFunc
 				return cryptoSetup, nil
 			}
 
 			conf := populateServerConfig(&Config{})
-			conf.AcceptSTK = func(clientAddr net.Addr, stk *STK) bool {
+			conf.AcceptCookie = func(clientAddr net.Addr, cookie *Cookie) bool {
 				paramClientAddr = clientAddr
-				paramSTK = stk
+				paramCookie = cookie
 				return false
 			}
 			pSess, _, err := newSession(
 				mconn,
-				protocol.Version35,
+				protocol.Version37,
 				0,
 				scfg,
 				nil,
@@ -232,25 +248,25 @@ var _ = Describe("Session", func() {
 		})
 
 		It("calls the callback with the right parameters when the client didn't send an STK", func() {
-			stkVerify(remoteAddr, nil)
+			cookieVerify(remoteAddr, nil)
 			Expect(paramClientAddr).To(Equal(remoteAddr))
-			Expect(paramSTK).To(BeNil())
+			Expect(paramCookie).To(BeNil())
 		})
 
 		It("calls the callback with the STK when the client sent an STK", func() {
-			stkAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
+			cookieAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 			sentTime := time.Now().Add(-time.Hour)
-			stkVerify(remoteAddr, &handshake.STK{SentTime: sentTime, RemoteAddr: stkAddr.String()})
+			cookieVerify(remoteAddr, &Cookie{SentTime: sentTime, RemoteAddr: cookieAddr.String()})
 			Expect(paramClientAddr).To(Equal(remoteAddr))
-			Expect(paramSTK).ToNot(BeNil())
-			Expect(paramSTK.remoteAddr).To(Equal(stkAddr.String()))
-			Expect(paramSTK.sentTime).To(Equal(sentTime))
+			Expect(paramCookie).ToNot(BeNil())
+			Expect(paramCookie.RemoteAddr).To(Equal(cookieAddr.String()))
+			Expect(paramCookie.SentTime).To(Equal(sentTime))
 		})
 	})
 
 	Context("when handling stream frames", func() {
 		It("makes new streams", func() {
-			sess.handleStreamFrame(&frames.StreamFrame{
+			sess.handleStreamFrame(&wire.StreamFrame{
 				StreamID: 5,
 				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
 			})
@@ -266,7 +282,7 @@ var _ = Describe("Session", func() {
 		It("does not reject existing streams with even StreamIDs", func() {
 			_, err := sess.GetOrOpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
-			err = sess.handleStreamFrame(&frames.StreamFrame{
+			err = sess.handleStreamFrame(&wire.StreamFrame{
 				StreamID: 5,
 				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
 			})
@@ -274,12 +290,12 @@ var _ = Describe("Session", func() {
 		})
 
 		It("handles existing streams", func() {
-			sess.handleStreamFrame(&frames.StreamFrame{
+			sess.handleStreamFrame(&wire.StreamFrame{
 				StreamID: 5,
 				Data:     []byte{0xde, 0xca},
 			})
 			numOpenStreams := len(sess.streamsMap.openStreams)
-			sess.handleStreamFrame(&frames.StreamFrame{
+			sess.handleStreamFrame(&wire.StreamFrame{
 				StreamID: 5,
 				Offset:   2,
 				Data:     []byte{0xfb, 0xad},
@@ -304,7 +320,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("does not delete streams with FIN bit", func() {
-			sess.handleStreamFrame(&frames.StreamFrame{
+			sess.handleStreamFrame(&wire.StreamFrame{
 				StreamID: 5,
 				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
 				FinBit:   true,
@@ -323,7 +339,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("deletes streams with FIN bit & close", func() {
-			sess.handleStreamFrame(&frames.StreamFrame{
+			sess.handleStreamFrame(&wire.StreamFrame{
 				StreamID: 5,
 				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
 				FinBit:   true,
@@ -356,7 +372,7 @@ var _ = Describe("Session", func() {
 		It("cancels streams with error", func() {
 			sess.garbageCollectStreams()
 			testErr := errors.New("test")
-			sess.handleStreamFrame(&frames.StreamFrame{
+			sess.handleStreamFrame(&wire.StreamFrame{
 				StreamID: 5,
 				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
 			})
@@ -400,7 +416,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("ignores STREAM frames for closed streams (client-side)", func() {
-			sess.handleStreamFrame(&frames.StreamFrame{
+			sess.handleStreamFrame(&wire.StreamFrame{
 				StreamID: 5,
 				FinBit:   true,
 			})
@@ -413,7 +429,7 @@ var _ = Describe("Session", func() {
 			sess.garbageCollectStreams()
 			str, _ = sess.streamsMap.GetOrOpenStream(5)
 			Expect(str).To(BeNil()) // make sure the stream is gone
-			err = sess.handleStreamFrame(&frames.StreamFrame{
+			err = sess.handleStreamFrame(&wire.StreamFrame{
 				StreamID: 5,
 				Data:     []byte("foobar"),
 			})
@@ -424,7 +440,7 @@ var _ = Describe("Session", func() {
 			ostr, err := sess.OpenStream()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(ostr.StreamID()).To(Equal(protocol.StreamID(2)))
-			err = sess.handleStreamFrame(&frames.StreamFrame{
+			err = sess.handleStreamFrame(&wire.StreamFrame{
 				StreamID: 2,
 				FinBit:   true,
 			})
@@ -438,7 +454,7 @@ var _ = Describe("Session", func() {
 			sess.garbageCollectStreams()
 			str, _ = sess.streamsMap.GetOrOpenStream(2)
 			Expect(str).To(BeNil()) // make sure the stream is gone
-			err = sess.handleStreamFrame(&frames.StreamFrame{
+			err = sess.handleStreamFrame(&wire.StreamFrame{
 				StreamID: 2,
 				FinBit:   true,
 			})
@@ -450,7 +466,7 @@ var _ = Describe("Session", func() {
 		It("closes the streams for writing", func() {
 			s, err := sess.GetOrOpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
-			err = sess.handleRstStreamFrame(&frames.RstStreamFrame{
+			err = sess.handleRstStreamFrame(&wire.RstStreamFrame{
 				StreamID:  5,
 				ErrorCode: 42,
 			})
@@ -463,11 +479,11 @@ var _ = Describe("Session", func() {
 		It("doesn't close the stream for reading", func() {
 			s, err := sess.GetOrOpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
-			sess.handleStreamFrame(&frames.StreamFrame{
+			sess.handleStreamFrame(&wire.StreamFrame{
 				StreamID: 5,
 				Data:     []byte("foobar"),
 			})
-			err = sess.handleRstStreamFrame(&frames.RstStreamFrame{
+			err = sess.handleRstStreamFrame(&wire.RstStreamFrame{
 				StreamID:   5,
 				ErrorCode:  42,
 				ByteOffset: 6,
@@ -483,12 +499,12 @@ var _ = Describe("Session", func() {
 			str, err := sess.GetOrOpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
 			str.(*stream).writeOffset = 0x1337
-			err = sess.handleRstStreamFrame(&frames.RstStreamFrame{
+			err = sess.handleRstStreamFrame(&wire.RstStreamFrame{
 				StreamID: 5,
 			})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(sess.packer.controlFrames).To(HaveLen(1))
-			Expect(sess.packer.controlFrames[0].(*frames.RstStreamFrame)).To(Equal(&frames.RstStreamFrame{
+			Expect(sess.packer.controlFrames[0].(*wire.RstStreamFrame)).To(Equal(&wire.RstStreamFrame{
 				StreamID:   5,
 				ByteOffset: 0x1337,
 			}))
@@ -500,7 +516,7 @@ var _ = Describe("Session", func() {
 			Expect(err).NotTo(HaveOccurred())
 			str.(*stream).sentFin()
 			str.Close()
-			err = sess.handleRstStreamFrame(&frames.RstStreamFrame{
+			err = sess.handleRstStreamFrame(&wire.RstStreamFrame{
 				StreamID: 5,
 			})
 			Expect(err).ToNot(HaveOccurred())
@@ -513,7 +529,7 @@ var _ = Describe("Session", func() {
 			fcm := mocks_fc.NewMockFlowControlManager(mockCtrl)
 			sess.flowControlManager = fcm
 			fcm.EXPECT().ResetStream(protocol.StreamID(5), protocol.ByteCount(0x1337))
-			err := sess.handleRstStreamFrame(&frames.RstStreamFrame{
+			err := sess.handleRstStreamFrame(&wire.RstStreamFrame{
 				StreamID:   5,
 				ByteOffset: 0x1337,
 			})
@@ -526,7 +542,7 @@ var _ = Describe("Session", func() {
 			fcm := mocks_fc.NewMockFlowControlManager(mockCtrl)
 			sess.flowControlManager = fcm
 			fcm.EXPECT().ResetStream(protocol.StreamID(5), protocol.ByteCount(0x1337)).Return(testErr)
-			err := sess.handleRstStreamFrame(&frames.RstStreamFrame{
+			err := sess.handleRstStreamFrame(&wire.RstStreamFrame{
 				StreamID:   5,
 				ByteOffset: 0x1337,
 			})
@@ -534,7 +550,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("ignores the error when the stream is not known", func() {
-			err := sess.handleFrames([]frames.Frame{&frames.RstStreamFrame{
+			err := sess.handleFrames([]wire.Frame{&wire.RstStreamFrame{
 				StreamID:  5,
 				ErrorCode: 42,
 			}})
@@ -548,7 +564,7 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 			str.Reset(testErr)
 			Expect(sess.packer.controlFrames).To(HaveLen(1))
-			Expect(sess.packer.controlFrames[0]).To(Equal(&frames.RstStreamFrame{
+			Expect(sess.packer.controlFrames[0]).To(Equal(&wire.RstStreamFrame{
 				StreamID:   5,
 				ByteOffset: 0x1337,
 			}))
@@ -561,7 +577,7 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 			str.Reset(testErr)
 			Expect(sess.packer.controlFrames).To(HaveLen(1))
-			err = sess.handleRstStreamFrame(&frames.RstStreamFrame{
+			err = sess.handleRstStreamFrame(&wire.RstStreamFrame{
 				StreamID:   5,
 				ByteOffset: 0x42,
 			})
@@ -574,7 +590,7 @@ var _ = Describe("Session", func() {
 		It("updates the Flow Control Window of a stream", func() {
 			_, err := sess.GetOrOpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
-			err = sess.handleWindowUpdateFrame(&frames.WindowUpdateFrame{
+			err = sess.handleWindowUpdateFrame(&wire.WindowUpdateFrame{
 				StreamID:   5,
 				ByteOffset: 100,
 			})
@@ -583,7 +599,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("updates the Flow Control Window of the connection", func() {
-			err := sess.handleWindowUpdateFrame(&frames.WindowUpdateFrame{
+			err := sess.handleWindowUpdateFrame(&wire.WindowUpdateFrame{
 				StreamID:   0,
 				ByteOffset: 0x800000,
 			})
@@ -591,7 +607,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("opens a new stream when receiving a WINDOW_UPDATE for an unknown stream", func() {
-			err := sess.handleWindowUpdateFrame(&frames.WindowUpdateFrame{
+			err := sess.handleWindowUpdateFrame(&wire.WindowUpdateFrame{
 				StreamID:   5,
 				ByteOffset: 1337,
 			})
@@ -602,11 +618,11 @@ var _ = Describe("Session", func() {
 		})
 
 		It("errors when receiving a WindowUpdateFrame for a closed stream", func() {
-			sess.handleStreamFrame(&frames.StreamFrame{StreamID: 5})
+			sess.handleStreamFrame(&wire.StreamFrame{StreamID: 5})
 			err := sess.streamsMap.RemoveStream(5)
 			Expect(err).ToNot(HaveOccurred())
 			sess.garbageCollectStreams()
-			err = sess.handleWindowUpdateFrame(&frames.WindowUpdateFrame{
+			err = sess.handleWindowUpdateFrame(&wire.WindowUpdateFrame{
 				StreamID:   5,
 				ByteOffset: 1337,
 			})
@@ -614,11 +630,11 @@ var _ = Describe("Session", func() {
 		})
 
 		It("ignores errors when receiving a WindowUpdateFrame for a closed stream", func() {
-			sess.handleStreamFrame(&frames.StreamFrame{StreamID: 5})
+			sess.handleStreamFrame(&wire.StreamFrame{StreamID: 5})
 			err := sess.streamsMap.RemoveStream(5)
 			Expect(err).ToNot(HaveOccurred())
 			sess.garbageCollectStreams()
-			err = sess.handleFrames([]frames.Frame{&frames.WindowUpdateFrame{
+			err = sess.handleFrames([]wire.Frame{&wire.WindowUpdateFrame{
 				StreamID:   5,
 				ByteOffset: 1337,
 			}})
@@ -627,34 +643,39 @@ var _ = Describe("Session", func() {
 	})
 
 	It("handles PING frames", func() {
-		err := sess.handleFrames([]frames.Frame{&frames.PingFrame{}})
+		err := sess.handleFrames([]wire.Frame{&wire.PingFrame{}})
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("handles BLOCKED frames", func() {
-		err := sess.handleFrames([]frames.Frame{&frames.BlockedFrame{}})
+		err := sess.handleFrames([]wire.Frame{&wire.BlockedFrame{}})
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("errors on GOAWAY frames", func() {
-		err := sess.handleFrames([]frames.Frame{&frames.GoawayFrame{}})
+		err := sess.handleFrames([]wire.Frame{&wire.GoawayFrame{}})
 		Expect(err).To(MatchError("unimplemented: handling GOAWAY frames"))
 	})
 
 	It("handles STOP_WAITING frames", func() {
-		err := sess.handleFrames([]frames.Frame{&frames.StopWaitingFrame{LeastUnacked: 10}})
+		err := sess.handleFrames([]wire.Frame{&wire.StopWaitingFrame{LeastUnacked: 10}})
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("handles CONNECTION_CLOSE frames", func(done Done) {
 		go sess.run()
 		str, _ := sess.GetOrOpenStream(5)
-		err := sess.handleFrames([]frames.Frame{&frames.ConnectionCloseFrame{ErrorCode: 42, ReasonPhrase: "foobar"}})
+		err := sess.handleFrames([]wire.Frame{&wire.ConnectionCloseFrame{ErrorCode: 42, ReasonPhrase: "foobar"}})
 		Expect(err).NotTo(HaveOccurred())
-		Eventually(sess.runClosed).Should(BeClosed())
+		Eventually(sess.Context().Done()).Should(BeClosed())
 		_, err = str.Read([]byte{0})
 		Expect(err).To(MatchError(qerr.Error(42, "foobar")))
 		close(done)
+	})
+
+	It("tells its versions", func() {
+		sess.version = 4242
+		Expect(sess.GetVersion()).To(Equal(protocol.VersionNumber(4242)))
 	})
 
 	Context("waiting until the handshake completes", func() {
@@ -720,7 +741,7 @@ var _ = Describe("Session", func() {
 				Expect(err).ToNot(HaveOccurred())
 			}()
 			Consistently(func() Stream { return str }).Should(BeNil())
-			sess.handleStreamFrame(&frames.StreamFrame{
+			sess.handleStreamFrame(&wire.StreamFrame{
 				StreamID: 3,
 			})
 			Eventually(func() Stream { return str }).ShouldNot(BeNil())
@@ -747,11 +768,11 @@ var _ = Describe("Session", func() {
 			}()
 			go sess.run()
 			Consistently(func() error { return err }).ShouldNot(HaveOccurred())
-			Expect(sess.runClosed).ToNot(BeClosed())
+			Expect(sess.Context().Done()).ToNot(BeClosed())
 			sess.Close(errCloseSessionForNewVersion)
 			Eventually(func() error { return err }).Should(HaveOccurred())
 			Expect(err).To(MatchError(qerr.Error(qerr.InternalError, errCloseSessionForNewVersion.Error())))
-			Eventually(sess.runClosed).Should(BeClosed())
+			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 	})
 
@@ -766,8 +787,8 @@ var _ = Describe("Session", func() {
 			sess.Close(nil)
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(mconn.written).To(HaveLen(1))
-			Expect(mconn.written[0]).To(ContainSubstring(string([]byte{0x02, byte(qerr.PeerGoingAway), 0, 0, 0, 0, 0})))
-			Expect(sess.runClosed).To(BeClosed())
+			Expect(mconn.written).To(Receive(ContainSubstring(string([]byte{0x02, byte(qerr.PeerGoingAway), 0, 0, 0, 0, 0}))))
+			Expect(sess.Context().Done()).To(BeClosed())
 		})
 
 		It("only closes once", func() {
@@ -775,7 +796,7 @@ var _ = Describe("Session", func() {
 			sess.Close(nil)
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(mconn.written).To(HaveLen(1))
-			Expect(sess.runClosed).To(BeClosed())
+			Expect(sess.Context().Done()).To(BeClosed())
 		})
 
 		It("closes streams with proper error", func() {
@@ -790,7 +811,7 @@ var _ = Describe("Session", func() {
 			n, err = s.Write([]byte{0})
 			Expect(n).To(BeZero())
 			Expect(err.Error()).To(ContainSubstring(testErr.Error()))
-			Expect(sess.runClosed).To(BeClosed())
+			Expect(sess.Context().Done()).To(BeClosed())
 		})
 
 		It("closes the session in order to replace it with another QUIC version", func() {
@@ -802,14 +823,24 @@ var _ = Describe("Session", func() {
 		It("sends a Public Reset if the client is initiating the head-of-line blocking experiment", func() {
 			sess.Close(handshake.ErrHOLExperiment)
 			Expect(mconn.written).To(HaveLen(1))
-			Expect(mconn.written[0][0] & 0x02).ToNot(BeZero()) // Public Reset
-			Expect(sess.runClosed).To(BeClosed())
+			Expect((<-mconn.written)[0] & 0x02).ToNot(BeZero()) // Public Reset
+			Expect(sess.Context().Done()).To(BeClosed())
 		})
 
-		It("unblocks WaitUntilClosed when the run loop exists", func() {
+		It("sends a Public Reset if the client is initiating the no STOP_WAITING experiment", func() {
+			sess.Close(handshake.ErrHOLExperiment)
+			Expect(mconn.written).To(HaveLen(1))
+			Expect((<-mconn.written)[0] & 0x02).ToNot(BeZero()) // Public Reset
+			Expect(sess.Context().Done()).To(BeClosed())
+		})
+
+		It("cancels the context when the run loop exists", func() {
 			returned := make(chan struct{})
 			go func() {
-				sess.WaitUntilClosed()
+				defer GinkgoRecover()
+				ctx := sess.Context()
+				<-ctx.Done()
+				Expect(ctx.Err()).To(MatchError(context.Canceled))
 				close(returned)
 			}()
 			Consistently(returned).ShouldNot(BeClosed())
@@ -819,11 +850,11 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("receiving packets", func() {
-		var hdr *PublicHeader
+		var hdr *wire.PublicHeader
 
 		BeforeEach(func() {
 			sess.unpacker = &mockUnpacker{}
-			hdr = &PublicHeader{PacketNumberLen: protocol.PacketNumberLen6}
+			hdr = &wire.PublicHeader{PacketNumberLen: protocol.PacketNumberLen6}
 		})
 
 		It("sets the {last,largest}RcvdPacketNumber", func() {
@@ -844,7 +875,7 @@ var _ = Describe("Session", func() {
 			sess.unpacker.(*mockUnpacker).unpackErr = testErr
 			sess.handlePacket(&receivedPacket{publicHeader: hdr})
 			Eventually(func() error { return runErr }).Should(MatchError(testErr))
-			Expect(sess.runClosed).To(BeClosed())
+			Expect(sess.Context().Done()).To(BeClosed())
 			close(done)
 		})
 
@@ -869,21 +900,13 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("handles packets smaller than the highest LeastUnacked of a StopWaiting", func() {
-			err := sess.receivedPacketHandler.ReceivedStopWaiting(&frames.StopWaitingFrame{LeastUnacked: 10})
-			Expect(err).ToNot(HaveOccurred())
-			hdr.PacketNumber = 5
-			err = sess.handlePacketImpl(&receivedPacket{publicHeader: hdr})
-			Expect(err).ToNot(HaveOccurred())
-		})
-
 		Context("updating the remote address", func() {
 			It("sets the remote address", func() {
 				remoteIP := &net.IPAddr{IP: net.IPv4(192, 168, 0, 100)}
 				Expect(sess.conn.(*mockConnection).remoteAddr).ToNot(Equal(remoteIP))
 				p := receivedPacket{
 					remoteAddr:   remoteIP,
-					publicHeader: &PublicHeader{PacketNumber: 1337},
+					publicHeader: &wire.PublicHeader{PacketNumber: 1337},
 				}
 				err := sess.handlePacketImpl(&p)
 				Expect(err).ToNot(HaveOccurred())
@@ -899,7 +922,7 @@ var _ = Describe("Session", func() {
 				sess.unpacker.(*packetUnpacker).aead = &mockAEAD{}
 				p := receivedPacket{
 					remoteAddr:   attackerIP,
-					publicHeader: &PublicHeader{PacketNumber: 1337},
+					publicHeader: &wire.PublicHeader{PacketNumber: 1337},
 				}
 				err := sess.handlePacketImpl(&p)
 				quicErr := err.(*qerr.QuicError)
@@ -913,7 +936,7 @@ var _ = Describe("Session", func() {
 				Expect(sess.conn.(*mockConnection).remoteAddr).ToNot(Equal(remoteIP))
 				p := receivedPacket{
 					remoteAddr:   remoteIP,
-					publicHeader: &PublicHeader{PacketNumber: 1337},
+					publicHeader: &wire.PublicHeader{PacketNumber: 1337},
 				}
 				sess.unpacker.(*mockUnpacker).unpackErr = testErr
 				err := sess.handlePacketImpl(&p)
@@ -930,7 +953,7 @@ var _ = Describe("Session", func() {
 			err := sess.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mconn.written).To(HaveLen(1))
-			Expect(mconn.written[0]).To(ContainSubstring(string([]byte{0x5E, 0x03})))
+			Expect(mconn.written).To(Receive(ContainSubstring(string([]byte{0x5E, 0x03}))))
 		})
 
 		It("sends ACK frames when congestion limited", func() {
@@ -941,7 +964,15 @@ var _ = Describe("Session", func() {
 			err := sess.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mconn.written).To(HaveLen(1))
-			Expect(mconn.written[0]).To(ContainSubstring(string([]byte{0x5E, 0x03})))
+			Expect(mconn.written).To(Receive(ContainSubstring(string([]byte{0x5E, 0x03}))))
+		})
+
+		It("sends a retransmittable packet when required by the SentPacketHandler", func() {
+			sess.sentPacketHandler = &mockSentPacketHandler{shouldSendRetransmittablePacket: true}
+			err := sess.sendPacket()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(mconn.written).To(HaveLen(1))
+			Expect(sess.sentPacketHandler.(*mockSentPacketHandler).sentPackets[0].Frames).To(ContainElement(&wire.PingFrame{}))
 		})
 
 		It("sends two WindowUpdate frames", func() {
@@ -955,15 +986,15 @@ var _ = Describe("Session", func() {
 			err = sess.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mconn.written).To(HaveLen(2))
-			Expect(mconn.written[0]).To(ContainSubstring(string([]byte{0x04, 0x05, 0, 0, 0})))
-			Expect(mconn.written[1]).To(ContainSubstring(string([]byte{0x04, 0x05, 0, 0, 0})))
+			Expect(mconn.written).To(Receive(ContainSubstring(string([]byte{0x04, 0x05, 0, 0, 0}))))
+			Expect(mconn.written).To(Receive(ContainSubstring(string([]byte{0x04, 0x05, 0, 0, 0}))))
 		})
 
 		It("sends public reset", func() {
 			err := sess.sendPublicReset(1)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mconn.written).To(HaveLen(1))
-			Expect(mconn.written[0]).To(ContainSubstring("PRST"))
+			Expect(mconn.written).To(Receive(ContainSubstring("PRST")))
 		})
 
 		It("informs the SentPacketHandler about sent packets", func() {
@@ -971,7 +1002,7 @@ var _ = Describe("Session", func() {
 			sess.packer.packetNumberGenerator.next = 0x1337 + 9
 			sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure}
 
-			f := &frames.StreamFrame{
+			f := &wire.StreamFrame{
 				StreamID: 5,
 				Data:     []byte("foobar"),
 			}
@@ -985,7 +1016,8 @@ var _ = Describe("Session", func() {
 			Expect(sentPackets).To(HaveLen(1))
 			Expect(sentPackets[0].Frames).To(ContainElement(f))
 			Expect(sentPackets[0].EncryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
-			Expect(sentPackets[0].Length).To(BeEquivalentTo(len(mconn.written[0])))
+			Expect(mconn.written).To(HaveLen(1))
+			Expect(sentPackets[0].Length).To(BeEquivalentTo(len(<-mconn.written)))
 		})
 	})
 
@@ -1001,9 +1033,9 @@ var _ = Describe("Session", func() {
 
 		Context("for handshake packets", func() {
 			It("retransmits an unencrypted packet", func() {
-				sf := &frames.StreamFrame{StreamID: 1, Data: []byte("foobar")}
+				sf := &wire.StreamFrame{StreamID: 1, Data: []byte("foobar")}
 				sph.retransmissionQueue = []*ackhandler.Packet{{
-					Frames:          []frames.Frame{sf},
+					Frames:          []wire.Frame{sf},
 					EncryptionLevel: protocol.EncryptionUnencrypted,
 				}}
 				err := sess.sendPacket()
@@ -1014,14 +1046,14 @@ var _ = Describe("Session", func() {
 				Expect(sentPackets[0].EncryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
 				Expect(sentPackets[0].Frames).To(HaveLen(2))
 				Expect(sentPackets[0].Frames[1]).To(Equal(sf))
-				swf := sentPackets[0].Frames[0].(*frames.StopWaitingFrame)
+				swf := sentPackets[0].Frames[0].(*wire.StopWaitingFrame)
 				Expect(swf.LeastUnacked).To(Equal(protocol.PacketNumber(0x1337)))
 			})
 
 			It("retransmit a packet encrypted with the initial encryption", func() {
-				sf := &frames.StreamFrame{StreamID: 1, Data: []byte("foobar")}
+				sf := &wire.StreamFrame{StreamID: 1, Data: []byte("foobar")}
 				sph.retransmissionQueue = []*ackhandler.Packet{{
-					Frames:          []frames.Frame{sf},
+					Frames:          []wire.Frame{sf},
 					EncryptionLevel: protocol.EncryptionSecure,
 				}}
 				err := sess.sendPacket()
@@ -1036,9 +1068,9 @@ var _ = Describe("Session", func() {
 
 			It("doesn't retransmit handshake packets when the handshake is complete", func() {
 				sess.handshakeComplete = true
-				sf := &frames.StreamFrame{StreamID: 1, Data: []byte("foobar")}
+				sf := &wire.StreamFrame{StreamID: 1, Data: []byte("foobar")}
 				sph.retransmissionQueue = []*ackhandler.Packet{{
-					Frames:          []frames.Frame{sf},
+					Frames:          []wire.Frame{sf},
 					EncryptionLevel: protocol.EncryptionSecure,
 				}}
 				err := sess.sendPacket()
@@ -1049,13 +1081,13 @@ var _ = Describe("Session", func() {
 
 		Context("for packets after the handshake", func() {
 			It("sends a StreamFrame from a packet queued for retransmission", func() {
-				f := frames.StreamFrame{
+				f := wire.StreamFrame{
 					StreamID: 0x5,
 					Data:     []byte("foobar1234567"),
 				}
 				p := ackhandler.Packet{
 					PacketNumber:    0x1337,
-					Frames:          []frames.Frame{&f},
+					Frames:          []wire.Frame{&f},
 					EncryptionLevel: protocol.EncryptionForwardSecure,
 				}
 				sph.retransmissionQueue = []*ackhandler.Packet{&p}
@@ -1064,26 +1096,26 @@ var _ = Describe("Session", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(mconn.written).To(HaveLen(1))
 				Expect(sph.requestedStopWaiting).To(BeTrue())
-				Expect(mconn.written[0]).To(ContainSubstring("foobar1234567"))
+				Expect(mconn.written).To(Receive(ContainSubstring("foobar1234567")))
 			})
 
 			It("sends a StreamFrame from a packet queued for retransmission", func() {
-				f1 := frames.StreamFrame{
+				f1 := wire.StreamFrame{
 					StreamID: 0x5,
 					Data:     []byte("foobar"),
 				}
-				f2 := frames.StreamFrame{
+				f2 := wire.StreamFrame{
 					StreamID: 0x7,
 					Data:     []byte("loremipsum"),
 				}
 				p1 := ackhandler.Packet{
 					PacketNumber:    0x1337,
-					Frames:          []frames.Frame{&f1},
+					Frames:          []wire.Frame{&f1},
 					EncryptionLevel: protocol.EncryptionForwardSecure,
 				}
 				p2 := ackhandler.Packet{
 					PacketNumber:    0x1338,
-					Frames:          []frames.Frame{&f2},
+					Frames:          []wire.Frame{&f2},
 					EncryptionLevel: protocol.EncryptionForwardSecure,
 				}
 				sph.retransmissionQueue = []*ackhandler.Packet{&p1, &p2}
@@ -1091,12 +1123,13 @@ var _ = Describe("Session", func() {
 				err := sess.sendPacket()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(mconn.written).To(HaveLen(1))
-				Expect(mconn.written[0]).To(ContainSubstring("foobar"))
-				Expect(mconn.written[0]).To(ContainSubstring("loremipsum"))
+				packet := <-mconn.written
+				Expect(packet).To(ContainSubstring("foobar"))
+				Expect(packet).To(ContainSubstring("loremipsum"))
 			})
 
 			It("always attaches a StopWaiting to a packet that contains a retransmission", func() {
-				f := &frames.StreamFrame{
+				f := &wire.StreamFrame{
 					StreamID: 0x5,
 					Data:     bytes.Repeat([]byte{'f'}, int(1.5*float32(protocol.MaxPacketSize))),
 				}
@@ -1107,9 +1140,9 @@ var _ = Describe("Session", func() {
 				Expect(mconn.written).To(HaveLen(2))
 				sentPackets := sph.sentPackets
 				Expect(sentPackets).To(HaveLen(2))
-				_, ok := sentPackets[0].Frames[0].(*frames.StopWaitingFrame)
+				_, ok := sentPackets[0].Frames[0].(*wire.StopWaitingFrame)
 				Expect(ok).To(BeTrue())
-				_, ok = sentPackets[1].Frames[0].(*frames.StopWaitingFrame)
+				_, ok = sentPackets[1].Frames[0].(*wire.StopWaitingFrame)
 				Expect(ok).To(BeTrue())
 			})
 
@@ -1120,12 +1153,12 @@ var _ = Describe("Session", func() {
 				sess.flowControlManager = fcm
 				fcm.EXPECT().GetWindowUpdates()
 				fcm.EXPECT().GetReceiveWindow(protocol.StreamID(5)).Return(protocol.ByteCount(0x1000), nil)
-				wuf := &frames.WindowUpdateFrame{
+				wuf := &wire.WindowUpdateFrame{
 					StreamID:   5,
 					ByteOffset: 0x1000,
 				}
 				sph.retransmissionQueue = []*ackhandler.Packet{{
-					Frames:          []frames.Frame{wuf},
+					Frames:          []wire.Frame{wuf},
 					EncryptionLevel: protocol.EncryptionForwardSecure,
 				}}
 				err = sess.sendPacket()
@@ -1142,7 +1175,7 @@ var _ = Describe("Session", func() {
 				fcm.EXPECT().GetWindowUpdates()
 				fcm.EXPECT().GetReceiveWindow(protocol.StreamID(5)).Return(protocol.ByteCount(0x2000), nil)
 				sph.retransmissionQueue = []*ackhandler.Packet{{
-					Frames: []frames.Frame{&frames.WindowUpdateFrame{
+					Frames: []wire.Frame{&wire.WindowUpdateFrame{
 						StreamID:   5,
 						ByteOffset: 0x1000,
 					}},
@@ -1164,7 +1197,7 @@ var _ = Describe("Session", func() {
 				_, err = sess.flowControlManager.SendWindowSize(5)
 				Expect(err).To(MatchError("Error accessing the flowController map."))
 				sph.retransmissionQueue = []*ackhandler.Packet{{
-					Frames: []frames.Frame{&frames.WindowUpdateFrame{
+					Frames: []wire.Frame{&wire.WindowUpdateFrame{
 						StreamID:   5,
 						ByteOffset: 0x1337,
 					}},
@@ -1189,7 +1222,7 @@ var _ = Describe("Session", func() {
 		err := sess.sentPacketHandler.SentPacket(&ackhandler.Packet{
 			PacketNumber: n,
 			Length:       1,
-			Frames: []frames.Frame{&frames.StreamFrame{
+			Frames: []wire.Frame{&wire.StreamFrame{
 				Data: []byte("foobar"),
 			}},
 			EncryptionLevel: protocol.EncryptionForwardSecure,
@@ -1199,7 +1232,7 @@ var _ = Describe("Session", func() {
 		defer sess.Close(nil)
 		sess.scheduleSending()
 		Eventually(func() int { return len(mconn.written) }).ShouldNot(BeZero())
-		Expect(mconn.written[0]).To(ContainSubstring("foobar"))
+		Expect(mconn.written).To(Receive(ContainSubstring("foobar")))
 	})
 
 	Context("scheduling sending", func() {
@@ -1221,13 +1254,13 @@ var _ = Describe("Session", func() {
 
 		It("sets the timer to the ack timer", func() {
 			rph := &mockReceivedPacketHandler{ackAlarm: time.Now().Add(10 * time.Millisecond)}
-			rph.nextAckFrame = &frames.AckFrame{LargestAcked: 0x1337}
+			rph.nextAckFrame = &wire.AckFrame{LargestAcked: 0x1337}
 			sess.receivedPacketHandler = rph
 			go sess.run()
 			defer sess.Close(nil)
 			time.Sleep(10 * time.Millisecond)
 			Eventually(func() int { return len(mconn.written) }).ShouldNot(BeZero())
-			Expect(mconn.written[0]).To(ContainSubstring(string([]byte{0x37, 0x13})))
+			Expect(mconn.written).To(Receive(ContainSubstring(string([]byte{0x37, 0x13}))))
 		})
 
 		Context("bundling of small packets", func() {
@@ -1245,9 +1278,10 @@ var _ = Describe("Session", func() {
 				go sess.run()
 				defer sess.Close(nil)
 
-				Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(1))
-				Expect(mconn.written[0]).To(ContainSubstring("foobar1"))
-				Expect(mconn.written[0]).To(ContainSubstring("foobar2"))
+				Eventually(mconn.written).Should(HaveLen(1))
+				packet := <-mconn.written
+				Expect(packet).To(ContainSubstring("foobar1"))
+				Expect(packet).To(ContainSubstring("foobar2"))
 			})
 
 			It("sends out two big frames in two packets", func() {
@@ -1263,7 +1297,7 @@ var _ = Describe("Session", func() {
 				}()
 				_, err = s2.Write(bytes.Repeat([]byte{'e'}, 1000))
 				Expect(err).ToNot(HaveOccurred())
-				Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(2))
+				Eventually(mconn.written).Should(HaveLen(2))
 			})
 
 			It("sends out two small frames that are written to long after one another into two packets", func() {
@@ -1273,10 +1307,10 @@ var _ = Describe("Session", func() {
 				defer sess.Close(nil)
 				_, err = s.Write([]byte("foobar1"))
 				Expect(err).NotTo(HaveOccurred())
-				Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(1))
+				Eventually(mconn.written).Should(HaveLen(1))
 				_, err = s.Write([]byte("foobar2"))
 				Expect(err).NotTo(HaveOccurred())
-				Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(2))
+				Eventually(mconn.written).Should(HaveLen(2))
 			})
 
 			It("sends a queued ACK frame only once", func() {
@@ -1289,13 +1323,13 @@ var _ = Describe("Session", func() {
 				defer sess.Close(nil)
 				_, err = s.Write([]byte("foobar1"))
 				Expect(err).NotTo(HaveOccurred())
-				Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(1))
+				Eventually(mconn.written).Should(HaveLen(1))
 				_, err = s.Write([]byte("foobar2"))
 				Expect(err).NotTo(HaveOccurred())
 
-				Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(2))
-				Expect(mconn.written[0]).To(ContainSubstring(string([]byte{0x37, 0x13})))
-				Expect(mconn.written[1]).ToNot(ContainSubstring(string([]byte{0x37, 0x13})))
+				Eventually(mconn.written).Should(HaveLen(2))
+				Expect(mconn.written).To(Receive(ContainSubstring(string([]byte{0x37, 0x13}))))
+				Expect(mconn.written).ToNot(Receive(ContainSubstring(string([]byte{0x37, 0x13}))))
 			})
 		})
 	})
@@ -1316,7 +1350,7 @@ var _ = Describe("Session", func() {
 		// this completely fills up the undecryptable packets queue and triggers the public reset timer
 		sendUndecryptablePackets := func() {
 			for i := 0; i < protocol.MaxUndecryptablePackets+1; i++ {
-				hdr := &PublicHeader{
+				hdr := &wire.PublicHeader{
 					PacketNumber: protocol.PacketNumber(i + 1),
 				}
 				sess.handlePacket(&receivedPacket{
@@ -1336,7 +1370,7 @@ var _ = Describe("Session", func() {
 			go sess.run()
 			sendUndecryptablePackets()
 			sess.scheduleSending()
-			Consistently(func() [][]byte { return mconn.written }).Should(HaveLen(0))
+			Consistently(mconn.written).Should(HaveLen(0))
 		})
 
 		It("sets a deadline to send a Public Reset after receiving too many undecryptable packets", func() {
@@ -1363,9 +1397,9 @@ var _ = Describe("Session", func() {
 			sess.receivedTooManyUndecrytablePacketsTime = time.Now().Add(-protocol.PublicResetTimeout)
 			time.Sleep(10 * time.Millisecond) // wait for the run loop to spin up
 			sess.scheduleSending()            // wake up the run loop
-			Eventually(func() [][]byte { return mconn.written }).Should(HaveLen(1))
-			Expect(mconn.written[0]).To(ContainSubstring("PRST"))
-			Eventually(sess.runClosed).Should(BeClosed())
+			Eventually(mconn.written).Should(HaveLen(1))
+			Expect(mconn.written).To(Receive(ContainSubstring("PRST")))
+			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
 		It("doesn't send a Public Reset if decrypting them suceeded during the timeout", func() {
@@ -1374,13 +1408,13 @@ var _ = Describe("Session", func() {
 			sess.scheduleSending() // wake up the run loop
 			// there are no packets in the undecryptable packet queue
 			// in reality, this happens when the trial decryption succeeded during the Public Reset timeout
-			Consistently(func() [][]byte { return mconn.written }).ShouldNot(HaveLen(1))
-			Expect(sess.runClosed).ToNot(Receive())
+			Consistently(mconn.written).ShouldNot(HaveLen(1))
+			Expect(sess.Context().Done()).ToNot(Receive())
 			sess.Close(nil)
 		})
 
 		It("ignores undecryptable packets after the handshake is complete", func() {
-			close(aeadChanged)
+			sess.handshakeComplete = true
 			go sess.run()
 			sendUndecryptablePackets()
 			Consistently(sess.undecryptablePackets).Should(BeEmpty())
@@ -1389,7 +1423,7 @@ var _ = Describe("Session", func() {
 
 		It("unqueues undecryptable packets for later decryption", func() {
 			sess.undecryptablePackets = []*receivedPacket{{
-				publicHeader: &PublicHeader{PacketNumber: protocol.PacketNumber(42)},
+				publicHeader: &wire.PublicHeader{PacketNumber: protocol.PacketNumber(42)},
 			}}
 			Expect(sess.receivedPackets).NotTo(Receive())
 			sess.tryDecryptingQueuedPackets()
@@ -1441,35 +1475,47 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("keep-alives", func() {
-		It("sends a ping packet", func() {
+		It("sends a PING", func() {
+			sess.handshakeComplete = true
 			sess.config.KeepAlive = true
 			sess.lastNetworkActivityTime = time.Now().Add(-(sess.idleTimeout() / 2))
 			go sess.run()
 			defer sess.Close(nil)
 			time.Sleep(60 * time.Millisecond)
-			Eventually(func() [][]byte { return mconn.written }).ShouldNot(BeEmpty())
+			Eventually(mconn.written).ShouldNot(BeEmpty())
 			Eventually(func() byte {
 				// -12 because of the crypto tag. This should be 7 (the frame id for a ping frame).
-				s := mconn.written[0]
+				s := <-mconn.written
 				return s[len(s)-12-1]
 			}).Should(Equal(byte(0x07)))
 		})
 
-		It("doesn't send a ping packet if keep-alive is disabled", func() {
+		It("doesn't send a PING packet if keep-alive is disabled", func() {
+			sess.handshakeComplete = true
 			sess.lastNetworkActivityTime = time.Now().Add(-(sess.idleTimeout() / 2))
 			go sess.run()
 			defer sess.Close(nil)
-			Consistently(func() [][]byte { return mconn.written }).Should(BeEmpty())
+			Consistently(mconn.written).Should(BeEmpty())
+		})
+
+		It("doesn't send a PING if the handshake isn't completed yet", func() {
+			sess.handshakeComplete = false
+			sess.config.KeepAlive = true
+			sess.lastNetworkActivityTime = time.Now().Add(-(sess.idleTimeout() / 2))
+			go sess.run()
+			defer sess.Close(nil)
+			Consistently(mconn.written).Should(BeEmpty())
 		})
 	})
 
 	Context("timeouts", func() {
 		It("times out due to no network activity", func(done Done) {
+			sess.handshakeComplete = true
 			sess.lastNetworkActivityTime = time.Now().Add(-time.Hour)
 			err := sess.run() // Would normally not return
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
-			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
-			Expect(sess.runClosed).To(BeClosed())
+			Expect(mconn.written).To(Receive(ContainSubstring("No recent network activity.")))
+			Expect(sess.Context().Done()).To(BeClosed())
 			close(done)
 		})
 
@@ -1477,23 +1523,27 @@ var _ = Describe("Session", func() {
 			sess.sessionCreationTime = time.Now().Add(-protocol.DefaultHandshakeTimeout).Add(-time.Second)
 			err := sess.run() // Would normally not return
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.HandshakeTimeout))
-			Expect(mconn.written[0]).To(ContainSubstring("Crypto handshake did not complete in time."))
-			Expect(sess.runClosed).To(BeClosed())
+			Expect(mconn.written).To(Receive(ContainSubstring("Crypto handshake did not complete in time.")))
+			Expect(sess.Context().Done()).To(BeClosed())
 			close(done)
 		})
 
-		It("does not use ICSL before handshake", func(done Done) {
+		It("does not use ICSL before handshake", func() {
+			defer sess.Close(nil)
 			sess.lastNetworkActivityTime = time.Now().Add(-time.Minute)
 			mockCpm = mocks.NewMockConnectionParametersManager(mockCtrl)
 			mockCpm.EXPECT().GetIdleConnectionStateLifetime().Return(9999 * time.Second).AnyTimes()
 			mockCpm.EXPECT().TruncateConnectionID().Return(false).AnyTimes()
 			sess.connectionParameters = mockCpm
 			sess.packer.connectionParameters = mockCpm
-			err := sess.run() // Would normally not return
-			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
-			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
-			Expect(sess.runClosed).To(BeClosed())
-			close(done)
+			// the handshake timeout is irrelevant here, since it depends on the time the session was created,
+			// and not on the last network activity
+			done := make(chan struct{})
+			go func() {
+				_ = sess.run()
+				close(done)
+			}()
+			Consistently(done).ShouldNot(BeClosed())
 		})
 
 		It("uses ICSL after handshake", func(done Done) {
@@ -1506,8 +1556,8 @@ var _ = Describe("Session", func() {
 			mockCpm.EXPECT().GetIdleConnectionStateLifetime().Return(0 * time.Second).AnyTimes()
 			err := sess.run() // Would normally not return
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
-			Expect(mconn.written[0]).To(ContainSubstring("No recent network activity."))
-			Expect(sess.runClosed).To(BeClosed())
+			Expect(mconn.written).To(Receive(ContainSubstring("No recent network activity.")))
+			Expect(sess.Context().Done()).To(BeClosed())
 			close(done)
 		})
 	})
@@ -1581,11 +1631,11 @@ var _ = Describe("Session", func() {
 				PacketNumber: 1,
 				Length:       1,
 			})
-			err := sess.handleFrames([]frames.Frame{&frames.AckFrame{
+			err := sess.handleFrames([]wire.Frame{&wire.AckFrame{
 				LargestAcked: 1,
 			}})
 			Expect(err).NotTo(HaveOccurred())
-			err = sess.handleFrames([]frames.Frame{&frames.AckFrame{
+			err = sess.handleFrames([]wire.Frame{&wire.AckFrame{
 				LargestAcked: 1,
 			}})
 			Expect(err).NotTo(HaveOccurred())
@@ -1599,7 +1649,7 @@ var _ = Describe("Session", func() {
 			frames := sess.getWindowUpdateFrames()
 			Expect(frames).To(HaveLen(1))
 			Expect(frames[0].StreamID).To(Equal(protocol.StreamID(1)))
-			Expect(frames[0].ByteOffset).To(Equal(protocol.ReceiveStreamFlowControlWindow * 2))
+			Expect(frames[0].ByteOffset).To(BeEquivalentTo(protocol.ReceiveStreamFlowControlWindow * 2))
 		})
 
 		It("gets connection level window updates", func() {
@@ -1610,7 +1660,7 @@ var _ = Describe("Session", func() {
 			frames := sess.getWindowUpdateFrames()
 			Expect(frames).To(HaveLen(1))
 			Expect(frames[0].StreamID).To(Equal(protocol.StreamID(0)))
-			Expect(frames[0].ByteOffset).To(Equal(protocol.ReceiveConnectionFlowControlWindow * 2))
+			Expect(frames[0].ByteOffset).To(BeEquivalentTo(protocol.ReceiveConnectionFlowControlWindow * 2))
 		})
 	})
 
@@ -1656,13 +1706,11 @@ var _ = Describe("Client Session", func() {
 			return cryptoSetup, nil
 		}
 
-		mconn = &mockConnection{
-			remoteAddr: &net.UDPAddr{},
-		}
+		mconn = newMockConnection()
 		sessP, _, err := newClientSession(
 			mconn,
 			"hostname",
-			protocol.Version35,
+			protocol.Version37,
 			0,
 			nil,
 			populateClientConfig(&Config{}),
@@ -1678,10 +1726,10 @@ var _ = Describe("Client Session", func() {
 	})
 
 	Context("receiving packets", func() {
-		var hdr *PublicHeader
+		var hdr *wire.PublicHeader
 
 		BeforeEach(func() {
-			hdr = &PublicHeader{PacketNumberLen: protocol.PacketNumberLen6}
+			hdr = &wire.PublicHeader{PacketNumberLen: protocol.PacketNumberLen6}
 			sess.unpacker = &mockUnpacker{}
 		})
 

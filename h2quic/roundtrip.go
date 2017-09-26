@@ -4,12 +4,20 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
 
+	quic "github.com/lucas-clemente/quic-go"
+
 	"golang.org/x/net/lex/httplex"
 )
+
+type roundTripCloser interface {
+	http.RoundTripper
+	io.Closer
+}
 
 // RoundTripper implements the http.RoundTripper interface
 type RoundTripper struct {
@@ -29,13 +37,29 @@ type RoundTripper struct {
 	// tls.Client. If nil, the default configuration is used.
 	TLSClientConfig *tls.Config
 
-	clients map[string]http.RoundTripper
+	// QuicConfig is the quic.Config used for dialing new connections.
+	// If nil, reasonable default values will be used.
+	QuicConfig *quic.Config
+
+	clients map[string]roundTripCloser
 }
 
-var _ http.RoundTripper = &RoundTripper{}
+// RoundTripOpt are options for the Transport.RoundTripOpt method.
+type RoundTripOpt struct {
+	// OnlyCachedConn controls whether the RoundTripper may
+	// create a new QUIC connection. If set true and
+	// no cached connection is available, RoundTrip
+	// will return ErrNoCachedConn.
+	OnlyCachedConn bool
+}
 
-// RoundTrip does a round trip
-func (r *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+var _ roundTripCloser = &RoundTripper{}
+
+// ErrNoCachedConn is returned when RoundTripper.OnlyCachedConn is set
+var ErrNoCachedConn = errors.New("h2quic: no cached connection was available")
+
+// RoundTripOpt is like RoundTrip, but takes options.
+func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
 	if req.URL == nil {
 		closeRequestBody(req)
 		return nil, errors.New("quic: nil Request.URL")
@@ -71,23 +95,48 @@ func (r *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	hostname := authorityAddr("https", hostnameFromRequest(req))
-	return r.getClient(hostname).RoundTrip(req)
+	cl, err := r.getClient(hostname, opt.OnlyCachedConn)
+	if err != nil {
+		return nil, err
+	}
+	return cl.RoundTrip(req)
 }
 
-func (r *RoundTripper) getClient(hostname string) http.RoundTripper {
+// RoundTrip does a round trip.
+func (r *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return r.RoundTripOpt(req, RoundTripOpt{})
+}
+
+func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTripper, error) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
 	if r.clients == nil {
-		r.clients = make(map[string]http.RoundTripper)
+		r.clients = make(map[string]roundTripCloser)
 	}
 
 	client, ok := r.clients[hostname]
 	if !ok {
-		client = newClient(r.TLSClientConfig, hostname, &roundTripperOpts{DisableCompression: r.DisableCompression})
+		if onlyCached {
+			return nil, ErrNoCachedConn
+		}
+		client = newClient(hostname, r.TLSClientConfig, &roundTripperOpts{DisableCompression: r.DisableCompression}, r.QuicConfig)
 		r.clients[hostname] = client
 	}
-	return client
+	return client, nil
+}
+
+// Close closes the QUIC connections that this RoundTripper has used
+func (r *RoundTripper) Close() error {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	for _, client := range r.clients {
+		if err := client.Close(); err != nil {
+			return err
+		}
+	}
+	r.clients = nil
+	return nil
 }
 
 func closeRequestBody(req *http.Request) {

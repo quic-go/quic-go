@@ -3,22 +3,22 @@ package ackhandler
 import (
 	"reflect"
 
-	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("retransmittable frames", func() {
-	for fl, el := range map[frames.Frame]bool{
-		&frames.AckFrame{}:             false,
-		&frames.StopWaitingFrame{}:     false,
-		&frames.BlockedFrame{}:         true,
-		&frames.ConnectionCloseFrame{}: true,
-		&frames.GoawayFrame{}:          true,
-		&frames.PingFrame{}:            true,
-		&frames.RstStreamFrame{}:       true,
-		&frames.StreamFrame{}:          true,
-		&frames.WindowUpdateFrame{}:    true,
+	for fl, el := range map[wire.Frame]bool{
+		&wire.AckFrame{}:             false,
+		&wire.StopWaitingFrame{}:     false,
+		&wire.BlockedFrame{}:         true,
+		&wire.ConnectionCloseFrame{}: true,
+		&wire.GoawayFrame{}:          true,
+		&wire.PingFrame{}:            true,
+		&wire.RstStreamFrame{}:       true,
+		&wire.StreamFrame{}:          true,
+		&wire.WindowUpdateFrame{}:    true,
 	} {
 		f := fl
 		e := el
@@ -29,16 +29,16 @@ var _ = Describe("retransmittable frames", func() {
 		})
 
 		It("stripping non-retransmittable frames works for "+fName, func() {
-			s := []frames.Frame{f}
+			s := []wire.Frame{f}
 			if e {
-				Expect(stripNonRetransmittableFrames(s)).To(Equal([]frames.Frame{f}))
+				Expect(stripNonRetransmittableFrames(s)).To(Equal([]wire.Frame{f}))
 			} else {
 				Expect(stripNonRetransmittableFrames(s)).To(BeEmpty())
 			}
 		})
 
 		It("HasRetransmittableFrames works for "+fName, func() {
-			Expect(HasRetransmittableFrames([]frames.Frame{f})).To(Equal(e))
+			Expect(HasRetransmittableFrames([]wire.Frame{f})).To(Equal(e))
 		})
 	}
 })

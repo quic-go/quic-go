@@ -2,14 +2,16 @@ package h2quic
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"sync"
+	"time"
 
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -23,19 +25,27 @@ type mockStream struct {
 	remoteClosed bool
 
 	unblockRead chan struct{}
+	ctx         context.Context
+	ctxCancel   context.CancelFunc
 }
 
 func newMockStream(id protocol.StreamID) *mockStream {
-	return &mockStream{
+	s := &mockStream{
 		id:          id,
 		unblockRead: make(chan struct{}),
 	}
+	s.ctx, s.ctxCancel = context.WithCancel(context.Background())
+	return s
 }
 
-func (s *mockStream) Close() error                          { s.closed = true; return nil }
+func (s *mockStream) Close() error                          { s.closed = true; s.ctxCancel(); return nil }
 func (s *mockStream) Reset(error)                           { s.reset = true }
-func (s *mockStream) CloseRemote(offset protocol.ByteCount) { s.remoteClosed = true }
+func (s *mockStream) CloseRemote(offset protocol.ByteCount) { s.remoteClosed = true; s.ctxCancel() }
 func (s mockStream) StreamID() protocol.StreamID            { return s.id }
+func (s *mockStream) Context() context.Context              { return s.ctx }
+func (s *mockStream) SetDeadline(time.Time) error           { panic("not implemented") }
+func (s *mockStream) SetReadDeadline(time.Time) error       { panic("not implemented") }
+func (s *mockStream) SetWriteDeadline(time.Time) error      { panic("not implemented") }
 
 func (s *mockStream) Read(p []byte) (int, error) {
 	n, _ := s.dataToRead.Read(p)

@@ -1,13 +1,20 @@
 #!/usr/bin/env bash
 
-set -e
+set -ex
 
 go get -t ./...
 if [ ${TESTMODE} == "unit" ]; then
-  ginkgo -r --cover --randomizeAllSpecs --randomizeSuites --trace --progress --skipPackage integrationtests --skipMeasurements
+  ginkgo -r -v -cover -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
 fi
 
 if [ ${TESTMODE} == "integration" ]; then
-  ginkgo --randomizeAllSpecs --randomizeSuites --trace --progress -focus "Benchmark"
-  ginkgo -r --randomizeAllSpecs --randomizeSuites --trace --progress integrationtests
+  # run benchmark tests
+  ginkgo -randomizeAllSpecs -randomizeSuites -trace benchmark -- -samples=1
+  # run benchmark tests with the Go race detector
+  # The Go race detector only works on amd64.
+  if [ ${TRAVIS_GOARCH} == 'amd64' ]; then
+    ginkgo -race -randomizeAllSpecs -randomizeSuites -trace benchmark -- -samples=1 -size=10
+  fi
+  # run integration tests
+  ginkgo -r -v -randomizeAllSpecs -randomizeSuites -trace integrationtests
 fi
