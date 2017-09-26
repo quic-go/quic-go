@@ -3,6 +3,7 @@ package h2quic
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/tls"
 	"errors"
 	"io"
@@ -36,6 +37,7 @@ var _ = Describe("Client", func() {
 		client = newClient(hostname, nil, &roundTripperOpts{}, nil)
 		Expect(client.hostname).To(Equal(hostname))
 		session = &mockSession{}
+		session.ctx, session.ctxCancel = context.WithCancel(context.Background())
 		client.session = session
 
 		headerStream = newMockStream(3)

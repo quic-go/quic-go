@@ -194,6 +194,7 @@ func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, 
 		_, _ = dataStream.Read([]byte{0}) // read the eof
 	}
 
+	req = req.WithContext(dataStream.Context())
 	reqBody := newRequestBody(dataStream)
 	req.Body = reqBody
 
