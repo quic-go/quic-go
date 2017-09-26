@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/congestion"
-	"github.com/lucas-clemente/quic-go/frames"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qerr"
 )
 
@@ -39,6 +39,8 @@ var errPacketNumberNotIncreasing = errors.New("Already sent a packet with a high
 type sentPacketHandler struct {
 	lastSentPacketNumber protocol.PacketNumber
 	skippedPackets       []protocol.PacketNumber
+
+	numNonRetransmittablePackets int // number of non-retransmittable packets since the last retransmittable packet
 
 	LargestAcked protocol.PacketNumber
 
@@ -89,6 +91,10 @@ func (h *sentPacketHandler) largestInOrderAcked() protocol.PacketNumber {
 	return h.LargestAcked
 }
 
+func (h *sentPacketHandler) ShouldSendRetransmittablePacket() bool {
+	return h.numNonRetransmittablePackets >= protocol.MaxNonRetransmittablePackets
+}
+
 func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 	if packet.PacketNumber <= h.lastSentPacketNumber {
 		return errPacketNumberNotIncreasing
@@ -116,6 +122,9 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 		packet.SendTime = now
 		h.bytesInFlight += packet.Length
 		h.packetHistory.PushBack(*packet)
+		h.numNonRetransmittablePackets = 0
+	} else {
+		h.numNonRetransmittablePackets++
 	}
 
 	h.congestion.OnPacketSent(
@@ -130,7 +139,7 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 	return nil
 }
 
-func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNumber protocol.PacketNumber, rcvTime time.Time) error {
+func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, rcvTime time.Time) error {
 	if ackFrame.LargestAcked > h.lastSentPacketNumber {
 		return errAckForUnsentPacket
 	}
@@ -178,7 +187,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *frames.AckFrame, withPacketNum
 	return nil
 }
 
-func (h *sentPacketHandler) determineNewlyAckedPackets(ackFrame *frames.AckFrame) ([]*PacketElement, error) {
+func (h *sentPacketHandler) determineNewlyAckedPackets(ackFrame *wire.AckFrame) ([]*PacketElement, error) {
 	var ackedPackets []*PacketElement
 	ackRangeIndex := 0
 	for el := h.packetHistory.Front(); el != nil; el = el.Next() {
@@ -197,14 +206,14 @@ func (h *sentPacketHandler) determineNewlyAckedPackets(ackFrame *frames.AckFrame
 		if ackFrame.HasMissingRanges() {
 			ackRange := ackFrame.AckRanges[len(ackFrame.AckRanges)-1-ackRangeIndex]
 
-			for packetNumber > ackRange.LastPacketNumber && ackRangeIndex < len(ackFrame.AckRanges)-1 {
+			for packetNumber > ackRange.Last && ackRangeIndex < len(ackFrame.AckRanges)-1 {
 				ackRangeIndex++
 				ackRange = ackFrame.AckRanges[len(ackFrame.AckRanges)-1-ackRangeIndex]
 			}
 
-			if packetNumber >= ackRange.FirstPacketNumber { // packet i contained in ACK range
-				if packetNumber > ackRange.LastPacketNumber {
-					return nil, fmt.Errorf("BUG: ackhandler would have acked wrong packet 0x%x, while evaluating range 0x%x -> 0x%x", packetNumber, ackRange.FirstPacketNumber, ackRange.LastPacketNumber)
+			if packetNumber >= ackRange.First { // packet i contained in ACK range
+				if packetNumber > ackRange.Last {
+					return nil, fmt.Errorf("BUG: ackhandler would have acked wrong packet 0x%x, while evaluating range 0x%x -> 0x%x", packetNumber, ackRange.First, ackRange.Last)
 				}
 				ackedPackets = append(ackedPackets, el)
 			}
@@ -323,7 +332,7 @@ func (h *sentPacketHandler) GetLeastUnacked() protocol.PacketNumber {
 	return h.largestInOrderAcked() + 1
 }
 
-func (h *sentPacketHandler) GetStopWaitingFrame(force bool) *frames.StopWaitingFrame {
+func (h *sentPacketHandler) GetStopWaitingFrame(force bool) *wire.StopWaitingFrame {
 	return h.stopWaitingManager.GetStopWaitingFrame(force)
 }
 
@@ -382,7 +391,7 @@ func (h *sentPacketHandler) computeRTOTimeout() time.Duration {
 	return utils.MinDuration(rto, maxRTOTimeout)
 }
 
-func (h *sentPacketHandler) skippedPacketsAcked(ackFrame *frames.AckFrame) bool {
+func (h *sentPacketHandler) skippedPacketsAcked(ackFrame *wire.AckFrame) bool {
 	for _, p := range h.skippedPackets {
 		if ackFrame.AcksPacket(p) {
 			return true

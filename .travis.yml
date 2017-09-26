@@ -7,8 +7,7 @@ addons:
 language: go
 
 go:
-  - 1.8.x
-  - 1.9beta2
+  - 1.9
 
 # first part of the GOARCH workaround
 # setting the GOARCH directly doesn't work, since the value will be overwritten later
@@ -31,7 +30,7 @@ before_install:
   - export GOARCH=$TRAVIS_GOARCH
   - go env # for debugging
   - "export DISPLAY=:99.0"
-  - "Xvfb $DISPLAY &"
+  - "Xvfb $DISPLAY &> /dev/null &"
 
 script:
   - .travis/script.sh

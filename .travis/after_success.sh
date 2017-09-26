@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -ex
 
 if [ ${TESTMODE} == "unit" ]; then
   cat `find . -name "*.coverprofile"` > coverage.txt

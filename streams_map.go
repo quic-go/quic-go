@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/lucas-clemente/quic-go/handshake"
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/handshake"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 )
 

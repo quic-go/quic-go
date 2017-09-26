@@ -3,6 +3,7 @@ package h2quic
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/tls"
 	"errors"
 	"io"
@@ -12,7 +13,7 @@ import (
 	"golang.org/x/net/http2/hpack"
 
 	quic "github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/protocol"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 
 	"time"
@@ -36,6 +37,7 @@ var _ = Describe("Client", func() {
 		client = newClient(hostname, nil, &roundTripperOpts{}, nil)
 		Expect(client.hostname).To(Equal(hostname))
 		session = &mockSession{}
+		session.ctx, session.ctxCancel = context.WithCancel(context.Background())
 		client.session = session
 
 		headerStream = newMockStream(3)
