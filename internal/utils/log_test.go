@@ -108,6 +108,12 @@ var _ = Describe("Log", func() {
 			Expect(logLevel).To(Equal(LogLevelDebug))
 		})
 
+		It("reads debug", func() {
+			os.Setenv(logEnv, "debug")
+			readLoggingEnv()
+			Expect(logLevel).To(Equal(LogLevelDebug))
+		})
+
 		It("reads INFO", func() {
 			os.Setenv(logEnv, "INFO")
 			readLoggingEnv()
