@@ -39,7 +39,7 @@ var _ = Describe("Client tests", func() {
 	for _, v := range protocol.SupportedVersions {
 		version := v
 
-		Context(fmt.Sprintf("with quic version %d", version), func() {
+		Context(fmt.Sprintf("with QUIC version %s", version), func() {
 			BeforeEach(func() {
 				client = &http.Client{
 					Transport: &h2quic.RoundTripper{

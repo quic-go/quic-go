@@ -112,7 +112,7 @@ func DialNonFWSecure(
 		versionNegotiationChan: make(chan struct{}),
 	}
 
-	utils.Infof("Starting new connection to %s (%s -> %s), connectionID %x, version %d", hostname, c.conn.LocalAddr().String(), c.conn.RemoteAddr().String(), c.connectionID, c.version)
+	utils.Infof("Starting new connection to %s (%s -> %s), connectionID %x, version %s", hostname, c.conn.LocalAddr().String(), c.conn.RemoteAddr().String(), c.connectionID, c.version)
 
 	if err := c.establishSecureConnection(); err != nil {
 		return nil, err
@@ -338,7 +338,7 @@ func (c *client) handlePacketWithVersionFlag(hdr *wire.PublicHeader) error {
 	if err != nil {
 		return err
 	}
-	utils.Infof("Switching to QUIC version %d. New connection ID: %x", newVersion, c.connectionID)
+	utils.Infof("Switching to QUIC version %s. New connection ID: %x", newVersion, c.connectionID)
 
 	// create a new session and close the old one
 	// the new session must be created first to update client member variables

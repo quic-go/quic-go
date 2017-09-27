@@ -272,7 +272,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 		if len(packet) < protocol.ClientHelloMinimumSize+len(hdr.Raw) {
 			return errors.New("dropping small packet with unknown version")
 		}
-		utils.Infof("Client offered version %d, sending VersionNegotiationPacket", hdr.VersionNumber)
+		utils.Infof("Client offered version %s, sending VersionNegotiationPacket", hdr.VersionNumber)
 		_, err = pconn.WriteTo(wire.ComposeVersionNegotiation(hdr.ConnectionID, s.config.Versions), remoteAddr)
 		return err
 	}
@@ -283,7 +283,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 			return errors.New("Server BUG: negotiated version not supported")
 		}
 
-		utils.Infof("Serving new connection: %x, version %d from %v", hdr.ConnectionID, version, remoteAddr)
+		utils.Infof("Serving new connection: %x, version %s from %v", hdr.ConnectionID, version, remoteAddr)
 		var handshakeChan <-chan handshakeEvent
 		session, handshakeChan, err = s.newSession(
 			&conn{pconn: pconn, currentAddr: remoteAddr},

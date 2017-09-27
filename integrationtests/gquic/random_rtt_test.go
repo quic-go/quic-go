@@ -88,7 +88,7 @@ var _ = Describe("Random RTT", func() {
 	for i := range protocol.SupportedVersions {
 		version := protocol.SupportedVersions[i]
 
-		Context(fmt.Sprintf("with quic version %d", version), func() {
+		Context(fmt.Sprintf("with QUIC version %s", version), func() {
 			It("gets a file a random RTT between 10ms and 30ms", func() {
 				runRTTTest(10*time.Millisecond, 30*time.Millisecond, version)
 			})
