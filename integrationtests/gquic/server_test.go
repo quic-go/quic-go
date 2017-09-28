@@ -170,7 +170,7 @@ var _ = Describe("Server tests", func() {
 			tmpDir = ""
 		})
 
-		Context(fmt.Sprintf("with QUIC version %d", version), func() {
+		Context(fmt.Sprintf("with QUIC version %s", version), func() {
 			It("downloads a hello", func() {
 				data := []byte("Hello world!\n")
 				createDownloadFile("hello", data)

@@ -22,7 +22,7 @@ var _ = Describe("Integration tests", func() {
 	for i := range protocol.SupportedVersions {
 		version := protocol.SupportedVersions[i]
 
-		Context(fmt.Sprintf("with quic version %d", version), func() {
+		Context(fmt.Sprintf("with QUIC version %s", version), func() {
 			It("gets a simple file", func() {
 				command := exec.Command(
 					clientPath,

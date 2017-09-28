@@ -54,7 +54,7 @@ var _ = Describe("non-zero RTT", func() {
 	for i := range protocol.SupportedVersions {
 		version := protocol.SupportedVersions[i]
 
-		Context(fmt.Sprintf("with quic version %d", version), func() {
+		Context(fmt.Sprintf("with QUIC version %s", version), func() {
 			roundTrips := [...]int{10, 50, 100, 200}
 			for _, rtt := range roundTrips {
 				It(fmt.Sprintf("gets a 500kB file with %dms RTT", rtt), func() {

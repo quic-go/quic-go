@@ -78,7 +78,7 @@ var _ = Describe("Drop tests", func() {
 	for _, v := range protocol.SupportedVersions {
 		version := v
 
-		Context(fmt.Sprintf("with QUIC version %d", version), func() {
+		Context(fmt.Sprintf("with QUIC version %s", version), func() {
 			Context("during the crypto handshake", func() {
 				for _, d := range directions {
 					direction := d

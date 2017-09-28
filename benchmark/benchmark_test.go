@@ -26,7 +26,7 @@ func init() {
 		for i := range protocol.SupportedVersions {
 			version := protocol.SupportedVersions[i]
 
-			Context(fmt.Sprintf("with version %d", version), func() {
+			Context(fmt.Sprintf("with version %s", version), func() {
 				Measure(fmt.Sprintf("transferring a %d MB file", size), func(b Benchmarker) {
 					var ln quic.Listener
 					serverAddr := make(chan net.Addr)
