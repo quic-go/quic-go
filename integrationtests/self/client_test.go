@@ -21,6 +21,9 @@ import (
 var _ = Describe("Client tests", func() {
 	var client *http.Client
 
+	// also run some tests with the TLS handshake
+	versions := append(protocol.SupportedVersions, protocol.VersionTLS)
+
 	BeforeEach(func() {
 		err := os.Setenv("HOSTALIASES", "quic.clemente.io 127.0.0.1")
 		Expect(err).ToNot(HaveOccurred())
@@ -29,14 +32,14 @@ var _ = Describe("Client tests", func() {
 		if addr.String() != "127.0.0.1:0" {
 			Fail("quic.clemente.io does not resolve to 127.0.0.1. Consider adding it to /etc/hosts.")
 		}
-		testserver.StartQuicServer(nil)
+		testserver.StartQuicServer(versions)
 	})
 
 	AfterEach(func() {
 		testserver.StopQuicServer()
 	})
 
-	for _, v := range protocol.SupportedVersions {
+	for _, v := range versions {
 		version := v
 
 		Context(fmt.Sprintf("with QUIC version %s", version), func() {
@@ -60,6 +63,10 @@ var _ = Describe("Client tests", func() {
 			})
 
 			It("downloads a small file", func() {
+				// TODO: enable this test as soon as we support TLS transport parameter negotiation
+				if version.UsesTLS() {
+					Skip("Test disabled, since transport paramenters aren't yet implemented for TLS.")
+				}
 				resp, err := client.Get("https://quic.clemente.io:" + testserver.Port() + "/prdata")
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
@@ -69,6 +76,10 @@ var _ = Describe("Client tests", func() {
 			})
 
 			It("downloads a large file", func() {
+				// TODO: enable this test as soon as we support TLS transport parameter negotiation
+				if version.UsesTLS() {
+					Skip("Test disabled, since transport paramenters aren't yet implemented for TLS.")
+				}
 				resp, err := client.Get("https://quic.clemente.io:" + testserver.Port() + "/prdatalong")
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
@@ -78,6 +89,10 @@ var _ = Describe("Client tests", func() {
 			})
 
 			It("uploads a file", func() {
+				// TODO: enable this test as soon as we support TLS transport parameter negotiation
+				if version.UsesTLS() {
+					Skip("Test disabled, since transport paramenters aren't yet implemented for TLS.")
+				}
 				resp, err := client.Post(
 					"https://quic.clemente.io:"+testserver.Port()+"/echo",
 					"text/plain",
