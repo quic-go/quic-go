@@ -13,6 +13,16 @@ var _ = Describe("Version", func() {
 		Expect(VersionTLS.UsesTLS()).To(BeTrue())
 	})
 
+	It("has the right string representation", func() {
+		Expect(Version37.String()).To(Equal("37"))
+		Expect(Version38.String()).To(Equal("38"))
+		Expect(Version39.String()).To(Equal("39"))
+		Expect(VersionTLS.String()).To(ContainSubstring("TLS"))
+		Expect(VersionWhatever.String()).To(Equal("whatever"))
+		Expect(VersionUnsupported.String()).To(Equal("unsupported"))
+		Expect(VersionUnknown.String()).To(Equal("unknown"))
+	})
+
 	It("converts tags to numbers", func() {
 		Expect(VersionTagToNumber('Q' + '1'<<8 + '2'<<16 + '3'<<24)).To(Equal(VersionNumber(123)))
 	})
