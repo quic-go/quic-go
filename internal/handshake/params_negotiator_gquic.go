@@ -114,3 +114,13 @@ func (h *paramsNegotiatorGQUIC) GetHelloMap() (map[Tag][]byte, error) {
 		TagSFCW: sfcw.Bytes(),
 	}, nil
 }
+
+func (h *paramsNegotiatorGQUIC) TruncateConnectionID() bool {
+	if h.perspective == protocol.PerspectiveClient {
+		return false
+	}
+
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+	return h.truncateConnectionID
+}

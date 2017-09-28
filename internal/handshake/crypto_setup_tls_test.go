@@ -45,6 +45,7 @@ var _ = Describe("TLS Crypto Setup", func() {
 			protocol.PerspectiveServer,
 			protocol.VersionTLS,
 			testdata.GetTLSConfig(),
+			&TransportParameters{},
 			aeadChanged,
 		)
 		Expect(err).ToNot(HaveOccurred())

@@ -199,6 +199,7 @@ func (s *session) setup(
 				s.perspective,
 				s.version,
 				tlsConf,
+				transportParams,
 				aeadChanged,
 			)
 		} else {
@@ -220,6 +221,7 @@ func (s *session) setup(
 				s.perspective,
 				s.version,
 				tlsConf,
+				transportParams,
 				aeadChanged,
 			)
 		} else {

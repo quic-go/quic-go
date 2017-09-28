@@ -39,7 +39,9 @@ type paramsNegotiatorBase struct {
 
 	flowControlNegotiated bool
 
-	truncateConnectionID                   bool
+	truncateConnectionID          bool
+	requestConnectionIDTruncation bool
+
 	maxStreamsPerConnection                uint32
 	maxIncomingDynamicStreamsPerConnection uint32
 	idleConnectionStateLifetime            time.Duration
@@ -58,6 +60,7 @@ func (h *paramsNegotiatorBase) init(params *TransportParameters) {
 	h.receiveConnectionFlowControlWindow = protocol.ReceiveConnectionFlowControlWindow
 	h.maxReceiveStreamFlowControlWindow = params.MaxReceiveStreamFlowControlWindow
 	h.maxReceiveConnectionFlowControlWindow = params.MaxReceiveConnectionFlowControlWindow
+	h.requestConnectionIDTruncation = params.RequestConnectionIDTruncation
 
 	h.idleConnectionStateLifetime = params.IdleTimeout
 	if h.perspective == protocol.PerspectiveServer {
@@ -136,14 +139,4 @@ func (h *paramsNegotiatorBase) GetIdleConnectionStateLifetime() time.Duration {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	return h.idleConnectionStateLifetime
-}
-
-func (h *paramsNegotiatorBase) TruncateConnectionID() bool {
-	if h.perspective == protocol.PerspectiveClient {
-		return false
-	}
-
-	h.mutex.RLock()
-	defer h.mutex.RUnlock()
-	return h.truncateConnectionID
 }

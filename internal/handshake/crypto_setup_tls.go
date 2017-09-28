@@ -9,6 +9,7 @@ import (
 	"github.com/bifurcation/mint"
 	"github.com/lucas-clemente/quic-go/internal/crypto"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 // KeyDerivationFunction is used for key derivation
@@ -21,7 +22,8 @@ type cryptoSetupTLS struct {
 
 	keyDerivation KeyDerivationFunction
 
-	mintConf *mint.Config
+	mintConf         *mint.Config
+	extensionHandler mint.AppExtensionHandler
 
 	nullAEAD crypto.AEAD
 	aead     crypto.AEAD
@@ -39,6 +41,7 @@ func NewCryptoSetupTLS(
 	perspective protocol.Perspective,
 	version protocol.VersionNumber,
 	tlsConfig *tls.Config,
+	transportParams *TransportParameters,
 	aeadChanged chan<- protocol.EncryptionLevel,
 ) (CryptoSetup, ParamsNegotiator, error) {
 	mintConf, err := tlsToMintConfig(tlsConfig, perspective)
@@ -47,14 +50,21 @@ func NewCryptoSetupTLS(
 	}
 	mintConf.ServerName = hostname
 
-	// TODO: implement connection paramaters negotiation for TLS
-	return &cryptoSetupTLS{
+	params := newParamsNegotiator(perspective, version, transportParams)
+	cs := &cryptoSetupTLS{
 		perspective:   perspective,
 		mintConf:      mintConf,
 		nullAEAD:      crypto.NewNullAEAD(perspective, version),
 		keyDerivation: crypto.DeriveAESKeys,
 		aeadChanged:   aeadChanged,
-	}, newParamsNegotiatorGQUIC(perspective, version, &TransportParameters{IdleTimeout: protocol.DefaultIdleTimeout}), nil
+	}
+	if perspective == protocol.PerspectiveClient {
+		cs.extensionHandler = newExtensionHandlerClient(params)
+	} else {
+		cs.extensionHandler = newExtensionHandlerServer(params)
+	}
+
+	return cs, params, nil
 }
 
 func (h *cryptoSetupTLS) HandleCryptoStream(cryptoStream io.ReadWriter) error {
@@ -63,6 +73,10 @@ func (h *cryptoSetupTLS) HandleCryptoStream(cryptoStream io.ReadWriter) error {
 		conn = mint.Server(&fakeConn{cryptoStream}, h.mintConf)
 	} else {
 		conn = mint.Client(&fakeConn{cryptoStream}, h.mintConf)
+	}
+	utils.Debugf("setting extension handler: %#v\n", h.extensionHandler)
+	if err := conn.SetExtensionHandler(h.extensionHandler); err != nil {
+		return err
 	}
 	mc := newMintController(conn)
 
