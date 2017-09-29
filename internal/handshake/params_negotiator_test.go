@@ -49,13 +49,14 @@ var _ = Describe("Params Negotiator (for TLS)", func() {
 		It("creates the parameters list", func() {
 			buf := make([]byte, 4)
 			values := paramsListToMap(pn.GetTransportParameters())
-			Expect(values).To(HaveLen(4))
+			Expect(values).To(HaveLen(5))
 			binary.BigEndian.PutUint32(buf, uint32(protocol.ReceiveStreamFlowControlWindow))
 			Expect(values).To(HaveKeyWithValue(initialMaxStreamDataParameterID, buf))
 			binary.BigEndian.PutUint32(buf, uint32(protocol.ReceiveConnectionFlowControlWindow))
 			Expect(values).To(HaveKeyWithValue(initialMaxDataParameterID, buf))
 			Expect(values).To(HaveKeyWithValue(initialMaxStreamIDParameterID, []byte{0xff, 0xff, 0xff, 0xff}))
 			Expect(values).To(HaveKeyWithValue(idleTimeoutParameterID, []byte{0x50, 0x0}))
+			Expect(values).To(HaveKeyWithValue(maxPacketSizeParameterID, []byte{0x5, 0xac})) // 1452 = 0x5ac
 		})
 
 		It("request ommision of the connection ID", func() {
