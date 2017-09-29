@@ -63,10 +63,6 @@ var _ = Describe("Client tests", func() {
 			})
 
 			It("downloads a small file", func() {
-				// TODO: enable this test as soon as we support TLS transport parameter negotiation
-				if version.UsesTLS() {
-					Skip("Test disabled, since transport paramenters aren't yet implemented for TLS.")
-				}
 				resp, err := client.Get("https://quic.clemente.io:" + testserver.Port() + "/prdata")
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
@@ -76,10 +72,6 @@ var _ = Describe("Client tests", func() {
 			})
 
 			It("downloads a large file", func() {
-				// TODO: enable this test as soon as we support TLS transport parameter negotiation
-				if version.UsesTLS() {
-					Skip("Test disabled, since transport paramenters aren't yet implemented for TLS.")
-				}
 				resp, err := client.Get("https://quic.clemente.io:" + testserver.Port() + "/prdatalong")
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
@@ -89,10 +81,6 @@ var _ = Describe("Client tests", func() {
 			})
 
 			It("uploads a file", func() {
-				// TODO: enable this test as soon as we support TLS transport parameter negotiation
-				if version.UsesTLS() {
-					Skip("Test disabled, since transport paramenters aren't yet implemented for TLS.")
-				}
 				resp, err := client.Post(
 					"https://quic.clemente.io:"+testserver.Port()+"/echo",
 					"text/plain",
