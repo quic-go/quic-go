@@ -88,11 +88,14 @@ func (h *paramsNegotiator) GetTransportParameters() []transportParameter {
 	binary.BigEndian.PutUint32(initialMaxStreamID, math.MaxUint32)
 	idleTimeout := make([]byte, 2)
 	binary.BigEndian.PutUint16(idleTimeout, uint16(h.GetIdleConnectionStateLifetime().Seconds()))
+	maxPacketSize := make([]byte, 2)
+	binary.BigEndian.PutUint16(maxPacketSize, uint16(protocol.MaxReceivePacketSize))
 	params := []transportParameter{
 		{initialMaxStreamDataParameterID, initialMaxStreamData},
 		{initialMaxDataParameterID, initialMaxData},
 		{initialMaxStreamIDParameterID, initialMaxStreamID},
 		{idleTimeoutParameterID, idleTimeout},
+		{maxPacketSizeParameterID, maxPacketSize},
 	}
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
