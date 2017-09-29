@@ -31,25 +31,41 @@ func main() {
 
 // Start a server that echos all data on the first stream opened by the client
 func echoServer() error {
-	listener, err := quic.ListenAddr(addr, generateTLSConfig(), nil)
+	cfg := quic.Config{
+		TLSConfig: generateTLSConfig(),
+		ConnState: quic.ConnStateCallback(func(sess quic.Session, cs quic.ConnState) {
+			stream, err := sess.AcceptStream()
+
+			if err != nil {
+				log.Println(err)
+				return
+			}
+
+			fmt.Printf("Server: Stream ID %v\n", stream.StreamID())
+
+			_, err = io.Copy(loggingWriter{stream}, stream)
+		}),
+	}
+
+	listener, err := quic.ListenAddr(addr, &cfg)
+
 	if err != nil {
 		return err
 	}
-	sess, err := listener.Accept()
+
+	err = listener.Serve()
 	if err != nil {
 		return err
 	}
-	stream, err := sess.AcceptStream()
-	if err != nil {
-		panic(err)
-	}
-	// Echo through the loggingWriter
-	_, err = io.Copy(loggingWriter{stream}, stream)
-	return err
+
+	return nil
 }
 
 func clientMain() error {
-	session, err := quic.DialAddr(addr, &tls.Config{InsecureSkipVerify: true}, nil)
+	cfg := quic.Config{
+		TLSConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	session, err := quic.DialAddr(addr, &cfg)
 	if err != nil {
 		return err
 	}
