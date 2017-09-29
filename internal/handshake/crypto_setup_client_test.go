@@ -109,20 +109,17 @@ var _ = Describe("Client Crypto Setup", func() {
 		certManager = &mockCertManager{}
 		version := protocol.Version37
 		aeadChanged = make(chan protocol.EncryptionLevel, 2)
-		csInt, err := NewCryptoSetupClient(
+		csInt, _, err := NewCryptoSetupClient(
 			"hostname",
 			0,
 			version,
-			stream,
 			nil,
-			NewConnectionParamatersManager(
-				protocol.PerspectiveClient,
-				version,
-				protocol.DefaultMaxReceiveStreamFlowControlWindowClient, protocol.DefaultMaxReceiveConnectionFlowControlWindowClient,
-				protocol.DefaultIdleTimeout,
-			),
+			&TransportParameters{
+				MaxReceiveStreamFlowControlWindow:     protocol.DefaultMaxReceiveStreamFlowControlWindowClient,
+				MaxReceiveConnectionFlowControlWindow: protocol.DefaultMaxReceiveConnectionFlowControlWindowClient,
+				IdleTimeout:                           protocol.DefaultIdleTimeout,
+			},
 			aeadChanged,
-			&TransportParameters{},
 			nil,
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -131,6 +128,7 @@ var _ = Describe("Client Crypto Setup", func() {
 		cs.keyDerivation = keyDerivation
 		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
 		cs.nullAEAD = &mockAEAD{encLevel: protocol.EncryptionUnencrypted}
+		cs.cryptoStream = stream
 	})
 
 	AfterEach(func() {
@@ -146,13 +144,13 @@ var _ = Describe("Client Crypto Setup", func() {
 
 		It("rejects handshake messages with the wrong message tag", func() {
 			HandshakeMessage{Tag: TagCHLO, Data: tagMap}.Write(&stream.dataToRead)
-			err := cs.HandleCryptoStream()
+			err := cs.HandleCryptoStream(stream)
 			Expect(err).To(MatchError(qerr.InvalidCryptoMessageType))
 		})
 
 		It("errors on invalid handshake messages", func() {
 			stream.dataToRead.Write([]byte("invalid message"))
-			err := cs.HandleCryptoStream()
+			err := cs.HandleCryptoStream(stream)
 			Expect(err).To(HaveOccurred())
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.HandshakeFailed))
 		})
@@ -161,7 +159,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			stk := []byte("foobar")
 			tagMap[TagSTK] = stk
 			HandshakeMessage{Tag: TagREJ, Data: tagMap}.Write(&stream.dataToRead)
-			go cs.HandleCryptoStream()
+			go cs.HandleCryptoStream(stream)
 			Eventually(func() []byte { return cs.stk }).Should(Equal(stk))
 		})
 
@@ -442,7 +440,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			shloMap[TagICSL] = []byte{3, 0, 0, 0} // 3 seconds
 			err := cs.handleSHLOMessage(shloMap)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(cs.connectionParameters.GetIdleConnectionStateLifetime()).To(Equal(3 * time.Second))
+			Expect(cs.params.GetIdleConnectionStateLifetime()).To(Equal(3 * time.Second))
 		})
 
 		It("errors if it can't read a connection parameter", func() {
@@ -494,19 +492,19 @@ var _ = Describe("Client Crypto Setup", func() {
 		})
 
 		It("requests to truncate the connection ID", func() {
-			cs.params.RequestConnectionIDTruncation = true
+			cs.requestConnIDTruncation = true
 			tags, err := cs.getTags()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(tags).To(HaveKeyWithValue(TagTCID, []byte{0, 0, 0, 0}))
 		})
 
 		It("adds the tags returned from the connectionParametersManager to the CHLO", func() {
-			cpmTags, err := cs.connectionParameters.GetHelloMap()
+			pnTags, err := cs.params.GetHelloMap()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(cpmTags).ToNot(BeEmpty())
+			Expect(pnTags).ToNot(BeEmpty())
 			tags, err := cs.getTags()
 			Expect(err).ToNot(HaveOccurred())
-			for t := range cpmTags {
+			for t := range pnTags {
 				Expect(tags).To(HaveKey(t))
 			}
 		})
@@ -663,7 +661,7 @@ var _ = Describe("Client Crypto Setup", func() {
 		It("tries to escalate before reading a handshake message", func() {
 			Expect(cs.secureAEAD).To(BeNil())
 			cs.serverVerified = true
-			go cs.HandleCryptoStream()
+			go cs.HandleCryptoStream(stream)
 			Eventually(aeadChanged).Should(Receive(Equal(protocol.EncryptionSecure)))
 			Expect(cs.secureAEAD).ToNot(BeNil())
 			Expect(aeadChanged).ToNot(Receive())
@@ -673,7 +671,7 @@ var _ = Describe("Client Crypto Setup", func() {
 		It("tries to escalate the crypto after receiving a diversification nonce", func(done Done) {
 			go func() {
 				defer GinkgoRecover()
-				cs.HandleCryptoStream()
+				cs.HandleCryptoStream(stream)
 				Fail("HandleCryptoStream should not have returned")
 			}()
 			cs.diversificationNonce = nil
@@ -836,14 +834,14 @@ var _ = Describe("Client Crypto Setup", func() {
 
 	Context("Diversification Nonces", func() {
 		It("sets a diversification nonce", func() {
-			go cs.HandleCryptoStream()
+			go cs.HandleCryptoStream(stream)
 			nonce := []byte("foobar")
 			cs.SetDiversificationNonce(nonce)
 			Eventually(func() []byte { return cs.diversificationNonce }).Should(Equal(nonce))
 		})
 
 		It("doesn't do anything when called multiple times with the same nonce", func(done Done) {
-			go cs.HandleCryptoStream()
+			go cs.HandleCryptoStream(stream)
 			nonce := []byte("foobar")
 			cs.SetDiversificationNonce(nonce)
 			cs.SetDiversificationNonce(nonce)
@@ -854,7 +852,7 @@ var _ = Describe("Client Crypto Setup", func() {
 		It("rejects a different diversification nonce", func() {
 			var err error
 			go func() {
-				err = cs.HandleCryptoStream()
+				err = cs.HandleCryptoStream(stream)
 			}()
 
 			nonce1 := []byte("foobar")

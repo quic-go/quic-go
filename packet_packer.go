@@ -25,7 +25,7 @@ type packetPacker struct {
 	cryptoSetup  handshake.CryptoSetup
 
 	packetNumberGenerator *packetNumberGenerator
-	connectionParameters  handshake.ConnectionParametersManager
+	connParams            handshake.ParamsNegotiator
 	streamFramer          *streamFramer
 
 	controlFrames []wire.Frame
@@ -36,7 +36,7 @@ type packetPacker struct {
 
 func newPacketPacker(connectionID protocol.ConnectionID,
 	cryptoSetup handshake.CryptoSetup,
-	connectionParameters handshake.ConnectionParametersManager,
+	connParams handshake.ParamsNegotiator,
 	streamFramer *streamFramer,
 	perspective protocol.Perspective,
 	version protocol.VersionNumber,
@@ -44,7 +44,7 @@ func newPacketPacker(connectionID protocol.ConnectionID,
 	return &packetPacker{
 		cryptoSetup:           cryptoSetup,
 		connectionID:          connectionID,
-		connectionParameters:  connectionParameters,
+		connParams:            connParams,
 		perspective:           perspective,
 		version:               version,
 		streamFramer:          streamFramer,
@@ -271,7 +271,7 @@ func (p *packetPacker) getPublicHeader(encLevel protocol.EncryptionLevel) *wire.
 		ConnectionID:         p.connectionID,
 		PacketNumber:         pnum,
 		PacketNumberLen:      packetNumberLen,
-		TruncateConnectionID: p.connectionParameters.TruncateConnectionID(),
+		TruncateConnectionID: p.connParams.TruncateConnectionID(),
 	}
 
 	if p.perspective == protocol.PerspectiveServer && encLevel == protocol.EncryptionSecure {

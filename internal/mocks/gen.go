@@ -4,5 +4,5 @@ package mocks
 // so we have to use sed to correct for that
 
 //go:generate sh -c "mockgen -package mocks_fc -source ../flowcontrol/interface.go | sed \"s/\\[\\]WindowUpdate/[]flowcontrol.WindowUpdate/g\" > mocks_fc/flow_control_manager.go"
-//go:generate sh -c "mockgen -package mocks -source ../handshake/connection_parameters_manager.go | sed \"s/\\[Tag\\]/[handshake.Tag]/g\" > cpm.go"
+//go:generate sh -c "mockgen -package mocks -source ../handshake/params_negotiator_base.go > params_negotiator.go"
 //go:generate sh -c "goimports -w ."

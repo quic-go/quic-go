@@ -17,17 +17,17 @@ var _ = Describe("Streams Map", func() {
 	)
 
 	var (
-		m       *streamsMap
-		mockCpm *mocks.MockConnectionParametersManager
+		m      *streamsMap
+		mockPn *mocks.MockParamsNegotiator
 	)
 
 	setNewStreamsMap := func(p protocol.Perspective) {
-		mockCpm = mocks.NewMockConnectionParametersManager(mockCtrl)
+		mockPn = mocks.NewMockParamsNegotiator(mockCtrl)
 
-		mockCpm.EXPECT().GetMaxOutgoingStreams().AnyTimes().Return(uint32(maxOutgoingStreams))
-		mockCpm.EXPECT().GetMaxIncomingStreams().AnyTimes().Return(uint32(maxIncomingStreams))
+		mockPn.EXPECT().GetMaxOutgoingStreams().AnyTimes().Return(uint32(maxOutgoingStreams))
+		mockPn.EXPECT().GetMaxIncomingStreams().AnyTimes().Return(uint32(maxIncomingStreams))
 
-		m = newStreamsMap(nil, p, mockCpm)
+		m = newStreamsMap(nil, p, mockPn)
 		m.newStream = func(id protocol.StreamID) *stream {
 			return newStream(id, nil, nil, nil)
 		}

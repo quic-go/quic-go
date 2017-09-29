@@ -1,6 +1,11 @@
 package handshake
 
-import "github.com/lucas-clemente/quic-go/internal/protocol"
+import (
+	"io"
+	"time"
+
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+)
 
 // Sealer seals a packet
 type Sealer interface {
@@ -11,7 +16,7 @@ type Sealer interface {
 // CryptoSetup is a crypto setup
 type CryptoSetup interface {
 	Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error)
-	HandleCryptoStream() error
+	HandleCryptoStream(io.ReadWriter) error
 	// TODO: clean up this interface
 	DiversificationNonce() []byte   // only needed for cryptoSetupServer
 	SetDiversificationNonce([]byte) // only needed for cryptoSetupClient
@@ -23,5 +28,8 @@ type CryptoSetup interface {
 
 // TransportParameters are parameters sent to the peer during the handshake
 type TransportParameters struct {
-	RequestConnectionIDTruncation bool
+	RequestConnectionIDTruncation         bool
+	MaxReceiveStreamFlowControlWindow     protocol.ByteCount
+	MaxReceiveConnectionFlowControlWindow protocol.ByteCount
+	IdleTimeout                           time.Duration
 }

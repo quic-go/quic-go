@@ -51,8 +51,8 @@ type cryptoSetupClient struct {
 	forwardSecureAEAD    crypto.AEAD
 	aeadChanged          chan<- protocol.EncryptionLevel
 
-	params               *TransportParameters
-	connectionParameters ConnectionParametersManager
+	requestConnIDTruncation bool
+	params                  *paramsNegotiatorGQUIC
 }
 
 var _ CryptoSetup = &cryptoSetupClient{}
@@ -68,33 +68,33 @@ func NewCryptoSetupClient(
 	hostname string,
 	connID protocol.ConnectionID,
 	version protocol.VersionNumber,
-	cryptoStream io.ReadWriter,
 	tlsConfig *tls.Config,
-	connectionParameters ConnectionParametersManager,
-	aeadChanged chan<- protocol.EncryptionLevel,
 	params *TransportParameters,
+	aeadChanged chan<- protocol.EncryptionLevel,
 	negotiatedVersions []protocol.VersionNumber,
-) (CryptoSetup, error) {
+) (CryptoSetup, ParamsNegotiator, error) {
+	pn := newParamsNegotiatorGQUIC(protocol.PerspectiveClient, version, params)
 	return &cryptoSetupClient{
-		hostname:             hostname,
-		connID:               connID,
-		version:              version,
-		cryptoStream:         cryptoStream,
-		certManager:          crypto.NewCertManager(tlsConfig),
-		connectionParameters: connectionParameters,
-		keyDerivation:        crypto.DeriveQuicCryptoAESKeys,
-		keyExchange:          getEphermalKEX,
-		nullAEAD:             crypto.NewNullAEAD(protocol.PerspectiveClient, version),
-		aeadChanged:          aeadChanged,
-		negotiatedVersions:   negotiatedVersions,
-		divNonceChan:         make(chan []byte),
-		params:               params,
-	}, nil
+		hostname:                hostname,
+		connID:                  connID,
+		version:                 version,
+		certManager:             crypto.NewCertManager(tlsConfig),
+		params:                  pn,
+		requestConnIDTruncation: params.RequestConnectionIDTruncation,
+		keyDerivation:           crypto.DeriveQuicCryptoAESKeys,
+		keyExchange:             getEphermalKEX,
+		nullAEAD:                crypto.NewNullAEAD(protocol.PerspectiveClient, version),
+		aeadChanged:             aeadChanged,
+		negotiatedVersions:      negotiatedVersions,
+		divNonceChan:            make(chan []byte),
+	}, pn, nil
 }
 
-func (h *cryptoSetupClient) HandleCryptoStream() error {
+func (h *cryptoSetupClient) HandleCryptoStream(stream io.ReadWriter) error {
 	messageChan := make(chan HandshakeMessage)
 	errorChan := make(chan error)
+
+	h.cryptoStream = stream
 
 	go func() {
 		for {
@@ -264,7 +264,7 @@ func (h *cryptoSetupClient) handleSHLOMessage(cryptoData map[Tag][]byte) error {
 		return err
 	}
 
-	err = h.connectionParameters.SetFromMap(cryptoData)
+	err = h.params.SetFromMap(cryptoData)
 	if err != nil {
 		return qerr.InvalidCryptoMessageParameter
 	}
@@ -401,12 +401,11 @@ func (h *cryptoSetupClient) sendCHLO() error {
 	}
 
 	h.lastSentCHLO = b.Bytes()
-
 	return nil
 }
 
 func (h *cryptoSetupClient) getTags() (map[Tag][]byte, error) {
-	tags, err := h.connectionParameters.GetHelloMap()
+	tags, err := h.params.GetHelloMap()
 	if err != nil {
 		return nil, err
 	}
@@ -422,7 +421,7 @@ func (h *cryptoSetupClient) getTags() (map[Tag][]byte, error) {
 	binary.LittleEndian.PutUint32(versionTag, protocol.VersionNumberToTag(h.version))
 	tags[TagVER] = versionTag
 
-	if h.params.RequestConnectionIDTruncation {
+	if h.requestConnIDTruncation {
 		tags[TagTCID] = []byte{0, 0, 0, 0}
 	}
 	if len(h.stk) > 0 {
