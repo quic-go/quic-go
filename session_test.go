@@ -170,7 +170,7 @@ func (m *mockParamsNegotiator) GetMaxIncomingStreams() uint32 { return 100 }
 func (m *mockParamsNegotiator) GetIdleConnectionStateLifetime() time.Duration {
 	return time.Hour
 }
-func (m *mockParamsNegotiator) TruncateConnectionID() bool { return false }
+func (m *mockParamsNegotiator) OmitConnectionID() bool { return false }
 
 var _ = Describe("Session", func() {
 	var (
@@ -1559,7 +1559,7 @@ var _ = Describe("Session", func() {
 			sess.lastNetworkActivityTime = time.Now().Add(-time.Minute)
 			mockPn := mocks.NewMockParamsNegotiator(mockCtrl)
 			mockPn.EXPECT().GetIdleConnectionStateLifetime().Return(9999 * time.Second).AnyTimes()
-			mockPn.EXPECT().TruncateConnectionID().Return(false).AnyTimes()
+			mockPn.EXPECT().OmitConnectionID().Return(false).AnyTimes()
 			sess.connParams = mockPn
 			sess.packer.connParams = mockPn
 			// the handshake timeout is irrelevant here, since it depends on the time the session was created,
@@ -1576,7 +1576,7 @@ var _ = Describe("Session", func() {
 			close(aeadChanged)
 			mockPn := mocks.NewMockParamsNegotiator(mockCtrl)
 			mockPn.EXPECT().GetIdleConnectionStateLifetime().Return(0 * time.Second)
-			mockPn.EXPECT().TruncateConnectionID().Return(false).AnyTimes()
+			mockPn.EXPECT().OmitConnectionID().Return(false).AnyTimes()
 			sess.connParams = mockPn
 			sess.packer.connParams = mockPn
 			mockPn.EXPECT().GetIdleConnectionStateLifetime().Return(0 * time.Second).AnyTimes()

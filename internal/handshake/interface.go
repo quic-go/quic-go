@@ -28,7 +28,7 @@ type CryptoSetup interface {
 
 // TransportParameters are parameters sent to the peer during the handshake
 type TransportParameters struct {
-	RequestConnectionIDTruncation         bool
+	RequestConnectionIDOmission           bool
 	MaxReceiveStreamFlowControlWindow     protocol.ByteCount
 	MaxReceiveConnectionFlowControlWindow protocol.ByteCount
 	IdleTimeout                           time.Duration

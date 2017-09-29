@@ -20,9 +20,8 @@ type ParamsNegotiator interface {
 	GetMaxOutgoingStreams() uint32
 	GetMaxIncomingStreams() uint32
 	GetIdleConnectionStateLifetime() time.Duration
-	// determines if the client requests truncated ConnectionIDs.
-	// It always returns false for the server.
-	TruncateConnectionID() bool
+	// determines if the client requests omission of connection IDs.
+	OmitConnectionID() bool
 }
 
 // For the server:
@@ -39,8 +38,8 @@ type paramsNegotiatorBase struct {
 
 	flowControlNegotiated bool
 
-	truncateConnectionID          bool
-	requestConnectionIDTruncation bool
+	omitConnectionID            bool
+	requestConnectionIDOmission bool
 
 	maxStreamsPerConnection                uint32
 	maxIncomingDynamicStreamsPerConnection uint32
@@ -60,7 +59,7 @@ func (h *paramsNegotiatorBase) init(params *TransportParameters) {
 	h.receiveConnectionFlowControlWindow = protocol.ReceiveConnectionFlowControlWindow
 	h.maxReceiveStreamFlowControlWindow = params.MaxReceiveStreamFlowControlWindow
 	h.maxReceiveConnectionFlowControlWindow = params.MaxReceiveConnectionFlowControlWindow
-	h.requestConnectionIDTruncation = params.RequestConnectionIDTruncation
+	h.requestConnectionIDOmission = params.RequestConnectionIDOmission
 
 	h.idleConnectionStateLifetime = params.IdleTimeout
 	if h.perspective == protocol.PerspectiveServer {

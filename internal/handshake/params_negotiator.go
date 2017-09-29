@@ -68,7 +68,7 @@ func (h *paramsNegotiator) SetFromTransportParameters(params []transportParamete
 			if len(p.Value) != 0 {
 				return fmt.Errorf("wrong length for omit_connection_id: %d (expected empty)", len(p.Value))
 			}
-			h.truncateConnectionID = true
+			h.omitConnectionID = true
 		}
 	}
 
@@ -96,14 +96,14 @@ func (h *paramsNegotiator) GetTransportParameters() []transportParameter {
 	}
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
-	if h.truncateConnectionID {
+	if h.omitConnectionID {
 		params = append(params, transportParameter{omitConnectionIDParameterID, []byte{}})
 	}
 	return params
 }
 
-func (h *paramsNegotiator) TruncateConnectionID() bool {
+func (h *paramsNegotiator) OmitConnectionID() bool {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
-	return h.truncateConnectionID
+	return h.omitConnectionID
 }

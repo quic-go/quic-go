@@ -15,7 +15,7 @@ var (
 	// This can happen when the server is restarted. The client will send a packet without a version number.
 	ErrPacketWithUnknownVersion          = errors.New("PublicHeader: Received a packet without version number, that we don't know the version for")
 	errResetAndVersionFlagSet            = errors.New("PublicHeader: Reset Flag and Version Flag should not be set at the same time")
-	errReceivedTruncatedConnectionID     = qerr.Error(qerr.InvalidPacketHeader, "receiving packets with truncated ConnectionID is not supported")
+	errReceivedOmittedConnectionID       = qerr.Error(qerr.InvalidPacketHeader, "receiving packets with omitted ConnectionID is not supported")
 	errInvalidConnectionID               = qerr.Error(qerr.InvalidPacketHeader, "connection ID cannot be 0")
 	errGetLengthNotForVersionNegotiation = errors.New("PublicHeader: GetLength cannot be called for VersionNegotiation packets")
 )
@@ -26,7 +26,7 @@ type PublicHeader struct {
 	ConnectionID         protocol.ConnectionID
 	VersionFlag          bool
 	ResetFlag            bool
-	TruncateConnectionID bool
+	OmitConnectionID     bool
 	PacketNumberLen      protocol.PacketNumberLen
 	PacketNumber         protocol.PacketNumber
 	VersionNumber        protocol.VersionNumber   // VersionNumber sent by the client
@@ -48,7 +48,7 @@ func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pe
 	if h.ResetFlag {
 		publicFlagByte |= 0x02
 	}
-	if !h.TruncateConnectionID {
+	if !h.OmitConnectionID {
 		publicFlagByte |= 0x08
 	}
 
@@ -75,7 +75,7 @@ func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pe
 
 	b.WriteByte(publicFlagByte)
 
-	if !h.TruncateConnectionID {
+	if !h.OmitConnectionID {
 		// always read the connection ID in little endian
 		utils.LittleEndian.WriteUint64(b, uint64(h.ConnectionID))
 	}
@@ -120,11 +120,11 @@ func PeekConnectionID(b *bytes.Reader, packetSentBy protocol.Perspective) (proto
 	// unread the public flag byte
 	defer b.UnreadByte()
 
-	truncateConnectionID := publicFlagByte&0x08 == 0
-	if truncateConnectionID && packetSentBy == protocol.PerspectiveClient {
-		return 0, errReceivedTruncatedConnectionID
+	omitConnectionID := publicFlagByte&0x08 == 0
+	if omitConnectionID && packetSentBy == protocol.PerspectiveClient {
+		return 0, errReceivedOmittedConnectionID
 	}
-	if !truncateConnectionID {
+	if !omitConnectionID {
 		connID, err := utils.LittleEndian.ReadUint64(b)
 		if err != nil {
 			return 0, err
@@ -161,9 +161,9 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective, versi
 	// 	return nil, errors.New("diversification nonces should only be sent by servers")
 	// }
 
-	header.TruncateConnectionID = publicFlagByte&0x08 == 0
-	if header.TruncateConnectionID && packetSentBy == protocol.PerspectiveClient {
-		return nil, errReceivedTruncatedConnectionID
+	header.OmitConnectionID = publicFlagByte&0x08 == 0
+	if header.OmitConnectionID && packetSentBy == protocol.PerspectiveClient {
+		return nil, errReceivedOmittedConnectionID
 	}
 
 	if header.hasPacketNumber(packetSentBy) {
@@ -180,7 +180,7 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective, versi
 	}
 
 	// Connection ID
-	if !header.TruncateConnectionID {
+	if !header.OmitConnectionID {
 		var connID uint64
 		// always write the connection ID in little endian
 		connID, err = utils.LittleEndian.ReadUint64(b)
@@ -266,7 +266,7 @@ func (h *PublicHeader) GetLength(pers protocol.Perspective) (protocol.ByteCount,
 		length += protocol.ByteCount(h.PacketNumberLen)
 	}
 
-	if !h.TruncateConnectionID {
+	if !h.OmitConnectionID {
 		length += 8 // 8 bytes for the connection ID
 	}
 

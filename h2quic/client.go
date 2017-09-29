@@ -51,8 +51,8 @@ type client struct {
 var _ http.RoundTripper = &client{}
 
 var defaultQuicConfig = &quic.Config{
-	RequestConnectionIDTruncation: true,
-	KeepAlive:                     true,
+	RequestConnectionIDOmission: true,
+	KeepAlive:                   true,
 }
 
 // newClient creates a new client

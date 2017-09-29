@@ -59,7 +59,7 @@ var _ = Describe("Params Negotiator (for TLS)", func() {
 		})
 
 		It("request ommision of the connection ID", func() {
-			pn.truncateConnectionID = true
+			pn.omitConnectionID = true
 			values := paramsListToMap(pn.GetTransportParameters())
 			Expect(values).To(HaveKeyWithValue(omitConnectionIDParameterID, []byte{}))
 		})
@@ -72,7 +72,7 @@ var _ = Describe("Params Negotiator (for TLS)", func() {
 			Expect(pn.GetSendStreamFlowControlWindow()).To(Equal(protocol.ByteCount(0x11223344)))
 			Expect(pn.GetSendConnectionFlowControlWindow()).To(Equal(protocol.ByteCount(0x22334455)))
 			Expect(pn.GetIdleConnectionStateLifetime()).To(Equal(0x1337 * time.Second))
-			Expect(pn.TruncateConnectionID()).To(BeFalse())
+			Expect(pn.OmitConnectionID()).To(BeFalse())
 		})
 
 		It("negotiates a smaller idle timeout, if the peer suggest a higher value than configured", func() {
@@ -86,7 +86,7 @@ var _ = Describe("Params Negotiator (for TLS)", func() {
 			params[omitConnectionIDParameterID] = []byte{}
 			err := pn.SetFromTransportParameters(paramsMapToList(params))
 			Expect(err).ToNot(HaveOccurred())
-			Expect(pn.TruncateConnectionID()).To(BeTrue())
+			Expect(pn.OmitConnectionID()).To(BeTrue())
 		})
 
 		It("rejects the parameters if the initial_max_stream_data is missing", func() {
