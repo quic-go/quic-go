@@ -58,11 +58,25 @@ func (m *mockCongestion) OnPacketLost(n protocol.PacketNumber, l protocol.ByteCo
 }
 
 func retransmittablePacket(num protocol.PacketNumber) *Packet {
-	return &Packet{PacketNumber: num, Length: 1, Frames: []wire.Frame{&wire.PingFrame{}}}
+	return &Packet{
+		PacketNumber:    num,
+		Length:          1,
+		Frames:          []wire.Frame{&wire.PingFrame{}},
+		EncryptionLevel: protocol.EncryptionForwardSecure,
+	}
 }
 
 func nonRetransmittablePacket(num protocol.PacketNumber) *Packet {
 	return &Packet{PacketNumber: num, Length: 1, Frames: []wire.Frame{&wire.AckFrame{}}}
+}
+
+func handshakePacket(num protocol.PacketNumber) *Packet {
+	return &Packet{
+		PacketNumber:    num,
+		Length:          1,
+		Frames:          []wire.Frame{&wire.PingFrame{}},
+		EncryptionLevel: protocol.EncryptionUnencrypted,
+	}
 }
 
 var _ = Describe("SentPacketHandler", func() {
@@ -74,6 +88,7 @@ var _ = Describe("SentPacketHandler", func() {
 	BeforeEach(func() {
 		rttStats := &congestion.RTTStats{}
 		handler = NewSentPacketHandler(rttStats).(*sentPacketHandler)
+		handler.SetHandshakeComplete()
 		streamFrame = wire.StreamFrame{
 			StreamID: 5,
 			Data:     []byte{0x13, 0x37},
@@ -807,6 +822,41 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.OnAlarm()
 			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
 			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
+			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
+		})
+	})
+
+	Context("retransmission for handshake packets", func() {
+		BeforeEach(func() {
+			handler.handshakeComplete = false
+		})
+
+		It("detects the handshake timeout", func() {
+			// send handshake packets: 1, 2, 4
+			// send a forward-secure packet: 3
+			err := handler.SentPacket(handshakePacket(1))
+			Expect(err).ToNot(HaveOccurred())
+			err = handler.SentPacket(handshakePacket(2))
+			Expect(err).ToNot(HaveOccurred())
+			err = handler.SentPacket(retransmittablePacket(3))
+			Expect(err).ToNot(HaveOccurred())
+			err = handler.SentPacket(handshakePacket(4))
+			Expect(err).ToNot(HaveOccurred())
+
+			err = handler.ReceivedAck(&wire.AckFrame{LargestAcked: 1, LowestAcked: 1}, 1, time.Now().Add(time.Hour))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(handler.lossTime.IsZero()).To(BeTrue())
+			Expect(handler.GetAlarmTimeout().Sub(time.Now())).To(BeNumerically("~", handler.computeHandshakeTimeout(), time.Minute))
+
+			handler.OnAlarm()
+			p := handler.DequeuePacketForRetransmission()
+			Expect(p).ToNot(BeNil())
+			Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(2)))
+			p = handler.DequeuePacketForRetransmission()
+			Expect(p).ToNot(BeNil())
+			Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(4)))
+			Expect(handler.packetHistory.Len()).To(Equal(1))
+			Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(3)))
 		})
 	})
 

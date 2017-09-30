@@ -12,6 +12,7 @@ type SentPacketHandler interface {
 	// SentPacket may modify the packet
 	SentPacket(packet *Packet) error
 	ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, recvTime time.Time) error
+	SetHandshakeComplete()
 
 	SendingAllowed() bool
 	GetStopWaitingFrame(force bool) *wire.StopWaitingFrame

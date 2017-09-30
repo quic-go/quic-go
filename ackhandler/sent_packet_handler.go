@@ -16,8 +16,13 @@ const (
 	// Maximum reordering in time space before time based loss detection considers a packet lost.
 	// In fraction of an RTT.
 	timeReorderingFraction = 1.0 / 8
+	// The default RTT used before an RTT sample is taken.
+	// Note: This constant is also defined in the congestion package.
+	defaultInitialRTT = 100 * time.Millisecond
 	// defaultRTOTimeout is the RTO time on new connections
 	defaultRTOTimeout = 500 * time.Millisecond
+	// Minimum time in the future a tail loss probe alarm may be set for.
+	minTPLTimeout = 10 * time.Millisecond
 	// Minimum time in the future an RTO alarm may be set for.
 	minRTOTimeout = 200 * time.Millisecond
 	// maxRTOTimeout is the maximum RTO time
@@ -56,6 +61,10 @@ type sentPacketHandler struct {
 	congestion congestion.SendAlgorithm
 	rttStats   *congestion.RTTStats
 
+	handshakeComplete bool
+	// The number of times the handshake packets have been retransmitted without receiving an ack.
+	handshakeCount uint32
+
 	// The number of times an RTO has been sent without receiving an ack.
 	rtoCount uint32
 
@@ -93,6 +102,10 @@ func (h *sentPacketHandler) largestInOrderAcked() protocol.PacketNumber {
 
 func (h *sentPacketHandler) ShouldSendRetransmittablePacket() bool {
 	return h.numNonRetransmittablePackets >= protocol.MaxNonRetransmittablePackets
+}
+
+func (h *sentPacketHandler) SetHandshakeComplete() {
+	h.handshakeComplete = true
 }
 
 func (h *sentPacketHandler) SentPacket(packet *Packet) error {
@@ -247,9 +260,10 @@ func (h *sentPacketHandler) updateLossDetectionAlarm() {
 		return
 	}
 
-	// TODO(#496): Handle handshake packets separately
 	// TODO(#497): TLP
-	if !h.lossTime.IsZero() {
+	if !h.handshakeComplete {
+		h.alarm = time.Now().Add(h.computeHandshakeTimeout())
+	} else if !h.lossTime.IsZero() {
 		// Early retransmit timer or time loss detection.
 		h.alarm = h.lossTime
 	} else {
@@ -291,9 +305,10 @@ func (h *sentPacketHandler) detectLostPackets() {
 }
 
 func (h *sentPacketHandler) OnAlarm() {
-	// TODO(#496): Handle handshake packets separately
 	// TODO(#497): TLP
-	if !h.lossTime.IsZero() {
+	if !h.handshakeComplete {
+		h.queueHandshakePacketsForRetransmission()
+	} else if !h.lossTime.IsZero() {
 		// Early retransmit or time loss detection
 		h.detectLostPackets()
 	} else {
@@ -312,6 +327,7 @@ func (h *sentPacketHandler) GetAlarmTimeout() time.Time {
 func (h *sentPacketHandler) onPacketAcked(packetElement *PacketElement) {
 	h.bytesInFlight -= packetElement.Value.Length
 	h.rtoCount = 0
+	h.handshakeCount = 0
 	// TODO(#497): h.tlpCount = 0
 	h.packetHistory.Remove(packetElement)
 }
@@ -372,12 +388,35 @@ func (h *sentPacketHandler) queueRTO(el *PacketElement) {
 	h.congestion.OnRetransmissionTimeout(true)
 }
 
+func (h *sentPacketHandler) queueHandshakePacketsForRetransmission() {
+	var handshakePackets []*PacketElement
+	for el := h.packetHistory.Front(); el != nil; el = el.Next() {
+		if el.Value.EncryptionLevel < protocol.EncryptionForwardSecure {
+			handshakePackets = append(handshakePackets, el)
+		}
+	}
+	for _, el := range handshakePackets {
+		h.queuePacketForRetransmission(el)
+	}
+}
+
 func (h *sentPacketHandler) queuePacketForRetransmission(packetElement *PacketElement) {
 	packet := &packetElement.Value
 	h.bytesInFlight -= packet.Length
 	h.retransmissionQueue = append(h.retransmissionQueue, packet)
 	h.packetHistory.Remove(packetElement)
 	h.stopWaitingManager.QueuedRetransmissionForPacketNumber(packet.PacketNumber)
+}
+
+func (h *sentPacketHandler) computeHandshakeTimeout() time.Duration {
+	duration := 2 * h.rttStats.SmoothedRTT()
+	if duration == 0 {
+		duration = 2 * defaultInitialRTT
+	}
+	duration = utils.MaxDuration(duration, minTPLTimeout)
+	// exponential backoff
+	// There's an implicit limit to this set by the handshake timeout.
+	return duration << h.handshakeCount
 }
 
 func (h *sentPacketHandler) computeRTOTimeout() time.Duration {
