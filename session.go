@@ -225,7 +225,7 @@ func (s *session) setup(
 				aeadChanged,
 			)
 		} else {
-			transportParams.RequestConnectionIDTruncation = s.config.RequestConnectionIDTruncation
+			transportParams.RequestConnectionIDOmission = s.config.RequestConnectionIDOmission
 			s.cryptoSetup, s.connParams, err = newCryptoSetupClient(
 				hostname,
 				s.connectionID,

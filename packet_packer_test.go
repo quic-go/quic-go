@@ -62,7 +62,7 @@ var _ = Describe("Packet packer", func() {
 
 	BeforeEach(func() {
 		mockPn := mocks.NewMockParamsNegotiator(mockCtrl)
-		mockPn.EXPECT().TruncateConnectionID().Return(false).AnyTimes()
+		mockPn.EXPECT().OmitConnectionID().Return(false).AnyTimes()
 
 		cryptoStream = &stream{}
 

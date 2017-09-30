@@ -89,10 +89,10 @@ type Config struct {
 	// If not set, it uses all versions available.
 	// Warning: This API should not be considered stable and will change soon.
 	Versions []VersionNumber
-	// Ask the server to truncate the connection ID sent in the Public Header.
+	// Ask the server to omit the connection ID sent in the Public Header.
 	// This saves 8 bytes in the Public Header in every packet. However, if the IP address of the server changes, the connection cannot be migrated.
 	// Currently only valid for the client.
-	RequestConnectionIDTruncation bool
+	RequestConnectionIDOmission bool
 	// HandshakeTimeout is the maximum duration that the cryptographic handshake may take.
 	// If the timeout is exceeded, the connection is closed.
 	// If this value is zero, the timeout is set to 10 seconds.

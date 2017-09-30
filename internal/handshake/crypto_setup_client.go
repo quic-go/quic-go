@@ -51,8 +51,8 @@ type cryptoSetupClient struct {
 	forwardSecureAEAD    crypto.AEAD
 	aeadChanged          chan<- protocol.EncryptionLevel
 
-	requestConnIDTruncation bool
-	params                  *paramsNegotiatorGQUIC
+	requestConnIDOmission bool
+	params                *paramsNegotiatorGQUIC
 }
 
 var _ CryptoSetup = &cryptoSetupClient{}
@@ -75,18 +75,18 @@ func NewCryptoSetupClient(
 ) (CryptoSetup, ParamsNegotiator, error) {
 	pn := newParamsNegotiatorGQUIC(protocol.PerspectiveClient, version, params)
 	return &cryptoSetupClient{
-		hostname:                hostname,
-		connID:                  connID,
-		version:                 version,
-		certManager:             crypto.NewCertManager(tlsConfig),
-		params:                  pn,
-		requestConnIDTruncation: params.RequestConnectionIDTruncation,
-		keyDerivation:           crypto.DeriveQuicCryptoAESKeys,
-		keyExchange:             getEphermalKEX,
-		nullAEAD:                crypto.NewNullAEAD(protocol.PerspectiveClient, version),
-		aeadChanged:             aeadChanged,
-		negotiatedVersions:      negotiatedVersions,
-		divNonceChan:            make(chan []byte),
+		hostname:              hostname,
+		connID:                connID,
+		version:               version,
+		certManager:           crypto.NewCertManager(tlsConfig),
+		params:                pn,
+		requestConnIDOmission: params.RequestConnectionIDOmission,
+		keyDerivation:         crypto.DeriveQuicCryptoAESKeys,
+		keyExchange:           getEphermalKEX,
+		nullAEAD:              crypto.NewNullAEAD(protocol.PerspectiveClient, version),
+		aeadChanged:           aeadChanged,
+		negotiatedVersions:    negotiatedVersions,
+		divNonceChan:          make(chan []byte),
 	}, pn, nil
 }
 
@@ -421,7 +421,7 @@ func (h *cryptoSetupClient) getTags() (map[Tag][]byte, error) {
 	binary.LittleEndian.PutUint32(versionTag, protocol.VersionNumberToTag(h.version))
 	tags[TagVER] = versionTag
 
-	if h.requestConnIDTruncation {
+	if h.requestConnIDOmission {
 		tags[TagTCID] = []byte{0, 0, 0, 0}
 	}
 	if len(h.stk) > 0 {

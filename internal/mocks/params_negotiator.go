@@ -142,14 +142,14 @@ func (_mr *MockParamsNegotiatorMockRecorder) GetIdleConnectionStateLifetime() *g
 	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "GetIdleConnectionStateLifetime", reflect.TypeOf((*MockParamsNegotiator)(nil).GetIdleConnectionStateLifetime))
 }
 
-// TruncateConnectionID mocks base method
-func (_m *MockParamsNegotiator) TruncateConnectionID() bool {
-	ret := _m.ctrl.Call(_m, "TruncateConnectionID")
+// OmitConnectionID mocks base method
+func (_m *MockParamsNegotiator) OmitConnectionID() bool {
+	ret := _m.ctrl.Call(_m, "OmitConnectionID")
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
-// TruncateConnectionID indicates an expected call of TruncateConnectionID
-func (_mr *MockParamsNegotiatorMockRecorder) TruncateConnectionID() *gomock.Call {
-	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "TruncateConnectionID", reflect.TypeOf((*MockParamsNegotiator)(nil).TruncateConnectionID))
+// OmitConnectionID indicates an expected call of OmitConnectionID
+func (_mr *MockParamsNegotiatorMockRecorder) OmitConnectionID() *gomock.Call {
+	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "OmitConnectionID", reflect.TypeOf((*MockParamsNegotiator)(nil).OmitConnectionID))
 }

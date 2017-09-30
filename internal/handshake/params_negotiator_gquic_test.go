@@ -119,21 +119,21 @@ var _ = Describe("Params Negotiator (for gQUIC)", func() {
 		})
 	})
 
-	Context("Truncated connection IDs", func() {
-		It("does not send truncated connection IDs if the TCID tag is missing", func() {
-			Expect(pn.TruncateConnectionID()).To(BeFalse())
+	Context("Omitted connection IDs", func() {
+		It("does not send omitted connection IDs if the TCID tag is missing", func() {
+			Expect(pn.OmitConnectionID()).To(BeFalse())
 		})
 
-		It("reads the tag for truncated connection IDs", func() {
+		It("reads the tag for omitted connection IDs", func() {
 			values := map[Tag][]byte{TagTCID: {0, 0, 0, 0}}
 			pn.SetFromMap(values)
-			Expect(pn.TruncateConnectionID()).To(BeTrue())
+			Expect(pn.OmitConnectionID()).To(BeTrue())
 		})
 
 		It("ignores the TCID tag, as a client", func() {
 			values := map[Tag][]byte{TagTCID: {0, 0, 0, 0}}
 			pnClient.SetFromMap(values)
-			Expect(pnClient.TruncateConnectionID()).To(BeFalse())
+			Expect(pnClient.OmitConnectionID()).To(BeFalse())
 		})
 
 		It("errors when given an invalid value", func() {

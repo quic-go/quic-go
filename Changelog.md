@@ -5,7 +5,7 @@
 - Add support for QUIC 38 and 39, drop support for QUIC 35 and 36
 - Added `quic.Config` options for maximal flow control windows
 - Add a `quic.Config` option for QUIC versions
-- Add a `quic.Config` option to request truncation of the connection ID from a server
+- Add a `quic.Config` option to request omission of the connection ID from a server
 - Add a `quic.Config` option to configure the source address validation
 - Add a `quic.Config` option to configure the handshake timeout
 - Add a `quic.Config` option to configure the idle timeout

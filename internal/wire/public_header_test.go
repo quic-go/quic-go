@@ -13,10 +13,10 @@ import (
 
 var _ = Describe("Public Header", func() {
 	Context("parsing the connection ID", func() {
-		It("does not accept truncated connection ID as a server", func() {
+		It("does not accept an omitted connection ID as a server", func() {
 			b := bytes.NewReader([]byte{0x00, 0x01})
 			_, err := PeekConnectionID(b, protocol.PerspectiveClient)
-			Expect(err).To(MatchError(errReceivedTruncatedConnectionID))
+			Expect(err).To(MatchError(errReceivedOmittedConnectionID))
 		})
 
 		It("gets the connection ID", func() {
@@ -40,7 +40,7 @@ var _ = Describe("Public Header", func() {
 			Expect(err).To(HaveOccurred())
 		})
 
-		It("accepts a truncated connection ID as a client", func() {
+		It("accepts an ommitted connection ID as a client", func() {
 			b := bytes.NewReader([]byte{0x00, 0x01})
 			len := b.Len()
 			connID, err := PeekConnectionID(b, protocol.PerspectiveServer)
@@ -64,17 +64,17 @@ var _ = Describe("Public Header", func() {
 			Expect(b.Len()).To(BeZero())
 		})
 
-		It("does not accept truncated connection ID as a server", func() {
+		It("does not accept an omittedd connection ID as a server", func() {
 			b := bytes.NewReader([]byte{0x00, 0x01})
 			_, err := ParsePublicHeader(b, protocol.PerspectiveClient, protocol.VersionWhatever)
-			Expect(err).To(MatchError(errReceivedTruncatedConnectionID))
+			Expect(err).To(MatchError(errReceivedOmittedConnectionID))
 		})
 
-		It("accepts a truncated connection ID as a client", func() {
+		It("accepts aan d connection ID as a client", func() {
 			b := bytes.NewReader([]byte{0x00, 0x01})
 			hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(hdr.TruncateConnectionID).To(BeTrue())
+			Expect(hdr.OmitConnectionID).To(BeTrue())
 			Expect(hdr.ConnectionID).To(BeZero())
 			Expect(b.Len()).To(BeZero())
 		})
@@ -303,13 +303,13 @@ var _ = Describe("Public Header", func() {
 			Expect(err).To(MatchError("PublicHeader: PacketNumberLen not set"))
 		})
 
-		It("truncates the connection ID", func() {
+		It("omits the connection ID", func() {
 			b := &bytes.Buffer{}
 			hdr := PublicHeader{
-				ConnectionID:         0x4cfa9f9b668619f6,
-				TruncateConnectionID: true,
-				PacketNumberLen:      protocol.PacketNumberLen6,
-				PacketNumber:         1,
+				ConnectionID:     0x4cfa9f9b668619f6,
+				OmitConnectionID: true,
+				PacketNumberLen:  protocol.PacketNumberLen6,
+				PacketNumber:     1,
 			}
 			err := hdr.Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
 			Expect(err).ToNot(HaveOccurred())
@@ -450,24 +450,24 @@ var _ = Describe("Public Header", func() {
 
 			It("gets the lengths of a packet sent by the client with the VersionFlag set", func() {
 				hdr := PublicHeader{
-					ConnectionID:         0x4cfa9f9b668619f6,
-					TruncateConnectionID: true,
-					PacketNumber:         0xDECAFBAD,
-					PacketNumberLen:      protocol.PacketNumberLen6,
-					VersionFlag:          true,
-					VersionNumber:        versionLittleEndian,
+					ConnectionID:     0x4cfa9f9b668619f6,
+					OmitConnectionID: true,
+					PacketNumber:     0xDECAFBAD,
+					PacketNumberLen:  protocol.PacketNumberLen6,
+					VersionFlag:      true,
+					VersionNumber:    versionLittleEndian,
 				}
 				length, err := hdr.GetLength(protocol.PerspectiveClient)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(length).To(Equal(protocol.ByteCount(1 + 4 + 6))) // 1 byte public flag, 4 version number, and packet number
 			})
 
-			It("gets the length of a packet with longest packet number length and truncated connectionID", func() {
+			It("gets the length of a packet with longest packet number length and omitted connectionID", func() {
 				hdr := PublicHeader{
-					ConnectionID:         0x4cfa9f9b668619f6,
-					TruncateConnectionID: true,
-					PacketNumber:         0xDECAFBAD,
-					PacketNumberLen:      protocol.PacketNumberLen6,
+					ConnectionID:     0x4cfa9f9b668619f6,
+					OmitConnectionID: true,
+					PacketNumber:     0xDECAFBAD,
+					PacketNumberLen:  protocol.PacketNumberLen6,
 				}
 				length, err := hdr.GetLength(protocol.PerspectiveServer)
 				Expect(err).ToNot(HaveOccurred())

@@ -172,7 +172,7 @@ func populateClientConfig(config *Config) *Config {
 		Versions:                              versions,
 		HandshakeTimeout:                      handshakeTimeout,
 		IdleTimeout:                           idleTimeout,
-		RequestConnectionIDTruncation:         config.RequestConnectionIDTruncation,
+		RequestConnectionIDOmission:           config.RequestConnectionIDOmission,
 		MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindow,
 		MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindow,
 		KeepAlive: config.KeepAlive,
@@ -256,11 +256,11 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 		return
 	}
 	// reject packets with truncated connection id if we didn't request truncation
-	if hdr.TruncateConnectionID && !c.config.RequestConnectionIDTruncation {
+	if hdr.OmitConnectionID && !c.config.RequestConnectionIDOmission {
 		return
 	}
 	// reject packets with the wrong connection ID
-	if !hdr.TruncateConnectionID && hdr.ConnectionID != c.connectionID {
+	if !hdr.OmitConnectionID && hdr.ConnectionID != c.connectionID {
 		return
 	}
 	hdr.Raw = packet[:len(packet)-r.Len()]

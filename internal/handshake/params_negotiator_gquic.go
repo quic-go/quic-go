@@ -40,7 +40,7 @@ func (h *paramsNegotiatorGQUIC) SetFromMap(params map[Tag][]byte) error {
 		if err != nil {
 			return errMalformedTag
 		}
-		h.truncateConnectionID = (clientValue == 0)
+		h.omitConnectionID = (clientValue == 0)
 	}
 	if value, ok := params[TagMSPC]; ok {
 		clientValue, err := utils.LittleEndian.ReadUint32(bytes.NewBuffer(value))
@@ -115,12 +115,12 @@ func (h *paramsNegotiatorGQUIC) GetHelloMap() (map[Tag][]byte, error) {
 	}, nil
 }
 
-func (h *paramsNegotiatorGQUIC) TruncateConnectionID() bool {
+func (h *paramsNegotiatorGQUIC) OmitConnectionID() bool {
 	if h.perspective == protocol.PerspectiveClient {
 		return false
 	}
 
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
-	return h.truncateConnectionID
+	return h.omitConnectionID
 }

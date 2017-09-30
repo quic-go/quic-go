@@ -253,14 +253,14 @@ var _ = Describe("Client", func() {
 
 		It("setups with the right values", func() {
 			config := &Config{
-				HandshakeTimeout:              1337 * time.Minute,
-				IdleTimeout:                   42 * time.Hour,
-				RequestConnectionIDTruncation: true,
+				HandshakeTimeout:            1337 * time.Minute,
+				IdleTimeout:                 42 * time.Hour,
+				RequestConnectionIDOmission: true,
 			}
 			c := populateClientConfig(config)
 			Expect(c.HandshakeTimeout).To(Equal(1337 * time.Minute))
 			Expect(c.IdleTimeout).To(Equal(42 * time.Hour))
-			Expect(c.RequestConnectionIDTruncation).To(BeTrue())
+			Expect(c.RequestConnectionIDOmission).To(BeTrue())
 		})
 
 		It("fills in default values if options are not set in the Config", func() {
@@ -268,7 +268,7 @@ var _ = Describe("Client", func() {
 			Expect(c.Versions).To(Equal(protocol.SupportedVersions))
 			Expect(c.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
 			Expect(c.IdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
-			Expect(c.RequestConnectionIDTruncation).To(BeFalse())
+			Expect(c.RequestConnectionIDOmission).To(BeFalse())
 		})
 
 		It("errors when receiving an error from the connection", func(done Done) {
@@ -438,12 +438,12 @@ var _ = Describe("Client", func() {
 	})
 
 	It("ignores packets without connection id, if it didn't request connection id trunctation", func() {
-		cl.config.RequestConnectionIDTruncation = false
+		cl.config.RequestConnectionIDOmission = false
 		buf := &bytes.Buffer{}
 		(&wire.PublicHeader{
-			TruncateConnectionID: true,
-			PacketNumber:         1,
-			PacketNumberLen:      1,
+			OmitConnectionID: true,
+			PacketNumber:     1,
+			PacketNumberLen:  1,
 		}).Write(buf, protocol.VersionWhatever, protocol.PerspectiveServer)
 		cl.handlePacket(addr, buf.Bytes())
 		Expect(sess.packetCount).To(BeZero())

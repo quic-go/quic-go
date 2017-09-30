@@ -268,10 +268,10 @@ func (p *packetPacker) getPublicHeader(encLevel protocol.EncryptionLevel) *wire.
 	pnum := p.packetNumberGenerator.Peek()
 	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(pnum, p.leastUnacked)
 	publicHeader := &wire.PublicHeader{
-		ConnectionID:         p.connectionID,
-		PacketNumber:         pnum,
-		PacketNumberLen:      packetNumberLen,
-		TruncateConnectionID: p.connParams.TruncateConnectionID(),
+		ConnectionID:     p.connectionID,
+		PacketNumber:     pnum,
+		PacketNumberLen:  packetNumberLen,
+		OmitConnectionID: p.connParams.OmitConnectionID(),
 	}
 
 	if p.perspective == protocol.PerspectiveServer && encLevel == protocol.EncryptionSecure {

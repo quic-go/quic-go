@@ -491,8 +491,8 @@ var _ = Describe("Client Crypto Setup", func() {
 			Expect(tags).ToNot(HaveKey(TagTCID))
 		})
 
-		It("requests to truncate the connection ID", func() {
-			cs.requestConnIDTruncation = true
+		It("requests to omit the connection ID", func() {
+			cs.requestConnIDOmission = true
 			tags, err := cs.getTags()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(tags).To(HaveKeyWithValue(TagTCID, []byte{0, 0, 0, 0}))
