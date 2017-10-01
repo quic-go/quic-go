@@ -149,4 +149,15 @@ var _ = Describe("Handshake RTT tests", func() {
 		// plus 1 RTT: the timer starts 0.5 RTTs after sending the first packet, and the CONNECTION_CLOSE needs another 0.5 RTTs to reach the client
 		expectDurationInRTTs(3)
 	})
+
+	It("errors when the client doesn't accept the certificate", func() {
+		// don't validate the client's address, send the certificate in the first flight
+		serverConfig.AcceptCookie = func(_ net.Addr, _ *quic.Cookie) bool {
+			return true
+		}
+		runServerAndProxy()
+		_, err := quic.DialAddr(proxy.LocalAddr().String(), nil, nil)
+		Expect(err).To(MatchError(qerr.ProofInvalid))
+		expectDurationInRTTs(1)
+	})
 })
