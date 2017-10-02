@@ -194,13 +194,11 @@ func (s *session) setup(
 			return s.config.AcceptCookie(clientAddr, cookie)
 		}
 		if s.version.UsesTLS() {
-			s.cryptoSetup, s.connParams, err = handshake.NewCryptoSetupTLS(
-				"",
-				s.perspective,
-				s.version,
+			s.cryptoSetup, s.connParams, err = handshake.NewCryptoSetupTLSServer(
 				tlsConf,
 				transportParams,
 				aeadChanged,
+				s.version,
 			)
 		} else {
 			s.cryptoSetup, s.connParams, err = newCryptoSetup(
@@ -216,13 +214,12 @@ func (s *session) setup(
 		}
 	} else {
 		if s.version.UsesTLS() {
-			s.cryptoSetup, s.connParams, err = handshake.NewCryptoSetupTLS(
+			s.cryptoSetup, s.connParams, err = handshake.NewCryptoSetupTLSClient(
 				hostname,
-				s.perspective,
-				s.version,
 				tlsConf,
 				transportParams,
 				aeadChanged,
+				s.version,
 			)
 		} else {
 			transportParams.RequestConnectionIDOmission = s.config.RequestConnectionIDOmission
