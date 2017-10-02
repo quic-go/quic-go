@@ -330,68 +330,7 @@ var _ = Describe("Session", func() {
 			Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
 		})
 
-		It("does not delete streams with Close()", func() {
-			str, err := sess.GetOrOpenStream(5)
-			Expect(err).ToNot(HaveOccurred())
-			str.Close()
-			sess.garbageCollectStreams()
-			str, err = sess.streamsMap.GetOrOpenStream(5)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(str).ToNot(BeNil())
-		})
-
-		It("does not delete streams with FIN bit", func() {
-			sess.handleStreamFrame(&wire.StreamFrame{
-				StreamID: 5,
-				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
-				FinBit:   true,
-			})
-			numOpenStreams := len(sess.streamsMap.openStreams)
-			str, _ := sess.streamsMap.GetOrOpenStream(5)
-			Expect(str).ToNot(BeNil())
-			p := make([]byte, 4)
-			_, err := str.Read(p)
-			Expect(err).To(MatchError(io.EOF))
-			Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
-			sess.garbageCollectStreams()
-			Expect(sess.streamsMap.openStreams).To(HaveLen(numOpenStreams))
-			str, _ = sess.streamsMap.GetOrOpenStream(5)
-			Expect(str).ToNot(BeNil())
-		})
-
-		It("deletes streams with FIN bit & close", func() {
-			sess.handleStreamFrame(&wire.StreamFrame{
-				StreamID: 5,
-				Data:     []byte{0xde, 0xca, 0xfb, 0xad},
-				FinBit:   true,
-			})
-			numOpenStreams := len(sess.streamsMap.openStreams)
-			str, _ := sess.streamsMap.GetOrOpenStream(5)
-			Expect(str).ToNot(BeNil())
-			p := make([]byte, 4)
-			_, err := str.Read(p)
-			Expect(err).To(MatchError(io.EOF))
-			Expect(p).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
-			sess.garbageCollectStreams()
-			Expect(sess.streamsMap.openStreams).To(HaveLen(numOpenStreams))
-			str, _ = sess.streamsMap.GetOrOpenStream(5)
-			Expect(str).ToNot(BeNil())
-			// We still need to close the stream locally
-			str.Close()
-			// ... and simulate that we actually the FIN
-			str.sentFin()
-			sess.garbageCollectStreams()
-			Expect(len(sess.streamsMap.openStreams)).To(BeNumerically("<", numOpenStreams))
-			str, err = sess.streamsMap.GetOrOpenStream(5)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(str).To(BeNil())
-			// flow controller should have been notified
-			_, err = sess.flowControlManager.SendWindowSize(5)
-			Expect(err).To(MatchError("Error accessing the flowController map."))
-		})
-
 		It("cancels streams with error", func() {
-			sess.garbageCollectStreams()
 			testErr := errors.New("test")
 			sess.handleStreamFrame(&wire.StreamFrame{
 				StreamID: 5,
@@ -406,10 +345,6 @@ var _ = Describe("Session", func() {
 			sess.handleCloseError(closeError{err: testErr, remote: true})
 			_, err = str.Read(p)
 			Expect(err).To(MatchError(qerr.Error(qerr.InternalError, testErr.Error())))
-			sess.garbageCollectStreams()
-			str, err = sess.streamsMap.GetOrOpenStream(5)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(str).To(BeNil())
 		})
 
 		It("cancels empty streams with error", func() {
@@ -421,10 +356,6 @@ var _ = Describe("Session", func() {
 			sess.handleCloseError(closeError{err: testErr, remote: true})
 			_, err = str.Read([]byte{0})
 			Expect(err).To(MatchError(qerr.Error(qerr.InternalError, testErr.Error())))
-			sess.garbageCollectStreams()
-			str, err = sess.streamsMap.GetOrOpenStream(5)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(str).To(BeNil())
 		})
 
 		It("informs the FlowControlManager about new streams", func() {
@@ -447,7 +378,8 @@ var _ = Describe("Session", func() {
 			Expect(err).To(MatchError(io.EOF))
 			str.Close()
 			str.sentFin()
-			sess.garbageCollectStreams()
+			err = sess.streamsMap.DeleteClosedStreams()
+			Expect(err).ToNot(HaveOccurred())
 			str, _ = sess.streamsMap.GetOrOpenStream(5)
 			Expect(str).To(BeNil()) // make sure the stream is gone
 			err = sess.handleStreamFrame(&wire.StreamFrame{
@@ -472,7 +404,8 @@ var _ = Describe("Session", func() {
 			Expect(err).To(MatchError(io.EOF))
 			str.Close()
 			str.sentFin()
-			sess.garbageCollectStreams()
+			err = sess.streamsMap.DeleteClosedStreams()
+			Expect(err).ToNot(HaveOccurred())
 			str, _ = sess.streamsMap.GetOrOpenStream(2)
 			Expect(str).To(BeNil()) // make sure the stream is gone
 			err = sess.handleStreamFrame(&wire.StreamFrame{
@@ -638,23 +571,17 @@ var _ = Describe("Session", func() {
 			Expect(str).ToNot(BeNil())
 		})
 
-		It("errors when receiving a WindowUpdateFrame for a closed stream", func() {
-			sess.handleStreamFrame(&wire.StreamFrame{StreamID: 5})
-			err := sess.streamsMap.RemoveStream(5)
+		It("ignores WINDOW_UPDATEs for a closed stream", func() {
+			str, err := sess.GetOrOpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
-			sess.garbageCollectStreams()
-			err = sess.handleWindowUpdateFrame(&wire.WindowUpdateFrame{
-				StreamID:   5,
-				ByteOffset: 1337,
-			})
-			Expect(err).To(MatchError(errWindowUpdateOnClosedStream))
-		})
-
-		It("ignores errors when receiving a WindowUpdateFrame for a closed stream", func() {
-			sess.handleStreamFrame(&wire.StreamFrame{StreamID: 5})
-			err := sess.streamsMap.RemoveStream(5)
+			str.Close()
+			str.(*stream).Cancel(nil)
+			Expect(str.(*stream).finished()).To(BeTrue())
+			err = sess.streamsMap.DeleteClosedStreams()
 			Expect(err).ToNot(HaveOccurred())
-			sess.garbageCollectStreams()
+			str, err = sess.GetOrOpenStream(5)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(str).To(BeNil())
 			err = sess.handleFrames([]wire.Frame{&wire.WindowUpdateFrame{
 				StreamID:   5,
 				ByteOffset: 1337,
@@ -1219,7 +1146,8 @@ var _ = Describe("Session", func() {
 				str.(*stream).sentFin()
 				str.Close()
 				str.(*stream).RegisterRemoteError(nil)
-				sess.garbageCollectStreams()
+				err = sess.streamsMap.DeleteClosedStreams()
+				Expect(err).ToNot(HaveOccurred())
 				_, err = sess.flowControlManager.SendWindowSize(5)
 				Expect(err).To(MatchError("Error accessing the flowController map."))
 				sph.retransmissionQueue = []*ackhandler.Packet{{
@@ -1605,12 +1533,15 @@ var _ = Describe("Session", func() {
 		})
 
 		It("returns a nil-value (not an interface with value nil) for closed streams", func() {
-			_, err := sess.GetOrOpenStream(9)
-			Expect(err).ToNot(HaveOccurred())
-			sess.streamsMap.RemoveStream(9)
-			sess.garbageCollectStreams()
-			Expect(sess.streamsMap.GetOrOpenStream(9)).To(BeNil())
 			str, err := sess.GetOrOpenStream(9)
+			Expect(err).ToNot(HaveOccurred())
+			str.Close()
+			str.(*stream).Cancel(nil)
+			Expect(str.(*stream).finished()).To(BeTrue())
+			err = sess.streamsMap.DeleteClosedStreams()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(sess.streamsMap.GetOrOpenStream(9)).To(BeNil())
+			str, err = sess.GetOrOpenStream(9)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(str).To(BeNil())
 			// make sure that the returned value is a plain nil, not an Stream with value nil
@@ -1650,7 +1581,7 @@ var _ = Describe("Session", func() {
 				s.(*stream).CloseRemote(0)
 				_, err = s.Read([]byte("a"))
 				Expect(err).To(MatchError(io.EOF))
-				sess.garbageCollectStreams()
+				sess.streamsMap.DeleteClosedStreams()
 			}
 		})
 	})

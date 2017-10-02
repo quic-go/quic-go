@@ -242,7 +242,7 @@ func (s *session) setup(
 	}
 
 	s.flowControlManager = flowcontrol.NewFlowControlManager(s.connParams, s.rttStats)
-	s.streamsMap = newStreamsMap(s.newStream, s.perspective, s.connParams)
+	s.streamsMap = newStreamsMap(s.newStream, s.flowControlManager.RemoveStream, s.perspective, s.connParams)
 	s.streamFramer = newStreamFramer(s.streamsMap, s.flowControlManager)
 	s.packer = newPacketPacker(s.connectionID,
 		s.cryptoSetup,
@@ -347,7 +347,10 @@ runLoop:
 		if s.handshakeComplete && now.Sub(s.lastNetworkActivityTime) >= s.idleTimeout() {
 			s.closeLocal(qerr.Error(qerr.NetworkIdleTimeout, "No recent network activity."))
 		}
-		s.garbageCollectStreams()
+
+		if err := s.streamsMap.DeleteClosedStreams(); err != nil {
+			s.closeLocal(err)
+		}
 	}
 
 	// only send the error the handshakeChan when the handshake is not completed yet
@@ -792,22 +795,6 @@ func (s *session) newStream(id protocol.StreamID) *stream {
 		s.flowControlManager.NewStream(id, true)
 	}
 	return newStream(id, s.scheduleSending, s.queueResetStreamFrame, s.flowControlManager)
-}
-
-// garbageCollectStreams goes through all streams and removes EOF'ed streams
-// from the streams map.
-func (s *session) garbageCollectStreams() {
-	s.streamsMap.Iterate(func(str *stream) (bool, error) {
-		id := str.StreamID()
-		if str.finished() {
-			err := s.streamsMap.RemoveStream(id)
-			if err != nil {
-				return false, err
-			}
-			s.flowControlManager.RemoveStream(id)
-		}
-		return true, nil
-	})
 }
 
 func (s *session) sendPublicReset(rejectedPacketNumber protocol.PacketNumber) error {

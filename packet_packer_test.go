@@ -66,7 +66,7 @@ var _ = Describe("Packet packer", func() {
 
 		cryptoStream = &stream{}
 
-		streamsMap := newStreamsMap(nil, protocol.PerspectiveServer, nil)
+		streamsMap := newStreamsMap(nil, nil, protocol.PerspectiveServer, nil)
 		streamsMap.streams[1] = cryptoStream
 		streamsMap.openStreams = []protocol.StreamID{1}
 		streamFramer = newStreamFramer(streamsMap, nil)
