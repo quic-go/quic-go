@@ -55,7 +55,7 @@ func NewCryptoSetupTLSServer(
 		nullAEAD:         crypto.NewNullAEAD(protocol.PerspectiveServer, version),
 		keyDerivation:    crypto.DeriveAESKeys,
 		aeadChanged:      aeadChanged,
-		extensionHandler: newExtensionHandlerServer(params, supportedVersions),
+		extensionHandler: newExtensionHandlerServer(params, supportedVersions, version),
 	}, params, nil
 }
 
