@@ -926,13 +926,30 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		Context("updating the remote address", func() {
+		Context("Connection Migration", func() {
 			It("sets the remote address", func() {
 				remoteIP := &net.IPAddr{IP: net.IPv4(192, 168, 0, 100)}
 				Expect(sess.conn.(*mockConnection).remoteAddr).ToNot(Equal(remoteIP))
 				p := receivedPacket{
 					remoteAddr:   remoteIP,
 					publicHeader: &wire.PublicHeader{PacketNumber: 1337},
+				}
+				err := sess.handlePacketImpl(&p)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(sess.conn.(*mockConnection).remoteAddr).To(Equal(remoteIP))
+			})
+
+			It("doesn't change the remote address for a delayed packet", func() {
+				remoteIP := sess.conn.(*mockConnection).remoteAddr
+				delayedRemoteIP := &net.IPAddr{IP: net.IPv4(192, 168, 0, 100)}
+				Expect(sess.conn.(*mockConnection).remoteAddr).To(Equal(remoteIP))
+				sess.largestRcvdPacketNumber = 1337 + 1
+				p := receivedPacket{
+					remoteAddr: delayedRemoteIP,
+					publicHeader: &wire.PublicHeader{
+						PacketNumber:    1337,
+						PacketNumberLen: protocol.PacketNumberLen4,
+					},
 				}
 				err := sess.handlePacketImpl(&p)
 				Expect(err).ToNot(HaveOccurred())

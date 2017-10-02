@@ -433,8 +433,11 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		return err
 	}
 	if s.perspective == protocol.PerspectiveServer {
-		// update the remote address, even if unpacking failed for any other reason than a decryption error
-		s.conn.SetCurrentRemoteAddr(p.remoteAddr)
+		// only perform a connection migration if this is not a delayed packet (i.e. the packet number is higher than the highest packet number we've seen so far)
+		if hdr.PacketNumber > s.largestRcvdPacketNumber {
+			// update the remote address, even if unpacking failed for any other reason than a decryption error
+			s.conn.SetCurrentRemoteAddr(p.remoteAddr)
+		}
 	}
 	if err != nil {
 		return err
