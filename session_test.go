@@ -1743,6 +1743,7 @@ var _ = Describe("Client Session", func() {
 			0,
 			nil,
 			populateClientConfig(&Config{}),
+			protocol.VersionWhatever,
 			nil,
 		)
 		sess = sessP.(*session)

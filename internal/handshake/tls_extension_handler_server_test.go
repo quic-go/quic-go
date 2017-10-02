@@ -5,6 +5,7 @@ import (
 
 	"github.com/bifurcation/mint"
 	"github.com/bifurcation/mint/syntax"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -15,7 +16,7 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 
 	BeforeEach(func() {
 		pn := &paramsNegotiator{}
-		handler = newExtensionHandlerServer(pn)
+		handler = newExtensionHandlerServer(pn, nil)
 		el = make(mint.ExtensionList, 0)
 	})
 
@@ -31,15 +32,17 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 		})
 
 		It("adds TransportParameters to the EncryptedExtensions message", func() {
+			handler.supportedVersions = []protocol.VersionNumber{13, 37, 42}
 			err := handler.Send(mint.HandshakeTypeEncryptedExtensions, &el)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(el).To(HaveLen(1))
 			ext := &tlsExtensionBody{}
 			found := el.Find(ext)
 			Expect(found).To(BeTrue())
-			chtp := &encryptedExtensionsTransportParameters{}
-			_, err = syntax.Unmarshal(ext.data, chtp)
+			eetp := &encryptedExtensionsTransportParameters{}
+			_, err = syntax.Unmarshal(ext.data, eetp)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(eetp.SupportedVersions).To(Equal([]uint32{13, 37, 42}))
 		})
 	})
 

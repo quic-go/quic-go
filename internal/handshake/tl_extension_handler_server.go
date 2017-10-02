@@ -12,12 +12,17 @@ import (
 
 type extensionHandlerServer struct {
 	params *paramsNegotiator
+
+	supportedVersions []protocol.VersionNumber
 }
 
 var _ mint.AppExtensionHandler = &extensionHandlerServer{}
 
-func newExtensionHandlerServer(params *paramsNegotiator) *extensionHandlerServer {
-	return &extensionHandlerServer{params: params}
+func newExtensionHandlerServer(params *paramsNegotiator, supportedVersions []protocol.VersionNumber) *extensionHandlerServer {
+	return &extensionHandlerServer{
+		params:            params,
+		supportedVersions: supportedVersions,
+	}
 }
 
 func (h *extensionHandlerServer) Send(hType mint.HandshakeType, el *mint.ExtensionList) error {
@@ -29,8 +34,12 @@ func (h *extensionHandlerServer) Send(hType mint.HandshakeType, el *mint.Extensi
 		h.params.GetTransportParameters(),
 		transportParameter{statelessResetTokenParameterID, bytes.Repeat([]byte{42}, 16)},
 	)
+	supportedVersions := make([]uint32, len(h.supportedVersions))
+	for i, v := range h.supportedVersions {
+		supportedVersions[i] = uint32(v)
+	}
 	data, err := syntax.Marshal(encryptedExtensionsTransportParameters{
-		SupportedVersions: []uint32{uint32(protocol.VersionTLS)},
+		SupportedVersions: supportedVersions,
 		Parameters:        transportParams,
 	})
 	if err != nil {

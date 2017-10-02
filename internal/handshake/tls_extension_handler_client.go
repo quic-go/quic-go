@@ -11,12 +11,19 @@ import (
 
 type extensionHandlerClient struct {
 	params *paramsNegotiator
+
+	initialVersion protocol.VersionNumber
+	version        protocol.VersionNumber
 }
 
 var _ mint.AppExtensionHandler = &extensionHandlerClient{}
 
-func newExtensionHandlerClient(params *paramsNegotiator) *extensionHandlerClient {
-	return &extensionHandlerClient{params: params}
+func newExtensionHandlerClient(params *paramsNegotiator, initialVersion, version protocol.VersionNumber) *extensionHandlerClient {
+	return &extensionHandlerClient{
+		params:         params,
+		initialVersion: initialVersion,
+		version:        version,
+	}
 }
 
 func (h *extensionHandlerClient) Send(hType mint.HandshakeType, el *mint.ExtensionList) error {
@@ -25,8 +32,8 @@ func (h *extensionHandlerClient) Send(hType mint.HandshakeType, el *mint.Extensi
 	}
 
 	data, err := syntax.Marshal(clientHelloTransportParameters{
-		NegotiatedVersion: uint32(protocol.VersionTLS),
-		InitialVersion:    uint32(protocol.VersionTLS),
+		NegotiatedVersion: uint32(h.version),
+		InitialVersion:    uint32(h.initialVersion),
 		Parameters:        h.params.GetTransportParameters(),
 	})
 	if err != nil {
