@@ -66,6 +66,7 @@ func NewCryptoSetupTLSClient(
 	transportParams *TransportParameters,
 	aeadChanged chan<- protocol.EncryptionLevel,
 	initialVersion protocol.VersionNumber,
+	supportedVersions []protocol.VersionNumber,
 	version protocol.VersionNumber,
 ) (CryptoSetup, ParamsNegotiator, error) {
 	mintConf, err := tlsToMintConfig(tlsConfig, protocol.PerspectiveClient)
@@ -81,7 +82,7 @@ func NewCryptoSetupTLSClient(
 		nullAEAD:         crypto.NewNullAEAD(protocol.PerspectiveClient, version),
 		keyDerivation:    crypto.DeriveAESKeys,
 		aeadChanged:      aeadChanged,
-		extensionHandler: newExtensionHandlerClient(params, initialVersion, version),
+		extensionHandler: newExtensionHandlerClient(params, initialVersion, supportedVersions, version),
 	}, params, nil
 }
 

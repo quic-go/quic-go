@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/lucas-clemente/quic-go/qerr"
+
 	"github.com/bifurcation/mint"
 	"github.com/bifurcation/mint/syntax"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -12,17 +14,19 @@ import (
 type extensionHandlerClient struct {
 	params *paramsNegotiator
 
-	initialVersion protocol.VersionNumber
-	version        protocol.VersionNumber
+	initialVersion    protocol.VersionNumber
+	supportedVersions []protocol.VersionNumber
+	version           protocol.VersionNumber
 }
 
 var _ mint.AppExtensionHandler = &extensionHandlerClient{}
 
-func newExtensionHandlerClient(params *paramsNegotiator, initialVersion, version protocol.VersionNumber) *extensionHandlerClient {
+func newExtensionHandlerClient(params *paramsNegotiator, initialVersion protocol.VersionNumber, supportedVersions []protocol.VersionNumber, version protocol.VersionNumber) *extensionHandlerClient {
 	return &extensionHandlerClient{
-		params:         params,
-		initialVersion: initialVersion,
-		version:        version,
+		params:            params,
+		initialVersion:    initialVersion,
+		supportedVersions: supportedVersions,
+		version:           version,
 	}
 }
 
@@ -67,7 +71,18 @@ func (h *extensionHandlerClient) Receive(hType mint.HandshakeType, el *mint.Exte
 	if _, err := syntax.Unmarshal(ext.data, eetp); err != nil {
 		return err
 	}
-	// TODO: check versions
+	serverSupportedVersions := make([]protocol.VersionNumber, len(eetp.SupportedVersions))
+	for i, v := range eetp.SupportedVersions {
+		serverSupportedVersions[i] = protocol.VersionNumber(v)
+	}
+	// check that the current version is included in the supported versions
+	if !protocol.IsSupportedVersion(serverSupportedVersions, h.version) {
+		return qerr.Error(qerr.VersionNegotiationMismatch, "current version not included in the supported versions")
+	}
+	// if version negotiation was performed, check that we would have selected the current version based on the supported versions sent by the server
+	if h.version != h.initialVersion && h.version != protocol.ChooseSupportedVersion(h.supportedVersions, serverSupportedVersions) {
+		return qerr.Error(qerr.VersionNegotiationMismatch, "would have picked a different version")
+	}
 
 	// check that the server sent the stateless reset token
 	var foundStatelessResetToken bool

@@ -17,7 +17,7 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 
 	BeforeEach(func() {
 		pn := &paramsNegotiator{}
-		handler = newExtensionHandlerClient(pn, protocol.VersionWhatever, protocol.VersionWhatever)
+		handler = newExtensionHandlerClient(pn, protocol.VersionWhatever, nil, protocol.VersionWhatever)
 		el = make(mint.ExtensionList, 0)
 	})
 
@@ -53,14 +53,14 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 		var fakeBody *tlsExtensionBody
 		var parameters map[transportParameterID][]byte
 
-		paramaterMapToExtensionBody := func(paramMap map[transportParameterID][]byte) *tlsExtensionBody {
-			var params []transportParameter
-			for id, val := range paramMap {
-				params = append(params, transportParameter{id, val})
-			}
-			body, err := syntax.Marshal(encryptedExtensionsTransportParameters{Parameters: params})
+		addEncryptedExtensionsWithParameters := func(paramMap map[transportParameterID][]byte) {
+			body, err := syntax.Marshal(encryptedExtensionsTransportParameters{
+				Parameters:        parameterMapToList(paramMap),
+				SupportedVersions: []uint32{uint32(handler.version)},
+			})
 			Expect(err).ToNot(HaveOccurred())
-			return &tlsExtensionBody{data: body}
+			err = el.Add(&tlsExtensionBody{data: body})
+			Expect(err).ToNot(HaveOccurred())
 		}
 
 		BeforeEach(func() {
@@ -75,9 +75,8 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 		})
 
 		It("accepts the TransportParameters on the EncryptedExtensions message", func() {
-			err := el.Add(paramaterMapToExtensionBody(parameters))
-			Expect(err).ToNot(HaveOccurred())
-			err = handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
+			addEncryptedExtensionsWithParameters(parameters)
+			err := handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.params.GetSendStreamFlowControlWindow()).To(BeEquivalentTo(0x11223344))
 		})
@@ -116,18 +115,88 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 
 		It("rejects TransportParameters if they don't contain the stateless reset token", func() {
 			delete(parameters, statelessResetTokenParameterID)
-			err := el.Add(paramaterMapToExtensionBody(parameters))
-			Expect(err).ToNot(HaveOccurred())
-			err = handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
+			addEncryptedExtensionsWithParameters(parameters)
+			err := handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
 			Expect(err).To(MatchError("server didn't sent stateless_reset_token"))
 		})
 
 		It("errors if the stateless reset token has the wrong length", func() {
 			parameters[statelessResetTokenParameterID] = bytes.Repeat([]byte{0}, 15) // should be 16
-			err := el.Add(paramaterMapToExtensionBody(parameters))
-			Expect(err).ToNot(HaveOccurred())
-			err = handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
+			addEncryptedExtensionsWithParameters(parameters)
+			err := handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
 			Expect(err).To(MatchError("wrong length for stateless_reset_token: 15 (expected 16)"))
+		})
+
+		Context("Version Negotiation", func() {
+			It("accepts a valid version negotiation", func() {
+				handler.initialVersion = 13
+				handler.version = 37
+				handler.supportedVersions = []protocol.VersionNumber{13, 37, 42}
+				body, err := syntax.Marshal(encryptedExtensionsTransportParameters{
+					Parameters:        parameterMapToList(parameters),
+					SupportedVersions: []uint32{36, 37, 38},
+				})
+				Expect(err).ToNot(HaveOccurred())
+				err = el.Add(&tlsExtensionBody{data: body})
+				Expect(err).ToNot(HaveOccurred())
+				err = handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("errors if the current version is not contained in the server's supported versions", func() {
+				handler.version = 42
+				body, err := syntax.Marshal(encryptedExtensionsTransportParameters{
+					SupportedVersions: []uint32{43, 44},
+				})
+				Expect(err).ToNot(HaveOccurred())
+				err = el.Add(&tlsExtensionBody{data: body})
+				Expect(err).ToNot(HaveOccurred())
+				err = handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
+				Expect(err).To(MatchError("VersionNegotiationMismatch: current version not included in the supported versions"))
+			})
+
+			It("errors if version negotiation was performed, but would have picked a different version based on the supported version list", func() {
+				handler.version = 42
+				handler.initialVersion = 41
+				handler.supportedVersions = []protocol.VersionNumber{43, 42, 41}
+				serverSupportedVersions := []protocol.VersionNumber{42, 43}
+				// check that version negotiation would have led us to pick version 43
+				Expect(protocol.ChooseSupportedVersion(handler.supportedVersions, serverSupportedVersions)).To(Equal(protocol.VersionNumber(43)))
+				ssv := make([]uint32, len(serverSupportedVersions))
+				for i, v := range serverSupportedVersions {
+					ssv[i] = uint32(v)
+				}
+				body, err := syntax.Marshal(encryptedExtensionsTransportParameters{
+					SupportedVersions: ssv,
+				})
+				Expect(err).ToNot(HaveOccurred())
+				err = el.Add(&tlsExtensionBody{data: body})
+				Expect(err).ToNot(HaveOccurred())
+				err = handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
+				Expect(err).To(MatchError("VersionNegotiationMismatch: would have picked a different version"))
+			})
+
+			It("doesn't error if it would have picked a different version based on the supported version list, if no version negotiation was performed", func() {
+				handler.version = 42
+				handler.initialVersion = 42 // version == initialVersion means no version negotiation was performed
+				handler.supportedVersions = []protocol.VersionNumber{43, 42, 41}
+				serverSupportedVersions := []protocol.VersionNumber{42, 43}
+				// check that version negotiation would have led us to pick version 43
+				Expect(protocol.ChooseSupportedVersion(handler.supportedVersions, serverSupportedVersions)).To(Equal(protocol.VersionNumber(43)))
+				ssv := make([]uint32, len(serverSupportedVersions))
+				for i, v := range serverSupportedVersions {
+					ssv[i] = uint32(v)
+				}
+				body, err := syntax.Marshal(encryptedExtensionsTransportParameters{
+					Parameters:        parameterMapToList(parameters),
+					SupportedVersions: ssv,
+				})
+				Expect(err).ToNot(HaveOccurred())
+				err = el.Add(&tlsExtensionBody{data: body})
+				Expect(err).ToNot(HaveOccurred())
+				err = handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
+				Expect(err).ToNot(HaveOccurred())
+			})
 		})
 	})
 })

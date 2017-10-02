@@ -223,6 +223,7 @@ func (s *session) setup(
 				transportParams,
 				aeadChanged,
 				initialVersion,
+				s.config.Versions,
 				s.version,
 			)
 		} else {

@@ -10,6 +10,14 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+func parameterMapToList(paramMap map[transportParameterID][]byte) []transportParameter {
+	var params []transportParameter
+	for id, val := range paramMap {
+		params = append(params, transportParameter{id, val})
+	}
+	return params
+}
+
 var _ = Describe("TLS Extension Handler, for the server", func() {
 	var handler *extensionHandlerServer
 	var el mint.ExtensionList
@@ -49,14 +57,6 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 	Context("receiving", func() {
 		var fakeBody *tlsExtensionBody
 		var parameters map[transportParameterID][]byte
-
-		parameterMapToList := func(paramMap map[transportParameterID][]byte) []transportParameter {
-			var params []transportParameter
-			for id, val := range paramMap {
-				params = append(params, transportParameter{id, val})
-			}
-			return params
-		}
 
 		addClientHelloWithParameters := func(paramMap map[transportParameterID][]byte) {
 			body, err := syntax.Marshal(clientHelloTransportParameters{Parameters: parameterMapToList(paramMap)})
