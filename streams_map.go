@@ -19,7 +19,7 @@ type streamsMap struct {
 	streams map[protocol.StreamID]*stream
 	// needed for round-robin scheduling
 	openStreams     []protocol.StreamID
-	roundRobinIndex uint32
+	roundRobinIndex int
 
 	nextStream                protocol.StreamID // StreamID of the next Stream that will be returned by OpenStream()
 	highestStreamOpenedByPeer protocol.StreamID
@@ -255,7 +255,7 @@ func (m *streamsMap) DeleteClosedStreams() error {
 		}
 		if id != 0 {
 			j++
-		} else if uint32(j) < m.roundRobinIndex {
+		} else if j < m.roundRobinIndex {
 			m.roundRobinIndex--
 		}
 	}
@@ -271,7 +271,7 @@ func (m *streamsMap) RoundRobinIterate(fn streamLambda) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	numStreams := uint32(len(m.streams))
+	numStreams := len(m.streams)
 	startIndex := m.roundRobinIndex
 
 	for _, i := range []protocol.StreamID{1, 3} {
@@ -284,7 +284,7 @@ func (m *streamsMap) RoundRobinIterate(fn streamLambda) error {
 		}
 	}
 
-	for i := uint32(0); i < numStreams; i++ {
+	for i := 0; i < numStreams; i++ {
 		streamID := m.openStreams[(i+startIndex)%numStreams]
 		if streamID == 1 || streamID == 3 {
 			continue

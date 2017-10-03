@@ -573,7 +573,7 @@ var _ = Describe("Streams Map", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(numIterations).To(Equal(5))
 				Expect(lambdaCalledForStream).To(Equal([]protocol.StreamID{7, 8, 4, 5, 6}))
-				Expect(m.roundRobinIndex).To(Equal(uint32(3)))
+				Expect(m.roundRobinIndex).To(BeEquivalentTo(3))
 			})
 
 			It("picks up at the index+1 where it last stopped", func() {
@@ -589,7 +589,7 @@ var _ = Describe("Streams Map", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(numIterations).To(Equal(2))
 				Expect(lambdaCalledForStream).To(Equal([]protocol.StreamID{4, 5}))
-				Expect(m.roundRobinIndex).To(Equal(uint32(2)))
+				Expect(m.roundRobinIndex).To(BeEquivalentTo(2))
 				numIterations = 0
 				lambdaCalledForStream = lambdaCalledForStream[:0]
 				fn2 := func(str *stream) (bool, error) {
@@ -615,7 +615,7 @@ var _ = Describe("Streams Map", func() {
 				It("adjusts when deleting an element in front", func() {
 					m.roundRobinIndex = 3 // stream 7
 					deleteStream(5)
-					Expect(m.roundRobinIndex).To(Equal(uint32(2)))
+					Expect(m.roundRobinIndex).To(BeEquivalentTo(2))
 				})
 
 				It("doesn't adjust when deleting an element at the back", func() {
@@ -627,7 +627,7 @@ var _ = Describe("Streams Map", func() {
 				It("doesn't adjust when deleting the element it is pointing to", func() {
 					m.roundRobinIndex = 3 // stream 7
 					deleteStream(7)
-					Expect(m.roundRobinIndex).To(Equal(uint32(3)))
+					Expect(m.roundRobinIndex).To(BeEquivalentTo(3))
 				})
 
 				It("adjusts when deleting multiple elements", func() {
