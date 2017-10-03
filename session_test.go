@@ -755,18 +755,21 @@ var _ = Describe("Session", func() {
 	Context("accepting streams", func() {
 		It("waits for new streams", func() {
 			strChan := make(chan Stream)
+			// accept two streams
 			go func() {
 				defer GinkgoRecover()
-				for {
+				for i := 0; i < 2; i++ {
 					str, err := sess.AcceptStream()
 					Expect(err).ToNot(HaveOccurred())
 					strChan <- str
 				}
 			}()
 			Consistently(strChan).ShouldNot(Receive())
-			sess.handleStreamFrame(&wire.StreamFrame{
+			err := sess.handleStreamFrame(&wire.StreamFrame{
 				StreamID: 3,
+				Data:     []byte("foobar"),
 			})
+			Expect(err).ToNot(HaveOccurred())
 			var str Stream
 			Eventually(strChan).Should(Receive(&str))
 			Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
@@ -776,28 +779,32 @@ var _ = Describe("Session", func() {
 
 		It("stops accepting when the session is closed", func() {
 			testErr := errors.New("testErr")
-			var err error
+			done := make(chan struct{})
 			go func() {
-				_, err = sess.AcceptStream()
+				defer GinkgoRecover()
+				_, err := sess.AcceptStream()
+				Expect(err).To(MatchError(qerr.ToQuicError(testErr)))
+				close(done)
 			}()
 			go sess.run()
-			Consistently(func() error { return err }).ShouldNot(HaveOccurred())
+			Consistently(done).ShouldNot(BeClosed())
 			sess.Close(testErr)
-			Eventually(func() error { return err }).Should(HaveOccurred())
-			Expect(err).To(MatchError(qerr.ToQuicError(testErr)))
+			Eventually(done).Should(BeClosed())
 		})
 
 		It("stops accepting when the session is closed after version negotiation", func() {
-			var err error
+			done := make(chan struct{})
 			go func() {
-				_, err = sess.AcceptStream()
+				defer GinkgoRecover()
+				_, err := sess.AcceptStream()
+				Expect(err).To(MatchError(qerr.Error(qerr.InternalError, errCloseSessionForNewVersion.Error())))
+				close(done)
 			}()
 			go sess.run()
-			Consistently(func() error { return err }).ShouldNot(HaveOccurred())
+			Consistently(done).ShouldNot(BeClosed())
 			Expect(sess.Context().Done()).ToNot(BeClosed())
 			sess.Close(errCloseSessionForNewVersion)
-			Eventually(func() error { return err }).Should(HaveOccurred())
-			Expect(err).To(MatchError(qerr.Error(qerr.InternalError, errCloseSessionForNewVersion.Error())))
+			Eventually(done).Should(BeClosed())
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 	})
