@@ -113,6 +113,9 @@ const CryptoParameterMaxLength = 4000
 // EphermalKeyLifetime is the lifetime of the ephermal key during the handshake, see handshake.getEphermalKEX.
 const EphermalKeyLifetime = time.Minute
 
+// MinRemoteIdleTimeout is the minimum value that we accept for the remote idle timeout
+const MinRemoteIdleTimeout = 5 * time.Second
+
 // DefaultIdleTimeout is the default idle timeout
 const DefaultIdleTimeout = 30 * time.Second
 

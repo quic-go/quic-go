@@ -19,7 +19,8 @@ type ParamsNegotiator interface {
 	GetMaxReceiveConnectionFlowControlWindow() protocol.ByteCount
 	GetMaxOutgoingStreams() uint32
 	GetMaxIncomingStreams() uint32
-	GetIdleConnectionStateLifetime() time.Duration
+	// get the idle timeout that was sent by the peer
+	GetRemoteIdleTimeout() time.Duration
 	// determines if the client requests omission of connection IDs.
 	OmitConnectionID() bool
 }
@@ -43,7 +44,8 @@ type paramsNegotiatorBase struct {
 
 	maxStreamsPerConnection                uint32
 	maxIncomingDynamicStreamsPerConnection uint32
-	idleConnectionStateLifetime            time.Duration
+	idleTimeout                            time.Duration
+	remoteIdleTimeout                      time.Duration
 	sendStreamFlowControlWindow            protocol.ByteCount
 	sendConnectionFlowControlWindow        protocol.ByteCount
 	receiveStreamFlowControlWindow         protocol.ByteCount
@@ -61,7 +63,7 @@ func (h *paramsNegotiatorBase) init(params *TransportParameters) {
 	h.maxReceiveConnectionFlowControlWindow = params.MaxReceiveConnectionFlowControlWindow
 	h.requestConnectionIDOmission = params.RequestConnectionIDOmission
 
-	h.idleConnectionStateLifetime = params.IdleTimeout
+	h.idleTimeout = params.IdleTimeout
 	if h.perspective == protocol.PerspectiveServer {
 		h.maxStreamsPerConnection = protocol.MaxStreamsPerConnection                // this is the value negotiated based on what the client sent
 		h.maxIncomingDynamicStreamsPerConnection = protocol.MaxStreamsPerConnection // "incoming" seen from the client's perspective
@@ -77,10 +79,6 @@ func (h *paramsNegotiatorBase) negotiateMaxStreamsPerConnection(clientValue uint
 
 func (h *paramsNegotiatorBase) negotiateMaxIncomingDynamicStreamsPerConnection(clientValue uint32) uint32 {
 	return utils.MinUint32(clientValue, protocol.MaxIncomingDynamicStreamsPerConnection)
-}
-
-func (h *paramsNegotiatorBase) negotiateIdleConnectionStateLifetime(clientValue time.Duration) time.Duration {
-	return utils.MinDuration(clientValue, h.idleConnectionStateLifetime)
 }
 
 // GetSendStreamFlowControlWindow gets the size of the stream-level flow control window for sending data
@@ -134,8 +132,12 @@ func (h *paramsNegotiatorBase) GetMaxIncomingStreams() uint32 {
 	return utils.MaxUint32(uint32(maxStreams)+protocol.MaxStreamsMinimumIncrement, uint32(float64(maxStreams)*protocol.MaxStreamsMultiplier))
 }
 
-func (h *paramsNegotiatorBase) GetIdleConnectionStateLifetime() time.Duration {
+func (h *paramsNegotiatorBase) setRemoteIdleTimeout(t time.Duration) {
+	h.remoteIdleTimeout = utils.MaxDuration(protocol.MinRemoteIdleTimeout, t)
+}
+
+func (h *paramsNegotiatorBase) GetRemoteIdleTimeout() time.Duration {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
-	return h.idleConnectionStateLifetime
+	return h.remoteIdleTimeout
 }

@@ -71,11 +71,11 @@ var _ = Describe("Params Negotiator (for gQUIC)", func() {
 		})
 
 		It("sets the connection-level flow control windows in SHLO", func() {
-			pn.idleConnectionStateLifetime = 0xDECAFBAD * time.Second
+			pn.idleTimeout = 0xdecafbad * time.Second
 			entryMap, err := pn.GetHelloMap()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(entryMap).To(HaveKey(TagICSL))
-			Expect(entryMap[TagICSL]).To(Equal([]byte{0xAD, 0xFB, 0xCA, 0xDE}))
+			Expect(entryMap[TagICSL]).To(Equal([]byte{0xad, 0xfb, 0xca, 0xde}))
 		})
 
 		It("sets the negotiated value for maximum streams in the SHLO", func() {
@@ -211,42 +211,25 @@ var _ = Describe("Params Negotiator (for gQUIC)", func() {
 		})
 	})
 
-	Context("idle connection state lifetime", func() {
-		It("has initial idle connection state lifetime", func() {
-			Expect(pn.GetIdleConnectionStateLifetime()).To(Equal(idleTimeout))
-		})
-
-		It("negotiates correctly when the peer wants a longer lifetime", func() {
-			Expect(pn.negotiateIdleConnectionStateLifetime(idleTimeout + 10*time.Second)).To(Equal(idleTimeout))
-		})
-
-		It("negotiates correctly when the peer wants a shorter lifetime", func() {
-			Expect(pn.negotiateIdleConnectionStateLifetime(idleTimeout - 3*time.Second)).To(Equal(idleTimeout - 3*time.Second))
-		})
-
-		It("sets the negotiated lifetime", func() {
-			// this test only works if the value given here is smaller than protocol.MaxIdleConnectionStateLifetime
+	Context("idle timeout", func() {
+		It("sets the remote idle timeout", func() {
 			values := map[Tag][]byte{
 				TagICSL: {10, 0, 0, 0},
 			}
 			err := pn.SetFromMap(values)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(pn.GetIdleConnectionStateLifetime()).To(Equal(10 * time.Second))
+			Expect(pn.GetRemoteIdleTimeout()).To(Equal(10 * time.Second))
 		})
 
-		It("does not change the idle connection state lifetime when given an invalid value", func() {
+		It("doesn't allow values below the minimum remote idle timeout", func() {
+			t := 2 * time.Second
+			Expect(t).To(BeNumerically("<", protocol.MinRemoteIdleTimeout))
 			values := map[Tag][]byte{
-				TagSFCW: {0xDE, 0xAD, 0xBE}, // 1 byte too short
+				TagICSL: {uint8(t.Seconds()), 0, 0, 0},
 			}
 			err := pn.SetFromMap(values)
-			Expect(err).To(MatchError(errMalformedTag))
-			Expect(pn.GetIdleConnectionStateLifetime()).To(Equal(idleTimeout))
-		})
-
-		It("gets idle connection state lifetime", func() {
-			value := 0xDECAFBAD * time.Second
-			pn.idleConnectionStateLifetime = value
-			Expect(pn.GetIdleConnectionStateLifetime()).To(Equal(value))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(pn.GetRemoteIdleTimeout()).To(Equal(protocol.MinRemoteIdleTimeout))
 		})
 
 		It("errors when given an invalid value", func() {

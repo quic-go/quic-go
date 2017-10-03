@@ -62,8 +62,7 @@ func (h *paramsNegotiator) SetFromTransportParameters(params []transportParamete
 			if len(p.Value) != 2 {
 				return fmt.Errorf("wrong length for idle_timeout: %d (expected 2)", len(p.Value))
 			}
-			val := time.Duration(binary.BigEndian.Uint16(p.Value)) * time.Second
-			h.idleConnectionStateLifetime = h.negotiateIdleConnectionStateLifetime(val)
+			h.setRemoteIdleTimeout(time.Duration(binary.BigEndian.Uint16(p.Value)) * time.Second)
 		case omitConnectionIDParameterID:
 			if len(p.Value) != 0 {
 				return fmt.Errorf("wrong length for omit_connection_id: %d (expected empty)", len(p.Value))
@@ -87,7 +86,7 @@ func (h *paramsNegotiator) GetTransportParameters() []transportParameter {
 	// TODO: use a reasonable value here
 	binary.BigEndian.PutUint32(initialMaxStreamID, math.MaxUint32)
 	idleTimeout := make([]byte, 2)
-	binary.BigEndian.PutUint16(idleTimeout, uint16(h.GetIdleConnectionStateLifetime().Seconds()))
+	binary.BigEndian.PutUint16(idleTimeout, uint16(h.idleTimeout))
 	maxPacketSize := make([]byte, 2)
 	binary.BigEndian.PutUint16(maxPacketSize, uint16(protocol.MaxReceivePacketSize))
 	params := []transportParameter{

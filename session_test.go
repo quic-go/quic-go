@@ -165,12 +165,10 @@ func (m *mockParamsNegotiator) GetReceiveConnectionFlowControlWindow() protocol.
 func (m *mockParamsNegotiator) GetMaxReceiveConnectionFlowControlWindow() protocol.ByteCount {
 	return protocol.DefaultMaxReceiveConnectionFlowControlWindowServer
 }
-func (m *mockParamsNegotiator) GetMaxOutgoingStreams() uint32 { return 100 }
-func (m *mockParamsNegotiator) GetMaxIncomingStreams() uint32 { return 100 }
-func (m *mockParamsNegotiator) GetIdleConnectionStateLifetime() time.Duration {
-	return time.Hour
-}
-func (m *mockParamsNegotiator) OmitConnectionID() bool { return false }
+func (m *mockParamsNegotiator) GetMaxOutgoingStreams() uint32       { return 100 }
+func (m *mockParamsNegotiator) GetMaxIncomingStreams() uint32       { return 100 }
+func (m *mockParamsNegotiator) GetRemoteIdleTimeout() time.Duration { return time.Hour }
+func (m *mockParamsNegotiator) OmitConnectionID() bool              { return false }
 
 var _ = Describe("Session", func() {
 	var (
@@ -1508,36 +1506,45 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("keep-alives", func() {
+		var mockPn *mocks.MockParamsNegotiator
+		// should be shorter than the local timeout for these tests
+		// otherwise we'd send a CONNECTION_CLOSE in the tests where we're testing that no PING is sent
+		remoteIdleTimeout := 20 * time.Second
+
+		BeforeEach(func() {
+			mockPn = mocks.NewMockParamsNegotiator(mockCtrl)
+			mockPn.EXPECT().GetRemoteIdleTimeout().Return(remoteIdleTimeout).AnyTimes()
+			sess.connParams = mockPn
+		})
+
 		It("sends a PING", func() {
 			sess.handshakeComplete = true
 			sess.config.KeepAlive = true
-			sess.lastNetworkActivityTime = time.Now().Add(-(sess.idleTimeout() / 2))
+			sess.lastNetworkActivityTime = time.Now().Add(-remoteIdleTimeout / 2)
 			go sess.run()
 			defer sess.Close(nil)
-			time.Sleep(60 * time.Millisecond)
-			Eventually(mconn.written).ShouldNot(BeEmpty())
-			Eventually(func() byte {
-				// -12 because of the crypto tag. This should be 7 (the frame id for a ping frame).
-				s := <-mconn.written
-				return s[len(s)-12-1]
-			}).Should(Equal(byte(0x07)))
+			var data []byte
+			Eventually(mconn.written).Should(Receive(&data))
+			// -12 because of the crypto tag. This should be 7 (the frame id for a ping frame).
+			Expect(data[len(data)-12-1 : len(data)-12]).To(Equal([]byte{0x07}))
 		})
 
 		It("doesn't send a PING packet if keep-alive is disabled", func() {
 			sess.handshakeComplete = true
-			sess.lastNetworkActivityTime = time.Now().Add(-(sess.idleTimeout() / 2))
+			sess.config.KeepAlive = false
+			sess.lastNetworkActivityTime = time.Now().Add(-remoteIdleTimeout / 2)
 			go sess.run()
 			defer sess.Close(nil)
-			Consistently(mconn.written).Should(BeEmpty())
+			Consistently(mconn.written).ShouldNot(Receive())
 		})
 
 		It("doesn't send a PING if the handshake isn't completed yet", func() {
 			sess.handshakeComplete = false
 			sess.config.KeepAlive = true
-			sess.lastNetworkActivityTime = time.Now().Add(-(sess.idleTimeout() / 2))
+			sess.lastNetworkActivityTime = time.Now().Add(-remoteIdleTimeout / 2)
 			go sess.run()
 			defer sess.Close(nil)
-			Consistently(mconn.written).Should(BeEmpty())
+			Consistently(mconn.written).ShouldNot(Receive())
 		})
 	})
 
@@ -1552,7 +1559,7 @@ var _ = Describe("Session", func() {
 			close(done)
 		})
 
-		It("times out due to non-completed crypto handshake", func(done Done) {
+		It("times out due to non-completed handshake", func(done Done) {
 			sess.sessionCreationTime = time.Now().Add(-protocol.DefaultHandshakeTimeout).Add(-time.Second)
 			err := sess.run() // Would normally not return
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.HandshakeTimeout))
@@ -1561,37 +1568,34 @@ var _ = Describe("Session", func() {
 			close(done)
 		})
 
-		It("does not use ICSL before handshake", func() {
+		It("does not use the idle timeout before the handshake complete", func() {
+			sess.config.IdleTimeout = 9999 * time.Second
 			defer sess.Close(nil)
 			sess.lastNetworkActivityTime = time.Now().Add(-time.Minute)
-			mockPn := mocks.NewMockParamsNegotiator(mockCtrl)
-			mockPn.EXPECT().GetIdleConnectionStateLifetime().Return(9999 * time.Second).AnyTimes()
-			mockPn.EXPECT().OmitConnectionID().Return(false).AnyTimes()
-			sess.connParams = mockPn
-			sess.packer.connParams = mockPn
 			// the handshake timeout is irrelevant here, since it depends on the time the session was created,
 			// and not on the last network activity
 			done := make(chan struct{})
 			go func() {
+				defer GinkgoRecover()
 				_ = sess.run()
 				close(done)
 			}()
 			Consistently(done).ShouldNot(BeClosed())
 		})
 
-		It("uses ICSL after handshake", func(done Done) {
+		It("closes the session due to the idle timeout after handshake", func() {
+			sess.config.IdleTimeout = 0
 			close(aeadChanged)
-			mockPn := mocks.NewMockParamsNegotiator(mockCtrl)
-			mockPn.EXPECT().GetIdleConnectionStateLifetime().Return(0 * time.Second)
-			mockPn.EXPECT().OmitConnectionID().Return(false).AnyTimes()
-			sess.connParams = mockPn
-			sess.packer.connParams = mockPn
-			mockPn.EXPECT().GetIdleConnectionStateLifetime().Return(0 * time.Second).AnyTimes()
-			err := sess.run() // Would normally not return
+			errChan := make(chan error)
+			go func() {
+				defer GinkgoRecover()
+				errChan <- sess.run() // Would normally not return
+			}()
+			var err error
+			Eventually(errChan).Should(Receive(&err))
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
 			Expect(mconn.written).To(Receive(ContainSubstring("No recent network activity.")))
 			Expect(sess.Context().Done()).To(BeClosed())
-			close(done)
 		})
 	})
 
