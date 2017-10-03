@@ -19,7 +19,7 @@ type streamsMap struct {
 	streams map[protocol.StreamID]*stream
 	// needed for round-robin scheduling
 	openStreams     []protocol.StreamID
-	roundRobinIndex uint32
+	roundRobinIndex int
 
 	nextStream                protocol.StreamID // StreamID of the next Stream that will be returned by OpenStream()
 	highestStreamOpenedByPeer protocol.StreamID
@@ -29,26 +29,27 @@ type streamsMap struct {
 	closeErr           error
 	nextStreamToAccept protocol.StreamID
 
-	newStream newStreamLambda
+	newStream            newStreamLambda
+	removeStreamCallback removeStreamCallback
 
 	numOutgoingStreams uint32
 	numIncomingStreams uint32
 }
 
 type streamLambda func(*stream) (bool, error)
+type removeStreamCallback func(protocol.StreamID)
 type newStreamLambda func(protocol.StreamID) *stream
 
-var (
-	errMapAccess = errors.New("streamsMap: Error accessing the streams map")
-)
+var errMapAccess = errors.New("streamsMap: Error accessing the streams map")
 
-func newStreamsMap(newStream newStreamLambda, pers protocol.Perspective, connParams handshake.ParamsNegotiator) *streamsMap {
+func newStreamsMap(newStream newStreamLambda, removeStreamCallback removeStreamCallback, pers protocol.Perspective, connParams handshake.ParamsNegotiator) *streamsMap {
 	sm := streamsMap{
-		perspective: pers,
-		streams:     map[protocol.StreamID]*stream{},
-		openStreams: make([]protocol.StreamID, 0),
-		newStream:   newStream,
-		connParams:  connParams,
+		perspective:          pers,
+		streams:              make(map[protocol.StreamID]*stream),
+		openStreams:          make([]protocol.StreamID, 0),
+		newStream:            newStream,
+		removeStreamCallback: removeStreamCallback,
+		connParams:           connParams,
 	}
 	sm.nextStreamOrErrCond.L = &sm.mutex
 	sm.openStreamOrErrCond.L = &sm.mutex
@@ -216,21 +217,50 @@ func (m *streamsMap) AcceptStream() (*stream, error) {
 	return str, nil
 }
 
-func (m *streamsMap) Iterate(fn streamLambda) error {
+func (m *streamsMap) DeleteClosedStreams() error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	openStreams := append([]protocol.StreamID{}, m.openStreams...)
-
-	for _, streamID := range openStreams {
-		cont, err := m.iterateFunc(streamID, fn)
-		if err != nil {
-			return err
+	var numDeletedStreams int
+	// for every closed stream, the streamID is replaced by 0 in the openStreams slice
+	for i, streamID := range m.openStreams {
+		str, ok := m.streams[streamID]
+		if !ok {
+			return errMapAccess
 		}
-		if !cont {
-			break
+		if !str.finished() {
+			continue
+		}
+		m.removeStreamCallback(streamID)
+		numDeletedStreams++
+		m.openStreams[i] = 0
+		if streamID%2 == 0 {
+			m.numOutgoingStreams--
+		} else {
+			m.numIncomingStreams--
+		}
+		delete(m.streams, streamID)
+	}
+
+	if numDeletedStreams == 0 {
+		return nil
+	}
+
+	// remove all 0s (representing closed streams) from the openStreams slice
+	// and adjust the roundRobinIndex
+	var j int
+	for i, id := range m.openStreams {
+		if i != j {
+			m.openStreams[j] = m.openStreams[i]
+		}
+		if id != 0 {
+			j++
+		} else if j < m.roundRobinIndex {
+			m.roundRobinIndex--
 		}
 	}
+	m.openStreams = m.openStreams[:len(m.openStreams)-numDeletedStreams]
+	m.openStreamOrErrCond.Signal()
 	return nil
 }
 
@@ -241,7 +271,7 @@ func (m *streamsMap) RoundRobinIterate(fn streamLambda) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	numStreams := uint32(len(m.streams))
+	numStreams := len(m.streams)
 	startIndex := m.roundRobinIndex
 
 	for _, i := range []protocol.StreamID{1, 3} {
@@ -254,7 +284,7 @@ func (m *streamsMap) RoundRobinIterate(fn streamLambda) error {
 		}
 	}
 
-	for i := uint32(0); i < numStreams; i++ {
+	for i := 0; i < numStreams; i++ {
 		streamID := m.openStreams[(i+startIndex)%numStreams]
 		if streamID == 1 || streamID == 3 {
 			continue
@@ -288,36 +318,6 @@ func (m *streamsMap) putStream(s *stream) error {
 
 	m.streams[id] = s
 	m.openStreams = append(m.openStreams, id)
-	return nil
-}
-
-// Attention: this function must only be called if a mutex has been acquired previously
-func (m *streamsMap) RemoveStream(id protocol.StreamID) error {
-	s, ok := m.streams[id]
-	if !ok || s == nil {
-		return fmt.Errorf("attempted to remove non-existing stream: %d", id)
-	}
-
-	if id%2 == 0 {
-		m.numOutgoingStreams--
-	} else {
-		m.numIncomingStreams--
-	}
-
-	for i, s := range m.openStreams {
-		if s == id {
-			// delete the streamID from the openStreams slice
-			m.openStreams = m.openStreams[:i+copy(m.openStreams[i:], m.openStreams[i+1:])]
-			// adjust round-robin index, if necessary
-			if uint32(i) < m.roundRobinIndex {
-				m.roundRobinIndex--
-			}
-			break
-		}
-	}
-
-	delete(m.streams, id)
-	m.openStreamOrErrCond.Signal()
 	return nil
 }
 
