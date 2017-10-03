@@ -40,13 +40,12 @@ var _ = Describe("TLS Crypto Setup", func() {
 
 	BeforeEach(func() {
 		aeadChanged = make(chan protocol.EncryptionLevel, 2)
-		csInt, _, err := NewCryptoSetupTLS(
-			"",
-			protocol.PerspectiveServer,
-			protocol.VersionTLS,
+		csInt, _, err := NewCryptoSetupTLSServer(
 			testdata.GetTLSConfig(),
 			&TransportParameters{},
 			aeadChanged,
+			nil,
+			protocol.VersionTLS,
 		)
 		Expect(err).ToNot(HaveOccurred())
 		cs = csInt.(*cryptoSetupTLS)

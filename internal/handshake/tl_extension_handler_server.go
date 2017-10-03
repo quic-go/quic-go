@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/lucas-clemente/quic-go/qerr"
+
 	"github.com/bifurcation/mint"
 	"github.com/bifurcation/mint/syntax"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -12,12 +14,19 @@ import (
 
 type extensionHandlerServer struct {
 	params *paramsNegotiator
+
+	version           protocol.VersionNumber
+	supportedVersions []protocol.VersionNumber
 }
 
 var _ mint.AppExtensionHandler = &extensionHandlerServer{}
 
-func newExtensionHandlerServer(params *paramsNegotiator) *extensionHandlerServer {
-	return &extensionHandlerServer{params: params}
+func newExtensionHandlerServer(params *paramsNegotiator, supportedVersions []protocol.VersionNumber, version protocol.VersionNumber) *extensionHandlerServer {
+	return &extensionHandlerServer{
+		params:            params,
+		version:           version,
+		supportedVersions: supportedVersions,
+	}
 }
 
 func (h *extensionHandlerServer) Send(hType mint.HandshakeType, el *mint.ExtensionList) error {
@@ -29,8 +38,12 @@ func (h *extensionHandlerServer) Send(hType mint.HandshakeType, el *mint.Extensi
 		h.params.GetTransportParameters(),
 		transportParameter{statelessResetTokenParameterID, bytes.Repeat([]byte{42}, 16)},
 	)
+	supportedVersions := make([]uint32, len(h.supportedVersions))
+	for i, v := range h.supportedVersions {
+		supportedVersions[i] = uint32(v)
+	}
 	data, err := syntax.Marshal(encryptedExtensionsTransportParameters{
-		SupportedVersions: []uint32{uint32(protocol.VersionTLS)},
+		SupportedVersions: supportedVersions,
 		Parameters:        transportParams,
 	})
 	if err != nil {
@@ -57,7 +70,19 @@ func (h *extensionHandlerServer) Receive(hType mint.HandshakeType, el *mint.Exte
 	if _, err := syntax.Unmarshal(ext.data, chtp); err != nil {
 		return err
 	}
-	// TODO: check versions
+	initialVersion := protocol.VersionNumber(chtp.InitialVersion)
+	negotiatedVersion := protocol.VersionNumber(chtp.NegotiatedVersion)
+	// check that the negotiated version is the version we're currently using
+	if negotiatedVersion != h.version {
+		return qerr.Error(qerr.VersionNegotiationMismatch, "Inconsistent negotiated version")
+	}
+	// perform the stateless version negotiation validation:
+	// make sure that we would have sent a Version Negotiation Packet if the client offered the initial version
+	// this is the case when the initial version is not contained in the supported versions
+	if initialVersion != negotiatedVersion && protocol.IsSupportedVersion(h.supportedVersions, initialVersion) {
+		return qerr.Error(qerr.VersionNegotiationMismatch, "Client should have used the initial version")
+	}
+
 	for _, p := range chtp.Parameters {
 		if p.Parameter == statelessResetTokenParameterID {
 			// TODO: return the correct error type

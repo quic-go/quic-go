@@ -134,7 +134,7 @@ func newSession(
 		version:      v,
 		config:       config,
 	}
-	return s.setup(sCfg, "", tlsConf, nil)
+	return s.setup(sCfg, "", tlsConf, v, nil)
 }
 
 // declare this as a variable, such that we can it mock it in the tests
@@ -145,7 +145,8 @@ var newClientSession = func(
 	connectionID protocol.ConnectionID,
 	tlsConf *tls.Config,
 	config *Config,
-	negotiatedVersions []protocol.VersionNumber,
+	initialVersion protocol.VersionNumber, // needed for validation of the version negotaion over TLS
+	negotiatedVersions []protocol.VersionNumber, // needed for validation of the GQUIC version negotiaton
 ) (packetHandler, <-chan handshakeEvent, error) {
 	s := &session{
 		conn:         conn,
@@ -154,13 +155,14 @@ var newClientSession = func(
 		version:      v,
 		config:       config,
 	}
-	return s.setup(nil, hostname, tlsConf, negotiatedVersions)
+	return s.setup(nil, hostname, tlsConf, v, negotiatedVersions)
 }
 
 func (s *session) setup(
 	scfg *handshake.ServerConfig,
 	hostname string,
 	tlsConf *tls.Config,
+	initialVersion protocol.VersionNumber,
 	negotiatedVersions []protocol.VersionNumber,
 ) (packetHandler, <-chan handshakeEvent, error) {
 	aeadChanged := make(chan protocol.EncryptionLevel, 2)
@@ -194,13 +196,12 @@ func (s *session) setup(
 			return s.config.AcceptCookie(clientAddr, cookie)
 		}
 		if s.version.UsesTLS() {
-			s.cryptoSetup, s.connParams, err = handshake.NewCryptoSetupTLS(
-				"",
-				s.perspective,
-				s.version,
+			s.cryptoSetup, s.connParams, err = handshake.NewCryptoSetupTLSServer(
 				tlsConf,
 				transportParams,
 				aeadChanged,
+				s.config.Versions,
+				s.version,
 			)
 		} else {
 			s.cryptoSetup, s.connParams, err = newCryptoSetup(
@@ -216,13 +217,14 @@ func (s *session) setup(
 		}
 	} else {
 		if s.version.UsesTLS() {
-			s.cryptoSetup, s.connParams, err = handshake.NewCryptoSetupTLS(
+			s.cryptoSetup, s.connParams, err = handshake.NewCryptoSetupTLSClient(
 				hostname,
-				s.perspective,
-				s.version,
 				tlsConf,
 				transportParams,
 				aeadChanged,
+				initialVersion,
+				s.config.Versions,
+				s.version,
 			)
 		} else {
 			transportParams.RequestConnectionIDOmission = s.config.RequestConnectionIDOmission

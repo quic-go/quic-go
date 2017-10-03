@@ -181,7 +181,7 @@ func populateClientConfig(config *Config) *Config {
 
 // establishSecureConnection returns as soon as the connection is secure (as opposed to forward-secure)
 func (c *client) establishSecureConnection() error {
-	if err := c.createNewSession(nil); err != nil {
+	if err := c.createNewSession(c.version, nil); err != nil {
 		return err
 	}
 	go c.listen()
@@ -332,6 +332,7 @@ func (c *client) handlePacketWithVersionFlag(hdr *wire.PublicHeader) error {
 	}
 
 	// switch to negotiated version
+	initialVersion := c.version
 	c.version = newVersion
 	var err error
 	c.connectionID, err = utils.GenerateConnectionID()
@@ -344,10 +345,10 @@ func (c *client) handlePacketWithVersionFlag(hdr *wire.PublicHeader) error {
 	// the new session must be created first to update client member variables
 	oldSession := c.session
 	defer oldSession.Close(errCloseSessionForNewVersion)
-	return c.createNewSession(hdr.SupportedVersions)
+	return c.createNewSession(initialVersion, hdr.SupportedVersions)
 }
 
-func (c *client) createNewSession(negotiatedVersions []protocol.VersionNumber) error {
+func (c *client) createNewSession(initialVersion protocol.VersionNumber, negotiatedVersions []protocol.VersionNumber) error {
 	var err error
 	c.session, c.handshakeChan, err = newClientSession(
 		c.conn,
@@ -356,6 +357,7 @@ func (c *client) createNewSession(negotiatedVersions []protocol.VersionNumber) e
 		c.connectionID,
 		c.tlsConf,
 		c.config,
+		initialVersion,
 		negotiatedVersions,
 	)
 	return err

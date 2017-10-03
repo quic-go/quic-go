@@ -24,7 +24,7 @@ var _ = Describe("Client", func() {
 		packetConn *mockPacketConn
 		addr       net.Addr
 
-		originalClientSessConstructor func(conn connection, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, tlsConf *tls.Config, config *Config, negotiatedVersions []protocol.VersionNumber) (packetHandler, <-chan handshakeEvent, error)
+		originalClientSessConstructor func(conn connection, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, tlsConf *tls.Config, config *Config, initialVersion protocol.VersionNumber, negotiatedVersions []protocol.VersionNumber) (packetHandler, <-chan handshakeEvent, error)
 	)
 
 	// generate a packet sent by the server that accepts the QUIC version suggested by the client
@@ -84,6 +84,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				_ *tls.Config,
 				_ *Config,
+				_ protocol.VersionNumber,
 				_ []protocol.VersionNumber,
 			) (packetHandler, <-chan handshakeEvent, error) {
 				Expect(conn.Write([]byte("fake CHLO"))).To(Succeed())
@@ -173,6 +174,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				_ *tls.Config,
 				_ *Config,
+				_ protocol.VersionNumber,
 				_ []protocol.VersionNumber,
 			) (packetHandler, <-chan handshakeEvent, error) {
 				remoteAddrChan <- conn.RemoteAddr().String()
@@ -199,6 +201,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				_ *tls.Config,
 				_ *Config,
+				_ protocol.VersionNumber,
 				_ []protocol.VersionNumber,
 			) (packetHandler, <-chan handshakeEvent, error) {
 				hostnameChan <- h
@@ -288,6 +291,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				_ *tls.Config,
 				_ *Config,
+				_ protocol.VersionNumber,
 				_ []protocol.VersionNumber,
 			) (packetHandler, <-chan handshakeEvent, error) {
 				return nil, nil, testErr
@@ -312,6 +316,7 @@ var _ = Describe("Client", func() {
 			})
 
 			It("changes the version after receiving a version negotiation packet", func() {
+				var initialVersion protocol.VersionNumber
 				var negotiatedVersions []protocol.VersionNumber
 				newVersion := protocol.VersionNumber(77)
 				Expect(newVersion).ToNot(Equal(cl.version))
@@ -329,8 +334,10 @@ var _ = Describe("Client", func() {
 					connectionID protocol.ConnectionID,
 					_ *tls.Config,
 					_ *Config,
+					initialVersionP protocol.VersionNumber,
 					negotiatedVersionsP []protocol.VersionNumber,
 				) (packetHandler, <-chan handshakeEvent, error) {
+					initialVersion = initialVersionP
 					negotiatedVersions = negotiatedVersionsP
 					// make the server accept the new version
 					if len(negotiatedVersionsP) > 0 {
@@ -351,6 +358,7 @@ var _ = Describe("Client", func() {
 					Expect(err).ToNot(HaveOccurred())
 					close(established)
 				}()
+				actualInitialVersion := cl.version
 				var firstSession, secondSession *mockSession
 				Eventually(sessionChan).Should(Receive(&firstSession))
 				Eventually(sessionChan).Should(Receive(&secondSession))
@@ -361,6 +369,7 @@ var _ = Describe("Client", func() {
 				Consistently(func() bool { return secondSession.closed }).Should(BeFalse())
 				Expect(cl.connectionID).ToNot(BeEquivalentTo(0x1337))
 				Expect(negotiatedVersions).To(Equal([]protocol.VersionNumber{newVersion}))
+				Expect(initialVersion).To(Equal(actualInitialVersion))
 
 				handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
 				Eventually(established).Should(BeClosed())
@@ -375,7 +384,8 @@ var _ = Describe("Client", func() {
 					connectionID protocol.ConnectionID,
 					_ *tls.Config,
 					_ *Config,
-					negotiatedVersionsP []protocol.VersionNumber,
+					_ protocol.VersionNumber,
+					_ []protocol.VersionNumber,
 				) (packetHandler, <-chan handshakeEvent, error) {
 					atomic.AddUint32(&sessionCounter, 1)
 					return sess, nil, nil
@@ -475,6 +485,7 @@ var _ = Describe("Client", func() {
 			_ protocol.ConnectionID,
 			_ *tls.Config,
 			configP *Config,
+			_ protocol.VersionNumber,
 			_ []protocol.VersionNumber,
 		) (packetHandler, <-chan handshakeEvent, error) {
 			cconn = connP
