@@ -329,7 +329,7 @@ runLoop:
 			s.sentPacketHandler.OnAlarm()
 		}
 
-		if s.config.KeepAlive && s.handshakeComplete && time.Since(s.lastNetworkActivityTime) >= s.connParams.GetIdleConnectionStateLifetime()/2 {
+		if s.config.KeepAlive && s.handshakeComplete && time.Since(s.lastNetworkActivityTime) >= s.connParams.GetRemoteIdleTimeout()/2 {
 			// send the PING frame since there is no activity in the session
 			s.packer.QueueControlFrame(&wire.PingFrame{})
 			s.keepAlivePingSent = true
@@ -368,7 +368,7 @@ func (s *session) Context() context.Context {
 func (s *session) maybeResetTimer() {
 	var deadline time.Time
 	if s.config.KeepAlive && s.handshakeComplete && !s.keepAlivePingSent {
-		deadline = s.lastNetworkActivityTime.Add(s.connParams.GetIdleConnectionStateLifetime() / 2)
+		deadline = s.lastNetworkActivityTime.Add(s.connParams.GetRemoteIdleTimeout() / 2)
 	} else {
 		deadline = s.lastNetworkActivityTime.Add(s.config.IdleTimeout)
 	}

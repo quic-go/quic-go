@@ -165,12 +165,10 @@ func (m *mockParamsNegotiator) GetReceiveConnectionFlowControlWindow() protocol.
 func (m *mockParamsNegotiator) GetMaxReceiveConnectionFlowControlWindow() protocol.ByteCount {
 	return protocol.DefaultMaxReceiveConnectionFlowControlWindowServer
 }
-func (m *mockParamsNegotiator) GetMaxOutgoingStreams() uint32 { return 100 }
-func (m *mockParamsNegotiator) GetMaxIncomingStreams() uint32 { return 100 }
-func (m *mockParamsNegotiator) GetIdleConnectionStateLifetime() time.Duration {
-	return time.Hour
-}
-func (m *mockParamsNegotiator) OmitConnectionID() bool { return false }
+func (m *mockParamsNegotiator) GetMaxOutgoingStreams() uint32       { return 100 }
+func (m *mockParamsNegotiator) GetMaxIncomingStreams() uint32       { return 100 }
+func (m *mockParamsNegotiator) GetRemoteIdleTimeout() time.Duration { return time.Hour }
+func (m *mockParamsNegotiator) OmitConnectionID() bool              { return false }
 
 var _ = Describe("Session", func() {
 	var (
@@ -1508,7 +1506,7 @@ var _ = Describe("Session", func() {
 
 		BeforeEach(func() {
 			mockPn = mocks.NewMockParamsNegotiator(mockCtrl)
-			mockPn.EXPECT().GetIdleConnectionStateLifetime().Return(remoteIdleTimeout).AnyTimes()
+			mockPn.EXPECT().GetRemoteIdleTimeout().Return(remoteIdleTimeout).AnyTimes()
 			sess.connParams = mockPn
 		})
 

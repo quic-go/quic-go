@@ -71,7 +71,7 @@ var _ = Describe("Params Negotiator (for TLS)", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(pn.GetSendStreamFlowControlWindow()).To(Equal(protocol.ByteCount(0x11223344)))
 			Expect(pn.GetSendConnectionFlowControlWindow()).To(Equal(protocol.ByteCount(0x22334455)))
-			Expect(pn.GetIdleConnectionStateLifetime()).To(Equal(0x1337 * time.Second))
+			Expect(pn.GetRemoteIdleTimeout()).To(Equal(0x1337 * time.Second))
 			Expect(pn.OmitConnectionID()).To(BeFalse())
 		})
 

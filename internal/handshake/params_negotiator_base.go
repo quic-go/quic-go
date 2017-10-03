@@ -20,7 +20,7 @@ type ParamsNegotiator interface {
 	GetMaxOutgoingStreams() uint32
 	GetMaxIncomingStreams() uint32
 	// get the idle timeout that was sent by the peer
-	GetIdleConnectionStateLifetime() time.Duration
+	GetRemoteIdleTimeout() time.Duration
 	// determines if the client requests omission of connection IDs.
 	OmitConnectionID() bool
 }
@@ -132,7 +132,7 @@ func (h *paramsNegotiatorBase) GetMaxIncomingStreams() uint32 {
 	return utils.MaxUint32(uint32(maxStreams)+protocol.MaxStreamsMinimumIncrement, uint32(float64(maxStreams)*protocol.MaxStreamsMultiplier))
 }
 
-func (h *paramsNegotiatorBase) GetIdleConnectionStateLifetime() time.Duration {
+func (h *paramsNegotiatorBase) GetRemoteIdleTimeout() time.Duration {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	return h.remoteIdleTimeout

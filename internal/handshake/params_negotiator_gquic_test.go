@@ -218,7 +218,7 @@ var _ = Describe("Params Negotiator (for gQUIC)", func() {
 			}
 			err := pn.SetFromMap(values)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(pn.GetIdleConnectionStateLifetime()).To(Equal(10 * time.Second))
+			Expect(pn.GetRemoteIdleTimeout()).To(Equal(10 * time.Second))
 		})
 
 		It("errors when given an invalid value", func() {
