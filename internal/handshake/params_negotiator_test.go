@@ -33,9 +33,7 @@ var _ = Describe("Params Negotiator (for TLS)", func() {
 		pn = newParamsNegotiator(
 			protocol.PerspectiveServer,
 			protocol.VersionWhatever,
-			&TransportParameters{
-				IdleTimeout: 0x5000 * time.Second,
-			},
+			&TransportParameters{},
 		)
 		params = map[transportParameterID][]byte{
 			initialMaxStreamDataParameterID: []byte{0x11, 0x22, 0x33, 0x44},
@@ -47,6 +45,7 @@ var _ = Describe("Params Negotiator (for TLS)", func() {
 
 	Context("getting", func() {
 		It("creates the parameters list", func() {
+			pn.idleTimeout = 0xcafe
 			buf := make([]byte, 4)
 			values := paramsListToMap(pn.GetTransportParameters())
 			Expect(values).To(HaveLen(5))
@@ -55,7 +54,7 @@ var _ = Describe("Params Negotiator (for TLS)", func() {
 			binary.BigEndian.PutUint32(buf, uint32(protocol.ReceiveConnectionFlowControlWindow))
 			Expect(values).To(HaveKeyWithValue(initialMaxDataParameterID, buf))
 			Expect(values).To(HaveKeyWithValue(initialMaxStreamIDParameterID, []byte{0xff, 0xff, 0xff, 0xff}))
-			Expect(values).To(HaveKeyWithValue(idleTimeoutParameterID, []byte{0x50, 0x0}))
+			Expect(values).To(HaveKeyWithValue(idleTimeoutParameterID, []byte{0xca, 0xfe}))
 			Expect(values).To(HaveKeyWithValue(maxPacketSizeParameterID, []byte{0x5, 0xac})) // 1452 = 0x5ac
 		})
 
@@ -74,13 +73,6 @@ var _ = Describe("Params Negotiator (for TLS)", func() {
 			Expect(pn.GetSendConnectionFlowControlWindow()).To(Equal(protocol.ByteCount(0x22334455)))
 			Expect(pn.GetIdleConnectionStateLifetime()).To(Equal(0x1337 * time.Second))
 			Expect(pn.OmitConnectionID()).To(BeFalse())
-		})
-
-		It("negotiates a smaller idle timeout, if the peer suggest a higher value than configured", func() {
-			params[idleTimeoutParameterID] = []byte{0xff, 0xff}
-			err := pn.SetFromTransportParameters(paramsMapToList(params))
-			Expect(err).ToNot(HaveOccurred())
-			Expect(pn.GetIdleConnectionStateLifetime()).To(Equal(0x5000 * time.Second))
 		})
 
 		It("saves if it should omit the connection ID", func() {

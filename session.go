@@ -329,7 +329,7 @@ runLoop:
 			s.sentPacketHandler.OnAlarm()
 		}
 
-		if s.config.KeepAlive && s.handshakeComplete && time.Since(s.lastNetworkActivityTime) >= s.idleTimeout()/2 {
+		if s.config.KeepAlive && s.handshakeComplete && time.Since(s.lastNetworkActivityTime) >= s.connParams.GetIdleConnectionStateLifetime()/2 {
 			// send the PING frame since there is no activity in the session
 			s.packer.QueueControlFrame(&wire.PingFrame{})
 			s.keepAlivePingSent = true
@@ -344,7 +344,7 @@ runLoop:
 		if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= s.config.HandshakeTimeout {
 			s.closeLocal(qerr.Error(qerr.HandshakeTimeout, "Crypto handshake did not complete in time."))
 		}
-		if s.handshakeComplete && now.Sub(s.lastNetworkActivityTime) >= s.idleTimeout() {
+		if s.handshakeComplete && now.Sub(s.lastNetworkActivityTime) >= s.config.IdleTimeout {
 			s.closeLocal(qerr.Error(qerr.NetworkIdleTimeout, "No recent network activity."))
 		}
 		s.garbageCollectStreams()
@@ -368,9 +368,9 @@ func (s *session) Context() context.Context {
 func (s *session) maybeResetTimer() {
 	var deadline time.Time
 	if s.config.KeepAlive && s.handshakeComplete && !s.keepAlivePingSent {
-		deadline = s.lastNetworkActivityTime.Add(s.idleTimeout() / 2)
+		deadline = s.lastNetworkActivityTime.Add(s.connParams.GetIdleConnectionStateLifetime() / 2)
 	} else {
-		deadline = s.lastNetworkActivityTime.Add(s.idleTimeout())
+		deadline = s.lastNetworkActivityTime.Add(s.config.IdleTimeout)
 	}
 
 	if ackAlarm := s.receivedPacketHandler.GetAlarmTimeout(); !ackAlarm.IsZero() {
@@ -388,10 +388,6 @@ func (s *session) maybeResetTimer() {
 	}
 
 	s.timer.Reset(deadline)
-}
-
-func (s *session) idleTimeout() time.Duration {
-	return s.connParams.GetIdleConnectionStateLifetime()
 }
 
 func (s *session) handlePacketImpl(p *receivedPacket) error {
