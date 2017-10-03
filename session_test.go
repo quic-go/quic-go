@@ -82,11 +82,10 @@ func (h *mockSentPacketHandler) SentPacket(packet *ackhandler.Packet) error {
 	h.sentPackets = append(h.sentPackets, packet)
 	return nil
 }
-
 func (h *mockSentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, recvTime time.Time) error {
 	return nil
 }
-
+func (h *mockSentPacketHandler) SetHandshakeComplete()                  {}
 func (h *mockSentPacketHandler) GetLeastUnacked() protocol.PacketNumber { return 1 }
 func (h *mockSentPacketHandler) GetAlarmTimeout() time.Time             { panic("not implemented") }
 func (h *mockSentPacketHandler) OnAlarm()                               { panic("not implemented") }
@@ -1170,6 +1169,7 @@ var _ = Describe("Session", func() {
 	})
 
 	It("retransmits RTO packets", func() {
+		sess.sentPacketHandler.SetHandshakeComplete()
 		n := protocol.PacketNumber(10)
 		sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure}
 		// We simulate consistently low RTTs, so that the test works faster

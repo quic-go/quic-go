@@ -316,6 +316,7 @@ runLoop:
 			if !ok { // the aeadChanged chan was closed. This means that the handshake is completed.
 				s.handshakeComplete = true
 				aeadChanged = nil // prevent this case from ever being selected again
+				s.sentPacketHandler.SetHandshakeComplete()
 				close(s.handshakeChan)
 				close(s.handshakeCompleteChan)
 			} else {
