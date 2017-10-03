@@ -61,7 +61,7 @@ func (h *paramsNegotiatorGQUIC) SetFromMap(params map[Tag][]byte) error {
 		if err != nil {
 			return errMalformedTag
 		}
-		h.remoteIdleTimeout = time.Duration(clientValue) * time.Second
+		h.setRemoteIdleTimeout(time.Duration(clientValue) * time.Second)
 	}
 	if value, ok := params[TagSFCW]; ok {
 		if h.flowControlNegotiated {

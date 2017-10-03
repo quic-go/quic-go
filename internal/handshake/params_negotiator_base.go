@@ -132,6 +132,10 @@ func (h *paramsNegotiatorBase) GetMaxIncomingStreams() uint32 {
 	return utils.MaxUint32(uint32(maxStreams)+protocol.MaxStreamsMinimumIncrement, uint32(float64(maxStreams)*protocol.MaxStreamsMultiplier))
 }
 
+func (h *paramsNegotiatorBase) setRemoteIdleTimeout(t time.Duration) {
+	h.remoteIdleTimeout = utils.MaxDuration(protocol.MinRemoteIdleTimeout, t)
+}
+
 func (h *paramsNegotiatorBase) GetRemoteIdleTimeout() time.Duration {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()

@@ -437,10 +437,10 @@ var _ = Describe("Client Crypto Setup", func() {
 		})
 
 		It("reads the connection paramaters", func() {
-			shloMap[TagICSL] = []byte{3, 0, 0, 0} // 3 seconds
+			shloMap[TagICSL] = []byte{13, 0, 0, 0} // 13 seconds
 			err := cs.handleSHLOMessage(shloMap)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(cs.params.GetRemoteIdleTimeout()).To(Equal(3 * time.Second))
+			Expect(cs.params.GetRemoteIdleTimeout()).To(Equal(13 * time.Second))
 		})
 
 		It("errors if it can't read a connection parameter", func() {

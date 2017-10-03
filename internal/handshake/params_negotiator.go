@@ -62,7 +62,7 @@ func (h *paramsNegotiator) SetFromTransportParameters(params []transportParamete
 			if len(p.Value) != 2 {
 				return fmt.Errorf("wrong length for idle_timeout: %d (expected 2)", len(p.Value))
 			}
-			h.remoteIdleTimeout = time.Duration(binary.BigEndian.Uint16(p.Value)) * time.Second
+			h.setRemoteIdleTimeout(time.Duration(binary.BigEndian.Uint16(p.Value)) * time.Second)
 		case omitConnectionIDParameterID:
 			if len(p.Value) != 0 {
 				return fmt.Errorf("wrong length for omit_connection_id: %d (expected empty)", len(p.Value))

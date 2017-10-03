@@ -212,13 +212,24 @@ var _ = Describe("Params Negotiator (for gQUIC)", func() {
 	})
 
 	Context("idle timeout", func() {
-		It("sets the negotiated lifetime", func() {
+		It("sets the remote idle timeout", func() {
 			values := map[Tag][]byte{
 				TagICSL: {10, 0, 0, 0},
 			}
 			err := pn.SetFromMap(values)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(pn.GetRemoteIdleTimeout()).To(Equal(10 * time.Second))
+		})
+
+		It("doesn't allow values below the minimum remote idle timeout", func() {
+			t := 2 * time.Second
+			Expect(t).To(BeNumerically("<", protocol.MinRemoteIdleTimeout))
+			values := map[Tag][]byte{
+				TagICSL: {uint8(t.Seconds()), 0, 0, 0},
+			}
+			err := pn.SetFromMap(values)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(pn.GetRemoteIdleTimeout()).To(Equal(protocol.MinRemoteIdleTimeout))
 		})
 
 		It("errors when given an invalid value", func() {

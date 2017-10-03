@@ -106,6 +106,15 @@ var _ = Describe("Params Negotiator (for TLS)", func() {
 			Expect(err).To(MatchError("missing parameter"))
 		})
 
+		It("doesn't allow values below the minimum remote idle timeout", func() {
+			t := 2 * time.Second
+			Expect(t).To(BeNumerically("<", protocol.MinRemoteIdleTimeout))
+			params[idleTimeoutParameterID] = []byte{0, uint8(t.Seconds())}
+			err := pn.SetFromTransportParameters(paramsMapToList(params))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(pn.GetRemoteIdleTimeout()).To(Equal(protocol.MinRemoteIdleTimeout))
+		})
+
 		It("rejects the parameters if the initial_max_stream_data has the wrong length", func() {
 			params[initialMaxStreamDataParameterID] = []byte{0x11, 0x22, 0x33} // should be 4 bytes
 			err := pn.SetFromTransportParameters(paramsMapToList(params))
