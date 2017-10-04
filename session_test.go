@@ -155,14 +155,8 @@ func (m *mockParamsNegotiator) GetSendConnectionFlowControlWindow() protocol.Byt
 func (m *mockParamsNegotiator) GetReceiveStreamFlowControlWindow() protocol.ByteCount {
 	return protocol.ReceiveStreamFlowControlWindow
 }
-func (m *mockParamsNegotiator) GetMaxReceiveStreamFlowControlWindow() protocol.ByteCount {
-	return protocol.DefaultMaxReceiveStreamFlowControlWindowServer
-}
 func (m *mockParamsNegotiator) GetReceiveConnectionFlowControlWindow() protocol.ByteCount {
 	return protocol.ReceiveConnectionFlowControlWindow
-}
-func (m *mockParamsNegotiator) GetMaxReceiveConnectionFlowControlWindow() protocol.ByteCount {
-	return protocol.DefaultMaxReceiveConnectionFlowControlWindowServer
 }
 func (m *mockParamsNegotiator) GetMaxOutgoingStreams() uint32       { return 100 }
 func (m *mockParamsNegotiator) GetMaxIncomingStreams() uint32       { return 100 }

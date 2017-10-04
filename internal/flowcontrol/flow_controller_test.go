@@ -22,45 +22,46 @@ var _ = Describe("Flow controller", func() {
 		var rttStats *congestion.RTTStats
 		var mockPn *mocks.MockParamsNegotiator
 
+		maxReceiveStreamWindow := protocol.ByteCount(8000)
+		maxReceiveConnectionWindow := protocol.ByteCount(9000)
+
 		BeforeEach(func() {
 			mockPn = mocks.NewMockParamsNegotiator(mockCtrl)
 			mockPn.EXPECT().GetSendStreamFlowControlWindow().AnyTimes().Return(protocol.ByteCount(1000))
 			mockPn.EXPECT().GetReceiveStreamFlowControlWindow().AnyTimes().Return(protocol.ByteCount(2000))
 			mockPn.EXPECT().GetSendConnectionFlowControlWindow().AnyTimes().Return(protocol.ByteCount(3000))
 			mockPn.EXPECT().GetReceiveConnectionFlowControlWindow().AnyTimes().Return(protocol.ByteCount(4000))
-			mockPn.EXPECT().GetMaxReceiveStreamFlowControlWindow().AnyTimes().Return(protocol.ByteCount(8000))
-			mockPn.EXPECT().GetMaxReceiveConnectionFlowControlWindow().AnyTimes().Return(protocol.ByteCount(9000))
 			rttStats = &congestion.RTTStats{}
 		})
 
 		It("reads the stream send and receive windows when acting as stream-level flow controller", func() {
-			fc := newFlowController(5, true, mockPn, rttStats)
+			fc := newFlowController(5, true, mockPn, maxReceiveStreamWindow, rttStats)
 			Expect(fc.streamID).To(Equal(protocol.StreamID(5)))
 			Expect(fc.receiveWindow).To(Equal(protocol.ByteCount(2000)))
-			Expect(fc.maxReceiveWindowIncrement).To(Equal(mockPn.GetMaxReceiveStreamFlowControlWindow()))
+			Expect(fc.maxReceiveWindowIncrement).To(Equal(maxReceiveStreamWindow))
 		})
 
 		It("reads the stream send and receive windows when acting as connection-level flow controller", func() {
-			fc := newFlowController(0, false, mockPn, rttStats)
+			fc := newFlowController(0, false, mockPn, maxReceiveConnectionWindow, rttStats)
 			Expect(fc.streamID).To(Equal(protocol.StreamID(0)))
 			Expect(fc.receiveWindow).To(Equal(protocol.ByteCount(4000)))
-			Expect(fc.maxReceiveWindowIncrement).To(Equal(mockPn.GetMaxReceiveConnectionFlowControlWindow()))
+			Expect(fc.maxReceiveWindowIncrement).To(Equal(maxReceiveConnectionWindow))
 		})
 
 		It("does not set the stream flow control windows for sending", func() {
-			fc := newFlowController(5, true, mockPn, rttStats)
+			fc := newFlowController(5, true, mockPn, protocol.MaxByteCount, rttStats)
 			Expect(fc.sendWindow).To(BeZero())
 		})
 
 		It("does not set the connection flow control windows for sending", func() {
-			fc := newFlowController(0, false, mockPn, rttStats)
+			fc := newFlowController(0, false, mockPn, protocol.MaxByteCount, rttStats)
 			Expect(fc.sendWindow).To(BeZero())
 		})
 
 		It("says if it contributes to connection-level flow control", func() {
-			fc := newFlowController(1, false, mockPn, rttStats)
+			fc := newFlowController(1, false, mockPn, protocol.MaxByteCount, rttStats)
 			Expect(fc.ContributesToConnection()).To(BeFalse())
-			fc = newFlowController(5, true, mockPn, rttStats)
+			fc = newFlowController(5, true, mockPn, protocol.MaxByteCount, rttStats)
 			Expect(fc.ContributesToConnection()).To(BeTrue())
 		})
 	})

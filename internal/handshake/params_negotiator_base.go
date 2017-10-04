@@ -14,9 +14,7 @@ type ParamsNegotiator interface {
 	GetSendStreamFlowControlWindow() protocol.ByteCount
 	GetSendConnectionFlowControlWindow() protocol.ByteCount
 	GetReceiveStreamFlowControlWindow() protocol.ByteCount
-	GetMaxReceiveStreamFlowControlWindow() protocol.ByteCount
 	GetReceiveConnectionFlowControlWindow() protocol.ByteCount
-	GetMaxReceiveConnectionFlowControlWindow() protocol.ByteCount
 	GetMaxOutgoingStreams() uint32
 	GetMaxIncomingStreams() uint32
 	// get the idle timeout that was sent by the peer
@@ -50,8 +48,6 @@ type paramsNegotiatorBase struct {
 	sendConnectionFlowControlWindow        protocol.ByteCount
 	receiveStreamFlowControlWindow         protocol.ByteCount
 	receiveConnectionFlowControlWindow     protocol.ByteCount
-	maxReceiveStreamFlowControlWindow      protocol.ByteCount
-	maxReceiveConnectionFlowControlWindow  protocol.ByteCount
 }
 
 func (h *paramsNegotiatorBase) init(params *TransportParameters) {
@@ -59,8 +55,6 @@ func (h *paramsNegotiatorBase) init(params *TransportParameters) {
 	h.sendConnectionFlowControlWindow = protocol.InitialConnectionFlowControlWindow // can only be changed by the client
 	h.receiveStreamFlowControlWindow = protocol.ReceiveStreamFlowControlWindow
 	h.receiveConnectionFlowControlWindow = protocol.ReceiveConnectionFlowControlWindow
-	h.maxReceiveStreamFlowControlWindow = params.MaxReceiveStreamFlowControlWindow
-	h.maxReceiveConnectionFlowControlWindow = params.MaxReceiveConnectionFlowControlWindow
 	h.requestConnectionIDOmission = params.RequestConnectionIDOmission
 
 	h.idleTimeout = params.IdleTimeout
@@ -101,20 +95,11 @@ func (h *paramsNegotiatorBase) GetReceiveStreamFlowControlWindow() protocol.Byte
 	return h.receiveStreamFlowControlWindow
 }
 
-// GetMaxReceiveStreamFlowControlWindow gets the maximum size of the stream-level flow control window for sending data
-func (h *paramsNegotiatorBase) GetMaxReceiveStreamFlowControlWindow() protocol.ByteCount {
-	return h.maxReceiveStreamFlowControlWindow
-}
-
 // GetReceiveConnectionFlowControlWindow gets the size of the stream-level flow control window for receiving data
 func (h *paramsNegotiatorBase) GetReceiveConnectionFlowControlWindow() protocol.ByteCount {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	return h.receiveConnectionFlowControlWindow
-}
-
-func (h *paramsNegotiatorBase) GetMaxReceiveConnectionFlowControlWindow() protocol.ByteCount {
-	return h.maxReceiveConnectionFlowControlWindow
 }
 
 func (h *paramsNegotiatorBase) GetMaxOutgoingStreams() uint32 {

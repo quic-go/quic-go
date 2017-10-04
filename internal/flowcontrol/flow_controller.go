@@ -33,22 +33,27 @@ type flowController struct {
 var ErrReceivedSmallerByteOffset = errors.New("Received a smaller byte offset")
 
 // newFlowController gets a new flow controller
-func newFlowController(streamID protocol.StreamID, contributesToConnection bool, connParams handshake.ParamsNegotiator, rttStats *congestion.RTTStats) *flowController {
+func newFlowController(
+	streamID protocol.StreamID,
+	contributesToConnection bool,
+	connParams handshake.ParamsNegotiator,
+	maxReceiveWindow protocol.ByteCount,
+	rttStats *congestion.RTTStats,
+) *flowController {
 	fc := flowController{
-		streamID:                streamID,
-		contributesToConnection: contributesToConnection,
-		connParams:              connParams,
-		rttStats:                rttStats,
+		streamID:                  streamID,
+		contributesToConnection:   contributesToConnection,
+		connParams:                connParams,
+		rttStats:                  rttStats,
+		maxReceiveWindowIncrement: maxReceiveWindow,
 	}
 
 	if streamID == 0 {
 		fc.receiveWindow = connParams.GetReceiveConnectionFlowControlWindow()
 		fc.receiveWindowIncrement = fc.receiveWindow
-		fc.maxReceiveWindowIncrement = connParams.GetMaxReceiveConnectionFlowControlWindow()
 	} else {
 		fc.receiveWindow = connParams.GetReceiveStreamFlowControlWindow()
 		fc.receiveWindowIncrement = fc.receiveWindow
-		fc.maxReceiveWindowIncrement = connParams.GetMaxReceiveStreamFlowControlWindow()
 	}
 
 	return &fc

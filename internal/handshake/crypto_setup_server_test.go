@@ -202,11 +202,7 @@ var _ = Describe("Server Crypto Setup", func() {
 			remoteAddr,
 			version,
 			scfg,
-			&TransportParameters{
-				MaxReceiveStreamFlowControlWindow:     protocol.DefaultMaxReceiveStreamFlowControlWindowServer,
-				MaxReceiveConnectionFlowControlWindow: protocol.DefaultMaxReceiveConnectionFlowControlWindowServer,
-				IdleTimeout:                           protocol.DefaultIdleTimeout,
-			},
+			&TransportParameters{IdleTimeout: protocol.DefaultIdleTimeout},
 			supportedVersions,
 			nil,
 			aeadChanged,

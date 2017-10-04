@@ -114,11 +114,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			0,
 			version,
 			nil,
-			&TransportParameters{
-				MaxReceiveStreamFlowControlWindow:     protocol.DefaultMaxReceiveStreamFlowControlWindowClient,
-				MaxReceiveConnectionFlowControlWindow: protocol.DefaultMaxReceiveConnectionFlowControlWindowClient,
-				IdleTimeout:                           protocol.DefaultIdleTimeout,
-			},
+			&TransportParameters{IdleTimeout: protocol.DefaultIdleTimeout},
 			aeadChanged,
 			nil,
 		)

@@ -2,7 +2,6 @@ package handshake
 
 import (
 	"encoding/binary"
-	"math"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -13,29 +12,20 @@ import (
 var _ = Describe("Params Negotiator (for gQUIC)", func() {
 	var pn *paramsNegotiatorGQUIC // a connectionParametersManager for a server
 	var pnClient *paramsNegotiatorGQUIC
-	const MB = 1 << 20
-	maxReceiveStreamFlowControlWindowServer := protocol.ByteCount(math.Floor(1.1 * MB))     // default is 1 MB
-	maxReceiveConnectionFlowControlWindowServer := protocol.ByteCount(math.Floor(1.5 * MB)) // default is 1.5 MB
-	maxReceiveStreamFlowControlWindowClient := protocol.ByteCount(math.Floor(6.4 * MB))     // default is 6 MB
-	maxReceiveConnectionFlowControlWindowClient := protocol.ByteCount(math.Floor(13 * MB))  // default is 15 MB
 	idleTimeout := 42 * time.Second
 	BeforeEach(func() {
 		pn = newParamsNegotiatorGQUIC(
 			protocol.PerspectiveServer,
 			protocol.VersionWhatever,
 			&TransportParameters{
-				MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindowServer,
-				MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindowServer,
-				IdleTimeout:                           idleTimeout,
+				IdleTimeout: idleTimeout,
 			},
 		)
 		pnClient = newParamsNegotiatorGQUIC(
 			protocol.PerspectiveClient,
 			protocol.VersionWhatever,
 			&TransportParameters{
-				MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindowClient,
-				MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindowClient,
-				IdleTimeout:                           idleTimeout,
+				IdleTimeout: idleTimeout,
 			},
 		)
 	})
@@ -156,13 +146,6 @@ var _ = Describe("Params Negotiator (for gQUIC)", func() {
 			Expect(pn.GetReceiveConnectionFlowControlWindow()).To(BeEquivalentTo(protocol.ReceiveConnectionFlowControlWindow))
 			Expect(pnClient.GetReceiveStreamFlowControlWindow()).To(BeEquivalentTo(protocol.ReceiveStreamFlowControlWindow))
 			Expect(pnClient.GetReceiveConnectionFlowControlWindow()).To(BeEquivalentTo(protocol.ReceiveConnectionFlowControlWindow))
-		})
-
-		It("has the correct maximum flow control windows", func() {
-			Expect(pn.GetMaxReceiveStreamFlowControlWindow()).To(Equal(maxReceiveStreamFlowControlWindowServer))
-			Expect(pn.GetMaxReceiveConnectionFlowControlWindow()).To(Equal(maxReceiveConnectionFlowControlWindowServer))
-			Expect(pnClient.GetMaxReceiveStreamFlowControlWindow()).To(Equal(maxReceiveStreamFlowControlWindowClient))
-			Expect(pnClient.GetMaxReceiveConnectionFlowControlWindow()).To(Equal(maxReceiveConnectionFlowControlWindowClient))
 		})
 
 		It("sets a new stream-level flow control window for sending", func() {
