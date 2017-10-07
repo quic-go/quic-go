@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 type paramsNegotiator struct {
@@ -43,14 +42,12 @@ func (h *paramsNegotiator) SetFromTransportParameters(params []transportParamete
 				return fmt.Errorf("wrong length for initial_max_stream_data: %d (expected 4)", len(p.Value))
 			}
 			h.sendStreamFlowControlWindow = protocol.ByteCount(binary.BigEndian.Uint32(p.Value))
-			utils.Debugf("h.sendStreamFlowControlWindow: %#x", h.sendStreamFlowControlWindow)
 		case initialMaxDataParameterID:
 			foundInitialMaxData = true
 			if len(p.Value) != 4 {
 				return fmt.Errorf("wrong length for initial_max_data: %d (expected 4)", len(p.Value))
 			}
 			h.sendConnectionFlowControlWindow = protocol.ByteCount(binary.BigEndian.Uint32(p.Value))
-			utils.Debugf("h.sendConnectionFlowControlWindow: %#x", h.sendConnectionFlowControlWindow)
 		case initialMaxStreamIDParameterID:
 			foundInitialMaxStreamID = true
 			if len(p.Value) != 4 {
