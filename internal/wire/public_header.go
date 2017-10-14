@@ -20,7 +20,7 @@ var (
 	errGetLengthNotForVersionNegotiation = errors.New("PublicHeader: GetLength cannot be called for VersionNegotiation packets")
 )
 
-// The PublicHeader of a QUIC packet. Warning: This struct should not be considered stable and will change soon.
+// The PublicHeader is the header of a gQUIC packet.
 type PublicHeader struct {
 	Raw                  []byte
 	ConnectionID         protocol.ConnectionID
@@ -34,7 +34,7 @@ type PublicHeader struct {
 	DiversificationNonce []byte
 }
 
-// Write writes a public header. Warning: This API should not be considered stable and will change soon.
+// Write writes a Public Header.
 func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pers protocol.Perspective) error {
 	publicFlagByte := uint8(0x00)
 
@@ -137,9 +137,8 @@ func PeekConnectionID(b *bytes.Reader, packetSentBy protocol.Perspective) (proto
 	return connectionID, nil
 }
 
-// ParsePublicHeader parses a QUIC packet's public header.
+// ParsePublicHeader parses a QUIC packet's Public Header.
 // The packetSentBy is the perspective of the peer that sent this PublicHeader, i.e. if we're the server, packetSentBy should be PerspectiveClient.
-// Warning: This API should not be considered stable and will change soon.
 func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective, version protocol.VersionNumber) (*PublicHeader, error) {
 	header := &PublicHeader{}
 
