@@ -145,14 +145,10 @@ var _ = Describe("Public Header", func() {
 				Expect(b.Len()).To(BeZero())
 			})
 
-			It("parses a version negotiation packet that contains 0 versions", func() {
+			It("errors if it doesn't contain any versions", func() {
 				b := bytes.NewReader([]byte{0x9, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c})
-				hdr, err := ParsePublicHeader(b, protocol.PerspectiveServer, protocol.VersionUnknown)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(hdr.VersionFlag).To(BeTrue())
-				Expect(hdr.VersionNumber).To(BeZero()) // unitialized
-				Expect(hdr.SupportedVersions).To(BeEmpty())
-				Expect(b.Len()).To(BeZero())
+				_, err := ParsePublicHeader(b, protocol.PerspectiveServer, protocol.VersionUnknown)
+				Expect(err).To(MatchError("InvalidVersionNegotiationPacket: empty version list"))
 			})
 
 			It("reads version negotiation packets containing unsupported versions", func() {

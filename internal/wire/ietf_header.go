@@ -60,6 +60,9 @@ func parseLongHeader(b *bytes.Reader, packetSentBy protocol.Perspective, typeByt
 		if packetSentBy == protocol.PerspectiveClient {
 			return nil, qerr.Error(qerr.InvalidVersionNegotiationPacket, "sent by the client")
 		}
+		if b.Len() == 0 {
+			return nil, qerr.Error(qerr.InvalidVersionNegotiationPacket, "empty version list")
+		}
 		h.SupportedVersions = make([]protocol.VersionNumber, b.Len()/4)
 		for i := 0; b.Len() > 0; i++ {
 			v, err := utils.BigEndian.ReadUint32(b)

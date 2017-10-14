@@ -205,6 +205,9 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective, versi
 	// Version (optional)
 	if !header.ResetFlag && header.VersionFlag {
 		if packetSentBy == protocol.PerspectiveServer { // parse the version negotiaton packet
+			if b.Len() == 0 {
+				return nil, qerr.Error(qerr.InvalidVersionNegotiationPacket, "empty version list")
+			}
 			if b.Len()%4 != 0 {
 				return nil, qerr.InvalidVersionNegotiationPacket
 			}

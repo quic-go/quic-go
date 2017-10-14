@@ -78,6 +78,12 @@ var _ = Describe("Header", func() {
 					_, err := ParseHeader(b, protocol.PerspectiveClient)
 					Expect(err).To(MatchError("InvalidVersionNegotiationPacket: sent by the client"))
 				})
+
+				It("errors if the version list is emtpy", func() {
+					b := bytes.NewReader(data)
+					_, err := ParseHeader(b, protocol.PerspectiveServer)
+					Expect(err).To(MatchError("InvalidVersionNegotiationPacket: empty version list"))
+				})
 			})
 		})
 
