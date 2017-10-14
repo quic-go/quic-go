@@ -6,34 +6,36 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/qerr"
 )
 
 // The Header is the header of a QUIC Packet.
 // TODO: add support for the key phase
 type Header struct {
-	Type             uint8
-	IsLongHeader     bool
-	KeyPhase         int
-	OmitConnectionID bool
-	ConnectionID     protocol.ConnectionID
-	PacketNumber     protocol.PacketNumber
-	PacketNumberLen  protocol.PacketNumberLen
-	Version          protocol.VersionNumber
+	Type              uint8
+	IsLongHeader      bool
+	KeyPhase          int
+	OmitConnectionID  bool
+	ConnectionID      protocol.ConnectionID
+	PacketNumber      protocol.PacketNumber
+	PacketNumberLen   protocol.PacketNumberLen
+	Version           protocol.VersionNumber
+	SupportedVersions []protocol.VersionNumber // version number sent in a Version Negotiation Packet by the server
 }
 
 // ParseHeader parses a header
-func ParseHeader(b *bytes.Reader) (*Header, error) {
+func ParseHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Header, error) {
 	typeByte, err := b.ReadByte()
 	if err != nil {
 		return nil, err
 	}
 	if typeByte&0x80 > 0 {
-		return parseLongHeader(b, typeByte)
+		return parseLongHeader(b, packetSentBy, typeByte)
 	}
 	return parseShortHeader(b, typeByte)
 }
 
-func parseLongHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
+func parseLongHeader(b *bytes.Reader, packetSentBy protocol.Perspective, typeByte byte) (*Header, error) {
 	connID, err := utils.BigEndian.ReadUint64(b)
 	if err != nil {
 		return nil, err
@@ -46,14 +48,28 @@ func parseLongHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Header{
+	h := &Header{
 		Type:            typeByte & 0x7f,
 		IsLongHeader:    true,
 		ConnectionID:    protocol.ConnectionID(connID),
 		PacketNumber:    protocol.PacketNumber(pn),
 		PacketNumberLen: protocol.PacketNumberLen4,
 		Version:         protocol.VersionNumber(v),
-	}, nil
+	}
+	if h.Type == 0x1 { // Version Negotiation Packet
+		if packetSentBy == protocol.PerspectiveClient {
+			return nil, qerr.Error(qerr.InvalidVersionNegotiationPacket, "sent by the client")
+		}
+		h.SupportedVersions = make([]protocol.VersionNumber, b.Len()/4)
+		for i := 0; b.Len() > 0; i++ {
+			v, err := utils.BigEndian.ReadUint32(b)
+			if err != nil {
+				return nil, qerr.InvalidVersionNegotiationPacket
+			}
+			h.SupportedVersions[i] = protocol.VersionNumber(v)
+		}
+	}
+	return h, nil
 }
 
 func parseShortHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
