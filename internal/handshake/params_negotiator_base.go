@@ -16,7 +16,6 @@ type ParamsNegotiator interface {
 	GetReceiveStreamFlowControlWindow() protocol.ByteCount
 	GetReceiveConnectionFlowControlWindow() protocol.ByteCount
 	GetMaxOutgoingStreams() uint32
-	GetMaxIncomingStreams() uint32
 	// get the idle timeout that was sent by the peer
 	GetRemoteIdleTimeout() time.Duration
 	// determines if the client requests omission of connection IDs.
@@ -40,7 +39,6 @@ type paramsNegotiatorBase struct {
 	omitConnectionID            bool
 	requestConnectionIDOmission bool
 
-	maxStreamsPerConnection                uint32
 	maxIncomingDynamicStreamsPerConnection uint32
 	idleTimeout                            time.Duration
 	remoteIdleTimeout                      time.Duration
@@ -59,16 +57,10 @@ func (h *paramsNegotiatorBase) init(params *TransportParameters) {
 
 	h.idleTimeout = params.IdleTimeout
 	if h.perspective == protocol.PerspectiveServer {
-		h.maxStreamsPerConnection = protocol.MaxStreamsPerConnection                // this is the value negotiated based on what the client sent
 		h.maxIncomingDynamicStreamsPerConnection = protocol.MaxStreamsPerConnection // "incoming" seen from the client's perspective
 	} else {
-		h.maxStreamsPerConnection = protocol.MaxStreamsPerConnection                // this is the value negotiated based on what the client sent
 		h.maxIncomingDynamicStreamsPerConnection = protocol.MaxStreamsPerConnection // "incoming" seen from the server's perspective
 	}
-}
-
-func (h *paramsNegotiatorBase) negotiateMaxStreamsPerConnection(clientValue uint32) uint32 {
-	return utils.MinUint32(clientValue, protocol.MaxStreamsPerConnection)
 }
 
 func (h *paramsNegotiatorBase) negotiateMaxIncomingDynamicStreamsPerConnection(clientValue uint32) uint32 {
@@ -107,14 +99,6 @@ func (h *paramsNegotiatorBase) GetMaxOutgoingStreams() uint32 {
 	defer h.mutex.RUnlock()
 
 	return h.maxIncomingDynamicStreamsPerConnection
-}
-
-func (h *paramsNegotiatorBase) GetMaxIncomingStreams() uint32 {
-	h.mutex.RLock()
-	defer h.mutex.RUnlock()
-
-	maxStreams := protocol.MaxIncomingDynamicStreamsPerConnection
-	return utils.MaxUint32(uint32(maxStreams)+protocol.MaxStreamsMinimumIncrement, uint32(float64(maxStreams)*protocol.MaxStreamsMultiplier))
 }
 
 func (h *paramsNegotiatorBase) setRemoteIdleTimeout(t time.Duration) {

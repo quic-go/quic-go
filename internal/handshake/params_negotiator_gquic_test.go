@@ -40,7 +40,6 @@ var _ = Describe("Params Negotiator (for gQUIC)", func() {
 			entryMap, err := pn.GetHelloMap()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(entryMap).To(HaveKey(TagICSL))
-			Expect(entryMap).To(HaveKey(TagMSPC))
 			Expect(entryMap).To(HaveKey(TagMIDS))
 		})
 
@@ -68,16 +67,6 @@ var _ = Describe("Params Negotiator (for gQUIC)", func() {
 			Expect(entryMap[TagICSL]).To(Equal([]byte{0xad, 0xfb, 0xca, 0xde}))
 		})
 
-		It("sets the negotiated value for maximum streams in the SHLO", func() {
-			val := 50
-			Expect(val).To(BeNumerically("<", protocol.MaxStreamsPerConnection))
-			err := pn.SetFromMap(map[Tag][]byte{TagMSPC: []byte{byte(val), 0, 0, 0}})
-			Expect(err).ToNot(HaveOccurred())
-			entryMap, err := pn.GetHelloMap()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(entryMap[TagMSPC]).To(Equal([]byte{byte(val), 0, 0, 0}))
-		})
-
 		It("always sends its own value for the maximum incoming dynamic streams in the SHLO", func() {
 			err := pn.SetFromMap(map[Tag][]byte{TagMIDS: []byte{5, 0, 0, 0}})
 			Expect(err).ToNot(HaveOccurred())
@@ -98,8 +87,6 @@ var _ = Describe("Params Negotiator (for gQUIC)", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(entryMap).To(HaveKey(TagICSL))
 			Expect(binary.LittleEndian.Uint32(entryMap[TagICSL])).To(BeEquivalentTo(idleTimeout / time.Second))
-			Expect(entryMap).To(HaveKey(TagMSPC))
-			Expect(binary.LittleEndian.Uint32(entryMap[TagMSPC])).To(BeEquivalentTo(protocol.MaxStreamsPerConnection))
 			Expect(entryMap).To(HaveKey(TagMIDS))
 			Expect(binary.LittleEndian.Uint32(entryMap[TagMIDS])).To(BeEquivalentTo(protocol.MaxIncomingDynamicStreamsPerConnection))
 			Expect(entryMap).To(HaveKey(TagSFCW))
@@ -223,12 +210,6 @@ var _ = Describe("Params Negotiator (for gQUIC)", func() {
 	})
 
 	Context("max streams per connection", func() {
-		It("errors when given an invalid max streams per connection value", func() {
-			values := map[Tag][]byte{TagMSPC: {2, 0, 0}} // 1 byte too short
-			err := pn.SetFromMap(values)
-			Expect(err).To(MatchError(errMalformedTag))
-		})
-
 		It("errors when given an invalid max dynamic incoming streams per connection value", func() {
 			values := map[Tag][]byte{TagMIDS: {2, 0, 0}} // 1 byte too short
 			err := pn.SetFromMap(values)
@@ -240,27 +221,17 @@ var _ = Describe("Params Negotiator (for gQUIC)", func() {
 				// this test only works if the value given here is smaller than protocol.MaxStreamsPerConnection
 				err := pn.SetFromMap(map[Tag][]byte{
 					TagMIDS: {2, 0, 0, 0},
-					TagMSPC: {1, 0, 0, 0},
 				})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(pn.GetMaxOutgoingStreams()).To(Equal(uint32(2)))
 			})
 
 			It("uses the the MSPC value, if no MIDS is given", func() {
-				err := pn.SetFromMap(map[Tag][]byte{TagMIDS: {3, 0, 0, 0}})
-				Expect(err).ToNot(HaveOccurred())
-				Expect(pn.GetMaxOutgoingStreams()).To(Equal(uint32(3)))
-			})
-		})
-
-		Context("incoming connections", func() {
-			It("always uses the constant value, no matter what the client sent", func() {
 				err := pn.SetFromMap(map[Tag][]byte{
-					TagMSPC: {3, 0, 0, 0},
 					TagMIDS: {3, 0, 0, 0},
 				})
 				Expect(err).ToNot(HaveOccurred())
-				Expect(pn.GetMaxIncomingStreams()).To(BeNumerically(">", protocol.MaxStreamsPerConnection))
+				Expect(pn.GetMaxOutgoingStreams()).To(Equal(uint32(3)))
 			})
 		})
 	})

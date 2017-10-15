@@ -95,18 +95,6 @@ func (mr *MockParamsNegotiatorMockRecorder) GetMaxOutgoingStreams() *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMaxOutgoingStreams", reflect.TypeOf((*MockParamsNegotiator)(nil).GetMaxOutgoingStreams))
 }
 
-// GetMaxIncomingStreams mocks base method
-func (m *MockParamsNegotiator) GetMaxIncomingStreams() uint32 {
-	ret := m.ctrl.Call(m, "GetMaxIncomingStreams")
-	ret0, _ := ret[0].(uint32)
-	return ret0
-}
-
-// GetMaxIncomingStreams indicates an expected call of GetMaxIncomingStreams
-func (mr *MockParamsNegotiatorMockRecorder) GetMaxIncomingStreams() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMaxIncomingStreams", reflect.TypeOf((*MockParamsNegotiator)(nil).GetMaxIncomingStreams))
-}
-
 // GetRemoteIdleTimeout mocks base method
 func (m *MockParamsNegotiator) GetRemoteIdleTimeout() time.Duration {
 	ret := m.ctrl.Call(m, "GetRemoteIdleTimeout")

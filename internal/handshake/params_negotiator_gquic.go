@@ -42,13 +42,6 @@ func (h *paramsNegotiatorGQUIC) SetFromMap(params map[Tag][]byte) error {
 		}
 		h.omitConnectionID = (clientValue == 0)
 	}
-	if value, ok := params[TagMSPC]; ok {
-		clientValue, err := utils.LittleEndian.ReadUint32(bytes.NewBuffer(value))
-		if err != nil {
-			return errMalformedTag
-		}
-		h.maxStreamsPerConnection = h.negotiateMaxStreamsPerConnection(clientValue)
-	}
 	if value, ok := params[TagMIDS]; ok {
 		clientValue, err := utils.LittleEndian.ReadUint32(bytes.NewBuffer(value))
 		if err != nil {
@@ -99,8 +92,6 @@ func (h *paramsNegotiatorGQUIC) GetHelloMap() (map[Tag][]byte, error) {
 	utils.LittleEndian.WriteUint32(sfcw, uint32(h.GetReceiveStreamFlowControlWindow()))
 	cfcw := bytes.NewBuffer([]byte{})
 	utils.LittleEndian.WriteUint32(cfcw, uint32(h.GetReceiveConnectionFlowControlWindow()))
-	mspc := bytes.NewBuffer([]byte{})
-	utils.LittleEndian.WriteUint32(mspc, h.maxStreamsPerConnection)
 	mids := bytes.NewBuffer([]byte{})
 	utils.LittleEndian.WriteUint32(mids, protocol.MaxIncomingDynamicStreamsPerConnection)
 	icsl := bytes.NewBuffer([]byte{})
@@ -108,7 +99,6 @@ func (h *paramsNegotiatorGQUIC) GetHelloMap() (map[Tag][]byte, error) {
 
 	return map[Tag][]byte{
 		TagICSL: icsl.Bytes(),
-		TagMSPC: mspc.Bytes(),
 		TagMIDS: mids.Bytes(),
 		TagCFCW: cfcw.Bytes(),
 		TagSFCW: sfcw.Bytes(),

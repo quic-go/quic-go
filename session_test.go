@@ -159,7 +159,6 @@ func (m *mockParamsNegotiator) GetReceiveConnectionFlowControlWindow() protocol.
 	return protocol.ReceiveConnectionFlowControlWindow
 }
 func (m *mockParamsNegotiator) GetMaxOutgoingStreams() uint32       { return 100 }
-func (m *mockParamsNegotiator) GetMaxIncomingStreams() uint32       { return 100 }
 func (m *mockParamsNegotiator) GetRemoteIdleTimeout() time.Duration { return time.Hour }
 func (m *mockParamsNegotiator) OmitConnectionID() bool              { return false }
 
@@ -1564,9 +1563,7 @@ var _ = Describe("Session", func() {
 
 	Context("counting streams", func() {
 		It("errors when too many streams are opened", func() {
-			mockPn := mocks.NewMockParamsNegotiator(mockCtrl)
-			mockPn.EXPECT().GetMaxIncomingStreams().Return(uint32(10)).AnyTimes()
-			for i := 0; i < 10; i++ {
+			for i := 0; i < protocol.MaxStreamsPerConnection; i++ {
 				_, err := sess.GetOrOpenStream(protocol.StreamID(i*2 + 1))
 				Expect(err).NotTo(HaveOccurred())
 			}
@@ -1575,8 +1572,6 @@ var _ = Describe("Session", func() {
 		})
 
 		It("does not error when many streams are opened and closed", func() {
-			mockPn := mocks.NewMockParamsNegotiator(mockCtrl)
-			mockPn.EXPECT().GetMaxIncomingStreams().Return(uint32(10)).AnyTimes()
 			for i := 2; i <= 1000; i++ {
 				s, err := sess.GetOrOpenStream(protocol.StreamID(i*2 + 1))
 				Expect(err).NotTo(HaveOccurred())

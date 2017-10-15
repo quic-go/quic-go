@@ -11,10 +11,7 @@ import (
 )
 
 var _ = Describe("Streams Map", func() {
-	const (
-		maxIncomingStreams = 75
-		maxOutgoingStreams = 60
-	)
+	const maxOutgoingStreams = 60
 
 	var (
 		m      *streamsMap
@@ -23,9 +20,7 @@ var _ = Describe("Streams Map", func() {
 
 	setNewStreamsMap := func(p protocol.Perspective) {
 		mockPn = mocks.NewMockParamsNegotiator(mockCtrl)
-
 		mockPn.EXPECT().GetMaxOutgoingStreams().AnyTimes().Return(uint32(maxOutgoingStreams))
-		mockPn.EXPECT().GetMaxIncomingStreams().AnyTimes().Return(uint32(maxIncomingStreams))
 
 		newStream := func(id protocol.StreamID) *stream {
 			return newStream(id, func() {}, nil, nil)
@@ -113,21 +108,21 @@ var _ = Describe("Streams Map", func() {
 
 				Context("counting streams", func() {
 					It("errors when too many streams are opened", func() {
-						for i := 0; i < maxIncomingStreams; i++ {
+						for i := uint32(0); i < m.maxIncomingStreams; i++ {
 							_, err := m.GetOrOpenStream(protocol.StreamID(i*2 + 1))
 							Expect(err).NotTo(HaveOccurred())
 						}
-						_, err := m.GetOrOpenStream(protocol.StreamID(2*maxIncomingStreams + 3))
+						_, err := m.GetOrOpenStream(protocol.StreamID(2*m.maxIncomingStreams + 3))
 						Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 					})
 
 					It("errors when too many streams are opened implicitely", func() {
-						_, err := m.GetOrOpenStream(protocol.StreamID(maxIncomingStreams*2 + 1))
+						_, err := m.GetOrOpenStream(protocol.StreamID(m.maxIncomingStreams*2 + 1))
 						Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 					})
 
 					It("does not error when many streams are opened and closed", func() {
-						for i := 2; i < 10*maxIncomingStreams; i++ {
+						for i := uint32(2); i < 10*m.maxIncomingStreams; i++ {
 							str, err := m.GetOrOpenStream(protocol.StreamID(i*2 + 1))
 							Expect(err).NotTo(HaveOccurred())
 							deleteStream(str.StreamID())
