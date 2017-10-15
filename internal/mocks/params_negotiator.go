@@ -59,30 +59,6 @@ func (mr *MockParamsNegotiatorMockRecorder) GetSendConnectionFlowControlWindow()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSendConnectionFlowControlWindow", reflect.TypeOf((*MockParamsNegotiator)(nil).GetSendConnectionFlowControlWindow))
 }
 
-// GetReceiveStreamFlowControlWindow mocks base method
-func (m *MockParamsNegotiator) GetReceiveStreamFlowControlWindow() protocol.ByteCount {
-	ret := m.ctrl.Call(m, "GetReceiveStreamFlowControlWindow")
-	ret0, _ := ret[0].(protocol.ByteCount)
-	return ret0
-}
-
-// GetReceiveStreamFlowControlWindow indicates an expected call of GetReceiveStreamFlowControlWindow
-func (mr *MockParamsNegotiatorMockRecorder) GetReceiveStreamFlowControlWindow() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReceiveStreamFlowControlWindow", reflect.TypeOf((*MockParamsNegotiator)(nil).GetReceiveStreamFlowControlWindow))
-}
-
-// GetReceiveConnectionFlowControlWindow mocks base method
-func (m *MockParamsNegotiator) GetReceiveConnectionFlowControlWindow() protocol.ByteCount {
-	ret := m.ctrl.Call(m, "GetReceiveConnectionFlowControlWindow")
-	ret0, _ := ret[0].(protocol.ByteCount)
-	return ret0
-}
-
-// GetReceiveConnectionFlowControlWindow indicates an expected call of GetReceiveConnectionFlowControlWindow
-func (mr *MockParamsNegotiatorMockRecorder) GetReceiveConnectionFlowControlWindow() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReceiveConnectionFlowControlWindow", reflect.TypeOf((*MockParamsNegotiator)(nil).GetReceiveConnectionFlowControlWindow))
-}
-
 // GetMaxOutgoingStreams mocks base method
 func (m *MockParamsNegotiator) GetMaxOutgoingStreams() uint32 {
 	ret := m.ctrl.Call(m, "GetMaxOutgoingStreams")

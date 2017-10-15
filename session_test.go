@@ -152,12 +152,6 @@ func (m *mockParamsNegotiator) GetSendStreamFlowControlWindow() protocol.ByteCou
 func (m *mockParamsNegotiator) GetSendConnectionFlowControlWindow() protocol.ByteCount {
 	return protocol.InitialConnectionFlowControlWindow
 }
-func (m *mockParamsNegotiator) GetReceiveStreamFlowControlWindow() protocol.ByteCount {
-	return protocol.ReceiveStreamFlowControlWindow
-}
-func (m *mockParamsNegotiator) GetReceiveConnectionFlowControlWindow() protocol.ByteCount {
-	return protocol.ReceiveConnectionFlowControlWindow
-}
 func (m *mockParamsNegotiator) GetMaxOutgoingStreams() uint32       { return 100 }
 func (m *mockParamsNegotiator) GetRemoteIdleTimeout() time.Duration { return time.Hour }
 func (m *mockParamsNegotiator) OmitConnectionID() bool              { return false }

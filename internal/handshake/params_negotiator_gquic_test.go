@@ -44,19 +44,19 @@ var _ = Describe("Params Negotiator (for gQUIC)", func() {
 		})
 
 		It("sets the stream-level flow control windows in SHLO", func() {
-			pn.receiveStreamFlowControlWindow = 0xDEADBEEF
 			entryMap, err := pn.GetHelloMap()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(entryMap).To(HaveKey(TagSFCW))
-			Expect(entryMap[TagSFCW]).To(Equal([]byte{0xEF, 0xBE, 0xAD, 0xDE}))
+			expected := make([]byte, 4)
+			binary.LittleEndian.PutUint32(expected, uint32(protocol.ReceiveStreamFlowControlWindow))
+			Expect(entryMap).To(HaveKeyWithValue(TagSFCW, expected))
 		})
 
 		It("sets the connection-level flow control windows in SHLO", func() {
-			pn.receiveConnectionFlowControlWindow = 0xDECAFBAD
 			entryMap, err := pn.GetHelloMap()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(entryMap).To(HaveKey(TagCFCW))
-			Expect(entryMap[TagCFCW]).To(Equal([]byte{0xAD, 0xFB, 0xCA, 0xDE}))
+			expected := make([]byte, 4)
+			binary.LittleEndian.PutUint32(expected, uint32(protocol.ReceiveConnectionFlowControlWindow))
+			Expect(entryMap).To(HaveKeyWithValue(TagCFCW, expected))
 		})
 
 		It("sets the connection-level flow control windows in SHLO", func() {
@@ -126,13 +126,6 @@ var _ = Describe("Params Negotiator (for gQUIC)", func() {
 			Expect(pn.GetSendConnectionFlowControlWindow()).To(Equal(protocol.InitialConnectionFlowControlWindow))
 			Expect(pnClient.GetSendStreamFlowControlWindow()).To(Equal(protocol.InitialStreamFlowControlWindow))
 			Expect(pnClient.GetSendConnectionFlowControlWindow()).To(Equal(protocol.InitialConnectionFlowControlWindow))
-		})
-
-		It("has the correct default flow control windows for receiving", func() {
-			Expect(pn.GetReceiveStreamFlowControlWindow()).To(BeEquivalentTo(protocol.ReceiveStreamFlowControlWindow))
-			Expect(pn.GetReceiveConnectionFlowControlWindow()).To(BeEquivalentTo(protocol.ReceiveConnectionFlowControlWindow))
-			Expect(pnClient.GetReceiveStreamFlowControlWindow()).To(BeEquivalentTo(protocol.ReceiveStreamFlowControlWindow))
-			Expect(pnClient.GetReceiveConnectionFlowControlWindow()).To(BeEquivalentTo(protocol.ReceiveConnectionFlowControlWindow))
 		})
 
 		It("sets a new stream-level flow control window for sending", func() {

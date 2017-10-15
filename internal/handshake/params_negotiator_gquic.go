@@ -89,9 +89,9 @@ func (h *paramsNegotiatorGQUIC) SetFromMap(params map[Tag][]byte) error {
 // GetHelloMap gets all parameters needed for the Hello message.
 func (h *paramsNegotiatorGQUIC) GetHelloMap() (map[Tag][]byte, error) {
 	sfcw := bytes.NewBuffer([]byte{})
-	utils.LittleEndian.WriteUint32(sfcw, uint32(h.GetReceiveStreamFlowControlWindow()))
+	utils.LittleEndian.WriteUint32(sfcw, uint32(protocol.ReceiveStreamFlowControlWindow))
 	cfcw := bytes.NewBuffer([]byte{})
-	utils.LittleEndian.WriteUint32(cfcw, uint32(h.GetReceiveConnectionFlowControlWindow()))
+	utils.LittleEndian.WriteUint32(cfcw, uint32(protocol.ReceiveConnectionFlowControlWindow))
 	mids := bytes.NewBuffer([]byte{})
 	utils.LittleEndian.WriteUint32(mids, protocol.MaxIncomingStreams)
 	icsl := bytes.NewBuffer([]byte{})

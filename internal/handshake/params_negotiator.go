@@ -79,9 +79,9 @@ func (h *paramsNegotiator) SetFromTransportParameters(params []transportParamete
 
 func (h *paramsNegotiator) GetTransportParameters() []transportParameter {
 	initialMaxStreamData := make([]byte, 4)
-	binary.BigEndian.PutUint32(initialMaxStreamData, uint32(h.GetReceiveStreamFlowControlWindow()))
+	binary.BigEndian.PutUint32(initialMaxStreamData, uint32(protocol.ReceiveStreamFlowControlWindow))
 	initialMaxData := make([]byte, 4)
-	binary.BigEndian.PutUint32(initialMaxData, uint32(h.GetReceiveConnectionFlowControlWindow()))
+	binary.BigEndian.PutUint32(initialMaxData, uint32(protocol.ReceiveConnectionFlowControlWindow))
 	initialMaxStreamID := make([]byte, 4)
 	// TODO: use a reasonable value here
 	binary.BigEndian.PutUint32(initialMaxStreamID, math.MaxUint32)

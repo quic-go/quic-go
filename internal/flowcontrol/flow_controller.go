@@ -37,26 +37,19 @@ func newFlowController(
 	streamID protocol.StreamID,
 	contributesToConnection bool,
 	connParams handshake.ParamsNegotiator,
+	receiveWindow protocol.ByteCount,
 	maxReceiveWindow protocol.ByteCount,
 	rttStats *congestion.RTTStats,
 ) *flowController {
-	fc := flowController{
+	return &flowController{
 		streamID:                  streamID,
 		contributesToConnection:   contributesToConnection,
 		connParams:                connParams,
 		rttStats:                  rttStats,
+		receiveWindow:             receiveWindow,
+		receiveWindowIncrement:    receiveWindow,
 		maxReceiveWindowIncrement: maxReceiveWindow,
 	}
-
-	if streamID == 0 {
-		fc.receiveWindow = connParams.GetReceiveConnectionFlowControlWindow()
-		fc.receiveWindowIncrement = fc.receiveWindow
-	} else {
-		fc.receiveWindow = connParams.GetReceiveStreamFlowControlWindow()
-		fc.receiveWindowIncrement = fc.receiveWindow
-	}
-
-	return &fc
 }
 
 func (c *flowController) ContributesToConnection() bool {

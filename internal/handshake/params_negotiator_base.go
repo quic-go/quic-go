@@ -13,8 +13,6 @@ import (
 type ParamsNegotiator interface {
 	GetSendStreamFlowControlWindow() protocol.ByteCount
 	GetSendConnectionFlowControlWindow() protocol.ByteCount
-	GetReceiveStreamFlowControlWindow() protocol.ByteCount
-	GetReceiveConnectionFlowControlWindow() protocol.ByteCount
 	GetMaxOutgoingStreams() uint32
 	// get the idle timeout that was sent by the peer
 	GetRemoteIdleTimeout() time.Duration
@@ -39,20 +37,16 @@ type paramsNegotiatorBase struct {
 	omitConnectionID            bool
 	requestConnectionIDOmission bool
 
-	maxOutgoingStreams                 uint32
-	idleTimeout                        time.Duration
-	remoteIdleTimeout                  time.Duration
-	sendStreamFlowControlWindow        protocol.ByteCount
-	sendConnectionFlowControlWindow    protocol.ByteCount
-	receiveStreamFlowControlWindow     protocol.ByteCount
-	receiveConnectionFlowControlWindow protocol.ByteCount
+	maxOutgoingStreams              uint32
+	idleTimeout                     time.Duration
+	remoteIdleTimeout               time.Duration
+	sendStreamFlowControlWindow     protocol.ByteCount
+	sendConnectionFlowControlWindow protocol.ByteCount
 }
 
 func (h *paramsNegotiatorBase) init(params *TransportParameters) {
 	h.sendStreamFlowControlWindow = protocol.InitialStreamFlowControlWindow         // can only be changed by the client
 	h.sendConnectionFlowControlWindow = protocol.InitialConnectionFlowControlWindow // can only be changed by the client
-	h.receiveStreamFlowControlWindow = protocol.ReceiveStreamFlowControlWindow
-	h.receiveConnectionFlowControlWindow = protocol.ReceiveConnectionFlowControlWindow
 	h.requestConnectionIDOmission = params.RequestConnectionIDOmission
 
 	h.idleTimeout = params.IdleTimeout
@@ -72,19 +66,6 @@ func (h *paramsNegotiatorBase) GetSendConnectionFlowControlWindow() protocol.Byt
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	return h.sendConnectionFlowControlWindow
-}
-
-func (h *paramsNegotiatorBase) GetReceiveStreamFlowControlWindow() protocol.ByteCount {
-	h.mutex.RLock()
-	defer h.mutex.RUnlock()
-	return h.receiveStreamFlowControlWindow
-}
-
-// GetReceiveConnectionFlowControlWindow gets the size of the stream-level flow control window for receiving data
-func (h *paramsNegotiatorBase) GetReceiveConnectionFlowControlWindow() protocol.ByteCount {
-	h.mutex.RLock()
-	defer h.mutex.RUnlock()
-	return h.receiveConnectionFlowControlWindow
 }
 
 func (h *paramsNegotiatorBase) GetMaxOutgoingStreams() uint32 {

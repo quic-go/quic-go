@@ -16,8 +16,6 @@ var _ = Describe("Flow Control Manager", func() {
 
 	BeforeEach(func() {
 		mockPn := mocks.NewMockParamsNegotiator(mockCtrl)
-		mockPn.EXPECT().GetReceiveStreamFlowControlWindow().AnyTimes().Return(protocol.ByteCount(100))
-		mockPn.EXPECT().GetReceiveConnectionFlowControlWindow().AnyTimes().Return(protocol.ByteCount(200))
 		fcm = NewFlowControlManager(mockPn, protocol.MaxByteCount, protocol.MaxByteCount, &congestion.RTTStats{}).(*flowControlManager)
 	})
 
@@ -58,6 +56,13 @@ var _ = Describe("Flow Control Manager", func() {
 			fcm.NewStream(1, false)
 			fcm.NewStream(4, true)
 			fcm.NewStream(6, true)
+
+			for _, fc := range fcm.streamFlowController {
+				fc.receiveWindow = 100
+				fc.receiveWindowIncrement = 100
+			}
+			fcm.connFlowController.receiveWindow = 200
+			fcm.connFlowController.receiveWindowIncrement = 200
 		})
 
 		It("updates the connection level flow controller if the stream contributes", func() {
@@ -195,6 +200,13 @@ var _ = Describe("Flow Control Manager", func() {
 			fcm.NewStream(6, true)
 			fcm.streamFlowController[1].bytesSent = 41
 			fcm.streamFlowController[4].bytesSent = 42
+
+			for _, fc := range fcm.streamFlowController {
+				fc.receiveWindow = 100
+				fc.receiveWindowIncrement = 100
+			}
+			fcm.connFlowController.receiveWindow = 200
+			fcm.connFlowController.receiveWindowIncrement = 200
 		})
 
 		It("updates the connection level flow controller if the stream contributes", func() {

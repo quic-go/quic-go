@@ -38,7 +38,7 @@ func NewFlowControlManager(
 		rttStats:               rttStats,
 		maxReceiveStreamWindow: maxReceiveStreamWindow,
 		streamFlowController:   make(map[protocol.StreamID]*flowController),
-		connFlowController:     newFlowController(0, false, connParams, maxReceiveConnectionWindow, rttStats),
+		connFlowController:     newFlowController(0, false, connParams, protocol.ReceiveConnectionFlowControlWindow, maxReceiveConnectionWindow, rttStats),
 	}
 }
 
@@ -51,7 +51,7 @@ func (f *flowControlManager) NewStream(streamID protocol.StreamID, contributesTo
 	if _, ok := f.streamFlowController[streamID]; ok {
 		return
 	}
-	f.streamFlowController[streamID] = newFlowController(streamID, contributesToConnection, f.connParams, f.maxReceiveStreamWindow, f.rttStats)
+	f.streamFlowController[streamID] = newFlowController(streamID, contributesToConnection, f.connParams, protocol.ReceiveStreamFlowControlWindow, f.maxReceiveStreamWindow, f.rttStats)
 }
 
 // RemoveStream removes a closed stream from flow control
