@@ -51,7 +51,7 @@ func (h *paramsNegotiatorBase) init(params *TransportParameters) {
 
 	h.idleTimeout = params.IdleTimeout
 	// use this as a default value. As soon as the client sends its value, this gets updated
-	h.maxOutgoingStreams = protocol.MaxOutgoingStreams
+	h.maxOutgoingStreams = protocol.MaxIncomingStreams
 }
 
 // GetSendStreamFlowControlWindow gets the size of the stream-level flow control window for sending data
@@ -72,10 +72,6 @@ func (h *paramsNegotiatorBase) GetMaxOutgoingStreams() uint32 {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 	return h.maxOutgoingStreams
-}
-
-func (h *paramsNegotiatorBase) setMaxOutgoingStreams(clientValue uint32) {
-	h.maxOutgoingStreams = utils.MinUint32(clientValue, protocol.MaxOutgoingStreams)
 }
 
 func (h *paramsNegotiatorBase) setRemoteIdleTimeout(t time.Duration) {

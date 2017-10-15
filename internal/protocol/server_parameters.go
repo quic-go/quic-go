@@ -56,9 +56,6 @@ const DefaultMaxReceiveConnectionFlowControlWindowClient = 15 * (1 << 20) // 15 
 // This is the value that Chromium is using
 const ConnectionFlowControlMultiplier = 1.5
 
-// MaxOutgoingStreams is the maximum number of streams that we will open to a peer
-const MaxOutgoingStreams = 100
-
 // MaxIncomingStreams is the maximum number of streams that a peer may open
 const MaxIncomingStreams = 100
 
@@ -70,7 +67,7 @@ const MaxStreamsMinimumIncrement = 10
 
 // MaxNewStreamIDDelta is the maximum difference between and a newly opened Stream and the highest StreamID that a client has ever opened
 // note that the number of streams is half this value, since the client can only open streams with open StreamID
-const MaxNewStreamIDDelta = 4 * MaxOutgoingStreams
+const MaxNewStreamIDDelta = 4 * MaxIncomingStreams
 
 // MaxSessionUnprocessedPackets is the max number of packets stored in each session that are not yet processed.
 const MaxSessionUnprocessedPackets = DefaultMaxCongestionWindow

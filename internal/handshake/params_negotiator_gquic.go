@@ -47,7 +47,7 @@ func (h *paramsNegotiatorGQUIC) SetFromMap(params map[Tag][]byte) error {
 		if err != nil {
 			return errMalformedTag
 		}
-		h.setMaxOutgoingStreams(clientValue)
+		h.maxOutgoingStreams = clientValue
 	}
 	if value, ok := params[TagICSL]; ok {
 		clientValue, err := utils.LittleEndian.ReadUint32(bytes.NewBuffer(value))
