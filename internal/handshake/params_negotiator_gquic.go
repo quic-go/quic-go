@@ -47,7 +47,7 @@ func (h *paramsNegotiatorGQUIC) SetFromMap(params map[Tag][]byte) error {
 		if err != nil {
 			return errMalformedTag
 		}
-		h.maxIncomingDynamicStreamsPerConnection = h.negotiateMaxIncomingDynamicStreamsPerConnection(clientValue)
+		h.setMaxOutgoingStreams(clientValue)
 	}
 	if value, ok := params[TagICSL]; ok {
 		clientValue, err := utils.LittleEndian.ReadUint32(bytes.NewBuffer(value))
@@ -93,7 +93,7 @@ func (h *paramsNegotiatorGQUIC) GetHelloMap() (map[Tag][]byte, error) {
 	cfcw := bytes.NewBuffer([]byte{})
 	utils.LittleEndian.WriteUint32(cfcw, uint32(h.GetReceiveConnectionFlowControlWindow()))
 	mids := bytes.NewBuffer([]byte{})
-	utils.LittleEndian.WriteUint32(mids, protocol.MaxIncomingDynamicStreamsPerConnection)
+	utils.LittleEndian.WriteUint32(mids, protocol.MaxIncomingStreams)
 	icsl := bytes.NewBuffer([]byte{})
 	utils.LittleEndian.WriteUint32(icsl, uint32(h.idleTimeout/time.Second))
 

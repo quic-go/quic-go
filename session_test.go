@@ -1563,7 +1563,7 @@ var _ = Describe("Session", func() {
 
 	Context("counting streams", func() {
 		It("errors when too many streams are opened", func() {
-			for i := 0; i < protocol.MaxStreamsPerConnection; i++ {
+			for i := 0; i < protocol.MaxIncomingStreams; i++ {
 				_, err := sess.GetOrOpenStream(protocol.StreamID(i*2 + 1))
 				Expect(err).NotTo(HaveOccurred())
 			}

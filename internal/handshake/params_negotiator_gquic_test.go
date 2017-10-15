@@ -72,7 +72,7 @@ var _ = Describe("Params Negotiator (for gQUIC)", func() {
 			Expect(err).ToNot(HaveOccurred())
 			entryMap, err := pn.GetHelloMap()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(entryMap[TagMIDS]).To(Equal([]byte{byte(protocol.MaxIncomingDynamicStreamsPerConnection), 0, 0, 0}))
+			Expect(entryMap[TagMIDS]).To(Equal([]byte{byte(protocol.MaxIncomingStreams), 0, 0, 0}))
 		})
 	})
 
@@ -88,7 +88,7 @@ var _ = Describe("Params Negotiator (for gQUIC)", func() {
 			Expect(entryMap).To(HaveKey(TagICSL))
 			Expect(binary.LittleEndian.Uint32(entryMap[TagICSL])).To(BeEquivalentTo(idleTimeout / time.Second))
 			Expect(entryMap).To(HaveKey(TagMIDS))
-			Expect(binary.LittleEndian.Uint32(entryMap[TagMIDS])).To(BeEquivalentTo(protocol.MaxIncomingDynamicStreamsPerConnection))
+			Expect(binary.LittleEndian.Uint32(entryMap[TagMIDS])).To(BeEquivalentTo(protocol.MaxIncomingStreams))
 			Expect(entryMap).To(HaveKey(TagSFCW))
 			Expect(binary.LittleEndian.Uint32(entryMap[TagSFCW])).To(BeEquivalentTo(protocol.ReceiveStreamFlowControlWindow))
 			Expect(entryMap).To(HaveKey(TagCFCW))

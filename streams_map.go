@@ -46,7 +46,7 @@ var errMapAccess = errors.New("streamsMap: Error accessing the streams map")
 
 func newStreamsMap(newStream newStreamLambda, removeStreamCallback removeStreamCallback, pers protocol.Perspective, connParams handshake.ParamsNegotiator) *streamsMap {
 	// add some tolerance to the maximum incoming streams value
-	maxStreams := uint32(protocol.MaxIncomingDynamicStreamsPerConnection)
+	maxStreams := uint32(protocol.MaxIncomingStreams)
 	maxIncomingStreams := utils.MaxUint32(
 		maxStreams+protocol.MaxStreamsMinimumIncrement,
 		uint32(float64(maxStreams)*float64(protocol.MaxStreamsMultiplier)),
