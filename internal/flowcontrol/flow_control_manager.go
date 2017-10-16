@@ -228,20 +228,17 @@ func (f *flowControlManager) RemainingConnectionWindowSize() protocol.ByteCount 
 	return f.connFlowController.SendWindowSize()
 }
 
-// streamID may be 0 here
-func (f *flowControlManager) UpdateWindow(streamID protocol.StreamID, offset protocol.ByteCount) (bool, error) {
-	f.mutex.Lock()
-	defer f.mutex.Unlock()
-
-	if streamID == 0 {
-		return f.connFlowController.UpdateSendWindow(offset), nil
-	}
-
+// streamID must not be 0 here
+func (f *flowControlManager) UpdateStreamWindow(streamID protocol.StreamID, offset protocol.ByteCount) (bool, error) {
 	fc, err := f.getFlowController(streamID)
 	if err != nil {
 		return false, err
 	}
 	return fc.UpdateSendWindow(offset), nil
+}
+
+func (f *flowControlManager) UpdateConnectionWindow(offset protocol.ByteCount) bool {
+	return f.connFlowController.UpdateSendWindow(offset)
 }
 
 func (f *flowControlManager) getFlowController(streamID protocol.StreamID) (*streamFlowController, error) {

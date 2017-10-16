@@ -302,19 +302,18 @@ var _ = Describe("Flow Control Manager", func() {
 		Context("window updates", func() {
 			It("updates the window for a normal stream", func() {
 				fcm.NewStream(5, true)
-				updated, err := fcm.UpdateWindow(5, 1000)
+				updated, err := fcm.UpdateStreamWindow(5, 1000)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(updated).To(BeTrue())
 			})
 
 			It("updates the connection level window", func() {
-				updated, err := fcm.UpdateWindow(0, 1000)
-				Expect(err).ToNot(HaveOccurred())
+				updated := fcm.UpdateConnectionWindow(1000)
 				Expect(updated).To(BeTrue())
 			})
 
 			It("errors when called for a stream that doesn't exist", func() {
-				_, err := fcm.UpdateWindow(17, 1000)
+				_, err := fcm.UpdateStreamWindow(17, 1000)
 				Expect(err).To(MatchError(errMapAccess))
 			})
 		})
@@ -322,7 +321,7 @@ var _ = Describe("Flow Control Manager", func() {
 		Context("window sizes", func() {
 			It("gets the window size of a stream", func() {
 				fcm.NewStream(5, false)
-				updated, err := fcm.UpdateWindow(5, 1000)
+				updated, err := fcm.UpdateStreamWindow(5, 1000)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(updated).To(BeTrue())
 				fcm.AddBytesSent(5, 500)
@@ -333,8 +332,7 @@ var _ = Describe("Flow Control Manager", func() {
 
 			It("gets the connection window size", func() {
 				fcm.NewStream(5, true)
-				updated, err := fcm.UpdateWindow(0, 1000)
-				Expect(err).ToNot(HaveOccurred())
+				updated := fcm.UpdateConnectionWindow(1000)
 				Expect(updated).To(BeTrue())
 				fcm.AddBytesSent(5, 500)
 				size := fcm.RemainingConnectionWindowSize()
@@ -348,10 +346,9 @@ var _ = Describe("Flow Control Manager", func() {
 
 			It("limits the stream window size by the connection window size", func() {
 				fcm.NewStream(5, true)
-				updated, err := fcm.UpdateWindow(0, 500)
-				Expect(err).ToNot(HaveOccurred())
+				updated := fcm.UpdateConnectionWindow(500)
 				Expect(updated).To(BeTrue())
-				updated, err = fcm.UpdateWindow(5, 1000)
+				updated, err := fcm.UpdateStreamWindow(5, 1000)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(updated).To(BeTrue())
 				size, err := fcm.SendWindowSize(5)
@@ -361,8 +358,7 @@ var _ = Describe("Flow Control Manager", func() {
 
 			It("does not reduce the size of the connection level window, if the stream does not contribute", func() {
 				fcm.NewStream(3, false)
-				updated, err := fcm.UpdateWindow(0, 1000)
-				Expect(err).ToNot(HaveOccurred())
+				updated := fcm.UpdateConnectionWindow(1000)
 				Expect(updated).To(BeTrue())
 				fcm.AddBytesSent(3, 456) // WindowSize should return the same value no matter how much was sent
 				size := fcm.RemainingConnectionWindowSize()

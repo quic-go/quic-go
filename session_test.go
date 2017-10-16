@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang/mock/gomock"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -514,33 +516,42 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("handling WINDOW_UPDATE frames", func() {
+		var fcm *mocks.MockFlowControlManager
+
 		BeforeEach(func() {
-			sess.flowControlManager.UpdateTransportParameters(&handshake.TransportParameters{ConnectionFlowControlWindow: 0x1000})
+			fcm = mocks.NewMockFlowControlManager(mockCtrl)
+			sess.flowControlManager = fcm
+			fcm.EXPECT().NewStream(gomock.Any(), gomock.Any()).AnyTimes()
 		})
 
 		It("updates the Flow Control Window of a stream", func() {
+			offset := protocol.ByteCount(0x1234)
+			fcm.EXPECT().UpdateStreamWindow(protocol.StreamID(5), offset)
 			_, err := sess.GetOrOpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
 			err = sess.handleWindowUpdateFrame(&wire.WindowUpdateFrame{
 				StreamID:   5,
-				ByteOffset: 100,
+				ByteOffset: offset,
 			})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(sess.flowControlManager.SendWindowSize(5)).To(Equal(protocol.ByteCount(100)))
 		})
 
 		It("updates the Flow Control Window of the connection", func() {
+			offset := protocol.ByteCount(0x800000)
+			fcm.EXPECT().UpdateConnectionWindow(offset)
 			err := sess.handleWindowUpdateFrame(&wire.WindowUpdateFrame{
 				StreamID:   0,
-				ByteOffset: 0x800000,
+				ByteOffset: offset,
 			})
 			Expect(err).ToNot(HaveOccurred())
 		})
 
 		It("opens a new stream when receiving a WINDOW_UPDATE for an unknown stream", func() {
+			offset := protocol.ByteCount(0x1337)
+			fcm.EXPECT().UpdateStreamWindow(protocol.StreamID(5), offset)
 			err := sess.handleWindowUpdateFrame(&wire.WindowUpdateFrame{
 				StreamID:   5,
-				ByteOffset: 1337,
+				ByteOffset: offset,
 			})
 			Expect(err).ToNot(HaveOccurred())
 			str, err := sess.streamsMap.GetOrOpenStream(5)

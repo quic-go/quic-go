@@ -163,15 +163,27 @@ func (_mr *MockFlowControlManagerMockRecorder) RemainingConnectionWindowSize() *
 	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "RemainingConnectionWindowSize", reflect.TypeOf((*MockFlowControlManager)(nil).RemainingConnectionWindowSize))
 }
 
-// UpdateWindow mocks base method
-func (_m *MockFlowControlManager) UpdateWindow(streamID protocol.StreamID, offset protocol.ByteCount) (bool, error) {
-	ret := _m.ctrl.Call(_m, "UpdateWindow", streamID, offset)
+// UpdateStreamWindow mocks base method
+func (_m *MockFlowControlManager) UpdateStreamWindow(streamID protocol.StreamID, offset protocol.ByteCount) (bool, error) {
+	ret := _m.ctrl.Call(_m, "UpdateStreamWindow", streamID, offset)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// UpdateWindow indicates an expected call of UpdateWindow
-func (_mr *MockFlowControlManagerMockRecorder) UpdateWindow(arg0, arg1 interface{}) *gomock.Call {
-	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "UpdateWindow", reflect.TypeOf((*MockFlowControlManager)(nil).UpdateWindow), arg0, arg1)
+// UpdateStreamWindow indicates an expected call of UpdateStreamWindow
+func (_mr *MockFlowControlManagerMockRecorder) UpdateStreamWindow(arg0, arg1 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "UpdateStreamWindow", reflect.TypeOf((*MockFlowControlManager)(nil).UpdateStreamWindow), arg0, arg1)
+}
+
+// UpdateConnectionWindow mocks base method
+func (_m *MockFlowControlManager) UpdateConnectionWindow(offset protocol.ByteCount) bool {
+	ret := _m.ctrl.Call(_m, "UpdateConnectionWindow", offset)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// UpdateConnectionWindow indicates an expected call of UpdateConnectionWindow
+func (_mr *MockFlowControlManagerMockRecorder) UpdateConnectionWindow(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "UpdateConnectionWindow", reflect.TypeOf((*MockFlowControlManager)(nil).UpdateConnectionWindow), arg0)
 }

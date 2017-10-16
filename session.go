@@ -537,16 +537,19 @@ func (s *session) handleStreamFrame(frame *wire.StreamFrame) error {
 }
 
 func (s *session) handleWindowUpdateFrame(frame *wire.WindowUpdateFrame) error {
-	if frame.StreamID != 0 {
-		str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
-		if err != nil {
-			return err
-		}
-		if str == nil {
-			return errWindowUpdateOnClosedStream
-		}
+	if frame.StreamID == 0 {
+		s.flowControlManager.UpdateConnectionWindow(frame.ByteOffset)
+		return nil
 	}
-	_, err := s.flowControlManager.UpdateWindow(frame.StreamID, frame.ByteOffset)
+
+	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
+	if err != nil {
+		return err
+	}
+	if str == nil {
+		return errWindowUpdateOnClosedStream
+	}
+	_, err = s.flowControlManager.UpdateStreamWindow(frame.StreamID, frame.ByteOffset)
 	return err
 }
 
