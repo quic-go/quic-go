@@ -9,34 +9,12 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Flow controller", func() {
-	var controller *flowController
+var _ = Describe("Base Flow controller", func() {
+	var controller *baseFlowController
 
 	BeforeEach(func() {
-		controller = &flowController{}
+		controller = &baseFlowController{}
 		controller.rttStats = &congestion.RTTStats{}
-	})
-
-	Context("Constructor", func() {
-		rttStats := &congestion.RTTStats{}
-
-		It("sets the send and receive windows", func() {
-			receiveWindow := protocol.ByteCount(2000)
-			maxReceiveWindow := protocol.ByteCount(3000)
-			sendWindow := protocol.ByteCount(4000)
-			fc := newFlowController(5, true, receiveWindow, maxReceiveWindow, sendWindow, rttStats)
-			Expect(fc.streamID).To(Equal(protocol.StreamID(5)))
-			Expect(fc.receiveWindow).To(Equal(receiveWindow))
-			Expect(fc.maxReceiveWindowIncrement).To(Equal(maxReceiveWindow))
-			Expect(fc.sendWindow).To(Equal(sendWindow))
-		})
-
-		It("says if it contributes to connection-level flow control", func() {
-			fc := newFlowController(1, false, protocol.MaxByteCount, protocol.MaxByteCount, protocol.MaxByteCount, rttStats)
-			Expect(fc.ContributesToConnection()).To(BeFalse())
-			fc = newFlowController(5, true, protocol.MaxByteCount, protocol.MaxByteCount, protocol.MaxByteCount, rttStats)
-			Expect(fc.ContributesToConnection()).To(BeTrue())
-		})
 	})
 
 	Context("send flow control", func() {
@@ -110,45 +88,6 @@ var _ = Describe("Flow controller", func() {
 			updateNecessary, _, _ := controller.MaybeUpdateWindow()
 			Expect(updateNecessary).To(BeFalse())
 			Expect(controller.lastWindowUpdateTime).To(Equal(lastWindowUpdateTime))
-		})
-
-		It("updates the highestReceived", func() {
-			controller.highestReceived = 1337
-			increment, err := controller.UpdateHighestReceived(1338)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(increment).To(Equal(protocol.ByteCount(1338 - 1337)))
-			Expect(controller.highestReceived).To(Equal(protocol.ByteCount(1338)))
-		})
-
-		It("does not decrease the highestReceived", func() {
-			controller.highestReceived = 1337
-			increment, err := controller.UpdateHighestReceived(1000)
-			Expect(err).To(MatchError(ErrReceivedSmallerByteOffset))
-			Expect(increment).To(BeZero())
-			Expect(controller.highestReceived).To(Equal(protocol.ByteCount(1337)))
-		})
-
-		It("does not error when setting the same byte offset", func() {
-			controller.highestReceived = 1337
-			increment, err := controller.UpdateHighestReceived(1337)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(increment).To(BeZero())
-		})
-
-		It("increases the highestReceived by a given increment", func() {
-			controller.highestReceived = 1337
-			controller.IncrementHighestReceived(123)
-			Expect(controller.highestReceived).To(Equal(protocol.ByteCount(1337 + 123)))
-		})
-
-		It("detects a flow control violation", func() {
-			controller.UpdateHighestReceived(receiveWindow + 1)
-			Expect(controller.CheckFlowControlViolation()).To(BeTrue())
-		})
-
-		It("does not give a flow control violation when using the window completely", func() {
-			controller.UpdateHighestReceived(receiveWindow)
-			Expect(controller.CheckFlowControlViolation()).To(BeFalse())
 		})
 
 		Context("receive window increment auto-tuning", func() {
@@ -242,35 +181,6 @@ var _ = Describe("Flow controller", func() {
 				Expect(newIncrement).To(BeZero())
 				Expect(controller.receiveWindowIncrement).To(Equal(oldIncrement))
 				Expect(offset).To(Equal(protocol.ByteCount(9900 + oldIncrement)))
-			})
-
-			Context("setting the minimum increment", func() {
-				It("sets the minimum window increment", func() {
-					controller.EnsureMinimumWindowIncrement(1000)
-					Expect(controller.receiveWindowIncrement).To(Equal(protocol.ByteCount(1000)))
-				})
-
-				It("doesn't reduce the window increment", func() {
-					controller.EnsureMinimumWindowIncrement(1)
-					Expect(controller.receiveWindowIncrement).To(Equal(oldIncrement))
-				})
-
-				It("doens't increase the increment beyong the maxReceiveWindowIncrement", func() {
-					max := controller.maxReceiveWindowIncrement
-					controller.EnsureMinimumWindowIncrement(2 * max)
-					Expect(controller.receiveWindowIncrement).To(Equal(max))
-				})
-
-				It("doesn't auto-tune the window after the increment was increased", func() {
-					setRtt(20 * time.Millisecond)
-					controller.bytesRead = 9900 // receive window is 10000
-					controller.lastWindowUpdateTime = time.Now().Add(-20 * time.Millisecond)
-					controller.EnsureMinimumWindowIncrement(912)
-					necessary, newIncrement, offset := controller.MaybeUpdateWindow()
-					Expect(necessary).To(BeTrue())
-					Expect(newIncrement).To(BeZero()) // no auto-tuning
-					Expect(offset).To(Equal(protocol.ByteCount(9900 + 912)))
-				})
 			})
 		})
 	})

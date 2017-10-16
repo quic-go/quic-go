@@ -16,8 +16,8 @@ type flowControlManager struct {
 	rttStats               *congestion.RTTStats
 	maxReceiveStreamWindow protocol.ByteCount
 
-	streamFlowController map[protocol.StreamID]*flowController
-	connFlowController   *flowController
+	streamFlowController map[protocol.StreamID]*streamFlowController
+	connFlowController   *connectionFlowController
 	mutex                sync.RWMutex
 
 	initialStreamSendWindow protocol.ByteCount
@@ -36,8 +36,8 @@ func NewFlowControlManager(
 	return &flowControlManager{
 		rttStats:               rttStats,
 		maxReceiveStreamWindow: maxReceiveStreamWindow,
-		streamFlowController:   make(map[protocol.StreamID]*flowController),
-		connFlowController:     newFlowController(0, false, protocol.ReceiveConnectionFlowControlWindow, maxReceiveConnectionWindow, 0, rttStats),
+		streamFlowController:   make(map[protocol.StreamID]*streamFlowController),
+		connFlowController:     newConnectionFlowController(protocol.ReceiveConnectionFlowControlWindow, maxReceiveConnectionWindow, 0, rttStats),
 	}
 }
 
@@ -50,7 +50,7 @@ func (f *flowControlManager) NewStream(streamID protocol.StreamID, contributesTo
 	if _, ok := f.streamFlowController[streamID]; ok {
 		return
 	}
-	f.streamFlowController[streamID] = newFlowController(streamID, contributesToConnection, protocol.ReceiveStreamFlowControlWindow, f.maxReceiveStreamWindow, f.initialStreamSendWindow, f.rttStats)
+	f.streamFlowController[streamID] = newStreamFlowController(streamID, contributesToConnection, protocol.ReceiveStreamFlowControlWindow, f.maxReceiveStreamWindow, f.initialStreamSendWindow, f.rttStats)
 }
 
 // RemoveStream removes a closed stream from flow control
@@ -233,20 +233,18 @@ func (f *flowControlManager) UpdateWindow(streamID protocol.StreamID, offset pro
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 
-	var fc *flowController
 	if streamID == 0 {
-		fc = f.connFlowController
-	} else {
-		var err error
-		fc, err = f.getFlowController(streamID)
-		if err != nil {
-			return false, err
-		}
+		return f.connFlowController.UpdateSendWindow(offset), nil
+	}
+
+	fc, err := f.getFlowController(streamID)
+	if err != nil {
+		return false, err
 	}
 	return fc.UpdateSendWindow(offset), nil
 }
 
-func (f *flowControlManager) getFlowController(streamID protocol.StreamID) (*flowController, error) {
+func (f *flowControlManager) getFlowController(streamID protocol.StreamID) (*streamFlowController, error) {
 	streamFlowController, ok := f.streamFlowController[streamID]
 	if !ok {
 		return nil, errMapAccess

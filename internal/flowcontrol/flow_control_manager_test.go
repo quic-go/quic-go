@@ -25,7 +25,6 @@ var _ = Describe("Flow Control Manager", func() {
 
 	It("creates a connection level flow controller", func() {
 		Expect(fcm.streamFlowController).To(BeEmpty())
-		Expect(fcm.connFlowController.ContributesToConnection()).To(BeFalse())
 		Expect(fcm.connFlowController.sendWindow).To(BeZero())
 		Expect(fcm.connFlowController.maxReceiveWindowIncrement).To(Equal(protocol.ByteCount(0x4000)))
 	})
