@@ -18,7 +18,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/crypto"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
-	"github.com/lucas-clemente/quic-go/internal/mocks/mocks_fc"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -142,20 +141,6 @@ func areSessionsRunning() bool {
 	return strings.Contains(b.String(), "quic-go.(*session).run")
 }
 
-type mockParamsNegotiator struct{}
-
-var _ handshake.ParamsNegotiator = &mockParamsNegotiator{}
-
-func (m *mockParamsNegotiator) GetSendStreamFlowControlWindow() protocol.ByteCount {
-	return protocol.InitialStreamFlowControlWindow
-}
-func (m *mockParamsNegotiator) GetSendConnectionFlowControlWindow() protocol.ByteCount {
-	return protocol.InitialConnectionFlowControlWindow
-}
-func (m *mockParamsNegotiator) GetMaxOutgoingStreams() uint32       { return 100 }
-func (m *mockParamsNegotiator) GetRemoteIdleTimeout() time.Duration { return time.Hour }
-func (m *mockParamsNegotiator) OmitConnectionID() bool              { return false }
-
 var _ = Describe("Session", func() {
 	var (
 		sess          *session
@@ -178,10 +163,11 @@ var _ = Describe("Session", func() {
 			_ *handshake.TransportParameters,
 			_ []protocol.VersionNumber,
 			_ func(net.Addr, *Cookie) bool,
+			_ chan<- handshake.TransportParameters,
 			aeadChangedP chan<- protocol.EncryptionLevel,
-		) (handshake.CryptoSetup, handshake.ParamsNegotiator, error) {
+		) (handshake.CryptoSetup, error) {
 			aeadChanged = aeadChangedP
-			return cryptoSetup, &mockParamsNegotiator{}, nil
+			return cryptoSetup, nil
 		}
 
 		mconn = newMockConnection()
@@ -202,8 +188,6 @@ var _ = Describe("Session", func() {
 		Expect(err).NotTo(HaveOccurred())
 		sess = pSess.(*session)
 		Expect(sess.streamsMap.openStreams).To(HaveLen(1)) // 1 stream: the crypto stream
-
-		sess.connParams = &mockParamsNegotiator{}
 	})
 
 	AfterEach(func() {
@@ -228,10 +212,11 @@ var _ = Describe("Session", func() {
 				_ *handshake.TransportParameters,
 				_ []protocol.VersionNumber,
 				cookieFunc func(net.Addr, *Cookie) bool,
+				_ chan<- handshake.TransportParameters,
 				_ chan<- protocol.EncryptionLevel,
-			) (handshake.CryptoSetup, handshake.ParamsNegotiator, error) {
+			) (handshake.CryptoSetup, error) {
 				cookieVerify = cookieFunc
-				return cryptoSetup, &mockParamsNegotiator{}, nil
+				return cryptoSetup, nil
 			}
 
 			conf := populateServerConfig(&Config{})
@@ -270,6 +255,10 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("when handling stream frames", func() {
+		BeforeEach(func() {
+			sess.streamsMap.UpdateMaxStreamLimit(100)
+		})
+
 		It("makes new streams", func() {
 			sess.handleStreamFrame(&wire.StreamFrame{
 				StreamID: 5,
@@ -464,7 +453,7 @@ var _ = Describe("Session", func() {
 
 		It("passes the byte offset to the flow controller", func() {
 			sess.streamsMap.GetOrOpenStream(5)
-			fcm := mocks_fc.NewMockFlowControlManager(mockCtrl)
+			fcm := mocks.NewMockFlowControlManager(mockCtrl)
 			sess.flowControlManager = fcm
 			fcm.EXPECT().ResetStream(protocol.StreamID(5), protocol.ByteCount(0x1337))
 			err := sess.handleRstStreamFrame(&wire.RstStreamFrame{
@@ -477,7 +466,7 @@ var _ = Describe("Session", func() {
 		It("returns errors from the flow controller", func() {
 			testErr := errors.New("flow control violation")
 			sess.streamsMap.GetOrOpenStream(5)
-			fcm := mocks_fc.NewMockFlowControlManager(mockCtrl)
+			fcm := mocks.NewMockFlowControlManager(mockCtrl)
 			sess.flowControlManager = fcm
 			fcm.EXPECT().ResetStream(protocol.StreamID(5), protocol.ByteCount(0x1337)).Return(testErr)
 			err := sess.handleRstStreamFrame(&wire.RstStreamFrame{
@@ -525,6 +514,10 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("handling WINDOW_UPDATE frames", func() {
+		BeforeEach(func() {
+			sess.flowControlManager.UpdateTransportParameters(&handshake.TransportParameters{ConnectionFlowControlWindow: 0x1000})
+		})
+
 		It("updates the Flow Control Window of a stream", func() {
 			_, err := sess.GetOrOpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
@@ -1093,7 +1086,7 @@ var _ = Describe("Session", func() {
 			It("retransmits a WindowUpdate if it hasn't already sent a WindowUpdate with a higher ByteOffset", func() {
 				_, err := sess.GetOrOpenStream(5)
 				Expect(err).ToNot(HaveOccurred())
-				fcm := mocks_fc.NewMockFlowControlManager(mockCtrl)
+				fcm := mocks.NewMockFlowControlManager(mockCtrl)
 				sess.flowControlManager = fcm
 				fcm.EXPECT().GetWindowUpdates()
 				fcm.EXPECT().GetReceiveWindow(protocol.StreamID(5)).Return(protocol.ByteCount(0x1000), nil)
@@ -1114,7 +1107,7 @@ var _ = Describe("Session", func() {
 			It("doesn't retransmit WindowUpdates if it already sent a WindowUpdate with a higher ByteOffset", func() {
 				_, err := sess.GetOrOpenStream(5)
 				Expect(err).ToNot(HaveOccurred())
-				fcm := mocks_fc.NewMockFlowControlManager(mockCtrl)
+				fcm := mocks.NewMockFlowControlManager(mockCtrl)
 				sess.flowControlManager = fcm
 				fcm.EXPECT().GetWindowUpdates()
 				fcm.EXPECT().GetReceiveWindow(protocol.StreamID(5)).Return(protocol.ByteCount(0x2000), nil)
@@ -1140,7 +1133,7 @@ var _ = Describe("Session", func() {
 				err = sess.streamsMap.DeleteClosedStreams()
 				Expect(err).ToNot(HaveOccurred())
 				_, err = sess.flowControlManager.SendWindowSize(5)
-				Expect(err).To(MatchError("Error accessing the flowController map."))
+				Expect(err).To(MatchError("Error accessing the flowController map"))
 				sph.retransmissionQueue = []*ackhandler.Packet{{
 					Frames: []wire.Frame{&wire.WindowUpdateFrame{
 						StreamID:   5,
@@ -1183,6 +1176,11 @@ var _ = Describe("Session", func() {
 
 	Context("scheduling sending", func() {
 		BeforeEach(func() {
+			sess.processTransportParameters(&handshake.TransportParameters{
+				StreamFlowControlWindow:     protocol.MaxByteCount,
+				ConnectionFlowControlWindow: protocol.MaxByteCount,
+				MaxStreams:                  1000,
+			})
 			sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure}
 		})
 
@@ -1420,16 +1418,33 @@ var _ = Describe("Session", func() {
 		close(done)
 	})
 
+	It("process transport parameters received from the peer", func() {
+		paramsChan := make(chan handshake.TransportParameters)
+		sess.paramsChan = paramsChan
+		_, err := sess.GetOrOpenStream(5)
+		Expect(err).ToNot(HaveOccurred())
+		go sess.run()
+		paramsChan <- handshake.TransportParameters{
+			MaxStreams:                  123,
+			IdleTimeout:                 90 * time.Second,
+			StreamFlowControlWindow:     0x5000,
+			ConnectionFlowControlWindow: 0x5000,
+			OmitConnectionID:            true,
+		}
+		Eventually(func() time.Duration { return sess.remoteIdleTimeout }).Should(Equal(90 * time.Second))
+		Eventually(func() uint32 { return sess.streamsMap.maxOutgoingStreams }).Should(Equal(uint32(123)))
+		Eventually(func() (protocol.ByteCount, error) { return sess.flowControlManager.SendWindowSize(5) }).Should(Equal(protocol.ByteCount(0x5000)))
+		Eventually(func() bool { return sess.packer.omitConnectionID }).Should(BeTrue())
+		Expect(sess.Close(nil)).To(Succeed())
+	})
+
 	Context("keep-alives", func() {
-		var mockPn *mocks.MockParamsNegotiator
 		// should be shorter than the local timeout for these tests
 		// otherwise we'd send a CONNECTION_CLOSE in the tests where we're testing that no PING is sent
 		remoteIdleTimeout := 20 * time.Second
 
 		BeforeEach(func() {
-			mockPn = mocks.NewMockParamsNegotiator(mockCtrl)
-			mockPn.EXPECT().GetRemoteIdleTimeout().Return(remoteIdleTimeout).AnyTimes()
-			sess.connParams = mockPn
+			sess.remoteIdleTimeout = remoteIdleTimeout
 		})
 
 		It("sends a PING", func() {
@@ -1523,6 +1538,10 @@ var _ = Describe("Session", func() {
 	}, 0.5)
 
 	Context("getting streams", func() {
+		BeforeEach(func() {
+			sess.processTransportParameters(&handshake.TransportParameters{MaxStreams: 1000})
+		})
+
 		It("returns a new stream", func() {
 			str, err := sess.GetOrOpenStream(11)
 			Expect(err).ToNot(HaveOccurred())
@@ -1653,11 +1672,12 @@ var _ = Describe("Client Session", func() {
 			_ protocol.VersionNumber,
 			_ *tls.Config,
 			_ *handshake.TransportParameters,
+			_ chan<- handshake.TransportParameters,
 			aeadChangedP chan<- protocol.EncryptionLevel,
 			_ []protocol.VersionNumber,
-		) (handshake.CryptoSetup, handshake.ParamsNegotiator, error) {
+		) (handshake.CryptoSetup, error) {
 			aeadChanged = aeadChangedP
-			return cryptoSetup, &mockParamsNegotiator{}, nil
+			return cryptoSetup, nil
 		}
 
 		mconn = newMockConnection()

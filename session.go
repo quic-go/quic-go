@@ -88,6 +88,8 @@ type session struct {
 	undecryptablePackets                   []*receivedPacket
 	receivedTooManyUndecrytablePacketsTime time.Time
 
+	// this channel is passed to the CryptoSetup and receives the transport parameters, as soon as the peer sends them
+	paramsChan <-chan handshake.TransportParameters
 	// this channel is passed to the CryptoSetup and receives the current encryption level
 	// it is closed as soon as the handshake is complete
 	aeadChanged       <-chan protocol.EncryptionLevel
@@ -100,8 +102,6 @@ type session struct {
 	// it receives at most 3 handshake events: 2 when the encryption level changes, and one error
 	handshakeChan chan<- handshakeEvent
 
-	connParams handshake.ParamsNegotiator
-
 	lastRcvdPacketNumber protocol.PacketNumber
 	// Used to calculate the next packet number from the truncated wire
 	// representation, and sent back in public reset packets
@@ -109,6 +109,7 @@ type session struct {
 
 	sessionCreationTime     time.Time
 	lastNetworkActivityTime time.Time
+	remoteIdleTimeout       time.Duration
 
 	timer *utils.Timer
 	// keepAlivePingSent stores whether a Ping frame was sent to the peer or not
@@ -166,7 +167,9 @@ func (s *session) setup(
 	negotiatedVersions []protocol.VersionNumber,
 ) (packetHandler, <-chan handshakeEvent, error) {
 	aeadChanged := make(chan protocol.EncryptionLevel, 2)
+	paramsChan := make(chan handshake.TransportParameters)
 	s.aeadChanged = aeadChanged
+	s.paramsChan = paramsChan
 	handshakeChan := make(chan handshakeEvent, 3)
 	s.handshakeChan = handshakeChan
 	s.handshakeCompleteChan = make(chan error, 1)
@@ -183,7 +186,10 @@ func (s *session) setup(
 
 	s.rttStats = &congestion.RTTStats{}
 	transportParams := &handshake.TransportParameters{
-		IdleTimeout: s.config.IdleTimeout,
+		StreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
+		ConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
+		MaxStreams:                  protocol.MaxIncomingStreams,
+		IdleTimeout:                 s.config.IdleTimeout,
 	}
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats)
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.version)
@@ -194,15 +200,16 @@ func (s *session) setup(
 			return s.config.AcceptCookie(clientAddr, cookie)
 		}
 		if s.version.UsesTLS() {
-			s.cryptoSetup, s.connParams, err = handshake.NewCryptoSetupTLSServer(
+			s.cryptoSetup, err = handshake.NewCryptoSetupTLSServer(
 				tlsConf,
 				transportParams,
+				paramsChan,
 				aeadChanged,
 				s.config.Versions,
 				s.version,
 			)
 		} else {
-			s.cryptoSetup, s.connParams, err = newCryptoSetup(
+			s.cryptoSetup, err = newCryptoSetup(
 				s.connectionID,
 				s.conn.RemoteAddr(),
 				s.version,
@@ -210,28 +217,31 @@ func (s *session) setup(
 				transportParams,
 				s.config.Versions,
 				verifySourceAddr,
+				paramsChan,
 				aeadChanged,
 			)
 		}
 	} else {
+		transportParams.OmitConnectionID = s.config.RequestConnectionIDOmission
 		if s.version.UsesTLS() {
-			s.cryptoSetup, s.connParams, err = handshake.NewCryptoSetupTLSClient(
+			s.cryptoSetup, err = handshake.NewCryptoSetupTLSClient(
 				hostname,
 				tlsConf,
 				transportParams,
+				paramsChan,
 				aeadChanged,
 				initialVersion,
 				s.config.Versions,
 				s.version,
 			)
 		} else {
-			transportParams.RequestConnectionIDOmission = s.config.RequestConnectionIDOmission
-			s.cryptoSetup, s.connParams, err = newCryptoSetupClient(
+			s.cryptoSetup, err = newCryptoSetupClient(
 				hostname,
 				s.connectionID,
 				s.version,
 				tlsConf,
 				transportParams,
+				paramsChan,
 				aeadChanged,
 				negotiatedVersions,
 			)
@@ -242,16 +252,14 @@ func (s *session) setup(
 	}
 
 	s.flowControlManager = flowcontrol.NewFlowControlManager(
-		s.connParams,
 		protocol.ByteCount(s.config.MaxReceiveStreamFlowControlWindow),
 		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),
 		s.rttStats,
 	)
-	s.streamsMap = newStreamsMap(s.newStream, s.flowControlManager.RemoveStream, s.perspective, s.connParams)
+	s.streamsMap = newStreamsMap(s.newStream, s.flowControlManager.RemoveStream, s.perspective)
 	s.streamFramer = newStreamFramer(s.streamsMap, s.flowControlManager)
 	s.packer = newPacketPacker(s.connectionID,
 		s.cryptoSetup,
-		s.connParams,
 		s.streamFramer,
 		s.perspective,
 		s.version,
@@ -318,6 +326,8 @@ runLoop:
 			// This is a bit unclean, but works properly, since the packet always
 			// begins with the public header and we never copy it.
 			putPacketBuffer(p.publicHeader.Raw)
+		case p := <-s.paramsChan:
+			s.processTransportParameters(&p)
 		case l, ok := <-aeadChanged:
 			if !ok { // the aeadChanged chan was closed. This means that the handshake is completed.
 				s.handshakeComplete = true
@@ -338,7 +348,7 @@ runLoop:
 			s.sentPacketHandler.OnAlarm()
 		}
 
-		if s.config.KeepAlive && s.handshakeComplete && time.Since(s.lastNetworkActivityTime) >= s.connParams.GetRemoteIdleTimeout()/2 {
+		if s.config.KeepAlive && s.handshakeComplete && time.Since(s.lastNetworkActivityTime) >= s.remoteIdleTimeout/2 {
 			// send the PING frame since there is no activity in the session
 			s.packer.QueueControlFrame(&wire.PingFrame{})
 			s.keepAlivePingSent = true
@@ -379,7 +389,7 @@ func (s *session) Context() context.Context {
 func (s *session) maybeResetTimer() {
 	var deadline time.Time
 	if s.config.KeepAlive && s.handshakeComplete && !s.keepAlivePingSent {
-		deadline = s.lastNetworkActivityTime.Add(s.connParams.GetRemoteIdleTimeout() / 2)
+		deadline = s.lastNetworkActivityTime.Add(s.remoteIdleTimeout / 2)
 	} else {
 		deadline = s.lastNetworkActivityTime.Add(s.config.IdleTimeout)
 	}
@@ -611,6 +621,15 @@ func (s *session) handleCloseError(closeErr closeError) error {
 		return s.sendPublicReset(s.lastRcvdPacketNumber)
 	}
 	return s.sendConnectionClose(quicErr)
+}
+
+func (s *session) processTransportParameters(params *handshake.TransportParameters) {
+	s.remoteIdleTimeout = params.IdleTimeout
+	s.flowControlManager.UpdateTransportParameters(params)
+	s.streamsMap.UpdateMaxStreamLimit(params.MaxStreams)
+	if params.OmitConnectionID {
+		s.packer.SetOmitConnectionID()
+	}
 }
 
 func (s *session) sendPacket() error {

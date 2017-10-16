@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/congestion"
-	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
@@ -14,8 +13,7 @@ type flowController struct {
 	streamID                protocol.StreamID
 	contributesToConnection bool // does the stream contribute to connection level flow control
 
-	connParams handshake.ParamsNegotiator
-	rttStats   *congestion.RTTStats
+	rttStats *congestion.RTTStats
 
 	bytesSent  protocol.ByteCount
 	sendWindow protocol.ByteCount
@@ -36,34 +34,24 @@ var ErrReceivedSmallerByteOffset = errors.New("Received a smaller byte offset")
 func newFlowController(
 	streamID protocol.StreamID,
 	contributesToConnection bool,
-	connParams handshake.ParamsNegotiator,
 	receiveWindow protocol.ByteCount,
 	maxReceiveWindow protocol.ByteCount,
+	initialSendWindow protocol.ByteCount,
 	rttStats *congestion.RTTStats,
 ) *flowController {
 	return &flowController{
 		streamID:                  streamID,
 		contributesToConnection:   contributesToConnection,
-		connParams:                connParams,
 		rttStats:                  rttStats,
 		receiveWindow:             receiveWindow,
 		receiveWindowIncrement:    receiveWindow,
 		maxReceiveWindowIncrement: maxReceiveWindow,
+		sendWindow:                initialSendWindow,
 	}
 }
 
 func (c *flowController) ContributesToConnection() bool {
 	return c.contributesToConnection
-}
-
-func (c *flowController) getSendWindow() protocol.ByteCount {
-	if c.sendWindow == 0 {
-		if c.streamID == 0 {
-			return c.connParams.GetSendConnectionFlowControlWindow()
-		}
-		return c.connParams.GetSendStreamFlowControlWindow()
-	}
-	return c.sendWindow
 }
 
 func (c *flowController) AddBytesSent(n protocol.ByteCount) {
@@ -81,16 +69,11 @@ func (c *flowController) UpdateSendWindow(newOffset protocol.ByteCount) bool {
 }
 
 func (c *flowController) SendWindowSize() protocol.ByteCount {
-	sendWindow := c.getSendWindow()
-
-	if c.bytesSent > sendWindow { // should never happen, but make sure we don't do an underflow here
+	// this only happens during connection establishment, when data is sent before we receive the peer's transport parameters
+	if c.bytesSent > c.sendWindow {
 		return 0
 	}
-	return sendWindow - c.bytesSent
-}
-
-func (c *flowController) SendWindowOffset() protocol.ByteCount {
-	return c.getSendWindow()
+	return c.sendWindow - c.bytesSent
 }
 
 // UpdateHighestReceived updates the highestReceived value, if the byteOffset is higher

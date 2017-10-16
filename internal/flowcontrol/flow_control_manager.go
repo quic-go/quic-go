@@ -13,32 +13,31 @@ import (
 )
 
 type flowControlManager struct {
-	connParams             handshake.ParamsNegotiator
 	rttStats               *congestion.RTTStats
 	maxReceiveStreamWindow protocol.ByteCount
 
 	streamFlowController map[protocol.StreamID]*flowController
 	connFlowController   *flowController
 	mutex                sync.RWMutex
+
+	initialStreamSendWindow protocol.ByteCount
 }
 
 var _ FlowControlManager = &flowControlManager{}
 
-var errMapAccess = errors.New("Error accessing the flowController map.")
+var errMapAccess = errors.New("Error accessing the flowController map")
 
 // NewFlowControlManager creates a new flow control manager
 func NewFlowControlManager(
-	connParams handshake.ParamsNegotiator,
 	maxReceiveStreamWindow protocol.ByteCount,
 	maxReceiveConnectionWindow protocol.ByteCount,
 	rttStats *congestion.RTTStats,
 ) FlowControlManager {
 	return &flowControlManager{
-		connParams:             connParams,
 		rttStats:               rttStats,
 		maxReceiveStreamWindow: maxReceiveStreamWindow,
 		streamFlowController:   make(map[protocol.StreamID]*flowController),
-		connFlowController:     newFlowController(0, false, connParams, protocol.ReceiveConnectionFlowControlWindow, maxReceiveConnectionWindow, rttStats),
+		connFlowController:     newFlowController(0, false, protocol.ReceiveConnectionFlowControlWindow, maxReceiveConnectionWindow, 0, rttStats),
 	}
 }
 
@@ -51,7 +50,7 @@ func (f *flowControlManager) NewStream(streamID protocol.StreamID, contributesTo
 	if _, ok := f.streamFlowController[streamID]; ok {
 		return
 	}
-	f.streamFlowController[streamID] = newFlowController(streamID, contributesToConnection, f.connParams, protocol.ReceiveStreamFlowControlWindow, f.maxReceiveStreamWindow, f.rttStats)
+	f.streamFlowController[streamID] = newFlowController(streamID, contributesToConnection, protocol.ReceiveStreamFlowControlWindow, f.maxReceiveStreamWindow, f.initialStreamSendWindow, f.rttStats)
 }
 
 // RemoveStream removes a closed stream from flow control
@@ -59,6 +58,17 @@ func (f *flowControlManager) RemoveStream(streamID protocol.StreamID) {
 	f.mutex.Lock()
 	delete(f.streamFlowController, streamID)
 	f.mutex.Unlock()
+}
+
+func (f *flowControlManager) UpdateTransportParameters(params *handshake.TransportParameters) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+
+	f.connFlowController.UpdateSendWindow(params.ConnectionFlowControlWindow)
+	f.initialStreamSendWindow = params.StreamFlowControlWindow
+	for _, fc := range f.streamFlowController {
+		fc.UpdateSendWindow(params.StreamFlowControlWindow)
+	}
 }
 
 // ResetStream should be called when receiving a RstStreamFrame
@@ -233,7 +243,6 @@ func (f *flowControlManager) UpdateWindow(streamID protocol.StreamID, offset pro
 			return false, err
 		}
 	}
-
 	return fc.UpdateSendWindow(offset), nil
 }
 

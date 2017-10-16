@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/congestion"
-	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -19,61 +18,28 @@ var _ = Describe("Flow controller", func() {
 	})
 
 	Context("Constructor", func() {
-		var rttStats *congestion.RTTStats
-		var mockPn *mocks.MockParamsNegotiator
+		rttStats := &congestion.RTTStats{}
 
-		receiveStreamWindow := protocol.ByteCount(2000)
-		receiveConnectionWindow := protocol.ByteCount(4000)
-		maxReceiveStreamWindow := protocol.ByteCount(8000)
-		maxReceiveConnectionWindow := protocol.ByteCount(9000)
-
-		BeforeEach(func() {
-			mockPn = mocks.NewMockParamsNegotiator(mockCtrl)
-			mockPn.EXPECT().GetSendStreamFlowControlWindow().AnyTimes().Return(protocol.ByteCount(1000))
-			mockPn.EXPECT().GetSendConnectionFlowControlWindow().AnyTimes().Return(protocol.ByteCount(3000))
-			rttStats = &congestion.RTTStats{}
-		})
-
-		It("reads the stream send and receive windows when acting as stream-level flow controller", func() {
-			fc := newFlowController(5, true, mockPn, receiveStreamWindow, maxReceiveStreamWindow, rttStats)
+		It("sets the send and receive windows", func() {
+			receiveWindow := protocol.ByteCount(2000)
+			maxReceiveWindow := protocol.ByteCount(3000)
+			sendWindow := protocol.ByteCount(4000)
+			fc := newFlowController(5, true, receiveWindow, maxReceiveWindow, sendWindow, rttStats)
 			Expect(fc.streamID).To(Equal(protocol.StreamID(5)))
-			Expect(fc.receiveWindow).To(Equal(receiveStreamWindow))
-			Expect(fc.maxReceiveWindowIncrement).To(Equal(maxReceiveStreamWindow))
-		})
-
-		It("reads the stream send and receive windows when acting as connection-level flow controller", func() {
-			fc := newFlowController(0, false, mockPn, receiveConnectionWindow, maxReceiveConnectionWindow, rttStats)
-			Expect(fc.streamID).To(Equal(protocol.StreamID(0)))
-			Expect(fc.receiveWindow).To(Equal(receiveConnectionWindow))
-			Expect(fc.maxReceiveWindowIncrement).To(Equal(maxReceiveConnectionWindow))
-		})
-
-		It("does not set the stream flow control windows for sending", func() {
-			fc := newFlowController(5, true, mockPn, protocol.MaxByteCount, protocol.MaxByteCount, rttStats)
-			Expect(fc.sendWindow).To(BeZero())
-		})
-
-		It("does not set the connection flow control windows for sending", func() {
-			fc := newFlowController(0, false, mockPn, protocol.MaxByteCount, protocol.MaxByteCount, rttStats)
-			Expect(fc.sendWindow).To(BeZero())
+			Expect(fc.receiveWindow).To(Equal(receiveWindow))
+			Expect(fc.maxReceiveWindowIncrement).To(Equal(maxReceiveWindow))
+			Expect(fc.sendWindow).To(Equal(sendWindow))
 		})
 
 		It("says if it contributes to connection-level flow control", func() {
-			fc := newFlowController(1, false, mockPn, protocol.MaxByteCount, protocol.MaxByteCount, rttStats)
+			fc := newFlowController(1, false, protocol.MaxByteCount, protocol.MaxByteCount, protocol.MaxByteCount, rttStats)
 			Expect(fc.ContributesToConnection()).To(BeFalse())
-			fc = newFlowController(5, true, mockPn, protocol.MaxByteCount, protocol.MaxByteCount, rttStats)
+			fc = newFlowController(5, true, protocol.MaxByteCount, protocol.MaxByteCount, protocol.MaxByteCount, rttStats)
 			Expect(fc.ContributesToConnection()).To(BeTrue())
 		})
 	})
 
 	Context("send flow control", func() {
-		var mockPn *mocks.MockParamsNegotiator
-
-		BeforeEach(func() {
-			mockPn = mocks.NewMockParamsNegotiator(mockCtrl)
-			controller.connParams = mockPn
-		})
-
 		It("adds bytes sent", func() {
 			controller.bytesSent = 5
 			controller.AddBytesSent(6)
@@ -89,14 +55,14 @@ var _ = Describe("Flow controller", func() {
 		It("gets the offset of the flow control window", func() {
 			controller.bytesSent = 5
 			controller.sendWindow = 12
-			Expect(controller.SendWindowOffset()).To(Equal(protocol.ByteCount(12)))
+			Expect(controller.sendWindow).To(Equal(protocol.ByteCount(12)))
 		})
 
 		It("updates the size of the flow control window", func() {
 			controller.bytesSent = 5
 			updateSuccessful := controller.UpdateSendWindow(15)
 			Expect(updateSuccessful).To(BeTrue())
-			Expect(controller.SendWindowOffset()).To(Equal(protocol.ByteCount(15)))
+			Expect(controller.sendWindow).To(Equal(protocol.ByteCount(15)))
 			Expect(controller.SendWindowSize()).To(Equal(protocol.ByteCount(15 - 5)))
 		})
 
@@ -107,36 +73,6 @@ var _ = Describe("Flow controller", func() {
 			updateSuccessful = controller.UpdateSendWindow(10)
 			Expect(updateSuccessful).To(BeFalse())
 			Expect(controller.SendWindowSize()).To(Equal(protocol.ByteCount(20)))
-		})
-
-		It("asks the ConnectionParametersManager for the stream flow control window size", func() {
-			controller.streamID = 5
-			mockPn.EXPECT().GetSendStreamFlowControlWindow().Return(protocol.ByteCount(1000))
-			Expect(controller.getSendWindow()).To(Equal(protocol.ByteCount(1000)))
-			// make sure the value is not cached
-			mockPn.EXPECT().GetSendStreamFlowControlWindow().Return(protocol.ByteCount(2000))
-			Expect(controller.getSendWindow()).To(Equal(protocol.ByteCount(2000)))
-		})
-
-		It("stops asking the ConnectionParametersManager for the flow control stream window size once a window update has arrived", func() {
-			controller.streamID = 5
-			Expect(controller.UpdateSendWindow(8000))
-			Expect(controller.getSendWindow()).To(Equal(protocol.ByteCount(8000)))
-		})
-
-		It("asks the ConnectionParametersManager for the connection flow control window size", func() {
-			controller.streamID = 0
-			mockPn.EXPECT().GetSendConnectionFlowControlWindow().Return(protocol.ByteCount(3000))
-			Expect(controller.getSendWindow()).To(Equal(protocol.ByteCount(3000)))
-			// make sure the value is not cached
-			mockPn.EXPECT().GetSendConnectionFlowControlWindow().Return(protocol.ByteCount(5000))
-			Expect(controller.getSendWindow()).To(Equal(protocol.ByteCount(5000)))
-		})
-
-		It("stops asking the ConnectionParametersManager for the connection flow control window size once a window update has arrived", func() {
-			controller.streamID = 0
-			Expect(controller.UpdateSendWindow(7000))
-			Expect(controller.getSendWindow()).To(Equal(protocol.ByteCount(7000)))
 		})
 	})
 

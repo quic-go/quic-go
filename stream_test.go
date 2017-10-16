@@ -9,7 +9,7 @@ import (
 
 	"os"
 
-	"github.com/lucas-clemente/quic-go/internal/mocks/mocks_fc"
+	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 
@@ -30,7 +30,7 @@ var _ = Describe("Stream", func() {
 		resetCalledForStream protocol.StreamID
 		resetCalledAtOffset  protocol.ByteCount
 
-		mockFcm *mocks_fc.MockFlowControlManager
+		mockFcm *mocks.MockFlowControlManager
 	)
 
 	// in the tests for the stream deadlines we set a deadline
@@ -58,7 +58,7 @@ var _ = Describe("Stream", func() {
 	BeforeEach(func() {
 		onDataCalled = false
 		resetCalled = false
-		mockFcm = mocks_fc.NewMockFlowControlManager(mockCtrl)
+		mockFcm = mocks.NewMockFlowControlManager(mockCtrl)
 		str = newStream(streamID, onData, onReset, mockFcm)
 
 		timeout := scaleDuration(250 * time.Millisecond)

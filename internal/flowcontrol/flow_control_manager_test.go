@@ -3,8 +3,9 @@ package flowcontrol
 import (
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/handshake"
+
 	"github.com/lucas-clemente/quic-go/congestion"
-	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 	. "github.com/onsi/ginkgo"
@@ -15,13 +16,18 @@ var _ = Describe("Flow Control Manager", func() {
 	var fcm *flowControlManager
 
 	BeforeEach(func() {
-		mockPn := mocks.NewMockParamsNegotiator(mockCtrl)
-		fcm = NewFlowControlManager(mockPn, protocol.MaxByteCount, protocol.MaxByteCount, &congestion.RTTStats{}).(*flowControlManager)
+		fcm = NewFlowControlManager(
+			0x2000, // maxReceiveStreamWindow
+			0x4000, // maxReceiveConnectionWindow
+			&congestion.RTTStats{},
+		).(*flowControlManager)
 	})
 
 	It("creates a connection level flow controller", func() {
-		Expect(fcm.streamFlowController).ToNot(HaveKey(protocol.StreamID(0)))
+		Expect(fcm.streamFlowController).To(BeEmpty())
 		Expect(fcm.connFlowController.ContributesToConnection()).To(BeFalse())
+		Expect(fcm.connFlowController.sendWindow).To(BeZero())
+		Expect(fcm.connFlowController.maxReceiveWindowIncrement).To(Equal(protocol.ByteCount(0x4000)))
 	})
 
 	Context("creating new streams", func() {
@@ -31,6 +37,19 @@ var _ = Describe("Flow Control Manager", func() {
 			fc := fcm.streamFlowController[5]
 			Expect(fc.streamID).To(Equal(protocol.StreamID(5)))
 			Expect(fc.ContributesToConnection()).To(BeFalse())
+			// the transport parameters have not yet been received. Start with a window of size 0
+			Expect(fc.sendWindow).To(BeZero())
+			Expect(fc.maxReceiveWindowIncrement).To(Equal(protocol.ByteCount(0x2000)))
+		})
+
+		It("creates a new stream after it has received transport parameters", func() {
+			fcm.UpdateTransportParameters(&handshake.TransportParameters{
+				StreamFlowControlWindow: 0x3000,
+			})
+			fcm.NewStream(5, false)
+			Expect(fcm.streamFlowController).To(HaveKey(protocol.StreamID(5)))
+			fc := fcm.streamFlowController[5]
+			Expect(fc.sendWindow).To(Equal(protocol.ByteCount(0x3000)))
 		})
 
 		It("doesn't create a new flow controller if called for an existing stream", func() {
@@ -49,6 +68,16 @@ var _ = Describe("Flow Control Manager", func() {
 		Expect(fcm.streamFlowController).To(HaveKey(protocol.StreamID(5)))
 		fcm.RemoveStream(5)
 		Expect(fcm.streamFlowController).ToNot(HaveKey(protocol.StreamID(5)))
+	})
+
+	It("updates the send windows for existing streams when receiveing the transport parameters", func() {
+		fcm.NewStream(5, false)
+		fcm.UpdateTransportParameters(&handshake.TransportParameters{
+			StreamFlowControlWindow:     0x3000,
+			ConnectionFlowControlWindow: 0x6000,
+		})
+		Expect(fcm.connFlowController.sendWindow).To(Equal(protocol.ByteCount(0x6000)))
+		Expect(fcm.streamFlowController[5].sendWindow).To(Equal(protocol.ByteCount(0x3000)))
 	})
 
 	Context("receiving data", func() {

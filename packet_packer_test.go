@@ -7,7 +7,6 @@ import (
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
-	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	. "github.com/onsi/ginkgo"
@@ -61,19 +60,15 @@ var _ = Describe("Packet packer", func() {
 	)
 
 	BeforeEach(func() {
-		mockPn := mocks.NewMockParamsNegotiator(mockCtrl)
-		mockPn.EXPECT().OmitConnectionID().Return(false).AnyTimes()
-
 		cryptoStream = &stream{}
 
-		streamsMap := newStreamsMap(nil, nil, protocol.PerspectiveServer, nil)
+		streamsMap := newStreamsMap(nil, nil, protocol.PerspectiveServer)
 		streamsMap.streams[1] = cryptoStream
 		streamsMap.openStreams = []protocol.StreamID{1}
 		streamFramer = newStreamFramer(streamsMap, nil)
 
 		packer = &packetPacker{
 			cryptoSetup:           &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure},
-			connParams:            mockPn,
 			connectionID:          0x1337,
 			packetNumberGenerator: newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
 			streamFramer:          streamFramer,
@@ -232,6 +227,20 @@ var _ = Describe("Packet packer", func() {
 		p, err := packer.PackPacket()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(p).ToNot(BeNil())
+	})
+
+	It("it omits the connection ID for forward-secure packets", func() {
+		ph := packer.getPublicHeader(protocol.EncryptionForwardSecure)
+		Expect(ph.OmitConnectionID).To(BeFalse())
+		packer.SetOmitConnectionID()
+		ph = packer.getPublicHeader(protocol.EncryptionForwardSecure)
+		Expect(ph.OmitConnectionID).To(BeTrue())
+	})
+
+	It("doesn't omit the connection ID for non-forware-secure packets", func() {
+		packer.SetOmitConnectionID()
+		ph := packer.getPublicHeader(protocol.EncryptionSecure)
+		Expect(ph.OmitConnectionID).To(BeFalse())
 	})
 
 	It("adds the version flag to the public header before the crypto handshake is finished", func() {

@@ -1,6 +1,7 @@
 package flowcontrol
 
 import "github.com/lucas-clemente/quic-go/internal/protocol"
+import "github.com/lucas-clemente/quic-go/internal/handshake"
 
 // WindowUpdate provides the data for WindowUpdateFrames.
 type WindowUpdate struct {
@@ -12,6 +13,7 @@ type WindowUpdate struct {
 type FlowControlManager interface {
 	NewStream(streamID protocol.StreamID, contributesToConnectionFlow bool)
 	RemoveStream(streamID protocol.StreamID)
+	UpdateTransportParameters(*handshake.TransportParameters)
 	// methods needed for receiving data
 	ResetStream(streamID protocol.StreamID, byteOffset protocol.ByteCount) error
 	UpdateHighestReceived(streamID protocol.StreamID, byteOffset protocol.ByteCount) error

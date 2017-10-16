@@ -3,7 +3,6 @@ package quic
 import (
 	"errors"
 
-	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 	. "github.com/onsi/ginkgo"
@@ -11,22 +10,16 @@ import (
 )
 
 var _ = Describe("Streams Map", func() {
-	const maxOutgoingStreams = 60
-
 	var (
-		m      *streamsMap
-		mockPn *mocks.MockParamsNegotiator
+		m *streamsMap
 	)
 
 	setNewStreamsMap := func(p protocol.Perspective) {
-		mockPn = mocks.NewMockParamsNegotiator(mockCtrl)
-		mockPn.EXPECT().GetMaxOutgoingStreams().AnyTimes().Return(uint32(maxOutgoingStreams))
-
 		newStream := func(id protocol.StreamID) *stream {
 			return newStream(id, func() {}, nil, nil)
 		}
 		removeStreamCallback := func(protocol.StreamID) {}
-		m = newStreamsMap(newStream, removeStreamCallback, p, mockPn)
+		m = newStreamsMap(newStream, removeStreamCallback, p)
 	}
 
 	AfterEach(func() {
@@ -132,7 +125,13 @@ var _ = Describe("Streams Map", func() {
 			})
 
 			Context("server-side streams", func() {
+				It("doesn't allow opening streams before receiving the transport parameters", func() {
+					_, err := m.OpenStream()
+					Expect(err).To(MatchError(qerr.TooManyOpenStreams))
+				})
+
 				It("opens a stream 2 first", func() {
+					m.UpdateMaxStreamLimit(100)
 					s, err := m.OpenStream()
 					Expect(err).ToNot(HaveOccurred())
 					Expect(s).ToNot(BeNil())
@@ -149,6 +148,7 @@ var _ = Describe("Streams Map", func() {
 				})
 
 				It("doesn't reopen an already closed stream", func() {
+					m.UpdateMaxStreamLimit(100)
 					str, err := m.OpenStream()
 					Expect(err).ToNot(HaveOccurred())
 					Expect(str.StreamID()).To(Equal(protocol.StreamID(2)))
@@ -160,6 +160,12 @@ var _ = Describe("Streams Map", func() {
 				})
 
 				Context("counting streams", func() {
+					const maxOutgoingStreams = 50
+
+					BeforeEach(func() {
+						m.UpdateMaxStreamLimit(maxOutgoingStreams)
+					})
+
 					It("errors when too many streams are opened", func() {
 						for i := 1; i <= maxOutgoingStreams; i++ {
 							_, err := m.OpenStream()
@@ -190,6 +196,12 @@ var _ = Describe("Streams Map", func() {
 				})
 
 				Context("opening streams synchronously", func() {
+					const maxOutgoingStreams = 10
+
+					BeforeEach(func() {
+						m.UpdateMaxStreamLimit(maxOutgoingStreams)
+					})
+
 					openMaxNumStreams := func() {
 						for i := 1; i <= maxOutgoingStreams; i++ {
 							_, err := m.OpenStream()

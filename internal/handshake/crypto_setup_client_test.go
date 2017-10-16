@@ -79,6 +79,7 @@ var _ = Describe("Client Crypto Setup", func() {
 		keyDerivationCalledWith *keyDerivationValues
 		shloMap                 map[Tag][]byte
 		aeadChanged             chan protocol.EncryptionLevel
+		paramsChan              chan TransportParameters
 	)
 
 	BeforeEach(func() {
@@ -108,13 +109,16 @@ var _ = Describe("Client Crypto Setup", func() {
 		stream = newMockStream()
 		certManager = &mockCertManager{}
 		version := protocol.Version37
+		// use a buffered channel here, so that we can parse a SHLO without having to receive the TransportParameters to avoid blocking
+		paramsChan = make(chan TransportParameters, 1)
 		aeadChanged = make(chan protocol.EncryptionLevel, 2)
-		csInt, _, err := NewCryptoSetupClient(
+		csInt, err := NewCryptoSetupClient(
 			"hostname",
 			0,
 			version,
 			nil,
 			&TransportParameters{IdleTimeout: protocol.DefaultIdleTimeout},
+			paramsChan,
 			aeadChanged,
 			nil,
 		)
@@ -222,7 +226,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			It("returns the right error when detecting a downgrade attack", func() {
 				cs.negotiatedVersions = []protocol.VersionNumber{protocol.VersionWhatever}
 				cs.receivedSecurePacket = true
-				err := cs.handleSHLOMessage(map[Tag][]byte{
+				_, err := cs.handleSHLOMessage(map[Tag][]byte{
 					TagPUBS: []byte{0},
 					TagVER:  []byte{0, 1},
 				})
@@ -385,7 +389,7 @@ var _ = Describe("Client Crypto Setup", func() {
 
 		It("rejects unencrypted SHLOs", func() {
 			cs.receivedSecurePacket = false
-			err := cs.handleSHLOMessage(shloMap)
+			_, err := cs.handleSHLOMessage(shloMap)
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoEncryptionLevelIncorrect, "unencrypted SHLO message")))
 			Expect(aeadChanged).ToNot(Receive())
 			Expect(aeadChanged).ToNot(BeClosed())
@@ -393,14 +397,14 @@ var _ = Describe("Client Crypto Setup", func() {
 
 		It("rejects SHLOs without a PUBS", func() {
 			delete(shloMap, TagPUBS)
-			err := cs.handleSHLOMessage(shloMap)
+			_, err := cs.handleSHLOMessage(shloMap)
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoMessageParameterNotFound, "PUBS")))
 			Expect(aeadChanged).ToNot(BeClosed())
 		})
 
 		It("rejects SHLOs without a version list", func() {
 			delete(shloMap, TagVER)
-			err := cs.handleSHLOMessage(shloMap)
+			_, err := cs.handleSHLOMessage(shloMap)
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "server hello missing version list")))
 			Expect(aeadChanged).ToNot(BeClosed())
 		})
@@ -412,36 +416,58 @@ var _ = Describe("Client Crypto Setup", func() {
 			b := &bytes.Buffer{}
 			utils.LittleEndian.WriteUint32(b, protocol.VersionNumberToTag(ver))
 			shloMap[TagVER] = b.Bytes()
-			err := cs.handleSHLOMessage(shloMap)
+			_, err := cs.handleSHLOMessage(shloMap)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
 		It("reads the server nonce, if set", func() {
 			shloMap[TagSNO] = []byte("server nonce")
-			err := cs.handleSHLOMessage(shloMap)
+			_, err := cs.handleSHLOMessage(shloMap)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.sno).To(Equal(shloMap[TagSNO]))
 		})
 
 		It("creates a forwardSecureAEAD", func() {
 			shloMap[TagSNO] = []byte("server nonce")
-			err := cs.handleSHLOMessage(shloMap)
+			_, err := cs.handleSHLOMessage(shloMap)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.forwardSecureAEAD).ToNot(BeNil())
-			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionForwardSecure)))
-			Expect(aeadChanged).To(BeClosed())
 		})
 
 		It("reads the connection paramaters", func() {
 			shloMap[TagICSL] = []byte{13, 0, 0, 0} // 13 seconds
-			err := cs.handleSHLOMessage(shloMap)
+			params, err := cs.handleSHLOMessage(shloMap)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(cs.params.GetRemoteIdleTimeout()).To(Equal(13 * time.Second))
+			Expect(params.IdleTimeout).To(Equal(13 * time.Second))
+		})
+
+		It("closes the aeadChanged when receiving an SHLO", func() {
+			HandshakeMessage{Tag: TagSHLO, Data: shloMap}.Write(&stream.dataToRead)
+			go func() {
+				defer GinkgoRecover()
+				err := cs.HandleCryptoStream(stream)
+				Expect(err).ToNot(HaveOccurred())
+			}()
+			Eventually(aeadChanged).Should(Receive(Equal(protocol.EncryptionForwardSecure)))
+			Eventually(aeadChanged).Should(BeClosed())
+		})
+
+		It("passes the transport parameters on the channel", func() {
+			shloMap[TagSFCW] = []byte{0x0d, 0x00, 0xdf, 0xba}
+			HandshakeMessage{Tag: TagSHLO, Data: shloMap}.Write(&stream.dataToRead)
+			go func() {
+				defer GinkgoRecover()
+				err := cs.HandleCryptoStream(stream)
+				Expect(err).ToNot(HaveOccurred())
+			}()
+			var params TransportParameters
+			Eventually(paramsChan).Should(Receive(&params))
+			Expect(params.StreamFlowControlWindow).To(Equal(protocol.ByteCount(0xbadf000d)))
 		})
 
 		It("errors if it can't read a connection parameter", func() {
 			shloMap[TagICSL] = []byte{3, 0, 0} // 1 byte too short
-			err := cs.handleSHLOMessage(shloMap)
+			_, err := cs.handleSHLOMessage(shloMap)
 			Expect(err).To(MatchError(qerr.InvalidCryptoMessageParameter))
 		})
 	})
@@ -488,15 +514,14 @@ var _ = Describe("Client Crypto Setup", func() {
 		})
 
 		It("requests to omit the connection ID", func() {
-			cs.requestConnIDOmission = true
+			cs.params.OmitConnectionID = true
 			tags, err := cs.getTags()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(tags).To(HaveKeyWithValue(TagTCID, []byte{0, 0, 0, 0}))
 		})
 
 		It("adds the tags returned from the connectionParametersManager to the CHLO", func() {
-			pnTags, err := cs.params.GetHelloMap()
-			Expect(err).ToNot(HaveOccurred())
+			pnTags := cs.params.getHelloMap()
 			Expect(pnTags).ToNot(BeEmpty())
 			tags, err := cs.getTags()
 			Expect(err).ToNot(HaveOccurred())
@@ -588,7 +613,7 @@ var _ = Describe("Client Crypto Setup", func() {
 
 		doSHLO := func() {
 			cs.receivedSecurePacket = true
-			err := cs.handleSHLOMessage(shloMap)
+			_, err := cs.handleSHLOMessage(shloMap)
 			Expect(err).ToNot(HaveOccurred())
 		}
 

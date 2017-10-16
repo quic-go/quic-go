@@ -2,7 +2,6 @@ package handshake
 
 import (
 	"io"
-	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
@@ -24,10 +23,4 @@ type CryptoSetup interface {
 	GetSealer() (protocol.EncryptionLevel, Sealer)
 	GetSealerWithEncryptionLevel(protocol.EncryptionLevel) (Sealer, error)
 	GetSealerForCryptoStream() (protocol.EncryptionLevel, Sealer)
-}
-
-// TransportParameters are parameters sent to the peer during the handshake
-type TransportParameters struct {
-	RequestConnectionIDOmission bool
-	IdleTimeout                 time.Duration
 }

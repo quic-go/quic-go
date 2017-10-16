@@ -6,25 +6,6 @@ import (
 )
 
 var _ = Describe("TLS extension body", func() {
-	// 	var server, client mint.AppExtensionHandler
-	// 	var el mint.ExtensionList
-
-	// 	BeforeEach(func() {
-	// 		server = &extensionHandler{perspective: protocol.PerspectiveServer}
-	// 		client = &extensionHandler{perspective: protocol.PerspectiveClient}
-	// 		// el = make(mint.ExtensionList, 0)
-	// 		// TODO: initialize el with some dummy extensions
-	// 	})
-
-	// 	It("writes and reads a ClientHello", func() {
-	// 		err := client.Send(mint.HandshakeTypeClientHello, &el)
-	// 		Expect(err).ToNot(HaveOccurred())
-	// 		ch := &tlsExtensionBody{}
-	// 		found := el.Find(ch)
-	// 		Expect(found).To(BeTrue())
-	// 		err = server.Receive(mint.HandshakeTypeClientHello, &el)
-	// 		Expect(err).ToNot(HaveOccurred())
-	// 	})
 	var extBody *tlsExtensionBody
 
 	BeforeEach(func() {
