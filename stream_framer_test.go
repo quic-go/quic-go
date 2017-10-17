@@ -3,7 +3,9 @@ package quic
 import (
 	"bytes"
 
+	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
+
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	. "github.com/onsi/ginkgo"
@@ -20,8 +22,8 @@ var _ = Describe("Stream Framer", func() {
 		retransmittedFrame1, retransmittedFrame2 *wire.StreamFrame
 		framer                                   *streamFramer
 		streamsMap                               *streamsMap
-		stream1, stream2                         *stream
-		mockFcm                                  *mocks.MockFlowControlManager
+		stream1, stream2                         *mocks.MockStreamI
+		connFC                                   *mocks.MockConnectionFlowController
 	)
 
 	BeforeEach(func() {
@@ -34,16 +36,25 @@ var _ = Describe("Stream Framer", func() {
 			Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
 		}
 
-		stream1 = &stream{streamID: id1}
-		stream2 = &stream{streamID: id2}
+		stream1 = mocks.NewMockStreamI(mockCtrl)
+		stream1.EXPECT().StreamID().Return(protocol.StreamID(5)).AnyTimes()
+		stream2 = mocks.NewMockStreamI(mockCtrl)
+		stream2.EXPECT().StreamID().Return(protocol.StreamID(6)).AnyTimes()
 
-		streamsMap = newStreamsMap(nil, nil, protocol.PerspectiveServer)
+		streamsMap = newStreamsMap(nil, protocol.PerspectiveServer)
 		streamsMap.putStream(stream1)
 		streamsMap.putStream(stream2)
 
-		mockFcm = mocks.NewMockFlowControlManager(mockCtrl)
-		framer = newStreamFramer(streamsMap, mockFcm)
+		connFC = mocks.NewMockConnectionFlowController(mockCtrl)
+		framer = newStreamFramer(streamsMap, connFC)
 	})
+
+	setNoData := func(str *mocks.MockStreamI) {
+		str.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(0)).AnyTimes()
+		str.EXPECT().GetDataForWriting(gomock.Any()).Return(nil).AnyTimes()
+		str.EXPECT().ShouldSendFin().Return(false).AnyTimes()
+		str.EXPECT().GetWriteOffset().AnyTimes()
+	}
 
 	It("says if it has retransmissions", func() {
 		Expect(framer.HasFramesForRetransmission()).To(BeFalse())
@@ -52,6 +63,8 @@ var _ = Describe("Stream Framer", func() {
 	})
 
 	It("sets the DataLenPresent for dequeued retransmitted frames", func() {
+		setNoData(stream1)
+		setNoData(stream2)
 		framer.AddFrameForRetransmission(retransmittedFrame1)
 		fs := framer.PopStreamFrames(protocol.MaxByteCount)
 		Expect(fs).To(HaveLen(1))
@@ -59,21 +72,35 @@ var _ = Describe("Stream Framer", func() {
 	})
 
 	It("sets the DataLenPresent for dequeued normal frames", func() {
-		mockFcm.EXPECT().SendWindowSize(id1).Return(protocol.MaxByteCount, nil)
-		mockFcm.EXPECT().AddBytesSent(id1, protocol.ByteCount(6))
-		mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-		stream1.dataForWriting = []byte("foobar")
+		connFC.EXPECT().IsBlocked()
+		setNoData(stream2)
+		stream1.EXPECT().GetWriteOffset()
+		stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(8))
+		stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobar"))
+		stream1.EXPECT().IsFlowControlBlocked()
+		stream1.EXPECT().ShouldSendFin()
 		fs := framer.PopStreamFrames(protocol.MaxByteCount)
 		Expect(fs).To(HaveLen(1))
 		Expect(fs[0].DataLenPresent).To(BeTrue())
 	})
 
 	Context("Popping", func() {
+		BeforeEach(func() {
+			// nothing is blocked here
+			connFC.EXPECT().IsBlocked().AnyTimes()
+			stream1.EXPECT().IsFlowControlBlocked().Return(false).AnyTimes()
+			stream2.EXPECT().IsFlowControlBlocked().Return(false).AnyTimes()
+		})
+
 		It("returns nil when popping an empty framer", func() {
+			setNoData(stream1)
+			setNoData(stream2)
 			Expect(framer.PopStreamFrames(1000)).To(BeEmpty())
 		})
 
 		It("pops frames for retransmission", func() {
+			setNoData(stream1)
+			setNoData(stream2)
 			framer.AddFrameForRetransmission(retransmittedFrame1)
 			framer.AddFrameForRetransmission(retransmittedFrame2)
 			fs := framer.PopStreamFrames(1000)
@@ -84,75 +111,71 @@ var _ = Describe("Stream Framer", func() {
 		})
 
 		It("returns normal frames", func() {
-			mockFcm.EXPECT().SendWindowSize(id1).Return(protocol.MaxByteCount, nil)
-			mockFcm.EXPECT().AddBytesSent(id1, protocol.ByteCount(6))
-			mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-			stream1.dataForWriting = []byte("foobar")
+			stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobar"))
+			stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(6))
+			stream1.EXPECT().GetWriteOffset()
+			stream1.EXPECT().ShouldSendFin()
+			setNoData(stream2)
 			fs := framer.PopStreamFrames(1000)
 			Expect(fs).To(HaveLen(1))
-			Expect(fs[0].StreamID).To(Equal(stream1.streamID))
+			Expect(fs[0].StreamID).To(Equal(stream1.StreamID()))
 			Expect(fs[0].Data).To(Equal([]byte("foobar")))
-			Expect(framer.PopStreamFrames(1000)).To(BeEmpty())
-		})
-
-		It("returns multiple normal frames", func() {
-			mockFcm.EXPECT().SendWindowSize(id1).Return(protocol.MaxByteCount, nil)
-			mockFcm.EXPECT().AddBytesSent(id1, protocol.ByteCount(6))
-			mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-			mockFcm.EXPECT().SendWindowSize(id2).Return(protocol.MaxByteCount, nil)
-			mockFcm.EXPECT().AddBytesSent(id2, protocol.ByteCount(6))
-			mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-			stream1.dataForWriting = []byte("foobar")
-			stream2.dataForWriting = []byte("foobaz")
-			fs := framer.PopStreamFrames(1000)
-			Expect(fs).To(HaveLen(2))
-			// Swap if we dequeued in other order
-			if fs[0].StreamID != stream1.streamID {
-				fs[0], fs[1] = fs[1], fs[0]
-			}
-			Expect(fs[0].StreamID).To(Equal(stream1.streamID))
-			Expect(fs[0].Data).To(Equal([]byte("foobar")))
-			Expect(fs[1].StreamID).To(Equal(stream2.streamID))
-			Expect(fs[1].Data).To(Equal([]byte("foobaz")))
-			Expect(framer.PopStreamFrames(1000)).To(BeEmpty())
-		})
-
-		It("returns retransmission frames before normal frames", func() {
-			mockFcm.EXPECT().SendWindowSize(id1).Return(protocol.MaxByteCount, nil)
-			mockFcm.EXPECT().AddBytesSent(id1, protocol.ByteCount(6))
-			mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-			framer.AddFrameForRetransmission(retransmittedFrame1)
-			stream1.dataForWriting = []byte("foobar")
-			fs := framer.PopStreamFrames(1000)
-			Expect(fs).To(HaveLen(2))
-			Expect(fs[0]).To(Equal(retransmittedFrame1))
-			Expect(fs[1].StreamID).To(Equal(stream1.streamID))
-			Expect(framer.PopStreamFrames(1000)).To(BeEmpty())
-		})
-
-		It("does not pop empty frames", func() {
-			mockFcm.EXPECT().SendWindowSize(id1).Return(protocol.MaxByteCount, nil)
-			stream1.dataForWriting = []byte("foobar")
-			fs := framer.PopStreamFrames(4)
-			Expect(fs).To(HaveLen(0))
-			mockFcm.EXPECT().SendWindowSize(id1).Return(protocol.MaxByteCount, nil)
-			mockFcm.EXPECT().AddBytesSent(id1, protocol.ByteCount(1))
-			mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-			fs = framer.PopStreamFrames(5)
-			Expect(fs).To(HaveLen(1))
-			Expect(fs[0].Data).ToNot(BeEmpty())
 			Expect(fs[0].FinBit).To(BeFalse())
 		})
 
+		It("returns multiple normal frames", func() {
+			stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobar"))
+			stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(6))
+			stream1.EXPECT().GetWriteOffset()
+			stream1.EXPECT().ShouldSendFin()
+			stream2.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobaz"))
+			stream2.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(6))
+			stream2.EXPECT().GetWriteOffset()
+			stream2.EXPECT().ShouldSendFin()
+			fs := framer.PopStreamFrames(1000)
+			Expect(fs).To(HaveLen(2))
+			// Swap if we dequeued in other order
+			if fs[0].StreamID != stream1.StreamID() {
+				fs[0], fs[1] = fs[1], fs[0]
+			}
+			Expect(fs[0].StreamID).To(Equal(stream1.StreamID()))
+			Expect(fs[0].Data).To(Equal([]byte("foobar")))
+			Expect(fs[1].StreamID).To(Equal(stream2.StreamID()))
+			Expect(fs[1].Data).To(Equal([]byte("foobaz")))
+		})
+
+		It("returns retransmission frames before normal frames", func() {
+			stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobar"))
+			stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(6))
+			stream1.EXPECT().GetWriteOffset()
+			stream1.EXPECT().ShouldSendFin()
+			setNoData(stream2)
+			framer.AddFrameForRetransmission(retransmittedFrame1)
+			fs := framer.PopStreamFrames(1000)
+			Expect(fs).To(HaveLen(2))
+			Expect(fs[0]).To(Equal(retransmittedFrame1))
+			Expect(fs[1].StreamID).To(Equal(stream1.StreamID()))
+		})
+
+		It("does not pop empty frames", func() {
+			stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(0))
+			stream1.EXPECT().ShouldSendFin()
+			stream1.EXPECT().GetWriteOffset()
+			setNoData(stream2)
+			fs := framer.PopStreamFrames(5)
+			Expect(fs).To(BeEmpty())
+		})
+
 		It("uses the round-robin scheduling", func() {
-			mockFcm.EXPECT().SendWindowSize(id1).Return(protocol.MaxByteCount, nil)
-			mockFcm.EXPECT().AddBytesSent(id1, protocol.ByteCount(6))
-			mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-			mockFcm.EXPECT().SendWindowSize(id2).Return(protocol.MaxByteCount, nil)
-			mockFcm.EXPECT().AddBytesSent(id2, protocol.ByteCount(6))
-			mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-			stream1.dataForWriting = bytes.Repeat([]byte("f"), 100)
-			stream2.dataForWriting = bytes.Repeat([]byte("e"), 100)
+			streamFrameHeaderLen := protocol.ByteCount(4)
+			stream1.EXPECT().GetDataForWriting(10 - streamFrameHeaderLen).Return(bytes.Repeat([]byte("f"), int(10-streamFrameHeaderLen)))
+			stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(100))
+			stream1.EXPECT().GetWriteOffset()
+			stream1.EXPECT().ShouldSendFin()
+			stream2.EXPECT().GetDataForWriting(protocol.ByteCount(10 - streamFrameHeaderLen)).Return(bytes.Repeat([]byte("e"), int(10-streamFrameHeaderLen)))
+			stream2.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(100))
+			stream2.EXPECT().GetWriteOffset()
+			stream2.EXPECT().ShouldSendFin()
 			fs := framer.PopStreamFrames(10)
 			Expect(fs).To(HaveLen(1))
 			// it doesn't matter here if this data is from stream1 or from stream2...
@@ -198,6 +221,8 @@ var _ = Describe("Stream Framer", func() {
 			})
 
 			It("splits a frame", func() {
+				setNoData(stream1)
+				setNoData(stream2)
 				framer.AddFrameForRetransmission(retransmittedFrame2)
 				origlen := retransmittedFrame2.DataLen()
 				fs := framer.PopStreamFrames(6)
@@ -239,6 +264,8 @@ var _ = Describe("Stream Framer", func() {
 			})
 
 			It("only removes a frame from the framer after returning all split parts", func() {
+				setNoData(stream1)
+				setNoData(stream2)
 				framer.AddFrameForRetransmission(retransmittedFrame2)
 				fs := framer.PopStreamFrames(6)
 				Expect(fs).To(HaveLen(1))
@@ -247,136 +274,40 @@ var _ = Describe("Stream Framer", func() {
 				Expect(fs).To(HaveLen(1))
 				Expect(framer.retransmissionQueue).To(BeEmpty())
 			})
-
-			It("gets the whole data of a frame if it was split", func() {
-				mockFcm.EXPECT().SendWindowSize(id1).Return(protocol.MaxByteCount, nil)
-				mockFcm.EXPECT().AddBytesSent(id1, protocol.ByteCount(3))
-				mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-				mockFcm.EXPECT().SendWindowSize(id1).Return(protocol.MaxByteCount, nil)
-				mockFcm.EXPECT().AddBytesSent(id1, protocol.ByteCount(3))
-				mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-				origdata := []byte("foobar")
-				stream1.dataForWriting = origdata
-				fs := framer.PopStreamFrames(7)
-				Expect(fs).To(HaveLen(1))
-				Expect(fs[0].Data).To(Equal([]byte("foo")))
-				var b bytes.Buffer
-				fs[0].Write(&b, 0)
-				Expect(b.Len()).To(Equal(7))
-				fs = framer.PopStreamFrames(1000)
-				Expect(fs).To(HaveLen(1))
-				Expect(fs[0].Data).To(Equal([]byte("bar")))
-			})
 		})
 
 		Context("sending FINs", func() {
 			It("sends FINs when streams are closed", func() {
-				mockFcm.EXPECT().AddBytesSent(id1, protocol.ByteCount(0))
-				mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-				stream1.writeOffset = 42
-				stream1.finishedWriting.Set(true)
-				fs := framer.PopStreamFrames(1000)
-				Expect(fs).To(HaveLen(1))
-				Expect(fs[0].StreamID).To(Equal(stream1.streamID))
-				Expect(fs[0].Offset).To(Equal(stream1.writeOffset))
-				Expect(fs[0].FinBit).To(BeTrue())
-				Expect(fs[0].Data).To(BeEmpty())
-			})
+				offset := protocol.ByteCount(42)
+				stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(0))
+				stream1.EXPECT().GetWriteOffset().Return(offset)
+				stream1.EXPECT().ShouldSendFin().Return(true)
+				stream1.EXPECT().SentFin()
+				setNoData(stream2)
 
-			It("sends FINs when flow-control blocked", func() {
-				mockFcm.EXPECT().AddBytesSent(id1, protocol.ByteCount(0))
-				mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-				stream1.writeOffset = 42
-				stream1.finishedWriting.Set(true)
 				fs := framer.PopStreamFrames(1000)
 				Expect(fs).To(HaveLen(1))
-				Expect(fs[0].StreamID).To(Equal(stream1.streamID))
-				Expect(fs[0].Offset).To(Equal(stream1.writeOffset))
+				Expect(fs[0].StreamID).To(Equal(stream1.StreamID()))
+				Expect(fs[0].Offset).To(Equal(offset))
 				Expect(fs[0].FinBit).To(BeTrue())
 				Expect(fs[0].Data).To(BeEmpty())
 			})
 
 			It("bundles FINs with data", func() {
-				mockFcm.EXPECT().SendWindowSize(id1).Return(protocol.MaxByteCount, nil)
-				mockFcm.EXPECT().AddBytesSent(id1, protocol.ByteCount(6))
-				mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-				stream1.dataForWriting = []byte("foobar")
-				stream1.finishedWriting.Set(true)
+				offset := protocol.ByteCount(42)
+				stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobar"))
+				stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(6))
+				stream1.EXPECT().GetWriteOffset().Return(offset)
+				stream1.EXPECT().ShouldSendFin().Return(true)
+				stream1.EXPECT().SentFin()
+				setNoData(stream2)
+
 				fs := framer.PopStreamFrames(1000)
 				Expect(fs).To(HaveLen(1))
-				Expect(fs[0].StreamID).To(Equal(stream1.streamID))
+				Expect(fs[0].StreamID).To(Equal(stream1.StreamID()))
 				Expect(fs[0].Data).To(Equal([]byte("foobar")))
 				Expect(fs[0].FinBit).To(BeTrue())
 			})
-		})
-	})
-
-	Context("flow control", func() {
-		It("tells the FlowControlManager how many bytes it sent", func() {
-			mockFcm.EXPECT().SendWindowSize(id1).Return(protocol.MaxByteCount, nil)
-			mockFcm.EXPECT().AddBytesSent(id1, protocol.ByteCount(6))
-			mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-			stream1.dataForWriting = []byte("foobar")
-			framer.PopStreamFrames(1000)
-		})
-
-		It("does not count retransmitted frames as sent bytes", func() {
-			framer.AddFrameForRetransmission(retransmittedFrame1)
-			framer.PopStreamFrames(1000)
-		})
-
-		It("returns the whole frame if it fits", func() {
-			mockFcm.EXPECT().SendWindowSize(id1).Return(protocol.ByteCount(10+6), nil)
-			mockFcm.EXPECT().AddBytesSent(id1, protocol.ByteCount(6))
-			mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-			stream1.writeOffset = 10
-			stream1.dataForWriting = []byte("foobar")
-			fs := framer.PopStreamFrames(1000)
-			Expect(fs).To(HaveLen(1))
-			Expect(fs[0].DataLen()).To(Equal(protocol.ByteCount(6)))
-		})
-
-		It("returns a smaller frame if the whole frame doesn't fit", func() {
-			mockFcm.EXPECT().SendWindowSize(id1).Return(protocol.ByteCount(3), nil)
-			mockFcm.EXPECT().AddBytesSent(id1, protocol.ByteCount(3))
-			mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-			stream1.dataForWriting = []byte("foobar")
-			fs := framer.PopStreamFrames(1000)
-			Expect(fs).To(HaveLen(1))
-			Expect(fs[0].Data).To(Equal([]byte("foo")))
-		})
-
-		It("returns a smaller frame if the whole frame doesn't fit in the stream flow control window, for non-zero StreamFrame offset", func() {
-			mockFcm.EXPECT().SendWindowSize(id1).Return(protocol.ByteCount(3), nil)
-			mockFcm.EXPECT().AddBytesSent(id1, protocol.ByteCount(3))
-			mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-			stream1.writeOffset = 1
-			stream1.dataForWriting = []byte("foobar")
-			fs := framer.PopStreamFrames(1000)
-			Expect(fs).To(HaveLen(1))
-			Expect(fs[0].Data).To(Equal([]byte("foo")))
-		})
-
-		It("selects a stream that is not flow control blocked", func() {
-			mockFcm.EXPECT().SendWindowSize(id1).Return(protocol.ByteCount(0), nil)
-			mockFcm.EXPECT().SendWindowSize(id2).Return(protocol.MaxByteCount, nil)
-			mockFcm.EXPECT().AddBytesSent(id2, protocol.ByteCount(6))
-			mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-			stream1.dataForWriting = []byte("foobar")
-			stream2.dataForWriting = []byte("foobaz")
-			fs := framer.PopStreamFrames(1000)
-			Expect(fs).To(HaveLen(1))
-			Expect(fs[0].StreamID).To(Equal(stream2.StreamID()))
-			Expect(fs[0].Data).To(Equal([]byte("foobaz")))
-		})
-
-		It("returns nil if every stream is individually flow control blocked", func() {
-			mockFcm.EXPECT().SendWindowSize(id1).Return(protocol.ByteCount(0), nil)
-			mockFcm.EXPECT().SendWindowSize(id2).Return(protocol.ByteCount(0), nil)
-			stream1.dataForWriting = []byte("foobar")
-			stream2.dataForWriting = []byte("foobaz")
-			fs := framer.PopStreamFrames(1000)
-			Expect(fs).To(BeEmpty())
 		})
 	})
 
@@ -386,10 +317,13 @@ var _ = Describe("Stream Framer", func() {
 		})
 
 		It("queues and pops BLOCKED frames for individually blocked streams", func() {
-			mockFcm.EXPECT().SendWindowSize(id1).Return(protocol.ByteCount(3), nil)
-			mockFcm.EXPECT().AddBytesSent(id1, protocol.ByteCount(3))
-			mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-			stream1.dataForWriting = []byte("foo")
+			connFC.EXPECT().IsBlocked()
+			stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobar"))
+			stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(6))
+			stream1.EXPECT().GetWriteOffset()
+			stream1.EXPECT().ShouldSendFin()
+			stream1.EXPECT().IsFlowControlBlocked().Return(true)
+			setNoData(stream2)
 			frames := framer.PopStreamFrames(1000)
 			Expect(frames).To(HaveLen(1))
 			blockedFrame := framer.PopBlockedFrame()
@@ -399,55 +333,33 @@ var _ = Describe("Stream Framer", func() {
 		})
 
 		It("does not queue a stream-level BLOCKED frame after sending the FinBit frame", func() {
-			mockFcm.EXPECT().SendWindowSize(id1).Return(protocol.ByteCount(5000), nil)
-			mockFcm.EXPECT().AddBytesSent(id1, protocol.ByteCount(3))
-			mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-			mockFcm.EXPECT().AddBytesSent(id1, protocol.ByteCount(0))
-			mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-			stream1.dataForWriting = []byte("foo")
+			connFC.EXPECT().IsBlocked()
+			stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foo"))
+			stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(3))
+			stream1.EXPECT().GetWriteOffset()
+			stream1.EXPECT().ShouldSendFin().Return(true)
+			stream1.EXPECT().SentFin()
+			setNoData(stream2)
 			frames := framer.PopStreamFrames(1000)
 			Expect(frames).To(HaveLen(1))
-			Expect(frames[0].FinBit).To(BeFalse())
-			stream1.finishedWriting.Set(true)
-			frames = framer.PopStreamFrames(1000)
-			Expect(frames).To(HaveLen(1))
 			Expect(frames[0].FinBit).To(BeTrue())
-			Expect(frames[0].DataLen()).To(BeZero())
+			Expect(frames[0].DataLen()).To(Equal(protocol.ByteCount(3)))
 			blockedFrame := framer.PopBlockedFrame()
 			Expect(blockedFrame).To(BeNil())
 		})
 
 		It("queues and pops BLOCKED frames for connection blocked streams", func() {
-			// FCM already considers the connection window size
-			mockFcm.EXPECT().SendWindowSize(id1).Return(protocol.ByteCount(3), nil)
-			mockFcm.EXPECT().AddBytesSent(id1, protocol.ByteCount(3))
-			mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.ByteCount(0))
-			stream1.dataForWriting = []byte("foo")
+			connFC.EXPECT().IsBlocked().Return(true)
+			stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foo"))
+			stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(3))
+			stream1.EXPECT().GetWriteOffset()
+			stream1.EXPECT().ShouldSendFin()
+			stream1.EXPECT().IsFlowControlBlocked().Return(false)
+			setNoData(stream2)
 			framer.PopStreamFrames(1000)
 			blockedFrame := framer.PopBlockedFrame()
 			Expect(blockedFrame).ToNot(BeNil())
 			Expect(blockedFrame.StreamID).To(BeZero())
-			Expect(framer.PopBlockedFrame()).To(BeNil())
-		})
-
-		It("does not queue BLOCKED frames for non-contributing streams", func() {
-			mockFcm.EXPECT().SendWindowSize(id1).Return(protocol.MaxByteCount, nil)
-			mockFcm.EXPECT().AddBytesSent(id1, protocol.ByteCount(3))
-			mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-			stream1.dataForWriting = []byte("foo")
-			framer.PopStreamFrames(1000)
-			Expect(framer.PopBlockedFrame()).To(BeNil())
-		})
-
-		It("does not queue BLOCKED frames twice", func() {
-			mockFcm.EXPECT().SendWindowSize(id1).Return(protocol.ByteCount(3), nil)
-			mockFcm.EXPECT().AddBytesSent(id1, protocol.ByteCount(3))
-			mockFcm.EXPECT().RemainingConnectionWindowSize().Return(protocol.MaxByteCount)
-			stream1.dataForWriting = []byte("foobar")
-			framer.PopStreamFrames(1000)
-			blockedFrame := framer.PopBlockedFrame()
-			Expect(blockedFrame).ToNot(BeNil())
-			Expect(blockedFrame.StreamID).To(Equal(stream1.StreamID()))
 			Expect(framer.PopBlockedFrame()).To(BeNil())
 		})
 	})

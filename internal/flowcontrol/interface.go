@@ -1,29 +1,37 @@
 package flowcontrol
 
 import "github.com/lucas-clemente/quic-go/internal/protocol"
-import "github.com/lucas-clemente/quic-go/internal/handshake"
 
-// WindowUpdate provides the data for WindowUpdateFrames.
-type WindowUpdate struct {
-	StreamID protocol.StreamID
-	Offset   protocol.ByteCount
+type flowController interface {
+	// for sending
+	SendWindowSize() protocol.ByteCount
+	IsBlocked() bool
+	UpdateSendWindow(protocol.ByteCount)
+	AddBytesSent(protocol.ByteCount)
+	// for receiving
+	AddBytesRead(protocol.ByteCount)
+	GetWindowUpdate() protocol.ByteCount // returns 0 if no update is necessary
 }
 
-// A FlowControlManager manages the flow control
-type FlowControlManager interface {
-	NewStream(streamID protocol.StreamID, contributesToConnectionFlow bool)
-	RemoveStream(streamID protocol.StreamID)
-	UpdateTransportParameters(*handshake.TransportParameters)
-	// methods needed for receiving data
-	ResetStream(streamID protocol.StreamID, byteOffset protocol.ByteCount) error
-	UpdateHighestReceived(streamID protocol.StreamID, byteOffset protocol.ByteCount) error
-	AddBytesRead(streamID protocol.StreamID, n protocol.ByteCount) error
-	GetWindowUpdates() []WindowUpdate
-	GetReceiveWindow(streamID protocol.StreamID) (protocol.ByteCount, error)
-	// methods needed for sending data
-	AddBytesSent(streamID protocol.StreamID, n protocol.ByteCount) error
-	SendWindowSize(streamID protocol.StreamID) (protocol.ByteCount, error)
-	RemainingConnectionWindowSize() protocol.ByteCount
-	UpdateStreamWindow(streamID protocol.StreamID, offset protocol.ByteCount) (bool, error)
-	UpdateConnectionWindow(offset protocol.ByteCount) bool
+// A StreamFlowController is a flow controller for a QUIC stream.
+type StreamFlowController interface {
+	flowController
+	// for receiving
+	// UpdateHighestReceived should be called when a new highest offset is received
+	// final has to be to true if this is the final offset of the stream, as contained in a STREAM frame with FIN bit, and the RST_STREAM frame
+	UpdateHighestReceived(offset protocol.ByteCount, final bool) error
+}
+
+// The ConnectionFlowController is the flow controller for the connection.
+type ConnectionFlowController interface {
+	flowController
+}
+
+type connectionFlowControllerI interface {
+	ConnectionFlowController
+	// The following two methods are not supposed to be called from outside this packet, but are needed internally
+	// for sending
+	EnsureMinimumWindowIncrement(protocol.ByteCount)
+	// for receiving
+	IncrementHighestReceived(protocol.ByteCount) error
 }

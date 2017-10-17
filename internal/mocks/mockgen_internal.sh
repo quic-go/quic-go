@@ -18,4 +18,4 @@ PACKAGE_PATH=${3/internal/internalpackage}
 mockgen -package $1 -self_package $1 -destination $2 $PACKAGE_PATH $4
 sed -i '' 's/internalpackage/internal/g' $2
 
-rm -rf "$TEMP_DIR"
+rm -r "$TEMP_DIR"

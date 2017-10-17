@@ -3,23 +3,22 @@ package quic
 import (
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 type streamFramer struct {
 	streamsMap *streamsMap
 
-	flowControlManager flowcontrol.FlowControlManager
+	connFlowController flowcontrol.ConnectionFlowController
 
 	retransmissionQueue []*wire.StreamFrame
 	blockedFrameQueue   []*wire.BlockedFrame
 }
 
-func newStreamFramer(streamsMap *streamsMap, flowControlManager flowcontrol.FlowControlManager) *streamFramer {
+func newStreamFramer(streamsMap *streamsMap, cfc flowcontrol.ConnectionFlowController) *streamFramer {
 	return &streamFramer{
 		streamsMap:         streamsMap,
-		flowControlManager: flowControlManager,
+		connFlowController: cfc,
 	}
 }
 
@@ -46,13 +45,11 @@ func (f *streamFramer) HasFramesForRetransmission() bool {
 }
 
 func (f *streamFramer) HasCryptoStreamFrame() bool {
-	// TODO(#657): Flow control
 	cs, _ := f.streamsMap.GetOrOpenStream(1)
-	return cs.lenOfDataForWriting() > 0
+	return cs.LenOfDataForWriting() > 0
 }
 
 // TODO(lclemente): This is somewhat duplicate with the normal path for generating frames.
-// TODO(#657): Flow control
 func (f *streamFramer) PopCryptoStreamFrame(maxLen protocol.ByteCount) *wire.StreamFrame {
 	if !f.HasCryptoStreamFrame() {
 		return nil
@@ -60,10 +57,10 @@ func (f *streamFramer) PopCryptoStreamFrame(maxLen protocol.ByteCount) *wire.Str
 	cs, _ := f.streamsMap.GetOrOpenStream(1)
 	frame := &wire.StreamFrame{
 		StreamID: 1,
-		Offset:   cs.writeOffset,
+		Offset:   cs.GetWriteOffset(),
 	}
 	frameHeaderBytes, _ := frame.MinLength(protocol.VersionWhatever) // can never error
-	frame.Data = cs.getDataForWriting(maxLen - frameHeaderBytes)
+	frame.Data = cs.GetDataForWriting(maxLen - frameHeaderBytes)
 	return frame
 }
 
@@ -97,59 +94,44 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 	frame := &wire.StreamFrame{DataLenPresent: true}
 	var currentLen protocol.ByteCount
 
-	fn := func(s *stream) (bool, error) {
-		if s == nil || s.streamID == 1 /* crypto stream is handled separately */ {
+	fn := func(s streamI) (bool, error) {
+		if s == nil || s.StreamID() == 1 /* crypto stream is handled separately */ {
 			return true, nil
 		}
 
-		frame.StreamID = s.streamID
+		frame.StreamID = s.StreamID()
+		frame.Offset = s.GetWriteOffset()
 		// not perfect, but thread-safe since writeOffset is only written when getting data
-		frame.Offset = s.writeOffset
 		frameHeaderBytes, _ := frame.MinLength(protocol.VersionWhatever) // can never error
 		if currentLen+frameHeaderBytes > maxBytes {
 			return false, nil // theoretically, we could find another stream that fits, but this is quite unlikely, so we stop here
 		}
 		maxLen := maxBytes - currentLen - frameHeaderBytes
 
-		var sendWindowSize protocol.ByteCount
-		lenStreamData := s.lenOfDataForWriting()
-		if lenStreamData != 0 {
-			sendWindowSize, _ = f.flowControlManager.SendWindowSize(s.streamID)
-			maxLen = utils.MinByteCount(maxLen, sendWindowSize)
-		}
-
-		if maxLen == 0 {
-			return true, nil
-		}
-
 		var data []byte
-		if lenStreamData != 0 {
-			// Only getDataForWriting() if we didn't have data earlier, so that we
-			// don't send without FC approval (if a Write() raced).
-			data = s.getDataForWriting(maxLen)
+		if s.LenOfDataForWriting() > 0 {
+			data = s.GetDataForWriting(maxLen)
 		}
 
 		// This is unlikely, but check it nonetheless, the scheduler might have jumped in. Seems to happen in ~20% of cases in the tests.
-		shouldSendFin := s.shouldSendFin()
+		shouldSendFin := s.ShouldSendFin()
 		if data == nil && !shouldSendFin {
 			return true, nil
 		}
 
 		if shouldSendFin {
 			frame.FinBit = true
-			s.sentFin()
+			s.SentFin()
 		}
 
 		frame.Data = data
-		f.flowControlManager.AddBytesSent(s.streamID, protocol.ByteCount(len(data)))
 
 		// Finally, check if we are now FC blocked and should queue a BLOCKED frame
-		if f.flowControlManager.RemainingConnectionWindowSize() == 0 {
-			// We are now connection-level FC blocked
-			f.blockedFrameQueue = append(f.blockedFrameQueue, &wire.BlockedFrame{StreamID: 0})
-		} else if !frame.FinBit && sendWindowSize-frame.DataLen() == 0 {
-			// We are now stream-level FC blocked
+		if !frame.FinBit && s.IsFlowControlBlocked() {
 			f.blockedFrameQueue = append(f.blockedFrameQueue, &wire.BlockedFrame{StreamID: s.StreamID()})
+		}
+		if f.connFlowController.IsBlocked() {
+			f.blockedFrameQueue = append(f.blockedFrameQueue, &wire.BlockedFrame{StreamID: 0})
 		}
 
 		res = append(res, frame)

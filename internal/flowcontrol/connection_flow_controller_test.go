@@ -12,6 +12,12 @@ import (
 var _ = Describe("Connection Flow controller", func() {
 	var controller *connectionFlowController
 
+	// update the congestion such that it returns a given value for the smoothed RTT
+	setRtt := func(t time.Duration) {
+		controller.rttStats.UpdateRTT(t, 0, time.Now())
+		Expect(controller.rttStats.SmoothedRTT()).To(Equal(t)) // make sure it worked
+	}
+
 	BeforeEach(func() {
 		controller = &connectionFlowController{}
 		controller.rttStats = &congestion.RTTStats{}
@@ -23,12 +29,10 @@ var _ = Describe("Connection Flow controller", func() {
 		It("sets the send and receive windows", func() {
 			receiveWindow := protocol.ByteCount(2000)
 			maxReceiveWindow := protocol.ByteCount(3000)
-			sendWindow := protocol.ByteCount(4000)
 
-			fc := newConnectionFlowController(receiveWindow, maxReceiveWindow, sendWindow, rttStats)
+			fc := NewConnectionFlowController(receiveWindow, maxReceiveWindow, rttStats).(*connectionFlowController)
 			Expect(fc.receiveWindow).To(Equal(receiveWindow))
 			Expect(fc.maxReceiveWindowIncrement).To(Equal(maxReceiveWindow))
-			Expect(fc.sendWindow).To(Equal(sendWindow))
 		})
 	})
 
@@ -38,12 +42,36 @@ var _ = Describe("Connection Flow controller", func() {
 			controller.IncrementHighestReceived(123)
 			Expect(controller.highestReceived).To(Equal(protocol.ByteCount(1337 + 123)))
 		})
+
+		Context("getting window updates", func() {
+			BeforeEach(func() {
+				controller.receiveWindow = 100
+				controller.receiveWindowIncrement = 60
+				controller.maxReceiveWindowIncrement = 1000
+			})
+
+			It("gets a window update", func() {
+				controller.AddBytesRead(80)
+				offset := controller.GetWindowUpdate()
+				Expect(offset).To(Equal(protocol.ByteCount(80 + 60)))
+			})
+
+			It("autotunes the window", func() {
+				controller.AddBytesRead(80)
+				setRtt(20 * time.Millisecond)
+				controller.lastWindowUpdateTime = time.Now().Add(-35 * time.Millisecond)
+				offset := controller.GetWindowUpdate()
+				Expect(offset).To(Equal(protocol.ByteCount(80 + 2*60)))
+			})
+		})
 	})
 
 	Context("setting the minimum increment", func() {
-		var oldIncrement protocol.ByteCount
-		var receiveWindow protocol.ByteCount = 10000
-		var receiveWindowIncrement protocol.ByteCount = 600
+		var (
+			oldIncrement           protocol.ByteCount
+			receiveWindow          protocol.ByteCount = 10000
+			receiveWindowIncrement protocol.ByteCount = 600
+		)
 
 		BeforeEach(func() {
 			controller.receiveWindow = receiveWindow
@@ -51,12 +79,6 @@ var _ = Describe("Connection Flow controller", func() {
 			oldIncrement = controller.receiveWindowIncrement
 			controller.maxReceiveWindowIncrement = 3000
 		})
-
-		// update the congestion such that it returns a given value for the smoothed RTT
-		setRtt := func(t time.Duration) {
-			controller.rttStats.UpdateRTT(t, 0, time.Now())
-			Expect(controller.rttStats.SmoothedRTT()).To(Equal(t)) // make sure it worked
-		}
 
 		It("sets the minimum window increment", func() {
 			controller.EnsureMinimumWindowIncrement(1000)
@@ -79,9 +101,8 @@ var _ = Describe("Connection Flow controller", func() {
 			controller.bytesRead = 9900 // receive window is 10000
 			controller.lastWindowUpdateTime = time.Now().Add(-20 * time.Millisecond)
 			controller.EnsureMinimumWindowIncrement(912)
-			necessary, newIncrement, offset := controller.MaybeUpdateWindow()
-			Expect(necessary).To(BeTrue())
-			Expect(newIncrement).To(BeZero()) // no auto-tuning
+			offset := controller.getWindowUpdate()
+			Expect(controller.receiveWindowIncrement).To(Equal(protocol.ByteCount(912))) // no auto-tuning
 			Expect(offset).To(Equal(protocol.ByteCount(9900 + 912)))
 		})
 	})

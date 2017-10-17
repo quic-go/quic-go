@@ -6,6 +6,7 @@ import (
 	"math"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
+	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -60,9 +61,9 @@ var _ = Describe("Packet packer", func() {
 	)
 
 	BeforeEach(func() {
-		cryptoStream = &stream{}
+		cryptoStream = &stream{flowController: flowcontrol.NewStreamFlowController(1, false, flowcontrol.NewConnectionFlowController(1000, 1000, nil), 1000, 1000, 1000, nil)}
 
-		streamsMap := newStreamsMap(nil, nil, protocol.PerspectiveServer)
+		streamsMap := newStreamsMap(nil, protocol.PerspectiveServer)
 		streamsMap.streams[1] = cryptoStream
 		streamsMap.openStreams = []protocol.StreamID{1}
 		streamFramer = newStreamFramer(streamsMap, nil)
