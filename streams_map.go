@@ -311,6 +311,18 @@ func (m *streamsMap) RoundRobinIterate(fn streamLambda) error {
 	return nil
 }
 
+// Range executes a callback for all streams, in pseudo-random order
+func (m *streamsMap) Range(cb func(s *stream)) {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	for _, s := range m.streams {
+		if s != nil {
+			cb(s)
+		}
+	}
+}
+
 func (m *streamsMap) iterateFunc(streamID protocol.StreamID, fn streamLambda) (bool, error) {
 	str, ok := m.streams[streamID]
 	if !ok {
