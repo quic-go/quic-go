@@ -2,6 +2,7 @@ package wire
 
 import (
 	"bytes"
+	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
@@ -168,9 +169,9 @@ var _ = Describe("StreamFrame", func() {
 		})
 
 		It("rejects frames to too large dataLen", func() {
-			b := bytes.NewReader([]byte{0xa0, 0x1, 0xff, 0xf})
+			b := bytes.NewReader([]byte{0xa0, 0x1, 0xff, 0xff})
 			_, err := ParseStreamFrame(b, protocol.VersionWhatever)
-			Expect(err).To(MatchError(qerr.Error(qerr.InvalidStreamData, "data len too large")))
+			Expect(err).To(MatchError(io.EOF))
 		})
 
 		It("rejects frames that overflow the offset", func() {
