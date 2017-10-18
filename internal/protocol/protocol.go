@@ -49,8 +49,8 @@ const InitialStreamFlowControlWindow ByteCount = (1 << 14) // 16 kB
 // InitialConnectionFlowControlWindow is the initial connection-level flow control window for sending
 const InitialConnectionFlowControlWindow ByteCount = (1 << 14) // 16 kB
 
-// ClientHelloMinimumSize is the minimum size the server expects an inchoate CHLO to have.
-const ClientHelloMinimumSize = 1024
+// ClientHelloMinimumSizeGQUIC is the minimum size the server the first packet to have in GQUIC.
+const ClientHelloMinimumSizeGQUIC = 1024
 
 // MaxClientHellos is the maximum number of times we'll send a client hello
 // The value 3 accounts for:

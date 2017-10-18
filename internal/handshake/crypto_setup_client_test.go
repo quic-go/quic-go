@@ -450,14 +450,14 @@ var _ = Describe("Client Crypto Setup", func() {
 		It("is longer than the miminum client hello size", func() {
 			err := cs.sendCHLO()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(cs.cryptoStream.(*mockStream).dataWritten.Len()).To(BeNumerically(">", protocol.ClientHelloMinimumSize))
+			Expect(cs.cryptoStream.(*mockStream).dataWritten.Len()).To(BeNumerically(">", protocol.ClientHelloMinimumSizeGQUIC))
 		})
 
 		It("doesn't overflow the packet with padding", func() {
 			tagMap := make(map[Tag][]byte)
-			tagMap[TagSCID] = bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSize*6/10)
+			tagMap[TagSCID] = bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSizeGQUIC*6/10)
 			cs.addPadding(tagMap)
-			Expect(len(tagMap[TagPAD])).To(BeNumerically("<", protocol.ClientHelloMinimumSize/2))
+			Expect(len(tagMap[TagPAD])).To(BeNumerically("<", protocol.ClientHelloMinimumSizeGQUIC/2))
 		})
 
 		It("saves the last sent CHLO", func() {

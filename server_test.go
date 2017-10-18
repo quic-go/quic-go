@@ -119,6 +119,8 @@ var _ = Describe("Server", func() {
 			utils.LittleEndian.WriteUint32(b, protocol.VersionNumberToTag(protocol.SupportedVersions[0]))
 			firstPacket = []byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c}
 			firstPacket = append(append(firstPacket, b.Bytes()...), 0x01)
+			// add padding to fulfill the minimum size requirement for Client Hellos
+			firstPacket = append(firstPacket, bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSizeGQUIC)...)
 		})
 
 		It("returns the address", func() {
@@ -136,6 +138,13 @@ var _ = Describe("Server", func() {
 			sess := serv.sessions[connID].(*mockSession)
 			Expect(sess.connectionID).To(Equal(connID))
 			Expect(sess.packetCount).To(Equal(1))
+		})
+
+		It("drops Client Hellos that are too small", func() {
+			firstPacket = firstPacket[:protocol.ClientHelloMinimumSizeGQUIC-1]
+			err := serv.handlePacket(nil, nil, firstPacket)
+			Expect(err).To(MatchError("packet too small"))
+			Expect(serv.sessions).To(BeEmpty())
 		})
 
 		It("accepts a session once the connection it is forward secure", func(done Done) {
@@ -298,12 +307,6 @@ var _ = Describe("Server", func() {
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.InvalidPacketHeader))
 		})
 
-		It("ignores public resets for unknown connections", func() {
-			err := serv.handlePacket(nil, nil, wire.WritePublicReset(999, 1, 1337))
-			Expect(err).ToNot(HaveOccurred())
-			Expect(serv.sessions).To(BeEmpty())
-		})
-
 		It("ignores public resets for known connections", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)
 			Expect(serv.sessions).To(HaveLen(1))
@@ -323,21 +326,6 @@ var _ = Describe("Server", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
-		})
-
-		It("doesn't respond with a version negotiation packet if the first packet is too small", func() {
-			b := &bytes.Buffer{}
-			hdr := wire.PublicHeader{
-				VersionFlag:     true,
-				ConnectionID:    0x1337,
-				PacketNumber:    1,
-				PacketNumberLen: protocol.PacketNumberLen2,
-			}
-			hdr.Write(b, 13 /* not a valid QUIC version */, protocol.PerspectiveClient)
-			b.Write(bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSize-1)) // this packet is 1 byte too small
-			err := serv.handlePacket(conn, udpAddr, b.Bytes())
-			Expect(err).To(MatchError("dropping small packet with unknown version"))
-			Expect(conn.dataWritten.Len()).Should(BeZero())
 		})
 	})
 
@@ -405,7 +393,7 @@ var _ = Describe("Server", func() {
 			PacketNumberLen: protocol.PacketNumberLen2,
 		}
 		hdr.Write(b, 13 /* not a valid QUIC version */, protocol.PerspectiveClient)
-		b.Write(bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSize)) // add a fake CHLO
+		b.Write(bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSizeGQUIC)) // add a fake CHLO
 		conn.dataToRead = b.Bytes()
 		conn.dataReadFrom = udpAddr
 		ln, err := Listen(conn, nil, config)
@@ -431,7 +419,10 @@ var _ = Describe("Server", func() {
 
 	It("sends a PublicReset for new connections that don't have the VersionFlag set", func() {
 		conn.dataReadFrom = udpAddr
-		conn.dataToRead = []byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x01}
+		conn.dataToRead = append(
+			[]byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x01},
+			bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSizeGQUIC)...,
+		)
 		ln, err := Listen(conn, nil, config)
 		Expect(err).ToNot(HaveOccurred())
 		go func() {

@@ -223,6 +223,12 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	session, ok := s.sessions[connID]
 	s.sessionsMutex.RUnlock()
 
+	// This is (potentially) a Client Hello.
+	// Make sure it has the minimum required size before spending any more ressources on it.
+	if !ok && len(packet) < protocol.ClientHelloMinimumSizeGQUIC {
+		return errors.New("packet too small")
+	}
+
 	if ok && session == nil {
 		// Late packet for closed session
 		return nil
@@ -268,10 +274,6 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 
 	// Send Version Negotiation Packet if the client is speaking a different protocol version
 	if hdr.VersionFlag && !protocol.IsSupportedVersion(s.config.Versions, hdr.VersionNumber) {
-		// drop packets that are too small to be valid first packets
-		if len(packet) < protocol.ClientHelloMinimumSize+len(hdr.Raw) {
-			return errors.New("dropping small packet with unknown version")
-		}
 		utils.Infof("Client offered version %s, sending VersionNegotiationPacket", hdr.VersionNumber)
 		_, err = pconn.WriteTo(wire.ComposeVersionNegotiation(hdr.ConnectionID, s.config.Versions), remoteAddr)
 		return err
