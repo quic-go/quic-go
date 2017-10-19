@@ -208,7 +208,7 @@ var _ = Describe("Session", func() {
 		)
 		Expect(err).NotTo(HaveOccurred())
 		sess = pSess.(*session)
-		Expect(sess.streamsMap.openStreams).To(BeEmpty()) // the crypto stream is opened in session.run()
+		Expect(sess.streamsMap.openStreams).To(HaveLen(1)) // 1 stream: the crypto stream
 
 		sess.connParams = &mockParamsNegotiator{}
 	})
@@ -684,15 +684,15 @@ var _ = Describe("Session", func() {
 			}()
 			Consistently(strChan).ShouldNot(Receive())
 			err := sess.handleStreamFrame(&wire.StreamFrame{
-				StreamID: 3,
+				StreamID: 5,
 				Data:     []byte("foobar"),
 			})
 			Expect(err).ToNot(HaveOccurred())
 			var str Stream
 			Eventually(strChan).Should(Receive(&str))
-			Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
-			Eventually(strChan).Should(Receive(&str))
 			Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
+			Eventually(strChan).Should(Receive(&str))
+			Expect(str.StreamID()).To(Equal(protocol.StreamID(5)))
 		})
 
 		It("stops accepting when the session is closed", func() {
@@ -1684,7 +1684,7 @@ var _ = Describe("Client Session", func() {
 		)
 		sess = sessP.(*session)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(sess.streamsMap.openStreams).To(BeEmpty()) // the crypto stream is opened in session.run()
+		Expect(sess.streamsMap.openStreams).To(HaveLen(1))
 	})
 
 	AfterEach(func() {
