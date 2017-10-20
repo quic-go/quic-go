@@ -258,21 +258,24 @@ func (s *session) setup(
 	)
 	s.unpacker = &packetUnpacker{aead: s.cryptoSetup, version: s.version}
 
+	// open the crypto stream
+	if s.perspective == protocol.PerspectiveServer {
+		_, _ = s.GetOrOpenStream(1)
+		_, _ = s.AcceptStream() // don't expose the crypto stream
+	} else {
+		_, _ = s.OpenStream()
+	}
+
 	return s, handshakeChan, nil
 }
 
 // run the session main loop
 func (s *session) run() error {
-	// Start the crypto stream handler
-	var cryptoStream Stream
-	if s.perspective == protocol.PerspectiveServer {
-		cryptoStream, _ = s.GetOrOpenStream(1)
-		_, _ = s.AcceptStream() // don't expose the crypto stream
-	} else {
-		cryptoStream, _ = s.OpenStream()
-	}
+	defer s.ctxCancel()
 
+	// Start the crypto stream handler
 	go func() {
+		cryptoStream, _ := s.GetOrOpenStream(1)
 		if err := s.cryptoSetup.HandleCryptoStream(cryptoStream); err != nil {
 			s.Close(err)
 		}
@@ -366,7 +369,6 @@ runLoop:
 		s.handshakeChan <- handshakeEvent{err: closeErr.err}
 	}
 	s.handleCloseError(closeErr)
-	defer s.ctxCancel()
 	return closeErr.err
 }
 
