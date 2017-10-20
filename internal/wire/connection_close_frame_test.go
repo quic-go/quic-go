@@ -2,6 +2,7 @@ package wire
 
 import (
 	"bytes"
+	"io"
 	"strings"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -32,7 +33,7 @@ var _ = Describe("ConnectionCloseFrame", func() {
 					0x0, 0xff, // reason phrase length
 				})
 				_, err := ParseConnectionCloseFrame(b, versionLittleEndian)
-				Expect(err).To(MatchError(qerr.Error(qerr.InvalidConnectionCloseData, "reason phrase too long")))
+				Expect(err).To(MatchError(io.EOF))
 			})
 
 			It("errors on EOFs", func() {
@@ -70,7 +71,7 @@ var _ = Describe("ConnectionCloseFrame", func() {
 					0xff, 0x0, // reason phrase length
 				})
 				_, err := ParseConnectionCloseFrame(b, versionBigEndian)
-				Expect(err).To(MatchError(qerr.Error(qerr.InvalidConnectionCloseData, "reason phrase too long")))
+				Expect(err).To(MatchError(io.EOF))
 			})
 
 			It("errors on EOFs", func() {
