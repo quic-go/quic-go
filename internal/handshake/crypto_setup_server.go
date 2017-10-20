@@ -40,14 +40,17 @@ type cryptoSetupServer struct {
 	receivedForwardSecurePacket bool
 	receivedSecurePacket        bool
 	sentSHLO                    chan struct{} // this channel is closed as soon as the SHLO has been written
-	aeadChanged                 chan<- protocol.EncryptionLevel
+
+	receivedParams bool
+	paramsChan     chan<- TransportParameters
+	aeadChanged    chan<- protocol.EncryptionLevel
 
 	keyDerivation QuicCryptoKeyDerivationFunction
 	keyExchange   KeyExchangeFunction
 
 	cryptoStream io.ReadWriter
 
-	params *paramsNegotiatorGQUIC
+	params *TransportParameters
 
 	mutex sync.RWMutex
 }
@@ -72,14 +75,14 @@ func NewCryptoSetup(
 	params *TransportParameters,
 	supportedVersions []protocol.VersionNumber,
 	acceptSTK func(net.Addr, *Cookie) bool,
+	paramsChan chan<- TransportParameters,
 	aeadChanged chan<- protocol.EncryptionLevel,
-) (CryptoSetup, ParamsNegotiator, error) {
+) (CryptoSetup, error) {
 	stkGenerator, err := NewCookieGenerator()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	pn := newParamsNegotiatorGQUIC(protocol.PerspectiveServer, version, params)
 	return &cryptoSetupServer{
 		connID:            connID,
 		remoteAddr:        remoteAddr,
@@ -90,11 +93,12 @@ func NewCryptoSetup(
 		keyDerivation:     crypto.DeriveQuicCryptoAESKeys,
 		keyExchange:       getEphermalKEX,
 		nullAEAD:          crypto.NewNullAEAD(protocol.PerspectiveServer, version),
-		params:            pn,
+		params:            params,
 		acceptSTKCallback: acceptSTK,
 		sentSHLO:          make(chan struct{}),
+		paramsChan:        paramsChan,
 		aeadChanged:       aeadChanged,
-	}, pn, nil
+	}, nil
 }
 
 // HandleCryptoStream reads and writes messages on the crypto stream
@@ -161,6 +165,16 @@ func (h *cryptoSetupServer) handleMessage(chloData []byte, cryptoData map[Tag][]
 	certUncompressed, err := h.scfg.certChain.GetLeafCert(sni)
 	if err != nil {
 		return false, err
+	}
+
+	params, err := readHelloMap(cryptoData)
+	if err != nil {
+		return false, err
+	}
+	// blocks until the session has received the parameters
+	if !h.receivedParams {
+		h.receivedParams = true
+		h.paramsChan <- *params
 	}
 
 	if !h.isInchoateCHLO(cryptoData, certUncompressed) {
@@ -418,14 +432,7 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 		return nil, err
 	}
 
-	if err := h.params.SetFromMap(cryptoData); err != nil {
-		return nil, err
-	}
-
-	replyMap, err := h.params.GetHelloMap()
-	if err != nil {
-		return nil, err
-	}
+	replyMap := h.params.getHelloMap()
 	// add crypto parameters
 	verTag := &bytes.Buffer{}
 	for _, v := range h.supportedVersions {

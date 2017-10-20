@@ -3,7 +3,7 @@ package quic
 import (
 	"bytes"
 
-	"github.com/lucas-clemente/quic-go/internal/mocks/mocks_fc"
+	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	. "github.com/onsi/ginkgo"
@@ -21,7 +21,7 @@ var _ = Describe("Stream Framer", func() {
 		framer                                   *streamFramer
 		streamsMap                               *streamsMap
 		stream1, stream2                         *stream
-		mockFcm                                  *mocks_fc.MockFlowControlManager
+		mockFcm                                  *mocks.MockFlowControlManager
 	)
 
 	BeforeEach(func() {
@@ -37,11 +37,11 @@ var _ = Describe("Stream Framer", func() {
 		stream1 = &stream{streamID: id1}
 		stream2 = &stream{streamID: id2}
 
-		streamsMap = newStreamsMap(nil, nil, protocol.PerspectiveServer, nil)
+		streamsMap = newStreamsMap(nil, nil, protocol.PerspectiveServer)
 		streamsMap.putStream(stream1)
 		streamsMap.putStream(stream2)
 
-		mockFcm = mocks_fc.NewMockFlowControlManager(mockCtrl)
+		mockFcm = mocks.NewMockFlowControlManager(mockCtrl)
 		framer = newStreamFramer(streamsMap, mockFcm)
 	})
 

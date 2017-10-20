@@ -12,12 +12,16 @@ import (
 )
 
 var _ = Describe("TLS Extension Handler, for the client", func() {
-	var handler *extensionHandlerClient
-	var el mint.ExtensionList
+	var (
+		handler    *extensionHandlerClient
+		el         mint.ExtensionList
+		paramsChan chan TransportParameters
+	)
 
 	BeforeEach(func() {
-		pn := &paramsNegotiator{}
-		handler = newExtensionHandlerClient(pn, protocol.VersionWhatever, nil, protocol.VersionWhatever)
+		// use a buffered channel here, so that we don't have to receive concurrently when parsing a message
+		paramsChan = make(chan TransportParameters, 1)
+		handler = newExtensionHandlerClient(&TransportParameters{}, paramsChan, protocol.VersionWhatever, nil, protocol.VersionWhatever)
 		el = make(mint.ExtensionList, 0)
 	})
 
@@ -78,7 +82,9 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 			addEncryptedExtensionsWithParameters(parameters)
 			err := handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.params.GetSendStreamFlowControlWindow()).To(BeEquivalentTo(0x11223344))
+			var params TransportParameters
+			Expect(paramsChan).To(Receive(&params))
+			Expect(params.StreamFlowControlWindow).To(BeEquivalentTo(0x11223344))
 		})
 
 		It("errors if the EncryptedExtensions message doesn't contain TransportParameters", func() {

@@ -25,18 +25,17 @@ type packetPacker struct {
 	cryptoSetup  handshake.CryptoSetup
 
 	packetNumberGenerator *packetNumberGenerator
-	connParams            handshake.ParamsNegotiator
 	streamFramer          *streamFramer
 
-	controlFrames []wire.Frame
-	stopWaiting   *wire.StopWaitingFrame
-	ackFrame      *wire.AckFrame
-	leastUnacked  protocol.PacketNumber
+	controlFrames    []wire.Frame
+	stopWaiting      *wire.StopWaitingFrame
+	ackFrame         *wire.AckFrame
+	leastUnacked     protocol.PacketNumber
+	omitConnectionID bool
 }
 
 func newPacketPacker(connectionID protocol.ConnectionID,
 	cryptoSetup handshake.CryptoSetup,
-	connParams handshake.ParamsNegotiator,
 	streamFramer *streamFramer,
 	perspective protocol.Perspective,
 	version protocol.VersionNumber,
@@ -44,7 +43,6 @@ func newPacketPacker(connectionID protocol.ConnectionID,
 	return &packetPacker{
 		cryptoSetup:           cryptoSetup,
 		connectionID:          connectionID,
-		connParams:            connParams,
 		perspective:           perspective,
 		version:               version,
 		streamFramer:          streamFramer,
@@ -268,12 +266,14 @@ func (p *packetPacker) getPublicHeader(encLevel protocol.EncryptionLevel) *wire.
 	pnum := p.packetNumberGenerator.Peek()
 	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(pnum, p.leastUnacked)
 	publicHeader := &wire.PublicHeader{
-		ConnectionID:     p.connectionID,
-		PacketNumber:     pnum,
-		PacketNumberLen:  packetNumberLen,
-		OmitConnectionID: p.connParams.OmitConnectionID(),
+		ConnectionID:    p.connectionID,
+		PacketNumber:    pnum,
+		PacketNumberLen: packetNumberLen,
 	}
 
+	if p.omitConnectionID && encLevel == protocol.EncryptionForwardSecure {
+		publicHeader.OmitConnectionID = true
+	}
 	if p.perspective == protocol.PerspectiveServer && encLevel == protocol.EncryptionSecure {
 		publicHeader.DiversificationNonce = p.cryptoSetup.DiversificationNonce()
 	}
@@ -328,4 +328,8 @@ func (p *packetPacker) canSendData(encLevel protocol.EncryptionLevel) bool {
 
 func (p *packetPacker) SetLeastUnacked(leastUnacked protocol.PacketNumber) {
 	p.leastUnacked = leastUnacked
+}
+
+func (p *packetPacker) SetOmitConnectionID() {
+	p.omitConnectionID = true
 }

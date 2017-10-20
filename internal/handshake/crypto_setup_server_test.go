@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"net"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/crypto"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -167,6 +168,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		scfg              *ServerConfig
 		cs                *cryptoSetupServer
 		stream            *mockStream
+		paramsChan        chan TransportParameters
 		aeadChanged       chan protocol.EncryptionLevel
 		nonce32           []byte
 		versionTag        []byte
@@ -183,6 +185,8 @@ var _ = Describe("Server Crypto Setup", func() {
 		remoteAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234}
 		expectedInitialNonceLen = 32
 		expectedFSNonceLen = 64
+		// use a buffered channel here, so that we can parse a CHLO without having to receive the TransportParameters to avoid blocking
+		paramsChan = make(chan TransportParameters, 1)
 		aeadChanged = make(chan protocol.EncryptionLevel, 2)
 		stream = newMockStream()
 		kex = &mockKEX{}
@@ -197,7 +201,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		Expect(err).NotTo(HaveOccurred())
 		version = protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
 		supportedVersions = []protocol.VersionNumber{version, 98, 99}
-		csInt, _, err := NewCryptoSetup(
+		csInt, err := NewCryptoSetup(
 			protocol.ConnectionID(42),
 			remoteAddr,
 			version,
@@ -205,6 +209,7 @@ var _ = Describe("Server Crypto Setup", func() {
 			&TransportParameters{IdleTimeout: protocol.DefaultIdleTimeout},
 			supportedVersions,
 			nil,
+			paramsChan,
 			aeadChanged,
 		)
 		Expect(err).NotTo(HaveOccurred())
@@ -283,6 +288,16 @@ var _ = Describe("Server Crypto Setup", func() {
 			}.Write(&stream.dataToRead)
 			err := cs.HandleCryptoStream(stream)
 			Expect(err).To(MatchError(ErrNSTPExperiment))
+		})
+
+		It("reads the transport parameters sent by the client", func() {
+			sourceAddrValid = true
+			fullCHLO[TagICSL] = []byte{0x37, 0x13, 0, 0}
+			_, err := cs.handleMessage(bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), fullCHLO)
+			Expect(err).ToNot(HaveOccurred())
+			var params TransportParameters
+			Expect(paramsChan).To(Receive(&params))
+			Expect(params.IdleTimeout).To(Equal(0x1337 * time.Second))
 		})
 
 		It("generates REJ messages", func() {

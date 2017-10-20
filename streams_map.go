@@ -5,15 +5,14 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/qerr"
 )
 
 type streamsMap struct {
 	mutex sync.RWMutex
 
-	connParams  handshake.ParamsNegotiator
 	perspective protocol.Perspective
 
 	streams map[protocol.StreamID]*stream
@@ -34,6 +33,8 @@ type streamsMap struct {
 
 	numOutgoingStreams uint32
 	numIncomingStreams uint32
+	maxIncomingStreams uint32
+	maxOutgoingStreams uint32
 }
 
 type streamLambda func(*stream) (bool, error)
@@ -42,14 +43,20 @@ type newStreamLambda func(protocol.StreamID) *stream
 
 var errMapAccess = errors.New("streamsMap: Error accessing the streams map")
 
-func newStreamsMap(newStream newStreamLambda, removeStreamCallback removeStreamCallback, pers protocol.Perspective, connParams handshake.ParamsNegotiator) *streamsMap {
+func newStreamsMap(newStream newStreamLambda, removeStreamCallback removeStreamCallback, pers protocol.Perspective) *streamsMap {
+	// add some tolerance to the maximum incoming streams value
+	maxStreams := uint32(protocol.MaxIncomingStreams)
+	maxIncomingStreams := utils.MaxUint32(
+		maxStreams+protocol.MaxStreamsMinimumIncrement,
+		uint32(float64(maxStreams)*float64(protocol.MaxStreamsMultiplier)),
+	)
 	sm := streamsMap{
 		perspective:          pers,
 		streams:              make(map[protocol.StreamID]*stream),
 		openStreams:          make([]protocol.StreamID, 0),
 		newStream:            newStream,
 		removeStreamCallback: removeStreamCallback,
-		connParams:           connParams,
+		maxIncomingStreams:   maxIncomingStreams,
 	}
 	sm.nextStreamOrErrCond.L = &sm.mutex
 	sm.openStreamOrErrCond.L = &sm.mutex
@@ -57,6 +64,8 @@ func newStreamsMap(newStream newStreamLambda, removeStreamCallback removeStreamC
 	if pers == protocol.PerspectiveClient {
 		sm.nextStream = 1
 		sm.nextStreamToAccept = 2
+		// TODO: find a better solution for opening the crypto stream
+		sm.maxOutgoingStreams = 1 // allow the crypto stream
 	} else {
 		sm.nextStream = 2
 		sm.nextStreamToAccept = 1
@@ -126,7 +135,7 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (*stream, error) {
 }
 
 func (m *streamsMap) openRemoteStream(id protocol.StreamID) (*stream, error) {
-	if m.numIncomingStreams >= m.connParams.GetMaxIncomingStreams() {
+	if m.numIncomingStreams >= m.maxIncomingStreams {
 		return nil, qerr.TooManyOpenStreams
 	}
 	if id+protocol.MaxNewStreamIDDelta < m.highestStreamOpenedByPeer {
@@ -150,7 +159,7 @@ func (m *streamsMap) openRemoteStream(id protocol.StreamID) (*stream, error) {
 
 func (m *streamsMap) openStreamImpl() (*stream, error) {
 	id := m.nextStream
-	if m.numOutgoingStreams >= m.connParams.GetMaxOutgoingStreams() {
+	if m.numOutgoingStreams >= m.maxOutgoingStreams {
 		return nil, qerr.TooManyOpenStreams
 	}
 
@@ -330,4 +339,10 @@ func (m *streamsMap) CloseWithError(err error) {
 	for _, s := range m.openStreams {
 		m.streams[s].Cancel(err)
 	}
+}
+
+func (m *streamsMap) UpdateMaxStreamLimit(limit uint32) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.maxOutgoingStreams = limit
 }

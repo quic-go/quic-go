@@ -38,52 +38,52 @@ var newMintController = func(conn *mint.Conn) crypto.MintController {
 // NewCryptoSetupTLSServer creates a new TLS CryptoSetup instance for a server
 func NewCryptoSetupTLSServer(
 	tlsConfig *tls.Config,
-	transportParams *TransportParameters,
+	params *TransportParameters,
+	paramsChan chan<- TransportParameters,
 	aeadChanged chan<- protocol.EncryptionLevel,
 	supportedVersions []protocol.VersionNumber,
 	version protocol.VersionNumber,
-) (CryptoSetup, ParamsNegotiator, error) {
+) (CryptoSetup, error) {
 	mintConf, err := tlsToMintConfig(tlsConfig, protocol.PerspectiveServer)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	params := newParamsNegotiator(protocol.PerspectiveServer, version, transportParams)
 	return &cryptoSetupTLS{
 		perspective:      protocol.PerspectiveServer,
 		mintConf:         mintConf,
 		nullAEAD:         crypto.NewNullAEAD(protocol.PerspectiveServer, version),
 		keyDerivation:    crypto.DeriveAESKeys,
 		aeadChanged:      aeadChanged,
-		extensionHandler: newExtensionHandlerServer(params, supportedVersions, version),
-	}, params, nil
+		extensionHandler: newExtensionHandlerServer(params, paramsChan, supportedVersions, version),
+	}, nil
 }
 
 // NewCryptoSetupTLSClient creates a new TLS CryptoSetup instance for a client
 func NewCryptoSetupTLSClient(
 	hostname string, // only needed for the client
 	tlsConfig *tls.Config,
-	transportParams *TransportParameters,
+	params *TransportParameters,
+	paramsChan chan<- TransportParameters,
 	aeadChanged chan<- protocol.EncryptionLevel,
 	initialVersion protocol.VersionNumber,
 	supportedVersions []protocol.VersionNumber,
 	version protocol.VersionNumber,
-) (CryptoSetup, ParamsNegotiator, error) {
+) (CryptoSetup, error) {
 	mintConf, err := tlsToMintConfig(tlsConfig, protocol.PerspectiveClient)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	mintConf.ServerName = hostname
 
-	params := newParamsNegotiator(protocol.PerspectiveClient, version, transportParams)
 	return &cryptoSetupTLS{
 		perspective:      protocol.PerspectiveClient,
 		mintConf:         mintConf,
 		nullAEAD:         crypto.NewNullAEAD(protocol.PerspectiveClient, version),
 		keyDerivation:    crypto.DeriveAESKeys,
 		aeadChanged:      aeadChanged,
-		extensionHandler: newExtensionHandlerClient(params, initialVersion, supportedVersions, version),
-	}, params, nil
+		extensionHandler: newExtensionHandlerClient(params, paramsChan, initialVersion, supportedVersions, version),
+	}, nil
 }
 
 func (h *cryptoSetupTLS) HandleCryptoStream(cryptoStream io.ReadWriter) error {
