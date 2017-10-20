@@ -2,9 +2,9 @@ package protocol
 
 import "time"
 
-// MaxPacketSize is the maximum packet size, including the public header, that we use for sending packets
-// This is the value used by Chromium for a QUIC packet sent using IPv6 (for IPv4 it would be 1370)
-const MaxPacketSize ByteCount = 1350
+// MaxPacketSize is the maximum packet size that we use for sending packets.
+// It includes the QUIC packet header, but excludes the UDP and IP header.
+const MaxPacketSize ByteCount = 1200
 
 // NonForwardSecurePacketSizeReduction is the number of bytes a non forward-secure packet has to be smaller than a forward-secure packet
 // This makes sure that those packets can always be retransmitted without splitting the contained StreamFrames

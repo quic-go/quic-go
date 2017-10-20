@@ -61,8 +61,11 @@ func ParseStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*StreamF
 		}
 	}
 
-	if dataLen > uint16(protocol.MaxPacketSize) {
-		return nil, qerr.Error(qerr.InvalidStreamData, "data len too large")
+	// shortcut to prevent the unneccessary allocation of dataLen bytes
+	// if the dataLen is larger than the remaining length of the packet
+	// reading the packet contents would result in EOF when attempting to READ
+	if int(dataLen) > r.Len() {
+		return nil, io.EOF
 	}
 
 	if !frame.DataLenPresent {
@@ -72,6 +75,7 @@ func ParseStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*StreamF
 	if dataLen != 0 {
 		frame.Data = make([]byte, dataLen)
 		if _, err := io.ReadFull(r, frame.Data); err != nil {
+			// this should never happen, since we already checked the dataLen earlier
 			return nil, err
 		}
 	}
