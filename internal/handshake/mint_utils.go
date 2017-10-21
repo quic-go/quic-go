@@ -43,15 +43,16 @@ func tlsToMintConfig(tlsConf *tls.Config, pers protocol.Perspective) (*mint.Conf
 	return mconf, nil
 }
 
+type mintTLS interface {
+	crypto.TLSExporter
+	Handshake() mint.Alert
+}
+
 type mintController struct {
 	conn *mint.Conn
 }
 
-var _ crypto.MintController = &mintController{}
-
-func (mc *mintController) Handshake() mint.Alert {
-	return mc.conn.Handshake()
-}
+var _ mintTLS = &mintController{}
 
 func (mc *mintController) GetCipherSuite() mint.CipherSuiteParams {
 	return mc.conn.State().CipherSuite
@@ -59,6 +60,10 @@ func (mc *mintController) GetCipherSuite() mint.CipherSuiteParams {
 
 func (mc *mintController) ComputeExporter(label string, context []byte, keyLength int) ([]byte, error) {
 	return mc.conn.ComputeExporter(label, context, keyLength)
+}
+
+func (mc *mintController) Handshake() mint.Alert {
+	return mc.conn.Handshake()
 }
 
 // mint expects a net.Conn, but we're doing the handshake on a stream
