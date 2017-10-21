@@ -264,7 +264,7 @@ func (p *packetPacker) QueueControlFrame(frame wire.Frame) {
 
 func (p *packetPacker) getPublicHeader(encLevel protocol.EncryptionLevel) *wire.PublicHeader {
 	pnum := p.packetNumberGenerator.Peek()
-	packetNumberLen := protocol.GetPacketNumberLengthForPublicHeader(pnum, p.leastUnacked)
+	packetNumberLen := protocol.GetPacketNumberLengthForHeader(pnum, p.leastUnacked)
 	publicHeader := &wire.PublicHeader{
 		ConnectionID:    p.connectionID,
 		PacketNumber:    pnum,
