@@ -46,7 +46,7 @@ var _ = Describe("Stream Framer", func() {
 		streamsMap.putStream(stream2)
 
 		connFC = mocks.NewMockConnectionFlowController(mockCtrl)
-		framer = newStreamFramer(streamsMap, connFC)
+		framer = newStreamFramer(nil, streamsMap, connFC)
 	})
 
 	setNoData := func(str *mocks.MockStreamI) {

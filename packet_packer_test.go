@@ -61,11 +61,8 @@ var _ = Describe("Packet packer", func() {
 
 	BeforeEach(func() {
 		cryptoStream = &stream{flowController: flowcontrol.NewStreamFlowController(1, false, flowcontrol.NewConnectionFlowController(1000, 1000, nil), 1000, 1000, 1000, nil)}
-
 		streamsMap := newStreamsMap(nil, protocol.PerspectiveServer)
-		streamsMap.streams[1] = cryptoStream
-		streamsMap.openStreams = []protocol.StreamID{1}
-		streamFramer = newStreamFramer(streamsMap, nil)
+		streamFramer = newStreamFramer(cryptoStream, streamsMap, nil)
 
 		packer = &packetPacker{
 			cryptoSetup:           &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure},

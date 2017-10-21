@@ -189,7 +189,7 @@ var _ = Describe("Session", func() {
 		)
 		Expect(err).NotTo(HaveOccurred())
 		sess = pSess.(*session)
-		Expect(sess.streamsMap.openStreams).To(HaveLen(1)) // 1 stream: the crypto stream
+		Expect(sess.streamsMap.openStreams).To(BeEmpty())
 	})
 
 	AfterEach(func() {
@@ -472,6 +472,9 @@ var _ = Describe("Session", func() {
 		})
 
 		It("handles CONNECTION_CLOSE frames", func() {
+			cryptoStream := mocks.NewMockStreamI(mockCtrl)
+			cryptoStream.EXPECT().Cancel(gomock.Any())
+			sess.cryptoStream = cryptoStream
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -482,9 +485,6 @@ var _ = Describe("Session", func() {
 			_, err := sess.GetOrOpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
 			sess.streamsMap.Range(func(s streamI) {
-				if s.StreamID() == 1 { // the crypto stream is created by the session setup and is not a mock stream
-					return
-				}
 				s.(*mocks.MockStreamI).EXPECT().Cancel(gomock.Any())
 			})
 			err = sess.handleFrames([]wire.Frame{&wire.ConnectionCloseFrame{ErrorCode: qerr.ProofInvalid, ReasonPhrase: "foobar"}})
@@ -1541,7 +1541,7 @@ var _ = Describe("Client Session", func() {
 		)
 		sess = sessP.(*session)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(sess.streamsMap.openStreams).To(HaveLen(1))
+		Expect(sess.streamsMap.openStreams).To(BeEmpty())
 	})
 
 	AfterEach(func() {

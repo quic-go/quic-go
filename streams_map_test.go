@@ -280,7 +280,7 @@ var _ = Describe("Streams Map", func() {
 					Consistently(func() bool { return accepted }).Should(BeFalse())
 				})
 
-				It("accepts stream 1 first", func() {
+				It("start with stream 3", func() {
 					var str streamI
 					go func() {
 						defer GinkgoRecover()
@@ -288,10 +288,10 @@ var _ = Describe("Streams Map", func() {
 						str, err = m.AcceptStream()
 						Expect(err).ToNot(HaveOccurred())
 					}()
-					_, err := m.GetOrOpenStream(1)
+					_, err := m.GetOrOpenStream(3)
 					Expect(err).ToNot(HaveOccurred())
 					Eventually(func() Stream { return str }).ShouldNot(BeNil())
-					Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
 				})
 
 				It("returns an implicitly opened stream, if a stream number is skipped", func() {
@@ -305,7 +305,7 @@ var _ = Describe("Streams Map", func() {
 					_, err := m.GetOrOpenStream(5)
 					Expect(err).ToNot(HaveOccurred())
 					Eventually(func() Stream { return str }).ShouldNot(BeNil())
-					Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
 				})
 
 				It("returns to multiple accepts", func() {
@@ -322,12 +322,12 @@ var _ = Describe("Streams Map", func() {
 						str2, err = m.AcceptStream()
 						Expect(err).ToNot(HaveOccurred())
 					}()
-					_, err := m.GetOrOpenStream(3) // opens stream 1 and 3
+					_, err := m.GetOrOpenStream(5) // opens stream 3 and 5
 					Expect(err).ToNot(HaveOccurred())
 					Eventually(func() streamI { return str1 }).ShouldNot(BeNil())
 					Eventually(func() streamI { return str2 }).ShouldNot(BeNil())
 					Expect(str1.StreamID()).ToNot(Equal(str2.StreamID()))
-					Expect(str1.StreamID() + str2.StreamID()).To(BeEquivalentTo(1 + 3))
+					Expect(str1.StreamID() + str2.StreamID()).To(BeEquivalentTo(3 + 5))
 				})
 
 				It("waits a new stream is available", func() {
@@ -339,10 +339,10 @@ var _ = Describe("Streams Map", func() {
 						Expect(err).ToNot(HaveOccurred())
 					}()
 					Consistently(func() streamI { return str }).Should(BeNil())
-					_, err := m.GetOrOpenStream(1)
+					_, err := m.GetOrOpenStream(3)
 					Expect(err).ToNot(HaveOccurred())
 					Eventually(func() streamI { return str }).ShouldNot(BeNil())
-					Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
 				})
 
 				It("returns multiple streams on subsequent Accept calls, if available", func() {
@@ -353,22 +353,22 @@ var _ = Describe("Streams Map", func() {
 						str, err = m.AcceptStream()
 						Expect(err).ToNot(HaveOccurred())
 					}()
-					_, err := m.GetOrOpenStream(3)
+					_, err := m.GetOrOpenStream(5)
 					Expect(err).ToNot(HaveOccurred())
 					Eventually(func() streamI { return str }).ShouldNot(BeNil())
-					Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
 					str, err = m.AcceptStream()
 					Expect(err).ToNot(HaveOccurred())
-					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(5)))
 				})
 
 				It("blocks after accepting a stream", func() {
 					var accepted bool
-					_, err := m.GetOrOpenStream(1)
+					_, err := m.GetOrOpenStream(3)
 					Expect(err).ToNot(HaveOccurred())
 					str, err := m.AcceptStream()
 					Expect(err).ToNot(HaveOccurred())
-					Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
 					go func() {
 						defer GinkgoRecover()
 						_, _ = m.AcceptStream()
@@ -400,6 +400,7 @@ var _ = Describe("Streams Map", func() {
 		Context("as a client", func() {
 			BeforeEach(func() {
 				setNewStreamsMap(protocol.PerspectiveClient)
+				m.UpdateMaxStreamLimit(100)
 			})
 
 			Context("client-side streams", func() {
@@ -434,21 +435,21 @@ var _ = Describe("Streams Map", func() {
 				It("doesn't reopen an already closed stream", func() {
 					str, err := m.OpenStream()
 					Expect(err).ToNot(HaveOccurred())
-					Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
-					deleteStream(1)
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
+					deleteStream(3)
 					Expect(err).ToNot(HaveOccurred())
-					str, err = m.GetOrOpenStream(1)
+					str, err = m.GetOrOpenStream(3)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(str).To(BeNil())
 				})
 			})
 
 			Context("server-side streams", func() {
-				It("opens stream 1 first", func() {
+				It("starts with stream 3", func() {
 					s, err := m.OpenStream()
 					Expect(err).ToNot(HaveOccurred())
 					Expect(s).ToNot(BeNil())
-					Expect(s.StreamID()).To(BeEquivalentTo(1))
+					Expect(s.StreamID()).To(BeEquivalentTo(3))
 					Expect(m.numOutgoingStreams).To(BeZero())
 					Expect(m.numIncomingStreams).To(BeEquivalentTo(1))
 				})
@@ -685,18 +686,16 @@ var _ = Describe("Streams Map", func() {
 				})
 			})
 
-			Context("Prioritizing crypto- and header streams", func() {
+			Context("Prioritizing the header stream", func() {
 				BeforeEach(func() {
-					err := m.putStream(&stream{streamID: 1})
-					Expect(err).NotTo(HaveOccurred())
-					err = m.putStream(&stream{streamID: 3})
+					err := m.putStream(&stream{streamID: 3})
 					Expect(err).NotTo(HaveOccurred())
 				})
 
 				It("gets crypto- and header stream first, then picks up at the round-robin position", func() {
 					m.roundRobinIndex = 3 // stream 7
 					fn := func(str streamI) (bool, error) {
-						if numIterations >= 3 {
+						if numIterations >= 2 {
 							return false, nil
 						}
 						lambdaCalledForStream = append(lambdaCalledForStream, str.StreamID())
@@ -705,8 +704,8 @@ var _ = Describe("Streams Map", func() {
 					}
 					err := m.RoundRobinIterate(fn)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(numIterations).To(Equal(3))
-					Expect(lambdaCalledForStream).To(Equal([]protocol.StreamID{1, 3, 7}))
+					Expect(numIterations).To(Equal(2))
+					Expect(lambdaCalledForStream).To(Equal([]protocol.StreamID{3, 7}))
 				})
 			})
 		})

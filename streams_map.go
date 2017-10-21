@@ -59,13 +59,11 @@ func newStreamsMap(newStream newStreamLambda, pers protocol.Perspective) *stream
 	sm.openStreamOrErrCond.L = &sm.mutex
 
 	if pers == protocol.PerspectiveClient {
-		sm.nextStream = 1
+		sm.nextStream = 3
 		sm.nextStreamToAccept = 2
-		// TODO: find a better solution for opening the crypto stream
-		sm.maxOutgoingStreams = 1 // allow the crypto stream
 	} else {
 		sm.nextStream = 2
-		sm.nextStreamToAccept = 1
+		sm.nextStreamToAccept = 3
 	}
 
 	return &sm
@@ -271,7 +269,7 @@ func (m *streamsMap) DeleteClosedStreams() error {
 
 // RoundRobinIterate executes the streamLambda for every open stream, until the streamLambda returns false
 // It uses a round-robin-like scheduling to ensure that every stream is considered fairly
-// It prioritizes the crypto- and the header-stream (StreamIDs 1 and 3)
+// It prioritizes the the header-stream (StreamID 3)
 func (m *streamsMap) RoundRobinIterate(fn streamLambda) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -279,19 +277,18 @@ func (m *streamsMap) RoundRobinIterate(fn streamLambda) error {
 	numStreams := len(m.streams)
 	startIndex := m.roundRobinIndex
 
-	for _, i := range []protocol.StreamID{1, 3} {
-		cont, err := m.iterateFunc(i, fn)
-		if err != nil && err != errMapAccess {
-			return err
-		}
-		if !cont {
-			return nil
-		}
+	// prioritize the header stream
+	cont, err := m.iterateFunc(3, fn)
+	if err != nil && err != errMapAccess {
+		return err
+	}
+	if !cont {
+		return nil
 	}
 
 	for i := 0; i < numStreams; i++ {
 		streamID := m.openStreams[(i+startIndex)%numStreams]
-		if streamID == 1 || streamID == 3 {
+		if streamID == 3 {
 			continue
 		}
 
