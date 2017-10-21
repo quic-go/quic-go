@@ -43,6 +43,7 @@ var _ = Describe("TLS Crypto Setup", func() {
 		paramsChan = make(chan TransportParameters)
 		aeadChanged = make(chan protocol.EncryptionLevel, 2)
 		csInt, err := NewCryptoSetupTLSServer(
+			nil,
 			testdata.GetTLSConfig(),
 			&TransportParameters{},
 			paramsChan,
@@ -63,7 +64,7 @@ var _ = Describe("TLS Crypto Setup", func() {
 		newMintController = func(*mint.Conn) crypto.MintController {
 			return &fakeMintController{result: alert}
 		}
-		err := cs.HandleCryptoStream(nil)
+		err := cs.HandleCryptoStream()
 		Expect(err).To(MatchError(fmt.Errorf("TLS handshake error: %s (Alert %d)", alert.String(), alert)))
 	})
 
@@ -72,7 +73,7 @@ var _ = Describe("TLS Crypto Setup", func() {
 			return &fakeMintController{result: mint.AlertNoAlert}
 		}
 		cs.keyDerivation = mockKeyDerivation
-		err := cs.HandleCryptoStream(nil)
+		err := cs.HandleCryptoStream()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionForwardSecure)))
 		Expect(aeadChanged).To(BeClosed())
@@ -86,7 +87,7 @@ var _ = Describe("TLS Crypto Setup", func() {
 				return &fakeMintController{result: mint.AlertNoAlert}
 			}
 			cs.keyDerivation = mockKeyDerivation
-			err := cs.HandleCryptoStream(nil)
+			err := cs.HandleCryptoStream()
 			Expect(err).ToNot(HaveOccurred())
 		}
 

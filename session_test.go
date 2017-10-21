@@ -157,6 +157,7 @@ var _ = Describe("Session", func() {
 
 		cryptoSetup = &mockCryptoSetup{}
 		newCryptoSetup = func(
+			_ io.ReadWriter,
 			_ protocol.ConnectionID,
 			_ net.Addr,
 			_ protocol.VersionNumber,
@@ -206,6 +207,7 @@ var _ = Describe("Session", func() {
 
 		BeforeEach(func() {
 			newCryptoSetup = func(
+				_ io.ReadWriter,
 				_ protocol.ConnectionID,
 				_ net.Addr,
 				_ protocol.VersionNumber,
@@ -1512,6 +1514,7 @@ var _ = Describe("Client Session", func() {
 
 		cryptoSetup = &mockCryptoSetup{}
 		newCryptoSetupClient = func(
+			_ io.ReadWriter,
 			_ string,
 			_ protocol.ConnectionID,
 			_ protocol.VersionNumber,

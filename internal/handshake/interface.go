@@ -1,8 +1,6 @@
 package handshake
 
 import (
-	"io"
-
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
 
@@ -15,7 +13,7 @@ type Sealer interface {
 // CryptoSetup is a crypto setup
 type CryptoSetup interface {
 	Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error)
-	HandleCryptoStream(io.ReadWriter) error
+	HandleCryptoStream() error
 	// TODO: clean up this interface
 	DiversificationNonce() []byte   // only needed for cryptoSetupServer
 	SetDiversificationNonce([]byte) // only needed for cryptoSetupClient
