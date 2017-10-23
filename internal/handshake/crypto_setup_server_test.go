@@ -214,8 +214,8 @@ var _ = Describe("Server Crypto Setup", func() {
 		)
 		Expect(err).NotTo(HaveOccurred())
 		cs = csInt.(*cryptoSetupServer)
-		cs.stkGenerator.cookieSource = &mockCookieSource{}
-		validSTK, err = cs.stkGenerator.NewToken(remoteAddr)
+		cs.scfg.cookieGenerator.cookieSource = &mockCookieSource{}
+		validSTK, err = cs.scfg.cookieGenerator.NewToken(remoteAddr)
 		Expect(err).NotTo(HaveOccurred())
 		sourceAddrValid = true
 		cs.acceptSTKCallback = func(_ net.Addr, _ *Cookie) bool { return sourceAddrValid }
@@ -438,7 +438,7 @@ var _ = Describe("Server Crypto Setup", func() {
 
 		It("recognizes inchoate CHLOs with an invalid STK", func() {
 			testErr := errors.New("STK invalid")
-			cs.stkGenerator.cookieSource.(*mockCookieSource).decodeErr = testErr
+			cs.scfg.cookieGenerator.cookieSource.(*mockCookieSource).decodeErr = testErr
 			Expect(cs.isInchoateCHLO(fullCHLO, cert)).To(BeTrue())
 		})
 
