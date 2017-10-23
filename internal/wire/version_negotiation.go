@@ -8,14 +8,15 @@ import (
 )
 
 // ComposeVersionNegotiation composes a Version Negotiation Packet
+// TODO(894): implement the IETF draft format of Version Negotiation Packets
 func ComposeVersionNegotiation(connectionID protocol.ConnectionID, versions []protocol.VersionNumber) []byte {
 	fullReply := &bytes.Buffer{}
-	responsePublicHeader := PublicHeader{
+	ph := Header{
 		ConnectionID: connectionID,
 		PacketNumber: 1,
 		VersionFlag:  true,
 	}
-	err := responsePublicHeader.Write(fullReply, protocol.VersionWhatever, protocol.PerspectiveServer)
+	err := ph.writePublicHeader(fullReply, protocol.PerspectiveServer, protocol.VersionWhatever)
 	if err != nil {
 		utils.Errorf("error composing version negotiation packet: %s", err.Error())
 	}

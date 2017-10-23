@@ -11,7 +11,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Header", func() {
+var _ = Describe("IETF draft Header", func() {
 	Context("parsing", func() {
 		Context("long headers", func() {
 			var data []byte
@@ -27,7 +27,7 @@ var _ = Describe("Header", func() {
 
 			It("parses a long header", func() {
 				b := bytes.NewReader(data)
-				h, err := ParseHeader(b, protocol.PerspectiveClient)
+				h, err := parseHeader(b, protocol.PerspectiveClient)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(h.Type).To(BeEquivalentTo(3))
 				Expect(h.IsLongHeader).To(BeTrue())
@@ -41,7 +41,7 @@ var _ = Describe("Header", func() {
 
 			It("errors on EOF", func() {
 				for i := 0; i < len(data); i++ {
-					_, err := ParseHeader(bytes.NewReader(data[:i]), protocol.PerspectiveClient)
+					_, err := parseHeader(bytes.NewReader(data[:i]), protocol.PerspectiveClient)
 					Expect(err).To(Equal(io.EOF))
 				}
 			})
@@ -57,7 +57,7 @@ var _ = Describe("Header", func() {
 						0x33, 0x44, 0x55, 0x66}...,
 					)
 					b := bytes.NewReader(data)
-					h, err := ParseHeader(b, protocol.PerspectiveServer)
+					h, err := parseHeader(b, protocol.PerspectiveServer)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(h.SupportedVersions).To(Equal([]protocol.VersionNumber{
 						0x22334455,
@@ -68,20 +68,20 @@ var _ = Describe("Header", func() {
 				It("errors if it contains versions of the wrong length", func() {
 					data = append(data, []byte{0x22, 0x33}...) // too short. Should be 4 bytes.
 					b := bytes.NewReader(data)
-					_, err := ParseHeader(b, protocol.PerspectiveServer)
+					_, err := parseHeader(b, protocol.PerspectiveServer)
 					Expect(err).To(MatchError(qerr.InvalidVersionNegotiationPacket))
 				})
 
 				It("errors if it was sent by the client", func() {
 					data = append(data, []byte{0x22, 0x33, 0x44, 0x55}...)
 					b := bytes.NewReader(data)
-					_, err := ParseHeader(b, protocol.PerspectiveClient)
+					_, err := parseHeader(b, protocol.PerspectiveClient)
 					Expect(err).To(MatchError("InvalidVersionNegotiationPacket: sent by the client"))
 				})
 
 				It("errors if the version list is emtpy", func() {
 					b := bytes.NewReader(data)
-					_, err := ParseHeader(b, protocol.PerspectiveServer)
+					_, err := parseHeader(b, protocol.PerspectiveServer)
 					Expect(err).To(MatchError("InvalidVersionNegotiationPacket: empty version list"))
 				})
 			})
@@ -95,7 +95,7 @@ var _ = Describe("Header", func() {
 					0x42, // packet number
 				}
 				b := bytes.NewReader(data)
-				h, err := ParseHeader(b, protocol.PerspectiveClient)
+				h, err := parseHeader(b, protocol.PerspectiveClient)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(h.IsLongHeader).To(BeFalse())
 				Expect(h.KeyPhase).To(Equal(0))
@@ -111,7 +111,7 @@ var _ = Describe("Header", func() {
 					0x11,
 				}
 				b := bytes.NewReader(data)
-				h, err := ParseHeader(b, protocol.PerspectiveClient)
+				h, err := parseHeader(b, protocol.PerspectiveClient)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(h.IsLongHeader).To(BeFalse())
 				Expect(h.KeyPhase).To(Equal(1))
@@ -124,7 +124,7 @@ var _ = Describe("Header", func() {
 					0x21, // packet number
 				}
 				b := bytes.NewReader(data)
-				h, err := ParseHeader(b, protocol.PerspectiveClient)
+				h, err := parseHeader(b, protocol.PerspectiveClient)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(h.IsLongHeader).To(BeFalse())
 				Expect(h.OmitConnectionID).To(BeTrue())
@@ -139,7 +139,7 @@ var _ = Describe("Header", func() {
 					0x13, 0x37, // packet number
 				}
 				b := bytes.NewReader(data)
-				h, err := ParseHeader(b, protocol.PerspectiveClient)
+				h, err := parseHeader(b, protocol.PerspectiveClient)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(h.IsLongHeader).To(BeFalse())
 				Expect(h.PacketNumber).To(Equal(protocol.PacketNumber(0x1337)))
@@ -153,7 +153,7 @@ var _ = Describe("Header", func() {
 					0xde, 0xad, 0xbe, 0xef, // packet number
 				}
 				b := bytes.NewReader(data)
-				h, err := ParseHeader(b, protocol.PerspectiveClient)
+				h, err := parseHeader(b, protocol.PerspectiveClient)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(h.IsLongHeader).To(BeFalse())
 				Expect(h.PacketNumber).To(Equal(protocol.PacketNumber(0xdeadbeef)))
@@ -168,7 +168,7 @@ var _ = Describe("Header", func() {
 					0xde, 0xca, 0xfb, 0xad, // packet number
 				}
 				for i := 0; i < len(data); i++ {
-					_, err := ParseHeader(bytes.NewReader(data[:i]), protocol.PerspectiveClient)
+					_, err := parseHeader(bytes.NewReader(data[:i]), protocol.PerspectiveClient)
 					Expect(err).To(Equal(io.EOF))
 				}
 			})
@@ -190,7 +190,7 @@ var _ = Describe("Header", func() {
 					ConnectionID: 0xdeadbeefcafe1337,
 					PacketNumber: 0xdecafbad,
 					Version:      0x1020304,
-				}).Write(buf)
+				}).writeHeader(buf)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(buf.Bytes()).To(Equal([]byte{
 					0x80 ^ 0x5,
@@ -207,7 +207,7 @@ var _ = Describe("Header", func() {
 					ConnectionID:    0xdeadbeefcafe1337,
 					PacketNumberLen: protocol.PacketNumberLen1,
 					PacketNumber:    0x42,
-				}).Write(buf)
+				}).writeHeader(buf)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(buf.Bytes()).To(Equal([]byte{
 					0x40 ^ 0x1,
@@ -221,7 +221,7 @@ var _ = Describe("Header", func() {
 					OmitConnectionID: true,
 					PacketNumberLen:  protocol.PacketNumberLen1,
 					PacketNumber:     0x42,
-				}).Write(buf)
+				}).writeHeader(buf)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(buf.Bytes()).To(Equal([]byte{
 					0x1,
@@ -234,7 +234,7 @@ var _ = Describe("Header", func() {
 					OmitConnectionID: true,
 					PacketNumberLen:  protocol.PacketNumberLen2,
 					PacketNumber:     0x1337,
-				}).Write(buf)
+				}).writeHeader(buf)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(buf.Bytes()).To(Equal([]byte{
 					0x2,
@@ -247,7 +247,7 @@ var _ = Describe("Header", func() {
 					OmitConnectionID: true,
 					PacketNumberLen:  protocol.PacketNumberLen4,
 					PacketNumber:     0xdecafbad,
-				}).Write(buf)
+				}).writeHeader(buf)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(buf.Bytes()).To(Equal([]byte{
 					0x3,
@@ -260,7 +260,7 @@ var _ = Describe("Header", func() {
 					OmitConnectionID: true,
 					PacketNumberLen:  3,
 					PacketNumber:     0xdecafbad,
-				}).Write(buf)
+				}).writeHeader(buf)
 				Expect(err).To(MatchError("invalid packet number length: 3"))
 			})
 
@@ -270,7 +270,7 @@ var _ = Describe("Header", func() {
 					OmitConnectionID: true,
 					PacketNumberLen:  protocol.PacketNumberLen1,
 					PacketNumber:     0x42,
-				}).Write(buf)
+				}).writeHeader(buf)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(buf.Bytes()).To(Equal([]byte{
 					0x20 ^ 0x1,
@@ -289,8 +289,8 @@ var _ = Describe("Header", func() {
 
 		It("has the right length for the long header", func() {
 			h := &Header{IsLongHeader: true}
-			Expect(h.GetLength()).To(Equal(protocol.ByteCount(17)))
-			err := h.Write(buf)
+			Expect(h.getHeaderLength()).To(Equal(protocol.ByteCount(17)))
+			err := h.writeHeader(buf)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(buf.Len()).To(Equal(17))
 		})
@@ -299,8 +299,8 @@ var _ = Describe("Header", func() {
 			h := &Header{
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}
-			Expect(h.GetLength()).To(Equal(protocol.ByteCount(1 + 8 + 1)))
-			err := h.Write(buf)
+			Expect(h.getHeaderLength()).To(Equal(protocol.ByteCount(1 + 8 + 1)))
+			err := h.writeHeader(buf)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(buf.Len()).To(Equal(10))
 		})
@@ -310,8 +310,8 @@ var _ = Describe("Header", func() {
 				OmitConnectionID: true,
 				PacketNumberLen:  protocol.PacketNumberLen1,
 			}
-			Expect(h.GetLength()).To(Equal(protocol.ByteCount(1 + 1)))
-			err := h.Write(buf)
+			Expect(h.getHeaderLength()).To(Equal(protocol.ByteCount(1 + 1)))
+			err := h.writeHeader(buf)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(buf.Len()).To(Equal(2))
 		})
@@ -321,8 +321,8 @@ var _ = Describe("Header", func() {
 				OmitConnectionID: true,
 				PacketNumberLen:  protocol.PacketNumberLen2,
 			}
-			Expect(h.GetLength()).To(Equal(protocol.ByteCount(1 + 2)))
-			err := h.Write(buf)
+			Expect(h.getHeaderLength()).To(Equal(protocol.ByteCount(1 + 2)))
+			err := h.writeHeader(buf)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(buf.Len()).To(Equal(3))
 		})
@@ -332,15 +332,15 @@ var _ = Describe("Header", func() {
 				OmitConnectionID: true,
 				PacketNumberLen:  protocol.PacketNumberLen4,
 			}
-			Expect(h.GetLength()).To(Equal(protocol.ByteCount(1 + 4)))
-			err := h.Write(buf)
+			Expect(h.getHeaderLength()).To(Equal(protocol.ByteCount(1 + 4)))
+			err := h.writeHeader(buf)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(buf.Len()).To(Equal(5))
 		})
 
 		It("errors when given an invalid packet number length", func() {
 			h := &Header{PacketNumberLen: 5}
-			_, err := h.GetLength()
+			_, err := h.getHeaderLength()
 			Expect(err).To(MatchError("invalid packet number length: 5"))
 		})
 	})

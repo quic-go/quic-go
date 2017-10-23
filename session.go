@@ -20,14 +20,14 @@ import (
 )
 
 type unpacker interface {
-	Unpack(publicHeaderBinary []byte, hdr *wire.PublicHeader, data []byte) (*unpackedPacket, error)
+	Unpack(headerBinary []byte, hdr *wire.Header, data []byte) (*unpackedPacket, error)
 }
 
 type receivedPacket struct {
-	remoteAddr   net.Addr
-	publicHeader *wire.PublicHeader
-	data         []byte
-	rcvTime      time.Time
+	remoteAddr net.Addr
+	header     *wire.Header
+	data       []byte
+	rcvTime    time.Time
 }
 
 var (
@@ -322,7 +322,7 @@ runLoop:
 			}
 			// This is a bit unclean, but works properly, since the packet always
 			// begins with the public header and we never copy it.
-			putPacketBuffer(p.publicHeader.Raw)
+			putPacketBuffer(p.header.Raw)
 		case p := <-s.paramsChan:
 			s.processTransportParameters(&p)
 		case l, ok := <-aeadChanged:
@@ -410,7 +410,7 @@ func (s *session) maybeResetTimer() {
 
 func (s *session) handlePacketImpl(p *receivedPacket) error {
 	if s.perspective == protocol.PerspectiveClient {
-		diversificationNonce := p.publicHeader.DiversificationNonce
+		diversificationNonce := p.header.DiversificationNonce
 		if len(diversificationNonce) > 0 {
 			s.cryptoSetup.SetDiversificationNonce(diversificationNonce)
 		}
@@ -423,7 +423,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 
 	s.lastNetworkActivityTime = p.rcvTime
 	s.keepAlivePingSent = false
-	hdr := p.publicHeader
+	hdr := p.header
 	data := p.data
 
 	// Calculate packet number
@@ -847,7 +847,7 @@ func (s *session) scheduleSending() {
 
 func (s *session) tryQueueingUndecryptablePacket(p *receivedPacket) {
 	if s.handshakeComplete {
-		utils.Debugf("Received undecryptable packet from %s after the handshake: %#v, %d bytes data", p.remoteAddr.String(), p.publicHeader, len(p.data))
+		utils.Debugf("Received undecryptable packet from %s after the handshake: %#v, %d bytes data", p.remoteAddr.String(), p.header, len(p.data))
 		return
 	}
 	if len(s.undecryptablePackets)+1 > protocol.MaxUndecryptablePackets {
@@ -856,10 +856,10 @@ func (s *session) tryQueueingUndecryptablePacket(p *receivedPacket) {
 			s.receivedTooManyUndecrytablePacketsTime = time.Now()
 			s.maybeResetTimer()
 		}
-		utils.Infof("Dropping undecrytable packet 0x%x (undecryptable packet queue full)", p.publicHeader.PacketNumber)
+		utils.Infof("Dropping undecrytable packet 0x%x (undecryptable packet queue full)", p.header.PacketNumber)
 		return
 	}
-	utils.Infof("Queueing packet 0x%x for later decryption", p.publicHeader.PacketNumber)
+	utils.Infof("Queueing packet 0x%x for later decryption", p.header.PacketNumber)
 	s.undecryptablePackets = append(s.undecryptablePackets, p)
 }
 

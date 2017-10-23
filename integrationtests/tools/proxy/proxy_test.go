@@ -20,13 +20,13 @@ type packetData []byte
 var _ = Describe("QUIC Proxy", func() {
 	makePacket := func(p protocol.PacketNumber, payload []byte) []byte {
 		b := &bytes.Buffer{}
-		hdr := wire.PublicHeader{
+		hdr := wire.Header{
 			PacketNumber:     p,
 			PacketNumberLen:  protocol.PacketNumberLen6,
 			ConnectionID:     1337,
 			OmitConnectionID: false,
 		}
-		hdr.Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
+		hdr.Write(b, protocol.PerspectiveServer, protocol.VersionWhatever)
 		raw := b.Bytes()
 		raw = append(raw, payload...)
 		return raw

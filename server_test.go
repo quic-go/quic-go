@@ -327,13 +327,13 @@ var _ = Describe("Server", func() {
 
 		It("doesn't respond with a version negotiation packet if the first packet is too small", func() {
 			b := &bytes.Buffer{}
-			hdr := wire.PublicHeader{
+			hdr := wire.Header{
 				VersionFlag:     true,
 				ConnectionID:    0x1337,
 				PacketNumber:    1,
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}
-			hdr.Write(b, 13 /* not a valid QUIC version */, protocol.PerspectiveClient)
+			hdr.Write(b, protocol.PerspectiveClient, 13 /* not a valid QUIC version */)
 			b.Write(bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSize-1)) // this packet is 1 byte too small
 			err := serv.handlePacket(conn, udpAddr, b.Bytes())
 			Expect(err).To(MatchError("dropping small packet with unknown version"))
@@ -398,13 +398,13 @@ var _ = Describe("Server", func() {
 	It("setups and responds with version negotiation", func() {
 		config.Versions = []protocol.VersionNumber{99}
 		b := &bytes.Buffer{}
-		hdr := wire.PublicHeader{
+		hdr := wire.Header{
 			VersionFlag:     true,
 			ConnectionID:    0x1337,
 			PacketNumber:    1,
 			PacketNumberLen: protocol.PacketNumberLen2,
 		}
-		hdr.Write(b, 13 /* not a valid QUIC version */, protocol.PerspectiveClient)
+		hdr.Write(b, protocol.PerspectiveClient, 13 /* not a valid QUIC version */)
 		b.Write(bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSize)) // add a fake CHLO
 		conn.dataToRead = b.Bytes()
 		conn.dataReadFrom = udpAddr

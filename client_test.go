@@ -30,11 +30,11 @@ var _ = Describe("Client", func() {
 	// generate a packet sent by the server that accepts the QUIC version suggested by the client
 	acceptClientVersionPacket := func(connID protocol.ConnectionID) []byte {
 		b := &bytes.Buffer{}
-		err := (&wire.PublicHeader{
+		err := (&wire.Header{
 			ConnectionID:    connID,
 			PacketNumber:    1,
 			PacketNumberLen: 1,
-		}).Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
+		}).Write(b, protocol.PerspectiveServer, protocol.VersionWhatever)
 		Expect(err).ToNot(HaveOccurred())
 		return b.Bytes()
 	}
@@ -302,13 +302,13 @@ var _ = Describe("Client", func() {
 
 		Context("version negotiation", func() {
 			It("recognizes that a packet without VersionFlag means that the server accepted the suggested version", func() {
-				ph := wire.PublicHeader{
+				ph := wire.Header{
 					PacketNumber:    1,
 					PacketNumberLen: protocol.PacketNumberLen2,
 					ConnectionID:    0x1337,
 				}
 				b := &bytes.Buffer{}
-				err := ph.Write(b, protocol.VersionWhatever, protocol.PerspectiveServer)
+				err := ph.Write(b, protocol.PerspectiveServer, protocol.VersionWhatever)
 				Expect(err).ToNot(HaveOccurred())
 				cl.handlePacket(nil, b.Bytes())
 				Expect(cl.versionNegotiated).To(BeTrue())
@@ -450,11 +450,11 @@ var _ = Describe("Client", func() {
 	It("ignores packets without connection id, if it didn't request connection id trunctation", func() {
 		cl.config.RequestConnectionIDOmission = false
 		buf := &bytes.Buffer{}
-		(&wire.PublicHeader{
+		(&wire.Header{
 			OmitConnectionID: true,
 			PacketNumber:     1,
 			PacketNumberLen:  1,
-		}).Write(buf, protocol.VersionWhatever, protocol.PerspectiveServer)
+		}).Write(buf, protocol.PerspectiveServer, protocol.VersionWhatever)
 		cl.handlePacket(addr, buf.Bytes())
 		Expect(sess.packetCount).To(BeZero())
 		Expect(sess.closed).To(BeFalse())
@@ -462,11 +462,11 @@ var _ = Describe("Client", func() {
 
 	It("ignores packets with the wrong connection ID", func() {
 		buf := &bytes.Buffer{}
-		(&wire.PublicHeader{
+		(&wire.Header{
 			ConnectionID:    cl.connectionID + 1,
 			PacketNumber:    1,
 			PacketNumberLen: 1,
-		}).Write(buf, protocol.VersionWhatever, protocol.PerspectiveServer)
+		}).Write(buf, protocol.PerspectiveServer, protocol.VersionWhatever)
 		cl.handlePacket(addr, buf.Bytes())
 		Expect(sess.packetCount).To(BeZero())
 		Expect(sess.closed).To(BeFalse())
@@ -513,13 +513,13 @@ var _ = Describe("Client", func() {
 
 	Context("handling packets", func() {
 		It("handles packets", func() {
-			ph := wire.PublicHeader{
+			ph := wire.Header{
 				PacketNumber:    1,
 				PacketNumberLen: protocol.PacketNumberLen2,
 				ConnectionID:    0x1337,
 			}
 			b := &bytes.Buffer{}
-			err := ph.Write(b, cl.version, protocol.PerspectiveServer)
+			err := ph.Write(b, protocol.PerspectiveServer, cl.version)
 			Expect(err).ToNot(HaveOccurred())
 			packetConn.dataToRead = b.Bytes()
 

@@ -61,7 +61,7 @@ type mockUnpacker struct {
 	unpackErr error
 }
 
-func (m *mockUnpacker) Unpack(publicHeaderBinary []byte, hdr *wire.PublicHeader, data []byte) (*unpackedPacket, error) {
+func (m *mockUnpacker) Unpack(headerBinary []byte, hdr *wire.Header, data []byte) (*unpackedPacket, error) {
 	if m.unpackErr != nil {
 		return nil, m.unpackErr
 	}
@@ -688,16 +688,16 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("receiving packets", func() {
-		var hdr *wire.PublicHeader
+		var hdr *wire.Header
 
 		BeforeEach(func() {
 			sess.unpacker = &mockUnpacker{}
-			hdr = &wire.PublicHeader{PacketNumberLen: protocol.PacketNumberLen6}
+			hdr = &wire.Header{PacketNumberLen: protocol.PacketNumberLen6}
 		})
 
 		It("sets the {last,largest}RcvdPacketNumber", func() {
 			hdr.PacketNumber = 5
-			err := sess.handlePacketImpl(&receivedPacket{publicHeader: hdr})
+			err := sess.handlePacketImpl(&receivedPacket{header: hdr})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(sess.lastRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
 			Expect(sess.largestRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
@@ -711,7 +711,7 @@ var _ = Describe("Session", func() {
 				runErr = sess.run()
 			}()
 			sess.unpacker.(*mockUnpacker).unpackErr = testErr
-			sess.handlePacket(&receivedPacket{publicHeader: hdr})
+			sess.handlePacket(&receivedPacket{header: hdr})
 			Eventually(func() error { return runErr }).Should(MatchError(testErr))
 			Expect(sess.Context().Done()).To(BeClosed())
 			close(done)
@@ -719,12 +719,12 @@ var _ = Describe("Session", func() {
 
 		It("sets the {last,largest}RcvdPacketNumber, for an out-of-order packet", func() {
 			hdr.PacketNumber = 5
-			err := sess.handlePacketImpl(&receivedPacket{publicHeader: hdr})
+			err := sess.handlePacketImpl(&receivedPacket{header: hdr})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(sess.lastRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
 			Expect(sess.largestRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
 			hdr.PacketNumber = 3
-			err = sess.handlePacketImpl(&receivedPacket{publicHeader: hdr})
+			err = sess.handlePacketImpl(&receivedPacket{header: hdr})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(sess.lastRcvdPacketNumber).To(Equal(protocol.PacketNumber(3)))
 			Expect(sess.largestRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
@@ -732,9 +732,9 @@ var _ = Describe("Session", func() {
 
 		It("handles duplicate packets", func() {
 			hdr.PacketNumber = 5
-			err := sess.handlePacketImpl(&receivedPacket{publicHeader: hdr})
+			err := sess.handlePacketImpl(&receivedPacket{header: hdr})
 			Expect(err).ToNot(HaveOccurred())
-			err = sess.handlePacketImpl(&receivedPacket{publicHeader: hdr})
+			err = sess.handlePacketImpl(&receivedPacket{header: hdr})
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -743,8 +743,8 @@ var _ = Describe("Session", func() {
 				remoteIP := &net.IPAddr{IP: net.IPv4(192, 168, 0, 100)}
 				Expect(sess.conn.(*mockConnection).remoteAddr).ToNot(Equal(remoteIP))
 				p := receivedPacket{
-					remoteAddr:   remoteIP,
-					publicHeader: &wire.PublicHeader{PacketNumber: 1337},
+					remoteAddr: remoteIP,
+					header:     &wire.Header{PacketNumber: 1337},
 				}
 				err := sess.handlePacketImpl(&p)
 				Expect(err).ToNot(HaveOccurred())
@@ -759,8 +759,8 @@ var _ = Describe("Session", func() {
 				sess.unpacker = &packetUnpacker{}
 				sess.unpacker.(*packetUnpacker).aead = &mockAEAD{}
 				p := receivedPacket{
-					remoteAddr:   attackerIP,
-					publicHeader: &wire.PublicHeader{PacketNumber: 1337},
+					remoteAddr: attackerIP,
+					header:     &wire.Header{PacketNumber: 1337},
 				}
 				err := sess.handlePacketImpl(&p)
 				quicErr := err.(*qerr.QuicError)
@@ -773,8 +773,8 @@ var _ = Describe("Session", func() {
 				remoteIP := &net.IPAddr{IP: net.IPv4(192, 168, 0, 100)}
 				Expect(sess.conn.(*mockConnection).remoteAddr).ToNot(Equal(remoteIP))
 				p := receivedPacket{
-					remoteAddr:   remoteIP,
-					publicHeader: &wire.PublicHeader{PacketNumber: 1337},
+					remoteAddr: remoteIP,
+					header:     &wire.Header{PacketNumber: 1337},
 				}
 				sess.unpacker.(*mockUnpacker).unpackErr = testErr
 				err := sess.handlePacketImpl(&p)
@@ -1140,13 +1140,13 @@ var _ = Describe("Session", func() {
 		// this completely fills up the undecryptable packets queue and triggers the public reset timer
 		sendUndecryptablePackets := func() {
 			for i := 0; i < protocol.MaxUndecryptablePackets+1; i++ {
-				hdr := &wire.PublicHeader{
+				hdr := &wire.Header{
 					PacketNumber: protocol.PacketNumber(i + 1),
 				}
 				sess.handlePacket(&receivedPacket{
-					publicHeader: hdr,
-					remoteAddr:   &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1234},
-					data:         []byte("foobar"),
+					header:     hdr,
+					remoteAddr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1234},
+					data:       []byte("foobar"),
 				})
 			}
 		}
@@ -1175,7 +1175,7 @@ var _ = Describe("Session", func() {
 			sendUndecryptablePackets()
 			Eventually(func() []*receivedPacket { return sess.undecryptablePackets }).Should(HaveLen(protocol.MaxUndecryptablePackets))
 			// check that old packets are kept, and the new packets are dropped
-			Expect(sess.undecryptablePackets[0].publicHeader.PacketNumber).To(Equal(protocol.PacketNumber(1)))
+			Expect(sess.undecryptablePackets[0].header.PacketNumber).To(Equal(protocol.PacketNumber(1)))
 			sess.Close(nil)
 		})
 
@@ -1213,7 +1213,7 @@ var _ = Describe("Session", func() {
 
 		It("unqueues undecryptable packets for later decryption", func() {
 			sess.undecryptablePackets = []*receivedPacket{{
-				publicHeader: &wire.PublicHeader{PacketNumber: protocol.PacketNumber(42)},
+				header: &wire.Header{PacketNumber: protocol.PacketNumber(42)},
 			}}
 			Expect(sess.receivedPackets).NotTo(Receive())
 			sess.tryDecryptingQueuedPackets()
@@ -1549,10 +1549,10 @@ var _ = Describe("Client Session", func() {
 	})
 
 	Context("receiving packets", func() {
-		var hdr *wire.PublicHeader
+		var hdr *wire.Header
 
 		BeforeEach(func() {
-			hdr = &wire.PublicHeader{PacketNumberLen: protocol.PacketNumberLen6}
+			hdr = &wire.Header{PacketNumberLen: protocol.PacketNumberLen6}
 			sess.unpacker = &mockUnpacker{}
 		})
 
@@ -1560,7 +1560,7 @@ var _ = Describe("Client Session", func() {
 			go sess.run()
 			hdr.PacketNumber = 5
 			hdr.DiversificationNonce = []byte("foobar")
-			err := sess.handlePacketImpl(&receivedPacket{publicHeader: hdr})
+			err := sess.handlePacketImpl(&receivedPacket{header: hdr})
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(func() []byte { return cryptoSetup.divNonce }).Should(Equal(hdr.DiversificationNonce))
 			Expect(sess.Close(nil)).To(Succeed())

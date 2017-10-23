@@ -9,22 +9,8 @@ import (
 	"github.com/lucas-clemente/quic-go/qerr"
 )
 
-// The Header is the header of a QUIC Packet.
-// TODO: add support for the key phase
-type Header struct {
-	Type              uint8
-	IsLongHeader      bool
-	KeyPhase          int
-	OmitConnectionID  bool
-	ConnectionID      protocol.ConnectionID
-	PacketNumber      protocol.PacketNumber
-	PacketNumberLen   protocol.PacketNumberLen
-	Version           protocol.VersionNumber
-	SupportedVersions []protocol.VersionNumber // version number sent in a Version Negotiation Packet by the server
-}
-
-// ParseHeader parses a header
-func ParseHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Header, error) {
+// parseHeader parses the header.
+func parseHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Header, error) {
 	typeByte, err := b.ReadByte()
 	if err != nil {
 		return nil, err
@@ -99,13 +85,15 @@ func parseShortHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
 	}, nil
 }
 
-func (h *Header) Write(b *bytes.Buffer) error {
+// writeHeader writes the Header.
+func (h *Header) writeHeader(b *bytes.Buffer) error {
 	if h.IsLongHeader {
 		return h.writeLongHeader(b)
 	}
 	return h.writeShortHeader(b)
 }
 
+// TODO: add support for the key phase
 func (h *Header) writeLongHeader(b *bytes.Buffer) error {
 	b.WriteByte(byte(0x80 ^ h.Type))
 	utils.BigEndian.WriteUint64(b, uint64(h.ConnectionID))
@@ -129,8 +117,8 @@ func (h *Header) writeShortHeader(b *bytes.Buffer) error {
 	default:
 		return fmt.Errorf("invalid packet number length: %d", h.PacketNumberLen)
 	}
-
 	b.WriteByte(typeByte)
+
 	if !h.OmitConnectionID {
 		utils.BigEndian.WriteUint64(b, uint64(h.ConnectionID))
 	}
@@ -145,8 +133,8 @@ func (h *Header) writeShortHeader(b *bytes.Buffer) error {
 	return nil
 }
 
-// GetLength gets the length of the Header in bytes.
-func (h *Header) GetLength() (protocol.ByteCount, error) {
+// getHeaderLength gets the length of the Header in bytes.
+func (h *Header) getHeaderLength() (protocol.ByteCount, error) {
 	if h.IsLongHeader {
 		return 1 + 8 + 4 + 4, nil
 	}
