@@ -27,6 +27,7 @@ var _ = Describe("ServerConfig", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(scfg1.ID).ToNot(Equal(scfg2.ID))
 		Expect(scfg1.obit).ToNot(Equal(scfg2.obit))
+		Expect(scfg1.cookieGenerator).ToNot(Equal(scfg2.cookieGenerator))
 	})
 
 	It("gets the proper binary representation", func() {

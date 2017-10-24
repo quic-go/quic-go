@@ -26,7 +26,6 @@ type cryptoSetupServer struct {
 	connID               protocol.ConnectionID
 	remoteAddr           net.Addr
 	scfg                 *ServerConfig
-	stkGenerator         *CookieGenerator
 	diversificationNonce []byte
 
 	version           protocol.VersionNumber
@@ -78,18 +77,12 @@ func NewCryptoSetup(
 	paramsChan chan<- TransportParameters,
 	aeadChanged chan<- protocol.EncryptionLevel,
 ) (CryptoSetup, error) {
-	stkGenerator, err := NewCookieGenerator()
-	if err != nil {
-		return nil, err
-	}
-
 	return &cryptoSetupServer{
 		connID:            connID,
 		remoteAddr:        remoteAddr,
 		version:           version,
 		supportedVersions: supportedVersions,
 		scfg:              scfg,
-		stkGenerator:      stkGenerator,
 		keyDerivation:     crypto.DeriveQuicCryptoAESKeys,
 		keyExchange:       getEphermalKEX,
 		nullAEAD:          crypto.NewNullAEAD(protocol.PerspectiveServer, version),
@@ -296,7 +289,7 @@ func (h *cryptoSetupServer) isInchoateCHLO(cryptoData map[Tag][]byte, cert []byt
 }
 
 func (h *cryptoSetupServer) acceptSTK(token []byte) bool {
-	stk, err := h.stkGenerator.DecodeToken(token)
+	stk, err := h.scfg.cookieGenerator.DecodeToken(token)
 	if err != nil {
 		utils.Debugf("STK invalid: %s", err.Error())
 		return false
@@ -309,7 +302,7 @@ func (h *cryptoSetupServer) handleInchoateCHLO(sni string, chlo []byte, cryptoDa
 		return nil, qerr.Error(qerr.CryptoInvalidValueLength, "CHLO too small")
 	}
 
-	token, err := h.stkGenerator.NewToken(h.remoteAddr)
+	token, err := h.scfg.cookieGenerator.NewToken(h.remoteAddr)
 	if err != nil {
 		return nil, err
 	}

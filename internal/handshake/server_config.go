@@ -13,6 +13,7 @@ type ServerConfig struct {
 	certChain crypto.CertChain
 	ID        []byte
 	obit      []byte
+	cookieGenerator *CookieGenerator
 }
 
 // NewServerConfig creates a new server config
@@ -28,11 +29,18 @@ func NewServerConfig(kex crypto.KeyExchange, certChain crypto.CertChain) (*Serve
 		return nil, err
 	}
 
+	cookieGenerator, err := NewCookieGenerator()
+
+	if err != nil {
+		return nil, err
+	}
+
 	return &ServerConfig{
 		kex:       kex,
 		certChain: certChain,
 		ID:        id,
 		obit:      obit,
+		cookieGenerator: cookieGenerator,
 	}, nil
 }
 
