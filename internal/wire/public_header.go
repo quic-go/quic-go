@@ -76,8 +76,7 @@ func (h *PublicHeader) Write(b *bytes.Buffer, version protocol.VersionNumber, pe
 	b.WriteByte(publicFlagByte)
 
 	if !h.OmitConnectionID {
-		// always read the connection ID in little endian
-		utils.LittleEndian.WriteUint64(b, uint64(h.ConnectionID))
+		utils.BigEndian.WriteUint64(b, uint64(h.ConnectionID))
 	}
 
 	if h.VersionFlag && pers == protocol.PerspectiveClient {
@@ -125,7 +124,7 @@ func PeekConnectionID(b *bytes.Reader, packetSentBy protocol.Perspective) (proto
 		return 0, errReceivedOmittedConnectionID
 	}
 	if !omitConnectionID {
-		connID, err := utils.LittleEndian.ReadUint64(b)
+		connID, err := utils.BigEndian.ReadUint64(b)
 		if err != nil {
 			return 0, err
 		}
@@ -182,8 +181,7 @@ func ParsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective, versi
 	// Connection ID
 	if !header.OmitConnectionID {
 		var connID uint64
-		// always write the connection ID in little endian
-		connID, err = utils.LittleEndian.ReadUint64(b)
+		connID, err = utils.BigEndian.ReadUint64(b)
 		if err != nil {
 			return nil, err
 		}

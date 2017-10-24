@@ -20,7 +20,7 @@ type PublicReset struct {
 func WritePublicReset(connectionID protocol.ConnectionID, rejectedPacketNumber protocol.PacketNumber, nonceProof uint64) []byte {
 	b := &bytes.Buffer{}
 	b.WriteByte(0x0a)
-	utils.LittleEndian.WriteUint64(b, uint64(connectionID))
+	utils.BigEndian.WriteUint64(b, uint64(connectionID))
 	utils.LittleEndian.WriteUint32(b, uint32(handshake.TagPRST))
 	utils.LittleEndian.WriteUint32(b, 2)
 	utils.LittleEndian.WriteUint32(b, uint32(handshake.TagRNON))

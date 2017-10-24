@@ -117,7 +117,7 @@ var _ = Describe("Server", func() {
 			}
 			b := &bytes.Buffer{}
 			utils.LittleEndian.WriteUint32(b, protocol.VersionNumberToTag(protocol.SupportedVersions[0]))
-			firstPacket = []byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c}
+			firstPacket = []byte{0x09, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6}
 			firstPacket = append(append(firstPacket, b.Bytes()...), 0x01)
 		})
 
@@ -176,7 +176,7 @@ var _ = Describe("Server", func() {
 		It("assigns packets to existing sessions", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
-			err = serv.handlePacket(nil, nil, []byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x01})
+			err = serv.handlePacket(nil, nil, []byte{0x08, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0x01})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions[connID].(*mockSession).connectionID).To(Equal(connID))
@@ -225,7 +225,7 @@ var _ = Describe("Server", func() {
 
 		It("ignores packets for closed sessions", func() {
 			serv.sessions[connID] = nil
-			err := serv.handlePacket(nil, nil, []byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x01})
+			err := serv.handlePacket(nil, nil, []byte{0x08, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0x01})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions[connID]).To(BeNil())
@@ -283,7 +283,7 @@ var _ = Describe("Server", func() {
 			b := &bytes.Buffer{}
 			// add an unsupported version
 			utils.LittleEndian.WriteUint32(b, protocol.VersionNumberToTag(protocol.SupportedVersions[0]+1))
-			data := []byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c}
+			data := []byte{0x09, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6}
 			data = append(append(data, b.Bytes()...), 0x01)
 			err = serv.handlePacket(nil, nil, data)
 			Expect(err).ToNot(HaveOccurred())
@@ -422,7 +422,7 @@ var _ = Describe("Server", func() {
 		b = &bytes.Buffer{}
 		utils.LittleEndian.WriteUint32(b, protocol.VersionNumberToTag(99))
 		expected := append(
-			[]byte{0x9, 0x37, 0x13, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
+			[]byte{0x9, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x13, 0x37},
 			b.Bytes()...,
 		)
 		Expect(conn.dataWritten.Bytes()).To(Equal(expected))
@@ -431,7 +431,7 @@ var _ = Describe("Server", func() {
 
 	It("sends a PublicReset for new connections that don't have the VersionFlag set", func() {
 		conn.dataReadFrom = udpAddr
-		conn.dataToRead = []byte{0x08, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c, 0x01}
+		conn.dataToRead = []byte{0x08, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0x01}
 		ln, err := Listen(conn, nil, config)
 		Expect(err).ToNot(HaveOccurred())
 		go func() {

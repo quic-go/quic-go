@@ -42,7 +42,7 @@ func deriveKeys(forwardSecure bool, sharedSecret, nonces []byte, connID protocol
 	} else {
 		info.Write([]byte("QUIC key expansion\x00"))
 	}
-	utils.LittleEndian.WriteUint64(&info, uint64(connID))
+	utils.BigEndian.WriteUint64(&info, uint64(connID))
 	info.Write(chlo)
 	info.Write(scfg)
 	info.Write(cert)
