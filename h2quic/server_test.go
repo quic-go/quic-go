@@ -9,7 +9,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -360,7 +359,7 @@ var _ = Describe("H2 server", func() {
 		getExpectedHeader := func(versions []protocol.VersionNumber) http.Header {
 			var versionsAsString []string
 			for _, v := range versions {
-				versionsAsString = append(versionsAsString, strconv.Itoa(int(v)))
+				versionsAsString = append(versionsAsString, v.ToAltSvc())
 			}
 			return http.Header{
 				"Alt-Svc": {fmt.Sprintf(`quic=":443"; ma=2592000; v="%s"`, strings.Join(versionsAsString, ","))},

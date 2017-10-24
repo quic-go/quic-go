@@ -197,7 +197,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		kexs = []byte("C255")
 		copy(nonce32[4:12], scfg.obit) // set the OBIT value at the right position
 		versionTag = make([]byte, 4)
-		binary.LittleEndian.PutUint32(versionTag, protocol.VersionNumberToTag(protocol.VersionWhatever))
+		binary.BigEndian.PutUint32(versionTag, uint32(protocol.VersionWhatever))
 		Expect(err).NotTo(HaveOccurred())
 		version = protocol.SupportedVersions[len(protocol.SupportedVersions)-1]
 		supportedVersions = []protocol.VersionNumber{version, 98, 99}
@@ -348,7 +348,7 @@ var _ = Describe("Server Crypto Setup", func() {
 			Expect(response).To(ContainSubstring("SNO\x00"))
 			for _, v := range supportedVersions {
 				b := &bytes.Buffer{}
-				utils.LittleEndian.WriteUint32(b, protocol.VersionNumberToTag(v))
+				utils.BigEndian.WriteUint32(b, uint32(v))
 				Expect(response).To(ContainSubstring(string(b.Bytes())))
 			}
 			Expect(cs.secureAEAD).ToNot(BeNil())
@@ -477,7 +477,7 @@ var _ = Describe("Server Crypto Setup", func() {
 			Expect(highestSupportedVersion).ToNot(Equal(lowestSupportedVersion))
 			cs.version = highestSupportedVersion
 			b := make([]byte, 4)
-			binary.LittleEndian.PutUint32(b, protocol.VersionNumberToTag(lowestSupportedVersion))
+			binary.BigEndian.PutUint32(b, uint32(lowestSupportedVersion))
 			fullCHLO[TagVER] = b
 			HandshakeMessage{Tag: TagCHLO, Data: fullCHLO}.Write(&stream.dataToRead)
 			err := cs.HandleCryptoStream()
@@ -490,7 +490,7 @@ var _ = Describe("Server Crypto Setup", func() {
 			Expect(protocol.IsSupportedVersion(supportedVersions, unsupportedVersion)).To(BeFalse())
 			cs.version = supportedVersion
 			b := make([]byte, 4)
-			binary.LittleEndian.PutUint32(b, protocol.VersionNumberToTag(unsupportedVersion))
+			binary.BigEndian.PutUint32(b, uint32(unsupportedVersion))
 			fullCHLO[TagVER] = b
 			HandshakeMessage{Tag: TagCHLO, Data: fullCHLO}.Write(&stream.dataToRead)
 			err := cs.HandleCryptoStream()

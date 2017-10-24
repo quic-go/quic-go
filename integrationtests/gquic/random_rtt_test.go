@@ -66,7 +66,7 @@ var _ = Describe("Random RTT", func() {
 
 		command := exec.Command(
 			clientPath,
-			"--quic-version="+strconv.Itoa(int(version)),
+			"--quic-version="+version.ToAltSvc(),
 			"--host=127.0.0.1",
 			"--port="+strconv.Itoa(proxy.LocalPort()),
 			"https://quic.clemente.io/prdata",

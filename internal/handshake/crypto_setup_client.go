@@ -288,11 +288,11 @@ func (h *cryptoSetupClient) validateVersionList(verTags []byte) bool {
 
 	b := bytes.NewReader(verTags)
 	for _, negotiatedVersion := range h.negotiatedVersions {
-		verTag, err := utils.LittleEndian.ReadUint32(b)
+		verTag, err := utils.BigEndian.ReadUint32(b)
 		if err != nil { // should never occur, since the length was already checked
 			return false
 		}
-		ver := protocol.VersionTagToNumber(verTag)
+		ver := protocol.VersionNumber(verTag)
 		if !protocol.IsSupportedVersion(protocol.SupportedVersions, ver) {
 			ver = protocol.VersionUnsupported
 		}
@@ -418,7 +418,7 @@ func (h *cryptoSetupClient) getTags() (map[Tag][]byte, error) {
 	}
 
 	versionTag := make([]byte, 4)
-	binary.LittleEndian.PutUint32(versionTag, protocol.VersionNumberToTag(h.version))
+	binary.BigEndian.PutUint32(versionTag, uint32(h.version))
 	tags[TagVER] = versionTag
 
 	if len(h.stk) > 0 {

@@ -205,7 +205,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			It("detects a downgrade attack", func() {
 				cs.negotiatedVersions = []protocol.VersionNumber{12}
 				b := &bytes.Buffer{}
-				utils.LittleEndian.WriteUint32(b, protocol.VersionNumberToTag(11))
+				utils.BigEndian.WriteUint32(b, 11)
 				Expect(cs.validateVersionList(b.Bytes())).To(BeFalse())
 			})
 
@@ -219,7 +219,7 @@ var _ = Describe("Client Crypto Setup", func() {
 				cs.negotiatedVersions = []protocol.VersionNumber{protocol.VersionUnsupported, ver, protocol.VersionUnsupported}
 				b := &bytes.Buffer{}
 				b.Write([]byte{0, 0, 0, 0})
-				utils.LittleEndian.WriteUint32(b, protocol.VersionNumberToTag(ver))
+				utils.BigEndian.WriteUint32(b, uint32(ver))
 				b.Write([]byte{0x13, 0x37, 0x13, 0x37})
 				Expect(cs.validateVersionList(b.Bytes())).To(BeTrue())
 			})
@@ -415,7 +415,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			cs.negotiatedVersions = []protocol.VersionNumber{ver}
 			cs.receivedSecurePacket = true
 			b := &bytes.Buffer{}
-			utils.LittleEndian.WriteUint32(b, protocol.VersionNumberToTag(ver))
+			utils.BigEndian.WriteUint32(b, uint32(ver))
 			shloMap[TagVER] = b.Bytes()
 			_, err := cs.handleSHLOMessage(shloMap)
 			Expect(err).ToNot(HaveOccurred())

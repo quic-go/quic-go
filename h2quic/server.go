@@ -7,7 +7,7 @@ import (
 	"net"
 	"net/http"
 	"runtime"
-	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -280,12 +280,11 @@ func (s *Server) SetQuicHeaders(hdr http.Header) error {
 	}
 
 	if s.supportedVersionsAsString == "" {
-		for i, v := range protocol.SupportedVersions {
-			s.supportedVersionsAsString += strconv.Itoa(int(v))
-			if i != len(protocol.SupportedVersions)-1 {
-				s.supportedVersionsAsString += ","
-			}
+		var versions []string
+		for _, v := range protocol.SupportedVersions {
+			versions = append(versions, v.ToAltSvc())
 		}
+		s.supportedVersionsAsString = strings.Join(versions, ",")
 	}
 
 	hdr.Add("Alt-Svc", fmt.Sprintf(`quic=":%d"; ma=2592000; v="%s"`, port, s.supportedVersionsAsString))
