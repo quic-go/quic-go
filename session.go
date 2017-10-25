@@ -212,6 +212,7 @@ func (s *session) setup(
 		if s.version.UsesTLS() {
 			s.cryptoSetup, err = handshake.NewCryptoSetupTLSServer(
 				s.cryptoStream,
+				s.connectionID,
 				tlsConf,
 				transportParams,
 				paramsChan,
@@ -238,6 +239,7 @@ func (s *session) setup(
 		if s.version.UsesTLS() {
 			s.cryptoSetup, err = handshake.NewCryptoSetupTLSClient(
 				s.cryptoStream,
+				s.connectionID,
 				hostname,
 				tlsConf,
 				transportParams,

@@ -185,8 +185,9 @@ var _ = Describe("Server", func() {
 
 		It("closes and deletes sessions", func() {
 			serv.deleteClosedSessionsAfter = time.Second // make sure that the nil value for the closed session doesn't get deleted in this test
-			nullAEAD := crypto.NewNullAEAD(protocol.PerspectiveServer, protocol.VersionWhatever)
-			err := serv.handlePacket(nil, nil, append(firstPacket, nullAEAD.Seal(nil, nil, 0, firstPacket)...))
+			nullAEAD, err := crypto.NewNullAEAD(protocol.PerspectiveServer, connID, protocol.VersionWhatever)
+			Expect(err).ToNot(HaveOccurred())
+			err = serv.handlePacket(nil, nil, append(firstPacket, nullAEAD.Seal(nil, nil, 0, firstPacket)...))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions[connID]).ToNot(BeNil())
@@ -199,8 +200,9 @@ var _ = Describe("Server", func() {
 
 		It("deletes nil session entries after a wait time", func() {
 			serv.deleteClosedSessionsAfter = 25 * time.Millisecond
-			nullAEAD := crypto.NewNullAEAD(protocol.PerspectiveServer, protocol.VersionWhatever)
-			err := serv.handlePacket(nil, nil, append(firstPacket, nullAEAD.Seal(nil, nil, 0, firstPacket)...))
+			nullAEAD, err := crypto.NewNullAEAD(protocol.PerspectiveServer, connID, protocol.VersionWhatever)
+			Expect(err).ToNot(HaveOccurred())
+			err = serv.handlePacket(nil, nil, append(firstPacket, nullAEAD.Seal(nil, nil, 0, firstPacket)...))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions).To(HaveKey(connID))
