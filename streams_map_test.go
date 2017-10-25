@@ -685,29 +685,6 @@ var _ = Describe("Streams Map", func() {
 					Expect(m.roundRobinIndex).To(BeEquivalentTo(1))
 				})
 			})
-
-			Context("Prioritizing the header stream", func() {
-				BeforeEach(func() {
-					err := m.putStream(&stream{streamID: 3})
-					Expect(err).NotTo(HaveOccurred())
-				})
-
-				It("gets crypto- and header stream first, then picks up at the round-robin position", func() {
-					m.roundRobinIndex = 3 // stream 7
-					fn := func(str streamI) (bool, error) {
-						if numIterations >= 2 {
-							return false, nil
-						}
-						lambdaCalledForStream = append(lambdaCalledForStream, str.StreamID())
-						numIterations++
-						return true, nil
-					}
-					err := m.RoundRobinIterate(fn)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(numIterations).To(Equal(2))
-					Expect(lambdaCalledForStream).To(Equal([]protocol.StreamID{3, 7}))
-				})
-			})
 		})
 	})
 })

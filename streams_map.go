@@ -277,21 +277,8 @@ func (m *streamsMap) RoundRobinIterate(fn streamLambda) error {
 	numStreams := len(m.streams)
 	startIndex := m.roundRobinIndex
 
-	// prioritize the header stream
-	cont, err := m.iterateFunc(3, fn)
-	if err != nil && err != errMapAccess {
-		return err
-	}
-	if !cont {
-		return nil
-	}
-
 	for i := 0; i < numStreams; i++ {
 		streamID := m.openStreams[(i+startIndex)%numStreams]
-		if streamID == 3 {
-			continue
-		}
-
 		cont, err := m.iterateFunc(streamID, fn)
 		if err != nil {
 			return err
