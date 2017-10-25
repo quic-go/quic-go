@@ -67,6 +67,7 @@ var ErrNSTPExperiment = qerr.Error(qerr.InvalidCryptoMessageParameter, "NSTP exp
 
 // NewCryptoSetup creates a new CryptoSetup instance for a server
 func NewCryptoSetup(
+	cryptoStream io.ReadWriter,
 	connID protocol.ConnectionID,
 	remoteAddr net.Addr,
 	version protocol.VersionNumber,
@@ -78,6 +79,7 @@ func NewCryptoSetup(
 	aeadChanged chan<- protocol.EncryptionLevel,
 ) (CryptoSetup, error) {
 	return &cryptoSetupServer{
+		cryptoStream:      cryptoStream,
 		connID:            connID,
 		remoteAddr:        remoteAddr,
 		version:           version,
@@ -95,9 +97,7 @@ func NewCryptoSetup(
 }
 
 // HandleCryptoStream reads and writes messages on the crypto stream
-func (h *cryptoSetupServer) HandleCryptoStream(stream io.ReadWriter) error {
-	h.cryptoStream = stream
-
+func (h *cryptoSetupServer) HandleCryptoStream() error {
 	for {
 		var chloData bytes.Buffer
 		message, err := ParseHandshakeMessage(io.TeeReader(h.cryptoStream, &chloData))

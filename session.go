@@ -59,7 +59,8 @@ type session struct {
 
 	conn connection
 
-	streamsMap *streamsMap
+	streamsMap   *streamsMap
+	cryptoStream streamI
 
 	rttStats *congestion.RTTStats
 
@@ -194,6 +195,14 @@ func (s *session) setup(
 	}
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats)
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.version)
+	s.connFlowController = flowcontrol.NewConnectionFlowController(
+		protocol.ReceiveConnectionFlowControlWindow,
+		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),
+		s.rttStats,
+	)
+	s.streamsMap = newStreamsMap(s.newStream, s.perspective)
+	s.cryptoStream = s.newStream(1)
+	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.connFlowController)
 
 	var err error
 	if s.perspective == protocol.PerspectiveServer {
@@ -202,6 +211,7 @@ func (s *session) setup(
 		}
 		if s.version.UsesTLS() {
 			s.cryptoSetup, err = handshake.NewCryptoSetupTLSServer(
+				s.cryptoStream,
 				tlsConf,
 				transportParams,
 				paramsChan,
@@ -211,6 +221,7 @@ func (s *session) setup(
 			)
 		} else {
 			s.cryptoSetup, err = newCryptoSetup(
+				s.cryptoStream,
 				s.connectionID,
 				s.conn.RemoteAddr(),
 				s.version,
@@ -226,6 +237,7 @@ func (s *session) setup(
 		transportParams.OmitConnectionID = s.config.RequestConnectionIDOmission
 		if s.version.UsesTLS() {
 			s.cryptoSetup, err = handshake.NewCryptoSetupTLSClient(
+				s.cryptoStream,
 				hostname,
 				tlsConf,
 				transportParams,
@@ -237,6 +249,7 @@ func (s *session) setup(
 			)
 		} else {
 			s.cryptoSetup, err = newCryptoSetupClient(
+				s.cryptoStream,
 				hostname,
 				s.connectionID,
 				s.version,
@@ -252,13 +265,6 @@ func (s *session) setup(
 		return nil, nil, err
 	}
 
-	s.connFlowController = flowcontrol.NewConnectionFlowController(
-		protocol.ReceiveConnectionFlowControlWindow,
-		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),
-		s.rttStats,
-	)
-	s.streamsMap = newStreamsMap(s.newStream, s.perspective)
-	s.streamFramer = newStreamFramer(s.streamsMap, s.connFlowController)
 	s.packer = newPacketPacker(s.connectionID,
 		s.cryptoSetup,
 		s.streamFramer,
@@ -267,14 +273,6 @@ func (s *session) setup(
 	)
 	s.unpacker = &packetUnpacker{aead: s.cryptoSetup, version: s.version}
 
-	// open the crypto stream
-	if s.perspective == protocol.PerspectiveServer {
-		_, _ = s.GetOrOpenStream(1)
-		_, _ = s.AcceptStream() // don't expose the crypto stream
-	} else {
-		_, _ = s.OpenStream()
-	}
-
 	return s, handshakeChan, nil
 }
 
@@ -282,10 +280,8 @@ func (s *session) setup(
 func (s *session) run() error {
 	defer s.ctxCancel()
 
-	// Start the crypto stream handler
 	go func() {
-		cryptoStream, _ := s.GetOrOpenStream(1)
-		if err := s.cryptoSetup.HandleCryptoStream(cryptoStream); err != nil {
+		if err := s.cryptoSetup.HandleCryptoStream(); err != nil {
 			s.Close(err)
 		}
 	}()
@@ -525,6 +521,9 @@ func (s *session) handlePacket(p *receivedPacket) {
 }
 
 func (s *session) handleStreamFrame(frame *wire.StreamFrame) error {
+	if frame.StreamID == 1 {
+		return s.cryptoStream.AddStreamFrame(frame)
+	}
 	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
 	if err != nil {
 		return err
@@ -606,6 +605,7 @@ func (s *session) handleCloseError(closeErr closeError) error {
 		utils.Errorf("Closing session with error: %s", closeErr.err.Error())
 	}
 
+	s.cryptoStream.Cancel(quicErr)
 	s.streamsMap.CloseWithError(quicErr)
 
 	if closeErr.err == errCloseSessionForNewVersion {

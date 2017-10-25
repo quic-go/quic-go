@@ -66,6 +66,7 @@ var (
 
 // NewCryptoSetupClient creates a new CryptoSetup instance for a client
 func NewCryptoSetupClient(
+	cryptoStream io.ReadWriter,
 	hostname string,
 	connID protocol.ConnectionID,
 	version protocol.VersionNumber,
@@ -76,6 +77,7 @@ func NewCryptoSetupClient(
 	negotiatedVersions []protocol.VersionNumber,
 ) (CryptoSetup, error) {
 	return &cryptoSetupClient{
+		cryptoStream:       cryptoStream,
 		hostname:           hostname,
 		connID:             connID,
 		version:            version,
@@ -91,11 +93,9 @@ func NewCryptoSetupClient(
 	}, nil
 }
 
-func (h *cryptoSetupClient) HandleCryptoStream(stream io.ReadWriter) error {
+func (h *cryptoSetupClient) HandleCryptoStream() error {
 	messageChan := make(chan HandshakeMessage)
 	errorChan := make(chan error)
-
-	h.cryptoStream = stream
 
 	go func() {
 		for {

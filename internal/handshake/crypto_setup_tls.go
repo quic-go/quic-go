@@ -9,11 +9,10 @@ import (
 	"github.com/bifurcation/mint"
 	"github.com/lucas-clemente/quic-go/internal/crypto"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 // KeyDerivationFunction is used for key derivation
-type KeyDerivationFunction func(crypto.MintController, protocol.Perspective) (crypto.AEAD, error)
+type KeyDerivationFunction func(crypto.TLSExporter, protocol.Perspective) (crypto.AEAD, error)
 
 type cryptoSetupTLS struct {
 	mutex sync.RWMutex
@@ -22,8 +21,7 @@ type cryptoSetupTLS struct {
 
 	keyDerivation KeyDerivationFunction
 
-	mintConf         *mint.Config
-	extensionHandler mint.AppExtensionHandler
+	tls mintTLS
 
 	nullAEAD crypto.AEAD
 	aead     crypto.AEAD
@@ -31,12 +29,9 @@ type cryptoSetupTLS struct {
 	aeadChanged chan<- protocol.EncryptionLevel
 }
 
-var newMintController = func(conn *mint.Conn) crypto.MintController {
-	return &mintController{conn}
-}
-
 // NewCryptoSetupTLSServer creates a new TLS CryptoSetup instance for a server
 func NewCryptoSetupTLSServer(
+	cryptoStream io.ReadWriter,
 	tlsConfig *tls.Config,
 	params *TransportParameters,
 	paramsChan chan<- TransportParameters,
@@ -48,19 +43,24 @@ func NewCryptoSetupTLSServer(
 	if err != nil {
 		return nil, err
 	}
+	mintConn := mint.Server(&fakeConn{cryptoStream}, mintConf)
+	eh := newExtensionHandlerServer(params, paramsChan, supportedVersions, version)
+	if err := mintConn.SetExtensionHandler(eh); err != nil {
+		return nil, err
+	}
 
 	return &cryptoSetupTLS{
-		perspective:      protocol.PerspectiveServer,
-		mintConf:         mintConf,
-		nullAEAD:         crypto.NewNullAEAD(protocol.PerspectiveServer, version),
-		keyDerivation:    crypto.DeriveAESKeys,
-		aeadChanged:      aeadChanged,
-		extensionHandler: newExtensionHandlerServer(params, paramsChan, supportedVersions, version),
+		perspective:   protocol.PerspectiveServer,
+		tls:           &mintController{mintConn},
+		nullAEAD:      crypto.NewNullAEAD(protocol.PerspectiveServer, version),
+		keyDerivation: crypto.DeriveAESKeys,
+		aeadChanged:   aeadChanged,
 	}, nil
 }
 
 // NewCryptoSetupTLSClient creates a new TLS CryptoSetup instance for a client
 func NewCryptoSetupTLSClient(
+	cryptoStream io.ReadWriter,
 	hostname string, // only needed for the client
 	tlsConfig *tls.Config,
 	params *TransportParameters,
@@ -75,35 +75,28 @@ func NewCryptoSetupTLSClient(
 		return nil, err
 	}
 	mintConf.ServerName = hostname
+	mintConn := mint.Client(&fakeConn{cryptoStream}, mintConf)
+	eh := newExtensionHandlerClient(params, paramsChan, initialVersion, supportedVersions, version)
+	if err := mintConn.SetExtensionHandler(eh); err != nil {
+		return nil, err
+	}
 
 	return &cryptoSetupTLS{
-		perspective:      protocol.PerspectiveClient,
-		mintConf:         mintConf,
-		nullAEAD:         crypto.NewNullAEAD(protocol.PerspectiveClient, version),
-		keyDerivation:    crypto.DeriveAESKeys,
-		aeadChanged:      aeadChanged,
-		extensionHandler: newExtensionHandlerClient(params, paramsChan, initialVersion, supportedVersions, version),
+		perspective:   protocol.PerspectiveClient,
+		tls:           &mintController{mintConn},
+		nullAEAD:      crypto.NewNullAEAD(protocol.PerspectiveClient, version),
+		keyDerivation: crypto.DeriveAESKeys,
+		aeadChanged:   aeadChanged,
 	}, nil
 }
 
-func (h *cryptoSetupTLS) HandleCryptoStream(cryptoStream io.ReadWriter) error {
-	var conn *mint.Conn
-	if h.perspective == protocol.PerspectiveServer {
-		conn = mint.Server(&fakeConn{cryptoStream}, h.mintConf)
-	} else {
-		conn = mint.Client(&fakeConn{cryptoStream}, h.mintConf)
-	}
-	utils.Debugf("setting extension handler: %#v\n", h.extensionHandler)
-	if err := conn.SetExtensionHandler(h.extensionHandler); err != nil {
-		return err
-	}
-	mc := newMintController(conn)
+func (h *cryptoSetupTLS) HandleCryptoStream() error {
 
-	if alert := mc.Handshake(); alert != mint.AlertNoAlert {
+	if alert := h.tls.Handshake(); alert != mint.AlertNoAlert {
 		return fmt.Errorf("TLS handshake error: %s (Alert %d)", alert.String(), alert)
 	}
 
-	aead, err := h.keyDerivation(mc, h.perspective)
+	aead, err := h.keyDerivation(h.tls, h.perspective)
 	if err != nil {
 		return err
 	}

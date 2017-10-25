@@ -2,7 +2,6 @@ package quic
 
 import (
 	"bytes"
-	"io"
 	"math"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
@@ -33,7 +32,7 @@ type mockCryptoSetup struct {
 
 var _ handshake.CryptoSetup = &mockCryptoSetup{}
 
-func (m *mockCryptoSetup) HandleCryptoStream(io.ReadWriter) error {
+func (m *mockCryptoSetup) HandleCryptoStream() error {
 	return m.handleErr
 }
 func (m *mockCryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error) {
@@ -62,11 +61,8 @@ var _ = Describe("Packet packer", func() {
 
 	BeforeEach(func() {
 		cryptoStream = &stream{flowController: flowcontrol.NewStreamFlowController(1, false, flowcontrol.NewConnectionFlowController(1000, 1000, nil), 1000, 1000, 1000, nil)}
-
 		streamsMap := newStreamsMap(nil, protocol.PerspectiveServer)
-		streamsMap.streams[1] = cryptoStream
-		streamsMap.openStreams = []protocol.StreamID{1}
-		streamFramer = newStreamFramer(streamsMap, nil)
+		streamFramer = newStreamFramer(cryptoStream, streamsMap, nil)
 
 		packer = &packetPacker{
 			cryptoSetup:           &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure},

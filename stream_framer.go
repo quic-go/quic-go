@@ -7,7 +7,8 @@ import (
 )
 
 type streamFramer struct {
-	streamsMap *streamsMap
+	streamsMap   *streamsMap
+	cryptoStream streamI
 
 	connFlowController flowcontrol.ConnectionFlowController
 
@@ -15,9 +16,14 @@ type streamFramer struct {
 	blockedFrameQueue   []*wire.BlockedFrame
 }
 
-func newStreamFramer(streamsMap *streamsMap, cfc flowcontrol.ConnectionFlowController) *streamFramer {
+func newStreamFramer(
+	cryptoStream streamI,
+	streamsMap *streamsMap,
+	cfc flowcontrol.ConnectionFlowController,
+) *streamFramer {
 	return &streamFramer{
 		streamsMap:         streamsMap,
+		cryptoStream:       cryptoStream,
 		connFlowController: cfc,
 	}
 }
@@ -45,8 +51,7 @@ func (f *streamFramer) HasFramesForRetransmission() bool {
 }
 
 func (f *streamFramer) HasCryptoStreamFrame() bool {
-	cs, _ := f.streamsMap.GetOrOpenStream(1)
-	return cs.LenOfDataForWriting() > 0
+	return f.cryptoStream.LenOfDataForWriting() > 0
 }
 
 // TODO(lclemente): This is somewhat duplicate with the normal path for generating frames.
@@ -54,13 +59,12 @@ func (f *streamFramer) PopCryptoStreamFrame(maxLen protocol.ByteCount) *wire.Str
 	if !f.HasCryptoStreamFrame() {
 		return nil
 	}
-	cs, _ := f.streamsMap.GetOrOpenStream(1)
 	frame := &wire.StreamFrame{
 		StreamID: 1,
-		Offset:   cs.GetWriteOffset(),
+		Offset:   f.cryptoStream.GetWriteOffset(),
 	}
 	frameHeaderBytes, _ := frame.MinLength(protocol.VersionWhatever) // can never error
-	frame.Data = cs.GetDataForWriting(maxLen - frameHeaderBytes)
+	frame.Data = f.cryptoStream.GetDataForWriting(maxLen - frameHeaderBytes)
 	return frame
 }
 
@@ -95,7 +99,7 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 	var currentLen protocol.ByteCount
 
 	fn := func(s streamI) (bool, error) {
-		if s == nil || s.StreamID() == 1 /* crypto stream is handled separately */ {
+		if s == nil {
 			return true, nil
 		}
 
@@ -146,7 +150,6 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 	}
 
 	f.streamsMap.RoundRobinIterate(fn)
-
 	return
 }
 

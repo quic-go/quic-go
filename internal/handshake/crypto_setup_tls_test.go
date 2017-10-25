@@ -12,21 +12,24 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type fakeMintController struct {
+type fakeMintTLS struct {
 	result mint.Alert
 }
 
-var _ crypto.MintController = &fakeMintController{}
+var _ mintTLS = &fakeMintTLS{}
 
-func (h *fakeMintController) Handshake() mint.Alert {
+func (h *fakeMintTLS) Handshake() mint.Alert {
 	return h.result
 }
-func (h *fakeMintController) GetCipherSuite() mint.CipherSuiteParams { panic("not implemented") }
-func (h *fakeMintController) ComputeExporter(label string, context []byte, keyLength int) ([]byte, error) {
+func (h *fakeMintTLS) GetCipherSuite() mint.CipherSuiteParams { panic("not implemented") }
+func (h *fakeMintTLS) ComputeExporter(label string, context []byte, keyLength int) ([]byte, error) {
+	panic("not implemented")
+}
+func (h *fakeMintTLS) SetExtensionHandler(mint.AppExtensionHandler) error {
 	panic("not implemented")
 }
 
-func mockKeyDerivation(crypto.MintController, protocol.Perspective) (crypto.AEAD, error) {
+func mockKeyDerivation(crypto.TLSExporter, protocol.Perspective) (crypto.AEAD, error) {
 	return &mockAEAD{encLevel: protocol.EncryptionForwardSecure}, nil
 }
 
@@ -35,14 +38,13 @@ var _ = Describe("TLS Crypto Setup", func() {
 		cs          *cryptoSetupTLS
 		paramsChan  chan TransportParameters
 		aeadChanged chan protocol.EncryptionLevel
-
-		mintControllerConstructor = newMintController
 	)
 
 	BeforeEach(func() {
 		paramsChan = make(chan TransportParameters)
 		aeadChanged = make(chan protocol.EncryptionLevel, 2)
 		csInt, err := NewCryptoSetupTLSServer(
+			nil,
 			testdata.GetTLSConfig(),
 			&TransportParameters{},
 			paramsChan,
@@ -54,25 +56,17 @@ var _ = Describe("TLS Crypto Setup", func() {
 		cs = csInt.(*cryptoSetupTLS)
 	})
 
-	AfterEach(func() {
-		newMintController = mintControllerConstructor
-	})
-
 	It("errors when the handshake fails", func() {
 		alert := mint.AlertBadRecordMAC
-		newMintController = func(*mint.Conn) crypto.MintController {
-			return &fakeMintController{result: alert}
-		}
-		err := cs.HandleCryptoStream(nil)
+		cs.tls = &fakeMintTLS{result: alert}
+		err := cs.HandleCryptoStream()
 		Expect(err).To(MatchError(fmt.Errorf("TLS handshake error: %s (Alert %d)", alert.String(), alert)))
 	})
 
 	It("derives keys", func() {
-		newMintController = func(*mint.Conn) crypto.MintController {
-			return &fakeMintController{result: mint.AlertNoAlert}
-		}
+		cs.tls = &fakeMintTLS{result: mint.AlertNoAlert}
 		cs.keyDerivation = mockKeyDerivation
-		err := cs.HandleCryptoStream(nil)
+		err := cs.HandleCryptoStream()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionForwardSecure)))
 		Expect(aeadChanged).To(BeClosed())
@@ -82,11 +76,9 @@ var _ = Describe("TLS Crypto Setup", func() {
 		var foobarFNVSigned []byte // a "foobar", FNV signed
 
 		doHandshake := func() {
-			newMintController = func(*mint.Conn) crypto.MintController {
-				return &fakeMintController{result: mint.AlertNoAlert}
-			}
+			cs.tls = &fakeMintTLS{result: mint.AlertNoAlert}
 			cs.keyDerivation = mockKeyDerivation
-			err := cs.HandleCryptoStream(nil)
+			err := cs.HandleCryptoStream()
 			Expect(err).ToNot(HaveOccurred())
 		}
 
