@@ -124,6 +124,21 @@ var _ = Describe("Stream Flow controller", func() {
 				err = controller.UpdateHighestReceived(250, false)
 				Expect(err).To(MatchError(qerr.StreamDataAfterTermination))
 			})
+
+			It("accepts duplicate final offsets", func() {
+				err := controller.UpdateHighestReceived(200, true)
+				Expect(err).ToNot(HaveOccurred())
+				err = controller.UpdateHighestReceived(200, true)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(controller.highestReceived).To(Equal(protocol.ByteCount(200)))
+			})
+
+			It("errors when receiving inconsistent final offsets", func() {
+				err := controller.UpdateHighestReceived(200, true)
+				Expect(err).ToNot(HaveOccurred())
+				err = controller.UpdateHighestReceived(201, true)
+				Expect(err).To(MatchError("StreamDataAfterTermination: Received inconsistent final offset for stream 10 (old: 200, new: 201 bytes)"))
+			})
 		})
 
 		Context("registering data read", func() {
