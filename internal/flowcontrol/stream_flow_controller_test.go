@@ -110,6 +110,20 @@ var _ = Describe("Stream Flow controller", func() {
 				err := controller.UpdateHighestReceived(99, true)
 				Expect(err).To(MatchError(qerr.StreamDataAfterTermination))
 			})
+
+			It("accepts delayed data after receiving a final offset", func() {
+				err := controller.UpdateHighestReceived(300, true)
+				Expect(err).ToNot(HaveOccurred())
+				err = controller.UpdateHighestReceived(250, false)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("errors when receiving a higher offset after receiving a final offset", func() {
+				err := controller.UpdateHighestReceived(200, true)
+				Expect(err).ToNot(HaveOccurred())
+				err = controller.UpdateHighestReceived(250, false)
+				Expect(err).To(MatchError(qerr.StreamDataAfterTermination))
+			})
 		})
 
 		Context("registering data read", func() {

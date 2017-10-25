@@ -12,10 +12,12 @@ import (
 type streamFlowController struct {
 	baseFlowController
 
-	connection connectionFlowControllerI
+	streamID protocol.StreamID
 
-	streamID                protocol.StreamID
+	connection              connectionFlowControllerI
 	contributesToConnection bool // does the stream contribute to connection level flow control
+
+	receivedFinalOffset bool
 }
 
 var _ StreamFlowController = &streamFlowController{}
@@ -50,7 +52,12 @@ func (c *streamFlowController) UpdateHighestReceived(byteOffset protocol.ByteCou
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	// TODO(#382): check for StreamDataAfterTermination errors, when receiving an offset after we already received a final offset
+	if c.receivedFinalOffset && byteOffset > c.highestReceived {
+		return qerr.StreamDataAfterTermination
+	}
+	if final {
+		c.receivedFinalOffset = true
+	}
 	if byteOffset == c.highestReceived {
 		return nil
 	}
