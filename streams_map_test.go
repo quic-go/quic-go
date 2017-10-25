@@ -2,25 +2,38 @@ package quic
 
 import (
 	"errors"
+	"sort"
 
+	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
+
+	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Streams Map", func() {
 	var (
-		m *streamsMap
+		m               *streamsMap
+		finishedStreams map[protocol.StreamID]*gomock.Call
 	)
 
-	setNewStreamsMap := func(p protocol.Perspective) {
-		newStream := func(id protocol.StreamID) *stream {
-			return newStream(id, func() {}, nil, nil)
-		}
-		removeStreamCallback := func(protocol.StreamID) {}
-		m = newStreamsMap(newStream, removeStreamCallback, p)
+	newStream := func(id protocol.StreamID) streamI {
+		str := mocks.NewMockStreamI(mockCtrl)
+		str.EXPECT().StreamID().Return(id).AnyTimes()
+		c := str.EXPECT().Finished().Return(false).AnyTimes()
+		finishedStreams[id] = c
+		return str
 	}
+
+	setNewStreamsMap := func(p protocol.Perspective) {
+		m = newStreamsMap(newStream, p)
+	}
+
+	BeforeEach(func() {
+		finishedStreams = make(map[protocol.StreamID]*gomock.Call)
+	})
 
 	AfterEach(func() {
 		Expect(m.openStreams).To(HaveLen(len(m.streams)))
@@ -29,8 +42,7 @@ var _ = Describe("Streams Map", func() {
 	deleteStream := func(id protocol.StreamID) {
 		str := m.streams[id]
 		Expect(str).ToNot(BeNil())
-		str.cancelled.Set(true)
-		Expect(str.finished()).To(BeTrue())
+		finishedStreams[id].Return(true)
 		err := m.DeleteClosedStreams()
 		Expect(err).ToNot(HaveOccurred())
 	}
@@ -214,7 +226,7 @@ var _ = Describe("Streams Map", func() {
 					It("waits until another stream is closed", func() {
 						openMaxNumStreams()
 						var returned bool
-						var str *stream
+						var str streamI
 						go func() {
 							defer GinkgoRecover()
 							var err error
@@ -230,19 +242,23 @@ var _ = Describe("Streams Map", func() {
 					})
 
 					It("stops waiting when an error is registered", func() {
-						openMaxNumStreams()
 						testErr := errors.New("test error")
-						var err error
-						var returned bool
+						openMaxNumStreams()
+						for _, str := range m.streams {
+							str.(*mocks.MockStreamI).EXPECT().Cancel(testErr)
+						}
+
+						done := make(chan struct{})
 						go func() {
-							_, err = m.OpenStreamSync()
-							returned = true
+							defer GinkgoRecover()
+							_, err := m.OpenStreamSync()
+							Expect(err).To(MatchError(testErr))
+							close(done)
 						}()
 
-						Consistently(func() bool { return returned }).Should(BeFalse())
+						Consistently(done).ShouldNot(BeClosed())
 						m.CloseWithError(testErr)
-						Eventually(func() bool { return returned }).Should(BeTrue())
-						Expect(err).To(MatchError(testErr))
+						Eventually(done).Should(BeClosed())
 					})
 
 					It("immediately returns when OpenStreamSync is called after an error was registered", func() {
@@ -265,7 +281,7 @@ var _ = Describe("Streams Map", func() {
 				})
 
 				It("accepts stream 1 first", func() {
-					var str *stream
+					var str streamI
 					go func() {
 						defer GinkgoRecover()
 						var err error
@@ -279,7 +295,7 @@ var _ = Describe("Streams Map", func() {
 				})
 
 				It("returns an implicitly opened stream, if a stream number is skipped", func() {
-					var str *stream
+					var str streamI
 					go func() {
 						defer GinkgoRecover()
 						var err error
@@ -293,7 +309,7 @@ var _ = Describe("Streams Map", func() {
 				})
 
 				It("returns to multiple accepts", func() {
-					var str1, str2 *stream
+					var str1, str2 streamI
 					go func() {
 						defer GinkgoRecover()
 						var err error
@@ -308,29 +324,29 @@ var _ = Describe("Streams Map", func() {
 					}()
 					_, err := m.GetOrOpenStream(3) // opens stream 1 and 3
 					Expect(err).ToNot(HaveOccurred())
-					Eventually(func() *stream { return str1 }).ShouldNot(BeNil())
-					Eventually(func() *stream { return str2 }).ShouldNot(BeNil())
+					Eventually(func() streamI { return str1 }).ShouldNot(BeNil())
+					Eventually(func() streamI { return str2 }).ShouldNot(BeNil())
 					Expect(str1.StreamID()).ToNot(Equal(str2.StreamID()))
 					Expect(str1.StreamID() + str2.StreamID()).To(BeEquivalentTo(1 + 3))
 				})
 
 				It("waits a new stream is available", func() {
-					var str *stream
+					var str streamI
 					go func() {
 						defer GinkgoRecover()
 						var err error
 						str, err = m.AcceptStream()
 						Expect(err).ToNot(HaveOccurred())
 					}()
-					Consistently(func() *stream { return str }).Should(BeNil())
+					Consistently(func() streamI { return str }).Should(BeNil())
 					_, err := m.GetOrOpenStream(1)
 					Expect(err).ToNot(HaveOccurred())
-					Eventually(func() *stream { return str }).ShouldNot(BeNil())
+					Eventually(func() streamI { return str }).ShouldNot(BeNil())
 					Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
 				})
 
 				It("returns multiple streams on subsequent Accept calls, if available", func() {
-					var str *stream
+					var str streamI
 					go func() {
 						defer GinkgoRecover()
 						var err error
@@ -339,7 +355,7 @@ var _ = Describe("Streams Map", func() {
 					}()
 					_, err := m.GetOrOpenStream(3)
 					Expect(err).ToNot(HaveOccurred())
-					Eventually(func() *stream { return str }).ShouldNot(BeNil())
+					Eventually(func() streamI { return str }).ShouldNot(BeNil())
 					Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
 					str, err = m.AcceptStream()
 					Expect(err).ToNot(HaveOccurred())
@@ -458,7 +474,7 @@ var _ = Describe("Streams Map", func() {
 
 			Context("accepting streams", func() {
 				It("accepts stream 2 first", func() {
-					var str *stream
+					var str streamI
 					go func() {
 						defer GinkgoRecover()
 						var err error
@@ -467,7 +483,7 @@ var _ = Describe("Streams Map", func() {
 					}()
 					_, err := m.GetOrOpenStream(2)
 					Expect(err).ToNot(HaveOccurred())
-					Eventually(func() *stream { return str }).ShouldNot(BeNil())
+					Eventually(func() streamI { return str }).ShouldNot(BeNil())
 					Expect(str.StreamID()).To(Equal(protocol.StreamID(2)))
 				})
 			})
@@ -482,15 +498,13 @@ var _ = Describe("Streams Map", func() {
 		closeStream := func(id protocol.StreamID) {
 			str := m.streams[id]
 			Expect(str).ToNot(BeNil())
-			Expect(str.finished()).To(BeFalse())
-			str.cancelled.Set(true)
-			Expect(str.finished()).To(BeTrue())
+			finishedStreams[id].Return(true)
 		}
 
 		Context("deleting streams", func() {
 			BeforeEach(func() {
 				for i := 1; i <= 5; i++ {
-					err := m.putStream(&stream{streamID: protocol.StreamID(i)})
+					err := m.putStream(newStream(protocol.StreamID(i)))
 					Expect(err).ToNot(HaveOccurred())
 				}
 				Expect(m.openStreams).To(Equal([]protocol.StreamID{1, 2, 3, 4, 5}))
@@ -499,6 +513,7 @@ var _ = Describe("Streams Map", func() {
 			It("does not delete streams with Close()", func() {
 				str, err := m.GetOrOpenStream(55)
 				Expect(err).ToNot(HaveOccurred())
+				str.(*mocks.MockStreamI).EXPECT().Close()
 				str.Close()
 				err = m.DeleteClosedStreams()
 				Expect(err).ToNot(HaveOccurred())
@@ -542,6 +557,28 @@ var _ = Describe("Streams Map", func() {
 			})
 		})
 
+		Context("Ranging", func() {
+			// create 5 streams, ids 4 to 8
+			var callbackCalledForStream []protocol.StreamID
+			callback := func(str streamI) {
+				callbackCalledForStream = append(callbackCalledForStream, str.StreamID())
+				sort.Slice(callbackCalledForStream, func(i, j int) bool { return callbackCalledForStream[i] < callbackCalledForStream[j] })
+			}
+
+			BeforeEach(func() {
+				callbackCalledForStream = callbackCalledForStream[:0]
+				for i := 4; i <= 8; i++ {
+					err := m.putStream(&stream{streamID: protocol.StreamID(i)})
+					Expect(err).NotTo(HaveOccurred())
+				}
+			})
+
+			It("ranges over all open streams", func() {
+				m.Range(callback)
+				Expect(callbackCalledForStream).To(Equal([]protocol.StreamID{4, 5, 6, 7, 8}))
+			})
+		})
+
 		Context("RoundRobinIterate", func() {
 			// create 5 streams, ids 4 to 8
 			var lambdaCalledForStream []protocol.StreamID
@@ -551,13 +588,13 @@ var _ = Describe("Streams Map", func() {
 				lambdaCalledForStream = lambdaCalledForStream[:0]
 				numIterations = 0
 				for i := 4; i <= 8; i++ {
-					err := m.putStream(&stream{streamID: protocol.StreamID(i)})
+					err := m.putStream(newStream(protocol.StreamID(i)))
 					Expect(err).NotTo(HaveOccurred())
 				}
 			})
 
 			It("executes the lambda exactly once for every stream", func() {
-				fn := func(str *stream) (bool, error) {
+				fn := func(str streamI) (bool, error) {
 					lambdaCalledForStream = append(lambdaCalledForStream, str.StreamID())
 					numIterations++
 					return true, nil
@@ -570,7 +607,7 @@ var _ = Describe("Streams Map", func() {
 			})
 
 			It("goes around once when starting in the middle", func() {
-				fn := func(str *stream) (bool, error) {
+				fn := func(str streamI) (bool, error) {
 					lambdaCalledForStream = append(lambdaCalledForStream, str.StreamID())
 					numIterations++
 					return true, nil
@@ -584,7 +621,7 @@ var _ = Describe("Streams Map", func() {
 			})
 
 			It("picks up at the index+1 where it last stopped", func() {
-				fn := func(str *stream) (bool, error) {
+				fn := func(str streamI) (bool, error) {
 					lambdaCalledForStream = append(lambdaCalledForStream, str.StreamID())
 					numIterations++
 					if str.StreamID() == 5 {
@@ -599,7 +636,7 @@ var _ = Describe("Streams Map", func() {
 				Expect(m.roundRobinIndex).To(BeEquivalentTo(2))
 				numIterations = 0
 				lambdaCalledForStream = lambdaCalledForStream[:0]
-				fn2 := func(str *stream) (bool, error) {
+				fn2 := func(str streamI) (bool, error) {
 					lambdaCalledForStream = append(lambdaCalledForStream, str.StreamID())
 					numIterations++
 					if str.StreamID() == 7 {
@@ -658,7 +695,7 @@ var _ = Describe("Streams Map", func() {
 
 				It("gets crypto- and header stream first, then picks up at the round-robin position", func() {
 					m.roundRobinIndex = 3 // stream 7
-					fn := func(str *stream) (bool, error) {
+					fn := func(str streamI) (bool, error) {
 						if numIterations >= 3 {
 							return false, nil
 						}

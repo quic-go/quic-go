@@ -67,7 +67,7 @@ type session struct {
 	receivedPacketHandler ackhandler.ReceivedPacketHandler
 	streamFramer          *streamFramer
 
-	flowControlManager flowcontrol.FlowControlManager
+	connFlowController flowcontrol.ConnectionFlowController
 
 	unpacker unpacker
 	packer   *packetPacker
@@ -109,7 +109,8 @@ type session struct {
 
 	sessionCreationTime     time.Time
 	lastNetworkActivityTime time.Time
-	remoteIdleTimeout       time.Duration
+
+	peerParams *handshake.TransportParameters
 
 	timer *utils.Timer
 	// keepAlivePingSent stores whether a Ping frame was sent to the peer or not
@@ -251,13 +252,13 @@ func (s *session) setup(
 		return nil, nil, err
 	}
 
-	s.flowControlManager = flowcontrol.NewFlowControlManager(
-		protocol.ByteCount(s.config.MaxReceiveStreamFlowControlWindow),
+	s.connFlowController = flowcontrol.NewConnectionFlowController(
+		protocol.ReceiveConnectionFlowControlWindow,
 		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),
 		s.rttStats,
 	)
-	s.streamsMap = newStreamsMap(s.newStream, s.flowControlManager.RemoveStream, s.perspective)
-	s.streamFramer = newStreamFramer(s.streamsMap, s.flowControlManager)
+	s.streamsMap = newStreamsMap(s.newStream, s.perspective)
+	s.streamFramer = newStreamFramer(s.streamsMap, s.connFlowController)
 	s.packer = newPacketPacker(s.connectionID,
 		s.cryptoSetup,
 		s.streamFramer,
@@ -348,7 +349,7 @@ runLoop:
 			s.sentPacketHandler.OnAlarm()
 		}
 
-		if s.config.KeepAlive && s.handshakeComplete && time.Since(s.lastNetworkActivityTime) >= s.remoteIdleTimeout/2 {
+		if s.config.KeepAlive && s.handshakeComplete && time.Since(s.lastNetworkActivityTime) >= s.peerParams.IdleTimeout/2 {
 			// send the PING frame since there is no activity in the session
 			s.packer.QueueControlFrame(&wire.PingFrame{})
 			s.keepAlivePingSent = true
@@ -389,7 +390,7 @@ func (s *session) Context() context.Context {
 func (s *session) maybeResetTimer() {
 	var deadline time.Time
 	if s.config.KeepAlive && s.handshakeComplete && !s.keepAlivePingSent {
-		deadline = s.lastNetworkActivityTime.Add(s.remoteIdleTimeout / 2)
+		deadline = s.lastNetworkActivityTime.Add(s.peerParams.IdleTimeout / 2)
 	} else {
 		deadline = s.lastNetworkActivityTime.Add(s.config.IdleTimeout)
 	}
@@ -537,17 +538,20 @@ func (s *session) handleStreamFrame(frame *wire.StreamFrame) error {
 }
 
 func (s *session) handleWindowUpdateFrame(frame *wire.WindowUpdateFrame) error {
-	if frame.StreamID != 0 {
-		str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
-		if err != nil {
-			return err
-		}
-		if str == nil {
-			return errWindowUpdateOnClosedStream
-		}
+	if frame.StreamID == 0 {
+		s.connFlowController.UpdateSendWindow(frame.ByteOffset)
+		return nil
 	}
-	_, err := s.flowControlManager.UpdateWindow(frame.StreamID, frame.ByteOffset)
-	return err
+
+	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
+	if err != nil {
+		return err
+	}
+	if str == nil {
+		return errWindowUpdateOnClosedStream
+	}
+	str.UpdateSendWindow(frame.ByteOffset)
+	return nil
 }
 
 func (s *session) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
@@ -558,9 +562,7 @@ func (s *session) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
 	if str == nil {
 		return errRstStreamOnInvalidStream
 	}
-
-	str.RegisterRemoteError(fmt.Errorf("RST_STREAM received with code %d", frame.ErrorCode))
-	return s.flowControlManager.ResetStream(frame.StreamID, frame.ByteOffset)
+	return str.RegisterRemoteError(fmt.Errorf("RST_STREAM received with code %d", frame.ErrorCode), frame.ByteOffset)
 }
 
 func (s *session) handleAckFrame(frame *wire.AckFrame) error {
@@ -624,12 +626,15 @@ func (s *session) handleCloseError(closeErr closeError) error {
 }
 
 func (s *session) processTransportParameters(params *handshake.TransportParameters) {
-	s.remoteIdleTimeout = params.IdleTimeout
-	s.flowControlManager.UpdateTransportParameters(params)
+	s.peerParams = params
 	s.streamsMap.UpdateMaxStreamLimit(params.MaxStreams)
 	if params.OmitConnectionID {
 		s.packer.SetOmitConnectionID()
 	}
+	s.connFlowController.UpdateSendWindow(params.ConnectionFlowControlWindow)
+	s.streamsMap.Range(func(str streamI) {
+		str.UpdateSendWindow(params.StreamFlowControlWindow)
+	})
 }
 
 func (s *session) sendPacket() error {
@@ -690,15 +695,10 @@ func (s *session) sendPacket() error {
 				utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 				// resend the frames that were in the packet
 				for _, frame := range retransmitPacket.GetFramesForRetransmission() {
+					// TODO: only retransmit WINDOW_UPDATEs if they actually enlarge the window
 					switch f := frame.(type) {
 					case *wire.StreamFrame:
 						s.streamFramer.AddFrameForRetransmission(f)
-					case *wire.WindowUpdateFrame:
-						// only retransmit WindowUpdates if the stream is not yet closed and the we haven't sent another WindowUpdate with a higher ByteOffset for the stream
-						currentOffset, err := s.flowControlManager.GetReceiveWindow(f.StreamID)
-						if err == nil && f.ByteOffset >= currentOffset {
-							s.packer.QueueControlFrame(f)
-						}
 					default:
 						s.packer.QueueControlFrame(frame)
 					}
@@ -810,14 +810,26 @@ func (s *session) queueResetStreamFrame(id protocol.StreamID, offset protocol.By
 	s.scheduleSending()
 }
 
-func (s *session) newStream(id protocol.StreamID) *stream {
+func (s *session) newStream(id protocol.StreamID) streamI {
 	// TODO: find a better solution for determining which streams contribute to connection level flow control
-	if id == 1 || id == 3 {
-		s.flowControlManager.NewStream(id, false)
-	} else {
-		s.flowControlManager.NewStream(id, true)
+	var contributesToConnection bool
+	if id != 1 && id != 3 {
+		contributesToConnection = true
 	}
-	return newStream(id, s.scheduleSending, s.queueResetStreamFrame, s.flowControlManager)
+	var initialSendWindow protocol.ByteCount
+	if s.peerParams != nil {
+		initialSendWindow = s.peerParams.StreamFlowControlWindow
+	}
+	flowController := flowcontrol.NewStreamFlowController(
+		id,
+		contributesToConnection,
+		s.connFlowController,
+		protocol.ReceiveStreamFlowControlWindow,
+		protocol.ByteCount(s.config.MaxReceiveStreamFlowControlWindow),
+		initialSendWindow,
+		s.rttStats,
+	)
+	return newStream(id, s.scheduleSending, s.queueResetStreamFrame, flowController)
 }
 
 func (s *session) sendPublicReset(rejectedPacketNumber protocol.PacketNumber) error {
@@ -859,10 +871,20 @@ func (s *session) tryDecryptingQueuedPackets() {
 }
 
 func (s *session) getWindowUpdateFrames() []*wire.WindowUpdateFrame {
-	updates := s.flowControlManager.GetWindowUpdates()
-	res := make([]*wire.WindowUpdateFrame, len(updates))
-	for i, u := range updates {
-		res[i] = &wire.WindowUpdateFrame{StreamID: u.StreamID, ByteOffset: u.Offset}
+	var res []*wire.WindowUpdateFrame
+	s.streamsMap.Range(func(str streamI) {
+		if offset := str.GetWindowUpdate(); offset != 0 {
+			res = append(res, &wire.WindowUpdateFrame{
+				StreamID:   str.StreamID(),
+				ByteOffset: offset,
+			})
+		}
+	})
+	if offset := s.connFlowController.GetWindowUpdate(); offset != 0 {
+		res = append(res, &wire.WindowUpdateFrame{
+			StreamID:   0,
+			ByteOffset: offset,
+		})
 	}
 	return res
 }
