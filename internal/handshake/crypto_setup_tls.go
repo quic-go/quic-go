@@ -21,7 +21,8 @@ type cryptoSetupTLS struct {
 
 	keyDerivation KeyDerivationFunction
 
-	tls mintTLS
+	tls  mintTLS
+	conn *fakeConn
 
 	nullAEAD crypto.AEAD
 	aead     crypto.AEAD
@@ -44,7 +45,8 @@ func NewCryptoSetupTLSServer(
 	if err != nil {
 		return nil, err
 	}
-	mintConn := mint.Server(&fakeConn{cryptoStream}, mintConf)
+	conn := &fakeConn{stream: cryptoStream, pers: protocol.PerspectiveServer}
+	mintConn := mint.Server(conn, mintConf)
 	eh := newExtensionHandlerServer(params, paramsChan, supportedVersions, version)
 	if err := mintConn.SetExtensionHandler(eh); err != nil {
 		return nil, err
@@ -58,6 +60,7 @@ func NewCryptoSetupTLSServer(
 	return &cryptoSetupTLS{
 		perspective:   protocol.PerspectiveServer,
 		tls:           &mintController{mintConn},
+		conn:          conn,
 		nullAEAD:      nullAEAD,
 		keyDerivation: crypto.DeriveAESKeys,
 		aeadChanged:   aeadChanged,
@@ -82,7 +85,8 @@ func NewCryptoSetupTLSClient(
 		return nil, err
 	}
 	mintConf.ServerName = hostname
-	mintConn := mint.Client(&fakeConn{cryptoStream}, mintConf)
+	conn := &fakeConn{stream: cryptoStream, pers: protocol.PerspectiveClient}
+	mintConn := mint.Client(conn, mintConf)
 	eh := newExtensionHandlerClient(params, paramsChan, initialVersion, supportedVersions, version)
 	if err := mintConn.SetExtensionHandler(eh); err != nil {
 		return nil, err
@@ -94,6 +98,7 @@ func NewCryptoSetupTLSClient(
 	}
 
 	return &cryptoSetupTLS{
+		conn:          conn,
 		perspective:   protocol.PerspectiveClient,
 		tls:           &mintController{mintConn},
 		nullAEAD:      nullAEAD,
@@ -103,9 +108,16 @@ func NewCryptoSetupTLSClient(
 }
 
 func (h *cryptoSetupTLS) HandleCryptoStream() error {
-
-	if alert := h.tls.Handshake(); alert != mint.AlertNoAlert {
-		return fmt.Errorf("TLS handshake error: %s (Alert %d)", alert.String(), alert)
+handshakeLoop:
+	for {
+		switch alert := h.tls.Handshake(); alert {
+		case mint.AlertNoAlert: // handshake complete
+			break handshakeLoop
+		case mint.AlertWouldBlock:
+			h.conn.UnblockRead()
+		default:
+			return fmt.Errorf("TLS handshake error: %s (Alert %d)", alert.String(), alert)
+		}
 	}
 
 	aead, err := h.keyDerivation(h.tls, h.perspective)

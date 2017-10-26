@@ -44,9 +44,15 @@ func tlsToMintConfig(tlsConf *tls.Config, pers protocol.Perspective) (*mint.Conf
 }
 
 type mintTLS interface {
-	crypto.TLSExporter
+	// These two methods are the same as the crypto.TLSExporter interface.
+	// Cannot use embedding here, because mockgen source mode refuses to generate mocks then.
+	GetCipherSuite() mint.CipherSuiteParams
+	ComputeExporter(label string, context []byte, keyLength int) ([]byte, error)
+	// additional methods
 	Handshake() mint.Alert
 }
+
+var _ crypto.TLSExporter = (mintTLS)(nil)
 
 type mintController struct {
 	conn *mint.Conn
@@ -69,10 +75,29 @@ func (mc *mintController) Handshake() mint.Alert {
 // mint expects a net.Conn, but we're doing the handshake on a stream
 // so we wrap a stream such that implements a net.Conn
 type fakeConn struct {
-	io.ReadWriter
+	stream io.ReadWriter
+	pers   protocol.Perspective
+
+	blockRead bool
 }
 
 var _ net.Conn = &fakeConn{}
+
+func (c *fakeConn) Read(b []byte) (int, error) {
+	if c.blockRead { // this causes mint.Conn.Handshake() to return a mint.AlertWouldBlock
+		return 0, nil
+	}
+	c.blockRead = true // block the next Read call
+	return c.stream.Read(b)
+}
+
+func (c *fakeConn) Write(p []byte) (int, error) {
+	return c.stream.Write(p)
+}
+
+func (c *fakeConn) UnblockRead() {
+	c.blockRead = false
+}
 
 func (c *fakeConn) Close() error                     { return nil }
 func (c *fakeConn) LocalAddr() net.Addr              { return nil }
