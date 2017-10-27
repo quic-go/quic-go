@@ -35,7 +35,7 @@ func parseLongHeader(b *bytes.Reader, packetSentBy protocol.Perspective, typeByt
 		return nil, err
 	}
 	h := &Header{
-		Type:            typeByte & 0x7f,
+		Type:            protocol.PacketType(typeByte & 0x7f),
 		IsLongHeader:    true,
 		ConnectionID:    protocol.ConnectionID(connID),
 		PacketNumber:    protocol.PacketNumber(pn),

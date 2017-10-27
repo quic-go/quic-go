@@ -24,7 +24,7 @@ type Header struct {
 	DiversificationNonce []byte
 
 	// only needed for the IETF Header
-	Type         uint8
+	Type         protocol.PacketType
 	IsLongHeader bool
 	KeyPhase     int
 

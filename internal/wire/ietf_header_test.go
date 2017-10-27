@@ -32,7 +32,7 @@ var _ = Describe("IETF draft Header", func() {
 				b := bytes.NewReader(data)
 				h, err := parseHeader(b, protocol.PerspectiveClient)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(h.Type).To(BeEquivalentTo(3))
+				Expect(h.Type).To(Equal(protocol.PacketType(3)))
 				Expect(h.IsLongHeader).To(BeTrue())
 				Expect(h.OmitConnectionID).To(BeFalse())
 				Expect(h.ConnectionID).To(Equal(protocol.ConnectionID(0xdeadbeefcafe1337)))
@@ -62,6 +62,7 @@ var _ = Describe("IETF draft Header", func() {
 					b := bytes.NewReader(data)
 					h, err := parseHeader(b, protocol.PerspectiveServer)
 					Expect(err).ToNot(HaveOccurred())
+					Expect(h.Type).To(Equal(protocol.PacketTypeVersionNegotiation))
 					Expect(h.SupportedVersions).To(Equal([]protocol.VersionNumber{
 						0x22334455,
 						0x33445566,

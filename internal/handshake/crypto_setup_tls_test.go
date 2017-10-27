@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 
@@ -53,8 +54,10 @@ var _ = Describe("TLS Crypto Setup", func() {
 	})
 
 	It("continues shaking hands when mint says that it would block", func() {
+		cs.conn.stream = &bytes.Buffer{}
 		cs.tls = mockhandshake.NewMockmintTLS(mockCtrl)
 		cs.tls.(*mockhandshake.MockmintTLS).EXPECT().Handshake().Return(mint.AlertWouldBlock)
+		cs.tls.(*mockhandshake.MockmintTLS).EXPECT().State().Return(mint.ConnectionState{})
 		cs.tls.(*mockhandshake.MockmintTLS).EXPECT().Handshake().Return(mint.AlertNoAlert)
 		cs.keyDerivation = mockKeyDerivation
 		err := cs.HandleCryptoStream()
@@ -69,6 +72,60 @@ var _ = Describe("TLS Crypto Setup", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionForwardSecure)))
 		Expect(aeadChanged).To(BeClosed())
+	})
+
+	Context("determining the packet type", func() {
+		Context("for the client", func() {
+			var csClient *cryptoSetupTLS
+
+			BeforeEach(func() {
+				csInt, err := NewCryptoSetupTLSClient(
+					nil,
+					1,
+					"quic.clemente.io",
+					testdata.GetTLSConfig(),
+					&TransportParameters{},
+					paramsChan,
+					aeadChanged,
+					protocol.VersionTLS,
+					[]protocol.VersionNumber{protocol.VersionTLS},
+					protocol.VersionTLS,
+				)
+				Expect(err).ToNot(HaveOccurred())
+				csClient = csInt.(*cryptoSetupTLS)
+				csClient.tls = mockhandshake.NewMockmintTLS(mockCtrl)
+			})
+
+			It("sends a Client Initial first", func() {
+				Expect(csClient.GetNextPacketType()).To(Equal(protocol.PacketTypeClientInitial))
+			})
+
+			It("sends a Client Cleartext after the server sent a Server Hello", func() {
+				csClient.tls.(*mockhandshake.MockmintTLS).EXPECT().State().Return(mint.ConnectionState{HandshakeState: "ClientStateWaitEE"})
+				err := csClient.determineNextPacketType()
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
+
+		Context("for the server", func() {
+			BeforeEach(func() {
+				cs.tls = mockhandshake.NewMockmintTLS(mockCtrl)
+			})
+
+			It("sends a Stateless Retry packet", func() {
+				cs.tls.(*mockhandshake.MockmintTLS).EXPECT().State().Return(mint.ConnectionState{HandshakeState: "ServerStateStart"})
+				err := cs.determineNextPacketType()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cs.GetNextPacketType()).To(Equal(protocol.PacketTypeServerStatelessRetry))
+			})
+
+			It("sends a Server Cleartext packet", func() {
+				cs.tls.(*mockhandshake.MockmintTLS).EXPECT().State().Return(mint.ConnectionState{HandshakeState: "ServerStateWaitFinished"})
+				err := cs.determineNextPacketType()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cs.GetNextPacketType()).To(Equal(protocol.PacketTypeServerCleartext))
+			})
+		})
 	})
 
 	Context("escalating crypto", func() {

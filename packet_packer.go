@@ -291,8 +291,11 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header
 			header.VersionFlag = true
 			header.Version = p.version
 		}
-	} else if encLevel != protocol.EncryptionForwardSecure {
-		header.Version = p.version
+	} else {
+		header.Type = p.cryptoSetup.GetNextPacketType()
+		if encLevel != protocol.EncryptionForwardSecure {
+			header.Version = p.version
+		}
 	}
 	return header
 }

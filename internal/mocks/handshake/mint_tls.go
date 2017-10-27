@@ -69,3 +69,15 @@ func (_m *MockmintTLS) Handshake() mint.Alert {
 func (_mr *MockmintTLSMockRecorder) Handshake() *gomock.Call {
 	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "Handshake", reflect.TypeOf((*MockmintTLS)(nil).Handshake))
 }
+
+// State mocks base method
+func (_m *MockmintTLS) State() mint.ConnectionState {
+	ret := _m.ctrl.Call(_m, "State")
+	ret0, _ := ret[0].(mint.ConnectionState)
+	return ret0
+}
+
+// State indicates an expected call of State
+func (_mr *MockmintTLSMockRecorder) State() *gomock.Call {
+	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "State", reflect.TypeOf((*MockmintTLS)(nil).State))
+}
