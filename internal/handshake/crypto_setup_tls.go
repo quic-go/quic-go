@@ -32,6 +32,7 @@ type cryptoSetupTLS struct {
 // NewCryptoSetupTLSServer creates a new TLS CryptoSetup instance for a server
 func NewCryptoSetupTLSServer(
 	cryptoStream io.ReadWriter,
+	connID protocol.ConnectionID,
 	tlsConfig *tls.Config,
 	params *TransportParameters,
 	paramsChan chan<- TransportParameters,
@@ -49,10 +50,15 @@ func NewCryptoSetupTLSServer(
 		return nil, err
 	}
 
+	nullAEAD, err := crypto.NewNullAEAD(protocol.PerspectiveServer, connID, version)
+	if err != nil {
+		return nil, err
+	}
+
 	return &cryptoSetupTLS{
 		perspective:   protocol.PerspectiveServer,
 		tls:           &mintController{mintConn},
-		nullAEAD:      crypto.NewNullAEAD(protocol.PerspectiveServer, version),
+		nullAEAD:      nullAEAD,
 		keyDerivation: crypto.DeriveAESKeys,
 		aeadChanged:   aeadChanged,
 	}, nil
@@ -61,7 +67,8 @@ func NewCryptoSetupTLSServer(
 // NewCryptoSetupTLSClient creates a new TLS CryptoSetup instance for a client
 func NewCryptoSetupTLSClient(
 	cryptoStream io.ReadWriter,
-	hostname string, // only needed for the client
+	connID protocol.ConnectionID,
+	hostname string,
 	tlsConfig *tls.Config,
 	params *TransportParameters,
 	paramsChan chan<- TransportParameters,
@@ -81,10 +88,15 @@ func NewCryptoSetupTLSClient(
 		return nil, err
 	}
 
+	nullAEAD, err := crypto.NewNullAEAD(protocol.PerspectiveClient, connID, version)
+	if err != nil {
+		return nil, err
+	}
+
 	return &cryptoSetupTLS{
 		perspective:   protocol.PerspectiveClient,
 		tls:           &mintController{mintConn},
-		nullAEAD:      crypto.NewNullAEAD(protocol.PerspectiveClient, version),
+		nullAEAD:      nullAEAD,
 		keyDerivation: crypto.DeriveAESKeys,
 		aeadChanged:   aeadChanged,
 	}, nil

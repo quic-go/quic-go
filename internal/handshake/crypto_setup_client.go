@@ -76,6 +76,10 @@ func NewCryptoSetupClient(
 	aeadChanged chan<- protocol.EncryptionLevel,
 	negotiatedVersions []protocol.VersionNumber,
 ) (CryptoSetup, error) {
+	nullAEAD, err := crypto.NewNullAEAD(protocol.PerspectiveClient, connID, version)
+	if err != nil {
+		return nil, err
+	}
 	return &cryptoSetupClient{
 		cryptoStream:       cryptoStream,
 		hostname:           hostname,
@@ -85,7 +89,7 @@ func NewCryptoSetupClient(
 		params:             params,
 		keyDerivation:      crypto.DeriveQuicCryptoAESKeys,
 		keyExchange:        getEphermalKEX,
-		nullAEAD:           crypto.NewNullAEAD(protocol.PerspectiveClient, version),
+		nullAEAD:           nullAEAD,
 		paramsChan:         paramsChan,
 		aeadChanged:        aeadChanged,
 		negotiatedVersions: negotiatedVersions,

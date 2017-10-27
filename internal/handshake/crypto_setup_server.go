@@ -78,6 +78,10 @@ func NewCryptoSetup(
 	paramsChan chan<- TransportParameters,
 	aeadChanged chan<- protocol.EncryptionLevel,
 ) (CryptoSetup, error) {
+	nullAEAD, err := crypto.NewNullAEAD(protocol.PerspectiveServer, connID, version)
+	if err != nil {
+		return nil, err
+	}
 	return &cryptoSetupServer{
 		cryptoStream:      cryptoStream,
 		connID:            connID,
@@ -87,7 +91,7 @@ func NewCryptoSetup(
 		scfg:              scfg,
 		keyDerivation:     crypto.DeriveQuicCryptoAESKeys,
 		keyExchange:       getEphermalKEX,
-		nullAEAD:          crypto.NewNullAEAD(protocol.PerspectiveServer, version),
+		nullAEAD:          nullAEAD,
 		params:            params,
 		acceptSTKCallback: acceptSTK,
 		sentSHLO:          make(chan struct{}),
