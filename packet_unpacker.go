@@ -24,10 +24,10 @@ type packetUnpacker struct {
 	aead    quicAEAD
 }
 
-func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *wire.PublicHeader, data []byte) (*unpackedPacket, error) {
+func (u *packetUnpacker) Unpack(headerBinary []byte, hdr *wire.Header, data []byte) (*unpackedPacket, error) {
 	buf := getPacketBuffer()
 	defer putPacketBuffer(buf)
-	decrypted, encryptionLevel, err := u.aead.Open(buf, data, hdr.PacketNumber, publicHeaderBinary)
+	decrypted, encryptionLevel, err := u.aead.Open(buf, data, hdr.PacketNumber, headerBinary)
 	if err != nil {
 		// Wrap err in quicError so that public reset is sent by session
 		return nil, qerr.Error(qerr.DecryptionFailure, err.Error())

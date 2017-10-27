@@ -249,10 +249,10 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
-	hdr, err := wire.ParsePublicHeader(r, protocol.PerspectiveServer, c.version)
+	hdr, err := wire.ParseHeader(r, protocol.PerspectiveServer, c.version)
 	if err != nil {
 		utils.Errorf("error parsing packet from %s: %s", remoteAddr.String(), err.Error())
-		// drop this packet if we can't parse the Public Header
+		// drop this packet if we can't parse the header
 		return
 	}
 	// reject packets with truncated connection id if we didn't request truncation
@@ -307,14 +307,14 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 	}
 
 	c.session.handlePacket(&receivedPacket{
-		remoteAddr:   remoteAddr,
-		publicHeader: hdr,
-		data:         packet[len(packet)-r.Len():],
-		rcvTime:      rcvTime,
+		remoteAddr: remoteAddr,
+		header:     hdr,
+		data:       packet[len(packet)-r.Len():],
+		rcvTime:    rcvTime,
 	})
 }
 
-func (c *client) handlePacketWithVersionFlag(hdr *wire.PublicHeader) error {
+func (c *client) handlePacketWithVersionFlag(hdr *wire.Header) error {
 	for _, v := range hdr.SupportedVersions {
 		if v == c.version {
 			// the version negotiation packet contains the version that we offered
