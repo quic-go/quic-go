@@ -27,6 +27,9 @@ type Header struct {
 	Type         uint8
 	IsLongHeader bool
 	KeyPhase     int
+
+	// only needed for logging
+	isPublicHeader bool
 }
 
 // ParseHeader parses the header.
@@ -51,7 +54,12 @@ func ParseHeader(b *bytes.Reader, sentBy protocol.Perspective, version protocol.
 	}
 
 	// This is a gQUIC Public Header.
-	return parsePublicHeader(b, sentBy, version)
+	hdr, err := parsePublicHeader(b, sentBy, version)
+	if err != nil {
+		return nil, err
+	}
+	hdr.isPublicHeader = true // save that this is a Public Header, so we can log it correctly later
+	return hdr, nil
 }
 
 // PeekConnectionID parses the connection ID from a QUIC packet's public header, sent by the client.
@@ -82,6 +90,7 @@ func PeekConnectionID(b *bytes.Reader) (protocol.ConnectionID, error) {
 // Write writes the Header.
 func (h *Header) Write(b *bytes.Buffer, pers protocol.Perspective, version protocol.VersionNumber) error {
 	if !version.UsesTLS() {
+		h.isPublicHeader = true // save that this is a Public Header, so we can log it correctly later
 		return h.writePublicHeader(b, pers, version)
 	}
 	return h.writeHeader(b)
@@ -93,4 +102,13 @@ func (h *Header) GetLength(pers protocol.Perspective, version protocol.VersionNu
 		return h.getPublicHeaderLength(pers)
 	}
 	return h.getHeaderLength()
+}
+
+// Log logs the Header
+func (h *Header) Log() {
+	if h.isPublicHeader {
+		h.logPublicHeader()
+	} else {
+		h.logHeader()
+	}
 }

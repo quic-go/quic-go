@@ -257,7 +257,7 @@ var _ = Describe("Packet packer", func() {
 		p2, err := packer.PackPacket()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(p2).ToNot(BeNil())
-		Expect(p2.number).To(BeNumerically(">", p1.number))
+		Expect(p2.header.PacketNumber).To(BeNumerically(">", p1.header.PacketNumber))
 	})
 
 	It("packs a StopWaitingFrame first", func() {
@@ -349,7 +349,7 @@ var _ = Describe("Packet packer", func() {
 		p, err = packer.PackPacket()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(p).ToNot(BeNil())
-		Expect(p.number).To(Equal(protocol.PacketNumber(1)))
+		Expect(p.header.PacketNumber).To(Equal(protocol.PacketNumber(1)))
 		Expect(packer.packetNumberGenerator.Peek()).To(Equal(protocol.PacketNumber(2)))
 	})
 

@@ -3,6 +3,8 @@ package wire
 import (
 	"bytes"
 	"encoding/binary"
+	"log"
+	"os"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -589,5 +591,58 @@ var _ = Describe("Public Header", func() {
 				})
 			})
 		})
+	})
+
+	Context("logging", func() {
+		var buf bytes.Buffer
+
+		BeforeEach(func() {
+			buf.Reset()
+			utils.SetLogLevel(utils.LogLevelDebug)
+			log.SetOutput(&buf)
+		})
+
+		AfterEach(func() {
+			utils.SetLogLevel(utils.LogLevelNothing)
+			log.SetOutput(os.Stdout)
+		})
+
+		It("logs a Public Header containing a connection ID", func() {
+			(&Header{
+				ConnectionID:    0xdecafbad,
+				PacketNumber:    0x1337,
+				PacketNumberLen: 6,
+				Version:         protocol.Version39,
+			}).logPublicHeader()
+			Expect(string(buf.Bytes())).To(ContainSubstring("Public Header{ConnectionID: 0xdecafbad, PacketNumber: 0x1337, PacketNumberLen: 6, Version: gQUIC 39"))
+		})
+
+		It("logs a Public Header with omitted connection ID", func() {
+			(&Header{
+				OmitConnectionID: true,
+				PacketNumber:     0x1337,
+				PacketNumberLen:  6,
+				Version:          protocol.Version39,
+			}).logPublicHeader()
+			Expect(string(buf.Bytes())).To(ContainSubstring("Public Header{ConnectionID: (omitted)"))
+		})
+
+		It("logs a Public Header without a version", func() {
+			(&Header{
+				OmitConnectionID: true,
+				PacketNumber:     0x1337,
+				PacketNumberLen:  6,
+			}).logPublicHeader()
+			Expect(string(buf.Bytes())).To(ContainSubstring("Version: (unset)"))
+		})
+
+		It("logs diversification nonces", func() {
+			(&Header{
+				ConnectionID:         0xdecafbad,
+				DiversificationNonce: []byte{0xba, 0xdf, 0x00, 0x0d},
+			}).logPublicHeader()
+			Expect(string(buf.Bytes())).To(ContainSubstring("DiversificationNonce: []byte{0xba, 0xdf, 0x0, 0xd}"))
+		})
+
 	})
 })

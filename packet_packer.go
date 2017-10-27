@@ -12,7 +12,7 @@ import (
 )
 
 type packedPacket struct {
-	number          protocol.PacketNumber
+	header          *wire.Header
 	raw             []byte
 	frames          []wire.Frame
 	encryptionLevel protocol.EncryptionLevel
@@ -57,7 +57,7 @@ func (p *packetPacker) PackConnectionClose(ccf *wire.ConnectionCloseFrame) (*pac
 	header := p.getHeader(encLevel)
 	raw, err := p.writeAndSealPacket(header, frames, sealer)
 	return &packedPacket{
-		number:          header.PacketNumber,
+		header:          header,
 		raw:             raw,
 		frames:          frames,
 		encryptionLevel: encLevel,
@@ -80,7 +80,7 @@ func (p *packetPacker) PackAckPacket() (*packedPacket, error) {
 	p.ackFrame = nil
 	raw, err := p.writeAndSealPacket(header, frames, sealer)
 	return &packedPacket{
-		number:          header.PacketNumber,
+		header:          header,
 		raw:             raw,
 		frames:          frames,
 		encryptionLevel: encLevel,
@@ -106,7 +106,7 @@ func (p *packetPacker) PackHandshakeRetransmission(packet *ackhandler.Packet) (*
 	p.stopWaiting = nil
 	raw, err := p.writeAndSealPacket(header, frames, sealer)
 	return &packedPacket{
-		number:          header.PacketNumber,
+		header:          header,
 		raw:             raw,
 		frames:          frames,
 		encryptionLevel: packet.EncryptionLevel,
@@ -154,7 +154,7 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 		return nil, err
 	}
 	return &packedPacket{
-		number:          header.PacketNumber,
+		header:          header,
 		raw:             raw,
 		frames:          payloadFrames,
 		encryptionLevel: encLevel,
@@ -175,7 +175,7 @@ func (p *packetPacker) packCryptoPacket() (*packedPacket, error) {
 		return nil, err
 	}
 	return &packedPacket{
-		number:          header.PacketNumber,
+		header:          header,
 		raw:             raw,
 		frames:          frames,
 		encryptionLevel: encLevel,
