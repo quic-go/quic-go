@@ -7,7 +7,7 @@ addons:
 language: go
 
 go:
-  - 1.9
+  - 1.9.x
 
 # first part of the GOARCH workaround
 # setting the GOARCH directly doesn't work, since the value will be overwritten later
