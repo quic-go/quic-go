@@ -145,8 +145,7 @@ func (h *cryptoSetupServer) handleMessage(chloData []byte, cryptoData map[Tag][]
 	if len(verSlice) != 4 {
 		return false, qerr.Error(qerr.InvalidCryptoMessageParameter, "incorrect version tag")
 	}
-	verTag := binary.LittleEndian.Uint32(verSlice)
-	ver := protocol.VersionTagToNumber(verTag)
+	ver := protocol.VersionNumber(binary.BigEndian.Uint32(verSlice))
 	// If the client's preferred version is not the version we are currently speaking, then the client went through a version negotiation.  In this case, we need to make sure that we actually do not support this version and that it wasn't a downgrade attack.
 	if ver != h.version && protocol.IsSupportedVersion(h.supportedVersions, ver) {
 		return false, qerr.Error(qerr.VersionNegotiationMismatch, "Downgrade attack detected")
@@ -429,7 +428,7 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 	// add crypto parameters
 	verTag := &bytes.Buffer{}
 	for _, v := range h.supportedVersions {
-		utils.LittleEndian.WriteUint32(verTag, protocol.VersionNumberToTag(v))
+		utils.BigEndian.WriteUint32(verTag, uint32(v))
 	}
 	replyMap[TagPUBS] = ephermalKex.PublicKey()
 	replyMap[TagSNO] = serverNonce

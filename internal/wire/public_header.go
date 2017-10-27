@@ -61,7 +61,7 @@ func (h *Header) writePublicHeader(b *bytes.Buffer, pers protocol.Perspective, v
 		utils.BigEndian.WriteUint64(b, uint64(h.ConnectionID))
 	}
 	if h.VersionFlag && pers == protocol.PerspectiveClient {
-		utils.LittleEndian.WriteUint32(b, protocol.VersionNumberToTag(h.Version))
+		utils.BigEndian.WriteUint32(b, uint32(h.Version))
 	}
 	if len(h.DiversificationNonce) > 0 {
 		b.Write(h.DiversificationNonce)
@@ -163,11 +163,11 @@ func parsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective, versi
 			header.SupportedVersions = make([]protocol.VersionNumber, 0)
 			for {
 				var versionTag uint32
-				versionTag, err = utils.LittleEndian.ReadUint32(b)
+				versionTag, err = utils.BigEndian.ReadUint32(b)
 				if err != nil {
 					break
 				}
-				v := protocol.VersionTagToNumber(versionTag)
+				v := protocol.VersionNumber(versionTag)
 				header.SupportedVersions = append(header.SupportedVersions, v)
 			}
 			// a version negotiation packet doesn't have a packet number
@@ -175,11 +175,11 @@ func parsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective, versi
 		}
 		// packet was sent by the client. Read the version number
 		var versionTag uint32
-		versionTag, err = utils.LittleEndian.ReadUint32(b)
+		versionTag, err = utils.BigEndian.ReadUint32(b)
 		if err != nil {
 			return nil, err
 		}
-		header.Version = protocol.VersionTagToNumber(versionTag)
+		header.Version = protocol.VersionNumber(versionTag)
 		version = header.Version
 	}
 

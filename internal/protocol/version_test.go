@@ -14,21 +14,20 @@ var _ = Describe("Version", func() {
 	})
 
 	It("has the right string representation", func() {
-		Expect(Version37.String()).To(Equal("37"))
-		Expect(Version38.String()).To(Equal("38"))
-		Expect(Version39.String()).To(Equal("39"))
+		Expect(Version37.String()).To(Equal("gQUIC 37"))
+		Expect(Version38.String()).To(Equal("gQUIC 38"))
+		Expect(Version39.String()).To(Equal("gQUIC 39"))
 		Expect(VersionTLS.String()).To(ContainSubstring("TLS"))
 		Expect(VersionWhatever.String()).To(Equal("whatever"))
 		Expect(VersionUnsupported.String()).To(Equal("unsupported"))
 		Expect(VersionUnknown.String()).To(Equal("unknown"))
 	})
 
-	It("converts tags to numbers", func() {
-		Expect(VersionTagToNumber('Q' + '1'<<8 + '2'<<16 + '3'<<24)).To(Equal(VersionNumber(123)))
-	})
-
-	It("converts number to tag", func() {
-		Expect(VersionNumberToTag(VersionNumber(123))).To(Equal(uint32('Q' + '1'<<8 + '2'<<16 + '3'<<24)))
+	It("has the right representation for the H2 Alt-Svc tag", func() {
+		Expect(Version37.ToAltSvc()).To(Equal("37"))
+		Expect(Version38.ToAltSvc()).To(Equal("38"))
+		Expect(Version39.ToAltSvc()).To(Equal("39"))
+		Expect(VersionTLS.ToAltSvc()).To(Equal("101"))
 	})
 
 	It("recognizes supported versions", func() {

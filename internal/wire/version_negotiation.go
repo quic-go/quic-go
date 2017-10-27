@@ -21,7 +21,7 @@ func ComposeVersionNegotiation(connectionID protocol.ConnectionID, versions []pr
 		utils.Errorf("error composing version negotiation packet: %s", err.Error())
 	}
 	for _, v := range versions {
-		utils.LittleEndian.WriteUint32(fullReply, protocol.VersionNumberToTag(v))
+		utils.BigEndian.WriteUint32(fullReply, uint32(v))
 	}
 	return fullReply.Bytes()
 }
