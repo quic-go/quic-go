@@ -1,17 +1,32 @@
 package wire
 
 import (
+	"bytes"
+
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Version Negotiation Packet", func() {
-	It("composes version negotiation packets", func() {
-		expected := append(
-			[]byte{0x01 | 0x08, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1},
-			[]byte{'Q', '0', '3', '9'}...,
-		)
-		Expect(ComposeVersionNegotiation(1, []protocol.VersionNumber{protocol.Version39})).To(Equal(expected))
+var _ = Describe("Version Negotiation Packets", func() {
+	It("writes for gQUIC", func() {
+		versions := []protocol.VersionNumber{1001, 1003}
+		data := ComposeGQUICVersionNegotiation(0x1337, versions)
+		hdr, err := parsePublicHeader(bytes.NewReader(data), protocol.PerspectiveServer, protocol.VersionUnknown)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(hdr.VersionFlag).To(BeTrue())
+		Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x1337)))
+		Expect(hdr.SupportedVersions).To(Equal(versions))
+	})
+
+	It("writes IETF draft style", func() {
+		versions := []protocol.VersionNumber{1001, 1003}
+		data := ComposeVersionNegotiation(0x1337, 0x42, versions)
+		hdr, err := parseHeader(bytes.NewReader(data), protocol.PerspectiveServer)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(hdr.Type).To(Equal(protocol.PacketTypeVersionNegotiation))
+		Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x1337)))
+		Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x42)))
+		Expect(hdr.SupportedVersions).To(Equal(versions))
 	})
 })

@@ -413,22 +413,55 @@ var _ = Describe("Server", func() {
 		ln, err := Listen(conn, nil, config)
 		Expect(err).ToNot(HaveOccurred())
 
-		var returned bool
+		done := make(chan struct{})
 		go func() {
 			ln.Accept()
-			returned = true
+			close(done)
 		}()
 
 		Eventually(func() int { return conn.dataWritten.Len() }).ShouldNot(BeZero())
 		Expect(conn.dataWrittenTo).To(Equal(udpAddr))
-		b = &bytes.Buffer{}
-		utils.BigEndian.WriteUint32(b, uint32(99))
-		expected := append(
-			[]byte{0x9, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x13, 0x37},
-			b.Bytes()...,
-		)
-		Expect(conn.dataWritten.Bytes()).To(Equal(expected))
-		Consistently(func() bool { return returned }).Should(BeFalse())
+		r := bytes.NewReader(conn.dataWritten.Bytes())
+		packet, err := wire.ParseHeader(r, protocol.PerspectiveServer, protocol.VersionUnknown)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(packet.VersionFlag).To(BeTrue())
+		Expect(packet.ConnectionID).To(Equal(protocol.ConnectionID(0x1337)))
+		Expect(r.Len()).To(BeZero())
+		Consistently(done).ShouldNot(BeClosed())
+	})
+
+	It("sends an IETF draft style Version Negotaion Packet, if the client sent a IETF draft style header", func() {
+		config.Versions = []protocol.VersionNumber{99}
+		b := &bytes.Buffer{}
+		hdr := wire.Header{
+			Type:         protocol.PacketTypeClientInitial,
+			IsLongHeader: true,
+			ConnectionID: 0x1337,
+			PacketNumber: 0x55,
+		}
+		hdr.Write(b, protocol.PerspectiveClient, protocol.VersionTLS)
+		b.Write(bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSize)) // add a fake CHLO
+		conn.dataToRead = b.Bytes()
+		conn.dataReadFrom = udpAddr
+		ln, err := Listen(conn, nil, config)
+		Expect(err).ToNot(HaveOccurred())
+
+		done := make(chan struct{})
+		go func() {
+			ln.Accept()
+			close(done)
+		}()
+
+		Eventually(func() int { return conn.dataWritten.Len() }).ShouldNot(BeZero())
+		Expect(conn.dataWrittenTo).To(Equal(udpAddr))
+		r := bytes.NewReader(conn.dataWritten.Bytes())
+		packet, err := wire.ParseHeader(r, protocol.PerspectiveServer, protocol.VersionUnknown)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(packet.Type).To(Equal(protocol.PacketTypeVersionNegotiation))
+		Expect(packet.ConnectionID).To(Equal(protocol.ConnectionID(0x1337)))
+		Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(0x55)))
+		Expect(r.Len()).To(BeZero())
+		Consistently(done).ShouldNot(BeClosed())
 	})
 
 	It("sends a PublicReset for new connections that don't have the VersionFlag set", func() {
