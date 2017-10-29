@@ -3,6 +3,7 @@ package wire
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -232,4 +233,16 @@ func (h *Header) hasPacketNumber(packetSentBy protocol.Perspective) bool {
 		return false
 	}
 	return true
+}
+
+func (h *Header) logPublicHeader() {
+	connID := "(omitted)"
+	if !h.OmitConnectionID {
+		connID = fmt.Sprintf("%#x", h.ConnectionID)
+	}
+	ver := "(unset)"
+	if h.Version != 0 {
+		ver = fmt.Sprintf("%s", h.Version)
+	}
+	utils.Debugf("   Public Header{ConnectionID: %s, PacketNumber: %#x, PacketNumberLen: %d, Version: %s, DiversificationNonce: %#v}", connID, h.PacketNumber, h.PacketNumberLen, ver, h.DiversificationNonce)
 }

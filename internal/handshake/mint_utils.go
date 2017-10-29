@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"bytes"
 	gocrypto "crypto"
 	"crypto/tls"
 	"crypto/x509"
@@ -44,9 +45,16 @@ func tlsToMintConfig(tlsConf *tls.Config, pers protocol.Perspective) (*mint.Conf
 }
 
 type mintTLS interface {
-	crypto.TLSExporter
+	// These two methods are the same as the crypto.TLSExporter interface.
+	// Cannot use embedding here, because mockgen source mode refuses to generate mocks then.
+	GetCipherSuite() mint.CipherSuiteParams
+	ComputeExporter(label string, context []byte, keyLength int) ([]byte, error)
+	// additional methods
 	Handshake() mint.Alert
+	State() mint.ConnectionState
 }
+
+var _ crypto.TLSExporter = (mintTLS)(nil)
 
 type mintController struct {
 	conn *mint.Conn
@@ -66,13 +74,49 @@ func (mc *mintController) Handshake() mint.Alert {
 	return mc.conn.Handshake()
 }
 
+func (mc *mintController) State() mint.ConnectionState {
+	return mc.conn.State()
+}
+
 // mint expects a net.Conn, but we're doing the handshake on a stream
 // so we wrap a stream such that implements a net.Conn
 type fakeConn struct {
-	io.ReadWriter
+	stream io.ReadWriter
+	pers   protocol.Perspective
+
+	blockRead   bool
+	writeBuffer bytes.Buffer
 }
 
 var _ net.Conn = &fakeConn{}
+
+func (c *fakeConn) Read(b []byte) (int, error) {
+	if c.blockRead { // this causes mint.Conn.Handshake() to return a mint.AlertWouldBlock
+		return 0, nil
+	}
+	c.blockRead = true // block the next Read call
+	return c.stream.Read(b)
+}
+
+func (c *fakeConn) Write(p []byte) (int, error) {
+	if c.pers == protocol.PerspectiveClient {
+		return c.stream.Write(p)
+	}
+	// Buffer all writes by the server.
+	// Mint transitions to the next state *after* writing, so we need to let all the writes happen, only then we can determine the packet type to use to send out this data.
+	return c.writeBuffer.Write(p)
+}
+
+func (c *fakeConn) Continue() error {
+	c.blockRead = false
+	if c.pers == protocol.PerspectiveClient {
+		return nil
+	}
+	// write all contents of the write buffer to the stream.
+	_, err := c.stream.Write(c.writeBuffer.Bytes())
+	c.writeBuffer.Reset()
+	return err
+}
 
 func (c *fakeConn) Close() error                     { return nil }
 func (c *fakeConn) LocalAddr() net.Addr              { return nil }

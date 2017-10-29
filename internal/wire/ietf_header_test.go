@@ -3,8 +3,11 @@ package wire
 import (
 	"bytes"
 	"io"
+	"log"
+	"os"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/qerr"
 
 	. "github.com/onsi/ginkgo"
@@ -29,7 +32,7 @@ var _ = Describe("IETF draft Header", func() {
 				b := bytes.NewReader(data)
 				h, err := parseHeader(b, protocol.PerspectiveClient)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(h.Type).To(BeEquivalentTo(3))
+				Expect(h.Type).To(Equal(protocol.PacketType(3)))
 				Expect(h.IsLongHeader).To(BeTrue())
 				Expect(h.OmitConnectionID).To(BeFalse())
 				Expect(h.ConnectionID).To(Equal(protocol.ConnectionID(0xdeadbeefcafe1337)))
@@ -59,6 +62,7 @@ var _ = Describe("IETF draft Header", func() {
 					b := bytes.NewReader(data)
 					h, err := parseHeader(b, protocol.PerspectiveServer)
 					Expect(err).ToNot(HaveOccurred())
+					Expect(h.Type).To(Equal(protocol.PacketTypeVersionNegotiation))
 					Expect(h.SupportedVersions).To(Equal([]protocol.VersionNumber{
 						0x22334455,
 						0x33445566,
@@ -342,6 +346,51 @@ var _ = Describe("IETF draft Header", func() {
 			h := &Header{PacketNumberLen: 5}
 			_, err := h.getHeaderLength()
 			Expect(err).To(MatchError("invalid packet number length: 5"))
+		})
+	})
+
+	Context("logging", func() {
+		var buf bytes.Buffer
+
+		BeforeEach(func() {
+			buf.Reset()
+			utils.SetLogLevel(utils.LogLevelDebug)
+			log.SetOutput(&buf)
+		})
+
+		AfterEach(func() {
+			utils.SetLogLevel(utils.LogLevelNothing)
+			log.SetOutput(os.Stdout)
+		})
+
+		It("logs Long Headers", func() {
+			(&Header{
+				IsLongHeader: true,
+				Type:         0x5,
+				PacketNumber: 0x1337,
+				ConnectionID: 0xdeadbeef,
+				Version:      253,
+			}).logHeader()
+			Expect(string(buf.Bytes())).To(ContainSubstring("Long Header{Type: 0x5, ConnectionID: 0xdeadbeef, PacketNumber: 0x1337, Version: 253}"))
+		})
+
+		It("logs Short Headers containing a connection ID", func() {
+			(&Header{
+				KeyPhase:        1,
+				PacketNumber:    0x1337,
+				PacketNumberLen: 4,
+				ConnectionID:    0xdeadbeef,
+			}).logHeader()
+			Expect(string(buf.Bytes())).To(ContainSubstring("Short Header{ConnectionID: 0xdeadbeef, PacketNumber: 0x1337, PacketNumberLen: 4, KeyPhase: 1}"))
+		})
+
+		It("logs Short Headers with omitted connection ID", func() {
+			(&Header{
+				PacketNumber:     0x12,
+				PacketNumberLen:  1,
+				OmitConnectionID: true,
+			}).logHeader()
+			Expect(string(buf.Bytes())).To(ContainSubstring("Short Header{ConnectionID: (omitted), PacketNumber: 0x12, PacketNumberLen: 1, KeyPhase: 0}"))
 		})
 	})
 })

@@ -442,6 +442,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		} else {
 			utils.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x, %s", hdr.PacketNumber, len(data)+len(hdr.Raw), hdr.ConnectionID, packet.encryptionLevel)
 		}
+		hdr.Log()
 	}
 	// if the decryption failed, this might be a packet sent by an attacker
 	// don't update the remote address
@@ -739,7 +740,7 @@ func (s *session) sendPacket() error {
 func (s *session) sendPackedPacket(packet *packedPacket) error {
 	defer putPacketBuffer(packet.raw)
 	err := s.sentPacketHandler.SentPacket(&ackhandler.Packet{
-		PacketNumber:    packet.number,
+		PacketNumber:    packet.header.PacketNumber,
 		Frames:          packet.frames,
 		Length:          protocol.ByteCount(len(packet.raw)),
 		EncryptionLevel: packet.encryptionLevel,
@@ -769,7 +770,8 @@ func (s *session) logPacket(packet *packedPacket) {
 		// We don't need to allocate the slices for calling the format functions
 		return
 	}
-	utils.Debugf("-> Sending packet 0x%x (%d bytes) for connection %x, %s", packet.number, len(packet.raw), s.connectionID, packet.encryptionLevel)
+	utils.Debugf("-> Sending packet 0x%x (%d bytes) for connection %x, %s", packet.header.PacketNumber, len(packet.raw), s.connectionID, packet.encryptionLevel)
+	packet.header.Log()
 	for _, frame := range packet.frames {
 		wire.LogFrame(frame, true)
 	}

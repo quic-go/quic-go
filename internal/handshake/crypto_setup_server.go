@@ -458,6 +458,10 @@ func (h *cryptoSetupServer) SetDiversificationNonce(data []byte) {
 	panic("not needed for cryptoSetupServer")
 }
 
+func (h *cryptoSetupServer) GetNextPacketType() protocol.PacketType {
+	panic("not needed for cryptoSetupServer")
+}
+
 func (h *cryptoSetupServer) validateClientNonce(nonce []byte) error {
 	if len(nonce) != 32 {
 		return qerr.Error(qerr.InvalidCryptoMessageParameter, "invalid client nonce length")
