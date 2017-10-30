@@ -7,13 +7,15 @@ import (
 // VersionNumber is a version number as int
 type VersionNumber int
 
-// gquicVersion0 is the "base" for gQUIC versions
-// e.g. version 39 is gquicVersion + 0x39
-const gquicVersion0 = 0x51303300
+// gQUIC version range as defined in the wiki: https://github.com/quicwg/base-drafts/wiki/QUIC-Versions
+const (
+	gquicVersion0   = 0x51303030
+	maxGquicVersion = 0x51303439
+)
 
 // The version numbers, making grepping easier
 const (
-	Version37 VersionNumber = gquicVersion0 + 0x37 + iota
+	Version37 VersionNumber = gquicVersion0 + 3*0x100 + 0x7 + iota
 	Version38
 	Version39
 	VersionTLS         VersionNumber = 101
@@ -46,8 +48,8 @@ func (vn VersionNumber) String() string {
 	case VersionTLS:
 		return "TLS dev version (WIP)"
 	default:
-		if vn > gquicVersion0 && vn <= gquicVersion0+0x99 {
-			return fmt.Sprintf("gQUIC %x", uint32(vn-gquicVersion0))
+		if vn > gquicVersion0 && vn <= maxGquicVersion {
+			return fmt.Sprintf("gQUIC %d", vn.toGQUICVersion())
 		}
 		return fmt.Sprintf("%d", vn)
 	}
@@ -55,10 +57,14 @@ func (vn VersionNumber) String() string {
 
 // ToAltSvc returns the representation of the version for the H2 Alt-Svc parameters
 func (vn VersionNumber) ToAltSvc() string {
-	if vn > gquicVersion0 && vn <= gquicVersion0+0x99 {
-		return fmt.Sprintf("%x", uint32(vn-gquicVersion0))
+	if vn > gquicVersion0 && vn <= maxGquicVersion {
+		return fmt.Sprintf("%d", vn.toGQUICVersion())
 	}
 	return fmt.Sprintf("%d", vn)
+}
+
+func (vn VersionNumber) toGQUICVersion() int {
+	return int(10*(vn-gquicVersion0)/0x100) + int(vn%0x10)
 }
 
 // IsSupportedVersion returns true if the server supports this version
