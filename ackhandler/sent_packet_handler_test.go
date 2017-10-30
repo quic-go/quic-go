@@ -846,7 +846,8 @@ var _ = Describe("SentPacketHandler", func() {
 			err = handler.ReceivedAck(&wire.AckFrame{LargestAcked: 1, LowestAcked: 1}, 1, time.Now().Add(time.Hour))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(handler.lossTime.IsZero()).To(BeTrue())
-			Expect(handler.GetAlarmTimeout().Sub(time.Now())).To(BeNumerically("~", handler.computeHandshakeTimeout(), time.Minute))
+			handshakeTimeout := handler.computeHandshakeTimeout()
+			Expect(handler.GetAlarmTimeout().Sub(time.Now())).To(BeNumerically("~", handshakeTimeout, time.Minute))
 
 			handler.OnAlarm()
 			p := handler.DequeuePacketForRetransmission()
@@ -857,6 +858,9 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(4)))
 			Expect(handler.packetHistory.Len()).To(Equal(1))
 			Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(3)))
+			Expect(handler.handshakeCount).To(BeEquivalentTo(1))
+			// make sure the exponential backoff is used
+			Expect(handler.computeHandshakeTimeout()).To(BeNumerically("~", 2*handshakeTimeout, time.Minute))
 		})
 	})
 

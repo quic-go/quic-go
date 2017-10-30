@@ -308,6 +308,7 @@ func (h *sentPacketHandler) OnAlarm() {
 	// TODO(#497): TLP
 	if !h.handshakeComplete {
 		h.queueHandshakePacketsForRetransmission()
+		h.handshakeCount++
 	} else if !h.lossTime.IsZero() {
 		// Early retransmit or time loss detection
 		h.detectLostPackets()
