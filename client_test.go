@@ -246,6 +246,7 @@ var _ = Describe("Client", func() {
 			testErr := errors.New("late handshake error")
 			packetConn.dataToRead = acceptClientVersionPacket(cl.connectionID)
 			go func() {
+				defer GinkgoRecover()
 				_, dialErr := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
 				Expect(dialErr).To(MatchError(testErr))
 				close(done)
