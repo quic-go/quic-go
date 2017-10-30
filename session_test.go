@@ -813,7 +813,7 @@ var _ = Describe("Session", func() {
 			Expect(sess.sentPacketHandler.(*mockSentPacketHandler).sentPackets[0].Frames).To(ContainElement(&wire.PingFrame{}))
 		})
 
-		It("sends two WindowUpdate frames", func() {
+		It("sends two WINDOW_UPDATE frames", func() {
 			mockFC := mocks.NewMockStreamFlowController(mockCtrl)
 			mockFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0x1000))
 			mockFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0)).Times(2)
@@ -830,7 +830,7 @@ var _ = Describe("Session", func() {
 			(&wire.WindowUpdateFrame{
 				StreamID:   5,
 				ByteOffset: 0x1000,
-			}).Write(buf, protocol.VersionWhatever)
+			}).Write(buf, sess.version)
 			Expect(mconn.written).To(HaveLen(2))
 			Expect(mconn.written).To(Receive(ContainSubstring(string(buf.Bytes()))))
 			Expect(mconn.written).To(Receive(ContainSubstring(string(buf.Bytes()))))
