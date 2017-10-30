@@ -7,18 +7,36 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
-// ComposeVersionNegotiation composes a Version Negotiation Packet
-// TODO(894): implement the IETF draft format of Version Negotiation Packets
-func ComposeVersionNegotiation(connectionID protocol.ConnectionID, versions []protocol.VersionNumber) []byte {
+// ComposeGQUICVersionNegotiation composes a Version Negotiation Packet for gQUIC
+func ComposeGQUICVersionNegotiation(connID protocol.ConnectionID, versions []protocol.VersionNumber) []byte {
 	fullReply := &bytes.Buffer{}
 	ph := Header{
-		ConnectionID: connectionID,
+		ConnectionID: connID,
 		PacketNumber: 1,
 		VersionFlag:  true,
 	}
-	err := ph.writePublicHeader(fullReply, protocol.PerspectiveServer, protocol.VersionWhatever)
-	if err != nil {
+	if err := ph.writePublicHeader(fullReply, protocol.PerspectiveServer, protocol.VersionWhatever); err != nil {
 		utils.Errorf("error composing version negotiation packet: %s", err.Error())
+		return nil
+	}
+	for _, v := range versions {
+		utils.BigEndian.WriteUint32(fullReply, uint32(v))
+	}
+	return fullReply.Bytes()
+}
+
+// ComposeVersionNegotiation composes a Version Negotiation according to the IETF draft
+func ComposeVersionNegotiation(connID protocol.ConnectionID, pn protocol.PacketNumber, versions []protocol.VersionNumber) []byte {
+	fullReply := &bytes.Buffer{}
+	ph := Header{
+		IsLongHeader: true,
+		Type:         protocol.PacketTypeVersionNegotiation,
+		ConnectionID: connID,
+		PacketNumber: pn,
+	}
+	if err := ph.writeHeader(fullReply); err != nil {
+		utils.Errorf("error composing version negotiation packet: %s", err.Error())
+		return nil
 	}
 	for _, v := range versions {
 		utils.BigEndian.WriteUint32(fullReply, uint32(v))
