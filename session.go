@@ -818,18 +818,13 @@ func (s *session) queueResetStreamFrame(id protocol.StreamID, offset protocol.By
 }
 
 func (s *session) newStream(id protocol.StreamID) streamI {
-	// TODO: find a better solution for determining which streams contribute to connection level flow control
-	var contributesToConnection bool
-	if id != 0 && id != 1 && id != 3 {
-		contributesToConnection = true
-	}
 	var initialSendWindow protocol.ByteCount
 	if s.peerParams != nil {
 		initialSendWindow = s.peerParams.StreamFlowControlWindow
 	}
 	flowController := flowcontrol.NewStreamFlowController(
 		id,
-		contributesToConnection,
+		s.version.StreamContributesToConnectionFlowControl(id),
 		s.connFlowController,
 		protocol.ReceiveStreamFlowControlWindow,
 		protocol.ByteCount(s.config.MaxReceiveStreamFlowControlWindow),

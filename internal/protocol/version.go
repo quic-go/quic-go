@@ -68,6 +68,17 @@ func (vn VersionNumber) CryptoStreamID() StreamID {
 	return 0
 }
 
+// StreamContributesToConnectionFlowControl says if a stream contributes to connection-level flow control
+func (vn VersionNumber) StreamContributesToConnectionFlowControl(id StreamID) bool {
+	if id == vn.CryptoStreamID() {
+		return false
+	}
+	if vn.isGQUIC() && id == 3 {
+		return false
+	}
+	return true
+}
+
 func (vn VersionNumber) isGQUIC() bool {
 	return vn > gquicVersion0 && vn <= maxGquicVersion
 }

@@ -52,6 +52,21 @@ var _ = Describe("Version", func() {
 		Expect(VersionTLS.CryptoStreamID()).To(Equal(StreamID(0)))
 	})
 
+	It("says if a stream contributes to connection-level flowcontrol, for gQUIC", func() {
+		Expect(Version39.StreamContributesToConnectionFlowControl(1)).To(BeFalse())
+		Expect(Version39.StreamContributesToConnectionFlowControl(2)).To(BeTrue())
+		Expect(Version39.StreamContributesToConnectionFlowControl(3)).To(BeFalse())
+		Expect(Version39.StreamContributesToConnectionFlowControl(4)).To(BeTrue())
+		Expect(Version39.StreamContributesToConnectionFlowControl(5)).To(BeTrue())
+	})
+
+	It("says if a stream contributes to connection-level flowcontrol, for TLS", func() {
+		Expect(VersionTLS.StreamContributesToConnectionFlowControl(0)).To(BeFalse())
+		Expect(VersionTLS.StreamContributesToConnectionFlowControl(1)).To(BeTrue())
+		Expect(VersionTLS.StreamContributesToConnectionFlowControl(2)).To(BeTrue())
+		Expect(VersionTLS.StreamContributesToConnectionFlowControl(3)).To(BeTrue())
+	})
+
 	It("recognizes supported versions", func() {
 		Expect(IsSupportedVersion(SupportedVersions, 0)).To(BeFalse())
 		Expect(IsSupportedVersion(SupportedVersions, SupportedVersions[0])).To(BeTrue())
