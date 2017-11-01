@@ -41,7 +41,7 @@ type newStreamLambda func(protocol.StreamID) streamI
 
 var errMapAccess = errors.New("streamsMap: Error accessing the streams map")
 
-func newStreamsMap(newStream newStreamLambda, pers protocol.Perspective) *streamsMap {
+func newStreamsMap(newStream newStreamLambda, pers protocol.Perspective, ver protocol.VersionNumber) *streamsMap {
 	// add some tolerance to the maximum incoming streams value
 	maxStreams := uint32(protocol.MaxIncomingStreams)
 	maxIncomingStreams := utils.MaxUint32(
@@ -58,12 +58,16 @@ func newStreamsMap(newStream newStreamLambda, pers protocol.Perspective) *stream
 	sm.nextStreamOrErrCond.L = &sm.mutex
 	sm.openStreamOrErrCond.L = &sm.mutex
 
+	nextOddStream := protocol.StreamID(1)
+	if ver.CryptoStreamID() == protocol.StreamID(1) {
+		nextOddStream = 3
+	}
 	if pers == protocol.PerspectiveClient {
-		sm.nextStream = 3
+		sm.nextStream = nextOddStream
 		sm.nextStreamToAccept = 2
 	} else {
 		sm.nextStream = 2
-		sm.nextStreamToAccept = 3
+		sm.nextStreamToAccept = nextOddStream
 	}
 
 	return &sm

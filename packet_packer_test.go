@@ -63,7 +63,7 @@ var _ = Describe("Packet packer", func() {
 
 	BeforeEach(func() {
 		cryptoStream = &stream{flowController: flowcontrol.NewStreamFlowController(1, false, flowcontrol.NewConnectionFlowController(1000, 1000, nil), 1000, 1000, 1000, nil)}
-		streamsMap := newStreamsMap(nil, protocol.PerspectiveServer)
+		streamsMap := newStreamsMap(nil, protocol.PerspectiveServer, protocol.VersionWhatever)
 		streamFramer = newStreamFramer(cryptoStream, streamsMap, nil)
 
 		packer = &packetPacker{
@@ -574,7 +574,10 @@ var _ = Describe("Packet packer", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
 			Expect(p.frames).To(HaveLen(1))
-			Expect(p.frames[0]).To(Equal(&wire.StreamFrame{StreamID: 1, Data: []byte("foobar")}))
+			Expect(p.frames[0]).To(Equal(&wire.StreamFrame{
+				StreamID: packer.version.CryptoStreamID(),
+				Data:     []byte("foobar"),
+			}))
 		})
 
 		It("sends encrypted stream data on the crypto stream", func() {
@@ -584,7 +587,10 @@ var _ = Describe("Packet packer", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionSecure))
 			Expect(p.frames).To(HaveLen(1))
-			Expect(p.frames[0]).To(Equal(&wire.StreamFrame{StreamID: 1, Data: []byte("foobar")}))
+			Expect(p.frames[0]).To(Equal(&wire.StreamFrame{
+				StreamID: packer.version.CryptoStreamID(),
+				Data:     []byte("foobar"),
+			}))
 		})
 
 		It("does not pack stream frames if not allowed", func() {

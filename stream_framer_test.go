@@ -41,7 +41,7 @@ var _ = Describe("Stream Framer", func() {
 		stream2 = mocks.NewMockStreamI(mockCtrl)
 		stream2.EXPECT().StreamID().Return(protocol.StreamID(6)).AnyTimes()
 
-		streamsMap = newStreamsMap(nil, protocol.PerspectiveServer)
+		streamsMap = newStreamsMap(nil, protocol.PerspectiveServer, protocol.VersionWhatever)
 		streamsMap.putStream(stream1)
 		streamsMap.putStream(stream2)
 

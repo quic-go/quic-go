@@ -224,10 +224,10 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	Context("unpacking STREAM frames", func() {
-		It("unpacks unencrypted STREAM frames on stream 1", func() {
+		It("unpacks unencrypted STREAM frames on the crypto stream", func() {
 			unpacker.aead.(*mockAEAD).encLevelOpen = protocol.EncryptionUnencrypted
 			f := &wire.StreamFrame{
-				StreamID: 1,
+				StreamID: unpacker.version.CryptoStreamID(),
 				Data:     []byte("foobar"),
 			}
 			err := f.Write(buf, 0)
@@ -238,10 +238,10 @@ var _ = Describe("Packet unpacker", func() {
 			Expect(packet.frames).To(Equal([]wire.Frame{f}))
 		})
 
-		It("unpacks encrypted STREAM frames on stream 1", func() {
+		It("unpacks encrypted STREAM frames on the crypto stream", func() {
 			unpacker.aead.(*mockAEAD).encLevelOpen = protocol.EncryptionSecure
 			f := &wire.StreamFrame{
-				StreamID: 1,
+				StreamID: unpacker.version.CryptoStreamID(),
 				Data:     []byte("foobar"),
 			}
 			err := f.Write(buf, 0)

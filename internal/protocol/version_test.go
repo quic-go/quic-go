@@ -43,7 +43,13 @@ var _ = Describe("Version", func() {
 		Expect(VersionNumber(0x51303133).ToAltSvc()).To(Equal("13"))
 		Expect(VersionNumber(0x51303235).ToAltSvc()).To(Equal("25"))
 		Expect(VersionNumber(0x51303438).ToAltSvc()).To(Equal("48"))
+	})
 
+	It("tells the Stream ID of the crypto stream", func() {
+		Expect(Version37.CryptoStreamID()).To(Equal(StreamID(1)))
+		Expect(Version38.CryptoStreamID()).To(Equal(StreamID(1)))
+		Expect(Version39.CryptoStreamID()).To(Equal(StreamID(1)))
+		Expect(VersionTLS.CryptoStreamID()).To(Equal(StreamID(0)))
 	})
 
 	It("recognizes supported versions", func() {

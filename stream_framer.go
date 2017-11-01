@@ -60,7 +60,7 @@ func (f *streamFramer) PopCryptoStreamFrame(maxLen protocol.ByteCount) *wire.Str
 		return nil
 	}
 	frame := &wire.StreamFrame{
-		StreamID: 1,
+		StreamID: f.cryptoStream.StreamID(),
 		Offset:   f.cryptoStream.GetWriteOffset(),
 	}
 	frameHeaderBytes, _ := frame.MinLength(protocol.VersionWhatever) // can never error

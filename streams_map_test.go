@@ -14,6 +14,11 @@ import (
 )
 
 var _ = Describe("Streams Map", func() {
+	const (
+		versionCryptoStream1 = protocol.Version39
+		versionCryptoStream0 = protocol.VersionTLS
+	)
+
 	var (
 		m               *streamsMap
 		finishedStreams map[protocol.StreamID]*gomock.Call
@@ -27,11 +32,13 @@ var _ = Describe("Streams Map", func() {
 		return str
 	}
 
-	setNewStreamsMap := func(p protocol.Perspective) {
-		m = newStreamsMap(newStream, p)
+	setNewStreamsMap := func(p protocol.Perspective, v protocol.VersionNumber) {
+		m = newStreamsMap(newStream, p, v)
 	}
 
 	BeforeEach(func() {
+		Expect(versionCryptoStream0.CryptoStreamID()).To(Equal(protocol.StreamID(0)))
+		Expect(versionCryptoStream1.CryptoStreamID()).To(Equal(protocol.StreamID(1)))
 		finishedStreams = make(map[protocol.StreamID]*gomock.Call)
 	})
 
@@ -50,7 +57,7 @@ var _ = Describe("Streams Map", func() {
 	Context("getting and creating streams", func() {
 		Context("as a server", func() {
 			BeforeEach(func() {
-				setNewStreamsMap(protocol.PerspectiveServer)
+				setNewStreamsMap(protocol.PerspectiveServer, versionCryptoStream1)
 			})
 
 			Context("client-side streams", func() {
@@ -280,7 +287,22 @@ var _ = Describe("Streams Map", func() {
 					Consistently(func() bool { return accepted }).Should(BeFalse())
 				})
 
-				It("start with stream 3", func() {
+				It("starts with stream 1, if the crypto stream is stream 0", func() {
+					setNewStreamsMap(protocol.PerspectiveServer, versionCryptoStream0)
+					var str streamI
+					go func() {
+						defer GinkgoRecover()
+						var err error
+						str, err = m.AcceptStream()
+						Expect(err).ToNot(HaveOccurred())
+					}()
+					_, err := m.GetOrOpenStream(1)
+					Expect(err).ToNot(HaveOccurred())
+					Eventually(func() Stream { return str }).ShouldNot(BeNil())
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
+				})
+
+				It("starts with stream 3, if the crypto stream is stream 1", func() {
 					var str streamI
 					go func() {
 						defer GinkgoRecover()
@@ -399,7 +421,7 @@ var _ = Describe("Streams Map", func() {
 
 		Context("as a client", func() {
 			BeforeEach(func() {
-				setNewStreamsMap(protocol.PerspectiveClient)
+				setNewStreamsMap(protocol.PerspectiveClient, versionCryptoStream1)
 				m.UpdateMaxStreamLimit(100)
 			})
 
@@ -445,7 +467,18 @@ var _ = Describe("Streams Map", func() {
 			})
 
 			Context("server-side streams", func() {
-				It("starts with stream 3", func() {
+				It("starts with stream 1, if the crypto stream is stream 0", func() {
+					setNewStreamsMap(protocol.PerspectiveClient, versionCryptoStream0)
+					m.UpdateMaxStreamLimit(100)
+					s, err := m.OpenStream()
+					Expect(err).ToNot(HaveOccurred())
+					Expect(s).ToNot(BeNil())
+					Expect(s.StreamID()).To(BeEquivalentTo(1))
+					Expect(m.numOutgoingStreams).To(BeZero())
+					Expect(m.numIncomingStreams).To(BeEquivalentTo(1))
+				})
+
+				It("starts with stream 3, if the crypto stream is stream 1", func() {
 					s, err := m.OpenStream()
 					Expect(err).ToNot(HaveOccurred())
 					Expect(s).ToNot(BeNil())
@@ -493,7 +526,7 @@ var _ = Describe("Streams Map", func() {
 
 	Context("DoS mitigation, iterating and deleting", func() {
 		BeforeEach(func() {
-			setNewStreamsMap(protocol.PerspectiveServer)
+			setNewStreamsMap(protocol.PerspectiveServer, versionCryptoStream1)
 		})
 
 		closeStream := func(id protocol.StreamID) {

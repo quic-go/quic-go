@@ -75,6 +75,7 @@ type stream struct {
 	writeDeadline  time.Time
 
 	flowController flowcontrol.StreamFlowController
+	version        protocol.VersionNumber
 }
 
 var _ Stream = &stream{}
@@ -93,6 +94,7 @@ func newStream(StreamID protocol.StreamID,
 	onData func(),
 	onReset func(protocol.StreamID, protocol.ByteCount),
 	flowController flowcontrol.StreamFlowController,
+	version protocol.VersionNumber,
 ) *stream {
 	s := &stream{
 		onData:         onData,
@@ -102,6 +104,7 @@ func newStream(StreamID protocol.StreamID,
 		frameQueue:     newStreamFrameSorter(),
 		readChan:       make(chan struct{}, 1),
 		writeChan:      make(chan struct{}, 1),
+		version:        version,
 	}
 	s.ctx, s.ctxCancel = context.WithCancel(context.Background())
 	return s
@@ -274,7 +277,7 @@ func (s *stream) GetDataForWriting(maxBytes protocol.ByteCount) []byte {
 	}
 
 	// TODO(#657): Flow control for the crypto stream
-	if s.streamID != 1 {
+	if s.streamID != s.version.CryptoStreamID() {
 		maxBytes = utils.MinByteCount(maxBytes, s.flowController.SendWindowSize())
 	}
 	if maxBytes == 0 {

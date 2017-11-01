@@ -200,8 +200,8 @@ func (s *session) setup(
 		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),
 		s.rttStats,
 	)
-	s.streamsMap = newStreamsMap(s.newStream, s.perspective)
-	s.cryptoStream = s.newStream(1)
+	s.streamsMap = newStreamsMap(s.newStream, s.perspective, s.version)
+	s.cryptoStream = s.newStream(s.version.CryptoStreamID())
 	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.connFlowController)
 
 	var err error
@@ -527,7 +527,7 @@ func (s *session) handlePacket(p *receivedPacket) {
 }
 
 func (s *session) handleStreamFrame(frame *wire.StreamFrame) error {
-	if frame.StreamID == 1 {
+	if frame.StreamID == s.version.CryptoStreamID() {
 		return s.cryptoStream.AddStreamFrame(frame)
 	}
 	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
@@ -820,7 +820,7 @@ func (s *session) queueResetStreamFrame(id protocol.StreamID, offset protocol.By
 func (s *session) newStream(id protocol.StreamID) streamI {
 	// TODO: find a better solution for determining which streams contribute to connection level flow control
 	var contributesToConnection bool
-	if id != 1 && id != 3 {
+	if id != 0 && id != 1 && id != 3 {
 		contributesToConnection = true
 	}
 	var initialSendWindow protocol.ByteCount
@@ -836,7 +836,7 @@ func (s *session) newStream(id protocol.StreamID) streamI {
 		initialSendWindow,
 		s.rttStats,
 	)
-	return newStream(id, s.scheduleSending, s.queueResetStreamFrame, flowController)
+	return newStream(id, s.scheduleSending, s.queueResetStreamFrame, flowController, s.version)
 }
 
 func (s *session) sendPublicReset(rejectedPacketNumber protocol.PacketNumber) error {

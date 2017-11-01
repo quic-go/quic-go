@@ -45,7 +45,7 @@ func (vn VersionNumber) String() string {
 	case VersionTLS:
 		return "TLS dev version (WIP)"
 	default:
-		if vn > gquicVersion0 && vn <= maxGquicVersion {
+		if vn.isGQUIC() {
 			return fmt.Sprintf("gQUIC %d", vn.toGQUICVersion())
 		}
 		return fmt.Sprintf("%d", vn)
@@ -54,10 +54,22 @@ func (vn VersionNumber) String() string {
 
 // ToAltSvc returns the representation of the version for the H2 Alt-Svc parameters
 func (vn VersionNumber) ToAltSvc() string {
-	if vn > gquicVersion0 && vn <= maxGquicVersion {
+	if vn.isGQUIC() {
 		return fmt.Sprintf("%d", vn.toGQUICVersion())
 	}
 	return fmt.Sprintf("%d", vn)
+}
+
+// CryptoStreamID gets the Stream ID of the crypto stream
+func (vn VersionNumber) CryptoStreamID() StreamID {
+	if vn.isGQUIC() {
+		return 1
+	}
+	return 0
+}
+
+func (vn VersionNumber) isGQUIC() bool {
+	return vn > gquicVersion0 && vn <= maxGquicVersion
 }
 
 func (vn VersionNumber) toGQUICVersion() int {

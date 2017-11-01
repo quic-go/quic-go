@@ -55,7 +55,7 @@ func (u *packetUnpacker) Unpack(headerBinary []byte, hdr *wire.Header, data []by
 				err = qerr.Error(qerr.InvalidStreamData, err.Error())
 			} else {
 				streamID := frame.(*wire.StreamFrame).StreamID
-				if streamID != 1 && encryptionLevel <= protocol.EncryptionUnencrypted {
+				if streamID != u.version.CryptoStreamID() && encryptionLevel <= protocol.EncryptionUnencrypted {
 					err = qerr.Error(qerr.UnencryptedStreamData, fmt.Sprintf("received unencrypted stream data on stream %d", streamID))
 				}
 			}
