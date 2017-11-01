@@ -63,13 +63,13 @@ var _ = Describe("Header", func() {
 			buf := &bytes.Buffer{}
 			err := (&Header{
 				IsLongHeader: true,
-				Type:         3,
+				Type:         protocol.PacketType0RTT,
 				PacketNumber: 0x42,
 			}).writeHeader(buf)
 			Expect(err).ToNot(HaveOccurred())
 			hdr, err := ParseHeader(bytes.NewReader(buf.Bytes()), protocol.PerspectiveClient, protocol.VersionUnknown)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(hdr.Type).To(BeEquivalentTo(3))
+			Expect(hdr.Type).To(Equal(protocol.PacketType0RTT))
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x42)))
 			Expect(hdr.isPublicHeader).To(BeFalse())
 		})
