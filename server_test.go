@@ -434,7 +434,7 @@ var _ = Describe("Server", func() {
 		config.Versions = []protocol.VersionNumber{99}
 		b := &bytes.Buffer{}
 		hdr := wire.Header{
-			Type:         protocol.PacketTypeClientInitial,
+			Type:         protocol.PacketTypeInitial,
 			IsLongHeader: true,
 			ConnectionID: 0x1337,
 			PacketNumber: 0x55,

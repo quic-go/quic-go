@@ -27,16 +27,14 @@ type PacketType uint8
 const (
 	// PacketTypeVersionNegotiation is the packet type of a Version Negotiation packet
 	PacketTypeVersionNegotiation PacketType = 1
-	// PacketTypeClientInitial is the packet type of a Client Initial packet
-	PacketTypeClientInitial PacketType = 2
-	// PacketTypeServerStatelessRetry is the packet type of a Server Stateless Retry packet
-	PacketTypeServerStatelessRetry PacketType = 3
-	// PacketTypeServerCleartext is the packet type of a Server Cleartext packet
-	PacketTypeServerCleartext PacketType = 4
-	// PacketTypeClientCleartext is the packet type of a Client Cleartext packet
-	PacketTypeClientCleartext PacketType = 5
+	// PacketTypeInitial is the packet type of a Initial packet
+	PacketTypeInitial PacketType = 2
+	// PacketTypeRetry is the packet type of a Retry packet
+	PacketTypeRetry PacketType = 3
+	// PacketTypeCleartext is the packet type of a Cleartext packet
+	PacketTypeCleartext PacketType = 4
 	// PacketType0RTT is the packet type of a 0-RTT packet
-	PacketType0RTT PacketType = 6
+	PacketType0RTT PacketType = 5
 )
 
 // A ConnectionID in QUIC
