@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
-	"time"
 
 	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -35,10 +34,9 @@ const (
 )
 
 var (
-	nFilesUploaded     int32 // should be used atomically
-	testEndpointCalled utils.AtomicBool
-	doneCalled         utils.AtomicBool
-	version            protocol.VersionNumber
+	nFilesUploaded int32 // should be used atomically
+	doneCalled     utils.AtomicBool
+	version        protocol.VersionNumber
 )
 
 func TestChrome(t *testing.T) {
@@ -55,7 +53,6 @@ func init() {
 		response = strings.Replace(response, "NUM", r.URL.Query().Get("num"), -1)
 		_, err := io.WriteString(w, response)
 		Expect(err).NotTo(HaveOccurred())
-		testEndpointCalled.Set(true)
 	})
 
 	// Requires the len & num GET parameters, e.g. /downloadtest?len=100&num=1
@@ -66,7 +63,6 @@ func init() {
 		response = strings.Replace(response, "NUM", r.URL.Query().Get("num"), -1)
 		_, err := io.WriteString(w, response)
 		Expect(err).NotTo(HaveOccurred())
-		testEndpointCalled.Set(true)
 	})
 
 	http.HandleFunc("/uploadhandler", func(w http.ResponseWriter, r *http.Request) {
@@ -98,7 +94,6 @@ var _ = AfterEach(func() {
 
 	atomic.StoreInt32(&nFilesUploaded, 0)
 	doneCalled.Set(false)
-	testEndpointCalled.Set(false)
 })
 
 func getChromePath() string {
@@ -116,17 +111,6 @@ func getChromePath() string {
 }
 
 func chromeTest(version protocol.VersionNumber, url string, blockUntilDone func()) {
-	// Chrome sometimes starts but doesn't send any HTTP requests for no apparent reason.
-	// Retry starting it a couple of times.
-	for i := 0; i < nChromeRetries; i++ {
-		if chromeTestImpl(version, url, blockUntilDone) {
-			return
-		}
-	}
-	Fail("Chrome didn't hit the testing endpoints")
-}
-
-func chromeTestImpl(version protocol.VersionNumber, url string, blockUntilDone func()) bool {
 	userDataDir, err := ioutil.TempDir("", "quic-go-test-chrome-dir")
 	Expect(err).NotTo(HaveOccurred())
 	defer os.RemoveAll(userDataDir)
@@ -148,19 +132,7 @@ func chromeTestImpl(version protocol.VersionNumber, url string, blockUntilDone f
 	session, err := gexec.Start(command, nil, nil)
 	Expect(err).NotTo(HaveOccurred())
 	defer session.Kill()
-	const pollInterval = 100 * time.Millisecond
-	const pollDuration = 10 * time.Second
-	for i := 0; i < int(pollDuration/pollInterval); i++ {
-		time.Sleep(pollInterval)
-		if testEndpointCalled.Get() {
-			break
-		}
-	}
-	if !testEndpointCalled.Get() {
-		return false
-	}
 	blockUntilDone()
-	return true
 }
 
 func waitForDone() {
