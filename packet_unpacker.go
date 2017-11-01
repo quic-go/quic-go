@@ -2,7 +2,6 @@ package quic
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -64,8 +63,6 @@ func (u *packetUnpacker) Unpack(headerBinary []byte, hdr *wire.Header, data []by
 			if err != nil {
 				err = qerr.Error(qerr.InvalidAckData, err.Error())
 			}
-		} else if typeByte&0xe0 == 0x20 {
-			err = errors.New("unimplemented: CONGESTION_FEEDBACK")
 		} else {
 			switch typeByte {
 			case 0x01:

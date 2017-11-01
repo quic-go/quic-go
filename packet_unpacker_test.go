@@ -92,12 +92,6 @@ var _ = Describe("Packet unpacker", func() {
 		Expect(readFrame.LargestAcked).To(Equal(protocol.PacketNumber(0x13)))
 	})
 
-	It("errors on CONGESTION_FEEDBACK frames", func() {
-		setData([]byte{0x20})
-		_, err := unpacker.Unpack(hdrBin, hdr, data)
-		Expect(err).To(MatchError("unimplemented: CONGESTION_FEEDBACK"))
-	})
-
 	It("handles PADDING frames", func() {
 		setData([]byte{0, 0, 0}) // 3 bytes PADDING
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
