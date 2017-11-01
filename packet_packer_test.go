@@ -236,7 +236,7 @@ var _ = Describe("Packet packer", func() {
 			ErrorCode:    0x1337,
 			ReasonPhrase: "foobar",
 		}
-		packer.controlFrames = []wire.Frame{&wire.WindowUpdateFrame{StreamID: 37}}
+		packer.controlFrames = []wire.Frame{&wire.MaxStreamDataFrame{StreamID: 37}}
 		streamFramer.AddFrameForRetransmission(&wire.StreamFrame{
 			StreamID: 5,
 			Data:     []byte("foobar"),
@@ -249,7 +249,7 @@ var _ = Describe("Packet packer", func() {
 
 	It("packs only control frames", func() {
 		packer.QueueControlFrame(&wire.RstStreamFrame{})
-		packer.QueueControlFrame(&wire.WindowUpdateFrame{})
+		packer.QueueControlFrame(&wire.MaxDataFrame{})
 		p, err := packer.PackPacket()
 		Expect(p).ToNot(BeNil())
 		Expect(err).ToNot(HaveOccurred())
@@ -670,12 +670,12 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	It("queues a control frame to be sent in the next packet", func() {
-		wuf := &wire.WindowUpdateFrame{StreamID: 5}
-		packer.QueueControlFrame(wuf)
+		msd := &wire.MaxStreamDataFrame{StreamID: 5}
+		packer.QueueControlFrame(msd)
 		p, err := packer.PackPacket()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(p.frames).To(HaveLen(1))
-		Expect(p.frames[0]).To(Equal(wuf))
+		Expect(p.frames[0]).To(Equal(msd))
 	})
 
 	Context("retransmitting of handshake packets", func() {

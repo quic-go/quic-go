@@ -14,11 +14,6 @@ import (
 )
 
 var _ = Describe("Streams Map", func() {
-	const (
-		versionCryptoStream1 = protocol.Version39
-		versionCryptoStream0 = protocol.VersionTLS
-	)
-
 	var (
 		m               *streamsMap
 		finishedStreams map[protocol.StreamID]*gomock.Call
@@ -37,8 +32,6 @@ var _ = Describe("Streams Map", func() {
 	}
 
 	BeforeEach(func() {
-		Expect(versionCryptoStream0.CryptoStreamID()).To(Equal(protocol.StreamID(0)))
-		Expect(versionCryptoStream1.CryptoStreamID()).To(Equal(protocol.StreamID(1)))
 		finishedStreams = make(map[protocol.StreamID]*gomock.Call)
 	})
 

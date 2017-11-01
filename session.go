@@ -491,8 +491,10 @@ func (s *session) handleFrames(fs []wire.Frame) error {
 			s.receivedPacketHandler.SetLowerLimit(frame.LeastUnacked - 1)
 		case *wire.RstStreamFrame:
 			err = s.handleRstStreamFrame(frame)
-		case *wire.WindowUpdateFrame:
-			err = s.handleWindowUpdateFrame(frame)
+		case *wire.MaxDataFrame:
+			s.handleMaxDataFrame(frame)
+		case *wire.MaxStreamDataFrame:
+			err = s.handleMaxStreamDataFrame(frame)
 		case *wire.BlockedFrame:
 		case *wire.PingFrame:
 		default:
@@ -542,12 +544,11 @@ func (s *session) handleStreamFrame(frame *wire.StreamFrame) error {
 	return str.AddStreamFrame(frame)
 }
 
-func (s *session) handleWindowUpdateFrame(frame *wire.WindowUpdateFrame) error {
-	if frame.StreamID == 0 {
-		s.connFlowController.UpdateSendWindow(frame.ByteOffset)
-		return nil
-	}
+func (s *session) handleMaxDataFrame(frame *wire.MaxDataFrame) {
+	s.connFlowController.UpdateSendWindow(frame.ByteOffset)
+}
 
+func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error {
 	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
 	if err != nil {
 		return err
@@ -646,11 +647,11 @@ func (s *session) processTransportParameters(params *handshake.TransportParamete
 func (s *session) sendPacket() error {
 	s.packer.SetLeastUnacked(s.sentPacketHandler.GetLeastUnacked())
 
-	// Get WindowUpdate frames
+	// Get MAX_DATA and MAX_STREAM_DATA frames
 	// this call triggers the flow controller to increase the flow control windows, if necessary
-	windowUpdateFrames := s.getWindowUpdateFrames()
-	for _, wuf := range windowUpdateFrames {
-		s.packer.QueueControlFrame(wuf)
+	windowUpdates := s.getWindowUpdates()
+	for _, f := range windowUpdates {
+		s.packer.QueueControlFrame(f)
 	}
 
 	ack := s.receivedPacketHandler.GetAckFrame()
@@ -732,10 +733,10 @@ func (s *session) sendPacket() error {
 		}
 
 		// send every window update twice
-		for _, f := range windowUpdateFrames {
+		for _, f := range windowUpdates {
 			s.packer.QueueControlFrame(f)
 		}
-		windowUpdateFrames = nil
+		windowUpdates = nil
 		ack = nil
 	}
 }
@@ -872,19 +873,18 @@ func (s *session) tryDecryptingQueuedPackets() {
 	s.undecryptablePackets = s.undecryptablePackets[:0]
 }
 
-func (s *session) getWindowUpdateFrames() []*wire.WindowUpdateFrame {
-	var res []*wire.WindowUpdateFrame
+func (s *session) getWindowUpdates() []wire.Frame {
+	var res []wire.Frame
 	s.streamsMap.Range(func(str streamI) {
 		if offset := str.GetWindowUpdate(); offset != 0 {
-			res = append(res, &wire.WindowUpdateFrame{
+			res = append(res, &wire.MaxStreamDataFrame{
 				StreamID:   str.StreamID(),
 				ByteOffset: offset,
 			})
 		}
 	})
 	if offset := s.connFlowController.GetWindowUpdate(); offset != 0 {
-		res = append(res, &wire.WindowUpdateFrame{
-			StreamID:   0,
+		res = append(res, &wire.MaxDataFrame{
 			ByteOffset: offset,
 		})
 	}

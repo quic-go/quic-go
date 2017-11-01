@@ -8,16 +8,18 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("WindowUpdateFrame", func() {
-	Context("when parsing", func() {
+var _ = Describe("WINDOW_UPDATE frame", func() {
+	Context("parsing", func() {
 		Context("in little endian", func() {
 			It("accepts sample frame", func() {
 				b := bytes.NewReader([]byte{0x4,
 					0xef, 0xbe, 0xad, 0xde, // stream id
 					0x44, 0x33, 0x22, 0x11, 0xad, 0xfb, 0xca, 0xde, // byte offset
 				})
-				frame, err := ParseWindowUpdateFrame(b, versionLittleEndian)
+				f, err := ParseWindowUpdateFrame(b, versionLittleEndian)
 				Expect(err).ToNot(HaveOccurred())
+				Expect(f).To(BeAssignableToTypeOf(&MaxStreamDataFrame{}))
+				frame := f.(*MaxStreamDataFrame)
 				Expect(frame.StreamID).To(Equal(protocol.StreamID(0xdeadbeef)))
 				Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0xdecafbad11223344)))
 				Expect(b.Len()).To(BeZero())
@@ -25,46 +27,65 @@ var _ = Describe("WindowUpdateFrame", func() {
 		})
 
 		Context("in big endian", func() {
-			It("accepts sample frame", func() {
+			It("parses a stream-level WINDOW_UPDATE", func() {
 				b := bytes.NewReader([]byte{0x4,
 					0xde, 0xad, 0xbe, 0xef, // stream id
 					0xde, 0xca, 0xfb, 0xad, 0x11, 0x22, 0x33, 0x44, // byte offset
 				})
-				frame, err := ParseWindowUpdateFrame(b, versionBigEndian)
+				f, err := ParseWindowUpdateFrame(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.StreamID).To(Equal(protocol.StreamID(0xdeadbeef)))
+				Expect(f).To(BeAssignableToTypeOf(&MaxStreamDataFrame{}))
+				frame := f.(*MaxStreamDataFrame)
 				Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0xdecafbad11223344)))
-				Expect(b.Len()).To(BeZero())
+				Expect(frame.StreamID).To(Equal(protocol.StreamID(0xdeadbeef)))
 			})
-		})
 
-		It("errors on EOFs", func() {
-			data := []byte{0x4,
-				0xef, 0xbe, 0xad, 0xde, // stream id
-				0x44, 0x33, 0x22, 0x11, 0xad, 0xfb, 0xca, 0xde, // byte offset
-			}
-			_, err := ParseWindowUpdateFrame(bytes.NewReader(data), protocol.VersionWhatever)
-			Expect(err).NotTo(HaveOccurred())
-			for i := range data {
-				_, err := ParseWindowUpdateFrame(bytes.NewReader(data[0:i]), protocol.VersionWhatever)
-				Expect(err).To(HaveOccurred())
-			}
+			It("parses a connection-level WINDOW_UPDATE", func() {
+				b := bytes.NewReader([]byte{0x4,
+					0x0, 0x0, 0x0, 0x0, // stream id
+					0xde, 0xca, 0xfb, 0xad, 0x11, 0x22, 0x33, 0x44, // byte offset
+				})
+				f, err := ParseWindowUpdateFrame(b, versionBigEndian)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(f).To(BeAssignableToTypeOf(&MaxDataFrame{}))
+				frame := f.(*MaxDataFrame)
+				Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0xdecafbad11223344)))
+			})
+
+			It("errors on EOFs", func() {
+				data := []byte{0x4,
+					0xef, 0xbe, 0xad, 0xde, // stream id
+					0x44, 0x33, 0x22, 0x11, 0xad, 0xfb, 0xca, 0xde, // byte offset
+				}
+				_, err := ParseWindowUpdateFrame(bytes.NewReader(data), versionBigEndian)
+				Expect(err).NotTo(HaveOccurred())
+				for i := range data {
+					_, err := ParseWindowUpdateFrame(bytes.NewReader(data[0:i]), versionBigEndian)
+					Expect(err).To(HaveOccurred())
+				}
+			})
 		})
 	})
 
-	Context("when writing", func() {
-		It("has proper min length", func() {
-			f := &WindowUpdateFrame{
-				StreamID:   0x1337,
+	Context("writing", func() {
+		It("has the proper min length for the stream-level WINDOW_UPDATE frame", func() {
+			f := &MaxDataFrame{
 				ByteOffset: 0xdeadbeef,
 			}
-			Expect(f.MinLength(0)).To(Equal(protocol.ByteCount(13)))
+			Expect(f.MinLength(versionBigEndian)).To(Equal(protocol.ByteCount(1 + 4 + 8)))
+		})
+
+		It("has the proper min length for the connection-level WINDOW_UPDATE frame", func() {
+			f := &MaxDataFrame{
+				ByteOffset: 0xdeadbeef,
+			}
+			Expect(f.MinLength(versionBigEndian)).To(Equal(protocol.ByteCount(1 + 4 + 8)))
 		})
 
 		Context("in little endian", func() {
 			It("writes a sample frame", func() {
 				b := &bytes.Buffer{}
-				f := &WindowUpdateFrame{
+				f := &windowUpdateFrame{
 					StreamID:   0xdecafbad,
 					ByteOffset: 0xdeadbeefcafe1337,
 				}
@@ -78,16 +99,29 @@ var _ = Describe("WindowUpdateFrame", func() {
 		})
 
 		Context("in big endian", func() {
-			It("writes a sample frame", func() {
+			It("writes a stream-level WINDOW_UPDATE frame", func() {
 				b := &bytes.Buffer{}
-				f := &WindowUpdateFrame{
+				f := &MaxStreamDataFrame{
 					StreamID:   0xdecafbad,
 					ByteOffset: 0xdeadbeefcafe1337,
 				}
 				err := f.Write(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(b.Bytes()).To(Equal([]byte{0x4,
-					0xde, 0xca, 0xfb, 0xad, // stream id
+					0xde, 0xca, 0xfb, 0xad, // stream ID 0
+					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // byte offset
+				}))
+			})
+
+			It("writes a connection-level WINDOW_UPDATE frame", func() {
+				b := &bytes.Buffer{}
+				f := &MaxDataFrame{
+					ByteOffset: 0xdeadbeefcafe1337,
+				}
+				err := f.Write(b, versionBigEndian)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(b.Bytes()).To(Equal([]byte{0x4,
+					0x0, 0x0, 0x0, 0x0, // stream ID 0
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // byte offset
 				}))
 			})

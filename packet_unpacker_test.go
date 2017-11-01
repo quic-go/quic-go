@@ -151,29 +151,103 @@ var _ = Describe("Packet unpacker", func() {
 		Expect(packet.frames).To(Equal([]wire.Frame{f}))
 	})
 
-	It("unpacks WINDOW_UPDATE frames", func() {
-		f := &wire.WindowUpdateFrame{
-			StreamID:   0xDEADBEEF,
-			ByteOffset: 0xCAFE000000001337,
-		}
-		buf := &bytes.Buffer{}
-		err := f.Write(buf, protocol.VersionWhatever)
-		Expect(err).ToNot(HaveOccurred())
-		setData(buf.Bytes())
-		packet, err := unpacker.Unpack(hdrBin, hdr, data)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(Equal([]wire.Frame{f}))
+	Context("flow control frames, when the crypto stream is stream 0", func() {
+		BeforeEach(func() {
+			unpacker.version = versionCryptoStream0
+		})
+
+		It("unpacks MAX_DATA frames", func() {
+			f := &wire.MaxDataFrame{
+				ByteOffset: 0xcafe000000001337,
+			}
+			buf := &bytes.Buffer{}
+			err := f.Write(buf, versionCryptoStream0)
+			Expect(err).ToNot(HaveOccurred())
+			setData(buf.Bytes())
+			packet, err := unpacker.Unpack(hdrBin, hdr, data)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packet.frames).To(Equal([]wire.Frame{f}))
+		})
+
+		It("unpacks MAX_STREAM_DATA frames", func() {
+			f := &wire.MaxStreamDataFrame{
+				StreamID:   0xdeadbeef,
+				ByteOffset: 0xcafe000000001337,
+			}
+			buf := &bytes.Buffer{}
+			err := f.Write(buf, versionCryptoStream0)
+			Expect(err).ToNot(HaveOccurred())
+			setData(buf.Bytes())
+			packet, err := unpacker.Unpack(hdrBin, hdr, data)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packet.frames).To(Equal([]wire.Frame{f}))
+		})
+
+		It("errors on invalid frames", func() {
+			for b, e := range map[byte]qerr.ErrorCode{
+				0x04: qerr.InvalidWindowUpdateData,
+				0x05: qerr.InvalidWindowUpdateData,
+			} {
+				setData([]byte{b})
+				_, err := unpacker.Unpack(hdrBin, hdr, data)
+				Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(e))
+			}
+		})
 	})
 
-	It("unpakcs BLOCKED frames", func() {
-		f := &wire.BlockedFrame{StreamID: 0xDEADBEEF}
-		buf := &bytes.Buffer{}
-		err := f.Write(buf, protocol.VersionWhatever)
-		Expect(err).ToNot(HaveOccurred())
-		setData(buf.Bytes())
-		packet, err := unpacker.Unpack(hdrBin, hdr, data)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(Equal([]wire.Frame{f}))
+	Context("flow control frames, when the crypto stream is stream 1", func() {
+		BeforeEach(func() {
+			unpacker.version = versionCryptoStream1
+		})
+
+		It("unpacks a stream-level WINDOW_UPDATE frame", func() {
+			f := &wire.MaxStreamDataFrame{
+				StreamID:   0xdeadbeef,
+				ByteOffset: 0xcafe000000001337,
+			}
+			buf := &bytes.Buffer{}
+			err := f.Write(buf, versionCryptoStream1)
+			Expect(err).ToNot(HaveOccurred())
+			setData(buf.Bytes())
+			packet, err := unpacker.Unpack(hdrBin, hdr, data)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packet.frames).To(Equal([]wire.Frame{f}))
+		})
+
+		It("unpacks a connection-level WINDOW_UPDATE frame", func() {
+			f := &wire.MaxDataFrame{
+				ByteOffset: 0xcafe000000001337,
+			}
+			buf := &bytes.Buffer{}
+			err := f.Write(buf, versionCryptoStream1)
+			Expect(err).ToNot(HaveOccurred())
+			setData(buf.Bytes())
+			packet, err := unpacker.Unpack(hdrBin, hdr, data)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packet.frames).To(Equal([]wire.Frame{f}))
+		})
+
+		It("unpacks BLOCKED frames", func() {
+			f := &wire.BlockedFrame{StreamID: 0xDEADBEEF}
+			buf := &bytes.Buffer{}
+			err := f.Write(buf, protocol.VersionWhatever)
+			Expect(err).ToNot(HaveOccurred())
+			setData(buf.Bytes())
+			packet, err := unpacker.Unpack(hdrBin, hdr, data)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packet.frames).To(Equal([]wire.Frame{f}))
+		})
+
+		It("errors on invalid frames", func() {
+			for b, e := range map[byte]qerr.ErrorCode{
+				0x04: qerr.InvalidWindowUpdateData,
+				0x05: qerr.InvalidBlockedData,
+			} {
+				setData([]byte{b})
+				_, err := unpacker.Unpack(hdrBin, hdr, data)
+				Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(e))
+			}
+		})
 	})
 
 	It("unpacks STOP_WAITING frames", func() {
@@ -207,8 +281,6 @@ var _ = Describe("Packet unpacker", func() {
 			0x01: qerr.InvalidRstStreamData,
 			0x02: qerr.InvalidConnectionCloseData,
 			0x03: qerr.InvalidGoawayData,
-			0x04: qerr.InvalidWindowUpdateData,
-			0x05: qerr.InvalidBlockedData,
 			0x06: qerr.InvalidStopWaitingData,
 		} {
 			setData([]byte{b})
