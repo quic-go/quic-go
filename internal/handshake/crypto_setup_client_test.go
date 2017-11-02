@@ -105,7 +105,7 @@ var _ = Describe("Client Crypto Setup", func() {
 
 		stream = newMockStream()
 		certManager = &mockCertManager{}
-		version := protocol.Version37
+		version := protocol.Version39
 		// use a buffered channel here, so that we can parse a SHLO without having to receive the TransportParameters to avoid blocking
 		paramsChan = make(chan TransportParameters, 1)
 		aeadChanged = make(chan protocol.EncryptionLevel, 2)
@@ -118,6 +118,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			&TransportParameters{IdleTimeout: protocol.DefaultIdleTimeout},
 			paramsChan,
 			aeadChanged,
+			protocol.Version37,
 			nil,
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -490,6 +491,7 @@ var _ = Describe("Client Crypto Setup", func() {
 		})
 
 		It("has the right values for an inchoate CHLO", func() {
+			Expect(cs.version).ToNot(Equal(cs.initialVersion)) // make sure we can test that TagVER actually has the initial version, and not the current version
 			cs.hostname = "sni-hostname"
 			certManager.commonCertificateHashes = []byte("common certs")
 			tags, err := cs.getTags()

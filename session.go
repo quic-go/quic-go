@@ -148,7 +148,7 @@ var newClientSession = func(
 	connectionID protocol.ConnectionID,
 	tlsConf *tls.Config,
 	config *Config,
-	initialVersion protocol.VersionNumber, // needed for validation of the version negotaion over TLS
+	initialVersion protocol.VersionNumber,
 	negotiatedVersions []protocol.VersionNumber, // needed for validation of the GQUIC version negotiaton
 ) (packetHandler, <-chan handshakeEvent, error) {
 	s := &session{
@@ -158,7 +158,7 @@ var newClientSession = func(
 		version:      v,
 		config:       config,
 	}
-	return s.setup(nil, hostname, tlsConf, v, negotiatedVersions)
+	return s.setup(nil, hostname, tlsConf, initialVersion, negotiatedVersions)
 }
 
 func (s *session) setup(
@@ -261,6 +261,7 @@ func (s *session) setup(
 				transportParams,
 				paramsChan,
 				aeadChanged,
+				initialVersion,
 				negotiatedVersions,
 			)
 		}
