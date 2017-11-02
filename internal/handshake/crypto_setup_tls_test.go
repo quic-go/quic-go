@@ -34,9 +34,11 @@ var _ = Describe("TLS Crypto Setup", func() {
 			nil,
 			1,
 			testdata.GetTLSConfig(),
+			nil,
 			&TransportParameters{},
 			paramsChan,
 			aeadChanged,
+			nil,
 			nil,
 			protocol.VersionTLS,
 		)

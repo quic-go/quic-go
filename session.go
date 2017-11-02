@@ -214,9 +214,11 @@ func (s *session) setup(
 				s.cryptoStream,
 				s.connectionID,
 				tlsConf,
+				s.conn.RemoteAddr(),
 				transportParams,
 				paramsChan,
 				aeadChanged,
+				verifySourceAddr,
 				s.config.Versions,
 				s.version,
 			)

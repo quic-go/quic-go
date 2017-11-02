@@ -81,8 +81,9 @@ func (mc *mintController) State() mint.ConnectionState {
 // mint expects a net.Conn, but we're doing the handshake on a stream
 // so we wrap a stream such that implements a net.Conn
 type fakeConn struct {
-	stream io.ReadWriter
-	pers   protocol.Perspective
+	stream     io.ReadWriter
+	pers       protocol.Perspective
+	remoteAddr net.Addr
 
 	blockRead   bool
 	writeBuffer bytes.Buffer
@@ -120,7 +121,7 @@ func (c *fakeConn) Continue() error {
 
 func (c *fakeConn) Close() error                     { return nil }
 func (c *fakeConn) LocalAddr() net.Addr              { return nil }
-func (c *fakeConn) RemoteAddr() net.Addr             { return nil }
+func (c *fakeConn) RemoteAddr() net.Addr             { return c.remoteAddr }
 func (c *fakeConn) SetReadDeadline(time.Time) error  { return nil }
 func (c *fakeConn) SetWriteDeadline(time.Time) error { return nil }
 func (c *fakeConn) SetDeadline(time.Time) error      { return nil }

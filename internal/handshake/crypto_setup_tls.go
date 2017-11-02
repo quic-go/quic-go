@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"net"
 	"sync"
 
 	"github.com/bifurcation/mint"
@@ -36,9 +37,11 @@ func NewCryptoSetupTLSServer(
 	cryptoStream io.ReadWriter,
 	connID protocol.ConnectionID,
 	tlsConfig *tls.Config,
+	remoteAddr net.Addr,
 	params *TransportParameters,
 	paramsChan chan<- TransportParameters,
 	aeadChanged chan<- protocol.EncryptionLevel,
+	checkCookie func(net.Addr, *Cookie) bool,
 	supportedVersions []protocol.VersionNumber,
 	version protocol.VersionNumber,
 ) (CryptoSetup, error) {
@@ -46,7 +49,16 @@ func NewCryptoSetupTLSServer(
 	if err != nil {
 		return nil, err
 	}
-	conn := &fakeConn{stream: cryptoStream, pers: protocol.PerspectiveServer}
+	mintConf.RequireCookie = true
+	mintConf.CookieHandler, err = newCookieHandler(checkCookie)
+	if err != nil {
+		return nil, err
+	}
+	conn := &fakeConn{
+		stream:     cryptoStream,
+		pers:       protocol.PerspectiveServer,
+		remoteAddr: remoteAddr,
+	}
 	mintConn := mint.Server(conn, mintConf)
 	eh := newExtensionHandlerServer(params, paramsChan, supportedVersions, version)
 	if err := mintConn.SetExtensionHandler(eh); err != nil {
@@ -86,7 +98,10 @@ func NewCryptoSetupTLSClient(
 		return nil, err
 	}
 	mintConf.ServerName = hostname
-	conn := &fakeConn{stream: cryptoStream, pers: protocol.PerspectiveClient}
+	conn := &fakeConn{
+		stream: cryptoStream,
+		pers:   protocol.PerspectiveClient,
+	}
 	mintConn := mint.Client(conn, mintConf)
 	eh := newExtensionHandlerClient(params, paramsChan, initialVersion, supportedVersions, version)
 	if err := mintConn.SetExtensionHandler(eh); err != nil {
