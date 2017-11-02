@@ -23,6 +23,7 @@ type cryptoSetupClient struct {
 	hostname           string
 	connID             protocol.ConnectionID
 	version            protocol.VersionNumber
+	initialVersion     protocol.VersionNumber
 	negotiatedVersions []protocol.VersionNumber
 
 	cryptoStream io.ReadWriter
@@ -74,6 +75,7 @@ func NewCryptoSetupClient(
 	params *TransportParameters,
 	paramsChan chan<- TransportParameters,
 	aeadChanged chan<- protocol.EncryptionLevel,
+	initialVersion protocol.VersionNumber,
 	negotiatedVersions []protocol.VersionNumber,
 ) (CryptoSetup, error) {
 	nullAEAD, err := crypto.NewNullAEAD(protocol.PerspectiveClient, connID, version)
@@ -92,6 +94,7 @@ func NewCryptoSetupClient(
 		nullAEAD:           nullAEAD,
 		paramsChan:         paramsChan,
 		aeadChanged:        aeadChanged,
+		initialVersion:     initialVersion,
 		negotiatedVersions: negotiatedVersions,
 		divNonceChan:       make(chan []byte),
 	}, nil
@@ -423,7 +426,7 @@ func (h *cryptoSetupClient) getTags() (map[Tag][]byte, error) {
 	}
 
 	versionTag := make([]byte, 4)
-	binary.BigEndian.PutUint32(versionTag, uint32(h.version))
+	binary.BigEndian.PutUint32(versionTag, uint32(h.initialVersion))
 	tags[TagVER] = versionTag
 
 	if len(h.stk) > 0 {

@@ -353,6 +353,7 @@ func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
 
 func (c *client) createNewSession(initialVersion protocol.VersionNumber, negotiatedVersions []protocol.VersionNumber) error {
 	var err error
+	utils.Debugf("createNewSession with initial version %s", initialVersion)
 	c.session, c.handshakeChan, err = newClientSession(
 		c.conn,
 		c.hostname,

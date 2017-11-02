@@ -1522,6 +1522,7 @@ var _ = Describe("Client Session", func() {
 			_ *handshake.TransportParameters,
 			_ chan<- handshake.TransportParameters,
 			aeadChangedP chan<- protocol.EncryptionLevel,
+			_ protocol.VersionNumber,
 			_ []protocol.VersionNumber,
 		) (handshake.CryptoSetup, error) {
 			aeadChanged = aeadChangedP
