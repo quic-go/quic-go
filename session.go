@@ -496,6 +496,7 @@ func (s *session) handleFrames(fs []wire.Frame) error {
 		case *wire.MaxStreamDataFrame:
 			err = s.handleMaxStreamDataFrame(frame)
 		case *wire.BlockedFrame:
+		case *wire.StreamBlockedFrame:
 		case *wire.PingFrame:
 		default:
 			return errors.New("Session BUG: unexpected frame type")

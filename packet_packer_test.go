@@ -301,7 +301,7 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	It("packs a packet if it has queued control frames, but no new control frames", func() {
-		packer.controlFrames = []wire.Frame{&wire.BlockedFrame{StreamID: 0}}
+		packer.controlFrames = []wire.Frame{&wire.BlockedFrame{}}
 		p, err := packer.PackPacket()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(p).ToNot(BeNil())
@@ -326,9 +326,7 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	It("packs a lot of control frames into 2 packets if they don't fit into one", func() {
-		blockedFrame := &wire.BlockedFrame{
-			StreamID: 0x1337,
-		}
+		blockedFrame := &wire.BlockedFrame{}
 		minLength, _ := blockedFrame.MinLength(0)
 		maxFramesPerPacket := int(maxFrameSize) / int(minLength)
 		var controlFrames []wire.Frame
@@ -607,7 +605,7 @@ var _ = Describe("Packet packer", func() {
 	Context("Blocked frames", func() {
 		It("queues a BLOCKED frame", func() {
 			length := 100
-			streamFramer.blockedFrameQueue = []*wire.BlockedFrame{{StreamID: 5}}
+			streamFramer.blockedFrameQueue = []wire.Frame{&wire.StreamBlockedFrame{StreamID: 5}}
 			f := &wire.StreamFrame{
 				StreamID: 5,
 				Data:     bytes.Repeat([]byte{'f'}, length),
@@ -615,12 +613,12 @@ var _ = Describe("Packet packer", func() {
 			streamFramer.AddFrameForRetransmission(f)
 			_, err := packer.composeNextPacket(maxFrameSize, true)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(packer.controlFrames[0]).To(Equal(&wire.BlockedFrame{StreamID: 5}))
+			Expect(packer.controlFrames[0]).To(Equal(&wire.StreamBlockedFrame{StreamID: 5}))
 		})
 
 		It("removes the dataLen attribute from the last StreamFrame, even if it queued a BLOCKED frame", func() {
 			length := 100
-			streamFramer.blockedFrameQueue = []*wire.BlockedFrame{{StreamID: 5}}
+			streamFramer.blockedFrameQueue = []wire.Frame{&wire.StreamBlockedFrame{StreamID: 5}}
 			f := &wire.StreamFrame{
 				StreamID: 5,
 				Data:     bytes.Repeat([]byte{'f'}, length),
@@ -633,7 +631,7 @@ var _ = Describe("Packet packer", func() {
 		})
 
 		It("packs a connection-level BlockedFrame", func() {
-			streamFramer.blockedFrameQueue = []*wire.BlockedFrame{{StreamID: 0}}
+			streamFramer.blockedFrameQueue = []wire.Frame{&wire.BlockedFrame{}}
 			f := &wire.StreamFrame{
 				StreamID: 5,
 				Data:     []byte("foobar"),
@@ -641,7 +639,7 @@ var _ = Describe("Packet packer", func() {
 			streamFramer.AddFrameForRetransmission(f)
 			_, err := packer.composeNextPacket(maxFrameSize, true)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(packer.controlFrames[0]).To(Equal(&wire.BlockedFrame{StreamID: 0}))
+			Expect(packer.controlFrames[0]).To(Equal(&wire.BlockedFrame{}))
 		})
 	})
 

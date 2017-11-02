@@ -94,7 +94,7 @@ func (u *packetUnpacker) Unpack(headerBinary []byte, hdr *wire.Header, data []by
 				err = qerr.Error(qerr.InvalidWindowUpdateData, err.Error())
 			}
 		} else if typeByte == 0x5 { // in gQUIC, 0x5  is a BLOCKED frame
-			frame, err = wire.ParseBlockedFrame(r, u.version)
+			frame, err = wire.ParseBlockedFrameLegacy(r, u.version)
 			if err != nil {
 				err = qerr.Error(qerr.InvalidBlockedData, err.Error())
 			}
@@ -105,6 +105,13 @@ func (u *packetUnpacker) Unpack(headerBinary []byte, hdr *wire.Header, data []by
 			}
 		} else if typeByte == 0x7 {
 			frame, err = wire.ParsePingFrame(r, u.version)
+		} else if u.version.UsesMaxDataFrame() && typeByte == 0x8 { // in IETF QUIC, 0x4 is a BLOCKED frame
+			frame, err = wire.ParseBlockedFrame(r, u.version)
+		} else if u.version.UsesMaxDataFrame() && typeByte == 0x9 { // in IETF QUIC, 0x4 is a STREAM_BLOCKED frame
+			frame, err = wire.ParseBlockedFrameLegacy(r, u.version)
+			if err != nil {
+				err = qerr.Error(qerr.InvalidBlockedData, err.Error())
+			}
 		} else {
 			err = qerr.Error(qerr.InvalidFrameData, fmt.Sprintf("unknown type byte 0x%x", typeByte))
 		}

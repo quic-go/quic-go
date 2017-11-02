@@ -183,10 +183,33 @@ var _ = Describe("Packet unpacker", func() {
 			Expect(packet.frames).To(Equal([]wire.Frame{f}))
 		})
 
+		It("unpacks connection-level BLOCKED frames", func() {
+			f := &wire.BlockedFrame{}
+			buf := &bytes.Buffer{}
+			err := f.Write(buf, versionCryptoStream0)
+			Expect(err).ToNot(HaveOccurred())
+			setData(buf.Bytes())
+			packet, err := unpacker.Unpack(hdrBin, hdr, data)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packet.frames).To(Equal([]wire.Frame{f}))
+		})
+
+		It("unpacks stream-level BLOCKED frames", func() {
+			f := &wire.StreamBlockedFrame{StreamID: 0xdeadbeef}
+			buf := &bytes.Buffer{}
+			err := f.Write(buf, versionCryptoStream0)
+			Expect(err).ToNot(HaveOccurred())
+			setData(buf.Bytes())
+			packet, err := unpacker.Unpack(hdrBin, hdr, data)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packet.frames).To(Equal([]wire.Frame{f}))
+		})
+
 		It("errors on invalid frames", func() {
 			for b, e := range map[byte]qerr.ErrorCode{
 				0x04: qerr.InvalidWindowUpdateData,
 				0x05: qerr.InvalidWindowUpdateData,
+				0x09: qerr.InvalidBlockedData,
 			} {
 				setData([]byte{b})
 				_, err := unpacker.Unpack(hdrBin, hdr, data)
@@ -227,10 +250,21 @@ var _ = Describe("Packet unpacker", func() {
 			Expect(packet.frames).To(Equal([]wire.Frame{f}))
 		})
 
-		It("unpacks BLOCKED frames", func() {
-			f := &wire.BlockedFrame{StreamID: 0xDEADBEEF}
+		It("unpacks connection-level BLOCKED frames", func() {
+			f := &wire.BlockedFrame{}
 			buf := &bytes.Buffer{}
-			err := f.Write(buf, protocol.VersionWhatever)
+			err := f.Write(buf, versionCryptoStream1)
+			Expect(err).ToNot(HaveOccurred())
+			setData(buf.Bytes())
+			packet, err := unpacker.Unpack(hdrBin, hdr, data)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packet.frames).To(Equal([]wire.Frame{f}))
+		})
+
+		It("unpacks stream-level BLOCKED frames", func() {
+			f := &wire.StreamBlockedFrame{StreamID: 0xdeadbeef}
+			buf := &bytes.Buffer{}
+			err := f.Write(buf, versionCryptoStream1)
 			Expect(err).ToNot(HaveOccurred())
 			setData(buf.Bytes())
 			packet, err := unpacker.Unpack(hdrBin, hdr, data)
@@ -269,9 +303,9 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	It("errors on invalid type", func() {
-		setData([]byte{0x08})
+		setData([]byte{0xf})
 		_, err := unpacker.Unpack(hdrBin, hdr, data)
-		Expect(err).To(MatchError("InvalidFrameData: unknown type byte 0x8"))
+		Expect(err).To(MatchError("InvalidFrameData: unknown type byte 0xf"))
 	})
 
 	It("errors on invalid frames", func() {

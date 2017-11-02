@@ -13,7 +13,7 @@ type streamFramer struct {
 	connFlowController flowcontrol.ConnectionFlowController
 
 	retransmissionQueue []*wire.StreamFrame
-	blockedFrameQueue   []*wire.BlockedFrame
+	blockedFrameQueue   []wire.Frame
 }
 
 func newStreamFramer(
@@ -37,7 +37,7 @@ func (f *streamFramer) PopStreamFrames(maxLen protocol.ByteCount) []*wire.Stream
 	return append(fs, f.maybePopNormalFrames(maxLen-currentLen)...)
 }
 
-func (f *streamFramer) PopBlockedFrame() *wire.BlockedFrame {
+func (f *streamFramer) PopBlockedFrame() wire.Frame {
 	if len(f.blockedFrameQueue) == 0 {
 		return nil
 	}
@@ -132,10 +132,10 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 
 		// Finally, check if we are now FC blocked and should queue a BLOCKED frame
 		if !frame.FinBit && s.IsFlowControlBlocked() {
-			f.blockedFrameQueue = append(f.blockedFrameQueue, &wire.BlockedFrame{StreamID: s.StreamID()})
+			f.blockedFrameQueue = append(f.blockedFrameQueue, &wire.StreamBlockedFrame{StreamID: s.StreamID()})
 		}
 		if f.connFlowController.IsBlocked() {
-			f.blockedFrameQueue = append(f.blockedFrameQueue, &wire.BlockedFrame{StreamID: 0})
+			f.blockedFrameQueue = append(f.blockedFrameQueue, &wire.BlockedFrame{})
 		}
 
 		res = append(res, frame)
