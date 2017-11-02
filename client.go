@@ -278,7 +278,7 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 		}
 		pr, err := wire.ParsePublicReset(r)
 		if err != nil {
-			utils.Infof("Received a Public Reset for connection %x. An error occurred parsing the packet.")
+			utils.Infof("Received a Public Reset. An error occurred parsing the packet: %s", err)
 			return
 		}
 		utils.Infof("Received Public Reset, rejected packet number: %#x.", pr.RejectedPacketNumber)
