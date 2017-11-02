@@ -2,6 +2,7 @@ package wire
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -17,22 +18,20 @@ import (
 var _ = Describe("IETF draft Header", func() {
 	Context("parsing", func() {
 		Context("long headers", func() {
-			var data []byte
-
-			BeforeEach(func() {
-				data = []byte{
-					0x80 ^ 0x3,
+			generatePacket := func(t protocol.PacketType) []byte {
+				return []byte{
+					0x80 ^ uint8(t),
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
 					0xde, 0xca, 0xfb, 0xad, // packet number
 					0x1, 0x2, 0x3, 0x4, // version number
 				}
-			})
+			}
 
 			It("parses a long header", func() {
-				b := bytes.NewReader(data)
+				b := bytes.NewReader(generatePacket(protocol.PacketTypeInitial))
 				h, err := parseHeader(b, protocol.PerspectiveClient)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(h.Type).To(Equal(protocol.PacketType(3)))
+				Expect(h.Type).To(Equal(protocol.PacketTypeInitial))
 				Expect(h.IsLongHeader).To(BeTrue())
 				Expect(h.OmitConnectionID).To(BeFalse())
 				Expect(h.ConnectionID).To(Equal(protocol.ConnectionID(0xdeadbeefcafe1337)))
@@ -42,7 +41,26 @@ var _ = Describe("IETF draft Header", func() {
 				Expect(b.Len()).To(BeZero())
 			})
 
+			It("rejects packets sent by the client that use packet types for packets sent by the server", func() {
+				b := bytes.NewReader(generatePacket(protocol.PacketTypeRetry))
+				_, err := parseHeader(b, protocol.PerspectiveClient)
+				Expect(err).To(MatchError(fmt.Sprintf("InvalidPacketHeader: Received packet with invalid packet type: %d", protocol.PacketTypeRetry)))
+			})
+
+			It("rejects packets sent by the client that use packet types for packets sent by the server", func() {
+				b := bytes.NewReader(generatePacket(protocol.PacketType0RTT))
+				_, err := parseHeader(b, protocol.PerspectiveServer)
+				Expect(err).To(MatchError(fmt.Sprintf("InvalidPacketHeader: Received packet with invalid packet type: %d", protocol.PacketType0RTT)))
+			})
+
+			It("rejects packets sent with an unknown packet type", func() {
+				b := bytes.NewReader(generatePacket(42))
+				_, err := parseHeader(b, protocol.PerspectiveServer)
+				Expect(err).To(MatchError("InvalidPacketHeader: Received packet with invalid packet type: 42"))
+			})
+
 			It("errors on EOF", func() {
+				data := generatePacket(protocol.PacketTypeInitial)
 				for i := 0; i < len(data); i++ {
 					_, err := parseHeader(bytes.NewReader(data[:i]), protocol.PerspectiveClient)
 					Expect(err).To(Equal(io.EOF))
@@ -50,14 +68,13 @@ var _ = Describe("IETF draft Header", func() {
 			})
 
 			Context("Version Negotiation Packets", func() {
-				BeforeEach(func() {
-					data[0] = 0x80 ^ 0x1 // set the type byte to Version Negotiation Packet
-				})
-
 				It("parses", func() {
-					data = append(data, []byte{
-						0x22, 0x33, 0x44, 0x55,
-						0x33, 0x44, 0x55, 0x66}...,
+					data := append(
+						generatePacket(protocol.PacketTypeVersionNegotiation),
+						[]byte{
+							0x22, 0x33, 0x44, 0x55,
+							0x33, 0x44, 0x55, 0x66,
+						}...,
 					)
 					b := bytes.NewReader(data)
 					h, err := parseHeader(b, protocol.PerspectiveServer)
@@ -70,21 +87,27 @@ var _ = Describe("IETF draft Header", func() {
 				})
 
 				It("errors if it contains versions of the wrong length", func() {
-					data = append(data, []byte{0x22, 0x33}...) // too short. Should be 4 bytes.
+					data := append(
+						generatePacket(protocol.PacketTypeVersionNegotiation),
+						[]byte{0x22, 0x33}..., // too short. Should be 4 bytes.
+					)
 					b := bytes.NewReader(data)
 					_, err := parseHeader(b, protocol.PerspectiveServer)
 					Expect(err).To(MatchError(qerr.InvalidVersionNegotiationPacket))
 				})
 
 				It("errors if it was sent by the client", func() {
-					data = append(data, []byte{0x22, 0x33, 0x44, 0x55}...)
+					data := append(
+						generatePacket(protocol.PacketTypeVersionNegotiation),
+						[]byte{0x22, 0x33, 0x44, 0x55}...,
+					)
 					b := bytes.NewReader(data)
 					_, err := parseHeader(b, protocol.PerspectiveClient)
 					Expect(err).To(MatchError("InvalidVersionNegotiationPacket: sent by the client"))
 				})
 
 				It("errors if the version list is emtpy", func() {
-					b := bytes.NewReader(data)
+					b := bytes.NewReader(generatePacket(protocol.PacketTypeVersionNegotiation))
 					_, err := parseHeader(b, protocol.PerspectiveServer)
 					Expect(err).To(MatchError("InvalidVersionNegotiationPacket: empty version list"))
 				})

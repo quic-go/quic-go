@@ -21,7 +21,7 @@ func parseHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Header, e
 	return parseShortHeader(b, typeByte)
 }
 
-func parseLongHeader(b *bytes.Reader, packetSentBy protocol.Perspective, typeByte byte) (*Header, error) {
+func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte) (*Header, error) {
 	connID, err := utils.BigEndian.ReadUint64(b)
 	if err != nil {
 		return nil, err
@@ -34,18 +34,25 @@ func parseLongHeader(b *bytes.Reader, packetSentBy protocol.Perspective, typeByt
 	if err != nil {
 		return nil, err
 	}
+	packetType := protocol.PacketType(typeByte & 0x7f)
+	if sentBy == protocol.PerspectiveClient && (packetType != protocol.PacketTypeInitial && packetType != protocol.PacketTypeCleartext && packetType != protocol.PacketType0RTT) {
+		if packetType == protocol.PacketTypeVersionNegotiation {
+			return nil, qerr.Error(qerr.InvalidVersionNegotiationPacket, "sent by the client")
+		}
+		return nil, qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", packetType))
+	}
+	if sentBy == protocol.PerspectiveServer && (packetType != protocol.PacketTypeVersionNegotiation && packetType != protocol.PacketTypeRetry && packetType != protocol.PacketTypeCleartext) {
+		return nil, qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", packetType))
+	}
 	h := &Header{
-		Type:            protocol.PacketType(typeByte & 0x7f),
+		Type:            packetType,
 		IsLongHeader:    true,
 		ConnectionID:    protocol.ConnectionID(connID),
 		PacketNumber:    protocol.PacketNumber(pn),
 		PacketNumberLen: protocol.PacketNumberLen4,
 		Version:         protocol.VersionNumber(v),
 	}
-	if h.Type == 0x1 { // Version Negotiation Packet
-		if packetSentBy == protocol.PerspectiveClient {
-			return nil, qerr.Error(qerr.InvalidVersionNegotiationPacket, "sent by the client")
-		}
+	if h.Type == protocol.PacketTypeVersionNegotiation {
 		if b.Len() == 0 {
 			return nil, qerr.Error(qerr.InvalidVersionNegotiationPacket, "empty version list")
 		}
