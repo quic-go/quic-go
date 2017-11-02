@@ -194,9 +194,9 @@ var _ = Describe("Client Crypto Setup", func() {
 				Expect(cs.validateVersionList([]byte{0})).To(BeTrue())
 			})
 
-			It("detects a downgrade attack if the number of versions is unequal", func() {
+			It("detects a downgrade attack if the number of versions is not equal", func() {
 				cs.negotiatedVersions = []protocol.VersionNumber{protocol.VersionWhatever}
-				Expect(cs.validateVersionList(bytes.Repeat([]byte{'f'}, 8))).To(BeFalse())
+				Expect(cs.validateVersionList(bytes.Repeat([]byte{'f'}, 2*4))).To(BeFalse())
 			})
 
 			It("detects a downgrade attack", func() {
@@ -208,17 +208,7 @@ var _ = Describe("Client Crypto Setup", func() {
 
 			It("errors if the version tags are invalid", func() {
 				cs.negotiatedVersions = []protocol.VersionNumber{protocol.VersionWhatever}
-				Expect(cs.validateVersionList([]byte{0, 1, 2})).To(BeFalse())
-			})
-
-			It("doesn't care about unsupported versions", func() {
-				ver := protocol.SupportedVersions[0]
-				cs.negotiatedVersions = []protocol.VersionNumber{protocol.VersionUnsupported, ver, protocol.VersionUnsupported}
-				b := &bytes.Buffer{}
-				b.Write([]byte{0, 0, 0, 0})
-				utils.BigEndian.WriteUint32(b, uint32(ver))
-				b.Write([]byte{0x13, 0x37, 0x13, 0x37})
-				Expect(cs.validateVersionList(b.Bytes())).To(BeTrue())
+				Expect(cs.validateVersionList([]byte{0, 1, 2})).To(BeFalse()) // 1 byte too short
 			})
 
 			It("returns the right error when detecting a downgrade attack", func() {

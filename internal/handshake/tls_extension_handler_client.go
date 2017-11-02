@@ -89,8 +89,11 @@ func (h *extensionHandlerClient) Receive(hType mint.HandshakeType, el *mint.Exte
 		return qerr.Error(qerr.VersionNegotiationMismatch, "current version not included in the supported versions")
 	}
 	// if version negotiation was performed, check that we would have selected the current version based on the supported versions sent by the server
-	if h.version != h.initialVersion && h.version != protocol.ChooseSupportedVersion(h.supportedVersions, serverSupportedVersions) {
-		return qerr.Error(qerr.VersionNegotiationMismatch, "would have picked a different version")
+	if h.version != h.initialVersion {
+		negotiatedVersion, ok := protocol.ChooseSupportedVersion(h.supportedVersions, serverSupportedVersions)
+		if !ok || h.version != negotiatedVersion {
+			return qerr.Error(qerr.VersionNegotiationMismatch, "would have picked a different version")
+		}
 	}
 
 	// check that the server sent the stateless reset token

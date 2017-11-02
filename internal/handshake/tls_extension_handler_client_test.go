@@ -167,7 +167,9 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 				handler.supportedVersions = []protocol.VersionNumber{43, 42, 41}
 				serverSupportedVersions := []protocol.VersionNumber{42, 43}
 				// check that version negotiation would have led us to pick version 43
-				Expect(protocol.ChooseSupportedVersion(handler.supportedVersions, serverSupportedVersions)).To(Equal(protocol.VersionNumber(43)))
+				ver, ok := protocol.ChooseSupportedVersion(handler.supportedVersions, serverSupportedVersions)
+				Expect(ok).To(BeTrue())
+				Expect(ver).To(Equal(protocol.VersionNumber(43)))
 				ssv := make([]uint32, len(serverSupportedVersions))
 				for i, v := range serverSupportedVersions {
 					ssv[i] = uint32(v)
@@ -188,7 +190,9 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 				handler.supportedVersions = []protocol.VersionNumber{43, 42, 41}
 				serverSupportedVersions := []protocol.VersionNumber{42, 43}
 				// check that version negotiation would have led us to pick version 43
-				Expect(protocol.ChooseSupportedVersion(handler.supportedVersions, serverSupportedVersions)).To(Equal(protocol.VersionNumber(43)))
+				ver, ok := protocol.ChooseSupportedVersion(handler.supportedVersions, serverSupportedVersions)
+				Expect(ok).To(BeTrue())
+				Expect(ver).To(Equal(protocol.VersionNumber(43)))
 				ssv := make([]uint32, len(serverSupportedVersions))
 				for i, v := range serverSupportedVersions {
 					ssv[i] = uint32(v)
