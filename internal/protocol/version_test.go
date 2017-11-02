@@ -26,7 +26,6 @@ var _ = Describe("Version", func() {
 		Expect(Version39.String()).To(Equal("gQUIC 39"))
 		Expect(VersionTLS.String()).To(ContainSubstring("TLS"))
 		Expect(VersionWhatever.String()).To(Equal("whatever"))
-		Expect(VersionUnsupported.String()).To(Equal("unsupported"))
 		Expect(VersionUnknown.String()).To(Equal("unknown"))
 		// check with unsupported version numbers from the wiki
 		Expect(VersionNumber(0x51303039).String()).To(Equal("gQUIC 9"))
@@ -63,22 +62,31 @@ var _ = Describe("Version", func() {
 		It("finds the supported version", func() {
 			supportedVersions := []VersionNumber{1, 2, 3}
 			other := []VersionNumber{6, 5, 4, 3}
-			Expect(ChooseSupportedVersion(supportedVersions, other)).To(Equal(VersionNumber(3)))
+			ver, ok := ChooseSupportedVersion(supportedVersions, other)
+			Expect(ok).To(BeTrue())
+			Expect(ver).To(Equal(VersionNumber(3)))
 		})
 
 		It("picks the preferred version", func() {
 			supportedVersions := []VersionNumber{2, 1, 3}
 			other := []VersionNumber{3, 6, 1, 8, 2, 10}
-			Expect(ChooseSupportedVersion(supportedVersions, other)).To(Equal(VersionNumber(2)))
+			ver, ok := ChooseSupportedVersion(supportedVersions, other)
+			Expect(ok).To(BeTrue())
+			Expect(ver).To(Equal(VersionNumber(2)))
+		})
+
+		It("says when no matching version was found", func() {
+			_, ok := ChooseSupportedVersion([]VersionNumber{1}, []VersionNumber{2})
+			Expect(ok).To(BeFalse())
 		})
 
 		It("handles empty inputs", func() {
-			supportedVersions := []VersionNumber{102, 101}
-			Expect(ChooseSupportedVersion(supportedVersions, nil)).To(Equal(VersionUnsupported))
-			Expect(ChooseSupportedVersion(supportedVersions, []VersionNumber{})).To(Equal(VersionUnsupported))
-			supportedVersions = []VersionNumber{}
-			Expect(ChooseSupportedVersion(supportedVersions, []VersionNumber{1, 2})).To(Equal(VersionUnsupported))
-			Expect(ChooseSupportedVersion(supportedVersions, []VersionNumber{})).To(Equal(VersionUnsupported))
+			_, ok := ChooseSupportedVersion([]VersionNumber{102, 101}, []VersionNumber{})
+			Expect(ok).To(BeFalse())
+			_, ok = ChooseSupportedVersion([]VersionNumber{}, []VersionNumber{1, 2})
+			Expect(ok).To(BeFalse())
+			_, ok = ChooseSupportedVersion([]VersionNumber{}, []VersionNumber{})
+			Expect(ok).To(BeFalse())
 		})
 	})
 })

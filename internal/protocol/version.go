@@ -18,10 +18,9 @@ const (
 	Version37 VersionNumber = gquicVersion0 + 3*0x100 + 0x7 + iota
 	Version38
 	Version39
-	VersionTLS         VersionNumber = 101
-	VersionWhatever    VersionNumber = 0 // for when the version doesn't matter
-	VersionUnsupported VersionNumber = -1
-	VersionUnknown     VersionNumber = -2
+	VersionTLS      VersionNumber = 101
+	VersionWhatever VersionNumber = 0 // for when the version doesn't matter
+	VersionUnknown  VersionNumber = -1
 )
 
 // SupportedVersions lists the versions that the server supports
@@ -41,8 +40,6 @@ func (vn VersionNumber) String() string {
 	switch vn {
 	case VersionWhatever:
 		return "whatever"
-	case VersionUnsupported:
-		return "unsupported"
 	case VersionUnknown:
 		return "unknown"
 	case VersionTLS:
@@ -79,15 +76,15 @@ func IsSupportedVersion(supported []VersionNumber, v VersionNumber) bool {
 
 // ChooseSupportedVersion finds the best version in the overlap of ours and theirs
 // ours is a slice of versions that we support, sorted by our preference (descending)
-// theirs is a slice of versions offered by the peer. The order does not matter
-// if no suitable version is found, it returns VersionUnsupported
-func ChooseSupportedVersion(ours, theirs []VersionNumber) VersionNumber {
+// theirs is a slice of versions offered by the peer. The order does not matter.
+// The bool returned indicates if a matching version was found.
+func ChooseSupportedVersion(ours, theirs []VersionNumber) (VersionNumber, bool) {
 	for _, ourVer := range ours {
 		for _, theirVer := range theirs {
 			if ourVer == theirVer {
-				return ourVer
+				return ourVer, true
 			}
 		}
 	}
-	return VersionUnsupported
+	return 0, false
 }

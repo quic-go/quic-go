@@ -283,24 +283,21 @@ func (h *cryptoSetupClient) handleSHLOMessage(cryptoData map[Tag][]byte) (*Trans
 }
 
 func (h *cryptoSetupClient) validateVersionList(verTags []byte) bool {
-	if len(h.negotiatedVersions) == 0 {
+	numNegotiatedVersions := len(h.negotiatedVersions)
+	if numNegotiatedVersions == 0 {
 		return true
 	}
-	if len(verTags)%4 != 0 || len(verTags)/4 != len(h.negotiatedVersions) {
+	if len(verTags)%4 != 0 || len(verTags)/4 != numNegotiatedVersions {
 		return false
 	}
 
 	b := bytes.NewReader(verTags)
-	for _, negotiatedVersion := range h.negotiatedVersions {
-		verTag, err := utils.BigEndian.ReadUint32(b)
+	for i := 0; i < numNegotiatedVersions; i++ {
+		v, err := utils.BigEndian.ReadUint32(b)
 		if err != nil { // should never occur, since the length was already checked
 			return false
 		}
-		ver := protocol.VersionNumber(verTag)
-		if !protocol.IsSupportedVersion(protocol.SupportedVersions, ver) {
-			ver = protocol.VersionUnsupported
-		}
-		if ver != negotiatedVersion {
+		if protocol.VersionNumber(v) != h.negotiatedVersions[i] {
 			return false
 		}
 	}
