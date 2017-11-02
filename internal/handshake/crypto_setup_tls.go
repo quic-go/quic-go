@@ -120,7 +120,7 @@ func NewCryptoSetupTLSClient(
 		nullAEAD:       nullAEAD,
 		keyDerivation:  crypto.DeriveAESKeys,
 		aeadChanged:    aeadChanged,
-		nextPacketType: protocol.PacketTypeClientInitial,
+		nextPacketType: protocol.PacketTypeInitial,
 	}, nil
 }
 
@@ -211,9 +211,9 @@ func (h *cryptoSetupTLS) determineNextPacketType() error {
 	if h.perspective == protocol.PerspectiveServer {
 		switch state {
 		case "ServerStateStart": // if we're still at ServerStateStart when writing the first packet, that means we've come back to that state by sending a HelloRetryRequest
-			h.nextPacketType = protocol.PacketTypeServerStatelessRetry
+			h.nextPacketType = protocol.PacketTypeRetry
 		case "ServerStateWaitFinished":
-			h.nextPacketType = protocol.PacketTypeServerCleartext
+			h.nextPacketType = protocol.PacketTypeCleartext
 		default:
 			// TODO: accept 0-RTT data
 			return fmt.Errorf("Unexpected handshake state: %s", state)
@@ -222,7 +222,7 @@ func (h *cryptoSetupTLS) determineNextPacketType() error {
 	}
 	// client
 	if state != "ClientStateWaitSH" {
-		h.nextPacketType = protocol.PacketTypeClientCleartext
+		h.nextPacketType = protocol.PacketTypeCleartext
 	}
 	return nil
 }
