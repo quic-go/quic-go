@@ -270,12 +270,12 @@ var _ = Describe("Public Header", func() {
 			hdr := Header{
 				ConnectionID:     0x4cfa9f9b668619f6,
 				OmitConnectionID: true,
-				PacketNumberLen:  protocol.PacketNumberLen6,
+				PacketNumberLen:  protocol.PacketNumberLen1,
 				PacketNumber:     1,
 			}
 			err := hdr.writePublicHeader(b, protocol.PerspectiveServer, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(b.Bytes()).To(Equal([]byte{0x30, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0}))
+			Expect(b.Bytes()).To(Equal([]byte{0x0, 0x1}))
 		})
 
 		It("writes diversification nonces", func() {
@@ -329,18 +329,18 @@ var _ = Describe("Public Header", func() {
 					VersionFlag:     true,
 					Version:         protocol.Version38,
 					ConnectionID:    0x4cfa9f9b668619f6,
-					PacketNumber:    0x1337,
-					PacketNumberLen: protocol.PacketNumberLen6,
+					PacketNumber:    0x42,
+					PacketNumberLen: protocol.PacketNumberLen1,
 				}
 				err := hdr.writePublicHeader(b, protocol.PerspectiveClient, protocol.VersionWhatever)
 				Expect(err).ToNot(HaveOccurred())
 				// must be the first assertion
-				Expect(b.Len()).To(Equal(1 + 8 + 4 + 6)) // 1 FlagByte + 8 ConnectionID + 4 version number + 6 PacketNumber
+				Expect(b.Len()).To(Equal(1 + 8 + 4 + 1)) // 1 FlagByte + 8 ConnectionID + 4 version number + 1 PacketNumber
 				firstByte, _ := b.ReadByte()
 				Expect(firstByte & 0x01).To(Equal(uint8(1)))
-				Expect(firstByte & 0x30).To(Equal(uint8(0x30)))
+				Expect(firstByte & 0x30).To(Equal(uint8(0x0)))
 				Expect(string(b.Bytes()[8:12])).To(Equal("Q038"))
-				Expect(b.Bytes()[12:18]).To(Equal([]byte{0x37, 0x13, 0, 0, 0, 0}))
+				Expect(b.Bytes()[12:13]).To(Equal([]byte{0x42}))
 			})
 		})
 

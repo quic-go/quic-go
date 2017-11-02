@@ -120,20 +120,35 @@ var _ = Describe("Packet unpacker", func() {
 	})
 
 	It("unpacks RST_STREAM frames", func() {
-		setData([]byte{0x01, 0xEF, 0xBE, 0xAD, 0xDE, 0x44, 0x33, 0x22, 0x11, 0xAD, 0xFB, 0xCA, 0xDE, 0x34, 0x12, 0x37, 0x13})
+		f := &wire.RstStreamFrame{
+			StreamID:   0xdeadbeef,
+			ByteOffset: 0xdecafbad11223344,
+			ErrorCode:  0x13371234,
+		}
+		err := f.Write(buf, protocol.VersionWhatever)
+		Expect(err).ToNot(HaveOccurred())
+		setData(buf.Bytes())
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(Equal([]wire.Frame{
-			&wire.RstStreamFrame{
-				StreamID:   0xDEADBEEF,
-				ByteOffset: 0xDECAFBAD11223344,
-				ErrorCode:  0x13371234,
-			},
-		}))
+		Expect(packet.frames).To(Equal([]wire.Frame{f}))
 	})
 
 	It("unpacks CONNECTION_CLOSE frames", func() {
 		f := &wire.ConnectionCloseFrame{ReasonPhrase: "foo"}
+		err := f.Write(buf, protocol.VersionWhatever)
+		Expect(err).ToNot(HaveOccurred())
+		setData(buf.Bytes())
+		packet, err := unpacker.Unpack(hdrBin, hdr, data)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(packet.frames).To(Equal([]wire.Frame{f}))
+	})
+
+	It("unpacks GOAWAY frames", func() {
+		f := &wire.GoawayFrame{
+			ErrorCode:      1,
+			LastGoodStream: 2,
+			ReasonPhrase:   "foo",
+		}
 		err := f.Write(buf, 0)
 		Expect(err).ToNot(HaveOccurred())
 		setData(buf.Bytes())
@@ -142,44 +157,29 @@ var _ = Describe("Packet unpacker", func() {
 		Expect(packet.frames).To(Equal([]wire.Frame{f}))
 	})
 
-	It("accepts GOAWAY frames", func() {
-		setData([]byte{
-			0x03,
-			0x01, 0x00, 0x00, 0x00,
-			0x02, 0x00, 0x00, 0x00,
-			0x03, 0x00,
-			'f', 'o', 'o',
-		})
+	It("unpacks WINDOW_UPDATE frames", func() {
+		f := &wire.WindowUpdateFrame{
+			StreamID:   0xDEADBEEF,
+			ByteOffset: 0xCAFE000000001337,
+		}
+		buf := &bytes.Buffer{}
+		err := f.Write(buf, protocol.VersionWhatever)
+		Expect(err).ToNot(HaveOccurred())
+		setData(buf.Bytes())
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(Equal([]wire.Frame{
-			&wire.GoawayFrame{
-				ErrorCode:      1,
-				LastGoodStream: 2,
-				ReasonPhrase:   "foo",
-			},
-		}))
+		Expect(packet.frames).To(Equal([]wire.Frame{f}))
 	})
 
-	It("accepts WINDOW_UPDATE frames", func() {
-		setData([]byte{0x04, 0xEF, 0xBE, 0xAD, 0xDE, 0x37, 0x13, 0, 0, 0, 0, 0xFE, 0xCA})
+	It("unpakcs BLOCKED frames", func() {
+		f := &wire.BlockedFrame{StreamID: 0xDEADBEEF}
+		buf := &bytes.Buffer{}
+		err := f.Write(buf, protocol.VersionWhatever)
+		Expect(err).ToNot(HaveOccurred())
+		setData(buf.Bytes())
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(Equal([]wire.Frame{
-			&wire.WindowUpdateFrame{
-				StreamID:   0xDEADBEEF,
-				ByteOffset: 0xCAFE000000001337,
-			},
-		}))
-	})
-
-	It("accepts BLOCKED frames", func() {
-		setData([]byte{0x05, 0xEF, 0xBE, 0xAD, 0xDE})
-		packet, err := unpacker.Unpack(hdrBin, hdr, data)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(Equal([]wire.Frame{
-			&wire.BlockedFrame{StreamID: 0xDEADBEEF},
-		}))
+		Expect(packet.frames).To(Equal([]wire.Frame{f}))
 	})
 
 	It("unpacks STOP_WAITING frames", func() {
@@ -191,7 +191,7 @@ var _ = Describe("Packet unpacker", func() {
 		}))
 	})
 
-	It("accepts PING frames", func() {
+	It("unpacks PING frames", func() {
 		setData([]byte{0x07})
 		packet, err := unpacker.Unpack(hdrBin, hdr, data)
 		Expect(err).ToNot(HaveOccurred())
