@@ -12,7 +12,7 @@ var _ = Describe("Chrome tests", func() {
 	for i := range protocol.SupportedVersions {
 		version = protocol.SupportedVersions[i]
 
-		Context(fmt.Sprintf("with quic version %s", version), func() {
+		Context(fmt.Sprintf("with version %s", version), func() {
 			It("downloads a small file", func() {
 				chromeTest(
 					version,
