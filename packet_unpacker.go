@@ -123,6 +123,11 @@ func (u *packetUnpacker) parseIETFFrame(r *bytes.Reader, typeByte byte, hdr *wir
 		if err != nil {
 			err = qerr.Error(qerr.InvalidBlockedData, err.Error())
 		}
+	case 0xa:
+		frame, err = wire.ParseStreamIDBlockedFrame(r, u.version)
+		if err != nil {
+			err = qerr.Error(qerr.InvalidFrameData, err.Error())
+		}
 	case 0xc:
 		frame, err = wire.ParseStopSendingFrame(r, u.version)
 		if err != nil {
