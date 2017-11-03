@@ -190,14 +190,19 @@ func (s *server) Accept() (Session, error) {
 // Close the server
 func (s *server) Close() error {
 	s.sessionsMutex.Lock()
+	var wg sync.WaitGroup
 	for _, session := range s.sessions {
 		if session != nil {
-			s.sessionsMutex.Unlock()
-			_ = session.Close(nil)
-			s.sessionsMutex.Lock()
+			wg.Add(1)
+			go func() {
+				// session.Close() blocks until the CONNECTION_CLOSE has been sent and the run-loop has stopped
+				_ = session.Close(nil)
+				wg.Done()
+			}()
 		}
 	}
 	s.sessionsMutex.Unlock()
+	wg.Wait()
 
 	if s.conn == nil {
 		return nil
@@ -310,7 +315,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 		go func() {
 			// session.run() returns as soon as the session is closed
 			_ = session.run()
-			s.removeConnection(hdr.ConnectionID)
+			s.removeConnection(connID)
 		}()
 
 		go func() {
