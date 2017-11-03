@@ -144,6 +144,20 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTr
 	return client, nil
 }
 
+// delClient closes and removes one QUIC connection that this RoundTripper has used
+func (r *RoundTripper) delClient(hostname string) error {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	client, ok := r.clients[hostname]
+	delete(r.clients, hostname)
+	if ok {
+		if err := client.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Close closes the QUIC connections that this RoundTripper has used
 func (r *RoundTripper) Close() error {
 	r.mutex.Lock()
