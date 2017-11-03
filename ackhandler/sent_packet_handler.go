@@ -386,7 +386,6 @@ func (h *sentPacketHandler) queueRTO(el *PacketElement) {
 	)
 	h.queuePacketForRetransmission(el)
 	h.congestion.OnPacketLost(packet.PacketNumber, packet.Length, h.bytesInFlight)
-	h.congestion.OnRetransmissionTimeout(true)
 }
 
 func (h *sentPacketHandler) queueHandshakePacketsForRetransmission() {
