@@ -45,7 +45,7 @@ func (vn VersionNumber) String() string {
 	case VersionTLS:
 		return "TLS dev version (WIP)"
 	default:
-		if vn > gquicVersion0 && vn <= maxGquicVersion {
+		if vn.isGQUIC() {
 			return fmt.Sprintf("gQUIC %d", vn.toGQUICVersion())
 		}
 		return fmt.Sprintf("%d", vn)
@@ -54,10 +54,38 @@ func (vn VersionNumber) String() string {
 
 // ToAltSvc returns the representation of the version for the H2 Alt-Svc parameters
 func (vn VersionNumber) ToAltSvc() string {
-	if vn > gquicVersion0 && vn <= maxGquicVersion {
+	if vn.isGQUIC() {
 		return fmt.Sprintf("%d", vn.toGQUICVersion())
 	}
 	return fmt.Sprintf("%d", vn)
+}
+
+// CryptoStreamID gets the Stream ID of the crypto stream
+func (vn VersionNumber) CryptoStreamID() StreamID {
+	if vn.isGQUIC() {
+		return 1
+	}
+	return 0
+}
+
+// UsesMaxDataFrame tells if this version uses MAX_DATA, MAX_STREAM_DATA, BLOCKED and STREAM_BLOCKED instead of WINDOW_UDPATE and BLOCKED frames
+func (vn VersionNumber) UsesMaxDataFrame() bool {
+	return vn.CryptoStreamID() == 0
+}
+
+// StreamContributesToConnectionFlowControl says if a stream contributes to connection-level flow control
+func (vn VersionNumber) StreamContributesToConnectionFlowControl(id StreamID) bool {
+	if id == vn.CryptoStreamID() {
+		return false
+	}
+	if vn.isGQUIC() && id == 3 {
+		return false
+	}
+	return true
+}
+
+func (vn VersionNumber) isGQUIC() bool {
+	return vn > gquicVersion0 && vn <= maxGquicVersion
 }
 
 func (vn VersionNumber) toGQUICVersion() int {

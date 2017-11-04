@@ -200,8 +200,8 @@ func (s *session) setup(
 		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),
 		s.rttStats,
 	)
-	s.streamsMap = newStreamsMap(s.newStream, s.perspective)
-	s.cryptoStream = s.newStream(1)
+	s.streamsMap = newStreamsMap(s.newStream, s.perspective, s.version)
+	s.cryptoStream = s.newStream(s.version.CryptoStreamID())
 	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.connFlowController)
 
 	var err error
@@ -491,9 +491,12 @@ func (s *session) handleFrames(fs []wire.Frame) error {
 			s.receivedPacketHandler.SetLowerLimit(frame.LeastUnacked - 1)
 		case *wire.RstStreamFrame:
 			err = s.handleRstStreamFrame(frame)
-		case *wire.WindowUpdateFrame:
-			err = s.handleWindowUpdateFrame(frame)
+		case *wire.MaxDataFrame:
+			s.handleMaxDataFrame(frame)
+		case *wire.MaxStreamDataFrame:
+			err = s.handleMaxStreamDataFrame(frame)
 		case *wire.BlockedFrame:
+		case *wire.StreamBlockedFrame:
 		case *wire.PingFrame:
 		default:
 			return errors.New("Session BUG: unexpected frame type")
@@ -527,7 +530,7 @@ func (s *session) handlePacket(p *receivedPacket) {
 }
 
 func (s *session) handleStreamFrame(frame *wire.StreamFrame) error {
-	if frame.StreamID == 1 {
+	if frame.StreamID == s.version.CryptoStreamID() {
 		return s.cryptoStream.AddStreamFrame(frame)
 	}
 	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
@@ -542,12 +545,11 @@ func (s *session) handleStreamFrame(frame *wire.StreamFrame) error {
 	return str.AddStreamFrame(frame)
 }
 
-func (s *session) handleWindowUpdateFrame(frame *wire.WindowUpdateFrame) error {
-	if frame.StreamID == 0 {
-		s.connFlowController.UpdateSendWindow(frame.ByteOffset)
-		return nil
-	}
+func (s *session) handleMaxDataFrame(frame *wire.MaxDataFrame) {
+	s.connFlowController.UpdateSendWindow(frame.ByteOffset)
+}
 
+func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error {
 	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
 	if err != nil {
 		return err
@@ -646,11 +648,11 @@ func (s *session) processTransportParameters(params *handshake.TransportParamete
 func (s *session) sendPacket() error {
 	s.packer.SetLeastUnacked(s.sentPacketHandler.GetLeastUnacked())
 
-	// Get WindowUpdate frames
+	// Get MAX_DATA and MAX_STREAM_DATA frames
 	// this call triggers the flow controller to increase the flow control windows, if necessary
-	windowUpdateFrames := s.getWindowUpdateFrames()
-	for _, wuf := range windowUpdateFrames {
-		s.packer.QueueControlFrame(wuf)
+	windowUpdates := s.getWindowUpdates()
+	for _, f := range windowUpdates {
+		s.packer.QueueControlFrame(f)
 	}
 
 	ack := s.receivedPacketHandler.GetAckFrame()
@@ -732,10 +734,10 @@ func (s *session) sendPacket() error {
 		}
 
 		// send every window update twice
-		for _, f := range windowUpdateFrames {
+		for _, f := range windowUpdates {
 			s.packer.QueueControlFrame(f)
 		}
-		windowUpdateFrames = nil
+		windowUpdates = nil
 		ack = nil
 	}
 }
@@ -818,25 +820,20 @@ func (s *session) queueResetStreamFrame(id protocol.StreamID, offset protocol.By
 }
 
 func (s *session) newStream(id protocol.StreamID) streamI {
-	// TODO: find a better solution for determining which streams contribute to connection level flow control
-	var contributesToConnection bool
-	if id != 1 && id != 3 {
-		contributesToConnection = true
-	}
 	var initialSendWindow protocol.ByteCount
 	if s.peerParams != nil {
 		initialSendWindow = s.peerParams.StreamFlowControlWindow
 	}
 	flowController := flowcontrol.NewStreamFlowController(
 		id,
-		contributesToConnection,
+		s.version.StreamContributesToConnectionFlowControl(id),
 		s.connFlowController,
 		protocol.ReceiveStreamFlowControlWindow,
 		protocol.ByteCount(s.config.MaxReceiveStreamFlowControlWindow),
 		initialSendWindow,
 		s.rttStats,
 	)
-	return newStream(id, s.scheduleSending, s.queueResetStreamFrame, flowController)
+	return newStream(id, s.scheduleSending, s.queueResetStreamFrame, flowController, s.version)
 }
 
 func (s *session) sendPublicReset(rejectedPacketNumber protocol.PacketNumber) error {
@@ -877,19 +874,18 @@ func (s *session) tryDecryptingQueuedPackets() {
 	s.undecryptablePackets = s.undecryptablePackets[:0]
 }
 
-func (s *session) getWindowUpdateFrames() []*wire.WindowUpdateFrame {
-	var res []*wire.WindowUpdateFrame
+func (s *session) getWindowUpdates() []wire.Frame {
+	var res []wire.Frame
 	s.streamsMap.Range(func(str streamI) {
 		if offset := str.GetWindowUpdate(); offset != 0 {
-			res = append(res, &wire.WindowUpdateFrame{
+			res = append(res, &wire.MaxStreamDataFrame{
 				StreamID:   str.StreamID(),
 				ByteOffset: offset,
 			})
 		}
 	})
 	if offset := s.connFlowController.GetWindowUpdate(); offset != 0 {
-		res = append(res, &wire.WindowUpdateFrame{
-			StreamID:   0,
+		res = append(res, &wire.MaxDataFrame{
 			ByteOffset: offset,
 		})
 	}

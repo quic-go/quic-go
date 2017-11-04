@@ -7,44 +7,29 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
-// A WindowUpdateFrame in QUIC
-type WindowUpdateFrame struct {
+type windowUpdateFrame struct {
 	StreamID   protocol.StreamID
 	ByteOffset protocol.ByteCount
 }
 
-//Write writes a RST_STREAM frame
-func (f *WindowUpdateFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
+// ParseWindowUpdateFrame parses a WINDOW_UPDATE frame
+// The frame returned is
+// * a MAX_STREAM_DATA frame, if the WINDOW_UPDATE applies to a stream
+// * a MAX_DATA frame, if the WINDOW_UPDATE applies to the connection
+func ParseWindowUpdateFrame(r *bytes.Reader, version protocol.VersionNumber) (Frame, error) {
+	f, err := ParseMaxStreamDataFrame(r, version)
+	if err != nil {
+		return nil, err
+	}
+	if f.StreamID == 0 {
+		return &MaxDataFrame{ByteOffset: f.ByteOffset}, nil
+	}
+	return f, nil
+}
+
+func (f *windowUpdateFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
 	b.WriteByte(0x4)
 	utils.GetByteOrder(version).WriteUint32(b, uint32(f.StreamID))
 	utils.GetByteOrder(version).WriteUint64(b, uint64(f.ByteOffset))
 	return nil
-}
-
-// MinLength of a written frame
-func (f *WindowUpdateFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
-	return 1 + 4 + 8, nil
-}
-
-// ParseWindowUpdateFrame parses a RST_STREAM frame
-func ParseWindowUpdateFrame(r *bytes.Reader, version protocol.VersionNumber) (*WindowUpdateFrame, error) {
-	frame := &WindowUpdateFrame{}
-
-	// read the TypeByte
-	if _, err := r.ReadByte(); err != nil {
-		return nil, err
-	}
-
-	sid, err := utils.GetByteOrder(version).ReadUint32(r)
-	if err != nil {
-		return nil, err
-	}
-	frame.StreamID = protocol.StreamID(sid)
-
-	byteOffset, err := utils.GetByteOrder(version).ReadUint64(r)
-	if err != nil {
-		return nil, err
-	}
-	frame.ByteOffset = protocol.ByteCount(byteOffset)
-	return frame, nil
 }

@@ -59,7 +59,7 @@ var _ = Describe("Stream", func() {
 		onDataCalled = false
 		resetCalled = false
 		mockFC = mocks.NewMockStreamFlowController(mockCtrl)
-		str = newStream(streamID, onData, onReset, mockFC)
+		str = newStream(streamID, onData, onReset, mockFC, protocol.VersionWhatever)
 
 		timeout := scaleDuration(250 * time.Millisecond)
 		strWithTimeout = struct {

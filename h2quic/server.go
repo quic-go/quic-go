@@ -122,10 +122,6 @@ func (s *Server) handleHeaderStream(session streamCreator) {
 		session.Close(qerr.Error(qerr.InvalidHeadersStreamData, err.Error()))
 		return
 	}
-	if stream.StreamID() != 3 {
-		session.Close(qerr.Error(qerr.InternalError, "h2quic server BUG: header stream does not have stream ID 3"))
-		return
-	}
 
 	hpackDecoder := hpack.NewDecoder(4096, nil)
 	h2framer := http2.NewFramer(nil, stream)

@@ -63,7 +63,7 @@ var _ = Describe("Packet packer", func() {
 
 	BeforeEach(func() {
 		cryptoStream = &stream{flowController: flowcontrol.NewStreamFlowController(1, false, flowcontrol.NewConnectionFlowController(1000, 1000, nil), 1000, 1000, 1000, nil)}
-		streamsMap := newStreamsMap(nil, protocol.PerspectiveServer)
+		streamsMap := newStreamsMap(nil, protocol.PerspectiveServer, protocol.VersionWhatever)
 		streamFramer = newStreamFramer(cryptoStream, streamsMap, nil)
 
 		packer = &packetPacker{
@@ -236,7 +236,7 @@ var _ = Describe("Packet packer", func() {
 			ErrorCode:    0x1337,
 			ReasonPhrase: "foobar",
 		}
-		packer.controlFrames = []wire.Frame{&wire.WindowUpdateFrame{StreamID: 37}}
+		packer.controlFrames = []wire.Frame{&wire.MaxStreamDataFrame{StreamID: 37}}
 		streamFramer.AddFrameForRetransmission(&wire.StreamFrame{
 			StreamID: 5,
 			Data:     []byte("foobar"),
@@ -249,7 +249,7 @@ var _ = Describe("Packet packer", func() {
 
 	It("packs only control frames", func() {
 		packer.QueueControlFrame(&wire.RstStreamFrame{})
-		packer.QueueControlFrame(&wire.WindowUpdateFrame{})
+		packer.QueueControlFrame(&wire.MaxDataFrame{})
 		p, err := packer.PackPacket()
 		Expect(p).ToNot(BeNil())
 		Expect(err).ToNot(HaveOccurred())
@@ -301,7 +301,7 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	It("packs a packet if it has queued control frames, but no new control frames", func() {
-		packer.controlFrames = []wire.Frame{&wire.BlockedFrame{StreamID: 0}}
+		packer.controlFrames = []wire.Frame{&wire.BlockedFrame{}}
 		p, err := packer.PackPacket()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(p).ToNot(BeNil())
@@ -326,9 +326,7 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	It("packs a lot of control frames into 2 packets if they don't fit into one", func() {
-		blockedFrame := &wire.BlockedFrame{
-			StreamID: 0x1337,
-		}
+		blockedFrame := &wire.BlockedFrame{}
 		minLength, _ := blockedFrame.MinLength(0)
 		maxFramesPerPacket := int(maxFrameSize) / int(minLength)
 		var controlFrames []wire.Frame
@@ -574,7 +572,10 @@ var _ = Describe("Packet packer", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
 			Expect(p.frames).To(HaveLen(1))
-			Expect(p.frames[0]).To(Equal(&wire.StreamFrame{StreamID: 1, Data: []byte("foobar")}))
+			Expect(p.frames[0]).To(Equal(&wire.StreamFrame{
+				StreamID: packer.version.CryptoStreamID(),
+				Data:     []byte("foobar"),
+			}))
 		})
 
 		It("sends encrypted stream data on the crypto stream", func() {
@@ -584,7 +585,10 @@ var _ = Describe("Packet packer", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionSecure))
 			Expect(p.frames).To(HaveLen(1))
-			Expect(p.frames[0]).To(Equal(&wire.StreamFrame{StreamID: 1, Data: []byte("foobar")}))
+			Expect(p.frames[0]).To(Equal(&wire.StreamFrame{
+				StreamID: packer.version.CryptoStreamID(),
+				Data:     []byte("foobar"),
+			}))
 		})
 
 		It("does not pack stream frames if not allowed", func() {
@@ -601,7 +605,7 @@ var _ = Describe("Packet packer", func() {
 	Context("Blocked frames", func() {
 		It("queues a BLOCKED frame", func() {
 			length := 100
-			streamFramer.blockedFrameQueue = []*wire.BlockedFrame{{StreamID: 5}}
+			streamFramer.blockedFrameQueue = []wire.Frame{&wire.StreamBlockedFrame{StreamID: 5}}
 			f := &wire.StreamFrame{
 				StreamID: 5,
 				Data:     bytes.Repeat([]byte{'f'}, length),
@@ -609,12 +613,12 @@ var _ = Describe("Packet packer", func() {
 			streamFramer.AddFrameForRetransmission(f)
 			_, err := packer.composeNextPacket(maxFrameSize, true)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(packer.controlFrames[0]).To(Equal(&wire.BlockedFrame{StreamID: 5}))
+			Expect(packer.controlFrames[0]).To(Equal(&wire.StreamBlockedFrame{StreamID: 5}))
 		})
 
 		It("removes the dataLen attribute from the last StreamFrame, even if it queued a BLOCKED frame", func() {
 			length := 100
-			streamFramer.blockedFrameQueue = []*wire.BlockedFrame{{StreamID: 5}}
+			streamFramer.blockedFrameQueue = []wire.Frame{&wire.StreamBlockedFrame{StreamID: 5}}
 			f := &wire.StreamFrame{
 				StreamID: 5,
 				Data:     bytes.Repeat([]byte{'f'}, length),
@@ -627,7 +631,7 @@ var _ = Describe("Packet packer", func() {
 		})
 
 		It("packs a connection-level BlockedFrame", func() {
-			streamFramer.blockedFrameQueue = []*wire.BlockedFrame{{StreamID: 0}}
+			streamFramer.blockedFrameQueue = []wire.Frame{&wire.BlockedFrame{}}
 			f := &wire.StreamFrame{
 				StreamID: 5,
 				Data:     []byte("foobar"),
@@ -635,7 +639,7 @@ var _ = Describe("Packet packer", func() {
 			streamFramer.AddFrameForRetransmission(f)
 			_, err := packer.composeNextPacket(maxFrameSize, true)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(packer.controlFrames[0]).To(Equal(&wire.BlockedFrame{StreamID: 0}))
+			Expect(packer.controlFrames[0]).To(Equal(&wire.BlockedFrame{}))
 		})
 	})
 
@@ -664,12 +668,12 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	It("queues a control frame to be sent in the next packet", func() {
-		wuf := &wire.WindowUpdateFrame{StreamID: 5}
-		packer.QueueControlFrame(wuf)
+		msd := &wire.MaxStreamDataFrame{StreamID: 5}
+		packer.QueueControlFrame(msd)
 		p, err := packer.PackPacket()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(p.frames).To(HaveLen(1))
-		Expect(p.frames[0]).To(Equal(wuf))
+		Expect(p.frames[0]).To(Equal(msd))
 	})
 
 	Context("retransmitting of handshake packets", func() {

@@ -90,9 +90,6 @@ func (c *client) dial() error {
 	if err != nil {
 		return err
 	}
-	if c.headerStream.StreamID() != 3 {
-		return errors.New("h2quic Client BUG: StreamID of Header Stream is not 3")
-	}
 	c.requestWriter = newRequestWriter(c.headerStream)
 	go c.handleHeaderStream()
 	return nil

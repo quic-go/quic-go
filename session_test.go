@@ -385,7 +385,7 @@ var _ = Describe("Session", func() {
 			})
 		})
 
-		Context("handling WINDOW_UPDATE frames", func() {
+		Context("handling MAX_DATA and MAX_STREAM_DATA frames", func() {
 			var connFC *mocks.MockConnectionFlowController
 
 			BeforeEach(func() {
@@ -398,7 +398,7 @@ var _ = Describe("Session", func() {
 				str, err := sess.GetOrOpenStream(5)
 				str.(*mocks.MockStreamI).EXPECT().UpdateSendWindow(offset)
 				Expect(err).ToNot(HaveOccurred())
-				err = sess.handleWindowUpdateFrame(&wire.WindowUpdateFrame{
+				err = sess.handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
 					StreamID:   5,
 					ByteOffset: offset,
 				})
@@ -408,14 +408,10 @@ var _ = Describe("Session", func() {
 			It("updates the flow control window of the connection", func() {
 				offset := protocol.ByteCount(0x800000)
 				connFC.EXPECT().UpdateSendWindow(offset)
-				err := sess.handleWindowUpdateFrame(&wire.WindowUpdateFrame{
-					StreamID:   0,
-					ByteOffset: offset,
-				})
-				Expect(err).ToNot(HaveOccurred())
+				sess.handleMaxDataFrame(&wire.MaxDataFrame{ByteOffset: offset})
 			})
 
-			It("opens a new stream when receiving a WINDOW_UPDATE for an unknown stream", func() {
+			It("opens a new stream when receiving a MAX_STREAM_DATA frame for an unknown stream", func() {
 				newStreamLambda := sess.streamsMap.newStream
 				sess.streamsMap.newStream = func(id protocol.StreamID) streamI {
 					str := newStreamLambda(id)
@@ -424,7 +420,7 @@ var _ = Describe("Session", func() {
 					}
 					return str
 				}
-				err := sess.handleWindowUpdateFrame(&wire.WindowUpdateFrame{
+				err := sess.handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
 					StreamID:   5,
 					ByteOffset: 0x1337,
 				})
@@ -434,7 +430,7 @@ var _ = Describe("Session", func() {
 				Expect(str).ToNot(BeNil())
 			})
 
-			It("ignores WINDOW_UPDATEs for a closed stream", func() {
+			It("ignores MAX_STREAM_DATA frames for a closed stream", func() {
 				str, err := sess.GetOrOpenStream(3)
 				Expect(err).ToNot(HaveOccurred())
 				str.(*mocks.MockStreamI).EXPECT().Finished().Return(true)
@@ -443,7 +439,7 @@ var _ = Describe("Session", func() {
 				str, err = sess.GetOrOpenStream(3)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(str).To(BeNil())
-				err = sess.handleFrames([]wire.Frame{&wire.WindowUpdateFrame{
+				err = sess.handleFrames([]wire.Frame{&wire.MaxStreamDataFrame{
 					StreamID:   3,
 					ByteOffset: 1337,
 				}})
@@ -813,7 +809,7 @@ var _ = Describe("Session", func() {
 			Expect(sess.sentPacketHandler.(*mockSentPacketHandler).sentPackets[0].Frames).To(ContainElement(&wire.PingFrame{}))
 		})
 
-		It("sends two WINDOW_UPDATE frames", func() {
+		It("sends two MAX_STREAM_DATA frames", func() {
 			mockFC := mocks.NewMockStreamFlowController(mockCtrl)
 			mockFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0x1000))
 			mockFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0)).Times(2)
@@ -827,7 +823,7 @@ var _ = Describe("Session", func() {
 			err = sess.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			buf := &bytes.Buffer{}
-			(&wire.WindowUpdateFrame{
+			(&wire.MaxStreamDataFrame{
 				StreamID:   5,
 				ByteOffset: 0x1000,
 			}).Write(buf, sess.version)
