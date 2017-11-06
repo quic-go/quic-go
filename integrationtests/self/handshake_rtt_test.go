@@ -107,17 +107,6 @@ var _ = Describe("Handshake RTT tests", func() {
 		expectDurationInRTTs(4)
 	})
 
-	It("does version negotiation, when the server supports more versions than the client", func() {
-		Expect(len(protocol.SupportedVersions)).To(BeNumerically(">", 1))
-		// the server doesn't support the highest supported version, which is the first one the client will try
-		// but it supports a bunch of versions that the client doesn't speak
-		serverConfig.Versions = []protocol.VersionNumber{protocol.SupportedVersions[1], 7, 8, 9}
-		runServerAndProxy()
-		_, err := quic.DialAddr(proxy.LocalAddr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
-		Expect(err).ToNot(HaveOccurred())
-		expectDurationInRTTs(4)
-	})
-
 	// 1 RTT for verifying the source address
 	// 1 RTT to become secure
 	// TODO (marten-seemann): enable this test (see #625)
@@ -159,16 +148,5 @@ var _ = Describe("Handshake RTT tests", func() {
 		// 2 RTTs during the timeout
 		// plus 1 RTT: the timer starts 0.5 RTTs after sending the first packet, and the CONNECTION_CLOSE needs another 0.5 RTTs to reach the client
 		expectDurationInRTTs(3)
-	})
-
-	It("errors when the client doesn't accept the certificate", func() {
-		// don't validate the client's address, send the certificate in the first flight
-		serverConfig.AcceptCookie = func(_ net.Addr, _ *quic.Cookie) bool {
-			return true
-		}
-		runServerAndProxy()
-		_, err := quic.DialAddr(proxy.LocalAddr().String(), nil, nil)
-		Expect(err).To(MatchError(qerr.ProofInvalid))
-		expectDurationInRTTs(1)
 	})
 })
