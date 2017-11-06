@@ -181,7 +181,7 @@ var _ = Describe("Session", func() {
 		var pSess Session
 		pSess, handshakeChan, err = newSession(
 			mconn,
-			protocol.Version37,
+			protocol.Version39,
 			0,
 			scfg,
 			nil,
@@ -230,7 +230,7 @@ var _ = Describe("Session", func() {
 			}
 			pSess, _, err := newSession(
 				mconn,
-				protocol.Version37,
+				protocol.Version39,
 				0,
 				scfg,
 				nil,
@@ -621,7 +621,10 @@ var _ = Describe("Session", func() {
 			sess.Close(nil)
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(mconn.written).To(HaveLen(1))
-			Expect(mconn.written).To(Receive(ContainSubstring(string([]byte{0x02, byte(qerr.PeerGoingAway), 0, 0, 0, 0, 0}))))
+			buf := &bytes.Buffer{}
+			err := (&wire.ConnectionCloseFrame{ErrorCode: qerr.PeerGoingAway}).Write(buf, sess.version)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(mconn.written).To(Receive(ContainSubstring(string(buf.Bytes()))))
 			Expect(sess.Context().Done()).To(BeClosed())
 		})
 
@@ -782,23 +785,23 @@ var _ = Describe("Session", func() {
 
 	Context("sending packets", func() {
 		It("sends ACK frames", func() {
-			packetNumber := protocol.PacketNumber(0x035E)
+			packetNumber := protocol.PacketNumber(0x035e)
 			sess.receivedPacketHandler.ReceivedPacket(packetNumber, true)
 			err := sess.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mconn.written).To(HaveLen(1))
-			Expect(mconn.written).To(Receive(ContainSubstring(string([]byte{0x5E, 0x03}))))
+			Expect(mconn.written).To(Receive(ContainSubstring(string([]byte{0x03, 0x5e}))))
 		})
 
 		It("sends ACK frames when congestion limited", func() {
 			sess.sentPacketHandler = &mockSentPacketHandler{congestionLimited: true}
 			sess.packer.packetNumberGenerator.next = 0x1338
-			packetNumber := protocol.PacketNumber(0x035E)
+			packetNumber := protocol.PacketNumber(0x035e)
 			sess.receivedPacketHandler.ReceivedPacket(packetNumber, true)
 			err := sess.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mconn.written).To(HaveLen(1))
-			Expect(mconn.written).To(Receive(ContainSubstring(string([]byte{0x5E, 0x03}))))
+			Expect(mconn.written).To(Receive(ContainSubstring(string([]byte{0x03, 0x5e}))))
 		})
 
 		It("sends a retransmittable packet when required by the SentPacketHandler", func() {
@@ -1046,7 +1049,7 @@ var _ = Describe("Session", func() {
 			defer sess.Close(nil)
 			time.Sleep(10 * time.Millisecond)
 			Eventually(func() int { return len(mconn.written) }).ShouldNot(BeZero())
-			Expect(mconn.written).To(Receive(ContainSubstring(string([]byte{0x37, 0x13}))))
+			Expect(mconn.written).To(Receive(ContainSubstring(string([]byte{0x13, 0x37}))))
 		})
 
 		Context("bundling of small packets", func() {
@@ -1114,8 +1117,8 @@ var _ = Describe("Session", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				Eventually(mconn.written).Should(HaveLen(2))
-				Expect(mconn.written).To(Receive(ContainSubstring(string([]byte{0x37, 0x13}))))
-				Expect(mconn.written).ToNot(Receive(ContainSubstring(string([]byte{0x37, 0x13}))))
+				Expect(mconn.written).To(Receive(ContainSubstring(string([]byte{0x13, 0x37}))))
+				Expect(mconn.written).ToNot(Receive(ContainSubstring(string([]byte{0x13, 0x37}))))
 			})
 		})
 	})
@@ -1529,7 +1532,7 @@ var _ = Describe("Client Session", func() {
 		sessP, _, err := newClientSession(
 			mconn,
 			"hostname",
-			protocol.Version37,
+			protocol.Version39,
 			0,
 			nil,
 			populateClientConfig(&Config{}),

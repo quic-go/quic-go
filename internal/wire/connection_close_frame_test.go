@@ -13,44 +13,6 @@ import (
 
 var _ = Describe("ConnectionCloseFrame", func() {
 	Context("when parsing", func() {
-		Context("in little endian", func() {
-			It("accepts sample frame", func() {
-				b := bytes.NewReader([]byte{0x2,
-					0x19, 0x0, 0x0, 0x0, // error code
-					0x1b, 0x0, // reason phrase length
-					'N', 'o', ' ', 'r', 'e', 'c', 'e', 'n', 't', ' ', 'n', 'e', 't', 'w', 'o', 'r', 'k', ' ', 'a', 'c', 't', 'i', 'v', 'i', 't', 'y', '.',
-				})
-				frame, err := ParseConnectionCloseFrame(b, versionLittleEndian)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.ErrorCode).To(Equal(qerr.ErrorCode(0x19)))
-				Expect(frame.ReasonPhrase).To(Equal("No recent network activity."))
-				Expect(b.Len()).To(BeZero())
-			})
-
-			It("rejects long reason phrases", func() {
-				b := bytes.NewReader([]byte{0x2,
-					0xad, 0xfb, 0xca, 0xde, // error code
-					0x0, 0xff, // reason phrase length
-				})
-				_, err := ParseConnectionCloseFrame(b, versionLittleEndian)
-				Expect(err).To(MatchError(io.EOF))
-			})
-
-			It("errors on EOFs", func() {
-				data := []byte{0x2,
-					0x19, 0x0, 0x0, 0x0, // error code
-					0x1b, 0x0, // reason phrase length
-					'N', 'o', ' ', 'r', 'e', 'c', 'e', 'n', 't', ' ', 'n', 'e', 't', 'w', 'o', 'r', 'k', ' ', 'a', 'c', 't', 'i', 'v', 'i', 't', 'y', '.',
-				}
-				_, err := ParseConnectionCloseFrame(bytes.NewReader(data), versionLittleEndian)
-				Expect(err).NotTo(HaveOccurred())
-				for i := range data {
-					_, err := ParseConnectionCloseFrame(bytes.NewReader(data[0:i]), versionLittleEndian)
-					Expect(err).To(HaveOccurred())
-				}
-			})
-		})
-
 		Context("in big endian", func() {
 			It("accepts sample frame", func() {
 				b := bytes.NewReader([]byte{0x2,
@@ -102,38 +64,6 @@ var _ = Describe("ConnectionCloseFrame", func() {
 	})
 
 	Context("when writing", func() {
-		Context("in little endian", func() {
-			It("writes a frame without a reason phrase", func() {
-				b := &bytes.Buffer{}
-				frame := &ConnectionCloseFrame{
-					ErrorCode: 0xdeadbeef,
-				}
-				err := frame.Write(b, versionLittleEndian)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(b.Len()).To(Equal(1 + 2 + 4))
-				Expect(b.Bytes()).To(Equal([]byte{0x2,
-					0xef, 0xbe, 0xad, 0xde, // error code
-					0x0, 0x0, // reason phrase length
-				}))
-			})
-
-			It("writes a frame with a reason phrase", func() {
-				b := &bytes.Buffer{}
-				frame := &ConnectionCloseFrame{
-					ErrorCode:    0xdeadbeef,
-					ReasonPhrase: "foobar",
-				}
-				err := frame.Write(b, versionLittleEndian)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(b.Len()).To(Equal(1 + 2 + 4 + len(frame.ReasonPhrase)))
-				Expect(b.Bytes()).To(Equal([]byte{0x2,
-					0xef, 0xbe, 0xad, 0xde, // error code
-					0x6, 0x0, // reason phrase length
-					'f', 'o', 'o', 'b', 'a', 'r',
-				}))
-			})
-		})
-
 		Context("in big endian", func() {
 			It("writes a frame without a ReasonPhrase", func() {
 				b := &bytes.Buffer{}

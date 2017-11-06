@@ -8,21 +8,15 @@ import (
 var _ = Describe("Version", func() {
 	// version numbers taken from the wiki: https://github.com/quicwg/base-drafts/wiki/QUIC-Versions
 	It("has the right gQUIC version number", func() {
-		Expect(Version37).To(BeEquivalentTo(0x51303337))
-		Expect(Version38).To(BeEquivalentTo(0x51303338))
 		Expect(Version39).To(BeEquivalentTo(0x51303339))
 	})
 
 	It("says if a version supports TLS", func() {
-		Expect(Version37.UsesTLS()).To(BeFalse())
-		Expect(Version38.UsesTLS()).To(BeFalse())
 		Expect(Version39.UsesTLS()).To(BeFalse())
 		Expect(VersionTLS.UsesTLS()).To(BeTrue())
 	})
 
 	It("has the right string representation", func() {
-		Expect(Version37.String()).To(Equal("gQUIC 37"))
-		Expect(Version38.String()).To(Equal("gQUIC 38"))
 		Expect(Version39.String()).To(Equal("gQUIC 39"))
 		Expect(VersionTLS.String()).To(ContainSubstring("TLS"))
 		Expect(VersionWhatever.String()).To(Equal("whatever"))
@@ -35,8 +29,6 @@ var _ = Describe("Version", func() {
 	})
 
 	It("has the right representation for the H2 Alt-Svc tag", func() {
-		Expect(Version37.ToAltSvc()).To(Equal("37"))
-		Expect(Version38.ToAltSvc()).To(Equal("38"))
 		Expect(Version39.ToAltSvc()).To(Equal("39"))
 		Expect(VersionTLS.ToAltSvc()).To(Equal("101"))
 		// check with unsupported version numbers from the wiki
@@ -46,15 +38,11 @@ var _ = Describe("Version", func() {
 	})
 
 	It("tells the Stream ID of the crypto stream", func() {
-		Expect(Version37.CryptoStreamID()).To(Equal(StreamID(1)))
-		Expect(Version38.CryptoStreamID()).To(Equal(StreamID(1)))
 		Expect(Version39.CryptoStreamID()).To(Equal(StreamID(1)))
 		Expect(VersionTLS.CryptoStreamID()).To(Equal(StreamID(0)))
 	})
 
 	It("tells if a version uses the MAX_DATA, MAX_STREAM_DATA, BLOCKED and STREAM_BLOCKED frames", func() {
-		Expect(Version37.UsesMaxDataFrame()).To(BeFalse())
-		Expect(Version38.UsesMaxDataFrame()).To(BeFalse())
 		Expect(Version39.UsesMaxDataFrame()).To(BeFalse())
 		Expect(VersionTLS.UsesMaxDataFrame()).To(BeTrue())
 	})

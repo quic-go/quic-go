@@ -49,7 +49,9 @@ var _ = Describe("Handshake tests", func() {
 
 	Context("Version Negotiation", func() {
 		It("when the server supports more versions than the client", func() {
-			Expect(len(protocol.SupportedVersions)).To(BeNumerically(">", 1))
+			if len(protocol.SupportedVersions) == 1 {
+				Skip("Test requires at least 2 supported versions.")
+			}
 			// the server doesn't support the highest supported version, which is the first one the client will try
 			// but it supports a bunch of versions that the client doesn't speak
 			serverConfig.Versions = []protocol.VersionNumber{protocol.SupportedVersions[1], 7, 8, 9}
@@ -59,7 +61,9 @@ var _ = Describe("Handshake tests", func() {
 		})
 
 		It("when the client supports more versions than the supports", func() {
-			Expect(len(protocol.SupportedVersions)).To(BeNumerically(">", 1))
+			if len(protocol.SupportedVersions) == 1 {
+				Skip("Test requires at least 2 supported versions.")
+			}
 			// the server doesn't support the highest supported version, which is the first one the client will try
 			// but it supports a bunch of versions that the client doesn't speak
 			runServer()

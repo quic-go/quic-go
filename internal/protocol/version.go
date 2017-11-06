@@ -15,9 +15,7 @@ const (
 
 // The version numbers, making grepping easier
 const (
-	Version37 VersionNumber = gquicVersion0 + 3*0x100 + 0x7 + iota
-	Version38
-	Version39
+	Version39       VersionNumber = gquicVersion0 + 3*0x100 + 0x9 + iota
 	VersionTLS      VersionNumber = 101
 	VersionWhatever VersionNumber = 0 // for when the version doesn't matter
 	VersionUnknown  VersionNumber = -1
@@ -27,8 +25,6 @@ const (
 // must be in sorted descending order
 var SupportedVersions = []VersionNumber{
 	Version39,
-	Version38,
-	Version37,
 }
 
 // UsesTLS says if this QUIC version uses TLS 1.3 for the handshake

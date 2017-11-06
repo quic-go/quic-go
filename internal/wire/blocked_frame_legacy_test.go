@@ -10,17 +10,6 @@ import (
 
 var _ = Describe("legacy BLOCKED Frame", func() {
 	Context("when parsing", func() {
-		Context("in little endian", func() {
-			It("accepts sample frame", func() {
-				b := bytes.NewReader([]byte{0x5, 0xef, 0xbe, 0xad, 0xde})
-				f, err := ParseBlockedFrameLegacy(b, versionLittleEndian)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(f).To(BeAssignableToTypeOf(&StreamBlockedFrame{}))
-				frame := f.(*StreamBlockedFrame)
-				Expect(frame.StreamID).To(Equal(protocol.StreamID(0xdeadbeef)))
-			})
-		})
-
 		Context("in big endian", func() {
 			It("accepts sample frame for a stream", func() {
 				b := bytes.NewReader([]byte{0x5, 0xde, 0xad, 0xbe, 0xef})
@@ -51,15 +40,6 @@ var _ = Describe("legacy BLOCKED Frame", func() {
 	})
 
 	Context("when writing", func() {
-		Context("in little endian", func() {
-			It("writes a sample frame", func() {
-				b := &bytes.Buffer{}
-				frame := StreamBlockedFrame{StreamID: 0x1337}
-				frame.Write(b, versionLittleEndian)
-				Expect(b.Bytes()).To(Equal([]byte{0x5, 0x37, 0x13, 0x0, 0x0}))
-			})
-		})
-
 		Context("in big endian", func() {
 			It("writes a BLOCKED frame for a stream", func() {
 				b := &bytes.Buffer{}
