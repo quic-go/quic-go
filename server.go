@@ -194,11 +194,11 @@ func (s *server) Close() error {
 	for _, session := range s.sessions {
 		if session != nil {
 			wg.Add(1)
-			go func() {
+			go func(sess packetHandler) {
 				// session.Close() blocks until the CONNECTION_CLOSE has been sent and the run-loop has stopped
-				_ = session.Close(nil)
+				_ = sess.Close(nil)
 				wg.Done()
-			}()
+			}(session)
 		}
 	}
 	s.sessionsMutex.Unlock()
