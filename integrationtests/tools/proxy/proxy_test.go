@@ -59,8 +59,11 @@ var _ = Describe("QUIC Proxy", func() {
 			// sometimes it takes a while for the OS to free the port
 			Eventually(func() error {
 				ln, err := net.ListenUDP("udp", addr)
-				defer ln.Close()
-				return err
+				if err != nil {
+					return err
+				}
+				ln.Close()
+				return nil
 			}).ShouldNot(HaveOccurred())
 		})
 
