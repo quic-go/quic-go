@@ -27,18 +27,14 @@ func delta(a, b PacketNumber) PacketNumber {
 	return a - b
 }
 
-// GetPacketNumberLengthForPublicHeader gets the length of the packet number for the public header
+// GetPacketNumberLengthForHeader gets the length of the packet number for the public header
 // it never chooses a PacketNumberLen of 1 byte, since this is too short under certain circumstances
-func GetPacketNumberLengthForPublicHeader(packetNumber PacketNumber, leastUnacked PacketNumber) PacketNumberLen {
+func GetPacketNumberLengthForHeader(packetNumber PacketNumber, leastUnacked PacketNumber) PacketNumberLen {
 	diff := uint64(packetNumber - leastUnacked)
-	if diff < (2 << (uint8(PacketNumberLen2)*8 - 2)) {
+	if diff < (1 << (uint8(PacketNumberLen2)*8 - 1)) {
 		return PacketNumberLen2
 	}
-	if diff < (2 << (uint8(PacketNumberLen4)*8 - 2)) {
-		return PacketNumberLen4
-	}
-	// we do not check if there are less than 2^46 packets in flight, since flow control and congestion control will limit this number *a lot* sooner
-	return PacketNumberLen6
+	return PacketNumberLen4
 }
 
 // GetPacketNumberLength gets the minimum length needed to fully represent the packet number

@@ -51,8 +51,8 @@ type client struct {
 var _ http.RoundTripper = &client{}
 
 var defaultQuicConfig = &quic.Config{
-	RequestConnectionIDTruncation: true,
-	KeepAlive:                     true,
+	RequestConnectionIDOmission: true,
+	KeepAlive:                   true,
 }
 
 // newClient creates a new client
@@ -89,9 +89,6 @@ func (c *client) dial() error {
 	c.headerStream, err = c.session.OpenStream()
 	if err != nil {
 		return err
-	}
-	if c.headerStream.StreamID() != 3 {
-		return errors.New("h2quic Client BUG: StreamID of Header Stream is not 3")
 	}
 	c.requestWriter = newRequestWriter(c.headerStream)
 	go c.handleHeaderStream()

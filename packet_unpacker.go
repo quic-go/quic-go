@@ -2,7 +2,6 @@ package quic
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -26,10 +25,10 @@ type packetUnpacker struct {
 	quicTracer *qtrace.Tracer
 }
 
-func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *wire.PublicHeader, data []byte) (*unpackedPacket, error) {
+func (u *packetUnpacker) Unpack(headerBinary []byte, hdr *wire.Header, data []byte) (*unpackedPacket, error) {
 	buf := getPacketBuffer()
 	defer putPacketBuffer(buf)
-	decrypted, encryptionLevel, err := u.aead.Open(buf, data, hdr.PacketNumber, publicHeaderBinary)
+	decrypted, encryptionLevel, err := u.aead.Open(buf, data, hdr.PacketNumber, headerBinary)
 	if err != nil {
 		// Wrap err in quicError so that public reset is sent by session
 		return nil, qerr.Error(qerr.DecryptionFailure, err.Error())
@@ -62,7 +61,7 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *wire.PublicHeade
 				err = qerr.Error(qerr.InvalidStreamData, err.Error())
 			} else {
 				streamID := frame.(*wire.StreamFrame).StreamID
-				if streamID != 1 && encryptionLevel <= protocol.EncryptionUnencrypted {
+				if streamID != u.version.CryptoStreamID() && encryptionLevel <= protocol.EncryptionUnencrypted {
 					err = qerr.Error(qerr.UnencryptedStreamData, fmt.Sprintf("received unencrypted stream data on stream %d", streamID))
 				}
 			}
@@ -71,45 +70,57 @@ func (u *packetUnpacker) Unpack(publicHeaderBinary []byte, hdr *wire.PublicHeade
 			if err != nil {
 				err = qerr.Error(qerr.InvalidAckData, err.Error())
 			}
-		} else if typeByte&0xe0 == 0x20 {
-			err = errors.New("unimplemented: CONGESTION_FEEDBACK")
-		} else {
-			switch typeByte {
-			case 0x01:
-				frame, err = wire.ParseRstStreamFrame(r, u.version)
-				if err != nil {
-					err = qerr.Error(qerr.InvalidRstStreamData, err.Error())
-				}
-			case 0x02:
-				frame, err = wire.ParseConnectionCloseFrame(r, u.version)
-				if err != nil {
-					err = qerr.Error(qerr.InvalidConnectionCloseData, err.Error())
-				}
-			case 0x03:
-				frame, err = wire.ParseGoawayFrame(r, u.version)
-				if err != nil {
-					err = qerr.Error(qerr.InvalidGoawayData, err.Error())
-				}
-			case 0x04:
-				frame, err = wire.ParseWindowUpdateFrame(r, u.version)
-				if err != nil {
-					err = qerr.Error(qerr.InvalidWindowUpdateData, err.Error())
-				}
-			case 0x05:
-				frame, err = wire.ParseBlockedFrame(r, u.version)
-				if err != nil {
-					err = qerr.Error(qerr.InvalidBlockedData, err.Error())
-				}
-			case 0x06:
-				frame, err = wire.ParseStopWaitingFrame(r, hdr.PacketNumber, hdr.PacketNumberLen, u.version)
-				if err != nil {
-					err = qerr.Error(qerr.InvalidStopWaitingData, err.Error())
-				}
-			case 0x07:
-				frame, err = wire.ParsePingFrame(r, u.version)
-			default:
-				err = qerr.Error(qerr.InvalidFrameData, fmt.Sprintf("unknown type byte 0x%x", typeByte))
+		} else if typeByte == 0x01 {
+			frame, err = wire.ParseRstStreamFrame(r, u.version)
+			if err != nil {
+				err = qerr.Error(qerr.InvalidRstStreamData, err.Error())
 			}
+		} else if typeByte == 0x02 {
+			frame, err = wire.ParseConnectionCloseFrame(r, u.version)
+			if err != nil {
+				err = qerr.Error(qerr.InvalidConnectionCloseData, err.Error())
+			}
+		} else if typeByte == 0x3 {
+			frame, err = wire.ParseGoawayFrame(r, u.version)
+			if err != nil {
+				err = qerr.Error(qerr.InvalidGoawayData, err.Error())
+			}
+		} else if u.version.UsesMaxDataFrame() && typeByte == 0x4 { // in IETF QUIC, 0x4 is a MAX_DATA frame
+			frame, err = wire.ParseMaxDataFrame(r, u.version)
+			if err != nil {
+				err = qerr.Error(qerr.InvalidWindowUpdateData, err.Error())
+			}
+		} else if typeByte == 0x4 { // in gQUIC, 0x4 is a WINDOW_UPDATE frame
+			frame, err = wire.ParseWindowUpdateFrame(r, u.version)
+			if err != nil {
+				err = qerr.Error(qerr.InvalidWindowUpdateData, err.Error())
+			}
+		} else if u.version.UsesMaxDataFrame() && typeByte == 0x5 { // in IETF QUIC, 0x5 is a MAX_STREAM_DATA frame
+			frame, err = wire.ParseMaxStreamDataFrame(r, u.version)
+			if err != nil {
+				err = qerr.Error(qerr.InvalidWindowUpdateData, err.Error())
+			}
+		} else if typeByte == 0x5 { // in gQUIC, 0x5  is a BLOCKED frame
+			frame, err = wire.ParseBlockedFrameLegacy(r, u.version)
+			if err != nil {
+				err = qerr.Error(qerr.InvalidBlockedData, err.Error())
+			}
+		} else if typeByte == 0x6 {
+			frame, err = wire.ParseStopWaitingFrame(r, hdr.PacketNumber, hdr.PacketNumberLen, u.version)
+			if err != nil {
+				err = qerr.Error(qerr.InvalidStopWaitingData, err.Error())
+			}
+		} else if typeByte == 0x7 {
+			frame, err = wire.ParsePingFrame(r, u.version)
+		} else if u.version.UsesMaxDataFrame() && typeByte == 0x8 { // in IETF QUIC, 0x4 is a BLOCKED frame
+			frame, err = wire.ParseBlockedFrame(r, u.version)
+		} else if u.version.UsesMaxDataFrame() && typeByte == 0x9 { // in IETF QUIC, 0x4 is a STREAM_BLOCKED frame
+			frame, err = wire.ParseBlockedFrameLegacy(r, u.version)
+			if err != nil {
+				err = qerr.Error(qerr.InvalidBlockedData, err.Error())
+			}
+		} else {
+			err = qerr.Error(qerr.InvalidFrameData, fmt.Sprintf("unknown type byte 0x%x", typeByte))
 		}
 		if err != nil {
 			return nil, err

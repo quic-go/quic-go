@@ -10,21 +10,6 @@ import (
 
 var _ = Describe("RstStreamFrame", func() {
 	Context("when parsing", func() {
-		Context("in little endian", func() {
-			It("accepts sample frame", func() {
-				b := bytes.NewReader([]byte{0x1,
-					0xef, 0xbe, 0xad, 0xde, // stream id
-					0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, // byte offset
-					0x34, 0x12, 0x37, 0x13, // error code
-				})
-				frame, err := ParseRstStreamFrame(b, versionLittleEndian)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.StreamID).To(Equal(protocol.StreamID(0xdeadbeef)))
-				Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0x1122334455667788)))
-				Expect(frame.ErrorCode).To(Equal(uint32(0x13371234)))
-			})
-		})
-
 		Context("in big endian", func() {
 			It("accepts sample frame", func() {
 				b := bytes.NewReader([]byte{0x1,
@@ -56,24 +41,6 @@ var _ = Describe("RstStreamFrame", func() {
 	})
 
 	Context("when writing", func() {
-		Context("in little endian", func() {
-			It("writes a sample RstStreamFrame", func() {
-				frame := RstStreamFrame{
-					StreamID:   0x1337,
-					ByteOffset: 0x11223344decafbad,
-					ErrorCode:  0xdeadbeef,
-				}
-				b := &bytes.Buffer{}
-				err := frame.Write(b, versionLittleEndian)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(b.Bytes()).To(Equal([]byte{0x01,
-					0x37, 0x13, 0x0, 0x0, // stream id
-					0xad, 0xfb, 0xca, 0xde, 0x44, 0x33, 0x22, 0x11, // byte offset
-					0xef, 0xbe, 0xad, 0xde, // error code
-				}))
-			})
-		})
-
 		Context("in big endian", func() {
 			It("writes a sample RstStreamFrame", func() {
 				frame := RstStreamFrame{

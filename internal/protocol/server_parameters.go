@@ -2,9 +2,9 @@ package protocol
 
 import "time"
 
-// MaxPacketSize is the maximum packet size, including the public header, that we use for sending packets
-// This is the value used by Chromium for a QUIC packet sent using IPv6 (for IPv4 it would be 1370)
-const MaxPacketSize ByteCount = 1350
+// MaxPacketSize is the maximum packet size that we use for sending packets.
+// It includes the QUIC packet header, but excludes the UDP and IP header.
+const MaxPacketSize ByteCount = 1200
 
 // NonForwardSecurePacketSizeReduction is the number of bytes a non forward-secure packet has to be smaller than a forward-secure packet
 // This makes sure that those packets can always be retransmitted without splitting the contained StreamFrames
@@ -56,11 +56,8 @@ const DefaultMaxReceiveConnectionFlowControlWindowClient = 15 * (1 << 20) // 15 
 // This is the value that Chromium is using
 const ConnectionFlowControlMultiplier = 1.5
 
-// MaxStreamsPerConnection is the maximum value accepted for the number of streams per connection
-const MaxStreamsPerConnection = 100
-
-// MaxIncomingDynamicStreamsPerConnection is the maximum value accepted for the incoming number of dynamic streams per connection
-const MaxIncomingDynamicStreamsPerConnection = 100
+// MaxIncomingStreams is the maximum number of streams that a peer may open
+const MaxIncomingStreams = 100
 
 // MaxStreamsMultiplier is the slack the client is allowed for the maximum number of streams per connection, needed e.g. when packets are out of order or dropped. The minimum of this procentual increase and the absolute increment specified by MaxStreamsMinimumIncrement is used.
 const MaxStreamsMultiplier = 1.1
@@ -70,7 +67,7 @@ const MaxStreamsMinimumIncrement = 10
 
 // MaxNewStreamIDDelta is the maximum difference between and a newly opened Stream and the highest StreamID that a client has ever opened
 // note that the number of streams is half this value, since the client can only open streams with open StreamID
-const MaxNewStreamIDDelta = 4 * MaxStreamsPerConnection
+const MaxNewStreamIDDelta = 4 * MaxIncomingStreams
 
 // MaxSessionUnprocessedPackets is the max number of packets stored in each session that are not yet processed.
 const MaxSessionUnprocessedPackets = DefaultMaxCongestionWindow
@@ -112,6 +109,9 @@ const CryptoParameterMaxLength = 4000
 
 // EphermalKeyLifetime is the lifetime of the ephermal key during the handshake, see handshake.getEphermalKEX.
 const EphermalKeyLifetime = time.Minute
+
+// MinRemoteIdleTimeout is the minimum value that we accept for the remote idle timeout
+const MinRemoteIdleTimeout = 5 * time.Second
 
 // DefaultIdleTimeout is the default idle timeout
 const DefaultIdleTimeout = 30 * time.Second

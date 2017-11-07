@@ -97,16 +97,6 @@ var _ = Describe("Client", func() {
 		Expect(err).To(MatchError(testErr))
 	})
 
-	It("errors if the header stream has the wrong stream ID", func() {
-		client = newClient("localhost:1337", nil, &roundTripperOpts{}, nil)
-		session.streamsToOpen = []quic.Stream{&mockStream{id: 2}}
-		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
-			return session, nil
-		}
-		_, err := client.RoundTrip(req)
-		Expect(err).To(MatchError("h2quic Client BUG: StreamID of Header Stream is not 3"))
-	})
-
 	It("errors if it can't open a stream", func() {
 		testErr := errors.New("you shall not pass")
 		client = newClient("localhost:1337", nil, &roundTripperOpts{}, nil)

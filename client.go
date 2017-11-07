@@ -172,7 +172,7 @@ func populateClientConfig(config *Config) *Config {
 		Versions:                              versions,
 		HandshakeTimeout:                      handshakeTimeout,
 		IdleTimeout:                           idleTimeout,
-		RequestConnectionIDTruncation:         config.RequestConnectionIDTruncation,
+		RequestConnectionIDOmission:           config.RequestConnectionIDOmission,
 		MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindow,
 		MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindow,
 		KeepAlive: config.KeepAlive,
@@ -182,7 +182,7 @@ func populateClientConfig(config *Config) *Config {
 
 // establishSecureConnection returns as soon as the connection is secure (as opposed to forward-secure)
 func (c *client) establishSecureConnection() error {
-	if err := c.createNewSession(nil); err != nil {
+	if err := c.createNewSession(c.version, nil); err != nil {
 		return err
 	}
 	go c.listen()
@@ -250,18 +250,18 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
-	hdr, err := wire.ParsePublicHeader(r, protocol.PerspectiveServer, c.version)
+	hdr, err := wire.ParseHeader(r, protocol.PerspectiveServer, c.version)
 	if err != nil {
 		utils.Errorf("error parsing packet from %s: %s", remoteAddr.String(), err.Error())
-		// drop this packet if we can't parse the Public Header
+		// drop this packet if we can't parse the header
 		return
 	}
 	// reject packets with truncated connection id if we didn't request truncation
-	if hdr.TruncateConnectionID && !c.config.RequestConnectionIDTruncation {
+	if hdr.OmitConnectionID && !c.config.RequestConnectionIDOmission {
 		return
 	}
 	// reject packets with the wrong connection ID
-	if !hdr.TruncateConnectionID && hdr.ConnectionID != c.connectionID {
+	if !hdr.OmitConnectionID && hdr.ConnectionID != c.connectionID {
 		return
 	}
 	hdr.Raw = packet[:len(packet)-r.Len()]
@@ -279,7 +279,7 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 		}
 		pr, err := wire.ParsePublicReset(r)
 		if err != nil {
-			utils.Infof("Received a Public Reset for connection %x. An error occurred parsing the packet.")
+			utils.Infof("Received a Public Reset. An error occurred parsing the packet: %s", err)
 			return
 		}
 		utils.Infof("Received Public Reset, rejected packet number: %#x.", pr.RejectedPacketNumber)
@@ -287,35 +287,38 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 		return
 	}
 
-	// ignore delayed / duplicated version negotiation packets
-	if (c.receivedVersionNegotiationPacket || c.versionNegotiated) && hdr.VersionFlag {
-		return
-	}
+	isVersionNegotiationPacket := hdr.VersionFlag /* gQUIC Version Negotiation Packet */ || hdr.Type == protocol.PacketTypeVersionNegotiation /* IETF draft style Version Negotiation Packet */
 
-	// this is the first packet after the client sent a packet with the VersionFlag set
-	// if the server doesn't send a version negotiation packet, it supports the suggested version
-	if !hdr.VersionFlag && !c.versionNegotiated {
-		c.versionNegotiated = true
-		close(c.versionNegotiationChan)
-	}
+	// handle Version Negotiation Packets
+	if isVersionNegotiationPacket {
+		// ignore delayed / duplicated version negotiation packets
+		if c.receivedVersionNegotiationPacket || c.versionNegotiated {
+			return
+		}
 
-	if hdr.VersionFlag {
 		// version negotiation packets have no payload
-		if err := c.handlePacketWithVersionFlag(hdr); err != nil {
+		if err := c.handleVersionNegotiationPacket(hdr); err != nil {
 			c.session.Close(err)
 		}
 		return
 	}
 
+	// this is the first packet we are receiving
+	// since it is not a Version Negotiation Packet, this means the server supports the suggested version
+	if !c.versionNegotiated {
+		c.versionNegotiated = true
+		close(c.versionNegotiationChan)
+	}
+
 	c.session.handlePacket(&receivedPacket{
-		remoteAddr:   remoteAddr,
-		publicHeader: hdr,
-		data:         packet[len(packet)-r.Len():],
-		rcvTime:      rcvTime,
+		remoteAddr: remoteAddr,
+		header:     hdr,
+		data:       packet[len(packet)-r.Len():],
+		rcvTime:    rcvTime,
 	})
 }
 
-func (c *client) handlePacketWithVersionFlag(hdr *wire.PublicHeader) error {
+func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
 	for _, v := range hdr.SupportedVersions {
 		if v == c.version {
 			// the version negotiation packet contains the version that we offered
@@ -327,12 +330,13 @@ func (c *client) handlePacketWithVersionFlag(hdr *wire.PublicHeader) error {
 
 	c.receivedVersionNegotiationPacket = true
 
-	newVersion := protocol.ChooseSupportedVersion(c.config.Versions, hdr.SupportedVersions)
-	if newVersion == protocol.VersionUnsupported {
+	newVersion, ok := protocol.ChooseSupportedVersion(c.config.Versions, hdr.SupportedVersions)
+	if !ok {
 		return qerr.InvalidVersion
 	}
 
 	// switch to negotiated version
+	initialVersion := c.version
 	c.version = newVersion
 	var err error
 	c.connectionID, err = utils.GenerateConnectionID()
@@ -345,11 +349,12 @@ func (c *client) handlePacketWithVersionFlag(hdr *wire.PublicHeader) error {
 	// the new session must be created first to update client member variables
 	oldSession := c.session
 	defer oldSession.Close(errCloseSessionForNewVersion)
-	return c.createNewSession(hdr.SupportedVersions)
+	return c.createNewSession(initialVersion, hdr.SupportedVersions)
 }
 
-func (c *client) createNewSession(negotiatedVersions []protocol.VersionNumber) error {
+func (c *client) createNewSession(initialVersion protocol.VersionNumber, negotiatedVersions []protocol.VersionNumber) error {
 	var err error
+	utils.Debugf("createNewSession with initial version %s", initialVersion)
 	c.session, c.handshakeChan, err = newClientSession(
 		c.conn,
 		c.hostname,
@@ -357,6 +362,7 @@ func (c *client) createNewSession(negotiatedVersions []protocol.VersionNumber) e
 		c.connectionID,
 		c.tlsConf,
 		c.config,
+		initialVersion,
 		negotiatedVersions,
 	)
 	return err

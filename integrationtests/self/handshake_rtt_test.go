@@ -75,7 +75,9 @@ var _ = Describe("Handshake RTT tests", func() {
 	}
 
 	It("fails when there's no matching version, after 1 RTT", func() {
-		Expect(len(protocol.SupportedVersions)).To(BeNumerically(">", 1))
+		if len(protocol.SupportedVersions) == 1 {
+			Skip("Test requires at least 2 supported versions.")
+		}
 		serverConfig.Versions = protocol.SupportedVersions[:1]
 		runServerAndProxy()
 		clientConfig := &quic.Config{
@@ -98,9 +100,11 @@ var _ = Describe("Handshake RTT tests", func() {
 	})
 
 	It("does version negotiation in 1 RTT", func() {
-		Expect(len(protocol.SupportedVersions)).To(BeNumerically(">", 1))
+		if len(protocol.SupportedVersions) == 1 {
+			Skip("Test requires at least 2 supported versions.")
+		}
 		// the server doesn't support the highest supported version, which is the first one the client will try
-		serverConfig.Versions = protocol.SupportedVersions[1:]
+		serverConfig.Versions = []protocol.VersionNumber{protocol.SupportedVersions[1]}
 		runServerAndProxy()
 		_, err := quic.DialAddr(proxy.LocalAddr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
 		Expect(err).ToNot(HaveOccurred())

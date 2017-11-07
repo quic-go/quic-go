@@ -26,11 +26,8 @@ type ByteOrder interface {
 	WriteUfloat16(*bytes.Buffer, uint64)
 }
 
-// GetByteOrder gets the ByteOrder (little endian or big endian) used to represent values on the wire
+// GetByteOrder gets the ByteOrder to represent values on the wire
 // from QUIC 39, values are encoded in big endian, before that in little endian
 func GetByteOrder(v protocol.VersionNumber) ByteOrder {
-	if v < protocol.Version39 {
-		return LittleEndian
-	}
 	return BigEndian
 }

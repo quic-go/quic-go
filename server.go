@@ -191,14 +191,19 @@ func (s *server) Accept() (Session, error) {
 // Close the server
 func (s *server) Close() error {
 	s.sessionsMutex.Lock()
+	var wg sync.WaitGroup
 	for _, session := range s.sessions {
 		if session != nil {
-			s.sessionsMutex.Unlock()
-			_ = session.Close(nil)
-			s.sessionsMutex.Lock()
+			wg.Add(1)
+			go func(sess packetHandler) {
+				// session.Close() blocks until the CONNECTION_CLOSE has been sent and the run-loop has stopped
+				_ = sess.Close(nil)
+				wg.Done()
+			}(session)
 		}
 	}
 	s.sessionsMutex.Unlock()
+	wg.Wait()
 
 	if s.conn == nil {
 		return nil
@@ -215,7 +220,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
-	connID, err := wire.PeekConnectionID(r, protocol.PerspectiveClient)
+	connID, err := wire.PeekConnectionID(r)
 	if err != nil {
 		return qerr.Error(qerr.InvalidPacketHeader, err.Error())
 	}
@@ -234,7 +239,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 		version = session.GetVersion()
 	}
 
-	hdr, err := wire.ParsePublicHeader(r, protocol.PerspectiveClient, version)
+	hdr, err := wire.ParseHeader(r, protocol.PerspectiveClient, version)
 	if err == wire.ErrPacketWithUnknownVersion {
 		_, err = pconn.WriteTo(wire.WritePublicReset(connID, 0, 0), remoteAddr)
 		return err
@@ -263,23 +268,30 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	// a session is only created once the client sent a supported version
 	// if we receive a packet for a connection that already has session, it's probably an old packet that was sent by the client before the version was negotiated
 	// it is safe to drop it
-	if ok && hdr.VersionFlag && !protocol.IsSupportedVersion(s.config.Versions, hdr.VersionNumber) {
+	if ok && hdr.VersionFlag && !protocol.IsSupportedVersion(s.config.Versions, hdr.Version) {
 		return nil
 	}
 
-	// Send Version Negotiation Packet if the client is speaking a different protocol version
-	if hdr.VersionFlag && !protocol.IsSupportedVersion(s.config.Versions, hdr.VersionNumber) {
+	// send a Version Negotiation Packet if the client is speaking a different protocol version
+	// since the client send a Public Header (only gQUIC has a Version Flag), we need to send a gQUIC Version Negotiation Packet
+	if hdr.VersionFlag && !protocol.IsSupportedVersion(s.config.Versions, hdr.Version) {
 		// drop packets that are too small to be valid first packets
 		if len(packet) < protocol.ClientHelloMinimumSize+len(hdr.Raw) {
 			return errors.New("dropping small packet with unknown version")
 		}
-		utils.Infof("Client offered version %s, sending VersionNegotiationPacket", hdr.VersionNumber)
-		_, err = pconn.WriteTo(wire.ComposeVersionNegotiation(hdr.ConnectionID, s.config.Versions), remoteAddr)
+		utils.Infof("Client offered version %s, sending VersionNegotiationPacket", hdr.Version)
+		if _, err := pconn.WriteTo(wire.ComposeGQUICVersionNegotiation(hdr.ConnectionID, s.config.Versions), remoteAddr); err != nil {
+			return err
+		}
+	}
+	// send an IETF draft style Version Negotiation Packet, if the client sent an unsupported version with an IETF draft style header
+	if hdr.Type == protocol.PacketTypeInitial && !protocol.IsSupportedVersion(s.config.Versions, hdr.Version) {
+		_, err := pconn.WriteTo(wire.ComposeVersionNegotiation(hdr.ConnectionID, hdr.PacketNumber, s.config.Versions), remoteAddr)
 		return err
 	}
 
 	if !ok {
-		version := hdr.VersionNumber
+		version := hdr.Version
 		if !protocol.IsSupportedVersion(s.config.Versions, version) {
 			return errors.New("Server BUG: negotiated version not supported")
 		}
@@ -304,7 +316,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 		go func() {
 			// session.run() returns as soon as the session is closed
 			_ = session.run()
-			s.removeConnection(hdr.ConnectionID)
+			s.removeConnection(connID)
 		}()
 
 		go func() {
@@ -321,10 +333,10 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 		}()
 	}
 	session.handlePacket(&receivedPacket{
-		remoteAddr:   remoteAddr,
-		publicHeader: hdr,
-		data:         packet[len(packet)-r.Len():],
-		rcvTime:      rcvTime,
+		remoteAddr: remoteAddr,
+		header:     hdr,
+		data:       packet[len(packet)-r.Len():],
+		rcvTime:    rcvTime,
 	})
 	return nil
 }

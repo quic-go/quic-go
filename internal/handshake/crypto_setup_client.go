@@ -24,6 +24,7 @@ type cryptoSetupClient struct {
 	hostname           string
 	connID             protocol.ConnectionID
 	version            protocol.VersionNumber
+	initialVersion     protocol.VersionNumber
 	negotiatedVersions []protocol.VersionNumber
 
 	cryptoStream io.ReadWriter
@@ -51,10 +52,11 @@ type cryptoSetupClient struct {
 	nullAEAD             crypto.AEAD
 	secureAEAD           crypto.AEAD
 	forwardSecureAEAD    crypto.AEAD
-	aeadChanged          chan<- protocol.EncryptionLevel
 
-	params               *TransportParameters
-	connectionParameters ConnectionParametersManager
+	paramsChan  chan<- TransportParameters
+	aeadChanged chan<- protocol.EncryptionLevel
+
+	params *TransportParameters
 }
 
 var _ CryptoSetup = &cryptoSetupClient{}
@@ -67,32 +69,38 @@ var (
 
 // NewCryptoSetupClient creates a new CryptoSetup instance for a client
 func NewCryptoSetupClient(
+	cryptoStream io.ReadWriter,
 	hostname string,
 	connID protocol.ConnectionID,
 	version protocol.VersionNumber,
-	cryptoStream io.ReadWriter,
 	tlsConfig *tls.Config,
-	connectionParameters ConnectionParametersManager,
-	aeadChanged chan<- protocol.EncryptionLevel,
 	params *TransportParameters,
+	paramsChan chan<- TransportParameters,
+	aeadChanged chan<- protocol.EncryptionLevel,
+	initialVersion protocol.VersionNumber,
 	negotiatedVersions []protocol.VersionNumber,
 	QuicTracer *qtrace.Tracer,
 ) (CryptoSetup, error) {
+	nullAEAD, err := crypto.NewNullAEAD(protocol.PerspectiveClient, connID, version)
+	if err != nil {
+		return nil, err
+	}
 	return &cryptoSetupClient{
-		hostname:             hostname,
-		connID:               connID,
-		version:              version,
-		cryptoStream:         cryptoStream,
-		certManager:          crypto.NewCertManager(tlsConfig),
-		connectionParameters: connectionParameters,
-		keyDerivation:        crypto.DeriveQuicCryptoAESKeys,
-		keyExchange:          getEphermalKEX,
-		nullAEAD:             crypto.NewNullAEAD(protocol.PerspectiveClient, version),
-		aeadChanged:          aeadChanged,
-		negotiatedVersions:   negotiatedVersions,
-		divNonceChan:         make(chan []byte),
-		params:               params,
-		QuicTracer:           QuicTracer,
+		cryptoStream:       cryptoStream,
+		hostname:           hostname,
+		connID:             connID,
+		version:            version,
+		certManager:        crypto.NewCertManager(tlsConfig),
+		params:             params,
+		keyDerivation:      crypto.DeriveQuicCryptoAESKeys,
+		keyExchange:        getEphermalKEX,
+		nullAEAD:           nullAEAD,
+		paramsChan:         paramsChan,
+		aeadChanged:        aeadChanged,
+		initialVersion:     initialVersion,
+		negotiatedVersions: negotiatedVersions,
+		divNonceChan:       make(chan []byte),
+		QuicTracer:         QuicTracer,
 	}, nil
 }
 
@@ -149,14 +157,20 @@ func (h *cryptoSetupClient) HandleCryptoStream() error {
 
 		switch message.Tag {
 		case TagREJ:
-			err = h.handleREJMessage(message.Data)
+			if err := h.handleREJMessage(message.Data); err != nil {
+				return err
+			}
 		case TagSHLO:
-			err = h.handleSHLOMessage(message.Data)
+			params, err := h.handleSHLOMessage(message.Data)
+			if err != nil {
+				return err
+			}
+			// blocks until the session has received the parameters
+			h.paramsChan <- *params
+			h.aeadChanged <- protocol.EncryptionForwardSecure
+			close(h.aeadChanged)
 		default:
 			return qerr.InvalidCryptoMessageType
-		}
-		if err != nil {
-			return err
 		}
 	}
 }
@@ -223,12 +237,12 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 	return nil
 }
 
-func (h *cryptoSetupClient) handleSHLOMessage(cryptoData map[Tag][]byte) error {
+func (h *cryptoSetupClient) handleSHLOMessage(cryptoData map[Tag][]byte) (*TransportParameters, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
 	if !h.receivedSecurePacket {
-		return qerr.Error(qerr.CryptoEncryptionLevelIncorrect, "unencrypted SHLO message")
+		return nil, qerr.Error(qerr.CryptoEncryptionLevelIncorrect, "unencrypted SHLO message")
 	}
 
 	if sno, ok := cryptoData[TagSNO]; ok {
@@ -237,22 +251,22 @@ func (h *cryptoSetupClient) handleSHLOMessage(cryptoData map[Tag][]byte) error {
 
 	serverPubs, ok := cryptoData[TagPUBS]
 	if !ok {
-		return qerr.Error(qerr.CryptoMessageParameterNotFound, "PUBS")
+		return nil, qerr.Error(qerr.CryptoMessageParameterNotFound, "PUBS")
 	}
 
 	verTag, ok := cryptoData[TagVER]
 	if !ok {
-		return qerr.Error(qerr.InvalidCryptoMessageParameter, "server hello missing version list")
+		return nil, qerr.Error(qerr.InvalidCryptoMessageParameter, "server hello missing version list")
 	}
 	if !h.validateVersionList(verTag) {
-		return qerr.Error(qerr.VersionNegotiationMismatch, "Downgrade attack detected")
+		return nil, qerr.Error(qerr.VersionNegotiationMismatch, "Downgrade attack detected")
 	}
 
 	nonce := append(h.nonc, h.sno...)
 
 	ephermalSharedSecret, err := h.serverConfig.kex.CalculateSharedKey(serverPubs)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	leafCert := h.certManager.GetLeafCert()
@@ -269,39 +283,32 @@ func (h *cryptoSetupClient) handleSHLOMessage(cryptoData map[Tag][]byte) error {
 		protocol.PerspectiveClient,
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	err = h.connectionParameters.SetFromMap(cryptoData)
+	params, err := readHelloMap(cryptoData)
 	if err != nil {
-		return qerr.InvalidCryptoMessageParameter
+		return nil, qerr.InvalidCryptoMessageParameter
 	}
-
-	h.aeadChanged <- protocol.EncryptionForwardSecure
-	close(h.aeadChanged)
-
-	return nil
+	return params, nil
 }
 
 func (h *cryptoSetupClient) validateVersionList(verTags []byte) bool {
-	if len(h.negotiatedVersions) == 0 {
+	numNegotiatedVersions := len(h.negotiatedVersions)
+	if numNegotiatedVersions == 0 {
 		return true
 	}
-	if len(verTags)%4 != 0 || len(verTags)/4 != len(h.negotiatedVersions) {
+	if len(verTags)%4 != 0 || len(verTags)/4 != numNegotiatedVersions {
 		return false
 	}
 
 	b := bytes.NewReader(verTags)
-	for _, negotiatedVersion := range h.negotiatedVersions {
-		verTag, err := utils.LittleEndian.ReadUint32(b)
+	for i := 0; i < numNegotiatedVersions; i++ {
+		v, err := utils.BigEndian.ReadUint32(b)
 		if err != nil { // should never occur, since the length was already checked
 			return false
 		}
-		ver := protocol.VersionTagToNumber(verTag)
-		if !protocol.IsSupportedVersion(protocol.SupportedVersions, ver) {
-			ver = protocol.VersionUnsupported
-		}
-		if ver != negotiatedVersion {
+		if protocol.VersionNumber(v) != h.negotiatedVersions[i] {
 			return false
 		}
 	}
@@ -382,6 +389,10 @@ func (h *cryptoSetupClient) SetDiversificationNonce(data []byte) {
 	h.divNonceChan <- data
 }
 
+func (h *cryptoSetupClient) GetNextPacketType() protocol.PacketType {
+	panic("not needed for cryptoSetupServer")
+}
+
 func (h *cryptoSetupClient) sendCHLO() error {
 	h.clientHelloCounter++
 	if h.clientHelloCounter > protocol.MaxClientHellos {
@@ -412,15 +423,11 @@ func (h *cryptoSetupClient) sendCHLO() error {
 	}
 
 	h.lastSentCHLO = b.Bytes()
-
 	return nil
 }
 
 func (h *cryptoSetupClient) getTags() (map[Tag][]byte, error) {
-	tags, err := h.connectionParameters.GetHelloMap()
-	if err != nil {
-		return nil, err
-	}
+	tags := h.params.getHelloMap()
 	tags[TagSNI] = []byte(h.hostname)
 	tags[TagPDMD] = []byte("X509")
 
@@ -430,12 +437,9 @@ func (h *cryptoSetupClient) getTags() (map[Tag][]byte, error) {
 	}
 
 	versionTag := make([]byte, 4)
-	binary.LittleEndian.PutUint32(versionTag, protocol.VersionNumberToTag(h.version))
+	binary.BigEndian.PutUint32(versionTag, uint32(h.initialVersion))
 	tags[TagVER] = versionTag
 
-	if h.params.RequestConnectionIDTruncation {
-		tags[TagTCID] = []byte{0, 0, 0, 0}
-	}
 	if len(h.stk) > 0 {
 		tags[TagSTK] = h.stk
 	}

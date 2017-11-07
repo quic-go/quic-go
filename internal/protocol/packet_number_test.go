@@ -129,17 +129,17 @@ var _ = Describe("packet number calculation", func() {
 	Context("shortening a packet number for the publicHeader", func() {
 		Context("shortening", func() {
 			It("sends out low packet numbers as 2 byte", func() {
-				length := GetPacketNumberLengthForPublicHeader(4, 2)
+				length := GetPacketNumberLengthForHeader(4, 2)
 				Expect(length).To(Equal(PacketNumberLen2))
 			})
 
 			It("sends out high packet numbers as 2 byte, if all ACKs are received", func() {
-				length := GetPacketNumberLengthForPublicHeader(0xDEADBEEF, 0xDEADBEEF-1)
+				length := GetPacketNumberLengthForHeader(0xDEADBEEF, 0xDEADBEEF-1)
 				Expect(length).To(Equal(PacketNumberLen2))
 			})
 
 			It("sends out higher packet numbers as 4 bytes, if a lot of ACKs are missing", func() {
-				length := GetPacketNumberLengthForPublicHeader(40000, 2)
+				length := GetPacketNumberLengthForHeader(40000, 2)
 				Expect(length).To(Equal(PacketNumberLen4))
 			})
 		})
@@ -149,7 +149,7 @@ var _ = Describe("packet number calculation", func() {
 				for i := uint64(1); i < 10000; i++ {
 					packetNumber := PacketNumber(i)
 					leastUnacked := PacketNumber(1)
-					length := GetPacketNumberLengthForPublicHeader(packetNumber, leastUnacked)
+					length := GetPacketNumberLengthForHeader(packetNumber, leastUnacked)
 					wirePacketNumber := (uint64(packetNumber) << (64 - length*8)) >> (64 - length*8)
 
 					inferedPacketNumber := InferPacketNumber(length, leastUnacked, PacketNumber(wirePacketNumber))
@@ -161,7 +161,7 @@ var _ = Describe("packet number calculation", func() {
 				for i := uint64(1); i < 10000; i++ {
 					packetNumber := PacketNumber(i)
 					leastUnacked := PacketNumber(i / 2)
-					length := GetPacketNumberLengthForPublicHeader(packetNumber, leastUnacked)
+					length := GetPacketNumberLengthForHeader(packetNumber, leastUnacked)
 					wirePacketNumber := (uint64(packetNumber) << (64 - length*8)) >> (64 - length*8)
 
 					inferedPacketNumber := InferPacketNumber(length, leastUnacked, PacketNumber(wirePacketNumber))
@@ -171,10 +171,10 @@ var _ = Describe("packet number calculation", func() {
 
 			It("also works for larger packet numbers", func() {
 				increment := uint64(1 << (8 - 3))
-				for i := uint64(1); i < (2 << 46); i += increment {
+				for i := uint64(1); i < (2 << 31); i += increment {
 					packetNumber := PacketNumber(i)
 					leastUnacked := PacketNumber(1)
-					length := GetPacketNumberLengthForPublicHeader(packetNumber, leastUnacked)
+					length := GetPacketNumberLengthForHeader(packetNumber, leastUnacked)
 					wirePacketNumber := (uint64(packetNumber) << (64 - length*8)) >> (64 - length*8)
 
 					inferedPacketNumber := InferPacketNumber(length, leastUnacked, PacketNumber(wirePacketNumber))
@@ -185,8 +185,6 @@ var _ = Describe("packet number calculation", func() {
 						increment = 1 << (2*8 - 3)
 					case PacketNumberLen4:
 						increment = 1 << (4*8 - 3)
-					case PacketNumberLen6:
-						increment = 1 << (6*8 - 3)
 					}
 				}
 			})
@@ -195,7 +193,7 @@ var _ = Describe("packet number calculation", func() {
 				for i := (uint64(1) << 48); i < ((uint64(1) << 63) - 1); i += (uint64(1) << 48) {
 					packetNumber := PacketNumber(i)
 					leastUnacked := PacketNumber(i - 1000)
-					length := GetPacketNumberLengthForPublicHeader(packetNumber, leastUnacked)
+					length := GetPacketNumberLengthForHeader(packetNumber, leastUnacked)
 					wirePacketNumber := (uint64(packetNumber) << (64 - length*8)) >> (64 - length*8)
 
 					inferedPacketNumber := InferPacketNumber(length, leastUnacked, PacketNumber(wirePacketNumber))

@@ -12,40 +12,6 @@ import (
 
 var _ = Describe("GoawayFrame", func() {
 	Context("when parsing", func() {
-		Context("in little endian", func() {
-			It("accepts sample frame", func() {
-				b := bytes.NewReader([]byte{0x3,
-					0x37, 0x13, 0x0, 0x0, // error code
-					0x34, 0x12, 0x0, 0x0, // last good stream id
-					0x3, 0x0, // reason phrase length
-					'f', 'o', 'o',
-				})
-				frame, err := ParseGoawayFrame(b, versionLittleEndian)
-				Expect(frame).To(Equal(&GoawayFrame{
-					ErrorCode:      0x1337,
-					LastGoodStream: 0x1234,
-					ReasonPhrase:   "foo",
-				}))
-				Expect(err).ToNot(HaveOccurred())
-				Expect(b.Len()).To(BeZero())
-			})
-
-			It("errors on EOFs", func() {
-				data := []byte{0x3,
-					0x1, 0x0, 0x0, 0x0, // error code
-					0x2, 0x0, 0x0, 0x0, // last good stream id
-					0x3, 0x0, // reason phrase length
-					'f', 'o', 'o',
-				}
-				_, err := ParseGoawayFrame(bytes.NewReader(data), versionLittleEndian)
-				Expect(err).NotTo(HaveOccurred())
-				for i := range data {
-					_, err := ParseGoawayFrame(bytes.NewReader(data[0:i]), versionLittleEndian)
-					Expect(err).To(HaveOccurred())
-				}
-			})
-		})
-
 		Context("in big endian", func() {
 			It("accepts sample frame", func() {
 				b := bytes.NewReader([]byte{0x3,
@@ -92,25 +58,6 @@ var _ = Describe("GoawayFrame", func() {
 	})
 
 	Context("when writing", func() {
-		Context("in little endian", func() {
-			It("writes a sample frame", func() {
-				b := &bytes.Buffer{}
-				frame := GoawayFrame{
-					ErrorCode:      0x1337,
-					LastGoodStream: 2,
-					ReasonPhrase:   "foo",
-				}
-				err := frame.Write(b, versionLittleEndian)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(b.Bytes()).To(Equal([]byte{0x3,
-					0x37, 0x13, 0x0, 0x0, // error code
-					0x2, 0x0, 0x0, 0x0, // last good stream
-					0x3, 0x0, // reason phrase length
-					'f', 'o', 'o',
-				}))
-			})
-		})
-
 		Context("in big endian", func() {
 			It("writes a sample frame", func() {
 				b := &bytes.Buffer{}

@@ -35,7 +35,7 @@ var _ = Describe("Drop tests", func() {
 	downloadFile := func(version protocol.VersionNumber) {
 		command := exec.Command(
 			clientPath,
-			"--quic-version="+strconv.Itoa(int(version)),
+			"--quic-version="+version.ToAltSvc(),
 			"--host=127.0.0.1",
 			"--port="+strconv.Itoa(proxy.LocalPort()),
 			"https://quic.clemente.io/prdata",
@@ -50,7 +50,7 @@ var _ = Describe("Drop tests", func() {
 	downloadHello := func(version protocol.VersionNumber) {
 		command := exec.Command(
 			clientPath,
-			"--quic-version="+strconv.Itoa(int(version)),
+			"--quic-version="+version.ToAltSvc(),
 			"--host=127.0.0.1",
 			"--port="+strconv.Itoa(proxy.LocalPort()),
 			"https://quic.clemente.io/hello",

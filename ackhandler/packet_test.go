@@ -10,7 +10,7 @@ var _ = Describe("Packet", func() {
 	Context("getting frames for retransmission", func() {
 		ackFrame := &wire.AckFrame{LargestAcked: 13}
 		stopWaitingFrame := &wire.StopWaitingFrame{LeastUnacked: 7331}
-		windowUpdateFrame := &wire.WindowUpdateFrame{StreamID: 999}
+		maxStreamDataFrame := &wire.MaxStreamDataFrame{StreamID: 999}
 
 		streamFrame := &wire.StreamFrame{
 			StreamID: 5,
@@ -32,7 +32,7 @@ var _ = Describe("Packet", func() {
 		It("returns all retransmittable frames", func() {
 			packet := &Packet{
 				Frames: []wire.Frame{
-					windowUpdateFrame,
+					maxStreamDataFrame,
 					ackFrame,
 					stopWaitingFrame,
 					streamFrame,
@@ -42,7 +42,7 @@ var _ = Describe("Packet", func() {
 			fs := packet.GetFramesForRetransmission()
 			Expect(fs).To(ContainElement(streamFrame))
 			Expect(fs).To(ContainElement(rstStreamFrame))
-			Expect(fs).To(ContainElement(windowUpdateFrame))
+			Expect(fs).To(ContainElement(maxStreamDataFrame))
 			Expect(fs).ToNot(ContainElement(stopWaitingFrame))
 			Expect(fs).ToNot(ContainElement(ackFrame))
 		})

@@ -27,7 +27,6 @@ type cryptoSetupServer struct {
 	connID               protocol.ConnectionID
 	remoteAddr           net.Addr
 	scfg                 *ServerConfig
-	stkGenerator         *CookieGenerator
 	diversificationNonce []byte
 	QuicTracer           *qtrace.Tracer
 
@@ -42,14 +41,17 @@ type cryptoSetupServer struct {
 	receivedForwardSecurePacket bool
 	receivedSecurePacket        bool
 	sentSHLO                    chan struct{} // this channel is closed as soon as the SHLO has been written
-	aeadChanged                 chan<- protocol.EncryptionLevel
+
+	receivedParams bool
+	paramsChan     chan<- TransportParameters
+	aeadChanged    chan<- protocol.EncryptionLevel
 
 	keyDerivation QuicCryptoKeyDerivationFunction
 	keyExchange   KeyExchangeFunction
 
 	cryptoStream io.ReadWriter
 
-	connectionParameters ConnectionParametersManager
+	params *TransportParameters
 
 	mutex sync.RWMutex
 }
@@ -67,38 +69,38 @@ var ErrNSTPExperiment = qerr.Error(qerr.InvalidCryptoMessageParameter, "NSTP exp
 
 // NewCryptoSetup creates a new CryptoSetup instance for a server
 func NewCryptoSetup(
+	cryptoStream io.ReadWriter,
 	connID protocol.ConnectionID,
 	remoteAddr net.Addr,
 	version protocol.VersionNumber,
 	scfg *ServerConfig,
-	cryptoStream io.ReadWriter,
-	connectionParametersManager ConnectionParametersManager,
+	params *TransportParameters,
 	supportedVersions []protocol.VersionNumber,
 	acceptSTK func(net.Addr, *Cookie) bool,
+	paramsChan chan<- TransportParameters,
 	aeadChanged chan<- protocol.EncryptionLevel,
 	QuicTracer *qtrace.Tracer,
 ) (CryptoSetup, error) {
-	stkGenerator, err := NewCookieGenerator()
+	nullAEAD, err := crypto.NewNullAEAD(protocol.PerspectiveServer, connID, version)
 	if err != nil {
 		return nil, err
 	}
-
 	return &cryptoSetupServer{
-		connID:               connID,
-		remoteAddr:           remoteAddr,
-		version:              version,
-		supportedVersions:    supportedVersions,
-		scfg:                 scfg,
-		stkGenerator:         stkGenerator,
-		keyDerivation:        crypto.DeriveQuicCryptoAESKeys,
-		keyExchange:          getEphermalKEX,
-		nullAEAD:             crypto.NewNullAEAD(protocol.PerspectiveServer, version),
-		cryptoStream:         cryptoStream,
-		connectionParameters: connectionParametersManager,
-		acceptSTKCallback:    acceptSTK,
-		sentSHLO:             make(chan struct{}),
-		aeadChanged:          aeadChanged,
-		QuicTracer:           QuicTracer,
+		cryptoStream:      cryptoStream,
+		connID:            connID,
+		remoteAddr:        remoteAddr,
+		version:           version,
+		supportedVersions: supportedVersions,
+		scfg:              scfg,
+		keyDerivation:     crypto.DeriveQuicCryptoAESKeys,
+		keyExchange:       getEphermalKEX,
+		nullAEAD:          nullAEAD,
+		params:            params,
+		acceptSTKCallback: acceptSTK,
+		sentSHLO:          make(chan struct{}),
+		paramsChan:        paramsChan,
+		aeadChanged:       aeadChanged,
+		QuicTracer:        QuicTracer,
 	}, nil
 }
 
@@ -155,8 +157,7 @@ func (h *cryptoSetupServer) handleMessage(chloData []byte, cryptoData map[Tag][]
 	if len(verSlice) != 4 {
 		return false, qerr.Error(qerr.InvalidCryptoMessageParameter, "incorrect version tag")
 	}
-	verTag := binary.LittleEndian.Uint32(verSlice)
-	ver := protocol.VersionTagToNumber(verTag)
+	ver := protocol.VersionNumber(binary.BigEndian.Uint32(verSlice))
 	// If the client's preferred version is not the version we are currently speaking, then the client went through a version negotiation.  In this case, we need to make sure that we actually do not support this version and that it wasn't a downgrade attack.
 	if ver != h.version && protocol.IsSupportedVersion(h.supportedVersions, ver) {
 		return false, qerr.Error(qerr.VersionNegotiationMismatch, "Downgrade attack detected")
@@ -168,6 +169,16 @@ func (h *cryptoSetupServer) handleMessage(chloData []byte, cryptoData map[Tag][]
 	certUncompressed, err := h.scfg.certChain.GetLeafCert(sni)
 	if err != nil {
 		return false, err
+	}
+
+	params, err := readHelloMap(cryptoData)
+	if err != nil {
+		return false, err
+	}
+	// blocks until the session has received the parameters
+	if !h.receivedParams {
+		h.receivedParams = true
+		h.paramsChan <- *params
 	}
 
 	if !h.isInchoateCHLO(cryptoData, certUncompressed) {
@@ -289,7 +300,7 @@ func (h *cryptoSetupServer) isInchoateCHLO(cryptoData map[Tag][]byte, cert []byt
 }
 
 func (h *cryptoSetupServer) acceptSTK(token []byte) bool {
-	stk, err := h.stkGenerator.DecodeToken(token)
+	stk, err := h.scfg.cookieGenerator.DecodeToken(token)
 	if err != nil {
 		utils.Debugf("STK invalid: %s", err.Error())
 		return false
@@ -302,7 +313,7 @@ func (h *cryptoSetupServer) handleInchoateCHLO(sni string, chlo []byte, cryptoDa
 		return nil, qerr.Error(qerr.CryptoInvalidValueLength, "CHLO too small")
 	}
 
-	token, err := h.stkGenerator.NewToken(h.remoteAddr)
+	token, err := h.scfg.cookieGenerator.NewToken(h.remoteAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -430,19 +441,11 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 		return nil, err
 	}
 
-	err = h.connectionParameters.SetFromMap(cryptoData)
-	if err != nil {
-		return nil, err
-	}
-
-	replyMap, err := h.connectionParameters.GetHelloMap()
-	if err != nil {
-		return nil, err
-	}
+	replyMap := h.params.getHelloMap()
 	// add crypto parameters
 	verTag := &bytes.Buffer{}
 	for _, v := range h.supportedVersions {
-		utils.LittleEndian.WriteUint32(verTag, protocol.VersionNumberToTag(v))
+		utils.BigEndian.WriteUint32(verTag, uint32(v))
 	}
 	replyMap[TagPUBS] = ephermalKex.PublicKey()
 	replyMap[TagSNO] = serverNonce
@@ -470,6 +473,10 @@ func (h *cryptoSetupServer) DiversificationNonce() []byte {
 }
 
 func (h *cryptoSetupServer) SetDiversificationNonce(data []byte) {
+	panic("not needed for cryptoSetupServer")
+}
+
+func (h *cryptoSetupServer) GetNextPacketType() protocol.PacketType {
 	panic("not needed for cryptoSetupServer")
 }
 

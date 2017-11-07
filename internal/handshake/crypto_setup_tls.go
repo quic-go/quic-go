@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"net"
 	"sync"
 
 	"github.com/bifurcation/mint"
@@ -12,61 +13,134 @@ import (
 )
 
 // KeyDerivationFunction is used for key derivation
-type KeyDerivationFunction func(crypto.MintController, protocol.Perspective) (crypto.AEAD, error)
+type KeyDerivationFunction func(crypto.TLSExporter, protocol.Perspective) (crypto.AEAD, error)
 
 type cryptoSetupTLS struct {
 	mutex sync.RWMutex
 
 	perspective protocol.Perspective
 
+	tls  mintTLS
+	conn *fakeConn
+
+	nextPacketType protocol.PacketType
+
 	keyDerivation KeyDerivationFunction
-
-	mintConf *mint.Config
-	conn     crypto.MintController
-
-	nullAEAD crypto.AEAD
-	aead     crypto.AEAD
+	nullAEAD      crypto.AEAD
+	aead          crypto.AEAD
 
 	aeadChanged chan<- protocol.EncryptionLevel
 }
 
-// NewCryptoSetupTLS creates a new CryptoSetup instance for a server
-func NewCryptoSetupTLS(
-	hostname string, // only needed for the client
-	perspective protocol.Perspective,
-	version protocol.VersionNumber,
-	tlsConfig *tls.Config,
+// NewCryptoSetupTLSServer creates a new TLS CryptoSetup instance for a server
+func NewCryptoSetupTLSServer(
 	cryptoStream io.ReadWriter,
+	connID protocol.ConnectionID,
+	tlsConfig *tls.Config,
+	remoteAddr net.Addr,
+	params *TransportParameters,
+	paramsChan chan<- TransportParameters,
 	aeadChanged chan<- protocol.EncryptionLevel,
+	checkCookie func(net.Addr, *Cookie) bool,
+	supportedVersions []protocol.VersionNumber,
+	version protocol.VersionNumber,
 ) (CryptoSetup, error) {
-	mintConf, err := tlsToMintConfig(tlsConfig, perspective)
+	mintConf, err := tlsToMintConfig(tlsConfig, protocol.PerspectiveServer)
 	if err != nil {
 		return nil, err
 	}
-	mintConf.ServerName = hostname
-	var conn *mint.Conn
-	if perspective == protocol.PerspectiveServer {
-		conn = mint.Server(&fakeConn{cryptoStream}, mintConf)
-	} else {
-		conn = mint.Client(&fakeConn{cryptoStream}, mintConf)
+	mintConf.RequireCookie = true
+	mintConf.CookieHandler, err = newCookieHandler(checkCookie)
+	if err != nil {
+		return nil, err
 	}
+	conn := &fakeConn{
+		stream:     cryptoStream,
+		pers:       protocol.PerspectiveServer,
+		remoteAddr: remoteAddr,
+	}
+	mintConn := mint.Server(conn, mintConf)
+	eh := newExtensionHandlerServer(params, paramsChan, supportedVersions, version)
+	if err := mintConn.SetExtensionHandler(eh); err != nil {
+		return nil, err
+	}
+
+	nullAEAD, err := crypto.NewNullAEAD(protocol.PerspectiveServer, connID, version)
+	if err != nil {
+		return nil, err
+	}
+
 	return &cryptoSetupTLS{
-		perspective:   perspective,
-		mintConf:      mintConf,
-		conn:          &mintController{conn},
-		nullAEAD:      crypto.NewNullAEAD(perspective, version),
+		perspective:   protocol.PerspectiveServer,
+		tls:           &mintController{mintConn},
+		conn:          conn,
+		nullAEAD:      nullAEAD,
 		keyDerivation: crypto.DeriveAESKeys,
 		aeadChanged:   aeadChanged,
 	}, nil
 }
 
-func (h *cryptoSetupTLS) HandleCryptoStream() error {
-	alert := h.conn.Handshake()
-	if alert != mint.AlertNoAlert {
-		return fmt.Errorf("TLS handshake error: %s (Alert %d)", alert.String(), alert)
+// NewCryptoSetupTLSClient creates a new TLS CryptoSetup instance for a client
+func NewCryptoSetupTLSClient(
+	cryptoStream io.ReadWriter,
+	connID protocol.ConnectionID,
+	hostname string,
+	tlsConfig *tls.Config,
+	params *TransportParameters,
+	paramsChan chan<- TransportParameters,
+	aeadChanged chan<- protocol.EncryptionLevel,
+	initialVersion protocol.VersionNumber,
+	supportedVersions []protocol.VersionNumber,
+	version protocol.VersionNumber,
+) (CryptoSetup, error) {
+	mintConf, err := tlsToMintConfig(tlsConfig, protocol.PerspectiveClient)
+	if err != nil {
+		return nil, err
+	}
+	mintConf.ServerName = hostname
+	conn := &fakeConn{
+		stream: cryptoStream,
+		pers:   protocol.PerspectiveClient,
+	}
+	mintConn := mint.Client(conn, mintConf)
+	eh := newExtensionHandlerClient(params, paramsChan, initialVersion, supportedVersions, version)
+	if err := mintConn.SetExtensionHandler(eh); err != nil {
+		return nil, err
 	}
 
-	aead, err := h.keyDerivation(h.conn, h.perspective)
+	nullAEAD, err := crypto.NewNullAEAD(protocol.PerspectiveClient, connID, version)
+	if err != nil {
+		return nil, err
+	}
+
+	return &cryptoSetupTLS{
+		conn:           conn,
+		perspective:    protocol.PerspectiveClient,
+		tls:            &mintController{mintConn},
+		nullAEAD:       nullAEAD,
+		keyDerivation:  crypto.DeriveAESKeys,
+		aeadChanged:    aeadChanged,
+		nextPacketType: protocol.PacketTypeInitial,
+	}, nil
+}
+
+func (h *cryptoSetupTLS) HandleCryptoStream() error {
+handshakeLoop:
+	for {
+		switch alert := h.tls.Handshake(); alert {
+		case mint.AlertNoAlert: // handshake complete
+			break handshakeLoop
+		case mint.AlertWouldBlock:
+			h.determineNextPacketType()
+			if err := h.conn.Continue(); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("TLS handshake error: %s (Alert %d)", alert.String(), alert)
+		}
+	}
+
+	aead, err := h.keyDerivation(h.tls, h.perspective)
 	if err != nil {
 		return err
 	}
@@ -128,6 +202,35 @@ func (h *cryptoSetupTLS) GetSealerWithEncryptionLevel(encLevel protocol.Encrypti
 
 func (h *cryptoSetupTLS) GetSealerForCryptoStream() (protocol.EncryptionLevel, Sealer) {
 	return protocol.EncryptionUnencrypted, h.nullAEAD
+}
+
+func (h *cryptoSetupTLS) determineNextPacketType() error {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+	state := h.tls.State().HandshakeState
+	if h.perspective == protocol.PerspectiveServer {
+		switch state {
+		case "ServerStateStart": // if we're still at ServerStateStart when writing the first packet, that means we've come back to that state by sending a HelloRetryRequest
+			h.nextPacketType = protocol.PacketTypeRetry
+		case "ServerStateWaitFinished":
+			h.nextPacketType = protocol.PacketTypeCleartext
+		default:
+			// TODO: accept 0-RTT data
+			return fmt.Errorf("Unexpected handshake state: %s", state)
+		}
+		return nil
+	}
+	// client
+	if state != "ClientStateWaitSH" {
+		h.nextPacketType = protocol.PacketTypeCleartext
+	}
+	return nil
+}
+
+func (h *cryptoSetupTLS) GetNextPacketType() protocol.PacketType {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+	return h.nextPacketType
 }
 
 func (h *cryptoSetupTLS) DiversificationNonce() []byte {
