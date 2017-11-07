@@ -118,7 +118,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			&TransportParameters{IdleTimeout: protocol.DefaultIdleTimeout},
 			paramsChan,
 			aeadChanged,
-			protocol.Version37,
+			protocol.Version39,
 			nil,
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -491,14 +491,14 @@ var _ = Describe("Client Crypto Setup", func() {
 		})
 
 		It("has the right values for an inchoate CHLO", func() {
-			Expect(cs.version).ToNot(Equal(cs.initialVersion)) // make sure we can test that TagVER actually has the initial version, and not the current version
+			cs.version = cs.initialVersion - 1
 			cs.hostname = "sni-hostname"
 			certManager.commonCertificateHashes = []byte("common certs")
 			tags, err := cs.getTags()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(string(tags[TagSNI])).To(Equal(cs.hostname))
 			Expect(tags[TagPDMD]).To(Equal([]byte("X509")))
-			Expect(tags[TagVER]).To(Equal([]byte("Q037")))
+			Expect(tags[TagVER]).To(Equal([]byte("Q039")))
 			Expect(tags[TagCCS]).To(Equal(certManager.commonCertificateHashes))
 			Expect(tags).ToNot(HaveKey(TagTCID))
 		})
