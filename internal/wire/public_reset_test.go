@@ -73,13 +73,14 @@ var _ = Describe("public reset", func() {
 			Expect(err).To(MatchError("invalid RNON tag"))
 		})
 
-		It("rejects packets missing the rejected packet number", func() {
+		It("accepts packets missing the rejected packet number", func() {
 			data := map[handshake.Tag][]byte{
 				handshake.TagRNON: []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
 			}
 			handshake.HandshakeMessage{Tag: handshake.TagPRST, Data: data}.Write(b)
-			_, err := ParsePublicReset(bytes.NewReader(b.Bytes()))
-			Expect(err).To(MatchError("RSEQ missing"))
+			pr, err := ParsePublicReset(bytes.NewReader(b.Bytes()))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(pr.Nonce).To(Equal(uint64(0x3713fecaefbeadde)))
 		})
 
 		It("rejects packets with a wrong length rejected packet number", func() {
