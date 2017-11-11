@@ -219,38 +219,25 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
-	connID, err := wire.PeekConnectionID(r)
-	if err != nil {
-		return qerr.Error(qerr.InvalidPacketHeader, err.Error())
-	}
-
-	s.sessionsMutex.RLock()
-	session, ok := s.sessions[connID]
-	s.sessionsMutex.RUnlock()
-
-	if ok && session == nil {
-		// Late packet for closed session
-		return nil
-	}
-
-	version := protocol.VersionUnknown
-	if ok {
-		version = session.GetVersion()
-	}
-
-	hdr, err := wire.ParseHeader(r, protocol.PerspectiveClient, version)
-	if err == wire.ErrPacketWithUnknownVersion {
-		_, err = pconn.WriteTo(wire.WritePublicReset(connID, 0, 0), remoteAddr)
-		return err
-	}
+	hdr, err := wire.ParseHeaderSentByClient(r)
 	if err != nil {
 		return qerr.Error(qerr.InvalidPacketHeader, err.Error())
 	}
 	hdr.Raw = packet[:len(packet)-r.Len()]
+	connID := hdr.ConnectionID
+
+	s.sessionsMutex.RLock()
+	session, sessionKnown := s.sessions[connID]
+	s.sessionsMutex.RUnlock()
+
+	if sessionKnown && session == nil {
+		// Late packet for closed session
+		return nil
+	}
 
 	// ignore all Public Reset packets
 	if hdr.ResetFlag {
-		if ok {
+		if sessionKnown {
 			var pr *wire.PublicReset
 			pr, err = wire.ParsePublicReset(r)
 			if err != nil {
@@ -264,10 +251,18 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 		return nil
 	}
 
+	// If we don't have a session for this connection, and this packet cannot open a new connection, send a Public Reset
+	// This should only happen after a server restart, when we still receive packets for connections that we lost the state for.
+	// TODO(#943): implement sending of IETF draft style stateless resets
+	if !sessionKnown && (!hdr.VersionFlag && hdr.Type != protocol.PacketTypeInitial) {
+		_, err = pconn.WriteTo(wire.WritePublicReset(connID, 0, 0), remoteAddr)
+		return err
+	}
+
 	// a session is only created once the client sent a supported version
 	// if we receive a packet for a connection that already has session, it's probably an old packet that was sent by the client before the version was negotiated
 	// it is safe to drop it
-	if ok && hdr.VersionFlag && !protocol.IsSupportedVersion(s.config.Versions, hdr.Version) {
+	if sessionKnown && hdr.VersionFlag && !protocol.IsSupportedVersion(s.config.Versions, hdr.Version) {
 		return nil
 	}
 
@@ -289,7 +284,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 		return err
 	}
 
-	if !ok {
+	if !sessionKnown {
 		version := hdr.Version
 		if !protocol.IsSupportedVersion(s.config.Versions, version) {
 			return errors.New("Server BUG: negotiated version not supported")

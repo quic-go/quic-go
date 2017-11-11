@@ -249,7 +249,7 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
-	hdr, err := wire.ParseHeader(r, protocol.PerspectiveServer, c.version)
+	hdr, err := wire.ParseHeaderSentByServer(r, c.version)
 	if err != nil {
 		utils.Errorf("error parsing packet from %s: %s", remoteAddr.String(), err.Error())
 		// drop this packet if we can't parse the header

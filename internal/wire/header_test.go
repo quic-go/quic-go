@@ -18,29 +18,6 @@ var _ = Describe("Header", func() {
 		versionIETFHeader   = protocol.VersionTLS // a QUIC version taht uses the IETF Header format
 	)
 
-	Context("peeking the connection ID", func() {
-		It("gets the connection ID", func() {
-			b := bytes.NewReader([]byte{0x09, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0x51, 0x30, 0x33, 0x34, 0x01})
-			len := b.Len()
-			connID, err := PeekConnectionID(b)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(connID).To(Equal(protocol.ConnectionID(0x4cfa9f9b668619f6)))
-			Expect(b.Len()).To(Equal(len))
-		})
-
-		It("errors if the header is too short", func() {
-			b := bytes.NewReader([]byte{0x09, 0xf6, 0x19, 0x86, 0x66, 0x9b})
-			_, err := PeekConnectionID(b)
-			Expect(err).To(HaveOccurred())
-		})
-
-		It("errors if the header is empty", func() {
-			b := bytes.NewReader([]byte{})
-			_, err := PeekConnectionID(b)
-			Expect(err).To(HaveOccurred())
-		})
-	})
-
 	Context("parsing", func() {
 		It("parses an IETF draft header, when the QUIC version supports TLS", func() {
 			buf := &bytes.Buffer{}
@@ -52,7 +29,7 @@ var _ = Describe("Header", func() {
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}).writeHeader(buf)
 			Expect(err).ToNot(HaveOccurred())
-			hdr, err := ParseHeader(bytes.NewReader(buf.Bytes()), protocol.PerspectiveClient, versionIETFHeader)
+			hdr, err := ParseHeaderSentByClient(bytes.NewReader(buf.Bytes()))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.KeyPhase).To(BeEquivalentTo(1))
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x42)))
@@ -67,7 +44,7 @@ var _ = Describe("Header", func() {
 				PacketNumber: 0x42,
 			}).writeHeader(buf)
 			Expect(err).ToNot(HaveOccurred())
-			hdr, err := ParseHeader(bytes.NewReader(buf.Bytes()), protocol.PerspectiveClient, protocol.VersionUnknown)
+			hdr, err := ParseHeaderSentByClient(bytes.NewReader(buf.Bytes()))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.Type).To(Equal(protocol.PacketType0RTT))
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x42)))
@@ -84,7 +61,7 @@ var _ = Describe("Header", func() {
 				PacketNumberLen: protocol.PacketNumberLen6,
 			}).writePublicHeader(buf, protocol.PerspectiveClient, versionPublicHeader)
 			Expect(err).ToNot(HaveOccurred())
-			hdr, err := ParseHeader(bytes.NewReader(buf.Bytes()), protocol.PerspectiveClient, protocol.VersionUnknown)
+			hdr, err := ParseHeaderSentByClient(bytes.NewReader(buf.Bytes()))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x1337)))
 			Expect(hdr.Version).To(Equal(versionPublicHeader))
@@ -100,7 +77,7 @@ var _ = Describe("Header", func() {
 				DiversificationNonce: bytes.Repeat([]byte{'f'}, 32),
 			}).writePublicHeader(buf, protocol.PerspectiveServer, versionPublicHeader)
 			Expect(err).ToNot(HaveOccurred())
-			hdr, err := ParseHeader(bytes.NewReader(buf.Bytes()), protocol.PerspectiveServer, versionPublicHeader)
+			hdr, err := ParseHeaderSentByServer(bytes.NewReader(buf.Bytes()), versionPublicHeader)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x1337)))
 			Expect(hdr.DiversificationNonce).To(HaveLen(32))
@@ -117,13 +94,37 @@ var _ = Describe("Header", func() {
 				PacketNumberLen: protocol.PacketNumberLen6,
 			}).writePublicHeader(buf, protocol.PerspectiveClient, versionPublicHeader)
 			Expect(err).ToNot(HaveOccurred())
-			_, err = ParseHeader(bytes.NewReader(buf.Bytes()[0:12]), protocol.PerspectiveClient, protocol.VersionUnknown)
+			_, err = ParseHeaderSentByClient(bytes.NewReader(buf.Bytes()[0:12]))
 			Expect(err).To(MatchError(io.EOF))
 		})
 
 		It("errors when given no data", func() {
-			_, err := ParseHeader(bytes.NewReader([]byte{}), protocol.PerspectiveClient, protocol.VersionUnknown)
+			_, err := ParseHeaderSentByServer(bytes.NewReader([]byte{}), protocol.VersionUnknown)
 			Expect(err).To(MatchError(io.EOF))
+			_, err = ParseHeaderSentByClient(bytes.NewReader([]byte{}))
+			Expect(err).To(MatchError(io.EOF))
+		})
+
+		It("parses a gQUIC Version Negotiation Packet", func() {
+			versions := []protocol.VersionNumber{0x13, 0x37}
+			data := ComposeGQUICVersionNegotiation(0x42, versions)
+			hdr, err := ParseHeaderSentByServer(bytes.NewReader(data), protocol.VersionUnknown)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(hdr.isPublicHeader).To(BeTrue())
+			Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x42)))
+			Expect(hdr.SupportedVersions).To(Equal(versions))
+		})
+
+		It("parses a gQUIC Version Negotiation Packet", func() {
+			versions := []protocol.VersionNumber{0x13, 0x37}
+			data := ComposeVersionNegotiation(0x42, 0x77, versions)
+			hdr, err := ParseHeaderSentByServer(bytes.NewReader(data), protocol.VersionUnknown)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(hdr.isPublicHeader).To(BeFalse())
+			Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x42)))
+			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x77)))
+			Expect(hdr.SupportedVersions).To(Equal(versions))
+			Expect(hdr.Type).To(Equal(protocol.PacketTypeVersionNegotiation))
 		})
 	})
 
@@ -137,7 +138,7 @@ var _ = Describe("Header", func() {
 			}
 			err := hdr.Write(buf, protocol.PerspectiveServer, versionPublicHeader)
 			Expect(err).ToNot(HaveOccurred())
-			_, err = parsePublicHeader(bytes.NewReader(buf.Bytes()), protocol.PerspectiveServer, versionPublicHeader)
+			_, err = parsePublicHeader(bytes.NewReader(buf.Bytes()), protocol.PerspectiveServer)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.isPublicHeader).To(BeTrue())
 		})

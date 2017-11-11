@@ -12,9 +12,6 @@ import (
 )
 
 var (
-	// ErrPacketWithUnknownVersion occurs when a packet with an unknown version is parsed.
-	// This can happen when the server is restarted. The client will send a packet without a version number.
-	ErrPacketWithUnknownVersion          = errors.New("PublicHeader: Received a packet without version number, that we don't know the version for")
 	errResetAndVersionFlagSet            = errors.New("PublicHeader: Reset Flag and Version Flag should not be set at the same time")
 	errReceivedOmittedConnectionID       = qerr.Error(qerr.InvalidPacketHeader, "receiving packets with omitted ConnectionID is not supported")
 	errInvalidConnectionID               = qerr.Error(qerr.InvalidPacketHeader, "connection ID cannot be 0")
@@ -90,7 +87,7 @@ func (h *Header) writePublicHeader(b *bytes.Buffer, pers protocol.Perspective, v
 
 // parsePublicHeader parses a QUIC packet's Public Header.
 // The packetSentBy is the perspective of the peer that sent this PublicHeader, i.e. if we're the server, packetSentBy should be PerspectiveClient.
-func parsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective, version protocol.VersionNumber) (*Header, error) {
+func parsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Header, error) {
 	header := &Header{}
 
 	// First byte
@@ -100,9 +97,6 @@ func parsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective, versi
 	}
 	header.ResetFlag = publicFlagByte&0x02 > 0
 	header.VersionFlag = publicFlagByte&0x01 > 0
-	if version == protocol.VersionUnknown && !(header.VersionFlag || header.ResetFlag) {
-		return nil, ErrPacketWithUnknownVersion
-	}
 
 	// TODO: activate this check once Chrome sends the correct value
 	// see https://github.com/lucas-clemente/quic-go/issues/232
@@ -181,12 +175,11 @@ func parsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective, versi
 			return nil, err
 		}
 		header.Version = protocol.VersionNumber(versionTag)
-		version = header.Version
 	}
 
 	// Packet number
 	if header.hasPacketNumber(packetSentBy) {
-		packetNumber, err := utils.GetByteOrder(version).ReadUintN(b, uint8(header.PacketNumberLen))
+		packetNumber, err := utils.BigEndian.ReadUintN(b, uint8(header.PacketNumberLen))
 		if err != nil {
 			return nil, err
 		}

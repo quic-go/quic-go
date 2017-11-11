@@ -12,7 +12,7 @@ var _ = Describe("Version Negotiation Packets", func() {
 	It("writes for gQUIC", func() {
 		versions := []protocol.VersionNumber{1001, 1003}
 		data := ComposeGQUICVersionNegotiation(0x1337, versions)
-		hdr, err := parsePublicHeader(bytes.NewReader(data), protocol.PerspectiveServer, protocol.VersionUnknown)
+		hdr, err := parsePublicHeader(bytes.NewReader(data), protocol.PerspectiveServer)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.VersionFlag).To(BeTrue())
 		Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x1337)))

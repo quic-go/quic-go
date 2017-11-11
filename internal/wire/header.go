@@ -4,7 +4,6 @@ import (
 	"bytes"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 // Header is the header of a QUIC packet.
@@ -32,59 +31,56 @@ type Header struct {
 	isPublicHeader bool
 }
 
-// ParseHeader parses the header.
-func ParseHeader(b *bytes.Reader, sentBy protocol.Perspective, version protocol.VersionNumber) (*Header, error) {
-	var typeByte uint8
-	if version == protocol.VersionUnknown {
-		var err error
-		typeByte, err = b.ReadByte()
-		if err != nil {
-			return nil, err
-		}
-		_ = b.UnreadByte() // unread the type byte
-	}
-
-	// There are two conditions this is a header in the IETF Header format:
-	// 1. We already know the version (because this is a packet that belongs to an exisitng session).
-	// 2. If this is a new packet, it must have the Long Format, which has the 0x80 bit set (which is always 0 in gQUIC).
-	// There's a third option: This could be a packet with Short Format that arrives after a server lost state.
-	// In that case, we'll try parsing the header as a gQUIC Public Header.
-	if version.UsesTLS() || (version == protocol.VersionUnknown && typeByte&0x80 > 0) {
-		return parseHeader(b, sentBy)
-	}
-
-	// This is a gQUIC Public Header.
-	hdr, err := parsePublicHeader(b, sentBy, version)
+// ParseHeaderSentByServer parses the header for a packet that was sent by the server.
+func ParseHeaderSentByServer(b *bytes.Reader, version protocol.VersionNumber) (*Header, error) {
+	typeByte, err := b.ReadByte()
 	if err != nil {
 		return nil, err
 	}
-	hdr.isPublicHeader = true // save that this is a Public Header, so we can log it correctly later
-	return hdr, nil
+	_ = b.UnreadByte() // unread the type byte
+
+	var isPublicHeader bool
+	// As a client, we know the version of the packet that the server sent, except for Version Negotiation Packets.
+	// Both gQUIC and IETF QUIC Version Negotiation Packets have 0x1 set.
+	if typeByte&0x1 > 0 {
+		// IETF QUIC Version Negotiation Packets are sent with the Long Header (indicated by the 0x80 bit)
+		// gQUIC always has 0x80 unset
+		isPublicHeader = typeByte&0x80 == 0
+	} else {
+		// For all packets that are not Version Negotiation Packets, the client knows the version that this packet was sent with
+		isPublicHeader = !version.UsesTLS()
+	}
+	return parsePacketHeader(b, protocol.PerspectiveServer, isPublicHeader)
 }
 
-// PeekConnectionID parses the connection ID from a QUIC packet's public header, sent by the client.
-// This function should not be called for packets sent by the server, since on these packets the Connection ID could be omitted.
-// If no error occurs, it restores the read position in the bytes.Reader.
-func PeekConnectionID(b *bytes.Reader) (protocol.ConnectionID, error) {
-	var connectionID protocol.ConnectionID
-	if _, err := b.ReadByte(); err != nil {
-		return 0, err
-	}
-	// unread the public flag byte
-	defer b.UnreadByte()
-
-	// Assume that the packet contains the Connection ID.
-	// This is a valid assumption for all packets sent by the client, because the server doesn't allow the ommision of the Connection ID.
-	connID, err := utils.BigEndian.ReadUint64(b)
+// ParseHeaderSentByClient parses the header for a packet that was sent by the client.
+func ParseHeaderSentByClient(b *bytes.Reader) (*Header, error) {
+	typeByte, err := b.ReadByte()
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	connectionID = protocol.ConnectionID(connID)
-	// unread the connection ID
-	for i := 0; i < 8; i++ {
-		b.UnreadByte()
+	_ = b.UnreadByte() // unread the type byte
+
+	// If this is a gQUIC header 0x80 and 0x40 will be set to 0.
+	// If this is an IETF QUIC header there are two options:
+	// * either 0x80 will be 1 (for the Long Header)
+	// * or 0x40 (the Connection ID Flag) will be 0 (for the Short Header), since we don't the client to omit it
+	isPublicHeader := typeByte&0xc0 == 0
+
+	return parsePacketHeader(b, protocol.PerspectiveClient, isPublicHeader)
+}
+
+func parsePacketHeader(b *bytes.Reader, sentBy protocol.Perspective, isPublicHeader bool) (*Header, error) {
+	// This is a gQUIC Public Header.
+	if isPublicHeader {
+		hdr, err := parsePublicHeader(b, sentBy)
+		if err != nil {
+			return nil, err
+		}
+		hdr.isPublicHeader = true // save that this is a Public Header, so we can log it correctly later
+		return hdr, nil
 	}
-	return connectionID, nil
+	return parseHeader(b, sentBy)
 }
 
 // Write writes the Header.
