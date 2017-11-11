@@ -12,7 +12,12 @@ var _ = Describe("Packet Number Generator", func() {
 	var png packetNumberGenerator
 
 	BeforeEach(func() {
-		png = *newPacketNumberGenerator(100)
+		png = *newPacketNumberGenerator(1, 100)
+	})
+
+	It("can be initialized to return any first packet number", func() {
+		png = *newPacketNumberGenerator(12345, 100)
+		Expect(png.Pop()).To(Equal(protocol.PacketNumber(12345)))
 	})
 
 	It("gets 1 as the first packet number", func() {

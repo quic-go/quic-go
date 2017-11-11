@@ -381,10 +381,6 @@ func (h *cryptoSetupClient) SetDiversificationNonce(data []byte) {
 	h.divNonceChan <- data
 }
 
-func (h *cryptoSetupClient) GetNextPacketType() protocol.PacketType {
-	panic("not needed for cryptoSetupServer")
-}
-
 func (h *cryptoSetupClient) sendCHLO() error {
 	h.clientHelloCounter++
 	if h.clientHelloCounter > protocol.MaxClientHellos {

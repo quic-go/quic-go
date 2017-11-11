@@ -14,26 +14,27 @@ import (
 )
 
 type extensionHandlerServer struct {
-	params     *TransportParameters
-	paramsChan chan<- TransportParameters
+	ourParams  *TransportParameters
+	paramsChan chan TransportParameters
 
 	version           protocol.VersionNumber
 	supportedVersions []protocol.VersionNumber
 }
 
 var _ mint.AppExtensionHandler = &extensionHandlerServer{}
+var _ TLSExtensionHandler = &extensionHandlerServer{}
 
-func newExtensionHandlerServer(
+func NewExtensionHandlerServer(
 	params *TransportParameters,
-	paramsChan chan<- TransportParameters,
 	supportedVersions []protocol.VersionNumber,
 	version protocol.VersionNumber,
-) *extensionHandlerServer {
+) TLSExtensionHandler {
+	paramsChan := make(chan TransportParameters, 1)
 	return &extensionHandlerServer{
-		params:            params,
+		ourParams:         params,
 		paramsChan:        paramsChan,
-		version:           version,
 		supportedVersions: supportedVersions,
+		version:           version,
 	}
 }
 
@@ -43,7 +44,7 @@ func (h *extensionHandlerServer) Send(hType mint.HandshakeType, el *mint.Extensi
 	}
 
 	transportParams := append(
-		h.params.getTransportParameters(),
+		h.ourParams.getTransportParameters(),
 		// TODO(#855): generate a real token
 		transportParameter{statelessResetTokenParameterID, bytes.Repeat([]byte{42}, 16)},
 	)
@@ -104,4 +105,8 @@ func (h *extensionHandlerServer) Receive(hType mint.HandshakeType, el *mint.Exte
 	params.MaxStreams = math.MaxUint32
 	h.paramsChan <- *params
 	return nil
+}
+
+func (h *extensionHandlerServer) GetPeerParams() <-chan TransportParameters {
+	return h.paramsChan
 }

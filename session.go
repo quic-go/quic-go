@@ -11,6 +11,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/congestion"
+	"github.com/lucas-clemente/quic-go/internal/crypto"
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -60,7 +61,7 @@ type session struct {
 	conn connection
 
 	streamsMap   *streamsMap
-	cryptoStream streamI
+	cryptoStream cryptoStream
 
 	rttStats *congestion.RTTStats
 
@@ -126,21 +127,48 @@ func newSession(
 	conn connection,
 	v protocol.VersionNumber,
 	connectionID protocol.ConnectionID,
-	sCfg *handshake.ServerConfig,
+	scfg *handshake.ServerConfig,
 	tlsConf *tls.Config,
 	config *Config,
 ) (packetHandler, error) {
+	paramsChan := make(chan handshake.TransportParameters)
+	aeadChanged := make(chan protocol.EncryptionLevel, 2)
 	s := &session{
 		conn:         conn,
 		connectionID: connectionID,
 		perspective:  protocol.PerspectiveServer,
 		version:      v,
 		config:       config,
+		aeadChanged:  aeadChanged,
+		paramsChan:   paramsChan,
 	}
-	return s, s.setup(sCfg, "", tlsConf, v, nil)
+	s.preSetup()
+	transportParams := &handshake.TransportParameters{
+		StreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
+		ConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
+		MaxStreams:                  protocol.MaxIncomingStreams,
+		IdleTimeout:                 s.config.IdleTimeout,
+	}
+	cs, err := newCryptoSetup(
+		s.cryptoStream,
+		s.connectionID,
+		s.conn.RemoteAddr(),
+		s.version,
+		scfg,
+		transportParams,
+		s.config.Versions,
+		s.config.AcceptCookie,
+		paramsChan,
+		aeadChanged,
+	)
+	if err != nil {
+		return nil, err
+	}
+	s.cryptoSetup = cs
+	return s, s.postSetup(1)
 }
 
-// declare this as a variable, such that we can it mock it in the tests
+// declare this as a variable, so that we can it mock it in the tests
 var newClientSession = func(
 	conn connection,
 	hostname string,
@@ -151,27 +179,130 @@ var newClientSession = func(
 	initialVersion protocol.VersionNumber,
 	negotiatedVersions []protocol.VersionNumber, // needed for validation of the GQUIC version negotiaton
 ) (packetHandler, error) {
+	paramsChan := make(chan handshake.TransportParameters)
+	aeadChanged := make(chan protocol.EncryptionLevel, 2)
 	s := &session{
 		conn:         conn,
 		connectionID: connectionID,
 		perspective:  protocol.PerspectiveClient,
 		version:      v,
 		config:       config,
+		aeadChanged:  aeadChanged,
+		paramsChan:   paramsChan,
 	}
-	return s, s.setup(nil, hostname, tlsConf, initialVersion, negotiatedVersions)
+	s.preSetup()
+	transportParams := &handshake.TransportParameters{
+		StreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
+		ConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
+		MaxStreams:                  protocol.MaxIncomingStreams,
+		IdleTimeout:                 s.config.IdleTimeout,
+		OmitConnectionID:            s.config.RequestConnectionIDOmission,
+	}
+	cs, err := newCryptoSetupClient(
+		s.cryptoStream,
+		hostname,
+		s.connectionID,
+		s.version,
+		tlsConf,
+		transportParams,
+		paramsChan,
+		aeadChanged,
+		initialVersion,
+		negotiatedVersions,
+	)
+	if err != nil {
+		return nil, err
+	}
+	s.cryptoSetup = cs
+	return s, s.postSetup(1)
 }
 
-func (s *session) setup(
-	scfg *handshake.ServerConfig,
-	hostname string,
-	tlsConf *tls.Config,
-	initialVersion protocol.VersionNumber,
-	negotiatedVersions []protocol.VersionNumber,
-) error {
+func newTLSServerSession(
+	conn connection,
+	connectionID protocol.ConnectionID,
+	initialPacketNumber protocol.PacketNumber,
+	config *Config,
+	tls handshake.MintTLS,
+	cryptoStreamConn *handshake.CryptoStreamConn,
+	nullAEAD crypto.AEAD,
+	peerParams *handshake.TransportParameters,
+	v protocol.VersionNumber,
+) (packetHandler, error) {
 	aeadChanged := make(chan protocol.EncryptionLevel, 2)
-	paramsChan := make(chan handshake.TransportParameters)
-	s.aeadChanged = aeadChanged
-	s.paramsChan = paramsChan
+	s := &session{
+		conn:         conn,
+		config:       config,
+		connectionID: connectionID,
+		perspective:  protocol.PerspectiveServer,
+		version:      v,
+		aeadChanged:  aeadChanged,
+	}
+	s.preSetup()
+	s.cryptoSetup = handshake.NewCryptoSetupTLSServer(
+		tls,
+		cryptoStreamConn,
+		nullAEAD,
+		aeadChanged,
+		v,
+	)
+	if err := s.postSetup(initialPacketNumber); err != nil {
+		return nil, err
+	}
+	s.peerParams = peerParams
+	s.processTransportParameters(peerParams)
+	s.unpacker = &packetUnpacker{aead: s.cryptoSetup, version: s.version}
+	return s, nil
+}
+
+// declare this as a variable, such that we can it mock it in the tests
+var newTLSClientSession = func(
+	conn connection,
+	hostname string,
+	v protocol.VersionNumber,
+	connectionID protocol.ConnectionID,
+	config *Config,
+	tls handshake.MintTLS,
+	paramsChan <-chan handshake.TransportParameters,
+	initialPacketNumber protocol.PacketNumber,
+) (packetHandler, error) {
+	aeadChanged := make(chan protocol.EncryptionLevel, 2)
+	s := &session{
+		conn:         conn,
+		config:       config,
+		connectionID: connectionID,
+		perspective:  protocol.PerspectiveClient,
+		version:      v,
+		aeadChanged:  aeadChanged,
+		paramsChan:   paramsChan,
+	}
+	s.preSetup()
+	tls.SetCryptoStream(s.cryptoStream)
+	cs, err := handshake.NewCryptoSetupTLSClient(
+		s.cryptoStream,
+		s.connectionID,
+		hostname,
+		aeadChanged,
+		tls,
+		v,
+	)
+	if err != nil {
+		return nil, err
+	}
+	s.cryptoSetup = cs
+	return s, s.postSetup(initialPacketNumber)
+}
+
+func (s *session) preSetup() {
+	s.rttStats = &congestion.RTTStats{}
+	s.connFlowController = flowcontrol.NewConnectionFlowController(
+		protocol.ReceiveConnectionFlowControlWindow,
+		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),
+		s.rttStats,
+	)
+	s.cryptoStream = s.newStream(s.version.CryptoStreamID()).(cryptoStream)
+}
+
+func (s *session) postSetup(initialPacketNumber protocol.PacketNumber) error {
 	s.handshakeChan = make(chan handshakeEvent, 3)
 	s.handshakeCompleteChan = make(chan error, 1)
 	s.receivedPackets = make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets)
@@ -185,91 +316,14 @@ func (s *session) setup(
 	s.lastNetworkActivityTime = now
 	s.sessionCreationTime = now
 
-	s.rttStats = &congestion.RTTStats{}
-	transportParams := &handshake.TransportParameters{
-		StreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
-		ConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
-		MaxStreams:                  protocol.MaxIncomingStreams,
-		IdleTimeout:                 s.config.IdleTimeout,
-	}
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats)
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.version)
-	s.connFlowController = flowcontrol.NewConnectionFlowController(
-		protocol.ReceiveConnectionFlowControlWindow,
-		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),
-		s.rttStats,
-	)
+
 	s.streamsMap = newStreamsMap(s.newStream, s.perspective, s.version)
-	s.cryptoStream = s.newStream(s.version.CryptoStreamID())
 	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.connFlowController)
 
-	var err error
-	if s.perspective == protocol.PerspectiveServer {
-		verifySourceAddr := func(clientAddr net.Addr, cookie *Cookie) bool {
-			return s.config.AcceptCookie(clientAddr, cookie)
-		}
-		if s.version.UsesTLS() {
-			s.cryptoSetup, err = handshake.NewCryptoSetupTLSServer(
-				s.cryptoStream,
-				s.connectionID,
-				tlsConf,
-				s.conn.RemoteAddr(),
-				transportParams,
-				paramsChan,
-				aeadChanged,
-				verifySourceAddr,
-				s.config.Versions,
-				s.version,
-			)
-		} else {
-			s.cryptoSetup, err = newCryptoSetup(
-				s.cryptoStream,
-				s.connectionID,
-				s.conn.RemoteAddr(),
-				s.version,
-				scfg,
-				transportParams,
-				s.config.Versions,
-				verifySourceAddr,
-				paramsChan,
-				aeadChanged,
-			)
-		}
-	} else {
-		transportParams.OmitConnectionID = s.config.RequestConnectionIDOmission
-		if s.version.UsesTLS() {
-			s.cryptoSetup, err = handshake.NewCryptoSetupTLSClient(
-				s.cryptoStream,
-				s.connectionID,
-				hostname,
-				tlsConf,
-				transportParams,
-				paramsChan,
-				aeadChanged,
-				initialVersion,
-				s.config.Versions,
-				s.version,
-			)
-		} else {
-			s.cryptoSetup, err = newCryptoSetupClient(
-				s.cryptoStream,
-				hostname,
-				s.connectionID,
-				s.version,
-				tlsConf,
-				transportParams,
-				paramsChan,
-				aeadChanged,
-				initialVersion,
-				negotiatedVersions,
-			)
-		}
-	}
-	if err != nil {
-		return err
-	}
-
 	s.packer = newPacketPacker(s.connectionID,
+		initialPacketNumber,
 		s.cryptoSetup,
 		s.streamFramer,
 		s.perspective,
@@ -604,7 +658,7 @@ func (s *session) handleCloseError(closeErr closeError) error {
 	s.cryptoStream.Cancel(quicErr)
 	s.streamsMap.CloseWithError(quicErr)
 
-	if closeErr.err == errCloseSessionForNewVersion {
+	if closeErr.err == errCloseSessionForNewVersion || closeErr.err == handshake.ErrCloseSessionForRetry {
 		return nil
 	}
 
@@ -891,6 +945,10 @@ func (s *session) RemoteAddr() net.Addr {
 
 func (s *session) handshakeStatus() <-chan handshakeEvent {
 	return s.handshakeChan
+}
+
+func (s *session) getCryptoStream() cryptoStream {
+	return s.cryptoStream
 }
 
 func (s *session) GetVersion() protocol.VersionNumber {

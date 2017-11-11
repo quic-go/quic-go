@@ -1,7 +1,6 @@
 package handshake
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 
@@ -10,7 +9,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/mocks/crypto"
 	"github.com/lucas-clemente/quic-go/internal/mocks/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/testdata"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -23,52 +21,33 @@ func mockKeyDerivation(crypto.TLSExporter, protocol.Perspective) (crypto.AEAD, e
 var _ = Describe("TLS Crypto Setup", func() {
 	var (
 		cs          *cryptoSetupTLS
-		paramsChan  chan TransportParameters
 		aeadChanged chan protocol.EncryptionLevel
 	)
 
 	BeforeEach(func() {
-		paramsChan = make(chan TransportParameters)
 		aeadChanged = make(chan protocol.EncryptionLevel, 2)
-		csInt, err := NewCryptoSetupTLSServer(
+		cs = NewCryptoSetupTLSServer(
 			nil,
-			1,
-			testdata.GetTLSConfig(),
-			nil,
-			&TransportParameters{},
-			paramsChan,
+			NewCryptoStreamConn(nil),
+			nil, // AEAD
 			aeadChanged,
-			nil,
-			nil,
 			protocol.VersionTLS,
-		)
-		Expect(err).ToNot(HaveOccurred())
-		cs = csInt.(*cryptoSetupTLS)
+		).(*cryptoSetupTLS)
 		cs.nullAEAD = mockcrypto.NewMockAEAD(mockCtrl)
 	})
 
 	It("errors when the handshake fails", func() {
 		alert := mint.AlertBadRecordMAC
-		cs.tls = mockhandshake.NewMockmintTLS(mockCtrl)
-		cs.tls.(*mockhandshake.MockmintTLS).EXPECT().Handshake().Return(alert)
+		cs.tls = mockhandshake.NewMockMintTLS(mockCtrl)
+		cs.tls.(*mockhandshake.MockMintTLS).EXPECT().Handshake().Return(alert)
 		err := cs.HandleCryptoStream()
 		Expect(err).To(MatchError(fmt.Errorf("TLS handshake error: %s (Alert %d)", alert.String(), alert)))
 	})
 
-	It("continues shaking hands when mint says that it would block", func() {
-		cs.conn.stream = &bytes.Buffer{}
-		cs.tls = mockhandshake.NewMockmintTLS(mockCtrl)
-		cs.tls.(*mockhandshake.MockmintTLS).EXPECT().Handshake().Return(mint.AlertWouldBlock)
-		cs.tls.(*mockhandshake.MockmintTLS).EXPECT().State().Return(mint.ConnectionState{})
-		cs.tls.(*mockhandshake.MockmintTLS).EXPECT().Handshake().Return(mint.AlertNoAlert)
-		cs.keyDerivation = mockKeyDerivation
-		err := cs.HandleCryptoStream()
-		Expect(err).ToNot(HaveOccurred())
-	})
-
 	It("derives keys", func() {
-		cs.tls = mockhandshake.NewMockmintTLS(mockCtrl)
-		cs.tls.(*mockhandshake.MockmintTLS).EXPECT().Handshake().Return(mint.AlertNoAlert)
+		cs.tls = mockhandshake.NewMockMintTLS(mockCtrl)
+		cs.tls.(*mockhandshake.MockMintTLS).EXPECT().Handshake().Return(mint.AlertNoAlert)
+		cs.tls.(*mockhandshake.MockMintTLS).EXPECT().State().Return(mint.StateServerConnected)
 		cs.keyDerivation = mockKeyDerivation
 		err := cs.HandleCryptoStream()
 		Expect(err).ToNot(HaveOccurred())
@@ -76,64 +55,22 @@ var _ = Describe("TLS Crypto Setup", func() {
 		Expect(aeadChanged).To(BeClosed())
 	})
 
-	Context("determining the packet type", func() {
-		Context("for the client", func() {
-			var csClient *cryptoSetupTLS
-
-			BeforeEach(func() {
-				csInt, err := NewCryptoSetupTLSClient(
-					nil,
-					1,
-					"quic.clemente.io",
-					testdata.GetTLSConfig(),
-					&TransportParameters{},
-					paramsChan,
-					aeadChanged,
-					protocol.VersionTLS,
-					[]protocol.VersionNumber{protocol.VersionTLS},
-					protocol.VersionTLS,
-				)
-				Expect(err).ToNot(HaveOccurred())
-				csClient = csInt.(*cryptoSetupTLS)
-				csClient.tls = mockhandshake.NewMockmintTLS(mockCtrl)
-			})
-
-			It("sends a Client Initial first", func() {
-				Expect(csClient.GetNextPacketType()).To(Equal(protocol.PacketTypeInitial))
-			})
-
-			It("sends a Handshake packet after the server sent a Server Hello", func() {
-				csClient.tls.(*mockhandshake.MockmintTLS).EXPECT().State().Return(mint.ConnectionState{HandshakeState: "ClientStateWaitEE"})
-				err := csClient.determineNextPacketType()
-				Expect(err).ToNot(HaveOccurred())
-			})
-		})
-
-		Context("for the server", func() {
-			BeforeEach(func() {
-				cs.tls = mockhandshake.NewMockmintTLS(mockCtrl)
-			})
-
-			It("sends a Stateless Retry packet", func() {
-				cs.tls.(*mockhandshake.MockmintTLS).EXPECT().State().Return(mint.ConnectionState{HandshakeState: "ServerStateStart"})
-				err := cs.determineNextPacketType()
-				Expect(err).ToNot(HaveOccurred())
-				Expect(cs.GetNextPacketType()).To(Equal(protocol.PacketTypeRetry))
-			})
-
-			It("sends Handshake packet", func() {
-				cs.tls.(*mockhandshake.MockmintTLS).EXPECT().State().Return(mint.ConnectionState{HandshakeState: "ServerStateWaitFinished"})
-				err := cs.determineNextPacketType()
-				Expect(err).ToNot(HaveOccurred())
-				Expect(cs.GetNextPacketType()).To(Equal(protocol.PacketTypeHandshake))
-			})
-		})
+	It("handshakes until it is connected", func() {
+		cs.tls = mockhandshake.NewMockMintTLS(mockCtrl)
+		cs.tls.(*mockhandshake.MockMintTLS).EXPECT().Handshake().Return(mint.AlertNoAlert).Times(10)
+		cs.tls.(*mockhandshake.MockMintTLS).EXPECT().State().Return(mint.StateServerNegotiated).Times(9)
+		cs.tls.(*mockhandshake.MockMintTLS).EXPECT().State().Return(mint.StateServerConnected)
+		cs.keyDerivation = mockKeyDerivation
+		err := cs.HandleCryptoStream()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(aeadChanged).To(Receive())
 	})
 
 	Context("escalating crypto", func() {
 		doHandshake := func() {
-			cs.tls = mockhandshake.NewMockmintTLS(mockCtrl)
-			cs.tls.(*mockhandshake.MockmintTLS).EXPECT().Handshake().Return(mint.AlertNoAlert)
+			cs.tls = mockhandshake.NewMockMintTLS(mockCtrl)
+			cs.tls.(*mockhandshake.MockMintTLS).EXPECT().Handshake().Return(mint.AlertNoAlert)
+			cs.tls.(*mockhandshake.MockMintTLS).EXPECT().State().Return(mint.StateServerConnected)
 			cs.keyDerivation = mockKeyDerivation
 			err := cs.HandleCryptoStream()
 			Expect(err).ToNot(HaveOccurred())
@@ -239,4 +176,34 @@ var _ = Describe("TLS Crypto Setup", func() {
 			})
 		})
 	})
+})
+
+var _ = Describe("TLS Crypto Setup, for the client", func() {
+	var (
+		cs          *cryptoSetupTLS
+		aeadChanged chan protocol.EncryptionLevel
+	)
+
+	BeforeEach(func() {
+		aeadChanged = make(chan protocol.EncryptionLevel, 2)
+		csInt, err := NewCryptoSetupTLSClient(
+			nil,
+			0,
+			"quic.clemente.io",
+			aeadChanged,
+			nil, // mintTLS
+			protocol.VersionTLS,
+		)
+		Expect(err).ToNot(HaveOccurred())
+		cs = csInt.(*cryptoSetupTLS)
+	})
+
+	It("returns when a retry is performed", func() {
+		cs.tls = mockhandshake.NewMockMintTLS(mockCtrl)
+		cs.tls.(*mockhandshake.MockMintTLS).EXPECT().Handshake().Return(mint.AlertNoAlert)
+		cs.tls.(*mockhandshake.MockMintTLS).EXPECT().State().Return(mint.StateClientStart)
+		err := cs.HandleCryptoStream()
+		Expect(err).To(MatchError(ErrCloseSessionForRetry))
+	})
+
 })
