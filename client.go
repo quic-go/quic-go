@@ -22,8 +22,6 @@ type client struct {
 	conn     connection
 	hostname string
 
-	handshakeChan <-chan handshakeEvent
-
 	versionNegotiationChan           chan struct{} // the versionNegotiationChan is closed as soon as the server accepted the suggested version
 	versionNegotiated                bool          // has version negotiation completed yet
 	receivedVersionNegotiationPacket bool
@@ -210,7 +208,7 @@ func (c *client) establishSecureConnection() error {
 	select {
 	case <-errorChan:
 		return runErr
-	case ev := <-c.handshakeChan:
+	case ev := <-c.session.handshakeStatus():
 		if ev.err != nil {
 			return ev.err
 		}
@@ -352,7 +350,7 @@ func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
 func (c *client) createNewSession(initialVersion protocol.VersionNumber, negotiatedVersions []protocol.VersionNumber) error {
 	var err error
 	utils.Debugf("createNewSession with initial version %s", initialVersion)
-	c.session, c.handshakeChan, err = newClientSession(
+	c.session, err = newClientSession(
 		c.conn,
 		c.hostname,
 		c.version,

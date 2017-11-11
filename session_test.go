@@ -145,12 +145,11 @@ func areSessionsRunning() bool {
 
 var _ = Describe("Session", func() {
 	var (
-		sess          *session
-		scfg          *handshake.ServerConfig
-		mconn         *mockConnection
-		cryptoSetup   *mockCryptoSetup
-		handshakeChan <-chan handshakeEvent
-		aeadChanged   chan<- protocol.EncryptionLevel
+		sess        *session
+		scfg        *handshake.ServerConfig
+		mconn       *mockConnection
+		cryptoSetup *mockCryptoSetup
+		aeadChanged chan<- protocol.EncryptionLevel
 	)
 
 	BeforeEach(func() {
@@ -180,7 +179,7 @@ var _ = Describe("Session", func() {
 		scfg, err = handshake.NewServerConfig(kex, certChain)
 		Expect(err).NotTo(HaveOccurred())
 		var pSess Session
-		pSess, handshakeChan, err = newSession(
+		pSess, err = newSession(
 			mconn,
 			protocol.Version39,
 			0,
@@ -229,7 +228,7 @@ var _ = Describe("Session", func() {
 				paramCookie = cookie
 				return false
 			}
-			pSess, _, err := newSession(
+			pSess, err := newSession(
 				mconn,
 				protocol.Version39,
 				0,
@@ -1219,7 +1218,7 @@ var _ = Describe("Session", func() {
 	It("send a handshake event on the handshakeChan when the AEAD changes to secure", func(done Done) {
 		go sess.run()
 		aeadChanged <- protocol.EncryptionSecure
-		Eventually(handshakeChan).Should(Receive(&handshakeEvent{encLevel: protocol.EncryptionSecure}))
+		Eventually(sess.handshakeStatus()).Should(Receive(&handshakeEvent{encLevel: protocol.EncryptionSecure}))
 		Expect(sess.Close(nil)).To(Succeed())
 		close(done)
 	})
@@ -1227,7 +1226,7 @@ var _ = Describe("Session", func() {
 	It("send a handshake event on the handshakeChan when the AEAD changes to forward-secure", func(done Done) {
 		go sess.run()
 		aeadChanged <- protocol.EncryptionForwardSecure
-		Eventually(handshakeChan).Should(Receive(&handshakeEvent{encLevel: protocol.EncryptionForwardSecure}))
+		Eventually(sess.handshakeStatus()).Should(Receive(&handshakeEvent{encLevel: protocol.EncryptionForwardSecure}))
 		Expect(sess.Close(nil)).To(Succeed())
 		close(done)
 	})
@@ -1235,7 +1234,7 @@ var _ = Describe("Session", func() {
 	It("closes the handshakeChan when the handshake completes", func(done Done) {
 		go sess.run()
 		close(aeadChanged)
-		Eventually(handshakeChan).Should(BeClosed())
+		Eventually(sess.handshakeStatus()).Should(BeClosed())
 		Expect(sess.Close(nil)).To(Succeed())
 		close(done)
 	})
@@ -1244,7 +1243,7 @@ var _ = Describe("Session", func() {
 		testErr := errors.New("handshake error")
 		go sess.run()
 		Expect(sess.Close(nil)).To(Succeed())
-		Expect(handshakeChan).To(Receive(&handshakeEvent{err: testErr}))
+		Expect(sess.handshakeStatus()).To(Receive(&handshakeEvent{err: testErr}))
 		close(done)
 	})
 
@@ -1524,7 +1523,7 @@ var _ = Describe("Client Session", func() {
 		}
 
 		mconn = newMockConnection()
-		sessP, _, err := newClientSession(
+		sessP, err := newClientSession(
 			mconn,
 			"hostname",
 			protocol.Version39,

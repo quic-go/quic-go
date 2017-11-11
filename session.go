@@ -101,7 +101,7 @@ type session struct {
 	// handshakeChan receives handshake events and is closed as soon the handshake completes
 	// the receiving end of this channel is passed to the creator of the session
 	// it receives at most 3 handshake events: 2 when the encryption level changes, and one error
-	handshakeChan chan<- handshakeEvent
+	handshakeChan chan handshakeEvent
 
 	lastRcvdPacketNumber protocol.PacketNumber
 	// Used to calculate the next packet number from the truncated wire
@@ -129,7 +129,7 @@ func newSession(
 	sCfg *handshake.ServerConfig,
 	tlsConf *tls.Config,
 	config *Config,
-) (packetHandler, <-chan handshakeEvent, error) {
+) (packetHandler, error) {
 	s := &session{
 		conn:         conn,
 		connectionID: connectionID,
@@ -137,7 +137,7 @@ func newSession(
 		version:      v,
 		config:       config,
 	}
-	return s.setup(sCfg, "", tlsConf, v, nil)
+	return s, s.setup(sCfg, "", tlsConf, v, nil)
 }
 
 // declare this as a variable, such that we can it mock it in the tests
@@ -150,7 +150,7 @@ var newClientSession = func(
 	config *Config,
 	initialVersion protocol.VersionNumber,
 	negotiatedVersions []protocol.VersionNumber, // needed for validation of the GQUIC version negotiaton
-) (packetHandler, <-chan handshakeEvent, error) {
+) (packetHandler, error) {
 	s := &session{
 		conn:         conn,
 		connectionID: connectionID,
@@ -158,7 +158,7 @@ var newClientSession = func(
 		version:      v,
 		config:       config,
 	}
-	return s.setup(nil, hostname, tlsConf, initialVersion, negotiatedVersions)
+	return s, s.setup(nil, hostname, tlsConf, initialVersion, negotiatedVersions)
 }
 
 func (s *session) setup(
@@ -167,13 +167,12 @@ func (s *session) setup(
 	tlsConf *tls.Config,
 	initialVersion protocol.VersionNumber,
 	negotiatedVersions []protocol.VersionNumber,
-) (packetHandler, <-chan handshakeEvent, error) {
+) error {
 	aeadChanged := make(chan protocol.EncryptionLevel, 2)
 	paramsChan := make(chan handshake.TransportParameters)
 	s.aeadChanged = aeadChanged
 	s.paramsChan = paramsChan
-	handshakeChan := make(chan handshakeEvent, 3)
-	s.handshakeChan = handshakeChan
+	s.handshakeChan = make(chan handshakeEvent, 3)
 	s.handshakeCompleteChan = make(chan error, 1)
 	s.receivedPackets = make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets)
 	s.closeChan = make(chan closeError, 1)
@@ -267,7 +266,7 @@ func (s *session) setup(
 		}
 	}
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
 
 	s.packer = newPacketPacker(s.connectionID,
@@ -277,8 +276,7 @@ func (s *session) setup(
 		s.version,
 	)
 	s.unpacker = &packetUnpacker{aead: s.cryptoSetup, version: s.version}
-
-	return s, handshakeChan, nil
+	return nil
 }
 
 // run the session main loop
@@ -889,6 +887,10 @@ func (s *session) LocalAddr() net.Addr {
 // RemoteAddr returns the net.Addr of the client
 func (s *session) RemoteAddr() net.Addr {
 	return s.conn.RemoteAddr()
+}
+
+func (s *session) handshakeStatus() <-chan handshakeEvent {
+	return s.handshakeChan
 }
 
 func (s *session) GetVersion() protocol.VersionNumber {

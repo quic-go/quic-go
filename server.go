@@ -19,6 +19,7 @@ import (
 // packetHandler handles packets
 type packetHandler interface {
 	Session
+	handshakeStatus() <-chan handshakeEvent
 	handlePacket(*receivedPacket)
 	GetVersion() protocol.VersionNumber
 	run() error
@@ -43,7 +44,7 @@ type server struct {
 	sessionQueue chan Session
 	errorChan    chan struct{}
 
-	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, tlsConf *tls.Config, config *Config) (packetHandler, <-chan handshakeEvent, error)
+	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, tlsConf *tls.Config, config *Config) (packetHandler, error)
 }
 
 var _ Listener = &server{}
@@ -291,8 +292,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 		}
 
 		utils.Infof("Serving new connection: %x, version %s from %v", hdr.ConnectionID, version, remoteAddr)
-		var handshakeChan <-chan handshakeEvent
-		session, handshakeChan, err = s.newSession(
+		session, err = s.newSession(
 			&conn{pconn: pconn, currentAddr: remoteAddr},
 			version,
 			hdr.ConnectionID,
@@ -315,7 +315,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 
 		go func() {
 			for {
-				ev := <-handshakeChan
+				ev := <-session.handshakeStatus()
 				if ev.err != nil {
 					return
 				}

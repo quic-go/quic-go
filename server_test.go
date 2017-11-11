@@ -60,12 +60,13 @@ func (s *mockSession) closeRemote(e error) {
 func (s *mockSession) OpenStream() (Stream, error) {
 	return &stream{streamID: 1337}, nil
 }
-func (s *mockSession) AcceptStream() (Stream, error)    { panic("not implemented") }
-func (s *mockSession) OpenStreamSync() (Stream, error)  { panic("not implemented") }
-func (s *mockSession) LocalAddr() net.Addr              { panic("not implemented") }
-func (s *mockSession) RemoteAddr() net.Addr             { panic("not implemented") }
-func (*mockSession) Context() context.Context           { panic("not implemented") }
-func (*mockSession) GetVersion() protocol.VersionNumber { return protocol.VersionWhatever }
+func (s *mockSession) AcceptStream() (Stream, error)          { panic("not implemented") }
+func (s *mockSession) OpenStreamSync() (Stream, error)        { panic("not implemented") }
+func (s *mockSession) LocalAddr() net.Addr                    { panic("not implemented") }
+func (s *mockSession) RemoteAddr() net.Addr                   { panic("not implemented") }
+func (*mockSession) Context() context.Context                 { panic("not implemented") }
+func (*mockSession) GetVersion() protocol.VersionNumber       { return protocol.VersionWhatever }
+func (s *mockSession) handshakeStatus() <-chan handshakeEvent { return s.handshakeChan }
 
 var _ Session = &mockSession{}
 var _ NonFWSession = &mockSession{}
@@ -77,14 +78,14 @@ func newMockSession(
 	_ *handshake.ServerConfig,
 	_ *tls.Config,
 	_ *Config,
-) (packetHandler, <-chan handshakeEvent, error) {
+) (packetHandler, error) {
 	s := mockSession{
 		connectionID:      connectionID,
 		handshakeChan:     make(chan handshakeEvent),
 		handshakeComplete: make(chan error),
 		stopRunLoop:       make(chan struct{}),
 	}
-	return &s, s.handshakeChan, nil
+	return &s, nil
 }
 
 var _ = Describe("Server", func() {
@@ -217,7 +218,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("closes sessions and the connection when Close is called", func() {
-			session, _, _ := newMockSession(nil, 0, 0, nil, nil, nil)
+			session, _ := newMockSession(nil, 0, 0, nil, nil, nil)
 			serv.sessions[1] = session
 			err := serv.Close()
 			Expect(err).NotTo(HaveOccurred())
@@ -267,7 +268,7 @@ var _ = Describe("Server", func() {
 		}, 0.5)
 
 		It("closes all sessions when encountering a connection error", func() {
-			session, _, _ := newMockSession(nil, 0, 0, nil, nil, nil)
+			session, _ := newMockSession(nil, 0, 0, nil, nil, nil)
 			serv.sessions[0x12345] = session
 			Expect(serv.sessions[0x12345].(*mockSession).closed).To(BeFalse())
 			testErr := errors.New("connection error")
