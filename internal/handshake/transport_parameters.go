@@ -150,7 +150,7 @@ func (p *TransportParameters) getTransportParameters() []transportParameter {
 	// TODO: use a reasonable value here
 	binary.BigEndian.PutUint32(initialMaxStreamID, math.MaxUint32)
 	idleTimeout := make([]byte, 2)
-	binary.BigEndian.PutUint16(idleTimeout, uint16(p.IdleTimeout))
+	binary.BigEndian.PutUint16(idleTimeout, uint16(p.IdleTimeout/time.Second))
 	maxPacketSize := make([]byte, 2)
 	binary.BigEndian.PutUint16(maxPacketSize, uint16(protocol.MaxReceivePacketSize))
 	params := []transportParameter{
