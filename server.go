@@ -280,7 +280,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	}
 	// send an IETF draft style Version Negotiation Packet, if the client sent an unsupported version with an IETF draft style header
 	if hdr.Type == protocol.PacketTypeInitial && !protocol.IsSupportedVersion(s.config.Versions, hdr.Version) {
-		_, err := pconn.WriteTo(wire.ComposeVersionNegotiation(hdr.ConnectionID, hdr.PacketNumber, s.config.Versions), remoteAddr)
+		_, err := pconn.WriteTo(wire.ComposeVersionNegotiation(hdr.ConnectionID, hdr.PacketNumber, hdr.Version, s.config.Versions), remoteAddr)
 		return err
 	}
 

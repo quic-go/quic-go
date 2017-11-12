@@ -26,13 +26,19 @@ func ComposeGQUICVersionNegotiation(connID protocol.ConnectionID, versions []pro
 }
 
 // ComposeVersionNegotiation composes a Version Negotiation according to the IETF draft
-func ComposeVersionNegotiation(connID protocol.ConnectionID, pn protocol.PacketNumber, versions []protocol.VersionNumber) []byte {
+func ComposeVersionNegotiation(
+	connID protocol.ConnectionID,
+	pn protocol.PacketNumber,
+	versionOffered protocol.VersionNumber,
+	versions []protocol.VersionNumber,
+) []byte {
 	fullReply := &bytes.Buffer{}
 	ph := Header{
 		IsLongHeader: true,
 		Type:         protocol.PacketTypeVersionNegotiation,
 		ConnectionID: connID,
 		PacketNumber: pn,
+		Version:      versionOffered,
 	}
 	if err := ph.writeHeader(fullReply); err != nil {
 		utils.Errorf("error composing version negotiation packet: %s", err.Error())
