@@ -31,8 +31,8 @@ const (
 	PacketTypeInitial PacketType = 2
 	// PacketTypeRetry is the packet type of a Retry packet
 	PacketTypeRetry PacketType = 3
-	// PacketTypeCleartext is the packet type of a Cleartext packet
-	PacketTypeCleartext PacketType = 4
+	// PacketTypeHandshake is the packet type of a Cleartext packet
+	PacketTypeHandshake PacketType = 4
 	// PacketType0RTT is the packet type of a 0-RTT packet
 	PacketType0RTT PacketType = 5
 )
