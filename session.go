@@ -469,10 +469,10 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		return err
 	}
 
-	return s.handleFrames(packet.frames)
+	return s.handleFrames(packet.frames, packet.encryptionLevel)
 }
 
-func (s *session) handleFrames(fs []wire.Frame) error {
+func (s *session) handleFrames(fs []wire.Frame, encLevel protocol.EncryptionLevel) error {
 	for _, ff := range fs {
 		var err error
 		wire.LogFrame(ff, false)
@@ -480,7 +480,7 @@ func (s *session) handleFrames(fs []wire.Frame) error {
 		case *wire.StreamFrame:
 			err = s.handleStreamFrame(frame)
 		case *wire.AckFrame:
-			err = s.handleAckFrame(frame)
+			err = s.handleAckFrame(frame, encLevel)
 		case *wire.ConnectionCloseFrame:
 			s.closeRemote(qerr.Error(frame.ErrorCode, frame.ReasonPhrase))
 		case *wire.GoawayFrame:
@@ -572,8 +572,8 @@ func (s *session) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
 	return str.RegisterRemoteError(fmt.Errorf("RST_STREAM received with code %d", frame.ErrorCode), frame.ByteOffset)
 }
 
-func (s *session) handleAckFrame(frame *wire.AckFrame) error {
-	return s.sentPacketHandler.ReceivedAck(frame, s.lastRcvdPacketNumber, s.lastNetworkActivityTime)
+func (s *session) handleAckFrame(frame *wire.AckFrame, encLevel protocol.EncryptionLevel) error {
+	return s.sentPacketHandler.ReceivedAck(frame, s.lastRcvdPacketNumber, encLevel, s.lastNetworkActivityTime)
 }
 
 func (s *session) closeLocal(e error) {
