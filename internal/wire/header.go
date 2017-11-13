@@ -41,13 +41,14 @@ func ParseHeaderSentByServer(b *bytes.Reader, version protocol.VersionNumber) (*
 
 	var isPublicHeader bool
 	// As a client, we know the version of the packet that the server sent, except for Version Negotiation Packets.
-	// Both gQUIC and IETF QUIC Version Negotiation Packets have 0x1 set.
-	if typeByte&0x1 > 0 {
+	if typeByte == 0x81 { // IETF draft Version Negotiation Packet
+		isPublicHeader = false
+	} else if typeByte&0xcf == 0x9 { // gQUIC Version Negotiation Packet
 		// IETF QUIC Version Negotiation Packets are sent with the Long Header (indicated by the 0x80 bit)
 		// gQUIC always has 0x80 unset
-		isPublicHeader = typeByte&0x80 == 0
-	} else {
-		// For all packets that are not Version Negotiation Packets, the client knows the version that this packet was sent with
+		isPublicHeader = true
+	} else { // not a Version Negotiation Packet
+		// the client knows the version that this packet was sent with
 		isPublicHeader = !version.UsesTLS()
 	}
 	return parsePacketHeader(b, protocol.PerspectiveServer, isPublicHeader)
