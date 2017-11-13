@@ -102,7 +102,7 @@ var _ = Describe("TLS Crypto Setup", func() {
 				Expect(csClient.GetNextPacketType()).To(Equal(protocol.PacketTypeInitial))
 			})
 
-			It("sends a Client Cleartext after the server sent a Server Hello", func() {
+			It("sends a Handshake packet after the server sent a Server Hello", func() {
 				csClient.tls.(*mockhandshake.MockmintTLS).EXPECT().State().Return(mint.ConnectionState{HandshakeState: "ClientStateWaitEE"})
 				err := csClient.determineNextPacketType()
 				Expect(err).ToNot(HaveOccurred())
@@ -121,11 +121,11 @@ var _ = Describe("TLS Crypto Setup", func() {
 				Expect(cs.GetNextPacketType()).To(Equal(protocol.PacketTypeRetry))
 			})
 
-			It("sends a Server Cleartext packet", func() {
+			It("sends Handshake packet", func() {
 				cs.tls.(*mockhandshake.MockmintTLS).EXPECT().State().Return(mint.ConnectionState{HandshakeState: "ServerStateWaitFinished"})
 				err := cs.determineNextPacketType()
 				Expect(err).ToNot(HaveOccurred())
-				Expect(cs.GetNextPacketType()).To(Equal(protocol.PacketTypeCleartext))
+				Expect(cs.GetNextPacketType()).To(Equal(protocol.PacketTypeHandshake))
 			})
 		})
 	})
