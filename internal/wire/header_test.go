@@ -115,14 +115,15 @@ var _ = Describe("Header", func() {
 			Expect(hdr.SupportedVersions).To(Equal(versions))
 		})
 
-		It("parses a gQUIC Version Negotiation Packet", func() {
+		It("parses an IETF draft style Version Negotiation Packet", func() {
 			versions := []protocol.VersionNumber{0x13, 0x37}
-			data := ComposeVersionNegotiation(0x42, 0x77, versions)
+			data := ComposeVersionNegotiation(0x42, 0x77, 0x4321, versions)
 			hdr, err := ParseHeaderSentByServer(bytes.NewReader(data), protocol.VersionUnknown)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.isPublicHeader).To(BeFalse())
 			Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x42)))
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x77)))
+			Expect(hdr.Version).To(Equal(protocol.VersionNumber(0x4321)))
 			Expect(hdr.SupportedVersions).To(Equal(versions))
 			Expect(hdr.Type).To(Equal(protocol.PacketTypeVersionNegotiation))
 		})
