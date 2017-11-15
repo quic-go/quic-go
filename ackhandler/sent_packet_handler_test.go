@@ -726,7 +726,7 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.SentPacket(retransmittablePacket(3))
 			handler.OnAlarm() // RTO, meaning 2 lost packets
 			Expect(cong.maybeExitSlowStart).To(BeFalse())
-			Expect(cong.onRetransmissionTimeout).To(BeTrue())
+			Expect(cong.onRetransmissionTimeout).To(BeFalse())
 			Expect(cong.packetsAcked).To(BeEmpty())
 			Expect(cong.packetsLost).To(BeEquivalentTo([][]interface{}{
 				{protocol.PacketNumber(1), protocol.ByteCount(1), protocol.ByteCount(2)},
