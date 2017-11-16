@@ -16,8 +16,7 @@ type blockedFrameLegacy struct {
 // * a STREAM_BLOCKED frame, if the BLOCKED applies to a stream
 // * a BLOCKED frame, if the BLOCKED applies to the connection
 func ParseBlockedFrameLegacy(r *bytes.Reader, version protocol.VersionNumber) (Frame, error) {
-	// read the TypeByte
-	if _, err := r.ReadByte(); err != nil {
+	if _, err := r.ReadByte(); err != nil { // read the TypeByte
 		return nil, err
 	}
 	streamID, err := utils.GetByteOrder(version).ReadUint32(r)

@@ -294,8 +294,8 @@ var _ = Describe("Packet unpacker", func() {
 		It("unpacks RST_STREAM frames", func() {
 			f := &wire.RstStreamFrame{
 				StreamID:   0xdeadbeef,
-				ByteOffset: 0xdecafbad11223344,
-				ErrorCode:  0x13371234,
+				ByteOffset: 0xdecafbad1234,
+				ErrorCode:  0x1337,
 			}
 			err := f.Write(buf, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
@@ -317,7 +317,7 @@ var _ = Describe("Packet unpacker", func() {
 
 		It("unpacks MAX_DATA frames", func() {
 			f := &wire.MaxDataFrame{
-				ByteOffset: 0xcafe000000001337,
+				ByteOffset: 0xcafe,
 			}
 			buf := &bytes.Buffer{}
 			err := f.Write(buf, versionIETFFrames)
@@ -331,7 +331,7 @@ var _ = Describe("Packet unpacker", func() {
 		It("unpacks MAX_STREAM_DATA frames", func() {
 			f := &wire.MaxStreamDataFrame{
 				StreamID:   0xdeadbeef,
-				ByteOffset: 0xcafe000000001337,
+				ByteOffset: 0xdecafbad,
 			}
 			buf := &bytes.Buffer{}
 			err := f.Write(buf, versionIETFFrames)

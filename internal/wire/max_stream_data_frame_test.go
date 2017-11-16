@@ -4,6 +4,7 @@ import (
 	"bytes"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -11,22 +12,21 @@ import (
 var _ = Describe("MAX_STREAM_DATA frame", func() {
 	Context("parsing", func() {
 		It("accepts sample frame", func() {
-			b := bytes.NewReader([]byte{0x5,
-				0xde, 0xad, 0xbe, 0xef, // stream id
-				0xde, 0xca, 0xfb, 0xad, 0x11, 0x22, 0x33, 0x44, // byte offset
-			})
+			data := []byte{0x5}
+			data = append(data, encodeVarInt(0xdeadbeef)...) // Stream ID
+			data = append(data, encodeVarInt(0x12345678)...) // Offset
+			b := bytes.NewReader(data)
 			frame, err := ParseMaxStreamDataFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0xdeadbeef)))
-			Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0xdecafbad11223344)))
+			Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0x12345678)))
 			Expect(b.Len()).To(BeZero())
 		})
 
 		It("errors on EOFs", func() {
-			data := []byte{0x5,
-				0xef, 0xbe, 0xad, 0xde, // stream id
-				0x44, 0x33, 0x22, 0x11, 0xad, 0xfb, 0xca, 0xde, // byte offset
-			}
+			data := []byte{0x5}
+			data = append(data, encodeVarInt(0xdeadbeef)...) // Stream ID
+			data = append(data, encodeVarInt(0x12345678)...) // Offset
 			_, err := ParseMaxStreamDataFrame(bytes.NewReader(data), versionIETFFrames)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
@@ -42,21 +42,21 @@ var _ = Describe("MAX_STREAM_DATA frame", func() {
 				StreamID:   0x1337,
 				ByteOffset: 0xdeadbeef,
 			}
-			Expect(f.MinLength(0)).To(Equal(protocol.ByteCount(13)))
+			Expect(f.MinLength(protocol.VersionWhatever)).To(Equal(1 + utils.VarIntLen(uint64(f.StreamID)) + utils.VarIntLen(uint64(f.ByteOffset))))
 		})
 
 		It("writes a sample frame", func() {
 			b := &bytes.Buffer{}
 			f := &MaxStreamDataFrame{
 				StreamID:   0xdecafbad,
-				ByteOffset: 0xdeadbeefcafe1337,
+				ByteOffset: 0xdeadbeefcafe42,
 			}
+			expected := []byte{0x5}
+			expected = append(expected, encodeVarInt(0xdecafbad)...)
+			expected = append(expected, encodeVarInt(0xdeadbeefcafe42)...)
 			err := f.Write(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(b.Bytes()).To(Equal([]byte{0x5,
-				0xde, 0xca, 0xfb, 0xad, // stream id
-				0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // byte offset
-			}))
+			Expect(b.Bytes()).To(Equal(expected))
 		})
 	})
 })

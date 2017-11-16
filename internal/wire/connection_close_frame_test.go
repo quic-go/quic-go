@@ -3,7 +3,6 @@ package wire
 import (
 	"bytes"
 	"io"
-	"strings"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
@@ -11,8 +10,56 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("ConnectionCloseFrame", func() {
+var _ = Describe("CONNECTION_CLOSE Frame", func() {
 	Context("when parsing", func() {
+		Context("in varint encoding", func() {
+			It("accepts sample frame", func() {
+				data := []byte{0x2, 0x0, 0x19}
+				data = append(data, encodeVarInt(0x1b)...) // reason phrase length
+				data = append(data, []byte{
+					'N', 'o', ' ', 'r', 'e', 'c', 'e', 'n', 't', ' ', 'n', 'e', 't', 'w', 'o', 'r', 'k', ' ', 'a', 'c', 't', 'i', 'v', 'i', 't', 'y', '.',
+				}...)
+				b := bytes.NewReader(data)
+				frame, err := ParseConnectionCloseFrame(b, versionIETFFrames)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(frame.ErrorCode).To(Equal(qerr.ErrorCode(0x19)))
+				Expect(frame.ReasonPhrase).To(Equal("No recent network activity."))
+				Expect(b.Len()).To(BeZero())
+			})
+
+			It("rejects long reason phrases", func() {
+				data := []byte{0x2, 0xca, 0xfe}
+				data = append(data, encodeVarInt(0xffff)...) // reason phrase length
+				b := bytes.NewReader(data)
+				_, err := ParseConnectionCloseFrame(b, versionIETFFrames)
+				Expect(err).To(MatchError(io.EOF))
+			})
+
+			It("errors on EOFs", func() {
+				data := []byte{0x2, 0x0, 0x19}
+				data = append(data, encodeVarInt(0x1b)...) // reason phrase length
+				data = append(data, []byte{
+					'N', 'o', ' ', 'r', 'e', 'c', 'e', 'n', 't', ' ', 'n', 'e', 't', 'w', 'o', 'r', 'k', ' ', 'a', 'c', 't', 'i', 'v', 'i', 't', 'y', '.',
+				}...)
+				_, err := ParseConnectionCloseFrame(bytes.NewReader(data), versionIETFFrames)
+				Expect(err).NotTo(HaveOccurred())
+				for i := range data {
+					_, err := ParseConnectionCloseFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
+					Expect(err).To(HaveOccurred())
+				}
+			})
+
+			It("parses a frame without a reason phrase", func() {
+				data := []byte{0x2, 0xca, 0xfe}
+				data = append(data, encodeVarInt(0)...)
+				b := bytes.NewReader(data)
+				frame, err := ParseConnectionCloseFrame(b, versionIETFFrames)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(frame.ReasonPhrase).To(BeEmpty())
+				Expect(b.Len()).To(BeZero())
+			})
+		})
+
 		Context("in big endian", func() {
 			It("accepts sample frame", func() {
 				b := bytes.NewReader([]byte{0x2,
@@ -49,21 +96,60 @@ var _ = Describe("ConnectionCloseFrame", func() {
 					Expect(err).To(HaveOccurred())
 				}
 			})
-		})
 
-		It("parses a frame without a reason phrase", func() {
-			b := bytes.NewReader([]byte{0x2,
-				0xad, 0xfb, 0xca, 0xde, // error code
-				0x0, 0x0, // reason phrase length
+			It("parses a frame without a reason phrase", func() {
+				b := bytes.NewReader([]byte{0x2,
+					0xad, 0xfb, 0xca, 0xde, // error code
+					0x0, 0x0, // reason phrase length
+				})
+				frame, err := ParseConnectionCloseFrame(b, versionBigEndian)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(frame.ReasonPhrase).To(BeEmpty())
+				Expect(b.Len()).To(BeZero())
 			})
-			frame, err := ParseConnectionCloseFrame(b, protocol.VersionWhatever)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.ReasonPhrase).To(BeEmpty())
-			Expect(b.Len()).To(BeZero())
 		})
 	})
 
 	Context("when writing", func() {
+		Context("in varint encoding", func() {
+			It("writes a frame without a ReasonPhrase", func() {
+				b := &bytes.Buffer{}
+				frame := &ConnectionCloseFrame{
+					ErrorCode: 0xbeef,
+				}
+				err := frame.Write(b, versionIETFFrames)
+				Expect(err).ToNot(HaveOccurred())
+				expected := []byte{0x2, 0xbe, 0xef}
+				expected = append(expected, encodeVarInt(0)...)
+				Expect(b.Bytes()).To(Equal(expected))
+			})
+
+			It("writes a frame with a ReasonPhrase", func() {
+				b := &bytes.Buffer{}
+				frame := &ConnectionCloseFrame{
+					ErrorCode:    0xdead,
+					ReasonPhrase: "foobar",
+				}
+				err := frame.Write(b, versionIETFFrames)
+				Expect(err).ToNot(HaveOccurred())
+				expected := []byte{0x2, 0xde, 0xad}
+				expected = append(expected, encodeVarInt(6)...)
+				expected = append(expected, []byte{'f', 'o', 'o', 'b', 'a', 'r'}...)
+				Expect(b.Bytes()).To(Equal(expected))
+			})
+
+			It("has proper min length", func() {
+				b := &bytes.Buffer{}
+				f := &ConnectionCloseFrame{
+					ErrorCode:    0xcafe,
+					ReasonPhrase: "foobar",
+				}
+				err := f.Write(b, versionIETFFrames)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(f.MinLength(versionIETFFrames)).To(Equal(protocol.ByteCount(b.Len())))
+			})
+		})
+
 		Context("in big endian", func() {
 			It("writes a frame without a ReasonPhrase", func() {
 				b := &bytes.Buffer{}
@@ -94,44 +180,17 @@ var _ = Describe("ConnectionCloseFrame", func() {
 					'f', 'o', 'o', 'b', 'a', 'r',
 				}))
 			})
-		})
 
-		It("rejects ReasonPhrases that are too long", func() {
-			b := &bytes.Buffer{}
-			reasonPhrase := strings.Repeat("a", 0xffff+0x11)
-			frame := &ConnectionCloseFrame{
-				ErrorCode:    0xdeadbeef,
-				ReasonPhrase: reasonPhrase,
-			}
-			err := frame.Write(b, protocol.VersionWhatever)
-			Expect(err).To(HaveOccurred())
+			It("has proper min length", func() {
+				b := &bytes.Buffer{}
+				f := &ConnectionCloseFrame{
+					ErrorCode:    0xcafe,
+					ReasonPhrase: "foobar",
+				}
+				err := f.Write(b, versionBigEndian)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(f.MinLength(versionBigEndian)).To(Equal(protocol.ByteCount(b.Len())))
+			})
 		})
-
-		It("has proper min length", func() {
-			b := &bytes.Buffer{}
-			f := &ConnectionCloseFrame{
-				ErrorCode:    0xdeadbeef,
-				ReasonPhrase: "foobar",
-			}
-			err := f.Write(b, protocol.VersionWhatever)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(f.MinLength(0)).To(Equal(protocol.ByteCount(b.Len())))
-		})
-	})
-
-	It("is self-consistent", func() {
-		buf := &bytes.Buffer{}
-		frame := &ConnectionCloseFrame{
-			ErrorCode:    0xdeadbeef,
-			ReasonPhrase: "Lorem ipsum dolor sit amet.",
-		}
-		err := frame.Write(buf, protocol.VersionWhatever)
-		Expect(err).ToNot(HaveOccurred())
-		b := bytes.NewReader(buf.Bytes())
-		readframe, err := ParseConnectionCloseFrame(b, protocol.VersionWhatever)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(readframe.ErrorCode).To(Equal(frame.ErrorCode))
-		Expect(readframe.ReasonPhrase).To(Equal(frame.ReasonPhrase))
-		Expect(b.Len()).To(BeZero())
 	})
 })

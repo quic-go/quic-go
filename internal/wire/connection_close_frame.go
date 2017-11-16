@@ -19,23 +19,33 @@ type ConnectionCloseFrame struct {
 
 // ParseConnectionCloseFrame reads a CONNECTION_CLOSE frame
 func ParseConnectionCloseFrame(r *bytes.Reader, version protocol.VersionNumber) (*ConnectionCloseFrame, error) {
-	frame := &ConnectionCloseFrame{}
-
-	// read the TypeByte
-	_, err := r.ReadByte()
-	if err != nil {
+	if _, err := r.ReadByte(); err != nil { // read the TypeByte
 		return nil, err
 	}
 
-	errorCode, err := utils.GetByteOrder(version).ReadUint32(r)
-	if err != nil {
-		return nil, err
-	}
-	frame.ErrorCode = qerr.ErrorCode(errorCode)
-
-	reasonPhraseLen, err := utils.GetByteOrder(version).ReadUint16(r)
-	if err != nil {
-		return nil, err
+	var errorCode qerr.ErrorCode
+	var reasonPhraseLen uint64
+	if version.UsesIETFFrameFormat() {
+		ec, err := utils.GetByteOrder(version).ReadUint16(r)
+		if err != nil {
+			return nil, err
+		}
+		errorCode = qerr.ErrorCode(ec)
+		reasonPhraseLen, err = utils.ReadVarInt(r)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		ec, err := utils.GetByteOrder(version).ReadUint32(r)
+		if err != nil {
+			return nil, err
+		}
+		errorCode = qerr.ErrorCode(ec)
+		length, err := utils.GetByteOrder(version).ReadUint16(r)
+		if err != nil {
+			return nil, err
+		}
+		reasonPhraseLen = uint64(length)
 	}
 
 	// shortcut to prevent the unneccessary allocation of dataLen bytes
@@ -50,27 +60,36 @@ func ParseConnectionCloseFrame(r *bytes.Reader, version protocol.VersionNumber) 
 		// this should never happen, since we already checked the reasonPhraseLen earlier
 		return nil, err
 	}
-	frame.ReasonPhrase = string(reasonPhrase)
 
-	return frame, nil
+	return &ConnectionCloseFrame{
+		ErrorCode:    qerr.ErrorCode(errorCode),
+		ReasonPhrase: string(reasonPhrase),
+	}, nil
 }
 
 // MinLength of a written frame
 func (f *ConnectionCloseFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
+	if version.UsesIETFFrameFormat() {
+		return 1 + 2 + utils.VarIntLen(uint64(len(f.ReasonPhrase))) + protocol.ByteCount(len(f.ReasonPhrase)), nil
+	}
 	return 1 + 4 + 2 + protocol.ByteCount(len(f.ReasonPhrase)), nil
 }
 
 // Write writes an CONNECTION_CLOSE frame.
 func (f *ConnectionCloseFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
 	b.WriteByte(0x02)
-	utils.GetByteOrder(version).WriteUint32(b, uint32(f.ErrorCode))
 
 	if len(f.ReasonPhrase) > math.MaxUint16 {
 		return errors.New("ConnectionFrame: ReasonPhrase too long")
 	}
 
-	reasonPhraseLen := uint16(len(f.ReasonPhrase))
-	utils.GetByteOrder(version).WriteUint16(b, reasonPhraseLen)
+	if version.UsesIETFFrameFormat() {
+		utils.BigEndian.WriteUint16(b, uint16(f.ErrorCode))
+		utils.WriteVarInt(b, uint64(len(f.ReasonPhrase)))
+	} else {
+		utils.GetByteOrder(version).WriteUint32(b, uint32(f.ErrorCode))
+		utils.GetByteOrder(version).WriteUint16(b, uint16(len(f.ReasonPhrase)))
+	}
 	b.WriteString(f.ReasonPhrase)
 
 	return nil

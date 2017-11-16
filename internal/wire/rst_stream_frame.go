@@ -14,44 +14,75 @@ type RstStreamFrame struct {
 	ByteOffset protocol.ByteCount
 }
 
+// ParseRstStreamFrame parses a RST_STREAM frame
+func ParseRstStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*RstStreamFrame, error) {
+	if _, err := r.ReadByte(); err != nil { // read the TypeByte
+		return nil, err
+	}
+
+	var streamID protocol.StreamID
+	var errorCode uint32
+	var byteOffset protocol.ByteCount
+	if version.UsesIETFFrameFormat() {
+		sid, err := utils.ReadVarInt(r)
+		if err != nil {
+			return nil, err
+		}
+		streamID = protocol.StreamID(sid)
+		ec, err := utils.GetByteOrder(version).ReadUint16(r)
+		if err != nil {
+			return nil, err
+		}
+		errorCode = uint32(ec)
+		bo, err := utils.ReadVarInt(r)
+		if err != nil {
+			return nil, err
+		}
+		byteOffset = protocol.ByteCount(bo)
+	} else {
+		sid, err := utils.GetByteOrder(version).ReadUint32(r)
+		if err != nil {
+			return nil, err
+		}
+		streamID = protocol.StreamID(sid)
+		bo, err := utils.GetByteOrder(version).ReadUint64(r)
+		if err != nil {
+			return nil, err
+		}
+		byteOffset = protocol.ByteCount(bo)
+		ec, err := utils.GetByteOrder(version).ReadUint32(r)
+		if err != nil {
+			return nil, err
+		}
+		errorCode = uint32(ec)
+	}
+
+	return &RstStreamFrame{
+		StreamID:   streamID,
+		ErrorCode:  errorCode,
+		ByteOffset: byteOffset,
+	}, nil
+}
+
 //Write writes a RST_STREAM frame
 func (f *RstStreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
 	b.WriteByte(0x01)
-	utils.GetByteOrder(version).WriteUint32(b, uint32(f.StreamID))
-	utils.GetByteOrder(version).WriteUint64(b, uint64(f.ByteOffset))
-	utils.GetByteOrder(version).WriteUint32(b, f.ErrorCode)
+	if version.UsesIETFFrameFormat() {
+		utils.WriteVarInt(b, uint64(f.StreamID))
+		utils.BigEndian.WriteUint16(b, uint16(f.ErrorCode))
+		utils.WriteVarInt(b, uint64(f.ByteOffset))
+	} else {
+		utils.GetByteOrder(version).WriteUint32(b, uint32(f.StreamID))
+		utils.GetByteOrder(version).WriteUint64(b, uint64(f.ByteOffset))
+		utils.GetByteOrder(version).WriteUint32(b, f.ErrorCode)
+	}
 	return nil
 }
 
 // MinLength of a written frame
 func (f *RstStreamFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
+	if version.UsesIETFFrameFormat() {
+		return 1 + utils.VarIntLen(uint64(f.StreamID)) + 2 + utils.VarIntLen(uint64(f.ByteOffset)), nil
+	}
 	return 1 + 4 + 8 + 4, nil
-}
-
-// ParseRstStreamFrame parses a RST_STREAM frame
-func ParseRstStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*RstStreamFrame, error) {
-	frame := &RstStreamFrame{}
-
-	// read the TypeByte
-	if _, err := r.ReadByte(); err != nil {
-		return nil, err
-	}
-
-	sid, err := utils.GetByteOrder(version).ReadUint32(r)
-	if err != nil {
-		return nil, err
-	}
-	frame.StreamID = protocol.StreamID(sid)
-
-	byteOffset, err := utils.GetByteOrder(version).ReadUint64(r)
-	if err != nil {
-		return nil, err
-	}
-	frame.ByteOffset = protocol.ByteCount(byteOffset)
-
-	frame.ErrorCode, err = utils.GetByteOrder(version).ReadUint32(r)
-	if err != nil {
-		return nil, err
-	}
-	return frame, nil
 }

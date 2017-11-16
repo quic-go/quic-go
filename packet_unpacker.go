@@ -125,7 +125,7 @@ func (u *packetUnpacker) parseIETFFrame(r *bytes.Reader, typeByte byte, hdr *wir
 	case 0x8:
 		frame, err = wire.ParseBlockedFrame(r, u.version)
 	case 0x9:
-		frame, err = wire.ParseBlockedFrameLegacy(r, u.version)
+		frame, err = wire.ParseStreamBlockedFrame(r, u.version)
 		if err != nil {
 			err = qerr.Error(qerr.InvalidBlockedData, err.Error())
 		}
