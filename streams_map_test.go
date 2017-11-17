@@ -50,7 +50,7 @@ var _ = Describe("Streams Map", func() {
 	Context("getting and creating streams", func() {
 		Context("as a server", func() {
 			BeforeEach(func() {
-				setNewStreamsMap(protocol.PerspectiveServer, versionCryptoStream1)
+				setNewStreamsMap(protocol.PerspectiveServer, versionGQUICFrames)
 			})
 
 			Context("client-side streams", func() {
@@ -281,7 +281,7 @@ var _ = Describe("Streams Map", func() {
 				})
 
 				It("starts with stream 1, if the crypto stream is stream 0", func() {
-					setNewStreamsMap(protocol.PerspectiveServer, versionCryptoStream0)
+					setNewStreamsMap(protocol.PerspectiveServer, versionIETFFrames)
 					var str streamI
 					go func() {
 						defer GinkgoRecover()
@@ -414,7 +414,7 @@ var _ = Describe("Streams Map", func() {
 
 		Context("as a client", func() {
 			BeforeEach(func() {
-				setNewStreamsMap(protocol.PerspectiveClient, versionCryptoStream1)
+				setNewStreamsMap(protocol.PerspectiveClient, versionGQUICFrames)
 				m.UpdateMaxStreamLimit(100)
 			})
 
@@ -463,7 +463,7 @@ var _ = Describe("Streams Map", func() {
 
 			Context("client-side streams", func() {
 				It("starts with stream 1, if the crypto stream is stream 0", func() {
-					setNewStreamsMap(protocol.PerspectiveClient, versionCryptoStream0)
+					setNewStreamsMap(protocol.PerspectiveClient, versionIETFFrames)
 					m.UpdateMaxStreamLimit(100)
 					s, err := m.OpenStream()
 					Expect(err).ToNot(HaveOccurred())
@@ -521,7 +521,7 @@ var _ = Describe("Streams Map", func() {
 
 	Context("DoS mitigation, iterating and deleting", func() {
 		BeforeEach(func() {
-			setNewStreamsMap(protocol.PerspectiveServer, versionCryptoStream1)
+			setNewStreamsMap(protocol.PerspectiveServer, versionGQUICFrames)
 		})
 
 		closeStream := func(id protocol.StreamID) {
@@ -615,7 +615,7 @@ var _ = Describe("Streams Map", func() {
 
 			Context("as a client", func() {
 				BeforeEach(func() {
-					setNewStreamsMap(protocol.PerspectiveClient, versionCryptoStream1)
+					setNewStreamsMap(protocol.PerspectiveClient, versionGQUICFrames)
 					m.UpdateMaxStreamLimit(100)
 					for i := 1; i <= 5; i++ {
 						if i%2 == 0 {

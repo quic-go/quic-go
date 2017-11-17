@@ -30,7 +30,7 @@ func ParseMaxDataFrame(r *bytes.Reader, version protocol.VersionNumber) (*MaxDat
 
 //Write writes a MAX_STREAM_DATA frame
 func (f *MaxDataFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
-	if !version.UsesMaxDataFrame() {
+	if !version.UsesIETFFrameFormat() {
 		// write a gQUIC WINDOW_UPDATE frame (with stream ID 0, which means connection-level there)
 		return (&windowUpdateFrame{
 			StreamID:   0,
@@ -44,7 +44,7 @@ func (f *MaxDataFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) er
 
 // MinLength of a written frame
 func (f *MaxDataFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
-	if !version.UsesMaxDataFrame() { // writing this frame would result in a gQUIC WINDOW_UPDATE being written, which is longer
+	if !version.UsesIETFFrameFormat() { // writing this frame would result in a gQUIC WINDOW_UPDATE being written, which is longer
 		return 1 + 4 + 8, nil
 	}
 	return 1 + 8, nil

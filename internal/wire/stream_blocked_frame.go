@@ -30,7 +30,7 @@ func ParseStreamBlockedFrame(r *bytes.Reader, version protocol.VersionNumber) (*
 
 // Write writes a STREAM_BLOCKED frame
 func (f *StreamBlockedFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
-	if !version.UsesMaxDataFrame() {
+	if !version.UsesIETFFrameFormat() {
 		return (&blockedFrameLegacy{StreamID: f.StreamID}).Write(b, version)
 	}
 	b.WriteByte(0x09)

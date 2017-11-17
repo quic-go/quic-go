@@ -15,7 +15,7 @@ var _ = Describe("MAX_STREAM_DATA frame", func() {
 				0xde, 0xad, 0xbe, 0xef, // stream id
 				0xde, 0xca, 0xfb, 0xad, 0x11, 0x22, 0x33, 0x44, // byte offset
 			})
-			frame, err := ParseMaxStreamDataFrame(b, versionMaxDataFrame)
+			frame, err := ParseMaxStreamDataFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0xdeadbeef)))
 			Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0xdecafbad11223344)))
@@ -27,10 +27,10 @@ var _ = Describe("MAX_STREAM_DATA frame", func() {
 				0xef, 0xbe, 0xad, 0xde, // stream id
 				0x44, 0x33, 0x22, 0x11, 0xad, 0xfb, 0xca, 0xde, // byte offset
 			}
-			_, err := ParseMaxStreamDataFrame(bytes.NewReader(data), versionMaxDataFrame)
+			_, err := ParseMaxStreamDataFrame(bytes.NewReader(data), versionIETFFrames)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := ParseMaxStreamDataFrame(bytes.NewReader(data[0:i]), versionMaxDataFrame)
+				_, err := ParseMaxStreamDataFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
 				Expect(err).To(HaveOccurred())
 			}
 		})
@@ -51,7 +51,7 @@ var _ = Describe("MAX_STREAM_DATA frame", func() {
 				StreamID:   0xdecafbad,
 				ByteOffset: 0xdeadbeefcafe1337,
 			}
-			err := f.Write(b, versionMaxDataFrame)
+			err := f.Write(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b.Bytes()).To(Equal([]byte{0x5,
 				0xde, 0xca, 0xfb, 0xad, // stream id

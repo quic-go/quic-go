@@ -24,10 +24,10 @@ var _ = Describe("MAX_DATA frame", func() {
 			data := []byte{0x4,
 				0x44, 0x33, 0x22, 0x11, 0xad, 0xfb, 0xca, 0xde, // byte offset
 			}
-			_, err := ParseMaxDataFrame(bytes.NewReader(data), versionMaxDataFrame)
+			_, err := ParseMaxDataFrame(bytes.NewReader(data), versionIETFFrames)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := ParseMaxDataFrame(bytes.NewReader(data[0:i]), versionMaxDataFrame)
+				_, err := ParseMaxDataFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
 				Expect(err).To(HaveOccurred())
 			}
 		})
@@ -38,7 +38,7 @@ var _ = Describe("MAX_DATA frame", func() {
 			f := &MaxDataFrame{
 				ByteOffset: 0xdeadbeef,
 			}
-			Expect(f.MinLength(versionMaxDataFrame)).To(Equal(protocol.ByteCount(1 + 8)))
+			Expect(f.MinLength(versionIETFFrames)).To(Equal(protocol.ByteCount(1 + 8)))
 		})
 
 		It("writes a MAX_DATA frame", func() {
@@ -46,7 +46,7 @@ var _ = Describe("MAX_DATA frame", func() {
 			f := &MaxDataFrame{
 				ByteOffset: 0xdeadbeefcafe1337,
 			}
-			err := f.Write(b, versionMaxDataFrame)
+			err := f.Write(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b.Bytes()).To(Equal([]byte{0x4,
 				0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // byte offset
