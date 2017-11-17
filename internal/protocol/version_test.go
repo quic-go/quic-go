@@ -56,6 +56,11 @@ var _ = Describe("Version", func() {
 		Expect(VersionTLS.UsesIETFFrameFormat()).To(BeTrue())
 	})
 
+	It("tells if a version uses the IETF frame types", func() {
+		Expect(Version39.UsesIETFFrameFormat()).To(BeFalse())
+		Expect(VersionTLS.UsesIETFFrameFormat()).To(BeTrue())
+	})
+
 	It("says if a stream contributes to connection-level flowcontrol, for gQUIC", func() {
 		Expect(Version39.StreamContributesToConnectionFlowControl(1)).To(BeFalse())
 		Expect(Version39.StreamContributesToConnectionFlowControl(2)).To(BeTrue())

@@ -236,10 +236,16 @@ func (p *packetPacker) composeNextPacket(
 		return payloadFrames, nil
 	}
 
-	// temporarily increase the maxFrameSize by 2 bytes
+	// temporarily increase the maxFrameSize by the (minimum) length of the DataLen field
 	// this leads to a properly sized packet in all cases, since we do all the packet length calculations with StreamFrames that have the DataLen set
-	// however, for the last StreamFrame in the packet, we can omit the DataLen, thus saving 2 bytes and yielding a packet of exactly the correct size
-	maxFrameSize += 2
+	// however, for the last StreamFrame in the packet, we can omit the DataLen, thus yielding a packet of exactly the correct size
+	// for gQUIC STREAM frames, DataLen is always 2 bytes
+	// for IETF draft style STREAM frames, the length is encoded to either 1 or 2 bytes
+	if p.version.UsesIETFFrameFormat() {
+		maxFrameSize++
+	} else {
+		maxFrameSize += 2
+	}
 
 	fs := p.streamFramer.PopStreamFrames(maxFrameSize - payloadLength)
 	if len(fs) != 0 {

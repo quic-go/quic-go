@@ -77,8 +77,7 @@ func (u *packetUnpacker) parseFrame(r *bytes.Reader, typeByte byte, hdr *wire.He
 func (u *packetUnpacker) parseIETFFrame(r *bytes.Reader, typeByte byte, hdr *wire.Header) (wire.Frame, error) {
 	var frame wire.Frame
 	var err error
-	// TODO: implement the IETF STREAM frame
-	if typeByte&0x80 == 0x80 {
+	if typeByte&0xf8 == 0x10 {
 		frame, err = wire.ParseStreamFrame(r, u.version)
 		if err != nil {
 			err = qerr.Error(qerr.InvalidStreamData, err.Error())

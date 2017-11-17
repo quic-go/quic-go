@@ -60,9 +60,10 @@ var _ = Describe("Packet packer", func() {
 	)
 
 	BeforeEach(func() {
-		cryptoStream = &stream{flowController: flowcontrol.NewStreamFlowController(1, false, flowcontrol.NewConnectionFlowController(1000, 1000, nil), 1000, 1000, 1000, nil)}
-		streamsMap := newStreamsMap(nil, protocol.PerspectiveServer, protocol.VersionWhatever)
-		streamFramer = newStreamFramer(cryptoStream, streamsMap, nil)
+		version := versionGQUICFrames
+		cryptoStream = &stream{streamID: version.CryptoStreamID(), flowController: flowcontrol.NewStreamFlowController(version.CryptoStreamID(), false, flowcontrol.NewConnectionFlowController(1000, 1000, nil), 1000, 1000, 1000, nil)}
+		streamsMap := newStreamsMap(nil, protocol.PerspectiveServer, versionGQUICFrames)
+		streamFramer = newStreamFramer(cryptoStream, streamsMap, nil, versionGQUICFrames)
 
 		packer = &packetPacker{
 			cryptoSetup:           &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure},
@@ -73,8 +74,8 @@ var _ = Describe("Packet packer", func() {
 		}
 		publicHeaderLen = 1 + 8 + 2 // 1 flag byte, 8 connection ID, 2 packet number
 		maxFrameSize = protocol.MaxPacketSize - protocol.ByteCount((&mockSealer{}).Overhead()) - publicHeaderLen
-		packer.version = protocol.VersionWhatever
 		packer.hasSentPacket = true
+		packer.version = version
 	})
 
 	It("returns nil when no packet is queued", func() {
@@ -93,7 +94,7 @@ var _ = Describe("Packet packer", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(p).ToNot(BeNil())
 		b := &bytes.Buffer{}
-		f.Write(b, 0)
+		f.Write(b, packer.version)
 		Expect(p.frames).To(HaveLen(1))
 		Expect(p.raw).To(ContainSubstring(string(b.Bytes())))
 	})
@@ -327,7 +328,7 @@ var _ = Describe("Packet packer", func() {
 
 	It("packs a lot of control frames into 2 packets if they don't fit into one", func() {
 		blockedFrame := &wire.BlockedFrame{}
-		minLength, _ := blockedFrame.MinLength(0)
+		minLength, _ := blockedFrame.MinLength(packer.version)
 		maxFramesPerPacket := int(maxFrameSize) / int(minLength)
 		var controlFrames []wire.Frame
 		for i := 0; i < maxFramesPerPacket+10; i++ {
@@ -360,14 +361,14 @@ var _ = Describe("Packet packer", func() {
 		Expect(packer.packetNumberGenerator.Peek()).To(Equal(protocol.PacketNumber(2)))
 	})
 
-	Context("Stream Frame handling", func() {
-		It("does not splits a stream frame with maximum size", func() {
+	Context("STREAM Frame handling", func() {
+		It("does not splits a STREAM frame with maximum size, for gQUIC frames", func() {
 			f := &wire.StreamFrame{
 				Offset:         1,
 				StreamID:       5,
 				DataLenPresent: false,
 			}
-			minLength, _ := f.MinLength(0)
+			minLength, _ := f.MinLength(packer.version)
 			maxStreamFrameDataLen := maxFrameSize - minLength
 			f.Data = bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen))
 			streamFramer.AddFrameForRetransmission(f)
@@ -380,7 +381,30 @@ var _ = Describe("Packet packer", func() {
 			Expect(payloadFrames).To(BeEmpty())
 		})
 
-		It("correctly handles a stream frame with one byte less than maximum size", func() {
+		It("does not splits a STREAM frame with maximum size, for IETF draft style frame", func() {
+			packer.version = versionIETFFrames
+			streamFramer.version = versionIETFFrames
+			f := &wire.StreamFrame{
+				Offset:         1,
+				StreamID:       5,
+				DataLenPresent: true,
+			}
+			minLength, _ := f.MinLength(packer.version)
+			// for IETF draft style STREAM frames, we don't know the size of the DataLen, because it is a variable length integer
+			// in the general case, we therefore use a STREAM frame that is 1 byte smaller than the maximum size
+			maxStreamFrameDataLen := maxFrameSize - minLength - 1
+			f.Data = bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen))
+			streamFramer.AddFrameForRetransmission(f)
+			payloadFrames, err := packer.composeNextPacket(maxFrameSize, true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(payloadFrames).To(HaveLen(1))
+			Expect(payloadFrames[0].(*wire.StreamFrame).DataLenPresent).To(BeFalse())
+			payloadFrames, err = packer.composeNextPacket(maxFrameSize, true)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(payloadFrames).To(BeEmpty())
+		})
+
+		It("correctly handles a STREAM frame with one byte less than maximum size", func() {
 			maxStreamFrameDataLen := maxFrameSize - (1 + 1 + 2) - 1
 			f1 := &wire.StreamFrame{
 				StreamID: 5,
@@ -405,7 +429,7 @@ var _ = Describe("Packet packer", func() {
 			Expect(p.frames[0].(*wire.StreamFrame).DataLenPresent).To(BeFalse())
 		})
 
-		It("packs multiple small stream frames into single packet", func() {
+		It("packs multiple small STREAM frames into single packet", func() {
 			f1 := &wire.StreamFrame{
 				StreamID: 5,
 				Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
@@ -437,12 +461,12 @@ var _ = Describe("Packet packer", func() {
 			Expect(p.raw).To(ContainSubstring(string(f3.Data)))
 		})
 
-		It("splits one stream frame larger than maximum size", func() {
+		It("splits one STREAM frame larger than maximum size", func() {
 			f := &wire.StreamFrame{
 				StreamID: 7,
 				Offset:   1,
 			}
-			minLength, _ := f.MinLength(0)
+			minLength, _ := f.MinLength(packer.version)
 			maxStreamFrameDataLen := maxFrameSize - minLength
 			f.Data = bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen)+200)
 			streamFramer.AddFrameForRetransmission(f)
@@ -461,7 +485,7 @@ var _ = Describe("Packet packer", func() {
 			Expect(payloadFrames).To(BeEmpty())
 		})
 
-		It("packs 2 stream frames that are too big for one packet correctly", func() {
+		It("packs 2 STREAM frames that are too big for one packet correctly", func() {
 			maxStreamFrameDataLen := maxFrameSize - (1 + 1 + 2)
 			f1 := &wire.StreamFrame{
 				StreamID: 5,
@@ -496,12 +520,12 @@ var _ = Describe("Packet packer", func() {
 			Expect(p).To(BeNil())
 		})
 
-		It("packs a packet that has the maximum packet size when given a large enough stream frame", func() {
+		It("packs a packet that has the maximum packet size when given a large enough STREAM frame", func() {
 			f := &wire.StreamFrame{
 				StreamID: 5,
 				Offset:   1,
 			}
-			minLength, _ := f.MinLength(0)
+			minLength, _ := f.MinLength(packer.version)
 			f.Data = bytes.Repeat([]byte{'f'}, int(maxFrameSize-minLength+1)) // + 1 since MinceLength is 1 bigger than the actual StreamFrame header
 			streamFramer.AddFrameForRetransmission(f)
 			p, err := packer.PackPacket()
@@ -510,12 +534,12 @@ var _ = Describe("Packet packer", func() {
 			Expect(p.raw).To(HaveLen(int(protocol.MaxPacketSize)))
 		})
 
-		It("splits a stream frame larger than the maximum size", func() {
+		It("splits a STREAM frame larger than the maximum size", func() {
 			f := &wire.StreamFrame{
 				StreamID: 5,
 				Offset:   1,
 			}
-			minLength, _ := f.MinLength(0)
+			minLength, _ := f.MinLength(packer.version)
 			f.Data = bytes.Repeat([]byte{'f'}, int(maxFrameSize-minLength+2)) // + 2 since MinceLength is 1 bigger than the actual StreamFrame header
 
 			streamFramer.AddFrameForRetransmission(f)

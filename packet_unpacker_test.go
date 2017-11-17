@@ -377,11 +377,55 @@ var _ = Describe("Packet unpacker", func() {
 				0x04: qerr.InvalidWindowUpdateData,
 				0x05: qerr.InvalidWindowUpdateData,
 				0x09: qerr.InvalidBlockedData,
+				0x10: qerr.InvalidStreamData,
 			} {
 				setData([]byte{b})
 				_, err := unpacker.Unpack(hdrBin, hdr, data)
 				Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(e))
 			}
+		})
+
+		Context("unpacking STREAM frames", func() {
+			It("unpacks unencrypted STREAM frames on the crypto stream", func() {
+				unpacker.aead.(*mockAEAD).encLevelOpen = protocol.EncryptionUnencrypted
+				f := &wire.StreamFrame{
+					StreamID: versionIETFFrames.CryptoStreamID(),
+					Data:     []byte("foobar"),
+				}
+				err := f.Write(buf, versionIETFFrames)
+				Expect(err).ToNot(HaveOccurred())
+				setData(buf.Bytes())
+				packet, err := unpacker.Unpack(hdrBin, hdr, data)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(packet.frames).To(Equal([]wire.Frame{f}))
+			})
+
+			It("unpacks encrypted STREAM frames on the crypto stream", func() {
+				unpacker.aead.(*mockAEAD).encLevelOpen = protocol.EncryptionSecure
+				f := &wire.StreamFrame{
+					StreamID: versionIETFFrames.CryptoStreamID(),
+					Data:     []byte("foobar"),
+				}
+				err := f.Write(buf, versionIETFFrames)
+				Expect(err).ToNot(HaveOccurred())
+				setData(buf.Bytes())
+				packet, err := unpacker.Unpack(hdrBin, hdr, data)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(packet.frames).To(Equal([]wire.Frame{f}))
+			})
+
+			It("does not unpack unencrypted STREAM frames on higher streams", func() {
+				unpacker.aead.(*mockAEAD).encLevelOpen = protocol.EncryptionUnencrypted
+				f := &wire.StreamFrame{
+					StreamID: 3,
+					Data:     []byte("foobar"),
+				}
+				err := f.Write(buf, versionIETFFrames)
+				Expect(err).ToNot(HaveOccurred())
+				setData(buf.Bytes())
+				_, err = unpacker.Unpack(hdrBin, hdr, data)
+				Expect(err).To(MatchError(qerr.Error(qerr.UnencryptedStreamData, "received unencrypted stream data on stream 3")))
+			})
 		})
 	})
 })

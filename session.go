@@ -320,7 +320,7 @@ func (s *session) postSetup(initialPacketNumber protocol.PacketNumber) error {
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.version)
 
 	s.streamsMap = newStreamsMap(s.newStream, s.perspective, s.version)
-	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.connFlowController)
+	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.connFlowController, s.version)
 
 	s.packer = newPacketPacker(s.connectionID,
 		initialPacketNumber,
