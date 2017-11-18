@@ -83,12 +83,6 @@ func (u *packetUnpacker) parseIETFFrame(r *bytes.Reader, typeByte byte, hdr *wir
 			err = qerr.Error(qerr.InvalidStreamData, err.Error())
 		}
 		return frame, err
-	} else if typeByte&0xc0 == 0x40 { // TODO: implement the IETF ACK frame
-		frame, err = wire.ParseAckFrame(r, u.version)
-		if err != nil {
-			err = qerr.Error(qerr.InvalidAckData, err.Error())
-		}
-		return frame, err
 	}
 	// TODO: implement all IETF QUIC frame types
 	switch typeByte {
@@ -127,6 +121,11 @@ func (u *packetUnpacker) parseIETFFrame(r *bytes.Reader, typeByte byte, hdr *wir
 		frame, err = wire.ParseStreamBlockedFrame(r, u.version)
 		if err != nil {
 			err = qerr.Error(qerr.InvalidBlockedData, err.Error())
+		}
+	case 0xe:
+		frame, err = wire.ParseAckFrame(r, u.version)
+		if err != nil {
+			err = qerr.Error(qerr.InvalidAckData, err.Error())
 		}
 	default:
 		err = qerr.Error(qerr.InvalidFrameData, fmt.Sprintf("unknown type byte 0x%x", typeByte))
