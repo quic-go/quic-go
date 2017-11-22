@@ -102,7 +102,7 @@ func NewCryptoSetupClient(
 
 func (h *cryptoSetupClient) HandleCryptoStream() error {
 	messageChan := make(chan HandshakeMessage)
-	errorChan := make(chan error)
+	errorChan := make(chan error, 1)
 
 	go func() {
 		for {
