@@ -1,6 +1,9 @@
 package protocol
 
-import "math"
+import (
+	"fmt"
+	"math"
+)
 
 // A PacketNumber in QUIC
 type PacketNumber uint64
@@ -36,6 +39,23 @@ const (
 	// PacketType0RTT is the packet type of a 0-RTT packet
 	PacketType0RTT PacketType = 5
 )
+
+func (t PacketType) String() string {
+	switch t {
+	case PacketTypeVersionNegotiation:
+		return "Version Negotiation"
+	case PacketTypeInitial:
+		return "Initial"
+	case PacketTypeRetry:
+		return "Retry"
+	case PacketTypeHandshake:
+		return "Handshake"
+	case PacketType0RTT:
+		return "0-RTT Protected"
+	default:
+		return fmt.Sprintf("unknown packet type: %d", t)
+	}
+}
 
 // A ConnectionID in QUIC
 type ConnectionID uint64
