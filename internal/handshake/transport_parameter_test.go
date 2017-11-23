@@ -222,7 +222,7 @@ var _ = Describe("Transport Parameters", func() {
 				params = &TransportParameters{
 					StreamFlowControlWindow:     0xdeadbeef,
 					ConnectionFlowControlWindow: 0xdecafbad,
-					IdleTimeout:                 0xcafe,
+					IdleTimeout:                 0xcafe * time.Second,
 				}
 			})
 

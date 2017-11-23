@@ -35,13 +35,13 @@ func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte
 		return nil, err
 	}
 	packetType := protocol.PacketType(typeByte & 0x7f)
-	if sentBy == protocol.PerspectiveClient && (packetType != protocol.PacketTypeInitial && packetType != protocol.PacketTypeCleartext && packetType != protocol.PacketType0RTT) {
+	if sentBy == protocol.PerspectiveClient && (packetType != protocol.PacketTypeInitial && packetType != protocol.PacketTypeHandshake && packetType != protocol.PacketType0RTT) {
 		if packetType == protocol.PacketTypeVersionNegotiation {
 			return nil, qerr.Error(qerr.InvalidVersionNegotiationPacket, "sent by the client")
 		}
 		return nil, qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", packetType))
 	}
-	if sentBy == protocol.PerspectiveServer && (packetType != protocol.PacketTypeVersionNegotiation && packetType != protocol.PacketTypeRetry && packetType != protocol.PacketTypeCleartext) {
+	if sentBy == protocol.PerspectiveServer && (packetType != protocol.PacketTypeVersionNegotiation && packetType != protocol.PacketTypeRetry && packetType != protocol.PacketTypeHandshake) {
 		return nil, qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", packetType))
 	}
 	h := &Header{

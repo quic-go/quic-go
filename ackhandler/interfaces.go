@@ -11,7 +11,7 @@ import (
 type SentPacketHandler interface {
 	// SentPacket may modify the packet
 	SentPacket(packet *Packet) error
-	ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, recvTime time.Time) error
+	ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, encLevel protocol.EncryptionLevel, recvTime time.Time) error
 	SetHandshakeComplete()
 
 	SendingAllowed() bool
