@@ -159,7 +159,7 @@ func (h *Header) getHeaderLength() (protocol.ByteCount, error) {
 
 func (h *Header) logHeader() {
 	if h.IsLongHeader {
-		utils.Debugf("   Long Header{Type: %#x, ConnectionID: %#x, PacketNumber: %#x, Version: %s}", h.Type, h.ConnectionID, h.PacketNumber, h.Version)
+		utils.Debugf("   Long Header{Type: %s, ConnectionID: %#x, PacketNumber: %#x, Version: %s}", h.Type, h.ConnectionID, h.PacketNumber, h.Version)
 	} else {
 		connID := "(omitted)"
 		if !h.OmitConnectionID {

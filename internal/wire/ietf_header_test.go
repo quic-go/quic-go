@@ -389,12 +389,12 @@ var _ = Describe("IETF draft Header", func() {
 		It("logs Long Headers", func() {
 			(&Header{
 				IsLongHeader: true,
-				Type:         0x5,
+				Type:         protocol.PacketTypeHandshake,
 				PacketNumber: 0x1337,
 				ConnectionID: 0xdeadbeef,
 				Version:      253,
 			}).logHeader()
-			Expect(string(buf.Bytes())).To(ContainSubstring("Long Header{Type: 0x5, ConnectionID: 0xdeadbeef, PacketNumber: 0x1337, Version: 253}"))
+			Expect(string(buf.Bytes())).To(ContainSubstring("Long Header{Type: Handshake, ConnectionID: 0xdeadbeef, PacketNumber: 0x1337, Version: 253}"))
 		})
 
 		It("logs Short Headers containing a connection ID", func() {
