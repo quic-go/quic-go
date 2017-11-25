@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -43,15 +44,13 @@ var _ = Describe("Cubic Sender", func() {
 	})
 
 	SendAvailableSendWindowLen := func(packetLength protocol.ByteCount) int {
-		// Send as long as TimeUntilSend returns Zero.
+		// Send as long as TimeUntilSend returns InfDuration.
 		packets_sent := 0
-		can_send := sender.TimeUntilSend(clock.Now(), bytesInFlight) == 0
-		for can_send {
+		for sender.TimeUntilSend(clock.Now(), bytesInFlight) != utils.InfDuration {
 			sender.OnPacketSent(clock.Now(), bytesInFlight, packetNumber, packetLength, true)
 			packetNumber++
 			packets_sent++
 			bytesInFlight += packetLength
-			can_send = sender.TimeUntilSend(clock.Now(), bytesInFlight) == 0
 		}
 		return packets_sent
 	}
@@ -99,6 +98,20 @@ var _ = Describe("Cubic Sender", func() {
 		// Fill the send window with data, then verify that we can't send.
 		SendAvailableSendWindow()
 		Expect(sender.TimeUntilSend(clock.Now(), sender.GetCongestionWindow())).ToNot(BeZero())
+	})
+
+	It("paces", func() {
+		clock.Advance(time.Hour)
+		// Fill the send window with data, then verify that we can't send.
+		SendAvailableSendWindow()
+		AckNPackets(1)
+		delay := sender.TimeUntilSend(clock.Now(), bytesInFlight)
+		Expect(delay).ToNot(BeZero())
+		Expect(delay).ToNot(Equal(utils.InfDuration))
+		// advance the clock by 1 ms, and check that the delay was decreased by 1 ms
+		Expect(delay).To(BeNumerically(">", time.Millisecond))
+		clock.Advance(time.Millisecond)
+		Expect(sender.TimeUntilSend(clock.Now(), bytesInFlight)).To(Equal(delay - time.Millisecond))
 	})
 
 	It("application limited slow start", func() {

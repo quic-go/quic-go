@@ -7,6 +7,7 @@ import (
 	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -723,27 +724,27 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("allows or denies sending based on congestion", func() {
-			Expect(handler.retransmissionQueue).To(BeEmpty())
 			handler.bytesInFlight = 100
-			cong.EXPECT().GetCongestionWindow().Return(protocol.MaxByteCount)
-			Expect(handler.SendingAllowed()).To(BeTrue())
-			cong.EXPECT().GetCongestionWindow().Return(protocol.ByteCount(0))
-			Expect(handler.SendingAllowed()).To(BeFalse())
+			Expect(handler.retransmissionQueue).To(BeEmpty())
+			cong.EXPECT().TimeUntilSend(gomock.Any(), protocol.ByteCount(100)).Return(time.Hour)
+			Expect(handler.TimeUntilSend()).To(Equal(time.Hour))
 		})
 
 		It("allows or denies sending based on the number of tracked packets", func() {
-			cong.EXPECT().GetCongestionWindow().Return(protocol.MaxByteCount).AnyTimes()
-			Expect(handler.SendingAllowed()).To(BeTrue())
+			cong.EXPECT().TimeUntilSend(gomock.Any(), gomock.Any()).Return(time.Hour)
+			Expect(handler.TimeUntilSend()).To(Equal(time.Hour))
 			handler.retransmissionQueue = make([]*Packet, protocol.MaxTrackedSentPackets)
-			Expect(handler.SendingAllowed()).To(BeFalse())
+			Expect(handler.TimeUntilSend()).To(Equal(utils.InfDuration))
 		})
 
 		It("allows sending if there are retransmisisons outstanding", func() {
+			cong.EXPECT().GetCongestionWindow().AnyTimes()
+			cong.EXPECT().TimeUntilSend(gomock.Any(), protocol.ByteCount(100)).Return(utils.InfDuration).Times(2)
 			handler.bytesInFlight = 100
-			cong.EXPECT().GetCongestionWindow().Return(protocol.ByteCount(0)).AnyTimes()
-			Expect(handler.SendingAllowed()).To(BeFalse())
-			handler.retransmissionQueue = []*Packet{nil}
-			Expect(handler.SendingAllowed()).To(BeTrue())
+			Expect(handler.retransmissionQueue).To(BeEmpty())
+			Expect(handler.TimeUntilSend()).To(Equal(utils.InfDuration))
+			handler.retransmissionQueue = []*Packet{{PacketNumber: 3}}
+			Expect(handler.TimeUntilSend()).To(BeZero())
 		})
 	})
 
