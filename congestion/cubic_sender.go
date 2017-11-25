@@ -58,6 +58,8 @@ type cubicSender struct {
 
 	initialCongestionWindow    protocol.PacketNumber
 	initialMaxCongestionWindow protocol.PacketNumber
+
+	lastPacketSentOn time.Time
 }
 
 // NewCubicSender makes a new cubic sender
@@ -76,15 +78,22 @@ func NewCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestio
 	}
 }
 
-func (c *cubicSender) TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCount) time.Duration {
+// TimeToSend returns infinite if the congestion controller is congestion window limited, a negative duration if the packet can be sent immediately
+// and a positive duration if sending is pacing limited.
+func (c *cubicSender) TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCount, packetLength protocol.ByteCount) time.Duration {
+	cwnd := c.GetCongestionWindow()
 	if c.InRecovery() {
 		// PRR is used when in recovery.
-		return c.prr.TimeUntilSend(c.GetCongestionWindow(), bytesInFlight, c.GetSlowStartThreshold())
+		return c.prr.TimeUntilSend(cwnd, bytesInFlight, c.GetSlowStartThreshold())
 	}
-	if c.GetCongestionWindow() > bytesInFlight {
-		return 0
+	if cwnd <= bytesInFlight {
+		return utils.InfDuration
 	}
-	return utils.InfDuration
+	timeToSend := c.lastPacketSentOn.Add((time.Duration(packetLength) * c.rttStats.SmoothedRTT()) / time.Duration(cwnd))
+	timeUntilSend := timeToSend.Sub(now)
+	// fmt.Printf("delta T_last_sent = %s\nPacket length = %d\nRTT = %s\nCwnd = %d\nBytes in flight = %d\n", c.lastPacketSentOn.Sub(now), packetLength, c.rttStats.SmoothedRTT(), cwnd, bytesInFlight)
+	// fmt.Printf("Time until sent %s\n\n", timeUntilSend)
+	return timeUntilSend
 }
 
 func (c *cubicSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) bool {
@@ -98,6 +107,7 @@ func (c *cubicSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.By
 	}
 	c.largestSentPacketNumber = packetNumber
 	c.hybridSlowStart.OnPacketSent(packetNumber)
+	c.lastPacketSentOn = sentTime
 	return true
 }
 

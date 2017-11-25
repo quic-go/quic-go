@@ -303,7 +303,7 @@ runLoop:
 		default:
 		}
 
-		s.maybeResetTimer()
+		s.maybeResetTimer(time.Time{})
 
 		select {
 		case closeErr = <-s.closeChan:
@@ -388,12 +388,16 @@ func (s *session) Context() context.Context {
 	return s.ctx
 }
 
-func (s *session) maybeResetTimer() {
+func (s *session) maybeResetTimer(timeToSend time.Time) {
 	var deadline time.Time
 	if s.config.KeepAlive && s.handshakeComplete && !s.keepAlivePingSent {
 		deadline = s.lastNetworkActivityTime.Add(s.peerParams.IdleTimeout / 2)
 	} else {
 		deadline = s.lastNetworkActivityTime.Add(s.config.IdleTimeout)
+	}
+
+	if !timeToSend.Equal(time.Time{}) {
+		deadline = utils.MinTime(deadline, timeToSend)
 	}
 
 	if ackAlarm := s.receivedPacketHandler.GetAlarmTimeout(); !ackAlarm.IsZero() {
@@ -660,28 +664,40 @@ func (s *session) sendPacket() error {
 		s.packer.QueueControlFrame(ack)
 	}
 
-	// Repeatedly try sending until we don't have any more data, or run out of the congestion window
-	for {
-		if !s.sentPacketHandler.SendingAllowed() {
-			if ack == nil {
-				return nil
-			}
-			// If we aren't allowed to send, at least try sending an ACK frame
-			swf := s.sentPacketHandler.GetStopWaitingFrame(false)
-			if swf != nil {
-				s.packer.QueueControlFrame(swf)
-			}
-			packet, err := s.packer.PackAckPacket()
-			if err != nil {
-				return err
-			}
-			return s.sendPackedPacket(packet)
+	baseForSendTimeout := time.Now()
+	timeUntilSend := s.sentPacketHandler.TimeUntilSend(baseForSendTimeout, protocol.MaxPacketSize)
+
+	// If we are congestion limited, at least try sending an ACK frame
+	if timeUntilSend == utils.InfDuration {
+		if ack == nil {
+			return nil
 		}
+		swf := s.sentPacketHandler.GetStopWaitingFrame(false)
+		if swf != nil {
+			s.packer.QueueControlFrame(swf)
+		}
+		packet, err := s.packer.PackAckPacket()
+		if err != nil {
+			return err
+		}
+		return s.sendPackedPacket(packet)
+	}
+
+	// Repeatedly try sending until we don't have any more data, or run out of the congestion window
+	for timeUntilSend <= 0 {
+		// TODO calculate new timeToSend for each packet we want to sent
+		baseForSendTimeout = time.Now()
+		timeUntilSend = s.sentPacketHandler.TimeUntilSend(baseForSendTimeout, protocol.MaxPacketSize)
 
 		// check for retransmissions first
 		for {
 			retransmitPacket := s.sentPacketHandler.DequeuePacketForRetransmission()
 			if retransmitPacket == nil {
+				break
+			}
+			baseForSendTimeout = time.Now()
+			timeUntilSend = s.sentPacketHandler.TimeUntilSend(baseForSendTimeout, retransmitPacket.Length)
+			if timeUntilSend > 0 {
 				break
 			}
 
@@ -740,6 +756,10 @@ func (s *session) sendPacket() error {
 		windowUpdates = nil
 		ack = nil
 	}
+
+	s.maybeResetTimer(baseForSendTimeout.Add(timeUntilSend))
+
+	return nil
 }
 
 func (s *session) sendPackedPacket(packet *packedPacket) error {
@@ -858,7 +878,7 @@ func (s *session) tryQueueingUndecryptablePacket(p *receivedPacket) {
 		// if this is the first time the undecryptablePackets runs full, start the timer to send a Public Reset
 		if s.receivedTooManyUndecrytablePacketsTime.IsZero() {
 			s.receivedTooManyUndecrytablePacketsTime = time.Now()
-			s.maybeResetTimer()
+			s.maybeResetTimer(time.Time{})
 		}
 		utils.Infof("Dropping undecrytable packet 0x%x (undecryptable packet queue full)", p.header.PacketNumber)
 		return
