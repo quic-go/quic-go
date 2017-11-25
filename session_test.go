@@ -70,26 +70,6 @@ func (m *mockUnpacker) Unpack(headerBinary []byte, hdr *wire.Header, data []byte
 	}, nil
 }
 
-type mockReceivedPacketHandler struct {
-	nextAckFrame *wire.AckFrame
-	ackAlarm     time.Time
-}
-
-func (m *mockReceivedPacketHandler) GetAckFrame() *wire.AckFrame {
-	f := m.nextAckFrame
-	m.nextAckFrame = nil
-	return f
-}
-func (m *mockReceivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumber, shouldInstigateAck bool) error {
-	panic("not implemented")
-}
-func (m *mockReceivedPacketHandler) IgnoreBelow(protocol.PacketNumber) {
-	panic("not implemented")
-}
-func (m *mockReceivedPacketHandler) GetAlarmTimeout() time.Time { return m.ackAlarm }
-
-var _ ackhandler.ReceivedPacketHandler = &mockReceivedPacketHandler{}
-
 func areSessionsRunning() bool {
 	var b bytes.Buffer
 	pprof.Lookup("goroutine").WriteTo(&b, 1)
@@ -1000,10 +980,14 @@ var _ = Describe("Session", func() {
 		})
 
 		It("sets the timer to the ack timer", func() {
-			rph := &mockReceivedPacketHandler{ackAlarm: time.Now().Add(10 * time.Millisecond)}
-			rph.nextAckFrame = &wire.AckFrame{LargestAcked: 0x1337}
+			rph := mocks.NewMockReceivedPacketHandler(mockCtrl)
+			rph.EXPECT().GetAckFrame().Return(&wire.AckFrame{LargestAcked: 0x1337})
+			rph.EXPECT().GetAlarmTimeout().Return(time.Now().Add(10 * time.Millisecond)).MinTimes(1)
 			sess.receivedPacketHandler = rph
-			go sess.run()
+			go func() {
+				defer GinkgoRecover()
+				sess.run()
+			}()
 			defer sess.Close(nil)
 			time.Sleep(10 * time.Millisecond)
 			Eventually(func() int { return len(mconn.written) }).ShouldNot(BeZero())
