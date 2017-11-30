@@ -739,16 +739,17 @@ var _ = Describe("Session", func() {
 		})
 
 		Context("updating the remote address", func() {
-			It("sets the remote address", func() {
+			It("doesn't support connection migration", func() {
+				origAddr := sess.conn.(*mockConnection).remoteAddr
 				remoteIP := &net.IPAddr{IP: net.IPv4(192, 168, 0, 100)}
-				Expect(sess.conn.(*mockConnection).remoteAddr).ToNot(Equal(remoteIP))
+				Expect(origAddr).ToNot(Equal(remoteIP))
 				p := receivedPacket{
 					remoteAddr: remoteIP,
 					header:     &wire.Header{PacketNumber: 1337},
 				}
 				err := sess.handlePacketImpl(&p)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(sess.conn.(*mockConnection).remoteAddr).To(Equal(remoteIP))
+				Expect(sess.conn.(*mockConnection).remoteAddr).To(Equal(origAddr))
 			})
 
 			It("doesn't change the remote address if authenticating the packet fails", func() {
@@ -765,20 +766,6 @@ var _ = Describe("Session", func() {
 				err := sess.handlePacketImpl(&p)
 				quicErr := err.(*qerr.QuicError)
 				Expect(quicErr.ErrorCode).To(Equal(qerr.DecryptionFailure))
-				Expect(sess.conn.(*mockConnection).remoteAddr).To(Equal(remoteIP))
-			})
-
-			It("sets the remote address, if the packet is authenticated, but unpacking fails for another reason", func() {
-				testErr := errors.New("testErr")
-				remoteIP := &net.IPAddr{IP: net.IPv4(192, 168, 0, 100)}
-				Expect(sess.conn.(*mockConnection).remoteAddr).ToNot(Equal(remoteIP))
-				p := receivedPacket{
-					remoteAddr: remoteIP,
-					header:     &wire.Header{PacketNumber: 1337},
-				}
-				sess.unpacker.(*mockUnpacker).unpackErr = testErr
-				err := sess.handlePacketImpl(&p)
-				Expect(err).To(MatchError(testErr))
 				Expect(sess.conn.(*mockConnection).remoteAddr).To(Equal(remoteIP))
 			})
 		})
