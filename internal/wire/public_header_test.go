@@ -97,14 +97,18 @@ var _ = Describe("Public Header", func() {
 				return data
 			}
 
-			It("parses version negotiation packets sent by the server", func() {
-				b := bytes.NewReader(ComposeGQUICVersionNegotiation(0x1337, protocol.SupportedVersions))
+			It("parses", func() {
+				versions := []protocol.VersionNumber{0x13, 0x37}
+				b := bytes.NewReader(ComposeGQUICVersionNegotiation(0x1337, versions))
 				hdr, err := parsePublicHeader(b, protocol.PerspectiveServer)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(hdr.VersionFlag).To(BeTrue())
 				Expect(hdr.Version).To(BeZero()) // unitialized
 				Expect(hdr.IsVersionNegotiation).To(BeTrue())
-				Expect(hdr.SupportedVersions).To(Equal(protocol.SupportedVersions))
+				// in addition to the versions, the supported versions might contain a reserved version number
+				for _, version := range versions {
+					Expect(hdr.SupportedVersions).To(ContainElement(version))
+				}
 				Expect(b.Len()).To(BeZero())
 			})
 

@@ -21,9 +21,7 @@ func ComposeGQUICVersionNegotiation(connID protocol.ConnectionID, versions []pro
 		utils.Errorf("error composing version negotiation packet: %s", err.Error())
 		return nil
 	}
-	for _, v := range versions {
-		utils.BigEndian.WriteUint32(fullReply, uint32(v))
-	}
+	writeVersions(fullReply, versions)
 	return fullReply.Bytes()
 }
 
@@ -48,8 +46,14 @@ func ComposeVersionNegotiation(
 		utils.Errorf("error composing version negotiation packet: %s", err.Error())
 		return nil
 	}
-	for _, v := range versions {
-		utils.BigEndian.WriteUint32(fullReply, uint32(v))
-	}
+	writeVersions(fullReply, versions)
 	return fullReply.Bytes()
+}
+
+// writeVersions writes the versions for a Version Negotiation Packet.
+// It inserts one reserved version number at a random position.
+func writeVersions(buf *bytes.Buffer, supported []protocol.VersionNumber) {
+	for _, v := range protocol.GetGreasedVersions(supported) {
+		utils.BigEndian.WriteUint32(buf, uint32(v))
+	}
 }

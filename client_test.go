@@ -369,7 +369,7 @@ var _ = Describe("Client", func() {
 				Expect(firstSession.closeReason).To(Equal(errCloseSessionForNewVersion))
 				Consistently(func() bool { return secondSession.closed }).Should(BeFalse())
 				Expect(cl.connectionID).ToNot(BeEquivalentTo(0x1337))
-				Expect(negotiatedVersions).To(Equal([]protocol.VersionNumber{newVersion}))
+				Expect(negotiatedVersions).To(ContainElement(newVersion))
 				Expect(initialVersion).To(Equal(actualInitialVersion))
 
 				handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
