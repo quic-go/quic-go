@@ -313,12 +313,17 @@ var _ = Describe("Server Crypto Setup", func() {
 			})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(response).To(HavePrefix("SHLO"))
-			Expect(response).To(ContainSubstring("ephermal pub"))
-			Expect(response).To(ContainSubstring("SNO\x00"))
+			message, err := ParseHandshakeMessage(bytes.NewReader(response))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(message.Data).To(HaveKeyWithValue(TagPUBS, []byte("ephermal pub")))
+			Expect(message.Data).To(HaveKey(TagSNO))
+			Expect(message.Data).To(HaveKey(TagVER))
+			// the supported versions should include one reserved version number
+			Expect(message.Data[TagVER]).To(HaveLen(4*len(supportedVersions) + 4))
 			for _, v := range supportedVersions {
 				b := &bytes.Buffer{}
 				utils.BigEndian.WriteUint32(b, uint32(v))
-				Expect(response).To(ContainSubstring(string(b.Bytes())))
+				Expect(message.Data[TagVER]).To(ContainSubstring(string(b.Bytes())))
 			}
 			Expect(checkedSecure).To(BeTrue())
 			Expect(checkedForwardSecure).To(BeTrue())
