@@ -91,23 +91,10 @@ var _ = Describe("receivedPacketHandler", func() {
 				Expect(handler.GetAlarmTimeout()).To(BeZero())
 			})
 
-			It("only queues one ACK for many non-retransmittable packets", func() {
-				receiveAndAck10Packets()
-				for i := 11; i < 10+protocol.MaxPacketsReceivedBeforeAckSend; i++ {
-					err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(handler.ackQueued).To(BeFalse())
-				}
-				err := handler.ReceivedPacket(10+protocol.MaxPacketsReceivedBeforeAckSend, false)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.ackQueued).To(BeTrue())
-				Expect(handler.GetAlarmTimeout()).To(BeZero())
-			})
-
-			It("doesn't queue an ACK for non-retransmittable packets, for QUIC >= 39", func() {
+			It("doesn't queue an ACK for non-retransmittable packets", func() {
 				receiveAndAck10Packets()
 				handler.version = protocol.Version39
-				for i := 11; i < 10+10*protocol.MaxPacketsReceivedBeforeAckSend; i++ {
+				for i := 11; i < 1000; i++ {
 					err := handler.ReceivedPacket(protocol.PacketNumber(i), false)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(handler.ackQueued).To(BeFalse())
