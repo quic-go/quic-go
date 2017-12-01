@@ -361,6 +361,49 @@ var _ = Describe("Packet packer", func() {
 		Expect(packer.packetNumberGenerator.Peek()).To(Equal(protocol.PacketNumber(2)))
 	})
 
+	It("adds a PING frame when it's supposed to send a retransmittable packet", func() {
+		packer.QueueControlFrame(&wire.AckFrame{})
+		packer.QueueControlFrame(&wire.StopWaitingFrame{})
+		packer.MakeNextPacketRetransmittable()
+		p, err := packer.PackPacket()
+		Expect(p).ToNot(BeNil())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(p.frames).To(HaveLen(3))
+		Expect(p.frames).To(ContainElement(&wire.PingFrame{}))
+		// make sure the next packet doesn't contain another PING
+		packer.QueueControlFrame(&wire.AckFrame{})
+		p, err = packer.PackPacket()
+		Expect(p).ToNot(BeNil())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(p.frames).To(HaveLen(1))
+	})
+
+	It("waits until there's something to send before adding a PING frame", func() {
+		packer.MakeNextPacketRetransmittable()
+		p, err := packer.PackPacket()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(p).To(BeNil())
+		packer.QueueControlFrame(&wire.AckFrame{})
+		p, err = packer.PackPacket()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(p.frames).To(HaveLen(2))
+		Expect(p.frames).To(ContainElement(&wire.PingFrame{}))
+	})
+
+	It("doesn't send a PING if it already sent another retransmittable frame", func() {
+		packer.MakeNextPacketRetransmittable()
+		packer.QueueControlFrame(&wire.MaxDataFrame{})
+		p, err := packer.PackPacket()
+		Expect(p).ToNot(BeNil())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(p.frames).To(HaveLen(1))
+		packer.QueueControlFrame(&wire.AckFrame{})
+		p, err = packer.PackPacket()
+		Expect(p).ToNot(BeNil())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(p.frames).To(HaveLen(1))
+	})
+
 	Context("STREAM Frame handling", func() {
 		It("does not splits a STREAM frame with maximum size, for gQUIC frames", func() {
 			f := &wire.StreamFrame{

@@ -824,6 +824,7 @@ var _ = Describe("Session", func() {
 
 		It("sends a retransmittable packet when required by the SentPacketHandler", func() {
 			sess.sentPacketHandler = &mockSentPacketHandler{shouldSendRetransmittablePacket: true}
+			sess.packer.QueueControlFrame(&wire.AckFrame{LargestAcked: 1000})
 			err := sess.sendPacket()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(mconn.written).To(HaveLen(1))
