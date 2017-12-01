@@ -212,14 +212,14 @@ func (p *packetPacker) composeNextPacket(
 	var payloadFrames []wire.Frame
 
 	// STOP_WAITING and ACK will always fit
-	if p.stopWaiting != nil {
-		payloadFrames = append(payloadFrames, p.stopWaiting)
-		payloadLength += p.stopWaiting.MinLength(p.version)
-	}
-	if p.ackFrame != nil {
+	if p.ackFrame != nil { // ACKs need to go first, so that the sentPacketHandler will recognize them
 		payloadFrames = append(payloadFrames, p.ackFrame)
 		l := p.ackFrame.MinLength(p.version)
 		payloadLength += l
+	}
+	if p.stopWaiting != nil {
+		payloadFrames = append(payloadFrames, p.stopWaiting)
+		payloadLength += p.stopWaiting.MinLength(p.version)
 	}
 
 	p.controlFrameMutex.Lock()

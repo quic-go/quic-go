@@ -276,13 +276,26 @@ var _ = Describe("Session", func() {
 
 		Context("handling ACK frames", func() {
 			It("informs the SentPacketHandler about ACKs", func() {
+				f := &wire.AckFrame{LargestAcked: 3, LowestAcked: 2}
 				sph := mocks.NewMockSentPacketHandler(mockCtrl)
+				sph.EXPECT().ReceivedAck(f, protocol.PacketNumber(42), protocol.EncryptionSecure, gomock.Any())
+				sph.EXPECT().GetLowestPacketNotConfirmedAcked()
 				sess.sentPacketHandler = sph
 				sess.lastRcvdPacketNumber = 42
-				f := &wire.AckFrame{LargestAcked: 3, LowestAcked: 2}
 				err := sess.handleAckFrame(f, protocol.EncryptionSecure)
 				Expect(err).ToNot(HaveOccurred())
-				sph.EXPECT().ReceivedAck(f, protocol.PacketNumber(42), protocol.EncryptionSecure, gomock.Any())
+			})
+
+			It("tells the ReceivedPacketHandler to ignore low ranges", func() {
+				sph := mocks.NewMockSentPacketHandler(mockCtrl)
+				sph.EXPECT().ReceivedAck(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+				sph.EXPECT().GetLowestPacketNotConfirmedAcked().Return(protocol.PacketNumber(0x42))
+				sess.sentPacketHandler = sph
+				rph := mocks.NewMockReceivedPacketHandler(mockCtrl)
+				rph.EXPECT().IgnoreBelow(protocol.PacketNumber(0x42))
+				sess.receivedPacketHandler = rph
+				err := sess.handleAckFrame(&wire.AckFrame{LargestAcked: 3, LowestAcked: 2}, protocol.EncryptionUnencrypted)
+				Expect(err).ToNot(HaveOccurred())
 			})
 		})
 
