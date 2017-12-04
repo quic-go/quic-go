@@ -202,13 +202,13 @@ var _ = Describe("receivedPacketHandler", func() {
 			})
 
 			It("accepts packets below the lower limit", func() {
-				handler.SetLowerLimit(5)
+				handler.IgnoreBelow(6)
 				err := handler.ReceivedPacket(2, true)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("doesn't add delayed packets to the packetHistory", func() {
-				handler.SetLowerLimit(6)
+				handler.IgnoreBelow(7)
 				err := handler.ReceivedPacket(4, true)
 				Expect(err).ToNot(HaveOccurred())
 				err = handler.ReceivedPacket(10, true)
@@ -224,7 +224,7 @@ var _ = Describe("receivedPacketHandler", func() {
 					err := handler.ReceivedPacket(protocol.PacketNumber(i), true)
 					Expect(err).ToNot(HaveOccurred())
 				}
-				handler.SetLowerLimit(6)
+				handler.IgnoreBelow(7)
 				// check that the packets were deleted from the receivedPacketHistory by checking the values in an ACK frame
 				ack := handler.GetAckFrame()
 				Expect(ack).ToNot(BeNil())
@@ -235,7 +235,7 @@ var _ = Describe("receivedPacketHandler", func() {
 
 			// TODO: remove this test when dropping support for STOP_WAITINGs
 			It("handles a lower limit of 0", func() {
-				handler.SetLowerLimit(0)
+				handler.IgnoreBelow(0)
 				err := handler.ReceivedPacket(1337, true)
 				Expect(err).ToNot(HaveOccurred())
 				ack := handler.GetAckFrame()

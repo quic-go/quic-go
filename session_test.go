@@ -130,7 +130,7 @@ func (m *mockReceivedPacketHandler) GetAckFrame() *wire.AckFrame {
 func (m *mockReceivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumber, shouldInstigateAck bool) error {
 	panic("not implemented")
 }
-func (m *mockReceivedPacketHandler) SetLowerLimit(protocol.PacketNumber) {
+func (m *mockReceivedPacketHandler) IgnoreBelow(protocol.PacketNumber) {
 	panic("not implemented")
 }
 func (m *mockReceivedPacketHandler) GetAlarmTimeout() time.Time { return m.ackAlarm }

@@ -124,7 +124,7 @@ var _ = Describe("receivedPacketHistory", func() {
 
 	Context("deleting", func() {
 		It("does nothing when the history is empty", func() {
-			hist.DeleteUpTo(5)
+			hist.DeleteBelow(5)
 			Expect(hist.ranges.Len()).To(BeZero())
 		})
 
@@ -132,7 +132,7 @@ var _ = Describe("receivedPacketHistory", func() {
 			hist.ReceivedPacket(4)
 			hist.ReceivedPacket(5)
 			hist.ReceivedPacket(10)
-			hist.DeleteUpTo(5)
+			hist.DeleteBelow(6)
 			Expect(hist.ranges.Len()).To(Equal(1))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 10, End: 10}))
 		})
@@ -141,7 +141,7 @@ var _ = Describe("receivedPacketHistory", func() {
 			hist.ReceivedPacket(1)
 			hist.ReceivedPacket(5)
 			hist.ReceivedPacket(10)
-			hist.DeleteUpTo(8)
+			hist.DeleteBelow(8)
 			Expect(hist.ranges.Len()).To(Equal(1))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 10, End: 10}))
 		})
@@ -152,7 +152,7 @@ var _ = Describe("receivedPacketHistory", func() {
 			hist.ReceivedPacket(5)
 			hist.ReceivedPacket(6)
 			hist.ReceivedPacket(7)
-			hist.DeleteUpTo(4)
+			hist.DeleteBelow(5)
 			Expect(hist.ranges.Len()).To(Equal(1))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 5, End: 7}))
 		})
@@ -161,7 +161,7 @@ var _ = Describe("receivedPacketHistory", func() {
 			hist.ReceivedPacket(4)
 			hist.ReceivedPacket(5)
 			hist.ReceivedPacket(10)
-			hist.DeleteUpTo(4)
+			hist.DeleteBelow(5)
 			Expect(hist.ranges.Len()).To(Equal(2))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 5, End: 5}))
 			Expect(hist.ranges.Back().Value).To(Equal(utils.PacketInterval{Start: 10, End: 10}))
@@ -169,7 +169,7 @@ var _ = Describe("receivedPacketHistory", func() {
 
 		It("keeps a one-packet range, if deleting up to the packet directly below", func() {
 			hist.ReceivedPacket(4)
-			hist.DeleteUpTo(3)
+			hist.DeleteBelow(4)
 			Expect(hist.ranges.Len()).To(Equal(1))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 4, End: 4}))
 		})
@@ -191,7 +191,7 @@ var _ = Describe("receivedPacketHistory", func() {
 				}
 				err := hist.ReceivedPacket(2*protocol.MaxTrackedReceivedAckRanges + 2)
 				Expect(err).To(MatchError(errTooManyOutstandingReceivedAckRanges))
-				hist.DeleteUpTo(protocol.MaxTrackedReceivedAckRanges) // deletes about half of the ranges
+				hist.DeleteBelow(protocol.MaxTrackedReceivedAckRanges) // deletes about half of the ranges
 				err = hist.ReceivedPacket(2*protocol.MaxTrackedReceivedAckRanges + 4)
 				Expect(err).ToNot(HaveOccurred())
 			})

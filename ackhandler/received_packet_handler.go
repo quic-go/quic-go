@@ -12,7 +12,7 @@ var errInvalidPacketNumber = errors.New("ReceivedPacketHandler: Invalid packet n
 
 type receivedPacketHandler struct {
 	largestObserved             protocol.PacketNumber
-	lowerLimit                  protocol.PacketNumber
+	ignoreBelow                 protocol.PacketNumber
 	largestObservedReceivedTime time.Time
 
 	packetHistory *receivedPacketHistory
@@ -47,7 +47,7 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 		h.largestObservedReceivedTime = time.Now()
 	}
 
-	if packetNumber <= h.lowerLimit {
+	if packetNumber < h.ignoreBelow {
 		return nil
 	}
 
@@ -58,11 +58,11 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 	return nil
 }
 
-// SetLowerLimit sets a lower limit for acking packets.
-// Packets with packet numbers smaller or equal than p will not be acked.
-func (h *receivedPacketHandler) SetLowerLimit(p protocol.PacketNumber) {
-	h.lowerLimit = p
-	h.packetHistory.DeleteUpTo(p)
+// IgnoreBelow sets a lower limit for acking packets.
+// Packets with packet numbers smaller than p will not be acked.
+func (h *receivedPacketHandler) IgnoreBelow(p protocol.PacketNumber) {
+	h.ignoreBelow = p
+	h.packetHistory.DeleteBelow(p)
 }
 
 func (h *receivedPacketHandler) maybeQueueAck(packetNumber protocol.PacketNumber, shouldInstigateAck bool) {
