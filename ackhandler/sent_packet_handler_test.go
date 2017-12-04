@@ -105,7 +105,7 @@ var _ = Describe("SentPacketHandler", func() {
 	}
 
 	It("gets the LeastUnacked packet number", func() {
-		handler.LargestAcked = 0x1337
+		handler.largestAcked = 0x1337
 		Expect(handler.GetLeastUnacked()).To(Equal(protocol.PacketNumber(0x1337 + 1)))
 	})
 
@@ -130,7 +130,7 @@ var _ = Describe("SentPacketHandler", func() {
 			err := handler.SentPacket(&packet1)
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.SentPacket(&packet2)
-			Expect(err).To(MatchError(errPacketNumberNotIncreasing))
+			Expect(err).To(MatchError("Already sent a packet with a higher packet number"))
 			Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(1)))
 			Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(1)))
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(1)))
@@ -143,7 +143,7 @@ var _ = Describe("SentPacketHandler", func() {
 			err := handler.SentPacket(&packet1)
 			Expect(err).ToNot(HaveOccurred())
 			err = handler.SentPacket(&packet2)
-			Expect(err).To(MatchError(errPacketNumberNotIncreasing))
+			Expect(err).To(MatchError("Already sent a packet with a higher packet number"))
 			Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(2)))
 			Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(2)))
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(1)))
@@ -219,21 +219,21 @@ var _ = Describe("SentPacketHandler", func() {
 			Context("garbage collection", func() {
 				It("keeps all packet numbers above the LargestAcked", func() {
 					handler.skippedPackets = []protocol.PacketNumber{2, 5, 8, 10}
-					handler.LargestAcked = 1
+					handler.largestAcked = 1
 					handler.garbageCollectSkippedPackets()
 					Expect(handler.skippedPackets).To(Equal([]protocol.PacketNumber{2, 5, 8, 10}))
 				})
 
 				It("doesn't keep packet numbers below the LargestAcked", func() {
 					handler.skippedPackets = []protocol.PacketNumber{1, 5, 8, 10}
-					handler.LargestAcked = 5
+					handler.largestAcked = 5
 					handler.garbageCollectSkippedPackets()
 					Expect(handler.skippedPackets).To(Equal([]protocol.PacketNumber{8, 10}))
 				})
 
 				It("deletes all packet numbers if LargestAcked is sufficiently high", func() {
 					handler.skippedPackets = []protocol.PacketNumber{1, 5, 10}
-					handler.LargestAcked = 15
+					handler.largestAcked = 15
 					handler.garbageCollectSkippedPackets()
 					Expect(handler.skippedPackets).To(BeEmpty())
 				})
@@ -273,7 +273,7 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 			}
 			err := handler.SentPacket(retransmittablePacket(i))
-			Expect(err).To(MatchError(ErrTooManyTrackedSentPackets))
+			Expect(err).To(MatchError("Too many outstanding non-acked and non-retransmitted packets"))
 		})
 
 		// TODO: add a test that the length of the retransmission queue is considered, even if packets have already been ACKed. Relevant once we drop support for QUIC 33 and earlier
@@ -329,7 +329,7 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 3)))
 				err = handler.ReceivedAck(&ack, 1337-1, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).To(MatchError(ErrDuplicateOrOutOfOrderAck))
-				Expect(handler.LargestAcked).To(Equal(protocol.PacketNumber(3)))
+				Expect(handler.largestAcked).To(Equal(protocol.PacketNumber(3)))
 				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 3)))
 			})
 
@@ -338,7 +338,7 @@ var _ = Describe("SentPacketHandler", func() {
 					LargestAcked: packets[len(packets)-1].PacketNumber + 1337,
 				}
 				err := handler.ReceivedAck(&ack, 1, protocol.EncryptionUnencrypted, time.Now())
-				Expect(err).To(MatchError(errAckForUnsentPacket))
+				Expect(err).To(MatchError("InvalidAckData: Received ACK for an unsent package"))
 				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets))))
 			})
 
@@ -352,7 +352,7 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 3)))
 				err = handler.ReceivedAck(&ack, 1337+1, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.LargestAcked).To(Equal(protocol.PacketNumber(3)))
+				Expect(handler.largestAcked).To(Equal(protocol.PacketNumber(3)))
 				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 3)))
 			})
 
@@ -362,7 +362,7 @@ var _ = Describe("SentPacketHandler", func() {
 					LowestAcked:  5,
 				}
 				err := handler.ReceivedAck(&ack, 1337, protocol.EncryptionUnencrypted, time.Now())
-				Expect(err).To(MatchError(ErrAckForSkippedPacket))
+				Expect(err).To(MatchError("InvalidAckData: Received an ACK for a skipped packet number"))
 			})
 
 			It("accepts an ACK that correctly nacks a skipped packet", func() {
@@ -376,7 +376,7 @@ var _ = Describe("SentPacketHandler", func() {
 				}
 				err := handler.ReceivedAck(&ack, 1337, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.LargestAcked).ToNot(BeZero())
+				Expect(handler.largestAcked).ToNot(BeZero())
 			})
 		})
 
@@ -388,7 +388,7 @@ var _ = Describe("SentPacketHandler", func() {
 				}
 				err := handler.ReceivedAck(&ack, 1, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.LargestAcked).To(Equal(protocol.PacketNumber(5)))
+				Expect(handler.largestAcked).To(Equal(protocol.PacketNumber(5)))
 				el := handler.packetHistory.Front()
 				for i := 6; i <= 10; i++ {
 					Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(i)))
