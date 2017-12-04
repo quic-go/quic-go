@@ -1,14 +1,11 @@
 package ackhandler
 
 import (
-	"errors"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
-
-var errInvalidPacketNumber = errors.New("ReceivedPacketHandler: Invalid packet number")
 
 type receivedPacketHandler struct {
 	largestObserved             protocol.PacketNumber
@@ -38,10 +35,6 @@ func NewReceivedPacketHandler(version protocol.VersionNumber) ReceivedPacketHand
 }
 
 func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumber, shouldInstigateAck bool) error {
-	if packetNumber == 0 {
-		return errInvalidPacketNumber
-	}
-
 	if packetNumber > h.largestObserved {
 		h.largestObserved = packetNumber
 		h.largestObservedReceivedTime = time.Now()
