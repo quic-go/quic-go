@@ -6,7 +6,6 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/qerr"
 )
 
 // A StopWaitingFrame in QUIC
@@ -73,8 +72,8 @@ func ParseStopWaitingFrame(r *bytes.Reader, packetNumber protocol.PacketNumber, 
 	if err != nil {
 		return nil, err
 	}
-	if leastUnackedDelta >= uint64(packetNumber) {
-		return nil, qerr.Error(qerr.InvalidStopWaitingData, "invalid LeastUnackedDelta")
+	if leastUnackedDelta > uint64(packetNumber) {
+		return nil, errors.New("invalid LeastUnackedDelta")
 	}
 	frame.LeastUnacked = protocol.PacketNumber(uint64(packetNumber) - leastUnackedDelta)
 	return frame, nil
