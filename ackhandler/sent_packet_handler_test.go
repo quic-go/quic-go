@@ -124,31 +124,6 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.skippedPackets).To(BeEmpty())
 		})
 
-		It("rejects packets with the same packet number", func() {
-			packet1 := Packet{PacketNumber: 1, Frames: []wire.Frame{&streamFrame}, Length: 1}
-			packet2 := Packet{PacketNumber: 1, Frames: []wire.Frame{&streamFrame}, Length: 2}
-			err := handler.SentPacket(&packet1)
-			Expect(err).ToNot(HaveOccurred())
-			err = handler.SentPacket(&packet2)
-			Expect(err).To(MatchError("Already sent a packet with a higher packet number"))
-			Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(1)))
-			Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(1)))
-			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(1)))
-			Expect(handler.skippedPackets).To(BeEmpty())
-		})
-
-		It("rejects packets with decreasing packet number", func() {
-			packet1 := Packet{PacketNumber: 2, Frames: []wire.Frame{&streamFrame}, Length: 1}
-			packet2 := Packet{PacketNumber: 1, Frames: []wire.Frame{&streamFrame}, Length: 2}
-			err := handler.SentPacket(&packet1)
-			Expect(err).ToNot(HaveOccurred())
-			err = handler.SentPacket(&packet2)
-			Expect(err).To(MatchError("Already sent a packet with a higher packet number"))
-			Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(2)))
-			Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(2)))
-			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(1)))
-		})
-
 		It("stores the sent time", func() {
 			packet := Packet{PacketNumber: 1, Frames: []wire.Frame{&streamFrame}, Length: 1}
 			err := handler.SentPacket(&packet)

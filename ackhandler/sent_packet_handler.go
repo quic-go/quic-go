@@ -99,10 +99,6 @@ func (h *sentPacketHandler) SetHandshakeComplete() {
 }
 
 func (h *sentPacketHandler) SentPacket(packet *Packet) error {
-	if packet.PacketNumber <= h.lastSentPacketNumber {
-		return errors.New("Already sent a packet with a higher packet number")
-	}
-
 	if protocol.PacketNumber(len(h.retransmissionQueue)+h.packetHistory.Len()+1) > protocol.MaxTrackedSentPackets {
 		return errors.New("Too many outstanding non-acked and non-retransmitted packets")
 	}
