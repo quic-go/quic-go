@@ -83,11 +83,11 @@ func NewSentPacketHandler(rttStats *congestion.RTTStats) SentPacketHandler {
 	}
 }
 
-func (h *sentPacketHandler) largestInOrderAcked() protocol.PacketNumber {
+func (h *sentPacketHandler) lowestUnacked() protocol.PacketNumber {
 	if f := h.packetHistory.Front(); f != nil {
-		return f.Value.PacketNumber - 1
+		return f.Value.PacketNumber
 	}
-	return h.largestAcked
+	return h.largestAcked + 1
 }
 
 func (h *sentPacketHandler) ShouldSendRetransmittablePacket() bool {
@@ -144,13 +144,16 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 	}
 
 	// duplicate or out-of-order ACK
+	// if withPacketNumber <= h.largestReceivedPacketWithAck && withPacketNumber != 0 {
 	if withPacketNumber <= h.largestReceivedPacketWithAck {
+		utils.Debugf("ignoring ack because duplicate")
 		return ErrDuplicateOrOutOfOrderAck
 	}
 	h.largestReceivedPacketWithAck = withPacketNumber
 
 	// ignore repeated ACK (ACKs that don't have a higher LargestAcked than the last ACK)
-	if ackFrame.LargestAcked <= h.largestInOrderAcked() {
+	if ackFrame.LargestAcked < h.lowestUnacked() {
+		utils.Debugf("ignoring ack because repeated")
 		return nil
 	}
 	h.largestAcked = ackFrame.LargestAcked
@@ -223,7 +226,6 @@ func (h *sentPacketHandler) determineNewlyAckedPackets(ackFrame *wire.AckFrame) 
 			ackedPackets = append(ackedPackets, el)
 		}
 	}
-
 	return ackedPackets, nil
 }
 
@@ -335,7 +337,7 @@ func (h *sentPacketHandler) DequeuePacketForRetransmission() *Packet {
 }
 
 func (h *sentPacketHandler) GetLeastUnacked() protocol.PacketNumber {
-	return h.largestInOrderAcked() + 1
+	return h.lowestUnacked()
 }
 
 func (h *sentPacketHandler) GetStopWaitingFrame(force bool) *wire.StopWaitingFrame {
@@ -430,10 +432,10 @@ func (h *sentPacketHandler) skippedPacketsAcked(ackFrame *wire.AckFrame) bool {
 }
 
 func (h *sentPacketHandler) garbageCollectSkippedPackets() {
-	lioa := h.largestInOrderAcked()
+	lowestUnacked := h.lowestUnacked()
 	deleteIndex := 0
 	for i, p := range h.skippedPackets {
-		if p <= lioa {
+		if p < lowestUnacked {
 			deleteIndex = i + 1
 		}
 	}
