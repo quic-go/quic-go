@@ -64,14 +64,14 @@ var _ = Describe("Streams Map", func() {
 
 				It("rejects streams with even IDs", func() {
 					_, err := m.GetOrOpenStream(6)
-					Expect(err).To(MatchError("InvalidStreamID: attempted to open stream 6 from client-side"))
+					Expect(err).To(MatchError("InvalidStreamID: peer attempted to open stream 6"))
 				})
 
 				It("rejects streams with even IDs, which are lower thatn the highest client-side stream", func() {
 					_, err := m.GetOrOpenStream(5)
 					Expect(err).NotTo(HaveOccurred())
 					_, err = m.GetOrOpenStream(4)
-					Expect(err).To(MatchError("InvalidStreamID: attempted to open stream 4 from client-side"))
+					Expect(err).To(MatchError("InvalidStreamID: peer attempted to open stream 4"))
 				})
 
 				It("gets existing streams", func() {
@@ -421,14 +421,14 @@ var _ = Describe("Streams Map", func() {
 			Context("client-side streams", func() {
 				It("rejects streams with odd IDs", func() {
 					_, err := m.GetOrOpenStream(5)
-					Expect(err).To(MatchError("InvalidStreamID: attempted to open stream 5 from server-side"))
+					Expect(err).To(MatchError("InvalidStreamID: peer attempted to open stream 5"))
 				})
 
 				It("rejects streams with odds IDs, which are lower thatn the highest server-side stream", func() {
 					_, err := m.GetOrOpenStream(6)
 					Expect(err).NotTo(HaveOccurred())
 					_, err = m.GetOrOpenStream(5)
-					Expect(err).To(MatchError("InvalidStreamID: attempted to open stream 5 from server-side"))
+					Expect(err).To(MatchError("InvalidStreamID: peer attempted to open stream 5"))
 				})
 
 				It("gets new streams", func() {
