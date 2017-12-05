@@ -169,7 +169,13 @@ func (p *packetPacker) packCryptoPacket() (*packedPacket, error) {
 		return nil, err
 	}
 	maxLen := protocol.MaxPacketSize - protocol.ByteCount(sealer.Overhead()) - protocol.NonForwardSecurePacketSizeReduction - headerLength
-	frames := []wire.Frame{p.streamFramer.PopCryptoStreamFrame(maxLen)}
+	f := p.streamFramer.PopCryptoStreamFrame(maxLen)
+	// If this is the Client Initial, writeAndSealPacket will add PADDING frames at the end of the packet.
+	// The STREAM frame must have the Data Length set, otherwise the PADDING will be regarded as part of the STREAM data.
+	if header.Type == protocol.PacketTypeClientInitial {
+		f.DataLenPresent = true
+	}
+	frames := []wire.Frame{f}
 	raw, err := p.writeAndSealPacket(header, frames, sealer)
 	if err != nil {
 		return nil, err
@@ -266,18 +272,10 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header
 	pnum := p.packetNumberGenerator.Peek()
 	packetNumberLen := protocol.GetPacketNumberLengthForHeader(pnum, p.leastUnacked)
 
-	var isLongHeader bool
-	if p.version.UsesTLS() && encLevel != protocol.EncryptionForwardSecure {
-		// TODO: set the Long Header type
-		packetNumberLen = protocol.PacketNumberLen4
-		isLongHeader = true
-	}
-
 	header := &wire.Header{
 		ConnectionID:    p.connectionID,
 		PacketNumber:    pnum,
 		PacketNumberLen: packetNumberLen,
-		IsLongHeader:    isLongHeader,
 	}
 
 	if p.omitConnectionID && encLevel == protocol.EncryptionForwardSecure {
@@ -292,9 +290,11 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header
 			header.Version = p.version
 		}
 	} else {
-		header.Type = p.cryptoSetup.GetNextPacketType()
 		if encLevel != protocol.EncryptionForwardSecure {
+			header.IsLongHeader = true
+			header.PacketNumberLen = protocol.PacketNumberLen4
 			header.Version = p.version
+			header.Type = p.cryptoSetup.GetNextPacketType()
 		}
 	}
 	return header
@@ -313,13 +313,22 @@ func (p *packetPacker) writeAndSealPacket(
 	}
 	payloadStartIndex := buffer.Len()
 	for _, frame := range payloadFrames {
-		err := frame.Write(buffer, p.version)
-		if err != nil {
+		if err := frame.Write(buffer, p.version); err != nil {
 			return nil, err
 		}
 	}
 	if protocol.ByteCount(buffer.Len()+sealer.Overhead()) > protocol.MaxPacketSize {
 		return nil, errors.New("PacketPacker BUG: packet too large")
+	}
+
+	// pad Client Initial packets to the required minimum packet size
+	if p.version.UsesTLS() && header.Type == protocol.PacketTypeClientInitial {
+		paddingLen := int(protocol.MinClientInitialSize) - buffer.Len() - sealer.Overhead()
+		if paddingLen > 0 {
+			if _, err := buffer.Write(bytes.Repeat([]byte{0x0} /* PADDING frame */, paddingLen)); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	raw = raw[0:buffer.Len()]

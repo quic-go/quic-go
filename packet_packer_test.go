@@ -269,6 +269,15 @@ var _ = Describe("Packet packer", func() {
 		Expect(p2.header.PacketNumber).To(BeNumerically(">", p1.header.PacketNumber))
 	})
 
+	It("pads a Client Initial to 1200 bytes", func() {
+		cryptoStream.dataForWriting = []byte("TLS Client Hello")
+		packer.version = protocol.VersionTLS
+		packer.cryptoSetup.(*mockCryptoSetup).nextPacketType = protocol.PacketTypeClientInitial
+		p, err := packer.packCryptoPacket()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(p.raw).To(HaveLen(protocol.MinClientInitialSize))
+	})
+
 	It("packs a StopWaitingFrame first", func() {
 		packer.packetNumberGenerator.next = 15
 		swf := &wire.StopWaitingFrame{LeastUnacked: 10}
