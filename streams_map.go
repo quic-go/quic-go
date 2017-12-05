@@ -135,12 +135,7 @@ func (m *streamsMap) openRemoteStream(id protocol.StreamID) (streamI, error) {
 		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d, which is a lot smaller than the highest opened stream, %d", id, m.highestStreamOpenedByPeer))
 	}
 
-	if m.perspective == protocol.PerspectiveServer {
-		m.numIncomingStreams++
-	} else {
-		m.numOutgoingStreams++
-	}
-
+	m.numIncomingStreams++
 	if id > m.highestStreamOpenedByPeer {
 		m.highestStreamOpenedByPeer = id
 	}
@@ -156,12 +151,7 @@ func (m *streamsMap) openStreamImpl() (streamI, error) {
 		return nil, qerr.TooManyOpenStreams
 	}
 
-	if m.perspective == protocol.PerspectiveServer {
-		m.numOutgoingStreams++
-	} else {
-		m.numIncomingStreams++
-	}
-
+	m.numOutgoingStreams++
 	m.nextStream += 2
 	s := m.newStream(id)
 	m.putStream(s)
@@ -235,7 +225,7 @@ func (m *streamsMap) DeleteClosedStreams() error {
 		}
 		numDeletedStreams++
 		m.openStreams[i] = 0
-		if streamID%2 == 0 {
+		if m.streamInitiatedBy(streamID) == m.perspective {
 			m.numOutgoingStreams--
 		} else {
 			m.numIncomingStreams--
