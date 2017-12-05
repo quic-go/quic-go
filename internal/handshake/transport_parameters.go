@@ -97,7 +97,6 @@ func readTransportParamters(paramsList []transportParameter) (*TransportParamete
 
 	var foundInitialMaxStreamData bool
 	var foundInitialMaxData bool
-	var foundInitialMaxStreamID bool
 	var foundIdleTimeout bool
 
 	for _, p := range paramsList {
@@ -114,10 +113,14 @@ func readTransportParamters(paramsList []transportParameter) (*TransportParamete
 				return nil, fmt.Errorf("wrong length for initial_max_data: %d (expected 4)", len(p.Value))
 			}
 			params.ConnectionFlowControlWindow = protocol.ByteCount(binary.BigEndian.Uint32(p.Value))
-		case initialMaxStreamIDParameterID:
-			foundInitialMaxStreamID = true
+		case initialMaxStreamIDBiDiParameterID:
 			if len(p.Value) != 4 {
-				return nil, fmt.Errorf("wrong length for initial_max_stream_id: %d (expected 4)", len(p.Value))
+				return nil, fmt.Errorf("wrong length for initial_max_stream_id_bidi: %d (expected 4)", len(p.Value))
+			}
+			// TODO: handle this value
+		case initialMaxStreamIDUniParameterID:
+			if len(p.Value) != 4 {
+				return nil, fmt.Errorf("wrong length for initial_max_stream_id_uni: %d (expected 4)", len(p.Value))
 			}
 			// TODO: handle this value
 		case idleTimeoutParameterID:
@@ -134,21 +137,22 @@ func readTransportParamters(paramsList []transportParameter) (*TransportParamete
 		}
 	}
 
-	if !(foundInitialMaxStreamData && foundInitialMaxData && foundInitialMaxStreamID && foundIdleTimeout) {
+	if !(foundInitialMaxStreamData && foundInitialMaxData && foundIdleTimeout) {
 		return nil, errors.New("missing parameter")
 	}
 	return params, nil
 }
 
 // GetTransportParameters gets the parameters needed for the TLS handshake.
+// It doesn't send the initial_max_stream_id_uni parameter, so the peer isn't allowed to open any unidirectional streams.
 func (p *TransportParameters) getTransportParameters() []transportParameter {
 	initialMaxStreamData := make([]byte, 4)
 	binary.BigEndian.PutUint32(initialMaxStreamData, uint32(p.StreamFlowControlWindow))
 	initialMaxData := make([]byte, 4)
 	binary.BigEndian.PutUint32(initialMaxData, uint32(p.ConnectionFlowControlWindow))
-	initialMaxStreamID := make([]byte, 4)
+	initialMaxStreamIDBiDi := make([]byte, 4)
 	// TODO: use a reasonable value here
-	binary.BigEndian.PutUint32(initialMaxStreamID, math.MaxUint32)
+	binary.BigEndian.PutUint32(initialMaxStreamIDBiDi, math.MaxUint32)
 	idleTimeout := make([]byte, 2)
 	binary.BigEndian.PutUint16(idleTimeout, uint16(p.IdleTimeout/time.Second))
 	maxPacketSize := make([]byte, 2)
@@ -156,7 +160,7 @@ func (p *TransportParameters) getTransportParameters() []transportParameter {
 	params := []transportParameter{
 		{initialMaxStreamDataParameterID, initialMaxStreamData},
 		{initialMaxDataParameterID, initialMaxData},
-		{initialMaxStreamIDParameterID, initialMaxStreamID},
+		{initialMaxStreamIDBiDiParameterID, initialMaxStreamIDBiDi},
 		{idleTimeoutParameterID, idleTimeout},
 		{maxPacketSizeParameterID, maxPacketSize},
 	}
