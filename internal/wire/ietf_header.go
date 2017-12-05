@@ -26,11 +26,11 @@ func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte
 	if err != nil {
 		return nil, err
 	}
-	pn, err := utils.BigEndian.ReadUint32(b)
+	v, err := utils.BigEndian.ReadUint32(b)
 	if err != nil {
 		return nil, err
 	}
-	v, err := utils.BigEndian.ReadUint32(b)
+	pn, err := utils.BigEndian.ReadUint32(b)
 	if err != nil {
 		return nil, err
 	}
@@ -104,8 +104,8 @@ func (h *Header) writeHeader(b *bytes.Buffer) error {
 func (h *Header) writeLongHeader(b *bytes.Buffer) error {
 	b.WriteByte(byte(0x80 ^ h.Type))
 	utils.BigEndian.WriteUint64(b, uint64(h.ConnectionID))
-	utils.BigEndian.WriteUint32(b, uint32(h.PacketNumber))
 	utils.BigEndian.WriteUint32(b, uint32(h.Version))
+	utils.BigEndian.WriteUint32(b, uint32(h.PacketNumber))
 	return nil
 }
 
