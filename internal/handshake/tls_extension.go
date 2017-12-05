@@ -24,12 +24,12 @@ type transportParameter struct {
 }
 
 type clientHelloTransportParameters struct {
-	NegotiatedVersion uint32               // actually a protocol.VersionNumber
-	InitialVersion    uint32               // actually a protocol.VersionNumber
-	Parameters        []transportParameter `tls:"head=2"`
+	InitialVersion uint32               // actually a protocol.VersionNumber
+	Parameters     []transportParameter `tls:"head=2"`
 }
 
 type encryptedExtensionsTransportParameters struct {
+	NegotiatedVersion uint32               // actually a protocol.VersionNumber
 	SupportedVersions []uint32             `tls:"head=1"` // actually a protocol.VersionNumber
 	Parameters        []transportParameter `tls:"head=2"`
 }

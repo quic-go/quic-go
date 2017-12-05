@@ -45,9 +45,8 @@ func (h *extensionHandlerClient) Send(hType mint.HandshakeType, el *mint.Extensi
 	}
 
 	data, err := syntax.Marshal(clientHelloTransportParameters{
-		NegotiatedVersion: uint32(h.version),
-		InitialVersion:    uint32(h.initialVersion),
-		Parameters:        h.params.getTransportParameters(),
+		InitialVersion: uint32(h.initialVersion),
+		Parameters:     h.params.getTransportParameters(),
 	})
 	if err != nil {
 		return err
@@ -83,6 +82,10 @@ func (h *extensionHandlerClient) Receive(hType mint.HandshakeType, el *mint.Exte
 	serverSupportedVersions := make([]protocol.VersionNumber, len(eetp.SupportedVersions))
 	for i, v := range eetp.SupportedVersions {
 		serverSupportedVersions[i] = protocol.VersionNumber(v)
+	}
+	// check that the negotiated_version is the current version
+	if protocol.VersionNumber(eetp.NegotiatedVersion) != h.version {
+		return qerr.Error(qerr.VersionNegotiationMismatch, "current version doesn't match negotiated_version")
 	}
 	// check that the current version is included in the supported versions
 	if !protocol.IsSupportedVersion(serverSupportedVersions, h.version) {

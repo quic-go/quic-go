@@ -38,7 +38,6 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 
 		It("adds TransportParameters to the ClientHello", func() {
 			handler.initialVersion = 13
-			handler.version = 37
 			err := handler.Send(mint.HandshakeTypeClientHello, &el)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(el).To(HaveLen(1))
@@ -49,7 +48,6 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 			_, err = syntax.Unmarshal(ext.data, chtp)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(chtp.InitialVersion).To(BeEquivalentTo(13))
-			Expect(chtp.NegotiatedVersion).To(BeEquivalentTo(37))
 		})
 	})
 
@@ -140,6 +138,7 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 				handler.supportedVersions = []protocol.VersionNumber{13, 37, 42}
 				body, err := syntax.Marshal(encryptedExtensionsTransportParameters{
 					Parameters:        parameterMapToList(parameters),
+					NegotiatedVersion: 37,
 					SupportedVersions: []uint32{36, 37, 38},
 				})
 				Expect(err).ToNot(HaveOccurred())
@@ -149,9 +148,26 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 
+			It("errors if the current version doesn't match negotiated_version", func() {
+				handler.initialVersion = 13
+				handler.version = 37
+				handler.supportedVersions = []protocol.VersionNumber{13, 37, 42}
+				body, err := syntax.Marshal(encryptedExtensionsTransportParameters{
+					Parameters:        parameterMapToList(parameters),
+					NegotiatedVersion: 38,
+					SupportedVersions: []uint32{36, 37, 38},
+				})
+				Expect(err).ToNot(HaveOccurred())
+				err = el.Add(&tlsExtensionBody{data: body})
+				Expect(err).ToNot(HaveOccurred())
+				err = handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
+				Expect(err).To(MatchError("VersionNegotiationMismatch: current version doesn't match negotiated_version"))
+			})
+
 			It("errors if the current version is not contained in the server's supported versions", func() {
 				handler.version = 42
 				body, err := syntax.Marshal(encryptedExtensionsTransportParameters{
+					NegotiatedVersion: 42,
 					SupportedVersions: []uint32{43, 44},
 				})
 				Expect(err).ToNot(HaveOccurred())
@@ -175,6 +191,7 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 					ssv[i] = uint32(v)
 				}
 				body, err := syntax.Marshal(encryptedExtensionsTransportParameters{
+					NegotiatedVersion: 42,
 					SupportedVersions: ssv,
 				})
 				Expect(err).ToNot(HaveOccurred())
@@ -199,6 +216,7 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 				}
 				body, err := syntax.Marshal(encryptedExtensionsTransportParameters{
 					Parameters:        parameterMapToList(parameters),
+					NegotiatedVersion: 42,
 					SupportedVersions: ssv,
 				})
 				Expect(err).ToNot(HaveOccurred())
