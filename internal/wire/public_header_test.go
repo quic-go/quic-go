@@ -22,6 +22,7 @@ var _ = Describe("Public Header", func() {
 			hdr, err := parsePublicHeader(b, protocol.PerspectiveClient)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.VersionFlag).To(BeTrue())
+			Expect(hdr.IsVersionNegotiation).To(BeFalse())
 			Expect(hdr.ResetFlag).To(BeFalse())
 			Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x4cfa9f9b668619f6)))
 			Expect(hdr.Version).To(Equal(protocol.SupportedVersions[0]))
@@ -65,6 +66,7 @@ var _ = Describe("Public Header", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.ResetFlag).To(BeTrue())
 			Expect(hdr.VersionFlag).To(BeFalse())
+			Expect(hdr.IsVersionNegotiation).To(BeFalse())
 			Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x0102030405060708)))
 		})
 
@@ -101,6 +103,7 @@ var _ = Describe("Public Header", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(hdr.VersionFlag).To(BeTrue())
 				Expect(hdr.Version).To(BeZero()) // unitialized
+				Expect(hdr.IsVersionNegotiation).To(BeTrue())
 				Expect(hdr.SupportedVersions).To(Equal(protocol.SupportedVersions))
 				Expect(b.Len()).To(BeZero())
 			})
@@ -120,6 +123,7 @@ var _ = Describe("Public Header", func() {
 				hdr, err := parsePublicHeader(b, protocol.PerspectiveServer)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(hdr.VersionFlag).To(BeTrue())
+				Expect(hdr.IsVersionNegotiation).To(BeTrue())
 				Expect(hdr.SupportedVersions).To(Equal([]protocol.VersionNumber{1, protocol.SupportedVersions[0], 99}))
 				Expect(b.Len()).To(BeZero())
 			})

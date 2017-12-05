@@ -155,6 +155,7 @@ func parsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Hea
 			if b.Len()%4 != 0 {
 				return nil, qerr.InvalidVersionNegotiationPacket
 			}
+			header.IsVersionNegotiation = true
 			header.SupportedVersions = make([]protocol.VersionNumber, 0)
 			for {
 				var versionTag uint32

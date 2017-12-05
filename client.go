@@ -286,10 +286,8 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 		return
 	}
 
-	isVersionNegotiationPacket := hdr.VersionFlag /* gQUIC Version Negotiation Packet */ || hdr.Type == protocol.PacketTypeVersionNegotiation /* IETF draft style Version Negotiation Packet */
-
 	// handle Version Negotiation Packets
-	if isVersionNegotiationPacket {
+	if hdr.IsVersionNegotiation {
 		// ignore delayed / duplicated version negotiation packets
 		if c.receivedVersionNegotiationPacket || c.versionNegotiated {
 			return
