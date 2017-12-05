@@ -97,7 +97,6 @@ func readTransportParamters(paramsList []transportParameter) (*TransportParamete
 
 	var foundInitialMaxStreamData bool
 	var foundInitialMaxData bool
-	var foundInitialMaxStreamID bool
 	var foundIdleTimeout bool
 
 	for _, p := range paramsList {
@@ -115,7 +114,6 @@ func readTransportParamters(paramsList []transportParameter) (*TransportParamete
 			}
 			params.ConnectionFlowControlWindow = protocol.ByteCount(binary.BigEndian.Uint32(p.Value))
 		case initialMaxStreamIDParameterID:
-			foundInitialMaxStreamID = true
 			if len(p.Value) != 4 {
 				return nil, fmt.Errorf("wrong length for initial_max_stream_id: %d (expected 4)", len(p.Value))
 			}
@@ -134,7 +132,7 @@ func readTransportParamters(paramsList []transportParameter) (*TransportParamete
 		}
 	}
 
-	if !(foundInitialMaxStreamData && foundInitialMaxData && foundInitialMaxStreamID && foundIdleTimeout) {
+	if !(foundInitialMaxStreamData && foundInitialMaxData && foundIdleTimeout) {
 		return nil, errors.New("missing parameter")
 	}
 	return params, nil

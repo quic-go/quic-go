@@ -149,12 +149,6 @@ var _ = Describe("Transport Parameters", func() {
 				Expect(err).To(MatchError("missing parameter"))
 			})
 
-			It("rejects the parameters if the initial_max_stream_id is missing", func() {
-				delete(parameters, initialMaxStreamIDParameterID)
-				_, err := readTransportParamters(paramsMapToList(parameters))
-				Expect(err).To(MatchError("missing parameter"))
-			})
-
 			It("rejects the parameters if the idle_timeout is missing", func() {
 				delete(parameters, idleTimeoutParameterID)
 				_, err := readTransportParamters(paramsMapToList(parameters))
