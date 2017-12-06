@@ -126,21 +126,19 @@ func (s *Server) handleHeaderStream(session streamCreator) {
 	hpackDecoder := hpack.NewDecoder(4096, nil)
 	h2framer := http2.NewFramer(nil, stream)
 
-	go func() {
-		var headerStreamMutex sync.Mutex // Protects concurrent calls to Write()
-		for {
-			if err := s.handleRequest(session, stream, &headerStreamMutex, hpackDecoder, h2framer); err != nil {
-				// QuicErrors must originate from stream.Read() returning an error.
-				// In this case, the session has already logged the error, so we don't
-				// need to log it again.
-				if _, ok := err.(*qerr.QuicError); !ok {
-					utils.Errorf("error handling h2 request: %s", err.Error())
-				}
-				session.Close(err)
-				return
+	var headerStreamMutex sync.Mutex // Protects concurrent calls to Write()
+	for {
+		if err := s.handleRequest(session, stream, &headerStreamMutex, hpackDecoder, h2framer); err != nil {
+			// QuicErrors must originate from stream.Read() returning an error.
+			// In this case, the session has already logged the error, so we don't
+			// need to log it again.
+			if _, ok := err.(*qerr.QuicError); !ok {
+				utils.Errorf("error handling h2 request: %s", err.Error())
 			}
+			session.Close(err)
+			return
 		}
-	}()
+	}
 }
 
 func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, headerStreamMutex *sync.Mutex, hpackDecoder *hpack.Decoder, h2framer *http2.Framer) error {
