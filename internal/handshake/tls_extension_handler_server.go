@@ -47,13 +47,14 @@ func (h *extensionHandlerServer) Send(hType mint.HandshakeType, el *mint.Extensi
 		// TODO(#855): generate a real token
 		transportParameter{statelessResetTokenParameterID, bytes.Repeat([]byte{42}, 16)},
 	)
-	supportedVersions := make([]uint32, len(h.supportedVersions))
-	for i, v := range h.supportedVersions {
-		supportedVersions[i] = uint32(v)
+	supportedVersions := protocol.GetGreasedVersions(h.supportedVersions)
+	versions := make([]uint32, len(supportedVersions))
+	for i, v := range supportedVersions {
+		versions[i] = uint32(v)
 	}
 	data, err := syntax.Marshal(encryptedExtensionsTransportParameters{
 		NegotiatedVersion: uint32(h.version),
-		SupportedVersions: supportedVersions,
+		SupportedVersions: versions,
 		Parameters:        transportParams,
 	})
 	if err != nil {
