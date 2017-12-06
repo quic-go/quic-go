@@ -52,6 +52,7 @@ func (h *extensionHandlerServer) Send(hType mint.HandshakeType, el *mint.Extensi
 		supportedVersions[i] = uint32(v)
 	}
 	data, err := syntax.Marshal(encryptedExtensionsTransportParameters{
+		NegotiatedVersion: uint32(h.version),
 		SupportedVersions: supportedVersions,
 		Parameters:        transportParams,
 	})
@@ -80,15 +81,11 @@ func (h *extensionHandlerServer) Receive(hType mint.HandshakeType, el *mint.Exte
 		return err
 	}
 	initialVersion := protocol.VersionNumber(chtp.InitialVersion)
-	negotiatedVersion := protocol.VersionNumber(chtp.NegotiatedVersion)
-	// check that the negotiated version is the version we're currently using
-	if negotiatedVersion != h.version {
-		return qerr.Error(qerr.VersionNegotiationMismatch, "Inconsistent negotiated version")
-	}
+
 	// perform the stateless version negotiation validation:
 	// make sure that we would have sent a Version Negotiation Packet if the client offered the initial version
-	// this is the case when the initial version is not contained in the supported versions
-	if initialVersion != negotiatedVersion && protocol.IsSupportedVersion(h.supportedVersions, initialVersion) {
+	// this is the case if and only if the initial version is not contained in the supported versions
+	if initialVersion != h.version && protocol.IsSupportedVersion(h.supportedVersions, initialVersion) {
 		return qerr.Error(qerr.VersionNegotiationMismatch, "Client should have used the initial version")
 	}
 
