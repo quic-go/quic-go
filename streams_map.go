@@ -73,6 +73,14 @@ func newStreamsMap(newStream newStreamLambda, pers protocol.Perspective, ver pro
 	return &sm
 }
 
+// getStreamPerspective says which side should initiate a stream
+func (m *streamsMap) streamInitiatedBy(id protocol.StreamID) protocol.Perspective {
+	if id%2 == 0 {
+		return protocol.PerspectiveServer
+	}
+	return protocol.PerspectiveClient
+}
+
 // GetOrOpenStream either returns an existing stream, a newly opened stream, or nil if a stream with the provided ID is already closed.
 // Newly opened streams should only originate from the client. To open a stream from the server, OpenStream should be used.
 func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (streamI, error) {
@@ -92,27 +100,14 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (streamI, error) {
 		return s, nil
 	}
 
-	if m.perspective == protocol.PerspectiveServer {
-		if id%2 == 0 {
-			if id <= m.nextStream { // this is a server-side stream that we already opened. Must have been closed already
-				return nil, nil
-			}
-			return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d from client-side", id))
-		}
-		if id <= m.highestStreamOpenedByPeer { // this is a client-side stream that doesn't exist anymore. Must have been closed already
+	if m.perspective == m.streamInitiatedBy(id) {
+		if id <= m.nextStream { // this is a stream opened by us. Must have been closed already
 			return nil, nil
 		}
+		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("peer attempted to open stream %d", id))
 	}
-	if m.perspective == protocol.PerspectiveClient {
-		if id%2 == 1 {
-			if id <= m.nextStream { // this is a client-side stream that we already opened.
-				return nil, nil
-			}
-			return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d from server-side", id))
-		}
-		if id <= m.highestStreamOpenedByPeer { // this is a server-side stream that doesn't exist anymore. Must have been closed already
-			return nil, nil
-		}
+	if id <= m.highestStreamOpenedByPeer { // this is a peer-initiated stream that doesn't exist anymore. Must have been closed already
+		return nil, nil
 	}
 
 	// sid is the next stream that will be opened
@@ -123,8 +118,7 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (streamI, error) {
 	}
 
 	for ; sid <= id; sid += 2 {
-		_, err := m.openRemoteStream(sid)
-		if err != nil {
+		if _, err := m.openRemoteStream(sid); err != nil {
 			return nil, err
 		}
 	}
@@ -141,12 +135,7 @@ func (m *streamsMap) openRemoteStream(id protocol.StreamID) (streamI, error) {
 		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d, which is a lot smaller than the highest opened stream, %d", id, m.highestStreamOpenedByPeer))
 	}
 
-	if m.perspective == protocol.PerspectiveServer {
-		m.numIncomingStreams++
-	} else {
-		m.numOutgoingStreams++
-	}
-
+	m.numIncomingStreams++
 	if id > m.highestStreamOpenedByPeer {
 		m.highestStreamOpenedByPeer = id
 	}
@@ -162,12 +151,7 @@ func (m *streamsMap) openStreamImpl() (streamI, error) {
 		return nil, qerr.TooManyOpenStreams
 	}
 
-	if m.perspective == protocol.PerspectiveServer {
-		m.numOutgoingStreams++
-	} else {
-		m.numIncomingStreams++
-	}
-
+	m.numOutgoingStreams++
 	m.nextStream += 2
 	s := m.newStream(id)
 	m.putStream(s)
@@ -241,7 +225,7 @@ func (m *streamsMap) DeleteClosedStreams() error {
 		}
 		numDeletedStreams++
 		m.openStreams[i] = 0
-		if streamID%2 == 0 {
+		if m.streamInitiatedBy(streamID) == m.perspective {
 			m.numOutgoingStreams--
 		} else {
 			m.numIncomingStreams--
