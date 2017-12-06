@@ -21,6 +21,7 @@ func parseHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Header, e
 	return parseShortHeader(b, typeByte)
 }
 
+// parse long header and version negotiation packets
 func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte) (*Header, error) {
 	connID, err := utils.BigEndian.ReadUint64(b)
 	if err != nil {
@@ -34,28 +35,17 @@ func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte
 	if err != nil {
 		return nil, err
 	}
-	packetType := protocol.PacketType(typeByte & 0x7f)
-	if sentBy == protocol.PerspectiveClient && (packetType != protocol.PacketTypeInitial && packetType != protocol.PacketTypeHandshake && packetType != protocol.PacketType0RTT) {
-		if packetType == protocol.PacketTypeVersionNegotiation {
-			return nil, qerr.Error(qerr.InvalidVersionNegotiationPacket, "sent by the client")
-		}
-		return nil, qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", packetType))
-	}
-	if sentBy == protocol.PerspectiveServer && (packetType != protocol.PacketTypeVersionNegotiation && packetType != protocol.PacketTypeRetry && packetType != protocol.PacketTypeHandshake) {
-		return nil, qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", packetType))
-	}
 	h := &Header{
-		Type:            packetType,
-		IsLongHeader:    true,
 		ConnectionID:    protocol.ConnectionID(connID),
 		PacketNumber:    protocol.PacketNumber(pn),
 		PacketNumberLen: protocol.PacketNumberLen4,
 		Version:         protocol.VersionNumber(v),
 	}
-	if h.Type == protocol.PacketTypeVersionNegotiation {
+	if v == 0 { // version negotiation packet
 		if b.Len() == 0 {
 			return nil, qerr.Error(qerr.InvalidVersionNegotiationPacket, "empty version list")
 		}
+		h.IsVersionNegotiation = true
 		h.SupportedVersions = make([]protocol.VersionNumber, b.Len()/4)
 		for i := 0; b.Len() > 0; i++ {
 			v, err := utils.BigEndian.ReadUint32(b)
@@ -64,6 +54,15 @@ func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte
 			}
 			h.SupportedVersions[i] = protocol.VersionNumber(v)
 		}
+		return h, nil
+	}
+	h.IsLongHeader = true
+	h.Type = protocol.PacketType(typeByte & 0x7f)
+	if sentBy == protocol.PerspectiveClient && (h.Type != protocol.PacketTypeInitial && h.Type != protocol.PacketTypeHandshake && h.Type != protocol.PacketType0RTT) {
+		return nil, qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", h.Type))
+	}
+	if sentBy == protocol.PerspectiveServer && (h.Type != protocol.PacketTypeRetry && h.Type != protocol.PacketTypeHandshake) {
+		return nil, qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", h.Type))
 	}
 	return h, nil
 }
@@ -102,7 +101,7 @@ func (h *Header) writeHeader(b *bytes.Buffer) error {
 
 // TODO: add support for the key phase
 func (h *Header) writeLongHeader(b *bytes.Buffer) error {
-	b.WriteByte(byte(0x80 ^ h.Type))
+	b.WriteByte(byte(0x80 | h.Type))
 	utils.BigEndian.WriteUint64(b, uint64(h.ConnectionID))
 	utils.BigEndian.WriteUint32(b, uint32(h.Version))
 	utils.BigEndian.WriteUint32(b, uint32(h.PacketNumber))

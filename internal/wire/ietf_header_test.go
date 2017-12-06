@@ -17,6 +17,36 @@ import (
 
 var _ = Describe("IETF draft Header", func() {
 	Context("parsing", func() {
+		Context("Version Negotiation Packets", func() {
+			It("parses", func() {
+				versions := []protocol.VersionNumber{0x22334455, 0x33445566}
+				data := ComposeVersionNegotiation(0x1234567890, 0x1337, versions)
+				b := bytes.NewReader(data)
+				h, err := parseHeader(b, protocol.PerspectiveServer)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(h.IsVersionNegotiation).To(BeTrue())
+				Expect(h.Version).To(BeZero())
+				Expect(h.ConnectionID).To(Equal(protocol.ConnectionID(0x1234567890)))
+				Expect(h.PacketNumber).To(Equal(protocol.PacketNumber(0x1337)))
+				Expect(h.SupportedVersions).To(Equal(versions))
+			})
+
+			It("errors if it contains versions of the wrong length", func() {
+				versions := []protocol.VersionNumber{0x22334455, 0x33445566}
+				data := ComposeVersionNegotiation(0x1234567890, 0x1337, versions)
+				b := bytes.NewReader(data[:len(data)-2])
+				_, err := parseHeader(b, protocol.PerspectiveServer)
+				Expect(err).To(MatchError(qerr.InvalidVersionNegotiationPacket))
+			})
+
+			It("errors if the version list is emtpy", func() {
+				versions := []protocol.VersionNumber{0x22334455}
+				data := ComposeVersionNegotiation(0x1234567890, 0x1337, versions)
+				_, err := parseHeader(bytes.NewReader(data[:len(data)-4]), protocol.PerspectiveServer)
+				Expect(err).To(MatchError("InvalidVersionNegotiationPacket: empty version list"))
+			})
+		})
+
 		Context("long headers", func() {
 			generatePacket := func(t protocol.PacketType) []byte {
 				return []byte{
@@ -38,6 +68,7 @@ var _ = Describe("IETF draft Header", func() {
 				Expect(h.PacketNumber).To(Equal(protocol.PacketNumber(0xdecafbad)))
 				Expect(h.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
 				Expect(h.Version).To(Equal(protocol.VersionNumber(0x1020304)))
+				Expect(h.IsVersionNegotiation).To(BeFalse())
 				Expect(b.Len()).To(BeZero())
 			})
 
@@ -66,52 +97,6 @@ var _ = Describe("IETF draft Header", func() {
 					Expect(err).To(Equal(io.EOF))
 				}
 			})
-
-			Context("Version Negotiation Packets", func() {
-				It("parses", func() {
-					data := append(
-						generatePacket(protocol.PacketTypeVersionNegotiation),
-						[]byte{
-							0x22, 0x33, 0x44, 0x55,
-							0x33, 0x44, 0x55, 0x66,
-						}...,
-					)
-					b := bytes.NewReader(data)
-					h, err := parseHeader(b, protocol.PerspectiveServer)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(h.Type).To(Equal(protocol.PacketTypeVersionNegotiation))
-					Expect(h.SupportedVersions).To(Equal([]protocol.VersionNumber{
-						0x22334455,
-						0x33445566,
-					}))
-				})
-
-				It("errors if it contains versions of the wrong length", func() {
-					data := append(
-						generatePacket(protocol.PacketTypeVersionNegotiation),
-						[]byte{0x22, 0x33}..., // too short. Should be 4 bytes.
-					)
-					b := bytes.NewReader(data)
-					_, err := parseHeader(b, protocol.PerspectiveServer)
-					Expect(err).To(MatchError(qerr.InvalidVersionNegotiationPacket))
-				})
-
-				It("errors if it was sent by the client", func() {
-					data := append(
-						generatePacket(protocol.PacketTypeVersionNegotiation),
-						[]byte{0x22, 0x33, 0x44, 0x55}...,
-					)
-					b := bytes.NewReader(data)
-					_, err := parseHeader(b, protocol.PerspectiveClient)
-					Expect(err).To(MatchError("InvalidVersionNegotiationPacket: sent by the client"))
-				})
-
-				It("errors if the version list is emtpy", func() {
-					b := bytes.NewReader(generatePacket(protocol.PacketTypeVersionNegotiation))
-					_, err := parseHeader(b, protocol.PerspectiveServer)
-					Expect(err).To(MatchError("InvalidVersionNegotiationPacket: empty version list"))
-				})
-			})
 		})
 
 		Context("short headers", func() {
@@ -129,6 +114,7 @@ var _ = Describe("IETF draft Header", func() {
 				Expect(h.OmitConnectionID).To(BeFalse())
 				Expect(h.ConnectionID).To(Equal(protocol.ConnectionID(0xdeadbeefcafe1337)))
 				Expect(h.PacketNumber).To(Equal(protocol.PacketNumber(0x42)))
+				Expect(h.IsVersionNegotiation).To(BeFalse())
 				Expect(b.Len()).To(BeZero())
 			})
 

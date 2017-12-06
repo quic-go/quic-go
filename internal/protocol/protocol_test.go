@@ -8,7 +8,6 @@ import (
 var _ = Describe("Protocol", func() {
 	Context("Long Header Packet Types", func() {
 		It("has the correct string representation", func() {
-			Expect(PacketTypeVersionNegotiation.String()).To(Equal("Version Negotiation"))
 			Expect(PacketTypeInitial.String()).To(Equal("Initial"))
 			Expect(PacketTypeRetry.String()).To(Equal("Retry"))
 			Expect(PacketTypeHandshake.String()).To(Equal("Handshake"))

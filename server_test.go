@@ -438,6 +438,7 @@ var _ = Describe("Server", func() {
 			IsLongHeader: true,
 			ConnectionID: 0x1337,
 			PacketNumber: 0x55,
+			Version:      0x1234,
 		}
 		hdr.Write(b, protocol.PerspectiveClient, protocol.VersionTLS)
 		b.Write(bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSize)) // add a fake CHLO
@@ -457,7 +458,7 @@ var _ = Describe("Server", func() {
 		r := bytes.NewReader(conn.dataWritten.Bytes())
 		packet, err := wire.ParseHeaderSentByServer(r, protocol.VersionUnknown)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.Type).To(Equal(protocol.PacketTypeVersionNegotiation))
+		Expect(packet.IsVersionNegotiation).To(BeTrue())
 		Expect(packet.ConnectionID).To(Equal(protocol.ConnectionID(0x1337)))
 		Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(0x55)))
 		Expect(r.Len()).To(BeZero())

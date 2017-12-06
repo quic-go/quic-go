@@ -28,8 +28,6 @@ const (
 type PacketType uint8
 
 const (
-	// PacketTypeVersionNegotiation is the packet type of a Version Negotiation packet
-	PacketTypeVersionNegotiation PacketType = 1
 	// PacketTypeInitial is the packet type of a Initial packet
 	PacketTypeInitial PacketType = 2
 	// PacketTypeRetry is the packet type of a Retry packet
@@ -42,8 +40,6 @@ const (
 
 func (t PacketType) String() string {
 	switch t {
-	case PacketTypeVersionNegotiation:
-		return "Version Negotiation"
 	case PacketTypeInitial:
 		return "Initial"
 	case PacketTypeRetry:
