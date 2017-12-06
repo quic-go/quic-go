@@ -116,6 +116,11 @@ func (c *streamFlowController) GetWindowUpdate() protocol.ByteCount {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
+	// if we already received the final offset for this stream, the peer won't need any additional flow control credit
+	if c.receivedFinalOffset {
+		return 0
+	}
+
 	oldWindowIncrement := c.receiveWindowIncrement
 	offset := c.baseFlowController.getWindowUpdate()
 	if c.receiveWindowIncrement > oldWindowIncrement { // auto-tuning enlarged the window increment
