@@ -34,10 +34,9 @@ type client struct {
 	config  *quic.Config
 	opts    *roundTripperOpts
 
-	hostname        string
-	encryptionLevel protocol.EncryptionLevel
-	handshakeErr    error
-	dialOnce        sync.Once
+	hostname     string
+	handshakeErr error
+	dialOnce     sync.Once
 
 	session       quic.Session
 	headerStream  quic.Stream
@@ -67,13 +66,12 @@ func newClient(
 		config = quicConfig
 	}
 	return &client{
-		hostname:        authorityAddr("https", hostname),
-		responses:       make(map[protocol.StreamID]chan *http.Response),
-		encryptionLevel: protocol.EncryptionUnencrypted,
-		tlsConf:         tlsConfig,
-		config:          config,
-		opts:            opts,
-		headerErrored:   make(chan struct{}),
+		hostname:      authorityAddr("https", hostname),
+		responses:     make(map[protocol.StreamID]chan *http.Response),
+		tlsConf:       tlsConfig,
+		config:        config,
+		opts:          opts,
+		headerErrored: make(chan struct{}),
 	}
 }
 

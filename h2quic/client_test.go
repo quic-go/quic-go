@@ -151,7 +151,6 @@ var _ = Describe("Client", func() {
 
 		BeforeEach(func() {
 			var err error
-			client.encryptionLevel = protocol.EncryptionForwardSecure
 			dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
 				return session, nil
 			}
