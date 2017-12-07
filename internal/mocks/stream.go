@@ -95,10 +95,11 @@ func (_mr *MockStreamIMockRecorder) Finished() *gomock.Call {
 }
 
 // GetDataForWriting mocks base method
-func (_m *MockStreamI) GetDataForWriting(_param0 protocol.ByteCount) []byte {
+func (_m *MockStreamI) GetDataForWriting(_param0 protocol.ByteCount) ([]byte, bool) {
 	ret := _m.ctrl.Call(_m, "GetDataForWriting", _param0)
 	ret0, _ := ret[0].([]byte)
-	return ret0
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
 }
 
 // GetDataForWriting indicates an expected call of GetDataForWriting
@@ -233,18 +234,6 @@ func (_m *MockStreamI) SetWriteDeadline(_param0 time.Time) error {
 // SetWriteDeadline indicates an expected call of SetWriteDeadline
 func (_mr *MockStreamIMockRecorder) SetWriteDeadline(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "SetWriteDeadline", reflect.TypeOf((*MockStreamI)(nil).SetWriteDeadline), arg0)
-}
-
-// ShouldSendFin mocks base method
-func (_m *MockStreamI) ShouldSendFin() bool {
-	ret := _m.ctrl.Call(_m, "ShouldSendFin")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// ShouldSendFin indicates an expected call of ShouldSendFin
-func (_mr *MockStreamIMockRecorder) ShouldSendFin() *gomock.Call {
-	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "ShouldSendFin", reflect.TypeOf((*MockStreamI)(nil).ShouldSendFin))
 }
 
 // StreamID mocks base method
