@@ -100,7 +100,7 @@ var _ = Describe("Client", func() {
 			generateConnectionID = origGenerateConnectionID
 		})
 
-		It("dials non-forward-secure", func(done Done) {
+		It("dials non-forward-secure", func() {
 			packetConn.dataToRead = acceptClientVersionPacket(cl.connectionID)
 			dialed := make(chan struct{})
 			go func() {
@@ -113,17 +113,18 @@ var _ = Describe("Client", func() {
 			Consistently(dialed).ShouldNot(BeClosed())
 			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
 			Eventually(dialed).Should(BeClosed())
-			close(done)
 		})
 
-		It("dials a non-forward-secure address", func(done Done) {
+		It("dials a non-forward-secure address", func() {
 			serverAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
 			Expect(err).ToNot(HaveOccurred())
 			server, err := net.ListenUDP("udp", serverAddr)
 			Expect(err).ToNot(HaveOccurred())
 			defer server.Close()
+			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
+				defer close(done)
 				for {
 					_, clientAddr, err := server.ReadFromUDP(make([]byte, 200))
 					if err != nil {
@@ -145,10 +146,11 @@ var _ = Describe("Client", func() {
 			Consistently(dialed).ShouldNot(BeClosed())
 			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
 			Eventually(dialed).Should(BeClosed())
-			close(done)
+			server.Close()
+			Eventually(done).Should(BeClosed())
 		})
 
-		It("Dial only returns after the handshake is complete", func(done Done) {
+		It("Dial only returns after the handshake is complete", func() {
 			packetConn.dataToRead = acceptClientVersionPacket(cl.connectionID)
 			dialed := make(chan struct{})
 			go func() {
@@ -162,10 +164,10 @@ var _ = Describe("Client", func() {
 			Consistently(dialed).ShouldNot(BeClosed())
 			close(sess.handshakeComplete)
 			Eventually(dialed).Should(BeClosed())
-			close(done)
 		})
 
-		It("resolves the address", func(done Done) {
+		It("resolves the address", func() {
+			closeErr := errors.New("peer doesn't reply")
 			remoteAddrChan := make(chan string)
 			newClientSession = func(
 				conn connection,
@@ -183,16 +185,17 @@ var _ = Describe("Client", func() {
 			dialed := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				DialAddr("localhost:17890", nil, &Config{HandshakeTimeout: time.Millisecond})
+				_, err := DialAddr("localhost:17890", nil, &Config{HandshakeTimeout: time.Millisecond})
+				Expect(err).To(MatchError(closeErr))
 				close(dialed)
 			}()
 			Eventually(remoteAddrChan).Should(Receive(Equal("127.0.0.1:17890")))
-			sess.Close(errors.New("peer doesn't reply"))
+			sess.Close(closeErr)
 			Eventually(dialed).Should(BeClosed())
-			close(done)
 		})
 
-		It("uses the tls.Config.ServerName as the hostname, if present", func(done Done) {
+		It("uses the tls.Config.ServerName as the hostname, if present", func() {
+			closeErr := errors.New("peer doesn't reply")
 			hostnameChan := make(chan string)
 			newClientSession = func(
 				_ connection,
@@ -210,49 +213,55 @@ var _ = Describe("Client", func() {
 			dialed := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				DialAddr("localhost:17890", &tls.Config{ServerName: "foobar"}, nil)
+				_, err := DialAddr("localhost:17890", &tls.Config{ServerName: "foobar"}, nil)
+				Expect(err).To(MatchError(closeErr))
 				close(dialed)
 			}()
 			Eventually(hostnameChan).Should(Receive(Equal("foobar")))
-			sess.Close(errors.New("peer doesn't reply"))
+			sess.Close(closeErr)
 			Eventually(dialed).Should(BeClosed())
-			close(done)
 		})
 
-		It("returns an error that occurs during version negotiation", func(done Done) {
+		It("returns an error that occurs during version negotiation", func() {
 			testErr := errors.New("early handshake error")
+			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				_, dialErr := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
-				Expect(dialErr).To(MatchError(testErr))
+				_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
+				Expect(err).To(MatchError(testErr))
 				close(done)
 			}()
 			sess.Close(testErr)
+			Eventually(done).Should(BeClosed())
 		})
 
-		It("returns an error that occurs while waiting for the connection to become secure", func(done Done) {
+		It("returns an error that occurs while waiting for the connection to become secure", func() {
 			testErr := errors.New("early handshake error")
 			packetConn.dataToRead = acceptClientVersionPacket(cl.connectionID)
+			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				_, dialErr := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
-				Expect(dialErr).To(MatchError(testErr))
+				_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
+				Expect(err).To(MatchError(testErr))
 				close(done)
 			}()
 			sess.handshakeChan <- handshakeEvent{err: testErr}
+			Eventually(done).Should(BeClosed())
 		})
 
-		It("returns an error that occurs while waiting for the handshake to complete", func(done Done) {
+		It("returns an error that occurs while waiting for the handshake to complete", func() {
 			testErr := errors.New("late handshake error")
 			packetConn.dataToRead = acceptClientVersionPacket(cl.connectionID)
+			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				_, dialErr := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
-				Expect(dialErr).To(MatchError(testErr))
+				_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
+				Expect(err).To(MatchError(testErr))
 				close(done)
 			}()
 			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
 			sess.handshakeComplete <- testErr
+			Eventually(done).Should(BeClosed())
 		})
 
 		It("setups with the right values", func() {
@@ -275,12 +284,11 @@ var _ = Describe("Client", func() {
 			Expect(c.RequestConnectionIDOmission).To(BeFalse())
 		})
 
-		It("errors when receiving an error from the connection", func(done Done) {
+		It("errors when receiving an error from the connection", func() {
 			testErr := errors.New("connection error")
 			packetConn.readErr = testErr
 			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
 			Expect(err).To(MatchError(testErr))
-			close(done)
 		})
 
 		It("errors if it can't create a session", func() {
@@ -473,7 +481,8 @@ var _ = Describe("Client", func() {
 		Expect(sess.closed).To(BeFalse())
 	})
 
-	It("creates new sessions with the right parameters", func(done Done) {
+	It("creates new sessions with the right parameters", func() {
+		closeErr := errors.New("peer doesn't reply")
 		c := make(chan struct{})
 		var cconn connection
 		var hostname string
@@ -499,7 +508,8 @@ var _ = Describe("Client", func() {
 		dialed := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
-			Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
+			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
+			Expect(err).To(MatchError(closeErr))
 			close(dialed)
 		}()
 		Eventually(c).Should(BeClosed())
@@ -507,9 +517,8 @@ var _ = Describe("Client", func() {
 		Expect(hostname).To(Equal("quic.clemente.io"))
 		Expect(version).To(Equal(cl.version))
 		Expect(conf.Versions).To(Equal(config.Versions))
-		sess.Close(errors.New("peer doesn't reply"))
+		sess.Close(closeErr)
 		Eventually(dialed).Should(BeClosed())
-		close(done)
 	})
 
 	Context("handling packets", func() {
