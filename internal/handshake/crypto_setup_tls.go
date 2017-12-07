@@ -215,9 +215,9 @@ func (h *cryptoSetupTLS) determineNextPacketType() error {
 	state := h.tls.State().HandshakeState
 	if h.perspective == protocol.PerspectiveServer {
 		switch state {
-		case "ServerStateStart": // if we're still at ServerStateStart when writing the first packet, that means we've come back to that state by sending a HelloRetryRequest
+		case mint.StateServerStart: // if we're still at ServerStateStart when writing the first packet, that means we've come back to that state by sending a HelloRetryRequest
 			h.nextPacketType = protocol.PacketTypeRetry
-		case "ServerStateWaitFinished":
+		case mint.StateServerWaitFinished:
 			h.nextPacketType = protocol.PacketTypeHandshake
 		default:
 			// TODO: accept 0-RTT data
@@ -226,7 +226,7 @@ func (h *cryptoSetupTLS) determineNextPacketType() error {
 		return nil
 	}
 	// client
-	if state != "ClientStateWaitSH" {
+	if state != mint.StateClientWaitSH {
 		h.nextPacketType = protocol.PacketTypeHandshake
 	}
 	return nil
