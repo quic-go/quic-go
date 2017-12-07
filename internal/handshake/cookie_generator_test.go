@@ -49,7 +49,7 @@ var _ = Describe("Cookie Generator", func() {
 	})
 
 	It("rejects tokens that cannot be decoded", func() {
-		token, err := cookieGen.cookieSource.NewToken([]byte("foobar"))
+		token, err := cookieGen.cookieProtector.NewToken([]byte("foobar"))
 		Expect(err).ToNot(HaveOccurred())
 		_, err = cookieGen.DecodeToken(token)
 		Expect(err).To(HaveOccurred())
@@ -59,7 +59,7 @@ var _ = Describe("Cookie Generator", func() {
 		t, err := asn1.Marshal(token{Data: []byte("foobar")})
 		Expect(err).ToNot(HaveOccurred())
 		t = append(t, []byte("rest")...)
-		enc, err := cookieGen.cookieSource.NewToken(t)
+		enc, err := cookieGen.cookieProtector.NewToken(t)
 		Expect(err).ToNot(HaveOccurred())
 		_, err = cookieGen.DecodeToken(enc)
 		Expect(err).To(MatchError("rest when unpacking token: 4"))
@@ -69,7 +69,7 @@ var _ = Describe("Cookie Generator", func() {
 	It("doesn't panic if a tokens has no data", func() {
 		t, err := asn1.Marshal(token{Data: []byte("")})
 		Expect(err).ToNot(HaveOccurred())
-		enc, err := cookieGen.cookieSource.NewToken(t)
+		enc, err := cookieGen.cookieProtector.NewToken(t)
 		Expect(err).ToNot(HaveOccurred())
 		_, err = cookieGen.DecodeToken(enc)
 		Expect(err).ToNot(HaveOccurred())

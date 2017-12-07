@@ -7,6 +7,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/bifurcation/mint"
+
 	"github.com/lucas-clemente/quic-go/internal/crypto"
 	"github.com/lucas-clemente/quic-go/internal/mocks/crypto"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -91,18 +93,18 @@ func (s *mockStream) Reset(error)                        { panic("not implemente
 func (mockStream) CloseRemote(offset protocol.ByteCount) { panic("not implemented") }
 func (s mockStream) StreamID() protocol.StreamID         { panic("not implemented") }
 
-type mockCookieSource struct {
+type mockCookieProtector struct {
 	data      []byte
 	decodeErr error
 }
 
-var _ crypto.StkSource = &mockCookieSource{}
+var _ mint.CookieProtector = &mockCookieProtector{}
 
-func (mockCookieSource) NewToken(sourceAddr []byte) ([]byte, error) {
+func (mockCookieProtector) NewToken(sourceAddr []byte) ([]byte, error) {
 	return append([]byte("token "), sourceAddr...), nil
 }
 
-func (s mockCookieSource) DecodeToken(data []byte) ([]byte, error) {
+func (s mockCookieProtector) DecodeToken(data []byte) ([]byte, error) {
 	if s.decodeErr != nil {
 		return nil, s.decodeErr
 	}
@@ -170,7 +172,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		)
 		Expect(err).NotTo(HaveOccurred())
 		cs = csInt.(*cryptoSetupServer)
-		cs.scfg.cookieGenerator.cookieSource = &mockCookieSource{}
+		cs.scfg.cookieGenerator.cookieProtector = &mockCookieProtector{}
 		validSTK, err = cs.scfg.cookieGenerator.NewToken(remoteAddr)
 		Expect(err).NotTo(HaveOccurred())
 		sourceAddrValid = true
@@ -409,7 +411,7 @@ var _ = Describe("Server Crypto Setup", func() {
 
 		It("recognizes inchoate CHLOs with an invalid STK", func() {
 			testErr := errors.New("STK invalid")
-			cs.scfg.cookieGenerator.cookieSource.(*mockCookieSource).decodeErr = testErr
+			cs.scfg.cookieGenerator.cookieProtector.(*mockCookieProtector).decodeErr = testErr
 			Expect(cs.isInchoateCHLO(fullCHLO, cert)).To(BeTrue())
 		})
 
