@@ -54,6 +54,10 @@ func NewCryptoSetupTLSServer(
 	if err != nil {
 		return nil, err
 	}
+	mintConf.CookieProtector, err = mint.NewDefaultCookieProtector()
+	if err != nil {
+		return nil, err
+	}
 	conn := &fakeConn{
 		stream:     cryptoStream,
 		pers:       protocol.PerspectiveServer,
@@ -128,6 +132,7 @@ func (h *cryptoSetupTLS) HandleCryptoStream() error {
 handshakeLoop:
 	for {
 		switch alert := h.tls.Handshake(); alert {
+		case mint.AlertStatelessRetry:
 		case mint.AlertNoAlert: // handshake complete
 			break handshakeLoop
 		case mint.AlertWouldBlock:
