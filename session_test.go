@@ -1148,6 +1148,8 @@ var _ = Describe("Session", func() {
 			sendUndecryptablePackets()
 			sess.scheduleSending()
 			Consistently(mconn.written).Should(HaveLen(0))
+			Expect(sess.Close(nil)).To(Succeed())
+			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
 		It("sets a deadline to send a Public Reset after receiving too many undecryptable packets", func() {
@@ -1155,6 +1157,7 @@ var _ = Describe("Session", func() {
 			sendUndecryptablePackets()
 			Eventually(func() time.Time { return sess.receivedTooManyUndecrytablePacketsTime }).Should(BeTemporally("~", time.Now(), 20*time.Millisecond))
 			sess.Close(nil)
+			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
 		It("drops undecryptable packets when the undecrytable packet queue is full", func() {
@@ -1163,13 +1166,15 @@ var _ = Describe("Session", func() {
 			Eventually(func() []*receivedPacket { return sess.undecryptablePackets }).Should(HaveLen(protocol.MaxUndecryptablePackets))
 			// check that old packets are kept, and the new packets are dropped
 			Expect(sess.undecryptablePackets[0].header.PacketNumber).To(Equal(protocol.PacketNumber(1)))
-			sess.Close(nil)
+			Expect(sess.Close(nil)).To(Succeed())
+			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
 		It("sends a Public Reset after a timeout", func() {
+			Expect(sess.receivedTooManyUndecrytablePacketsTime).To(BeZero())
 			go sess.run()
 			sendUndecryptablePackets()
-			Eventually(func() time.Time { return sess.receivedTooManyUndecrytablePacketsTime }).Should(BeTemporally("~", time.Now(), 10*time.Millisecond))
+			Eventually(func() time.Time { return sess.receivedTooManyUndecrytablePacketsTime }).Should(BeTemporally("~", time.Now(), time.Second))
 			// speed up this test by manually setting back the time when too many packets were received
 			sess.receivedTooManyUndecrytablePacketsTime = time.Now().Add(-protocol.PublicResetTimeout)
 			time.Sleep(10 * time.Millisecond) // wait for the run loop to spin up
@@ -1187,7 +1192,8 @@ var _ = Describe("Session", func() {
 			// in reality, this happens when the trial decryption succeeded during the Public Reset timeout
 			Consistently(mconn.written).ShouldNot(HaveLen(1))
 			Expect(sess.Context().Done()).ToNot(Receive())
-			sess.Close(nil)
+			Expect(sess.Close(nil)).To(Succeed())
+			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
 		It("ignores undecryptable packets after the handshake is complete", func() {
@@ -1196,6 +1202,7 @@ var _ = Describe("Session", func() {
 			sendUndecryptablePackets()
 			Consistently(sess.undecryptablePackets).Should(BeEmpty())
 			Expect(sess.Close(nil)).To(Succeed())
+			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
 		It("unqueues undecryptable packets for later decryption", func() {
