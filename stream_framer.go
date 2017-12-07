@@ -121,9 +121,6 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 		if len(frame.Data) == 0 && !frame.FinBit {
 			return true, nil
 		}
-		if frame.FinBit {
-			s.SentFin()
-		}
 
 		// Finally, check if we are now FC blocked and should queue a BLOCKED frame
 		if !frame.FinBit && s.IsFlowControlBlocked() {

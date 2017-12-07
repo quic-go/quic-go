@@ -24,7 +24,6 @@ type streamI interface {
 	GetWriteOffset() protocol.ByteCount
 	Finished() bool
 	Cancel(error)
-	SentFin()
 	// methods needed for flow control
 	GetWindowUpdate() protocol.ByteCount
 	UpdateSendWindow(protocol.ByteCount)
@@ -273,6 +272,14 @@ func (s *stream) HasDataForWriting() bool {
 }
 
 func (s *stream) GetDataForWriting(maxBytes protocol.ByteCount) ([]byte, bool /* should send FIN */) {
+	data, shouldSendFin := s.getDataForWritingImpl(maxBytes)
+	if shouldSendFin {
+		s.finSent.Set(true)
+	}
+	return data, shouldSendFin
+}
+
+func (s *stream) getDataForWritingImpl(maxBytes protocol.ByteCount) ([]byte, bool /* should send FIN */) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -315,10 +322,6 @@ func (s *stream) shouldSendReset() bool {
 		return false
 	}
 	return (s.resetLocally.Get() || s.resetRemotely.Get()) && !s.finishedWriteAndSentFin()
-}
-
-func (s *stream) SentFin() {
-	s.finSent.Set(true)
 }
 
 // AddStreamFrame adds a new stream frame

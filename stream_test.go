@@ -641,7 +641,8 @@ var _ = Describe("Stream", func() {
 			It("doesn't call onReset if it already sent a FIN", func() {
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(0), true)
 				str.Close()
-				str.SentFin()
+				_, sentFin := str.GetDataForWriting(1000)
+				Expect(sentFin).To(BeTrue())
 				str.RegisterRemoteError(testErr, 0)
 				Expect(resetCalled).To(BeFalse())
 			})
@@ -726,7 +727,8 @@ var _ = Describe("Stream", func() {
 
 			It("doesn't call onReset if it already sent a FIN", func() {
 				str.Close()
-				str.SentFin()
+				_, sentFin := str.GetDataForWriting(1000)
+				Expect(sentFin).To(BeTrue())
 				str.Reset(testErr)
 				Expect(resetCalled).To(BeFalse())
 			})
@@ -957,7 +959,6 @@ var _ = Describe("Stream", func() {
 				data, sendFin := str.GetDataForWriting(1000)
 				Expect(data).To(BeEmpty())
 				Expect(sendFin).To(BeTrue())
-				str.SentFin()
 				Expect(str.HasDataForWriting()).To(BeFalse())
 				data, sendFin = str.GetDataForWriting(1000)
 				Expect(data).To(BeEmpty())
@@ -1022,14 +1023,14 @@ var _ = Describe("Stream", func() {
 
 		It("is not finished if it is only closed for writing", func() {
 			str.Close()
-			str.SentFin()
+			_, sentFin := str.GetDataForWriting(1000)
+			Expect(sentFin).To(BeTrue())
 			Expect(str.Finished()).To(BeFalse())
 		})
 
 		It("cancels the context after it is closed", func() {
 			Expect(str.Context().Done()).ToNot(BeClosed())
 			str.Close()
-			str.SentFin()
 			Expect(str.Context().Done()).To(BeClosed())
 		})
 
@@ -1065,7 +1066,8 @@ var _ = Describe("Stream", func() {
 		It("is finished after finishing writing and receiving a RST", func() {
 			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(13), true)
 			str.Close()
-			str.SentFin()
+			_, sentFin := str.GetDataForWriting(1000)
+			Expect(sentFin).To(BeTrue())
 			str.RegisterRemoteError(testErr, 13)
 			Expect(str.Finished()).To(BeTrue())
 		})

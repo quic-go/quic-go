@@ -273,7 +273,6 @@ var _ = Describe("Stream Framer", func() {
 				stream1.EXPECT().HasDataForWriting().Return(true)
 				stream1.EXPECT().GetDataForWriting(gomock.Any()).Return(nil, true)
 				stream1.EXPECT().GetWriteOffset().Return(offset)
-				stream1.EXPECT().SentFin()
 				setNoData(stream2)
 
 				fs := framer.PopStreamFrames(1000)
@@ -289,7 +288,6 @@ var _ = Describe("Stream Framer", func() {
 				stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobar"), true)
 				stream1.EXPECT().HasDataForWriting().Return(true)
 				stream1.EXPECT().GetWriteOffset().Return(offset)
-				stream1.EXPECT().SentFin()
 				setNoData(stream2)
 
 				fs := framer.PopStreamFrames(1000)
@@ -327,7 +325,6 @@ var _ = Describe("Stream Framer", func() {
 			stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foo"), true)
 			stream1.EXPECT().HasDataForWriting().Return(true)
 			stream1.EXPECT().GetWriteOffset()
-			stream1.EXPECT().SentFin()
 			setNoData(stream2)
 			frames := framer.PopStreamFrames(1000)
 			Expect(frames).To(HaveLen(1))

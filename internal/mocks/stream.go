@@ -190,16 +190,6 @@ func (_mr *MockStreamIMockRecorder) Reset(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "Reset", reflect.TypeOf((*MockStreamI)(nil).Reset), arg0)
 }
 
-// SentFin mocks base method
-func (_m *MockStreamI) SentFin() {
-	_m.ctrl.Call(_m, "SentFin")
-}
-
-// SentFin indicates an expected call of SentFin
-func (_mr *MockStreamIMockRecorder) SentFin() *gomock.Call {
-	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "SentFin", reflect.TypeOf((*MockStreamI)(nil).SentFin))
-}
-
 // SetDeadline mocks base method
 func (_m *MockStreamI) SetDeadline(_param0 time.Time) error {
 	ret := _m.ctrl.Call(_m, "SetDeadline", _param0)
