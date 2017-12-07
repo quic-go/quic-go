@@ -130,6 +130,18 @@ func (_mr *MockStreamIMockRecorder) GetWriteOffset() *gomock.Call {
 	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "GetWriteOffset", reflect.TypeOf((*MockStreamI)(nil).GetWriteOffset))
 }
 
+// HasDataForWriting mocks base method
+func (_m *MockStreamI) HasDataForWriting() bool {
+	ret := _m.ctrl.Call(_m, "HasDataForWriting")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HasDataForWriting indicates an expected call of HasDataForWriting
+func (_mr *MockStreamIMockRecorder) HasDataForWriting() *gomock.Call {
+	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "HasDataForWriting", reflect.TypeOf((*MockStreamI)(nil).HasDataForWriting))
+}
+
 // IsFlowControlBlocked mocks base method
 func (_m *MockStreamI) IsFlowControlBlocked() bool {
 	ret := _m.ctrl.Call(_m, "IsFlowControlBlocked")
@@ -140,18 +152,6 @@ func (_m *MockStreamI) IsFlowControlBlocked() bool {
 // IsFlowControlBlocked indicates an expected call of IsFlowControlBlocked
 func (_mr *MockStreamIMockRecorder) IsFlowControlBlocked() *gomock.Call {
 	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "IsFlowControlBlocked", reflect.TypeOf((*MockStreamI)(nil).IsFlowControlBlocked))
-}
-
-// LenOfDataForWriting mocks base method
-func (_m *MockStreamI) LenOfDataForWriting() protocol.ByteCount {
-	ret := _m.ctrl.Call(_m, "LenOfDataForWriting")
-	ret0, _ := ret[0].(protocol.ByteCount)
-	return ret0
-}
-
-// LenOfDataForWriting indicates an expected call of LenOfDataForWriting
-func (_mr *MockStreamIMockRecorder) LenOfDataForWriting() *gomock.Call {
-	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "LenOfDataForWriting", reflect.TypeOf((*MockStreamI)(nil).LenOfDataForWriting))
 }
 
 // Read mocks base method

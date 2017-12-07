@@ -19,7 +19,7 @@ type streamI interface {
 
 	AddStreamFrame(*wire.StreamFrame) error
 	RegisterRemoteError(error, protocol.ByteCount) error
-	LenOfDataForWriting() protocol.ByteCount
+	HasDataForWriting() bool
 	GetDataForWriting(maxBytes protocol.ByteCount) []byte
 	GetWriteOffset() protocol.ByteCount
 	Finished() bool
@@ -263,14 +263,12 @@ func (s *stream) GetWriteOffset() protocol.ByteCount {
 	return s.writeOffset
 }
 
-func (s *stream) LenOfDataForWriting() protocol.ByteCount {
+// HasDataForWriting says if there's stream available to be dequeued for writing
+func (s *stream) HasDataForWriting() bool {
 	s.mutex.Lock()
-	var l protocol.ByteCount
-	if s.err == nil {
-		l = protocol.ByteCount(len(s.dataForWriting))
-	}
+	hasData := s.err == nil && len(s.dataForWriting) > 0
 	s.mutex.Unlock()
-	return l
+	return hasData
 }
 
 func (s *stream) GetDataForWriting(maxBytes protocol.ByteCount) []byte {
