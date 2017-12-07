@@ -89,7 +89,7 @@ func ParseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 		return nil, ErrInvalidFirstAckRange
 	}
 
-	if ackBlockLength > largestAcked {
+	if ackBlockLength > largestAcked+1 {
 		return nil, ErrInvalidAckRanges
 	}
 

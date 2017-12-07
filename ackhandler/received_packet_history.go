@@ -74,17 +74,17 @@ func (h *receivedPacketHistory) ReceivedPacket(p protocol.PacketNumber) error {
 	return nil
 }
 
-// DeleteUpTo deletes all entries up to (and including) p
-func (h *receivedPacketHistory) DeleteUpTo(p protocol.PacketNumber) {
-	h.lowestInReceivedPacketNumbers = utils.MaxPacketNumber(h.lowestInReceivedPacketNumbers, p+1)
+// DeleteBelow deletes all entries below (but not including) p
+func (h *receivedPacketHistory) DeleteBelow(p protocol.PacketNumber) {
+	h.lowestInReceivedPacketNumbers = utils.MaxPacketNumber(h.lowestInReceivedPacketNumbers, p)
 
 	nextEl := h.ranges.Front()
 	for el := h.ranges.Front(); nextEl != nil; el = nextEl {
 		nextEl = el.Next()
 
-		if p >= el.Value.Start && p < el.Value.End {
-			el.Value.Start = p + 1
-		} else if el.Value.End <= p { // delete a whole range
+		if p > el.Value.Start && p <= el.Value.End {
+			el.Value.Start = p
+		} else if el.Value.End < p { // delete a whole range
 			h.ranges.Remove(el)
 		} else { // no ranges affected. Nothing to do
 			return
