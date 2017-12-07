@@ -193,6 +193,14 @@ var _ = Describe("Stream Flow controller", func() {
 				Expect(controller.receiveWindowIncrement).To(Equal(2 * oldIncrement))
 				Expect(controller.connection.(*connectionFlowController).receiveWindowIncrement).To(Equal(protocol.ByteCount(120))) // unchanged
 			})
+
+			It("doesn't increase the window after a final offset was already received", func() {
+				controller.AddBytesRead(80)
+				err := controller.UpdateHighestReceived(90, true)
+				Expect(err).ToNot(HaveOccurred())
+				offset := controller.GetWindowUpdate()
+				Expect(offset).To(BeZero())
+			})
 		})
 	})
 
