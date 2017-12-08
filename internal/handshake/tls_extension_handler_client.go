@@ -13,8 +13,8 @@ import (
 )
 
 type extensionHandlerClient struct {
-	params     *TransportParameters
-	paramsChan chan<- TransportParameters
+	ourParams  *TransportParameters
+	paramsChan chan TransportParameters
 
 	initialVersion    protocol.VersionNumber
 	supportedVersions []protocol.VersionNumber
@@ -22,16 +22,17 @@ type extensionHandlerClient struct {
 }
 
 var _ mint.AppExtensionHandler = &extensionHandlerClient{}
+var _ TLSExtensionHandler = &extensionHandlerClient{}
 
-func newExtensionHandlerClient(
+func NewExtensionHandlerClient(
 	params *TransportParameters,
-	paramsChan chan<- TransportParameters,
 	initialVersion protocol.VersionNumber,
 	supportedVersions []protocol.VersionNumber,
 	version protocol.VersionNumber,
-) *extensionHandlerClient {
+) TLSExtensionHandler {
+	paramsChan := make(chan TransportParameters, 1)
 	return &extensionHandlerClient{
-		params:            params,
+		ourParams:         params,
 		paramsChan:        paramsChan,
 		initialVersion:    initialVersion,
 		supportedVersions: supportedVersions,
@@ -46,7 +47,7 @@ func (h *extensionHandlerClient) Send(hType mint.HandshakeType, el *mint.Extensi
 
 	data, err := syntax.Marshal(clientHelloTransportParameters{
 		InitialVersion: uint32(h.initialVersion),
-		Parameters:     h.params.getTransportParameters(),
+		Parameters:     h.ourParams.getTransportParameters(),
 	})
 	if err != nil {
 		return err
@@ -122,4 +123,8 @@ func (h *extensionHandlerClient) Receive(hType mint.HandshakeType, el *mint.Exte
 	params.MaxStreams = math.MaxUint32
 	h.paramsChan <- *params
 	return nil
+}
+
+func (h *extensionHandlerClient) GetPeerParams() <-chan TransportParameters {
+	return h.paramsChan
 }

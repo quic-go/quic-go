@@ -32,9 +32,11 @@ type packetPacker struct {
 	ackFrame         *wire.AckFrame
 	leastUnacked     protocol.PacketNumber
 	omitConnectionID bool
+	hasSentPacket    bool // has the packetPacker already sent a packet
 }
 
 func newPacketPacker(connectionID protocol.ConnectionID,
+	initialPacketNumber protocol.PacketNumber,
 	cryptoSetup handshake.CryptoSetup,
 	streamFramer *streamFramer,
 	perspective protocol.Perspective,
@@ -46,7 +48,7 @@ func newPacketPacker(connectionID protocol.ConnectionID,
 		perspective:           perspective,
 		version:               version,
 		streamFramer:          streamFramer,
-		packetNumberGenerator: newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
+		packetNumberGenerator: newPacketNumberGenerator(initialPacketNumber, protocol.SkipPacketAveragePeriodLength),
 	}
 }
 
@@ -116,7 +118,12 @@ func (p *packetPacker) PackHandshakeRetransmission(packet *ackhandler.Packet) (*
 // PackPacket packs a new packet
 // the other controlFrames are sent in the next packet, but might be queued and sent in the next packet if the packet would overflow MaxPacketSize otherwise
 func (p *packetPacker) PackPacket() (*packedPacket, error) {
-	if p.streamFramer.HasCryptoStreamFrame() {
+	hasCryptoStreamFrame := p.streamFramer.HasCryptoStreamFrame()
+	// if this is the first packet to be send, make sure it contains stream data
+	if !p.hasSentPacket && !hasCryptoStreamFrame {
+		return nil, nil
+	}
+	if hasCryptoStreamFrame {
 		return p.packCryptoPacket()
 	}
 
@@ -266,18 +273,21 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header
 	pnum := p.packetNumberGenerator.Peek()
 	packetNumberLen := protocol.GetPacketNumberLengthForHeader(pnum, p.leastUnacked)
 
-	var isLongHeader bool
-	if p.version.UsesTLS() && encLevel != protocol.EncryptionForwardSecure {
-		// TODO: set the Long Header type
-		packetNumberLen = protocol.PacketNumberLen4
-		isLongHeader = true
-	}
-
 	header := &wire.Header{
 		ConnectionID:    p.connectionID,
 		PacketNumber:    pnum,
 		PacketNumberLen: packetNumberLen,
-		IsLongHeader:    isLongHeader,
+	}
+
+	if p.version.UsesTLS() && encLevel != protocol.EncryptionForwardSecure {
+		header.PacketNumberLen = protocol.PacketNumberLen4
+		header.IsLongHeader = true
+		if !p.hasSentPacket && p.perspective == protocol.PerspectiveClient {
+			header.Type = protocol.PacketTypeInitial
+			// TODO(#886): add padding
+		} else {
+			header.Type = protocol.PacketTypeHandshake
+		}
 	}
 
 	if p.omitConnectionID && encLevel == protocol.EncryptionForwardSecure {
@@ -292,7 +302,6 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header
 			header.Version = p.version
 		}
 	} else {
-		header.Type = p.cryptoSetup.GetNextPacketType()
 		if encLevel != protocol.EncryptionForwardSecure {
 			header.Version = p.version
 		}
@@ -330,7 +339,7 @@ func (p *packetPacker) writeAndSealPacket(
 	if num != header.PacketNumber {
 		return nil, errors.New("packetPacker BUG: Peeked and Popped packet numbers do not match")
 	}
-
+	p.hasSentPacket = true
 	return raw, nil
 }
 

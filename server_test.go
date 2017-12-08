@@ -12,6 +12,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/crypto"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qerr"
@@ -60,12 +61,14 @@ func (s *mockSession) closeRemote(e error) {
 func (s *mockSession) OpenStream() (Stream, error) {
 	return &stream{streamID: 1337}, nil
 }
-func (s *mockSession) AcceptStream() (Stream, error)    { panic("not implemented") }
-func (s *mockSession) OpenStreamSync() (Stream, error)  { panic("not implemented") }
-func (s *mockSession) LocalAddr() net.Addr              { panic("not implemented") }
-func (s *mockSession) RemoteAddr() net.Addr             { panic("not implemented") }
-func (*mockSession) Context() context.Context           { panic("not implemented") }
-func (*mockSession) GetVersion() protocol.VersionNumber { return protocol.VersionWhatever }
+func (s *mockSession) AcceptStream() (Stream, error)          { panic("not implemented") }
+func (s *mockSession) OpenStreamSync() (Stream, error)        { panic("not implemented") }
+func (s *mockSession) LocalAddr() net.Addr                    { panic("not implemented") }
+func (s *mockSession) RemoteAddr() net.Addr                   { panic("not implemented") }
+func (*mockSession) Context() context.Context                 { panic("not implemented") }
+func (*mockSession) GetVersion() protocol.VersionNumber       { return protocol.VersionWhatever }
+func (s *mockSession) handshakeStatus() <-chan handshakeEvent { return s.handshakeChan }
+func (*mockSession) getCryptoStream() cryptoStream            { panic("not implemented") }
 
 var _ Session = &mockSession{}
 var _ NonFWSession = &mockSession{}
@@ -77,14 +80,14 @@ func newMockSession(
 	_ *handshake.ServerConfig,
 	_ *tls.Config,
 	_ *Config,
-) (packetHandler, <-chan handshakeEvent, error) {
+) (packetHandler, error) {
 	s := mockSession{
 		connectionID:      connectionID,
 		handshakeChan:     make(chan handshakeEvent),
 		handshakeComplete: make(chan error),
 		stopRunLoop:       make(chan struct{}),
 	}
-	return &s, s.handshakeChan, nil
+	return &s, nil
 }
 
 var _ = Describe("Server", func() {
@@ -95,7 +98,8 @@ var _ = Describe("Server", func() {
 	)
 
 	BeforeEach(func() {
-		conn = &mockPacketConn{addr: &net.UDPAddr{}}
+		conn = newMockPacketConn()
+		conn.addr = &net.UDPAddr{}
 		config = &Config{Versions: protocol.SupportedVersions}
 	})
 
@@ -217,7 +221,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("closes sessions and the connection when Close is called", func() {
-			session, _, _ := newMockSession(nil, 0, 0, nil, nil, nil)
+			session, _ := newMockSession(nil, 0, 0, nil, nil, nil)
 			serv.sessions[1] = session
 			err := serv.Close()
 			Expect(err).NotTo(HaveOccurred())
@@ -234,14 +238,14 @@ var _ = Describe("Server", func() {
 		})
 
 		It("works if no quic.Config is given", func(done Done) {
-			ln, err := ListenAddr("127.0.0.1:0", nil, config)
+			ln, err := ListenAddr("127.0.0.1:0", testdata.GetTLSConfig(), nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(ln.Close()).To(Succeed())
 			close(done)
 		}, 1)
 
 		It("closes properly", func() {
-			ln, err := ListenAddr("127.0.0.1:0", nil, config)
+			ln, err := ListenAddr("127.0.0.1:0", testdata.GetTLSConfig(), config)
 			Expect(err).ToNot(HaveOccurred())
 
 			var returned bool
@@ -267,7 +271,7 @@ var _ = Describe("Server", func() {
 		}, 0.5)
 
 		It("closes all sessions when encountering a connection error", func() {
-			session, _, _ := newMockSession(nil, 0, 0, nil, nil, nil)
+			session, _ := newMockSession(nil, 0, 0, nil, nil, nil)
 			serv.sessions[0x12345] = session
 			Expect(serv.sessions[0x12345].(*mockSession).closed).To(BeFalse())
 			testErr := errors.New("connection error")
@@ -408,7 +412,7 @@ var _ = Describe("Server", func() {
 		}
 		hdr.Write(b, protocol.PerspectiveClient, 13 /* not a valid QUIC version */)
 		b.Write(bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSize)) // add a fake CHLO
-		conn.dataToRead = b.Bytes()
+		conn.dataToRead <- b.Bytes()
 		conn.dataReadFrom = udpAddr
 		ln, err := Listen(conn, nil, config)
 		Expect(err).ToNot(HaveOccurred())
@@ -431,7 +435,7 @@ var _ = Describe("Server", func() {
 	})
 
 	It("sends an IETF draft style Version Negotaion Packet, if the client sent a IETF draft style header", func() {
-		config.Versions = []protocol.VersionNumber{99}
+		config.Versions = []protocol.VersionNumber{99, protocol.VersionTLS}
 		b := &bytes.Buffer{}
 		hdr := wire.Header{
 			Type:         protocol.PacketTypeInitial,
@@ -440,11 +444,12 @@ var _ = Describe("Server", func() {
 			PacketNumber: 0x55,
 			Version:      0x1234,
 		}
-		hdr.Write(b, protocol.PerspectiveClient, protocol.VersionTLS)
+		err := hdr.Write(b, protocol.PerspectiveClient, protocol.VersionTLS)
+		Expect(err).ToNot(HaveOccurred())
 		b.Write(bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSize)) // add a fake CHLO
-		conn.dataToRead = b.Bytes()
+		conn.dataToRead <- b.Bytes()
 		conn.dataReadFrom = udpAddr
-		ln, err := Listen(conn, nil, config)
+		ln, err := Listen(conn, testdata.GetTLSConfig(), config)
 		Expect(err).ToNot(HaveOccurred())
 
 		done := make(chan struct{})
@@ -465,9 +470,32 @@ var _ = Describe("Server", func() {
 		Consistently(done).ShouldNot(BeClosed())
 	})
 
+	It("ignores IETF draft style Initial packets, if it doesn't support TLS", func() {
+		version := protocol.VersionNumber(99)
+		Expect(version.UsesTLS()).To(BeFalse())
+		config.Versions = []protocol.VersionNumber{version}
+		b := &bytes.Buffer{}
+		hdr := wire.Header{
+			Type:         protocol.PacketTypeInitial,
+			IsLongHeader: true,
+			ConnectionID: 0x1337,
+			PacketNumber: 0x55,
+			Version:      protocol.VersionTLS,
+		}
+		err := hdr.Write(b, protocol.PerspectiveClient, protocol.VersionTLS)
+		Expect(err).ToNot(HaveOccurred())
+		b.Write(bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSize)) // add a fake CHLO
+		conn.dataToRead <- b.Bytes()
+		conn.dataReadFrom = udpAddr
+		ln, err := Listen(conn, testdata.GetTLSConfig(), config)
+		defer ln.Close()
+		Expect(err).ToNot(HaveOccurred())
+		Consistently(func() int { return conn.dataWritten.Len() }).Should(BeZero())
+	})
+
 	It("sends a PublicReset for new connections that don't have the VersionFlag set", func() {
 		conn.dataReadFrom = udpAddr
-		conn.dataToRead = []byte{0x08, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0x01}
+		conn.dataToRead <- []byte{0x08, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0x01}
 		ln, err := Listen(conn, nil, config)
 		Expect(err).ToNot(HaveOccurred())
 		go func() {

@@ -32,6 +32,11 @@ type streamI interface {
 	IsFlowControlBlocked() bool
 }
 
+type cryptoStream interface {
+	streamI
+	SetReadOffset(protocol.ByteCount)
+}
+
 // A Stream assembles the data from StreamFrames and provides a super-convenient Read-Interface
 //
 // Read() and Write() may be called concurrently, but multiple calls to Read() or Write() individually must be synchronized manually.
@@ -480,4 +485,12 @@ func (s *stream) IsFlowControlBlocked() bool {
 
 func (s *stream) GetWindowUpdate() protocol.ByteCount {
 	return s.flowController.GetWindowUpdate()
+}
+
+// SetReadOffset sets the read offset.
+// It is only needed for the crypto stream.
+// It must not be called concurrently with any other stream methods, especially Read and Write.
+func (s *stream) SetReadOffset(offset protocol.ByteCount) {
+	s.readOffset = offset
+	s.frameQueue.readPosition = offset
 }

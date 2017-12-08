@@ -325,4 +325,5 @@ func (m *streamsMap) UpdateMaxStreamLimit(limit uint32) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.maxOutgoingStreams = limit
+	m.openStreamOrErrCond.Broadcast()
 }

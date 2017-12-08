@@ -13,15 +13,12 @@ import (
 
 var _ = Describe("TLS Extension Handler, for the client", func() {
 	var (
-		handler    *extensionHandlerClient
-		el         mint.ExtensionList
-		paramsChan chan TransportParameters
+		handler *extensionHandlerClient
+		el      mint.ExtensionList
 	)
 
 	BeforeEach(func() {
-		// use a buffered channel here, so that we don't have to receive concurrently when parsing a message
-		paramsChan = make(chan TransportParameters, 1)
-		handler = newExtensionHandlerClient(&TransportParameters{}, paramsChan, protocol.VersionWhatever, nil, protocol.VersionWhatever)
+		handler = NewExtensionHandlerClient(&TransportParameters{}, protocol.VersionWhatever, nil, protocol.VersionWhatever).(*extensionHandlerClient)
 		el = make(mint.ExtensionList, 0)
 	})
 
@@ -81,7 +78,7 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 			err := handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
 			Expect(err).ToNot(HaveOccurred())
 			var params TransportParameters
-			Expect(paramsChan).To(Receive(&params))
+			Expect(handler.GetPeerParams()).To(Receive(&params))
 			Expect(params.StreamFlowControlWindow).To(BeEquivalentTo(0x11223344))
 		})
 

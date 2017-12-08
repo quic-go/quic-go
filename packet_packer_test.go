@@ -28,7 +28,6 @@ type mockCryptoSetup struct {
 	divNonce           []byte
 	encLevelSeal       protocol.EncryptionLevel
 	encLevelSealCrypto protocol.EncryptionLevel
-	nextPacketType     protocol.PacketType
 }
 
 var _ handshake.CryptoSetup = &mockCryptoSetup{}
@@ -50,7 +49,6 @@ func (m *mockCryptoSetup) GetSealerWithEncryptionLevel(protocol.EncryptionLevel)
 }
 func (m *mockCryptoSetup) DiversificationNonce() []byte            { return m.divNonce }
 func (m *mockCryptoSetup) SetDiversificationNonce(divNonce []byte) { m.divNonce = divNonce }
-func (m *mockCryptoSetup) GetNextPacketType() protocol.PacketType  { return m.nextPacketType }
 
 var _ = Describe("Packet packer", func() {
 	var (
@@ -69,13 +67,14 @@ var _ = Describe("Packet packer", func() {
 		packer = &packetPacker{
 			cryptoSetup:           &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure},
 			connectionID:          0x1337,
-			packetNumberGenerator: newPacketNumberGenerator(protocol.SkipPacketAveragePeriodLength),
+			packetNumberGenerator: newPacketNumberGenerator(1, protocol.SkipPacketAveragePeriodLength),
 			streamFramer:          streamFramer,
 			perspective:           protocol.PerspectiveServer,
 		}
 		publicHeaderLen = 1 + 8 + 2 // 1 flag byte, 8 connection ID, 2 packet number
 		maxFrameSize = protocol.MaxPacketSize - protocol.ByteCount((&mockSealer{}).Overhead()) - publicHeaderLen
 		packer.version = protocol.VersionWhatever
+		packer.hasSentPacket = true
 	})
 
 	It("returns nil when no packet is queued", func() {
@@ -191,13 +190,6 @@ var _ = Describe("Packet packer", func() {
 				Expect(h.Version).To(Equal(versionIETFHeader))
 			})
 
-			It("sets the packet type based on the state of the handshake", func() {
-				packer.cryptoSetup.(*mockCryptoSetup).nextPacketType = 5
-				h := packer.getHeader(protocol.EncryptionSecure)
-				Expect(h.IsLongHeader).To(BeTrue())
-				Expect(h.Type).To(Equal(protocol.PacketType(5)))
-			})
-
 			It("uses the Short Header format for forward-secure packets", func() {
 				h := packer.getHeader(protocol.EncryptionForwardSecure)
 				Expect(h.IsLongHeader).To(BeFalse())
@@ -269,7 +261,7 @@ var _ = Describe("Packet packer", func() {
 		Expect(p2.header.PacketNumber).To(BeNumerically(">", p1.header.PacketNumber))
 	})
 
-	It("packs a StopWaitingFrame first", func() {
+	It("packs a STOP_WAITING frame first", func() {
 		packer.packetNumberGenerator.next = 15
 		swf := &wire.StopWaitingFrame{LeastUnacked: 10}
 		packer.QueueControlFrame(&wire.RstStreamFrame{})
@@ -281,7 +273,7 @@ var _ = Describe("Packet packer", func() {
 		Expect(p.frames[0]).To(Equal(swf))
 	})
 
-	It("sets the LeastUnackedDelta length of a StopWaitingFrame", func() {
+	It("sets the LeastUnackedDelta length of a STOP_WAITING frame", func() {
 		packetNumber := protocol.PacketNumber(0xDECAFB) // will result in a 4 byte packet number
 		packer.packetNumberGenerator.next = packetNumber
 		swf := &wire.StopWaitingFrame{LeastUnacked: packetNumber - 0x100}
@@ -292,7 +284,7 @@ var _ = Describe("Packet packer", func() {
 		Expect(p.frames[0].(*wire.StopWaitingFrame).PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
 	})
 
-	It("does not pack a packet containing only a StopWaitingFrame", func() {
+	It("does not pack a packet containing only a STOP_WAITING frame", func() {
 		swf := &wire.StopWaitingFrame{LeastUnacked: 10}
 		packer.QueueControlFrame(swf)
 		p, err := packer.PackPacket()
@@ -305,6 +297,14 @@ var _ = Describe("Packet packer", func() {
 		p, err := packer.PackPacket()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(p).ToNot(BeNil())
+	})
+
+	It("refuses to send a packet that doesn't contain crypto stream data, if it has never sent a packet before", func() {
+		packer.hasSentPacket = false
+		packer.controlFrames = []wire.Frame{&wire.BlockedFrame{}}
+		p, err := packer.PackPacket()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(p).To(BeNil())
 	})
 
 	It("packs many control frames into 1 packets", func() {
@@ -602,7 +602,7 @@ var _ = Describe("Packet packer", func() {
 		})
 	})
 
-	Context("Blocked frames", func() {
+	Context("BLOCKED frames", func() {
 		It("queues a BLOCKED frame", func() {
 			length := 100
 			streamFramer.blockedFrameQueue = []wire.Frame{&wire.StreamBlockedFrame{StreamID: 5}}
@@ -750,7 +750,7 @@ var _ = Describe("Packet packer", func() {
 			Expect(err).To(MatchError("PacketPacker BUG: forward-secure encrypted handshake packets don't need special treatment"))
 		})
 
-		It("refuses to retransmit packets without a StopWaitingFrame", func() {
+		It("refuses to retransmit packets without a STOP_WAITING Frame", func() {
 			packer.stopWaiting = nil
 			_, err := packer.PackHandshakeRetransmission(&ackhandler.Packet{
 				EncryptionLevel: protocol.EncryptionSecure,

@@ -20,15 +20,12 @@ func parameterMapToList(paramMap map[transportParameterID][]byte) []transportPar
 
 var _ = Describe("TLS Extension Handler, for the server", func() {
 	var (
-		handler    *extensionHandlerServer
-		el         mint.ExtensionList
-		paramsChan chan TransportParameters
+		handler *extensionHandlerServer
+		el      mint.ExtensionList
 	)
 
 	BeforeEach(func() {
-		// use a buffered channel here, so that we don't have to receive concurrently when parsing a message
-		paramsChan = make(chan TransportParameters, 1)
-		handler = newExtensionHandlerServer(&TransportParameters{}, paramsChan, nil, protocol.VersionWhatever)
+		handler = NewExtensionHandlerServer(&TransportParameters{}, nil, protocol.VersionWhatever).(*extensionHandlerServer)
 		el = make(mint.ExtensionList, 0)
 	})
 
@@ -91,7 +88,7 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 			err := handler.Receive(mint.HandshakeTypeClientHello, &el)
 			Expect(err).ToNot(HaveOccurred())
 			var params TransportParameters
-			Expect(paramsChan).To(Receive(&params))
+			Expect(handler.GetPeerParams()).To(Receive(&params))
 			Expect(params.StreamFlowControlWindow).To(BeEquivalentTo(0x11223344))
 		})
 

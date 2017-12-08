@@ -145,12 +145,11 @@ func areSessionsRunning() bool {
 
 var _ = Describe("Session", func() {
 	var (
-		sess          *session
-		scfg          *handshake.ServerConfig
-		mconn         *mockConnection
-		cryptoSetup   *mockCryptoSetup
-		handshakeChan <-chan handshakeEvent
-		aeadChanged   chan<- protocol.EncryptionLevel
+		sess        *session
+		scfg        *handshake.ServerConfig
+		mconn       *mockConnection
+		cryptoSetup *mockCryptoSetup
+		aeadChanged chan<- protocol.EncryptionLevel
 	)
 
 	BeforeEach(func() {
@@ -180,7 +179,7 @@ var _ = Describe("Session", func() {
 		scfg, err = handshake.NewServerConfig(kex, certChain)
 		Expect(err).NotTo(HaveOccurred())
 		var pSess Session
-		pSess, handshakeChan, err = newSession(
+		pSess, err = newSession(
 			mconn,
 			protocol.Version39,
 			0,
@@ -229,7 +228,7 @@ var _ = Describe("Session", func() {
 				paramCookie = cookie
 				return false
 			}
-			pSess, _, err := newSession(
+			pSess, err := newSession(
 				mconn,
 				protocol.Version39,
 				0,
@@ -469,9 +468,6 @@ var _ = Describe("Session", func() {
 		})
 
 		It("handles CONNECTION_CLOSE frames", func() {
-			cryptoStream := mocks.NewMockStreamI(mockCtrl)
-			cryptoStream.EXPECT().Cancel(gomock.Any())
-			sess.cryptoStream = cryptoStream
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -772,10 +768,15 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("sending packets", func() {
+		BeforeEach(func() {
+			sess.packer.hasSentPacket = true // make sure this is not the first packet the packer sends
+		})
+
 		It("sends ACK frames", func() {
 			packetNumber := protocol.PacketNumber(0x035e)
-			sess.receivedPacketHandler.ReceivedPacket(packetNumber, true)
-			err := sess.sendPacket()
+			err := sess.receivedPacketHandler.ReceivedPacket(packetNumber, true)
+			Expect(err).ToNot(HaveOccurred())
+			err = sess.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mconn.written).To(HaveLen(1))
 			Expect(mconn.written).To(Receive(ContainSubstring(string([]byte{0x03, 0x5e}))))
@@ -859,6 +860,7 @@ var _ = Describe("Session", func() {
 		BeforeEach(func() {
 			// a StopWaitingFrame is added, so make sure the packet number of the new package is higher than the packet number of the retransmitted packet
 			sess.packer.packetNumberGenerator.next = 0x1337 + 10
+			sess.packer.hasSentPacket = true // make sure this is not the first packet the packer sends
 			sph = newMockSentPacketHandler().(*mockSentPacketHandler)
 			sess.sentPacketHandler = sph
 			sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure}
@@ -982,6 +984,7 @@ var _ = Describe("Session", func() {
 	})
 
 	It("retransmits RTO packets", func() {
+		sess.packer.hasSentPacket = true // make sure this is not the first packet the packer sends
 		sess.sentPacketHandler.SetHandshakeComplete()
 		n := protocol.PacketNumber(10)
 		sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure}
@@ -1009,6 +1012,7 @@ var _ = Describe("Session", func() {
 
 	Context("scheduling sending", func() {
 		BeforeEach(func() {
+			sess.packer.hasSentPacket = true // make sure this is not the first packet the packer sends
 			sess.processTransportParameters(&handshake.TransportParameters{
 				StreamFlowControlWindow:     protocol.MaxByteCount,
 				ConnectionFlowControlWindow: protocol.MaxByteCount,
@@ -1219,7 +1223,7 @@ var _ = Describe("Session", func() {
 	It("send a handshake event on the handshakeChan when the AEAD changes to secure", func(done Done) {
 		go sess.run()
 		aeadChanged <- protocol.EncryptionSecure
-		Eventually(handshakeChan).Should(Receive(&handshakeEvent{encLevel: protocol.EncryptionSecure}))
+		Eventually(sess.handshakeStatus()).Should(Receive(&handshakeEvent{encLevel: protocol.EncryptionSecure}))
 		Expect(sess.Close(nil)).To(Succeed())
 		close(done)
 	})
@@ -1227,7 +1231,7 @@ var _ = Describe("Session", func() {
 	It("send a handshake event on the handshakeChan when the AEAD changes to forward-secure", func(done Done) {
 		go sess.run()
 		aeadChanged <- protocol.EncryptionForwardSecure
-		Eventually(handshakeChan).Should(Receive(&handshakeEvent{encLevel: protocol.EncryptionForwardSecure}))
+		Eventually(sess.handshakeStatus()).Should(Receive(&handshakeEvent{encLevel: protocol.EncryptionForwardSecure}))
 		Expect(sess.Close(nil)).To(Succeed())
 		close(done)
 	})
@@ -1235,7 +1239,7 @@ var _ = Describe("Session", func() {
 	It("closes the handshakeChan when the handshake completes", func(done Done) {
 		go sess.run()
 		close(aeadChanged)
-		Eventually(handshakeChan).Should(BeClosed())
+		Eventually(sess.handshakeStatus()).Should(BeClosed())
 		Expect(sess.Close(nil)).To(Succeed())
 		close(done)
 	})
@@ -1244,7 +1248,7 @@ var _ = Describe("Session", func() {
 		testErr := errors.New("handshake error")
 		go sess.run()
 		Expect(sess.Close(nil)).To(Succeed())
-		Expect(handshakeChan).To(Receive(&handshakeEvent{err: testErr}))
+		Expect(sess.handshakeStatus()).To(Receive(&handshakeEvent{err: testErr}))
 		close(done)
 	})
 
@@ -1292,6 +1296,7 @@ var _ = Describe("Session", func() {
 			sess.handshakeComplete = true
 			sess.config.KeepAlive = true
 			sess.lastNetworkActivityTime = time.Now().Add(-remoteIdleTimeout / 2)
+			sess.packer.hasSentPacket = true // make sure this is not the first packet the packer sends
 			go sess.run()
 			defer sess.Close(nil)
 			var data []byte
@@ -1524,7 +1529,7 @@ var _ = Describe("Client Session", func() {
 		}
 
 		mconn = newMockConnection()
-		sessP, _, err := newClientSession(
+		sessP, err := newClientSession(
 			mconn,
 			"hostname",
 			protocol.Version39,
@@ -1552,7 +1557,10 @@ var _ = Describe("Client Session", func() {
 		})
 
 		It("passes the diversification nonce to the cryptoSetup", func() {
-			go sess.run()
+			go func() {
+				defer GinkgoRecover()
+				sess.run()
+			}()
 			hdr.PacketNumber = 5
 			hdr.DiversificationNonce = []byte("foobar")
 			err := sess.handlePacketImpl(&receivedPacket{header: hdr})
