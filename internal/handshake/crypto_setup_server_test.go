@@ -251,7 +251,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		It("reads the transport parameters sent by the client", func() {
 			sourceAddrValid = true
 			fullCHLO[TagICSL] = []byte{0x37, 0x13, 0, 0}
-			_, err := cs.handleMessage(bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), fullCHLO)
+			_, err := cs.handleMessage(bytes.Repeat([]byte{'a'}, protocol.MinClientHelloSize), fullCHLO)
 			Expect(err).ToNot(HaveOccurred())
 			var params TransportParameters
 			Expect(paramsChan).To(Receive(&params))
@@ -260,7 +260,7 @@ var _ = Describe("Server Crypto Setup", func() {
 
 		It("generates REJ messages", func() {
 			sourceAddrValid = false
-			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), nil)
+			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.MinClientHelloSize), nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(response).To(HavePrefix("REJ"))
 			Expect(response).To(ContainSubstring("initial public"))
@@ -271,7 +271,7 @@ var _ = Describe("Server Crypto Setup", func() {
 
 		It("REJ messages don't include cert or proof without STK", func() {
 			sourceAddrValid = false
-			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), nil)
+			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.MinClientHelloSize), nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(response).To(HavePrefix("REJ"))
 			Expect(response).ToNot(ContainSubstring("certcompressed"))
@@ -281,7 +281,7 @@ var _ = Describe("Server Crypto Setup", func() {
 
 		It("REJ messages include cert and proof with valid STK", func() {
 			sourceAddrValid = true
-			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), map[Tag][]byte{
+			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.MinClientHelloSize), map[Tag][]byte{
 				TagSTK: validSTK,
 				TagSNI: []byte("foo"),
 			})
@@ -337,7 +337,7 @@ var _ = Describe("Server Crypto Setup", func() {
 				Data: map[Tag][]byte{
 					TagSNI: []byte("quic.clemente.io"),
 					TagSTK: validSTK,
-					TagPAD: bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize),
+					TagPAD: bytes.Repeat([]byte{'a'}, protocol.MinClientHelloSize),
 					TagVER: versionTag,
 				},
 			}.Write(&stream.dataToRead)
@@ -417,11 +417,6 @@ var _ = Describe("Server Crypto Setup", func() {
 
 		It("recognizes proper CHLOs", func() {
 			Expect(cs.isInchoateCHLO(fullCHLO, cert)).To(BeFalse())
-		})
-
-		It("errors on too short inchoate CHLOs", func() {
-			_, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize-1), nil)
-			Expect(err).To(MatchError("CryptoInvalidValueLength: CHLO too small"))
 		})
 
 		It("rejects CHLOs without the version tag", func() {
@@ -719,7 +714,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		It("requires STK", func() {
 			sourceAddrValid = false
 			done, err := cs.handleMessage(
-				bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize),
+				bytes.Repeat([]byte{'a'}, protocol.MinClientHelloSize),
 				map[Tag][]byte{
 					TagSNI: []byte("foo"),
 					TagVER: versionTag,
@@ -733,7 +728,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		It("works with proper STK", func() {
 			sourceAddrValid = true
 			done, err := cs.handleMessage(
-				bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize),
+				bytes.Repeat([]byte{'a'}, protocol.MinClientHelloSize),
 				map[Tag][]byte{
 					TagSNI: []byte("foo"),
 					TagVER: versionTag,

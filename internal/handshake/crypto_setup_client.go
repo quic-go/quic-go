@@ -458,7 +458,7 @@ func (h *cryptoSetupClient) addPadding(tags map[Tag][]byte) {
 	for _, tag := range tags {
 		size += 8 + len(tag) // 4 bytes for the tag + 4 bytes for the offset + the length of the data
 	}
-	paddingSize := protocol.ClientHelloMinimumSize - size
+	paddingSize := protocol.MinClientHelloSize - size
 	if paddingSize > 0 {
 		tags[TagPAD] = bytes.Repeat([]byte{0}, paddingSize)
 	}

@@ -123,6 +123,7 @@ var _ = Describe("Server", func() {
 			utils.BigEndian.WriteUint32(b, uint32(protocol.SupportedVersions[0]))
 			firstPacket = []byte{0x09, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6}
 			firstPacket = append(append(firstPacket, b.Bytes()...), 0x01)
+			firstPacket = append(firstPacket, bytes.Repeat([]byte{0}, protocol.MinClientHelloSize)...) // add padding
 		})
 
 		It("returns the address", func() {
@@ -340,7 +341,7 @@ var _ = Describe("Server", func() {
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}
 			hdr.Write(b, protocol.PerspectiveClient, 13 /* not a valid QUIC version */)
-			b.Write(bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSize-1)) // this packet is 1 byte too small
+			b.Write(bytes.Repeat([]byte{0}, protocol.MinClientHelloSize-1)) // this packet is 1 byte too small
 			err := serv.handlePacket(conn, udpAddr, b.Bytes())
 			Expect(err).To(MatchError("dropping small packet with unknown version"))
 			Expect(conn.dataWritten.Len()).Should(BeZero())
@@ -411,7 +412,7 @@ var _ = Describe("Server", func() {
 			PacketNumberLen: protocol.PacketNumberLen2,
 		}
 		hdr.Write(b, protocol.PerspectiveClient, 13 /* not a valid QUIC version */)
-		b.Write(bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSize)) // add a fake CHLO
+		b.Write(bytes.Repeat([]byte{0}, protocol.MinClientHelloSize)) // add a fake CHLO
 		conn.dataToRead <- b.Bytes()
 		conn.dataReadFrom = udpAddr
 		ln, err := Listen(conn, nil, config)
@@ -446,7 +447,7 @@ var _ = Describe("Server", func() {
 		}
 		err := hdr.Write(b, protocol.PerspectiveClient, protocol.VersionTLS)
 		Expect(err).ToNot(HaveOccurred())
-		b.Write(bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSize)) // add a fake CHLO
+		b.Write(bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize)) // add a fake CHLO
 		conn.dataToRead <- b.Bytes()
 		conn.dataReadFrom = udpAddr
 		ln, err := Listen(conn, testdata.GetTLSConfig(), config)
@@ -484,7 +485,7 @@ var _ = Describe("Server", func() {
 		}
 		err := hdr.Write(b, protocol.PerspectiveClient, protocol.VersionTLS)
 		Expect(err).ToNot(HaveOccurred())
-		b.Write(bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSize)) // add a fake CHLO
+		b.Write(bytes.Repeat([]byte{0}, protocol.MinClientHelloSize)) // add a fake CHLO
 		conn.dataToRead <- b.Bytes()
 		conn.dataReadFrom = udpAddr
 		ln, err := Listen(conn, testdata.GetTLSConfig(), config)

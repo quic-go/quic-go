@@ -301,10 +301,6 @@ func (h *cryptoSetupServer) acceptSTK(token []byte) bool {
 }
 
 func (h *cryptoSetupServer) handleInchoateCHLO(sni string, chlo []byte, cryptoData map[Tag][]byte) ([]byte, error) {
-	if len(chlo) < protocol.ClientHelloMinimumSize {
-		return nil, qerr.Error(qerr.CryptoInvalidValueLength, "CHLO too small")
-	}
-
 	token, err := h.scfg.cookieGenerator.NewToken(h.remoteAddr)
 	if err != nil {
 		return nil, err

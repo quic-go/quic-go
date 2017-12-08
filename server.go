@@ -328,13 +328,19 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	// since the client send a Public Header (only gQUIC has a Version Flag), we need to send a gQUIC Version Negotiation Packet
 	if hdr.VersionFlag && !protocol.IsSupportedVersion(s.config.Versions, hdr.Version) {
 		// drop packets that are too small to be valid first packets
-		if len(packet) < protocol.ClientHelloMinimumSize+len(hdr.Raw) {
+		if len(packet) < protocol.MinClientHelloSize+len(hdr.Raw) {
 			return errors.New("dropping small packet with unknown version")
 		}
 		utils.Infof("Client offered version %s, sending VersionNegotiationPacket", hdr.Version)
 		if _, err := pconn.WriteTo(wire.ComposeGQUICVersionNegotiation(hdr.ConnectionID, s.config.Versions), remoteAddr); err != nil {
 			return err
 		}
+	}
+
+	// This is (potentially) a Client Hello.
+	// Make sure it has the minimum required size before spending any more ressources on it.
+	if !sessionKnown && len(packet) < protocol.MinClientHelloSize+len(hdr.Raw) {
+		return errors.New("dropping small packet for unknown connection")
 	}
 
 	if !sessionKnown {
