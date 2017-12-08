@@ -767,6 +767,21 @@ var _ = Describe("Packet packer", func() {
 			Expect(err).To(MatchError("PacketPacker BUG: packet too large"))
 		})
 
+		It("pads Initial packets to the required minimum packet size", func() {
+			packer.version = protocol.VersionTLS
+			packer.hasSentPacket = false
+			packer.perspective = protocol.PerspectiveClient
+			packer.cryptoSetup.(*mockCryptoSetup).encLevelSealCrypto = protocol.EncryptionUnencrypted
+			cryptoStream.dataForWriting = []byte("foobar")
+			packet, err := packer.PackPacket()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packet.raw).To(HaveLen(protocol.MinInitialPacketSize))
+			Expect(packet.frames).To(HaveLen(1))
+			sf := packet.frames[0].(*wire.StreamFrame)
+			Expect(sf.Data).To(Equal([]byte("foobar")))
+			Expect(sf.DataLenPresent).To(BeTrue())
+		})
+
 		It("refuses to retransmit packets that were sent with forward-secure encryption", func() {
 			p := &ackhandler.Packet{
 				EncryptionLevel: protocol.EncryptionForwardSecure,

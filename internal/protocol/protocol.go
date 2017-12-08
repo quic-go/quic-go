@@ -77,6 +77,9 @@ const DefaultTCPMSS ByteCount = 1460
 // ClientHelloMinimumSize is the minimum size the server expects an inchoate CHLO to have.
 const ClientHelloMinimumSize = 1024
 
+// MinInitialPacketSize is the minimum size an Initial packet (in IETF QUIC) is requried to have.
+const MinInitialPacketSize = 1200
+
 // MaxClientHellos is the maximum number of times we'll send a client hello
 // The value 3 accounts for:
 // * one failure due to an incorrect or missing source-address token
