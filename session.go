@@ -694,8 +694,7 @@ func (s *session) sendPacket() error {
 
 	// Get MAX_DATA and MAX_STREAM_DATA frames
 	// this call triggers the flow controller to increase the flow control windows, if necessary
-	windowUpdates := s.getWindowUpdates()
-	for _, f := range windowUpdates {
+	for _, f := range s.getWindowUpdates() {
 		s.packer.QueueControlFrame(f)
 	}
 
@@ -777,11 +776,6 @@ func (s *session) sendPacket() error {
 			return err
 		}
 
-		// send every window update twice
-		for _, f := range windowUpdates {
-			s.packer.QueueControlFrame(f)
-		}
-		windowUpdates = nil
 		ack = nil
 	}
 }

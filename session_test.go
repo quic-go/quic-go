@@ -830,29 +830,6 @@ var _ = Describe("Session", func() {
 			Expect(sess.sentPacketHandler.(*mockSentPacketHandler).sentPackets[0].Frames).To(ContainElement(&wire.PingFrame{}))
 		})
 
-		It("sends two MAX_STREAM_DATA frames", func() {
-			mockFC := mocks.NewMockStreamFlowController(mockCtrl)
-			mockFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0x1000))
-			mockFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0)).Times(2)
-			str, err := sess.GetOrOpenStream(5)
-			Expect(err).ToNot(HaveOccurred())
-			str.(*stream).flowController = mockFC
-			err = sess.sendPacket()
-			Expect(err).NotTo(HaveOccurred())
-			err = sess.sendPacket()
-			Expect(err).NotTo(HaveOccurred())
-			err = sess.sendPacket()
-			Expect(err).NotTo(HaveOccurred())
-			buf := &bytes.Buffer{}
-			(&wire.MaxStreamDataFrame{
-				StreamID:   5,
-				ByteOffset: 0x1000,
-			}).Write(buf, sess.version)
-			Expect(mconn.written).To(HaveLen(2))
-			Expect(mconn.written).To(Receive(ContainSubstring(string(buf.Bytes()))))
-			Expect(mconn.written).To(Receive(ContainSubstring(string(buf.Bytes()))))
-		})
-
 		It("sends public reset", func() {
 			err := sess.sendPublicReset(1)
 			Expect(err).NotTo(HaveOccurred())
