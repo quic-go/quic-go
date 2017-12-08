@@ -16,7 +16,7 @@ var (
 )
 
 // parseLegacyStreamFrame reads a stream frame. The type byte must not have been read yet.
-func parseLegacyStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*StreamFrame, error) {
+func parseLegacyStreamFrame(r *bytes.Reader, _ protocol.VersionNumber) (*StreamFrame, error) {
 	frame := &StreamFrame{}
 
 	typeByte, err := r.ReadByte()
@@ -32,13 +32,13 @@ func parseLegacyStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*S
 	}
 	streamIDLen := typeByte&0x3 + 1
 
-	sid, err := utils.GetByteOrder(version).ReadUintN(r, streamIDLen)
+	sid, err := utils.BigEndian.ReadUintN(r, streamIDLen)
 	if err != nil {
 		return nil, err
 	}
 	frame.StreamID = protocol.StreamID(sid)
 
-	offset, err := utils.GetByteOrder(version).ReadUintN(r, offsetLen)
+	offset, err := utils.BigEndian.ReadUintN(r, offsetLen)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +46,7 @@ func parseLegacyStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*S
 
 	var dataLen uint16
 	if frame.DataLenPresent {
-		dataLen, err = utils.GetByteOrder(version).ReadUint16(r)
+		dataLen, err = utils.BigEndian.ReadUint16(r)
 		if err != nil {
 			return nil, err
 		}
@@ -83,7 +83,7 @@ func parseLegacyStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*S
 }
 
 // writeLegacy writes a stream frame.
-func (f *StreamFrame) writeLegacy(b *bytes.Buffer, version protocol.VersionNumber) error {
+func (f *StreamFrame) writeLegacy(b *bytes.Buffer, _ protocol.VersionNumber) error {
 	if len(f.Data) == 0 && !f.FinBit {
 		return errors.New("StreamFrame: attempting to write empty frame without FIN")
 	}
@@ -110,11 +110,11 @@ func (f *StreamFrame) writeLegacy(b *bytes.Buffer, version protocol.VersionNumbe
 	case 1:
 		b.WriteByte(uint8(f.StreamID))
 	case 2:
-		utils.GetByteOrder(version).WriteUint16(b, uint16(f.StreamID))
+		utils.BigEndian.WriteUint16(b, uint16(f.StreamID))
 	case 3:
-		utils.GetByteOrder(version).WriteUint24(b, uint32(f.StreamID))
+		utils.BigEndian.WriteUint24(b, uint32(f.StreamID))
 	case 4:
-		utils.GetByteOrder(version).WriteUint32(b, uint32(f.StreamID))
+		utils.BigEndian.WriteUint32(b, uint32(f.StreamID))
 	default:
 		return errInvalidStreamIDLen
 	}
@@ -122,25 +122,25 @@ func (f *StreamFrame) writeLegacy(b *bytes.Buffer, version protocol.VersionNumbe
 	switch offsetLength {
 	case 0:
 	case 2:
-		utils.GetByteOrder(version).WriteUint16(b, uint16(f.Offset))
+		utils.BigEndian.WriteUint16(b, uint16(f.Offset))
 	case 3:
-		utils.GetByteOrder(version).WriteUint24(b, uint32(f.Offset))
+		utils.BigEndian.WriteUint24(b, uint32(f.Offset))
 	case 4:
-		utils.GetByteOrder(version).WriteUint32(b, uint32(f.Offset))
+		utils.BigEndian.WriteUint32(b, uint32(f.Offset))
 	case 5:
-		utils.GetByteOrder(version).WriteUint40(b, uint64(f.Offset))
+		utils.BigEndian.WriteUint40(b, uint64(f.Offset))
 	case 6:
-		utils.GetByteOrder(version).WriteUint48(b, uint64(f.Offset))
+		utils.BigEndian.WriteUint48(b, uint64(f.Offset))
 	case 7:
-		utils.GetByteOrder(version).WriteUint56(b, uint64(f.Offset))
+		utils.BigEndian.WriteUint56(b, uint64(f.Offset))
 	case 8:
-		utils.GetByteOrder(version).WriteUint64(b, uint64(f.Offset))
+		utils.BigEndian.WriteUint64(b, uint64(f.Offset))
 	default:
 		return errInvalidOffsetLen
 	}
 
 	if f.DataLenPresent {
-		utils.GetByteOrder(version).WriteUint16(b, uint16(len(f.Data)))
+		utils.BigEndian.WriteUint16(b, uint16(len(f.Data)))
 	}
 
 	b.Write(f.Data)
@@ -183,7 +183,7 @@ func (f *StreamFrame) getOffsetLength() protocol.ByteCount {
 	return 8
 }
 
-func (f *StreamFrame) minLengthLegacy(protocol.VersionNumber) (protocol.ByteCount, error) {
+func (f *StreamFrame) minLengthLegacy(_ protocol.VersionNumber) (protocol.ByteCount, error) {
 	length := protocol.ByteCount(1) + protocol.ByteCount(f.calculateStreamIDLength()) + f.getOffsetLength()
 	if f.DataLenPresent {
 		length += 2
