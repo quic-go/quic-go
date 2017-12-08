@@ -38,9 +38,11 @@ type stream struct {
 	ctxCancel context.CancelFunc
 
 	streamID protocol.StreamID
-	onData   func()
-	// onReset is a callback that should send a RST_STREAM
-	onReset func(protocol.StreamID, protocol.ByteCount)
+	// onData tells the session that there's stuff to pack into a new packet
+	onData func()
+	// queueControlFrame queues a new control frame for sending
+	// it does not call onData
+	queueControlFrame func(wire.Frame)
 
 	readPosInFrame int
 	writeOffset    protocol.ByteCount
@@ -88,19 +90,19 @@ var errDeadline net.Error = &deadlineError{}
 // newStream creates a new Stream
 func newStream(StreamID protocol.StreamID,
 	onData func(),
-	onReset func(protocol.StreamID, protocol.ByteCount),
+	queueControlFrame func(wire.Frame),
 	flowController flowcontrol.StreamFlowController,
 	version protocol.VersionNumber,
 ) *stream {
 	s := &stream{
-		onData:         onData,
-		onReset:        onReset,
-		streamID:       StreamID,
-		flowController: flowController,
-		frameQueue:     newStreamFrameSorter(),
-		readChan:       make(chan struct{}, 1),
-		writeChan:      make(chan struct{}, 1),
-		version:        version,
+		onData:            onData,
+		queueControlFrame: queueControlFrame,
+		streamID:          StreamID,
+		flowController:    flowController,
+		frameQueue:        newStreamFrameSorter(),
+		readChan:          make(chan struct{}, 1),
+		writeChan:         make(chan struct{}, 1),
+		version:           version,
 	}
 	s.ctx, s.ctxCancel = context.WithCancel(context.Background())
 	return s
@@ -421,7 +423,11 @@ func (s *stream) Reset(err error) {
 		s.signalWrite()
 	}
 	if s.shouldSendReset() {
-		s.onReset(s.streamID, s.writeOffset)
+		s.queueControlFrame(&wire.RstStreamFrame{
+			StreamID:   s.streamID,
+			ByteOffset: s.writeOffset,
+		})
+		s.onData()
 		s.rstSent.Set(true)
 	}
 	s.mutex.Unlock()
@@ -444,7 +450,11 @@ func (s *stream) RegisterRemoteError(err error, offset protocol.ByteCount) error
 		return err
 	}
 	if s.shouldSendReset() {
-		s.onReset(s.streamID, s.writeOffset)
+		s.queueControlFrame(&wire.RstStreamFrame{
+			StreamID:   s.streamID,
+			ByteOffset: s.writeOffset,
+		})
+		s.onData()
 		s.rstSent.Set(true)
 	}
 	s.mutex.Unlock()

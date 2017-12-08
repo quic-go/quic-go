@@ -28,9 +28,7 @@ var _ = Describe("Stream", func() {
 		strWithTimeout io.ReadWriter // str wrapped with gbytes.Timeout{Reader,Writer}
 		onDataCalled   bool
 
-		resetCalled          bool
-		resetCalledForStream protocol.StreamID
-		resetCalledAtOffset  protocol.ByteCount
+		queuedControlFrames []wire.Frame
 
 		mockFC *mocks.MockStreamFlowController
 	)
@@ -51,17 +49,15 @@ var _ = Describe("Stream", func() {
 		onDataCalled = true
 	}
 
-	onReset := func(id protocol.StreamID, offset protocol.ByteCount) {
-		resetCalled = true
-		resetCalledForStream = id
-		resetCalledAtOffset = offset
+	queueControlFrame := func(f wire.Frame) {
+		queuedControlFrames = append(queuedControlFrames, f)
 	}
 
 	BeforeEach(func() {
+		queuedControlFrames = queuedControlFrames[:0]
 		onDataCalled = false
-		resetCalled = false
 		mockFC = mocks.NewMockStreamFlowController(mockCtrl)
-		str = newStream(streamID, onData, onReset, mockFC, protocol.VersionWhatever)
+		str = newStream(streamID, onData, queueControlFrame, mockFC, protocol.VersionWhatever)
 
 		timeout := scaleDuration(250 * time.Millisecond)
 		strWithTimeout = struct {
@@ -631,9 +627,12 @@ var _ = Describe("Stream", func() {
 					close(done)
 				}()
 				str.RegisterRemoteError(testErr, 0)
-				Expect(resetCalled).To(BeTrue())
-				Expect(resetCalledForStream).To(Equal(protocol.StreamID(1337)))
-				Expect(resetCalledAtOffset).To(Equal(protocol.ByteCount(0x1000)))
+				Expect(queuedControlFrames).To(Equal([]wire.Frame{
+					&wire.RstStreamFrame{
+						StreamID:   1337,
+						ByteOffset: 0x1000,
+					},
+				}))
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -643,25 +642,23 @@ var _ = Describe("Stream", func() {
 				f := str.PopStreamFrame(100)
 				Expect(f.FinBit).To(BeTrue())
 				str.RegisterRemoteError(testErr, 0)
-				Expect(resetCalled).To(BeFalse())
+				Expect(queuedControlFrames).To(BeEmpty())
 			})
 
-			It("doesn't call onReset if the stream was reset locally before", func() {
+			It("doesn't call queue a RST_STREAM if the stream was reset locally before", func() {
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(0), true)
 				str.Reset(testErr)
-				Expect(resetCalled).To(BeTrue())
-				resetCalled = false
+				Expect(queuedControlFrames).To(HaveLen(1))
 				str.RegisterRemoteError(testErr, 0)
-				Expect(resetCalled).To(BeFalse())
+				Expect(queuedControlFrames).To(HaveLen(1)) // no additional queued frame
 			})
 
-			It("doesn't call onReset twice, when it gets two remote errors", func() {
+			It("doesn't queue two RST_STREAMs twice, when it gets two remote errors", func() {
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(0), true)
 				str.RegisterRemoteError(testErr, 0)
-				Expect(resetCalled).To(BeTrue())
-				resetCalled = false
+				Expect(queuedControlFrames).To(HaveLen(1))
 				str.RegisterRemoteError(testErr, 0)
-				Expect(resetCalled).To(BeFalse())
+				Expect(queuedControlFrames).To(HaveLen(1)) // no additional queued frame
 			})
 		})
 
@@ -716,37 +713,38 @@ var _ = Describe("Stream", func() {
 				Expect(err).To(MatchError(testErr))
 			})
 
-			It("calls onReset", func() {
+			It("queues a RST_STREAM frame", func() {
 				str.writeOffset = 0x1000
 				str.Reset(testErr)
-				Expect(resetCalled).To(BeTrue())
-				Expect(resetCalledForStream).To(Equal(protocol.StreamID(1337)))
-				Expect(resetCalledAtOffset).To(Equal(protocol.ByteCount(0x1000)))
+				Expect(queuedControlFrames).To(Equal([]wire.Frame{
+					&wire.RstStreamFrame{
+						StreamID:   1337,
+						ByteOffset: 0x1000,
+					},
+				}))
 			})
 
-			It("doesn't call onReset if it already sent a FIN", func() {
+			It("doesn't queue a RST_STREAM if it already sent a FIN", func() {
 				str.Close()
 				f := str.PopStreamFrame(1000)
 				Expect(f.FinBit).To(BeTrue())
 				str.Reset(testErr)
-				Expect(resetCalled).To(BeFalse())
+				Expect(queuedControlFrames).To(BeEmpty())
 			})
 
-			It("doesn't call onReset if the stream was reset remotely before", func() {
+			It("doesn't queue a new RST_STREAM, if the stream was reset remotely before", func() {
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(0), true)
 				str.RegisterRemoteError(testErr, 0)
-				Expect(resetCalled).To(BeTrue())
-				resetCalled = false
+				Expect(queuedControlFrames).To(HaveLen(1))
 				str.Reset(testErr)
-				Expect(resetCalled).To(BeFalse())
+				Expect(queuedControlFrames).To(HaveLen(1)) // no additional queued frame
 			})
 
 			It("doesn't call onReset twice", func() {
 				str.Reset(testErr)
-				Expect(resetCalled).To(BeTrue())
-				resetCalled = false
+				Expect(queuedControlFrames).To(HaveLen(1))
 				str.Reset(testErr)
-				Expect(resetCalled).To(BeFalse())
+				Expect(queuedControlFrames).To(HaveLen(1)) // no additional queued frame
 			})
 
 			It("cancels the context", func() {
