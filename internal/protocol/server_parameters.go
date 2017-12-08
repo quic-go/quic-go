@@ -56,6 +56,9 @@ const DefaultMaxReceiveConnectionFlowControlWindowClient = 15 * (1 << 20) // 15 
 // This is the value that Chromium is using
 const ConnectionFlowControlMultiplier = 1.5
 
+// WindowUpdateThreshold is the fraction of the receive window that has to be consumed before an higher offset is advertised to the client
+const WindowUpdateThreshold = 0.25
+
 // MaxIncomingStreams is the maximum number of streams that a peer may open
 const MaxIncomingStreams = 100
 

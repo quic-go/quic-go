@@ -175,8 +175,9 @@ var _ = Describe("Stream Flow controller", func() {
 			It("tells the connection flow controller when the window was autotuned", func() {
 				controller.contributesToConnection = true
 				controller.AddBytesRead(75)
-				setRtt(20 * time.Millisecond)
-				controller.lastWindowUpdateTime = time.Now().Add(-35 * time.Millisecond)
+				rtt := 20 * time.Millisecond
+				setRtt(rtt)
+				controller.lastWindowUpdateTime = time.Now().Add(-4*protocol.WindowUpdateThreshold*rtt + time.Millisecond)
 				offset := controller.GetWindowUpdate()
 				Expect(offset).To(Equal(protocol.ByteCount(75 + 2*60)))
 				Expect(controller.receiveWindowIncrement).To(Equal(2 * oldIncrement))
@@ -186,8 +187,9 @@ var _ = Describe("Stream Flow controller", func() {
 			It("doesn't tell the connection flow controller if it doesn't contribute", func() {
 				controller.contributesToConnection = false
 				controller.AddBytesRead(75)
-				setRtt(20 * time.Millisecond)
-				controller.lastWindowUpdateTime = time.Now().Add(-35 * time.Millisecond)
+				rtt := 20 * time.Millisecond
+				setRtt(rtt)
+				controller.lastWindowUpdateTime = time.Now().Add(-4*protocol.WindowUpdateThreshold*rtt + time.Millisecond)
 				offset := controller.GetWindowUpdate()
 				Expect(offset).ToNot(BeZero())
 				Expect(controller.receiveWindowIncrement).To(Equal(2 * oldIncrement))

@@ -58,8 +58,9 @@ var _ = Describe("Connection Flow controller", func() {
 
 			It("autotunes the window", func() {
 				controller.AddBytesRead(80)
-				setRtt(20 * time.Millisecond)
-				controller.lastWindowUpdateTime = time.Now().Add(-35 * time.Millisecond)
+				rtt := 20 * time.Millisecond
+				setRtt(rtt)
+				controller.lastWindowUpdateTime = time.Now().Add(-4*protocol.WindowUpdateThreshold*rtt + time.Millisecond)
 				offset := controller.GetWindowUpdate()
 				Expect(offset).To(Equal(protocol.ByteCount(80 + 2*60)))
 			})
