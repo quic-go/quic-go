@@ -26,7 +26,7 @@ func ParseConnectionCloseFrame(r *bytes.Reader, version protocol.VersionNumber) 
 	var errorCode qerr.ErrorCode
 	var reasonPhraseLen uint64
 	if version.UsesIETFFrameFormat() {
-		ec, err := utils.GetByteOrder(version).ReadUint16(r)
+		ec, err := utils.BigEndian.ReadUint16(r)
 		if err != nil {
 			return nil, err
 		}
@@ -36,12 +36,12 @@ func ParseConnectionCloseFrame(r *bytes.Reader, version protocol.VersionNumber) 
 			return nil, err
 		}
 	} else {
-		ec, err := utils.GetByteOrder(version).ReadUint32(r)
+		ec, err := utils.BigEndian.ReadUint32(r)
 		if err != nil {
 			return nil, err
 		}
 		errorCode = qerr.ErrorCode(ec)
-		length, err := utils.GetByteOrder(version).ReadUint16(r)
+		length, err := utils.BigEndian.ReadUint16(r)
 		if err != nil {
 			return nil, err
 		}
@@ -87,8 +87,8 @@ func (f *ConnectionCloseFrame) Write(b *bytes.Buffer, version protocol.VersionNu
 		utils.BigEndian.WriteUint16(b, uint16(f.ErrorCode))
 		utils.WriteVarInt(b, uint64(len(f.ReasonPhrase)))
 	} else {
-		utils.GetByteOrder(version).WriteUint32(b, uint32(f.ErrorCode))
-		utils.GetByteOrder(version).WriteUint16(b, uint16(len(f.ReasonPhrase)))
+		utils.BigEndian.WriteUint32(b, uint32(f.ErrorCode))
+		utils.BigEndian.WriteUint16(b, uint16(len(f.ReasonPhrase)))
 	}
 	b.WriteString(f.ReasonPhrase)
 

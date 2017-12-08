@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-func TestCrypto(t *testing.T) {
+func TestWire(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Wire Suite")
 }
@@ -30,8 +30,6 @@ func encodeVarInt(i uint64) []byte {
 }
 
 var _ = BeforeSuite(func() {
-	Expect(utils.GetByteOrder(versionBigEndian)).To(Equal(utils.BigEndian))
-	Expect(utils.GetByteOrder(versionIETFFrames)).To(Equal(utils.BigEndian))
 	Expect(versionBigEndian.UsesIETFFrameFormat()).To(BeFalse())
 	Expect(versionIETFFrames.UsesIETFFrameFormat()).To(BeTrue())
 })

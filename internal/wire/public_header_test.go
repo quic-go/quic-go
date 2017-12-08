@@ -430,11 +430,7 @@ var _ = Describe("Public Header", func() {
 			})
 
 			Context("in big endian", func() {
-				version := protocol.Version39
-
-				BeforeEach(func() {
-					Expect(utils.GetByteOrder(version)).To(Equal(utils.BigEndian))
-				})
+				version := versionBigEndian
 
 				It("writes a header with a 1-byte packet number", func() {
 					b := &bytes.Buffer{}

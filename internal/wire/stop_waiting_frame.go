@@ -22,7 +22,7 @@ var (
 	errPacketNumberLenNotSet              = errors.New("StopWaitingFrame: PacketNumberLen not set")
 )
 
-func (f *StopWaitingFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
+func (f *StopWaitingFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) error {
 	// make sure the PacketNumber was set
 	if f.PacketNumber == protocol.PacketNumber(0) {
 		return errPacketNumberNotSet
@@ -37,11 +37,11 @@ func (f *StopWaitingFrame) Write(b *bytes.Buffer, version protocol.VersionNumber
 	case protocol.PacketNumberLen1:
 		b.WriteByte(uint8(leastUnackedDelta))
 	case protocol.PacketNumberLen2:
-		utils.GetByteOrder(version).WriteUint16(b, uint16(leastUnackedDelta))
+		utils.BigEndian.WriteUint16(b, uint16(leastUnackedDelta))
 	case protocol.PacketNumberLen4:
-		utils.GetByteOrder(version).WriteUint32(b, uint32(leastUnackedDelta))
+		utils.BigEndian.WriteUint32(b, uint32(leastUnackedDelta))
 	case protocol.PacketNumberLen6:
-		utils.GetByteOrder(version).WriteUint48(b, leastUnackedDelta&(1<<48-1))
+		utils.BigEndian.WriteUint48(b, leastUnackedDelta&(1<<48-1))
 	default:
 		return errPacketNumberLenNotSet
 	}
@@ -49,7 +49,7 @@ func (f *StopWaitingFrame) Write(b *bytes.Buffer, version protocol.VersionNumber
 }
 
 // MinLength of a written frame
-func (f *StopWaitingFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
+func (f *StopWaitingFrame) MinLength(_ protocol.VersionNumber) (protocol.ByteCount, error) {
 	minLength := protocol.ByteCount(1) // typeByte
 
 	if f.PacketNumberLen == protocol.PacketNumberLenInvalid {
@@ -60,7 +60,7 @@ func (f *StopWaitingFrame) MinLength(version protocol.VersionNumber) (protocol.B
 }
 
 // ParseStopWaitingFrame parses a StopWaiting frame
-func ParseStopWaitingFrame(r *bytes.Reader, packetNumber protocol.PacketNumber, packetNumberLen protocol.PacketNumberLen, version protocol.VersionNumber) (*StopWaitingFrame, error) {
+func ParseStopWaitingFrame(r *bytes.Reader, packetNumber protocol.PacketNumber, packetNumberLen protocol.PacketNumberLen, _ protocol.VersionNumber) (*StopWaitingFrame, error) {
 	frame := &StopWaitingFrame{}
 
 	// read the TypeByte
@@ -68,7 +68,7 @@ func ParseStopWaitingFrame(r *bytes.Reader, packetNumber protocol.PacketNumber, 
 		return nil, err
 	}
 
-	leastUnackedDelta, err := utils.GetByteOrder(version).ReadUintN(r, uint8(packetNumberLen))
+	leastUnackedDelta, err := utils.BigEndian.ReadUintN(r, uint8(packetNumberLen))
 	if err != nil {
 		return nil, err
 	}

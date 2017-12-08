@@ -29,7 +29,7 @@ func ParseRstStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*RstS
 			return nil, err
 		}
 		streamID = protocol.StreamID(sid)
-		ec, err := utils.GetByteOrder(version).ReadUint16(r)
+		ec, err := utils.BigEndian.ReadUint16(r)
 		if err != nil {
 			return nil, err
 		}
@@ -40,17 +40,17 @@ func ParseRstStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*RstS
 		}
 		byteOffset = protocol.ByteCount(bo)
 	} else {
-		sid, err := utils.GetByteOrder(version).ReadUint32(r)
+		sid, err := utils.BigEndian.ReadUint32(r)
 		if err != nil {
 			return nil, err
 		}
 		streamID = protocol.StreamID(sid)
-		bo, err := utils.GetByteOrder(version).ReadUint64(r)
+		bo, err := utils.BigEndian.ReadUint64(r)
 		if err != nil {
 			return nil, err
 		}
 		byteOffset = protocol.ByteCount(bo)
-		ec, err := utils.GetByteOrder(version).ReadUint32(r)
+		ec, err := utils.BigEndian.ReadUint32(r)
 		if err != nil {
 			return nil, err
 		}
@@ -72,9 +72,9 @@ func (f *RstStreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) 
 		utils.BigEndian.WriteUint16(b, uint16(f.ErrorCode))
 		utils.WriteVarInt(b, uint64(f.ByteOffset))
 	} else {
-		utils.GetByteOrder(version).WriteUint32(b, uint32(f.StreamID))
-		utils.GetByteOrder(version).WriteUint64(b, uint64(f.ByteOffset))
-		utils.GetByteOrder(version).WriteUint32(b, f.ErrorCode)
+		utils.BigEndian.WriteUint32(b, uint32(f.StreamID))
+		utils.BigEndian.WriteUint64(b, uint64(f.ByteOffset))
+		utils.BigEndian.WriteUint32(b, f.ErrorCode)
 	}
 	return nil
 }

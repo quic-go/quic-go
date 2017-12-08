@@ -15,7 +15,7 @@ var (
 	errInvalidAckRanges            = errors.New("AckFrame: ACK frame contains invalid ACK ranges")
 )
 
-func parseAckFrameLegacy(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, error) {
+func parseAckFrameLegacy(r *bytes.Reader, _ protocol.VersionNumber) (*AckFrame, error) {
 	frame := &AckFrame{}
 
 	typeByte, err := r.ReadByte()
@@ -38,13 +38,13 @@ func parseAckFrameLegacy(r *bytes.Reader, version protocol.VersionNumber) (*AckF
 		missingSequenceNumberDeltaLen = 1
 	}
 
-	largestAcked, err := utils.GetByteOrder(version).ReadUintN(r, largestAckedLen)
+	largestAcked, err := utils.BigEndian.ReadUintN(r, largestAckedLen)
 	if err != nil {
 		return nil, err
 	}
 	frame.LargestAcked = protocol.PacketNumber(largestAcked)
 
-	delay, err := utils.GetByteOrder(version).ReadUfloat16(r)
+	delay, err := utils.BigEndian.ReadUfloat16(r)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +62,7 @@ func parseAckFrameLegacy(r *bytes.Reader, version protocol.VersionNumber) (*AckF
 		return nil, errInvalidAckRanges
 	}
 
-	ackBlockLength, err := utils.GetByteOrder(version).ReadUintN(r, missingSequenceNumberDeltaLen)
+	ackBlockLength, err := utils.BigEndian.ReadUintN(r, missingSequenceNumberDeltaLen)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func parseAckFrameLegacy(r *bytes.Reader, version protocol.VersionNumber) (*AckF
 				return nil, err
 			}
 
-			ackBlockLength, err = utils.GetByteOrder(version).ReadUintN(r, missingSequenceNumberDeltaLen)
+			ackBlockLength, err = utils.BigEndian.ReadUintN(r, missingSequenceNumberDeltaLen)
 			if err != nil {
 				return nil, err
 			}
@@ -148,7 +148,7 @@ func parseAckFrameLegacy(r *bytes.Reader, version protocol.VersionNumber) (*AckF
 			return nil, err
 		}
 		// First Timestamp
-		_, err = utils.GetByteOrder(version).ReadUint32(r)
+		_, err = utils.BigEndian.ReadUint32(r)
 		if err != nil {
 			return nil, err
 		}
@@ -161,7 +161,7 @@ func parseAckFrameLegacy(r *bytes.Reader, version protocol.VersionNumber) (*AckF
 			}
 
 			// Time Since Previous Timestamp
-			_, err = utils.GetByteOrder(version).ReadUint16(r)
+			_, err = utils.BigEndian.ReadUint16(r)
 			if err != nil {
 				return nil, err
 			}
@@ -170,7 +170,7 @@ func parseAckFrameLegacy(r *bytes.Reader, version protocol.VersionNumber) (*AckF
 	return frame, nil
 }
 
-func (f *AckFrame) writeLegacy(b *bytes.Buffer, version protocol.VersionNumber) error {
+func (f *AckFrame) writeLegacy(b *bytes.Buffer, _ protocol.VersionNumber) error {
 	largestAckedLen := protocol.GetPacketNumberLength(f.LargestAcked)
 
 	typeByte := uint8(0x40)
@@ -194,15 +194,15 @@ func (f *AckFrame) writeLegacy(b *bytes.Buffer, version protocol.VersionNumber) 
 	case protocol.PacketNumberLen1:
 		b.WriteByte(uint8(f.LargestAcked))
 	case protocol.PacketNumberLen2:
-		utils.GetByteOrder(version).WriteUint16(b, uint16(f.LargestAcked))
+		utils.BigEndian.WriteUint16(b, uint16(f.LargestAcked))
 	case protocol.PacketNumberLen4:
-		utils.GetByteOrder(version).WriteUint32(b, uint32(f.LargestAcked))
+		utils.BigEndian.WriteUint32(b, uint32(f.LargestAcked))
 	case protocol.PacketNumberLen6:
-		utils.GetByteOrder(version).WriteUint48(b, uint64(f.LargestAcked)&(1<<48-1))
+		utils.BigEndian.WriteUint48(b, uint64(f.LargestAcked)&(1<<48-1))
 	}
 
 	f.DelayTime = time.Since(f.PacketReceivedTime)
-	utils.GetByteOrder(version).WriteUfloat16(b, uint64(f.DelayTime/time.Microsecond))
+	utils.BigEndian.WriteUfloat16(b, uint64(f.DelayTime/time.Microsecond))
 
 	var numRanges uint64
 	var numRangesWritten uint64
@@ -232,11 +232,11 @@ func (f *AckFrame) writeLegacy(b *bytes.Buffer, version protocol.VersionNumber) 
 	case protocol.PacketNumberLen1:
 		b.WriteByte(uint8(firstAckBlockLength))
 	case protocol.PacketNumberLen2:
-		utils.GetByteOrder(version).WriteUint16(b, uint16(firstAckBlockLength))
+		utils.BigEndian.WriteUint16(b, uint16(firstAckBlockLength))
 	case protocol.PacketNumberLen4:
-		utils.GetByteOrder(version).WriteUint32(b, uint32(firstAckBlockLength))
+		utils.BigEndian.WriteUint32(b, uint32(firstAckBlockLength))
 	case protocol.PacketNumberLen6:
-		utils.GetByteOrder(version).WriteUint48(b, uint64(firstAckBlockLength)&(1<<48-1))
+		utils.BigEndian.WriteUint48(b, uint64(firstAckBlockLength)&(1<<48-1))
 	}
 
 	for i, ackRange := range f.AckRanges {
@@ -258,11 +258,11 @@ func (f *AckFrame) writeLegacy(b *bytes.Buffer, version protocol.VersionNumber) 
 			case protocol.PacketNumberLen1:
 				b.WriteByte(uint8(length))
 			case protocol.PacketNumberLen2:
-				utils.GetByteOrder(version).WriteUint16(b, uint16(length))
+				utils.BigEndian.WriteUint16(b, uint16(length))
 			case protocol.PacketNumberLen4:
-				utils.GetByteOrder(version).WriteUint32(b, uint32(length))
+				utils.BigEndian.WriteUint32(b, uint32(length))
 			case protocol.PacketNumberLen6:
-				utils.GetByteOrder(version).WriteUint48(b, uint64(length)&(1<<48-1))
+				utils.BigEndian.WriteUint48(b, uint64(length)&(1<<48-1))
 			}
 			numRangesWritten++
 		} else {
@@ -283,11 +283,11 @@ func (f *AckFrame) writeLegacy(b *bytes.Buffer, version protocol.VersionNumber) 
 				case protocol.PacketNumberLen1:
 					b.WriteByte(uint8(lengthWritten))
 				case protocol.PacketNumberLen2:
-					utils.GetByteOrder(version).WriteUint16(b, uint16(lengthWritten))
+					utils.BigEndian.WriteUint16(b, uint16(lengthWritten))
 				case protocol.PacketNumberLen4:
-					utils.GetByteOrder(version).WriteUint32(b, uint32(lengthWritten))
+					utils.BigEndian.WriteUint32(b, uint32(lengthWritten))
 				case protocol.PacketNumberLen6:
-					utils.GetByteOrder(version).WriteUint48(b, lengthWritten&(1<<48-1))
+					utils.BigEndian.WriteUint48(b, lengthWritten&(1<<48-1))
 				}
 
 				numRangesWritten++
@@ -308,7 +308,7 @@ func (f *AckFrame) writeLegacy(b *bytes.Buffer, version protocol.VersionNumber) 
 	return nil
 }
 
-func (f *AckFrame) minLengthLegacy(version protocol.VersionNumber) (protocol.ByteCount, error) {
+func (f *AckFrame) minLengthLegacy(_ protocol.VersionNumber) (protocol.ByteCount, error) {
 	length := protocol.ByteCount(1 + 2 + 1) // 1 TypeByte, 2 ACK delay time, 1 Num Timestamp
 	length += protocol.ByteCount(protocol.GetPacketNumberLength(f.LargestAcked))
 

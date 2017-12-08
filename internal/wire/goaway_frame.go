@@ -17,26 +17,26 @@ type GoawayFrame struct {
 }
 
 // ParseGoawayFrame parses a GOAWAY frame
-func ParseGoawayFrame(r *bytes.Reader, version protocol.VersionNumber) (*GoawayFrame, error) {
+func ParseGoawayFrame(r *bytes.Reader, _ protocol.VersionNumber) (*GoawayFrame, error) {
 	frame := &GoawayFrame{}
 
 	if _, err := r.ReadByte(); err != nil {
 		return nil, err
 	}
 
-	errorCode, err := utils.GetByteOrder(version).ReadUint32(r)
+	errorCode, err := utils.BigEndian.ReadUint32(r)
 	if err != nil {
 		return nil, err
 	}
 	frame.ErrorCode = qerr.ErrorCode(errorCode)
 
-	lastGoodStream, err := utils.GetByteOrder(version).ReadUint32(r)
+	lastGoodStream, err := utils.BigEndian.ReadUint32(r)
 	if err != nil {
 		return nil, err
 	}
 	frame.LastGoodStream = protocol.StreamID(lastGoodStream)
 
-	reasonPhraseLen, err := utils.GetByteOrder(version).ReadUint16(r)
+	reasonPhraseLen, err := utils.BigEndian.ReadUint16(r)
 	if err != nil {
 		return nil, err
 	}
@@ -53,11 +53,11 @@ func ParseGoawayFrame(r *bytes.Reader, version protocol.VersionNumber) (*GoawayF
 	return frame, nil
 }
 
-func (f *GoawayFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
+func (f *GoawayFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) error {
 	b.WriteByte(0x03)
-	utils.GetByteOrder(version).WriteUint32(b, uint32(f.ErrorCode))
-	utils.GetByteOrder(version).WriteUint32(b, uint32(f.LastGoodStream))
-	utils.GetByteOrder(version).WriteUint16(b, uint16(len(f.ReasonPhrase)))
+	utils.BigEndian.WriteUint32(b, uint32(f.ErrorCode))
+	utils.BigEndian.WriteUint32(b, uint32(f.LastGoodStream))
+	utils.BigEndian.WriteUint16(b, uint16(len(f.ReasonPhrase)))
 	b.WriteString(f.ReasonPhrase)
 	return nil
 }

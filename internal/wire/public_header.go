@@ -19,7 +19,7 @@ var (
 )
 
 // writePublicHeader writes a Public Header.
-func (h *Header) writePublicHeader(b *bytes.Buffer, pers protocol.Perspective, version protocol.VersionNumber) error {
+func (h *Header) writePublicHeader(b *bytes.Buffer, pers protocol.Perspective, _ protocol.VersionNumber) error {
 	if h.VersionFlag && h.ResetFlag {
 		return errResetAndVersionFlagSet
 	}
@@ -73,11 +73,11 @@ func (h *Header) writePublicHeader(b *bytes.Buffer, pers protocol.Perspective, v
 	case protocol.PacketNumberLen1:
 		b.WriteByte(uint8(h.PacketNumber))
 	case protocol.PacketNumberLen2:
-		utils.GetByteOrder(version).WriteUint16(b, uint16(h.PacketNumber))
+		utils.BigEndian.WriteUint16(b, uint16(h.PacketNumber))
 	case protocol.PacketNumberLen4:
-		utils.GetByteOrder(version).WriteUint32(b, uint32(h.PacketNumber))
+		utils.BigEndian.WriteUint32(b, uint32(h.PacketNumber))
 	case protocol.PacketNumberLen6:
-		utils.GetByteOrder(version).WriteUint48(b, uint64(h.PacketNumber)&(1<<48-1))
+		utils.BigEndian.WriteUint48(b, uint64(h.PacketNumber)&(1<<48-1))
 	default:
 		return errors.New("PublicHeader: PacketNumberLen not set")
 	}
