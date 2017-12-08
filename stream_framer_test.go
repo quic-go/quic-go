@@ -50,9 +50,8 @@ var _ = Describe("Stream Framer", func() {
 	})
 
 	setNoData := func(str *mocks.MockStreamI) {
-		str.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(0)).AnyTimes()
-		str.EXPECT().GetDataForWriting(gomock.Any()).Return(nil).AnyTimes()
-		str.EXPECT().ShouldSendFin().Return(false).AnyTimes()
+		str.EXPECT().HasDataForWriting().Return(false).AnyTimes()
+		str.EXPECT().GetDataForWriting(gomock.Any()).Return(nil, false).AnyTimes()
 		str.EXPECT().GetWriteOffset().AnyTimes()
 	}
 
@@ -75,10 +74,9 @@ var _ = Describe("Stream Framer", func() {
 		connFC.EXPECT().IsBlocked()
 		setNoData(stream2)
 		stream1.EXPECT().GetWriteOffset()
-		stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(8))
-		stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobar"))
+		stream1.EXPECT().HasDataForWriting().Return(true)
+		stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobar"), false)
 		stream1.EXPECT().IsFlowControlBlocked()
-		stream1.EXPECT().ShouldSendFin()
 		fs := framer.PopStreamFrames(protocol.MaxByteCount)
 		Expect(fs).To(HaveLen(1))
 		Expect(fs[0].DataLenPresent).To(BeTrue())
@@ -111,10 +109,9 @@ var _ = Describe("Stream Framer", func() {
 		})
 
 		It("returns normal frames", func() {
-			stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobar"))
-			stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(6))
+			stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobar"), false)
+			stream1.EXPECT().HasDataForWriting().Return(true)
 			stream1.EXPECT().GetWriteOffset()
-			stream1.EXPECT().ShouldSendFin()
 			setNoData(stream2)
 			fs := framer.PopStreamFrames(1000)
 			Expect(fs).To(HaveLen(1))
@@ -124,14 +121,12 @@ var _ = Describe("Stream Framer", func() {
 		})
 
 		It("returns multiple normal frames", func() {
-			stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobar"))
-			stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(6))
+			stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobar"), false)
+			stream1.EXPECT().HasDataForWriting().Return(true)
 			stream1.EXPECT().GetWriteOffset()
-			stream1.EXPECT().ShouldSendFin()
-			stream2.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobaz"))
-			stream2.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(6))
+			stream2.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobaz"), false)
+			stream2.EXPECT().HasDataForWriting().Return(true)
 			stream2.EXPECT().GetWriteOffset()
-			stream2.EXPECT().ShouldSendFin()
 			fs := framer.PopStreamFrames(1000)
 			Expect(fs).To(HaveLen(2))
 			// Swap if we dequeued in other order
@@ -145,10 +140,9 @@ var _ = Describe("Stream Framer", func() {
 		})
 
 		It("returns retransmission frames before normal frames", func() {
-			stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobar"))
-			stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(6))
+			stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobar"), false)
+			stream1.EXPECT().HasDataForWriting().Return(true)
 			stream1.EXPECT().GetWriteOffset()
-			stream1.EXPECT().ShouldSendFin()
 			setNoData(stream2)
 			framer.AddFrameForRetransmission(retransmittedFrame1)
 			fs := framer.PopStreamFrames(1000)
@@ -158,8 +152,7 @@ var _ = Describe("Stream Framer", func() {
 		})
 
 		It("does not pop empty frames", func() {
-			stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(0))
-			stream1.EXPECT().ShouldSendFin()
+			stream1.EXPECT().HasDataForWriting().Return(false)
 			stream1.EXPECT().GetWriteOffset()
 			setNoData(stream2)
 			fs := framer.PopStreamFrames(5)
@@ -168,14 +161,12 @@ var _ = Describe("Stream Framer", func() {
 
 		It("uses the round-robin scheduling", func() {
 			streamFrameHeaderLen := protocol.ByteCount(4)
-			stream1.EXPECT().GetDataForWriting(10 - streamFrameHeaderLen).Return(bytes.Repeat([]byte("f"), int(10-streamFrameHeaderLen)))
-			stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(100))
+			stream1.EXPECT().GetDataForWriting(10-streamFrameHeaderLen).Return(bytes.Repeat([]byte("f"), int(10-streamFrameHeaderLen)), false)
+			stream1.EXPECT().HasDataForWriting().Return(true)
 			stream1.EXPECT().GetWriteOffset()
-			stream1.EXPECT().ShouldSendFin()
-			stream2.EXPECT().GetDataForWriting(protocol.ByteCount(10 - streamFrameHeaderLen)).Return(bytes.Repeat([]byte("e"), int(10-streamFrameHeaderLen)))
-			stream2.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(100))
+			stream2.EXPECT().GetDataForWriting(protocol.ByteCount(10-streamFrameHeaderLen)).Return(bytes.Repeat([]byte("e"), int(10-streamFrameHeaderLen)), false)
+			stream2.EXPECT().HasDataForWriting().Return(true)
 			stream2.EXPECT().GetWriteOffset()
-			stream2.EXPECT().ShouldSendFin()
 			fs := framer.PopStreamFrames(10)
 			Expect(fs).To(HaveLen(1))
 			// it doesn't matter here if this data is from stream1 or from stream2...
@@ -279,10 +270,9 @@ var _ = Describe("Stream Framer", func() {
 		Context("sending FINs", func() {
 			It("sends FINs when streams are closed", func() {
 				offset := protocol.ByteCount(42)
-				stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(0))
+				stream1.EXPECT().HasDataForWriting().Return(true)
+				stream1.EXPECT().GetDataForWriting(gomock.Any()).Return(nil, true)
 				stream1.EXPECT().GetWriteOffset().Return(offset)
-				stream1.EXPECT().ShouldSendFin().Return(true)
-				stream1.EXPECT().SentFin()
 				setNoData(stream2)
 
 				fs := framer.PopStreamFrames(1000)
@@ -295,11 +285,9 @@ var _ = Describe("Stream Framer", func() {
 
 			It("bundles FINs with data", func() {
 				offset := protocol.ByteCount(42)
-				stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobar"))
-				stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(6))
+				stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobar"), true)
+				stream1.EXPECT().HasDataForWriting().Return(true)
 				stream1.EXPECT().GetWriteOffset().Return(offset)
-				stream1.EXPECT().ShouldSendFin().Return(true)
-				stream1.EXPECT().SentFin()
 				setNoData(stream2)
 
 				fs := framer.PopStreamFrames(1000)
@@ -318,10 +306,9 @@ var _ = Describe("Stream Framer", func() {
 
 		It("queues and pops BLOCKED frames for individually blocked streams", func() {
 			connFC.EXPECT().IsBlocked()
-			stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobar"))
-			stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(6))
+			stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobar"), false)
+			stream1.EXPECT().HasDataForWriting().Return(true)
 			stream1.EXPECT().GetWriteOffset()
-			stream1.EXPECT().ShouldSendFin()
 			stream1.EXPECT().IsFlowControlBlocked().Return(true)
 			setNoData(stream2)
 			frames := framer.PopStreamFrames(1000)
@@ -335,11 +322,9 @@ var _ = Describe("Stream Framer", func() {
 
 		It("does not queue a stream-level BLOCKED frame after sending the FinBit frame", func() {
 			connFC.EXPECT().IsBlocked()
-			stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foo"))
-			stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(3))
+			stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foo"), true)
+			stream1.EXPECT().HasDataForWriting().Return(true)
 			stream1.EXPECT().GetWriteOffset()
-			stream1.EXPECT().ShouldSendFin().Return(true)
-			stream1.EXPECT().SentFin()
 			setNoData(stream2)
 			frames := framer.PopStreamFrames(1000)
 			Expect(frames).To(HaveLen(1))
@@ -351,10 +336,9 @@ var _ = Describe("Stream Framer", func() {
 
 		It("queues and pops BLOCKED frames for connection blocked streams", func() {
 			connFC.EXPECT().IsBlocked().Return(true)
-			stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foo"))
-			stream1.EXPECT().LenOfDataForWriting().Return(protocol.ByteCount(3))
+			stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foo"), false)
+			stream1.EXPECT().HasDataForWriting().Return(true)
 			stream1.EXPECT().GetWriteOffset()
-			stream1.EXPECT().ShouldSendFin()
 			stream1.EXPECT().IsFlowControlBlocked().Return(false)
 			setNoData(stream2)
 			framer.PopStreamFrames(1000)

@@ -54,7 +54,7 @@ func (f *streamFramer) HasFramesForRetransmission() bool {
 }
 
 func (f *streamFramer) HasCryptoStreamFrame() bool {
-	return f.cryptoStream.LenOfDataForWriting() > 0
+	return f.cryptoStream.HasDataForWriting()
 }
 
 // TODO(lclemente): This is somewhat duplicate with the normal path for generating frames.
@@ -67,7 +67,7 @@ func (f *streamFramer) PopCryptoStreamFrame(maxLen protocol.ByteCount) *wire.Str
 		Offset:   f.cryptoStream.GetWriteOffset(),
 	}
 	frameHeaderBytes, _ := frame.MinLength(f.version) // can never error
-	frame.Data = f.cryptoStream.GetDataForWriting(maxLen - frameHeaderBytes)
+	frame.Data, frame.FinBit = f.cryptoStream.GetDataForWriting(maxLen - frameHeaderBytes)
 	return frame
 }
 
@@ -115,23 +115,12 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 		}
 		maxLen := maxBytes - currentLen - frameHeaderBytes
 
-		var data []byte
-		if s.LenOfDataForWriting() > 0 {
-			data = s.GetDataForWriting(maxLen)
+		if s.HasDataForWriting() {
+			frame.Data, frame.FinBit = s.GetDataForWriting(maxLen)
 		}
-
-		// This is unlikely, but check it nonetheless, the scheduler might have jumped in. Seems to happen in ~20% of cases in the tests.
-		shouldSendFin := s.ShouldSendFin()
-		if data == nil && !shouldSendFin {
+		if len(frame.Data) == 0 && !frame.FinBit {
 			return true, nil
 		}
-
-		if shouldSendFin {
-			frame.FinBit = true
-			s.SentFin()
-		}
-
-		frame.Data = data
 
 		// Finally, check if we are now FC blocked and should queue a BLOCKED frame
 		if !frame.FinBit && s.IsFlowControlBlocked() {

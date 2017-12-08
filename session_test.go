@@ -1434,9 +1434,9 @@ var _ = Describe("Session", func() {
 			for i := 2; i <= 1000; i++ {
 				s, err := sess.GetOrOpenStream(protocol.StreamID(i*2 + 1))
 				Expect(err).NotTo(HaveOccurred())
-				err = s.Close()
-				Expect(err).NotTo(HaveOccurred())
-				s.(*stream).SentFin()
+				Expect(s.Close()).To(Succeed())
+				_, sentFin := s.(*stream).GetDataForWriting(1000) // trigger "sending" of the FIN bit
+				Expect(sentFin).To(BeTrue())
 				s.(*stream).CloseRemote(0)
 				_, err = s.Read([]byte("a"))
 				Expect(err).To(MatchError(io.EOF))
