@@ -93,6 +93,17 @@ var _ = Describe("IETF draft Header", func() {
 				Expect(err).To(MatchError("InvalidPacketHeader: Received packet with invalid packet type: 42"))
 			})
 
+			It("rejects version 0 for packets sent by the client", func() {
+				data := []byte{
+					0x80 ^ uint8(protocol.PacketTypeInitial),
+					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
+					0x0, 0x0, 0x0, 0x0, // version number
+					0xde, 0xca, 0xfb, 0xad, // packet number
+				}
+				_, err := parseHeader(bytes.NewReader(data), protocol.PerspectiveClient)
+				Expect(err).To(MatchError(qerr.InvalidVersion))
+			})
+
 			It("errors on EOF", func() {
 				data := generatePacket(protocol.PacketTypeInitial)
 				for i := 0; i < len(data); i++ {

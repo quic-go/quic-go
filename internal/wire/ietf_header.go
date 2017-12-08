@@ -42,6 +42,9 @@ func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte
 		Version:         protocol.VersionNumber(v),
 	}
 	if v == 0 { // version negotiation packet
+		if sentBy == protocol.PerspectiveClient {
+			return nil, qerr.InvalidVersion
+		}
 		if b.Len() == 0 {
 			return nil, qerr.Error(qerr.InvalidVersionNegotiationPacket, "empty version list")
 		}
