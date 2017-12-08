@@ -164,8 +164,6 @@ func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, 
 		return err
 	}
 
-	req.RemoteAddr = session.RemoteAddr().String()
-
 	if utils.Debug() {
 		utils.Infof("%s %s%s, on data stream %d", req.Method, req.Host, req.RequestURI, h2headersFrame.StreamID)
 	} else {
@@ -181,20 +179,25 @@ func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, 
 		return nil
 	}
 
-	var streamEnded bool
-	if h2headersFrame.StreamEnded() {
-		dataStream.(remoteCloser).CloseRemote(0)
-		streamEnded = true
-		_, _ = dataStream.Read([]byte{0}) // read the eof
-	}
-
-	req = req.WithContext(dataStream.Context())
-	reqBody := newRequestBody(dataStream)
-	req.Body = reqBody
-
-	responseWriter := newResponseWriter(headerStream, headerStreamMutex, dataStream, protocol.StreamID(h2headersFrame.StreamID))
-
+	// handleRequest should be as non-blocking as possible to minimize
+	// head-of-line blocking. Potentially blocking code is run in a separate
+	// goroutine, enabling handleRequest to return before the code is executed.
 	go func() {
+		streamEnded := h2headersFrame.StreamEnded()
+		if streamEnded {
+			dataStream.(remoteCloser).CloseRemote(0)
+			streamEnded = true
+			_, _ = dataStream.Read([]byte{0}) // read the eof
+		}
+
+		req = req.WithContext(dataStream.Context())
+		reqBody := newRequestBody(dataStream)
+		req.Body = reqBody
+
+		req.RemoteAddr = session.RemoteAddr().String()
+
+		responseWriter := newResponseWriter(headerStream, headerStreamMutex, dataStream, protocol.StreamID(h2headersFrame.StreamID))
+
 		handler := s.Handler
 		if handler == nil {
 			handler = http.DefaultServeMux
