@@ -2,6 +2,7 @@ package quic
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 
@@ -98,7 +99,9 @@ func (s *serverTLS) newMintConnImpl(bc *handshake.CryptoStreamConn, v protocol.V
 }
 
 func (s *serverTLS) handleInitialImpl(remoteAddr net.Addr, hdr *wire.Header, data []byte) (packetHandler, error) {
-	// TODO: check length requirement
+	if len(hdr.Raw)+len(data) < protocol.MinInitialPacketSize {
+		return nil, errors.New("dropping too small Initial packet")
+	}
 	// check version, if not matching send VNP
 	if !protocol.IsSupportedVersion(s.supportedVersions, hdr.Version) {
 		utils.Debugf("Client offered version %s, sending VersionNegotiationPacket", hdr.Version)
