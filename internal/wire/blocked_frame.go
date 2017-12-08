@@ -18,7 +18,7 @@ func ParseBlockedFrame(r *bytes.Reader, version protocol.VersionNumber) (*Blocke
 }
 
 func (f *BlockedFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
-	if !version.UsesMaxDataFrame() {
+	if !version.UsesIETFFrameFormat() {
 		return (&blockedFrameLegacy{}).Write(b, version)
 	}
 	typeByte := uint8(0x08)
@@ -28,7 +28,7 @@ func (f *BlockedFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) er
 
 // MinLength of a written frame
 func (f *BlockedFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
-	if !version.UsesMaxDataFrame() { // writing this frame would result in a legacy BLOCKED being written, which is longer
+	if !version.UsesIETFFrameFormat() { // writing this frame would result in a legacy BLOCKED being written, which is longer
 		return 1 + 4, nil
 	}
 	return 1, nil

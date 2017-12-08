@@ -41,12 +41,12 @@ var _ = Describe("Stream Framer", func() {
 		stream2 = mocks.NewMockStreamI(mockCtrl)
 		stream2.EXPECT().StreamID().Return(protocol.StreamID(6)).AnyTimes()
 
-		streamsMap = newStreamsMap(nil, protocol.PerspectiveServer, protocol.VersionWhatever)
+		streamsMap = newStreamsMap(nil, protocol.PerspectiveServer, versionGQUICFrames)
 		streamsMap.putStream(stream1)
 		streamsMap.putStream(stream2)
 
 		connFC = mocks.NewMockConnectionFlowController(mockCtrl)
-		framer = newStreamFramer(nil, streamsMap, connFC)
+		framer = newStreamFramer(nil, streamsMap, connFC, versionGQUICFrames)
 	})
 
 	setNoData := func(str *mocks.MockStreamI) {
@@ -227,7 +227,7 @@ var _ = Describe("Stream Framer", func() {
 				origlen := retransmittedFrame2.DataLen()
 				fs := framer.PopStreamFrames(6)
 				Expect(fs).To(HaveLen(1))
-				minLength, _ := fs[0].MinLength(0)
+				minLength, _ := fs[0].MinLength(framer.version)
 				Expect(minLength + fs[0].DataLen()).To(Equal(protocol.ByteCount(6)))
 				Expect(framer.retransmissionQueue[0].Data).To(HaveLen(int(origlen - fs[0].DataLen())))
 				Expect(framer.retransmissionQueue[0].Offset).To(Equal(fs[0].DataLen()))

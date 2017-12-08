@@ -15,15 +15,17 @@ func TestQuicGo(t *testing.T) {
 }
 
 const (
-	versionCryptoStream1 = protocol.Version39
-	versionCryptoStream0 = protocol.VersionTLS
+	versionGQUICFrames = protocol.Version39
+	versionIETFFrames  = protocol.VersionTLS
 )
 
 var mockCtrl *gomock.Controller
 
 var _ = BeforeSuite(func() {
-	Expect(versionCryptoStream0.CryptoStreamID()).To(Equal(protocol.StreamID(0)))
-	Expect(versionCryptoStream1.CryptoStreamID()).To(Equal(protocol.StreamID(1)))
+	Expect(versionGQUICFrames.CryptoStreamID()).To(Equal(protocol.StreamID(1)))
+	Expect(versionGQUICFrames.UsesIETFFrameFormat()).To(BeFalse())
+	Expect(versionIETFFrames.CryptoStreamID()).To(Equal(protocol.StreamID(0)))
+	Expect(versionIETFFrames.UsesIETFFrameFormat()).To(BeTrue())
 })
 
 var _ = BeforeEach(func() {

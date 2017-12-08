@@ -17,14 +17,24 @@ type windowUpdateFrame struct {
 // * a MAX_STREAM_DATA frame, if the WINDOW_UPDATE applies to a stream
 // * a MAX_DATA frame, if the WINDOW_UPDATE applies to the connection
 func ParseWindowUpdateFrame(r *bytes.Reader, version protocol.VersionNumber) (Frame, error) {
-	f, err := ParseMaxStreamDataFrame(r, version)
+	if _, err := r.ReadByte(); err != nil { // read the TypeByte
+		return nil, err
+	}
+	streamID, err := utils.GetByteOrder(version).ReadUint32(r)
 	if err != nil {
 		return nil, err
 	}
-	if f.StreamID == 0 {
-		return &MaxDataFrame{ByteOffset: f.ByteOffset}, nil
+	offset, err := utils.GetByteOrder(version).ReadUint64(r)
+	if err != nil {
+		return nil, err
 	}
-	return f, nil
+	if streamID == 0 {
+		return &MaxDataFrame{ByteOffset: protocol.ByteCount(offset)}, nil
+	}
+	return &MaxStreamDataFrame{
+		StreamID:   protocol.StreamID(streamID),
+		ByteOffset: protocol.ByteCount(offset),
+	}, nil
 }
 
 func (f *windowUpdateFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {

@@ -2,490 +2,210 @@ package wire
 
 import (
 	"bytes"
-	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/qerr"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("StreamFrame", func() {
+var _ = Describe("STREAM frame (for IETF QUIC)", func() {
 	Context("when parsing", func() {
-		Context("in big endian", func() {
-			It("accepts a sample frame", func() {
-				// a STREAM frame, plus 3 additional bytes, not belonging to this frame
-				b := bytes.NewReader([]byte{0x80 ^ 0x20,
-					0x1,      // stream id
-					0x0, 0x6, // data length
-					'f', 'o', 'o', 'b', 'a', 'r',
-					'f', 'o', 'o', // additional bytes
-				})
-				frame, err := ParseStreamFrame(b, versionBigEndian)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.FinBit).To(BeFalse())
-				Expect(frame.StreamID).To(Equal(protocol.StreamID(1)))
-				Expect(frame.Offset).To(BeZero())
-				Expect(frame.DataLenPresent).To(BeTrue())
-				Expect(frame.Data).To(Equal([]byte("foobar")))
-				Expect(b.Len()).To(Equal(3))
-			})
-
-			It("accepts frames with offsets", func() {
-				b := bytes.NewReader([]byte{0x80 ^ 0x20 /* 2 byte offset */ ^ 0x4,
-					0x1,       // stream id
-					0x0, 0x42, // offset
-					0x0, 0x6, // data length
-					'f', 'o', 'o', 'b', 'a', 'r',
-				})
-				frame, err := ParseStreamFrame(b, versionBigEndian)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.FinBit).To(BeFalse())
-				Expect(frame.StreamID).To(Equal(protocol.StreamID(1)))
-				Expect(frame.Offset).To(Equal(protocol.ByteCount(0x42)))
-				Expect(frame.DataLenPresent).To(BeTrue())
-				Expect(frame.Data).To(Equal([]byte("foobar")))
-				Expect(b.Len()).To(BeZero())
-			})
-
-			It("errors on EOFs", func() {
-				data := []byte{0x80 ^ 0x20 ^ 0x4,
-					0x1,       // stream id
-					0x0, 0x2a, // offset
-					0x0, 0x6, // data length,
-					'f', 'o', 'o', 'b', 'a', 'r',
-				}
-				_, err := ParseStreamFrame(bytes.NewReader(data), versionBigEndian)
-				Expect(err).NotTo(HaveOccurred())
-				for i := range data {
-					_, err := ParseStreamFrame(bytes.NewReader(data[0:i]), versionBigEndian)
-					Expect(err).To(HaveOccurred())
-				}
-			})
-		})
-
-		It("accepts frame without data length", func() {
-			b := bytes.NewReader([]byte{0x80,
-				0x1, // stream id
-				'f', 'o', 'o', 'b', 'a', 'r',
-			})
-			frame, err := ParseStreamFrame(b, protocol.VersionWhatever)
+		It("parses a frame with OFF bit", func() {
+			data := []byte{0x10 ^ 0x4}
+			data = append(data, encodeVarInt(0x12345)...)    // stream ID
+			data = append(data, encodeVarInt(0xdecafbad)...) // offset
+			data = append(data, []byte("foobar")...)
+			r := bytes.NewReader(data)
+			frame, err := ParseStreamFrame(r, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(frame.StreamID).To(Equal(protocol.StreamID(0x12345)))
+			Expect(frame.Data).To(Equal([]byte("foobar")))
 			Expect(frame.FinBit).To(BeFalse())
-			Expect(frame.StreamID).To(Equal(protocol.StreamID(1)))
+			Expect(frame.Offset).To(Equal(protocol.ByteCount(0xdecafbad)))
+			Expect(r.Len()).To(BeZero())
+		})
+
+		It("respects the LEN when parsing the frame", func() {
+			data := []byte{0x10 ^ 0x2}
+			data = append(data, encodeVarInt(0x12345)...) // stream ID
+			data = append(data, encodeVarInt(4)...)       // data length
+			data = append(data, []byte("foobar")...)
+			r := bytes.NewReader(data)
+			frame, err := ParseStreamFrame(r, versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame.StreamID).To(Equal(protocol.StreamID(0x12345)))
+			Expect(frame.Data).To(Equal([]byte("foob")))
+			Expect(frame.FinBit).To(BeFalse())
 			Expect(frame.Offset).To(BeZero())
-			Expect(frame.DataLenPresent).To(BeFalse())
-			Expect(frame.Data).To(Equal([]byte("foobar")))
-			Expect(b.Len()).To(BeZero())
+			Expect(r.Len()).To(Equal(2))
 		})
 
-		It("accepts an empty frame with FinBit set, with data length set", func() {
-			// the STREAM frame, plus 3 additional bytes, not belonging to this frame
-			b := bytes.NewReader([]byte{0x80 ^ 0x40 ^ 0x20,
-				0x1,  // stream id
-				0, 0, // data length
-				'f', 'o', 'o', // additional bytes
-			})
-			frame, err := ParseStreamFrame(b, protocol.VersionWhatever)
+		It("parses a frame with FIN bit", func() {
+			data := []byte{0x10 ^ 0x1}
+			data = append(data, encodeVarInt(9)...) // stream ID
+			data = append(data, []byte("foobar")...)
+			r := bytes.NewReader(data)
+			frame, err := ParseStreamFrame(r, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.FinBit).To(BeTrue())
-			Expect(frame.DataLenPresent).To(BeTrue())
-			Expect(frame.Data).To(BeEmpty())
-			Expect(b.Len()).To(Equal(3))
-		})
-
-		It("accepts an empty frame with the FinBit set", func() {
-			b := bytes.NewReader([]byte{0x80 ^ 0x40,
-				0x1, // stream id
-				'f', 'o', 'o', 'b', 'a', 'r',
-			})
-			frame, err := ParseStreamFrame(b, protocol.VersionWhatever)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.FinBit).To(BeTrue())
-			Expect(frame.DataLenPresent).To(BeFalse())
+			Expect(frame.StreamID).To(Equal(protocol.StreamID(9)))
 			Expect(frame.Data).To(Equal([]byte("foobar")))
-			Expect(b.Len()).To(BeZero())
+			Expect(frame.FinBit).To(BeTrue())
+			Expect(frame.Offset).To(BeZero())
+			Expect(r.Len()).To(BeZero())
 		})
 
-		It("errors on empty stream frames that don't have the FinBit set", func() {
-			b := bytes.NewReader([]byte{0x80 ^ 0x20,
-				0x1,  // stream id
-				0, 0, // data length
-			})
-			_, err := ParseStreamFrame(b, protocol.VersionWhatever)
+		It("rejects empty frames than don't have the FIN bit set", func() {
+			data := []byte{0x10}
+			data = append(data, encodeVarInt(0x1337)...) // stream ID
+			r := bytes.NewReader(data)
+			_, err := ParseStreamFrame(r, versionIETFFrames)
 			Expect(err).To(MatchError(qerr.EmptyStreamFrameNoFin))
 		})
 
-		It("rejects frames to too large dataLen", func() {
-			b := bytes.NewReader([]byte{0xa0, 0x1, 0xff, 0xff})
-			_, err := ParseStreamFrame(b, protocol.VersionWhatever)
-			Expect(err).To(MatchError(io.EOF))
+		It("rejects frames that overflow the maximum offset", func() {
+			data := []byte{0x10 ^ 0x4}
+			data = append(data, encodeVarInt(0x12345)...)                         // stream ID
+			data = append(data, encodeVarInt(uint64(protocol.MaxByteCount-5))...) // offset
+			data = append(data, []byte("foobar")...)
+			r := bytes.NewReader(data)
+			_, err := ParseStreamFrame(r, versionIETFFrames)
+			Expect(err).To(MatchError(qerr.Error(qerr.InvalidStreamData, "data overflows maximum offset")))
 		})
 
-		It("rejects frames that overflow the offset", func() {
-			// Offset + len(Data) overflows MaxByteCount
-			f := &StreamFrame{
-				StreamID: 1,
-				Offset:   protocol.MaxByteCount,
-				Data:     []byte{'f'},
+		It("errors on EOFs", func() {
+			data := []byte{0x10 ^ 0x4 ^ 0x2}
+			data = append(data, encodeVarInt(0x12345)...)    // stream ID
+			data = append(data, encodeVarInt(0xdecafbad)...) // offset
+			data = append(data, encodeVarInt(6)...)          // data length
+			data = append(data, []byte("foobar")...)
+			_, err := ParseStreamFrame(bytes.NewReader(data), versionIETFFrames)
+			Expect(err).NotTo(HaveOccurred())
+			for i := range data {
+				_, err := ParseStreamFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
+				Expect(err).To(HaveOccurred())
 			}
-			b := &bytes.Buffer{}
-			err := f.Write(b, protocol.VersionWhatever)
-			Expect(err).ToNot(HaveOccurred())
-			_, err = ParseStreamFrame(bytes.NewReader(b.Bytes()), protocol.VersionWhatever)
-			Expect(err).To(MatchError(qerr.Error(qerr.InvalidStreamData, "data overflows maximum offset")))
 		})
 	})
 
 	Context("when writing", func() {
-		Context("in big endian", func() {
-			It("writes sample frame", func() {
-				b := &bytes.Buffer{}
-				err := (&StreamFrame{
-					StreamID:       1,
-					Data:           []byte("foobar"),
-					DataLenPresent: true,
-				}).Write(b, versionBigEndian)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(b.Bytes()).To(Equal([]byte{0x80 ^ 0x20,
-					0x1,      // stream id
-					0x0, 0x6, // data length
-					'f', 'o', 'o', 'b', 'a', 'r',
-				}))
-			})
-		})
-
-		It("sets the FinBit", func() {
-			b := &bytes.Buffer{}
-			err := (&StreamFrame{
-				StreamID: 1,
+		It("writes a frame without offset", func() {
+			f := &StreamFrame{
+				StreamID: 0x1337,
 				Data:     []byte("foobar"),
-				FinBit:   true,
-			}).Write(b, protocol.VersionWhatever)
+			}
+			b := &bytes.Buffer{}
+			err := f.Write(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(b.Bytes()[0] & 0x40).To(Equal(byte(0x40)))
+			expected := []byte{0x10}
+			expected = append(expected, encodeVarInt(0x1337)...) // stream ID
+			expected = append(expected, []byte("foobar")...)
+			Expect(b.Bytes()).To(Equal(expected))
 		})
 
-		It("errors when length is zero and FIN is not set", func() {
+		It("writes a frame with offset", func() {
+			f := &StreamFrame{
+				StreamID: 0x1337,
+				Offset:   0x123456,
+				Data:     []byte("foobar"),
+			}
 			b := &bytes.Buffer{}
-			err := (&StreamFrame{
-				StreamID: 1,
-			}).Write(b, protocol.VersionWhatever)
+			err := f.Write(b, versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			expected := []byte{0x10 ^ 0x4}
+			expected = append(expected, encodeVarInt(0x1337)...)   // stream ID
+			expected = append(expected, encodeVarInt(0x123456)...) // offset
+			expected = append(expected, []byte("foobar")...)
+			Expect(b.Bytes()).To(Equal(expected))
+		})
+
+		It("writes a frame with FIN bit", func() {
+			f := &StreamFrame{
+				StreamID: 0x1337,
+				Offset:   0x123456,
+				FinBit:   true,
+			}
+			b := &bytes.Buffer{}
+			err := f.Write(b, versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			expected := []byte{0x10 ^ 0x4 ^ 0x1}
+			expected = append(expected, encodeVarInt(0x1337)...)   // stream ID
+			expected = append(expected, encodeVarInt(0x123456)...) // offset
+			Expect(b.Bytes()).To(Equal(expected))
+		})
+
+		It("writes a frame with data length", func() {
+			f := &StreamFrame{
+				StreamID:       0x1337,
+				Data:           []byte("foobar"),
+				DataLenPresent: true,
+			}
+			b := &bytes.Buffer{}
+			err := f.Write(b, versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			expected := []byte{0x10 ^ 0x2}
+			expected = append(expected, encodeVarInt(0x1337)...) // stream ID
+			expected = append(expected, encodeVarInt(6)...)      // data length
+			expected = append(expected, []byte("foobar")...)
+			Expect(b.Bytes()).To(Equal(expected))
+		})
+
+		It("writes a frame with data length and offset", func() {
+			f := &StreamFrame{
+				StreamID:       0x1337,
+				Data:           []byte("foobar"),
+				DataLenPresent: true,
+				Offset:         0x123456,
+			}
+			b := &bytes.Buffer{}
+			err := f.Write(b, versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			expected := []byte{0x10 ^ 0x4 ^ 0x2}
+			expected = append(expected, encodeVarInt(0x1337)...)   // stream ID
+			expected = append(expected, encodeVarInt(0x123456)...) // offset
+			expected = append(expected, encodeVarInt(6)...)        // data length
+			expected = append(expected, []byte("foobar")...)
+			Expect(b.Bytes()).To(Equal(expected))
+		})
+
+		It("refuses to write an empty frame without FIN", func() {
+			f := &StreamFrame{
+				StreamID: 0x42,
+				Offset:   0x1337,
+			}
+			b := &bytes.Buffer{}
+			err := f.Write(b, versionIETFFrames)
 			Expect(err).To(MatchError("StreamFrame: attempting to write empty frame without FIN"))
 		})
+	})
 
-		It("has proper min length for a short StreamID and a short offset", func() {
-			b := &bytes.Buffer{}
+	Context("length", func() {
+		It("has the right length for a frame without offset and data length", func() {
 			f := &StreamFrame{
-				StreamID: 1,
-				Data:     []byte{},
-				Offset:   0,
-				FinBit:   true,
+				StreamID: 0x1337,
+				Data:     []byte("foobar"),
 			}
-			err := f.Write(b, protocol.VersionWhatever)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(f.MinLength(0)).To(Equal(protocol.ByteCount(b.Len())))
+			Expect(f.MinLength(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0x1337)))
 		})
 
-		It("has proper min length for a long StreamID and a big offset", func() {
-			b := &bytes.Buffer{}
+		It("has the right length for a frame with offset", func() {
 			f := &StreamFrame{
-				StreamID: 0xdecafbad,
-				Data:     []byte{},
-				Offset:   0xdeadbeefcafe,
-				FinBit:   true,
+				StreamID: 0x1337,
+				Offset:   0x42,
+				Data:     []byte("foobar"),
 			}
-			err := f.Write(b, protocol.VersionWhatever)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(f.MinLength(0)).To(Equal(protocol.ByteCount(b.Len())))
+			Expect(f.MinLength(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0x1337) + utils.VarIntLen(0x42)))
 		})
 
-		Context("data length field", func() {
-			Context("in big endian", func() {
-				It("writes the data length", func() {
-					dataLen := 0x1337
-					b := &bytes.Buffer{}
-					f := &StreamFrame{
-						StreamID:       1,
-						Data:           bytes.Repeat([]byte{'f'}, dataLen),
-						DataLenPresent: true,
-						Offset:         0,
-					}
-					err := f.Write(b, versionBigEndian)
-					Expect(err).ToNot(HaveOccurred())
-					minLength, _ := f.MinLength(0)
-					Expect(b.Bytes()[0] & 0x20).To(Equal(uint8(0x20)))
-					Expect(b.Bytes()[minLength-2 : minLength]).To(Equal([]byte{0x13, 0x37}))
-				})
-			})
-
-			It("omits the data length field", func() {
-				dataLen := 0x1337
-				b := &bytes.Buffer{}
-				f := &StreamFrame{
-					StreamID:       1,
-					Data:           bytes.Repeat([]byte{'f'}, dataLen),
-					DataLenPresent: false,
-					Offset:         0,
-				}
-				err := f.Write(b, protocol.VersionWhatever)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(b.Bytes()[0] & 0x20).To(Equal(uint8(0)))
-				Expect(b.Bytes()[1 : b.Len()-dataLen]).ToNot(ContainSubstring(string([]byte{0x37, 0x13})))
-				minLength, _ := f.MinLength(0)
-				f.DataLenPresent = true
-				minLengthWithoutDataLen, _ := f.MinLength(0)
-				Expect(minLength).To(Equal(minLengthWithoutDataLen - 2))
-			})
-
-			It("calculates the correcct min-length", func() {
-				f := &StreamFrame{
-					StreamID:       0xCAFE,
-					Data:           []byte("foobar"),
-					DataLenPresent: false,
-					Offset:         0xDEADBEEF,
-				}
-				minLengthWithoutDataLen, _ := f.MinLength(0)
-				f.DataLenPresent = true
-				Expect(f.MinLength(0)).To(Equal(minLengthWithoutDataLen + 2))
-			})
-		})
-
-		Context("offset lengths", func() {
-			Context("in big endian", func() {
-				It("does not write an offset if the offset is 0", func() {
-					b := &bytes.Buffer{}
-					err := (&StreamFrame{
-						StreamID: 1,
-						Data:     []byte("foobar"),
-						Offset:   0,
-					}).Write(b, versionBigEndian)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x0)))
-				})
-
-				It("writes a 2-byte offset if the offset is larger than 0", func() {
-					b := &bytes.Buffer{}
-					err := (&StreamFrame{
-						StreamID: 1,
-						Data:     []byte("foobar"),
-						Offset:   0x1337,
-					}).Write(b, versionBigEndian)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x1 << 2)))
-					Expect(b.Bytes()[2:4]).To(Equal([]byte{0x13, 0x37}))
-				})
-
-				It("writes a 3-byte offset if the offset", func() {
-					b := &bytes.Buffer{}
-					(&StreamFrame{
-						StreamID: 1,
-						Data:     []byte("foobar"),
-						Offset:   0x13cafe,
-					}).Write(b, versionBigEndian)
-					Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x2 << 2)))
-					Expect(b.Bytes()[2:5]).To(Equal([]byte{0x13, 0xca, 0xfe}))
-				})
-
-				It("writes a 4-byte offset if the offset", func() {
-					b := &bytes.Buffer{}
-					err := (&StreamFrame{
-						StreamID: 1,
-						Data:     []byte("foobar"),
-						Offset:   0xdeadbeef,
-					}).Write(b, versionBigEndian)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x3 << 2)))
-					Expect(b.Bytes()[2:6]).To(Equal([]byte{0xde, 0xad, 0xbe, 0xef}))
-				})
-
-				It("writes a 5-byte offset if the offset", func() {
-					b := &bytes.Buffer{}
-					err := (&StreamFrame{
-						StreamID: 1,
-						Data:     []byte("foobar"),
-						Offset:   0x13deadbeef,
-					}).Write(b, versionBigEndian)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x4 << 2)))
-					Expect(b.Bytes()[2:7]).To(Equal([]byte{0x13, 0xde, 0xad, 0xbe, 0xef}))
-				})
-
-				It("writes a 6-byte offset if the offset", func() {
-					b := &bytes.Buffer{}
-					err := (&StreamFrame{
-						StreamID: 1,
-						Data:     []byte("foobar"),
-						Offset:   0xdeadbeefcafe,
-					}).Write(b, versionBigEndian)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x5 << 2)))
-					Expect(b.Bytes()[2:8]).To(Equal([]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe}))
-				})
-
-				It("writes a 7-byte offset if the offset", func() {
-					b := &bytes.Buffer{}
-					err := (&StreamFrame{
-						StreamID: 1,
-						Data:     []byte("foobar"),
-						Offset:   0x13deadbeefcafe,
-					}).Write(b, versionBigEndian)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x6 << 2)))
-					Expect(b.Bytes()[2:9]).To(Equal([]byte{0x13, 0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe}))
-				})
-
-				It("writes a 8-byte offset if the offset", func() {
-					b := &bytes.Buffer{}
-					err := (&StreamFrame{
-						StreamID: 1,
-						Data:     []byte("foobar"),
-						Offset:   0x1337deadbeefcafe,
-					}).Write(b, versionBigEndian)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(b.Bytes()[0] & 0x1c).To(Equal(uint8(0x7 << 2)))
-					Expect(b.Bytes()[2:10]).To(Equal([]byte{0x13, 0x37, 0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe}))
-				})
-			})
-		})
-
-		Context("lengths of StreamIDs", func() {
-			Context("in big endian", func() {
-				It("writes a 1 byte StreamID", func() {
-					b := &bytes.Buffer{}
-					err := (&StreamFrame{
-						StreamID: 13,
-						Data:     []byte("foobar"),
-					}).Write(b, versionBigEndian)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(b.Bytes()[0] & 0x3).To(Equal(uint8(0x0)))
-					Expect(b.Bytes()[1]).To(Equal(uint8(13)))
-				})
-
-				It("writes a 2 byte StreamID", func() {
-					b := &bytes.Buffer{}
-					err := (&StreamFrame{
-						StreamID: 0xcafe,
-						Data:     []byte("foobar"),
-					}).Write(b, versionBigEndian)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(b.Bytes()[0] & 0x3).To(Equal(uint8(0x1)))
-					Expect(b.Bytes()[1:3]).To(Equal([]byte{0xca, 0xfe}))
-				})
-
-				It("writes a 3 byte StreamID", func() {
-					b := &bytes.Buffer{}
-					err := (&StreamFrame{
-						StreamID: 0x13beef,
-						Data:     []byte("foobar"),
-					}).Write(b, versionBigEndian)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(b.Bytes()[0] & 0x3).To(Equal(uint8(0x2)))
-					Expect(b.Bytes()[1:4]).To(Equal([]byte{0x13, 0xbe, 0xef}))
-				})
-
-				It("writes a 4 byte StreamID", func() {
-					b := &bytes.Buffer{}
-					err := (&StreamFrame{
-						StreamID: 0xdecafbad,
-						Data:     []byte("foobar"),
-					}).Write(b, versionBigEndian)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(b.Bytes()[0] & 0x3).To(Equal(uint8(0x3)))
-					Expect(b.Bytes()[1:5]).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
-				})
-
-				It("writes a multiple byte StreamID, after the Stream length was already determined by MinLenght()", func() {
-					b := &bytes.Buffer{}
-					frame := &StreamFrame{
-						StreamID: 0xdecafbad,
-						Data:     []byte("foobar"),
-					}
-					frame.MinLength(0)
-					err := frame.Write(b, versionBigEndian)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(b.Bytes()[0] & 0x3).To(Equal(uint8(0x3)))
-					Expect(b.Bytes()[1:5]).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
-				})
-			})
-		})
-	})
-
-	Context("shortening of StreamIDs", func() {
-		It("determines the length of a 1 byte StreamID", func() {
-			f := &StreamFrame{StreamID: 0xFF}
-			Expect(f.calculateStreamIDLength()).To(Equal(uint8(1)))
-		})
-
-		It("determines the length of a 2 byte StreamID", func() {
-			f := &StreamFrame{StreamID: 0xFFFF}
-			Expect(f.calculateStreamIDLength()).To(Equal(uint8(2)))
-		})
-
-		It("determines the length of a 3 byte StreamID", func() {
-			f := &StreamFrame{StreamID: 0xFFFFFF}
-			Expect(f.calculateStreamIDLength()).To(Equal(uint8(3)))
-		})
-
-		It("determines the length of a 4 byte StreamID", func() {
-			f := &StreamFrame{StreamID: 0xFFFFFFFF}
-			Expect(f.calculateStreamIDLength()).To(Equal(uint8(4)))
-		})
-	})
-
-	Context("shortening of Offsets", func() {
-		It("determines length 0 of offset 0", func() {
-			f := &StreamFrame{Offset: 0}
-			Expect(f.getOffsetLength()).To(Equal(protocol.ByteCount(0)))
-		})
-
-		It("determines the length of a 2 byte offset", func() {
-			f := &StreamFrame{Offset: 0xFFFF}
-			Expect(f.getOffsetLength()).To(Equal(protocol.ByteCount(2)))
-		})
-
-		It("determines the length of a 2 byte offset, even if it would fit into 1 byte", func() {
-			f := &StreamFrame{Offset: 0x1}
-			Expect(f.getOffsetLength()).To(Equal(protocol.ByteCount(2)))
-		})
-
-		It("determines the length of a 3 byte offset", func() {
-			f := &StreamFrame{Offset: 0xFFFFFF}
-			Expect(f.getOffsetLength()).To(Equal(protocol.ByteCount(3)))
-		})
-
-		It("determines the length of a 4 byte offset", func() {
-			f := &StreamFrame{Offset: 0xFFFFFFFF}
-			Expect(f.getOffsetLength()).To(Equal(protocol.ByteCount(4)))
-		})
-
-		It("determines the length of a 5 byte offset", func() {
-			f := &StreamFrame{Offset: 0xFFFFFFFFFF}
-			Expect(f.getOffsetLength()).To(Equal(protocol.ByteCount(5)))
-		})
-
-		It("determines the length of a 6 byte offset", func() {
-			f := &StreamFrame{Offset: 0xFFFFFFFFFFFF}
-			Expect(f.getOffsetLength()).To(Equal(protocol.ByteCount(6)))
-		})
-
-		It("determines the length of a 7 byte offset", func() {
-			f := &StreamFrame{Offset: 0xFFFFFFFFFFFFFF}
-			Expect(f.getOffsetLength()).To(Equal(protocol.ByteCount(7)))
-		})
-
-		It("determines the length of an 8 byte offset", func() {
-			f := &StreamFrame{Offset: 0xFFFFFFFFFFFFFFFF}
-			Expect(f.getOffsetLength()).To(Equal(protocol.ByteCount(8)))
-		})
-	})
-
-	Context("DataLen", func() {
-		It("determines the length of the data", func() {
-			frame := StreamFrame{
-				Data: []byte("foobar"),
+		It("has the right length for a frame with data length", func() {
+			f := &StreamFrame{
+				StreamID:       0x1337,
+				Offset:         0x1234567,
+				DataLenPresent: true,
+				Data:           []byte("foobar"),
 			}
-			Expect(frame.DataLen()).To(Equal(protocol.ByteCount(6)))
+			Expect(f.MinLength(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0x1337) + utils.VarIntLen(0x1234567) + utils.VarIntLen(6)))
 		})
 	})
 })

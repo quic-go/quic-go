@@ -51,9 +51,14 @@ var _ = Describe("Version", func() {
 		Expect(VersionTLS.CryptoStreamID()).To(Equal(StreamID(0)))
 	})
 
-	It("tells if a version uses the MAX_DATA, MAX_STREAM_DATA, BLOCKED and STREAM_BLOCKED frames", func() {
-		Expect(Version39.UsesMaxDataFrame()).To(BeFalse())
-		Expect(VersionTLS.UsesMaxDataFrame()).To(BeTrue())
+	It("tells if a version uses the IETF frame types", func() {
+		Expect(Version39.UsesIETFFrameFormat()).To(BeFalse())
+		Expect(VersionTLS.UsesIETFFrameFormat()).To(BeTrue())
+	})
+
+	It("tells if a version uses the IETF frame types", func() {
+		Expect(Version39.UsesIETFFrameFormat()).To(BeFalse())
+		Expect(VersionTLS.UsesIETFFrameFormat()).To(BeTrue())
 	})
 
 	It("says if a stream contributes to connection-level flowcontrol, for gQUIC", func() {

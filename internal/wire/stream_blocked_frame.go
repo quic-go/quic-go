@@ -14,31 +14,30 @@ type StreamBlockedFrame struct {
 
 // ParseStreamBlockedFrame parses a STREAM_BLOCKED frame
 func ParseStreamBlockedFrame(r *bytes.Reader, version protocol.VersionNumber) (*StreamBlockedFrame, error) {
-	frame := &StreamBlockedFrame{}
-
-	// read the TypeByte
-	if _, err := r.ReadByte(); err != nil {
+	if _, err := r.ReadByte(); err != nil { // read the TypeByte
 		return nil, err
 	}
-	sid, err := utils.GetByteOrder(version).ReadUint32(r)
+	sid, err := utils.ReadVarInt(r)
 	if err != nil {
 		return nil, err
 	}
-	frame.StreamID = protocol.StreamID(sid)
-	return frame, nil
+	return &StreamBlockedFrame{StreamID: protocol.StreamID(sid)}, nil
 }
 
 // Write writes a STREAM_BLOCKED frame
 func (f *StreamBlockedFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
-	if !version.UsesMaxDataFrame() {
+	if !version.UsesIETFFrameFormat() {
 		return (&blockedFrameLegacy{StreamID: f.StreamID}).Write(b, version)
 	}
 	b.WriteByte(0x09)
-	utils.GetByteOrder(version).WriteUint32(b, uint32(f.StreamID))
+	utils.WriteVarInt(b, uint64(f.StreamID))
 	return nil
 }
 
 // MinLength of a written frame
 func (f *StreamBlockedFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
-	return 1 + 4, nil
+	if !version.UsesIETFFrameFormat() {
+		return 1 + 4, nil
+	}
+	return 1 + utils.VarIntLen(uint64(f.StreamID)), nil
 }

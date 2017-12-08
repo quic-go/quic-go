@@ -35,7 +35,7 @@ var _ = Describe("BLOCKED frame", func() {
 
 		It("has the correct min length", func() {
 			frame := BlockedFrame{}
-			Expect(frame.MinLength(versionMaxDataFrame)).To(Equal(protocol.ByteCount(1)))
+			Expect(frame.MinLength(versionIETFFrames)).To(Equal(protocol.ByteCount(1)))
 		})
 	})
 })

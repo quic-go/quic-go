@@ -66,9 +66,9 @@ func (vn VersionNumber) CryptoStreamID() StreamID {
 	return 0
 }
 
-// UsesMaxDataFrame tells if this version uses MAX_DATA, MAX_STREAM_DATA, BLOCKED and STREAM_BLOCKED instead of WINDOW_UDPATE and BLOCKED frames
-func (vn VersionNumber) UsesMaxDataFrame() bool {
-	return vn.CryptoStreamID() == 0
+// UsesIETFFrameFormat tells if this version uses the IETF frame format
+func (vn VersionNumber) UsesIETFFrameFormat() bool {
+	return vn != Version39
 }
 
 // StreamContributesToConnectionFlowControl says if a stream contributes to connection-level flow control
