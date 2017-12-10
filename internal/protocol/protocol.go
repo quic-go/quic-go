@@ -59,7 +59,7 @@ type ConnectionID uint64
 type StreamID uint64
 
 // A ByteCount in QUIC
-type ByteCount uint64
+type ByteCount = uint64
 
 // MaxByteCount is the maximum value of a ByteCount
 const MaxByteCount = ByteCount(1<<62 - 1)

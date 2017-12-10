@@ -16,6 +16,16 @@ type StreamID = protocol.StreamID
 // A VersionNumber is a QUIC version number.
 type VersionNumber = protocol.VersionNumber
 
+// Some known QUIC versions.
+// Warning: This API should not be considered stable and might change soon.
+const (
+	Version39  VersionNumber = protocol.Version39
+	VersionTLS VersionNumber = protocol.VersionTLS
+)
+
+// SupportedVersions contains all supported QUIC versions.
+var SupportedVersions = protocol.SupportedVersions
+
 // A Cookie can be used to verify the ownership of the client address.
 type Cookie = handshake.Cookie
 

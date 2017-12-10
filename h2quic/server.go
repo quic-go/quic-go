@@ -13,7 +13,6 @@ import (
 	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/qerr"
 	"golang.org/x/net/http2"
@@ -22,11 +21,11 @@ import (
 
 type streamCreator interface {
 	quic.Session
-	GetOrOpenStream(protocol.StreamID) (quic.Stream, error)
+	GetOrOpenStream(quic.StreamID) (quic.Stream, error)
 }
 
 type remoteCloser interface {
-	CloseRemote(protocol.ByteCount)
+	CloseRemote(uint64)
 }
 
 // allows mocking of quic.Listen and quic.ListenAddr
@@ -170,7 +169,7 @@ func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, 
 		utils.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
 	}
 
-	dataStream, err := session.GetOrOpenStream(protocol.StreamID(h2headersFrame.StreamID))
+	dataStream, err := session.GetOrOpenStream(quic.StreamID(h2headersFrame.StreamID))
 	if err != nil {
 		return err
 	}
@@ -196,7 +195,7 @@ func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, 
 
 		req.RemoteAddr = session.RemoteAddr().String()
 
-		responseWriter := newResponseWriter(headerStream, headerStreamMutex, dataStream, protocol.StreamID(h2headersFrame.StreamID))
+		responseWriter := newResponseWriter(headerStream, headerStreamMutex, dataStream, quic.StreamID(h2headersFrame.StreamID))
 
 		handler := s.Handler
 		if handler == nil {
@@ -278,7 +277,7 @@ func (s *Server) SetQuicHeaders(hdr http.Header) error {
 
 	if s.supportedVersionsAsString == "" {
 		var versions []string
-		for _, v := range protocol.SupportedVersions {
+		for _, v := range quic.SupportedVersions {
 			versions = append(versions, v.ToAltSvc())
 		}
 		s.supportedVersionsAsString = strings.Join(versions, ",")

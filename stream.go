@@ -386,7 +386,7 @@ func (s *stream) SetDeadline(t time.Time) error {
 }
 
 // CloseRemote makes the stream receive a "virtual" FIN stream frame at a given offset
-func (s *stream) CloseRemote(offset protocol.ByteCount) {
+func (s *stream) CloseRemote(offset uint64) {
 	s.AddStreamFrame(&wire.StreamFrame{FinBit: true, Offset: offset})
 }
 
