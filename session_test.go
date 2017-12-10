@@ -269,7 +269,7 @@ var _ = Describe("Session", func() {
 			}
 		})
 
-		Context("when handling STREAM frames", func() {
+		Context("handling STREAM frames", func() {
 			BeforeEach(func() {
 				sess.streamsMap.UpdateMaxStreamLimit(100)
 			})
@@ -329,6 +329,15 @@ var _ = Describe("Session", func() {
 					Data:     []byte("foobar"),
 				})
 				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("errors on a STREAM frame that would close the crypto stream", func() {
+				err := sess.handleStreamFrame(&wire.StreamFrame{
+					StreamID: sess.version.CryptoStreamID(),
+					Offset:   0x1337,
+					FinBit:   true,
+				})
+				Expect(err).To(MatchError("Received STREAM frame with FIN bit for the crypto stream"))
 			})
 		})
 
