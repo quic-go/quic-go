@@ -56,12 +56,12 @@ var _ = Describe("Packet packer", func() {
 		publicHeaderLen protocol.ByteCount
 		maxFrameSize    protocol.ByteCount
 		streamFramer    *streamFramer
-		cryptoStream    *stream
+		cryptoStream    cryptoStreamI
 	)
 
 	BeforeEach(func() {
 		version := versionGQUICFrames
-		cryptoStream = &stream{streamID: version.CryptoStreamID(), flowController: flowcontrol.NewStreamFlowController(version.CryptoStreamID(), false, flowcontrol.NewConnectionFlowController(1000, 1000, nil), 1000, 1000, 1000, nil)}
+		cryptoStream = newCryptoStream(func() {}, flowcontrol.NewStreamFlowController(version.CryptoStreamID(), false, flowcontrol.NewConnectionFlowController(1000, 1000, nil), 1000, 1000, 1000, nil), version)
 		streamsMap := newStreamsMap(nil, protocol.PerspectiveServer, versionGQUICFrames)
 		streamFramer = newStreamFramer(cryptoStream, streamsMap, nil, versionGQUICFrames)
 
@@ -585,29 +585,55 @@ var _ = Describe("Packet packer", func() {
 		})
 
 		It("sends unencrypted stream data on the crypto stream", func() {
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				_, err := cryptoStream.Write([]byte("foobar"))
+				Expect(err).ToNot(HaveOccurred())
+				close(done)
+			}()
 			packer.cryptoSetup.(*mockCryptoSetup).encLevelSealCrypto = protocol.EncryptionUnencrypted
-			cryptoStream.dataForWriting = []byte("foobar")
-			p, err := packer.PackPacket()
-			Expect(err).ToNot(HaveOccurred())
+			var p *packedPacket
+			Eventually(func() *packedPacket {
+				defer GinkgoRecover()
+				var err error
+				p, err = packer.PackPacket()
+				Expect(err).ToNot(HaveOccurred())
+				return p
+			}).ShouldNot(BeNil())
 			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
 			Expect(p.frames).To(HaveLen(1))
 			Expect(p.frames[0]).To(Equal(&wire.StreamFrame{
 				StreamID: packer.version.CryptoStreamID(),
 				Data:     []byte("foobar"),
 			}))
+			Eventually(done).Should(BeClosed())
 		})
 
 		It("sends encrypted stream data on the crypto stream", func() {
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				_, err := cryptoStream.Write([]byte("foobar"))
+				Expect(err).ToNot(HaveOccurred())
+				close(done)
+			}()
 			packer.cryptoSetup.(*mockCryptoSetup).encLevelSealCrypto = protocol.EncryptionSecure
-			cryptoStream.dataForWriting = []byte("foobar")
-			p, err := packer.PackPacket()
-			Expect(err).ToNot(HaveOccurred())
+			var p *packedPacket
+			Eventually(func() *packedPacket {
+				defer GinkgoRecover()
+				var err error
+				p, err = packer.PackPacket()
+				Expect(err).ToNot(HaveOccurred())
+				return p
+			}).ShouldNot(BeNil())
 			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionSecure))
 			Expect(p.frames).To(HaveLen(1))
 			Expect(p.frames[0]).To(Equal(&wire.StreamFrame{
 				StreamID: packer.version.CryptoStreamID(),
 				Data:     []byte("foobar"),
 			}))
+			Eventually(done).Should(BeClosed())
 		})
 
 		It("does not pack stream frames if not allowed", func() {
@@ -766,14 +792,27 @@ var _ = Describe("Packet packer", func() {
 			packer.hasSentPacket = false
 			packer.perspective = protocol.PerspectiveClient
 			packer.cryptoSetup.(*mockCryptoSetup).encLevelSealCrypto = protocol.EncryptionUnencrypted
-			cryptoStream.dataForWriting = []byte("foobar")
-			packet, err := packer.PackPacket()
-			Expect(err).ToNot(HaveOccurred())
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				_, err := cryptoStream.Write([]byte("foobar"))
+				Expect(err).ToNot(HaveOccurred())
+				close(done)
+			}()
+			var packet *packedPacket
+			Eventually(func() *packedPacket {
+				defer GinkgoRecover()
+				var err error
+				packet, err = packer.PackPacket()
+				Expect(err).ToNot(HaveOccurred())
+				return packet
+			}).ShouldNot(BeNil())
 			Expect(packet.raw).To(HaveLen(protocol.MinInitialPacketSize))
 			Expect(packet.frames).To(HaveLen(1))
 			sf := packet.frames[0].(*wire.StreamFrame)
 			Expect(sf.Data).To(Equal([]byte("foobar")))
 			Expect(sf.DataLenPresent).To(BeTrue())
+			Eventually(done).Should(BeClosed())
 		})
 
 		It("refuses to retransmit packets that were sent with forward-secure encryption", func() {

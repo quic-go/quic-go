@@ -8,7 +8,7 @@ import (
 
 type streamFramer struct {
 	streamsMap   *streamsMap
-	cryptoStream streamI
+	cryptoStream cryptoStreamI
 	version      protocol.VersionNumber
 
 	connFlowController flowcontrol.ConnectionFlowController
@@ -18,7 +18,7 @@ type streamFramer struct {
 }
 
 func newStreamFramer(
-	cryptoStream streamI,
+	cryptoStream cryptoStreamI,
 	streamsMap *streamsMap,
 	cfc flowcontrol.ConnectionFlowController,
 	v protocol.VersionNumber,
@@ -63,7 +63,7 @@ func (f *streamFramer) PopCryptoStreamFrame(maxLen protocol.ByteCount) *wire.Str
 		return nil
 	}
 	frame := &wire.StreamFrame{
-		StreamID: f.cryptoStream.StreamID(),
+		StreamID: f.version.CryptoStreamID(),
 		Offset:   f.cryptoStream.GetWriteOffset(),
 	}
 	frame.Data, frame.FinBit = f.cryptoStream.GetDataForWriting(maxLen - frame.MinLength(f.version))

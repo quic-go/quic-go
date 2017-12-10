@@ -414,7 +414,7 @@ var _ = Describe("Session", func() {
 				fc := mocks.NewMockStreamFlowController(mockCtrl)
 				offset := protocol.ByteCount(0x4321)
 				fc.EXPECT().UpdateSendWindow(offset)
-				sess.cryptoStream.(*stream).flowController = fc
+				sess.cryptoStream.(*cryptoStream).flowController = fc
 				err := sess.handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
 					StreamID:   sess.version.CryptoStreamID(),
 					ByteOffset: offset,
