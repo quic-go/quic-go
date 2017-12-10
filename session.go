@@ -32,8 +32,7 @@ type receivedPacket struct {
 }
 
 var (
-	errRstStreamOnInvalidStream   = errors.New("RST_STREAM received for unknown stream")
-	errWindowUpdateOnClosedStream = errors.New("WINDOW_UPDATE received for an already closed stream")
+	errRstStreamOnInvalidStream = errors.New("RST_STREAM received for unknown stream")
 )
 
 var (
@@ -551,8 +550,6 @@ func (s *session) handleFrames(fs []wire.Frame, encLevel protocol.EncryptionLeve
 			case errRstStreamOnInvalidStream:
 				// Can happen when RST_STREAMs arrive early or late (?)
 				utils.Errorf("Ignoring error in session: %s", err.Error())
-			case errWindowUpdateOnClosedStream:
-				// Can happen when we already sent the last StreamFrame with the FinBit, but the client already sent a WindowUpdate for this Stream
 			default:
 				return err
 			}
@@ -597,7 +594,8 @@ func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error
 		return err
 	}
 	if str == nil {
-		return errWindowUpdateOnClosedStream
+		// stream is closed and already garbage collected
+		return nil
 	}
 	str.UpdateSendWindow(frame.ByteOffset)
 	return nil
