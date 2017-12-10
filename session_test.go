@@ -392,6 +392,14 @@ var _ = Describe("Session", func() {
 				}}, protocol.EncryptionUnspecified)
 				Expect(err).NotTo(HaveOccurred())
 			})
+
+			It("erros when a RST_STREAM frame would reset the crypto stream", func() {
+				err := sess.handleRstStreamFrame(&wire.RstStreamFrame{
+					StreamID:  sess.version.CryptoStreamID(),
+					ErrorCode: 123,
+				})
+				Expect(err).To(MatchError("Received RST_STREAM frame for the crypto stream"))
+			})
 		})
 
 		Context("handling MAX_DATA and MAX_STREAM_DATA frames", func() {
