@@ -582,6 +582,10 @@ func (s *session) handleMaxDataFrame(frame *wire.MaxDataFrame) {
 }
 
 func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error {
+	if frame.StreamID == s.version.CryptoStreamID() {
+		s.cryptoStream.UpdateSendWindow(frame.ByteOffset)
+		return nil
+	}
 	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
 	if err != nil {
 		return err

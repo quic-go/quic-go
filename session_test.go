@@ -393,6 +393,18 @@ var _ = Describe("Session", func() {
 				sess.connFlowController = connFC
 			})
 
+			It("updates the flow control window of the crypto stream", func() {
+				fc := mocks.NewMockStreamFlowController(mockCtrl)
+				offset := protocol.ByteCount(0x4321)
+				fc.EXPECT().UpdateSendWindow(offset)
+				sess.cryptoStream.(*stream).flowController = fc
+				err := sess.handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
+					StreamID:   sess.version.CryptoStreamID(),
+					ByteOffset: offset,
+				})
+				Expect(err).ToNot(HaveOccurred())
+			})
+
 			It("updates the flow control window of a stream", func() {
 				offset := protocol.ByteCount(0x1234)
 				str, err := sess.GetOrOpenStream(5)
