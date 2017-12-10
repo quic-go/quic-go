@@ -32,10 +32,6 @@ type receivedPacket struct {
 }
 
 var (
-	errRstStreamOnInvalidStream = errors.New("RST_STREAM received for unknown stream")
-)
-
-var (
 	newCryptoSetup       = handshake.NewCryptoSetup
 	newCryptoSetupClient = handshake.NewCryptoSetupClient
 )
@@ -547,9 +543,6 @@ func (s *session) handleFrames(fs []wire.Frame, encLevel protocol.EncryptionLeve
 			switch err {
 			case ackhandler.ErrDuplicateOrOutOfOrderAck:
 				// Can happen e.g. when packets thought missing arrive late
-			case errRstStreamOnInvalidStream:
-				// Can happen when RST_STREAMs arrive early or late (?)
-				utils.Errorf("Ignoring error in session: %s", err.Error())
 			default:
 				return err
 			}
@@ -607,7 +600,8 @@ func (s *session) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
 		return err
 	}
 	if str == nil {
-		return errRstStreamOnInvalidStream
+		// stream is closed and already garbage collected
+		return nil
 	}
 	return str.RegisterRemoteError(fmt.Errorf("RST_STREAM received with code %d", frame.ErrorCode), frame.ByteOffset)
 }
