@@ -19,9 +19,7 @@ type streamI interface {
 
 	AddStreamFrame(*wire.StreamFrame) error
 	RegisterRemoteError(error, protocol.ByteCount) error
-	HasDataForWriting() bool
-	GetDataForWriting(maxBytes protocol.ByteCount) (data []byte, shouldSendFin bool)
-	GetWriteOffset() protocol.ByteCount
+	PopStreamFrame(maxBytes protocol.ByteCount) *wire.StreamFrame
 	Finished() bool
 	Cancel(error)
 	// methods needed for flow control
@@ -256,29 +254,37 @@ func (s *stream) GetWriteOffset() protocol.ByteCount {
 	return s.writeOffset
 }
 
-// HasDataForWriting says if there's stream available to be dequeued for writing
-func (s *stream) HasDataForWriting() bool {
-	s.mutex.Lock()
-	hasData := s.err == nil && // nothing should be sent if an error occurred
-		(len(s.dataForWriting) > 0 || // there is data queued for sending
-			s.finishedWriting.Get() && !s.finSent.Get()) // if there is no data, but writing finished and the FIN hasn't been sent yet
-	s.mutex.Unlock()
-	return hasData
-}
-
-func (s *stream) GetDataForWriting(maxBytes protocol.ByteCount) ([]byte, bool /* should send FIN */) {
-	data, shouldSendFin := s.getDataForWritingImpl(maxBytes)
-	if shouldSendFin {
-		s.finSent.Set(true)
-	}
-	return data, shouldSendFin
-}
-
-func (s *stream) getDataForWritingImpl(maxBytes protocol.ByteCount) ([]byte, bool /* should send FIN */) {
+// PopStreamFrame returns the next STREAM frame that is supposed to be sent on this stream
+// maxBytes is the maximum length this frame (including frame header) will have.
+func (s *stream) PopStreamFrame(maxBytes protocol.ByteCount) *wire.StreamFrame {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	if s.err != nil || s.dataForWriting == nil {
+	if s.err != nil {
+		return nil
+	}
+
+	frame := &wire.StreamFrame{
+		StreamID:       s.streamID,
+		Offset:         s.writeOffset,
+		DataLenPresent: true,
+	}
+	frameLen := frame.MinLength(s.version)
+	if frameLen >= maxBytes { // a STREAM frame must have at least one byte of data
+		return nil
+	}
+	frame.Data, frame.FinBit = s.getDataForWriting(maxBytes - frameLen)
+	if len(frame.Data) == 0 && !frame.FinBit {
+		return nil
+	}
+	if frame.FinBit {
+		s.finSent.Set(true)
+	}
+	return frame
+}
+
+func (s *stream) getDataForWriting(maxBytes protocol.ByteCount) ([]byte, bool /* should send FIN */) {
+	if s.dataForWriting == nil {
 		return nil, s.finishedWriting.Get() && !s.finSent.Get()
 	}
 
