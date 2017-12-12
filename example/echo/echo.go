@@ -14,6 +14,9 @@ import (
 	quic "github.com/lucas-clemente/quic-go"
 )
 
+// For additional logging of quic-go internals, the QUIC_GO_LOG_LEVEL env var
+// can be set. See https://github.com/lucas-clemente/quic-go/wiki/Logging
+
 const addr = "localhost:4242"
 
 const message = "foobar"
