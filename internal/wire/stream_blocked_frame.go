@@ -35,9 +35,9 @@ func (f *StreamBlockedFrame) Write(b *bytes.Buffer, version protocol.VersionNumb
 }
 
 // MinLength of a written frame
-func (f *StreamBlockedFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
+func (f *StreamBlockedFrame) MinLength(version protocol.VersionNumber) protocol.ByteCount {
 	if !version.UsesIETFFrameFormat() {
-		return 1 + 4, nil
+		return 1 + 4
 	}
-	return 1 + utils.VarIntLen(uint64(f.StreamID)), nil
+	return 1 + utils.VarIntLen(uint64(f.StreamID))
 }

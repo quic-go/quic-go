@@ -49,14 +49,8 @@ func (f *StopWaitingFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) erro
 }
 
 // MinLength of a written frame
-func (f *StopWaitingFrame) MinLength(_ protocol.VersionNumber) (protocol.ByteCount, error) {
-	minLength := protocol.ByteCount(1) // typeByte
-
-	if f.PacketNumberLen == protocol.PacketNumberLenInvalid {
-		return 0, errPacketNumberLenNotSet
-	}
-	minLength += protocol.ByteCount(f.PacketNumberLen)
-	return minLength, nil
+func (f *StopWaitingFrame) MinLength(_ protocol.VersionNumber) protocol.ByteCount {
+	return 1 + protocol.ByteCount(f.PacketNumberLen)
 }
 
 // ParseStopWaitingFrame parses a StopWaiting frame

@@ -183,12 +183,12 @@ func (f *StreamFrame) getOffsetLength() protocol.ByteCount {
 	return 8
 }
 
-func (f *StreamFrame) minLengthLegacy(_ protocol.VersionNumber) (protocol.ByteCount, error) {
+func (f *StreamFrame) minLengthLegacy(_ protocol.VersionNumber) protocol.ByteCount {
 	length := protocol.ByteCount(1) + protocol.ByteCount(f.calculateStreamIDLength()) + f.getOffsetLength()
 	if f.DataLenPresent {
 		length += 2
 	}
-	return length, nil
+	return length
 }
 
 // DataLen gives the length of data in bytes

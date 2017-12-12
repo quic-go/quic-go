@@ -176,14 +176,6 @@ var _ = Describe("StopWaitingFrame", func() {
 				Expect(frame.MinLength(protocol.VersionWhatever)).To(Equal(protocol.ByteCount(length + 1)))
 			}
 		})
-
-		It("errors when packetNumberLen is not set", func() {
-			frame := &StopWaitingFrame{
-				LeastUnacked: 10,
-			}
-			_, err := frame.MinLength(0)
-			Expect(err).To(MatchError(errPacketNumberLenNotSet))
-		})
 	})
 
 	Context("self consistency", func() {

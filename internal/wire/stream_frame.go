@@ -117,7 +117,7 @@ func (f *StreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 
 // MinLength returns the length of the header of a StreamFrame
 // the total length of the frame is frame.MinLength() + frame.DataLen()
-func (f *StreamFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
+func (f *StreamFrame) MinLength(version protocol.VersionNumber) protocol.ByteCount {
 	if !version.UsesIETFFrameFormat() {
 		return f.minLengthLegacy(version)
 	}
@@ -128,5 +128,5 @@ func (f *StreamFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCo
 	if f.DataLenPresent {
 		length += utils.VarIntLen(uint64(f.DataLen()))
 	}
-	return length, nil
+	return length
 }

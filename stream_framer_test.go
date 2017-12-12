@@ -218,7 +218,7 @@ var _ = Describe("Stream Framer", func() {
 				origlen := retransmittedFrame2.DataLen()
 				fs := framer.PopStreamFrames(6)
 				Expect(fs).To(HaveLen(1))
-				minLength, _ := fs[0].MinLength(framer.version)
+				minLength := fs[0].MinLength(framer.version)
 				Expect(minLength + fs[0].DataLen()).To(Equal(protocol.ByteCount(6)))
 				Expect(framer.retransmissionQueue[0].Data).To(HaveLen(int(origlen - fs[0].DataLen())))
 				Expect(framer.retransmissionQueue[0].Offset).To(Equal(fs[0].DataLen()))
