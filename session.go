@@ -563,6 +563,9 @@ func (s *session) handlePacket(p *receivedPacket) {
 
 func (s *session) handleStreamFrame(frame *wire.StreamFrame) error {
 	if frame.StreamID == s.version.CryptoStreamID() {
+		if frame.FinBit {
+			return errors.New("Received STREAM frame with FIN bit for the crypto stream")
+		}
 		return s.cryptoStream.AddStreamFrame(frame)
 	}
 	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
@@ -582,6 +585,10 @@ func (s *session) handleMaxDataFrame(frame *wire.MaxDataFrame) {
 }
 
 func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error {
+	if frame.StreamID == s.version.CryptoStreamID() {
+		s.cryptoStream.UpdateSendWindow(frame.ByteOffset)
+		return nil
+	}
 	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
 	if err != nil {
 		return err
@@ -595,6 +602,9 @@ func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error
 }
 
 func (s *session) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
+	if frame.StreamID == s.version.CryptoStreamID() {
+		return errors.New("Received RST_STREAM frame for the crypto stream")
+	}
 	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
 	if err != nil {
 		return err

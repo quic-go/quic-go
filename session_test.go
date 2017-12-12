@@ -269,7 +269,7 @@ var _ = Describe("Session", func() {
 			}
 		})
 
-		Context("when handling STREAM frames", func() {
+		Context("handling STREAM frames", func() {
 			BeforeEach(func() {
 				sess.streamsMap.UpdateMaxStreamLimit(100)
 			})
@@ -330,6 +330,15 @@ var _ = Describe("Session", func() {
 				})
 				Expect(err).ToNot(HaveOccurred())
 			})
+
+			It("errors on a STREAM frame that would close the crypto stream", func() {
+				err := sess.handleStreamFrame(&wire.StreamFrame{
+					StreamID: sess.version.CryptoStreamID(),
+					Offset:   0x1337,
+					FinBit:   true,
+				})
+				Expect(err).To(MatchError("Received STREAM frame with FIN bit for the crypto stream"))
+			})
 		})
 
 		Context("handling RST_STREAM frames", func() {
@@ -383,6 +392,14 @@ var _ = Describe("Session", func() {
 				}}, protocol.EncryptionUnspecified)
 				Expect(err).NotTo(HaveOccurred())
 			})
+
+			It("erros when a RST_STREAM frame would reset the crypto stream", func() {
+				err := sess.handleRstStreamFrame(&wire.RstStreamFrame{
+					StreamID:  sess.version.CryptoStreamID(),
+					ErrorCode: 123,
+				})
+				Expect(err).To(MatchError("Received RST_STREAM frame for the crypto stream"))
+			})
 		})
 
 		Context("handling MAX_DATA and MAX_STREAM_DATA frames", func() {
@@ -391,6 +408,18 @@ var _ = Describe("Session", func() {
 			BeforeEach(func() {
 				connFC = mocks.NewMockConnectionFlowController(mockCtrl)
 				sess.connFlowController = connFC
+			})
+
+			It("updates the flow control window of the crypto stream", func() {
+				fc := mocks.NewMockStreamFlowController(mockCtrl)
+				offset := protocol.ByteCount(0x4321)
+				fc.EXPECT().UpdateSendWindow(offset)
+				sess.cryptoStream.(*stream).flowController = fc
+				err := sess.handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
+					StreamID:   sess.version.CryptoStreamID(),
+					ByteOffset: offset,
+				})
+				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("updates the flow control window of a stream", func() {
