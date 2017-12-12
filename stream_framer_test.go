@@ -108,6 +108,33 @@ var _ = Describe("Stream Framer", func() {
 			Expect(framer.PopStreamFrames(1000)).To(BeEmpty())
 		})
 
+		It("doesn't pop frames for retransmission, if the remaining space in the packet is too small, and the frame would be split", func() {
+			setNoData(stream1)
+			setNoData(stream2)
+			framer.AddFrameForRetransmission(&wire.StreamFrame{
+				StreamID: id1,
+				Data:     bytes.Repeat([]byte{'a'}, int(protocol.MinStreamFrameSize)),
+			})
+			fs := framer.PopStreamFrames(protocol.MinStreamFrameSize - 1)
+			Expect(fs).To(BeEmpty())
+		})
+
+		It("pops frames for retransmission, even if the remaining space in the packet is too small, if the frame doesn't need to be split", func() {
+			setNoData(stream1)
+			setNoData(stream2)
+			framer.AddFrameForRetransmission(retransmittedFrame1)
+			fs := framer.PopStreamFrames(protocol.MinStreamFrameSize - 1)
+			Expect(fs).To(Equal([]*wire.StreamFrame{retransmittedFrame1}))
+		})
+
+		It("pops frames for retransmission, if the remaining size is the miniumum STREAM frame size", func() {
+			setNoData(stream1)
+			setNoData(stream2)
+			framer.AddFrameForRetransmission(retransmittedFrame1)
+			fs := framer.PopStreamFrames(1000)
+			Expect(fs).To(HaveLen(1))
+		})
+
 		It("returns normal frames", func() {
 			stream1.EXPECT().GetDataForWriting(gomock.Any()).Return([]byte("foobar"), false)
 			stream1.EXPECT().HasDataForWriting().Return(true)
@@ -155,26 +182,55 @@ var _ = Describe("Stream Framer", func() {
 			stream1.EXPECT().HasDataForWriting().Return(false)
 			stream1.EXPECT().GetWriteOffset()
 			setNoData(stream2)
-			fs := framer.PopStreamFrames(5)
+			fs := framer.PopStreamFrames(500)
+			Expect(fs).To(BeEmpty())
+		})
+
+		It("pops frames that have the minimum size", func() {
+			streamFrameHeaderLen := protocol.ByteCount(4)
+			stream1.EXPECT().HasDataForWriting().Return(true)
+			stream1.EXPECT().GetWriteOffset()
+			stream1.EXPECT().GetDataForWriting(protocol.MinStreamFrameSize-streamFrameHeaderLen).Return(bytes.Repeat([]byte{'f'}, int(protocol.MinStreamFrameSize-streamFrameHeaderLen)), false)
+			setNoData(stream2)
+			fs := framer.PopStreamFrames(protocol.MinStreamFrameSize)
+			Expect(fs).To(HaveLen(1))
+			Expect(fs[0].DataLen()).To(Equal(protocol.MinStreamFrameSize - streamFrameHeaderLen))
+		})
+
+		It("does not pop frames smaller than the mimimum size", func() {
+			setNoData(stream1)
+			setNoData(stream2)
+			fs := framer.PopStreamFrames(protocol.MinStreamFrameSize - 1)
 			Expect(fs).To(BeEmpty())
 		})
 
 		It("uses the round-robin scheduling", func() {
 			streamFrameHeaderLen := protocol.ByteCount(4)
-			stream1.EXPECT().GetDataForWriting(10-streamFrameHeaderLen).Return(bytes.Repeat([]byte("f"), int(10-streamFrameHeaderLen)), false)
+			stream1.EXPECT().GetDataForWriting(1000-streamFrameHeaderLen).Return(bytes.Repeat([]byte("f"), int(1000-streamFrameHeaderLen)), false)
 			stream1.EXPECT().HasDataForWriting().Return(true)
 			stream1.EXPECT().GetWriteOffset()
-			stream2.EXPECT().GetDataForWriting(protocol.ByteCount(10-streamFrameHeaderLen)).Return(bytes.Repeat([]byte("e"), int(10-streamFrameHeaderLen)), false)
+			stream2.EXPECT().GetDataForWriting(protocol.ByteCount(1000-streamFrameHeaderLen)).Return(bytes.Repeat([]byte("e"), int(1000-streamFrameHeaderLen)), false)
 			stream2.EXPECT().HasDataForWriting().Return(true)
 			stream2.EXPECT().GetWriteOffset()
-			fs := framer.PopStreamFrames(10)
+			fs := framer.PopStreamFrames(1000)
 			Expect(fs).To(HaveLen(1))
 			// it doesn't matter here if this data is from stream1 or from stream2...
 			firstStreamID := fs[0].StreamID
-			fs = framer.PopStreamFrames(10)
+			fs = framer.PopStreamFrames(1000)
 			Expect(fs).To(HaveLen(1))
 			// ... but the data popped this time has to be from the other stream
 			Expect(fs[0].StreamID).ToNot(Equal(firstStreamID))
+		})
+
+		It("stops iterating when the remaining size is smaller than the minimum STREAM frame size", func() {
+			streamFrameHeaderLen := protocol.ByteCount(4)
+			// pop a frame such that the remaining size is one byte less than the minimum STREAM frame size
+			stream1.EXPECT().GetDataForWriting(1000-streamFrameHeaderLen).Return(bytes.Repeat([]byte("f"), int(1000-streamFrameHeaderLen-protocol.MinStreamFrameSize+1)), false)
+			stream1.EXPECT().HasDataForWriting().Return(true)
+			stream1.EXPECT().GetWriteOffset()
+			setNoData(stream2)
+			fs := framer.PopStreamFrames(1000)
+			Expect(fs).To(HaveLen(1))
 		})
 
 		Context("splitting of frames", func() {
@@ -214,55 +270,28 @@ var _ = Describe("Stream Framer", func() {
 			It("splits a frame", func() {
 				setNoData(stream1)
 				setNoData(stream2)
-				framer.AddFrameForRetransmission(retransmittedFrame2)
-				origlen := retransmittedFrame2.DataLen()
-				fs := framer.PopStreamFrames(6)
+				frame := &wire.StreamFrame{Data: bytes.Repeat([]byte{0}, 600)}
+				framer.AddFrameForRetransmission(frame)
+				fs := framer.PopStreamFrames(500)
 				Expect(fs).To(HaveLen(1))
 				minLength := fs[0].MinLength(framer.version)
-				Expect(minLength + fs[0].DataLen()).To(Equal(protocol.ByteCount(6)))
-				Expect(framer.retransmissionQueue[0].Data).To(HaveLen(int(origlen - fs[0].DataLen())))
+				Expect(minLength + fs[0].DataLen()).To(Equal(protocol.ByteCount(500)))
+				Expect(framer.retransmissionQueue[0].Data).To(HaveLen(int(600 - fs[0].DataLen())))
 				Expect(framer.retransmissionQueue[0].Offset).To(Equal(fs[0].DataLen()))
 			})
 
-			It("never returns an empty stream frame", func() {
-				// this one frame will be split off from again and again in this test. Therefore, it has to be large enough (checked again at the end)
-				origFrame := &wire.StreamFrame{
-					StreamID: 5,
-					Offset:   1,
-					FinBit:   false,
-					Data:     bytes.Repeat([]byte{'f'}, 30*30),
-				}
-				framer.AddFrameForRetransmission(origFrame)
-
-				minFrameDataLen := protocol.MaxPacketSize
-
-				for i := 0; i < 30; i++ {
-					frames, currentLen := framer.maybePopFramesForRetransmission(protocol.ByteCount(i))
-					if len(frames) == 0 {
-						Expect(currentLen).To(BeZero())
-					} else {
-						Expect(frames).To(HaveLen(1))
-						Expect(currentLen).ToNot(BeZero())
-						dataLen := frames[0].DataLen()
-						Expect(dataLen).ToNot(BeZero())
-						if dataLen < minFrameDataLen {
-							minFrameDataLen = dataLen
-						}
-					}
-				}
-				Expect(framer.retransmissionQueue).To(HaveLen(1)) // check that origFrame was large enough for this test and didn't get used up completely
-				Expect(minFrameDataLen).To(Equal(protocol.ByteCount(1)))
-			})
-
 			It("only removes a frame from the framer after returning all split parts", func() {
+				frameHeaderLen := protocol.ByteCount(4)
 				setNoData(stream1)
 				setNoData(stream2)
-				framer.AddFrameForRetransmission(retransmittedFrame2)
-				fs := framer.PopStreamFrames(6)
+				frame := &wire.StreamFrame{Data: bytes.Repeat([]byte{0}, int(501-frameHeaderLen))}
+				framer.AddFrameForRetransmission(frame)
+				fs := framer.PopStreamFrames(500)
 				Expect(fs).To(HaveLen(1))
 				Expect(framer.retransmissionQueue).ToNot(BeEmpty())
-				fs = framer.PopStreamFrames(1000)
+				fs = framer.PopStreamFrames(500)
 				Expect(fs).To(HaveLen(1))
+				Expect(fs[0].DataLen()).To(BeEquivalentTo(1))
 				Expect(framer.retransmissionQueue).To(BeEmpty())
 			})
 		})

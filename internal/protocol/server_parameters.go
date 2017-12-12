@@ -122,3 +122,9 @@ const ClosedSessionDeleteTimeout = time.Minute
 
 // NumCachedCertificates is the number of cached compressed certificate chains, each taking ~1K space
 const NumCachedCertificates = 128
+
+// MinStreamFrameSize is the minimum size that has to be left in a packet, so that we add another STREAM frame.
+// This avoids splitting up STREAM frames into small pieces, which has 2 advantages:
+// 1. it reduces the framing overhead
+// 2. it reduces the head-of-line blocking, when a packet is lost
+const MinStreamFrameSize ByteCount = 128
