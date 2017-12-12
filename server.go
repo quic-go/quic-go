@@ -19,7 +19,7 @@ import (
 // packetHandler handles packets
 type packetHandler interface {
 	Session
-	getCryptoStream() cryptoStream
+	getCryptoStream() cryptoStreamI
 	handshakeStatus() <-chan handshakeEvent
 	handlePacket(*receivedPacket)
 	GetVersion() protocol.VersionNumber

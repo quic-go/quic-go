@@ -56,7 +56,7 @@ type session struct {
 	conn connection
 
 	streamsMap   *streamsMap
-	cryptoStream cryptoStream
+	cryptoStream cryptoStreamI
 
 	rttStats *congestion.RTTStats
 
@@ -294,7 +294,7 @@ func (s *session) preSetup() {
 		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),
 		s.rttStats,
 	)
-	s.cryptoStream = s.newStream(s.version.CryptoStreamID()).(cryptoStream)
+	s.cryptoStream = s.newCryptoStream()
 }
 
 func (s *session) postSetup(initialPacketNumber protocol.PacketNumber) error {
@@ -874,6 +874,20 @@ func (s *session) newStream(id protocol.StreamID) streamI {
 	return newStream(id, s.scheduleSending, s.queueResetStreamFrame, flowController, s.version)
 }
 
+func (s *session) newCryptoStream() cryptoStreamI {
+	id := s.version.CryptoStreamID()
+	flowController := flowcontrol.NewStreamFlowController(
+		id,
+		s.version.StreamContributesToConnectionFlowControl(id),
+		s.connFlowController,
+		protocol.ReceiveStreamFlowControlWindow,
+		protocol.ByteCount(s.config.MaxReceiveStreamFlowControlWindow),
+		0,
+		s.rttStats,
+	)
+	return newCryptoStream(s.scheduleSending, flowController, s.version)
+}
+
 func (s *session) sendPublicReset(rejectedPacketNumber protocol.PacketNumber) error {
 	utils.Infof("Sending public reset for connection %x, packet number %d", s.connectionID, rejectedPacketNumber)
 	return s.conn.Write(wire.WritePublicReset(s.connectionID, rejectedPacketNumber, 0))
@@ -943,7 +957,7 @@ func (s *session) handshakeStatus() <-chan handshakeEvent {
 	return s.handshakeChan
 }
 
-func (s *session) getCryptoStream() cryptoStream {
+func (s *session) getCryptoStream() cryptoStreamI {
 	return s.cryptoStream
 }
 

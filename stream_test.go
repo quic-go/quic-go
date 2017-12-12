@@ -267,12 +267,6 @@ var _ = Describe("Stream", func() {
 			Expect(onDataCalled).To(BeTrue())
 		})
 
-		It("sets the read offset", func() {
-			str.SetReadOffset(0x42)
-			Expect(str.readOffset).To(Equal(protocol.ByteCount(0x42)))
-			Expect(str.frameQueue.readPosition).To(Equal(protocol.ByteCount(0x42)))
-		})
-
 		Context("deadlines", func() {
 			It("the deadline error has the right net.Error properties", func() {
 				Expect(errDeadline.Temporary()).To(BeTrue())

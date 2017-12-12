@@ -68,7 +68,7 @@ func (s *mockSession) RemoteAddr() net.Addr                   { panic("not imple
 func (*mockSession) Context() context.Context                 { panic("not implemented") }
 func (*mockSession) GetVersion() protocol.VersionNumber       { return protocol.VersionWhatever }
 func (s *mockSession) handshakeStatus() <-chan handshakeEvent { return s.handshakeChan }
-func (*mockSession) getCryptoStream() cryptoStream            { panic("not implemented") }
+func (*mockSession) getCryptoStream() cryptoStreamI           { panic("not implemented") }
 
 var _ Session = &mockSession{}
 var _ NonFWSession = &mockSession{}
