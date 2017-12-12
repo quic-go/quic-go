@@ -6,7 +6,6 @@ import (
 	"io"
 	"io/ioutil"
 	"sync"
-	"time"
 
 	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 
@@ -34,12 +33,15 @@ var _ = Describe("Stream tests", func() {
 		var wg sync.WaitGroup
 		wg.Add(numStreams)
 		for i := 0; i < numStreams; i++ {
-			str, err := sess.OpenStream()
+			str, err := sess.OpenStreamSync()
 			Expect(err).ToNot(HaveOccurred())
 			data := testserver.GeneratePRData(25 * i)
-			_, err = str.Write(data)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(str.Close()).To(Succeed())
+			go func() {
+				defer GinkgoRecover()
+				_, err := str.Write(data)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(str.Close()).To(Succeed())
+			}()
 			go func() {
 				defer GinkgoRecover()
 				defer wg.Done()
@@ -47,7 +49,6 @@ var _ = Describe("Stream tests", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(dataRead).To(Equal(data))
 			}()
-			time.Sleep(5 * time.Millisecond)
 		}
 		wg.Wait()
 	}
