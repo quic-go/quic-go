@@ -17,7 +17,7 @@ import (
 type streamI interface {
 	Stream
 
-	AddStreamFrame(*wire.StreamFrame) error
+	HandleStreamFrame(*wire.StreamFrame) error
 	RegisterRemoteError(error, protocol.ByteCount) error
 	PopStreamFrame(maxBytes protocol.ByteCount) *wire.StreamFrame
 	Finished() bool
@@ -327,8 +327,8 @@ func (s *stream) shouldSendReset() bool {
 	return (s.resetLocally.Get() || s.resetRemotely.Get()) && !s.finishedWriteAndSentFin()
 }
 
-// AddStreamFrame adds a new stream frame
-func (s *stream) AddStreamFrame(frame *wire.StreamFrame) error {
+// HandleStreamFrame adds a new stream frame
+func (s *stream) HandleStreamFrame(frame *wire.StreamFrame) error {
 	maxOffset := frame.Offset + frame.DataLen()
 	if err := s.flowController.UpdateHighestReceived(maxOffset, frame.FinBit); err != nil {
 		return err
@@ -390,7 +390,7 @@ func (s *stream) SetDeadline(t time.Time) error {
 
 // CloseRemote makes the stream receive a "virtual" FIN stream frame at a given offset
 func (s *stream) CloseRemote(offset protocol.ByteCount) {
-	s.AddStreamFrame(&wire.StreamFrame{FinBit: true, Offset: offset})
+	s.HandleStreamFrame(&wire.StreamFrame{FinBit: true, Offset: offset})
 }
 
 // Cancel is called by session to indicate that an error occurred

@@ -36,18 +36,6 @@ func (_m *MockStreamI) EXPECT() *MockStreamIMockRecorder {
 	return _m.recorder
 }
 
-// AddStreamFrame mocks base method
-func (_m *MockStreamI) AddStreamFrame(_param0 *wire.StreamFrame) error {
-	ret := _m.ctrl.Call(_m, "AddStreamFrame", _param0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AddStreamFrame indicates an expected call of AddStreamFrame
-func (_mr *MockStreamIMockRecorder) AddStreamFrame(arg0 interface{}) *gomock.Call {
-	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "AddStreamFrame", reflect.TypeOf((*MockStreamI)(nil).AddStreamFrame), arg0)
-}
-
 // Cancel mocks base method
 func (_m *MockStreamI) Cancel(_param0 error) {
 	_m.ctrl.Call(_m, "Cancel", _param0)
@@ -104,6 +92,18 @@ func (_m *MockStreamI) GetWindowUpdate() protocol.ByteCount {
 // GetWindowUpdate indicates an expected call of GetWindowUpdate
 func (_mr *MockStreamIMockRecorder) GetWindowUpdate() *gomock.Call {
 	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "GetWindowUpdate", reflect.TypeOf((*MockStreamI)(nil).GetWindowUpdate))
+}
+
+// HandleStreamFrame mocks base method
+func (_m *MockStreamI) HandleStreamFrame(_param0 *wire.StreamFrame) error {
+	ret := _m.ctrl.Call(_m, "HandleStreamFrame", _param0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// HandleStreamFrame indicates an expected call of HandleStreamFrame
+func (_mr *MockStreamIMockRecorder) HandleStreamFrame(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "HandleStreamFrame", reflect.TypeOf((*MockStreamI)(nil).HandleStreamFrame), arg0)
 }
 
 // IsFlowControlBlocked mocks base method

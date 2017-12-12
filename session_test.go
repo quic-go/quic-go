@@ -283,7 +283,7 @@ var _ = Describe("Session", func() {
 				sess.streamsMap.newStream = func(id protocol.StreamID) streamI {
 					str := newStreamLambda(id)
 					if id == 5 {
-						str.(*mocks.MockStreamI).EXPECT().AddStreamFrame(f)
+						str.(*mocks.MockStreamI).EXPECT().HandleStreamFrame(f)
 					}
 					return str
 				}
@@ -308,8 +308,8 @@ var _ = Describe("Session", func() {
 				sess.streamsMap.newStream = func(id protocol.StreamID) streamI {
 					str := newStreamLambda(id)
 					if id == 5 {
-						str.(*mocks.MockStreamI).EXPECT().AddStreamFrame(f1)
-						str.(*mocks.MockStreamI).EXPECT().AddStreamFrame(f2)
+						str.(*mocks.MockStreamI).EXPECT().HandleStreamFrame(f1)
+						str.(*mocks.MockStreamI).EXPECT().HandleStreamFrame(f2)
 					}
 					return str
 				}

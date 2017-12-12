@@ -81,7 +81,7 @@ var _ = Describe("Stream", func() {
 				Offset: 0,
 				Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
 			}
-			err := str.AddStreamFrame(&frame)
+			err := str.HandleStreamFrame(&frame)
 			Expect(err).ToNot(HaveOccurred())
 			b := make([]byte, 4)
 			n, err := strWithTimeout.Read(b)
@@ -98,7 +98,7 @@ var _ = Describe("Stream", func() {
 				Offset: 0,
 				Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
 			}
-			err := str.AddStreamFrame(&frame)
+			err := str.HandleStreamFrame(&frame)
 			Expect(err).ToNot(HaveOccurred())
 			b := make([]byte, 2)
 			n, err := strWithTimeout.Read(b)
@@ -123,9 +123,9 @@ var _ = Describe("Stream", func() {
 				Offset: 2,
 				Data:   []byte{0xBE, 0xEF},
 			}
-			err := str.AddStreamFrame(&frame1)
+			err := str.HandleStreamFrame(&frame1)
 			Expect(err).ToNot(HaveOccurred())
-			err = str.AddStreamFrame(&frame2)
+			err = str.HandleStreamFrame(&frame2)
 			Expect(err).ToNot(HaveOccurred())
 			b := make([]byte, 6)
 			n, err := strWithTimeout.Read(b)
@@ -146,9 +146,9 @@ var _ = Describe("Stream", func() {
 				Offset: 2,
 				Data:   []byte{0xBE, 0xEF},
 			}
-			err := str.AddStreamFrame(&frame1)
+			err := str.HandleStreamFrame(&frame1)
 			Expect(err).ToNot(HaveOccurred())
-			err = str.AddStreamFrame(&frame2)
+			err = str.HandleStreamFrame(&frame2)
 			Expect(err).ToNot(HaveOccurred())
 			b := make([]byte, 4)
 			n, err := strWithTimeout.Read(b)
@@ -164,7 +164,7 @@ var _ = Describe("Stream", func() {
 				defer GinkgoRecover()
 				frame := wire.StreamFrame{Data: []byte{0xDE, 0xAD}}
 				time.Sleep(10 * time.Millisecond)
-				err := str.AddStreamFrame(&frame)
+				err := str.HandleStreamFrame(&frame)
 				Expect(err).ToNot(HaveOccurred())
 			}()
 			b := make([]byte, 2)
@@ -185,9 +185,9 @@ var _ = Describe("Stream", func() {
 				Offset: 0,
 				Data:   []byte{0xDE, 0xAD},
 			}
-			err := str.AddStreamFrame(&frame1)
+			err := str.HandleStreamFrame(&frame1)
 			Expect(err).ToNot(HaveOccurred())
-			err = str.AddStreamFrame(&frame2)
+			err = str.HandleStreamFrame(&frame2)
 			Expect(err).ToNot(HaveOccurred())
 			b := make([]byte, 4)
 			n, err := strWithTimeout.Read(b)
@@ -213,11 +213,11 @@ var _ = Describe("Stream", func() {
 				Offset: 2,
 				Data:   []byte{0xBE, 0xEF},
 			}
-			err := str.AddStreamFrame(&frame1)
+			err := str.HandleStreamFrame(&frame1)
 			Expect(err).ToNot(HaveOccurred())
-			err = str.AddStreamFrame(&frame2)
+			err = str.HandleStreamFrame(&frame2)
 			Expect(err).ToNot(HaveOccurred())
-			err = str.AddStreamFrame(&frame3)
+			err = str.HandleStreamFrame(&frame3)
 			Expect(err).ToNot(HaveOccurred())
 			b := make([]byte, 4)
 			n, err := strWithTimeout.Read(b)
@@ -239,9 +239,9 @@ var _ = Describe("Stream", func() {
 				Offset: 2,
 				Data:   []byte("obar"),
 			}
-			err := str.AddStreamFrame(&frame1)
+			err := str.HandleStreamFrame(&frame1)
 			Expect(err).ToNot(HaveOccurred())
-			err = str.AddStreamFrame(&frame2)
+			err = str.HandleStreamFrame(&frame2)
 			Expect(err).ToNot(HaveOccurred())
 			b := make([]byte, 6)
 			n, err := strWithTimeout.Read(b)
@@ -257,7 +257,7 @@ var _ = Describe("Stream", func() {
 				Offset: 0,
 				Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
 			}
-			str.AddStreamFrame(&frame)
+			str.HandleStreamFrame(&frame)
 			b := make([]byte, 4)
 			_, err := strWithTimeout.Read(b)
 			Expect(err).ToNot(HaveOccurred())
@@ -273,7 +273,7 @@ var _ = Describe("Stream", func() {
 			It("returns an error when Read is called after the deadline", func() {
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), false).AnyTimes()
 				f := &wire.StreamFrame{Data: []byte("foobar")}
-				err := str.AddStreamFrame(f)
+				err := str.HandleStreamFrame(f)
 				Expect(err).ToNot(HaveOccurred())
 				str.SetReadDeadline(time.Now().Add(-time.Second))
 				b := make([]byte, 6)
@@ -332,7 +332,7 @@ var _ = Describe("Stream", func() {
 			It("sets a read deadline, when SetDeadline is called", func() {
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), false).AnyTimes()
 				f := &wire.StreamFrame{Data: []byte("foobar")}
-				err := str.AddStreamFrame(f)
+				err := str.HandleStreamFrame(f)
 				Expect(err).ToNot(HaveOccurred())
 				str.SetDeadline(time.Now().Add(-time.Second))
 				b := make([]byte, 6)
@@ -352,7 +352,7 @@ var _ = Describe("Stream", func() {
 						Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
 						FinBit: true,
 					}
-					str.AddStreamFrame(&frame)
+					str.HandleStreamFrame(&frame)
 					b := make([]byte, 4)
 					n, err := strWithTimeout.Read(b)
 					Expect(err).To(MatchError(io.EOF))
@@ -376,9 +376,9 @@ var _ = Describe("Stream", func() {
 						Offset: 0,
 						Data:   []byte{0xDE, 0xAD},
 					}
-					err := str.AddStreamFrame(&frame1)
+					err := str.HandleStreamFrame(&frame1)
 					Expect(err).ToNot(HaveOccurred())
-					err = str.AddStreamFrame(&frame2)
+					err = str.HandleStreamFrame(&frame2)
 					Expect(err).ToNot(HaveOccurred())
 					b := make([]byte, 4)
 					n, err := strWithTimeout.Read(b)
@@ -398,7 +398,7 @@ var _ = Describe("Stream", func() {
 						Data:   []byte{0xDE, 0xAD},
 						FinBit: true,
 					}
-					err := str.AddStreamFrame(&frame)
+					err := str.HandleStreamFrame(&frame)
 					Expect(err).ToNot(HaveOccurred())
 					b := make([]byte, 4)
 					n, err := strWithTimeout.Read(b)
@@ -415,7 +415,7 @@ var _ = Describe("Stream", func() {
 						Data:   []byte{},
 						FinBit: true,
 					}
-					err := str.AddStreamFrame(&frame)
+					err := str.HandleStreamFrame(&frame)
 					Expect(err).ToNot(HaveOccurred())
 					b := make([]byte, 4)
 					n, err := strWithTimeout.Read(b)
@@ -488,7 +488,7 @@ var _ = Describe("Stream", func() {
 					Offset: 0,
 					Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
 				}
-				str.AddStreamFrame(&frame)
+				str.HandleStreamFrame(&frame)
 				str.RegisterRemoteError(testErr, 10)
 				b := make([]byte, 4)
 				n, err := strWithTimeout.Read(b)
@@ -504,7 +504,7 @@ var _ = Describe("Stream", func() {
 					Offset: 0,
 					Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
 				}
-				err := str.AddStreamFrame(&frame)
+				err := str.HandleStreamFrame(&frame)
 				Expect(err).ToNot(HaveOccurred())
 				b := make([]byte, 4)
 				n, err := strWithTimeout.Read(b)
@@ -519,7 +519,7 @@ var _ = Describe("Stream", func() {
 					Offset: 0,
 					Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
 				}
-				str.AddStreamFrame(&frame)
+				str.HandleStreamFrame(&frame)
 				str.RegisterRemoteError(testErr, 8)
 				b := make([]byte, 10)
 				n, err := strWithTimeout.Read(b)
@@ -536,7 +536,7 @@ var _ = Describe("Stream", func() {
 					Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
 					FinBit: true,
 				}
-				str.AddStreamFrame(&frame)
+				str.HandleStreamFrame(&frame)
 				str.RegisterRemoteError(testErr, 8)
 				b := make([]byte, 10)
 				n, err := strWithTimeout.Read(b)
@@ -553,7 +553,7 @@ var _ = Describe("Stream", func() {
 					Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
 					FinBit: true,
 				}
-				str.AddStreamFrame(&frame)
+				str.HandleStreamFrame(&frame)
 				str.RegisterRemoteError(testErr, 4)
 				b := make([]byte, 3)
 				_, err := strWithTimeout.Read(b)
@@ -575,7 +575,7 @@ var _ = Describe("Stream", func() {
 					StreamID: 5,
 					Data:     []byte{0xDE, 0xAD, 0xBE, 0xEF},
 				}
-				str.AddStreamFrame(&frame)
+				str.HandleStreamFrame(&frame)
 				str.RegisterRemoteError(testErr, 10)
 				b := make([]byte, 3)
 				_, err := strWithTimeout.Read(b)
@@ -703,7 +703,7 @@ var _ = Describe("Stream", func() {
 
 			It("doesn't allow further reads", func() {
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), false)
-				str.AddStreamFrame(&wire.StreamFrame{
+				str.HandleStreamFrame(&wire.StreamFrame{
 					Data: []byte("foobar"),
 				})
 				str.Reset(testErr)
@@ -994,7 +994,7 @@ var _ = Describe("Stream", func() {
 			Offset: 2,
 			Data:   []byte("foobar"),
 		}
-		err := str.AddStreamFrame(&frame)
+		err := str.HandleStreamFrame(&frame)
 		Expect(err).To(MatchError(testErr))
 	})
 
@@ -1003,7 +1003,7 @@ var _ = Describe("Stream", func() {
 
 		finishReading := func() {
 			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(0), true)
-			err := str.AddStreamFrame(&wire.StreamFrame{FinBit: true})
+			err := str.HandleStreamFrame(&wire.StreamFrame{FinBit: true})
 			Expect(err).ToNot(HaveOccurred())
 			b := make([]byte, 100)
 			_, err = strWithTimeout.Read(b)

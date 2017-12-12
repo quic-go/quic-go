@@ -566,7 +566,7 @@ func (s *session) handleStreamFrame(frame *wire.StreamFrame) error {
 		if frame.FinBit {
 			return errors.New("Received STREAM frame with FIN bit for the crypto stream")
 		}
-		return s.cryptoStream.AddStreamFrame(frame)
+		return s.cryptoStream.HandleStreamFrame(frame)
 	}
 	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
 	if err != nil {
@@ -577,7 +577,7 @@ func (s *session) handleStreamFrame(frame *wire.StreamFrame) error {
 		// ignore this StreamFrame
 		return nil
 	}
-	return str.AddStreamFrame(frame)
+	return str.HandleStreamFrame(frame)
 }
 
 func (s *session) handleMaxDataFrame(frame *wire.MaxDataFrame) {
