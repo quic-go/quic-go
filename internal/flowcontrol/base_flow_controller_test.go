@@ -59,8 +59,10 @@ var _ = Describe("Base Flow controller", func() {
 	})
 
 	Context("receive flow control", func() {
-		var receiveWindow protocol.ByteCount = 10000
-		var receiveWindowIncrement protocol.ByteCount = 600
+		var (
+			receiveWindow          protocol.ByteCount = 10000
+			receiveWindowIncrement protocol.ByteCount = 600
+		)
 
 		BeforeEach(func() {
 			controller.receiveWindow = receiveWindow
@@ -75,7 +77,9 @@ var _ = Describe("Base Flow controller", func() {
 
 		It("triggers a window update when necessary", func() {
 			controller.lastWindowUpdateTime = time.Now().Add(-time.Hour)
-			readPosition := receiveWindow - receiveWindowIncrement/2 + 1
+			bytesConsumed := float64(receiveWindowIncrement)*protocol.WindowUpdateThreshold + 1 // consumed 1 byte more than the threshold
+			bytesRemaining := receiveWindowIncrement - protocol.ByteCount(bytesConsumed)
+			readPosition := receiveWindow - bytesRemaining
 			controller.bytesRead = readPosition
 			offset := controller.getWindowUpdate()
 			Expect(offset).To(Equal(readPosition + receiveWindowIncrement))
@@ -86,7 +90,9 @@ var _ = Describe("Base Flow controller", func() {
 		It("doesn't trigger a window update when not necessary", func() {
 			lastWindowUpdateTime := time.Now().Add(-time.Hour)
 			controller.lastWindowUpdateTime = lastWindowUpdateTime
-			readPosition := receiveWindow - receiveWindow/2 - 1
+			bytesConsumed := float64(receiveWindowIncrement)*protocol.WindowUpdateThreshold - 1 // consumed 1 byte less than the threshold
+			bytesRemaining := receiveWindowIncrement - protocol.ByteCount(bytesConsumed)
+			readPosition := receiveWindow - bytesRemaining
 			controller.bytesRead = readPosition
 			offset := controller.getWindowUpdate()
 			Expect(offset).To(BeZero())
@@ -119,23 +125,31 @@ var _ = Describe("Base Flow controller", func() {
 				Expect(controller.receiveWindowIncrement).To(Equal(oldIncrement))
 			})
 
-			It("increases the increment when the last WindowUpdate was sent less than two RTTs ago", func() {
-				setRtt(20 * time.Millisecond)
-				controller.lastWindowUpdateTime = time.Now().Add(-35 * time.Millisecond)
-				controller.maybeAdjustWindowIncrement()
-				Expect(controller.receiveWindowIncrement).To(Equal(2 * oldIncrement))
+			It("increases the increment when the last WindowUpdate was sent less than (4 * threshold) RTTs ago", func() {
+				rtt := 20 * time.Millisecond
+				setRtt(rtt)
+				controller.AddBytesRead(9900) // receive window is 10000
+				controller.lastWindowUpdateTime = time.Now().Add(-4*protocol.WindowUpdateThreshold*rtt + time.Millisecond)
+				offset := controller.getWindowUpdate()
+				Expect(offset).ToNot(BeZero())
+				// check that the increment was increased
+				newIncrement := controller.receiveWindowIncrement
+				Expect(newIncrement).To(Equal(2 * oldIncrement))
+				// check that the new increment was used to increase the offset
+				Expect(offset).To(Equal(protocol.ByteCount(9900 + newIncrement)))
 			})
 
-			It("doesn't increase the increase increment when the last WindowUpdate was sent more than two RTTs ago", func() {
-				setRtt(20 * time.Millisecond)
-				controller.lastWindowUpdateTime = time.Now().Add(-45 * time.Millisecond)
+			It("doesn't increase the increase increment when the last WindowUpdate was sent more than (4 * threshold) RTTs ago", func() {
+				rtt := 20 * time.Millisecond
+				setRtt(rtt)
+				controller.lastWindowUpdateTime = time.Now().Add(-4*protocol.WindowUpdateThreshold*rtt - time.Millisecond)
 				controller.maybeAdjustWindowIncrement()
 				Expect(controller.receiveWindowIncrement).To(Equal(oldIncrement))
 			})
 
 			It("doesn't increase the increment to a value higher than the maxReceiveWindowIncrement", func() {
 				setRtt(20 * time.Millisecond)
-				controller.lastWindowUpdateTime = time.Now().Add(-35 * time.Millisecond)
+				controller.lastWindowUpdateTime = time.Now().Add(-time.Millisecond)
 				controller.maybeAdjustWindowIncrement()
 				Expect(controller.receiveWindowIncrement).To(Equal(2 * oldIncrement)) // 1200
 				// because the lastWindowUpdateTime is updated by MaybeTriggerWindowUpdate(), we can just call maybeAdjustWindowIncrement() multiple times and get an increase of the increment every time
@@ -145,17 +159,6 @@ var _ = Describe("Base Flow controller", func() {
 				Expect(controller.receiveWindowIncrement).To(Equal(controller.maxReceiveWindowIncrement)) // 3000
 				controller.maybeAdjustWindowIncrement()
 				Expect(controller.receiveWindowIncrement).To(Equal(controller.maxReceiveWindowIncrement)) // 3000
-			})
-
-			It("returns the new increment when updating the window", func() {
-				setRtt(20 * time.Millisecond)
-				controller.AddBytesRead(9900) // receive window is 10000
-				controller.lastWindowUpdateTime = time.Now().Add(-35 * time.Millisecond)
-				offset := controller.getWindowUpdate()
-				Expect(offset).ToNot(BeZero())
-				newIncrement := controller.receiveWindowIncrement
-				Expect(newIncrement).To(Equal(2 * oldIncrement))
-				Expect(offset).To(Equal(protocol.ByteCount(9900 + newIncrement)))
 			})
 
 			It("increases the increment sent in the first WindowUpdate, if data is read fast enough", func() {
