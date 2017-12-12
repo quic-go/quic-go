@@ -18,7 +18,7 @@ type streamI interface {
 	Stream
 
 	HandleStreamFrame(*wire.StreamFrame) error
-	RegisterRemoteError(error, protocol.ByteCount) error
+	HandleRstStreamFrame(*wire.RstStreamFrame) error
 	PopStreamFrame(maxBytes protocol.ByteCount) *wire.StreamFrame
 	Finished() bool
 	Cancel(error)
@@ -59,7 +59,7 @@ type stream struct {
 	finishedWriting utils.AtomicBool
 	// resetLocally is set if Reset() is called
 	resetLocally utils.AtomicBool
-	// resetRemotely is set if RegisterRemoteError() is called
+	// resetRemotely is set if HandleRstStreamFrame() is called
 	resetRemotely utils.AtomicBool
 
 	frameQueue   *streamFrameSorter
@@ -433,8 +433,7 @@ func (s *stream) Reset(err error) {
 	s.mutex.Unlock()
 }
 
-// resets the stream remotely
-func (s *stream) RegisterRemoteError(err error, offset protocol.ByteCount) error {
+func (s *stream) HandleRstStreamFrame(frame *wire.RstStreamFrame) error {
 	if s.resetRemotely.Get() {
 		return nil
 	}
@@ -443,10 +442,10 @@ func (s *stream) RegisterRemoteError(err error, offset protocol.ByteCount) error
 	s.ctxCancel()
 	// errors must not be changed!
 	if s.err == nil {
-		s.err = err
+		s.err = fmt.Errorf("RST_STREAM received with code %d", frame.ErrorCode)
 		s.signalWrite()
 	}
-	if err := s.flowController.UpdateHighestReceived(offset, true); err != nil {
+	if err := s.flowController.UpdateHighestReceived(frame.ByteOffset, true); err != nil {
 		return err
 	}
 	if s.shouldSendReset() {

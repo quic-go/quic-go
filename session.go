@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -613,7 +612,7 @@ func (s *session) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
 		// stream is closed and already garbage collected
 		return nil
 	}
-	return str.RegisterRemoteError(fmt.Errorf("RST_STREAM received with code %d", frame.ErrorCode), frame.ByteOffset)
+	return str.HandleRstStreamFrame(frame)
 }
 
 func (s *session) handleAckFrame(frame *wire.AckFrame, encLevel protocol.EncryptionLevel) error {

@@ -343,29 +343,28 @@ var _ = Describe("Session", func() {
 
 		Context("handling RST_STREAM frames", func() {
 			It("closes the streams for writing", func() {
-				str, err := sess.GetOrOpenStream(5)
-				Expect(err).ToNot(HaveOccurred())
-				str.(*mocks.MockStreamI).EXPECT().RegisterRemoteError(
-					errors.New("RST_STREAM received with code 42"),
-					protocol.ByteCount(0x1337),
-				)
-				err = sess.handleRstStreamFrame(&wire.RstStreamFrame{
+				f := &wire.RstStreamFrame{
 					StreamID:   5,
 					ErrorCode:  42,
 					ByteOffset: 0x1337,
-				})
+				}
+				str, err := sess.GetOrOpenStream(5)
+				Expect(err).ToNot(HaveOccurred())
+				str.(*mocks.MockStreamI).EXPECT().HandleRstStreamFrame(f)
+				err = sess.handleRstStreamFrame(f)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("returns errors", func() {
+				f := &wire.RstStreamFrame{
+					StreamID:   5,
+					ByteOffset: 0x1337,
+				}
 				testErr := errors.New("flow control violation")
 				str, err := sess.GetOrOpenStream(5)
 				Expect(err).ToNot(HaveOccurred())
-				str.(*mocks.MockStreamI).EXPECT().RegisterRemoteError(gomock.Any(), gomock.Any()).Return(testErr)
-				err = sess.handleRstStreamFrame(&wire.RstStreamFrame{
-					StreamID:   5,
-					ByteOffset: 0x1337,
-				})
+				str.(*mocks.MockStreamI).EXPECT().HandleRstStreamFrame(f).Return(testErr)
+				err = sess.handleRstStreamFrame(f)
 				Expect(err).To(MatchError(testErr))
 			})
 
