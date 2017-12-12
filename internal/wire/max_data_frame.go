@@ -43,9 +43,9 @@ func (f *MaxDataFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) er
 }
 
 // MinLength of a written frame
-func (f *MaxDataFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
+func (f *MaxDataFrame) MinLength(version protocol.VersionNumber) protocol.ByteCount {
 	if !version.UsesIETFFrameFormat() { // writing this frame would result in a gQUIC WINDOW_UPDATE being written, which is longer
-		return 1 + 4 + 8, nil
+		return 1 + 4 + 8
 	}
-	return 1 + utils.VarIntLen(uint64(f.ByteOffset)), nil
+	return 1 + utils.VarIntLen(uint64(f.ByteOffset))
 }

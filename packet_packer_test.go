@@ -329,8 +329,7 @@ var _ = Describe("Packet packer", func() {
 
 	It("packs a lot of control frames into 2 packets if they don't fit into one", func() {
 		blockedFrame := &wire.BlockedFrame{}
-		minLength, _ := blockedFrame.MinLength(packer.version)
-		maxFramesPerPacket := int(maxFrameSize) / int(minLength)
+		maxFramesPerPacket := int(maxFrameSize) / int(blockedFrame.MinLength(packer.version))
 		var controlFrames []wire.Frame
 		for i := 0; i < maxFramesPerPacket+10; i++ {
 			controlFrames = append(controlFrames, blockedFrame)
@@ -369,8 +368,7 @@ var _ = Describe("Packet packer", func() {
 				StreamID:       5,
 				DataLenPresent: false,
 			}
-			minLength, _ := f.MinLength(packer.version)
-			maxStreamFrameDataLen := maxFrameSize - minLength
+			maxStreamFrameDataLen := maxFrameSize - f.MinLength(packer.version)
 			f.Data = bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen))
 			streamFramer.AddFrameForRetransmission(f)
 			payloadFrames, err := packer.composeNextPacket(maxFrameSize, true)
@@ -390,10 +388,9 @@ var _ = Describe("Packet packer", func() {
 				StreamID:       5,
 				DataLenPresent: true,
 			}
-			minLength, _ := f.MinLength(packer.version)
 			// for IETF draft style STREAM frames, we don't know the size of the DataLen, because it is a variable length integer
 			// in the general case, we therefore use a STREAM frame that is 1 byte smaller than the maximum size
-			maxStreamFrameDataLen := maxFrameSize - minLength - 1
+			maxStreamFrameDataLen := maxFrameSize - f.MinLength(packer.version) - 1
 			f.Data = bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen))
 			streamFramer.AddFrameForRetransmission(f)
 			payloadFrames, err := packer.composeNextPacket(maxFrameSize, true)
@@ -467,8 +464,7 @@ var _ = Describe("Packet packer", func() {
 				StreamID: 7,
 				Offset:   1,
 			}
-			minLength, _ := f.MinLength(packer.version)
-			maxStreamFrameDataLen := maxFrameSize - minLength
+			maxStreamFrameDataLen := maxFrameSize - f.MinLength(packer.version)
 			f.Data = bytes.Repeat([]byte{'f'}, int(maxStreamFrameDataLen)+200)
 			streamFramer.AddFrameForRetransmission(f)
 			payloadFrames, err := packer.composeNextPacket(maxFrameSize, true)
@@ -526,8 +522,7 @@ var _ = Describe("Packet packer", func() {
 				StreamID: 5,
 				Offset:   1,
 			}
-			minLength, _ := f.MinLength(packer.version)
-			f.Data = bytes.Repeat([]byte{'f'}, int(maxFrameSize-minLength+1)) // + 1 since MinceLength is 1 bigger than the actual StreamFrame header
+			f.Data = bytes.Repeat([]byte{'f'}, int(maxFrameSize-f.MinLength(packer.version)+1)) // + 1 since MinceLength is 1 bigger than the actual StreamFrame header
 			streamFramer.AddFrameForRetransmission(f)
 			p, err := packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
@@ -540,8 +535,7 @@ var _ = Describe("Packet packer", func() {
 				StreamID: 5,
 				Offset:   1,
 			}
-			minLength, _ := f.MinLength(packer.version)
-			f.Data = bytes.Repeat([]byte{'f'}, int(maxFrameSize-minLength+2)) // + 2 since MinceLength is 1 bigger than the actual StreamFrame header
+			f.Data = bytes.Repeat([]byte{'f'}, int(maxFrameSize-f.MinLength(packer.version)+2)) // + 2 since MinceLength is 1 bigger than the actual StreamFrame header
 
 			streamFramer.AddFrameForRetransmission(f)
 			payloadFrames, err := packer.composeNextPacket(maxFrameSize, true)

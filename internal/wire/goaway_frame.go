@@ -63,6 +63,6 @@ func (f *GoawayFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) error {
 }
 
 // MinLength of a written frame
-func (f *GoawayFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
-	return protocol.ByteCount(1 + 4 + 4 + 2 + len(f.ReasonPhrase)), nil
+func (f *GoawayFrame) MinLength(version protocol.VersionNumber) protocol.ByteCount {
+	return protocol.ByteCount(1 + 4 + 4 + 2 + len(f.ReasonPhrase))
 }

@@ -199,27 +199,17 @@ func (p *packetPacker) composeNextPacket(
 	// STOP_WAITING and ACK will always fit
 	if p.stopWaiting != nil {
 		payloadFrames = append(payloadFrames, p.stopWaiting)
-		l, err := p.stopWaiting.MinLength(p.version)
-		if err != nil {
-			return nil, err
-		}
-		payloadLength += l
+		payloadLength += p.stopWaiting.MinLength(p.version)
 	}
 	if p.ackFrame != nil {
 		payloadFrames = append(payloadFrames, p.ackFrame)
-		l, err := p.ackFrame.MinLength(p.version)
-		if err != nil {
-			return nil, err
-		}
+		l := p.ackFrame.MinLength(p.version)
 		payloadLength += l
 	}
 
 	for len(p.controlFrames) > 0 {
 		frame := p.controlFrames[len(p.controlFrames)-1]
-		minLength, err := frame.MinLength(p.version)
-		if err != nil {
-			return nil, err
-		}
+		minLength := frame.MinLength(p.version)
 		if payloadLength+minLength > maxFrameSize {
 			break
 		}

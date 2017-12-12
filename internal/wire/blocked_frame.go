@@ -27,9 +27,9 @@ func (f *BlockedFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) er
 }
 
 // MinLength of a written frame
-func (f *BlockedFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
+func (f *BlockedFrame) MinLength(version protocol.VersionNumber) protocol.ByteCount {
 	if !version.UsesIETFFrameFormat() { // writing this frame would result in a legacy BLOCKED being written, which is longer
-		return 1 + 4, nil
+		return 1 + 4
 	}
-	return 1, nil
+	return 1
 }

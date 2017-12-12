@@ -139,7 +139,7 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 }
 
 // MinLength of a written frame
-func (f *AckFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
+func (f *AckFrame) MinLength(version protocol.VersionNumber) protocol.ByteCount {
 	if !version.UsesIETFFrameFormat() {
 		return f.minLengthLegacy(version)
 	}
@@ -157,7 +157,7 @@ func (f *AckFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount
 	length += utils.VarIntLen(uint64(f.LargestAcked - lowestInFirstRange))
 
 	if !f.HasMissingRanges() {
-		return length, nil
+		return length
 	}
 	var lowest protocol.PacketNumber
 	for i, ackRange := range f.AckRanges {
@@ -169,7 +169,7 @@ func (f *AckFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount
 		length += utils.VarIntLen(uint64(ackRange.Last - ackRange.First))
 		lowest = ackRange.First
 	}
-	return length, nil
+	return length
 }
 
 // HasMissingRanges returns if this frame reports any missing packets

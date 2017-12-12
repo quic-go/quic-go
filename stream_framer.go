@@ -66,8 +66,7 @@ func (f *streamFramer) PopCryptoStreamFrame(maxLen protocol.ByteCount) *wire.Str
 		StreamID: f.cryptoStream.StreamID(),
 		Offset:   f.cryptoStream.GetWriteOffset(),
 	}
-	frameHeaderBytes, _ := frame.MinLength(f.version) // can never error
-	frame.Data, frame.FinBit = f.cryptoStream.GetDataForWriting(maxLen - frameHeaderBytes)
+	frame.Data, frame.FinBit = f.cryptoStream.GetDataForWriting(maxLen - frame.MinLength(f.version))
 	return frame
 }
 
@@ -76,11 +75,10 @@ func (f *streamFramer) maybePopFramesForRetransmission(maxLen protocol.ByteCount
 		frame := f.retransmissionQueue[0]
 		frame.DataLenPresent = true
 
-		frameHeaderLen, _ := frame.MinLength(f.version) // can never error
+		frameHeaderLen := frame.MinLength(f.version)
 		if currentLen+frameHeaderLen >= maxLen {
 			break
 		}
-
 		currentLen += frameHeaderLen
 
 		splitFrame := maybeSplitOffFrame(frame, maxLen-currentLen)
@@ -109,7 +107,7 @@ func (f *streamFramer) maybePopNormalFrames(maxBytes protocol.ByteCount) (res []
 		frame.StreamID = s.StreamID()
 		frame.Offset = s.GetWriteOffset()
 		// not perfect, but thread-safe since writeOffset is only written when getting data
-		frameHeaderBytes, _ := frame.MinLength(f.version) // can never error
+		frameHeaderBytes := frame.MinLength(f.version)
 		if currentLen+frameHeaderBytes > maxBytes {
 			return false, nil // theoretically, we could find another stream that fits, but this is quite unlikely, so we stop here
 		}

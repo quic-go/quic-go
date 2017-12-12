@@ -210,7 +210,7 @@ var _ = Describe("STREAM frame (for gQUIC)", func() {
 				}
 				err := f.Write(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
-				minLength, _ := f.MinLength(0)
+				minLength := f.MinLength(0)
 				Expect(b.Bytes()[0] & 0x20).To(Equal(uint8(0x20)))
 				Expect(b.Bytes()[minLength-2 : minLength]).To(Equal([]byte{0x13, 0x37}))
 			})
@@ -229,9 +229,9 @@ var _ = Describe("STREAM frame (for gQUIC)", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b.Bytes()[0] & 0x20).To(Equal(uint8(0)))
 			Expect(b.Bytes()[1 : b.Len()-dataLen]).ToNot(ContainSubstring(string([]byte{0x37, 0x13})))
-			minLength, _ := f.MinLength(versionBigEndian)
+			minLength := f.MinLength(versionBigEndian)
 			f.DataLenPresent = true
-			minLengthWithoutDataLen, _ := f.MinLength(versionBigEndian)
+			minLengthWithoutDataLen := f.MinLength(versionBigEndian)
 			Expect(minLength).To(Equal(minLengthWithoutDataLen - 2))
 		})
 
@@ -242,7 +242,7 @@ var _ = Describe("STREAM frame (for gQUIC)", func() {
 				DataLenPresent: false,
 				Offset:         0xdeadbeef,
 			}
-			minLengthWithoutDataLen, _ := f.MinLength(versionBigEndian)
+			minLengthWithoutDataLen := f.MinLength(versionBigEndian)
 			f.DataLenPresent = true
 			Expect(f.MinLength(versionBigEndian)).To(Equal(minLengthWithoutDataLen + 2))
 		})

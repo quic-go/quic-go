@@ -51,10 +51,10 @@ func (f *MaxStreamDataFrame) Write(b *bytes.Buffer, version protocol.VersionNumb
 }
 
 // MinLength of a written frame
-func (f *MaxStreamDataFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
+func (f *MaxStreamDataFrame) MinLength(version protocol.VersionNumber) protocol.ByteCount {
 	// writing this frame would result in a gQUIC WINDOW_UPDATE being written, which has a different length
 	if !version.UsesIETFFrameFormat() {
-		return 1 + 4 + 8, nil
+		return 1 + 4 + 8
 	}
-	return 1 + utils.VarIntLen(uint64(f.StreamID)) + utils.VarIntLen(uint64(f.ByteOffset)), nil
+	return 1 + utils.VarIntLen(uint64(f.StreamID)) + utils.VarIntLen(uint64(f.ByteOffset))
 }

@@ -308,7 +308,7 @@ func (f *AckFrame) writeLegacy(b *bytes.Buffer, _ protocol.VersionNumber) error 
 	return nil
 }
 
-func (f *AckFrame) minLengthLegacy(_ protocol.VersionNumber) (protocol.ByteCount, error) {
+func (f *AckFrame) minLengthLegacy(_ protocol.VersionNumber) protocol.ByteCount {
 	length := protocol.ByteCount(1 + 2 + 1) // 1 TypeByte, 2 ACK delay time, 1 Num Timestamp
 	length += protocol.ByteCount(protocol.GetPacketNumberLength(f.LargestAcked))
 
@@ -320,7 +320,7 @@ func (f *AckFrame) minLengthLegacy(_ protocol.VersionNumber) (protocol.ByteCount
 		length += missingSequenceNumberDeltaLen
 	}
 	// we don't write
-	return length, nil
+	return length
 }
 
 // numWritableNackRanges calculates the number of ACK blocks that are about to be written

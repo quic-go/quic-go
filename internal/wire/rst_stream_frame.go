@@ -80,9 +80,9 @@ func (f *RstStreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) 
 }
 
 // MinLength of a written frame
-func (f *RstStreamFrame) MinLength(version protocol.VersionNumber) (protocol.ByteCount, error) {
+func (f *RstStreamFrame) MinLength(version protocol.VersionNumber) protocol.ByteCount {
 	if version.UsesIETFFrameFormat() {
-		return 1 + utils.VarIntLen(uint64(f.StreamID)) + 2 + utils.VarIntLen(uint64(f.ByteOffset)), nil
+		return 1 + utils.VarIntLen(uint64(f.StreamID)) + 2 + utils.VarIntLen(uint64(f.ByteOffset))
 	}
-	return 1 + 4 + 8 + 4, nil
+	return 1 + 4 + 8 + 4
 }
