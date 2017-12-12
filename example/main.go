@@ -37,8 +37,6 @@ type Size interface {
 	Size() int64
 }
 
-var verbose bool
-
 func init() {
 	http.HandleFunc("/demo/tile", func(w http.ResponseWriter, r *http.Request) {
 		// Small 40x40 png
@@ -90,7 +88,7 @@ func init() {
 					err = errors.New("couldn't get uploaded file size")
 				}
 			}
-			if err != nil && verbose {
+			if err != nil {
 				fmt.Printf("Error receiving upload: %#v\n", err)
 			}
 		}
@@ -117,7 +115,6 @@ func main() {
 	}()
 	// runtime.SetBlockProfileRate(1)
 
-	verbose = *flag.Bool("v", false, "verbose")
 	bs := binds{}
 	flag.Var(&bs, "bind", "bind to")
 	certPath := flag.String("certpath", getBuildDir(), "certificate directory")
