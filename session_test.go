@@ -414,14 +414,14 @@ var _ = Describe("Session", func() {
 			})
 
 			It("updates the flow control window of a stream", func() {
-				offset := protocol.ByteCount(0x1234)
-				str, err := sess.GetOrOpenStream(5)
-				str.(*mocks.MockStreamI).EXPECT().UpdateSendWindow(offset)
-				Expect(err).ToNot(HaveOccurred())
-				err = sess.handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
+				f := &wire.MaxStreamDataFrame{
 					StreamID:   5,
-					ByteOffset: offset,
-				})
+					ByteOffset: 0x1234,
+				}
+				str, err := sess.GetOrOpenStream(5)
+				Expect(err).ToNot(HaveOccurred())
+				str.(*mocks.MockStreamI).EXPECT().HandleMaxStreamDataFrame(f)
+				err = sess.handleMaxStreamDataFrame(f)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
@@ -432,18 +432,19 @@ var _ = Describe("Session", func() {
 			})
 
 			It("opens a new stream when receiving a MAX_STREAM_DATA frame for an unknown stream", func() {
+				f := &wire.MaxStreamDataFrame{
+					StreamID:   5,
+					ByteOffset: 0x1337,
+				}
 				newStreamLambda := sess.streamsMap.newStream
 				sess.streamsMap.newStream = func(id protocol.StreamID) streamI {
 					str := newStreamLambda(id)
 					if id == 5 {
-						str.(*mocks.MockStreamI).EXPECT().UpdateSendWindow(protocol.ByteCount(0x1337))
+						str.(*mocks.MockStreamI).EXPECT().HandleMaxStreamDataFrame(f)
 					}
 					return str
 				}
-				err := sess.handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
-					StreamID:   5,
-					ByteOffset: 0x1337,
-				})
+				err := sess.handleMaxStreamDataFrame(f)
 				Expect(err).ToNot(HaveOccurred())
 				str, err := sess.streamsMap.GetOrOpenStream(5)
 				Expect(err).NotTo(HaveOccurred())

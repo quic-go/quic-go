@@ -18,7 +18,7 @@ type cryptoStreamI interface {
 	SetReadOffset(protocol.ByteCount)
 	// methods needed for flow control
 	GetWindowUpdate() protocol.ByteCount
-	UpdateSendWindow(protocol.ByteCount)
+	HandleMaxStreamDataFrame(*wire.MaxStreamDataFrame)
 	IsFlowControlBlocked() bool
 }
 

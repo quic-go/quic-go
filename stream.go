@@ -24,7 +24,7 @@ type streamI interface {
 	Cancel(error)
 	// methods needed for flow control
 	GetWindowUpdate() protocol.ByteCount
-	UpdateSendWindow(protocol.ByteCount)
+	HandleMaxStreamDataFrame(*wire.MaxStreamDataFrame)
 	IsFlowControlBlocked() bool
 }
 
@@ -481,8 +481,8 @@ func (s *stream) StreamID() protocol.StreamID {
 	return s.streamID
 }
 
-func (s *stream) UpdateSendWindow(n protocol.ByteCount) {
-	s.flowController.UpdateSendWindow(n)
+func (s *stream) HandleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
+	s.flowController.UpdateSendWindow(frame.ByteOffset)
 }
 
 func (s *stream) IsFlowControlBlocked() bool {

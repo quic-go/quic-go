@@ -586,7 +586,7 @@ func (s *session) handleMaxDataFrame(frame *wire.MaxDataFrame) {
 
 func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error {
 	if frame.StreamID == s.version.CryptoStreamID() {
-		s.cryptoStream.UpdateSendWindow(frame.ByteOffset)
+		s.cryptoStream.HandleMaxStreamDataFrame(frame)
 		return nil
 	}
 	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
@@ -597,7 +597,7 @@ func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error
 		// stream is closed and already garbage collected
 		return nil
 	}
-	str.UpdateSendWindow(frame.ByteOffset)
+	str.HandleMaxStreamDataFrame(frame)
 	return nil
 }
 
@@ -684,8 +684,12 @@ func (s *session) processTransportParameters(params *handshake.TransportParamete
 		s.packer.SetOmitConnectionID()
 	}
 	s.connFlowController.UpdateSendWindow(params.ConnectionFlowControlWindow)
+	// increase the flow control windows of all streams by sending them a fake MAX_STREAM_DATA frame
 	s.streamsMap.Range(func(str streamI) {
-		str.UpdateSendWindow(params.StreamFlowControlWindow)
+		str.HandleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
+			StreamID:   str.StreamID(),
+			ByteOffset: params.StreamFlowControlWindow,
+		})
 	})
 }
 

@@ -1085,7 +1085,10 @@ var _ = Describe("Stream", func() {
 
 		It("updates the flow control window", func() {
 			mockFC.EXPECT().UpdateSendWindow(protocol.ByteCount(0x42))
-			str.UpdateSendWindow(0x42)
+			str.HandleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
+				StreamID:   streamID,
+				ByteOffset: 0x42,
+			})
 		})
 
 		It("gets a window update", func() {
