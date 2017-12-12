@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"runtime"
@@ -600,6 +601,7 @@ var _ = Describe("Stream", func() {
 			})
 
 			It("returns how much was written when recieving a remote error", func() {
+				frameHeaderSize := protocol.ByteCount(4)
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(10), true)
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999))
 				mockFC.EXPECT().AddBytesSent(protocol.ByteCount(4))
@@ -612,7 +614,10 @@ var _ = Describe("Stream", func() {
 					close(done)
 				}()
 
-				Eventually(func() []byte { data, _ := str.GetDataForWriting(4); return data }).ShouldNot(BeEmpty())
+				var frame *wire.StreamFrame
+				Eventually(func() *wire.StreamFrame { frame = str.PopStreamFrame(4 + frameHeaderSize); return frame }).ShouldNot(BeNil())
+				Expect(frame).ToNot(BeNil())
+				Expect(frame.DataLen()).To(BeEquivalentTo(4))
 				str.RegisterRemoteError(testErr, 10)
 				Eventually(done).Should(BeClosed())
 			})
@@ -635,8 +640,8 @@ var _ = Describe("Stream", func() {
 			It("doesn't call onReset if it already sent a FIN", func() {
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(0), true)
 				str.Close()
-				_, sentFin := str.GetDataForWriting(1000)
-				Expect(sentFin).To(BeTrue())
+				f := str.PopStreamFrame(100)
+				Expect(f.FinBit).To(BeTrue())
 				str.RegisterRemoteError(testErr, 0)
 				Expect(resetCalled).To(BeFalse())
 			})
@@ -672,7 +677,7 @@ var _ = Describe("Stream", func() {
 				}()
 				Consistently(done).ShouldNot(BeClosed())
 				str.Reset(testErr)
-				Expect(str.GetDataForWriting(6)).To(BeNil())
+				Expect(str.PopStreamFrame(1000)).To(BeNil())
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -681,7 +686,7 @@ var _ = Describe("Stream", func() {
 				n, err := strWithTimeout.Write([]byte("foobar"))
 				Expect(n).To(BeZero())
 				Expect(err).To(MatchError(testErr))
-				Expect(str.GetDataForWriting(6)).To(BeNil())
+				Expect(str.PopStreamFrame(1000)).To(BeNil())
 			})
 
 			It("stops reading", func() {
@@ -721,8 +726,8 @@ var _ = Describe("Stream", func() {
 
 			It("doesn't call onReset if it already sent a FIN", func() {
 				str.Close()
-				_, sentFin := str.GetDataForWriting(1000)
-				Expect(sentFin).To(BeTrue())
+				f := str.PopStreamFrame(1000)
+				Expect(f.FinBit).To(BeTrue())
 				str.Reset(testErr)
 				Expect(resetCalled).To(BeFalse())
 			})
@@ -771,18 +776,20 @@ var _ = Describe("Stream", func() {
 			}).Should(Equal([]byte("foobar")))
 			Consistently(done).ShouldNot(BeClosed())
 			Expect(onDataCalled).To(BeTrue())
-			Expect(str.HasDataForWriting()).To(BeTrue())
-			data, sendFin := str.GetDataForWriting(1000)
-			Expect(data).To(Equal([]byte("foobar")))
-			Expect(sendFin).To(BeFalse())
+			f := str.PopStreamFrame(1000)
+			Expect(f.Data).To(Equal([]byte("foobar")))
+			Expect(f.FinBit).To(BeFalse())
+			Expect(f.Offset).To(BeZero())
+			Expect(f.DataLenPresent).To(BeTrue())
 			Expect(str.writeOffset).To(Equal(protocol.ByteCount(6)))
 			Expect(str.dataForWriting).To(BeNil())
 			Eventually(done).Should(BeClosed())
 		})
 
 		It("writes and gets data in two turns", func() {
+			frameHeaderLen := protocol.ByteCount(4)
 			mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999)).Times(2)
-			mockFC.EXPECT().AddBytesSent(protocol.ByteCount(3)).Times(2)
+			mockFC.EXPECT().AddBytesSent(gomock.Any() /* protocol.ByteCount(3)*/).Times(2)
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -797,29 +804,29 @@ var _ = Describe("Stream", func() {
 				return str.dataForWriting
 			}).Should(Equal([]byte("foobar")))
 			Consistently(done).ShouldNot(BeClosed())
-			Expect(str.HasDataForWriting()).To(BeTrue())
-			data, sendFin := str.GetDataForWriting(3)
-			Expect(data).To(Equal([]byte("foo")))
-			Expect(sendFin).To(BeFalse())
-			Expect(str.writeOffset).To(Equal(protocol.ByteCount(3)))
-			Expect(str.dataForWriting).ToNot(BeNil())
-			Expect(str.HasDataForWriting()).To(BeTrue())
-			data, sendFin = str.GetDataForWriting(3)
-			Expect(data).To(Equal([]byte("bar")))
-			Expect(sendFin).To(BeFalse())
-			Expect(str.writeOffset).To(Equal(protocol.ByteCount(6)))
-			Expect(str.dataForWriting).To(BeNil())
-			Expect(str.HasDataForWriting()).To(BeFalse())
+			f := str.PopStreamFrame(3 + frameHeaderLen)
+			Expect(f.Data).To(Equal([]byte("foo")))
+			Expect(f.FinBit).To(BeFalse())
+			Expect(f.Offset).To(BeZero())
+			Expect(f.DataLenPresent).To(BeTrue())
+			f = str.PopStreamFrame(100)
+			Expect(f.Data).To(Equal([]byte("bar")))
+			Expect(f.FinBit).To(BeFalse())
+			Expect(f.Offset).To(Equal(protocol.ByteCount(3)))
+			Expect(f.DataLenPresent).To(BeTrue())
+			Expect(str.PopStreamFrame(1000)).To(BeNil())
 			Eventually(done).Should(BeClosed())
 		})
 
-		It("getDataForWriting returns nil if no data is available", func() {
-			Expect(str.GetDataForWriting(1000)).To(BeNil())
+		It("PopStreamFrame returns nil if no data is available", func() {
+			Expect(str.PopStreamFrame(1000)).To(BeNil())
 		})
 
 		It("copies the slice while writing", func() {
-			mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999))
-			mockFC.EXPECT().AddBytesSent(protocol.ByteCount(3))
+			frameHeaderSize := protocol.ByteCount(4)
+			mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999)).Times(2)
+			mockFC.EXPECT().AddBytesSent(protocol.ByteCount(1))
+			mockFC.EXPECT().AddBytesSent(protocol.ByteCount(2))
 			s := []byte("foo")
 			go func() {
 				defer GinkgoRecover()
@@ -827,9 +834,13 @@ var _ = Describe("Stream", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(n).To(Equal(3))
 			}()
-			Eventually(func() bool { return str.HasDataForWriting() }).Should(BeTrue())
-			s[0] = 'v'
-			Expect(str.GetDataForWriting(3)).To(Equal([]byte("foo")))
+			var frame *wire.StreamFrame
+			Eventually(func() *wire.StreamFrame { frame = str.PopStreamFrame(frameHeaderSize + 1); return frame }).ShouldNot(BeNil())
+			Expect(frame.Data).To(Equal([]byte("f")))
+			s[1] = 'e'
+			f := str.PopStreamFrame(100)
+			Expect(f).ToNot(BeNil())
+			Expect(f.Data).To(Equal([]byte("oo")))
 		})
 
 		It("returns when given a nil input", func() {
@@ -913,50 +924,40 @@ var _ = Describe("Stream", func() {
 
 			It("allows FIN", func() {
 				str.Close()
-				Expect(str.HasDataForWriting()).To(BeTrue())
-				data, sendFin := str.GetDataForWriting(1000)
-				Expect(data).To(BeEmpty())
-				Expect(sendFin).To(BeTrue())
+				f := str.PopStreamFrame(1000)
+				Expect(f).ToNot(BeNil())
+				Expect(f.Data).To(BeEmpty())
+				Expect(f.FinBit).To(BeTrue())
 			})
 
-			It("does not allow FIN when there's still data", func() {
+			It("doesn't allow FIN when there's still data", func() {
+				frameHeaderLen := protocol.ByteCount(4)
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999)).Times(2)
 				mockFC.EXPECT().AddBytesSent(gomock.Any()).Times(2)
 				str.dataForWriting = []byte("foobar")
 				str.Close()
-				Expect(str.HasDataForWriting()).To(BeTrue())
-				data, sendFin := str.GetDataForWriting(3)
-				Expect(data).To(Equal([]byte("foo")))
-				Expect(sendFin).To(BeFalse())
-				data, sendFin = str.GetDataForWriting(3)
-				Expect(data).To(Equal([]byte("bar")))
-				Expect(sendFin).To(BeTrue())
+				f := str.PopStreamFrame(3 + frameHeaderLen)
+				Expect(f).ToNot(BeNil())
+				Expect(f.Data).To(Equal([]byte("foo")))
+				Expect(f.FinBit).To(BeFalse())
+				f = str.PopStreamFrame(100)
+				Expect(f.Data).To(Equal([]byte("bar")))
+				Expect(f.FinBit).To(BeTrue())
 			})
 
-			It("does not allow FIN when the stream is not closed", func() {
-				Expect(str.HasDataForWriting()).To(BeFalse())
-				_, sendFin := str.GetDataForWriting(3)
-				Expect(sendFin).To(BeFalse())
-			})
-
-			It("does not allow FIN after an error", func() {
+			It("doesn't allow FIN after an error", func() {
 				str.Cancel(errors.New("test"))
-				Expect(str.HasDataForWriting()).To(BeFalse())
-				data, sendFin := str.GetDataForWriting(1000)
-				Expect(data).To(BeEmpty())
-				Expect(sendFin).To(BeFalse())
+				f := str.PopStreamFrame(1000)
+				Expect(f).To(BeNil())
 			})
 
-			It("does not allow FIN twice", func() {
+			It("doesn't allow FIN twice", func() {
 				str.Close()
-				Expect(str.HasDataForWriting()).To(BeTrue())
-				data, sendFin := str.GetDataForWriting(1000)
-				Expect(data).To(BeEmpty())
-				Expect(sendFin).To(BeTrue())
-				Expect(str.HasDataForWriting()).To(BeFalse())
-				data, sendFin = str.GetDataForWriting(1000)
-				Expect(data).To(BeEmpty())
-				Expect(sendFin).To(BeFalse())
+				f := str.PopStreamFrame(1000)
+				Expect(f).ToNot(BeNil())
+				Expect(f.Data).To(BeEmpty())
+				Expect(f.FinBit).To(BeTrue())
+				Expect(str.PopStreamFrame(1000)).To(BeNil())
 			})
 		})
 
@@ -971,18 +972,19 @@ var _ = Describe("Stream", func() {
 			})
 
 			It("doesn't get data for writing if an error occurred", func() {
+				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999))
+				mockFC.EXPECT().AddBytesSent(gomock.Any())
+				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
-					_, err := strWithTimeout.Write([]byte("foobar"))
+					_, err := strWithTimeout.Write(bytes.Repeat([]byte{0}, 500))
 					Expect(err).To(MatchError(testErr))
+					close(done)
 				}()
-				Eventually(func() []byte { return str.dataForWriting }).ShouldNot(BeNil())
-				Expect(str.HasDataForWriting()).To(BeTrue())
+				Eventually(func() *wire.StreamFrame { return str.PopStreamFrame(50) }).ShouldNot(BeNil()) // get a STREAM frame containing some data, but not all
 				str.Cancel(testErr)
-				data, sendFin := str.GetDataForWriting(6)
-				Expect(data).To(BeNil())
-				Expect(sendFin).To(BeFalse())
-				Expect(str.HasDataForWriting()).To(BeFalse())
+				Expect(str.PopStreamFrame(1000)).To(BeNil())
+				Eventually(done).Should(BeClosed())
 			})
 		})
 	})
@@ -1017,8 +1019,8 @@ var _ = Describe("Stream", func() {
 
 		It("is not finished if it is only closed for writing", func() {
 			str.Close()
-			_, sentFin := str.GetDataForWriting(1000)
-			Expect(sentFin).To(BeTrue())
+			f := str.PopStreamFrame(1000)
+			Expect(f.FinBit).To(BeTrue())
 			Expect(str.Finished()).To(BeFalse())
 		})
 
@@ -1060,8 +1062,8 @@ var _ = Describe("Stream", func() {
 		It("is finished after finishing writing and receiving a RST", func() {
 			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(13), true)
 			str.Close()
-			_, sentFin := str.GetDataForWriting(1000)
-			Expect(sentFin).To(BeTrue())
+			f := str.PopStreamFrame(1000)
+			Expect(f.FinBit).To(BeTrue())
 			str.RegisterRemoteError(testErr, 13)
 			Expect(str.Finished()).To(BeTrue())
 		})

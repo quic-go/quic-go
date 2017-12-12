@@ -1036,7 +1036,7 @@ var _ = Describe("Session", func() {
 				close(done)
 			}()
 			Eventually(sess.sendingScheduled).Should(Receive())
-			s.(*stream).GetDataForWriting(1000) // unblock
+			s.(*stream).PopStreamFrame(1000) // unblock
 		})
 
 		It("sets the timer to the ack timer", func() {
@@ -1441,8 +1441,8 @@ var _ = Describe("Session", func() {
 				s, err := sess.GetOrOpenStream(protocol.StreamID(i*2 + 1))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(s.Close()).To(Succeed())
-				_, sentFin := s.(*stream).GetDataForWriting(1000) // trigger "sending" of the FIN bit
-				Expect(sentFin).To(BeTrue())
+				f := s.(*stream).PopStreamFrame(1000) // trigger "sending" of the FIN bit
+				Expect(f.FinBit).To(BeTrue())
 				s.(*stream).CloseRemote(0)
 				_, err = s.Read([]byte("a"))
 				Expect(err).To(MatchError(io.EOF))

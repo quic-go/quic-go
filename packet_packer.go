@@ -176,7 +176,9 @@ func (p *packetPacker) packCryptoPacket() (*packedPacket, error) {
 		return nil, err
 	}
 	maxLen := protocol.MaxPacketSize - protocol.ByteCount(sealer.Overhead()) - protocol.NonForwardSecurePacketSizeReduction - headerLength
-	frames := []wire.Frame{p.streamFramer.PopCryptoStreamFrame(maxLen)}
+	sf := p.streamFramer.PopCryptoStreamFrame(maxLen)
+	sf.DataLenPresent = false
+	frames := []wire.Frame{sf}
 	raw, err := p.writeAndSealPacket(header, frames, sealer)
 	if err != nil {
 		return nil, err

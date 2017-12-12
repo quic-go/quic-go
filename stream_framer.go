@@ -59,15 +59,7 @@ func (f *streamFramer) HasCryptoStreamFrame() bool {
 
 // TODO(lclemente): This is somewhat duplicate with the normal path for generating frames.
 func (f *streamFramer) PopCryptoStreamFrame(maxLen protocol.ByteCount) *wire.StreamFrame {
-	if !f.HasCryptoStreamFrame() {
-		return nil
-	}
-	frame := &wire.StreamFrame{
-		StreamID: f.version.CryptoStreamID(),
-		Offset:   f.cryptoStream.GetWriteOffset(),
-	}
-	frame.Data, frame.FinBit = f.cryptoStream.GetDataForWriting(maxLen - frame.MinLength(f.version))
-	return frame
+	return f.cryptoStream.PopStreamFrame(maxLen)
 }
 
 func (f *streamFramer) maybePopFramesForRetransmission(maxTotalLen protocol.ByteCount) (res []*wire.StreamFrame, currentLen protocol.ByteCount) {
@@ -96,7 +88,6 @@ func (f *streamFramer) maybePopFramesForRetransmission(maxTotalLen protocol.Byte
 }
 
 func (f *streamFramer) maybePopNormalFrames(maxTotalLen protocol.ByteCount) (res []*wire.StreamFrame) {
-	frame := &wire.StreamFrame{DataLenPresent: true}
 	var currentLen protocol.ByteCount
 
 	fn := func(s streamI) (bool, error) {
@@ -104,23 +95,12 @@ func (f *streamFramer) maybePopNormalFrames(maxTotalLen protocol.ByteCount) (res
 			return true, nil
 		}
 
-		frame.StreamID = s.StreamID()
-		// not perfect, but thread-safe since writeOffset is only written when getting data
-		frame.Offset = s.GetWriteOffset()
-
-		frameHeaderBytes := frame.MinLength(f.version)
-		if currentLen+frameHeaderBytes > maxTotalLen {
-			return false, nil // theoretically, we could find another stream that fits, but this is quite unlikely, so we stop here
-		}
 		maxLen := maxTotalLen - currentLen
 		if maxLen < protocol.MinStreamFrameSize { // don't try to add new STREAM frames, if only little space is left in the packet
 			return false, nil
 		}
-
-		if s.HasDataForWriting() {
-			frame.Data, frame.FinBit = s.GetDataForWriting(maxLen - frameHeaderBytes)
-		}
-		if len(frame.Data) == 0 && !frame.FinBit {
+		frame := s.PopStreamFrame(maxLen)
+		if frame == nil {
 			return true, nil
 		}
 
@@ -133,7 +113,7 @@ func (f *streamFramer) maybePopNormalFrames(maxTotalLen protocol.ByteCount) (res
 		}
 
 		res = append(res, frame)
-		currentLen += frameHeaderBytes + frame.DataLen()
+		currentLen += frame.MinLength(f.version) + frame.DataLen()
 
 		if currentLen == maxTotalLen {
 			return false, nil
