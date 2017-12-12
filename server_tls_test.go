@@ -58,16 +58,27 @@ var _ = Describe("Stateless TLS handling", func() {
 		buf := &bytes.Buffer{}
 		err = f.Write(buf, protocol.VersionTLS)
 		Expect(err).ToNot(HaveOccurred())
-		return hdr, aead.Seal(nil, buf.Bytes(), 1, hdr.Raw)
+		// pad the packet such that is has exactly the required minimum size
+		buf.Write(bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize-len(hdr.Raw)-aead.Overhead()-buf.Len()))
+		data := aead.Seal(nil, buf.Bytes(), 1, hdr.Raw)
+		Expect(len(hdr.Raw) + len(data)).To(Equal(protocol.MinInitialPacketSize))
+		return hdr, data
 	}
 
 	It("sends a version negotiation packet if it doesn't support the version", func() {
-		server.HandleInitial(nil, &wire.Header{Version: 0x1337}, nil)
+		server.HandleInitial(nil, &wire.Header{Version: 0x1337}, bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize))
 		Expect(conn.dataWritten.Len()).ToNot(BeZero())
 		hdr, err := wire.ParseHeaderSentByServer(bytes.NewReader(conn.dataWritten.Bytes()), protocol.VersionUnknown)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.IsVersionNegotiation).To(BeTrue())
 		Expect(sessionChan).ToNot(Receive())
+	})
+
+	It("drops too small packets", func() {
+		hdr, data := getPacket(&wire.StreamFrame{Data: []byte("Client Hello")})
+		data = data[:len(data)-1] // the packet is now 1 byte too small
+		server.HandleInitial(nil, hdr, data)
+		Expect(conn.dataWritten.Len()).To(BeZero())
 	})
 
 	It("ignores packets with invalid contents", func() {

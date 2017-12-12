@@ -290,7 +290,6 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header
 		header.IsLongHeader = true
 		if !p.hasSentPacket && p.perspective == protocol.PerspectiveClient {
 			header.Type = protocol.PacketTypeInitial
-			// TODO(#886): add padding
 		} else {
 			header.Type = protocol.PacketTypeHandshake
 		}
@@ -327,10 +326,25 @@ func (p *packetPacker) writeAndSealPacket(
 		return nil, err
 	}
 	payloadStartIndex := buffer.Len()
+
+	// the Initial packet needs to be padded, so the last STREAM frame must have the data length present
+	if header.Type == protocol.PacketTypeInitial {
+		lastFrame := payloadFrames[len(payloadFrames)-1]
+		if sf, ok := lastFrame.(*wire.StreamFrame); ok {
+			sf.DataLenPresent = true
+		}
+	}
 	for _, frame := range payloadFrames {
-		err := frame.Write(buffer, p.version)
-		if err != nil {
+		if err := frame.Write(buffer, p.version); err != nil {
 			return nil, err
+		}
+	}
+	// if this is an IETF QUIC Initial packet, we need to pad it to fulfill the minimum size requirement
+	// in gQUIC, padding is handled in the CHLO
+	if header.Type == protocol.PacketTypeInitial {
+		paddingLen := protocol.MinInitialPacketSize - sealer.Overhead() - buffer.Len()
+		if paddingLen > 0 {
+			buffer.Write(bytes.Repeat([]byte{0}, paddingLen))
 		}
 	}
 	if protocol.ByteCount(buffer.Len()+sealer.Overhead()) > protocol.MaxPacketSize {
