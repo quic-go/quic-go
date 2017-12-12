@@ -12,9 +12,6 @@ import (
 	"github.com/lucas-clemente/quic-go/h2quic"
 )
 
-// For additional logging of quic-go internals, the QUIC_GO_LOG_LEVEL env var
-// can be set. See https://github.com/lucas-clemente/quic-go/wiki/Logging
-
 func main() {
 	tls := flag.Bool("tls", false, "activate support for IETF QUIC (work in progress)")
 	flag.Parse()
