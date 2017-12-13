@@ -317,7 +317,7 @@ func (m *streamsMap) CloseWithError(err error) {
 	m.nextStreamOrErrCond.Broadcast()
 	m.openStreamOrErrCond.Broadcast()
 	for _, s := range m.openStreams {
-		m.streams[s].Cancel(err)
+		m.streams[s].CloseForShutdown(err)
 	}
 }
 
