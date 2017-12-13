@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
@@ -27,7 +28,9 @@ type packetPacker struct {
 	packetNumberGenerator *packetNumberGenerator
 	streamFramer          *streamFramer
 
-	controlFrames                 []wire.Frame
+	controlFrameMutex sync.Mutex
+	controlFrames     []wire.Frame
+
 	stopWaiting                   *wire.StopWaitingFrame
 	ackFrame                      *wire.AckFrame
 	leastUnacked                  protocol.PacketNumber
@@ -219,6 +222,7 @@ func (p *packetPacker) composeNextPacket(
 		payloadLength += l
 	}
 
+	p.controlFrameMutex.Lock()
 	for len(p.controlFrames) > 0 {
 		frame := p.controlFrames[len(p.controlFrames)-1]
 		minLength := frame.MinLength(p.version)
@@ -229,6 +233,7 @@ func (p *packetPacker) composeNextPacket(
 		payloadLength += minLength
 		p.controlFrames = p.controlFrames[:len(p.controlFrames)-1]
 	}
+	p.controlFrameMutex.Unlock()
 
 	if payloadLength > maxFrameSize {
 		return nil, fmt.Errorf("Packet Packer BUG: packet payload (%d) too large (%d)", payloadLength, maxFrameSize)
@@ -260,7 +265,9 @@ func (p *packetPacker) composeNextPacket(
 	}
 
 	for b := p.streamFramer.PopBlockedFrame(); b != nil; b = p.streamFramer.PopBlockedFrame() {
+		p.controlFrameMutex.Lock()
 		p.controlFrames = append(p.controlFrames, b)
+		p.controlFrameMutex.Unlock()
 	}
 
 	return payloadFrames, nil
@@ -273,7 +280,9 @@ func (p *packetPacker) QueueControlFrame(frame wire.Frame) {
 	case *wire.AckFrame:
 		p.ackFrame = f
 	default:
+		p.controlFrameMutex.Lock()
 		p.controlFrames = append(p.controlFrames, f)
+		p.controlFrameMutex.Unlock()
 	}
 }
 
