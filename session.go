@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -566,7 +565,7 @@ func (s *session) handleStreamFrame(frame *wire.StreamFrame) error {
 		if frame.FinBit {
 			return errors.New("Received STREAM frame with FIN bit for the crypto stream")
 		}
-		return s.cryptoStream.AddStreamFrame(frame)
+		return s.cryptoStream.HandleStreamFrame(frame)
 	}
 	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
 	if err != nil {
@@ -577,7 +576,7 @@ func (s *session) handleStreamFrame(frame *wire.StreamFrame) error {
 		// ignore this StreamFrame
 		return nil
 	}
-	return str.AddStreamFrame(frame)
+	return str.HandleStreamFrame(frame)
 }
 
 func (s *session) handleMaxDataFrame(frame *wire.MaxDataFrame) {
@@ -586,7 +585,7 @@ func (s *session) handleMaxDataFrame(frame *wire.MaxDataFrame) {
 
 func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error {
 	if frame.StreamID == s.version.CryptoStreamID() {
-		s.cryptoStream.UpdateSendWindow(frame.ByteOffset)
+		s.cryptoStream.HandleMaxStreamDataFrame(frame)
 		return nil
 	}
 	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
@@ -597,7 +596,7 @@ func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error
 		// stream is closed and already garbage collected
 		return nil
 	}
-	str.UpdateSendWindow(frame.ByteOffset)
+	str.HandleMaxStreamDataFrame(frame)
 	return nil
 }
 
@@ -613,7 +612,7 @@ func (s *session) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
 		// stream is closed and already garbage collected
 		return nil
 	}
-	return str.RegisterRemoteError(fmt.Errorf("RST_STREAM received with code %d", frame.ErrorCode), frame.ByteOffset)
+	return str.HandleRstStreamFrame(frame)
 }
 
 func (s *session) handleAckFrame(frame *wire.AckFrame, encLevel protocol.EncryptionLevel) error {
@@ -684,8 +683,12 @@ func (s *session) processTransportParameters(params *handshake.TransportParamete
 		s.packer.SetOmitConnectionID()
 	}
 	s.connFlowController.UpdateSendWindow(params.ConnectionFlowControlWindow)
+	// increase the flow control windows of all streams by sending them a fake MAX_STREAM_DATA frame
 	s.streamsMap.Range(func(str streamI) {
-		str.UpdateSendWindow(params.StreamFlowControlWindow)
+		str.HandleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
+			StreamID:   str.StreamID(),
+			ByteOffset: params.StreamFlowControlWindow,
+		})
 	})
 }
 

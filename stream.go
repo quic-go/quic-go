@@ -17,14 +17,14 @@ import (
 type streamI interface {
 	Stream
 
-	AddStreamFrame(*wire.StreamFrame) error
-	RegisterRemoteError(error, protocol.ByteCount) error
+	HandleStreamFrame(*wire.StreamFrame) error
+	HandleRstStreamFrame(*wire.RstStreamFrame) error
 	PopStreamFrame(maxBytes protocol.ByteCount) *wire.StreamFrame
 	Finished() bool
 	Cancel(error)
 	// methods needed for flow control
 	GetWindowUpdate() protocol.ByteCount
-	UpdateSendWindow(protocol.ByteCount)
+	HandleMaxStreamDataFrame(*wire.MaxStreamDataFrame)
 	IsFlowControlBlocked() bool
 }
 
@@ -59,7 +59,7 @@ type stream struct {
 	finishedWriting utils.AtomicBool
 	// resetLocally is set if Reset() is called
 	resetLocally utils.AtomicBool
-	// resetRemotely is set if RegisterRemoteError() is called
+	// resetRemotely is set if HandleRstStreamFrame() is called
 	resetRemotely utils.AtomicBool
 
 	frameQueue   *streamFrameSorter
@@ -327,8 +327,8 @@ func (s *stream) shouldSendReset() bool {
 	return (s.resetLocally.Get() || s.resetRemotely.Get()) && !s.finishedWriteAndSentFin()
 }
 
-// AddStreamFrame adds a new stream frame
-func (s *stream) AddStreamFrame(frame *wire.StreamFrame) error {
+// HandleStreamFrame adds a new stream frame
+func (s *stream) HandleStreamFrame(frame *wire.StreamFrame) error {
 	maxOffset := frame.Offset + frame.DataLen()
 	if err := s.flowController.UpdateHighestReceived(maxOffset, frame.FinBit); err != nil {
 		return err
@@ -390,7 +390,7 @@ func (s *stream) SetDeadline(t time.Time) error {
 
 // CloseRemote makes the stream receive a "virtual" FIN stream frame at a given offset
 func (s *stream) CloseRemote(offset protocol.ByteCount) {
-	s.AddStreamFrame(&wire.StreamFrame{FinBit: true, Offset: offset})
+	s.HandleStreamFrame(&wire.StreamFrame{FinBit: true, Offset: offset})
 }
 
 // Cancel is called by session to indicate that an error occurred
@@ -433,8 +433,7 @@ func (s *stream) Reset(err error) {
 	s.mutex.Unlock()
 }
 
-// resets the stream remotely
-func (s *stream) RegisterRemoteError(err error, offset protocol.ByteCount) error {
+func (s *stream) HandleRstStreamFrame(frame *wire.RstStreamFrame) error {
 	if s.resetRemotely.Get() {
 		return nil
 	}
@@ -443,10 +442,10 @@ func (s *stream) RegisterRemoteError(err error, offset protocol.ByteCount) error
 	s.ctxCancel()
 	// errors must not be changed!
 	if s.err == nil {
-		s.err = err
+		s.err = fmt.Errorf("RST_STREAM received with code %d", frame.ErrorCode)
 		s.signalWrite()
 	}
-	if err := s.flowController.UpdateHighestReceived(offset, true); err != nil {
+	if err := s.flowController.UpdateHighestReceived(frame.ByteOffset, true); err != nil {
 		return err
 	}
 	if s.shouldSendReset() {
@@ -481,8 +480,8 @@ func (s *stream) StreamID() protocol.StreamID {
 	return s.streamID
 }
 
-func (s *stream) UpdateSendWindow(n protocol.ByteCount) {
-	s.flowController.UpdateSendWindow(n)
+func (s *stream) HandleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
+	s.flowController.UpdateSendWindow(frame.ByteOffset)
 }
 
 func (s *stream) IsFlowControlBlocked() bool {

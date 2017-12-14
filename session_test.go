@@ -283,7 +283,7 @@ var _ = Describe("Session", func() {
 				sess.streamsMap.newStream = func(id protocol.StreamID) streamI {
 					str := newStreamLambda(id)
 					if id == 5 {
-						str.(*mocks.MockStreamI).EXPECT().AddStreamFrame(f)
+						str.(*mocks.MockStreamI).EXPECT().HandleStreamFrame(f)
 					}
 					return str
 				}
@@ -308,8 +308,8 @@ var _ = Describe("Session", func() {
 				sess.streamsMap.newStream = func(id protocol.StreamID) streamI {
 					str := newStreamLambda(id)
 					if id == 5 {
-						str.(*mocks.MockStreamI).EXPECT().AddStreamFrame(f1)
-						str.(*mocks.MockStreamI).EXPECT().AddStreamFrame(f2)
+						str.(*mocks.MockStreamI).EXPECT().HandleStreamFrame(f1)
+						str.(*mocks.MockStreamI).EXPECT().HandleStreamFrame(f2)
 					}
 					return str
 				}
@@ -343,29 +343,28 @@ var _ = Describe("Session", func() {
 
 		Context("handling RST_STREAM frames", func() {
 			It("closes the streams for writing", func() {
-				str, err := sess.GetOrOpenStream(5)
-				Expect(err).ToNot(HaveOccurred())
-				str.(*mocks.MockStreamI).EXPECT().RegisterRemoteError(
-					errors.New("RST_STREAM received with code 42"),
-					protocol.ByteCount(0x1337),
-				)
-				err = sess.handleRstStreamFrame(&wire.RstStreamFrame{
+				f := &wire.RstStreamFrame{
 					StreamID:   5,
 					ErrorCode:  42,
 					ByteOffset: 0x1337,
-				})
+				}
+				str, err := sess.GetOrOpenStream(5)
+				Expect(err).ToNot(HaveOccurred())
+				str.(*mocks.MockStreamI).EXPECT().HandleRstStreamFrame(f)
+				err = sess.handleRstStreamFrame(f)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("returns errors", func() {
+				f := &wire.RstStreamFrame{
+					StreamID:   5,
+					ByteOffset: 0x1337,
+				}
 				testErr := errors.New("flow control violation")
 				str, err := sess.GetOrOpenStream(5)
 				Expect(err).ToNot(HaveOccurred())
-				str.(*mocks.MockStreamI).EXPECT().RegisterRemoteError(gomock.Any(), gomock.Any()).Return(testErr)
-				err = sess.handleRstStreamFrame(&wire.RstStreamFrame{
-					StreamID:   5,
-					ByteOffset: 0x1337,
-				})
+				str.(*mocks.MockStreamI).EXPECT().HandleRstStreamFrame(f).Return(testErr)
+				err = sess.handleRstStreamFrame(f)
 				Expect(err).To(MatchError(testErr))
 			})
 
@@ -414,14 +413,14 @@ var _ = Describe("Session", func() {
 			})
 
 			It("updates the flow control window of a stream", func() {
-				offset := protocol.ByteCount(0x1234)
-				str, err := sess.GetOrOpenStream(5)
-				str.(*mocks.MockStreamI).EXPECT().UpdateSendWindow(offset)
-				Expect(err).ToNot(HaveOccurred())
-				err = sess.handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
+				f := &wire.MaxStreamDataFrame{
 					StreamID:   5,
-					ByteOffset: offset,
-				})
+					ByteOffset: 0x1234,
+				}
+				str, err := sess.GetOrOpenStream(5)
+				Expect(err).ToNot(HaveOccurred())
+				str.(*mocks.MockStreamI).EXPECT().HandleMaxStreamDataFrame(f)
+				err = sess.handleMaxStreamDataFrame(f)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
@@ -432,18 +431,19 @@ var _ = Describe("Session", func() {
 			})
 
 			It("opens a new stream when receiving a MAX_STREAM_DATA frame for an unknown stream", func() {
+				f := &wire.MaxStreamDataFrame{
+					StreamID:   5,
+					ByteOffset: 0x1337,
+				}
 				newStreamLambda := sess.streamsMap.newStream
 				sess.streamsMap.newStream = func(id protocol.StreamID) streamI {
 					str := newStreamLambda(id)
 					if id == 5 {
-						str.(*mocks.MockStreamI).EXPECT().UpdateSendWindow(protocol.ByteCount(0x1337))
+						str.(*mocks.MockStreamI).EXPECT().HandleMaxStreamDataFrame(f)
 					}
 					return str
 				}
-				err := sess.handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
-					StreamID:   5,
-					ByteOffset: 0x1337,
-				})
+				err := sess.handleMaxStreamDataFrame(f)
 				Expect(err).ToNot(HaveOccurred())
 				str, err := sess.streamsMap.GetOrOpenStream(5)
 				Expect(err).NotTo(HaveOccurred())

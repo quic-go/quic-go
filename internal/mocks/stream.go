@@ -36,18 +36,6 @@ func (_m *MockStreamI) EXPECT() *MockStreamIMockRecorder {
 	return _m.recorder
 }
 
-// AddStreamFrame mocks base method
-func (_m *MockStreamI) AddStreamFrame(_param0 *wire.StreamFrame) error {
-	ret := _m.ctrl.Call(_m, "AddStreamFrame", _param0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AddStreamFrame indicates an expected call of AddStreamFrame
-func (_mr *MockStreamIMockRecorder) AddStreamFrame(arg0 interface{}) *gomock.Call {
-	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "AddStreamFrame", reflect.TypeOf((*MockStreamI)(nil).AddStreamFrame), arg0)
-}
-
 // Cancel mocks base method
 func (_m *MockStreamI) Cancel(_param0 error) {
 	_m.ctrl.Call(_m, "Cancel", _param0)
@@ -106,6 +94,40 @@ func (_mr *MockStreamIMockRecorder) GetWindowUpdate() *gomock.Call {
 	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "GetWindowUpdate", reflect.TypeOf((*MockStreamI)(nil).GetWindowUpdate))
 }
 
+// HandleMaxStreamDataFrame mocks base method
+func (_m *MockStreamI) HandleMaxStreamDataFrame(_param0 *wire.MaxStreamDataFrame) {
+	_m.ctrl.Call(_m, "HandleMaxStreamDataFrame", _param0)
+}
+
+// HandleMaxStreamDataFrame indicates an expected call of HandleMaxStreamDataFrame
+func (_mr *MockStreamIMockRecorder) HandleMaxStreamDataFrame(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "HandleMaxStreamDataFrame", reflect.TypeOf((*MockStreamI)(nil).HandleMaxStreamDataFrame), arg0)
+}
+
+// HandleRstStreamFrame mocks base method
+func (_m *MockStreamI) HandleRstStreamFrame(_param0 *wire.RstStreamFrame) error {
+	ret := _m.ctrl.Call(_m, "HandleRstStreamFrame", _param0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// HandleRstStreamFrame indicates an expected call of HandleRstStreamFrame
+func (_mr *MockStreamIMockRecorder) HandleRstStreamFrame(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "HandleRstStreamFrame", reflect.TypeOf((*MockStreamI)(nil).HandleRstStreamFrame), arg0)
+}
+
+// HandleStreamFrame mocks base method
+func (_m *MockStreamI) HandleStreamFrame(_param0 *wire.StreamFrame) error {
+	ret := _m.ctrl.Call(_m, "HandleStreamFrame", _param0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// HandleStreamFrame indicates an expected call of HandleStreamFrame
+func (_mr *MockStreamIMockRecorder) HandleStreamFrame(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "HandleStreamFrame", reflect.TypeOf((*MockStreamI)(nil).HandleStreamFrame), arg0)
+}
+
 // IsFlowControlBlocked mocks base method
 func (_m *MockStreamI) IsFlowControlBlocked() bool {
 	ret := _m.ctrl.Call(_m, "IsFlowControlBlocked")
@@ -141,18 +163,6 @@ func (_m *MockStreamI) Read(_param0 []byte) (int, error) {
 // Read indicates an expected call of Read
 func (_mr *MockStreamIMockRecorder) Read(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "Read", reflect.TypeOf((*MockStreamI)(nil).Read), arg0)
-}
-
-// RegisterRemoteError mocks base method
-func (_m *MockStreamI) RegisterRemoteError(_param0 error, _param1 protocol.ByteCount) error {
-	ret := _m.ctrl.Call(_m, "RegisterRemoteError", _param0, _param1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// RegisterRemoteError indicates an expected call of RegisterRemoteError
-func (_mr *MockStreamIMockRecorder) RegisterRemoteError(arg0, arg1 interface{}) *gomock.Call {
-	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "RegisterRemoteError", reflect.TypeOf((*MockStreamI)(nil).RegisterRemoteError), arg0, arg1)
 }
 
 // Reset mocks base method
@@ -211,16 +221,6 @@ func (_m *MockStreamI) StreamID() protocol.StreamID {
 // StreamID indicates an expected call of StreamID
 func (_mr *MockStreamIMockRecorder) StreamID() *gomock.Call {
 	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "StreamID", reflect.TypeOf((*MockStreamI)(nil).StreamID))
-}
-
-// UpdateSendWindow mocks base method
-func (_m *MockStreamI) UpdateSendWindow(_param0 protocol.ByteCount) {
-	_m.ctrl.Call(_m, "UpdateSendWindow", _param0)
-}
-
-// UpdateSendWindow indicates an expected call of UpdateSendWindow
-func (_mr *MockStreamIMockRecorder) UpdateSendWindow(arg0 interface{}) *gomock.Call {
-	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "UpdateSendWindow", reflect.TypeOf((*MockStreamI)(nil).UpdateSendWindow), arg0)
 }
 
 // Write mocks base method
