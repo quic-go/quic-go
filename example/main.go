@@ -19,8 +19,6 @@ import (
 
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/h2quic"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 type binds []string
@@ -91,7 +89,7 @@ func init() {
 				}
 			}
 			if err != nil {
-				utils.Infof("Error receiving upload: %#v", err)
+				fmt.Printf("Error receiving upload: %#v\n", err)
 			}
 		}
 		io.WriteString(w, `<html><body><form action="/demo/upload" method="post" enctype="multipart/form-data">
@@ -117,7 +115,6 @@ func main() {
 	}()
 	// runtime.SetBlockProfileRate(1)
 
-	verbose := flag.Bool("v", false, "verbose")
 	bs := binds{}
 	flag.Var(&bs, "bind", "bind to")
 	certPath := flag.String("certpath", getBuildDir(), "certificate directory")
@@ -126,16 +123,9 @@ func main() {
 	tls := flag.Bool("tls", false, "activate support for IETF QUIC (work in progress)")
 	flag.Parse()
 
-	if *verbose {
-		utils.SetLogLevel(utils.LogLevelDebug)
-	} else {
-		utils.SetLogLevel(utils.LogLevelInfo)
-	}
-	utils.SetLogTimeFormat("")
-
-	versions := protocol.SupportedVersions
+	versions := quic.SupportedVersions
 	if *tls {
-		versions = append([]protocol.VersionNumber{protocol.VersionTLS}, versions...)
+		versions = append([]quic.VersionNumber{quic.VersionTLS}, versions...)
 	}
 
 	certFile := *certPath + "/fullchain.pem"

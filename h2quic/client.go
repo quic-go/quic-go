@@ -15,7 +15,6 @@ import (
 	"golang.org/x/net/idna"
 
 	quic "github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/qerr"
 )
@@ -44,7 +43,7 @@ type client struct {
 	headerErrored chan struct{} // this channel is closed if an error occurs on the header stream
 	requestWriter *requestWriter
 
-	responses map[protocol.StreamID]chan *http.Response
+	responses map[quic.StreamID]chan *http.Response
 }
 
 var _ http.RoundTripper = &client{}
@@ -67,7 +66,7 @@ func newClient(
 	}
 	return &client{
 		hostname:      authorityAddr("https", hostname),
-		responses:     make(map[protocol.StreamID]chan *http.Response),
+		responses:     make(map[quic.StreamID]chan *http.Response),
 		tlsConf:       tlsConfig,
 		config:        config,
 		opts:          opts,
@@ -97,7 +96,7 @@ func (c *client) handleHeaderStream() {
 	decoder := hpack.NewDecoder(4096, func(hf hpack.HeaderField) {})
 	h2framer := http2.NewFramer(nil, c.headerStream)
 
-	var lastStream protocol.StreamID
+	var lastStream quic.StreamID
 
 	for {
 		frame, err := h2framer.ReadFrame()
@@ -105,7 +104,7 @@ func (c *client) handleHeaderStream() {
 			c.headerErr = qerr.Error(qerr.HeadersStreamDataDecompressFailure, "cannot read frame")
 			break
 		}
-		lastStream = protocol.StreamID(frame.Header().StreamID)
+		lastStream = quic.StreamID(frame.Header().StreamID)
 		hframe, ok := frame.(*http2.HeadersFrame)
 		if !ok {
 			c.headerErr = qerr.Error(qerr.InvalidHeadersStreamData, "not a headers frame")
@@ -119,7 +118,7 @@ func (c *client) handleHeaderStream() {
 		}
 
 		c.mutex.RLock()
-		responseChan, ok := c.responses[protocol.StreamID(hframe.StreamID)]
+		responseChan, ok := c.responses[quic.StreamID(hframe.StreamID)]
 		c.mutex.RUnlock()
 		if !ok {
 			c.headerErr = qerr.Error(qerr.InternalError, fmt.Sprintf("h2client BUG: response channel for stream %d not found", lastStream))

@@ -13,7 +13,6 @@ import (
 	"golang.org/x/net/lex/httplex"
 
 	quic "github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
@@ -35,7 +34,7 @@ func newRequestWriter(headerStream quic.Stream) *requestWriter {
 	return rw
 }
 
-func (w *requestWriter) WriteRequest(req *http.Request, dataStreamID protocol.StreamID, endStream, requestGzip bool) error {
+func (w *requestWriter) WriteRequest(req *http.Request, dataStreamID quic.StreamID, endStream, requestGzip bool) error {
 	// TODO: add support for trailers
 	// TODO: add support for gzip compression
 	// TODO: write continuation frames, if the header frame is too long

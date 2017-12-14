@@ -13,7 +13,6 @@ import (
 	"golang.org/x/net/http2/hpack"
 
 	quic "github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 
 	"time"
@@ -170,7 +169,7 @@ var _ = Describe("Client", func() {
 			}()
 
 			Eventually(func() []byte { return headerStream.dataWritten.Bytes() }).ShouldNot(BeEmpty())
-			Eventually(func() map[protocol.StreamID]chan *http.Response { return client.responses }).Should(HaveKey(protocol.StreamID(5)))
+			Eventually(func() map[quic.StreamID]chan *http.Response { return client.responses }).Should(HaveKey(quic.StreamID(5)))
 			rsp := &http.Response{
 				Status:     "418 I'm a teapot",
 				StatusCode: 418,

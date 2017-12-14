@@ -8,14 +8,13 @@ import (
 	"sync"
 
 	quic "github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 )
 
 type responseWriter struct {
-	dataStreamID protocol.StreamID
+	dataStreamID quic.StreamID
 	dataStream   quic.Stream
 
 	headerStream      quic.Stream
@@ -26,7 +25,7 @@ type responseWriter struct {
 	headerWritten bool
 }
 
-func newResponseWriter(headerStream quic.Stream, headerStreamMutex *sync.Mutex, dataStream quic.Stream, dataStreamID protocol.StreamID) *responseWriter {
+func newResponseWriter(headerStream quic.Stream, headerStreamMutex *sync.Mutex, dataStream quic.Stream, dataStreamID quic.StreamID) *responseWriter {
 	return &responseWriter{
 		header:            http.Header{},
 		headerStream:      headerStream,

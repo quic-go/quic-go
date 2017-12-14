@@ -88,10 +88,10 @@ func (s *mockStream) Write(p []byte) (int, error) {
 	return s.dataWritten.Write(p)
 }
 
-func (s *mockStream) Close() error                       { panic("not implemented") }
-func (s *mockStream) Reset(error)                        { panic("not implemented") }
-func (mockStream) CloseRemote(offset protocol.ByteCount) { panic("not implemented") }
-func (s mockStream) StreamID() protocol.StreamID         { panic("not implemented") }
+func (s *mockStream) Close() error               { panic("not implemented") }
+func (s *mockStream) Reset(error)                { panic("not implemented") }
+func (mockStream) CloseRemote(offset uint64)     { panic("not implemented") }
+func (s mockStream) StreamID() protocol.StreamID { panic("not implemented") }
 
 type mockCookieProtector struct {
 	data      []byte

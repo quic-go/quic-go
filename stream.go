@@ -389,8 +389,8 @@ func (s *stream) SetDeadline(t time.Time) error {
 }
 
 // CloseRemote makes the stream receive a "virtual" FIN stream frame at a given offset
-func (s *stream) CloseRemote(offset protocol.ByteCount) {
-	s.AddStreamFrame(&wire.StreamFrame{FinBit: true, Offset: offset})
+func (s *stream) CloseRemote(offset uint64) {
+	s.AddStreamFrame(&wire.StreamFrame{FinBit: true, Offset: protocol.ByteCount(offset)})
 }
 
 // Cancel is called by session to indicate that an error occurred
