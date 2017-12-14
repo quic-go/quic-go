@@ -357,15 +357,6 @@ var _ = Describe("Session", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("queues a RST_STERAM frame", func() {
-				sess.queueResetStreamFrame(5, 0x1337)
-				Expect(sess.packer.controlFrames).To(HaveLen(1))
-				Expect(sess.packer.controlFrames[0].(*wire.RstStreamFrame)).To(Equal(&wire.RstStreamFrame{
-					StreamID:   5,
-					ByteOffset: 0x1337,
-				}))
-			})
-
 			It("returns errors", func() {
 				testErr := errors.New("flow control violation")
 				str, err := sess.GetOrOpenStream(5)
