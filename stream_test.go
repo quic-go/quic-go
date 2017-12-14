@@ -927,6 +927,31 @@ var _ = Describe("Stream", func() {
 				Expect(time.Now()).To(BeTemporally("~", deadline, scaleDuration(20*time.Millisecond)))
 			})
 
+			It("returns the number of bytes written, when the deadline expires", func() {
+				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(10000)).AnyTimes()
+				mockFC.EXPECT().AddBytesSent(gomock.Any())
+				deadline := time.Now().Add(scaleDuration(50 * time.Millisecond))
+				str.SetWriteDeadline(deadline)
+				var n int
+				writeReturned := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					var err error
+					n, err = strWithTimeout.Write(bytes.Repeat([]byte{0}, 100))
+					Expect(err).To(MatchError(errDeadline))
+					Expect(time.Now()).To(BeTemporally("~", deadline, scaleDuration(20*time.Millisecond)))
+					close(writeReturned)
+				}()
+				var frame *wire.StreamFrame
+				Eventually(func() *wire.StreamFrame {
+					defer GinkgoRecover()
+					frame = str.PopStreamFrame(50)
+					return frame
+				}).ShouldNot(BeNil())
+				Eventually(writeReturned, scaleDuration(80*time.Millisecond)).Should(BeClosed())
+				Expect(n).To(BeEquivalentTo(frame.DataLen()))
+			})
+
 			It("doesn't unblock if the deadline is changed before the first one expires", func() {
 				deadline1 := time.Now().Add(scaleDuration(50 * time.Millisecond))
 				deadline2 := time.Now().Add(scaleDuration(100 * time.Millisecond))

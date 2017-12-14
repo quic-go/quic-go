@@ -243,13 +243,10 @@ func (s *stream) Write(p []byte) (int, error) {
 		s.mutex.Lock()
 	}
 
-	if err != nil {
-		return 0, err
-	}
 	if s.err != nil {
-		return len(p) - len(s.dataForWriting), s.err
+		err = s.err
 	}
-	return len(p), nil
+	return len(p) - len(s.dataForWriting), err
 }
 
 func (s *stream) GetWriteOffset() protocol.ByteCount {
