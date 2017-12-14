@@ -245,7 +245,7 @@ var _ = Describe("Streams Map", func() {
 						testErr := errors.New("test error")
 						openMaxNumStreams()
 						for _, str := range m.streams {
-							str.(*mocks.MockStreamI).EXPECT().Cancel(testErr)
+							str.(*mocks.MockStreamI).EXPECT().CloseForShutdown(testErr)
 						}
 
 						done := make(chan struct{})

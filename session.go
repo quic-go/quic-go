@@ -656,7 +656,7 @@ func (s *session) handleCloseError(closeErr closeError) error {
 		utils.Errorf("Closing session with error: %s", closeErr.err.Error())
 	}
 
-	s.cryptoStream.Cancel(quicErr)
+	s.cryptoStream.CloseForShutdown(quicErr)
 	s.streamsMap.CloseWithError(quicErr)
 
 	if closeErr.err == errCloseSessionForNewVersion || closeErr.err == handshake.ErrCloseSessionForRetry {

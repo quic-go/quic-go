@@ -457,12 +457,12 @@ var _ = Describe("Stream", func() {
 					close(done)
 				}()
 				Consistently(done).ShouldNot(BeClosed())
-				str.Cancel(testErr)
+				str.CloseForShutdown(testErr)
 				Eventually(done).Should(BeClosed())
 			})
 
 			It("errors for all following reads", func() {
-				str.Cancel(testErr)
+				str.CloseForShutdown(testErr)
 				b := make([]byte, 1)
 				n, err := strWithTimeout.Read(b)
 				Expect(n).To(BeZero())
@@ -471,7 +471,7 @@ var _ = Describe("Stream", func() {
 
 			It("cancels the context", func() {
 				Expect(str.Context().Done()).ToNot(BeClosed())
-				str.Cancel(testErr)
+				str.CloseForShutdown(testErr)
 				Expect(str.Context().Done()).To(BeClosed())
 			})
 		})
@@ -1001,7 +1001,7 @@ var _ = Describe("Stream", func() {
 			})
 
 			It("doesn't allow FIN after an error", func() {
-				str.Cancel(errors.New("test"))
+				str.CloseForShutdown(errors.New("test"))
 				f := str.PopStreamFrame(1000)
 				Expect(f).To(BeNil())
 			})
@@ -1016,11 +1016,11 @@ var _ = Describe("Stream", func() {
 			})
 		})
 
-		Context("cancelling", func() {
+		Context("closing abruptly", func() {
 			testErr := errors.New("test")
 
 			It("returns errors when the stream is cancelled", func() {
-				str.Cancel(testErr)
+				str.CloseForShutdown(testErr)
 				n, err := strWithTimeout.Write([]byte("foo"))
 				Expect(n).To(BeZero())
 				Expect(err).To(MatchError(testErr))
@@ -1037,7 +1037,7 @@ var _ = Describe("Stream", func() {
 					close(done)
 				}()
 				Eventually(func() *wire.StreamFrame { return str.PopStreamFrame(50) }).ShouldNot(BeNil()) // get a STREAM frame containing some data, but not all
-				str.Cancel(testErr)
+				str.CloseForShutdown(testErr)
 				Expect(str.PopStreamFrame(1000)).To(BeNil())
 				Eventually(done).Should(BeClosed())
 			})
@@ -1068,7 +1068,7 @@ var _ = Describe("Stream", func() {
 		}
 
 		It("is finished after it is canceled", func() {
-			str.Cancel(testErr)
+			str.CloseForShutdown(testErr)
 			Expect(str.Finished()).To(BeTrue())
 		})
 

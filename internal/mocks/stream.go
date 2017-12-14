@@ -36,16 +36,6 @@ func (_m *MockStreamI) EXPECT() *MockStreamIMockRecorder {
 	return _m.recorder
 }
 
-// Cancel mocks base method
-func (_m *MockStreamI) Cancel(_param0 error) {
-	_m.ctrl.Call(_m, "Cancel", _param0)
-}
-
-// Cancel indicates an expected call of Cancel
-func (_mr *MockStreamIMockRecorder) Cancel(arg0 interface{}) *gomock.Call {
-	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "Cancel", reflect.TypeOf((*MockStreamI)(nil).Cancel), arg0)
-}
-
 // Close mocks base method
 func (_m *MockStreamI) Close() error {
 	ret := _m.ctrl.Call(_m, "Close")
@@ -56,6 +46,16 @@ func (_m *MockStreamI) Close() error {
 // Close indicates an expected call of Close
 func (_mr *MockStreamIMockRecorder) Close() *gomock.Call {
 	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "Close", reflect.TypeOf((*MockStreamI)(nil).Close))
+}
+
+// CloseForShutdown mocks base method
+func (_m *MockStreamI) CloseForShutdown(_param0 error) {
+	_m.ctrl.Call(_m, "CloseForShutdown", _param0)
+}
+
+// CloseForShutdown indicates an expected call of CloseForShutdown
+func (_mr *MockStreamIMockRecorder) CloseForShutdown(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "CloseForShutdown", reflect.TypeOf((*MockStreamI)(nil).CloseForShutdown), arg0)
 }
 
 // Context mocks base method

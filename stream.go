@@ -21,7 +21,7 @@ type streamI interface {
 	HandleRstStreamFrame(*wire.RstStreamFrame) error
 	PopStreamFrame(maxBytes protocol.ByteCount) *wire.StreamFrame
 	Finished() bool
-	Cancel(error)
+	CloseForShutdown(error)
 	// methods needed for flow control
 	GetWindowUpdate() protocol.ByteCount
 	HandleMaxStreamDataFrame(*wire.MaxStreamDataFrame)
@@ -51,8 +51,8 @@ type stream struct {
 	// Once set, the errors must not be changed!
 	err error
 
-	// cancelled is set when Cancel() is called
-	cancelled utils.AtomicBool
+	// closedForShutdown is set when Cancel() is called
+	closedForShutdown utils.AtomicBool
 	// finishedReading is set once we read a frame with a FinBit
 	finishedReading utils.AtomicBool
 	// finisedWriting is set once Close() is called
@@ -113,7 +113,7 @@ func (s *stream) Read(p []byte) (int, error) {
 	s.mutex.Lock()
 	err := s.err
 	s.mutex.Unlock()
-	if s.cancelled.Get() || s.resetLocally.Get() {
+	if s.closedForShutdown.Get() || s.resetLocally.Get() {
 		return 0, err
 	}
 	if s.finishedReading.Get() {
@@ -133,7 +133,7 @@ func (s *stream) Read(p []byte) (int, error) {
 		var err error
 		for {
 			// Stop waiting on errors
-			if s.resetLocally.Get() || s.cancelled.Get() {
+			if s.resetLocally.Get() || s.closedForShutdown.Get() {
 				err = s.err
 				break
 			}
@@ -393,11 +393,12 @@ func (s *stream) CloseRemote(offset protocol.ByteCount) {
 	s.HandleStreamFrame(&wire.StreamFrame{FinBit: true, Offset: offset})
 }
 
-// Cancel is called by session to indicate that an error occurred
-// The stream should will be closed immediately
-func (s *stream) Cancel(err error) {
+// CloseForShutdown closes a stream abruptly.
+// It makes Read and Write unblock (and return the error) immediately.
+// The peer will NOT be informed about this: the stream is closed without sending a FIN or RST.
+func (s *stream) CloseForShutdown(err error) {
 	s.mutex.Lock()
-	s.cancelled.Set(true)
+	s.closedForShutdown.Set(true)
 	s.ctxCancel()
 	// errors must not be changed!
 	if s.err == nil {
@@ -465,7 +466,7 @@ func (s *stream) finishedWriteAndSentFin() bool {
 }
 
 func (s *stream) Finished() bool {
-	return s.cancelled.Get() ||
+	return s.closedForShutdown.Get() ||
 		(s.finishedReading.Get() && s.finishedWriteAndSentFin()) ||
 		(s.resetRemotely.Get() && s.rstSent.Get()) ||
 		(s.finishedReading.Get() && s.rstSent.Get()) ||
