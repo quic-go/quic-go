@@ -66,10 +66,11 @@ func (_mr *MockStreamFlowControllerMockRecorder) GetWindowUpdate() *gomock.Call 
 }
 
 // IsBlocked mocks base method
-func (_m *MockStreamFlowController) IsBlocked() bool {
+func (_m *MockStreamFlowController) IsBlocked() (bool, protocol.ByteCount) {
 	ret := _m.ctrl.Call(_m, "IsBlocked")
 	ret0, _ := ret[0].(bool)
-	return ret0
+	ret1, _ := ret[1].(protocol.ByteCount)
+	return ret0, ret1
 }
 
 // IsBlocked indicates an expected call of IsBlocked

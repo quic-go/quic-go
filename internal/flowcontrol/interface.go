@@ -5,7 +5,7 @@ import "github.com/lucas-clemente/quic-go/internal/protocol"
 type flowController interface {
 	// for sending
 	SendWindowSize() protocol.ByteCount
-	IsBlocked() bool
+	IsBlocked() (bool, protocol.ByteCount)
 	UpdateSendWindow(protocol.ByteCount)
 	AddBytesSent(protocol.ByteCount)
 	// for receiving

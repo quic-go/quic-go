@@ -1146,10 +1146,13 @@ var _ = Describe("Stream", func() {
 
 	Context("flow control", func() {
 		It("says when it's flow control blocked", func() {
-			mockFC.EXPECT().IsBlocked().Return(false)
-			Expect(str.IsFlowControlBlocked()).To(BeFalse())
-			mockFC.EXPECT().IsBlocked().Return(true)
-			Expect(str.IsFlowControlBlocked()).To(BeTrue())
+			mockFC.EXPECT().IsBlocked().Return(false, protocol.ByteCount(0))
+			blocked, _ := str.IsFlowControlBlocked()
+			Expect(blocked).To(BeFalse())
+			mockFC.EXPECT().IsBlocked().Return(true, protocol.ByteCount(0x1337))
+			blocked, offset := str.IsFlowControlBlocked()
+			Expect(blocked).To(BeTrue())
+			Expect(offset).To(Equal(protocol.ByteCount(0x1337)))
 		})
 
 		It("updates the flow control window", func() {

@@ -25,7 +25,7 @@ type streamI interface {
 	// methods needed for flow control
 	GetWindowUpdate() protocol.ByteCount
 	HandleMaxStreamDataFrame(*wire.MaxStreamDataFrame)
-	IsFlowControlBlocked() bool
+	IsFlowControlBlocked() (bool, protocol.ByteCount)
 }
 
 // A Stream assembles the data from StreamFrames and provides a super-convenient Read-Interface
@@ -485,7 +485,7 @@ func (s *stream) HandleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
 	s.flowController.UpdateSendWindow(frame.ByteOffset)
 }
 
-func (s *stream) IsFlowControlBlocked() bool {
+func (s *stream) IsFlowControlBlocked() (bool, protocol.ByteCount) {
 	return s.flowController.IsBlocked()
 }
 
