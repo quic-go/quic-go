@@ -2,8 +2,10 @@ package wire
 
 import (
 	"bytes"
+	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -12,30 +14,41 @@ import (
 var _ = Describe("BLOCKED frame", func() {
 	Context("when parsing", func() {
 		It("accepts sample frame", func() {
-			b := bytes.NewReader([]byte{0x08})
-			_, err := ParseBlockedFrame(b, protocol.VersionWhatever)
+			data := []byte{0x08}
+			data = append(data, encodeVarInt(0x12345678)...)
+			b := bytes.NewReader(data)
+			frame, err := ParseBlockedFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(frame.Offset).To(Equal(protocol.ByteCount(0x12345678)))
 			Expect(b.Len()).To(BeZero())
 		})
 
 		It("errors on EOFs", func() {
-			_, err := ParseBlockedFrame(bytes.NewReader(nil), protocol.VersionWhatever)
-			Expect(err).To(HaveOccurred())
+			data := []byte{0x08}
+			data = append(data, encodeVarInt(0x12345678)...)
+			_, err := ParseBlockedFrame(bytes.NewReader(data), versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			for i := range data {
+				_, err := ParseBlockedFrame(bytes.NewReader(data[:i]), versionIETFFrames)
+				Expect(err).To(MatchError(io.EOF))
+			}
 		})
 	})
 
 	Context("when writing", func() {
 		It("writes a sample frame", func() {
 			b := &bytes.Buffer{}
-			frame := BlockedFrame{}
+			frame := BlockedFrame{Offset: 0xdeadbeef}
 			err := frame.Write(b, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(b.Bytes()).To(Equal([]byte{0x08}))
+			expected := []byte{0x08}
+			expected = append(expected, encodeVarInt(0xdeadbeef)...)
+			Expect(b.Bytes()).To(Equal(expected))
 		})
 
 		It("has the correct min length", func() {
-			frame := BlockedFrame{}
-			Expect(frame.MinLength(versionIETFFrames)).To(Equal(protocol.ByteCount(1)))
+			frame := BlockedFrame{Offset: 0x12345}
+			Expect(frame.MinLength(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0x12345)))
 		})
 	})
 })

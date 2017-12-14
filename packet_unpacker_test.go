@@ -343,7 +343,7 @@ var _ = Describe("Packet unpacker", func() {
 		})
 
 		It("unpacks connection-level BLOCKED frames", func() {
-			f := &wire.BlockedFrame{}
+			f := &wire.BlockedFrame{Offset: 0x1234}
 			buf := &bytes.Buffer{}
 			err := f.Write(buf, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
@@ -354,7 +354,10 @@ var _ = Describe("Packet unpacker", func() {
 		})
 
 		It("unpacks stream-level BLOCKED frames", func() {
-			f := &wire.StreamBlockedFrame{StreamID: 0xdeadbeef}
+			f := &wire.StreamBlockedFrame{
+				StreamID: 0xdeadbeef,
+				Offset:   0xdead,
+			}
 			buf := &bytes.Buffer{}
 			err := f.Write(buf, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
@@ -403,6 +406,7 @@ var _ = Describe("Packet unpacker", func() {
 				0x02: qerr.InvalidConnectionCloseData,
 				0x04: qerr.InvalidWindowUpdateData,
 				0x05: qerr.InvalidWindowUpdateData,
+				0x08: qerr.InvalidBlockedData,
 				0x09: qerr.InvalidBlockedData,
 				0x0c: qerr.InvalidFrameData,
 				0x0e: qerr.InvalidAckData,
