@@ -364,6 +364,17 @@ var _ = Describe("Packet unpacker", func() {
 			Expect(packet.frames).To(Equal([]wire.Frame{f}))
 		})
 
+		It("unpacks STOP_SENDING frames", func() {
+			f := &wire.StopSendingFrame{StreamID: 0x42}
+			buf := &bytes.Buffer{}
+			err := f.Write(buf, versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			setData(buf.Bytes())
+			packet, err := unpacker.Unpack(hdrBin, hdr, data)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packet.frames).To(Equal([]wire.Frame{f}))
+		})
+
 		It("unpacks ACK frames", func() {
 			f := &wire.AckFrame{
 				LargestAcked: 0x13,
@@ -393,8 +404,9 @@ var _ = Describe("Packet unpacker", func() {
 				0x04: qerr.InvalidWindowUpdateData,
 				0x05: qerr.InvalidWindowUpdateData,
 				0x09: qerr.InvalidBlockedData,
+				0x0c: qerr.InvalidFrameData,
+				0x0e: qerr.InvalidAckData,
 				0x10: qerr.InvalidStreamData,
-				0xe:  qerr.InvalidAckData,
 			} {
 				setData([]byte{b})
 				_, err := unpacker.Unpack(hdrBin, hdr, data)
