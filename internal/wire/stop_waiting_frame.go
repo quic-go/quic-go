@@ -22,7 +22,10 @@ var (
 	errPacketNumberLenNotSet              = errors.New("StopWaitingFrame: PacketNumberLen not set")
 )
 
-func (f *StopWaitingFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) error {
+func (f *StopWaitingFrame) Write(b *bytes.Buffer, v protocol.VersionNumber) error {
+	if v.UsesIETFFrameFormat() {
+		return errors.New("STOP_WAITING not defined in IETF QUIC")
+	}
 	// make sure the PacketNumber was set
 	if f.PacketNumber == protocol.PacketNumber(0) {
 		return errPacketNumberNotSet

@@ -106,13 +106,7 @@ func (u *packetUnpacker) parseIETFFrame(r *bytes.Reader, typeByte byte, hdr *wir
 		if err != nil {
 			err = qerr.Error(qerr.InvalidWindowUpdateData, err.Error())
 		}
-	case 0x6:
-		// TODO(#964): remove STOP_WAITING frames
-		// TODO(#878): implement the MAX_STREAM_ID frame
-		frame, err = wire.ParseStopWaitingFrame(r, hdr.PacketNumber, hdr.PacketNumberLen, u.version)
-		if err != nil {
-			err = qerr.Error(qerr.InvalidStopWaitingData, err.Error())
-		}
+	// TODO(#878): implement the MAX_STREAM_ID frame
 	case 0x7:
 		frame, err = wire.ParsePingFrame(r, u.version)
 	case 0x8:
