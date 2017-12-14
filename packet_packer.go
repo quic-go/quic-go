@@ -77,7 +77,7 @@ func (p *packetPacker) PackAckPacket() (*packedPacket, error) {
 	encLevel, sealer := p.cryptoSetup.GetSealer()
 	header := p.getHeader(encLevel)
 	frames := []wire.Frame{p.ackFrame}
-	if p.stopWaiting != nil {
+	if p.stopWaiting != nil { // a STOP_WAITING will only be queued when using gQUIC
 		p.stopWaiting.PacketNumber = header.PacketNumber
 		p.stopWaiting.PacketNumberLen = header.PacketNumberLen
 		frames = append(frames, p.stopWaiting)
@@ -102,14 +102,20 @@ func (p *packetPacker) PackHandshakeRetransmission(packet *ackhandler.Packet) (*
 	if err != nil {
 		return nil, err
 	}
-	if p.stopWaiting == nil {
-		return nil, errors.New("PacketPacker BUG: Handshake retransmissions must contain a StopWaitingFrame")
-	}
 	header := p.getHeader(packet.EncryptionLevel)
-	p.stopWaiting.PacketNumber = header.PacketNumber
-	p.stopWaiting.PacketNumberLen = header.PacketNumberLen
-	frames := append([]wire.Frame{p.stopWaiting}, packet.Frames...)
-	p.stopWaiting = nil
+	var frames []wire.Frame
+	if !p.version.UsesIETFFrameFormat() { // for gQUIC: pack a STOP_WAITING first
+		if p.stopWaiting == nil {
+			return nil, errors.New("PacketPacker BUG: Handshake retransmissions must contain a STOP_WAITING frame")
+		}
+		swf := p.stopWaiting
+		swf.PacketNumber = header.PacketNumber
+		swf.PacketNumberLen = header.PacketNumberLen
+		p.stopWaiting = nil
+		frames = append([]wire.Frame{swf}, packet.Frames...)
+	} else {
+		frames = packet.Frames
+	}
 	raw, err := p.writeAndSealPacket(header, frames, sealer)
 	return &packedPacket{
 		header:          header,
@@ -217,7 +223,7 @@ func (p *packetPacker) composeNextPacket(
 		l := p.ackFrame.MinLength(p.version)
 		payloadLength += l
 	}
-	if p.stopWaiting != nil {
+	if p.stopWaiting != nil { // a STOP_WAITING will only be queued when using gQUIC
 		payloadFrames = append(payloadFrames, p.stopWaiting)
 		payloadLength += p.stopWaiting.MinLength(p.version)
 	}

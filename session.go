@@ -716,9 +716,10 @@ func (s *session) sendPacket() error {
 				return nil
 			}
 			// If we aren't allowed to send, at least try sending an ACK frame
-			swf := s.sentPacketHandler.GetStopWaitingFrame(false)
-			if swf != nil {
-				s.packer.QueueControlFrame(swf)
+			if !s.version.UsesIETFFrameFormat() {
+				if swf := s.sentPacketHandler.GetStopWaitingFrame(false); swf != nil {
+					s.packer.QueueControlFrame(swf)
+				}
 			}
 			packet, err := s.packer.PackAckPacket()
 			if err != nil {
@@ -740,7 +741,9 @@ func (s *session) sendPacket() error {
 					continue
 				}
 				utils.Debugf("\tDequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
-				s.packer.QueueControlFrame(s.sentPacketHandler.GetStopWaitingFrame(true))
+				if !s.version.UsesIETFFrameFormat() {
+					s.packer.QueueControlFrame(s.sentPacketHandler.GetStopWaitingFrame(true))
+				}
 				packet, err := s.packer.PackHandshakeRetransmission(retransmitPacket)
 				if err != nil {
 					return err
@@ -764,9 +767,8 @@ func (s *session) sendPacket() error {
 		}
 
 		hasRetransmission := s.streamFramer.HasFramesForRetransmission()
-		if ack != nil || hasRetransmission {
-			swf := s.sentPacketHandler.GetStopWaitingFrame(hasRetransmission)
-			if swf != nil {
+		if !s.version.UsesIETFFrameFormat() && (ack != nil || hasRetransmission) {
+			if swf := s.sentPacketHandler.GetStopWaitingFrame(hasRetransmission); swf != nil {
 				s.packer.QueueControlFrame(swf)
 			}
 		}

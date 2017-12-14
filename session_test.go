@@ -761,19 +761,39 @@ var _ = Describe("Session", func() {
 		})
 
 		It("sends ACK frames when congestion limited", func() {
+			swf := &wire.StopWaitingFrame{LeastUnacked: 10}
 			sph := mocks.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().GetLeastUnacked().AnyTimes()
 			sph.EXPECT().SendingAllowed().Return(false)
-			sph.EXPECT().GetStopWaitingFrame(false)
-			sph.EXPECT().SentPacket(gomock.Any())
+			sph.EXPECT().GetStopWaitingFrame(false).Return(swf)
+			sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
+				Expect(p.Frames).To(HaveLen(2))
+				Expect(p.Frames[0]).To(BeAssignableToTypeOf(&wire.AckFrame{}))
+				Expect(p.Frames[1]).To(Equal(swf))
+			})
 			sess.sentPacketHandler = sph
 			sess.packer.packetNumberGenerator.next = 0x1338
-			packetNumber := protocol.PacketNumber(0x035e)
-			sess.receivedPacketHandler.ReceivedPacket(packetNumber, true)
+			sess.receivedPacketHandler.ReceivedPacket(1, true)
 			err := sess.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mconn.written).To(HaveLen(1))
-			Expect(mconn.written).To(Receive(ContainSubstring(string([]byte{0x03, 0x5e}))))
+		})
+
+		It("doesn't include a STOP_WAITING for an ACK-only packet for IETF QUIC", func() {
+			sess.version = versionIETFFrames
+			sph := mocks.NewMockSentPacketHandler(mockCtrl)
+			sph.EXPECT().GetLeastUnacked().AnyTimes()
+			sph.EXPECT().SendingAllowed().Return(false)
+			sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
+				Expect(p.Frames).To(HaveLen(1))
+				Expect(p.Frames[0]).To(BeAssignableToTypeOf(&wire.AckFrame{}))
+			})
+			sess.sentPacketHandler = sph
+			sess.packer.packetNumberGenerator.next = 0x1338
+			sess.receivedPacketHandler.ReceivedPacket(1, true)
+			err := sess.sendPacket()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mconn.written).To(HaveLen(1))
 		})
 
 		It("sends a retransmittable packet when required by the SentPacketHandler", func() {
@@ -846,27 +866,41 @@ var _ = Describe("Session", func() {
 		})
 
 		Context("for handshake packets", func() {
-			It("retransmits an unencrypted packet", func() {
+			It("retransmits an unencrypted packet, and adds a STOP_WAITING frame (for gQUIC)", func() {
 				sf := &wire.StreamFrame{StreamID: 1, Data: []byte("foobar")}
-				var sentPacket *ackhandler.Packet
-				sph.EXPECT().GetStopWaitingFrame(true).Return(&wire.StopWaitingFrame{LeastUnacked: 0x1337})
-				sph.EXPECT().DequeuePacketForRetransmission().Return(
-					&ackhandler.Packet{
-						Frames:          []wire.Frame{sf},
-						EncryptionLevel: protocol.EncryptionUnencrypted,
-					})
+				swf := &wire.StopWaitingFrame{LeastUnacked: 0x1337}
+				sph.EXPECT().GetStopWaitingFrame(true).Return(swf)
+				sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
+					Frames:          []wire.Frame{sf},
+					EncryptionLevel: protocol.EncryptionUnencrypted,
+				})
 				sph.EXPECT().DequeuePacketForRetransmission()
 				sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
-					sentPacket = p
+					Expect(p.EncryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
+					Expect(p.Frames).To(Equal([]wire.Frame{swf, sf}))
 				})
 				err := sess.sendPacket()
 				Expect(err).ToNot(HaveOccurred())
 				Expect(mconn.written).To(HaveLen(1))
-				Expect(sentPacket.EncryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
-				Expect(sentPacket.Frames).To(HaveLen(2))
-				Expect(sentPacket.Frames[1]).To(Equal(sf))
-				swf := sentPacket.Frames[0].(*wire.StopWaitingFrame)
-				Expect(swf.LeastUnacked).To(Equal(protocol.PacketNumber(0x1337)))
+
+			})
+
+			It("retransmits an unencrypted packet, and doesn't add a STOP_WAITING frame (for IETF QUIC)", func() {
+				sess.version = versionIETFFrames
+				sess.packer.version = versionIETFFrames
+				sf := &wire.StreamFrame{StreamID: 1, Data: []byte("foobar")}
+				sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
+					Frames:          []wire.Frame{sf},
+					EncryptionLevel: protocol.EncryptionUnencrypted,
+				})
+				sph.EXPECT().DequeuePacketForRetransmission()
+				sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
+					Expect(p.EncryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
+					Expect(p.Frames).To(Equal([]wire.Frame{sf}))
+				})
+				err := sess.sendPacket()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(mconn.written).To(HaveLen(1))
 			})
 
 			It("doesn't retransmit handshake packets when the handshake is complete", func() {
@@ -885,25 +919,49 @@ var _ = Describe("Session", func() {
 		})
 
 		Context("for packets after the handshake", func() {
-			It("sends a StreamFrame from a packet queued for retransmission", func() {
-				f := wire.StreamFrame{
+			It("sends a STREAM frame from a packet queued for retransmission, and adds a STOP_WAITING (for gQUIC)", func() {
+				f := &wire.StreamFrame{
 					StreamID: 0x5,
-					Data:     []byte("foobar1234567"),
+					Data:     []byte("foobar"),
 				}
-				sph.EXPECT().GetStopWaitingFrame(true).Return(&wire.StopWaitingFrame{})
-				sph.EXPECT().DequeuePacketForRetransmission().Return(
-					&ackhandler.Packet{
-						PacketNumber:    0x1337,
-						Frames:          []wire.Frame{&f},
-						EncryptionLevel: protocol.EncryptionForwardSecure,
-					})
+				swf := &wire.StopWaitingFrame{LeastUnacked: 10}
+				sph.EXPECT().GetStopWaitingFrame(true).Return(swf)
+				sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
+					PacketNumber:    0x1337,
+					Frames:          []wire.Frame{f},
+					EncryptionLevel: protocol.EncryptionForwardSecure,
+				})
 				sph.EXPECT().DequeuePacketForRetransmission()
-				sph.EXPECT().SentPacket(gomock.Any())
+				sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
+					Expect(p.Frames).To(Equal([]wire.Frame{swf, f}))
+					Expect(p.EncryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
+				})
 				sph.EXPECT().SendingAllowed()
 				err := sess.sendPacket()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(mconn.written).To(HaveLen(1))
-				Expect(mconn.written).To(Receive(ContainSubstring("foobar1234567")))
+			})
+
+			It("sends a STREAM frame from a packet queued for retransmission, and doesn't add a STOP_WAITING (for IETF QUIC)", func() {
+				sess.version = versionIETFFrames
+				sess.packer.version = versionIETFFrames
+				f := &wire.StreamFrame{
+					StreamID: 0x5,
+					Data:     []byte("foobar"),
+				}
+				sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
+					Frames:          []wire.Frame{f},
+					EncryptionLevel: protocol.EncryptionForwardSecure,
+				})
+				sph.EXPECT().DequeuePacketForRetransmission()
+				sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
+					Expect(p.Frames).To(Equal([]wire.Frame{f}))
+					Expect(p.EncryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
+				})
+				sph.EXPECT().SendingAllowed()
+				err := sess.sendPacket()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(mconn.written).To(HaveLen(1))
 			})
 
 			It("sends a StreamFrame from a packet queued for retransmission", func() {

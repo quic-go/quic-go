@@ -782,8 +782,19 @@ var _ = Describe("Packet packer", func() {
 			}
 			p, err := packer.PackHandshakeRetransmission(packet)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(p.frames).To(ContainElement(sf))
-			Expect(p.frames).To(ContainElement(swf))
+			Expect(p.frames).To(Equal([]wire.Frame{swf, sf}))
+			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
+		})
+
+		It("doesn't add a STOP_WAITING frame for IETF QUIC", func() {
+			packer.version = versionIETFFrames
+			packet := &ackhandler.Packet{
+				EncryptionLevel: protocol.EncryptionUnencrypted,
+				Frames:          []wire.Frame{sf},
+			}
+			p, err := packer.PackHandshakeRetransmission(packet)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p.frames).To(Equal([]wire.Frame{sf}))
 			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
 		})
 
@@ -796,8 +807,7 @@ var _ = Describe("Packet packer", func() {
 			}
 			p, err := packer.PackHandshakeRetransmission(packet)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(p.frames).To(ContainElement(sf))
-			Expect(p.frames).To(ContainElement(swf))
+			Expect(p.frames).To(Equal([]wire.Frame{swf, sf}))
 			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionSecure))
 			// a packet sent by the server with initial encryption contains the SHLO
 			// it needs to have a diversification nonce
@@ -871,7 +881,7 @@ var _ = Describe("Packet packer", func() {
 			_, err := packer.PackHandshakeRetransmission(&ackhandler.Packet{
 				EncryptionLevel: protocol.EncryptionSecure,
 			})
-			Expect(err).To(MatchError("PacketPacker BUG: Handshake retransmissions must contain a StopWaitingFrame"))
+			Expect(err).To(MatchError("PacketPacker BUG: Handshake retransmissions must contain a STOP_WAITING frame"))
 		})
 	})
 
@@ -883,7 +893,7 @@ var _ = Describe("Packet packer", func() {
 			Expect(p.frames).To(Equal([]wire.Frame{&wire.AckFrame{DelayTime: math.MaxInt64}}))
 		})
 
-		It("packs ACK packets with SWFs", func() {
+		It("packs ACK packets with STOP_WAITING frames", func() {
 			packer.QueueControlFrame(&wire.AckFrame{})
 			packer.QueueControlFrame(&wire.StopWaitingFrame{})
 			p, err := packer.PackAckPacket()
