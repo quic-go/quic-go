@@ -72,8 +72,8 @@ var _ = Describe("Stream Framer", func() {
 		BeforeEach(func() {
 			// nothing is blocked here
 			connFC.EXPECT().IsBlocked().AnyTimes()
-			stream1.EXPECT().IsFlowControlBlocked().Return(false).AnyTimes()
-			stream2.EXPECT().IsFlowControlBlocked().Return(false).AnyTimes()
+			stream1.EXPECT().IsFlowControlBlocked().Return(false, protocol.ByteCount(0)).AnyTimes()
+			stream2.EXPECT().IsFlowControlBlocked().Return(false, protocol.ByteCount(0)).AnyTimes()
 		})
 
 		It("returns nil when popping an empty framer", func() {
@@ -272,13 +272,13 @@ var _ = Describe("Stream Framer", func() {
 				StreamID: id1,
 				Data:     []byte("foobar"),
 			})
-			stream1.EXPECT().IsFlowControlBlocked().Return(true)
+			stream1.EXPECT().IsFlowControlBlocked().Return(true, protocol.ByteCount(0x1234))
 			frames := framer.PopStreamFrames(1000)
 			Expect(frames).To(HaveLen(1))
-			f := framer.PopBlockedFrame()
-			Expect(f).To(BeAssignableToTypeOf(&wire.StreamBlockedFrame{}))
-			bf := f.(*wire.StreamBlockedFrame)
-			Expect(bf.StreamID).To(Equal(stream1.StreamID()))
+			Expect(framer.PopBlockedFrame()).To(Equal(&wire.StreamBlockedFrame{
+				StreamID: stream1.StreamID(),
+				Offset:   0x1234,
+			}))
 			Expect(framer.PopBlockedFrame()).To(BeNil())
 		})
 
@@ -300,15 +300,14 @@ var _ = Describe("Stream Framer", func() {
 
 		It("queues and pops BLOCKED frames for connection blocked streams", func() {
 			setNoData(stream2)
-			connFC.EXPECT().IsBlocked().Return(true)
+			connFC.EXPECT().IsBlocked().Return(true, protocol.ByteCount(0x4321))
 			stream1.EXPECT().PopStreamFrame(gomock.Any()).Return(&wire.StreamFrame{
 				StreamID: id1,
 				Data:     []byte("foo"),
 			})
-			stream1.EXPECT().IsFlowControlBlocked().Return(false)
+			stream1.EXPECT().IsFlowControlBlocked().Return(false, protocol.ByteCount(0))
 			framer.PopStreamFrames(1000)
-			f := framer.PopBlockedFrame()
-			Expect(f).To(BeAssignableToTypeOf(&wire.BlockedFrame{}))
+			Expect(framer.PopBlockedFrame()).To(Equal(&wire.BlockedFrame{Offset: 0x4321}))
 			Expect(framer.PopBlockedFrame()).To(BeNil())
 		})
 	})

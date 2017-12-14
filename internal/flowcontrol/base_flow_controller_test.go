@@ -54,7 +54,9 @@ var _ = Describe("Base Flow controller", func() {
 			controller.UpdateSendWindow(100)
 			Expect(controller.IsBlocked()).To(BeFalse())
 			controller.AddBytesSent(100)
-			Expect(controller.IsBlocked()).To(BeTrue())
+			blocked, offset := controller.IsBlocked()
+			Expect(blocked).To(BeTrue())
+			Expect(offset).To(Equal(protocol.ByteCount(100)))
 		})
 	})
 

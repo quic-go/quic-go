@@ -105,11 +105,16 @@ func (f *streamFramer) maybePopNormalFrames(maxTotalLen protocol.ByteCount) (res
 		}
 
 		// Finally, check if we are now FC blocked and should queue a BLOCKED frame
-		if !frame.FinBit && s.IsFlowControlBlocked() {
-			f.blockedFrameQueue = append(f.blockedFrameQueue, &wire.StreamBlockedFrame{StreamID: s.StreamID()})
+		if !frame.FinBit {
+			if blocked, offset := s.IsFlowControlBlocked(); blocked {
+				f.blockedFrameQueue = append(f.blockedFrameQueue, &wire.StreamBlockedFrame{
+					StreamID: s.StreamID(),
+					Offset:   offset,
+				})
+			}
 		}
-		if f.connFlowController.IsBlocked() {
-			f.blockedFrameQueue = append(f.blockedFrameQueue, &wire.BlockedFrame{})
+		if blocked, offset := f.connFlowController.IsBlocked(); blocked {
+			f.blockedFrameQueue = append(f.blockedFrameQueue, &wire.BlockedFrame{Offset: offset})
 		}
 
 		res = append(res, frame)

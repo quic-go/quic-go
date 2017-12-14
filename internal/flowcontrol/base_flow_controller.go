@@ -79,11 +79,16 @@ func (c *baseFlowController) getWindowUpdate() protocol.ByteCount {
 	return c.receiveWindow
 }
 
-func (c *baseFlowController) IsBlocked() bool {
+// IsBlocked says if it is blocked by flow control.
+// If it is blocked, the offset is returned.
+func (c *baseFlowController) IsBlocked() (bool, protocol.ByteCount) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	return c.sendWindowSize() == 0
+	if c.sendWindowSize() != 0 {
+		return false, 0
+	}
+	return true, c.sendWindow
 }
 
 // maybeAdjustWindowIncrement increases the receiveWindowIncrement if we're sending updates too often.
