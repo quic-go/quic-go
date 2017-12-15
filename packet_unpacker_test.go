@@ -102,7 +102,7 @@ var _ = Describe("Packet unpacker", func() {
 			f := &wire.RstStreamFrame{
 				StreamID:   0xdeadbeef,
 				ByteOffset: 0xdecafbad11223344,
-				ErrorCode:  0x13371234,
+				ErrorCode:  0x1337,
 			}
 			err := f.Write(buf, versionGQUICFrames)
 			Expect(err).ToNot(HaveOccurred())
