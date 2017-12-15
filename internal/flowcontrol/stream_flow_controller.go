@@ -102,9 +102,6 @@ func (c *streamFlowController) AddBytesSent(n protocol.ByteCount) {
 }
 
 func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
 	window := c.baseFlowController.sendWindowSize()
 	if c.contributesToConnection {
 		window = utils.MinByteCount(window, c.connection.SendWindowSize())
