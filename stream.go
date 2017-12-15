@@ -249,10 +249,6 @@ func (s *stream) Write(p []byte) (int, error) {
 	return len(p) - len(s.dataForWriting), err
 }
 
-func (s *stream) GetWriteOffset() protocol.ByteCount {
-	return s.writeOffset
-}
-
 // PopStreamFrame returns the next STREAM frame that is supposed to be sent on this stream
 // maxBytes is the maximum length this frame (including frame header) will have.
 func (s *stream) PopStreamFrame(maxBytes protocol.ByteCount) *wire.StreamFrame {
