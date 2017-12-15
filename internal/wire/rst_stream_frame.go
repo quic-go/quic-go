@@ -7,10 +7,12 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
-// A RstStreamFrame in QUIC
+// A RstStreamFrame is a RST_STREAM frame in QUIC
 type RstStreamFrame struct {
-	StreamID   protocol.StreamID
-	ErrorCode  uint32
+	StreamID protocol.StreamID
+	// The error code is a uint32 in gQUIC, but a uint16 in IETF QUIC.
+	// protocol.ApplicaitonErrorCode is a uint16, so larger values in gQUIC frames will be truncated.
+	ErrorCode  protocol.ApplicationErrorCode
 	ByteOffset protocol.ByteCount
 }
 
@@ -21,7 +23,7 @@ func ParseRstStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*RstS
 	}
 
 	var streamID protocol.StreamID
-	var errorCode uint32
+	var errorCode uint16
 	var byteOffset protocol.ByteCount
 	if version.UsesIETFFrameFormat() {
 		sid, err := utils.ReadVarInt(r)
@@ -29,11 +31,10 @@ func ParseRstStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*RstS
 			return nil, err
 		}
 		streamID = protocol.StreamID(sid)
-		ec, err := utils.BigEndian.ReadUint16(r)
+		errorCode, err = utils.BigEndian.ReadUint16(r)
 		if err != nil {
 			return nil, err
 		}
-		errorCode = uint32(ec)
 		bo, err := utils.ReadVarInt(r)
 		if err != nil {
 			return nil, err
@@ -54,12 +55,12 @@ func ParseRstStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*RstS
 		if err != nil {
 			return nil, err
 		}
-		errorCode = uint32(ec)
+		errorCode = uint16(ec)
 	}
 
 	return &RstStreamFrame{
 		StreamID:   streamID,
-		ErrorCode:  errorCode,
+		ErrorCode:  protocol.ApplicationErrorCode(errorCode),
 		ByteOffset: byteOffset,
 	}, nil
 }
@@ -74,7 +75,7 @@ func (f *RstStreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) 
 	} else {
 		utils.BigEndian.WriteUint32(b, uint32(f.StreamID))
 		utils.BigEndian.WriteUint64(b, uint64(f.ByteOffset))
-		utils.BigEndian.WriteUint32(b, f.ErrorCode)
+		utils.BigEndian.WriteUint32(b, uint32(f.ErrorCode))
 	}
 	return nil
 }

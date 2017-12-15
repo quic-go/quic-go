@@ -22,7 +22,7 @@ var _ = Describe("RST_STREAM frame", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.StreamID).To(Equal(protocol.StreamID(0xdeadbeef)))
 				Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0x987654321)))
-				Expect(frame.ErrorCode).To(Equal(uint32(0x1337)))
+				Expect(frame.ErrorCode).To(Equal(protocol.ApplicationErrorCode(0x1337)))
 			})
 
 			It("errors on EOFs", func() {
@@ -44,13 +44,13 @@ var _ = Describe("RST_STREAM frame", func() {
 				b := bytes.NewReader([]byte{0x1,
 					0xde, 0xad, 0xbe, 0xef, // stream id
 					0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, // byte offset
-					0x34, 0x12, 0x37, 0x13, // error code
+					0x0, 0x0, 0xca, 0xfe, // error code
 				})
 				frame, err := ParseRstStreamFrame(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.StreamID).To(Equal(protocol.StreamID(0xdeadbeef)))
 				Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0x8877665544332211)))
-				Expect(frame.ErrorCode).To(Equal(uint32(0x34123713)))
+				Expect(frame.ErrorCode).To(Equal(protocol.ApplicationErrorCode(0xcafe)))
 			})
 
 			It("errors on EOFs", func() {
@@ -103,7 +103,7 @@ var _ = Describe("RST_STREAM frame", func() {
 				frame := RstStreamFrame{
 					StreamID:   0x1337,
 					ByteOffset: 0x11223344decafbad,
-					ErrorCode:  0xdeadbeef,
+					ErrorCode:  0xcafe,
 				}
 				b := &bytes.Buffer{}
 				err := frame.Write(b, versionBigEndian)
@@ -111,7 +111,7 @@ var _ = Describe("RST_STREAM frame", func() {
 				Expect(b.Bytes()).To(Equal([]byte{0x01,
 					0x0, 0x0, 0x13, 0x37, // stream id
 					0x11, 0x22, 0x33, 0x44, 0xde, 0xca, 0xfb, 0xad, // byte offset
-					0xde, 0xad, 0xbe, 0xef, // error code
+					0x0, 0x0, 0xca, 0xfe, // error code
 				}))
 			})
 

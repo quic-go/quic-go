@@ -5,7 +5,6 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/qerr"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -21,7 +20,7 @@ var _ = Describe("STOP_SENDING frame", func() {
 			frame, err := ParseStopSendingFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0xdecafbad)))
-			Expect(frame.ErrorCode).To(Equal(qerr.ErrorCode(0x1337)))
+			Expect(frame.ErrorCode).To(Equal(protocol.ApplicationErrorCode(0x1337)))
 			Expect(b.Len()).To(BeZero())
 		})
 
