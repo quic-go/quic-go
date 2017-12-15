@@ -36,6 +36,30 @@ func (_m *MockStreamI) EXPECT() *MockStreamIMockRecorder {
 	return _m.recorder
 }
 
+// CancelRead mocks base method
+func (_m *MockStreamI) CancelRead(_param0 protocol.ApplicationErrorCode) error {
+	ret := _m.ctrl.Call(_m, "CancelRead", _param0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CancelRead indicates an expected call of CancelRead
+func (_mr *MockStreamIMockRecorder) CancelRead(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "CancelRead", reflect.TypeOf((*MockStreamI)(nil).CancelRead), arg0)
+}
+
+// CancelWrite mocks base method
+func (_m *MockStreamI) CancelWrite(_param0 protocol.ApplicationErrorCode) error {
+	ret := _m.ctrl.Call(_m, "CancelWrite", _param0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CancelWrite indicates an expected call of CancelWrite
+func (_mr *MockStreamIMockRecorder) CancelWrite(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "CancelWrite", reflect.TypeOf((*MockStreamI)(nil).CancelWrite), arg0)
+}
+
 // Close mocks base method
 func (_m *MockStreamI) Close() error {
 	ret := _m.ctrl.Call(_m, "Close")
@@ -164,16 +188,6 @@ func (_m *MockStreamI) Read(_param0 []byte) (int, error) {
 // Read indicates an expected call of Read
 func (_mr *MockStreamIMockRecorder) Read(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "Read", reflect.TypeOf((*MockStreamI)(nil).Read), arg0)
-}
-
-// Reset mocks base method
-func (_m *MockStreamI) Reset(_param0 error) {
-	_m.ctrl.Call(_m, "Reset", _param0)
-}
-
-// Reset indicates an expected call of Reset
-func (_mr *MockStreamIMockRecorder) Reset(arg0 interface{}) *gomock.Call {
-	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "Reset", reflect.TypeOf((*MockStreamI)(nil).Reset), arg0)
 }
 
 // SetDeadline mocks base method

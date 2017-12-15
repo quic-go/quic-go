@@ -11,6 +11,7 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 
+	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -29,6 +30,8 @@ type mockStream struct {
 	ctxCancel   context.CancelFunc
 }
 
+var _ quic.Stream = &mockStream{}
+
 func newMockStream(id protocol.StreamID) *mockStream {
 	s := &mockStream{
 		id:          id,
@@ -39,7 +42,8 @@ func newMockStream(id protocol.StreamID) *mockStream {
 }
 
 func (s *mockStream) Close() error                          { s.closed = true; s.ctxCancel(); return nil }
-func (s *mockStream) Reset(error)                           { s.reset = true }
+func (s *mockStream) CancelRead(quic.ErrorCode) error       { s.reset = true; return nil }
+func (s *mockStream) CancelWrite(quic.ErrorCode) error      { panic("not implemented") }
 func (s *mockStream) CloseRemote(offset protocol.ByteCount) { s.remoteClosed = true; s.ctxCancel() }
 func (s mockStream) StreamID() protocol.StreamID            { return s.id }
 func (s *mockStream) Context() context.Context              { return s.ctx }
