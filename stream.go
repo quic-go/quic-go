@@ -25,13 +25,17 @@ func (e streamCanceledError) ErrorCode() protocol.ApplicationErrorCode { return 
 var _ StreamError = &streamCanceledError{}
 var _ error = &streamCanceledError{}
 
-const errorCodeStoppingGQUIC protocol.ApplicationErrorCode = 7
+const (
+	errorCodeStopping      protocol.ApplicationErrorCode = 0
+	errorCodeStoppingGQUIC protocol.ApplicationErrorCode = 7
+)
 
 type streamI interface {
 	Stream
 
 	HandleStreamFrame(*wire.StreamFrame) error
 	HandleRstStreamFrame(*wire.RstStreamFrame) error
+	HandleStopSendingFrame(*wire.StopSendingFrame)
 	PopStreamFrame(maxBytes protocol.ByteCount) *wire.StreamFrame
 	Finished() bool
 	CloseForShutdown(error)
@@ -69,7 +73,7 @@ type stream struct {
 	closedForShutdown bool // set when CloseForShutdown() is called
 	finRead           bool // set once we read a frame with a FinBit
 	finishedWriting   bool // set once Close() is called
-	canceledWrite     bool // set when CancelWrite() is called
+	canceledWrite     bool // set when CancelWrite() is called, or a STOP_SENDING frame is received
 	canceledRead      bool // set when CancelRead() is called
 	finSent           bool // set when a STREAM_FRAME with FIN bit has b
 	resetRemotely     bool // set when HandleRstStreamFrame() is called
@@ -459,7 +463,12 @@ func (s *stream) CancelRead(errorCode protocol.ApplicationErrorCode) error {
 	s.canceledRead = true
 	s.cancelReadErr = fmt.Errorf("Read on stream %d canceled with error code %d", s.streamID, errorCode)
 	s.signalRead()
-	// TODO(#1034): queue a STOP_SENDING (in IETF QUIC)
+	if s.version.UsesIETFFrameFormat() {
+		s.queueControlFrame(&wire.StopSendingFrame{
+			StreamID:  s.streamID,
+			ErrorCode: errorCode,
+		})
+	}
 	return nil
 }
 
@@ -474,7 +483,7 @@ func (s *stream) HandleRstStreamFrame(frame *wire.RstStreamFrame) error {
 		return err
 	}
 	if !s.version.UsesIETFFrameFormat() {
-		s.HandleStopSendingFrame(&wire.StopSendingFrame{
+		s.handleStopSendingFrameImpl(&wire.StopSendingFrame{
 			StreamID:  s.streamID,
 			ErrorCode: frame.ErrorCode,
 		})
@@ -500,12 +509,22 @@ func (s *stream) HandleRstStreamFrame(frame *wire.RstStreamFrame) error {
 }
 
 func (s *stream) HandleStopSendingFrame(frame *wire.StopSendingFrame) {
-	// send a RST_STREAM frame
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.handleStopSendingFrameImpl(frame)
+}
+
+// must be called after locking the mutex
+func (s *stream) handleStopSendingFrameImpl(frame *wire.StopSendingFrame) {
 	writeErr := streamCanceledError{
 		errorCode: frame.ErrorCode,
 		error:     fmt.Errorf("Stream %d was reset with error code %d", s.streamID, frame.ErrorCode),
 	}
-	s.cancelWriteImpl(errorCodeStoppingGQUIC, writeErr)
+	errorCode := errorCodeStopping
+	if !s.version.UsesIETFFrameFormat() {
+		errorCode = errorCodeStoppingGQUIC
+	}
+	s.cancelWriteImpl(errorCode, writeErr)
 }
 
 func (s *stream) Finished() bool {

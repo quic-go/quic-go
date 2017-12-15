@@ -425,6 +425,52 @@ var _ = Describe("Session", func() {
 			})
 		})
 
+		Context("handling STOP_SENDING frames", func() {
+			It("opens a new stream when receiving a STOP_SENDING frame for an unknown stream", func() {
+				f := &wire.StopSendingFrame{
+					StreamID:  5,
+					ErrorCode: 10,
+				}
+				newStreamLambda := sess.streamsMap.newStream
+				sess.streamsMap.newStream = func(id protocol.StreamID) streamI {
+					str := newStreamLambda(id)
+					if id == 5 {
+						str.(*mocks.MockStreamI).EXPECT().HandleStopSendingFrame(f)
+					}
+					return str
+				}
+				err := sess.handleStopSendingFrame(f)
+				Expect(err).ToNot(HaveOccurred())
+				str, err := sess.streamsMap.GetOrOpenStream(5)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(str).ToNot(BeNil())
+			})
+
+			It("errors when receiving a STOP_SENDING for the crypto stream", func() {
+				err := sess.handleStopSendingFrame(&wire.StopSendingFrame{
+					StreamID:  sess.version.CryptoStreamID(),
+					ErrorCode: 10,
+				})
+				Expect(err).To(MatchError("Received a STOP_SENDING frame for the crypto stream"))
+			})
+
+			It("ignores STOP_SENDING frames for a closed stream", func() {
+				str, err := sess.GetOrOpenStream(3)
+				Expect(err).ToNot(HaveOccurred())
+				str.(*mocks.MockStreamI).EXPECT().Finished().Return(true)
+				err = sess.streamsMap.DeleteClosedStreams()
+				Expect(err).ToNot(HaveOccurred())
+				str, err = sess.GetOrOpenStream(3)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(str).To(BeNil())
+				err = sess.handleFrames([]wire.Frame{&wire.StopSendingFrame{
+					StreamID:  3,
+					ErrorCode: 1337,
+				}}, protocol.EncryptionUnspecified)
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
 		It("handles PING frames", func() {
 			err := sess.handleFrames([]wire.Frame{&wire.PingFrame{}}, protocol.EncryptionUnspecified)
 			Expect(err).NotTo(HaveOccurred())

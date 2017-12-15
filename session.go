@@ -532,6 +532,8 @@ func (s *session) handleFrames(fs []wire.Frame, encLevel protocol.EncryptionLeve
 			err = s.handleMaxStreamDataFrame(frame)
 		case *wire.BlockedFrame:
 		case *wire.StreamBlockedFrame:
+		case *wire.StopSendingFrame:
+			err = s.handleStopSendingFrame(frame)
 		case *wire.PingFrame:
 		default:
 			return errors.New("Session BUG: unexpected frame type")
@@ -596,6 +598,22 @@ func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error
 		return nil
 	}
 	str.HandleMaxStreamDataFrame(frame)
+	return nil
+}
+
+func (s *session) handleStopSendingFrame(frame *wire.StopSendingFrame) error {
+	if frame.StreamID == s.version.CryptoStreamID() {
+		return errors.New("Received a STOP_SENDING frame for the crypto stream")
+	}
+	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
+	if err != nil {
+		return err
+	}
+	if str == nil {
+		// stream is closed and already garbage collected
+		return nil
+	}
+	str.HandleStopSendingFrame(frame)
 	return nil
 }
 

@@ -886,6 +886,28 @@ var _ = Describe("Stream", func() {
 					Expect(queuedControlFrames).To(BeEmpty()) // no RST_STREAM frame queued yet
 				})
 			})
+
+			Context("for IETF QUIC", func() {
+				It("queues a STOP_SENDING frame", func() {
+					err := str.CancelRead(1234)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(queuedControlFrames).To(Equal([]wire.Frame{
+						&wire.StopSendingFrame{
+							StreamID:  streamID,
+							ErrorCode: 1234,
+						},
+					}))
+				})
+
+				It("doesn't queue a RST_STREAM after closing the stream", func() { // this is what it does for gQUIC
+					err := str.CancelRead(1234)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(queuedControlFrames).To(HaveLen(1))
+					Expect(queuedControlFrames[0]).To(BeAssignableToTypeOf(&wire.StopSendingFrame{}))
+					Expect(str.Close()).To(Succeed())
+					Expect(queuedControlFrames).To(HaveLen(1))
+				})
+			})
 		})
 
 		Context("receiving RST_STREAM frames", func() {
@@ -1059,6 +1081,52 @@ var _ = Describe("Stream", func() {
 					}))
 					Eventually(writeReturned).Should(BeClosed())
 				})
+			})
+		})
+
+		Context("receiving STOP_SENDING frames", func() {
+			It("queues a RST_STREAM frames with error code Stopping", func() {
+				str.HandleStopSendingFrame(&wire.StopSendingFrame{
+					StreamID:  streamID,
+					ErrorCode: 101,
+				})
+				Expect(queuedControlFrames).To(Equal([]wire.Frame{
+					&wire.RstStreamFrame{
+						StreamID:  streamID,
+						ErrorCode: errorCodeStopping,
+					},
+				}))
+			})
+
+			It("unblocks Write", func() {
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					_, err := str.Write([]byte("foobar"))
+					Expect(err).To(MatchError("Stream 1337 was reset with error code 123"))
+					Expect(err).To(BeAssignableToTypeOf(streamCanceledError{}))
+					Expect(err.(streamCanceledError).Canceled()).To(BeTrue())
+					Expect(err.(streamCanceledError).ErrorCode()).To(Equal(protocol.ApplicationErrorCode(123)))
+					close(done)
+				}()
+				Consistently(done).ShouldNot(BeClosed())
+				str.HandleStopSendingFrame(&wire.StopSendingFrame{
+					StreamID:  streamID,
+					ErrorCode: 123,
+				})
+				Eventually(done).Should(BeClosed())
+			})
+
+			It("doesn't allow further calls to Write", func() {
+				str.HandleStopSendingFrame(&wire.StopSendingFrame{
+					StreamID:  streamID,
+					ErrorCode: 123,
+				})
+				_, err := str.Write([]byte("foobar"))
+				Expect(err).To(MatchError("Stream 1337 was reset with error code 123"))
+				Expect(err).To(BeAssignableToTypeOf(streamCanceledError{}))
+				Expect(err.(streamCanceledError).Canceled()).To(BeTrue())
+				Expect(err.(streamCanceledError).ErrorCode()).To(Equal(protocol.ApplicationErrorCode(123)))
 			})
 		})
 	})
