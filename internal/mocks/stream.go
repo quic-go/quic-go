@@ -140,6 +140,16 @@ func (_mr *MockStreamIMockRecorder) HandleRstStreamFrame(arg0 interface{}) *gomo
 	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "HandleRstStreamFrame", reflect.TypeOf((*MockStreamI)(nil).HandleRstStreamFrame), arg0)
 }
 
+// HandleStopSendingFrame mocks base method
+func (_m *MockStreamI) HandleStopSendingFrame(_param0 *wire.StopSendingFrame) {
+	_m.ctrl.Call(_m, "HandleStopSendingFrame", _param0)
+}
+
+// HandleStopSendingFrame indicates an expected call of HandleStopSendingFrame
+func (_mr *MockStreamIMockRecorder) HandleStopSendingFrame(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "HandleStopSendingFrame", reflect.TypeOf((*MockStreamI)(nil).HandleStopSendingFrame), arg0)
+}
+
 // HandleStreamFrame mocks base method
 func (_m *MockStreamI) HandleStreamFrame(_param0 *wire.StreamFrame) error {
 	ret := _m.ctrl.Call(_m, "HandleStreamFrame", _param0)
