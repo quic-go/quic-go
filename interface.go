@@ -24,6 +24,8 @@ type ErrorCode = protocol.ApplicationErrorCode
 
 // Stream is the interface implemented by QUIC streams
 type Stream interface {
+	// StreamID returns the stream ID.
+	StreamID() StreamID
 	// Read reads data from the stream.
 	// Read can be made to time out and return a net.Error with Timeout() == true
 	// after a fixed time limit; see SetDeadline and SetReadDeadline.
@@ -41,7 +43,6 @@ type Stream interface {
 	// It must not be called concurrently with Write.
 	// It must not be called after calling CancelWrite.
 	io.Closer
-	StreamID() StreamID
 	// CancelWrite aborts sending on this stream.
 	// It must not be called after Close.
 	// Data already written, but not yet delivered to the peer is not guaranteed to be delivered reliably.
@@ -69,6 +70,34 @@ type Stream interface {
 	// with the connection. It is equivalent to calling both
 	// SetReadDeadline and SetWriteDeadline.
 	SetDeadline(t time.Time) error
+}
+
+// A ReceiveStream is a unidirectional Receive Stream.
+type ReceiveStream interface {
+	// see Stream.StreamID
+	StreamID() StreamID
+	// see Stream.Read
+	io.Reader
+	// see Stream.CancelRead
+	CancelRead(ErrorCode) error
+	// see Stream.SetReadDealine
+	SetReadDeadline(t time.Time) error
+}
+
+// A SendStream is a unidirectional Send Stream.
+type SendStream interface {
+	// see Stream.StreamID
+	StreamID() StreamID
+	// see Stream.Write
+	io.Writer
+	// see Stream.Close
+	io.Closer
+	// see Stream.CancelWrite
+	CancelWrite(ErrorCode) error
+	// see Stream.Context
+	Context() context.Context
+	// see Stream.SetWriteDeadline
+	SetWriteDeadline(t time.Time) error
 }
 
 // StreamError is returned by Read and Write when the peer cancels the stream.

@@ -678,7 +678,9 @@ var _ = Describe("Streams Map", func() {
 			BeforeEach(func() {
 				callbackCalledForStream = callbackCalledForStream[:0]
 				for i := 4; i <= 8; i++ {
-					err := m.putStream(&stream{streamID: protocol.StreamID(i)})
+					str := mocks.NewMockStreamI(mockCtrl)
+					str.EXPECT().StreamID().Return(protocol.StreamID(i)).AnyTimes()
+					err := m.putStream(str)
 					Expect(err).NotTo(HaveOccurred())
 				}
 			})

@@ -362,7 +362,7 @@ var _ = Describe("Session", func() {
 				fc := mocks.NewMockStreamFlowController(mockCtrl)
 				offset := protocol.ByteCount(0x4321)
 				fc.EXPECT().UpdateSendWindow(offset)
-				sess.cryptoStream.(*cryptoStream).flowController = fc
+				sess.cryptoStream.(*cryptoStream).sendStream.flowController = fc
 				err := sess.handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
 					StreamID:   sess.version.CryptoStreamID(),
 					ByteOffset: offset,
@@ -1118,9 +1118,21 @@ var _ = Describe("Session", func() {
 				s2, err := sess.GetOrOpenStream(7)
 				Expect(err).NotTo(HaveOccurred())
 
-				// Put data directly into the streams
-				s1.(*stream).dataForWriting = []byte("foobar1")
-				s2.(*stream).dataForWriting = []byte("foobar2")
+				done1 := make(chan struct{})
+				done2 := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					_, err := s1.Write([]byte("foobar1"))
+					Expect(err).ToNot(HaveOccurred())
+					close(done1)
+				}()
+				go func() {
+					defer GinkgoRecover()
+					s2.Write([]byte("foobar2"))
+					Expect(err).ToNot(HaveOccurred())
+					close(done2)
+				}()
+				time.Sleep(100 * time.Millisecond) // make sure the both writes are active
 
 				sess.scheduleSending()
 				go sess.run()
@@ -1130,6 +1142,8 @@ var _ = Describe("Session", func() {
 				packet := <-mconn.written
 				Expect(packet).To(ContainSubstring("foobar1"))
 				Expect(packet).To(ContainSubstring("foobar2"))
+				Eventually(done1).Should(BeClosed())
+				Eventually(done2).Should(BeClosed())
 			})
 
 			It("sends out two big frames in two packets", func() {
