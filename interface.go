@@ -19,20 +19,38 @@ type VersionNumber = protocol.VersionNumber
 // A Cookie can be used to verify the ownership of the client address.
 type Cookie = handshake.Cookie
 
+// An ErrorCode is an application-defined error code.
+type ErrorCode = protocol.ApplicationErrorCode
+
 // Stream is the interface implemented by QUIC streams
 type Stream interface {
 	// Read reads data from the stream.
 	// Read can be made to time out and return a net.Error with Timeout() == true
 	// after a fixed time limit; see SetDeadline and SetReadDeadline.
+	// If the stream was canceled by the peer, the error implements the StreamError
+	// interface, and Canceled() == true.
 	io.Reader
 	// Write writes data to the stream.
 	// Write can be made to time out and return a net.Error with Timeout() == true
 	// after a fixed time limit; see SetDeadline and SetWriteDeadline.
+	// If the stream was canceled by the peer, the error implements the StreamError
+	// interface, and Canceled() == true.
 	io.Writer
+	// Close closes the write-direction of the stream.
+	// Future calls to Write are not permitted after calling Close.
+	// It must not be called concurrently with Write.
+	// It must not be called after calling CancelWrite.
 	io.Closer
 	StreamID() StreamID
-	// Reset closes the stream with an error.
-	Reset(error)
+	// CancelWrite aborts sending on this stream.
+	// It must not be called after Close.
+	// Data already written, but not yet delivered to the peer is not guaranteed to be delivered reliably.
+	// Write will unblock immediately, and future calls to Write will fail.
+	CancelWrite(ErrorCode) error
+	// CancelRead aborts receiving on this stream.
+	// It will ask the peer to stop transmitting stream data.
+	// Read will unblock immediately, and future Read calls will fail.
+	CancelRead(ErrorCode) error
 	// The context is canceled as soon as the write-side of the stream is closed.
 	// This happens when Close() is called, or when the stream is reset (either locally or remotely).
 	// Warning: This API should not be considered stable and might change soon.
@@ -51,6 +69,13 @@ type Stream interface {
 	// with the connection. It is equivalent to calling both
 	// SetReadDeadline and SetWriteDeadline.
 	SetDeadline(t time.Time) error
+}
+
+// StreamError is returned by Read and Write when the peer cancels the stream.
+type StreamError interface {
+	error
+	Canceled() bool
+	ErrorCode() ErrorCode
 }
 
 // A Session is a QUIC connection between two peers.

@@ -223,7 +223,8 @@ func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, 
 		}
 		if responseWriter.dataStream != nil {
 			if !streamEnded && !reqBody.requestRead {
-				responseWriter.dataStream.Reset(nil)
+				// in gQUIC, the error code doesn't matter, so just use 0 here
+				responseWriter.dataStream.CancelRead(0)
 			}
 			responseWriter.dataStream.Close()
 		}
