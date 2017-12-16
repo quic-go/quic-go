@@ -34,9 +34,6 @@ func NewConnectionFlowController(
 }
 
 func (c *connectionFlowController) SendWindowSize() protocol.ByteCount {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-
 	return c.baseFlowController.sendWindowSize()
 }
 
