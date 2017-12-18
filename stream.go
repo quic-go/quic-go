@@ -14,6 +14,12 @@ const (
 	errorCodeStoppingGQUIC protocol.ApplicationErrorCode = 7
 )
 
+// The streamSender is notified by the stream about various events.
+type streamSender interface {
+	scheduleSending()
+	queueControlFrame(wire.Frame)
+}
+
 type streamI interface {
 	Stream
 
@@ -61,14 +67,13 @@ var _ StreamError = &streamCanceledError{}
 
 // newStream creates a new Stream
 func newStream(streamID protocol.StreamID,
-	onData func(),
-	queueControlFrame func(wire.Frame),
+	sender streamSender,
 	flowController flowcontrol.StreamFlowController,
 	version protocol.VersionNumber,
 ) *stream {
 	return &stream{
-		sendStream:    *newSendStream(streamID, onData, queueControlFrame, flowController, version),
-		receiveStream: *newReceiveStream(streamID, onData, queueControlFrame, flowController),
+		sendStream:    *newSendStream(streamID, sender, flowController, version),
+		receiveStream: *newReceiveStream(streamID, sender, flowController),
 	}
 }
 

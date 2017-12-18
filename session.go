@@ -115,6 +115,7 @@ type session struct {
 }
 
 var _ Session = &session{}
+var _ streamSender = &session{}
 
 // newSession makes a new session
 func newSession(
@@ -892,7 +893,7 @@ func (s *session) newStream(id protocol.StreamID) streamI {
 		initialSendWindow,
 		s.rttStats,
 	)
-	return newStream(id, s.scheduleSending, s.packer.QueueControlFrame, flowController, s.version)
+	return newStream(id, s, flowController, s.version)
 }
 
 func (s *session) newCryptoStream() cryptoStreamI {
@@ -906,7 +907,7 @@ func (s *session) newCryptoStream() cryptoStreamI {
 		0,
 		s.rttStats,
 	)
-	return newCryptoStream(s.scheduleSending, flowController, s.version)
+	return newCryptoStream(s, flowController, s.version)
 }
 
 func (s *session) sendPublicReset(rejectedPacketNumber protocol.PacketNumber) error {
@@ -963,6 +964,11 @@ func (s *session) getWindowUpdates() []wire.Frame {
 		})
 	}
 	return res
+}
+
+func (s *session) queueControlFrame(f wire.Frame) {
+	s.packer.QueueControlFrame(f)
+	s.scheduleSending()
 }
 
 func (s *session) LocalAddr() net.Addr {

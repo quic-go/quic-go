@@ -17,11 +17,7 @@ type receiveStream struct {
 
 	streamID protocol.StreamID
 
-	// onData tells the session that there's stuff to pack into a new packet
-	onData func()
-	// queueControlFrame queues a new control frame for sending
-	// it does not call onData
-	queueControlFrame func(wire.Frame)
+	sender streamSender
 
 	frameQueue     *streamFrameSorter
 	readPosInFrame int
@@ -47,17 +43,15 @@ var _ ReceiveStream = &receiveStream{}
 
 func newReceiveStream(
 	streamID protocol.StreamID,
-	onData func(),
-	queueControlFrame func(wire.Frame),
+	sender streamSender,
 	flowController flowcontrol.StreamFlowController,
 ) *receiveStream {
 	return &receiveStream{
-		streamID:          streamID,
-		onData:            onData,
-		queueControlFrame: queueControlFrame,
-		flowController:    flowController,
-		frameQueue:        newStreamFrameSorter(),
-		readChan:          make(chan struct{}, 1),
+		streamID:       streamID,
+		sender:         sender,
+		flowController: flowController,
+		frameQueue:     newStreamFrameSorter(),
+		readChan:       make(chan struct{}, 1),
 	}
 }
 
@@ -145,7 +139,7 @@ func (s *receiveStream) Read(p []byte) (int, error) {
 		if !s.resetRemotely {
 			s.flowController.AddBytesRead(protocol.ByteCount(m))
 		}
-		s.onData() // so that a possible WINDOW_UPDATE is sent
+		s.sender.scheduleSending() // so that a possible WINDOW_UPDATE is sent
 
 		if s.readPosInFrame >= int(frame.DataLen()) {
 			s.frameQueue.Pop()
@@ -172,7 +166,7 @@ func (s *receiveStream) CancelRead(errorCode protocol.ApplicationErrorCode) erro
 	s.cancelReadErr = fmt.Errorf("Read on stream %d canceled with error code %d", s.streamID, errorCode)
 	s.signalRead()
 	if s.version.UsesIETFFrameFormat() {
-		s.queueControlFrame(&wire.StopSendingFrame{
+		s.sender.queueControlFrame(&wire.StopSendingFrame{
 			StreamID:  s.streamID,
 			ErrorCode: errorCode,
 		})
@@ -231,12 +225,11 @@ func (s *receiveStream) CloseRemote(offset protocol.ByteCount) {
 
 func (s *receiveStream) onClose(offset protocol.ByteCount) {
 	if s.canceledRead && !s.version.UsesIETFFrameFormat() {
-		s.queueControlFrame(&wire.RstStreamFrame{
+		s.sender.queueControlFrame(&wire.RstStreamFrame{
 			StreamID:   s.streamID,
 			ByteOffset: offset,
 			ErrorCode:  0,
 		})
-		s.onData()
 	}
 }
 

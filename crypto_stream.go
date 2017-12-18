@@ -27,8 +27,8 @@ type cryptoStream struct {
 
 var _ cryptoStreamI = &cryptoStream{}
 
-func newCryptoStream(onData func(), flowController flowcontrol.StreamFlowController, version protocol.VersionNumber) cryptoStreamI {
-	str := newStream(version.CryptoStreamID(), onData, nil, flowController, version)
+func newCryptoStream(sender streamSender, flowController flowcontrol.StreamFlowController, version protocol.VersionNumber) cryptoStreamI {
+	str := newStream(version.CryptoStreamID(), sender, flowController, version)
 	return &cryptoStream{str}
 }
 
