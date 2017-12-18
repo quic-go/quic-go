@@ -4,7 +4,6 @@ import (
 	"bytes"
 
 	"github.com/golang/mock/gomock"
-	"github.com/lucas-clemente/quic-go/internal/mocks"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -22,11 +21,11 @@ var _ = Describe("Stream Framer", func() {
 		retransmittedFrame1, retransmittedFrame2 *wire.StreamFrame
 		framer                                   *streamFramer
 		streamsMap                               *streamsMap
-		stream1, stream2                         *mocks.MockStreamI
+		stream1, stream2                         *MockStreamI
 	)
 
-	setNoData := func(str *mocks.MockStreamI) {
-		str.EXPECT().PopStreamFrame(gomock.Any()).AnyTimes()
+	setNoData := func(str *MockStreamI) {
+		str.EXPECT().popStreamFrame(gomock.Any()).AnyTimes()
 	}
 
 	BeforeEach(func() {
@@ -39,9 +38,9 @@ var _ = Describe("Stream Framer", func() {
 			Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
 		}
 
-		stream1 = mocks.NewMockStreamI(mockCtrl)
+		stream1 = NewMockStreamI(mockCtrl)
 		stream1.EXPECT().StreamID().Return(protocol.StreamID(5)).AnyTimes()
-		stream2 = mocks.NewMockStreamI(mockCtrl)
+		stream2 = NewMockStreamI(mockCtrl)
 		stream2.EXPECT().StreamID().Return(protocol.StreamID(6)).AnyTimes()
 
 		streamsMap = newStreamsMap(nil, protocol.PerspectiveServer, versionGQUICFrames)
@@ -114,7 +113,7 @@ var _ = Describe("Stream Framer", func() {
 				Data:     []byte("foobar"),
 				Offset:   42,
 			}
-			stream1.EXPECT().PopStreamFrame(gomock.Any()).Return(f)
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f)
 			fs := framer.PopStreamFrames(1000)
 			Expect(fs).To(Equal([]*wire.StreamFrame{f}))
 		})
@@ -122,8 +121,8 @@ var _ = Describe("Stream Framer", func() {
 		It("returns multiple normal frames", func() {
 			f1 := &wire.StreamFrame{Data: []byte("foobar")}
 			f2 := &wire.StreamFrame{Data: []byte("foobaz")}
-			stream1.EXPECT().PopStreamFrame(gomock.Any()).Return(f1)
-			stream2.EXPECT().PopStreamFrame(gomock.Any()).Return(f2)
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f1)
+			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(f2)
 			fs := framer.PopStreamFrames(1000)
 			Expect(fs).To(HaveLen(2))
 			Expect(fs).To(ContainElement(f1))
@@ -133,7 +132,7 @@ var _ = Describe("Stream Framer", func() {
 		It("returns retransmission frames before normal frames", func() {
 			setNoData(stream2)
 			f1 := &wire.StreamFrame{Data: []byte("foobar")}
-			stream1.EXPECT().PopStreamFrame(gomock.Any()).Return(f1)
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f1)
 			framer.AddFrameForRetransmission(retransmittedFrame1)
 			fs := framer.PopStreamFrames(1000)
 			Expect(fs).To(Equal([]*wire.StreamFrame{retransmittedFrame1, f1}))
@@ -147,7 +146,7 @@ var _ = Describe("Stream Framer", func() {
 		})
 
 		It("pops frames that have the minimum size", func() {
-			stream1.EXPECT().PopStreamFrame(protocol.MinStreamFrameSize).Return(&wire.StreamFrame{Data: []byte("foobar")})
+			stream1.EXPECT().popStreamFrame(protocol.MinStreamFrameSize).Return(&wire.StreamFrame{Data: []byte("foobar")})
 			framer.PopStreamFrames(protocol.MinStreamFrameSize)
 		})
 
@@ -157,16 +156,16 @@ var _ = Describe("Stream Framer", func() {
 		})
 
 		It("uses the round-robin scheduling", func() {
-			stream1.EXPECT().PopStreamFrame(gomock.Any()).Return(&wire.StreamFrame{
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&wire.StreamFrame{
 				StreamID: id1,
 				Data:     []byte("foobar"),
 			})
-			stream1.EXPECT().PopStreamFrame(gomock.Any()).MaxTimes(1)
-			stream2.EXPECT().PopStreamFrame(gomock.Any()).Return(&wire.StreamFrame{
+			stream1.EXPECT().popStreamFrame(gomock.Any()).MaxTimes(1)
+			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(&wire.StreamFrame{
 				StreamID: id2,
 				Data:     []byte("foobaz"),
 			})
-			stream2.EXPECT().PopStreamFrame(gomock.Any()).MaxTimes(1)
+			stream2.EXPECT().popStreamFrame(gomock.Any()).MaxTimes(1)
 			fs := framer.PopStreamFrames(protocol.MinStreamFrameSize)
 			Expect(fs).To(HaveLen(1))
 			// it doesn't matter here if this data is from stream1 or from stream2...
@@ -183,7 +182,7 @@ var _ = Describe("Stream Framer", func() {
 				StreamID: id1,
 				Data:     bytes.Repeat([]byte("f"), int(500-protocol.MinStreamFrameSize)),
 			}
-			stream1.EXPECT().PopStreamFrame(protocol.ByteCount(500)).Return(f)
+			stream1.EXPECT().popStreamFrame(protocol.ByteCount(500)).Return(f)
 			setNoData(stream2)
 			fs := framer.PopStreamFrames(500)
 			Expect(fs).To(Equal([]*wire.StreamFrame{f}))

@@ -176,7 +176,7 @@ func (s *serverTLS) handleInitialImpl(remoteAddr net.Addr, hdr *wire.Header, dat
 		return nil, err
 	}
 	cs := sess.getCryptoStream()
-	cs.SetReadOffset(frame.DataLen())
+	cs.setReadOffset(frame.DataLen())
 	bc.SetStream(cs)
 	return sess, nil
 }

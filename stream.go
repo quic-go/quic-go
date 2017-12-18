@@ -17,15 +17,15 @@ const (
 type streamI interface {
 	Stream
 
-	HandleStreamFrame(*wire.StreamFrame) error
-	HandleRstStreamFrame(*wire.RstStreamFrame) error
-	HandleStopSendingFrame(*wire.StopSendingFrame)
-	PopStreamFrame(maxBytes protocol.ByteCount) *wire.StreamFrame
-	Finished() bool
-	CloseForShutdown(error)
+	handleStreamFrame(*wire.StreamFrame) error
+	handleRstStreamFrame(*wire.RstStreamFrame) error
+	handleStopSendingFrame(*wire.StopSendingFrame)
+	popStreamFrame(maxBytes protocol.ByteCount) *wire.StreamFrame
+	finished() bool
+	closeForShutdown(error)
 	// methods needed for flow control
-	GetWindowUpdate() protocol.ByteCount
-	HandleMaxStreamDataFrame(*wire.MaxStreamDataFrame)
+	getWindowUpdate() protocol.ByteCount
+	handleMaxStreamDataFrame(*wire.MaxStreamDataFrame)
 }
 
 // A Stream assembles the data from StreamFrames and provides a super-convenient Read-Interface
@@ -96,17 +96,17 @@ func (s *stream) SetDeadline(t time.Time) error {
 // CloseForShutdown closes a stream abruptly.
 // It makes Read and Write unblock (and return the error) immediately.
 // The peer will NOT be informed about this: the stream is closed without sending a FIN or RST.
-func (s *stream) CloseForShutdown(err error) {
-	s.sendStream.CloseForShutdown(err)
-	s.receiveStream.CloseForShutdown(err)
+func (s *stream) closeForShutdown(err error) {
+	s.sendStream.closeForShutdown(err)
+	s.receiveStream.closeForShutdown(err)
 }
 
-func (s *stream) HandleRstStreamFrame(frame *wire.RstStreamFrame) error {
-	if err := s.receiveStream.HandleRstStreamFrame(frame); err != nil {
+func (s *stream) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
+	if err := s.receiveStream.handleRstStreamFrame(frame); err != nil {
 		return err
 	}
 	if !s.version.UsesIETFFrameFormat() {
-		s.HandleStopSendingFrame(&wire.StopSendingFrame{
+		s.handleStopSendingFrame(&wire.StopSendingFrame{
 			StreamID:  s.StreamID(),
 			ErrorCode: frame.ErrorCode,
 		})
@@ -114,6 +114,6 @@ func (s *stream) HandleRstStreamFrame(frame *wire.RstStreamFrame) error {
 	return nil
 }
 
-func (s *stream) Finished() bool {
-	return s.sendStream.Finished() && s.receiveStream.Finished()
+func (s *stream) finished() bool {
+	return s.sendStream.finished() && s.receiveStream.finished()
 }

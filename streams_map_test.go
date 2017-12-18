@@ -4,7 +4,6 @@ import (
 	"errors"
 	"sort"
 
-	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/qerr"
 
@@ -20,9 +19,9 @@ var _ = Describe("Streams Map", func() {
 	)
 
 	newStream := func(id protocol.StreamID) streamI {
-		str := mocks.NewMockStreamI(mockCtrl)
+		str := NewMockStreamI(mockCtrl)
 		str.EXPECT().StreamID().Return(id).AnyTimes()
-		c := str.EXPECT().Finished().Return(false).AnyTimes()
+		c := str.EXPECT().finished().Return(false).AnyTimes()
 		finishedStreams[id] = c
 		return str
 	}
@@ -245,7 +244,7 @@ var _ = Describe("Streams Map", func() {
 						testErr := errors.New("test error")
 						openMaxNumStreams()
 						for _, str := range m.streams {
-							str.(*mocks.MockStreamI).EXPECT().CloseForShutdown(testErr)
+							str.(*MockStreamI).EXPECT().closeForShutdown(testErr)
 						}
 
 						done := make(chan struct{})
@@ -551,7 +550,7 @@ var _ = Describe("Streams Map", func() {
 				It("does not delete streams with Close()", func() {
 					str, err := m.GetOrOpenStream(55)
 					Expect(err).ToNot(HaveOccurred())
-					str.(*mocks.MockStreamI).EXPECT().Close()
+					str.(*MockStreamI).EXPECT().Close()
 					str.Close()
 					err = m.DeleteClosedStreams()
 					Expect(err).ToNot(HaveOccurred())
@@ -678,7 +677,7 @@ var _ = Describe("Streams Map", func() {
 			BeforeEach(func() {
 				callbackCalledForStream = callbackCalledForStream[:0]
 				for i := 4; i <= 8; i++ {
-					str := mocks.NewMockStreamI(mockCtrl)
+					str := NewMockStreamI(mockCtrl)
 					str.EXPECT().StreamID().Return(protocol.StreamID(i)).AnyTimes()
 					err := m.putStream(str)
 					Expect(err).NotTo(HaveOccurred())

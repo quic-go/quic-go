@@ -61,7 +61,7 @@ var _ = Describe("Send Stream", func() {
 			Consistently(done).ShouldNot(BeClosed())
 			var f *wire.StreamFrame
 			Eventually(func() *wire.StreamFrame {
-				f = str.PopStreamFrame(1000)
+				f = str.popStreamFrame(1000)
 				return f
 			}).ShouldNot(BeNil())
 			Expect(onDataCalled).To(BeTrue())
@@ -90,24 +90,24 @@ var _ = Describe("Send Stream", func() {
 			Consistently(done).ShouldNot(BeClosed())
 			var f *wire.StreamFrame
 			Eventually(func() *wire.StreamFrame {
-				f = str.PopStreamFrame(3 + frameHeaderLen)
+				f = str.popStreamFrame(3 + frameHeaderLen)
 				return f
 			}).ShouldNot(BeNil())
 			Expect(f.Data).To(Equal([]byte("foo")))
 			Expect(f.FinBit).To(BeFalse())
 			Expect(f.Offset).To(BeZero())
 			Expect(f.DataLenPresent).To(BeTrue())
-			f = str.PopStreamFrame(100)
+			f = str.popStreamFrame(100)
 			Expect(f.Data).To(Equal([]byte("bar")))
 			Expect(f.FinBit).To(BeFalse())
 			Expect(f.Offset).To(Equal(protocol.ByteCount(3)))
 			Expect(f.DataLenPresent).To(BeTrue())
-			Expect(str.PopStreamFrame(1000)).To(BeNil())
+			Expect(str.popStreamFrame(1000)).To(BeNil())
 			Eventually(done).Should(BeClosed())
 		})
 
-		It("PopStreamFrame returns nil if no data is available", func() {
-			Expect(str.PopStreamFrame(1000)).To(BeNil())
+		It("popStreamFrame returns nil if no data is available", func() {
+			Expect(str.popStreamFrame(1000)).To(BeNil())
 		})
 
 		It("copies the slice while writing", func() {
@@ -124,10 +124,10 @@ var _ = Describe("Send Stream", func() {
 				Expect(n).To(Equal(3))
 			}()
 			var frame *wire.StreamFrame
-			Eventually(func() *wire.StreamFrame { frame = str.PopStreamFrame(frameHeaderSize + 1); return frame }).ShouldNot(BeNil())
+			Eventually(func() *wire.StreamFrame { frame = str.popStreamFrame(frameHeaderSize + 1); return frame }).ShouldNot(BeNil())
 			Expect(frame.Data).To(Equal([]byte("f")))
 			s[1] = 'e'
-			f := str.PopStreamFrame(100)
+			f := str.popStreamFrame(100)
 			Expect(f).ToNot(BeNil())
 			Expect(f.Data).To(Equal([]byte("oo")))
 		})
@@ -165,7 +165,7 @@ var _ = Describe("Send Stream", func() {
 				}()
 				var f *wire.StreamFrame
 				Eventually(func() *wire.StreamFrame {
-					f = str.PopStreamFrame(1000)
+					f = str.popStreamFrame(1000)
 					return f
 				}).ShouldNot(BeNil())
 				Expect(queuedControlFrames).To(Equal([]wire.Frame{
@@ -193,7 +193,7 @@ var _ = Describe("Send Stream", func() {
 				Expect(str.Close()).To(Succeed())
 				var f *wire.StreamFrame
 				Eventually(func() *wire.StreamFrame {
-					f = str.PopStreamFrame(1000)
+					f = str.popStreamFrame(1000)
 					return f
 				}).ShouldNot(BeNil())
 				Expect(f.FinBit).To(BeTrue())
@@ -237,7 +237,7 @@ var _ = Describe("Send Stream", func() {
 				}()
 				var frame *wire.StreamFrame
 				Eventually(func() *wire.StreamFrame {
-					frame = str.PopStreamFrame(50)
+					frame = str.popStreamFrame(50)
 					return frame
 				}).ShouldNot(BeNil())
 				Eventually(writeReturned, scaleDuration(80*time.Millisecond)).Should(BeClosed())
@@ -289,7 +289,7 @@ var _ = Describe("Send Stream", func() {
 
 			It("allows FIN", func() {
 				str.Close()
-				f := str.PopStreamFrame(1000)
+				f := str.popStreamFrame(1000)
 				Expect(f).ToNot(BeNil())
 				Expect(f.Data).To(BeEmpty())
 				Expect(f.FinBit).To(BeTrue())
@@ -302,28 +302,28 @@ var _ = Describe("Send Stream", func() {
 				mockFC.EXPECT().IsNewlyBlocked()
 				str.dataForWriting = []byte("foobar")
 				str.Close()
-				f := str.PopStreamFrame(3 + frameHeaderLen)
+				f := str.popStreamFrame(3 + frameHeaderLen)
 				Expect(f).ToNot(BeNil())
 				Expect(f.Data).To(Equal([]byte("foo")))
 				Expect(f.FinBit).To(BeFalse())
-				f = str.PopStreamFrame(100)
+				f = str.popStreamFrame(100)
 				Expect(f.Data).To(Equal([]byte("bar")))
 				Expect(f.FinBit).To(BeTrue())
 			})
 
 			It("doesn't allow FIN after an error", func() {
-				str.CloseForShutdown(errors.New("test"))
-				f := str.PopStreamFrame(1000)
+				str.closeForShutdown(errors.New("test"))
+				f := str.popStreamFrame(1000)
 				Expect(f).To(BeNil())
 			})
 
 			It("doesn't allow FIN twice", func() {
 				str.Close()
-				f := str.PopStreamFrame(1000)
+				f := str.popStreamFrame(1000)
 				Expect(f).ToNot(BeNil())
 				Expect(f.Data).To(BeEmpty())
 				Expect(f.FinBit).To(BeTrue())
-				Expect(str.PopStreamFrame(1000)).To(BeNil())
+				Expect(str.popStreamFrame(1000)).To(BeNil())
 			})
 		})
 
@@ -331,7 +331,7 @@ var _ = Describe("Send Stream", func() {
 			testErr := errors.New("test")
 
 			It("returns errors when the stream is cancelled", func() {
-				str.CloseForShutdown(testErr)
+				str.closeForShutdown(testErr)
 				n, err := strWithTimeout.Write([]byte("foo"))
 				Expect(n).To(BeZero())
 				Expect(err).To(MatchError(testErr))
@@ -348,15 +348,15 @@ var _ = Describe("Send Stream", func() {
 					Expect(err).To(MatchError(testErr))
 					close(done)
 				}()
-				Eventually(func() *wire.StreamFrame { return str.PopStreamFrame(50) }).ShouldNot(BeNil()) // get a STREAM frame containing some data, but not all
-				str.CloseForShutdown(testErr)
-				Expect(str.PopStreamFrame(1000)).To(BeNil())
+				Eventually(func() *wire.StreamFrame { return str.popStreamFrame(50) }).ShouldNot(BeNil()) // get a STREAM frame containing some data, but not all
+				str.closeForShutdown(testErr)
+				Expect(str.popStreamFrame(1000)).To(BeNil())
 				Eventually(done).Should(BeClosed())
 			})
 
 			It("cancels the context", func() {
 				Expect(str.Context().Done()).ToNot(BeClosed())
-				str.CloseForShutdown(testErr)
+				str.closeForShutdown(testErr)
 				Expect(str.Context().Done()).To(BeClosed())
 			})
 		})
@@ -392,7 +392,7 @@ var _ = Describe("Send Stream", func() {
 				}()
 				var frame *wire.StreamFrame
 				Eventually(func() *wire.StreamFrame {
-					frame = str.PopStreamFrame(50)
+					frame = str.popStreamFrame(50)
 					return frame
 				}).ShouldNot(BeNil())
 				err := str.CancelWrite(1234)
@@ -433,7 +433,7 @@ var _ = Describe("Send Stream", func() {
 
 		Context("receiving STOP_SENDING frames", func() {
 			It("queues a RST_STREAM frames with error code Stopping", func() {
-				str.HandleStopSendingFrame(&wire.StopSendingFrame{
+				str.handleStopSendingFrame(&wire.StopSendingFrame{
 					StreamID:  streamID,
 					ErrorCode: 101,
 				})
@@ -457,7 +457,7 @@ var _ = Describe("Send Stream", func() {
 					close(done)
 				}()
 				Consistently(done).ShouldNot(BeClosed())
-				str.HandleStopSendingFrame(&wire.StopSendingFrame{
+				str.handleStopSendingFrame(&wire.StopSendingFrame{
 					StreamID:  streamID,
 					ErrorCode: 123,
 				})
@@ -465,7 +465,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("doesn't allow further calls to Write", func() {
-				str.HandleStopSendingFrame(&wire.StopSendingFrame{
+				str.handleStopSendingFrame(&wire.StopSendingFrame{
 					StreamID:  streamID,
 					ErrorCode: 123,
 				})
@@ -480,26 +480,26 @@ var _ = Describe("Send Stream", func() {
 
 	Context("saying if it is finished", func() {
 		It("is finished after it is closed for shutdown", func() {
-			str.CloseForShutdown(errors.New("testErr"))
-			Expect(str.Finished()).To(BeTrue())
+			str.closeForShutdown(errors.New("testErr"))
+			Expect(str.finished()).To(BeTrue())
 		})
 
 		It("is finished after Close()", func() {
 			str.Close()
-			f := str.PopStreamFrame(1000)
+			f := str.popStreamFrame(1000)
 			Expect(f.FinBit).To(BeTrue())
-			Expect(str.Finished()).To(BeTrue())
+			Expect(str.finished()).To(BeTrue())
 		})
 
 		It("is finished after CancelWrite", func() {
 			err := str.CancelWrite(123)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(str.Finished()).To(BeTrue())
+			Expect(str.finished()).To(BeTrue())
 		})
 
 		It("is finished after receiving a STOP_SENDING (and sending a RST_STREAM)", func() {
-			str.HandleStopSendingFrame(&wire.StopSendingFrame{StreamID: streamID})
-			Expect(str.Finished()).To(BeTrue())
+			str.handleStopSendingFrame(&wire.StopSendingFrame{StreamID: streamID})
+			Expect(str.finished()).To(BeTrue())
 		})
 	})
 })

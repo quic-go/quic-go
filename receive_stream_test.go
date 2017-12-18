@@ -51,7 +51,7 @@ var _ = Describe("Receive Stream", func() {
 				Offset: 0,
 				Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
 			}
-			err := str.HandleStreamFrame(&frame)
+			err := str.handleStreamFrame(&frame)
 			Expect(err).ToNot(HaveOccurred())
 			b := make([]byte, 4)
 			n, err := strWithTimeout.Read(b)
@@ -68,7 +68,7 @@ var _ = Describe("Receive Stream", func() {
 				Offset: 0,
 				Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
 			}
-			err := str.HandleStreamFrame(&frame)
+			err := str.handleStreamFrame(&frame)
 			Expect(err).ToNot(HaveOccurred())
 			b := make([]byte, 2)
 			n, err := strWithTimeout.Read(b)
@@ -93,9 +93,9 @@ var _ = Describe("Receive Stream", func() {
 				Offset: 2,
 				Data:   []byte{0xBE, 0xEF},
 			}
-			err := str.HandleStreamFrame(&frame1)
+			err := str.handleStreamFrame(&frame1)
 			Expect(err).ToNot(HaveOccurred())
-			err = str.HandleStreamFrame(&frame2)
+			err = str.handleStreamFrame(&frame2)
 			Expect(err).ToNot(HaveOccurred())
 			b := make([]byte, 6)
 			n, err := strWithTimeout.Read(b)
@@ -116,9 +116,9 @@ var _ = Describe("Receive Stream", func() {
 				Offset: 2,
 				Data:   []byte{0xBE, 0xEF},
 			}
-			err := str.HandleStreamFrame(&frame1)
+			err := str.handleStreamFrame(&frame1)
 			Expect(err).ToNot(HaveOccurred())
-			err = str.HandleStreamFrame(&frame2)
+			err = str.handleStreamFrame(&frame2)
 			Expect(err).ToNot(HaveOccurred())
 			b := make([]byte, 4)
 			n, err := strWithTimeout.Read(b)
@@ -134,7 +134,7 @@ var _ = Describe("Receive Stream", func() {
 				defer GinkgoRecover()
 				frame := wire.StreamFrame{Data: []byte{0xDE, 0xAD}}
 				time.Sleep(10 * time.Millisecond)
-				err := str.HandleStreamFrame(&frame)
+				err := str.handleStreamFrame(&frame)
 				Expect(err).ToNot(HaveOccurred())
 			}()
 			b := make([]byte, 2)
@@ -155,9 +155,9 @@ var _ = Describe("Receive Stream", func() {
 				Offset: 0,
 				Data:   []byte{0xDE, 0xAD},
 			}
-			err := str.HandleStreamFrame(&frame1)
+			err := str.handleStreamFrame(&frame1)
 			Expect(err).ToNot(HaveOccurred())
-			err = str.HandleStreamFrame(&frame2)
+			err = str.handleStreamFrame(&frame2)
 			Expect(err).ToNot(HaveOccurred())
 			b := make([]byte, 4)
 			n, err := strWithTimeout.Read(b)
@@ -183,11 +183,11 @@ var _ = Describe("Receive Stream", func() {
 				Offset: 2,
 				Data:   []byte{0xBE, 0xEF},
 			}
-			err := str.HandleStreamFrame(&frame1)
+			err := str.handleStreamFrame(&frame1)
 			Expect(err).ToNot(HaveOccurred())
-			err = str.HandleStreamFrame(&frame2)
+			err = str.handleStreamFrame(&frame2)
 			Expect(err).ToNot(HaveOccurred())
-			err = str.HandleStreamFrame(&frame3)
+			err = str.handleStreamFrame(&frame3)
 			Expect(err).ToNot(HaveOccurred())
 			b := make([]byte, 4)
 			n, err := strWithTimeout.Read(b)
@@ -209,9 +209,9 @@ var _ = Describe("Receive Stream", func() {
 				Offset: 2,
 				Data:   []byte("obar"),
 			}
-			err := str.HandleStreamFrame(&frame1)
+			err := str.handleStreamFrame(&frame1)
 			Expect(err).ToNot(HaveOccurred())
-			err = str.HandleStreamFrame(&frame2)
+			err = str.handleStreamFrame(&frame2)
 			Expect(err).ToNot(HaveOccurred())
 			b := make([]byte, 6)
 			n, err := strWithTimeout.Read(b)
@@ -227,7 +227,7 @@ var _ = Describe("Receive Stream", func() {
 				Offset: 0,
 				Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
 			}
-			err := str.HandleStreamFrame(&frame)
+			err := str.handleStreamFrame(&frame)
 			Expect(err).ToNot(HaveOccurred())
 			b := make([]byte, 4)
 			_, err = strWithTimeout.Read(b)
@@ -237,7 +237,7 @@ var _ = Describe("Receive Stream", func() {
 
 		It("passes on errors from the streamFrameSorter", func() {
 			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(0), false)
-			err := str.HandleStreamFrame(&wire.StreamFrame{StreamID: streamID}) // STREAM frame without data
+			err := str.handleStreamFrame(&wire.StreamFrame{StreamID: streamID}) // STREAM frame without data
 			Expect(err).To(MatchError(errEmptyStreamData))
 		})
 
@@ -251,7 +251,7 @@ var _ = Describe("Receive Stream", func() {
 			It("returns an error when Read is called after the deadline", func() {
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), false).AnyTimes()
 				f := &wire.StreamFrame{Data: []byte("foobar")}
-				err := str.HandleStreamFrame(f)
+				err := str.handleStreamFrame(f)
 				Expect(err).ToNot(HaveOccurred())
 				str.SetReadDeadline(time.Now().Add(-time.Second))
 				b := make([]byte, 6)
@@ -318,7 +318,7 @@ var _ = Describe("Receive Stream", func() {
 						Data:   []byte{0xDE, 0xAD, 0xBE, 0xEF},
 						FinBit: true,
 					}
-					str.HandleStreamFrame(&frame)
+					str.handleStreamFrame(&frame)
 					b := make([]byte, 4)
 					n, err := strWithTimeout.Read(b)
 					Expect(err).To(MatchError(io.EOF))
@@ -342,9 +342,9 @@ var _ = Describe("Receive Stream", func() {
 						Offset: 0,
 						Data:   []byte{0xDE, 0xAD},
 					}
-					err := str.HandleStreamFrame(&frame1)
+					err := str.handleStreamFrame(&frame1)
 					Expect(err).ToNot(HaveOccurred())
-					err = str.HandleStreamFrame(&frame2)
+					err = str.handleStreamFrame(&frame2)
 					Expect(err).ToNot(HaveOccurred())
 					b := make([]byte, 4)
 					n, err := strWithTimeout.Read(b)
@@ -364,7 +364,7 @@ var _ = Describe("Receive Stream", func() {
 						Data:   []byte{0xDE, 0xAD},
 						FinBit: true,
 					}
-					err := str.HandleStreamFrame(&frame)
+					err := str.handleStreamFrame(&frame)
 					Expect(err).ToNot(HaveOccurred())
 					b := make([]byte, 4)
 					n, err := strWithTimeout.Read(b)
@@ -381,7 +381,7 @@ var _ = Describe("Receive Stream", func() {
 						Data:   []byte{},
 						FinBit: true,
 					}
-					err := str.HandleStreamFrame(&frame)
+					err := str.handleStreamFrame(&frame)
 					Expect(err).ToNot(HaveOccurred())
 					b := make([]byte, 4)
 					n, err := strWithTimeout.Read(b)
@@ -415,12 +415,12 @@ var _ = Describe("Receive Stream", func() {
 					close(done)
 				}()
 				Consistently(done).ShouldNot(BeClosed())
-				str.CloseForShutdown(testErr)
+				str.closeForShutdown(testErr)
 				Eventually(done).Should(BeClosed())
 			})
 
 			It("errors for all following reads", func() {
-				str.CloseForShutdown(testErr)
+				str.closeForShutdown(testErr)
 				b := make([]byte, 1)
 				n, err := strWithTimeout.Read(b)
 				Expect(n).To(BeZero())
@@ -464,7 +464,7 @@ var _ = Describe("Receive Stream", func() {
 			It("doesn't send a RST_STREAM frame, if the FIN was already read", func() {
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), true)
 				mockFC.EXPECT().AddBytesRead(protocol.ByteCount(6))
-				err := str.HandleStreamFrame(&wire.StreamFrame{
+				err := str.handleStreamFrame(&wire.StreamFrame{
 					StreamID: streamID,
 					Data:     []byte("foobar"),
 					FinBit:   true,
@@ -511,13 +511,13 @@ var _ = Describe("Receive Stream", func() {
 					close(done)
 				}()
 				Consistently(done).ShouldNot(BeClosed())
-				str.HandleRstStreamFrame(rst)
+				str.handleRstStreamFrame(rst)
 				Eventually(done).Should(BeClosed())
 			})
 
 			It("doesn't allow further calls to Read", func() {
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(42), true)
-				err := str.HandleRstStreamFrame(rst)
+				err := str.handleRstStreamFrame(rst)
 				Expect(err).ToNot(HaveOccurred())
 				_, err = strWithTimeout.Read([]byte{0})
 				Expect(err).To(MatchError("Stream 1337 was reset with error code 1234"))
@@ -529,21 +529,21 @@ var _ = Describe("Receive Stream", func() {
 			It("errors when receiving a RST_STREAM with an inconsistent offset", func() {
 				testErr := errors.New("already received a different final offset before")
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(42), true).Return(testErr)
-				err := str.HandleRstStreamFrame(rst)
+				err := str.handleRstStreamFrame(rst)
 				Expect(err).To(MatchError(testErr))
 			})
 
 			It("ignores duplicate RST_STREAM frames", func() {
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(42), true).Times(2)
-				err := str.HandleRstStreamFrame(rst)
+				err := str.handleRstStreamFrame(rst)
 				Expect(err).ToNot(HaveOccurred())
-				err = str.HandleRstStreamFrame(rst)
+				err = str.handleRstStreamFrame(rst)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("doesn't do anyting when it was closed for shutdown", func() {
-				str.CloseForShutdown(nil)
-				err := str.HandleRstStreamFrame(rst)
+				str.closeForShutdown(nil)
+				err := str.handleRstStreamFrame(rst)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
@@ -565,7 +565,7 @@ var _ = Describe("Receive Stream", func() {
 						close(readReturned)
 					}()
 					Consistently(readReturned).ShouldNot(BeClosed())
-					err := str.HandleRstStreamFrame(rst)
+					err := str.handleRstStreamFrame(rst)
 					Expect(err).ToNot(HaveOccurred())
 					Eventually(readReturned).Should(BeClosed())
 				})
@@ -586,13 +586,13 @@ var _ = Describe("Receive Stream", func() {
 						close(readReturned)
 					}()
 					Consistently(readReturned).ShouldNot(BeClosed())
-					err := str.HandleStreamFrame(&wire.StreamFrame{
+					err := str.handleStreamFrame(&wire.StreamFrame{
 						StreamID: streamID,
 						Data:     []byte("foobar"),
 						FinBit:   true,
 					})
 					Expect(err).ToNot(HaveOccurred())
-					err = str.HandleRstStreamFrame(&wire.RstStreamFrame{
+					err = str.handleRstStreamFrame(&wire.RstStreamFrame{
 						StreamID:   streamID,
 						ByteOffset: 6,
 						ErrorCode:  0,
@@ -613,20 +613,20 @@ var _ = Describe("Receive Stream", func() {
 				Offset: 2,
 				Data:   []byte("foobar"),
 			}
-			err := str.HandleStreamFrame(&frame)
+			err := str.handleStreamFrame(&frame)
 			Expect(err).To(MatchError(testErr))
 		})
 
 		It("gets a window update", func() {
 			mockFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0x100))
-			Expect(str.GetWindowUpdate()).To(Equal(protocol.ByteCount(0x100)))
+			Expect(str.getWindowUpdate()).To(Equal(protocol.ByteCount(0x100)))
 		})
 	})
 
 	Context("saying if it is finished", func() {
 		finishReading := func() {
 			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(0), true)
-			err := str.HandleStreamFrame(&wire.StreamFrame{FinBit: true})
+			err := str.handleStreamFrame(&wire.StreamFrame{FinBit: true})
 			Expect(err).ToNot(HaveOccurred())
 			b := make([]byte, 100)
 			_, err = strWithTimeout.Read(b)
@@ -634,14 +634,14 @@ var _ = Describe("Receive Stream", func() {
 		}
 
 		It("is finished after it is closed for shutdown", func() {
-			str.CloseForShutdown(errors.New("testErr"))
-			Expect(str.Finished()).To(BeTrue())
+			str.closeForShutdown(errors.New("testErr"))
+			Expect(str.finished()).To(BeTrue())
 		})
 
 		It("is finished if it is only closed for reading", func() {
 			mockFC.EXPECT().AddBytesRead(protocol.ByteCount(0))
 			finishReading()
-			Expect(str.Finished()).To(BeTrue())
+			Expect(str.finished()).To(BeTrue())
 		})
 
 		// the stream still needs to stay alive until we receive the final offset
@@ -649,14 +649,14 @@ var _ = Describe("Receive Stream", func() {
 		It("is not finished after CancelRead", func() {
 			err := str.CancelRead(123)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(str.Finished()).To(BeFalse())
+			Expect(str.finished()).To(BeFalse())
 		})
 
 		It("is finished after receiving a RST_STREAM frame", func() {
 			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(3), true)
-			err := str.HandleRstStreamFrame(&wire.RstStreamFrame{ByteOffset: 3})
+			err := str.handleRstStreamFrame(&wire.RstStreamFrame{ByteOffset: 3})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(str.Finished()).To(BeTrue())
+			Expect(str.finished()).To(BeTrue())
 		})
 	})
 })
