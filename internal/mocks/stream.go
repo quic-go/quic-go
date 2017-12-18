@@ -162,19 +162,6 @@ func (_mr *MockStreamIMockRecorder) HandleStreamFrame(arg0 interface{}) *gomock.
 	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "HandleStreamFrame", reflect.TypeOf((*MockStreamI)(nil).HandleStreamFrame), arg0)
 }
 
-// IsFlowControlBlocked mocks base method
-func (_m *MockStreamI) IsFlowControlBlocked() (bool, protocol.ByteCount) {
-	ret := _m.ctrl.Call(_m, "IsFlowControlBlocked")
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(protocol.ByteCount)
-	return ret0, ret1
-}
-
-// IsFlowControlBlocked indicates an expected call of IsFlowControlBlocked
-func (_mr *MockStreamIMockRecorder) IsFlowControlBlocked() *gomock.Call {
-	return _mr.mock.ctrl.RecordCallWithMethodType(_mr.mock, "IsFlowControlBlocked", reflect.TypeOf((*MockStreamI)(nil).IsFlowControlBlocked))
-}
-
 // PopStreamFrame mocks base method
 func (_m *MockStreamI) PopStreamFrame(_param0 protocol.ByteCount) *wire.StreamFrame {
 	ret := _m.ctrl.Call(_m, "PopStreamFrame", _param0)

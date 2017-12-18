@@ -26,7 +26,6 @@ type streamI interface {
 	// methods needed for flow control
 	GetWindowUpdate() protocol.ByteCount
 	HandleMaxStreamDataFrame(*wire.MaxStreamDataFrame)
-	IsFlowControlBlocked() (bool, protocol.ByteCount)
 }
 
 // A Stream assembles the data from StreamFrames and provides a super-convenient Read-Interface

@@ -693,7 +693,7 @@ var _ = Describe("Packet packer", func() {
 	Context("BLOCKED frames", func() {
 		It("queues a BLOCKED frame", func() {
 			length := 100
-			streamFramer.blockedFrameQueue = []wire.Frame{&wire.StreamBlockedFrame{StreamID: 5}}
+			streamFramer.blockedFrameQueue = []*wire.BlockedFrame{&wire.BlockedFrame{Offset: 555}}
 			f := &wire.StreamFrame{
 				StreamID: 5,
 				Data:     bytes.Repeat([]byte{'f'}, length),
@@ -701,12 +701,12 @@ var _ = Describe("Packet packer", func() {
 			streamFramer.AddFrameForRetransmission(f)
 			_, err := packer.composeNextPacket(maxFrameSize, true)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(packer.controlFrames[0]).To(Equal(&wire.StreamBlockedFrame{StreamID: 5}))
+			Expect(packer.controlFrames[0]).To(Equal(&wire.BlockedFrame{Offset: 555}))
 		})
 
-		It("removes the dataLen attribute from the last StreamFrame, even if it queued a BLOCKED frame", func() {
+		It("removes the dataLen attribute from the last STREAM frame, even if it queued a BLOCKED frame", func() {
 			length := 100
-			streamFramer.blockedFrameQueue = []wire.Frame{&wire.StreamBlockedFrame{StreamID: 5}}
+			streamFramer.blockedFrameQueue = []*wire.BlockedFrame{&wire.BlockedFrame{Offset: 50}}
 			f := &wire.StreamFrame{
 				StreamID: 5,
 				Data:     bytes.Repeat([]byte{'f'}, length),
@@ -719,7 +719,7 @@ var _ = Describe("Packet packer", func() {
 		})
 
 		It("packs a connection-level BlockedFrame", func() {
-			streamFramer.blockedFrameQueue = []wire.Frame{&wire.BlockedFrame{}}
+			streamFramer.blockedFrameQueue = []*wire.BlockedFrame{&wire.BlockedFrame{}}
 			f := &wire.StreamFrame{
 				StreamID: 5,
 				Data:     []byte("foobar"),
