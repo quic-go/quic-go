@@ -146,7 +146,7 @@ func (s *sendStream) PopStreamFrame(maxBytes protocol.ByteCount) *wire.StreamFra
 	if frame.FinBit {
 		s.finSent = true
 	} else if s.streamID != s.version.CryptoStreamID() { // TODO(#657): Flow control for the crypto stream
-		if isBlocked, offset := s.flowController.IsBlocked(); isBlocked {
+		if isBlocked, offset := s.flowController.IsNewlyBlocked(); isBlocked {
 			s.queueControlFrame(&wire.StreamBlockedFrame{
 				StreamID: s.streamID,
 				Offset:   offset,

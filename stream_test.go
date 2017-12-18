@@ -138,7 +138,7 @@ var _ = Describe("Stream", func() {
 				str.version = versionGQUICFrames
 				mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount).AnyTimes()
 				mockFC.EXPECT().AddBytesSent(protocol.ByteCount(6))
-				mockFC.EXPECT().IsBlocked()
+				mockFC.EXPECT().IsNewlyBlocked()
 				err := str.CancelRead(1234)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(queuedControlFrames).To(BeEmpty()) // no RST_STREAM frame queued yet

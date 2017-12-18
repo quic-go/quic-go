@@ -265,17 +265,9 @@ func (p *packetPacker) composeNextPacket(
 		fs[len(fs)-1].DataLenPresent = false
 	}
 
-	// TODO: Simplify
 	for _, f := range fs {
 		payloadFrames = append(payloadFrames, f)
 	}
-
-	for b := p.streamFramer.PopBlockedFrame(); b != nil; b = p.streamFramer.PopBlockedFrame() {
-		p.controlFrameMutex.Lock()
-		p.controlFrames = append(p.controlFrames, b)
-		p.controlFrameMutex.Unlock()
-	}
-
 	return payloadFrames, nil
 }
 

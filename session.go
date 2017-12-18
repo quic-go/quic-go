@@ -314,7 +314,7 @@ func (s *session) postSetup(initialPacketNumber protocol.PacketNumber) error {
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.version)
 
 	s.streamsMap = newStreamsMap(s.newStream, s.perspective, s.version)
-	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.connFlowController, s.version)
+	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
 
 	s.packer = newPacketPacker(s.connectionID,
 		initialPacketNumber,
@@ -720,6 +720,9 @@ func (s *session) sendPacket() error {
 	// this call triggers the flow controller to increase the flow control windows, if necessary
 	for _, f := range s.getWindowUpdates() {
 		s.packer.QueueControlFrame(f)
+	}
+	if isBlocked, offset := s.connFlowController.IsNewlyBlocked(); isBlocked {
+		s.packer.QueueControlFrame(&wire.BlockedFrame{Offset: offset})
 	}
 
 	ack := s.receivedPacketHandler.GetAckFrame()

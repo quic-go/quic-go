@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
@@ -11,23 +10,18 @@ type streamFramer struct {
 	cryptoStream cryptoStreamI
 	version      protocol.VersionNumber
 
-	connFlowController flowcontrol.ConnectionFlowController
-
 	retransmissionQueue []*wire.StreamFrame
-	blockedFrameQueue   []*wire.BlockedFrame
 }
 
 func newStreamFramer(
 	cryptoStream cryptoStreamI,
 	streamsMap *streamsMap,
-	cfc flowcontrol.ConnectionFlowController,
 	v protocol.VersionNumber,
 ) *streamFramer {
 	return &streamFramer{
-		streamsMap:         streamsMap,
-		cryptoStream:       cryptoStream,
-		connFlowController: cfc,
-		version:            v,
+		streamsMap:   streamsMap,
+		cryptoStream: cryptoStream,
+		version:      v,
 	}
 }
 
@@ -38,15 +32,6 @@ func (f *streamFramer) AddFrameForRetransmission(frame *wire.StreamFrame) {
 func (f *streamFramer) PopStreamFrames(maxLen protocol.ByteCount) []*wire.StreamFrame {
 	fs, currentLen := f.maybePopFramesForRetransmission(maxLen)
 	return append(fs, f.maybePopNormalFrames(maxLen-currentLen)...)
-}
-
-func (f *streamFramer) PopBlockedFrame() wire.Frame {
-	if len(f.blockedFrameQueue) == 0 {
-		return nil
-	}
-	frame := f.blockedFrameQueue[0]
-	f.blockedFrameQueue = f.blockedFrameQueue[1:]
-	return frame
 }
 
 func (f *streamFramer) HasFramesForRetransmission() bool {
@@ -103,19 +88,11 @@ func (f *streamFramer) maybePopNormalFrames(maxTotalLen protocol.ByteCount) (res
 		if frame == nil {
 			return true, nil
 		}
-
-		if blocked, offset := f.connFlowController.IsBlocked(); blocked {
-			f.blockedFrameQueue = append(f.blockedFrameQueue, &wire.BlockedFrame{Offset: offset})
-		}
-
 		res = append(res, frame)
 		currentLen += frame.MinLength(f.version) + frame.DataLen()
-
 		if currentLen == maxTotalLen {
 			return false, nil
 		}
-
-		frame = &wire.StreamFrame{DataLenPresent: true}
 		return true, nil
 	}
 

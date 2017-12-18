@@ -49,7 +49,7 @@ var _ = Describe("Send Stream", func() {
 		It("writes and gets all data at once", func() {
 			mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999))
 			mockFC.EXPECT().AddBytesSent(protocol.ByteCount(6))
-			mockFC.EXPECT().IsBlocked()
+			mockFC.EXPECT().IsNewlyBlocked()
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -78,7 +78,7 @@ var _ = Describe("Send Stream", func() {
 			frameHeaderLen := protocol.ByteCount(4)
 			mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999)).Times(2)
 			mockFC.EXPECT().AddBytesSent(gomock.Any() /* protocol.ByteCount(3)*/).Times(2)
-			mockFC.EXPECT().IsBlocked().Times(2)
+			mockFC.EXPECT().IsNewlyBlocked().Times(2)
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -115,7 +115,7 @@ var _ = Describe("Send Stream", func() {
 			mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999)).Times(2)
 			mockFC.EXPECT().AddBytesSent(protocol.ByteCount(1))
 			mockFC.EXPECT().AddBytesSent(protocol.ByteCount(2))
-			mockFC.EXPECT().IsBlocked().Times(2)
+			mockFC.EXPECT().IsNewlyBlocked().Times(2)
 			s := []byte("foo")
 			go func() {
 				defer GinkgoRecover()
@@ -155,7 +155,7 @@ var _ = Describe("Send Stream", func() {
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999))
 				mockFC.EXPECT().AddBytesSent(protocol.ByteCount(6))
 				// don't use offset 6 here, to make sure the BLOCKED frame contains the number returned by the flow controller
-				mockFC.EXPECT().IsBlocked().Return(true, protocol.ByteCount(10))
+				mockFC.EXPECT().IsNewlyBlocked().Return(true, protocol.ByteCount(10))
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
@@ -181,7 +181,7 @@ var _ = Describe("Send Stream", func() {
 			It("doesn't queue a BLOCKED frame if the stream is flow control blocked, but the frame popped has the FIN bit set", func() {
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999))
 				mockFC.EXPECT().AddBytesSent(protocol.ByteCount(6))
-				// don't EXPECT a call to IsBlocked
+				// don't EXPECT a call to IsNewlyBlocked
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
@@ -222,7 +222,7 @@ var _ = Describe("Send Stream", func() {
 			It("returns the number of bytes written, when the deadline expires", func() {
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(10000)).AnyTimes()
 				mockFC.EXPECT().AddBytesSent(gomock.Any())
-				mockFC.EXPECT().IsBlocked()
+				mockFC.EXPECT().IsNewlyBlocked()
 				deadline := time.Now().Add(scaleDuration(50 * time.Millisecond))
 				str.SetWriteDeadline(deadline)
 				var n int
@@ -299,7 +299,7 @@ var _ = Describe("Send Stream", func() {
 				frameHeaderLen := protocol.ByteCount(4)
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999)).Times(2)
 				mockFC.EXPECT().AddBytesSent(gomock.Any()).Times(2)
-				mockFC.EXPECT().IsBlocked()
+				mockFC.EXPECT().IsNewlyBlocked()
 				str.dataForWriting = []byte("foobar")
 				str.Close()
 				f := str.PopStreamFrame(3 + frameHeaderLen)
@@ -340,7 +340,7 @@ var _ = Describe("Send Stream", func() {
 			It("doesn't get data for writing if an error occurred", func() {
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999))
 				mockFC.EXPECT().AddBytesSent(gomock.Any())
-				mockFC.EXPECT().IsBlocked()
+				mockFC.EXPECT().IsNewlyBlocked()
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
@@ -380,7 +380,7 @@ var _ = Describe("Send Stream", func() {
 			It("unblocks Write", func() {
 				mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
 				mockFC.EXPECT().AddBytesSent(gomock.Any())
-				mockFC.EXPECT().IsBlocked()
+				mockFC.EXPECT().IsNewlyBlocked()
 				writeReturned := make(chan struct{})
 				var n int
 				go func() {
