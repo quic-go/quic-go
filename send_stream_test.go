@@ -208,6 +208,7 @@ var _ = Describe("Send Stream", func() {
 				n, err := strWithTimeout.Write([]byte("foobar"))
 				Expect(err).To(MatchError(errDeadline))
 				Expect(n).To(BeZero())
+				Expect(onDataCalled).To(BeFalse())
 			})
 
 			It("unblocks after the deadline", func() {
