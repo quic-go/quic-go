@@ -92,10 +92,13 @@ func (s *sendStream) Write(p []byte) (int, error) {
 	copy(s.dataForWriting, p)
 	s.onData()
 
+	var bytesWritten int
 	var err error
 	for {
+		bytesWritten = len(p) - len(s.dataForWriting)
 		deadline := s.writeDeadline
 		if !deadline.IsZero() && !time.Now().Before(deadline) {
+			s.dataForWriting = nil
 			err = errDeadline
 			break
 		}
@@ -120,7 +123,7 @@ func (s *sendStream) Write(p []byte) (int, error) {
 	} else if s.cancelWriteErr != nil {
 		err = s.cancelWriteErr
 	}
-	return len(p) - len(s.dataForWriting), err
+	return bytesWritten, err
 }
 
 // popStreamFrame returns the next STREAM frame that is supposed to be sent on this stream
