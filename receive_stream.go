@@ -139,7 +139,10 @@ func (s *receiveStream) Read(p []byte) (int, error) {
 		if !s.resetRemotely {
 			s.flowController.AddBytesRead(protocol.ByteCount(m))
 		}
-		s.sender.scheduleSending() // so that a possible WINDOW_UPDATE is sent
+		// this call triggers the flow controller to increase the flow control window, if necessary
+		if offset := s.flowController.GetWindowUpdate(); offset != 0 {
+			s.sender.onHasWindowUpdate(s.streamID, offset)
+		}
 
 		if s.readPosInFrame >= int(frame.DataLen()) {
 			s.frameQueue.Pop()

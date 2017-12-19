@@ -857,6 +857,45 @@ var _ = Describe("Session", func() {
 			Expect(mconn.written).To(HaveLen(1))
 		})
 
+		It("adds a MAX_DATA frames", func() {
+			fc := mocks.NewMockConnectionFlowController(mockCtrl)
+			fc.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0x1337))
+			fc.EXPECT().IsNewlyBlocked()
+			sess.connFlowController = fc
+			sph := mocks.NewMockSentPacketHandler(mockCtrl)
+			sph.EXPECT().GetLeastUnacked().AnyTimes()
+			sph.EXPECT().SendingAllowed().Return(true)
+			sph.EXPECT().SendingAllowed()
+			sph.EXPECT().DequeuePacketForRetransmission()
+			sph.EXPECT().ShouldSendRetransmittablePacket()
+			sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
+				Expect(p.Frames).To(Equal([]wire.Frame{
+					&wire.MaxDataFrame{ByteOffset: 0x1337},
+				}))
+			})
+			sess.sentPacketHandler = sph
+			err := sess.sendPacket()
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("adds MAX_STREAM_DATA frames", func() {
+			sess.windowUpdateQueue.Add(1, 10)
+			sess.windowUpdateQueue.Add(2, 20)
+			sph := mocks.NewMockSentPacketHandler(mockCtrl)
+			sph.EXPECT().GetLeastUnacked().AnyTimes()
+			sph.EXPECT().SendingAllowed().Return(true)
+			sph.EXPECT().SendingAllowed()
+			sph.EXPECT().DequeuePacketForRetransmission()
+			sph.EXPECT().ShouldSendRetransmittablePacket()
+			sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
+				Expect(p.Frames).To(ContainElement(&wire.MaxStreamDataFrame{StreamID: 1, ByteOffset: 10}))
+				Expect(p.Frames).To(ContainElement(&wire.MaxStreamDataFrame{StreamID: 2, ByteOffset: 20}))
+			})
+			sess.sentPacketHandler = sph
+			err := sess.sendPacket()
+			Expect(err).ToNot(HaveOccurred())
+		})
+
 		It("adds a BLOCKED frame when it is connection-level flow control blocked", func() {
 			fc := mocks.NewMockConnectionFlowController(mockCtrl)
 			fc.EXPECT().GetWindowUpdate()

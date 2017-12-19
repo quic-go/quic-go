@@ -62,8 +62,8 @@ type session struct {
 	sentPacketHandler     ackhandler.SentPacketHandler
 	receivedPacketHandler ackhandler.ReceivedPacketHandler
 	streamFramer          *streamFramer
-
-	connFlowController flowcontrol.ConnectionFlowController
+	windowUpdateQueue     *windowUpdateQueue
+	connFlowController    flowcontrol.ConnectionFlowController
 
 	unpacker unpacker
 	packer   *packetPacker
@@ -316,7 +316,6 @@ func (s *session) postSetup(initialPacketNumber protocol.PacketNumber) error {
 
 	s.streamsMap = newStreamsMap(s.newStream, s.perspective, s.version)
 	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
-
 	s.packer = newPacketPacker(s.connectionID,
 		initialPacketNumber,
 		s.cryptoSetup,
@@ -324,6 +323,7 @@ func (s *session) postSetup(initialPacketNumber protocol.PacketNumber) error {
 		s.perspective,
 		s.version,
 	)
+	s.windowUpdateQueue = newWindowUpdateQueue(s.packer.QueueControlFrame)
 	s.unpacker = &packetUnpacker{aead: s.cryptoSetup, version: s.version}
 	return nil
 }
@@ -717,14 +717,13 @@ func (s *session) processTransportParameters(params *handshake.TransportParamete
 func (s *session) sendPacket() error {
 	s.packer.SetLeastUnacked(s.sentPacketHandler.GetLeastUnacked())
 
-	// Get MAX_DATA and MAX_STREAM_DATA frames
-	// this call triggers the flow controller to increase the flow control windows, if necessary
-	for _, f := range s.getWindowUpdates() {
-		s.packer.QueueControlFrame(f)
+	if offset := s.connFlowController.GetWindowUpdate(); offset != 0 {
+		s.packer.QueueControlFrame(&wire.MaxDataFrame{ByteOffset: offset})
 	}
 	if isBlocked, offset := s.connFlowController.IsNewlyBlocked(); isBlocked {
 		s.packer.QueueControlFrame(&wire.BlockedFrame{Offset: offset})
 	}
+	s.windowUpdateQueue.QueueAll()
 
 	ack := s.receivedPacketHandler.GetAckFrame()
 	if ack != nil {
@@ -948,26 +947,13 @@ func (s *session) tryDecryptingQueuedPackets() {
 	s.undecryptablePackets = s.undecryptablePackets[:0]
 }
 
-func (s *session) getWindowUpdates() []wire.Frame {
-	var res []wire.Frame
-	s.streamsMap.Range(func(str streamI) {
-		if offset := str.getWindowUpdate(); offset != 0 {
-			res = append(res, &wire.MaxStreamDataFrame{
-				StreamID:   str.StreamID(),
-				ByteOffset: offset,
-			})
-		}
-	})
-	if offset := s.connFlowController.GetWindowUpdate(); offset != 0 {
-		res = append(res, &wire.MaxDataFrame{
-			ByteOffset: offset,
-		})
-	}
-	return res
-}
-
 func (s *session) queueControlFrame(f wire.Frame) {
 	s.packer.QueueControlFrame(f)
+	s.scheduleSending()
+}
+
+func (s *session) onHasWindowUpdate(streamID protocol.StreamID, offset protocol.ByteCount) {
+	s.windowUpdateQueue.Add(streamID, offset)
 	s.scheduleSending()
 }
 
