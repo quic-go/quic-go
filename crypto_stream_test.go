@@ -25,7 +25,7 @@ var _ = Describe("Crypto Stream", func() {
 	})
 
 	It("says if it has data for writing", func() {
-		mockSender.EXPECT().scheduleSending()
+		mockSender.EXPECT().onHasStreamData(str.version.CryptoStreamID())
 		Expect(str.hasDataForWriting()).To(BeFalse())
 		done := make(chan struct{})
 		go func() {

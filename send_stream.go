@@ -84,7 +84,7 @@ func (s *sendStream) Write(p []byte) (int, error) {
 
 	s.dataForWriting = make([]byte, len(p))
 	copy(s.dataForWriting, p)
-	s.sender.scheduleSending()
+	s.sender.onHasStreamData(s.streamID)
 
 	var bytesWritten int
 	var err error
@@ -191,7 +191,7 @@ func (s *sendStream) Close() error {
 		return fmt.Errorf("Close called for canceled stream %d", s.streamID)
 	}
 	s.finishedWriting = true
-	s.sender.scheduleSending()
+	s.sender.onHasStreamData(s.streamID) // need to send the FIN
 	s.ctxCancel()
 	return nil
 }

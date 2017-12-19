@@ -42,7 +42,7 @@ var _ = Describe("Send Stream", func() {
 
 	Context("writing", func() {
 		It("writes and gets all data at once", func() {
-			mockSender.EXPECT().scheduleSending()
+			mockSender.EXPECT().onHasStreamData(streamID)
 			mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999))
 			mockFC.EXPECT().AddBytesSent(protocol.ByteCount(6))
 			mockFC.EXPECT().IsNewlyBlocked()
@@ -70,7 +70,7 @@ var _ = Describe("Send Stream", func() {
 		})
 
 		It("writes and gets data in two turns", func() {
-			mockSender.EXPECT().scheduleSending()
+			mockSender.EXPECT().onHasStreamData(streamID)
 			frameHeaderLen := protocol.ByteCount(4)
 			mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999)).Times(2)
 			mockFC.EXPECT().AddBytesSent(gomock.Any() /* protocol.ByteCount(3)*/).Times(2)
@@ -107,7 +107,7 @@ var _ = Describe("Send Stream", func() {
 		})
 
 		It("copies the slice while writing", func() {
-			mockSender.EXPECT().scheduleSending()
+			mockSender.EXPECT().onHasStreamData(streamID)
 			frameHeaderSize := protocol.ByteCount(4)
 			mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999)).Times(2)
 			mockFC.EXPECT().AddBytesSent(protocol.ByteCount(1))
@@ -142,7 +142,7 @@ var _ = Describe("Send Stream", func() {
 		})
 
 		It("cancels the context when Close is called", func() {
-			mockSender.EXPECT().scheduleSending()
+			mockSender.EXPECT().onHasStreamData(streamID)
 			Expect(str.Context().Done()).ToNot(BeClosed())
 			str.Close()
 			Expect(str.Context().Done()).To(BeClosed())
@@ -150,7 +150,7 @@ var _ = Describe("Send Stream", func() {
 
 		Context("adding BLOCKED", func() {
 			It("queues a BLOCKED frame if the stream is flow control blocked", func() {
-				mockSender.EXPECT().scheduleSending()
+				mockSender.EXPECT().onHasStreamData(streamID)
 				mockSender.EXPECT().queueControlFrame(&wire.StreamBlockedFrame{
 					StreamID: streamID,
 					Offset:   10,
@@ -175,7 +175,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("doesn't queue a BLOCKED frame if the stream is flow control blocked, but the frame popped has the FIN bit set", func() {
-				mockSender.EXPECT().scheduleSending().Times(2) // once for the Write, once for the Close
+				mockSender.EXPECT().onHasStreamData(streamID).Times(2) // once for the Write, once for the Close
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999))
 				mockFC.EXPECT().AddBytesSent(protocol.ByteCount(6))
 				// don't EXPECT a call to mockFC.IsNewlyBlocked
@@ -208,7 +208,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("unblocks after the deadline", func() {
-				mockSender.EXPECT().scheduleSending()
+				mockSender.EXPECT().onHasStreamData(streamID)
 				deadline := time.Now().Add(scaleDuration(50 * time.Millisecond))
 				str.SetWriteDeadline(deadline)
 				n, err := strWithTimeout.Write([]byte("foobar"))
@@ -218,7 +218,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("returns the number of bytes written, when the deadline expires", func() {
-				mockSender.EXPECT().scheduleSending()
+				mockSender.EXPECT().onHasStreamData(streamID)
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(10000)).AnyTimes()
 				mockFC.EXPECT().AddBytesSent(gomock.Any())
 				mockFC.EXPECT().IsNewlyBlocked()
@@ -244,7 +244,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("doesn't pop any data after the deadline expired", func() {
-				mockSender.EXPECT().scheduleSending()
+				mockSender.EXPECT().onHasStreamData(streamID)
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(10000)).AnyTimes()
 				mockFC.EXPECT().AddBytesSent(gomock.Any())
 				mockFC.EXPECT().IsNewlyBlocked()
@@ -267,7 +267,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("doesn't unblock if the deadline is changed before the first one expires", func() {
-				mockSender.EXPECT().scheduleSending()
+				mockSender.EXPECT().onHasStreamData(streamID)
 				deadline1 := time.Now().Add(scaleDuration(50 * time.Millisecond))
 				deadline2 := time.Now().Add(scaleDuration(100 * time.Millisecond))
 				str.SetWriteDeadline(deadline1)
@@ -286,7 +286,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("unblocks earlier, when a new deadline is set", func() {
-				mockSender.EXPECT().scheduleSending()
+				mockSender.EXPECT().onHasStreamData(streamID)
 				deadline1 := time.Now().Add(scaleDuration(200 * time.Millisecond))
 				deadline2 := time.Now().Add(scaleDuration(50 * time.Millisecond))
 				go func() {
@@ -306,14 +306,14 @@ var _ = Describe("Send Stream", func() {
 
 		Context("closing", func() {
 			It("doesn't allow writes after it has been closed", func() {
-				mockSender.EXPECT().scheduleSending()
+				mockSender.EXPECT().onHasStreamData(streamID)
 				str.Close()
 				_, err := strWithTimeout.Write([]byte("foobar"))
 				Expect(err).To(MatchError("write on closed stream 1337"))
 			})
 
 			It("allows FIN", func() {
-				mockSender.EXPECT().scheduleSending()
+				mockSender.EXPECT().onHasStreamData(streamID)
 				str.Close()
 				f := str.popStreamFrame(1000)
 				Expect(f).ToNot(BeNil())
@@ -322,7 +322,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("doesn't send a FIN when there's still data", func() {
-				mockSender.EXPECT().scheduleSending()
+				mockSender.EXPECT().onHasStreamData(streamID)
 				frameHeaderLen := protocol.ByteCount(4)
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999)).Times(2)
 				mockFC.EXPECT().AddBytesSent(gomock.Any()).Times(2)
@@ -345,7 +345,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("doesn't allow FIN twice", func() {
-				mockSender.EXPECT().scheduleSending()
+				mockSender.EXPECT().onHasStreamData(streamID)
 				str.Close()
 				f := str.popStreamFrame(1000)
 				Expect(f).ToNot(BeNil())
@@ -366,7 +366,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("doesn't get data for writing if an error occurred", func() {
-				mockSender.EXPECT().scheduleSending()
+				mockSender.EXPECT().onHasStreamData(streamID)
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999))
 				mockFC.EXPECT().AddBytesSent(gomock.Any())
 				mockFC.EXPECT().IsNewlyBlocked()
@@ -405,7 +405,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("unblocks Write", func() {
-				mockSender.EXPECT().scheduleSending()
+				mockSender.EXPECT().onHasStreamData(streamID)
 				mockSender.EXPECT().queueControlFrame(gomock.Any())
 				mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
 				mockFC.EXPECT().AddBytesSent(gomock.Any())
@@ -454,7 +454,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("doesn't cancel when the stream was already closed", func() {
-				mockSender.EXPECT().scheduleSending()
+				mockSender.EXPECT().onHasStreamData(streamID)
 				err := str.Close()
 				Expect(err).ToNot(HaveOccurred())
 				err = str.CancelWrite(123)
@@ -475,7 +475,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("unblocks Write", func() {
-				mockSender.EXPECT().scheduleSending()
+				mockSender.EXPECT().onHasStreamData(streamID)
 				mockSender.EXPECT().queueControlFrame(gomock.Any())
 				done := make(chan struct{})
 				go func() {
@@ -517,7 +517,7 @@ var _ = Describe("Send Stream", func() {
 		})
 
 		It("is finished after Close()", func() {
-			mockSender.EXPECT().scheduleSending()
+			mockSender.EXPECT().onHasStreamData(streamID)
 			str.Close()
 			f := str.popStreamFrame(1000)
 			Expect(f.FinBit).To(BeTrue())

@@ -58,10 +58,6 @@ var _ = Describe("Stream", func() {
 
 	// need some stream cancelation tests here, since gQUIC doesn't cleanly separate the two stream halves
 	Context("stream cancelations", func() {
-		BeforeEach(func() {
-			mockSender.EXPECT().scheduleSending().AnyTimes()
-		})
-
 		Context("for gQUIC", func() {
 			BeforeEach(func() {
 				str.version = versionGQUICFrames
@@ -70,6 +66,7 @@ var _ = Describe("Stream", func() {
 			})
 
 			It("unblocks Write when receiving a RST_STREAM frame with non-zero error code", func() {
+				mockSender.EXPECT().onHasStreamData(streamID)
 				mockSender.EXPECT().queueControlFrame(&wire.RstStreamFrame{
 					StreamID:   streamID,
 					ByteOffset: 1000,
@@ -99,6 +96,7 @@ var _ = Describe("Stream", func() {
 			})
 
 			It("unblocks Write when receiving a RST_STREAM frame with error code 0", func() {
+				mockSender.EXPECT().onHasStreamData(streamID)
 				mockSender.EXPECT().queueControlFrame(&wire.RstStreamFrame{
 					StreamID:   streamID,
 					ByteOffset: 1000,
@@ -129,6 +127,7 @@ var _ = Describe("Stream", func() {
 
 			It("sends a RST_STREAM with error code 0, after the stream is closed", func() {
 				str.version = versionGQUICFrames
+				mockSender.EXPECT().onHasStreamData(streamID).Times(2) // once for the Write, once for the Close
 				mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount).AnyTimes()
 				mockFC.EXPECT().AddBytesSent(protocol.ByteCount(6))
 				mockFC.EXPECT().IsNewlyBlocked()
@@ -148,8 +147,7 @@ var _ = Describe("Stream", func() {
 					ByteOffset: 6,
 					ErrorCode:  0,
 				})
-				err = str.Close()
-				Expect(err).ToNot(HaveOccurred())
+				Expect(str.Close()).To(Succeed())
 			})
 		})
 
@@ -159,6 +157,7 @@ var _ = Describe("Stream", func() {
 					StreamID:  streamID,
 					ErrorCode: 1234,
 				})
+				mockSender.EXPECT().onHasStreamData(streamID)
 				err := str.CancelRead(1234)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(str.Close()).To(Succeed())

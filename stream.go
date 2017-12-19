@@ -16,9 +16,9 @@ const (
 
 // The streamSender is notified by the stream about various events.
 type streamSender interface {
-	scheduleSending()
 	queueControlFrame(wire.Frame)
 	onHasWindowUpdate(protocol.StreamID)
+	onHasStreamData(protocol.StreamID)
 }
 
 type streamI interface {

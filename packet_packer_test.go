@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"math"
 
+	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
@@ -62,7 +63,7 @@ var _ = Describe("Packet packer", func() {
 	BeforeEach(func() {
 		version := versionGQUICFrames
 		mockSender := NewMockStreamSender(mockCtrl)
-		mockSender.EXPECT().scheduleSending().AnyTimes()
+		mockSender.EXPECT().onHasStreamData(gomock.Any()).AnyTimes()
 		cryptoStream = newCryptoStream(mockSender, flowcontrol.NewStreamFlowController(version.CryptoStreamID(), false, flowcontrol.NewConnectionFlowController(1000, 1000, nil), 1000, 1000, 1000, nil), version)
 		streamsMap := newStreamsMap(nil, protocol.PerspectiveServer, versionGQUICFrames)
 		streamFramer = newStreamFramer(cryptoStream, streamsMap, versionGQUICFrames)
