@@ -59,7 +59,7 @@ func (s *mockSession) closeRemote(e error) {
 	close(s.stopRunLoop)
 }
 func (s *mockSession) OpenStream() (Stream, error) {
-	return &stream{streamID: 1337}, nil
+	return &stream{}, nil
 }
 func (s *mockSession) AcceptStream() (Stream, error)          { panic("not implemented") }
 func (s *mockSession) OpenStreamSync() (Stream, error)        { panic("not implemented") }

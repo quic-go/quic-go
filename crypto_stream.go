@@ -37,13 +37,13 @@ func newCryptoStream(onData func(), flowController flowcontrol.StreamFlowControl
 // It is only needed for the crypto stream.
 // It must not be called concurrently with any other stream methods, especially Read and Write.
 func (s *cryptoStream) SetReadOffset(offset protocol.ByteCount) {
-	s.readOffset = offset
-	s.frameQueue.readPosition = offset
+	s.receiveStream.readOffset = offset
+	s.receiveStream.frameQueue.readPosition = offset
 }
 
 func (s *cryptoStream) HasDataForWriting() bool {
-	s.mutex.Lock()
-	hasData := s.dataForWriting != nil
-	s.mutex.Unlock()
+	s.sendStream.mutex.Lock()
+	hasData := s.sendStream.dataForWriting != nil
+	s.sendStream.mutex.Unlock()
 	return hasData
 }
