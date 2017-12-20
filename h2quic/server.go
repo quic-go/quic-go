@@ -50,6 +50,7 @@ type Server struct {
 
 	listenerMutex sync.Mutex
 	listener      quic.Listener
+	closed        bool
 
 	supportedVersionsAsString string
 }
@@ -88,6 +89,10 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 		return errors.New("use of h2quic.Server without http.Server")
 	}
 	s.listenerMutex.Lock()
+	if s.closed {
+		s.listenerMutex.Unlock()
+		return errors.New("Server is already closed")
+	}
 	if s.listener != nil {
 		s.listenerMutex.Unlock()
 		return errors.New("ListenAndServe may only be called once")
@@ -242,6 +247,7 @@ func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, 
 func (s *Server) Close() error {
 	s.listenerMutex.Lock()
 	defer s.listenerMutex.Unlock()
+	s.closed = true
 	if s.listener != nil {
 		err := s.listener.Close()
 		s.listener = nil
