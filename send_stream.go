@@ -81,6 +81,9 @@ func (s *sendStream) Write(p []byte) (int, error) {
 	if s.closeForShutdownErr != nil {
 		return 0, s.closeForShutdownErr
 	}
+	if !s.writeDeadline.IsZero() && !time.Now().Before(s.writeDeadline) {
+		return 0, errDeadline
+	}
 	if len(p) == 0 {
 		return 0, nil
 	}
