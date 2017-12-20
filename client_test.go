@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -167,6 +168,9 @@ var _ = Describe("Client", func() {
 		})
 
 		It("resolves the address", func() {
+			if os.Getenv("APPVEYOR") == "True" {
+				Skip("This test is flaky on AppVeyor.")
+			}
 			closeErr := errors.New("peer doesn't reply")
 			remoteAddrChan := make(chan string)
 			newClientSession = func(
