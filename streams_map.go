@@ -220,7 +220,7 @@ func (m *streamsMap) DeleteClosedStreams() error {
 		if !ok {
 			return errMapAccess
 		}
-		if !str.Finished() {
+		if !str.finished() {
 			continue
 		}
 		numDeletedStreams++
@@ -317,7 +317,7 @@ func (m *streamsMap) CloseWithError(err error) {
 	m.nextStreamOrErrCond.Broadcast()
 	m.openStreamOrErrCond.Broadcast()
 	for _, s := range m.openStreams {
-		m.streams[s].CloseForShutdown(err)
+		m.streams[s].closeForShutdown(err)
 	}
 }
 

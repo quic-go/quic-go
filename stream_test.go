@@ -91,7 +91,7 @@ var _ = Describe("Stream", func() {
 					close(writeReturned)
 				}()
 				Consistently(writeReturned).ShouldNot(BeClosed())
-				err := str.HandleRstStreamFrame(f)
+				err := str.handleRstStreamFrame(f)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(queuedControlFrames).To(Equal([]wire.Frame{
 					&wire.RstStreamFrame{
@@ -122,7 +122,7 @@ var _ = Describe("Stream", func() {
 					close(writeReturned)
 				}()
 				Consistently(writeReturned).ShouldNot(BeClosed())
-				err := str.HandleRstStreamFrame(f)
+				err := str.handleRstStreamFrame(f)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(queuedControlFrames).To(Equal([]wire.Frame{
 					&wire.RstStreamFrame{
@@ -149,7 +149,7 @@ var _ = Describe("Stream", func() {
 					Expect(err).ToNot(HaveOccurred())
 					close(writeReturned)
 				}()
-				Eventually(func() *wire.StreamFrame { return str.PopStreamFrame(1000) }).ShouldNot(BeNil())
+				Eventually(func() *wire.StreamFrame { return str.popStreamFrame(1000) }).ShouldNot(BeNil())
 				Eventually(writeReturned).Should(BeClosed())
 				Expect(queuedControlFrames).To(BeEmpty()) // no RST_STREAM frame queued yet
 				err = str.Close()
@@ -187,7 +187,7 @@ var _ = Describe("Stream", func() {
 		It("sets a read deadline, when SetDeadline is called", func() {
 			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), false).AnyTimes()
 			f := &wire.StreamFrame{Data: []byte("foobar")}
-			err := str.HandleStreamFrame(f)
+			err := str.handleStreamFrame(f)
 			Expect(err).ToNot(HaveOccurred())
 			str.SetDeadline(time.Now().Add(-time.Second))
 			b := make([]byte, 6)
@@ -199,24 +199,24 @@ var _ = Describe("Stream", func() {
 
 	Context("saying if it is finished", func() {
 		It("is finished when both the send and the receive side are finished", func() {
-			str.receiveStream.CloseForShutdown(errors.New("shutdown"))
-			Expect(str.receiveStream.Finished()).To(BeTrue())
-			Expect(str.sendStream.Finished()).To(BeFalse())
-			Expect(str.Finished()).To(BeFalse())
+			str.receiveStream.closeForShutdown(errors.New("shutdown"))
+			Expect(str.receiveStream.finished()).To(BeTrue())
+			Expect(str.sendStream.finished()).To(BeFalse())
+			Expect(str.finished()).To(BeFalse())
 		})
 
 		It("is not finished when the receive side is finished", func() {
-			str.sendStream.CloseForShutdown(errors.New("shutdown"))
-			Expect(str.receiveStream.Finished()).To(BeFalse())
-			Expect(str.sendStream.Finished()).To(BeTrue())
-			Expect(str.Finished()).To(BeFalse())
+			str.sendStream.closeForShutdown(errors.New("shutdown"))
+			Expect(str.receiveStream.finished()).To(BeFalse())
+			Expect(str.sendStream.finished()).To(BeTrue())
+			Expect(str.finished()).To(BeFalse())
 		})
 
 		It("is not finished when the send side is finished", func() {
-			str.CloseForShutdown(errors.New("shutdown"))
-			Expect(str.receiveStream.Finished()).To(BeTrue())
-			Expect(str.sendStream.Finished()).To(BeTrue())
-			Expect(str.Finished()).To(BeTrue())
+			str.closeForShutdown(errors.New("shutdown"))
+			Expect(str.receiveStream.finished()).To(BeTrue())
+			Expect(str.sendStream.finished()).To(BeTrue())
+			Expect(str.finished()).To(BeTrue())
 		})
 	})
 })

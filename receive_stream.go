@@ -180,7 +180,7 @@ func (s *receiveStream) CancelRead(errorCode protocol.ApplicationErrorCode) erro
 	return nil
 }
 
-func (s *receiveStream) HandleStreamFrame(frame *wire.StreamFrame) error {
+func (s *receiveStream) handleStreamFrame(frame *wire.StreamFrame) error {
 	maxOffset := frame.Offset + frame.DataLen()
 	if err := s.flowController.UpdateHighestReceived(maxOffset, frame.FinBit); err != nil {
 		return err
@@ -195,7 +195,7 @@ func (s *receiveStream) HandleStreamFrame(frame *wire.StreamFrame) error {
 	return nil
 }
 
-func (s *receiveStream) HandleRstStreamFrame(frame *wire.RstStreamFrame) error {
+func (s *receiveStream) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -226,7 +226,7 @@ func (s *receiveStream) HandleRstStreamFrame(frame *wire.RstStreamFrame) error {
 }
 
 func (s *receiveStream) CloseRemote(offset protocol.ByteCount) {
-	s.HandleStreamFrame(&wire.StreamFrame{FinBit: true, Offset: offset})
+	s.handleStreamFrame(&wire.StreamFrame{FinBit: true, Offset: offset})
 }
 
 func (s *receiveStream) onClose(offset protocol.ByteCount) {
@@ -255,7 +255,7 @@ func (s *receiveStream) SetReadDeadline(t time.Time) error {
 // CloseForShutdown closes a stream abruptly.
 // It makes Read unblock (and return the error) immediately.
 // The peer will NOT be informed about this: the stream is closed without sending a FIN or RST.
-func (s *receiveStream) CloseForShutdown(err error) {
+func (s *receiveStream) closeForShutdown(err error) {
 	s.mutex.Lock()
 	s.closedForShutdown = true
 	s.closeForShutdownErr = err
@@ -263,7 +263,7 @@ func (s *receiveStream) CloseForShutdown(err error) {
 	s.signalRead()
 }
 
-func (s *receiveStream) Finished() bool {
+func (s *receiveStream) finished() bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -271,7 +271,7 @@ func (s *receiveStream) Finished() bool {
 		s.finRead || s.resetRemotely
 }
 
-func (s *receiveStream) GetWindowUpdate() protocol.ByteCount {
+func (s *receiveStream) getWindowUpdate() protocol.ByteCount {
 	return s.flowController.GetWindowUpdate()
 }
 

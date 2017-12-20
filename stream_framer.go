@@ -39,12 +39,12 @@ func (f *streamFramer) HasFramesForRetransmission() bool {
 }
 
 func (f *streamFramer) HasCryptoStreamFrame() bool {
-	return f.cryptoStream.HasDataForWriting()
+	return f.cryptoStream.hasDataForWriting()
 }
 
 // TODO(lclemente): This is somewhat duplicate with the normal path for generating frames.
 func (f *streamFramer) PopCryptoStreamFrame(maxLen protocol.ByteCount) *wire.StreamFrame {
-	return f.cryptoStream.PopStreamFrame(maxLen)
+	return f.cryptoStream.popStreamFrame(maxLen)
 }
 
 func (f *streamFramer) maybePopFramesForRetransmission(maxTotalLen protocol.ByteCount) (res []*wire.StreamFrame, currentLen protocol.ByteCount) {
@@ -84,7 +84,7 @@ func (f *streamFramer) maybePopNormalFrames(maxTotalLen protocol.ByteCount) (res
 		if maxLen < protocol.MinStreamFrameSize { // don't try to add new STREAM frames, if only little space is left in the packet
 			return false, nil
 		}
-		frame := s.PopStreamFrame(maxLen)
+		frame := s.popStreamFrame(maxLen)
 		if frame == nil {
 			return true, nil
 		}

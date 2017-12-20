@@ -120,9 +120,9 @@ func (s *sendStream) Write(p []byte) (int, error) {
 	return len(p) - len(s.dataForWriting), err
 }
 
-// PopStreamFrame returns the next STREAM frame that is supposed to be sent on this stream
+// popStreamFrame returns the next STREAM frame that is supposed to be sent on this stream
 // maxBytes is the maximum length this frame (including frame header) will have.
-func (s *sendStream) PopStreamFrame(maxBytes protocol.ByteCount) *wire.StreamFrame {
+func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) *wire.StreamFrame {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -226,13 +226,13 @@ func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, wr
 	return nil
 }
 
-func (s *sendStream) HandleStopSendingFrame(frame *wire.StopSendingFrame) {
+func (s *sendStream) handleStopSendingFrame(frame *wire.StopSendingFrame) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.handleStopSendingFrameImpl(frame)
 }
 
-func (s *sendStream) HandleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
+func (s *sendStream) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
 	s.flowController.UpdateSendWindow(frame.ByteOffset)
 }
 
@@ -267,7 +267,7 @@ func (s *sendStream) SetWriteDeadline(t time.Time) error {
 // CloseForShutdown closes a stream abruptly.
 // It makes Write unblock (and return the error) immediately.
 // The peer will NOT be informed about this: the stream is closed without sending a FIN or RST.
-func (s *sendStream) CloseForShutdown(err error) {
+func (s *sendStream) closeForShutdown(err error) {
 	s.mutex.Lock()
 	s.closedForShutdown = true
 	s.closeForShutdownErr = err
@@ -276,7 +276,7 @@ func (s *sendStream) CloseForShutdown(err error) {
 	s.ctxCancel()
 }
 
-func (s *sendStream) Finished() bool {
+func (s *sendStream) finished() bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 

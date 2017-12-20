@@ -566,7 +566,7 @@ func (s *session) handleStreamFrame(frame *wire.StreamFrame) error {
 		if frame.FinBit {
 			return errors.New("Received STREAM frame with FIN bit for the crypto stream")
 		}
-		return s.cryptoStream.HandleStreamFrame(frame)
+		return s.cryptoStream.handleStreamFrame(frame)
 	}
 	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
 	if err != nil {
@@ -577,7 +577,7 @@ func (s *session) handleStreamFrame(frame *wire.StreamFrame) error {
 		// ignore this StreamFrame
 		return nil
 	}
-	return str.HandleStreamFrame(frame)
+	return str.handleStreamFrame(frame)
 }
 
 func (s *session) handleMaxDataFrame(frame *wire.MaxDataFrame) {
@@ -586,7 +586,7 @@ func (s *session) handleMaxDataFrame(frame *wire.MaxDataFrame) {
 
 func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error {
 	if frame.StreamID == s.version.CryptoStreamID() {
-		s.cryptoStream.HandleMaxStreamDataFrame(frame)
+		s.cryptoStream.handleMaxStreamDataFrame(frame)
 		return nil
 	}
 	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
@@ -597,7 +597,7 @@ func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error
 		// stream is closed and already garbage collected
 		return nil
 	}
-	str.HandleMaxStreamDataFrame(frame)
+	str.handleMaxStreamDataFrame(frame)
 	return nil
 }
 
@@ -613,7 +613,7 @@ func (s *session) handleStopSendingFrame(frame *wire.StopSendingFrame) error {
 		// stream is closed and already garbage collected
 		return nil
 	}
-	str.HandleStopSendingFrame(frame)
+	str.handleStopSendingFrame(frame)
 	return nil
 }
 
@@ -629,7 +629,7 @@ func (s *session) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
 		// stream is closed and already garbage collected
 		return nil
 	}
-	return str.HandleRstStreamFrame(frame)
+	return str.handleRstStreamFrame(frame)
 }
 
 func (s *session) handleAckFrame(frame *wire.AckFrame, encLevel protocol.EncryptionLevel) error {
@@ -677,7 +677,7 @@ func (s *session) handleCloseError(closeErr closeError) error {
 		utils.Errorf("Closing session with error: %s", closeErr.err.Error())
 	}
 
-	s.cryptoStream.CloseForShutdown(quicErr)
+	s.cryptoStream.closeForShutdown(quicErr)
 	s.streamsMap.CloseWithError(quicErr)
 
 	if closeErr.err == errCloseSessionForNewVersion || closeErr.err == handshake.ErrCloseSessionForRetry {
@@ -706,7 +706,7 @@ func (s *session) processTransportParameters(params *handshake.TransportParamete
 	s.connFlowController.UpdateSendWindow(params.ConnectionFlowControlWindow)
 	// increase the flow control windows of all streams by sending them a fake MAX_STREAM_DATA frame
 	s.streamsMap.Range(func(str streamI) {
-		str.HandleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
+		str.handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
 			StreamID:   str.StreamID(),
 			ByteOffset: params.StreamFlowControlWindow,
 		})
@@ -950,7 +950,7 @@ func (s *session) tryDecryptingQueuedPackets() {
 func (s *session) getWindowUpdates() []wire.Frame {
 	var res []wire.Frame
 	s.streamsMap.Range(func(str streamI) {
-		if offset := str.GetWindowUpdate(); offset != 0 {
+		if offset := str.getWindowUpdate(); offset != 0 {
 			res = append(res, &wire.MaxStreamDataFrame{
 				StreamID:   str.StreamID(),
 				ByteOffset: offset,
