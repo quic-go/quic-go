@@ -23,7 +23,6 @@ var _ = Describe("Stream Framer", func() {
 		framer                                   *streamFramer
 		streamsMap                               *streamsMap
 		stream1, stream2                         *mocks.MockStreamI
-		connFC                                   *mocks.MockConnectionFlowController
 	)
 
 	setNoData := func(str *mocks.MockStreamI) {
@@ -49,8 +48,7 @@ var _ = Describe("Stream Framer", func() {
 		streamsMap.putStream(stream1)
 		streamsMap.putStream(stream2)
 
-		connFC = mocks.NewMockConnectionFlowController(mockCtrl)
-		framer = newStreamFramer(nil, streamsMap, connFC, versionGQUICFrames)
+		framer = newStreamFramer(nil, streamsMap, versionGQUICFrames)
 	})
 
 	It("says if it has retransmissions", func() {
@@ -69,13 +67,6 @@ var _ = Describe("Stream Framer", func() {
 	})
 
 	Context("Popping", func() {
-		BeforeEach(func() {
-			// nothing is blocked here
-			connFC.EXPECT().IsBlocked().AnyTimes()
-			stream1.EXPECT().IsFlowControlBlocked().Return(false, protocol.ByteCount(0)).AnyTimes()
-			stream2.EXPECT().IsFlowControlBlocked().Return(false, protocol.ByteCount(0)).AnyTimes()
-		})
-
 		It("returns nil when popping an empty framer", func() {
 			setNoData(stream1)
 			setNoData(stream2)
@@ -257,58 +248,6 @@ var _ = Describe("Stream Framer", func() {
 				Expect(fs[0].DataLen()).To(BeEquivalentTo(1))
 				Expect(framer.retransmissionQueue).To(BeEmpty())
 			})
-		})
-	})
-
-	Context("BLOCKED frames", func() {
-		It("Pop returns nil if no frame is queued", func() {
-			Expect(framer.PopBlockedFrame()).To(BeNil())
-		})
-
-		It("queues and pops BLOCKED frames for individually blocked streams", func() {
-			setNoData(stream2)
-			connFC.EXPECT().IsBlocked()
-			stream1.EXPECT().PopStreamFrame(gomock.Any()).Return(&wire.StreamFrame{
-				StreamID: id1,
-				Data:     []byte("foobar"),
-			})
-			stream1.EXPECT().IsFlowControlBlocked().Return(true, protocol.ByteCount(0x1234))
-			frames := framer.PopStreamFrames(1000)
-			Expect(frames).To(HaveLen(1))
-			Expect(framer.PopBlockedFrame()).To(Equal(&wire.StreamBlockedFrame{
-				StreamID: stream1.StreamID(),
-				Offset:   0x1234,
-			}))
-			Expect(framer.PopBlockedFrame()).To(BeNil())
-		})
-
-		It("doesn't queue a stream-level BLOCKED frame after sending the FIN bit frame", func() {
-			setNoData(stream2)
-			f := &wire.StreamFrame{
-				StreamID: id1,
-				Data:     []byte("foobar"),
-				FinBit:   true,
-			}
-			connFC.EXPECT().IsBlocked()
-			stream1.EXPECT().PopStreamFrame(gomock.Any()).Return(f)
-			// no call to IsFlowControlBlocked()
-			frames := framer.PopStreamFrames(1000)
-			Expect(frames).To(Equal([]*wire.StreamFrame{f}))
-			blockedFrame := framer.PopBlockedFrame()
-			Expect(blockedFrame).To(BeNil())
-		})
-
-		It("queues and pops BLOCKED frames for connection blocked streams", func() {
-			setNoData(stream2)
-			connFC.EXPECT().IsBlocked().Return(true, protocol.ByteCount(0x4321))
-			stream1.EXPECT().PopStreamFrame(gomock.Any()).Return(&wire.StreamFrame{
-				StreamID: id1,
-				Data:     []byte("foo"),
-			})
-			stream1.EXPECT().IsFlowControlBlocked().Return(false, protocol.ByteCount(0))
-			framer.PopStreamFrames(1000)
-			Expect(framer.PopBlockedFrame()).To(Equal(&wire.BlockedFrame{Offset: 0x4321}))
-			Expect(framer.PopBlockedFrame()).To(BeNil())
 		})
 	})
 })

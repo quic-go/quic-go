@@ -49,6 +49,7 @@ var _ = Describe("Send Stream", func() {
 		It("writes and gets all data at once", func() {
 			mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999))
 			mockFC.EXPECT().AddBytesSent(protocol.ByteCount(6))
+			mockFC.EXPECT().IsNewlyBlocked()
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -57,14 +58,13 @@ var _ = Describe("Send Stream", func() {
 				Expect(n).To(Equal(6))
 				close(done)
 			}()
-			Eventually(func() []byte {
-				str.mutex.Lock()
-				defer str.mutex.Unlock()
-				return str.dataForWriting
-			}).Should(Equal([]byte("foobar")))
 			Consistently(done).ShouldNot(BeClosed())
+			var f *wire.StreamFrame
+			Eventually(func() *wire.StreamFrame {
+				f = str.PopStreamFrame(1000)
+				return f
+			}).ShouldNot(BeNil())
 			Expect(onDataCalled).To(BeTrue())
-			f := str.PopStreamFrame(1000)
 			Expect(f.Data).To(Equal([]byte("foobar")))
 			Expect(f.FinBit).To(BeFalse())
 			Expect(f.Offset).To(BeZero())
@@ -78,6 +78,7 @@ var _ = Describe("Send Stream", func() {
 			frameHeaderLen := protocol.ByteCount(4)
 			mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999)).Times(2)
 			mockFC.EXPECT().AddBytesSent(gomock.Any() /* protocol.ByteCount(3)*/).Times(2)
+			mockFC.EXPECT().IsNewlyBlocked().Times(2)
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -86,13 +87,12 @@ var _ = Describe("Send Stream", func() {
 				Expect(n).To(Equal(6))
 				close(done)
 			}()
-			Eventually(func() []byte {
-				str.mutex.Lock()
-				defer str.mutex.Unlock()
-				return str.dataForWriting
-			}).Should(Equal([]byte("foobar")))
 			Consistently(done).ShouldNot(BeClosed())
-			f := str.PopStreamFrame(3 + frameHeaderLen)
+			var f *wire.StreamFrame
+			Eventually(func() *wire.StreamFrame {
+				f = str.PopStreamFrame(3 + frameHeaderLen)
+				return f
+			}).ShouldNot(BeNil())
 			Expect(f.Data).To(Equal([]byte("foo")))
 			Expect(f.FinBit).To(BeFalse())
 			Expect(f.Offset).To(BeZero())
@@ -115,6 +115,7 @@ var _ = Describe("Send Stream", func() {
 			mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999)).Times(2)
 			mockFC.EXPECT().AddBytesSent(protocol.ByteCount(1))
 			mockFC.EXPECT().AddBytesSent(protocol.ByteCount(2))
+			mockFC.EXPECT().IsNewlyBlocked().Times(2)
 			s := []byte("foo")
 			go func() {
 				defer GinkgoRecover()
@@ -149,6 +150,58 @@ var _ = Describe("Send Stream", func() {
 			Expect(str.Context().Done()).To(BeClosed())
 		})
 
+		Context("adding BLOCKED", func() {
+			It("queues a BLOCKED frame if the stream is flow control blocked", func() {
+				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999))
+				mockFC.EXPECT().AddBytesSent(protocol.ByteCount(6))
+				// don't use offset 6 here, to make sure the BLOCKED frame contains the number returned by the flow controller
+				mockFC.EXPECT().IsNewlyBlocked().Return(true, protocol.ByteCount(10))
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					_, err := str.Write([]byte("foobar"))
+					Expect(err).ToNot(HaveOccurred())
+					close(done)
+				}()
+				var f *wire.StreamFrame
+				Eventually(func() *wire.StreamFrame {
+					f = str.PopStreamFrame(1000)
+					return f
+				}).ShouldNot(BeNil())
+				Expect(queuedControlFrames).To(Equal([]wire.Frame{
+					&wire.StreamBlockedFrame{
+						StreamID: streamID,
+						Offset:   10,
+					},
+				}))
+				Expect(onDataCalled).To(BeTrue())
+				Eventually(done).Should(BeClosed())
+			})
+
+			It("doesn't queue a BLOCKED frame if the stream is flow control blocked, but the frame popped has the FIN bit set", func() {
+				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999))
+				mockFC.EXPECT().AddBytesSent(protocol.ByteCount(6))
+				// don't EXPECT a call to IsNewlyBlocked
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					_, err := str.Write([]byte("foobar"))
+					Expect(err).ToNot(HaveOccurred())
+					close(done)
+				}()
+				Consistently(done).ShouldNot(BeClosed())
+				Expect(str.Close()).To(Succeed())
+				var f *wire.StreamFrame
+				Eventually(func() *wire.StreamFrame {
+					f = str.PopStreamFrame(1000)
+					return f
+				}).ShouldNot(BeNil())
+				Expect(f.FinBit).To(BeTrue())
+				Expect(queuedControlFrames).To(BeEmpty())
+				Eventually(done).Should(BeClosed())
+			})
+		})
+
 		Context("deadlines", func() {
 			It("returns an error when Write is called after the deadline", func() {
 				str.SetWriteDeadline(time.Now().Add(-time.Second))
@@ -169,6 +222,7 @@ var _ = Describe("Send Stream", func() {
 			It("returns the number of bytes written, when the deadline expires", func() {
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(10000)).AnyTimes()
 				mockFC.EXPECT().AddBytesSent(gomock.Any())
+				mockFC.EXPECT().IsNewlyBlocked()
 				deadline := time.Now().Add(scaleDuration(50 * time.Millisecond))
 				str.SetWriteDeadline(deadline)
 				var n int
@@ -241,10 +295,11 @@ var _ = Describe("Send Stream", func() {
 				Expect(f.FinBit).To(BeTrue())
 			})
 
-			It("doesn't allow FIN when there's still data", func() {
+			It("doesn't send a FIN when there's still data", func() {
 				frameHeaderLen := protocol.ByteCount(4)
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999)).Times(2)
 				mockFC.EXPECT().AddBytesSent(gomock.Any()).Times(2)
+				mockFC.EXPECT().IsNewlyBlocked()
 				str.dataForWriting = []byte("foobar")
 				str.Close()
 				f := str.PopStreamFrame(3 + frameHeaderLen)
@@ -285,6 +340,7 @@ var _ = Describe("Send Stream", func() {
 			It("doesn't get data for writing if an error occurred", func() {
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999))
 				mockFC.EXPECT().AddBytesSent(gomock.Any())
+				mockFC.EXPECT().IsNewlyBlocked()
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
@@ -324,6 +380,7 @@ var _ = Describe("Send Stream", func() {
 			It("unblocks Write", func() {
 				mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
 				mockFC.EXPECT().AddBytesSent(gomock.Any())
+				mockFC.EXPECT().IsNewlyBlocked()
 				writeReturned := make(chan struct{})
 				var n int
 				go func() {
@@ -417,26 +474,6 @@ var _ = Describe("Send Stream", func() {
 				Expect(err).To(BeAssignableToTypeOf(streamCanceledError{}))
 				Expect(err.(streamCanceledError).Canceled()).To(BeTrue())
 				Expect(err.(streamCanceledError).ErrorCode()).To(Equal(protocol.ApplicationErrorCode(123)))
-			})
-		})
-	})
-
-	Context("flow control", func() {
-		It("says when it's flow control blocked", func() {
-			mockFC.EXPECT().IsBlocked().Return(false, protocol.ByteCount(0))
-			blocked, _ := str.IsFlowControlBlocked()
-			Expect(blocked).To(BeFalse())
-			mockFC.EXPECT().IsBlocked().Return(true, protocol.ByteCount(0x1337))
-			blocked, offset := str.IsFlowControlBlocked()
-			Expect(blocked).To(BeTrue())
-			Expect(offset).To(Equal(protocol.ByteCount(0x1337)))
-		})
-
-		It("updates the flow control window", func() {
-			mockFC.EXPECT().UpdateSendWindow(protocol.ByteCount(0x42))
-			str.HandleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
-				StreamID:   streamID,
-				ByteOffset: 0x42,
 			})
 		})
 	})

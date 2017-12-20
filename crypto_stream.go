@@ -19,7 +19,6 @@ type cryptoStreamI interface {
 	// methods needed for flow control
 	GetWindowUpdate() protocol.ByteCount
 	HandleMaxStreamDataFrame(*wire.MaxStreamDataFrame)
-	IsFlowControlBlocked() (bool, protocol.ByteCount)
 }
 
 type cryptoStream struct {

@@ -63,7 +63,7 @@ var _ = Describe("Packet packer", func() {
 		version := versionGQUICFrames
 		cryptoStream = newCryptoStream(func() {}, flowcontrol.NewStreamFlowController(version.CryptoStreamID(), false, flowcontrol.NewConnectionFlowController(1000, 1000, nil), 1000, 1000, 1000, nil), version)
 		streamsMap := newStreamsMap(nil, protocol.PerspectiveServer, versionGQUICFrames)
-		streamFramer = newStreamFramer(cryptoStream, streamsMap, nil, versionGQUICFrames)
+		streamFramer = newStreamFramer(cryptoStream, streamsMap, versionGQUICFrames)
 
 		packer = &packetPacker{
 			cryptoSetup:           &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure},
@@ -687,47 +687,6 @@ var _ = Describe("Packet packer", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.frames).To(HaveLen(1))
 			Expect(func() { _ = p.frames[0].(*wire.AckFrame) }).NotTo(Panic())
-		})
-	})
-
-	Context("BLOCKED frames", func() {
-		It("queues a BLOCKED frame", func() {
-			length := 100
-			streamFramer.blockedFrameQueue = []wire.Frame{&wire.StreamBlockedFrame{StreamID: 5}}
-			f := &wire.StreamFrame{
-				StreamID: 5,
-				Data:     bytes.Repeat([]byte{'f'}, length),
-			}
-			streamFramer.AddFrameForRetransmission(f)
-			_, err := packer.composeNextPacket(maxFrameSize, true)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(packer.controlFrames[0]).To(Equal(&wire.StreamBlockedFrame{StreamID: 5}))
-		})
-
-		It("removes the dataLen attribute from the last StreamFrame, even if it queued a BLOCKED frame", func() {
-			length := 100
-			streamFramer.blockedFrameQueue = []wire.Frame{&wire.StreamBlockedFrame{StreamID: 5}}
-			f := &wire.StreamFrame{
-				StreamID: 5,
-				Data:     bytes.Repeat([]byte{'f'}, length),
-			}
-			streamFramer.AddFrameForRetransmission(f)
-			p, err := packer.composeNextPacket(maxFrameSize, true)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(p).To(HaveLen(1))
-			Expect(p[0].(*wire.StreamFrame).DataLenPresent).To(BeFalse())
-		})
-
-		It("packs a connection-level BlockedFrame", func() {
-			streamFramer.blockedFrameQueue = []wire.Frame{&wire.BlockedFrame{}}
-			f := &wire.StreamFrame{
-				StreamID: 5,
-				Data:     []byte("foobar"),
-			}
-			streamFramer.AddFrameForRetransmission(f)
-			_, err := packer.composeNextPacket(maxFrameSize, true)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(packer.controlFrames[0]).To(Equal(&wire.BlockedFrame{}))
 		})
 	})
 

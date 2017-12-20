@@ -145,6 +145,14 @@ func (s *sendStream) PopStreamFrame(maxBytes protocol.ByteCount) *wire.StreamFra
 	}
 	if frame.FinBit {
 		s.finSent = true
+	} else if s.streamID != s.version.CryptoStreamID() { // TODO(#657): Flow control for the crypto stream
+		if isBlocked, offset := s.flowController.IsNewlyBlocked(); isBlocked {
+			s.queueControlFrame(&wire.StreamBlockedFrame{
+				StreamID: s.streamID,
+				Offset:   offset,
+			})
+			s.onData()
+		}
 	}
 	return frame
 }
@@ -226,10 +234,6 @@ func (s *sendStream) HandleStopSendingFrame(frame *wire.StopSendingFrame) {
 
 func (s *sendStream) HandleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
 	s.flowController.UpdateSendWindow(frame.ByteOffset)
-}
-
-func (s *sendStream) IsFlowControlBlocked() (bool, protocol.ByteCount) {
-	return s.flowController.IsBlocked()
 }
 
 // must be called after locking the mutex

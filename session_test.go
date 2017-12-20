@@ -857,6 +857,27 @@ var _ = Describe("Session", func() {
 			Expect(mconn.written).To(HaveLen(1))
 		})
 
+		It("adds a BLOCKED frame when it is connection-level flow control blocked", func() {
+			fc := mocks.NewMockConnectionFlowController(mockCtrl)
+			fc.EXPECT().GetWindowUpdate()
+			fc.EXPECT().IsNewlyBlocked().Return(true, protocol.ByteCount(1337))
+			sess.connFlowController = fc
+			sph := mocks.NewMockSentPacketHandler(mockCtrl)
+			sph.EXPECT().GetLeastUnacked().AnyTimes()
+			sph.EXPECT().SendingAllowed().Return(true)
+			sph.EXPECT().SendingAllowed()
+			sph.EXPECT().DequeuePacketForRetransmission()
+			sph.EXPECT().ShouldSendRetransmittablePacket()
+			sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
+				Expect(p.Frames).To(Equal([]wire.Frame{
+					&wire.BlockedFrame{Offset: 1337},
+				}))
+			})
+			sess.sentPacketHandler = sph
+			err := sess.sendPacket()
+			Expect(err).ToNot(HaveOccurred())
+		})
+
 		It("sends public reset", func() {
 			err := sess.sendPublicReset(1)
 			Expect(err).NotTo(HaveOccurred())
