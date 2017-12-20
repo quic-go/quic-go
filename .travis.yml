@@ -30,6 +30,7 @@ before_install:
   - export GOARCH=$TRAVIS_GOARCH
   - go env # for debugging
   - google-chrome --version
+  - "printf \"quic.clemente.io certificate valid until: \" && openssl x509 -in example/fullchain.pem -enddate -noout | cut -d = -f 2"
   - "export DISPLAY=:99.0"
   - "Xvfb $DISPLAY &> /dev/null &"
 
