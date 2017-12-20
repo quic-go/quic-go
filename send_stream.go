@@ -19,11 +19,7 @@ type sendStream struct {
 	ctxCancel context.CancelFunc
 
 	streamID protocol.StreamID
-	// onData tells the session that there's stuff to pack into a new packet
-	onData func()
-	// queueControlFrame queues a new control frame for sending
-	// it does not call onData
-	queueControlFrame func(wire.Frame)
+	sender   streamSender
 
 	writeOffset protocol.ByteCount
 
@@ -47,18 +43,16 @@ var _ SendStream = &sendStream{}
 
 func newSendStream(
 	streamID protocol.StreamID,
-	onData func(),
-	queueControlFrame func(wire.Frame),
+	sender streamSender,
 	flowController flowcontrol.StreamFlowController,
 	version protocol.VersionNumber,
 ) *sendStream {
 	s := &sendStream{
-		streamID:          streamID,
-		onData:            onData,
-		queueControlFrame: queueControlFrame,
-		flowController:    flowController,
-		writeChan:         make(chan struct{}, 1),
-		version:           version,
+		streamID:       streamID,
+		sender:         sender,
+		flowController: flowController,
+		writeChan:      make(chan struct{}, 1),
+		version:        version,
 	}
 	s.ctx, s.ctxCancel = context.WithCancel(context.Background())
 	return s
@@ -90,7 +84,7 @@ func (s *sendStream) Write(p []byte) (int, error) {
 
 	s.dataForWriting = make([]byte, len(p))
 	copy(s.dataForWriting, p)
-	s.onData()
+	s.sender.scheduleSending()
 
 	var bytesWritten int
 	var err error
@@ -153,11 +147,10 @@ func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) *wire.StreamFra
 		s.finSent = true
 	} else if s.streamID != s.version.CryptoStreamID() { // TODO(#657): Flow control for the crypto stream
 		if isBlocked, offset := s.flowController.IsNewlyBlocked(); isBlocked {
-			s.queueControlFrame(&wire.StreamBlockedFrame{
+			s.sender.queueControlFrame(&wire.StreamBlockedFrame{
 				StreamID: s.streamID,
 				Offset:   offset,
 			})
-			s.onData()
 		}
 	}
 	return frame
@@ -199,7 +192,6 @@ func (s *sendStream) Close() error {
 	}
 	s.finishedWriting = true
 	s.ctxCancel()
-	s.onData()
 	return nil
 }
 
@@ -221,13 +213,12 @@ func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, wr
 	s.canceledWrite = true
 	s.cancelWriteErr = writeErr
 	s.signalWrite()
-	s.queueControlFrame(&wire.RstStreamFrame{
+	s.sender.queueControlFrame(&wire.RstStreamFrame{
 		StreamID:   s.streamID,
 		ByteOffset: s.writeOffset,
 		ErrorCode:  errorCode,
 	})
 	// TODO(#991): cancel retransmissions for this stream
-	s.onData()
 	s.ctxCancel()
 	return nil
 }

@@ -7,10 +7,16 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Stream", func() {
-	var str *cryptoStream
+var _ = Describe("Crypto Stream", func() {
+	var (
+		str        *cryptoStream
+		mockSender *MockStreamSender
+	)
 
-	str = newCryptoStream(func() {}, nil, protocol.VersionWhatever).(*cryptoStream)
+	BeforeEach(func() {
+		mockSender = NewMockStreamSender(mockCtrl)
+		str = newCryptoStream(mockSender, nil, protocol.VersionWhatever).(*cryptoStream)
+	})
 
 	It("sets the read offset", func() {
 		str.setReadOffset(0x42)
@@ -19,6 +25,7 @@ var _ = Describe("Stream", func() {
 	})
 
 	It("says if it has data for writing", func() {
+		mockSender.EXPECT().scheduleSending()
 		Expect(str.hasDataForWriting()).To(BeFalse())
 		done := make(chan struct{})
 		go func() {

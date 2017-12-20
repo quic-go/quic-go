@@ -61,7 +61,9 @@ var _ = Describe("Packet packer", func() {
 
 	BeforeEach(func() {
 		version := versionGQUICFrames
-		cryptoStream = newCryptoStream(func() {}, flowcontrol.NewStreamFlowController(version.CryptoStreamID(), false, flowcontrol.NewConnectionFlowController(1000, 1000, nil), 1000, 1000, 1000, nil), version)
+		mockSender := NewMockStreamSender(mockCtrl)
+		mockSender.EXPECT().scheduleSending().AnyTimes()
+		cryptoStream = newCryptoStream(mockSender, flowcontrol.NewStreamFlowController(version.CryptoStreamID(), false, flowcontrol.NewConnectionFlowController(1000, 1000, nil), 1000, 1000, 1000, nil), version)
 		streamsMap := newStreamsMap(nil, protocol.PerspectiveServer, versionGQUICFrames)
 		streamFramer = newStreamFramer(cryptoStream, streamsMap, versionGQUICFrames)
 

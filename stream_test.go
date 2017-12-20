@@ -3,15 +3,13 @@ package quic
 import (
 	"errors"
 	"io"
+	"os"
 	"strconv"
 	"time"
-
-	"os"
 
 	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
@@ -33,21 +31,16 @@ var _ = Describe("Stream", func() {
 	const streamID protocol.StreamID = 1337
 
 	var (
-		str                 *stream
-		strWithTimeout      io.ReadWriter // str wrapped with gbytes.Timeout{Reader,Writer}
-		onDataCalled        bool
-		queuedControlFrames []wire.Frame
-		mockFC              *mocks.MockStreamFlowController
+		str            *stream
+		strWithTimeout io.ReadWriter // str wrapped with gbytes.Timeout{Reader,Writer}
+		mockFC         *mocks.MockStreamFlowController
+		mockSender     *MockStreamSender
 	)
 
-	onData := func() { onDataCalled = true }
-	queueControlFrame := func(f wire.Frame) { queuedControlFrames = append(queuedControlFrames, f) }
-
 	BeforeEach(func() {
-		queuedControlFrames = queuedControlFrames[:0]
-		onDataCalled = false
+		mockSender = NewMockStreamSender(mockCtrl)
 		mockFC = mocks.NewMockStreamFlowController(mockCtrl)
-		str = newStream(streamID, onData, queueControlFrame, mockFC, protocol.VersionWhatever)
+		str = newStream(streamID, mockSender, mockFC, protocol.VersionWhatever)
 
 		timeout := scaleDuration(250 * time.Millisecond)
 		strWithTimeout = struct {
@@ -65,6 +58,10 @@ var _ = Describe("Stream", func() {
 
 	// need some stream cancelation tests here, since gQUIC doesn't cleanly separate the two stream halves
 	Context("stream cancelations", func() {
+		BeforeEach(func() {
+			mockSender.EXPECT().scheduleSending().AnyTimes()
+		})
+
 		Context("for gQUIC", func() {
 			BeforeEach(func() {
 				str.version = versionGQUICFrames
@@ -73,6 +70,11 @@ var _ = Describe("Stream", func() {
 			})
 
 			It("unblocks Write when receiving a RST_STREAM frame with non-zero error code", func() {
+				mockSender.EXPECT().queueControlFrame(&wire.RstStreamFrame{
+					StreamID:   streamID,
+					ByteOffset: 1000,
+					ErrorCode:  errorCodeStoppingGQUIC,
+				})
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), true)
 				str.writeOffset = 1000
 				f := &wire.RstStreamFrame{
@@ -93,17 +95,15 @@ var _ = Describe("Stream", func() {
 				Consistently(writeReturned).ShouldNot(BeClosed())
 				err := str.handleRstStreamFrame(f)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(queuedControlFrames).To(Equal([]wire.Frame{
-					&wire.RstStreamFrame{
-						StreamID:   streamID,
-						ByteOffset: 1000,
-						ErrorCode:  errorCodeStoppingGQUIC,
-					},
-				}))
 				Eventually(writeReturned).Should(BeClosed())
 			})
 
 			It("unblocks Write when receiving a RST_STREAM frame with error code 0", func() {
+				mockSender.EXPECT().queueControlFrame(&wire.RstStreamFrame{
+					StreamID:   streamID,
+					ByteOffset: 1000,
+					ErrorCode:  errorCodeStoppingGQUIC,
+				})
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), true)
 				str.writeOffset = 1000
 				f := &wire.RstStreamFrame{
@@ -124,13 +124,6 @@ var _ = Describe("Stream", func() {
 				Consistently(writeReturned).ShouldNot(BeClosed())
 				err := str.handleRstStreamFrame(f)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(queuedControlFrames).To(Equal([]wire.Frame{
-					&wire.RstStreamFrame{
-						StreamID:   streamID,
-						ByteOffset: 1000,
-						ErrorCode:  errorCodeStoppingGQUIC,
-					},
-				}))
 				Eventually(writeReturned).Should(BeClosed())
 			})
 
@@ -141,7 +134,6 @@ var _ = Describe("Stream", func() {
 				mockFC.EXPECT().IsNewlyBlocked()
 				err := str.CancelRead(1234)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(queuedControlFrames).To(BeEmpty()) // no RST_STREAM frame queued yet
 				writeReturned := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
@@ -151,27 +143,25 @@ var _ = Describe("Stream", func() {
 				}()
 				Eventually(func() *wire.StreamFrame { return str.popStreamFrame(1000) }).ShouldNot(BeNil())
 				Eventually(writeReturned).Should(BeClosed())
-				Expect(queuedControlFrames).To(BeEmpty()) // no RST_STREAM frame queued yet
+				mockSender.EXPECT().queueControlFrame(&wire.RstStreamFrame{
+					StreamID:   streamID,
+					ByteOffset: 6,
+					ErrorCode:  0,
+				})
 				err = str.Close()
 				Expect(err).ToNot(HaveOccurred())
-				Expect(queuedControlFrames).To(Equal([]wire.Frame{
-					&wire.RstStreamFrame{
-						StreamID:   streamID,
-						ByteOffset: 6,
-						ErrorCode:  0,
-					},
-				}))
 			})
 		})
 
 		Context("for IETF QUIC", func() {
 			It("doesn't queue a RST_STREAM after closing the stream", func() { // this is what it does for gQUIC
+				mockSender.EXPECT().queueControlFrame(&wire.StopSendingFrame{
+					StreamID:  streamID,
+					ErrorCode: 1234,
+				})
 				err := str.CancelRead(1234)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(queuedControlFrames).To(HaveLen(1))
-				Expect(queuedControlFrames[0]).To(BeAssignableToTypeOf(&wire.StopSendingFrame{}))
 				Expect(str.Close()).To(Succeed())
-				Expect(queuedControlFrames).To(HaveLen(1))
 			})
 		})
 	})
