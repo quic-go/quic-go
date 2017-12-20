@@ -122,12 +122,12 @@ func (s *sendStream) Write(p []byte) (int, error) {
 
 // popStreamFrame returns the next STREAM frame that is supposed to be sent on this stream
 // maxBytes is the maximum length this frame (including frame header) will have.
-func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) *wire.StreamFrame {
+func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) (*wire.StreamFrame, bool /* has more data to send */) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
 	if s.closeForShutdownErr != nil {
-		return nil
+		return nil, false
 	}
 
 	frame := &wire.StreamFrame{
@@ -137,11 +137,11 @@ func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) *wire.StreamFra
 	}
 	frameLen := frame.MinLength(s.version)
 	if frameLen >= maxBytes { // a STREAM frame must have at least one byte of data
-		return nil
+		return nil, s.dataForWriting != nil
 	}
 	frame.Data, frame.FinBit = s.getDataForWriting(maxBytes - frameLen)
 	if len(frame.Data) == 0 && !frame.FinBit {
-		return nil
+		return nil, s.dataForWriting != nil
 	}
 	if frame.FinBit {
 		s.finSent = true
@@ -153,7 +153,7 @@ func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) *wire.StreamFra
 			})
 		}
 	}
-	return frame
+	return frame, s.dataForWriting != nil
 }
 
 func (s *sendStream) getDataForWriting(maxBytes protocol.ByteCount) ([]byte, bool /* should send FIN */) {

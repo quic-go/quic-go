@@ -65,8 +65,7 @@ var _ = Describe("Packet packer", func() {
 		mockSender := NewMockStreamSender(mockCtrl)
 		mockSender.EXPECT().onHasStreamData(gomock.Any()).AnyTimes()
 		cryptoStream = newCryptoStream(mockSender, flowcontrol.NewStreamFlowController(version.CryptoStreamID(), false, flowcontrol.NewConnectionFlowController(1000, 1000, nil), 1000, 1000, 1000, nil), version)
-		streamsMap := newStreamsMap(nil, protocol.PerspectiveServer, versionGQUICFrames)
-		streamFramer = newStreamFramer(cryptoStream, streamsMap, versionGQUICFrames)
+		streamFramer = newStreamFramer(cryptoStream, nil, versionGQUICFrames)
 
 		packer = &packetPacker{
 			cryptoSetup:           &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure},

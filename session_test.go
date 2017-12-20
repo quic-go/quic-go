@@ -1171,90 +1171,6 @@ var _ = Describe("Session", func() {
 			Eventually(func() int { return len(mconn.written) }).ShouldNot(BeZero())
 			Expect(mconn.written).To(Receive(ContainSubstring(string([]byte{0x13, 0x37}))))
 		})
-
-		Context("bundling of small packets", func() {
-			It("bundles two small frames of different streams into one packet", func() {
-				s1, err := sess.GetOrOpenStream(5)
-				Expect(err).NotTo(HaveOccurred())
-				s2, err := sess.GetOrOpenStream(7)
-				Expect(err).NotTo(HaveOccurred())
-
-				done1 := make(chan struct{})
-				done2 := make(chan struct{})
-				go func() {
-					defer GinkgoRecover()
-					_, err := s1.Write([]byte("foobar1"))
-					Expect(err).ToNot(HaveOccurred())
-					close(done1)
-				}()
-				go func() {
-					defer GinkgoRecover()
-					s2.Write([]byte("foobar2"))
-					Expect(err).ToNot(HaveOccurred())
-					close(done2)
-				}()
-				time.Sleep(100 * time.Millisecond) // make sure the both writes are active
-
-				sess.scheduleSending()
-				go sess.run()
-				defer sess.Close(nil)
-
-				Eventually(mconn.written).Should(HaveLen(1))
-				packet := <-mconn.written
-				Expect(packet).To(ContainSubstring("foobar1"))
-				Expect(packet).To(ContainSubstring("foobar2"))
-				Eventually(done1).Should(BeClosed())
-				Eventually(done2).Should(BeClosed())
-			})
-
-			It("sends out two big frames in two packets", func() {
-				s1, err := sess.GetOrOpenStream(5)
-				Expect(err).NotTo(HaveOccurred())
-				s2, err := sess.GetOrOpenStream(7)
-				Expect(err).NotTo(HaveOccurred())
-				go sess.run()
-				defer sess.Close(nil)
-				go func() {
-					defer GinkgoRecover()
-					s1.Write(bytes.Repeat([]byte{'e'}, 1000))
-				}()
-				_, err = s2.Write(bytes.Repeat([]byte{'e'}, 1000))
-				Expect(err).ToNot(HaveOccurred())
-				Eventually(mconn.written).Should(HaveLen(2))
-			})
-
-			It("sends out two small frames that are written to long after one another into two packets", func() {
-				s, err := sess.GetOrOpenStream(5)
-				Expect(err).NotTo(HaveOccurred())
-				go sess.run()
-				defer sess.Close(nil)
-				_, err = s.Write([]byte("foobar1"))
-				Expect(err).NotTo(HaveOccurred())
-				Eventually(mconn.written).Should(HaveLen(1))
-				_, err = s.Write([]byte("foobar2"))
-				Expect(err).NotTo(HaveOccurred())
-				Eventually(mconn.written).Should(HaveLen(2))
-			})
-
-			It("sends a queued ACK frame only once", func() {
-				packetNumber := protocol.PacketNumber(0x1337)
-				sess.receivedPacketHandler.ReceivedPacket(packetNumber, true)
-
-				s, err := sess.GetOrOpenStream(5)
-				Expect(err).NotTo(HaveOccurred())
-				go sess.run()
-				defer sess.Close(nil)
-				_, err = s.Write([]byte("foobar1"))
-				Expect(err).NotTo(HaveOccurred())
-				Eventually(mconn.written).Should(HaveLen(1))
-				_, err = s.Write([]byte("foobar2"))
-				Expect(err).NotTo(HaveOccurred())
-
-				Eventually(mconn.written).Should(HaveLen(2))
-				Expect(mconn.written).To(Receive(ContainSubstring(string([]byte{0x13, 0x37}))))
-				Expect(mconn.written).ToNot(Receive(ContainSubstring(string([]byte{0x13, 0x37}))))
-			})
-		})
 	})
 
 	It("closes when crypto stream errors", func() {
@@ -1577,7 +1493,7 @@ var _ = Describe("Session", func() {
 				s, err := sess.GetOrOpenStream(protocol.StreamID(i*2 + 1))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(s.Close()).To(Succeed())
-				f := s.(*stream).popStreamFrame(1000) // trigger "sending" of the FIN bit
+				f, _ := s.(*stream).popStreamFrame(1000) // trigger "sending" of the FIN bit
 				Expect(f.FinBit).To(BeTrue())
 				s.(*stream).CloseRemote(0)
 				_, err = s.Read([]byte("a"))

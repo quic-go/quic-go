@@ -140,7 +140,10 @@ var _ = Describe("Stream", func() {
 					Expect(err).ToNot(HaveOccurred())
 					close(writeReturned)
 				}()
-				Eventually(func() *wire.StreamFrame { return str.popStreamFrame(1000) }).ShouldNot(BeNil())
+				Eventually(func() *wire.StreamFrame {
+					frame, _ := str.popStreamFrame(1000)
+					return frame
+				}).ShouldNot(BeNil())
 				Eventually(writeReturned).Should(BeClosed())
 				mockSender.EXPECT().queueControlFrame(&wire.RstStreamFrame{
 					StreamID:   streamID,
