@@ -222,6 +222,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("closes sessions and the connection when Close is called", func() {
+			go serv.serve()
 			session, _ := newMockSession(nil, 0, 0, nil, nil, nil)
 			serv.sessions[1] = session
 			err := serv.Close()

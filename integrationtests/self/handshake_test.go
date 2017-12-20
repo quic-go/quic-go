@@ -20,13 +20,16 @@ var _ = Describe("Handshake tests", func() {
 	)
 
 	BeforeEach(func() {
+		server = nil
 		acceptStopped = make(chan struct{})
 		serverConfig = &quic.Config{}
 	})
 
 	AfterEach(func() {
-		Expect(server.Close()).To(Succeed())
-		<-acceptStopped
+		if server != nil {
+			server.Close()
+			<-acceptStopped
+		}
 	})
 
 	runServer := func() {
@@ -60,7 +63,7 @@ var _ = Describe("Handshake tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("when the client supports more versions than the supports", func() {
+		It("when the client supports more versions than the server supports", func() {
 			if len(protocol.SupportedVersions) == 1 {
 				Skip("Test requires at least 2 supported versions.")
 			}

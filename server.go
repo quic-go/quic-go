@@ -40,15 +40,17 @@ type server struct {
 	certChain crypto.CertChain
 	scfg      *handshake.ServerConfig
 
-	sessions                  map[protocol.ConnectionID]packetHandler
-	sessionsMutex             sync.RWMutex
-	deleteClosedSessionsAfter time.Duration
+	sessionsMutex sync.RWMutex
+	sessions      map[protocol.ConnectionID]packetHandler
+	closed        bool
 
 	serverError  error
 	sessionQueue chan Session
 	errorChan    chan struct{}
 
-	newSession func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, tlsConf *tls.Config, config *Config) (packetHandler, error)
+	// set as members, so they can be set in the tests
+	newSession                func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, tlsConf *tls.Config, config *Config) (packetHandler, error)
+	deleteClosedSessionsAfter time.Duration
 }
 
 var _ Listener = &server{}
@@ -240,6 +242,12 @@ func (s *server) Accept() (Session, error) {
 // Close the server
 func (s *server) Close() error {
 	s.sessionsMutex.Lock()
+	if s.closed {
+		s.sessionsMutex.Unlock()
+		return nil
+	}
+	s.closed = true
+
 	var wg sync.WaitGroup
 	for _, session := range s.sessions {
 		if session != nil {
@@ -254,10 +262,9 @@ func (s *server) Close() error {
 	s.sessionsMutex.Unlock()
 	wg.Wait()
 
-	if s.conn == nil {
-		return nil
-	}
-	return s.conn.Close()
+	err := s.conn.Close()
+	<-s.errorChan // wait for serve() to return
+	return err
 }
 
 // Addr returns the server's network address
