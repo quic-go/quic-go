@@ -245,6 +245,28 @@ var _ = Describe("Send Stream", func() {
 				Expect(n).To(BeEquivalentTo(frame.DataLen()))
 			})
 
+			It("doesn't pop any data after the deadline expired", func() {
+				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(10000)).AnyTimes()
+				mockFC.EXPECT().AddBytesSent(gomock.Any())
+				mockFC.EXPECT().IsNewlyBlocked()
+				deadline := time.Now().Add(scaleDuration(50 * time.Millisecond))
+				str.SetWriteDeadline(deadline)
+				writeReturned := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					_, err := strWithTimeout.Write(bytes.Repeat([]byte{0}, 100))
+					Expect(err).To(MatchError(errDeadline))
+					close(writeReturned)
+				}()
+				var frame *wire.StreamFrame
+				Eventually(func() *wire.StreamFrame {
+					frame = str.popStreamFrame(50)
+					return frame
+				}).ShouldNot(BeNil())
+				Eventually(writeReturned, scaleDuration(80*time.Millisecond)).Should(BeClosed())
+				Expect(str.popStreamFrame(50)).To(BeNil())
+			})
+
 			It("doesn't unblock if the deadline is changed before the first one expires", func() {
 				deadline1 := time.Now().Add(scaleDuration(50 * time.Millisecond))
 				deadline2 := time.Now().Add(scaleDuration(100 * time.Millisecond))
