@@ -410,6 +410,13 @@ var _ = Describe("H2 server", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("errors when ListenAndServer is called after Close", func() {
+		serv := &Server{Server: &http.Server{}}
+		Expect(serv.Close()).To(Succeed())
+		err := serv.ListenAndServe()
+		Expect(err).To(MatchError("Server is already closed"))
+	})
+
 	Context("ListenAndServe", func() {
 		BeforeEach(func() {
 			s.Server.Addr = "localhost:0"
