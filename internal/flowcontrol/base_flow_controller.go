@@ -16,14 +16,14 @@ type baseFlowController struct {
 	lastBlockedAt protocol.ByteCount
 
 	// for receiving data
-	mutex                     sync.RWMutex
-	bytesRead                 protocol.ByteCount
-	highestReceived           protocol.ByteCount
-	receiveWindow             protocol.ByteCount
-	receiveWindowIncrement    protocol.ByteCount
-	maxReceiveWindowIncrement protocol.ByteCount
-	lastWindowUpdateTime      time.Time
-	rttStats                  *congestion.RTTStats
+	mutex                sync.RWMutex
+	bytesRead            protocol.ByteCount
+	highestReceived      protocol.ByteCount
+	receiveWindow        protocol.ByteCount
+	receiveWindowSize    protocol.ByteCount
+	maxReceiveWindowSize protocol.ByteCount
+	lastWindowUpdateTime time.Time
+	rttStats             *congestion.RTTStats
 }
 
 func (c *baseFlowController) AddBytesSent(n protocol.ByteCount) {
@@ -51,7 +51,7 @@ func (c *baseFlowController) AddBytesRead(n protocol.ByteCount) {
 	defer c.mutex.Unlock()
 
 	// pretend we sent a WindowUpdate when reading the first byte
-	// this way auto-tuning of the window increment already works for the first WindowUpdate
+	// this way auto-tuning of the window size already works for the first WindowUpdate
 	if c.bytesRead == 0 {
 		c.lastWindowUpdateTime = time.Now()
 	}
@@ -63,12 +63,12 @@ func (c *baseFlowController) AddBytesRead(n protocol.ByteCount) {
 func (c *baseFlowController) getWindowUpdate() protocol.ByteCount {
 	bytesRemaining := c.receiveWindow - c.bytesRead
 	// update the window when more than the threshold was consumed
-	if bytesRemaining >= protocol.ByteCount((float64(c.receiveWindowIncrement) * float64((1 - protocol.WindowUpdateThreshold)))) {
+	if bytesRemaining >= protocol.ByteCount((float64(c.receiveWindowSize) * float64((1 - protocol.WindowUpdateThreshold)))) {
 		return 0
 	}
 
-	c.maybeAdjustWindowIncrement()
-	c.receiveWindow = c.bytesRead + c.receiveWindowIncrement
+	c.maybeAdjustWindowSize()
+	c.receiveWindow = c.bytesRead + c.receiveWindowSize
 	c.lastWindowUpdateTime = time.Now()
 	return c.receiveWindow
 }
@@ -84,9 +84,9 @@ func (c *baseFlowController) IsNewlyBlocked() (bool, protocol.ByteCount) {
 	return true, c.sendWindow
 }
 
-// maybeAdjustWindowIncrement increases the receiveWindowIncrement if we're sending updates too often.
+// maybeAdjustWindowSize increases the receiveWindowSize if we're sending updates too often.
 // For details about auto-tuning, see https://docs.google.com/document/d/1F2YfdDXKpy20WVKJueEf4abn_LVZHhMUMS5gX6Pgjl4/edit#heading=h.hcm2y5x4qmqt.
-func (c *baseFlowController) maybeAdjustWindowIncrement() {
+func (c *baseFlowController) maybeAdjustWindowSize() {
 	if c.lastWindowUpdateTime.IsZero() {
 		return
 	}
@@ -97,11 +97,11 @@ func (c *baseFlowController) maybeAdjustWindowIncrement() {
 	}
 
 	timeSinceLastWindowUpdate := time.Since(c.lastWindowUpdateTime)
-	// interval between the updates is sufficiently large, no need to increase the increment
+	// interval between the updates is sufficiently large, no need to increase the window size
 	if timeSinceLastWindowUpdate >= 4*protocol.WindowUpdateThreshold*rtt {
 		return
 	}
-	c.receiveWindowIncrement = utils.MinByteCount(2*c.receiveWindowIncrement, c.maxReceiveWindowIncrement)
+	c.receiveWindowSize = utils.MinByteCount(2*c.receiveWindowSize, c.maxReceiveWindowSize)
 }
 
 func (c *baseFlowController) checkFlowControlViolation() bool {
