@@ -115,7 +115,6 @@ func DialNonFWSecure(
 	}
 
 	utils.Infof("Starting new connection to %s (%s -> %s), connectionID %x, version %s", hostname, c.conn.LocalAddr().String(), c.conn.RemoteAddr().String(), c.connectionID, c.version)
-	go c.listen()
 
 	if err := c.dial(); err != nil {
 		return nil, err
@@ -199,6 +198,7 @@ func (c *client) dialGQUIC() error {
 	if err := c.createNewGQUICSession(); err != nil {
 		return err
 	}
+	go c.listen()
 	return c.establishSecureConnection()
 }
 
@@ -224,6 +224,7 @@ func (c *client) dialTLS() error {
 	if err := c.createNewTLSSession(eh.GetPeerParams(), c.version); err != nil {
 		return err
 	}
+	go c.listen()
 	if err := c.establishSecureConnection(); err != nil {
 		if err != handshake.ErrCloseSessionForRetry {
 			return err
