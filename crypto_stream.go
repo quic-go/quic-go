@@ -9,6 +9,7 @@ import (
 )
 
 type cryptoStreamI interface {
+	StreamID() protocol.StreamID
 	io.Reader
 	io.Writer
 	handleStreamFrame(*wire.StreamFrame) error

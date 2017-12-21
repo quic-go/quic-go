@@ -60,12 +60,16 @@ func (c *baseFlowController) AddBytesRead(n protocol.ByteCount) {
 	c.bytesRead += n
 }
 
+func (c *baseFlowController) hasWindowUpdate() bool {
+	bytesRemaining := c.receiveWindow - c.bytesRead
+	// update the window when more than the threshold was consumed
+	return bytesRemaining <= protocol.ByteCount((float64(c.receiveWindowSize) * float64((1 - protocol.WindowUpdateThreshold))))
+}
+
 // getWindowUpdate updates the receive window, if necessary
 // it returns the new offset
 func (c *baseFlowController) getWindowUpdate() protocol.ByteCount {
-	bytesRemaining := c.receiveWindow - c.bytesRead
-	// update the window when more than the threshold was consumed
-	if bytesRemaining >= protocol.ByteCount((float64(c.receiveWindowSize) * float64((1 - protocol.WindowUpdateThreshold)))) {
+	if !c.hasWindowUpdate() {
 		return 0
 	}
 

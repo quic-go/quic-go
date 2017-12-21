@@ -879,8 +879,10 @@ var _ = Describe("Session", func() {
 		})
 
 		It("adds MAX_STREAM_DATA frames", func() {
-			sess.windowUpdateQueue.Add(1, 10)
-			sess.windowUpdateQueue.Add(2, 20)
+			sess.windowUpdateQueue.callback(&wire.MaxStreamDataFrame{
+				StreamID:   2,
+				ByteOffset: 20,
+			})
 			sph := mocks.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().GetLeastUnacked().AnyTimes()
 			sph.EXPECT().SendingAllowed().Return(true)
@@ -888,7 +890,6 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().DequeuePacketForRetransmission()
 			sph.EXPECT().ShouldSendRetransmittablePacket()
 			sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
-				Expect(p.Frames).To(ContainElement(&wire.MaxStreamDataFrame{StreamID: 1, ByteOffset: 10}))
 				Expect(p.Frames).To(ContainElement(&wire.MaxStreamDataFrame{StreamID: 2, ByteOffset: 20}))
 			})
 			sess.sentPacketHandler = sph
@@ -1602,30 +1603,6 @@ var _ = Describe("Session", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
-
-	// Context("window updates", func() {
-	// 	It("gets stream level window updates", func() {
-	// 		_, err := sess.GetOrOpenStream(3)
-	// 		Expect(err).ToNot(HaveOccurred())
-	// 		err = sess.flowControlManager.AddBytesRead(3, protocol.ReceiveStreamFlowControlWindow)
-	// 		Expect(err).NotTo(HaveOccurred())
-	// 		frames := sess.getWindowUpdateFrames()
-	// 		Expect(frames).To(HaveLen(1))
-	// 		Expect(frames[0].StreamID).To(Equal(protocol.StreamID(3)))
-	// 		Expect(frames[0].ByteOffset).To(BeEquivalentTo(protocol.ReceiveStreamFlowControlWindow * 2))
-	// 	})
-
-	// 	It("gets connection level window updates", func() {
-	// 		_, err := sess.GetOrOpenStream(5)
-	// 		Expect(err).NotTo(HaveOccurred())
-	// 		err = sess.flowControlManager.AddBytesRead(5, protocol.ReceiveConnectionFlowControlWindow)
-	// 		Expect(err).NotTo(HaveOccurred())
-	// 		frames := sess.getWindowUpdateFrames()
-	// 		Expect(frames).To(HaveLen(1))
-	// 		Expect(frames[0].StreamID).To(Equal(protocol.StreamID(0)))
-	// 		Expect(frames[0].ByteOffset).To(BeEquivalentTo(protocol.ReceiveConnectionFlowControlWindow * 2))
-	// 	})
-	// })
 
 	It("returns the local address", func() {
 		addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}

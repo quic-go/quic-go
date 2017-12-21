@@ -23,6 +23,10 @@ type unpacker interface {
 	Unpack(headerBinary []byte, hdr *wire.Header, data []byte) (*unpackedPacket, error)
 }
 
+type streamGetter interface {
+	GetOrOpenStream(protocol.StreamID) (streamI, error)
+}
+
 type receivedPacket struct {
 	remoteAddr net.Addr
 	header     *wire.Header
@@ -323,7 +327,7 @@ func (s *session) postSetup(initialPacketNumber protocol.PacketNumber) error {
 		s.perspective,
 		s.version,
 	)
-	s.windowUpdateQueue = newWindowUpdateQueue(s.packer.QueueControlFrame)
+	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.cryptoStream, s.packer.QueueControlFrame)
 	s.unpacker = &packetUnpacker{aead: s.cryptoSetup, version: s.version}
 	return nil
 }
@@ -952,8 +956,8 @@ func (s *session) queueControlFrame(f wire.Frame) {
 	s.scheduleSending()
 }
 
-func (s *session) onHasWindowUpdate(streamID protocol.StreamID, offset protocol.ByteCount) {
-	s.windowUpdateQueue.Add(streamID, offset)
+func (s *session) onHasWindowUpdate(id protocol.StreamID) {
+	s.windowUpdateQueue.Add(id)
 	s.scheduleSending()
 }
 

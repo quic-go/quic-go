@@ -6,11 +6,12 @@ package quic
 
 import (
 	context "context"
+	reflect "reflect"
+	time "time"
+
 	gomock "github.com/golang/mock/gomock"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 	wire "github.com/lucas-clemente/quic-go/internal/wire"
-	reflect "reflect"
-	time "time"
 )
 
 // MockStreamI is a mock of StreamI interface

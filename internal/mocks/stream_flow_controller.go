@@ -66,6 +66,18 @@ func (mr *MockStreamFlowControllerMockRecorder) GetWindowUpdate() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWindowUpdate", reflect.TypeOf((*MockStreamFlowController)(nil).GetWindowUpdate))
 }
 
+// HasWindowUpdate mocks base method
+func (m *MockStreamFlowController) HasWindowUpdate() bool {
+	ret := m.ctrl.Call(m, "HasWindowUpdate")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HasWindowUpdate indicates an expected call of HasWindowUpdate
+func (mr *MockStreamFlowControllerMockRecorder) HasWindowUpdate() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasWindowUpdate", reflect.TypeOf((*MockStreamFlowController)(nil).HasWindowUpdate))
+}
+
 // IsNewlyBlocked mocks base method
 func (m *MockStreamFlowController) IsNewlyBlocked() (bool, protocol.ByteCount) {
 	ret := m.ctrl.Call(m, "IsNewlyBlocked")
