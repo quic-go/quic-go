@@ -2,7 +2,6 @@ package flowcontrol
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -66,7 +65,7 @@ func (c *connectionFlowController) EnsureMinimumWindowSize(inc protocol.ByteCoun
 	c.mutex.Lock()
 	if inc > c.receiveWindowSize {
 		c.receiveWindowSize = utils.MinByteCount(inc, c.maxReceiveWindowSize)
-		c.lastWindowUpdateTime = time.Time{} // disables autotuning for the next window update
+		c.startNewAutoTuningEpoch()
 	}
 	c.mutex.Unlock()
 }
