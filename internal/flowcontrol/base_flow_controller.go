@@ -16,14 +16,16 @@ type baseFlowController struct {
 	lastBlockedAt protocol.ByteCount
 
 	// for receiving data
-	mutex                     sync.RWMutex
-	bytesRead                 protocol.ByteCount
-	highestReceived           protocol.ByteCount
-	receiveWindow             protocol.ByteCount
-	receiveWindowIncrement    protocol.ByteCount
-	maxReceiveWindowIncrement protocol.ByteCount
-	lastWindowUpdateTime      time.Time
-	rttStats                  *congestion.RTTStats
+	mutex                sync.RWMutex
+	bytesRead            protocol.ByteCount
+	highestReceived      protocol.ByteCount
+	receiveWindow        protocol.ByteCount
+	receiveWindowSize    protocol.ByteCount
+	maxReceiveWindowSize protocol.ByteCount
+
+	epochStartTime   time.Time
+	epochStartOffset protocol.ByteCount
+	rttStats         *congestion.RTTStats
 }
 
 func (c *baseFlowController) AddBytesSent(n protocol.ByteCount) {
@@ -51,9 +53,9 @@ func (c *baseFlowController) AddBytesRead(n protocol.ByteCount) {
 	defer c.mutex.Unlock()
 
 	// pretend we sent a WindowUpdate when reading the first byte
-	// this way auto-tuning of the window increment already works for the first WindowUpdate
+	// this way auto-tuning of the window size already works for the first WindowUpdate
 	if c.bytesRead == 0 {
-		c.lastWindowUpdateTime = time.Now()
+		c.startNewAutoTuningEpoch()
 	}
 	c.bytesRead += n
 }
@@ -63,13 +65,12 @@ func (c *baseFlowController) AddBytesRead(n protocol.ByteCount) {
 func (c *baseFlowController) getWindowUpdate() protocol.ByteCount {
 	bytesRemaining := c.receiveWindow - c.bytesRead
 	// update the window when more than the threshold was consumed
-	if bytesRemaining >= protocol.ByteCount((float64(c.receiveWindowIncrement) * float64((1 - protocol.WindowUpdateThreshold)))) {
+	if bytesRemaining >= protocol.ByteCount((float64(c.receiveWindowSize) * float64((1 - protocol.WindowUpdateThreshold)))) {
 		return 0
 	}
 
-	c.maybeAdjustWindowIncrement()
-	c.receiveWindow = c.bytesRead + c.receiveWindowIncrement
-	c.lastWindowUpdateTime = time.Now()
+	c.maybeAdjustWindowSize()
+	c.receiveWindow = c.bytesRead + c.receiveWindowSize
 	return c.receiveWindow
 }
 
@@ -84,24 +85,30 @@ func (c *baseFlowController) IsNewlyBlocked() (bool, protocol.ByteCount) {
 	return true, c.sendWindow
 }
 
-// maybeAdjustWindowIncrement increases the receiveWindowIncrement if we're sending updates too often.
-// For details about auto-tuning, see https://docs.google.com/document/d/1F2YfdDXKpy20WVKJueEf4abn_LVZHhMUMS5gX6Pgjl4/edit#heading=h.hcm2y5x4qmqt.
-func (c *baseFlowController) maybeAdjustWindowIncrement() {
-	if c.lastWindowUpdateTime.IsZero() {
+// maybeAdjustWindowSize increases the receiveWindowSize if we're sending updates too often.
+// For details about auto-tuning, see https://docs.google.com/document/d/1SExkMmGiz8VYzV3s9E35JQlJ73vhzCekKkDi85F1qCE/edit?usp=sharing.
+func (c *baseFlowController) maybeAdjustWindowSize() {
+	bytesReadInEpoch := c.bytesRead - c.epochStartOffset
+	// don't do anything if less than half the window has been consumed
+	if bytesReadInEpoch <= c.receiveWindowSize/2 {
 		return
 	}
-
 	rtt := c.rttStats.SmoothedRTT()
 	if rtt == 0 {
 		return
 	}
 
-	timeSinceLastWindowUpdate := time.Since(c.lastWindowUpdateTime)
-	// interval between the updates is sufficiently large, no need to increase the increment
-	if timeSinceLastWindowUpdate >= 4*protocol.WindowUpdateThreshold*rtt {
-		return
+	fraction := float64(bytesReadInEpoch) / float64(c.receiveWindowSize)
+	if time.Since(c.epochStartTime) < time.Duration(4*fraction*float64(rtt)) {
+		// window is consumed too fast, try to increase the window size
+		c.receiveWindowSize = utils.MinByteCount(2*c.receiveWindowSize, c.maxReceiveWindowSize)
 	}
-	c.receiveWindowIncrement = utils.MinByteCount(2*c.receiveWindowIncrement, c.maxReceiveWindowIncrement)
+	c.startNewAutoTuningEpoch()
+}
+
+func (c *baseFlowController) startNewAutoTuningEpoch() {
+	c.epochStartTime = time.Now()
+	c.epochStartOffset = c.bytesRead
 }
 
 func (c *baseFlowController) checkFlowControlViolation() bool {

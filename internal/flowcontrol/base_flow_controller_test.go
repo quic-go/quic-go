@@ -76,13 +76,14 @@ var _ = Describe("Base Flow controller", func() {
 
 	Context("receive flow control", func() {
 		var (
-			receiveWindow          protocol.ByteCount = 10000
-			receiveWindowIncrement protocol.ByteCount = 600
+			receiveWindow     protocol.ByteCount = 10000
+			receiveWindowSize protocol.ByteCount = 1000
 		)
 
 		BeforeEach(func() {
+			controller.bytesRead = receiveWindow - receiveWindowSize
 			controller.receiveWindow = receiveWindow
-			controller.receiveWindowIncrement = receiveWindowIncrement
+			controller.receiveWindowSize = receiveWindowSize
 		})
 
 		It("adds bytes read", func() {
@@ -92,35 +93,30 @@ var _ = Describe("Base Flow controller", func() {
 		})
 
 		It("triggers a window update when necessary", func() {
-			controller.lastWindowUpdateTime = time.Now().Add(-time.Hour)
-			bytesConsumed := float64(receiveWindowIncrement)*protocol.WindowUpdateThreshold + 1 // consumed 1 byte more than the threshold
-			bytesRemaining := receiveWindowIncrement - protocol.ByteCount(bytesConsumed)
+			bytesConsumed := float64(receiveWindowSize)*protocol.WindowUpdateThreshold + 1 // consumed 1 byte more than the threshold
+			bytesRemaining := receiveWindowSize - protocol.ByteCount(bytesConsumed)
 			readPosition := receiveWindow - bytesRemaining
 			controller.bytesRead = readPosition
 			offset := controller.getWindowUpdate()
-			Expect(offset).To(Equal(readPosition + receiveWindowIncrement))
-			Expect(controller.receiveWindow).To(Equal(readPosition + receiveWindowIncrement))
-			Expect(controller.lastWindowUpdateTime).To(BeTemporally("~", time.Now(), 20*time.Millisecond))
+			Expect(offset).To(Equal(readPosition + receiveWindowSize))
+			Expect(controller.receiveWindow).To(Equal(readPosition + receiveWindowSize))
 		})
 
 		It("doesn't trigger a window update when not necessary", func() {
-			lastWindowUpdateTime := time.Now().Add(-time.Hour)
-			controller.lastWindowUpdateTime = lastWindowUpdateTime
-			bytesConsumed := float64(receiveWindowIncrement)*protocol.WindowUpdateThreshold - 1 // consumed 1 byte less than the threshold
-			bytesRemaining := receiveWindowIncrement - protocol.ByteCount(bytesConsumed)
+			bytesConsumed := float64(receiveWindowSize)*protocol.WindowUpdateThreshold - 1 // consumed 1 byte less than the threshold
+			bytesRemaining := receiveWindowSize - protocol.ByteCount(bytesConsumed)
 			readPosition := receiveWindow - bytesRemaining
 			controller.bytesRead = readPosition
 			offset := controller.getWindowUpdate()
 			Expect(offset).To(BeZero())
-			Expect(controller.lastWindowUpdateTime).To(Equal(lastWindowUpdateTime))
 		})
 
-		Context("receive window increment auto-tuning", func() {
-			var oldIncrement protocol.ByteCount
+		Context("receive window size auto-tuning", func() {
+			var oldWindowSize protocol.ByteCount
 
 			BeforeEach(func() {
-				oldIncrement = controller.receiveWindowIncrement
-				controller.maxReceiveWindowIncrement = 3000
+				oldWindowSize = controller.receiveWindowSize
+				controller.maxReceiveWindowSize = 5000
 			})
 
 			// update the congestion such that it returns a given value for the smoothed RTT
@@ -129,69 +125,98 @@ var _ = Describe("Base Flow controller", func() {
 				Expect(controller.rttStats.SmoothedRTT()).To(Equal(t)) // make sure it worked
 			}
 
-			It("doesn't increase the increment for a new stream", func() {
-				controller.maybeAdjustWindowIncrement()
-				Expect(controller.receiveWindowIncrement).To(Equal(oldIncrement))
+			It("doesn't increase the window size for a new stream", func() {
+				controller.maybeAdjustWindowSize()
+				Expect(controller.receiveWindowSize).To(Equal(oldWindowSize))
 			})
 
-			It("doesn't increase the increment when no RTT estimate is available", func() {
+			It("doesn't increase the window size when no RTT estimate is available", func() {
 				setRtt(0)
-				controller.lastWindowUpdateTime = time.Now()
-				controller.maybeAdjustWindowIncrement()
-				Expect(controller.receiveWindowIncrement).To(Equal(oldIncrement))
+				controller.startNewAutoTuningEpoch()
+				controller.AddBytesRead(400)
+				offset := controller.getWindowUpdate()
+				Expect(offset).ToNot(BeZero()) // make sure a window update is sent
+				Expect(controller.receiveWindowSize).To(Equal(oldWindowSize))
 			})
 
-			It("increases the increment when the last WindowUpdate was sent less than (4 * threshold) RTTs ago", func() {
+			It("increases the window size if read so fast that the window would be consumed in less than 4 RTTs", func() {
+				bytesRead := controller.bytesRead
 				rtt := 20 * time.Millisecond
 				setRtt(rtt)
-				controller.AddBytesRead(9900) // receive window is 10000
-				controller.lastWindowUpdateTime = time.Now().Add(-4*protocol.WindowUpdateThreshold*rtt + time.Millisecond)
+				// consume more than 2/3 of the window...
+				dataRead := receiveWindowSize*2/3 + 1
+				// ... in 4*2/3 of the RTT
+				controller.epochStartOffset = controller.bytesRead
+				controller.epochStartTime = time.Now().Add(-rtt * 4 * 2 / 3)
+				controller.AddBytesRead(dataRead)
 				offset := controller.getWindowUpdate()
 				Expect(offset).ToNot(BeZero())
-				// check that the increment was increased
-				newIncrement := controller.receiveWindowIncrement
-				Expect(newIncrement).To(Equal(2 * oldIncrement))
-				// check that the new increment was used to increase the offset
-				Expect(offset).To(Equal(protocol.ByteCount(9900 + newIncrement)))
+				// check that the window size was increased
+				newWindowSize := controller.receiveWindowSize
+				Expect(newWindowSize).To(Equal(2 * oldWindowSize))
+				// check that the new window size was used to increase the offset
+				Expect(offset).To(Equal(protocol.ByteCount(bytesRead + dataRead + newWindowSize)))
 			})
 
-			It("doesn't increase the increase increment when the last WindowUpdate was sent more than (4 * threshold) RTTs ago", func() {
+			It("doesn't increase the window size if data is read so fast that the window would be consumed in less than 4 RTTs, but less than half the window has been read", func() {
+				// this test only makes sense if a window update is triggered before half of the window has been consumed
+				Expect(protocol.WindowUpdateThreshold).To(BeNumerically(">", 1/3))
+				bytesRead := controller.bytesRead
 				rtt := 20 * time.Millisecond
 				setRtt(rtt)
-				controller.lastWindowUpdateTime = time.Now().Add(-4*protocol.WindowUpdateThreshold*rtt - time.Millisecond)
-				controller.maybeAdjustWindowIncrement()
-				Expect(controller.receiveWindowIncrement).To(Equal(oldIncrement))
-			})
-
-			It("doesn't increase the increment to a value higher than the maxReceiveWindowIncrement", func() {
-				setRtt(20 * time.Millisecond)
-				controller.lastWindowUpdateTime = time.Now().Add(-time.Millisecond)
-				controller.maybeAdjustWindowIncrement()
-				Expect(controller.receiveWindowIncrement).To(Equal(2 * oldIncrement)) // 1200
-				// because the lastWindowUpdateTime is updated by MaybeTriggerWindowUpdate(), we can just call maybeAdjustWindowIncrement() multiple times and get an increase of the increment every time
-				controller.maybeAdjustWindowIncrement()
-				Expect(controller.receiveWindowIncrement).To(Equal(2 * 2 * oldIncrement)) // 2400
-				controller.maybeAdjustWindowIncrement()
-				Expect(controller.receiveWindowIncrement).To(Equal(controller.maxReceiveWindowIncrement)) // 3000
-				controller.maybeAdjustWindowIncrement()
-				Expect(controller.receiveWindowIncrement).To(Equal(controller.maxReceiveWindowIncrement)) // 3000
-			})
-
-			It("increases the increment sent in the first WindowUpdate, if data is read fast enough", func() {
-				setRtt(20 * time.Millisecond)
-				controller.AddBytesRead(9900)
+				// consume more than 2/3 of the window...
+				dataRead := receiveWindowSize*1/3 + 1
+				// ... in 4*2/3 of the RTT
+				controller.epochStartOffset = controller.bytesRead
+				controller.epochStartTime = time.Now().Add(-rtt * 4 * 1 / 3)
+				controller.AddBytesRead(dataRead)
 				offset := controller.getWindowUpdate()
 				Expect(offset).ToNot(BeZero())
-				Expect(controller.receiveWindowIncrement).To(Equal(2 * oldIncrement))
+				// check that the window size was not increased
+				newWindowSize := controller.receiveWindowSize
+				Expect(newWindowSize).To(Equal(oldWindowSize))
+				// check that the new window size was used to increase the offset
+				Expect(offset).To(Equal(protocol.ByteCount(bytesRead + dataRead + newWindowSize)))
 			})
 
-			It("doesn't increamse the increment sent in the first WindowUpdate, if data is read slowly", func() {
-				setRtt(5 * time.Millisecond)
-				controller.AddBytesRead(9900)
-				time.Sleep(15 * time.Millisecond) // more than 2x RTT
+			It("doesn't increase the window size if read too slowly", func() {
+				bytesRead := controller.bytesRead
+				rtt := 20 * time.Millisecond
+				setRtt(rtt)
+				// consume less than 2/3 of the window...
+				dataRead := receiveWindowSize*2/3 - 1
+				// ... in 4*2/3 of the RTT
+				controller.epochStartOffset = controller.bytesRead
+				controller.epochStartTime = time.Now().Add(-rtt * 4 * 2 / 3)
+				controller.AddBytesRead(dataRead)
 				offset := controller.getWindowUpdate()
 				Expect(offset).ToNot(BeZero())
-				Expect(controller.receiveWindowIncrement).To(Equal(oldIncrement))
+				// check that the window size was not increased
+				Expect(controller.receiveWindowSize).To(Equal(oldWindowSize))
+				// check that the new window size was used to increase the offset
+				Expect(offset).To(Equal(protocol.ByteCount(bytesRead + dataRead + oldWindowSize)))
+			})
+
+			It("doesn't increase the window size to a value higher than the maxReceiveWindowSize", func() {
+				resetEpoch := func() {
+					// make sure the next call to maybeAdjustWindowSize will increase the window
+					controller.epochStartTime = time.Now().Add(-time.Millisecond)
+					controller.epochStartOffset = controller.bytesRead
+					controller.AddBytesRead(controller.receiveWindowSize/2 + 1)
+				}
+				setRtt(20 * time.Millisecond)
+				resetEpoch()
+				controller.maybeAdjustWindowSize()
+				Expect(controller.receiveWindowSize).To(Equal(2 * oldWindowSize)) // 2000
+				// because the lastWindowUpdateTime is updated by MaybeTriggerWindowUpdate(), we can just call maybeAdjustWindowSize() multiple times and get an increase of the window size every time
+				resetEpoch()
+				controller.maybeAdjustWindowSize()
+				Expect(controller.receiveWindowSize).To(Equal(2 * 2 * oldWindowSize)) // 4000
+				resetEpoch()
+				controller.maybeAdjustWindowSize()
+				Expect(controller.receiveWindowSize).To(Equal(controller.maxReceiveWindowSize)) // 5000
+				controller.maybeAdjustWindowSize()
+				Expect(controller.receiveWindowSize).To(Equal(controller.maxReceiveWindowSize)) // 5000
 			})
 		})
 	})

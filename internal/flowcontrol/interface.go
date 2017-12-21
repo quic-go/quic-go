@@ -31,7 +31,7 @@ type connectionFlowControllerI interface {
 	ConnectionFlowController
 	// The following two methods are not supposed to be called from outside this packet, but are needed internally
 	// for sending
-	EnsureMinimumWindowIncrement(protocol.ByteCount)
+	EnsureMinimumWindowSize(protocol.ByteCount)
 	// for receiving
 	IncrementHighestReceived(protocol.ByteCount) error
 }
