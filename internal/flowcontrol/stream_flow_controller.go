@@ -109,6 +109,13 @@ func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
 	return window
 }
 
+func (c *streamFlowController) HasWindowUpdate() bool {
+	c.mutex.Lock()
+	hasWindowUpdate := !c.receivedFinalOffset && c.hasWindowUpdate()
+	c.mutex.Unlock()
+	return hasWindowUpdate
+}
+
 func (c *streamFlowController) GetWindowUpdate() protocol.ByteCount {
 	// don't use defer for unlocking the mutex here, GetWindowUpdate() is called frequently and defer shows up in the profiler
 	c.mutex.Lock()

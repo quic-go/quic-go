@@ -173,6 +173,14 @@ var _ = Describe("Stream Flow controller", func() {
 				oldWindowSize = controller.receiveWindowSize
 			})
 
+			It("tells if it has window updates", func() {
+				Expect(controller.HasWindowUpdate()).To(BeFalse())
+				controller.AddBytesRead(30)
+				Expect(controller.HasWindowUpdate()).To(BeTrue())
+				Expect(controller.GetWindowUpdate()).ToNot(BeZero())
+				Expect(controller.HasWindowUpdate()).To(BeFalse())
+			})
+
 			It("tells the connection flow controller when the window was autotuned", func() {
 				oldOffset := controller.bytesRead
 				controller.contributesToConnection = true
@@ -200,9 +208,10 @@ var _ = Describe("Stream Flow controller", func() {
 			})
 
 			It("doesn't increase the window after a final offset was already received", func() {
-				controller.AddBytesRead(80)
+				controller.AddBytesRead(30)
 				err := controller.UpdateHighestReceived(90, true)
 				Expect(err).ToNot(HaveOccurred())
+				Expect(controller.HasWindowUpdate()).To(BeFalse())
 				offset := controller.GetWindowUpdate()
 				Expect(offset).To(BeZero())
 			})
