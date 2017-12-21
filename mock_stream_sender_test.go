@@ -5,10 +5,11 @@
 package quic
 
 import (
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 	wire "github.com/lucas-clemente/quic-go/internal/wire"
-	reflect "reflect"
 )
 
 // MockStreamSender is a mock of StreamSender interface
@@ -35,13 +36,13 @@ func (m *MockStreamSender) EXPECT() *MockStreamSenderMockRecorder {
 }
 
 // onHasWindowUpdate mocks base method
-func (m *MockStreamSender) onHasWindowUpdate(arg0 protocol.StreamID, arg1 protocol.ByteCount) {
-	m.ctrl.Call(m, "onHasWindowUpdate", arg0, arg1)
+func (m *MockStreamSender) onHasWindowUpdate(arg0 protocol.StreamID) {
+	m.ctrl.Call(m, "onHasWindowUpdate", arg0)
 }
 
 // onHasWindowUpdate indicates an expected call of onHasWindowUpdate
-func (mr *MockStreamSenderMockRecorder) onHasWindowUpdate(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "onHasWindowUpdate", reflect.TypeOf((*MockStreamSender)(nil).onHasWindowUpdate), arg0, arg1)
+func (mr *MockStreamSenderMockRecorder) onHasWindowUpdate(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "onHasWindowUpdate", reflect.TypeOf((*MockStreamSender)(nil).onHasWindowUpdate), arg0)
 }
 
 // queueControlFrame mocks base method

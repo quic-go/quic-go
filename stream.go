@@ -18,7 +18,7 @@ const (
 type streamSender interface {
 	scheduleSending()
 	queueControlFrame(wire.Frame)
-	onHasWindowUpdate(protocol.StreamID, protocol.ByteCount)
+	onHasWindowUpdate(protocol.StreamID)
 }
 
 type streamI interface {
