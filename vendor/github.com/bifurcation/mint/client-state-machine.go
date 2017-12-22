@@ -88,7 +88,7 @@ func (state ClientStateStart) Next(hr handshakeMessageReader) (HandshakeState, [
 	logf(logTypeHandshake, "opts: %+v", state.Opts)
 
 	// supported_versions, supported_groups, signature_algorithms, server_name
-	sv := SupportedVersionsExtension{Versions: []uint16{supportedVersion}}
+	sv := SupportedVersionsExtension{HandshakeType: HandshakeTypeClientHello, Versions: []uint16{supportedVersion}}
 	sni := ServerNameExtension(state.Opts.ServerName)
 	sg := SupportedGroupsExtension{Groups: state.Caps.Groups}
 	sa := SignatureAlgorithmsExtension{Algorithms: state.Caps.SignatureSchemes}
@@ -265,6 +265,7 @@ func (state ClientStateStart) Next(hr handshakeMessageReader) (HandshakeState, [
 	}
 
 	logf(logTypeHandshake, "[ClientStateStart] -> [ClientStateWaitSH]")
+	state.hsCtx.SetVersion(tls12Version) // Everything after this should be 1.2.
 	nextState := ClientStateWaitSH{
 		Caps:       state.Caps,
 		Opts:       state.Opts,
@@ -323,41 +324,55 @@ func (state ClientStateWaitSH) Next(hr handshakeMessageReader) (HandshakeState, 
 	if alert != AlertNoAlert {
 		return nil, nil, alert
 	}
-	if hm == nil {
-		logf(logTypeHandshake, "[ClientStateWaitSH] Unexpected nil message")
+
+	if hm == nil || hm.msgType != HandshakeTypeServerHello {
+		logf(logTypeHandshake, "[ClientStateWaitSH] Unexpected message")
 		return nil, nil, AlertUnexpectedMessage
 	}
 
-	bodyGeneric, err := hm.ToBody()
-	if err != nil {
-		logf(logTypeHandshake, "[ClientStateWaitSH] Error decoding message: %v", err)
-		return nil, nil, AlertDecodeError
+	sh := &ServerHelloBody{}
+	if _, err := sh.Unmarshal(hm.body); err != nil {
+		logf(logTypeHandshake, "[ClientStateWaitSH] unexpected message")
+		return nil, nil, AlertUnexpectedMessage
 	}
 
-	switch body := bodyGeneric.(type) {
-	case *HelloRetryRequestBody:
-		hrr := body
+	// Common SH/HRR processing first.
+	// 1. Check that sh.version is TLS 1.2
+	if sh.Version != tls12Version {
+		logf(logTypeHandshake, "[ClientStateWaitSH] illegal legacy version [%v]", sh.Version)
+		return nil, nil, AlertIllegalParameter
+	}
 
-		if state.helloRetryRequest != nil {
-			logf(logTypeHandshake, "[ClientStateWaitSH] Received a second HelloRetryRequest")
-			return nil, nil, AlertUnexpectedMessage
-		}
+	// 2. Check that it responded with a valid version.
+	supportedVersions := SupportedVersionsExtension{HandshakeType: HandshakeTypeServerHello}
+	foundSupportedVersions, err := sh.Extensions.Find(&supportedVersions)
+	if err != nil {
+		logf(logTypeHandshake, "[ClientStateWaitSH] invalid supported_versions extension [%v]", err)
+		return nil, nil, AlertDecodeError
+	}
+	if !foundSupportedVersions {
+		logf(logTypeHandshake, "[ClientStateWaitSH] no supported_versions extension")
+		return nil, nil, AlertMissingExtension
+	}
+	if supportedVersions.Versions[0] != supportedVersion {
+		logf(logTypeHandshake, "[ClientStateWaitSH] unsupported version [%x]", supportedVersions.Versions[0])
+		return nil, nil, AlertProtocolVersion
+	}
+	// 3. Check that the server provided a supported ciphersuite
+	supportedCipherSuite := false
+	for _, suite := range state.Caps.CipherSuites {
+		supportedCipherSuite = supportedCipherSuite || (suite == sh.CipherSuite)
+	}
+	if !supportedCipherSuite {
+		logf(logTypeHandshake, "[ClientStateWaitSH] Unsupported ciphersuite [%04x]", sh.CipherSuite)
+		return nil, nil, AlertHandshakeFailure
+	}
 
-		// Check that the version sent by the server is the one we support
-		if hrr.Version != supportedVersion {
-			logf(logTypeHandshake, "[ClientStateWaitSH] Unsupported version [%v]", hrr.Version)
-			return nil, nil, AlertProtocolVersion
-		}
+	// Now check for the sentinel.
 
-		// Check that the server provided a supported ciphersuite
-		supportedCipherSuite := false
-		for _, suite := range state.Caps.CipherSuites {
-			supportedCipherSuite = supportedCipherSuite || (suite == hrr.CipherSuite)
-		}
-		if !supportedCipherSuite {
-			logf(logTypeHandshake, "[ClientStateWaitSH] Unsupported ciphersuite [%04x]", hrr.CipherSuite)
-			return nil, nil, AlertHandshakeFailure
-		}
+	if sh.Random == hrrRandomSentinel {
+		// This is actually HRR.
+		hrr := sh
 
 		// Narrow the supported ciphersuites to the server-provided one
 		state.Caps.CipherSuites = []CipherSuite{hrr.CipherSuite}
@@ -373,10 +388,14 @@ func (state ClientStateWaitSH) Next(hr handshakeMessageReader) (HandshakeState, 
 
 		// The only thing we know how to respond to in an HRR is the Cookie
 		// extension, so if there is either no Cookie extension or anything other
-		// than a Cookie extension, we have to fail.
+		// than a Cookie extension and SupportedVersions we have to fail.
 		serverCookie := new(CookieExtension)
-		foundCookie := hrr.Extensions.Find(serverCookie)
-		if !foundCookie || len(hrr.Extensions) != 1 {
+		foundCookie, err := hrr.Extensions.Find(serverCookie)
+		if err != nil {
+			logf(logTypeHandshake, "[ClientStateWaitSH] Invalid server cookie extension [%v]", err)
+			return nil, nil, AlertDecodeError
+		}
+		if !foundCookie || len(hrr.Extensions) != 2 {
 			logf(logTypeHandshake, "[ClientStateWaitSH] No Cookie or extra extensions [%v] [%d]", foundCookie, len(hrr.Extensions))
 			return nil, nil, AlertIllegalParameter
 		}
@@ -400,131 +419,117 @@ func (state ClientStateWaitSH) Next(hr handshakeMessageReader) (HandshakeState, 
 			firstClientHello:  firstClientHello,
 			helloRetryRequest: hm,
 		}, nil, AlertNoAlert
-
-	case *ServerHelloBody:
-		sh := body
-
-		// Check that the version sent by the server is the one we support
-		if sh.Version != supportedVersion {
-			logf(logTypeHandshake, "[ClientStateWaitSH] Unsupported version [%v]", sh.Version)
-			return nil, nil, AlertProtocolVersion
-		}
-
-		// Check that the server provided a supported ciphersuite
-		supportedCipherSuite := false
-		for _, suite := range state.Caps.CipherSuites {
-			supportedCipherSuite = supportedCipherSuite || (suite == sh.CipherSuite)
-		}
-		if !supportedCipherSuite {
-			logf(logTypeHandshake, "[ClientStateWaitSH] Unsupported ciphersuite [%04x]", sh.CipherSuite)
-			return nil, nil, AlertHandshakeFailure
-		}
-
-		// Handle external extensions.
-		if state.Caps.ExtensionHandler != nil {
-			err := state.Caps.ExtensionHandler.Receive(HandshakeTypeServerHello, &sh.Extensions)
-			if err != nil {
-				logf(logTypeHandshake, "[ClientWaitSH] Error running external extension handler [%v]", err)
-				return nil, nil, AlertInternalError
-			}
-		}
-
-		// Do PSK or key agreement depending on extensions
-		serverPSK := PreSharedKeyExtension{HandshakeType: HandshakeTypeServerHello}
-		serverKeyShare := KeyShareExtension{HandshakeType: HandshakeTypeServerHello}
-
-		foundPSK := sh.Extensions.Find(&serverPSK)
-		foundKeyShare := sh.Extensions.Find(&serverKeyShare)
-
-		if foundPSK && (serverPSK.SelectedIdentity == 0) {
-			state.Params.UsingPSK = true
-		}
-
-		var dhSecret []byte
-		if foundKeyShare {
-			sks := serverKeyShare.Shares[0]
-			priv, ok := state.OfferedDH[sks.Group]
-			if !ok {
-				logf(logTypeHandshake, "[ClientStateWaitSH] Key share for unknown group")
-				return nil, nil, AlertIllegalParameter
-			}
-
-			state.Params.UsingDH = true
-			dhSecret, _ = keyAgreement(sks.Group, sks.KeyExchange, priv)
-		}
-
-		suite := sh.CipherSuite
-		state.Params.CipherSuite = suite
-
-		params, ok := cipherSuiteMap[suite]
-		if !ok {
-			logf(logTypeCrypto, "Unsupported ciphersuite [%04x]", suite)
-			return nil, nil, AlertHandshakeFailure
-		}
-
-		// Start up the handshake hash
-		handshakeHash := params.Hash.New()
-		handshakeHash.Write(state.firstClientHello.Marshal())
-		handshakeHash.Write(state.helloRetryRequest.Marshal())
-		handshakeHash.Write(state.clientHello.Marshal())
-		handshakeHash.Write(hm.Marshal())
-
-		// Compute handshake secrets
-		zero := bytes.Repeat([]byte{0}, params.Hash.Size())
-
-		var earlySecret []byte
-		if state.Params.UsingPSK {
-			if params.Hash != state.earlyHash {
-				logf(logTypeCrypto, "Change of hash between early and normal init early=[%02x] suite=[%04x] hash=[%02x]",
-					state.earlyHash, suite, params.Hash)
-			}
-
-			earlySecret = state.earlySecret
-		} else {
-			earlySecret = HkdfExtract(params.Hash, zero, zero)
-		}
-
-		if dhSecret == nil {
-			dhSecret = zero
-		}
-
-		h0 := params.Hash.New().Sum(nil)
-		h2 := handshakeHash.Sum(nil)
-		preHandshakeSecret := deriveSecret(params, earlySecret, labelDerived, h0)
-		handshakeSecret := HkdfExtract(params.Hash, preHandshakeSecret, dhSecret)
-		clientHandshakeTrafficSecret := deriveSecret(params, handshakeSecret, labelClientHandshakeTrafficSecret, h2)
-		serverHandshakeTrafficSecret := deriveSecret(params, handshakeSecret, labelServerHandshakeTrafficSecret, h2)
-		preMasterSecret := deriveSecret(params, handshakeSecret, labelDerived, h0)
-		masterSecret := HkdfExtract(params.Hash, preMasterSecret, zero)
-
-		logf(logTypeCrypto, "early secret: [%d] %x", len(earlySecret), earlySecret)
-		logf(logTypeCrypto, "handshake secret: [%d] %x", len(handshakeSecret), handshakeSecret)
-		logf(logTypeCrypto, "client handshake traffic secret: [%d] %x", len(clientHandshakeTrafficSecret), clientHandshakeTrafficSecret)
-		logf(logTypeCrypto, "server handshake traffic secret: [%d] %x", len(serverHandshakeTrafficSecret), serverHandshakeTrafficSecret)
-		logf(logTypeCrypto, "master secret: [%d] %x", len(masterSecret), masterSecret)
-
-		serverHandshakeKeys := makeTrafficKeys(params, serverHandshakeTrafficSecret)
-
-		logf(logTypeHandshake, "[ClientStateWaitSH] -> [ClientStateWaitEE]")
-		nextState := ClientStateWaitEE{
-			Caps:                         state.Caps,
-			Params:                       state.Params,
-			hsCtx:                        state.hsCtx,
-			cryptoParams:                 params,
-			handshakeHash:                handshakeHash,
-			certificates:                 state.Caps.Certificates,
-			masterSecret:                 masterSecret,
-			clientHandshakeTrafficSecret: clientHandshakeTrafficSecret,
-			serverHandshakeTrafficSecret: serverHandshakeTrafficSecret,
-		}
-		toSend := []HandshakeAction{
-			RekeyIn{epoch: EpochHandshakeData, KeySet: serverHandshakeKeys},
-		}
-		return nextState, toSend, AlertNoAlert
 	}
 
-	logf(logTypeHandshake, "[ClientStateWaitSH] Unexpected message [%d]", hm.msgType)
-	return nil, nil, AlertUnexpectedMessage
+	// This is SH.
+	// Handle external extensions.
+	if state.Caps.ExtensionHandler != nil {
+		err := state.Caps.ExtensionHandler.Receive(HandshakeTypeServerHello, &sh.Extensions)
+		if err != nil {
+			logf(logTypeHandshake, "[ClientWaitSH] Error running external extension handler [%v]", err)
+			return nil, nil, AlertInternalError
+		}
+	}
+
+	// Do PSK or key agreement depending on extensions
+	serverPSK := PreSharedKeyExtension{HandshakeType: HandshakeTypeServerHello}
+	serverKeyShare := KeyShareExtension{HandshakeType: HandshakeTypeServerHello}
+
+	foundExts, err := sh.Extensions.Parse(
+		[]ExtensionBody{
+			&serverPSK,
+			&serverKeyShare,
+		})
+	if err != nil {
+		logf(logTypeHandshake, "[ClientWaitSH] Error processing extensions [%v]", err)
+		return nil, nil, AlertDecodeError
+	}
+
+	if foundExts[ExtensionTypePreSharedKey] && (serverPSK.SelectedIdentity == 0) {
+		state.Params.UsingPSK = true
+	}
+
+	var dhSecret []byte
+	if foundExts[ExtensionTypeKeyShare] {
+		sks := serverKeyShare.Shares[0]
+		priv, ok := state.OfferedDH[sks.Group]
+		if !ok {
+			logf(logTypeHandshake, "[ClientStateWaitSH] Key share for unknown group")
+			return nil, nil, AlertIllegalParameter
+		}
+
+		state.Params.UsingDH = true
+		dhSecret, _ = keyAgreement(sks.Group, sks.KeyExchange, priv)
+	}
+
+	suite := sh.CipherSuite
+	state.Params.CipherSuite = suite
+
+	params, ok := cipherSuiteMap[suite]
+	if !ok {
+		logf(logTypeCrypto, "Unsupported ciphersuite [%04x]", suite)
+		return nil, nil, AlertHandshakeFailure
+	}
+
+	// Start up the handshake hash
+	handshakeHash := params.Hash.New()
+	handshakeHash.Write(state.firstClientHello.Marshal())
+	handshakeHash.Write(state.helloRetryRequest.Marshal())
+	handshakeHash.Write(state.clientHello.Marshal())
+	handshakeHash.Write(hm.Marshal())
+
+	// Compute handshake secrets
+	zero := bytes.Repeat([]byte{0}, params.Hash.Size())
+
+	var earlySecret []byte
+	if state.Params.UsingPSK {
+		if params.Hash != state.earlyHash {
+			logf(logTypeCrypto, "Change of hash between early and normal init early=[%02x] suite=[%04x] hash=[%02x]",
+				state.earlyHash, suite, params.Hash)
+		}
+
+		earlySecret = state.earlySecret
+	} else {
+		earlySecret = HkdfExtract(params.Hash, zero, zero)
+	}
+
+	if dhSecret == nil {
+		dhSecret = zero
+	}
+
+	h0 := params.Hash.New().Sum(nil)
+	h2 := handshakeHash.Sum(nil)
+	preHandshakeSecret := deriveSecret(params, earlySecret, labelDerived, h0)
+	handshakeSecret := HkdfExtract(params.Hash, preHandshakeSecret, dhSecret)
+	clientHandshakeTrafficSecret := deriveSecret(params, handshakeSecret, labelClientHandshakeTrafficSecret, h2)
+	serverHandshakeTrafficSecret := deriveSecret(params, handshakeSecret, labelServerHandshakeTrafficSecret, h2)
+	preMasterSecret := deriveSecret(params, handshakeSecret, labelDerived, h0)
+	masterSecret := HkdfExtract(params.Hash, preMasterSecret, zero)
+
+	logf(logTypeCrypto, "early secret: [%d] %x", len(earlySecret), earlySecret)
+	logf(logTypeCrypto, "handshake secret: [%d] %x", len(handshakeSecret), handshakeSecret)
+	logf(logTypeCrypto, "client handshake traffic secret: [%d] %x", len(clientHandshakeTrafficSecret), clientHandshakeTrafficSecret)
+	logf(logTypeCrypto, "server handshake traffic secret: [%d] %x", len(serverHandshakeTrafficSecret), serverHandshakeTrafficSecret)
+	logf(logTypeCrypto, "master secret: [%d] %x", len(masterSecret), masterSecret)
+
+	serverHandshakeKeys := makeTrafficKeys(params, serverHandshakeTrafficSecret)
+
+	logf(logTypeHandshake, "[ClientStateWaitSH] -> [ClientStateWaitEE]")
+	nextState := ClientStateWaitEE{
+		Caps:                         state.Caps,
+		Params:                       state.Params,
+		hsCtx:                        state.hsCtx,
+		cryptoParams:                 params,
+		handshakeHash:                handshakeHash,
+		certificates:                 state.Caps.Certificates,
+		masterSecret:                 masterSecret,
+		clientHandshakeTrafficSecret: clientHandshakeTrafficSecret,
+		serverHandshakeTrafficSecret: serverHandshakeTrafficSecret,
+	}
+	toSend := []HandshakeAction{
+		RekeyIn{epoch: EpochHandshakeData, KeySet: serverHandshakeKeys},
+	}
+	return nextState, toSend, AlertNoAlert
 }
 
 type ClientStateWaitEE struct {
@@ -557,7 +562,7 @@ func (state ClientStateWaitEE) Next(hr handshakeMessageReader) (HandshakeState, 
 	}
 
 	ee := EncryptedExtensionsBody{}
-	if _, err := ee.Unmarshal(hm.body); err != nil {
+	if err := safeUnmarshal(&ee, hm.body); err != nil {
 		logf(logTypeHandshake, "[ClientStateWaitEE] Error decoding message: %v", err)
 		return nil, nil, AlertDecodeError
 	}
@@ -571,13 +576,22 @@ func (state ClientStateWaitEE) Next(hr handshakeMessageReader) (HandshakeState, 
 		}
 	}
 
-	serverALPN := ALPNExtension{}
-	serverEarlyData := EarlyDataExtension{}
+	serverALPN := &ALPNExtension{}
+	serverEarlyData := &EarlyDataExtension{}
 
-	gotALPN := ee.Extensions.Find(&serverALPN)
-	state.Params.UsingEarlyData = ee.Extensions.Find(&serverEarlyData)
+	foundExts, err := ee.Extensions.Parse(
+		[]ExtensionBody{
+			serverALPN,
+			serverEarlyData,
+		})
+	if err != nil {
+		logf(logTypeHandshake, "[ClientStateWaitEE] Error decoding extensions: %v", err)
+		return nil, nil, AlertDecodeError
+	}
 
-	if gotALPN && len(serverALPN.Protocols) > 0 {
+	state.Params.UsingEarlyData = foundExts[ExtensionTypeEarlyData]
+
+	if foundExts[ExtensionTypeALPN] && len(serverALPN.Protocols) > 0 {
 		state.Params.NextProto = serverALPN.Protocols[0]
 	}
 
@@ -726,7 +740,7 @@ func (state ClientStateWaitCert) Next(hr handshakeMessageReader) (HandshakeState
 	}
 
 	cert := &CertificateBody{}
-	if _, err := cert.Unmarshal(hm.body); err != nil {
+	if err := safeUnmarshal(cert, hm.body); err != nil {
 		logf(logTypeHandshake, "[ClientStateWaitCert] Error decoding message: %v", err)
 		return nil, nil, AlertDecodeError
 	}
@@ -783,7 +797,7 @@ func (state ClientStateWaitCV) Next(hr handshakeMessageReader) (HandshakeState, 
 	}
 
 	certVerify := CertificateVerifyBody{}
-	if _, err := certVerify.Unmarshal(hm.body); err != nil {
+	if err := safeUnmarshal(&certVerify, hm.body); err != nil {
 		logf(logTypeHandshake, "[ClientStateWaitCV] Error decoding message: %v", err)
 		return nil, nil, AlertDecodeError
 	}
@@ -863,7 +877,7 @@ func (state ClientStateWaitFinished) Next(hr handshakeMessageReader) (HandshakeS
 	logf(logTypeCrypto, "server finished data: [%d] %x", len(serverFinishedData), serverFinishedData)
 
 	fin := &FinishedBody{VerifyDataLen: len(serverFinishedData)}
-	if _, err := fin.Unmarshal(hm.body); err != nil {
+	if err := safeUnmarshal(fin, hm.body); err != nil {
 		logf(logTypeHandshake, "[ClientStateWaitFinished] Error decoding message: %v", err)
 		return nil, nil, AlertDecodeError
 	}
@@ -913,7 +927,11 @@ func (state ClientStateWaitFinished) Next(hr handshakeMessageReader) (HandshakeS
 	if state.Params.UsingClientAuth {
 		// Extract constraints from certicateRequest
 		schemes := SignatureAlgorithmsExtension{}
-		gotSchemes := state.serverCertificateRequest.Extensions.Find(&schemes)
+		gotSchemes, err := state.serverCertificateRequest.Extensions.Find(&schemes)
+		if err != nil {
+			logf(logTypeHandshake, "[ClientStateWaitFinished] WARNING invalid signature_schemes extension [%v]", err)
+			return nil, nil, AlertDecodeError
+		}
 		if !gotSchemes {
 			logf(logTypeHandshake, "[ClientStateWaitFinished] WARNING no appropriate certificate found")
 			return nil, nil, AlertIllegalParameter

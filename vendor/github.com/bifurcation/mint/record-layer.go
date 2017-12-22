@@ -23,7 +23,7 @@ func (err DecryptError) Error() string {
 
 // struct {
 //     ContentType type;
-//     ProtocolVersion record_version = { 3, 1 };    /* TLS v1.x */
+//     ProtocolVersion record_version [0301 for CH, 0303 for others]
 //     uint16 length;
 //     opaque fragment[TLSPlaintext.length];
 // } TLSPlaintext;
@@ -45,6 +45,7 @@ type cipherState struct {
 type RecordLayer struct {
 	sync.Mutex
 
+	version      uint16        // The current version number
 	conn         io.ReadWriter // The underlying connection
 	frame        *frameReader  // The buffered frame reader
 	nextData     []byte        // The next record to send
@@ -92,6 +93,7 @@ func NewRecordLayerTLS(conn io.ReadWriter) *RecordLayer {
 	r.conn = conn
 	r.frame = newFrameReader(recordLayerFrameDetails{false})
 	r.cipher = newCipherStateNull()
+	r.version = tls10Version
 	return &r
 }
 
@@ -102,6 +104,10 @@ func NewRecordLayerDTLS(conn io.ReadWriter) *RecordLayer {
 	r.cipher = newCipherStateNull()
 	r.datagram = true
 	return &r
+}
+
+func (r *RecordLayer) SetVersion(v uint16) {
+	r.version = v
 }
 
 func (r *RecordLayer) Rekey(epoch Epoch, factory aeadFactory, key []byte, iv []byte) error {
@@ -349,7 +355,9 @@ func (r *RecordLayer) writeRecordWithPadding(pt *TLSPlaintext, cipher *cipherSta
 	length := len(pt.fragment)
 	var header []byte
 	if !r.datagram {
-		header = []byte{byte(pt.contentType), 0x03, 0x01, byte(length >> 8), byte(length)}
+		header = []byte{byte(pt.contentType),
+			byte(r.version >> 8), byte(r.version & 0xff),
+			byte(length >> 8), byte(length)}
 	} else {
 		// TODO(ekr@rtfm.com): Double check version
 		seq := cipher.seq

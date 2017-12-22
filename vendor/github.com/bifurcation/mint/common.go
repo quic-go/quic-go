@@ -5,9 +5,13 @@ import (
 	"strconv"
 )
 
-var (
-	supportedVersion uint16 = 0x7f15 // draft-21
+const (
+	supportedVersion uint16 = 0x7f16 // draft-22
+	tls12Version     uint16 = 0x0303
+	tls10Version     uint16 = 0x0301
+)
 
+var (
 	// Flags for some minor compat issues
 	allowWrongVersionNumber = true
 	allowPKCS1              = true
@@ -41,6 +45,13 @@ const (
 	HandshakeTypeKeyUpdate           HandshakeType = 24
 	HandshakeTypeMessageHash         HandshakeType = 254
 )
+
+var hrrRandomSentinel = [32]byte{
+	0xcf, 0x21, 0xad, 0x74, 0xe5, 0x9a, 0x61, 0x11,
+	0xbe, 0x1d, 0x8c, 0x02, 0x1e, 0x65, 0xb8, 0x91,
+	0xc2, 0xa2, 0x11, 0x16, 0x7a, 0xbb, 0x8c, 0x5e,
+	0x07, 0x9e, 0x09, 0xe2, 0xc8, 0xa8, 0x33, 0x9c,
+}
 
 // uint8 CipherSuite[2];
 type CipherSuite uint16

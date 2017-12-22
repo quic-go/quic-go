@@ -48,7 +48,8 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(el).To(HaveLen(1))
 			ext := &tlsExtensionBody{}
-			found := el.Find(ext)
+			found, err := el.Find(ext)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue())
 			eetp := &encryptedExtensionsTransportParameters{}
 			_, err = syntax.Unmarshal(ext.data, eetp)
