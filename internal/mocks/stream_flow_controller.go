@@ -78,17 +78,17 @@ func (mr *MockStreamFlowControllerMockRecorder) HasWindowUpdate() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasWindowUpdate", reflect.TypeOf((*MockStreamFlowController)(nil).HasWindowUpdate))
 }
 
-// IsNewlyBlocked mocks base method
-func (m *MockStreamFlowController) IsNewlyBlocked() (bool, protocol.ByteCount) {
-	ret := m.ctrl.Call(m, "IsNewlyBlocked")
+// IsBlocked mocks base method
+func (m *MockStreamFlowController) IsBlocked() (bool, protocol.ByteCount) {
+	ret := m.ctrl.Call(m, "IsBlocked")
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(protocol.ByteCount)
 	return ret0, ret1
 }
 
-// IsNewlyBlocked indicates an expected call of IsNewlyBlocked
-func (mr *MockStreamFlowControllerMockRecorder) IsNewlyBlocked() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsNewlyBlocked", reflect.TypeOf((*MockStreamFlowController)(nil).IsNewlyBlocked))
+// IsBlocked indicates an expected call of IsBlocked
+func (mr *MockStreamFlowControllerMockRecorder) IsBlocked() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsBlocked", reflect.TypeOf((*MockStreamFlowController)(nil).IsBlocked))
 }
 
 // SendWindowSize mocks base method
