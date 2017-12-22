@@ -112,6 +112,10 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 	s.listener = ln
 	s.listenerMutex.Unlock()
 
+	return s.ServeLoop(ln)
+}
+
+func (s *Server) ServeLoop(ln quic.Listener) error {
 	for {
 		sess, err := ln.Accept()
 		if err != nil {
