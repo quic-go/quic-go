@@ -99,7 +99,7 @@ func (hm HandshakeMessage) ToBody() (HandshakeMessageBody, error) {
 		return body, fmt.Errorf("tls.handshakemessage: Unsupported body type")
 	}
 
-	_, err := body.Unmarshal(hm.body)
+	err := safeUnmarshal(body, hm.body)
 	return body, err
 }
 
@@ -324,8 +324,6 @@ func (h *HandshakeLayer) ReadMessage() (*HandshakeMessage, error) {
 		return nil, err
 	}
 	for {
-
-		// TODO(ekr@rtfm.com): Discard partial DTLS frames.
 		logf(logTypeVerbose, "ReadMessage() buffered=%v", len(h.frame.remainder))
 		if h.frame.needed() > 0 {
 			logf(logTypeVerbose, "Trying to read a new record")
@@ -480,4 +478,20 @@ func decodeUint(in []byte, size int) (uint64, []byte) {
 		val += uint64(in[i])
 	}
 	return val, in[size:]
+}
+
+type marshalledPDU interface {
+	Marshal() ([]byte, error)
+	Unmarshal(data []byte) (int, error)
+}
+
+func safeUnmarshal(pdu marshalledPDU, data []byte) error {
+	read, err := pdu.Unmarshal(data)
+	if err != nil {
+		return err
+	}
+	if len(data) != read {
+		return fmt.Errorf("Invalid encoding: Extra data not consumed")
+	}
+	return nil
 }

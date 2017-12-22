@@ -24,6 +24,7 @@ type extensionHandlerClient struct {
 var _ mint.AppExtensionHandler = &extensionHandlerClient{}
 var _ TLSExtensionHandler = &extensionHandlerClient{}
 
+// NewExtensionHandlerClient creates a new extension handler for the client.
 func NewExtensionHandlerClient(
 	params *TransportParameters,
 	initialVersion protocol.VersionNumber,
@@ -57,7 +58,10 @@ func (h *extensionHandlerClient) Send(hType mint.HandshakeType, el *mint.Extensi
 
 func (h *extensionHandlerClient) Receive(hType mint.HandshakeType, el *mint.ExtensionList) error {
 	ext := &tlsExtensionBody{}
-	found := el.Find(ext)
+	found, err := el.Find(ext)
+	if err != nil {
+		return err
+	}
 
 	if hType != mint.HandshakeTypeEncryptedExtensions && hType != mint.HandshakeTypeNewSessionTicket {
 		if found {

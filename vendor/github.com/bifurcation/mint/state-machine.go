@@ -95,6 +95,15 @@ type HandshakeContext struct {
 	hIn, hOut *HandshakeLayer
 }
 
+func (hc *HandshakeContext) SetVersion(version uint16) {
+	if hc.hIn.conn != nil {
+		hc.hIn.conn.SetVersion(version)
+	}
+	if hc.hOut.conn != nil {
+		hc.hOut.conn.SetVersion(version)
+	}
+}
+
 // StateConnected is symmetric between client and server
 type StateConnected struct {
 	Params              ConnectionParameters
