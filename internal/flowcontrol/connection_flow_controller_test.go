@@ -63,7 +63,7 @@ var _ = Describe("Connection Flow controller", func() {
 			It("autotunes the window", func() {
 				oldOffset := controller.bytesRead
 				oldWindowSize := controller.receiveWindowSize
-				rtt := 20 * time.Millisecond
+				rtt := 200 * time.Millisecond
 				setRtt(rtt)
 				controller.epochStartTime = time.Now().Add(-time.Millisecond)
 				controller.epochStartOffset = oldOffset

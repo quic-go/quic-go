@@ -141,7 +141,7 @@ var _ = Describe("Base Flow controller", func() {
 
 			It("increases the window size if read so fast that the window would be consumed in less than 4 RTTs", func() {
 				bytesRead := controller.bytesRead
-				rtt := 20 * time.Millisecond
+				rtt := 200 * time.Millisecond
 				setRtt(rtt)
 				// consume more than 2/3 of the window...
 				dataRead := receiveWindowSize*2/3 + 1
@@ -162,7 +162,7 @@ var _ = Describe("Base Flow controller", func() {
 				// this test only makes sense if a window update is triggered before half of the window has been consumed
 				Expect(protocol.WindowUpdateThreshold).To(BeNumerically(">", 1/3))
 				bytesRead := controller.bytesRead
-				rtt := 20 * time.Millisecond
+				rtt := 200 * time.Millisecond
 				setRtt(rtt)
 				// consume more than 2/3 of the window...
 				dataRead := receiveWindowSize*1/3 + 1
@@ -181,7 +181,7 @@ var _ = Describe("Base Flow controller", func() {
 
 			It("doesn't increase the window size if read too slowly", func() {
 				bytesRead := controller.bytesRead
-				rtt := 20 * time.Millisecond
+				rtt := 200 * time.Millisecond
 				setRtt(rtt)
 				// consume less than 2/3 of the window...
 				dataRead := receiveWindowSize*2/3 - 1
@@ -204,7 +204,7 @@ var _ = Describe("Base Flow controller", func() {
 					controller.epochStartOffset = controller.bytesRead
 					controller.AddBytesRead(controller.receiveWindowSize/2 + 1)
 				}
-				setRtt(20 * time.Millisecond)
+				setRtt(200 * time.Millisecond)
 				resetEpoch()
 				controller.maybeAdjustWindowSize()
 				Expect(controller.receiveWindowSize).To(Equal(2 * oldWindowSize)) // 2000
