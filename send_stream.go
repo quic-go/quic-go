@@ -191,6 +191,7 @@ func (s *sendStream) Close() error {
 		return fmt.Errorf("Close called for canceled stream %d", s.streamID)
 	}
 	s.finishedWriting = true
+	s.sender.scheduleSending()
 	s.ctxCancel()
 	return nil
 }

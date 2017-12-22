@@ -142,6 +142,7 @@ var _ = Describe("Send Stream", func() {
 		})
 
 		It("cancels the context when Close is called", func() {
+			mockSender.EXPECT().scheduleSending()
 			Expect(str.Context().Done()).ToNot(BeClosed())
 			str.Close()
 			Expect(str.Context().Done()).To(BeClosed())
@@ -174,7 +175,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("doesn't queue a BLOCKED frame if the stream is flow control blocked, but the frame popped has the FIN bit set", func() {
-				mockSender.EXPECT().scheduleSending()
+				mockSender.EXPECT().scheduleSending().Times(2) // once for the Write, once for the Close
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999))
 				mockFC.EXPECT().AddBytesSent(protocol.ByteCount(6))
 				// don't EXPECT a call to mockFC.IsNewlyBlocked
@@ -305,12 +306,14 @@ var _ = Describe("Send Stream", func() {
 
 		Context("closing", func() {
 			It("doesn't allow writes after it has been closed", func() {
+				mockSender.EXPECT().scheduleSending()
 				str.Close()
 				_, err := strWithTimeout.Write([]byte("foobar"))
 				Expect(err).To(MatchError("write on closed stream 1337"))
 			})
 
 			It("allows FIN", func() {
+				mockSender.EXPECT().scheduleSending()
 				str.Close()
 				f := str.popStreamFrame(1000)
 				Expect(f).ToNot(BeNil())
@@ -319,12 +322,13 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("doesn't send a FIN when there's still data", func() {
+				mockSender.EXPECT().scheduleSending()
 				frameHeaderLen := protocol.ByteCount(4)
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(9999)).Times(2)
 				mockFC.EXPECT().AddBytesSent(gomock.Any()).Times(2)
 				mockFC.EXPECT().IsNewlyBlocked()
 				str.dataForWriting = []byte("foobar")
-				str.Close()
+				Expect(str.Close()).To(Succeed())
 				f := str.popStreamFrame(3 + frameHeaderLen)
 				Expect(f).ToNot(BeNil())
 				Expect(f.Data).To(Equal([]byte("foo")))
@@ -341,6 +345,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("doesn't allow FIN twice", func() {
+				mockSender.EXPECT().scheduleSending()
 				str.Close()
 				f := str.popStreamFrame(1000)
 				Expect(f).ToNot(BeNil())
@@ -449,6 +454,7 @@ var _ = Describe("Send Stream", func() {
 			})
 
 			It("doesn't cancel when the stream was already closed", func() {
+				mockSender.EXPECT().scheduleSending()
 				err := str.Close()
 				Expect(err).ToNot(HaveOccurred())
 				err = str.CancelWrite(123)
@@ -511,6 +517,7 @@ var _ = Describe("Send Stream", func() {
 		})
 
 		It("is finished after Close()", func() {
+			mockSender.EXPECT().scheduleSending()
 			str.Close()
 			f := str.popStreamFrame(1000)
 			Expect(f.FinBit).To(BeTrue())
