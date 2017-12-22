@@ -14,9 +14,10 @@ type streamFramer struct {
 
 	retransmissionQueue []*wire.StreamFrame
 
-	streamQueueMutex sync.Mutex
-	activeStreams    map[protocol.StreamID]struct{}
-	streamQueue      []protocol.StreamID
+	streamQueueMutex    sync.Mutex
+	activeStreams       map[protocol.StreamID]struct{}
+	streamQueue         []protocol.StreamID
+	hasCryptoStreamData bool
 }
 
 func newStreamFramer(
@@ -38,6 +39,9 @@ func (f *streamFramer) AddFrameForRetransmission(frame *wire.StreamFrame) {
 
 func (f *streamFramer) AddActiveStream(id protocol.StreamID) {
 	if id == f.version.CryptoStreamID() { // the crypto stream is handled separately
+		f.streamQueueMutex.Lock()
+		f.hasCryptoStreamData = true
+		f.streamQueueMutex.Unlock()
 		return
 	}
 	f.streamQueueMutex.Lock()
@@ -57,14 +61,18 @@ func (f *streamFramer) HasFramesForRetransmission() bool {
 	return len(f.retransmissionQueue) > 0
 }
 
-// TODO: don't need to ask the crypto stream here, just record this information in AddActiveStream
-func (f *streamFramer) HasCryptoStreamFrame() bool {
-	return f.cryptoStream.hasDataForWriting()
+func (f *streamFramer) HasCryptoStreamData() bool {
+	f.streamQueueMutex.Lock()
+	hasCryptoStreamData := f.hasCryptoStreamData
+	f.streamQueueMutex.Unlock()
+	return hasCryptoStreamData
 }
 
-// TODO(lclemente): This is somewhat duplicate with the normal path for generating frames.
 func (f *streamFramer) PopCryptoStreamFrame(maxLen protocol.ByteCount) *wire.StreamFrame {
-	frame, _ := f.cryptoStream.popStreamFrame(maxLen)
+	f.streamQueueMutex.Lock()
+	frame, hasMoreData := f.cryptoStream.popStreamFrame(maxLen)
+	f.hasCryptoStreamData = hasMoreData
+	f.streamQueueMutex.Unlock()
 	return frame
 }
 
