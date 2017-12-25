@@ -408,10 +408,6 @@ runLoop:
 		if s.handshakeComplete && now.Sub(s.lastNetworkActivityTime) >= s.config.IdleTimeout {
 			s.closeLocal(qerr.Error(qerr.NetworkIdleTimeout, "No recent network activity."))
 		}
-
-		if err := s.streamsMap.DeleteClosedStreams(); err != nil {
-			s.closeLocal(err)
-		}
 	}
 
 	// only send the error the handshakeChan when the handshake is not completed yet
@@ -948,6 +944,12 @@ func (s *session) onHasWindowUpdate(id protocol.StreamID) {
 func (s *session) onHasStreamData(id protocol.StreamID) {
 	s.streamFramer.AddActiveStream(id)
 	s.scheduleSending()
+}
+
+func (s *session) onStreamCompleted(id protocol.StreamID) {
+	if err := s.streamsMap.DeleteStream(id); err != nil {
+		s.Close(err)
+	}
 }
 
 func (s *session) LocalAddr() net.Addr {

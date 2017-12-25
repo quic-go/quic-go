@@ -16,9 +16,6 @@ type streamsMap struct {
 	perspective protocol.Perspective
 
 	streams map[protocol.StreamID]streamI
-	// needed for round-robin scheduling
-	openStreams     []protocol.StreamID
-	roundRobinIndex int
 
 	nextStreamToOpen          protocol.StreamID // StreamID of the next Stream that will be returned by OpenStream()
 	highestStreamOpenedByPeer protocol.StreamID
@@ -51,7 +48,6 @@ func newStreamsMap(newStream newStreamLambda, pers protocol.Perspective, ver pro
 	sm := streamsMap{
 		perspective:        pers,
 		streams:            make(map[protocol.StreamID]streamI),
-		openStreams:        make([]protocol.StreamID, 0),
 		newStream:          newStream,
 		maxIncomingStreams: maxIncomingStreams,
 	}
@@ -99,7 +95,7 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (streamI, error) {
 	s, ok := m.streams[id]
 	m.mutex.RUnlock()
 	if ok {
-		return s, nil // s may be nil
+		return s, nil
 	}
 
 	// ... we don't have an existing stream
@@ -212,48 +208,19 @@ func (m *streamsMap) AcceptStream() (streamI, error) {
 	return str, nil
 }
 
-func (m *streamsMap) DeleteClosedStreams() error {
+func (m *streamsMap) DeleteStream(id protocol.StreamID) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-
-	var numDeletedStreams int
-	// for every closed stream, the streamID is replaced by 0 in the openStreams slice
-	for i, streamID := range m.openStreams {
-		str, ok := m.streams[streamID]
-		if !ok {
-			return errMapAccess
-		}
-		if !str.finished() {
-			continue
-		}
-		numDeletedStreams++
-		m.openStreams[i] = 0
-		if m.streamInitiatedBy(streamID) == m.perspective {
-			m.numOutgoingStreams--
-		} else {
-			m.numIncomingStreams--
-		}
-		delete(m.streams, streamID)
+	_, ok := m.streams[id]
+	if !ok {
+		return errMapAccess
 	}
-
-	if numDeletedStreams == 0 {
-		return nil
+	delete(m.streams, id)
+	if m.streamInitiatedBy(id) == m.perspective {
+		m.numOutgoingStreams--
+	} else {
+		m.numIncomingStreams--
 	}
-
-	// remove all 0s (representing closed streams) from the openStreams slice
-	// and adjust the roundRobinIndex
-	var j int
-	for i, id := range m.openStreams {
-		if i != j {
-			m.openStreams[j] = m.openStreams[i]
-		}
-		if id != 0 {
-			j++
-		} else if j < m.roundRobinIndex {
-			m.roundRobinIndex--
-		}
-	}
-	m.openStreams = m.openStreams[:len(m.openStreams)-numDeletedStreams]
 	m.openStreamOrErrCond.Signal()
 	return nil
 }
@@ -264,18 +231,8 @@ func (m *streamsMap) Range(cb func(s streamI)) {
 	defer m.mutex.RUnlock()
 
 	for _, s := range m.streams {
-		if s != nil {
-			cb(s)
-		}
+		cb(s)
 	}
-}
-
-func (m *streamsMap) iterateFunc(streamID protocol.StreamID, fn streamLambda) (bool, error) {
-	str, ok := m.streams[streamID]
-	if !ok {
-		return true, errMapAccess
-	}
-	return fn(str)
 }
 
 func (m *streamsMap) putStream(s streamI) error {
@@ -283,9 +240,7 @@ func (m *streamsMap) putStream(s streamI) error {
 	if _, ok := m.streams[id]; ok {
 		return fmt.Errorf("a stream with ID %d already exists", id)
 	}
-
 	m.streams[id] = s
-	m.openStreams = append(m.openStreams, id)
 	return nil
 }
 
@@ -295,8 +250,8 @@ func (m *streamsMap) CloseWithError(err error) {
 	m.closeErr = err
 	m.nextStreamOrErrCond.Broadcast()
 	m.openStreamOrErrCond.Broadcast()
-	for _, s := range m.openStreams {
-		m.streams[s].closeForShutdown(err)
+	for _, s := range m.streams {
+		s.closeForShutdown(err)
 	}
 }
 

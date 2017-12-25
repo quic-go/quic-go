@@ -154,6 +154,7 @@ func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) (*wire.StreamFr
 	}
 	if frame.FinBit {
 		s.finSent = true
+		s.sender.onStreamCompleted(s.streamID)
 	} else if s.streamID != s.version.CryptoStreamID() { // TODO(#657): Flow control for the crypto stream
 		if isBlocked, offset := s.flowController.IsBlocked(); isBlocked {
 			s.sender.queueControlFrame(&wire.StreamBlockedFrame{
@@ -231,6 +232,7 @@ func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, wr
 	})
 	// TODO(#991): cancel retransmissions for this stream
 	s.ctxCancel()
+	s.sender.onStreamCompleted(s.streamID)
 	return nil
 }
 
@@ -287,14 +289,6 @@ func (s *sendStream) closeForShutdown(err error) {
 	s.mutex.Unlock()
 	s.signalWrite()
 	s.ctxCancel()
-}
-
-func (s *sendStream) finished() bool {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	return s.closedForShutdown || // if the stream was abruptly closed for shutting down
-		s.finSent || s.canceledWrite
 }
 
 func (s *sendStream) getWriteOffset() protocol.ByteCount {

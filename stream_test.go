@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"errors"
 	"io"
 	"os"
 	"strconv"
@@ -72,6 +71,7 @@ var _ = Describe("Stream", func() {
 					ByteOffset: 1000,
 					ErrorCode:  errorCodeStoppingGQUIC,
 				})
+				mockSender.EXPECT().onStreamCompleted(streamID)
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), true)
 				str.writeOffset = 1000
 				f := &wire.RstStreamFrame{
@@ -189,26 +189,21 @@ var _ = Describe("Stream", func() {
 		})
 	})
 
-	Context("saying if it is finished", func() {
-		It("is finished when both the send and the receive side are finished", func() {
-			str.receiveStream.closeForShutdown(errors.New("shutdown"))
-			Expect(str.receiveStream.finished()).To(BeTrue())
-			Expect(str.sendStream.finished()).To(BeFalse())
-			Expect(str.finished()).To(BeFalse())
+	Context("completing", func() {
+		It("is not completed when only the receive side is completed", func() {
+			// don't EXPECT a call to mockSender.onStreamCompleted()
+			str.receiveStream.sender.onStreamCompleted(streamID)
 		})
 
-		It("is not finished when the receive side is finished", func() {
-			str.sendStream.closeForShutdown(errors.New("shutdown"))
-			Expect(str.receiveStream.finished()).To(BeFalse())
-			Expect(str.sendStream.finished()).To(BeTrue())
-			Expect(str.finished()).To(BeFalse())
+		It("is not completed when only the send side is completed", func() {
+			// don't EXPECT a call to mockSender.onStreamCompleted()
+			str.sendStream.sender.onStreamCompleted(streamID)
 		})
 
-		It("is not finished when the send side is finished", func() {
-			str.closeForShutdown(errors.New("shutdown"))
-			Expect(str.receiveStream.finished()).To(BeTrue())
-			Expect(str.sendStream.finished()).To(BeTrue())
-			Expect(str.finished()).To(BeTrue())
+		It("is completed when both sides are completed", func() {
+			mockSender.EXPECT().onStreamCompleted(streamID)
+			str.sendStream.sender.onStreamCompleted(streamID)
+			str.receiveStream.sender.onStreamCompleted(streamID)
 		})
 	})
 })

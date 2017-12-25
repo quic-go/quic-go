@@ -169,18 +169,6 @@ func (mr *MockStreamIMockRecorder) closeForShutdown(arg0 interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "closeForShutdown", reflect.TypeOf((*MockStreamI)(nil).closeForShutdown), arg0)
 }
 
-// finished mocks base method
-func (m *MockStreamI) finished() bool {
-	ret := m.ctrl.Call(m, "finished")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// finished indicates an expected call of finished
-func (mr *MockStreamIMockRecorder) finished() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "finished", reflect.TypeOf((*MockStreamI)(nil).finished))
-}
-
 // getWindowUpdate mocks base method
 func (m *MockStreamI) getWindowUpdate() protocol.ByteCount {
 	ret := m.ctrl.Call(m, "getWindowUpdate")
