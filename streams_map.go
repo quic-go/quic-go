@@ -20,7 +20,7 @@ type streamsMap struct {
 	openStreams     []protocol.StreamID
 	roundRobinIndex int
 
-	nextStream                protocol.StreamID // StreamID of the next Stream that will be returned by OpenStream()
+	nextStreamToOpen          protocol.StreamID // StreamID of the next Stream that will be returned by OpenStream()
 	highestStreamOpenedByPeer protocol.StreamID
 	nextStreamOrErrCond       sync.Cond
 	openStreamOrErrCond       sync.Cond
@@ -58,18 +58,22 @@ func newStreamsMap(newStream newStreamLambda, pers protocol.Perspective, ver pro
 	sm.nextStreamOrErrCond.L = &sm.mutex
 	sm.openStreamOrErrCond.L = &sm.mutex
 
-	nextOddStream := protocol.StreamID(1)
-	if ver.CryptoStreamID() == protocol.StreamID(1) {
-		nextOddStream = 3
+	nextClientInitiatedStream := protocol.StreamID(1)
+	nextServerInitiatedStream := protocol.StreamID(2)
+	if !ver.UsesTLS() {
+		nextServerInitiatedStream = 2
+		nextClientInitiatedStream = 3
+		if pers == protocol.PerspectiveServer {
+			sm.highestStreamOpenedByPeer = 1
+		}
 	}
-	if pers == protocol.PerspectiveClient {
-		sm.nextStream = nextOddStream
-		sm.nextStreamToAccept = 2
+	if pers == protocol.PerspectiveServer {
+		sm.nextStreamToOpen = nextServerInitiatedStream
+		sm.nextStreamToAccept = nextClientInitiatedStream
 	} else {
-		sm.nextStream = 2
-		sm.nextStreamToAccept = nextOddStream
+		sm.nextStreamToOpen = nextClientInitiatedStream
+		sm.nextStreamToAccept = nextServerInitiatedStream
 	}
-
 	return &sm
 }
 
@@ -79,6 +83,13 @@ func (m *streamsMap) streamInitiatedBy(id protocol.StreamID) protocol.Perspectiv
 		return protocol.PerspectiveServer
 	}
 	return protocol.PerspectiveClient
+}
+
+func (m *streamsMap) nextStreamID(id protocol.StreamID) protocol.StreamID {
+	if m.perspective == protocol.PerspectiveServer && id == 0 {
+		return 1
+	}
+	return id + 2
 }
 
 // GetOrOpenStream either returns an existing stream, a newly opened stream, or nil if a stream with the provided ID is already closed.
@@ -101,7 +112,7 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (streamI, error) {
 	}
 
 	if m.perspective == m.streamInitiatedBy(id) {
-		if id <= m.nextStream { // this is a stream opened by us. Must have been closed already
+		if id <= m.nextStreamToOpen { // this is a stream opened by us. Must have been closed already
 			return nil, nil
 		}
 		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("peer attempted to open stream %d", id))
@@ -110,14 +121,7 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (streamI, error) {
 		return nil, nil
 	}
 
-	// sid is the next stream that will be opened
-	sid := m.highestStreamOpenedByPeer + 2
-	// if there is no stream opened yet, and this is the server, stream 1 should be openend
-	if sid == 2 && m.perspective == protocol.PerspectiveServer {
-		sid = 1
-	}
-
-	for ; sid <= id; sid += 2 {
+	for sid := m.nextStreamID(m.highestStreamOpenedByPeer); sid <= id; sid = m.nextStreamID(sid) {
 		if _, err := m.openRemoteStream(sid); err != nil {
 			return nil, err
 		}
@@ -146,15 +150,14 @@ func (m *streamsMap) openRemoteStream(id protocol.StreamID) (streamI, error) {
 }
 
 func (m *streamsMap) openStreamImpl() (streamI, error) {
-	id := m.nextStream
 	if m.numOutgoingStreams >= m.maxOutgoingStreams {
 		return nil, qerr.TooManyOpenStreams
 	}
 
 	m.numOutgoingStreams++
-	m.nextStream += 2
-	s := m.newStream(id)
+	s := m.newStream(m.nextStreamToOpen)
 	m.putStream(s)
+	m.nextStreamToOpen = m.nextStreamID(m.nextStreamToOpen)
 	return s, nil
 }
 
