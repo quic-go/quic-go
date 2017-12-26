@@ -90,6 +90,16 @@ func (m *streamsMap) nextStreamID(id protocol.StreamID) protocol.StreamID {
 	return id + 2
 }
 
+func (m *streamsMap) GetOrOpenReceiveStream(id protocol.StreamID) (receiveStreamI, error) {
+	// every bidirectional stream is also a receive stream
+	return m.GetOrOpenStream(id)
+}
+
+func (m *streamsMap) GetOrOpenSendStream(id protocol.StreamID) (sendStreamI, error) {
+	// every bidirectional stream is also a send stream
+	return m.GetOrOpenStream(id)
+}
+
 // GetOrOpenStream either returns an existing stream, a newly opened stream, or nil if a stream with the provided ID is already closed.
 // Newly opened streams should only originate from the client. To open a stream from the server, OpenStream should be used.
 func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (streamI, error) {

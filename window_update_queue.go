@@ -38,7 +38,7 @@ func (q *windowUpdateQueue) QueueAll() {
 		if id == q.cryptoStream.StreamID() {
 			offset = q.cryptoStream.getWindowUpdate()
 		} else {
-			str, err := q.streamGetter.GetOrOpenStream(id)
+			str, err := q.streamGetter.GetOrOpenReceiveStream(id)
 			if err != nil || str == nil { // the stream can be nil if it was completed before dequeing the window update
 				continue
 			}

@@ -12,6 +12,15 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
+type receiveStreamI interface {
+	ReceiveStream
+
+	handleStreamFrame(*wire.StreamFrame) error
+	handleRstStreamFrame(*wire.RstStreamFrame) error
+	closeForShutdown(error)
+	getWindowUpdate() protocol.ByteCount
+}
+
 type receiveStream struct {
 	mutex sync.Mutex
 
@@ -40,6 +49,7 @@ type receiveStream struct {
 }
 
 var _ ReceiveStream = &receiveStream{}
+var _ receiveStreamI = &receiveStream{}
 
 func newReceiveStream(
 	streamID protocol.StreamID,

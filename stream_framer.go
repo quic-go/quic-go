@@ -113,7 +113,7 @@ func (f *streamFramer) maybePopNormalFrames(maxTotalLen protocol.ByteCount) []*w
 		}
 		id := f.streamQueue[0]
 		f.streamQueue = f.streamQueue[1:]
-		str, err := f.streamGetter.GetOrOpenStream(id)
+		str, err := f.streamGetter.GetOrOpenSendStream(id)
 		if err != nil { // can happen if the stream completed after it said it had data
 			delete(f.activeStreams, id)
 			continue

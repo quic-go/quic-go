@@ -50,16 +50,19 @@ var _ streamSender = &uniStreamSender{}
 
 type streamI interface {
 	Stream
-
+	closeForShutdown(error)
+	// for receiving
 	handleStreamFrame(*wire.StreamFrame) error
 	handleRstStreamFrame(*wire.RstStreamFrame) error
+	getWindowUpdate() protocol.ByteCount
+	// for sending
 	handleStopSendingFrame(*wire.StopSendingFrame)
 	popStreamFrame(maxBytes protocol.ByteCount) (*wire.StreamFrame, bool)
-	closeForShutdown(error)
-	// methods needed for flow control
-	getWindowUpdate() protocol.ByteCount
 	handleMaxStreamDataFrame(*wire.MaxStreamDataFrame)
 }
+
+var _ receiveStreamI = (streamI)(nil)
+var _ sendStreamI = (streamI)(nil)
 
 // A Stream assembles the data from StreamFrames and provides a super-convenient Read-Interface
 //
@@ -77,7 +80,6 @@ type stream struct {
 }
 
 var _ Stream = &stream{}
-var _ streamI = &stream{}
 
 type deadlineError struct{}
 

@@ -24,7 +24,8 @@ type unpacker interface {
 }
 
 type streamGetter interface {
-	GetOrOpenStream(protocol.StreamID) (streamI, error)
+	GetOrOpenReceiveStream(protocol.StreamID) (receiveStreamI, error)
+	GetOrOpenSendStream(protocol.StreamID) (sendStreamI, error)
 }
 
 type receivedPacket struct {
@@ -574,7 +575,7 @@ func (s *session) handleStreamFrame(frame *wire.StreamFrame) error {
 		}
 		return s.cryptoStream.handleStreamFrame(frame)
 	}
-	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
+	str, err := s.streamsMap.GetOrOpenReceiveStream(frame.StreamID)
 	if err != nil {
 		return err
 	}
@@ -595,7 +596,7 @@ func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error
 		s.cryptoStream.handleMaxStreamDataFrame(frame)
 		return nil
 	}
-	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
+	str, err := s.streamsMap.GetOrOpenSendStream(frame.StreamID)
 	if err != nil {
 		return err
 	}
@@ -607,11 +608,26 @@ func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error
 	return nil
 }
 
+func (s *session) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
+	if frame.StreamID == s.version.CryptoStreamID() {
+		return errors.New("Received RST_STREAM frame for the crypto stream")
+	}
+	str, err := s.streamsMap.GetOrOpenReceiveStream(frame.StreamID)
+	if err != nil {
+		return err
+	}
+	if str == nil {
+		// stream is closed and already garbage collected
+		return nil
+	}
+	return str.handleRstStreamFrame(frame)
+}
+
 func (s *session) handleStopSendingFrame(frame *wire.StopSendingFrame) error {
 	if frame.StreamID == s.version.CryptoStreamID() {
 		return errors.New("Received a STOP_SENDING frame for the crypto stream")
 	}
-	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
+	str, err := s.streamsMap.GetOrOpenSendStream(frame.StreamID)
 	if err != nil {
 		return err
 	}
@@ -621,21 +637,6 @@ func (s *session) handleStopSendingFrame(frame *wire.StopSendingFrame) error {
 	}
 	str.handleStopSendingFrame(frame)
 	return nil
-}
-
-func (s *session) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
-	if frame.StreamID == s.version.CryptoStreamID() {
-		return errors.New("Received RST_STREAM frame for the crypto stream")
-	}
-	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
-	if err != nil {
-		return err
-	}
-	if str == nil {
-		// stream is closed and already garbage collected
-		return nil
-	}
-	return str.handleRstStreamFrame(frame)
 }
 
 func (s *session) handleAckFrame(frame *wire.AckFrame, encLevel protocol.EncryptionLevel) error {
