@@ -20,17 +20,17 @@ func mockKeyDerivation(crypto.TLSExporter, protocol.Perspective) (crypto.AEAD, e
 
 var _ = Describe("TLS Crypto Setup", func() {
 	var (
-		cs          *cryptoSetupTLS
-		aeadChanged chan protocol.EncryptionLevel
+		cs             *cryptoSetupTLS
+		handshakeEvent chan struct{}
 	)
 
 	BeforeEach(func() {
-		aeadChanged = make(chan protocol.EncryptionLevel, 2)
+		handshakeEvent = make(chan struct{}, 2)
 		cs = NewCryptoSetupTLSServer(
 			nil,
 			NewCryptoStreamConn(nil),
 			nil, // AEAD
-			aeadChanged,
+			handshakeEvent,
 			protocol.VersionTLS,
 		).(*cryptoSetupTLS)
 		cs.nullAEAD = mockcrypto.NewMockAEAD(mockCtrl)
@@ -51,8 +51,8 @@ var _ = Describe("TLS Crypto Setup", func() {
 		cs.keyDerivation = mockKeyDerivation
 		err := cs.HandleCryptoStream()
 		Expect(err).ToNot(HaveOccurred())
-		Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionForwardSecure)))
-		Expect(aeadChanged).To(BeClosed())
+		Expect(handshakeEvent).To(Receive())
+		Expect(handshakeEvent).To(BeClosed())
 	})
 
 	It("handshakes until it is connected", func() {
@@ -63,7 +63,7 @@ var _ = Describe("TLS Crypto Setup", func() {
 		cs.keyDerivation = mockKeyDerivation
 		err := cs.HandleCryptoStream()
 		Expect(err).ToNot(HaveOccurred())
-		Expect(aeadChanged).To(Receive())
+		Expect(handshakeEvent).To(Receive())
 	})
 
 	Context("escalating crypto", func() {
@@ -180,17 +180,17 @@ var _ = Describe("TLS Crypto Setup", func() {
 
 var _ = Describe("TLS Crypto Setup, for the client", func() {
 	var (
-		cs          *cryptoSetupTLS
-		aeadChanged chan protocol.EncryptionLevel
+		cs             *cryptoSetupTLS
+		handshakeEvent chan struct{}
 	)
 
 	BeforeEach(func() {
-		aeadChanged = make(chan protocol.EncryptionLevel, 2)
+		handshakeEvent = make(chan struct{})
 		csInt, err := NewCryptoSetupTLSClient(
 			nil,
 			0,
 			"quic.clemente.io",
-			aeadChanged,
+			handshakeEvent,
 			nil, // mintTLS
 			protocol.VersionTLS,
 		)

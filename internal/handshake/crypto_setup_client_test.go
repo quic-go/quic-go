@@ -79,7 +79,7 @@ var _ = Describe("Client Crypto Setup", func() {
 		stream                  *mockStream
 		keyDerivationCalledWith *keyDerivationValues
 		shloMap                 map[Tag][]byte
-		aeadChanged             chan protocol.EncryptionLevel
+		handshakeEvent          chan struct{}
 		paramsChan              chan TransportParameters
 	)
 
@@ -108,7 +108,7 @@ var _ = Describe("Client Crypto Setup", func() {
 		version := protocol.Version39
 		// use a buffered channel here, so that we can parse a SHLO without having to receive the TransportParameters to avoid blocking
 		paramsChan = make(chan TransportParameters, 1)
-		aeadChanged = make(chan protocol.EncryptionLevel, 2)
+		handshakeEvent = make(chan struct{}, 2)
 		csInt, err := NewCryptoSetupClient(
 			stream,
 			"hostname",
@@ -117,7 +117,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			nil,
 			&TransportParameters{IdleTimeout: protocol.DefaultIdleTimeout},
 			paramsChan,
-			aeadChanged,
+			handshakeEvent,
 			protocol.Version39,
 			nil,
 		)
@@ -385,22 +385,22 @@ var _ = Describe("Client Crypto Setup", func() {
 			cs.receivedSecurePacket = false
 			_, err := cs.handleSHLOMessage(shloMap)
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoEncryptionLevelIncorrect, "unencrypted SHLO message")))
-			Expect(aeadChanged).ToNot(Receive())
-			Expect(aeadChanged).ToNot(BeClosed())
+			Expect(handshakeEvent).ToNot(Receive())
+			Expect(handshakeEvent).ToNot(BeClosed())
 		})
 
 		It("rejects SHLOs without a PUBS", func() {
 			delete(shloMap, TagPUBS)
 			_, err := cs.handleSHLOMessage(shloMap)
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoMessageParameterNotFound, "PUBS")))
-			Expect(aeadChanged).ToNot(BeClosed())
+			Expect(handshakeEvent).ToNot(BeClosed())
 		})
 
 		It("rejects SHLOs without a version list", func() {
 			delete(shloMap, TagVER)
 			_, err := cs.handleSHLOMessage(shloMap)
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "server hello missing version list")))
-			Expect(aeadChanged).ToNot(BeClosed())
+			Expect(handshakeEvent).ToNot(BeClosed())
 		})
 
 		It("accepts a SHLO after a version negotiation", func() {
@@ -435,7 +435,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			Expect(params.IdleTimeout).To(Equal(13 * time.Second))
 		})
 
-		It("closes the aeadChanged when receiving an SHLO", func() {
+		It("closes the handshakeEvent chan when receiving an SHLO", func() {
 			HandshakeMessage{Tag: TagSHLO, Data: shloMap}.Write(&stream.dataToRead)
 			done := make(chan struct{})
 			go func() {
@@ -444,8 +444,8 @@ var _ = Describe("Client Crypto Setup", func() {
 				Expect(err).To(MatchError(qerr.Error(qerr.HandshakeFailed, errMockStreamClosing.Error())))
 				close(done)
 			}()
-			Eventually(aeadChanged).Should(Receive(Equal(protocol.EncryptionForwardSecure)))
-			Eventually(aeadChanged).Should(BeClosed())
+			Eventually(handshakeEvent).Should(Receive())
+			Eventually(handshakeEvent).Should(BeClosed())
 			// make the go routine return
 			stream.close()
 			Eventually(done).Should(BeClosed())
@@ -652,9 +652,9 @@ var _ = Describe("Client Crypto Setup", func() {
 			Expect(keyDerivationCalledWith.cert).To(Equal(certManager.leafCert))
 			Expect(keyDerivationCalledWith.divNonce).To(Equal(cs.diversificationNonce))
 			Expect(keyDerivationCalledWith.pers).To(Equal(protocol.PerspectiveClient))
-			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
-			Expect(aeadChanged).ToNot(Receive())
-			Expect(aeadChanged).ToNot(BeClosed())
+			Expect(handshakeEvent).To(Receive())
+			Expect(handshakeEvent).ToNot(Receive())
+			Expect(handshakeEvent).ToNot(BeClosed())
 		})
 
 		It("uses the server nonce, if the server sent one", func() {
@@ -664,24 +664,24 @@ var _ = Describe("Client Crypto Setup", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.secureAEAD).ToNot(BeNil())
 			Expect(keyDerivationCalledWith.nonces).To(Equal(append(cs.nonc, cs.sno...)))
-			Expect(aeadChanged).To(Receive())
-			Expect(aeadChanged).ToNot(Receive())
-			Expect(aeadChanged).ToNot(BeClosed())
+			Expect(handshakeEvent).To(Receive())
+			Expect(handshakeEvent).ToNot(Receive())
+			Expect(handshakeEvent).ToNot(BeClosed())
 		})
 
 		It("doesn't create a secureAEAD if the certificate is not yet verified, even if it has all necessary values", func() {
 			err := cs.maybeUpgradeCrypto()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.secureAEAD).To(BeNil())
-			Expect(aeadChanged).ToNot(Receive())
+			Expect(handshakeEvent).ToNot(Receive())
 			cs.serverVerified = true
 			// make sure we really had all necessary values before, and only serverVerified was missing
 			err = cs.maybeUpgradeCrypto()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.secureAEAD).ToNot(BeNil())
-			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
-			Expect(aeadChanged).ToNot(Receive())
-			Expect(aeadChanged).ToNot(BeClosed())
+			Expect(handshakeEvent).To(Receive())
+			Expect(handshakeEvent).ToNot(Receive())
+			Expect(handshakeEvent).ToNot(BeClosed())
 		})
 
 		It("tries to escalate before reading a handshake message", func() {
@@ -694,10 +694,10 @@ var _ = Describe("Client Crypto Setup", func() {
 				Expect(err).To(MatchError(qerr.Error(qerr.HandshakeFailed, errMockStreamClosing.Error())))
 				close(done)
 			}()
-			Eventually(aeadChanged).Should(Receive(Equal(protocol.EncryptionSecure)))
+			Eventually(handshakeEvent).Should(Receive())
 			Expect(cs.secureAEAD).ToNot(BeNil())
-			Expect(aeadChanged).ToNot(Receive())
-			Expect(aeadChanged).ToNot(BeClosed())
+			Expect(handshakeEvent).ToNot(Receive())
+			Expect(handshakeEvent).ToNot(BeClosed())
 			// make the go routine return
 			stream.close()
 			Eventually(done).Should(BeClosed())
@@ -715,10 +715,10 @@ var _ = Describe("Client Crypto Setup", func() {
 			cs.serverVerified = true
 			Expect(cs.secureAEAD).To(BeNil())
 			cs.SetDiversificationNonce([]byte("div"))
-			Eventually(aeadChanged).Should(Receive(Equal(protocol.EncryptionSecure)))
+			Eventually(handshakeEvent).Should(Receive())
 			Expect(cs.secureAEAD).ToNot(BeNil())
-			Expect(aeadChanged).ToNot(Receive())
-			Expect(aeadChanged).ToNot(BeClosed())
+			Expect(handshakeEvent).ToNot(Receive())
+			Expect(handshakeEvent).ToNot(BeClosed())
 			// make the go routine return
 			stream.close()
 			Eventually(done).Should(BeClosed())

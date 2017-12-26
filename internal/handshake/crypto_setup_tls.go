@@ -26,9 +26,9 @@ type cryptoSetupTLS struct {
 	nullAEAD      crypto.AEAD
 	aead          crypto.AEAD
 
-	tls          MintTLS
-	cryptoStream *CryptoStreamConn
-	aeadChanged  chan<- protocol.EncryptionLevel
+	tls            MintTLS
+	cryptoStream   *CryptoStreamConn
+	handshakeEvent chan<- struct{}
 }
 
 // NewCryptoSetupTLSServer creates a new TLS CryptoSetup instance for a server
@@ -36,16 +36,16 @@ func NewCryptoSetupTLSServer(
 	tls MintTLS,
 	cryptoStream *CryptoStreamConn,
 	nullAEAD crypto.AEAD,
-	aeadChanged chan<- protocol.EncryptionLevel,
+	handshakeEvent chan<- struct{},
 	version protocol.VersionNumber,
 ) CryptoSetup {
 	return &cryptoSetupTLS{
-		tls:           tls,
-		cryptoStream:  cryptoStream,
-		nullAEAD:      nullAEAD,
-		perspective:   protocol.PerspectiveServer,
-		keyDerivation: crypto.DeriveAESKeys,
-		aeadChanged:   aeadChanged,
+		tls:            tls,
+		cryptoStream:   cryptoStream,
+		nullAEAD:       nullAEAD,
+		perspective:    protocol.PerspectiveServer,
+		keyDerivation:  crypto.DeriveAESKeys,
+		handshakeEvent: handshakeEvent,
 	}
 }
 
@@ -54,7 +54,7 @@ func NewCryptoSetupTLSClient(
 	cryptoStream io.ReadWriter,
 	connID protocol.ConnectionID,
 	hostname string,
-	aeadChanged chan<- protocol.EncryptionLevel,
+	handshakeEvent chan<- struct{},
 	tls MintTLS,
 	version protocol.VersionNumber,
 ) (CryptoSetup, error) {
@@ -64,11 +64,11 @@ func NewCryptoSetupTLSClient(
 	}
 
 	return &cryptoSetupTLS{
-		perspective:   protocol.PerspectiveClient,
-		tls:           tls,
-		nullAEAD:      nullAEAD,
-		keyDerivation: crypto.DeriveAESKeys,
-		aeadChanged:   aeadChanged,
+		perspective:    protocol.PerspectiveClient,
+		tls:            tls,
+		nullAEAD:       nullAEAD,
+		keyDerivation:  crypto.DeriveAESKeys,
+		handshakeEvent: handshakeEvent,
 	}, nil
 }
 
@@ -102,9 +102,8 @@ handshakeLoop:
 	h.aead = aead
 	h.mutex.Unlock()
 
-	// signal to the outside world that the handshake completed
-	h.aeadChanged <- protocol.EncryptionForwardSecure
-	close(h.aeadChanged)
+	h.handshakeEvent <- struct{}{}
+	close(h.handshakeEvent)
 	return nil
 }
 

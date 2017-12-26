@@ -60,33 +60,15 @@ func DialAddr(addr string, tlsConf *tls.Config, config *Config) (Session, error)
 	return Dial(udpConn, udpAddr, addr, tlsConf, config)
 }
 
-// DialAddrNonFWSecure establishes a new QUIC connection to a server.
-// The hostname for SNI is taken from the given address.
-func DialAddrNonFWSecure(
-	addr string,
-	tlsConf *tls.Config,
-	config *Config,
-) (NonFWSession, error) {
-	udpAddr, err := net.ResolveUDPAddr("udp", addr)
-	if err != nil {
-		return nil, err
-	}
-	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
-	if err != nil {
-		return nil, err
-	}
-	return DialNonFWSecure(udpConn, udpAddr, addr, tlsConf, config)
-}
-
-// DialNonFWSecure establishes a new non-forward-secure QUIC connection to a server using a net.PacketConn.
+// Dial establishes a new QUIC connection to a server using a net.PacketConn.
 // The host parameter is used for SNI.
-func DialNonFWSecure(
+func Dial(
 	pconn net.PacketConn,
 	remoteAddr net.Addr,
 	host string,
 	tlsConf *tls.Config,
 	config *Config,
-) (NonFWSession, error) {
+) (Session, error) {
 	connID, err := generateConnectionID()
 	if err != nil {
 		return nil, err
@@ -119,26 +101,7 @@ func DialNonFWSecure(
 	if err := c.dial(); err != nil {
 		return nil, err
 	}
-	return c.session.(NonFWSession), nil
-}
-
-// Dial establishes a new QUIC connection to a server using a net.PacketConn.
-// The host parameter is used for SNI.
-func Dial(
-	pconn net.PacketConn,
-	remoteAddr net.Addr,
-	host string,
-	tlsConf *tls.Config,
-	config *Config,
-) (Session, error) {
-	sess, err := DialNonFWSecure(pconn, remoteAddr, host, tlsConf, config)
-	if err != nil {
-		return nil, err
-	}
-	if err := sess.WaitUntilHandshakeComplete(); err != nil {
-		return nil, err
-	}
-	return sess, nil
+	return c.session, nil
 }
 
 // populateClientConfig populates fields in the quic.Config with their default values, if none are set
@@ -268,14 +231,8 @@ func (c *client) establishSecureConnection() error {
 	select {
 	case <-errorChan:
 		return runErr
-	case ev := <-c.session.handshakeStatus():
-		if ev.err != nil {
-			return ev.err
-		}
-		if !c.version.UsesTLS() && ev.encLevel != protocol.EncryptionSecure {
-			return fmt.Errorf("Client BUG: Expected encryption level to be secure, was %s", ev.encLevel)
-		}
-		return nil
+	case err := <-c.session.handshakeStatus():
+		return err
 	}
 }
 

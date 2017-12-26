@@ -39,11 +39,6 @@ var (
 	newCryptoSetupClient = handshake.NewCryptoSetupClient
 )
 
-type handshakeEvent struct {
-	encLevel protocol.EncryptionLevel
-	err      error
-}
-
 type closeError struct {
 	err    error
 	remote bool
@@ -90,17 +85,14 @@ type session struct {
 
 	// this channel is passed to the CryptoSetup and receives the transport parameters, as soon as the peer sends them
 	paramsChan <-chan handshake.TransportParameters
-	// this channel is passed to the CryptoSetup and receives the current encryption level
-	// it is closed as soon as the handshake is complete
-	aeadChanged       <-chan protocol.EncryptionLevel
+	// the handshakeEvent channel is passed to the CryptoSetup.
+	// It receives when it makes sense to try decrypting undecryptable packets.
+	handshakeEvent <-chan struct{}
+	// handshakeChan is returned by handshakeStatus.
+	// It receives any error that might occur during the handshake.
+	// It is closed when the handshake is complete.
+	handshakeChan     chan error
 	handshakeComplete bool
-	// will be closed as soon as the handshake completes, and receive any error that might occur until then
-	// it is used to block WaitUntilHandshakeComplete()
-	handshakeCompleteChan chan error
-	// handshakeChan receives handshake events and is closed as soon the handshake completes
-	// the receiving end of this channel is passed to the creator of the session
-	// it receives at most 3 handshake events: 2 when the encryption level changes, and one error
-	handshakeChan chan handshakeEvent
 
 	lastRcvdPacketNumber protocol.PacketNumber
 	// Used to calculate the next packet number from the truncated wire
@@ -131,15 +123,15 @@ func newSession(
 	config *Config,
 ) (packetHandler, error) {
 	paramsChan := make(chan handshake.TransportParameters)
-	aeadChanged := make(chan protocol.EncryptionLevel, 2)
+	handshakeEvent := make(chan struct{}, 1)
 	s := &session{
-		conn:         conn,
-		connectionID: connectionID,
-		perspective:  protocol.PerspectiveServer,
-		version:      v,
-		config:       config,
-		aeadChanged:  aeadChanged,
-		paramsChan:   paramsChan,
+		conn:           conn,
+		connectionID:   connectionID,
+		perspective:    protocol.PerspectiveServer,
+		version:        v,
+		config:         config,
+		handshakeEvent: handshakeEvent,
+		paramsChan:     paramsChan,
 	}
 	s.preSetup()
 	transportParams := &handshake.TransportParameters{
@@ -158,7 +150,7 @@ func newSession(
 		s.config.Versions,
 		s.config.AcceptCookie,
 		paramsChan,
-		aeadChanged,
+		handshakeEvent,
 	)
 	if err != nil {
 		return nil, err
@@ -179,15 +171,15 @@ var newClientSession = func(
 	negotiatedVersions []protocol.VersionNumber, // needed for validation of the GQUIC version negotiaton
 ) (packetHandler, error) {
 	paramsChan := make(chan handshake.TransportParameters)
-	aeadChanged := make(chan protocol.EncryptionLevel, 2)
+	handshakeEvent := make(chan struct{}, 1)
 	s := &session{
-		conn:         conn,
-		connectionID: connectionID,
-		perspective:  protocol.PerspectiveClient,
-		version:      v,
-		config:       config,
-		aeadChanged:  aeadChanged,
-		paramsChan:   paramsChan,
+		conn:           conn,
+		connectionID:   connectionID,
+		perspective:    protocol.PerspectiveClient,
+		version:        v,
+		config:         config,
+		handshakeEvent: handshakeEvent,
+		paramsChan:     paramsChan,
 	}
 	s.preSetup()
 	transportParams := &handshake.TransportParameters{
@@ -205,7 +197,7 @@ var newClientSession = func(
 		tlsConf,
 		transportParams,
 		paramsChan,
-		aeadChanged,
+		handshakeEvent,
 		initialVersion,
 		negotiatedVersions,
 	)
@@ -227,21 +219,21 @@ func newTLSServerSession(
 	peerParams *handshake.TransportParameters,
 	v protocol.VersionNumber,
 ) (packetHandler, error) {
-	aeadChanged := make(chan protocol.EncryptionLevel, 2)
+	handshakeEvent := make(chan struct{}, 1)
 	s := &session{
-		conn:         conn,
-		config:       config,
-		connectionID: connectionID,
-		perspective:  protocol.PerspectiveServer,
-		version:      v,
-		aeadChanged:  aeadChanged,
+		conn:           conn,
+		config:         config,
+		connectionID:   connectionID,
+		perspective:    protocol.PerspectiveServer,
+		version:        v,
+		handshakeEvent: handshakeEvent,
 	}
 	s.preSetup()
 	s.cryptoSetup = handshake.NewCryptoSetupTLSServer(
 		tls,
 		cryptoStreamConn,
 		nullAEAD,
-		aeadChanged,
+		handshakeEvent,
 		v,
 	)
 	if err := s.postSetup(initialPacketNumber); err != nil {
@@ -264,15 +256,15 @@ var newTLSClientSession = func(
 	paramsChan <-chan handshake.TransportParameters,
 	initialPacketNumber protocol.PacketNumber,
 ) (packetHandler, error) {
-	aeadChanged := make(chan protocol.EncryptionLevel, 2)
+	handshakeEvent := make(chan struct{}, 1)
 	s := &session{
-		conn:         conn,
-		config:       config,
-		connectionID: connectionID,
-		perspective:  protocol.PerspectiveClient,
-		version:      v,
-		aeadChanged:  aeadChanged,
-		paramsChan:   paramsChan,
+		conn:           conn,
+		config:         config,
+		connectionID:   connectionID,
+		perspective:    protocol.PerspectiveClient,
+		version:        v,
+		handshakeEvent: handshakeEvent,
+		paramsChan:     paramsChan,
 	}
 	s.preSetup()
 	tls.SetCryptoStream(s.cryptoStream)
@@ -280,7 +272,7 @@ var newTLSClientSession = func(
 		s.cryptoStream,
 		s.connectionID,
 		hostname,
-		aeadChanged,
+		handshakeEvent,
 		tls,
 		v,
 	)
@@ -302,8 +294,7 @@ func (s *session) preSetup() {
 }
 
 func (s *session) postSetup(initialPacketNumber protocol.PacketNumber) error {
-	s.handshakeChan = make(chan handshakeEvent, 3)
-	s.handshakeCompleteChan = make(chan error, 1)
+	s.handshakeChan = make(chan error, 1)
 	s.receivedPackets = make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets)
 	s.closeChan = make(chan closeError, 1)
 	s.sendingScheduled = make(chan struct{}, 1)
@@ -343,7 +334,7 @@ func (s *session) run() error {
 	}()
 
 	var closeErr closeError
-	aeadChanged := s.aeadChanged
+	handshakeEvent := s.handshakeEvent
 
 runLoop:
 	for {
@@ -381,16 +372,14 @@ runLoop:
 			putPacketBuffer(p.header.Raw)
 		case p := <-s.paramsChan:
 			s.processTransportParameters(&p)
-		case l, ok := <-aeadChanged:
+		case _, ok := <-handshakeEvent:
 			if !ok { // the aeadChanged chan was closed. This means that the handshake is completed.
 				s.handshakeComplete = true
-				aeadChanged = nil // prevent this case from ever being selected again
+				handshakeEvent = nil // prevent this case from ever being selected again
 				s.sentPacketHandler.SetHandshakeComplete()
 				close(s.handshakeChan)
-				close(s.handshakeCompleteChan)
 			} else {
 				s.tryDecryptingQueuedPackets()
-				s.handshakeChan <- handshakeEvent{encLevel: l}
 			}
 		}
 
@@ -428,8 +417,7 @@ runLoop:
 	// only send the error the handshakeChan when the handshake is not completed yet
 	// otherwise this chan will already be closed
 	if !s.handshakeComplete {
-		s.handshakeCompleteChan <- closeErr.err
-		s.handshakeChan <- handshakeEvent{err: closeErr.err}
+		s.handshakeChan <- closeErr.err
 	}
 	s.handleCloseError(closeErr)
 	return closeErr.err
@@ -878,10 +866,6 @@ func (s *session) OpenStreamSync() (Stream, error) {
 	return s.streamsMap.OpenStreamSync()
 }
 
-func (s *session) WaitUntilHandshakeComplete() error {
-	return <-s.handshakeCompleteChan
-}
-
 func (s *session) newStream(id protocol.StreamID) streamI {
 	var initialSendWindow protocol.ByteCount
 	if s.peerParams != nil {
@@ -970,7 +954,7 @@ func (s *session) RemoteAddr() net.Addr {
 	return s.conn.RemoteAddr()
 }
 
-func (s *session) handshakeStatus() <-chan handshakeEvent {
+func (s *session) handshakeStatus() <-chan error {
 	return s.handshakeChan
 }
 

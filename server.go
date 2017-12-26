@@ -20,7 +20,7 @@ import (
 type packetHandler interface {
 	Session
 	getCryptoStream() cryptoStreamI
-	handshakeStatus() <-chan handshakeEvent
+	handshakeStatus() <-chan error
 	handlePacket(*receivedPacket)
 	GetVersion() protocol.VersionNumber
 	run() error
@@ -391,14 +391,8 @@ func (s *server) runHandshakeAndSession(session packetHandler, connID protocol.C
 	}()
 
 	go func() {
-		for {
-			ev := <-session.handshakeStatus()
-			if ev.err != nil {
-				return
-			}
-			if ev.encLevel == protocol.EncryptionForwardSecure {
-				break
-			}
+		if err := <-session.handshakeStatus(); err != nil {
+			return
 		}
 		s.sessionQueue <- session
 	}()

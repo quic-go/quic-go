@@ -42,7 +42,7 @@ type cryptoSetupServer struct {
 
 	receivedParams bool
 	paramsChan     chan<- TransportParameters
-	aeadChanged    chan<- protocol.EncryptionLevel
+	handshakeEvent chan<- struct{}
 
 	keyDerivation QuicCryptoKeyDerivationFunction
 	keyExchange   KeyExchangeFunction
@@ -76,7 +76,7 @@ func NewCryptoSetup(
 	supportedVersions []protocol.VersionNumber,
 	acceptSTK func(net.Addr, *Cookie) bool,
 	paramsChan chan<- TransportParameters,
-	aeadChanged chan<- protocol.EncryptionLevel,
+	handshakeEvent chan<- struct{},
 ) (CryptoSetup, error) {
 	nullAEAD, err := crypto.NewNullAEAD(protocol.PerspectiveServer, connID, version)
 	if err != nil {
@@ -96,7 +96,7 @@ func NewCryptoSetup(
 		acceptSTKCallback: acceptSTK,
 		sentSHLO:          make(chan struct{}),
 		paramsChan:        paramsChan,
-		aeadChanged:       aeadChanged,
+		handshakeEvent:    handshakeEvent,
 	}, nil
 }
 
@@ -182,7 +182,7 @@ func (h *cryptoSetupServer) handleMessage(chloData []byte, cryptoData map[Tag][]
 		if _, err := h.cryptoStream.Write(reply); err != nil {
 			return false, err
 		}
-		h.aeadChanged <- protocol.EncryptionForwardSecure
+		h.handshakeEvent <- struct{}{}
 		close(h.sentSHLO)
 		return true, nil
 	}
@@ -206,9 +206,9 @@ func (h *cryptoSetupServer) Open(dst, src []byte, packetNumber protocol.PacketNu
 		if err == nil {
 			if !h.receivedForwardSecurePacket { // this is the first forward secure packet we receive from the client
 				h.receivedForwardSecurePacket = true
-				// wait until protocol.EncryptionForwardSecure was sent on the aeadChan
+				// wait for the send on the handshakeEvent chan
 				<-h.sentSHLO
-				close(h.aeadChanged)
+				close(h.handshakeEvent)
 			}
 			return res, protocol.EncryptionForwardSecure, nil
 		}
@@ -396,8 +396,7 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 	if err != nil {
 		return nil, err
 	}
-
-	h.aeadChanged <- protocol.EncryptionSecure
+	h.handshakeEvent <- struct{}{}
 
 	// Generate a new curve instance to derive the forward secure key
 	var fsNonce bytes.Buffer
