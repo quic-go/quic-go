@@ -396,9 +396,16 @@ runLoop:
 			s.keepAlivePingSent = true
 		}
 
-		if err := s.sendPacket(); err != nil {
-			s.closeLocal(err)
+		if !s.sentPacketHandler.SendingAllowed() { // if congestion limited, at least try sending an ACK frame
+			if err := s.maybeSendAckOnlyPacket(); err != nil {
+				s.closeLocal(err)
+			}
+		} else {
+			if err := s.sendPacket(); err != nil {
+				s.closeLocal(err)
+			}
 		}
+
 		if !s.receivedTooManyUndecrytablePacketsTime.IsZero() && s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout).Before(now) && len(s.undecryptablePackets) != 0 {
 			s.closeLocal(qerr.Error(qerr.DecryptionFailure, "too many undecryptable packets received"))
 		}
@@ -702,6 +709,25 @@ func (s *session) processTransportParameters(params *handshake.TransportParamete
 	})
 }
 
+func (s *session) maybeSendAckOnlyPacket() error {
+	ack := s.receivedPacketHandler.GetAckFrame()
+	if ack == nil {
+		return nil
+	}
+	s.packer.QueueControlFrame(ack)
+
+	if !s.version.UsesIETFFrameFormat() { // for gQUIC, maybe add a STOP_WAITING
+		if swf := s.sentPacketHandler.GetStopWaitingFrame(false); swf != nil {
+			s.packer.QueueControlFrame(swf)
+		}
+	}
+	packet, err := s.packer.PackAckPacket()
+	if err != nil {
+		return err
+	}
+	return s.sendPackedPacket(packet)
+}
+
 func (s *session) sendPacket() error {
 	s.packer.SetLeastUnacked(s.sentPacketHandler.GetLeastUnacked())
 
@@ -721,20 +747,7 @@ func (s *session) sendPacket() error {
 	// Repeatedly try sending until we don't have any more data, or run out of the congestion window
 	for {
 		if !s.sentPacketHandler.SendingAllowed() {
-			if ack == nil {
-				return nil
-			}
-			// If we aren't allowed to send, at least try sending an ACK frame
-			if !s.version.UsesIETFFrameFormat() {
-				if swf := s.sentPacketHandler.GetStopWaitingFrame(false); swf != nil {
-					s.packer.QueueControlFrame(swf)
-				}
-			}
-			packet, err := s.packer.PackAckPacket()
-			if err != nil {
-				return err
-			}
-			return s.sendPackedPacket(packet)
+			return nil
 		}
 
 		// check for retransmissions first
@@ -757,7 +770,7 @@ func (s *session) sendPacket() error {
 				if err != nil {
 					return err
 				}
-				if err = s.sendPackedPacket(packet); err != nil {
+				if err := s.sendPackedPacket(packet); err != nil {
 					return err
 				}
 			} else {
@@ -792,7 +805,6 @@ func (s *session) sendPacket() error {
 		if err = s.sendPackedPacket(packet); err != nil {
 			return err
 		}
-
 		ack = nil
 	}
 }
