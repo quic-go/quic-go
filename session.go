@@ -408,11 +408,18 @@ runLoop:
 			s.keepAlivePingSent = true
 		}
 
-		var err error
-		sentPacket, err = s.sendPacket()
-		if err != nil {
-			s.closeLocal(err)
+		if s.sentPacketHandler.TimeUntilSend() == utils.InfDuration { // if congestion limited, at least try sending an ACK frame
+			if err := s.maybeSendAckOnlyPacket(); err != nil {
+				s.closeLocal(err)
+			}
+		} else {
+			var err error
+			sentPacket, err = s.sendPacket()
+			if err != nil {
+				s.closeLocal(err)
+			}
 		}
+
 		if !s.receivedTooManyUndecrytablePacketsTime.IsZero() && s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout).Before(now) && len(s.undecryptablePackets) != 0 {
 			s.closeLocal(qerr.Error(qerr.DecryptionFailure, "too many undecryptable packets received"))
 		}
@@ -724,6 +731,25 @@ func (s *session) processTransportParameters(params *handshake.TransportParamete
 	})
 }
 
+func (s *session) maybeSendAckOnlyPacket() error {
+	ack := s.receivedPacketHandler.GetAckFrame()
+	if ack == nil {
+		return nil
+	}
+	s.packer.QueueControlFrame(ack)
+
+	if !s.version.UsesIETFFrameFormat() { // for gQUIC, maybe add a STOP_WAITING
+		if swf := s.sentPacketHandler.GetStopWaitingFrame(false); swf != nil {
+			s.packer.QueueControlFrame(swf)
+		}
+	}
+	packet, err := s.packer.PackAckPacket()
+	if err != nil {
+		return err
+	}
+	return s.sendPackedPacket(packet)
+}
+
 func (s *session) sendPacket() (bool /* was a packet sent */, error) {
 	s.packer.SetLeastUnacked(s.sentPacketHandler.GetLeastUnacked())
 
@@ -738,26 +764,6 @@ func (s *session) sendPacket() (bool /* was a packet sent */, error) {
 	ack := s.receivedPacketHandler.GetAckFrame()
 	if ack != nil {
 		s.packer.QueueControlFrame(ack)
-	}
-
-	timeUntilSend := s.sentPacketHandler.TimeUntilSend()
-	// send ACKs, even if we're congestion limited
-	if timeUntilSend == utils.InfDuration {
-		if ack == nil {
-			return false, nil
-		}
-		// If we aren't allowed to send, at least try sending an ACK frame
-		if !s.version.UsesIETFFrameFormat() {
-			swf := s.sentPacketHandler.GetStopWaitingFrame(false)
-			if swf != nil {
-				s.packer.QueueControlFrame(swf)
-			}
-		}
-		packet, err := s.packer.PackAckPacket()
-		if err != nil {
-			return false, err
-		}
-		return true, s.sendPackedPacket(packet)
 	}
 
 	// check for retransmissions first
