@@ -364,12 +364,12 @@ func (h *sentPacketHandler) GetStopWaitingFrame(force bool) *wire.StopWaitingFra
 	return h.stopWaitingManager.GetStopWaitingFrame(force)
 }
 
-func (h *sentPacketHandler) TimeUntilSend() time.Duration {
+func (h *sentPacketHandler) TimeUntilSend(now time.Time) time.Duration {
 	// check if we're limited by the number of packets we're tracking
 	if protocol.PacketNumber(len(h.retransmissionQueue)+h.packetHistory.Len()) >= protocol.MaxTrackedSentPackets {
 		return utils.InfDuration
 	}
-	delay := h.congestion.TimeUntilSend(time.Now(), h.bytesInFlight)
+	delay := h.congestion.TimeUntilSend(now, h.bytesInFlight)
 	congestionLimited := delay == utils.InfDuration
 	// Workaround for #555:
 	// Always allow sending of retransmissions. This should probably be limited

@@ -724,27 +724,30 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("allows or denies sending based on congestion", func() {
+			now := time.Now()
 			handler.bytesInFlight = 100
 			Expect(handler.retransmissionQueue).To(BeEmpty())
-			cong.EXPECT().TimeUntilSend(gomock.Any(), protocol.ByteCount(100)).Return(time.Hour)
-			Expect(handler.TimeUntilSend()).To(Equal(time.Hour))
+			cong.EXPECT().TimeUntilSend(now, protocol.ByteCount(100)).Return(time.Hour)
+			Expect(handler.TimeUntilSend(now)).To(Equal(time.Hour))
 		})
 
 		It("allows or denies sending based on the number of tracked packets", func() {
-			cong.EXPECT().TimeUntilSend(gomock.Any(), gomock.Any()).Return(time.Hour)
-			Expect(handler.TimeUntilSend()).To(Equal(time.Hour))
+			now := time.Now()
+			cong.EXPECT().TimeUntilSend(now, gomock.Any()).Return(time.Hour)
+			Expect(handler.TimeUntilSend(now)).To(Equal(time.Hour))
 			handler.retransmissionQueue = make([]*Packet, protocol.MaxTrackedSentPackets)
-			Expect(handler.TimeUntilSend()).To(Equal(utils.InfDuration))
+			Expect(handler.TimeUntilSend(now)).To(Equal(utils.InfDuration))
 		})
 
 		It("allows sending if there are retransmisisons outstanding", func() {
+			now := time.Now()
 			cong.EXPECT().GetCongestionWindow().AnyTimes()
-			cong.EXPECT().TimeUntilSend(gomock.Any(), protocol.ByteCount(100)).Return(utils.InfDuration).Times(2)
+			cong.EXPECT().TimeUntilSend(now, protocol.ByteCount(100)).Return(utils.InfDuration).Times(2)
 			handler.bytesInFlight = 100
 			Expect(handler.retransmissionQueue).To(BeEmpty())
-			Expect(handler.TimeUntilSend()).To(Equal(utils.InfDuration))
+			Expect(handler.TimeUntilSend(now)).To(Equal(utils.InfDuration))
 			handler.retransmissionQueue = []*Packet{{PacketNumber: 3}}
-			Expect(handler.TimeUntilSend()).To(BeZero())
+			Expect(handler.TimeUntilSend(now)).To(BeZero())
 		})
 	})
 

@@ -929,7 +929,9 @@ var _ = Describe("Session", func() {
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().GetLeastUnacked()
 			sph.EXPECT().GetAlarmTimeout().AnyTimes()
-			sph.EXPECT().TimeUntilSend().Return(utils.InfDuration)
+			sph.EXPECT().TimeUntilSend(gomock.Any()).Do(func(now time.Time) {
+				Expect(now).To(BeTemporally("~", time.Now(), time.Second))
+			}).Return(utils.InfDuration)
 			sph.EXPECT().GetStopWaitingFrame(false).Return(swf)
 			sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
 				Expect(p.Frames).To(HaveLen(2))
@@ -958,7 +960,9 @@ var _ = Describe("Session", func() {
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().GetLeastUnacked()
 			sph.EXPECT().GetAlarmTimeout().AnyTimes()
-			sph.EXPECT().TimeUntilSend().Return(utils.InfDuration)
+			sph.EXPECT().TimeUntilSend(gomock.Any()).Do(func(now time.Time) {
+				Expect(now).To(BeTemporally("~", time.Now(), time.Second))
+			}).Return(utils.InfDuration)
 			sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
 				Expect(p.Frames).To(HaveLen(1))
 				Expect(p.Frames[0]).To(BeAssignableToTypeOf(&wire.AckFrame{}))
