@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -359,15 +360,19 @@ runLoop:
 
 		select {
 		case closeErr = <-s.closeChan:
+			fmt.Println("case 1")
 			break runLoop
 		case <-s.timer.Chan():
+			fmt.Println("case 2")
 			s.timer.SetRead()
 			// We do all the interesting stuff after the switch statement, so
 			// nothing to see here.
 		case <-s.sendingScheduled:
+			fmt.Println("case 3")
 			// We do all the interesting stuff after the switch statement, so
 			// nothing to see here.
 		case p := <-s.receivedPackets:
+			fmt.Println("case 4")
 			err := s.handlePacketImpl(p)
 			if err != nil {
 				if qErr, ok := err.(*qerr.QuicError); ok && qErr.ErrorCode == qerr.DecryptionFailure {
@@ -381,8 +386,10 @@ runLoop:
 			// begins with the public header and we never copy it.
 			putPacketBuffer(p.header.Raw)
 		case p := <-s.paramsChan:
+			fmt.Println("case 5")
 			s.processTransportParameters(&p)
 		case l, ok := <-aeadChanged:
+			fmt.Println("case 6")
 			if !ok { // the aeadChanged chan was closed. This means that the handshake is completed.
 				s.handshakeComplete = true
 				aeadChanged = nil // prevent this case from ever being selected again
@@ -408,22 +415,34 @@ runLoop:
 			s.keepAlivePingSent = true
 		}
 
+		fmt.Println("hallo")
+		pacingDeadline = time.Time{}
 		if !s.sentPacketHandler.SendingAllowed() { // if congestion limited, at least try sending an ACK frame
 			if err := s.maybeSendAckOnlyPacket(); err != nil {
 				s.closeLocal(err)
 			}
-			pacingDeadline = time.Time{} // don't pace when congestion limited
 		} else {
-			sentPacket, err := s.sendPacket()
-			if err != nil {
-				s.closeLocal(err)
-			}
-			if sentPacket { // start pacing if a packet was sent
-				if pacingDelay := s.sentPacketHandler.TimeUntilSend(now); pacingDelay != utils.InfDuration {
+			numPackets, pacingDelay := s.sentPacketHandler.TimeUntilSend(now) // numPackets is at least 1
+			fmt.Printf("num packets: %d, delay: %s\n", numPackets, pacingDelay)
+			if pacingDelay != utils.InfDuration {
+				var setPacingTimer bool
+				for i := 0; i < numPackets; i++ {
+					if i > 0 && !s.sentPacketHandler.SendingAllowed() { // for the first packet, we already checked that above
+						break
+					}
+					sentPacket, err := s.sendPacket()
+					if err != nil {
+						s.closeLocal(err)
+					}
+					fmt.Println("sent one packet", time.Now())
+					if !sentPacket {
+						break
+					}
+					setPacingTimer = true
+				}
+				if setPacingTimer {
 					pacingDeadline = now.Add(pacingDelay)
 				}
-			} else { // don't pace if there's nothing to send
-				pacingDeadline = time.Time{}
 			}
 		}
 
@@ -480,6 +499,8 @@ func (s *session) maybeResetTimer(pacingDeadline time.Time) {
 	if !pacingDeadline.IsZero() {
 		deadline = utils.MinTime(deadline, pacingDeadline)
 	}
+
+	fmt.Println("setting deadline to ", deadline)
 
 	s.timer.Reset(deadline)
 }

@@ -876,7 +876,7 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("sends multiple packets", func() {
+		FIt("paces multiple packets", func() {
 			sess.queueControlFrame(&wire.MaxDataFrame{ByteOffset: 1})
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().DequeuePacketForRetransmission().Times(2)
@@ -886,11 +886,14 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().SentPacket(gomock.Any()).Times(2)
 			sph.EXPECT().TimeUntilSend(gomock.Any()).Do(func(now time.Time) {
 				Expect(now).To(BeTemporally("~", time.Now(), time.Second))
-			}).Return(time.Millisecond).Times(2) // is called every time a packet is sent
-			sph.EXPECT().SendingAllowed().Do(func() { // after sending the first packet
+			}).Return(1, 200*time.Millisecond) // is called every time a packet is sent
+			sph.EXPECT().TimeUntilSend(gomock.Any()).Do(func(now time.Time) {
+				Expect(now).To(BeTemporally("~", time.Now(), time.Second))
+			}).Return(1, time.Hour)
+			sph.EXPECT().SendingAllowed().Do(func() { // is called before and after sending a packet
 				// make sure there's something to send
 				sess.queueControlFrame(&wire.MaxDataFrame{ByteOffset: 2})
-			}).Return(true).Times(2) // allow 2 packets...
+			}).Return(true).Times(4) // allow 2 packets...
 			sph.EXPECT().SendingAllowed() // ...then report that we're congestion limited
 			sess.sentPacketHandler = sph
 			done := make(chan struct{})
@@ -899,8 +902,10 @@ var _ = Describe("Session", func() {
 				sess.run()
 				close(done)
 			}()
-			sess.scheduleSending()
-			Eventually(mconn.written).Should(HaveLen(2))
+			// sess.scheduleSending()
+			Eventually(mconn.written).Should(HaveLen(1))
+			Consistently(mconn.written, 100*time.Millisecond).Should(HaveLen(1))
+			Eventually(mconn.written, 200*time.Millisecond).Should(HaveLen(2))
 			// make the go routine return
 			sess.Close(nil)
 			Eventually(done).Should(BeClosed())
