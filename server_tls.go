@@ -12,6 +12,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/lucas-clemente/quic-go/qerr"
 )
 
 type nullAEAD struct {
@@ -98,6 +99,26 @@ func (s *serverTLS) newMintConnImpl(bc *handshake.CryptoStreamConn, v protocol.V
 	return tls, extHandler.GetPeerParams(), nil
 }
 
+func (s *serverTLS) sendConnectionClose(remoteAddr net.Addr, clientHdr *wire.Header, aead crypto.AEAD, closeErr error) error {
+	ccf := &wire.ConnectionCloseFrame{
+		ErrorCode:    qerr.HandshakeFailed,
+		ReasonPhrase: closeErr.Error(),
+	}
+	replyHdr := &wire.Header{
+		IsLongHeader: true,
+		Type:         protocol.PacketTypeHandshake,
+		ConnectionID: clientHdr.ConnectionID, // echo the client's connection ID
+		PacketNumber: 1,                      // random packet number
+		Version:      clientHdr.Version,
+	}
+	data, err := packUnencryptedPacket(aead, replyHdr, ccf, protocol.PerspectiveServer)
+	if err != nil {
+		return err
+	}
+	_, err = s.conn.WriteTo(data, remoteAddr)
+	return err
+}
+
 func (s *serverTLS) handleInitialImpl(remoteAddr net.Addr, hdr *wire.Header, data []byte) (packetHandler, error) {
 	if len(hdr.Raw)+len(data) < protocol.MinInitialPacketSize {
 		return nil, errors.New("dropping too small Initial packet")
@@ -110,19 +131,30 @@ func (s *serverTLS) handleInitialImpl(remoteAddr net.Addr, hdr *wire.Header, dat
 	}
 
 	// unpack packet and check stream frame contents
-	version := hdr.Version
-	aead, err := crypto.NewNullAEAD(protocol.PerspectiveServer, hdr.ConnectionID, version)
+	aead, err := crypto.NewNullAEAD(protocol.PerspectiveServer, hdr.ConnectionID, hdr.Version)
 	if err != nil {
 		return nil, err
 	}
-	frame, err := unpackInitialPacket(aead, hdr, data, version)
+	frame, err := unpackInitialPacket(aead, hdr, data, hdr.Version)
 	if err != nil {
 		utils.Debugf("Error unpacking initial packet: %s", err)
 		return nil, nil
 	}
+	sess, err := s.handleUnpackedInitial(remoteAddr, hdr, frame, aead)
+	if err != nil {
+		if ccerr := s.sendConnectionClose(remoteAddr, hdr, aead, err); ccerr != nil {
+			utils.Debugf("Error sending CONNECTION_CLOSE: ", ccerr)
+		}
+		return nil, err
+	}
+	return sess, nil
+}
+
+func (s *serverTLS) handleUnpackedInitial(remoteAddr net.Addr, hdr *wire.Header, frame *wire.StreamFrame, aead crypto.AEAD) (packetHandler, error) {
+	version := hdr.Version
 	bc := handshake.NewCryptoStreamConn(remoteAddr)
 	bc.AddDataForReading(frame.Data)
-	tls, paramsChan, err := s.newMintConn(bc, hdr.Version)
+	tls, paramsChan, err := s.newMintConn(bc, version)
 	if err != nil {
 		return nil, err
 	}

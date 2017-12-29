@@ -4,15 +4,16 @@ import (
 	"bytes"
 	"io"
 
-	"github.com/lucas-clemente/quic-go/internal/mocks"
-	"github.com/lucas-clemente/quic-go/internal/mocks/handshake"
-
 	"github.com/bifurcation/mint"
 	"github.com/lucas-clemente/quic-go/internal/crypto"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
+	"github.com/lucas-clemente/quic-go/internal/mocks"
+	"github.com/lucas-clemente/quic-go/internal/mocks/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/lucas-clemente/quic-go/qerr"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -63,6 +64,18 @@ var _ = Describe("Stateless TLS handling", func() {
 		data := aead.Seal(nil, buf.Bytes(), 1, hdr.Raw)
 		Expect(len(hdr.Raw) + len(data)).To(Equal(protocol.MinInitialPacketSize))
 		return hdr, data
+	}
+
+	unpackPacket := func(data []byte) (*wire.Header, []byte) {
+		r := bytes.NewReader(conn.dataWritten.Bytes())
+		hdr, err := wire.ParseHeaderSentByServer(r, protocol.VersionTLS)
+		Expect(err).ToNot(HaveOccurred())
+		hdr.Raw = data[:len(data)-r.Len()]
+		aead, err := crypto.NewNullAEAD(protocol.PerspectiveClient, hdr.ConnectionID, protocol.VersionTLS)
+		Expect(err).ToNot(HaveOccurred())
+		payload, err := aead.Open(nil, data[len(data)-r.Len():], hdr.PacketNumber, hdr.Raw)
+		Expect(err).ToNot(HaveOccurred())
+		return hdr, payload
 	}
 
 	It("sends a version negotiation packet if it doesn't support the version", func() {
@@ -123,5 +136,21 @@ var _ = Describe("Stateless TLS handling", func() {
 		}()
 		Eventually(sessionChan).Should(Receive())
 		Eventually(done).Should(BeClosed())
+	})
+
+	It("sends a CONNECTION_CLOSE, if mint returns an error", func() {
+		mintTLS.EXPECT().Handshake().Return(mint.AlertAccessDenied)
+		extHandler.EXPECT().GetPeerParams()
+		hdr, data := getPacket(&wire.StreamFrame{Data: []byte("Client Hello")})
+		server.HandleInitial(nil, hdr, data)
+		// the Handshake packet is written by the session
+		Expect(conn.dataWritten.Bytes()).ToNot(BeEmpty())
+		// unpack the packet to check that it actually contains a CONNECTION_CLOSE
+		hdr, data = unpackPacket(conn.dataWritten.Bytes())
+		Expect(hdr.Type).To(Equal(protocol.PacketTypeHandshake))
+		ccf, err := wire.ParseConnectionCloseFrame(bytes.NewReader(data), protocol.VersionTLS)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(ccf.ErrorCode).To(Equal(qerr.HandshakeFailed))
+		Expect(ccf.ReasonPhrase).To(Equal(mint.AlertAccessDenied.String()))
 	})
 })
