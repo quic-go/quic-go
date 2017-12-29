@@ -46,7 +46,7 @@ var _ = Describe("Cubic Sender", func() {
 	SendAvailableSendWindowLen := func(packetLength protocol.ByteCount) int {
 		// Send as long as TimeUntilSend returns InfDuration.
 		packets_sent := 0
-		for sender.TimeUntilSend(clock.Now(), bytesInFlight) != utils.InfDuration {
+		for sender.TimeUntilSend(clock.Now(), bytesInFlight) != utils.InfDuration && bytesInFlight < sender.GetCongestionWindow() {
 			sender.OnPacketSent(clock.Now(), bytesInFlight, packetNumber, packetLength, true)
 			packetNumber++
 			packets_sent++
@@ -85,7 +85,7 @@ var _ = Describe("Cubic Sender", func() {
 	AckNPackets := func(n int) { AckNPacketsLen(n, protocol.DefaultTCPMSS) }
 	LoseNPackets := func(n int) { LoseNPacketsLen(n, protocol.DefaultTCPMSS) }
 
-	It("simpler sender", func() {
+	It("has the right values at startup", func() {
 		// At startup make sure we are at the default.
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
 		// At startup make sure we can send.
@@ -94,10 +94,6 @@ var _ = Describe("Cubic Sender", func() {
 		Expect(sender.TimeUntilSend(clock.Now(), 0)).To(BeZero())
 		// And that window is un-affected.
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
-
-		// Fill the send window with data, then verify that we can't send.
-		SendAvailableSendWindow()
-		Expect(sender.TimeUntilSend(clock.Now(), sender.GetCongestionWindow())).ToNot(BeZero())
 	})
 
 	It("paces", func() {

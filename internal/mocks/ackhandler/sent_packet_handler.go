@@ -119,6 +119,18 @@ func (mr *MockSentPacketHandlerMockRecorder) ReceivedAck(arg0, arg1, arg2, arg3 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedAck", reflect.TypeOf((*MockSentPacketHandler)(nil).ReceivedAck), arg0, arg1, arg2, arg3)
 }
 
+// SendingAllowed mocks base method
+func (m *MockSentPacketHandler) SendingAllowed() bool {
+	ret := m.ctrl.Call(m, "SendingAllowed")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// SendingAllowed indicates an expected call of SendingAllowed
+func (mr *MockSentPacketHandlerMockRecorder) SendingAllowed() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendingAllowed", reflect.TypeOf((*MockSentPacketHandler)(nil).SendingAllowed))
+}
+
 // SentPacket mocks base method
 func (m *MockSentPacketHandler) SentPacket(arg0 *ackhandler.Packet) error {
 	ret := m.ctrl.Call(m, "SentPacket", arg0)

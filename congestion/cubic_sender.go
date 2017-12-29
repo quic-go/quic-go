@@ -80,14 +80,10 @@ func NewCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestio
 }
 
 // TimeUntilSend returns when the next packet should be sent.
-// When congestion limited, it returns an infinite duration (utils.InfDuration).
 func (c *cubicSender) TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCount) time.Duration {
 	if c.InRecovery() {
 		// PRR is used when in recovery.
 		return c.prr.TimeUntilSend(c.GetCongestionWindow(), bytesInFlight, c.GetSlowStartThreshold())
-	}
-	if c.GetCongestionWindow() <= bytesInFlight {
-		return utils.InfDuration
 	}
 	delay := c.rttStats.SmoothedRTT() / time.Duration(2*c.GetCongestionWindow()/protocol.DefaultTCPMSS)
 	if !c.InSlowStart() { // adjust delay, such that it's 1.25*cwd/rtt

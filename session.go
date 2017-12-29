@@ -408,23 +408,23 @@ runLoop:
 			s.keepAlivePingSent = true
 		}
 
-		var sentPacket bool
-		pacingDelay := s.sentPacketHandler.TimeUntilSend(now)
-		if pacingDelay == utils.InfDuration { // if congestion limited, at least try sending an ACK frame
+		if !s.sentPacketHandler.SendingAllowed() { // if congestion limited, at least try sending an ACK frame
 			if err := s.maybeSendAckOnlyPacket(); err != nil {
 				s.closeLocal(err)
 			}
+			pacingDeadline = time.Time{} // don't pace when congestion limited
 		} else {
-			var err error
-			sentPacket, err = s.sendPacket()
+			sentPacket, err := s.sendPacket()
 			if err != nil {
 				s.closeLocal(err)
 			}
-		}
-		if sentPacket {
-			pacingDeadline = now.Add(pacingDelay)
-		} else {
-			pacingDeadline = time.Time{}
+			if sentPacket { // start pacing if a packet was sent
+				if pacingDelay := s.sentPacketHandler.TimeUntilSend(now); pacingDelay != utils.InfDuration {
+					pacingDeadline = now.Add(pacingDelay)
+				}
+			} else { // don't pace if there's nothing to send
+				pacingDeadline = time.Time{}
+			}
 		}
 
 		if !s.receivedTooManyUndecrytablePacketsTime.IsZero() && s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout).Before(now) && len(s.undecryptablePackets) != 0 {
