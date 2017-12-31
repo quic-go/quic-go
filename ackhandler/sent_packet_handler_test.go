@@ -723,27 +723,35 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("allows or denies sending based on congestion", func() {
-			Expect(handler.retransmissionQueue).To(BeEmpty())
 			handler.bytesInFlight = 100
-			cong.EXPECT().GetCongestionWindow().Return(protocol.MaxByteCount)
+			cong.EXPECT().GetCongestionWindow().Return(protocol.ByteCount(200))
 			Expect(handler.SendingAllowed()).To(BeTrue())
-			cong.EXPECT().GetCongestionWindow().Return(protocol.ByteCount(0))
+			cong.EXPECT().GetCongestionWindow().Return(protocol.ByteCount(75))
 			Expect(handler.SendingAllowed()).To(BeFalse())
 		})
 
 		It("allows or denies sending based on the number of tracked packets", func() {
-			cong.EXPECT().GetCongestionWindow().Return(protocol.MaxByteCount).AnyTimes()
+			cong.EXPECT().GetCongestionWindow().Times(2)
 			Expect(handler.SendingAllowed()).To(BeTrue())
 			handler.retransmissionQueue = make([]*Packet, protocol.MaxTrackedSentPackets)
 			Expect(handler.SendingAllowed()).To(BeFalse())
 		})
 
 		It("allows sending if there are retransmisisons outstanding", func() {
+			cong.EXPECT().GetCongestionWindow().Times(2)
 			handler.bytesInFlight = 100
-			cong.EXPECT().GetCongestionWindow().Return(protocol.ByteCount(0)).AnyTimes()
+			Expect(handler.retransmissionQueue).To(BeEmpty())
 			Expect(handler.SendingAllowed()).To(BeFalse())
-			handler.retransmissionQueue = []*Packet{nil}
+			handler.retransmissionQueue = []*Packet{{PacketNumber: 3}}
 			Expect(handler.SendingAllowed()).To(BeTrue())
+		})
+
+		It("gets the pacing delay", func() {
+			handler.bytesInFlight = protocol.ByteCount(100)
+			timestamp := time.Now().Add(time.Hour)
+			delay := 123 * time.Millisecond
+			cong.EXPECT().TimeUntilSend(timestamp, handler.bytesInFlight).Return(delay)
+			Expect(handler.TimeUntilSend(timestamp)).To(Equal(delay))
 		})
 	})
 

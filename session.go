@@ -335,6 +335,9 @@ func (s *session) run() error {
 
 	var closeErr closeError
 	handshakeEvent := s.handshakeEvent
+	var pacingDeadline time.Time
+
+	s.maybeResetTimer(time.Time{})
 
 runLoop:
 	for {
@@ -344,8 +347,6 @@ runLoop:
 			break runLoop
 		default:
 		}
-
-		s.maybeResetTimer()
 
 		select {
 		case closeErr = <-s.closeChan:
@@ -384,36 +385,48 @@ runLoop:
 		}
 
 		now := time.Now()
+
 		if timeout := s.sentPacketHandler.GetAlarmTimeout(); !timeout.IsZero() && timeout.Before(now) {
 			// This could cause packets to be retransmitted, so check it before trying
 			// to send packets.
 			s.sentPacketHandler.OnAlarm()
 		}
 
-		if s.config.KeepAlive && s.handshakeComplete && time.Since(s.lastNetworkActivityTime) >= s.peerParams.IdleTimeout/2 {
+		if s.config.KeepAlive && !s.keepAlivePingSent && s.handshakeComplete && time.Since(s.lastNetworkActivityTime) >= s.peerParams.IdleTimeout/2 {
 			// send the PING frame since there is no activity in the session
 			s.packer.QueueControlFrame(&wire.PingFrame{})
 			s.keepAlivePingSent = true
+		} else if !pacingDeadline.IsZero() && now.Before(pacingDeadline) {
+			// If we get to this point before the pacing deadline, we should wait until that deadline.
+			// This can happen when scheduleSending is called, or a packet is received.
+			// Set the timer and restart the run loop.
+			s.maybeResetTimer(pacingDeadline)
+			continue
 		}
 
+		var startPacingTimer bool
 		sendingAllowed := s.sentPacketHandler.SendingAllowed()
+		pacingDeadline = now.Add(s.sentPacketHandler.TimeUntilSend(now))
 		if !sendingAllowed { // if congestion limited, at least try sending an ACK frame
 			if err := s.maybeSendAckOnlyPacket(); err != nil {
 				s.closeLocal(err)
 			}
 		} else {
-			// repeatedly try sending until we don't have any more data, or run out of the congestion window
-			for sendingAllowed {
-				sentPacket, err := s.sendPacket()
-				if err != nil {
-					s.closeLocal(err)
-					break
-				}
-				if !sentPacket {
-					break
-				}
-				sendingAllowed = s.sentPacketHandler.SendingAllowed()
+			sentPacket, err := s.sendPacket()
+			if err != nil {
+				s.closeLocal(err)
 			}
+			if sentPacket {
+				// Only start the pacing timer if actually a packet was sent.
+				// If one packet was sent, there will probably be more to send when calling sendPacket again.
+				startPacingTimer = true
+			}
+		}
+
+		if startPacingTimer {
+			s.maybeResetTimer(pacingDeadline)
+		} else {
+			s.maybeResetTimer(time.Time{})
 		}
 
 		if !s.receivedTooManyUndecrytablePacketsTime.IsZero() && s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout).Before(now) && len(s.undecryptablePackets) != 0 {
@@ -440,7 +453,7 @@ func (s *session) Context() context.Context {
 	return s.ctx
 }
 
-func (s *session) maybeResetTimer() {
+func (s *session) maybeResetTimer(pacingDeadline time.Time) {
 	var deadline time.Time
 	if s.config.KeepAlive && s.handshakeComplete && !s.keepAlivePingSent {
 		deadline = s.lastNetworkActivityTime.Add(s.peerParams.IdleTimeout / 2)
@@ -460,6 +473,9 @@ func (s *session) maybeResetTimer() {
 	}
 	if !s.receivedTooManyUndecrytablePacketsTime.IsZero() {
 		deadline = utils.MinTime(deadline, s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout))
+	}
+	if !pacingDeadline.IsZero() {
+		deadline = utils.MinTime(deadline, pacingDeadline)
 	}
 
 	s.timer.Reset(deadline)
@@ -933,7 +949,7 @@ func (s *session) tryQueueingUndecryptablePacket(p *receivedPacket) {
 		// if this is the first time the undecryptablePackets runs full, start the timer to send a Public Reset
 		if s.receivedTooManyUndecrytablePacketsTime.IsZero() {
 			s.receivedTooManyUndecrytablePacketsTime = time.Now()
-			s.maybeResetTimer()
+			s.maybeResetTimer(time.Time{})
 		}
 		utils.Infof("Dropping undecrytable packet 0x%x (undecryptable packet queue full)", p.header.PacketNumber)
 		return

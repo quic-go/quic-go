@@ -378,6 +378,10 @@ func (h *sentPacketHandler) SendingAllowed() bool {
 	return !maxTrackedLimited && (!congestionLimited || haveRetransmissions)
 }
 
+func (h *sentPacketHandler) TimeUntilSend(now time.Time) time.Duration {
+	return h.congestion.TimeUntilSend(now, h.bytesInFlight)
+}
+
 func (h *sentPacketHandler) retransmitOldestTwoPackets() {
 	if p := h.packetHistory.Front(); p != nil {
 		h.queueRTO(p)
