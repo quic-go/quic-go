@@ -114,6 +114,8 @@ type session struct {
 
 	sessionCreationTime     time.Time
 	lastNetworkActivityTime time.Time
+	// pacingDeadline is the time when the next packet should be sent
+	pacingDeadline time.Time
 
 	peerParams *handshake.TransportParameters
 
@@ -355,6 +357,7 @@ func (s *session) run() error {
 
 runLoop:
 	for {
+
 		// Close immediately if requested
 		select {
 		case closeErr = <-s.closeChan:
@@ -413,29 +416,37 @@ runLoop:
 			s.sentPacketHandler.OnAlarm()
 		}
 
-		if s.config.KeepAlive && s.handshakeComplete && time.Since(s.lastNetworkActivityTime) >= s.peerParams.IdleTimeout/2 {
+		var pacingDeadline time.Time
+		if s.pacingDeadline.IsZero() { // the timer didn't have a pacing deadline set
+			pacingDeadline = s.sentPacketHandler.TimeUntilSend()
+		}
+		if s.config.KeepAlive && !s.keepAlivePingSent && s.handshakeComplete && time.Since(s.lastNetworkActivityTime) >= s.peerParams.IdleTimeout/2 {
 			// send the PING frame since there is no activity in the session
 			s.packer.QueueControlFrame(&wire.PingFrame{})
 			s.keepAlivePingSent = true
+		} else if !pacingDeadline.IsZero() && now.Before(pacingDeadline) {
+			// If we get to this point before the pacing deadline, we should wait until that deadline.
+			// This can happen when scheduleSending is called, or a packet is received.
+			// Set the timer and restart the run loop.
+			s.pacingDeadline = pacingDeadline
+			continue
 		}
 
+		s.pacingDeadline = time.Time{}
 		sendingAllowed := s.sentPacketHandler.SendingAllowed()
 		if !sendingAllowed { // if congestion limited, at least try sending an ACK frame
 			if err := s.maybeSendAckOnlyPacket(); err != nil {
 				s.closeLocal(err)
 			}
 		} else {
-			// repeatedly try sending until we don't have any more data, or run out of the congestion window
-			for sendingAllowed {
-				sentPacket, err := s.sendPacket()
-				if err != nil {
-					s.closeLocal(err)
-					break
-				}
-				if !sentPacket {
-					break
-				}
-				sendingAllowed = s.sentPacketHandler.SendingAllowed()
+			sentPacket, err := s.sendPacket()
+			if err != nil {
+				s.closeLocal(err)
+			}
+			if sentPacket {
+				// Only start the pacing timer if actually a packet was sent.
+				// If one packet was sent, there will probably be more to send when calling sendPacket again.
+				s.pacingDeadline = s.sentPacketHandler.TimeUntilSend()
 			}
 		}
 
@@ -487,6 +498,9 @@ func (s *session) maybeResetTimer() {
 	}
 	if !s.receivedTooManyUndecrytablePacketsTime.IsZero() {
 		deadline = utils.MinTime(deadline, s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout))
+	}
+	if !s.pacingDeadline.IsZero() {
+		deadline = utils.MinTime(deadline, s.pacingDeadline)
 	}
 
 	s.timer.Reset(deadline)

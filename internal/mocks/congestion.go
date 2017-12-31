@@ -142,13 +142,13 @@ func (mr *MockSendAlgorithmMockRecorder) SetSlowStartLargeReduction(arg0 interfa
 }
 
 // TimeUntilSend mocks base method
-func (m *MockSendAlgorithm) TimeUntilSend(arg0 time.Time, arg1 protocol.ByteCount) time.Duration {
-	ret := m.ctrl.Call(m, "TimeUntilSend", arg0, arg1)
+func (m *MockSendAlgorithm) TimeUntilSend(arg0 protocol.ByteCount) time.Duration {
+	ret := m.ctrl.Call(m, "TimeUntilSend", arg0)
 	ret0, _ := ret[0].(time.Duration)
 	return ret0
 }
 
 // TimeUntilSend indicates an expected call of TimeUntilSend
-func (mr *MockSendAlgorithmMockRecorder) TimeUntilSend(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TimeUntilSend", reflect.TypeOf((*MockSendAlgorithm)(nil).TimeUntilSend), arg0, arg1)
+func (mr *MockSendAlgorithmMockRecorder) TimeUntilSend(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TimeUntilSend", reflect.TypeOf((*MockSendAlgorithm)(nil).TimeUntilSend), arg0)
 }

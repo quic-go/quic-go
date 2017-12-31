@@ -164,3 +164,15 @@ func (m *MockSentPacketHandler) ShouldSendRetransmittablePacket() bool {
 func (mr *MockSentPacketHandlerMockRecorder) ShouldSendRetransmittablePacket() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShouldSendRetransmittablePacket", reflect.TypeOf((*MockSentPacketHandler)(nil).ShouldSendRetransmittablePacket))
 }
+
+// TimeUntilSend mocks base method
+func (m *MockSentPacketHandler) TimeUntilSend() time.Time {
+	ret := m.ctrl.Call(m, "TimeUntilSend")
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// TimeUntilSend indicates an expected call of TimeUntilSend
+func (mr *MockSentPacketHandlerMockRecorder) TimeUntilSend() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TimeUntilSend", reflect.TypeOf((*MockSentPacketHandler)(nil).TimeUntilSend))
+}
