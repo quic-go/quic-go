@@ -26,6 +26,11 @@ type roundTripperOpts struct {
 
 var dialAddr = quic.DialAddr
 
+// SetQuicDialer overrides the dialer used for connecting to quic servers
+func SetQuicDialer(qd func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.Session, error)) {
+	dialAddr = qd
+}
+
 // client is a HTTP2 client doing QUIC requests
 type client struct {
 	mutex sync.RWMutex
@@ -44,6 +49,7 @@ type client struct {
 	headerErrored chan struct{} // this channel is closed if an error occurs on the header stream
 	requestWriter *requestWriter
 
+	// Responses pending header receipt.
 	responses map[protocol.StreamID]chan *http.Response
 }
 
@@ -181,6 +187,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	resc := make(chan error, 1)
+	// This will write the request body in a separate goroutine.
 	if hasBody {
 		go func() {
 			resc <- c.writeRequestBody(dataStream, req.Body)
@@ -190,24 +197,23 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	var res *http.Response
 
 	var receivedResponse bool
-	var bodySent bool
 
-	if !hasBody {
-		bodySent = true
-	}
-
-	for !(bodySent && receivedResponse) {
+	// Wait until the response headers are fully received or an error happened.
+	// The request and response body are still open.
+	for !(receivedResponse) {
 		select {
 		case res = <-responseChan:
 			receivedResponse = true
 			c.mutex.Lock()
 			delete(c.responses, dataStream.StreamID())
 			c.mutex.Unlock()
+			// Response headers received - request may still be sending.
 		case err := <-resc:
-			bodySent = true
 			if err != nil {
+				// Error while sending the request body.
 				return nil, err
 			}
+			// Body was sent without errors. Continue to wait for response.
 		case <-c.headerErrored:
 			// an error occured on the header stream
 			_ = c.CloseWithError(c.headerErr)
