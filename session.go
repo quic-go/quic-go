@@ -405,9 +405,9 @@ runLoop:
 		}
 
 		var startPacingTimer bool
-		sendingAllowed := s.sentPacketHandler.SendingAllowed()
-		pacingDeadline = now.Add(s.sentPacketHandler.TimeUntilSend(now))
-		if !sendingAllowed { // if congestion limited, at least try sending an ACK frame
+		numPackets, pacingDelay := s.sentPacketHandler.TimeUntilSend(now)
+		packetsSent := 1
+		if !s.sentPacketHandler.SendingAllowed() { // if congestion limited, at least try sending an ACK frame
 			if err := s.maybeSendAckOnlyPacket(); err != nil {
 				s.closeLocal(err)
 			}
@@ -416,13 +416,29 @@ runLoop:
 			if err != nil {
 				s.closeLocal(err)
 			}
-			if sentPacket {
-				// Only start the pacing timer if actually a packet was sent.
-				// If one packet was sent, there will probably be more to send when calling sendPacket again.
-				startPacingTimer = true
+			// Only start the pacing timer if actually a packet was sent.
+			// If one packet was sent, there will probably be more to send when calling sendPacket again.
+			startPacingTimer = sentPacket
+			for i := 1; i < numPackets; i++ {
+				if !s.sentPacketHandler.SendingAllowed() {
+					// if we're congestion limited, there's no need to try to pace
+					startPacingTimer = false
+					break
+				}
+				sentPacket, err := s.sendPacket()
+				if err != nil {
+					s.closeLocal(err)
+				}
+				// Only start the pacing timer if we sent a packet.
+				startPacingTimer = sentPacket
+				if !sentPacket {
+					break
+				}
+				packetsSent++
 			}
 		}
 
+		pacingDeadline = now.Add(pacingDelay * time.Duration(packetsSent) / time.Duration(numPackets))
 		if startPacingTimer {
 			s.maybeResetTimer(pacingDeadline)
 		} else {

@@ -15,7 +15,7 @@ type SentPacketHandler interface {
 	SetHandshakeComplete()
 
 	SendingAllowed() bool
-	TimeUntilSend(now time.Time) time.Duration
+	TimeUntilSend(now time.Time) (numPackets int, nextDeadline time.Duration)
 	GetStopWaitingFrame(force bool) *wire.StopWaitingFrame
 	GetLowestPacketNotConfirmedAcked() protocol.PacketNumber
 	ShouldSendRetransmittablePacket() bool

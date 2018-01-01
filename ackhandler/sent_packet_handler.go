@@ -3,6 +3,7 @@ package ackhandler
 import (
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/congestion"
@@ -378,8 +379,16 @@ func (h *sentPacketHandler) SendingAllowed() bool {
 	return !maxTrackedLimited && (!congestionLimited || haveRetransmissions)
 }
 
-func (h *sentPacketHandler) TimeUntilSend(now time.Time) time.Duration {
-	return h.congestion.TimeUntilSend(now, h.bytesInFlight)
+// TimeUntilSend returns the pacing delay when the next packet should be sent, and the number of packets to send.
+// The returned duration is guaranteed to be larger than protocol.MinPacingDelay.
+// The returned number of packets is never smaller than 1.
+func (h *sentPacketHandler) TimeUntilSend(now time.Time) (int, time.Duration) {
+	delay := h.congestion.TimeUntilSend(now, h.bytesInFlight)
+	if delay == 0 || delay > protocol.MinPacingDelay {
+		return 1, delay
+	}
+	numPackets := int(math.Ceil(float64(protocol.MinPacingDelay) / float64(delay)))
+	return numPackets, delay * time.Duration(numPackets)
 }
 
 func (h *sentPacketHandler) retransmitOldestTwoPackets() {

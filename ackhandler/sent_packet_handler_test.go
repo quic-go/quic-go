@@ -749,9 +749,28 @@ var _ = Describe("SentPacketHandler", func() {
 		It("gets the pacing delay", func() {
 			handler.bytesInFlight = protocol.ByteCount(100)
 			timestamp := time.Now().Add(time.Hour)
-			delay := 123 * time.Millisecond
-			cong.EXPECT().TimeUntilSend(timestamp, handler.bytesInFlight).Return(delay)
-			Expect(handler.TimeUntilSend(timestamp)).To(Equal(delay))
+			pacingDelay := 123 * time.Millisecond
+			cong.EXPECT().TimeUntilSend(timestamp, handler.bytesInFlight).Return(pacingDelay)
+			numPackets, delay := handler.TimeUntilSend(timestamp)
+			Expect(delay).To(Equal(delay))
+			Expect(numPackets).To(Equal(1))
+		})
+
+		It("allows sending of multiple packets, if the pacing delay is smaller than the minimum", func() {
+			pacingDelay := protocol.MinPacingDelay / 10
+			cong.EXPECT().TimeUntilSend(gomock.Any(), gomock.Any()).Return(pacingDelay)
+			numPackets, delay := handler.TimeUntilSend(time.Now())
+			Expect(numPackets).To(Equal(10))
+			Expect(delay).To(Equal(protocol.MinPacingDelay))
+		})
+
+		It("allows sending of multiple packets, if the pacing delay is smaller than the minimum, and not a fraction", func() {
+			pacingDelay := protocol.MinPacingDelay * 2 / 5
+			cong.EXPECT().TimeUntilSend(gomock.Any(), gomock.Any()).Return(pacingDelay)
+			numPackets, delay := handler.TimeUntilSend(time.Now())
+			Expect(numPackets).To(Equal(3))
+			_ = numPackets
+			Expect(delay).To(Equal(protocol.MinPacingDelay * 6 / 5))
 		})
 	})
 
