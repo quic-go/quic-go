@@ -130,13 +130,6 @@ type Session interface {
 	Context() context.Context
 }
 
-// A NonFWSession is a QUIC connection between two peers half-way through the handshake.
-// The communication is encrypted, but not yet forward secure.
-type NonFWSession interface {
-	Session
-	WaitUntilHandshakeComplete() error
-}
-
 // Config contains all configuration data needed for a QUIC server or client.
 type Config struct {
 	// The QUIC versions that can be negotiated.

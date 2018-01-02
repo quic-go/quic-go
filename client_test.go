@@ -101,57 +101,7 @@ var _ = Describe("Client", func() {
 			generateConnectionID = origGenerateConnectionID
 		})
 
-		It("dials non-forward-secure", func() {
-			packetConn.dataToRead <- acceptClientVersionPacket(cl.connectionID)
-			dialed := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				s, err := DialNonFWSecure(packetConn, addr, "quic.clemente.io:1337", nil, config)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(s).ToNot(BeNil())
-				close(dialed)
-			}()
-			Consistently(dialed).ShouldNot(BeClosed())
-			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
-			Eventually(dialed).Should(BeClosed())
-		})
-
-		It("dials a non-forward-secure address", func() {
-			serverAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
-			Expect(err).ToNot(HaveOccurred())
-			server, err := net.ListenUDP("udp", serverAddr)
-			Expect(err).ToNot(HaveOccurred())
-			defer server.Close()
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				defer close(done)
-				for {
-					_, clientAddr, err := server.ReadFromUDP(make([]byte, 200))
-					if err != nil {
-						return
-					}
-					_, err = server.WriteToUDP(acceptClientVersionPacket(cl.connectionID), clientAddr)
-					Expect(err).ToNot(HaveOccurred())
-				}
-			}()
-
-			dialed := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				s, err := DialAddrNonFWSecure(server.LocalAddr().String(), nil, config)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(s).ToNot(BeNil())
-				close(dialed)
-			}()
-			Consistently(dialed).ShouldNot(BeClosed())
-			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
-			Eventually(dialed).Should(BeClosed())
-			server.Close()
-			Eventually(done).Should(BeClosed())
-		})
-
-		It("Dial only returns after the handshake is complete", func() {
+		It("returns after the handshake is complete", func() {
 			packetConn.dataToRead <- acceptClientVersionPacket(cl.connectionID)
 			dialed := make(chan struct{})
 			go func() {
@@ -161,9 +111,7 @@ var _ = Describe("Client", func() {
 				Expect(s).ToNot(BeNil())
 				close(dialed)
 			}()
-			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
-			Consistently(dialed).ShouldNot(BeClosed())
-			close(sess.handshakeComplete)
+			close(sess.handshakeChan)
 			Eventually(dialed).Should(BeClosed())
 		})
 
@@ -249,22 +197,7 @@ var _ = Describe("Client", func() {
 				Expect(err).To(MatchError(testErr))
 				close(done)
 			}()
-			sess.handshakeChan <- handshakeEvent{err: testErr}
-			Eventually(done).Should(BeClosed())
-		})
-
-		It("returns an error that occurs while waiting for the handshake to complete", func() {
-			testErr := errors.New("late handshake error")
-			packetConn.dataToRead <- acceptClientVersionPacket(cl.connectionID)
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
-				Expect(err).To(MatchError(testErr))
-				close(done)
-			}()
-			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
-			sess.handshakeComplete <- testErr
+			sess.handshakeChan <- testErr
 			Eventually(done).Should(BeClosed())
 		})
 
@@ -309,7 +242,7 @@ var _ = Describe("Client", func() {
 			) (packetHandler, error) {
 				return nil, testErr
 			}
-			_, err := DialNonFWSecure(packetConn, addr, "quic.clemente.io:1337", nil, config)
+			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
 			Expect(err).To(MatchError(testErr))
 		})
 
@@ -335,7 +268,7 @@ var _ = Describe("Client", func() {
 				Expect(newVersion).ToNot(Equal(cl.version))
 				Expect(config.Versions).To(ContainElement(newVersion))
 				sessionChan := make(chan *mockSession)
-				handshakeChan := make(chan handshakeEvent)
+				handshakeChan := make(chan error)
 				newClientSession = func(
 					_ connection,
 					_ string,
@@ -386,7 +319,7 @@ var _ = Describe("Client", func() {
 				Expect(negotiatedVersions).To(ContainElement(newVersion))
 				Expect(initialVersion).To(Equal(actualInitialVersion))
 
-				handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
+				close(handshakeChan)
 				Eventually(established).Should(BeClosed())
 			})
 

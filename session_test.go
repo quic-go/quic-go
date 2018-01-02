@@ -78,11 +78,11 @@ func areSessionsRunning() bool {
 
 var _ = Describe("Session", func() {
 	var (
-		sess        *session
-		scfg        *handshake.ServerConfig
-		mconn       *mockConnection
-		cryptoSetup *mockCryptoSetup
-		aeadChanged chan<- protocol.EncryptionLevel
+		sess          *session
+		scfg          *handshake.ServerConfig
+		mconn         *mockConnection
+		cryptoSetup   *mockCryptoSetup
+		handshakeChan chan<- struct{}
 	)
 
 	BeforeEach(func() {
@@ -99,9 +99,9 @@ var _ = Describe("Session", func() {
 			_ []protocol.VersionNumber,
 			_ func(net.Addr, *Cookie) bool,
 			_ chan<- handshake.TransportParameters,
-			aeadChangedP chan<- protocol.EncryptionLevel,
+			handshakeChanP chan<- struct{},
 		) (handshake.CryptoSetup, error) {
-			aeadChanged = aeadChangedP
+			handshakeChan = handshakeChanP
 			return cryptoSetup, nil
 		}
 
@@ -149,7 +149,7 @@ var _ = Describe("Session", func() {
 				_ []protocol.VersionNumber,
 				cookieFunc func(net.Addr, *Cookie) bool,
 				_ chan<- handshake.TransportParameters,
-				_ chan<- protocol.EncryptionLevel,
+				_ chan<- struct{},
 			) (handshake.CryptoSetup, error) {
 				cookieVerify = cookieFunc
 				return cryptoSetup, nil
@@ -514,61 +514,6 @@ var _ = Describe("Session", func() {
 	It("tells its versions", func() {
 		sess.version = 4242
 		Expect(sess.GetVersion()).To(Equal(protocol.VersionNumber(4242)))
-	})
-
-	Context("waiting until the handshake completes", func() {
-		It("waits until the handshake is complete", func() {
-			go func() {
-				defer GinkgoRecover()
-				sess.run()
-			}()
-
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				err := sess.WaitUntilHandshakeComplete()
-				Expect(err).ToNot(HaveOccurred())
-				close(done)
-			}()
-			aeadChanged <- protocol.EncryptionForwardSecure
-			Consistently(done).ShouldNot(BeClosed())
-			close(aeadChanged)
-			Eventually(done).Should(BeClosed())
-			Expect(sess.Close(nil)).To(Succeed())
-		})
-
-		It("errors if the handshake fails", func(done Done) {
-			testErr := errors.New("crypto error")
-			sess.cryptoSetup = &mockCryptoSetup{handleErr: testErr}
-			go sess.run()
-			err := sess.WaitUntilHandshakeComplete()
-			Expect(err).To(MatchError(testErr))
-			close(done)
-		}, 0.5)
-
-		It("returns when Close is called", func(done Done) {
-			testErr := errors.New("close error")
-			go sess.run()
-			var waitReturned bool
-			go func() {
-				defer GinkgoRecover()
-				err := sess.WaitUntilHandshakeComplete()
-				Expect(err).To(MatchError(testErr))
-				waitReturned = true
-			}()
-			sess.Close(testErr)
-			Eventually(func() bool { return waitReturned }).Should(BeTrue())
-			close(done)
-		})
-
-		It("doesn't wait if the handshake is already completed", func(done Done) {
-			go sess.run()
-			close(aeadChanged)
-			err := sess.WaitUntilHandshakeComplete()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(sess.Close(nil)).To(Succeed())
-			close(done)
-		})
 	})
 
 	Context("accepting streams", func() {
@@ -1278,46 +1223,48 @@ var _ = Describe("Session", func() {
 		})
 	})
 
-	It("send a handshake event on the handshakeChan when the AEAD changes to secure", func(done Done) {
-		go sess.run()
-		aeadChanged <- protocol.EncryptionSecure
-		Eventually(sess.handshakeStatus()).Should(Receive(&handshakeEvent{encLevel: protocol.EncryptionSecure}))
+	It("doesn't do anything when the crypto setup says to decrypt undecryptable packets", func() {
+		done := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			err := sess.run()
+			Expect(err).ToNot(HaveOccurred())
+			close(done)
+		}()
+		handshakeChan <- struct{}{}
+		Consistently(sess.handshakeStatus()).ShouldNot(Receive())
+		// make sure the go routine returns
 		Expect(sess.Close(nil)).To(Succeed())
-		close(done)
+		Eventually(done).Should(BeClosed())
 	})
 
-	It("send a handshake event on the handshakeChan when the AEAD changes to forward-secure", func(done Done) {
-		go sess.run()
-		aeadChanged <- protocol.EncryptionForwardSecure
-		Eventually(sess.handshakeStatus()).Should(Receive(&handshakeEvent{encLevel: protocol.EncryptionForwardSecure}))
-		Expect(sess.Close(nil)).To(Succeed())
-		close(done)
-	})
-
-	It("closes the handshakeChan when the handshake completes", func(done Done) {
-		go sess.run()
-		close(aeadChanged)
+	It("closes the handshakeChan when the handshake completes", func() {
+		done := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			err := sess.run()
+			Expect(err).ToNot(HaveOccurred())
+			close(done)
+		}()
+		close(handshakeChan)
 		Eventually(sess.handshakeStatus()).Should(BeClosed())
+		// make sure the go routine returns
 		Expect(sess.Close(nil)).To(Succeed())
-		close(done)
+		Eventually(done).Should(BeClosed())
 	})
 
-	It("passes errors to the handshakeChan", func(done Done) {
+	It("passes errors to the handshakeChan", func() {
 		testErr := errors.New("handshake error")
-		go sess.run()
-		Expect(sess.Close(nil)).To(Succeed())
-		Expect(sess.handshakeStatus()).To(Receive(&handshakeEvent{err: testErr}))
-		close(done)
-	})
-
-	It("does not block if an error occurs", func(done Done) {
-		// this test basically tests that the handshakeChan has a capacity of 3
-		// The session needs to run (and close) properly, even if no one is receiving from the handshakeChan
-		go sess.run()
-		aeadChanged <- protocol.EncryptionSecure
-		aeadChanged <- protocol.EncryptionForwardSecure
-		Expect(sess.Close(nil)).To(Succeed())
-		close(done)
+		done := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			err := sess.run()
+			Expect(err).To(MatchError(testErr))
+			close(done)
+		}()
+		sess.Close(testErr)
+		Expect(sess.handshakeStatus()).To(Receive(Equal(testErr)))
+		Eventually(done).Should(BeClosed())
 	})
 
 	It("process transport parameters received from the peer", func() {
@@ -1419,7 +1366,7 @@ var _ = Describe("Session", func() {
 
 		It("closes the session due to the idle timeout after handshake", func() {
 			sess.config.IdleTimeout = 0
-			close(aeadChanged)
+			close(handshakeChan)
 			errChan := make(chan error)
 			go func() {
 				defer GinkgoRecover()
@@ -1535,9 +1482,9 @@ var _ = Describe("Session", func() {
 
 var _ = Describe("Client Session", func() {
 	var (
-		sess        *session
-		mconn       *mockConnection
-		aeadChanged chan<- protocol.EncryptionLevel
+		sess          *session
+		mconn         *mockConnection
+		handshakeChan chan<- struct{}
 
 		cryptoSetup *mockCryptoSetup
 	)
@@ -1554,11 +1501,11 @@ var _ = Describe("Client Session", func() {
 			_ *tls.Config,
 			_ *handshake.TransportParameters,
 			_ chan<- handshake.TransportParameters,
-			aeadChangedP chan<- protocol.EncryptionLevel,
+			handshakeChanP chan<- struct{},
 			_ protocol.VersionNumber,
 			_ []protocol.VersionNumber,
 		) (handshake.CryptoSetup, error) {
-			aeadChanged = aeadChangedP
+			handshakeChan = handshakeChanP
 			return cryptoSetup, nil
 		}
 
@@ -1590,10 +1537,13 @@ var _ = Describe("Client Session", func() {
 			sess.unpacker = &mockUnpacker{}
 		})
 
-		It("passes the diversification nonce to the cryptoSetup", func() {
+		It("passes the diversification nonce to the crypto setup", func() {
+			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				sess.run()
+				err := sess.run()
+				Expect(err).ToNot(HaveOccurred())
+				close(done)
 			}()
 			hdr.PacketNumber = 5
 			hdr.DiversificationNonce = []byte("foobar")
@@ -1601,16 +1551,7 @@ var _ = Describe("Client Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(func() []byte { return cryptoSetup.divNonce }).Should(Equal(hdr.DiversificationNonce))
 			Expect(sess.Close(nil)).To(Succeed())
+			Eventually(done).Should(BeClosed())
 		})
-	})
-
-	It("does not block if an error occurs", func(done Done) {
-		// this test basically tests that the handshakeChan has a capacity of 3
-		// The session needs to run (and close) properly, even if no one is receiving from the handshakeChan
-		go sess.run()
-		aeadChanged <- protocol.EncryptionSecure
-		aeadChanged <- protocol.EncryptionForwardSecure
-		Expect(sess.Close(nil)).To(Succeed())
-		close(done)
 	})
 })

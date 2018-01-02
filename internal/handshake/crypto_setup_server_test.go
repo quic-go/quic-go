@@ -124,7 +124,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		cs                *cryptoSetupServer
 		stream            *mockStream
 		paramsChan        chan TransportParameters
-		aeadChanged       chan protocol.EncryptionLevel
+		handshakeEvent    chan struct{}
 		nonce32           []byte
 		versionTag        []byte
 		validSTK          []byte
@@ -146,7 +146,7 @@ var _ = Describe("Server Crypto Setup", func() {
 
 		// use a buffered channel here, so that we can parse a CHLO without having to receive the TransportParameters to avoid blocking
 		paramsChan = make(chan TransportParameters, 1)
-		aeadChanged = make(chan protocol.EncryptionLevel, 2)
+		handshakeEvent = make(chan struct{}, 2)
 		stream = newMockStream()
 		kex = &mockKEX{}
 		signer = &mockSigner{}
@@ -170,7 +170,7 @@ var _ = Describe("Server Crypto Setup", func() {
 			supportedVersions,
 			nil,
 			paramsChan,
-			aeadChanged,
+			handshakeEvent,
 		)
 		Expect(err).NotTo(HaveOccurred())
 		cs = csInt.(*cryptoSetupServer)
@@ -343,10 +343,10 @@ var _ = Describe("Server Crypto Setup", func() {
 			err := cs.HandleCryptoStream()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stream.dataWritten.Bytes()).To(HavePrefix("REJ"))
-			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
+			Expect(handshakeEvent).To(Receive()) // for the switch to secure
 			Expect(stream.dataWritten.Bytes()).To(ContainSubstring("SHLO"))
-			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionForwardSecure)))
-			Expect(aeadChanged).ToNot(BeClosed())
+			Expect(handshakeEvent).To(Receive()) // for the switch to forward secure
+			Expect(handshakeEvent).ToNot(BeClosed())
 		})
 
 		It("rejects client nonces that have the wrong length", func() {
@@ -377,9 +377,9 @@ var _ = Describe("Server Crypto Setup", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stream.dataWritten.Bytes()).To(HavePrefix("SHLO"))
 			Expect(stream.dataWritten.Bytes()).ToNot(ContainSubstring("REJ"))
-			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
-			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionForwardSecure)))
-			Expect(aeadChanged).ToNot(BeClosed())
+			Expect(handshakeEvent).To(Receive()) // for the switch to secure
+			Expect(handshakeEvent).To(Receive()) // for the switch to forward secure
+			Expect(handshakeEvent).ToNot(BeClosed())
 		})
 
 		It("recognizes inchoate CHLOs missing SCID", func() {
@@ -535,7 +535,7 @@ var _ = Describe("Server Crypto Setup", func() {
 				TagKEXS: kexs,
 			})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
+			Expect(handshakeEvent).To(Receive()) // for the switch to secure
 			close(cs.sentSHLO)
 		}
 
@@ -657,7 +657,7 @@ var _ = Describe("Server Crypto Setup", func() {
 				cs.forwardSecureAEAD.(*mockcrypto.MockAEAD).EXPECT().Open(nil, []byte("forward secure encrypted"), protocol.PacketNumber(200), []byte{})
 				_, _, err := cs.Open(nil, []byte("forward secure encrypted"), 200, []byte{})
 				Expect(err).ToNot(HaveOccurred())
-				Expect(aeadChanged).To(BeClosed())
+				Expect(handshakeEvent).To(BeClosed())
 			})
 		})
 

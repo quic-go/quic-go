@@ -22,14 +22,13 @@ import (
 )
 
 type mockSession struct {
-	connectionID      protocol.ConnectionID
-	packetCount       int
-	closed            bool
-	closeReason       error
-	closedRemote      bool
-	stopRunLoop       chan struct{} // run returns as soon as this channel receives a value
-	handshakeChan     chan handshakeEvent
-	handshakeComplete chan error // for WaitUntilHandshakeComplete
+	connectionID  protocol.ConnectionID
+	packetCount   int
+	closed        bool
+	closeReason   error
+	closedRemote  bool
+	stopRunLoop   chan struct{} // run returns as soon as this channel receives a value
+	handshakeChan chan error
 }
 
 func (s *mockSession) handlePacket(*receivedPacket) {
@@ -39,9 +38,6 @@ func (s *mockSession) handlePacket(*receivedPacket) {
 func (s *mockSession) run() error {
 	<-s.stopRunLoop
 	return s.closeReason
-}
-func (s *mockSession) WaitUntilHandshakeComplete() error {
-	return <-s.handshakeComplete
 }
 func (s *mockSession) Close(e error) error {
 	if s.closed {
@@ -61,17 +57,16 @@ func (s *mockSession) closeRemote(e error) {
 func (s *mockSession) OpenStream() (Stream, error) {
 	return &stream{}, nil
 }
-func (s *mockSession) AcceptStream() (Stream, error)          { panic("not implemented") }
-func (s *mockSession) OpenStreamSync() (Stream, error)        { panic("not implemented") }
-func (s *mockSession) LocalAddr() net.Addr                    { panic("not implemented") }
-func (s *mockSession) RemoteAddr() net.Addr                   { panic("not implemented") }
-func (*mockSession) Context() context.Context                 { panic("not implemented") }
-func (*mockSession) GetVersion() protocol.VersionNumber       { return protocol.VersionWhatever }
-func (s *mockSession) handshakeStatus() <-chan handshakeEvent { return s.handshakeChan }
-func (*mockSession) getCryptoStream() cryptoStreamI           { panic("not implemented") }
+func (s *mockSession) AcceptStream() (Stream, error)    { panic("not implemented") }
+func (s *mockSession) OpenStreamSync() (Stream, error)  { panic("not implemented") }
+func (s *mockSession) LocalAddr() net.Addr              { panic("not implemented") }
+func (s *mockSession) RemoteAddr() net.Addr             { panic("not implemented") }
+func (*mockSession) Context() context.Context           { panic("not implemented") }
+func (*mockSession) GetVersion() protocol.VersionNumber { return protocol.VersionWhatever }
+func (s *mockSession) handshakeStatus() <-chan error    { return s.handshakeChan }
+func (*mockSession) getCryptoStream() cryptoStreamI     { panic("not implemented") }
 
 var _ Session = &mockSession{}
-var _ NonFWSession = &mockSession{}
 
 func newMockSession(
 	_ connection,
@@ -82,10 +77,9 @@ func newMockSession(
 	_ *Config,
 ) (packetHandler, error) {
 	s := mockSession{
-		connectionID:      connectionID,
-		handshakeChan:     make(chan handshakeEvent),
-		handshakeComplete: make(chan error),
-		stopRunLoop:       make(chan struct{}),
+		connectionID:  connectionID,
+		handshakeChan: make(chan error),
+		stopRunLoop:   make(chan struct{}),
 	}
 	return &s, nil
 }
@@ -155,9 +149,8 @@ var _ = Describe("Server", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			sess := serv.sessions[connID].(*mockSession)
-			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionSecure}
 			Consistently(func() Session { return acceptedSess }).Should(BeNil())
-			sess.handshakeChan <- handshakeEvent{encLevel: protocol.EncryptionForwardSecure}
+			close(sess.handshakeChan)
 			Eventually(func() Session { return acceptedSess }).Should(Equal(sess))
 			close(done)
 		}, 0.5)
@@ -173,7 +166,7 @@ var _ = Describe("Server", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			sess := serv.sessions[connID].(*mockSession)
-			sess.handshakeChan <- handshakeEvent{err: errors.New("handshake failed")}
+			sess.handshakeChan <- errors.New("handshake failed")
 			Consistently(func() bool { return accepted }).Should(BeFalse())
 			close(done)
 		})
