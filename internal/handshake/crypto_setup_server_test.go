@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"io"
 	"net"
 	"time"
 
@@ -63,35 +64,36 @@ func mockQuicCryptoKeyDerivation(forwardSecure bool, sharedSecret, nonces []byte
 }
 
 type mockStream struct {
-	unblockRead chan struct{} // close this chan to unblock Read
+	unblockRead chan struct{}
 	dataToRead  bytes.Buffer
 	dataWritten bytes.Buffer
 }
+
+var _ io.ReadWriter = &mockStream{}
+
+var errMockStreamClosing = errors.New("mock stream closing")
 
 func newMockStream() *mockStream {
 	return &mockStream{unblockRead: make(chan struct{})}
 }
 
+// call Close to make Read return
 func (s *mockStream) Read(p []byte) (int, error) {
 	n, _ := s.dataToRead.Read(p)
 	if n == 0 { // block if there's no data
 		<-s.unblockRead
+		return 0, errMockStreamClosing
 	}
 	return n, nil // never return an EOF
-}
-
-func (s *mockStream) ReadByte() (byte, error) {
-	return s.dataToRead.ReadByte()
 }
 
 func (s *mockStream) Write(p []byte) (int, error) {
 	return s.dataWritten.Write(p)
 }
 
-func (s *mockStream) Close() error                       { panic("not implemented") }
-func (s *mockStream) Reset(error)                        { panic("not implemented") }
-func (mockStream) CloseRemote(offset protocol.ByteCount) { panic("not implemented") }
-func (s mockStream) StreamID() protocol.StreamID         { panic("not implemented") }
+func (s *mockStream) close() {
+	close(s.unblockRead)
+}
 
 type mockCookieProtector struct {
 	data      []byte
@@ -181,10 +183,6 @@ var _ = Describe("Server Crypto Setup", func() {
 		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
 		cs.nullAEAD = mockcrypto.NewMockAEAD(mockCtrl)
 		cs.cryptoStream = stream
-	})
-
-	AfterEach(func() {
-		close(stream.unblockRead)
 	})
 
 	Context("diversification nonce", func() {
