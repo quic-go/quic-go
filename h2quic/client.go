@@ -26,6 +26,11 @@ type roundTripperOpts struct {
 
 var dialAddr = quic.DialAddr
 
+// SetQuicDialer overrides the dialer used for connecting to quic servers
+func SetQuicDialer(qd func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.Session, error)) {
+	dialAddr = qd
+}
+
 // client is a HTTP2 client doing QUIC requests
 type client struct {
 	mutex sync.RWMutex
