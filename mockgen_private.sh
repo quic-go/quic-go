@@ -8,7 +8,8 @@ TEMP_DIR=$(mktemp -d)
 mkdir -p $TEMP_DIR/src/github.com/lucas-clemente/quic-go/
 
 # copy all .go files to a temporary directory
-rsync -r --include='*.go' --include '*/' --exclude '*' $GOPATH/src/github.com/lucas-clemente/quic-go/ $TEMP_DIR/src/github.com/lucas-clemente/quic-go/
+# golang.org/x/crypto/curve25519/ uses Go compiler directives, which is confusing to mockgen
+rsync -r --exclude 'vendor/golang.org/x/crypto/curve25519/' --include='*.go' --include '*/' --exclude '*'   $GOPATH/src/github.com/lucas-clemente/quic-go/ $TEMP_DIR/src/github.com/lucas-clemente/quic-go/
 echo "type $5 = $4" >> $TEMP_DIR/src/github.com/lucas-clemente/quic-go/interface.go
 
 export GOPATH="$TEMP_DIR:$GOPATH"
