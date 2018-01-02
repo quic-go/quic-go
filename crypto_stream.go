@@ -13,7 +13,7 @@ type cryptoStreamI interface {
 	io.Reader
 	io.Writer
 	handleStreamFrame(*wire.StreamFrame) error
-	popStreamFrame(protocol.ByteCount) *wire.StreamFrame
+	popStreamFrame(protocol.ByteCount) (*wire.StreamFrame, bool)
 	closeForShutdown(error)
 	hasDataForWriting() bool
 	setReadOffset(protocol.ByteCount)

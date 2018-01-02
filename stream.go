@@ -16,9 +16,9 @@ const (
 
 // The streamSender is notified by the stream about various events.
 type streamSender interface {
-	scheduleSending()
 	queueControlFrame(wire.Frame)
 	onHasWindowUpdate(protocol.StreamID)
+	onHasStreamData(protocol.StreamID)
 }
 
 type streamI interface {
@@ -27,7 +27,7 @@ type streamI interface {
 	handleStreamFrame(*wire.StreamFrame) error
 	handleRstStreamFrame(*wire.RstStreamFrame) error
 	handleStopSendingFrame(*wire.StopSendingFrame)
-	popStreamFrame(maxBytes protocol.ByteCount) *wire.StreamFrame
+	popStreamFrame(maxBytes protocol.ByteCount) (*wire.StreamFrame, bool)
 	finished() bool
 	closeForShutdown(error)
 	// methods needed for flow control

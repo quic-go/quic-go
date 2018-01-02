@@ -238,10 +238,11 @@ func (mr *MockStreamIMockRecorder) handleStreamFrame(arg0 interface{}) *gomock.C
 }
 
 // popStreamFrame mocks base method
-func (m *MockStreamI) popStreamFrame(arg0 protocol.ByteCount) *wire.StreamFrame {
+func (m *MockStreamI) popStreamFrame(arg0 protocol.ByteCount) (*wire.StreamFrame, bool) {
 	ret := m.ctrl.Call(m, "popStreamFrame", arg0)
 	ret0, _ := ret[0].(*wire.StreamFrame)
-	return ret0
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
 }
 
 // popStreamFrame indicates an expected call of popStreamFrame

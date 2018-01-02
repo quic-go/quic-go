@@ -255,30 +255,6 @@ func (m *streamsMap) DeleteClosedStreams() error {
 	return nil
 }
 
-// RoundRobinIterate executes the streamLambda for every open stream, until the streamLambda returns false
-// It uses a round-robin-like scheduling to ensure that every stream is considered fairly
-// It prioritizes the the header-stream (StreamID 3)
-func (m *streamsMap) RoundRobinIterate(fn streamLambda) error {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	numStreams := len(m.streams)
-	startIndex := m.roundRobinIndex
-
-	for i := 0; i < numStreams; i++ {
-		streamID := m.openStreams[(i+startIndex)%numStreams]
-		cont, err := m.iterateFunc(streamID, fn)
-		if err != nil {
-			return err
-		}
-		m.roundRobinIndex = (m.roundRobinIndex + 1) % numStreams
-		if !cont {
-			break
-		}
-	}
-	return nil
-}
-
 // Range executes a callback for all streams, in pseudo-random order
 func (m *streamsMap) Range(cb func(s streamI)) {
 	m.mutex.RLock()

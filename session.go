@@ -961,6 +961,11 @@ func (s *session) onHasWindowUpdate(id protocol.StreamID) {
 	s.scheduleSending()
 }
 
+func (s *session) onHasStreamData(id protocol.StreamID) {
+	s.streamFramer.AddActiveStream(id)
+	s.scheduleSending()
+}
+
 func (s *session) LocalAddr() net.Addr {
 	return s.conn.LocalAddr()
 }
