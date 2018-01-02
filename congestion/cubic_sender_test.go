@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -43,15 +44,13 @@ var _ = Describe("Cubic Sender", func() {
 	})
 
 	SendAvailableSendWindowLen := func(packetLength protocol.ByteCount) int {
-		// Send as long as TimeUntilSend returns Zero.
+		// Send as long as TimeUntilSend returns InfDuration.
 		packets_sent := 0
-		can_send := sender.TimeUntilSend(clock.Now(), bytesInFlight) == 0
-		for can_send {
+		for sender.TimeUntilSend(clock.Now(), bytesInFlight) != utils.InfDuration && bytesInFlight < sender.GetCongestionWindow() {
 			sender.OnPacketSent(clock.Now(), bytesInFlight, packetNumber, packetLength, true)
 			packetNumber++
 			packets_sent++
 			bytesInFlight += packetLength
-			can_send = sender.TimeUntilSend(clock.Now(), bytesInFlight) == 0
 		}
 		return packets_sent
 	}
@@ -86,7 +85,7 @@ var _ = Describe("Cubic Sender", func() {
 	AckNPackets := func(n int) { AckNPacketsLen(n, protocol.DefaultTCPMSS) }
 	LoseNPackets := func(n int) { LoseNPacketsLen(n, protocol.DefaultTCPMSS) }
 
-	It("simpler sender", func() {
+	It("has the right values at startup", func() {
 		// At startup make sure we are at the default.
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
 		// At startup make sure we can send.
@@ -95,10 +94,20 @@ var _ = Describe("Cubic Sender", func() {
 		Expect(sender.TimeUntilSend(clock.Now(), 0)).To(BeZero())
 		// And that window is un-affected.
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
+	})
 
+	It("paces", func() {
+		clock.Advance(time.Hour)
 		// Fill the send window with data, then verify that we can't send.
 		SendAvailableSendWindow()
-		Expect(sender.TimeUntilSend(clock.Now(), sender.GetCongestionWindow())).ToNot(BeZero())
+		AckNPackets(1)
+		delay := sender.TimeUntilSend(clock.Now(), bytesInFlight)
+		Expect(delay).ToNot(BeZero())
+		Expect(delay).ToNot(Equal(utils.InfDuration))
+		// advance the clock by 1 ms, and check that the delay was decreased by 1 ms
+		Expect(delay).To(BeNumerically(">", time.Millisecond))
+		clock.Advance(time.Millisecond)
+		Expect(sender.TimeUntilSend(clock.Now(), bytesInFlight)).To(Equal(delay - time.Millisecond))
 	})
 
 	It("application limited slow start", func() {

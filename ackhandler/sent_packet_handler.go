@@ -3,6 +3,7 @@ package ackhandler
 import (
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/congestion"
@@ -365,18 +366,29 @@ func (h *sentPacketHandler) GetStopWaitingFrame(force bool) *wire.StopWaitingFra
 }
 
 func (h *sentPacketHandler) SendingAllowed() bool {
-	congestionLimited := h.bytesInFlight > h.congestion.GetCongestionWindow()
+	cwnd := h.congestion.GetCongestionWindow()
+	congestionLimited := h.bytesInFlight > cwnd
 	maxTrackedLimited := protocol.PacketNumber(len(h.retransmissionQueue)+h.packetHistory.Len()) >= protocol.MaxTrackedSentPackets
 	if congestionLimited {
-		utils.Debugf("Congestion limited: bytes in flight %d, window %d",
-			h.bytesInFlight,
-			h.congestion.GetCongestionWindow())
+		utils.Debugf("Congestion limited: bytes in flight %d, window %d", h.bytesInFlight, cwnd)
 	}
 	// Workaround for #555:
 	// Always allow sending of retransmissions. This should probably be limited
 	// to RTOs, but we currently don't have a nice way of distinguishing them.
 	haveRetransmissions := len(h.retransmissionQueue) > 0
 	return !maxTrackedLimited && (!congestionLimited || haveRetransmissions)
+}
+
+// TimeUntilSend returns the pacing delay when the next packet should be sent, and the number of packets to send.
+// The returned duration is guaranteed to be larger than protocol.MinPacingDelay.
+// The returned number of packets is never smaller than 1.
+func (h *sentPacketHandler) TimeUntilSend(now time.Time) (int, time.Duration) {
+	delay := h.congestion.TimeUntilSend(now, h.bytesInFlight)
+	if delay == 0 || delay > protocol.MinPacingDelay {
+		return 1, delay
+	}
+	numPackets := int(math.Ceil(float64(protocol.MinPacingDelay) / float64(delay)))
+	return numPackets, delay * time.Duration(numPackets)
 }
 
 func (h *sentPacketHandler) retransmitOldestTwoPackets() {

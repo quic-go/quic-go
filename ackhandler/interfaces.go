@@ -14,6 +14,7 @@ type SentPacketHandler interface {
 	ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, encLevel protocol.EncryptionLevel, recvTime time.Time) error
 	SetHandshakeComplete()
 
+	TimeUntilSend(now time.Time) (numPackets int, nextDeadline time.Duration)
 	SendingAllowed() bool
 	GetStopWaitingFrame(force bool) *wire.StopWaitingFrame
 	GetLowestPacketNotConfirmedAcked() protocol.PacketNumber

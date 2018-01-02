@@ -3,59 +3,14 @@ package ackhandler
 import (
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/congestion"
+	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
-
-type mockCongestion struct {
-	argsOnPacketSent        []interface{}
-	maybeExitSlowStart      bool
-	onRetransmissionTimeout bool
-	getCongestionWindow     bool
-	packetsAcked            [][]interface{}
-	packetsLost             [][]interface{}
-}
-
-func (m *mockCongestion) TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCount) time.Duration {
-	panic("not implemented")
-}
-
-func (m *mockCongestion) OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) bool {
-	m.argsOnPacketSent = []interface{}{sentTime, bytesInFlight, packetNumber, bytes, isRetransmittable}
-	return false
-}
-
-func (m *mockCongestion) GetCongestionWindow() protocol.ByteCount {
-	m.getCongestionWindow = true
-	return protocol.DefaultTCPMSS
-}
-
-func (m *mockCongestion) MaybeExitSlowStart() {
-	m.maybeExitSlowStart = true
-}
-
-func (m *mockCongestion) OnRetransmissionTimeout(packetsRetransmitted bool) {
-	m.onRetransmissionTimeout = true
-}
-
-func (m *mockCongestion) RetransmissionDelay() time.Duration {
-	return defaultRTOTimeout
-}
-
-func (m *mockCongestion) SetNumEmulatedConnections(n int)         { panic("not implemented") }
-func (m *mockCongestion) OnConnectionMigration()                  { panic("not implemented") }
-func (m *mockCongestion) SetSlowStartLargeReduction(enabled bool) { panic("not implemented") }
-
-func (m *mockCongestion) OnPacketAcked(n protocol.PacketNumber, l protocol.ByteCount, bif protocol.ByteCount) {
-	m.packetsAcked = append(m.packetsAcked, []interface{}{n, l, bif})
-}
-
-func (m *mockCongestion) OnPacketLost(n protocol.PacketNumber, l protocol.ByteCount, bif protocol.ByteCount) {
-	m.packetsLost = append(m.packetsLost, []interface{}{n, l, bif})
-}
 
 func retransmittablePacket(num protocol.PacketNumber) *Packet {
 	return &Packet{
@@ -708,15 +663,23 @@ var _ = Describe("SentPacketHandler", func() {
 
 	Context("congestion", func() {
 		var (
-			cong *mockCongestion
+			cong *mocks.MockSendAlgorithm
 		)
 
 		BeforeEach(func() {
-			cong = &mockCongestion{}
+			cong = mocks.NewMockSendAlgorithm(mockCtrl)
+			cong.EXPECT().RetransmissionDelay().AnyTimes()
 			handler.congestion = cong
 		})
 
 		It("should call OnSent", func() {
+			cong.EXPECT().OnPacketSent(
+				gomock.Any(),
+				protocol.ByteCount(42),
+				protocol.PacketNumber(1),
+				protocol.ByteCount(42),
+				true,
+			)
 			p := &Packet{
 				PacketNumber: 1,
 				Length:       42,
@@ -724,65 +687,90 @@ var _ = Describe("SentPacketHandler", func() {
 			}
 			err := handler.SentPacket(p)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(cong.argsOnPacketSent[1]).To(Equal(protocol.ByteCount(42)))
-			Expect(cong.argsOnPacketSent[2]).To(Equal(protocol.PacketNumber(1)))
-			Expect(cong.argsOnPacketSent[3]).To(Equal(protocol.ByteCount(42)))
-			Expect(cong.argsOnPacketSent[4]).To(BeTrue())
 		})
 
 		It("should call MaybeExitSlowStart and OnPacketAcked", func() {
+			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(2)
+			cong.EXPECT().MaybeExitSlowStart()
+			cong.EXPECT().OnPacketAcked(
+				protocol.PacketNumber(1),
+				protocol.ByteCount(1),
+				protocol.ByteCount(1),
+			)
 			handler.SentPacket(retransmittablePacket(1))
 			handler.SentPacket(retransmittablePacket(2))
 			err := handler.ReceivedAck(&wire.AckFrame{LargestAcked: 1, LowestAcked: 1}, 1, protocol.EncryptionForwardSecure, time.Now())
 			Expect(err).NotTo(HaveOccurred())
-			Expect(cong.maybeExitSlowStart).To(BeTrue())
-			Expect(cong.packetsAcked).To(BeEquivalentTo([][]interface{}{
-				{protocol.PacketNumber(1), protocol.ByteCount(1), protocol.ByteCount(1)},
-			}))
-			Expect(cong.packetsLost).To(BeEmpty())
 		})
 
 		It("should call MaybeExitSlowStart and OnPacketLost", func() {
+			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(3)
+			cong.EXPECT().OnRetransmissionTimeout(true).Times(2)
+			cong.EXPECT().OnPacketLost(
+				protocol.PacketNumber(1),
+				protocol.ByteCount(1),
+				protocol.ByteCount(2),
+			)
+			cong.EXPECT().OnPacketLost(
+				protocol.PacketNumber(2),
+				protocol.ByteCount(1),
+				protocol.ByteCount(1),
+			)
 			handler.SentPacket(retransmittablePacket(1))
 			handler.SentPacket(retransmittablePacket(2))
 			handler.SentPacket(retransmittablePacket(3))
 			handler.OnAlarm() // RTO, meaning 2 lost packets
-			Expect(cong.maybeExitSlowStart).To(BeFalse())
-			Expect(cong.onRetransmissionTimeout).To(BeTrue())
-			Expect(cong.packetsAcked).To(BeEmpty())
-			Expect(cong.packetsLost).To(BeEquivalentTo([][]interface{}{
-				{protocol.PacketNumber(1), protocol.ByteCount(1), protocol.ByteCount(2)},
-				{protocol.PacketNumber(2), protocol.ByteCount(1), protocol.ByteCount(1)},
-			}))
 		})
 
 		It("allows or denies sending based on congestion", func() {
+			handler.bytesInFlight = 100
+			cong.EXPECT().GetCongestionWindow().Return(protocol.ByteCount(200))
 			Expect(handler.SendingAllowed()).To(BeTrue())
-			err := handler.SentPacket(&Packet{
-				PacketNumber: 1,
-				Frames:       []wire.Frame{&wire.PingFrame{}},
-				Length:       protocol.DefaultTCPMSS + 1,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			cong.EXPECT().GetCongestionWindow().Return(protocol.ByteCount(75))
 			Expect(handler.SendingAllowed()).To(BeFalse())
 		})
 
 		It("allows or denies sending based on the number of tracked packets", func() {
+			cong.EXPECT().GetCongestionWindow().Times(2)
 			Expect(handler.SendingAllowed()).To(BeTrue())
 			handler.retransmissionQueue = make([]*Packet, protocol.MaxTrackedSentPackets)
 			Expect(handler.SendingAllowed()).To(BeFalse())
 		})
 
 		It("allows sending if there are retransmisisons outstanding", func() {
-			err := handler.SentPacket(&Packet{
-				PacketNumber: 1,
-				Frames:       []wire.Frame{&wire.PingFrame{}},
-				Length:       protocol.DefaultTCPMSS + 1,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			cong.EXPECT().GetCongestionWindow().Times(2)
+			handler.bytesInFlight = 100
+			Expect(handler.retransmissionQueue).To(BeEmpty())
 			Expect(handler.SendingAllowed()).To(BeFalse())
-			handler.retransmissionQueue = []*Packet{nil}
+			handler.retransmissionQueue = []*Packet{{PacketNumber: 3}}
 			Expect(handler.SendingAllowed()).To(BeTrue())
+		})
+
+		It("gets the pacing delay", func() {
+			handler.bytesInFlight = protocol.ByteCount(100)
+			timestamp := time.Now().Add(time.Hour)
+			pacingDelay := 123 * time.Millisecond
+			cong.EXPECT().TimeUntilSend(timestamp, handler.bytesInFlight).Return(pacingDelay)
+			numPackets, delay := handler.TimeUntilSend(timestamp)
+			Expect(delay).To(Equal(delay))
+			Expect(numPackets).To(Equal(1))
+		})
+
+		It("allows sending of multiple packets, if the pacing delay is smaller than the minimum", func() {
+			pacingDelay := protocol.MinPacingDelay / 10
+			cong.EXPECT().TimeUntilSend(gomock.Any(), gomock.Any()).Return(pacingDelay)
+			numPackets, delay := handler.TimeUntilSend(time.Now())
+			Expect(numPackets).To(Equal(10))
+			Expect(delay).To(Equal(protocol.MinPacingDelay))
+		})
+
+		It("allows sending of multiple packets, if the pacing delay is smaller than the minimum, and not a fraction", func() {
+			pacingDelay := protocol.MinPacingDelay * 2 / 5
+			cong.EXPECT().TimeUntilSend(gomock.Any(), gomock.Any()).Return(pacingDelay)
+			numPackets, delay := handler.TimeUntilSend(time.Now())
+			Expect(numPackets).To(Equal(3))
+			_ = numPackets
+			Expect(delay).To(Equal(protocol.MinPacingDelay * 6 / 5))
 		})
 	})
 
