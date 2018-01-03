@@ -1,6 +1,7 @@
 package h2quic
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -120,10 +121,41 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTr
 		if onlyCached {
 			return nil, ErrNoCachedConn
 		}
-		client = newClient(hostname, r.TLSClientConfig, &roundTripperOpts{DisableCompression: r.DisableCompression}, r.QuicConfig)
+		c := newClient(hostname, r.TLSClientConfig, &roundTripperOpts{DisableCompression: r.DisableCompression}, r.QuicConfig)
+		// Pre-dial client to init session
+		if c.session == nil {
+			c.dialOnce.Do(func() {
+				c.handshakeErr = c.dial()
+			})
+			if c.handshakeErr != nil {
+				return nil, c.handshakeErr
+			}
+		}
+		// Delete client when its session is dead/done
+		if ctx := c.session.Context(); ctx != nil {
+			go func(ctx context.Context, r *RoundTripper, hostname string) {
+				<-ctx.Done()
+				r.delClient(hostname)
+			}(ctx, r, hostname)
+		}
+		client = c
 		r.clients[hostname] = client
 	}
 	return client, nil
+}
+
+// delClient closes and removes one QUIC connection that this RoundTripper has used
+func (r *RoundTripper) delClient(hostname string) error {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	client, ok := r.clients[hostname]
+	delete(r.clients, hostname)
+	if ok {
+		if err := client.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Close closes the QUIC connections that this RoundTripper has used
