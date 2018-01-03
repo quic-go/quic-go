@@ -486,13 +486,15 @@ var _ = Describe("Send Stream", func() {
 
 		It("says when it has data for sending", func() {
 			mockFC.EXPECT().UpdateSendWindow(gomock.Any())
-			mockSender.EXPECT().onHasStreamData(streamID)
+			mockSender.EXPECT().onHasStreamData(streamID).Times(2) // once for Write, once for the MAX_STREAM_DATA frame
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				_, _ = str.Write([]byte("foobar"))
+				_, err := str.Write([]byte("foobar"))
+				Expect(err).ToNot(HaveOccurred())
 				close(done)
 			}()
+			waitForWrite()
 			str.handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
 				StreamID:   streamID,
 				ByteOffset: 42,
