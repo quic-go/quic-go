@@ -10,6 +10,7 @@ import (
 )
 
 type connectionFlowController struct {
+	lastBlockedAt protocol.ByteCount
 	baseFlowController
 }
 
@@ -34,6 +35,17 @@ func NewConnectionFlowController(
 
 func (c *connectionFlowController) SendWindowSize() protocol.ByteCount {
 	return c.baseFlowController.sendWindowSize()
+}
+
+// IsNewlyBlocked says if it is newly blocked by flow control.
+// For every offset, it only returns true once.
+// If it is blocked, the offset is returned.
+func (c *connectionFlowController) IsNewlyBlocked() (bool, protocol.ByteCount) {
+	if c.sendWindowSize() != 0 || c.sendWindow == c.lastBlockedAt {
+		return false, 0
+	}
+	c.lastBlockedAt = c.sendWindow
+	return true, c.sendWindow
 }
 
 // IncrementHighestReceived adds an increment to the highestReceived value

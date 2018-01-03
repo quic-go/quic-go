@@ -36,7 +36,8 @@ type sendStream struct {
 	writeDeadline  time.Time
 
 	flowController flowcontrol.StreamFlowController
-	version        protocol.VersionNumber
+
+	version protocol.VersionNumber
 }
 
 var _ SendStream = &sendStream{}
@@ -141,16 +142,25 @@ func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) (*wire.StreamFr
 	}
 	frame.Data, frame.FinBit = s.getDataForWriting(maxBytes - frameLen)
 	if len(frame.Data) == 0 && !frame.FinBit {
-		return nil, s.dataForWriting != nil
+		// this can happen if:
+		// - popStreamFrame is called but there's no data for writing
+		// - there's data for writing, but the stream is stream-level flow control blocked
+		// - there's data for writing, but the stream is connection-level flow control blocked
+		if s.dataForWriting == nil {
+			return nil, false
+		}
+		isBlocked, _ := s.flowController.IsBlocked()
+		return nil, !isBlocked
 	}
 	if frame.FinBit {
 		s.finSent = true
 	} else if s.streamID != s.version.CryptoStreamID() { // TODO(#657): Flow control for the crypto stream
-		if isBlocked, offset := s.flowController.IsNewlyBlocked(); isBlocked {
+		if isBlocked, offset := s.flowController.IsBlocked(); isBlocked {
 			s.sender.queueControlFrame(&wire.StreamBlockedFrame{
 				StreamID: s.streamID,
 				Offset:   offset,
 			})
+			return frame, false
 		}
 	}
 	return frame, s.dataForWriting != nil
@@ -232,6 +242,11 @@ func (s *sendStream) handleStopSendingFrame(frame *wire.StopSendingFrame) {
 
 func (s *sendStream) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
 	s.flowController.UpdateSendWindow(frame.ByteOffset)
+	s.mutex.Lock()
+	if s.dataForWriting != nil {
+		s.sender.onHasStreamData(s.streamID)
+	}
+	s.mutex.Unlock()
 }
 
 // must be called after locking the mutex
