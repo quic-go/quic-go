@@ -98,45 +98,43 @@ func (c *client) handleHeaderStream() {
 	h2framer := http2.NewFramer(nil, c.headerStream)
 
 	var err error
-	for {
-		var frame http2.Frame
-		frame, err = h2framer.ReadFrame()
-		if err != nil {
-			break
-		}
-		lastStream := protocol.StreamID(frame.Header().StreamID)
-		hframe, ok := frame.(*http2.HeadersFrame)
-		if !ok {
-			err = errors.New("not a headers frame")
-			break
-		}
-		mhframe := &http2.MetaHeadersFrame{HeadersFrame: hframe}
-		mhframe.Fields, err = decoder.DecodeFull(hframe.HeaderBlockFragment())
-		if err != nil {
-			err = fmt.Errorf("cannot read header fields: %s", err.Error())
-			break
-		}
-
-		c.mutex.RLock()
-		responseChan, ok := c.responses[protocol.StreamID(hframe.StreamID)]
-		c.mutex.RUnlock()
-		if !ok {
-			err = fmt.Errorf("response channel for stream %d not found", lastStream)
-			break
-		}
-
-		var rsp *http.Response
-		rsp, err = responseFromHeaders(mhframe)
-		if err != nil {
-			break
-		}
-		responseChan <- rsp
+	for err == nil {
+		err = c.readResponse(h2framer, decoder)
 	}
-
 	utils.Debugf("Error handling header stream: %s", err)
 	c.headerErr = qerr.Error(qerr.InvalidHeadersStreamData, err.Error())
 	// stop all running request
 	close(c.headerErrored)
+}
+
+func (c *client) readResponse(h2framer *http2.Framer, decoder *hpack.Decoder) error {
+	frame, err := h2framer.ReadFrame()
+	if err != nil {
+		return err
+	}
+	hframe, ok := frame.(*http2.HeadersFrame)
+	if !ok {
+		return errors.New("not a headers frame")
+	}
+	mhframe := &http2.MetaHeadersFrame{HeadersFrame: hframe}
+	mhframe.Fields, err = decoder.DecodeFull(hframe.HeaderBlockFragment())
+	if err != nil {
+		return fmt.Errorf("cannot read header fields: %s", err.Error())
+	}
+
+	c.mutex.RLock()
+	responseChan, ok := c.responses[protocol.StreamID(hframe.StreamID)]
+	c.mutex.RUnlock()
+	if !ok {
+		return fmt.Errorf("response channel for stream %d not found", hframe.StreamID)
+	}
+
+	rsp, err := responseFromHeaders(mhframe)
+	if err != nil {
+		return err
+	}
+	responseChan <- rsp
+	return nil
 }
 
 // Roundtrip executes a request and returns a response
