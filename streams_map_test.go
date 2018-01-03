@@ -54,9 +54,11 @@ var _ = Describe("Streams Map", func() {
 
 			Context("client-side streams", func() {
 				It("gets new streams", func() {
-					s, err := m.GetOrOpenStream(1)
+					s, err := m.GetOrOpenStream(3)
 					Expect(err).NotTo(HaveOccurred())
-					Expect(s.StreamID()).To(Equal(protocol.StreamID(1)))
+					Expect(s).ToNot(BeNil())
+					Expect(s.StreamID()).To(Equal(protocol.StreamID(3)))
+					Expect(m.streams).To(HaveLen(1))
 					Expect(m.numIncomingStreams).To(BeEquivalentTo(1))
 					Expect(m.numOutgoingStreams).To(BeZero())
 				})
@@ -93,11 +95,11 @@ var _ = Describe("Streams Map", func() {
 				})
 
 				It("opens skipped streams", func() {
-					_, err := m.GetOrOpenStream(5)
+					_, err := m.GetOrOpenStream(7)
 					Expect(err).NotTo(HaveOccurred())
-					Expect(m.streams).To(HaveKey(protocol.StreamID(1)))
 					Expect(m.streams).To(HaveKey(protocol.StreamID(3)))
 					Expect(m.streams).To(HaveKey(protocol.StreamID(5)))
+					Expect(m.streams).To(HaveKey(protocol.StreamID(7)))
 				})
 
 				It("doesn't reopen an already closed stream", func() {
@@ -121,7 +123,7 @@ var _ = Describe("Streams Map", func() {
 					})
 
 					It("errors when too many streams are opened implicitely", func() {
-						_, err := m.GetOrOpenStream(protocol.StreamID(m.maxIncomingStreams*2 + 1))
+						_, err := m.GetOrOpenStream(protocol.StreamID(m.maxIncomingStreams*2 + 3))
 						Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 					})
 
@@ -423,7 +425,7 @@ var _ = Describe("Streams Map", func() {
 					Expect(err).To(MatchError("InvalidStreamID: peer attempted to open stream 5"))
 				})
 
-				It("rejects streams with odds IDs, which are lower thatn the highest server-side stream", func() {
+				It("rejects streams with odds IDs, which are lower than the highest server-side stream", func() {
 					_, err := m.GetOrOpenStream(6)
 					Expect(err).NotTo(HaveOccurred())
 					_, err = m.GetOrOpenStream(5)
@@ -434,6 +436,7 @@ var _ = Describe("Streams Map", func() {
 					s, err := m.GetOrOpenStream(2)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(s.StreamID()).To(Equal(protocol.StreamID(2)))
+					Expect(m.streams).To(HaveLen(1))
 					Expect(m.numOutgoingStreams).To(BeZero())
 					Expect(m.numIncomingStreams).To(BeEquivalentTo(1))
 				})
