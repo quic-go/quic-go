@@ -184,7 +184,7 @@ var _ = Describe("Stream Flow controller", func() {
 			It("tells the connection flow controller when the window was autotuned", func() {
 				oldOffset := controller.bytesRead
 				controller.contributesToConnection = true
-				setRtt(200 * time.Millisecond)
+				setRtt(scaleDuration(20 * time.Millisecond))
 				controller.epochStartOffset = oldOffset
 				controller.epochStartTime = time.Now().Add(-time.Millisecond)
 				controller.AddBytesRead(55)
@@ -197,7 +197,7 @@ var _ = Describe("Stream Flow controller", func() {
 			It("doesn't tell the connection flow controller if it doesn't contribute", func() {
 				oldOffset := controller.bytesRead
 				controller.contributesToConnection = false
-				setRtt(200 * time.Millisecond)
+				setRtt(scaleDuration(20 * time.Millisecond))
 				controller.epochStartOffset = oldOffset
 				controller.epochStartTime = time.Now().Add(-time.Millisecond)
 				controller.AddBytesRead(55)
