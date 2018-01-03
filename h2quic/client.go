@@ -97,24 +97,23 @@ func (c *client) handleHeaderStream() {
 	decoder := hpack.NewDecoder(4096, func(hf hpack.HeaderField) {})
 	h2framer := http2.NewFramer(nil, c.headerStream)
 
-	var lastStream protocol.StreamID
-
+	var err error
 	for {
-		frame, err := h2framer.ReadFrame()
+		var frame http2.Frame
+		frame, err = h2framer.ReadFrame()
 		if err != nil {
-			c.headerErr = qerr.Error(qerr.HeadersStreamDataDecompressFailure, "cannot read frame")
 			break
 		}
-		lastStream = protocol.StreamID(frame.Header().StreamID)
+		lastStream := protocol.StreamID(frame.Header().StreamID)
 		hframe, ok := frame.(*http2.HeadersFrame)
 		if !ok {
-			c.headerErr = qerr.Error(qerr.InvalidHeadersStreamData, "not a headers frame")
+			err = errors.New("not a headers frame")
 			break
 		}
 		mhframe := &http2.MetaHeadersFrame{HeadersFrame: hframe}
 		mhframe.Fields, err = decoder.DecodeFull(hframe.HeaderBlockFragment())
 		if err != nil {
-			c.headerErr = qerr.Error(qerr.InvalidHeadersStreamData, "cannot read header fields")
+			err = fmt.Errorf("cannot read header fields: %s", err.Error())
 			break
 		}
 
@@ -122,19 +121,21 @@ func (c *client) handleHeaderStream() {
 		responseChan, ok := c.responses[protocol.StreamID(hframe.StreamID)]
 		c.mutex.RUnlock()
 		if !ok {
-			c.headerErr = qerr.Error(qerr.InternalError, fmt.Sprintf("h2client BUG: response channel for stream %d not found", lastStream))
+			err = fmt.Errorf("response channel for stream %d not found", lastStream)
 			break
 		}
 
-		rsp, err := responseFromHeaders(mhframe)
+		var rsp *http.Response
+		rsp, err = responseFromHeaders(mhframe)
 		if err != nil {
-			c.headerErr = qerr.Error(qerr.InternalError, err.Error())
+			break
 		}
 		responseChan <- rsp
 	}
 
+	utils.Debugf("Error handling header stream: %s", err)
+	c.headerErr = qerr.Error(qerr.InvalidHeadersStreamData, err.Error())
 	// stop all running request
-	utils.Debugf("Error handling header stream %d: %s", lastStream, c.headerErr.Error())
 	close(c.headerErrored)
 }
 
