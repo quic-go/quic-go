@@ -201,7 +201,7 @@ var _ = Describe("Session", func() {
 
 		Context("handling STREAM frames", func() {
 			BeforeEach(func() {
-				sess.streamsMap.UpdateMaxStreamLimit(100)
+				sess.streamsMap.UpdateLimits(&handshake.TransportParameters{MaxStreams: 10000})
 			})
 
 			It("makes new streams", func() {
@@ -494,9 +494,9 @@ var _ = Describe("Session", func() {
 			}()
 			_, err := sess.GetOrOpenStream(5)
 			Expect(err).ToNot(HaveOccurred())
-			sess.streamsMap.Range(func(s streamI) {
+			for _, s := range sess.streamsMap.streams {
 				s.(*MockStreamI).EXPECT().closeForShutdown(gomock.Any())
-			})
+			}
 			err = sess.handleFrames([]wire.Frame{&wire.ConnectionCloseFrame{ErrorCode: qerr.ProofInvalid, ReasonPhrase: "foobar"}}, protocol.EncryptionUnspecified)
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(sess.Context().Done()).Should(BeClosed())

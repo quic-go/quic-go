@@ -2,9 +2,10 @@ package quic
 
 import (
 	"errors"
-	"sort"
 
+	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qerr"
 
 	. "github.com/onsi/ginkgo"
@@ -126,7 +127,7 @@ var _ = Describe("Streams Map", func() {
 				})
 
 				It("opens a stream 2 first", func() {
-					m.UpdateMaxStreamLimit(100)
+					m.UpdateLimits(&handshake.TransportParameters{MaxStreams: 10000})
 					s, err := m.OpenStream()
 					Expect(err).ToNot(HaveOccurred())
 					Expect(s).ToNot(BeNil())
@@ -143,7 +144,7 @@ var _ = Describe("Streams Map", func() {
 				})
 
 				It("doesn't reopen an already closed stream", func() {
-					m.UpdateMaxStreamLimit(100)
+					m.UpdateLimits(&handshake.TransportParameters{MaxStreams: 10000})
 					str, err := m.OpenStream()
 					Expect(err).ToNot(HaveOccurred())
 					Expect(str.StreamID()).To(Equal(protocol.StreamID(2)))
@@ -158,7 +159,8 @@ var _ = Describe("Streams Map", func() {
 					const maxOutgoingStreams = 50
 
 					BeforeEach(func() {
-						m.UpdateMaxStreamLimit(maxOutgoingStreams)
+						m.UpdateLimits(&handshake.TransportParameters{MaxStreams: maxOutgoingStreams})
+
 					})
 
 					It("errors when too many streams are opened", func() {
@@ -194,7 +196,7 @@ var _ = Describe("Streams Map", func() {
 					const maxOutgoingStreams = 10
 
 					BeforeEach(func() {
-						m.UpdateMaxStreamLimit(maxOutgoingStreams)
+						m.UpdateLimits(&handshake.TransportParameters{MaxStreams: maxOutgoingStreams})
 					})
 
 					openMaxNumStreams := func() {
@@ -398,7 +400,7 @@ var _ = Describe("Streams Map", func() {
 		Context("as a client", func() {
 			BeforeEach(func() {
 				setNewStreamsMap(protocol.PerspectiveClient, versionGQUICFrames)
-				m.UpdateMaxStreamLimit(100)
+				m.UpdateLimits(&handshake.TransportParameters{MaxStreams: 10000})
 			})
 
 			Context("server-side streams", func() {
@@ -448,7 +450,7 @@ var _ = Describe("Streams Map", func() {
 			Context("client-side streams", func() {
 				It("starts with stream 1, if the crypto stream is stream 0", func() {
 					setNewStreamsMap(protocol.PerspectiveClient, versionIETFFrames)
-					m.UpdateMaxStreamLimit(100)
+					m.UpdateLimits(&handshake.TransportParameters{MaxStreams: 10000})
 					s, err := m.OpenStream()
 					Expect(err).ToNot(HaveOccurred())
 					Expect(s).ToNot(BeNil())
@@ -503,32 +505,6 @@ var _ = Describe("Streams Map", func() {
 		})
 	})
 
-	Context("Ranging", func() {
-		It("ranges over all open streams", func() {
-			setNewStreamsMap(protocol.PerspectiveServer, protocol.VersionWhatever)
-			var callbackCalledForStream []protocol.StreamID
-			callback := func(str streamI) {
-				callbackCalledForStream = append(callbackCalledForStream, str.StreamID())
-				sort.Slice(callbackCalledForStream, func(i, j int) bool {
-					return callbackCalledForStream[i] < callbackCalledForStream[j]
-				})
-			}
-
-			Expect(m.streams).To(BeEmpty())
-			// create 5 streams, ids 4 to 8
-			callbackCalledForStream = callbackCalledForStream[:0]
-			for i := 4; i <= 8; i++ {
-				str := NewMockStreamI(mockCtrl)
-				str.EXPECT().StreamID().Return(protocol.StreamID(i)).AnyTimes()
-				err := m.putStream(str)
-				Expect(err).NotTo(HaveOccurred())
-			}
-			// execute the callback for all streams
-			m.Range(callback)
-			Expect(callbackCalledForStream).To(Equal([]protocol.StreamID{4, 5, 6, 7, 8}))
-		})
-	})
-
 	Context("deleting streams", func() {
 		BeforeEach(func() {
 			setNewStreamsMap(protocol.PerspectiveServer, versionGQUICFrames)
@@ -546,7 +522,7 @@ var _ = Describe("Streams Map", func() {
 		})
 
 		It("deletes an outgoing stream", func() {
-			m.UpdateMaxStreamLimit(10000)
+			m.UpdateLimits(&handshake.TransportParameters{MaxStreams: 10000})
 			_, err := m.OpenStream() // open stream 2
 			Expect(err).ToNot(HaveOccurred())
 			_, err = m.OpenStream()
@@ -561,5 +537,20 @@ var _ = Describe("Streams Map", func() {
 			err := m.DeleteStream(1337)
 			Expect(err).To(MatchError(errMapAccess))
 		})
+	})
+
+	It("sets the flow control limit", func() {
+		setNewStreamsMap(protocol.PerspectiveServer, versionGQUICFrames)
+		_, err := m.GetOrOpenStream(5)
+		Expect(err).ToNot(HaveOccurred())
+		m.streams[3].(*MockStreamI).EXPECT().handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
+			StreamID:   3,
+			ByteOffset: 321,
+		})
+		m.streams[5].(*MockStreamI).EXPECT().handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
+			StreamID:   5,
+			ByteOffset: 321,
+		})
+		m.UpdateLimits(&handshake.TransportParameters{StreamFlowControlWindow: 321})
 	})
 })
