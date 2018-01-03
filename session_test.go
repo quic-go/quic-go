@@ -122,7 +122,7 @@ var _ = Describe("Session", func() {
 		)
 		Expect(err).NotTo(HaveOccurred())
 		sess = pSess.(*session)
-		Expect(sess.streamsMap.openStreams).To(BeEmpty())
+		Expect(sess.streamsMap.streams).To(BeEmpty())
 	})
 
 	AfterEach(func() {
@@ -195,9 +195,6 @@ var _ = Describe("Session", func() {
 			sess.streamsMap.newStream = func(id protocol.StreamID) streamI {
 				str := NewMockStreamI(mockCtrl)
 				str.EXPECT().StreamID().Return(id).AnyTimes()
-				if id == 1 {
-					str.EXPECT().finished().AnyTimes()
-				}
 				return str
 			}
 		})
@@ -247,9 +244,9 @@ var _ = Describe("Session", func() {
 					return str
 				}
 				sess.handleStreamFrame(f1)
-				numOpenStreams := len(sess.streamsMap.openStreams)
+				numOpenStreams := len(sess.streamsMap.streams)
 				sess.handleStreamFrame(f2)
-				Expect(sess.streamsMap.openStreams).To(HaveLen(numOpenStreams))
+				Expect(sess.streamsMap.streams).To(HaveLen(numOpenStreams))
 			})
 
 			It("ignores STREAM frames for closed streams", func() {
@@ -329,8 +326,7 @@ var _ = Describe("Session", func() {
 			It("ignores the error when the stream is not known", func() {
 				str, err := sess.GetOrOpenStream(3)
 				Expect(err).ToNot(HaveOccurred())
-				str.(*MockStreamI).EXPECT().finished().Return(true)
-				sess.streamsMap.DeleteClosedStreams()
+				sess.onStreamCompleted(3)
 				str, err = sess.GetOrOpenStream(3)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(str).To(BeNil())
@@ -411,9 +407,7 @@ var _ = Describe("Session", func() {
 			It("ignores MAX_STREAM_DATA frames for a closed stream", func() {
 				str, err := sess.GetOrOpenStream(3)
 				Expect(err).ToNot(HaveOccurred())
-				str.(*MockStreamI).EXPECT().finished().Return(true)
-				err = sess.streamsMap.DeleteClosedStreams()
-				Expect(err).ToNot(HaveOccurred())
+				sess.onStreamCompleted(3)
 				str, err = sess.GetOrOpenStream(3)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(str).To(BeNil())
@@ -457,8 +451,7 @@ var _ = Describe("Session", func() {
 			It("ignores STOP_SENDING frames for a closed stream", func() {
 				str, err := sess.GetOrOpenStream(3)
 				Expect(err).ToNot(HaveOccurred())
-				str.(*MockStreamI).EXPECT().finished().Return(true)
-				err = sess.streamsMap.DeleteClosedStreams()
+				sess.onStreamCompleted(3)
 				Expect(err).ToNot(HaveOccurred())
 				str, err = sess.GetOrOpenStream(3)
 				Expect(err).ToNot(HaveOccurred())
@@ -1403,12 +1396,7 @@ var _ = Describe("Session", func() {
 		It("returns a nil-value (not an interface with value nil) for closed streams", func() {
 			str, err := sess.GetOrOpenStream(9)
 			Expect(err).ToNot(HaveOccurred())
-			str.Close()
-			str.(*stream).closeForShutdown(nil)
-			Expect(str.(*stream).finished()).To(BeTrue())
-			err = sess.streamsMap.DeleteClosedStreams()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(sess.streamsMap.GetOrOpenStream(9)).To(BeNil())
+			sess.onStreamCompleted(9)
 			str, err = sess.GetOrOpenStream(9)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(str).To(BeNil())
@@ -1422,31 +1410,6 @@ var _ = Describe("Session", func() {
 			str, err := sess.OpenStreamSync()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(str).ToNot(BeNil())
-		})
-	})
-
-	Context("counting streams", func() {
-		It("errors when too many streams are opened", func() {
-			for i := 0; i < protocol.MaxIncomingStreams; i++ {
-				_, err := sess.GetOrOpenStream(protocol.StreamID(i*2 + 1))
-				Expect(err).NotTo(HaveOccurred())
-			}
-			_, err := sess.GetOrOpenStream(protocol.StreamID(301))
-			Expect(err).To(MatchError(qerr.TooManyOpenStreams))
-		})
-
-		It("does not error when many streams are opened and closed", func() {
-			for i := 2; i <= 1000; i++ {
-				s, err := sess.GetOrOpenStream(protocol.StreamID(i*2 + 1))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(s.Close()).To(Succeed())
-				f, _ := s.(*stream).popStreamFrame(1000) // trigger "sending" of the FIN bit
-				Expect(f.FinBit).To(BeTrue())
-				s.(*stream).CloseRemote(0)
-				_, err = s.Read([]byte("a"))
-				Expect(err).To(MatchError(io.EOF))
-				sess.streamsMap.DeleteClosedStreams()
-			}
 		})
 	})
 
@@ -1522,7 +1485,7 @@ var _ = Describe("Client Session", func() {
 		)
 		sess = sessP.(*session)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(sess.streamsMap.openStreams).To(BeEmpty())
+		Expect(sess.streamsMap.streams).To(BeEmpty())
 	})
 
 	AfterEach(func() {
