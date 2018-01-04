@@ -28,6 +28,18 @@ type streamGetter interface {
 	GetOrOpenSendStream(protocol.StreamID) (sendStreamI, error)
 }
 
+type streamManager interface {
+	GetOrOpenStream(protocol.StreamID) (streamI, error)
+	GetOrOpenSendStream(protocol.StreamID) (sendStreamI, error)
+	GetOrOpenReceiveStream(protocol.StreamID) (receiveStreamI, error)
+	OpenStream() (Stream, error)
+	OpenStreamSync() (Stream, error)
+	AcceptStream() (Stream, error)
+	DeleteStream(protocol.StreamID) error
+	UpdateLimits(*handshake.TransportParameters)
+	CloseWithError(error)
+}
+
 type receivedPacket struct {
 	remoteAddr net.Addr
 	header     *wire.Header
@@ -310,7 +322,11 @@ func (s *session) postSetup(initialPacketNumber protocol.PacketNumber) error {
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats)
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.version)
 
-	s.streamsMap = newStreamsMap(s.newStream, s.perspective, s.version)
+	if s.version.UsesTLS() {
+		s.streamsMap = newStreamsMap(s.newStream, s.perspective)
+	} else {
+		s.streamsMap = newStreamsMapLegacy(s.newStream, s.perspective)
+	}
 	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
 	s.packer = newPacketPacker(s.connectionID,
 		initialPacketNumber,

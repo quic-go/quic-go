@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 
@@ -12,7 +11,7 @@ import (
 	"github.com/lucas-clemente/quic-go/qerr"
 )
 
-type streamsMap struct {
+type streamsMapLegacy struct {
 	mutex sync.RWMutex
 
 	perspective protocol.Perspective
@@ -35,20 +34,16 @@ type streamsMap struct {
 	maxOutgoingStreams uint32
 }
 
-var _ streamManager = &streamsMap{}
+var _ streamManager = &streamsMapLegacy{}
 
-type newStreamLambda func(protocol.StreamID) streamI
-
-var errMapAccess = errors.New("streamsMap: Error accessing the streams map")
-
-func newStreamsMap(newStream newStreamLambda, pers protocol.Perspective) streamManager {
+func newStreamsMapLegacy(newStream newStreamLambda, pers protocol.Perspective) streamManager {
 	// add some tolerance to the maximum incoming streams value
 	maxStreams := uint32(protocol.MaxIncomingStreams)
 	maxIncomingStreams := utils.MaxUint32(
 		maxStreams+protocol.MaxStreamsMinimumIncrement,
 		uint32(float64(maxStreams)*float64(protocol.MaxStreamsMultiplier)),
 	)
-	sm := streamsMap{
+	sm := streamsMapLegacy{
 		perspective:        pers,
 		streams:            make(map[protocol.StreamID]streamI),
 		newStream:          newStream,
@@ -57,8 +52,11 @@ func newStreamsMap(newStream newStreamLambda, pers protocol.Perspective) streamM
 	sm.nextStreamOrErrCond.L = &sm.mutex
 	sm.openStreamOrErrCond.L = &sm.mutex
 
-	nextClientInitiatedStream := protocol.StreamID(1)
 	nextServerInitiatedStream := protocol.StreamID(2)
+	nextClientInitiatedStream := protocol.StreamID(3)
+	if pers == protocol.PerspectiveServer {
+		sm.highestStreamOpenedByPeer = 1
+	}
 	if pers == protocol.PerspectiveServer {
 		sm.nextStreamToOpen = nextServerInitiatedStream
 		sm.nextStreamToAccept = nextClientInitiatedStream
@@ -70,33 +68,26 @@ func newStreamsMap(newStream newStreamLambda, pers protocol.Perspective) streamM
 }
 
 // getStreamPerspective says which side should initiate a stream
-func (m *streamsMap) streamInitiatedBy(id protocol.StreamID) protocol.Perspective {
+func (m *streamsMapLegacy) streamInitiatedBy(id protocol.StreamID) protocol.Perspective {
 	if id%2 == 0 {
 		return protocol.PerspectiveServer
 	}
 	return protocol.PerspectiveClient
 }
 
-func (m *streamsMap) nextStreamID(id protocol.StreamID) protocol.StreamID {
-	if m.perspective == protocol.PerspectiveServer && id == 0 {
-		return 1
-	}
-	return id + 2
-}
-
-func (m *streamsMap) GetOrOpenReceiveStream(id protocol.StreamID) (receiveStreamI, error) {
+func (m *streamsMapLegacy) GetOrOpenReceiveStream(id protocol.StreamID) (receiveStreamI, error) {
 	// every bidirectional stream is also a receive stream
 	return m.GetOrOpenStream(id)
 }
 
-func (m *streamsMap) GetOrOpenSendStream(id protocol.StreamID) (sendStreamI, error) {
+func (m *streamsMapLegacy) GetOrOpenSendStream(id protocol.StreamID) (sendStreamI, error) {
 	// every bidirectional stream is also a send stream
 	return m.GetOrOpenStream(id)
 }
 
 // GetOrOpenStream either returns an existing stream, a newly opened stream, or nil if a stream with the provided ID is already closed.
 // Newly opened streams should only originate from the client. To open a stream from the server, OpenStream should be used.
-func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (streamI, error) {
+func (m *streamsMapLegacy) GetOrOpenStream(id protocol.StreamID) (streamI, error) {
 	m.mutex.RLock()
 	s, ok := m.streams[id]
 	m.mutex.RUnlock()
@@ -123,7 +114,7 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (streamI, error) {
 		return nil, nil
 	}
 
-	for sid := m.nextStreamID(m.highestStreamOpenedByPeer); sid <= id; sid = m.nextStreamID(sid) {
+	for sid := m.highestStreamOpenedByPeer + 2; sid <= id; sid += 2 {
 		if _, err := m.openRemoteStream(sid); err != nil {
 			return nil, err
 		}
@@ -133,7 +124,7 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (streamI, error) {
 	return m.streams[id], nil
 }
 
-func (m *streamsMap) openRemoteStream(id protocol.StreamID) (streamI, error) {
+func (m *streamsMapLegacy) openRemoteStream(id protocol.StreamID) (streamI, error) {
 	if m.numIncomingStreams >= m.maxIncomingStreams {
 		return nil, qerr.TooManyOpenStreams
 	}
@@ -151,7 +142,7 @@ func (m *streamsMap) openRemoteStream(id protocol.StreamID) (streamI, error) {
 	return s, nil
 }
 
-func (m *streamsMap) openStreamImpl() (streamI, error) {
+func (m *streamsMapLegacy) openStreamImpl() (streamI, error) {
 	if m.numOutgoingStreams >= m.maxOutgoingStreams {
 		return nil, qerr.TooManyOpenStreams
 	}
@@ -159,12 +150,12 @@ func (m *streamsMap) openStreamImpl() (streamI, error) {
 	m.numOutgoingStreams++
 	s := m.newStream(m.nextStreamToOpen)
 	m.putStream(s)
-	m.nextStreamToOpen = m.nextStreamID(m.nextStreamToOpen)
+	m.nextStreamToOpen += 2
 	return s, nil
 }
 
 // OpenStream opens the next available stream
-func (m *streamsMap) OpenStream() (Stream, error) {
+func (m *streamsMapLegacy) OpenStream() (Stream, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -174,7 +165,7 @@ func (m *streamsMap) OpenStream() (Stream, error) {
 	return m.openStreamImpl()
 }
 
-func (m *streamsMap) OpenStreamSync() (Stream, error) {
+func (m *streamsMapLegacy) OpenStreamSync() (Stream, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -195,7 +186,7 @@ func (m *streamsMap) OpenStreamSync() (Stream, error) {
 
 // AcceptStream returns the next stream opened by the peer
 // it blocks until a new stream is opened
-func (m *streamsMap) AcceptStream() (Stream, error) {
+func (m *streamsMapLegacy) AcceptStream() (Stream, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	var str streamI
@@ -214,7 +205,7 @@ func (m *streamsMap) AcceptStream() (Stream, error) {
 	return str, nil
 }
 
-func (m *streamsMap) DeleteStream(id protocol.StreamID) error {
+func (m *streamsMapLegacy) DeleteStream(id protocol.StreamID) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	_, ok := m.streams[id]
@@ -231,7 +222,7 @@ func (m *streamsMap) DeleteStream(id protocol.StreamID) error {
 	return nil
 }
 
-func (m *streamsMap) putStream(s streamI) error {
+func (m *streamsMapLegacy) putStream(s streamI) error {
 	id := s.StreamID()
 	if _, ok := m.streams[id]; ok {
 		return fmt.Errorf("a stream with ID %d already exists", id)
@@ -240,7 +231,7 @@ func (m *streamsMap) putStream(s streamI) error {
 	return nil
 }
 
-func (m *streamsMap) CloseWithError(err error) {
+func (m *streamsMapLegacy) CloseWithError(err error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.closeErr = err
@@ -252,7 +243,7 @@ func (m *streamsMap) CloseWithError(err error) {
 }
 
 // TODO(#952): this won't be needed when gQUIC supports stateless handshakes
-func (m *streamsMap) UpdateLimits(params *handshake.TransportParameters) {
+func (m *streamsMapLegacy) UpdateLimits(params *handshake.TransportParameters) {
 	m.mutex.Lock()
 	m.maxOutgoingStreams = params.MaxStreams
 	for id, str := range m.streams {

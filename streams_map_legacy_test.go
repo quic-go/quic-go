@@ -13,8 +13,8 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Streams Map (for IETF QUIC)", func() {
-	var m *streamsMap
+var _ = Describe("Streams Map (for gQUIC)", func() {
+	var m *streamsMapLegacy
 
 	newStream := func(id protocol.StreamID) streamI {
 		str := NewMockStreamI(mockCtrl)
@@ -23,7 +23,7 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 	}
 
 	setNewStreamsMap := func(p protocol.Perspective) {
-		m = newStreamsMap(newStream, p).(*streamsMap)
+		m = newStreamsMapLegacy(newStream, p).(*streamsMapLegacy)
 	}
 
 	deleteStream := func(id protocol.StreamID) {
@@ -38,10 +38,10 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 
 			Context("client-side streams", func() {
 				It("gets new streams", func() {
-					s, err := m.GetOrOpenStream(1)
+					s, err := m.GetOrOpenStream(3)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(s).ToNot(BeNil())
-					Expect(s.StreamID()).To(Equal(protocol.StreamID(1)))
+					Expect(s.StreamID()).To(Equal(protocol.StreamID(3)))
 					Expect(m.streams).To(HaveLen(1))
 					Expect(m.numIncomingStreams).To(BeEquivalentTo(1))
 					Expect(m.numOutgoingStreams).To(BeZero())
@@ -161,7 +161,6 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 
 					BeforeEach(func() {
 						m.UpdateLimits(&handshake.TransportParameters{MaxStreams: maxOutgoingStreams})
-
 					})
 
 					It("errors when too many streams are opened", func() {
@@ -265,23 +264,7 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 					Consistently(func() bool { return accepted }).Should(BeFalse())
 				})
 
-				It("starts with stream 1", func() {
-					var str Stream
-					done := make(chan struct{})
-					go func() {
-						defer GinkgoRecover()
-						var err error
-						str, err = m.AcceptStream()
-						Expect(err).ToNot(HaveOccurred())
-						close(done)
-					}()
-					_, err := m.GetOrOpenStream(1)
-					Expect(err).ToNot(HaveOccurred())
-					Eventually(done).Should(BeClosed())
-					Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
-				})
-
-				It("returns an implicitly opened stream, if a stream number is skipped", func() {
+				It("starts with stream 3", func() {
 					var str Stream
 					done := make(chan struct{})
 					go func() {
@@ -294,7 +277,23 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 					_, err := m.GetOrOpenStream(3)
 					Expect(err).ToNot(HaveOccurred())
 					Eventually(done).Should(BeClosed())
-					Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
+				})
+
+				It("returns an implicitly opened stream, if a stream number is skipped", func() {
+					var str Stream
+					done := make(chan struct{})
+					go func() {
+						defer GinkgoRecover()
+						var err error
+						str, err = m.AcceptStream()
+						Expect(err).ToNot(HaveOccurred())
+						close(done)
+					}()
+					_, err := m.GetOrOpenStream(5)
+					Expect(err).ToNot(HaveOccurred())
+					Eventually(done).Should(BeClosed())
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
 				})
 
 				It("returns to multiple accepts", func() {
@@ -315,12 +314,12 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 						Expect(err).ToNot(HaveOccurred())
 						close(done2)
 					}()
-					_, err := m.GetOrOpenStream(3) // opens stream 1 and 3
+					_, err := m.GetOrOpenStream(5) // opens stream 3 and 5
 					Expect(err).ToNot(HaveOccurred())
 					Eventually(done1).Should(BeClosed())
 					Eventually(done2).Should(BeClosed())
 					Expect(str1.StreamID()).ToNot(Equal(str2.StreamID()))
-					Expect(str1.StreamID() + str2.StreamID()).To(BeEquivalentTo(1 + 3))
+					Expect(str1.StreamID() + str2.StreamID()).To(BeEquivalentTo(3 + 5))
 				})
 
 				It("waits until a new stream is available", func() {
@@ -334,10 +333,10 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 						close(done)
 					}()
 					Consistently(done).ShouldNot(BeClosed())
-					_, err := m.GetOrOpenStream(1)
+					_, err := m.GetOrOpenStream(3)
 					Expect(err).ToNot(HaveOccurred())
 					Eventually(done).Should(BeClosed())
-					Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
 				})
 
 				It("returns multiple streams on subsequent Accept calls, if available", func() {
@@ -350,21 +349,21 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 						Expect(err).ToNot(HaveOccurred())
 						close(done)
 					}()
-					_, err := m.GetOrOpenStream(3)
+					_, err := m.GetOrOpenStream(5)
 					Expect(err).ToNot(HaveOccurred())
 					Eventually(done).Should(BeClosed())
-					Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
 					str, err = m.AcceptStream()
 					Expect(err).ToNot(HaveOccurred())
-					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(5)))
 				})
 
 				It("blocks after accepting a stream", func() {
-					_, err := m.GetOrOpenStream(1)
+					_, err := m.GetOrOpenStream(3)
 					Expect(err).ToNot(HaveOccurred())
 					str, err := m.AcceptStream()
 					Expect(err).ToNot(HaveOccurred())
-					Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
 					done := make(chan struct{})
 					go func() {
 						defer GinkgoRecover()
@@ -391,7 +390,6 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 					m.CloseWithError(testErr)
 					Eventually(done).Should(BeClosed())
 				})
-
 				It("immediately returns when Accept is called after an error was registered", func() {
 					testErr := errors.New("testErr")
 					m.CloseWithError(testErr)
@@ -442,23 +440,21 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 				It("doesn't reopen an already closed stream", func() {
 					str, err := m.OpenStream()
 					Expect(err).ToNot(HaveOccurred())
-					Expect(str.StreamID()).To(Equal(protocol.StreamID(1)))
-					deleteStream(1)
+					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
+					deleteStream(3)
 					Expect(err).ToNot(HaveOccurred())
-					str, err = m.GetOrOpenStream(1)
+					str, err = m.GetOrOpenStream(3)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(str).To(BeNil())
 				})
 			})
 
 			Context("client-side streams", func() {
-				It("starts with stream 1", func() {
-					setNewStreamsMap(protocol.PerspectiveClient)
-					m.UpdateLimits(&handshake.TransportParameters{MaxStreams: 10000})
+				It("starts with stream 3", func() {
 					s, err := m.OpenStream()
 					Expect(err).ToNot(HaveOccurred())
 					Expect(s).ToNot(BeNil())
-					Expect(s.StreamID()).To(BeEquivalentTo(1))
+					Expect(s.StreamID()).To(BeEquivalentTo(3))
 					Expect(m.numOutgoingStreams).To(BeEquivalentTo(1))
 					Expect(m.numIncomingStreams).To(BeZero())
 				})
@@ -508,13 +504,13 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 		})
 
 		It("deletes an incoming stream", func() {
-			_, err := m.GetOrOpenStream(3) // open stream 1 and 3
+			_, err := m.GetOrOpenStream(5) // open stream 3 and 5
 			Expect(err).ToNot(HaveOccurred())
 			Expect(m.numIncomingStreams).To(BeEquivalentTo(2))
-			err = m.DeleteStream(1)
+			err = m.DeleteStream(3)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(m.streams).To(HaveLen(1))
-			Expect(m.streams).To(HaveKey(protocol.StreamID(3)))
+			Expect(m.streams).To(HaveKey(protocol.StreamID(5)))
 			Expect(m.numIncomingStreams).To(BeEquivalentTo(1))
 		})
 
@@ -538,14 +534,14 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 
 	It("sets the flow control limit", func() {
 		setNewStreamsMap(protocol.PerspectiveServer)
-		_, err := m.GetOrOpenStream(3)
+		_, err := m.GetOrOpenStream(5)
 		Expect(err).ToNot(HaveOccurred())
-		m.streams[1].(*MockStreamI).EXPECT().handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
-			StreamID:   1,
-			ByteOffset: 321,
-		})
 		m.streams[3].(*MockStreamI).EXPECT().handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
 			StreamID:   3,
+			ByteOffset: 321,
+		})
+		m.streams[5].(*MockStreamI).EXPECT().handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
+			StreamID:   5,
 			ByteOffset: 321,
 		})
 		m.UpdateLimits(&handshake.TransportParameters{StreamFlowControlWindow: 321})
