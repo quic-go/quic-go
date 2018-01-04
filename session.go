@@ -54,7 +54,7 @@ type session struct {
 
 	conn connection
 
-	streamsMap   *streamsMap
+	streamsMap   streamManager
 	cryptoStream cryptoStreamI
 
 	rttStats *congestion.RTTStats
@@ -855,7 +855,7 @@ func (s *session) GetOrOpenStream(id protocol.StreamID) (Stream, error) {
 		return str, err
 	}
 	// make sure to return an actual nil value here, not an Stream with value nil
-	return nil, err
+	return str, err
 }
 
 // AcceptStream returns the next stream openend by the peer

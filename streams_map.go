@@ -12,6 +12,18 @@ import (
 	"github.com/lucas-clemente/quic-go/qerr"
 )
 
+type streamManager interface {
+	GetOrOpenStream(protocol.StreamID) (streamI, error)
+	GetOrOpenSendStream(protocol.StreamID) (sendStreamI, error)
+	GetOrOpenReceiveStream(protocol.StreamID) (receiveStreamI, error)
+	OpenStream() (Stream, error)
+	OpenStreamSync() (Stream, error)
+	AcceptStream() (Stream, error)
+	DeleteStream(protocol.StreamID) error
+	UpdateLimits(*handshake.TransportParameters)
+	CloseWithError(error)
+}
+
 type streamsMap struct {
 	mutex sync.RWMutex
 
@@ -34,6 +46,8 @@ type streamsMap struct {
 	maxIncomingStreams uint32
 	maxOutgoingStreams uint32
 }
+
+var _ streamManager = &streamsMap{}
 
 type streamLambda func(streamI) (bool, error)
 type newStreamLambda func(protocol.StreamID) streamI
