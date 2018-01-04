@@ -106,7 +106,11 @@ func (u *packetUnpacker) parseIETFFrame(r *bytes.Reader, typeByte byte, hdr *wir
 		if err != nil {
 			err = qerr.Error(qerr.InvalidWindowUpdateData, err.Error())
 		}
-	// TODO(#878): implement the MAX_STREAM_ID frame
+	case 0x6:
+		frame, err = wire.ParseMaxStreamIDFrame(r, u.version)
+		if err != nil {
+			err = qerr.Error(qerr.InvalidFrameData, err.Error())
+		}
 	case 0x7:
 		frame, err = wire.ParsePingFrame(r, u.version)
 	case 0x8:
@@ -118,6 +122,11 @@ func (u *packetUnpacker) parseIETFFrame(r *bytes.Reader, typeByte byte, hdr *wir
 		frame, err = wire.ParseStreamBlockedFrame(r, u.version)
 		if err != nil {
 			err = qerr.Error(qerr.InvalidBlockedData, err.Error())
+		}
+	case 0xa:
+		frame, err = wire.ParseStreamIDBlockedFrame(r, u.version)
+		if err != nil {
+			err = qerr.Error(qerr.InvalidFrameData, err.Error())
 		}
 	case 0xc:
 		frame, err = wire.ParseStopSendingFrame(r, u.version)

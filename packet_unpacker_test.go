@@ -342,6 +342,17 @@ var _ = Describe("Packet unpacker", func() {
 			Expect(packet.frames).To(Equal([]wire.Frame{f}))
 		})
 
+		It("unpacks MAX_STREAM_ID frames", func() {
+			f := &wire.MaxStreamIDFrame{StreamID: 0x1337}
+			buf := &bytes.Buffer{}
+			err := f.Write(buf, versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			setData(buf.Bytes())
+			packet, err := unpacker.Unpack(hdrBin, hdr, data)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packet.frames).To(Equal([]wire.Frame{f}))
+		})
+
 		It("unpacks connection-level BLOCKED frames", func() {
 			f := &wire.BlockedFrame{Offset: 0x1234}
 			buf := &bytes.Buffer{}
@@ -358,6 +369,17 @@ var _ = Describe("Packet unpacker", func() {
 				StreamID: 0xdeadbeef,
 				Offset:   0xdead,
 			}
+			buf := &bytes.Buffer{}
+			err := f.Write(buf, versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			setData(buf.Bytes())
+			packet, err := unpacker.Unpack(hdrBin, hdr, data)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packet.frames).To(Equal([]wire.Frame{f}))
+		})
+
+		It("unpacks STREAM_ID_BLOCKED frames", func() {
+			f := &wire.StreamIDBlockedFrame{StreamID: 0x1234567}
 			buf := &bytes.Buffer{}
 			err := f.Write(buf, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
@@ -406,8 +428,10 @@ var _ = Describe("Packet unpacker", func() {
 				0x02: qerr.InvalidConnectionCloseData,
 				0x04: qerr.InvalidWindowUpdateData,
 				0x05: qerr.InvalidWindowUpdateData,
+				0x06: qerr.InvalidFrameData,
 				0x08: qerr.InvalidBlockedData,
 				0x09: qerr.InvalidBlockedData,
+				0x0a: qerr.InvalidFrameData,
 				0x0c: qerr.InvalidFrameData,
 				0x0e: qerr.InvalidAckData,
 				0x10: qerr.InvalidStreamData,
