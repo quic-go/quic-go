@@ -7,7 +7,6 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qerr"
 )
@@ -28,11 +27,6 @@ type streamsMap struct {
 	nextStreamToAccept protocol.StreamID
 
 	newStream newStreamLambda
-
-	numOutgoingStreams uint32
-	numIncomingStreams uint32
-	maxIncomingStreams uint32
-	maxOutgoingStreams uint32
 }
 
 var _ streamManager = &streamsMap{}
@@ -42,17 +36,10 @@ type newStreamLambda func(protocol.StreamID) streamI
 var errMapAccess = errors.New("streamsMap: Error accessing the streams map")
 
 func newStreamsMap(newStream newStreamLambda, pers protocol.Perspective) streamManager {
-	// add some tolerance to the maximum incoming streams value
-	maxStreams := uint32(protocol.MaxIncomingStreams)
-	maxIncomingStreams := utils.MaxUint32(
-		maxStreams+protocol.MaxStreamsMinimumIncrement,
-		uint32(float64(maxStreams)*float64(protocol.MaxStreamsMultiplier)),
-	)
 	sm := streamsMap{
-		perspective:        pers,
-		streams:            make(map[protocol.StreamID]streamI),
-		newStream:          newStream,
-		maxIncomingStreams: maxIncomingStreams,
+		perspective: pers,
+		streams:     make(map[protocol.StreamID]streamI),
+		newStream:   newStream,
 	}
 	sm.nextStreamOrErrCond.L = &sm.mutex
 	sm.openStreamOrErrCond.L = &sm.mutex
@@ -134,29 +121,18 @@ func (m *streamsMap) GetOrOpenStream(id protocol.StreamID) (streamI, error) {
 }
 
 func (m *streamsMap) openRemoteStream(id protocol.StreamID) (streamI, error) {
-	if m.numIncomingStreams >= m.maxIncomingStreams {
-		return nil, qerr.TooManyOpenStreams
-	}
 	if id+protocol.MaxNewStreamIDDelta < m.highestStreamOpenedByPeer {
 		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("attempted to open stream %d, which is a lot smaller than the highest opened stream, %d", id, m.highestStreamOpenedByPeer))
 	}
-
-	m.numIncomingStreams++
 	if id > m.highestStreamOpenedByPeer {
 		m.highestStreamOpenedByPeer = id
 	}
-
 	s := m.newStream(id)
 	m.putStream(s)
 	return s, nil
 }
 
 func (m *streamsMap) openStreamImpl() (streamI, error) {
-	if m.numOutgoingStreams >= m.maxOutgoingStreams {
-		return nil, qerr.TooManyOpenStreams
-	}
-
-	m.numOutgoingStreams++
 	s := m.newStream(m.nextStreamToOpen)
 	m.putStream(s)
 	m.nextStreamToOpen = m.nextStreamID(m.nextStreamToOpen)
@@ -222,11 +198,6 @@ func (m *streamsMap) DeleteStream(id protocol.StreamID) error {
 		return errMapAccess
 	}
 	delete(m.streams, id)
-	if m.streamInitiatedBy(id) == m.perspective {
-		m.numOutgoingStreams--
-	} else {
-		m.numIncomingStreams--
-	}
 	m.openStreamOrErrCond.Signal()
 	return nil
 }
@@ -254,7 +225,6 @@ func (m *streamsMap) CloseWithError(err error) {
 // TODO(#952): this won't be needed when gQUIC supports stateless handshakes
 func (m *streamsMap) UpdateLimits(params *handshake.TransportParameters) {
 	m.mutex.Lock()
-	m.maxOutgoingStreams = params.MaxStreams
 	for id, str := range m.streams {
 		str.handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
 			StreamID:   id,
