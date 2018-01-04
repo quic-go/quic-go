@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qerr"
 )
 
@@ -225,16 +227,6 @@ func (m *streamsMap) DeleteStream(id protocol.StreamID) error {
 	return nil
 }
 
-// Range executes a callback for all streams, in pseudo-random order
-func (m *streamsMap) Range(cb func(s streamI)) {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
-
-	for _, s := range m.streams {
-		cb(s)
-	}
-}
-
 func (m *streamsMap) putStream(s streamI) error {
 	id := s.StreamID()
 	if _, ok := m.streams[id]; ok {
@@ -255,9 +247,16 @@ func (m *streamsMap) CloseWithError(err error) {
 	}
 }
 
-func (m *streamsMap) UpdateMaxStreamLimit(limit uint32) {
+// TODO(#952): this won't be needed when gQUIC supports stateless handshakes
+func (m *streamsMap) UpdateLimits(params *handshake.TransportParameters) {
 	m.mutex.Lock()
-	defer m.mutex.Unlock()
-	m.maxOutgoingStreams = limit
+	m.maxOutgoingStreams = params.MaxStreams
+	for id, str := range m.streams {
+		str.handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
+			StreamID:   id,
+			ByteOffset: params.StreamFlowControlWindow,
+		})
+	}
+	m.mutex.Unlock()
 	m.openStreamOrErrCond.Broadcast()
 }
