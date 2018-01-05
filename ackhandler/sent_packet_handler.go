@@ -99,6 +99,13 @@ func (h *sentPacketHandler) ShouldSendRetransmittablePacket() bool {
 }
 
 func (h *sentPacketHandler) SetHandshakeComplete() {
+	var queue []*Packet
+	for _, packet := range h.retransmissionQueue {
+		if packet.EncryptionLevel == protocol.EncryptionForwardSecure {
+			queue = append(queue, packet)
+		}
+	}
+	h.retransmissionQueue = queue
 	h.handshakeComplete = true
 }
 
