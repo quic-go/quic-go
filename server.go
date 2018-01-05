@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -85,9 +86,12 @@ func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener,
 	}
 	config = populateServerConfig(config)
 
-	// check if any of the supported versions supports TLS
 	var supportsTLS bool
 	for _, v := range config.Versions {
+		if !protocol.IsValidVersion(v) {
+			return nil, fmt.Errorf("%s is not a valid QUIC version", v)
+		}
+		// check if any of the supported versions supports TLS
 		if v.UsesTLS() {
 			supportsTLS = true
 			break

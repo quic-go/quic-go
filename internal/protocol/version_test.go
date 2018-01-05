@@ -15,6 +15,14 @@ var _ = Describe("Version", func() {
 		Expect(Version39).To(BeEquivalentTo(0x51303339))
 	})
 
+	It("says if a version is valid", func() {
+		Expect(IsValidVersion(Version39)).To(BeTrue())
+		Expect(IsValidVersion(VersionTLS)).To(BeTrue())
+		Expect(IsValidVersion(VersionWhatever)).To(BeFalse())
+		Expect(IsValidVersion(VersionUnknown)).To(BeFalse())
+		Expect(IsValidVersion(1234)).To(BeFalse())
+	})
+
 	It("says if a version supports TLS", func() {
 		Expect(Version39.UsesTLS()).To(BeFalse())
 		Expect(VersionTLS.UsesTLS()).To(BeTrue())
