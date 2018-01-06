@@ -237,6 +237,15 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	return res, nil
 }
 
+func (c *client) isClosed() bool {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	if c.session == nil { // still dialing
+		return false
+	}
+	return c.session.Context().Err() != nil
+}
+
 func (c *client) writeRequestBody(dataStream quic.Stream, body io.ReadCloser) (err error) {
 	defer func() {
 		cerr := body.Close()

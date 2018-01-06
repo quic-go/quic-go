@@ -2,6 +2,7 @@ package qerr
 
 import (
 	"fmt"
+	"net"
 
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
@@ -18,6 +19,8 @@ type QuicError struct {
 	ErrorCode    ErrorCode
 	ErrorMessage string
 }
+
+var _ net.Error = &QuicError{}
 
 // Error creates a new QuicError instance
 func Error(errorCode ErrorCode, errorMessage string) *QuicError {
@@ -39,6 +42,10 @@ func (e *QuicError) Timeout() bool {
 		return true
 	}
 	return false
+}
+
+func (e *QuicError) Temporary() bool {
+	return e.Timeout()
 }
 
 // ToQuicError converts an arbitrary error to a QuicError. It leaves QuicErrors
