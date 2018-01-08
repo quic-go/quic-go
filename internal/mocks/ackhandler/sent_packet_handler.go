@@ -153,6 +153,18 @@ func (mr *MockSentPacketHandlerMockRecorder) SetHandshakeComplete() *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHandshakeComplete", reflect.TypeOf((*MockSentPacketHandler)(nil).SetHandshakeComplete))
 }
 
+// ShouldSendNumPackets mocks base method
+func (m *MockSentPacketHandler) ShouldSendNumPackets() int {
+	ret := m.ctrl.Call(m, "ShouldSendNumPackets")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// ShouldSendNumPackets indicates an expected call of ShouldSendNumPackets
+func (mr *MockSentPacketHandlerMockRecorder) ShouldSendNumPackets() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShouldSendNumPackets", reflect.TypeOf((*MockSentPacketHandler)(nil).ShouldSendNumPackets))
+}
+
 // ShouldSendRetransmittablePacket mocks base method
 func (m *MockSentPacketHandler) ShouldSendRetransmittablePacket() bool {
 	ret := m.ctrl.Call(m, "ShouldSendRetransmittablePacket")

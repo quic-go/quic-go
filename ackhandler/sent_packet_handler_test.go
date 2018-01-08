@@ -680,9 +680,7 @@ var _ = Describe("SentPacketHandler", func() {
 	})
 
 	Context("congestion", func() {
-		var (
-			cong *mocks.MockSendAlgorithm
-		)
+		var cong *mocks.MockSendAlgorithm
 
 		BeforeEach(func() {
 			cong = mocks.NewMockSendAlgorithm(mockCtrl)
@@ -698,6 +696,7 @@ var _ = Describe("SentPacketHandler", func() {
 				protocol.ByteCount(42),
 				true,
 			)
+			cong.EXPECT().TimeUntilSend(gomock.Any())
 			p := &Packet{
 				PacketNumber: 1,
 				Length:       42,
@@ -709,6 +708,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("should call MaybeExitSlowStart and OnPacketAcked", func() {
 			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(2)
+			cong.EXPECT().TimeUntilSend(gomock.Any()).Times(2)
 			cong.EXPECT().MaybeExitSlowStart()
 			cong.EXPECT().OnPacketAcked(
 				protocol.PacketNumber(1),
@@ -723,6 +723,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("should call MaybeExitSlowStart and OnPacketLost", func() {
 			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(3)
+			cong.EXPECT().TimeUntilSend(gomock.Any()).Times(3)
 			cong.EXPECT().OnRetransmissionTimeout(true).Times(2)
 			cong.EXPECT().OnPacketLost(
 				protocol.PacketNumber(1),
@@ -765,11 +766,28 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("gets the pacing delay", func() {
+			handler.bytesInFlight = 100
 			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+			cong.EXPECT().TimeUntilSend(protocol.ByteCount(100)).Return(time.Hour)
 			handler.SentPacket(&Packet{PacketNumber: 1})
-			handler.bytesInFlight = protocol.ByteCount(100)
-			cong.EXPECT().TimeUntilSend(handler.bytesInFlight).Return(time.Hour)
 			Expect(handler.TimeUntilSend()).To(BeTemporally("~", time.Now().Add(time.Hour), time.Second))
+		})
+
+		It("allows sending of one packet, if it should be sent immediately", func() {
+			cong.EXPECT().TimeUntilSend(gomock.Any()).Return(time.Duration(0))
+			Expect(handler.ShouldSendNumPackets()).To(Equal(1))
+		})
+
+		It("allows sending of multiple packets, if the pacing delay is smaller than the minimum", func() {
+			pacingDelay := protocol.MinPacingDelay / 10
+			cong.EXPECT().TimeUntilSend(gomock.Any()).Return(pacingDelay)
+			Expect(handler.ShouldSendNumPackets()).To(Equal(10))
+		})
+
+		It("allows sending of multiple packets, if the pacing delay is smaller than the minimum, and not a fraction", func() {
+			pacingDelay := protocol.MinPacingDelay * 2 / 5
+			cong.EXPECT().TimeUntilSend(gomock.Any()).Return(pacingDelay)
+			Expect(handler.ShouldSendNumPackets()).To(Equal(3))
 		})
 	})
 

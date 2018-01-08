@@ -49,6 +49,13 @@ var _ = Describe("Min / Max", func() {
 			Expect(MaxPacketNumber(1, 2)).To(Equal(protocol.PacketNumber(2)))
 			Expect(MaxPacketNumber(2, 1)).To(Equal(protocol.PacketNumber(2)))
 		})
+
+		It("returns the maximum time", func() {
+			a := time.Now()
+			b := a.Add(time.Second)
+			Expect(MaxTime(a, b)).To(Equal(b))
+			Expect(MaxTime(b, a)).To(Equal(b))
+		})
 	})
 
 	Context("Min", func() {

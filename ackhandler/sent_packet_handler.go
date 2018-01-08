@@ -3,6 +3,7 @@ package ackhandler
 import (
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/congestion"
@@ -34,7 +35,7 @@ var ErrDuplicateOrOutOfOrderAck = errors.New("SentPacketHandler: Duplicate or ou
 
 type sentPacketHandler struct {
 	lastSentPacketNumber protocol.PacketNumber
-	lastPacketSentTime   time.Time
+	nextPacketSendTime   time.Time
 	skippedPackets       []protocol.PacketNumber
 
 	numNonRetransmittablePackets int // number of non-retransmittable packets since the last retransmittable packet
@@ -125,7 +126,6 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 
 	now := time.Now()
 	h.lastSentPacketNumber = packet.PacketNumber
-	h.lastPacketSentTime = now
 
 	var largestAcked protocol.PacketNumber
 	if len(packet.Frames) > 0 {
@@ -154,6 +154,8 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 		packet.Length,
 		isRetransmittable,
 	)
+
+	h.nextPacketSendTime = utils.MaxTime(h.nextPacketSendTime, now).Add(h.congestion.TimeUntilSend(h.bytesInFlight))
 
 	h.updateLossDetectionAlarm(now)
 	return nil
@@ -389,7 +391,15 @@ func (h *sentPacketHandler) SendingAllowed() bool {
 }
 
 func (h *sentPacketHandler) TimeUntilSend() time.Time {
-	return h.lastPacketSentTime.Add(h.congestion.TimeUntilSend(h.bytesInFlight))
+	return h.nextPacketSendTime
+}
+
+func (h *sentPacketHandler) ShouldSendNumPackets() int {
+	delay := h.congestion.TimeUntilSend(h.bytesInFlight)
+	if delay == 0 || delay > protocol.MinPacingDelay {
+		return 1
+	}
+	return int(math.Ceil(float64(protocol.MinPacingDelay) / float64(delay)))
 }
 
 func (h *sentPacketHandler) retransmitOldestTwoPackets() {
