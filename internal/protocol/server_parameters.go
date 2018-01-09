@@ -131,3 +131,8 @@ const NumCachedCertificates = 128
 // 1. it reduces the framing overhead
 // 2. it reduces the head-of-line blocking, when a packet is lost
 const MinStreamFrameSize ByteCount = 128
+
+// MinPacingDelay is the minimum duration that is used for packet pacing
+// If the packet packing frequency is higher, multiple packets might be sent at once.
+// Example: For a packet pacing delay of 20 microseconds, we would send 5 packets at once, wait for 100 microseconds, and so forth.
+const MinPacingDelay time.Duration = 100 * time.Microsecond

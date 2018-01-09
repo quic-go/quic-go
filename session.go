@@ -335,6 +335,9 @@ func (s *session) run() error {
 
 	var closeErr closeError
 	handshakeEvent := s.handshakeEvent
+	var pacingDeadline time.Time
+
+	s.maybeResetTimer(time.Time{})
 
 runLoop:
 	for {
@@ -344,8 +347,6 @@ runLoop:
 			break runLoop
 		default:
 		}
-
-		s.maybeResetTimer()
 
 		select {
 		case closeErr = <-s.closeChan:
@@ -384,21 +385,66 @@ runLoop:
 		}
 
 		now := time.Now()
+
 		if timeout := s.sentPacketHandler.GetAlarmTimeout(); !timeout.IsZero() && timeout.Before(now) {
 			// This could cause packets to be retransmitted, so check it before trying
 			// to send packets.
 			s.sentPacketHandler.OnAlarm()
 		}
 
-		if s.config.KeepAlive && s.handshakeComplete && time.Since(s.lastNetworkActivityTime) >= s.peerParams.IdleTimeout/2 {
+		if s.config.KeepAlive && !s.keepAlivePingSent && s.handshakeComplete && time.Since(s.lastNetworkActivityTime) >= s.peerParams.IdleTimeout/2 {
 			// send the PING frame since there is no activity in the session
 			s.packer.QueueControlFrame(&wire.PingFrame{})
 			s.keepAlivePingSent = true
+		} else if !pacingDeadline.IsZero() && now.Before(pacingDeadline) {
+			// If we get to this point before the pacing deadline, we should wait until that deadline.
+			// This can happen when scheduleSending is called, or a packet is received.
+			// Set the timer and restart the run loop.
+			s.maybeResetTimer(pacingDeadline)
+			continue
 		}
 
-		if err := s.sendPacket(); err != nil {
-			s.closeLocal(err)
+		var startPacingTimer bool
+		numPackets, pacingDelay := s.sentPacketHandler.TimeUntilSend(now)
+		packetsSent := 1
+		if !s.sentPacketHandler.SendingAllowed() { // if congestion limited, at least try sending an ACK frame
+			if err := s.maybeSendAckOnlyPacket(); err != nil {
+				s.closeLocal(err)
+			}
+		} else {
+			sentPacket, err := s.sendPacket()
+			if err != nil {
+				s.closeLocal(err)
+			}
+			// Only start the pacing timer if actually a packet was sent.
+			// If one packet was sent, there will probably be more to send when calling sendPacket again.
+			startPacingTimer = sentPacket
+			for i := 1; i < numPackets; i++ {
+				if !s.sentPacketHandler.SendingAllowed() {
+					// if we're congestion limited, there's no need to try to pace
+					startPacingTimer = false
+					break
+				}
+				sentPacket, err := s.sendPacket()
+				if err != nil {
+					s.closeLocal(err)
+				}
+				// Only start the pacing timer if we sent a packet.
+				startPacingTimer = sentPacket
+				if !sentPacket {
+					break
+				}
+				packetsSent++
+			}
 		}
+
+		pacingDeadline = now.Add(pacingDelay * time.Duration(packetsSent) / time.Duration(numPackets))
+		if startPacingTimer {
+			s.maybeResetTimer(pacingDeadline)
+		} else {
+			s.maybeResetTimer(time.Time{})
+		}
+
 		if !s.receivedTooManyUndecrytablePacketsTime.IsZero() && s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout).Before(now) && len(s.undecryptablePackets) != 0 {
 			s.closeLocal(qerr.Error(qerr.DecryptionFailure, "too many undecryptable packets received"))
 		}
@@ -423,7 +469,7 @@ func (s *session) Context() context.Context {
 	return s.ctx
 }
 
-func (s *session) maybeResetTimer() {
+func (s *session) maybeResetTimer(pacingDeadline time.Time) {
 	var deadline time.Time
 	if s.config.KeepAlive && s.handshakeComplete && !s.keepAlivePingSent {
 		deadline = s.lastNetworkActivityTime.Add(s.peerParams.IdleTimeout / 2)
@@ -443,6 +489,9 @@ func (s *session) maybeResetTimer() {
 	}
 	if !s.receivedTooManyUndecrytablePacketsTime.IsZero() {
 		deadline = utils.MinTime(deadline, s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout))
+	}
+	if !pacingDeadline.IsZero() {
+		deadline = utils.MinTime(deadline, pacingDeadline)
 	}
 
 	s.timer.Reset(deadline)
@@ -697,7 +746,26 @@ func (s *session) processTransportParameters(params *handshake.TransportParamete
 	// so we don't need to update stream flow control windows
 }
 
-func (s *session) sendPacket() error {
+func (s *session) maybeSendAckOnlyPacket() error {
+	ack := s.receivedPacketHandler.GetAckFrame()
+	if ack == nil {
+		return nil
+	}
+	s.packer.QueueControlFrame(ack)
+
+	if !s.version.UsesIETFFrameFormat() { // for gQUIC, maybe add a STOP_WAITING
+		if swf := s.sentPacketHandler.GetStopWaitingFrame(false); swf != nil {
+			s.packer.QueueControlFrame(swf)
+		}
+	}
+	packet, err := s.packer.PackAckPacket()
+	if err != nil {
+		return err
+	}
+	return s.sendPackedPacket(packet)
+}
+
+func (s *session) sendPacket() (bool, error) {
 	s.packer.SetLeastUnacked(s.sentPacketHandler.GetLeastUnacked())
 
 	if offset := s.connFlowController.GetWindowUpdate(); offset != 0 {
@@ -713,83 +781,65 @@ func (s *session) sendPacket() error {
 		s.packer.QueueControlFrame(ack)
 	}
 
-	// Repeatedly try sending until we don't have any more data, or run out of the congestion window
+	// check for retransmissions first
 	for {
-		if !s.sentPacketHandler.SendingAllowed() {
-			if ack == nil {
-				return nil
+		retransmitPacket := s.sentPacketHandler.DequeuePacketForRetransmission()
+		if retransmitPacket == nil {
+			break
+		}
+
+		// retransmit handshake packets
+		if retransmitPacket.EncryptionLevel != protocol.EncryptionForwardSecure {
+			if s.handshakeComplete {
+				// don't retransmit handshake packets when the handshake is complete
+				continue
 			}
-			// If we aren't allowed to send, at least try sending an ACK frame
+			utils.Debugf("\tDequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 			if !s.version.UsesIETFFrameFormat() {
-				if swf := s.sentPacketHandler.GetStopWaitingFrame(false); swf != nil {
-					s.packer.QueueControlFrame(swf)
-				}
+				s.packer.QueueControlFrame(s.sentPacketHandler.GetStopWaitingFrame(true))
 			}
-			packet, err := s.packer.PackAckPacket()
+			packet, err := s.packer.PackHandshakeRetransmission(retransmitPacket)
 			if err != nil {
-				return err
+				return false, err
 			}
-			return s.sendPackedPacket(packet)
+			if err := s.sendPackedPacket(packet); err != nil {
+				return false, err
+			}
+			return true, nil
 		}
 
-		// check for retransmissions first
-		for {
-			retransmitPacket := s.sentPacketHandler.DequeuePacketForRetransmission()
-			if retransmitPacket == nil {
-				break
-			}
-
-			if retransmitPacket.EncryptionLevel != protocol.EncryptionForwardSecure {
-				if s.handshakeComplete {
-					// Don't retransmit handshake packets when the handshake is complete
-					continue
-				}
-				utils.Debugf("\tDequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
-				if !s.version.UsesIETFFrameFormat() {
-					s.packer.QueueControlFrame(s.sentPacketHandler.GetStopWaitingFrame(true))
-				}
-				packet, err := s.packer.PackHandshakeRetransmission(retransmitPacket)
-				if err != nil {
-					return err
-				}
-				if err = s.sendPackedPacket(packet); err != nil {
-					return err
-				}
-			} else {
-				utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
-				// resend the frames that were in the packet
-				for _, frame := range retransmitPacket.GetFramesForRetransmission() {
-					// TODO: only retransmit WINDOW_UPDATEs if they actually enlarge the window
-					switch f := frame.(type) {
-					case *wire.StreamFrame:
-						s.streamFramer.AddFrameForRetransmission(f)
-					default:
-						s.packer.QueueControlFrame(frame)
-					}
-				}
+		// queue all retransmittable frames sent in forward-secure packets
+		utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
+		// resend the frames that were in the packet
+		for _, frame := range retransmitPacket.GetFramesForRetransmission() {
+			// TODO: only retransmit WINDOW_UPDATEs if they actually enlarge the window
+			switch f := frame.(type) {
+			case *wire.StreamFrame:
+				s.streamFramer.AddFrameForRetransmission(f)
+			default:
+				s.packer.QueueControlFrame(frame)
 			}
 		}
-
-		hasRetransmission := s.streamFramer.HasFramesForRetransmission()
-		if !s.version.UsesIETFFrameFormat() && (ack != nil || hasRetransmission) {
-			if swf := s.sentPacketHandler.GetStopWaitingFrame(hasRetransmission); swf != nil {
-				s.packer.QueueControlFrame(swf)
-			}
-		}
-		// add a retransmittable frame
-		if s.sentPacketHandler.ShouldSendRetransmittablePacket() {
-			s.packer.MakeNextPacketRetransmittable()
-		}
-		packet, err := s.packer.PackPacket()
-		if err != nil || packet == nil {
-			return err
-		}
-		if err = s.sendPackedPacket(packet); err != nil {
-			return err
-		}
-
-		ack = nil
 	}
+
+	hasRetransmission := s.streamFramer.HasFramesForRetransmission()
+	if !s.version.UsesIETFFrameFormat() && (ack != nil || hasRetransmission) {
+		if swf := s.sentPacketHandler.GetStopWaitingFrame(hasRetransmission); swf != nil {
+			s.packer.QueueControlFrame(swf)
+		}
+	}
+	// add a retransmittable frame
+	if s.sentPacketHandler.ShouldSendRetransmittablePacket() {
+		s.packer.MakeNextPacketRetransmittable()
+	}
+	packet, err := s.packer.PackPacket()
+	if err != nil || packet == nil {
+		return false, err
+	}
+	if err := s.sendPackedPacket(packet); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *session) sendPackedPacket(packet *packedPacket) error {
@@ -910,7 +960,7 @@ func (s *session) tryQueueingUndecryptablePacket(p *receivedPacket) {
 		// if this is the first time the undecryptablePackets runs full, start the timer to send a Public Reset
 		if s.receivedTooManyUndecrytablePacketsTime.IsZero() {
 			s.receivedTooManyUndecrytablePacketsTime = time.Now()
-			s.maybeResetTimer()
+			s.maybeResetTimer(time.Time{})
 		}
 		utils.Infof("Dropping undecrytable packet 0x%x (undecryptable packet queue full)", p.header.PacketNumber)
 		return
