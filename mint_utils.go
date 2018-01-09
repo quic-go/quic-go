@@ -128,14 +128,14 @@ func unpackInitialPacket(aead crypto.AEAD, hdr *wire.Header, data []byte, versio
 
 // packUnencryptedPacket provides a low-overhead way to pack a packet.
 // It is supposed to be used in the early stages of the handshake, before a session (which owns a packetPacker) is available.
-func packUnencryptedPacket(aead crypto.AEAD, hdr *wire.Header, sf *wire.StreamFrame, pers protocol.Perspective) ([]byte, error) {
+func packUnencryptedPacket(aead crypto.AEAD, hdr *wire.Header, f wire.Frame, pers protocol.Perspective) ([]byte, error) {
 	raw := getPacketBuffer()
 	buffer := bytes.NewBuffer(raw)
 	if err := hdr.Write(buffer, pers, hdr.Version); err != nil {
 		return nil, err
 	}
 	payloadStartIndex := buffer.Len()
-	if err := sf.Write(buffer, hdr.Version); err != nil {
+	if err := f.Write(buffer, hdr.Version); err != nil {
 		return nil, err
 	}
 	raw = raw[0:buffer.Len()]
@@ -144,7 +144,7 @@ func packUnencryptedPacket(aead crypto.AEAD, hdr *wire.Header, sf *wire.StreamFr
 	if utils.Debug() {
 		utils.Debugf("-> Sending packet 0x%x (%d bytes) for connection %x, %s", hdr.PacketNumber, len(raw), hdr.ConnectionID, protocol.EncryptionUnencrypted)
 		hdr.Log()
-		wire.LogFrame(sf, true)
+		wire.LogFrame(f, true)
 	}
 	return raw, nil
 }
