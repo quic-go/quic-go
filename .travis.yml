@@ -1,4 +1,5 @@
 dist: trusty
+group: travis_latest
 
 addons:
   hosts:
