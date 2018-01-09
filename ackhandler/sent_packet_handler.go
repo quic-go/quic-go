@@ -365,12 +365,11 @@ func (h *sentPacketHandler) GetStopWaitingFrame(force bool) *wire.StopWaitingFra
 }
 
 func (h *sentPacketHandler) SendingAllowed() bool {
-	congestionLimited := h.bytesInFlight > h.congestion.GetCongestionWindow()
+	cwnd := h.congestion.GetCongestionWindow()
+	congestionLimited := h.bytesInFlight > cwnd
 	maxTrackedLimited := protocol.PacketNumber(len(h.retransmissionQueue)+h.packetHistory.Len()) >= protocol.MaxTrackedSentPackets
 	if congestionLimited {
-		utils.Debugf("Congestion limited: bytes in flight %d, window %d",
-			h.bytesInFlight,
-			h.congestion.GetCongestionWindow())
+		utils.Debugf("Congestion limited: bytes in flight %d, window %d", h.bytesInFlight, cwnd)
 	}
 	// Workaround for #555:
 	// Always allow sending of retransmissions. This should probably be limited
