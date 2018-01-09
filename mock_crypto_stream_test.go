@@ -117,18 +117,6 @@ func (mr *MockCryptoStreamMockRecorder) handleStreamFrame(arg0 interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleStreamFrame", reflect.TypeOf((*MockCryptoStream)(nil).handleStreamFrame), arg0)
 }
 
-// hasDataForWriting mocks base method
-func (m *MockCryptoStream) hasDataForWriting() bool {
-	ret := m.ctrl.Call(m, "hasDataForWriting")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// hasDataForWriting indicates an expected call of hasDataForWriting
-func (mr *MockCryptoStreamMockRecorder) hasDataForWriting() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "hasDataForWriting", reflect.TypeOf((*MockCryptoStream)(nil).hasDataForWriting))
-}
-
 // popStreamFrame mocks base method
 func (m *MockCryptoStream) popStreamFrame(arg0 protocol.ByteCount) (*wire.StreamFrame, bool) {
 	ret := m.ctrl.Call(m, "popStreamFrame", arg0)

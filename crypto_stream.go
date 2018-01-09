@@ -15,7 +15,6 @@ type cryptoStreamI interface {
 	handleStreamFrame(*wire.StreamFrame) error
 	popStreamFrame(protocol.ByteCount) (*wire.StreamFrame, bool)
 	closeForShutdown(error)
-	hasDataForWriting() bool
 	setReadOffset(protocol.ByteCount)
 	// methods needed for flow control
 	getWindowUpdate() protocol.ByteCount
@@ -39,11 +38,4 @@ func newCryptoStream(sender streamSender, flowController flowcontrol.StreamFlowC
 func (s *cryptoStream) setReadOffset(offset protocol.ByteCount) {
 	s.receiveStream.readOffset = offset
 	s.receiveStream.frameQueue.readPosition = offset
-}
-
-func (s *cryptoStream) hasDataForWriting() bool {
-	s.sendStream.mutex.Lock()
-	hasData := s.sendStream.dataForWriting != nil
-	s.sendStream.mutex.Unlock()
-	return hasData
 }

@@ -22,6 +22,7 @@ var _ = Describe("Stream Framer", func() {
 		retransmittedFrame1, retransmittedFrame2 *wire.StreamFrame
 		framer                                   *streamFramer
 		stream1, stream2                         *MockStreamI
+		cryptoStream                             *MockCryptoStream
 		streamGetter                             *MockStreamGetter
 	)
 
@@ -40,8 +41,8 @@ var _ = Describe("Stream Framer", func() {
 		stream1.EXPECT().StreamID().Return(protocol.StreamID(5)).AnyTimes()
 		stream2 = NewMockStreamI(mockCtrl)
 		stream2.EXPECT().StreamID().Return(protocol.StreamID(6)).AnyTimes()
-
-		framer = newStreamFramer(nil, streamGetter, versionGQUICFrames)
+		cryptoStream = NewMockCryptoStream(mockCtrl)
+		framer = newStreamFramer(cryptoStream, streamGetter, versionGQUICFrames)
 	})
 
 	It("says if it has retransmissions", func() {
@@ -55,6 +56,38 @@ var _ = Describe("Stream Framer", func() {
 		fs := framer.PopStreamFrames(protocol.MaxByteCount)
 		Expect(fs).To(HaveLen(1))
 		Expect(fs[0].DataLenPresent).To(BeTrue())
+	})
+
+	Context("handling the crypto stream", func() {
+		It("says if it has crypto stream data", func() {
+			Expect(framer.HasCryptoStreamData()).To(BeFalse())
+			framer.AddActiveStream(framer.version.CryptoStreamID())
+			Expect(framer.HasCryptoStreamData()).To(BeTrue())
+		})
+
+		It("says that it doesn't have crypto stream data after popping all data", func() {
+			streamID := framer.version.CryptoStreamID()
+			f := &wire.StreamFrame{
+				StreamID: streamID,
+				Data:     []byte("foobar"),
+			}
+			cryptoStream.EXPECT().popStreamFrame(protocol.ByteCount(1000)).Return(f, false)
+			framer.AddActiveStream(streamID)
+			Expect(framer.PopCryptoStreamFrame(1000)).To(Equal(f))
+			Expect(framer.HasCryptoStreamData()).To(BeFalse())
+		})
+
+		It("says that it has more crypto stream data if not all data was popped", func() {
+			streamID := framer.version.CryptoStreamID()
+			f := &wire.StreamFrame{
+				StreamID: streamID,
+				Data:     []byte("foobar"),
+			}
+			cryptoStream.EXPECT().popStreamFrame(protocol.ByteCount(1000)).Return(f, true)
+			framer.AddActiveStream(streamID)
+			Expect(framer.PopCryptoStreamFrame(1000)).To(Equal(f))
+			Expect(framer.HasCryptoStreamData()).To(BeTrue())
+		})
 	})
 
 	Context("Popping", func() {

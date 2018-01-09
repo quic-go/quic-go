@@ -23,17 +23,4 @@ var _ = Describe("Crypto Stream", func() {
 		Expect(str.receiveStream.readOffset).To(Equal(protocol.ByteCount(0x42)))
 		Expect(str.receiveStream.frameQueue.readPosition).To(Equal(protocol.ByteCount(0x42)))
 	})
-
-	It("says if it has data for writing", func() {
-		mockSender.EXPECT().onHasStreamData(str.version.CryptoStreamID())
-		Expect(str.hasDataForWriting()).To(BeFalse())
-		done := make(chan struct{})
-		go func() {
-			defer GinkgoRecover()
-			_, err := str.Write([]byte("foobar"))
-			Expect(err).ToNot(HaveOccurred())
-			close(done)
-		}()
-		Eventually(str.hasDataForWriting).Should(BeTrue())
-	})
 })
