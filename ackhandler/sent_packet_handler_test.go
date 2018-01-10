@@ -576,13 +576,13 @@ var _ = Describe("SentPacketHandler", func() {
 
 		BeforeEach(func() {
 			packets = []*Packet{
-				{PacketNumber: 1, Frames: []wire.Frame{&streamFrame}, Length: 1},
-				{PacketNumber: 2, Frames: []wire.Frame{&streamFrame}, Length: 1},
-				{PacketNumber: 3, Frames: []wire.Frame{&streamFrame}, Length: 1},
-				{PacketNumber: 4, Frames: []wire.Frame{&streamFrame}, Length: 1},
-				{PacketNumber: 5, Frames: []wire.Frame{&streamFrame}, Length: 1},
-				{PacketNumber: 6, Frames: []wire.Frame{&streamFrame}, Length: 1},
-				{PacketNumber: 7, Frames: []wire.Frame{&streamFrame}, Length: 1},
+				{PacketNumber: 1, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.EncryptionUnencrypted},
+				{PacketNumber: 2, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.EncryptionUnencrypted},
+				{PacketNumber: 3, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.EncryptionUnencrypted},
+				{PacketNumber: 4, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.EncryptionSecure},
+				{PacketNumber: 5, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.EncryptionSecure},
+				{PacketNumber: 6, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.EncryptionForwardSecure},
+				{PacketNumber: 7, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.EncryptionForwardSecure},
 			}
 			for _, packet := range packets {
 				handler.SentPacket(packet)
@@ -590,7 +590,7 @@ var _ = Describe("SentPacketHandler", func() {
 			// Increase RTT, because the tests would be flaky otherwise
 			handler.rttStats.UpdateRTT(time.Minute, 0, time.Now())
 			// Ack a single packet so that we have non-RTO timings
-			handler.ReceivedAck(&wire.AckFrame{LargestAcked: 2, LowestAcked: 2}, 1, protocol.EncryptionUnencrypted, time.Now())
+			handler.ReceivedAck(&wire.AckFrame{LargestAcked: 2, LowestAcked: 2}, 1, protocol.EncryptionForwardSecure, time.Now())
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(6)))
 		})
 
@@ -610,15 +610,33 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
 		})
 
-		Context("StopWaitings", func() {
-			It("gets a StopWaitingFrame", func() {
+		It("deletes non forward-secure packets when the handshake completes", func() {
+			for i := protocol.PacketNumber(1); i <= 7; i++ {
+				if i == 2 { // packet 2 was already acked in BeforeEach
+					continue
+				}
+				handler.queuePacketForRetransmission(getPacketElement(i))
+			}
+			Expect(handler.retransmissionQueue).To(HaveLen(6))
+			handler.SetHandshakeComplete()
+			packet := handler.DequeuePacketForRetransmission()
+			Expect(packet).ToNot(BeNil())
+			Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(6)))
+			packet = handler.DequeuePacketForRetransmission()
+			Expect(packet).ToNot(BeNil())
+			Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(7)))
+			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
+		})
+
+		Context("STOP_WAITINGs", func() {
+			It("gets a STOP_WAITING frame", func() {
 				ack := wire.AckFrame{LargestAcked: 5, LowestAcked: 5}
-				err := handler.ReceivedAck(&ack, 2, protocol.EncryptionUnencrypted, time.Now())
+				err := handler.ReceivedAck(&ack, 2, protocol.EncryptionForwardSecure, time.Now())
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.GetStopWaitingFrame(false)).To(Equal(&wire.StopWaitingFrame{LeastUnacked: 6}))
 			})
 
-			It("gets a StopWaitingFrame after queueing a retransmission", func() {
+			It("gets a STOP_WAITING frame after queueing a retransmission", func() {
 				handler.queuePacketForRetransmission(getPacketElement(5))
 				Expect(handler.GetStopWaitingFrame(false)).To(Equal(&wire.StopWaitingFrame{LeastUnacked: 6}))
 			})
