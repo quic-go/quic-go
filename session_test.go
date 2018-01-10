@@ -1470,6 +1470,22 @@ var _ = Describe("Client Session", func() {
 		newCryptoSetupClient = handshake.NewCryptoSetupClient
 	})
 
+	It("sends a forward-secure packet when the handshake completes", func() {
+		sess.packer.hasSentPacket = true
+		done := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			err := sess.run()
+			Expect(err).ToNot(HaveOccurred())
+			close(done)
+		}()
+		close(handshakeChan)
+		Eventually(mconn.written).Should(Receive())
+		//make sure the go routine returns
+		Expect(sess.Close(nil)).To(Succeed())
+		Eventually(done).Should(BeClosed())
+	})
+
 	Context("receiving packets", func() {
 		var hdr *wire.Header
 
