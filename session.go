@@ -457,6 +457,10 @@ func (s *session) Context() context.Context {
 	return s.ctx
 }
 
+func (s *session) ConnectionState() ConnectionState {
+	return s.cryptoSetup.ConnectionState()
+}
+
 func (s *session) maybeResetTimer() {
 	var deadline time.Time
 	if s.config.KeepAlive && s.handshakeComplete && !s.keepAlivePingSent {

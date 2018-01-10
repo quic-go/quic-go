@@ -164,3 +164,14 @@ func (h *cryptoSetupTLS) DiversificationNonce() []byte {
 func (h *cryptoSetupTLS) SetDiversificationNonce([]byte) {
 	panic("diversification nonce not needed for TLS")
 }
+
+func (h *cryptoSetupTLS) ConnectionState() ConnectionState {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+	mintConnState := h.tls.ConnectionState()
+	return ConnectionState{
+		// TODO: set the ServerName, once mint exports it
+		HandshakeComplete: h.aead != nil,
+		PeerCertificates:  mintConnState.PeerCertificates,
+	}
+}

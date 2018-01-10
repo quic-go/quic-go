@@ -50,6 +50,7 @@ func (m *mockCryptoSetup) GetSealerWithEncryptionLevel(protocol.EncryptionLevel)
 }
 func (m *mockCryptoSetup) DiversificationNonce() []byte            { return m.divNonce }
 func (m *mockCryptoSetup) SetDiversificationNonce(divNonce []byte) { m.divNonce = divNonce }
+func (m *mockCryptoSetup) ConnectionState() ConnectionState        { panic("not implemented") }
 
 var _ = Describe("Packet packer", func() {
 	var (

@@ -48,6 +48,18 @@ func (mr *MockMintTLSMockRecorder) ComputeExporter(arg0, arg1, arg2 interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ComputeExporter", reflect.TypeOf((*MockMintTLS)(nil).ComputeExporter), arg0, arg1, arg2)
 }
 
+// ConnectionState mocks base method
+func (m *MockMintTLS) ConnectionState() mint.ConnectionState {
+	ret := m.ctrl.Call(m, "ConnectionState")
+	ret0, _ := ret[0].(mint.ConnectionState)
+	return ret0
+}
+
+// ConnectionState indicates an expected call of ConnectionState
+func (mr *MockMintTLSMockRecorder) ConnectionState() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConnectionState", reflect.TypeOf((*MockMintTLS)(nil).ConnectionState))
+}
+
 // GetCipherSuite mocks base method
 func (m *MockMintTLS) GetCipherSuite() mint.CipherSuiteParams {
 	ret := m.ctrl.Call(m, "GetCipherSuite")
