@@ -12,6 +12,14 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
+type sendStreamI interface {
+	SendStream
+	handleStopSendingFrame(*wire.StopSendingFrame)
+	popStreamFrame(maxBytes protocol.ByteCount) (*wire.StreamFrame, bool)
+	closeForShutdown(error)
+	handleMaxStreamDataFrame(*wire.MaxStreamDataFrame)
+}
+
 type sendStream struct {
 	mutex sync.Mutex
 
@@ -41,6 +49,7 @@ type sendStream struct {
 }
 
 var _ SendStream = &sendStream{}
+var _ sendStreamI = &sendStream{}
 
 func newSendStream(
 	streamID protocol.StreamID,

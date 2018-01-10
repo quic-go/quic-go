@@ -24,7 +24,20 @@ type unpacker interface {
 }
 
 type streamGetter interface {
+	GetOrOpenReceiveStream(protocol.StreamID) (receiveStreamI, error)
+	GetOrOpenSendStream(protocol.StreamID) (sendStreamI, error)
+}
+
+type streamManager interface {
 	GetOrOpenStream(protocol.StreamID) (streamI, error)
+	GetOrOpenSendStream(protocol.StreamID) (sendStreamI, error)
+	GetOrOpenReceiveStream(protocol.StreamID) (receiveStreamI, error)
+	OpenStream() (Stream, error)
+	OpenStreamSync() (Stream, error)
+	AcceptStream() (Stream, error)
+	DeleteStream(protocol.StreamID) error
+	UpdateLimits(*handshake.TransportParameters)
+	CloseWithError(error)
 }
 
 type receivedPacket struct {
@@ -53,7 +66,7 @@ type session struct {
 
 	conn connection
 
-	streamsMap   *streamsMap
+	streamsMap   streamManager
 	cryptoStream cryptoStreamI
 
 	rttStats *congestion.RTTStats
@@ -309,7 +322,11 @@ func (s *session) postSetup(initialPacketNumber protocol.PacketNumber) error {
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats)
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.version)
 
-	s.streamsMap = newStreamsMap(s.newStream, s.perspective, s.version)
+	if s.version.UsesTLS() {
+		s.streamsMap = newStreamsMap(s.newStream, s.perspective)
+	} else {
+		s.streamsMap = newStreamsMapLegacy(s.newStream, s.perspective)
+	}
 	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
 	s.packer = newPacketPacker(s.connectionID,
 		initialPacketNumber,
@@ -574,7 +591,7 @@ func (s *session) handleStreamFrame(frame *wire.StreamFrame) error {
 		}
 		return s.cryptoStream.handleStreamFrame(frame)
 	}
-	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
+	str, err := s.streamsMap.GetOrOpenReceiveStream(frame.StreamID)
 	if err != nil {
 		return err
 	}
@@ -595,7 +612,7 @@ func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error
 		s.cryptoStream.handleMaxStreamDataFrame(frame)
 		return nil
 	}
-	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
+	str, err := s.streamsMap.GetOrOpenSendStream(frame.StreamID)
 	if err != nil {
 		return err
 	}
@@ -607,11 +624,26 @@ func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error
 	return nil
 }
 
+func (s *session) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
+	if frame.StreamID == s.version.CryptoStreamID() {
+		return errors.New("Received RST_STREAM frame for the crypto stream")
+	}
+	str, err := s.streamsMap.GetOrOpenReceiveStream(frame.StreamID)
+	if err != nil {
+		return err
+	}
+	if str == nil {
+		// stream is closed and already garbage collected
+		return nil
+	}
+	return str.handleRstStreamFrame(frame)
+}
+
 func (s *session) handleStopSendingFrame(frame *wire.StopSendingFrame) error {
 	if frame.StreamID == s.version.CryptoStreamID() {
 		return errors.New("Received a STOP_SENDING frame for the crypto stream")
 	}
-	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
+	str, err := s.streamsMap.GetOrOpenSendStream(frame.StreamID)
 	if err != nil {
 		return err
 	}
@@ -621,21 +653,6 @@ func (s *session) handleStopSendingFrame(frame *wire.StopSendingFrame) error {
 	}
 	str.handleStopSendingFrame(frame)
 	return nil
-}
-
-func (s *session) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
-	if frame.StreamID == s.version.CryptoStreamID() {
-		return errors.New("Received RST_STREAM frame for the crypto stream")
-	}
-	str, err := s.streamsMap.GetOrOpenStream(frame.StreamID)
-	if err != nil {
-		return err
-	}
-	if str == nil {
-		// stream is closed and already garbage collected
-		return nil
-	}
-	return str.handleRstStreamFrame(frame)
 }
 
 func (s *session) handleAckFrame(frame *wire.AckFrame, encLevel protocol.EncryptionLevel) error {
@@ -854,7 +871,7 @@ func (s *session) GetOrOpenStream(id protocol.StreamID) (Stream, error) {
 		return str, err
 	}
 	// make sure to return an actual nil value here, not an Stream with value nil
-	return nil, err
+	return str, err
 }
 
 // AcceptStream returns the next stream openend by the peer

@@ -31,8 +31,8 @@ var _ = Describe("Window Update Queue", func() {
 		stream1.EXPECT().getWindowUpdate().Return(protocol.ByteCount(10))
 		stream3 := NewMockStreamI(mockCtrl)
 		stream3.EXPECT().getWindowUpdate().Return(protocol.ByteCount(30))
-		streamGetter.EXPECT().GetOrOpenStream(protocol.StreamID(3)).Return(stream3, nil)
-		streamGetter.EXPECT().GetOrOpenStream(protocol.StreamID(1)).Return(stream1, nil)
+		streamGetter.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(3)).Return(stream3, nil)
+		streamGetter.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(1)).Return(stream1, nil)
 		q.Add(3)
 		q.Add(1)
 		q.QueueAll()
@@ -43,7 +43,7 @@ var _ = Describe("Window Update Queue", func() {
 	It("deletes the entry after getting the MAX_STREAM_DATA frame", func() {
 		stream10 := NewMockStreamI(mockCtrl)
 		stream10.EXPECT().getWindowUpdate().Return(protocol.ByteCount(100))
-		streamGetter.EXPECT().GetOrOpenStream(protocol.StreamID(10)).Return(stream10, nil)
+		streamGetter.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(10)).Return(stream10, nil)
 		q.Add(10)
 		q.QueueAll()
 		Expect(queuedFrames).To(HaveLen(1))
@@ -52,7 +52,7 @@ var _ = Describe("Window Update Queue", func() {
 	})
 
 	It("doesn't queue a MAX_STREAM_DATA for a closed stream", func() {
-		streamGetter.EXPECT().GetOrOpenStream(protocol.StreamID(12)).Return(nil, nil)
+		streamGetter.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(12)).Return(nil, nil)
 		q.Add(12)
 		q.QueueAll()
 		Expect(queuedFrames).To(BeEmpty())
@@ -61,7 +61,7 @@ var _ = Describe("Window Update Queue", func() {
 	It("doesn't queue a MAX_STREAM_DATA if the flow controller returns an offset of 0", func() {
 		stream5 := NewMockStreamI(mockCtrl)
 		stream5.EXPECT().getWindowUpdate().Return(protocol.ByteCount(0))
-		streamGetter.EXPECT().GetOrOpenStream(protocol.StreamID(5)).Return(stream5, nil)
+		streamGetter.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(5)).Return(stream5, nil)
 		q.Add(5)
 		q.QueueAll()
 		Expect(queuedFrames).To(BeEmpty())
@@ -79,7 +79,7 @@ var _ = Describe("Window Update Queue", func() {
 	It("deduplicates", func() {
 		stream10 := NewMockStreamI(mockCtrl)
 		stream10.EXPECT().getWindowUpdate().Return(protocol.ByteCount(200))
-		streamGetter.EXPECT().GetOrOpenStream(protocol.StreamID(10)).Return(stream10, nil)
+		streamGetter.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(10)).Return(stream10, nil)
 		q.Add(10)
 		q.Add(10)
 		q.QueueAll()
