@@ -394,6 +394,12 @@ runLoop:
 				s.handshakeComplete = true
 				handshakeEvent = nil // prevent this case from ever being selected again
 				s.sentPacketHandler.SetHandshakeComplete()
+				if !s.version.UsesTLS() && s.perspective == protocol.PerspectiveClient {
+					// In gQUIC, there's no equivalent to the Finished message in TLS
+					// The server knows that the handshake is complete when it receives the first forward-secure packet sent by the client.
+					// We need to make sure that the client actually sends such a packet.
+					s.packer.QueueControlFrame(&wire.PingFrame{})
+				}
 				close(s.handshakeChan)
 			} else {
 				s.tryDecryptingQueuedPackets()
