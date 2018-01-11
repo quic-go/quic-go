@@ -2,9 +2,11 @@ package quic
 
 import (
 	"bytes"
+	"crypto/tls"
 
 	"github.com/lucas-clemente/quic-go/internal/crypto"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -31,6 +33,38 @@ var _ = Describe("Packing and unpacking Initial packets", func() {
 		err = hdr.Write(buf, protocol.PerspectiveServer, ver)
 		Expect(err).ToNot(HaveOccurred())
 		hdr.Raw = buf.Bytes()
+	})
+
+	Context("generating a mint.Config", func() {
+		It("sets non-blocking mode", func() {
+			mintConf, err := tlsToMintConfig(nil, protocol.PerspectiveClient)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(mintConf.NonBlocking).To(BeTrue())
+		})
+
+		It("sets the certificate chain", func() {
+			tlsConf := testdata.GetTLSConfig()
+			mintConf, err := tlsToMintConfig(tlsConf, protocol.PerspectiveClient)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(mintConf.Certificates).ToNot(BeEmpty())
+			Expect(mintConf.Certificates).To(HaveLen(len(tlsConf.Certificates)))
+		})
+
+		It("requires client authentication", func() {
+			mintConf, err := tlsToMintConfig(nil, protocol.PerspectiveClient)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(mintConf.RequireClientAuth).To(BeFalse())
+			conf := &tls.Config{ClientAuth: tls.RequireAnyClientCert}
+			mintConf, err = tlsToMintConfig(conf, protocol.PerspectiveClient)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(mintConf.RequireClientAuth).To(BeTrue())
+		})
+
+		It("rejects unsupported client auth types", func() {
+			conf := &tls.Config{ClientAuth: tls.RequireAndVerifyClientCert}
+			_, err := tlsToMintConfig(conf, protocol.PerspectiveClient)
+			Expect(err).To(MatchError("mint currently only support ClientAuthType RequireAnyClientCert"))
+		})
 	})
 
 	Context("unpacking", func() {

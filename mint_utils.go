@@ -87,6 +87,13 @@ func tlsToMintConfig(tlsConf *tls.Config, pers protocol.Perspective) (*mint.Conf
 				mconf.Certificates[i].Chain[j] = c
 			}
 		}
+		switch tlsConf.ClientAuth {
+		case tls.NoClientCert:
+		case tls.RequireAnyClientCert:
+			mconf.RequireClientAuth = true
+		default:
+			return nil, errors.New("mint currently only support ClientAuthType RequireAnyClientCert")
+		}
 	}
 	if err := mconf.Init(pers == protocol.PerspectiveClient); err != nil {
 		return nil, err
