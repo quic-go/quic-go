@@ -6,6 +6,10 @@ import (
 )
 
 var _ = Describe("Version", func() {
+	isReservedVersion := func(v VersionNumber) bool {
+		return v&0x0f0f0f0f == 0x0a0a0a0a
+	}
+
 	// version numbers taken from the wiki: https://github.com/quicwg/base-drafts/wiki/QUIC-Versions
 	It("has the right gQUIC version number", func() {
 		Expect(Version39).To(BeEquivalentTo(0x51303339))
@@ -14,6 +18,11 @@ var _ = Describe("Version", func() {
 	It("says if a version supports TLS", func() {
 		Expect(Version39.UsesTLS()).To(BeFalse())
 		Expect(VersionTLS.UsesTLS()).To(BeTrue())
+	})
+
+	It("versions don't have reserved version numbers", func() {
+		Expect(isReservedVersion(Version39)).To(BeFalse())
+		Expect(isReservedVersion(VersionTLS)).To(BeFalse())
 	})
 
 	It("has the right string representation", func() {
@@ -42,9 +51,14 @@ var _ = Describe("Version", func() {
 		Expect(VersionTLS.CryptoStreamID()).To(Equal(StreamID(0)))
 	})
 
-	It("tells if a version uses the MAX_DATA, MAX_STREAM_DATA, BLOCKED and STREAM_BLOCKED frames", func() {
-		Expect(Version39.UsesMaxDataFrame()).To(BeFalse())
-		Expect(VersionTLS.UsesMaxDataFrame()).To(BeTrue())
+	It("tells if a version uses the IETF frame types", func() {
+		Expect(Version39.UsesIETFFrameFormat()).To(BeFalse())
+		Expect(VersionTLS.UsesIETFFrameFormat()).To(BeTrue())
+	})
+
+	It("tells if a version uses the IETF frame types", func() {
+		Expect(Version39.UsesIETFFrameFormat()).To(BeFalse())
+		Expect(VersionTLS.UsesIETFFrameFormat()).To(BeTrue())
 	})
 
 	It("says if a stream contributes to connection-level flowcontrol, for gQUIC", func() {
@@ -103,6 +117,49 @@ var _ = Describe("Version", func() {
 			Expect(ok).To(BeFalse())
 			_, ok = ChooseSupportedVersion([]VersionNumber{}, []VersionNumber{})
 			Expect(ok).To(BeFalse())
+		})
+	})
+
+	Context("reserved versions", func() {
+		It("adds a greased version if passed an empty slice", func() {
+			greased := GetGreasedVersions([]VersionNumber{})
+			Expect(greased).To(HaveLen(1))
+			Expect(isReservedVersion(greased[0])).To(BeTrue())
+		})
+
+		It("creates greased lists of version numbers", func() {
+			supported := []VersionNumber{10, 18, 29}
+			for _, v := range supported {
+				Expect(isReservedVersion(v)).To(BeFalse())
+			}
+			var greasedVersionFirst, greasedVersionLast, greasedVersionMiddle int
+			// check that
+			// 1. the greased version sometimes appears first
+			// 2. the greased version sometimes appears in the middle
+			// 3. the greased version sometimes appears last
+			// 4. the supported versions are kept in order
+			for i := 0; i < 100; i++ {
+				greased := GetGreasedVersions(supported)
+				Expect(greased).To(HaveLen(4))
+				var j int
+				for i, v := range greased {
+					if isReservedVersion(v) {
+						if i == 0 {
+							greasedVersionFirst++
+						}
+						if i == len(greased)-1 {
+							greasedVersionLast++
+						}
+						greasedVersionMiddle++
+						continue
+					}
+					Expect(supported[j]).To(Equal(v))
+					j++
+				}
+			}
+			Expect(greasedVersionFirst).ToNot(BeZero())
+			Expect(greasedVersionLast).ToNot(BeZero())
+			Expect(greasedVersionMiddle).ToNot(BeZero())
 		})
 	})
 })

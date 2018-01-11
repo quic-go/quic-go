@@ -13,8 +13,8 @@ import (
 )
 
 type extensionHandlerClient struct {
-	params     *TransportParameters
-	paramsChan chan<- TransportParameters
+	ourParams  *TransportParameters
+	paramsChan chan TransportParameters
 
 	initialVersion    protocol.VersionNumber
 	supportedVersions []protocol.VersionNumber
@@ -22,16 +22,18 @@ type extensionHandlerClient struct {
 }
 
 var _ mint.AppExtensionHandler = &extensionHandlerClient{}
+var _ TLSExtensionHandler = &extensionHandlerClient{}
 
-func newExtensionHandlerClient(
+// NewExtensionHandlerClient creates a new extension handler for the client.
+func NewExtensionHandlerClient(
 	params *TransportParameters,
-	paramsChan chan<- TransportParameters,
 	initialVersion protocol.VersionNumber,
 	supportedVersions []protocol.VersionNumber,
 	version protocol.VersionNumber,
-) *extensionHandlerClient {
+) TLSExtensionHandler {
+	paramsChan := make(chan TransportParameters, 1)
 	return &extensionHandlerClient{
-		params:            params,
+		ourParams:         params,
 		paramsChan:        paramsChan,
 		initialVersion:    initialVersion,
 		supportedVersions: supportedVersions,
@@ -45,9 +47,8 @@ func (h *extensionHandlerClient) Send(hType mint.HandshakeType, el *mint.Extensi
 	}
 
 	data, err := syntax.Marshal(clientHelloTransportParameters{
-		NegotiatedVersion: uint32(h.version),
-		InitialVersion:    uint32(h.initialVersion),
-		Parameters:        h.params.getTransportParameters(),
+		InitialVersion: uint32(h.initialVersion),
+		Parameters:     h.ourParams.getTransportParameters(),
 	})
 	if err != nil {
 		return err
@@ -57,7 +58,10 @@ func (h *extensionHandlerClient) Send(hType mint.HandshakeType, el *mint.Extensi
 
 func (h *extensionHandlerClient) Receive(hType mint.HandshakeType, el *mint.ExtensionList) error {
 	ext := &tlsExtensionBody{}
-	found := el.Find(ext)
+	found, err := el.Find(ext)
+	if err != nil {
+		return err
+	}
 
 	if hType != mint.HandshakeTypeEncryptedExtensions && hType != mint.HandshakeTypeNewSessionTicket {
 		if found {
@@ -83,6 +87,10 @@ func (h *extensionHandlerClient) Receive(hType mint.HandshakeType, el *mint.Exte
 	serverSupportedVersions := make([]protocol.VersionNumber, len(eetp.SupportedVersions))
 	for i, v := range eetp.SupportedVersions {
 		serverSupportedVersions[i] = protocol.VersionNumber(v)
+	}
+	// check that the negotiated_version is the current version
+	if protocol.VersionNumber(eetp.NegotiatedVersion) != h.version {
+		return qerr.Error(qerr.VersionNegotiationMismatch, "current version doesn't match negotiated_version")
 	}
 	// check that the current version is included in the supported versions
 	if !protocol.IsSupportedVersion(serverSupportedVersions, h.version) {
@@ -119,4 +127,8 @@ func (h *extensionHandlerClient) Receive(hType mint.HandshakeType, el *mint.Exte
 	params.MaxStreams = math.MaxUint32
 	h.paramsChan <- *params
 	return nil
+}
+
+func (h *extensionHandlerClient) GetPeerParams() <-chan TransportParameters {
+	return h.paramsChan
 }

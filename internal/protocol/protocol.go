@@ -1,6 +1,8 @@
 package protocol
 
-import "math"
+import (
+	"fmt"
+)
 
 // A PacketNumber in QUIC
 type PacketNumber uint64
@@ -25,8 +27,6 @@ const (
 type PacketType uint8
 
 const (
-	// PacketTypeVersionNegotiation is the packet type of a Version Negotiation packet
-	PacketTypeVersionNegotiation PacketType = 1
 	// PacketTypeInitial is the packet type of a Initial packet
 	PacketTypeInitial PacketType = 2
 	// PacketTypeRetry is the packet type of a Retry packet
@@ -37,17 +37,35 @@ const (
 	PacketType0RTT PacketType = 5
 )
 
+func (t PacketType) String() string {
+	switch t {
+	case PacketTypeInitial:
+		return "Initial"
+	case PacketTypeRetry:
+		return "Retry"
+	case PacketTypeHandshake:
+		return "Handshake"
+	case PacketType0RTT:
+		return "0-RTT Protected"
+	default:
+		return fmt.Sprintf("unknown packet type: %d", t)
+	}
+}
+
 // A ConnectionID in QUIC
 type ConnectionID uint64
 
 // A StreamID in QUIC
-type StreamID uint32
+type StreamID uint64
 
 // A ByteCount in QUIC
 type ByteCount uint64
 
 // MaxByteCount is the maximum value of a ByteCount
-const MaxByteCount = ByteCount(math.MaxUint64)
+const MaxByteCount = ByteCount(1<<62 - 1)
+
+// An ApplicationErrorCode is an application-defined error code.
+type ApplicationErrorCode uint16
 
 // MaxReceivePacketSize maximum packet size of any QUIC packet, based on
 // ethernet's max size, minus the IP and UDP headers. IPv6 has a 40 byte header,
@@ -59,8 +77,11 @@ const MaxReceivePacketSize ByteCount = 1452
 // Used in QUIC for congestion window computations in bytes.
 const DefaultTCPMSS ByteCount = 1460
 
-// ClientHelloMinimumSize is the minimum size the server expects an inchoate CHLO to have.
-const ClientHelloMinimumSize = 1024
+// MinClientHelloSize is the minimum size the server expects an inchoate CHLO to have (in gQUIC)
+const MinClientHelloSize = 1024
+
+// MinInitialPacketSize is the minimum size an Initial packet (in IETF QUIC) is requried to have.
+const MinInitialPacketSize = 1200
 
 // MaxClientHellos is the maximum number of times we'll send a client hello
 // The value 3 accounts for:

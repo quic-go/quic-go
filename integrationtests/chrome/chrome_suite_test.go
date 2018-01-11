@@ -122,6 +122,7 @@ func chromeTest(version protocol.VersionNumber, url string, blockUntilDone func(
 		"--user-data-dir=" + userDataDir,
 		"--enable-quic=true",
 		"--no-proxy-server=true",
+		"--no-sandbox",
 		"--origin-to-force-quic-on=quic.clemente.io:443",
 		fmt.Sprintf(`--host-resolver-rules=MAP quic.clemente.io:443 127.0.0.1:%s`, testserver.Port()),
 		fmt.Sprintf("--quic-version=QUIC_VERSION_%s", version.ToAltSvc()),

@@ -1,0 +1,31 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"checksumSHA1": "nxj6lkDUEZ81SO0lP8YUhm+4BAM=",
+			"path": "github.com/bifurcation/mint",
+			"revision": "f699e8d03646cb8e6e15410ced7bff37fcf8dddd",
+			"revisionTime": "2017-12-21T19:05:27Z"
+		},
+		{
+			"checksumSHA1": "PZNcjO1c9gV/LZzppwpVRl6+QAY=",
+			"path": "github.com/bifurcation/mint/syntax",
+			"revision": "a544bfbca6a083ce9ddeb2c5f570cb240837355a",
+			"revisionTime": "2017-12-09T20:11:46Z"
+		},
+		{
+			"checksumSHA1": "IQkUIOnvlf0tYloFx9mLaXSvXWQ=",
+			"path": "golang.org/x/crypto/curve25519",
+			"revision": "d585fd2cc9195196078f516b69daff6744ef5e84",
+			"revisionTime": "2017-12-16T04:08:15Z"
+		},
+		{
+			"checksumSHA1": "4D8hxMIaSDEW5pCQk22Xj4DcDh4=",
+			"path": "golang.org/x/crypto/hkdf",
+			"revision": "d585fd2cc9195196078f516b69daff6744ef5e84",
+			"revisionTime": "2017-12-16T04:08:15Z"
+		}
+	],
+	"rootPath": "github.com/lucas-clemente/quic-go"
+}

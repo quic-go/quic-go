@@ -56,6 +56,9 @@ const DefaultMaxReceiveConnectionFlowControlWindowClient = 15 * (1 << 20) // 15 
 // This is the value that Chromium is using
 const ConnectionFlowControlMultiplier = 1.5
 
+// WindowUpdateThreshold is the fraction of the receive window that has to be consumed before an higher offset is advertised to the client
+const WindowUpdateThreshold = 0.25
+
 // MaxIncomingStreams is the maximum number of streams that a peer may open
 const MaxIncomingStreams = 100
 
@@ -86,9 +89,6 @@ const MaxTrackedSentPackets = 2 * DefaultMaxCongestionWindow
 
 // MaxTrackedReceivedAckRanges is the maximum number of ACK ranges tracked
 const MaxTrackedReceivedAckRanges = DefaultMaxCongestionWindow
-
-// MaxPacketsReceivedBeforeAckSend is the number of packets that can be received before an ACK frame is sent
-const MaxPacketsReceivedBeforeAckSend = 20
 
 // MaxNonRetransmittablePackets is the maximum number of non-retransmittable packets that we send in a row
 const MaxNonRetransmittablePackets = 19
@@ -125,3 +125,9 @@ const ClosedSessionDeleteTimeout = time.Minute
 
 // NumCachedCertificates is the number of cached compressed certificate chains, each taking ~1K space
 const NumCachedCertificates = 128
+
+// MinStreamFrameSize is the minimum size that has to be left in a packet, so that we add another STREAM frame.
+// This avoids splitting up STREAM frames into small pieces, which has 2 advantages:
+// 1. it reduces the framing overhead
+// 2. it reduces the head-of-line blocking, when a packet is lost
+const MinStreamFrameSize ByteCount = 128

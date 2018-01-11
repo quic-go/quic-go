@@ -79,7 +79,7 @@ var _ = Describe("Client Crypto Setup", func() {
 		stream                  *mockStream
 		keyDerivationCalledWith *keyDerivationValues
 		shloMap                 map[Tag][]byte
-		aeadChanged             chan protocol.EncryptionLevel
+		handshakeEvent          chan struct{}
 		paramsChan              chan TransportParameters
 	)
 
@@ -108,7 +108,7 @@ var _ = Describe("Client Crypto Setup", func() {
 		version := protocol.Version39
 		// use a buffered channel here, so that we can parse a SHLO without having to receive the TransportParameters to avoid blocking
 		paramsChan = make(chan TransportParameters, 1)
-		aeadChanged = make(chan protocol.EncryptionLevel, 2)
+		handshakeEvent = make(chan struct{}, 2)
 		csInt, err := NewCryptoSetupClient(
 			stream,
 			"hostname",
@@ -117,7 +117,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			nil,
 			&TransportParameters{IdleTimeout: protocol.DefaultIdleTimeout},
 			paramsChan,
-			aeadChanged,
+			handshakeEvent,
 			protocol.Version39,
 			nil,
 			nil,
@@ -129,10 +129,6 @@ var _ = Describe("Client Crypto Setup", func() {
 		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
 		cs.nullAEAD = mockcrypto.NewMockAEAD(mockCtrl)
 		cs.cryptoStream = stream
-	})
-
-	AfterEach(func() {
-		close(stream.unblockRead)
 	})
 
 	Context("Reading REJ", func() {
@@ -159,8 +155,17 @@ var _ = Describe("Client Crypto Setup", func() {
 			stk := []byte("foobar")
 			tagMap[TagSTK] = stk
 			HandshakeMessage{Tag: TagREJ, Data: tagMap}.Write(&stream.dataToRead)
-			go cs.HandleCryptoStream()
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				err := cs.HandleCryptoStream()
+				Expect(err).To(MatchError(qerr.Error(qerr.HandshakeFailed, errMockStreamClosing.Error())))
+				close(done)
+			}()
 			Eventually(func() []byte { return cs.stk }).Should(Equal(stk))
+			// make the go routine return
+			stream.close()
+			Eventually(done).Should(BeClosed())
 		})
 
 		It("saves the proof", func() {
@@ -381,22 +386,22 @@ var _ = Describe("Client Crypto Setup", func() {
 			cs.receivedSecurePacket = false
 			_, err := cs.handleSHLOMessage(shloMap)
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoEncryptionLevelIncorrect, "unencrypted SHLO message")))
-			Expect(aeadChanged).ToNot(Receive())
-			Expect(aeadChanged).ToNot(BeClosed())
+			Expect(handshakeEvent).ToNot(Receive())
+			Expect(handshakeEvent).ToNot(BeClosed())
 		})
 
 		It("rejects SHLOs without a PUBS", func() {
 			delete(shloMap, TagPUBS)
 			_, err := cs.handleSHLOMessage(shloMap)
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoMessageParameterNotFound, "PUBS")))
-			Expect(aeadChanged).ToNot(BeClosed())
+			Expect(handshakeEvent).ToNot(BeClosed())
 		})
 
 		It("rejects SHLOs without a version list", func() {
 			delete(shloMap, TagVER)
 			_, err := cs.handleSHLOMessage(shloMap)
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "server hello missing version list")))
-			Expect(aeadChanged).ToNot(BeClosed())
+			Expect(handshakeEvent).ToNot(BeClosed())
 		})
 
 		It("accepts a SHLO after a version negotiation", func() {
@@ -431,28 +436,38 @@ var _ = Describe("Client Crypto Setup", func() {
 			Expect(params.IdleTimeout).To(Equal(13 * time.Second))
 		})
 
-		It("closes the aeadChanged when receiving an SHLO", func() {
+		It("closes the handshakeEvent chan when receiving an SHLO", func() {
 			HandshakeMessage{Tag: TagSHLO, Data: shloMap}.Write(&stream.dataToRead)
+			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
 				err := cs.HandleCryptoStream()
-				Expect(err).ToNot(HaveOccurred())
+				Expect(err).To(MatchError(qerr.Error(qerr.HandshakeFailed, errMockStreamClosing.Error())))
+				close(done)
 			}()
-			Eventually(aeadChanged).Should(Receive(Equal(protocol.EncryptionForwardSecure)))
-			Eventually(aeadChanged).Should(BeClosed())
+			Eventually(handshakeEvent).Should(Receive())
+			Eventually(handshakeEvent).Should(BeClosed())
+			// make the go routine return
+			stream.close()
+			Eventually(done).Should(BeClosed())
 		})
 
 		It("passes the transport parameters on the channel", func() {
 			shloMap[TagSFCW] = []byte{0x0d, 0x00, 0xdf, 0xba}
 			HandshakeMessage{Tag: TagSHLO, Data: shloMap}.Write(&stream.dataToRead)
+			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
 				err := cs.HandleCryptoStream()
-				Expect(err).ToNot(HaveOccurred())
+				Expect(err).To(MatchError(qerr.Error(qerr.HandshakeFailed, errMockStreamClosing.Error())))
+				close(done)
 			}()
 			var params TransportParameters
 			Eventually(paramsChan).Should(Receive(&params))
 			Expect(params.StreamFlowControlWindow).To(Equal(protocol.ByteCount(0xbadf000d)))
+			// make the go routine return
+			stream.close()
+			Eventually(done).Should(BeClosed())
 		})
 
 		It("errors if it can't read a connection parameter", func() {
@@ -466,14 +481,14 @@ var _ = Describe("Client Crypto Setup", func() {
 		It("is longer than the miminum client hello size", func() {
 			err := cs.sendCHLO()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(cs.cryptoStream.(*mockStream).dataWritten.Len()).To(BeNumerically(">", protocol.ClientHelloMinimumSize))
+			Expect(cs.cryptoStream.(*mockStream).dataWritten.Len()).To(BeNumerically(">", protocol.MinClientHelloSize))
 		})
 
 		It("doesn't overflow the packet with padding", func() {
 			tagMap := make(map[Tag][]byte)
-			tagMap[TagSCID] = bytes.Repeat([]byte{0}, protocol.ClientHelloMinimumSize*6/10)
+			tagMap[TagSCID] = bytes.Repeat([]byte{0}, protocol.MinClientHelloSize*6/10)
 			cs.addPadding(tagMap)
-			Expect(len(tagMap[TagPAD])).To(BeNumerically("<", protocol.ClientHelloMinimumSize/2))
+			Expect(len(tagMap[TagPAD])).To(BeNumerically("<", protocol.MinClientHelloSize/2))
 		})
 
 		It("saves the last sent CHLO", func() {
@@ -638,9 +653,9 @@ var _ = Describe("Client Crypto Setup", func() {
 			Expect(keyDerivationCalledWith.cert).To(Equal(certManager.leafCert))
 			Expect(keyDerivationCalledWith.divNonce).To(Equal(cs.diversificationNonce))
 			Expect(keyDerivationCalledWith.pers).To(Equal(protocol.PerspectiveClient))
-			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
-			Expect(aeadChanged).ToNot(Receive())
-			Expect(aeadChanged).ToNot(BeClosed())
+			Expect(handshakeEvent).To(Receive())
+			Expect(handshakeEvent).ToNot(Receive())
+			Expect(handshakeEvent).ToNot(BeClosed())
 		})
 
 		It("uses the server nonce, if the server sent one", func() {
@@ -650,51 +665,64 @@ var _ = Describe("Client Crypto Setup", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.secureAEAD).ToNot(BeNil())
 			Expect(keyDerivationCalledWith.nonces).To(Equal(append(cs.nonc, cs.sno...)))
-			Expect(aeadChanged).To(Receive())
-			Expect(aeadChanged).ToNot(Receive())
-			Expect(aeadChanged).ToNot(BeClosed())
+			Expect(handshakeEvent).To(Receive())
+			Expect(handshakeEvent).ToNot(Receive())
+			Expect(handshakeEvent).ToNot(BeClosed())
 		})
 
 		It("doesn't create a secureAEAD if the certificate is not yet verified, even if it has all necessary values", func() {
 			err := cs.maybeUpgradeCrypto()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.secureAEAD).To(BeNil())
-			Expect(aeadChanged).ToNot(Receive())
+			Expect(handshakeEvent).ToNot(Receive())
 			cs.serverVerified = true
 			// make sure we really had all necessary values before, and only serverVerified was missing
 			err = cs.maybeUpgradeCrypto()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cs.secureAEAD).ToNot(BeNil())
-			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
-			Expect(aeadChanged).ToNot(Receive())
-			Expect(aeadChanged).ToNot(BeClosed())
+			Expect(handshakeEvent).To(Receive())
+			Expect(handshakeEvent).ToNot(Receive())
+			Expect(handshakeEvent).ToNot(BeClosed())
 		})
 
 		It("tries to escalate before reading a handshake message", func() {
 			Expect(cs.secureAEAD).To(BeNil())
 			cs.serverVerified = true
-			go cs.HandleCryptoStream()
-			Eventually(aeadChanged).Should(Receive(Equal(protocol.EncryptionSecure)))
-			Expect(cs.secureAEAD).ToNot(BeNil())
-			Expect(aeadChanged).ToNot(Receive())
-			Expect(aeadChanged).ToNot(BeClosed())
-		})
-
-		It("tries to escalate the crypto after receiving a diversification nonce", func(done Done) {
+			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				cs.HandleCryptoStream()
-				Fail("HandleCryptoStream should not have returned")
+				err := cs.HandleCryptoStream()
+				Expect(err).To(MatchError(qerr.Error(qerr.HandshakeFailed, errMockStreamClosing.Error())))
+				close(done)
+			}()
+			Eventually(handshakeEvent).Should(Receive())
+			Expect(cs.secureAEAD).ToNot(BeNil())
+			Expect(handshakeEvent).ToNot(Receive())
+			Expect(handshakeEvent).ToNot(BeClosed())
+			// make the go routine return
+			stream.close()
+			Eventually(done).Should(BeClosed())
+		})
+
+		It("tries to escalate the crypto after receiving a diversification nonce", func() {
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				err := cs.HandleCryptoStream()
+				Expect(err).To(MatchError(qerr.Error(qerr.HandshakeFailed, errMockStreamClosing.Error())))
+				close(done)
 			}()
 			cs.diversificationNonce = nil
 			cs.serverVerified = true
 			Expect(cs.secureAEAD).To(BeNil())
 			cs.SetDiversificationNonce([]byte("div"))
-			Eventually(aeadChanged).Should(Receive(Equal(protocol.EncryptionSecure)))
+			Eventually(handshakeEvent).Should(Receive())
 			Expect(cs.secureAEAD).ToNot(BeNil())
-			Expect(aeadChanged).ToNot(Receive())
-			Expect(aeadChanged).ToNot(BeClosed())
-			close(done)
+			Expect(handshakeEvent).ToNot(Receive())
+			Expect(handshakeEvent).ToNot(BeClosed())
+			// make the go routine return
+			stream.close()
+			Eventually(done).Should(BeClosed())
 		})
 
 		Context("null encryption", func() {
@@ -863,32 +891,51 @@ var _ = Describe("Client Crypto Setup", func() {
 
 	Context("Diversification Nonces", func() {
 		It("sets a diversification nonce", func() {
-			go cs.HandleCryptoStream()
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				err := cs.HandleCryptoStream()
+				Expect(err).To(MatchError(qerr.Error(qerr.HandshakeFailed, errMockStreamClosing.Error())))
+				close(done)
+			}()
 			nonce := []byte("foobar")
 			cs.SetDiversificationNonce(nonce)
 			Eventually(func() []byte { return cs.diversificationNonce }).Should(Equal(nonce))
+			// make the go routine return
+			stream.close()
+			Eventually(done).Should(BeClosed())
 		})
 
-		It("doesn't do anything when called multiple times with the same nonce", func(done Done) {
-			go cs.HandleCryptoStream()
+		It("doesn't do anything when called multiple times with the same nonce", func() {
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				err := cs.HandleCryptoStream()
+				Expect(err).To(MatchError(qerr.Error(qerr.HandshakeFailed, errMockStreamClosing.Error())))
+				close(done)
+			}()
 			nonce := []byte("foobar")
 			cs.SetDiversificationNonce(nonce)
 			cs.SetDiversificationNonce(nonce)
 			Eventually(func() []byte { return cs.diversificationNonce }).Should(Equal(nonce))
-			close(done)
+			// make the go routine return
+			stream.close()
+			Eventually(done).Should(BeClosed())
 		})
 
 		It("rejects a different diversification nonce", func() {
-			var err error
+			done := make(chan struct{})
 			go func() {
-				err = cs.HandleCryptoStream()
+				defer GinkgoRecover()
+				err := cs.HandleCryptoStream()
+				Expect(err).To(MatchError(errConflictingDiversificationNonces))
+				close(done)
 			}()
-
 			nonce1 := []byte("foobar")
 			nonce2 := []byte("raboof")
 			cs.SetDiversificationNonce(nonce1)
 			cs.SetDiversificationNonce(nonce2)
-			Eventually(func() error { return err }).Should(MatchError(errConflictingDiversificationNonces))
+			Eventually(done).Should(BeClosed())
 		})
 	})
 

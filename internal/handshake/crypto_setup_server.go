@@ -44,7 +44,7 @@ type cryptoSetupServer struct {
 
 	receivedParams bool
 	paramsChan     chan<- TransportParameters
-	aeadChanged    chan<- protocol.EncryptionLevel
+	handshakeEvent chan<- struct{}
 
 	keyDerivation QuicCryptoKeyDerivationFunction
 	keyExchange   KeyExchangeFunction
@@ -78,7 +78,7 @@ func NewCryptoSetup(
 	supportedVersions []protocol.VersionNumber,
 	acceptSTK func(net.Addr, *Cookie) bool,
 	paramsChan chan<- TransportParameters,
-	aeadChanged chan<- protocol.EncryptionLevel,
+	handshakeEvent chan<- struct{},
 	QuicTracer *qtrace.Tracer,
 ) (CryptoSetup, error) {
 	nullAEAD, err := crypto.NewNullAEAD(protocol.PerspectiveServer, connID, version)
@@ -99,7 +99,7 @@ func NewCryptoSetup(
 		acceptSTKCallback: acceptSTK,
 		sentSHLO:          make(chan struct{}),
 		paramsChan:        paramsChan,
-		aeadChanged:       aeadChanged,
+		handshakeEvent:    handshakeEvent,
 		QuicTracer:        QuicTracer,
 	}, nil
 }
@@ -190,7 +190,7 @@ func (h *cryptoSetupServer) handleMessage(chloData []byte, cryptoData map[Tag][]
 		if _, err := h.cryptoStream.Write(reply); err != nil {
 			return false, err
 		}
-		h.aeadChanged <- protocol.EncryptionForwardSecure
+		h.handshakeEvent <- struct{}{}
 		close(h.sentSHLO)
 		return true, nil
 	}
@@ -214,9 +214,9 @@ func (h *cryptoSetupServer) Open(dst, src []byte, packetNumber protocol.PacketNu
 		if err == nil {
 			if !h.receivedForwardSecurePacket { // this is the first forward secure packet we receive from the client
 				h.receivedForwardSecurePacket = true
-				// wait until protocol.EncryptionForwardSecure was sent on the aeadChan
+				// wait for the send on the handshakeEvent chan
 				<-h.sentSHLO
-				close(h.aeadChanged)
+				close(h.handshakeEvent)
 			}
 			return res, protocol.EncryptionForwardSecure, nil
 		}
@@ -309,10 +309,6 @@ func (h *cryptoSetupServer) acceptSTK(token []byte) bool {
 }
 
 func (h *cryptoSetupServer) handleInchoateCHLO(sni string, chlo []byte, cryptoData map[Tag][]byte) ([]byte, error) {
-	if len(chlo) < protocol.ClientHelloMinimumSize {
-		return nil, qerr.Error(qerr.CryptoInvalidValueLength, "CHLO too small")
-	}
-
 	token, err := h.scfg.cookieGenerator.NewToken(h.remoteAddr)
 	if err != nil {
 		return nil, err
@@ -413,8 +409,7 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 	if err != nil {
 		return nil, err
 	}
-
-	h.aeadChanged <- protocol.EncryptionSecure
+	h.handshakeEvent <- struct{}{}
 
 	// Generate a new curve instance to derive the forward secure key
 	var fsNonce bytes.Buffer
@@ -444,7 +439,7 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 	replyMap := h.params.getHelloMap()
 	// add crypto parameters
 	verTag := &bytes.Buffer{}
-	for _, v := range h.supportedVersions {
+	for _, v := range protocol.GetGreasedVersions(h.supportedVersions) {
 		utils.BigEndian.WriteUint32(verTag, uint32(v))
 	}
 	replyMap[TagPUBS] = ephermalKex.PublicKey()
@@ -473,10 +468,6 @@ func (h *cryptoSetupServer) DiversificationNonce() []byte {
 }
 
 func (h *cryptoSetupServer) SetDiversificationNonce(data []byte) {
-	panic("not needed for cryptoSetupServer")
-}
-
-func (h *cryptoSetupServer) GetNextPacketType() protocol.PacketType {
 	panic("not needed for cryptoSetupServer")
 }
 

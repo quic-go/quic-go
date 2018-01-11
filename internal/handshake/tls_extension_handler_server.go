@@ -14,26 +14,28 @@ import (
 )
 
 type extensionHandlerServer struct {
-	params     *TransportParameters
-	paramsChan chan<- TransportParameters
+	ourParams  *TransportParameters
+	paramsChan chan TransportParameters
 
 	version           protocol.VersionNumber
 	supportedVersions []protocol.VersionNumber
 }
 
 var _ mint.AppExtensionHandler = &extensionHandlerServer{}
+var _ TLSExtensionHandler = &extensionHandlerServer{}
 
-func newExtensionHandlerServer(
+// NewExtensionHandlerServer creates a new extension handler for the server
+func NewExtensionHandlerServer(
 	params *TransportParameters,
-	paramsChan chan<- TransportParameters,
 	supportedVersions []protocol.VersionNumber,
 	version protocol.VersionNumber,
-) *extensionHandlerServer {
+) TLSExtensionHandler {
+	paramsChan := make(chan TransportParameters, 1)
 	return &extensionHandlerServer{
-		params:            params,
+		ourParams:         params,
 		paramsChan:        paramsChan,
-		version:           version,
 		supportedVersions: supportedVersions,
+		version:           version,
 	}
 }
 
@@ -43,16 +45,18 @@ func (h *extensionHandlerServer) Send(hType mint.HandshakeType, el *mint.Extensi
 	}
 
 	transportParams := append(
-		h.params.getTransportParameters(),
+		h.ourParams.getTransportParameters(),
 		// TODO(#855): generate a real token
 		transportParameter{statelessResetTokenParameterID, bytes.Repeat([]byte{42}, 16)},
 	)
-	supportedVersions := make([]uint32, len(h.supportedVersions))
-	for i, v := range h.supportedVersions {
-		supportedVersions[i] = uint32(v)
+	supportedVersions := protocol.GetGreasedVersions(h.supportedVersions)
+	versions := make([]uint32, len(supportedVersions))
+	for i, v := range supportedVersions {
+		versions[i] = uint32(v)
 	}
 	data, err := syntax.Marshal(encryptedExtensionsTransportParameters{
-		SupportedVersions: supportedVersions,
+		NegotiatedVersion: uint32(h.version),
+		SupportedVersions: versions,
 		Parameters:        transportParams,
 	})
 	if err != nil {
@@ -63,7 +67,10 @@ func (h *extensionHandlerServer) Send(hType mint.HandshakeType, el *mint.Extensi
 
 func (h *extensionHandlerServer) Receive(hType mint.HandshakeType, el *mint.ExtensionList) error {
 	ext := &tlsExtensionBody{}
-	found := el.Find(ext)
+	found, err := el.Find(ext)
+	if err != nil {
+		return err
+	}
 
 	if hType != mint.HandshakeTypeClientHello {
 		if found {
@@ -80,15 +87,11 @@ func (h *extensionHandlerServer) Receive(hType mint.HandshakeType, el *mint.Exte
 		return err
 	}
 	initialVersion := protocol.VersionNumber(chtp.InitialVersion)
-	negotiatedVersion := protocol.VersionNumber(chtp.NegotiatedVersion)
-	// check that the negotiated version is the version we're currently using
-	if negotiatedVersion != h.version {
-		return qerr.Error(qerr.VersionNegotiationMismatch, "Inconsistent negotiated version")
-	}
+
 	// perform the stateless version negotiation validation:
 	// make sure that we would have sent a Version Negotiation Packet if the client offered the initial version
-	// this is the case when the initial version is not contained in the supported versions
-	if initialVersion != negotiatedVersion && protocol.IsSupportedVersion(h.supportedVersions, initialVersion) {
+	// this is the case if and only if the initial version is not contained in the supported versions
+	if initialVersion != h.version && protocol.IsSupportedVersion(h.supportedVersions, initialVersion) {
 		return qerr.Error(qerr.VersionNegotiationMismatch, "Client should have used the initial version")
 	}
 
@@ -106,4 +109,8 @@ func (h *extensionHandlerServer) Receive(hType mint.HandshakeType, el *mint.Exte
 	params.MaxStreams = math.MaxUint32
 	h.paramsChan <- *params
 	return nil
+}
+
+func (h *extensionHandlerServer) GetPeerParams() <-chan TransportParameters {
+	return h.paramsChan
 }

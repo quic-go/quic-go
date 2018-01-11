@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"io"
 	"net"
 	"time"
+
+	"github.com/bifurcation/mint"
 
 	"github.com/lucas-clemente/quic-go/internal/crypto"
 	"github.com/lucas-clemente/quic-go/internal/mocks/crypto"
@@ -61,48 +64,49 @@ func mockQuicCryptoKeyDerivation(forwardSecure bool, sharedSecret, nonces []byte
 }
 
 type mockStream struct {
-	unblockRead chan struct{} // close this chan to unblock Read
+	unblockRead chan struct{}
 	dataToRead  bytes.Buffer
 	dataWritten bytes.Buffer
 }
+
+var _ io.ReadWriter = &mockStream{}
+
+var errMockStreamClosing = errors.New("mock stream closing")
 
 func newMockStream() *mockStream {
 	return &mockStream{unblockRead: make(chan struct{})}
 }
 
+// call Close to make Read return
 func (s *mockStream) Read(p []byte) (int, error) {
 	n, _ := s.dataToRead.Read(p)
 	if n == 0 { // block if there's no data
 		<-s.unblockRead
+		return 0, errMockStreamClosing
 	}
 	return n, nil // never return an EOF
-}
-
-func (s *mockStream) ReadByte() (byte, error) {
-	return s.dataToRead.ReadByte()
 }
 
 func (s *mockStream) Write(p []byte) (int, error) {
 	return s.dataWritten.Write(p)
 }
 
-func (s *mockStream) Close() error                       { panic("not implemented") }
-func (s *mockStream) Reset(error)                        { panic("not implemented") }
-func (mockStream) CloseRemote(offset protocol.ByteCount) { panic("not implemented") }
-func (s mockStream) StreamID() protocol.StreamID         { panic("not implemented") }
+func (s *mockStream) close() {
+	close(s.unblockRead)
+}
 
-type mockCookieSource struct {
+type mockCookieProtector struct {
 	data      []byte
 	decodeErr error
 }
 
-var _ crypto.StkSource = &mockCookieSource{}
+var _ mint.CookieProtector = &mockCookieProtector{}
 
-func (mockCookieSource) NewToken(sourceAddr []byte) ([]byte, error) {
+func (mockCookieProtector) NewToken(sourceAddr []byte) ([]byte, error) {
 	return append([]byte("token "), sourceAddr...), nil
 }
 
-func (s mockCookieSource) DecodeToken(data []byte) ([]byte, error) {
+func (s mockCookieProtector) DecodeToken(data []byte) ([]byte, error) {
 	if s.decodeErr != nil {
 		return nil, s.decodeErr
 	}
@@ -120,7 +124,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		cs                *cryptoSetupServer
 		stream            *mockStream
 		paramsChan        chan TransportParameters
-		aeadChanged       chan protocol.EncryptionLevel
+		handshakeEvent    chan struct{}
 		nonce32           []byte
 		versionTag        []byte
 		validSTK          []byte
@@ -142,7 +146,7 @@ var _ = Describe("Server Crypto Setup", func() {
 
 		// use a buffered channel here, so that we can parse a CHLO without having to receive the TransportParameters to avoid blocking
 		paramsChan = make(chan TransportParameters, 1)
-		aeadChanged = make(chan protocol.EncryptionLevel, 2)
+		handshakeEvent = make(chan struct{}, 2)
 		stream = newMockStream()
 		kex = &mockKEX{}
 		signer = &mockSigner{}
@@ -166,12 +170,12 @@ var _ = Describe("Server Crypto Setup", func() {
 			supportedVersions,
 			nil,
 			paramsChan,
-			aeadChanged,
+			handshakeEvent,
 			nil,
 		)
 		Expect(err).NotTo(HaveOccurred())
 		cs = csInt.(*cryptoSetupServer)
-		cs.scfg.cookieGenerator.cookieSource = &mockCookieSource{}
+		cs.scfg.cookieGenerator.cookieProtector = &mockCookieProtector{}
 		validSTK, err = cs.scfg.cookieGenerator.NewToken(remoteAddr)
 		Expect(err).NotTo(HaveOccurred())
 		sourceAddrValid = true
@@ -180,10 +184,6 @@ var _ = Describe("Server Crypto Setup", func() {
 		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
 		cs.nullAEAD = mockcrypto.NewMockAEAD(mockCtrl)
 		cs.cryptoStream = stream
-	})
-
-	AfterEach(func() {
-		close(stream.unblockRead)
 	})
 
 	Context("diversification nonce", func() {
@@ -250,7 +250,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		It("reads the transport parameters sent by the client", func() {
 			sourceAddrValid = true
 			fullCHLO[TagICSL] = []byte{0x37, 0x13, 0, 0}
-			_, err := cs.handleMessage(bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), fullCHLO)
+			_, err := cs.handleMessage(bytes.Repeat([]byte{'a'}, protocol.MinClientHelloSize), fullCHLO)
 			Expect(err).ToNot(HaveOccurred())
 			var params TransportParameters
 			Expect(paramsChan).To(Receive(&params))
@@ -259,7 +259,7 @@ var _ = Describe("Server Crypto Setup", func() {
 
 		It("generates REJ messages", func() {
 			sourceAddrValid = false
-			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), nil)
+			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.MinClientHelloSize), nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(response).To(HavePrefix("REJ"))
 			Expect(response).To(ContainSubstring("initial public"))
@@ -270,7 +270,7 @@ var _ = Describe("Server Crypto Setup", func() {
 
 		It("REJ messages don't include cert or proof without STK", func() {
 			sourceAddrValid = false
-			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), nil)
+			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.MinClientHelloSize), nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(response).To(HavePrefix("REJ"))
 			Expect(response).ToNot(ContainSubstring("certcompressed"))
@@ -280,7 +280,7 @@ var _ = Describe("Server Crypto Setup", func() {
 
 		It("REJ messages include cert and proof with valid STK", func() {
 			sourceAddrValid = true
-			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize), map[Tag][]byte{
+			response, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.MinClientHelloSize), map[Tag][]byte{
 				TagSTK: validSTK,
 				TagSNI: []byte("foo"),
 			})
@@ -314,12 +314,17 @@ var _ = Describe("Server Crypto Setup", func() {
 			})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(response).To(HavePrefix("SHLO"))
-			Expect(response).To(ContainSubstring("ephermal pub"))
-			Expect(response).To(ContainSubstring("SNO\x00"))
+			message, err := ParseHandshakeMessage(bytes.NewReader(response))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(message.Data).To(HaveKeyWithValue(TagPUBS, []byte("ephermal pub")))
+			Expect(message.Data).To(HaveKey(TagSNO))
+			Expect(message.Data).To(HaveKey(TagVER))
+			// the supported versions should include one reserved version number
+			Expect(message.Data[TagVER]).To(HaveLen(4*len(supportedVersions) + 4))
 			for _, v := range supportedVersions {
 				b := &bytes.Buffer{}
 				utils.BigEndian.WriteUint32(b, uint32(v))
-				Expect(response).To(ContainSubstring(string(b.Bytes())))
+				Expect(message.Data[TagVER]).To(ContainSubstring(string(b.Bytes())))
 			}
 			Expect(checkedSecure).To(BeTrue())
 			Expect(checkedForwardSecure).To(BeTrue())
@@ -331,7 +336,7 @@ var _ = Describe("Server Crypto Setup", func() {
 				Data: map[Tag][]byte{
 					TagSNI: []byte("quic.clemente.io"),
 					TagSTK: validSTK,
-					TagPAD: bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize),
+					TagPAD: bytes.Repeat([]byte{'a'}, protocol.MinClientHelloSize),
 					TagVER: versionTag,
 				},
 			}.Write(&stream.dataToRead)
@@ -339,10 +344,10 @@ var _ = Describe("Server Crypto Setup", func() {
 			err := cs.HandleCryptoStream()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stream.dataWritten.Bytes()).To(HavePrefix("REJ"))
-			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
+			Expect(handshakeEvent).To(Receive()) // for the switch to secure
 			Expect(stream.dataWritten.Bytes()).To(ContainSubstring("SHLO"))
-			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionForwardSecure)))
-			Expect(aeadChanged).ToNot(BeClosed())
+			Expect(handshakeEvent).To(Receive()) // for the switch to forward secure
+			Expect(handshakeEvent).ToNot(BeClosed())
 		})
 
 		It("rejects client nonces that have the wrong length", func() {
@@ -373,9 +378,9 @@ var _ = Describe("Server Crypto Setup", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stream.dataWritten.Bytes()).To(HavePrefix("SHLO"))
 			Expect(stream.dataWritten.Bytes()).ToNot(ContainSubstring("REJ"))
-			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
-			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionForwardSecure)))
-			Expect(aeadChanged).ToNot(BeClosed())
+			Expect(handshakeEvent).To(Receive()) // for the switch to secure
+			Expect(handshakeEvent).To(Receive()) // for the switch to forward secure
+			Expect(handshakeEvent).ToNot(BeClosed())
 		})
 
 		It("recognizes inchoate CHLOs missing SCID", func() {
@@ -405,17 +410,12 @@ var _ = Describe("Server Crypto Setup", func() {
 
 		It("recognizes inchoate CHLOs with an invalid STK", func() {
 			testErr := errors.New("STK invalid")
-			cs.scfg.cookieGenerator.cookieSource.(*mockCookieSource).decodeErr = testErr
+			cs.scfg.cookieGenerator.cookieProtector.(*mockCookieProtector).decodeErr = testErr
 			Expect(cs.isInchoateCHLO(fullCHLO, cert)).To(BeTrue())
 		})
 
 		It("recognizes proper CHLOs", func() {
 			Expect(cs.isInchoateCHLO(fullCHLO, cert)).To(BeFalse())
-		})
-
-		It("errors on too short inchoate CHLOs", func() {
-			_, err := cs.handleInchoateCHLO("", bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize-1), nil)
-			Expect(err).To(MatchError("CryptoInvalidValueLength: CHLO too small"))
 		})
 
 		It("rejects CHLOs without the version tag", func() {
@@ -536,7 +536,7 @@ var _ = Describe("Server Crypto Setup", func() {
 				TagKEXS: kexs,
 			})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(aeadChanged).To(Receive(Equal(protocol.EncryptionSecure)))
+			Expect(handshakeEvent).To(Receive()) // for the switch to secure
 			close(cs.sentSHLO)
 		}
 
@@ -658,7 +658,7 @@ var _ = Describe("Server Crypto Setup", func() {
 				cs.forwardSecureAEAD.(*mockcrypto.MockAEAD).EXPECT().Open(nil, []byte("forward secure encrypted"), protocol.PacketNumber(200), []byte{})
 				_, _, err := cs.Open(nil, []byte("forward secure encrypted"), 200, []byte{})
 				Expect(err).ToNot(HaveOccurred())
-				Expect(aeadChanged).To(BeClosed())
+				Expect(handshakeEvent).To(BeClosed())
 			})
 		})
 
@@ -713,7 +713,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		It("requires STK", func() {
 			sourceAddrValid = false
 			done, err := cs.handleMessage(
-				bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize),
+				bytes.Repeat([]byte{'a'}, protocol.MinClientHelloSize),
 				map[Tag][]byte{
 					TagSNI: []byte("foo"),
 					TagVER: versionTag,
@@ -727,7 +727,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		It("works with proper STK", func() {
 			sourceAddrValid = true
 			done, err := cs.handleMessage(
-				bytes.Repeat([]byte{'a'}, protocol.ClientHelloMinimumSize),
+				bytes.Repeat([]byte{'a'}, protocol.MinClientHelloSize),
 				map[Tag][]byte{
 					TagSNI: []byte("foo"),
 					TagVER: versionTag,

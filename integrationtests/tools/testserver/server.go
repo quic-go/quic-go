@@ -25,8 +25,9 @@ var (
 	PRData     = GeneratePRData(dataLen)
 	PRDataLong = GeneratePRData(dataLenLong)
 
-	server *h2quic.Server
-	port   string
+	server         *h2quic.Server
+	stoppedServing chan struct{}
+	port           string
 )
 
 func init() {
@@ -95,14 +96,18 @@ func StartQuicServer(versions []protocol.VersionNumber) {
 	Expect(err).NotTo(HaveOccurred())
 	port = strconv.Itoa(conn.LocalAddr().(*net.UDPAddr).Port)
 
+	stoppedServing = make(chan struct{})
+
 	go func() {
 		defer GinkgoRecover()
 		server.Serve(conn)
+		close(stoppedServing)
 	}()
 }
 
 func StopQuicServer() {
 	Expect(server.Close()).NotTo(HaveOccurred())
+	Eventually(stoppedServing).Should(BeClosed())
 }
 
 func Port() string {

@@ -2,14 +2,12 @@ package self_test
 
 import (
 	"crypto/tls"
-	"fmt"
 	"net"
 	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/qerr"
 
 	"github.com/lucas-clemente/quic-go/internal/testdata"
@@ -109,18 +107,6 @@ var _ = Describe("Handshake RTT tests", func() {
 		_, err := quic.DialAddr(proxy.LocalAddr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
 		Expect(err).ToNot(HaveOccurred())
 		expectDurationInRTTs(4)
-	})
-
-	// 1 RTT for verifying the source address
-	// 1 RTT to become secure
-	// TODO (marten-seemann): enable this test (see #625)
-	PIt("is secure after 2 RTTs", func() {
-		utils.SetLogLevel(utils.LogLevelDebug)
-		runServerAndProxy()
-		_, err := quic.DialAddrNonFWSecure(proxy.LocalAddr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
-		fmt.Println("#### is non fw secure ###")
-		Expect(err).ToNot(HaveOccurred())
-		expectDurationInRTTs(2)
 	})
 
 	It("is forward-secure after 2 RTTs when the server doesn't require a Cookie", func() {

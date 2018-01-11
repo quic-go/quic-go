@@ -1,4 +1,5 @@
 dist: trusty
+group: travis_latest
 
 addons:
   hosts:
@@ -8,6 +9,7 @@ language: go
 
 go:
   - 1.9.2
+  - 1.10beta1
 
 # first part of the GOARCH workaround
 # setting the GOARCH directly doesn't work, since the value will be overwritten later
@@ -30,6 +32,7 @@ before_install:
   - export GOARCH=$TRAVIS_GOARCH
   - go env # for debugging
   - google-chrome --version
+  - "printf \"quic.clemente.io certificate valid until: \" && openssl x509 -in example/fullchain.pem -enddate -noout | cut -d = -f 2"
   - "export DISPLAY=:99.0"
   - "Xvfb $DISPLAY &> /dev/null &"
 

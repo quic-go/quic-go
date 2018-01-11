@@ -27,11 +27,18 @@ var _ = Describe("StopWaitingFrame", func() {
 			Expect(b.Len()).To(BeZero())
 		})
 
-		It("rejects frames that would have 0 as LeastUnacked", func() {
+		It("parses a frame with 0 as LeastUnacked", func() {
 			b := bytes.NewReader([]byte{0x6, 0x8})
-			_, err := ParseStopWaitingFrame(b, 8, 1, protocol.VersionWhatever)
-			Expect(err).To(HaveOccurred())
+			frame, err := ParseStopWaitingFrame(b, 8, 1, protocol.VersionWhatever)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame.LeastUnacked).To(Equal(protocol.PacketNumber(0)))
 			Expect(b.Len()).To(BeZero())
+		})
+
+		It("rejects frames that underflow LeastUnacked", func() {
+			b := bytes.NewReader([]byte{0x6, 0x9})
+			_, err := ParseStopWaitingFrame(b, 8, 1, protocol.VersionWhatever)
+			Expect(err).To(MatchError("invalid LeastUnackedDelta"))
 		})
 
 		It("errors on EOFs", func() {
@@ -46,19 +53,29 @@ var _ = Describe("StopWaitingFrame", func() {
 	})
 
 	Context("when writing", func() {
-		Context("in big endian", func() {
-			It("writes a sample frame", func() {
-				b := &bytes.Buffer{}
-				frame := &StopWaitingFrame{
-					LeastUnacked:    10,
-					PacketNumber:    13,
-					PacketNumberLen: protocol.PacketNumberLen6,
-				}
-				err := frame.Write(b, versionBigEndian)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(b.Bytes()[0]).To(Equal(uint8(0x06)))
-				Expect(b.Bytes()[1:7]).To(Equal([]byte{0, 0, 0, 0, 0, 3}))
-			})
+		It("writes a sample frame", func() {
+			b := &bytes.Buffer{}
+			frame := &StopWaitingFrame{
+				LeastUnacked:    10,
+				PacketNumber:    13,
+				PacketNumberLen: protocol.PacketNumberLen6,
+			}
+			err := frame.Write(b, versionBigEndian)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(b.Bytes()[0]).To(Equal(uint8(0x06)))
+			Expect(b.Bytes()[1:7]).To(Equal([]byte{0, 0, 0, 0, 0, 3}))
+		})
+
+		It("writes a frame for LeastUnacked = 0", func() {
+			b := &bytes.Buffer{}
+			frame := &StopWaitingFrame{
+				LeastUnacked:    0,
+				PacketNumber:    8,
+				PacketNumberLen: protocol.PacketNumberLen1,
+			}
+			err := frame.Write(b, versionBigEndian)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(b.Bytes()).To(Equal([]byte{0x6, 0x8}))
 		})
 
 		It("errors when PacketNumber was not set", func() {
@@ -67,7 +84,7 @@ var _ = Describe("StopWaitingFrame", func() {
 				LeastUnacked:    10,
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}
-			err := frame.Write(b, protocol.VersionWhatever)
+			err := frame.Write(b, versionBigEndian)
 			Expect(err).To(MatchError(errPacketNumberNotSet))
 		})
 
@@ -77,7 +94,7 @@ var _ = Describe("StopWaitingFrame", func() {
 				LeastUnacked: 10,
 				PacketNumber: 13,
 			}
-			err := frame.Write(b, protocol.VersionWhatever)
+			err := frame.Write(b, versionBigEndian)
 			Expect(err).To(MatchError(errPacketNumberLenNotSet))
 		})
 
@@ -88,8 +105,19 @@ var _ = Describe("StopWaitingFrame", func() {
 				PacketNumber:    5,
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}
-			err := frame.Write(b, protocol.VersionWhatever)
+			err := frame.Write(b, versionBigEndian)
 			Expect(err).To(MatchError(errLeastUnackedHigherThanPacketNumber))
+		})
+
+		It("refuses to write for IETF QUIC", func() {
+			b := &bytes.Buffer{}
+			frame := &StopWaitingFrame{
+				LeastUnacked:    10,
+				PacketNumber:    13,
+				PacketNumberLen: protocol.PacketNumberLen6,
+			}
+			err := frame.Write(b, versionIETFFrames)
+			Expect(err).To(MatchError("STOP_WAITING not defined in IETF QUIC"))
 		})
 
 		Context("LeastUnackedDelta length", func() {
@@ -159,18 +187,10 @@ var _ = Describe("StopWaitingFrame", func() {
 				Expect(frame.MinLength(protocol.VersionWhatever)).To(Equal(protocol.ByteCount(length + 1)))
 			}
 		})
-
-		It("errors when packetNumberLen is not set", func() {
-			frame := &StopWaitingFrame{
-				LeastUnacked: 10,
-			}
-			_, err := frame.MinLength(0)
-			Expect(err).To(MatchError(errPacketNumberLenNotSet))
-		})
 	})
 
 	Context("self consistency", func() {
-		It("reads a stop waiting frame that it wrote", func() {
+		It("reads a STOP_WAITING frame that it wrote", func() {
 			packetNumber := protocol.PacketNumber(13)
 			frame := &StopWaitingFrame{
 				LeastUnacked:    10,
@@ -178,9 +198,9 @@ var _ = Describe("StopWaitingFrame", func() {
 				PacketNumberLen: protocol.PacketNumberLen4,
 			}
 			b := &bytes.Buffer{}
-			err := frame.Write(b, protocol.VersionWhatever)
+			err := frame.Write(b, versionBigEndian)
 			Expect(err).ToNot(HaveOccurred())
-			readframe, err := ParseStopWaitingFrame(bytes.NewReader(b.Bytes()), packetNumber, protocol.PacketNumberLen4, protocol.VersionWhatever)
+			readframe, err := ParseStopWaitingFrame(bytes.NewReader(b.Bytes()), packetNumber, protocol.PacketNumberLen4, versionBigEndian)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(readframe.LeastUnacked).To(Equal(frame.LeastUnacked))
 		})

@@ -19,7 +19,7 @@ var _ = Describe("Stream Flow controller", func() {
 			streamID:   10,
 			connection: NewConnectionFlowController(1000, 1000, rttStats).(*connectionFlowController),
 		}
-		controller.maxReceiveWindowIncrement = 10000
+		controller.maxReceiveWindowSize = 10000
 		controller.rttStats = rttStats
 	})
 
@@ -35,7 +35,7 @@ var _ = Describe("Stream Flow controller", func() {
 			fc := NewStreamFlowController(5, true, cc, receiveWindow, maxReceiveWindow, sendWindow, rttStats).(*streamFlowController)
 			Expect(fc.streamID).To(Equal(protocol.StreamID(5)))
 			Expect(fc.receiveWindow).To(Equal(receiveWindow))
-			Expect(fc.maxReceiveWindowIncrement).To(Equal(maxReceiveWindow))
+			Expect(fc.maxReceiveWindowSize).To(Equal(maxReceiveWindow))
 			Expect(fc.sendWindow).To(Equal(sendWindow))
 			Expect(fc.contributesToConnection).To(BeTrue())
 		})
@@ -44,11 +44,11 @@ var _ = Describe("Stream Flow controller", func() {
 	Context("receiving data", func() {
 		Context("registering received offsets", func() {
 			var receiveWindow protocol.ByteCount = 10000
-			var receiveWindowIncrement protocol.ByteCount = 600
+			var receiveWindowSize protocol.ByteCount = 600
 
 			BeforeEach(func() {
 				controller.receiveWindow = receiveWindow
-				controller.receiveWindowIncrement = receiveWindowIncrement
+				controller.receiveWindowSize = receiveWindowSize
 			})
 
 			It("updates the highestReceived", func() {
@@ -157,7 +157,7 @@ var _ = Describe("Stream Flow controller", func() {
 		})
 
 		Context("generating window updates", func() {
-			var oldIncrement protocol.ByteCount
+			var oldWindowSize protocol.ByteCount
 
 			// update the congestion such that it returns a given value for the smoothed RTT
 			setRtt := func(t time.Duration) {
@@ -167,31 +167,53 @@ var _ = Describe("Stream Flow controller", func() {
 
 			BeforeEach(func() {
 				controller.receiveWindow = 100
-				controller.receiveWindowIncrement = 60
-				controller.connection.(*connectionFlowController).receiveWindowIncrement = 120
-				oldIncrement = controller.receiveWindowIncrement
+				controller.receiveWindowSize = 60
+				controller.bytesRead = 100 - 60
+				controller.connection.(*connectionFlowController).receiveWindowSize = 120
+				oldWindowSize = controller.receiveWindowSize
+			})
+
+			It("tells if it has window updates", func() {
+				Expect(controller.HasWindowUpdate()).To(BeFalse())
+				controller.AddBytesRead(30)
+				Expect(controller.HasWindowUpdate()).To(BeTrue())
+				Expect(controller.GetWindowUpdate()).ToNot(BeZero())
+				Expect(controller.HasWindowUpdate()).To(BeFalse())
 			})
 
 			It("tells the connection flow controller when the window was autotuned", func() {
+				oldOffset := controller.bytesRead
 				controller.contributesToConnection = true
-				controller.AddBytesRead(75)
-				setRtt(20 * time.Millisecond)
-				controller.lastWindowUpdateTime = time.Now().Add(-35 * time.Millisecond)
+				setRtt(scaleDuration(20 * time.Millisecond))
+				controller.epochStartOffset = oldOffset
+				controller.epochStartTime = time.Now().Add(-time.Millisecond)
+				controller.AddBytesRead(55)
 				offset := controller.GetWindowUpdate()
-				Expect(offset).To(Equal(protocol.ByteCount(75 + 2*60)))
-				Expect(controller.receiveWindowIncrement).To(Equal(2 * oldIncrement))
-				Expect(controller.connection.(*connectionFlowController).receiveWindowIncrement).To(Equal(protocol.ByteCount(float64(controller.receiveWindowIncrement) * protocol.ConnectionFlowControlMultiplier)))
+				Expect(offset).To(Equal(protocol.ByteCount(oldOffset + 55 + 2*oldWindowSize)))
+				Expect(controller.receiveWindowSize).To(Equal(2 * oldWindowSize))
+				Expect(controller.connection.(*connectionFlowController).receiveWindowSize).To(Equal(protocol.ByteCount(float64(controller.receiveWindowSize) * protocol.ConnectionFlowControlMultiplier)))
 			})
 
 			It("doesn't tell the connection flow controller if it doesn't contribute", func() {
+				oldOffset := controller.bytesRead
 				controller.contributesToConnection = false
-				controller.AddBytesRead(75)
-				setRtt(20 * time.Millisecond)
-				controller.lastWindowUpdateTime = time.Now().Add(-35 * time.Millisecond)
+				setRtt(scaleDuration(20 * time.Millisecond))
+				controller.epochStartOffset = oldOffset
+				controller.epochStartTime = time.Now().Add(-time.Millisecond)
+				controller.AddBytesRead(55)
 				offset := controller.GetWindowUpdate()
 				Expect(offset).ToNot(BeZero())
-				Expect(controller.receiveWindowIncrement).To(Equal(2 * oldIncrement))
-				Expect(controller.connection.(*connectionFlowController).receiveWindowIncrement).To(Equal(protocol.ByteCount(120))) // unchanged
+				Expect(controller.receiveWindowSize).To(Equal(2 * oldWindowSize))
+				Expect(controller.connection.(*connectionFlowController).receiveWindowSize).To(Equal(protocol.ByteCount(2 * oldWindowSize))) // unchanged
+			})
+
+			It("doesn't increase the window after a final offset was already received", func() {
+				controller.AddBytesRead(30)
+				err := controller.UpdateHighestReceived(90, true)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(controller.HasWindowUpdate()).To(BeFalse())
+				offset := controller.GetWindowUpdate()
+				Expect(offset).To(BeZero())
 			})
 		})
 	})
@@ -223,7 +245,8 @@ var _ = Describe("Stream Flow controller", func() {
 			controller.connection.UpdateSendWindow(50)
 			controller.UpdateSendWindow(100)
 			controller.AddBytesSent(50)
-			Expect(controller.connection.IsBlocked()).To(BeTrue())
+			blocked, _ := controller.connection.IsNewlyBlocked()
+			Expect(blocked).To(BeTrue())
 			Expect(controller.IsBlocked()).To(BeFalse())
 		})
 	})

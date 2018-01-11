@@ -3,59 +3,14 @@ package ackhandler
 import (
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/congestion"
+	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
-
-type mockCongestion struct {
-	argsOnPacketSent        []interface{}
-	maybeExitSlowStart      bool
-	onRetransmissionTimeout bool
-	getCongestionWindow     bool
-	packetsAcked            [][]interface{}
-	packetsLost             [][]interface{}
-}
-
-func (m *mockCongestion) TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCount) time.Duration {
-	panic("not implemented")
-}
-
-func (m *mockCongestion) OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) bool {
-	m.argsOnPacketSent = []interface{}{sentTime, bytesInFlight, packetNumber, bytes, isRetransmittable}
-	return false
-}
-
-func (m *mockCongestion) GetCongestionWindow() protocol.ByteCount {
-	m.getCongestionWindow = true
-	return protocol.DefaultTCPMSS
-}
-
-func (m *mockCongestion) MaybeExitSlowStart() {
-	m.maybeExitSlowStart = true
-}
-
-func (m *mockCongestion) OnRetransmissionTimeout(packetsRetransmitted bool) {
-	m.onRetransmissionTimeout = true
-}
-
-func (m *mockCongestion) RetransmissionDelay() time.Duration {
-	return defaultRTOTimeout
-}
-
-func (m *mockCongestion) SetNumEmulatedConnections(n int)         { panic("not implemented") }
-func (m *mockCongestion) OnConnectionMigration()                  { panic("not implemented") }
-func (m *mockCongestion) SetSlowStartLargeReduction(enabled bool) { panic("not implemented") }
-
-func (m *mockCongestion) OnPacketAcked(n protocol.PacketNumber, l protocol.ByteCount, bif protocol.ByteCount) {
-	m.packetsAcked = append(m.packetsAcked, []interface{}{n, l, bif})
-}
-
-func (m *mockCongestion) OnPacketLost(n protocol.PacketNumber, l protocol.ByteCount, bif protocol.ByteCount) {
-	m.packetsLost = append(m.packetsLost, []interface{}{n, l, bif})
-}
 
 func retransmittablePacket(num protocol.PacketNumber) *Packet {
 	return &Packet{
@@ -105,7 +60,7 @@ var _ = Describe("SentPacketHandler", func() {
 	}
 
 	It("gets the LeastUnacked packet number", func() {
-		handler.LargestAcked = 0x1337
+		handler.largestAcked = 0x1337
 		Expect(handler.GetLeastUnacked()).To(Equal(protocol.PacketNumber(0x1337 + 1)))
 	})
 
@@ -124,36 +79,26 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.skippedPackets).To(BeEmpty())
 		})
 
-		It("rejects packets with the same packet number", func() {
-			packet1 := Packet{PacketNumber: 1, Frames: []wire.Frame{&streamFrame}, Length: 1}
+		It("accepts packet number 0", func() {
+			packet1 := Packet{PacketNumber: 0, Frames: []wire.Frame{&streamFrame}, Length: 1}
 			packet2 := Packet{PacketNumber: 1, Frames: []wire.Frame{&streamFrame}, Length: 2}
 			err := handler.SentPacket(&packet1)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.lastSentPacketNumber).To(BeZero())
 			err = handler.SentPacket(&packet2)
-			Expect(err).To(MatchError(errPacketNumberNotIncreasing))
+			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(1)))
-			Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(1)))
-			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(1)))
+			Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(0)))
+			Expect(handler.packetHistory.Back().Value.PacketNumber).To(Equal(protocol.PacketNumber(1)))
+			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(3)))
 			Expect(handler.skippedPackets).To(BeEmpty())
-		})
-
-		It("rejects packets with decreasing packet number", func() {
-			packet1 := Packet{PacketNumber: 2, Frames: []wire.Frame{&streamFrame}, Length: 1}
-			packet2 := Packet{PacketNumber: 1, Frames: []wire.Frame{&streamFrame}, Length: 2}
-			err := handler.SentPacket(&packet1)
-			Expect(err).ToNot(HaveOccurred())
-			err = handler.SentPacket(&packet2)
-			Expect(err).To(MatchError(errPacketNumberNotIncreasing))
-			Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(2)))
-			Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(2)))
-			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(1)))
 		})
 
 		It("stores the sent time", func() {
 			packet := Packet{PacketNumber: 1, Frames: []wire.Frame{&streamFrame}, Length: 1}
 			err := handler.SentPacket(&packet)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.packetHistory.Front().Value.SendTime.Unix()).To(BeNumerically("~", time.Now().Unix(), 1))
+			Expect(handler.packetHistory.Front().Value.sendTime.Unix()).To(BeNumerically("~", time.Now().Unix(), 1))
 		})
 
 		It("does not store non-retransmittable packets", func() {
@@ -219,21 +164,21 @@ var _ = Describe("SentPacketHandler", func() {
 			Context("garbage collection", func() {
 				It("keeps all packet numbers above the LargestAcked", func() {
 					handler.skippedPackets = []protocol.PacketNumber{2, 5, 8, 10}
-					handler.LargestAcked = 1
+					handler.largestAcked = 1
 					handler.garbageCollectSkippedPackets()
 					Expect(handler.skippedPackets).To(Equal([]protocol.PacketNumber{2, 5, 8, 10}))
 				})
 
 				It("doesn't keep packet numbers below the LargestAcked", func() {
 					handler.skippedPackets = []protocol.PacketNumber{1, 5, 8, 10}
-					handler.LargestAcked = 5
+					handler.largestAcked = 5
 					handler.garbageCollectSkippedPackets()
 					Expect(handler.skippedPackets).To(Equal([]protocol.PacketNumber{8, 10}))
 				})
 
 				It("deletes all packet numbers if LargestAcked is sufficiently high", func() {
 					handler.skippedPackets = []protocol.PacketNumber{1, 5, 10}
-					handler.LargestAcked = 15
+					handler.largestAcked = 15
 					handler.garbageCollectSkippedPackets()
 					Expect(handler.skippedPackets).To(BeEmpty())
 				})
@@ -273,7 +218,7 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 			}
 			err := handler.SentPacket(retransmittablePacket(i))
-			Expect(err).To(MatchError(ErrTooManyTrackedSentPackets))
+			Expect(err).To(MatchError("Too many outstanding non-acked and non-retransmitted packets"))
 		})
 
 		// TODO: add a test that the length of the retransmission queue is considered, even if packets have already been ACKed. Relevant once we drop support for QUIC 33 and earlier
@@ -284,6 +229,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 		BeforeEach(func() {
 			packets = []*Packet{
+				{PacketNumber: 0, Frames: []wire.Frame{&streamFrame}, Length: 1},
 				{PacketNumber: 1, Frames: []wire.Frame{&streamFrame}, Length: 1},
 				{PacketNumber: 2, Frames: []wire.Frame{&streamFrame}, Length: 1},
 				{PacketNumber: 3, Frames: []wire.Frame{&streamFrame}, Length: 1},
@@ -305,6 +251,14 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets))))
 		})
 
+		expectInPacketHistory := func(expected []protocol.PacketNumber) {
+			var packets []protocol.PacketNumber
+			for el := handler.packetHistory.Front(); el != nil; el = el.Next() {
+				packets = append(packets, el.Value.PacketNumber)
+			}
+			ExpectWithOffset(1, packets).To(Equal(expected))
+		}
+
 		Context("ACK validation", func() {
 			It("rejects duplicate ACKs", func() {
 				largestAcked := 3
@@ -321,16 +275,15 @@ var _ = Describe("SentPacketHandler", func() {
 			})
 
 			It("rejects out of order ACKs", func() {
-				ack := wire.AckFrame{
-					LargestAcked: 3,
-				}
+				// acks packets 0, 1, 2, 3
+				ack := wire.AckFrame{LargestAcked: 3}
 				err := handler.ReceivedAck(&ack, 1337, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 3)))
+				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 4)))
 				err = handler.ReceivedAck(&ack, 1337-1, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).To(MatchError(ErrDuplicateOrOutOfOrderAck))
-				Expect(handler.LargestAcked).To(Equal(protocol.PacketNumber(3)))
-				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 3)))
+				Expect(handler.largestAcked).To(Equal(protocol.PacketNumber(3)))
+				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 4)))
 			})
 
 			It("rejects ACKs with a too high LargestAcked packet number", func() {
@@ -338,7 +291,7 @@ var _ = Describe("SentPacketHandler", func() {
 					LargestAcked: packets[len(packets)-1].PacketNumber + 1337,
 				}
 				err := handler.ReceivedAck(&ack, 1, protocol.EncryptionUnencrypted, time.Now())
-				Expect(err).To(MatchError(errAckForUnsentPacket))
+				Expect(err).To(MatchError("InvalidAckData: Received ACK for an unsent package"))
 				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets))))
 			})
 
@@ -352,7 +305,7 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 3)))
 				err = handler.ReceivedAck(&ack, 1337+1, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.LargestAcked).To(Equal(protocol.PacketNumber(3)))
+				Expect(handler.largestAcked).To(Equal(protocol.PacketNumber(3)))
 				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 3)))
 			})
 
@@ -362,7 +315,7 @@ var _ = Describe("SentPacketHandler", func() {
 					LowestAcked:  5,
 				}
 				err := handler.ReceivedAck(&ack, 1337, protocol.EncryptionUnencrypted, time.Now())
-				Expect(err).To(MatchError(ErrAckForSkippedPacket))
+				Expect(err).To(MatchError("InvalidAckData: Received an ACK for a skipped packet number"))
 			})
 
 			It("accepts an ACK that correctly nacks a skipped packet", func() {
@@ -376,7 +329,7 @@ var _ = Describe("SentPacketHandler", func() {
 				}
 				err := handler.ReceivedAck(&ack, 1337, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.LargestAcked).ToNot(BeZero())
+				Expect(handler.largestAcked).ToNot(BeZero())
 			})
 		})
 
@@ -384,11 +337,11 @@ var _ = Describe("SentPacketHandler", func() {
 			It("adjusts the LargestAcked", func() {
 				ack := wire.AckFrame{
 					LargestAcked: 5,
-					LowestAcked:  1,
+					LowestAcked:  0,
 				}
 				err := handler.ReceivedAck(&ack, 1, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.LargestAcked).To(Equal(protocol.PacketNumber(5)))
+				Expect(handler.largestAcked).To(Equal(protocol.PacketNumber(5)))
 				el := handler.packetHistory.Front()
 				for i := 6; i <= 10; i++ {
 					Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(i)))
@@ -413,15 +366,15 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(err).To(MatchError("Received ACK with encryption level encrypted (not forward-secure) that acks a packet 13 (encryption level forward-secure)"))
 			})
 
-			It("ACKs all packets for an ACK frame with no missing packets", func() {
+			It("acks all packets for an ACK frame with no missing packets", func() {
 				ack := wire.AckFrame{
 					LargestAcked: 8,
-					LowestAcked:  2,
+					LowestAcked:  1,
 				}
 				err := handler.ReceivedAck(&ack, 1, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).ToNot(HaveOccurred())
 				el := handler.packetHistory.Front()
-				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(1)))
+				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(0)))
 				el = el.Next()
 				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(9)))
 				el = el.Next()
@@ -429,26 +382,28 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(el.Next().Value.PacketNumber).To(Equal(protocol.PacketNumber(12)))
 			})
 
+			It("acks packet 0", func() {
+				ack := wire.AckFrame{
+					LargestAcked: 0,
+					LowestAcked:  0,
+				}
+				err := handler.ReceivedAck(&ack, 1, protocol.EncryptionUnencrypted, time.Now())
+				Expect(err).ToNot(HaveOccurred())
+				expectInPacketHistory([]protocol.PacketNumber{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12})
+			})
+
 			It("handles an ACK frame with one missing packet range", func() {
 				ack := wire.AckFrame{
 					LargestAcked: 9,
-					LowestAcked:  2,
+					LowestAcked:  1,
 					AckRanges: []wire.AckRange{ // packets 4 and 5 were lost
 						{First: 6, Last: 9},
-						{First: 2, Last: 3},
+						{First: 1, Last: 3},
 					},
 				}
 				err := handler.ReceivedAck(&ack, 1, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).ToNot(HaveOccurred())
-				el := handler.packetHistory.Front()
-				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(1)))
-				el = el.Next()
-				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(4)))
-				el = el.Next()
-				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(5)))
-				el = el.Next()
-				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(10)))
-				Expect(el.Next().Value.PacketNumber).To(Equal(protocol.PacketNumber(12)))
+				expectInPacketHistory([]protocol.PacketNumber{0, 4, 5, 10, 12})
 			})
 
 			It("does not ack packets below the LowestAcked", func() {
@@ -458,11 +413,7 @@ var _ = Describe("SentPacketHandler", func() {
 				}
 				err := handler.ReceivedAck(&ack, 1, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).ToNot(HaveOccurred())
-				el := handler.packetHistory.Front()
-				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(1)))
-				el = el.Next()
-				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(2)))
-				Expect(el.Next().Value.PacketNumber).To(Equal(protocol.PacketNumber(9)))
+				expectInPacketHistory([]protocol.PacketNumber{0, 1, 2, 9, 10, 12})
 			})
 
 			It("handles an ACK with multiple missing packet ranges", func() {
@@ -478,16 +429,7 @@ var _ = Describe("SentPacketHandler", func() {
 				}
 				err := handler.ReceivedAck(&ack, 1, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).ToNot(HaveOccurred())
-				el := handler.packetHistory.Front()
-				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(2)))
-				el = el.Next()
-				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(4)))
-				el = el.Next()
-				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(5)))
-				el = el.Next()
-				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(8)))
-				el = el.Next()
-				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(10)))
+				expectInPacketHistory([]protocol.PacketNumber{0, 2, 4, 5, 8, 10, 12})
 			})
 
 			It("processes an ACK frame that would be sent after a late arrival of a packet", func() {
@@ -503,8 +445,7 @@ var _ = Describe("SentPacketHandler", func() {
 				err := handler.ReceivedAck(&ack1, 1, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 5)))
-				el := handler.packetHistory.Front()
-				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(3)))
+				expectInPacketHistory([]protocol.PacketNumber{0, 3, 7, 8, 9, 10, 12})
 				ack2 := wire.AckFrame{
 					LargestAcked: protocol.PacketNumber(largestObserved),
 					LowestAcked:  1,
@@ -512,31 +453,30 @@ var _ = Describe("SentPacketHandler", func() {
 				err = handler.ReceivedAck(&ack2, 2, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 6)))
-				Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(7)))
+				expectInPacketHistory([]protocol.PacketNumber{0, 7, 8, 9, 10, 12})
 			})
 
 			It("processes an ACK frame that would be sent after a late arrival of a packet and another packet", func() {
 				ack1 := wire.AckFrame{
 					LargestAcked: 6,
-					LowestAcked:  1,
+					LowestAcked:  0,
 					AckRanges: []wire.AckRange{
 						{First: 4, Last: 6},
-						{First: 1, Last: 2},
+						{First: 0, Last: 2},
 					},
 				}
 				err := handler.ReceivedAck(&ack1, 1, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 5)))
-				el := handler.packetHistory.Front()
-				Expect(el.Value.PacketNumber).To(Equal(protocol.PacketNumber(3)))
+				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 6)))
+				expectInPacketHistory([]protocol.PacketNumber{3, 7, 8, 9, 10, 12})
 				ack2 := wire.AckFrame{
 					LargestAcked: 7,
 					LowestAcked:  1,
 				}
 				err = handler.ReceivedAck(&ack2, 2, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 7)))
-				Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(8)))
+				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 8)))
+				expectInPacketHistory([]protocol.PacketNumber{8, 9, 10, 12})
 			})
 
 			It("processes an ACK that contains old ACK ranges", func() {
@@ -546,7 +486,7 @@ var _ = Describe("SentPacketHandler", func() {
 				}
 				err := handler.ReceivedAck(&ack1, 1, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(7)))
+				expectInPacketHistory([]protocol.PacketNumber{0, 7, 8, 9, 10, 12})
 				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 6)))
 				ack2 := wire.AckFrame{
 					LargestAcked: 10,
@@ -560,8 +500,7 @@ var _ = Describe("SentPacketHandler", func() {
 				err = handler.ReceivedAck(&ack2, 2, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 6 - 3)))
-				Expect(handler.packetHistory.Front().Value.PacketNumber).To(Equal(protocol.PacketNumber(7)))
-				Expect(handler.packetHistory.Back().Value.PacketNumber).To(Equal(protocol.PacketNumber(12)))
+				expectInPacketHistory([]protocol.PacketNumber{0, 7, 12})
 			})
 		})
 
@@ -569,9 +508,9 @@ var _ = Describe("SentPacketHandler", func() {
 			It("computes the RTT", func() {
 				now := time.Now()
 				// First, fake the sent times of the first, second and last packet
-				getPacketElement(1).Value.SendTime = now.Add(-10 * time.Minute)
-				getPacketElement(2).Value.SendTime = now.Add(-5 * time.Minute)
-				getPacketElement(6).Value.SendTime = now.Add(-1 * time.Minute)
+				getPacketElement(1).Value.sendTime = now.Add(-10 * time.Minute)
+				getPacketElement(2).Value.sendTime = now.Add(-5 * time.Minute)
+				getPacketElement(6).Value.sendTime = now.Add(-1 * time.Minute)
 				// Now, check that the proper times are used when calculating the deltas
 				err := handler.ReceivedAck(&wire.AckFrame{LargestAcked: 1}, 1, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).NotTo(HaveOccurred())
@@ -586,10 +525,48 @@ var _ = Describe("SentPacketHandler", func() {
 
 			It("uses the DelayTime in the ack frame", func() {
 				now := time.Now()
-				getPacketElement(1).Value.SendTime = now.Add(-10 * time.Minute)
+				getPacketElement(1).Value.sendTime = now.Add(-10 * time.Minute)
 				err := handler.ReceivedAck(&wire.AckFrame{LargestAcked: 1, DelayTime: 5 * time.Minute}, 1, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).NotTo(HaveOccurred())
 				Expect(handler.rttStats.LatestRTT()).To(BeNumerically("~", 5*time.Minute, 1*time.Second))
+			})
+		})
+
+		Context("determinining, which ACKs we have received an ACK for", func() {
+			BeforeEach(func() {
+				morePackets := []*Packet{
+					&Packet{PacketNumber: 13, Frames: []wire.Frame{&wire.AckFrame{LowestAcked: 80, LargestAcked: 100}, &streamFrame}, Length: 1},
+					&Packet{PacketNumber: 14, Frames: []wire.Frame{&wire.AckFrame{LowestAcked: 50, LargestAcked: 200}, &streamFrame}, Length: 1},
+					&Packet{PacketNumber: 15, Frames: []wire.Frame{&streamFrame}, Length: 1},
+				}
+				for _, packet := range morePackets {
+					err := handler.SentPacket(packet)
+					Expect(err).NotTo(HaveOccurred())
+				}
+			})
+
+			It("determines which ACK we have received an ACK for", func() {
+				err := handler.ReceivedAck(&wire.AckFrame{LargestAcked: 15, LowestAcked: 12}, 1, protocol.EncryptionUnencrypted, time.Now())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.GetLowestPacketNotConfirmedAcked()).To(Equal(protocol.PacketNumber(201)))
+			})
+
+			It("doesn't do anything when the acked packet didn't contain an ACK", func() {
+				err := handler.ReceivedAck(&wire.AckFrame{LargestAcked: 13, LowestAcked: 13}, 1, protocol.EncryptionUnencrypted, time.Now())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.GetLowestPacketNotConfirmedAcked()).To(Equal(protocol.PacketNumber(101)))
+				err = handler.ReceivedAck(&wire.AckFrame{LargestAcked: 15, LowestAcked: 15}, 2, protocol.EncryptionUnencrypted, time.Now())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.GetLowestPacketNotConfirmedAcked()).To(Equal(protocol.PacketNumber(101)))
+			})
+
+			It("doesn't decrease the value", func() {
+				err := handler.ReceivedAck(&wire.AckFrame{LargestAcked: 14, LowestAcked: 14}, 1, protocol.EncryptionUnencrypted, time.Now())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.GetLowestPacketNotConfirmedAcked()).To(Equal(protocol.PacketNumber(201)))
+				err = handler.ReceivedAck(&wire.AckFrame{LargestAcked: 13, LowestAcked: 13}, 2, protocol.EncryptionUnencrypted, time.Now())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.GetLowestPacketNotConfirmedAcked()).To(Equal(protocol.PacketNumber(201)))
 			})
 		})
 	})
@@ -599,13 +576,13 @@ var _ = Describe("SentPacketHandler", func() {
 
 		BeforeEach(func() {
 			packets = []*Packet{
-				{PacketNumber: 1, Frames: []wire.Frame{&streamFrame}, Length: 1},
-				{PacketNumber: 2, Frames: []wire.Frame{&streamFrame}, Length: 1},
-				{PacketNumber: 3, Frames: []wire.Frame{&streamFrame}, Length: 1},
-				{PacketNumber: 4, Frames: []wire.Frame{&streamFrame}, Length: 1},
-				{PacketNumber: 5, Frames: []wire.Frame{&streamFrame}, Length: 1},
-				{PacketNumber: 6, Frames: []wire.Frame{&streamFrame}, Length: 1},
-				{PacketNumber: 7, Frames: []wire.Frame{&streamFrame}, Length: 1},
+				{PacketNumber: 1, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.EncryptionUnencrypted},
+				{PacketNumber: 2, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.EncryptionUnencrypted},
+				{PacketNumber: 3, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.EncryptionUnencrypted},
+				{PacketNumber: 4, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.EncryptionSecure},
+				{PacketNumber: 5, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.EncryptionSecure},
+				{PacketNumber: 6, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.EncryptionForwardSecure},
+				{PacketNumber: 7, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.EncryptionForwardSecure},
 			}
 			for _, packet := range packets {
 				handler.SentPacket(packet)
@@ -613,7 +590,7 @@ var _ = Describe("SentPacketHandler", func() {
 			// Increase RTT, because the tests would be flaky otherwise
 			handler.rttStats.UpdateRTT(time.Minute, 0, time.Now())
 			// Ack a single packet so that we have non-RTO timings
-			handler.ReceivedAck(&wire.AckFrame{LargestAcked: 2, LowestAcked: 2}, 1, protocol.EncryptionUnencrypted, time.Now())
+			handler.ReceivedAck(&wire.AckFrame{LargestAcked: 2, LowestAcked: 2}, 1, protocol.EncryptionForwardSecure, time.Now())
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(6)))
 		})
 
@@ -622,7 +599,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("dequeues a packet for retransmission", func() {
-			getPacketElement(1).Value.SendTime = time.Now().Add(-time.Hour)
+			getPacketElement(1).Value.sendTime = time.Now().Add(-time.Hour)
 			handler.OnAlarm()
 			Expect(getPacketElement(1)).To(BeNil())
 			Expect(handler.retransmissionQueue).To(HaveLen(1))
@@ -633,15 +610,33 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
 		})
 
-		Context("StopWaitings", func() {
-			It("gets a StopWaitingFrame", func() {
+		It("deletes non forward-secure packets when the handshake completes", func() {
+			for i := protocol.PacketNumber(1); i <= 7; i++ {
+				if i == 2 { // packet 2 was already acked in BeforeEach
+					continue
+				}
+				handler.queuePacketForRetransmission(getPacketElement(i))
+			}
+			Expect(handler.retransmissionQueue).To(HaveLen(6))
+			handler.SetHandshakeComplete()
+			packet := handler.DequeuePacketForRetransmission()
+			Expect(packet).ToNot(BeNil())
+			Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(6)))
+			packet = handler.DequeuePacketForRetransmission()
+			Expect(packet).ToNot(BeNil())
+			Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(7)))
+			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
+		})
+
+		Context("STOP_WAITINGs", func() {
+			It("gets a STOP_WAITING frame", func() {
 				ack := wire.AckFrame{LargestAcked: 5, LowestAcked: 5}
-				err := handler.ReceivedAck(&ack, 2, protocol.EncryptionUnencrypted, time.Now())
+				err := handler.ReceivedAck(&ack, 2, protocol.EncryptionForwardSecure, time.Now())
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.GetStopWaitingFrame(false)).To(Equal(&wire.StopWaitingFrame{LeastUnacked: 6}))
 			})
 
-			It("gets a StopWaitingFrame after queueing a retransmission", func() {
+			It("gets a STOP_WAITING frame after queueing a retransmission", func() {
 				handler.queuePacketForRetransmission(getPacketElement(5))
 				Expect(handler.GetStopWaitingFrame(false)).To(Equal(&wire.StopWaitingFrame{LeastUnacked: 6}))
 			})
@@ -678,7 +673,7 @@ var _ = Describe("SentPacketHandler", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(2)))
 
-		handler.packetHistory.Front().Value.SendTime = time.Now().Add(-time.Hour)
+		handler.packetHistory.Front().Value.sendTime = time.Now().Add(-time.Hour)
 		handler.OnAlarm()
 
 		Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(0)))
@@ -686,15 +681,23 @@ var _ = Describe("SentPacketHandler", func() {
 
 	Context("congestion", func() {
 		var (
-			cong *mockCongestion
+			cong *mocks.MockSendAlgorithm
 		)
 
 		BeforeEach(func() {
-			cong = &mockCongestion{}
+			cong = mocks.NewMockSendAlgorithm(mockCtrl)
+			cong.EXPECT().RetransmissionDelay().AnyTimes()
 			handler.congestion = cong
 		})
 
 		It("should call OnSent", func() {
+			cong.EXPECT().OnPacketSent(
+				gomock.Any(),
+				protocol.ByteCount(42),
+				protocol.PacketNumber(1),
+				protocol.ByteCount(42),
+				true,
+			)
 			p := &Packet{
 				PacketNumber: 1,
 				Length:       42,
@@ -702,62 +705,60 @@ var _ = Describe("SentPacketHandler", func() {
 			}
 			err := handler.SentPacket(p)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(cong.argsOnPacketSent[1]).To(Equal(protocol.ByteCount(42)))
-			Expect(cong.argsOnPacketSent[2]).To(Equal(protocol.PacketNumber(1)))
-			Expect(cong.argsOnPacketSent[3]).To(Equal(protocol.ByteCount(42)))
-			Expect(cong.argsOnPacketSent[4]).To(BeTrue())
 		})
 
 		It("should call MaybeExitSlowStart and OnPacketAcked", func() {
+			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(2)
+			cong.EXPECT().MaybeExitSlowStart()
+			cong.EXPECT().OnPacketAcked(
+				protocol.PacketNumber(1),
+				protocol.ByteCount(1),
+				protocol.ByteCount(1),
+			)
 			handler.SentPacket(retransmittablePacket(1))
 			handler.SentPacket(retransmittablePacket(2))
 			err := handler.ReceivedAck(&wire.AckFrame{LargestAcked: 1, LowestAcked: 1}, 1, protocol.EncryptionForwardSecure, time.Now())
 			Expect(err).NotTo(HaveOccurred())
-			Expect(cong.maybeExitSlowStart).To(BeTrue())
-			Expect(cong.packetsAcked).To(BeEquivalentTo([][]interface{}{
-				{protocol.PacketNumber(1), protocol.ByteCount(1), protocol.ByteCount(1)},
-			}))
-			Expect(cong.packetsLost).To(BeEmpty())
 		})
 
 		It("should call MaybeExitSlowStart and OnPacketLost", func() {
+			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(3)
+			cong.EXPECT().OnRetransmissionTimeout(true).Times(2)
+			cong.EXPECT().OnPacketLost(
+				protocol.PacketNumber(1),
+				protocol.ByteCount(1),
+				protocol.ByteCount(2),
+			)
+			cong.EXPECT().OnPacketLost(
+				protocol.PacketNumber(2),
+				protocol.ByteCount(1),
+				protocol.ByteCount(1),
+			)
 			handler.SentPacket(retransmittablePacket(1))
 			handler.SentPacket(retransmittablePacket(2))
 			handler.SentPacket(retransmittablePacket(3))
 			handler.OnAlarm() // RTO, meaning 2 lost packets
-			Expect(cong.maybeExitSlowStart).To(BeFalse())
-			Expect(cong.onRetransmissionTimeout).To(BeTrue())
-			Expect(cong.packetsAcked).To(BeEmpty())
-			Expect(cong.packetsLost).To(BeEquivalentTo([][]interface{}{
-				{protocol.PacketNumber(1), protocol.ByteCount(1), protocol.ByteCount(2)},
-				{protocol.PacketNumber(2), protocol.ByteCount(1), protocol.ByteCount(1)},
-			}))
 		})
 
 		It("allows or denies sending based on congestion", func() {
+			Expect(handler.retransmissionQueue).To(BeEmpty())
+			handler.bytesInFlight = 100
+			cong.EXPECT().GetCongestionWindow().Return(protocol.MaxByteCount)
 			Expect(handler.SendingAllowed()).To(BeTrue())
-			err := handler.SentPacket(&Packet{
-				PacketNumber: 1,
-				Frames:       []wire.Frame{&wire.PingFrame{}},
-				Length:       protocol.DefaultTCPMSS + 1,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			cong.EXPECT().GetCongestionWindow().Return(protocol.ByteCount(0))
 			Expect(handler.SendingAllowed()).To(BeFalse())
 		})
 
 		It("allows or denies sending based on the number of tracked packets", func() {
+			cong.EXPECT().GetCongestionWindow().Return(protocol.MaxByteCount).AnyTimes()
 			Expect(handler.SendingAllowed()).To(BeTrue())
 			handler.retransmissionQueue = make([]*Packet, protocol.MaxTrackedSentPackets)
 			Expect(handler.SendingAllowed()).To(BeFalse())
 		})
 
 		It("allows sending if there are retransmisisons outstanding", func() {
-			err := handler.SentPacket(&Packet{
-				PacketNumber: 1,
-				Frames:       []wire.Frame{&wire.PingFrame{}},
-				Length:       protocol.DefaultTCPMSS + 1,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			handler.bytesInFlight = 100
+			cong.EXPECT().GetCongestionWindow().Return(protocol.ByteCount(0)).AnyTimes()
 			Expect(handler.SendingAllowed()).To(BeFalse())
 			handler.retransmissionQueue = []*Packet{nil}
 			Expect(handler.SendingAllowed()).To(BeTrue())
@@ -815,7 +816,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.lossTime.Sub(time.Now())).To(BeNumerically("~", time.Hour*9/8, time.Minute))
 			Expect(handler.GetAlarmTimeout().Sub(time.Now())).To(BeNumerically("~", time.Hour*9/8, time.Minute))
 
-			handler.packetHistory.Front().Value.SendTime = time.Now().Add(-2 * time.Hour)
+			handler.packetHistory.Front().Value.sendTime = time.Now().Add(-2 * time.Hour)
 			handler.OnAlarm()
 			Expect(handler.DequeuePacketForRetransmission()).NotTo(BeNil())
 		})

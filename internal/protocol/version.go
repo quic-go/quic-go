@@ -1,11 +1,13 @@
 package protocol
 
 import (
+	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 )
 
 // VersionNumber is a version number as int
-type VersionNumber int
+type VersionNumber int32
 
 // gQUIC version range as defined in the wiki: https://github.com/quicwg/base-drafts/wiki/QUIC-Versions
 const (
@@ -64,9 +66,9 @@ func (vn VersionNumber) CryptoStreamID() StreamID {
 	return 0
 }
 
-// UsesMaxDataFrame tells if this version uses MAX_DATA, MAX_STREAM_DATA, BLOCKED and STREAM_BLOCKED instead of WINDOW_UDPATE and BLOCKED frames
-func (vn VersionNumber) UsesMaxDataFrame() bool {
-	return vn.CryptoStreamID() == 0
+// UsesIETFFrameFormat tells if this version uses the IETF frame format
+func (vn VersionNumber) UsesIETFFrameFormat() bool {
+	return vn != Version39
 }
 
 // StreamContributesToConnectionFlowControl says if a stream contributes to connection-level flow control
@@ -111,4 +113,23 @@ func ChooseSupportedVersion(ours, theirs []VersionNumber) (VersionNumber, bool) 
 		}
 	}
 	return 0, false
+}
+
+// generateReservedVersion generates a reserved version number (v & 0x0f0f0f0f == 0x0a0a0a0a)
+func generateReservedVersion() VersionNumber {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b) // ignore the error here. Failure to read random data doesn't break anything
+	return VersionNumber((binary.BigEndian.Uint32(b) | 0x0a0a0a0a) & 0xfafafafa)
+}
+
+// GetGreasedVersions adds one reserved version number to a slice of version numbers, at a random position
+func GetGreasedVersions(supported []VersionNumber) []VersionNumber {
+	b := make([]byte, 1)
+	_, _ = rand.Read(b) // ignore the error here. Failure to read random data doesn't break anything
+	randPos := int(b[0]) % (len(supported) + 1)
+	greased := make([]VersionNumber, len(supported)+1)
+	copy(greased, supported[:randPos])
+	greased[randPos] = generateReservedVersion()
+	copy(greased[randPos+1:], supported[randPos:])
+	return greased
 }

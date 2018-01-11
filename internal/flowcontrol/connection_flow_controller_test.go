@@ -32,12 +32,12 @@ var _ = Describe("Connection Flow controller", func() {
 
 			fc := NewConnectionFlowController(receiveWindow, maxReceiveWindow, rttStats).(*connectionFlowController)
 			Expect(fc.receiveWindow).To(Equal(receiveWindow))
-			Expect(fc.maxReceiveWindowIncrement).To(Equal(maxReceiveWindow))
+			Expect(fc.maxReceiveWindowSize).To(Equal(maxReceiveWindow))
 		})
 	})
 
 	Context("receive flow control", func() {
-		It("increases the highestReceived by a given increment", func() {
+		It("increases the highestReceived by a given window size", func() {
 			controller.highestReceived = 1337
 			controller.IncrementHighestReceived(123)
 			Expect(controller.highestReceived).To(Equal(protocol.ByteCount(1337 + 123)))
@@ -46,64 +46,96 @@ var _ = Describe("Connection Flow controller", func() {
 		Context("getting window updates", func() {
 			BeforeEach(func() {
 				controller.receiveWindow = 100
-				controller.receiveWindowIncrement = 60
-				controller.maxReceiveWindowIncrement = 1000
+				controller.receiveWindowSize = 60
+				controller.maxReceiveWindowSize = 1000
+				controller.bytesRead = 100 - 60
 			})
 
 			It("gets a window update", func() {
-				controller.AddBytesRead(80)
+				windowSize := controller.receiveWindowSize
+				oldOffset := controller.bytesRead
+				dataRead := windowSize/2 - 1 // make sure not to trigger auto-tuning
+				controller.AddBytesRead(dataRead)
 				offset := controller.GetWindowUpdate()
-				Expect(offset).To(Equal(protocol.ByteCount(80 + 60)))
+				Expect(offset).To(Equal(protocol.ByteCount(oldOffset + dataRead + 60)))
 			})
 
 			It("autotunes the window", func() {
-				controller.AddBytesRead(80)
-				setRtt(20 * time.Millisecond)
-				controller.lastWindowUpdateTime = time.Now().Add(-35 * time.Millisecond)
+				oldOffset := controller.bytesRead
+				oldWindowSize := controller.receiveWindowSize
+				rtt := scaleDuration(20 * time.Millisecond)
+				setRtt(rtt)
+				controller.epochStartTime = time.Now().Add(-time.Millisecond)
+				controller.epochStartOffset = oldOffset
+				dataRead := oldWindowSize/2 + 1
+				controller.AddBytesRead(dataRead)
 				offset := controller.GetWindowUpdate()
-				Expect(offset).To(Equal(protocol.ByteCount(80 + 2*60)))
+				newWindowSize := controller.receiveWindowSize
+				Expect(newWindowSize).To(Equal(2 * oldWindowSize))
+				Expect(offset).To(Equal(protocol.ByteCount(oldOffset + dataRead + newWindowSize)))
 			})
 		})
 	})
 
-	Context("setting the minimum increment", func() {
+	Context("send flow control", func() {
+		It("says when it's blocked", func() {
+			controller.UpdateSendWindow(100)
+			Expect(controller.IsNewlyBlocked()).To(BeFalse())
+			controller.AddBytesSent(100)
+			blocked, offset := controller.IsNewlyBlocked()
+			Expect(blocked).To(BeTrue())
+			Expect(offset).To(Equal(protocol.ByteCount(100)))
+		})
+
+		It("doesn't say that it's newly blocked multiple times for the same offset", func() {
+			controller.UpdateSendWindow(100)
+			controller.AddBytesSent(100)
+			newlyBlocked, offset := controller.IsNewlyBlocked()
+			Expect(newlyBlocked).To(BeTrue())
+			Expect(offset).To(Equal(protocol.ByteCount(100)))
+			newlyBlocked, _ = controller.IsNewlyBlocked()
+			Expect(newlyBlocked).To(BeFalse())
+			controller.UpdateSendWindow(150)
+			controller.AddBytesSent(150)
+			newlyBlocked, offset = controller.IsNewlyBlocked()
+			Expect(newlyBlocked).To(BeTrue())
+		})
+	})
+
+	Context("setting the minimum window size", func() {
 		var (
-			oldIncrement           protocol.ByteCount
-			receiveWindow          protocol.ByteCount = 10000
-			receiveWindowIncrement protocol.ByteCount = 600
+			oldWindowSize     protocol.ByteCount
+			receiveWindow     protocol.ByteCount = 10000
+			receiveWindowSize protocol.ByteCount = 1000
 		)
 
 		BeforeEach(func() {
+			controller.bytesRead = receiveWindowSize - receiveWindowSize
 			controller.receiveWindow = receiveWindow
-			controller.receiveWindowIncrement = receiveWindowIncrement
-			oldIncrement = controller.receiveWindowIncrement
-			controller.maxReceiveWindowIncrement = 3000
+			controller.receiveWindowSize = receiveWindowSize
+			oldWindowSize = controller.receiveWindowSize
+			controller.maxReceiveWindowSize = 3000
 		})
 
-		It("sets the minimum window increment", func() {
-			controller.EnsureMinimumWindowIncrement(1000)
-			Expect(controller.receiveWindowIncrement).To(Equal(protocol.ByteCount(1000)))
+		It("sets the minimum window window size", func() {
+			controller.EnsureMinimumWindowSize(1800)
+			Expect(controller.receiveWindowSize).To(Equal(protocol.ByteCount(1800)))
 		})
 
-		It("doesn't reduce the window increment", func() {
-			controller.EnsureMinimumWindowIncrement(1)
-			Expect(controller.receiveWindowIncrement).To(Equal(oldIncrement))
+		It("doesn't reduce the window window size", func() {
+			controller.EnsureMinimumWindowSize(1)
+			Expect(controller.receiveWindowSize).To(Equal(oldWindowSize))
 		})
 
-		It("doens't increase the increment beyond the maxReceiveWindowIncrement", func() {
-			max := controller.maxReceiveWindowIncrement
-			controller.EnsureMinimumWindowIncrement(2 * max)
-			Expect(controller.receiveWindowIncrement).To(Equal(max))
+		It("doens't increase the window size beyond the maxReceiveWindowSize", func() {
+			max := controller.maxReceiveWindowSize
+			controller.EnsureMinimumWindowSize(2 * max)
+			Expect(controller.receiveWindowSize).To(Equal(max))
 		})
 
-		It("doesn't auto-tune the window after the increment was increased", func() {
-			setRtt(20 * time.Millisecond)
-			controller.bytesRead = 9900 // receive window is 10000
-			controller.lastWindowUpdateTime = time.Now().Add(-20 * time.Millisecond)
-			controller.EnsureMinimumWindowIncrement(912)
-			offset := controller.getWindowUpdate()
-			Expect(controller.receiveWindowIncrement).To(Equal(protocol.ByteCount(912))) // no auto-tuning
-			Expect(offset).To(Equal(protocol.ByteCount(9900 + 912)))
+		It("starts a new epoch after the window size was increased", func() {
+			controller.EnsureMinimumWindowSize(1912)
+			Expect(controller.epochStartTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
 		})
 	})
 })

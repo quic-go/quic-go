@@ -42,6 +42,7 @@ var _ = Describe("Header", func() {
 				IsLongHeader: true,
 				Type:         protocol.PacketType0RTT,
 				PacketNumber: 0x42,
+				Version:      0x1234,
 			}).writeHeader(buf)
 			Expect(err).ToNot(HaveOccurred())
 			hdr, err := ParseHeaderSentByClient(bytes.NewReader(buf.Bytes()))
@@ -49,6 +50,7 @@ var _ = Describe("Header", func() {
 			Expect(hdr.Type).To(Equal(protocol.PacketType0RTT))
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x42)))
 			Expect(hdr.isPublicHeader).To(BeFalse())
+			Expect(hdr.Version).To(Equal(protocol.VersionNumber(0x1234)))
 		})
 
 		It("doens't mistake packets with a Short Header for Version Negotiation Packets", func() {
@@ -127,20 +129,26 @@ var _ = Describe("Header", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.isPublicHeader).To(BeTrue())
 			Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x42)))
-			Expect(hdr.SupportedVersions).To(Equal(versions))
+			// in addition to the versions, the supported versions might contain a reserved version number
+			for _, version := range versions {
+				Expect(hdr.SupportedVersions).To(ContainElement(version))
+			}
 		})
 
 		It("parses an IETF draft style Version Negotiation Packet", func() {
 			versions := []protocol.VersionNumber{0x13, 0x37}
-			data := ComposeVersionNegotiation(0x42, 0x77, 0x4321, versions)
+			data := ComposeVersionNegotiation(0x42, 0x77, versions)
 			hdr, err := ParseHeaderSentByServer(bytes.NewReader(data), protocol.VersionUnknown)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.isPublicHeader).To(BeFalse())
+			Expect(hdr.IsVersionNegotiation).To(BeTrue())
 			Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x42)))
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x77)))
-			Expect(hdr.Version).To(Equal(protocol.VersionNumber(0x4321)))
-			Expect(hdr.SupportedVersions).To(Equal(versions))
-			Expect(hdr.Type).To(Equal(protocol.PacketTypeVersionNegotiation))
+			Expect(hdr.Version).To(BeZero())
+			// in addition to the versions, the supported versions might contain a reserved version number
+			for _, version := range versions {
+				Expect(hdr.SupportedVersions).To(ContainElement(version))
+			}
 		})
 	})
 

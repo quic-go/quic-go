@@ -2,7 +2,7 @@ package quic
 
 import (
 	"bytes"
-	"io"
+	"errors"
 	"net"
 	"time"
 
@@ -12,7 +12,7 @@ import (
 
 type mockPacketConn struct {
 	addr          net.Addr
-	dataToRead    []byte
+	dataToRead    chan []byte
 	dataReadFrom  net.Addr
 	readErr       error
 	dataWritten   bytes.Buffer
@@ -20,23 +20,34 @@ type mockPacketConn struct {
 	closed        bool
 }
 
+func newMockPacketConn() *mockPacketConn {
+	return &mockPacketConn{
+		dataToRead: make(chan []byte, 1000),
+	}
+}
+
 func (c *mockPacketConn) ReadFrom(b []byte) (int, net.Addr, error) {
 	if c.readErr != nil {
 		return 0, nil, c.readErr
 	}
-	if c.dataToRead == nil { // block if there's no data
-		time.Sleep(time.Hour)
-		return 0, nil, io.EOF
+	data, ok := <-c.dataToRead
+	if !ok {
+		return 0, nil, errors.New("connection closed")
 	}
-	n := copy(b, c.dataToRead)
-	c.dataToRead = nil
+	n := copy(b, data)
 	return n, c.dataReadFrom, nil
 }
 func (c *mockPacketConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
 	c.dataWrittenTo = addr
 	return c.dataWritten.Write(b)
 }
-func (c *mockPacketConn) Close() error                       { c.closed = true; return nil }
+func (c *mockPacketConn) Close() error {
+	if !c.closed {
+		close(c.dataToRead)
+	}
+	c.closed = true
+	return nil
+}
 func (c *mockPacketConn) LocalAddr() net.Addr                { return c.addr }
 func (c *mockPacketConn) SetDeadline(t time.Time) error      { panic("not implemented") }
 func (c *mockPacketConn) SetReadDeadline(t time.Time) error  { panic("not implemented") }
@@ -53,7 +64,7 @@ var _ = Describe("Connection", func() {
 			IP:   net.IPv4(192, 168, 100, 200),
 			Port: 1337,
 		}
-		packetConn = &mockPacketConn{}
+		packetConn = newMockPacketConn()
 		c = &conn{
 			currentAddr: addr,
 			pconn:       packetConn,
@@ -68,7 +79,7 @@ var _ = Describe("Connection", func() {
 	})
 
 	It("reads", func() {
-		packetConn.dataToRead = []byte("foo")
+		packetConn.dataToRead <- []byte("foo")
 		packetConn.dataReadFrom = &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1336}
 		p := make([]byte, 10)
 		n, raddr, err := c.Read(p)

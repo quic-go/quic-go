@@ -1,6 +1,11 @@
 # Changelog
 
-## v0.6.0 (unreleased)
+## v0.7 (unreleased)
+
+- The lower boundary for packets included in ACKs is now derived, and the value sent in STOP_WAITING frames is ignored.
+- Remove `DialNonFWSecure` and `DialAddrNonFWSecure`.
+
+## v0.6.0 (2017-12-12)
 
 - Add support for QUIC 39, drop support for QUIC 35 - 37
 - Added `quic.Config` options for maximal flow control windows
