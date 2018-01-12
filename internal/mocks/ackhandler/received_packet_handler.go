@@ -71,13 +71,13 @@ func (mr *MockReceivedPacketHandlerMockRecorder) IgnoreBelow(arg0 interface{}) *
 }
 
 // ReceivedPacket mocks base method
-func (m *MockReceivedPacketHandler) ReceivedPacket(arg0 protocol.PacketNumber, arg1 bool) error {
-	ret := m.ctrl.Call(m, "ReceivedPacket", arg0, arg1)
+func (m *MockReceivedPacketHandler) ReceivedPacket(arg0 protocol.PacketNumber, arg1 time.Time, arg2 bool) error {
+	ret := m.ctrl.Call(m, "ReceivedPacket", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ReceivedPacket indicates an expected call of ReceivedPacket
-func (mr *MockReceivedPacketHandlerMockRecorder) ReceivedPacket(arg0, arg1 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedPacket", reflect.TypeOf((*MockReceivedPacketHandler)(nil).ReceivedPacket), arg0, arg1)
+func (mr *MockReceivedPacketHandlerMockRecorder) ReceivedPacket(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedPacket", reflect.TypeOf((*MockReceivedPacketHandler)(nil).ReceivedPacket), arg0, arg1, arg2)
 }

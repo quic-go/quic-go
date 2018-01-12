@@ -532,7 +532,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 	s.largestRcvdPacketNumber = utils.MaxPacketNumber(s.largestRcvdPacketNumber, hdr.PacketNumber)
 
 	isRetransmittable := ackhandler.HasRetransmittableFrames(packet.frames)
-	if err = s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, isRetransmittable); err != nil {
+	if err = s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, p.rcvTime, isRetransmittable); err != nil {
 		return err
 	}
 

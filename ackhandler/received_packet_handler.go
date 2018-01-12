@@ -34,10 +34,10 @@ func NewReceivedPacketHandler(version protocol.VersionNumber) ReceivedPacketHand
 	}
 }
 
-func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumber, shouldInstigateAck bool) error {
+func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumber, rcvTime time.Time, shouldInstigateAck bool) error {
 	if packetNumber > h.largestObserved {
 		h.largestObserved = packetNumber
-		h.largestObservedReceivedTime = time.Now()
+		h.largestObservedReceivedTime = rcvTime
 	}
 
 	if packetNumber < h.ignoreBelow {
@@ -47,7 +47,7 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 	if err := h.packetHistory.ReceivedPacket(packetNumber); err != nil {
 		return err
 	}
-	h.maybeQueueAck(packetNumber, shouldInstigateAck)
+	h.maybeQueueAck(packetNumber, rcvTime, shouldInstigateAck)
 	return nil
 }
 
@@ -58,7 +58,7 @@ func (h *receivedPacketHandler) IgnoreBelow(p protocol.PacketNumber) {
 	h.packetHistory.DeleteBelow(p)
 }
 
-func (h *receivedPacketHandler) maybeQueueAck(packetNumber protocol.PacketNumber, shouldInstigateAck bool) {
+func (h *receivedPacketHandler) maybeQueueAck(packetNumber protocol.PacketNumber, rcvTime time.Time, shouldInstigateAck bool) {
 	h.packetsReceivedSinceLastAck++
 
 	if shouldInstigateAck {
@@ -86,7 +86,7 @@ func (h *receivedPacketHandler) maybeQueueAck(packetNumber protocol.PacketNumber
 			h.ackQueued = true
 		} else {
 			if h.ackAlarm.IsZero() {
-				h.ackAlarm = time.Now().Add(h.ackSendDelay)
+				h.ackAlarm = rcvTime.Add(h.ackSendDelay)
 			}
 		}
 	}
