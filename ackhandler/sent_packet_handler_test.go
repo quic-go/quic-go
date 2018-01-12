@@ -860,7 +860,7 @@ var _ = Describe("SentPacketHandler", func() {
 			err = handler.SentPacket(handshakePacket(4))
 			Expect(err).ToNot(HaveOccurred())
 
-			err = handler.ReceivedAck(&wire.AckFrame{LargestAcked: 1, LowestAcked: 1}, 1, protocol.EncryptionSecure, time.Now().Add(time.Hour))
+			err = handler.ReceivedAck(&wire.AckFrame{LargestAcked: 1, LowestAcked: 1}, 1, protocol.EncryptionSecure, time.Now())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(handler.lossTime.IsZero()).To(BeTrue())
 			handshakeTimeout := handler.computeHandshakeTimeout()
