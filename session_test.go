@@ -532,6 +532,16 @@ var _ = Describe("Session", func() {
 			Expect(sess.largestRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
 		})
 
+		It("informs the ReceivedPacketHandler", func() {
+			now := time.Now().Add(time.Hour)
+			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
+			rph.EXPECT().ReceivedPacket(protocol.PacketNumber(5), now, false)
+			sess.receivedPacketHandler = rph
+			hdr.PacketNumber = 5
+			err := sess.handlePacketImpl(&receivedPacket{header: hdr, rcvTime: now})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
 		It("closes when handling a packet fails", func(done Done) {
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			testErr := errors.New("unpack error")
@@ -609,7 +619,7 @@ var _ = Describe("Session", func() {
 
 		It("sends ACK frames", func() {
 			packetNumber := protocol.PacketNumber(0x035e)
-			err := sess.receivedPacketHandler.ReceivedPacket(packetNumber, true)
+			err := sess.receivedPacketHandler.ReceivedPacket(packetNumber, time.Now(), true)
 			Expect(err).ToNot(HaveOccurred())
 			sent, err := sess.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
@@ -782,7 +792,7 @@ var _ = Describe("Session", func() {
 			})
 			sess.sentPacketHandler = sph
 			sess.packer.packetNumberGenerator.next = 0x1338
-			sess.receivedPacketHandler.ReceivedPacket(1, true)
+			sess.receivedPacketHandler.ReceivedPacket(1, time.Now(), true)
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -810,7 +820,7 @@ var _ = Describe("Session", func() {
 			})
 			sess.sentPacketHandler = sph
 			sess.packer.packetNumberGenerator.next = 0x1338
-			sess.receivedPacketHandler.ReceivedPacket(1, true)
+			sess.receivedPacketHandler.ReceivedPacket(1, time.Now(), true)
 			go func() {
 				defer GinkgoRecover()
 				sess.run()
