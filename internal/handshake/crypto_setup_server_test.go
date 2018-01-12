@@ -661,6 +661,25 @@ var _ = Describe("Server Crypto Setup", func() {
 			})
 		})
 
+		Context("reporting the connection state", func() {
+			It("reports before the handshake completes", func() {
+				cs.sni = "server name"
+				state := cs.ConnectionState()
+				Expect(state.HandshakeComplete).To(BeFalse())
+				Expect(state.ServerName).To(Equal("server name"))
+			})
+
+			It("reports after the handshake completes", func() {
+				doCHLO()
+				// receive a forward secure packet
+				cs.forwardSecureAEAD.(*mockcrypto.MockAEAD).EXPECT().Open(nil, []byte("forward secure encrypted"), protocol.PacketNumber(11), []byte{})
+				_, _, err := cs.Open(nil, []byte("forward secure encrypted"), 11, []byte{})
+				Expect(err).ToNot(HaveOccurred())
+				state := cs.ConnectionState()
+				Expect(state.HandshakeComplete).To(BeTrue())
+			})
+		})
+
 		Context("forcing encryption levels", func() {
 			It("forces null encryption", func() {
 				cs.nullAEAD.(*mockcrypto.MockAEAD).EXPECT().Seal(nil, []byte("foobar"), protocol.PacketNumber(11), []byte{}).Return([]byte("foobar unencrypted"))
@@ -721,6 +740,7 @@ var _ = Describe("Server Crypto Setup", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(done).To(BeFalse())
 			Expect(stream.dataWritten.Bytes()).To(ContainSubstring(string(validSTK)))
+			Expect(cs.sni).To(Equal("foo"))
 		})
 
 		It("works with proper STK", func() {

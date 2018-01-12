@@ -56,6 +56,10 @@ func (mc *mintController) State() mint.State {
 	return mc.conn.State().HandshakeState
 }
 
+func (mc *mintController) ConnectionState() mint.ConnectionState {
+	return mc.conn.State()
+}
+
 func (mc *mintController) SetCryptoStream(stream io.ReadWriter) {
 	mc.csc.SetStream(stream)
 }

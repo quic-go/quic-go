@@ -70,6 +70,7 @@ func (s *mockSession) RemoteAddr() net.Addr {
 func (s *mockSession) Context() context.Context {
 	return s.ctx
 }
+func (s *mockSession) ConnectionState() quic.ConnectionState { panic("not implemented") }
 
 var _ = Describe("H2 server", func() {
 	var (

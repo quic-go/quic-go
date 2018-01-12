@@ -19,6 +19,9 @@ type VersionNumber = protocol.VersionNumber
 // A Cookie can be used to verify the ownership of the client address.
 type Cookie = handshake.Cookie
 
+// ConnectionState records basic details about the QUIC connection.
+type ConnectionState = handshake.ConnectionState
+
 // An ErrorCode is an application-defined error code.
 type ErrorCode = protocol.ApplicationErrorCode
 
@@ -128,6 +131,9 @@ type Session interface {
 	// The context is cancelled when the session is closed.
 	// Warning: This API should not be considered stable and might change soon.
 	Context() context.Context
+	// ConnectionState returns basic details about the QUIC connection.
+	// Warning: This API should not be considered stable and might change soon.
+	ConnectionState() ConnectionState
 }
 
 // Config contains all configuration data needed for a QUIC server or client.

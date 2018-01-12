@@ -23,6 +23,8 @@ type KeyExchangeFunction func() crypto.KeyExchange
 
 // The CryptoSetupServer handles all things crypto for the Session
 type cryptoSetupServer struct {
+	mutex sync.RWMutex
+
 	connID               protocol.ConnectionID
 	remoteAddr           net.Addr
 	scfg                 *ServerConfig
@@ -51,7 +53,7 @@ type cryptoSetupServer struct {
 
 	params *TransportParameters
 
-	mutex sync.RWMutex
+	sni string // need to fill out the ConnectionState
 }
 
 var _ CryptoSetup = &cryptoSetupServer{}
@@ -139,6 +141,7 @@ func (h *cryptoSetupServer) handleMessage(chloData []byte, cryptoData map[Tag][]
 	if sni == "" {
 		return false, qerr.Error(qerr.CryptoMessageParameterNotFound, "SNI required")
 	}
+	h.sni = sni
 
 	// prevent version downgrade attacks
 	// see https://groups.google.com/a/chromium.org/forum/#!topic/proto-quic/N-de9j63tCk for a discussion and examples
@@ -451,6 +454,15 @@ func (h *cryptoSetupServer) DiversificationNonce() []byte {
 
 func (h *cryptoSetupServer) SetDiversificationNonce(data []byte) {
 	panic("not needed for cryptoSetupServer")
+}
+
+func (h *cryptoSetupServer) ConnectionState() ConnectionState {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+	return ConnectionState{
+		ServerName:        h.sni,
+		HandshakeComplete: h.receivedForwardSecurePacket,
+	}
 }
 
 func (h *cryptoSetupServer) validateClientNonce(nonce []byte) error {

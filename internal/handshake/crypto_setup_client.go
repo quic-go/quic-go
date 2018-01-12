@@ -381,6 +381,15 @@ func (h *cryptoSetupClient) SetDiversificationNonce(data []byte) {
 	h.divNonceChan <- data
 }
 
+func (h *cryptoSetupClient) ConnectionState() ConnectionState {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+	return ConnectionState{
+		HandshakeComplete: h.forwardSecureAEAD != nil,
+		PeerCertificates:  h.certManager.GetChain(),
+	}
+}
+
 func (h *cryptoSetupClient) sendCHLO() error {
 	h.clientHelloCounter++
 	if h.clientHelloCounter > protocol.MaxClientHellos {

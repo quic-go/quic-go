@@ -62,6 +62,7 @@ func (s *mockSession) OpenStreamSync() (Stream, error)  { panic("not implemented
 func (s *mockSession) LocalAddr() net.Addr              { panic("not implemented") }
 func (s *mockSession) RemoteAddr() net.Addr             { panic("not implemented") }
 func (*mockSession) Context() context.Context           { panic("not implemented") }
+func (*mockSession) ConnectionState() ConnectionState   { panic("not implemented") }
 func (*mockSession) GetVersion() protocol.VersionNumber { return protocol.VersionWhatever }
 func (s *mockSession) handshakeStatus() <-chan error    { return s.handshakeChan }
 func (*mockSession) getCryptoStream() cryptoStreamI     { panic("not implemented") }

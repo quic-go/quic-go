@@ -2,6 +2,7 @@ package handshake
 
 import (
 	"bytes"
+	"crypto/x509"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/crypto"
 	"github.com/lucas-clemente/quic-go/internal/mocks/crypto"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/qerr"
 	. "github.com/onsi/ginkgo"
@@ -34,6 +36,8 @@ type mockCertManager struct {
 
 	commonCertificateHashes []byte
 
+	chain []*x509.Certificate
+
 	leafCert          []byte
 	leafCertHash      uint64
 	leafCertHashError error
@@ -44,6 +48,8 @@ type mockCertManager struct {
 	verifyError  error
 	verifyCalled bool
 }
+
+var _ crypto.CertManager = &mockCertManager{}
 
 func (m *mockCertManager) SetData(data []byte) error {
 	m.setDataCalledWith = data
@@ -70,6 +76,10 @@ func (m *mockCertManager) VerifyServerProof(proof, chlo, serverConfigData []byte
 func (m *mockCertManager) Verify(hostname string) error {
 	m.verifyCalled = true
 	return m.verifyError
+}
+
+func (m *mockCertManager) GetChain() []*x509.Certificate {
+	return m.chain
 }
 
 var _ = Describe("Client Crypto Setup", func() {
@@ -838,6 +848,22 @@ var _ = Describe("Client Crypto Setup", func() {
 				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
 				d := sealer.Seal(nil, []byte("foobar"), 3, []byte{})
 				Expect(d).To(Equal([]byte("foobar unencrypted")))
+			})
+		})
+
+		Context("reporting the connection state", func() {
+			It("reports the connection state before the handshake completes", func() {
+				chain := []*x509.Certificate{testdata.GetCertificate().Leaf}
+				certManager.chain = chain
+				state := cs.ConnectionState()
+				Expect(state.HandshakeComplete).To(BeFalse())
+				Expect(state.PeerCertificates).To(Equal(chain))
+			})
+
+			It("reports the connection state after the handshake completes", func() {
+				doSHLO()
+				state := cs.ConnectionState()
+				Expect(state.HandshakeComplete).To(BeTrue())
 			})
 		})
 

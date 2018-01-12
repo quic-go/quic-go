@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"crypto/x509"
 	"io"
 
 	"github.com/bifurcation/mint"
@@ -29,6 +30,7 @@ type MintTLS interface {
 	// additional methods
 	Handshake() mint.Alert
 	State() mint.State
+	ConnectionState() mint.ConnectionState
 
 	SetCryptoStream(io.ReadWriter)
 	SetExtensionHandler(mint.AppExtensionHandler) error
@@ -41,8 +43,17 @@ type CryptoSetup interface {
 	// TODO: clean up this interface
 	DiversificationNonce() []byte   // only needed for cryptoSetupServer
 	SetDiversificationNonce([]byte) // only needed for cryptoSetupClient
+	ConnectionState() ConnectionState
 
 	GetSealer() (protocol.EncryptionLevel, Sealer)
 	GetSealerWithEncryptionLevel(protocol.EncryptionLevel) (Sealer, error)
 	GetSealerForCryptoStream() (protocol.EncryptionLevel, Sealer)
+}
+
+// ConnectionState records basic details about the QUIC connection.
+// Warning: This API should not be considered stable and might change soon.
+type ConnectionState struct {
+	HandshakeComplete bool                // handshake is complete
+	ServerName        string              // server name requested by client, if any (server side only)
+	PeerCertificates  []*x509.Certificate // certificate chain presented by remote peer
 }
