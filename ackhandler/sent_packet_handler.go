@@ -153,7 +153,7 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 		isRetransmittable,
 	)
 
-	h.updateLossDetectionAlarm()
+	h.updateLossDetectionAlarm(now)
 	return nil
 }
 
@@ -206,8 +206,8 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 		}
 	}
 
-	h.detectLostPackets()
-	h.updateLossDetectionAlarm()
+	h.detectLostPackets(rcvTime)
+	h.updateLossDetectionAlarm(rcvTime)
 
 	h.garbageCollectSkippedPackets()
 	h.stopWaitingManager.ReceivedAck(ackFrame)
@@ -260,7 +260,7 @@ func (h *sentPacketHandler) maybeUpdateRTT(largestAcked protocol.PacketNumber, a
 	for el := h.packetHistory.Front(); el != nil; el = el.Next() {
 		packet := el.Value
 		if packet.PacketNumber == largestAcked {
-			h.rttStats.UpdateRTT(rcvTime.Sub(packet.sendTime), ackDelay, time.Now())
+			h.rttStats.UpdateRTT(rcvTime.Sub(packet.sendTime), ackDelay, rcvTime)
 			return true
 		}
 		// Packets are sorted by number, so we can stop searching
@@ -271,7 +271,7 @@ func (h *sentPacketHandler) maybeUpdateRTT(largestAcked protocol.PacketNumber, a
 	return false
 }
 
-func (h *sentPacketHandler) updateLossDetectionAlarm() {
+func (h *sentPacketHandler) updateLossDetectionAlarm(now time.Time) {
 	// Cancel the alarm if no packets are outstanding
 	if h.packetHistory.Len() == 0 {
 		h.alarm = time.Time{}
@@ -280,19 +280,18 @@ func (h *sentPacketHandler) updateLossDetectionAlarm() {
 
 	// TODO(#497): TLP
 	if !h.handshakeComplete {
-		h.alarm = time.Now().Add(h.computeHandshakeTimeout())
+		h.alarm = now.Add(h.computeHandshakeTimeout())
 	} else if !h.lossTime.IsZero() {
 		// Early retransmit timer or time loss detection.
 		h.alarm = h.lossTime
 	} else {
 		// RTO
-		h.alarm = time.Now().Add(h.computeRTOTimeout())
+		h.alarm = now.Add(h.computeRTOTimeout())
 	}
 }
 
-func (h *sentPacketHandler) detectLostPackets() {
+func (h *sentPacketHandler) detectLostPackets(now time.Time) {
 	h.lossTime = time.Time{}
-	now := time.Now()
 
 	maxRTT := float64(utils.MaxDuration(h.rttStats.LatestRTT(), h.rttStats.SmoothedRTT()))
 	delayUntilLost := time.Duration((1.0 + timeReorderingFraction) * maxRTT)
@@ -323,20 +322,22 @@ func (h *sentPacketHandler) detectLostPackets() {
 }
 
 func (h *sentPacketHandler) OnAlarm() {
+	now := time.Now()
+
 	// TODO(#497): TLP
 	if !h.handshakeComplete {
 		h.queueHandshakePacketsForRetransmission()
 		h.handshakeCount++
 	} else if !h.lossTime.IsZero() {
 		// Early retransmit or time loss detection
-		h.detectLostPackets()
+		h.detectLostPackets(now)
 	} else {
 		// RTO
 		h.retransmitOldestTwoPackets()
 		h.rtoCount++
 	}
 
-	h.updateLossDetectionAlarm()
+	h.updateLossDetectionAlarm(now)
 }
 
 func (h *sentPacketHandler) GetAlarmTimeout() time.Time {
