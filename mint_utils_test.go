@@ -42,6 +42,13 @@ var _ = Describe("Packing and unpacking Initial packets", func() {
 			Expect(mintConf.NonBlocking).To(BeTrue())
 		})
 
+		It("sets the server name", func() {
+			conf := &tls.Config{ServerName: "www.example.com"}
+			mintConf, err := tlsToMintConfig(conf, protocol.PerspectiveClient)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(mintConf.ServerName).To(Equal("www.example.com"))
+		})
+
 		It("sets the certificate chain", func() {
 			tlsConf := testdata.GetTLSConfig()
 			mintConf, err := tlsToMintConfig(tlsConf, protocol.PerspectiveClient)
