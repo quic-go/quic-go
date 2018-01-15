@@ -103,6 +103,17 @@ var _ = Describe("RoundTripper", func() {
 			Expect(receivedConfig).To(Equal(config))
 		})
 
+		It("uses the custom dialer, if provided", func() {
+			var dialed bool
+			dialer := func(_, _ string, tlsCfgP *tls.Config, cfg *quic.Config) (quic.Session, error) {
+				dialed = true
+				return nil, errors.New("err")
+			}
+			rt.Dial = dialer
+			rt.RoundTrip(req1)
+			Expect(dialed).To(BeTrue())
+		})
+
 		It("reuses existing clients", func() {
 			req, err := http.NewRequest("GET", "https://quic.clemente.io/file1.html", nil)
 			Expect(err).ToNot(HaveOccurred())
