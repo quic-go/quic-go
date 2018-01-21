@@ -113,8 +113,11 @@ func (f *streamFramer) maybePopNormalFrames(maxTotalLen protocol.ByteCount) []*w
 		}
 		id := f.streamQueue[0]
 		f.streamQueue = f.streamQueue[1:]
+		// This should never return an error. Better check it anyway.
+		// The stream will only be in the streamQueue, if it enqueued itself there.
 		str, err := f.streamGetter.GetOrOpenSendStream(id)
-		if err != nil { // can happen if the stream completed after it said it had data
+		// The stream can be nil if it completed after it said it had data.
+		if str == nil || err != nil {
 			delete(f.activeStreams, id)
 			continue
 		}
