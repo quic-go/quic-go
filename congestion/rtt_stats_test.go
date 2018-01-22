@@ -24,18 +24,18 @@ var _ = Describe("RTT stats", func() {
 	})
 
 	It("SmoothedRTT", func() {
-		// Verify that ack_delay is corrected for in Smoothed RTT.
+		// Verify that ack_delay is ignored in the first measurement.
 		rttStats.UpdateRTT((300 * time.Millisecond), (100 * time.Millisecond), time.Time{})
-		Expect(rttStats.LatestRTT()).To(Equal((200 * time.Millisecond)))
-		Expect(rttStats.SmoothedRTT()).To(Equal((200 * time.Millisecond)))
-		// Verify that effective RTT of zero does not change Smoothed RTT.
-		rttStats.UpdateRTT((200 * time.Millisecond), (200 * time.Millisecond), time.Time{})
-		Expect(rttStats.LatestRTT()).To(Equal((200 * time.Millisecond)))
-		Expect(rttStats.SmoothedRTT()).To(Equal((200 * time.Millisecond)))
+		Expect(rttStats.LatestRTT()).To(Equal((300 * time.Millisecond)))
+		Expect(rttStats.SmoothedRTT()).To(Equal((300 * time.Millisecond)))
+		// Verify that Smoothed RTT includes max ack delay if it's reasonable.
+		rttStats.UpdateRTT((350 * time.Millisecond), (50 * time.Millisecond), time.Time{})
+		Expect(rttStats.LatestRTT()).To(Equal((300 * time.Millisecond)))
+		Expect(rttStats.SmoothedRTT()).To(Equal((300 * time.Millisecond)))
 		// Verify that large erroneous ack_delay does not change Smoothed RTT.
 		rttStats.UpdateRTT((200 * time.Millisecond), (300 * time.Millisecond), time.Time{})
 		Expect(rttStats.LatestRTT()).To(Equal((200 * time.Millisecond)))
-		Expect(rttStats.SmoothedRTT()).To(Equal((200 * time.Millisecond)))
+		Expect(rttStats.SmoothedRTT()).To(Equal((287500 * time.Microsecond)))
 	})
 
 	It("MinRTT", func() {
@@ -197,11 +197,15 @@ var _ = Describe("RTT stats", func() {
 	})
 
 	It("ResetAfterConnectionMigrations", func() {
+		rttStats.UpdateRTT((200 * time.Millisecond), 0, time.Time{})
+		Expect(rttStats.LatestRTT()).To(Equal((200 * time.Millisecond)))
+		Expect(rttStats.SmoothedRTT()).To(Equal((200 * time.Millisecond)))
+		Expect(rttStats.MinRTT()).To(Equal((200 * time.Millisecond)))
 		rttStats.UpdateRTT((300 * time.Millisecond), (100 * time.Millisecond), time.Time{})
 		Expect(rttStats.LatestRTT()).To(Equal((200 * time.Millisecond)))
 		Expect(rttStats.SmoothedRTT()).To(Equal((200 * time.Millisecond)))
-		Expect(rttStats.MinRTT()).To(Equal((300 * time.Millisecond)))
-		Expect(rttStats.RecentMinRTT()).To(Equal(300 * time.Millisecond))
+		Expect(rttStats.MinRTT()).To(Equal((200 * time.Millisecond)))
+		Expect(rttStats.RecentMinRTT()).To(Equal(200 * time.Millisecond))
 
 		// Reset rtt stats on connection migrations.
 		rttStats.OnConnectionMigration()

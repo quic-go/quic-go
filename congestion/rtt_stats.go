@@ -98,10 +98,10 @@ func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration, now time.Time) {
 	r.updateRecentMinRTT(sendDelta, now)
 
 	// Correct for ackDelay if information received from the peer results in a
-	// positive RTT sample. Otherwise, we use the sendDelta as a reasonable
-	// measure for smoothedRTT.
+	// an RTT sample at least as large as minRTT. Otherwise, only use the
+	// sendDelta.
 	sample := sendDelta
-	if sample > ackDelay {
+	if sample-r.minRTT >= ackDelay {
 		sample -= ackDelay
 	}
 	r.latestRTT = sample
