@@ -2,7 +2,6 @@ package quic
 
 import (
 	"bytes"
-	"errors"
 
 	"github.com/golang/mock/gomock"
 
@@ -139,7 +138,7 @@ var _ = Describe("Stream Framer", func() {
 		})
 
 		It("skips a stream that was reported active, but was completed shortly after", func() {
-			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(nil, errors.New("stream was already deleted"))
+			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(nil, nil)
 			streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil)
 			f := &wire.StreamFrame{
 				StreamID: id2,
