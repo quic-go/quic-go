@@ -5,6 +5,7 @@
 - The lower boundary for packets included in ACKs is now derived, and the value sent in STOP_WAITING frames is ignored.
 - Remove `DialNonFWSecure` and `DialAddrNonFWSecure`.
 - Expose the `ConnectionState` in the `Session` (experimental API).
+- Implement packet pacing.
 
 ## v0.6.0 (2017-12-12)
 
