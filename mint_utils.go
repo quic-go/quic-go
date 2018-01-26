@@ -16,6 +16,8 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
+var errMintIsInsecure = errors.New("mint currently DOES NOT support certificate verification (see https://github.com/bifurcation/mint/issues/161 for details). Set InsecureSkipVerify to acknowledge that no certificate verification will be performed, and the connection will be vulnerable to man-in-the-middle attacks")
+
 type mintController struct {
 	csc  *handshake.CryptoStreamConn
 	conn *mint.Conn
@@ -77,6 +79,9 @@ func tlsToMintConfig(tlsConf *tls.Config, pers protocol.Perspective) (*mint.Conf
 		},
 	}
 	if tlsConf != nil {
+		if pers == protocol.PerspectiveClient && !tlsConf.InsecureSkipVerify {
+			return nil, errMintIsInsecure
+		}
 		mconf.ServerName = tlsConf.ServerName
 		mconf.Certificates = make([]*mint.Certificate, len(tlsConf.Certificates))
 		for i, certChain := range tlsConf.Certificates {
