@@ -36,8 +36,7 @@ var _ = Describe("Stateless TLS handling", func() {
 			Versions: []protocol.VersionNumber{protocol.VersionTLS},
 		}
 		var err error
-		tlsConf := testdata.GetTLSConfig()
-		server, sessionChan, err = newServerTLS(conn, config, nil, tlsConf)
+		server, sessionChan, err = newServerTLS(conn, config, nil, testdata.GetTLSConfig())
 		Expect(err).ToNot(HaveOccurred())
 		server.newMintConn = func(bc *handshake.CryptoStreamConn, v protocol.VersionNumber) (handshake.MintTLS, <-chan handshake.TransportParameters, error) {
 			mintReply = bc
