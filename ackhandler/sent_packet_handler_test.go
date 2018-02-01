@@ -186,30 +186,6 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 	})
 
-	Context("forcing retransmittable packets", func() {
-		It("says that every 20th packet should be retransmittable", func() {
-			// send 19 non-retransmittable packets
-			for i := 1; i <= protocol.MaxNonRetransmittablePackets; i++ {
-				Expect(handler.ShouldSendRetransmittablePacket()).To(BeFalse())
-				err := handler.SentPacket(nonRetransmittablePacket(protocol.PacketNumber(i)))
-				Expect(err).ToNot(HaveOccurred())
-			}
-			Expect(handler.ShouldSendRetransmittablePacket()).To(BeTrue())
-		})
-
-		It("resets the counter when a retransmittable packet is sent", func() {
-			// send 19 non-retransmittable packets
-			for i := 1; i <= protocol.MaxNonRetransmittablePackets; i++ {
-				Expect(handler.ShouldSendRetransmittablePacket()).To(BeFalse())
-				err := handler.SentPacket(nonRetransmittablePacket(protocol.PacketNumber(i)))
-				Expect(err).ToNot(HaveOccurred())
-			}
-			err := handler.SentPacket(retransmittablePacket(20))
-			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.ShouldSendRetransmittablePacket()).To(BeFalse())
-		})
-	})
-
 	Context("DoS mitigation", func() {
 		It("checks the size of the packet history, for unacked packets", func() {
 			i := protocol.PacketNumber(1)

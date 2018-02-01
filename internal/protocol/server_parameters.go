@@ -90,8 +90,8 @@ const MaxTrackedSentPackets = 2 * DefaultMaxCongestionWindow
 // MaxTrackedReceivedAckRanges is the maximum number of ACK ranges tracked
 const MaxTrackedReceivedAckRanges = DefaultMaxCongestionWindow
 
-// MaxNonRetransmittablePackets is the maximum number of non-retransmittable packets that we send in a row
-const MaxNonRetransmittablePackets = 19
+// MaxNonRetransmittableAcks is the maximum number of packets containing an ACK, but no retransmittable frames, that we send in a row
+const MaxNonRetransmittableAcks = 19
 
 // RetransmittablePacketsBeforeAck is the number of retransmittable that an ACK is sent for
 const RetransmittablePacketsBeforeAck = 10
