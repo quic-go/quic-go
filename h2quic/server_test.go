@@ -32,9 +32,14 @@ type mockSession struct {
 	streamToAccept      quic.Stream
 	streamsToOpen       []quic.Stream
 	blockOpenStreamSync bool
+	blockOpenStreamChan chan struct{} // close this chan (or call Close) to make OpenStreamSync return
 	streamOpenErr       error
 	ctx                 context.Context
 	ctxCancel           context.CancelFunc
+}
+
+func newMockSession() *mockSession {
+	return &mockSession{blockOpenStreamChan: make(chan struct{})}
 }
 
 func (s *mockSession) GetOrOpenStream(id protocol.StreamID) (quic.Stream, error) {
@@ -51,14 +56,17 @@ func (s *mockSession) OpenStream() (quic.Stream, error) {
 }
 func (s *mockSession) OpenStreamSync() (quic.Stream, error) {
 	if s.blockOpenStreamSync {
-		time.Sleep(time.Hour)
+		<-s.blockOpenStreamChan
 	}
 	return s.OpenStream()
 }
 func (s *mockSession) Close(e error) error {
-	s.closed = true
 	s.closedWithError = e
 	s.ctxCancel()
+	if !s.closed {
+		close(s.blockOpenStreamChan)
+	}
+	s.closed = true
 	return nil
 }
 func (s *mockSession) LocalAddr() net.Addr {
@@ -88,7 +96,8 @@ var _ = Describe("H2 server", func() {
 		}
 		dataStream = newMockStream(0)
 		close(dataStream.unblockRead)
-		session = &mockSession{dataStream: dataStream}
+		session = newMockSession()
+		session.dataStream = dataStream
 		session.ctx, session.ctxCancel = context.WithCancel(context.Background())
 		origQuicListenAddr = quicListenAddr
 	})
