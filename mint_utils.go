@@ -43,7 +43,7 @@ func newMintController(
 }
 
 func (mc *mintController) GetCipherSuite() mint.CipherSuiteParams {
-	return mc.conn.State().CipherSuite
+	return mc.conn.ConnectionState().CipherSuite
 }
 
 func (mc *mintController) ComputeExporter(label string, context []byte, keyLength int) ([]byte, error) {
@@ -55,19 +55,15 @@ func (mc *mintController) Handshake() mint.Alert {
 }
 
 func (mc *mintController) State() mint.State {
-	return mc.conn.State().HandshakeState
+	return mc.conn.ConnectionState().HandshakeState
 }
 
 func (mc *mintController) ConnectionState() mint.ConnectionState {
-	return mc.conn.State()
+	return mc.conn.ConnectionState()
 }
 
 func (mc *mintController) SetCryptoStream(stream io.ReadWriter) {
 	mc.csc.SetStream(stream)
-}
-
-func (mc *mintController) SetExtensionHandler(h mint.AppExtensionHandler) error {
-	return mc.conn.SetExtensionHandler(h)
 }
 
 func tlsToMintConfig(tlsConf *tls.Config, pers protocol.Perspective) (*mint.Config, error) {

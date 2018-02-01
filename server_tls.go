@@ -89,14 +89,10 @@ func (s *serverTLS) HandleInitial(remoteAddr net.Addr, hdr *wire.Header, data []
 
 // will be set to s.newMintConn by the constructor
 func (s *serverTLS) newMintConnImpl(bc *handshake.CryptoStreamConn, v protocol.VersionNumber) (handshake.MintTLS, <-chan handshake.TransportParameters, error) {
-	conn := mint.Server(bc, s.mintConf)
 	extHandler := handshake.NewExtensionHandlerServer(s.params, s.config.Versions, v)
-	if err := conn.SetExtensionHandler(extHandler); err != nil {
-		return nil, nil, err
-	}
-	tls := newMintController(bc, s.mintConf, protocol.PerspectiveServer)
-	tls.SetExtensionHandler(extHandler)
-	return tls, extHandler.GetPeerParams(), nil
+	conf := s.mintConf.Clone()
+	conf.ExtensionHandler = extHandler
+	return newMintController(bc, conf, protocol.PerspectiveServer), extHandler.GetPeerParams(), nil
 }
 
 func (s *serverTLS) sendConnectionClose(remoteAddr net.Addr, clientHdr *wire.Header, aead crypto.AEAD, closeErr error) error {

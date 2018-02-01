@@ -77,8 +77,6 @@ func (hm HandshakeMessage) ToBody() (HandshakeMessageBody, error) {
 		body = new(ClientHelloBody)
 	case HandshakeTypeServerHello:
 		body = new(ServerHelloBody)
-	case HandshakeTypeHelloRetryRequest:
-		body = new(HelloRetryRequestBody)
 	case HandshakeTypeEncryptedExtensions:
 		body = new(EncryptedExtensionsBody)
 	case HandshakeTypeCertificate:

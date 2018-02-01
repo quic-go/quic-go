@@ -94,18 +94,6 @@ func (mr *MockMintTLSMockRecorder) SetCryptoStream(arg0 interface{}) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCryptoStream", reflect.TypeOf((*MockMintTLS)(nil).SetCryptoStream), arg0)
 }
 
-// SetExtensionHandler mocks base method
-func (m *MockMintTLS) SetExtensionHandler(arg0 mint.AppExtensionHandler) error {
-	ret := m.ctrl.Call(m, "SetExtensionHandler", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SetExtensionHandler indicates an expected call of SetExtensionHandler
-func (mr *MockMintTLSMockRecorder) SetExtensionHandler(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetExtensionHandler", reflect.TypeOf((*MockMintTLS)(nil).SetExtensionHandler), arg0)
-}
-
 // State mocks base method
 func (m *MockMintTLS) State() mint.State {
 	ret := m.ctrl.Call(m, "State")

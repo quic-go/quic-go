@@ -166,13 +166,6 @@ func (c *client) dialGQUIC() error {
 }
 
 func (c *client) dialTLS() error {
-	csc := handshake.NewCryptoStreamConn(nil)
-	mintConf, err := tlsToMintConfig(c.tlsConf, protocol.PerspectiveClient)
-	if err != nil {
-		return err
-	}
-	mintConf.ServerName = c.hostname
-	c.tls = newMintController(csc, mintConf, protocol.PerspectiveClient)
 	params := &handshake.TransportParameters{
 		StreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
 		ConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
@@ -180,11 +173,17 @@ func (c *client) dialTLS() error {
 		IdleTimeout:                 c.config.IdleTimeout,
 		OmitConnectionID:            c.config.RequestConnectionIDOmission,
 	}
-	eh := handshake.NewExtensionHandlerClient(params, c.initialVersion, c.config.Versions, c.version)
-	if err := c.tls.SetExtensionHandler(eh); err != nil {
+	csc := handshake.NewCryptoStreamConn(nil)
+	extHandler := handshake.NewExtensionHandlerClient(params, c.initialVersion, c.config.Versions, c.version)
+	mintConf, err := tlsToMintConfig(c.tlsConf, protocol.PerspectiveClient)
+	if err != nil {
 		return err
 	}
-	if err := c.createNewTLSSession(eh.GetPeerParams(), c.version); err != nil {
+	mintConf.ExtensionHandler = extHandler
+	mintConf.ServerName = c.hostname
+	c.tls = newMintController(csc, mintConf, protocol.PerspectiveClient)
+
+	if err := c.createNewTLSSession(extHandler.GetPeerParams(), c.version); err != nil {
 		return err
 	}
 	go c.listen()
@@ -193,7 +192,7 @@ func (c *client) dialTLS() error {
 			return err
 		}
 		utils.Infof("Received a Retry packet. Recreating session.")
-		if err := c.createNewTLSSession(eh.GetPeerParams(), c.version); err != nil {
+		if err := c.createNewTLSSession(extHandler.GetPeerParams(), c.version); err != nil {
 			return err
 		}
 		if err := c.establishSecureConnection(); err != nil {

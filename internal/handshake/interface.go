@@ -33,7 +33,6 @@ type MintTLS interface {
 	ConnectionState() mint.ConnectionState
 
 	SetCryptoStream(io.ReadWriter)
-	SetExtensionHandler(mint.AppExtensionHandler) error
 }
 
 // CryptoSetup is a crypto setup
