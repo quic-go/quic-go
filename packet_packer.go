@@ -37,12 +37,12 @@ type packetPacker struct {
 	controlFrameMutex sync.Mutex
 	controlFrames     []wire.Frame
 
-	stopWaiting                   *wire.StopWaitingFrame
-	ackFrame                      *wire.AckFrame
-	leastUnacked                  protocol.PacketNumber
-	omitConnectionID              bool
-	hasSentPacket                 bool // has the packetPacker already sent a packet
-	makeNextPacketRetransmittable bool
+	stopWaiting               *wire.StopWaitingFrame
+	ackFrame                  *wire.AckFrame
+	leastUnacked              protocol.PacketNumber
+	omitConnectionID          bool
+	hasSentPacket             bool // has the packetPacker already sent a packet
+	numNonRetransmittableAcks int
 }
 
 func newPacketPacker(connectionID protocol.ConnectionID,
@@ -169,14 +169,18 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 	if len(payloadFrames) == 1 && p.stopWaiting != nil {
 		return nil, nil
 	}
-	// check if this packet only contains an ACK and / or STOP_WAITING
-	if !ackhandler.HasRetransmittableFrames(payloadFrames) {
-		if p.makeNextPacketRetransmittable {
-			payloadFrames = append(payloadFrames, &wire.PingFrame{})
-			p.makeNextPacketRetransmittable = false
+	if p.ackFrame != nil {
+		// check if this packet only contains an ACK (and maybe a STOP_WAITING)
+		if len(payloadFrames) == 1 || (p.stopWaiting != nil && len(payloadFrames) == 2) {
+			if p.numNonRetransmittableAcks >= protocol.MaxNonRetransmittableAcks {
+				payloadFrames = append(payloadFrames, &wire.PingFrame{})
+				p.numNonRetransmittableAcks = 0
+			} else {
+				p.numNonRetransmittableAcks++
+			}
+		} else {
+			p.numNonRetransmittableAcks = 0
 		}
-	} else { // this packet already contains a retransmittable frame. No need to send a PING
-		p.makeNextPacketRetransmittable = false
 	}
 	p.stopWaiting = nil
 	p.ackFrame = nil
@@ -391,8 +395,4 @@ func (p *packetPacker) SetLeastUnacked(leastUnacked protocol.PacketNumber) {
 
 func (p *packetPacker) SetOmitConnectionID() {
 	p.omitConnectionID = true
-}
-
-func (p *packetPacker) MakeNextPacketRetransmittable() {
-	p.makeNextPacketRetransmittable = true
 }

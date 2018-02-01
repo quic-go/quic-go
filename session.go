@@ -841,10 +841,6 @@ func (s *session) sendPacket() (bool, error) {
 			s.packer.QueueControlFrame(swf)
 		}
 	}
-	// add a retransmittable frame
-	if s.sentPacketHandler.ShouldSendRetransmittablePacket() {
-		s.packer.MakeNextPacketRetransmittable()
-	}
 	packet, err := s.packer.PackPacket()
 	if err != nil || packet == nil {
 		return false, err

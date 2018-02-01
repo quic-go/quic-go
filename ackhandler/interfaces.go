@@ -31,7 +31,6 @@ type SentPacketHandler interface {
 
 	GetStopWaitingFrame(force bool) *wire.StopWaitingFrame
 	GetLowestPacketNotConfirmedAcked() protocol.PacketNumber
-	ShouldSendRetransmittablePacket() bool
 	DequeuePacketForRetransmission() (packet *Packet)
 	GetLeastUnacked() protocol.PacketNumber
 
