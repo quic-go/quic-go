@@ -138,8 +138,7 @@ func (m *streamsMapLegacy) openRemoteStream(id protocol.StreamID) (streamI, erro
 	}
 
 	s := m.newStream(id)
-	m.putStream(s)
-	return s, nil
+	return s, m.putStream(s)
 }
 
 func (m *streamsMapLegacy) openStreamImpl() (streamI, error) {
@@ -149,9 +148,8 @@ func (m *streamsMapLegacy) openStreamImpl() (streamI, error) {
 
 	m.numOutgoingStreams++
 	s := m.newStream(m.nextStreamToOpen)
-	m.putStream(s)
 	m.nextStreamToOpen += 2
-	return s, nil
+	return s, m.putStream(s)
 }
 
 // OpenStream opens the next available stream

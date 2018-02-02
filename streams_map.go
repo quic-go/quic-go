@@ -128,15 +128,13 @@ func (m *streamsMap) openRemoteStream(id protocol.StreamID) (streamI, error) {
 		m.highestStreamOpenedByPeer = id
 	}
 	s := m.newStream(id)
-	m.putStream(s)
-	return s, nil
+	return s, m.putStream(s)
 }
 
 func (m *streamsMap) openStreamImpl() (streamI, error) {
 	s := m.newStream(m.nextStreamToOpen)
-	m.putStream(s)
 	m.nextStreamToOpen = m.nextStreamID(m.nextStreamToOpen)
-	return s, nil
+	return s, m.putStream(s)
 }
 
 // OpenStream opens the next available stream
