@@ -29,7 +29,7 @@ var _ = Describe("Receive Stream", func() {
 	BeforeEach(func() {
 		mockSender = NewMockStreamSender(mockCtrl)
 		mockFC = mocks.NewMockStreamFlowController(mockCtrl)
-		str = newReceiveStream(streamID, mockSender, mockFC)
+		str = newReceiveStream(streamID, mockSender, mockFC, versionIETFFrames)
 
 		timeout := scaleDuration(250 * time.Millisecond)
 		strWithTimeout = gbytes.TimeoutReader(str, timeout)
@@ -494,6 +494,7 @@ var _ = Describe("Receive Stream", func() {
 			})
 
 			It("queues a STOP_SENDING frame, for IETF QUIC", func() {
+				str.version = versionIETFFrames
 				mockSender.EXPECT().queueControlFrame(&wire.StopSendingFrame{
 					StreamID:  streamID,
 					ErrorCode: 1234,
@@ -503,7 +504,10 @@ var _ = Describe("Receive Stream", func() {
 			})
 
 			It("doesn't queue a STOP_SENDING frame, for gQUIC", func() {
-
+				str.version = versionGQUICFrames
+				// no calls to mockSender.queueControlFrame
+				err := str.CancelRead(1234)
+				Expect(err).ToNot(HaveOccurred())
 			})
 		})
 
