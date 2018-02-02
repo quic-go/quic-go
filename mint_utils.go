@@ -16,8 +16,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
-var errMintIsInsecure = errors.New("mint currently DOES NOT support certificate verification (see https://github.com/bifurcation/mint/issues/161 for details). Set InsecureSkipVerify to acknowledge that no certificate verification will be performed, and the connection will be vulnerable to man-in-the-middle attacks")
-
 type mintController struct {
 	csc  *handshake.CryptoStreamConn
 	conn *mint.Conn
@@ -43,7 +41,7 @@ func newMintController(
 }
 
 func (mc *mintController) GetCipherSuite() mint.CipherSuiteParams {
-	return mc.conn.State().CipherSuite
+	return mc.conn.ConnectionState().CipherSuite
 }
 
 func (mc *mintController) ComputeExporter(label string, context []byte, keyLength int) ([]byte, error) {
@@ -55,19 +53,15 @@ func (mc *mintController) Handshake() mint.Alert {
 }
 
 func (mc *mintController) State() mint.State {
-	return mc.conn.State().HandshakeState
+	return mc.conn.ConnectionState().HandshakeState
 }
 
 func (mc *mintController) ConnectionState() mint.ConnectionState {
-	return mc.conn.State()
+	return mc.conn.ConnectionState()
 }
 
 func (mc *mintController) SetCryptoStream(stream io.ReadWriter) {
 	mc.csc.SetStream(stream)
-}
-
-func (mc *mintController) SetExtensionHandler(h mint.AppExtensionHandler) error {
-	return mc.conn.SetExtensionHandler(h)
 }
 
 func tlsToMintConfig(tlsConf *tls.Config, pers protocol.Perspective) (*mint.Config, error) {
@@ -79,9 +73,6 @@ func tlsToMintConfig(tlsConf *tls.Config, pers protocol.Perspective) (*mint.Conf
 		},
 	}
 	if tlsConf != nil {
-		if pers == protocol.PerspectiveClient && !tlsConf.InsecureSkipVerify {
-			return nil, errMintIsInsecure
-		}
 		mconf.ServerName = tlsConf.ServerName
 		mconf.Certificates = make([]*mint.Certificate, len(tlsConf.Certificates))
 		for i, certChain := range tlsConf.Certificates {

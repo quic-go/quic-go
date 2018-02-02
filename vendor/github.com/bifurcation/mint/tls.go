@@ -93,6 +93,7 @@ func DialWithDialer(dialer *net.Dialer, network, addr string, config *Config) (*
 	if config != nil && config.NonBlocking {
 		return nil, errors.New("dialing not possible in non-blocking mode")
 	}
+
 	// We want the Timeout and Deadline values from dialer to cover the
 	// whole process: TCP connection and TLS handshake. This means that we
 	// also need to start our own timers now.
@@ -127,15 +128,19 @@ func DialWithDialer(dialer *net.Dialer, network, addr string, config *Config) (*
 
 	if config == nil {
 		config = &Config{}
+	} else {
+		config = config.Clone()
 	}
+
 	// If no ServerName is set, infer the ServerName
 	// from the hostname we're connecting to.
 	if config.ServerName == "" {
-		// Make a copy to avoid polluting argument or default.
-		c := config.Clone()
-		c.ServerName = hostname
-		config = c
+		config.ServerName = hostname
+
 	}
+
+	// Set up DTLS as needed.
+	config.UseDTLS = (network == "udp")
 
 	conn := Client(rawConn, config)
 

@@ -79,8 +79,7 @@ var _ = Describe("Handshake tests", func() {
 	})
 
 	Context("Certifiate validation", func() {
-		// no need to run these tests with TLS. mint doesn't do certificate verification
-		for _, v := range protocol.SupportedVersions {
+		for _, v := range []protocol.VersionNumber{protocol.Version39, protocol.VersionTLS} {
 			version := v
 
 			Context(fmt.Sprintf("using %s", version), func() {

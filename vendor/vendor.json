@@ -3,10 +3,10 @@
 	"ignore": "test",
 	"package": [
 		{
-			"checksumSHA1": "nxj6lkDUEZ81SO0lP8YUhm+4BAM=",
+			"checksumSHA1": "8nsuzBKJY9oVNM/NPU0kbY/YpDw=",
 			"path": "github.com/bifurcation/mint",
-			"revision": "f699e8d03646cb8e6e15410ced7bff37fcf8dddd",
-			"revisionTime": "2017-12-21T19:05:27Z"
+			"revision": "a00905133cda39e4ac20677ae9332dce13e785eb",
+			"revisionTime": "2018-02-01T00:42:34Z"
 		},
 		{
 			"checksumSHA1": "PZNcjO1c9gV/LZzppwpVRl6+QAY=",

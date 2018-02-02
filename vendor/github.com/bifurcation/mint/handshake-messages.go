@@ -25,17 +25,27 @@ type HandshakeMessageBody interface {
 //     Extension extensions<0..2^16-1>;
 // } ClientHello;
 type ClientHelloBody struct {
-	// Omitted: clientVersion
+	LegacyVersion   uint16
 	Random          [32]byte
 	LegacySessionID []byte
 	CipherSuites    []CipherSuite
 	Extensions      ExtensionList
 }
 
-type clientHelloBodyInner struct {
+type clientHelloBodyInnerTLS struct {
 	LegacyVersion            uint16
 	Random                   [32]byte
 	LegacySessionID          []byte        `tls:"head=1,max=32"`
+	CipherSuites             []CipherSuite `tls:"head=2,min=2"`
+	LegacyCompressionMethods []byte        `tls:"head=1,min=1"`
+	Extensions               []Extension   `tls:"head=2"`
+}
+
+type clientHelloBodyInnerDTLS struct {
+	LegacyVersion            uint16
+	Random                   [32]byte
+	LegacySessionID          []byte `tls:"head=1,max=32"`
+	EmptyCookie              uint8
 	CipherSuites             []CipherSuite `tls:"head=2,min=2"`
 	LegacyCompressionMethods []byte        `tls:"head=1,min=1"`
 	Extensions               []Extension   `tls:"head=2"`
@@ -46,36 +56,71 @@ func (ch ClientHelloBody) Type() HandshakeType {
 }
 
 func (ch ClientHelloBody) Marshal() ([]byte, error) {
-	return syntax.Marshal(clientHelloBodyInner{
-		LegacyVersion:            tls12Version,
-		Random:                   ch.Random,
-		LegacySessionID:          []byte{},
-		CipherSuites:             ch.CipherSuites,
-		LegacyCompressionMethods: []byte{0},
-		Extensions:               ch.Extensions,
-	})
+	if ch.LegacyVersion == tls12Version {
+		return syntax.Marshal(clientHelloBodyInnerTLS{
+			LegacyVersion:            ch.LegacyVersion,
+			Random:                   ch.Random,
+			LegacySessionID:          []byte{},
+			CipherSuites:             ch.CipherSuites,
+			LegacyCompressionMethods: []byte{0},
+			Extensions:               ch.Extensions,
+		})
+	} else {
+		return syntax.Marshal(clientHelloBodyInnerDTLS{
+			LegacyVersion:            ch.LegacyVersion,
+			Random:                   ch.Random,
+			LegacySessionID:          []byte{},
+			CipherSuites:             ch.CipherSuites,
+			LegacyCompressionMethods: []byte{0},
+			Extensions:               ch.Extensions,
+		})
+	}
+
 }
 
 func (ch *ClientHelloBody) Unmarshal(data []byte) (int, error) {
-	var inner clientHelloBodyInner
-	read, err := syntax.Unmarshal(data, &inner)
-	if err != nil {
-		return 0, err
-	}
+	var read int
+	var err error
 
-	// We are strict about these things because we only support 1.3
-	if inner.LegacyVersion != tls12Version {
-		return 0, fmt.Errorf("tls.clienthello: Incorrect version number")
-	}
+	// Note that this might be 0, in which case we do TLS. That
+	// makes the tests easier.
+	if ch.LegacyVersion != dtls12WireVersion {
+		var inner clientHelloBodyInnerTLS
+		read, err = syntax.Unmarshal(data, &inner)
+		if err != nil {
+			return 0, err
+		}
 
-	if len(inner.LegacyCompressionMethods) != 1 || inner.LegacyCompressionMethods[0] != 0 {
-		return 0, fmt.Errorf("tls.clienthello: Invalid compression method")
-	}
+		if len(inner.LegacyCompressionMethods) != 1 || inner.LegacyCompressionMethods[0] != 0 {
+			return 0, fmt.Errorf("tls.clienthello: Invalid compression method")
+		}
 
-	ch.Random = inner.Random
-	ch.LegacySessionID = inner.LegacySessionID
-	ch.CipherSuites = inner.CipherSuites
-	ch.Extensions = inner.Extensions
+		ch.LegacyVersion = inner.LegacyVersion
+		ch.Random = inner.Random
+		ch.LegacySessionID = inner.LegacySessionID
+		ch.CipherSuites = inner.CipherSuites
+		ch.Extensions = inner.Extensions
+	} else {
+		var inner clientHelloBodyInnerDTLS
+		read, err = syntax.Unmarshal(data, &inner)
+		if err != nil {
+			return 0, err
+		}
+
+		if inner.EmptyCookie != 0 {
+			return 0, fmt.Errorf("tls.clienthello: Invalid cookie")
+		}
+
+		if len(inner.LegacyCompressionMethods) != 1 || inner.LegacyCompressionMethods[0] != 0 {
+			return 0, fmt.Errorf("tls.clienthello: Invalid compression method")
+		}
+
+		ch.LegacyVersion = inner.LegacyVersion
+		ch.Random = inner.Random
+		ch.LegacySessionID = inner.LegacySessionID
+		ch.CipherSuites = inner.CipherSuites
+		ch.Extensions = inner.Extensions
+	}
 	return read, nil
 }
 
@@ -118,29 +163,6 @@ func (ch ClientHelloBody) Truncated() ([]byte, error) {
 
 	chLen := len(chData)
 	return chData[:chLen-binderLen], nil
-}
-
-// struct {
-//     ProtocolVersion server_version;
-//     CipherSuite	cipher_suite;
-//     Extension extensions<2..2^16-1>;
-// } HelloRetryRequest;
-type HelloRetryRequestBody struct {
-	Version     uint16
-	CipherSuite CipherSuite
-	Extensions  ExtensionList `tls:"head=2,min=2"`
-}
-
-func (hrr HelloRetryRequestBody) Type() HandshakeType {
-	return HandshakeTypeHelloRetryRequest
-}
-
-func (hrr HelloRetryRequestBody) Marshal() ([]byte, error) {
-	return syntax.Marshal(hrr)
-}
-
-func (hrr *HelloRetryRequestBody) Unmarshal(data []byte) (int, error) {
-	return syntax.Unmarshal(data, hrr)
 }
 
 // struct {
