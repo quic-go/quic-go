@@ -74,6 +74,7 @@ func tlsToMintConfig(tlsConf *tls.Config, pers protocol.Perspective) (*mint.Conf
 	}
 	if tlsConf != nil {
 		mconf.ServerName = tlsConf.ServerName
+		mconf.InsecureSkipVerify = tlsConf.InsecureSkipVerify
 		mconf.Certificates = make([]*mint.Certificate, len(tlsConf.Certificates))
 		for i, certChain := range tlsConf.Certificates {
 			mconf.Certificates[i] = &mint.Certificate{

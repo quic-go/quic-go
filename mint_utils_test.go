@@ -49,6 +49,13 @@ var _ = Describe("Packing and unpacking Initial packets", func() {
 			Expect(mintConf.ServerName).To(Equal("www.example.com"))
 		})
 
+		It("sets InsecureSkipVerify", func() {
+			conf := &tls.Config{InsecureSkipVerify: true}
+			mintConf, err := tlsToMintConfig(conf, protocol.PerspectiveClient)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(mintConf.InsecureSkipVerify).To(BeTrue())
+		})
+
 		It("sets the certificate chain", func() {
 			tlsConf := testdata.GetTLSConfig()
 			mintConf, err := tlsToMintConfig(tlsConf, protocol.PerspectiveClient)
