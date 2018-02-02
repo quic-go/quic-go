@@ -3,6 +3,8 @@ package quic
 import (
 	"bytes"
 	"crypto/tls"
+	"crypto/x509"
+	"errors"
 
 	"github.com/lucas-clemente/quic-go/internal/crypto"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -42,26 +44,28 @@ var _ = Describe("Packing and unpacking Initial packets", func() {
 			Expect(mintConf.NonBlocking).To(BeTrue())
 		})
 
-		It("sets the server name", func() {
-			conf := &tls.Config{ServerName: "www.example.com"}
-			mintConf, err := tlsToMintConfig(conf, protocol.PerspectiveClient)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(mintConf.ServerName).To(Equal("www.example.com"))
-		})
-
-		It("sets InsecureSkipVerify", func() {
-			conf := &tls.Config{InsecureSkipVerify: true}
-			mintConf, err := tlsToMintConfig(conf, protocol.PerspectiveClient)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(mintConf.InsecureSkipVerify).To(BeTrue())
-		})
-
 		It("sets the certificate chain", func() {
 			tlsConf := testdata.GetTLSConfig()
 			mintConf, err := tlsToMintConfig(tlsConf, protocol.PerspectiveClient)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(mintConf.Certificates).ToNot(BeEmpty())
 			Expect(mintConf.Certificates).To(HaveLen(len(tlsConf.Certificates)))
+		})
+
+		It("copies values from the tls.Config", func() {
+			verifyErr := errors.New("test err")
+			tlsConf := &tls.Config{
+				ServerName:         "www.example.com",
+				InsecureSkipVerify: true,
+				VerifyPeerCertificate: func(_ [][]byte, _ [][]*x509.Certificate) error {
+					return verifyErr
+				},
+			}
+			mintConf, err := tlsToMintConfig(tlsConf, protocol.PerspectiveClient)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(mintConf.ServerName).To(Equal("www.example.com"))
+			Expect(mintConf.InsecureSkipVerify).To(BeTrue())
+			Expect(mintConf.VerifyPeerCertificate(nil, nil)).To(MatchError(verifyErr))
 		})
 
 		It("requires client authentication", func() {
