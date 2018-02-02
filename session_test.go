@@ -758,10 +758,11 @@ var _ = Describe("Session", func() {
 		})
 
 		It("paces packets", func() {
-			sess.queueControlFrame(&wire.MaxDataFrame{ByteOffset: 1})
+			pacingDelay := scaleDuration(100 * time.Millisecond)
+			sess.packer.QueueControlFrame(&wire.MaxDataFrame{ByteOffset: 1})
 			sph.EXPECT().SentPacket(gomock.Any()).Times(2)
-			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(-time.Minute))
-			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(300 * time.Millisecond))
+			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(-time.Minute)) // send one packet immediately
+			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(pacingDelay))  // send one
 			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour))
 			sph.EXPECT().ShouldSendNumPackets().Times(2).Return(1)
 			sph.EXPECT().SendingAllowed().Do(func() { // after sending the first packet
@@ -776,8 +777,8 @@ var _ = Describe("Session", func() {
 			}()
 			sess.scheduleSending()
 			Eventually(mconn.written).Should(HaveLen(1))
-			Consistently(mconn.written, 100*time.Millisecond).Should(HaveLen(1))
-			Eventually(mconn.written).Should(HaveLen(2))
+			Consistently(mconn.written, pacingDelay/2).Should(HaveLen(1))
+			Eventually(mconn.written, 2*pacingDelay).Should(HaveLen(2))
 			// make the go routine return
 			sess.Close(nil)
 			Eventually(done).Should(BeClosed())
