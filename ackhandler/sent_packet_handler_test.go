@@ -499,8 +499,10 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(handler.rttStats.LatestRTT()).To(BeNumerically("~", 1*time.Minute, 1*time.Second))
 			})
 
-			It("uses the DelayTime in the ack frame", func() {
+			It("uses the DelayTime in the ACK frame", func() {
 				now := time.Now()
+				// make sure the rttStats have a min RTT, so that the delay is used
+				handler.rttStats.UpdateRTT(5*time.Minute, 0, time.Now())
 				getPacketElement(1).Value.sendTime = now.Add(-10 * time.Minute)
 				err := handler.ReceivedAck(&wire.AckFrame{LargestAcked: 1, DelayTime: 5 * time.Minute}, 1, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).NotTo(HaveOccurred())
