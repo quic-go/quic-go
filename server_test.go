@@ -327,6 +327,22 @@ var _ = Describe("Server", func() {
 			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
 		})
 
+		It("doesn't try to process a packet after sending a gQUIC Version Negotiation Packet", func() {
+			config.Versions = []protocol.VersionNumber{99}
+			b := &bytes.Buffer{}
+			hdr := wire.Header{
+				VersionFlag:     true,
+				ConnectionID:    0x1337,
+				PacketNumber:    1,
+				PacketNumberLen: protocol.PacketNumberLen2,
+			}
+			hdr.Write(b, protocol.PerspectiveClient, 13 /* not a valid QUIC version */)
+			b.Write(bytes.Repeat([]byte{0}, protocol.MinClientHelloSize)) // add a fake CHLO
+			err := serv.handlePacket(conn, nil, b.Bytes())
+			Expect(conn.dataWritten.Bytes()).ToNot(BeEmpty())
+			Expect(err).ToNot(HaveOccurred())
+		})
+
 		It("doesn't respond with a version negotiation packet if the first packet is too small", func() {
 			b := &bytes.Buffer{}
 			hdr := wire.Header{
@@ -397,7 +413,7 @@ var _ = Describe("Server", func() {
 		Expect(err).To(BeAssignableToTypeOf(&net.OpError{}))
 	})
 
-	It("setups and responds with version negotiation", func() {
+	It("sends a gQUIC Version Negotaion Packet, if the client sent a gQUIC Public Header", func() {
 		config.Versions = []protocol.VersionNumber{99}
 		b := &bytes.Buffer{}
 		hdr := wire.Header{
@@ -415,6 +431,7 @@ var _ = Describe("Server", func() {
 
 		done := make(chan struct{})
 		go func() {
+			defer GinkgoRecover()
 			ln.Accept()
 			close(done)
 		}()
@@ -428,6 +445,9 @@ var _ = Describe("Server", func() {
 		Expect(packet.ConnectionID).To(Equal(protocol.ConnectionID(0x1337)))
 		Expect(r.Len()).To(BeZero())
 		Consistently(done).ShouldNot(BeClosed())
+		// make the go routine return
+		ln.Close()
+		Eventually(done).Should(BeClosed())
 	})
 
 	It("sends an IETF draft style Version Negotaion Packet, if the client sent a IETF draft style header", func() {

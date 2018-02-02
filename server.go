@@ -338,10 +338,9 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 		if len(packet) < protocol.MinClientHelloSize+len(hdr.Raw) {
 			return errors.New("dropping small packet with unknown version")
 		}
-		utils.Infof("Client offered version %s, sending VersionNegotiationPacket", hdr.Version)
-		if _, err := pconn.WriteTo(wire.ComposeGQUICVersionNegotiation(hdr.ConnectionID, s.config.Versions), remoteAddr); err != nil {
-			return err
-		}
+		utils.Infof("Client offered version %s, sending Version Negotiation Packet", hdr.Version)
+		_, err := pconn.WriteTo(wire.ComposeGQUICVersionNegotiation(hdr.ConnectionID, s.config.Versions), remoteAddr)
+		return err
 	}
 
 	// This is (potentially) a Client Hello.
