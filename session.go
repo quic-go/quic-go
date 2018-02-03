@@ -33,8 +33,11 @@ type streamManager interface {
 	GetOrOpenSendStream(protocol.StreamID) (sendStreamI, error)
 	GetOrOpenReceiveStream(protocol.StreamID) (receiveStreamI, error)
 	OpenStream() (Stream, error)
+	OpenUniStream() (SendStream, error)
 	OpenStreamSync() (Stream, error)
+	OpenUniStreamSync() (SendStream, error)
 	AcceptStream() (Stream, error)
+	AcceptUniStream() (ReceiveStream, error)
 	DeleteStream(protocol.StreamID) error
 	UpdateLimits(*handshake.TransportParameters)
 	HandleMaxStreamIDFrame(*wire.MaxStreamIDFrame) error
@@ -923,6 +926,10 @@ func (s *session) AcceptStream() (Stream, error) {
 	return s.streamsMap.AcceptStream()
 }
 
+func (s *session) AcceptUniStream() (ReceiveStream, error) {
+	return s.streamsMap.AcceptUniStream()
+}
+
 // OpenStream opens a stream
 func (s *session) OpenStream() (Stream, error) {
 	return s.streamsMap.OpenStream()
@@ -930,6 +937,14 @@ func (s *session) OpenStream() (Stream, error) {
 
 func (s *session) OpenStreamSync() (Stream, error) {
 	return s.streamsMap.OpenStreamSync()
+}
+
+func (s *session) OpenUniStream() (SendStream, error) {
+	return s.streamsMap.OpenUniStream()
+}
+
+func (s *session) OpenUniStreamSync() (SendStream, error) {
+	return s.streamsMap.OpenUniStreamSync()
 }
 
 func (s *session) newStream(id protocol.StreamID) streamI {

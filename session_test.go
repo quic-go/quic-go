@@ -1507,11 +1507,50 @@ var _ = Describe("Session", func() {
 			Expect(err).To(MatchError("Stream 100 is not a bidirectional stream"))
 		})
 
-		// all relevant tests for this are in the streamsMap
+		It("opens streams", func() {
+			mstr := NewMockStreamI(mockCtrl)
+			streamManager.EXPECT().OpenStream().Return(mstr, nil)
+			str, err := sess.OpenStream()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(str).To(Equal(mstr))
+		})
+
 		It("opens streams synchronously", func() {
 			mstr := NewMockStreamI(mockCtrl)
 			streamManager.EXPECT().OpenStreamSync().Return(mstr, nil)
 			str, err := sess.OpenStreamSync()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(str).To(Equal(mstr))
+		})
+
+		It("opens unidirectional streams", func() {
+			mstr := NewMockSendStreamI(mockCtrl)
+			streamManager.EXPECT().OpenUniStream().Return(mstr, nil)
+			str, err := sess.OpenUniStream()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(str).To(Equal(mstr))
+		})
+
+		It("opens unidirectional streams synchronously", func() {
+			mstr := NewMockSendStreamI(mockCtrl)
+			streamManager.EXPECT().OpenUniStreamSync().Return(mstr, nil)
+			str, err := sess.OpenUniStreamSync()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(str).To(Equal(mstr))
+		})
+
+		It("accepts streams", func() {
+			mstr := NewMockStreamI(mockCtrl)
+			streamManager.EXPECT().AcceptStream().Return(mstr, nil)
+			str, err := sess.AcceptStream()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(str).To(Equal(mstr))
+		})
+
+		It("accepts unidirectional streams", func() {
+			mstr := NewMockReceiveStreamI(mockCtrl)
+			streamManager.EXPECT().AcceptUniStream().Return(mstr, nil)
+			str, err := sess.AcceptUniStream()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(str).To(Equal(mstr))
 		})

@@ -113,15 +113,23 @@ type StreamError interface {
 // A Session is a QUIC connection between two peers.
 type Session interface {
 	// AcceptStream returns the next stream opened by the peer, blocking until one is available.
-	// Since stream 1 is reserved for the crypto stream, the first stream is either 2 (for a client) or 3 (for a server).
 	AcceptStream() (Stream, error)
-	// OpenStream opens a new QUIC stream, returning a special error when the peer's concurrent stream limit is reached.
-	// New streams always have the smallest possible stream ID.
-	// TODO: Enable testing for the special error
+	// AcceptUniStream returns the next unidirectional stream opened by the peer, blocking until one is available.
+	AcceptUniStream() (ReceiveStream, error)
+	// OpenStream opens a new bidirectional QUIC stream.
+	// It returns a special error when the peer's concurrent stream limit is reached.
+	// TODO(#1152): Enable testing for the special error
 	OpenStream() (Stream, error)
-	// OpenStreamSync opens a new QUIC stream, blocking until the peer's concurrent stream limit allows a new stream to be opened.
-	// It always picks the smallest possible stream ID.
+	// OpenStreamSync opens a new bidirectional QUIC stream.
+	// It blocks until the peer's concurrent stream limit allows a new stream to be opened.
 	OpenStreamSync() (Stream, error)
+	// OpenUniStream opens a new outgoing unidirectional QUIC stream.
+	// It returns a special error when the peer's concurrent stream limit is reached.
+	// TODO(#1152): Enable testing for the special error
+	OpenUniStream() (SendStream, error)
+	// OpenUniStreamSync opens a new outgoing unidirectional QUIC stream.
+	// It blocks until the peer's concurrent stream limit allows a new stream to be opened.
+	OpenUniStreamSync() (SendStream, error)
 	// LocalAddr returns the local address.
 	LocalAddr() net.Addr
 	// RemoteAddr returns the address of the peer.

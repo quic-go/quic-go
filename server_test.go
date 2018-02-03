@@ -57,15 +57,18 @@ func (s *mockSession) closeRemote(e error) {
 func (s *mockSession) OpenStream() (Stream, error) {
 	return &stream{}, nil
 }
-func (s *mockSession) AcceptStream() (Stream, error)    { panic("not implemented") }
-func (s *mockSession) OpenStreamSync() (Stream, error)  { panic("not implemented") }
-func (s *mockSession) LocalAddr() net.Addr              { panic("not implemented") }
-func (s *mockSession) RemoteAddr() net.Addr             { panic("not implemented") }
-func (*mockSession) Context() context.Context           { panic("not implemented") }
-func (*mockSession) ConnectionState() ConnectionState   { panic("not implemented") }
-func (*mockSession) GetVersion() protocol.VersionNumber { return protocol.VersionWhatever }
-func (s *mockSession) handshakeStatus() <-chan error    { return s.handshakeChan }
-func (*mockSession) getCryptoStream() cryptoStreamI     { panic("not implemented") }
+func (s *mockSession) AcceptStream() (Stream, error)           { panic("not implemented") }
+func (s *mockSession) AcceptUniStream() (ReceiveStream, error) { panic("not implemented") }
+func (s *mockSession) OpenStreamSync() (Stream, error)         { panic("not implemented") }
+func (s *mockSession) OpenUniStream() (SendStream, error)      { panic("not implemented") }
+func (s *mockSession) OpenUniStreamSync() (SendStream, error)  { panic("not implemented") }
+func (s *mockSession) LocalAddr() net.Addr                     { panic("not implemented") }
+func (s *mockSession) RemoteAddr() net.Addr                    { panic("not implemented") }
+func (*mockSession) Context() context.Context                  { panic("not implemented") }
+func (*mockSession) ConnectionState() ConnectionState          { panic("not implemented") }
+func (*mockSession) GetVersion() protocol.VersionNumber        { return protocol.VersionWhatever }
+func (s *mockSession) handshakeStatus() <-chan error           { return s.handshakeChan }
+func (*mockSession) getCryptoStream() cryptoStreamI            { panic("not implemented") }
 
 var _ Session = &mockSession{}
 

@@ -185,6 +185,14 @@ func (m *streamsMapLegacy) OpenStreamSync() (Stream, error) {
 	}
 }
 
+func (m *streamsMapLegacy) OpenUniStream() (SendStream, error) {
+	return nil, errors.New("gQUIC doesn't support unidirectional streams")
+}
+
+func (m *streamsMapLegacy) OpenUniStreamSync() (SendStream, error) {
+	return nil, errors.New("gQUIC doesn't support unidirectional streams")
+}
+
 // AcceptStream returns the next stream opened by the peer
 // it blocks until a new stream is opened
 func (m *streamsMapLegacy) AcceptStream() (Stream, error) {
@@ -204,6 +212,10 @@ func (m *streamsMapLegacy) AcceptStream() (Stream, error) {
 	}
 	m.nextStreamToAccept += 2
 	return str, nil
+}
+
+func (m *streamsMapLegacy) AcceptUniStream() (ReceiveStream, error) {
+	return nil, errors.New("gQUIC doesn't support unidirectional streams")
 }
 
 func (m *streamsMapLegacy) DeleteStream(id protocol.StreamID) error {
