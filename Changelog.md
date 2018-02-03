@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.7 (unreleased)
+## v0.7.0 (2018-02-03)
 
 - The lower boundary for packets included in ACKs is now derived, and the value sent in STOP_WAITING frames is ignored.
 - Remove `DialNonFWSecure` and `DialAddrNonFWSecure`.
