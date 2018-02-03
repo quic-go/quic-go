@@ -1,6 +1,8 @@
 coverage:
   round: nearest
   ignore:
+    - streams_map_outgoing_bidi.go
+    - streams_map_outgoing_uni.go
     - h2quic/gzipreader.go
     - h2quic/response.go
     - internal/ackhandler/packet_linkedlist.go
