@@ -96,19 +96,6 @@ func (mr *MockStreamManagerMockRecorder) GetOrOpenSendStream(arg0 interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrOpenSendStream", reflect.TypeOf((*MockStreamManager)(nil).GetOrOpenSendStream), arg0)
 }
 
-// GetOrOpenStream mocks base method
-func (m *MockStreamManager) GetOrOpenStream(arg0 protocol.StreamID) (streamI, error) {
-	ret := m.ctrl.Call(m, "GetOrOpenStream", arg0)
-	ret0, _ := ret[0].(streamI)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetOrOpenStream indicates an expected call of GetOrOpenStream
-func (mr *MockStreamManagerMockRecorder) GetOrOpenStream(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrOpenStream", reflect.TypeOf((*MockStreamManager)(nil).GetOrOpenStream), arg0)
-}
-
 // OpenStream mocks base method
 func (m *MockStreamManager) OpenStream() (Stream, error) {
 	ret := m.ctrl.Call(m, "OpenStream")
