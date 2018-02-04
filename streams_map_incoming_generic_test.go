@@ -2,6 +2,7 @@ package quic
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 
@@ -10,7 +11,11 @@ import (
 )
 
 var _ = Describe("Streams Map (outgoing)", func() {
-	const firstNewStream protocol.StreamID = 20
+	const (
+		firstNewStream protocol.StreamID = 20
+		maxStream      protocol.StreamID = firstNewStream + 4*100
+	)
+
 	var (
 		m              *incomingItemsMap
 		newItem        func(id protocol.StreamID) item
@@ -23,7 +28,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			newItemCounter++
 			return id
 		}
-		m = newIncomingItemsMap(firstNewStream, newItem)
+		m = newIncomingItemsMap(firstNewStream, maxStream, newItem)
 	})
 
 	It("opens all streams up to the id on GetOrOpenStream", func() {
@@ -51,6 +56,17 @@ var _ = Describe("Streams Map (outgoing)", func() {
 		str, err = m.AcceptStream()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(str).To(Equal(firstNewStream + 4))
+	})
+
+	It("allows opening the maximum stream ID", func() {
+		str, err := m.GetOrOpenStream(maxStream)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(str).To(Equal(maxStream))
+	})
+
+	It("errors when trying to get a stream ID higher than the maximum", func() {
+		_, err := m.GetOrOpenStream(maxStream + 4)
+		Expect(err).To(MatchError(fmt.Errorf("peer tried to open stream %d (current limit: %d)", maxStream+4, maxStream)))
 	})
 
 	It("blocks AcceptStream until a new stream is available", func() {

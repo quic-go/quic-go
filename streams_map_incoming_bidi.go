@@ -17,17 +17,23 @@ type incomingBidiStreamsMap struct {
 
 	streams map[protocol.StreamID]streamI
 
-	nextStream    protocol.StreamID
-	highestStream protocol.StreamID
+	nextStream    protocol.StreamID // the next stream that will be returned by AcceptStream()
+	highestStream protocol.StreamID // the highest stream that the peer openend
+	maxStream     protocol.StreamID // the highest stream that the peer is allowed to open
 	newStream     func(protocol.StreamID) streamI
 
 	closeErr error
 }
 
-func newIncomingBidiStreamsMap(nextStream protocol.StreamID, newStream func(protocol.StreamID) streamI) *incomingBidiStreamsMap {
+func newIncomingBidiStreamsMap(
+	nextStream protocol.StreamID,
+	maxStream protocol.StreamID,
+	newStream func(protocol.StreamID) streamI,
+) *incomingBidiStreamsMap {
 	m := &incomingBidiStreamsMap{
 		streams:    make(map[protocol.StreamID]streamI),
 		nextStream: nextStream,
+		maxStream:  maxStream,
 		newStream:  newStream,
 	}
 	m.cond.L = &m.mutex
@@ -55,6 +61,9 @@ func (m *incomingBidiStreamsMap) AcceptStream() (streamI, error) {
 }
 
 func (m *incomingBidiStreamsMap) GetOrOpenStream(id protocol.StreamID) (streamI, error) {
+	if id > m.maxStream {
+		return nil, fmt.Errorf("peer tried to open stream %d (current limit: %d)", id, m.maxStream)
+	}
 	// if the id is smaller than the highest we accepted
 	// * this stream exists in the map, and we can return it, or
 	// * this stream was already closed, then we can return the nil
