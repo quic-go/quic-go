@@ -169,9 +169,11 @@ func (c *client) dialTLS() error {
 	params := &handshake.TransportParameters{
 		StreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
 		ConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
-		MaxStreams:                  protocol.MaxIncomingStreams,
 		IdleTimeout:                 c.config.IdleTimeout,
 		OmitConnectionID:            c.config.RequestConnectionIDOmission,
+		// TODO(#1150): set reasonable limits
+		MaxBidiStreamID: 0xffffffff,
+		MaxUniStreamID:  0xffffffff,
 	}
 	csc := handshake.NewCryptoStreamConn(nil)
 	extHandler := handshake.NewExtensionHandlerClient(params, c.initialVersion, c.config.Versions, c.version)

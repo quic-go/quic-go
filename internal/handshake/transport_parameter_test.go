@@ -127,6 +127,8 @@ var _ = Describe("Transport Parameters", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(params.StreamFlowControlWindow).To(Equal(protocol.ByteCount(0x11223344)))
 				Expect(params.ConnectionFlowControlWindow).To(Equal(protocol.ByteCount(0x22334455)))
+				Expect(params.MaxBidiStreamID).To(Equal(protocol.StreamID(0x33445566)))
+				Expect(params.MaxUniStreamID).To(Equal(protocol.StreamID(0x44556677)))
 				Expect(params.IdleTimeout).To(Equal(0x1337 * time.Second))
 				Expect(params.OmitConnectionID).To(BeFalse())
 			})
@@ -224,18 +226,20 @@ var _ = Describe("Transport Parameters", func() {
 					StreamFlowControlWindow:     0xdeadbeef,
 					ConnectionFlowControlWindow: 0xdecafbad,
 					IdleTimeout:                 0xcafe * time.Second,
+					MaxBidiStreamID:             0xbadf000d,
+					MaxUniStreamID:              0xface,
 				}
 			})
 
 			It("creates the parameters list", func() {
 				values := paramsListToMap(params.getTransportParameters())
-				Expect(values).To(HaveLen(5))
+				Expect(values).To(HaveLen(6))
 				Expect(values).To(HaveKeyWithValue(initialMaxStreamDataParameterID, []byte{0xde, 0xad, 0xbe, 0xef}))
 				Expect(values).To(HaveKeyWithValue(initialMaxDataParameterID, []byte{0xde, 0xca, 0xfb, 0xad}))
-				Expect(values).To(HaveKeyWithValue(initialMaxStreamIDBiDiParameterID, []byte{0xff, 0xff, 0xff, 0xff}))
+				Expect(values).To(HaveKeyWithValue(initialMaxStreamIDBiDiParameterID, []byte{0xba, 0xdf, 0x00, 0x0d}))
+				Expect(values).To(HaveKeyWithValue(initialMaxStreamIDUniParameterID, []byte{0x0, 0x0, 0xfa, 0xce}))
 				Expect(values).To(HaveKeyWithValue(idleTimeoutParameterID, []byte{0xca, 0xfe}))
 				Expect(values).To(HaveKeyWithValue(maxPacketSizeParameterID, []byte{0x5, 0xac})) // 1452 = 0x5ac
-				Expect(values).ToNot(HaveKey(initialMaxStreamIDUniParameterID))
 			})
 
 			It("request ommision of the connection ID", func() {
