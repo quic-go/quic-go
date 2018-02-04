@@ -37,6 +37,7 @@ type streamManager interface {
 	AcceptStream() (Stream, error)
 	DeleteStream(protocol.StreamID) error
 	UpdateLimits(*handshake.TransportParameters)
+	HandleMaxStreamIDFrame(*wire.MaxStreamIDFrame) error
 	CloseWithError(error)
 }
 
@@ -563,6 +564,8 @@ func (s *session) handleFrames(fs []wire.Frame, encLevel protocol.EncryptionLeve
 			s.handleMaxDataFrame(frame)
 		case *wire.MaxStreamDataFrame:
 			err = s.handleMaxStreamDataFrame(frame)
+		case *wire.MaxStreamIDFrame:
+			err = s.handleMaxStreamIDFrame(frame)
 		case *wire.BlockedFrame:
 		case *wire.StreamBlockedFrame:
 		case *wire.StopSendingFrame:
@@ -632,6 +635,10 @@ func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error
 	}
 	str.handleMaxStreamDataFrame(frame)
 	return nil
+}
+
+func (s *session) handleMaxStreamIDFrame(frame *wire.MaxStreamIDFrame) error {
+	return s.streamsMap.HandleMaxStreamIDFrame(frame)
 }
 
 func (s *session) handleRstStreamFrame(frame *wire.RstStreamFrame) error {

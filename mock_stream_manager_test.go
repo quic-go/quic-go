@@ -10,6 +10,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	handshake "github.com/lucas-clemente/quic-go/internal/handshake"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
+	wire "github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 // MockStreamManager is a mock of StreamManager interface
@@ -94,6 +95,18 @@ func (m *MockStreamManager) GetOrOpenSendStream(arg0 protocol.StreamID) (sendStr
 // GetOrOpenSendStream indicates an expected call of GetOrOpenSendStream
 func (mr *MockStreamManagerMockRecorder) GetOrOpenSendStream(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrOpenSendStream", reflect.TypeOf((*MockStreamManager)(nil).GetOrOpenSendStream), arg0)
+}
+
+// HandleMaxStreamIDFrame mocks base method
+func (m *MockStreamManager) HandleMaxStreamIDFrame(arg0 *wire.MaxStreamIDFrame) error {
+	ret := m.ctrl.Call(m, "HandleMaxStreamIDFrame", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// HandleMaxStreamIDFrame indicates an expected call of HandleMaxStreamIDFrame
+func (mr *MockStreamManagerMockRecorder) HandleMaxStreamIDFrame(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleMaxStreamIDFrame", reflect.TypeOf((*MockStreamManager)(nil).HandleMaxStreamIDFrame), arg0)
 }
 
 // OpenStream mocks base method

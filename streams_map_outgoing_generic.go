@@ -15,29 +15,56 @@ type item generic.Type
 //go:generate genny -in $GOFILE -out streams_map_outgoing_uni.go gen "item=sendStreamI Item=UniStream"
 type outgoingItemsMap struct {
 	mutex sync.RWMutex
+	cond  sync.Cond
 
 	streams map[protocol.StreamID]item
 
 	nextStream protocol.StreamID
+	maxStream  protocol.StreamID
 	newStream  func(protocol.StreamID) item
 
 	closeErr error
 }
 
 func newOutgoingItemsMap(nextStream protocol.StreamID, newStream func(protocol.StreamID) item) *outgoingItemsMap {
-	return &outgoingItemsMap{
+	m := &outgoingItemsMap{
 		streams:    make(map[protocol.StreamID]item),
 		nextStream: nextStream,
 		newStream:  newStream,
 	}
+	m.cond.L = &m.mutex
+	return m
 }
 
 func (m *outgoingItemsMap) OpenStream() (item, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
+	return m.openStreamImpl()
+}
+
+func (m *outgoingItemsMap) OpenStreamSync() (item, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	for {
+		str, err := m.openStreamImpl()
+		if err == nil {
+			return str, err
+		}
+		if err != nil && err != qerr.TooManyOpenStreams {
+			return nil, err
+		}
+		m.cond.Wait()
+	}
+}
+
+func (m *outgoingItemsMap) openStreamImpl() (item, error) {
 	if m.closeErr != nil {
 		return nil, m.closeErr
+	}
+	if m.nextStream > m.maxStream {
+		return nil, qerr.TooManyOpenStreams
 	}
 	s := m.newStream(m.nextStream)
 	m.streams[m.nextStream] = s
@@ -66,8 +93,18 @@ func (m *outgoingItemsMap) DeleteStream(id protocol.StreamID) error {
 	return nil
 }
 
+func (m *outgoingItemsMap) SetMaxStream(id protocol.StreamID) {
+	m.mutex.Lock()
+	if id > m.maxStream {
+		m.maxStream = id
+		m.cond.Broadcast()
+	}
+	m.mutex.Unlock()
+}
+
 func (m *outgoingItemsMap) CloseWithError(err error) {
 	m.mutex.Lock()
 	m.closeErr = err
+	m.cond.Broadcast()
 	m.mutex.Unlock()
 }

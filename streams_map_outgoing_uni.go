@@ -14,29 +14,56 @@ import (
 
 type outgoingUniStreamsMap struct {
 	mutex sync.RWMutex
+	cond  sync.Cond
 
 	streams map[protocol.StreamID]sendStreamI
 
 	nextStream protocol.StreamID
+	maxStream  protocol.StreamID
 	newStream  func(protocol.StreamID) sendStreamI
 
 	closeErr error
 }
 
 func newOutgoingUniStreamsMap(nextStream protocol.StreamID, newStream func(protocol.StreamID) sendStreamI) *outgoingUniStreamsMap {
-	return &outgoingUniStreamsMap{
+	m := &outgoingUniStreamsMap{
 		streams:    make(map[protocol.StreamID]sendStreamI),
 		nextStream: nextStream,
 		newStream:  newStream,
 	}
+	m.cond.L = &m.mutex
+	return m
 }
 
 func (m *outgoingUniStreamsMap) OpenStream() (sendStreamI, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
+	return m.openStreamImpl()
+}
+
+func (m *outgoingUniStreamsMap) OpenStreamSync() (sendStreamI, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	for {
+		str, err := m.openStreamImpl()
+		if err == nil {
+			return str, err
+		}
+		if err != nil && err != qerr.TooManyOpenStreams {
+			return nil, err
+		}
+		m.cond.Wait()
+	}
+}
+
+func (m *outgoingUniStreamsMap) openStreamImpl() (sendStreamI, error) {
 	if m.closeErr != nil {
 		return nil, m.closeErr
+	}
+	if m.nextStream > m.maxStream {
+		return nil, qerr.TooManyOpenStreams
 	}
 	s := m.newStream(m.nextStream)
 	m.streams[m.nextStream] = s
@@ -65,8 +92,18 @@ func (m *outgoingUniStreamsMap) DeleteStream(id protocol.StreamID) error {
 	return nil
 }
 
+func (m *outgoingUniStreamsMap) SetMaxStream(id protocol.StreamID) {
+	m.mutex.Lock()
+	if id > m.maxStream {
+		m.maxStream = id
+		m.cond.Broadcast()
+	}
+	m.mutex.Unlock()
+}
+
 func (m *outgoingUniStreamsMap) CloseWithError(err error) {
 	m.mutex.Lock()
 	m.closeErr = err
+	m.cond.Broadcast()
 	m.mutex.Unlock()
 }

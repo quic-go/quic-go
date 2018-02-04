@@ -6,6 +6,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 type streamType int
@@ -102,8 +103,7 @@ func (m *streamsMap) OpenStream() (Stream, error) {
 }
 
 func (m *streamsMap) OpenStreamSync() (Stream, error) {
-	// TODO(#1150): implement limits
-	return m.OpenStream()
+	return m.outgoingBidiStreams.OpenStreamSync()
 }
 
 func (m *streamsMap) OpenUniStream() (SendStream, error) {
@@ -111,8 +111,7 @@ func (m *streamsMap) OpenUniStream() (SendStream, error) {
 }
 
 func (m *streamsMap) OpenUniStreamSync() (SendStream, error) {
-	// TODO(#1150): implement limits
-	return m.outgoingUniStreams.OpenStream()
+	return m.outgoingUniStreams.OpenStreamSync()
 }
 
 func (m *streamsMap) AcceptStream() (Stream, error) {
@@ -170,8 +169,23 @@ func (m *streamsMap) GetOrOpenSendStream(id protocol.StreamID) (sendStreamI, err
 	}
 }
 
-func (m *streamsMap) UpdateLimits(*handshake.TransportParameters) {
-	// TODO(#1150): implement limits
+func (m *streamsMap) HandleMaxStreamIDFrame(f *wire.MaxStreamIDFrame) error {
+	id := f.StreamID
+	switch m.getStreamType(id) {
+	case streamTypeOutgoingBidi:
+		m.outgoingBidiStreams.SetMaxStream(id)
+		return nil
+	case streamTypeOutgoingUni:
+		m.outgoingUniStreams.SetMaxStream(id)
+		return nil
+	default:
+		return fmt.Errorf("received MAX_STREAM_DATA frame for incoming stream %d", id)
+	}
+}
+
+func (m *streamsMap) UpdateLimits(p *handshake.TransportParameters) {
+	m.outgoingBidiStreams.SetMaxStream(p.MaxBidiStreamID)
+	m.outgoingUniStreams.SetMaxStream(p.MaxUniStreamID)
 }
 
 func (m *streamsMap) CloseWithError(err error) {

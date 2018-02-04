@@ -546,4 +546,8 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 		})
 		m.UpdateLimits(&handshake.TransportParameters{StreamFlowControlWindow: 321})
 	})
+
+	It("doesn't accept MAX_STREAM_ID frames", func() {
+		Expect(m.HandleMaxStreamIDFrame(&wire.MaxStreamIDFrame{})).ToNot(Succeed())
+	})
 })
