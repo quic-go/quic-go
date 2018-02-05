@@ -366,8 +366,9 @@ func (p *packetPacker) writeAndSealPacket(
 			buffer.Write(bytes.Repeat([]byte{0}, paddingLen))
 		}
 	}
-	if protocol.ByteCount(buffer.Len()+sealer.Overhead()) > protocol.MaxPacketSize {
-		return nil, errors.New("PacketPacker BUG: packet too large")
+
+	if size := protocol.ByteCount(buffer.Len() + sealer.Overhead()); size > protocol.MaxPacketSize {
+		return nil, fmt.Errorf("PacketPacker BUG: packet too large (%d bytes, allowed %d bytes)", size, protocol.MaxPacketSize)
 	}
 
 	raw = raw[0:buffer.Len()]

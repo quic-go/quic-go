@@ -679,7 +679,8 @@ var _ = Describe("Packet packer", func() {
 				},
 			}
 			_, err := packer.PackHandshakeRetransmission(packet)
-			Expect(err).To(MatchError("PacketPacker BUG: packet too large"))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("PacketPacker BUG: packet too large"))
 		})
 
 		It("pads Initial packets to the required minimum packet size", func() {
