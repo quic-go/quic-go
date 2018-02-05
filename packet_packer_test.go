@@ -345,7 +345,7 @@ var _ = Describe("Packet packer", func() {
 
 	It("packs a lot of control frames into 2 packets if they don't fit into one", func() {
 		blockedFrame := &wire.BlockedFrame{}
-		maxFramesPerPacket := int(maxFrameSize) / int(blockedFrame.MinLength(packer.version))
+		maxFramesPerPacket := int(maxFrameSize) / int(blockedFrame.Length(packer.version))
 		var controlFrames []wire.Frame
 		for i := 0; i < maxFramesPerPacket+10; i++ {
 			controlFrames = append(controlFrames, blockedFrame)
@@ -445,7 +445,7 @@ var _ = Describe("Packet packer", func() {
 					StreamID:       5,
 					DataLenPresent: true,
 				}
-				f.Data = bytes.Repeat([]byte{'f'}, int(maxSize-f.MinLength(packer.version)))
+				f.Data = bytes.Repeat([]byte{'f'}, int(maxSize-f.Length(packer.version)))
 				return []*wire.StreamFrame{f}
 			})
 			mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any())
@@ -468,7 +468,7 @@ var _ = Describe("Packet packer", func() {
 					StreamID:       5,
 					DataLenPresent: true,
 				}
-				f.Data = bytes.Repeat([]byte{'f'}, int(maxSize-f.MinLength(packer.version)))
+				f.Data = bytes.Repeat([]byte{'f'}, int(maxSize-f.Length(packer.version)))
 				return []*wire.StreamFrame{f}
 			})
 			mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any())
@@ -679,7 +679,8 @@ var _ = Describe("Packet packer", func() {
 				},
 			}
 			_, err := packer.PackHandshakeRetransmission(packet)
-			Expect(err).To(MatchError("PacketPacker BUG: packet too large"))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("PacketPacker BUG: packet too large"))
 		})
 
 		It("pads Initial packets to the required minimum packet size", func() {

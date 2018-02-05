@@ -38,7 +38,7 @@ var _ = Describe("MAX_DATA frame", func() {
 			f := &MaxDataFrame{
 				ByteOffset: 0xdeadbeef,
 			}
-			Expect(f.MinLength(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0xdeadbeef)))
+			Expect(f.Length(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0xdeadbeef)))
 		})
 
 		It("writes a MAX_DATA frame", func() {

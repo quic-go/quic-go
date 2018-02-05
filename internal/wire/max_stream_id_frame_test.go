@@ -45,7 +45,7 @@ var _ = Describe("MAX_STREAM_ID frame", func() {
 
 		It("has the correct min length", func() {
 			frame := MaxStreamIDFrame{StreamID: 0x1337}
-			Expect(frame.MinLength(protocol.VersionWhatever)).To(Equal(1 + utils.VarIntLen(0x1337)))
+			Expect(frame.Length(protocol.VersionWhatever)).To(Equal(1 + utils.VarIntLen(0x1337)))
 		})
 	})
 })
