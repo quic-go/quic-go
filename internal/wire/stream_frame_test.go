@@ -208,4 +208,70 @@ var _ = Describe("STREAM frame (for IETF QUIC)", func() {
 			Expect(f.MinLength(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0x1337) + utils.VarIntLen(0x1234567) + utils.VarIntLen(6)))
 		})
 	})
+
+	Context("max data length", func() {
+		const maxSize = 3000
+
+		It("always returns a data length such that the resulting frame has the right size, if data length is not present", func() {
+			data := make([]byte, maxSize)
+			f := &StreamFrame{
+				StreamID: 0x1337,
+				Offset:   0xdeadbeef,
+			}
+			b := &bytes.Buffer{}
+			for i := 1; i < 3000; i++ {
+				b.Reset()
+				f.Data = nil
+				maxDataLen := f.MaxDataLen(protocol.ByteCount(i), versionIETFFrames)
+				if maxDataLen == 0 { // 0 means that no valid STREAM_FRAME can be written
+					// check that writing a minimal size STREAM_FRAME (i.e. with 1 byte data) is actually larger than the desired size
+					f.Data = []byte{0}
+					err := f.Write(b, versionIETFFrames)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(b.Len()).To(BeNumerically(">", i))
+					continue
+				}
+				f.Data = data[:int(maxDataLen)]
+				err := f.Write(b, versionIETFFrames)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(b.Len()).To(Equal(i))
+			}
+		})
+
+		It("always returns a data length such that the resulting frame has the right size, if data length is present", func() {
+			data := make([]byte, maxSize)
+			f := &StreamFrame{
+				StreamID:       0x1337,
+				Offset:         0xdeadbeef,
+				DataLenPresent: true,
+			}
+			b := &bytes.Buffer{}
+			var frameOneByteTooSmallCounter int
+			for i := 1; i < 3000; i++ {
+				b.Reset()
+				f.Data = nil
+				maxDataLen := f.MaxDataLen(protocol.ByteCount(i), versionIETFFrames)
+				if maxDataLen == 0 { // 0 means that no valid STREAM_FRAME can be written
+					// check that writing a minimal size STREAM_FRAME (i.e. with 1 byte data) is actually larger than the desired size
+					f.Data = []byte{0}
+					err := f.Write(b, versionIETFFrames)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(b.Len()).To(BeNumerically(">", i))
+					continue
+				}
+				f.Data = data[:int(maxDataLen)]
+				err := f.Write(b, versionIETFFrames)
+				Expect(err).ToNot(HaveOccurred())
+				// There's *one* pathological case, where a data length of x can be encoded into 1 byte
+				// but a data lengths of x+1 needs 2 bytes
+				// In that case, it's impossible to create a STREAM_FRAME of the desired size
+				if b.Len() == i-1 {
+					frameOneByteTooSmallCounter++
+					continue
+				}
+				Expect(b.Len()).To(Equal(i))
+			}
+			Expect(frameOneByteTooSmallCounter).To(Equal(1))
+		})
+	})
 })

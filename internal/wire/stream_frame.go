@@ -130,3 +130,29 @@ func (f *StreamFrame) MinLength(version protocol.VersionNumber) protocol.ByteCou
 	}
 	return length
 }
+
+// MaxDataLen returns the maximum data length
+// If 0 is returned, writing will fail (a STREAM_FRAME must contain at least 1 byte of data).
+func (f *StreamFrame) MaxDataLen(maxSize protocol.ByteCount, version protocol.VersionNumber) protocol.ByteCount {
+	if !version.UsesIETFFrameFormat() {
+		return f.maxDataLenLegacy(maxSize, version)
+	}
+
+	headerLen := 1 + utils.VarIntLen(uint64(f.StreamID))
+	if f.Offset != 0 {
+		headerLen += utils.VarIntLen(uint64(f.Offset))
+	}
+	if f.DataLenPresent {
+		// pretend that the data size will be 1 bytes
+		// if it turns out that varint encoding the length will consume 2 bytes, we need to adjust the data length afterwards
+		headerLen++
+	}
+	if headerLen > maxSize {
+		return 0
+	}
+	maxDataLen := maxSize - headerLen
+	if f.DataLenPresent && utils.VarIntLen(uint64(maxDataLen)) != 1 {
+		maxDataLen--
+	}
+	return maxDataLen
+}

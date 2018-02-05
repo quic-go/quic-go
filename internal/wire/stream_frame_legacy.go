@@ -191,6 +191,14 @@ func (f *StreamFrame) minLengthLegacy(_ protocol.VersionNumber) protocol.ByteCou
 	return length
 }
 
+func (f *StreamFrame) maxDataLenLegacy(maxFrameSize protocol.ByteCount, version protocol.VersionNumber) protocol.ByteCount {
+	headerLen := f.minLengthLegacy(version)
+	if headerLen > maxFrameSize {
+		return 0
+	}
+	return maxFrameSize - headerLen
+}
+
 // DataLen gives the length of data in bytes
 func (f *StreamFrame) DataLen() protocol.ByteCount {
 	return protocol.ByteCount(len(f.Data))
