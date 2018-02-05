@@ -15,7 +15,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Stream tests", func() {
+var _ = Describe("Bidirectional streams", func() {
 	const numStreams = 300
 
 	var (
