@@ -2,7 +2,6 @@ package quic
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
@@ -66,11 +65,23 @@ func newStreamsMap(
 		return newReceiveStream(id, m.sender, m.newFlowController(id), version)
 	}
 	m.outgoingBidiStreams = newOutgoingBidiStreamsMap(firstOutgoingBidiStream, newBidiStream)
-	// TODO(#1150): use a reasonable stream limit
-	m.incomingBidiStreams = newIncomingBidiStreamsMap(firstIncomingBidiStream, protocol.StreamID(math.MaxUint32), newBidiStream)
+	// TODO(#523): make these values configurable
+	m.incomingBidiStreams = newIncomingBidiStreamsMap(
+		firstIncomingBidiStream,
+		protocol.MaxBidiStreamID(protocol.MaxIncomingStreams, perspective),
+		protocol.MaxIncomingStreams,
+		sender.queueControlFrame,
+		newBidiStream,
+	)
 	m.outgoingUniStreams = newOutgoingUniStreamsMap(firstOutgoingUniStream, newUniSendStream)
-	// TODO(#1150): use a reasonable stream limit
-	m.incomingUniStreams = newIncomingUniStreamsMap(firstIncomingUniStream, protocol.StreamID(math.MaxUint32), newUniReceiveStream)
+	// TODO(#523): make these values configurable
+	m.incomingUniStreams = newIncomingUniStreamsMap(
+		firstIncomingUniStream,
+		protocol.MaxUniStreamID(protocol.MaxIncomingStreams, perspective),
+		protocol.MaxIncomingStreams,
+		sender.queueControlFrame,
+		newUniReceiveStream,
+	)
 	return m
 }
 

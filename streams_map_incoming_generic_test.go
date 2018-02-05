@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -12,14 +14,16 @@ import (
 
 var _ = Describe("Streams Map (outgoing)", func() {
 	const (
-		firstNewStream protocol.StreamID = 20
-		maxStream      protocol.StreamID = firstNewStream + 4*100
+		firstNewStream   protocol.StreamID = 20
+		maxNumStreams    int               = 10
+		initialMaxStream protocol.StreamID = firstNewStream + 4*protocol.StreamID(maxNumStreams-1)
 	)
 
 	var (
 		m              *incomingItemsMap
 		newItem        func(id protocol.StreamID) item
 		newItemCounter int
+		mockSender     *MockStreamSender
 	)
 
 	BeforeEach(func() {
@@ -28,7 +32,8 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			newItemCounter++
 			return id
 		}
-		m = newIncomingItemsMap(firstNewStream, maxStream, newItem)
+		mockSender = NewMockStreamSender(mockCtrl)
+		m = newIncomingItemsMap(firstNewStream, initialMaxStream, maxNumStreams, mockSender.queueControlFrame, newItem)
 	})
 
 	It("opens all streams up to the id on GetOrOpenStream", func() {
@@ -59,14 +64,14 @@ var _ = Describe("Streams Map (outgoing)", func() {
 	})
 
 	It("allows opening the maximum stream ID", func() {
-		str, err := m.GetOrOpenStream(maxStream)
+		str, err := m.GetOrOpenStream(initialMaxStream)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(str).To(Equal(maxStream))
+		Expect(str).To(Equal(initialMaxStream))
 	})
 
 	It("errors when trying to get a stream ID higher than the maximum", func() {
-		_, err := m.GetOrOpenStream(maxStream + 4)
-		Expect(err).To(MatchError(fmt.Errorf("peer tried to open stream %d (current limit: %d)", maxStream+4, maxStream)))
+		_, err := m.GetOrOpenStream(initialMaxStream + 4)
+		Expect(err).To(MatchError(fmt.Errorf("peer tried to open stream %d (current limit: %d)", initialMaxStream+4, initialMaxStream)))
 	})
 
 	It("blocks AcceptStream until a new stream is available", func() {
@@ -106,6 +111,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 	})
 
 	It("deletes streams", func() {
+		mockSender.EXPECT().queueControlFrame(gomock.Any())
 		_, err := m.GetOrOpenStream(20)
 		Expect(err).ToNot(HaveOccurred())
 		err = m.DeleteStream(20)
@@ -118,5 +124,15 @@ var _ = Describe("Streams Map (outgoing)", func() {
 	It("errors when deleting a non-existing stream", func() {
 		err := m.DeleteStream(1337)
 		Expect(err).To(MatchError("Tried to delete unknown stream 1337"))
+	})
+
+	It("sends MAX_STREAM_ID frames when streams are deleted", func() {
+		// open a bunch of streams
+		_, err := m.GetOrOpenStream(firstNewStream + 4*4)
+		Expect(err).ToNot(HaveOccurred())
+		mockSender.EXPECT().queueControlFrame(&wire.MaxStreamIDFrame{StreamID: initialMaxStream + 4})
+		Expect(m.DeleteStream(firstNewStream + 4)).To(Succeed())
+		mockSender.EXPECT().queueControlFrame(&wire.MaxStreamIDFrame{StreamID: initialMaxStream + 8})
+		Expect(m.DeleteStream(firstNewStream + 3*4)).To(Succeed())
 	})
 })

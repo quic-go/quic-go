@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 type incomingBidiStreamsMap struct {
@@ -20,21 +21,28 @@ type incomingBidiStreamsMap struct {
 	nextStream    protocol.StreamID // the next stream that will be returned by AcceptStream()
 	highestStream protocol.StreamID // the highest stream that the peer openend
 	maxStream     protocol.StreamID // the highest stream that the peer is allowed to open
-	newStream     func(protocol.StreamID) streamI
+	maxNumStreams int               // maximum number of streams
+
+	newStream        func(protocol.StreamID) streamI
+	queueMaxStreamID func(*wire.MaxStreamIDFrame)
 
 	closeErr error
 }
 
 func newIncomingBidiStreamsMap(
 	nextStream protocol.StreamID,
-	maxStream protocol.StreamID,
+	initialMaxStreamID protocol.StreamID,
+	maxNumStreams int,
+	queueControlFrame func(wire.Frame),
 	newStream func(protocol.StreamID) streamI,
 ) *incomingBidiStreamsMap {
 	m := &incomingBidiStreamsMap{
-		streams:    make(map[protocol.StreamID]streamI),
-		nextStream: nextStream,
-		maxStream:  maxStream,
-		newStream:  newStream,
+		streams:          make(map[protocol.StreamID]streamI),
+		nextStream:       nextStream,
+		maxStream:        initialMaxStreamID,
+		maxNumStreams:    maxNumStreams,
+		newStream:        newStream,
+		queueMaxStreamID: func(f *wire.MaxStreamIDFrame) { queueControlFrame(f) },
 	}
 	m.cond.L = &m.mutex
 	return m
@@ -99,6 +107,11 @@ func (m *incomingBidiStreamsMap) DeleteStream(id protocol.StreamID) error {
 		return fmt.Errorf("Tried to delete unknown stream %d", id)
 	}
 	delete(m.streams, id)
+	// queue a MAX_STREAM_ID frame, giving the peer the option to open a new stream
+	if numNewStreams := m.maxNumStreams - len(m.streams); numNewStreams > 0 {
+		m.maxStream = m.highestStream + protocol.StreamID(numNewStreams*4)
+		m.queueMaxStreamID(&wire.MaxStreamIDFrame{StreamID: m.maxStream})
+	}
 	return nil
 }
 
