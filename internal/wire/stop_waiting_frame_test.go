@@ -177,14 +177,14 @@ var _ = Describe("StopWaitingFrame", func() {
 		})
 	})
 
-	Context("minLength", func() {
-		It("calculates the right minLength", func() {
+	Context("Length", func() {
+		It("calculates the right length", func() {
 			for _, length := range []protocol.PacketNumberLen{protocol.PacketNumberLen1, protocol.PacketNumberLen2, protocol.PacketNumberLen4, protocol.PacketNumberLen6} {
 				frame := &StopWaitingFrame{
 					LeastUnacked:    10,
 					PacketNumberLen: length,
 				}
-				Expect(frame.MinLength(protocol.VersionWhatever)).To(Equal(protocol.ByteCount(length + 1)))
+				Expect(frame.Length(protocol.VersionWhatever)).To(Equal(protocol.ByteCount(length + 1)))
 			}
 		})
 	})

@@ -43,7 +43,7 @@ var _ = Describe("STREAM_BLOCKED frame", func() {
 				StreamID: 0x1337,
 				Offset:   0xdeadbeef,
 			}
-			Expect(f.MinLength(0)).To(Equal(1 + utils.VarIntLen(0x1337) + utils.VarIntLen(0xdeadbeef)))
+			Expect(f.Length(0)).To(Equal(1 + utils.VarIntLen(0x1337) + utils.VarIntLen(0xdeadbeef)))
 		})
 
 		It("writes a sample frame", func() {

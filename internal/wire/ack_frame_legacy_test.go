@@ -1067,7 +1067,7 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 				}
 				err := f.Write(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(f.MinLength(versionBigEndian)).To(Equal(protocol.ByteCount(b.Len())))
+				Expect(f.Length(versionBigEndian)).To(Equal(protocol.ByteCount(b.Len())))
 			})
 
 			It("has proper min length with a large LargestObserved", func() {
@@ -1076,7 +1076,7 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 				}
 				err := f.Write(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(f.MinLength(versionBigEndian)).To(Equal(protocol.ByteCount(b.Len())))
+				Expect(f.Length(versionBigEndian)).To(Equal(protocol.ByteCount(b.Len())))
 			})
 
 			It("has the proper min length for an ACK with missing packets", func() {
@@ -1091,7 +1091,7 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 				}
 				err := f.Write(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(f.MinLength(versionBigEndian)).To(Equal(protocol.ByteCount(b.Len())))
+				Expect(f.Length(versionBigEndian)).To(Equal(protocol.ByteCount(b.Len())))
 			})
 
 			It("has the proper min length for an ACK with long gaps of missing packets", func() {
@@ -1106,7 +1106,7 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 				}
 				err := f.Write(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(f.MinLength(versionBigEndian)).To(Equal(protocol.ByteCount(b.Len())))
+				Expect(f.Length(versionBigEndian)).To(Equal(protocol.ByteCount(b.Len())))
 			})
 
 			It("has the proper min length for an ACK with a long ACK range", func() {
@@ -1122,7 +1122,7 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 				}
 				err := f.Write(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(f.MinLength(versionBigEndian)).To(Equal(protocol.ByteCount(b.Len())))
+				Expect(f.Length(versionBigEndian)).To(Equal(protocol.ByteCount(b.Len())))
 			})
 		})
 	})

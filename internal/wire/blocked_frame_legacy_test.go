@@ -47,7 +47,7 @@ var _ = Describe("legacy BLOCKED Frame", func() {
 
 		It("has the correct min length for a BLOCKED frame for a stream", func() {
 			frame := StreamBlockedFrame{StreamID: 3}
-			Expect(frame.MinLength(versionBigEndian)).To(Equal(protocol.ByteCount(5)))
+			Expect(frame.Length(versionBigEndian)).To(Equal(protocol.ByteCount(5)))
 		})
 
 		It("writes a BLOCKED frame for the connection", func() {
@@ -59,7 +59,7 @@ var _ = Describe("legacy BLOCKED Frame", func() {
 
 		It("has the correct min length for a BLOCKED frame for the connection", func() {
 			frame := BlockedFrame{}
-			Expect(frame.MinLength(versionBigEndian)).To(Equal(protocol.ByteCount(5)))
+			Expect(frame.Length(versionBigEndian)).To(Equal(protocol.ByteCount(5)))
 		})
 	})
 })

@@ -48,7 +48,7 @@ var _ = Describe("BLOCKED frame", func() {
 
 		It("has the correct min length", func() {
 			frame := BlockedFrame{Offset: 0x12345}
-			Expect(frame.MinLength(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0x12345)))
+			Expect(frame.Length(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0x12345)))
 		})
 	})
 })

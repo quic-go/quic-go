@@ -42,7 +42,7 @@ var _ = Describe("MAX_STREAM_DATA frame", func() {
 				StreamID:   0x1337,
 				ByteOffset: 0xdeadbeef,
 			}
-			Expect(f.MinLength(protocol.VersionWhatever)).To(Equal(1 + utils.VarIntLen(uint64(f.StreamID)) + utils.VarIntLen(uint64(f.ByteOffset))))
+			Expect(f.Length(protocol.VersionWhatever)).To(Equal(1 + utils.VarIntLen(uint64(f.StreamID)) + utils.VarIntLen(uint64(f.ByteOffset))))
 		})
 
 		It("writes a sample frame", func() {

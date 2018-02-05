@@ -146,7 +146,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 				}
 				err := f.Write(b, versionIETFFrames)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(f.MinLength(versionIETFFrames)).To(Equal(protocol.ByteCount(b.Len())))
+				Expect(f.Length(versionIETFFrames)).To(Equal(protocol.ByteCount(b.Len())))
 			})
 		})
 
@@ -189,7 +189,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 				}
 				err := f.Write(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(f.MinLength(versionBigEndian)).To(Equal(protocol.ByteCount(b.Len())))
+				Expect(f.Length(versionBigEndian)).To(Equal(protocol.ByteCount(b.Len())))
 			})
 		})
 	})

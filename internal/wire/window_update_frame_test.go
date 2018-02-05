@@ -56,14 +56,14 @@ var _ = Describe("WINDOW_UPDATE frame", func() {
 			f := &MaxDataFrame{
 				ByteOffset: 0xdeadbeef,
 			}
-			Expect(f.MinLength(versionBigEndian)).To(Equal(protocol.ByteCount(1 + 4 + 8)))
+			Expect(f.Length(versionBigEndian)).To(Equal(protocol.ByteCount(1 + 4 + 8)))
 		})
 
 		It("has the proper min length for the connection-level WINDOW_UPDATE frame", func() {
 			f := &MaxDataFrame{
 				ByteOffset: 0xdeadbeef,
 			}
-			Expect(f.MinLength(versionBigEndian)).To(Equal(protocol.ByteCount(1 + 4 + 8)))
+			Expect(f.Length(versionBigEndian)).To(Equal(protocol.ByteCount(1 + 4 + 8)))
 		})
 
 		Context("in big endian", func() {

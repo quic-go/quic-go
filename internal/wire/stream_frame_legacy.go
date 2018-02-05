@@ -183,7 +183,7 @@ func (f *StreamFrame) getOffsetLength() protocol.ByteCount {
 	return 8
 }
 
-func (f *StreamFrame) minLengthLegacy(_ protocol.VersionNumber) protocol.ByteCount {
+func (f *StreamFrame) headerLengthLegacy(_ protocol.VersionNumber) protocol.ByteCount {
 	length := protocol.ByteCount(1) + protocol.ByteCount(f.calculateStreamIDLength()) + f.getOffsetLength()
 	if f.DataLenPresent {
 		length += 2
@@ -191,8 +191,12 @@ func (f *StreamFrame) minLengthLegacy(_ protocol.VersionNumber) protocol.ByteCou
 	return length
 }
 
+func (f *StreamFrame) lengthLegacy(version protocol.VersionNumber) protocol.ByteCount {
+	return f.headerLengthLegacy(version) + f.DataLen()
+}
+
 func (f *StreamFrame) maxDataLenLegacy(maxFrameSize protocol.ByteCount, version protocol.VersionNumber) protocol.ByteCount {
-	headerLen := f.minLengthLegacy(version)
+	headerLen := f.headerLengthLegacy(version)
 	if headerLen > maxFrameSize {
 		return 0
 	}
