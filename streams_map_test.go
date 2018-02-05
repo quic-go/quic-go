@@ -257,6 +257,10 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 			})
 
 			Context("updating stream ID limits", func() {
+				BeforeEach(func() {
+					mockSender.EXPECT().queueControlFrame(gomock.Any())
+				})
+
 				It("processes the parameter for outgoing bidirectional streams", func() {
 					_, err := m.OpenStream()
 					Expect(err).To(MatchError(qerr.TooManyOpenStreams))
@@ -281,6 +285,10 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 			})
 
 			Context("handling MAX_STREAM_ID frames", func() {
+				BeforeEach(func() {
+					mockSender.EXPECT().queueControlFrame(gomock.Any()).AnyTimes()
+				})
+
 				It("processes IDs for outgoing bidirectional streams", func() {
 					_, err := m.OpenStream()
 					Expect(err).To(MatchError(qerr.TooManyOpenStreams))

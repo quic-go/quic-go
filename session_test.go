@@ -415,6 +415,16 @@ var _ = Describe("Session", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
+		It("handles STREAM_BLOCKED frames", func() {
+			err := sess.handleFrames([]wire.Frame{&wire.StreamBlockedFrame{}}, protocol.EncryptionUnspecified)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("handles STREAM_ID_BLOCKED frames", func() {
+			err := sess.handleFrames([]wire.Frame{&wire.StreamIDBlockedFrame{}}, protocol.EncryptionUnspecified)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
 		It("errors on GOAWAY frames", func() {
 			err := sess.handleFrames([]wire.Frame{&wire.GoawayFrame{}}, protocol.EncryptionUnspecified)
 			Expect(err).To(MatchError("unimplemented: handling GOAWAY frames"))

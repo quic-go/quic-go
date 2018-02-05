@@ -3,7 +3,9 @@ package quic
 import (
 	"errors"
 
+	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qerr"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -12,15 +14,17 @@ import (
 var _ = Describe("Streams Map (outgoing)", func() {
 	const firstNewStream protocol.StreamID = 10
 	var (
-		m       *outgoingItemsMap
-		newItem func(id protocol.StreamID) item
+		m          *outgoingItemsMap
+		newItem    func(id protocol.StreamID) item
+		mockSender *MockStreamSender
 	)
 
 	BeforeEach(func() {
 		newItem = func(id protocol.StreamID) item {
 			return id
 		}
-		m = newOutgoingItemsMap(firstNewStream, newItem)
+		mockSender = NewMockStreamSender(mockCtrl)
+		m = newOutgoingItemsMap(firstNewStream, newItem, mockSender.queueControlFrame)
 	})
 
 	Context("no stream ID limit", func() {
@@ -84,11 +88,13 @@ var _ = Describe("Streams Map (outgoing)", func() {
 
 	Context("with stream ID limits", func() {
 		It("errors when no stream can be opened immediately", func() {
+			mockSender.EXPECT().queueControlFrame(gomock.Any())
 			_, err := m.OpenStream()
 			Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 		})
 
 		It("blocks until a stream can be opened synchronously", func() {
+			mockSender.EXPECT().queueControlFrame(gomock.Any())
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -104,6 +110,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 		})
 
 		It("stops opening synchronously when it is closed", func() {
+			mockSender.EXPECT().queueControlFrame(gomock.Any())
 			testErr := errors.New("test error")
 			done := make(chan struct{})
 			go func() {
@@ -124,6 +131,27 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			str, err := m.OpenStream()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(str).To(Equal(firstNewStream))
+		})
+
+		It("queues a STREAM_ID_BLOCKED frame if no stream can be opened", func() {
+			m.SetMaxStream(firstNewStream)
+			mockSender.EXPECT().queueControlFrame(&wire.StreamIDBlockedFrame{StreamID: firstNewStream})
+			_, err := m.OpenStream()
+			Expect(err).ToNot(HaveOccurred())
+			_, err = m.OpenStream()
+			Expect(err).To(MatchError(qerr.TooManyOpenStreams))
+		})
+
+		It("only sends one STREAM_ID_BLOCKED frame for one stream ID", func() {
+			m.SetMaxStream(firstNewStream)
+			mockSender.EXPECT().queueControlFrame(&wire.StreamIDBlockedFrame{StreamID: firstNewStream})
+			_, err := m.OpenStream()
+			Expect(err).ToNot(HaveOccurred())
+			// try to open a stream twice, but expect only one STREAM_ID_BLOCKED to be sent
+			_, err = m.OpenStream()
+			Expect(err).To(MatchError(qerr.TooManyOpenStreams))
+			_, err = m.OpenStream()
+			Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 		})
 	})
 })
