@@ -64,7 +64,11 @@ func newStreamsMap(
 	newUniReceiveStream := func(id protocol.StreamID) receiveStreamI {
 		return newReceiveStream(id, m.sender, m.newFlowController(id), version)
 	}
-	m.outgoingBidiStreams = newOutgoingBidiStreamsMap(firstOutgoingBidiStream, newBidiStream)
+	m.outgoingBidiStreams = newOutgoingBidiStreamsMap(
+		firstOutgoingBidiStream,
+		newBidiStream,
+		sender.queueControlFrame,
+	)
 	// TODO(#523): make these values configurable
 	m.incomingBidiStreams = newIncomingBidiStreamsMap(
 		firstIncomingBidiStream,
@@ -73,7 +77,11 @@ func newStreamsMap(
 		sender.queueControlFrame,
 		newBidiStream,
 	)
-	m.outgoingUniStreams = newOutgoingUniStreamsMap(firstOutgoingUniStream, newUniSendStream)
+	m.outgoingUniStreams = newOutgoingUniStreamsMap(
+		firstOutgoingUniStream,
+		newUniSendStream,
+		sender.queueControlFrame,
+	)
 	// TODO(#523): make these values configurable
 	m.incomingUniStreams = newIncomingUniStreamsMap(
 		firstIncomingUniStream,

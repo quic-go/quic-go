@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qerr"
 )
 
@@ -18,18 +19,26 @@ type outgoingUniStreamsMap struct {
 
 	streams map[protocol.StreamID]sendStreamI
 
-	nextStream protocol.StreamID
-	maxStream  protocol.StreamID
-	newStream  func(protocol.StreamID) sendStreamI
+	nextStream     protocol.StreamID // stream ID of the stream returned by OpenStream(Sync)
+	maxStream      protocol.StreamID // the maximum stream ID we're allowed to open
+	highestBlocked protocol.StreamID // the highest stream ID that we queued a STREAM_ID_BLOCKED frame for
+
+	newStream            func(protocol.StreamID) sendStreamI
+	queueStreamIDBlocked func(*wire.StreamIDBlockedFrame)
 
 	closeErr error
 }
 
-func newOutgoingUniStreamsMap(nextStream protocol.StreamID, newStream func(protocol.StreamID) sendStreamI) *outgoingUniStreamsMap {
+func newOutgoingUniStreamsMap(
+	nextStream protocol.StreamID,
+	newStream func(protocol.StreamID) sendStreamI,
+	queueControlFrame func(wire.Frame),
+) *outgoingUniStreamsMap {
 	m := &outgoingUniStreamsMap{
-		streams:    make(map[protocol.StreamID]sendStreamI),
-		nextStream: nextStream,
-		newStream:  newStream,
+		streams:              make(map[protocol.StreamID]sendStreamI),
+		nextStream:           nextStream,
+		newStream:            newStream,
+		queueStreamIDBlocked: func(f *wire.StreamIDBlockedFrame) { queueControlFrame(f) },
 	}
 	m.cond.L = &m.mutex
 	return m
@@ -63,6 +72,10 @@ func (m *outgoingUniStreamsMap) openStreamImpl() (sendStreamI, error) {
 		return nil, m.closeErr
 	}
 	if m.nextStream > m.maxStream {
+		if m.maxStream == 0 || m.highestBlocked < m.maxStream {
+			m.queueStreamIDBlocked(&wire.StreamIDBlockedFrame{StreamID: m.maxStream})
+			m.highestBlocked = m.maxStream
+		}
 		return nil, qerr.TooManyOpenStreams
 	}
 	s := m.newStream(m.nextStream)
