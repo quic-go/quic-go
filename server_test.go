@@ -138,6 +138,51 @@ var _ = Describe("Server", func() {
 			Expect(sess.packetCount).To(Equal(1))
 		})
 
+		It("accepts new TLS sessions", func() {
+			connID := protocol.ConnectionID(0x12345)
+			sess, err := newMockSession(nil, protocol.VersionTLS, connID, nil, nil, nil)
+			Expect(err).ToNot(HaveOccurred())
+			err = serv.setupTLS()
+			Expect(err).ToNot(HaveOccurred())
+			serv.serverTLS.sessionChan <- tlsSession{
+				connID: connID,
+				sess:   sess,
+			}
+			Eventually(func() packetHandler {
+				serv.sessionsMutex.Lock()
+				defer serv.sessionsMutex.Unlock()
+				return serv.sessions[connID]
+			}).Should(Equal(sess))
+		})
+
+		It("only accepts one new TLS sessions for one connection ID", func() {
+			connID := protocol.ConnectionID(0x12345)
+			sess1, err := newMockSession(nil, protocol.VersionTLS, connID, nil, nil, nil)
+			Expect(err).ToNot(HaveOccurred())
+			sess2, err := newMockSession(nil, protocol.VersionTLS, connID, nil, nil, nil)
+			Expect(err).ToNot(HaveOccurred())
+			err = serv.setupTLS()
+			Expect(err).ToNot(HaveOccurred())
+			serv.serverTLS.sessionChan <- tlsSession{
+				connID: connID,
+				sess:   sess1,
+			}
+			Eventually(func() packetHandler {
+				serv.sessionsMutex.Lock()
+				defer serv.sessionsMutex.Unlock()
+				return serv.sessions[connID]
+			}).Should(Equal(sess1))
+			serv.serverTLS.sessionChan <- tlsSession{
+				connID: connID,
+				sess:   sess2,
+			}
+			Eventually(func() packetHandler {
+				serv.sessionsMutex.Lock()
+				defer serv.sessionsMutex.Unlock()
+				return serv.sessions[connID]
+			}).Should(Equal(sess1))
+		})
+
 		It("accepts a session once the connection it is forward secure", func(done Done) {
 			var acceptedSess Session
 			go func() {
