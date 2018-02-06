@@ -22,7 +22,7 @@ var _ = Describe("Stateless TLS handling", func() {
 	var (
 		conn        *mockPacketConn
 		server      *serverTLS
-		sessionChan <-chan packetHandler
+		sessionChan <-chan tlsSession
 		mintTLS     *mockhandshake.MockMintTLS
 		extHandler  *mocks.MockTLSExtensionHandler
 		mintReply   io.Writer
