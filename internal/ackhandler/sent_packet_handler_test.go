@@ -588,7 +588,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
 		})
 
-		It("deletes non forward-secure packets when the handshake completes", func() {
+		It("deletes non forward-secure packets from the retransmission queue when the handshake completes", func() {
 			for i := protocol.PacketNumber(1); i <= 7; i++ {
 				if i == 2 { // packet 2 was already acked in BeforeEach
 					continue
@@ -604,6 +604,19 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(packet).ToNot(BeNil())
 			Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(7)))
 			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
+		})
+
+		It("deletes non forward-secure packets from the packet queue", func() {
+			Expect(handler.retransmissionQueue).To(BeEmpty())
+			handler.SetHandshakeComplete()
+			for i := protocol.PacketNumber(1); i <= 7; i++ {
+				if el := getPacketElement(i); el != nil {
+					handler.queuePacketForRetransmission(el)
+				}
+			}
+			Expect(handler.retransmissionQueue).To(HaveLen(2))
+			Expect(handler.DequeuePacketForRetransmission().EncryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
+			Expect(handler.DequeuePacketForRetransmission().EncryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
 		})
 
 		Context("STOP_WAITINGs", func() {

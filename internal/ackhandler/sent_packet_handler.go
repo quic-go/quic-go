@@ -102,6 +102,13 @@ func (h *sentPacketHandler) SetHandshakeComplete() {
 		}
 	}
 	h.retransmissionQueue = queue
+	for el := h.packetHistory.Front(); el != nil; {
+		next := el.Next()
+		if el.Value.EncryptionLevel != protocol.EncryptionForwardSecure {
+			h.packetHistory.Remove(el)
+		}
+		el = next
+	}
 	h.handshakeComplete = true
 }
 
