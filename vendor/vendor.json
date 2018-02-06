@@ -15,6 +15,12 @@
 			"revisionTime": "2017-12-09T20:11:46Z"
 		},
 		{
+			"checksumSHA1": "PYXuf7wvcj492uWhjvmXlyyQUYc=",
+			"path": "github.com/cheekybits/genny/generic",
+			"revision": "9127e812e1e9e501ce899a18121d316ecb52e4ba",
+			"revisionTime": "2017-03-28T20:00:08Z"
+		},
+		{
 			"checksumSHA1": "IQkUIOnvlf0tYloFx9mLaXSvXWQ=",
 			"path": "golang.org/x/crypto/curve25519",
 			"revision": "d585fd2cc9195196078f516b69daff6744ef5e84",
