@@ -66,8 +66,10 @@ func newServerTLS(
 		params: &handshake.TransportParameters{
 			StreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
 			ConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
-			MaxStreams:                  protocol.MaxIncomingStreams,
 			IdleTimeout:                 config.IdleTimeout,
+			// TODO(#523): make these values configurable
+			MaxBidiStreamID: protocol.MaxBidiStreamID(protocol.MaxIncomingStreams, protocol.PerspectiveServer),
+			MaxUniStreamID:  protocol.MaxUniStreamID(protocol.MaxIncomingStreams, protocol.PerspectiveServer),
 		},
 	}
 	s.newMintConn = s.newMintConnImpl

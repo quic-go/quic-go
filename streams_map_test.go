@@ -4,9 +4,12 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
+	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qerr"
 
 	. "github.com/onsi/ginkgo"
@@ -48,14 +51,26 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 		}
 
 		Context(perspective.String(), func() {
-			var m *streamsMap
+			var (
+				m          *streamsMap
+				mockSender *MockStreamSender
+			)
+
+			allowUnlimitedStreams := func() {
+				m.UpdateLimits(&handshake.TransportParameters{
+					MaxBidiStreamID: 0xffffffff,
+					MaxUniStreamID:  0xffffffff,
+				})
+			}
 
 			BeforeEach(func() {
-				m = newStreamsMap(nil, newFlowController, perspective, versionIETFFrames).(*streamsMap)
+				mockSender = NewMockStreamSender(mockCtrl)
+				m = newStreamsMap(mockSender, newFlowController, perspective, versionIETFFrames).(*streamsMap)
 			})
 
 			Context("opening", func() {
 				It("opens bidirectional streams", func() {
+					allowUnlimitedStreams()
 					str, err := m.OpenStream()
 					Expect(err).ToNot(HaveOccurred())
 					Expect(str).To(BeAssignableToTypeOf(&stream{}))
@@ -67,6 +82,7 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 				})
 
 				It("opens unidirectional streams", func() {
+					allowUnlimitedStreams()
 					str, err := m.OpenUniStream()
 					Expect(err).ToNot(HaveOccurred())
 					Expect(str).To(BeAssignableToTypeOf(&sendStream{}))
@@ -99,6 +115,11 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 			})
 
 			Context("deleting", func() {
+				BeforeEach(func() {
+					mockSender.EXPECT().queueControlFrame(gomock.Any()).AnyTimes()
+					allowUnlimitedStreams()
+				})
+
 				It("deletes outgoing bidirectional streams", func() {
 					id := ids.firstOutgoingBidiStream
 					str, err := m.OpenStream()
@@ -145,6 +166,10 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 			})
 
 			Context("getting streams", func() {
+				BeforeEach(func() {
+					allowUnlimitedStreams()
+				})
+
 				Context("send streams", func() {
 					It("gets an outgoing bidirectional stream", func() {
 						// need to open the stream ourselves first
@@ -228,6 +253,82 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 						_, err := m.GetOrOpenReceiveStream(id)
 						Expect(err).To(MatchError(fmt.Errorf("peer attempted to open receive stream %d", id)))
 					})
+				})
+			})
+
+			Context("updating stream ID limits", func() {
+				It("processes the parameter for outgoing bidirectional streams", func() {
+					_, err := m.OpenStream()
+					Expect(err).To(MatchError(qerr.TooManyOpenStreams))
+					m.UpdateLimits(&handshake.TransportParameters{
+						MaxBidiStreamID: ids.firstOutgoingBidiStream,
+					})
+					str, err := m.OpenStream()
+					Expect(err).ToNot(HaveOccurred())
+					Expect(str.StreamID()).To(Equal(ids.firstOutgoingBidiStream))
+				})
+
+				It("processes the parameter for outgoing bidirectional streams", func() {
+					_, err := m.OpenUniStream()
+					Expect(err).To(MatchError(qerr.TooManyOpenStreams))
+					m.UpdateLimits(&handshake.TransportParameters{
+						MaxUniStreamID: ids.firstOutgoingUniStream,
+					})
+					str, err := m.OpenUniStream()
+					Expect(err).ToNot(HaveOccurred())
+					Expect(str.StreamID()).To(Equal(ids.firstOutgoingUniStream))
+				})
+			})
+
+			Context("handling MAX_STREAM_ID frames", func() {
+				It("processes IDs for outgoing bidirectional streams", func() {
+					_, err := m.OpenStream()
+					Expect(err).To(MatchError(qerr.TooManyOpenStreams))
+					err = m.HandleMaxStreamIDFrame(&wire.MaxStreamIDFrame{StreamID: ids.firstOutgoingBidiStream})
+					Expect(err).ToNot(HaveOccurred())
+					str, err := m.OpenStream()
+					Expect(err).ToNot(HaveOccurred())
+					Expect(str.StreamID()).To(Equal(ids.firstOutgoingBidiStream))
+				})
+
+				It("processes IDs for outgoing bidirectional streams", func() {
+					_, err := m.OpenUniStream()
+					Expect(err).To(MatchError(qerr.TooManyOpenStreams))
+					err = m.HandleMaxStreamIDFrame(&wire.MaxStreamIDFrame{StreamID: ids.firstOutgoingUniStream})
+					Expect(err).ToNot(HaveOccurred())
+					str, err := m.OpenUniStream()
+					Expect(err).ToNot(HaveOccurred())
+					Expect(str.StreamID()).To(Equal(ids.firstOutgoingUniStream))
+				})
+
+				It("rejects IDs for incoming bidirectional streams", func() {
+					err := m.HandleMaxStreamIDFrame(&wire.MaxStreamIDFrame{StreamID: ids.firstIncomingBidiStream})
+					Expect(err).To(MatchError(fmt.Sprintf("received MAX_STREAM_DATA frame for incoming stream %d", ids.firstIncomingBidiStream)))
+				})
+
+				It("rejects IDs for incoming unidirectional streams", func() {
+					err := m.HandleMaxStreamIDFrame(&wire.MaxStreamIDFrame{StreamID: ids.firstIncomingUniStream})
+					Expect(err).To(MatchError(fmt.Sprintf("received MAX_STREAM_DATA frame for incoming stream %d", ids.firstIncomingUniStream)))
+				})
+			})
+
+			Context("sending MAX_STREAM_ID frames", func() {
+				It("sends MAX_STREAM_ID frames for bidirectional streams", func() {
+					_, err := m.GetOrOpenReceiveStream(ids.firstIncomingBidiStream + 4*10)
+					Expect(err).ToNot(HaveOccurred())
+					mockSender.EXPECT().queueControlFrame(&wire.MaxStreamIDFrame{
+						StreamID: protocol.MaxBidiStreamID(protocol.MaxIncomingStreams, perspective) + 4,
+					})
+					Expect(m.DeleteStream(ids.firstIncomingBidiStream)).To(Succeed())
+				})
+
+				It("sends MAX_STREAM_ID frames for unidirectional streams", func() {
+					_, err := m.GetOrOpenReceiveStream(ids.firstIncomingUniStream + 4*10)
+					Expect(err).ToNot(HaveOccurred())
+					mockSender.EXPECT().queueControlFrame(&wire.MaxStreamIDFrame{
+						StreamID: protocol.MaxUniStreamID(protocol.MaxIncomingStreams, perspective) + 4,
+					})
+					Expect(m.DeleteStream(ids.firstIncomingUniStream)).To(Succeed())
 				})
 			})
 

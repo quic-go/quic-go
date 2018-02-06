@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 //go:generate genny -in $GOFILE -out streams_map_incoming_bidi.go gen "item=streamI Item=BidiStream"
@@ -15,18 +16,31 @@ type incomingItemsMap struct {
 
 	streams map[protocol.StreamID]item
 
-	nextStream    protocol.StreamID
-	highestStream protocol.StreamID
-	newStream     func(protocol.StreamID) item
+	nextStream    protocol.StreamID // the next stream that will be returned by AcceptStream()
+	highestStream protocol.StreamID // the highest stream that the peer openend
+	maxStream     protocol.StreamID // the highest stream that the peer is allowed to open
+	maxNumStreams int               // maximum number of streams
+
+	newStream        func(protocol.StreamID) item
+	queueMaxStreamID func(*wire.MaxStreamIDFrame)
 
 	closeErr error
 }
 
-func newIncomingItemsMap(nextStream protocol.StreamID, newStream func(protocol.StreamID) item) *incomingItemsMap {
+func newIncomingItemsMap(
+	nextStream protocol.StreamID,
+	initialMaxStreamID protocol.StreamID,
+	maxNumStreams int,
+	queueControlFrame func(wire.Frame),
+	newStream func(protocol.StreamID) item,
+) *incomingItemsMap {
 	m := &incomingItemsMap{
-		streams:    make(map[protocol.StreamID]item),
-		nextStream: nextStream,
-		newStream:  newStream,
+		streams:          make(map[protocol.StreamID]item),
+		nextStream:       nextStream,
+		maxStream:        initialMaxStreamID,
+		maxNumStreams:    maxNumStreams,
+		newStream:        newStream,
+		queueMaxStreamID: func(f *wire.MaxStreamIDFrame) { queueControlFrame(f) },
 	}
 	m.cond.L = &m.mutex
 	return m
@@ -53,6 +67,9 @@ func (m *incomingItemsMap) AcceptStream() (item, error) {
 }
 
 func (m *incomingItemsMap) GetOrOpenStream(id protocol.StreamID) (item, error) {
+	if id > m.maxStream {
+		return nil, fmt.Errorf("peer tried to open stream %d (current limit: %d)", id, m.maxStream)
+	}
 	// if the id is smaller than the highest we accepted
 	// * this stream exists in the map, and we can return it, or
 	// * this stream was already closed, then we can return the nil
@@ -88,6 +105,11 @@ func (m *incomingItemsMap) DeleteStream(id protocol.StreamID) error {
 		return fmt.Errorf("Tried to delete unknown stream %d", id)
 	}
 	delete(m.streams, id)
+	// queue a MAX_STREAM_ID frame, giving the peer the option to open a new stream
+	if numNewStreams := m.maxNumStreams - len(m.streams); numNewStreams > 0 {
+		m.maxStream = m.highestStream + protocol.StreamID(numNewStreams*4)
+		m.queueMaxStreamID(&wire.MaxStreamIDFrame{StreamID: m.maxStream})
+	}
 	return nil
 }
 

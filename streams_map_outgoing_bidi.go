@@ -14,29 +14,56 @@ import (
 
 type outgoingBidiStreamsMap struct {
 	mutex sync.RWMutex
+	cond  sync.Cond
 
 	streams map[protocol.StreamID]streamI
 
 	nextStream protocol.StreamID
+	maxStream  protocol.StreamID
 	newStream  func(protocol.StreamID) streamI
 
 	closeErr error
 }
 
 func newOutgoingBidiStreamsMap(nextStream protocol.StreamID, newStream func(protocol.StreamID) streamI) *outgoingBidiStreamsMap {
-	return &outgoingBidiStreamsMap{
+	m := &outgoingBidiStreamsMap{
 		streams:    make(map[protocol.StreamID]streamI),
 		nextStream: nextStream,
 		newStream:  newStream,
 	}
+	m.cond.L = &m.mutex
+	return m
 }
 
 func (m *outgoingBidiStreamsMap) OpenStream() (streamI, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
+	return m.openStreamImpl()
+}
+
+func (m *outgoingBidiStreamsMap) OpenStreamSync() (streamI, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	for {
+		str, err := m.openStreamImpl()
+		if err == nil {
+			return str, err
+		}
+		if err != nil && err != qerr.TooManyOpenStreams {
+			return nil, err
+		}
+		m.cond.Wait()
+	}
+}
+
+func (m *outgoingBidiStreamsMap) openStreamImpl() (streamI, error) {
 	if m.closeErr != nil {
 		return nil, m.closeErr
+	}
+	if m.nextStream > m.maxStream {
+		return nil, qerr.TooManyOpenStreams
 	}
 	s := m.newStream(m.nextStream)
 	m.streams[m.nextStream] = s
@@ -65,8 +92,18 @@ func (m *outgoingBidiStreamsMap) DeleteStream(id protocol.StreamID) error {
 	return nil
 }
 
+func (m *outgoingBidiStreamsMap) SetMaxStream(id protocol.StreamID) {
+	m.mutex.Lock()
+	if id > m.maxStream {
+		m.maxStream = id
+		m.cond.Broadcast()
+	}
+	m.mutex.Unlock()
+}
+
 func (m *outgoingBidiStreamsMap) CloseWithError(err error) {
 	m.mutex.Lock()
 	m.closeErr = err
+	m.cond.Broadcast()
 	m.mutex.Unlock()
 }

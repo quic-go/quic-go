@@ -256,3 +256,8 @@ func (m *streamsMapLegacy) UpdateLimits(params *handshake.TransportParameters) {
 	m.mutex.Unlock()
 	m.openStreamOrErrCond.Broadcast()
 }
+
+// should never be called, since MAX_STREAM_ID frames can only be unpacked for IETF QUIC
+func (m *streamsMapLegacy) HandleMaxStreamIDFrame(f *wire.MaxStreamIDFrame) error {
+	return errors.New("gQUIC doesn't have MAX_STREAM_ID frames")
+}
