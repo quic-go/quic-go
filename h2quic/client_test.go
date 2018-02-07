@@ -231,6 +231,67 @@ var _ = Describe("Client", func() {
 			Eventually(done).Should(BeClosed())
 		})
 
+		It("errors if a request without a body is canceled", func() {
+			done := make(chan struct{})
+			ctx, cancel := context.WithCancel(context.Background())
+			go func() {
+				defer GinkgoRecover()
+				request = request.WithContext(ctx)
+				rsp, err := client.RoundTrip(request)
+				Expect(err).To(MatchError(context.Canceled))
+				Expect(rsp).To(BeNil())
+				close(done)
+			}()
+
+			cancel()
+			Eventually(done).Should(BeClosed())
+			Expect(dataStream.reset).To(BeTrue())
+			Expect(dataStream.canceledWrite).To(BeTrue())
+			Expect(client.headerErrored).ToNot(BeClosed())
+		})
+
+		It("errors if a request with a body is canceled after the body is sent", func() {
+			done := make(chan struct{})
+			ctx, cancel := context.WithCancel(context.Background())
+			go func() {
+				defer GinkgoRecover()
+				request = request.WithContext(ctx)
+				request.Body = &mockBody{}
+				rsp, err := client.RoundTrip(request)
+				Expect(err).To(MatchError(context.Canceled))
+				Expect(rsp).To(BeNil())
+				close(done)
+			}()
+
+			time.Sleep(10 * time.Millisecond)
+			cancel()
+			Eventually(done).Should(BeClosed())
+			Expect(dataStream.reset).To(BeTrue())
+			Expect(dataStream.canceledWrite).To(BeTrue())
+			Expect(client.headerErrored).ToNot(BeClosed())
+		})
+
+		It("errors if a request with a body is canceled before the body is sent", func() {
+			done := make(chan struct{})
+			ctx, cancel := context.WithCancel(context.Background())
+			go func() {
+				defer GinkgoRecover()
+				request = request.WithContext(ctx)
+				request.Body = &mockBody{}
+				cancel()
+				time.Sleep(10 * time.Millisecond)
+				rsp, err := client.RoundTrip(request)
+				Expect(err).To(MatchError(context.Canceled))
+				Expect(rsp).To(BeNil())
+				close(done)
+			}()
+
+			Eventually(done).Should(BeClosed())
+			Expect(dataStream.reset).To(BeTrue())
+			Expect(dataStream.canceledWrite).To(BeTrue())
+			Expect(client.headerErrored).ToNot(BeClosed())
+		})
+
 		It("closes the quic client when encountering an error on the header stream", func() {
 			headerStream.dataToRead.Write(bytes.Repeat([]byte{0}, 100))
 			done := make(chan struct{})

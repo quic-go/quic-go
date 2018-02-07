@@ -202,6 +202,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		bodySent = true
 	}
 
+	ctx := req.Context()
 	for !(bodySent && receivedResponse) {
 		select {
 		case res = <-responseChan:
@@ -214,6 +215,14 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 			if err != nil {
 				return nil, err
 			}
+		case <-ctx.Done():
+			// error code 6 signals that stream was canceled
+			dataStream.CancelRead(6)
+			dataStream.CancelWrite(6)
+			c.mutex.Lock()
+			delete(c.responses, dataStream.StreamID())
+			c.mutex.Unlock()
+			return nil, ctx.Err()
 		case <-c.headerErrored:
 			// an error occurred on the header stream
 			_ = c.CloseWithError(c.headerErr)
