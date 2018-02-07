@@ -621,6 +621,42 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 	})
 
+	It("doesn't retransmit Initial packets after receiving the first packet", func() {
+		err := handler.SentPacket(&Packet{
+			PacketType:   protocol.PacketTypeInitial,
+			PacketNumber: 1,
+			Frames:       []wire.Frame{&wire.StreamFrame{StreamID: 0, Data: []byte("foobar")}},
+		})
+		Expect(err).ToNot(HaveOccurred())
+		getPacketElement(1).Value.sendTime = time.Now().Add(-time.Hour)
+		handler.OnAlarm()
+		Expect(handler.retransmissionQueue).ToNot(BeEmpty())
+		handler.ReceivedFirstPacket()
+		Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
+	})
+
+	It("doesn't retransmit Initial packets after receiving a response to an already retransmitted Initial packet", func() {
+		// assume that we sent an Initial with packet number 1, then retransmitted that one with packet number 2
+		// then we receive a packet as a response to packet 2
+		err := handler.SentPacket(&Packet{
+			PacketType:   protocol.PacketTypeInitial,
+			PacketNumber: 1,
+			Frames:       []wire.Frame{&wire.StreamFrame{StreamID: 0, Data: []byte("foobar")}},
+		})
+		Expect(err).ToNot(HaveOccurred())
+		err = handler.SentPacket(&Packet{
+			PacketType:   protocol.PacketTypeInitial,
+			PacketNumber: 2,
+			Frames:       []wire.Frame{&wire.StreamFrame{StreamID: 0, Data: []byte("foobar")}},
+		})
+		Expect(err).ToNot(HaveOccurred())
+		getPacketElement(2).Value.sendTime = time.Now().Add(-time.Hour)
+		handler.OnAlarm()
+		Expect(handler.retransmissionQueue).ToNot(BeEmpty())
+		handler.ReceivedFirstPacket()
+		Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
+	})
+
 	It("calculates bytes in flight", func() {
 		packet1 := Packet{PacketNumber: 1, Frames: []wire.Frame{&streamFrame}, Length: 1}
 		packet2 := Packet{PacketNumber: 2, Frames: []wire.Frame{&streamFrame}, Length: 2}

@@ -119,6 +119,16 @@ func (mr *MockSentPacketHandlerMockRecorder) ReceivedAck(arg0, arg1, arg2, arg3 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedAck", reflect.TypeOf((*MockSentPacketHandler)(nil).ReceivedAck), arg0, arg1, arg2, arg3)
 }
 
+// ReceivedFirstPacket mocks base method
+func (m *MockSentPacketHandler) ReceivedFirstPacket() {
+	m.ctrl.Call(m, "ReceivedFirstPacket")
+}
+
+// ReceivedFirstPacket indicates an expected call of ReceivedFirstPacket
+func (mr *MockSentPacketHandlerMockRecorder) ReceivedFirstPacket() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedFirstPacket", reflect.TypeOf((*MockSentPacketHandler)(nil).ReceivedFirstPacket))
+}
+
 // SendingAllowed mocks base method
 func (m *MockSentPacketHandler) SendingAllowed() bool {
 	ret := m.ctrl.Call(m, "SendingAllowed")
