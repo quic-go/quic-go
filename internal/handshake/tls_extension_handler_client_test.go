@@ -100,14 +100,6 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		// TODO: fix this when implementing the NewSessionTicket
-		It("ignors the TransportParameters in the NewSessionTicket message", func() {
-			err := el.Add(fakeBody)
-			Expect(err).ToNot(HaveOccurred())
-			err = handler.Receive(mint.HandshakeTypeNewSessionTicket, &el)
-			Expect(err).ToNot(HaveOccurred())
-		})
-
 		It("errors when it can't parse the TransportParameters", func() {
 			err := el.Add(fakeBody)
 			Expect(err).ToNot(HaveOccurred())

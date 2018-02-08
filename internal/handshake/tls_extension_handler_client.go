@@ -63,15 +63,10 @@ func (h *extensionHandlerClient) Receive(hType mint.HandshakeType, el *mint.Exte
 		return err
 	}
 
-	if hType != mint.HandshakeTypeEncryptedExtensions && hType != mint.HandshakeTypeNewSessionTicket {
+	if hType != mint.HandshakeTypeEncryptedExtensions {
 		if found {
 			return fmt.Errorf("Unexpected QUIC extension in handshake message %d", hType)
 		}
-		return nil
-	}
-	if hType == mint.HandshakeTypeNewSessionTicket {
-		// the extension it's optional in the NewSessionTicket message
-		// TODO: handle this
 		return nil
 	}
 
