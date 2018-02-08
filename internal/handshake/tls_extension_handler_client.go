@@ -31,7 +31,10 @@ func NewExtensionHandlerClient(
 	supportedVersions []protocol.VersionNumber,
 	version protocol.VersionNumber,
 ) TLSExtensionHandler {
-	paramsChan := make(chan TransportParameters, 1)
+	// The client reads the transport parameters from the Encrypted Extensions message.
+	// The paramsChan is used in the session's run loop's select statement.
+	// We have to use an unbuffered channel here to make sure that the session actually processes the transport parameters immediately.
+	paramsChan := make(chan TransportParameters)
 	return &extensionHandlerClient{
 		ourParams:         params,
 		paramsChan:        paramsChan,
