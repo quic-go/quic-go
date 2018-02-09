@@ -2,7 +2,6 @@ package quic
 
 import (
 	"bytes"
-	"errors"
 
 	"github.com/golang/mock/gomock"
 
@@ -139,7 +138,7 @@ var _ = Describe("Stream Framer", func() {
 		})
 
 		It("skips a stream that was reported active, but was completed shortly after", func() {
-			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(nil, errors.New("stream was already deleted"))
+			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(nil, nil)
 			streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil)
 			f := &wire.StreamFrame{
 				StreamID: id2,
@@ -269,46 +268,11 @@ var _ = Describe("Stream Framer", func() {
 		})
 
 		Context("splitting of frames", func() {
-			It("splits off nothing", func() {
-				f := &wire.StreamFrame{
-					StreamID: 1,
-					Data:     []byte("bar"),
-					Offset:   3,
-				}
-				Expect(maybeSplitOffFrame(f, 1000)).To(BeNil())
-				Expect(f.Offset).To(Equal(protocol.ByteCount(3)))
-				Expect(f.Data).To(Equal([]byte("bar")))
-			})
-
-			It("splits off initial frame", func() {
-				f := &wire.StreamFrame{
-					StreamID:       1,
-					Data:           []byte("foobar"),
-					DataLenPresent: true,
-					Offset:         3,
-					FinBit:         true,
-				}
-				previous := maybeSplitOffFrame(f, 3)
-				Expect(previous).ToNot(BeNil())
-				Expect(previous.StreamID).To(Equal(protocol.StreamID(1)))
-				Expect(previous.Data).To(Equal([]byte("foo")))
-				Expect(previous.DataLenPresent).To(BeTrue())
-				Expect(previous.Offset).To(Equal(protocol.ByteCount(3)))
-				Expect(previous.FinBit).To(BeFalse())
-				Expect(f.StreamID).To(Equal(protocol.StreamID(1)))
-				Expect(f.Data).To(Equal([]byte("bar")))
-				Expect(f.DataLenPresent).To(BeTrue())
-				Expect(f.Offset).To(Equal(protocol.ByteCount(6)))
-				Expect(f.FinBit).To(BeTrue())
-			})
-
 			It("splits a frame", func() {
-				frame := &wire.StreamFrame{Data: bytes.Repeat([]byte{0}, 600)}
-				framer.AddFrameForRetransmission(frame)
+				framer.AddFrameForRetransmission(&wire.StreamFrame{Data: make([]byte, 600)})
 				fs := framer.PopStreamFrames(500)
 				Expect(fs).To(HaveLen(1))
-				minLength := fs[0].MinLength(framer.version)
-				Expect(minLength + fs[0].DataLen()).To(Equal(protocol.ByteCount(500)))
+				Expect(fs[0].Length(framer.version)).To(Equal(protocol.ByteCount(500)))
 				Expect(framer.retransmissionQueue[0].Data).To(HaveLen(int(600 - fs[0].DataLen())))
 				Expect(framer.retransmissionQueue[0].Offset).To(Equal(fs[0].DataLen()))
 			})

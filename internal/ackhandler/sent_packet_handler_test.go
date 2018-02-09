@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/lucas-clemente/quic-go/congestion"
+	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -183,30 +183,6 @@ var _ = Describe("SentPacketHandler", func() {
 					Expect(handler.skippedPackets).To(BeEmpty())
 				})
 			})
-		})
-	})
-
-	Context("forcing retransmittable packets", func() {
-		It("says that every 20th packet should be retransmittable", func() {
-			// send 19 non-retransmittable packets
-			for i := 1; i <= protocol.MaxNonRetransmittablePackets; i++ {
-				Expect(handler.ShouldSendRetransmittablePacket()).To(BeFalse())
-				err := handler.SentPacket(nonRetransmittablePacket(protocol.PacketNumber(i)))
-				Expect(err).ToNot(HaveOccurred())
-			}
-			Expect(handler.ShouldSendRetransmittablePacket()).To(BeTrue())
-		})
-
-		It("resets the counter when a retransmittable packet is sent", func() {
-			// send 19 non-retransmittable packets
-			for i := 1; i <= protocol.MaxNonRetransmittablePackets; i++ {
-				Expect(handler.ShouldSendRetransmittablePacket()).To(BeFalse())
-				err := handler.SentPacket(nonRetransmittablePacket(protocol.PacketNumber(i)))
-				Expect(err).ToNot(HaveOccurred())
-			}
-			err := handler.SentPacket(retransmittablePacket(20))
-			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.ShouldSendRetransmittablePacket()).To(BeFalse())
 		})
 	})
 
@@ -523,8 +499,10 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(handler.rttStats.LatestRTT()).To(BeNumerically("~", 1*time.Minute, 1*time.Second))
 			})
 
-			It("uses the DelayTime in the ack frame", func() {
+			It("uses the DelayTime in the ACK frame", func() {
 				now := time.Now()
+				// make sure the rttStats have a min RTT, so that the delay is used
+				handler.rttStats.UpdateRTT(5*time.Minute, 0, time.Now())
 				getPacketElement(1).Value.sendTime = now.Add(-10 * time.Minute)
 				err := handler.ReceivedAck(&wire.AckFrame{LargestAcked: 1, DelayTime: 5 * time.Minute}, 1, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).NotTo(HaveOccurred())
@@ -680,9 +658,7 @@ var _ = Describe("SentPacketHandler", func() {
 	})
 
 	Context("congestion", func() {
-		var (
-			cong *mocks.MockSendAlgorithm
-		)
+		var cong *mocks.MockSendAlgorithm
 
 		BeforeEach(func() {
 			cong = mocks.NewMockSendAlgorithm(mockCtrl)
@@ -698,6 +674,7 @@ var _ = Describe("SentPacketHandler", func() {
 				protocol.ByteCount(42),
 				true,
 			)
+			cong.EXPECT().TimeUntilSend(gomock.Any())
 			p := &Packet{
 				PacketNumber: 1,
 				Length:       42,
@@ -709,6 +686,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("should call MaybeExitSlowStart and OnPacketAcked", func() {
 			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(2)
+			cong.EXPECT().TimeUntilSend(gomock.Any()).Times(2)
 			cong.EXPECT().MaybeExitSlowStart()
 			cong.EXPECT().OnPacketAcked(
 				protocol.PacketNumber(1),
@@ -723,6 +701,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("should call MaybeExitSlowStart and OnPacketLost", func() {
 			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(3)
+			cong.EXPECT().TimeUntilSend(gomock.Any()).Times(3)
 			cong.EXPECT().OnRetransmissionTimeout(true).Times(2)
 			cong.EXPECT().OnPacketLost(
 				protocol.PacketNumber(1),
@@ -741,27 +720,52 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("allows or denies sending based on congestion", func() {
-			Expect(handler.retransmissionQueue).To(BeEmpty())
 			handler.bytesInFlight = 100
-			cong.EXPECT().GetCongestionWindow().Return(protocol.MaxByteCount)
+			cong.EXPECT().GetCongestionWindow().Return(protocol.ByteCount(200))
 			Expect(handler.SendingAllowed()).To(BeTrue())
-			cong.EXPECT().GetCongestionWindow().Return(protocol.ByteCount(0))
+			cong.EXPECT().GetCongestionWindow().Return(protocol.ByteCount(75))
 			Expect(handler.SendingAllowed()).To(BeFalse())
 		})
 
 		It("allows or denies sending based on the number of tracked packets", func() {
-			cong.EXPECT().GetCongestionWindow().Return(protocol.MaxByteCount).AnyTimes()
+			cong.EXPECT().GetCongestionWindow().Times(2)
 			Expect(handler.SendingAllowed()).To(BeTrue())
 			handler.retransmissionQueue = make([]*Packet, protocol.MaxTrackedSentPackets)
 			Expect(handler.SendingAllowed()).To(BeFalse())
 		})
 
 		It("allows sending if there are retransmisisons outstanding", func() {
+			cong.EXPECT().GetCongestionWindow().Times(2)
 			handler.bytesInFlight = 100
-			cong.EXPECT().GetCongestionWindow().Return(protocol.ByteCount(0)).AnyTimes()
+			Expect(handler.retransmissionQueue).To(BeEmpty())
 			Expect(handler.SendingAllowed()).To(BeFalse())
-			handler.retransmissionQueue = []*Packet{nil}
+			handler.retransmissionQueue = []*Packet{{PacketNumber: 3}}
 			Expect(handler.SendingAllowed()).To(BeTrue())
+		})
+
+		It("gets the pacing delay", func() {
+			handler.bytesInFlight = 100
+			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+			cong.EXPECT().TimeUntilSend(protocol.ByteCount(100)).Return(time.Hour)
+			handler.SentPacket(&Packet{PacketNumber: 1})
+			Expect(handler.TimeUntilSend()).To(BeTemporally("~", time.Now().Add(time.Hour), time.Second))
+		})
+
+		It("allows sending of one packet, if it should be sent immediately", func() {
+			cong.EXPECT().TimeUntilSend(gomock.Any()).Return(time.Duration(0))
+			Expect(handler.ShouldSendNumPackets()).To(Equal(1))
+		})
+
+		It("allows sending of multiple packets, if the pacing delay is smaller than the minimum", func() {
+			pacingDelay := protocol.MinPacingDelay / 10
+			cong.EXPECT().TimeUntilSend(gomock.Any()).Return(pacingDelay)
+			Expect(handler.ShouldSendNumPackets()).To(Equal(10))
+		})
+
+		It("allows sending of multiple packets, if the pacing delay is smaller than the minimum, and not a fraction", func() {
+			pacingDelay := protocol.MinPacingDelay * 2 / 5
+			cong.EXPECT().TimeUntilSend(gomock.Any()).Return(pacingDelay)
+			Expect(handler.ShouldSendNumPackets()).To(Equal(3))
 		})
 	})
 
@@ -860,7 +864,7 @@ var _ = Describe("SentPacketHandler", func() {
 			err = handler.SentPacket(handshakePacket(4))
 			Expect(err).ToNot(HaveOccurred())
 
-			err = handler.ReceivedAck(&wire.AckFrame{LargestAcked: 1, LowestAcked: 1}, 1, protocol.EncryptionSecure, time.Now().Add(time.Hour))
+			err = handler.ReceivedAck(&wire.AckFrame{LargestAcked: 1, LowestAcked: 1}, 1, protocol.EncryptionSecure, time.Now())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(handler.lossTime.IsZero()).To(BeTrue())
 			handshakeTimeout := handler.computeHandshakeTimeout()

@@ -3,9 +3,10 @@ package ackhandler
 import (
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/congestion"
+	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -34,9 +35,8 @@ var ErrDuplicateOrOutOfOrderAck = errors.New("SentPacketHandler: Duplicate or ou
 
 type sentPacketHandler struct {
 	lastSentPacketNumber protocol.PacketNumber
+	nextPacketSendTime   time.Time
 	skippedPackets       []protocol.PacketNumber
-
-	numNonRetransmittablePackets int // number of non-retransmittable packets since the last retransmittable packet
 
 	largestAcked                 protocol.PacketNumber
 	largestReceivedPacketWithAck protocol.PacketNumber
@@ -94,10 +94,6 @@ func (h *sentPacketHandler) lowestUnacked() protocol.PacketNumber {
 	return h.largestAcked + 1
 }
 
-func (h *sentPacketHandler) ShouldSendRetransmittablePacket() bool {
-	return h.numNonRetransmittablePackets >= protocol.MaxNonRetransmittablePackets
-}
-
 func (h *sentPacketHandler) SetHandshakeComplete() {
 	var queue []*Packet
 	for _, packet := range h.retransmissionQueue {
@@ -122,8 +118,8 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 		}
 	}
 
-	h.lastSentPacketNumber = packet.PacketNumber
 	now := time.Now()
+	h.lastSentPacketNumber = packet.PacketNumber
 
 	var largestAcked protocol.PacketNumber
 	if len(packet.Frames) > 0 {
@@ -140,9 +136,6 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 		packet.largestAcked = largestAcked
 		h.bytesInFlight += packet.Length
 		h.packetHistory.PushBack(*packet)
-		h.numNonRetransmittablePackets = 0
-	} else {
-		h.numNonRetransmittablePackets++
 	}
 
 	h.congestion.OnPacketSent(
@@ -153,7 +146,9 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 		isRetransmittable,
 	)
 
-	h.updateLossDetectionAlarm()
+	h.nextPacketSendTime = utils.MaxTime(h.nextPacketSendTime, now).Add(h.congestion.TimeUntilSend(h.bytesInFlight))
+
+	h.updateLossDetectionAlarm(now)
 	return nil
 }
 
@@ -206,8 +201,8 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 		}
 	}
 
-	h.detectLostPackets()
-	h.updateLossDetectionAlarm()
+	h.detectLostPackets(rcvTime)
+	h.updateLossDetectionAlarm(rcvTime)
 
 	h.garbageCollectSkippedPackets()
 	h.stopWaitingManager.ReceivedAck(ackFrame)
@@ -260,7 +255,7 @@ func (h *sentPacketHandler) maybeUpdateRTT(largestAcked protocol.PacketNumber, a
 	for el := h.packetHistory.Front(); el != nil; el = el.Next() {
 		packet := el.Value
 		if packet.PacketNumber == largestAcked {
-			h.rttStats.UpdateRTT(rcvTime.Sub(packet.sendTime), ackDelay, time.Now())
+			h.rttStats.UpdateRTT(rcvTime.Sub(packet.sendTime), ackDelay, rcvTime)
 			return true
 		}
 		// Packets are sorted by number, so we can stop searching
@@ -271,7 +266,7 @@ func (h *sentPacketHandler) maybeUpdateRTT(largestAcked protocol.PacketNumber, a
 	return false
 }
 
-func (h *sentPacketHandler) updateLossDetectionAlarm() {
+func (h *sentPacketHandler) updateLossDetectionAlarm(now time.Time) {
 	// Cancel the alarm if no packets are outstanding
 	if h.packetHistory.Len() == 0 {
 		h.alarm = time.Time{}
@@ -280,19 +275,18 @@ func (h *sentPacketHandler) updateLossDetectionAlarm() {
 
 	// TODO(#497): TLP
 	if !h.handshakeComplete {
-		h.alarm = time.Now().Add(h.computeHandshakeTimeout())
+		h.alarm = now.Add(h.computeHandshakeTimeout())
 	} else if !h.lossTime.IsZero() {
 		// Early retransmit timer or time loss detection.
 		h.alarm = h.lossTime
 	} else {
 		// RTO
-		h.alarm = time.Now().Add(h.computeRTOTimeout())
+		h.alarm = now.Add(h.computeRTOTimeout())
 	}
 }
 
-func (h *sentPacketHandler) detectLostPackets() {
+func (h *sentPacketHandler) detectLostPackets(now time.Time) {
 	h.lossTime = time.Time{}
-	now := time.Now()
 
 	maxRTT := float64(utils.MaxDuration(h.rttStats.LatestRTT(), h.rttStats.SmoothedRTT()))
 	delayUntilLost := time.Duration((1.0 + timeReorderingFraction) * maxRTT)
@@ -323,20 +317,22 @@ func (h *sentPacketHandler) detectLostPackets() {
 }
 
 func (h *sentPacketHandler) OnAlarm() {
+	now := time.Now()
+
 	// TODO(#497): TLP
 	if !h.handshakeComplete {
 		h.queueHandshakePacketsForRetransmission()
 		h.handshakeCount++
 	} else if !h.lossTime.IsZero() {
 		// Early retransmit or time loss detection
-		h.detectLostPackets()
+		h.detectLostPackets(now)
 	} else {
 		// RTO
 		h.retransmitOldestTwoPackets()
 		h.rtoCount++
 	}
 
-	h.updateLossDetectionAlarm()
+	h.updateLossDetectionAlarm(now)
 }
 
 func (h *sentPacketHandler) GetAlarmTimeout() time.Time {
@@ -383,6 +379,18 @@ func (h *sentPacketHandler) SendingAllowed() bool {
 	// to RTOs, but we currently don't have a nice way of distinguishing them.
 	haveRetransmissions := len(h.retransmissionQueue) > 0
 	return !maxTrackedLimited && (!congestionLimited || haveRetransmissions)
+}
+
+func (h *sentPacketHandler) TimeUntilSend() time.Time {
+	return h.nextPacketSendTime
+}
+
+func (h *sentPacketHandler) ShouldSendNumPackets() int {
+	delay := h.congestion.TimeUntilSend(h.bytesInFlight)
+	if delay == 0 || delay > protocol.MinPacingDelay {
+		return 1
+	}
+	return int(math.Ceil(float64(protocol.MinPacingDelay) / float64(delay)))
 }
 
 func (h *sentPacketHandler) retransmitOldestTwoPackets() {

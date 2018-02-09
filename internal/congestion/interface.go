@@ -8,7 +8,7 @@ import (
 
 // A SendAlgorithm performs congestion control and calculates the congestion window
 type SendAlgorithm interface {
-	TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCount) time.Duration
+	TimeUntilSend(bytesInFlight protocol.ByteCount) time.Duration
 	OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) bool
 	GetCongestionWindow() protocol.ByteCount
 	MaybeExitSlowStart()

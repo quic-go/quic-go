@@ -94,7 +94,7 @@ var _ = Describe("RST_STREAM frame", func() {
 					ErrorCode:  0xde,
 				}
 				expectedLen := 1 + utils.VarIntLen(0x1337) + utils.VarIntLen(0x1234567) + 2
-				Expect(rst.MinLength(versionIETFFrames)).To(Equal(expectedLen))
+				Expect(rst.Length(versionIETFFrames)).To(Equal(expectedLen))
 			})
 		})
 
@@ -121,7 +121,7 @@ var _ = Describe("RST_STREAM frame", func() {
 					ByteOffset: 0x1000,
 					ErrorCode:  0xde,
 				}
-				Expect(rst.MinLength(versionBigEndian)).To(Equal(protocol.ByteCount(17)))
+				Expect(rst.Length(versionBigEndian)).To(Equal(protocol.ByteCount(17)))
 			})
 		})
 	})

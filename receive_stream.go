@@ -55,6 +55,7 @@ func newReceiveStream(
 	streamID protocol.StreamID,
 	sender streamSender,
 	flowController flowcontrol.StreamFlowController,
+	version protocol.VersionNumber,
 ) *receiveStream {
 	return &receiveStream{
 		streamID:       streamID,
@@ -62,6 +63,7 @@ func newReceiveStream(
 		flowController: flowController,
 		frameQueue:     newStreamFrameSorter(),
 		readChan:       make(chan struct{}, 1),
+		version:        version,
 	}
 }
 

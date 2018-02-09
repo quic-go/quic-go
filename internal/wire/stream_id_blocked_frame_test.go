@@ -47,7 +47,7 @@ var _ = Describe("STREAM_ID_BLOCKED frame", func() {
 
 		It("has the correct min length", func() {
 			frame := StreamIDBlockedFrame{StreamID: 0x123456}
-			Expect(frame.MinLength(0)).To(Equal(protocol.ByteCount(1) + utils.VarIntLen(0x123456)))
+			Expect(frame.Length(0)).To(Equal(protocol.ByteCount(1) + utils.VarIntLen(0x123456)))
 		})
 	})
 })

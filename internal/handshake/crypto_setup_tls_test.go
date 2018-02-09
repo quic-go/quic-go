@@ -66,6 +66,29 @@ var _ = Describe("TLS Crypto Setup", func() {
 		Expect(handshakeEvent).To(Receive())
 	})
 
+	Context("reporting the handshake state", func() {
+		It("reports before the handshake compeletes", func() {
+			cs.tls = mockhandshake.NewMockMintTLS(mockCtrl)
+			cs.tls.(*mockhandshake.MockMintTLS).EXPECT().ConnectionState().Return(mint.ConnectionState{})
+			state := cs.ConnectionState()
+			Expect(state.HandshakeComplete).To(BeFalse())
+			Expect(state.PeerCertificates).To(BeNil())
+		})
+
+		It("reports after the handshake completes", func() {
+			cs.tls = mockhandshake.NewMockMintTLS(mockCtrl)
+			cs.tls.(*mockhandshake.MockMintTLS).EXPECT().ConnectionState().Return(mint.ConnectionState{})
+			cs.tls.(*mockhandshake.MockMintTLS).EXPECT().Handshake().Return(mint.AlertNoAlert)
+			cs.tls.(*mockhandshake.MockMintTLS).EXPECT().State().Return(mint.StateServerConnected)
+			cs.keyDerivation = mockKeyDerivation
+			err := cs.HandleCryptoStream()
+			Expect(err).ToNot(HaveOccurred())
+			state := cs.ConnectionState()
+			Expect(state.HandshakeComplete).To(BeTrue())
+			Expect(state.PeerCertificates).To(BeNil())
+		})
+	})
+
 	Context("escalating crypto", func() {
 		doHandshake := func() {
 			cs.tls = mockhandshake.NewMockMintTLS(mockCtrl)

@@ -90,11 +90,11 @@ const MaxTrackedSentPackets = 2 * DefaultMaxCongestionWindow
 // MaxTrackedReceivedAckRanges is the maximum number of ACK ranges tracked
 const MaxTrackedReceivedAckRanges = DefaultMaxCongestionWindow
 
-// MaxNonRetransmittablePackets is the maximum number of non-retransmittable packets that we send in a row
-const MaxNonRetransmittablePackets = 19
+// MaxNonRetransmittableAcks is the maximum number of packets containing an ACK, but no retransmittable frames, that we send in a row
+const MaxNonRetransmittableAcks = 19
 
 // RetransmittablePacketsBeforeAck is the number of retransmittable that an ACK is sent for
-const RetransmittablePacketsBeforeAck = 2
+const RetransmittablePacketsBeforeAck = 10
 
 // MaxStreamFrameSorterGaps is the maximum number of gaps between received StreamFrames
 // prevents DoS attacks against the streamFrameSorter
@@ -131,3 +131,8 @@ const NumCachedCertificates = 128
 // 1. it reduces the framing overhead
 // 2. it reduces the head-of-line blocking, when a packet is lost
 const MinStreamFrameSize ByteCount = 128
+
+// MinPacingDelay is the minimum duration that is used for packet pacing
+// If the packet packing frequency is higher, multiple packets might be sent at once.
+// Example: For a packet pacing delay of 20 microseconds, we would send 5 packets at once, wait for 100 microseconds, and so forth.
+const MinPacingDelay time.Duration = 100 * time.Microsecond

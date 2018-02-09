@@ -38,7 +38,7 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 
 			Context("client-side streams", func() {
 				It("gets new streams", func() {
-					s, err := m.GetOrOpenStream(3)
+					s, err := m.getOrOpenStream(3)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(s).ToNot(BeNil())
 					Expect(s.StreamID()).To(Equal(protocol.StreamID(3)))
@@ -48,38 +48,38 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 				})
 
 				It("rejects streams with even IDs", func() {
-					_, err := m.GetOrOpenStream(6)
+					_, err := m.getOrOpenStream(6)
 					Expect(err).To(MatchError("InvalidStreamID: peer attempted to open stream 6"))
 				})
 
 				It("rejects streams with even IDs, which are lower thatn the highest client-side stream", func() {
-					_, err := m.GetOrOpenStream(5)
+					_, err := m.getOrOpenStream(5)
 					Expect(err).NotTo(HaveOccurred())
-					_, err = m.GetOrOpenStream(4)
+					_, err = m.getOrOpenStream(4)
 					Expect(err).To(MatchError("InvalidStreamID: peer attempted to open stream 4"))
 				})
 
 				It("gets existing streams", func() {
-					s, err := m.GetOrOpenStream(5)
+					s, err := m.getOrOpenStream(5)
 					Expect(err).NotTo(HaveOccurred())
 					numStreams := m.numIncomingStreams
-					s, err = m.GetOrOpenStream(5)
+					s, err = m.getOrOpenStream(5)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(s.StreamID()).To(Equal(protocol.StreamID(5)))
 					Expect(m.numIncomingStreams).To(Equal(numStreams))
 				})
 
 				It("returns nil for closed streams", func() {
-					_, err := m.GetOrOpenStream(5)
+					_, err := m.getOrOpenStream(5)
 					Expect(err).NotTo(HaveOccurred())
 					deleteStream(5)
-					s, err := m.GetOrOpenStream(5)
+					s, err := m.getOrOpenStream(5)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(s).To(BeNil())
 				})
 
 				It("opens skipped streams", func() {
-					_, err := m.GetOrOpenStream(7)
+					_, err := m.getOrOpenStream(7)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(m.streams).To(HaveKey(protocol.StreamID(3)))
 					Expect(m.streams).To(HaveKey(protocol.StreamID(5)))
@@ -87,11 +87,11 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 				})
 
 				It("doesn't reopen an already closed stream", func() {
-					_, err := m.GetOrOpenStream(5)
+					_, err := m.getOrOpenStream(5)
 					Expect(err).ToNot(HaveOccurred())
 					deleteStream(5)
 					Expect(err).ToNot(HaveOccurred())
-					str, err := m.GetOrOpenStream(5)
+					str, err := m.getOrOpenStream(5)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(str).To(BeNil())
 				})
@@ -99,21 +99,21 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 				Context("counting streams", func() {
 					It("errors when too many streams are opened", func() {
 						for i := uint32(0); i < m.maxIncomingStreams; i++ {
-							_, err := m.GetOrOpenStream(protocol.StreamID(i*2 + 1))
+							_, err := m.getOrOpenStream(protocol.StreamID(i*2 + 1))
 							Expect(err).NotTo(HaveOccurred())
 						}
-						_, err := m.GetOrOpenStream(protocol.StreamID(2*m.maxIncomingStreams + 3))
+						_, err := m.getOrOpenStream(protocol.StreamID(2*m.maxIncomingStreams + 3))
 						Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 					})
 
 					It("errors when too many streams are opened implicitely", func() {
-						_, err := m.GetOrOpenStream(protocol.StreamID(m.maxIncomingStreams*2 + 3))
+						_, err := m.getOrOpenStream(protocol.StreamID(m.maxIncomingStreams*2 + 3))
 						Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 					})
 
 					It("does not error when many streams are opened and closed", func() {
 						for i := uint32(2); i < 10*m.maxIncomingStreams; i++ {
-							str, err := m.GetOrOpenStream(protocol.StreamID(i*2 + 1))
+							str, err := m.getOrOpenStream(protocol.StreamID(i*2 + 1))
 							Expect(err).NotTo(HaveOccurred())
 							deleteStream(str.StreamID())
 						}
@@ -151,7 +151,7 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 					Expect(str.StreamID()).To(Equal(protocol.StreamID(2)))
 					deleteStream(2)
 					Expect(err).ToNot(HaveOccurred())
-					str, err = m.GetOrOpenStream(2)
+					str, err = m.getOrOpenStream(2)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(str).To(BeNil())
 				})
@@ -186,7 +186,7 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 							Expect(err).ToNot(HaveOccurred())
 						}
 						for i := 0; i < maxOutgoingStreams; i++ {
-							_, err := m.GetOrOpenStream(protocol.StreamID(2*i + 1))
+							_, err := m.getOrOpenStream(protocol.StreamID(2*i + 1))
 							Expect(err).ToNot(HaveOccurred())
 						}
 					})
@@ -274,7 +274,7 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 						Expect(err).ToNot(HaveOccurred())
 						close(done)
 					}()
-					_, err := m.GetOrOpenStream(3)
+					_, err := m.getOrOpenStream(3)
 					Expect(err).ToNot(HaveOccurred())
 					Eventually(done).Should(BeClosed())
 					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
@@ -290,7 +290,7 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 						Expect(err).ToNot(HaveOccurred())
 						close(done)
 					}()
-					_, err := m.GetOrOpenStream(5)
+					_, err := m.getOrOpenStream(5)
 					Expect(err).ToNot(HaveOccurred())
 					Eventually(done).Should(BeClosed())
 					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
@@ -314,7 +314,7 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 						Expect(err).ToNot(HaveOccurred())
 						close(done2)
 					}()
-					_, err := m.GetOrOpenStream(5) // opens stream 3 and 5
+					_, err := m.getOrOpenStream(5) // opens stream 3 and 5
 					Expect(err).ToNot(HaveOccurred())
 					Eventually(done1).Should(BeClosed())
 					Eventually(done2).Should(BeClosed())
@@ -333,7 +333,7 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 						close(done)
 					}()
 					Consistently(done).ShouldNot(BeClosed())
-					_, err := m.GetOrOpenStream(3)
+					_, err := m.getOrOpenStream(3)
 					Expect(err).ToNot(HaveOccurred())
 					Eventually(done).Should(BeClosed())
 					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
@@ -349,7 +349,7 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 						Expect(err).ToNot(HaveOccurred())
 						close(done)
 					}()
-					_, err := m.GetOrOpenStream(5)
+					_, err := m.getOrOpenStream(5)
 					Expect(err).ToNot(HaveOccurred())
 					Eventually(done).Should(BeClosed())
 					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
@@ -359,7 +359,7 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 				})
 
 				It("blocks after accepting a stream", func() {
-					_, err := m.GetOrOpenStream(3)
+					_, err := m.getOrOpenStream(3)
 					Expect(err).ToNot(HaveOccurred())
 					str, err := m.AcceptStream()
 					Expect(err).ToNot(HaveOccurred())
@@ -407,19 +407,19 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 
 			Context("server-side streams", func() {
 				It("rejects streams with odd IDs", func() {
-					_, err := m.GetOrOpenStream(5)
+					_, err := m.getOrOpenStream(5)
 					Expect(err).To(MatchError("InvalidStreamID: peer attempted to open stream 5"))
 				})
 
 				It("rejects streams with odds IDs, which are lower than the highest server-side stream", func() {
-					_, err := m.GetOrOpenStream(6)
+					_, err := m.getOrOpenStream(6)
 					Expect(err).NotTo(HaveOccurred())
-					_, err = m.GetOrOpenStream(5)
+					_, err = m.getOrOpenStream(5)
 					Expect(err).To(MatchError("InvalidStreamID: peer attempted to open stream 5"))
 				})
 
 				It("gets new streams", func() {
-					s, err := m.GetOrOpenStream(2)
+					s, err := m.getOrOpenStream(2)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(s.StreamID()).To(Equal(protocol.StreamID(2)))
 					Expect(m.streams).To(HaveLen(1))
@@ -428,7 +428,7 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 				})
 
 				It("opens skipped streams", func() {
-					_, err := m.GetOrOpenStream(6)
+					_, err := m.getOrOpenStream(6)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(m.streams).To(HaveKey(protocol.StreamID(2)))
 					Expect(m.streams).To(HaveKey(protocol.StreamID(4)))
@@ -443,7 +443,7 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 					Expect(str.StreamID()).To(Equal(protocol.StreamID(3)))
 					deleteStream(3)
 					Expect(err).ToNot(HaveOccurred())
-					str, err = m.GetOrOpenStream(3)
+					str, err = m.getOrOpenStream(3)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(str).To(BeNil())
 				})
@@ -468,11 +468,11 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 				})
 
 				It("doesn't reopen an already closed stream", func() {
-					_, err := m.GetOrOpenStream(4)
+					_, err := m.getOrOpenStream(4)
 					Expect(err).ToNot(HaveOccurred())
 					deleteStream(4)
 					Expect(err).ToNot(HaveOccurred())
-					str, err := m.GetOrOpenStream(4)
+					str, err := m.getOrOpenStream(4)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(str).To(BeNil())
 				})
@@ -489,7 +489,7 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 						Expect(err).ToNot(HaveOccurred())
 						close(done)
 					}()
-					_, err := m.GetOrOpenStream(2)
+					_, err := m.getOrOpenStream(2)
 					Expect(err).ToNot(HaveOccurred())
 					Eventually(done).Should(BeClosed())
 					Expect(str.StreamID()).To(Equal(protocol.StreamID(2)))
@@ -504,7 +504,7 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 		})
 
 		It("deletes an incoming stream", func() {
-			_, err := m.GetOrOpenStream(5) // open stream 3 and 5
+			_, err := m.getOrOpenStream(5) // open stream 3 and 5
 			Expect(err).ToNot(HaveOccurred())
 			Expect(m.numIncomingStreams).To(BeEquivalentTo(2))
 			err = m.DeleteStream(3)
@@ -534,7 +534,7 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 
 	It("sets the flow control limit", func() {
 		setNewStreamsMap(protocol.PerspectiveServer)
-		_, err := m.GetOrOpenStream(5)
+		_, err := m.getOrOpenStream(5)
 		Expect(err).ToNot(HaveOccurred())
 		m.streams[3].(*MockStreamI).EXPECT().handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
 			StreamID:   3,
@@ -545,5 +545,9 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 			ByteOffset: 321,
 		})
 		m.UpdateLimits(&handshake.TransportParameters{StreamFlowControlWindow: 321})
+	})
+
+	It("doesn't accept MAX_STREAM_ID frames", func() {
+		Expect(m.HandleMaxStreamIDFrame(&wire.MaxStreamIDFrame{})).ToNot(Succeed())
 	})
 })

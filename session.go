@@ -4,12 +4,13 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/ackhandler"
-	"github.com/lucas-clemente/quic-go/congestion"
+	"github.com/lucas-clemente/quic-go/internal/ackhandler"
+	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/crypto"
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
@@ -29,7 +30,6 @@ type streamGetter interface {
 }
 
 type streamManager interface {
-	GetOrOpenStream(protocol.StreamID) (streamI, error)
 	GetOrOpenSendStream(protocol.StreamID) (sendStreamI, error)
 	GetOrOpenReceiveStream(protocol.StreamID) (receiveStreamI, error)
 	OpenStream() (Stream, error)
@@ -37,6 +37,7 @@ type streamManager interface {
 	AcceptStream() (Stream, error)
 	DeleteStream(protocol.StreamID) error
 	UpdateLimits(*handshake.TransportParameters)
+	HandleMaxStreamIDFrame(*wire.MaxStreamIDFrame) error
 	CloseWithError(error)
 }
 
@@ -114,6 +115,8 @@ type session struct {
 
 	sessionCreationTime     time.Time
 	lastNetworkActivityTime time.Time
+	// pacingDeadline is the time when the next packet should be sent
+	pacingDeadline time.Time
 
 	peerParams *handshake.TransportParameters
 
@@ -325,7 +328,7 @@ func (s *session) postSetup(initialPacketNumber protocol.PacketNumber) error {
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.version)
 
 	if s.version.UsesTLS() {
-		s.streamsMap = newStreamsMap(s.newStream, s.perspective)
+		s.streamsMap = newStreamsMap(s, s.newFlowController, s.perspective, s.version)
 	} else {
 		s.streamsMap = newStreamsMapLegacy(s.newStream, s.perspective)
 	}
@@ -358,6 +361,7 @@ func (s *session) run() error {
 
 runLoop:
 	for {
+
 		// Close immediately if requested
 		select {
 		case closeErr = <-s.closeChan:
@@ -416,30 +420,24 @@ runLoop:
 			s.sentPacketHandler.OnAlarm()
 		}
 
-		if s.config.KeepAlive && s.handshakeComplete && time.Since(s.lastNetworkActivityTime) >= s.peerParams.IdleTimeout/2 {
+		var pacingDeadline time.Time
+		if s.pacingDeadline.IsZero() { // the timer didn't have a pacing deadline set
+			pacingDeadline = s.sentPacketHandler.TimeUntilSend()
+		}
+		if s.config.KeepAlive && !s.keepAlivePingSent && s.handshakeComplete && time.Since(s.lastNetworkActivityTime) >= s.peerParams.IdleTimeout/2 {
 			// send the PING frame since there is no activity in the session
 			s.packer.QueueControlFrame(&wire.PingFrame{})
 			s.keepAlivePingSent = true
+		} else if !pacingDeadline.IsZero() && now.Before(pacingDeadline) {
+			// If we get to this point before the pacing deadline, we should wait until that deadline.
+			// This can happen when scheduleSending is called, or a packet is received.
+			// Set the timer and restart the run loop.
+			s.pacingDeadline = pacingDeadline
+			continue
 		}
 
-		sendingAllowed := s.sentPacketHandler.SendingAllowed()
-		if !sendingAllowed { // if congestion limited, at least try sending an ACK frame
-			if err := s.maybeSendAckOnlyPacket(); err != nil {
-				s.closeLocal(err)
-			}
-		} else {
-			// repeatedly try sending until we don't have any more data, or run out of the congestion window
-			for sendingAllowed {
-				sentPacket, err := s.sendPacket()
-				if err != nil {
-					s.closeLocal(err)
-					break
-				}
-				if !sentPacket {
-					break
-				}
-				sendingAllowed = s.sentPacketHandler.SendingAllowed()
-			}
+		if err := s.sendPackets(); err != nil {
+			s.closeLocal(err)
 		}
 
 		if !s.receivedTooManyUndecrytablePacketsTime.IsZero() && s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout).Before(now) && len(s.undecryptablePackets) != 0 {
@@ -466,6 +464,10 @@ func (s *session) Context() context.Context {
 	return s.ctx
 }
 
+func (s *session) ConnectionState() ConnectionState {
+	return s.cryptoSetup.ConnectionState()
+}
+
 func (s *session) maybeResetTimer() {
 	var deadline time.Time
 	if s.config.KeepAlive && s.handshakeComplete && !s.keepAlivePingSent {
@@ -486,6 +488,9 @@ func (s *session) maybeResetTimer() {
 	}
 	if !s.receivedTooManyUndecrytablePacketsTime.IsZero() {
 		deadline = utils.MinTime(deadline, s.receivedTooManyUndecrytablePacketsTime.Add(protocol.PublicResetTimeout))
+	}
+	if !s.pacingDeadline.IsZero() {
+		deadline = utils.MinTime(deadline, s.pacingDeadline)
 	}
 
 	s.timer.Reset(deadline)
@@ -536,7 +541,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 	s.largestRcvdPacketNumber = utils.MaxPacketNumber(s.largestRcvdPacketNumber, hdr.PacketNumber)
 
 	isRetransmittable := ackhandler.HasRetransmittableFrames(packet.frames)
-	if err = s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, isRetransmittable); err != nil {
+	if err = s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, p.rcvTime, isRetransmittable); err != nil {
 		return err
 	}
 
@@ -563,8 +568,11 @@ func (s *session) handleFrames(fs []wire.Frame, encLevel protocol.EncryptionLeve
 			s.handleMaxDataFrame(frame)
 		case *wire.MaxStreamDataFrame:
 			err = s.handleMaxStreamDataFrame(frame)
+		case *wire.MaxStreamIDFrame:
+			err = s.handleMaxStreamIDFrame(frame)
 		case *wire.BlockedFrame:
 		case *wire.StreamBlockedFrame:
+		case *wire.StreamIDBlockedFrame:
 		case *wire.StopSendingFrame:
 			err = s.handleStopSendingFrame(frame)
 		case *wire.PingFrame:
@@ -632,6 +640,10 @@ func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error
 	}
 	str.handleMaxStreamDataFrame(frame)
 	return nil
+}
+
+func (s *session) handleMaxStreamIDFrame(frame *wire.MaxStreamIDFrame) error {
+	return s.streamsMap.HandleMaxStreamIDFrame(frame)
 }
 
 func (s *session) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
@@ -741,6 +753,28 @@ func (s *session) processTransportParameters(params *handshake.TransportParamete
 	// so we don't need to update stream flow control windows
 }
 
+func (s *session) sendPackets() error {
+	s.pacingDeadline = time.Time{}
+	if !s.sentPacketHandler.SendingAllowed() { // if congestion limited, at least try sending an ACK frame
+		return s.maybeSendAckOnlyPacket()
+	}
+	numPackets := s.sentPacketHandler.ShouldSendNumPackets()
+	for i := 0; i < numPackets; i++ {
+		sentPacket, err := s.sendPacket()
+		if err != nil {
+			return err
+		}
+		// If no packet was sent, or we're congestion limit, we're done here.
+		if !sentPacket || !s.sentPacketHandler.SendingAllowed() {
+			return nil
+		}
+	}
+	// Only start the pacing timer if we sent as many packets as we were allowed.
+	// There will probably be more to send when calling sendPacket again.
+	s.pacingDeadline = s.sentPacketHandler.TimeUntilSend()
+	return nil
+}
+
 func (s *session) maybeSendAckOnlyPacket() error {
 	ack := s.receivedPacketHandler.GetAckFrame()
 	if ack == nil {
@@ -819,10 +853,6 @@ func (s *session) sendPacket() (bool, error) {
 			s.packer.QueueControlFrame(swf)
 		}
 	}
-	// add a retransmittable frame
-	if s.sentPacketHandler.ShouldSendRetransmittablePacket() {
-		s.packer.MakeNextPacketRetransmittable()
-	}
 	packet, err := s.packer.PackPacket()
 	if err != nil || packet == nil {
 		return false, err
@@ -874,14 +904,18 @@ func (s *session) logPacket(packet *packedPacket) {
 }
 
 // GetOrOpenStream either returns an existing stream, a newly opened stream, or nil if a stream with the provided ID is already closed.
-// Newly opened streams should only originate from the client. To open a stream from the server, OpenStream should be used.
+// It is *only* needed for gQUIC's H2.
+// It will be removed as soon as gQUIC moves towards the IETF H2/QUIC stream mapping.
 func (s *session) GetOrOpenStream(id protocol.StreamID) (Stream, error) {
-	str, err := s.streamsMap.GetOrOpenStream(id)
+	str, err := s.streamsMap.GetOrOpenSendStream(id)
 	if str != nil {
-		return str, err
+		if bstr, ok := str.(Stream); ok {
+			return bstr, err
+		}
+		return nil, fmt.Errorf("Stream %d is not a bidirectional stream", id)
 	}
 	// make sure to return an actual nil value here, not an Stream with value nil
-	return str, err
+	return nil, err
 }
 
 // AcceptStream returns the next stream openend by the peer
@@ -899,11 +933,16 @@ func (s *session) OpenStreamSync() (Stream, error) {
 }
 
 func (s *session) newStream(id protocol.StreamID) streamI {
+	flowController := s.newFlowController(id)
+	return newStream(id, s, flowController, s.version)
+}
+
+func (s *session) newFlowController(id protocol.StreamID) flowcontrol.StreamFlowController {
 	var initialSendWindow protocol.ByteCount
 	if s.peerParams != nil {
 		initialSendWindow = s.peerParams.StreamFlowControlWindow
 	}
-	flowController := flowcontrol.NewStreamFlowController(
+	return flowcontrol.NewStreamFlowController(
 		id,
 		s.version.StreamContributesToConnectionFlowControl(id),
 		s.connFlowController,
@@ -912,7 +951,6 @@ func (s *session) newStream(id protocol.StreamID) streamI {
 		initialSendWindow,
 		s.rttStats,
 	)
-	return newStream(id, s, flowController, s.version)
 }
 
 func (s *session) newCryptoStream() cryptoStreamI {

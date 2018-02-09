@@ -37,6 +37,7 @@ type client struct {
 	hostname     string
 	handshakeErr error
 	dialOnce     sync.Once
+	dialer       func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.Session, error)
 
 	session       quic.Session
 	headerStream  quic.Stream
@@ -60,6 +61,7 @@ func newClient(
 	tlsConfig *tls.Config,
 	opts *roundTripperOpts,
 	quicConfig *quic.Config,
+	dialer func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.Session, error),
 ) *client {
 	config := defaultQuicConfig
 	if quicConfig != nil {
@@ -72,13 +74,18 @@ func newClient(
 		config:        config,
 		opts:          opts,
 		headerErrored: make(chan struct{}),
+		dialer:        dialer,
 	}
 }
 
 // dial dials the connection
 func (c *client) dial() error {
 	var err error
-	c.session, err = dialAddr(c.hostname, c.tlsConf, c.config)
+	if c.dialer != nil {
+		c.session, err = c.dialer("udp", c.hostname, c.tlsConf, c.config)
+	} else {
+		c.session, err = dialAddr(c.hostname, c.tlsConf, c.config)
+	}
 	if err != nil {
 		return err
 	}

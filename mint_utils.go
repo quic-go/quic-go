@@ -41,7 +41,7 @@ func newMintController(
 }
 
 func (mc *mintController) GetCipherSuite() mint.CipherSuiteParams {
-	return mc.conn.State().CipherSuite
+	return mc.conn.ConnectionState().CipherSuite
 }
 
 func (mc *mintController) ComputeExporter(label string, context []byte, keyLength int) ([]byte, error) {
@@ -53,15 +53,15 @@ func (mc *mintController) Handshake() mint.Alert {
 }
 
 func (mc *mintController) State() mint.State {
-	return mc.conn.State().HandshakeState
+	return mc.conn.ConnectionState().HandshakeState
+}
+
+func (mc *mintController) ConnectionState() mint.ConnectionState {
+	return mc.conn.ConnectionState()
 }
 
 func (mc *mintController) SetCryptoStream(stream io.ReadWriter) {
 	mc.csc.SetStream(stream)
-}
-
-func (mc *mintController) SetExtensionHandler(h mint.AppExtensionHandler) error {
-	return mc.conn.SetExtensionHandler(h)
 }
 
 func tlsToMintConfig(tlsConf *tls.Config, pers protocol.Perspective) (*mint.Config, error) {
@@ -73,7 +73,10 @@ func tlsToMintConfig(tlsConf *tls.Config, pers protocol.Perspective) (*mint.Conf
 		},
 	}
 	if tlsConf != nil {
+		mconf.ServerName = tlsConf.ServerName
+		mconf.InsecureSkipVerify = tlsConf.InsecureSkipVerify
 		mconf.Certificates = make([]*mint.Certificate, len(tlsConf.Certificates))
+		mconf.VerifyPeerCertificate = tlsConf.VerifyPeerCertificate
 		for i, certChain := range tlsConf.Certificates {
 			mconf.Certificates[i] = &mint.Certificate{
 				Chain:      make([]*x509.Certificate, len(certChain.Certificate)),
@@ -86,6 +89,13 @@ func tlsToMintConfig(tlsConf *tls.Config, pers protocol.Perspective) (*mint.Conf
 				}
 				mconf.Certificates[i].Chain[j] = c
 			}
+		}
+		switch tlsConf.ClientAuth {
+		case tls.NoClientCert:
+		case tls.RequireAnyClientCert:
+			mconf.RequireClientAuth = true
+		default:
+			return nil, errors.New("mint currently only support ClientAuthType RequireAnyClientCert")
 		}
 	}
 	if err := mconf.Init(pers == protocol.PerspectiveClient); err != nil {

@@ -125,7 +125,7 @@ func newStream(streamID protocol.StreamID,
 			s.completedMutex.Unlock()
 		},
 	}
-	s.receiveStream = *newReceiveStream(streamID, senderForReceiveStream, flowController)
+	s.receiveStream = *newReceiveStream(streamID, senderForReceiveStream, flowController, version)
 	return s
 }
 

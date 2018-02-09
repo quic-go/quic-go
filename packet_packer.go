@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/lucas-clemente/quic-go/ackhandler"
 	"github.com/lucas-clemente/quic-go/qtrace"
+	"github.com/lucas-clemente/quic-go/internal/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -39,12 +39,12 @@ type packetPacker struct {
 	controlFrameMutex sync.Mutex
 	controlFrames     []wire.Frame
 
-	stopWaiting                   *wire.StopWaitingFrame
-	ackFrame                      *wire.AckFrame
-	leastUnacked                  protocol.PacketNumber
-	omitConnectionID              bool
-	hasSentPacket                 bool // has the packetPacker already sent a packet
-	makeNextPacketRetransmittable bool
+	stopWaiting               *wire.StopWaitingFrame
+	ackFrame                  *wire.AckFrame
+	leastUnacked              protocol.PacketNumber
+	omitConnectionID          bool
+	hasSentPacket             bool // has the packetPacker already sent a packet
+	numNonRetransmittableAcks int
 }
 
 func newPacketPacker(connectionID protocol.ConnectionID,
@@ -188,14 +188,18 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 	if len(payloadFrames) == 1 && p.stopWaiting != nil {
 		return nil, nil
 	}
-	// check if this packet only contains an ACK and / or STOP_WAITING
-	if !ackhandler.HasRetransmittableFrames(payloadFrames) {
-		if p.makeNextPacketRetransmittable {
-			payloadFrames = append(payloadFrames, &wire.PingFrame{})
-			p.makeNextPacketRetransmittable = false
+	if p.ackFrame != nil {
+		// check if this packet only contains an ACK (and maybe a STOP_WAITING)
+		if len(payloadFrames) == 1 || (p.stopWaiting != nil && len(payloadFrames) == 2) {
+			if p.numNonRetransmittableAcks >= protocol.MaxNonRetransmittableAcks {
+				payloadFrames = append(payloadFrames, &wire.PingFrame{})
+				p.numNonRetransmittableAcks = 0
+			} else {
+				p.numNonRetransmittableAcks++
+			}
+		} else {
+			p.numNonRetransmittableAcks = 0
 		}
-	} else { // this packet already contains a retransmittable frame. No need to send a PING
-		p.makeNextPacketRetransmittable = false
 	}
 	p.stopWaiting = nil
 	p.ackFrame = nil
@@ -250,23 +254,23 @@ func (p *packetPacker) composeNextPacket(
 	// STOP_WAITING and ACK will always fit
 	if p.ackFrame != nil { // ACKs need to go first, so that the sentPacketHandler will recognize them
 		payloadFrames = append(payloadFrames, p.ackFrame)
-		l := p.ackFrame.MinLength(p.version)
+		l := p.ackFrame.Length(p.version)
 		payloadLength += l
 	}
 	if p.stopWaiting != nil { // a STOP_WAITING will only be queued when using gQUIC
 		payloadFrames = append(payloadFrames, p.stopWaiting)
-		payloadLength += p.stopWaiting.MinLength(p.version)
+		payloadLength += p.stopWaiting.Length(p.version)
 	}
 
 	p.controlFrameMutex.Lock()
 	for len(p.controlFrames) > 0 {
 		frame := p.controlFrames[len(p.controlFrames)-1]
-		minLength := frame.MinLength(p.version)
-		if payloadLength+minLength > maxFrameSize {
+		length := frame.Length(p.version)
+		if payloadLength+length > maxFrameSize {
 			break
 		}
 		payloadFrames = append(payloadFrames, frame)
-		payloadLength += minLength
+		payloadLength += length
 		p.controlFrames = p.controlFrames[:len(p.controlFrames)-1]
 	}
 	p.controlFrameMutex.Unlock()
@@ -386,8 +390,9 @@ func (p *packetPacker) writeAndSealPacket(
 			buffer.Write(bytes.Repeat([]byte{0}, paddingLen))
 		}
 	}
-	if protocol.ByteCount(buffer.Len()+sealer.Overhead()) > protocol.MaxPacketSize {
-		return nil, errors.New("PacketPacker BUG: packet too large")
+
+	if size := protocol.ByteCount(buffer.Len() + sealer.Overhead()); size > protocol.MaxPacketSize {
+		return nil, fmt.Errorf("PacketPacker BUG: packet too large (%d bytes, allowed %d bytes)", size, protocol.MaxPacketSize)
 	}
 
 	raw = raw[0:buffer.Len()]
@@ -415,8 +420,4 @@ func (p *packetPacker) SetLeastUnacked(leastUnacked protocol.PacketNumber) {
 
 func (p *packetPacker) SetOmitConnectionID() {
 	p.omitConnectionID = true
-}
-
-func (p *packetPacker) MakeNextPacketRetransmittable() {
-	p.makeNextPacketRetransmittable = true
 }

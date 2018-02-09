@@ -76,7 +76,10 @@ func (h *receivedPacketHistory) ReceivedPacket(p protocol.PacketNumber) error {
 
 // DeleteBelow deletes all entries below (but not including) p
 func (h *receivedPacketHistory) DeleteBelow(p protocol.PacketNumber) {
-	h.lowestInReceivedPacketNumbers = utils.MaxPacketNumber(h.lowestInReceivedPacketNumbers, p)
+	if p <= h.lowestInReceivedPacketNumbers {
+		return
+	}
+	h.lowestInReceivedPacketNumbers = p
 
 	nextEl := h.ranges.Front()
 	for el := h.ranges.Front(); nextEl != nil; el = nextEl {
