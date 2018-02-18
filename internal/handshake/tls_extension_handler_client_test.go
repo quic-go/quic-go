@@ -74,13 +74,33 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 			}
 		})
 
+		It("blocks until the transport parameters are read", func() {
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				addEncryptedExtensionsWithParameters(parameters)
+				err := handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
+				Expect(err).ToNot(HaveOccurred())
+				close(done)
+			}()
+			Consistently(done).ShouldNot(BeClosed())
+			Expect(handler.GetPeerParams()).To(Receive())
+			Eventually(done).Should(BeClosed())
+		})
+
 		It("accepts the TransportParameters on the EncryptedExtensions message", func() {
-			addEncryptedExtensionsWithParameters(parameters)
-			err := handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
-			Expect(err).ToNot(HaveOccurred())
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				addEncryptedExtensionsWithParameters(parameters)
+				err := handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
+				Expect(err).ToNot(HaveOccurred())
+				close(done)
+			}()
 			var params TransportParameters
-			Expect(handler.GetPeerParams()).To(Receive(&params))
+			Eventually(handler.GetPeerParams()).Should(Receive(&params))
 			Expect(params.StreamFlowControlWindow).To(BeEquivalentTo(0x11223344))
+			Eventually(done).Should(BeClosed())
 		})
 
 		It("errors if the EncryptedExtensions message doesn't contain TransportParameters", func() {
@@ -131,6 +151,13 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 
 		Context("Version Negotiation", func() {
 			It("accepts a valid version negotiation", func() {
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					Eventually(handler.GetPeerParams()).Should(Receive())
+					close(done)
+				}()
+
 				handler.initialVersion = 13
 				handler.version = 37
 				handler.supportedVersions = []protocol.VersionNumber{13, 37, 42}
@@ -144,6 +171,7 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 				Expect(err).ToNot(HaveOccurred())
 				err = handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
 				Expect(err).ToNot(HaveOccurred())
+				Eventually(done).Should(BeClosed())
 			})
 
 			It("errors if the current version doesn't match negotiated_version", func() {
@@ -200,6 +228,13 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 			})
 
 			It("doesn't error if it would have picked a different version based on the supported version list, if no version negotiation was performed", func() {
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					Eventually(handler.GetPeerParams()).Should(Receive())
+					close(done)
+				}()
+
 				handler.version = 42
 				handler.initialVersion = 42 // version == initialVersion means no version negotiation was performed
 				handler.supportedVersions = []protocol.VersionNumber{43, 42, 41}
@@ -222,6 +257,7 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 				Expect(err).ToNot(HaveOccurred())
 				err = handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
 				Expect(err).ToNot(HaveOccurred())
+				Eventually(done).Should(BeClosed())
 			})
 		})
 	})
