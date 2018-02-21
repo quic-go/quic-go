@@ -36,7 +36,6 @@ type serverTLS struct {
 	config            *Config
 	supportedVersions []protocol.VersionNumber
 	mintConf          *mint.Config
-	cookieProtector   mint.CookieProtector
 	params            *handshake.TransportParameters
 	newMintConn       func(*handshake.CryptoStreamConn, protocol.VersionNumber) (handshake.MintTLS, <-chan handshake.TransportParameters, error)
 

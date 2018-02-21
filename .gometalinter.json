@@ -10,6 +10,7 @@
     "goimports",
     "ineffassign",
     "misspell",
+    "structcheck",
     "varcheck",
     "vet"
   ],

@@ -96,7 +96,6 @@ func (s *mockStream) close() {
 }
 
 type mockCookieProtector struct {
-	data      []byte
 	decodeErr error
 }
 
