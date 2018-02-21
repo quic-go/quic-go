@@ -8,8 +8,8 @@ addons:
 language: go
 
 go:
-  - 1.9.3
-  - 1.10rc1
+  - "1.9.4"
+  - "1.10"
 
 # first part of the GOARCH workaround
 # setting the GOARCH directly doesn't work, since the value will be overwritten later
