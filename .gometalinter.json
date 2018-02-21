@@ -8,6 +8,7 @@
   "Enable": [
     "deadcode",
     "ineffassign",
+    "varcheck",
     "vet"
   ],
   "Linters": {

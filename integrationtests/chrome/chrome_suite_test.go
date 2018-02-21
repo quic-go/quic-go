@@ -27,8 +27,6 @@ import (
 )
 
 const (
-	nChromeRetries = 8
-
 	dataLen     = 500 * 1024       // 500 KB
 	dataLongLen = 50 * 1024 * 1024 // 50 MB
 )
