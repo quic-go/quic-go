@@ -826,7 +826,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("does not detect packets as lost without ACKs", func() {
-			err := handler.SentPacket(&Packet{PacketNumber: 1, Length: 1})
+			err := handler.SentPacket(nonRetransmittablePacket(1))
 			Expect(err).NotTo(HaveOccurred())
 			err = handler.SentPacket(retransmittablePacket(2))
 			Expect(err).NotTo(HaveOccurred())
