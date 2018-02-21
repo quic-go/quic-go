@@ -347,6 +347,8 @@ func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
 		}
 	}
 
+	utils.Infof("Received a Version Negotiation Packet. Supported Versions: %s", hdr.SupportedVersions)
+
 	newVersion, ok := protocol.ChooseSupportedVersion(c.config.Versions, hdr.SupportedVersions)
 	if !ok {
 		return qerr.InvalidVersion
