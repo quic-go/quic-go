@@ -49,6 +49,19 @@ func (mr *MockStreamManagerMockRecorder) AcceptStream() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptStream", reflect.TypeOf((*MockStreamManager)(nil).AcceptStream))
 }
 
+// AcceptUniStream mocks base method
+func (m *MockStreamManager) AcceptUniStream() (ReceiveStream, error) {
+	ret := m.ctrl.Call(m, "AcceptUniStream")
+	ret0, _ := ret[0].(ReceiveStream)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AcceptUniStream indicates an expected call of AcceptUniStream
+func (mr *MockStreamManagerMockRecorder) AcceptUniStream() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptUniStream", reflect.TypeOf((*MockStreamManager)(nil).AcceptUniStream))
+}
+
 // CloseWithError mocks base method
 func (m *MockStreamManager) CloseWithError(arg0 error) {
 	m.ctrl.Call(m, "CloseWithError", arg0)
@@ -133,6 +146,32 @@ func (m *MockStreamManager) OpenStreamSync() (Stream, error) {
 // OpenStreamSync indicates an expected call of OpenStreamSync
 func (mr *MockStreamManagerMockRecorder) OpenStreamSync() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenStreamSync", reflect.TypeOf((*MockStreamManager)(nil).OpenStreamSync))
+}
+
+// OpenUniStream mocks base method
+func (m *MockStreamManager) OpenUniStream() (SendStream, error) {
+	ret := m.ctrl.Call(m, "OpenUniStream")
+	ret0, _ := ret[0].(SendStream)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// OpenUniStream indicates an expected call of OpenUniStream
+func (mr *MockStreamManagerMockRecorder) OpenUniStream() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenUniStream", reflect.TypeOf((*MockStreamManager)(nil).OpenUniStream))
+}
+
+// OpenUniStreamSync mocks base method
+func (m *MockStreamManager) OpenUniStreamSync() (SendStream, error) {
+	ret := m.ctrl.Call(m, "OpenUniStreamSync")
+	ret0, _ := ret[0].(SendStream)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// OpenUniStreamSync indicates an expected call of OpenUniStreamSync
+func (mr *MockStreamManagerMockRecorder) OpenUniStreamSync() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenUniStreamSync", reflect.TypeOf((*MockStreamManager)(nil).OpenUniStreamSync))
 }
 
 // UpdateLimits mocks base method

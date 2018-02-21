@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.8.0 (unreleased)
+
+- Add support for unidirectional streams (for IETF QUIC).
+
 ## v0.7.0 (2018-02-03)
 
 - The lower boundary for packets included in ACKs is now derived, and the value sent in STOP_WAITING frames is ignored.
