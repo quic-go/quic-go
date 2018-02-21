@@ -569,6 +569,17 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
+		It("doesn't inform the ReceivedPacketHandler about Retry packets", func() {
+			now := time.Now().Add(time.Hour)
+			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
+			sess.receivedPacketHandler = rph
+			// don't EXPECT any call to ReceivedPacket
+			hdr.PacketNumber = 5
+			hdr.Type = protocol.PacketTypeRetry
+			err := sess.handlePacketImpl(&receivedPacket{header: hdr, rcvTime: now})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
 		It("closes when handling a packet fails", func(done Done) {
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			testErr := errors.New("unpack error")

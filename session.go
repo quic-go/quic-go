@@ -536,9 +536,13 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 	// Only do this after decrypting, so we are sure the packet is not attacker-controlled
 	s.largestRcvdPacketNumber = utils.MaxPacketNumber(s.largestRcvdPacketNumber, hdr.PacketNumber)
 
-	isRetransmittable := ackhandler.HasRetransmittableFrames(packet.frames)
-	if err = s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, p.rcvTime, isRetransmittable); err != nil {
-		return err
+	// If this is a Retry packet, there's no need to send an ACK.
+	// The session will be closed and recreated as soon as the crypto setup processed the HRR.
+	if hdr.Type != protocol.PacketTypeRetry {
+		isRetransmittable := ackhandler.HasRetransmittableFrames(packet.frames)
+		if err := s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, p.rcvTime, isRetransmittable); err != nil {
+			return err
+		}
 	}
 
 	return s.handleFrames(packet.frames, packet.encryptionLevel)
