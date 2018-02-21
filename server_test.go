@@ -392,6 +392,7 @@ var _ = Describe("Server", func() {
 
 		It("ignores public resets for known connections", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
 			err = serv.handlePacket(nil, nil, wire.WritePublicReset(connID, 1, 1337))
@@ -402,6 +403,7 @@ var _ = Describe("Server", func() {
 
 		It("ignores invalid public resets for known connections", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
 			data := wire.WritePublicReset(connID, 1, 1337)

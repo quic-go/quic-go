@@ -92,6 +92,7 @@ var _ = Describe("Packing and unpacking Initial packets", func() {
 			Expect(err).ToNot(HaveOccurred())
 			payloadStartIndex := buf.Len()
 			aeadCl, err := crypto.NewNullAEAD(protocol.PerspectiveClient, connID, ver)
+			Expect(err).ToNot(HaveOccurred())
 			for _, f := range frames {
 				err := f.Write(buf, ver)
 				Expect(err).ToNot(HaveOccurred())

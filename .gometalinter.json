@@ -4,6 +4,7 @@
     "vendor"
   ],
   "Enable": [
+    "ineffassign",
     "vet"
   ],
   "Linters": {
