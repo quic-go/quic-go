@@ -245,7 +245,7 @@ func (c *client) listen() {
 	for {
 		var n int
 		var addr net.Addr
-		data := getPacketBuffer()
+		data := *getPacketBuffer()
 		data = data[:protocol.MaxReceivePacketSize]
 		// The packet size should not exceed protocol.MaxReceivePacketSize bytes
 		// If it does, we only read a truncated packet, which will then end up undecryptable

@@ -393,7 +393,7 @@ runLoop:
 			}
 			// This is a bit unclean, but works properly, since the packet always
 			// begins with the public header and we never copy it.
-			putPacketBuffer(p.header.Raw)
+			putPacketBuffer(&p.header.Raw)
 		case p := <-s.paramsChan:
 			s.processTransportParameters(&p)
 		case _, ok := <-handshakeEvent:
@@ -867,7 +867,7 @@ func (s *session) sendPacket() (bool, error) {
 }
 
 func (s *session) sendPackedPacket(packet *packedPacket) error {
-	defer putPacketBuffer(packet.raw)
+	defer putPacketBuffer(&packet.raw)
 	err := s.sentPacketHandler.SentPacket(&ackhandler.Packet{
 		PacketNumber:    packet.header.PacketNumber,
 		Frames:          packet.frames,
