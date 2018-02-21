@@ -438,7 +438,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			Expect(cs.forwardSecureAEAD).ToNot(BeNil())
 		})
 
-		It("reads the connection paramaters", func() {
+		It("reads the connection parameters", func() {
 			shloMap[TagICSL] = []byte{13, 0, 0, 0} // 13 seconds
 			params, err := cs.handleSHLOMessage(shloMap)
 			Expect(err).ToNot(HaveOccurred())

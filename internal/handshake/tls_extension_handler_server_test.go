@@ -151,7 +151,7 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("errros when a version negotiation was performed, although we already support the inital version", func() {
+			It("erros when a version negotiation was performed, although we already support the initial version", func() {
 				handler.supportedVersions = []protocol.VersionNumber{11, 12, 13}
 				handler.version = 13
 				body, err := syntax.Marshal(clientHelloTransportParameters{

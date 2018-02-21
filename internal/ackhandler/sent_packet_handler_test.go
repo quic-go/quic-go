@@ -510,7 +510,7 @@ var _ = Describe("SentPacketHandler", func() {
 			})
 		})
 
-		Context("determinining, which ACKs we have received an ACK for", func() {
+		Context("determining which ACKs we have received an ACK for", func() {
 			BeforeEach(func() {
 				morePackets := []*Packet{
 					&Packet{PacketNumber: 13, Frames: []wire.Frame{&wire.AckFrame{LowestAcked: 80, LargestAcked: 100}, &streamFrame}, Length: 1},

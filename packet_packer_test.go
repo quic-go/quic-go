@@ -118,7 +118,7 @@ var _ = Describe("Packet packer", func() {
 	Context("generating a packet header", func() {
 		const (
 			versionPublicHeader = protocol.Version39  // a QUIC version that uses the Public Header format
-			versionIETFHeader   = protocol.VersionTLS // a QUIC version taht uses the IETF Header format
+			versionIETFHeader   = protocol.VersionTLS // a QUIC version that uses the IETF Header format
 		)
 
 		Context("Public Header (for gQUIC)", func() {

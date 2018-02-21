@@ -373,7 +373,7 @@ var _ = Describe("Server", func() {
 			data = append(append(data, b.Bytes()...), 0x01)
 			err = serv.handlePacket(nil, nil, data)
 			Expect(err).ToNot(HaveOccurred())
-			// if we didn't ignore the packet, the server would try to send a version negotation packet, which would make the test panic because it doesn't have a udpConn
+			// if we didn't ignore the packet, the server would try to send a version negotiation packet, which would make the test panic because it doesn't have a udpConn
 			Expect(conn.dataWritten.Bytes()).To(BeEmpty())
 			// make sure the packet was *not* passed to session.handlePacket()
 			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))

@@ -1268,7 +1268,7 @@ var _ = Describe("Session", func() {
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
-		It("doesn't send a Public Reset if decrypting them suceeded during the timeout", func() {
+		It("doesn't send a Public Reset if decrypting them succeeded during the timeout", func() {
 			go func() {
 				defer GinkgoRecover()
 				sess.run()

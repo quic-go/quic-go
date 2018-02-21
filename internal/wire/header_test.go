@@ -15,7 +15,7 @@ import (
 var _ = Describe("Header", func() {
 	const (
 		versionPublicHeader = protocol.Version39  // a QUIC version that uses the Public Header format
-		versionIETFHeader   = protocol.VersionTLS // a QUIC version taht uses the IETF Header format
+		versionIETFHeader   = protocol.VersionTLS // a QUIC version that uses the IETF Header format
 	)
 
 	Context("parsing", func() {

@@ -48,7 +48,7 @@ func ParseConnectionCloseFrame(r *bytes.Reader, version protocol.VersionNumber) 
 		reasonPhraseLen = uint64(length)
 	}
 
-	// shortcut to prevent the unneccessary allocation of dataLen bytes
+	// shortcut to prevent the unnecessary allocation of dataLen bytes
 	// if the dataLen is larger than the remaining length of the packet
 	// reading the whole reason phrase would result in EOF when attempting to READ
 	if int(reasonPhraseLen) > r.Len() {

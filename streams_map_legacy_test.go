@@ -116,7 +116,7 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 						Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 					})
 
-					It("errors when too many streams are opened implicitely", func() {
+					It("errors when too many streams are opened implicitly", func() {
 						_, err := m.getOrOpenStream(protocol.StreamID(m.maxIncomingStreams*2 + 3))
 						Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 					})

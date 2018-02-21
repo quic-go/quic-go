@@ -249,7 +249,7 @@ var _ = Describe("Stream Framer", func() {
 			framer.PopStreamFrames(protocol.MinStreamFrameSize)
 		})
 
-		It("does not pop frames smaller than the mimimum size", func() {
+		It("does not pop frames smaller than the minimum size", func() {
 			// don't expect a call to PopStreamFrame()
 			framer.PopStreamFrames(protocol.MinStreamFrameSize - 1)
 		})

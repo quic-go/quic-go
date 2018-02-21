@@ -84,7 +84,7 @@ func (s *serverTLS) HandleInitial(remoteAddr net.Addr, hdr *wire.Header, data []
 	utils.Debugf("Received a Packet. Handling it statelessly.")
 	sess, err := s.handleInitialImpl(remoteAddr, hdr, data)
 	if err != nil {
-		utils.Errorf("Error occured handling initial packet: %s", err)
+		utils.Errorf("Error occurred handling initial packet: %s", err)
 		return
 	}
 	if sess == nil { // a stateless reset was done
