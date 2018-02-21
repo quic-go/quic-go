@@ -18,6 +18,7 @@ env:
   global:
     - TIMESCALE_FACTOR=20
   matrix:
+    - TRAVIS_GOARCH=amd64 TESTMODE=lint
     - TRAVIS_GOARCH=amd64 TESTMODE=unit
     - TRAVIS_GOARCH=amd64 TESTMODE=integration
     - TRAVIS_GOARCH=386 TESTMODE=unit

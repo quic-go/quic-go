@@ -1,0 +1,12 @@
+{
+  "DisableAll": true,
+  "Exclude": [
+    "vendor"
+  ],
+  "Enable": [
+    "vet"
+  ],
+  "Linters": {
+    "vet": "go tool vet -printfuncs=Infof,Debugf,Warningf,Errorf:PATH:LINE:MESSAGE"
+  }
+}

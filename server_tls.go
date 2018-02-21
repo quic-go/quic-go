@@ -148,7 +148,7 @@ func (s *serverTLS) handleInitialImpl(remoteAddr net.Addr, hdr *wire.Header, dat
 	sess, err := s.handleUnpackedInitial(remoteAddr, hdr, frame, aead)
 	if err != nil {
 		if ccerr := s.sendConnectionClose(remoteAddr, hdr, aead, err); ccerr != nil {
-			utils.Debugf("Error sending CONNECTION_CLOSE: ", ccerr)
+			utils.Debugf("Error sending CONNECTION_CLOSE: %s", ccerr)
 		}
 		return nil, err
 	}
