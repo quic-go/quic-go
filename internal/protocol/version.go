@@ -47,7 +47,7 @@ func (vn VersionNumber) String() string {
 		if vn.isGQUIC() {
 			return fmt.Sprintf("gQUIC %d", vn.toGQUICVersion())
 		}
-		return fmt.Sprintf("%d", vn)
+		return fmt.Sprintf("%#x", uint32(vn))
 	}
 }
 

@@ -35,6 +35,7 @@ var _ = Describe("Version", func() {
 		Expect(VersionNumber(0x51303133).String()).To(Equal("gQUIC 13"))
 		Expect(VersionNumber(0x51303235).String()).To(Equal("gQUIC 25"))
 		Expect(VersionNumber(0x51303438).String()).To(Equal("gQUIC 48"))
+		Expect(VersionNumber(0x01234567).String()).To(Equal("0x1234567"))
 	})
 
 	It("has the right representation for the H2 Alt-Svc tag", func() {
