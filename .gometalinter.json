@@ -1,9 +1,12 @@
 {
   "DisableAll": true,
   "Exclude": [
-    "vendor"
+    "vendor",
+    "streams_map_incoming_generic.go",
+    "streams_map_outgoing_generic.go"
   ],
   "Enable": [
+    "deadcode",
     "ineffassign",
     "vet"
   ],
