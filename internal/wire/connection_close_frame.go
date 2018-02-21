@@ -62,7 +62,7 @@ func ParseConnectionCloseFrame(r *bytes.Reader, version protocol.VersionNumber) 
 	}
 
 	return &ConnectionCloseFrame{
-		ErrorCode:    qerr.ErrorCode(errorCode),
+		ErrorCode:    errorCode,
 		ReasonPhrase: string(reasonPhrase),
 	}, nil
 }
