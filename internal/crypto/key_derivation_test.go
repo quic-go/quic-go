@@ -46,16 +46,6 @@ var _ = Describe("Key Derivation", func() {
 		Expect(data).To(Equal([]byte("foobar")))
 	})
 
-	It("fails when different hash functions are used", func() {
-		clientAEAD, err := DeriveAESKeys(&mockTLSExporter{hash: crypto.SHA256}, protocol.PerspectiveClient)
-		Expect(err).ToNot(HaveOccurred())
-		serverAEAD, err := DeriveAESKeys(&mockTLSExporter{hash: crypto.SHA512}, protocol.PerspectiveServer)
-		Expect(err).ToNot(HaveOccurred())
-		ciphertext := clientAEAD.Seal(nil, []byte("foobar"), 0, []byte("aad"))
-		_, err = serverAEAD.Open(nil, ciphertext, 0, []byte("aad"))
-		Expect(err).To(MatchError("cipher: message authentication failed"))
-	})
-
 	It("fails when computing the exporter fails", func() {
 		testErr := errors.New("test error")
 		_, err := DeriveAESKeys(&mockTLSExporter{hash: crypto.SHA256, computerError: testErr}, protocol.PerspectiveClient)
