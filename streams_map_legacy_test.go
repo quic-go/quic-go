@@ -72,6 +72,7 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 				It("gets existing streams", func() {
 					s, err := m.getOrOpenStream(5)
 					Expect(err).NotTo(HaveOccurred())
+					Expect(s.StreamID()).To(Equal(protocol.StreamID(5)))
 					numStreams := m.numIncomingStreams
 					s, err = m.getOrOpenStream(5)
 					Expect(err).NotTo(HaveOccurred())

@@ -589,8 +589,8 @@ var _ = Describe("Server", func() {
 		conn.dataToRead <- b.Bytes()
 		conn.dataReadFrom = udpAddr
 		ln, err := Listen(conn, testdata.GetTLSConfig(), config)
-		defer ln.Close()
 		Expect(err).ToNot(HaveOccurred())
+		defer ln.Close()
 		Consistently(func() int { return conn.dataWritten.Len() }).Should(BeZero())
 	})
 

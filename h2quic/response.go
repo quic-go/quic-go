@@ -33,16 +33,7 @@ func responseFromHeaders(f *http2.MetaHeadersFrame) (*http.Response, error) {
 		return nil, errors.New("malformed non-numeric status pseudo header")
 	}
 
-	if statusCode == 100 {
-		// TODO: handle this
-
-		// traceGot100Continue(cs.trace)
-		// if cs.on100 != nil {
-		// 	cs.on100() // forces any write delay timer to fire
-		// }
-		// cs.pastHeaders = false // do it all again
-		// return nil, nil
-	}
+	// TODO: handle statusCode == 100
 
 	header := make(http.Header)
 	res := &http.Response{
@@ -78,13 +69,7 @@ func setLength(res *http.Response, isHead, streamEnded bool) *http.Response {
 		if clens := res.Header["Content-Length"]; len(clens) == 1 {
 			if clen64, err := strconv.ParseInt(clens[0], 10, 64); err == nil {
 				res.ContentLength = clen64
-			} else {
-				// TODO: care? unlike http/1, it won't mess up our framing, so it's
-				// more safe smuggling-wise to ignore.
 			}
-		} else if len(clens) > 1 {
-			// TODO: care? unlike http/1, it won't mess up our framing, so it's
-			// more safe smuggling-wise to ignore.
 		}
 	}
 	return res

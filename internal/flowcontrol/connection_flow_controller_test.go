@@ -110,7 +110,6 @@ var _ = Describe("Connection Flow controller", func() {
 		)
 
 		BeforeEach(func() {
-			controller.bytesRead = receiveWindowSize - receiveWindowSize
 			controller.receiveWindow = receiveWindow
 			controller.receiveWindowSize = receiveWindowSize
 			oldWindowSize = controller.receiveWindowSize
