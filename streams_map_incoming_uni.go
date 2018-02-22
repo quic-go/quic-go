@@ -85,6 +85,9 @@ func (m *incomingUniStreamsMap) GetOrOpenStream(id protocol.StreamID) (receiveSt
 	m.mutex.RUnlock()
 
 	m.mutex.Lock()
+	// no need to check the two error conditions from above again
+	// * maxStream can only increase, so if the id was valid before, it definitely is valid now
+	// * highestStream is only modified by this function
 	var start protocol.StreamID
 	if m.highestStream == 0 {
 		start = m.nextStream
