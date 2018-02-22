@@ -100,7 +100,7 @@ var _ = Describe("Packet packer", func() {
 		b := &bytes.Buffer{}
 		f.Write(b, packer.version)
 		Expect(p.frames).To(Equal([]wire.Frame{f}))
-		Expect(p.raw).To(ContainSubstring(string(b.Bytes())))
+		Expect(p.raw).To(ContainSubstring(b.String()))
 	})
 
 	It("stores the encryption level a packet was sealed with", func() {

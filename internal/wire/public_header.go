@@ -236,7 +236,7 @@ func (h *Header) logPublicHeader() {
 	}
 	ver := "(unset)"
 	if h.Version != 0 {
-		ver = fmt.Sprintf("%s", h.Version)
+		ver = h.Version.String()
 	}
 	utils.Debugf("   Public Header{ConnectionID: %s, PacketNumber: %#x, PacketNumberLen: %d, Version: %s, DiversificationNonce: %#v}", connID, h.PacketNumber, h.PacketNumberLen, ver, h.DiversificationNonce)
 }

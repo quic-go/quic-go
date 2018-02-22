@@ -9,11 +9,10 @@
     "deadcode",
     "goimports",
     "ineffassign",
+    "megacheck",
     "misspell",
-    "staticcheck",
     "structcheck",
     "unconvert",
-    "unused",
     "varcheck",
     "vet"
   ],

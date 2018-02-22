@@ -243,14 +243,14 @@ var _ = Describe("Header", func() {
 			(&Header{
 				IsLongHeader: true,
 			}).Log()
-			Expect(string(buf.Bytes())).To(ContainSubstring("Long Header"))
+			Expect(buf.String()).To(ContainSubstring("Long Header"))
 		})
 
 		It("logs a Public Header", func() {
 			(&Header{
 				isPublicHeader: true,
 			}).Log()
-			Expect(string(buf.Bytes())).To(ContainSubstring("Public Header"))
+			Expect(buf.String()).To(ContainSubstring("Public Header"))
 		})
 	})
 })
