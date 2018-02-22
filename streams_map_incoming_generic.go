@@ -67,18 +67,20 @@ func (m *incomingItemsMap) AcceptStream() (item, error) {
 }
 
 func (m *incomingItemsMap) GetOrOpenStream(id protocol.StreamID) (item, error) {
+	m.mutex.RLock()
 	if id > m.maxStream {
+		m.mutex.RUnlock()
 		return nil, fmt.Errorf("peer tried to open stream %d (current limit: %d)", id, m.maxStream)
 	}
 	// if the id is smaller than the highest we accepted
 	// * this stream exists in the map, and we can return it, or
 	// * this stream was already closed, then we can return the nil
 	if id <= m.highestStream {
-		m.mutex.RLock()
 		s := m.streams[id]
 		m.mutex.RUnlock()
 		return s, nil
 	}
+	m.mutex.RUnlock()
 
 	m.mutex.Lock()
 	var start protocol.StreamID
