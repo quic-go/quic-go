@@ -3,7 +3,9 @@ package quicproxy
 import (
 	"bytes"
 	"net"
+	"runtime/pprof"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -47,9 +49,16 @@ var _ = Describe("QUIC Proxy", func() {
 		})
 
 		It("stops the UDPProxy", func() {
+			isProxyRunning := func() bool {
+				var b bytes.Buffer
+				pprof.Lookup("goroutine").WriteTo(&b, 1)
+				return strings.Contains(b.String(), "proxy.(*QuicProxy).runProxy")
+			}
+
 			proxy, err := NewQuicProxy("localhost:0", protocol.VersionWhatever, nil)
 			Expect(err).ToNot(HaveOccurred())
 			port := proxy.LocalPort()
+			Expect(isProxyRunning()).To(BeTrue())
 			err = proxy.Close()
 			Expect(err).ToNot(HaveOccurred())
 
@@ -65,6 +74,34 @@ var _ = Describe("QUIC Proxy", func() {
 				ln.Close()
 				return nil
 			}).ShouldNot(HaveOccurred())
+			Eventually(isProxyRunning).Should(BeFalse())
+		})
+
+		It("stops listening for proxied connections", func() {
+			isConnRunning := func() bool {
+				var b bytes.Buffer
+				pprof.Lookup("goroutine").WriteTo(&b, 1)
+				return strings.Contains(b.String(), "proxy.(*QuicProxy).runConnection")
+			}
+
+			serverAddr, err := net.ResolveUDPAddr("udp", "localhost:0")
+			Expect(err).ToNot(HaveOccurred())
+			serverConn, err := net.ListenUDP("udp", serverAddr)
+			Expect(err).ToNot(HaveOccurred())
+			defer serverConn.Close()
+
+			proxy, err := NewQuicProxy("localhost:0", protocol.VersionWhatever, &Opts{RemoteAddr: serverConn.LocalAddr().String()})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(isConnRunning()).To(BeFalse())
+
+			// check that the proxy port is not in use anymore
+			conn, err := net.DialUDP("udp", nil, proxy.LocalAddr().(*net.UDPAddr))
+			Expect(err).ToNot(HaveOccurred())
+			_, err = conn.Write(makePacket(1, []byte("foobar")))
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(isConnRunning).Should(BeTrue())
+			Expect(proxy.Close()).To(Succeed())
+			Eventually(isConnRunning).Should(BeFalse())
 		})
 
 		It("has the correct LocalAddr and LocalPort", func() {
