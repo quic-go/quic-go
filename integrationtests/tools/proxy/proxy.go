@@ -137,6 +137,13 @@ func NewQuicProxy(local string, version protocol.VersionNumber, opts *Opts) (*Qu
 
 // Close stops the UDP Proxy
 func (p *QuicProxy) Close() error {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	for _, c := range p.clientDict {
+		if err := c.ServerConn.Close(); err != nil {
+			return err
+		}
+	}
 	return p.conn.Close()
 }
 
