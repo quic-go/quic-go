@@ -174,6 +174,15 @@ type Config struct {
 	// MaxReceiveConnectionFlowControlWindow is the connection-level flow control window for receiving data.
 	// If this value is zero, it will default to 1.5 MB for the server and 15 MB for the client.
 	MaxReceiveConnectionFlowControlWindow uint64
+	// MaxIncomingStreams is the maximum number of concurrent bidirectional streams that a peer is allowed to open.
+	// If not set, it will default to 100.
+	// If set to a negative value, it doesn't allow any bidirectional streams.
+	MaxIncomingStreams int
+	// MaxIncomingUniStreams is the maximum number of concurrent unidirectional streams that a peer is allowed to open.
+	// This value doesn't have any effect in Google QUIC.
+	// If not set, it will default to 100.
+	// If set to a negative value, it doesn't allow any unidirectional streams.
+	MaxIncomingUniStreams int
 	// KeepAlive defines whether this peer will periodically send PING frames to keep the connection alive.
 	KeepAlive bool
 }

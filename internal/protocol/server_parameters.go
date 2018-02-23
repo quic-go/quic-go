@@ -59,18 +59,17 @@ const ConnectionFlowControlMultiplier = 1.5
 // WindowUpdateThreshold is the fraction of the receive window that has to be consumed before an higher offset is advertised to the client
 const WindowUpdateThreshold = 0.25
 
-// MaxIncomingStreams is the maximum number of streams that a peer may open
-const MaxIncomingStreams = 100
+// DefaultMaxIncomingStreams is the maximum number of streams that a peer may open
+const DefaultMaxIncomingStreams = 100
+
+// DefaultMaxIncomingUniStreams is the maximum number of unidirectional streams that a peer may open
+const DefaultMaxIncomingUniStreams = 100
 
 // MaxStreamsMultiplier is the slack the client is allowed for the maximum number of streams per connection, needed e.g. when packets are out of order or dropped. The minimum of this procentual increase and the absolute increment specified by MaxStreamsMinimumIncrement is used.
 const MaxStreamsMultiplier = 1.1
 
 // MaxStreamsMinimumIncrement is the slack the client is allowed for the maximum number of streams per connection, needed e.g. when packets are out of order or dropped. The minimum of this absolute increment and the procentual increase specified by MaxStreamsMultiplier is used.
 const MaxStreamsMinimumIncrement = 10
-
-// MaxNewStreamIDDelta is the maximum difference between and a newly opened Stream and the highest StreamID that a client has ever opened
-// note that the number of streams is half this value, since the client can only open streams with open StreamID
-const MaxNewStreamIDDelta = 4 * MaxIncomingStreams
 
 // MaxSessionUnprocessedPackets is the max number of packets stored in each session that are not yet processed.
 const MaxSessionUnprocessedPackets = DefaultMaxCongestionWindow

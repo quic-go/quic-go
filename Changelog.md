@@ -3,6 +3,7 @@
 ## v0.8.0 (unreleased)
 
 - Add support for unidirectional streams (for IETF QUIC).
+- Add a `quic.Config` option for the maximum number of incoming streams.
 
 ## v0.7.0 (2018-02-03)
 
