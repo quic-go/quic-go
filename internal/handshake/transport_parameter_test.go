@@ -110,6 +110,18 @@ var _ = Describe("Transport Parameters", func() {
 			return list
 		}
 
+		It("has a string representation", func() {
+			p := &TransportParameters{
+				StreamFlowControlWindow:     0x1234,
+				ConnectionFlowControlWindow: 0x4321,
+				MaxBidiStreamID:             1337,
+				MaxUniStreamID:              7331,
+				OmitConnectionID:            true,
+				IdleTimeout:                 42 * time.Second,
+			}
+			Expect(p.String()).To(Equal("&handshake.TransportParameters{StreamFlowControlWindow: 0x1234, ConnectionFlowControlWindow: 0x4321, MaxBidiStreamID: 1337, MaxUniStreamID: 7331, OmitConnectionID: true, IdleTimeout: 42s}"))
+		})
+
 		Context("parsing", func() {
 			var parameters map[transportParameterID][]byte
 

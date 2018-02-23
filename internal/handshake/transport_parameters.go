@@ -174,3 +174,9 @@ func (p *TransportParameters) getTransportParameters() []transportParameter {
 	}
 	return params
 }
+
+// String returns a string representation, intended for logging.
+// It should only used for IETF QUIC.
+func (p *TransportParameters) String() string {
+	return fmt.Sprintf("&handshake.TransportParameters{StreamFlowControlWindow: %#x, ConnectionFlowControlWindow: %#x, MaxBidiStreamID: %d, MaxUniStreamID: %d, OmitConnectionID: %t, IdleTimeout: %s}", p.StreamFlowControlWindow, p.ConnectionFlowControlWindow, p.MaxBidiStreamID, p.MaxUniStreamID, p.OmitConnectionID, p.IdleTimeout)
+}

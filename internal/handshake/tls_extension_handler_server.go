@@ -10,6 +10,7 @@ import (
 	"github.com/bifurcation/mint"
 	"github.com/bifurcation/mint/syntax"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 type extensionHandlerServer struct {
@@ -55,6 +56,7 @@ func (h *extensionHandlerServer) Send(hType mint.HandshakeType, el *mint.Extensi
 	for i, v := range supportedVersions {
 		versions[i] = uint32(v)
 	}
+	utils.Debugf("Sending Transport Parameters: %s", h.ourParams)
 	data, err := syntax.Marshal(encryptedExtensionsTransportParameters{
 		NegotiatedVersion: uint32(h.version),
 		SupportedVersions: versions,
@@ -106,6 +108,7 @@ func (h *extensionHandlerServer) Receive(hType mint.HandshakeType, el *mint.Exte
 	if err != nil {
 		return err
 	}
+	utils.Debugf("Received Transport Parameters: %s", params)
 	h.paramsChan <- *params
 	return nil
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/bifurcation/mint"
 	"github.com/bifurcation/mint/syntax"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 type extensionHandlerClient struct {
@@ -48,6 +49,7 @@ func (h *extensionHandlerClient) Send(hType mint.HandshakeType, el *mint.Extensi
 		return nil
 	}
 
+	utils.Debugf("Sending Transport Parameters: %s", h.ourParams)
 	data, err := syntax.Marshal(clientHelloTransportParameters{
 		InitialVersion: uint32(h.initialVersion),
 		Parameters:     h.ourParams.getTransportParameters(),
@@ -120,6 +122,7 @@ func (h *extensionHandlerClient) Receive(hType mint.HandshakeType, el *mint.Exte
 	if err != nil {
 		return err
 	}
+	utils.Debugf("Received Transport Parameters: %s", params)
 	h.paramsChan <- *params
 	return nil
 }
