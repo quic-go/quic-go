@@ -108,6 +108,10 @@ func (p *packetPacker) PackHandshakeRetransmission(packet *ackhandler.Packet) (*
 	if err != nil {
 		return nil, err
 	}
+	// make sure that the retransmission for an Initial packet is sent as an Initial packet
+	if packet.PacketType == protocol.PacketTypeInitial {
+		p.hasSentPacket = false
+	}
 	header := p.getHeader(packet.EncryptionLevel)
 	var frames []wire.Frame
 	if !p.version.UsesIETFFrameFormat() { // for gQUIC: pack a STOP_WAITING first

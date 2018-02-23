@@ -11,6 +11,7 @@ import (
 // +gen linkedlist
 type Packet struct {
 	PacketNumber    protocol.PacketNumber
+	PacketType      protocol.PacketType
 	Frames          []wire.Frame
 	Length          protocol.ByteCount
 	EncryptionLevel protocol.EncryptionLevel

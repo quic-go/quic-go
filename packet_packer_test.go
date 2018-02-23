@@ -703,6 +703,21 @@ var _ = Describe("Packet packer", func() {
 			Expect(sf.DataLenPresent).To(BeTrue())
 		})
 
+		It("packs a retransmission for an Initial packet", func() {
+			packer.version = versionIETFFrames
+			packer.perspective = protocol.PerspectiveClient
+			packet := &ackhandler.Packet{
+				PacketType:      protocol.PacketTypeInitial,
+				EncryptionLevel: protocol.EncryptionUnencrypted,
+				Frames:          []wire.Frame{sf},
+			}
+			p, err := packer.PackHandshakeRetransmission(packet)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p.frames).To(Equal([]wire.Frame{sf}))
+			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
+			Expect(p.header.Type).To(Equal(protocol.PacketTypeInitial))
+		})
+
 		It("refuses to retransmit packets that were sent with forward-secure encryption", func() {
 			p := &ackhandler.Packet{
 				EncryptionLevel: protocol.EncryptionForwardSecure,
