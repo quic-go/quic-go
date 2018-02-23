@@ -83,8 +83,8 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(750)))
 			Expect(frame.HasMissingRanges()).To(BeTrue())
 			Expect(frame.AckRanges).To(Equal([]AckRange{
-				AckRange{Last: 1000, First: 900},
-				AckRange{Last: 800, First: 750},
+				{Last: 1000, First: 900},
+				{Last: 800, First: 750},
 			}))
 			Expect(b.Len()).To(BeZero())
 		})
@@ -106,9 +106,9 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(94)))
 			Expect(frame.HasMissingRanges()).To(BeTrue())
 			Expect(frame.AckRanges).To(Equal([]AckRange{
-				AckRange{Last: 100, First: 100},
-				AckRange{Last: 98, First: 98},
-				AckRange{Last: 95, First: 94},
+				{Last: 100, First: 100},
+				{Last: 98, First: 98},
+				{Last: 95, First: 94},
 			}))
 			Expect(b.Len()).To(BeZero())
 		})
