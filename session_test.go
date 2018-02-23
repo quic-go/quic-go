@@ -483,7 +483,7 @@ var _ = Describe("Session", func() {
 			buf := &bytes.Buffer{}
 			err := (&wire.ConnectionCloseFrame{ErrorCode: qerr.PeerGoingAway}).Write(buf, sess.version)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(mconn.written).To(Receive(ContainSubstring(string(buf.Bytes()))))
+			Expect(mconn.written).To(Receive(ContainSubstring(buf.String())))
 			Expect(sess.Context().Done()).To(BeClosed())
 		})
 
@@ -1268,7 +1268,7 @@ var _ = Describe("Session", func() {
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
-		It("doesn't send a Public Reset if decrypting them suceeded during the timeout", func() {
+		It("doesn't send a Public Reset if decrypting them succeeded during the timeout", func() {
 			go func() {
 				defer GinkgoRecover()
 				sess.run()

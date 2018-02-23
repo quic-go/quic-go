@@ -373,7 +373,7 @@ var _ = Describe("Server", func() {
 			data = append(append(data, b.Bytes()...), 0x01)
 			err = serv.handlePacket(nil, nil, data)
 			Expect(err).ToNot(HaveOccurred())
-			// if we didn't ignore the packet, the server would try to send a version negotation packet, which would make the test panic because it doesn't have a udpConn
+			// if we didn't ignore the packet, the server would try to send a version negotiation packet, which would make the test panic because it doesn't have a udpConn
 			Expect(conn.dataWritten.Bytes()).To(BeEmpty())
 			// make sure the packet was *not* passed to session.handlePacket()
 			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
@@ -392,6 +392,7 @@ var _ = Describe("Server", func() {
 
 		It("ignores public resets for known connections", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
 			err = serv.handlePacket(nil, nil, wire.WritePublicReset(connID, 1, 1337))
@@ -402,6 +403,7 @@ var _ = Describe("Server", func() {
 
 		It("ignores invalid public resets for known connections", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
 			data := wire.WritePublicReset(connID, 1, 1337)
@@ -587,8 +589,8 @@ var _ = Describe("Server", func() {
 		conn.dataToRead <- b.Bytes()
 		conn.dataReadFrom = udpAddr
 		ln, err := Listen(conn, testdata.GetTLSConfig(), config)
-		defer ln.Close()
 		Expect(err).ToNot(HaveOccurred())
+		defer ln.Close()
 		Consistently(func() int { return conn.dataWritten.Len() }).Should(BeZero())
 	})
 

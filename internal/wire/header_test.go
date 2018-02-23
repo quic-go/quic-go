@@ -15,7 +15,7 @@ import (
 var _ = Describe("Header", func() {
 	const (
 		versionPublicHeader = protocol.Version39  // a QUIC version that uses the Public Header format
-		versionIETFHeader   = protocol.VersionTLS // a QUIC version taht uses the IETF Header format
+		versionIETFHeader   = protocol.VersionTLS // a QUIC version that uses the IETF Header format
 	)
 
 	Context("parsing", func() {
@@ -243,14 +243,14 @@ var _ = Describe("Header", func() {
 			(&Header{
 				IsLongHeader: true,
 			}).Log()
-			Expect(string(buf.Bytes())).To(ContainSubstring("Long Header"))
+			Expect(buf.String()).To(ContainSubstring("Long Header"))
 		})
 
 		It("logs a Public Header", func() {
 			(&Header{
 				isPublicHeader: true,
 			}).Log()
-			Expect(string(buf.Bytes())).To(ContainSubstring("Public Header"))
+			Expect(buf.String()).To(ContainSubstring("Public Header"))
 		})
 	})
 })

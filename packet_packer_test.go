@@ -6,7 +6,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
-	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -57,7 +56,6 @@ var _ = Describe("Packet packer", func() {
 		packer           *packetPacker
 		publicHeaderLen  protocol.ByteCount
 		maxFrameSize     protocol.ByteCount
-		cryptoStream     cryptoStreamI
 		mockStreamFramer *MockStreamFrameSource
 	)
 
@@ -65,7 +63,6 @@ var _ = Describe("Packet packer", func() {
 		version := versionGQUICFrames
 		mockSender := NewMockStreamSender(mockCtrl)
 		mockSender.EXPECT().onHasStreamData(gomock.Any()).AnyTimes()
-		cryptoStream = newCryptoStream(mockSender, flowcontrol.NewStreamFlowController(version.CryptoStreamID(), false, flowcontrol.NewConnectionFlowController(1000, 1000, nil), 1000, 1000, 1000, nil), version)
 		mockStreamFramer = NewMockStreamFrameSource(mockCtrl)
 
 		packer = newPacketPacker(
@@ -103,7 +100,7 @@ var _ = Describe("Packet packer", func() {
 		b := &bytes.Buffer{}
 		f.Write(b, packer.version)
 		Expect(p.frames).To(Equal([]wire.Frame{f}))
-		Expect(p.raw).To(ContainSubstring(string(b.Bytes())))
+		Expect(p.raw).To(ContainSubstring(b.String()))
 	})
 
 	It("stores the encryption level a packet was sealed with", func() {
@@ -121,7 +118,7 @@ var _ = Describe("Packet packer", func() {
 	Context("generating a packet header", func() {
 		const (
 			versionPublicHeader = protocol.Version39  // a QUIC version that uses the Public Header format
-			versionIETFHeader   = protocol.VersionTLS // a QUIC version taht uses the IETF Header format
+			versionIETFHeader   = protocol.VersionTLS // a QUIC version that uses the IETF Header format
 		)
 
 		Context("Public Header (for gQUIC)", func() {

@@ -242,7 +242,7 @@ var _ = Describe("Transport Parameters", func() {
 				Expect(values).To(HaveKeyWithValue(maxPacketSizeParameterID, []byte{0x5, 0xac})) // 1452 = 0x5ac
 			})
 
-			It("request ommision of the connection ID", func() {
+			It("request ommission of the connection ID", func() {
 				params.OmitConnectionID = true
 				values := paramsListToMap(params.getTransportParameters())
 				Expect(values).To(HaveKeyWithValue(omitConnectionIDParameterID, []byte{}))

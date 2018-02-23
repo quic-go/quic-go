@@ -40,7 +40,7 @@ var _ = Describe("IETF draft Header", func() {
 				Expect(err).To(MatchError(qerr.InvalidVersionNegotiationPacket))
 			})
 
-			It("errors if the version list is emtpy", func() {
+			It("errors if the version list is empty", func() {
 				versions := []protocol.VersionNumber{0x22334455}
 				data := ComposeVersionNegotiation(0x1234567890, versions)
 				// remove 8 bytes (two versions), since ComposeVersionNegotiation also added a reserved version number
@@ -144,7 +144,7 @@ var _ = Describe("IETF draft Header", func() {
 				Expect(b.Len()).To(BeZero())
 			})
 
-			It("reads a header with ommited connection ID", func() {
+			It("reads a header with omitted connection ID", func() {
 				data := []byte{
 					0x1,
 					0x21, // packet number
@@ -393,7 +393,7 @@ var _ = Describe("IETF draft Header", func() {
 				ConnectionID: 0xdeadbeef,
 				Version:      0xfeed,
 			}).logHeader()
-			Expect(string(buf.Bytes())).To(ContainSubstring("Long Header{Type: Handshake, ConnectionID: 0xdeadbeef, PacketNumber: 0x1337, Version: 0xfeed}"))
+			Expect(buf.String()).To(ContainSubstring("Long Header{Type: Handshake, ConnectionID: 0xdeadbeef, PacketNumber: 0x1337, Version: 0xfeed}"))
 		})
 
 		It("logs Short Headers containing a connection ID", func() {
@@ -403,7 +403,7 @@ var _ = Describe("IETF draft Header", func() {
 				PacketNumberLen: 4,
 				ConnectionID:    0xdeadbeef,
 			}).logHeader()
-			Expect(string(buf.Bytes())).To(ContainSubstring("Short Header{ConnectionID: 0xdeadbeef, PacketNumber: 0x1337, PacketNumberLen: 4, KeyPhase: 1}"))
+			Expect(buf.String()).To(ContainSubstring("Short Header{ConnectionID: 0xdeadbeef, PacketNumber: 0x1337, PacketNumberLen: 4, KeyPhase: 1}"))
 		})
 
 		It("logs Short Headers with omitted connection ID", func() {
@@ -412,7 +412,7 @@ var _ = Describe("IETF draft Header", func() {
 				PacketNumberLen:  1,
 				OmitConnectionID: true,
 			}).logHeader()
-			Expect(string(buf.Bytes())).To(ContainSubstring("Short Header{ConnectionID: (omitted), PacketNumber: 0x12, PacketNumberLen: 1, KeyPhase: 0}"))
+			Expect(buf.String()).To(ContainSubstring("Short Header{ConnectionID: (omitted), PacketNumber: 0x12, PacketNumberLen: 1, KeyPhase: 0}"))
 		})
 	})
 })

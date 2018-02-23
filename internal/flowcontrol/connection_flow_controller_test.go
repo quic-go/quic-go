@@ -97,7 +97,7 @@ var _ = Describe("Connection Flow controller", func() {
 			Expect(newlyBlocked).To(BeFalse())
 			controller.UpdateSendWindow(150)
 			controller.AddBytesSent(150)
-			newlyBlocked, offset = controller.IsNewlyBlocked()
+			newlyBlocked, _ = controller.IsNewlyBlocked()
 			Expect(newlyBlocked).To(BeTrue())
 		})
 	})
@@ -110,7 +110,6 @@ var _ = Describe("Connection Flow controller", func() {
 		)
 
 		BeforeEach(func() {
-			controller.bytesRead = receiveWindowSize - receiveWindowSize
 			controller.receiveWindow = receiveWindow
 			controller.receiveWindowSize = receiveWindowSize
 			oldWindowSize = controller.receiveWindowSize

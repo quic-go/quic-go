@@ -189,7 +189,7 @@ var newClientSession = func(
 	tlsConf *tls.Config,
 	config *Config,
 	initialVersion protocol.VersionNumber,
-	negotiatedVersions []protocol.VersionNumber, // needed for validation of the GQUIC version negotiaton
+	negotiatedVersions []protocol.VersionNumber, // needed for validation of the GQUIC version negotiation
 ) (packetHandler, error) {
 	paramsChan := make(chan handshake.TransportParameters)
 	handshakeEvent := make(chan struct{}, 1)

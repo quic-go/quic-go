@@ -96,7 +96,6 @@ func (s *mockStream) close() {
 }
 
 type mockCookieProtector struct {
-	data      []byte
 	decodeErr error
 }
 
@@ -323,7 +322,7 @@ var _ = Describe("Server Crypto Setup", func() {
 			for _, v := range supportedVersions {
 				b := &bytes.Buffer{}
 				utils.BigEndian.WriteUint32(b, uint32(v))
-				Expect(message.Data[TagVER]).To(ContainSubstring(string(b.Bytes())))
+				Expect(message.Data[TagVER]).To(ContainSubstring(b.String()))
 			}
 			Expect(checkedSecure).To(BeTrue())
 			Expect(checkedForwardSecure).To(BeTrue())

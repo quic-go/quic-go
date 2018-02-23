@@ -215,7 +215,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 				return nil, err
 			}
 		case <-c.headerErrored:
-			// an error occured on the header stream
+			// an error occurred on the header stream
 			_ = c.CloseWithError(c.headerErr)
 			return nil, c.headerErr
 		}
