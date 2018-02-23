@@ -24,13 +24,16 @@ var _ = Describe("Stream tests", func() {
 		qconf      *quic.Config
 	)
 
-	for _, v := range []protocol.VersionNumber{protocol.Version39, protocol.VersionTLS} {
+	for _, v := range []protocol.VersionNumber{protocol.VersionTLS} {
 		version := v
 
 		Context(fmt.Sprintf("with QUIC %s", version), func() {
 			BeforeEach(func() {
 				var err error
-				qconf = &quic.Config{Versions: []protocol.VersionNumber{version}}
+				qconf = &quic.Config{
+					Versions:           []protocol.VersionNumber{version},
+					MaxIncomingStreams: 0,
+				}
 				server, err = quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), qconf)
 				Expect(err).ToNot(HaveOccurred())
 				serverAddr = fmt.Sprintf("quic.clemente.io:%d", server.Addr().(*net.UDPAddr).Port)

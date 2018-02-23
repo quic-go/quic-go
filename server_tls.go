@@ -72,9 +72,8 @@ func newServerTLS(
 			StreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
 			ConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
 			IdleTimeout:                 config.IdleTimeout,
-			// TODO(#523): make these values configurable
-			MaxBidiStreamID: protocol.MaxBidiStreamID(protocol.MaxIncomingStreams, protocol.PerspectiveServer),
-			MaxUniStreamID:  protocol.MaxUniStreamID(protocol.MaxIncomingStreams, protocol.PerspectiveServer),
+			MaxBidiStreamID:             protocol.MaxBidiStreamID(config.MaxIncomingStreams, protocol.PerspectiveServer),
+			MaxUniStreamID:              protocol.MaxUniStreamID(config.MaxIncomingUniStreams, protocol.PerspectiveServer),
 		},
 	}
 	s.newMintConn = s.newMintConnImpl

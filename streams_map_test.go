@@ -56,6 +56,11 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 				mockSender *MockStreamSender
 			)
 
+			const (
+				maxBidiStreams = 111
+				maxUniStreams  = 222
+			)
+
 			allowUnlimitedStreams := func() {
 				m.UpdateLimits(&handshake.TransportParameters{
 					MaxBidiStreamID: 0xffffffff,
@@ -65,7 +70,7 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 
 			BeforeEach(func() {
 				mockSender = NewMockStreamSender(mockCtrl)
-				m = newStreamsMap(mockSender, newFlowController, perspective, versionIETFFrames).(*streamsMap)
+				m = newStreamsMap(mockSender, newFlowController, maxBidiStreams, maxUniStreams, perspective, versionIETFFrames).(*streamsMap)
 			})
 
 			Context("opening", func() {
@@ -325,7 +330,7 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 					_, err := m.GetOrOpenReceiveStream(ids.firstIncomingBidiStream + 4*10)
 					Expect(err).ToNot(HaveOccurred())
 					mockSender.EXPECT().queueControlFrame(&wire.MaxStreamIDFrame{
-						StreamID: protocol.MaxBidiStreamID(protocol.MaxIncomingStreams, perspective) + 4,
+						StreamID: protocol.MaxBidiStreamID(maxBidiStreams, perspective) + 4,
 					})
 					Expect(m.DeleteStream(ids.firstIncomingBidiStream)).To(Succeed())
 				})
@@ -334,7 +339,7 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 					_, err := m.GetOrOpenReceiveStream(ids.firstIncomingUniStream + 4*10)
 					Expect(err).ToNot(HaveOccurred())
 					mockSender.EXPECT().queueControlFrame(&wire.MaxStreamIDFrame{
-						StreamID: protocol.MaxUniStreamID(protocol.MaxIncomingStreams, perspective) + 4,
+						StreamID: protocol.MaxUniStreamID(maxUniStreams, perspective) + 4,
 					})
 					Expect(m.DeleteStream(ids.firstIncomingUniStream)).To(Succeed())
 				})

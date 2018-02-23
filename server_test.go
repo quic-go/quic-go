@@ -124,6 +124,42 @@ var _ = Describe("Server", func() {
 			firstPacket = append(firstPacket, bytes.Repeat([]byte{0}, protocol.MinClientHelloSize)...) // add padding
 		})
 
+		It("setups with the right values", func() {
+			config := &Config{
+				HandshakeTimeout:            1337 * time.Minute,
+				IdleTimeout:                 42 * time.Hour,
+				RequestConnectionIDOmission: true,
+				MaxIncomingStreams:          1234,
+				MaxIncomingUniStreams:       4321,
+			}
+			c := populateServerConfig(config)
+			Expect(c.HandshakeTimeout).To(Equal(1337 * time.Minute))
+			Expect(c.IdleTimeout).To(Equal(42 * time.Hour))
+			Expect(c.RequestConnectionIDOmission).To(BeFalse())
+			Expect(c.MaxIncomingStreams).To(Equal(1234))
+			Expect(c.MaxIncomingUniStreams).To(Equal(4321))
+		})
+
+		It("disables bidirectional streams", func() {
+			config := &Config{
+				MaxIncomingStreams:    -1,
+				MaxIncomingUniStreams: 4321,
+			}
+			c := populateServerConfig(config)
+			Expect(c.MaxIncomingStreams).To(BeZero())
+			Expect(c.MaxIncomingUniStreams).To(Equal(4321))
+		})
+
+		It("disables unidirectional streams", func() {
+			config := &Config{
+				MaxIncomingStreams:    1234,
+				MaxIncomingUniStreams: -1,
+			}
+			c := populateServerConfig(config)
+			Expect(c.MaxIncomingStreams).To(Equal(1234))
+			Expect(c.MaxIncomingUniStreams).To(BeZero())
+		})
+
 		It("returns the address", func() {
 			conn.addr = &net.UDPAddr{
 				IP:   net.IPv4(192, 168, 13, 37),

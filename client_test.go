@@ -206,11 +206,35 @@ var _ = Describe("Client", func() {
 				HandshakeTimeout:            1337 * time.Minute,
 				IdleTimeout:                 42 * time.Hour,
 				RequestConnectionIDOmission: true,
+				MaxIncomingStreams:          1234,
+				MaxIncomingUniStreams:       4321,
 			}
 			c := populateClientConfig(config)
 			Expect(c.HandshakeTimeout).To(Equal(1337 * time.Minute))
 			Expect(c.IdleTimeout).To(Equal(42 * time.Hour))
 			Expect(c.RequestConnectionIDOmission).To(BeTrue())
+			Expect(c.MaxIncomingStreams).To(Equal(1234))
+			Expect(c.MaxIncomingUniStreams).To(Equal(4321))
+		})
+
+		It("disables bidirectional streams", func() {
+			config := &Config{
+				MaxIncomingStreams:    -1,
+				MaxIncomingUniStreams: 4321,
+			}
+			c := populateClientConfig(config)
+			Expect(c.MaxIncomingStreams).To(BeZero())
+			Expect(c.MaxIncomingUniStreams).To(Equal(4321))
+		})
+
+		It("disables unidirectional streams", func() {
+			config := &Config{
+				MaxIncomingStreams:    1234,
+				MaxIncomingUniStreams: -1,
+			}
+			c := populateClientConfig(config)
+			Expect(c.MaxIncomingStreams).To(Equal(1234))
+			Expect(c.MaxIncomingUniStreams).To(BeZero())
 		})
 
 		It("fills in default values if options are not set in the Config", func() {

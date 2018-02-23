@@ -41,7 +41,7 @@ var errMapAccess = errors.New("streamsMap: Error accessing the streams map")
 
 func newStreamsMapLegacy(newStream func(protocol.StreamID) streamI, pers protocol.Perspective) streamManager {
 	// add some tolerance to the maximum incoming streams value
-	maxStreams := uint32(protocol.MaxIncomingStreams)
+	maxStreams := uint32(protocol.DefaultMaxIncomingStreams)
 	maxIncomingStreams := utils.MaxUint32(
 		maxStreams+protocol.MaxStreamsMinimumIncrement,
 		uint32(float64(maxStreams)*float64(protocol.MaxStreamsMultiplier)),
