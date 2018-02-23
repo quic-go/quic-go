@@ -111,6 +111,7 @@ type session struct {
 	handshakeChan     chan error
 	handshakeComplete bool
 
+	receivedFirstPacket  bool // since packet numbers start at 0, we can't use largestRcvdPacketNumber != 0 for this
 	lastRcvdPacketNumber protocol.PacketNumber
 	// Used to calculate the next packet number from the truncated wire
 	// representation, and sent back in public reset packets
@@ -509,6 +510,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		p.rcvTime = time.Now()
 	}
 
+	s.receivedFirstPacket = true
 	s.lastNetworkActivityTime = p.rcvTime
 	s.keepAlivePingSent = false
 	hdr := p.header
@@ -819,6 +821,13 @@ func (s *session) sendPacket() (bool, error) {
 		if retransmitPacket == nil {
 			break
 		}
+		// Don't retransmit Initial packets if we already received a response.
+		// An Initial might have been retransmitted multiple times before we receive a response.
+		// As soon as we receive one response, we don't need to send any more Initials.
+		if s.receivedFirstPacket && retransmitPacket.PacketType == protocol.PacketTypeInitial {
+			utils.Debugf("Skipping retransmission of packet %d. Already received a response to an Initial.", retransmitPacket.PacketNumber)
+			continue
+		}
 
 		// retransmit handshake packets
 		if retransmitPacket.EncryptionLevel != protocol.EncryptionForwardSecure {
@@ -870,6 +879,7 @@ func (s *session) sendPackedPacket(packet *packedPacket) error {
 	defer putPacketBuffer(packet.raw)
 	err := s.sentPacketHandler.SentPacket(&ackhandler.Packet{
 		PacketNumber:    packet.header.PacketNumber,
+		PacketType:      packet.header.Type,
 		Frames:          packet.frames,
 		Length:          protocol.ByteCount(len(packet.raw)),
 		EncryptionLevel: packet.encryptionLevel,
