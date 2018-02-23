@@ -82,8 +82,8 @@ var _ = Describe("RTT stats", func() {
 		rttStats.SetRecentMinRTTwindow((99 * time.Millisecond))
 
 		now := time.Time{}
-		rtt_sample := (10 * time.Millisecond)
-		rttStats.UpdateRTT(rtt_sample, 0, now)
+		rttSample := (10 * time.Millisecond)
+		rttStats.UpdateRTT(rttSample, 0, now)
 		Expect(rttStats.MinRTT()).To(Equal((10 * time.Millisecond)))
 		Expect(rttStats.RecentMinRTT()).To(Equal((10 * time.Millisecond)))
 
@@ -91,11 +91,11 @@ var _ = Describe("RTT stats", func() {
 		// rising.
 		for i := 0; i < 8; i++ {
 			now = now.Add((25 * time.Millisecond))
-			rtt_sample += (10 * time.Millisecond)
-			rttStats.UpdateRTT(rtt_sample, 0, now)
+			rttSample += (10 * time.Millisecond)
+			rttStats.UpdateRTT(rttSample, 0, now)
 			Expect(rttStats.MinRTT()).To(Equal((10 * time.Millisecond)))
-			Expect(rttStats.GetQuarterWindowRTT()).To(Equal(rtt_sample))
-			Expect(rttStats.GetHalfWindowRTT()).To(Equal(rtt_sample - (10 * time.Millisecond)))
+			Expect(rttStats.GetQuarterWindowRTT()).To(Equal(rttSample))
+			Expect(rttStats.GetHalfWindowRTT()).To(Equal(rttSample - (10 * time.Millisecond)))
 			if i < 3 {
 				Expect(rttStats.RecentMinRTT()).To(Equal(10 * time.Millisecond))
 			} else if i < 5 {
@@ -108,91 +108,91 @@ var _ = Describe("RTT stats", func() {
 		}
 
 		// A new quarter rtt low sets that, but nothing else.
-		rtt_sample -= (5 * time.Millisecond)
-		rttStats.UpdateRTT(rtt_sample, 0, now)
+		rttSample -= (5 * time.Millisecond)
+		rttStats.UpdateRTT(rttSample, 0, now)
 		Expect(rttStats.MinRTT()).To(Equal((10 * time.Millisecond)))
-		Expect(rttStats.GetQuarterWindowRTT()).To(Equal(rtt_sample))
-		Expect(rttStats.GetHalfWindowRTT()).To(Equal(rtt_sample - (5 * time.Millisecond)))
+		Expect(rttStats.GetQuarterWindowRTT()).To(Equal(rttSample))
+		Expect(rttStats.GetHalfWindowRTT()).To(Equal(rttSample - (5 * time.Millisecond)))
 		Expect(rttStats.RecentMinRTT()).To(Equal((70 * time.Millisecond)))
 
 		// A new half rtt low sets that and the quarter rtt low.
-		rtt_sample -= (15 * time.Millisecond)
-		rttStats.UpdateRTT(rtt_sample, 0, now)
+		rttSample -= (15 * time.Millisecond)
+		rttStats.UpdateRTT(rttSample, 0, now)
 		Expect(rttStats.MinRTT()).To(Equal((10 * time.Millisecond)))
-		Expect(rttStats.GetQuarterWindowRTT()).To(Equal(rtt_sample))
-		Expect(rttStats.GetHalfWindowRTT()).To(Equal(rtt_sample))
+		Expect(rttStats.GetQuarterWindowRTT()).To(Equal(rttSample))
+		Expect(rttStats.GetHalfWindowRTT()).To(Equal(rttSample))
 		Expect(rttStats.RecentMinRTT()).To(Equal((70 * time.Millisecond)))
 
 		// A new full window loss sets the RecentMinRTT, but not MinRTT.
-		rtt_sample = (65 * time.Millisecond)
-		rttStats.UpdateRTT(rtt_sample, 0, now)
+		rttSample = (65 * time.Millisecond)
+		rttStats.UpdateRTT(rttSample, 0, now)
 		Expect(rttStats.MinRTT()).To(Equal((10 * time.Millisecond)))
-		Expect(rttStats.GetQuarterWindowRTT()).To(Equal(rtt_sample))
-		Expect(rttStats.GetHalfWindowRTT()).To(Equal(rtt_sample))
-		Expect(rttStats.RecentMinRTT()).To(Equal(rtt_sample))
+		Expect(rttStats.GetQuarterWindowRTT()).To(Equal(rttSample))
+		Expect(rttStats.GetHalfWindowRTT()).To(Equal(rttSample))
+		Expect(rttStats.RecentMinRTT()).To(Equal(rttSample))
 
 		// A new all time low sets both the MinRTT and the RecentMinRTT.
-		rtt_sample = (5 * time.Millisecond)
-		rttStats.UpdateRTT(rtt_sample, 0, now)
+		rttSample = (5 * time.Millisecond)
+		rttStats.UpdateRTT(rttSample, 0, now)
 
-		Expect(rttStats.MinRTT()).To(Equal(rtt_sample))
-		Expect(rttStats.GetQuarterWindowRTT()).To(Equal(rtt_sample))
-		Expect(rttStats.GetHalfWindowRTT()).To(Equal(rtt_sample))
-		Expect(rttStats.RecentMinRTT()).To(Equal(rtt_sample))
+		Expect(rttStats.MinRTT()).To(Equal(rttSample))
+		Expect(rttStats.GetQuarterWindowRTT()).To(Equal(rttSample))
+		Expect(rttStats.GetHalfWindowRTT()).To(Equal(rttSample))
+		Expect(rttStats.RecentMinRTT()).To(Equal(rttSample))
 	})
 
 	It("ExpireSmoothedMetrics", func() {
-		initial_rtt := (10 * time.Millisecond)
-		rttStats.UpdateRTT(initial_rtt, 0, time.Time{})
-		Expect(rttStats.MinRTT()).To(Equal(initial_rtt))
-		Expect(rttStats.RecentMinRTT()).To(Equal(initial_rtt))
-		Expect(rttStats.SmoothedRTT()).To(Equal(initial_rtt))
+		initialRtt := (10 * time.Millisecond)
+		rttStats.UpdateRTT(initialRtt, 0, time.Time{})
+		Expect(rttStats.MinRTT()).To(Equal(initialRtt))
+		Expect(rttStats.RecentMinRTT()).To(Equal(initialRtt))
+		Expect(rttStats.SmoothedRTT()).To(Equal(initialRtt))
 
-		Expect(rttStats.MeanDeviation()).To(Equal(initial_rtt / 2))
+		Expect(rttStats.MeanDeviation()).To(Equal(initialRtt / 2))
 
 		// Update once with a 20ms RTT.
-		doubled_rtt := initial_rtt * (2)
-		rttStats.UpdateRTT(doubled_rtt, 0, time.Time{})
-		Expect(rttStats.SmoothedRTT()).To(Equal(time.Duration(float32(initial_rtt) * 1.125)))
+		doubledRtt := initialRtt * (2)
+		rttStats.UpdateRTT(doubledRtt, 0, time.Time{})
+		Expect(rttStats.SmoothedRTT()).To(Equal(time.Duration(float32(initialRtt) * 1.125)))
 
 		// Expire the smoothed metrics, increasing smoothed rtt and mean deviation.
 		rttStats.ExpireSmoothedMetrics()
-		Expect(rttStats.SmoothedRTT()).To(Equal(doubled_rtt))
-		Expect(rttStats.MeanDeviation()).To(Equal(time.Duration(float32(initial_rtt) * 0.875)))
+		Expect(rttStats.SmoothedRTT()).To(Equal(doubledRtt))
+		Expect(rttStats.MeanDeviation()).To(Equal(time.Duration(float32(initialRtt) * 0.875)))
 
 		// Now go back down to 5ms and expire the smoothed metrics, and ensure the
 		// mean deviation increases to 15ms.
-		half_rtt := initial_rtt / 2
-		rttStats.UpdateRTT(half_rtt, 0, time.Time{})
-		Expect(doubled_rtt).To(BeNumerically(">", rttStats.SmoothedRTT()))
-		Expect(initial_rtt).To(BeNumerically("<", rttStats.MeanDeviation()))
+		halfRtt := initialRtt / 2
+		rttStats.UpdateRTT(halfRtt, 0, time.Time{})
+		Expect(doubledRtt).To(BeNumerically(">", rttStats.SmoothedRTT()))
+		Expect(initialRtt).To(BeNumerically("<", rttStats.MeanDeviation()))
 	})
 
 	It("UpdateRTTWithBadSendDeltas", func() {
 		// Make sure we ignore bad RTTs.
 		// base::test::MockLog log;
 
-		initial_rtt := (10 * time.Millisecond)
-		rttStats.UpdateRTT(initial_rtt, 0, time.Time{})
-		Expect(rttStats.MinRTT()).To(Equal(initial_rtt))
-		Expect(rttStats.RecentMinRTT()).To(Equal(initial_rtt))
-		Expect(rttStats.SmoothedRTT()).To(Equal(initial_rtt))
+		initialRtt := (10 * time.Millisecond)
+		rttStats.UpdateRTT(initialRtt, 0, time.Time{})
+		Expect(rttStats.MinRTT()).To(Equal(initialRtt))
+		Expect(rttStats.RecentMinRTT()).To(Equal(initialRtt))
+		Expect(rttStats.SmoothedRTT()).To(Equal(initialRtt))
 
-		bad_send_deltas := []time.Duration{
+		badSendDeltas := []time.Duration{
 			0,
 			utils.InfDuration,
 			-1000 * time.Microsecond,
 		}
 		// log.StartCapturingLogs();
 
-		for _, bad_send_delta := range bad_send_deltas {
+		for _, badSendDelta := range badSendDeltas {
 			// SCOPED_TRACE(Message() << "bad_send_delta = "
 			//  << bad_send_delta.ToMicroseconds());
 			// EXPECT_CALL(log, Log(LOG_WARNING, _, _, _, HasSubstr("Ignoring")));
-			rttStats.UpdateRTT(bad_send_delta, 0, time.Time{})
-			Expect(rttStats.MinRTT()).To(Equal(initial_rtt))
-			Expect(rttStats.RecentMinRTT()).To(Equal(initial_rtt))
-			Expect(rttStats.SmoothedRTT()).To(Equal(initial_rtt))
+			rttStats.UpdateRTT(badSendDelta, 0, time.Time{})
+			Expect(rttStats.MinRTT()).To(Equal(initialRtt))
+			Expect(rttStats.RecentMinRTT()).To(Equal(initialRtt))
+			Expect(rttStats.SmoothedRTT()).To(Equal(initialRtt))
 		}
 	})
 
