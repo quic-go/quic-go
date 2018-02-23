@@ -132,7 +132,7 @@ func (s *serverTLS) handleInitialImpl(remoteAddr net.Addr, hdr *wire.Header, dat
 	// check version, if not matching send VNP
 	if !protocol.IsSupportedVersion(s.supportedVersions, hdr.Version) {
 		utils.Debugf("Client offered version %s, sending VersionNegotiationPacket", hdr.Version)
-		_, err := s.conn.WriteTo(wire.ComposeVersionNegotiation(hdr.ConnectionID, hdr.PacketNumber, s.supportedVersions), remoteAddr)
+		_, err := s.conn.WriteTo(wire.ComposeVersionNegotiation(hdr.ConnectionID, s.supportedVersions), remoteAddr)
 		return nil, err
 	}
 

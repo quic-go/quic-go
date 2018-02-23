@@ -529,7 +529,6 @@ var _ = Describe("Server", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.IsVersionNegotiation).To(BeTrue())
 		Expect(packet.ConnectionID).To(Equal(protocol.ConnectionID(0x1337)))
-		Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(0x55)))
 		Expect(r.Len()).To(BeZero())
 		Consistently(done).ShouldNot(BeClosed())
 	})
