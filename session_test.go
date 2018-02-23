@@ -755,6 +755,31 @@ var _ = Describe("Session", func() {
 			Expect(sentPacket.EncryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
 			Expect(sentPacket.Length).To(BeEquivalentTo(len(<-mconn.written)))
 		})
+
+		It("doesn't retransmit an initial packet if it already received a response", func() {
+			sess.unpacker = &mockUnpacker{}
+			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+			sph.EXPECT().GetLeastUnacked().AnyTimes()
+			sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
+				PacketNumber: 10,
+				PacketType:   protocol.PacketTypeInitial,
+			})
+			sph.EXPECT().DequeuePacketForRetransmission()
+			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
+			rph.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any())
+			rph.EXPECT().GetAckFrame()
+			sess.receivedPacketHandler = rph
+			sess.sentPacketHandler = sph
+			err := sess.handlePacketImpl(&receivedPacket{
+				header: &wire.Header{},
+				data:   []byte{0},
+			})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(sess.receivedFirstPacket).To(BeTrue())
+			sent, err := sess.sendPacket()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sent).To(BeFalse())
+		})
 	})
 
 	Context("packet pacing", func() {
