@@ -179,6 +179,7 @@ type Config struct {
 	// If set to a negative value, it doesn't allow any bidirectional streams.
 	MaxIncomingStreams int
 	// MaxIncomingUniStreams is the maximum number of concurrent unidirectional streams that a peer is allowed to open.
+	// This value doesn't have any effect in Google QUIC.
 	// If not set, it will default to 100.
 	// If set to a negative value, it doesn't allow any unidirectional streams.
 	MaxIncomingUniStreams int

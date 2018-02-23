@@ -23,12 +23,22 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 	}
 
 	setNewStreamsMap := func(p protocol.Perspective) {
-		m = newStreamsMapLegacy(newStream, p).(*streamsMapLegacy)
+		m = newStreamsMapLegacy(newStream, protocol.DefaultMaxIncomingStreams, p).(*streamsMapLegacy)
 	}
 
 	deleteStream := func(id protocol.StreamID) {
 		ExpectWithOffset(1, m.DeleteStream(id)).To(Succeed())
 	}
+
+	It("applies the max stream limit for small number of streams", func() {
+		sm := newStreamsMapLegacy(newStream, 1, protocol.PerspectiveServer).(*streamsMapLegacy)
+		Expect(sm.maxIncomingStreams).To(BeEquivalentTo(1 + protocol.MaxStreamsMinimumIncrement))
+	})
+
+	It("applies the max stream limit for big number of streams", func() {
+		sm := newStreamsMapLegacy(newStream, 1000, protocol.PerspectiveServer).(*streamsMapLegacy)
+		Expect(sm.maxIncomingStreams).To(BeEquivalentTo(1000 * protocol.MaxStreamsMultiplier))
+	})
 
 	Context("getting and creating streams", func() {
 		Context("as a server", func() {

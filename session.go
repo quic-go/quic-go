@@ -157,7 +157,7 @@ func newSession(
 	transportParams := &handshake.TransportParameters{
 		StreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
 		ConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
-		MaxStreams:                  protocol.DefaultMaxIncomingStreams,
+		MaxStreams:                  uint32(s.config.MaxIncomingStreams),
 		IdleTimeout:                 s.config.IdleTimeout,
 	}
 	cs, err := newCryptoSetup(
@@ -205,7 +205,7 @@ var newClientSession = func(
 	transportParams := &handshake.TransportParameters{
 		StreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
 		ConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
-		MaxStreams:                  protocol.DefaultMaxIncomingStreams,
+		MaxStreams:                  uint32(s.config.MaxIncomingStreams),
 		IdleTimeout:                 s.config.IdleTimeout,
 		OmitConnectionID:            s.config.RequestConnectionIDOmission,
 	}
@@ -332,7 +332,7 @@ func (s *session) postSetup(initialPacketNumber protocol.PacketNumber) error {
 	if s.version.UsesTLS() {
 		s.streamsMap = newStreamsMap(s, s.newFlowController, s.config.MaxIncomingStreams, s.config.MaxIncomingUniStreams, s.perspective, s.version)
 	} else {
-		s.streamsMap = newStreamsMapLegacy(s.newStream, s.perspective)
+		s.streamsMap = newStreamsMapLegacy(s.newStream, s.config.MaxIncomingStreams, s.perspective)
 	}
 	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
 	s.packer = newPacketPacker(s.connectionID,
