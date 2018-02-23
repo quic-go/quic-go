@@ -25,12 +25,12 @@ var _ = Describe("Version Negotiation Packets", func() {
 
 	It("writes in IETF draft style", func() {
 		versions := []protocol.VersionNumber{1001, 1003}
-		data := ComposeVersionNegotiation(0x1337, 0x42, versions)
+		data := ComposeVersionNegotiation(0x1337, versions)
+		Expect(data[0] & 0x80).ToNot(BeZero())
 		hdr, err := parseHeader(bytes.NewReader(data), protocol.PerspectiveServer)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.IsVersionNegotiation).To(BeTrue())
 		Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x1337)))
-		Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x42)))
 		Expect(hdr.Version).To(BeZero())
 		// the supported versions should include one reserved version number
 		Expect(hdr.SupportedVersions).To(HaveLen(len(versions) + 1))

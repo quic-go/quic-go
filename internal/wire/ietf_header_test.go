@@ -20,14 +20,13 @@ var _ = Describe("IETF draft Header", func() {
 		Context("Version Negotiation Packets", func() {
 			It("parses", func() {
 				versions := []protocol.VersionNumber{0x22334455, 0x33445566}
-				data := ComposeVersionNegotiation(0x1234567890, 0x1337, versions)
+				data := ComposeVersionNegotiation(0x1234567890, versions)
 				b := bytes.NewReader(data)
 				h, err := parseHeader(b, protocol.PerspectiveServer)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(h.IsVersionNegotiation).To(BeTrue())
 				Expect(h.Version).To(BeZero())
 				Expect(h.ConnectionID).To(Equal(protocol.ConnectionID(0x1234567890)))
-				Expect(h.PacketNumber).To(Equal(protocol.PacketNumber(0x1337)))
 				for _, v := range versions {
 					Expect(h.SupportedVersions).To(ContainElement(v))
 				}
@@ -35,7 +34,7 @@ var _ = Describe("IETF draft Header", func() {
 
 			It("errors if it contains versions of the wrong length", func() {
 				versions := []protocol.VersionNumber{0x22334455, 0x33445566}
-				data := ComposeVersionNegotiation(0x1234567890, 0x1337, versions)
+				data := ComposeVersionNegotiation(0x1234567890, versions)
 				b := bytes.NewReader(data[:len(data)-2])
 				_, err := parseHeader(b, protocol.PerspectiveServer)
 				Expect(err).To(MatchError(qerr.InvalidVersionNegotiationPacket))
@@ -43,7 +42,7 @@ var _ = Describe("IETF draft Header", func() {
 
 			It("errors if the version list is emtpy", func() {
 				versions := []protocol.VersionNumber{0x22334455}
-				data := ComposeVersionNegotiation(0x1234567890, 0x1337, versions)
+				data := ComposeVersionNegotiation(0x1234567890, versions)
 				// remove 8 bytes (two versions), since ComposeVersionNegotiation also added a reserved version number
 				_, err := parseHeader(bytes.NewReader(data[:len(data)-8]), protocol.PerspectiveServer)
 				Expect(err).To(MatchError("InvalidVersionNegotiationPacket: empty version list"))

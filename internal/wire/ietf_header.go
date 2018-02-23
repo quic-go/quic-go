@@ -31,15 +31,9 @@ func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte
 	if err != nil {
 		return nil, err
 	}
-	pn, err := utils.BigEndian.ReadUint32(b)
-	if err != nil {
-		return nil, err
-	}
 	h := &Header{
-		ConnectionID:    protocol.ConnectionID(connID),
-		PacketNumber:    protocol.PacketNumber(pn),
-		PacketNumberLen: protocol.PacketNumberLen4,
-		Version:         protocol.VersionNumber(v),
+		ConnectionID: protocol.ConnectionID(connID),
+		Version:      protocol.VersionNumber(v),
 	}
 	if v == 0 { // version negotiation packet
 		if sentBy == protocol.PerspectiveClient {
@@ -60,6 +54,12 @@ func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte
 		return h, nil
 	}
 	h.IsLongHeader = true
+	pn, err := utils.BigEndian.ReadUint32(b)
+	if err != nil {
+		return nil, err
+	}
+	h.PacketNumber = protocol.PacketNumber(pn)
+	h.PacketNumberLen = protocol.PacketNumberLen4
 	h.Type = protocol.PacketType(typeByte & 0x7f)
 	if sentBy == protocol.PerspectiveClient && (h.Type != protocol.PacketTypeInitial && h.Type != protocol.PacketTypeHandshake && h.Type != protocol.PacketType0RTT) {
 		return nil, qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", h.Type))

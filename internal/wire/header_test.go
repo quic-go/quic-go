@@ -137,13 +137,12 @@ var _ = Describe("Header", func() {
 
 		It("parses an IETF draft style Version Negotiation Packet", func() {
 			versions := []protocol.VersionNumber{0x13, 0x37}
-			data := ComposeVersionNegotiation(0x42, 0x77, versions)
+			data := ComposeVersionNegotiation(0x42, versions)
 			hdr, err := ParseHeaderSentByServer(bytes.NewReader(data), protocol.VersionUnknown)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.isPublicHeader).To(BeFalse())
 			Expect(hdr.IsVersionNegotiation).To(BeTrue())
 			Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x42)))
-			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x77)))
 			Expect(hdr.Version).To(BeZero())
 			// in addition to the versions, the supported versions might contain a reserved version number
 			for _, version := range versions {
