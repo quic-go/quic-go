@@ -551,6 +551,16 @@ var _ = Describe("Session", func() {
 			hdr = &wire.Header{PacketNumberLen: protocol.PacketNumberLen6}
 		})
 
+		It("informs the SentPacketHandler when receiving a Retry packet", func() {
+			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+			sess.sentPacketHandler = sph
+			now := time.Now()
+			sph.EXPECT().ReceivedFirstPacket()
+			hdr.PacketNumber = 5
+			err := sess.handlePacketImpl(&receivedPacket{header: hdr, rcvTime: now})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
 		It("sets the {last,largest}RcvdPacketNumber", func() {
 			hdr.PacketNumber = 5
 			err := sess.handlePacketImpl(&receivedPacket{header: hdr})

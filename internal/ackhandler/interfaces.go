@@ -13,6 +13,7 @@ type SentPacketHandler interface {
 	SentPacket(packet *Packet) error
 	ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, encLevel protocol.EncryptionLevel, recvTime time.Time) error
 	SetHandshakeComplete()
+	ReceivedFirstPacket()
 
 	// SendingAllowed says if a packet can be sent.
 	// Sending packets might not be possible because:

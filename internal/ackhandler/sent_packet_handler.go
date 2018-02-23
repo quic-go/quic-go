@@ -55,7 +55,8 @@ type sentPacketHandler struct {
 	congestion congestion.SendAlgorithm
 	rttStats   *congestion.RTTStats
 
-	handshakeComplete bool
+	receivedFirstPacket bool
+	handshakeComplete   bool
 	// The number of times the handshake packets have been retransmitted without receiving an ack.
 	handshakeCount uint32
 
@@ -92,6 +93,10 @@ func (h *sentPacketHandler) lowestUnacked() protocol.PacketNumber {
 		return f.Value.PacketNumber
 	}
 	return h.largestAcked + 1
+}
+
+func (h *sentPacketHandler) ReceivedFirstPacket() {
+	h.receivedFirstPacket = true
 }
 
 func (h *sentPacketHandler) SetHandshakeComplete() {
@@ -348,15 +353,19 @@ func (h *sentPacketHandler) onPacketAcked(packetElement *PacketElement) {
 }
 
 func (h *sentPacketHandler) DequeuePacketForRetransmission() *Packet {
-	if len(h.retransmissionQueue) == 0 {
-		return nil
+	for len(h.retransmissionQueue) > 0 {
+		packet := h.retransmissionQueue[0]
+		// Shift the slice and don't retain anything that isn't needed.
+		copy(h.retransmissionQueue, h.retransmissionQueue[1:])
+		h.retransmissionQueue[len(h.retransmissionQueue)-1] = nil
+		h.retransmissionQueue = h.retransmissionQueue[:len(h.retransmissionQueue)-1]
+		// no need to retransmit Initial packets after the server already replied
+		if h.receivedFirstPacket && packet.PacketType == protocol.PacketTypeInitial {
+			continue
+		}
+		return packet
 	}
-	packet := h.retransmissionQueue[0]
-	// Shift the slice and don't retain anything that isn't needed.
-	copy(h.retransmissionQueue, h.retransmissionQueue[1:])
-	h.retransmissionQueue[len(h.retransmissionQueue)-1] = nil
-	h.retransmissionQueue = h.retransmissionQueue[:len(h.retransmissionQueue)-1]
-	return packet
+	return nil
 }
 
 func (h *sentPacketHandler) GetLeastUnacked() protocol.PacketNumber {
@@ -429,8 +438,8 @@ func (h *sentPacketHandler) queueHandshakePacketsForRetransmission() {
 func (h *sentPacketHandler) queuePacketForRetransmission(packetElement *PacketElement) {
 	packet := &packetElement.Value
 	h.bytesInFlight -= packet.Length
-	h.retransmissionQueue = append(h.retransmissionQueue, packet)
 	h.packetHistory.Remove(packetElement)
+	h.retransmissionQueue = append(h.retransmissionQueue, packet)
 	h.stopWaitingManager.QueuedRetransmissionForPacketNumber(packet.PacketNumber)
 }
 

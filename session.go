@@ -111,6 +111,7 @@ type session struct {
 	handshakeChan     chan error
 	handshakeComplete bool
 
+	receivedFirstPacket  bool // since packet numbers start at 0, we can't use largestRcvdPacketNumber != 0 for this
 	lastRcvdPacketNumber protocol.PacketNumber
 	// Used to calculate the next packet number from the truncated wire
 	// representation, and sent back in public reset packets
@@ -504,6 +505,11 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		}
 	}
 
+	if !s.receivedFirstPacket {
+		s.sentPacketHandler.ReceivedFirstPacket()
+		s.receivedFirstPacket = true
+	}
+
 	if p.rcvTime.IsZero() {
 		// To simplify testing
 		p.rcvTime = time.Now()
@@ -870,6 +876,7 @@ func (s *session) sendPackedPacket(packet *packedPacket) error {
 	defer putPacketBuffer(packet.raw)
 	err := s.sentPacketHandler.SentPacket(&ackhandler.Packet{
 		PacketNumber:    packet.header.PacketNumber,
+		PacketType:      packet.header.Type,
 		Frames:          packet.frames,
 		Length:          protocol.ByteCount(len(packet.raw)),
 		EncryptionLevel: packet.encryptionLevel,
