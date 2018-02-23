@@ -56,7 +56,7 @@ var _ = Describe("public reset", func() {
 
 		It("rejects packets missing the nonce", func() {
 			data := map[handshake.Tag][]byte{
-				handshake.TagRSEQ: []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
+				handshake.TagRSEQ: {0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
 			}
 			handshake.HandshakeMessage{Tag: handshake.TagPRST, Data: data}.Write(b)
 			_, err := ParsePublicReset(bytes.NewReader(b.Bytes()))
@@ -65,8 +65,8 @@ var _ = Describe("public reset", func() {
 
 		It("rejects packets with a wrong length nonce", func() {
 			data := map[handshake.Tag][]byte{
-				handshake.TagRSEQ: []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
-				handshake.TagRNON: []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13},
+				handshake.TagRSEQ: {0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
+				handshake.TagRNON: {0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13},
 			}
 			handshake.HandshakeMessage{Tag: handshake.TagPRST, Data: data}.Write(b)
 			_, err := ParsePublicReset(bytes.NewReader(b.Bytes()))
@@ -75,7 +75,7 @@ var _ = Describe("public reset", func() {
 
 		It("accepts packets missing the rejected packet number", func() {
 			data := map[handshake.Tag][]byte{
-				handshake.TagRNON: []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
+				handshake.TagRNON: {0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
 			}
 			handshake.HandshakeMessage{Tag: handshake.TagPRST, Data: data}.Write(b)
 			pr, err := ParsePublicReset(bytes.NewReader(b.Bytes()))
@@ -85,8 +85,8 @@ var _ = Describe("public reset", func() {
 
 		It("rejects packets with a wrong length rejected packet number", func() {
 			data := map[handshake.Tag][]byte{
-				handshake.TagRSEQ: []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13},
-				handshake.TagRNON: []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
+				handshake.TagRSEQ: {0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13},
+				handshake.TagRNON: {0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
 			}
 			handshake.HandshakeMessage{Tag: handshake.TagPRST, Data: data}.Write(b)
 			_, err := ParsePublicReset(bytes.NewReader(b.Bytes()))

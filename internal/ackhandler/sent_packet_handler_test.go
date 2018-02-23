@@ -513,9 +513,9 @@ var _ = Describe("SentPacketHandler", func() {
 		Context("determining which ACKs we have received an ACK for", func() {
 			BeforeEach(func() {
 				morePackets := []*Packet{
-					&Packet{PacketNumber: 13, Frames: []wire.Frame{&wire.AckFrame{LowestAcked: 80, LargestAcked: 100}, &streamFrame}, Length: 1},
-					&Packet{PacketNumber: 14, Frames: []wire.Frame{&wire.AckFrame{LowestAcked: 50, LargestAcked: 200}, &streamFrame}, Length: 1},
-					&Packet{PacketNumber: 15, Frames: []wire.Frame{&streamFrame}, Length: 1},
+					{PacketNumber: 13, Frames: []wire.Frame{&wire.AckFrame{LowestAcked: 80, LargestAcked: 100}, &streamFrame}, Length: 1},
+					{PacketNumber: 14, Frames: []wire.Frame{&wire.AckFrame{LowestAcked: 50, LargestAcked: 200}, &streamFrame}, Length: 1},
+					{PacketNumber: 15, Frames: []wire.Frame{&streamFrame}, Length: 1},
 				}
 				for _, packet := range morePackets {
 					err := handler.SentPacket(packet)

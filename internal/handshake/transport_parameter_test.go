@@ -115,11 +115,11 @@ var _ = Describe("Transport Parameters", func() {
 
 			BeforeEach(func() {
 				parameters = map[transportParameterID][]byte{
-					initialMaxStreamDataParameterID:   []byte{0x11, 0x22, 0x33, 0x44},
-					initialMaxDataParameterID:         []byte{0x22, 0x33, 0x44, 0x55},
-					initialMaxStreamIDBiDiParameterID: []byte{0x33, 0x44, 0x55, 0x66},
-					initialMaxStreamIDUniParameterID:  []byte{0x44, 0x55, 0x66, 0x77},
-					idleTimeoutParameterID:            []byte{0x13, 0x37},
+					initialMaxStreamDataParameterID:   {0x11, 0x22, 0x33, 0x44},
+					initialMaxDataParameterID:         {0x22, 0x33, 0x44, 0x55},
+					initialMaxStreamIDBiDiParameterID: {0x33, 0x44, 0x55, 0x66},
+					initialMaxStreamIDUniParameterID:  {0x44, 0x55, 0x66, 0x77},
+					idleTimeoutParameterID:            {0x13, 0x37},
 				}
 			})
 			It("reads parameters", func() {
