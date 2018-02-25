@@ -243,7 +243,6 @@ func (p *QuicProxy) runConnection(conn *connection) error {
 			}
 			continue
 		}
-		utils.Debugf("forwarding outgoing packet %d (%d bytes) to %s", packetCount, n, conn.ClientAddr)
 
 		delay := p.delayPacket(DirectionOutgoing, packetCount)
 		if delay != 0 {
