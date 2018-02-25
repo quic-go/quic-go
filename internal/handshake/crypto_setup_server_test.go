@@ -317,8 +317,7 @@ var _ = Describe("Server Crypto Setup", func() {
 			Expect(message.Data).To(HaveKeyWithValue(TagPUBS, []byte("ephermal pub")))
 			Expect(message.Data).To(HaveKey(TagSNO))
 			Expect(message.Data).To(HaveKey(TagVER))
-			// the supported versions should include one reserved version number
-			Expect(message.Data[TagVER]).To(HaveLen(4*len(supportedVersions) + 4))
+			Expect(message.Data[TagVER]).To(HaveLen(4 * len(supportedVersions)))
 			for _, v := range supportedVersions {
 				b := &bytes.Buffer{}
 				utils.BigEndian.WriteUint32(b, uint32(v))
