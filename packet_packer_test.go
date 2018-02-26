@@ -809,8 +809,10 @@ var _ = Describe("Packet packer", func() {
 			sf2 := packets[1].frames[1].(*wire.StreamFrame)
 			Expect(sf1.StreamID).To(Equal(protocol.StreamID(42)))
 			Expect(sf1.Offset).To(Equal(protocol.ByteCount(1337)))
+			Expect(sf1.DataLenPresent).To(BeFalse())
 			Expect(sf2.StreamID).To(Equal(protocol.StreamID(42)))
 			Expect(sf2.Offset).To(Equal(protocol.ByteCount(1337) + sf1.DataLen()))
+			Expect(sf2.DataLenPresent).To(BeFalse())
 			Expect(sf1.DataLen() + sf2.DataLen()).To(Equal(protocol.MaxPacketSize * 3 / 2))
 			Expect(packets[0].raw).To(HaveLen(int(protocol.MaxPacketSize)))
 		})
@@ -842,6 +844,29 @@ var _ = Describe("Packet packer", func() {
 			// check that the first packet was filled up as far as possible:
 			// if the first frame (after the STOP_WAITING) was packed into the first packet, it would have overflown the MaxPacketSize
 			Expect(len(packets[0].raw) + int(packets[1].frames[1].Length(packer.version))).To(BeNumerically(">", protocol.MaxPacketSize-protocol.MinStreamFrameSize))
+		})
+
+		It("correctly sets the DataLenPresent on STREAM frames", func() {
+			frames := []wire.Frame{
+				&wire.StreamFrame{StreamID: 4, Data: []byte("foobar"), DataLenPresent: true},
+				&wire.StreamFrame{StreamID: 5, Data: []byte("barfoo")},
+			}
+			packets, err := packer.PackRetransmission(&ackhandler.Packet{
+				EncryptionLevel: protocol.EncryptionForwardSecure,
+				Frames:          frames,
+			})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packets).To(HaveLen(1))
+			p := packets[0]
+			Expect(p.frames).To(HaveLen(3))
+			Expect(p.frames[1]).To(BeAssignableToTypeOf(&wire.StreamFrame{}))
+			Expect(p.frames[2]).To(BeAssignableToTypeOf(&wire.StreamFrame{}))
+			sf1 := p.frames[1].(*wire.StreamFrame)
+			sf2 := p.frames[2].(*wire.StreamFrame)
+			Expect(sf1.StreamID).To(Equal(protocol.StreamID(4)))
+			Expect(sf1.DataLenPresent).To(BeTrue())
+			Expect(sf2.StreamID).To(Equal(protocol.StreamID(5)))
+			Expect(sf2.DataLenPresent).To(BeFalse())
 		})
 
 	})

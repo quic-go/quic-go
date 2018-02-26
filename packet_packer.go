@@ -157,10 +157,22 @@ func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedP
 			frames = append(frames, frame)
 			controlFrames = controlFrames[1:]
 		}
+
+		// temporarily increase the maxFrameSize by the (minimum) length of the DataLen field
+		// this leads to a properly sized packet in all cases, since we do all the packet length calculations with StreamFrames that have the DataLen set
+		// however, for the last STREAM frame in the packet, we can omit the DataLen, thus yielding a packet of exactly the correct size
+		// for gQUIC STREAM frames, DataLen is always 2 bytes
+		// for IETF draft style STREAM frames, the length is encoded to either 1 or 2 bytes
+		if p.version.UsesIETFFrameFormat() {
+			maxSize++
+		} else {
+			maxSize += 2
+		}
 		for len(streamFrames) > 0 && payloadLength+protocol.MinStreamFrameSize < maxSize {
 			// TODO: optimize by setting DataLenPresent = false on all but the last STREAM frame
 			frame := streamFrames[0]
 			frameToAdd := frame
+
 			sf, err := frame.MaybeSplitOffFrame(maxSize-payloadLength, p.version)
 			if err != nil {
 				return nil, err
@@ -172,6 +184,9 @@ func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedP
 			}
 			payloadLength += frameToAdd.Length(p.version)
 			frames = append(frames, frameToAdd)
+		}
+		if sf, ok := frames[len(frames)-1].(*wire.StreamFrame); ok {
+			sf.DataLenPresent = false
 		}
 		raw, err := p.writeAndSealPacket(header, frames, sealer)
 		if err != nil {
@@ -351,7 +366,7 @@ func (p *packetPacker) composeNextPacket(
 
 	// temporarily increase the maxFrameSize by the (minimum) length of the DataLen field
 	// this leads to a properly sized packet in all cases, since we do all the packet length calculations with StreamFrames that have the DataLen set
-	// however, for the last StreamFrame in the packet, we can omit the DataLen, thus yielding a packet of exactly the correct size
+	// however, for the last STREAM frame in the packet, we can omit the DataLen, thus yielding a packet of exactly the correct size
 	// for gQUIC STREAM frames, DataLen is always 2 bytes
 	// for IETF draft style STREAM frames, the length is encoded to either 1 or 2 bytes
 	if p.version.UsesIETFFrameFormat() {
