@@ -838,39 +838,30 @@ func (s *session) sendPacket() (bool, error) {
 			continue
 		}
 
-		// retransmit handshake packets
+		// retransmit packets
 		if retransmitPacket.EncryptionLevel != protocol.EncryptionForwardSecure {
 			utils.Debugf("\tDequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
-			if !s.version.UsesIETFFrameFormat() {
-				s.packer.QueueControlFrame(s.sentPacketHandler.GetStopWaitingFrame(true))
-			}
-			packet, err := s.packer.PackHandshakeRetransmission(retransmitPacket)
-			if err != nil {
-				return false, err
-			}
+		} else {
+			utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
+		}
+
+		if !s.version.UsesIETFFrameFormat() {
+			s.packer.QueueControlFrame(s.sentPacketHandler.GetStopWaitingFrame(true))
+		}
+		packets, err := s.packer.PackRetransmission(retransmitPacket)
+		if err != nil {
+			return false, err
+		}
+		for _, packet := range packets {
 			if err := s.sendPackedPacket(packet); err != nil {
 				return false, err
 			}
-			return true, nil
 		}
-
-		// queue all retransmittable frames sent in forward-secure packets
-		utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
-		// resend the frames that were in the packet
-		for _, frame := range retransmitPacket.GetFramesForRetransmission() {
-			// TODO: only retransmit WINDOW_UPDATEs if they actually enlarge the window
-			switch f := frame.(type) {
-			case *wire.StreamFrame:
-				s.streamFramer.AddFrameForRetransmission(f)
-			default:
-				s.packer.QueueControlFrame(frame)
-			}
-		}
+		return true, nil
 	}
 
-	hasRetransmission := s.streamFramer.HasFramesForRetransmission()
-	if !s.version.UsesIETFFrameFormat() && (ack != nil || hasRetransmission) {
-		if swf := s.sentPacketHandler.GetStopWaitingFrame(hasRetransmission); swf != nil {
+	if !s.version.UsesIETFFrameFormat() && ack != nil {
+		if swf := s.sentPacketHandler.GetStopWaitingFrame(false); swf != nil {
 			s.packer.QueueControlFrame(swf)
 		}
 	}
