@@ -21,7 +21,7 @@ func ComposeGQUICVersionNegotiation(connID protocol.ConnectionID, versions []pro
 		utils.Errorf("error composing version negotiation packet: %s", err.Error())
 		return nil
 	}
-	for _, v := range protocol.GetGreasedVersions(versions) {
+	for _, v := range versions {
 		utils.BigEndian.WriteUint32(buf, uint32(v))
 	}
 	return buf.Bytes()
