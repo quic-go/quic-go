@@ -446,7 +446,7 @@ var _ = Describe("Server", func() {
 	})
 
 	It("setups with the right values", func() {
-		supportedVersions := []protocol.VersionNumber{1, 3, 5}
+		supportedVersions := []protocol.VersionNumber{protocol.VersionTLS, protocol.Version39}
 		acceptCookie := func(_ net.Addr, _ *Cookie) bool { return true }
 		config := Config{
 			Versions:         supportedVersions,
@@ -466,6 +466,12 @@ var _ = Describe("Server", func() {
 		Expect(server.config.IdleTimeout).To(Equal(42 * time.Minute))
 		Expect(reflect.ValueOf(server.config.AcceptCookie)).To(Equal(reflect.ValueOf(acceptCookie)))
 		Expect(server.config.KeepAlive).To(BeTrue())
+	})
+
+	It("errors when the Config contains an invalid version", func() {
+		version := protocol.VersionNumber(0x1234)
+		_, err := Listen(conn, &tls.Config{}, &Config{Versions: []protocol.VersionNumber{version}})
+		Expect(err).To(MatchError("0x1234 is not a valid QUIC version"))
 	})
 
 	It("fills in default values if options are not set in the Config", func() {
@@ -500,7 +506,6 @@ var _ = Describe("Server", func() {
 	})
 
 	It("sends a gQUIC Version Negotaion Packet, if the client sent a gQUIC Public Header", func() {
-		config.Versions = []protocol.VersionNumber{99}
 		b := &bytes.Buffer{}
 		hdr := wire.Header{
 			VersionFlag:     true,
@@ -537,7 +542,7 @@ var _ = Describe("Server", func() {
 	})
 
 	It("sends an IETF draft style Version Negotaion Packet, if the client sent a IETF draft style header", func() {
-		config.Versions = []protocol.VersionNumber{99, protocol.VersionTLS}
+		config.Versions = append(config.Versions, protocol.VersionTLS)
 		b := &bytes.Buffer{}
 		hdr := wire.Header{
 			Type:         protocol.PacketTypeInitial,
@@ -556,6 +561,7 @@ var _ = Describe("Server", func() {
 
 		done := make(chan struct{})
 		go func() {
+			defer GinkgoRecover()
 			ln.Accept()
 			close(done)
 		}()
@@ -569,12 +575,12 @@ var _ = Describe("Server", func() {
 		Expect(packet.ConnectionID).To(Equal(protocol.ConnectionID(0x1337)))
 		Expect(r.Len()).To(BeZero())
 		Consistently(done).ShouldNot(BeClosed())
+		// make the go routine return
+		ln.Close()
+		Eventually(done).Should(BeClosed())
 	})
 
 	It("ignores IETF draft style Initial packets, if it doesn't support TLS", func() {
-		version := protocol.VersionNumber(99)
-		Expect(version.UsesTLS()).To(BeFalse())
-		config.Versions = []protocol.VersionNumber{version}
 		b := &bytes.Buffer{}
 		hdr := wire.Header{
 			Type:         protocol.PacketTypeInitial,

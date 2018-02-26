@@ -85,6 +85,14 @@ func Dial(
 		}
 	}
 
+	// check that all versions are actually supported
+	if config != nil {
+		for _, v := range config.Versions {
+			if !protocol.IsValidVersion(v) {
+				return nil, fmt.Errorf("%s is not a valid QUIC version", v)
+			}
+		}
+	}
 	clientConfig := populateClientConfig(config)
 	c := &client{
 		conn:                   &conn{pconn: pconn, currentAddr: remoteAddr},

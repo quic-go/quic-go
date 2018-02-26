@@ -30,6 +30,11 @@ var SupportedVersions = []VersionNumber{
 	Version39,
 }
 
+// IsValidVersion says if the version is known to quic-go
+func IsValidVersion(v VersionNumber) bool {
+	return v == VersionTLS || IsSupportedVersion(SupportedVersions, v)
+}
+
 // UsesTLS says if this QUIC version uses TLS 1.3 for the handshake
 func (vn VersionNumber) UsesTLS() bool {
 	return vn == VersionTLS
