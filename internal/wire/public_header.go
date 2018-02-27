@@ -55,6 +55,13 @@ func (h *Header) writePublicHeader(b *bytes.Buffer, pers protocol.Perspective, _
 	}
 	b.WriteByte(publicFlagByte)
 
+	x := h.SpinCounter
+	if (h.SpinBit) {
+		x |= 0x80000000		
+	}
+	utils.BigEndian.WriteUint32(b, x)
+	
+	
 	if !h.OmitConnectionID {
 		utils.BigEndian.WriteUint64(b, uint64(h.ConnectionID))
 	}
@@ -95,6 +102,14 @@ func parsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Hea
 	if err != nil {
 		return nil, err
 	}
+
+	var scval uint32
+	scval, err = utils.BigEndian.ReadUint32(b)
+	if err != nil {
+		return nil, err
+	}
+	header.SpinBit = ((scval & 0x80000000) != 0) 
+
 	header.ResetFlag = publicFlagByte&0x02 > 0
 	header.VersionFlag = publicFlagByte&0x01 > 0
 
@@ -200,6 +215,7 @@ func (h *Header) getPublicHeaderLength(pers protocol.Perspective) (protocol.Byte
 	}
 
 	length := protocol.ByteCount(1) // 1 byte for public flags
+	length+=4  // 4 bytes for spin stuff
 	if h.hasPacketNumber(pers) {
 		if h.PacketNumberLen != protocol.PacketNumberLen1 && h.PacketNumberLen != protocol.PacketNumberLen2 && h.PacketNumberLen != protocol.PacketNumberLen4 && h.PacketNumberLen != protocol.PacketNumberLen6 {
 			return 0, errPacketNumberLenNotSet

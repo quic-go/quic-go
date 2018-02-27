@@ -31,6 +31,10 @@ type Header struct {
 
 	// only needed for logging
 	isPublicHeader bool
+
+	// spin stuff
+	SpinBit bool
+	SpinCounter      uint32
 }
 
 // ParseHeaderSentByServer parses the header for a packet that was sent by the server.
