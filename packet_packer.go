@@ -33,22 +33,6 @@ type packetPacker struct {
 	cryptoSetup  handshake.CryptoSetup
 
 	packetNumberGenerator *packetNumberGenerator
-<<<<<<< HEAD
-	streamFramer          *streamFramer
-
-	controlFrames    []wire.Frame
-	stopWaiting      *wire.StopWaitingFrame
-	ackFrame         *wire.AckFrame
-	leastUnacked     protocol.PacketNumber
-	omitConnectionID bool
-	hasSentPacket    bool // has the packetPacker already sent a packet
-
-	SpinBit bool
-	SpinCounterRsaved uint32
-	SpinCounterTsaved uint32
-	SpinCounterT      uint32
-	SpinCounterR      uint32
-=======
 	streams               streamFrameSource
 
 	controlFrameMutex sync.Mutex
@@ -60,7 +44,12 @@ type packetPacker struct {
 	omitConnectionID          bool
 	hasSentPacket             bool // has the packetPacker already sent a packet
 	numNonRetransmittableAcks int
->>>>>>> be2be3872f6608f29b379c422b2a885d521cb597
+	
+	SpinBit bool
+	SpinCounterRsaved uint32
+	SpinCounterTsaved uint32
+	SpinCounterT      uint32
+	SpinCounterR      uint32
 }
 
 func newPacketPacker(connectionID protocol.ConnectionID,
@@ -410,15 +399,13 @@ func (p *packetPacker) writeAndSealPacket(
 	if num != header.PacketNumber {
 		return nil, errors.New("packetPacker BUG: Peeked and Popped packet numbers do not match")
 	}
-<<<<<<< HEAD
 
 //	if (p.SpinBit) {
 //		log.Printf("SpincounterT=%v       pnum=%v",p.SpinCounterT,num);
 //	}
 	
-=======
 	p.hasSentPacket = true
->>>>>>> 489ea7fa1a9f21456060420f7b972908034b3d20
+	
 	return raw, nil
 }
 
