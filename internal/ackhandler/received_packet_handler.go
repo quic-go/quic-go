@@ -25,11 +25,18 @@ type receivedPacketHandler struct {
 	version protocol.VersionNumber
 }
 
+const (
+	// ackSendDelay is the maximum delay that can be applied to an ACK for a retransmittable packet
+	ackSendDelay = 25 * time.Millisecond
+	// retransmittablePacketsBeforeAck is the number of retransmittable that an ACK is sent for
+	retransmittablePacketsBeforeAck = 10
+)
+
 // NewReceivedPacketHandler creates a new receivedPacketHandler
 func NewReceivedPacketHandler(version protocol.VersionNumber) ReceivedPacketHandler {
 	return &receivedPacketHandler{
 		packetHistory: newReceivedPacketHistory(),
-		ackSendDelay:  protocol.AckSendDelay,
+		ackSendDelay:  ackSendDelay,
 		version:       version,
 	}
 }
@@ -82,7 +89,7 @@ func (h *receivedPacketHandler) maybeQueueAck(packetNumber protocol.PacketNumber
 	}
 
 	if !h.ackQueued && shouldInstigateAck {
-		if h.retransmittablePacketsReceivedSinceLastAck >= protocol.RetransmittablePacketsBeforeAck {
+		if h.retransmittablePacketsReceivedSinceLastAck >= retransmittablePacketsBeforeAck {
 			h.ackQueued = true
 		} else {
 			if h.ackAlarm.IsZero() {

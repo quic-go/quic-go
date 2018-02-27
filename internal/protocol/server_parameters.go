@@ -24,10 +24,6 @@ const MaxUndecryptablePackets = 10
 // This timeout allows the Go scheduler to switch to the Go rountine that reads the crypto stream and to escalate the crypto
 const PublicResetTimeout = 500 * time.Millisecond
 
-// AckSendDelay is the maximum delay that can be applied to an ACK for a retransmittable packet
-// This is the value Chromium is using
-const AckSendDelay = 25 * time.Millisecond
-
 // ReceiveStreamFlowControlWindow is the stream-level flow control window for receiving data
 // This is the value that Google servers are using
 const ReceiveStreamFlowControlWindow = (1 << 10) * 32 // 32 kB
@@ -91,9 +87,6 @@ const MaxTrackedReceivedAckRanges = DefaultMaxCongestionWindow
 
 // MaxNonRetransmittableAcks is the maximum number of packets containing an ACK, but no retransmittable frames, that we send in a row
 const MaxNonRetransmittableAcks = 19
-
-// RetransmittablePacketsBeforeAck is the number of retransmittable that an ACK is sent for
-const RetransmittablePacketsBeforeAck = 10
 
 // MaxStreamFrameSorterGaps is the maximum number of gaps between received StreamFrames
 // prevents DoS attacks against the streamFrameSorter

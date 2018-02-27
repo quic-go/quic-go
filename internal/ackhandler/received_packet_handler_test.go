@@ -98,7 +98,7 @@ var _ = Describe("receivedPacketHandler", func() {
 			It("queues an ACK for every RetransmittablePacketsBeforeAck retransmittable packet, if they are arriving fast", func() {
 				receiveAndAck10Packets()
 				p := protocol.PacketNumber(11)
-				for i := 0; i < protocol.RetransmittablePacketsBeforeAck-1; i++ {
+				for i := 0; i < retransmittablePacketsBeforeAck-1; i++ {
 					err := handler.ReceivedPacket(p, time.Time{}, true)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(handler.ackQueued).To(BeFalse())
