@@ -71,6 +71,13 @@ func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte
 }
 
 func parseShortHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
+
+	scval, err := utils.BigEndian.ReadUint32(b)
+	if err != nil {
+		return nil, err
+	}
+	spinbit := ((scval & 0x80000000) != 0) 
+
 	hasConnID := typeByte&0x40 > 0
 	var connID uint64
 	if hasConnID {
@@ -91,6 +98,7 @@ func parseShortHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
 		ConnectionID:     protocol.ConnectionID(connID),
 		PacketNumber:     protocol.PacketNumber(pn),
 		PacketNumberLen:  protocol.PacketNumberLen(pnLen),
+		SpinBit:          spinbit,
 	}, nil
 }
 
@@ -128,6 +136,12 @@ func (h *Header) writeShortHeader(b *bytes.Buffer) error {
 	}
 	b.WriteByte(typeByte)
 
+	x := h.SpinCounter
+	if (h.SpinBit) {
+		x |= 0x80000000		
+	}
+	utils.BigEndian.WriteUint32(b, x)
+		
 	if !h.OmitConnectionID {
 		utils.BigEndian.WriteUint64(b, uint64(h.ConnectionID))
 	}
@@ -149,6 +163,7 @@ func (h *Header) getHeaderLength() (protocol.ByteCount, error) {
 	}
 
 	length := protocol.ByteCount(1) // type byte
+	length+=4  // 4 bytes for spin stuff
 	if !h.OmitConnectionID {
 		length += 8
 	}
