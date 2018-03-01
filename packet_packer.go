@@ -46,10 +46,13 @@ type packetPacker struct {
 	numNonRetransmittableAcks int
 	
 	SpinBit bool
+
 	SpinCounterRsaved uint32
 	SpinCounterTsaved uint32
 	SpinCounterT      uint32
 	SpinCounterR      uint32
+	
+	serialPhase	  uint16
 }
 
 func newPacketPacker(connectionID protocol.ConnectionID,
@@ -344,6 +347,35 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header
 	return header
 }
 
+
+
+func twelveBitEncoding(x uint32) uint16 {
+	var exp uint16 = 0
+
+	for (x>511) {
+		exp++
+		if (exp>7) {
+			return 0xFFFF // infinite
+		}
+		x>>=1
+	}	
+	return (exp << 9) | uint16(x)
+}
+
+func (p *packetPacker) serialEncoding(val uint16) uint8 {
+	phase := p.serialPhase
+	if (phase>1) {
+		panic("Phase out of range")
+	}
+	p.serialPhase = (p.serialPhase + 1) % 2
+	if (phase==0) {
+		return uint8(val&0x003F)
+	} else {
+		return 0x40 | uint8((val>>6)&0x3F)
+	}	
+}
+
+
 func (p *packetPacker) writeAndSealPacket(
 	header *wire.Header,
 	payloadFrames []wire.Frame,
@@ -352,18 +384,19 @@ func (p *packetPacker) writeAndSealPacket(
 	raw := *getPacketBuffer()
 	buffer := bytes.NewBuffer(raw[:0])
 
-
+	var scval uint16
 	header.SpinBit = p.SpinBit
 	if (p.SpinBit) {
 		p.SpinCounterT++
-		header.SpinCounter = p.SpinCounterRsaved
+		scval = twelveBitEncoding(p.SpinCounterRsaved)
 	} else {
-		header.SpinCounter = p.SpinCounterTsaved
+		scval = twelveBitEncoding(p.SpinCounterTsaved)
 	}
-	
+	header.MeasurementByte = p.serialEncoding(scval)
 	if err := header.Write(buffer, p.perspective, p.version); err != nil {
 		return nil, err
 	}
+
 	payloadStartIndex := buffer.Len()
 
 	// the Initial packet needs to be padded, so the last STREAM frame must have the data length present

@@ -34,7 +34,7 @@ type Header struct {
 
 	// spin stuff
 	SpinBit bool
-	SpinCounter      uint32
+	MeasurementByte  uint8
 }
 
 // ParseHeaderSentByServer parses the header for a packet that was sent by the server.

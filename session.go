@@ -535,11 +535,11 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 			// client = inverter
 			if (s.packer.SpinBit == hdr.SpinBit) {
 				if (hdr.SpinBit) {
-					//log.Printf("CLI=>SPIN0 : save T=%v   pnum=%v",s.packer.SpinCounterT,hdr.PacketNumber);
+					log.Printf("CLI=>SPIN0 : save T=%v   pnum=%v",s.packer.SpinCounterT,hdr.PacketNumber);
 					s.packer.SpinCounterR = 0
 					s.packer.SpinCounterTsaved = s.packer.SpinCounterT
 				} else {
-					//log.Printf("CLI=>SPIN1 : save R=%v   pnum=%v",s.packer.SpinCounterR,hdr.PacketNumber);
+					log.Printf("CLI=>SPIN1 : save R=%v   pnum=%v",s.packer.SpinCounterR,hdr.PacketNumber);
 					s.packer.SpinCounterT = 0
 					s.packer.SpinCounterRsaved = s.packer.SpinCounterR
 				}
@@ -550,12 +550,12 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 			// server = repeater
 			if (s.packer.SpinBit != hdr.SpinBit) {
 				if (hdr.SpinBit) {
-					//log.Printf("SRV=>SPIN1 : save R=%v",s.packer.SpinCounterR);
+					log.Printf("SRV=>SPIN1 : save R=%v",s.packer.SpinCounterR);
 					s.packer.SpinCounterRsaved = s.packer.SpinCounterR
 					s.packer.SpinCounterR = 0
 					s.packer.SpinCounterT = 0
 				} else {
-					//log.Printf("SRV=>SPIN0 : save T=%v",s.packer.SpinCounterT);
+					log.Printf("SRV=>SPIN0 : save T=%v",s.packer.SpinCounterT);
 					s.packer.SpinCounterTsaved = s.packer.SpinCounterT
 				}
 			}
