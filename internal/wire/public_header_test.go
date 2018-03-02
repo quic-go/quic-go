@@ -81,15 +81,6 @@ var _ = Describe("Public Header", func() {
 			Expect(b.Len()).To(BeZero())
 		})
 
-		PIt("rejects diversification nonces sent by the client", func() {
-			b := bytes.NewReader([]byte{0x0c, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6,
-				0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1,
-				0x01,
-			})
-			_, err := parsePublicHeader(b, protocol.PerspectiveClient)
-			Expect(err).To(MatchError("diversification nonces should only be sent by servers"))
-		})
-
 		Context("version negotiation packets", func() {
 			appendVersion := func(data []byte, v protocol.VersionNumber) []byte {
 				data = append(data, []byte{0, 0, 0, 0}...)
