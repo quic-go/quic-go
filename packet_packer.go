@@ -133,7 +133,7 @@ func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedP
 		maxSize := protocol.MaxPacketSize - protocol.ByteCount(sealer.Overhead()) - headerLength
 
 		// for gQUIC: add a STOP_WAITING for *every* retransmission
-		if !p.version.UsesIETFFrameFormat() {
+		if p.version.UsesStopWaitingFrames() {
 			if p.stopWaiting == nil {
 				return nil, errors.New("PacketPacker BUG: Handshake retransmissions must contain a STOP_WAITING frame")
 			}
@@ -215,7 +215,7 @@ func (p *packetPacker) packHandshakeRetransmission(packet *ackhandler.Packet) (*
 	}
 	header := p.getHeader(packet.EncryptionLevel)
 	var frames []wire.Frame
-	if !p.version.UsesIETFFrameFormat() { // for gQUIC: pack a STOP_WAITING first
+	if p.version.UsesStopWaitingFrames() { // for gQUIC: pack a STOP_WAITING first
 		if p.stopWaiting == nil {
 			return nil, errors.New("PacketPacker BUG: Handshake retransmissions must contain a STOP_WAITING frame")
 		}

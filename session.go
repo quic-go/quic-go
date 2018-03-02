@@ -796,7 +796,7 @@ func (s *session) maybeSendAckOnlyPacket() error {
 	}
 	s.packer.QueueControlFrame(ack)
 
-	if !s.version.UsesIETFFrameFormat() { // for gQUIC, maybe add a STOP_WAITING
+	if s.version.UsesStopWaitingFrames() { // for gQUIC, maybe add a STOP_WAITING
 		if swf := s.sentPacketHandler.GetStopWaitingFrame(false); swf != nil {
 			s.packer.QueueControlFrame(swf)
 		}
@@ -845,7 +845,7 @@ func (s *session) sendPacket() (bool, error) {
 			utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 		}
 
-		if !s.version.UsesIETFFrameFormat() {
+		if s.version.UsesStopWaitingFrames() {
 			s.packer.QueueControlFrame(s.sentPacketHandler.GetStopWaitingFrame(true))
 		}
 		packets, err := s.packer.PackRetransmission(retransmitPacket)
@@ -860,7 +860,7 @@ func (s *session) sendPacket() (bool, error) {
 		return true, nil
 	}
 
-	if !s.version.UsesIETFFrameFormat() && ack != nil {
+	if s.version.UsesStopWaitingFrames() && ack != nil {
 		if swf := s.sentPacketHandler.GetStopWaitingFrame(false); swf != nil {
 			s.packer.QueueControlFrame(swf)
 		}

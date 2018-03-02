@@ -70,6 +70,11 @@ var _ = Describe("Version", func() {
 		Expect(VersionTLS.UsesIETFFrameFormat()).To(BeTrue())
 	})
 
+	It("tells if a version uses STOP_WAITING frames", func() {
+		Expect(Version39.UsesStopWaitingFrames()).To(BeTrue())
+		Expect(VersionTLS.UsesStopWaitingFrames()).To(BeFalse())
+	})
+
 	It("says if a stream contributes to connection-level flowcontrol, for gQUIC", func() {
 		Expect(Version39.StreamContributesToConnectionFlowControl(1)).To(BeFalse())
 		Expect(Version39.StreamContributesToConnectionFlowControl(2)).To(BeTrue())
