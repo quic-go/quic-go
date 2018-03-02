@@ -619,10 +619,11 @@ var _ = Describe("Packet packer", func() {
 				EncryptionLevel: protocol.EncryptionUnencrypted,
 				Frames:          []wire.Frame{sf},
 			}
-			p, err := packer.PackHandshakeRetransmission(packet)
+			p, err := packer.PackRetransmission(packet)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(p.frames).To(Equal([]wire.Frame{swf, sf}))
-			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
+			Expect(p).To(HaveLen(1))
+			Expect(p[0].frames).To(Equal([]wire.Frame{swf, sf}))
+			Expect(p[0].encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
 		})
 
 		It("doesn't add a STOP_WAITING frame for IETF QUIC", func() {
@@ -631,10 +632,11 @@ var _ = Describe("Packet packer", func() {
 				EncryptionLevel: protocol.EncryptionUnencrypted,
 				Frames:          []wire.Frame{sf},
 			}
-			p, err := packer.PackHandshakeRetransmission(packet)
+			p, err := packer.PackRetransmission(packet)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(p.frames).To(Equal([]wire.Frame{sf}))
-			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
+			Expect(p).To(HaveLen(1))
+			Expect(p[0].frames).To(Equal([]wire.Frame{sf}))
+			Expect(p[0].encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
 		})
 
 		It("packs a retransmission for a packet sent with initial encryption", func() {
@@ -644,13 +646,14 @@ var _ = Describe("Packet packer", func() {
 				EncryptionLevel: protocol.EncryptionSecure,
 				Frames:          []wire.Frame{sf},
 			}
-			p, err := packer.PackHandshakeRetransmission(packet)
+			p, err := packer.PackRetransmission(packet)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(p.frames).To(Equal([]wire.Frame{swf, sf}))
-			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionSecure))
+			Expect(p).To(HaveLen(1))
+			Expect(p[0].frames).To(Equal([]wire.Frame{swf, sf}))
+			Expect(p[0].encryptionLevel).To(Equal(protocol.EncryptionSecure))
 			// a packet sent by the server with initial encryption contains the SHLO
 			// it needs to have a diversification nonce
-			Expect(p.raw).To(ContainSubstring(string(nonce)))
+			Expect(p[0].raw).To(ContainSubstring(string(nonce)))
 		})
 
 		It("includes the diversification nonce on packets sent with initial encryption", func() {
@@ -658,9 +661,10 @@ var _ = Describe("Packet packer", func() {
 				EncryptionLevel: protocol.EncryptionSecure,
 				Frames:          []wire.Frame{sf},
 			}
-			p, err := packer.PackHandshakeRetransmission(packet)
+			p, err := packer.PackRetransmission(packet)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionSecure))
+			Expect(p).To(HaveLen(1))
+			Expect(p[0].encryptionLevel).To(Equal(protocol.EncryptionSecure))
 		})
 
 		// this should never happen, since non forward-secure packets are limited to a size smaller than MaxPacketSize, such that it is always possible to retransmit them without splitting the StreamFrame
@@ -675,7 +679,7 @@ var _ = Describe("Packet packer", func() {
 					},
 				},
 			}
-			_, err := packer.PackHandshakeRetransmission(packet)
+			_, err := packer.PackRetransmission(packet)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("PacketPacker BUG: packet too large"))
 		})
@@ -708,28 +712,163 @@ var _ = Describe("Packet packer", func() {
 				EncryptionLevel: protocol.EncryptionUnencrypted,
 				Frames:          []wire.Frame{sf},
 			}
-			p, err := packer.PackHandshakeRetransmission(packet)
+			p, err := packer.PackRetransmission(packet)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(p.frames).To(Equal([]wire.Frame{sf}))
-			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
-			Expect(p.header.Type).To(Equal(protocol.PacketTypeInitial))
-		})
-
-		It("refuses to retransmit packets that were sent with forward-secure encryption", func() {
-			p := &ackhandler.Packet{
-				EncryptionLevel: protocol.EncryptionForwardSecure,
-			}
-			_, err := packer.PackHandshakeRetransmission(p)
-			Expect(err).To(MatchError("PacketPacker BUG: forward-secure encrypted handshake packets don't need special treatment"))
+			Expect(p).To(HaveLen(1))
+			Expect(p[0].frames).To(Equal([]wire.Frame{sf}))
+			Expect(p[0].encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
+			Expect(p[0].header.Type).To(Equal(protocol.PacketTypeInitial))
 		})
 
 		It("refuses to retransmit packets without a STOP_WAITING Frame", func() {
 			packer.stopWaiting = nil
-			_, err := packer.PackHandshakeRetransmission(&ackhandler.Packet{
+			_, err := packer.PackRetransmission(&ackhandler.Packet{
 				EncryptionLevel: protocol.EncryptionSecure,
 			})
 			Expect(err).To(MatchError("PacketPacker BUG: Handshake retransmissions must contain a STOP_WAITING frame"))
 		})
+	})
+
+	Context("retransmission of forward-secure packets", func() {
+		BeforeEach(func() {
+			packer.packetNumberGenerator.next = 15
+			packer.stopWaiting = &wire.StopWaitingFrame{LeastUnacked: 7}
+		})
+
+		It("retransmits a small packet", func() {
+			frames := []wire.Frame{
+				&wire.MaxDataFrame{ByteOffset: 0x1234},
+				&wire.StreamFrame{StreamID: 42, Data: []byte("foobar")},
+			}
+			packets, err := packer.PackRetransmission(&ackhandler.Packet{
+				EncryptionLevel: protocol.EncryptionForwardSecure,
+				Frames:          frames,
+			})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packets).To(HaveLen(1))
+			p := packets[0]
+			Expect(p.encryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
+			Expect(p.frames).To(HaveLen(3))
+			Expect(p.frames[0]).To(BeAssignableToTypeOf(&wire.StopWaitingFrame{}))
+			Expect(p.frames[0].(*wire.StopWaitingFrame).LeastUnacked).To(Equal(protocol.PacketNumber(7)))
+			Expect(p.frames[0].(*wire.StopWaitingFrame).PacketNumber).To(Equal(p.header.PacketNumber))
+			Expect(p.frames[0].(*wire.StopWaitingFrame).PacketNumberLen).To(Equal(p.header.PacketNumberLen))
+			Expect(p.frames[1:]).To(Equal(frames))
+		})
+
+		It("refuses to retransmit packets without a STOP_WAITING Frame", func() {
+			packer.stopWaiting = nil
+			_, err := packer.PackRetransmission(&ackhandler.Packet{
+				EncryptionLevel: protocol.EncryptionForwardSecure,
+				Frames:          []wire.Frame{&wire.MaxDataFrame{ByteOffset: 0x1234}},
+			})
+			Expect(err).To(MatchError("PacketPacker BUG: Handshake retransmissions must contain a STOP_WAITING frame"))
+		})
+
+		It("packs two packets for retransmission if the original packet contained many control frames", func() {
+			var frames []wire.Frame
+			var totalLen protocol.ByteCount
+			// pack a bunch of control frames, such that the packet is way bigger than a single packet
+			for i := 0; totalLen < protocol.MaxPacketSize*3/2; i++ {
+				f := &wire.MaxStreamDataFrame{StreamID: protocol.StreamID(i), ByteOffset: protocol.ByteCount(i)}
+				frames = append(frames, f)
+				totalLen += f.Length(packer.version)
+			}
+			packets, err := packer.PackRetransmission(&ackhandler.Packet{
+				EncryptionLevel: protocol.EncryptionForwardSecure,
+				Frames:          frames,
+			})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packets).To(HaveLen(2))
+			Expect(len(packets[0].frames) + len(packets[1].frames)).To(Equal(len(frames) + 2)) // all frames, plus 2 STOP_WAITING frames
+			Expect(packets[0].frames[0]).To(BeAssignableToTypeOf(&wire.StopWaitingFrame{}))
+			Expect(packets[1].frames[0]).To(BeAssignableToTypeOf(&wire.StopWaitingFrame{}))
+			Expect(packets[0].frames[1:]).To(Equal(frames[:len(packets[0].frames)-1]))
+			Expect(packets[1].frames[1:]).To(Equal(frames[len(packets[0].frames)-1:]))
+			// check that the first packet was filled up as far as possible:
+			// if the first frame (after the STOP_WAITING) was packed into the first packet, it would have overflown the MaxPacketSize
+			Expect(len(packets[0].raw) + int(packets[1].frames[1].Length(packer.version))).To(BeNumerically(">", protocol.MaxPacketSize))
+		})
+
+		It("splits a STREAM frame that doesn't fit", func() {
+			packets, err := packer.PackRetransmission(&ackhandler.Packet{
+				EncryptionLevel: protocol.EncryptionForwardSecure,
+				Frames: []wire.Frame{&wire.StreamFrame{
+					StreamID: 42,
+					Offset:   1337,
+					Data:     bytes.Repeat([]byte{'a'}, int(protocol.MaxPacketSize)*3/2),
+				}},
+			})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packets).To(HaveLen(2))
+			Expect(packets[0].frames[0]).To(BeAssignableToTypeOf(&wire.StopWaitingFrame{}))
+			Expect(packets[1].frames[0]).To(BeAssignableToTypeOf(&wire.StopWaitingFrame{}))
+			Expect(packets[0].frames[1]).To(BeAssignableToTypeOf(&wire.StreamFrame{}))
+			Expect(packets[1].frames[1]).To(BeAssignableToTypeOf(&wire.StreamFrame{}))
+			sf1 := packets[0].frames[1].(*wire.StreamFrame)
+			sf2 := packets[1].frames[1].(*wire.StreamFrame)
+			Expect(sf1.StreamID).To(Equal(protocol.StreamID(42)))
+			Expect(sf1.Offset).To(Equal(protocol.ByteCount(1337)))
+			Expect(sf1.DataLenPresent).To(BeFalse())
+			Expect(sf2.StreamID).To(Equal(protocol.StreamID(42)))
+			Expect(sf2.Offset).To(Equal(protocol.ByteCount(1337) + sf1.DataLen()))
+			Expect(sf2.DataLenPresent).To(BeFalse())
+			Expect(sf1.DataLen() + sf2.DataLen()).To(Equal(protocol.MaxPacketSize * 3 / 2))
+			Expect(packets[0].raw).To(HaveLen(int(protocol.MaxPacketSize)))
+		})
+
+		It("packs two packets for retransmission if the original packet contained many STREAM frames", func() {
+			var frames []wire.Frame
+			var totalLen protocol.ByteCount
+			// pack a bunch of control frames, such that the packet is way bigger than a single packet
+			for i := 0; totalLen < protocol.MaxPacketSize*3/2; i++ {
+				f := &wire.StreamFrame{
+					StreamID:       protocol.StreamID(i),
+					Data:           []byte("foobar"),
+					DataLenPresent: true,
+				}
+				frames = append(frames, f)
+				totalLen += f.Length(packer.version)
+			}
+			packets, err := packer.PackRetransmission(&ackhandler.Packet{
+				EncryptionLevel: protocol.EncryptionForwardSecure,
+				Frames:          frames,
+			})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packets).To(HaveLen(2))
+			Expect(len(packets[0].frames) + len(packets[1].frames)).To(Equal(len(frames) + 2)) // all frames, plus 2 STOP_WAITING frames
+			Expect(packets[0].frames[0]).To(BeAssignableToTypeOf(&wire.StopWaitingFrame{}))
+			Expect(packets[1].frames[0]).To(BeAssignableToTypeOf(&wire.StopWaitingFrame{}))
+			Expect(packets[0].frames[1:]).To(Equal(frames[:len(packets[0].frames)-1]))
+			Expect(packets[1].frames[1:]).To(Equal(frames[len(packets[0].frames)-1:]))
+			// check that the first packet was filled up as far as possible:
+			// if the first frame (after the STOP_WAITING) was packed into the first packet, it would have overflown the MaxPacketSize
+			Expect(len(packets[0].raw) + int(packets[1].frames[1].Length(packer.version))).To(BeNumerically(">", protocol.MaxPacketSize-protocol.MinStreamFrameSize))
+		})
+
+		It("correctly sets the DataLenPresent on STREAM frames", func() {
+			frames := []wire.Frame{
+				&wire.StreamFrame{StreamID: 4, Data: []byte("foobar"), DataLenPresent: true},
+				&wire.StreamFrame{StreamID: 5, Data: []byte("barfoo")},
+			}
+			packets, err := packer.PackRetransmission(&ackhandler.Packet{
+				EncryptionLevel: protocol.EncryptionForwardSecure,
+				Frames:          frames,
+			})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packets).To(HaveLen(1))
+			p := packets[0]
+			Expect(p.frames).To(HaveLen(3))
+			Expect(p.frames[1]).To(BeAssignableToTypeOf(&wire.StreamFrame{}))
+			Expect(p.frames[2]).To(BeAssignableToTypeOf(&wire.StreamFrame{}))
+			sf1 := p.frames[1].(*wire.StreamFrame)
+			sf2 := p.frames[2].(*wire.StreamFrame)
+			Expect(sf1.StreamID).To(Equal(protocol.StreamID(4)))
+			Expect(sf1.DataLenPresent).To(BeTrue())
+			Expect(sf2.StreamID).To(Equal(protocol.StreamID(5)))
+			Expect(sf2.DataLenPresent).To(BeFalse())
+		})
+
 	})
 
 	Context("packing ACK packets", func() {

@@ -99,11 +99,112 @@ func (p *packetPacker) PackAckPacket() (*packedPacket, error) {
 	}, err
 }
 
-// PackHandshakeRetransmission retransmits a handshake packet, that was sent with less than forward-secure encryption
-func (p *packetPacker) PackHandshakeRetransmission(packet *ackhandler.Packet) (*packedPacket, error) {
-	if packet.EncryptionLevel == protocol.EncryptionForwardSecure {
-		return nil, errors.New("PacketPacker BUG: forward-secure encrypted handshake packets don't need special treatment")
+// PackRetransmission packs a retransmission
+// For packets sent after completion of the handshake, it might happen that 2 packets have to be sent.
+// This can happen e.g. when a longer packet number is used in the header.
+func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedPacket, error) {
+	if packet.EncryptionLevel != protocol.EncryptionForwardSecure {
+		p, err := p.packHandshakeRetransmission(packet)
+		return []*packedPacket{p}, err
 	}
+
+	var controlFrames []wire.Frame
+	var streamFrames []*wire.StreamFrame
+	for _, f := range packet.Frames {
+		if sf, ok := f.(*wire.StreamFrame); ok {
+			sf.DataLenPresent = true
+			streamFrames = append(streamFrames, sf)
+		} else {
+			controlFrames = append(controlFrames, f)
+		}
+	}
+
+	var packets []*packedPacket
+	encLevel, sealer := p.cryptoSetup.GetSealer()
+	for len(controlFrames) > 0 || len(streamFrames) > 0 {
+		var frames []wire.Frame
+		var payloadLength protocol.ByteCount
+
+		header := p.getHeader(encLevel)
+		headerLength, err := header.GetLength(p.perspective, p.version)
+		if err != nil {
+			return nil, err
+		}
+		maxSize := protocol.MaxPacketSize - protocol.ByteCount(sealer.Overhead()) - headerLength
+
+		// for gQUIC: add a STOP_WAITING for *every* retransmission
+		if p.version.UsesStopWaitingFrames() {
+			if p.stopWaiting == nil {
+				return nil, errors.New("PacketPacker BUG: Handshake retransmissions must contain a STOP_WAITING frame")
+			}
+			// create a new StopWaitingFrame, since we might need to send more than one packet as a retransmission
+			swf := &wire.StopWaitingFrame{
+				LeastUnacked:    p.stopWaiting.LeastUnacked,
+				PacketNumber:    header.PacketNumber,
+				PacketNumberLen: header.PacketNumberLen,
+			}
+			payloadLength += swf.Length(p.version)
+			frames = append(frames, swf)
+		}
+
+		for len(controlFrames) > 0 {
+			frame := controlFrames[0]
+			length := frame.Length(p.version)
+			if payloadLength+length > maxSize {
+				break
+			}
+			payloadLength += length
+			frames = append(frames, frame)
+			controlFrames = controlFrames[1:]
+		}
+
+		// temporarily increase the maxFrameSize by the (minimum) length of the DataLen field
+		// this leads to a properly sized packet in all cases, since we do all the packet length calculations with StreamFrames that have the DataLen set
+		// however, for the last STREAM frame in the packet, we can omit the DataLen, thus yielding a packet of exactly the correct size
+		// for gQUIC STREAM frames, DataLen is always 2 bytes
+		// for IETF draft style STREAM frames, the length is encoded to either 1 or 2 bytes
+		if p.version.UsesIETFFrameFormat() {
+			maxSize++
+		} else {
+			maxSize += 2
+		}
+		for len(streamFrames) > 0 && payloadLength+protocol.MinStreamFrameSize < maxSize {
+			// TODO: optimize by setting DataLenPresent = false on all but the last STREAM frame
+			frame := streamFrames[0]
+			frameToAdd := frame
+
+			sf, err := frame.MaybeSplitOffFrame(maxSize-payloadLength, p.version)
+			if err != nil {
+				return nil, err
+			}
+			if sf != nil {
+				frameToAdd = sf
+			} else {
+				streamFrames = streamFrames[1:]
+			}
+			payloadLength += frameToAdd.Length(p.version)
+			frames = append(frames, frameToAdd)
+		}
+		if sf, ok := frames[len(frames)-1].(*wire.StreamFrame); ok {
+			sf.DataLenPresent = false
+		}
+		raw, err := p.writeAndSealPacket(header, frames, sealer)
+		if err != nil {
+			return nil, err
+		}
+		packets = append(packets, &packedPacket{
+			header:          header,
+			raw:             raw,
+			frames:          frames,
+			encryptionLevel: encLevel,
+		})
+	}
+	p.stopWaiting = nil
+	return packets, nil
+}
+
+// packHandshakeRetransmission retransmits a handshake packet, that was sent with less than forward-secure encryption
+func (p *packetPacker) packHandshakeRetransmission(packet *ackhandler.Packet) (*packedPacket, error) {
 	sealer, err := p.cryptoSetup.GetSealerWithEncryptionLevel(packet.EncryptionLevel)
 	if err != nil {
 		return nil, err
@@ -114,7 +215,7 @@ func (p *packetPacker) PackHandshakeRetransmission(packet *ackhandler.Packet) (*
 	}
 	header := p.getHeader(packet.EncryptionLevel)
 	var frames []wire.Frame
-	if !p.version.UsesIETFFrameFormat() { // for gQUIC: pack a STOP_WAITING first
+	if p.version.UsesStopWaitingFrames() { // for gQUIC: pack a STOP_WAITING first
 		if p.stopWaiting == nil {
 			return nil, errors.New("PacketPacker BUG: Handshake retransmissions must contain a STOP_WAITING frame")
 		}
@@ -265,7 +366,7 @@ func (p *packetPacker) composeNextPacket(
 
 	// temporarily increase the maxFrameSize by the (minimum) length of the DataLen field
 	// this leads to a properly sized packet in all cases, since we do all the packet length calculations with StreamFrames that have the DataLen set
-	// however, for the last StreamFrame in the packet, we can omit the DataLen, thus yielding a packet of exactly the correct size
+	// however, for the last STREAM frame in the packet, we can omit the DataLen, thus yielding a packet of exactly the correct size
 	// for gQUIC STREAM frames, DataLen is always 2 bytes
 	// for IETF draft style STREAM frames, the length is encoded to either 1 or 2 bytes
 	if p.version.UsesIETFFrameFormat() {
