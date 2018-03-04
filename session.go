@@ -768,12 +768,30 @@ func (s *session) processTransportParameters(params *handshake.TransportParamete
 }
 
 func (s *session) sendPackets() error {
+	s.packer.SetLeastUnacked(s.sentPacketHandler.GetLeastUnacked())
 	s.pacingDeadline = time.Time{}
 	if !s.sentPacketHandler.SendingAllowed() { // if congestion limited, at least try sending an ACK frame
 		return s.maybeSendAckOnlyPacket()
 	}
 	numPackets := s.sentPacketHandler.ShouldSendNumPackets()
-	for i := 0; i < numPackets; i++ {
+	var numPacketsSent int
+	// Send retransmissions, until
+	// * we're congestion limited, or
+	// * there are no more retransmissions, or
+	// * the maximum number of packets was reached
+	for ; numPacketsSent < numPackets; numPacketsSent++ {
+		sentPacket, err := s.maybeSendRetransmission()
+		if err != nil {
+			return err
+		}
+		if !sentPacket { // no more retransmission to send. Proceed to send new data.
+			break
+		}
+		if !s.sentPacketHandler.SendingAllowed() {
+			return nil
+		}
+	}
+	for ; numPacketsSent < numPackets; numPacketsSent++ {
 		sentPacket, err := s.sendPacket()
 		if err != nil {
 			return err
@@ -808,9 +826,49 @@ func (s *session) maybeSendAckOnlyPacket() error {
 	return s.sendPackedPacket(packet)
 }
 
-func (s *session) sendPacket() (bool, error) {
-	s.packer.SetLeastUnacked(s.sentPacketHandler.GetLeastUnacked())
+// maybeSendRetransmission sends retransmissions for at most one packet.
+// It takes care that Initials aren't retransmitted, if a packet from the server was already received.
+func (s *session) maybeSendRetransmission() (bool, error) {
+	var retransmitPacket *ackhandler.Packet
+	for {
+		retransmitPacket = s.sentPacketHandler.DequeuePacketForRetransmission()
+		if retransmitPacket == nil {
+			return false, nil
+		}
 
+		// Don't retransmit Initial packets if we already received a response.
+		// An Initial might have been retransmitted multiple times before we receive a response.
+		// As soon as we receive one response, we don't need to send any more Initials.
+		if s.receivedFirstPacket && retransmitPacket.PacketType == protocol.PacketTypeInitial {
+			utils.Debugf("Skipping retransmission of packet %d. Already received a response to an Initial.", retransmitPacket.PacketNumber)
+			retransmitPacket = nil
+			continue
+		}
+		break
+	}
+
+	if retransmitPacket.EncryptionLevel != protocol.EncryptionForwardSecure {
+		utils.Debugf("\tDequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
+	} else {
+		utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
+	}
+
+	if s.version.UsesStopWaitingFrames() {
+		s.packer.QueueControlFrame(s.sentPacketHandler.GetStopWaitingFrame(true))
+	}
+	packets, err := s.packer.PackRetransmission(retransmitPacket)
+	if err != nil {
+		return false, err
+	}
+	for _, packet := range packets {
+		if err := s.sendPackedPacket(packet); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+func (s *session) sendPacket() (bool, error) {
 	if offset := s.connFlowController.GetWindowUpdate(); offset != 0 {
 		s.packer.QueueControlFrame(&wire.MaxDataFrame{ByteOffset: offset})
 	}
@@ -819,52 +877,15 @@ func (s *session) sendPacket() (bool, error) {
 	}
 	s.windowUpdateQueue.QueueAll()
 
-	ack := s.receivedPacketHandler.GetAckFrame()
-	if ack != nil {
+	if ack := s.receivedPacketHandler.GetAckFrame(); ack != nil {
 		s.packer.QueueControlFrame(ack)
-	}
-
-	// check for retransmissions first
-	for {
-		retransmitPacket := s.sentPacketHandler.DequeuePacketForRetransmission()
-		if retransmitPacket == nil {
-			break
-		}
-		// Don't retransmit Initial packets if we already received a response.
-		// An Initial might have been retransmitted multiple times before we receive a response.
-		// As soon as we receive one response, we don't need to send any more Initials.
-		if s.receivedFirstPacket && retransmitPacket.PacketType == protocol.PacketTypeInitial {
-			utils.Debugf("Skipping retransmission of packet %d. Already received a response to an Initial.", retransmitPacket.PacketNumber)
-			continue
-		}
-
-		// retransmit packets
-		if retransmitPacket.EncryptionLevel != protocol.EncryptionForwardSecure {
-			utils.Debugf("\tDequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
-		} else {
-			utils.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
-		}
-
 		if s.version.UsesStopWaitingFrames() {
-			s.packer.QueueControlFrame(s.sentPacketHandler.GetStopWaitingFrame(true))
-		}
-		packets, err := s.packer.PackRetransmission(retransmitPacket)
-		if err != nil {
-			return false, err
-		}
-		for _, packet := range packets {
-			if err := s.sendPackedPacket(packet); err != nil {
-				return false, err
+			if swf := s.sentPacketHandler.GetStopWaitingFrame(false); swf != nil {
+				s.packer.QueueControlFrame(swf)
 			}
 		}
-		return true, nil
 	}
 
-	if s.version.UsesStopWaitingFrames() && ack != nil {
-		if swf := s.sentPacketHandler.GetStopWaitingFrame(false); swf != nil {
-			s.packer.QueueControlFrame(swf)
-		}
-	}
 	packet, err := s.packer.PackPacket()
 	if err != nil || packet == nil {
 		return false, err
