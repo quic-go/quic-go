@@ -616,12 +616,14 @@ var _ = Describe("Packet packer", func() {
 
 		It("packs a retransmission for a packet sent with no encryption", func() {
 			packet := &ackhandler.Packet{
+				PacketType:      protocol.PacketTypeHandshake,
 				EncryptionLevel: protocol.EncryptionUnencrypted,
 				Frames:          []wire.Frame{sf},
 			}
 			p, err := packer.PackRetransmission(packet)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p).To(HaveLen(1))
+			Expect(p[0].header.Type).To(Equal(protocol.PacketTypeHandshake))
 			Expect(p[0].frames).To(Equal([]wire.Frame{swf, sf}))
 			Expect(p[0].encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
 		})
