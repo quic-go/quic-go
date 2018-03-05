@@ -112,14 +112,9 @@ func (h *sentPacketHandler) SetHandshakeComplete() {
 	h.handshakeComplete = true
 }
 
-func (h *sentPacketHandler) SentPacket(packet *Packet) error {
-	if protocol.PacketNumber(len(h.retransmissionQueue)+h.packetHistory.Len()+1) > protocol.MaxTrackedSentPackets {
-		return errors.New("Too many outstanding non-acked and non-retransmitted packets")
-	}
-
+func (h *sentPacketHandler) SentPacket(packet *Packet) {
 	for p := h.lastSentPacketNumber + 1; p < packet.PacketNumber; p++ {
 		h.skippedPackets = append(h.skippedPackets, p)
-
 		if len(h.skippedPackets) > protocol.MaxTrackedSkippedPackets {
 			h.skippedPackets = h.skippedPackets[1:]
 		}
@@ -144,7 +139,6 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 		h.bytesInFlight += packet.Length
 		h.packetHistory.PushBack(*packet)
 	}
-
 	h.congestion.OnPacketSent(
 		now,
 		h.bytesInFlight,
@@ -154,9 +148,7 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 	)
 
 	h.nextPacketSendTime = utils.MaxTime(h.nextPacketSendTime, now).Add(h.congestion.TimeUntilSend(h.bytesInFlight))
-
 	h.updateLossDetectionAlarm(now)
-	return nil
 }
 
 func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, encLevel protocol.EncryptionLevel, rcvTime time.Time) error {

@@ -1081,7 +1081,7 @@ var _ = Describe("Session", func() {
 		Expect(sess.rttStats.SmoothedRTT()).To(Equal(rtt)) // make sure it worked
 		sess.packer.packetNumberGenerator.next = n + 1
 		// Now, we send a single packet, and expect that it was retransmitted later
-		err := sess.sentPacketHandler.SentPacket(&ackhandler.Packet{
+		sess.sentPacketHandler.SentPacket(&ackhandler.Packet{
 			PacketNumber: n,
 			Length:       1,
 			Frames: []wire.Frame{&wire.StreamFrame{
@@ -1089,7 +1089,6 @@ var _ = Describe("Session", func() {
 			}},
 			EncryptionLevel: protocol.EncryptionForwardSecure,
 		})
-		Expect(err).NotTo(HaveOccurred())
 		go sess.run()
 		defer sess.Close(nil)
 		sess.scheduleSending()
