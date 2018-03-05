@@ -214,6 +214,7 @@ func (p *packetPacker) packHandshakeRetransmission(packet *ackhandler.Packet) (*
 		p.hasSentPacket = false
 	}
 	header := p.getHeader(packet.EncryptionLevel)
+	header.Type = packet.PacketType
 	var frames []wire.Frame
 	if p.version.UsesStopWaitingFrames() { // for gQUIC: pack a STOP_WAITING first
 		if p.stopWaiting == nil {
