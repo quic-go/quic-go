@@ -27,14 +27,14 @@ const (
 type PacketType uint8
 
 const (
-	// PacketTypeInitial is the packet type of a Initial packet
-	PacketTypeInitial PacketType = 2
+	// PacketTypeInitial is the packet type of an Initial packet
+	PacketTypeInitial PacketType = 0x7f
 	// PacketTypeRetry is the packet type of a Retry packet
-	PacketTypeRetry PacketType = 3
-	// PacketTypeHandshake is the packet type of a Cleartext packet
-	PacketTypeHandshake PacketType = 4
+	PacketTypeRetry PacketType = 0x7e
+	// PacketTypeHandshake is the packet type of a Handshake packet
+	PacketTypeHandshake PacketType = 0x7d
 	// PacketType0RTT is the packet type of a 0-RTT packet
-	PacketType0RTT PacketType = 5
+	PacketType0RTT PacketType = 0x7c
 )
 
 func (t PacketType) String() string {

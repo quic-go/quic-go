@@ -115,7 +115,7 @@ var _ = Describe("IETF draft Header", func() {
 		Context("short headers", func() {
 			It("reads a short header with a connection ID", func() {
 				data := []byte{
-					0x40 ^ 0x1,                                     //
+					0x10,                                           // 1 byte packet number
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
 					0x42, // packet number
 				}
@@ -133,7 +133,7 @@ var _ = Describe("IETF draft Header", func() {
 
 			It("reads the Key Phase Bit", func() {
 				data := []byte{
-					0x20 ^ 0x1,
+					0x10 ^ 0x40 ^ 0x20,
 					0x11,
 				}
 				b := bytes.NewReader(data)
@@ -146,7 +146,7 @@ var _ = Describe("IETF draft Header", func() {
 
 			It("reads a header with omitted connection ID", func() {
 				data := []byte{
-					0x1,
+					0x10 ^ 0x40,
 					0x21, // packet number
 				}
 				b := bytes.NewReader(data)
@@ -161,7 +161,7 @@ var _ = Describe("IETF draft Header", func() {
 
 			It("reads a header with a 2 byte packet number", func() {
 				data := []byte{
-					0x2,
+					0x10 ^ 0x40 ^ 0x1,
 					0x13, 0x37, // packet number
 				}
 				b := bytes.NewReader(data)
@@ -175,7 +175,7 @@ var _ = Describe("IETF draft Header", func() {
 
 			It("reads a header with a 4 byte packet number", func() {
 				data := []byte{
-					0x3,
+					0x10 ^ 0x40 ^ 0x2,
 					0xde, 0xad, 0xbe, 0xef, // packet number
 				}
 				b := bytes.NewReader(data)
@@ -189,7 +189,7 @@ var _ = Describe("IETF draft Header", func() {
 
 			It("errors on EOF", func() {
 				data := []byte{
-					0x40 ^ 0x3,
+					0x10 ^ 0x2,
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
 					0xde, 0xca, 0xfb, 0xad, // packet number
 				}
@@ -236,7 +236,7 @@ var _ = Describe("IETF draft Header", func() {
 				}).writeHeader(buf)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(buf.Bytes()).To(Equal([]byte{
-					0x40 ^ 0x1,
+					0x10,
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
 					0x42, // packet number
 				}))
@@ -250,7 +250,7 @@ var _ = Describe("IETF draft Header", func() {
 				}).writeHeader(buf)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(buf.Bytes()).To(Equal([]byte{
-					0x1,
+					0x10 ^ 0x40,
 					0x42, // packet number
 				}))
 			})
@@ -263,7 +263,7 @@ var _ = Describe("IETF draft Header", func() {
 				}).writeHeader(buf)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(buf.Bytes()).To(Equal([]byte{
-					0x2,
+					0x10 ^ 0x40 ^ 0x1,
 					0x13, 0x37, // packet number
 				}))
 			})
@@ -276,7 +276,7 @@ var _ = Describe("IETF draft Header", func() {
 				}).writeHeader(buf)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(buf.Bytes()).To(Equal([]byte{
-					0x3,
+					0x10 ^ 0x40 ^ 0x2,
 					0xde, 0xca, 0xfb, 0xad, // packet number
 				}))
 			})
@@ -299,7 +299,7 @@ var _ = Describe("IETF draft Header", func() {
 				}).writeHeader(buf)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(buf.Bytes()).To(Equal([]byte{
-					0x20 ^ 0x1,
+					0x10 ^ 0x40 ^ 0x20,
 					0x42, // packet number
 				}))
 			})
