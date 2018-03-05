@@ -132,10 +132,8 @@ func (mr *MockSentPacketHandlerMockRecorder) SendingAllowed() *gomock.Call {
 }
 
 // SentPacket mocks base method
-func (m *MockSentPacketHandler) SentPacket(arg0 *ackhandler.Packet) error {
-	ret := m.ctrl.Call(m, "SentPacket", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+func (m *MockSentPacketHandler) SentPacket(arg0 *ackhandler.Packet) {
+	m.ctrl.Call(m, "SentPacket", arg0)
 }
 
 // SentPacket indicates an expected call of SentPacket

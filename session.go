@@ -877,16 +877,13 @@ func (s *session) sendPacket() (bool, error) {
 
 func (s *session) sendPackedPacket(packet *packedPacket) error {
 	defer putPacketBuffer(&packet.raw)
-	err := s.sentPacketHandler.SentPacket(&ackhandler.Packet{
+	s.sentPacketHandler.SentPacket(&ackhandler.Packet{
 		PacketNumber:    packet.header.PacketNumber,
 		PacketType:      packet.header.Type,
 		Frames:          packet.frames,
 		Length:          protocol.ByteCount(len(packet.raw)),
 		EncryptionLevel: packet.encryptionLevel,
 	})
-	if err != nil {
-		return err
-	}
 	s.logPacket(packet)
 	return s.conn.Write(packet.raw)
 }
