@@ -157,8 +157,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 	}
 
 	// duplicate or out-of-order ACK
-	// if withPacketNumber <= h.largestReceivedPacketWithAck && withPacketNumber != 0 {
-	if withPacketNumber <= h.largestReceivedPacketWithAck {
+	if withPacketNumber != 0 && withPacketNumber <= h.largestReceivedPacketWithAck {
 		return ErrDuplicateOrOutOfOrderAck
 	}
 	h.largestReceivedPacketWithAck = withPacketNumber
