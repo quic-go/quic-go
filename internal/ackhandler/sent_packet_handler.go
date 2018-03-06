@@ -1,7 +1,6 @@
 package ackhandler
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -29,9 +28,6 @@ const (
 	// maxRTOTimeout is the maximum RTO time
 	maxRTOTimeout = 60 * time.Second
 )
-
-// ErrDuplicateOrOutOfOrderAck occurs when a duplicate or an out-of-order ACK is received
-var ErrDuplicateOrOutOfOrderAck = errors.New("SentPacketHandler: Duplicate or out-of-order ACK")
 
 type sentPacketHandler struct {
 	lastSentPacketNumber protocol.PacketNumber
@@ -156,9 +152,10 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 		return qerr.Error(qerr.InvalidAckData, "Received ACK for an unsent package")
 	}
 
-	// duplicate or out-of-order ACK
+	// duplicate or out of order ACK
 	if withPacketNumber != 0 && withPacketNumber <= h.largestReceivedPacketWithAck {
-		return ErrDuplicateOrOutOfOrderAck
+		utils.Debugf("Ignoring ACK frame (duplicate or out of order).")
+		return nil
 	}
 	h.largestReceivedPacketWithAck = withPacketNumber
 
