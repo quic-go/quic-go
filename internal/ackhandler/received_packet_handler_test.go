@@ -3,6 +3,7 @@ package ackhandler
 import (
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 
@@ -12,11 +13,13 @@ import (
 
 var _ = Describe("receivedPacketHandler", func() {
 	var (
-		handler *receivedPacketHandler
+		handler  *receivedPacketHandler
+		rttStats *congestion.RTTStats
 	)
 
 	BeforeEach(func() {
-		handler = NewReceivedPacketHandler(protocol.VersionWhatever).(*receivedPacketHandler)
+		rttStats = &congestion.RTTStats{}
+		handler = NewReceivedPacketHandler(rttStats, protocol.VersionWhatever).(*receivedPacketHandler)
 	})
 
 	Context("accepting packets", func() {
@@ -81,6 +84,15 @@ var _ = Describe("receivedPacketHandler", func() {
 				Expect(handler.ackQueued).To(BeFalse())
 			}
 
+			receiveAndAckPacketsUntilAckDecimation := func() {
+				for i := 1; i <= minReceivedBeforeAckDecimation; i++ {
+					err := handler.ReceivedPacket(protocol.PacketNumber(i), time.Time{}, true)
+					Expect(err).ToNot(HaveOccurred())
+				}
+				Expect(handler.GetAckFrame()).ToNot(BeNil())
+				Expect(handler.ackQueued).To(BeFalse())
+			}
+
 			It("always queues an ACK for the first packet", func() {
 				err := handler.ReceivedPacket(1, time.Time{}, false)
 				Expect(err).ToNot(HaveOccurred())
@@ -95,17 +107,34 @@ var _ = Describe("receivedPacketHandler", func() {
 				Expect(handler.GetAlarmTimeout()).To(BeZero())
 			})
 
-			It("queues an ACK for every RetransmittablePacketsBeforeAck retransmittable packet, if they are arriving fast", func() {
+			It("queues an ACK for every second retransmittable packet at the beginning", func() {
 				receiveAndAck10Packets()
 				p := protocol.PacketNumber(11)
-				for i := 0; i < protocol.RetransmittablePacketsBeforeAck-1; i++ {
+				for i := 0; i <= 20; i++ {
 					err := handler.ReceivedPacket(p, time.Time{}, true)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(handler.ackQueued).To(BeFalse())
+					p++
+					err = handler.ReceivedPacket(p, time.Time{}, true)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(handler.ackQueued).To(BeTrue())
+					p++
+					// dequeue the ACK frame
+					Expect(handler.GetAckFrame()).ToNot(BeNil())
+				}
+			})
+
+			It("queues an ACK for every 10 retransmittable packet, if they are arriving fast", func() {
+				receiveAndAck10Packets()
+				p := protocol.PacketNumber(10000)
+				for i := 0; i < 9; i++ {
+					err := handler.ReceivedPacket(p, time.Now(), true)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(handler.ackQueued).To(BeFalse())
 					p++
 				}
 				Expect(handler.GetAlarmTimeout()).NotTo(BeZero())
-				err := handler.ReceivedPacket(p, time.Time{}, true)
+				err := handler.ReceivedPacket(p, time.Now(), true)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.ackQueued).To(BeTrue())
 				Expect(handler.GetAlarmTimeout()).To(BeZero())
@@ -113,15 +142,15 @@ var _ = Describe("receivedPacketHandler", func() {
 
 			It("only sets the timer when receiving a retransmittable packets", func() {
 				receiveAndAck10Packets()
-				err := handler.ReceivedPacket(11, time.Time{}, false)
+				err := handler.ReceivedPacket(11, time.Now(), false)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.ackQueued).To(BeFalse())
-				Expect(handler.ackAlarm).To(BeZero())
-				err = handler.ReceivedPacket(12, time.Time{}, true)
+				Expect(handler.GetAlarmTimeout()).To(BeZero())
+				rcvTime := time.Now().Add(10 * time.Millisecond)
+				err = handler.ReceivedPacket(12, rcvTime, true)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.ackQueued).To(BeFalse())
-				Expect(handler.ackAlarm).ToNot(BeZero())
-				Expect(handler.GetAlarmTimeout()).NotTo(BeZero())
+				Expect(handler.GetAlarmTimeout()).To(Equal(rcvTime.Add(ackSendDelay)))
 			})
 
 			It("queues an ACK if it was reported missing before", func() {
@@ -139,15 +168,32 @@ var _ = Describe("receivedPacketHandler", func() {
 				Expect(handler.ackQueued).To(BeTrue())
 			})
 
-			It("queues an ACK if it creates a new missing range", func() {
-				receiveAndAck10Packets()
-				for i := 11; i < 16; i++ {
-					err := handler.ReceivedPacket(protocol.PacketNumber(i), time.Time{}, true)
+			It("doesn't queue an ACK if the packet closes a gap that was not yet reported", func() {
+				receiveAndAckPacketsUntilAckDecimation()
+				p := protocol.PacketNumber(minReceivedBeforeAckDecimation + 1)
+				err := handler.ReceivedPacket(p+1, time.Now(), true) // p is missing now
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.ackQueued).To(BeFalse())
+				Expect(handler.GetAlarmTimeout()).ToNot(BeZero())
+				err = handler.ReceivedPacket(p, time.Now(), true) // p is not missing any more
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.ackQueued).To(BeFalse())
+			})
+
+			It("sets an ACK alarm after 1/4 RTT if it creates a new missing range", func() {
+				now := time.Now().Add(-time.Hour)
+				rtt := 80 * time.Millisecond
+				rttStats.UpdateRTT(rtt, 0, now)
+				receiveAndAckPacketsUntilAckDecimation()
+				p := protocol.PacketNumber(minReceivedBeforeAckDecimation + 1)
+				for i := p; i < p+6; i++ {
+					err := handler.ReceivedPacket(i, now, true)
 					Expect(err).ToNot(HaveOccurred())
 				}
-				err := handler.ReceivedPacket(20, time.Time{}, true) // we now know that packets 16 to 19 are missing
+				err := handler.ReceivedPacket(p+10, now, true) // we now know that packets p+7, p+8 and p+9
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.ackQueued).To(BeTrue())
+				Expect(rttStats.MinRTT()).To(Equal(rtt))
+				Expect(handler.ackAlarm.Sub(now)).To(Equal(rtt / 8))
 				ack := handler.GetAckFrame()
 				Expect(ack.HasMissingRanges()).To(BeTrue())
 				Expect(ack).ToNot(BeNil())
@@ -275,7 +321,7 @@ var _ = Describe("receivedPacketHandler", func() {
 				handler.ackAlarm = time.Now().Add(-time.Minute)
 				Expect(handler.GetAckFrame()).ToNot(BeNil())
 				Expect(handler.packetsReceivedSinceLastAck).To(BeZero())
-				Expect(handler.ackAlarm).To(BeZero())
+				Expect(handler.GetAlarmTimeout()).To(BeZero())
 				Expect(handler.retransmittablePacketsReceivedSinceLastAck).To(BeZero())
 				Expect(handler.ackQueued).To(BeFalse())
 			})

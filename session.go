@@ -328,7 +328,7 @@ func (s *session) postSetup(initialPacketNumber protocol.PacketNumber) error {
 	s.sessionCreationTime = now
 
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats)
-	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.version)
+	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.rttStats, s.version)
 
 	if s.version.UsesTLS() {
 		s.streamsMap = newStreamsMap(s, s.newFlowController, s.config.MaxIncomingStreams, s.config.MaxIncomingUniStreams, s.perspective, s.version)
