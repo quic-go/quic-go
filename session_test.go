@@ -725,7 +725,7 @@ var _ = Describe("Session", func() {
 		It("doesn't retransmit an Initial packet if it already received a response", func() {
 			sess.unpacker = &mockUnpacker{}
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
-			sph.EXPECT().GetLeastUnacked().AnyTimes()
+			sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
 			sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
 				PacketNumber: 10,
 				PacketType:   protocol.PacketTypeInitial,
@@ -749,7 +749,7 @@ var _ = Describe("Session", func() {
 		It("sends a retransmission and a regular packet in the same run", func() {
 			sess.windowUpdateQueue.callback(&wire.MaxDataFrame{})
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
-			sph.EXPECT().GetLeastUnacked()
+			sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
 			sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
 				PacketNumber: 10,
 				PacketType:   protocol.PacketTypeHandshake,
@@ -781,7 +781,7 @@ var _ = Describe("Session", func() {
 		BeforeEach(func() {
 			sph = mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().GetAlarmTimeout().AnyTimes()
-			sph.EXPECT().GetLeastUnacked().AnyTimes()
+			sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
 			sph.EXPECT().DequeuePacketForRetransmission().AnyTimes()
 			sess.sentPacketHandler = sph
 			sess.packer.hasSentPacket = true
@@ -894,7 +894,7 @@ var _ = Describe("Session", func() {
 		It("sends ACK only packets", func() {
 			swf := &wire.StopWaitingFrame{LeastUnacked: 10}
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
-			sph.EXPECT().GetLeastUnacked().AnyTimes()
+			sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
 			sph.EXPECT().GetAlarmTimeout().AnyTimes()
 			sph.EXPECT().SendingAllowed()
 			sph.EXPECT().GetStopWaitingFrame(false).Return(swf)
@@ -925,7 +925,7 @@ var _ = Describe("Session", func() {
 			sess.version = versionIETFFrames
 			done := make(chan struct{})
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
-			sph.EXPECT().GetLeastUnacked().AnyTimes()
+			sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
 			sph.EXPECT().GetAlarmTimeout().AnyTimes()
 			sph.EXPECT().SendingAllowed()
 			sph.EXPECT().TimeUntilSend()
@@ -957,7 +957,7 @@ var _ = Describe("Session", func() {
 			sess.packer.packetNumberGenerator.next = 0x1337 + 10
 			sess.packer.hasSentPacket = true // make sure this is not the first packet the packer sends
 			sph = mockackhandler.NewMockSentPacketHandler(mockCtrl)
-			sph.EXPECT().GetLeastUnacked().AnyTimes()
+			sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
 			sess.sentPacketHandler = sph
 			sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure}
 		})
@@ -1114,7 +1114,7 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().TimeUntilSend().AnyTimes()
 			sph.EXPECT().SendingAllowed().AnyTimes().Return(true)
 			sph.EXPECT().ShouldSendNumPackets().AnyTimes().Return(1)
-			sph.EXPECT().GetLeastUnacked().AnyTimes()
+			sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
 			sph.EXPECT().GetStopWaitingFrame(true).Return(&wire.StopWaitingFrame{LeastUnacked: 10})
 			sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
 				PacketNumber:    0x1337,
@@ -1145,7 +1145,6 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour))
 			sph.EXPECT().GetAlarmTimeout().AnyTimes()
 			sph.EXPECT().SendingAllowed().Return(true).AnyTimes()
-			sph.EXPECT().GetLeastUnacked().Times(2)
 			sph.EXPECT().DequeuePacketForRetransmission()
 			sph.EXPECT().GetStopWaitingFrame(gomock.Any())
 			sph.EXPECT().ShouldSendNumPackets().Return(1)
