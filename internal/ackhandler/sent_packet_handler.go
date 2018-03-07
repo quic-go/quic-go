@@ -164,12 +164,6 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 		return qerr.Error(qerr.InvalidAckData, "Received an ACK for a skipped packet number")
 	}
 
-	rttUpdated := h.maybeUpdateRTT(ackFrame.LargestAcked, ackFrame.DelayTime, rcvTime)
-
-	if rttUpdated {
-		h.congestion.MaybeExitSlowStart()
-	}
-
 	ackedPackets, err := h.determineNewlyAckedPackets(ackFrame)
 	if err != nil {
 		return err
@@ -185,6 +179,10 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 			// the lowestPacketNotConfirmedAcked is only used to limit the number of ACK ranges we will send.
 			if p.Value.largestAcked != 0 {
 				h.lowestPacketNotConfirmedAcked = utils.MaxPacketNumber(h.lowestPacketNotConfirmedAcked, p.Value.largestAcked+1)
+			}
+			if p.Value.PacketNumber == ackFrame.LargestAcked {
+				h.rttStats.UpdateRTT(rcvTime.Sub(p.Value.sendTime), ackFrame.DelayTime, rcvTime)
+				h.congestion.MaybeExitSlowStart()
 			}
 			h.onPacketAcked(p)
 			h.congestion.OnPacketAcked(p.Value.PacketNumber, p.Value.Length, h.bytesInFlight)
@@ -239,21 +237,6 @@ func (h *sentPacketHandler) determineNewlyAckedPackets(ackFrame *wire.AckFrame) 
 		}
 	}
 	return ackedPackets, nil
-}
-
-func (h *sentPacketHandler) maybeUpdateRTT(largestAcked protocol.PacketNumber, ackDelay time.Duration, rcvTime time.Time) bool {
-	for el := h.packetHistory.Front(); el != nil; el = el.Next() {
-		packet := el.Value
-		if packet.PacketNumber == largestAcked {
-			h.rttStats.UpdateRTT(rcvTime.Sub(packet.sendTime), ackDelay, rcvTime)
-			return true
-		}
-		// Packets are sorted by number, so we can stop searching
-		if packet.PacketNumber > largestAcked {
-			break
-		}
-	}
-	return false
 }
 
 func (h *sentPacketHandler) updateLossDetectionAlarm(now time.Time) {
