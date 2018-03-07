@@ -140,10 +140,11 @@ func (s *server) setupTLS() error {
 			case tlsSession := <-sessionChan:
 				connID := tlsSession.connID
 				sess := tlsSession.sess
+				s.sessionsMutex.Lock()
 				if _, ok := s.sessions[connID]; ok { // drop this session if it already exists
+					s.sessionsMutex.Unlock()
 					continue
 				}
-				s.sessionsMutex.Lock()
 				s.sessions[connID] = sess
 				s.sessionsMutex.Unlock()
 				s.runHandshakeAndSession(sess, connID)
