@@ -61,18 +61,6 @@ func (mr *MockSentPacketHandlerMockRecorder) GetAlarmTimeout() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAlarmTimeout", reflect.TypeOf((*MockSentPacketHandler)(nil).GetAlarmTimeout))
 }
 
-// GetLeastUnacked mocks base method
-func (m *MockSentPacketHandler) GetLeastUnacked() protocol.PacketNumber {
-	ret := m.ctrl.Call(m, "GetLeastUnacked")
-	ret0, _ := ret[0].(protocol.PacketNumber)
-	return ret0
-}
-
-// GetLeastUnacked indicates an expected call of GetLeastUnacked
-func (mr *MockSentPacketHandlerMockRecorder) GetLeastUnacked() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLeastUnacked", reflect.TypeOf((*MockSentPacketHandler)(nil).GetLeastUnacked))
-}
-
 // GetLowestPacketNotConfirmedAcked mocks base method
 func (m *MockSentPacketHandler) GetLowestPacketNotConfirmedAcked() protocol.PacketNumber {
 	ret := m.ctrl.Call(m, "GetLowestPacketNotConfirmedAcked")
@@ -83,6 +71,18 @@ func (m *MockSentPacketHandler) GetLowestPacketNotConfirmedAcked() protocol.Pack
 // GetLowestPacketNotConfirmedAcked indicates an expected call of GetLowestPacketNotConfirmedAcked
 func (mr *MockSentPacketHandlerMockRecorder) GetLowestPacketNotConfirmedAcked() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLowestPacketNotConfirmedAcked", reflect.TypeOf((*MockSentPacketHandler)(nil).GetLowestPacketNotConfirmedAcked))
+}
+
+// GetPacketNumberLen mocks base method
+func (m *MockSentPacketHandler) GetPacketNumberLen(arg0 protocol.PacketNumber) protocol.PacketNumberLen {
+	ret := m.ctrl.Call(m, "GetPacketNumberLen", arg0)
+	ret0, _ := ret[0].(protocol.PacketNumberLen)
+	return ret0
+}
+
+// GetPacketNumberLen indicates an expected call of GetPacketNumberLen
+func (mr *MockSentPacketHandlerMockRecorder) GetPacketNumberLen(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPacketNumberLen", reflect.TypeOf((*MockSentPacketHandler)(nil).GetPacketNumberLen), arg0)
 }
 
 // GetStopWaitingFrame mocks base method

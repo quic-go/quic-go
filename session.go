@@ -338,6 +338,7 @@ func (s *session) postSetup(initialPacketNumber protocol.PacketNumber) error {
 	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
 	s.packer = newPacketPacker(s.connectionID,
 		initialPacketNumber,
+		s.sentPacketHandler.GetPacketNumberLen,
 		s.cryptoSetup,
 		s.streamFramer,
 		s.perspective,
@@ -763,7 +764,6 @@ func (s *session) processTransportParameters(params *handshake.TransportParamete
 }
 
 func (s *session) sendPackets() error {
-	s.packer.SetLeastUnacked(s.sentPacketHandler.GetLeastUnacked())
 	s.pacingDeadline = time.Time{}
 	if !s.sentPacketHandler.SendingAllowed() { // if congestion limited, at least try sending an ACK frame
 		return s.maybeSendAckOnlyPacket()
@@ -905,7 +905,6 @@ func (s *session) sendPackedPacket(packet *packedPacket) error {
 }
 
 func (s *session) sendConnectionClose(quicErr *qerr.QuicError) error {
-	s.packer.SetLeastUnacked(s.sentPacketHandler.GetLeastUnacked())
 	packet, err := s.packer.PackConnectionClose(&wire.ConnectionCloseFrame{
 		ErrorCode:    quicErr.ErrorCode,
 		ReasonPhrase: quicErr.ErrorMessage,

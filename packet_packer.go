@@ -32,6 +32,7 @@ type packetPacker struct {
 	cryptoSetup  handshake.CryptoSetup
 
 	packetNumberGenerator *packetNumberGenerator
+	getPacketNumberLen    func(protocol.PacketNumber) protocol.PacketNumberLen
 	streams               streamFrameSource
 
 	controlFrameMutex sync.Mutex
@@ -39,7 +40,6 @@ type packetPacker struct {
 
 	stopWaiting               *wire.StopWaitingFrame
 	ackFrame                  *wire.AckFrame
-	leastUnacked              protocol.PacketNumber
 	omitConnectionID          bool
 	hasSentPacket             bool // has the packetPacker already sent a packet
 	numNonRetransmittableAcks int
@@ -47,6 +47,7 @@ type packetPacker struct {
 
 func newPacketPacker(connectionID protocol.ConnectionID,
 	initialPacketNumber protocol.PacketNumber,
+	getPacketNumberLen func(protocol.PacketNumber) protocol.PacketNumberLen,
 	cryptoSetup handshake.CryptoSetup,
 	streamFramer streamFrameSource,
 	perspective protocol.Perspective,
@@ -58,6 +59,7 @@ func newPacketPacker(connectionID protocol.ConnectionID,
 		perspective:           perspective,
 		version:               version,
 		streams:               streamFramer,
+		getPacketNumberLen:    getPacketNumberLen,
 		packetNumberGenerator: newPacketNumberGenerator(initialPacketNumber, protocol.SkipPacketAveragePeriodLength),
 	}
 }
@@ -402,7 +404,7 @@ func (p *packetPacker) QueueControlFrame(frame wire.Frame) {
 
 func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header {
 	pnum := p.packetNumberGenerator.Peek()
-	packetNumberLen := protocol.GetPacketNumberLengthForHeader(pnum, p.leastUnacked)
+	packetNumberLen := p.getPacketNumberLen(pnum)
 
 	header := &wire.Header{
 		ConnectionID:    p.connectionID,
@@ -494,10 +496,6 @@ func (p *packetPacker) canSendData(encLevel protocol.EncryptionLevel) bool {
 		return encLevel >= protocol.EncryptionSecure
 	}
 	return encLevel == protocol.EncryptionForwardSecure
-}
-
-func (p *packetPacker) SetLeastUnacked(leastUnacked protocol.PacketNumber) {
-	p.leastUnacked = leastUnacked
 }
 
 func (p *packetPacker) SetOmitConnectionID() {

@@ -68,6 +68,7 @@ var _ = Describe("Packet packer", func() {
 		packer = newPacketPacker(
 			0x1337,
 			1,
+			func(protocol.PacketNumber) protocol.PacketNumberLen { return protocol.PacketNumberLen2 },
 			&mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure},
 			mockStreamFramer,
 			protocol.PerspectiveServer,
@@ -283,14 +284,13 @@ var _ = Describe("Packet packer", func() {
 	It("sets the LeastUnackedDelta length of a STOP_WAITING frame", func() {
 		mockStreamFramer.EXPECT().HasCryptoStreamData()
 		mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any())
-		packetNumber := protocol.PacketNumber(0xDECAFB) // will result in a 4 byte packet number
-		packer.packetNumberGenerator.next = packetNumber
-		swf := &wire.StopWaitingFrame{LeastUnacked: packetNumber - 0x100}
+		packer.packetNumberGenerator.next = 0x1337
+		swf := &wire.StopWaitingFrame{LeastUnacked: 0x1337 - 0x100}
 		packer.QueueControlFrame(&wire.RstStreamFrame{})
 		packer.QueueControlFrame(swf)
 		p, err := packer.PackPacket()
 		Expect(err).ToNot(HaveOccurred())
-		Expect(p.frames[0].(*wire.StopWaitingFrame).PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
+		Expect(p.frames[0].(*wire.StopWaitingFrame).PacketNumberLen).To(Equal(protocol.PacketNumberLen2))
 	})
 
 	It("does not pack a packet containing only a STOP_WAITING frame", func() {

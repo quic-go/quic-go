@@ -59,9 +59,10 @@ var _ = Describe("SentPacketHandler", func() {
 		return nil
 	}
 
-	It("gets the LeastUnacked packet number", func() {
+	It("determines the packet number length", func() {
 		handler.largestAcked = 0x1337
-		Expect(handler.GetLeastUnacked()).To(Equal(protocol.PacketNumber(0x1337 + 1)))
+		Expect(handler.GetPacketNumberLen(0x1338)).To(Equal(protocol.PacketNumberLen2))
+		Expect(handler.GetPacketNumberLen(0xfffffff)).To(Equal(protocol.PacketNumberLen4))
 	})
 
 	Context("registering sent packets", func() {

@@ -32,7 +32,7 @@ type SentPacketHandler interface {
 	GetStopWaitingFrame(force bool) *wire.StopWaitingFrame
 	GetLowestPacketNotConfirmedAcked() protocol.PacketNumber
 	DequeuePacketForRetransmission() (packet *Packet)
-	GetLeastUnacked() protocol.PacketNumber
+	GetPacketNumberLen(protocol.PacketNumber) protocol.PacketNumberLen
 
 	GetAlarmTimeout() time.Time
 	OnAlarm()

@@ -349,8 +349,8 @@ func (h *sentPacketHandler) DequeuePacketForRetransmission() *Packet {
 	return packet
 }
 
-func (h *sentPacketHandler) GetLeastUnacked() protocol.PacketNumber {
-	return h.lowestUnacked()
+func (h *sentPacketHandler) GetPacketNumberLen(p protocol.PacketNumber) protocol.PacketNumberLen {
+	return protocol.GetPacketNumberLengthForHeader(p, h.lowestUnacked())
 }
 
 func (h *sentPacketHandler) GetStopWaitingFrame(force bool) *wire.StopWaitingFrame {
