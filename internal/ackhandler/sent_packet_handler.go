@@ -158,12 +158,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 		return nil
 	}
 	h.largestReceivedPacketWithAck = withPacketNumber
-
-	// ignore repeated ACK (ACKs that don't have a higher LargestAcked than the last ACK)
-	if ackFrame.LargestAcked < h.lowestUnacked() {
-		return nil
-	}
-	h.largestAcked = ackFrame.LargestAcked
+	h.largestAcked = utils.MaxPacketNumber(h.largestAcked, ackFrame.LargestAcked)
 
 	if h.skippedPacketsAcked(ackFrame) {
 		return qerr.Error(qerr.InvalidAckData, "Received an ACK for a skipped packet number")
