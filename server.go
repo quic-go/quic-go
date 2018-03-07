@@ -141,7 +141,7 @@ func (s *server) setupTLS() error {
 				connID := tlsSession.connID
 				sess := tlsSession.sess
 				if _, ok := s.sessions[connID]; ok { // drop this session if it already exists
-					return
+					continue
 				}
 				s.sessionsMutex.Lock()
 				s.sessions[connID] = sess
