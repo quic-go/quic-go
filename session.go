@@ -838,6 +838,7 @@ func (s *session) maybeSendAckOnlyPacket() error {
 	if err != nil {
 		return err
 	}
+	s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket())
 	return s.sendPackedPacket(packet)
 }
 
@@ -874,6 +875,11 @@ func (s *session) maybeSendRetransmission() (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	ackhandlerPackets := make([]*ackhandler.Packet, len(packets))
+	for i, packet := range packets {
+		ackhandlerPackets[i] = packet.ToAckHandlerPacket()
+	}
+	s.sentPacketHandler.SentPacketsAsRetransmission(ackhandlerPackets, retransmitPacket.PacketNumber)
 	for _, packet := range packets {
 		if err := s.sendPackedPacket(packet); err != nil {
 			return false, err
@@ -904,6 +910,7 @@ func (s *session) sendPacket() (bool, error) {
 	if err != nil || packet == nil {
 		return false, err
 	}
+	s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket())
 	if err := s.sendPackedPacket(packet); err != nil {
 		return false, err
 	}
@@ -912,13 +919,6 @@ func (s *session) sendPacket() (bool, error) {
 
 func (s *session) sendPackedPacket(packet *packedPacket) error {
 	defer putPacketBuffer(&packet.raw)
-	s.sentPacketHandler.SentPacket(&ackhandler.Packet{
-		PacketNumber:    packet.header.PacketNumber,
-		PacketType:      packet.header.Type,
-		Frames:          packet.frames,
-		Length:          protocol.ByteCount(len(packet.raw)),
-		EncryptionLevel: packet.encryptionLevel,
-	})
 	s.logPacket(packet)
 	return s.conn.Write(packet.raw)
 }

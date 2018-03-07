@@ -21,6 +21,16 @@ type packedPacket struct {
 	encryptionLevel protocol.EncryptionLevel
 }
 
+func (p *packedPacket) ToAckHandlerPacket() *ackhandler.Packet {
+	return &ackhandler.Packet{
+		PacketNumber:    p.header.PacketNumber,
+		PacketType:      p.header.Type,
+		Frames:          p.frames,
+		Length:          protocol.ByteCount(len(p.raw)),
+		EncryptionLevel: p.encryptionLevel,
+	}
+}
+
 type streamFrameSource interface {
 	HasCryptoStreamData() bool
 	PopCryptoStreamFrame(protocol.ByteCount) *wire.StreamFrame

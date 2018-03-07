@@ -150,6 +150,12 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) {
 	h.updateLossDetectionAlarm(now)
 }
 
+func (h *sentPacketHandler) SentPacketsAsRetransmission(packets []*Packet, retransmissionOf protocol.PacketNumber) {
+	for _, packet := range packets {
+		h.SentPacket(packet)
+	}
+}
+
 func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, encLevel protocol.EncryptionLevel, rcvTime time.Time) error {
 	if ackFrame.LargestAcked > h.lastSentPacketNumber {
 		return qerr.Error(qerr.InvalidAckData, "Received ACK for an unsent package")

@@ -759,16 +759,17 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().ShouldSendNumPackets().Return(2)
 			sph.EXPECT().TimeUntilSend()
 			sph.EXPECT().GetStopWaitingFrame(gomock.Any()).Return(&wire.StopWaitingFrame{})
-			sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
-				// retransmitted packet
-				Expect(len(p.Frames)).To(BeNumerically(">", 0))
-				Expect(p.Frames[0]).To(BeAssignableToTypeOf(&wire.StopWaitingFrame{}))
-			})
-			sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
-				// regular packet
-				Expect(p.Frames).To(HaveLen(1))
-				Expect(p.Frames[0]).To(BeAssignableToTypeOf(&wire.MaxDataFrame{}))
-			})
+			gomock.InOrder(
+				sph.EXPECT().SentPacketsAsRetransmission(gomock.Any(), protocol.PacketNumber(10)).Do(func(packets []*ackhandler.Packet, _ protocol.PacketNumber) {
+					Expect(packets).To(HaveLen(1))
+					Expect(len(packets[0].Frames)).To(BeNumerically(">", 0))
+					Expect(packets[0].Frames[0]).To(BeAssignableToTypeOf(&wire.StopWaitingFrame{}))
+				}),
+				sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
+					Expect(p.Frames).To(HaveLen(1))
+					Expect(p.Frames[0]).To(BeAssignableToTypeOf(&wire.MaxDataFrame{}))
+				}),
+			)
 			sess.sentPacketHandler = sph
 			err := sess.sendPackets()
 			Expect(err).ToNot(HaveOccurred())
@@ -1000,10 +1001,13 @@ var _ = Describe("Session", func() {
 				swf := &wire.StopWaitingFrame{LeastUnacked: 0x1337}
 				sph.EXPECT().GetStopWaitingFrame(true).Return(swf)
 				sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
+					PacketNumber:    42,
 					Frames:          []wire.Frame{sf},
 					EncryptionLevel: protocol.EncryptionUnencrypted,
 				})
-				sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
+				sph.EXPECT().SentPacketsAsRetransmission(gomock.Any(), protocol.PacketNumber(42)).Do(func(packets []*ackhandler.Packet, _ protocol.PacketNumber) {
+					Expect(packets).To(HaveLen(1))
+					p := packets[0]
 					Expect(p.EncryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
 					Expect(p.Frames).To(Equal([]wire.Frame{swf, sf}))
 				})
@@ -1018,10 +1022,13 @@ var _ = Describe("Session", func() {
 				sess.packer.version = versionIETFFrames
 				sf := &wire.StreamFrame{StreamID: 1, Data: []byte("foobar")}
 				sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
+					PacketNumber:    1337,
 					Frames:          []wire.Frame{sf},
 					EncryptionLevel: protocol.EncryptionUnencrypted,
 				})
-				sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
+				sph.EXPECT().SentPacketsAsRetransmission(gomock.Any(), protocol.PacketNumber(1337)).Do(func(packets []*ackhandler.Packet, _ protocol.PacketNumber) {
+					Expect(packets).To(HaveLen(1))
+					p := packets[0]
 					Expect(p.EncryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
 					Expect(p.Frames).To(Equal([]wire.Frame{sf}))
 				})
@@ -1045,7 +1052,9 @@ var _ = Describe("Session", func() {
 					Frames:          []wire.Frame{f},
 					EncryptionLevel: protocol.EncryptionForwardSecure,
 				})
-				sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
+				sph.EXPECT().SentPacketsAsRetransmission(gomock.Any(), protocol.PacketNumber(0x1337)).Do(func(packets []*ackhandler.Packet, _ protocol.PacketNumber) {
+					Expect(packets).To(HaveLen(1))
+					p := packets[0]
 					Expect(p.Frames).To(HaveLen(2))
 					Expect(p.Frames[0]).To(BeAssignableToTypeOf(&wire.StopWaitingFrame{}))
 					Expect(p.Frames[1]).To(Equal(f))
@@ -1065,10 +1074,13 @@ var _ = Describe("Session", func() {
 					Data:     []byte("foobar"),
 				}
 				sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
+					PacketNumber:    42,
 					Frames:          []wire.Frame{f},
 					EncryptionLevel: protocol.EncryptionForwardSecure,
 				})
-				sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
+				sph.EXPECT().SentPacketsAsRetransmission(gomock.Any(), protocol.PacketNumber(42)).Do(func(packets []*ackhandler.Packet, _ protocol.PacketNumber) {
+					Expect(packets).To(HaveLen(1))
+					p := packets[0]
 					Expect(p.Frames).To(Equal([]wire.Frame{f}))
 					Expect(p.EncryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
 				})
@@ -1086,14 +1098,18 @@ var _ = Describe("Session", func() {
 					Data:     bytes.Repeat([]byte{'b'}, int(protocol.MaxPacketSizeIPv4)*3/2),
 				}
 				sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
+					PacketNumber:    42,
 					Frames:          []wire.Frame{f},
 					EncryptionLevel: protocol.EncryptionForwardSecure,
 				})
-				sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
-					Expect(p.Frames).To(HaveLen(1))
-					Expect(p.Frames[0]).To(BeAssignableToTypeOf(&wire.StreamFrame{}))
-					Expect(p.EncryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
-				}).Times(2)
+				sph.EXPECT().SentPacketsAsRetransmission(gomock.Any(), protocol.PacketNumber(42)).Do(func(packets []*ackhandler.Packet, _ protocol.PacketNumber) {
+					Expect(packets).To(HaveLen(2))
+					for _, p := range packets {
+						Expect(p.Frames).To(HaveLen(1))
+						Expect(p.Frames[0]).To(BeAssignableToTypeOf(&wire.StreamFrame{}))
+						Expect(p.EncryptionLevel).To(Equal(protocol.EncryptionForwardSecure))
+					}
+				})
 				sent, err := sess.maybeSendRetransmission()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(sent).To(BeTrue())
