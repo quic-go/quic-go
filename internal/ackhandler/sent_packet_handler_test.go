@@ -207,6 +207,16 @@ var _ = Describe("SentPacketHandler", func() {
 		}
 
 		Context("ACK validation", func() {
+			It("accepts ACKs sent in packet 0", func() {
+				ack := wire.AckFrame{
+					LargestAcked: 5,
+					LowestAcked:  1,
+				}
+				err := handler.ReceivedAck(&ack, 0, protocol.EncryptionUnencrypted, time.Now())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.largestAcked).To(Equal(protocol.PacketNumber(5)))
+			})
+
 			It("rejects duplicate ACKs", func() {
 				largestAcked := 3
 				ack := wire.AckFrame{
