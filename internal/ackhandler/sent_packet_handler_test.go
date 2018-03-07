@@ -218,29 +218,29 @@ var _ = Describe("SentPacketHandler", func() {
 			})
 
 			It("rejects duplicate ACKs", func() {
-				largestAcked := 3
-				ack := wire.AckFrame{
-					LargestAcked: protocol.PacketNumber(largestAcked),
-					LowestAcked:  1,
-				}
-				err := handler.ReceivedAck(&ack, 1337, protocol.EncryptionUnencrypted, time.Now())
+				ack1 := wire.AckFrame{LargestAcked: 3}
+				ack2 := wire.AckFrame{LargestAcked: 4}
+				err := handler.ReceivedAck(&ack1, 1337, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 3)))
-				err = handler.ReceivedAck(&ack, 1337, protocol.EncryptionUnencrypted, time.Now())
-				Expect(err).To(MatchError(ErrDuplicateOrOutOfOrderAck))
-				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 3)))
+				Expect(handler.largestAcked).To(Equal(protocol.PacketNumber(3)))
+				// this wouldn't happen in practice
+				// for testing purposes, we pretend send a different ACK frame in a duplicated packet, to be able to verify that it actually doesn't get processed
+				err = handler.ReceivedAck(&ack2, 1337, protocol.EncryptionUnencrypted, time.Now())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.largestAcked).To(Equal(protocol.PacketNumber(3)))
 			})
 
 			It("rejects out of order ACKs", func() {
 				// acks packets 0, 1, 2, 3
-				ack := wire.AckFrame{LargestAcked: 3}
-				err := handler.ReceivedAck(&ack, 1337, protocol.EncryptionUnencrypted, time.Now())
+				ack1 := wire.AckFrame{LargestAcked: 3}
+				ack2 := wire.AckFrame{LargestAcked: 4}
+				err := handler.ReceivedAck(&ack1, 1337, protocol.EncryptionUnencrypted, time.Now())
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 4)))
-				err = handler.ReceivedAck(&ack, 1337-1, protocol.EncryptionUnencrypted, time.Now())
-				Expect(err).To(MatchError(ErrDuplicateOrOutOfOrderAck))
+				// this wouldn't happen in practive
+				// a receiver wouldn't send an ACK for a lower largest acked in a packet sent later
+				err = handler.ReceivedAck(&ack2, 1337-1, protocol.EncryptionUnencrypted, time.Now())
+				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.largestAcked).To(Equal(protocol.PacketNumber(3)))
-				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(len(packets) - 4)))
 			})
 
 			It("rejects ACKs with a too high LargestAcked packet number", func() {
