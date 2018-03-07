@@ -803,10 +803,11 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.SentPacket(retransmittablePacket(3))
 			Expect(handler.lossTime.IsZero()).To(BeTrue())
 
-			err := handler.ReceivedAck(&wire.AckFrame{LargestAcked: 1, LowestAcked: 1}, 1, protocol.EncryptionUnencrypted, time.Now().Add(time.Hour))
+			now := time.Now().Add(time.Hour)
+			err := handler.ReceivedAck(&wire.AckFrame{LargestAcked: 1, LowestAcked: 1}, 1, protocol.EncryptionUnencrypted, now)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(handler.lossTime.IsZero()).To(BeTrue())
-			Expect(time.Until(handler.GetAlarmTimeout())).To(BeNumerically("~", handler.computeRTOTimeout(), time.Minute))
+			Expect(handler.GetAlarmTimeout().Sub(now)).To(BeNumerically("~", handler.computeRTOTimeout(), time.Minute))
 
 			// This means RTO, so both packets should be lost
 			handler.OnAlarm()
