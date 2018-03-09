@@ -1051,7 +1051,7 @@ var _ = Describe("Session", func() {
 				sess.packer.version = versionIETFFrames
 				f := &wire.StreamFrame{
 					StreamID: 0x5,
-					Data:     bytes.Repeat([]byte{'b'}, int(protocol.MaxPacketSize)*3/2),
+					Data:     bytes.Repeat([]byte{'b'}, int(protocol.MaxPacketSizeIPv4)*3/2),
 				}
 				sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
 					Frames:          []wire.Frame{f},
