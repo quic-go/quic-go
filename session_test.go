@@ -754,10 +754,10 @@ var _ = Describe("Session", func() {
 				PacketNumber: 10,
 				PacketType:   protocol.PacketTypeHandshake,
 			})
-			sph.EXPECT().DequeuePacketForRetransmission()
-			sph.EXPECT().SendingAllowed().Return(true).Times(2)
-			sph.EXPECT().SendingAllowed()
+			sph.EXPECT().SendMode().Return(ackhandler.SendRetransmission)
+			sph.EXPECT().SendMode().Return(ackhandler.SendAny)
 			sph.EXPECT().ShouldSendNumPackets().Return(2)
+			sph.EXPECT().TimeUntilSend()
 			sph.EXPECT().GetStopWaitingFrame(gomock.Any()).Return(&wire.StopWaitingFrame{})
 			sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
 				// retransmitted packet
@@ -769,6 +769,14 @@ var _ = Describe("Session", func() {
 				Expect(p.Frames).To(HaveLen(1))
 				Expect(p.Frames[0]).To(BeAssignableToTypeOf(&wire.MaxDataFrame{}))
 			})
+			sess.sentPacketHandler = sph
+			err := sess.sendPackets()
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("doesn't send when the SentPacketHandler doesn't allow it", func() {
+			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+			sph.EXPECT().SendMode().Return(ackhandler.SendNone)
 			sess.sentPacketHandler = sph
 			err := sess.sendPackets()
 			Expect(err).ToNot(HaveOccurred())
@@ -792,12 +800,11 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().SentPacket(gomock.Any()).Times(2)
 			sph.EXPECT().ShouldSendNumPackets().Return(1).Times(2)
 			sph.EXPECT().TimeUntilSend().Return(time.Now()).Times(2)
-			sph.EXPECT().SendingAllowed().Do(func() {
+			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour))
+			sph.EXPECT().SendMode().Return(ackhandler.SendAny).Do(func() {
 				// make sure there's something to send
 				sess.packer.QueueControlFrame(&wire.MaxDataFrame{ByteOffset: 1})
-			}).Return(true).Times(3) // allow 2 packets...
-			// ...then report that we're congestion limited
-			sph.EXPECT().SendingAllowed()
+			}).Times(2) // allow 2 packets...
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -812,6 +819,29 @@ var _ = Describe("Session", func() {
 			Eventually(done).Should(BeClosed())
 		})
 
+		// when becoming congestion limited, at some point the SendMode will change from SendAny to SendAck
+		// we shouldn't send the ACK in the same run
+		It("doesn't send an ACK right after becoming congestion limited", func() {
+			sess.packer.QueueControlFrame(&wire.MaxDataFrame{ByteOffset: 1})
+			sph.EXPECT().SentPacket(gomock.Any())
+			sph.EXPECT().ShouldSendNumPackets().Return(1000)
+			sph.EXPECT().TimeUntilSend().Return(time.Now())
+			sph.EXPECT().SendMode().Return(ackhandler.SendAny)
+			sph.EXPECT().SendMode().Return(ackhandler.SendAck)
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				sess.run()
+				close(done)
+			}()
+			sess.scheduleSending()
+			Eventually(mconn.written).Should(HaveLen(1))
+			Consistently(mconn.written).Should(HaveLen(1))
+			// make the go routine return
+			sess.Close(nil)
+			Eventually(done).Should(BeClosed())
+		})
+
 		It("paces packets", func() {
 			pacingDelay := scaleDuration(100 * time.Millisecond)
 			sess.packer.QueueControlFrame(&wire.MaxDataFrame{ByteOffset: 1})
@@ -820,10 +850,10 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(pacingDelay))  // send one
 			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour))
 			sph.EXPECT().ShouldSendNumPackets().Times(2).Return(1)
-			sph.EXPECT().SendingAllowed().Do(func() { // after sending the first packet
+			sph.EXPECT().SendMode().Return(ackhandler.SendAny).Do(func() { // after sending the first packet
 				// make sure there's something to send
 				sess.packer.QueueControlFrame(&wire.MaxDataFrame{ByteOffset: 2})
-			}).Return(true).AnyTimes()
+			}).AnyTimes()
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -844,10 +874,10 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().ShouldSendNumPackets().Return(3)
 			sph.EXPECT().TimeUntilSend().Return(time.Now())
 			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour))
-			sph.EXPECT().SendingAllowed().Do(func() {
+			sph.EXPECT().SendMode().Return(ackhandler.SendAny).Do(func() {
 				// make sure there's something to send
 				sess.packer.QueueControlFrame(&wire.MaxDataFrame{ByteOffset: 1})
-			}).Return(true).Times(4)
+			}).Times(3)
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -864,7 +894,7 @@ var _ = Describe("Session", func() {
 		It("doesn't set a pacing timer when there is no data to send", func() {
 			sph.EXPECT().TimeUntilSend().Return(time.Now())
 			sph.EXPECT().ShouldSendNumPackets().Return(1)
-			sph.EXPECT().SendingAllowed().Return(true).AnyTimes()
+			sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -896,7 +926,8 @@ var _ = Describe("Session", func() {
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
 			sph.EXPECT().GetAlarmTimeout().AnyTimes()
-			sph.EXPECT().SendingAllowed()
+			sph.EXPECT().SendMode().Return(ackhandler.SendAck)
+			sph.EXPECT().ShouldSendNumPackets().Return(1000)
 			sph.EXPECT().GetStopWaitingFrame(false).Return(swf)
 			sph.EXPECT().TimeUntilSend()
 			sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
@@ -927,7 +958,8 @@ var _ = Describe("Session", func() {
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
 			sph.EXPECT().GetAlarmTimeout().AnyTimes()
-			sph.EXPECT().SendingAllowed()
+			sph.EXPECT().SendMode().Return(ackhandler.SendAck)
+			sph.EXPECT().ShouldSendNumPackets().Return(1000)
 			sph.EXPECT().TimeUntilSend()
 			sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
 				Expect(p.Frames).To(HaveLen(1))
@@ -1105,22 +1137,13 @@ var _ = Describe("Session", func() {
 
 		It("sends when scheduleSending is called", func() {
 			sess.packer.packetNumberGenerator.next = 10000
-			f := &wire.StreamFrame{
-				StreamID: 0x5,
-				Data:     []byte("foobar"),
-			}
+			sess.packer.QueueControlFrame(&wire.BlockedFrame{})
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().GetAlarmTimeout().AnyTimes()
 			sph.EXPECT().TimeUntilSend().AnyTimes()
-			sph.EXPECT().SendingAllowed().AnyTimes().Return(true)
+			sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
 			sph.EXPECT().ShouldSendNumPackets().AnyTimes().Return(1)
 			sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
-			sph.EXPECT().GetStopWaitingFrame(true).Return(&wire.StopWaitingFrame{LeastUnacked: 10})
-			sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
-				PacketNumber:    0x1337,
-				Frames:          []wire.Frame{f},
-				EncryptionLevel: protocol.EncryptionForwardSecure,
-			})
 			sph.EXPECT().SentPacket(gomock.Any())
 			sess.sentPacketHandler = sph
 
@@ -1144,8 +1167,7 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().TimeUntilSend().Return(time.Now())
 			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour))
 			sph.EXPECT().GetAlarmTimeout().AnyTimes()
-			sph.EXPECT().SendingAllowed().Return(true).AnyTimes()
-			sph.EXPECT().DequeuePacketForRetransmission()
+			sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
 			sph.EXPECT().GetStopWaitingFrame(gomock.Any())
 			sph.EXPECT().ShouldSendNumPackets().Return(1)
 			sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {

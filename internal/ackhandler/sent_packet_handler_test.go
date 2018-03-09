@@ -694,28 +694,39 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.OnAlarm() // RTO, meaning 2 lost packets
 		})
 
-		It("allows or denies sending based on congestion", func() {
+		It("only allows sending of ACKs when congestion limited", func() {
 			handler.bytesInFlight = 100
 			cong.EXPECT().GetCongestionWindow().Return(protocol.ByteCount(200))
-			Expect(handler.SendingAllowed()).To(BeTrue())
+			Expect(handler.SendMode()).To(Equal(SendAny))
 			cong.EXPECT().GetCongestionWindow().Return(protocol.ByteCount(75))
-			Expect(handler.SendingAllowed()).To(BeFalse())
+			Expect(handler.SendMode()).To(Equal(SendAck))
 		})
 
-		It("allows or denies sending based on the number of tracked packets", func() {
-			cong.EXPECT().GetCongestionWindow().Times(2)
-			Expect(handler.SendingAllowed()).To(BeTrue())
-			handler.retransmissionQueue = make([]*Packet, protocol.MaxTrackedSentPackets)
-			Expect(handler.SendingAllowed()).To(BeFalse())
+		It("only allows sending of ACKs when we're keeping track of MaxOutstandingSentPackets packets", func() {
+			cong.EXPECT().GetCongestionWindow().Return(protocol.MaxByteCount).AnyTimes()
+			cong.EXPECT().TimeUntilSend(gomock.Any()).AnyTimes()
+			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			for i := 1; i < protocol.MaxOutstandingSentPackets; i++ {
+				handler.SentPacket(retransmittablePacket(protocol.PacketNumber(i)))
+				Expect(handler.SendMode()).To(Equal(SendAny))
+			}
+			handler.SentPacket(retransmittablePacket(protocol.MaxOutstandingSentPackets))
+			Expect(handler.SendMode()).To(Equal(SendAck))
 		})
 
-		It("allows sending if there are retransmisisons outstanding", func() {
-			cong.EXPECT().GetCongestionWindow().Times(2)
-			handler.bytesInFlight = 100
-			Expect(handler.retransmissionQueue).To(BeEmpty())
-			Expect(handler.SendingAllowed()).To(BeFalse())
+		It("allows sending retransmissions", func() {
+			// note that we don't EXPECT a call to GetCongestionWindow
+			// that means retransmissions are sent without considering the congestion window
 			handler.retransmissionQueue = []*Packet{{PacketNumber: 3}}
-			Expect(handler.SendingAllowed()).To(BeTrue())
+			Expect(handler.SendMode()).To(Equal(SendRetransmission))
+		})
+
+		It("allow retransmissions, if we're keeping track of between MaxOutstandingSentPackets and MaxTrackedSentPackets packets", func() {
+			Expect(protocol.MaxOutstandingSentPackets).To(BeNumerically("<", protocol.MaxTrackedSentPackets))
+			handler.retransmissionQueue = make([]*Packet, protocol.MaxOutstandingSentPackets+10)
+			Expect(handler.SendMode()).To(Equal(SendRetransmission))
+			handler.retransmissionQueue = make([]*Packet, protocol.MaxTrackedSentPackets)
+			Expect(handler.SendMode()).To(Equal(SendNone))
 		})
 
 		It("gets the pacing delay", func() {
