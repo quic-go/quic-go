@@ -660,17 +660,17 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("should call MaybeExitSlowStart and OnPacketAcked", func() {
-			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(2)
-			cong.EXPECT().TimeUntilSend(gomock.Any()).Times(2)
-			cong.EXPECT().MaybeExitSlowStart()
-			cong.EXPECT().OnPacketAcked(
-				protocol.PacketNumber(1),
-				protocol.ByteCount(1),
-				protocol.ByteCount(1),
+			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(3)
+			cong.EXPECT().TimeUntilSend(gomock.Any()).Times(3)
+			gomock.InOrder(
+				cong.EXPECT().MaybeExitSlowStart(), // must be called before packets are acked
+				cong.EXPECT().OnPacketAcked(protocol.PacketNumber(1), protocol.ByteCount(1), protocol.ByteCount(2)),
+				cong.EXPECT().OnPacketAcked(protocol.PacketNumber(2), protocol.ByteCount(1), protocol.ByteCount(1)),
 			)
 			handler.SentPacket(retransmittablePacket(1))
 			handler.SentPacket(retransmittablePacket(2))
-			err := handler.ReceivedAck(&wire.AckFrame{LargestAcked: 1, LowestAcked: 1}, 1, protocol.EncryptionForwardSecure, time.Now())
+			handler.SentPacket(retransmittablePacket(3))
+			err := handler.ReceivedAck(&wire.AckFrame{LargestAcked: 2, LowestAcked: 1}, 1, protocol.EncryptionForwardSecure, time.Now())
 			Expect(err).NotTo(HaveOccurred())
 		})
 
