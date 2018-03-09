@@ -3,6 +3,7 @@ package quic
 import (
 	"bytes"
 	"math"
+	"net"
 
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
@@ -52,6 +53,7 @@ func (m *mockCryptoSetup) SetDiversificationNonce(divNonce []byte) { m.divNonce 
 func (m *mockCryptoSetup) ConnectionState() ConnectionState        { panic("not implemented") }
 
 var _ = Describe("Packet packer", func() {
+	const maxPacketSize protocol.ByteCount = 1357
 	var (
 		packer           *packetPacker
 		publicHeaderLen  protocol.ByteCount
@@ -69,15 +71,38 @@ var _ = Describe("Packet packer", func() {
 			0x1337,
 			1,
 			func(protocol.PacketNumber) protocol.PacketNumberLen { return protocol.PacketNumberLen2 },
+			&net.TCPAddr{},
 			&mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure},
 			mockStreamFramer,
 			protocol.PerspectiveServer,
 			version,
 		)
 		publicHeaderLen = 1 + 8 + 2 // 1 flag byte, 8 connection ID, 2 packet number
-		maxFrameSize = protocol.MaxPacketSize - protocol.ByteCount((&mockSealer{}).Overhead()) - publicHeaderLen
+		maxFrameSize = maxPacketSize - protocol.ByteCount((&mockSealer{}).Overhead()) - publicHeaderLen
 		packer.hasSentPacket = true
 		packer.version = version
+		packer.maxPacketSize = maxPacketSize
+	})
+
+	Context("determining the maximum packet size", func() {
+		It("uses the minimum initial size, if it can't determine if the remote address is IPv4 or IPv6", func() {
+			remoteAddr := &net.TCPAddr{}
+			packer = newPacketPacker(0x1337, 1, nil, remoteAddr, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
+			Expect(packer.maxPacketSize).To(BeEquivalentTo(protocol.MinInitialPacketSize))
+		})
+
+		It("uses the maximum IPv4 packet size, if the remote address is IPv4", func() {
+			remoteAddr := &net.UDPAddr{IP: net.IPv4(11, 12, 13, 14), Port: 1337}
+			packer = newPacketPacker(0x1337, 1, nil, remoteAddr, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
+			Expect(packer.maxPacketSize).To(BeEquivalentTo(protocol.MaxPacketSizeIPv4))
+		})
+
+		It("uses the maximum IPv6 packet size, if the remote address is IPv6", func() {
+			ip := net.ParseIP("2001:0db8:85a3:0000:0000:8a2e:0370:7334")
+			remoteAddr := &net.UDPAddr{IP: ip, Port: 1337}
+			packer = newPacketPacker(0x1337, 1, nil, remoteAddr, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
+			Expect(packer.maxPacketSize).To(BeEquivalentTo(protocol.MaxPacketSizeIPv6))
+		})
 	})
 
 	It("returns nil when no packet is queued", func() {
@@ -449,7 +474,7 @@ var _ = Describe("Packet packer", func() {
 			p, err := packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.frames).To(HaveLen(1))
-			Expect(p.raw).To(HaveLen(int(protocol.MaxPacketSize)))
+			Expect(p.raw).To(HaveLen(int(maxPacketSize)))
 			Expect(p.frames[0].(*wire.StreamFrame).DataLenPresent).To(BeFalse())
 			p, err = packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
@@ -472,7 +497,7 @@ var _ = Describe("Packet packer", func() {
 			p, err := packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.frames).To(HaveLen(1))
-			Expect(p.raw).To(HaveLen(int(protocol.MaxPacketSize)))
+			Expect(p.raw).To(HaveLen(int(maxPacketSize)))
 			Expect(p.frames[0].(*wire.StreamFrame).DataLenPresent).To(BeFalse())
 			p, err = packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
@@ -677,7 +702,7 @@ var _ = Describe("Packet packer", func() {
 				Frames: []wire.Frame{
 					&wire.StreamFrame{
 						StreamID: 1,
-						Data:     bytes.Repeat([]byte{'f'}, int(protocol.MaxPacketSize-5)),
+						Data:     bytes.Repeat([]byte{'f'}, int(maxPacketSize-5)),
 					},
 				},
 			}
@@ -771,7 +796,7 @@ var _ = Describe("Packet packer", func() {
 			var frames []wire.Frame
 			var totalLen protocol.ByteCount
 			// pack a bunch of control frames, such that the packet is way bigger than a single packet
-			for i := 0; totalLen < protocol.MaxPacketSize*3/2; i++ {
+			for i := 0; totalLen < maxPacketSize*3/2; i++ {
 				f := &wire.MaxStreamDataFrame{StreamID: protocol.StreamID(i), ByteOffset: protocol.ByteCount(i)}
 				frames = append(frames, f)
 				totalLen += f.Length(packer.version)
@@ -789,7 +814,7 @@ var _ = Describe("Packet packer", func() {
 			Expect(packets[1].frames[1:]).To(Equal(frames[len(packets[0].frames)-1:]))
 			// check that the first packet was filled up as far as possible:
 			// if the first frame (after the STOP_WAITING) was packed into the first packet, it would have overflown the MaxPacketSize
-			Expect(len(packets[0].raw) + int(packets[1].frames[1].Length(packer.version))).To(BeNumerically(">", protocol.MaxPacketSize))
+			Expect(len(packets[0].raw) + int(packets[1].frames[1].Length(packer.version))).To(BeNumerically(">", maxPacketSize))
 		})
 
 		It("splits a STREAM frame that doesn't fit", func() {
@@ -798,7 +823,7 @@ var _ = Describe("Packet packer", func() {
 				Frames: []wire.Frame{&wire.StreamFrame{
 					StreamID: 42,
 					Offset:   1337,
-					Data:     bytes.Repeat([]byte{'a'}, int(protocol.MaxPacketSize)*3/2),
+					Data:     bytes.Repeat([]byte{'a'}, int(maxPacketSize)*3/2),
 				}},
 			})
 			Expect(err).ToNot(HaveOccurred())
@@ -815,15 +840,15 @@ var _ = Describe("Packet packer", func() {
 			Expect(sf2.StreamID).To(Equal(protocol.StreamID(42)))
 			Expect(sf2.Offset).To(Equal(protocol.ByteCount(1337) + sf1.DataLen()))
 			Expect(sf2.DataLenPresent).To(BeFalse())
-			Expect(sf1.DataLen() + sf2.DataLen()).To(Equal(protocol.MaxPacketSize * 3 / 2))
-			Expect(packets[0].raw).To(HaveLen(int(protocol.MaxPacketSize)))
+			Expect(sf1.DataLen() + sf2.DataLen()).To(Equal(maxPacketSize * 3 / 2))
+			Expect(packets[0].raw).To(HaveLen(int(maxPacketSize)))
 		})
 
 		It("packs two packets for retransmission if the original packet contained many STREAM frames", func() {
 			var frames []wire.Frame
 			var totalLen protocol.ByteCount
 			// pack a bunch of control frames, such that the packet is way bigger than a single packet
-			for i := 0; totalLen < protocol.MaxPacketSize*3/2; i++ {
+			for i := 0; totalLen < maxPacketSize*3/2; i++ {
 				f := &wire.StreamFrame{
 					StreamID:       protocol.StreamID(i),
 					Data:           []byte("foobar"),
@@ -845,7 +870,7 @@ var _ = Describe("Packet packer", func() {
 			Expect(packets[1].frames[1:]).To(Equal(frames[len(packets[0].frames)-1:]))
 			// check that the first packet was filled up as far as possible:
 			// if the first frame (after the STOP_WAITING) was packed into the first packet, it would have overflown the MaxPacketSize
-			Expect(len(packets[0].raw) + int(packets[1].frames[1].Length(packer.version))).To(BeNumerically(">", protocol.MaxPacketSize-protocol.MinStreamFrameSize))
+			Expect(len(packets[0].raw) + int(packets[1].frames[1].Length(packer.version))).To(BeNumerically(">", maxPacketSize-protocol.MinStreamFrameSize))
 		})
 
 		It("correctly sets the DataLenPresent on STREAM frames", func() {

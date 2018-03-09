@@ -339,6 +339,7 @@ func (s *session) postSetup(initialPacketNumber protocol.PacketNumber) error {
 	s.packer = newPacketPacker(s.connectionID,
 		initialPacketNumber,
 		s.sentPacketHandler.GetPacketNumberLen,
+		s.RemoteAddr(),
 		s.cryptoSetup,
 		s.streamFramer,
 		s.perspective,
@@ -1067,7 +1068,6 @@ func (s *session) LocalAddr() net.Addr {
 	return s.conn.LocalAddr()
 }
 
-// RemoteAddr returns the net.Addr of the client
 func (s *session) RemoteAddr() net.Addr {
 	return s.conn.RemoteAddr()
 }
