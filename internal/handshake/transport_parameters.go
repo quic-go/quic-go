@@ -20,6 +20,8 @@ type TransportParameters struct {
 	StreamFlowControlWindow     protocol.ByteCount
 	ConnectionFlowControlWindow protocol.ByteCount
 
+	MaxPacketSize protocol.ByteCount
+
 	MaxBidiStreamID protocol.StreamID // only used for IETF QUIC
 	MaxUniStreamID  protocol.StreamID // only used for IETF QUIC
 	MaxStreams      uint32            // only used for gQUIC
@@ -137,6 +139,15 @@ func readTransportParamters(paramsList []transportParameter) (*TransportParamete
 				return nil, fmt.Errorf("wrong length for omit_connection_id: %d (expected empty)", len(p.Value))
 			}
 			params.OmitConnectionID = true
+		case maxPacketSizeParameterID:
+			if len(p.Value) != 2 {
+				return nil, fmt.Errorf("wrong length for max_packet_size: %d (expected 2)", len(p.Value))
+			}
+			maxPacketSize := protocol.ByteCount(binary.BigEndian.Uint16(p.Value))
+			if maxPacketSize < 1200 {
+				return nil, fmt.Errorf("invalid value for max_packet_size: %d (minimum 1200)", maxPacketSize)
+			}
+			params.MaxPacketSize = maxPacketSize
 		}
 	}
 

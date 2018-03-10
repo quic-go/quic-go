@@ -132,6 +132,7 @@ var _ = Describe("Transport Parameters", func() {
 					initialMaxStreamIDBiDiParameterID: {0x33, 0x44, 0x55, 0x66},
 					initialMaxStreamIDUniParameterID:  {0x44, 0x55, 0x66, 0x77},
 					idleTimeoutParameterID:            {0x13, 0x37},
+					maxPacketSizeParameterID:          {0x73, 0x31},
 				}
 			})
 			It("reads parameters", func() {
@@ -143,6 +144,7 @@ var _ = Describe("Transport Parameters", func() {
 				Expect(params.MaxUniStreamID).To(Equal(protocol.StreamID(0x44556677)))
 				Expect(params.IdleTimeout).To(Equal(0x1337 * time.Second))
 				Expect(params.OmitConnectionID).To(BeFalse())
+				Expect(params.MaxPacketSize).To(Equal(protocol.ByteCount(0x7331)))
 			})
 
 			It("saves if it should omit the connection ID", func() {
@@ -213,6 +215,18 @@ var _ = Describe("Transport Parameters", func() {
 				parameters[omitConnectionIDParameterID] = []byte{0} // should be empty
 				_, err := readTransportParamters(paramsMapToList(parameters))
 				Expect(err).To(MatchError("wrong length for omit_connection_id: 1 (expected empty)"))
+			})
+
+			It("rejects the parameters if max_packet_size has the wrong length", func() {
+				parameters[maxPacketSizeParameterID] = []byte{0x11} // should be 2 bytes
+				_, err := readTransportParamters(paramsMapToList(parameters))
+				Expect(err).To(MatchError("wrong length for max_packet_size: 1 (expected 2)"))
+			})
+
+			It("rejects max_packet_sizes smaller than 1200 bytes", func() {
+				parameters[maxPacketSizeParameterID] = []byte{0x4, 0xaf} // 0x4af = 1199
+				_, err := readTransportParamters(paramsMapToList(parameters))
+				Expect(err).To(MatchError("invalid value for max_packet_size: 1199 (minimum 1200)"))
 			})
 
 			It("ignores unknown parameters", func() {
