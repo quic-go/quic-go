@@ -16,6 +16,7 @@ import (
 func main() {
 	verbose := flag.Bool("v", false, "verbose")
 	tls := flag.Bool("tls", false, "activate support for IETF QUIC (work in progress)")
+	meas := flag.Bool("meas", false, "activate support for measurement byte")
 	flag.Parse()
 	urls := flag.Args()
 
@@ -30,6 +31,8 @@ func main() {
 	if *tls {
 		versions = append([]protocol.VersionNumber{protocol.VersionTLS}, versions...)
 	}
+	
+	utils.Globals.HasMeasurementByte = *meas
 
 	roundTripper := &h2quic.RoundTripper{
 		QuicConfig: &quic.Config{Versions: versions},

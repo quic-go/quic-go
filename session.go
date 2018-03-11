@@ -566,12 +566,12 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		} else {
 			// out of order R1 on client : update Rsaved
 			log.Printf("OUT-OF-ORDER : pnum=%v < %v",hdr.PacketNumber,s.largestRcvdPacketNumber);
-			if (hdr.SpinBit&&(s.perspective == protocol.PerspectiveClient)&&s.packer.SpinBit) {
+			if (hdr.SpinBit&&(s.perspective == protocol.PerspectiveClient)&&s.packer.SpinBit && utils.Globals.HasMeasurementByte) {
 				s.packer.SpinCounterRsaved++
 				log.Printf("LATE-R1 : pnum=%v",hdr.PacketNumber);
 			}
 		}
-		if (hdr.SpinBit) {
+		if (hdr.SpinBit && utils.Globals.HasMeasurementByte) {
 			s.packer.SpinCounterR ++
 			//log.Printf("SpincounterR=%v      pnum=%v",s.packer.SpinCounterR, hdr.PacketNumber);
 		}

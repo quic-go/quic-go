@@ -11,6 +11,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 //	"log"
 )
 
@@ -507,13 +508,15 @@ func (p *packetPacker) writeAndSealPacket(
 
 	var scval uint16
 	header.SpinBit = p.SpinBit
-	if (p.SpinBit) {
-		p.SpinCounterT++
-		scval = twelveBitEncoding(p.SpinCounterRsaved)
-	} else {
-		scval = twelveBitEncoding(p.SpinCounterTsaved)
+	if utils.Globals.HasMeasurementByte {
+		if (p.SpinBit) {
+			p.SpinCounterT++
+			scval = twelveBitEncoding(p.SpinCounterRsaved)
+		} else {
+			scval = twelveBitEncoding(p.SpinCounterTsaved)
+		}
+		header.MeasurementByte = p.serialEncoding(scval)
 	}
-	header.MeasurementByte = p.serialEncoding(scval)
 	if err := header.Write(buffer, p.perspective, p.version); err != nil {
 		return nil, err
 	}

@@ -128,6 +128,7 @@ func main() {
 	www := flag.String("www", "/var/www", "www data")
 	tcp := flag.Bool("tcp", false, "also listen on TCP")
 	tls := flag.Bool("tls", false, "activate support for IETF QUIC (work in progress)")
+	meas := flag.Bool("meas", false, "activate support for measurement byte")
 	flag.Parse()
 
 	if *verbose {
@@ -142,6 +143,8 @@ func main() {
 		versions = append([]protocol.VersionNumber{protocol.VersionTLS}, versions...)
 	}
 
+        utils.Globals.HasMeasurementByte = *meas
+	
 	certFile := *certPath + "/fullchain.pem"
 	keyFile := *certPath + "/privkey.pem"
 
