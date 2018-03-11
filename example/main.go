@@ -144,7 +144,6 @@ func main() {
 	}
 
         utils.Globals.HasMeasurementByte = *meas
-	
 	certFile := *certPath + "/fullchain.pem"
 	keyFile := *certPath + "/privkey.pem"
 

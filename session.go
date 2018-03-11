@@ -533,7 +533,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 				log.Printf("GAP : pnum=%v => missing %v",hdr.PacketNumber,hdr.PacketNumber-s.largestRcvdPacketNumber-1);
 			}
 			if s.perspective == protocol.PerspectiveClient {
-				
+
 				// client = inverter
 				if (s.packer.SpinBit == hdr.SpinBit) {
 					if (hdr.SpinBit) {

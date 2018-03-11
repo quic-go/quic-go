@@ -31,7 +31,6 @@ func main() {
 	if *tls {
 		versions = append([]protocol.VersionNumber{protocol.VersionTLS}, versions...)
 	}
-	
 	utils.Globals.HasMeasurementByte = *meas
 
 	roundTripper := &h2quic.RoundTripper{

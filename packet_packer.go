@@ -47,14 +47,14 @@ type packetPacker struct {
 	maxPacketSize             protocol.ByteCount
 	hasSentPacket             bool // has the packetPacker already sent a packet
 	numNonRetransmittableAcks int
-	
+
 	SpinBit bool
 
 	SpinCounterRsaved uint32
 	SpinCounterTsaved uint32
 	SpinCounterT      uint32
 	SpinCounterR      uint32
-	
+
 	serialPhase	  uint16
 }
 
@@ -480,7 +480,7 @@ func twelveBitEncoding(x uint32) uint16 {
 			return 0xFFFF // infinite
 		}
 		x>>=1
-	}	
+	}
 	return (exp << 9) | uint16(x)
 }
 
@@ -494,7 +494,7 @@ func (p *packetPacker) serialEncoding(val uint16) uint8 {
 		return uint8(val&0x003F)
 	} else {
 		return 0x40 | uint8((val>>6)&0x3F)
-	}	
+	}
 }
 
 
@@ -560,9 +560,7 @@ func (p *packetPacker) writeAndSealPacket(
 //	if (p.SpinBit) {
 //		log.Printf("SpincounterT=%v       pnum=%v",p.SpinCounterT,num);
 //	}
-	
 	p.hasSentPacket = true
-	
 	return raw, nil
 }
 
