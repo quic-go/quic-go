@@ -61,7 +61,7 @@ func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte
 	}
 	h.PacketNumber = protocol.PacketNumber(pn)
 	h.PacketNumberLen = protocol.PacketNumberLen4
-	h.Type = protocol.PacketType(typeByte & 0x3f)
+	h.Type = protocol.PacketType(typeByte & 0x7f)
 	if sentBy == protocol.PerspectiveClient && (h.Type != protocol.PacketTypeInitial && h.Type != protocol.PacketTypeHandshake && h.Type != protocol.PacketType0RTT) {
 		return nil, qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", h.Type))
 	}
