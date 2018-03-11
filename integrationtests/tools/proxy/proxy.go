@@ -44,6 +44,8 @@ func (d Direction) String() string {
 	}
 }
 
+// Is says if one direction matches another direction.
+// For example, incoming matches both incoming and both, but not outgoing.
 func (d Direction) Is(dir Direction) bool {
 	if d == DirectionBoth || dir == DirectionBoth {
 		return true

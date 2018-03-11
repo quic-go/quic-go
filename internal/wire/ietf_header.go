@@ -2,6 +2,7 @@ package wire
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -71,31 +72,38 @@ func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte
 }
 
 func parseShortHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
-
 	spinbit := typeByte&0x10 > 0
-
 	_,_ = b.ReadByte() // Ignore Measurement Byte on input
-
-	hasConnID := typeByte&0x40 > 0
+	omitConnID := typeByte&0x40 > 0
 	var connID uint64
-	if hasConnID {
+	if !omitConnID {
 		var err error
 		connID, err = utils.BigEndian.ReadUint64(b)
 		if err != nil {
 			return nil, err
 		}
 	}
-	pnLen := 1 << ( 0xF-(typeByte & 0xF))
+	var pnLen protocol.PacketNumberLen
+	switch typeByte & 0x7 {
+	case 0x0:
+		pnLen = protocol.PacketNumberLen1
+	case 0x1:
+		pnLen = protocol.PacketNumberLen2
+	case 0x2:
+		pnLen = protocol.PacketNumberLen4
+	default:
+		return nil, errors.New("invalid short header type")
+	}
 	pn, err := utils.BigEndian.ReadUintN(b, uint8(pnLen))
 	if err != nil {
 		return nil, err
 	}
 	return &Header{
 		KeyPhase:         int(typeByte&0x20) >> 5,
-		OmitConnectionID: !hasConnID,
+		OmitConnectionID: omitConnID,
 		ConnectionID:     protocol.ConnectionID(connID),
 		PacketNumber:     protocol.PacketNumber(pn),
-		PacketNumberLen:  protocol.PacketNumberLen(pnLen),
+		PacketNumberLen:  pnLen,
 		HasSpinBit:       true,
 		SpinBit:          spinbit,
 	}, nil
@@ -119,20 +127,20 @@ func (h *Header) writeLongHeader(b *bytes.Buffer) error {
 }
 
 func (h *Header) writeShortHeader(b *bytes.Buffer) error {
-	typeByte := byte(h.KeyPhase << 5)
+	typeByte := byte(0x00)
+	typeByte ^= byte(h.KeyPhase << 5)
 	if (h.SpinBit) {
 		typeByte |= 0x10
 	}
-	if !h.OmitConnectionID {
+	if h.OmitConnectionID {
 		typeByte ^= 0x40
 	}
 	switch h.PacketNumberLen {
 	case protocol.PacketNumberLen1:
-		typeByte ^= 0xF
 	case protocol.PacketNumberLen2:
-		typeByte ^= 0xE
+		typeByte ^= 0x1
 	case protocol.PacketNumberLen4:
-		typeByte ^= 0xD
+		typeByte ^= 0x2
 	default:
 		return fmt.Errorf("invalid packet number length: %d", h.PacketNumberLen)
 	}

@@ -77,6 +77,11 @@ func (vn VersionNumber) UsesIETFFrameFormat() bool {
 	return vn != Version39
 }
 
+// UsesStopWaitingFrames tells if this version uses STOP_WAITING frames
+func (vn VersionNumber) UsesStopWaitingFrames() bool {
+	return vn == Version39
+}
+
 // StreamContributesToConnectionFlowControl says if a stream contributes to connection-level flow control
 func (vn VersionNumber) StreamContributesToConnectionFlowControl(id StreamID) bool {
 	if id == vn.CryptoStreamID() {

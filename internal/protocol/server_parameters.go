@@ -2,9 +2,11 @@ package protocol
 
 import "time"
 
-// MaxPacketSize is the maximum packet size that we use for sending packets.
-// It includes the QUIC packet header, but excludes the UDP and IP header.
-const MaxPacketSize ByteCount = 1200
+// MaxPacketSizeIPv4 is the maximum packet size that we use for sending IPv4 packets.
+const MaxPacketSizeIPv4 = 1252
+
+// MaxPacketSizeIPv6 is the maximum packet size that we use for sending IPv6 packets.
+const MaxPacketSizeIPv6 = 1232
 
 // NonForwardSecurePacketSizeReduction is the number of bytes a non forward-secure packet has to be smaller than a forward-secure packet
 // This makes sure that those packets can always be retransmitted without splitting the contained StreamFrames
@@ -23,10 +25,6 @@ const MaxUndecryptablePackets = 10
 // PublicResetTimeout is the time to wait before sending a Public Reset when receiving too many undecryptable packets during the handshake
 // This timeout allows the Go scheduler to switch to the Go rountine that reads the crypto stream and to escalate the crypto
 const PublicResetTimeout = 500 * time.Millisecond
-
-// AckSendDelay is the maximum delay that can be applied to an ACK for a retransmittable packet
-// This is the value Chromium is using
-const AckSendDelay = 25 * time.Millisecond
 
 // ReceiveStreamFlowControlWindow is the stream-level flow control window for receiving data
 // This is the value that Google servers are using
@@ -91,9 +89,6 @@ const MaxTrackedReceivedAckRanges = DefaultMaxCongestionWindow
 
 // MaxNonRetransmittableAcks is the maximum number of packets containing an ACK, but no retransmittable frames, that we send in a row
 const MaxNonRetransmittableAcks = 19
-
-// RetransmittablePacketsBeforeAck is the number of retransmittable that an ACK is sent for
-const RetransmittablePacketsBeforeAck = 10
 
 // MaxStreamFrameSorterGaps is the maximum number of gaps between received StreamFrames
 // prevents DoS attacks against the streamFrameSorter

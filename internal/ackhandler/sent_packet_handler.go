@@ -1,7 +1,6 @@
 package ackhandler
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -29,9 +28,6 @@ const (
 	// maxRTOTimeout is the maximum RTO time
 	maxRTOTimeout = 60 * time.Second
 )
-
-// ErrDuplicateOrOutOfOrderAck occurs when a duplicate or an out-of-order ACK is received
-var ErrDuplicateOrOutOfOrderAck = errors.New("SentPacketHandler: Duplicate or out-of-order ACK")
 
 type sentPacketHandler struct {
 	lastSentPacketNumber protocol.PacketNumber
@@ -112,14 +108,9 @@ func (h *sentPacketHandler) SetHandshakeComplete() {
 	h.handshakeComplete = true
 }
 
-func (h *sentPacketHandler) SentPacket(packet *Packet) error {
-	if protocol.PacketNumber(len(h.retransmissionQueue)+h.packetHistory.Len()+1) > protocol.MaxTrackedSentPackets {
-		return errors.New("Too many outstanding non-acked and non-retransmitted packets")
-	}
-
+func (h *sentPacketHandler) SentPacket(packet *Packet) {
 	for p := h.lastSentPacketNumber + 1; p < packet.PacketNumber; p++ {
 		h.skippedPackets = append(h.skippedPackets, p)
-
 		if len(h.skippedPackets) > protocol.MaxTrackedSkippedPackets {
 			h.skippedPackets = h.skippedPackets[1:]
 		}
@@ -144,7 +135,6 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 		h.bytesInFlight += packet.Length
 		h.packetHistory.PushBack(*packet)
 	}
-
 	h.congestion.OnPacketSent(
 		now,
 		h.bytesInFlight,
@@ -154,9 +144,7 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 	)
 
 	h.nextPacketSendTime = utils.MaxTime(h.nextPacketSendTime, now).Add(h.congestion.TimeUntilSend(h.bytesInFlight))
-
 	h.updateLossDetectionAlarm(now)
-	return nil
 }
 
 func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, encLevel protocol.EncryptionLevel, rcvTime time.Time) error {
@@ -164,18 +152,13 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 		return qerr.Error(qerr.InvalidAckData, "Received ACK for an unsent package")
 	}
 
-	// duplicate or out-of-order ACK
-	// if withPacketNumber <= h.largestReceivedPacketWithAck && withPacketNumber != 0 {
-	if withPacketNumber <= h.largestReceivedPacketWithAck {
-		return ErrDuplicateOrOutOfOrderAck
-	}
-	h.largestReceivedPacketWithAck = withPacketNumber
-
-	// ignore repeated ACK (ACKs that don't have a higher LargestAcked than the last ACK)
-	if ackFrame.LargestAcked < h.lowestUnacked() {
+	// duplicate or out of order ACK
+	if withPacketNumber != 0 && withPacketNumber <= h.largestReceivedPacketWithAck {
+		utils.Debugf("Ignoring ACK frame (duplicate or out of order).")
 		return nil
 	}
-	h.largestAcked = ackFrame.LargestAcked
+	h.largestReceivedPacketWithAck = withPacketNumber
+	h.largestAcked = utils.MaxPacketNumber(h.largestAcked, ackFrame.LargestAcked)
 
 	if h.skippedPacketsAcked(ackFrame) {
 		return qerr.Error(qerr.InvalidAckData, "Received an ACK for a skipped packet number")
@@ -366,8 +349,8 @@ func (h *sentPacketHandler) DequeuePacketForRetransmission() *Packet {
 	return packet
 }
 
-func (h *sentPacketHandler) GetLeastUnacked() protocol.PacketNumber {
-	return h.lowestUnacked()
+func (h *sentPacketHandler) GetPacketNumberLen(p protocol.PacketNumber) protocol.PacketNumberLen {
+	return protocol.GetPacketNumberLengthForHeader(p, h.lowestUnacked())
 }
 
 func (h *sentPacketHandler) GetStopWaitingFrame(force bool) *wire.StopWaitingFrame {

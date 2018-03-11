@@ -10,7 +10,7 @@ import (
 // SentPacketHandler handles ACKs received for outgoing packets
 type SentPacketHandler interface {
 	// SentPacket may modify the packet
-	SentPacket(packet *Packet) error
+	SentPacket(packet *Packet)
 	ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, encLevel protocol.EncryptionLevel, recvTime time.Time) error
 	SetHandshakeComplete()
 
@@ -32,7 +32,7 @@ type SentPacketHandler interface {
 	GetStopWaitingFrame(force bool) *wire.StopWaitingFrame
 	GetLowestPacketNotConfirmedAcked() protocol.PacketNumber
 	DequeuePacketForRetransmission() (packet *Packet)
-	GetLeastUnacked() protocol.PacketNumber
+	GetPacketNumberLen(protocol.PacketNumber) protocol.PacketNumberLen
 
 	GetAlarmTimeout() time.Time
 	OnAlarm()
