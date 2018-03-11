@@ -108,7 +108,9 @@ func (c *client) handleHeaderStream() {
 	for err == nil {
 		err = c.readResponse(h2framer, decoder)
 	}
-	utils.Debugf("Error handling header stream: %s", err)
+	if quicErr, ok := err.(*qerr.QuicError); !ok || quicErr.ErrorCode != qerr.PeerGoingAway {
+		utils.Debugf("Error handling header stream: %s", err)
+	}
 	c.headerErr = qerr.Error(qerr.InvalidHeadersStreamData, err.Error())
 	// stop all running request
 	close(c.headerErrored)
