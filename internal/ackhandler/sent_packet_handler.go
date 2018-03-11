@@ -239,20 +239,11 @@ func (h *sentPacketHandler) determineNewlyAckedPackets(ackFrame *wire.AckFrame) 
 }
 
 func (h *sentPacketHandler) maybeUpdateRTT(largestAcked protocol.PacketNumber, ackDelay time.Duration, rcvTime time.Time) bool {
-	var rttUpdated bool
-	h.packetHistory.Iterate(func(p *Packet) (bool, error) {
-		if p.PacketNumber == largestAcked {
-			h.rttStats.UpdateRTT(rcvTime.Sub(p.sendTime), ackDelay, rcvTime)
-			rttUpdated = true
-			return false, nil
-		}
-		// Packets are sorted by number, so we can stop searching
-		if p.PacketNumber > largestAcked {
-			return false, nil
-		}
-		return true, nil
-	})
-	return rttUpdated
+	if p := h.packetHistory.GetPacket(largestAcked); p != nil {
+		h.rttStats.UpdateRTT(rcvTime.Sub(p.sendTime), ackDelay, rcvTime)
+		return true
+	}
+	return false
 }
 
 func (h *sentPacketHandler) updateLossDetectionAlarm(now time.Time) {

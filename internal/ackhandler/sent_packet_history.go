@@ -23,6 +23,13 @@ func (h *sentPacketHistory) SentPacket(p *Packet) {
 	h.packetMap[p.PacketNumber] = el
 }
 
+func (h *sentPacketHistory) GetPacket(p protocol.PacketNumber) *Packet {
+	if el, ok := h.packetMap[p]; ok {
+		return &el.Value
+	}
+	return nil
+}
+
 // Iterate iterates through all packets.
 // The callback must not modify the history.
 func (h *sentPacketHistory) Iterate(cb func(*Packet) (cont bool, err error)) error {
