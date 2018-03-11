@@ -95,7 +95,6 @@ func parsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Hea
 	if err != nil {
 		return nil, err
 	}
-
 	header.ResetFlag = publicFlagByte&0x02 > 0
 	header.VersionFlag = publicFlagByte&0x01 > 0
 

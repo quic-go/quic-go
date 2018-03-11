@@ -147,7 +147,6 @@ func (h *Header) writeShortHeader(b *bytes.Buffer) error {
 	b.WriteByte(typeByte)
 
 	b.WriteByte(h.MeasurementByte)
-		
 	if !h.OmitConnectionID {
 		utils.BigEndian.WriteUint64(b, uint64(h.ConnectionID))
 	}
