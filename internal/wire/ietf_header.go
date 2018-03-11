@@ -23,7 +23,6 @@ func parseHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Header, e
 
 // parse long header and version negotiation packets
 func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte) (*Header, error) {
-	spinbit := typeByte&0x40 > 0
 	connID, err := utils.BigEndian.ReadUint64(b)
 	if err != nil {
 		return nil, err
@@ -35,7 +34,6 @@ func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte
 	h := &Header{
 		ConnectionID: protocol.ConnectionID(connID),
 		Version:      protocol.VersionNumber(v),
-		SpinBit:      spinbit,		
 	}
 	if v == 0 { // version negotiation packet
 		if sentBy == protocol.PerspectiveClient {
@@ -87,7 +85,7 @@ func parseShortHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
 			return nil, err
 		}
 	}
-	pnLen := 1 << ((typeByte & 0x3) - 1)
+	pnLen := 1 << ( 0xF-(typeByte & 0xF))
 	pn, err := utils.BigEndian.ReadUintN(b, uint8(pnLen))
 	if err != nil {
 		return nil, err
@@ -98,6 +96,7 @@ func parseShortHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
 		ConnectionID:     protocol.ConnectionID(connID),
 		PacketNumber:     protocol.PacketNumber(pn),
 		PacketNumberLen:  protocol.PacketNumberLen(pnLen),
+		HasSpinBit:       true,
 		SpinBit:          spinbit,
 	}, nil
 }
@@ -112,9 +111,7 @@ func (h *Header) writeHeader(b *bytes.Buffer) error {
 
 // TODO: add support for the key phase
 func (h *Header) writeLongHeader(b *bytes.Buffer) error {
-	var spin protocol.PacketType = 0
-	if h.SpinBit {spin = 0x40}
-	b.WriteByte(byte(0x80 | h.Type | spin))
+	b.WriteByte(byte(0x80 | h.Type))
 	utils.BigEndian.WriteUint64(b, uint64(h.ConnectionID))
 	utils.BigEndian.WriteUint32(b, uint32(h.Version))
 	utils.BigEndian.WriteUint32(b, uint32(h.PacketNumber))
@@ -131,11 +128,11 @@ func (h *Header) writeShortHeader(b *bytes.Buffer) error {
 	}
 	switch h.PacketNumberLen {
 	case protocol.PacketNumberLen1:
-		typeByte ^= 0x1
+		typeByte ^= 0xF
 	case protocol.PacketNumberLen2:
-		typeByte ^= 0x2
+		typeByte ^= 0xE
 	case protocol.PacketNumberLen4:
-		typeByte ^= 0x3
+		typeByte ^= 0xD
 	default:
 		return fmt.Errorf("invalid packet number length: %d", h.PacketNumberLen)
 	}

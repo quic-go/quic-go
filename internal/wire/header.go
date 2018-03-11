@@ -33,6 +33,7 @@ type Header struct {
 	isPublicHeader bool
 
 	// spin stuff
+	HasSpinBit bool
 	SpinBit bool
 	MeasurementByte  uint8
 }
