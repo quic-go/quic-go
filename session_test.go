@@ -1361,11 +1361,13 @@ var _ = Describe("Session", func() {
 			StreamFlowControlWindow:     0x5000,
 			ConnectionFlowControlWindow: 0x5000,
 			OmitConnectionID:            true,
+			MaxPacketSize:               0x42,
 		}
 		streamManager.EXPECT().UpdateLimits(&params)
 		paramsChan <- params
 		Eventually(func() *handshake.TransportParameters { return sess.peerParams }).Should(Equal(&params))
 		Eventually(func() bool { return sess.packer.omitConnectionID }).Should(BeTrue())
+		Eventually(func() protocol.ByteCount { return sess.packer.maxPacketSize }).Should(Equal(protocol.ByteCount(0x42)))
 		// make the go routine return
 		streamManager.EXPECT().CloseWithError(gomock.Any())
 		Expect(sess.Close(nil)).To(Succeed())

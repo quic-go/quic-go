@@ -759,6 +759,9 @@ func (s *session) processTransportParameters(params *handshake.TransportParamete
 	if params.OmitConnectionID {
 		s.packer.SetOmitConnectionID()
 	}
+	if params.MaxPacketSize != 0 {
+		s.packer.SetMaxPacketSize(params.MaxPacketSize)
+	}
 	s.connFlowController.UpdateSendWindow(params.ConnectionFlowControlWindow)
 	// the crypto stream is the only open stream at this moment
 	// so we don't need to update stream flow control windows

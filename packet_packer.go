@@ -10,6 +10,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
@@ -517,4 +518,8 @@ func (p *packetPacker) canSendData(encLevel protocol.EncryptionLevel) bool {
 
 func (p *packetPacker) SetOmitConnectionID() {
 	p.omitConnectionID = true
+}
+
+func (p *packetPacker) SetMaxPacketSize(size protocol.ByteCount) {
+	p.maxPacketSize = utils.MinByteCount(p.maxPacketSize, size)
 }
