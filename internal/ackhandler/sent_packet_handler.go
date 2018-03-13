@@ -357,18 +357,31 @@ func (h *sentPacketHandler) GetStopWaitingFrame(force bool) *wire.StopWaitingFra
 	return h.stopWaitingManager.GetStopWaitingFrame(force)
 }
 
-func (h *sentPacketHandler) SendingAllowed() bool {
-	cwnd := h.congestion.GetCongestionWindow()
-	congestionLimited := h.bytesInFlight > cwnd
-	maxTrackedLimited := protocol.PacketNumber(len(h.retransmissionQueue)+h.packetHistory.Len()) >= protocol.MaxTrackedSentPackets
-	if congestionLimited {
-		utils.Debugf("Congestion limited: bytes in flight %d, window %d", h.bytesInFlight, cwnd)
+func (h *sentPacketHandler) SendMode() SendMode {
+	numTrackedPackets := len(h.retransmissionQueue) + h.packetHistory.Len()
+
+	// Don't send any packets if we're keeping track of the maximum number of packets.
+	// Note that since MaxOutstandingSentPackets is smaller than MaxTrackedSentPackets,
+	// we will stop sending out new data when reaching MaxOutstandingSentPackets,
+	// but still allow sending of retransmissions and ACKs.
+	if numTrackedPackets >= protocol.MaxTrackedSentPackets {
+		utils.Debugf("Limited by the number of tracked packets: tracking %d packets, maximum %d", numTrackedPackets, protocol.MaxTrackedSentPackets)
+		return SendNone
 	}
-	// Workaround for #555:
-	// Always allow sending of retransmissions. This should probably be limited
-	// to RTOs, but we currently don't have a nice way of distinguishing them.
-	haveRetransmissions := len(h.retransmissionQueue) > 0
-	return !maxTrackedLimited && (!congestionLimited || haveRetransmissions)
+	// Send retransmissions first, if there are any.
+	if len(h.retransmissionQueue) > 0 {
+		return SendRetransmission
+	}
+	// Only send ACKs if we're congestion limited.
+	if cwnd := h.congestion.GetCongestionWindow(); h.bytesInFlight > cwnd {
+		utils.Debugf("Congestion limited: bytes in flight %d, window %d", h.bytesInFlight, cwnd)
+		return SendAck
+	}
+	if numTrackedPackets >= protocol.MaxOutstandingSentPackets {
+		utils.Debugf("Max outstanding limited: tracking %d packets, maximum: %d", numTrackedPackets, protocol.MaxOutstandingSentPackets)
+		return SendAck
+	}
+	return SendAny
 }
 
 func (h *sentPacketHandler) TimeUntilSend() time.Time {
