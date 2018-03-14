@@ -9,6 +9,8 @@ import (
 type sentPacketHistory struct {
 	packetList *PacketList
 	packetMap  map[protocol.PacketNumber]*PacketElement
+
+	firstOutstanding *PacketElement
 }
 
 func newSentPacketHistory() *sentPacketHistory {
@@ -19,8 +21,37 @@ func newSentPacketHistory() *sentPacketHistory {
 }
 
 func (h *sentPacketHistory) SentPacket(p *Packet) {
+	h.sentPacketImpl(p)
+}
+
+func (h *sentPacketHistory) sentPacketImpl(p *Packet) *PacketElement {
 	el := h.packetList.PushBack(*p)
 	h.packetMap[p.PacketNumber] = el
+	if h.firstOutstanding == nil {
+		h.firstOutstanding = el
+	}
+	return el
+}
+
+func (h *sentPacketHistory) SentPacketsAsRetransmission(packets []*Packet, retransmissionOf protocol.PacketNumber) {
+	retransmission, ok := h.packetMap[retransmissionOf]
+	// The retransmitted packet is not present anymore.
+	// This can happen if it was acked in between dequeueing of the retransmission and sending.
+	// Just treat the retransmissions as normal packets.
+	// TODO: This won't happen if we clear packets queued for retransmission on new ACKs.
+	if !ok {
+		for _, packet := range packets {
+			h.sentPacketImpl(packet)
+		}
+		return
+	}
+	retransmission.Value.retransmittedAs = make([]protocol.PacketNumber, len(packets))
+	for i, packet := range packets {
+		retransmission.Value.retransmittedAs[i] = packet.PacketNumber
+		el := h.sentPacketImpl(packet)
+		el.Value.isRetransmission = true
+		el.Value.retransmissionOf = retransmissionOf
+	}
 }
 
 func (h *sentPacketHistory) GetPacket(p protocol.PacketNumber) *Packet {
@@ -44,11 +75,41 @@ func (h *sentPacketHistory) Iterate(cb func(*Packet) (cont bool, err error)) err
 	return nil
 }
 
-func (h *sentPacketHistory) Front() *Packet {
-	if h.Len() == 0 {
+// FirstOutStanding returns the first outstanding packet.
+// It must not be modified (e.g. retransmitted).
+// Use DequeueFirstPacketForRetransmission() to retransmit it.
+func (h *sentPacketHistory) FirstOutstanding() *Packet {
+	if h.firstOutstanding == nil {
 		return nil
 	}
-	return &h.packetList.Front().Value
+	return &h.firstOutstanding.Value
+}
+
+// QueuePacketForRetransmission marks a packet for retransmission.
+// A packet can only be queued once.
+func (h *sentPacketHistory) QueuePacketForRetransmission(pn protocol.PacketNumber) (*Packet, error) {
+	el, ok := h.packetMap[pn]
+	if !ok {
+		return nil, fmt.Errorf("sent packet history: packet %d not found", pn)
+	}
+	if el.Value.queuedForRetransmission {
+		return nil, fmt.Errorf("sent packet history BUG: packet %d already queued for retransmission", pn)
+	}
+	el.Value.queuedForRetransmission = true
+	if el == h.firstOutstanding {
+		h.readjustFirstOutstanding()
+	}
+	return &el.Value, nil
+}
+
+// readjustFirstOutstanding readjusts the pointer to the first outstanding packet.
+// This is necessary every time the first outstanding packet is deleted or retransmitted.
+func (h *sentPacketHistory) readjustFirstOutstanding() {
+	el := h.firstOutstanding.Next()
+	for el != nil && el.Value.queuedForRetransmission {
+		el = el.Next()
+	}
+	h.firstOutstanding = el
 }
 
 func (h *sentPacketHistory) Len() int {
@@ -59,6 +120,9 @@ func (h *sentPacketHistory) Remove(p protocol.PacketNumber) error {
 	el, ok := h.packetMap[p]
 	if !ok {
 		return fmt.Errorf("packet %d not found in sent packet history", p)
+	}
+	if el == h.firstOutstanding {
+		h.readjustFirstOutstanding()
 	}
 	h.packetList.Remove(el)
 	delete(h.packetMap, p)

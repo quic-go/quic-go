@@ -98,8 +98,10 @@ func (mr *MockSentPacketHandlerMockRecorder) GetStopWaitingFrame(arg0 interface{
 }
 
 // OnAlarm mocks base method
-func (m *MockSentPacketHandler) OnAlarm() {
-	m.ctrl.Call(m, "OnAlarm")
+func (m *MockSentPacketHandler) OnAlarm() error {
+	ret := m.ctrl.Call(m, "OnAlarm")
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // OnAlarm indicates an expected call of OnAlarm

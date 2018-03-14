@@ -33,7 +33,7 @@ type SentPacketHandler interface {
 	GetPacketNumberLen(protocol.PacketNumber) protocol.PacketNumberLen
 
 	GetAlarmTimeout() time.Time
-	OnAlarm()
+	OnAlarm() error
 }
 
 // ReceivedPacketHandler handles ACKs needed to send for incoming packets

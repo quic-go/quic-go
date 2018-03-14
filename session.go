@@ -418,9 +418,11 @@ runLoop:
 
 		now := time.Now()
 		if timeout := s.sentPacketHandler.GetAlarmTimeout(); !timeout.IsZero() && timeout.Before(now) {
-			// This could cause packets to be retransmitted, so check it before trying
-			// to send packets.
-			s.sentPacketHandler.OnAlarm()
+			// This could cause packets to be retransmitted.
+			// Check it before trying to send packets.
+			if err := s.sentPacketHandler.OnAlarm(); err != nil {
+				s.closeLocal(err)
+			}
 		}
 
 		var pacingDeadline time.Time

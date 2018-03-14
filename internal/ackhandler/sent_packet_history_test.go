@@ -41,16 +41,57 @@ var _ = Describe("SentPacketHistory", func() {
 		Expect(hist.Len()).To(Equal(2))
 	})
 
-	It("gets nil, if there's no front packet", func() {
-		Expect(hist.Front()).To(BeNil())
-	})
+	Context("getting the first outstanding packet", func() {
+		It("gets nil, if there are no packets", func() {
+			Expect(hist.FirstOutstanding()).To(BeNil())
+		})
 
-	It("gets the front packet", func() {
-		hist.SentPacket(&Packet{PacketNumber: 2})
-		hist.SentPacket(&Packet{PacketNumber: 3})
-		front := hist.Front()
-		Expect(front).ToNot(BeNil())
-		Expect(front.PacketNumber).To(Equal(protocol.PacketNumber(2)))
+		It("gets the first outstanding packet", func() {
+			hist.SentPacket(&Packet{PacketNumber: 2})
+			hist.SentPacket(&Packet{PacketNumber: 3})
+			front := hist.FirstOutstanding()
+			Expect(front).ToNot(BeNil())
+			Expect(front.PacketNumber).To(Equal(protocol.PacketNumber(2)))
+		})
+
+		It("gets the second packet if the first one is retransmitted", func() {
+			hist.SentPacket(&Packet{PacketNumber: 1})
+			hist.SentPacket(&Packet{PacketNumber: 3})
+			hist.SentPacket(&Packet{PacketNumber: 4})
+			front := hist.FirstOutstanding()
+			Expect(front).ToNot(BeNil())
+			Expect(front.PacketNumber).To(Equal(protocol.PacketNumber(1)))
+			// Queue the first packet for retransmission.
+			// The first outstanding packet should now be 3.
+			_, err := hist.QueuePacketForRetransmission(1)
+			Expect(err).ToNot(HaveOccurred())
+			front = hist.FirstOutstanding()
+			Expect(front).ToNot(BeNil())
+			Expect(front.PacketNumber).To(Equal(protocol.PacketNumber(3)))
+		})
+
+		It("gets the third packet if the first two are retransmitted", func() {
+			hist.SentPacket(&Packet{PacketNumber: 1})
+			hist.SentPacket(&Packet{PacketNumber: 3})
+			hist.SentPacket(&Packet{PacketNumber: 4})
+			front := hist.FirstOutstanding()
+			Expect(front).ToNot(BeNil())
+			Expect(front.PacketNumber).To(Equal(protocol.PacketNumber(1)))
+			// Queue the second packet for retransmission.
+			// The first outstanding packet should still be 3.
+			_, err := hist.QueuePacketForRetransmission(3)
+			Expect(err).ToNot(HaveOccurred())
+			front = hist.FirstOutstanding()
+			Expect(front).ToNot(BeNil())
+			Expect(front.PacketNumber).To(Equal(protocol.PacketNumber(1)))
+			// Queue the first packet for retransmission.
+			// The first outstanding packet should still be 4.
+			_, err = hist.QueuePacketForRetransmission(1)
+			Expect(err).ToNot(HaveOccurred())
+			front = hist.FirstOutstanding()
+			Expect(front).ToNot(BeNil())
+			Expect(front.PacketNumber).To(Equal(protocol.PacketNumber(4)))
+		})
 	})
 
 	It("gets a packet by packet number", func() {
@@ -117,6 +158,61 @@ var _ = Describe("SentPacketHistory", func() {
 			})
 			Expect(err).To(MatchError(testErr))
 			Expect(iterations).To(Equal([]protocol.PacketNumber{10, 14}))
+		})
+	})
+
+	Context("retransmissions", func() {
+		BeforeEach(func() {
+			for i := protocol.PacketNumber(1); i <= 5; i++ {
+				hist.SentPacket(&Packet{PacketNumber: i})
+			}
+		})
+
+		It("gets packets for retransmission", func() {
+			p, err := hist.QueuePacketForRetransmission(3)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(3)))
+			Expect(p.queuedForRetransmission).To(BeTrue())
+			Expect(p.retransmissionOf).To(BeZero())
+			Expect(p.isRetransmission).To(BeFalse())
+			Expect(p.retransmittedAs).To(BeNil())
+		})
+
+		It("errors if the packet was already queued for retransmission", func() {
+			p, err := hist.QueuePacketForRetransmission(5)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p).ToNot(BeNil())
+			_, err = hist.QueuePacketForRetransmission(5)
+			Expect(err).To(MatchError("sent packet history BUG: packet 5 already queued for retransmission"))
+		})
+
+		It("errors if the packet doesn't exist", func() {
+			_, err := hist.QueuePacketForRetransmission(100)
+			Expect(err).To(MatchError("sent packet history: packet 100 not found"))
+		})
+
+		It("adds a sent packets as a retransmission", func() {
+			hist.SentPacketsAsRetransmission([]*Packet{{PacketNumber: 13}}, 2)
+			expectInHistory([]protocol.PacketNumber{1, 2, 3, 4, 5, 13})
+			Expect(hist.GetPacket(13).isRetransmission).To(BeTrue())
+			Expect(hist.GetPacket(13).retransmissionOf).To(Equal(protocol.PacketNumber(2)))
+			Expect(hist.GetPacket(2).retransmittedAs).To(Equal([]protocol.PacketNumber{13}))
+		})
+
+		It("adds multiple packets sent as a retransmission", func() {
+			hist.SentPacketsAsRetransmission([]*Packet{{PacketNumber: 13}, {PacketNumber: 15}}, 2)
+			expectInHistory([]protocol.PacketNumber{1, 2, 3, 4, 5, 13, 15})
+			Expect(hist.GetPacket(13).isRetransmission).To(BeTrue())
+			Expect(hist.GetPacket(13).retransmissionOf).To(Equal(protocol.PacketNumber(2)))
+			Expect(hist.GetPacket(15).retransmissionOf).To(Equal(protocol.PacketNumber(2)))
+			Expect(hist.GetPacket(2).retransmittedAs).To(Equal([]protocol.PacketNumber{13, 15}))
+		})
+
+		It("adds a packet as a normal packet if the retransmitted packet doesn't exist", func() {
+			hist.SentPacketsAsRetransmission([]*Packet{{PacketNumber: 13}}, 7)
+			expectInHistory([]protocol.PacketNumber{1, 2, 3, 4, 5, 13})
+			Expect(hist.GetPacket(13).isRetransmission).To(BeFalse())
+			Expect(hist.GetPacket(13).retransmissionOf).To(BeZero())
 		})
 	})
 })

@@ -13,10 +13,17 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func retransmittablePacket(num protocol.PacketNumber) *Packet {
+func retransmittablePacket(num protocol.PacketNumber, args ...protocol.ByteCount) *Packet {
+	length := protocol.ByteCount(1)
+	if len(args) == 1 {
+		length = args[0]
+	}
+	if len(args) > 1 {
+		Fail("invalid function parameters")
+	}
 	return &Packet{
 		PacketNumber:    num,
-		Length:          1,
+		Length:          length,
 		Frames:          []wire.Frame{&wire.PingFrame{}},
 		EncryptionLevel: protocol.EncryptionForwardSecure,
 	}
@@ -415,6 +422,96 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 	})
 
+	Context("Ack processing, for retransmitted packets", func() {
+		losePacket := func(pn protocol.PacketNumber) {
+			p := getPacket(pn)
+			ExpectWithOffset(1, p).ToNot(BeNil())
+			handler.queuePacketForRetransmission(p)
+			r := handler.DequeuePacketForRetransmission()
+			ExpectWithOffset(1, r).ToNot(BeNil())
+			ExpectWithOffset(1, r.PacketNumber).To(Equal(pn))
+		}
+
+		It("sends a packet as retransmission", func() {
+			// packet 5 was retransmitted as packet 6
+			handler.SentPacket(retransmittablePacket(5, 10))
+			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(10)))
+			losePacket(5)
+			Expect(handler.bytesInFlight).To(BeZero())
+			handler.SentPacketsAsRetransmission([]*Packet{retransmittablePacket(6, 11)}, 5)
+			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(11)))
+		})
+
+		It("removes all retransmissions when the original packet is acked", func() {
+			// packet 5 was retransmitted as packet 6, which was then retransmitted as packet 8
+			handler.SentPacket(retransmittablePacket(5, 10))
+			losePacket(5)
+			handler.SentPacketsAsRetransmission([]*Packet{retransmittablePacket(6, 11)}, 5)
+			losePacket(6)
+			handler.SentPacketsAsRetransmission([]*Packet{retransmittablePacket(8, 12)}, 6)
+			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(12)))
+			// ack 5
+			err := handler.ReceivedAck(&wire.AckFrame{LowestAcked: 5, LargestAcked: 5}, 1, protocol.EncryptionForwardSecure, time.Now())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.packetHistory.Len()).To(BeZero())
+			Expect(handler.bytesInFlight).To(BeZero())
+		})
+
+		It("removes all retransmissions when the retransmission is acked", func() {
+			// the retransmission for packet 5 was split into packets 6 and 8
+			handler.SentPacket(retransmittablePacket(5, 10))
+			losePacket(5)
+			handler.SentPacketsAsRetransmission([]*Packet{retransmittablePacket(6, 11)}, 5)
+			losePacket(6)
+			handler.SentPacketsAsRetransmission([]*Packet{retransmittablePacket(8, 12)}, 6)
+			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(12)))
+			// ack 8
+			err := handler.ReceivedAck(&wire.AckFrame{LowestAcked: 8, LargestAcked: 8}, 1, protocol.EncryptionForwardSecure, time.Now())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.packetHistory.Len()).To(BeZero())
+			Expect(handler.bytesInFlight).To(BeZero())
+		})
+
+		It("removes split retransmissions when the original packet is acked", func() {
+			// the retransmission for packet 5 was split into 8 and 9
+			handler.SentPacket(retransmittablePacket(5, 10))
+			losePacket(5)
+			handler.SentPacketsAsRetransmission([]*Packet{retransmittablePacket(8, 6), retransmittablePacket(9, 7)}, 5)
+			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(6 + 7)))
+			// ack 5
+			err := handler.ReceivedAck(&wire.AckFrame{LowestAcked: 5, LargestAcked: 5}, 1, protocol.EncryptionForwardSecure, time.Now())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.packetHistory.Len()).To(BeZero())
+			Expect(handler.bytesInFlight).To(BeZero())
+		})
+
+		It("doesn't remove the original packet if a split retransmission is acked", func() {
+			// the retransmission for packet 5 was split into 10 and 12
+			handler.SentPacket(retransmittablePacket(5, 10))
+			losePacket(5)
+			handler.SentPacketsAsRetransmission([]*Packet{retransmittablePacket(10, 6), retransmittablePacket(12, 7)}, 5)
+			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(6 + 7)))
+			// ack 10
+			err := handler.ReceivedAck(&wire.AckFrame{LowestAcked: 10, LargestAcked: 10}, 1, protocol.EncryptionForwardSecure, time.Now())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(7)))
+			expectInPacketHistory([]protocol.PacketNumber{5, 12})
+		})
+
+		It("handles ACKs that ack the original packet as well as the retransmission", func() {
+			// packet 5 was retransmitted as packet 7
+			handler.SentPacket(retransmittablePacket(5, 10))
+			losePacket(5)
+			handler.SentPacketsAsRetransmission([]*Packet{retransmittablePacket(7, 11)}, 5)
+			// ack 5 and 7
+			ack := createAck([]wire.AckRange{{First: 5, Last: 5}, {First: 7, Last: 7}})
+			err := handler.ReceivedAck(ack, 1, protocol.EncryptionForwardSecure, time.Now())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.packetHistory.Len()).To(BeZero())
+			Expect(handler.bytesInFlight).To(BeZero())
+		})
+	})
+
 	Context("Retransmission handling", func() {
 		It("does not dequeue a packet if no ack has been received", func() {
 			handler.SentPacket(retransmittablePacket(1))
@@ -683,7 +780,6 @@ var _ = Describe("SentPacketHandler", func() {
 			p = handler.DequeuePacketForRetransmission()
 			Expect(p).ToNot(BeNil())
 			Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(4)))
-			Expect(handler.packetHistory.Len()).To(Equal(1))
 			Expect(getPacket(3)).ToNot(BeNil())
 			Expect(handler.handshakeCount).To(BeEquivalentTo(1))
 			// make sure the exponential backoff is used
