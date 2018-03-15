@@ -193,8 +193,8 @@ func (c *client) dialTLS() error {
 		ConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
 		IdleTimeout:                 c.config.IdleTimeout,
 		OmitConnectionID:            c.config.RequestConnectionIDOmission,
-		MaxBidiStreamID:             protocol.MaxBidiStreamID(c.config.MaxIncomingStreams, protocol.PerspectiveClient),
-		MaxUniStreamID:              protocol.MaxUniStreamID(c.config.MaxIncomingUniStreams, protocol.PerspectiveClient),
+		MaxBidiStreams:              uint16(c.config.MaxIncomingStreams),
+		MaxUniStreams:               uint16(c.config.MaxIncomingUniStreams),
 	}
 	csc := handshake.NewCryptoStreamConn(nil)
 	extHandler := handshake.NewExtensionHandlerClient(params, c.initialVersion, c.config.Versions, c.version)
