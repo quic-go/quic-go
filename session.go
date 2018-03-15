@@ -564,11 +564,13 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 				s.packer.SpinBit = hdr.SpinBit
 			}
 		} else {
-			// out of order R1 on client : update Rsaved
-			log.Printf("OUT-OF-ORDER : pnum=%v < %v",hdr.PacketNumber,s.largestRcvdPacketNumber);
-			if (hdr.SpinBit&&(s.perspective == protocol.PerspectiveClient)&&s.packer.SpinBit && utils.Globals.HasMeasurementByte) {
-				s.packer.SpinCounterRsaved++
-				log.Printf("LATE-R1 : pnum=%v",hdr.PacketNumber);
+			if false { // DISABLED FOR SERIAL MODE CONSISTENCY
+				// out of order R1 on client : update Rsaved
+				log.Printf("OUT-OF-ORDER : pnum=%v < %v",hdr.PacketNumber,s.largestRcvdPacketNumber);
+				if (hdr.SpinBit&&(s.perspective == protocol.PerspectiveClient)&&s.packer.SpinBit && utils.Globals.HasMeasurementByte) {
+					s.packer.SpinCounterRsaved++
+					log.Printf("LATE-R1 : pnum=%v",hdr.PacketNumber);
+				}
 			}
 		}
 		if (hdr.SpinBit && utils.Globals.HasMeasurementByte) {
