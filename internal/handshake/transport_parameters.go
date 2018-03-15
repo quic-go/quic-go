@@ -95,7 +95,7 @@ func (p *TransportParameters) getHelloMap() map[Tag][]byte {
 }
 
 // readTransportParameters reads the transport parameters sent in the QUIC TLS extension
-func readTransportParamters(paramsList []transportParameter) (*TransportParameters, error) {
+func readTransportParameters(paramsList []transportParameter) (*TransportParameters, error) {
 	params := &TransportParameters{}
 
 	var foundInitialMaxStreamData bool
