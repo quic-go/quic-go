@@ -18,6 +18,11 @@ type Packet struct {
 
 	largestAcked protocol.PacketNumber // if the packet contains an ACK, the LargestAcked value of that ACK
 	sendTime     time.Time
+
+	queuedForRetransmission bool
+	retransmittedAs         []protocol.PacketNumber
+	isRetransmission        bool // we need a separate bool here because 0 is a valid packet number
+	retransmissionOf        protocol.PacketNumber
 }
 
 // GetFramesForRetransmission gets all the frames for retransmission

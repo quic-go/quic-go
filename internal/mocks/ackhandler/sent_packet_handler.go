@@ -98,8 +98,10 @@ func (mr *MockSentPacketHandlerMockRecorder) GetStopWaitingFrame(arg0 interface{
 }
 
 // OnAlarm mocks base method
-func (m *MockSentPacketHandler) OnAlarm() {
-	m.ctrl.Call(m, "OnAlarm")
+func (m *MockSentPacketHandler) OnAlarm() error {
+	ret := m.ctrl.Call(m, "OnAlarm")
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // OnAlarm indicates an expected call of OnAlarm
@@ -139,6 +141,16 @@ func (m *MockSentPacketHandler) SentPacket(arg0 *ackhandler.Packet) {
 // SentPacket indicates an expected call of SentPacket
 func (mr *MockSentPacketHandlerMockRecorder) SentPacket(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SentPacket", reflect.TypeOf((*MockSentPacketHandler)(nil).SentPacket), arg0)
+}
+
+// SentPacketsAsRetransmission mocks base method
+func (m *MockSentPacketHandler) SentPacketsAsRetransmission(arg0 []*ackhandler.Packet, arg1 protocol.PacketNumber) {
+	m.ctrl.Call(m, "SentPacketsAsRetransmission", arg0, arg1)
+}
+
+// SentPacketsAsRetransmission indicates an expected call of SentPacketsAsRetransmission
+func (mr *MockSentPacketHandlerMockRecorder) SentPacketsAsRetransmission(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SentPacketsAsRetransmission", reflect.TypeOf((*MockSentPacketHandler)(nil).SentPacketsAsRetransmission), arg0, arg1)
 }
 
 // SetHandshakeComplete mocks base method
