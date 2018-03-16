@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -24,8 +25,11 @@ func parseHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Header, e
 
 // parse long header and version negotiation packets
 func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte) (*Header, error) {
-	connID, err := utils.BigEndian.ReadUint64(b)
-	if err != nil {
+	connID := make(protocol.ConnectionID, 8)
+	if _, err := io.ReadFull(b, connID); err != nil {
+		if err == io.ErrUnexpectedEOF {
+			err = io.EOF
+		}
 		return nil, err
 	}
 	v, err := utils.BigEndian.ReadUint32(b)
@@ -33,7 +37,7 @@ func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte
 		return nil, err
 	}
 	h := &Header{
-		ConnectionID: protocol.ConnectionID(connID),
+		ConnectionID: connID,
 		Version:      protocol.VersionNumber(v),
 	}
 	if v == 0 { // version negotiation packet
@@ -73,11 +77,12 @@ func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte
 
 func parseShortHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
 	omitConnID := typeByte&0x40 > 0
-	var connID uint64
+	connID := make(protocol.ConnectionID, 8)
 	if !omitConnID {
-		var err error
-		connID, err = utils.BigEndian.ReadUint64(b)
-		if err != nil {
+		if _, err := io.ReadFull(b, connID); err != nil {
+			if err == io.ErrUnexpectedEOF {
+				err = io.EOF
+			}
 			return nil, err
 		}
 	}
@@ -103,7 +108,7 @@ func parseShortHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
 	return &Header{
 		KeyPhase:         int(typeByte&0x20) >> 5,
 		OmitConnectionID: omitConnID,
-		ConnectionID:     protocol.ConnectionID(connID),
+		ConnectionID:     connID,
 		PacketNumber:     protocol.PacketNumber(pn),
 		PacketNumberLen:  pnLen,
 	}, nil
@@ -120,7 +125,7 @@ func (h *Header) writeHeader(b *bytes.Buffer) error {
 // TODO: add support for the key phase
 func (h *Header) writeLongHeader(b *bytes.Buffer) error {
 	b.WriteByte(byte(0x80 | h.Type))
-	utils.BigEndian.WriteUint64(b, uint64(h.ConnectionID))
+	b.Write(h.ConnectionID)
 	utils.BigEndian.WriteUint32(b, uint32(h.Version))
 	utils.BigEndian.WriteUint32(b, uint32(h.PacketNumber))
 	return nil
@@ -144,7 +149,7 @@ func (h *Header) writeShortHeader(b *bytes.Buffer) error {
 	b.WriteByte(typeByte)
 
 	if !h.OmitConnectionID {
-		utils.BigEndian.WriteUint64(b, uint64(h.ConnectionID))
+		b.Write(h.ConnectionID)
 	}
 	switch h.PacketNumberLen {
 	case protocol.PacketNumberLen1:

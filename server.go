@@ -42,7 +42,7 @@ type server struct {
 	scfg      *handshake.ServerConfig
 
 	sessionsMutex sync.RWMutex
-	sessions      map[protocol.ConnectionID]packetHandler
+	sessions      map[string] /* string(ConnectionID)*/ packetHandler
 	closed        bool
 
 	serverError  error
@@ -106,7 +106,7 @@ func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener,
 		config:                    config,
 		certChain:                 certChain,
 		scfg:                      scfg,
-		sessions:                  map[protocol.ConnectionID]packetHandler{},
+		sessions:                  map[string]packetHandler{},
 		newSession:                newSession,
 		deleteClosedSessionsAfter: protocol.ClosedSessionDeleteTimeout,
 		sessionQueue:              make(chan Session, 5),
@@ -144,11 +144,11 @@ func (s *server) setupTLS() error {
 				connID := tlsSession.connID
 				sess := tlsSession.sess
 				s.sessionsMutex.Lock()
-				if _, ok := s.sessions[connID]; ok { // drop this session if it already exists
+				if _, ok := s.sessions[string(connID)]; ok { // drop this session if it already exists
 					s.sessionsMutex.Unlock()
 					continue
 				}
-				s.sessions[connID] = sess
+				s.sessions[string(connID)] = sess
 				s.sessionsMutex.Unlock()
 				s.runHandshakeAndSession(sess, connID)
 			}
@@ -317,7 +317,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	}
 
 	s.sessionsMutex.RLock()
-	session, sessionKnown := s.sessions[connID]
+	session, sessionKnown := s.sessions[string(connID)]
 	s.sessionsMutex.RUnlock()
 
 	if sessionKnown && session == nil {
@@ -394,7 +394,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 			return err
 		}
 		s.sessionsMutex.Lock()
-		s.sessions[connID] = session
+		s.sessions[string(connID)] = session
 		s.sessionsMutex.Unlock()
 
 		s.runHandshakeAndSession(session, connID)
@@ -425,12 +425,12 @@ func (s *server) runHandshakeAndSession(session packetHandler, connID protocol.C
 
 func (s *server) removeConnection(id protocol.ConnectionID) {
 	s.sessionsMutex.Lock()
-	s.sessions[id] = nil
+	s.sessions[string(id)] = nil
 	s.sessionsMutex.Unlock()
 
 	time.AfterFunc(s.deleteClosedSessionsAfter, func() {
 		s.sessionsMutex.Lock()
-		delete(s.sessions, id)
+		delete(s.sessions, string(id))
 		s.sessionsMutex.Unlock()
 	})
 }

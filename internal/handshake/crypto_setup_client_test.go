@@ -123,7 +123,7 @@ var _ = Describe("Client Crypto Setup", func() {
 		csInt, dnc, err := NewCryptoSetupClient(
 			stream,
 			"hostname",
-			0,
+			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 			version,
 			nil,
 			&TransportParameters{IdleTimeout: protocol.DefaultIdleTimeout},

@@ -161,7 +161,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		supportedVersions = []protocol.VersionNumber{version, 98, 99}
 		csInt, err := NewCryptoSetup(
 			stream,
-			protocol.ConnectionID(42),
+			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 			remoteAddr,
 			version,
 			make([]byte, 32), // div nonce

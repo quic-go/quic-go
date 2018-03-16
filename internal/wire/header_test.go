@@ -24,6 +24,7 @@ var _ = Describe("Header", func() {
 			// use a Short Header, which isn't distinguishable from the gQUIC Public Header when looking at the type byte
 			err := (&Header{
 				IsLongHeader:    false,
+				ConnectionID:    protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				KeyPhase:        1,
 				PacketNumber:    0x42,
 				PacketNumberLen: protocol.PacketNumberLen2,
@@ -40,6 +41,7 @@ var _ = Describe("Header", func() {
 			buf := &bytes.Buffer{}
 			err := (&Header{
 				IsLongHeader: true,
+				ConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				Type:         protocol.PacketType0RTT,
 				PacketNumber: 0x42,
 				Version:      0x1234,
@@ -58,6 +60,7 @@ var _ = Describe("Header", func() {
 			buf := &bytes.Buffer{}
 			err := (&Header{
 				IsLongHeader:    false,
+				ConnectionID:    protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				PacketNumberLen: protocol.PacketNumberLen1,
 				PacketNumber:    0x42,
 			}).writeHeader(buf)
@@ -68,26 +71,29 @@ var _ = Describe("Header", func() {
 		})
 
 		It("parses a gQUIC Public Header, when the version is not known", func() {
+			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			buf := &bytes.Buffer{}
 			err := (&Header{
 				VersionFlag:     true,
 				Version:         versionPublicHeader,
-				ConnectionID:    0x42,
+				ConnectionID:    connID,
 				PacketNumber:    0x1337,
 				PacketNumberLen: protocol.PacketNumberLen6,
 			}).writePublicHeader(buf, protocol.PerspectiveClient, versionPublicHeader)
 			Expect(err).ToNot(HaveOccurred())
 			hdr, err := ParseHeaderSentByClient(bytes.NewReader(buf.Bytes()))
 			Expect(err).ToNot(HaveOccurred())
+			Expect(hdr.ConnectionID).To(Equal(connID))
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x1337)))
 			Expect(hdr.Version).To(Equal(versionPublicHeader))
 			Expect(hdr.isPublicHeader).To(BeTrue())
 		})
 
 		It("parses a gQUIC Public Header, when the version is known", func() {
+			connID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
 			buf := &bytes.Buffer{}
 			err := (&Header{
-				ConnectionID:         0x42,
+				ConnectionID:         connID,
 				PacketNumber:         0x1337,
 				PacketNumberLen:      protocol.PacketNumberLen6,
 				DiversificationNonce: bytes.Repeat([]byte{'f'}, 32),
@@ -95,6 +101,7 @@ var _ = Describe("Header", func() {
 			Expect(err).ToNot(HaveOccurred())
 			hdr, err := ParseHeaderSentByServer(bytes.NewReader(buf.Bytes()), versionPublicHeader)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(hdr.ConnectionID).To(Equal(connID))
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x1337)))
 			Expect(hdr.DiversificationNonce).To(HaveLen(32))
 			Expect(hdr.isPublicHeader).To(BeTrue())
@@ -105,7 +112,7 @@ var _ = Describe("Header", func() {
 			err := (&Header{
 				VersionFlag:     true,
 				Version:         versionPublicHeader,
-				ConnectionID:    0x42,
+				ConnectionID:    protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				PacketNumber:    0x1337,
 				PacketNumberLen: protocol.PacketNumberLen6,
 			}).writePublicHeader(buf, protocol.PerspectiveClient, versionPublicHeader)
@@ -122,12 +129,13 @@ var _ = Describe("Header", func() {
 		})
 
 		It("parses a gQUIC Version Negotiation Packet", func() {
+			connID := protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad, 0xde, 0xca, 0xfb, 0xad}
 			versions := []protocol.VersionNumber{0x13, 0x37}
-			data := ComposeGQUICVersionNegotiation(0x42, versions)
+			data := ComposeGQUICVersionNegotiation(connID, versions)
 			hdr, err := ParseHeaderSentByServer(bytes.NewReader(data), protocol.VersionUnknown)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.isPublicHeader).To(BeTrue())
-			Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x42)))
+			Expect(hdr.ConnectionID).To(Equal(connID))
 			// in addition to the versions, the supported versions might contain a reserved version number
 			for _, version := range versions {
 				Expect(hdr.SupportedVersions).To(ContainElement(version))
@@ -135,13 +143,14 @@ var _ = Describe("Header", func() {
 		})
 
 		It("parses an IETF draft style Version Negotiation Packet", func() {
+			connID := protocol.ConnectionID{1, 3, 3, 7, 1, 3, 3, 7}
 			versions := []protocol.VersionNumber{0x13, 0x37}
-			data := ComposeVersionNegotiation(0x42, versions)
+			data := ComposeVersionNegotiation(connID, versions)
 			hdr, err := ParseHeaderSentByServer(bytes.NewReader(data), protocol.VersionUnknown)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.isPublicHeader).To(BeFalse())
 			Expect(hdr.IsVersionNegotiation).To(BeTrue())
-			Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x42)))
+			Expect(hdr.ConnectionID).To(Equal(connID))
 			Expect(hdr.Version).To(BeZero())
 			// in addition to the versions, the supported versions might contain a reserved version number
 			for _, version := range versions {
@@ -154,7 +163,7 @@ var _ = Describe("Header", func() {
 		It("writes a gQUIC Public Header", func() {
 			buf := &bytes.Buffer{}
 			hdr := &Header{
-				ConnectionID:    0x1337,
+				ConnectionID:    protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				PacketNumber:    0x42,
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}
@@ -168,7 +177,7 @@ var _ = Describe("Header", func() {
 		It("writes a IETF draft header", func() {
 			buf := &bytes.Buffer{}
 			hdr := &Header{
-				ConnectionID:    0x1337,
+				ConnectionID:    protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				PacketNumber:    0x42,
 				PacketNumberLen: protocol.PacketNumberLen2,
 				KeyPhase:        1,
@@ -185,7 +194,7 @@ var _ = Describe("Header", func() {
 		It("get the length of a gQUIC Public Header", func() {
 			buf := &bytes.Buffer{}
 			hdr := &Header{
-				ConnectionID:         0x1337,
+				ConnectionID:         protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				PacketNumber:         0x42,
 				PacketNumberLen:      protocol.PacketNumberLen2,
 				DiversificationNonce: bytes.Repeat([]byte{'f'}, 32),
@@ -206,7 +215,7 @@ var _ = Describe("Header", func() {
 			buf := &bytes.Buffer{}
 			hdr := &Header{
 				IsLongHeader:    true,
-				ConnectionID:    0x1337,
+				ConnectionID:    protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				PacketNumber:    0x42,
 				PacketNumberLen: protocol.PacketNumberLen2,
 				KeyPhase:        1,
@@ -244,6 +253,7 @@ var _ = Describe("Header", func() {
 		It("logs an IETF draft header", func() {
 			(&Header{
 				IsLongHeader: true,
+				ConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 			}).Log(logger)
 			Expect(buf.String()).To(ContainSubstring("Long Header"))
 		})
@@ -251,6 +261,7 @@ var _ = Describe("Header", func() {
 		It("logs a Public Header", func() {
 			(&Header{
 				isPublicHeader: true,
+				ConnectionID:   protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 			}).Log(logger)
 			Expect(buf.String()).To(ContainSubstring("Public Header"))
 		})

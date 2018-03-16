@@ -24,7 +24,7 @@ var _ = Describe("Public Header", func() {
 			Expect(hdr.VersionFlag).To(BeTrue())
 			Expect(hdr.IsVersionNegotiation).To(BeFalse())
 			Expect(hdr.ResetFlag).To(BeFalse())
-			Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x4cfa9f9b668619f6)))
+			Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6}))
 			Expect(hdr.Version).To(Equal(protocol.SupportedVersions[0]))
 			Expect(hdr.SupportedVersions).To(BeEmpty())
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(1)))
@@ -42,7 +42,7 @@ var _ = Describe("Public Header", func() {
 			hdr, err := parsePublicHeader(b, protocol.PerspectiveServer)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.OmitConnectionID).To(BeTrue())
-			Expect(hdr.ConnectionID).To(BeZero())
+			Expect(hdr.ConnectionID).To(BeEmpty())
 			Expect(b.Len()).To(BeZero())
 		})
 
@@ -52,22 +52,22 @@ var _ = Describe("Public Header", func() {
 			Expect(err).To(MatchError(errInvalidConnectionID))
 		})
 
-		It("reads a PublicReset packet", func() {
+		It("reads a PUBLIC_RESET packet", func() {
 			b := bytes.NewReader([]byte{0xa, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8})
 			hdr, err := parsePublicHeader(b, protocol.PerspectiveServer)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.ResetFlag).To(BeTrue())
-			Expect(hdr.ConnectionID).ToNot(BeZero())
+			Expect(hdr.ConnectionID).ToNot(BeEmpty())
 		})
 
-		It("parses a public reset packet", func() {
-			b := bytes.NewReader([]byte{0xa, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08})
+		It("parses a PUBLIC_RESET packet", func() {
+			b := bytes.NewReader([]byte{0xa, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8})
 			hdr, err := parsePublicHeader(b, protocol.PerspectiveServer)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.ResetFlag).To(BeTrue())
 			Expect(hdr.VersionFlag).To(BeFalse())
 			Expect(hdr.IsVersionNegotiation).To(BeFalse())
-			Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x0102030405060708)))
+			Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8}))
 		})
 
 		It("reads a diversification nonce sent by the server", func() {
@@ -76,7 +76,7 @@ var _ = Describe("Public Header", func() {
 			b := bytes.NewReader(append(append([]byte{0x0c, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c}, divNonce...), 0x37))
 			hdr, err := parsePublicHeader(b, protocol.PerspectiveServer)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(hdr.ConnectionID).To(Not(BeZero()))
+			Expect(hdr.ConnectionID).To(Not(BeEmpty()))
 			Expect(hdr.DiversificationNonce).To(Equal(divNonce))
 			Expect(b.Len()).To(BeZero())
 		})
@@ -89,10 +89,12 @@ var _ = Describe("Public Header", func() {
 			}
 
 			It("parses", func() {
+				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 				versions := []protocol.VersionNumber{0x13, 0x37}
-				b := bytes.NewReader(ComposeGQUICVersionNegotiation(0x1337, versions))
+				b := bytes.NewReader(ComposeGQUICVersionNegotiation(connID, versions))
 				hdr, err := parsePublicHeader(b, protocol.PerspectiveServer)
 				Expect(err).ToNot(HaveOccurred())
+				Expect(hdr.ConnectionID).To(Equal(connID))
 				Expect(hdr.VersionFlag).To(BeTrue())
 				Expect(hdr.Version).To(BeZero()) // unitialized
 				Expect(hdr.IsVersionNegotiation).To(BeTrue())
@@ -124,7 +126,7 @@ var _ = Describe("Public Header", func() {
 			})
 
 			It("errors on invalid version tags", func() {
-				data := ComposeGQUICVersionNegotiation(0x1337, protocol.SupportedVersions)
+				data := ComposeGQUICVersionNegotiation(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}, protocol.SupportedVersions)
 				data = append(data, []byte{0x13, 0x37}...)
 				b := bytes.NewReader(data)
 				_, err := parsePublicHeader(b, protocol.PerspectiveServer)
@@ -175,7 +177,7 @@ var _ = Describe("Public Header", func() {
 		It("writes a sample header as a server", func() {
 			b := &bytes.Buffer{}
 			hdr := Header{
-				ConnectionID:    0x4cfa9f9b668619f6,
+				ConnectionID:    protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6},
 				PacketNumber:    2,
 				PacketNumberLen: protocol.PacketNumberLen6,
 			}
@@ -187,7 +189,7 @@ var _ = Describe("Public Header", func() {
 		It("writes a sample header as a client", func() {
 			b := &bytes.Buffer{}
 			hdr := Header{
-				ConnectionID:    0x4cfa9f9b668619f6,
+				ConnectionID:    protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6},
 				PacketNumber:    0x1337,
 				PacketNumberLen: protocol.PacketNumberLen6,
 			}
@@ -196,9 +198,20 @@ var _ = Describe("Public Header", func() {
 			Expect(b.Bytes()).To(Equal([]byte{0x38, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0x0, 0x0, 0x0, 0x0, 0x13, 0x37}))
 		})
 
+		It("refuses to write a Public Header if the connection ID has the wrong length", func() {
+			hdr := Header{
+				ConnectionID:    protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7},
+				PacketNumber:    2,
+				PacketNumberLen: protocol.PacketNumberLen2,
+			}
+			b := &bytes.Buffer{}
+			err := hdr.writePublicHeader(b, protocol.PerspectiveServer, protocol.VersionWhatever)
+			Expect(err).To(MatchError("PublicHeader: wrong length for Connection ID: 7 (expected 8)"))
+		})
+
 		It("refuses to write a Public Header if the PacketNumberLen is not set", func() {
 			hdr := Header{
-				ConnectionID: 1,
+				ConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				PacketNumber: 2,
 			}
 			b := &bytes.Buffer{}
@@ -209,7 +222,7 @@ var _ = Describe("Public Header", func() {
 		It("omits the connection ID", func() {
 			b := &bytes.Buffer{}
 			hdr := Header{
-				ConnectionID:     0x4cfa9f9b668619f6,
+				ConnectionID:     protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				OmitConnectionID: true,
 				PacketNumberLen:  protocol.PacketNumberLen1,
 				PacketNumber:     1,
@@ -222,7 +235,7 @@ var _ = Describe("Public Header", func() {
 		It("writes diversification nonces", func() {
 			b := &bytes.Buffer{}
 			hdr := Header{
-				ConnectionID:         0x4cfa9f9b668619f6,
+				ConnectionID:         protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6},
 				PacketNumber:         1,
 				PacketNumberLen:      protocol.PacketNumberLen1,
 				DiversificationNonce: bytes.Repeat([]byte{1}, 32),
@@ -250,7 +263,7 @@ var _ = Describe("Public Header", func() {
 			b := &bytes.Buffer{}
 			hdr := Header{
 				VersionFlag:     true,
-				ConnectionID:    0x4cfa9f9b668619f6,
+				ConnectionID:    protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6},
 				PacketNumber:    2,
 				PacketNumberLen: protocol.PacketNumberLen6,
 			}
@@ -263,7 +276,7 @@ var _ = Describe("Public Header", func() {
 			hdr := Header{
 				VersionFlag:     true,
 				Version:         protocol.Version39,
-				ConnectionID:    0x4cfa9f9b668619f6,
+				ConnectionID:    protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6},
 				PacketNumber:    0x42,
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}
@@ -283,7 +296,7 @@ var _ = Describe("Public Header", func() {
 				b := &bytes.Buffer{}
 				hdr := Header{
 					ResetFlag:    true,
-					ConnectionID: 0x4cfa9f9b668619f6,
+					ConnectionID: protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6},
 				}
 				err := hdr.writePublicHeader(b, protocol.PerspectiveServer, protocol.VersionWhatever)
 				Expect(err).ToNot(HaveOccurred())
@@ -297,7 +310,7 @@ var _ = Describe("Public Header", func() {
 				b := &bytes.Buffer{}
 				hdr := Header{
 					ResetFlag:       true,
-					ConnectionID:    0x4cfa9f9b668619f6,
+					ConnectionID:    protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6},
 					PacketNumber:    2,
 					PacketNumberLen: protocol.PacketNumberLen6,
 				}
@@ -326,7 +339,7 @@ var _ = Describe("Public Header", func() {
 
 			It("errors when PacketNumberLen is not set", func() {
 				hdr := Header{
-					ConnectionID: 0x4cfa9f9b668619f6,
+					ConnectionID: protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6},
 					PacketNumber: 0xdecafbad,
 				}
 				_, err := hdr.getPublicHeaderLength(protocol.PerspectiveServer)
@@ -335,7 +348,7 @@ var _ = Describe("Public Header", func() {
 
 			It("gets the length of a packet with longest packet number length and connectionID", func() {
 				hdr := Header{
-					ConnectionID:    0x4cfa9f9b668619f6,
+					ConnectionID:    protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6},
 					PacketNumber:    0xdecafbad,
 					PacketNumberLen: protocol.PacketNumberLen6,
 				}
@@ -346,7 +359,7 @@ var _ = Describe("Public Header", func() {
 
 			It("gets the lengths of a packet sent by the client with the VersionFlag set", func() {
 				hdr := Header{
-					ConnectionID:     0x4cfa9f9b668619f6,
+					ConnectionID:     protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6},
 					OmitConnectionID: true,
 					PacketNumber:     0xdecafbad,
 					PacketNumberLen:  protocol.PacketNumberLen6,
@@ -360,7 +373,7 @@ var _ = Describe("Public Header", func() {
 
 			It("gets the length of a packet with longest packet number length and omitted connectionID", func() {
 				hdr := Header{
-					ConnectionID:     0x4cfa9f9b668619f6,
+					ConnectionID:     protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6},
 					OmitConnectionID: true,
 					PacketNumber:     0xDECAFBAD,
 					PacketNumberLen:  protocol.PacketNumberLen6,
@@ -372,7 +385,7 @@ var _ = Describe("Public Header", func() {
 
 			It("gets the length of a packet 2 byte packet number length ", func() {
 				hdr := Header{
-					ConnectionID:    0x4cfa9f9b668619f6,
+					ConnectionID:    protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6},
 					PacketNumber:    0xDECAFBAD,
 					PacketNumberLen: protocol.PacketNumberLen2,
 				}
@@ -394,7 +407,7 @@ var _ = Describe("Public Header", func() {
 			It("gets the length of a PublicReset", func() {
 				hdr := Header{
 					ResetFlag:    true,
-					ConnectionID: 0x4cfa9f9b668619f6,
+					ConnectionID: protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6},
 				}
 				length, err := hdr.getPublicHeaderLength(protocol.PerspectiveServer)
 				Expect(err).NotTo(HaveOccurred())
@@ -406,7 +419,7 @@ var _ = Describe("Public Header", func() {
 			It("doesn't write a header if the packet number length is not set", func() {
 				b := &bytes.Buffer{}
 				hdr := Header{
-					ConnectionID: 0x4cfa9f9b668619f6,
+					ConnectionID: protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6},
 					PacketNumber: 0xDECAFBAD,
 				}
 				err := hdr.writePublicHeader(b, protocol.PerspectiveServer, protocol.VersionWhatever)
@@ -419,7 +432,7 @@ var _ = Describe("Public Header", func() {
 				It("writes a header with a 1-byte packet number", func() {
 					b := &bytes.Buffer{}
 					hdr := Header{
-						ConnectionID:    0x4cfa9f9b668619f6,
+						ConnectionID:    protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6},
 						PacketNumber:    0xdecafbad,
 						PacketNumberLen: protocol.PacketNumberLen1,
 					}
@@ -431,7 +444,7 @@ var _ = Describe("Public Header", func() {
 				It("writes a header with a 2-byte packet number", func() {
 					b := &bytes.Buffer{}
 					hdr := Header{
-						ConnectionID:    0x4cfa9f9b668619f6,
+						ConnectionID:    protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6},
 						PacketNumber:    0xdecafbad,
 						PacketNumberLen: protocol.PacketNumberLen2,
 					}
@@ -443,7 +456,7 @@ var _ = Describe("Public Header", func() {
 				It("writes a header with a 4-byte packet number", func() {
 					b := &bytes.Buffer{}
 					hdr := Header{
-						ConnectionID:    0x4cfa9f9b668619f6,
+						ConnectionID:    protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6},
 						PacketNumber:    0x13decafbad,
 						PacketNumberLen: protocol.PacketNumberLen4,
 					}
@@ -455,7 +468,7 @@ var _ = Describe("Public Header", func() {
 				It("writes a header with a 6-byte packet number", func() {
 					b := &bytes.Buffer{}
 					hdr := Header{
-						ConnectionID:    0x4cfa9f9b668619f6,
+						ConnectionID:    protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6},
 						PacketNumber:    0xbe1337decafbad,
 						PacketNumberLen: protocol.PacketNumberLen6,
 					}
@@ -486,12 +499,12 @@ var _ = Describe("Public Header", func() {
 
 		It("logs a Public Header containing a connection ID", func() {
 			(&Header{
-				ConnectionID:    0xdecafbad,
+				ConnectionID:    protocol.ConnectionID{0x13, 0x37, 0, 0, 0xde, 0xca, 0xfb, 0xad},
 				PacketNumber:    0x1337,
 				PacketNumberLen: 6,
 				Version:         protocol.Version39,
 			}).logPublicHeader(logger)
-			Expect(buf.String()).To(ContainSubstring("Public Header{ConnectionID: 0xdecafbad, PacketNumber: 0x1337, PacketNumberLen: 6, Version: gQUIC 39"))
+			Expect(buf.String()).To(ContainSubstring("Public Header{ConnectionID: 0x13370000decafbad, PacketNumber: 0x1337, PacketNumberLen: 6, Version: gQUIC 39"))
 		})
 
 		It("logs a Public Header with omitted connection ID", func() {
@@ -515,7 +528,7 @@ var _ = Describe("Public Header", func() {
 
 		It("logs diversification nonces", func() {
 			(&Header{
-				ConnectionID:         0xdecafbad,
+				ConnectionID:         []byte{0x13, 0x13, 0, 0, 0xde, 0xca, 0xfb, 0xad},
 				DiversificationNonce: []byte{0xba, 0xdf, 0x00, 0x0d},
 			}).logPublicHeader(logger)
 			Expect(buf.String()).To(ContainSubstring("DiversificationNonce: []byte{0xba, 0xdf, 0x0, 0xd}"))

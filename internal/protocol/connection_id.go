@@ -1,19 +1,23 @@
 package protocol
 
 import (
+	"bytes"
 	"crypto/rand"
-	"encoding/binary"
 )
 
 // A ConnectionID in QUIC
-type ConnectionID uint64
+type ConnectionID []byte
 
 // GenerateConnectionID generates a connection ID using cryptographic random
 func GenerateConnectionID() (ConnectionID, error) {
 	b := make([]byte, 8)
-	_, err := rand.Read(b)
-	if err != nil {
-		return 0, err
+	if _, err := rand.Read(b); err != nil {
+		return nil, err
 	}
-	return ConnectionID(binary.LittleEndian.Uint64(b)), nil
+	return ConnectionID(b), nil
+}
+
+// Equal says if two connection IDs are equal
+func (c ConnectionID) Equal(other ConnectionID) bool {
+	return bytes.Equal(c, other)
 }

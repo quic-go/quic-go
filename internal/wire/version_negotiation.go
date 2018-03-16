@@ -12,7 +12,7 @@ import (
 func ComposeGQUICVersionNegotiation(connID protocol.ConnectionID, versions []protocol.VersionNumber) []byte {
 	buf := bytes.NewBuffer(make([]byte, 0, 1+8+len(versions)*4))
 	buf.Write([]byte{0x1 | 0x8}) // type byte
-	utils.BigEndian.WriteUint64(buf, uint64(connID))
+	buf.Write(connID)
 	for _, v := range versions {
 		utils.BigEndian.WriteUint32(buf, uint32(v))
 	}
@@ -20,16 +20,13 @@ func ComposeGQUICVersionNegotiation(connID protocol.ConnectionID, versions []pro
 }
 
 // ComposeVersionNegotiation composes a Version Negotiation according to the IETF draft
-func ComposeVersionNegotiation(
-	connID protocol.ConnectionID,
-	versions []protocol.VersionNumber,
-) []byte {
+func ComposeVersionNegotiation(connID protocol.ConnectionID, versions []protocol.VersionNumber) []byte {
 	greasedVersions := protocol.GetGreasedVersions(versions)
 	buf := bytes.NewBuffer(make([]byte, 0, 1+8+4+len(greasedVersions)*4))
 	r := make([]byte, 1)
 	_, _ = rand.Read(r) // ignore the error here. It is not critical to have perfect random here.
 	buf.WriteByte(r[0] | 0x80)
-	utils.BigEndian.WriteUint64(buf, uint64(connID))
+	buf.Write(connID)
 	utils.BigEndian.WriteUint32(buf, 0) // version 0
 	for _, v := range greasedVersions {
 		utils.BigEndian.WriteUint32(buf, uint32(v))

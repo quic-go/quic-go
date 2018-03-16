@@ -106,12 +106,12 @@ var _ = Describe("Server", func() {
 		var (
 			serv        *server
 			firstPacket []byte // a valid first packet for a new connection with connectionID 0x4cfa9f9b668619f6 (= connID)
-			connID      = protocol.ConnectionID(0x4cfa9f9b668619f6)
+			connID      = protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6}
 		)
 
 		BeforeEach(func() {
 			serv = &server{
-				sessions:     make(map[protocol.ConnectionID]packetHandler),
+				sessions:     make(map[string]packetHandler),
 				newSession:   newMockSession,
 				conn:         conn,
 				config:       config,
@@ -174,13 +174,13 @@ var _ = Describe("Server", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
-			sess := serv.sessions[connID].(*mockSession)
+			sess := serv.sessions[string(connID)].(*mockSession)
 			Expect(sess.connectionID).To(Equal(connID))
 			Expect(sess.packetCount).To(Equal(1))
 		})
 
 		It("accepts new TLS sessions", func() {
-			connID := protocol.ConnectionID(0x12345)
+			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			sess, err := newMockSession(nil, protocol.VersionTLS, connID, nil, nil, nil, nil)
 			Expect(err).ToNot(HaveOccurred())
 			err = serv.setupTLS()
@@ -192,12 +192,12 @@ var _ = Describe("Server", func() {
 			Eventually(func() packetHandler {
 				serv.sessionsMutex.Lock()
 				defer serv.sessionsMutex.Unlock()
-				return serv.sessions[connID]
+				return serv.sessions[string(connID)]
 			}).Should(Equal(sess))
 		})
 
 		It("only accepts one new TLS sessions for one connection ID", func() {
-			connID := protocol.ConnectionID(0x12345)
+			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			sess1, err := newMockSession(nil, protocol.VersionTLS, connID, nil, nil, nil, nil)
 			Expect(err).ToNot(HaveOccurred())
 			sess2, err := newMockSession(nil, protocol.VersionTLS, connID, nil, nil, nil, nil)
@@ -211,7 +211,7 @@ var _ = Describe("Server", func() {
 			Eventually(func() packetHandler {
 				serv.sessionsMutex.Lock()
 				defer serv.sessionsMutex.Unlock()
-				return serv.sessions[connID]
+				return serv.sessions[string(connID)]
 			}).Should(Equal(sess1))
 			serv.serverTLS.sessionChan <- tlsSession{
 				connID: connID,
@@ -220,7 +220,7 @@ var _ = Describe("Server", func() {
 			Eventually(func() packetHandler {
 				serv.sessionsMutex.Lock()
 				defer serv.sessionsMutex.Unlock()
-				return serv.sessions[connID]
+				return serv.sessions[string(connID)]
 			}).Should(Equal(sess1))
 		})
 
@@ -235,7 +235,7 @@ var _ = Describe("Server", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
-			sess := serv.sessions[connID].(*mockSession)
+			sess := serv.sessions[string(connID)].(*mockSession)
 			Consistently(func() Session { return acceptedSess }).Should(BeNil())
 			close(sess.handshakeChan)
 			Eventually(func() Session { return acceptedSess }).Should(Equal(sess))
@@ -252,7 +252,7 @@ var _ = Describe("Server", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
-			sess := serv.sessions[connID].(*mockSession)
+			sess := serv.sessions[string(connID)].(*mockSession)
 			sess.handshakeChan <- errors.New("handshake failed")
 			Consistently(func() bool { return accepted }).Should(BeFalse())
 			close(done)
@@ -264,8 +264,8 @@ var _ = Describe("Server", func() {
 			err = serv.handlePacket(nil, nil, []byte{0x08, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0x01})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
-			Expect(serv.sessions[connID].(*mockSession).connectionID).To(Equal(connID))
-			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(2))
+			Expect(serv.sessions[string(connID)].(*mockSession).connectionID).To(Equal(connID))
+			Expect(serv.sessions[string(connID)].(*mockSession).packetCount).To(Equal(2))
 		})
 
 		It("closes and deletes sessions", func() {
@@ -275,12 +275,12 @@ var _ = Describe("Server", func() {
 			err = serv.handlePacket(nil, nil, append(firstPacket, nullAEAD.Seal(nil, nil, 0, firstPacket)...))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
-			Expect(serv.sessions[connID]).ToNot(BeNil())
+			Expect(serv.sessions[string(connID)]).ToNot(BeNil())
 			// make session.run() return
-			serv.sessions[connID].(*mockSession).stopRunLoop <- struct{}{}
+			serv.sessions[string(connID)].(*mockSession).stopRunLoop <- struct{}{}
 			// The server should now have closed the session, leaving a nil value in the sessions map
-			Consistently(func() map[protocol.ConnectionID]packetHandler { return serv.sessions }).Should(HaveLen(1))
-			Expect(serv.sessions[connID]).To(BeNil())
+			Consistently(func() map[string]packetHandler { return serv.sessions }).Should(HaveLen(1))
+			Expect(serv.sessions[string(connID)]).To(BeNil())
 		})
 
 		It("deletes nil session entries after a wait time", func() {
@@ -290,12 +290,12 @@ var _ = Describe("Server", func() {
 			err = serv.handlePacket(nil, nil, append(firstPacket, nullAEAD.Seal(nil, nil, 0, firstPacket)...))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
-			Expect(serv.sessions).To(HaveKey(connID))
+			Expect(serv.sessions).To(HaveKey(string(connID)))
 			// make session.run() return
-			serv.sessions[connID].(*mockSession).stopRunLoop <- struct{}{}
+			serv.sessions[string(connID)].(*mockSession).stopRunLoop <- struct{}{}
 			Eventually(func() bool {
 				serv.sessionsMutex.Lock()
-				_, ok := serv.sessions[connID]
+				_, ok := serv.sessions[string(connID)]
 				serv.sessionsMutex.Unlock()
 				return ok
 			}).Should(BeFalse())
@@ -303,8 +303,8 @@ var _ = Describe("Server", func() {
 
 		It("closes sessions and the connection when Close is called", func() {
 			go serv.serve()
-			session, _ := newMockSession(nil, 0, 0, nil, nil, nil, nil)
-			serv.sessions[1] = session
+			session, _ := newMockSession(nil, 0, connID, nil, nil, nil, nil)
+			serv.sessions[string(connID)] = session
 			err := serv.Close()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(session.(*mockSession).closed).To(BeTrue())
@@ -312,11 +312,11 @@ var _ = Describe("Server", func() {
 		})
 
 		It("ignores packets for closed sessions", func() {
-			serv.sessions[connID] = nil
+			serv.sessions[string(connID)] = nil
 			err := serv.handlePacket(nil, nil, []byte{0x08, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0x01})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
-			Expect(serv.sessions[connID]).To(BeNil())
+			Expect(serv.sessions[string(connID)]).To(BeNil())
 		})
 
 		It("works if no quic.Config is given", func(done Done) {
@@ -353,9 +353,9 @@ var _ = Describe("Server", func() {
 		}, 0.5)
 
 		It("closes all sessions when encountering a connection error", func() {
-			session, _ := newMockSession(nil, 0, 0, nil, nil, nil, nil)
-			serv.sessions[0x12345] = session
-			Expect(serv.sessions[0x12345].(*mockSession).closed).To(BeFalse())
+			session, _ := newMockSession(nil, 0, connID, nil, nil, nil, nil)
+			serv.sessions[string(connID)] = session
+			Expect(serv.sessions[string(connID)].(*mockSession).closed).To(BeFalse())
 			testErr := errors.New("connection error")
 			conn.readErr = testErr
 			go serv.serve()
@@ -366,7 +366,7 @@ var _ = Describe("Server", func() {
 		It("ignores delayed packets with mismatching versions", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
+			Expect(serv.sessions[string(connID)].(*mockSession).packetCount).To(Equal(1))
 			b := &bytes.Buffer{}
 			// add an unsupported version
 			data := []byte{0x09, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6}
@@ -377,7 +377,7 @@ var _ = Describe("Server", func() {
 			// if we didn't ignore the packet, the server would try to send a version negotiation packet, which would make the test panic because it doesn't have a udpConn
 			Expect(conn.dataWritten.Bytes()).To(BeEmpty())
 			// make sure the packet was *not* passed to session.handlePacket()
-			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
+			Expect(serv.sessions[string(connID)].(*mockSession).packetCount).To(Equal(1))
 		})
 
 		It("errors on invalid public header", func() {
@@ -386,7 +386,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("ignores public resets for unknown connections", func() {
-			err := serv.handlePacket(nil, nil, wire.WritePublicReset(999, 1, 1337))
+			err := serv.handlePacket(nil, nil, wire.WritePublicReset([]byte{9, 9, 9, 9, 9, 9, 9, 9}, 1, 1337))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(BeEmpty())
 		})
@@ -395,23 +395,23 @@ var _ = Describe("Server", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
-			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
+			Expect(serv.sessions[string(connID)].(*mockSession).packetCount).To(Equal(1))
 			err = serv.handlePacket(nil, nil, wire.WritePublicReset(connID, 1, 1337))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
-			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
+			Expect(serv.sessions[string(connID)].(*mockSession).packetCount).To(Equal(1))
 		})
 
 		It("ignores invalid public resets for known connections", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
-			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
+			Expect(serv.sessions[string(connID)].(*mockSession).packetCount).To(Equal(1))
 			data := wire.WritePublicReset(connID, 1, 1337)
 			err = serv.handlePacket(nil, nil, data[:len(data)-2])
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
-			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
+			Expect(serv.sessions[string(connID)].(*mockSession).packetCount).To(Equal(1))
 		})
 
 		It("doesn't try to process a packet after sending a gQUIC Version Negotiation Packet", func() {
@@ -419,7 +419,7 @@ var _ = Describe("Server", func() {
 			b := &bytes.Buffer{}
 			hdr := wire.Header{
 				VersionFlag:     true,
-				ConnectionID:    0x1337,
+				ConnectionID:    connID,
 				PacketNumber:    1,
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}
@@ -434,7 +434,7 @@ var _ = Describe("Server", func() {
 			b := &bytes.Buffer{}
 			hdr := wire.Header{
 				VersionFlag:     true,
-				ConnectionID:    0x1337,
+				ConnectionID:    connID,
 				PacketNumber:    1,
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}
@@ -507,10 +507,11 @@ var _ = Describe("Server", func() {
 	})
 
 	It("sends a gQUIC Version Negotaion Packet, if the client sent a gQUIC Public Header", func() {
+		connID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
 		b := &bytes.Buffer{}
 		hdr := wire.Header{
 			VersionFlag:     true,
-			ConnectionID:    0x1337,
+			ConnectionID:    connID,
 			PacketNumber:    1,
 			PacketNumberLen: protocol.PacketNumberLen2,
 		}
@@ -534,7 +535,7 @@ var _ = Describe("Server", func() {
 		packet, err := wire.ParseHeaderSentByServer(r, protocol.VersionUnknown)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.VersionFlag).To(BeTrue())
-		Expect(packet.ConnectionID).To(Equal(protocol.ConnectionID(0x1337)))
+		Expect(packet.ConnectionID).To(Equal(connID))
 		Expect(r.Len()).To(BeZero())
 		Consistently(done).ShouldNot(BeClosed())
 		// make the go routine return
@@ -543,12 +544,13 @@ var _ = Describe("Server", func() {
 	})
 
 	It("sends an IETF draft style Version Negotaion Packet, if the client sent a IETF draft style header", func() {
+		connID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
 		config.Versions = append(config.Versions, protocol.VersionTLS)
 		b := &bytes.Buffer{}
 		hdr := wire.Header{
 			Type:         protocol.PacketTypeInitial,
 			IsLongHeader: true,
-			ConnectionID: 0x1337,
+			ConnectionID: connID,
 			PacketNumber: 0x55,
 			Version:      0x1234,
 		}
@@ -573,7 +575,7 @@ var _ = Describe("Server", func() {
 		packet, err := wire.ParseHeaderSentByServer(r, protocol.VersionUnknown)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.IsVersionNegotiation).To(BeTrue())
-		Expect(packet.ConnectionID).To(Equal(protocol.ConnectionID(0x1337)))
+		Expect(packet.ConnectionID).To(Equal(connID))
 		Expect(r.Len()).To(BeZero())
 		Consistently(done).ShouldNot(BeClosed())
 		// make the go routine return
@@ -582,11 +584,12 @@ var _ = Describe("Server", func() {
 	})
 
 	It("ignores IETF draft style Initial packets, if it doesn't support TLS", func() {
+		connID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
 		b := &bytes.Buffer{}
 		hdr := wire.Header{
 			Type:         protocol.PacketTypeInitial,
 			IsLongHeader: true,
-			ConnectionID: 0x1337,
+			ConnectionID: connID,
 			PacketNumber: 0x55,
 			Version:      protocol.VersionTLS,
 		}

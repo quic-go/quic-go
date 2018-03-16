@@ -10,23 +10,25 @@ import (
 
 var _ = Describe("Version Negotiation Packets", func() {
 	It("writes for gQUIC", func() {
+		connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}
 		versions := []protocol.VersionNumber{1001, 1003}
-		data := ComposeGQUICVersionNegotiation(0x1337, versions)
+		data := ComposeGQUICVersionNegotiation(connID, versions)
 		hdr, err := parsePublicHeader(bytes.NewReader(data), protocol.PerspectiveServer)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.VersionFlag).To(BeTrue())
-		Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x1337)))
+		Expect(hdr.ConnectionID).To(Equal(connID))
 		Expect(hdr.SupportedVersions).To(Equal(versions))
 	})
 
 	It("writes in IETF draft style", func() {
+		connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}
 		versions := []protocol.VersionNumber{1001, 1003}
-		data := ComposeVersionNegotiation(0x1337, versions)
+		data := ComposeVersionNegotiation(connID, versions)
 		Expect(data[0] & 0x80).ToNot(BeZero())
 		hdr, err := parseHeader(bytes.NewReader(data), protocol.PerspectiveServer)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.IsVersionNegotiation).To(BeTrue())
-		Expect(hdr.ConnectionID).To(Equal(protocol.ConnectionID(0x1337)))
+		Expect(hdr.ConnectionID).To(Equal(connID))
 		Expect(hdr.Version).To(BeZero())
 		// the supported versions should include one reserved version number
 		Expect(hdr.SupportedVersions).To(HaveLen(len(versions) + 1))
