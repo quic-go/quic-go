@@ -44,7 +44,7 @@ type client struct {
 
 var (
 	// make it possible to mock connection ID generation in the tests
-	generateConnectionID         = utils.GenerateConnectionID
+	generateConnectionID         = protocol.GenerateConnectionID
 	errCloseSessionForNewVersion = errors.New("closing session in order to recreate it with a new version")
 )
 
@@ -384,7 +384,7 @@ func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
 	c.initialVersion = c.version
 	c.version = newVersion
 	var err error
-	c.connectionID, err = utils.GenerateConnectionID()
+	c.connectionID, err = protocol.GenerateConnectionID()
 	if err != nil {
 		return err
 	}

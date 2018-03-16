@@ -1,4 +1,4 @@
-package utils
+package protocol
 
 import (
 	. "github.com/onsi/ginkgo"
