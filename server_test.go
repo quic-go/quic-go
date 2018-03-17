@@ -357,7 +357,6 @@ var _ = Describe("Server", func() {
 			testErr := errors.New("connection error")
 			conn.readErr = testErr
 			go serv.serve()
-			Eventually(func() Session { return serv.sessions[connID] }).Should(BeNil())
 			Eventually(func() bool { return session.(*mockSession).closed }).Should(BeTrue())
 			Expect(serv.Close()).To(Succeed())
 		})

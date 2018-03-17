@@ -10,6 +10,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 //	"log"
@@ -20,6 +21,16 @@ type packedPacket struct {
 	raw             []byte
 	frames          []wire.Frame
 	encryptionLevel protocol.EncryptionLevel
+}
+
+func (p *packedPacket) ToAckHandlerPacket() *ackhandler.Packet {
+	return &ackhandler.Packet{
+		PacketNumber:    p.header.PacketNumber,
+		PacketType:      p.header.Type,
+		Frames:          p.frames,
+		Length:          protocol.ByteCount(len(p.raw)),
+		EncryptionLevel: p.encryptionLevel,
+	}
 }
 
 type streamFrameSource interface {
@@ -573,4 +584,8 @@ func (p *packetPacker) canSendData(encLevel protocol.EncryptionLevel) bool {
 
 func (p *packetPacker) SetOmitConnectionID() {
 	p.omitConnectionID = true
+}
+
+func (p *packetPacker) SetMaxPacketSize(size protocol.ByteCount) {
+	p.maxPacketSize = utils.MinByteCount(p.maxPacketSize, size)
 }

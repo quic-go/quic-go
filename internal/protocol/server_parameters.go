@@ -81,8 +81,15 @@ const MaxTrackedSkippedPackets = 10
 // CookieExpiryTime is the valid time of a cookie
 const CookieExpiryTime = 24 * time.Hour
 
-// MaxTrackedSentPackets is maximum number of sent packets saved for either later retransmission or entropy calculation
-const MaxTrackedSentPackets = 2 * DefaultMaxCongestionWindow
+// MaxOutstandingSentPackets is maximum number of packets saved for retransmission.
+// When reached, it imposes a soft limit on sending new packets:
+// Sending ACKs and retransmission is still allowed, but now new regular packets can be sent.
+const MaxOutstandingSentPackets = 2 * DefaultMaxCongestionWindow
+
+// MaxTrackedSentPackets is maximum number of sent packets saved for retransmission.
+// When reached, no more packets will be sent.
+// This value *must* be larger than MaxOutstandingSentPackets.
+const MaxTrackedSentPackets = MaxOutstandingSentPackets * 5 / 4
 
 // MaxTrackedReceivedAckRanges is the maximum number of ACK ranges tracked
 const MaxTrackedReceivedAckRanges = DefaultMaxCongestionWindow

@@ -895,7 +895,6 @@ var _ = Describe("Packet packer", func() {
 			Expect(sf2.StreamID).To(Equal(protocol.StreamID(5)))
 			Expect(sf2.DataLenPresent).To(BeFalse())
 		})
-
 	})
 
 	Context("packing ACK packets", func() {
@@ -915,6 +914,40 @@ var _ = Describe("Packet packer", func() {
 				&wire.AckFrame{DelayTime: math.MaxInt64},
 				&wire.StopWaitingFrame{PacketNumber: 1, PacketNumberLen: 2},
 			}))
+		})
+	})
+
+	Context("max packet size", func() {
+		It("sets the maximum packet size", func() {
+			for i := 0; i < 10*int(maxPacketSize); i++ {
+				packer.QueueControlFrame(&wire.PingFrame{})
+			}
+			mockStreamFramer.EXPECT().HasCryptoStreamData().AnyTimes()
+			mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any()).AnyTimes()
+			p, err := packer.PackPacket()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p.raw).To(HaveLen(int(maxPacketSize)))
+			// now reduce the maxPacketSize
+			packer.SetMaxPacketSize(maxPacketSize - 10)
+			p, err = packer.PackPacket()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p.raw).To(HaveLen(int(maxPacketSize) - 10))
+		})
+
+		It("doesn't increase the max packet size", func() {
+			for i := 0; i < 10*int(maxPacketSize); i++ {
+				packer.QueueControlFrame(&wire.PingFrame{})
+			}
+			mockStreamFramer.EXPECT().HasCryptoStreamData().AnyTimes()
+			mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any()).AnyTimes()
+			p, err := packer.PackPacket()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p.raw).To(HaveLen(int(maxPacketSize)))
+			// now try to increase the maxPacketSize
+			packer.SetMaxPacketSize(maxPacketSize + 10)
+			p, err = packer.PackPacket()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p.raw).To(HaveLen(int(maxPacketSize)))
 		})
 	})
 })

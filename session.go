@@ -420,9 +420,11 @@ runLoop:
 
 		now := time.Now()
 		if timeout := s.sentPacketHandler.GetAlarmTimeout(); !timeout.IsZero() && timeout.Before(now) {
-			// This could cause packets to be retransmitted, so check it before trying
-			// to send packets.
-			s.sentPacketHandler.OnAlarm()
+			// This could cause packets to be retransmitted.
+			// Check it before trying to send packets.
+			if err := s.sentPacketHandler.OnAlarm(); err != nil {
+				s.closeLocal(err)
+			}
 		}
 
 		var pacingDeadline time.Time
@@ -813,6 +815,9 @@ func (s *session) processTransportParameters(params *handshake.TransportParamete
 	if params.OmitConnectionID {
 		s.packer.SetOmitConnectionID()
 	}
+	if params.MaxPacketSize != 0 {
+		s.packer.SetMaxPacketSize(params.MaxPacketSize)
+	}
 	s.connFlowController.UpdateSendWindow(params.ConnectionFlowControlWindow)
 	// the crypto stream is the only open stream at this moment
 	// so we don't need to update stream flow control windows
@@ -820,40 +825,56 @@ func (s *session) processTransportParameters(params *handshake.TransportParamete
 
 func (s *session) sendPackets() error {
 	s.pacingDeadline = time.Time{}
-	if !s.sentPacketHandler.SendingAllowed() { // if congestion limited, at least try sending an ACK frame
-		return s.maybeSendAckOnlyPacket()
+
+	sendMode := s.sentPacketHandler.SendMode()
+	if sendMode == ackhandler.SendNone { // shortcut: return immediately if there's nothing to send
+		return nil
 	}
+
 	numPackets := s.sentPacketHandler.ShouldSendNumPackets()
 	var numPacketsSent int
-	// Send retransmissions, until
-	// * we're congestion limited, or
-	// * there are no more retransmissions, or
-	// * the maximum number of packets was reached
-	for ; numPacketsSent < numPackets; numPacketsSent++ {
-		sentPacket, err := s.maybeSendRetransmission()
-		if err != nil {
-			return err
+sendLoop:
+	for {
+		switch sendMode {
+		case ackhandler.SendNone:
+			break sendLoop
+		case ackhandler.SendAck:
+			// We can at most send a single ACK only packet.
+			// There will only be a new ACK after receiving new packets.
+			// SendAck is only returned when we're congestion limited, so we don't need to set the pacingt timer.
+			return s.maybeSendAckOnlyPacket()
+		case ackhandler.SendRetransmission:
+			sentPacket, err := s.maybeSendRetransmission()
+			if err != nil {
+				return err
+			}
+			if sentPacket {
+				numPacketsSent++
+				// This can happen if a retransmission queued, but it wasn't necessary to send it.
+				// e.g. when an Initial is queued, but we already received a packet from the server.
+			}
+		case ackhandler.SendAny:
+			sentPacket, err := s.sendPacket()
+			if err != nil {
+				return err
+			}
+			if !sentPacket {
+				break sendLoop
+			}
+			numPacketsSent++
+		default:
+			return fmt.Errorf("BUG: invalid send mode %d", sendMode)
 		}
-		if !sentPacket { // no more retransmission to send. Proceed to send new data.
+		if numPacketsSent >= numPackets {
 			break
 		}
-		if !s.sentPacketHandler.SendingAllowed() {
-			return nil
-		}
-	}
-	for ; numPacketsSent < numPackets; numPacketsSent++ {
-		sentPacket, err := s.sendPacket()
-		if err != nil {
-			return err
-		}
-		// If no packet was sent, or we're congestion limit, we're done here.
-		if !sentPacket || !s.sentPacketHandler.SendingAllowed() {
-			return nil
-		}
+		sendMode = s.sentPacketHandler.SendMode()
 	}
 	// Only start the pacing timer if we sent as many packets as we were allowed.
 	// There will probably be more to send when calling sendPacket again.
-	s.pacingDeadline = s.sentPacketHandler.TimeUntilSend()
+	if numPacketsSent == numPackets {
+		s.pacingDeadline = s.sentPacketHandler.TimeUntilSend()
+	}
 	return nil
 }
 
@@ -873,6 +894,7 @@ func (s *session) maybeSendAckOnlyPacket() error {
 	if err != nil {
 		return err
 	}
+	s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket())
 	return s.sendPackedPacket(packet)
 }
 
@@ -891,7 +913,6 @@ func (s *session) maybeSendRetransmission() (bool, error) {
 		// As soon as we receive one response, we don't need to send any more Initials.
 		if s.receivedFirstPacket && retransmitPacket.PacketType == protocol.PacketTypeInitial {
 			utils.Debugf("Skipping retransmission of packet %d. Already received a response to an Initial.", retransmitPacket.PacketNumber)
-			retransmitPacket = nil
 			continue
 		}
 		break
@@ -910,6 +931,11 @@ func (s *session) maybeSendRetransmission() (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	ackhandlerPackets := make([]*ackhandler.Packet, len(packets))
+	for i, packet := range packets {
+		ackhandlerPackets[i] = packet.ToAckHandlerPacket()
+	}
+	s.sentPacketHandler.SentPacketsAsRetransmission(ackhandlerPackets, retransmitPacket.PacketNumber)
 	for _, packet := range packets {
 		if err := s.sendPackedPacket(packet); err != nil {
 			return false, err
@@ -940,6 +966,7 @@ func (s *session) sendPacket() (bool, error) {
 	if err != nil || packet == nil {
 		return false, err
 	}
+	s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket())
 	if err := s.sendPackedPacket(packet); err != nil {
 		return false, err
 	}
@@ -948,13 +975,6 @@ func (s *session) sendPacket() (bool, error) {
 
 func (s *session) sendPackedPacket(packet *packedPacket) error {
 	defer putPacketBuffer(&packet.raw)
-	s.sentPacketHandler.SentPacket(&ackhandler.Packet{
-		PacketNumber:    packet.header.PacketNumber,
-		PacketType:      packet.header.Type,
-		Frames:          packet.frames,
-		Length:          protocol.ByteCount(len(packet.raw)),
-		EncryptionLevel: packet.encryptionLevel,
-	})
 	s.logPacket(packet)
 	return s.conn.Write(packet.raw)
 }
