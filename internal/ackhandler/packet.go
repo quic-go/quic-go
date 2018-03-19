@@ -15,9 +15,9 @@ type Packet struct {
 	Frames          []wire.Frame
 	Length          protocol.ByteCount
 	EncryptionLevel protocol.EncryptionLevel
+	SendTime        time.Time
 
 	largestAcked protocol.PacketNumber // if the packet contains an ACK, the LargestAcked value of that ACK
-	sendTime     time.Time
 
 	queuedForRetransmission bool
 	includedInBytesInFlight bool

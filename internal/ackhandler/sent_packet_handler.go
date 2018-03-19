@@ -114,7 +114,6 @@ func (h *sentPacketHandler) SetHandshakeComplete() {
 }
 
 func (h *sentPacketHandler) SentPacket(packet *Packet) {
-	packet.sendTime = time.Now()
 	if isRetransmittable := h.sentPacketImpl(packet); isRetransmittable {
 		h.packetHistory.SentPacket(packet)
 		h.updateLossDetectionAlarm()
@@ -122,10 +121,8 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) {
 }
 
 func (h *sentPacketHandler) SentPacketsAsRetransmission(packets []*Packet, retransmissionOf protocol.PacketNumber) {
-	now := time.Now()
 	var p []*Packet
 	for _, packet := range packets {
-		packet.sendTime = now
 		if isRetransmittable := h.sentPacketImpl(packet); isRetransmittable {
 			p = append(p, packet)
 		}
@@ -156,13 +153,13 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* isRetransmitt
 
 	if isRetransmittable {
 		packet.largestAcked = largestAcked
-		h.lastSentRetransmittablePacketTime = packet.sendTime
+		h.lastSentRetransmittablePacketTime = packet.SendTime
 		packet.includedInBytesInFlight = true
 		h.bytesInFlight += packet.Length
 	}
-	h.congestion.OnPacketSent(packet.sendTime, h.bytesInFlight, packet.PacketNumber, packet.Length, isRetransmittable)
+	h.congestion.OnPacketSent(packet.SendTime, h.bytesInFlight, packet.PacketNumber, packet.Length, isRetransmittable)
 
-	h.nextPacketSendTime = utils.MaxTime(h.nextPacketSendTime, packet.sendTime).Add(h.congestion.TimeUntilSend(h.bytesInFlight))
+	h.nextPacketSendTime = utils.MaxTime(h.nextPacketSendTime, packet.SendTime).Add(h.congestion.TimeUntilSend(h.bytesInFlight))
 	return isRetransmittable
 }
 
@@ -262,7 +259,7 @@ func (h *sentPacketHandler) determineNewlyAckedPackets(ackFrame *wire.AckFrame) 
 
 func (h *sentPacketHandler) maybeUpdateRTT(largestAcked protocol.PacketNumber, ackDelay time.Duration, rcvTime time.Time) bool {
 	if p := h.packetHistory.GetPacket(largestAcked); p != nil {
-		h.rttStats.UpdateRTT(rcvTime.Sub(p.sendTime), ackDelay, rcvTime)
+		h.rttStats.UpdateRTT(rcvTime.Sub(p.SendTime), ackDelay, rcvTime)
 		return true
 	}
 	return false
@@ -302,7 +299,7 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time) error {
 			return true, nil
 		}
 
-		timeSinceSent := now.Sub(packet.sendTime)
+		timeSinceSent := now.Sub(packet.SendTime)
 		if timeSinceSent > delayUntilLost {
 			lostPackets = append(lostPackets, packet)
 		} else if h.lossTime.IsZero() {
