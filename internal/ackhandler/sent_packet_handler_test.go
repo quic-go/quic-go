@@ -114,12 +114,14 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("stores the sent time", func() {
 			handler.SentPacket(retransmittablePacket(1))
-			Expect(getPacket(1).sendTime.Unix()).To(BeNumerically("~", time.Now().Unix(), 1))
+			Expect(getPacket(1).sendTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
+			Expect(handler.lastSentRetransmittablePacketTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
 		})
 
 		It("does not store non-retransmittable packets", func() {
 			handler.SentPacket(nonRetransmittablePacket(1))
 			Expect(handler.packetHistory.Len()).To(BeZero())
+			Expect(handler.lastSentRetransmittablePacketTime).To(BeZero())
 		})
 
 		Context("skipped packet numbers", func() {
