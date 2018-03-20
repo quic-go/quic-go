@@ -66,11 +66,11 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 		BeforeEach(func() {
 			fakeBody = &tlsExtensionBody{data: []byte("foobar foobar")}
 			parameters = map[transportParameterID][]byte{
-				initialMaxStreamDataParameterID:   {0x11, 0x22, 0x33, 0x44},
-				initialMaxDataParameterID:         {0x22, 0x33, 0x44, 0x55},
-				initialMaxStreamIDBiDiParameterID: {0x33, 0x44, 0x55, 0x66},
-				idleTimeoutParameterID:            {0x13, 0x37},
-				statelessResetTokenParameterID:    bytes.Repeat([]byte{0}, 16),
+				initialMaxStreamDataParameterID:  {0x11, 0x22, 0x33, 0x44},
+				initialMaxDataParameterID:        {0x22, 0x33, 0x44, 0x55},
+				initialMaxStreamsBiDiParameterID: {0x33, 0x44},
+				idleTimeoutParameterID:           {0x13, 0x37},
+				statelessResetTokenParameterID:   bytes.Repeat([]byte{0}, 16),
 			}
 		})
 
