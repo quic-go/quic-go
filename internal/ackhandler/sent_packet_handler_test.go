@@ -424,11 +424,15 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 	})
 
-	Context("Ack processing, for retransmitted packets", func() {
+	Context("ACK processing, for retransmitted packets", func() {
 		losePacket := func(pn protocol.PacketNumber) {
 			p := getPacket(pn)
 			ExpectWithOffset(1, p).ToNot(BeNil())
 			handler.queuePacketForRetransmission(p)
+			if p.includedInBytesInFlight {
+				p.includedInBytesInFlight = false
+				handler.bytesInFlight -= p.Length
+			}
 			r := handler.DequeuePacketForRetransmission()
 			ExpectWithOffset(1, r).ToNot(BeNil())
 			ExpectWithOffset(1, r.PacketNumber).To(Equal(pn))
@@ -587,12 +591,12 @@ var _ = Describe("SentPacketHandler", func() {
 			cong.EXPECT().OnPacketLost(
 				protocol.PacketNumber(1),
 				protocol.ByteCount(1),
-				protocol.ByteCount(2),
+				protocol.ByteCount(3),
 			)
 			cong.EXPECT().OnPacketLost(
 				protocol.PacketNumber(2),
 				protocol.ByteCount(1),
-				protocol.ByteCount(1),
+				protocol.ByteCount(3),
 			)
 			handler.SentPacket(retransmittablePacket(1))
 			handler.SentPacket(retransmittablePacket(2))
@@ -709,6 +713,7 @@ var _ = Describe("SentPacketHandler", func() {
 			p = handler.DequeuePacketForRetransmission()
 			Expect(p).ToNot(BeNil())
 			Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(2)))
+			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(2)))
 
 			Expect(handler.rtoCount).To(BeEquivalentTo(1))
 		})
