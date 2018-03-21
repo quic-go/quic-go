@@ -157,6 +157,7 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* isRetransmitt
 	if isRetransmittable {
 		packet.largestAcked = largestAcked
 		h.lastSentRetransmittablePacketTime = packet.sendTime
+		packet.includedInBytesInFlight = true
 		h.bytesInFlight += packet.Length
 	}
 	h.congestion.OnPacketSent(packet.sendTime, h.bytesInFlight, packet.PacketNumber, packet.Length, isRetransmittable)
@@ -315,6 +316,8 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time) error {
 		if err := h.queuePacketForRetransmission(p); err != nil {
 			return err
 		}
+		h.bytesInFlight -= p.Length
+		p.includedInBytesInFlight = false
 		h.congestion.OnPacketLost(p.PacketNumber, p.Length, h.bytesInFlight)
 	}
 	return nil
@@ -389,11 +392,11 @@ func (h *sentPacketHandler) onPacketAcked(p *Packet) error {
 }
 
 func (h *sentPacketHandler) removeAllRetransmissions(p *Packet) error {
-	if !p.queuedForRetransmission {
-		// The bytes in flight are reduced when a packet is queued for retransmission.
-		// When a packet is acked, we only need to reduce it for packets that were not retransmitted.
+	if p.includedInBytesInFlight {
 		h.bytesInFlight -= p.Length
-	} else {
+		p.includedInBytesInFlight = false
+	}
+	if p.queuedForRetransmission {
 		for _, r := range p.retransmittedAs {
 			packet := h.packetHistory.GetPacket(r)
 			if packet == nil {
@@ -501,7 +504,6 @@ func (h *sentPacketHandler) queuePacketForRetransmission(p *Packet) error {
 	if _, err := h.packetHistory.QueuePacketForRetransmission(p.PacketNumber); err != nil {
 		return err
 	}
-	h.bytesInFlight -= p.Length
 	h.retransmissionQueue = append(h.retransmissionQueue, p)
 	h.stopWaitingManager.QueuedRetransmissionForPacketNumber(p.PacketNumber)
 	return nil

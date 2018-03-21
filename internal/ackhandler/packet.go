@@ -20,6 +20,7 @@ type Packet struct {
 	sendTime     time.Time
 
 	queuedForRetransmission bool
+	includedInBytesInFlight bool
 	retransmittedAs         []protocol.PacketNumber
 	isRetransmission        bool // we need a separate bool here because 0 is a valid packet number
 	retransmissionOf        protocol.PacketNumber
