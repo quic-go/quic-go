@@ -48,9 +48,8 @@ func (m *mockCryptoSetup) GetSealerForCryptoStream() (protocol.EncryptionLevel, 
 func (m *mockCryptoSetup) GetSealerWithEncryptionLevel(protocol.EncryptionLevel) (handshake.Sealer, error) {
 	return &mockSealer{}, nil
 }
-func (m *mockCryptoSetup) DiversificationNonce() []byte            { return m.divNonce }
-func (m *mockCryptoSetup) SetDiversificationNonce(divNonce []byte) { m.divNonce = divNonce }
-func (m *mockCryptoSetup) ConnectionState() ConnectionState        { panic("not implemented") }
+func (m *mockCryptoSetup) DiversificationNonce() []byte     { return m.divNonce }
+func (m *mockCryptoSetup) ConnectionState() ConnectionState { panic("not implemented") }
 
 var _ = Describe("Packet packer", func() {
 	const maxPacketSize protocol.ByteCount = 1357

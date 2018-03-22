@@ -84,7 +84,8 @@ type session struct {
 	unpacker unpacker
 	packer   *packetPacker
 
-	cryptoSetup handshake.CryptoSetup
+	cryptoSetup  handshake.CryptoSetup
+	divNonceChan chan<- []byte // only set for the client
 
 	receivedPackets  chan *receivedPacket
 	sendingScheduled chan struct{}
@@ -210,7 +211,7 @@ var newClientSession = func(
 		IdleTimeout:                 s.config.IdleTimeout,
 		OmitConnectionID:            s.config.RequestConnectionIDOmission,
 	}
-	cs, err := newCryptoSetupClient(
+	cs, divNonceChan, err := newCryptoSetupClient(
 		s.cryptoStream,
 		hostname,
 		s.connectionID,
@@ -226,6 +227,7 @@ var newClientSession = func(
 		return nil, err
 	}
 	s.cryptoSetup = cs
+	s.divNonceChan = divNonceChan
 	return s, s.postSetup(1)
 }
 
@@ -503,9 +505,8 @@ func (s *session) maybeResetTimer() {
 
 func (s *session) handlePacketImpl(p *receivedPacket) error {
 	if s.perspective == protocol.PerspectiveClient {
-		diversificationNonce := p.header.DiversificationNonce
-		if len(diversificationNonce) > 0 {
-			s.cryptoSetup.SetDiversificationNonce(diversificationNonce)
+		if divNonce := p.header.DiversificationNonce; len(divNonce) > 0 {
+			s.divNonceChan <- divNonce
 		}
 	}
 

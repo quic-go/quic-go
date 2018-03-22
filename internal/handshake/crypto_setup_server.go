@@ -455,10 +455,6 @@ func (h *cryptoSetupServer) DiversificationNonce() []byte {
 	return h.diversificationNonce
 }
 
-func (h *cryptoSetupServer) SetDiversificationNonce(data []byte) {
-	panic("not needed for cryptoSetupServer")
-}
-
 func (h *cryptoSetupServer) ConnectionState() ConnectionState {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()

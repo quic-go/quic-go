@@ -38,7 +38,7 @@ type cryptoSetupClient struct {
 	lastSentCHLO     []byte
 	certManager      crypto.CertManager
 
-	divNonceChan         chan []byte
+	divNonceChan         <-chan []byte
 	diversificationNonce []byte
 
 	clientHelloCounter int
@@ -76,12 +76,13 @@ func NewCryptoSetupClient(
 	handshakeEvent chan<- struct{},
 	initialVersion protocol.VersionNumber,
 	negotiatedVersions []protocol.VersionNumber,
-) (CryptoSetup, error) {
+) (CryptoSetup, chan<- []byte, error) {
 	nullAEAD, err := crypto.NewNullAEAD(protocol.PerspectiveClient, connID, version)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return &cryptoSetupClient{
+	divNonceChan := make(chan []byte)
+	cs := &cryptoSetupClient{
 		cryptoStream:       cryptoStream,
 		hostname:           hostname,
 		connID:             connID,
@@ -94,8 +95,9 @@ func NewCryptoSetupClient(
 		handshakeEvent:     handshakeEvent,
 		initialVersion:     initialVersion,
 		negotiatedVersions: negotiatedVersions,
-		divNonceChan:       make(chan []byte),
-	}, nil
+		divNonceChan:       divNonceChan,
+	}
+	return cs, divNonceChan, nil
 }
 
 func (h *cryptoSetupClient) HandleCryptoStream() error {
@@ -373,10 +375,6 @@ func (h *cryptoSetupClient) GetSealerWithEncryptionLevel(encLevel protocol.Encry
 
 func (h *cryptoSetupClient) DiversificationNonce() []byte {
 	panic("not needed for cryptoSetupClient")
-}
-
-func (h *cryptoSetupClient) SetDiversificationNonce(data []byte) {
-	h.divNonceChan <- data
 }
 
 func (h *cryptoSetupClient) ConnectionState() ConnectionState {
