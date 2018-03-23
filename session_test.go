@@ -1274,7 +1274,7 @@ var _ = Describe("Session", func() {
 
 		BeforeEach(func() {
 			sess.unpacker = &mockUnpacker{unpackErr: qerr.Error(qerr.DecryptionFailure, "")}
-			sess.cryptoSetup = &mockCryptoSetup{}
+			sess.cryptoStreamHandler = &mockCryptoSetup{}
 			streamManager.EXPECT().CloseWithError(gomock.Any()).MaxTimes(1)
 		})
 
