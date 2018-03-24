@@ -44,6 +44,7 @@ type packetPacker struct {
 	perspective  protocol.Perspective
 	version      protocol.VersionNumber
 	cryptoSetup  handshake.CryptoSetup
+	divNonce     []byte
 
 	packetNumberGenerator *packetNumberGenerator
 	getPacketNumberLen    func(protocol.PacketNumber) protocol.PacketNumberLen
@@ -64,6 +65,7 @@ func newPacketPacker(connectionID protocol.ConnectionID,
 	initialPacketNumber protocol.PacketNumber,
 	getPacketNumberLen func(protocol.PacketNumber) protocol.PacketNumberLen,
 	remoteAddr net.Addr, // only used for determining the max packet size
+	divNonce []byte,
 	cryptoSetup handshake.CryptoSetup,
 	streamFramer streamFrameSource,
 	perspective protocol.Perspective,
@@ -84,6 +86,7 @@ func newPacketPacker(connectionID protocol.ConnectionID,
 	}
 	return &packetPacker{
 		cryptoSetup:           cryptoSetup,
+		divNonce:              divNonce,
 		connectionID:          connectionID,
 		perspective:           perspective,
 		version:               version,
@@ -457,7 +460,7 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header
 	}
 	if !p.version.UsesTLS() {
 		if p.perspective == protocol.PerspectiveServer && encLevel == protocol.EncryptionSecure {
-			header.DiversificationNonce = p.cryptoSetup.DiversificationNonce()
+			header.DiversificationNonce = p.divNonce
 		}
 		if p.perspective == protocol.PerspectiveClient && encLevel != protocol.EncryptionForwardSecure {
 			header.VersionFlag = true

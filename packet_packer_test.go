@@ -26,7 +26,6 @@ var _ handshake.Sealer = &mockSealer{}
 
 type mockCryptoSetup struct {
 	handleErr          error
-	divNonce           []byte
 	encLevelSeal       protocol.EncryptionLevel
 	encLevelSealCrypto protocol.EncryptionLevel
 }
@@ -48,7 +47,6 @@ func (m *mockCryptoSetup) GetSealerForCryptoStream() (protocol.EncryptionLevel, 
 func (m *mockCryptoSetup) GetSealerWithEncryptionLevel(protocol.EncryptionLevel) (handshake.Sealer, error) {
 	return &mockSealer{}, nil
 }
-func (m *mockCryptoSetup) DiversificationNonce() []byte     { return m.divNonce }
 func (m *mockCryptoSetup) ConnectionState() ConnectionState { panic("not implemented") }
 
 var _ = Describe("Packet packer", func() {
@@ -58,6 +56,7 @@ var _ = Describe("Packet packer", func() {
 		publicHeaderLen  protocol.ByteCount
 		maxFrameSize     protocol.ByteCount
 		mockStreamFramer *MockStreamFrameSource
+		divNonce         []byte
 	)
 
 	BeforeEach(func() {
@@ -65,12 +64,14 @@ var _ = Describe("Packet packer", func() {
 		mockSender := NewMockStreamSender(mockCtrl)
 		mockSender.EXPECT().onHasStreamData(gomock.Any()).AnyTimes()
 		mockStreamFramer = NewMockStreamFrameSource(mockCtrl)
+		divNonce = bytes.Repeat([]byte{'e'}, 32)
 
 		packer = newPacketPacker(
 			0x1337,
 			1,
 			func(protocol.PacketNumber) protocol.PacketNumberLen { return protocol.PacketNumberLen2 },
 			&net.TCPAddr{},
+			divNonce,
 			&mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure},
 			mockStreamFramer,
 			protocol.PerspectiveServer,
@@ -86,20 +87,20 @@ var _ = Describe("Packet packer", func() {
 	Context("determining the maximum packet size", func() {
 		It("uses the minimum initial size, if it can't determine if the remote address is IPv4 or IPv6", func() {
 			remoteAddr := &net.TCPAddr{}
-			packer = newPacketPacker(0x1337, 1, nil, remoteAddr, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
+			packer = newPacketPacker(0x1337, 1, nil, remoteAddr, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
 			Expect(packer.maxPacketSize).To(BeEquivalentTo(protocol.MinInitialPacketSize))
 		})
 
 		It("uses the maximum IPv4 packet size, if the remote address is IPv4", func() {
 			remoteAddr := &net.UDPAddr{IP: net.IPv4(11, 12, 13, 14), Port: 1337}
-			packer = newPacketPacker(0x1337, 1, nil, remoteAddr, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
+			packer = newPacketPacker(0x1337, 1, nil, remoteAddr, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
 			Expect(packer.maxPacketSize).To(BeEquivalentTo(protocol.MaxPacketSizeIPv4))
 		})
 
 		It("uses the maximum IPv6 packet size, if the remote address is IPv6", func() {
 			ip := net.ParseIP("2001:0db8:85a3:0000:0000:8a2e:0370:7334")
 			remoteAddr := &net.UDPAddr{IP: ip, Port: 1337}
-			packer = newPacketPacker(0x1337, 1, nil, remoteAddr, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
+			packer = newPacketPacker(0x1337, 1, nil, remoteAddr, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
 			Expect(packer.maxPacketSize).To(BeEquivalentTo(protocol.MaxPacketSizeIPv6))
 		})
 	})
@@ -178,13 +179,6 @@ var _ = Describe("Packet packer", func() {
 			})
 
 			Context("diversificaton nonces", func() {
-				var nonce []byte
-
-				BeforeEach(func() {
-					nonce = bytes.Repeat([]byte{'e'}, 32)
-					packer.cryptoSetup.(*mockCryptoSetup).divNonce = nonce
-				})
-
 				It("doesn't include a div nonce, when sending a packet with initial encryption", func() {
 					ph := packer.getHeader(protocol.EncryptionUnencrypted)
 					Expect(ph.DiversificationNonce).To(BeEmpty())
@@ -192,7 +186,7 @@ var _ = Describe("Packet packer", func() {
 
 				It("includes a div nonce, when sending a packet with secure encryption", func() {
 					ph := packer.getHeader(protocol.EncryptionSecure)
-					Expect(ph.DiversificationNonce).To(Equal(nonce))
+					Expect(ph.DiversificationNonce).To(Equal(divNonce))
 				})
 
 				It("doesn't include a div nonce, when sending a packet with forward-secure encryption", func() {
@@ -666,8 +660,6 @@ var _ = Describe("Packet packer", func() {
 		})
 
 		It("packs a retransmission for a packet sent with initial encryption", func() {
-			nonce := bytes.Repeat([]byte{'e'}, 32)
-			packer.cryptoSetup.(*mockCryptoSetup).divNonce = nonce
 			packet := &ackhandler.Packet{
 				EncryptionLevel: protocol.EncryptionSecure,
 				Frames:          []wire.Frame{sf},
@@ -679,7 +671,7 @@ var _ = Describe("Packet packer", func() {
 			Expect(p[0].encryptionLevel).To(Equal(protocol.EncryptionSecure))
 			// a packet sent by the server with initial encryption contains the SHLO
 			// it needs to have a diversification nonce
-			Expect(p[0].raw).To(ContainSubstring(string(nonce)))
+			Expect(p[0].raw).To(ContainSubstring(string(divNonce)))
 		})
 
 		It("includes the diversification nonce on packets sent with initial encryption", func() {

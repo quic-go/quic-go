@@ -157,10 +157,6 @@ func (h *cryptoSetupTLS) GetSealerForCryptoStream() (protocol.EncryptionLevel, S
 	return protocol.EncryptionUnencrypted, h.nullAEAD
 }
 
-func (h *cryptoSetupTLS) DiversificationNonce() []byte {
-	panic("diversification nonce not needed for TLS")
-}
-
 func (h *cryptoSetupTLS) ConnectionState() ConnectionState {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()

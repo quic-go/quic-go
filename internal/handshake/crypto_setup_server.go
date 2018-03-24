@@ -73,6 +73,7 @@ func NewCryptoSetup(
 	connID protocol.ConnectionID,
 	remoteAddr net.Addr,
 	version protocol.VersionNumber,
+	divNonce []byte,
 	scfg *ServerConfig,
 	params *TransportParameters,
 	supportedVersions []protocol.VersionNumber,
@@ -85,20 +86,21 @@ func NewCryptoSetup(
 		return nil, err
 	}
 	return &cryptoSetupServer{
-		cryptoStream:      cryptoStream,
-		connID:            connID,
-		remoteAddr:        remoteAddr,
-		version:           version,
-		supportedVersions: supportedVersions,
-		scfg:              scfg,
-		keyDerivation:     crypto.DeriveQuicCryptoAESKeys,
-		keyExchange:       getEphermalKEX,
-		nullAEAD:          nullAEAD,
-		params:            params,
-		acceptSTKCallback: acceptSTK,
-		sentSHLO:          make(chan struct{}),
-		paramsChan:        paramsChan,
-		handshakeEvent:    handshakeEvent,
+		cryptoStream:         cryptoStream,
+		connID:               connID,
+		remoteAddr:           remoteAddr,
+		version:              version,
+		supportedVersions:    supportedVersions,
+		diversificationNonce: divNonce,
+		scfg:                 scfg,
+		keyDerivation:        crypto.DeriveQuicCryptoAESKeys,
+		keyExchange:          getEphermalKEX,
+		nullAEAD:             nullAEAD,
+		params:               params,
+		acceptSTKCallback:    acceptSTK,
+		sentSHLO:             make(chan struct{}),
+		paramsChan:           paramsChan,
+		handshakeEvent:       handshakeEvent,
 	}, nil
 }
 
@@ -364,11 +366,6 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 		return nil, err
 	}
 
-	h.diversificationNonce = make([]byte, 32)
-	if _, err = rand.Read(h.diversificationNonce); err != nil {
-		return nil, err
-	}
-
 	clientNonce := cryptoData[TagNONC]
 	err = h.validateClientNonce(clientNonce)
 	if err != nil {
@@ -448,11 +445,6 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 	message.Write(&reply)
 	utils.Debugf("Sending %s", message)
 	return reply.Bytes(), nil
-}
-
-// DiversificationNonce returns the diversification nonce
-func (h *cryptoSetupServer) DiversificationNonce() []byte {
-	return h.diversificationNonce
 }
 
 func (h *cryptoSetupServer) ConnectionState() ConnectionState {

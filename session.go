@@ -2,6 +2,7 @@ package quic
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -167,11 +168,16 @@ func newSession(
 		MaxStreams:                  uint32(s.config.MaxIncomingStreams),
 		IdleTimeout:                 s.config.IdleTimeout,
 	}
+	divNonce := make([]byte, 32)
+	if _, err := rand.Read(divNonce); err != nil {
+		return nil, err
+	}
 	cs, err := newCryptoSetup(
 		s.cryptoStream,
 		s.connectionID,
 		s.conn.RemoteAddr(),
 		s.version,
+		divNonce,
 		scfg,
 		transportParams,
 		s.config.Versions,
@@ -190,6 +196,7 @@ func newSession(
 		1,
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),
+		divNonce,
 		cs,
 		s.streamFramer,
 		s.perspective,
@@ -252,6 +259,7 @@ var newClientSession = func(
 		1,
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),
+		nil, // no diversification nonce
 		cs,
 		s.streamFramer,
 		s.perspective,
@@ -295,6 +303,7 @@ func newTLSServerSession(
 		initialPacketNumber,
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),
+		nil, // no diversification nonce
 		cs,
 		s.streamFramer,
 		s.perspective,
@@ -351,6 +360,7 @@ var newTLSClientSession = func(
 		initialPacketNumber,
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),
+		nil, // no diversification nonce
 		cs,
 		s.streamFramer,
 		s.perspective,

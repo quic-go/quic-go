@@ -373,10 +373,6 @@ func (h *cryptoSetupClient) GetSealerWithEncryptionLevel(encLevel protocol.Encry
 	return nil, errors.New("CryptoSetupClient: no encryption level specified")
 }
 
-func (h *cryptoSetupClient) DiversificationNonce() []byte {
-	panic("not needed for cryptoSetupClient")
-}
-
 func (h *cryptoSetupClient) ConnectionState() ConnectionState {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()

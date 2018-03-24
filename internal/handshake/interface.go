@@ -39,8 +39,6 @@ type MintTLS interface {
 type CryptoSetup interface {
 	Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error)
 	HandleCryptoStream() error
-	// TODO: clean up this interface
-	DiversificationNonce() []byte // only needed for cryptoSetupServer
 	ConnectionState() ConnectionState
 
 	GetSealer() (protocol.EncryptionLevel, Sealer)
