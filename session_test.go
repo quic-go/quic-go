@@ -58,19 +58,6 @@ func (m *mockConnection) LocalAddr() net.Addr  { return m.localAddr }
 func (m *mockConnection) RemoteAddr() net.Addr { return m.remoteAddr }
 func (*mockConnection) Close() error           { panic("not implemented") }
 
-type mockUnpacker struct {
-	unpackErr error
-}
-
-func (m *mockUnpacker) Unpack(headerBinary []byte, hdr *wire.Header, data []byte) (*unpackedPacket, error) {
-	if m.unpackErr != nil {
-		return nil, m.unpackErr
-	}
-	return &unpackedPacket{
-		frames: nil,
-	}, nil
-}
-
 func areSessionsRunning() bool {
 	var b bytes.Buffer
 	pprof.Lookup("goroutine").WriteTo(&b, 1)
@@ -572,21 +559,26 @@ var _ = Describe("Session", func() {
 
 	Context("receiving packets", func() {
 		var hdr *wire.Header
+		var unpacker *MockUnpacker
 
 		BeforeEach(func() {
-			sess.unpacker = &mockUnpacker{}
+			unpacker = NewMockUnpacker(mockCtrl)
+			sess.unpacker = unpacker
 			hdr = &wire.Header{PacketNumberLen: protocol.PacketNumberLen6}
 		})
 
 		It("sets the {last,largest}RcvdPacketNumber", func() {
 			hdr.PacketNumber = 5
-			err := sess.handlePacketImpl(&receivedPacket{header: hdr})
+			hdr.Raw = []byte("raw header")
+			unpacker.EXPECT().Unpack([]byte("raw header"), hdr, []byte("foobar")).Return(&unpackedPacket{}, nil)
+			err := sess.handlePacketImpl(&receivedPacket{header: hdr, data: []byte("foobar")})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(sess.lastRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
 			Expect(sess.largestRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
 		})
 
 		It("informs the ReceivedPacketHandler", func() {
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
 			now := time.Now().Add(time.Hour)
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 			rph.EXPECT().ReceivedPacket(protocol.PacketNumber(5), now, false)
@@ -597,6 +589,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("doesn't inform the ReceivedPacketHandler about Retry packets", func() {
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
 			now := time.Now().Add(time.Hour)
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 			sess.receivedPacketHandler = rph
@@ -608,15 +601,15 @@ var _ = Describe("Session", func() {
 		})
 
 		It("closes when handling a packet fails", func(done Done) {
-			streamManager.EXPECT().CloseWithError(gomock.Any())
 			testErr := errors.New("unpack error")
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, testErr)
+			streamManager.EXPECT().CloseWithError(gomock.Any())
 			hdr.PacketNumber = 5
 			var runErr error
 			go func() {
 				defer GinkgoRecover()
 				runErr = sess.run()
 			}()
-			sess.unpacker.(*mockUnpacker).unpackErr = testErr
 			sess.handlePacket(&receivedPacket{header: hdr})
 			Eventually(func() error { return runErr }).Should(MatchError(testErr))
 			Expect(sess.Context().Done()).To(BeClosed())
@@ -624,6 +617,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("sets the {last,largest}RcvdPacketNumber, for an out-of-order packet", func() {
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil).Times(2)
 			hdr.PacketNumber = 5
 			err := sess.handlePacketImpl(&receivedPacket{header: hdr})
 			Expect(err).ToNot(HaveOccurred())
@@ -637,6 +631,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("handles duplicate packets", func() {
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil).Times(2)
 			hdr.PacketNumber = 5
 			err := sess.handlePacketImpl(&receivedPacket{header: hdr})
 			Expect(err).ToNot(HaveOccurred())
@@ -646,6 +641,7 @@ var _ = Describe("Session", func() {
 
 		Context("updating the remote address", func() {
 			It("doesn't support connection migration", func() {
+				unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
 				origAddr := sess.conn.(*mockConnection).remoteAddr
 				remoteIP := &net.IPAddr{IP: net.IPv4(192, 168, 0, 100)}
 				Expect(origAddr).ToNot(Equal(remoteIP))
@@ -751,7 +747,9 @@ var _ = Describe("Session", func() {
 		})
 
 		It("doesn't retransmit an Initial packet if it already received a response", func() {
-			sess.unpacker = &mockUnpacker{}
+			unpacker := NewMockUnpacker(mockCtrl)
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
+			sess.unpacker = unpacker
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
 			sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
@@ -1275,7 +1273,9 @@ var _ = Describe("Session", func() {
 		}
 
 		BeforeEach(func() {
-			sess.unpacker = &mockUnpacker{unpackErr: qerr.Error(qerr.DecryptionFailure, "")}
+			unpacker := NewMockUnpacker(mockCtrl)
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, qerr.Error(qerr.DecryptionFailure, "")).AnyTimes()
+			sess.unpacker = unpacker
 			sess.cryptoStreamHandler = &mockCryptoSetup{}
 			streamManager.EXPECT().CloseWithError(gomock.Any()).MaxTimes(1)
 		})
@@ -1749,10 +1749,12 @@ var _ = Describe("Client Session", func() {
 
 		BeforeEach(func() {
 			hdr = &wire.Header{PacketNumberLen: protocol.PacketNumberLen6}
-			sess.unpacker = &mockUnpacker{}
 		})
 
 		It("passes the diversification nonce to the crypto setup", func() {
+			unpacker := NewMockUnpacker(mockCtrl)
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
+			sess.unpacker = unpacker
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
