@@ -18,7 +18,7 @@ var _ = Describe("RST_STREAM frame", func() {
 				data = append(data, []byte{0x13, 0x37}...)        // error code
 				data = append(data, encodeVarInt(0x987654321)...) // byte offset
 				b := bytes.NewReader(data)
-				frame, err := ParseRstStreamFrame(b, versionIETFFrames)
+				frame, err := parseRstStreamFrame(b, versionIETFFrames)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.StreamID).To(Equal(protocol.StreamID(0xdeadbeef)))
 				Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0x987654321)))
@@ -30,10 +30,10 @@ var _ = Describe("RST_STREAM frame", func() {
 				data = append(data, encodeVarInt(0xdeadbeef)...)  // stream ID
 				data = append(data, []byte{0x13, 0x37}...)        // error code
 				data = append(data, encodeVarInt(0x987654321)...) // byte offset
-				_, err := ParseRstStreamFrame(bytes.NewReader(data), versionIETFFrames)
+				_, err := parseRstStreamFrame(bytes.NewReader(data), versionIETFFrames)
 				Expect(err).NotTo(HaveOccurred())
 				for i := range data {
-					_, err := ParseRstStreamFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
+					_, err := parseRstStreamFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
 					Expect(err).To(HaveOccurred())
 				}
 			})
@@ -46,7 +46,7 @@ var _ = Describe("RST_STREAM frame", func() {
 					0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, // byte offset
 					0x0, 0x0, 0xca, 0xfe, // error code
 				})
-				frame, err := ParseRstStreamFrame(b, versionBigEndian)
+				frame, err := parseRstStreamFrame(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.StreamID).To(Equal(protocol.StreamID(0xdeadbeef)))
 				Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0x8877665544332211)))
@@ -59,10 +59,10 @@ var _ = Describe("RST_STREAM frame", func() {
 					0x33, 0x22, 0x11, 0xad, 0xfb, 0xca, 0xde, 0x34, // byte offset
 					0x12, 0x37, 0x13, // error code
 				}
-				_, err := ParseRstStreamFrame(bytes.NewReader(data), versionBigEndian)
+				_, err := parseRstStreamFrame(bytes.NewReader(data), versionBigEndian)
 				Expect(err).NotTo(HaveOccurred())
 				for i := range data {
-					_, err := ParseRstStreamFrame(bytes.NewReader(data[0:i]), versionBigEndian)
+					_, err := parseRstStreamFrame(bytes.NewReader(data[0:i]), versionBigEndian)
 					Expect(err).To(HaveOccurred())
 				}
 			})

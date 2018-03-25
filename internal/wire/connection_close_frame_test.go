@@ -20,7 +20,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 					'N', 'o', ' ', 'r', 'e', 'c', 'e', 'n', 't', ' ', 'n', 'e', 't', 'w', 'o', 'r', 'k', ' ', 'a', 'c', 't', 'i', 'v', 'i', 't', 'y', '.',
 				}...)
 				b := bytes.NewReader(data)
-				frame, err := ParseConnectionCloseFrame(b, versionIETFFrames)
+				frame, err := parseConnectionCloseFrame(b, versionIETFFrames)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.ErrorCode).To(Equal(qerr.ErrorCode(0x19)))
 				Expect(frame.ReasonPhrase).To(Equal("No recent network activity."))
@@ -31,7 +31,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 				data := []byte{0x2, 0xca, 0xfe}
 				data = append(data, encodeVarInt(0xffff)...) // reason phrase length
 				b := bytes.NewReader(data)
-				_, err := ParseConnectionCloseFrame(b, versionIETFFrames)
+				_, err := parseConnectionCloseFrame(b, versionIETFFrames)
 				Expect(err).To(MatchError(io.EOF))
 			})
 
@@ -41,10 +41,10 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 				data = append(data, []byte{
 					'N', 'o', ' ', 'r', 'e', 'c', 'e', 'n', 't', ' ', 'n', 'e', 't', 'w', 'o', 'r', 'k', ' ', 'a', 'c', 't', 'i', 'v', 'i', 't', 'y', '.',
 				}...)
-				_, err := ParseConnectionCloseFrame(bytes.NewReader(data), versionIETFFrames)
+				_, err := parseConnectionCloseFrame(bytes.NewReader(data), versionIETFFrames)
 				Expect(err).NotTo(HaveOccurred())
 				for i := range data {
-					_, err := ParseConnectionCloseFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
+					_, err := parseConnectionCloseFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
 					Expect(err).To(HaveOccurred())
 				}
 			})
@@ -53,7 +53,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 				data := []byte{0x2, 0xca, 0xfe}
 				data = append(data, encodeVarInt(0)...)
 				b := bytes.NewReader(data)
-				frame, err := ParseConnectionCloseFrame(b, versionIETFFrames)
+				frame, err := parseConnectionCloseFrame(b, versionIETFFrames)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.ReasonPhrase).To(BeEmpty())
 				Expect(b.Len()).To(BeZero())
@@ -67,7 +67,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 					0x0, 0x1b, // reason phrase length
 					'N', 'o', ' ', 'r', 'e', 'c', 'e', 'n', 't', ' ', 'n', 'e', 't', 'w', 'o', 'r', 'k', ' ', 'a', 'c', 't', 'i', 'v', 'i', 't', 'y', '.',
 				})
-				frame, err := ParseConnectionCloseFrame(b, versionBigEndian)
+				frame, err := parseConnectionCloseFrame(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.ErrorCode).To(Equal(qerr.ErrorCode(0x19)))
 				Expect(frame.ReasonPhrase).To(Equal("No recent network activity."))
@@ -79,7 +79,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 					0xad, 0xfb, 0xca, 0xde, // error code
 					0xff, 0x0, // reason phrase length
 				})
-				_, err := ParseConnectionCloseFrame(b, versionBigEndian)
+				_, err := parseConnectionCloseFrame(b, versionBigEndian)
 				Expect(err).To(MatchError(io.EOF))
 			})
 
@@ -89,10 +89,10 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 					0x0, 0x1b, // reason phrase length
 					'N', 'o', ' ', 'r', 'e', 'c', 'e', 'n', 't', ' ', 'n', 'e', 't', 'w', 'o', 'r', 'k', ' ', 'a', 'c', 't', 'i', 'v', 'i', 't', 'y', '.',
 				}
-				_, err := ParseConnectionCloseFrame(bytes.NewReader(data), versionBigEndian)
+				_, err := parseConnectionCloseFrame(bytes.NewReader(data), versionBigEndian)
 				Expect(err).NotTo(HaveOccurred())
 				for i := range data {
-					_, err := ParseConnectionCloseFrame(bytes.NewReader(data[0:i]), versionBigEndian)
+					_, err := parseConnectionCloseFrame(bytes.NewReader(data[0:i]), versionBigEndian)
 					Expect(err).To(HaveOccurred())
 				}
 			})
@@ -102,7 +102,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 					0xad, 0xfb, 0xca, 0xde, // error code
 					0x0, 0x0, // reason phrase length
 				})
-				frame, err := ParseConnectionCloseFrame(b, versionBigEndian)
+				frame, err := parseConnectionCloseFrame(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.ReasonPhrase).To(BeEmpty())
 				Expect(b.Len()).To(BeZero())

@@ -19,8 +19,8 @@ type StreamFrame struct {
 	Data           []byte
 }
 
-// ParseStreamFrame reads a STREAM frame
-func ParseStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*StreamFrame, error) {
+// parseStreamFrame reads a STREAM frame
+func parseStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*StreamFrame, error) {
 	if !version.UsesIETFFrameFormat() {
 		return parseLegacyStreamFrame(r, version)
 	}
