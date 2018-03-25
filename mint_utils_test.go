@@ -125,7 +125,7 @@ var _ = Describe("Packing and unpacking Initial packets", func() {
 			}
 			p := packPacket([]wire.Frame{f})
 			_, err := unpackInitialPacket(aead, hdr, p, ver)
-			Expect(err).To(MatchError("UnencryptedStreamData: received unencrypted stream data on stream 42"))
+			Expect(err).To(MatchError("Received STREAM_FRAME for wrong stream (Stream ID 42)"))
 		})
 
 		It("rejects a packet that has a STREAM_FRAME with a non-zero offset", func() {

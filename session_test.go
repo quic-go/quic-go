@@ -203,7 +203,7 @@ var _ = Describe("Session", func() {
 				str := NewMockReceiveStreamI(mockCtrl)
 				str.EXPECT().handleStreamFrame(f)
 				streamManager.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(5)).Return(str, nil)
-				err := sess.handleStreamFrame(f)
+				err := sess.handleStreamFrame(f, protocol.EncryptionForwardSecure)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
@@ -216,7 +216,7 @@ var _ = Describe("Session", func() {
 				str := NewMockReceiveStreamI(mockCtrl)
 				str.EXPECT().handleStreamFrame(f).Return(testErr)
 				streamManager.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(5)).Return(str, nil)
-				err := sess.handleStreamFrame(f)
+				err := sess.handleStreamFrame(f, protocol.EncryptionForwardSecure)
 				Expect(err).To(MatchError(testErr))
 			})
 
@@ -225,7 +225,7 @@ var _ = Describe("Session", func() {
 				err := sess.handleStreamFrame(&wire.StreamFrame{
 					StreamID: 5,
 					Data:     []byte("foobar"),
-				})
+				}, protocol.EncryptionForwardSecure)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
@@ -234,8 +234,33 @@ var _ = Describe("Session", func() {
 					StreamID: sess.version.CryptoStreamID(),
 					Offset:   0x1337,
 					FinBit:   true,
-				})
+				}, protocol.EncryptionForwardSecure)
 				Expect(err).To(MatchError("Received STREAM frame with FIN bit for the crypto stream"))
+			})
+
+			It("accepts unencrypted STREAM frames on the crypto stream", func() {
+				f := &wire.StreamFrame{
+					StreamID: versionGQUICFrames.CryptoStreamID(),
+					Data:     []byte("foobar"),
+				}
+				err := sess.handleStreamFrame(f, protocol.EncryptionUnencrypted)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("unpacks encrypted STREAM frames on the crypto stream", func() {
+				err := sess.handleStreamFrame(&wire.StreamFrame{
+					StreamID: versionGQUICFrames.CryptoStreamID(),
+					Data:     []byte("foobar"),
+				}, protocol.EncryptionSecure)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("does not unpack unencrypted STREAM frames on higher streams", func() {
+				err := sess.handleStreamFrame(&wire.StreamFrame{
+					StreamID: 3,
+					Data:     []byte("foobar"),
+				}, protocol.EncryptionUnencrypted)
+				Expect(err).To(MatchError(qerr.Error(qerr.UnencryptedStreamData, "received unencrypted stream data on stream 3")))
 			})
 		})
 

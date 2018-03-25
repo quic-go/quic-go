@@ -2,7 +2,6 @@ package quic
 
 import (
 	"bytes"
-	"fmt"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -48,11 +47,6 @@ func (u *packetUnpacker) Unpack(headerBinary []byte, hdr *wire.Header, data []by
 		}
 		if frame == nil {
 			break
-		}
-		if sf, ok := frame.(*wire.StreamFrame); ok {
-			if sf.StreamID != u.version.CryptoStreamID() && encryptionLevel <= protocol.EncryptionUnencrypted {
-				return nil, qerr.Error(qerr.UnencryptedStreamData, fmt.Sprintf("received unencrypted stream data on stream %d", sf.StreamID))
-			}
 		}
 		fs = append(fs, frame)
 	}

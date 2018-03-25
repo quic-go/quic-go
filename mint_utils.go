@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/bifurcation/mint"
@@ -122,6 +123,9 @@ func unpackInitialPacket(aead crypto.AEAD, hdr *wire.Header, data []byte, versio
 	}
 	if frame == nil {
 		return nil, errors.New("Packet doesn't contain a STREAM_FRAME")
+	}
+	if frame.StreamID != version.CryptoStreamID() {
+		return nil, fmt.Errorf("Received STREAM_FRAME for wrong stream (Stream ID %d)", frame.StreamID)
 	}
 	// We don't need a check for the stream ID here.
 	// The packetUnpacker checks that there's no unencrypted stream data except for the crypto stream.
