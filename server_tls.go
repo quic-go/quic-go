@@ -21,9 +21,12 @@ type nullAEAD struct {
 
 var _ quicAEAD = &nullAEAD{}
 
-func (n *nullAEAD) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error) {
-	data, err := n.aead.Open(dst, src, packetNumber, associatedData)
-	return data, protocol.EncryptionUnencrypted, err
+func (n *nullAEAD) OpenHandshake(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {
+	return n.aead.Open(dst, src, packetNumber, associatedData)
+}
+
+func (n *nullAEAD) Open1RTT(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {
+	return nil, errors.New("no 1-RTT keys")
 }
 
 type tlsSession struct {

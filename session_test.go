@@ -653,23 +653,6 @@ var _ = Describe("Session", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(sess.conn.(*mockConnection).remoteAddr).To(Equal(origAddr))
 			})
-
-			It("doesn't change the remote address if authenticating the packet fails", func() {
-				remoteIP := &net.IPAddr{IP: net.IPv4(192, 168, 0, 100)}
-				attackerIP := &net.IPAddr{IP: net.IPv4(192, 168, 0, 102)}
-				sess.conn.(*mockConnection).remoteAddr = remoteIP
-				// use the real packetUnpacker here, to make sure this test fails if the error code for failed decryption changes
-				sess.unpacker = &packetUnpacker{}
-				sess.unpacker.(*packetUnpacker).aead = &mockAEAD{}
-				p := receivedPacket{
-					remoteAddr: attackerIP,
-					header:     &wire.Header{PacketNumber: 1337},
-				}
-				err := sess.handlePacketImpl(&p)
-				quicErr := err.(*qerr.QuicError)
-				Expect(quicErr.ErrorCode).To(Equal(qerr.DecryptionFailure))
-				Expect(sess.conn.(*mockConnection).remoteAddr).To(Equal(remoteIP))
-			})
 		})
 	})
 

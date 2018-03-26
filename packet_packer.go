@@ -33,6 +33,12 @@ func (p *packedPacket) ToAckHandlerPacket() *ackhandler.Packet {
 	}
 }
 
+type sealingManager interface {
+	GetSealer() (protocol.EncryptionLevel, handshake.Sealer)
+	GetSealerForCryptoStream() (protocol.EncryptionLevel, handshake.Sealer)
+	GetSealerWithEncryptionLevel(protocol.EncryptionLevel) (handshake.Sealer, error)
+}
+
 type streamFrameSource interface {
 	HasCryptoStreamData() bool
 	PopCryptoStreamFrame(protocol.ByteCount) *wire.StreamFrame
@@ -43,8 +49,8 @@ type packetPacker struct {
 	connectionID protocol.ConnectionID
 	perspective  protocol.Perspective
 	version      protocol.VersionNumber
-	cryptoSetup  handshake.CryptoSetup
 	divNonce     []byte
+	cryptoSetup  sealingManager
 
 	packetNumberGenerator *packetNumberGenerator
 	getPacketNumberLen    func(protocol.PacketNumber) protocol.PacketNumberLen
@@ -66,7 +72,7 @@ func newPacketPacker(connectionID protocol.ConnectionID,
 	getPacketNumberLen func(protocol.PacketNumber) protocol.PacketNumberLen,
 	remoteAddr net.Addr, // only used for determining the max packet size
 	divNonce []byte,
-	cryptoSetup handshake.CryptoSetup,
+	cryptoSetup sealingManager,
 	streamFramer streamFrameSource,
 	perspective protocol.Perspective,
 	version protocol.VersionNumber,

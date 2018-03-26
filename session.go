@@ -189,7 +189,7 @@ func newSession(
 		return nil, err
 	}
 	s.cryptoStreamHandler = cs
-	s.unpacker = &packetUnpacker{aead: cs, version: s.version}
+	s.unpacker = newPacketUnpackerGQUIC(cs, s.version)
 	s.streamsMap = newStreamsMapLegacy(s.newStream, s.config.MaxIncomingStreams, s.perspective)
 	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
 	s.packer = newPacketPacker(s.connectionID,
@@ -252,7 +252,7 @@ var newClientSession = func(
 	}
 	s.cryptoStreamHandler = cs
 	s.divNonceChan = divNonceChan
-	s.unpacker = &packetUnpacker{aead: cs, version: s.version}
+	s.unpacker = newPacketUnpackerGQUIC(cs, s.version)
 	s.streamsMap = newStreamsMapLegacy(s.newStream, s.config.MaxIncomingStreams, s.perspective)
 	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
 	s.packer = newPacketPacker(s.connectionID,
@@ -314,7 +314,7 @@ func newTLSServerSession(
 	}
 	s.peerParams = peerParams
 	s.processTransportParameters(peerParams)
-	s.unpacker = &packetUnpacker{aead: cs, version: s.version}
+	s.unpacker = newPacketUnpacker(cs, s.version)
 	return s, nil
 }
 
@@ -353,7 +353,7 @@ var newTLSClientSession = func(
 		return nil, err
 	}
 	s.cryptoStreamHandler = cs
-	s.unpacker = &packetUnpacker{aead: cs, version: s.version}
+	s.unpacker = newPacketUnpacker(cs, s.version)
 	s.streamsMap = newStreamsMap(s, s.newFlowController, s.config.MaxIncomingStreams, s.config.MaxIncomingUniStreams, s.perspective, s.version)
 	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
 	s.packer = newPacketPacker(s.connectionID,
