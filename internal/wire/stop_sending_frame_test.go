@@ -17,7 +17,7 @@ var _ = Describe("STOP_SENDING frame", func() {
 			data = append(data, encodeVarInt(0xdecafbad)...) // stream ID
 			data = append(data, []byte{0x13, 0x37}...)       // error code
 			b := bytes.NewReader(data)
-			frame, err := ParseStopSendingFrame(b, versionIETFFrames)
+			frame, err := parseStopSendingFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0xdecafbad)))
 			Expect(frame.ErrorCode).To(Equal(protocol.ApplicationErrorCode(0x1337)))
@@ -28,10 +28,10 @@ var _ = Describe("STOP_SENDING frame", func() {
 			data := []byte{0x0c}
 			data = append(data, encodeVarInt(0xdecafbad)...) // stream ID
 			data = append(data, []byte{0x13, 0x37}...)       // error code
-			_, err := ParseStopSendingFrame(bytes.NewReader(data), versionIETFFrames)
+			_, err := parseStopSendingFrame(bytes.NewReader(data), versionIETFFrames)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := ParseStopSendingFrame(bytes.NewReader(data[:i]), versionIETFFrames)
+				_, err := parseStopSendingFrame(bytes.NewReader(data[:i]), versionIETFFrames)
 				Expect(err).To(HaveOccurred())
 			}
 		})

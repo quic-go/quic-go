@@ -16,7 +16,7 @@ var _ = Describe("MAX_STREAM_DATA frame", func() {
 			data = append(data, encodeVarInt(0xdeadbeef)...) // Stream ID
 			data = append(data, encodeVarInt(0x12345678)...) // Offset
 			b := bytes.NewReader(data)
-			frame, err := ParseMaxStreamDataFrame(b, versionIETFFrames)
+			frame, err := parseMaxStreamDataFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0xdeadbeef)))
 			Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0x12345678)))
@@ -27,10 +27,10 @@ var _ = Describe("MAX_STREAM_DATA frame", func() {
 			data := []byte{0x5}
 			data = append(data, encodeVarInt(0xdeadbeef)...) // Stream ID
 			data = append(data, encodeVarInt(0x12345678)...) // Offset
-			_, err := ParseMaxStreamDataFrame(bytes.NewReader(data), versionIETFFrames)
+			_, err := parseMaxStreamDataFrame(bytes.NewReader(data), versionIETFFrames)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := ParseMaxStreamDataFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
+				_, err := parseMaxStreamDataFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
 				Expect(err).To(HaveOccurred())
 			}
 		})

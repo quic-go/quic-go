@@ -20,7 +20,7 @@ var _ = Describe("STREAM frame (for gQUIC)", func() {
 				'f', 'o', 'o', 'b', 'a', 'r',
 				'f', 'o', 'o', // additional bytes
 			})
-			frame, err := ParseStreamFrame(b, versionBigEndian)
+			frame, err := parseStreamFrame(b, versionBigEndian)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.FinBit).To(BeFalse())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(1)))
@@ -37,7 +37,7 @@ var _ = Describe("STREAM frame (for gQUIC)", func() {
 				0x0, 0x6, // data length
 				'f', 'o', 'o', 'b', 'a', 'r',
 			})
-			frame, err := ParseStreamFrame(b, versionBigEndian)
+			frame, err := parseStreamFrame(b, versionBigEndian)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.FinBit).To(BeFalse())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(1)))
@@ -54,10 +54,10 @@ var _ = Describe("STREAM frame (for gQUIC)", func() {
 				0x0, 0x6, // data length,
 				'f', 'o', 'o', 'b', 'a', 'r',
 			}
-			_, err := ParseStreamFrame(bytes.NewReader(data), versionBigEndian)
+			_, err := parseStreamFrame(bytes.NewReader(data), versionBigEndian)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := ParseStreamFrame(bytes.NewReader(data[0:i]), versionBigEndian)
+				_, err := parseStreamFrame(bytes.NewReader(data[0:i]), versionBigEndian)
 				Expect(err).To(HaveOccurred())
 			}
 		})
@@ -67,7 +67,7 @@ var _ = Describe("STREAM frame (for gQUIC)", func() {
 				0x1, // stream id
 				'f', 'o', 'o', 'b', 'a', 'r',
 			})
-			frame, err := ParseStreamFrame(b, versionBigEndian)
+			frame, err := parseStreamFrame(b, versionBigEndian)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.FinBit).To(BeFalse())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(1)))
@@ -84,7 +84,7 @@ var _ = Describe("STREAM frame (for gQUIC)", func() {
 				0, 0, // data length
 				'f', 'o', 'o', // additional bytes
 			})
-			frame, err := ParseStreamFrame(b, versionBigEndian)
+			frame, err := parseStreamFrame(b, versionBigEndian)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.FinBit).To(BeTrue())
 			Expect(frame.DataLenPresent).To(BeTrue())
@@ -97,7 +97,7 @@ var _ = Describe("STREAM frame (for gQUIC)", func() {
 				0x1, // stream id
 				'f', 'o', 'o', 'b', 'a', 'r',
 			})
-			frame, err := ParseStreamFrame(b, versionBigEndian)
+			frame, err := parseStreamFrame(b, versionBigEndian)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.FinBit).To(BeTrue())
 			Expect(frame.DataLenPresent).To(BeFalse())
@@ -110,13 +110,13 @@ var _ = Describe("STREAM frame (for gQUIC)", func() {
 				0x1,  // stream id
 				0, 0, // data length
 			})
-			_, err := ParseStreamFrame(b, versionBigEndian)
+			_, err := parseStreamFrame(b, versionBigEndian)
 			Expect(err).To(MatchError(qerr.EmptyStreamFrameNoFin))
 		})
 
 		It("rejects frames to too large dataLen", func() {
 			b := bytes.NewReader([]byte{0xa0, 0x1, 0xff, 0xff})
-			_, err := ParseStreamFrame(b, versionBigEndian)
+			_, err := parseStreamFrame(b, versionBigEndian)
 			Expect(err).To(MatchError(io.EOF))
 		})
 
@@ -130,7 +130,7 @@ var _ = Describe("STREAM frame (for gQUIC)", func() {
 			b := &bytes.Buffer{}
 			err := f.Write(b, versionBigEndian)
 			Expect(err).ToNot(HaveOccurred())
-			_, err = ParseStreamFrame(bytes.NewReader(b.Bytes()), versionBigEndian)
+			_, err = parseStreamFrame(bytes.NewReader(b.Bytes()), versionBigEndian)
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidStreamData, "data overflows maximum offset")))
 		})
 	})
@@ -211,7 +211,7 @@ var _ = Describe("STREAM frame (for gQUIC)", func() {
 				err := f.Write(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(b.Bytes()[0] & 0x20).To(Equal(uint8(0x20)))
-				frame, err := ParseStreamFrame(bytes.NewReader(b.Bytes()), versionBigEndian)
+				frame, err := parseStreamFrame(bytes.NewReader(b.Bytes()), versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.DataLenPresent).To(BeTrue())
 				Expect(frame.DataLen()).To(Equal(protocol.ByteCount(dataLen)))
