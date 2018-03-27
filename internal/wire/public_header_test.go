@@ -242,47 +242,40 @@ var _ = Describe("Public Header", func() {
 				VersionFlag: true,
 				ResetFlag:   true,
 			}
-			err := hdr.writePublicHeader(b, protocol.PerspectiveServer, protocol.VersionWhatever)
+			err := hdr.writePublicHeader(b, protocol.PerspectiveClient, protocol.VersionWhatever)
 			Expect(err).To(MatchError(errResetAndVersionFlagSet))
 		})
 
-		Context("Version Negotiation packets", func() {
-			It("sets the Version Flag for packets sent as a server", func() {
-				b := &bytes.Buffer{}
-				hdr := Header{
-					VersionFlag:     true,
-					ConnectionID:    0x4cfa9f9b668619f6,
-					PacketNumber:    2,
-					PacketNumberLen: protocol.PacketNumberLen6,
-				}
-				err := hdr.writePublicHeader(b, protocol.PerspectiveServer, protocol.VersionWhatever)
-				Expect(err).ToNot(HaveOccurred())
-				// must be the first assertion
-				Expect(b.Len()).To(Equal(1 + 8)) // 1 FlagByte + 8 ConnectionID
-				firstByte, _ := b.ReadByte()
-				Expect(firstByte & 0x01).To(Equal(uint8(1)))
-				Expect(firstByte & 0x30).To(BeZero()) // no packet number present
-			})
+		It("doesn't write Version Negotiation Packets", func() {
+			b := &bytes.Buffer{}
+			hdr := Header{
+				VersionFlag:     true,
+				ConnectionID:    0x4cfa9f9b668619f6,
+				PacketNumber:    2,
+				PacketNumberLen: protocol.PacketNumberLen6,
+			}
+			err := hdr.writePublicHeader(b, protocol.PerspectiveServer, protocol.VersionWhatever)
+			Expect(err).To(MatchError("PublicHeader: Writing of Version Negotiation Packets not supported"))
+		})
 
-			It("sets the Version Flag for packets sent as a client, and adds a packet number", func() {
-				b := &bytes.Buffer{}
-				hdr := Header{
-					VersionFlag:     true,
-					Version:         protocol.Version39,
-					ConnectionID:    0x4cfa9f9b668619f6,
-					PacketNumber:    0x42,
-					PacketNumberLen: protocol.PacketNumberLen1,
-				}
-				err := hdr.writePublicHeader(b, protocol.PerspectiveClient, protocol.VersionWhatever)
-				Expect(err).ToNot(HaveOccurred())
-				// must be the first assertion
-				Expect(b.Len()).To(Equal(1 + 8 + 4 + 1)) // 1 FlagByte + 8 ConnectionID + 4 version number + 1 PacketNumber
-				firstByte, _ := b.ReadByte()
-				Expect(firstByte & 0x01).To(Equal(uint8(1)))
-				Expect(firstByte & 0x30).To(Equal(uint8(0x0)))
-				Expect(string(b.Bytes()[8:12])).To(Equal("Q039"))
-				Expect(b.Bytes()[12:13]).To(Equal([]byte{0x42}))
-			})
+		It("writes packets with Version Flag, as a client", func() {
+			b := &bytes.Buffer{}
+			hdr := Header{
+				VersionFlag:     true,
+				Version:         protocol.Version39,
+				ConnectionID:    0x4cfa9f9b668619f6,
+				PacketNumber:    0x42,
+				PacketNumberLen: protocol.PacketNumberLen1,
+			}
+			err := hdr.writePublicHeader(b, protocol.PerspectiveClient, protocol.VersionWhatever)
+			Expect(err).ToNot(HaveOccurred())
+			// must be the first assertion
+			Expect(b.Len()).To(Equal(1 + 8 + 4 + 1)) // 1 FlagByte + 8 ConnectionID + 4 version number + 1 PacketNumber
+			firstByte, _ := b.ReadByte()
+			Expect(firstByte & 0x01).To(Equal(uint8(1)))
+			Expect(firstByte & 0x30).To(Equal(uint8(0x0)))
+			Expect(string(b.Bytes()[8:12])).To(Equal("Q039"))
+			Expect(b.Bytes()[12:13]).To(Equal([]byte{0x42}))
 		})
 
 		Context("PublicReset packets", func() {
