@@ -372,16 +372,19 @@ var _ = Describe("IETF draft Header", func() {
 	})
 
 	Context("logging", func() {
-		var buf bytes.Buffer
+		var (
+			buf    *bytes.Buffer
+			logger utils.Logger
+		)
 
 		BeforeEach(func() {
-			buf.Reset()
-			utils.SetLogLevel(utils.LogLevelDebug)
-			log.SetOutput(&buf)
+			buf = &bytes.Buffer{}
+			logger = utils.DefaultLogger
+			logger.SetLogLevel(utils.LogLevelDebug)
+			log.SetOutput(buf)
 		})
 
 		AfterEach(func() {
-			utils.SetLogLevel(utils.LogLevelNothing)
 			log.SetOutput(os.Stdout)
 		})
 
@@ -392,7 +395,7 @@ var _ = Describe("IETF draft Header", func() {
 				PacketNumber: 0x1337,
 				ConnectionID: 0xdeadbeef,
 				Version:      0xfeed,
-			}).logHeader()
+			}).logHeader(logger)
 			Expect(buf.String()).To(ContainSubstring("Long Header{Type: Handshake, ConnectionID: 0xdeadbeef, PacketNumber: 0x1337, Version: 0xfeed}"))
 		})
 
@@ -402,7 +405,7 @@ var _ = Describe("IETF draft Header", func() {
 				PacketNumber:    0x1337,
 				PacketNumberLen: 4,
 				ConnectionID:    0xdeadbeef,
-			}).logHeader()
+			}).logHeader(logger)
 			Expect(buf.String()).To(ContainSubstring("Short Header{ConnectionID: 0xdeadbeef, PacketNumber: 0x1337, PacketNumberLen: 4, KeyPhase: 1}"))
 		})
 
@@ -411,7 +414,7 @@ var _ = Describe("IETF draft Header", func() {
 				PacketNumber:     0x12,
 				PacketNumberLen:  1,
 				OmitConnectionID: true,
-			}).logHeader()
+			}).logHeader(logger)
 			Expect(buf.String()).To(ContainSubstring("Short Header{ConnectionID: (omitted), PacketNumber: 0x12, PacketNumberLen: 1, KeyPhase: 0}"))
 		})
 	})

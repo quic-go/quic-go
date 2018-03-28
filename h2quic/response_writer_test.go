@@ -13,6 +13,7 @@ import (
 
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -72,7 +73,7 @@ var _ = Describe("Response Writer", func() {
 	BeforeEach(func() {
 		headerStream = &mockStream{}
 		dataStream = &mockStream{}
-		w = newResponseWriter(headerStream, &sync.Mutex{}, dataStream, 5)
+		w = newResponseWriter(headerStream, &sync.Mutex{}, dataStream, 5, utils.DefaultLogger)
 	})
 
 	decodeHeaderFields := func() map[string][]string {

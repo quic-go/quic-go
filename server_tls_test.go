@@ -11,6 +11,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/mocks/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qerr"
 
@@ -36,7 +37,7 @@ var _ = Describe("Stateless TLS handling", func() {
 			Versions: []protocol.VersionNumber{protocol.VersionTLS},
 		}
 		var err error
-		server, sessionChan, err = newServerTLS(conn, config, nil, testdata.GetTLSConfig())
+		server, sessionChan, err = newServerTLS(conn, config, nil, testdata.GetTLSConfig(), utils.DefaultLogger)
 		Expect(err).ToNot(HaveOccurred())
 		server.newMintConn = func(bc *handshake.CryptoStreamConn, v protocol.VersionNumber) (handshake.MintTLS, <-chan handshake.TransportParameters, error) {
 			mintReply = bc

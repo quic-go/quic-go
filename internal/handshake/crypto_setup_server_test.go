@@ -171,6 +171,7 @@ var _ = Describe("Server Crypto Setup", func() {
 			nil,
 			paramsChan,
 			handshakeEvent,
+			utils.DefaultLogger,
 		)
 		Expect(err).NotTo(HaveOccurred())
 		cs = csInt.(*cryptoSetupServer)

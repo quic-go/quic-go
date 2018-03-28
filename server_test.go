@@ -79,6 +79,7 @@ func newMockSession(
 	_ *handshake.ServerConfig,
 	_ *tls.Config,
 	_ *Config,
+	_ utils.Logger,
 ) (packetHandler, error) {
 	s := mockSession{
 		connectionID:  connectionID,
@@ -116,6 +117,7 @@ var _ = Describe("Server", func() {
 				config:       config,
 				sessionQueue: make(chan Session, 5),
 				errorChan:    make(chan struct{}),
+				logger:       utils.DefaultLogger,
 			}
 			b := &bytes.Buffer{}
 			utils.BigEndian.WriteUint32(b, uint32(protocol.SupportedVersions[0]))
@@ -179,7 +181,7 @@ var _ = Describe("Server", func() {
 
 		It("accepts new TLS sessions", func() {
 			connID := protocol.ConnectionID(0x12345)
-			sess, err := newMockSession(nil, protocol.VersionTLS, connID, nil, nil, nil)
+			sess, err := newMockSession(nil, protocol.VersionTLS, connID, nil, nil, nil, nil)
 			Expect(err).ToNot(HaveOccurred())
 			err = serv.setupTLS()
 			Expect(err).ToNot(HaveOccurred())
@@ -196,9 +198,9 @@ var _ = Describe("Server", func() {
 
 		It("only accepts one new TLS sessions for one connection ID", func() {
 			connID := protocol.ConnectionID(0x12345)
-			sess1, err := newMockSession(nil, protocol.VersionTLS, connID, nil, nil, nil)
+			sess1, err := newMockSession(nil, protocol.VersionTLS, connID, nil, nil, nil, nil)
 			Expect(err).ToNot(HaveOccurred())
-			sess2, err := newMockSession(nil, protocol.VersionTLS, connID, nil, nil, nil)
+			sess2, err := newMockSession(nil, protocol.VersionTLS, connID, nil, nil, nil, nil)
 			Expect(err).ToNot(HaveOccurred())
 			err = serv.setupTLS()
 			Expect(err).ToNot(HaveOccurred())
@@ -301,7 +303,7 @@ var _ = Describe("Server", func() {
 
 		It("closes sessions and the connection when Close is called", func() {
 			go serv.serve()
-			session, _ := newMockSession(nil, 0, 0, nil, nil, nil)
+			session, _ := newMockSession(nil, 0, 0, nil, nil, nil, nil)
 			serv.sessions[1] = session
 			err := serv.Close()
 			Expect(err).NotTo(HaveOccurred())
@@ -351,7 +353,7 @@ var _ = Describe("Server", func() {
 		}, 0.5)
 
 		It("closes all sessions when encountering a connection error", func() {
-			session, _ := newMockSession(nil, 0, 0, nil, nil, nil)
+			session, _ := newMockSession(nil, 0, 0, nil, nil, nil, nil)
 			serv.sessions[0x12345] = session
 			Expect(serv.sessions[0x12345].(*mockSession).closed).To(BeFalse())
 			testErr := errors.New("connection error")
