@@ -44,7 +44,6 @@ type cryptoSetupClient struct {
 	clientHelloCounter int
 	serverVerified     bool // has the certificate chain and the proof already been verified
 	keyDerivation      QuicCryptoKeyDerivationFunction
-	keyExchange        KeyExchangeFunction
 
 	receivedSecurePacket bool
 	nullAEAD             crypto.AEAD
@@ -90,7 +89,6 @@ func NewCryptoSetupClient(
 		certManager:        crypto.NewCertManager(tlsConfig),
 		params:             params,
 		keyDerivation:      crypto.DeriveQuicCryptoAESKeys,
-		keyExchange:        getEphermalKEX,
 		nullAEAD:           nullAEAD,
 		paramsChan:         paramsChan,
 		handshakeEvent:     handshakeEvent,

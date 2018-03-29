@@ -19,7 +19,7 @@ import (
 type QuicCryptoKeyDerivationFunction func(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte, pers protocol.Perspective) (crypto.AEAD, error)
 
 // KeyExchangeFunction is used to make a new KEX
-type KeyExchangeFunction func() crypto.KeyExchange
+type KeyExchangeFunction func() (crypto.KeyExchange, error)
 
 // The CryptoSetupServer handles all things crypto for the Session
 type cryptoSetupServer struct {
@@ -405,7 +405,10 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 	var fsNonce bytes.Buffer
 	fsNonce.Write(clientNonce)
 	fsNonce.Write(serverNonce)
-	ephermalKex := h.keyExchange()
+	ephermalKex, err := h.keyExchange()
+	if err != nil {
+		return nil, err
+	}
 	ephermalSharedSecret, err := ephermalKex.CalculateSharedKey(cryptoData[TagPUBS])
 	if err != nil {
 		return nil, err

@@ -135,7 +135,6 @@ var _ = Describe("Client Crypto Setup", func() {
 		cs = csInt.(*cryptoSetupClient)
 		cs.certManager = certManager
 		cs.keyDerivation = keyDerivation
-		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
 		cs.nullAEAD = mockcrypto.NewMockAEAD(mockCtrl)
 		cs.cryptoStream = stream
 	})
