@@ -676,6 +676,7 @@ var _ = Describe("Session", func() {
 				Expect(p.Frames).To(Equal([]wire.Frame{
 					&wire.MaxDataFrame{ByteOffset: 0x1337},
 				}))
+				Expect(p.SendTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
 			})
 			sess.sentPacketHandler = sph
 			sent, err := sess.sendPacket()
@@ -764,10 +765,12 @@ var _ = Describe("Session", func() {
 					Expect(packets).To(HaveLen(1))
 					Expect(len(packets[0].Frames)).To(BeNumerically(">", 0))
 					Expect(packets[0].Frames[0]).To(BeAssignableToTypeOf(&wire.StopWaitingFrame{}))
+					Expect(packets[0].SendTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
 				}),
 				sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
 					Expect(p.Frames).To(HaveLen(1))
 					Expect(p.Frames[0]).To(BeAssignableToTypeOf(&wire.MaxDataFrame{}))
+					Expect(p.SendTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
 				}),
 			)
 			sess.sentPacketHandler = sph
@@ -935,6 +938,7 @@ var _ = Describe("Session", func() {
 				Expect(p.Frames).To(HaveLen(2))
 				Expect(p.Frames[0]).To(BeAssignableToTypeOf(&wire.AckFrame{}))
 				Expect(p.Frames[1]).To(Equal(swf))
+				Expect(p.SendTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
 			})
 			sess.sentPacketHandler = sph
 			sess.packer.packetNumberGenerator.next = 0x1338
@@ -965,6 +969,7 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
 				Expect(p.Frames).To(HaveLen(1))
 				Expect(p.Frames[0]).To(BeAssignableToTypeOf(&wire.AckFrame{}))
+				Expect(p.SendTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
 			})
 			sess.sentPacketHandler = sph
 			sess.packer.packetNumberGenerator.next = 0x1338
@@ -1010,6 +1015,7 @@ var _ = Describe("Session", func() {
 					p := packets[0]
 					Expect(p.EncryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
 					Expect(p.Frames).To(Equal([]wire.Frame{swf, sf}))
+					Expect(p.SendTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
 				})
 				sent, err := sess.maybeSendRetransmission()
 				Expect(err).NotTo(HaveOccurred())
@@ -1031,6 +1037,7 @@ var _ = Describe("Session", func() {
 					p := packets[0]
 					Expect(p.EncryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
 					Expect(p.Frames).To(Equal([]wire.Frame{sf}))
+					Expect(p.SendTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
 				})
 				sent, err := sess.maybeSendRetransmission()
 				Expect(err).NotTo(HaveOccurred())

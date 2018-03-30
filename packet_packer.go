@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
@@ -28,6 +29,7 @@ func (p *packedPacket) ToAckHandlerPacket() *ackhandler.Packet {
 		Frames:          p.frames,
 		Length:          protocol.ByteCount(len(p.raw)),
 		EncryptionLevel: p.encryptionLevel,
+		SendTime:        time.Now(),
 	}
 }
 
