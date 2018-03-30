@@ -42,6 +42,7 @@ type sentPacketHandler struct {
 	// example: we send an ACK for packets 90-100 with packet number 20
 	// once we receive an ACK from the peer for packet 20, the lowestPacketNotConfirmedAcked is 101
 	lowestPacketNotConfirmedAcked protocol.PacketNumber
+	largestSentBeforeRTO          protocol.PacketNumber
 
 	packetHistory      *sentPacketHistory
 	stopWaitingManager stopWaitingManager
@@ -316,6 +317,8 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time) error {
 			if err := h.queuePacketForRetransmission(p); err != nil {
 				return err
 			}
+		}
+		if p.includedInBytesInFlight {
 			h.congestion.OnPacketLost(p.PacketNumber, p.Length, h.bytesInFlight)
 		}
 		h.packetHistory.Remove(p.PacketNumber)
@@ -357,9 +360,6 @@ func (h *sentPacketHandler) onPacketAcked(p *Packet) error {
 	if packet := h.packetHistory.GetPacket(p.PacketNumber); packet == nil {
 		return nil
 	}
-	h.rtoCount = 0
-	h.handshakeCount = 0
-	// TODO(#497): h.tlpCount = 0
 
 	// only report the acking of this packet to the congestion controller if:
 	// * it is a retransmittable packet
@@ -381,16 +381,20 @@ func (h *sentPacketHandler) onPacketAcked(p *Packet) error {
 			}
 		}
 	}
+	// this also applies to packets that have been retransmitted as probe packets
 	if p.includedInBytesInFlight {
 		h.bytesInFlight -= p.Length
-	}
-	// TODO: this will need to change once we implement sending of probe packets
-	if p.canBeRetransmitted {
 		h.congestion.OnPacketAcked(p.PacketNumber, p.Length, h.bytesInFlight)
+	}
+	if h.rtoCount > 0 {
+		h.verifyRTO(p.PacketNumber)
 	}
 	if err := h.stopRetransmissionsFor(p); err != nil {
 		return err
 	}
+	h.rtoCount = 0
+	h.handshakeCount = 0
+	// TODO(#497): h.tlpCount = 0
 	return h.packetHistory.Remove(p.PacketNumber)
 }
 
@@ -406,6 +410,18 @@ func (h *sentPacketHandler) stopRetransmissionsFor(p *Packet) error {
 		h.stopRetransmissionsFor(packet)
 	}
 	return nil
+}
+
+func (h *sentPacketHandler) verifyRTO(pn protocol.PacketNumber) {
+	if pn <= h.largestSentBeforeRTO {
+		h.logger.Debugf("Spurious RTO detected. Received an ACK for %#x (largest sent before RTO: %#x)", pn, h.largestSentBeforeRTO)
+		// Replace SRTT with latest_rtt and increase the variance to prevent
+		// a spurious RTO from happening again.
+		h.rttStats.ExpireSmoothedMetrics()
+		return
+	}
+	h.logger.Debugf("RTO verified. Received an ACK for %#x (largest sent before RTO: %#x", pn, h.largestSentBeforeRTO)
+	h.congestion.OnRetransmissionTimeout(true)
 }
 
 func (h *sentPacketHandler) DequeuePacketForRetransmission() *Packet {
@@ -469,18 +485,16 @@ func (h *sentPacketHandler) ShouldSendNumPackets() int {
 
 // retransmit the oldest two packets
 func (h *sentPacketHandler) queueRTOs() error {
+	h.largestSentBeforeRTO = h.lastSentPacketNumber
 	// Queue the first two outstanding packets for retransmission.
 	// This does NOT declare this packets as lost:
 	// They are still tracked in the packet history and count towards the bytes in flight.
-	// TODO: don't report them as lost to the congestion controller
 	for i := 0; i < 2; i++ {
 		if p := h.packetHistory.FirstOutstanding(); p != nil {
 			h.logger.Debugf("\tQueueing packet %#x for retransmission (RTO)", p.PacketNumber)
 			if err := h.queuePacketForRetransmission(p); err != nil {
 				return err
 			}
-			h.congestion.OnPacketLost(p.PacketNumber, p.Length, h.bytesInFlight)
-			h.congestion.OnRetransmissionTimeout(true)
 		}
 	}
 	return nil
