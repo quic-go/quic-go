@@ -110,7 +110,7 @@ func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener,
 		sessionQueue:              make(chan Session, 5),
 		errorChan:                 make(chan struct{}),
 		supportsTLS:               supportsTLS,
-		logger:                    utils.DefaultLogger,
+		logger:                    utils.DefaultLogger.WithPrefix("server"),
 	}
 	if supportsTLS {
 		if err := s.setupTLS(); err != nil {
