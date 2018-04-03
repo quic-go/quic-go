@@ -582,49 +582,12 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 				log.Printf("GAP : pnum=%v => missing %v",hdr.PacketNumber,hdr.PacketNumber-s.largestRcvdPacketNumber-1);
 			}
 			if s.perspective == protocol.PerspectiveClient {
-
 				// client = inverter
-				if (s.packer.SpinBit == hdr.SpinBit) {
-					if (hdr.SpinBit) {
-						log.Printf("CLI=>SPIN0 : save T=%v   pnum=%v",s.packer.SpinCounterT,hdr.PacketNumber);
-						s.packer.SpinCounterR = 0
-						s.packer.SpinCounterTsaved = s.packer.SpinCounterT
-					} else {
-						log.Printf("CLI=>SPIN1 : save R=%v   pnum=%v",s.packer.SpinCounterR,hdr.PacketNumber);
-						s.packer.SpinCounterT = 0
-						s.packer.SpinCounterRsaved = s.packer.SpinCounterR
-					}
-				}
 				s.packer.SpinBit = !hdr.SpinBit	
 			} else {
-
 				// server = repeater
-				if (s.packer.SpinBit != hdr.SpinBit) {
-					if (hdr.SpinBit) {
-						log.Printf("SRV=>SPIN1 : save R=%v",s.packer.SpinCounterR);
-						s.packer.SpinCounterRsaved = s.packer.SpinCounterR
-						s.packer.SpinCounterR = 0
-						s.packer.SpinCounterT = 0
-					} else {
-						log.Printf("SRV=>SPIN0 : save T=%v",s.packer.SpinCounterT);
-						s.packer.SpinCounterTsaved = s.packer.SpinCounterT
-					}
-				}
 				s.packer.SpinBit = hdr.SpinBit
 			}
-		} else {
-			if false { // DISABLED FOR SERIAL MODE CONSISTENCY
-				// out of order R1 on client : update Rsaved
-				log.Printf("OUT-OF-ORDER : pnum=%v < %v",hdr.PacketNumber,s.largestRcvdPacketNumber);
-				if (hdr.SpinBit&&(s.perspective == protocol.PerspectiveClient)&&s.packer.SpinBit && utils.Globals.HasMeasurementByte) {
-					s.packer.SpinCounterRsaved++
-					log.Printf("LATE-R1 : pnum=%v",hdr.PacketNumber);
-				}
-			}
-		}
-		if (hdr.SpinBit && utils.Globals.HasMeasurementByte) {
-			s.packer.SpinCounterR ++
-			//log.Printf("SpincounterR=%v      pnum=%v",s.packer.SpinCounterR, hdr.PacketNumber);
 		}
 	}
 
