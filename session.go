@@ -583,6 +583,11 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 				// server = repeater
 				s.packer.SpinBit = hdr.SpinBit
 			}
+			if s.packer.SpinBit != s.packer.PrevSpinBit {
+				// got an edge
+				s.packer.VEC = hdr.VEC
+				s.packer.LastTrigger = time.Now()
+			}
 		}
 	}
 

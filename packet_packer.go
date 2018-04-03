@@ -67,6 +67,9 @@ type packetPacker struct {
 	numNonRetransmittableAcks int
 
 	SpinBit bool
+	PrevSpinBit bool
+	LastTrigger time.Time
+	VEC         byte
 }
 
 func newPacketPacker(connectionID protocol.ConnectionID,
@@ -491,6 +494,17 @@ func (p *packetPacker) writeAndSealPacket(
 	buffer := bytes.NewBuffer(raw[:0])
 
 	header.SpinBit = p.SpinBit
+	if (p.SpinBit == p.PrevSpinBit) {
+		header.VEC = 0
+	} else if  (time.Since(p.LastTrigger) > time.Millisecond) { // DELAYED !!! {
+		header.VEC = 1
+	} else {
+		header.VEC = p.VEC + 1
+		if header.VEC > 3 {
+			header.VEC = 3
+		}
+	}
+	p.PrevSpinBit = p.SpinBit
 	if err := header.Write(buffer, p.perspective, p.version); err != nil {
 		return nil, err
 	}
