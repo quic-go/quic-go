@@ -71,6 +71,8 @@ func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte
 	return h, nil
 }
 
+// TYPE-BYTE:  0CKS00TT
+
 func parseShortHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
 	spinbit := typeByte&0x10 > 0
 	omitConnID := typeByte&0x40 > 0
