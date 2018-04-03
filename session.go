@@ -578,9 +578,6 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 
 	if hdr.HasSpinBit {
 		if (hdr.PacketNumber>=s.largestRcvdPacketNumber) {
-			if ((hdr.PacketNumber-s.largestRcvdPacketNumber)>1) {
-				log.Printf("GAP : pnum=%v => missing %v",hdr.PacketNumber,hdr.PacketNumber-s.largestRcvdPacketNumber-1);
-			}
 			if s.perspective == protocol.PerspectiveClient {
 				// client = inverter
 				s.packer.SpinBit = !hdr.SpinBit	
