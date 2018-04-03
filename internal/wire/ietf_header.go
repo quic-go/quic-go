@@ -83,7 +83,7 @@ func parseShortHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
 		}
 	}
 	var pnLen protocol.PacketNumberLen
-	switch typeByte & 0x7 {
+	switch typeByte & 0x3 {
 	case 0x0:
 		pnLen = protocol.PacketNumberLen1
 	case 0x1:
