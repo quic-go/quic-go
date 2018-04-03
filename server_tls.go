@@ -21,9 +21,12 @@ type nullAEAD struct {
 
 var _ quicAEAD = &nullAEAD{}
 
-func (n *nullAEAD) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error) {
-	data, err := n.aead.Open(dst, src, packetNumber, associatedData)
-	return data, protocol.EncryptionUnencrypted, err
+func (n *nullAEAD) OpenHandshake(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {
+	return n.aead.Open(dst, src, packetNumber, associatedData)
+}
+
+func (n *nullAEAD) Open1RTT(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error) {
+	return nil, errors.New("no 1-RTT keys")
 }
 
 type tlsSession struct {
@@ -71,8 +74,8 @@ func newServerTLS(
 			StreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
 			ConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
 			IdleTimeout:                 config.IdleTimeout,
-			MaxBidiStreamID:             protocol.MaxBidiStreamID(config.MaxIncomingStreams, protocol.PerspectiveServer),
-			MaxUniStreamID:              protocol.MaxUniStreamID(config.MaxIncomingUniStreams, protocol.PerspectiveServer),
+			MaxBidiStreams:              uint16(config.MaxIncomingStreams),
+			MaxUniStreams:               uint16(config.MaxIncomingUniStreams),
 		},
 	}
 	s.newMintConn = s.newMintConnImpl

@@ -104,7 +104,7 @@ func (h *extensionHandlerServer) Receive(hType mint.HandshakeType, el *mint.Exte
 			return errors.New("client sent a stateless reset token")
 		}
 	}
-	params, err := readTransportParamters(chtp.Parameters)
+	params, err := readTransportParameters(chtp.Parameters)
 	if err != nil {
 		return err
 	}

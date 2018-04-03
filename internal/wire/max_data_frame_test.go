@@ -15,7 +15,7 @@ var _ = Describe("MAX_DATA frame", func() {
 			data := []byte{0x4}
 			data = append(data, encodeVarInt(0xdecafbad123456)...) // byte offset
 			b := bytes.NewReader(data)
-			frame, err := ParseMaxDataFrame(b, versionBigEndian)
+			frame, err := parseMaxDataFrame(b, versionBigEndian)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0xdecafbad123456)))
 			Expect(b.Len()).To(BeZero())
@@ -24,10 +24,10 @@ var _ = Describe("MAX_DATA frame", func() {
 		It("errors on EOFs", func() {
 			data := []byte{0x4}
 			data = append(data, encodeVarInt(0xdecafbad1234567)...) // byte offset
-			_, err := ParseMaxDataFrame(bytes.NewReader(data), versionIETFFrames)
+			_, err := parseMaxDataFrame(bytes.NewReader(data), versionIETFFrames)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := ParseMaxDataFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
+				_, err := parseMaxDataFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
 				Expect(err).To(HaveOccurred())
 			}
 		})

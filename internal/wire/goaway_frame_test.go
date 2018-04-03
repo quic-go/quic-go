@@ -20,7 +20,7 @@ var _ = Describe("GoawayFrame", func() {
 					0x0, 0x3, // reason phrase length
 					'f', 'o', 'o',
 				})
-				frame, err := ParseGoawayFrame(b, versionBigEndian)
+				frame, err := parseGoawayFrame(b, versionBigEndian)
 				Expect(frame).To(Equal(&GoawayFrame{
 					ErrorCode:      0x1337,
 					LastGoodStream: 0x1234,
@@ -37,10 +37,10 @@ var _ = Describe("GoawayFrame", func() {
 					0x0, 0x3, // reason phrase length
 					'f', 'o', 'o',
 				}
-				_, err := ParseGoawayFrame(bytes.NewReader(data), versionBigEndian)
+				_, err := parseGoawayFrame(bytes.NewReader(data), versionBigEndian)
 				Expect(err).NotTo(HaveOccurred())
 				for i := range data {
-					_, err := ParseGoawayFrame(bytes.NewReader(data[0:i]), versionBigEndian)
+					_, err := parseGoawayFrame(bytes.NewReader(data[0:i]), versionBigEndian)
 					Expect(err).To(HaveOccurred())
 				}
 			})
@@ -52,7 +52,7 @@ var _ = Describe("GoawayFrame", func() {
 				0x2, 0x0, 0x0, 0x0, // last good stream id
 				0xff, 0xff, // reason phrase length
 			})
-			_, err := ParseGoawayFrame(b, protocol.VersionWhatever)
+			_, err := parseGoawayFrame(b, protocol.VersionWhatever)
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidGoawayData, "reason phrase too long")))
 		})
 	})

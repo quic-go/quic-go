@@ -15,7 +15,7 @@ var _ = Describe("MAX_STREAM_ID frame", func() {
 			data := []byte{0x6}
 			data = append(data, encodeVarInt(0xdecafbad)...)
 			b := bytes.NewReader(data)
-			f, err := ParseMaxStreamIDFrame(b, protocol.VersionWhatever)
+			f, err := parseMaxStreamIDFrame(b, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(f.StreamID).To(Equal(protocol.StreamID(0xdecafbad)))
 			Expect(b.Len()).To(BeZero())
@@ -24,10 +24,10 @@ var _ = Describe("MAX_STREAM_ID frame", func() {
 		It("errors on EOFs", func() {
 			data := []byte{0x06}
 			data = append(data, encodeVarInt(0xdeadbeefcafe13)...)
-			_, err := ParseMaxStreamIDFrame(bytes.NewReader(data), protocol.VersionWhatever)
+			_, err := parseMaxStreamIDFrame(bytes.NewReader(data), protocol.VersionWhatever)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := ParseMaxStreamIDFrame(bytes.NewReader(data[0:i]), protocol.VersionWhatever)
+				_, err := parseMaxStreamIDFrame(bytes.NewReader(data[0:i]), protocol.VersionWhatever)
 				Expect(err).To(HaveOccurred())
 			}
 		})

@@ -19,7 +19,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			data = append(data, encodeVarInt(0)...)   // num blocks
 			data = append(data, encodeVarInt(10)...)  // first ack block
 			b := bytes.NewReader(data)
-			frame, err := ParseAckFrame(b, versionIETFFrames)
+			frame, err := parseAckFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(100)))
 			Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(90)))
@@ -34,7 +34,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			data = append(data, encodeVarInt(0)...)  // num blocks
 			data = append(data, encodeVarInt(0)...)  // first ack block
 			b := bytes.NewReader(data)
-			frame, err := ParseAckFrame(b, versionIETFFrames)
+			frame, err := parseAckFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(55)))
 			Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(55)))
@@ -49,7 +49,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			data = append(data, encodeVarInt(0)...)  // num blocks
 			data = append(data, encodeVarInt(20)...) // first ack block
 			b := bytes.NewReader(data)
-			frame, err := ParseAckFrame(b, versionIETFFrames)
+			frame, err := parseAckFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(20)))
 			Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(0)))
@@ -64,7 +64,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			data = append(data, encodeVarInt(0)...)  // num blocks
 			data = append(data, encodeVarInt(21)...) // first ack block
 			b := bytes.NewReader(data)
-			_, err := ParseAckFrame(b, versionIETFFrames)
+			_, err := parseAckFrame(b, versionIETFFrames)
 			Expect(err).To(MatchError("invalid first ACK range"))
 		})
 
@@ -77,7 +77,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			data = append(data, encodeVarInt(98)...)   // gap
 			data = append(data, encodeVarInt(50)...)   // ack block
 			b := bytes.NewReader(data)
-			frame, err := ParseAckFrame(b, versionIETFFrames)
+			frame, err := parseAckFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(1000)))
 			Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(750)))
@@ -100,7 +100,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			data = append(data, encodeVarInt(1)...)   // gap
 			data = append(data, encodeVarInt(1)...)   // ack block
 			b := bytes.NewReader(data)
-			frame, err := ParseAckFrame(b, versionIETFFrames)
+			frame, err := parseAckFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(100)))
 			Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(94)))
@@ -121,10 +121,10 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			data = append(data, encodeVarInt(100)...)  // first ack block
 			data = append(data, encodeVarInt(98)...)   // gap
 			data = append(data, encodeVarInt(50)...)   // ack block
-			_, err := ParseAckFrame(bytes.NewReader(data), versionIETFFrames)
+			_, err := parseAckFrame(bytes.NewReader(data), versionIETFFrames)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := ParseAckFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
+				_, err := parseAckFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})
@@ -142,7 +142,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(f.Length(versionIETFFrames)).To(BeEquivalentTo(buf.Len()))
 			b := bytes.NewReader(buf.Bytes())
-			frame, err := ParseAckFrame(b, versionIETFFrames)
+			frame, err := parseAckFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).To(Equal(f))
 			Expect(frame.HasMissingRanges()).To(BeFalse())
@@ -159,7 +159,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(f.Length(versionIETFFrames)).To(BeEquivalentTo(buf.Len()))
 			b := bytes.NewReader(buf.Bytes())
-			frame, err := ParseAckFrame(b, versionIETFFrames)
+			frame, err := parseAckFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).To(Equal(f))
 			Expect(frame.HasMissingRanges()).To(BeFalse())
@@ -181,7 +181,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(f.Length(versionIETFFrames)).To(BeEquivalentTo(buf.Len()))
 			b := bytes.NewReader(buf.Bytes())
-			frame, err := ParseAckFrame(b, versionIETFFrames)
+			frame, err := parseAckFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).To(Equal(f))
 			Expect(frame.HasMissingRanges()).To(BeTrue())
@@ -205,7 +205,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(f.Length(versionIETFFrames)).To(BeEquivalentTo(buf.Len()))
 			b := bytes.NewReader(buf.Bytes())
-			frame, err := ParseAckFrame(b, versionIETFFrames)
+			frame, err := parseAckFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).To(Equal(f))
 			Expect(frame.HasMissingRanges()).To(BeTrue())

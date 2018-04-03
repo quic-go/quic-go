@@ -19,7 +19,7 @@ import (
 type QuicCryptoKeyDerivationFunction func(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte, pers protocol.Perspective) (crypto.AEAD, error)
 
 // KeyExchangeFunction is used to make a new KEX
-type KeyExchangeFunction func() crypto.KeyExchange
+type KeyExchangeFunction func() (crypto.KeyExchange, error)
 
 // The CryptoSetupServer handles all things crypto for the Session
 type cryptoSetupServer struct {
@@ -73,6 +73,7 @@ func NewCryptoSetup(
 	connID protocol.ConnectionID,
 	remoteAddr net.Addr,
 	version protocol.VersionNumber,
+	divNonce []byte,
 	scfg *ServerConfig,
 	params *TransportParameters,
 	supportedVersions []protocol.VersionNumber,
@@ -85,20 +86,21 @@ func NewCryptoSetup(
 		return nil, err
 	}
 	return &cryptoSetupServer{
-		cryptoStream:      cryptoStream,
-		connID:            connID,
-		remoteAddr:        remoteAddr,
-		version:           version,
-		supportedVersions: supportedVersions,
-		scfg:              scfg,
-		keyDerivation:     crypto.DeriveQuicCryptoAESKeys,
-		keyExchange:       getEphermalKEX,
-		nullAEAD:          nullAEAD,
-		params:            params,
-		acceptSTKCallback: acceptSTK,
-		sentSHLO:          make(chan struct{}),
-		paramsChan:        paramsChan,
-		handshakeEvent:    handshakeEvent,
+		cryptoStream:         cryptoStream,
+		connID:               connID,
+		remoteAddr:           remoteAddr,
+		version:              version,
+		supportedVersions:    supportedVersions,
+		diversificationNonce: divNonce,
+		scfg:                 scfg,
+		keyDerivation:        crypto.DeriveQuicCryptoAESKeys,
+		keyExchange:          getEphermalKEX,
+		nullAEAD:             nullAEAD,
+		params:               params,
+		acceptSTKCallback:    acceptSTK,
+		sentSHLO:             make(chan struct{}),
+		paramsChan:           paramsChan,
+		handshakeEvent:       handshakeEvent,
 	}, nil
 }
 
@@ -364,11 +366,6 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 		return nil, err
 	}
 
-	h.diversificationNonce = make([]byte, 32)
-	if _, err = rand.Read(h.diversificationNonce); err != nil {
-		return nil, err
-	}
-
 	clientNonce := cryptoData[TagNONC]
 	err = h.validateClientNonce(clientNonce)
 	if err != nil {
@@ -405,7 +402,10 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 	var fsNonce bytes.Buffer
 	fsNonce.Write(clientNonce)
 	fsNonce.Write(serverNonce)
-	ephermalKex := h.keyExchange()
+	ephermalKex, err := h.keyExchange()
+	if err != nil {
+		return nil, err
+	}
 	ephermalSharedSecret, err := ephermalKex.CalculateSharedKey(cryptoData[TagPUBS])
 	if err != nil {
 		return nil, err
@@ -445,15 +445,6 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 	message.Write(&reply)
 	utils.Debugf("Sending %s", message)
 	return reply.Bytes(), nil
-}
-
-// DiversificationNonce returns the diversification nonce
-func (h *cryptoSetupServer) DiversificationNonce() []byte {
-	return h.diversificationNonce
-}
-
-func (h *cryptoSetupServer) SetDiversificationNonce(data []byte) {
-	panic("not needed for cryptoSetupServer")
 }
 
 func (h *cryptoSetupServer) ConnectionState() ConnectionState {

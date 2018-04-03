@@ -148,8 +148,10 @@ var _ = Describe("Stateless TLS handling", func() {
 		// unpack the packet to check that it actually contains a CONNECTION_CLOSE
 		hdr, data = unpackPacket(conn.dataWritten.Bytes())
 		Expect(hdr.Type).To(Equal(protocol.PacketTypeHandshake))
-		ccf, err := wire.ParseConnectionCloseFrame(bytes.NewReader(data), protocol.VersionTLS)
+		frame, err := wire.ParseNextFrame(bytes.NewReader(data), nil, protocol.VersionTLS)
 		Expect(err).ToNot(HaveOccurred())
+		Expect(frame).To(BeAssignableToTypeOf(&wire.ConnectionCloseFrame{}))
+		ccf := frame.(*wire.ConnectionCloseFrame)
 		Expect(ccf.ErrorCode).To(Equal(qerr.HandshakeFailed))
 		Expect(ccf.ReasonPhrase).To(Equal(mint.AlertAccessDenied.String()))
 	})
