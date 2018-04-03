@@ -8,7 +8,6 @@ import (
 )
 
 // A Packet is a packet
-// +gen linkedlist
 type Packet struct {
 	PacketNumber    protocol.PacketNumber
 	PacketType      protocol.PacketType
