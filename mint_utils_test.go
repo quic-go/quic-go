@@ -125,7 +125,7 @@ var _ = Describe("Packing and unpacking Initial packets", func() {
 			}
 			p := packPacket([]wire.Frame{f})
 			_, err := unpackInitialPacket(aead, hdr, p, ver)
-			Expect(err).To(MatchError("UnencryptedStreamData: received unencrypted stream data on stream 42"))
+			Expect(err).To(MatchError("Received STREAM_FRAME for wrong stream (Stream ID 42)"))
 		})
 
 		It("rejects a packet that has a STREAM_FRAME with a non-zero offset", func() {
@@ -141,14 +141,6 @@ var _ = Describe("Packing and unpacking Initial packets", func() {
 	})
 
 	Context("packing", func() {
-		var unpacker *packetUnpacker
-
-		BeforeEach(func() {
-			aeadCl, err := crypto.NewNullAEAD(protocol.PerspectiveClient, connID, ver)
-			Expect(err).ToNot(HaveOccurred())
-			unpacker = &packetUnpacker{aead: &nullAEAD{aeadCl}, version: ver}
-		})
-
 		It("packs a packet", func() {
 			f := &wire.StreamFrame{
 				Data:   []byte("foobar"),
@@ -156,9 +148,13 @@ var _ = Describe("Packing and unpacking Initial packets", func() {
 			}
 			data, err := packUnencryptedPacket(aead, hdr, f, protocol.PerspectiveServer)
 			Expect(err).ToNot(HaveOccurred())
-			packet, err := unpacker.Unpack(hdr.Raw, hdr, data[len(hdr.Raw):])
+			aeadCl, err := crypto.NewNullAEAD(protocol.PerspectiveClient, connID, ver)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(packet.frames).To(Equal([]wire.Frame{f}))
+			decrypted, err := aeadCl.Open(nil, data[len(hdr.Raw):], hdr.PacketNumber, hdr.Raw)
+			Expect(err).ToNot(HaveOccurred())
+			frame, err := wire.ParseNextFrame(bytes.NewReader(decrypted), hdr, versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame).To(Equal(f))
 		})
 	})
 })

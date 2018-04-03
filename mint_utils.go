@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/bifurcation/mint"
@@ -107,21 +108,31 @@ func tlsToMintConfig(tlsConf *tls.Config, pers protocol.Perspective) (*mint.Conf
 // unpackInitialOrRetryPacket unpacks packets Initial and Retry packets
 // These packets must contain a STREAM_FRAME for the crypto stream, starting at offset 0.
 func unpackInitialPacket(aead crypto.AEAD, hdr *wire.Header, data []byte, version protocol.VersionNumber) (*wire.StreamFrame, error) {
-	unpacker := &packetUnpacker{aead: &nullAEAD{aead}, version: version}
-	packet, err := unpacker.Unpack(hdr.Raw, hdr, data)
+	buf := *getPacketBuffer()
+	buf = buf[:0]
+	defer putPacketBuffer(&buf)
+
+	decrypted, err := aead.Open(buf, data, hdr.PacketNumber, hdr.Raw)
 	if err != nil {
 		return nil, err
 	}
 	var frame *wire.StreamFrame
-	for _, f := range packet.frames {
+	r := bytes.NewReader(decrypted)
+	for {
+		f, err := wire.ParseNextFrame(r, hdr, version)
+		if err != nil {
+			return nil, err
+		}
 		var ok bool
-		frame, ok = f.(*wire.StreamFrame)
-		if ok {
+		if frame, ok = f.(*wire.StreamFrame); ok || frame == nil {
 			break
 		}
 	}
 	if frame == nil {
 		return nil, errors.New("Packet doesn't contain a STREAM_FRAME")
+	}
+	if frame.StreamID != version.CryptoStreamID() {
+		return nil, fmt.Errorf("Received STREAM_FRAME for wrong stream (Stream ID %d)", frame.StreamID)
 	}
 	// We don't need a check for the stream ID here.
 	// The packetUnpacker checks that there's no unencrypted stream data except for the crypto stream.

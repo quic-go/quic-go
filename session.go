@@ -2,6 +2,7 @@ package quic
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -44,6 +45,11 @@ type streamManager interface {
 	CloseWithError(error)
 }
 
+type cryptoStreamHandler interface {
+	HandleCryptoStream() error
+	ConnectionState() handshake.ConnectionState
+}
+
 type receivedPacket struct {
 	remoteAddr net.Addr
 	header     *wire.Header
@@ -84,7 +90,8 @@ type session struct {
 	unpacker unpacker
 	packer   *packetPacker
 
-	cryptoSetup handshake.CryptoSetup
+	cryptoStreamHandler cryptoStreamHandler
+	divNonceChan        chan<- []byte // only set for the client
 
 	receivedPackets  chan *receivedPacket
 	sendingScheduled chan struct{}
@@ -161,11 +168,16 @@ func newSession(
 		MaxStreams:                  uint32(s.config.MaxIncomingStreams),
 		IdleTimeout:                 s.config.IdleTimeout,
 	}
+	divNonce := make([]byte, 32)
+	if _, err := rand.Read(divNonce); err != nil {
+		return nil, err
+	}
 	cs, err := newCryptoSetup(
 		s.cryptoStream,
 		s.connectionID,
 		s.conn.RemoteAddr(),
 		s.version,
+		divNonce,
 		scfg,
 		transportParams,
 		s.config.Versions,
@@ -176,8 +188,21 @@ func newSession(
 	if err != nil {
 		return nil, err
 	}
-	s.cryptoSetup = cs
-	return s, s.postSetup(1)
+	s.cryptoStreamHandler = cs
+	s.unpacker = newPacketUnpackerGQUIC(cs, s.version)
+	s.streamsMap = newStreamsMapLegacy(s.newStream, s.config.MaxIncomingStreams, s.perspective)
+	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
+	s.packer = newPacketPacker(s.connectionID,
+		1,
+		s.sentPacketHandler.GetPacketNumberLen,
+		s.RemoteAddr(),
+		divNonce,
+		cs,
+		s.streamFramer,
+		s.perspective,
+		s.version,
+	)
+	return s, s.postSetup()
 }
 
 // declare this as a variable, so that we can it mock it in the tests
@@ -210,7 +235,7 @@ var newClientSession = func(
 		IdleTimeout:                 s.config.IdleTimeout,
 		OmitConnectionID:            s.config.RequestConnectionIDOmission,
 	}
-	cs, err := newCryptoSetupClient(
+	cs, divNonceChan, err := newCryptoSetupClient(
 		s.cryptoStream,
 		hostname,
 		s.connectionID,
@@ -225,8 +250,22 @@ var newClientSession = func(
 	if err != nil {
 		return nil, err
 	}
-	s.cryptoSetup = cs
-	return s, s.postSetup(1)
+	s.cryptoStreamHandler = cs
+	s.divNonceChan = divNonceChan
+	s.unpacker = newPacketUnpackerGQUIC(cs, s.version)
+	s.streamsMap = newStreamsMapLegacy(s.newStream, s.config.MaxIncomingStreams, s.perspective)
+	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
+	s.packer = newPacketPacker(s.connectionID,
+		1,
+		s.sentPacketHandler.GetPacketNumberLen,
+		s.RemoteAddr(),
+		nil, // no diversification nonce
+		cs,
+		s.streamFramer,
+		s.perspective,
+		s.version,
+	)
+	return s, s.postSetup()
 }
 
 func newTLSServerSession(
@@ -250,19 +289,32 @@ func newTLSServerSession(
 		handshakeEvent: handshakeEvent,
 	}
 	s.preSetup()
-	s.cryptoSetup = handshake.NewCryptoSetupTLSServer(
+	cs := handshake.NewCryptoSetupTLSServer(
 		tls,
 		cryptoStreamConn,
 		nullAEAD,
 		handshakeEvent,
 		v,
 	)
-	if err := s.postSetup(initialPacketNumber); err != nil {
+	s.cryptoStreamHandler = cs
+	s.streamsMap = newStreamsMap(s, s.newFlowController, s.config.MaxIncomingStreams, s.config.MaxIncomingUniStreams, s.perspective, s.version)
+	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
+	s.packer = newPacketPacker(s.connectionID,
+		initialPacketNumber,
+		s.sentPacketHandler.GetPacketNumberLen,
+		s.RemoteAddr(),
+		nil, // no diversification nonce
+		cs,
+		s.streamFramer,
+		s.perspective,
+		s.version,
+	)
+	if err := s.postSetup(); err != nil {
 		return nil, err
 	}
 	s.peerParams = peerParams
 	s.processTransportParameters(peerParams)
-	s.unpacker = &packetUnpacker{aead: s.cryptoSetup, version: s.version}
+	s.unpacker = newPacketUnpacker(cs, s.version)
 	return s, nil
 }
 
@@ -300,12 +352,26 @@ var newTLSClientSession = func(
 	if err != nil {
 		return nil, err
 	}
-	s.cryptoSetup = cs
-	return s, s.postSetup(initialPacketNumber)
+	s.cryptoStreamHandler = cs
+	s.unpacker = newPacketUnpacker(cs, s.version)
+	s.streamsMap = newStreamsMap(s, s.newFlowController, s.config.MaxIncomingStreams, s.config.MaxIncomingUniStreams, s.perspective, s.version)
+	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
+	s.packer = newPacketPacker(s.connectionID,
+		initialPacketNumber,
+		s.sentPacketHandler.GetPacketNumberLen,
+		s.RemoteAddr(),
+		nil, // no diversification nonce
+		cs,
+		s.streamFramer,
+		s.perspective,
+		s.version,
+	)
+	return s, s.postSetup()
 }
 
 func (s *session) preSetup() {
 	s.rttStats = &congestion.RTTStats{}
+	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats)
 	s.connFlowController = flowcontrol.NewConnectionFlowController(
 		protocol.ReceiveConnectionFlowControlWindow,
 		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),
@@ -314,7 +380,7 @@ func (s *session) preSetup() {
 	s.cryptoStream = s.newCryptoStream()
 }
 
-func (s *session) postSetup(initialPacketNumber protocol.PacketNumber) error {
+func (s *session) postSetup() error {
 	s.handshakeChan = make(chan error, 1)
 	s.receivedPackets = make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets)
 	s.closeChan = make(chan closeError, 1)
@@ -327,26 +393,8 @@ func (s *session) postSetup(initialPacketNumber protocol.PacketNumber) error {
 	s.lastNetworkActivityTime = now
 	s.sessionCreationTime = now
 
-	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats)
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.rttStats, s.version)
-
-	if s.version.UsesTLS() {
-		s.streamsMap = newStreamsMap(s, s.newFlowController, s.config.MaxIncomingStreams, s.config.MaxIncomingUniStreams, s.perspective, s.version)
-	} else {
-		s.streamsMap = newStreamsMapLegacy(s.newStream, s.config.MaxIncomingStreams, s.perspective)
-	}
-	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
-	s.packer = newPacketPacker(s.connectionID,
-		initialPacketNumber,
-		s.sentPacketHandler.GetPacketNumberLen,
-		s.RemoteAddr(),
-		s.cryptoSetup,
-		s.streamFramer,
-		s.perspective,
-		s.version,
-	)
 	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.cryptoStream, s.packer.QueueControlFrame)
-	s.unpacker = &packetUnpacker{aead: s.cryptoSetup, version: s.version}
 	return nil
 }
 
@@ -355,7 +403,7 @@ func (s *session) run() error {
 	defer s.ctxCancel()
 
 	go func() {
-		if err := s.cryptoSetup.HandleCryptoStream(); err != nil {
+		if err := s.cryptoStreamHandler.HandleCryptoStream(); err != nil {
 			s.Close(err)
 		}
 	}()
@@ -470,7 +518,7 @@ func (s *session) Context() context.Context {
 }
 
 func (s *session) ConnectionState() ConnectionState {
-	return s.cryptoSetup.ConnectionState()
+	return s.cryptoStreamHandler.ConnectionState()
 }
 
 func (s *session) maybeResetTimer() {
@@ -503,9 +551,8 @@ func (s *session) maybeResetTimer() {
 
 func (s *session) handlePacketImpl(p *receivedPacket) error {
 	if s.perspective == protocol.PerspectiveClient {
-		diversificationNonce := p.header.DiversificationNonce
-		if len(diversificationNonce) > 0 {
-			s.cryptoSetup.SetDiversificationNonce(diversificationNonce)
+		if divNonce := p.header.DiversificationNonce; len(divNonce) > 0 {
+			s.divNonceChan <- divNonce
 		}
 	}
 
@@ -572,7 +619,7 @@ func (s *session) handleFrames(fs []wire.Frame, encLevel protocol.EncryptionLeve
 		wire.LogFrame(ff, false)
 		switch frame := ff.(type) {
 		case *wire.StreamFrame:
-			err = s.handleStreamFrame(frame)
+			err = s.handleStreamFrame(frame, encLevel)
 		case *wire.AckFrame:
 			err = s.handleAckFrame(frame, encLevel)
 		case *wire.ConnectionCloseFrame:
@@ -615,12 +662,14 @@ func (s *session) handlePacket(p *receivedPacket) {
 	}
 }
 
-func (s *session) handleStreamFrame(frame *wire.StreamFrame) error {
+func (s *session) handleStreamFrame(frame *wire.StreamFrame, encLevel protocol.EncryptionLevel) error {
 	if frame.StreamID == s.version.CryptoStreamID() {
 		if frame.FinBit {
 			return errors.New("Received STREAM frame with FIN bit for the crypto stream")
 		}
 		return s.cryptoStream.handleStreamFrame(frame)
+	} else if encLevel <= protocol.EncryptionUnencrypted {
+		return qerr.Error(qerr.UnencryptedStreamData, fmt.Sprintf("received unencrypted stream data on stream %d", frame.StreamID))
 	}
 	str, err := s.streamsMap.GetOrOpenReceiveStream(frame.StreamID)
 	if err != nil {
