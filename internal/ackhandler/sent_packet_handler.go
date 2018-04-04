@@ -144,10 +144,9 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* isRetransmitt
 
 	h.lastSentPacketNumber = packet.PacketNumber
 
-	var largestAcked protocol.PacketNumber
 	if len(packet.Frames) > 0 {
 		if ackFrame, ok := packet.Frames[0].(*wire.AckFrame); ok {
-			largestAcked = ackFrame.LargestAcked
+			packet.largestAcked = ackFrame.LargestAcked
 		}
 	}
 
@@ -155,10 +154,10 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* isRetransmitt
 	isRetransmittable := len(packet.Frames) != 0
 
 	if isRetransmittable {
-		packet.largestAcked = largestAcked
 		h.lastSentRetransmittablePacketTime = packet.SendTime
 		packet.includedInBytesInFlight = true
 		h.bytesInFlight += packet.Length
+		packet.canBeRetransmitted = true
 	}
 	h.congestion.OnPacketSent(packet.SendTime, h.bytesInFlight, packet.PacketNumber, packet.Length, isRetransmittable)
 
@@ -204,9 +203,6 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 		}
 		if err := h.onPacketAcked(p); err != nil {
 			return err
-		}
-		if len(p.retransmittedAs) == 0 {
-			h.congestion.OnPacketAcked(p.PacketNumber, p.Length, h.bytesInFlight)
 		}
 	}
 
@@ -298,9 +294,6 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time) error {
 		if packet.PacketNumber > h.largestAcked {
 			return false, nil
 		}
-		if packet.queuedForRetransmission { // don't retransmit packets twice
-			return true, nil
-		}
 
 		timeSinceSent := now.Sub(packet.SendTime)
 		if timeSinceSent > delayUntilLost {
@@ -313,12 +306,19 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time) error {
 	})
 
 	for _, p := range lostPackets {
-		if err := h.queuePacketForRetransmission(p); err != nil {
-			return err
+		// the bytes in flight need to be reduced no matter if this packet will be retransmitted
+		if p.includedInBytesInFlight {
+			h.bytesInFlight -= p.Length
 		}
-		h.bytesInFlight -= p.Length
-		p.includedInBytesInFlight = false
-		h.congestion.OnPacketLost(p.PacketNumber, p.Length, h.bytesInFlight)
+		if p.canBeRetransmitted {
+			// queue the packet for retransmission, and report the loss to the congestion controller
+			h.logger.Debugf("\tQueueing packet %#x because it was detected lost", p.PacketNumber)
+			if err := h.queuePacketForRetransmission(p); err != nil {
+				return err
+			}
+			h.congestion.OnPacketLost(p.PacketNumber, p.Length, h.bytesInFlight)
+		}
+		h.packetHistory.Remove(p.PacketNumber)
 	}
 	return nil
 }
@@ -361,53 +361,51 @@ func (h *sentPacketHandler) onPacketAcked(p *Packet) error {
 	h.handshakeCount = 0
 	// TODO(#497): h.tlpCount = 0
 
-	// find the first packet, from which on we can delete all retransmissions
-	// example: packet 10 was retransmitted as packet 11 and 12, and
-	// packet 12 was then retransmitted as 13.
-	// When receiving an ACK for packet 13, we can remove packets 12 and 13,
-	// but still need to keep 10 and 11.
-	first := p
-	for first.isRetransmission {
-		previous := h.packetHistory.GetPacket(first.retransmissionOf)
-		if previous == nil {
-			return fmt.Errorf("sent packet handler BUG: retransmitted packet for %d not found (should have been %d)", first.PacketNumber, first.retransmissionOf)
-		}
-		// if the retransmission of a packet was split, we can't remove it yet
-		if len(previous.retransmittedAs) > 1 {
-			break
-		}
-		first = previous
-	}
-	if first.isRetransmission {
-		root := h.packetHistory.GetPacket(first.retransmissionOf)
-		retransmittedAs := make([]protocol.PacketNumber, 0, len(root.retransmittedAs)-1)
-		for _, pn := range root.retransmittedAs {
-			if pn != first.PacketNumber {
-				retransmittedAs = append(retransmittedAs, pn)
+	// only report the acking of this packet to the congestion controller if:
+	// * it is a retransmittable packet
+	// * this packet wasn't retransmitted yet
+	if p.isRetransmission {
+		// that the parent doesn't exist is expected to happen every time the original packet was already acked
+		if parent := h.packetHistory.GetPacket(p.retransmissionOf); parent != nil {
+			if len(parent.retransmittedAs) == 1 {
+				parent.retransmittedAs = nil
+			} else {
+				// remove this packet from the slice of retransmission
+				retransmittedAs := make([]protocol.PacketNumber, 0, len(parent.retransmittedAs)-1)
+				for _, pn := range parent.retransmittedAs {
+					if pn != p.PacketNumber {
+						retransmittedAs = append(retransmittedAs, pn)
+					}
+				}
+				parent.retransmittedAs = retransmittedAs
 			}
 		}
-		root.retransmittedAs = retransmittedAs
 	}
-	return h.removeAllRetransmissions(first)
-}
-
-func (h *sentPacketHandler) removeAllRetransmissions(p *Packet) error {
 	if p.includedInBytesInFlight {
 		h.bytesInFlight -= p.Length
-		p.includedInBytesInFlight = false
 	}
-	if p.queuedForRetransmission {
-		for _, r := range p.retransmittedAs {
-			packet := h.packetHistory.GetPacket(r)
-			if packet == nil {
-				return fmt.Errorf("sent packet handler BUG: removing packet %d (retransmission of %d) not found in history", r, p.PacketNumber)
-			}
-			if err := h.removeAllRetransmissions(packet); err != nil {
-				return err
-			}
-		}
+	// TODO: this will need to change once we implement sending of probe packets
+	if p.canBeRetransmitted {
+		h.congestion.OnPacketAcked(p.PacketNumber, p.Length, h.bytesInFlight)
+	}
+	if err := h.stopRetransmissionsFor(p); err != nil {
+		return err
 	}
 	return h.packetHistory.Remove(p.PacketNumber)
+}
+
+func (h *sentPacketHandler) stopRetransmissionsFor(p *Packet) error {
+	if err := h.packetHistory.MarkCannotBeRetransmitted(p.PacketNumber); err != nil {
+		return err
+	}
+	for _, r := range p.retransmittedAs {
+		packet := h.packetHistory.GetPacket(r)
+		if packet == nil {
+			return fmt.Errorf("sent packet handler BUG: marking packet as not retransmittable %d (retransmission of %d) not found in history", r, p.PacketNumber)
+		}
+		h.stopRetransmissionsFor(packet)
+	}
+	return nil
 }
 
 func (h *sentPacketHandler) DequeuePacketForRetransmission() *Packet {
@@ -471,9 +469,13 @@ func (h *sentPacketHandler) ShouldSendNumPackets() int {
 
 // retransmit the oldest two packets
 func (h *sentPacketHandler) queueRTOs() error {
+	// Queue the first two outstanding packets for retransmission.
+	// This does NOT declare this packets as lost:
+	// They are still tracked in the packet history and count towards the bytes in flight.
+	// TODO: don't report them as lost to the congestion controller
 	for i := 0; i < 2; i++ {
 		if p := h.packetHistory.FirstOutstanding(); p != nil {
-			h.logger.Debugf("\tQueueing packet %#x for retransmission (RTO), %d outstanding", p.PacketNumber, h.packetHistory.Len())
+			h.logger.Debugf("\tQueueing packet %#x for retransmission (RTO)", p.PacketNumber)
 			if err := h.queuePacketForRetransmission(p); err != nil {
 				return err
 			}
@@ -487,12 +489,13 @@ func (h *sentPacketHandler) queueRTOs() error {
 func (h *sentPacketHandler) queueHandshakePacketsForRetransmission() error {
 	var handshakePackets []*Packet
 	h.packetHistory.Iterate(func(p *Packet) (bool, error) {
-		if !p.queuedForRetransmission && p.EncryptionLevel < protocol.EncryptionForwardSecure {
+		if p.canBeRetransmitted && p.EncryptionLevel < protocol.EncryptionForwardSecure {
 			handshakePackets = append(handshakePackets, p)
 		}
 		return true, nil
 	})
 	for _, p := range handshakePackets {
+		h.logger.Debugf("\tQueueing packet %#x as a handshake retransmission", p.PacketNumber)
 		if err := h.queuePacketForRetransmission(p); err != nil {
 			return err
 		}
@@ -501,7 +504,10 @@ func (h *sentPacketHandler) queueHandshakePacketsForRetransmission() error {
 }
 
 func (h *sentPacketHandler) queuePacketForRetransmission(p *Packet) error {
-	if _, err := h.packetHistory.QueuePacketForRetransmission(p.PacketNumber); err != nil {
+	if !p.canBeRetransmitted {
+		return fmt.Errorf("sent packet handler BUG: packet %d already queued for retransmission", p.PacketNumber)
+	}
+	if err := h.packetHistory.MarkCannotBeRetransmitted(p.PacketNumber); err != nil {
 		return err
 	}
 	h.retransmissionQueue = append(h.retransmissionQueue, p)
