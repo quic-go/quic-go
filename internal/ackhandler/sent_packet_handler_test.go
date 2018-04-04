@@ -541,24 +541,62 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should call MaybeExitSlowStart and OnPacketLost", func() {
+		It("doesn't call OnPacketLost and OnRetransmissionTimeout when queuing RTOs", func() {
 			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(3)
 			cong.EXPECT().TimeUntilSend(gomock.Any()).Times(3)
-			cong.EXPECT().OnRetransmissionTimeout(true).Times(2)
-			cong.EXPECT().OnPacketLost(
-				protocol.PacketNumber(1),
-				protocol.ByteCount(1),
-				protocol.ByteCount(3),
-			)
-			cong.EXPECT().OnPacketLost(
-				protocol.PacketNumber(2),
-				protocol.ByteCount(1),
-				protocol.ByteCount(3),
-			)
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 1}))
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 2}))
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 3}))
 			handler.OnAlarm() // RTO, meaning 2 lost packets
+			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
+			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
+		})
+
+		It("declares all lower packets lost and call OnRetransmissionTimeout when verifying an RTO", func() {
+			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(5)
+			cong.EXPECT().TimeUntilSend(gomock.Any()).Times(5)
+			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 1, SendTime: time.Now().Add(-time.Hour)}))
+			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 2, SendTime: time.Now().Add(-time.Hour)}))
+			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 3, SendTime: time.Now().Add(-time.Hour)}))
+			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 4, SendTime: time.Now().Add(-time.Hour)}))
+			handler.OnAlarm() // RTO, meaning 2 lost packets
+			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
+			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
+			// send one probe packet and receive an ACK for it
+			gomock.InOrder(
+				cong.EXPECT().MaybeExitSlowStart(),
+				cong.EXPECT().OnPacketAcked(protocol.PacketNumber(5), protocol.ByteCount(1), protocol.ByteCount(4)),
+				cong.EXPECT().OnRetransmissionTimeout(true),
+				cong.EXPECT().OnPacketLost(protocol.PacketNumber(1), protocol.ByteCount(1), protocol.ByteCount(3)),
+				cong.EXPECT().OnPacketLost(protocol.PacketNumber(2), protocol.ByteCount(1), protocol.ByteCount(2)),
+				cong.EXPECT().OnPacketLost(protocol.PacketNumber(3), protocol.ByteCount(1), protocol.ByteCount(1)),
+				cong.EXPECT().OnPacketLost(protocol.PacketNumber(4), protocol.ByteCount(1), protocol.ByteCount(0)),
+			)
+			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 5}))
+			err := handler.ReceivedAck(&wire.AckFrame{LargestAcked: 5, LowestAcked: 5}, 1, protocol.EncryptionForwardSecure, time.Now())
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("doesn't call OnRetransmissionTimeout when a spurious RTO occurs", func() {
+			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(3)
+			cong.EXPECT().TimeUntilSend(gomock.Any()).Times(3)
+			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 1, SendTime: time.Now().Add(-time.Hour)}))
+			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 2, SendTime: time.Now()}))
+			handler.OnAlarm() // RTO, meaning 2 lost packets
+			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
+			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
+			// send one probe packet
+
+			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 3}))
+			// receive an ACK for a packet send *before* the probe packet
+			// don't EXPECT any call to OnRetransmissionTimeout
+			gomock.InOrder(
+				cong.EXPECT().MaybeExitSlowStart(),
+				cong.EXPECT().OnPacketAcked(protocol.PacketNumber(2), protocol.ByteCount(1), protocol.ByteCount(2)),
+				cong.EXPECT().OnPacketLost(protocol.PacketNumber(1), protocol.ByteCount(1), protocol.ByteCount(1)),
+			)
+			err := handler.ReceivedAck(&wire.AckFrame{LargestAcked: 2, LowestAcked: 2}, 1, protocol.EncryptionForwardSecure, time.Now())
+			Expect(err).ToNot(HaveOccurred())
 		})
 
 		It("doesn't call OnPacketAcked when a retransmitted packet is acked", func() {
@@ -705,13 +743,34 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
 			expectInPacketHistory([]protocol.PacketNumber{1, 2})
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(2)))
-			// send another packet and receive an ACK for it
-			// This will trigger ack-based loss detection, and declare 1 and 2 lost, and remove them from bytes in flight
+			// Send a probe packet and receive an ACK for it.
+			// This verifies the RTO.
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 3}))
 			err = handler.ReceivedAck(&wire.AckFrame{LargestAcked: 3, LowestAcked: 3}, 1, protocol.EncryptionForwardSecure, time.Now())
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.packetHistory.Len()).To(BeZero())
 			Expect(handler.bytesInFlight).To(BeZero())
+			Expect(handler.retransmissionQueue).To(BeEmpty()) // 1 and 2 were already sent as probe packets
+		})
+
+		It("queues packets sent before the probe packet for retransmission", func() {
+			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 1, SendTime: time.Now().Add(-time.Hour)}))
+			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 2, SendTime: time.Now().Add(-time.Hour)}))
+			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 3, SendTime: time.Now().Add(-time.Hour)}))
+			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 4, SendTime: time.Now().Add(-time.Hour)}))
+			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 5, SendTime: time.Now().Add(-time.Hour)}))
+			handler.OnAlarm()
+			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
+			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
+			expectInPacketHistory([]protocol.PacketNumber{1, 2, 3, 4, 5})
+			// Send a probe packet and receive an ACK for it.
+			// This verifies the RTO.
+			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 6}))
+			err := handler.ReceivedAck(&wire.AckFrame{LargestAcked: 6, LowestAcked: 6}, 1, protocol.EncryptionForwardSecure, time.Now())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.packetHistory.Len()).To(BeZero())
+			Expect(handler.bytesInFlight).To(BeZero())
+			Expect(handler.retransmissionQueue).To(HaveLen(3)) // packets 3, 4, 5
 		})
 
 		It("handles ACKs for the original packet", func() {
