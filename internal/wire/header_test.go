@@ -225,30 +225,33 @@ var _ = Describe("Header", func() {
 	})
 
 	Context("logging", func() {
-		var buf bytes.Buffer
+		var (
+			buf    *bytes.Buffer
+			logger utils.Logger
+		)
 
 		BeforeEach(func() {
-			buf.Reset()
-			utils.SetLogLevel(utils.LogLevelDebug)
-			log.SetOutput(&buf)
+			buf = &bytes.Buffer{}
+			logger = utils.DefaultLogger
+			logger.SetLogLevel(utils.LogLevelDebug)
+			log.SetOutput(buf)
 		})
 
 		AfterEach(func() {
-			utils.SetLogLevel(utils.LogLevelNothing)
 			log.SetOutput(os.Stdout)
 		})
 
 		It("logs an IETF draft header", func() {
 			(&Header{
 				IsLongHeader: true,
-			}).Log()
+			}).Log(logger)
 			Expect(buf.String()).To(ContainSubstring("Long Header"))
 		})
 
 		It("logs a Public Header", func() {
 			(&Header{
 				isPublicHeader: true,
-			}).Log()
+			}).Log(logger)
 			Expect(buf.String()).To(ContainSubstring("Public Header"))
 		})
 	})

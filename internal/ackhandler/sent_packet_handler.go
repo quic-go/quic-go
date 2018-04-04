@@ -65,10 +65,12 @@ type sentPacketHandler struct {
 
 	// The alarm timeout
 	alarm time.Time
+
+	logger utils.Logger
 }
 
 // NewSentPacketHandler creates a new sentPacketHandler
-func NewSentPacketHandler(rttStats *congestion.RTTStats) SentPacketHandler {
+func NewSentPacketHandler(rttStats *congestion.RTTStats, logger utils.Logger) SentPacketHandler {
 	congestion := congestion.NewCubicSender(
 		congestion.DefaultClock{},
 		rttStats,
@@ -82,6 +84,7 @@ func NewSentPacketHandler(rttStats *congestion.RTTStats) SentPacketHandler {
 		stopWaitingManager: stopWaitingManager{},
 		rttStats:           rttStats,
 		congestion:         congestion,
+		logger:             logger,
 	}
 }
 
@@ -170,7 +173,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 
 	// duplicate or out of order ACK
 	if withPacketNumber != 0 && withPacketNumber <= h.largestReceivedPacketWithAck {
-		utils.Debugf("Ignoring ACK frame (duplicate or out of order).")
+		h.logger.Debugf("Ignoring ACK frame (duplicate or out of order).")
 		return nil
 	}
 	h.largestReceivedPacketWithAck = withPacketNumber
@@ -435,7 +438,7 @@ func (h *sentPacketHandler) SendMode() SendMode {
 	// we will stop sending out new data when reaching MaxOutstandingSentPackets,
 	// but still allow sending of retransmissions and ACKs.
 	if numTrackedPackets >= protocol.MaxTrackedSentPackets {
-		utils.Debugf("Limited by the number of tracked packets: tracking %d packets, maximum %d", numTrackedPackets, protocol.MaxTrackedSentPackets)
+		h.logger.Debugf("Limited by the number of tracked packets: tracking %d packets, maximum %d", numTrackedPackets, protocol.MaxTrackedSentPackets)
 		return SendNone
 	}
 	// Send retransmissions first, if there are any.
@@ -444,11 +447,11 @@ func (h *sentPacketHandler) SendMode() SendMode {
 	}
 	// Only send ACKs if we're congestion limited.
 	if cwnd := h.congestion.GetCongestionWindow(); h.bytesInFlight > cwnd {
-		utils.Debugf("Congestion limited: bytes in flight %d, window %d", h.bytesInFlight, cwnd)
+		h.logger.Debugf("Congestion limited: bytes in flight %d, window %d", h.bytesInFlight, cwnd)
 		return SendAck
 	}
 	if numTrackedPackets >= protocol.MaxOutstandingSentPackets {
-		utils.Debugf("Max outstanding limited: tracking %d packets, maximum: %d", numTrackedPackets, protocol.MaxOutstandingSentPackets)
+		h.logger.Debugf("Max outstanding limited: tracking %d packets, maximum: %d", numTrackedPackets, protocol.MaxOutstandingSentPackets)
 		return SendAck
 	}
 	return SendAny
@@ -470,7 +473,7 @@ func (h *sentPacketHandler) ShouldSendNumPackets() int {
 func (h *sentPacketHandler) queueRTOs() error {
 	for i := 0; i < 2; i++ {
 		if p := h.packetHistory.FirstOutstanding(); p != nil {
-			utils.Debugf("\tQueueing packet %#x for retransmission (RTO), %d outstanding", p.PacketNumber, h.packetHistory.Len())
+			h.logger.Debugf("\tQueueing packet %#x for retransmission (RTO), %d outstanding", p.PacketNumber, h.packetHistory.Len())
 			if err := h.queuePacketForRetransmission(p); err != nil {
 				return err
 			}

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/bifurcation/mint"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -37,7 +38,7 @@ var _ = Describe("Cookie Handler", func() {
 	BeforeEach(func() {
 		callbackReturn = false
 		var err error
-		ch, err = NewCookieHandler(mockCallback)
+		ch, err = NewCookieHandler(mockCallback, utils.DefaultLogger)
 		Expect(err).ToNot(HaveOccurred())
 		addr := &net.UDPAddr{IP: net.IPv4(42, 43, 44, 45), Port: 46}
 		conn = mint.NewConn(&mockConn{remoteAddr: addr}, &mint.Config{}, false)

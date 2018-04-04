@@ -5,6 +5,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/qerr"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -17,10 +18,11 @@ var _ = Describe("Stream Flow controller", func() {
 		rttStats := &congestion.RTTStats{}
 		controller = &streamFlowController{
 			streamID:   10,
-			connection: NewConnectionFlowController(1000, 1000, rttStats).(*connectionFlowController),
+			connection: NewConnectionFlowController(1000, 1000, rttStats, utils.DefaultLogger).(*connectionFlowController),
 		}
 		controller.maxReceiveWindowSize = 10000
 		controller.rttStats = rttStats
+		controller.logger = utils.DefaultLogger
 	})
 
 	Context("Constructor", func() {
@@ -31,8 +33,8 @@ var _ = Describe("Stream Flow controller", func() {
 			maxReceiveWindow := protocol.ByteCount(3000)
 			sendWindow := protocol.ByteCount(4000)
 
-			cc := NewConnectionFlowController(0, 0, nil)
-			fc := NewStreamFlowController(5, true, cc, receiveWindow, maxReceiveWindow, sendWindow, rttStats).(*streamFlowController)
+			cc := NewConnectionFlowController(0, 0, nil, utils.DefaultLogger)
+			fc := NewStreamFlowController(5, true, cc, receiveWindow, maxReceiveWindow, sendWindow, rttStats, utils.DefaultLogger).(*streamFlowController)
 			Expect(fc.streamID).To(Equal(protocol.StreamID(5)))
 			Expect(fc.receiveWindow).To(Equal(receiveWindow))
 			Expect(fc.maxReceiveWindowSize).To(Equal(maxReceiveWindow))

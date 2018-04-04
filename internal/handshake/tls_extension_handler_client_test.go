@@ -7,6 +7,7 @@ import (
 	"github.com/bifurcation/mint"
 	"github.com/bifurcation/mint/syntax"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -18,7 +19,7 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 	)
 
 	BeforeEach(func() {
-		handler = NewExtensionHandlerClient(&TransportParameters{}, protocol.VersionWhatever, nil, protocol.VersionWhatever).(*extensionHandlerClient)
+		handler = NewExtensionHandlerClient(&TransportParameters{}, protocol.VersionWhatever, nil, protocol.VersionWhatever, utils.DefaultLogger).(*extensionHandlerClient)
 		el = make(mint.ExtensionList, 0)
 	})
 

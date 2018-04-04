@@ -11,6 +11,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qerr"
 
@@ -25,7 +26,7 @@ var _ = Describe("Client", func() {
 		packetConn *mockPacketConn
 		addr       net.Addr
 
-		originalClientSessConstructor func(conn connection, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, tlsConf *tls.Config, config *Config, initialVersion protocol.VersionNumber, negotiatedVersions []protocol.VersionNumber) (packetHandler, error)
+		originalClientSessConstructor func(conn connection, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, tlsConf *tls.Config, config *Config, initialVersion protocol.VersionNumber, negotiatedVersions []protocol.VersionNumber, logger utils.Logger) (packetHandler, error)
 	)
 
 	// generate a packet sent by the server that accepts the QUIC version suggested by the client
@@ -43,7 +44,7 @@ var _ = Describe("Client", func() {
 	BeforeEach(func() {
 		originalClientSessConstructor = newClientSession
 		Eventually(areSessionsRunning).Should(BeFalse())
-		msess, _ := newMockSession(nil, 0, 0, nil, nil, nil)
+		msess, _ := newMockSession(nil, 0, 0, nil, nil, nil, nil)
 		sess = msess.(*mockSession)
 		addr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
 		packetConn = newMockPacketConn()
@@ -55,6 +56,7 @@ var _ = Describe("Client", func() {
 			version:      protocol.SupportedVersions[0],
 			conn:         &conn{pconn: packetConn, currentAddr: addr},
 			versionNegotiationChan: make(chan struct{}),
+			logger:                 utils.DefaultLogger,
 		}
 	})
 
@@ -82,6 +84,7 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ protocol.VersionNumber,
 				_ []protocol.VersionNumber,
+				_ utils.Logger,
 			) (packetHandler, error) {
 				Expect(conn.Write([]byte("0 fake CHLO"))).To(Succeed())
 				return sess, nil
@@ -125,6 +128,7 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ protocol.VersionNumber,
 				_ []protocol.VersionNumber,
+				_ utils.Logger,
 			) (packetHandler, error) {
 				remoteAddrChan <- conn.RemoteAddr().String()
 				return sess, nil
@@ -153,6 +157,7 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ protocol.VersionNumber,
 				_ []protocol.VersionNumber,
+				_ utils.Logger,
 			) (packetHandler, error) {
 				hostnameChan <- h
 				return sess, nil
@@ -264,6 +269,7 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ protocol.VersionNumber,
 				_ []protocol.VersionNumber,
+				_ utils.Logger,
 			) (packetHandler, error) {
 				return nil, testErr
 			}
@@ -314,6 +320,7 @@ var _ = Describe("Client", func() {
 					_ *Config,
 					initialVersionP protocol.VersionNumber,
 					negotiatedVersionsP []protocol.VersionNumber,
+					_ utils.Logger,
 				) (packetHandler, error) {
 					initialVersion = initialVersionP
 					negotiatedVersions = negotiatedVersionsP
@@ -370,6 +377,7 @@ var _ = Describe("Client", func() {
 					_ *Config,
 					_ protocol.VersionNumber,
 					_ []protocol.VersionNumber,
+					_ utils.Logger,
 				) (packetHandler, error) {
 					atomic.AddUint32(&sessionCounter, 1)
 					return &mockSession{
@@ -474,6 +482,7 @@ var _ = Describe("Client", func() {
 			configP *Config,
 			_ protocol.VersionNumber,
 			_ []protocol.VersionNumber,
+			_ utils.Logger,
 		) (packetHandler, error) {
 			cconn = connP
 			hostname = hostnameP
@@ -514,6 +523,7 @@ var _ = Describe("Client", func() {
 			tls handshake.MintTLS,
 			paramsChan <-chan handshake.TransportParameters,
 			_ protocol.PacketNumber,
+			_ utils.Logger,
 		) (packetHandler, error) {
 			cconn = connP
 			hostname = hostnameP
@@ -550,6 +560,7 @@ var _ = Describe("Client", func() {
 			tls handshake.MintTLS,
 			paramsChan <-chan handshake.TransportParameters,
 			_ protocol.PacketNumber,
+			_ utils.Logger,
 		) (packetHandler, error) {
 			sess := &mockSession{
 				stopRunLoop: make(chan struct{}),

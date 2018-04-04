@@ -8,6 +8,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -61,7 +62,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 	BeforeEach(func() {
 		rttStats := &congestion.RTTStats{}
-		handler = NewSentPacketHandler(rttStats).(*sentPacketHandler)
+		handler = NewSentPacketHandler(rttStats, utils.DefaultLogger).(*sentPacketHandler)
 		handler.SetHandshakeComplete()
 		streamFrame = wire.StreamFrame{
 			StreamID: 5,

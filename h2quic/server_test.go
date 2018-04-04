@@ -19,6 +19,7 @@ import (
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/qerr"
 
 	. "github.com/onsi/ginkgo"
@@ -96,6 +97,7 @@ var _ = Describe("H2 server", func() {
 			Server: &http.Server{
 				TLSConfig: testdata.GetTLSConfig(),
 			},
+			logger: utils.DefaultLogger,
 		}
 		dataStream = newMockStream(0)
 		close(dataStream.unblockRead)
@@ -287,7 +289,6 @@ var _ = Describe("H2 server", func() {
 			Expect(dataStream.remoteClosed).To(BeTrue())
 			Expect(dataStream.reset).To(BeFalse())
 		})
-
 	})
 
 	It("handles the header stream", func() {

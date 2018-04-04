@@ -5,6 +5,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -21,6 +22,7 @@ var _ = Describe("Connection Flow controller", func() {
 	BeforeEach(func() {
 		controller = &connectionFlowController{}
 		controller.rttStats = &congestion.RTTStats{}
+		controller.logger = utils.DefaultLogger
 	})
 
 	Context("Constructor", func() {
@@ -30,7 +32,7 @@ var _ = Describe("Connection Flow controller", func() {
 			receiveWindow := protocol.ByteCount(2000)
 			maxReceiveWindow := protocol.ByteCount(3000)
 
-			fc := NewConnectionFlowController(receiveWindow, maxReceiveWindow, rttStats).(*connectionFlowController)
+			fc := NewConnectionFlowController(receiveWindow, maxReceiveWindow, rttStats, utils.DefaultLogger).(*connectionFlowController)
 			Expect(fc.receiveWindow).To(Equal(receiveWindow))
 			Expect(fc.maxReceiveWindowSize).To(Equal(maxReceiveWindow))
 		})
