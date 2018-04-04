@@ -63,10 +63,7 @@ func newPacketUnpackerGQUIC(aead gQUICAEAD, version protocol.VersionNumber) unpa
 }
 
 func (u *packetUnpackerGQUIC) Unpack(headerBinary []byte, hdr *wire.Header, data []byte) (*unpackedPacket, error) {
-	buf := *getPacketBuffer()
-	buf = buf[:0]
-	defer putPacketBuffer(&buf)
-	decrypted, encryptionLevel, err := u.aead.Open(buf, data, hdr.PacketNumber, headerBinary)
+	decrypted, encryptionLevel, err := u.aead.Open(data[:0], data, hdr.PacketNumber, headerBinary)
 	if err != nil {
 		// Wrap err in quicError so that public reset is sent by session
 		return nil, qerr.Error(qerr.DecryptionFailure, err.Error())
