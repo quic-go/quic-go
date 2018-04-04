@@ -80,7 +80,7 @@ func ParseHeaderSentByClient(b *bytes.Reader) (*Header, error) {
 
 func parsePacketHeader(b *bytes.Reader, sentBy protocol.Perspective, isPublicHeader bool) (*Header, error) {
 	// This is a gQUIC Public Header.
-	if isPublicHeader {
+	if false && isPublicHeader { // Disable gQUIC compat for now
 		hdr, err := parsePublicHeader(b, sentBy)
 		if err != nil {
 			return nil, err
