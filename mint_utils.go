@@ -107,7 +107,7 @@ func tlsToMintConfig(tlsConf *tls.Config, pers protocol.Perspective) (*mint.Conf
 
 // unpackInitialOrRetryPacket unpacks packets Initial and Retry packets
 // These packets must contain a STREAM_FRAME for the crypto stream, starting at offset 0.
-func unpackInitialPacket(aead crypto.AEAD, hdr *wire.Header, data []byte, version protocol.VersionNumber) (*wire.StreamFrame, error) {
+func unpackInitialPacket(aead crypto.AEAD, hdr *wire.Header, data []byte, logger utils.Logger, version protocol.VersionNumber) (*wire.StreamFrame, error) {
 	buf := *getPacketBuffer()
 	buf = buf[:0]
 	defer putPacketBuffer(&buf)
@@ -139,17 +139,17 @@ func unpackInitialPacket(aead crypto.AEAD, hdr *wire.Header, data []byte, versio
 	if frame.Offset != 0 {
 		return nil, errors.New("received stream data with non-zero offset")
 	}
-	if utils.Debug() {
-		utils.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x", hdr.PacketNumber, len(data)+len(hdr.Raw), hdr.ConnectionID)
-		hdr.Log()
-		wire.LogFrame(frame, false)
+	if logger.Debug() {
+		logger.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x", hdr.PacketNumber, len(data)+len(hdr.Raw), hdr.ConnectionID)
+		hdr.Log(logger)
+		wire.LogFrame(logger, frame, false)
 	}
 	return frame, nil
 }
 
 // packUnencryptedPacket provides a low-overhead way to pack a packet.
 // It is supposed to be used in the early stages of the handshake, before a session (which owns a packetPacker) is available.
-func packUnencryptedPacket(aead crypto.AEAD, hdr *wire.Header, f wire.Frame, pers protocol.Perspective) ([]byte, error) {
+func packUnencryptedPacket(aead crypto.AEAD, hdr *wire.Header, f wire.Frame, pers protocol.Perspective, logger utils.Logger) ([]byte, error) {
 	raw := *getPacketBuffer()
 	buffer := bytes.NewBuffer(raw[:0])
 	if err := hdr.Write(buffer, pers, hdr.Version); err != nil {
@@ -162,10 +162,10 @@ func packUnencryptedPacket(aead crypto.AEAD, hdr *wire.Header, f wire.Frame, per
 	raw = raw[0:buffer.Len()]
 	_ = aead.Seal(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], hdr.PacketNumber, raw[:payloadStartIndex])
 	raw = raw[0 : buffer.Len()+aead.Overhead()]
-	if utils.Debug() {
-		utils.Debugf("-> Sending packet 0x%x (%d bytes) for connection %x, %s", hdr.PacketNumber, len(raw), hdr.ConnectionID, protocol.EncryptionUnencrypted)
-		hdr.Log()
-		wire.LogFrame(f, true)
+	if logger.Debug() {
+		logger.Debugf("-> Sending packet 0x%x (%d bytes) for connection %x, %s", hdr.PacketNumber, len(raw), hdr.ConnectionID, protocol.EncryptionUnencrypted)
+		hdr.Log(logger)
+		wire.LogFrame(logger, f, true)
 	}
 	return raw, nil
 }

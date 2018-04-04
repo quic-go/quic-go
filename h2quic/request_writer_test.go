@@ -10,6 +10,7 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -23,7 +24,7 @@ var _ = Describe("Request", func() {
 
 	BeforeEach(func() {
 		headerStream = &mockStream{}
-		rw = newRequestWriter(headerStream)
+		rw = newRequestWriter(headerStream, utils.DefaultLogger)
 		decoder = hpack.NewDecoder(4096, func(hf hpack.HeaderField) {})
 	})
 

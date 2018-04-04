@@ -242,47 +242,40 @@ var _ = Describe("Public Header", func() {
 				VersionFlag: true,
 				ResetFlag:   true,
 			}
-			err := hdr.writePublicHeader(b, protocol.PerspectiveServer, protocol.VersionWhatever)
+			err := hdr.writePublicHeader(b, protocol.PerspectiveClient, protocol.VersionWhatever)
 			Expect(err).To(MatchError(errResetAndVersionFlagSet))
 		})
 
-		Context("Version Negotiation packets", func() {
-			It("sets the Version Flag for packets sent as a server", func() {
-				b := &bytes.Buffer{}
-				hdr := Header{
-					VersionFlag:     true,
-					ConnectionID:    0x4cfa9f9b668619f6,
-					PacketNumber:    2,
-					PacketNumberLen: protocol.PacketNumberLen6,
-				}
-				err := hdr.writePublicHeader(b, protocol.PerspectiveServer, protocol.VersionWhatever)
-				Expect(err).ToNot(HaveOccurred())
-				// must be the first assertion
-				Expect(b.Len()).To(Equal(1 + 8)) // 1 FlagByte + 8 ConnectionID
-				firstByte, _ := b.ReadByte()
-				Expect(firstByte & 0x01).To(Equal(uint8(1)))
-				Expect(firstByte & 0x30).To(BeZero()) // no packet number present
-			})
+		It("doesn't write Version Negotiation Packets", func() {
+			b := &bytes.Buffer{}
+			hdr := Header{
+				VersionFlag:     true,
+				ConnectionID:    0x4cfa9f9b668619f6,
+				PacketNumber:    2,
+				PacketNumberLen: protocol.PacketNumberLen6,
+			}
+			err := hdr.writePublicHeader(b, protocol.PerspectiveServer, protocol.VersionWhatever)
+			Expect(err).To(MatchError("PublicHeader: Writing of Version Negotiation Packets not supported"))
+		})
 
-			It("sets the Version Flag for packets sent as a client, and adds a packet number", func() {
-				b := &bytes.Buffer{}
-				hdr := Header{
-					VersionFlag:     true,
-					Version:         protocol.Version39,
-					ConnectionID:    0x4cfa9f9b668619f6,
-					PacketNumber:    0x42,
-					PacketNumberLen: protocol.PacketNumberLen1,
-				}
-				err := hdr.writePublicHeader(b, protocol.PerspectiveClient, protocol.VersionWhatever)
-				Expect(err).ToNot(HaveOccurred())
-				// must be the first assertion
-				Expect(b.Len()).To(Equal(1 + 8 + 4 + 1)) // 1 FlagByte + 8 ConnectionID + 4 version number + 1 PacketNumber
-				firstByte, _ := b.ReadByte()
-				Expect(firstByte & 0x01).To(Equal(uint8(1)))
-				Expect(firstByte & 0x30).To(Equal(uint8(0x0)))
-				Expect(string(b.Bytes()[8:12])).To(Equal("Q039"))
-				Expect(b.Bytes()[12:13]).To(Equal([]byte{0x42}))
-			})
+		It("writes packets with Version Flag, as a client", func() {
+			b := &bytes.Buffer{}
+			hdr := Header{
+				VersionFlag:     true,
+				Version:         protocol.Version39,
+				ConnectionID:    0x4cfa9f9b668619f6,
+				PacketNumber:    0x42,
+				PacketNumberLen: protocol.PacketNumberLen1,
+			}
+			err := hdr.writePublicHeader(b, protocol.PerspectiveClient, protocol.VersionWhatever)
+			Expect(err).ToNot(HaveOccurred())
+			// must be the first assertion
+			Expect(b.Len()).To(Equal(1 + 8 + 4 + 1)) // 1 FlagByte + 8 ConnectionID + 4 version number + 1 PacketNumber
+			firstByte, _ := b.ReadByte()
+			Expect(firstByte & 0x01).To(Equal(uint8(1)))
+			Expect(firstByte & 0x30).To(Equal(uint8(0x0)))
+			Expect(string(b.Bytes()[8:12])).To(Equal("Q039"))
+			Expect(b.Bytes()[12:13]).To(Equal([]byte{0x42}))
 		})
 
 		Context("PublicReset packets", func() {
@@ -475,16 +468,19 @@ var _ = Describe("Public Header", func() {
 	})
 
 	Context("logging", func() {
-		var buf bytes.Buffer
+		var (
+			buf    *bytes.Buffer
+			logger utils.Logger
+		)
 
 		BeforeEach(func() {
-			buf.Reset()
-			utils.SetLogLevel(utils.LogLevelDebug)
-			log.SetOutput(&buf)
+			buf = &bytes.Buffer{}
+			logger = utils.DefaultLogger
+			logger.SetLogLevel(utils.LogLevelDebug)
+			log.SetOutput(buf)
 		})
 
 		AfterEach(func() {
-			utils.SetLogLevel(utils.LogLevelNothing)
 			log.SetOutput(os.Stdout)
 		})
 
@@ -494,7 +490,7 @@ var _ = Describe("Public Header", func() {
 				PacketNumber:    0x1337,
 				PacketNumberLen: 6,
 				Version:         protocol.Version39,
-			}).logPublicHeader()
+			}).logPublicHeader(logger)
 			Expect(buf.String()).To(ContainSubstring("Public Header{ConnectionID: 0xdecafbad, PacketNumber: 0x1337, PacketNumberLen: 6, Version: gQUIC 39"))
 		})
 
@@ -504,7 +500,7 @@ var _ = Describe("Public Header", func() {
 				PacketNumber:     0x1337,
 				PacketNumberLen:  6,
 				Version:          protocol.Version39,
-			}).logPublicHeader()
+			}).logPublicHeader(logger)
 			Expect(buf.String()).To(ContainSubstring("Public Header{ConnectionID: (omitted)"))
 		})
 
@@ -513,7 +509,7 @@ var _ = Describe("Public Header", func() {
 				OmitConnectionID: true,
 				PacketNumber:     0x1337,
 				PacketNumberLen:  6,
-			}).logPublicHeader()
+			}).logPublicHeader(logger)
 			Expect(buf.String()).To(ContainSubstring("Version: (unset)"))
 		})
 
@@ -521,7 +517,7 @@ var _ = Describe("Public Header", func() {
 			(&Header{
 				ConnectionID:         0xdecafbad,
 				DiversificationNonce: []byte{0xba, 0xdf, 0x00, 0x0d},
-			}).logPublicHeader()
+			}).logPublicHeader(logger)
 			Expect(buf.String()).To(ContainSubstring("DiversificationNonce: []byte{0xba, 0xdf, 0x0, 0xd}"))
 		})
 

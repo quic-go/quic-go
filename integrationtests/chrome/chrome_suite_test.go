@@ -126,7 +126,7 @@ func chromeTest(version protocol.VersionNumber, url string, blockUntilDone func(
 		fmt.Sprintf("--quic-version=QUIC_VERSION_%s", version.ToAltSvc()),
 		url,
 	}
-	utils.Infof("Running chrome: %s '%s'", getChromePath(), strings.Join(args, "' '"))
+	utils.DefaultLogger.Infof("Running chrome: %s '%s'", getChromePath(), strings.Join(args, "' '"))
 	command := exec.Command(path, args...)
 	session, err := gexec.Start(command, nil, nil)
 	Expect(err).NotTo(HaveOccurred())

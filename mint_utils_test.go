@@ -9,6 +9,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/crypto"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -107,14 +108,14 @@ var _ = Describe("Packing and unpacking Initial packets", func() {
 				Data:     []byte("foobar"),
 			}
 			p := packPacket([]wire.Frame{f})
-			frame, err := unpackInitialPacket(aead, hdr, p, ver)
+			frame, err := unpackInitialPacket(aead, hdr, p, utils.DefaultLogger, ver)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).To(Equal(f))
 		})
 
 		It("rejects a packet that doesn't contain a STREAM_FRAME", func() {
 			p := packPacket([]wire.Frame{&wire.PingFrame{}})
-			_, err := unpackInitialPacket(aead, hdr, p, ver)
+			_, err := unpackInitialPacket(aead, hdr, p, utils.DefaultLogger, ver)
 			Expect(err).To(MatchError("Packet doesn't contain a STREAM_FRAME"))
 		})
 
@@ -124,7 +125,7 @@ var _ = Describe("Packing and unpacking Initial packets", func() {
 				Data:     []byte("foobar"),
 			}
 			p := packPacket([]wire.Frame{f})
-			_, err := unpackInitialPacket(aead, hdr, p, ver)
+			_, err := unpackInitialPacket(aead, hdr, p, utils.DefaultLogger, ver)
 			Expect(err).To(MatchError("Received STREAM_FRAME for wrong stream (Stream ID 42)"))
 		})
 
@@ -135,7 +136,7 @@ var _ = Describe("Packing and unpacking Initial packets", func() {
 				Data:     []byte("foobar"),
 			}
 			p := packPacket([]wire.Frame{f})
-			_, err := unpackInitialPacket(aead, hdr, p, ver)
+			_, err := unpackInitialPacket(aead, hdr, p, utils.DefaultLogger, ver)
 			Expect(err).To(MatchError("received stream data with non-zero offset"))
 		})
 	})
@@ -146,7 +147,7 @@ var _ = Describe("Packing and unpacking Initial packets", func() {
 				Data:   []byte("foobar"),
 				FinBit: true,
 			}
-			data, err := packUnencryptedPacket(aead, hdr, f, protocol.PerspectiveServer)
+			data, err := packUnencryptedPacket(aead, hdr, f, protocol.PerspectiveServer, utils.DefaultLogger)
 			Expect(err).ToNot(HaveOccurred())
 			aeadCl, err := crypto.NewNullAEAD(protocol.PerspectiveClient, connID, ver)
 			Expect(err).ToNot(HaveOccurred())
