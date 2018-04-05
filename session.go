@@ -19,6 +19,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qerr"
+	//"log"
 )
 
 type unpacker interface {
@@ -598,8 +599,14 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 			}
 			if s.packer.SpinBit != s.packer.PrevSpinBit {
 				// got an edge
-				s.packer.VEC = hdr.VEC
+				s.packer.PrevSpinBit = s.packer.SpinBit
+				s.packer.Edge = true
+				s.packer.VEC = hdr.VEC + 1
+				if (s.packer.VEC > 3) {
+					s.packer.VEC = 3
+				}
 				s.packer.LastTrigger = time.Now()
+				//log.Printf("=== GOT EDGE ON %v INSPIN=%v VEC=%v ",s.packer.LastTrigger.Format("20060102_150405.999"),hdr.SpinBit,hdr.VEC);
 			}
 		}
 	}
