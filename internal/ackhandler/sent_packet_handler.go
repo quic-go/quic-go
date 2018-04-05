@@ -32,6 +32,7 @@ const (
 type sentPacketHandler struct {
 	lastSentPacketNumber              protocol.PacketNumber
 	lastSentRetransmittablePacketTime time.Time
+	lastSentHandshakePacketTime       time.Time
 
 	nextPacketSendTime time.Time
 	skippedPackets     []protocol.PacketNumber
@@ -155,6 +156,9 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* isRetransmitt
 	isRetransmittable := len(packet.Frames) != 0
 
 	if isRetransmittable {
+		if packet.EncryptionLevel < protocol.EncryptionForwardSecure {
+			h.lastSentHandshakePacketTime = packet.SendTime
+		}
 		h.lastSentRetransmittablePacketTime = packet.SendTime
 		packet.includedInBytesInFlight = true
 		h.bytesInFlight += packet.Length
@@ -274,7 +278,7 @@ func (h *sentPacketHandler) updateLossDetectionAlarm() {
 
 	// TODO(#497): TLP
 	if !h.handshakeComplete {
-		h.alarm = h.lastSentRetransmittablePacketTime.Add(h.computeHandshakeTimeout())
+		h.alarm = h.lastSentHandshakePacketTime.Add(h.computeHandshakeTimeout())
 	} else if !h.lossTime.IsZero() {
 		// Early retransmit timer or time loss detection.
 		h.alarm = h.lossTime
