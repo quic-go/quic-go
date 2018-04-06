@@ -418,10 +418,11 @@ var _ = Describe("Server", func() {
 			config.Versions = []protocol.VersionNumber{99}
 			b := &bytes.Buffer{}
 			hdr := wire.Header{
-				VersionFlag:     true,
-				ConnectionID:    connID,
-				PacketNumber:    1,
-				PacketNumberLen: protocol.PacketNumberLen2,
+				VersionFlag:      true,
+				DestConnectionID: connID,
+				SrcConnectionID:  connID,
+				PacketNumber:     1,
+				PacketNumberLen:  protocol.PacketNumberLen2,
 			}
 			hdr.Write(b, protocol.PerspectiveClient, 13 /* not a valid QUIC version */)
 			b.Write(bytes.Repeat([]byte{0}, protocol.MinClientHelloSize)) // add a fake CHLO
@@ -433,10 +434,11 @@ var _ = Describe("Server", func() {
 		It("doesn't respond with a version negotiation packet if the first packet is too small", func() {
 			b := &bytes.Buffer{}
 			hdr := wire.Header{
-				VersionFlag:     true,
-				ConnectionID:    connID,
-				PacketNumber:    1,
-				PacketNumberLen: protocol.PacketNumberLen2,
+				VersionFlag:      true,
+				DestConnectionID: connID,
+				SrcConnectionID:  connID,
+				PacketNumber:     1,
+				PacketNumberLen:  protocol.PacketNumberLen2,
 			}
 			hdr.Write(b, protocol.PerspectiveClient, 13 /* not a valid QUIC version */)
 			b.Write(bytes.Repeat([]byte{0}, protocol.MinClientHelloSize-1)) // this packet is 1 byte too small
@@ -510,10 +512,11 @@ var _ = Describe("Server", func() {
 		connID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
 		b := &bytes.Buffer{}
 		hdr := wire.Header{
-			VersionFlag:     true,
-			ConnectionID:    connID,
-			PacketNumber:    1,
-			PacketNumberLen: protocol.PacketNumberLen2,
+			VersionFlag:      true,
+			DestConnectionID: connID,
+			SrcConnectionID:  connID,
+			PacketNumber:     1,
+			PacketNumberLen:  protocol.PacketNumberLen2,
 		}
 		hdr.Write(b, protocol.PerspectiveClient, 13 /* not a valid QUIC version */)
 		b.Write(bytes.Repeat([]byte{0}, protocol.MinClientHelloSize)) // add a fake CHLO
@@ -535,7 +538,8 @@ var _ = Describe("Server", func() {
 		packet, err := wire.ParseHeaderSentByServer(r, protocol.VersionUnknown)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.VersionFlag).To(BeTrue())
-		Expect(packet.ConnectionID).To(Equal(connID))
+		Expect(packet.DestConnectionID).To(Equal(connID))
+		Expect(packet.SrcConnectionID).To(Equal(connID))
 		Expect(r.Len()).To(BeZero())
 		Consistently(done).ShouldNot(BeClosed())
 		// make the go routine return
@@ -548,11 +552,12 @@ var _ = Describe("Server", func() {
 		config.Versions = append(config.Versions, protocol.VersionTLS)
 		b := &bytes.Buffer{}
 		hdr := wire.Header{
-			Type:         protocol.PacketTypeInitial,
-			IsLongHeader: true,
-			ConnectionID: connID,
-			PacketNumber: 0x55,
-			Version:      0x1234,
+			Type:             protocol.PacketTypeInitial,
+			IsLongHeader:     true,
+			DestConnectionID: connID,
+			SrcConnectionID:  connID,
+			PacketNumber:     0x55,
+			Version:          0x1234,
 		}
 		err := hdr.Write(b, protocol.PerspectiveClient, protocol.VersionTLS)
 		Expect(err).ToNot(HaveOccurred())
@@ -575,7 +580,8 @@ var _ = Describe("Server", func() {
 		packet, err := wire.ParseHeaderSentByServer(r, protocol.VersionUnknown)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.IsVersionNegotiation).To(BeTrue())
-		Expect(packet.ConnectionID).To(Equal(connID))
+		Expect(packet.DestConnectionID).To(Equal(connID))
+		Expect(packet.SrcConnectionID).To(Equal(connID))
 		Expect(r.Len()).To(BeZero())
 		Consistently(done).ShouldNot(BeClosed())
 		// make the go routine return
@@ -587,11 +593,12 @@ var _ = Describe("Server", func() {
 		connID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
 		b := &bytes.Buffer{}
 		hdr := wire.Header{
-			Type:         protocol.PacketTypeInitial,
-			IsLongHeader: true,
-			ConnectionID: connID,
-			PacketNumber: 0x55,
-			Version:      protocol.VersionTLS,
+			Type:             protocol.PacketTypeInitial,
+			IsLongHeader:     true,
+			DestConnectionID: connID,
+			SrcConnectionID:  connID,
+			PacketNumber:     0x55,
+			Version:          protocol.VersionTLS,
 		}
 		err := hdr.Write(b, protocol.PerspectiveClient, protocol.VersionTLS)
 		Expect(err).ToNot(HaveOccurred())

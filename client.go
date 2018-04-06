@@ -304,11 +304,16 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 	}
 	hdr.Raw = packet[:len(packet)-r.Len()]
 
+	if hdr.IsLongHeader && !hdr.DestConnectionID.Equal(hdr.SrcConnectionID) {
+		c.logger.Errorf("receiving packets with different destination and source connection IDs not supported")
+	}
+
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
 	// reject packets with the wrong connection ID
-	if !hdr.OmitConnectionID && !hdr.ConnectionID.Equal(c.connectionID) {
+	// TODO(#1003): add support for server-chosen connection IDs
+	if !hdr.OmitConnectionID && !hdr.DestConnectionID.Equal(c.connectionID) {
 		return
 	}
 
@@ -316,7 +321,7 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 		cr := c.conn.RemoteAddr()
 		// check if the remote address and the connection ID match
 		// otherwise this might be an attacker trying to inject a PUBLIC_RESET to kill the connection
-		if cr.Network() != remoteAddr.Network() || cr.String() != remoteAddr.String() || !hdr.ConnectionID.Equal(c.connectionID) {
+		if cr.Network() != remoteAddr.Network() || cr.String() != remoteAddr.String() || !hdr.DestConnectionID.Equal(c.connectionID) {
 			c.logger.Infof("Received a spoofed Public Reset. Ignoring.")
 			return
 		}

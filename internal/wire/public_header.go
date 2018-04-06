@@ -26,8 +26,11 @@ func (h *Header) writePublicHeader(b *bytes.Buffer, pers protocol.Perspective, _
 	if h.VersionFlag && h.ResetFlag {
 		return errResetAndVersionFlagSet
 	}
-	if len(h.ConnectionID) != 8 {
-		return fmt.Errorf("PublicHeader: wrong length for Connection ID: %d (expected 8)", len(h.ConnectionID))
+	if !h.DestConnectionID.Equal(h.SrcConnectionID) {
+		return fmt.Errorf("PublicHeader: SrcConnectionID must be equal to DestConnectionID")
+	}
+	if len(h.DestConnectionID) != 8 {
+		return fmt.Errorf("PublicHeader: wrong length for Connection ID: %d (expected 8)", len(h.DestConnectionID))
 	}
 
 	publicFlagByte := uint8(0x00)
@@ -62,7 +65,7 @@ func (h *Header) writePublicHeader(b *bytes.Buffer, pers protocol.Perspective, _
 	b.WriteByte(publicFlagByte)
 
 	if !h.OmitConnectionID {
-		b.Write(h.ConnectionID)
+		b.Write(h.DestConnectionID)
 	}
 	if h.VersionFlag && pers == protocol.PerspectiveClient {
 		utils.BigEndian.WriteUint32(b, uint32(h.Version))
@@ -139,8 +142,8 @@ func parsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Hea
 		if connID[0] == 0 && connID[1] == 0 && connID[2] == 0 && connID[3] == 0 && connID[4] == 0 && connID[5] == 0 && connID[6] == 0 && connID[7] == 0 {
 			return nil, errInvalidConnectionID
 		}
-		header.ConnectionID = connID
-
+		header.DestConnectionID = connID
+		header.SrcConnectionID = connID
 	}
 
 	// Contrary to what the gQUIC wire spec says, the 0x4 bit only indicates the presence of the diversification nonce for packets sent by the server.
@@ -240,7 +243,7 @@ func (h *Header) hasPacketNumber(packetSentBy protocol.Perspective) bool {
 func (h *Header) logPublicHeader(logger utils.Logger) {
 	connID := "(omitted)"
 	if !h.OmitConnectionID {
-		connID = fmt.Sprintf("%#x", h.ConnectionID)
+		connID = fmt.Sprintf("%#x", h.DestConnectionID)
 	}
 	ver := "(unset)"
 	if h.Version != 0 {

@@ -49,10 +49,11 @@ var _ = Describe("Stateless TLS handling", func() {
 		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 		hdrBuf := &bytes.Buffer{}
 		hdr := &wire.Header{
-			IsLongHeader: true,
-			ConnectionID: connID,
-			PacketNumber: 1,
-			Version:      protocol.VersionTLS,
+			IsLongHeader:     true,
+			DestConnectionID: connID,
+			SrcConnectionID:  connID,
+			PacketNumber:     1,
+			Version:          protocol.VersionTLS,
 		}
 		err := hdr.Write(hdrBuf, protocol.PerspectiveClient, protocol.VersionTLS)
 		Expect(err).ToNot(HaveOccurred())
@@ -74,7 +75,7 @@ var _ = Describe("Stateless TLS handling", func() {
 		hdr, err := wire.ParseHeaderSentByServer(r, protocol.VersionTLS)
 		Expect(err).ToNot(HaveOccurred())
 		hdr.Raw = data[:len(data)-r.Len()]
-		aead, err := crypto.NewNullAEAD(protocol.PerspectiveClient, hdr.ConnectionID, protocol.VersionTLS)
+		aead, err := crypto.NewNullAEAD(protocol.PerspectiveClient, hdr.DestConnectionID, protocol.VersionTLS)
 		Expect(err).ToNot(HaveOccurred())
 		payload, err := aead.Open(nil, data[len(data)-r.Len():], hdr.PacketNumber, hdr.Raw)
 		Expect(err).ToNot(HaveOccurred())
@@ -83,8 +84,9 @@ var _ = Describe("Stateless TLS handling", func() {
 
 	It("sends a version negotiation packet if it doesn't support the version", func() {
 		hdr := &wire.Header{
-			ConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-			Version:      0x1337,
+			DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+			SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+			Version:          0x1337,
 		}
 		server.HandleInitial(nil, hdr, bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize))
 		Expect(conn.dataWritten.Len()).ToNot(BeZero())

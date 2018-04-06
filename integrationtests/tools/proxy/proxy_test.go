@@ -25,7 +25,8 @@ var _ = Describe("QUIC Proxy", func() {
 		hdr := wire.Header{
 			PacketNumber:     p,
 			PacketNumberLen:  protocol.PacketNumberLen6,
-			ConnectionID:     protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0, 0, 0x13, 0x37},
+			DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0, 0, 0x13, 0x37},
+			SrcConnectionID:  protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0, 0, 0x13, 0x37},
 			OmitConnectionID: false,
 		}
 		hdr.Write(b, protocol.PerspectiveServer, protocol.VersionWhatever)

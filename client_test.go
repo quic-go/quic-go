@@ -34,9 +34,10 @@ var _ = Describe("Client", func() {
 	acceptClientVersionPacket := func(connID protocol.ConnectionID) []byte {
 		b := &bytes.Buffer{}
 		err := (&wire.Header{
-			ConnectionID:    connID,
-			PacketNumber:    1,
-			PacketNumberLen: 1,
+			DestConnectionID: connID,
+			SrcConnectionID:  connID,
+			PacketNumber:     1,
+			PacketNumberLen:  1,
 		}).Write(b, protocol.PerspectiveServer, protocol.VersionWhatever)
 		Expect(err).ToNot(HaveOccurred())
 		return b.Bytes()
@@ -293,9 +294,10 @@ var _ = Describe("Client", func() {
 
 			It("recognizes that a packet without VersionFlag means that the server accepted the suggested version", func() {
 				ph := wire.Header{
-					PacketNumber:    1,
-					PacketNumberLen: protocol.PacketNumberLen2,
-					ConnectionID:    connID,
+					PacketNumber:     1,
+					PacketNumberLen:  protocol.PacketNumberLen2,
+					DestConnectionID: connID,
+					SrcConnectionID:  connID,
 				}
 				b := &bytes.Buffer{}
 				err := ph.Write(b, protocol.PerspectiveServer, protocol.VersionWhatever)
@@ -460,9 +462,10 @@ var _ = Describe("Client", func() {
 		connID2 := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7}
 		Expect(connID).ToNot(Equal(connID2))
 		(&wire.Header{
-			ConnectionID:    connID2,
-			PacketNumber:    1,
-			PacketNumberLen: 1,
+			DestConnectionID: connID2,
+			SrcConnectionID:  connID2,
+			PacketNumber:     1,
+			PacketNumberLen:  1,
 		}).Write(buf, protocol.PerspectiveServer, protocol.VersionWhatever)
 		cl.handlePacket(addr, buf.Bytes())
 		Expect(sess.packetCount).To(BeZero())
@@ -589,9 +592,10 @@ var _ = Describe("Client", func() {
 	Context("handling packets", func() {
 		It("handles packets", func() {
 			ph := wire.Header{
-				PacketNumber:    1,
-				PacketNumberLen: protocol.PacketNumberLen2,
-				ConnectionID:    connID,
+				PacketNumber:     1,
+				PacketNumberLen:  protocol.PacketNumberLen2,
+				DestConnectionID: connID,
+				SrcConnectionID:  connID,
 			}
 			b := &bytes.Buffer{}
 			err := ph.Write(b, protocol.PerspectiveServer, cl.version)

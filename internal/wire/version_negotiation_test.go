@@ -16,19 +16,23 @@ var _ = Describe("Version Negotiation Packets", func() {
 		hdr, err := parsePublicHeader(bytes.NewReader(data), protocol.PerspectiveServer)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.VersionFlag).To(BeTrue())
-		Expect(hdr.ConnectionID).To(Equal(connID))
+		Expect(hdr.DestConnectionID).To(Equal(connID))
+		Expect(hdr.SrcConnectionID).To(Equal(connID))
 		Expect(hdr.SupportedVersions).To(Equal(versions))
 	})
 
 	It("writes in IETF draft style", func() {
-		connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}
+		srcConnID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}
+		destConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 		versions := []protocol.VersionNumber{1001, 1003}
-		data := ComposeVersionNegotiation(connID, versions)
+		data, err := ComposeVersionNegotiation(destConnID, srcConnID, versions)
+		Expect(err).ToNot(HaveOccurred())
 		Expect(data[0] & 0x80).ToNot(BeZero())
 		hdr, err := parseHeader(bytes.NewReader(data), protocol.PerspectiveServer)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.IsVersionNegotiation).To(BeTrue())
-		Expect(hdr.ConnectionID).To(Equal(connID))
+		Expect(hdr.DestConnectionID).To(Equal(destConnID))
+		Expect(hdr.SrcConnectionID).To(Equal(srcConnID))
 		Expect(hdr.Version).To(BeZero())
 		// the supported versions should include one reserved version number
 		Expect(hdr.SupportedVersions).To(HaveLen(len(versions) + 1))
