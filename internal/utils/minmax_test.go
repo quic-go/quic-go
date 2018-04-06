@@ -35,6 +35,11 @@ var _ = Describe("Min / Max", func() {
 			Expect(MaxInt64(7, 5)).To(Equal(int64(7)))
 		})
 
+		It("returns the maximum ByteCount", func() {
+			Expect(MaxByteCount(7, 5)).To(Equal(protocol.ByteCount(7)))
+			Expect(MaxByteCount(5, 7)).To(Equal(protocol.ByteCount(7)))
+		})
+
 		It("returns the maximum duration", func() {
 			Expect(MaxDuration(time.Microsecond, time.Nanosecond)).To(Equal(time.Microsecond))
 			Expect(MaxDuration(time.Nanosecond, time.Microsecond)).To(Equal(time.Microsecond))
