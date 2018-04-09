@@ -16,10 +16,16 @@ type incomingBidiStreamsMap struct {
 	mutex sync.RWMutex
 	cond  sync.Cond
 
+	// The map contains:
+	// * the stream, if it is an active stream
+	// * no entry, if the stream doesn't exist and is higher than the highest stream
+	// * nil, if the stream doesn't exist and is smaller than the highest stream
+	// * no entry, if the stream is smaller than the highest stream and already closed
 	streams map[protocol.StreamID]streamI
 
-	nextStream    protocol.StreamID // the next stream that will be returned by AcceptStream()
-	highestStream protocol.StreamID // the highest stream that the peer openend
+	acceptQueue []streamI
+
+	nextStream    protocol.StreamID // the next stream that the peer will open (if in order)
 	maxStream     protocol.StreamID // the highest stream that the peer is allowed to open
 	maxNumStreams int               // maximum number of streams
 
@@ -38,9 +44,9 @@ func newIncomingBidiStreamsMap(
 ) *incomingBidiStreamsMap {
 	m := &incomingBidiStreamsMap{
 		streams:          make(map[protocol.StreamID]streamI),
-		nextStream:       nextStream,
 		maxStream:        initialMaxStreamID,
 		maxNumStreams:    maxNumStreams,
+		nextStream:       nextStream,
 		newStream:        newStream,
 		queueMaxStreamID: func(f *wire.MaxStreamIDFrame) { queueControlFrame(f) },
 	}
@@ -52,20 +58,18 @@ func (m *incomingBidiStreamsMap) AcceptStream() (streamI, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	var str streamI
 	for {
-		var ok bool
 		if m.closeErr != nil {
 			return nil, m.closeErr
 		}
-		str, ok = m.streams[m.nextStream]
-		if ok {
-			break
+		if len(m.acceptQueue) > 0 {
+			str := m.acceptQueue[0]
+			m.acceptQueue = m.acceptQueue[1:]
+			m.maybeQueueMaxStreamID()
+			return str, nil
 		}
 		m.cond.Wait()
 	}
-	m.nextStream += 4
-	return str, nil
 }
 
 func (m *incomingBidiStreamsMap) GetOrOpenStream(id protocol.StreamID) (streamI, error) {
@@ -74,13 +78,15 @@ func (m *incomingBidiStreamsMap) GetOrOpenStream(id protocol.StreamID) (streamI,
 		m.mutex.RUnlock()
 		return nil, fmt.Errorf("peer tried to open stream %d (current limit: %d)", id, m.maxStream)
 	}
-	// if the id is smaller than the highest we accepted
-	// * this stream exists in the map, and we can return it, or
-	// * this stream was already closed, then we can return the nil
-	if id <= m.highestStream {
-		s := m.streams[id]
-		m.mutex.RUnlock()
-		return s, nil
+	if id < m.nextStream {
+		s, ok := m.streams[id]
+		// if the stream exists in the map, return it
+		// if no entry exists in the map, the stream was already closed
+		if !ok || s != nil {
+			m.mutex.RUnlock()
+			return s, nil
+		}
+		// if the value is nil, the stream should be created
 	}
 	m.mutex.RUnlock()
 
@@ -88,36 +94,47 @@ func (m *incomingBidiStreamsMap) GetOrOpenStream(id protocol.StreamID) (streamI,
 	// no need to check the two error conditions from above again
 	// * maxStream can only increase, so if the id was valid before, it definitely is valid now
 	// * highestStream is only modified by this function
-	var start protocol.StreamID
-	if m.highestStream == 0 {
-		start = m.nextStream
-	} else {
-		start = m.highestStream + 4
+	if id > m.nextStream {
+		for newID := m.nextStream; newID < id; newID += 4 {
+			m.streams[newID] = nil
+		}
 	}
-	for newID := start; newID <= id; newID += 4 {
-		m.streams[newID] = m.newStream(newID)
-		m.cond.Signal()
+	str := m.newStream(id)
+	m.streams[id] = str
+	m.acceptQueue = append(m.acceptQueue, str)
+	if id >= m.nextStream {
+		m.nextStream = id + 4
 	}
-	m.highestStream = id
-	s := m.streams[id]
 	m.mutex.Unlock()
-	return s, nil
+	m.cond.Signal()
+	return str, nil
 }
 
 func (m *incomingBidiStreamsMap) DeleteStream(id protocol.StreamID) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	if _, ok := m.streams[id]; !ok {
+	if str, ok := m.streams[id]; !ok || str == nil {
 		return fmt.Errorf("Tried to delete unknown stream %d", id)
 	}
 	delete(m.streams, id)
-	// queue a MAX_STREAM_ID frame, giving the peer the option to open a new stream
-	if numNewStreams := m.maxNumStreams - len(m.streams); numNewStreams > 0 {
-		m.maxStream = m.highestStream + protocol.StreamID(numNewStreams*4)
-		m.queueMaxStreamID(&wire.MaxStreamIDFrame{StreamID: m.maxStream})
-	}
+	m.maybeQueueMaxStreamID()
 	return nil
+}
+
+func (m *incomingBidiStreamsMap) maybeQueueMaxStreamID() {
+	// Note that streams that have been accepted, but haven't been accepted are counted twice.
+	// This is necessary because a stream that is opened and deleted before it is accepted will be removed from the map, but not the accept queue.
+	// This shouldn't be a problem since an application is expected to immediately accept new streams.
+	numNewStreams := m.maxNumStreams - len(m.acceptQueue) - len(m.streams)
+	if numNewStreams < 1 {
+		return
+	}
+	// queue a MAX_STREAM_ID frame, giving the peer the option to open a new stream
+	if maxStream := m.nextStream + protocol.StreamID((numNewStreams-1)*4); maxStream > m.maxStream {
+		m.maxStream = maxStream
+		m.queueMaxStreamID(&wire.MaxStreamIDFrame{StreamID: maxStream})
+	}
 }
 
 func (m *incomingBidiStreamsMap) CloseWithError(err error) {

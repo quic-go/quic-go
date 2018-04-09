@@ -330,21 +330,29 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 
 			Context("sending MAX_STREAM_ID frames", func() {
 				It("sends MAX_STREAM_ID frames for bidirectional streams", func() {
-					_, err := m.GetOrOpenReceiveStream(ids.firstIncomingBidiStream + 4*10)
+					id := ids.firstIncomingBidiStream + 4*10
+					_, err := m.GetOrOpenReceiveStream(id)
 					Expect(err).ToNot(HaveOccurred())
+					str, err := m.AcceptStream()
+					Expect(err).ToNot(HaveOccurred())
+					Expect(str.StreamID()).To(Equal(id))
 					mockSender.EXPECT().queueControlFrame(&wire.MaxStreamIDFrame{
 						StreamID: protocol.MaxBidiStreamID(maxBidiStreams, perspective) + 4,
 					})
-					Expect(m.DeleteStream(ids.firstIncomingBidiStream)).To(Succeed())
+					Expect(m.DeleteStream(id)).To(Succeed())
 				})
 
 				It("sends MAX_STREAM_ID frames for unidirectional streams", func() {
-					_, err := m.GetOrOpenReceiveStream(ids.firstIncomingUniStream + 4*10)
+					id := ids.firstIncomingUniStream + 4*10
+					_, err := m.GetOrOpenReceiveStream(id)
 					Expect(err).ToNot(HaveOccurred())
+					str, err := m.AcceptUniStream()
+					Expect(err).ToNot(HaveOccurred())
+					Expect(str.StreamID()).To(Equal(id))
 					mockSender.EXPECT().queueControlFrame(&wire.MaxStreamIDFrame{
 						StreamID: protocol.MaxUniStreamID(maxUniStreams, perspective) + 4,
 					})
-					Expect(m.DeleteStream(ids.firstIncomingUniStream)).To(Succeed())
+					Expect(m.DeleteStream(id)).To(Succeed())
 				})
 			})
 
