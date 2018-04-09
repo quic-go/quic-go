@@ -129,6 +129,13 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.lastSentRetransmittablePacketTime).To(Equal(sendTime))
 		})
 
+		It("stores the sent time of handshake packets", func() {
+			sendTime := time.Now().Add(-time.Minute)
+			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 1, SendTime: sendTime, EncryptionLevel: protocol.EncryptionUnencrypted}))
+			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 2, SendTime: sendTime.Add(time.Hour), EncryptionLevel: protocol.EncryptionForwardSecure}))
+			Expect(handler.lastSentHandshakePacketTime).To(Equal(sendTime))
+		})
+
 		It("does not store non-retransmittable packets", func() {
 			handler.SentPacket(nonRetransmittablePacket(&Packet{PacketNumber: 1}))
 			Expect(handler.packetHistory.Len()).To(BeZero())
@@ -851,6 +858,7 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.SentPacket(handshakePacket(&Packet{PacketNumber: 2, SendTime: sendTime}))
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 3, SendTime: sendTime}))
 			handler.SentPacket(handshakePacket(&Packet{PacketNumber: 4, SendTime: lastHandshakePacketSendTime}))
+			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 5, SendTime: now}))
 
 			err := handler.ReceivedAck(createAck([]wire.AckRange{{First: 1, Last: 1}}), 1, protocol.EncryptionForwardSecure, now)
 			// RTT is now 1 minute
