@@ -91,12 +91,13 @@ var _ = Describe("Client Crypto Setup", func() {
 		shloMap                 map[Tag][]byte
 		handshakeEvent          chan struct{}
 		paramsChan              chan TransportParameters
+		divNonceChan            chan<- []byte
 	)
 
 	BeforeEach(func() {
 		shloMap = map[Tag][]byte{
-			TagPUBS: []byte{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f},
-			TagVER:  []byte{},
+			TagPUBS: {0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f},
+			TagVER:  {},
 		}
 		keyDerivation := func(forwardSecure bool, sharedSecret, nonces []byte, connID protocol.ConnectionID, chlo []byte, scfg []byte, cert []byte, divNonce []byte, pers protocol.Perspective) (crypto.AEAD, error) {
 			keyDerivationCalledWith = &keyDerivationValues{
@@ -119,7 +120,7 @@ var _ = Describe("Client Crypto Setup", func() {
 		// use a buffered channel here, so that we can parse a SHLO without having to receive the TransportParameters to avoid blocking
 		paramsChan = make(chan TransportParameters, 1)
 		handshakeEvent = make(chan struct{}, 2)
-		csInt, err := NewCryptoSetupClient(
+		csInt, dnc, err := NewCryptoSetupClient(
 			stream,
 			"hostname",
 			0,
@@ -130,15 +131,16 @@ var _ = Describe("Client Crypto Setup", func() {
 			handshakeEvent,
 			protocol.Version39,
 			nil,
+			utils.DefaultLogger,
 			nil,
 		)
 		Expect(err).ToNot(HaveOccurred())
 		cs = csInt.(*cryptoSetupClient)
 		cs.certManager = certManager
 		cs.keyDerivation = keyDerivation
-		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
 		cs.nullAEAD = mockcrypto.NewMockAEAD(mockCtrl)
 		cs.cryptoStream = stream
+		divNonceChan = dnc
 	})
 
 	Context("Reading REJ", func() {
@@ -232,8 +234,8 @@ var _ = Describe("Client Crypto Setup", func() {
 				cs.negotiatedVersions = []protocol.VersionNumber{protocol.VersionWhatever}
 				cs.receivedSecurePacket = true
 				_, err := cs.handleSHLOMessage(map[Tag][]byte{
-					TagPUBS: []byte{0},
-					TagVER:  []byte{0, 1},
+					TagPUBS: {0},
+					TagVER:  {0, 1},
 				})
 				Expect(err).To(MatchError(qerr.Error(qerr.VersionNegotiationMismatch, "Downgrade attack detected")))
 			})
@@ -439,7 +441,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			Expect(cs.forwardSecureAEAD).ToNot(BeNil())
 		})
 
-		It("reads the connection paramaters", func() {
+		It("reads the connection parameters", func() {
 			shloMap[TagICSL] = []byte{13, 0, 0, 0} // 13 seconds
 			params, err := cs.handleSHLOMessage(shloMap)
 			Expect(err).ToNot(HaveOccurred())
@@ -725,7 +727,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			cs.diversificationNonce = nil
 			cs.serverVerified = true
 			Expect(cs.secureAEAD).To(BeNil())
-			cs.SetDiversificationNonce([]byte("div"))
+			divNonceChan <- []byte("div")
 			Eventually(handshakeEvent).Should(Receive())
 			Expect(cs.secureAEAD).ToNot(BeNil())
 			Expect(handshakeEvent).ToNot(Receive())
@@ -925,7 +927,7 @@ var _ = Describe("Client Crypto Setup", func() {
 				close(done)
 			}()
 			nonce := []byte("foobar")
-			cs.SetDiversificationNonce(nonce)
+			divNonceChan <- nonce
 			Eventually(func() []byte { return cs.diversificationNonce }).Should(Equal(nonce))
 			// make the go routine return
 			stream.close()
@@ -941,8 +943,8 @@ var _ = Describe("Client Crypto Setup", func() {
 				close(done)
 			}()
 			nonce := []byte("foobar")
-			cs.SetDiversificationNonce(nonce)
-			cs.SetDiversificationNonce(nonce)
+			divNonceChan <- nonce
+			divNonceChan <- nonce
 			Eventually(func() []byte { return cs.diversificationNonce }).Should(Equal(nonce))
 			// make the go routine return
 			stream.close()
@@ -959,8 +961,8 @@ var _ = Describe("Client Crypto Setup", func() {
 			}()
 			nonce1 := []byte("foobar")
 			nonce2 := []byte("raboof")
-			cs.SetDiversificationNonce(nonce1)
-			cs.SetDiversificationNonce(nonce2)
+			divNonceChan <- nonce1
+			divNonceChan <- nonce2
 			Eventually(done).Should(BeClosed())
 		})
 	})

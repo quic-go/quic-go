@@ -40,13 +40,12 @@ type cryptoSetupClient struct {
 	lastSentCHLO     []byte
 	certManager      crypto.CertManager
 
-	divNonceChan         chan []byte
+	divNonceChan         <-chan []byte
 	diversificationNonce []byte
 
 	clientHelloCounter int
 	serverVerified     bool // has the certificate chain and the proof already been verified
 	keyDerivation      QuicCryptoKeyDerivationFunction
-	keyExchange        KeyExchangeFunction
 
 	receivedSecurePacket bool
 	nullAEAD             crypto.AEAD
@@ -57,6 +56,8 @@ type cryptoSetupClient struct {
 	handshakeEvent chan<- struct{}
 
 	params *TransportParameters
+
+	logger utils.Logger
 }
 
 var _ CryptoSetup = &cryptoSetupClient{}
@@ -79,13 +80,15 @@ func NewCryptoSetupClient(
 	handshakeEvent chan<- struct{},
 	initialVersion protocol.VersionNumber,
 	negotiatedVersions []protocol.VersionNumber,
+	logger utils.Logger,
 	QuicTracer *qtrace.Tracer,
-) (CryptoSetup, error) {
+) (CryptoSetup, chan<- []byte, error) {
 	nullAEAD, err := crypto.NewNullAEAD(protocol.PerspectiveClient, connID, version)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return &cryptoSetupClient{
+	divNonceChan := make(chan []byte)
+	cs := &cryptoSetupClient{
 		cryptoStream:       cryptoStream,
 		hostname:           hostname,
 		connID:             connID,
@@ -93,15 +96,16 @@ func NewCryptoSetupClient(
 		certManager:        crypto.NewCertManager(tlsConfig),
 		params:             params,
 		keyDerivation:      crypto.DeriveQuicCryptoAESKeys,
-		keyExchange:        getEphermalKEX,
 		nullAEAD:           nullAEAD,
 		paramsChan:         paramsChan,
 		handshakeEvent:     handshakeEvent,
 		initialVersion:     initialVersion,
 		negotiatedVersions: negotiatedVersions,
-		divNonceChan:       make(chan []byte),
+		divNonceChan:       divNonceChan,
+		logger:             logger,
 		QuicTracer:         QuicTracer,
-	}, nil
+	}
+	return cs, divNonceChan, nil
 }
 
 func (h *cryptoSetupClient) HandleCryptoStream() error {
@@ -150,11 +154,10 @@ func (h *cryptoSetupClient) HandleCryptoStream() error {
 			return err
 		}
 
-		utils.Debugf("Got %s", message)
+		h.logger.Debugf("Got %s", message)
 		if h.QuicTracer != nil && h.QuicTracer.ClientGotHandshakeMsg != nil {
 			h.QuicTracer.ClientGotHandshakeMsg(HandshakeMessage2Tracer(message))
 		}
-
 		switch message.Tag {
 		case TagREJ:
 			if err := h.handleREJMessage(message.Data); err != nil {
@@ -219,7 +222,7 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 
 		err = h.certManager.Verify(h.hostname)
 		if err != nil {
-			utils.Infof("Certificate validation failed: %s", err.Error())
+			h.logger.Infof("Certificate validation failed: %s", err.Error())
 			return qerr.ProofInvalid
 		}
 	}
@@ -227,7 +230,7 @@ func (h *cryptoSetupClient) handleREJMessage(cryptoData map[Tag][]byte) error {
 	if h.serverConfig != nil && len(h.proof) != 0 && h.certManager.GetLeafCert() != nil {
 		validProof := h.certManager.VerifyServerProof(h.proof, h.chloForSignature, h.serverConfig.Get())
 		if !validProof {
-			utils.Infof("Server proof verification failed")
+			h.logger.Infof("Server proof verification failed")
 			return qerr.ProofInvalid
 		}
 
@@ -381,14 +384,6 @@ func (h *cryptoSetupClient) GetSealerWithEncryptionLevel(encLevel protocol.Encry
 	return nil, errors.New("CryptoSetupClient: no encryption level specified")
 }
 
-func (h *cryptoSetupClient) DiversificationNonce() []byte {
-	panic("not needed for cryptoSetupClient")
-}
-
-func (h *cryptoSetupClient) SetDiversificationNonce(data []byte) {
-	h.divNonceChan <- data
-}
-
 func (h *cryptoSetupClient) ConnectionState() ConnectionState {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
@@ -416,7 +411,7 @@ func (h *cryptoSetupClient) sendCHLO() error {
 		Data: tags,
 	}
 
-	utils.Debugf("Sending %s", message)
+	h.logger.Debugf("Sending %s", message)
 	if h.QuicTracer != nil && h.QuicTracer.ClientSentCHLO != nil {
 		h.QuicTracer.ClientSentCHLO(HandshakeMessage2Tracer(message))
 	}

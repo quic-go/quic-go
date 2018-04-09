@@ -3,6 +3,7 @@ package quic
 import (
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
@@ -56,16 +57,21 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 				mockSender *MockStreamSender
 			)
 
+			const (
+				maxBidiStreams = 111
+				maxUniStreams  = 222
+			)
+
 			allowUnlimitedStreams := func() {
 				m.UpdateLimits(&handshake.TransportParameters{
-					MaxBidiStreamID: 0xffffffff,
-					MaxUniStreamID:  0xffffffff,
+					MaxBidiStreams: math.MaxUint16,
+					MaxUniStreams:  math.MaxUint16,
 				})
 			}
 
 			BeforeEach(func() {
 				mockSender = NewMockStreamSender(mockCtrl)
-				m = newStreamsMap(mockSender, newFlowController, perspective, versionIETFFrames).(*streamsMap)
+				m = newStreamsMap(mockSender, newFlowController, maxBidiStreams, maxUniStreams, perspective, versionIETFFrames).(*streamsMap)
 			})
 
 			Context("opening", func() {
@@ -261,26 +267,28 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 					mockSender.EXPECT().queueControlFrame(gomock.Any())
 				})
 
-				It("processes the parameter for outgoing bidirectional streams", func() {
+				It("processes the parameter for outgoing streams, as a server", func() {
+					m.perspective = protocol.PerspectiveServer
 					_, err := m.OpenStream()
 					Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 					m.UpdateLimits(&handshake.TransportParameters{
-						MaxBidiStreamID: ids.firstOutgoingBidiStream,
+						MaxBidiStreams: 5,
+						MaxUniStreams:  5,
 					})
-					str, err := m.OpenStream()
-					Expect(err).ToNot(HaveOccurred())
-					Expect(str.StreamID()).To(Equal(ids.firstOutgoingBidiStream))
+					Expect(m.outgoingBidiStreams.maxStream).To(Equal(protocol.StreamID(17)))
+					Expect(m.outgoingUniStreams.maxStream).To(Equal(protocol.StreamID(19)))
 				})
 
-				It("processes the parameter for outgoing bidirectional streams", func() {
+				It("processes the parameter for outgoing streams, as a client", func() {
+					m.perspective = protocol.PerspectiveClient
 					_, err := m.OpenUniStream()
 					Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 					m.UpdateLimits(&handshake.TransportParameters{
-						MaxUniStreamID: ids.firstOutgoingUniStream,
+						MaxBidiStreams: 5,
+						MaxUniStreams:  5,
 					})
-					str, err := m.OpenUniStream()
-					Expect(err).ToNot(HaveOccurred())
-					Expect(str.StreamID()).To(Equal(ids.firstOutgoingUniStream))
+					Expect(m.outgoingBidiStreams.maxStream).To(Equal(protocol.StreamID(20)))
+					Expect(m.outgoingUniStreams.maxStream).To(Equal(protocol.StreamID(18)))
 				})
 			})
 
@@ -325,7 +333,7 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 					_, err := m.GetOrOpenReceiveStream(ids.firstIncomingBidiStream + 4*10)
 					Expect(err).ToNot(HaveOccurred())
 					mockSender.EXPECT().queueControlFrame(&wire.MaxStreamIDFrame{
-						StreamID: protocol.MaxBidiStreamID(protocol.MaxIncomingStreams, perspective) + 4,
+						StreamID: protocol.MaxBidiStreamID(maxBidiStreams, perspective) + 4,
 					})
 					Expect(m.DeleteStream(ids.firstIncomingBidiStream)).To(Succeed())
 				})
@@ -334,7 +342,7 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 					_, err := m.GetOrOpenReceiveStream(ids.firstIncomingUniStream + 4*10)
 					Expect(err).ToNot(HaveOccurred())
 					mockSender.EXPECT().queueControlFrame(&wire.MaxStreamIDFrame{
-						StreamID: protocol.MaxUniStreamID(protocol.MaxIncomingStreams, perspective) + 4,
+						StreamID: protocol.MaxUniStreamID(maxUniStreams, perspective) + 4,
 					})
 					Expect(m.DeleteStream(ids.firstIncomingUniStream)).To(Succeed())
 				})

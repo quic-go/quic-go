@@ -13,17 +13,19 @@ import (
 
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 type mockStream struct {
-	id           protocol.StreamID
-	dataToRead   bytes.Buffer
-	dataWritten  bytes.Buffer
-	reset        bool
-	closed       bool
-	remoteClosed bool
+	id            protocol.StreamID
+	dataToRead    bytes.Buffer
+	dataWritten   bytes.Buffer
+	reset         bool
+	canceledWrite bool
+	closed        bool
+	remoteClosed  bool
 
 	unblockRead chan struct{}
 	ctx         context.Context
@@ -43,7 +45,7 @@ func newMockStream(id protocol.StreamID) *mockStream {
 
 func (s *mockStream) Close() error                          { s.closed = true; s.ctxCancel(); return nil }
 func (s *mockStream) CancelRead(quic.ErrorCode) error       { s.reset = true; return nil }
-func (s *mockStream) CancelWrite(quic.ErrorCode) error      { panic("not implemented") }
+func (s *mockStream) CancelWrite(quic.ErrorCode) error      { s.canceledWrite = true; return nil }
 func (s *mockStream) CloseRemote(offset protocol.ByteCount) { s.remoteClosed = true; s.ctxCancel() }
 func (s mockStream) StreamID() protocol.StreamID            { return s.id }
 func (s *mockStream) Context() context.Context              { return s.ctx }
@@ -71,7 +73,7 @@ var _ = Describe("Response Writer", func() {
 	BeforeEach(func() {
 		headerStream = &mockStream{}
 		dataStream = &mockStream{}
-		w = newResponseWriter(headerStream, &sync.Mutex{}, dataStream, 5)
+		w = newResponseWriter(headerStream, &sync.Mutex{}, dataStream, 5, utils.DefaultLogger)
 	})
 
 	decodeHeaderFields := func() map[string][]string {

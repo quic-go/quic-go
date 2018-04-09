@@ -96,7 +96,6 @@ func (s *mockStream) close() {
 }
 
 type mockCookieProtector struct {
-	data      []byte
 	decodeErr error
 }
 
@@ -165,12 +164,14 @@ var _ = Describe("Server Crypto Setup", func() {
 			protocol.ConnectionID(42),
 			remoteAddr,
 			version,
+			make([]byte, 32), // div nonce
 			scfg,
 			&TransportParameters{IdleTimeout: protocol.DefaultIdleTimeout},
 			supportedVersions,
 			nil,
 			paramsChan,
 			handshakeEvent,
+			utils.DefaultLogger,
 			nil,
 		)
 		Expect(err).NotTo(HaveOccurred())
@@ -181,24 +182,9 @@ var _ = Describe("Server Crypto Setup", func() {
 		sourceAddrValid = true
 		cs.acceptSTKCallback = func(_ net.Addr, _ *Cookie) bool { return sourceAddrValid }
 		cs.keyDerivation = mockQuicCryptoKeyDerivation
-		cs.keyExchange = func() crypto.KeyExchange { return &mockKEX{ephermal: true} }
+		cs.keyExchange = func() (crypto.KeyExchange, error) { return &mockKEX{ephermal: true}, nil }
 		cs.nullAEAD = mockcrypto.NewMockAEAD(mockCtrl)
 		cs.cryptoStream = stream
-	})
-
-	Context("diversification nonce", func() {
-		BeforeEach(func() {
-			cs.secureAEAD = mockcrypto.NewMockAEAD(mockCtrl)
-			cs.receivedForwardSecurePacket = false
-
-			Expect(cs.DiversificationNonce()).To(BeEmpty())
-			// Div nonce is created after CHLO
-			cs.handleCHLO("", nil, map[Tag][]byte{TagNONC: nonce32})
-		})
-
-		It("returns diversification nonces", func() {
-			Expect(cs.DiversificationNonce()).To(HaveLen(32))
-		})
 	})
 
 	Context("when responding to client messages", func() {
@@ -319,12 +305,11 @@ var _ = Describe("Server Crypto Setup", func() {
 			Expect(message.Data).To(HaveKeyWithValue(TagPUBS, []byte("ephermal pub")))
 			Expect(message.Data).To(HaveKey(TagSNO))
 			Expect(message.Data).To(HaveKey(TagVER))
-			// the supported versions should include one reserved version number
-			Expect(message.Data[TagVER]).To(HaveLen(4*len(supportedVersions) + 4))
+			Expect(message.Data[TagVER]).To(HaveLen(4 * len(supportedVersions)))
 			for _, v := range supportedVersions {
 				b := &bytes.Buffer{}
 				utils.BigEndian.WriteUint32(b, uint32(v))
-				Expect(message.Data[TagVER]).To(ContainSubstring(string(b.Bytes())))
+				Expect(message.Data[TagVER]).To(ContainSubstring(b.String()))
 			}
 			Expect(checkedSecure).To(BeTrue())
 			Expect(checkedForwardSecure).To(BeTrue())

@@ -17,7 +17,7 @@ var _ = Describe("BLOCKED frame", func() {
 			data := []byte{0x08}
 			data = append(data, encodeVarInt(0x12345678)...)
 			b := bytes.NewReader(data)
-			frame, err := ParseBlockedFrame(b, versionIETFFrames)
+			frame, err := parseBlockedFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.Offset).To(Equal(protocol.ByteCount(0x12345678)))
 			Expect(b.Len()).To(BeZero())
@@ -26,10 +26,10 @@ var _ = Describe("BLOCKED frame", func() {
 		It("errors on EOFs", func() {
 			data := []byte{0x08}
 			data = append(data, encodeVarInt(0x12345678)...)
-			_, err := ParseBlockedFrame(bytes.NewReader(data), versionIETFFrames)
+			_, err := parseBlockedFrame(bytes.NewReader(data), versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			for i := range data {
-				_, err := ParseBlockedFrame(bytes.NewReader(data[:i]), versionIETFFrames)
+				_, err := parseBlockedFrame(bytes.NewReader(data[:i]), versionIETFFrames)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})

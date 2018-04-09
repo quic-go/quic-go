@@ -54,7 +54,7 @@ var _ = Describe("Chrome tests", func() {
 			})
 
 			It("uploads many small files", func() {
-				num := protocol.MaxIncomingStreams + 20
+				num := protocol.DefaultMaxIncomingStreams + 20
 				chromeTest(
 					version,
 					fmt.Sprintf("https://quic.clemente.io/uploadtest?num=%d&len=%d", num, dataLen),

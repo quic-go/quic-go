@@ -11,6 +11,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qerr"
 
@@ -21,12 +22,11 @@ import (
 var _ = Describe("Client", func() {
 	var (
 		cl         *client
-		config     *Config
 		sess       *mockSession
 		packetConn *mockPacketConn
 		addr       net.Addr
 
-		originalClientSessConstructor func(conn connection, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, tlsConf *tls.Config, config *Config, initialVersion protocol.VersionNumber, negotiatedVersions []protocol.VersionNumber) (packetHandler, error)
+		originalClientSessConstructor func(conn connection, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, tlsConf *tls.Config, config *Config, initialVersion protocol.VersionNumber, negotiatedVersions []protocol.VersionNumber, logger utils.Logger) (packetHandler, error)
 	)
 
 	// generate a packet sent by the server that accepts the QUIC version suggested by the client
@@ -44,22 +44,19 @@ var _ = Describe("Client", func() {
 	BeforeEach(func() {
 		originalClientSessConstructor = newClientSession
 		Eventually(areSessionsRunning).Should(BeFalse())
-		msess, _ := newMockSession(nil, 0, 0, nil, nil, nil)
+		msess, _ := newMockSession(nil, 0, 0, nil, nil, nil, nil)
 		sess = msess.(*mockSession)
 		addr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
 		packetConn = newMockPacketConn()
 		packetConn.addr = &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1234}
 		packetConn.dataReadFrom = addr
-		config = &Config{
-			Versions: []protocol.VersionNumber{protocol.SupportedVersions[0], 77, 78},
-		}
 		cl = &client{
-			config:       config,
 			connectionID: 0x1337,
 			session:      sess,
 			version:      protocol.SupportedVersions[0],
 			conn:         &conn{pconn: packetConn, currentAddr: addr},
 			versionNegotiationChan: make(chan struct{}),
+			logger:                 utils.DefaultLogger,
 		}
 	})
 
@@ -87,6 +84,7 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ protocol.VersionNumber,
 				_ []protocol.VersionNumber,
+				_ utils.Logger,
 			) (packetHandler, error) {
 				Expect(conn.Write([]byte("0 fake CHLO"))).To(Succeed())
 				return sess, nil
@@ -106,7 +104,7 @@ var _ = Describe("Client", func() {
 			dialed := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				s, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
+				s, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, nil)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(s).ToNot(BeNil())
 				close(dialed)
@@ -130,6 +128,7 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ protocol.VersionNumber,
 				_ []protocol.VersionNumber,
+				_ utils.Logger,
 			) (packetHandler, error) {
 				remoteAddrChan <- conn.RemoteAddr().String()
 				return sess, nil
@@ -158,6 +157,7 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ protocol.VersionNumber,
 				_ []protocol.VersionNumber,
+				_ utils.Logger,
 			) (packetHandler, error) {
 				hostnameChan <- h
 				return sess, nil
@@ -179,7 +179,7 @@ var _ = Describe("Client", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
+				_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, nil)
 				Expect(err).To(MatchError(testErr))
 				close(done)
 			}()
@@ -193,7 +193,7 @@ var _ = Describe("Client", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
+				_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, nil)
 				Expect(err).To(MatchError(testErr))
 				close(done)
 			}()
@@ -206,11 +206,41 @@ var _ = Describe("Client", func() {
 				HandshakeTimeout:            1337 * time.Minute,
 				IdleTimeout:                 42 * time.Hour,
 				RequestConnectionIDOmission: true,
+				MaxIncomingStreams:          1234,
+				MaxIncomingUniStreams:       4321,
 			}
 			c := populateClientConfig(config)
 			Expect(c.HandshakeTimeout).To(Equal(1337 * time.Minute))
 			Expect(c.IdleTimeout).To(Equal(42 * time.Hour))
 			Expect(c.RequestConnectionIDOmission).To(BeTrue())
+			Expect(c.MaxIncomingStreams).To(Equal(1234))
+			Expect(c.MaxIncomingUniStreams).To(Equal(4321))
+		})
+
+		It("errors when the Config contains an invalid version", func() {
+			version := protocol.VersionNumber(0x1234)
+			_, err := Dial(nil, nil, "localhost:1234", &tls.Config{}, &Config{Versions: []protocol.VersionNumber{version}})
+			Expect(err).To(MatchError("0x1234 is not a valid QUIC version"))
+		})
+
+		It("disables bidirectional streams", func() {
+			config := &Config{
+				MaxIncomingStreams:    -1,
+				MaxIncomingUniStreams: 4321,
+			}
+			c := populateClientConfig(config)
+			Expect(c.MaxIncomingStreams).To(BeZero())
+			Expect(c.MaxIncomingUniStreams).To(Equal(4321))
+		})
+
+		It("disables unidirectional streams", func() {
+			config := &Config{
+				MaxIncomingStreams:    1234,
+				MaxIncomingUniStreams: -1,
+			}
+			c := populateClientConfig(config)
+			Expect(c.MaxIncomingStreams).To(Equal(1234))
+			Expect(c.MaxIncomingUniStreams).To(BeZero())
 		})
 
 		It("fills in default values if options are not set in the Config", func() {
@@ -224,7 +254,7 @@ var _ = Describe("Client", func() {
 		It("errors when receiving an error from the connection", func() {
 			testErr := errors.New("connection error")
 			packetConn.readErr = testErr
-			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
+			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, nil)
 			Expect(err).To(MatchError(testErr))
 		})
 
@@ -239,14 +269,26 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ protocol.VersionNumber,
 				_ []protocol.VersionNumber,
+				_ utils.Logger,
 			) (packetHandler, error) {
 				return nil, testErr
 			}
-			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
+			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, nil)
 			Expect(err).To(MatchError(testErr))
 		})
 
 		Context("version negotiation", func() {
+			var origSupportedVersions []protocol.VersionNumber
+
+			BeforeEach(func() {
+				origSupportedVersions = protocol.SupportedVersions
+				protocol.SupportedVersions = append(protocol.SupportedVersions, []protocol.VersionNumber{77, 78}...)
+			})
+
+			AfterEach(func() {
+				protocol.SupportedVersions = origSupportedVersions
+			})
+
 			It("recognizes that a packet without VersionFlag means that the server accepted the suggested version", func() {
 				ph := wire.Header{
 					PacketNumber:    1,
@@ -266,7 +308,7 @@ var _ = Describe("Client", func() {
 				var negotiatedVersions []protocol.VersionNumber
 				newVersion := protocol.VersionNumber(77)
 				Expect(newVersion).ToNot(Equal(cl.version))
-				Expect(config.Versions).To(ContainElement(newVersion))
+				cl.config = &Config{Versions: []protocol.VersionNumber{newVersion}}
 				sessionChan := make(chan *mockSession)
 				handshakeChan := make(chan error)
 				newClientSession = func(
@@ -278,6 +320,7 @@ var _ = Describe("Client", func() {
 					_ *Config,
 					initialVersionP protocol.VersionNumber,
 					negotiatedVersionsP []protocol.VersionNumber,
+					_ utils.Logger,
 				) (packetHandler, error) {
 					initialVersion = initialVersionP
 					negotiatedVersions = negotiatedVersionsP
@@ -334,6 +377,7 @@ var _ = Describe("Client", func() {
 					_ *Config,
 					_ protocol.VersionNumber,
 					_ []protocol.VersionNumber,
+					_ utils.Logger,
 				) (packetHandler, error) {
 					atomic.AddUint32(&sessionCounter, 1)
 					return &mockSession{
@@ -343,36 +387,34 @@ var _ = Describe("Client", func() {
 				}
 				go cl.dial()
 				Eventually(func() uint32 { return atomic.LoadUint32(&sessionCounter) }).Should(BeEquivalentTo(1))
-				newVersion := protocol.VersionNumber(77)
-				Expect(newVersion).ToNot(Equal(cl.version))
-				Expect(config.Versions).To(ContainElement(newVersion))
-				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(0x1337, []protocol.VersionNumber{newVersion}))
+				cl.config = &Config{Versions: []protocol.VersionNumber{77, 78}}
+				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(0x1337, []protocol.VersionNumber{77}))
 				Eventually(func() uint32 { return atomic.LoadUint32(&sessionCounter) }).Should(BeEquivalentTo(2))
-				newVersion = protocol.VersionNumber(78)
-				Expect(newVersion).ToNot(Equal(cl.version))
-				Expect(config.Versions).To(ContainElement(newVersion))
-				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(0x1337, []protocol.VersionNumber{newVersion}))
+				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(0x1337, []protocol.VersionNumber{78}))
 				Consistently(func() uint32 { return atomic.LoadUint32(&sessionCounter) }).Should(BeEquivalentTo(2))
 			})
 
 			It("errors if no matching version is found", func() {
+				cl.config = &Config{Versions: protocol.SupportedVersions}
 				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(0x1337, []protocol.VersionNumber{1}))
 				Expect(cl.session.(*mockSession).closed).To(BeTrue())
 				Expect(cl.session.(*mockSession).closeReason).To(MatchError(qerr.InvalidVersion))
 			})
 
 			It("errors if the version is supported by quic-go, but disabled by the quic.Config", func() {
-				v := protocol.VersionNumber(111)
+				v := protocol.VersionNumber(1234)
 				Expect(v).ToNot(Equal(cl.version))
-				Expect(config.Versions).ToNot(ContainElement(v))
+				cl.config = &Config{Versions: protocol.SupportedVersions}
 				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(0x1337, []protocol.VersionNumber{v}))
 				Expect(cl.session.(*mockSession).closed).To(BeTrue())
 				Expect(cl.session.(*mockSession).closeReason).To(MatchError(qerr.InvalidVersion))
 			})
 
 			It("changes to the version preferred by the quic.Config", func() {
-				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(0x1337, []protocol.VersionNumber{config.Versions[2], config.Versions[1]}))
-				Expect(cl.version).To(Equal(config.Versions[1]))
+				config := &Config{Versions: []protocol.VersionNumber{1234, 4321}}
+				cl.config = config
+				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(0x1337, []protocol.VersionNumber{4321, 1234}))
+				Expect(cl.version).To(Equal(protocol.VersionNumber(1234)))
 			})
 
 			It("ignores delayed version negotiation packets", func() {
@@ -399,7 +441,7 @@ var _ = Describe("Client", func() {
 	})
 
 	It("ignores packets without connection id, if it didn't request connection id trunctation", func() {
-		cl.config.RequestConnectionIDOmission = false
+		cl.config = &Config{RequestConnectionIDOmission: false}
 		buf := &bytes.Buffer{}
 		(&wire.Header{
 			OmitConnectionID: true,
@@ -424,6 +466,7 @@ var _ = Describe("Client", func() {
 	})
 
 	It("creates new GQUIC sessions with the right parameters", func() {
+		config := &Config{Versions: protocol.SupportedVersions}
 		closeErr := errors.New("peer doesn't reply")
 		c := make(chan struct{})
 		var cconn connection
@@ -439,6 +482,7 @@ var _ = Describe("Client", func() {
 			configP *Config,
 			_ protocol.VersionNumber,
 			_ []protocol.VersionNumber,
+			_ utils.Logger,
 		) (packetHandler, error) {
 			cconn = connP
 			hostname = hostnameP
@@ -464,7 +508,7 @@ var _ = Describe("Client", func() {
 	})
 
 	It("creates new TLS sessions with the right parameters", func() {
-		config.Versions = []protocol.VersionNumber{protocol.VersionTLS}
+		config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}}
 		c := make(chan struct{})
 		var cconn connection
 		var hostname string
@@ -479,6 +523,7 @@ var _ = Describe("Client", func() {
 			tls handshake.MintTLS,
 			paramsChan <-chan handshake.TransportParameters,
 			_ protocol.PacketNumber,
+			_ utils.Logger,
 		) (packetHandler, error) {
 			cconn = connP
 			hostname = hostnameP
@@ -503,7 +548,8 @@ var _ = Describe("Client", func() {
 	})
 
 	It("creates a new session when the server performs a retry", func() {
-		config.Versions = []protocol.VersionNumber{protocol.VersionTLS}
+		config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}}
+		cl.config = config
 		sessionChan := make(chan *mockSession)
 		newTLSClientSession = func(
 			connP connection,
@@ -514,6 +560,7 @@ var _ = Describe("Client", func() {
 			tls handshake.MintTLS,
 			paramsChan <-chan handshake.TransportParameters,
 			_ protocol.PacketNumber,
+			_ utils.Logger,
 		) (packetHandler, error) {
 			sess := &mockSession{
 				stopRunLoop: make(chan struct{}),

@@ -18,53 +18,53 @@ var _ = Describe("Hybrid slow start", func() {
 	})
 
 	It("works in a simple case", func() {
-		packet_number := protocol.PacketNumber(1)
-		end_packet_number := protocol.PacketNumber(3)
-		slowStart.StartReceiveRound(end_packet_number)
+		packetNumber := protocol.PacketNumber(1)
+		endPacketNumber := protocol.PacketNumber(3)
+		slowStart.StartReceiveRound(endPacketNumber)
 
-		packet_number++
-		Expect(slowStart.IsEndOfRound(packet_number)).To(BeFalse())
+		packetNumber++
+		Expect(slowStart.IsEndOfRound(packetNumber)).To(BeFalse())
 
 		// Test duplicates.
-		Expect(slowStart.IsEndOfRound(packet_number)).To(BeFalse())
+		Expect(slowStart.IsEndOfRound(packetNumber)).To(BeFalse())
 
-		packet_number++
-		Expect(slowStart.IsEndOfRound(packet_number)).To(BeFalse())
-		packet_number++
-		Expect(slowStart.IsEndOfRound(packet_number)).To(BeTrue())
+		packetNumber++
+		Expect(slowStart.IsEndOfRound(packetNumber)).To(BeFalse())
+		packetNumber++
+		Expect(slowStart.IsEndOfRound(packetNumber)).To(BeTrue())
 
 		// Test without a new registered end_packet_number;
-		packet_number++
-		Expect(slowStart.IsEndOfRound(packet_number)).To(BeTrue())
+		packetNumber++
+		Expect(slowStart.IsEndOfRound(packetNumber)).To(BeTrue())
 
-		end_packet_number = 20
-		slowStart.StartReceiveRound(end_packet_number)
-		for packet_number < end_packet_number {
-			packet_number++
-			Expect(slowStart.IsEndOfRound(packet_number)).To(BeFalse())
+		endPacketNumber = 20
+		slowStart.StartReceiveRound(endPacketNumber)
+		for packetNumber < endPacketNumber {
+			packetNumber++
+			Expect(slowStart.IsEndOfRound(packetNumber)).To(BeFalse())
 		}
-		packet_number++
-		Expect(slowStart.IsEndOfRound(packet_number)).To(BeTrue())
+		packetNumber++
+		Expect(slowStart.IsEndOfRound(packetNumber)).To(BeTrue())
 	})
 
 	It("works with delay", func() {
 		rtt := 60 * time.Millisecond
 		// We expect to detect the increase at +1/8 of the RTT; hence at a typical
 		// RTT of 60ms the detection will happen at 67.5 ms.
-		const kHybridStartMinSamples = 8 // Number of acks required to trigger.
+		const hybridStartMinSamples = 8 // Number of acks required to trigger.
 
-		end_packet_number := protocol.PacketNumber(1)
-		end_packet_number++
-		slowStart.StartReceiveRound(end_packet_number)
+		endPacketNumber := protocol.PacketNumber(1)
+		endPacketNumber++
+		slowStart.StartReceiveRound(endPacketNumber)
 
 		// Will not trigger since our lowest RTT in our burst is the same as the long
 		// term RTT provided.
-		for n := 0; n < kHybridStartMinSamples; n++ {
+		for n := 0; n < hybridStartMinSamples; n++ {
 			Expect(slowStart.ShouldExitSlowStart(rtt+time.Duration(n)*time.Millisecond, rtt, 100)).To(BeFalse())
 		}
-		end_packet_number++
-		slowStart.StartReceiveRound(end_packet_number)
-		for n := 1; n < kHybridStartMinSamples; n++ {
+		endPacketNumber++
+		slowStart.StartReceiveRound(endPacketNumber)
+		for n := 1; n < hybridStartMinSamples; n++ {
 			Expect(slowStart.ShouldExitSlowStart(rtt+(time.Duration(n)+10)*time.Millisecond, rtt, 100)).To(BeFalse())
 		}
 		// Expect to trigger since all packets in this burst was above the long term

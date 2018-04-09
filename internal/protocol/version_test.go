@@ -15,6 +15,14 @@ var _ = Describe("Version", func() {
 		Expect(Version39).To(BeEquivalentTo(0x51303339))
 	})
 
+	It("says if a version is valid", func() {
+		Expect(IsValidVersion(Version39)).To(BeTrue())
+		Expect(IsValidVersion(VersionTLS)).To(BeTrue())
+		Expect(IsValidVersion(VersionWhatever)).To(BeFalse())
+		Expect(IsValidVersion(VersionUnknown)).To(BeFalse())
+		Expect(IsValidVersion(1234)).To(BeFalse())
+	})
+
 	It("says if a version supports TLS", func() {
 		Expect(Version39.UsesTLS()).To(BeFalse())
 		Expect(VersionTLS.UsesTLS()).To(BeTrue())
@@ -35,6 +43,7 @@ var _ = Describe("Version", func() {
 		Expect(VersionNumber(0x51303133).String()).To(Equal("gQUIC 13"))
 		Expect(VersionNumber(0x51303235).String()).To(Equal("gQUIC 25"))
 		Expect(VersionNumber(0x51303438).String()).To(Equal("gQUIC 48"))
+		Expect(VersionNumber(0x01234567).String()).To(Equal("0x1234567"))
 	})
 
 	It("has the right representation for the H2 Alt-Svc tag", func() {
@@ -59,6 +68,11 @@ var _ = Describe("Version", func() {
 	It("tells if a version uses the IETF frame types", func() {
 		Expect(Version39.UsesIETFFrameFormat()).To(BeFalse())
 		Expect(VersionTLS.UsesIETFFrameFormat()).To(BeTrue())
+	})
+
+	It("tells if a version uses STOP_WAITING frames", func() {
+		Expect(Version39.UsesStopWaitingFrames()).To(BeTrue())
+		Expect(VersionTLS.UsesStopWaitingFrames()).To(BeFalse())
 	})
 
 	It("says if a stream contributes to connection-level flowcontrol, for gQUIC", func() {

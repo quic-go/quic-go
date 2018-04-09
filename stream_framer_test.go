@@ -18,43 +18,20 @@ var _ = Describe("Stream Framer", func() {
 	)
 
 	var (
-		retransmittedFrame1, retransmittedFrame2 *wire.StreamFrame
-		framer                                   *streamFramer
-		cryptoStream                             *MockCryptoStream
-		stream1, stream2                         *MockSendStreamI
-		streamGetter                             *MockStreamGetter
+		framer           *streamFramer
+		cryptoStream     *MockCryptoStream
+		stream1, stream2 *MockSendStreamI
+		streamGetter     *MockStreamGetter
 	)
 
 	BeforeEach(func() {
 		streamGetter = NewMockStreamGetter(mockCtrl)
-		retransmittedFrame1 = &wire.StreamFrame{
-			StreamID: 5,
-			Data:     []byte{0x13, 0x37},
-		}
-		retransmittedFrame2 = &wire.StreamFrame{
-			StreamID: 6,
-			Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
-		}
-
 		stream1 = NewMockSendStreamI(mockCtrl)
 		stream1.EXPECT().StreamID().Return(protocol.StreamID(5)).AnyTimes()
 		stream2 = NewMockSendStreamI(mockCtrl)
 		stream2.EXPECT().StreamID().Return(protocol.StreamID(6)).AnyTimes()
 		cryptoStream = NewMockCryptoStream(mockCtrl)
 		framer = newStreamFramer(cryptoStream, streamGetter, versionGQUICFrames)
-	})
-
-	It("says if it has retransmissions", func() {
-		Expect(framer.HasFramesForRetransmission()).To(BeFalse())
-		framer.AddFrameForRetransmission(retransmittedFrame1)
-		Expect(framer.HasFramesForRetransmission()).To(BeTrue())
-	})
-
-	It("sets the DataLenPresent for dequeued retransmitted frames", func() {
-		framer.AddFrameForRetransmission(retransmittedFrame1)
-		fs := framer.PopStreamFrames(protocol.MaxByteCount)
-		Expect(fs).To(HaveLen(1))
-		Expect(fs[0].DataLenPresent).To(BeTrue())
 	})
 
 	Context("handling the crypto stream", func() {
@@ -94,37 +71,7 @@ var _ = Describe("Stream Framer", func() {
 			Expect(framer.PopStreamFrames(1000)).To(BeEmpty())
 		})
 
-		It("pops frames for retransmission", func() {
-			framer.AddFrameForRetransmission(retransmittedFrame1)
-			framer.AddFrameForRetransmission(retransmittedFrame2)
-			fs := framer.PopStreamFrames(1000)
-			Expect(fs).To(Equal([]*wire.StreamFrame{retransmittedFrame1, retransmittedFrame2}))
-			// make sure the frames are actually removed, and not returned a second time
-			Expect(framer.PopStreamFrames(1000)).To(BeEmpty())
-		})
-
-		It("doesn't pop frames for retransmission, if the size would be smaller than the minimum STREAM frame size", func() {
-			framer.AddFrameForRetransmission(&wire.StreamFrame{
-				StreamID: id1,
-				Data:     bytes.Repeat([]byte{'a'}, int(protocol.MinStreamFrameSize)),
-			})
-			fs := framer.PopStreamFrames(protocol.MinStreamFrameSize - 1)
-			Expect(fs).To(BeEmpty())
-		})
-
-		It("pops frames for retransmission, even if the remaining space in the packet is too small, if the frame doesn't need to be split", func() {
-			framer.AddFrameForRetransmission(retransmittedFrame1)
-			fs := framer.PopStreamFrames(protocol.MinStreamFrameSize - 1)
-			Expect(fs).To(Equal([]*wire.StreamFrame{retransmittedFrame1}))
-		})
-
-		It("pops frames for retransmission, if the remaining size is the miniumum STREAM frame size", func() {
-			framer.AddFrameForRetransmission(retransmittedFrame1)
-			fs := framer.PopStreamFrames(protocol.MinStreamFrameSize)
-			Expect(fs).To(Equal([]*wire.StreamFrame{retransmittedFrame1}))
-		})
-
-		It("returns normal frames", func() {
+		It("returns STREAM frames", func() {
 			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
 			f := &wire.StreamFrame{
 				StreamID: id1,
@@ -227,16 +174,6 @@ var _ = Describe("Stream Framer", func() {
 			Expect(framer.PopStreamFrames(1000)).To(HaveLen(1))
 		})
 
-		It("returns retransmission frames before normal frames", func() {
-			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
-			framer.AddActiveStream(id1)
-			f1 := &wire.StreamFrame{Data: []byte("foobar")}
-			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f1, false)
-			framer.AddFrameForRetransmission(retransmittedFrame1)
-			fs := framer.PopStreamFrames(1000)
-			Expect(fs).To(Equal([]*wire.StreamFrame{retransmittedFrame1, f1}))
-		})
-
 		It("does not pop empty frames", func() {
 			fs := framer.PopStreamFrames(500)
 			Expect(fs).To(BeEmpty())
@@ -249,7 +186,7 @@ var _ = Describe("Stream Framer", func() {
 			framer.PopStreamFrames(protocol.MinStreamFrameSize)
 		})
 
-		It("does not pop frames smaller than the mimimum size", func() {
+		It("does not pop frames smaller than the minimum size", func() {
 			// don't expect a call to PopStreamFrame()
 			framer.PopStreamFrames(protocol.MinStreamFrameSize - 1)
 		})
@@ -265,30 +202,6 @@ var _ = Describe("Stream Framer", func() {
 			framer.AddActiveStream(id1)
 			fs := framer.PopStreamFrames(500)
 			Expect(fs).To(Equal([]*wire.StreamFrame{f}))
-		})
-
-		Context("splitting of frames", func() {
-			It("splits a frame", func() {
-				framer.AddFrameForRetransmission(&wire.StreamFrame{Data: make([]byte, 600)})
-				fs := framer.PopStreamFrames(500)
-				Expect(fs).To(HaveLen(1))
-				Expect(fs[0].Length(framer.version)).To(Equal(protocol.ByteCount(500)))
-				Expect(framer.retransmissionQueue[0].Data).To(HaveLen(int(600 - fs[0].DataLen())))
-				Expect(framer.retransmissionQueue[0].Offset).To(Equal(fs[0].DataLen()))
-			})
-
-			It("only removes a frame from the framer after returning all split parts", func() {
-				frameHeaderLen := protocol.ByteCount(4)
-				frame := &wire.StreamFrame{Data: bytes.Repeat([]byte{0}, int(501-frameHeaderLen))}
-				framer.AddFrameForRetransmission(frame)
-				fs := framer.PopStreamFrames(500)
-				Expect(fs).To(HaveLen(1))
-				Expect(framer.retransmissionQueue).ToNot(BeEmpty())
-				fs = framer.PopStreamFrames(500)
-				Expect(fs).To(HaveLen(1))
-				Expect(fs[0].DataLen()).To(BeEquivalentTo(1))
-				Expect(framer.retransmissionQueue).To(BeEmpty())
-			})
 		})
 	})
 })

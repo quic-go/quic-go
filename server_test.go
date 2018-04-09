@@ -57,15 +57,18 @@ func (s *mockSession) closeRemote(e error) {
 func (s *mockSession) OpenStream() (Stream, error) {
 	return &stream{}, nil
 }
-func (s *mockSession) AcceptStream() (Stream, error)    { panic("not implemented") }
-func (s *mockSession) OpenStreamSync() (Stream, error)  { panic("not implemented") }
-func (s *mockSession) LocalAddr() net.Addr              { panic("not implemented") }
-func (s *mockSession) RemoteAddr() net.Addr             { panic("not implemented") }
-func (*mockSession) Context() context.Context           { panic("not implemented") }
-func (*mockSession) ConnectionState() ConnectionState   { panic("not implemented") }
-func (*mockSession) GetVersion() protocol.VersionNumber { return protocol.VersionWhatever }
-func (s *mockSession) handshakeStatus() <-chan error    { return s.handshakeChan }
-func (*mockSession) getCryptoStream() cryptoStreamI     { panic("not implemented") }
+func (s *mockSession) AcceptStream() (Stream, error)           { panic("not implemented") }
+func (s *mockSession) AcceptUniStream() (ReceiveStream, error) { panic("not implemented") }
+func (s *mockSession) OpenStreamSync() (Stream, error)         { panic("not implemented") }
+func (s *mockSession) OpenUniStream() (SendStream, error)      { panic("not implemented") }
+func (s *mockSession) OpenUniStreamSync() (SendStream, error)  { panic("not implemented") }
+func (s *mockSession) LocalAddr() net.Addr                     { panic("not implemented") }
+func (s *mockSession) RemoteAddr() net.Addr                    { panic("not implemented") }
+func (*mockSession) Context() context.Context                  { panic("not implemented") }
+func (*mockSession) ConnectionState() ConnectionState          { panic("not implemented") }
+func (*mockSession) GetVersion() protocol.VersionNumber        { return protocol.VersionWhatever }
+func (s *mockSession) handshakeStatus() <-chan error           { return s.handshakeChan }
+func (*mockSession) getCryptoStream() cryptoStreamI            { panic("not implemented") }
 
 var _ Session = &mockSession{}
 
@@ -76,6 +79,7 @@ func newMockSession(
 	_ *handshake.ServerConfig,
 	_ *tls.Config,
 	_ *Config,
+	_ utils.Logger,
 ) (packetHandler, error) {
 	s := mockSession{
 		connectionID:  connectionID,
@@ -113,12 +117,49 @@ var _ = Describe("Server", func() {
 				config:       config,
 				sessionQueue: make(chan Session, 5),
 				errorChan:    make(chan struct{}),
+				logger:       utils.DefaultLogger,
 			}
 			b := &bytes.Buffer{}
 			utils.BigEndian.WriteUint32(b, uint32(protocol.SupportedVersions[0]))
 			firstPacket = []byte{0x09, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6}
 			firstPacket = append(append(firstPacket, b.Bytes()...), 0x01)
 			firstPacket = append(firstPacket, bytes.Repeat([]byte{0}, protocol.MinClientHelloSize)...) // add padding
+		})
+
+		It("setups with the right values", func() {
+			config := &Config{
+				HandshakeTimeout:            1337 * time.Minute,
+				IdleTimeout:                 42 * time.Hour,
+				RequestConnectionIDOmission: true,
+				MaxIncomingStreams:          1234,
+				MaxIncomingUniStreams:       4321,
+			}
+			c := populateServerConfig(config)
+			Expect(c.HandshakeTimeout).To(Equal(1337 * time.Minute))
+			Expect(c.IdleTimeout).To(Equal(42 * time.Hour))
+			Expect(c.RequestConnectionIDOmission).To(BeFalse())
+			Expect(c.MaxIncomingStreams).To(Equal(1234))
+			Expect(c.MaxIncomingUniStreams).To(Equal(4321))
+		})
+
+		It("disables bidirectional streams", func() {
+			config := &Config{
+				MaxIncomingStreams:    -1,
+				MaxIncomingUniStreams: 4321,
+			}
+			c := populateServerConfig(config)
+			Expect(c.MaxIncomingStreams).To(BeZero())
+			Expect(c.MaxIncomingUniStreams).To(Equal(4321))
+		})
+
+		It("disables unidirectional streams", func() {
+			config := &Config{
+				MaxIncomingStreams:    1234,
+				MaxIncomingUniStreams: -1,
+			}
+			c := populateServerConfig(config)
+			Expect(c.MaxIncomingStreams).To(Equal(1234))
+			Expect(c.MaxIncomingUniStreams).To(BeZero())
 		})
 
 		It("returns the address", func() {
@@ -140,7 +181,7 @@ var _ = Describe("Server", func() {
 
 		It("accepts new TLS sessions", func() {
 			connID := protocol.ConnectionID(0x12345)
-			sess, err := newMockSession(nil, protocol.VersionTLS, connID, nil, nil, nil)
+			sess, err := newMockSession(nil, protocol.VersionTLS, connID, nil, nil, nil, nil)
 			Expect(err).ToNot(HaveOccurred())
 			err = serv.setupTLS()
 			Expect(err).ToNot(HaveOccurred())
@@ -157,9 +198,9 @@ var _ = Describe("Server", func() {
 
 		It("only accepts one new TLS sessions for one connection ID", func() {
 			connID := protocol.ConnectionID(0x12345)
-			sess1, err := newMockSession(nil, protocol.VersionTLS, connID, nil, nil, nil)
+			sess1, err := newMockSession(nil, protocol.VersionTLS, connID, nil, nil, nil, nil)
 			Expect(err).ToNot(HaveOccurred())
-			sess2, err := newMockSession(nil, protocol.VersionTLS, connID, nil, nil, nil)
+			sess2, err := newMockSession(nil, protocol.VersionTLS, connID, nil, nil, nil, nil)
 			Expect(err).ToNot(HaveOccurred())
 			err = serv.setupTLS()
 			Expect(err).ToNot(HaveOccurred())
@@ -262,7 +303,7 @@ var _ = Describe("Server", func() {
 
 		It("closes sessions and the connection when Close is called", func() {
 			go serv.serve()
-			session, _ := newMockSession(nil, 0, 0, nil, nil, nil)
+			session, _ := newMockSession(nil, 0, 0, nil, nil, nil, nil)
 			serv.sessions[1] = session
 			err := serv.Close()
 			Expect(err).NotTo(HaveOccurred())
@@ -312,13 +353,12 @@ var _ = Describe("Server", func() {
 		}, 0.5)
 
 		It("closes all sessions when encountering a connection error", func() {
-			session, _ := newMockSession(nil, 0, 0, nil, nil, nil)
+			session, _ := newMockSession(nil, 0, 0, nil, nil, nil, nil)
 			serv.sessions[0x12345] = session
 			Expect(serv.sessions[0x12345].(*mockSession).closed).To(BeFalse())
 			testErr := errors.New("connection error")
 			conn.readErr = testErr
 			go serv.serve()
-			Eventually(func() Session { return serv.sessions[connID] }).Should(BeNil())
 			Eventually(func() bool { return session.(*mockSession).closed }).Should(BeTrue())
 			Expect(serv.Close()).To(Succeed())
 		})
@@ -334,7 +374,7 @@ var _ = Describe("Server", func() {
 			data = append(append(data, b.Bytes()...), 0x01)
 			err = serv.handlePacket(nil, nil, data)
 			Expect(err).ToNot(HaveOccurred())
-			// if we didn't ignore the packet, the server would try to send a version negotation packet, which would make the test panic because it doesn't have a udpConn
+			// if we didn't ignore the packet, the server would try to send a version negotiation packet, which would make the test panic because it doesn't have a udpConn
 			Expect(conn.dataWritten.Bytes()).To(BeEmpty())
 			// make sure the packet was *not* passed to session.handlePacket()
 			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
@@ -353,6 +393,7 @@ var _ = Describe("Server", func() {
 
 		It("ignores public resets for known connections", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
 			err = serv.handlePacket(nil, nil, wire.WritePublicReset(connID, 1, 1337))
@@ -363,6 +404,7 @@ var _ = Describe("Server", func() {
 
 		It("ignores invalid public resets for known connections", func() {
 			err := serv.handlePacket(nil, nil, firstPacket)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions[connID].(*mockSession).packetCount).To(Equal(1))
 			data := wire.WritePublicReset(connID, 1, 1337)
@@ -405,7 +447,7 @@ var _ = Describe("Server", func() {
 	})
 
 	It("setups with the right values", func() {
-		supportedVersions := []protocol.VersionNumber{1, 3, 5}
+		supportedVersions := []protocol.VersionNumber{protocol.VersionTLS, protocol.Version39}
 		acceptCookie := func(_ net.Addr, _ *Cookie) bool { return true }
 		config := Config{
 			Versions:         supportedVersions,
@@ -425,6 +467,12 @@ var _ = Describe("Server", func() {
 		Expect(server.config.IdleTimeout).To(Equal(42 * time.Minute))
 		Expect(reflect.ValueOf(server.config.AcceptCookie)).To(Equal(reflect.ValueOf(acceptCookie)))
 		Expect(server.config.KeepAlive).To(BeTrue())
+	})
+
+	It("errors when the Config contains an invalid version", func() {
+		version := protocol.VersionNumber(0x1234)
+		_, err := Listen(conn, &tls.Config{}, &Config{Versions: []protocol.VersionNumber{version}})
+		Expect(err).To(MatchError("0x1234 is not a valid QUIC version"))
 	})
 
 	It("fills in default values if options are not set in the Config", func() {
@@ -459,7 +507,6 @@ var _ = Describe("Server", func() {
 	})
 
 	It("sends a gQUIC Version Negotaion Packet, if the client sent a gQUIC Public Header", func() {
-		config.Versions = []protocol.VersionNumber{99}
 		b := &bytes.Buffer{}
 		hdr := wire.Header{
 			VersionFlag:     true,
@@ -496,7 +543,7 @@ var _ = Describe("Server", func() {
 	})
 
 	It("sends an IETF draft style Version Negotaion Packet, if the client sent a IETF draft style header", func() {
-		config.Versions = []protocol.VersionNumber{99, protocol.VersionTLS}
+		config.Versions = append(config.Versions, protocol.VersionTLS)
 		b := &bytes.Buffer{}
 		hdr := wire.Header{
 			Type:         protocol.PacketTypeInitial,
@@ -515,6 +562,7 @@ var _ = Describe("Server", func() {
 
 		done := make(chan struct{})
 		go func() {
+			defer GinkgoRecover()
 			ln.Accept()
 			close(done)
 		}()
@@ -526,15 +574,14 @@ var _ = Describe("Server", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.IsVersionNegotiation).To(BeTrue())
 		Expect(packet.ConnectionID).To(Equal(protocol.ConnectionID(0x1337)))
-		Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(0x55)))
 		Expect(r.Len()).To(BeZero())
 		Consistently(done).ShouldNot(BeClosed())
+		// make the go routine return
+		ln.Close()
+		Eventually(done).Should(BeClosed())
 	})
 
 	It("ignores IETF draft style Initial packets, if it doesn't support TLS", func() {
-		version := protocol.VersionNumber(99)
-		Expect(version.UsesTLS()).To(BeFalse())
-		config.Versions = []protocol.VersionNumber{version}
 		b := &bytes.Buffer{}
 		hdr := wire.Header{
 			Type:         protocol.PacketTypeInitial,
@@ -549,8 +596,8 @@ var _ = Describe("Server", func() {
 		conn.dataToRead <- b.Bytes()
 		conn.dataReadFrom = udpAddr
 		ln, err := Listen(conn, testdata.GetTLSConfig(), config)
-		defer ln.Close()
 		Expect(err).ToNot(HaveOccurred())
+		defer ln.Close()
 		Consistently(func() int { return conn.dataWritten.Len() }).Should(BeZero())
 	})
 

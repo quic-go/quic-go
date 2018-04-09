@@ -7,6 +7,7 @@ import (
 	"github.com/bifurcation/mint"
 	"github.com/bifurcation/mint/syntax"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -18,7 +19,7 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 	)
 
 	BeforeEach(func() {
-		handler = NewExtensionHandlerClient(&TransportParameters{}, protocol.VersionWhatever, nil, protocol.VersionWhatever).(*extensionHandlerClient)
+		handler = NewExtensionHandlerClient(&TransportParameters{}, protocol.VersionWhatever, nil, protocol.VersionWhatever, utils.DefaultLogger).(*extensionHandlerClient)
 		el = make(mint.ExtensionList, 0)
 	})
 
@@ -66,21 +67,41 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 		BeforeEach(func() {
 			fakeBody = &tlsExtensionBody{data: []byte("foobar foobar")}
 			parameters = map[transportParameterID][]byte{
-				initialMaxStreamDataParameterID:   []byte{0x11, 0x22, 0x33, 0x44},
-				initialMaxDataParameterID:         []byte{0x22, 0x33, 0x44, 0x55},
-				initialMaxStreamIDBiDiParameterID: []byte{0x33, 0x44, 0x55, 0x66},
-				idleTimeoutParameterID:            []byte{0x13, 0x37},
-				statelessResetTokenParameterID:    bytes.Repeat([]byte{0}, 16),
+				initialMaxStreamDataParameterID:  {0x11, 0x22, 0x33, 0x44},
+				initialMaxDataParameterID:        {0x22, 0x33, 0x44, 0x55},
+				initialMaxStreamsBiDiParameterID: {0x33, 0x44},
+				idleTimeoutParameterID:           {0x13, 0x37},
+				statelessResetTokenParameterID:   bytes.Repeat([]byte{0}, 16),
 			}
 		})
 
+		It("blocks until the transport parameters are read", func() {
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				addEncryptedExtensionsWithParameters(parameters)
+				err := handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
+				Expect(err).ToNot(HaveOccurred())
+				close(done)
+			}()
+			Consistently(done).ShouldNot(BeClosed())
+			Expect(handler.GetPeerParams()).To(Receive())
+			Eventually(done).Should(BeClosed())
+		})
+
 		It("accepts the TransportParameters on the EncryptedExtensions message", func() {
-			addEncryptedExtensionsWithParameters(parameters)
-			err := handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
-			Expect(err).ToNot(HaveOccurred())
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				addEncryptedExtensionsWithParameters(parameters)
+				err := handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
+				Expect(err).ToNot(HaveOccurred())
+				close(done)
+			}()
 			var params TransportParameters
-			Expect(handler.GetPeerParams()).To(Receive(&params))
+			Eventually(handler.GetPeerParams()).Should(Receive(&params))
 			Expect(params.StreamFlowControlWindow).To(BeEquivalentTo(0x11223344))
+			Eventually(done).Should(BeClosed())
 		})
 
 		It("errors if the EncryptedExtensions message doesn't contain TransportParameters", func() {
@@ -97,14 +118,6 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 
 		It("ignores messages without TransportParameters, if they are not required", func() {
 			err := handler.Receive(mint.HandshakeTypeCertificate, &el)
-			Expect(err).ToNot(HaveOccurred())
-		})
-
-		// TODO: fix this when implementing the NewSessionTicket
-		It("ignors the TransportParameters in the NewSessionTicket message", func() {
-			err := el.Add(fakeBody)
-			Expect(err).ToNot(HaveOccurred())
-			err = handler.Receive(mint.HandshakeTypeNewSessionTicket, &el)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -131,6 +144,13 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 
 		Context("Version Negotiation", func() {
 			It("accepts a valid version negotiation", func() {
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					Eventually(handler.GetPeerParams()).Should(Receive())
+					close(done)
+				}()
+
 				handler.initialVersion = 13
 				handler.version = 37
 				handler.supportedVersions = []protocol.VersionNumber{13, 37, 42}
@@ -144,6 +164,7 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 				Expect(err).ToNot(HaveOccurred())
 				err = handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
 				Expect(err).ToNot(HaveOccurred())
+				Eventually(done).Should(BeClosed())
 			})
 
 			It("errors if the current version doesn't match negotiated_version", func() {
@@ -200,6 +221,13 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 			})
 
 			It("doesn't error if it would have picked a different version based on the supported version list, if no version negotiation was performed", func() {
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					Eventually(handler.GetPeerParams()).Should(Receive())
+					close(done)
+				}()
+
 				handler.version = 42
 				handler.initialVersion = 42 // version == initialVersion means no version negotiation was performed
 				handler.supportedVersions = []protocol.VersionNumber{43, 42, 41}
@@ -222,6 +250,7 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 				Expect(err).ToNot(HaveOccurred())
 				err = handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
 				Expect(err).ToNot(HaveOccurred())
+				Eventually(done).Should(BeClosed())
 			})
 		})
 	})

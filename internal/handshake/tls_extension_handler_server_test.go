@@ -6,6 +6,7 @@ import (
 	"github.com/bifurcation/mint"
 	"github.com/bifurcation/mint/syntax"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -25,7 +26,7 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 	)
 
 	BeforeEach(func() {
-		handler = NewExtensionHandlerServer(&TransportParameters{}, nil, protocol.VersionWhatever).(*extensionHandlerServer)
+		handler = NewExtensionHandlerServer(&TransportParameters{}, nil, protocol.VersionWhatever, utils.DefaultLogger).(*extensionHandlerServer)
 		el = make(mint.ExtensionList, 0)
 	})
 
@@ -77,10 +78,10 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 		BeforeEach(func() {
 			fakeBody = &tlsExtensionBody{data: []byte("foobar foobar")}
 			parameters = map[transportParameterID][]byte{
-				initialMaxStreamDataParameterID:   []byte{0x11, 0x22, 0x33, 0x44},
-				initialMaxDataParameterID:         []byte{0x22, 0x33, 0x44, 0x55},
-				initialMaxStreamIDBiDiParameterID: []byte{0x33, 0x44, 0x55, 0x66},
-				idleTimeoutParameterID:            []byte{0x13, 0x37},
+				initialMaxStreamDataParameterID:  {0x11, 0x22, 0x33, 0x44},
+				initialMaxDataParameterID:        {0x22, 0x33, 0x44, 0x55},
+				initialMaxStreamsBiDiParameterID: {0x33, 0x44},
+				idleTimeoutParameterID:           {0x13, 0x37},
 			}
 		})
 
@@ -151,7 +152,7 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("errros when a version negotiation was performed, although we already support the inital version", func() {
+			It("erros when a version negotiation was performed, although we already support the initial version", func() {
 				handler.supportedVersions = []protocol.VersionNumber{11, 12, 13}
 				handler.version = 13
 				body, err := syntax.Marshal(clientHelloTransportParameters{

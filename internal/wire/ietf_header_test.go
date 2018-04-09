@@ -20,14 +20,13 @@ var _ = Describe("IETF draft Header", func() {
 		Context("Version Negotiation Packets", func() {
 			It("parses", func() {
 				versions := []protocol.VersionNumber{0x22334455, 0x33445566}
-				data := ComposeVersionNegotiation(0x1234567890, 0x1337, versions)
+				data := ComposeVersionNegotiation(0x1234567890, versions)
 				b := bytes.NewReader(data)
 				h, err := parseHeader(b, protocol.PerspectiveServer)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(h.IsVersionNegotiation).To(BeTrue())
 				Expect(h.Version).To(BeZero())
 				Expect(h.ConnectionID).To(Equal(protocol.ConnectionID(0x1234567890)))
-				Expect(h.PacketNumber).To(Equal(protocol.PacketNumber(0x1337)))
 				for _, v := range versions {
 					Expect(h.SupportedVersions).To(ContainElement(v))
 				}
@@ -35,15 +34,15 @@ var _ = Describe("IETF draft Header", func() {
 
 			It("errors if it contains versions of the wrong length", func() {
 				versions := []protocol.VersionNumber{0x22334455, 0x33445566}
-				data := ComposeVersionNegotiation(0x1234567890, 0x1337, versions)
+				data := ComposeVersionNegotiation(0x1234567890, versions)
 				b := bytes.NewReader(data[:len(data)-2])
 				_, err := parseHeader(b, protocol.PerspectiveServer)
 				Expect(err).To(MatchError(qerr.InvalidVersionNegotiationPacket))
 			})
 
-			It("errors if the version list is emtpy", func() {
+			It("errors if the version list is empty", func() {
 				versions := []protocol.VersionNumber{0x22334455}
-				data := ComposeVersionNegotiation(0x1234567890, 0x1337, versions)
+				data := ComposeVersionNegotiation(0x1234567890, versions)
 				// remove 8 bytes (two versions), since ComposeVersionNegotiation also added a reserved version number
 				_, err := parseHeader(bytes.NewReader(data[:len(data)-8]), protocol.PerspectiveServer)
 				Expect(err).To(MatchError("InvalidVersionNegotiationPacket: empty version list"))
@@ -116,7 +115,7 @@ var _ = Describe("IETF draft Header", func() {
 		Context("short headers", func() {
 			It("reads a short header with a connection ID", func() {
 				data := []byte{
-					0x40 ^ 0x1,                                     //
+					0x10,                                           // 1 byte packet number
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
 					0x42, // packet number
 				}
@@ -134,7 +133,7 @@ var _ = Describe("IETF draft Header", func() {
 
 			It("reads the Key Phase Bit", func() {
 				data := []byte{
-					0x20 ^ 0x1,
+					0x10 ^ 0x40 ^ 0x20,
 					0x11,
 				}
 				b := bytes.NewReader(data)
@@ -145,9 +144,9 @@ var _ = Describe("IETF draft Header", func() {
 				Expect(b.Len()).To(BeZero())
 			})
 
-			It("reads a header with ommited connection ID", func() {
+			It("reads a header with omitted connection ID", func() {
 				data := []byte{
-					0x1,
+					0x10 ^ 0x40,
 					0x21, // packet number
 				}
 				b := bytes.NewReader(data)
@@ -162,7 +161,7 @@ var _ = Describe("IETF draft Header", func() {
 
 			It("reads a header with a 2 byte packet number", func() {
 				data := []byte{
-					0x2,
+					0x10 ^ 0x40 ^ 0x1,
 					0x13, 0x37, // packet number
 				}
 				b := bytes.NewReader(data)
@@ -176,7 +175,7 @@ var _ = Describe("IETF draft Header", func() {
 
 			It("reads a header with a 4 byte packet number", func() {
 				data := []byte{
-					0x3,
+					0x10 ^ 0x40 ^ 0x2,
 					0xde, 0xad, 0xbe, 0xef, // packet number
 				}
 				b := bytes.NewReader(data)
@@ -190,7 +189,7 @@ var _ = Describe("IETF draft Header", func() {
 
 			It("errors on EOF", func() {
 				data := []byte{
-					0x40 ^ 0x3,
+					0x10 ^ 0x2,
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
 					0xde, 0xca, 0xfb, 0xad, // packet number
 				}
@@ -237,7 +236,7 @@ var _ = Describe("IETF draft Header", func() {
 				}).writeHeader(buf)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(buf.Bytes()).To(Equal([]byte{
-					0x40 ^ 0x1,
+					0x10,
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
 					0x42, // packet number
 				}))
@@ -251,7 +250,7 @@ var _ = Describe("IETF draft Header", func() {
 				}).writeHeader(buf)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(buf.Bytes()).To(Equal([]byte{
-					0x1,
+					0x10 ^ 0x40,
 					0x42, // packet number
 				}))
 			})
@@ -264,7 +263,7 @@ var _ = Describe("IETF draft Header", func() {
 				}).writeHeader(buf)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(buf.Bytes()).To(Equal([]byte{
-					0x2,
+					0x10 ^ 0x40 ^ 0x1,
 					0x13, 0x37, // packet number
 				}))
 			})
@@ -277,7 +276,7 @@ var _ = Describe("IETF draft Header", func() {
 				}).writeHeader(buf)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(buf.Bytes()).To(Equal([]byte{
-					0x3,
+					0x10 ^ 0x40 ^ 0x2,
 					0xde, 0xca, 0xfb, 0xad, // packet number
 				}))
 			})
@@ -300,7 +299,7 @@ var _ = Describe("IETF draft Header", func() {
 				}).writeHeader(buf)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(buf.Bytes()).To(Equal([]byte{
-					0x20 ^ 0x1,
+					0x10 ^ 0x40 ^ 0x20,
 					0x42, // packet number
 				}))
 			})
@@ -373,16 +372,19 @@ var _ = Describe("IETF draft Header", func() {
 	})
 
 	Context("logging", func() {
-		var buf bytes.Buffer
+		var (
+			buf    *bytes.Buffer
+			logger utils.Logger
+		)
 
 		BeforeEach(func() {
-			buf.Reset()
-			utils.SetLogLevel(utils.LogLevelDebug)
-			log.SetOutput(&buf)
+			buf = &bytes.Buffer{}
+			logger = utils.DefaultLogger
+			logger.SetLogLevel(utils.LogLevelDebug)
+			log.SetOutput(buf)
 		})
 
 		AfterEach(func() {
-			utils.SetLogLevel(utils.LogLevelNothing)
 			log.SetOutput(os.Stdout)
 		})
 
@@ -392,9 +394,9 @@ var _ = Describe("IETF draft Header", func() {
 				Type:         protocol.PacketTypeHandshake,
 				PacketNumber: 0x1337,
 				ConnectionID: 0xdeadbeef,
-				Version:      253,
-			}).logHeader()
-			Expect(string(buf.Bytes())).To(ContainSubstring("Long Header{Type: Handshake, ConnectionID: 0xdeadbeef, PacketNumber: 0x1337, Version: 253}"))
+				Version:      0xfeed,
+			}).logHeader(logger)
+			Expect(buf.String()).To(ContainSubstring("Long Header{Type: Handshake, ConnectionID: 0xdeadbeef, PacketNumber: 0x1337, Version: 0xfeed}"))
 		})
 
 		It("logs Short Headers containing a connection ID", func() {
@@ -403,8 +405,8 @@ var _ = Describe("IETF draft Header", func() {
 				PacketNumber:    0x1337,
 				PacketNumberLen: 4,
 				ConnectionID:    0xdeadbeef,
-			}).logHeader()
-			Expect(string(buf.Bytes())).To(ContainSubstring("Short Header{ConnectionID: 0xdeadbeef, PacketNumber: 0x1337, PacketNumberLen: 4, KeyPhase: 1}"))
+			}).logHeader(logger)
+			Expect(buf.String()).To(ContainSubstring("Short Header{ConnectionID: 0xdeadbeef, PacketNumber: 0x1337, PacketNumberLen: 4, KeyPhase: 1}"))
 		})
 
 		It("logs Short Headers with omitted connection ID", func() {
@@ -412,8 +414,8 @@ var _ = Describe("IETF draft Header", func() {
 				PacketNumber:     0x12,
 				PacketNumberLen:  1,
 				OmitConnectionID: true,
-			}).logHeader()
-			Expect(string(buf.Bytes())).To(ContainSubstring("Short Header{ConnectionID: (omitted), PacketNumber: 0x12, PacketNumberLen: 1, KeyPhase: 0}"))
+			}).logHeader(logger)
+			Expect(buf.String()).To(ContainSubstring("Short Header{ConnectionID: (omitted), PacketNumber: 0x12, PacketNumberLen: 1, KeyPhase: 0}"))
 		})
 	})
 })

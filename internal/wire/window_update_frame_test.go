@@ -16,7 +16,7 @@ var _ = Describe("WINDOW_UPDATE frame", func() {
 					0xde, 0xad, 0xbe, 0xef, // stream id
 					0xde, 0xca, 0xfb, 0xad, 0x11, 0x22, 0x33, 0x44, // byte offset
 				})
-				f, err := ParseWindowUpdateFrame(b, versionBigEndian)
+				f, err := parseWindowUpdateFrame(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(f).To(BeAssignableToTypeOf(&MaxStreamDataFrame{}))
 				frame := f.(*MaxStreamDataFrame)
@@ -29,7 +29,7 @@ var _ = Describe("WINDOW_UPDATE frame", func() {
 					0x0, 0x0, 0x0, 0x0, // stream id
 					0xde, 0xca, 0xfb, 0xad, 0x11, 0x22, 0x33, 0x44, // byte offset
 				})
-				f, err := ParseWindowUpdateFrame(b, versionBigEndian)
+				f, err := parseWindowUpdateFrame(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(f).To(BeAssignableToTypeOf(&MaxDataFrame{}))
 				frame := f.(*MaxDataFrame)
@@ -41,10 +41,10 @@ var _ = Describe("WINDOW_UPDATE frame", func() {
 					0xef, 0xbe, 0xad, 0xde, // stream id
 					0x44, 0x33, 0x22, 0x11, 0xad, 0xfb, 0xca, 0xde, // byte offset
 				}
-				_, err := ParseWindowUpdateFrame(bytes.NewReader(data), versionBigEndian)
+				_, err := parseWindowUpdateFrame(bytes.NewReader(data), versionBigEndian)
 				Expect(err).NotTo(HaveOccurred())
 				for i := range data {
-					_, err := ParseWindowUpdateFrame(bytes.NewReader(data[0:i]), versionBigEndian)
+					_, err := parseWindowUpdateFrame(bytes.NewReader(data[0:i]), versionBigEndian)
 					Expect(err).To(HaveOccurred())
 				}
 			})

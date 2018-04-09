@@ -108,12 +108,11 @@ var _ = Describe("TLS Crypto Setup", func() {
 				Expect(d).To(Equal([]byte("foobar signed")))
 			})
 
-			It("is accepted initially", func() {
+			It("is used for opening", func() {
 				cs.nullAEAD.(*mockcrypto.MockAEAD).EXPECT().Open(nil, []byte("foobar enc"), protocol.PacketNumber(10), []byte{}).Return([]byte("foobar"), nil)
-				d, enc, err := cs.Open(nil, []byte("foobar enc"), 10, []byte{})
+				d, err := cs.OpenHandshake(nil, []byte("foobar enc"), 10, []byte{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(d).To(Equal([]byte("foobar")))
-				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
 			})
 
 			It("is used for crypto stream", func() {
@@ -126,17 +125,8 @@ var _ = Describe("TLS Crypto Setup", func() {
 
 			It("errors if the has the wrong hash", func() {
 				cs.nullAEAD.(*mockcrypto.MockAEAD).EXPECT().Open(nil, []byte("foobar enc"), protocol.PacketNumber(10), []byte{}).Return(nil, errors.New("authentication failed"))
-				_, enc, err := cs.Open(nil, []byte("foobar enc"), 10, []byte{})
+				_, err := cs.OpenHandshake(nil, []byte("foobar enc"), 10, []byte{})
 				Expect(err).To(MatchError("authentication failed"))
-				Expect(enc).To(Equal(protocol.EncryptionUnspecified))
-			})
-
-			It("is not accepted after the handshake completes", func() {
-				doHandshake()
-				cs.aead.(*mockcrypto.MockAEAD).EXPECT().Open(nil, []byte("foobar encrypted"), protocol.PacketNumber(1), []byte{}).Return(nil, errors.New("authentication failed"))
-				_, enc, err := cs.Open(nil, []byte("foobar encrypted"), 1, []byte{})
-				Expect(err).To(MatchError("authentication failed"))
-				Expect(enc).To(Equal(protocol.EncryptionUnspecified))
 			})
 		})
 
@@ -150,12 +140,11 @@ var _ = Describe("TLS Crypto Setup", func() {
 				Expect(d).To(Equal([]byte("foobar forward sec")))
 			})
 
-			It("is used for opening after the handshake completes", func() {
+			It("is used for opening", func() {
 				doHandshake()
 				cs.aead.(*mockcrypto.MockAEAD).EXPECT().Open(nil, []byte("encrypted"), protocol.PacketNumber(6), []byte{}).Return([]byte("decrypted"), nil)
-				d, enc, err := cs.Open(nil, []byte("encrypted"), 6, []byte{})
+				d, err := cs.Open1RTT(nil, []byte("encrypted"), 6, []byte{})
 				Expect(err).ToNot(HaveOccurred())
-				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
 				Expect(d).To(Equal([]byte("decrypted")))
 			})
 		})

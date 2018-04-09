@@ -23,12 +23,22 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 	}
 
 	setNewStreamsMap := func(p protocol.Perspective) {
-		m = newStreamsMapLegacy(newStream, p).(*streamsMapLegacy)
+		m = newStreamsMapLegacy(newStream, protocol.DefaultMaxIncomingStreams, p).(*streamsMapLegacy)
 	}
 
 	deleteStream := func(id protocol.StreamID) {
 		ExpectWithOffset(1, m.DeleteStream(id)).To(Succeed())
 	}
+
+	It("applies the max stream limit for small number of streams", func() {
+		sm := newStreamsMapLegacy(newStream, 1, protocol.PerspectiveServer).(*streamsMapLegacy)
+		Expect(sm.maxIncomingStreams).To(BeEquivalentTo(1 + protocol.MaxStreamsMinimumIncrement))
+	})
+
+	It("applies the max stream limit for big number of streams", func() {
+		sm := newStreamsMapLegacy(newStream, 1000, protocol.PerspectiveServer).(*streamsMapLegacy)
+		Expect(sm.maxIncomingStreams).To(BeEquivalentTo(1000 * protocol.MaxStreamsMultiplier))
+	})
 
 	Context("getting and creating streams", func() {
 		Context("as a server", func() {
@@ -62,6 +72,7 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 				It("gets existing streams", func() {
 					s, err := m.getOrOpenStream(5)
 					Expect(err).NotTo(HaveOccurred())
+					Expect(s.StreamID()).To(Equal(protocol.StreamID(5)))
 					numStreams := m.numIncomingStreams
 					s, err = m.getOrOpenStream(5)
 					Expect(err).NotTo(HaveOccurred())
@@ -106,7 +117,7 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 						Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 					})
 
-					It("errors when too many streams are opened implicitely", func() {
+					It("errors when too many streams are opened implicitly", func() {
 						_, err := m.getOrOpenStream(protocol.StreamID(m.maxIncomingStreams*2 + 3))
 						Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 					})

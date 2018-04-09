@@ -124,6 +124,7 @@ var _ = Describe("Send Stream", func() {
 			}()
 			waitForWrite()
 			frame, hasMoreData := str.popStreamFrame(50)
+			Expect(frame).ToNot(BeNil())
 			Expect(hasMoreData).To(BeTrue())
 			frame, hasMoreData = str.popStreamFrame(1000)
 			Expect(frame).ToNot(BeNil())
