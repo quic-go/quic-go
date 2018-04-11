@@ -217,8 +217,16 @@ func (m *streamsMap) UpdateLimits(p *handshake.TransportParameters) {
 }
 
 func (m *streamsMap) CloseWithError(err error) {
-	m.outgoingBidiStreams.CloseWithError(err)
-	m.outgoingUniStreams.CloseWithError(err)
-	m.incomingBidiStreams.CloseWithError(err)
-	m.incomingUniStreams.CloseWithError(err)
+	for _, s := range m.outgoingBidiStreams.CloseWithError(err) {
+		s.closeForShutdown(err)
+	}
+	for _, s := range m.outgoingUniStreams.CloseWithError(err) {
+		s.closeForShutdown(err)
+	}
+	for _, s := range m.incomingBidiStreams.CloseWithError(err) {
+		s.closeForShutdown(err)
+	}
+	for _, s := range m.incomingUniStreams.CloseWithError(err) {
+		s.closeForShutdown(err)
+	}
 }
