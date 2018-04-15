@@ -55,7 +55,9 @@ var _ = Describe("Packing and unpacking Initial packets", func() {
 
 		It("copies values from the tls.Config", func() {
 			verifyErr := errors.New("test err")
+			certPool := &x509.CertPool{}
 			tlsConf := &tls.Config{
+				RootCAs:            certPool,
 				ServerName:         "www.example.com",
 				InsecureSkipVerify: true,
 				VerifyPeerCertificate: func(_ [][]byte, _ [][]*x509.Certificate) error {
@@ -64,6 +66,7 @@ var _ = Describe("Packing and unpacking Initial packets", func() {
 			}
 			mintConf, err := tlsToMintConfig(tlsConf, protocol.PerspectiveClient)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(mintConf.RootCAs).To(Equal(certPool))
 			Expect(mintConf.ServerName).To(Equal("www.example.com"))
 			Expect(mintConf.InsecureSkipVerify).To(BeTrue())
 			Expect(mintConf.VerifyPeerCertificate(nil, nil)).To(MatchError(verifyErr))
