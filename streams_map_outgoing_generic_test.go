@@ -21,7 +21,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 
 	BeforeEach(func() {
 		newItem = func(id protocol.StreamID) item {
-			return id
+			return &mockGenericStream{id: id}
 		}
 		mockSender = NewMockStreamSender(mockCtrl)
 		m = newOutgoingItemsMap(firstNewStream, newItem, mockSender.queueControlFrame)
@@ -35,10 +35,10 @@ var _ = Describe("Streams Map (outgoing)", func() {
 		It("opens streams", func() {
 			str, err := m.OpenStream()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(str).To(Equal(firstNewStream))
+			Expect(str.(*mockGenericStream).id).To(Equal(firstNewStream))
 			str, err = m.OpenStream()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(str).To(Equal(firstNewStream + 4))
+			Expect(str.(*mockGenericStream).id).To(Equal(firstNewStream + 4))
 		})
 
 		It("doesn't open streams after it has been closed", func() {
@@ -53,7 +53,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			Expect(err).ToNot(HaveOccurred())
 			str, err := m.GetStream(firstNewStream)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(str).To(Equal(firstNewStream))
+			Expect(str.(*mockGenericStream).id).To(Equal(firstNewStream))
 		})
 
 		It("errors when trying to get a stream that has not yet been opened", func() {
@@ -84,6 +84,19 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			err = m.DeleteStream(10)
 			Expect(err).To(MatchError("Tried to delete unknown stream 10"))
 		})
+
+		It("closes all streams when CloseWithError is called", func() {
+			str1, err := m.OpenStream()
+			Expect(err).ToNot(HaveOccurred())
+			str2, err := m.OpenStream()
+			Expect(err).ToNot(HaveOccurred())
+			testErr := errors.New("test err")
+			m.CloseWithError(testErr)
+			Expect(str1.(*mockGenericStream).closed).To(BeTrue())
+			Expect(str1.(*mockGenericStream).closeErr).To(MatchError(testErr))
+			Expect(str2.(*mockGenericStream).closed).To(BeTrue())
+			Expect(str2.(*mockGenericStream).closeErr).To(MatchError(testErr))
+		})
 	})
 
 	Context("with stream ID limits", func() {
@@ -100,7 +113,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 				defer GinkgoRecover()
 				str, err := m.OpenStreamSync()
 				Expect(err).ToNot(HaveOccurred())
-				Expect(str).To(Equal(firstNewStream))
+				Expect(str.(*mockGenericStream).id).To(Equal(firstNewStream))
 				close(done)
 			}()
 
@@ -130,7 +143,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			m.SetMaxStream(firstNewStream - 4)
 			str, err := m.OpenStream()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(str).To(Equal(firstNewStream))
+			Expect(str.(*mockGenericStream).id).To(Equal(firstNewStream))
 		})
 
 		It("queues a STREAM_ID_BLOCKED frame if no stream can be opened", func() {
