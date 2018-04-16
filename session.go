@@ -422,7 +422,6 @@ func (s *session) run() error {
 	}()
 
 	var closeErr closeError
-	handshakeEvent := s.handshakeEvent
 
 runLoop:
 	for {
@@ -431,6 +430,9 @@ runLoop:
 		select {
 		case closeErr = <-s.closeChan:
 			break runLoop
+		case _, ok := <-s.handshakeEvent:
+			// when the handshake is completed, the channel will be closed
+			s.handleHandshakeEvent(!ok)
 		default:
 		}
 
@@ -461,20 +463,9 @@ runLoop:
 			putPacketBuffer(&p.header.Raw)
 		case p := <-s.paramsChan:
 			s.processTransportParameters(&p)
-		case _, ok := <-handshakeEvent:
-			if !ok { // the aeadChanged chan was closed. This means that the handshake is completed.
-				s.handshakeComplete = true
-				handshakeEvent = nil // prevent this case from ever being selected again
-				if !s.version.UsesTLS() && s.perspective == protocol.PerspectiveClient {
-					// In gQUIC, there's no equivalent to the Finished message in TLS
-					// The server knows that the handshake is complete when it receives the first forward-secure packet sent by the client.
-					// We need to make sure that the client actually sends such a packet.
-					s.packer.QueueControlFrame(&wire.PingFrame{})
-				}
-				close(s.handshakeChan)
-			} else {
-				s.tryDecryptingQueuedPackets()
-			}
+		case _, ok := <-s.handshakeEvent:
+			// when the handshake is completed, the channel will be closed
+			s.handleHandshakeEvent(!ok)
 		}
 
 		now := time.Now()
@@ -560,6 +551,23 @@ func (s *session) maybeResetTimer() {
 	}
 
 	s.timer.Reset(deadline)
+}
+
+func (s *session) handleHandshakeEvent(completed bool) {
+	if !completed {
+		s.tryDecryptingQueuedPackets()
+		return
+	}
+	s.handshakeComplete = true
+	s.handshakeEvent = nil // prevent this case from ever being selected again
+	if !s.version.UsesTLS() && s.perspective == protocol.PerspectiveClient {
+		// In gQUIC, there's no equivalent to the Finished message in TLS
+		// The server knows that the handshake is complete when it receives the first forward-secure packet sent by the client.
+		// We need to make sure that the client actually sends such a packet.
+		s.packer.QueueControlFrame(&wire.PingFrame{})
+		s.scheduleSending()
+	}
+	close(s.handshakeChan)
 }
 
 func (s *session) handlePacketImpl(p *receivedPacket) error {
