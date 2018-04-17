@@ -83,8 +83,8 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(750)))
 			Expect(frame.HasMissingRanges()).To(BeTrue())
 			Expect(frame.AckRanges).To(Equal([]AckRange{
-				{Last: 1000, First: 900},
-				{Last: 800, First: 750},
+				{Largest: 1000, Smallest: 900},
+				{Largest: 800, Smallest: 750},
 			}))
 			Expect(b.Len()).To(BeZero())
 		})
@@ -106,9 +106,9 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(94)))
 			Expect(frame.HasMissingRanges()).To(BeTrue())
 			Expect(frame.AckRanges).To(Equal([]AckRange{
-				{Last: 100, First: 100},
-				{Last: 98, First: 98},
-				{Last: 95, First: 94},
+				{Largest: 100, Smallest: 100},
+				{Largest: 98, Smallest: 98},
+				{Largest: 95, Smallest: 94},
 			}))
 			Expect(b.Len()).To(BeZero())
 		})
@@ -172,8 +172,8 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 				LargestAcked: 1000,
 				LowestAcked:  100,
 				AckRanges: []AckRange{
-					{First: 400, Last: 1000},
-					{First: 100, Last: 200},
+					{Smallest: 400, Largest: 1000},
+					{Smallest: 100, Largest: 200},
 				},
 			}
 			Expect(f.validateAckRanges()).To(BeTrue())
@@ -194,10 +194,10 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 				LargestAcked: 10,
 				LowestAcked:  1,
 				AckRanges: []AckRange{
-					{First: 10, Last: 10},
-					{First: 8, Last: 8},
-					{First: 5, Last: 6},
-					{First: 1, Last: 3},
+					{Smallest: 10, Largest: 10},
+					{Smallest: 8, Largest: 8},
+					{Smallest: 5, Largest: 6},
+					{Smallest: 1, Largest: 3},
 				},
 			}
 			Expect(f.validateAckRanges()).To(BeTrue())
@@ -222,39 +222,39 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 		It("rejects ACK ranges with a single range", func() {
 			ack := AckFrame{
 				LargestAcked: 10,
-				AckRanges:    []AckRange{{First: 1, Last: 10}},
+				AckRanges:    []AckRange{{Smallest: 1, Largest: 10}},
 			}
 			Expect(ack.validateAckRanges()).To(BeFalse())
 		})
 
-		It("rejects ACK ranges with Last of the first range unequal to LargestObserved", func() {
+		It("rejects ACK ranges with Largest of the first range unequal to LargestObserved", func() {
 			ack := AckFrame{
 				LargestAcked: 10,
 				AckRanges: []AckRange{
-					{First: 8, Last: 9},
-					{First: 2, Last: 3},
+					{Smallest: 8, Largest: 9},
+					{Smallest: 2, Largest: 3},
 				},
 			}
 			Expect(ack.validateAckRanges()).To(BeFalse())
 		})
 
-		It("rejects ACK ranges with First greater than Last", func() {
+		It("rejects ACK ranges with Smallest greater than Largest", func() {
 			ack := AckFrame{
 				LargestAcked: 10,
 				AckRanges: []AckRange{
-					{First: 8, Last: 10},
-					{First: 4, Last: 3},
+					{Smallest: 8, Largest: 10},
+					{Smallest: 4, Largest: 3},
 				},
 			}
 			Expect(ack.validateAckRanges()).To(BeFalse())
 		})
 
-		It("rejects ACK ranges with First greater than LargestObserved", func() {
+		It("rejects ACK ranges with Smallest greater than LargestObserved", func() {
 			ack := AckFrame{
 				LargestAcked: 5,
 				AckRanges: []AckRange{
-					{First: 4, Last: 10},
-					{First: 1, Last: 2},
+					{Smallest: 4, Largest: 10},
+					{Smallest: 1, Largest: 2},
 				},
 			}
 			Expect(ack.validateAckRanges()).To(BeFalse())
@@ -264,8 +264,8 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			ack := AckFrame{
 				LargestAcked: 7,
 				AckRanges: []AckRange{
-					{First: 2, Last: 2},
-					{First: 6, Last: 7},
+					{Smallest: 2, Largest: 2},
+					{Smallest: 6, Largest: 7},
 				},
 			}
 			Expect(ack.validateAckRanges()).To(BeFalse())
@@ -275,8 +275,8 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			ack := AckFrame{
 				LargestAcked: 7,
 				AckRanges: []AckRange{
-					{First: 5, Last: 7},
-					{First: 2, Last: 5},
+					{Smallest: 5, Largest: 7},
+					{Smallest: 2, Largest: 5},
 				},
 			}
 			Expect(ack.validateAckRanges()).To(BeFalse())
@@ -286,8 +286,8 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			ack := AckFrame{
 				LargestAcked: 7,
 				AckRanges: []AckRange{
-					{First: 4, Last: 7},
-					{First: 5, Last: 6},
+					{Smallest: 4, Largest: 7},
+					{Smallest: 5, Largest: 6},
 				},
 			}
 			Expect(ack.validateAckRanges()).To(BeFalse())
@@ -297,8 +297,8 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			ack := AckFrame{
 				LargestAcked: 7,
 				AckRanges: []AckRange{
-					{First: 5, Last: 7},
-					{First: 2, Last: 4},
+					{Smallest: 5, Largest: 7},
+					{Smallest: 2, Largest: 4},
 				},
 			}
 			Expect(ack.validateAckRanges()).To(BeFalse())
@@ -308,8 +308,8 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			ack := AckFrame{
 				LargestAcked: 10,
 				AckRanges: []AckRange{
-					{First: 5, Last: 10},
-					{First: 1, Last: 3},
+					{Smallest: 5, Largest: 10},
+					{Smallest: 1, Largest: 3},
 				},
 			}
 			Expect(ack.validateAckRanges()).To(BeTrue())
@@ -319,9 +319,9 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			ack := AckFrame{
 				LargestAcked: 20,
 				AckRanges: []AckRange{
-					{First: 15, Last: 20},
-					{First: 10, Last: 12},
-					{First: 1, Last: 3},
+					{Smallest: 15, Largest: 20},
+					{Smallest: 10, Largest: 12},
+					{Smallest: 1, Largest: 3},
 				},
 			}
 			Expect(ack.validateAckRanges()).To(BeTrue())
@@ -348,8 +348,8 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 				LowestAcked:  5,
 				LargestAcked: 20,
 				AckRanges: []AckRange{
-					{First: 15, Last: 20},
-					{First: 5, Last: 8},
+					{Smallest: 15, Largest: 20},
+					{Smallest: 5, Largest: 8},
 				},
 			}
 			Expect(f.AcksPacket(4)).To(BeFalse())

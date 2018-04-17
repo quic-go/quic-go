@@ -251,8 +251,8 @@ var _ = Describe("receivedPacketHandler", func() {
 				Expect(ack.LargestAcked).To(Equal(protocol.PacketNumber(4)))
 				Expect(ack.LowestAcked).To(Equal(protocol.PacketNumber(1)))
 				Expect(ack.AckRanges).To(Equal([]wire.AckRange{
-					{First: 4, Last: 4},
-					{First: 1, Last: 1},
+					{Smallest: 4, Largest: 4},
+					{Smallest: 1, Largest: 1},
 				}))
 			})
 
@@ -268,8 +268,8 @@ var _ = Describe("receivedPacketHandler", func() {
 				Expect(ack.LargestAcked).To(Equal(protocol.PacketNumber(3)))
 				Expect(ack.LowestAcked).To(Equal(protocol.PacketNumber(0)))
 				Expect(ack.AckRanges).To(Equal([]wire.AckRange{
-					{First: 3, Last: 3},
-					{First: 0, Last: 1},
+					{Smallest: 3, Largest: 3},
+					{Smallest: 0, Largest: 1},
 				}))
 			})
 

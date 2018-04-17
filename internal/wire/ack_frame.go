@@ -64,7 +64,7 @@ func parseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 
 	// read all the other ACK ranges
 	if numBlocks > 0 {
-		frame.AckRanges = append(frame.AckRanges, AckRange{First: smallest, Last: frame.LargestAcked})
+		frame.AckRanges = append(frame.AckRanges, AckRange{Smallest: smallest, Largest: frame.LargestAcked})
 	}
 	for i := uint64(0); i < numBlocks; i++ {
 		g, err := utils.ReadVarInt(r)
@@ -87,7 +87,7 @@ func parseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 			return nil, errInvalidAckRanges
 		}
 		smallest = largest - ackBlock
-		frame.AckRanges = append(frame.AckRanges, AckRange{First: smallest, Last: largest})
+		frame.AckRanges = append(frame.AckRanges, AckRange{Smallest: smallest, Largest: largest})
 	}
 
 	frame.LowestAcked = smallest
@@ -112,7 +112,7 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 	var lowestInFirstRange protocol.PacketNumber
 	if f.HasMissingRanges() {
 		utils.WriteVarInt(b, uint64(len(f.AckRanges)-1))
-		lowestInFirstRange = f.AckRanges[0].First
+		lowestInFirstRange = f.AckRanges[0].Smallest
 	} else {
 		utils.WriteVarInt(b, 0)
 		lowestInFirstRange = f.LowestAcked
@@ -131,9 +131,9 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 			lowest = lowestInFirstRange
 			continue
 		}
-		utils.WriteVarInt(b, uint64(lowest-ackRange.Last-2))
-		utils.WriteVarInt(b, uint64(ackRange.Last-ackRange.First))
-		lowest = ackRange.First
+		utils.WriteVarInt(b, uint64(lowest-ackRange.Largest-2))
+		utils.WriteVarInt(b, uint64(ackRange.Largest-ackRange.Smallest))
+		lowest = ackRange.Smallest
 	}
 	return nil
 }
@@ -149,7 +149,7 @@ func (f *AckFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
 	var lowestInFirstRange protocol.PacketNumber
 	if f.HasMissingRanges() {
 		length += utils.VarIntLen(uint64(len(f.AckRanges) - 1))
-		lowestInFirstRange = f.AckRanges[0].First
+		lowestInFirstRange = f.AckRanges[0].Smallest
 	} else {
 		length += utils.VarIntLen(0)
 		lowestInFirstRange = f.LowestAcked
@@ -162,12 +162,12 @@ func (f *AckFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
 	var lowest protocol.PacketNumber
 	for i, ackRange := range f.AckRanges {
 		if i == 0 {
-			lowest = ackRange.First
+			lowest = ackRange.Smallest
 			continue
 		}
-		length += utils.VarIntLen(uint64(lowest - ackRange.Last - 2))
-		length += utils.VarIntLen(uint64(ackRange.Last - ackRange.First))
-		lowest = ackRange.First
+		length += utils.VarIntLen(uint64(lowest - ackRange.Largest - 2))
+		length += utils.VarIntLen(uint64(ackRange.Largest - ackRange.Smallest))
+		lowest = ackRange.Smallest
 	}
 	return length
 }
@@ -187,13 +187,13 @@ func (f *AckFrame) validateAckRanges() bool {
 		return false
 	}
 
-	if f.AckRanges[0].Last != f.LargestAcked {
+	if f.AckRanges[0].Largest != f.LargestAcked {
 		return false
 	}
 
 	// check the validity of every single ACK range
 	for _, ackRange := range f.AckRanges {
-		if ackRange.First > ackRange.Last {
+		if ackRange.Smallest > ackRange.Largest {
 			return false
 		}
 	}
@@ -204,10 +204,10 @@ func (f *AckFrame) validateAckRanges() bool {
 			continue
 		}
 		lastAckRange := f.AckRanges[i-1]
-		if lastAckRange.First <= ackRange.First {
+		if lastAckRange.Smallest <= ackRange.Smallest {
 			return false
 		}
-		if lastAckRange.First <= ackRange.Last+1 {
+		if lastAckRange.Smallest <= ackRange.Largest+1 {
 			return false
 		}
 	}
@@ -224,7 +224,7 @@ func (f *AckFrame) AcksPacket(p protocol.PacketNumber) bool {
 	if f.HasMissingRanges() {
 		// TODO: this could be implemented as a binary search
 		for _, ackRange := range f.AckRanges {
-			if p >= ackRange.First && p <= ackRange.Last {
+			if p >= ackRange.Smallest && p <= ackRange.Largest {
 				return true
 			}
 		}
