@@ -115,9 +115,14 @@ func (m *outgoingBidiStreamsMap) SetMaxStream(id protocol.StreamID) {
 	m.mutex.Unlock()
 }
 
-func (m *outgoingBidiStreamsMap) CloseWithError(err error) {
+func (m *outgoingBidiStreamsMap) CloseWithError(err error) map[protocol.StreamID]streamI {
 	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	m.closeErr = err
 	m.cond.Broadcast()
-	m.mutex.Unlock()
+	streams := make(map[protocol.StreamID]streamI)
+	for k, v := range m.streams {
+		streams[k] = v
+	}
+	return streams
 }
