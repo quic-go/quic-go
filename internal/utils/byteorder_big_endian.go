@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 )
@@ -90,7 +89,7 @@ func (bigEndian) ReadUint16(b io.ByteReader) (uint16, error) {
 }
 
 // WriteUint64 writes a uint64
-func (bigEndian) WriteUint64(b *bytes.Buffer, i uint64) {
+func (bigEndian) WriteUint64(b ByteWriter, i uint64) {
 	b.Write([]byte{
 		uint8(i >> 56), uint8(i >> 48), uint8(i >> 40), uint8(i >> 32),
 		uint8(i >> 24), uint8(i >> 16), uint8(i >> 8), uint8(i),
@@ -98,7 +97,7 @@ func (bigEndian) WriteUint64(b *bytes.Buffer, i uint64) {
 }
 
 // WriteUint56 writes 56 bit of a uint64
-func (bigEndian) WriteUint56(b *bytes.Buffer, i uint64) {
+func (bigEndian) WriteUint56(b ByteWriter, i uint64) {
 	if i >= (1 << 56) {
 		panic(fmt.Sprintf("%#x doesn't fit into 56 bits", i))
 	}
@@ -109,7 +108,7 @@ func (bigEndian) WriteUint56(b *bytes.Buffer, i uint64) {
 }
 
 // WriteUint48 writes 48 bit of a uint64
-func (bigEndian) WriteUint48(b *bytes.Buffer, i uint64) {
+func (bigEndian) WriteUint48(b ByteWriter, i uint64) {
 	if i >= (1 << 48) {
 		panic(fmt.Sprintf("%#x doesn't fit into 48 bits", i))
 	}
@@ -120,7 +119,7 @@ func (bigEndian) WriteUint48(b *bytes.Buffer, i uint64) {
 }
 
 // WriteUint40 writes 40 bit of a uint64
-func (bigEndian) WriteUint40(b *bytes.Buffer, i uint64) {
+func (bigEndian) WriteUint40(b ByteWriter, i uint64) {
 	if i >= (1 << 40) {
 		panic(fmt.Sprintf("%#x doesn't fit into 40 bits", i))
 	}
@@ -131,12 +130,12 @@ func (bigEndian) WriteUint40(b *bytes.Buffer, i uint64) {
 }
 
 // WriteUint32 writes a uint32
-func (bigEndian) WriteUint32(b *bytes.Buffer, i uint32) {
+func (bigEndian) WriteUint32(b ByteWriter, i uint32) {
 	b.Write([]byte{uint8(i >> 24), uint8(i >> 16), uint8(i >> 8), uint8(i)})
 }
 
 // WriteUint24 writes 24 bit of a uint32
-func (bigEndian) WriteUint24(b *bytes.Buffer, i uint32) {
+func (bigEndian) WriteUint24(b ByteWriter, i uint32) {
 	if i >= (1 << 24) {
 		panic(fmt.Sprintf("%#x doesn't fit into 24 bits", i))
 	}
@@ -144,7 +143,7 @@ func (bigEndian) WriteUint24(b *bytes.Buffer, i uint32) {
 }
 
 // WriteUint16 writes a uint16
-func (bigEndian) WriteUint16(b *bytes.Buffer, i uint16) {
+func (bigEndian) WriteUint16(b ByteWriter, i uint16) {
 	b.Write([]byte{uint8(i >> 8), uint8(i)})
 }
 
@@ -152,6 +151,6 @@ func (l bigEndian) ReadUfloat16(b io.ByteReader) (uint64, error) {
 	return readUfloat16(b, l)
 }
 
-func (l bigEndian) WriteUfloat16(b *bytes.Buffer, val uint64) {
+func (l bigEndian) WriteUfloat16(b ByteWriter, val uint64) {
 	writeUfloat16(b, l, val)
 }
