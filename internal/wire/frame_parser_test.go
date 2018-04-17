@@ -144,17 +144,14 @@ var _ = Describe("Frame parsing", func() {
 		})
 
 		It("unpacks ACK frames", func() {
-			f := &AckFrame{
-				LargestAcked: 0x13,
-				LowestAcked:  1,
-			}
+			f := &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 0x13}}}
 			err := f.Write(buf, versionBigEndian)
 			Expect(err).ToNot(HaveOccurred())
 			frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), nil, versionBigEndian)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).ToNot(BeNil())
 			Expect(frame).To(BeAssignableToTypeOf(f))
-			Expect(frame.(*AckFrame).LargestAcked).To(Equal(protocol.PacketNumber(0x13)))
+			Expect(frame.(*AckFrame).LargestAcked()).To(Equal(protocol.PacketNumber(0x13)))
 		})
 
 		It("errors on invalid type", func() {
@@ -282,17 +279,14 @@ var _ = Describe("Frame parsing", func() {
 		})
 
 		It("unpacks ACK frames", func() {
-			f := &AckFrame{
-				LargestAcked: 0x13,
-				LowestAcked:  1,
-			}
+			f := &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 0x13}}}
 			err := f.Write(buf, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), nil, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).ToNot(BeNil())
 			Expect(frame).To(BeAssignableToTypeOf(f))
-			Expect(frame.(*AckFrame).LargestAcked).To(Equal(protocol.PacketNumber(0x13)))
+			Expect(frame.(*AckFrame).LargestAcked()).To(Equal(protocol.PacketNumber(0x13)))
 		})
 
 		It("errors on invalid type", func() {

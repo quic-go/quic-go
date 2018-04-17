@@ -21,8 +21,8 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 			})
 			frame, err := parseAckFrame(b, versionBigEndian)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x1c)))
-			Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(1)))
+			Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(0x1c)))
+			Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(1)))
 			Expect(frame.HasMissingRanges()).To(BeFalse())
 			Expect(b.Len()).To(BeZero())
 		})
@@ -36,8 +36,8 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 			})
 			frame, err := parseAckFrame(b, versionBigEndian)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0)))
-			Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(0)))
+			Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(0)))
+			Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(0)))
 			Expect(frame.HasMissingRanges()).To(BeFalse())
 			Expect(b.Len()).To(BeZero())
 		})
@@ -51,8 +51,8 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 			})
 			frame, err := parseAckFrame(b, versionBigEndian)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x10)))
-			Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(0x10)))
+			Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(0x10)))
+			Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(0x10)))
 			Expect(frame.HasMissingRanges()).To(BeFalse())
 			Expect(b.Len()).To(BeZero())
 		})
@@ -66,8 +66,8 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 			})
 			frame, err := parseAckFrame(b, versionBigEndian)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x10)))
-			Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(0)))
+			Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(0x10)))
+			Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(0)))
 			Expect(frame.HasMissingRanges()).To(BeFalse())
 			Expect(b.Len()).To(BeZero())
 		})
@@ -121,7 +121,7 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 			})
 			frame, err := parseAckFrame(b, versionBigEndian)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(3)))
+			Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(3)))
 			Expect(frame.DelayTime).To(Equal(142 * time.Microsecond))
 		})
 
@@ -160,8 +160,8 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 				})
 				frame, err := parseAckFrame(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x1337)))
-				Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(0x1337 - 0x9 + 1)))
+				Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(0x1337)))
+				Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(0x1337 - 0x9 + 1)))
 				Expect(frame.HasMissingRanges()).To(BeFalse())
 				Expect(b.Len()).To(BeZero())
 			})
@@ -175,8 +175,8 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 				})
 				frame, err := parseAckFrame(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0xdecafbad)))
-				Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(0xdecafbad - 5 + 1)))
+				Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(0xdecafbad)))
+				Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(0xdecafbad - 5 + 1)))
 				Expect(frame.HasMissingRanges()).To(BeFalse())
 				Expect(b.Len()).To(BeZero())
 			})
@@ -190,8 +190,8 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 				})
 				frame, err := parseAckFrame(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0xdeadbeefcafe)))
-				Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(0xdeadbeefcafe - 5 + 1)))
+				Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(0xdeadbeefcafe)))
+				Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(0xdeadbeefcafe - 5 + 1)))
 				Expect(frame.HasMissingRanges()).To(BeFalse())
 				Expect(b.Len()).To(BeZero())
 			})
@@ -209,12 +209,12 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 				})
 				frame, err := parseAckFrame(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x18)))
+				Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(0x18)))
 				Expect(frame.HasMissingRanges()).To(BeTrue())
 				Expect(frame.AckRanges).To(HaveLen(2))
 				Expect(frame.AckRanges[0]).To(Equal(AckRange{Smallest: 0x18 - 0x3 + 1, Largest: 0x18}))
 				Expect(frame.AckRanges[1]).To(Equal(AckRange{Smallest: (0x18 - 0x3 + 1) - (0x2 + 1) - (0x10 - 1), Largest: (0x18 - 0x3 + 1) - (0x2 + 1)}))
-				Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(4)))
+				Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(4)))
 				Expect(b.Len()).To(BeZero())
 			})
 
@@ -259,7 +259,7 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 				})
 				frame, err := parseAckFrame(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x27)))
+				Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(0x27)))
 				Expect(frame.HasMissingRanges()).To(BeTrue())
 				Expect(frame.AckRanges).To(HaveLen(7))
 				Expect(frame.AckRanges[0]).To(Equal(AckRange{Smallest: 31, Largest: 0x27}))
@@ -269,7 +269,7 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 				Expect(frame.AckRanges[4]).To(Equal(AckRange{Smallest: 23, Largest: 23}))
 				Expect(frame.AckRanges[5]).To(Equal(AckRange{Smallest: 21, Largest: 21}))
 				Expect(frame.AckRanges[6]).To(Equal(AckRange{Smallest: 1, Largest: 19}))
-				Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(1)))
+				Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(1)))
 				Expect(b.Len()).To(BeZero())
 			})
 
@@ -286,14 +286,14 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 				})
 				frame, err := parseAckFrame(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x52)))
+				Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(0x52)))
 				Expect(frame.HasMissingRanges()).To(BeTrue())
 				Expect(frame.AckRanges).To(HaveLen(4))
 				Expect(frame.AckRanges[0]).To(Equal(AckRange{Smallest: 60, Largest: 0x52}))
 				Expect(frame.AckRanges[1]).To(Equal(AckRange{Smallest: 34, Largest: 49}))
 				Expect(frame.AckRanges[2]).To(Equal(AckRange{Smallest: 22, Largest: 29}))
 				Expect(frame.AckRanges[3]).To(Equal(AckRange{Smallest: 2, Largest: 19}))
-				Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(2)))
+				Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(2)))
 				Expect(b.Len()).To(BeZero())
 			})
 
@@ -310,12 +310,12 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					})
 					frame, err := parseAckFrame(b, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x115)))
+					Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(0x115)))
 					Expect(frame.HasMissingRanges()).To(BeTrue())
 					Expect(frame.AckRanges).To(HaveLen(2))
 					Expect(frame.AckRanges[0]).To(Equal(AckRange{Smallest: 20 + 255, Largest: 0x115}))
 					Expect(frame.AckRanges[1]).To(Equal(AckRange{Smallest: 1, Largest: 19}))
-					Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(1)))
+					Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(1)))
 					Expect(b.Len()).To(BeZero())
 				})
 
@@ -332,12 +332,12 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					})
 					frame, err := parseAckFrame(b, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x114)))
+					Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(0x114)))
 					Expect(frame.HasMissingRanges()).To(BeTrue())
 					Expect(frame.AckRanges).To(HaveLen(2))
 					Expect(frame.AckRanges[0]).To(Equal(AckRange{Smallest: 20 + 256, Largest: 0x114}))
 					Expect(frame.AckRanges[1]).To(Equal(AckRange{Smallest: 1, Largest: 19}))
-					Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(1)))
+					Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(1)))
 					Expect(b.Len()).To(BeZero())
 				})
 
@@ -359,7 +359,7 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					})
 					frame, err := parseAckFrame(b, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x39b)))
+					Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(0x39b)))
 					Expect(frame.HasMissingRanges()).To(BeTrue())
 					Expect(frame.AckRanges).To(HaveLen(3))
 					Expect(frame.AckRanges[0]).To(Equal(AckRange{Smallest: 20 + 3*301, Largest: 20 + 3*301}))
@@ -381,12 +381,12 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					})
 					frame, err := parseAckFrame(b, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x144)))
+					Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(0x144)))
 					Expect(frame.HasMissingRanges()).To(BeTrue())
 					Expect(frame.AckRanges).To(HaveLen(2))
 					Expect(frame.AckRanges[0]).To(Equal(AckRange{Smallest: 300, Largest: 0x144}))
 					Expect(frame.AckRanges[1]).To(Equal(AckRange{Smallest: 1, Largest: 19}))
-					Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(1)))
+					Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(1)))
 					Expect(b.Len()).To(BeZero())
 				})
 
@@ -411,12 +411,12 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					})
 					frame, err := parseAckFrame(b, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x95b)))
+					Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(0x95b)))
 					Expect(frame.HasMissingRanges()).To(BeTrue())
 					Expect(frame.AckRanges).To(HaveLen(2))
 					Expect(frame.AckRanges[0]).To(Equal(AckRange{Smallest: 2365, Largest: 0x95b}))
 					Expect(frame.AckRanges[1]).To(Equal(AckRange{Smallest: 1, Largest: 19}))
-					Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(1)))
+					Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(1)))
 					Expect(b.Len()).To(BeZero())
 				})
 
@@ -437,14 +437,14 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					})
 					frame, err := parseAckFrame(b, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0x966)))
+					Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(0x966)))
 					Expect(frame.HasMissingRanges()).To(BeTrue())
 					Expect(frame.AckRanges).To(HaveLen(4))
 					Expect(frame.AckRanges[0]).To(Equal(AckRange{Smallest: 2400, Largest: 0x966}))
 					Expect(frame.AckRanges[1]).To(Equal(AckRange{Smallest: 1250, Largest: 1899}))
 					Expect(frame.AckRanges[2]).To(Equal(AckRange{Smallest: 820, Largest: 1049}))
 					Expect(frame.AckRanges[3]).To(Equal(AckRange{Smallest: 1, Largest: 19}))
-					Expect(frame.LowestAcked).To(Equal(protocol.PacketNumber(1)))
+					Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(1)))
 					Expect(b.Len()).To(BeZero())
 				})
 
@@ -459,7 +459,7 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					})
 					frame, err := parseAckFrame(b, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0xdeadbeefcafe)))
+					Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(0xdeadbeefcafe)))
 					Expect(frame.HasMissingRanges()).To(BeTrue())
 					Expect(frame.AckRanges).To(HaveLen(2))
 					Expect(frame.AckRanges[0]).To(Equal(AckRange{Smallest: 0xdeadbeefcafe - 0x1337 + 1, Largest: 0xdeadbeefcafe}))
@@ -477,7 +477,7 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					})
 					frame, err := parseAckFrame(b, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(protocol.PacketNumber(0xdeadbeefcafe)))
+					Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(0xdeadbeefcafe)))
 					Expect(frame.HasMissingRanges()).To(BeTrue())
 					Expect(frame.AckRanges).To(HaveLen(2))
 					Expect(frame.AckRanges[0]).To(Equal(AckRange{Smallest: 0xdeadbeefcafe - 0x1337 + 1, Largest: 0xdeadbeefcafe}))
@@ -497,69 +497,63 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 		Context("self-consistency", func() {
 			It("writes a simple ACK frame", func() {
 				frameOrig := &AckFrame{
-					LargestAcked: 1,
-					LowestAcked:  1,
+					AckRanges: []AckRange{{Smallest: 1, Largest: 1}},
 				}
 				err := frameOrig.Write(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
 				r := bytes.NewReader(b.Bytes())
 				frame, err := parseAckFrame(r, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
+				Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
 				Expect(frame.HasMissingRanges()).To(BeFalse())
 				Expect(r.Len()).To(BeZero())
 			})
 
 			It("writes an ACK that also acks packet 0", func() {
 				frameOrig := &AckFrame{
-					LargestAcked: 1,
-					LowestAcked:  0,
+					AckRanges: []AckRange{{Smallest: 0, Largest: 1}},
 				}
 				err := frameOrig.Write(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
 				r := bytes.NewReader(b.Bytes())
 				frame, err := parseAckFrame(r, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
+				Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
 				Expect(frame.HasMissingRanges()).To(BeFalse())
 				Expect(r.Len()).To(BeZero())
 			})
 
 			It("writes the correct block length in a simple ACK frame", func() {
 				frameOrig := &AckFrame{
-					LargestAcked: 20,
-					LowestAcked:  10,
+					AckRanges: []AckRange{{Smallest: 10, Largest: 20}},
 				}
 				err := frameOrig.Write(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
 				r := bytes.NewReader(b.Bytes())
 				frame, err := parseAckFrame(r, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
-				Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
+				Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
+				Expect(frame.LowestAcked()).To(Equal(frameOrig.LowestAcked()))
 				Expect(frame.HasMissingRanges()).To(BeFalse())
 				Expect(r.Len()).To(BeZero())
 			})
 
 			It("writes a simple ACK frame with a high packet number", func() {
 				frameOrig := &AckFrame{
-					LargestAcked: 0xdeadbeefcafe,
-					LowestAcked:  0xdeadbeefcafe,
+					AckRanges: []AckRange{{Smallest: 0xdeadbeefcafe, Largest: 0xdeadbeefcafe}},
 				}
 				err := frameOrig.Write(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
 				r := bytes.NewReader(b.Bytes())
 				frame, err := parseAckFrame(r, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
+				Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
 				Expect(frame.HasMissingRanges()).To(BeFalse())
 				Expect(r.Len()).To(BeZero())
 			})
 
 			It("writes an ACK frame with one packet missing", func() {
 				frameOrig := &AckFrame{
-					LargestAcked: 40,
-					LowestAcked:  0,
 					AckRanges: []AckRange{
 						{Smallest: 25, Largest: 40},
 						{Smallest: 0, Largest: 23},
@@ -570,16 +564,14 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 				r := bytes.NewReader(b.Bytes())
 				frame, err := parseAckFrame(r, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
-				Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
+				Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
+				Expect(frame.LowestAcked()).To(Equal(frameOrig.LowestAcked()))
 				Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
 				Expect(r.Len()).To(BeZero())
 			})
 
 			It("writes an ACK frame with multiple missing packets", func() {
 				frameOrig := &AckFrame{
-					LargestAcked: 25,
-					LowestAcked:  1,
 					AckRanges: []AckRange{
 						{Smallest: 22, Largest: 25},
 						{Smallest: 15, Largest: 18},
@@ -592,43 +584,15 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 				r := bytes.NewReader(b.Bytes())
 				frame, err := parseAckFrame(r, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
-				Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
+				Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
+				Expect(frame.LowestAcked()).To(Equal(frameOrig.LowestAcked()))
 				Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
 				Expect(r.Len()).To(BeZero())
-			})
-
-			It("rejects a frame with incorrect LargestObserved value", func() {
-				frame := &AckFrame{
-					LargestAcked: 26,
-					LowestAcked:  1,
-					AckRanges: []AckRange{
-						{Smallest: 12, Largest: 25},
-						{Smallest: 1, Largest: 10},
-					},
-				}
-				err := frame.Write(b, versionBigEndian)
-				Expect(err).To(MatchError(errInconsistentAckLargestAcked))
-			})
-
-			It("rejects a frame with incorrect LargestObserved value", func() {
-				frame := &AckFrame{
-					LargestAcked: 25,
-					LowestAcked:  2,
-					AckRanges: []AckRange{
-						{Smallest: 12, Largest: 25},
-						{Smallest: 1, Largest: 10},
-					},
-				}
-				err := frame.Write(b, versionBigEndian)
-				Expect(err).To(MatchError(errInconsistentAckLowestAcked))
 			})
 
 			Context("longer gaps between ACK blocks", func() {
 				It("only writes one block for 254 lost packets", func() {
 					frameOrig := &AckFrame{
-						LargestAcked: 300,
-						LowestAcked:  1,
 						AckRanges: []AckRange{
 							{Smallest: 20 + 254, Largest: 300},
 							{Smallest: 1, Largest: 19},
@@ -640,14 +604,12 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
 					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
 				})
 
 				It("only writes one block for 255 lost packets", func() {
 					frameOrig := &AckFrame{
-						LargestAcked: 300,
-						LowestAcked:  1,
 						AckRanges: []AckRange{
 							{Smallest: 20 + 255, Largest: 300},
 							{Smallest: 1, Largest: 19},
@@ -659,14 +621,12 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
 					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
 				})
 
 				It("writes two blocks for 256 lost packets", func() {
 					frameOrig := &AckFrame{
-						LargestAcked: 300,
-						LowestAcked:  1,
 						AckRanges: []AckRange{
 							{Smallest: 20 + 256, Largest: 300},
 							{Smallest: 1, Largest: 19},
@@ -678,14 +638,12 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
 					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
 				})
 
 				It("writes two blocks for 510 lost packets", func() {
 					frameOrig := &AckFrame{
-						LargestAcked: 600,
-						LowestAcked:  1,
 						AckRanges: []AckRange{
 							{Smallest: 20 + 510, Largest: 600},
 							{Smallest: 1, Largest: 19},
@@ -697,14 +655,12 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
 					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
 				})
 
 				It("writes three blocks for 511 lost packets", func() {
 					frameOrig := &AckFrame{
-						LargestAcked: 600,
-						LowestAcked:  1,
 						AckRanges: []AckRange{
 							{Smallest: 20 + 511, Largest: 600},
 							{Smallest: 1, Largest: 19},
@@ -716,14 +672,12 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
 					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
 				})
 
 				It("writes three blocks for 512 lost packets", func() {
 					frameOrig := &AckFrame{
-						LargestAcked: 600,
-						LowestAcked:  1,
 						AckRanges: []AckRange{
 							{Smallest: 20 + 512, Largest: 600},
 							{Smallest: 1, Largest: 19},
@@ -735,14 +689,12 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
 					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
 				})
 
 				It("writes multiple blocks for a lot of lost packets", func() {
 					frameOrig := &AckFrame{
-						LargestAcked: 3000,
-						LowestAcked:  1,
 						AckRanges: []AckRange{
 							{Smallest: 2900, Largest: 3000},
 							{Smallest: 1, Largest: 19},
@@ -753,14 +705,12 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
 					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
 				})
 
 				It("writes multiple longer blocks for 256 lost packets", func() {
 					frameOrig := &AckFrame{
-						LargestAcked: 3600,
-						LowestAcked:  1,
 						AckRanges: []AckRange{
 							{Smallest: 2900, Largest: 3600},
 							{Smallest: 1000, Largest: 2500},
@@ -772,7 +722,7 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
 					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
 				})
 			})
@@ -780,8 +730,7 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 			Context("largest acked length", func() {
 				It("writes a 1 largest acked", func() {
 					frameOrig := &AckFrame{
-						LargestAcked: 200,
-						LowestAcked:  1,
+						AckRanges: []AckRange{{Smallest: 1, Largest: 200}},
 					}
 					err := frameOrig.Write(b, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
@@ -789,15 +738,14 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
-					Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
+					Expect(frame.LowestAcked()).To(Equal(frameOrig.LowestAcked()))
 					Expect(r.Len()).To(BeZero())
 				})
 
 				It("writes a 2 byte largest acked", func() {
 					frameOrig := &AckFrame{
-						LargestAcked: 0x100,
-						LowestAcked:  1,
+						AckRanges: []AckRange{{Smallest: 1, Largest: 0x100}},
 					}
 					err := frameOrig.Write(b, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
@@ -805,15 +753,14 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
-					Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
+					Expect(frame.LowestAcked()).To(Equal(frameOrig.LowestAcked()))
 					Expect(r.Len()).To(BeZero())
 				})
 
 				It("writes a 4 byte largest acked", func() {
 					frameOrig := &AckFrame{
-						LargestAcked: 0x10000,
-						LowestAcked:  1,
+						AckRanges: []AckRange{{Smallest: 1, Largest: 0x10000}},
 					}
 					err := frameOrig.Write(b, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
@@ -821,15 +768,14 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
-					Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
+					Expect(frame.LowestAcked()).To(Equal(frameOrig.LowestAcked()))
 					Expect(r.Len()).To(BeZero())
 				})
 
 				It("writes a 6 byte largest acked", func() {
 					frameOrig := &AckFrame{
-						LargestAcked: 0x100000000,
-						LowestAcked:  1,
+						AckRanges: []AckRange{{Smallest: 1, Largest: 0x100000000}},
 					}
 					err := frameOrig.Write(b, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
@@ -837,8 +783,8 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
-					Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
+					Expect(frame.LowestAcked()).To(Equal(frameOrig.LowestAcked()))
 					Expect(r.Len()).To(BeZero())
 				})
 			})
@@ -846,8 +792,6 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 			Context("ack block length", func() {
 				It("writes a 1 byte ack block length, if all ACK blocks are short", func() {
 					frameOrig := &AckFrame{
-						LargestAcked: 5001,
-						LowestAcked:  1,
 						AckRanges: []AckRange{
 							{Smallest: 5000, Largest: 5001},
 							{Smallest: 250, Largest: 300},
@@ -860,16 +804,14 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
-					Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
+					Expect(frame.LowestAcked()).To(Equal(frameOrig.LowestAcked()))
 					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
 					Expect(r.Len()).To(BeZero())
 				})
 
 				It("writes a 2 byte ack block length, for a frame with one ACK block", func() {
 					frameOrig := &AckFrame{
-						LargestAcked: 10000,
-						LowestAcked:  1,
 						AckRanges: []AckRange{
 							{Smallest: 9990, Largest: 10000},
 							{Smallest: 1, Largest: 9988},
@@ -881,16 +823,14 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
-					Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
+					Expect(frame.LowestAcked()).To(Equal(frameOrig.LowestAcked()))
 					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
 					Expect(r.Len()).To(BeZero())
 				})
 
 				It("writes a 2 byte ack block length, for a frame with multiple ACK blocks", func() {
 					frameOrig := &AckFrame{
-						LargestAcked: 10000,
-						LowestAcked:  1,
 						AckRanges: []AckRange{
 							{Smallest: 9990, Largest: 10000},
 							{Smallest: 1, Largest: 256},
@@ -902,16 +842,14 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
-					Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
+					Expect(frame.LowestAcked()).To(Equal(frameOrig.LowestAcked()))
 					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
 					Expect(r.Len()).To(BeZero())
 				})
 
 				It("writes a 4 byte ack block length, for a frame with single ACK blocks", func() {
 					frameOrig := &AckFrame{
-						LargestAcked: 0xdeadbeef,
-						LowestAcked:  1,
 						AckRanges: []AckRange{
 							{Smallest: 9990, Largest: 0xdeadbeef},
 							{Smallest: 1, Largest: 9988},
@@ -923,16 +861,14 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
-					Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
+					Expect(frame.LowestAcked()).To(Equal(frameOrig.LowestAcked()))
 					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
 					Expect(r.Len()).To(BeZero())
 				})
 
 				It("writes a 4 byte ack block length, for a frame with multiple ACK blocks", func() {
 					frameOrig := &AckFrame{
-						LargestAcked: 0xdeadbeef,
-						LowestAcked:  1,
 						AckRanges: []AckRange{
 							{Smallest: 9990, Largest: 0xdeadbeef},
 							{Smallest: 1, Largest: 256},
@@ -944,16 +880,14 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
-					Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
+					Expect(frame.LowestAcked()).To(Equal(frameOrig.LowestAcked()))
 					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
 					Expect(r.Len()).To(BeZero())
 				})
 
 				It("writes a 6 byte ack block length, for a frame with a single ACK blocks", func() {
 					frameOrig := &AckFrame{
-						LargestAcked: 0xdeadbeefcafe,
-						LowestAcked:  1,
 						AckRanges: []AckRange{
 							{Smallest: 9990, Largest: 0xdeadbeefcafe},
 							{Smallest: 1, Largest: 9988},
@@ -965,16 +899,14 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
-					Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
+					Expect(frame.LowestAcked()).To(Equal(frameOrig.LowestAcked()))
 					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
 					Expect(r.Len()).To(BeZero())
 				})
 
 				It("writes a 6 byte ack block length, for a frame with multiple ACK blocks", func() {
 					frameOrig := &AckFrame{
-						LargestAcked: 0xdeadbeefcafe,
-						LowestAcked:  1,
 						AckRanges: []AckRange{
 							{Smallest: 9990, Largest: 0xdeadbeefcafe},
 							{Smallest: 1, Largest: 256},
@@ -986,8 +918,8 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
-					Expect(frame.LowestAcked).To(Equal(frameOrig.LowestAcked))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
+					Expect(frame.LowestAcked()).To(Equal(frameOrig.LowestAcked()))
 					Expect(frame.AckRanges).To(Equal(frameOrig.AckRanges))
 					Expect(r.Len()).To(BeZero())
 				})
@@ -999,18 +931,14 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					for i := 1; i <= 300; i++ {
 						ackRanges[300-i] = AckRange{Smallest: protocol.PacketNumber(3 * i), Largest: protocol.PacketNumber(3*i + 1)}
 					}
-					frameOrig := &AckFrame{
-						LargestAcked: ackRanges[0].Largest,
-						LowestAcked:  ackRanges[len(ackRanges)-1].Smallest,
-						AckRanges:    ackRanges,
-					}
+					frameOrig := &AckFrame{AckRanges: ackRanges}
 					err := frameOrig.Write(b, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
-					Expect(frame.LowestAcked).To(Equal(ackRanges[254].Smallest))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
+					Expect(frame.LowestAcked()).To(Equal(ackRanges[254].Smallest))
 					Expect(frame.AckRanges).To(HaveLen(0xFF))
 					Expect(frame.validateAckRanges()).To(BeTrue())
 				})
@@ -1021,18 +949,14 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 					for i := 1; i <= 100; i++ {
 						ackRanges[100-i] = AckRange{Smallest: protocol.PacketNumber(1000 * i), Largest: protocol.PacketNumber(1000*i + 1)}
 					}
-					frameOrig := &AckFrame{
-						LargestAcked: ackRanges[0].Largest,
-						LowestAcked:  ackRanges[len(ackRanges)-1].Smallest,
-						AckRanges:    ackRanges,
-					}
+					frameOrig := &AckFrame{AckRanges: ackRanges}
 					err := frameOrig.Write(b, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
-					Expect(frame.LowestAcked).To(Equal(ackRanges[255/4].Smallest))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
+					Expect(frame.LowestAcked()).To(Equal(ackRanges[255/4].Smallest))
 					Expect(frame.validateAckRanges()).To(BeTrue())
 				})
 
@@ -1042,19 +966,15 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 						{Smallest: 1 * 255 * 200, Largest: 1*255*200 + 1},
 						{Smallest: 1, Largest: 2},
 					}
-					frameOrig := &AckFrame{
-						LargestAcked: ackRanges[0].Largest,
-						LowestAcked:  ackRanges[len(ackRanges)-1].Smallest,
-						AckRanges:    ackRanges,
-					}
+					frameOrig := &AckFrame{AckRanges: ackRanges}
 					err := frameOrig.Write(b, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
 					r := bytes.NewReader(b.Bytes())
 					frame, err := parseAckFrame(r, versionBigEndian)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(frame.LargestAcked).To(Equal(frameOrig.LargestAcked))
+					Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
 					Expect(frame.AckRanges).To(HaveLen(2))
-					Expect(frame.LowestAcked).To(Equal(ackRanges[1].Smallest))
+					Expect(frame.LowestAcked()).To(Equal(ackRanges[1].Smallest))
 					Expect(frame.validateAckRanges()).To(BeTrue())
 				})
 			})
@@ -1063,7 +983,7 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 		Context("min length", func() {
 			It("has proper min length", func() {
 				f := &AckFrame{
-					LargestAcked: 1,
+					AckRanges: []AckRange{{Smallest: 1, Largest: 1}},
 				}
 				err := f.Write(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
@@ -1072,7 +992,7 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 
 			It("has proper min length with a large LargestObserved", func() {
 				f := &AckFrame{
-					LargestAcked: 0xDEADBEEFCAFE,
+					AckRanges: []AckRange{{Smallest: 1, Largest: 0xdeadbeefcafe}},
 				}
 				err := f.Write(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
@@ -1081,8 +1001,6 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 
 			It("has the proper min length for an ACK with missing packets", func() {
 				f := &AckFrame{
-					LargestAcked: 2000,
-					LowestAcked:  10,
 					AckRanges: []AckRange{
 						{Smallest: 1000, Largest: 2000},
 						{Smallest: 50, Largest: 900},
@@ -1096,8 +1014,6 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 
 			It("has the proper min length for an ACK with long gaps of missing packets", func() {
 				f := &AckFrame{
-					LargestAcked: 2000,
-					LowestAcked:  1,
 					AckRanges: []AckRange{
 						{Smallest: 1500, Largest: 2000},
 						{Smallest: 290, Largest: 295},
@@ -1112,8 +1028,6 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 			It("has the proper min length for an ACK with a long ACK range", func() {
 				largestAcked := protocol.PacketNumber(2 + 0xFFFFFF)
 				f := &AckFrame{
-					LargestAcked: largestAcked,
-					LowestAcked:  1,
 					AckRanges: []AckRange{
 						{Smallest: 1500, Largest: largestAcked},
 						{Smallest: 290, Largest: 295},

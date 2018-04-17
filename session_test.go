@@ -260,7 +260,7 @@ var _ = Describe("Session", func() {
 
 		Context("handling ACK frames", func() {
 			It("informs the SentPacketHandler about ACKs", func() {
-				f := &wire.AckFrame{LargestAcked: 3, LowestAcked: 2}
+				f := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 3}}}
 				sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 				sph.EXPECT().ReceivedAck(f, protocol.PacketNumber(42), protocol.EncryptionSecure, gomock.Any())
 				sph.EXPECT().GetLowestPacketNotConfirmedAcked()
@@ -271,6 +271,7 @@ var _ = Describe("Session", func() {
 			})
 
 			It("tells the ReceivedPacketHandler to ignore low ranges", func() {
+				ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 3}}}
 				sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 				sph.EXPECT().ReceivedAck(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 				sph.EXPECT().GetLowestPacketNotConfirmedAcked().Return(protocol.PacketNumber(0x42))
@@ -278,7 +279,7 @@ var _ = Describe("Session", func() {
 				rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 				rph.EXPECT().IgnoreBelow(protocol.PacketNumber(0x42))
 				sess.receivedPacketHandler = rph
-				err := sess.handleAckFrame(&wire.AckFrame{LargestAcked: 3, LowestAcked: 2}, protocol.EncryptionUnencrypted)
+				err := sess.handleAckFrame(ack, protocol.EncryptionUnencrypted)
 				Expect(err).ToNot(HaveOccurred())
 			})
 		})
@@ -1253,11 +1254,11 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().ShouldSendNumPackets().Return(1)
 			sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
 				Expect(p.Frames[0]).To(BeAssignableToTypeOf(&wire.AckFrame{}))
-				Expect(p.Frames[0].(*wire.AckFrame).LargestAcked).To(Equal(protocol.PacketNumber(0x1337)))
+				Expect(p.Frames[0].(*wire.AckFrame).LargestAcked()).To(Equal(protocol.PacketNumber(0x1337)))
 			})
 			sess.sentPacketHandler = sph
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
-			rph.EXPECT().GetAckFrame().Return(&wire.AckFrame{LargestAcked: 0x1337})
+			rph.EXPECT().GetAckFrame().Return(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 0x1337}}})
 			rph.EXPECT().GetAlarmTimeout().Return(time.Now().Add(10 * time.Millisecond))
 			rph.EXPECT().GetAlarmTimeout().Return(time.Now().Add(time.Hour))
 			sess.receivedPacketHandler = rph
@@ -1678,23 +1679,6 @@ var _ = Describe("Session", func() {
 			str, err := sess.AcceptUniStream()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(str).To(Equal(mstr))
-		})
-	})
-
-	Context("ignoring errors", func() {
-		It("ignores duplicate acks", func() {
-			sess.sentPacketHandler.SentPacket(&ackhandler.Packet{
-				PacketNumber: 1,
-				Length:       1,
-			})
-			err := sess.handleFrames([]wire.Frame{&wire.AckFrame{
-				LargestAcked: 1,
-			}}, protocol.EncryptionUnspecified)
-			Expect(err).NotTo(HaveOccurred())
-			err = sess.handleFrames([]wire.Frame{&wire.AckFrame{
-				LargestAcked: 1,
-			}}, protocol.EncryptionUnspecified)
-			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 

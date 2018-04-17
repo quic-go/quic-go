@@ -212,9 +212,9 @@ var _ = Describe("receivedPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 				ack := handler.GetAckFrame()
 				Expect(ack).ToNot(BeNil())
-				Expect(ack.LargestAcked).To(Equal(protocol.PacketNumber(2)))
-				Expect(ack.LowestAcked).To(Equal(protocol.PacketNumber(1)))
-				Expect(ack.AckRanges).To(BeEmpty())
+				Expect(ack.LargestAcked()).To(Equal(protocol.PacketNumber(2)))
+				Expect(ack.LowestAcked()).To(Equal(protocol.PacketNumber(1)))
+				Expect(ack.HasMissingRanges()).To(BeFalse())
 			})
 
 			It("generates an ACK for packet number 0", func() {
@@ -222,9 +222,9 @@ var _ = Describe("receivedPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 				ack := handler.GetAckFrame()
 				Expect(ack).ToNot(BeNil())
-				Expect(ack.LargestAcked).To(Equal(protocol.PacketNumber(0)))
-				Expect(ack.LowestAcked).To(Equal(protocol.PacketNumber(0)))
-				Expect(ack.AckRanges).To(BeEmpty())
+				Expect(ack.LargestAcked()).To(Equal(protocol.PacketNumber(0)))
+				Expect(ack.LowestAcked()).To(Equal(protocol.PacketNumber(0)))
+				Expect(ack.HasMissingRanges()).To(BeFalse())
 			})
 
 			It("saves the last sent ACK", func() {
@@ -248,8 +248,8 @@ var _ = Describe("receivedPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 				ack := handler.GetAckFrame()
 				Expect(ack).ToNot(BeNil())
-				Expect(ack.LargestAcked).To(Equal(protocol.PacketNumber(4)))
-				Expect(ack.LowestAcked).To(Equal(protocol.PacketNumber(1)))
+				Expect(ack.LargestAcked()).To(Equal(protocol.PacketNumber(4)))
+				Expect(ack.LowestAcked()).To(Equal(protocol.PacketNumber(1)))
 				Expect(ack.AckRanges).To(Equal([]wire.AckRange{
 					{Smallest: 4, Largest: 4},
 					{Smallest: 1, Largest: 1},
@@ -265,8 +265,8 @@ var _ = Describe("receivedPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 				ack := handler.GetAckFrame()
 				Expect(ack).ToNot(BeNil())
-				Expect(ack.LargestAcked).To(Equal(protocol.PacketNumber(3)))
-				Expect(ack.LowestAcked).To(Equal(protocol.PacketNumber(0)))
+				Expect(ack.LargestAcked()).To(Equal(protocol.PacketNumber(3)))
+				Expect(ack.LowestAcked()).To(Equal(protocol.PacketNumber(0)))
 				Expect(ack.AckRanges).To(Equal([]wire.AckRange{
 					{Smallest: 3, Largest: 3},
 					{Smallest: 0, Largest: 1},
@@ -287,8 +287,8 @@ var _ = Describe("receivedPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 				ack := handler.GetAckFrame()
 				Expect(ack).ToNot(BeNil())
-				Expect(ack.LargestAcked).To(Equal(protocol.PacketNumber(10)))
-				Expect(ack.LowestAcked).To(Equal(protocol.PacketNumber(10)))
+				Expect(ack.LargestAcked()).To(Equal(protocol.PacketNumber(10)))
+				Expect(ack.LowestAcked()).To(Equal(protocol.PacketNumber(10)))
 			})
 
 			It("deletes packets from the packetHistory when a lower limit is set", func() {
@@ -300,8 +300,8 @@ var _ = Describe("receivedPacketHandler", func() {
 				// check that the packets were deleted from the receivedPacketHistory by checking the values in an ACK frame
 				ack := handler.GetAckFrame()
 				Expect(ack).ToNot(BeNil())
-				Expect(ack.LargestAcked).To(Equal(protocol.PacketNumber(12)))
-				Expect(ack.LowestAcked).To(Equal(protocol.PacketNumber(7)))
+				Expect(ack.LargestAcked()).To(Equal(protocol.PacketNumber(12)))
+				Expect(ack.LowestAcked()).To(Equal(protocol.PacketNumber(7)))
 				Expect(ack.HasMissingRanges()).To(BeFalse())
 			})
 
@@ -312,7 +312,7 @@ var _ = Describe("receivedPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 				ack := handler.GetAckFrame()
 				Expect(ack).ToNot(BeNil())
-				Expect(ack.LargestAcked).To(Equal(protocol.PacketNumber(1337)))
+				Expect(ack.LargestAcked()).To(Equal(protocol.PacketNumber(1337)))
 			})
 
 			It("resets all counters needed for the ACK queueing decision when sending an ACK", func() {

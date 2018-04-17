@@ -91,7 +91,7 @@ func (h *receivedPacketHandler) isMissing(p protocol.PacketNumber) bool {
 	if h.lastAck == nil {
 		return false
 	}
-	return p < h.lastAck.LargestAcked && !h.lastAck.AcksPacket(p)
+	return p < h.lastAck.LargestAcked() && !h.lastAck.AcksPacket(p)
 }
 
 func (h *receivedPacketHandler) hasNewMissingPackets() bool {
@@ -99,7 +99,7 @@ func (h *receivedPacketHandler) hasNewMissingPackets() bool {
 		return false
 	}
 	highestRange := h.packetHistory.GetHighestAckRange()
-	return highestRange.Smallest >= h.lastAck.LargestAcked && highestRange.Len() <= maxPacketsAfterNewMissing
+	return highestRange.Smallest >= h.lastAck.LargestAcked() && highestRange.Len() <= maxPacketsAfterNewMissing
 }
 
 // maybeQueueAck queues an ACK, if necessary.
@@ -163,15 +163,9 @@ func (h *receivedPacketHandler) GetAckFrame() *wire.AckFrame {
 		return nil
 	}
 
-	ackRanges := h.packetHistory.GetAckRanges()
 	ack := &wire.AckFrame{
-		LargestAcked:       h.largestObserved,
-		LowestAcked:        ackRanges[len(ackRanges)-1].Smallest,
+		AckRanges:          h.packetHistory.GetAckRanges(),
 		PacketReceivedTime: h.largestObservedReceivedTime,
-	}
-
-	if len(ackRanges) > 1 {
-		ack.AckRanges = ackRanges
 	}
 
 	h.lastAck = ack
