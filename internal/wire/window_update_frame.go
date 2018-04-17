@@ -37,7 +37,7 @@ func parseWindowUpdateFrame(r *bytes.Reader, _ protocol.VersionNumber) (Frame, e
 	}, nil
 }
 
-func (f *windowUpdateFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) error {
+func (f *windowUpdateFrame) Write(b utils.ByteWriter, _ protocol.VersionNumber) error {
 	b.WriteByte(0x4)
 	utils.BigEndian.WriteUint32(b, uint32(f.StreamID))
 	utils.BigEndian.WriteUint64(b, uint64(f.ByteOffset))

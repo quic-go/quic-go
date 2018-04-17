@@ -148,7 +148,7 @@ func unpackInitialPacket(aead crypto.AEAD, hdr *wire.Header, data []byte, logger
 // It is supposed to be used in the early stages of the handshake, before a session (which owns a packetPacker) is available.
 func packUnencryptedPacket(aead crypto.AEAD, hdr *wire.Header, f wire.Frame, pers protocol.Perspective, logger utils.Logger) ([]byte, error) {
 	raw := *getPacketBuffer()
-	buffer := bytes.NewBuffer(raw[:0])
+	buffer := utils.NewBuffer(raw[:0])
 	if err := hdr.Write(buffer, pers, hdr.Version); err != nil {
 		return nil, err
 	}

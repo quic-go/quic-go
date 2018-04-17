@@ -486,7 +486,7 @@ func (p *packetPacker) writeAndSealPacket(
 	sealer handshake.Sealer,
 ) ([]byte, error) {
 	raw := *getPacketBuffer()
-	buffer := bytes.NewBuffer(raw[:0])
+	buffer := utils.NewBuffer(raw[:0])
 
 	if err := header.Write(buffer, p.perspective, p.version); err != nil {
 		return nil, err

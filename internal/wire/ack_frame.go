@@ -99,7 +99,7 @@ func parseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 }
 
 // Write writes an ACK frame.
-func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
+func (f *AckFrame) Write(b utils.ByteWriter, version protocol.VersionNumber) error {
 	if !version.UsesIETFFrameFormat() {
 		return f.writeLegacy(b, version)
 	}

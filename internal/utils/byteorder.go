@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"bytes"
 	"io"
 )
 
@@ -12,14 +11,14 @@ type ByteOrder interface {
 	ReadUint32(io.ByteReader) (uint32, error)
 	ReadUint16(io.ByteReader) (uint16, error)
 
-	WriteUint64(*bytes.Buffer, uint64)
-	WriteUint56(*bytes.Buffer, uint64)
-	WriteUint48(*bytes.Buffer, uint64)
-	WriteUint40(*bytes.Buffer, uint64)
-	WriteUint32(*bytes.Buffer, uint32)
-	WriteUint24(*bytes.Buffer, uint32)
-	WriteUint16(*bytes.Buffer, uint16)
+	WriteUint64(ByteWriter, uint64)
+	WriteUint56(ByteWriter, uint64)
+	WriteUint48(ByteWriter, uint64)
+	WriteUint40(ByteWriter, uint64)
+	WriteUint32(ByteWriter, uint32)
+	WriteUint24(ByteWriter, uint32)
+	WriteUint16(ByteWriter, uint16)
 
 	ReadUfloat16(io.ByteReader) (uint64, error)
-	WriteUfloat16(*bytes.Buffer, uint64)
+	WriteUfloat16(ByteWriter, uint64)
 }

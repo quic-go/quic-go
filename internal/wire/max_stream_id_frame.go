@@ -25,7 +25,7 @@ func parseMaxStreamIDFrame(r *bytes.Reader, _ protocol.VersionNumber) (*MaxStrea
 	return &MaxStreamIDFrame{StreamID: protocol.StreamID(streamID)}, nil
 }
 
-func (f *MaxStreamIDFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) error {
+func (f *MaxStreamIDFrame) Write(b utils.ByteWriter, _ protocol.VersionNumber) error {
 	b.WriteByte(0x6)
 	utils.WriteVarInt(b, uint64(f.StreamID))
 	return nil

@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"bytes"
 	"io"
 	"math"
 )
@@ -51,7 +50,7 @@ func readUfloat16(b io.ByteReader, byteOrder ByteOrder) (uint64, error) {
 }
 
 // writeUfloat16 writes a float in the QUIC-float16 format from its uint64 representation
-func writeUfloat16(b *bytes.Buffer, byteOrder ByteOrder, value uint64) {
+func writeUfloat16(b ByteWriter, byteOrder ByteOrder, value uint64) {
 	var result uint16
 	if value < (uint64(1) << uFloat16MantissaEffectiveBits) {
 		// Fast path: either the value is denormalized, or has exponent zero.

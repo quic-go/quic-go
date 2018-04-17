@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 
@@ -66,7 +65,7 @@ func ReadVarInt(b io.ByteReader) (uint64, error) {
 }
 
 // WriteVarInt writes a number in the QUIC varint format
-func WriteVarInt(b *bytes.Buffer, i uint64) {
+func WriteVarInt(b ByteWriter, i uint64) {
 	if i <= maxVarInt1 {
 		b.WriteByte(uint8(i))
 	} else if i <= maxVarInt2 {

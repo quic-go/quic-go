@@ -110,7 +110,7 @@ func parseShortHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
 }
 
 // writeHeader writes the Header.
-func (h *Header) writeHeader(b *bytes.Buffer) error {
+func (h *Header) writeHeader(b utils.ByteWriter) error {
 	if h.IsLongHeader {
 		return h.writeLongHeader(b)
 	}
@@ -118,7 +118,7 @@ func (h *Header) writeHeader(b *bytes.Buffer) error {
 }
 
 // TODO: add support for the key phase
-func (h *Header) writeLongHeader(b *bytes.Buffer) error {
+func (h *Header) writeLongHeader(b utils.ByteWriter) error {
 	b.WriteByte(byte(0x80 | h.Type))
 	utils.BigEndian.WriteUint64(b, uint64(h.ConnectionID))
 	utils.BigEndian.WriteUint32(b, uint32(h.Version))
@@ -126,7 +126,7 @@ func (h *Header) writeLongHeader(b *bytes.Buffer) error {
 	return nil
 }
 
-func (h *Header) writeShortHeader(b *bytes.Buffer) error {
+func (h *Header) writeShortHeader(b utils.ByteWriter) error {
 	typeByte := byte(0x10)
 	typeByte ^= byte(h.KeyPhase << 5)
 	if h.OmitConnectionID {

@@ -53,12 +53,12 @@ func parseGoawayFrame(r *bytes.Reader, _ protocol.VersionNumber) (*GoawayFrame, 
 	return frame, nil
 }
 
-func (f *GoawayFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) error {
+func (f *GoawayFrame) Write(b utils.ByteWriter, _ protocol.VersionNumber) error {
 	b.WriteByte(0x03)
 	utils.BigEndian.WriteUint32(b, uint32(f.ErrorCode))
 	utils.BigEndian.WriteUint32(b, uint32(f.LastGoodStream))
 	utils.BigEndian.WriteUint16(b, uint16(len(f.ReasonPhrase)))
-	b.WriteString(f.ReasonPhrase)
+	b.Write([]byte(f.ReasonPhrase))
 	return nil
 }
 

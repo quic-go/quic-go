@@ -84,7 +84,7 @@ func parseStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*StreamF
 }
 
 // Write writes a STREAM frame
-func (f *StreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
+func (f *StreamFrame) Write(b utils.ByteWriter, version protocol.VersionNumber) error {
 	if !version.UsesIETFFrameFormat() {
 		return f.writeLegacy(b, version)
 	}
