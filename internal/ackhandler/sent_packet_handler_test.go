@@ -512,7 +512,6 @@ var _ = Describe("SentPacketHandler", func() {
 
 		BeforeEach(func() {
 			cong = mocks.NewMockSendAlgorithm(mockCtrl)
-			cong.EXPECT().RetransmissionDelay().AnyTimes()
 			handler.congestion = cong
 		})
 
@@ -693,8 +692,10 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("uses RTO from rttStats", func() {
 			rtt := time.Second
-			expected := rtt + rtt/2*4
 			handler.rttStats.UpdateRTT(rtt, 0, time.Now())
+			Expect(handler.rttStats.SmoothedRTT()).To(Equal(rtt))
+			Expect(handler.rttStats.MeanDeviation()).To(Equal(rtt / 2))
+			expected := rtt + rtt/2*4
 			Expect(handler.computeRTOTimeout()).To(Equal(expected))
 		})
 

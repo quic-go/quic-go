@@ -545,9 +545,12 @@ func (h *sentPacketHandler) computeHandshakeTimeout() time.Duration {
 }
 
 func (h *sentPacketHandler) computeRTOTimeout() time.Duration {
-	rto := h.congestion.RetransmissionDelay()
-	if rto == 0 {
+	var rto time.Duration
+	rtt := h.rttStats.SmoothedRTT()
+	if rtt == 0 {
 		rto = defaultRTOTimeout
+	} else {
+		rto = rtt + 4*h.rttStats.MeanDeviation()
 	}
 	rto = utils.MaxDuration(rto, minRTOTimeout)
 	// Exponential backoff
