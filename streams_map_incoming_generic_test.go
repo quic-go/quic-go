@@ -12,7 +12,19 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Streams Map (outgoing)", func() {
+type mockGenericStream struct {
+	id protocol.StreamID
+
+	closed   bool
+	closeErr error
+}
+
+func (s *mockGenericStream) closeForShutdown(err error) {
+	s.closed = true
+	s.closeErr = err
+}
+
+var _ = Describe("Streams Map (incoming)", func() {
 	const (
 		firstNewStream   protocol.StreamID = 20
 		maxNumStreams    int               = 10
@@ -30,7 +42,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 		newItemCounter = 0
 		newItem = func(id protocol.StreamID) item {
 			newItemCounter++
-			return id
+			return &mockGenericStream{id: id}
 		}
 		mockSender = NewMockStreamSender(mockCtrl)
 		m = newIncomingItemsMap(firstNewStream, initialMaxStream, maxNumStreams, mockSender.queueControlFrame, newItem)
@@ -57,16 +69,16 @@ var _ = Describe("Streams Map (outgoing)", func() {
 		Expect(err).ToNot(HaveOccurred())
 		str, err := m.AcceptStream()
 		Expect(err).ToNot(HaveOccurred())
-		Expect(str).To(Equal(firstNewStream))
+		Expect(str.(*mockGenericStream).id).To(Equal(firstNewStream))
 		str, err = m.AcceptStream()
 		Expect(err).ToNot(HaveOccurred())
-		Expect(str).To(Equal(firstNewStream + 4))
+		Expect(str.(*mockGenericStream).id).To(Equal(firstNewStream + 4))
 	})
 
 	It("allows opening the maximum stream ID", func() {
 		str, err := m.GetOrOpenStream(initialMaxStream)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(str).To(Equal(initialMaxStream))
+		Expect(str.(*mockGenericStream).id).To(Equal(initialMaxStream))
 	})
 
 	It("errors when trying to get a stream ID higher than the maximum", func() {
@@ -85,8 +97,10 @@ var _ = Describe("Streams Map (outgoing)", func() {
 		Consistently(strChan).ShouldNot(Receive())
 		str, err := m.GetOrOpenStream(firstNewStream)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(str).To(Equal(firstNewStream))
-		Eventually(strChan).Should(Receive(Equal(firstNewStream)))
+		Expect(str.(*mockGenericStream).id).To(Equal(firstNewStream))
+		var acceptedStr item
+		Eventually(strChan).Should(Receive(&acceptedStr))
+		Expect(acceptedStr.(*mockGenericStream).id).To(Equal(firstNewStream))
 	})
 
 	It("unblocks AcceptStream when it is closed", func() {
@@ -108,6 +122,19 @@ var _ = Describe("Streams Map (outgoing)", func() {
 		m.CloseWithError(testErr)
 		_, err := m.AcceptStream()
 		Expect(err).To(MatchError(testErr))
+	})
+
+	It("closes all streams when CloseWithError is called", func() {
+		str1, err := m.GetOrOpenStream(20)
+		Expect(err).ToNot(HaveOccurred())
+		str2, err := m.GetOrOpenStream(20 + 8)
+		Expect(err).ToNot(HaveOccurred())
+		testErr := errors.New("test err")
+		m.CloseWithError(testErr)
+		Expect(str1.(*mockGenericStream).closed).To(BeTrue())
+		Expect(str1.(*mockGenericStream).closeErr).To(MatchError(testErr))
+		Expect(str2.(*mockGenericStream).closed).To(BeTrue())
+		Expect(str2.(*mockGenericStream).closeErr).To(MatchError(testErr))
 	})
 
 	It("deletes streams", func() {
