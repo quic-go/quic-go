@@ -791,6 +791,51 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
+		It("sends an RTO probe packets", func() {
+			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+			sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
+			sph.EXPECT().TimeUntilSend()
+			sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
+				PacketNumber: 10,
+			})
+			sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
+				PacketNumber: 11,
+			})
+			sph.EXPECT().SendMode().Return(ackhandler.SendRTO).Times(2)
+			sph.EXPECT().ShouldSendNumPackets().Return(2)
+			sph.EXPECT().GetStopWaitingFrame(gomock.Any()).Return(&wire.StopWaitingFrame{}).Times(2)
+			gomock.InOrder(
+				sph.EXPECT().SentPacketsAsRetransmission(gomock.Any(), protocol.PacketNumber(10)),
+				sph.EXPECT().SentPacketsAsRetransmission(gomock.Any(), protocol.PacketNumber(11)),
+			)
+			sess.sentPacketHandler = sph
+			err := sess.sendPackets()
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("sends RTO probe packets with new data, if no retransmission is available", func() {
+			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+			sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
+			sph.EXPECT().TimeUntilSend()
+			sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
+				PacketNumber: 10,
+			})
+			sph.EXPECT().DequeuePacketForRetransmission()
+			sph.EXPECT().SendMode().Return(ackhandler.SendRTO).Times(2)
+			sph.EXPECT().ShouldSendNumPackets().Return(2)
+			sph.EXPECT().GetStopWaitingFrame(gomock.Any()).Return(&wire.StopWaitingFrame{})
+			gomock.InOrder(
+				sph.EXPECT().SentPacketsAsRetransmission(gomock.Any(), protocol.PacketNumber(10)),
+				sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
+					Expect(p.Frames).To(HaveLen(1))
+					Expect(p.Frames[0]).To(BeAssignableToTypeOf(&wire.PingFrame{}))
+				}),
+			)
+			sess.sentPacketHandler = sph
+			err := sess.sendPackets()
+			Expect(err).ToNot(HaveOccurred())
+		})
+
 		It("doesn't send when the SentPacketHandler doesn't allow it", func() {
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().SendMode().Return(ackhandler.SendNone)
