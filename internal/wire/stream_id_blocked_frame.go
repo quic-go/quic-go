@@ -24,7 +24,7 @@ func parseStreamIDBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*Stre
 	return &StreamIDBlockedFrame{StreamID: protocol.StreamID(streamID)}, nil
 }
 
-func (f *StreamIDBlockedFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) error {
+func (f *StreamIDBlockedFrame) Write(b utils.ByteWriter, _ protocol.VersionNumber) error {
 	typeByte := uint8(0x0a)
 	b.WriteByte(typeByte)
 	utils.WriteVarInt(b, uint64(f.StreamID))

@@ -19,7 +19,7 @@ var (
 )
 
 // writePublicHeader writes a Public Header.
-func (h *Header) writePublicHeader(b *bytes.Buffer, pers protocol.Perspective, _ protocol.VersionNumber) error {
+func (h *Header) writePublicHeader(b utils.ByteWriter, pers protocol.Perspective, _ protocol.VersionNumber) error {
 	if h.VersionFlag && pers == protocol.PerspectiveServer {
 		return errors.New("PublicHeader: Writing of Version Negotiation Packets not supported")
 	}

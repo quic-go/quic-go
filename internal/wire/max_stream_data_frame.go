@@ -37,7 +37,7 @@ func parseMaxStreamDataFrame(r *bytes.Reader, version protocol.VersionNumber) (*
 }
 
 // Write writes a MAX_STREAM_DATA frame
-func (f *MaxStreamDataFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
+func (f *MaxStreamDataFrame) Write(b utils.ByteWriter, version protocol.VersionNumber) error {
 	if !version.UsesIETFFrameFormat() {
 		return (&windowUpdateFrame{
 			StreamID:   f.StreamID,

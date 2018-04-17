@@ -170,7 +170,7 @@ func parseAckFrameLegacy(r *bytes.Reader, _ protocol.VersionNumber) (*AckFrame, 
 	return frame, nil
 }
 
-func (f *AckFrame) writeLegacy(b *bytes.Buffer, _ protocol.VersionNumber) error {
+func (f *AckFrame) writeLegacy(b utils.ByteWriter, _ protocol.VersionNumber) error {
 	largestAckedLen := protocol.GetPacketNumberLength(f.LargestAcked)
 
 	typeByte := uint8(0x40)

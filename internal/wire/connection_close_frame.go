@@ -76,7 +76,7 @@ func (f *ConnectionCloseFrame) Length(version protocol.VersionNumber) protocol.B
 }
 
 // Write writes an CONNECTION_CLOSE frame.
-func (f *ConnectionCloseFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
+func (f *ConnectionCloseFrame) Write(b utils.ByteWriter, version protocol.VersionNumber) error {
 	b.WriteByte(0x02)
 
 	if len(f.ReasonPhrase) > math.MaxUint16 {
@@ -90,7 +90,7 @@ func (f *ConnectionCloseFrame) Write(b *bytes.Buffer, version protocol.VersionNu
 		utils.BigEndian.WriteUint32(b, uint32(f.ErrorCode))
 		utils.BigEndian.WriteUint16(b, uint16(len(f.ReasonPhrase)))
 	}
-	b.WriteString(f.ReasonPhrase)
+	b.Write([]byte(f.ReasonPhrase))
 
 	return nil
 }

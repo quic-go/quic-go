@@ -83,7 +83,7 @@ func parseLegacyStreamFrame(r *bytes.Reader, _ protocol.VersionNumber) (*StreamF
 }
 
 // writeLegacy writes a stream frame.
-func (f *StreamFrame) writeLegacy(b *bytes.Buffer, _ protocol.VersionNumber) error {
+func (f *StreamFrame) writeLegacy(b utils.ByteWriter, _ protocol.VersionNumber) error {
 	if len(f.Data) == 0 && !f.FinBit {
 		return errors.New("StreamFrame: attempting to write empty frame without FIN")
 	}

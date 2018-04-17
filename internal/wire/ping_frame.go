@@ -4,6 +4,7 @@ import (
 	"bytes"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 // A PingFrame is a ping frame
@@ -21,7 +22,7 @@ func parsePingFrame(r *bytes.Reader, version protocol.VersionNumber) (*PingFrame
 	return frame, nil
 }
 
-func (f *PingFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
+func (f *PingFrame) Write(b utils.ByteWriter, version protocol.VersionNumber) error {
 	typeByte := uint8(0x07)
 	b.WriteByte(typeByte)
 	return nil

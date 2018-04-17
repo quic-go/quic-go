@@ -26,7 +26,7 @@ func parseBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*BlockedFrame
 	}, nil
 }
 
-func (f *BlockedFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
+func (f *BlockedFrame) Write(b utils.ByteWriter, version protocol.VersionNumber) error {
 	if !version.UsesIETFFrameFormat() {
 		return (&blockedFrameLegacy{}).Write(b, version)
 	}

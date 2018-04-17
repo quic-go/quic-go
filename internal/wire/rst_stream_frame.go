@@ -66,7 +66,7 @@ func parseRstStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*RstS
 }
 
 //Write writes a RST_STREAM frame
-func (f *RstStreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
+func (f *RstStreamFrame) Write(b utils.ByteWriter, version protocol.VersionNumber) error {
 	b.WriteByte(0x01)
 	if version.UsesIETFFrameFormat() {
 		utils.WriteVarInt(b, uint64(f.StreamID))
