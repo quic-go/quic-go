@@ -196,6 +196,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 		return err
 	}
 
+	priorInFlight := h.bytesInFlight
 	for _, p := range ackedPackets {
 		if encLevel < p.EncryptionLevel {
 			return fmt.Errorf("Received ACK with encryption level %s that acks a packet %d (encryption level %s)", encLevel, p.PacketNumber, p.EncryptionLevel)
@@ -209,9 +210,12 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 		if err := h.onPacketAcked(p); err != nil {
 			return err
 		}
+		if p.includedInBytesInFlight {
+			h.congestion.OnPacketAcked(p.PacketNumber, p.Length, priorInFlight)
+		}
 	}
 
-	if err := h.detectLostPackets(rcvTime); err != nil {
+	if err := h.detectLostPackets(rcvTime, priorInFlight); err != nil {
 		return err
 	}
 	h.updateLossDetectionAlarm()
@@ -288,7 +292,7 @@ func (h *sentPacketHandler) updateLossDetectionAlarm() {
 	}
 }
 
-func (h *sentPacketHandler) detectLostPackets(now time.Time) error {
+func (h *sentPacketHandler) detectLostPackets(now time.Time, priorInFlight protocol.ByteCount) error {
 	h.lossTime = time.Time{}
 
 	maxRTT := float64(utils.MaxDuration(h.rttStats.LatestRTT(), h.rttStats.SmoothedRTT()))
@@ -314,6 +318,7 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time) error {
 		// the bytes in flight need to be reduced no matter if this packet will be retransmitted
 		if p.includedInBytesInFlight {
 			h.bytesInFlight -= p.Length
+			h.congestion.OnPacketLost(p.PacketNumber, p.Length, priorInFlight)
 		}
 		if p.canBeRetransmitted {
 			// queue the packet for retransmission, and report the loss to the congestion controller
@@ -321,9 +326,6 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time) error {
 			if err := h.queuePacketForRetransmission(p); err != nil {
 				return err
 			}
-		}
-		if p.includedInBytesInFlight {
-			h.congestion.OnPacketLost(p.PacketNumber, p.Length, h.bytesInFlight)
 		}
 		h.packetHistory.Remove(p.PacketNumber)
 	}
@@ -340,7 +342,7 @@ func (h *sentPacketHandler) OnAlarm() error {
 		err = h.queueHandshakePacketsForRetransmission()
 	} else if !h.lossTime.IsZero() {
 		// Early retransmit or time loss detection
-		err = h.detectLostPackets(now)
+		err = h.detectLostPackets(now, h.bytesInFlight)
 	} else {
 		// RTO
 		h.rtoCount++
@@ -388,7 +390,6 @@ func (h *sentPacketHandler) onPacketAcked(p *Packet) error {
 	// this also applies to packets that have been retransmitted as probe packets
 	if p.includedInBytesInFlight {
 		h.bytesInFlight -= p.Length
-		h.congestion.OnPacketAcked(p.PacketNumber, p.Length, h.bytesInFlight)
 	}
 	if h.rtoCount > 0 {
 		h.verifyRTO(p.PacketNumber)
