@@ -13,7 +13,6 @@ const (
 	initialMaxDataParameterID        transportParameterID = 0x1
 	initialMaxStreamsBiDiParameterID transportParameterID = 0x2
 	idleTimeoutParameterID           transportParameterID = 0x3
-	omitConnectionIDParameterID      transportParameterID = 0x4
 	maxPacketSizeParameterID         transportParameterID = 0x5
 	statelessResetTokenParameterID   transportParameterID = 0x6
 	initialMaxStreamsUniParameterID  transportParameterID = 0x8
