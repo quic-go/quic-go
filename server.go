@@ -308,10 +308,6 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	hdr.Raw = packet[:len(packet)-r.Len()]
 	packetData := packet[len(packet)-r.Len():]
 
-	if hdr.IsLongHeader && !hdr.DestConnectionID.Equal(hdr.SrcConnectionID) {
-		return errors.New("receiving packets with different destination and source connection IDs not supported")
-	}
-
 	if hdr.Type == protocol.PacketTypeInitial {
 		if s.supportsTLS {
 			go s.serverTLS.HandleInitial(remoteAddr, hdr, packetData)

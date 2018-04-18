@@ -16,6 +16,8 @@ import (
 )
 
 var _ = Describe("IETF QUIC Header", func() {
+	srcConnID := protocol.ConnectionID(bytes.Repeat([]byte{'f'}, protocol.ConnectionIDLen))
+
 	Context("parsing", func() {
 		Context("Version Negotiation Packets", func() {
 			It("parses", func() {
@@ -57,19 +59,15 @@ var _ = Describe("IETF QUIC Header", func() {
 		})
 
 		Context("long headers", func() {
-			generatePacket := func(t protocol.PacketType) []byte {
-				return []byte{
-					0x80 ^ uint8(t),
+			It("parses a long header", func() {
+				b := bytes.NewReader([]byte{
+					0x80 ^ uint8(protocol.PacketTypeInitial),
 					0x1, 0x2, 0x3, 0x4, // version number
 					0x55,                                           // connection ID lengths
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // destination connection ID
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // source connection ID
 					0xde, 0xca, 0xfb, 0xad, // packet number
-				}
-			}
-
-			It("parses a long header", func() {
-				b := bytes.NewReader(generatePacket(protocol.PacketTypeInitial))
+				})
 				h, err := parseHeader(b, protocol.PerspectiveClient)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(h.Type).To(Equal(protocol.PacketTypeInitial))
@@ -84,21 +82,73 @@ var _ = Describe("IETF QUIC Header", func() {
 				Expect(b.Len()).To(BeZero())
 			})
 
+			It("parses a long header without a destination connection ID", func() {
+				b := bytes.NewReader([]byte{
+					0x80 ^ uint8(protocol.PacketTypeInitial),
+					0x1, 0x2, 0x3, 0x4, // version number
+					0x01,                   // connection ID lengths
+					0xde, 0xad, 0xbe, 0xef, // source connection ID
+					0xde, 0xca, 0xfb, 0xad, // packet number
+				})
+				h, err := parseHeader(b, protocol.PerspectiveClient)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(h.SrcConnectionID).To(Equal(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}))
+				Expect(h.DestConnectionID).To(BeEmpty())
+			})
+
+			It("parses a long header without a source connection ID", func() {
+				b := bytes.NewReader([]byte{
+					0x80 ^ uint8(protocol.PacketTypeInitial),
+					0x1, 0x2, 0x3, 0x4, // version number
+					0x70,                          // connection ID lengths
+					1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // source connection ID
+					0xde, 0xca, 0xfb, 0xad, // packet number
+				})
+				h, err := parseHeader(b, protocol.PerspectiveClient)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(h.SrcConnectionID).To(BeEmpty())
+				Expect(h.DestConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
+			})
+
 			It("rejects packets sent by the client that use packet types for packets sent by the server", func() {
-				b := bytes.NewReader(generatePacket(protocol.PacketTypeRetry))
-				_, err := parseHeader(b, protocol.PerspectiveClient)
+				buf := &bytes.Buffer{}
+				err := (&Header{
+					IsLongHeader:    true,
+					Type:            protocol.PacketTypeRetry,
+					SrcConnectionID: srcConnID,
+					Version:         0x10203040,
+				}).Write(buf, protocol.PerspectiveServer, protocol.VersionTLS)
+				Expect(err).ToNot(HaveOccurred())
+				b := bytes.NewReader(buf.Bytes())
+				_, err = parseHeader(b, protocol.PerspectiveClient)
 				Expect(err).To(MatchError(fmt.Sprintf("InvalidPacketHeader: Received packet with invalid packet type: %d", protocol.PacketTypeRetry)))
 			})
 
 			It("rejects packets sent by the client that use packet types for packets sent by the server", func() {
-				b := bytes.NewReader(generatePacket(protocol.PacketType0RTT))
-				_, err := parseHeader(b, protocol.PerspectiveServer)
+				buf := &bytes.Buffer{}
+				err := (&Header{
+					IsLongHeader:    true,
+					Type:            protocol.PacketType0RTT,
+					SrcConnectionID: srcConnID,
+					Version:         0x10203040,
+				}).Write(buf, protocol.PerspectiveClient, protocol.VersionTLS)
+				Expect(err).ToNot(HaveOccurred())
+				b := bytes.NewReader(buf.Bytes())
+				_, err = parseHeader(b, protocol.PerspectiveServer)
 				Expect(err).To(MatchError(fmt.Sprintf("InvalidPacketHeader: Received packet with invalid packet type: %d", protocol.PacketType0RTT)))
 			})
 
 			It("rejects packets sent with an unknown packet type", func() {
-				b := bytes.NewReader(generatePacket(42))
-				_, err := parseHeader(b, protocol.PerspectiveServer)
+				buf := &bytes.Buffer{}
+				err := (&Header{
+					IsLongHeader:    true,
+					Type:            42,
+					SrcConnectionID: srcConnID,
+					Version:         0x10203040,
+				}).Write(buf, protocol.PerspectiveClient, protocol.VersionTLS)
+				Expect(err).ToNot(HaveOccurred())
+				b := bytes.NewReader(buf.Bytes())
+				_, err = parseHeader(b, protocol.PerspectiveServer)
 				Expect(err).To(MatchError("InvalidPacketHeader: Received packet with invalid packet type: 42"))
 			})
 
@@ -106,9 +156,7 @@ var _ = Describe("IETF QUIC Header", func() {
 				data := []byte{
 					0x80 ^ uint8(protocol.PacketTypeInitial),
 					0x0, 0x0, 0x0, 0x0, // version number
-					0x55,
-					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // dest connection ID
-					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // src connection ID
+					0x0,                    // no connection IDs
 					0xde, 0xca, 0xfb, 0xad, // packet number
 				}
 				_, err := parseHeader(bytes.NewReader(data), protocol.PerspectiveClient)
@@ -116,7 +164,14 @@ var _ = Describe("IETF QUIC Header", func() {
 			})
 
 			It("errors on EOF", func() {
-				data := generatePacket(protocol.PacketTypeInitial)
+				data := []byte{
+					0x80 ^ uint8(protocol.PacketTypeInitial),
+					0x1, 0x2, 0x3, 0x4, // version number
+					0x55,                                           // connection ID lengths
+					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // destination connection ID
+					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // source connection ID
+					0xde, 0xca, 0xfb, 0xad, // packet number
+				}
 				for i := 0; i < len(data); i++ {
 					_, err := parseHeader(bytes.NewReader(data[:i]), protocol.PerspectiveClient)
 					Expect(err).To(Equal(io.EOF))
@@ -236,8 +291,8 @@ var _ = Describe("IETF QUIC Header", func() {
 				err := (&Header{
 					IsLongHeader:     true,
 					Type:             0x5,
-					DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
-					SrcConnectionID:  protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
+					DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe},
+					SrcConnectionID:  protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad, 0x0, 0x0, 0x13, 0x37},
 					PacketNumber:     0xdecafbad,
 					Version:          0x1020304,
 				}).writeHeader(buf)
@@ -245,20 +300,48 @@ var _ = Describe("IETF QUIC Header", func() {
 				Expect(buf.Bytes()).To(Equal([]byte{
 					0x80 ^ 0x5,
 					0x1, 0x2, 0x3, 0x4, // version number
-					0x55,                                           // connection ID lengths
-					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
-					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
+					0x35,                               // connection ID lengths
+					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, // destination connection ID
+					0xde, 0xca, 0xfb, 0xad, 0x0, 0x0, 0x13, 0x37, // source connection ID
 					0xde, 0xca, 0xfb, 0xad, // packet number
 				}))
 			})
 
-			It("refuses to write headers with unequal destination and source connection IDs", func() {
+			It("refuses to write a header with a too short connection ID", func() {
 				err := (&Header{
 					IsLongHeader:     true,
-					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-					SrcConnectionID:  protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
+					Type:             0x5,
+					SrcConnectionID:  srcConnID,
+					DestConnectionID: protocol.ConnectionID{1, 2, 3}, // connection IDs must be at least 4 bytes long
+					PacketNumber:     0xdecafbad,
+					Version:          0x1020304,
 				}).writeHeader(buf)
-				Expect(err).To(MatchError("Header: can't write a header with different source and destination connection ID"))
+				Expect(err).To(MatchError("invalid connection ID length: 3 bytes"))
+			})
+
+			It("refuses to write a header with a too long connection ID", func() {
+				err := (&Header{
+					IsLongHeader:     true,
+					Type:             0x5,
+					SrcConnectionID:  srcConnID,
+					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}, // connection IDs must be at most 18 bytes long
+					PacketNumber:     0xdecafbad,
+					Version:          0x1020304,
+				}).writeHeader(buf)
+				Expect(err).To(MatchError("invalid connection ID length: 19 bytes"))
+			})
+
+			It("writes a header with an 18 byte connection ID", func() {
+				err := (&Header{
+					IsLongHeader:     true,
+					Type:             0x5,
+					SrcConnectionID:  srcConnID,
+					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18}, // connection IDs must be at most 18 bytes long
+					PacketNumber:     0xdecafbad,
+					Version:          0x1020304,
+				}).writeHeader(buf)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(buf.Bytes()).To(ContainSubstring(string([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18})))
 			})
 		})
 

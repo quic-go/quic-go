@@ -119,8 +119,8 @@ func (s *serverTLS) sendConnectionClose(remoteAddr net.Addr, clientHdr *wire.Hea
 	replyHdr := &wire.Header{
 		IsLongHeader:     true,
 		Type:             protocol.PacketTypeHandshake,
-		SrcConnectionID:  clientHdr.SrcConnectionID,
-		DestConnectionID: clientHdr.DestConnectionID,
+		SrcConnectionID:  clientHdr.DestConnectionID,
+		DestConnectionID: clientHdr.SrcConnectionID,
 		PacketNumber:     1, // random packet number
 		Version:          clientHdr.Version,
 	}
@@ -176,15 +176,14 @@ func (s *serverTLS) handleUnpackedInitial(remoteAddr net.Addr, hdr *wire.Header,
 		return nil, err
 	}
 	alert := tls.Handshake()
-	s.logger.Debugf("%#v\n", hdr)
 	if alert == mint.AlertStatelessRetry {
 		// the HelloRetryRequest was written to the bufferConn
 		// Take that data and write send a Retry packet
 		replyHdr := &wire.Header{
 			IsLongHeader:     true,
 			Type:             protocol.PacketTypeRetry,
-			DestConnectionID: hdr.DestConnectionID,
-			SrcConnectionID:  hdr.SrcConnectionID,
+			DestConnectionID: hdr.SrcConnectionID,
+			SrcConnectionID:  hdr.DestConnectionID,
 			PacketNumber:     hdr.PacketNumber, // echo the client's packet number
 			Version:          version,
 		}
@@ -214,6 +213,7 @@ func (s *serverTLS) handleUnpackedInitial(remoteAddr net.Addr, hdr *wire.Header,
 	params := <-paramsChan
 	sess, err := newTLSServerSession(
 		&conn{pconn: s.conn, currentAddr: remoteAddr},
+		hdr.SrcConnectionID,
 		hdr.DestConnectionID,     // TODO(#1003): we can use a server-chosen connection ID here
 		protocol.PacketNumber(1), // TODO: use a random packet number here
 		s.config,

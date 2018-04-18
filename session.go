@@ -69,10 +69,12 @@ type closeError struct {
 
 // A Session is a QUIC session
 type session struct {
-	connectionID protocol.ConnectionID
-	perspective  protocol.Perspective
-	version      protocol.VersionNumber
-	config       *Config
+	destConnID protocol.ConnectionID
+	srcConnID  protocol.ConnectionID
+
+	perspective protocol.Perspective
+	version     protocol.VersionNumber
+	config      *Config
 
 	conn connection
 
@@ -157,7 +159,8 @@ func newSession(
 	handshakeEvent := make(chan struct{}, 1)
 	s := &session{
 		conn:           conn,
-		connectionID:   connectionID,
+		srcConnID:      connectionID,
+		destConnID:     connectionID,
 		perspective:    protocol.PerspectiveServer,
 		version:        v,
 		config:         config,
@@ -178,7 +181,7 @@ func newSession(
 	}
 	cs, err := newCryptoSetup(
 		s.cryptoStream,
-		s.connectionID,
+		connectionID,
 		s.conn.RemoteAddr(),
 		s.version,
 		divNonce,
@@ -197,7 +200,9 @@ func newSession(
 	s.unpacker = newPacketUnpackerGQUIC(cs, s.version)
 	s.streamsMap = newStreamsMapLegacy(s.newStream, s.config.MaxIncomingStreams, s.perspective)
 	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
-	s.packer = newPacketPacker(s.connectionID,
+	s.packer = newPacketPacker(
+		connectionID,
+		connectionID,
 		1,
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),
@@ -226,7 +231,8 @@ var newClientSession = func(
 	handshakeEvent := make(chan struct{}, 1)
 	s := &session{
 		conn:           conn,
-		connectionID:   connectionID,
+		srcConnID:      connectionID,
+		destConnID:     connectionID,
 		perspective:    protocol.PerspectiveClient,
 		version:        v,
 		config:         config,
@@ -245,7 +251,7 @@ var newClientSession = func(
 	cs, divNonceChan, err := newCryptoSetupClient(
 		s.cryptoStream,
 		hostname,
-		s.connectionID,
+		connectionID,
 		s.version,
 		tlsConf,
 		transportParams,
@@ -263,7 +269,9 @@ var newClientSession = func(
 	s.unpacker = newPacketUnpackerGQUIC(cs, s.version)
 	s.streamsMap = newStreamsMapLegacy(s.newStream, s.config.MaxIncomingStreams, s.perspective)
 	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
-	s.packer = newPacketPacker(s.connectionID,
+	s.packer = newPacketPacker(
+		connectionID,
+		connectionID,
 		1,
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),
@@ -278,7 +286,8 @@ var newClientSession = func(
 
 func newTLSServerSession(
 	conn connection,
-	connectionID protocol.ConnectionID,
+	destConnID protocol.ConnectionID,
+	srcConnID protocol.ConnectionID,
 	initialPacketNumber protocol.PacketNumber,
 	config *Config,
 	tls handshake.MintTLS,
@@ -292,7 +301,8 @@ func newTLSServerSession(
 	s := &session{
 		conn:           conn,
 		config:         config,
-		connectionID:   connectionID,
+		srcConnID:      srcConnID,
+		destConnID:     destConnID,
 		perspective:    protocol.PerspectiveServer,
 		version:        v,
 		handshakeEvent: handshakeEvent,
@@ -309,7 +319,9 @@ func newTLSServerSession(
 	s.cryptoStreamHandler = cs
 	s.streamsMap = newStreamsMap(s, s.newFlowController, s.config.MaxIncomingStreams, s.config.MaxIncomingUniStreams, s.perspective, s.version)
 	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
-	s.packer = newPacketPacker(s.connectionID,
+	s.packer = newPacketPacker(
+		s.destConnID,
+		s.srcConnID,
 		initialPacketNumber,
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),
@@ -333,7 +345,8 @@ var newTLSClientSession = func(
 	conn connection,
 	hostname string,
 	v protocol.VersionNumber,
-	connectionID protocol.ConnectionID,
+	destConnID protocol.ConnectionID,
+	srcConnID protocol.ConnectionID,
 	config *Config,
 	tls handshake.MintTLS,
 	paramsChan <-chan handshake.TransportParameters,
@@ -344,7 +357,8 @@ var newTLSClientSession = func(
 	s := &session{
 		conn:           conn,
 		config:         config,
-		connectionID:   connectionID,
+		srcConnID:      srcConnID,
+		destConnID:     destConnID,
 		perspective:    protocol.PerspectiveClient,
 		version:        v,
 		handshakeEvent: handshakeEvent,
@@ -355,7 +369,7 @@ var newTLSClientSession = func(
 	tls.SetCryptoStream(s.cryptoStream)
 	cs, err := handshake.NewCryptoSetupTLSClient(
 		s.cryptoStream,
-		s.connectionID,
+		s.destConnID,
 		hostname,
 		handshakeEvent,
 		tls,
@@ -368,7 +382,9 @@ var newTLSClientSession = func(
 	s.unpacker = newPacketUnpacker(cs, s.version)
 	s.streamsMap = newStreamsMap(s, s.newFlowController, s.config.MaxIncomingStreams, s.config.MaxIncomingUniStreams, s.perspective, s.version)
 	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
-	s.packer = newPacketPacker(s.connectionID,
+	s.packer = newPacketPacker(
+		s.destConnID,
+		s.srcConnID,
 		initialPacketNumber,
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),
@@ -800,7 +816,7 @@ func (s *session) handleCloseError(closeErr closeError) error {
 	}
 	// Don't log 'normal' reasons
 	if quicErr.ErrorCode == qerr.PeerGoingAway || quicErr.ErrorCode == qerr.NetworkIdleTimeout {
-		s.logger.Infof("Closing connection %s", s.connectionID)
+		s.logger.Infof("Closing connection %s", s.srcConnID)
 	} else {
 		s.logger.Errorf("Closing session with error: %s", closeErr.err.Error())
 	}
@@ -1031,7 +1047,7 @@ func (s *session) logPacket(packet *packedPacket) {
 		// We don't need to allocate the slices for calling the format functions
 		return
 	}
-	s.logger.Debugf("-> Sending packet 0x%x (%d bytes) for connection %s, %s", packet.header.PacketNumber, len(packet.raw), s.connectionID, packet.encryptionLevel)
+	s.logger.Debugf("-> Sending packet 0x%x (%d bytes) for connection %s, %s", packet.header.PacketNumber, len(packet.raw), s.srcConnID, packet.encryptionLevel)
 	packet.header.Log(s.logger)
 	for _, frame := range packet.frames {
 		wire.LogFrame(s.logger, frame, true)
@@ -1117,8 +1133,8 @@ func (s *session) newCryptoStream() cryptoStreamI {
 }
 
 func (s *session) sendPublicReset(rejectedPacketNumber protocol.PacketNumber) error {
-	s.logger.Infof("Sending public reset for connection %s, packet number %d", s.connectionID, rejectedPacketNumber)
-	return s.conn.Write(wire.WritePublicReset(s.connectionID, rejectedPacketNumber, 0))
+	s.logger.Infof("Sending public reset for connection %x, packet number %d", s.destConnID, rejectedPacketNumber)
+	return s.conn.Write(wire.WritePublicReset(s.destConnID, rejectedPacketNumber, 0))
 }
 
 // scheduleSending signals that we have data for sending
