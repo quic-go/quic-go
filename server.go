@@ -334,12 +334,12 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 			var pr *wire.PublicReset
 			pr, err = wire.ParsePublicReset(r)
 			if err != nil {
-				s.logger.Infof("Received a Public Reset for connection %x. An error occurred parsing the packet.", hdr.DestConnectionID)
+				s.logger.Infof("Received a Public Reset for connection %s. An error occurred parsing the packet.", hdr.DestConnectionID)
 			} else {
-				s.logger.Infof("Received a Public Reset for connection %x, rejected packet number: 0x%x.", hdr.DestConnectionID, pr.RejectedPacketNumber)
+				s.logger.Infof("Received a Public Reset for connection %s, rejected packet number: 0x%x.", hdr.DestConnectionID, pr.RejectedPacketNumber)
 			}
 		} else {
-			s.logger.Infof("Received Public Reset for unknown connection %x.", hdr.DestConnectionID)
+			s.logger.Infof("Received Public Reset for unknown connection %s.", hdr.DestConnectionID)
 		}
 		return nil
 	}
@@ -383,7 +383,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 			return errors.New("Server BUG: negotiated version not supported")
 		}
 
-		s.logger.Infof("Serving new connection: %x, version %s from %v", hdr.DestConnectionID, version, remoteAddr)
+		s.logger.Infof("Serving new connection: %s, version %s from %v", hdr.DestConnectionID, version, remoteAddr)
 		session, err = s.newSession(
 			&conn{pconn: pconn, currentAddr: remoteAddr},
 			version,

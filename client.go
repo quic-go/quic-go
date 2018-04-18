@@ -107,7 +107,7 @@ func Dial(
 		logger:                 utils.DefaultLogger,
 	}
 
-	c.logger.Infof("Starting new connection to %s (%s -> %s), connectionID %x, version %s", hostname, c.conn.LocalAddr().String(), c.conn.RemoteAddr().String(), c.connectionID, c.version)
+	c.logger.Infof("Starting new connection to %s (%s -> %s), connectionID %s, version %s", hostname, c.conn.LocalAddr().String(), c.conn.RemoteAddr().String(), c.connectionID, c.version)
 
 	if err := c.dial(); err != nil {
 		return nil, err
@@ -240,7 +240,7 @@ func (c *client) establishSecureConnection() error {
 	go func() {
 		runErr = c.session.run() // returns as soon as the session is closed
 		close(errorChan)
-		c.logger.Infof("Connection %x closed.", c.connectionID)
+		c.logger.Infof("Connection %s closed.", c.connectionID)
 		if runErr != handshake.ErrCloseSessionForRetry && runErr != errCloseSessionForNewVersion {
 			c.conn.Close()
 		}
@@ -393,7 +393,7 @@ func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
 	if err != nil {
 		return err
 	}
-	c.logger.Infof("Switching to QUIC version %s. New connection ID: %x", newVersion, c.connectionID)
+	c.logger.Infof("Switching to QUIC version %s. New connection ID: %s", newVersion, c.connectionID)
 	c.session.Close(errCloseSessionForNewVersion)
 	return nil
 }

@@ -598,9 +598,9 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 	packet, err := s.unpacker.Unpack(hdr.Raw, hdr, data)
 	if s.logger.Debug() {
 		if err != nil {
-			s.logger.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x", hdr.PacketNumber, len(data)+len(hdr.Raw), hdr.DestConnectionID)
+			s.logger.Debugf("<- Reading packet 0x%x (%d bytes) for connection %s", hdr.PacketNumber, len(data)+len(hdr.Raw), hdr.DestConnectionID)
 		} else {
-			s.logger.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x, %s", hdr.PacketNumber, len(data)+len(hdr.Raw), hdr.DestConnectionID, packet.encryptionLevel)
+			s.logger.Debugf("<- Reading packet 0x%x (%d bytes) for connection %s, %s", hdr.PacketNumber, len(data)+len(hdr.Raw), hdr.DestConnectionID, packet.encryptionLevel)
 		}
 		hdr.Log(s.logger)
 	}
@@ -800,7 +800,7 @@ func (s *session) handleCloseError(closeErr closeError) error {
 	}
 	// Don't log 'normal' reasons
 	if quicErr.ErrorCode == qerr.PeerGoingAway || quicErr.ErrorCode == qerr.NetworkIdleTimeout {
-		s.logger.Infof("Closing connection %x", s.connectionID)
+		s.logger.Infof("Closing connection %s", s.connectionID)
 	} else {
 		s.logger.Errorf("Closing session with error: %s", closeErr.err.Error())
 	}
@@ -1031,7 +1031,7 @@ func (s *session) logPacket(packet *packedPacket) {
 		// We don't need to allocate the slices for calling the format functions
 		return
 	}
-	s.logger.Debugf("-> Sending packet 0x%x (%d bytes) for connection %x, %s", packet.header.PacketNumber, len(packet.raw), s.connectionID, packet.encryptionLevel)
+	s.logger.Debugf("-> Sending packet 0x%x (%d bytes) for connection %s, %s", packet.header.PacketNumber, len(packet.raw), s.connectionID, packet.encryptionLevel)
 	packet.header.Log(s.logger)
 	for _, frame := range packet.frames {
 		wire.LogFrame(s.logger, frame, true)
@@ -1117,7 +1117,7 @@ func (s *session) newCryptoStream() cryptoStreamI {
 }
 
 func (s *session) sendPublicReset(rejectedPacketNumber protocol.PacketNumber) error {
-	s.logger.Infof("Sending public reset for connection %x, packet number %d", s.connectionID, rejectedPacketNumber)
+	s.logger.Infof("Sending public reset for connection %s, packet number %d", s.connectionID, rejectedPacketNumber)
 	return s.conn.Write(wire.WritePublicReset(s.connectionID, rejectedPacketNumber, 0))
 }
 

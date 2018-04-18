@@ -35,24 +35,13 @@ func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte
 		return nil, err
 	}
 	dcil, scil := decodeConnIDLen(connIDLenByte)
-	var destConnID, srcConnID protocol.ConnectionID
-	if dcil > 0 {
-		destConnID = make(protocol.ConnectionID, dcil)
-		if _, err := io.ReadFull(b, destConnID); err != nil {
-			if err == io.ErrUnexpectedEOF {
-				err = io.EOF
-			}
-			return nil, err
-		}
+	destConnID, err := protocol.ReadConnectionID(b, dcil)
+	if err != nil {
+		return nil, err
 	}
-	if scil > 0 {
-		srcConnID = make(protocol.ConnectionID, scil)
-		if _, err := io.ReadFull(b, srcConnID); err != nil {
-			if err == io.ErrUnexpectedEOF {
-				err = io.EOF
-			}
-			return nil, err
-		}
+	srcConnID, err := protocol.ReadConnectionID(b, scil)
+	if err != nil {
+		return nil, err
 	}
 
 	h := &Header{
@@ -145,8 +134,8 @@ func (h *Header) writeLongHeader(b *bytes.Buffer) error {
 	if !h.DestConnectionID.Equal(h.SrcConnectionID) {
 		return errors.New("Header: can't write a header with different source and destination connection ID")
 	}
-	if len(h.SrcConnectionID) != 8 {
-		return fmt.Errorf("Header: source connection ID must be 8 bytes, is %d", len(h.SrcConnectionID))
+	if h.SrcConnectionID.Len() != 8 {
+		return fmt.Errorf("Header: source connection ID must be 8 bytes, is %d", h.SrcConnectionID.Len())
 	}
 	b.WriteByte(byte(0x80 | h.Type))
 	utils.BigEndian.WriteUint32(b, uint32(h.Version))
@@ -155,8 +144,8 @@ func (h *Header) writeLongHeader(b *bytes.Buffer) error {
 		return err
 	}
 	b.WriteByte(connIDLen)
-	b.Write(h.DestConnectionID)
-	b.Write(h.SrcConnectionID)
+	b.Write(h.DestConnectionID.Bytes())
+	b.Write(h.SrcConnectionID.Bytes())
 	utils.BigEndian.WriteUint32(b, uint32(h.PacketNumber))
 	return nil
 }
@@ -175,7 +164,7 @@ func (h *Header) writeShortHeader(b *bytes.Buffer) error {
 	}
 	b.WriteByte(typeByte)
 
-	b.Write(h.DestConnectionID)
+	b.Write(h.DestConnectionID.Bytes())
 	switch h.PacketNumberLen {
 	case protocol.PacketNumberLen1:
 		b.WriteByte(uint8(h.PacketNumber))
@@ -190,10 +179,10 @@ func (h *Header) writeShortHeader(b *bytes.Buffer) error {
 // getHeaderLength gets the length of the Header in bytes.
 func (h *Header) getHeaderLength() (protocol.ByteCount, error) {
 	if h.IsLongHeader {
-		return 1 /* type byte */ + 4 /* version */ + 1 /* conn id len byte */ + protocol.ByteCount(len(h.DestConnectionID)+len(h.SrcConnectionID)) + 4 /* packet number */, nil
+		return 1 /* type byte */ + 4 /* version */ + 1 /* conn id len byte */ + protocol.ByteCount(h.DestConnectionID.Len()+h.SrcConnectionID.Len()) + 4 /* packet number */, nil
 	}
 
-	length := protocol.ByteCount(1 /* type byte */ + len(h.DestConnectionID))
+	length := protocol.ByteCount(1 /* type byte */ + h.DestConnectionID.Len())
 	if h.PacketNumberLen != protocol.PacketNumberLen1 && h.PacketNumberLen != protocol.PacketNumberLen2 && h.PacketNumberLen != protocol.PacketNumberLen4 {
 		return 0, fmt.Errorf("invalid packet number length: %d", h.PacketNumberLen)
 	}
@@ -203,9 +192,9 @@ func (h *Header) getHeaderLength() (protocol.ByteCount, error) {
 
 func (h *Header) logHeader(logger utils.Logger) {
 	if h.IsLongHeader {
-		logger.Debugf("   Long Header{Type: %s, DestConnectionID: %#x, SrcConnectionID: %#x, PacketNumber: %#x, Version: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, h.PacketNumber, h.Version)
+		logger.Debugf("   Long Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, PacketNumber: %#x, Version: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, h.PacketNumber, h.Version)
 	} else {
-		logger.Debugf("   Short Header{DestConnectionID: %#x, PacketNumber: %#x, PacketNumberLen: %d, KeyPhase: %d}", h.DestConnectionID, h.PacketNumber, h.PacketNumberLen, h.KeyPhase)
+		logger.Debugf("   Short Header{DestConnectionID: %s, PacketNumber: %#x, PacketNumberLen: %d, KeyPhase: %d}", h.DestConnectionID, h.PacketNumber, h.PacketNumberLen, h.KeyPhase)
 	}
 }
 
@@ -222,13 +211,14 @@ func encodeConnIDLen(dest, src protocol.ConnectionID) (byte, error) {
 }
 
 func encodeSingleConnIDLen(id protocol.ConnectionID) (byte, error) {
-	if len(id) == 0 {
+	len := id.Len()
+	if len == 0 {
 		return 0, nil
 	}
-	if len(id) < 4 || len(id) > 18 {
+	if len < 4 || len > 18 {
 		return 0, errors.New("invalid connection ID length")
 	}
-	return byte(len(id) - 3), nil
+	return byte(len - 3), nil
 }
 
 func decodeConnIDLen(enc byte) (int /*dest conn id len*/, int /*src conn id len*/) {

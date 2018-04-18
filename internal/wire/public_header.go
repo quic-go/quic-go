@@ -241,13 +241,9 @@ func (h *Header) hasPacketNumber(packetSentBy protocol.Perspective) bool {
 }
 
 func (h *Header) logPublicHeader(logger utils.Logger) {
-	connID := "(omitted)"
-	if !h.OmitConnectionID {
-		connID = fmt.Sprintf("%#x", h.DestConnectionID)
-	}
 	ver := "(unset)"
 	if h.Version != 0 {
 		ver = h.Version.String()
 	}
-	logger.Debugf("   Public Header{ConnectionID: %s, PacketNumber: %#x, PacketNumberLen: %d, Version: %s, DiversificationNonce: %#v}", connID, h.PacketNumber, h.PacketNumberLen, ver, h.DiversificationNonce)
+	logger.Debugf("   Public Header{ConnectionID: %s, PacketNumber: %#x, PacketNumberLen: %d, Version: %s, DiversificationNonce: %#v}", h.DestConnectionID, h.PacketNumber, h.PacketNumberLen, ver, h.DiversificationNonce)
 }

@@ -554,7 +554,7 @@ var _ = Describe("Public Header", func() {
 				PacketNumberLen:  6,
 				Version:          protocol.Version39,
 			}).logPublicHeader(logger)
-			Expect(buf.String()).To(ContainSubstring("Public Header{ConnectionID: (omitted)"))
+			Expect(buf.String()).To(ContainSubstring("Public Header{ConnectionID: (empty)"))
 		})
 
 		It("logs a Public Header without a version", func() {
