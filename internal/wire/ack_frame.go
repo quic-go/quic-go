@@ -99,31 +99,22 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 		return f.writeLegacy(b, version)
 	}
 
-	largestAcked := f.AckRanges[0].Largest
-	lowestInFirstRange := f.AckRanges[0].Smallest
-
 	b.WriteByte(0x0d)
-	utils.WriteVarInt(b, uint64(largestAcked))
+	utils.WriteVarInt(b, uint64(f.LargestAcked()))
 	utils.WriteVarInt(b, encodeAckDelay(f.DelayTime))
 
 	// TODO: limit the number of ACK ranges, such that the frame doesn't grow larger than an upper bound
 	utils.WriteVarInt(b, uint64(len(f.AckRanges)-1))
 
 	// write the first range
-	utils.WriteVarInt(b, uint64(largestAcked-lowestInFirstRange))
+	_, firstRange := f.encodeAckRange(0)
+	utils.WriteVarInt(b, firstRange)
 
 	// write all the other range
-	if f.HasMissingRanges() {
-		var lowest protocol.PacketNumber
-		for i, ackRange := range f.AckRanges {
-			if i == 0 {
-				lowest = lowestInFirstRange
-				continue
-			}
-			utils.WriteVarInt(b, uint64(lowest-ackRange.Largest-2))
-			utils.WriteVarInt(b, uint64(ackRange.Largest-ackRange.Smallest))
-			lowest = ackRange.Smallest
-		}
+	for i := 1; i < len(f.AckRanges); i++ {
+		gap, len := f.encodeAckRange(i)
+		utils.WriteVarInt(b, gap)
+		utils.WriteVarInt(b, len)
 	}
 	return nil
 }
@@ -141,20 +132,20 @@ func (f *AckFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
 	lowestInFirstRange := f.AckRanges[0].Smallest
 	length += utils.VarIntLen(uint64(largestAcked - lowestInFirstRange))
 
-	if !f.HasMissingRanges() {
-		return length
-	}
-	var lowest protocol.PacketNumber
-	for i, ackRange := range f.AckRanges {
-		if i == 0 {
-			lowest = ackRange.Smallest
-			continue
-		}
-		length += utils.VarIntLen(uint64(lowest - ackRange.Largest - 2))
-		length += utils.VarIntLen(uint64(ackRange.Largest - ackRange.Smallest))
-		lowest = ackRange.Smallest
+	for i := 1; i < len(f.AckRanges); i++ {
+		gap, len := f.encodeAckRange(i)
+		length += utils.VarIntLen(gap)
+		length += utils.VarIntLen(len)
 	}
 	return length
+}
+
+func (f *AckFrame) encodeAckRange(i int) (uint64 /* gap */, uint64 /* length */) {
+	if i == 0 {
+		return 0, uint64(f.AckRanges[0].Largest - f.AckRanges[0].Smallest)
+	}
+	return uint64(f.AckRanges[i-1].Smallest - f.AckRanges[i].Largest - 2),
+		uint64(f.AckRanges[i].Largest - f.AckRanges[i].Smallest)
 }
 
 // HasMissingRanges returns if this frame reports any missing packets
