@@ -17,14 +17,15 @@ import (
 
 var _ = Describe("Packing and unpacking Initial packets", func() {
 	var aead crypto.AEAD
-	connID := protocol.ConnectionID(0x1337)
+	connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 	ver := protocol.VersionTLS
 	hdr := &wire.Header{
-		IsLongHeader: true,
-		Type:         protocol.PacketTypeRetry,
-		PacketNumber: 0x42,
-		ConnectionID: connID,
-		Version:      ver,
+		IsLongHeader:     true,
+		Type:             protocol.PacketTypeRetry,
+		PacketNumber:     0x42,
+		DestConnectionID: connID,
+		SrcConnectionID:  connID,
+		Version:          ver,
 	}
 
 	BeforeEach(func() {

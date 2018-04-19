@@ -10,12 +10,16 @@ import (
 // Header is the header of a QUIC packet.
 // It contains fields that are only needed for the gQUIC Public Header and the IETF draft Header.
 type Header struct {
-	Raw              []byte
-	ConnectionID     protocol.ConnectionID
+	Raw []byte
+
+	Version protocol.VersionNumber
+
+	DestConnectionID protocol.ConnectionID
+	SrcConnectionID  protocol.ConnectionID
 	OmitConnectionID bool
-	PacketNumberLen  protocol.PacketNumberLen
-	PacketNumber     protocol.PacketNumber
-	Version          protocol.VersionNumber // VersionNumber sent by the client
+
+	PacketNumberLen protocol.PacketNumberLen
+	PacketNumber    protocol.PacketNumber
 
 	IsVersionNegotiation bool
 	SupportedVersions    []protocol.VersionNumber // Version Number sent in a Version Negotiation Packet by the server

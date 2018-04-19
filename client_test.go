@@ -25,6 +25,7 @@ var _ = Describe("Client", func() {
 		sess       *mockSession
 		packetConn *mockPacketConn
 		addr       net.Addr
+		connID     protocol.ConnectionID
 
 		originalClientSessConstructor func(conn connection, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, tlsConf *tls.Config, config *Config, initialVersion protocol.VersionNumber, negotiatedVersions []protocol.VersionNumber, logger utils.Logger) (packetHandler, error)
 	)
@@ -33,25 +34,27 @@ var _ = Describe("Client", func() {
 	acceptClientVersionPacket := func(connID protocol.ConnectionID) []byte {
 		b := &bytes.Buffer{}
 		err := (&wire.Header{
-			ConnectionID:    connID,
-			PacketNumber:    1,
-			PacketNumberLen: 1,
+			DestConnectionID: connID,
+			SrcConnectionID:  connID,
+			PacketNumber:     1,
+			PacketNumberLen:  1,
 		}).Write(b, protocol.PerspectiveServer, protocol.VersionWhatever)
 		Expect(err).ToNot(HaveOccurred())
 		return b.Bytes()
 	}
 
 	BeforeEach(func() {
+		connID = protocol.ConnectionID{0, 0, 0, 0, 0, 0, 0x13, 0x37}
 		originalClientSessConstructor = newClientSession
 		Eventually(areSessionsRunning).Should(BeFalse())
-		msess, _ := newMockSession(nil, 0, 0, nil, nil, nil, nil)
+		msess, _ := newMockSession(nil, 0, connID, nil, nil, nil, nil)
 		sess = msess.(*mockSession)
 		addr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
 		packetConn = newMockPacketConn()
 		packetConn.addr = &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1234}
 		packetConn.dataReadFrom = addr
 		cl = &client{
-			connectionID: 0x1337,
+			connectionID: connID,
 			session:      sess,
 			version:      protocol.SupportedVersions[0],
 			conn:         &conn{pconn: packetConn, currentAddr: addr},
@@ -291,9 +294,10 @@ var _ = Describe("Client", func() {
 
 			It("recognizes that a packet without VersionFlag means that the server accepted the suggested version", func() {
 				ph := wire.Header{
-					PacketNumber:    1,
-					PacketNumberLen: protocol.PacketNumberLen2,
-					ConnectionID:    0x1337,
+					PacketNumber:     1,
+					PacketNumberLen:  protocol.PacketNumberLen2,
+					DestConnectionID: connID,
+					SrcConnectionID:  connID,
 				}
 				b := &bytes.Buffer{}
 				err := ph.Write(b, protocol.PerspectiveServer, protocol.VersionWhatever)
@@ -388,15 +392,15 @@ var _ = Describe("Client", func() {
 				go cl.dial()
 				Eventually(func() uint32 { return atomic.LoadUint32(&sessionCounter) }).Should(BeEquivalentTo(1))
 				cl.config = &Config{Versions: []protocol.VersionNumber{77, 78}}
-				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(0x1337, []protocol.VersionNumber{77}))
+				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(connID, []protocol.VersionNumber{77}))
 				Eventually(func() uint32 { return atomic.LoadUint32(&sessionCounter) }).Should(BeEquivalentTo(2))
-				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(0x1337, []protocol.VersionNumber{78}))
+				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(connID, []protocol.VersionNumber{78}))
 				Consistently(func() uint32 { return atomic.LoadUint32(&sessionCounter) }).Should(BeEquivalentTo(2))
 			})
 
 			It("errors if no matching version is found", func() {
 				cl.config = &Config{Versions: protocol.SupportedVersions}
-				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(0x1337, []protocol.VersionNumber{1}))
+				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(connID, []protocol.VersionNumber{1}))
 				Expect(cl.session.(*mockSession).closed).To(BeTrue())
 				Expect(cl.session.(*mockSession).closeReason).To(MatchError(qerr.InvalidVersion))
 			})
@@ -405,7 +409,7 @@ var _ = Describe("Client", func() {
 				v := protocol.VersionNumber(1234)
 				Expect(v).ToNot(Equal(cl.version))
 				cl.config = &Config{Versions: protocol.SupportedVersions}
-				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(0x1337, []protocol.VersionNumber{v}))
+				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(connID, []protocol.VersionNumber{v}))
 				Expect(cl.session.(*mockSession).closed).To(BeTrue())
 				Expect(cl.session.(*mockSession).closeReason).To(MatchError(qerr.InvalidVersion))
 			})
@@ -413,7 +417,7 @@ var _ = Describe("Client", func() {
 			It("changes to the version preferred by the quic.Config", func() {
 				config := &Config{Versions: []protocol.VersionNumber{1234, 4321}}
 				cl.config = config
-				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(0x1337, []protocol.VersionNumber{4321, 1234}))
+				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(connID, []protocol.VersionNumber{4321, 1234}))
 				Expect(cl.version).To(Equal(protocol.VersionNumber(1234)))
 			})
 
@@ -421,14 +425,14 @@ var _ = Describe("Client", func() {
 				// if the version was not yet negotiated, handlePacket would return a VersionNegotiationMismatch error, see above test
 				cl.versionNegotiated = true
 				Expect(sess.packetCount).To(BeZero())
-				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(0x1337, []protocol.VersionNumber{1}))
+				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(connID, []protocol.VersionNumber{1}))
 				Expect(cl.versionNegotiated).To(BeTrue())
 				Expect(sess.packetCount).To(BeZero())
 			})
 
 			It("drops version negotiation packets that contain the offered version", func() {
 				ver := cl.version
-				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(0x1337, []protocol.VersionNumber{ver}))
+				cl.handlePacket(nil, wire.ComposeGQUICVersionNegotiation(connID, []protocol.VersionNumber{ver}))
 				Expect(cl.version).To(Equal(ver))
 			})
 		})
@@ -455,10 +459,13 @@ var _ = Describe("Client", func() {
 
 	It("ignores packets with the wrong connection ID", func() {
 		buf := &bytes.Buffer{}
+		connID2 := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7}
+		Expect(connID).ToNot(Equal(connID2))
 		(&wire.Header{
-			ConnectionID:    cl.connectionID + 1,
-			PacketNumber:    1,
-			PacketNumberLen: 1,
+			DestConnectionID: connID2,
+			SrcConnectionID:  connID2,
+			PacketNumber:     1,
+			PacketNumberLen:  1,
 		}).Write(buf, protocol.PerspectiveServer, protocol.VersionWhatever)
 		cl.handlePacket(addr, buf.Bytes())
 		Expect(sess.packetCount).To(BeZero())
@@ -585,9 +592,10 @@ var _ = Describe("Client", func() {
 	Context("handling packets", func() {
 		It("handles packets", func() {
 			ph := wire.Header{
-				PacketNumber:    1,
-				PacketNumberLen: protocol.PacketNumberLen2,
-				ConnectionID:    0x1337,
+				PacketNumber:     1,
+				PacketNumberLen:  protocol.PacketNumberLen2,
+				DestConnectionID: connID,
+				SrcConnectionID:  connID,
 			}
 			b := &bytes.Buffer{}
 			err := ph.Write(b, protocol.PerspectiveServer, cl.version)
@@ -625,7 +633,9 @@ var _ = Describe("Client", func() {
 		})
 
 		It("ignores Public Resets with the wrong connection ID", func() {
-			cl.handlePacket(addr, wire.WritePublicReset(cl.connectionID+1, 1, 0))
+			connID2 := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7}
+			Expect(connID).ToNot(Equal(connID2))
+			cl.handlePacket(addr, wire.WritePublicReset(connID2, 1, 0))
 			Expect(cl.session.(*mockSession).closed).To(BeFalse())
 			Expect(cl.session.(*mockSession).closedRemote).To(BeFalse())
 		})

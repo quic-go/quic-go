@@ -137,7 +137,7 @@ func unpackInitialPacket(aead crypto.AEAD, hdr *wire.Header, data []byte, logger
 		return nil, errors.New("received stream data with non-zero offset")
 	}
 	if logger.Debug() {
-		logger.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x", hdr.PacketNumber, len(data)+len(hdr.Raw), hdr.ConnectionID)
+		logger.Debugf("<- Reading packet 0x%x (%d bytes) for connection %x", hdr.PacketNumber, len(data)+len(hdr.Raw), hdr.DestConnectionID)
 		hdr.Log(logger)
 		wire.LogFrame(logger, frame, false)
 	}
@@ -160,7 +160,7 @@ func packUnencryptedPacket(aead crypto.AEAD, hdr *wire.Header, f wire.Frame, per
 	_ = aead.Seal(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], hdr.PacketNumber, raw[:payloadStartIndex])
 	raw = raw[0 : buffer.Len()+aead.Overhead()]
 	if logger.Debug() {
-		logger.Debugf("-> Sending packet 0x%x (%d bytes) for connection %x, %s", hdr.PacketNumber, len(raw), hdr.ConnectionID, protocol.EncryptionUnencrypted)
+		logger.Debugf("-> Sending packet 0x%x (%d bytes) for connection %x, %s", hdr.PacketNumber, len(raw), hdr.SrcConnectionID, protocol.EncryptionUnencrypted)
 		hdr.Log(logger)
 		wire.LogFrame(logger, f, true)
 	}

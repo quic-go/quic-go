@@ -44,7 +44,7 @@ type client struct {
 
 var (
 	// make it possible to mock connection ID generation in the tests
-	generateConnectionID         = utils.GenerateConnectionID
+	generateConnectionID         = protocol.GenerateConnectionID
 	errCloseSessionForNewVersion = errors.New("closing session in order to recreate it with a new version")
 )
 
@@ -107,7 +107,7 @@ func Dial(
 		logger:                 utils.DefaultLogger,
 	}
 
-	c.logger.Infof("Starting new connection to %s (%s -> %s), connectionID %x, version %s", hostname, c.conn.LocalAddr().String(), c.conn.RemoteAddr().String(), c.connectionID, c.version)
+	c.logger.Infof("Starting new connection to %s (%s -> %s), connectionID %s, version %s", hostname, c.conn.LocalAddr().String(), c.conn.RemoteAddr().String(), c.connectionID, c.version)
 
 	if err := c.dial(); err != nil {
 		return nil, err
@@ -240,7 +240,7 @@ func (c *client) establishSecureConnection() error {
 	go func() {
 		runErr = c.session.run() // returns as soon as the session is closed
 		close(errorChan)
-		c.logger.Infof("Connection %x closed.", c.connectionID)
+		c.logger.Infof("Connection %s closed.", c.connectionID)
 		if runErr != handshake.ErrCloseSessionForRetry && runErr != errCloseSessionForNewVersion {
 			c.conn.Close()
 		}
@@ -304,11 +304,16 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 	}
 	hdr.Raw = packet[:len(packet)-r.Len()]
 
+	if hdr.IsLongHeader && !hdr.DestConnectionID.Equal(hdr.SrcConnectionID) {
+		c.logger.Errorf("receiving packets with different destination and source connection IDs not supported")
+	}
+
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
 	// reject packets with the wrong connection ID
-	if !hdr.OmitConnectionID && hdr.ConnectionID != c.connectionID {
+	// TODO(#1003): add support for server-chosen connection IDs
+	if !hdr.OmitConnectionID && !hdr.DestConnectionID.Equal(c.connectionID) {
 		return
 	}
 
@@ -316,7 +321,7 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 		cr := c.conn.RemoteAddr()
 		// check if the remote address and the connection ID match
 		// otherwise this might be an attacker trying to inject a PUBLIC_RESET to kill the connection
-		if cr.Network() != remoteAddr.Network() || cr.String() != remoteAddr.String() || hdr.ConnectionID != c.connectionID {
+		if cr.Network() != remoteAddr.Network() || cr.String() != remoteAddr.String() || !hdr.DestConnectionID.Equal(c.connectionID) {
 			c.logger.Infof("Received a spoofed Public Reset. Ignoring.")
 			return
 		}
@@ -384,11 +389,11 @@ func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
 	c.initialVersion = c.version
 	c.version = newVersion
 	var err error
-	c.connectionID, err = utils.GenerateConnectionID()
+	c.connectionID, err = protocol.GenerateConnectionID()
 	if err != nil {
 		return err
 	}
-	c.logger.Infof("Switching to QUIC version %s. New connection ID: %x", newVersion, c.connectionID)
+	c.logger.Infof("Switching to QUIC version %s. New connection ID: %s", newVersion, c.connectionID)
 	c.session.Close(errCloseSessionForNewVersion)
 	return nil
 }
