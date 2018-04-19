@@ -150,7 +150,7 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* isRetransmitt
 
 	if len(packet.Frames) > 0 {
 		if ackFrame, ok := packet.Frames[0].(*wire.AckFrame); ok {
-			packet.largestAcked = ackFrame.LargestAcked
+			packet.largestAcked = ackFrame.LargestAcked()
 		}
 	}
 
@@ -176,7 +176,8 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* isRetransmitt
 }
 
 func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, encLevel protocol.EncryptionLevel, rcvTime time.Time) error {
-	if ackFrame.LargestAcked > h.lastSentPacketNumber {
+	largestAcked := ackFrame.LargestAcked()
+	if largestAcked > h.lastSentPacketNumber {
 		return qerr.Error(qerr.InvalidAckData, "Received ACK for an unsent package")
 	}
 
@@ -186,13 +187,13 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 		return nil
 	}
 	h.largestReceivedPacketWithAck = withPacketNumber
-	h.largestAcked = utils.MaxPacketNumber(h.largestAcked, ackFrame.LargestAcked)
+	h.largestAcked = utils.MaxPacketNumber(h.largestAcked, largestAcked)
 
 	if h.skippedPacketsAcked(ackFrame) {
 		return qerr.Error(qerr.InvalidAckData, "Received an ACK for a skipped packet number")
 	}
 
-	if rttUpdated := h.maybeUpdateRTT(ackFrame.LargestAcked, ackFrame.DelayTime, rcvTime); rttUpdated {
+	if rttUpdated := h.maybeUpdateRTT(largestAcked, ackFrame.DelayTime, rcvTime); rttUpdated {
 		h.congestion.MaybeExitSlowStart()
 	}
 
@@ -238,27 +239,29 @@ func (h *sentPacketHandler) GetLowestPacketNotConfirmedAcked() protocol.PacketNu
 func (h *sentPacketHandler) determineNewlyAckedPackets(ackFrame *wire.AckFrame) ([]*Packet, error) {
 	var ackedPackets []*Packet
 	ackRangeIndex := 0
+	lowestAcked := ackFrame.LowestAcked()
+	largestAcked := ackFrame.LargestAcked()
 	err := h.packetHistory.Iterate(func(p *Packet) (bool, error) {
-		// Ignore packets below the LowestAcked
-		if p.PacketNumber < ackFrame.LowestAcked {
+		// Ignore packets below the lowest acked
+		if p.PacketNumber < lowestAcked {
 			return true, nil
 		}
-		// Break after LargestAcked is reached
-		if p.PacketNumber > ackFrame.LargestAcked {
+		// Break after largest acked is reached
+		if p.PacketNumber > largestAcked {
 			return false, nil
 		}
 
 		if ackFrame.HasMissingRanges() {
 			ackRange := ackFrame.AckRanges[len(ackFrame.AckRanges)-1-ackRangeIndex]
 
-			for p.PacketNumber > ackRange.Last && ackRangeIndex < len(ackFrame.AckRanges)-1 {
+			for p.PacketNumber > ackRange.Largest && ackRangeIndex < len(ackFrame.AckRanges)-1 {
 				ackRangeIndex++
 				ackRange = ackFrame.AckRanges[len(ackFrame.AckRanges)-1-ackRangeIndex]
 			}
 
-			if p.PacketNumber >= ackRange.First { // packet i contained in ACK range
-				if p.PacketNumber > ackRange.Last {
-					return false, fmt.Errorf("BUG: ackhandler would have acked wrong packet 0x%x, while evaluating range 0x%x -> 0x%x", p.PacketNumber, ackRange.First, ackRange.Last)
+			if p.PacketNumber >= ackRange.Smallest { // packet i contained in ACK range
+				if p.PacketNumber > ackRange.Largest {
+					return false, fmt.Errorf("BUG: ackhandler would have acked wrong packet 0x%x, while evaluating range 0x%x -> 0x%x", p.PacketNumber, ackRange.Smallest, ackRange.Largest)
 				}
 				ackedPackets = append(ackedPackets, p)
 			}

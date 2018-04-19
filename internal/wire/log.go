@@ -21,7 +21,11 @@ func LogFrame(logger utils.Logger, frame Frame, sent bool) {
 			logger.Debugf("\t%s &wire.StopWaitingFrame{LeastUnacked: 0x%x}", dir, f.LeastUnacked)
 		}
 	case *AckFrame:
-		logger.Debugf("\t%s &wire.AckFrame{LargestAcked: 0x%x, LowestAcked: 0x%x, AckRanges: %#v, DelayTime: %s}", dir, f.LargestAcked, f.LowestAcked, f.AckRanges, f.DelayTime.String())
+		if len(f.AckRanges) > 1 {
+			logger.Debugf("\t%s &wire.AckFrame{LargestAcked: 0x%x, LowestAcked: 0x%x, AckRanges: %#v, DelayTime: %s}", dir, f.LargestAcked(), f.LowestAcked(), f.AckRanges, f.DelayTime.String())
+		} else {
+			logger.Debugf("\t%s &wire.AckFrame{LargestAcked: 0x%x, LowestAcked: 0x%x, DelayTime: %s}", dir, f.LargestAcked(), f.LowestAcked(), f.DelayTime.String())
+		}
 	default:
 		logger.Debugf("\t%s %#v", dir, frame)
 	}
