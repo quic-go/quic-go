@@ -3,6 +3,7 @@ package wire
 import (
 	"bytes"
 	"errors"
+	"sort"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -202,17 +203,15 @@ func (f *AckFrame) LowestAcked() protocol.PacketNumber {
 
 // AcksPacket determines if this ACK frame acks a certain packet number
 func (f *AckFrame) AcksPacket(p protocol.PacketNumber) bool {
-	if p < f.LowestAcked() || p > f.LargestAcked() { // this is just a performance optimization
+	if p < f.LowestAcked() || p > f.LargestAcked() {
 		return false
 	}
 
-	// TODO: this could be implemented as a binary search
-	for _, ackRange := range f.AckRanges {
-		if p >= ackRange.Smallest && p <= ackRange.Largest {
-			return true
-		}
-	}
-	return false
+	i := sort.Search(len(f.AckRanges), func(i int) bool {
+		return p >= f.AckRanges[i].Smallest
+	})
+	// i will always be < len(f.AckRanges), since we checked above that p is not bigger than the largest acked
+	return p <= f.AckRanges[i].Largest
 }
 
 func encodeAckDelay(delay time.Duration) uint64 {
