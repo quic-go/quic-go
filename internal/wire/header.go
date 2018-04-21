@@ -33,6 +33,7 @@ type Header struct {
 	Type         protocol.PacketType
 	IsLongHeader bool
 	KeyPhase     int
+	PayloadLen   protocol.ByteCount
 
 	// only needed for logging
 	isPublicHeader bool
