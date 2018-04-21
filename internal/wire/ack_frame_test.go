@@ -220,6 +220,29 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			Expect(frame.HasMissingRanges()).To(BeTrue())
 			Expect(b.Len()).To(BeZero())
 		})
+
+		It("limits the maximum size of the ACK frame", func() {
+			buf := &bytes.Buffer{}
+			const numRanges = 1000
+			ackRanges := make([]AckRange, numRanges)
+			for i := protocol.PacketNumber(1); i <= numRanges; i++ {
+				ackRanges[numRanges-i] = AckRange{Smallest: 2 * i, Largest: 2 * i}
+			}
+			f := &AckFrame{AckRanges: ackRanges}
+			Expect(f.validateAckRanges()).To(BeTrue())
+			err := f.Write(buf, versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(f.Length(versionIETFFrames)).To(BeEquivalentTo(buf.Len()))
+			// make sure the ACK frame is *a little bit* smaller than the MaxAckFrameSize
+			Expect(buf.Len()).To(BeNumerically(">", protocol.MaxAckFrameSize-5))
+			Expect(buf.Len()).To(BeNumerically("<=", protocol.MaxAckFrameSize))
+			b := bytes.NewReader(buf.Bytes())
+			frame, err := parseAckFrame(b, versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame.HasMissingRanges()).To(BeTrue())
+			Expect(b.Len()).To(BeZero())
+			Expect(len(frame.AckRanges)).To(BeNumerically("<", numRanges)) // make sure we dropped some ranges
+		})
 	})
 
 	Context("ACK range validator", func() {
