@@ -179,17 +179,18 @@ func (s *serverTLS) handleUnpackedInitial(remoteAddr net.Addr, hdr *wire.Header,
 	if alert == mint.AlertStatelessRetry {
 		// the HelloRetryRequest was written to the bufferConn
 		// Take that data and write send a Retry packet
+		f := &wire.StreamFrame{
+			StreamID: version.CryptoStreamID(),
+			Data:     bc.GetDataForWriting(),
+		}
 		replyHdr := &wire.Header{
 			IsLongHeader:     true,
 			Type:             protocol.PacketTypeRetry,
 			DestConnectionID: hdr.SrcConnectionID,
 			SrcConnectionID:  hdr.DestConnectionID,
+			PayloadLen:       f.Length(version) + protocol.ByteCount(aead.Overhead()),
 			PacketNumber:     hdr.PacketNumber, // echo the client's packet number
 			Version:          version,
-		}
-		f := &wire.StreamFrame{
-			StreamID: version.CryptoStreamID(),
-			Data:     bc.GetDataForWriting(),
 		}
 		data, err := packUnencryptedPacket(aead, replyHdr, f, protocol.PerspectiveServer, s.logger)
 		if err != nil {
