@@ -662,6 +662,11 @@ func (s *session) handleFrames(fs []wire.Frame, encLevel protocol.EncryptionLeve
 		case *wire.StopSendingFrame:
 			err = s.handleStopSendingFrame(frame)
 		case *wire.PingFrame:
+		case *wire.PathChallengeFrame:
+			s.handlePathChallengeFrame(frame)
+		case *wire.PathResponseFrame:
+			// since we don't send PATH_CHALLENGEs, we don't expect PATH_RESPONSEs
+			err = errors.New("unexpected PATH_RESPONSE frame")
 		default:
 			return errors.New("Session BUG: unexpected frame type")
 		}
@@ -758,6 +763,10 @@ func (s *session) handleStopSendingFrame(frame *wire.StopSendingFrame) error {
 	}
 	str.handleStopSendingFrame(frame)
 	return nil
+}
+
+func (s *session) handlePathChallengeFrame(frame *wire.PathChallengeFrame) {
+	s.queueControlFrame(&wire.PathResponseFrame{Data: frame.Data})
 }
 
 func (s *session) handleAckFrame(frame *wire.AckFrame, encLevel protocol.EncryptionLevel) error {
