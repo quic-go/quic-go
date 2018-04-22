@@ -20,7 +20,7 @@ var _ = Describe("Ephermal KEX", func() {
 	})
 
 	It("changes KEX", func() {
-		kexLifetime = time.Millisecond
+		kexLifetime = 10 * time.Millisecond
 		defer func() {
 			kexLifetime = protocol.EphermalKeyLifetime
 		}()
