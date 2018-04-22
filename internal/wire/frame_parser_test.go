@@ -305,7 +305,7 @@ var _ = Describe("Frame parsing", func() {
 				0x09: qerr.InvalidBlockedData,
 				0x0a: qerr.InvalidFrameData,
 				0x0c: qerr.InvalidFrameData,
-				0x0e: qerr.InvalidAckData,
+				0x0d: qerr.InvalidAckData,
 				0x10: qerr.InvalidStreamData,
 			} {
 				_, err := ParseNextFrame(bytes.NewReader([]byte{b}), nil, versionIETFFrames)
