@@ -300,9 +300,20 @@ var _ = Describe("Frame parsing", func() {
 			Expect(frame.(*PathChallengeFrame).Data).To(Equal([8]byte{1, 2, 3, 4, 5, 6, 7, 8}))
 		})
 
+		It("unpacks PATH_RESPONSE frames", func() {
+			f := &PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}
+			err := f.Write(buf, versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), nil, versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame).ToNot(BeNil())
+			Expect(frame).To(BeAssignableToTypeOf(f))
+			Expect(frame.(*PathResponseFrame).Data).To(Equal([8]byte{1, 2, 3, 4, 5, 6, 7, 8}))
+		})
+
 		It("errors on invalid type", func() {
-			_, err := ParseNextFrame(bytes.NewReader([]byte{0xf}), nil, versionIETFFrames)
-			Expect(err).To(MatchError("InvalidFrameData: unknown type byte 0xf"))
+			_, err := ParseNextFrame(bytes.NewReader([]byte{0x42}), nil, versionIETFFrames)
+			Expect(err).To(MatchError("InvalidFrameData: unknown type byte 0x42"))
 		})
 
 		It("errors on invalid frames", func() {
@@ -318,6 +329,7 @@ var _ = Describe("Frame parsing", func() {
 				0x0c: qerr.InvalidFrameData,
 				0x0d: qerr.InvalidAckData,
 				0x0e: qerr.InvalidFrameData,
+				0x0f: qerr.InvalidFrameData,
 				0x10: qerr.InvalidStreamData,
 			} {
 				_, err := ParseNextFrame(bytes.NewReader([]byte{b}), nil, versionIETFFrames)
