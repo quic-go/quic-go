@@ -428,6 +428,19 @@ var _ = Describe("IETF QUIC Header", func() {
 			log.SetOutput(os.Stdout)
 		})
 
+		It("logs version negotiation packets", func() {
+			destConnID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}
+			srcConnID := protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad, 0x013, 0x37, 0x13, 0x37}
+			data, err := ComposeVersionNegotiation(destConnID, srcConnID, []protocol.VersionNumber{0x12345678, 0x87654321})
+			Expect(err).ToNot(HaveOccurred())
+			hdr, err := parseLongHeader(bytes.NewReader(data[1:]), protocol.PerspectiveServer, data[0])
+			Expect(err).ToNot(HaveOccurred())
+			hdr.logHeader(logger)
+			Expect(buf.String()).To(ContainSubstring("VersionNegotiationPacket{DestConnectionID: 0xdeadbeefcafe1337, SrcConnectionID: 0xdecafbad13371337"))
+			Expect(buf.String()).To(ContainSubstring("0x12345678"))
+			Expect(buf.String()).To(ContainSubstring("0x87654321"))
+		})
+
 		It("logs Long Headers", func() {
 			(&Header{
 				IsLongHeader:     true,
