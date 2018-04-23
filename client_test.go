@@ -435,7 +435,7 @@ var _ = Describe("Client", func() {
 				// it didn't pass the version negoation packet to the old session (since it has no payload)
 				Eventually(func() bool { return firstSession.closed }).Should(BeTrue())
 				Expect(firstSession.closeReason).To(Equal(errCloseSessionForNewVersion))
-				Expect(firstSession.packetCount).To(BeZero())
+				Expect(firstSession.handledPackets).To(BeEmpty())
 				Eventually(sessionChan).Should(Receive(&secondSession))
 				// make the server accept the new version
 				packetConn.dataToRead <- acceptClientVersionPacket(secondSession.connectionID)
@@ -516,8 +516,40 @@ var _ = Describe("Client", func() {
 		err := cl.handlePacket(addr, []byte("invalid packet"))
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("error parsing packet from"))
-		Expect(sess.packetCount).To(BeZero())
+		Expect(sess.handledPackets).To(BeEmpty())
 		Expect(sess.closed).To(BeFalse())
+	})
+
+	It("errors on packets that are smaller than the Payload Length in the packet header", func() {
+		b := &bytes.Buffer{}
+		hdr := &wire.Header{
+			IsLongHeader:     true,
+			Type:             protocol.PacketTypeHandshake,
+			PayloadLen:       1000,
+			SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+			DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+			Version:          versionIETFFrames,
+		}
+		Expect(hdr.Write(b, protocol.PerspectiveClient, versionIETFFrames)).To(Succeed())
+		cl.handlePacket(addr, append(b.Bytes(), make([]byte, 456)...))
+		Expect(sess.handledPackets).To(BeEmpty())
+		Expect(sess.closed).To(BeFalse())
+	})
+
+	It("cuts packets at the payload length", func() {
+		b := &bytes.Buffer{}
+		hdr := &wire.Header{
+			IsLongHeader:     true,
+			Type:             protocol.PacketTypeHandshake,
+			PayloadLen:       123,
+			SrcConnectionID:  connID,
+			DestConnectionID: connID,
+			Version:          versionIETFFrames,
+		}
+		Expect(hdr.Write(b, protocol.PerspectiveClient, versionIETFFrames)).To(Succeed())
+		cl.handlePacket(addr, append(b.Bytes(), make([]byte, 456)...))
+		Expect(sess.handledPackets).To(HaveLen(1))
+		Expect(sess.handledPackets[0].data).To(HaveLen(123))
 	})
 
 	It("ignores packets without connection id, if it didn't request connection id trunctation", func() {
@@ -533,7 +565,7 @@ var _ = Describe("Client", func() {
 		Expect(err).ToNot(HaveOccurred())
 		err = cl.handlePacket(addr, buf.Bytes())
 		Expect(err).To(MatchError("received packet with truncated connection ID, but didn't request truncation"))
-		Expect(sess.packetCount).To(BeZero())
+		Expect(sess.handledPackets).To(BeEmpty())
 		Expect(sess.closed).To(BeFalse())
 	})
 
@@ -552,7 +584,7 @@ var _ = Describe("Client", func() {
 		Expect(err).ToNot(HaveOccurred())
 		err = cl.handlePacket(addr, buf.Bytes())
 		Expect(err).To(MatchError(fmt.Sprintf("received a packet with an unexpected connection ID (0x0807060504030201, expected %s)", connID)))
-		Expect(sess.packetCount).To(BeZero())
+		Expect(sess.handledPackets).To(BeEmpty())
 		Expect(sess.closed).To(BeFalse())
 	})
 
@@ -647,7 +679,7 @@ var _ = Describe("Client", func() {
 			Expect(err).ToNot(HaveOccurred())
 			packetConn.dataToRead <- b.Bytes()
 
-			Expect(sess.packetCount).To(BeZero())
+			Expect(sess.handledPackets).To(BeEmpty())
 			stoppedListening := make(chan struct{})
 			go func() {
 				cl.listen()
@@ -655,7 +687,7 @@ var _ = Describe("Client", func() {
 				close(stoppedListening)
 			}()
 
-			Eventually(func() int { return sess.packetCount }).Should(Equal(1))
+			Eventually(func() []*receivedPacket { return sess.handledPackets }).Should(HaveLen(1))
 			Expect(sess.closed).To(BeFalse())
 			Consistently(stoppedListening).ShouldNot(BeClosed())
 		})

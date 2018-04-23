@@ -460,6 +460,9 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header
 	if p.version.UsesTLS() && encLevel != protocol.EncryptionForwardSecure {
 		header.PacketNumberLen = protocol.PacketNumberLen4
 		header.IsLongHeader = true
+		// Set the payload len to maximum size.
+		// Since it is encoded as a varint, this guarantees us that the header will end up at most as big as GetLength() returns.
+		header.PayloadLen = p.maxPacketSize
 		if !p.hasSentPacket && p.perspective == protocol.PerspectiveClient {
 			header.Type = protocol.PacketTypeInitial
 		} else {
@@ -493,6 +496,20 @@ func (p *packetPacker) writeAndSealPacket(
 ) ([]byte, error) {
 	raw := *getPacketBuffer()
 	buffer := bytes.NewBuffer(raw[:0])
+
+	// the payload length is only needed for Long Headers
+	if header.IsLongHeader {
+		if header.Type == protocol.PacketTypeInitial {
+			headerLen, _ := header.GetLength(p.perspective, p.version)
+			header.PayloadLen = protocol.ByteCount(protocol.MinInitialPacketSize) - headerLen
+		} else {
+			payloadLen := protocol.ByteCount(sealer.Overhead())
+			for _, frame := range payloadFrames {
+				payloadLen += frame.Length(p.version)
+			}
+			header.PayloadLen = payloadLen
+		}
+	}
 
 	if err := header.Write(buffer, p.perspective, p.version); err != nil {
 		return nil, err

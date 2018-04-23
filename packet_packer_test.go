@@ -247,6 +247,24 @@ var _ = Describe("Packet packer", func() {
 		})
 	})
 
+	It("sets the payload length for packets containing crypto data", func() {
+		packer.version = versionIETFFrames
+		f := &wire.StreamFrame{
+			StreamID: packer.version.CryptoStreamID(),
+			Offset:   0x1337,
+			Data:     []byte("foobar"),
+		}
+		mockStreamFramer.EXPECT().HasCryptoStreamData().Return(true)
+		mockStreamFramer.EXPECT().PopCryptoStreamFrame(gomock.Any()).Return(f)
+		p, err := packer.PackPacket()
+		Expect(err).ToNot(HaveOccurred())
+		// parse the packet
+		r := bytes.NewReader(p.raw)
+		hdr, err := wire.ParseHeaderSentByServer(r, packer.version)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(hdr.PayloadLen).To(BeEquivalentTo(r.Len()))
+	})
+
 	It("packs a CONNECTION_CLOSE", func() {
 		ccf := wire.ConnectionCloseFrame{
 			ErrorCode:    0x1337,
@@ -571,6 +589,31 @@ var _ = Describe("Packet packer", func() {
 			Expect(p).To(BeNil())
 		})
 
+		It("packs a maximum size crypto packet", func() {
+			var f *wire.StreamFrame
+			packer.version = versionIETFFrames
+			mockStreamFramer.EXPECT().HasCryptoStreamData().Return(true)
+			mockStreamFramer.EXPECT().PopCryptoStreamFrame(gomock.Any()).DoAndReturn(func(size protocol.ByteCount) *wire.StreamFrame {
+				f = &wire.StreamFrame{
+					StreamID: packer.version.CryptoStreamID(),
+					Offset:   0x1337,
+				}
+				f.Data = bytes.Repeat([]byte{'f'}, int(size-f.Length(packer.version)))
+				return f
+			})
+			p, err := packer.PackPacket()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p.frames).To(HaveLen(1))
+			expectedPacketLen := packer.maxPacketSize - protocol.NonForwardSecurePacketSizeReduction
+			Expect(p.raw).To(HaveLen(int(expectedPacketLen)))
+			Expect(p.header.IsLongHeader).To(BeTrue())
+			// parse the packet
+			r := bytes.NewReader(p.raw)
+			hdr, err := wire.ParseHeaderSentByServer(r, packer.version)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(hdr.PayloadLen).To(BeEquivalentTo(r.Len()))
+		})
+
 		It("sends unencrypted stream data on the crypto stream", func() {
 			f := &wire.StreamFrame{
 				StreamID: packer.version.CryptoStreamID(),
@@ -731,6 +774,25 @@ var _ = Describe("Packet packer", func() {
 			sf := packet.frames[0].(*wire.StreamFrame)
 			Expect(sf.Data).To(Equal([]byte("foobar")))
 			Expect(sf.DataLenPresent).To(BeTrue())
+		})
+
+		It("set the correct payload length for an Initial packet", func() {
+			mockStreamFramer.EXPECT().HasCryptoStreamData().Return(true)
+			mockStreamFramer.EXPECT().PopCryptoStreamFrame(gomock.Any()).Return(&wire.StreamFrame{
+				StreamID: packer.version.CryptoStreamID(),
+				Data:     []byte("foobar"),
+			})
+			packer.version = protocol.VersionTLS
+			packer.hasSentPacket = false
+			packer.perspective = protocol.PerspectiveClient
+			packer.cryptoSetup.(*mockCryptoSetup).encLevelSealCrypto = protocol.EncryptionUnencrypted
+			packet, err := packer.PackPacket()
+			Expect(err).ToNot(HaveOccurred())
+			// parse the header and check the values
+			r := bytes.NewReader(packet.raw)
+			hdr, err := wire.ParseHeaderSentByClient(r)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(hdr.PayloadLen).To(BeEquivalentTo(r.Len()))
 		})
 
 		It("packs a retransmission for an Initial packet", func() {

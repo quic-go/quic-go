@@ -308,6 +308,14 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	hdr.Raw = packet[:len(packet)-r.Len()]
 	packetData := packet[len(packet)-r.Len():]
 
+	if hdr.IsLongHeader {
+		if protocol.ByteCount(len(packetData)) < hdr.PayloadLen {
+			return fmt.Errorf("packet payload (%d bytes) is smaller than the expected payload length (%d bytes)", len(packetData), hdr.PayloadLen)
+		}
+		packetData = packetData[:int(hdr.PayloadLen)]
+		// TODO(#1312): implement parsing of compound packets
+	}
+
 	if hdr.Type == protocol.PacketTypeInitial {
 		if s.supportsTLS {
 			go s.serverTLS.HandleInitial(remoteAddr, hdr, packetData)

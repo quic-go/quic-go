@@ -314,6 +314,16 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 		return errors.New("received packet with truncated connection ID, but didn't request truncation")
 	}
 	hdr.Raw = packet[:len(packet)-r.Len()]
+	packetData := packet[len(packet)-r.Len():]
+
+	if hdr.IsLongHeader {
+		c.logger.Debugf("len(packet data): %d, payloadLen: %d", len(packetData), hdr.PayloadLen)
+		if protocol.ByteCount(len(packetData)) < hdr.PayloadLen {
+			return fmt.Errorf("packet payload (%d bytes) is smaller than the expected payload length (%d bytes)", len(packetData), hdr.PayloadLen)
+		}
+		packetData = packetData[:int(hdr.PayloadLen)]
+		// TODO(#1312): implement parsing of compound packets
+	}
 
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -366,7 +376,7 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 	c.session.handlePacket(&receivedPacket{
 		remoteAddr: remoteAddr,
 		header:     hdr,
-		data:       packet[len(packet)-r.Len():],
+		data:       packetData,
 		rcvTime:    rcvTime,
 	})
 	return nil

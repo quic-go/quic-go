@@ -70,6 +70,11 @@ func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte
 		return h, nil
 	}
 
+	pl, err := utils.ReadVarInt(b)
+	if err != nil {
+		return nil, err
+	}
+	h.PayloadLen = protocol.ByteCount(pl)
 	pn, err := utils.BigEndian.ReadUint32(b)
 	if err != nil {
 		return nil, err
@@ -143,6 +148,7 @@ func (h *Header) writeLongHeader(b *bytes.Buffer) error {
 	b.WriteByte(connIDLen)
 	b.Write(h.DestConnectionID.Bytes())
 	b.Write(h.SrcConnectionID.Bytes())
+	utils.WriteVarInt(b, uint64(h.PayloadLen))
 	utils.BigEndian.WriteUint32(b, uint32(h.PacketNumber))
 	return nil
 }
@@ -173,10 +179,9 @@ func (h *Header) writeShortHeader(b *bytes.Buffer) error {
 	return nil
 }
 
-// getHeaderLength gets the length of the Header in bytes.
 func (h *Header) getHeaderLength() (protocol.ByteCount, error) {
 	if h.IsLongHeader {
-		return 1 /* type byte */ + 4 /* version */ + 1 /* conn id len byte */ + protocol.ByteCount(h.DestConnectionID.Len()+h.SrcConnectionID.Len()) + 4 /* packet number */, nil
+		return 1 /* type byte */ + 4 /* version */ + 1 /* conn id len byte */ + protocol.ByteCount(h.DestConnectionID.Len()+h.SrcConnectionID.Len()) + utils.VarIntLen(uint64(h.PayloadLen)) + 4 /* packet number */, nil
 	}
 
 	length := protocol.ByteCount(1 /* type byte */ + h.DestConnectionID.Len())
@@ -192,7 +197,7 @@ func (h *Header) logHeader(logger utils.Logger) {
 		if h.Version == 0 {
 			logger.Debugf("    VersionNegotiationPacket{DestConnectionID: %s, SrcConnectionID: %s, SupportedVersions: %s}", h.DestConnectionID, h.SrcConnectionID, h.SupportedVersions)
 		} else {
-			logger.Debugf("   Long Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, PacketNumber: %#x, Version: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, h.PacketNumber, h.Version)
+			logger.Debugf("   Long Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, PacketNumber: %#x, PayloadLen: %d, Version: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, h.PacketNumber, h.PayloadLen, h.Version)
 		}
 	} else {
 		logger.Debugf("   Short Header{DestConnectionID: %s, PacketNumber: %#x, PacketNumberLen: %d, KeyPhase: %d}", h.DestConnectionID, h.PacketNumber, h.PacketNumberLen, h.KeyPhase)
