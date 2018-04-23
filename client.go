@@ -32,7 +32,8 @@ type client struct {
 	config  *Config
 	tls     handshake.MintTLS // only used when using TLS
 
-	connectionID protocol.ConnectionID
+	srcConnID  protocol.ConnectionID
+	destConnID protocol.ConnectionID
 
 	initialVersion protocol.VersionNumber
 	version        protocol.VersionNumber
@@ -71,9 +72,18 @@ func Dial(
 	tlsConf *tls.Config,
 	config *Config,
 ) (Session, error) {
-	connID, err := generateConnectionID()
+	clientConfig := populateClientConfig(config)
+	version := clientConfig.Versions[0]
+	srcConnID, err := generateConnectionID()
 	if err != nil {
 		return nil, err
+	}
+	destConnID := srcConnID
+	if version.UsesTLS() {
+		destConnID, err = generateConnectionID()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var hostname string
@@ -95,19 +105,19 @@ func Dial(
 			}
 		}
 	}
-	clientConfig := populateClientConfig(config)
 	c := &client{
 		conn:                   &conn{pconn: pconn, currentAddr: remoteAddr},
-		connectionID:           connID,
+		srcConnID:              srcConnID,
+		destConnID:             destConnID,
 		hostname:               hostname,
 		tlsConf:                tlsConf,
 		config:                 clientConfig,
-		version:                clientConfig.Versions[0],
+		version:                version,
 		versionNegotiationChan: make(chan struct{}),
 		logger:                 utils.DefaultLogger,
 	}
 
-	c.logger.Infof("Starting new connection to %s (%s -> %s), connectionID %s, version %s", hostname, c.conn.LocalAddr().String(), c.conn.RemoteAddr().String(), c.connectionID, c.version)
+	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", hostname, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
 
 	if err := c.dial(); err != nil {
 		return nil, err
@@ -240,7 +250,7 @@ func (c *client) establishSecureConnection() error {
 	go func() {
 		runErr = c.session.run() // returns as soon as the session is closed
 		close(errorChan)
-		c.logger.Infof("Connection %s closed.", c.connectionID)
+		c.logger.Infof("Connection %s closed.", c.srcConnID)
 		if runErr != handshake.ErrCloseSessionForRetry && runErr != errCloseSessionForNewVersion {
 			c.conn.Close()
 		}
@@ -284,69 +294,64 @@ func (c *client) listen() {
 			}
 			break
 		}
-		c.handlePacket(addr, data[:n])
+		if err := c.handlePacket(addr, data[:n]); err != nil {
+			c.logger.Errorf("error handling packet: %s", err.Error())
+		}
 	}
 }
 
-func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
+func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
 	hdr, err := wire.ParseHeaderSentByServer(r, c.version)
+	// drop the packet if we can't parse the header
 	if err != nil {
-		c.logger.Errorf("error parsing packet from %s: %s", remoteAddr.String(), err.Error())
-		// drop this packet if we can't parse the header
-		return
+		return fmt.Errorf("error parsing packet from %s: %s", remoteAddr.String(), err.Error())
 	}
 	// reject packets with truncated connection id if we didn't request truncation
 	if hdr.OmitConnectionID && !c.config.RequestConnectionIDOmission {
-		return
+		return errors.New("received packet with truncated connection ID, but didn't request truncation")
 	}
 	hdr.Raw = packet[:len(packet)-r.Len()]
-
-	if hdr.IsLongHeader && !hdr.DestConnectionID.Equal(hdr.SrcConnectionID) {
-		c.logger.Errorf("receiving packets with different destination and source connection IDs not supported")
-	}
 
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
 	// reject packets with the wrong connection ID
 	// TODO(#1003): add support for server-chosen connection IDs
-	if !hdr.OmitConnectionID && !hdr.DestConnectionID.Equal(c.connectionID) {
-		return
+	if !hdr.OmitConnectionID && !hdr.DestConnectionID.Equal(c.srcConnID) {
+		return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", hdr.DestConnectionID, c.srcConnID)
 	}
 
 	if hdr.ResetFlag {
 		cr := c.conn.RemoteAddr()
 		// check if the remote address and the connection ID match
 		// otherwise this might be an attacker trying to inject a PUBLIC_RESET to kill the connection
-		if cr.Network() != remoteAddr.Network() || cr.String() != remoteAddr.String() || !hdr.DestConnectionID.Equal(c.connectionID) {
-			c.logger.Infof("Received a spoofed Public Reset. Ignoring.")
-			return
+		if cr.Network() != remoteAddr.Network() || cr.String() != remoteAddr.String() || !hdr.DestConnectionID.Equal(c.srcConnID) {
+			return errors.New("Received a spoofed Public Reset")
 		}
 		pr, err := wire.ParsePublicReset(r)
 		if err != nil {
-			c.logger.Infof("Received a Public Reset. An error occurred parsing the packet: %s", err)
-			return
+			return fmt.Errorf("Received a Public Reset. An error occurred parsing the packet: %s", err)
 		}
-		c.logger.Infof("Received Public Reset, rejected packet number: %#x.", pr.RejectedPacketNumber)
 		c.session.closeRemote(qerr.Error(qerr.PublicReset, fmt.Sprintf("Received a Public Reset for packet number %#x", pr.RejectedPacketNumber)))
-		return
+		c.logger.Infof("Received Public Reset, rejected packet number: %#x", pr.RejectedPacketNumber)
+		return nil
 	}
 
 	// handle Version Negotiation Packets
 	if hdr.IsVersionNegotiation {
 		// ignore delayed / duplicated version negotiation packets
 		if c.receivedVersionNegotiationPacket || c.versionNegotiated {
-			return
+			return errors.New("received a delayed Version Negotiation Packet")
 		}
 
 		// version negotiation packets have no payload
 		if err := c.handleVersionNegotiationPacket(hdr); err != nil {
 			c.session.Close(err)
 		}
-		return
+		return nil
 	}
 
 	// this is the first packet we are receiving
@@ -364,6 +369,7 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 		data:       packet[len(packet)-r.Len():],
 		rcvTime:    rcvTime,
 	})
+	return nil
 }
 
 func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
@@ -389,11 +395,15 @@ func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
 	c.initialVersion = c.version
 	c.version = newVersion
 	var err error
-	c.connectionID, err = protocol.GenerateConnectionID()
+	c.destConnID, err = generateConnectionID()
 	if err != nil {
 		return err
 	}
-	c.logger.Infof("Switching to QUIC version %s. New connection ID: %s", newVersion, c.connectionID)
+	// in gQUIC, there's only one connection ID
+	if !c.version.UsesTLS() {
+		c.srcConnID = c.destConnID
+	}
+	c.logger.Infof("Switching to QUIC version %s. New connection ID: %s", newVersion, c.destConnID)
 	c.session.Close(errCloseSessionForNewVersion)
 	return nil
 }
@@ -405,7 +415,7 @@ func (c *client) createNewGQUICSession() (err error) {
 		c.conn,
 		c.hostname,
 		c.version,
-		c.connectionID,
+		c.destConnID,
 		c.tlsConf,
 		c.config,
 		c.initialVersion,
@@ -425,7 +435,8 @@ func (c *client) createNewTLSSession(
 		c.conn,
 		c.hostname,
 		c.version,
-		c.connectionID,
+		c.destConnID,
+		c.srcConnID,
 		c.config,
 		c.tls,
 		paramsChan,

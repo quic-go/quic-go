@@ -46,11 +46,13 @@ type streamFrameSource interface {
 }
 
 type packetPacker struct {
-	connectionID protocol.ConnectionID
-	perspective  protocol.Perspective
-	version      protocol.VersionNumber
-	divNonce     []byte
-	cryptoSetup  sealingManager
+	destConnID protocol.ConnectionID
+	srcConnID  protocol.ConnectionID
+
+	perspective protocol.Perspective
+	version     protocol.VersionNumber
+	divNonce    []byte
+	cryptoSetup sealingManager
 
 	packetNumberGenerator *packetNumberGenerator
 	getPacketNumberLen    func(protocol.PacketNumber) protocol.PacketNumberLen
@@ -67,7 +69,9 @@ type packetPacker struct {
 	numNonRetransmittableAcks int
 }
 
-func newPacketPacker(connectionID protocol.ConnectionID,
+func newPacketPacker(
+	destConnID protocol.ConnectionID,
+	srcConnID protocol.ConnectionID,
 	initialPacketNumber protocol.PacketNumber,
 	getPacketNumberLen func(protocol.PacketNumber) protocol.PacketNumberLen,
 	remoteAddr net.Addr, // only used for determining the max packet size
@@ -93,7 +97,8 @@ func newPacketPacker(connectionID protocol.ConnectionID,
 	return &packetPacker{
 		cryptoSetup:           cryptoSetup,
 		divNonce:              divNonce,
-		connectionID:          connectionID,
+		destConnID:            destConnID,
+		srcConnID:             srcConnID,
 		perspective:           perspective,
 		version:               version,
 		streams:               streamFramer,
@@ -446,8 +451,8 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header
 	packetNumberLen := p.getPacketNumberLen(pnum)
 
 	header := &wire.Header{
-		DestConnectionID: p.connectionID,
-		SrcConnectionID:  p.connectionID,
+		DestConnectionID: p.destConnID,
+		SrcConnectionID:  p.srcConnID,
 		PacketNumber:     pnum,
 		PacketNumberLen:  packetNumberLen,
 	}

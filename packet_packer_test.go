@@ -66,7 +66,8 @@ var _ = Describe("Packet packer", func() {
 		divNonce = bytes.Repeat([]byte{'e'}, 32)
 
 		packer = newPacketPacker(
-			protocol.ConnectionID{0, 0, 0, 0, 0, 0, 0x13, 0x37},
+			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 			1,
 			func(protocol.PacketNumber) protocol.PacketNumberLen { return protocol.PacketNumberLen2 },
 			&net.TCPAddr{},
@@ -87,20 +88,20 @@ var _ = Describe("Packet packer", func() {
 		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 		It("uses the minimum initial size, if it can't determine if the remote address is IPv4 or IPv6", func() {
 			remoteAddr := &net.TCPAddr{}
-			packer = newPacketPacker(connID, 1, nil, remoteAddr, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
+			packer = newPacketPacker(connID, connID, 1, nil, remoteAddr, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
 			Expect(packer.maxPacketSize).To(BeEquivalentTo(protocol.MinInitialPacketSize))
 		})
 
 		It("uses the maximum IPv4 packet size, if the remote address is IPv4", func() {
 			remoteAddr := &net.UDPAddr{IP: net.IPv4(11, 12, 13, 14), Port: 1337}
-			packer = newPacketPacker(connID, 1, nil, remoteAddr, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
+			packer = newPacketPacker(connID, connID, 1, nil, remoteAddr, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
 			Expect(packer.maxPacketSize).To(BeEquivalentTo(protocol.MaxPacketSizeIPv4))
 		})
 
 		It("uses the maximum IPv6 packet size, if the remote address is IPv6", func() {
 			ip := net.ParseIP("2001:0db8:85a3:0000:0000:8a2e:0370:7334")
 			remoteAddr := &net.UDPAddr{IP: ip, Port: 1337}
-			packer = newPacketPacker(connID, 1, nil, remoteAddr, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
+			packer = newPacketPacker(connID, connID, 1, nil, remoteAddr, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
 			Expect(packer.maxPacketSize).To(BeEquivalentTo(protocol.MaxPacketSizeIPv6))
 		})
 	})
@@ -212,6 +213,16 @@ var _ = Describe("Packet packer", func() {
 				Expect(h.IsLongHeader).To(BeTrue())
 				Expect(h.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
 				Expect(h.Version).To(Equal(versionIETFHeader))
+			})
+
+			It("sets source and destination connection ID", func() {
+				srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+				destConnID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
+				packer.srcConnID = srcConnID
+				packer.destConnID = destConnID
+				h := packer.getHeader(protocol.EncryptionSecure)
+				Expect(h.SrcConnectionID).To(Equal(srcConnID))
+				Expect(h.DestConnectionID).To(Equal(destConnID))
 			})
 
 			It("uses the Short Header format for forward-secure packets", func() {

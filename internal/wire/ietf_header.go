@@ -131,11 +131,8 @@ func (h *Header) writeHeader(b *bytes.Buffer) error {
 
 // TODO: add support for the key phase
 func (h *Header) writeLongHeader(b *bytes.Buffer) error {
-	if !h.DestConnectionID.Equal(h.SrcConnectionID) {
-		return errors.New("Header: can't write a header with different source and destination connection ID")
-	}
-	if h.SrcConnectionID.Len() != 8 {
-		return fmt.Errorf("Header: source connection ID must be 8 bytes, is %d", h.SrcConnectionID.Len())
+	if h.SrcConnectionID.Len() != protocol.ConnectionIDLen {
+		return fmt.Errorf("Header: source connection ID must be %d bytes, is %d", protocol.ConnectionIDLen, h.SrcConnectionID.Len())
 	}
 	b.WriteByte(byte(0x80 | h.Type))
 	utils.BigEndian.WriteUint32(b, uint32(h.Version))
@@ -220,7 +217,7 @@ func encodeSingleConnIDLen(id protocol.ConnectionID) (byte, error) {
 		return 0, nil
 	}
 	if len < 4 || len > 18 {
-		return 0, errors.New("invalid connection ID length")
+		return 0, fmt.Errorf("invalid connection ID length: %d bytes", len)
 	}
 	return byte(len - 3), nil
 }
