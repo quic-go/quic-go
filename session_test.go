@@ -430,6 +430,19 @@ var _ = Describe("Session", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
+		It("rejects PATH_RESPONSE frames", func() {
+			err := sess.handleFrames([]wire.Frame{&wire.PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}}, protocol.EncryptionUnspecified)
+			Expect(err).To(MatchError("unexpected PATH_RESPONSE frame"))
+		})
+
+		It("handles PATH_CHALLENGE frames", func() {
+			err := sess.handleFrames([]wire.Frame{&wire.PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}}, protocol.EncryptionUnspecified)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(sess.packer.controlFrames).To(HaveLen(1))
+			Expect(sess.packer.controlFrames[0]).To(BeAssignableToTypeOf(&wire.PathResponseFrame{}))
+			Expect(sess.packer.controlFrames[0].(*wire.PathResponseFrame).Data).To(Equal([8]byte{1, 2, 3, 4, 5, 6, 7, 8}))
+		})
+
 		It("handles BLOCKED frames", func() {
 			err := sess.handleFrames([]wire.Frame{&wire.BlockedFrame{}}, protocol.EncryptionUnspecified)
 			Expect(err).NotTo(HaveOccurred())

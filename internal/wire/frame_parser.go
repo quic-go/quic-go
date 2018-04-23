@@ -90,6 +90,16 @@ func parseIETFFrame(r *bytes.Reader, typeByte byte, v protocol.VersionNumber) (F
 		if err != nil {
 			err = qerr.Error(qerr.InvalidAckData, err.Error())
 		}
+	case 0xe:
+		frame, err = parsePathChallengeFrame(r, v)
+		if err != nil {
+			err = qerr.Error(qerr.InvalidFrameData, err.Error())
+		}
+	case 0xf:
+		frame, err = parsePathResponseFrame(r, v)
+		if err != nil {
+			err = qerr.Error(qerr.InvalidFrameData, err.Error())
+		}
 	default:
 		err = qerr.Error(qerr.InvalidFrameData, fmt.Sprintf("unknown type byte 0x%x", typeByte))
 	}
