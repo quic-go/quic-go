@@ -99,31 +99,22 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 		return f.writeLegacy(b, version)
 	}
 
-	largestAcked := f.AckRanges[0].Largest
-	lowestInFirstRange := f.AckRanges[0].Smallest
-
 	b.WriteByte(0x0d)
-	utils.WriteVarInt(b, uint64(largestAcked))
+	utils.WriteVarInt(b, uint64(f.LargestAcked()))
 	utils.WriteVarInt(b, encodeAckDelay(f.DelayTime))
 
-	// TODO: limit the number of ACK ranges, such that the frame doesn't grow larger than an upper bound
-	utils.WriteVarInt(b, uint64(len(f.AckRanges)-1))
+	numRanges := f.numEncodableAckRanges()
+	utils.WriteVarInt(b, uint64(numRanges-1))
 
 	// write the first range
-	utils.WriteVarInt(b, uint64(largestAcked-lowestInFirstRange))
+	_, firstRange := f.encodeAckRange(0)
+	utils.WriteVarInt(b, firstRange)
 
 	// write all the other range
-	if f.HasMissingRanges() {
-		var lowest protocol.PacketNumber
-		for i, ackRange := range f.AckRanges {
-			if i == 0 {
-				lowest = lowestInFirstRange
-				continue
-			}
-			utils.WriteVarInt(b, uint64(lowest-ackRange.Largest-2))
-			utils.WriteVarInt(b, uint64(ackRange.Largest-ackRange.Smallest))
-			lowest = ackRange.Smallest
-		}
+	for i := 1; i < numRanges; i++ {
+		gap, len := f.encodeAckRange(i)
+		utils.WriteVarInt(b, gap)
+		utils.WriteVarInt(b, len)
 	}
 	return nil
 }
@@ -135,26 +126,46 @@ func (f *AckFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
 	}
 
 	largestAcked := f.AckRanges[0].Largest
+	numRanges := f.numEncodableAckRanges()
+
 	length := 1 + utils.VarIntLen(uint64(largestAcked)) + utils.VarIntLen(encodeAckDelay(f.DelayTime))
 
-	length += utils.VarIntLen(uint64(len(f.AckRanges) - 1))
+	length += utils.VarIntLen(uint64(numRanges - 1))
 	lowestInFirstRange := f.AckRanges[0].Smallest
 	length += utils.VarIntLen(uint64(largestAcked - lowestInFirstRange))
 
-	if !f.HasMissingRanges() {
-		return length
-	}
-	var lowest protocol.PacketNumber
-	for i, ackRange := range f.AckRanges {
-		if i == 0 {
-			lowest = ackRange.Smallest
-			continue
-		}
-		length += utils.VarIntLen(uint64(lowest - ackRange.Largest - 2))
-		length += utils.VarIntLen(uint64(ackRange.Largest - ackRange.Smallest))
-		lowest = ackRange.Smallest
+	for i := 1; i < numRanges; i++ {
+		gap, len := f.encodeAckRange(i)
+		length += utils.VarIntLen(gap)
+		length += utils.VarIntLen(len)
 	}
 	return length
+}
+
+// gets the number of ACK ranges that can be encoded
+// such that the resulting frame is smaller than the maximum ACK frame size
+func (f *AckFrame) numEncodableAckRanges() int {
+	length := 1 + utils.VarIntLen(uint64(f.LargestAcked())) + utils.VarIntLen(encodeAckDelay(f.DelayTime))
+	length += 2 // assume that the number of ranges will consume 2 bytes
+	for i := 1; i < len(f.AckRanges); i++ {
+		gap, len := f.encodeAckRange(i)
+		rangeLen := utils.VarIntLen(gap) + utils.VarIntLen(len)
+		if length+rangeLen > protocol.MaxAckFrameSize {
+			// Writing range i would exceed the MaxAckFrameSize.
+			// So encode one range less than that.
+			return i - 1
+		}
+		length += rangeLen
+	}
+	return len(f.AckRanges)
+}
+
+func (f *AckFrame) encodeAckRange(i int) (uint64 /* gap */, uint64 /* length */) {
+	if i == 0 {
+		return 0, uint64(f.AckRanges[0].Largest - f.AckRanges[0].Smallest)
+	}
+	return uint64(f.AckRanges[i-1].Smallest - f.AckRanges[i].Largest - 2),
+		uint64(f.AckRanges[i].Largest - f.AckRanges[i].Smallest)
 }
 
 // HasMissingRanges returns if this frame reports any missing packets
