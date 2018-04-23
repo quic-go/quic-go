@@ -284,28 +284,29 @@ func (c *client) listen() {
 			}
 			break
 		}
-		c.handlePacket(addr, data[:n])
+		if err := c.handlePacket(addr, data[:n]); err != nil {
+			c.logger.Errorf("error handling packet: %s", err.Error())
+		}
 	}
 }
 
-func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
+func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
 	hdr, err := wire.ParseHeaderSentByServer(r, c.version)
+	// drop the packet if we can't parse the header
 	if err != nil {
-		c.logger.Errorf("error parsing packet from %s: %s", remoteAddr.String(), err.Error())
-		// drop this packet if we can't parse the header
-		return
+		return fmt.Errorf("error parsing packet from %s: %s", remoteAddr.String(), err.Error())
 	}
 	// reject packets with truncated connection id if we didn't request truncation
 	if hdr.OmitConnectionID && !c.config.RequestConnectionIDOmission {
-		return
+		return errors.New("received packet with truncated connection ID, but didn't request truncation")
 	}
 	hdr.Raw = packet[:len(packet)-r.Len()]
 
 	if hdr.IsLongHeader && !hdr.DestConnectionID.Equal(hdr.SrcConnectionID) {
-		c.logger.Errorf("receiving packets with different destination and source connection IDs not supported")
+		return fmt.Errorf("receiving packets with different destination and source connection IDs not supported")
 	}
 
 	c.mutex.Lock()
@@ -314,7 +315,7 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 	// reject packets with the wrong connection ID
 	// TODO(#1003): add support for server-chosen connection IDs
 	if !hdr.OmitConnectionID && !hdr.DestConnectionID.Equal(c.connectionID) {
-		return
+		return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", hdr.DestConnectionID, c.connectionID)
 	}
 
 	if hdr.ResetFlag {
@@ -322,31 +323,29 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 		// check if the remote address and the connection ID match
 		// otherwise this might be an attacker trying to inject a PUBLIC_RESET to kill the connection
 		if cr.Network() != remoteAddr.Network() || cr.String() != remoteAddr.String() || !hdr.DestConnectionID.Equal(c.connectionID) {
-			c.logger.Infof("Received a spoofed Public Reset. Ignoring.")
-			return
+			return errors.New("Received a spoofed Public Reset")
 		}
 		pr, err := wire.ParsePublicReset(r)
 		if err != nil {
-			c.logger.Infof("Received a Public Reset. An error occurred parsing the packet: %s", err)
-			return
+			return fmt.Errorf("Received a Public Reset. An error occurred parsing the packet: %s", err)
 		}
-		c.logger.Infof("Received Public Reset, rejected packet number: %#x.", pr.RejectedPacketNumber)
 		c.session.closeRemote(qerr.Error(qerr.PublicReset, fmt.Sprintf("Received a Public Reset for packet number %#x", pr.RejectedPacketNumber)))
-		return
+		c.logger.Infof("Received Public Reset, rejected packet number: %#x", pr.RejectedPacketNumber)
+		return nil
 	}
 
 	// handle Version Negotiation Packets
 	if hdr.IsVersionNegotiation {
 		// ignore delayed / duplicated version negotiation packets
 		if c.receivedVersionNegotiationPacket || c.versionNegotiated {
-			return
+			return errors.New("received a delayed Version Negotiation Packet")
 		}
 
 		// version negotiation packets have no payload
 		if err := c.handleVersionNegotiationPacket(hdr); err != nil {
 			c.session.Close(err)
 		}
-		return
+		return nil
 	}
 
 	// this is the first packet we are receiving
@@ -364,6 +363,7 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) {
 		data:       packet[len(packet)-r.Len():],
 		rcvTime:    rcvTime,
 	})
+	return nil
 }
 
 func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
@@ -389,7 +389,7 @@ func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
 	c.initialVersion = c.version
 	c.version = newVersion
 	var err error
-	c.connectionID, err = protocol.GenerateConnectionID()
+	c.connectionID, err = generateConnectionID()
 	if err != nil {
 		return err
 	}
