@@ -102,7 +102,7 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 	largestAcked := f.AckRanges[0].Largest
 	lowestInFirstRange := f.AckRanges[0].Smallest
 
-	b.WriteByte(0xe)
+	b.WriteByte(0x0d)
 	utils.WriteVarInt(b, uint64(largestAcked))
 	utils.WriteVarInt(b, encodeAckDelay(f.DelayTime))
 

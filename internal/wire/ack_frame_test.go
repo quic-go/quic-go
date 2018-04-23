@@ -13,7 +13,7 @@ import (
 var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 	Context("parsing", func() {
 		It("parses an ACK frame without any ranges", func() {
-			data := []byte{0xe}
+			data := []byte{0xd}
 			data = append(data, encodeVarInt(100)...) // largest acked
 			data = append(data, encodeVarInt(0)...)   // delay
 			data = append(data, encodeVarInt(0)...)   // num blocks
@@ -28,7 +28,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 		})
 
 		It("parses an ACK frame that only acks a single packet", func() {
-			data := []byte{0xe}
+			data := []byte{0xd}
 			data = append(data, encodeVarInt(55)...) // largest acked
 			data = append(data, encodeVarInt(0)...)  // delay
 			data = append(data, encodeVarInt(0)...)  // num blocks
@@ -43,7 +43,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 		})
 
 		It("accepts an ACK frame that acks all packets from 0 to largest", func() {
-			data := []byte{0xe}
+			data := []byte{0xd}
 			data = append(data, encodeVarInt(20)...) // largest acked
 			data = append(data, encodeVarInt(0)...)  // delay
 			data = append(data, encodeVarInt(0)...)  // num blocks
@@ -58,7 +58,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 		})
 
 		It("rejects an ACK frame that has a first ACK block which is larger than LargestAcked", func() {
-			data := []byte{0xe}
+			data := []byte{0xd}
 			data = append(data, encodeVarInt(20)...) // largest acked
 			data = append(data, encodeVarInt(0)...)  // delay
 			data = append(data, encodeVarInt(0)...)  // num blocks
@@ -69,7 +69,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 		})
 
 		It("parses an ACK frame that has a single block", func() {
-			data := []byte{0xe}
+			data := []byte{0xd}
 			data = append(data, encodeVarInt(1000)...) // largest acked
 			data = append(data, encodeVarInt(0)...)    // delay
 			data = append(data, encodeVarInt(1)...)    // num blocks
@@ -90,7 +90,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 		})
 
 		It("parses an ACK frame that has a multiple blocks", func() {
-			data := []byte{0xe}
+			data := []byte{0xd}
 			data = append(data, encodeVarInt(100)...) // largest acked
 			data = append(data, encodeVarInt(0)...)   // delay
 			data = append(data, encodeVarInt(2)...)   // num blocks
@@ -114,7 +114,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 		})
 
 		It("errors on EOF", func() {
-			data := []byte{0xe}
+			data := []byte{0xd}
 			data = append(data, encodeVarInt(1000)...) // largest acked
 			data = append(data, encodeVarInt(0)...)    // delay
 			data = append(data, encodeVarInt(1)...)    // num blocks
@@ -131,6 +131,21 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 	})
 
 	Context("when writing", func() {
+		It("writes a simple frame", func() {
+			buf := &bytes.Buffer{}
+			f := &AckFrame{
+				AckRanges: []AckRange{{Smallest: 100, Largest: 1337}},
+			}
+			err := f.Write(buf, versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			expected := []byte{0xd}
+			expected = append(expected, encodeVarInt(1337)...) // largest acked
+			expected = append(expected, 0)                     // delay
+			expected = append(expected, encodeVarInt(0)...)    // num ranges
+			expected = append(expected, encodeVarInt(1337-100)...)
+			Expect(buf.Bytes()).To(Equal(expected))
+		})
+
 		It("writes a frame that acks a single packet", func() {
 			buf := &bytes.Buffer{}
 			f := &AckFrame{

@@ -85,7 +85,7 @@ func parseIETFFrame(r *bytes.Reader, typeByte byte, v protocol.VersionNumber) (F
 		if err != nil {
 			err = qerr.Error(qerr.InvalidFrameData, err.Error())
 		}
-	case 0xe:
+	case 0xd:
 		frame, err = parseAckFrame(r, v)
 		if err != nil {
 			err = qerr.Error(qerr.InvalidAckData, err.Error())
