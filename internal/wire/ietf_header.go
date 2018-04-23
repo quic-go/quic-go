@@ -45,6 +45,7 @@ func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte
 	}
 
 	h := &Header{
+		IsLongHeader:     true,
 		Version:          protocol.VersionNumber(v),
 		DestConnectionID: destConnID,
 		SrcConnectionID:  srcConnID,
@@ -69,7 +70,6 @@ func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte
 		return h, nil
 	}
 
-	h.IsLongHeader = true
 	pn, err := utils.BigEndian.ReadUint32(b)
 	if err != nil {
 		return nil, err
@@ -192,7 +192,11 @@ func (h *Header) getHeaderLength() (protocol.ByteCount, error) {
 
 func (h *Header) logHeader(logger utils.Logger) {
 	if h.IsLongHeader {
-		logger.Debugf("   Long Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, PacketNumber: %#x, Version: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, h.PacketNumber, h.Version)
+		if h.Version == 0 {
+			logger.Debugf("    VersionNegotiationPacket{DestConnectionID: %s, SrcConnectionID: %s, SupportedVersions: %s}", h.DestConnectionID, h.SrcConnectionID, h.SupportedVersions)
+		} else {
+			logger.Debugf("   Long Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, PacketNumber: %#x, Version: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, h.PacketNumber, h.Version)
+		}
 	} else {
 		logger.Debugf("   Short Header{DestConnectionID: %s, PacketNumber: %#x, PacketNumberLen: %d, KeyPhase: %d}", h.DestConnectionID, h.PacketNumber, h.PacketNumberLen, h.KeyPhase)
 	}

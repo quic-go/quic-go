@@ -271,6 +271,7 @@ var _ = Describe("Header", func() {
 				IsLongHeader:     true,
 				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+				Version:          0x1337,
 			}).Log(logger)
 			Expect(buf.String()).To(ContainSubstring("Long Header"))
 		})
