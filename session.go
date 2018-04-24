@@ -50,6 +50,10 @@ type cryptoStreamHandler interface {
 	ConnectionState() handshake.ConnectionState
 }
 
+type divNonceSetter interface {
+	SetDiversificationNonce([]byte) error
+}
+
 type receivedPacket struct {
 	remoteAddr net.Addr
 	header     *wire.Header
@@ -93,7 +97,6 @@ type session struct {
 	packer   *packetPacker
 
 	cryptoStreamHandler cryptoStreamHandler
-	divNonceChan        chan<- []byte // only set for the client
 
 	receivedPackets  chan *receivedPacket
 	sendingScheduled chan struct{}
@@ -248,7 +251,7 @@ var newClientSession = func(
 		IdleTimeout:                 s.config.IdleTimeout,
 		OmitConnectionID:            s.config.RequestConnectionIDOmission,
 	}
-	cs, divNonceChan, err := newCryptoSetupClient(
+	cs, err := newCryptoSetupClient(
 		s.cryptoStream,
 		hostname,
 		connectionID,
@@ -265,7 +268,6 @@ var newClientSession = func(
 		return nil, err
 	}
 	s.cryptoStreamHandler = cs
-	s.divNonceChan = divNonceChan
 	s.unpacker = newPacketUnpackerGQUIC(cs, s.version)
 	s.streamsMap = newStreamsMapLegacy(s.newStream, s.config.MaxIncomingStreams, s.perspective)
 	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
@@ -449,6 +451,8 @@ runLoop:
 		case _, ok := <-s.handshakeEvent:
 			// when the handshake is completed, the channel will be closed
 			s.handleHandshakeEvent(!ok)
+		// case p := <-s.paramsChan:
+		// 	s.processTransportParameters(&p)
 		default:
 		}
 
@@ -589,7 +593,9 @@ func (s *session) handleHandshakeEvent(completed bool) {
 func (s *session) handlePacketImpl(p *receivedPacket) error {
 	if s.perspective == protocol.PerspectiveClient {
 		if divNonce := p.header.DiversificationNonce; len(divNonce) > 0 {
-			s.divNonceChan <- divNonce
+			if err := s.cryptoStreamHandler.(divNonceSetter).SetDiversificationNonce(divNonce); err != nil {
+				return err
+			}
 		}
 	}
 

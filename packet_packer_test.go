@@ -27,6 +27,7 @@ type mockCryptoSetup struct {
 	handleErr          error
 	encLevelSeal       protocol.EncryptionLevel
 	encLevelSealCrypto protocol.EncryptionLevel
+	divNonce           []byte
 }
 
 var _ handshake.CryptoSetup = &mockCryptoSetup{}
@@ -45,6 +46,10 @@ func (m *mockCryptoSetup) GetSealerForCryptoStream() (protocol.EncryptionLevel, 
 }
 func (m *mockCryptoSetup) GetSealerWithEncryptionLevel(protocol.EncryptionLevel) (handshake.Sealer, error) {
 	return &mockSealer{}, nil
+}
+func (m *mockCryptoSetup) SetDiversificationNonce(divNonce []byte) error {
+	m.divNonce = divNonce
+	return nil
 }
 func (m *mockCryptoSetup) ConnectionState() ConnectionState { panic("not implemented") }
 
