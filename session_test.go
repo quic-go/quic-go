@@ -1713,7 +1713,6 @@ var _ = Describe("Client Session", func() {
 		sess          *session
 		mconn         *mockConnection
 		handshakeChan chan<- struct{}
-		divNonceChan  chan []byte
 
 		cryptoSetup *mockCryptoSetup
 	)
@@ -1722,7 +1721,6 @@ var _ = Describe("Client Session", func() {
 		Eventually(areSessionsRunning).Should(BeFalse())
 
 		cryptoSetup = &mockCryptoSetup{}
-		divNonceChan = make(chan []byte, 1)
 		newCryptoSetupClient = func(
 			_ io.ReadWriter,
 			_ string,
@@ -1735,9 +1733,9 @@ var _ = Describe("Client Session", func() {
 			_ protocol.VersionNumber,
 			_ []protocol.VersionNumber,
 			_ utils.Logger,
-		) (handshake.CryptoSetup, chan<- []byte, error) {
+		) (handshake.CryptoSetup, error) {
 			handshakeChan = handshakeChanP
-			return cryptoSetup, divNonceChan, nil
+			return cryptoSetup, nil
 		}
 
 		mconn = newMockConnection()
@@ -1784,6 +1782,8 @@ var _ = Describe("Client Session", func() {
 		})
 
 		It("passes the diversification nonce to the crypto setup", func() {
+			cryptoSetup := &mockCryptoSetup{}
+			sess.cryptoStreamHandler = cryptoSetup
 			unpacker := NewMockUnpacker(mockCtrl)
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
 			sess.unpacker = unpacker
@@ -1798,7 +1798,7 @@ var _ = Describe("Client Session", func() {
 			hdr.DiversificationNonce = []byte("foobar")
 			err := sess.handlePacketImpl(&receivedPacket{header: hdr})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(divNonceChan).To(Receive(Equal(hdr.DiversificationNonce)))
+			Expect(cryptoSetup.divNonce).To(Equal(hdr.DiversificationNonce))
 			Expect(sess.Close(nil)).To(Succeed())
 			Eventually(done).Should(BeClosed())
 		})
