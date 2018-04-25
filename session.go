@@ -909,6 +909,18 @@ sendLoop:
 				}
 			}
 			numPacketsSent++
+		case ackhandler.SendTLP:
+			// In TLP mode, a probe packet has to be sent.
+			// Add a PING frame to make sure a (retransmittable) packet will be sent.
+			s.queueControlFrame(&wire.PingFrame{})
+			sentPacket, err := s.sendPacket()
+			if err != nil {
+				return err
+			}
+			if !sentPacket {
+				return errors.New("session BUG: expected a packet to be sent in TLP mode")
+			}
+			return nil
 		case ackhandler.SendRetransmission:
 			sentPacket, err := s.maybeSendRetransmission()
 			if err != nil {

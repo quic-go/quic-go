@@ -805,6 +805,20 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
+		It("sends a TLP probe packet", func() {
+			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+			sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
+			sph.EXPECT().SendMode().Return(ackhandler.SendTLP)
+			sph.EXPECT().ShouldSendNumPackets().Return(1)
+			sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
+				Expect(p.Frames).To(HaveLen(1))
+				Expect(p.Frames[0]).To(BeAssignableToTypeOf(&wire.PingFrame{}))
+			})
+			sess.sentPacketHandler = sph
+			err := sess.sendPackets()
+			Expect(err).ToNot(HaveOccurred())
+		})
+
 		It("sends an RTO probe packets", func() {
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
@@ -1195,33 +1209,6 @@ var _ = Describe("Session", func() {
 				Expect(mconn.written).To(HaveLen(2))
 			})
 		})
-	})
-
-	It("retransmits RTO packets", func() {
-		sess.packer.hasSentPacket = true // make sure this is not the first packet the packer sends
-		sess.sentPacketHandler.SetHandshakeComplete()
-		n := protocol.PacketNumber(10)
-		sess.packer.cryptoSetup = &mockCryptoSetup{encLevelSeal: protocol.EncryptionForwardSecure}
-		// We simulate consistently low RTTs, so that the test works faster
-		rtt := time.Millisecond
-		sess.rttStats.UpdateRTT(rtt, 0, time.Now())
-		Expect(sess.rttStats.SmoothedRTT()).To(Equal(rtt)) // make sure it worked
-		sess.packer.packetNumberGenerator.next = n + 1
-		// Now, we send a single packet, and expect that it was retransmitted later
-		sess.sentPacketHandler.SentPacket(&ackhandler.Packet{
-			PacketNumber: n,
-			Length:       1,
-			Frames: []wire.Frame{&wire.StreamFrame{
-				Data: []byte("foobar"),
-			}},
-			EncryptionLevel: protocol.EncryptionForwardSecure,
-		})
-		go sess.run()
-		defer sess.Close(nil)
-		sess.scheduleSending()
-		Eventually(func() int { return len(mconn.written) }).ShouldNot(BeZero())
-		Expect(mconn.written).To(Receive(ContainSubstring("foobar")))
-		streamManager.EXPECT().CloseWithError(gomock.Any())
 	})
 
 	Context("scheduling sending", func() {
