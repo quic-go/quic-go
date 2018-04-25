@@ -91,11 +91,11 @@ func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte
 	return h, nil
 }
 
-// TYPE-BYTE:  0CKSVVTT
+// TYPE-BYTE:  0K1VVSTT
 
 func parseShortHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
-	spinbit := typeByte&0x10 > 0
-	vec := (typeByte&0xC)>>2
+	spinbit := typeByte&0x04 > 0
+	vec := (typeByte&0x18)>>3
 	connID := make(protocol.ConnectionID, 8)
 	if _, err := io.ReadFull(b, connID); err != nil {
 		if err == io.ErrUnexpectedEOF {
@@ -164,12 +164,9 @@ func (h *Header) writeShortHeader(b *bytes.Buffer) error {
 	typeByte := byte(0x00)
 	typeByte |= byte(h.KeyPhase << 6)
 	if (h.SpinBit) {
-		typeByte |= 0x10
+		typeByte |= 0x04
 	}
-	typeByte |= h.VEC << 2
-	if h.OmitConnectionID {
-		typeByte ^= 0x40
-	}
+	typeByte |= h.VEC << 3
 	switch h.PacketNumberLen {
 	case protocol.PacketNumberLen1:
 	case protocol.PacketNumberLen2:
