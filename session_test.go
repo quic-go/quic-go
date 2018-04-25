@@ -107,7 +107,7 @@ var _ = Describe("Session", func() {
 		pSess, err = newSession(
 			mconn,
 			protocol.Version39,
-			0,
+			protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
 			scfg,
 			nil,
 			populateServerConfig(&Config{}),
@@ -160,7 +160,7 @@ var _ = Describe("Session", func() {
 			pSess, err := newSession(
 				mconn,
 				protocol.Version39,
-				0,
+				protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
 				scfg,
 				nil,
 				conf,
@@ -260,7 +260,7 @@ var _ = Describe("Session", func() {
 
 		Context("handling ACK frames", func() {
 			It("informs the SentPacketHandler about ACKs", func() {
-				f := &wire.AckFrame{LargestAcked: 3, LowestAcked: 2}
+				f := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 3}}}
 				sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 				sph.EXPECT().ReceivedAck(f, protocol.PacketNumber(42), protocol.EncryptionSecure, gomock.Any())
 				sph.EXPECT().GetLowestPacketNotConfirmedAcked()
@@ -271,6 +271,7 @@ var _ = Describe("Session", func() {
 			})
 
 			It("tells the ReceivedPacketHandler to ignore low ranges", func() {
+				ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 3}}}
 				sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 				sph.EXPECT().ReceivedAck(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 				sph.EXPECT().GetLowestPacketNotConfirmedAcked().Return(protocol.PacketNumber(0x42))
@@ -278,7 +279,7 @@ var _ = Describe("Session", func() {
 				rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 				rph.EXPECT().IgnoreBelow(protocol.PacketNumber(0x42))
 				sess.receivedPacketHandler = rph
-				err := sess.handleAckFrame(&wire.AckFrame{LargestAcked: 3, LowestAcked: 2}, protocol.EncryptionUnencrypted)
+				err := sess.handleAckFrame(ack, protocol.EncryptionUnencrypted)
 				Expect(err).ToNot(HaveOccurred())
 			})
 		})
@@ -427,6 +428,19 @@ var _ = Describe("Session", func() {
 		It("handles PING frames", func() {
 			err := sess.handleFrames([]wire.Frame{&wire.PingFrame{}}, protocol.EncryptionUnspecified)
 			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("rejects PATH_RESPONSE frames", func() {
+			err := sess.handleFrames([]wire.Frame{&wire.PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}}, protocol.EncryptionUnspecified)
+			Expect(err).To(MatchError("unexpected PATH_RESPONSE frame"))
+		})
+
+		It("handles PATH_CHALLENGE frames", func() {
+			err := sess.handleFrames([]wire.Frame{&wire.PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}}, protocol.EncryptionUnspecified)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(sess.packer.controlFrames).To(HaveLen(1))
+			Expect(sess.packer.controlFrames[0]).To(BeAssignableToTypeOf(&wire.PathResponseFrame{}))
+			Expect(sess.packer.controlFrames[0].(*wire.PathResponseFrame).Data).To(Equal([8]byte{1, 2, 3, 4, 5, 6, 7, 8}))
 		})
 
 		It("handles BLOCKED frames", func() {
@@ -784,6 +798,51 @@ var _ = Describe("Session", func() {
 					Expect(p.Frames).To(HaveLen(1))
 					Expect(p.Frames[0]).To(BeAssignableToTypeOf(&wire.MaxDataFrame{}))
 					Expect(p.SendTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
+				}),
+			)
+			sess.sentPacketHandler = sph
+			err := sess.sendPackets()
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("sends an RTO probe packets", func() {
+			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+			sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
+			sph.EXPECT().TimeUntilSend()
+			sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
+				PacketNumber: 10,
+			})
+			sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
+				PacketNumber: 11,
+			})
+			sph.EXPECT().SendMode().Return(ackhandler.SendRTO).Times(2)
+			sph.EXPECT().ShouldSendNumPackets().Return(2)
+			sph.EXPECT().GetStopWaitingFrame(gomock.Any()).Return(&wire.StopWaitingFrame{}).Times(2)
+			gomock.InOrder(
+				sph.EXPECT().SentPacketsAsRetransmission(gomock.Any(), protocol.PacketNumber(10)),
+				sph.EXPECT().SentPacketsAsRetransmission(gomock.Any(), protocol.PacketNumber(11)),
+			)
+			sess.sentPacketHandler = sph
+			err := sess.sendPackets()
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("sends RTO probe packets with new data, if no retransmission is available", func() {
+			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+			sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
+			sph.EXPECT().TimeUntilSend()
+			sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
+				PacketNumber: 10,
+			})
+			sph.EXPECT().DequeuePacketForRetransmission()
+			sph.EXPECT().SendMode().Return(ackhandler.SendRTO).Times(2)
+			sph.EXPECT().ShouldSendNumPackets().Return(2)
+			sph.EXPECT().GetStopWaitingFrame(gomock.Any()).Return(&wire.StopWaitingFrame{})
+			gomock.InOrder(
+				sph.EXPECT().SentPacketsAsRetransmission(gomock.Any(), protocol.PacketNumber(10)),
+				sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
+					Expect(p.Frames).To(HaveLen(1))
+					Expect(p.Frames[0]).To(BeAssignableToTypeOf(&wire.PingFrame{}))
 				}),
 			)
 			sess.sentPacketHandler = sph
@@ -1208,11 +1267,11 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().ShouldSendNumPackets().Return(1)
 			sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
 				Expect(p.Frames[0]).To(BeAssignableToTypeOf(&wire.AckFrame{}))
-				Expect(p.Frames[0].(*wire.AckFrame).LargestAcked).To(Equal(protocol.PacketNumber(0x1337)))
+				Expect(p.Frames[0].(*wire.AckFrame).LargestAcked()).To(Equal(protocol.PacketNumber(0x1337)))
 			})
 			sess.sentPacketHandler = sph
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
-			rph.EXPECT().GetAckFrame().Return(&wire.AckFrame{LargestAcked: 0x1337})
+			rph.EXPECT().GetAckFrame().Return(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 0x1337}}})
 			rph.EXPECT().GetAlarmTimeout().Return(time.Now().Add(10 * time.Millisecond))
 			rph.EXPECT().GetAlarmTimeout().Return(time.Now().Add(time.Hour))
 			sess.receivedPacketHandler = rph
@@ -1636,23 +1695,6 @@ var _ = Describe("Session", func() {
 		})
 	})
 
-	Context("ignoring errors", func() {
-		It("ignores duplicate acks", func() {
-			sess.sentPacketHandler.SentPacket(&ackhandler.Packet{
-				PacketNumber: 1,
-				Length:       1,
-			})
-			err := sess.handleFrames([]wire.Frame{&wire.AckFrame{
-				LargestAcked: 1,
-			}}, protocol.EncryptionUnspecified)
-			Expect(err).NotTo(HaveOccurred())
-			err = sess.handleFrames([]wire.Frame{&wire.AckFrame{
-				LargestAcked: 1,
-			}}, protocol.EncryptionUnspecified)
-			Expect(err).NotTo(HaveOccurred())
-		})
-	})
-
 	It("returns the local address", func() {
 		addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 		mconn.localAddr = addr
@@ -1671,7 +1713,6 @@ var _ = Describe("Client Session", func() {
 		sess          *session
 		mconn         *mockConnection
 		handshakeChan chan<- struct{}
-		divNonceChan  chan []byte
 
 		cryptoSetup *mockCryptoSetup
 	)
@@ -1680,7 +1721,6 @@ var _ = Describe("Client Session", func() {
 		Eventually(areSessionsRunning).Should(BeFalse())
 
 		cryptoSetup = &mockCryptoSetup{}
-		divNonceChan = make(chan []byte, 1)
 		newCryptoSetupClient = func(
 			_ io.ReadWriter,
 			_ string,
@@ -1693,9 +1733,9 @@ var _ = Describe("Client Session", func() {
 			_ protocol.VersionNumber,
 			_ []protocol.VersionNumber,
 			_ utils.Logger,
-		) (handshake.CryptoSetup, chan<- []byte, error) {
+		) (handshake.CryptoSetup, error) {
 			handshakeChan = handshakeChanP
-			return cryptoSetup, divNonceChan, nil
+			return cryptoSetup, nil
 		}
 
 		mconn = newMockConnection()
@@ -1703,7 +1743,7 @@ var _ = Describe("Client Session", func() {
 			mconn,
 			"hostname",
 			protocol.Version39,
-			0,
+			protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
 			nil,
 			populateClientConfig(&Config{}),
 			protocol.VersionWhatever,
@@ -1742,6 +1782,8 @@ var _ = Describe("Client Session", func() {
 		})
 
 		It("passes the diversification nonce to the crypto setup", func() {
+			cryptoSetup := &mockCryptoSetup{}
+			sess.cryptoStreamHandler = cryptoSetup
 			unpacker := NewMockUnpacker(mockCtrl)
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
 			sess.unpacker = unpacker
@@ -1756,7 +1798,7 @@ var _ = Describe("Client Session", func() {
 			hdr.DiversificationNonce = []byte("foobar")
 			err := sess.handlePacketImpl(&receivedPacket{header: hdr})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(divNonceChan).To(Receive(Equal(hdr.DiversificationNonce)))
+			Expect(cryptoSetup.divNonce).To(Equal(hdr.DiversificationNonce))
 			Expect(sess.Close(nil)).To(Succeed())
 			Eventually(done).Should(BeClosed())
 		})

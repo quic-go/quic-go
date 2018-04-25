@@ -42,7 +42,7 @@ type server struct {
 	scfg      *handshake.ServerConfig
 
 	sessionsMutex sync.RWMutex
-	sessions      map[protocol.ConnectionID]packetHandler
+	sessions      map[string] /* string(ConnectionID)*/ packetHandler
 	closed        bool
 
 	serverError  error
@@ -106,7 +106,7 @@ func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener,
 		config:                    config,
 		certChain:                 certChain,
 		scfg:                      scfg,
-		sessions:                  map[protocol.ConnectionID]packetHandler{},
+		sessions:                  map[string]packetHandler{},
 		newSession:                newSession,
 		deleteClosedSessionsAfter: protocol.ClosedSessionDeleteTimeout,
 		sessionQueue:              make(chan Session, 5),
@@ -144,11 +144,11 @@ func (s *server) setupTLS() error {
 				connID := tlsSession.connID
 				sess := tlsSession.sess
 				s.sessionsMutex.Lock()
-				if _, ok := s.sessions[connID]; ok { // drop this session if it already exists
+				if _, ok := s.sessions[string(connID)]; ok { // drop this session if it already exists
 					s.sessionsMutex.Unlock()
 					continue
 				}
-				s.sessions[connID] = sess
+				s.sessions[string(connID)] = sess
 				s.sessionsMutex.Unlock()
 				s.runHandshakeAndSession(sess, connID)
 			}
@@ -307,7 +307,14 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	}
 	hdr.Raw = packet[:len(packet)-r.Len()]
 	packetData := packet[len(packet)-r.Len():]
-	connID := hdr.ConnectionID
+
+	if hdr.IsLongHeader {
+		if protocol.ByteCount(len(packetData)) < hdr.PayloadLen {
+			return fmt.Errorf("packet payload (%d bytes) is smaller than the expected payload length (%d bytes)", len(packetData), hdr.PayloadLen)
+		}
+		packetData = packetData[:int(hdr.PayloadLen)]
+		// TODO(#1312): implement parsing of compound packets
+	}
 
 	if hdr.Type == protocol.PacketTypeInitial {
 		if s.supportsTLS {
@@ -317,7 +324,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	}
 
 	s.sessionsMutex.RLock()
-	session, sessionKnown := s.sessions[connID]
+	session, sessionKnown := s.sessions[string(hdr.DestConnectionID)]
 	s.sessionsMutex.RUnlock()
 
 	if sessionKnown && session == nil {
@@ -331,12 +338,12 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 			var pr *wire.PublicReset
 			pr, err = wire.ParsePublicReset(r)
 			if err != nil {
-				s.logger.Infof("Received a Public Reset for connection %x. An error occurred parsing the packet.", hdr.ConnectionID)
+				s.logger.Infof("Received a Public Reset for connection %s. An error occurred parsing the packet.", hdr.DestConnectionID)
 			} else {
-				s.logger.Infof("Received a Public Reset for connection %x, rejected packet number: 0x%x.", hdr.ConnectionID, pr.RejectedPacketNumber)
+				s.logger.Infof("Received a Public Reset for connection %s, rejected packet number: 0x%x.", hdr.DestConnectionID, pr.RejectedPacketNumber)
 			}
 		} else {
-			s.logger.Infof("Received Public Reset for unknown connection %x.", hdr.ConnectionID)
+			s.logger.Infof("Received Public Reset for unknown connection %s.", hdr.DestConnectionID)
 		}
 		return nil
 	}
@@ -345,7 +352,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	// This should only happen after a server restart, when we still receive packets for connections that we lost the state for.
 	// TODO(#943): implement sending of IETF draft style stateless resets
 	if !sessionKnown && (!hdr.VersionFlag && hdr.Type != protocol.PacketTypeInitial) {
-		_, err = pconn.WriteTo(wire.WritePublicReset(connID, 0, 0), remoteAddr)
+		_, err = pconn.WriteTo(wire.WritePublicReset(hdr.DestConnectionID, 0, 0), remoteAddr)
 		return err
 	}
 
@@ -364,7 +371,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 			return errors.New("dropping small packet with unknown version")
 		}
 		s.logger.Infof("Client offered version %s, sending Version Negotiation Packet", hdr.Version)
-		_, err := pconn.WriteTo(wire.ComposeGQUICVersionNegotiation(hdr.ConnectionID, s.config.Versions), remoteAddr)
+		_, err := pconn.WriteTo(wire.ComposeGQUICVersionNegotiation(hdr.SrcConnectionID, s.config.Versions), remoteAddr)
 		return err
 	}
 
@@ -380,11 +387,11 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 			return errors.New("Server BUG: negotiated version not supported")
 		}
 
-		s.logger.Infof("Serving new connection: %x, version %s from %v", hdr.ConnectionID, version, remoteAddr)
+		s.logger.Infof("Serving new connection: %s, version %s from %v", hdr.DestConnectionID, version, remoteAddr)
 		session, err = s.newSession(
 			&conn{pconn: pconn, currentAddr: remoteAddr},
 			version,
-			hdr.ConnectionID,
+			hdr.DestConnectionID,
 			s.scfg,
 			s.tlsConf,
 			s.config,
@@ -394,10 +401,10 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 			return err
 		}
 		s.sessionsMutex.Lock()
-		s.sessions[connID] = session
+		s.sessions[string(hdr.DestConnectionID)] = session
 		s.sessionsMutex.Unlock()
 
-		s.runHandshakeAndSession(session, connID)
+		s.runHandshakeAndSession(session, hdr.DestConnectionID)
 	}
 	session.handlePacket(&receivedPacket{
 		remoteAddr: remoteAddr,
@@ -425,12 +432,12 @@ func (s *server) runHandshakeAndSession(session packetHandler, connID protocol.C
 
 func (s *server) removeConnection(id protocol.ConnectionID) {
 	s.sessionsMutex.Lock()
-	s.sessions[id] = nil
+	s.sessions[string(id)] = nil
 	s.sessionsMutex.Unlock()
 
 	time.AfterFunc(s.deleteClosedSessionsAfter, func() {
 		s.sessionsMutex.Lock()
-		delete(s.sessions, id)
+		delete(s.sessions, string(id))
 		s.sessionsMutex.Unlock()
 	})
 }

@@ -133,7 +133,19 @@ const NumCachedCertificates = 128
 // 2. it reduces the head-of-line blocking, when a packet is lost
 const MinStreamFrameSize ByteCount = 128
 
+// MaxAckFrameSize is the maximum size for an (IETF QUIC) ACK frame that we write
+// Due to the varint encoding, ACK frames can grow (almost) indefinitely large.
+// The MaxAckFrameSize should be large enough to encode many ACK range,
+// but must ensure that a maximum size ACK frame fits into one packet.
+const MaxAckFrameSize ByteCount = 1000
+
 // MinPacingDelay is the minimum duration that is used for packet pacing
 // If the packet packing frequency is higher, multiple packets might be sent at once.
 // Example: For a packet pacing delay of 20 microseconds, we would send 5 packets at once, wait for 100 microseconds, and so forth.
 const MinPacingDelay time.Duration = 100 * time.Microsecond
+
+// ConnectionIDLen is the length of the source Connection ID used on IETF QUIC packets.
+// The Short Header contains the connection ID, but not the length,
+// so we need to know this value in advance (or encode it into the connection ID).
+// TODO: make this configurable
+const ConnectionIDLen = 8

@@ -397,33 +397,6 @@ var _ = Describe("Cubic Sender", func() {
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
 	})
 
-	It("retransmission delay", func() {
-		const rtt = 10 * time.Millisecond
-		const deviation = 3 * time.Millisecond
-		Expect(sender.RetransmissionDelay()).To(BeZero())
-
-		rttStats.UpdateRTT(rtt, 0, clock.Now())
-
-		// Initial value is to set the median deviation to half of the initial
-		// rtt, the median in then multiplied by a factor of 4 and finally the
-		// smoothed rtt is added which is the initial rtt.
-		expectedDelay := rtt + rtt/2*4
-		Expect(sender.RetransmissionDelay()).To(Equal(expectedDelay))
-
-		for i := 0; i < 100; i++ {
-			// run to make sure that we converge.
-			rttStats.UpdateRTT(rtt+deviation, 0, clock.Now())
-			rttStats.UpdateRTT(rtt-deviation, 0, clock.Now())
-		}
-		expectedDelay = rtt + deviation*4
-
-		Expect(rttStats.SmoothedRTT()).To(BeNumerically("~", rtt, time.Millisecond))
-		Expect(sender.RetransmissionDelay()).To(BeNumerically("~", expectedDelay, time.Millisecond))
-		Expect(sender.BandwidthEstimate() / BytesPerSecond).To(Equal(Bandwidth(
-			sender.GetCongestionWindow() * protocol.ByteCount(time.Second) / protocol.ByteCount(rttStats.SmoothedRTT()),
-		)))
-	})
-
 	It("slow start max send window", func() {
 		const maxCongestionWindowTCP = 50
 		const numberOfAcks = 100

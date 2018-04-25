@@ -200,7 +200,7 @@ var _ = Describe("TLS Crypto Setup, for the client", func() {
 		handshakeEvent = make(chan struct{})
 		csInt, err := NewCryptoSetupTLSClient(
 			nil,
-			0,
+			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 			"quic.clemente.io",
 			handshakeEvent,
 			nil, // mintTLS

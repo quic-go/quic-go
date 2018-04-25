@@ -8,7 +8,7 @@ import (
 
 var _ = Describe("NullAEAD", func() {
 	It("selects the right FVN variant", func() {
-		connID := protocol.ConnectionID(0x42)
+		connID := protocol.ConnectionID([]byte{0x42, 0, 0, 0, 0, 0, 0, 0})
 		Expect(NewNullAEAD(protocol.PerspectiveClient, connID, protocol.Version39)).To(Equal(&nullAEADFNV128a{
 			perspective: protocol.PerspectiveClient,
 		}))

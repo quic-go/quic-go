@@ -48,11 +48,13 @@ type streamFrameSource interface {
 }
 
 type packetPacker struct {
-	connectionID protocol.ConnectionID
-	perspective  protocol.Perspective
-	version      protocol.VersionNumber
-	divNonce     []byte
-	cryptoSetup  sealingManager
+	destConnID protocol.ConnectionID
+	srcConnID  protocol.ConnectionID
+
+	perspective protocol.Perspective
+	version     protocol.VersionNumber
+	divNonce    []byte
+	cryptoSetup sealingManager
 
 	packetNumberGenerator *packetNumberGenerator
 	getPacketNumberLen    func(protocol.PacketNumber) protocol.PacketNumberLen
@@ -75,7 +77,9 @@ type packetPacker struct {
 	Edge        bool
 }
 
-func newPacketPacker(connectionID protocol.ConnectionID,
+func newPacketPacker(
+	destConnID protocol.ConnectionID,
+	srcConnID protocol.ConnectionID,
 	initialPacketNumber protocol.PacketNumber,
 	getPacketNumberLen func(protocol.PacketNumber) protocol.PacketNumberLen,
 	remoteAddr net.Addr, // only used for determining the max packet size
@@ -101,7 +105,8 @@ func newPacketPacker(connectionID protocol.ConnectionID,
 	return &packetPacker{
 		cryptoSetup:           cryptoSetup,
 		divNonce:              divNonce,
-		connectionID:          connectionID,
+		destConnID:            destConnID,
+		srcConnID:             srcConnID,
 		perspective:           perspective,
 		version:               version,
 		streams:               streamFramer,
@@ -454,14 +459,18 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header
 	packetNumberLen := p.getPacketNumberLen(pnum)
 
 	header := &wire.Header{
-		ConnectionID:    p.connectionID,
-		PacketNumber:    pnum,
-		PacketNumberLen: packetNumberLen,
+		DestConnectionID: p.destConnID,
+		SrcConnectionID:  p.srcConnID,
+		PacketNumber:     pnum,
+		PacketNumberLen:  packetNumberLen,
 	}
 
 	if p.version.UsesTLS() && encLevel != protocol.EncryptionForwardSecure {
 		header.PacketNumberLen = protocol.PacketNumberLen4
 		header.IsLongHeader = true
+		// Set the payload len to maximum size.
+		// Since it is encoded as a varint, this guarantees us that the header will end up at most as big as GetLength() returns.
+		header.PayloadLen = p.maxPacketSize
 		if !p.hasSentPacket && p.perspective == protocol.PerspectiveClient {
 			header.Type = protocol.PacketTypeInitial
 		} else {
@@ -508,6 +517,21 @@ func (p *packetPacker) writeAndSealPacket(
 			//log.Printf("*** DELAYED OUTGOING SPIN=%v  DT=%v",p.SpinBit,dt);
 		}
 	}
+	
+	// the payload length is only needed for Long Headers
+	if header.IsLongHeader {
+		if header.Type == protocol.PacketTypeInitial {
+			headerLen, _ := header.GetLength(p.perspective, p.version)
+			header.PayloadLen = protocol.ByteCount(protocol.MinInitialPacketSize) - headerLen
+		} else {
+			payloadLen := protocol.ByteCount(sealer.Overhead())
+			for _, frame := range payloadFrames {
+				payloadLen += frame.Length(p.version)
+			}
+			header.PayloadLen = payloadLen
+		}
+	}
+
 	if err := header.Write(buffer, p.perspective, p.version); err != nil {
 		return nil, err
 	}

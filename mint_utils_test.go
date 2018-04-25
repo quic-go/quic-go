@@ -17,14 +17,15 @@ import (
 
 var _ = Describe("Packing and unpacking Initial packets", func() {
 	var aead crypto.AEAD
-	connID := protocol.ConnectionID(0x1337)
+	connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 	ver := protocol.VersionTLS
 	hdr := &wire.Header{
-		IsLongHeader: true,
-		Type:         protocol.PacketTypeRetry,
-		PacketNumber: 0x42,
-		ConnectionID: connID,
-		Version:      ver,
+		IsLongHeader:     true,
+		Type:             protocol.PacketTypeRetry,
+		PacketNumber:     0x42,
+		DestConnectionID: connID,
+		SrcConnectionID:  connID,
+		Version:          ver,
 	}
 
 	BeforeEach(func() {
@@ -55,7 +56,9 @@ var _ = Describe("Packing and unpacking Initial packets", func() {
 
 		It("copies values from the tls.Config", func() {
 			verifyErr := errors.New("test err")
+			certPool := &x509.CertPool{}
 			tlsConf := &tls.Config{
+				RootCAs:            certPool,
 				ServerName:         "www.example.com",
 				InsecureSkipVerify: true,
 				VerifyPeerCertificate: func(_ [][]byte, _ [][]*x509.Certificate) error {
@@ -64,6 +67,7 @@ var _ = Describe("Packing and unpacking Initial packets", func() {
 			}
 			mintConf, err := tlsToMintConfig(tlsConf, protocol.PerspectiveClient)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(mintConf.RootCAs).To(Equal(certPool))
 			Expect(mintConf.ServerName).To(Equal("www.example.com"))
 			Expect(mintConf.InsecureSkipVerify).To(BeTrue())
 			Expect(mintConf.VerifyPeerCertificate(nil, nil)).To(MatchError(verifyErr))

@@ -92,7 +92,7 @@ var _ = Describe("QUIC Crypto Key Derivation", func() {
 				false,
 				[]byte("0123456789012345678901"),
 				[]byte("nonce"),
-				protocol.ConnectionID(0x2a00000000000000), // this was 42 before the connection ID was changed to big endian
+				protocol.ConnectionID([]byte{42, 0, 0, 0, 0, 0, 0, 0}),
 				[]byte("chlo"),
 				[]byte("scfg"),
 				[]byte("cert"),
@@ -111,7 +111,7 @@ var _ = Describe("QUIC Crypto Key Derivation", func() {
 				false,
 				[]byte("0123456789012345678901"),
 				[]byte("nonce"),
-				protocol.ConnectionID(42),
+				protocol.ConnectionID([]byte{42, 0, 0, 0, 0, 0, 0, 0}),
 				[]byte("chlo"),
 				[]byte("scfg"),
 				[]byte("cert"),
@@ -123,7 +123,7 @@ var _ = Describe("QUIC Crypto Key Derivation", func() {
 				false,
 				[]byte("0123456789012345678901"),
 				[]byte("nonce"),
-				protocol.ConnectionID(42),
+				protocol.ConnectionID([]byte{42, 0, 0, 0, 0, 0, 0, 0}),
 				[]byte("chlo"),
 				[]byte("scfg"),
 				[]byte("cert"),
@@ -142,7 +142,7 @@ var _ = Describe("QUIC Crypto Key Derivation", func() {
 				false,
 				[]byte("0123456789012345678901"),
 				[]byte("nonce"),
-				protocol.ConnectionID(0x2a00000000000000), // this was 42 before the connection ID was changed to big endian
+				protocol.ConnectionID([]byte{42, 0, 0, 0, 0, 0, 0, 0}),
 				[]byte("chlo"),
 				[]byte("scfg"),
 				[]byte("cert"),
@@ -161,7 +161,7 @@ var _ = Describe("QUIC Crypto Key Derivation", func() {
 				true,
 				[]byte("0123456789012345678901"),
 				[]byte("nonce"),
-				protocol.ConnectionID(0x2a00000000000000), // this was 42 before the connection ID was changed to big endian
+				protocol.ConnectionID([]byte{42, 0, 0, 0, 0, 0, 0, 0}),
 				[]byte("chlo"),
 				[]byte("scfg"),
 				[]byte("cert"),
@@ -180,7 +180,7 @@ var _ = Describe("QUIC Crypto Key Derivation", func() {
 				true,
 				[]byte("0123456789012345678901"),
 				[]byte("nonce"),
-				protocol.ConnectionID(0x2a00000000000000), // this was 42 before the connection ID was changed to big endian
+				protocol.ConnectionID([]byte{42, 0, 0, 0, 0, 0, 0, 0}),
 				[]byte("chlo"),
 				[]byte("scfg"),
 				[]byte("cert"),

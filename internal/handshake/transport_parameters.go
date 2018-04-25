@@ -26,7 +26,7 @@ type TransportParameters struct {
 	MaxBidiStreams uint16 // only used for IETF QUIC
 	MaxStreams     uint32 // only used for gQUIC
 
-	OmitConnectionID bool
+	OmitConnectionID bool // only used for gQUIC
 	IdleTimeout      time.Duration
 }
 
@@ -132,11 +132,6 @@ func readTransportParameters(paramsList []transportParameter) (*TransportParamet
 				return nil, fmt.Errorf("wrong length for idle_timeout: %d (expected 2)", len(p.Value))
 			}
 			params.IdleTimeout = utils.MaxDuration(protocol.MinRemoteIdleTimeout, time.Duration(binary.BigEndian.Uint16(p.Value))*time.Second)
-		case omitConnectionIDParameterID:
-			if len(p.Value) != 0 {
-				return nil, fmt.Errorf("wrong length for omit_connection_id: %d (expected empty)", len(p.Value))
-			}
-			params.OmitConnectionID = true
 		case maxPacketSizeParameterID:
 			if len(p.Value) != 2 {
 				return nil, fmt.Errorf("wrong length for max_packet_size: %d (expected 2)", len(p.Value))
@@ -178,14 +173,11 @@ func (p *TransportParameters) getTransportParameters() []transportParameter {
 		{idleTimeoutParameterID, idleTimeout},
 		{maxPacketSizeParameterID, maxPacketSize},
 	}
-	if p.OmitConnectionID {
-		params = append(params, transportParameter{omitConnectionIDParameterID, []byte{}})
-	}
 	return params
 }
 
 // String returns a string representation, intended for logging.
 // It should only used for IETF QUIC.
 func (p *TransportParameters) String() string {
-	return fmt.Sprintf("&handshake.TransportParameters{StreamFlowControlWindow: %#x, ConnectionFlowControlWindow: %#x, MaxBidiStreams: %d, MaxUniStreams: %d, OmitConnectionID: %t, IdleTimeout: %s}", p.StreamFlowControlWindow, p.ConnectionFlowControlWindow, p.MaxBidiStreams, p.MaxUniStreams, p.OmitConnectionID, p.IdleTimeout)
+	return fmt.Sprintf("&handshake.TransportParameters{StreamFlowControlWindow: %#x, ConnectionFlowControlWindow: %#x, MaxBidiStreams: %d, MaxUniStreams: %d, IdleTimeout: %s}", p.StreamFlowControlWindow, p.ConnectionFlowControlWindow, p.MaxBidiStreams, p.MaxUniStreams, p.IdleTimeout)
 }

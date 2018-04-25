@@ -52,9 +52,6 @@ func (t PacketType) String() string {
 	}
 }
 
-// A ConnectionID in QUIC
-type ConnectionID uint64
-
 // A ByteCount in QUIC
 type ByteCount uint64
 
