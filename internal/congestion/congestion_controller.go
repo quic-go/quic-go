@@ -2,8 +2,7 @@ package congestion
 
 import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	)
-
+)
 
 func GetCongestionControlerFromConfig(rttStats *RTTStats, congestionConfig protocol.CongestionControlAlgorithm) SendAlgorithmWithDebugInfo {
 	var congestionAlgorithm SendAlgorithmWithDebugInfo
