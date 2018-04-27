@@ -49,7 +49,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 	BeforeEach(func() {
 		rttStats := &congestion.RTTStats{}
-		handler = NewSentPacketHandler(rttStats, utils.DefaultLogger).(*sentPacketHandler)
+		handler = NewSentPacketHandler(rttStats, utils.DefaultLogger, protocol.GetCongestionType("")).(*sentPacketHandler)
 		handler.SetHandshakeComplete()
 		streamFrame = wire.StreamFrame{
 			StreamID: 5,
