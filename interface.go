@@ -28,6 +28,8 @@ type ConnectionState = handshake.ConnectionState
 // An ErrorCode is an application-defined error code.
 type ErrorCode = protocol.ApplicationErrorCode
 
+
+
 // Stream is the interface implemented by QUIC streams
 type Stream interface {
 	// StreamID returns the stream ID.
@@ -192,7 +194,10 @@ type Config struct {
 	MaxIncomingUniStreams int
 	// KeepAlive defines whether this peer will periodically send PING frames to keep the connection alive.
 	KeepAlive bool
+	//The congestion control to use
+	CongestionControl protocol.CongestionControlAlgorithm
 }
+
 
 // A Listener for incoming QUIC connections
 type Listener interface {

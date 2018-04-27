@@ -80,20 +80,14 @@ type sentPacketHandler struct {
 }
 
 // NewSentPacketHandler creates a new sentPacketHandler
-func NewSentPacketHandler(rttStats *congestion.RTTStats, logger utils.Logger) SentPacketHandler {
-	congestion := congestion.NewCubicSender(
-		congestion.DefaultClock{},
-		rttStats,
-		false, /* don't use reno since chromium doesn't (why?) */
-		protocol.InitialCongestionWindow,
-		protocol.DefaultMaxCongestionWindow,
-	)
+func NewSentPacketHandler(rttStats *congestion.RTTStats, logger utils.Logger, congestionConfig protocol.CongestionControlAlgorithm) SentPacketHandler {
+	congestionAlgorithm := congestion.GetCongestionControlerFromConfig(rttStats, congestionConfig)
 
 	return &sentPacketHandler{
 		packetHistory:      newSentPacketHistory(),
 		stopWaitingManager: stopWaitingManager{},
 		rttStats:           rttStats,
-		congestion:         congestion,
+		congestion:         congestionAlgorithm,
 		logger:             logger,
 	}
 }
