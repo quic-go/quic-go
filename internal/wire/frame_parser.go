@@ -11,19 +11,19 @@ import (
 // ParseNextFrame parses the next frame
 // It skips PADDING frames.
 func ParseNextFrame(r *bytes.Reader, hdr *Header, v protocol.VersionNumber) (Frame, error) {
-	if r.Len() == 0 {
-		return nil, nil
-	}
-	typeByte, _ := r.ReadByte()
-	if typeByte == 0x0 { // PADDING frame
-		return ParseNextFrame(r, hdr, v)
-	}
-	r.UnreadByte()
+	for r.Len() != 0 {
+		typeByte, _ := r.ReadByte()
+		if typeByte == 0x0 { // PADDING frame
+			continue
+		}
+		r.UnreadByte()
 
-	if !v.UsesIETFFrameFormat() {
-		return parseGQUICFrame(r, typeByte, hdr, v)
+		if !v.UsesIETFFrameFormat() {
+			return parseGQUICFrame(r, typeByte, hdr, v)
+		}
+		return parseIETFFrame(r, typeByte, v)
 	}
-	return parseIETFFrame(r, typeByte, v)
+	return nil, nil
 }
 
 func parseIETFFrame(r *bytes.Reader, typeByte byte, v protocol.VersionNumber) (Frame, error) {
