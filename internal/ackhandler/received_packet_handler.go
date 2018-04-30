@@ -159,13 +159,14 @@ func (h *receivedPacketHandler) maybeQueueAck(packetNumber protocol.PacketNumber
 }
 
 func (h *receivedPacketHandler) GetAckFrame() *wire.AckFrame {
-	if !h.ackQueued && (h.ackAlarm.IsZero() || h.ackAlarm.After(time.Now())) {
+	now := time.Now()
+	if !h.ackQueued && (h.ackAlarm.IsZero() || h.ackAlarm.After(now)) {
 		return nil
 	}
 
 	ack := &wire.AckFrame{
-		AckRanges:          h.packetHistory.GetAckRanges(),
-		PacketReceivedTime: h.largestObservedReceivedTime,
+		AckRanges: h.packetHistory.GetAckRanges(),
+		DelayTime: now.Sub(h.largestObservedReceivedTime),
 	}
 
 	h.lastAck = ack

@@ -227,6 +227,16 @@ var _ = Describe("receivedPacketHandler", func() {
 				Expect(ack.HasMissingRanges()).To(BeFalse())
 			})
 
+			It("sets the delay time", func() {
+				err := handler.ReceivedPacket(1, time.Time{}, true)
+				Expect(err).ToNot(HaveOccurred())
+				err = handler.ReceivedPacket(2, time.Now().Add(-1337*time.Millisecond), true)
+				Expect(err).ToNot(HaveOccurred())
+				ack := handler.GetAckFrame()
+				Expect(ack).ToNot(BeNil())
+				Expect(ack.DelayTime).To(BeNumerically("~", 1337*time.Millisecond, 50*time.Millisecond))
+			})
+
 			It("saves the last sent ACK", func() {
 				err := handler.ReceivedPacket(1, time.Time{}, true)
 				Expect(err).ToNot(HaveOccurred())
