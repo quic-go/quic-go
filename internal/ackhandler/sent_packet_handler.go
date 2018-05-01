@@ -17,7 +17,6 @@ const (
 	// In fraction of an RTT.
 	timeReorderingFraction = 1.0 / 8
 	// The default RTT used before an RTT sample is taken.
-	// Note: This constant is also defined in the congestion package.
 	defaultInitialRTT = 100 * time.Millisecond
 	// defaultRTOTimeout is the RTO time on new connections
 	defaultRTOTimeout = 500 * time.Millisecond
