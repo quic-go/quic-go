@@ -16,8 +16,6 @@ const (
 	// Maximum reordering in time space before time based loss detection considers a packet lost.
 	// In fraction of an RTT.
 	timeReorderingFraction = 1.0 / 8
-	// The default RTT used before an RTT sample is taken.
-	defaultInitialRTT = 100 * time.Millisecond
 	// defaultRTOTimeout is the RTO time on new connections
 	defaultRTOTimeout = 500 * time.Millisecond
 	// Minimum time in the future a tail loss probe alarm may be set for.
@@ -567,11 +565,7 @@ func (h *sentPacketHandler) queuePacketForRetransmission(p *Packet) error {
 }
 
 func (h *sentPacketHandler) computeHandshakeTimeout() time.Duration {
-	duration := 2 * h.rttStats.SmoothedRTT()
-	if duration == 0 {
-		duration = 2 * defaultInitialRTT
-	}
-	duration = utils.MaxDuration(duration, minTPLTimeout)
+	duration := utils.MaxDuration(2*h.rttStats.SmoothedOrInitialRTT(), minTPLTimeout)
 	// exponential backoff
 	// There's an implicit limit to this set by the handshake timeout.
 	return duration << h.handshakeCount
@@ -579,11 +573,7 @@ func (h *sentPacketHandler) computeHandshakeTimeout() time.Duration {
 
 func (h *sentPacketHandler) computeTLPTimeout() time.Duration {
 	// TODO(#1236): include the max_ack_delay
-	srtt := h.rttStats.SmoothedRTT()
-	if srtt == 0 {
-		srtt = defaultInitialRTT
-	}
-	return utils.MaxDuration(srtt*3/2, minTPLTimeout)
+	return utils.MaxDuration(h.rttStats.SmoothedOrInitialRTT()*3/2, minTPLTimeout)
 }
 
 func (h *sentPacketHandler) computeRTOTimeout() time.Duration {

@@ -781,10 +781,6 @@ var _ = Describe("SentPacketHandler", func() {
 	})
 
 	Context("TLPs", func() {
-		It("uses the default RTT", func() {
-			Expect(handler.computeTLPTimeout()).To(Equal(defaultInitialRTT * 3 / 2))
-		})
-
 		It("uses the RTT from RTT stats", func() {
 			rtt := 2 * time.Second
 			updateRTT(rtt)
