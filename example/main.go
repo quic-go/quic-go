@@ -141,6 +141,8 @@ func main() {
 		versions = append([]protocol.VersionNumber{protocol.VersionTLS}, versions...)
 	}
 
+	congestionControl := protocol.GetCongestionAlgorithmFromString(*cc)
+
 	certFile := *certPath + "/fullchain.pem"
 	keyFile := *certPath + "/privkey.pem"
 
@@ -161,7 +163,7 @@ func main() {
 			} else {
 				server := h2quic.Server{
 					Server:     &http.Server{Addr: bCap},
-					QuicConfig: &quic.Config{Versions: versions, CongestionControl: protocol.GetCongestionAlgorithmFromString(*cc)},
+					QuicConfig: &quic.Config{Versions: versions, CongestionControl: congestionControl},
 				}
 				err = server.ListenAndServeTLS(certFile, keyFile)
 			}
