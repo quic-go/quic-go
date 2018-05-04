@@ -161,7 +161,7 @@ func main() {
 			} else {
 				server := h2quic.Server{
 					Server:     &http.Server{Addr: bCap},
-					QuicConfig: &quic.Config{Versions: versions, CongestionControl: protocol.GetCongestionType(*cc)},
+					QuicConfig: &quic.Config{Versions: versions, CongestionControl: protocol.GetCongestionAlgorithmFromString(*cc)},
 				}
 				err = server.ListenAndServeTLS(certFile, keyFile)
 			}

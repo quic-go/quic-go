@@ -9,7 +9,7 @@ const (
 	RENO  CongestionControlAlgorithm = 2
 )
 
-func GetCongestionType(congestionString string) CongestionControlAlgorithm {
+func GetCongestionAlgorithmFromString(congestionString string) CongestionControlAlgorithm {
 	switch strings.ToLower(congestionString) {
 	case "cubic":
 		return 1
