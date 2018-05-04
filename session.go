@@ -451,8 +451,6 @@ runLoop:
 		case _, ok := <-s.handshakeEvent:
 			// when the handshake is completed, the channel will be closed
 			s.handleHandshakeEvent(!ok)
-		// case p := <-s.paramsChan:
-		// 	s.processTransportParameters(&p)
 		default:
 		}
 
