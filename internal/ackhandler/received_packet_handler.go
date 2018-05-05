@@ -88,7 +88,7 @@ func (h *receivedPacketHandler) IgnoreBelow(p protocol.PacketNumber) {
 
 // isMissing says if a packet was reported missing in the last ACK.
 func (h *receivedPacketHandler) isMissing(p protocol.PacketNumber) bool {
-	if h.lastAck == nil {
+	if h.lastAck == nil || p < h.ignoreBelow {
 		return false
 	}
 	return p < h.lastAck.LargestAcked() && !h.lastAck.AcksPacket(p)

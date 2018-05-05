@@ -159,13 +159,30 @@ var _ = Describe("receivedPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 				err = handler.ReceivedPacket(13, time.Time{}, true)
 				Expect(err).ToNot(HaveOccurred())
-				ack := handler.GetAckFrame() // ACK: 1 and 3, missing: 2
+				ack := handler.GetAckFrame() // ACK: 1-11 and 13, missing: 12
 				Expect(ack).ToNot(BeNil())
 				Expect(ack.HasMissingRanges()).To(BeTrue())
 				Expect(handler.ackQueued).To(BeFalse())
 				err = handler.ReceivedPacket(12, time.Time{}, false)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.ackQueued).To(BeTrue())
+			})
+
+			It("doesn't queue an ACK if it was reported missing before, but is below the threshold", func() {
+				receiveAndAck10Packets()
+				// 11 is missing
+				err := handler.ReceivedPacket(12, time.Time{}, true)
+				Expect(err).ToNot(HaveOccurred())
+				err = handler.ReceivedPacket(13, time.Time{}, true)
+				Expect(err).ToNot(HaveOccurred())
+				ack := handler.GetAckFrame() // ACK: 1-10, 12-13
+				Expect(ack).ToNot(BeNil())
+				// now receive 11
+				handler.IgnoreBelow(12)
+				err = handler.ReceivedPacket(11, time.Time{}, false)
+				Expect(err).ToNot(HaveOccurred())
+				ack = handler.GetAckFrame()
+				Expect(ack).To(BeNil())
 			})
 
 			It("doesn't queue an ACK if the packet closes a gap that was not yet reported", func() {
