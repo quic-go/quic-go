@@ -498,6 +498,7 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 			It("writes a simple ACK frame", func() {
 				frameOrig := &AckFrame{
 					AckRanges: []AckRange{{Smallest: 1, Largest: 1}},
+					DelayTime: 876 * time.Microsecond,
 				}
 				err := frameOrig.Write(b, versionBigEndian)
 				Expect(err).ToNot(HaveOccurred())
@@ -506,6 +507,7 @@ var _ = Describe("ACK Frame (for gQUIC)", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.LargestAcked()).To(Equal(frameOrig.LargestAcked()))
 				Expect(frame.HasMissingRanges()).To(BeFalse())
+				Expect(frame.DelayTime).To(Equal(frameOrig.DelayTime))
 				Expect(r.Len()).To(BeZero())
 			})
 

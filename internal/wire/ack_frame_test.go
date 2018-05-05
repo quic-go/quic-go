@@ -150,7 +150,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			buf := &bytes.Buffer{}
 			f := &AckFrame{
 				AckRanges: []AckRange{{Smallest: 0xdeadbeef, Largest: 0xdeadbeef}},
-				DelayTime: 18 * time.Second,
+				DelayTime: 18 * time.Millisecond,
 			}
 			err := f.Write(buf, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
@@ -160,6 +160,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).To(Equal(f))
 			Expect(frame.HasMissingRanges()).To(BeFalse())
+			Expect(frame.DelayTime).To(Equal(f.DelayTime))
 			Expect(b.Len()).To(BeZero())
 		})
 
