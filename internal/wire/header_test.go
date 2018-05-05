@@ -190,6 +190,7 @@ var _ = Describe("Header", func() {
 		It("writes a IETF draft header", func() {
 			buf := &bytes.Buffer{}
 			hdr := &Header{
+				Type:             protocol.PacketTypeHandshake,
 				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				PacketNumber:     0x42,
@@ -198,7 +199,7 @@ var _ = Describe("Header", func() {
 			}
 			err := hdr.Write(buf, protocol.PerspectiveServer, versionIETFHeader)
 			Expect(err).ToNot(HaveOccurred())
-			_, err = parseHeader(bytes.NewReader(buf.Bytes()), protocol.PerspectiveServer)
+			_, err = ParseHeaderSentByServer(bytes.NewReader(buf.Bytes()), versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.IsPublicHeader).To(BeFalse())
 		})

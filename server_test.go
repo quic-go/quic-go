@@ -386,6 +386,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("errors on packets that are smaller than the Payload Length in the packet header", func() {
+			serv.supportsTLS = true
 			b := &bytes.Buffer{}
 			hdr := &wire.Header{
 				IsLongHeader:     true,
@@ -401,6 +402,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("cuts packets at the payload length", func() {
+			serv.supportsTLS = true
 			err := serv.handlePacket(nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
 			b := &bytes.Buffer{}
@@ -417,6 +419,22 @@ var _ = Describe("Server", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions[string(connID)].(*mockSession).handledPackets).To(HaveLen(2))
 			Expect(serv.sessions[string(connID)].(*mockSession).handledPackets[1].data).To(HaveLen(123))
+		})
+
+		It("drops packets with invalid packet types", func() {
+			serv.supportsTLS = true
+			b := &bytes.Buffer{}
+			hdr := &wire.Header{
+				IsLongHeader:     true,
+				Type:             protocol.PacketTypeRetry,
+				PayloadLen:       123,
+				SrcConnectionID:  connID,
+				DestConnectionID: connID,
+				Version:          versionIETFFrames,
+			}
+			Expect(hdr.Write(b, protocol.PerspectiveClient, versionIETFFrames)).To(Succeed())
+			err := serv.handlePacket(nil, append(b.Bytes(), make([]byte, 456)...))
+			Expect(err).To(MatchError("Received unsupported packet type: Retry"))
 		})
 
 		It("ignores Public Resets", func() {

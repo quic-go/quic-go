@@ -314,18 +314,25 @@ func (s *server) handlePacket(remoteAddr net.Addr, packet []byte) error {
 
 func (s *server) handleIETFQUICPacket(hdr *wire.Header, packetData []byte, remoteAddr net.Addr, rcvTime time.Time) error {
 	if hdr.IsLongHeader {
+		if !s.supportsTLS {
+			return errors.New("Received an IETF QUIC Long Header")
+		}
 		if protocol.ByteCount(len(packetData)) < hdr.PayloadLen {
 			return fmt.Errorf("packet payload (%d bytes) is smaller than the expected payload length (%d bytes)", len(packetData), hdr.PayloadLen)
 		}
 		packetData = packetData[:int(hdr.PayloadLen)]
 		// TODO(#1312): implement parsing of compound packets
-	}
 
-	if hdr.Type == protocol.PacketTypeInitial {
-		if s.supportsTLS {
+		switch hdr.Type {
+		case protocol.PacketTypeInitial:
 			go s.serverTLS.HandleInitial(remoteAddr, hdr, packetData)
+			return nil
+		case protocol.PacketTypeHandshake:
+			// nothing to do here. Packet will be passed to the session.
+		default:
+			// Note that this also drops 0-RTT packets.
+			return fmt.Errorf("Received unsupported packet type: %s", hdr.Type)
 		}
-		return nil
 	}
 
 	s.sessionsMutex.RLock()

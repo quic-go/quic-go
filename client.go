@@ -346,6 +346,9 @@ func (c *client) handleIETFQUICPacket(hdr *wire.Header, packetData []byte, remot
 		return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", hdr.DestConnectionID, c.srcConnID)
 	}
 	if hdr.IsLongHeader {
+		if hdr.Type != protocol.PacketTypeRetry && hdr.Type != protocol.PacketTypeHandshake {
+			return fmt.Errorf("Received unsupported packet type: %s", hdr.Type)
+		}
 		c.logger.Debugf("len(packet data): %d, payloadLen: %d", len(packetData), hdr.PayloadLen)
 		if protocol.ByteCount(len(packetData)) < hdr.PayloadLen {
 			return fmt.Errorf("packet payload (%d bytes) is smaller than the expected payload length (%d bytes)", len(packetData), hdr.PayloadLen)

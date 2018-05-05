@@ -2,7 +2,6 @@ package wire
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"log"
 	"os"
@@ -26,7 +25,7 @@ var _ = Describe("IETF QUIC Header", func() {
 				data, err := ComposeVersionNegotiation(connID, connID, versions)
 				Expect(err).ToNot(HaveOccurred())
 				b := bytes.NewReader(data)
-				h, err := parseHeader(b, protocol.PerspectiveServer)
+				h, err := parseHeader(b)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(h.IsVersionNegotiation).To(BeTrue())
 				Expect(h.Version).To(BeZero())
@@ -43,7 +42,7 @@ var _ = Describe("IETF QUIC Header", func() {
 				data, err := ComposeVersionNegotiation(connID, connID, versions)
 				Expect(err).ToNot(HaveOccurred())
 				b := bytes.NewReader(data[:len(data)-2])
-				_, err = parseHeader(b, protocol.PerspectiveServer)
+				_, err = parseHeader(b)
 				Expect(err).To(MatchError(qerr.InvalidVersionNegotiationPacket))
 			})
 
@@ -53,7 +52,7 @@ var _ = Describe("IETF QUIC Header", func() {
 				data, err := ComposeVersionNegotiation(connID, connID, versions)
 				Expect(err).ToNot(HaveOccurred())
 				// remove 8 bytes (two versions), since ComposeVersionNegotiation also added a reserved version number
-				_, err = parseHeader(bytes.NewReader(data[:len(data)-8]), protocol.PerspectiveServer)
+				_, err = parseHeader(bytes.NewReader(data[:len(data)-8]))
 				Expect(err).To(MatchError("InvalidVersionNegotiationPacket: empty version list"))
 			})
 		})
@@ -74,7 +73,7 @@ var _ = Describe("IETF QUIC Header", func() {
 
 			It("parses a long header", func() {
 				b := bytes.NewReader(generatePacket(protocol.PacketTypeInitial))
-				h, err := parseHeader(b, protocol.PerspectiveClient)
+				h, err := parseHeader(b)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(h.Type).To(Equal(protocol.PacketTypeInitial))
 				Expect(h.IsLongHeader).To(BeTrue())
@@ -99,7 +98,7 @@ var _ = Describe("IETF QUIC Header", func() {
 				data = append(data, encodeVarInt(0x42)...) // payload length
 				data = append(data, []byte{0xde, 0xca, 0xfb, 0xad}...)
 				b := bytes.NewReader(data)
-				h, err := parseHeader(b, protocol.PerspectiveClient)
+				h, err := parseHeader(b)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(h.SrcConnectionID).To(Equal(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}))
 				Expect(h.DestConnectionID).To(BeEmpty())
@@ -115,38 +114,10 @@ var _ = Describe("IETF QUIC Header", func() {
 				data = append(data, encodeVarInt(0x42)...) // payload length
 				data = append(data, []byte{0xde, 0xca, 0xfb, 0xad}...)
 				b := bytes.NewReader(data)
-				h, err := parseHeader(b, protocol.PerspectiveClient)
+				h, err := parseHeader(b)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(h.SrcConnectionID).To(BeEmpty())
 				Expect(h.DestConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
-			})
-
-			It("rejects packets sent by the client that use packet types for packets sent by the server", func() {
-				buf := &bytes.Buffer{}
-				err := (&Header{
-					IsLongHeader:    true,
-					Type:            protocol.PacketTypeRetry,
-					SrcConnectionID: srcConnID,
-					Version:         0x10203040,
-				}).Write(buf, protocol.PerspectiveServer, protocol.VersionTLS)
-				Expect(err).ToNot(HaveOccurred())
-				b := bytes.NewReader(buf.Bytes())
-				_, err = parseHeader(b, protocol.PerspectiveClient)
-				Expect(err).To(MatchError(fmt.Sprintf("InvalidPacketHeader: Received packet with invalid packet type: %d", protocol.PacketTypeRetry)))
-			})
-
-			It("rejects packets sent by the client that use packet types for packets sent by the server", func() {
-				buf := &bytes.Buffer{}
-				err := (&Header{
-					IsLongHeader:    true,
-					Type:            protocol.PacketType0RTT,
-					SrcConnectionID: srcConnID,
-					Version:         0x10203040,
-				}).Write(buf, protocol.PerspectiveClient, protocol.VersionTLS)
-				Expect(err).ToNot(HaveOccurred())
-				b := bytes.NewReader(buf.Bytes())
-				_, err = parseHeader(b, protocol.PerspectiveServer)
-				Expect(err).To(MatchError(fmt.Sprintf("InvalidPacketHeader: Received packet with invalid packet type: %d", protocol.PacketType0RTT)))
 			})
 
 			It("rejects packets sent with an unknown packet type", func() {
@@ -159,19 +130,8 @@ var _ = Describe("IETF QUIC Header", func() {
 				}).Write(buf, protocol.PerspectiveClient, protocol.VersionTLS)
 				Expect(err).ToNot(HaveOccurred())
 				b := bytes.NewReader(buf.Bytes())
-				_, err = parseHeader(b, protocol.PerspectiveServer)
+				_, err = parseHeader(b)
 				Expect(err).To(MatchError("InvalidPacketHeader: Received packet with invalid packet type: 42"))
-			})
-
-			It("rejects version 0 for packets sent by the client", func() {
-				data := []byte{
-					0x80 ^ uint8(protocol.PacketTypeInitial),
-					0x0, 0x0, 0x0, 0x0, // version number
-					0x0,                    // no connection IDs
-					0xde, 0xca, 0xfb, 0xad, // packet number
-				}
-				_, err := parseHeader(bytes.NewReader(data), protocol.PerspectiveClient)
-				Expect(err).To(MatchError(qerr.InvalidVersion))
 			})
 
 			It("errors on EOF", func() {
@@ -184,7 +144,7 @@ var _ = Describe("IETF QUIC Header", func() {
 					0xde, 0xca, 0xfb, 0xad, // packet number
 				}
 				for i := 0; i < len(data); i++ {
-					_, err := parseHeader(bytes.NewReader(data[:i]), protocol.PerspectiveClient)
+					_, err := parseHeader(bytes.NewReader(data[:i]))
 					Expect(err).To(Equal(io.EOF))
 				}
 			})
@@ -198,7 +158,7 @@ var _ = Describe("IETF QUIC Header", func() {
 					0x42, // packet number
 				}
 				b := bytes.NewReader(data)
-				h, err := parseHeader(b, protocol.PerspectiveClient)
+				h, err := parseHeader(b)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(h.IsLongHeader).To(BeFalse())
 				Expect(h.KeyPhase).To(Equal(0))
@@ -217,7 +177,7 @@ var _ = Describe("IETF QUIC Header", func() {
 					0x11,
 				}
 				b := bytes.NewReader(data)
-				h, err := parseHeader(b, protocol.PerspectiveClient)
+				h, err := parseHeader(b)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(h.IsLongHeader).To(BeFalse())
 				Expect(h.KeyPhase).To(Equal(1))
@@ -231,7 +191,7 @@ var _ = Describe("IETF QUIC Header", func() {
 					0x13, 0x37, // packet number
 				}
 				b := bytes.NewReader(data)
-				h, err := parseHeader(b, protocol.PerspectiveClient)
+				h, err := parseHeader(b)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(h.IsLongHeader).To(BeFalse())
 				Expect(h.PacketNumber).To(Equal(protocol.PacketNumber(0x1337)))
@@ -246,7 +206,7 @@ var _ = Describe("IETF QUIC Header", func() {
 					0xde, 0xad, 0xbe, 0xef, // packet number
 				}
 				b := bytes.NewReader(data)
-				h, err := parseHeader(b, protocol.PerspectiveClient)
+				h, err := parseHeader(b)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(h.IsLongHeader).To(BeFalse())
 				Expect(h.PacketNumber).To(Equal(protocol.PacketNumber(0xdeadbeef)))
@@ -261,7 +221,7 @@ var _ = Describe("IETF QUIC Header", func() {
 					0xde, 0xad, 0xbe, 0xef, // packet number
 				}
 				b := bytes.NewReader(data)
-				_, err := parseHeader(b, protocol.PerspectiveClient)
+				_, err := parseHeader(b)
 				Expect(err).To(MatchError("invalid short header type"))
 			})
 
@@ -272,7 +232,7 @@ var _ = Describe("IETF QUIC Header", func() {
 					0xde, 0xca, 0xfb, 0xad, // packet number
 				}
 				b := bytes.NewReader(data)
-				_, err := parseHeader(b, protocol.PerspectiveClient)
+				_, err := parseHeader(b)
 				Expect(err).To(MatchError("invalid bits 3, 4 and 5"))
 			})
 
@@ -283,7 +243,7 @@ var _ = Describe("IETF QUIC Header", func() {
 					0xde, 0xca, 0xfb, 0xad, // packet number
 				}
 				for i := 0; i < len(data); i++ {
-					_, err := parseHeader(bytes.NewReader(data[:i]), protocol.PerspectiveClient)
+					_, err := parseHeader(bytes.NewReader(data[:i]))
 					Expect(err).To(Equal(io.EOF))
 				}
 			})
@@ -545,7 +505,7 @@ var _ = Describe("IETF QUIC Header", func() {
 			srcConnID := protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad, 0x013, 0x37, 0x13, 0x37}
 			data, err := ComposeVersionNegotiation(destConnID, srcConnID, []protocol.VersionNumber{0x12345678, 0x87654321})
 			Expect(err).ToNot(HaveOccurred())
-			hdr, err := parseLongHeader(bytes.NewReader(data[1:]), protocol.PerspectiveServer, data[0])
+			hdr, err := parseLongHeader(bytes.NewReader(data[1:]), data[0])
 			Expect(err).ToNot(HaveOccurred())
 			hdr.logHeader(logger)
 			Expect(buf.String()).To(ContainSubstring("VersionNegotiationPacket{DestConnectionID: 0xdeadbeefcafe1337, SrcConnectionID: 0xdecafbad13371337"))

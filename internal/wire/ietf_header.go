@@ -12,19 +12,19 @@ import (
 )
 
 // parseHeader parses the header.
-func parseHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Header, error) {
+func parseHeader(b *bytes.Reader) (*Header, error) {
 	typeByte, err := b.ReadByte()
 	if err != nil {
 		return nil, err
 	}
 	if typeByte&0x80 > 0 {
-		return parseLongHeader(b, packetSentBy, typeByte)
+		return parseLongHeader(b, typeByte)
 	}
 	return parseShortHeader(b, typeByte)
 }
 
 // parse long header and version negotiation packets
-func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte) (*Header, error) {
+func parseLongHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
 	v, err := utils.BigEndian.ReadUint32(b)
 	if err != nil {
 		return nil, err
@@ -52,9 +52,6 @@ func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte
 	}
 
 	if v == 0 { // version negotiation packet
-		if sentBy == protocol.PerspectiveClient {
-			return nil, qerr.InvalidVersion
-		}
 		if b.Len() == 0 {
 			return nil, qerr.Error(qerr.InvalidVersionNegotiationPacket, "empty version list")
 		}
@@ -82,10 +79,8 @@ func parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, typeByte byte
 	h.PacketNumber = protocol.PacketNumber(pn)
 	h.PacketNumberLen = protocol.PacketNumberLen4
 	h.Type = protocol.PacketType(typeByte & 0x7f)
-	if sentBy == protocol.PerspectiveClient && (h.Type != protocol.PacketTypeInitial && h.Type != protocol.PacketTypeHandshake && h.Type != protocol.PacketType0RTT) {
-		return nil, qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", h.Type))
-	}
-	if sentBy == protocol.PerspectiveServer && (h.Type != protocol.PacketTypeRetry && h.Type != protocol.PacketTypeHandshake) {
+
+	if h.Type != protocol.PacketTypeInitial && h.Type != protocol.PacketTypeRetry && h.Type != protocol.PacketType0RTT && h.Type != protocol.PacketTypeHandshake {
 		return nil, qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", h.Type))
 	}
 	return h, nil
