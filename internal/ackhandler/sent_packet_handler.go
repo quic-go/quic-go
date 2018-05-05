@@ -217,11 +217,11 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 		if p.largestAcked != 0 {
 			h.lowestPacketNotConfirmedAcked = utils.MaxPacketNumber(h.lowestPacketNotConfirmedAcked, p.largestAcked+1)
 		}
-		if err := h.onPacketAcked(p); err != nil {
+		if err := h.onPacketAcked(p, rcvTime); err != nil {
 			return err
 		}
 		if p.includedInBytesInFlight {
-			h.congestion.OnPacketAcked(p.PacketNumber, p.Length, priorInFlight)
+			h.congestion.OnPacketAcked(p.PacketNumber, p.Length, priorInFlight, rcvTime)
 		}
 	}
 
@@ -379,7 +379,7 @@ func (h *sentPacketHandler) GetAlarmTimeout() time.Time {
 	return h.alarm
 }
 
-func (h *sentPacketHandler) onPacketAcked(p *Packet) error {
+func (h *sentPacketHandler) onPacketAcked(p *Packet, rcvTime time.Time) error {
 	// This happens if a packet and its retransmissions is acked in the same ACK.
 	// As soon as we process the first one, this will remove all the retransmissions,
 	// so we won't find the retransmitted packet number later.
