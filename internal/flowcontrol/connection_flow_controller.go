@@ -78,6 +78,7 @@ func (c *connectionFlowController) GetWindowUpdate() protocol.ByteCount {
 func (c *connectionFlowController) EnsureMinimumWindowSize(inc protocol.ByteCount) {
 	c.mutex.Lock()
 	if inc > c.receiveWindowSize {
+		c.logger.Debugf("Increasing receive flow control window for the connection to %d kB, in response to stream flow control window increase", c.receiveWindowSize/(1<<10))
 		c.receiveWindowSize = utils.MinByteCount(inc, c.maxReceiveWindowSize)
 		c.startNewAutoTuningEpoch()
 	}
