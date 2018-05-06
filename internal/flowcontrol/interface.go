@@ -21,8 +21,8 @@ type StreamFlowController interface {
 	// UpdateHighestReceived should be called when a new highest offset is received
 	// final has to be to true if this is the final offset of the stream, as contained in a STREAM frame with FIN bit, and the RST_STREAM frame
 	UpdateHighestReceived(offset protocol.ByteCount, final bool) error
-	// HasWindowUpdate says if it is necessary to update the window
-	HasWindowUpdate() bool
+	// MaybeQueueWindowUpdate queues a window update, if necessary
+	MaybeQueueWindowUpdate()
 }
 
 // The ConnectionFlowController is the flow controller for the connection.

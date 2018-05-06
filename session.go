@@ -1137,6 +1137,7 @@ func (s *session) newFlowController(id protocol.StreamID) flowcontrol.StreamFlow
 		protocol.ReceiveStreamFlowControlWindow,
 		protocol.ByteCount(s.config.MaxReceiveStreamFlowControlWindow),
 		initialSendWindow,
+		s.onHasWindowUpdate,
 		s.rttStats,
 		s.logger,
 	)
@@ -1151,6 +1152,7 @@ func (s *session) newCryptoStream() cryptoStreamI {
 		protocol.ReceiveStreamFlowControlWindow,
 		protocol.ByteCount(s.config.MaxReceiveStreamFlowControlWindow),
 		0,
+		s.onHasWindowUpdate,
 		s.rttStats,
 		s.logger,
 	)

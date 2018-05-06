@@ -14,6 +14,8 @@ type streamFlowController struct {
 
 	streamID protocol.StreamID
 
+	queueWindowUpdate func()
+
 	connection              connectionFlowControllerI
 	contributesToConnection bool // does the stream contribute to connection level flow control
 
@@ -30,6 +32,7 @@ func NewStreamFlowController(
 	receiveWindow protocol.ByteCount,
 	maxReceiveWindow protocol.ByteCount,
 	initialSendWindow protocol.ByteCount,
+	queueWindowUpdate func(protocol.StreamID),
 	rttStats *congestion.RTTStats,
 	logger utils.Logger,
 ) StreamFlowController {
@@ -37,6 +40,7 @@ func NewStreamFlowController(
 		streamID:                streamID,
 		contributesToConnection: contributesToConnection,
 		connection:              cfc.(connectionFlowControllerI),
+		queueWindowUpdate:       func() { queueWindowUpdate(streamID) },
 		baseFlowController: baseFlowController{
 			rttStats:             rttStats,
 			receiveWindow:        receiveWindow,
@@ -120,11 +124,13 @@ func (c *streamFlowController) IsBlocked() (bool, protocol.ByteCount) {
 	return true, c.sendWindow
 }
 
-func (c *streamFlowController) HasWindowUpdate() bool {
+func (c *streamFlowController) MaybeQueueWindowUpdate() {
 	c.mutex.Lock()
 	hasWindowUpdate := !c.receivedFinalOffset && c.hasWindowUpdate()
 	c.mutex.Unlock()
-	return hasWindowUpdate
+	if hasWindowUpdate {
+		c.queueWindowUpdate()
+	}
 }
 
 func (c *streamFlowController) GetWindowUpdate() protocol.ByteCount {
