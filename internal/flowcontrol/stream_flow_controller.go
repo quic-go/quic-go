@@ -131,6 +131,9 @@ func (c *streamFlowController) MaybeQueueWindowUpdate() {
 	if hasWindowUpdate {
 		c.queueWindowUpdate()
 	}
+	if c.contributesToConnection {
+		c.connection.MaybeQueueWindowUpdate()
+	}
 }
 
 func (c *streamFlowController) GetWindowUpdate() protocol.ByteCount {

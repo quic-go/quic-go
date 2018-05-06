@@ -691,24 +691,6 @@ var _ = Describe("Session", func() {
 			Expect(mconn.written).To(Receive(ContainSubstring(string([]byte{0x03, 0x5e}))))
 		})
 
-		It("adds a MAX_DATA frames", func() {
-			fc := mocks.NewMockConnectionFlowController(mockCtrl)
-			fc.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0x1337))
-			fc.EXPECT().IsNewlyBlocked()
-			sess.connFlowController = fc
-			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
-			sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
-				Expect(p.Frames).To(Equal([]wire.Frame{
-					&wire.MaxDataFrame{ByteOffset: 0x1337},
-				}))
-				Expect(p.SendTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
-			})
-			sess.sentPacketHandler = sph
-			sent, err := sess.sendPacket()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(sent).To(BeTrue())
-		})
-
 		It("adds MAX_STREAM_DATA frames", func() {
 			sess.windowUpdateQueue.callback(&wire.MaxStreamDataFrame{
 				StreamID:   2,
@@ -726,7 +708,6 @@ var _ = Describe("Session", func() {
 
 		It("adds a BLOCKED frame when it is connection-level flow control blocked", func() {
 			fc := mocks.NewMockConnectionFlowController(mockCtrl)
-			fc.EXPECT().GetWindowUpdate()
 			fc.EXPECT().IsNewlyBlocked().Return(true, protocol.ByteCount(1337))
 			sess.connFlowController = fc
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)

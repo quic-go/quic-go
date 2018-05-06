@@ -13,16 +13,18 @@ import (
 
 var _ = Describe("Stream Flow controller", func() {
 	var (
-		controller         *streamFlowController
-		queuedWindowUpdate bool
+		controller             *streamFlowController
+		queuedWindowUpdate     bool
+		queuedConnWindowUpdate bool
 	)
 
 	BeforeEach(func() {
 		queuedWindowUpdate = false
+		queuedConnWindowUpdate = false
 		rttStats := &congestion.RTTStats{}
 		controller = &streamFlowController{
 			streamID:   10,
-			connection: NewConnectionFlowController(1000, 1000, rttStats, utils.DefaultLogger).(*connectionFlowController),
+			connection: NewConnectionFlowController(1000, 1000, func() { queuedConnWindowUpdate = true }, rttStats, utils.DefaultLogger).(*connectionFlowController),
 		}
 		controller.maxReceiveWindowSize = 10000
 		controller.rttStats = rttStats
@@ -37,7 +39,7 @@ var _ = Describe("Stream Flow controller", func() {
 		sendWindow := protocol.ByteCount(4000)
 
 		It("sets the send and receive windows", func() {
-			cc := NewConnectionFlowController(0, 0, nil, utils.DefaultLogger)
+			cc := NewConnectionFlowController(0, 0, nil, nil, utils.DefaultLogger)
 			fc := NewStreamFlowController(5, true, cc, receiveWindow, maxReceiveWindow, sendWindow, nil, rttStats, utils.DefaultLogger).(*streamFlowController)
 			Expect(fc.streamID).To(Equal(protocol.StreamID(5)))
 			Expect(fc.receiveWindow).To(Equal(receiveWindow))
@@ -53,7 +55,7 @@ var _ = Describe("Stream Flow controller", func() {
 				queued = true
 			}
 
-			cc := NewConnectionFlowController(0, 0, nil, utils.DefaultLogger)
+			cc := NewConnectionFlowController(0, 0, nil, nil, utils.DefaultLogger)
 			fc := NewStreamFlowController(5, true, cc, receiveWindow, maxReceiveWindow, sendWindow, queueWindowUpdate, rttStats, utils.DefaultLogger).(*streamFlowController)
 			fc.AddBytesRead(receiveWindow)
 			fc.MaybeQueueWindowUpdate()
@@ -189,6 +191,7 @@ var _ = Describe("Stream Flow controller", func() {
 				controller.receiveWindow = 100
 				controller.receiveWindowSize = 60
 				controller.bytesRead = 100 - 60
+				controller.connection.(*connectionFlowController).receiveWindow = 100
 				controller.connection.(*connectionFlowController).receiveWindowSize = 120
 				oldWindowSize = controller.receiveWindowSize
 			})
@@ -203,6 +206,15 @@ var _ = Describe("Stream Flow controller", func() {
 				queuedWindowUpdate = false
 				controller.MaybeQueueWindowUpdate()
 				Expect(queuedWindowUpdate).To(BeFalse())
+			})
+
+			It("queues connection-level window updates", func() {
+				controller.contributesToConnection = true
+				controller.MaybeQueueWindowUpdate()
+				Expect(queuedConnWindowUpdate).To(BeFalse())
+				controller.AddBytesRead(60)
+				controller.MaybeQueueWindowUpdate()
+				Expect(queuedConnWindowUpdate).To(BeTrue())
 			})
 
 			It("tells the connection flow controller when the window was autotuned", func() {
