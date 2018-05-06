@@ -116,12 +116,12 @@ func readTransportParameters(paramsList []transportParameter) (*TransportParamet
 				return nil, fmt.Errorf("wrong length for initial_max_data: %d (expected 4)", len(p.Value))
 			}
 			params.ConnectionFlowControlWindow = protocol.ByteCount(binary.BigEndian.Uint32(p.Value))
-		case initialMaxStreamsBiDiParameterID:
+		case initialMaxBidiStreamsParameterID:
 			if len(p.Value) != 2 {
 				return nil, fmt.Errorf("wrong length for initial_max_stream_id_bidi: %d (expected 2)", len(p.Value))
 			}
 			params.MaxBidiStreams = binary.BigEndian.Uint16(p.Value)
-		case initialMaxStreamsUniParameterID:
+		case initialMaxUniStreamsParameterID:
 			if len(p.Value) != 2 {
 				return nil, fmt.Errorf("wrong length for initial_max_stream_id_uni: %d (expected 2)", len(p.Value))
 			}
@@ -168,8 +168,8 @@ func (p *TransportParameters) getTransportParameters() []transportParameter {
 	params := []transportParameter{
 		{initialMaxStreamDataParameterID, initialMaxStreamData},
 		{initialMaxDataParameterID, initialMaxData},
-		{initialMaxStreamsBiDiParameterID, initialMaxBidiStreamID},
-		{initialMaxStreamsUniParameterID, initialMaxUniStreamID},
+		{initialMaxBidiStreamsParameterID, initialMaxBidiStreamID},
+		{initialMaxUniStreamsParameterID, initialMaxUniStreamID},
 		{idleTimeoutParameterID, idleTimeout},
 		{maxPacketSizeParameterID, maxPacketSize},
 	}
