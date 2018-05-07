@@ -139,7 +139,7 @@ func (c *streamFlowController) GetWindowUpdate() protocol.ByteCount {
 	oldWindowSize := c.receiveWindowSize
 	offset := c.baseFlowController.getWindowUpdate()
 	if c.receiveWindowSize > oldWindowSize { // auto-tuning enlarged the window size
-		c.logger.Debugf("Increasing receive flow control window for the connection to %d kB", c.receiveWindowSize/(1<<10))
+		c.logger.Debugf("Increasing receive flow control window for stream %d to %d kB", c.streamID, c.receiveWindowSize/(1<<10))
 		if c.contributesToConnection {
 			c.connection.EnsureMinimumWindowSize(protocol.ByteCount(float64(c.receiveWindowSize) * protocol.ConnectionFlowControlMultiplier))
 		}
