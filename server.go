@@ -247,7 +247,7 @@ func (s *server) serve() {
 			return
 		}
 		data = data[:n]
-		if err := s.handlePacket(s.conn, remoteAddr, data); err != nil {
+		if err := s.handlePacket(remoteAddr, data); err != nil {
 			s.logger.Errorf("error handling packet: %s", err.Error())
 		}
 	}
@@ -297,7 +297,7 @@ func (s *server) Addr() net.Addr {
 	return s.conn.LocalAddr()
 }
 
-func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet []byte) error {
+func (s *server) handlePacket(remoteAddr net.Addr, packet []byte) error {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
@@ -308,6 +308,13 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	hdr.Raw = packet[:len(packet)-r.Len()]
 	packetData := packet[len(packet)-r.Len():]
 
+	if hdr.IsPublicHeader {
+		return s.handleGQUICPacket(hdr, packetData, remoteAddr, rcvTime)
+	}
+	return s.handleIETFQUICPacket(hdr, packetData, remoteAddr, rcvTime)
+}
+
+func (s *server) handleIETFQUICPacket(hdr *wire.Header, packetData []byte, remoteAddr net.Addr, rcvTime time.Time) error {
 	if hdr.IsLongHeader {
 		if protocol.ByteCount(len(packetData)) < hdr.PayloadLen {
 			return fmt.Errorf("packet payload (%d bytes) is smaller than the expected payload length (%d bytes)", len(packetData), hdr.PayloadLen)
@@ -331,6 +338,29 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 		// Late packet for closed session
 		return nil
 	}
+	if !sessionKnown {
+		s.logger.Debugf("Received %s packet for unknown connection %s.", hdr.Type, hdr.DestConnectionID)
+		return nil
+	}
+
+	session.handlePacket(&receivedPacket{
+		remoteAddr: remoteAddr,
+		header:     hdr,
+		data:       packetData,
+		rcvTime:    rcvTime,
+	})
+	return nil
+}
+
+func (s *server) handleGQUICPacket(hdr *wire.Header, packetData []byte, remoteAddr net.Addr, rcvTime time.Time) error {
+	s.sessionsMutex.RLock()
+	session, sessionKnown := s.sessions[string(hdr.DestConnectionID)]
+	s.sessionsMutex.RUnlock()
+
+	if sessionKnown && session == nil {
+		// Late packet for closed session
+		return nil
+	}
 
 	// ignore all Public Reset packets
 	if hdr.ResetFlag {
@@ -340,9 +370,8 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 
 	// If we don't have a session for this connection, and this packet cannot open a new connection, send a Public Reset
 	// This should only happen after a server restart, when we still receive packets for connections that we lost the state for.
-	// TODO(#943): implement sending of IETF draft style stateless resets
-	if !sessionKnown && (!hdr.VersionFlag && hdr.Type != protocol.PacketTypeInitial) {
-		_, err = pconn.WriteTo(wire.WritePublicReset(hdr.DestConnectionID, 0, 0), remoteAddr)
+	if !sessionKnown && !hdr.VersionFlag {
+		_, err := s.conn.WriteTo(wire.WritePublicReset(hdr.DestConnectionID, 0, 0), remoteAddr)
 		return err
 	}
 
@@ -357,29 +386,30 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 	// since the client send a Public Header (only gQUIC has a Version Flag), we need to send a gQUIC Version Negotiation Packet
 	if hdr.VersionFlag && !protocol.IsSupportedVersion(s.config.Versions, hdr.Version) {
 		// drop packets that are too small to be valid first packets
-		if len(packet) < protocol.MinClientHelloSize+len(hdr.Raw) {
+		if len(packetData) < protocol.MinClientHelloSize {
 			return errors.New("dropping small packet with unknown version")
 		}
 		s.logger.Infof("Client offered version %s, sending Version Negotiation Packet", hdr.Version)
-		_, err := pconn.WriteTo(wire.ComposeGQUICVersionNegotiation(hdr.SrcConnectionID, s.config.Versions), remoteAddr)
+		_, err := s.conn.WriteTo(wire.ComposeGQUICVersionNegotiation(hdr.SrcConnectionID, s.config.Versions), remoteAddr)
 		return err
 	}
 
-	// This is (potentially) a Client Hello.
-	// Make sure it has the minimum required size before spending any more ressources on it.
-	if !sessionKnown && len(packet) < protocol.MinClientHelloSize+len(hdr.Raw) {
-		return errors.New("dropping small packet for unknown connection")
-	}
-
 	if !sessionKnown {
+		// This is (potentially) a Client Hello.
+		// Make sure it has the minimum required size before spending any more ressources on it.
+		if len(packetData) < protocol.MinClientHelloSize {
+			return errors.New("dropping small packet for unknown connection")
+		}
+
 		version := hdr.Version
 		if !protocol.IsSupportedVersion(s.config.Versions, version) {
 			return errors.New("Server BUG: negotiated version not supported")
 		}
 
 		s.logger.Infof("Serving new connection: %s, version %s from %v", hdr.DestConnectionID, version, remoteAddr)
+		var err error
 		session, err = s.newSession(
-			&conn{pconn: pconn, currentAddr: remoteAddr},
+			&conn{pconn: s.conn, currentAddr: remoteAddr},
 			version,
 			hdr.DestConnectionID,
 			s.scfg,
@@ -396,6 +426,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 
 		s.runHandshakeAndSession(session, hdr.DestConnectionID)
 	}
+
 	session.handlePacket(&receivedPacket{
 		remoteAddr: remoteAddr,
 		header:     hdr,
