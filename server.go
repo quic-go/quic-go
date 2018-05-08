@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/crypto"
@@ -42,6 +41,13 @@ func (r *runner) removeConnectionID(c protocol.ConnectionID) { r.removeConnectio
 
 var _ sessionRunner = &runner{}
 
+type sessionHandler interface {
+	Add(protocol.ConnectionID, packetHandler)
+	Get(protocol.ConnectionID) (packetHandler, bool)
+	Remove(protocol.ConnectionID)
+	Close()
+}
+
 // A Listener of QUIC
 type server struct {
 	tlsConf *tls.Config
@@ -55,9 +61,7 @@ type server struct {
 	certChain crypto.CertChain
 	scfg      *handshake.ServerConfig
 
-	sessionsMutex sync.RWMutex
-	sessions      map[string] /* string(ConnectionID)*/ packetHandler
-	closed        bool
+	sessionHandler sessionHandler
 
 	serverError error
 
@@ -65,9 +69,8 @@ type server struct {
 	errorChan    chan struct{}
 
 	sessionRunner sessionRunner
-	// set as members, so they can be set in the tests
-	newSession                func(connection, sessionRunner, protocol.VersionNumber, protocol.ConnectionID, *handshake.ServerConfig, *tls.Config, *Config, utils.Logger) (packetHandler, error)
-	deleteClosedSessionsAfter time.Duration
+	// set as a member, so they can be set in the tests
+	newSession func(connection, sessionRunner, protocol.VersionNumber, protocol.ConnectionID, *handshake.ServerConfig, *tls.Config, *Config, utils.Logger) (packetHandler, error)
 
 	logger utils.Logger
 }
@@ -115,18 +118,17 @@ func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener,
 	}
 
 	s := &server{
-		conn:                      conn,
-		tlsConf:                   tlsConf,
-		config:                    config,
-		certChain:                 certChain,
-		scfg:                      scfg,
-		sessions:                  map[string]packetHandler{},
-		newSession:                newSession,
-		deleteClosedSessionsAfter: protocol.ClosedSessionDeleteTimeout,
-		sessionQueue:              make(chan Session, 5),
-		errorChan:                 make(chan struct{}),
-		supportsTLS:               supportsTLS,
-		logger:                    utils.DefaultLogger.WithPrefix("server"),
+		conn:           conn,
+		tlsConf:        tlsConf,
+		config:         config,
+		certChain:      certChain,
+		scfg:           scfg,
+		newSession:     newSession,
+		sessionHandler: newSessionMap(),
+		sessionQueue:   make(chan Session, 5),
+		errorChan:      make(chan struct{}),
+		supportsTLS:    supportsTLS,
+		logger:         utils.DefaultLogger.WithPrefix("server"),
 	}
 	s.setup()
 	if supportsTLS {
@@ -142,7 +144,7 @@ func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener,
 func (s *server) setup() {
 	s.sessionRunner = &runner{
 		onHandshakeCompleteImpl: func(sess packetHandler) { s.sessionQueue <- sess },
-		removeConnectionIDImpl:  s.removeConnection,
+		removeConnectionIDImpl:  s.sessionHandler.Remove,
 	}
 }
 
@@ -165,13 +167,13 @@ func (s *server) setupTLS() error {
 			case tlsSession := <-sessionChan:
 				connID := tlsSession.connID
 				sess := tlsSession.sess
-				s.sessionsMutex.Lock()
-				if _, ok := s.sessions[string(connID)]; ok { // drop this session if it already exists
-					s.sessionsMutex.Unlock()
+				if _, ok := s.sessionHandler.Get(connID); ok { // drop this session if it already exists
 					continue
 				}
-				s.sessions[string(connID)] = sess
-				s.sessionsMutex.Unlock()
+				// TODO(#1003): There's a race condition here.
+				// If another connection with the same conn ID is added between Get() and Add(), it would be overwritten.
+				// We can avoid this be using server-chosen connection IDs.
+				s.sessionHandler.Add(connID, sess)
 				go sess.run()
 			}
 		}
@@ -288,27 +290,7 @@ func (s *server) Accept() (Session, error) {
 
 // Close the server
 func (s *server) Close() error {
-	s.sessionsMutex.Lock()
-	if s.closed {
-		s.sessionsMutex.Unlock()
-		return nil
-	}
-	s.closed = true
-
-	var wg sync.WaitGroup
-	for _, session := range s.sessions {
-		if session != nil {
-			wg.Add(1)
-			go func(sess packetHandler) {
-				// session.Close() blocks until the CONNECTION_CLOSE has been sent and the run-loop has stopped
-				_ = sess.Close(nil)
-				wg.Done()
-			}(session)
-		}
-	}
-	s.sessionsMutex.Unlock()
-	wg.Wait()
-
+	s.sessionHandler.Close()
 	err := s.conn.Close()
 	<-s.errorChan // wait for serve() to return
 	return err
@@ -359,10 +341,7 @@ func (s *server) handleIETFQUICPacket(hdr *wire.Header, packetData []byte, remot
 		}
 	}
 
-	s.sessionsMutex.RLock()
-	session, sessionKnown := s.sessions[string(hdr.DestConnectionID)]
-	s.sessionsMutex.RUnlock()
-
+	session, sessionKnown := s.sessionHandler.Get(hdr.DestConnectionID)
 	if sessionKnown && session == nil {
 		// Late packet for closed session
 		return nil
@@ -382,18 +361,15 @@ func (s *server) handleIETFQUICPacket(hdr *wire.Header, packetData []byte, remot
 }
 
 func (s *server) handleGQUICPacket(hdr *wire.Header, packetData []byte, remoteAddr net.Addr, rcvTime time.Time) error {
-	s.sessionsMutex.RLock()
-	session, sessionKnown := s.sessions[string(hdr.DestConnectionID)]
-	s.sessionsMutex.RUnlock()
-
-	if sessionKnown && session == nil {
-		// Late packet for closed session
-		return nil
-	}
-
 	// ignore all Public Reset packets
 	if hdr.ResetFlag {
 		s.logger.Infof("Received unexpected Public Reset for connection %s.", hdr.DestConnectionID)
+		return nil
+	}
+
+	session, sessionKnown := s.sessionHandler.Get(hdr.DestConnectionID)
+	if sessionKnown && session == nil {
+		// Late packet for closed session
 		return nil
 	}
 
@@ -450,9 +426,7 @@ func (s *server) handleGQUICPacket(hdr *wire.Header, packetData []byte, remoteAd
 		if err != nil {
 			return err
 		}
-		s.sessionsMutex.Lock()
-		s.sessions[string(hdr.DestConnectionID)] = session
-		s.sessionsMutex.Unlock()
+		s.sessionHandler.Add(hdr.DestConnectionID, session)
 
 		go session.run()
 	}
@@ -464,16 +438,4 @@ func (s *server) handleGQUICPacket(hdr *wire.Header, packetData []byte, remoteAd
 		rcvTime:    rcvTime,
 	})
 	return nil
-}
-
-func (s *server) removeConnection(id protocol.ConnectionID) {
-	s.sessionsMutex.Lock()
-	s.sessions[string(id)] = nil
-	s.sessionsMutex.Unlock()
-
-	time.AfterFunc(s.deleteClosedSessionsAfter, func() {
-		s.sessionsMutex.Lock()
-		delete(s.sessions, string(id))
-		s.sessionsMutex.Unlock()
-	})
 }
