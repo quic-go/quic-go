@@ -274,6 +274,7 @@ func (h *cryptoSetupClient) handleSHLOMessage(cryptoData map[Tag][]byte) (*Trans
 	if err != nil {
 		return nil, err
 	}
+	h.logger.Debugf("Creating AEAD for forward-secure encryption. Stopping to accept all lower encryption levels.")
 
 	params, err := readHelloMap(cryptoData)
 	if err != nil {
@@ -319,6 +320,7 @@ func (h *cryptoSetupClient) Open(dst, src []byte, packetNumber protocol.PacketNu
 	if h.secureAEAD != nil {
 		data, err := h.secureAEAD.Open(dst, src, packetNumber, associatedData)
 		if err == nil {
+			h.logger.Debugf("Received first secure packet. Stopping to accept unencrypted packets.")
 			h.receivedSecurePacket = true
 			return data, protocol.EncryptionSecure, nil
 		}
@@ -509,6 +511,7 @@ func (h *cryptoSetupClient) maybeUpgradeCrypto() error {
 		if err != nil {
 			return err
 		}
+		h.logger.Debugf("Creating AEAD for secure encryption.")
 		h.handshakeEvent <- struct{}{}
 	}
 	return nil
