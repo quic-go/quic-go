@@ -334,17 +334,7 @@ func (s *server) handlePacket(pconn net.PacketConn, remoteAddr net.Addr, packet 
 
 	// ignore all Public Reset packets
 	if hdr.ResetFlag {
-		if sessionKnown {
-			var pr *wire.PublicReset
-			pr, err = wire.ParsePublicReset(r)
-			if err != nil {
-				s.logger.Infof("Received a Public Reset for connection %s. An error occurred parsing the packet.", hdr.DestConnectionID)
-			} else {
-				s.logger.Infof("Received a Public Reset for connection %s, rejected packet number: 0x%x.", hdr.DestConnectionID, pr.RejectedPacketNumber)
-			}
-		} else {
-			s.logger.Infof("Received Public Reset for unknown connection %s.", hdr.DestConnectionID)
-		}
+		s.logger.Infof("Received unexpected Public Reset for connection %s.", hdr.DestConnectionID)
 		return nil
 	}
 
