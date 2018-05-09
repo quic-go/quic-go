@@ -171,7 +171,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("creates new sessions", func() {
-			err := serv.handlePacket(nil, nil, firstPacket)
+			err := serv.handlePacket(nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			sess := serv.sessions[string(connID)].(*mockSession)
@@ -232,7 +232,7 @@ var _ = Describe("Server", func() {
 				acceptedSess, err = serv.Accept()
 				Expect(err).ToNot(HaveOccurred())
 			}()
-			err := serv.handlePacket(nil, nil, firstPacket)
+			err := serv.handlePacket(nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			sess := serv.sessions[string(connID)].(*mockSession)
@@ -249,7 +249,7 @@ var _ = Describe("Server", func() {
 				serv.Accept()
 				accepted = true
 			}()
-			err := serv.handlePacket(nil, nil, firstPacket)
+			err := serv.handlePacket(nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			sess := serv.sessions[string(connID)].(*mockSession)
@@ -259,9 +259,9 @@ var _ = Describe("Server", func() {
 		})
 
 		It("assigns packets to existing sessions", func() {
-			err := serv.handlePacket(nil, nil, firstPacket)
+			err := serv.handlePacket(nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
-			err = serv.handlePacket(nil, nil, []byte{0x08, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0x01})
+			err = serv.handlePacket(nil, []byte{0x08, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0x01})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions[string(connID)].(*mockSession).connectionID).To(Equal(connID))
@@ -272,7 +272,7 @@ var _ = Describe("Server", func() {
 			serv.deleteClosedSessionsAfter = time.Second // make sure that the nil value for the closed session doesn't get deleted in this test
 			nullAEAD, err := crypto.NewNullAEAD(protocol.PerspectiveServer, connID, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
-			err = serv.handlePacket(nil, nil, append(firstPacket, nullAEAD.Seal(nil, nil, 0, firstPacket)...))
+			err = serv.handlePacket(nil, append(firstPacket, nullAEAD.Seal(nil, nil, 0, firstPacket)...))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions[string(connID)]).ToNot(BeNil())
@@ -287,7 +287,7 @@ var _ = Describe("Server", func() {
 			serv.deleteClosedSessionsAfter = 25 * time.Millisecond
 			nullAEAD, err := crypto.NewNullAEAD(protocol.PerspectiveServer, connID, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
-			err = serv.handlePacket(nil, nil, append(firstPacket, nullAEAD.Seal(nil, nil, 0, firstPacket)...))
+			err = serv.handlePacket(nil, append(firstPacket, nullAEAD.Seal(nil, nil, 0, firstPacket)...))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions).To(HaveKey(string(connID)))
@@ -313,7 +313,7 @@ var _ = Describe("Server", func() {
 
 		It("ignores packets for closed sessions", func() {
 			serv.sessions[string(connID)] = nil
-			err := serv.handlePacket(nil, nil, []byte{0x08, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0x01})
+			err := serv.handlePacket(nil, []byte{0x08, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0x01})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions[string(connID)]).To(BeNil())
@@ -364,7 +364,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("ignores delayed packets with mismatching versions", func() {
-			err := serv.handlePacket(nil, nil, firstPacket)
+			err := serv.handlePacket(nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions[string(connID)].(*mockSession).handledPackets).To(HaveLen(1))
 			b := &bytes.Buffer{}
@@ -372,7 +372,7 @@ var _ = Describe("Server", func() {
 			data := []byte{0x09, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6}
 			utils.BigEndian.WriteUint32(b, uint32(protocol.SupportedVersions[0]+1))
 			data = append(append(data, b.Bytes()...), 0x01)
-			err = serv.handlePacket(nil, nil, data)
+			err = serv.handlePacket(nil, data)
 			Expect(err).ToNot(HaveOccurred())
 			// if we didn't ignore the packet, the server would try to send a version negotiation packet, which would make the test panic because it doesn't have a udpConn
 			Expect(conn.dataWritten.Bytes()).To(BeEmpty())
@@ -381,7 +381,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("errors on invalid public header", func() {
-			err := serv.handlePacket(nil, nil, nil)
+			err := serv.handlePacket(nil, nil)
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.InvalidPacketHeader))
 		})
 
@@ -396,12 +396,12 @@ var _ = Describe("Server", func() {
 				Version:          versionIETFFrames,
 			}
 			Expect(hdr.Write(b, protocol.PerspectiveClient, versionIETFFrames)).To(Succeed())
-			err := serv.handlePacket(nil, nil, append(b.Bytes(), make([]byte, 456)...))
+			err := serv.handlePacket(nil, append(b.Bytes(), make([]byte, 456)...))
 			Expect(err).To(MatchError("packet payload (456 bytes) is smaller than the expected payload length (1000 bytes)"))
 		})
 
 		It("cuts packets at the payload length", func() {
-			err := serv.handlePacket(nil, nil, firstPacket)
+			err := serv.handlePacket(nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
 			b := &bytes.Buffer{}
 			hdr := &wire.Header{
@@ -413,36 +413,18 @@ var _ = Describe("Server", func() {
 				Version:          versionIETFFrames,
 			}
 			Expect(hdr.Write(b, protocol.PerspectiveClient, versionIETFFrames)).To(Succeed())
-			err = serv.handlePacket(nil, nil, append(b.Bytes(), make([]byte, 456)...))
+			err = serv.handlePacket(nil, append(b.Bytes(), make([]byte, 456)...))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions[string(connID)].(*mockSession).handledPackets).To(HaveLen(2))
 			Expect(serv.sessions[string(connID)].(*mockSession).handledPackets[1].data).To(HaveLen(123))
 		})
 
-		It("ignores public resets for unknown connections", func() {
-			err := serv.handlePacket(nil, nil, wire.WritePublicReset([]byte{9, 9, 9, 9, 9, 9, 9, 9}, 1, 1337))
-			Expect(err).ToNot(HaveOccurred())
-			Expect(serv.sessions).To(BeEmpty())
-		})
-
-		It("ignores public resets for known connections", func() {
-			err := serv.handlePacket(nil, nil, firstPacket)
+		It("ignores Public Resets", func() {
+			err := serv.handlePacket(nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions[string(connID)].(*mockSession).handledPackets).To(HaveLen(1))
-			err = serv.handlePacket(nil, nil, wire.WritePublicReset(connID, 1, 1337))
-			Expect(err).ToNot(HaveOccurred())
-			Expect(serv.sessions).To(HaveLen(1))
-			Expect(serv.sessions[string(connID)].(*mockSession).handledPackets).To(HaveLen(1))
-		})
-
-		It("ignores invalid public resets for known connections", func() {
-			err := serv.handlePacket(nil, nil, firstPacket)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(serv.sessions).To(HaveLen(1))
-			Expect(serv.sessions[string(connID)].(*mockSession).handledPackets).To(HaveLen(1))
-			data := wire.WritePublicReset(connID, 1, 1337)
-			err = serv.handlePacket(nil, nil, data[:len(data)-2])
+			err = serv.handlePacket(nil, wire.WritePublicReset(connID, 1, 1337))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(serv.sessions).To(HaveLen(1))
 			Expect(serv.sessions[string(connID)].(*mockSession).handledPackets).To(HaveLen(1))
@@ -460,7 +442,8 @@ var _ = Describe("Server", func() {
 			}
 			hdr.Write(b, protocol.PerspectiveClient, 13 /* not a valid QUIC version */)
 			b.Write(bytes.Repeat([]byte{0}, protocol.MinClientHelloSize)) // add a fake CHLO
-			err := serv.handlePacket(conn, nil, b.Bytes())
+			serv.conn = conn
+			err := serv.handlePacket(nil, b.Bytes())
 			Expect(conn.dataWritten.Bytes()).ToNot(BeEmpty())
 			Expect(err).ToNot(HaveOccurred())
 		})
@@ -476,7 +459,8 @@ var _ = Describe("Server", func() {
 			}
 			hdr.Write(b, protocol.PerspectiveClient, 13 /* not a valid QUIC version */)
 			b.Write(bytes.Repeat([]byte{0}, protocol.MinClientHelloSize-1)) // this packet is 1 byte too small
-			err := serv.handlePacket(conn, udpAddr, b.Bytes())
+			serv.conn = conn
+			err := serv.handlePacket(udpAddr, b.Bytes())
 			Expect(err).To(MatchError("dropping small packet with unknown version"))
 			Expect(conn.dataWritten.Len()).Should(BeZero())
 		})
@@ -638,6 +622,27 @@ var _ = Describe("Server", func() {
 		err := hdr.Write(b, protocol.PerspectiveClient, protocol.VersionTLS)
 		Expect(err).ToNot(HaveOccurred())
 		b.Write(bytes.Repeat([]byte{0}, protocol.MinClientHelloSize)) // add a fake CHLO
+		conn.dataToRead <- b.Bytes()
+		conn.dataReadFrom = udpAddr
+		ln, err := Listen(conn, testdata.GetTLSConfig(), config)
+		Expect(err).ToNot(HaveOccurred())
+		defer ln.Close()
+		Consistently(func() int { return conn.dataWritten.Len() }).Should(BeZero())
+	})
+
+	It("ignores non-Initial Long Header packets for unknown connections", func() {
+		connID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
+		b := &bytes.Buffer{}
+		hdr := wire.Header{
+			Type:             protocol.PacketTypeHandshake,
+			IsLongHeader:     true,
+			DestConnectionID: connID,
+			SrcConnectionID:  connID,
+			PacketNumber:     0x55,
+			Version:          protocol.VersionTLS,
+		}
+		err := hdr.Write(b, protocol.PerspectiveClient, protocol.VersionTLS)
+		Expect(err).ToNot(HaveOccurred())
 		conn.dataToRead <- b.Bytes()
 		conn.dataReadFrom = udpAddr
 		ln, err := Listen(conn, testdata.GetTLSConfig(), config)

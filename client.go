@@ -316,6 +316,35 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 	hdr.Raw = packet[:len(packet)-r.Len()]
 	packetData := packet[len(packet)-r.Len():]
 
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	// handle Version Negotiation Packets
+	if hdr.IsVersionNegotiation {
+		// ignore delayed / duplicated version negotiation packets
+		if c.receivedVersionNegotiationPacket || c.versionNegotiated {
+			return errors.New("received a delayed Version Negotiation Packet")
+		}
+
+		// version negotiation packets have no payload
+		if err := c.handleVersionNegotiationPacket(hdr); err != nil {
+			c.session.Close(err)
+		}
+		return nil
+	}
+
+	if hdr.IsPublicHeader {
+		return c.handleGQUICPacket(hdr, r, packetData, remoteAddr, rcvTime)
+	}
+	return c.handleIETFQUICPacket(hdr, packetData, remoteAddr, rcvTime)
+}
+
+func (c *client) handleIETFQUICPacket(hdr *wire.Header, packetData []byte, remoteAddr net.Addr, rcvTime time.Time) error {
+	// TODO(#1003): add support for server-chosen connection IDs
+	// reject packets with the wrong connection ID
+	if !hdr.DestConnectionID.Equal(c.srcConnID) {
+		return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", hdr.DestConnectionID, c.srcConnID)
+	}
 	if hdr.IsLongHeader {
 		c.logger.Debugf("len(packet data): %d, payloadLen: %d", len(packetData), hdr.PayloadLen)
 		if protocol.ByteCount(len(packetData)) < hdr.PayloadLen {
@@ -325,11 +354,24 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 		// TODO(#1312): implement parsing of compound packets
 	}
 
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	// this is the first packet we are receiving
+	// since it is not a Version Negotiation Packet, this means the server supports the suggested version
+	if !c.versionNegotiated {
+		c.versionNegotiated = true
+		close(c.versionNegotiationChan)
+	}
 
+	c.session.handlePacket(&receivedPacket{
+		remoteAddr: remoteAddr,
+		header:     hdr,
+		data:       packetData,
+		rcvTime:    rcvTime,
+	})
+	return nil
+}
+
+func (c *client) handleGQUICPacket(hdr *wire.Header, r *bytes.Reader, packetData []byte, remoteAddr net.Addr, rcvTime time.Time) error {
 	// reject packets with the wrong connection ID
-	// TODO(#1003): add support for server-chosen connection IDs
 	if !hdr.OmitConnectionID && !hdr.DestConnectionID.Equal(c.srcConnID) {
 		return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", hdr.DestConnectionID, c.srcConnID)
 	}
@@ -350,28 +392,12 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 		return nil
 	}
 
-	// handle Version Negotiation Packets
-	if hdr.IsVersionNegotiation {
-		// ignore delayed / duplicated version negotiation packets
-		if c.receivedVersionNegotiationPacket || c.versionNegotiated {
-			return errors.New("received a delayed Version Negotiation Packet")
-		}
-
-		// version negotiation packets have no payload
-		if err := c.handleVersionNegotiationPacket(hdr); err != nil {
-			c.session.Close(err)
-		}
-		return nil
-	}
-
 	// this is the first packet we are receiving
 	// since it is not a Version Negotiation Packet, this means the server supports the suggested version
 	if !c.versionNegotiated {
 		c.versionNegotiated = true
 		close(c.versionNegotiationChan)
 	}
-
-	// TODO: validate packet number and connection ID on Retry packets (for IETF QUIC)
 
 	c.session.handlePacket(&receivedPacket{
 		remoteAddr: remoteAddr,

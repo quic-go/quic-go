@@ -580,6 +580,7 @@ var _ = Describe("Client", func() {
 			SrcConnectionID:  connID,
 			PacketNumber:     1,
 			PacketNumberLen:  1,
+			Version:          versionIETFFrames,
 		}).Write(buf, protocol.PerspectiveServer, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
 		err = cl.handlePacket(addr, buf.Bytes())
