@@ -405,6 +405,7 @@ func (s *session) preSetup() {
 	s.connFlowController = flowcontrol.NewConnectionFlowController(
 		protocol.ReceiveConnectionFlowControlWindow,
 		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),
+		s.onHasConnectionWindowUpdate,
 		s.rttStats,
 		s.logger,
 	)
@@ -425,7 +426,7 @@ func (s *session) postSetup() error {
 	s.sessionCreationTime = now
 
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.rttStats, s.version)
-	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.cryptoStream, s.packer.QueueControlFrame)
+	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.cryptoStream, s.connFlowController, s.packer.QueueControlFrame)
 	return nil
 }
 
@@ -1021,9 +1022,6 @@ func (s *session) maybeSendRetransmission() (bool, error) {
 }
 
 func (s *session) sendPacket() (bool, error) {
-	if offset := s.connFlowController.GetWindowUpdate(); offset != 0 {
-		s.packer.QueueControlFrame(&wire.MaxDataFrame{ByteOffset: offset})
-	}
 	if isBlocked, offset := s.connFlowController.IsNewlyBlocked(); isBlocked {
 		s.packer.QueueControlFrame(&wire.BlockedFrame{Offset: offset})
 	}
@@ -1137,6 +1135,7 @@ func (s *session) newFlowController(id protocol.StreamID) flowcontrol.StreamFlow
 		protocol.ReceiveStreamFlowControlWindow,
 		protocol.ByteCount(s.config.MaxReceiveStreamFlowControlWindow),
 		initialSendWindow,
+		s.onHasStreamWindowUpdate,
 		s.rttStats,
 		s.logger,
 	)
@@ -1151,6 +1150,7 @@ func (s *session) newCryptoStream() cryptoStreamI {
 		protocol.ReceiveStreamFlowControlWindow,
 		protocol.ByteCount(s.config.MaxReceiveStreamFlowControlWindow),
 		0,
+		s.onHasStreamWindowUpdate,
 		s.rttStats,
 		s.logger,
 	)
@@ -1200,8 +1200,13 @@ func (s *session) queueControlFrame(f wire.Frame) {
 	s.scheduleSending()
 }
 
-func (s *session) onHasWindowUpdate(id protocol.StreamID) {
-	s.windowUpdateQueue.Add(id)
+func (s *session) onHasStreamWindowUpdate(id protocol.StreamID) {
+	s.windowUpdateQueue.AddStream(id)
+	s.scheduleSending()
+}
+
+func (s *session) onHasConnectionWindowUpdate() {
+	s.windowUpdateQueue.AddConnection()
 	s.scheduleSending()
 }
 
