@@ -16,11 +16,7 @@ const ackDelayExponent = 3
 // An AckFrame is an ACK frame
 type AckFrame struct {
 	AckRanges []AckRange // has to be ordered. The highest ACK range goes first, the lowest ACK range goes last
-
-	// time when the LargestAcked was receiveid
-	// this field will not be set for received ACKs frames
-	PacketReceivedTime time.Time
-	DelayTime          time.Duration
+	DelayTime time.Duration
 }
 
 // parseAckFrame reads an ACK frame

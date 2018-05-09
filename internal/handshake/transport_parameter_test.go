@@ -128,8 +128,8 @@ var _ = Describe("Transport Parameters", func() {
 				parameters = map[transportParameterID][]byte{
 					initialMaxStreamDataParameterID:  {0x11, 0x22, 0x33, 0x44},
 					initialMaxDataParameterID:        {0x22, 0x33, 0x44, 0x55},
-					initialMaxStreamsBiDiParameterID: {0x33, 0x44},
-					initialMaxStreamsUniParameterID:  {0x44, 0x55},
+					initialMaxBidiStreamsParameterID: {0x33, 0x44},
+					initialMaxUniStreamsParameterID:  {0x44, 0x55},
 					idleTimeoutParameterID:           {0x13, 0x37},
 					maxPacketSizeParameterID:         {0x73, 0x31},
 				}
@@ -186,13 +186,13 @@ var _ = Describe("Transport Parameters", func() {
 			})
 
 			It("rejects the parameters if the initial_max_stream_id_bidi has the wrong length", func() {
-				parameters[initialMaxStreamsBiDiParameterID] = []byte{0x11, 0x22, 0x33} // should be 2 bytes
+				parameters[initialMaxBidiStreamsParameterID] = []byte{0x11, 0x22, 0x33} // should be 2 bytes
 				_, err := readTransportParameters(paramsMapToList(parameters))
 				Expect(err).To(MatchError("wrong length for initial_max_stream_id_bidi: 3 (expected 2)"))
 			})
 
 			It("rejects the parameters if the initial_max_stream_id_bidi has the wrong length", func() {
-				parameters[initialMaxStreamsUniParameterID] = []byte{0x11, 0x22, 0x33} // should be 2 bytes
+				parameters[initialMaxUniStreamsParameterID] = []byte{0x11, 0x22, 0x33} // should be 2 bytes
 				_, err := readTransportParameters(paramsMapToList(parameters))
 				Expect(err).To(MatchError("wrong length for initial_max_stream_id_uni: 3 (expected 2)"))
 			})
@@ -248,8 +248,8 @@ var _ = Describe("Transport Parameters", func() {
 				Expect(values).To(HaveLen(6))
 				Expect(values).To(HaveKeyWithValue(initialMaxStreamDataParameterID, []byte{0xde, 0xad, 0xbe, 0xef}))
 				Expect(values).To(HaveKeyWithValue(initialMaxDataParameterID, []byte{0xde, 0xca, 0xfb, 0xad}))
-				Expect(values).To(HaveKeyWithValue(initialMaxStreamsBiDiParameterID, []byte{0x12, 0x34}))
-				Expect(values).To(HaveKeyWithValue(initialMaxStreamsUniParameterID, []byte{0x43, 0x21}))
+				Expect(values).To(HaveKeyWithValue(initialMaxBidiStreamsParameterID, []byte{0x12, 0x34}))
+				Expect(values).To(HaveKeyWithValue(initialMaxUniStreamsParameterID, []byte{0x43, 0x21}))
 				Expect(values).To(HaveKeyWithValue(idleTimeoutParameterID, []byte{0xca, 0xfe}))
 				Expect(values).To(HaveKeyWithValue(maxPacketSizeParameterID, []byte{0x5, 0xac})) // 1452 = 0x5ac
 			})

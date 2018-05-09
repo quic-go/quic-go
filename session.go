@@ -406,6 +406,7 @@ func (s *session) preSetup() {
 	s.connFlowController = flowcontrol.NewConnectionFlowController(
 		protocol.ReceiveConnectionFlowControlWindow,
 		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),
+		s.onHasConnectionWindowUpdate,
 		s.rttStats,
 		s.logger,
 	)
@@ -426,7 +427,7 @@ func (s *session) postSetup() error {
 	s.sessionCreationTime = now
 
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.rttStats, s.version)
-	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.cryptoStream, s.packer.QueueControlFrame)
+	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.cryptoStream, s.connFlowController, s.packer.QueueControlFrame)
 	return nil
 }
 
@@ -452,8 +453,6 @@ runLoop:
 		case _, ok := <-s.handshakeEvent:
 			// when the handshake is completed, the channel will be closed
 			s.handleHandshakeEvent(!ok)
-		// case p := <-s.paramsChan:
-		// 	s.processTransportParameters(&p)
 		default:
 		}
 
@@ -933,6 +932,18 @@ sendLoop:
 				}
 			}
 			numPacketsSent++
+		case ackhandler.SendTLP:
+			// In TLP mode, a probe packet has to be sent.
+			// Add a PING frame to make sure a (retransmittable) packet will be sent.
+			s.queueControlFrame(&wire.PingFrame{})
+			sentPacket, err := s.sendPacket()
+			if err != nil {
+				return err
+			}
+			if !sentPacket {
+				return errors.New("session BUG: expected a packet to be sent in TLP mode")
+			}
+			return nil
 		case ackhandler.SendRetransmission:
 			sentPacket, err := s.maybeSendRetransmission()
 			if err != nil {
@@ -1035,9 +1046,6 @@ func (s *session) maybeSendRetransmission() (bool, error) {
 }
 
 func (s *session) sendPacket() (bool, error) {
-	if offset := s.connFlowController.GetWindowUpdate(); offset != 0 {
-		s.packer.QueueControlFrame(&wire.MaxDataFrame{ByteOffset: offset})
-	}
 	if isBlocked, offset := s.connFlowController.IsNewlyBlocked(); isBlocked {
 		s.packer.QueueControlFrame(&wire.BlockedFrame{Offset: offset})
 	}
@@ -1151,6 +1159,7 @@ func (s *session) newFlowController(id protocol.StreamID) flowcontrol.StreamFlow
 		protocol.ReceiveStreamFlowControlWindow,
 		protocol.ByteCount(s.config.MaxReceiveStreamFlowControlWindow),
 		initialSendWindow,
+		s.onHasStreamWindowUpdate,
 		s.rttStats,
 		s.logger,
 	)
@@ -1165,6 +1174,7 @@ func (s *session) newCryptoStream() cryptoStreamI {
 		protocol.ReceiveStreamFlowControlWindow,
 		protocol.ByteCount(s.config.MaxReceiveStreamFlowControlWindow),
 		0,
+		s.onHasStreamWindowUpdate,
 		s.rttStats,
 		s.logger,
 	)
@@ -1214,8 +1224,13 @@ func (s *session) queueControlFrame(f wire.Frame) {
 	s.scheduleSending()
 }
 
-func (s *session) onHasWindowUpdate(id protocol.StreamID) {
-	s.windowUpdateQueue.Add(id)
+func (s *session) onHasStreamWindowUpdate(id protocol.StreamID) {
+	s.windowUpdateQueue.AddStream(id)
+	s.scheduleSending()
+}
+
+func (s *session) onHasConnectionWindowUpdate() {
+	s.windowUpdateQueue.AddConnection()
 	s.scheduleSending()
 }
 

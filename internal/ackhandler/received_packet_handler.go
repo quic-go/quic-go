@@ -88,7 +88,7 @@ func (h *receivedPacketHandler) IgnoreBelow(p protocol.PacketNumber) {
 
 // isMissing says if a packet was reported missing in the last ACK.
 func (h *receivedPacketHandler) isMissing(p protocol.PacketNumber) bool {
-	if h.lastAck == nil {
+	if h.lastAck == nil || p < h.ignoreBelow {
 		return false
 	}
 	return p < h.lastAck.LargestAcked() && !h.lastAck.AcksPacket(p)
@@ -159,13 +159,14 @@ func (h *receivedPacketHandler) maybeQueueAck(packetNumber protocol.PacketNumber
 }
 
 func (h *receivedPacketHandler) GetAckFrame() *wire.AckFrame {
-	if !h.ackQueued && (h.ackAlarm.IsZero() || h.ackAlarm.After(time.Now())) {
+	now := time.Now()
+	if !h.ackQueued && (h.ackAlarm.IsZero() || h.ackAlarm.After(now)) {
 		return nil
 	}
 
 	ack := &wire.AckFrame{
-		AckRanges:          h.packetHistory.GetAckRanges(),
-		PacketReceivedTime: h.largestObservedReceivedTime,
+		AckRanges: h.packetHistory.GetAckRanges(),
+		DelayTime: now.Sub(h.largestObservedReceivedTime),
 	}
 
 	h.lastAck = ack

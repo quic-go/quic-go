@@ -214,6 +214,7 @@ func (h *cryptoSetupServer) Open(dst, src []byte, packetNumber protocol.PacketNu
 		res, err := h.forwardSecureAEAD.Open(dst, src, packetNumber, associatedData)
 		if err == nil {
 			if !h.receivedForwardSecurePacket { // this is the first forward secure packet we receive from the client
+				h.logger.Debugf("Received first forward-secure packet. Stopping to accept all lower encryption levels.")
 				h.receivedForwardSecurePacket = true
 				// wait for the send on the handshakeEvent chan
 				<-h.sentSHLO
@@ -228,6 +229,7 @@ func (h *cryptoSetupServer) Open(dst, src []byte, packetNumber protocol.PacketNu
 	if h.secureAEAD != nil {
 		res, err := h.secureAEAD.Open(dst, src, packetNumber, associatedData)
 		if err == nil {
+			h.logger.Debugf("Received first secure packet. Stopping to accept unencrypted packets.")
 			h.receivedSecurePacket = true
 			return res, protocol.EncryptionSecure, nil
 		}
@@ -400,6 +402,7 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 	if err != nil {
 		return nil, err
 	}
+	h.logger.Debugf("Creating AEAD for secure encryption.")
 	h.handshakeEvent <- struct{}{}
 
 	// Generate a new curve instance to derive the forward secure key
@@ -429,6 +432,7 @@ func (h *cryptoSetupServer) handleCHLO(sni string, data []byte, cryptoData map[T
 	if err != nil {
 		return nil, err
 	}
+	h.logger.Debugf("Creating AEAD for forward-secure encryption.")
 
 	replyMap := h.params.getHelloMap()
 	// add crypto parameters

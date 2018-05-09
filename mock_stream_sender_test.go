@@ -45,16 +45,6 @@ func (mr *MockStreamSenderMockRecorder) onHasStreamData(arg0 interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "onHasStreamData", reflect.TypeOf((*MockStreamSender)(nil).onHasStreamData), arg0)
 }
 
-// onHasWindowUpdate mocks base method
-func (m *MockStreamSender) onHasWindowUpdate(arg0 protocol.StreamID) {
-	m.ctrl.Call(m, "onHasWindowUpdate", arg0)
-}
-
-// onHasWindowUpdate indicates an expected call of onHasWindowUpdate
-func (mr *MockStreamSenderMockRecorder) onHasWindowUpdate(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "onHasWindowUpdate", reflect.TypeOf((*MockStreamSender)(nil).onHasWindowUpdate), arg0)
-}
-
 // onStreamCompleted mocks base method
 func (m *MockStreamSender) onStreamCompleted(arg0 protocol.StreamID) {
 	m.ctrl.Call(m, "onStreamCompleted", arg0)

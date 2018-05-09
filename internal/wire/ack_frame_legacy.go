@@ -191,7 +191,6 @@ func (f *AckFrame) writeLegacy(b *bytes.Buffer, _ protocol.VersionNumber) error 
 		utils.BigEndian.WriteUint48(b, uint64(largestAcked)&(1<<48-1))
 	}
 
-	f.DelayTime = time.Since(f.PacketReceivedTime)
 	utils.BigEndian.WriteUfloat16(b, uint64(f.DelayTime/time.Microsecond))
 
 	var numRanges uint64

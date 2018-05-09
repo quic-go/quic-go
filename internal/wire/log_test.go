@@ -74,7 +74,7 @@ var _ = Describe("Frame logging", func() {
 			DelayTime: 12 * time.Millisecond,
 		}
 		LogFrame(logger, frame, false)
-		Expect(buf.String()).To(ContainSubstring("\t<- &wire.AckFrame{LargestAcked: 0x8, LowestAcked: 0x2, AckRanges: []wire.AckRange{wire.AckRange{Smallest:0x5, Largest:0x8}, wire.AckRange{Smallest:0x2, Largest:0x3}}, DelayTime: 12ms}\n"))
+		Expect(buf.String()).To(ContainSubstring("\t<- &wire.AckFrame{LargestAcked: 0x8, LowestAcked: 0x2, AckRanges: {{Largest: 0x8, Smallest: 0x5}, {Largest: 0x3, Smallest: 0x2}}, DelayTime: 12ms}\n"))
 	})
 
 	It("logs incoming StopWaiting frames", func() {

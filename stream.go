@@ -18,7 +18,6 @@ const (
 // The streamSender is notified by the stream about various events.
 type streamSender interface {
 	queueControlFrame(wire.Frame)
-	onHasWindowUpdate(protocol.StreamID)
 	onHasStreamData(protocol.StreamID)
 	onStreamCompleted(protocol.StreamID)
 }
@@ -32,10 +31,6 @@ type uniStreamSender struct {
 
 func (s *uniStreamSender) queueControlFrame(f wire.Frame) {
 	s.streamSender.queueControlFrame(f)
-}
-
-func (s *uniStreamSender) onHasWindowUpdate(id protocol.StreamID) {
-	s.streamSender.onHasWindowUpdate(id)
 }
 
 func (s *uniStreamSender) onHasStreamData(id protocol.StreamID) {
