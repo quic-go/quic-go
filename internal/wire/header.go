@@ -37,9 +37,6 @@ type Header struct {
 	KeyPhase     int
 	PayloadLen   protocol.ByteCount
 
-	// only needed for logging
-	isPublicHeader bool
-
 	// spin stuff
 	HasSpinBit bool
 	SpinBit bool
