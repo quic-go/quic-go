@@ -87,7 +87,7 @@ func parsePacketHeader(b *bytes.Reader, sentBy protocol.Perspective, isPublicHea
 		hdr.IsPublicHeader = true // save that this is a Public Header, so we can log it correctly later
 		return hdr, nil
 	}
-	return parseHeader(b, sentBy)
+	return parseHeader(b)
 }
 
 // Write writes the Header.

@@ -547,9 +547,25 @@ var _ = Describe("Client", func() {
 			Version:          versionIETFFrames,
 		}
 		Expect(hdr.Write(b, protocol.PerspectiveClient, versionIETFFrames)).To(Succeed())
-		cl.handlePacket(addr, append(b.Bytes(), make([]byte, 456)...))
+		err := cl.handlePacket(addr, append(b.Bytes(), make([]byte, 456)...))
+		Expect(err).ToNot(HaveOccurred())
 		Expect(sess.handledPackets).To(HaveLen(1))
 		Expect(sess.handledPackets[0].data).To(HaveLen(123))
+	})
+
+	It("ignores packets with the wrong Long Header Type", func() {
+		b := &bytes.Buffer{}
+		hdr := &wire.Header{
+			IsLongHeader:     true,
+			Type:             protocol.PacketTypeInitial,
+			PayloadLen:       123,
+			SrcConnectionID:  connID,
+			DestConnectionID: connID,
+			Version:          versionIETFFrames,
+		}
+		Expect(hdr.Write(b, protocol.PerspectiveServer, versionIETFFrames)).To(Succeed())
+		err := cl.handlePacket(addr, append(b.Bytes(), make([]byte, 456)...))
+		Expect(err).To(MatchError("Received unsupported packet type: Initial"))
 	})
 
 	It("ignores packets without connection id, if it didn't request connection id trunctation", func() {
