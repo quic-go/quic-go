@@ -28,7 +28,7 @@ var _ = Describe("Client", func() {
 		addr       net.Addr
 		connID     protocol.ConnectionID
 
-		originalClientSessConstructor func(conn connection, hostname string, v protocol.VersionNumber, connectionID protocol.ConnectionID, tlsConf *tls.Config, config *Config, initialVersion protocol.VersionNumber, negotiatedVersions []protocol.VersionNumber, logger utils.Logger) (packetHandler, error)
+		originalClientSessConstructor func(connection, sessionRunner, string, protocol.VersionNumber, protocol.ConnectionID, *tls.Config, *Config, protocol.VersionNumber, []protocol.VersionNumber, utils.Logger) (packetHandler, error)
 	)
 
 	// generate a packet sent by the server that accepts the QUIC version suggested by the client
@@ -48,7 +48,7 @@ var _ = Describe("Client", func() {
 		connID = protocol.ConnectionID{0, 0, 0, 0, 0, 0, 0x13, 0x37}
 		originalClientSessConstructor = newClientSession
 		Eventually(areSessionsRunning).Should(BeFalse())
-		msess, _ := newMockSession(nil, 0, connID, nil, nil, nil, nil)
+		msess, _ := newMockSession(nil, nil, 0, connID, nil, nil, nil, nil)
 		sess = msess.(*mockSession)
 		addr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
 		packetConn = newMockPacketConn()
@@ -97,6 +97,7 @@ var _ = Describe("Client", func() {
 			remoteAddrChan := make(chan string)
 			newClientSession = func(
 				conn connection,
+				_ sessionRunner,
 				_ string,
 				_ protocol.VersionNumber,
 				_ protocol.ConnectionID,
@@ -126,6 +127,7 @@ var _ = Describe("Client", func() {
 			hostnameChan := make(chan string)
 			newClientSession = func(
 				_ connection,
+				_ sessionRunner,
 				h string,
 				_ protocol.VersionNumber,
 				_ protocol.ConnectionID,
@@ -160,6 +162,7 @@ var _ = Describe("Client", func() {
 		It("returns after the handshake is complete", func() {
 			newClientSession = func(
 				_ connection,
+				runner sessionRunner,
 				_ string,
 				_ protocol.VersionNumber,
 				_ protocol.ConnectionID,
@@ -169,6 +172,7 @@ var _ = Describe("Client", func() {
 				_ []protocol.VersionNumber,
 				_ utils.Logger,
 			) (packetHandler, error) {
+				runner.onHandshakeComplete(sess)
 				return sess, nil
 			}
 			packetConn.dataToRead <- acceptClientVersionPacket(cl.srcConnID)
@@ -180,14 +184,16 @@ var _ = Describe("Client", func() {
 				Expect(s).ToNot(BeNil())
 				close(dialed)
 			}()
-			close(sess.handshakeChan)
 			Eventually(dialed).Should(BeClosed())
+			// make the session run loop return
+			close(sess.stopRunLoop)
 		})
 
 		It("returns an error that occurs while waiting for the connection to become secure", func() {
 			testErr := errors.New("early handshake error")
 			newClientSession = func(
 				conn connection,
+				_ sessionRunner,
 				_ string,
 				_ protocol.VersionNumber,
 				_ protocol.ConnectionID,
@@ -208,7 +214,8 @@ var _ = Describe("Client", func() {
 				Expect(err).To(MatchError(testErr))
 				close(done)
 			}()
-			sess.handshakeChan <- testErr
+			sess.closeReason = testErr
+			close(sess.stopRunLoop)
 			Eventually(done).Should(BeClosed())
 		})
 
@@ -269,6 +276,7 @@ var _ = Describe("Client", func() {
 				testErr := errors.New("error creating session")
 				newClientSession = func(
 					_ connection,
+					_ sessionRunner,
 					_ string,
 					_ protocol.VersionNumber,
 					_ protocol.ConnectionID,
@@ -295,6 +303,7 @@ var _ = Describe("Client", func() {
 				var conf *Config
 				newTLSClientSession = func(
 					connP connection,
+					_ sessionRunner,
 					hostnameP string,
 					versionP protocol.VersionNumber,
 					_ protocol.ConnectionID,
@@ -344,6 +353,7 @@ var _ = Describe("Client", func() {
 			It("returns an error that occurs during version negotiation", func() {
 				newClientSession = func(
 					conn connection,
+					_ sessionRunner,
 					_ string,
 					_ protocol.VersionNumber,
 					_ protocol.ConnectionID,
@@ -390,9 +400,10 @@ var _ = Describe("Client", func() {
 				Expect(newVersion).ToNot(Equal(cl.version))
 				cl.config = &Config{Versions: []protocol.VersionNumber{newVersion}}
 				sessionChan := make(chan *mockSession)
-				handshakeChan := make(chan error)
+				stopRunLoop := make(chan struct{})
 				newClientSession = func(
 					_ connection,
+					_ sessionRunner,
 					_ string,
 					_ protocol.VersionNumber,
 					connectionID protocol.ConnectionID,
@@ -406,9 +417,8 @@ var _ = Describe("Client", func() {
 					negotiatedVersions = negotiatedVersionsP
 
 					sess := &mockSession{
-						connectionID:  connectionID,
-						stopRunLoop:   make(chan struct{}),
-						handshakeChan: handshakeChan,
+						connectionID: connectionID,
+						stopRunLoop:  stopRunLoop,
 					}
 					sessionChan <- sess
 					return sess, nil
@@ -441,7 +451,6 @@ var _ = Describe("Client", func() {
 				Expect(negotiatedVersions).To(ContainElement(newVersion))
 				Expect(initialVersion).To(Equal(actualInitialVersion))
 
-				close(handshakeChan)
 				Eventually(established).Should(BeClosed())
 			})
 
@@ -449,6 +458,7 @@ var _ = Describe("Client", func() {
 				sessionCounter := uint32(0)
 				newClientSession = func(
 					_ connection,
+					_ sessionRunner,
 					_ string,
 					_ protocol.VersionNumber,
 					connectionID protocol.ConnectionID,
@@ -613,6 +623,7 @@ var _ = Describe("Client", func() {
 		var conf *Config
 		newClientSession = func(
 			connP connection,
+			_ sessionRunner,
 			hostnameP string,
 			versionP protocol.VersionNumber,
 			_ protocol.ConnectionID,
@@ -651,6 +662,7 @@ var _ = Describe("Client", func() {
 		sessionChan := make(chan *mockSession)
 		newTLSClientSession = func(
 			connP connection,
+			_ sessionRunner,
 			hostnameP string,
 			versionP protocol.VersionNumber,
 			_ protocol.ConnectionID,
