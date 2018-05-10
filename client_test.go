@@ -60,8 +60,7 @@ var _ = Describe("Client", func() {
 			session:    sess,
 			version:    protocol.SupportedVersions[0],
 			conn:       &conn{pconn: packetConn, currentAddr: addr},
-			versionNegotiationChan: make(chan struct{}),
-			logger:                 utils.DefaultLogger,
+			logger:     utils.DefaultLogger,
 		}
 	})
 
@@ -382,7 +381,6 @@ var _ = Describe("Client", func() {
 				err = cl.handlePacket(nil, b.Bytes())
 				Expect(err).ToNot(HaveOccurred())
 				Expect(cl.versionNegotiated).To(BeTrue())
-				Expect(cl.versionNegotiationChan).To(BeClosed())
 			})
 
 			It("changes the version after receiving a version negotiation packet", func() {

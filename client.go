@@ -23,8 +23,7 @@ type client struct {
 	conn     connection
 	hostname string
 
-	versionNegotiationChan           chan struct{} // the versionNegotiationChan is closed as soon as the server accepted the suggested version
-	versionNegotiated                bool          // has the server accepted our version
+	versionNegotiated                bool // has the server accepted our version
 	receivedVersionNegotiationPacket bool
 	negotiatedVersions               []protocol.VersionNumber // the list of versions from the version negotiation packet
 
@@ -106,15 +105,14 @@ func Dial(
 		}
 	}
 	c := &client{
-		conn:                   &conn{pconn: pconn, currentAddr: remoteAddr},
-		srcConnID:              srcConnID,
-		destConnID:             destConnID,
-		hostname:               hostname,
-		tlsConf:                tlsConf,
-		config:                 clientConfig,
-		version:                version,
-		versionNegotiationChan: make(chan struct{}),
-		logger:                 utils.DefaultLogger,
+		conn:       &conn{pconn: pconn, currentAddr: remoteAddr},
+		srcConnID:  srcConnID,
+		destConnID: destConnID,
+		hostname:   hostname,
+		tlsConf:    tlsConf,
+		config:     clientConfig,
+		version:    version,
+		logger:     utils.DefaultLogger,
 	}
 
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", hostname, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
@@ -256,13 +254,6 @@ func (c *client) establishSecureConnection() error {
 		}
 	}()
 
-	// wait until the server accepts the QUIC version (or an error occurs)
-	select {
-	case <-errorChan:
-		return runErr
-	case <-c.versionNegotiationChan:
-	}
-
 	select {
 	case <-errorChan:
 		return runErr
@@ -361,7 +352,6 @@ func (c *client) handleIETFQUICPacket(hdr *wire.Header, packetData []byte, remot
 	// since it is not a Version Negotiation Packet, this means the server supports the suggested version
 	if !c.versionNegotiated {
 		c.versionNegotiated = true
-		close(c.versionNegotiationChan)
 	}
 
 	c.session.handlePacket(&receivedPacket{
@@ -399,7 +389,6 @@ func (c *client) handleGQUICPacket(hdr *wire.Header, r *bytes.Reader, packetData
 	// since it is not a Version Negotiation Packet, this means the server supports the suggested version
 	if !c.versionNegotiated {
 		c.versionNegotiated = true
-		close(c.versionNegotiationChan)
 	}
 
 	c.session.handlePacket(&receivedPacket{
