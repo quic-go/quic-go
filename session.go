@@ -533,6 +533,7 @@ runLoop:
 		s.handshakeChan <- closeErr.err
 	}
 	s.handleCloseError(closeErr)
+	s.logger.Infof("Connection %s closed.", s.srcConnID)
 	return closeErr.err
 }
 
@@ -839,7 +840,7 @@ func (s *session) handleCloseError(closeErr closeError) error {
 	}
 	// Don't log 'normal' reasons
 	if quicErr.ErrorCode == qerr.PeerGoingAway || quicErr.ErrorCode == qerr.NetworkIdleTimeout {
-		s.logger.Infof("Closing connection %s", s.srcConnID)
+		s.logger.Infof("Closing connection %s.", s.srcConnID)
 	} else {
 		s.logger.Errorf("Closing session with error: %s", closeErr.err.Error())
 	}

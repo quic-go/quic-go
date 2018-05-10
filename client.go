@@ -248,7 +248,6 @@ func (c *client) establishSecureConnection() error {
 	go func() {
 		runErr = c.session.run() // returns as soon as the session is closed
 		close(errorChan)
-		c.logger.Infof("Connection %s closed.", c.srcConnID)
 		if runErr != handshake.ErrCloseSessionForRetry && runErr != errCloseSessionForNewVersion {
 			c.conn.Close()
 		}
