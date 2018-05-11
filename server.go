@@ -128,10 +128,7 @@ func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener,
 		supportsTLS:               supportsTLS,
 		logger:                    utils.DefaultLogger.WithPrefix("server"),
 	}
-	s.sessionRunner = &runner{
-		onHandshakeCompleteImpl: func(sess packetHandler) { s.sessionQueue <- sess },
-		removeConnectionIDImpl:  s.removeConnection,
-	}
+	s.setup()
 	if supportsTLS {
 		if err := s.setupTLS(); err != nil {
 			return nil, err
@@ -140,6 +137,13 @@ func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener,
 	go s.serve()
 	s.logger.Debugf("Listening for %s connections on %s", conn.LocalAddr().Network(), conn.LocalAddr().String())
 	return s, nil
+}
+
+func (s *server) setup() {
+	s.sessionRunner = &runner{
+		onHandshakeCompleteImpl: func(sess packetHandler) { s.sessionQueue <- sess },
+		removeConnectionIDImpl:  s.removeConnection,
+	}
 }
 
 func (s *server) setupTLS() error {
