@@ -5,6 +5,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo"
@@ -19,7 +20,7 @@ var _ = Describe("receivedPacketHandler", func() {
 
 	BeforeEach(func() {
 		rttStats = &congestion.RTTStats{}
-		handler = NewReceivedPacketHandler(rttStats, protocol.VersionWhatever).(*receivedPacketHandler)
+		handler = NewReceivedPacketHandler(rttStats, utils.DefaultLogger, protocol.VersionWhatever).(*receivedPacketHandler)
 	})
 
 	Context("accepting packets", func() {

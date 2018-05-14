@@ -103,6 +103,7 @@ func (h *sentPacketHandler) lowestUnacked() protocol.PacketNumber {
 }
 
 func (h *sentPacketHandler) SetHandshakeComplete() {
+	h.logger.Debugf("Handshake complete. Discarding all outstanding handshake packets.")
 	var queue []*Packet
 	for _, packet := range h.retransmissionQueue {
 		if packet.EncryptionLevel == protocol.EncryptionForwardSecure {
@@ -274,12 +275,22 @@ func (h *sentPacketHandler) determineNewlyAckedPackets(ackFrame *wire.AckFrame) 
 		}
 		return true, nil
 	})
+	if h.logger.Debug() && len(ackedPackets) > 0 {
+		pns := make([]protocol.PacketNumber, len(ackedPackets))
+		for i, p := range ackedPackets {
+			pns[i] = p.PacketNumber
+		}
+		h.logger.Debugf("\tnewly acked packets (%d): %#x", len(pns), pns)
+	}
 	return ackedPackets, err
 }
 
 func (h *sentPacketHandler) maybeUpdateRTT(largestAcked protocol.PacketNumber, ackDelay time.Duration, rcvTime time.Time) bool {
 	if p := h.packetHistory.GetPacket(largestAcked); p != nil {
 		h.rttStats.UpdateRTT(rcvTime.Sub(p.SendTime), ackDelay, rcvTime)
+		if h.logger.Debug() {
+			h.logger.Debugf("\tupdated RTT: %s (σ: %s)", h.rttStats.SmoothedRTT(), h.rttStats.MeanDeviation())
+		}
 		return true
 	}
 	return false
@@ -325,11 +336,21 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, priorInFlight proto
 		if timeSinceSent > delayUntilLost {
 			lostPackets = append(lostPackets, packet)
 		} else if h.lossTime.IsZero() {
+			if h.logger.Debug() {
+				h.logger.Debugf("\tsetting loss timer for packet %#x to %s (in %s)", packet.PacketNumber, delayUntilLost, delayUntilLost-timeSinceSent)
+			}
 			// Note: This conditional is only entered once per call
 			h.lossTime = now.Add(delayUntilLost - timeSinceSent)
 		}
 		return true, nil
 	})
+	if h.logger.Debug() && len(lostPackets) > 0 {
+		pns := make([]protocol.PacketNumber, len(lostPackets))
+		for i, p := range lostPackets {
+			pns[i] = p.PacketNumber
+		}
+		h.logger.Debugf("\tlost packets (%d): %#x", len(pns), pns)
+	}
 
 	for _, p := range lostPackets {
 		// the bytes in flight need to be reduced no matter if this packet will be retransmitted
@@ -339,7 +360,6 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, priorInFlight proto
 		}
 		if p.canBeRetransmitted {
 			// queue the packet for retransmission, and report the loss to the congestion controller
-			h.logger.Debugf("\tQueueing packet %#x because it was detected lost", p.PacketNumber)
 			if err := h.queuePacketForRetransmission(p); err != nil {
 				return err
 			}
@@ -354,15 +374,27 @@ func (h *sentPacketHandler) OnAlarm() error {
 
 	var err error
 	if !h.handshakeComplete {
+		if h.logger.Debug() {
+			h.logger.Debugf("Loss detection alarm fired in handshake mode")
+		}
 		h.handshakeCount++
 		err = h.queueHandshakePacketsForRetransmission()
 	} else if !h.lossTime.IsZero() {
+		if h.logger.Debug() {
+			h.logger.Debugf("Loss detection alarm fired in loss timer mode")
+		}
 		// Early retransmit or time loss detection
 		err = h.detectLostPackets(now, h.bytesInFlight)
 	} else if h.tlpCount < maxTLPs {
+		if h.logger.Debug() {
+			h.logger.Debugf("Loss detection alarm fired in TLP mode")
+		}
 		h.allowTLP = true
 		h.tlpCount++
 	} else {
+		if h.logger.Debug() {
+			h.logger.Debugf("Loss detection alarm fired in RTO mode")
+		}
 		// RTO
 		h.rtoCount++
 		h.numRTOs += 2
@@ -477,7 +509,9 @@ func (h *sentPacketHandler) SendMode() SendMode {
 	// we will stop sending out new data when reaching MaxOutstandingSentPackets,
 	// but still allow sending of retransmissions and ACKs.
 	if numTrackedPackets >= protocol.MaxTrackedSentPackets {
-		h.logger.Debugf("Limited by the number of tracked packets: tracking %d packets, maximum %d", numTrackedPackets, protocol.MaxTrackedSentPackets)
+		if h.logger.Debug() {
+			h.logger.Debugf("Limited by the number of tracked packets: tracking %d packets, maximum %d", numTrackedPackets, protocol.MaxTrackedSentPackets)
+		}
 		return SendNone
 	}
 	if h.allowTLP {
@@ -488,7 +522,9 @@ func (h *sentPacketHandler) SendMode() SendMode {
 	}
 	// Only send ACKs if we're congestion limited.
 	if cwnd := h.congestion.GetCongestionWindow(); h.bytesInFlight > cwnd {
-		h.logger.Debugf("Congestion limited: bytes in flight %d, window %d", h.bytesInFlight, cwnd)
+		if h.logger.Debug() {
+			h.logger.Debugf("Congestion limited: bytes in flight %d, window %d", h.bytesInFlight, cwnd)
+		}
 		return SendAck
 	}
 	// Send retransmissions first, if there are any.
@@ -496,7 +532,9 @@ func (h *sentPacketHandler) SendMode() SendMode {
 		return SendRetransmission
 	}
 	if numTrackedPackets >= protocol.MaxOutstandingSentPackets {
-		h.logger.Debugf("Max outstanding limited: tracking %d packets, maximum: %d", numTrackedPackets, protocol.MaxOutstandingSentPackets)
+		if h.logger.Debug() {
+			h.logger.Debugf("Max outstanding limited: tracking %d packets, maximum: %d", numTrackedPackets, protocol.MaxOutstandingSentPackets)
+		}
 		return SendAck
 	}
 	return SendAny
@@ -526,7 +564,7 @@ func (h *sentPacketHandler) queueRTOs() error {
 	// They are still tracked in the packet history and count towards the bytes in flight.
 	for i := 0; i < 2; i++ {
 		if p := h.packetHistory.FirstOutstanding(); p != nil {
-			h.logger.Debugf("\tQueueing packet %#x for retransmission (RTO)", p.PacketNumber)
+			h.logger.Debugf("Queueing packet %#x for retransmission (RTO)", p.PacketNumber)
 			if err := h.queuePacketForRetransmission(p); err != nil {
 				return err
 			}
@@ -544,7 +582,7 @@ func (h *sentPacketHandler) queueHandshakePacketsForRetransmission() error {
 		return true, nil
 	})
 	for _, p := range handshakePackets {
-		h.logger.Debugf("\tQueueing packet %#x as a handshake retransmission", p.PacketNumber)
+		h.logger.Debugf("Queueing packet %#x as a handshake retransmission", p.PacketNumber)
 		if err := h.queuePacketForRetransmission(p); err != nil {
 			return err
 		}

@@ -425,7 +425,7 @@ func (s *session) postSetup() error {
 	s.lastNetworkActivityTime = now
 	s.sessionCreationTime = now
 
-	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.rttStats, s.version)
+	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.rttStats, s.logger, s.version)
 	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.cryptoStream, s.connFlowController, s.packer.QueueControlFrame)
 	return nil
 }
@@ -996,9 +996,9 @@ func (s *session) maybeSendRetransmission() (bool, error) {
 	}
 
 	if retransmitPacket.EncryptionLevel != protocol.EncryptionForwardSecure {
-		s.logger.Debugf("\tDequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
+		s.logger.Debugf("Dequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 	} else {
-		s.logger.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
+		s.logger.Debugf("Dequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 	}
 
 	if s.version.UsesStopWaitingFrames() {
