@@ -579,12 +579,18 @@ func (s *session) handleHandshakeEvent(completed bool) {
 	}
 	s.handshakeComplete = true
 	s.handshakeEvent = nil // prevent this case from ever being selected again
-	if !s.version.UsesTLS() && s.perspective == protocol.PerspectiveClient {
-		// In gQUIC, there's no equivalent to the Finished message in TLS
-		// The server knows that the handshake is complete when it receives the first forward-secure packet sent by the client.
-		// We need to make sure that the client actually sends such a packet.
-		s.packer.QueueControlFrame(&wire.PingFrame{})
-		s.scheduleSending()
+
+	// In gQUIC, the server completes the handshake first (after sending the SHLO).
+	// In TLS 1.3, the client completes the handshake first (after sending the CFIN).
+	// We need to make sure they learn about the peer completing the handshake,
+	// in order to stop retransmitting handshake packets.
+	// They will stop retransmitting handshake packets when receiving the first forward-secure packet.
+	// We need to make sure that a retransmittable forward-secure packet is sent,
+	// independent from the application protocol.
+	if (!s.version.UsesTLS() && s.perspective == protocol.PerspectiveClient) ||
+		(s.version.UsesTLS() && s.perspective == protocol.PerspectiveServer) {
+		s.queueControlFrame(&wire.PingFrame{})
+		s.sentPacketHandler.SetHandshakeComplete()
 	}
 	close(s.handshakeChan)
 }
@@ -631,13 +637,15 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 	s.lastNetworkActivityTime = p.rcvTime
 	s.keepAlivePingSent = false
 
-	// In TLS 1.3, the client considers the handshake complete as soon as
-	// it received the server's Finished message and sent its Finished.
-	// We have to wait for the first forward-secure packet from the server before
-	// deleting all handshake packets from the history.
-	if !s.receivedFirstForwardSecurePacket && packet.encryptionLevel == protocol.EncryptionForwardSecure {
-		s.receivedFirstForwardSecurePacket = true
-		s.sentPacketHandler.SetHandshakeComplete()
+	// In gQUIC, the server completes the handshake first (after sending the SHLO).
+	// In TLS 1.3, the client completes the handshake first (after sending the CFIN).
+	// We know that the peer completed the handshake as soon as we receive a forward-secure packet.
+	if (!s.version.UsesTLS() && s.perspective == protocol.PerspectiveServer) ||
+		(s.version.UsesTLS() && s.perspective == protocol.PerspectiveClient) {
+		if !s.receivedFirstForwardSecurePacket && packet.encryptionLevel == protocol.EncryptionForwardSecure {
+			s.receivedFirstForwardSecurePacket = true
+			s.sentPacketHandler.SetHandshakeComplete()
+		}
 	}
 
 	s.lastRcvdPacketNumber = hdr.PacketNumber
