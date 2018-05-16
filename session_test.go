@@ -1782,6 +1782,39 @@ var _ = Describe("Client Session", func() {
 		Eventually(sess.Context().Done()).Should(BeClosed())
 	})
 
+	It("changes the connection ID when receiving the first packet from the server", func() {
+		sess.version = protocol.VersionTLS
+		sess.packer.version = protocol.VersionTLS
+		unpacker := NewMockUnpacker(mockCtrl)
+		unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
+		sess.unpacker = unpacker
+		go func() {
+			defer GinkgoRecover()
+			sess.run()
+		}()
+		err := sess.handlePacketImpl(&receivedPacket{
+			header: &wire.Header{
+				Type:             protocol.PacketTypeHandshake,
+				SrcConnectionID:  protocol.ConnectionID{1, 3, 3, 7, 1, 3, 3, 7},
+				DestConnectionID: sess.srcConnID,
+			},
+			data: []byte{0},
+		})
+		Expect(err).ToNot(HaveOccurred())
+		// the session should have changed the dest connection ID now
+		sess.packer.hasSentPacket = true
+		sess.queueControlFrame(&wire.PingFrame{})
+		var packet []byte
+		Eventually(mconn.written).Should(Receive(&packet))
+		hdr, err := wire.ParseHeaderSentByClient(bytes.NewReader(packet))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(hdr.DestConnectionID).To(Equal(protocol.ConnectionID{1, 3, 3, 7, 1, 3, 3, 7}))
+		// make sure the go routine returns
+		sessionRunner.EXPECT().removeConnectionID(gomock.Any())
+		Expect(sess.Close(nil)).To(Succeed())
+		Eventually(sess.Context().Done()).Should(BeClosed())
+	})
+
 	Context("receiving packets", func() {
 		var hdr *wire.Header
 
