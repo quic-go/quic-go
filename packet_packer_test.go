@@ -2,7 +2,6 @@ package quic
 
 import (
 	"bytes"
-	"math"
 	"net"
 
 	"github.com/golang/mock/gomock"
@@ -28,6 +27,7 @@ type mockCryptoSetup struct {
 	handleErr          error
 	encLevelSeal       protocol.EncryptionLevel
 	encLevelSealCrypto protocol.EncryptionLevel
+	divNonce           []byte
 }
 
 var _ handshake.CryptoSetup = &mockCryptoSetup{}
@@ -46,6 +46,10 @@ func (m *mockCryptoSetup) GetSealerForCryptoStream() (protocol.EncryptionLevel, 
 }
 func (m *mockCryptoSetup) GetSealerWithEncryptionLevel(protocol.EncryptionLevel) (handshake.Sealer, error) {
 	return &mockSealer{}, nil
+}
+func (m *mockCryptoSetup) SetDiversificationNonce(divNonce []byte) error {
+	m.divNonce = divNonce
+	return nil
 }
 func (m *mockCryptoSetup) ConnectionState() ConnectionState { panic("not implemented") }
 
@@ -67,7 +71,8 @@ var _ = Describe("Packet packer", func() {
 		divNonce = bytes.Repeat([]byte{'e'}, 32)
 
 		packer = newPacketPacker(
-			0x1337,
+			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 			1,
 			func(protocol.PacketNumber) protocol.PacketNumberLen { return protocol.PacketNumberLen2 },
 			&net.TCPAddr{},
@@ -86,22 +91,23 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	Context("determining the maximum packet size", func() {
+		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 		It("uses the minimum initial size, if it can't determine if the remote address is IPv4 or IPv6", func() {
 			remoteAddr := &net.TCPAddr{}
-			packer = newPacketPacker(0x1337, 1, nil, remoteAddr, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever, nil)
+			packer = newPacketPacker(connID, connID, 1, nil, remoteAddr, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever, nil)
 			Expect(packer.maxPacketSize).To(BeEquivalentTo(protocol.MinInitialPacketSize))
 		})
 
 		It("uses the maximum IPv4 packet size, if the remote address is IPv4", func() {
 			remoteAddr := &net.UDPAddr{IP: net.IPv4(11, 12, 13, 14), Port: 1337}
-			packer = newPacketPacker(0x1337, 1, nil, remoteAddr, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever, nil)
+			packer = newPacketPacker(connID, connID, 1, nil, remoteAddr, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever, nil)
 			Expect(packer.maxPacketSize).To(BeEquivalentTo(protocol.MaxPacketSizeIPv4))
 		})
 
 		It("uses the maximum IPv6 packet size, if the remote address is IPv6", func() {
 			ip := net.ParseIP("2001:0db8:85a3:0000:0000:8a2e:0370:7334")
 			remoteAddr := &net.UDPAddr{IP: ip, Port: 1337}
-			packer = newPacketPacker(0x1337, 1, nil, remoteAddr, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever, nil)
+			packer = newPacketPacker(connID, connID, 1, nil, remoteAddr, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever, nil)
 			Expect(packer.maxPacketSize).To(BeEquivalentTo(protocol.MaxPacketSizeIPv6))
 		})
 	})
@@ -215,6 +221,16 @@ var _ = Describe("Packet packer", func() {
 				Expect(h.Version).To(Equal(versionIETFHeader))
 			})
 
+			It("sets source and destination connection ID", func() {
+				srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+				destConnID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
+				packer.srcConnID = srcConnID
+				packer.destConnID = destConnID
+				h := packer.getHeader(protocol.EncryptionSecure)
+				Expect(h.SrcConnectionID).To(Equal(srcConnID))
+				Expect(h.DestConnectionID).To(Equal(destConnID))
+			})
+
 			It("uses the Short Header format for forward-secure packets", func() {
 				h := packer.getHeader(protocol.EncryptionForwardSecure)
 				Expect(h.IsLongHeader).To(BeFalse())
@@ -235,6 +251,24 @@ var _ = Describe("Packet packer", func() {
 				Expect(h.OmitConnectionID).To(BeFalse())
 			})
 		})
+	})
+
+	It("sets the payload length for packets containing crypto data", func() {
+		packer.version = versionIETFFrames
+		f := &wire.StreamFrame{
+			StreamID: packer.version.CryptoStreamID(),
+			Offset:   0x1337,
+			Data:     []byte("foobar"),
+		}
+		mockStreamFramer.EXPECT().HasCryptoStreamData().Return(true)
+		mockStreamFramer.EXPECT().PopCryptoStreamFrame(gomock.Any()).Return(f)
+		p, err := packer.PackPacket()
+		Expect(err).ToNot(HaveOccurred())
+		// parse the packet
+		r := bytes.NewReader(p.raw)
+		hdr, err := wire.ParseHeaderSentByServer(r, packer.version)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(hdr.PayloadLen).To(BeEquivalentTo(r.Len()))
 	})
 
 	It("packs a CONNECTION_CLOSE", func() {
@@ -341,7 +375,7 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	It("packs many control frames into 1 packets", func() {
-		f := &wire.AckFrame{LargestAcked: 1}
+		f := &wire.AckFrame{AckRanges: []wire.AckRange{{Largest: 1, Smallest: 1}}}
 		b := &bytes.Buffer{}
 		err := f.Write(b, packer.version)
 		Expect(err).ToNot(HaveOccurred())
@@ -399,7 +433,7 @@ var _ = Describe("Packet packer", func() {
 			mockStreamFramer.EXPECT().HasCryptoStreamData().Times(protocol.MaxNonRetransmittableAcks)
 			mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any()).Times(protocol.MaxNonRetransmittableAcks)
 			for i := 0; i < protocol.MaxNonRetransmittableAcks; i++ {
-				packer.QueueControlFrame(&wire.AckFrame{})
+				packer.QueueControlFrame(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}})
 				p, err := packer.PackPacket()
 				Expect(p).ToNot(BeNil())
 				Expect(err).ToNot(HaveOccurred())
@@ -411,13 +445,13 @@ var _ = Describe("Packet packer", func() {
 			sendMaxNumNonRetransmittableAcks()
 			mockStreamFramer.EXPECT().HasCryptoStreamData().Times(2)
 			mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any()).Times(2)
-			packer.QueueControlFrame(&wire.AckFrame{})
+			packer.QueueControlFrame(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}})
 			p, err := packer.PackPacket()
 			Expect(p).ToNot(BeNil())
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.frames).To(ContainElement(&wire.PingFrame{}))
 			// make sure the next packet doesn't contain another PING
-			packer.QueueControlFrame(&wire.AckFrame{})
+			packer.QueueControlFrame(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 2}}})
 			p, err = packer.PackPacket()
 			Expect(p).ToNot(BeNil())
 			Expect(err).ToNot(HaveOccurred())
@@ -431,7 +465,7 @@ var _ = Describe("Packet packer", func() {
 			p, err := packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p).To(BeNil())
-			packer.QueueControlFrame(&wire.AckFrame{})
+			packer.QueueControlFrame(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}})
 			p, err = packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.frames).To(HaveLen(2))
@@ -443,7 +477,7 @@ var _ = Describe("Packet packer", func() {
 			mockStreamFramer.EXPECT().HasCryptoStreamData()
 			mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any())
 			packer.QueueControlFrame(&wire.MaxDataFrame{})
-			packer.QueueControlFrame(&wire.AckFrame{})
+			packer.QueueControlFrame(&wire.StopWaitingFrame{})
 			p, err := packer.PackPacket()
 			Expect(p).ToNot(BeNil())
 			Expect(err).ToNot(HaveOccurred())
@@ -561,6 +595,31 @@ var _ = Describe("Packet packer", func() {
 			Expect(p).To(BeNil())
 		})
 
+		It("packs a maximum size crypto packet", func() {
+			var f *wire.StreamFrame
+			packer.version = versionIETFFrames
+			mockStreamFramer.EXPECT().HasCryptoStreamData().Return(true)
+			mockStreamFramer.EXPECT().PopCryptoStreamFrame(gomock.Any()).DoAndReturn(func(size protocol.ByteCount) *wire.StreamFrame {
+				f = &wire.StreamFrame{
+					StreamID: packer.version.CryptoStreamID(),
+					Offset:   0x1337,
+				}
+				f.Data = bytes.Repeat([]byte{'f'}, int(size-f.Length(packer.version)))
+				return f
+			})
+			p, err := packer.PackPacket()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p.frames).To(HaveLen(1))
+			expectedPacketLen := packer.maxPacketSize - protocol.NonForwardSecurePacketSizeReduction
+			Expect(p.raw).To(HaveLen(int(expectedPacketLen)))
+			Expect(p.header.IsLongHeader).To(BeTrue())
+			// parse the packet
+			r := bytes.NewReader(p.raw)
+			hdr, err := wire.ParseHeaderSentByServer(r, packer.version)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(hdr.PayloadLen).To(BeEquivalentTo(r.Len()))
+		})
+
 		It("sends unencrypted stream data on the crypto stream", func() {
 			f := &wire.StreamFrame{
 				StreamID: packer.version.CryptoStreamID(),
@@ -593,7 +652,7 @@ var _ = Describe("Packet packer", func() {
 			mockStreamFramer.EXPECT().HasCryptoStreamData()
 			// don't expect a call to mockStreamFramer.PopStreamFrames
 			packer.cryptoSetup.(*mockCryptoSetup).encLevelSeal = protocol.EncryptionUnencrypted
-			ack := &wire.AckFrame{LargestAcked: 10}
+			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Largest: 10, Smallest: 1}}}
 			packer.QueueControlFrame(ack)
 			p, err := packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
@@ -604,7 +663,7 @@ var _ = Describe("Packet packer", func() {
 	It("packs a single ACK", func() {
 		mockStreamFramer.EXPECT().HasCryptoStreamData()
 		mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any())
-		ack := &wire.AckFrame{LargestAcked: 42}
+		ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Largest: 42, Smallest: 1}}}
 		packer.QueueControlFrame(ack)
 		p, err := packer.PackPacket()
 		Expect(err).NotTo(HaveOccurred())
@@ -615,7 +674,7 @@ var _ = Describe("Packet packer", func() {
 	It("does not return nil if we only have a single ACK but request it to be sent", func() {
 		mockStreamFramer.EXPECT().HasCryptoStreamData()
 		mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any())
-		ack := &wire.AckFrame{}
+		ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}}
 		packer.QueueControlFrame(ack)
 		p, err := packer.PackPacket()
 		Expect(err).NotTo(HaveOccurred())
@@ -721,6 +780,25 @@ var _ = Describe("Packet packer", func() {
 			sf := packet.frames[0].(*wire.StreamFrame)
 			Expect(sf.Data).To(Equal([]byte("foobar")))
 			Expect(sf.DataLenPresent).To(BeTrue())
+		})
+
+		It("set the correct payload length for an Initial packet", func() {
+			mockStreamFramer.EXPECT().HasCryptoStreamData().Return(true)
+			mockStreamFramer.EXPECT().PopCryptoStreamFrame(gomock.Any()).Return(&wire.StreamFrame{
+				StreamID: packer.version.CryptoStreamID(),
+				Data:     []byte("foobar"),
+			})
+			packer.version = protocol.VersionTLS
+			packer.hasSentPacket = false
+			packer.perspective = protocol.PerspectiveClient
+			packer.cryptoSetup.(*mockCryptoSetup).encLevelSealCrypto = protocol.EncryptionUnencrypted
+			packet, err := packer.PackPacket()
+			Expect(err).ToNot(HaveOccurred())
+			// parse the header and check the values
+			r := bytes.NewReader(packet.raw)
+			hdr, err := wire.ParseHeaderSentByClient(r)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(hdr.PayloadLen).To(BeEquivalentTo(r.Len()))
 		})
 
 		It("packs a retransmission for an Initial packet", func() {
@@ -891,21 +969,23 @@ var _ = Describe("Packet packer", func() {
 
 	Context("packing ACK packets", func() {
 		It("packs ACK packets", func() {
-			packer.QueueControlFrame(&wire.AckFrame{})
+			packer.QueueControlFrame(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 10}}})
 			p, err := packer.PackAckPacket()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(p.frames).To(Equal([]wire.Frame{&wire.AckFrame{DelayTime: math.MaxInt64}}))
+			Expect(p.frames).To(HaveLen(1))
+			Expect(p.frames[0]).To(BeAssignableToTypeOf(&wire.AckFrame{}))
+			ack := p.frames[0].(*wire.AckFrame)
+			Expect(ack.LargestAcked()).To(Equal(protocol.PacketNumber(10)))
 		})
 
 		It("packs ACK packets with STOP_WAITING frames", func() {
-			packer.QueueControlFrame(&wire.AckFrame{})
+			packer.QueueControlFrame(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 10}}})
 			packer.QueueControlFrame(&wire.StopWaitingFrame{})
 			p, err := packer.PackAckPacket()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(p.frames).To(Equal([]wire.Frame{
-				&wire.AckFrame{DelayTime: math.MaxInt64},
-				&wire.StopWaitingFrame{PacketNumber: 1, PacketNumberLen: 2},
-			}))
+			Expect(p.frames).To(HaveLen(2))
+			Expect(p.frames[0]).To(BeAssignableToTypeOf(&wire.AckFrame{}))
+			Expect(p.frames[1]).To(Equal(&wire.StopWaitingFrame{PacketNumber: 1, PacketNumberLen: 2}))
 		})
 	})
 

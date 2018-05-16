@@ -9,7 +9,7 @@ import (
 var _ = Describe("NullAEAD using AES-GCM", func() {
 	// values taken from https://github.com/quicwg/base-drafts/wiki/Test-Vector-for-the-Clear-Text-AEAD-key-derivation
 	Context("using the test vector from the QUIC WG Wiki", func() {
-		connID := protocol.ConnectionID(0x8394c8f03e515708)
+		connID := protocol.ConnectionID([]byte{0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08})
 
 		It("computes the secrets", func() {
 			clientSecret, serverSecret := computeSecrets(connID)
@@ -55,7 +55,7 @@ var _ = Describe("NullAEAD using AES-GCM", func() {
 	})
 
 	It("seals and opens", func() {
-		connectionID := protocol.ConnectionID(0x1234567890)
+		connectionID := protocol.ConnectionID([]byte{0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef})
 		clientAEAD, err := newNullAEADAESGCM(connectionID, protocol.PerspectiveClient)
 		Expect(err).ToNot(HaveOccurred())
 		serverAEAD, err := newNullAEADAESGCM(connectionID, protocol.PerspectiveServer)
@@ -72,9 +72,11 @@ var _ = Describe("NullAEAD using AES-GCM", func() {
 	})
 
 	It("doesn't work if initialized with different connection IDs", func() {
-		clientAEAD, err := newNullAEADAESGCM(1, protocol.PerspectiveClient)
+		c1 := protocol.ConnectionID([]byte{0, 0, 0, 0, 0, 0, 0, 1})
+		c2 := protocol.ConnectionID([]byte{0, 0, 0, 0, 0, 0, 0, 2})
+		clientAEAD, err := newNullAEADAESGCM(c1, protocol.PerspectiveClient)
 		Expect(err).ToNot(HaveOccurred())
-		serverAEAD, err := newNullAEADAESGCM(2, protocol.PerspectiveServer)
+		serverAEAD, err := newNullAEADAESGCM(c2, protocol.PerspectiveServer)
 		Expect(err).ToNot(HaveOccurred())
 
 		clientMessage := clientAEAD.Seal(nil, []byte("foobar"), 42, []byte("aad"))

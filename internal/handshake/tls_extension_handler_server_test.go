@@ -80,7 +80,7 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 			parameters = map[transportParameterID][]byte{
 				initialMaxStreamDataParameterID:  {0x11, 0x22, 0x33, 0x44},
 				initialMaxDataParameterID:        {0x22, 0x33, 0x44, 0x55},
-				initialMaxStreamsBiDiParameterID: {0x33, 0x44},
+				initialMaxBidiStreamsParameterID: {0x33, 0x44},
 				idleTimeoutParameterID:           {0x13, 0x37},
 			}
 		})

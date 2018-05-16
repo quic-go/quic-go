@@ -87,6 +87,7 @@ func newServerTLS(
 }
 
 func (s *serverTLS) HandleInitial(remoteAddr net.Addr, hdr *wire.Header, data []byte) {
+	// TODO: add a check that DestConnID == SrcConnID
 	s.logger.Debugf("Received a Packet. Handling it statelessly.")
 	sess, err := s.handleInitialImpl(remoteAddr, hdr, data)
 	if err != nil {
@@ -97,7 +98,7 @@ func (s *serverTLS) HandleInitial(remoteAddr net.Addr, hdr *wire.Header, data []
 		return
 	}
 	s.sessionChan <- tlsSession{
-		connID: hdr.ConnectionID,
+		connID: hdr.DestConnectionID,
 		sess:   sess,
 	}
 }
@@ -116,11 +117,12 @@ func (s *serverTLS) sendConnectionClose(remoteAddr net.Addr, clientHdr *wire.Hea
 		ReasonPhrase: closeErr.Error(),
 	}
 	replyHdr := &wire.Header{
-		IsLongHeader: true,
-		Type:         protocol.PacketTypeHandshake,
-		ConnectionID: clientHdr.ConnectionID, // echo the client's connection ID
-		PacketNumber: 1,                      // random packet number
-		Version:      clientHdr.Version,
+		IsLongHeader:     true,
+		Type:             protocol.PacketTypeHandshake,
+		SrcConnectionID:  clientHdr.DestConnectionID,
+		DestConnectionID: clientHdr.SrcConnectionID,
+		PacketNumber:     1, // random packet number
+		Version:          clientHdr.Version,
 	}
 	data, err := packUnencryptedPacket(aead, replyHdr, ccf, protocol.PerspectiveServer, s.logger)
 	if err != nil {
@@ -137,12 +139,16 @@ func (s *serverTLS) handleInitialImpl(remoteAddr net.Addr, hdr *wire.Header, dat
 	// check version, if not matching send VNP
 	if !protocol.IsSupportedVersion(s.supportedVersions, hdr.Version) {
 		s.logger.Debugf("Client offered version %s, sending VersionNegotiationPacket", hdr.Version)
-		_, err := s.conn.WriteTo(wire.ComposeVersionNegotiation(hdr.ConnectionID, s.supportedVersions), remoteAddr)
+		vnp, err := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, s.supportedVersions)
+		if err != nil {
+			return nil, err
+		}
+		_, err = s.conn.WriteTo(vnp, remoteAddr)
 		return nil, err
 	}
 
 	// unpack packet and check stream frame contents
-	aead, err := crypto.NewNullAEAD(protocol.PerspectiveServer, hdr.ConnectionID, hdr.Version)
+	aead, err := crypto.NewNullAEAD(protocol.PerspectiveServer, hdr.DestConnectionID, protocol.VersionTLS)
 	if err != nil {
 		return nil, err
 	}
@@ -173,16 +179,18 @@ func (s *serverTLS) handleUnpackedInitial(remoteAddr net.Addr, hdr *wire.Header,
 	if alert == mint.AlertStatelessRetry {
 		// the HelloRetryRequest was written to the bufferConn
 		// Take that data and write send a Retry packet
-		replyHdr := &wire.Header{
-			IsLongHeader: true,
-			Type:         protocol.PacketTypeRetry,
-			ConnectionID: hdr.ConnectionID, // echo the client's connection ID
-			PacketNumber: hdr.PacketNumber, // echo the client's packet number
-			Version:      version,
-		}
 		f := &wire.StreamFrame{
 			StreamID: version.CryptoStreamID(),
 			Data:     bc.GetDataForWriting(),
+		}
+		replyHdr := &wire.Header{
+			IsLongHeader:     true,
+			Type:             protocol.PacketTypeRetry,
+			DestConnectionID: hdr.SrcConnectionID,
+			SrcConnectionID:  hdr.DestConnectionID,
+			PayloadLen:       f.Length(version) + protocol.ByteCount(aead.Overhead()),
+			PacketNumber:     hdr.PacketNumber, // echo the client's packet number
+			Version:          version,
 		}
 		data, err := packUnencryptedPacket(aead, replyHdr, f, protocol.PerspectiveServer, s.logger)
 		if err != nil {
@@ -206,7 +214,8 @@ func (s *serverTLS) handleUnpackedInitial(remoteAddr net.Addr, hdr *wire.Header,
 	params := <-paramsChan
 	sess, err := newTLSServerSession(
 		&conn{pconn: s.conn, currentAddr: remoteAddr},
-		hdr.ConnectionID,         // TODO: we can use a server-chosen connection ID here
+		hdr.SrcConnectionID,
+		hdr.DestConnectionID,     // TODO(#1003): we can use a server-chosen connection ID here
 		protocol.PacketNumber(1), // TODO: use a random packet number here
 		s.config,
 		tls,
