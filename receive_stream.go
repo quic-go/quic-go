@@ -73,6 +73,14 @@ func (s *receiveStream) StreamID() protocol.StreamID {
 
 // Read implements io.Reader. It is not thread safe!
 func (s *receiveStream) Read(p []byte) (int, error) {
+	// trigger onStreamCompleted outside of lock context, if necessary
+	streamCompleted := false
+	defer func() {
+		if streamCompleted {
+			s.sender.onStreamCompleted(s.streamID)
+		}
+	}()
+
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -158,7 +166,8 @@ func (s *receiveStream) Read(p []byte) (int, error) {
 			s.frameQueue.Pop()
 			s.finRead = frame.FinBit
 			if frame.FinBit {
-				s.sender.onStreamCompleted(s.streamID)
+				// trigger onStreamCompleted
+				streamCompleted = true
 				return bytesRead, io.EOF
 			}
 		}
@@ -204,6 +213,14 @@ func (s *receiveStream) handleStreamFrame(frame *wire.StreamFrame) error {
 }
 
 func (s *receiveStream) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
+	// trigger onStreamCompleted outside of lock context, if necessary
+	streamCompleted := false
+	defer func() {
+		if streamCompleted {
+			s.sender.onStreamCompleted(s.streamID)
+		}
+	}()
+
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -230,7 +247,8 @@ func (s *receiveStream) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
 		error:     fmt.Errorf("Stream %d was reset with error code %d", s.streamID, frame.ErrorCode),
 	}
 	s.signalRead()
-	s.sender.onStreamCompleted(s.streamID)
+	// trigger onStreamCompleted
+	streamCompleted = true
 	return nil
 }
 

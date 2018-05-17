@@ -133,6 +133,15 @@ func (s *sendStream) Write(p []byte) (int, error) {
 // popStreamFrame returns the next STREAM frame that is supposed to be sent on this stream
 // maxBytes is the maximum length this frame (including frame header) will have.
 func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) (*wire.StreamFrame, bool /* has more data to send */) {
+
+	// trigger onStreamCompleted outside of lock context, if necessary
+	streamCompleted := false
+	defer func() {
+		if streamCompleted {
+			s.sender.onStreamCompleted(s.streamID)
+		}
+	}()
+
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -163,7 +172,8 @@ func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) (*wire.StreamFr
 	}
 	if frame.FinBit {
 		s.finSent = true
-		s.sender.onStreamCompleted(s.streamID)
+		// trigger onStreamCompleted
+		streamCompleted = true
 	} else if s.streamID != s.version.CryptoStreamID() { // TODO(#657): Flow control for the crypto stream
 		if isBlocked, offset := s.flowController.IsBlocked(); isBlocked {
 			s.sender.queueControlFrame(&wire.StreamBlockedFrame{
@@ -217,19 +227,27 @@ func (s *sendStream) Close() error {
 }
 
 func (s *sendStream) CancelWrite(errorCode protocol.ApplicationErrorCode) error {
+	cancelled := false
+	defer func() {
+		if cancelled {
+			s.sender.onStreamCompleted(s.streamID)
+		}
+	}()
+
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	return s.cancelWriteImpl(errorCode, fmt.Errorf("Write on stream %d canceled with error code %d", s.streamID, errorCode))
+	cancelled, err := s.cancelWriteImpl(errorCode, fmt.Errorf("Write on stream %d canceled with error code %d", s.streamID, errorCode))
+	return err
 }
 
 // must be called after locking the mutex
-func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, writeErr error) error {
+func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, writeErr error) (bool, error) {
 	if s.canceledWrite {
-		return nil
+		return false, nil
 	}
 	if s.finishedWriting {
-		return fmt.Errorf("CancelWrite for closed stream %d", s.streamID)
+		return false, fmt.Errorf("CancelWrite for closed stream %d", s.streamID)
 	}
 	s.canceledWrite = true
 	s.cancelWriteErr = writeErr
@@ -241,14 +259,20 @@ func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, wr
 	})
 	// TODO(#991): cancel retransmissions for this stream
 	s.ctxCancel()
-	s.sender.onStreamCompleted(s.streamID)
-	return nil
+	return true, nil
 }
 
 func (s *sendStream) handleStopSendingFrame(frame *wire.StopSendingFrame) {
+	cancelled := false
+	defer func() {
+		if cancelled {
+			s.sender.onStreamCompleted(s.streamID)
+		}
+	}()
+
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	s.handleStopSendingFrameImpl(frame)
+	cancelled, _ = s.handleStopSendingFrameImpl(frame)
 }
 
 func (s *sendStream) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
@@ -261,7 +285,7 @@ func (s *sendStream) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
 }
 
 // must be called after locking the mutex
-func (s *sendStream) handleStopSendingFrameImpl(frame *wire.StopSendingFrame) {
+func (s *sendStream) handleStopSendingFrameImpl(frame *wire.StopSendingFrame) (bool, error) {
 	writeErr := streamCanceledError{
 		errorCode: frame.ErrorCode,
 		error:     fmt.Errorf("Stream %d was reset with error code %d", s.streamID, frame.ErrorCode),
@@ -270,7 +294,7 @@ func (s *sendStream) handleStopSendingFrameImpl(frame *wire.StopSendingFrame) {
 	if !s.version.UsesIETFFrameFormat() {
 		errorCode = errorCodeStoppingGQUIC
 	}
-	s.cancelWriteImpl(errorCode, writeErr)
+	return s.cancelWriteImpl(errorCode, writeErr)
 }
 
 func (s *sendStream) Context() context.Context {
