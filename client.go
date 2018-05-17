@@ -331,7 +331,6 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 }
 
 func (c *client) handleIETFQUICPacket(hdr *wire.Header, packetData []byte, remoteAddr net.Addr, rcvTime time.Time) error {
-	// TODO(#1003): add support for server-chosen connection IDs
 	// reject packets with the wrong connection ID
 	if !hdr.DestConnectionID.Equal(c.srcConnID) {
 		return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", hdr.DestConnectionID, c.srcConnID)

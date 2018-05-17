@@ -165,15 +165,10 @@ func (s *server) setupTLS() error {
 			case <-s.errorChan:
 				return
 			case tlsSession := <-sessionChan:
-				connID := tlsSession.connID
 				sess := tlsSession.sess
-				if _, ok := s.sessionHandler.Get(connID); ok { // drop this session if it already exists
-					continue
-				}
-				// TODO(#1003): There's a race condition here.
-				// If another connection with the same conn ID is added between Get() and Add(), it would be overwritten.
-				// We can avoid this be using server-chosen connection IDs.
-				s.sessionHandler.Add(connID, sess)
+				// The connection ID is a randomly chosen 8 byte value.
+				// It is safe to assume that it doesn't collide with other randomly chosen values.
+				s.sessionHandler.Add(tlsSession.connID, sess)
 				go sess.run()
 			}
 		}

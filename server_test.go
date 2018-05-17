@@ -158,31 +158,12 @@ var _ = Describe("Server", func() {
 			sess.EXPECT().run().Do(func() { close(run) })
 			err := serv.setupTLS()
 			Expect(err).ToNot(HaveOccurred())
-			sessionHandler.EXPECT().Get(connID)
 			sessionHandler.EXPECT().Add(connID, sess)
 			serv.serverTLS.sessionChan <- tlsSession{
 				connID: connID,
 				sess:   sess,
 			}
 			Eventually(run).Should(BeClosed())
-		})
-
-		It("only accepts one new TLS sessions for one connection ID", func() {
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			sess := NewMockPacketHandler(mockCtrl)
-			err := serv.setupTLS()
-			Expect(err).ToNot(HaveOccurred())
-
-			done := make(chan struct{})
-			sessionHandler.EXPECT().Get(connID).Return(NewMockPacketHandler(mockCtrl), true).Do(func(protocol.ConnectionID) {
-				close(done)
-			})
-			// don't EXPECT any calls to sessionHandler.Add
-			serv.serverTLS.sessionChan <- tlsSession{
-				connID: connID,
-				sess:   sess,
-			}
-			Eventually(done).Should(BeClosed())
 		})
 
 		It("accepts a session once the connection it is forward secure", func() {

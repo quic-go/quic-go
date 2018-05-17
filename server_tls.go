@@ -92,7 +92,7 @@ func newServerTLS(
 func (s *serverTLS) HandleInitial(remoteAddr net.Addr, hdr *wire.Header, data []byte) {
 	// TODO: add a check that DestConnID == SrcConnID
 	s.logger.Debugf("Received a Packet. Handling it statelessly.")
-	sess, err := s.handleInitialImpl(remoteAddr, hdr, data)
+	sess, connID, err := s.handleInitialImpl(remoteAddr, hdr, data)
 	if err != nil {
 		s.logger.Errorf("Error occurred handling initial packet: %s", err)
 		return
@@ -101,7 +101,7 @@ func (s *serverTLS) HandleInitial(remoteAddr net.Addr, hdr *wire.Header, data []
 		return
 	}
 	s.sessionChan <- tlsSession{
-		connID: hdr.DestConnectionID,
+		connID: connID,
 		sess:   sess,
 	}
 }
@@ -135,48 +135,48 @@ func (s *serverTLS) sendConnectionClose(remoteAddr net.Addr, clientHdr *wire.Hea
 	return err
 }
 
-func (s *serverTLS) handleInitialImpl(remoteAddr net.Addr, hdr *wire.Header, data []byte) (packetHandler, error) {
+func (s *serverTLS) handleInitialImpl(remoteAddr net.Addr, hdr *wire.Header, data []byte) (packetHandler, protocol.ConnectionID, error) {
 	if len(hdr.Raw)+len(data) < protocol.MinInitialPacketSize {
-		return nil, errors.New("dropping too small Initial packet")
+		return nil, nil, errors.New("dropping too small Initial packet")
 	}
 	// check version, if not matching send VNP
 	if !protocol.IsSupportedVersion(s.supportedVersions, hdr.Version) {
 		s.logger.Debugf("Client offered version %s, sending VersionNegotiationPacket", hdr.Version)
 		vnp, err := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, s.supportedVersions)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		_, err = s.conn.WriteTo(vnp, remoteAddr)
-		return nil, err
+		return nil, nil, err
 	}
 
 	// unpack packet and check stream frame contents
 	aead, err := crypto.NewNullAEAD(protocol.PerspectiveServer, hdr.DestConnectionID, protocol.VersionTLS)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	frame, err := unpackInitialPacket(aead, hdr, data, s.logger, hdr.Version)
 	if err != nil {
 		s.logger.Debugf("Error unpacking initial packet: %s", err)
-		return nil, nil
+		return nil, nil, nil
 	}
-	sess, err := s.handleUnpackedInitial(remoteAddr, hdr, frame, aead)
+	sess, connID, err := s.handleUnpackedInitial(remoteAddr, hdr, frame, aead)
 	if err != nil {
 		if ccerr := s.sendConnectionClose(remoteAddr, hdr, aead, err); ccerr != nil {
 			s.logger.Debugf("Error sending CONNECTION_CLOSE: %s", ccerr)
 		}
-		return nil, err
+		return nil, nil, err
 	}
-	return sess, nil
+	return sess, connID, nil
 }
 
-func (s *serverTLS) handleUnpackedInitial(remoteAddr net.Addr, hdr *wire.Header, frame *wire.StreamFrame, aead crypto.AEAD) (packetHandler, error) {
+func (s *serverTLS) handleUnpackedInitial(remoteAddr net.Addr, hdr *wire.Header, frame *wire.StreamFrame, aead crypto.AEAD) (packetHandler, protocol.ConnectionID, error) {
 	version := hdr.Version
 	bc := handshake.NewCryptoStreamConn(remoteAddr)
 	bc.AddDataForReading(frame.Data)
 	tls, paramsChan, err := s.newMintConn(bc, version)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	alert := tls.Handshake()
 	if alert == mint.AlertStatelessRetry {
@@ -197,29 +197,34 @@ func (s *serverTLS) handleUnpackedInitial(remoteAddr net.Addr, hdr *wire.Header,
 		}
 		data, err := packUnencryptedPacket(aead, replyHdr, f, protocol.PerspectiveServer, s.logger)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		_, err = s.conn.WriteTo(data, remoteAddr)
-		return nil, err
+		return nil, nil, err
 	}
 	if alert != mint.AlertNoAlert {
-		return nil, alert
+		return nil, nil, alert
 	}
 	if tls.State() != mint.StateServerNegotiated {
-		return nil, fmt.Errorf("Expected mint state to be %s, got %s", mint.StateServerNegotiated, tls.State())
+		return nil, nil, fmt.Errorf("Expected mint state to be %s, got %s", mint.StateServerNegotiated, tls.State())
 	}
 	if alert := tls.Handshake(); alert != mint.AlertNoAlert {
-		return nil, alert
+		return nil, nil, alert
 	}
 	if tls.State() != mint.StateServerWaitFlight2 {
-		return nil, fmt.Errorf("Expected mint state to be %s, got %s", mint.StateServerWaitFlight2, tls.State())
+		return nil, nil, fmt.Errorf("Expected mint state to be %s, got %s", mint.StateServerWaitFlight2, tls.State())
 	}
 	params := <-paramsChan
+	connID, err := protocol.GenerateConnectionID()
+	if err != nil {
+		return nil, nil, err
+	}
+	s.logger.Debugf("Changing source connection ID to %s.", connID)
 	sess, err := newTLSServerSession(
 		&conn{pconn: s.conn, currentAddr: remoteAddr},
 		s.sessionRunner,
 		hdr.SrcConnectionID,
-		hdr.DestConnectionID,     // TODO(#1003): we can use a server-chosen connection ID here
+		connID,
 		protocol.PacketNumber(1), // TODO: use a random packet number here
 		s.config,
 		tls,
@@ -230,10 +235,10 @@ func (s *serverTLS) handleUnpackedInitial(remoteAddr net.Addr, hdr *wire.Header,
 		s.logger,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	cs := sess.getCryptoStream()
 	cs.setReadOffset(frame.DataLen())
 	bc.SetStream(cs)
-	return sess, nil
+	return sess, connID, nil
 }
