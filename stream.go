@@ -100,7 +100,7 @@ func newStream(streamID protocol.StreamID,
 	flowController flowcontrol.StreamFlowController,
 	version protocol.VersionNumber,
 ) *stream {
-	s := &stream{sender: sender}
+	s := &stream{sender: sender, version: version}
 	senderForSendStream := &uniStreamSender{
 		streamSender: sender,
 		onStreamCompletedImpl: func() {
