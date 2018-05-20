@@ -42,6 +42,8 @@ type serverTLS struct {
 	params            *handshake.TransportParameters
 	newMintConn       func(*handshake.CryptoStreamConn, protocol.VersionNumber) (handshake.MintTLS, <-chan handshake.TransportParameters, error)
 
+	newSession func(connection, sessionRunner, protocol.ConnectionID, protocol.ConnectionID, protocol.PacketNumber, *Config, handshake.MintTLS, *handshake.CryptoStreamConn, crypto.AEAD, *handshake.TransportParameters, protocol.VersionNumber, utils.Logger) (packetHandler, error)
+
 	sessionRunner sessionRunner
 	sessionChan   chan<- tlsSession
 
@@ -83,7 +85,8 @@ func newServerTLS(
 			MaxBidiStreams:              uint16(config.MaxIncomingStreams),
 			MaxUniStreams:               uint16(config.MaxIncomingUniStreams),
 		},
-		logger: logger,
+		newSession: newTLSServerSession,
+		logger:     logger,
 	}
 	s.newMintConn = s.newMintConnImpl
 	return s, sessionChan, nil
@@ -225,7 +228,7 @@ func (s *serverTLS) handleUnpackedInitial(remoteAddr net.Addr, hdr *wire.Header,
 		return nil, nil, err
 	}
 	s.logger.Debugf("Changing source connection ID to %s.", connID)
-	sess, err := newTLSServerSession(
+	sess, err := s.newSession(
 		&conn{pconn: s.conn, currentAddr: remoteAddr},
 		s.sessionRunner,
 		hdr.SrcConnectionID,
@@ -245,5 +248,6 @@ func (s *serverTLS) handleUnpackedInitial(remoteAddr net.Addr, hdr *wire.Header,
 	cs := sess.getCryptoStream()
 	cs.setReadOffset(frame.DataLen())
 	bc.SetStream(cs)
+	go sess.run()
 	return sess, connID, nil
 }

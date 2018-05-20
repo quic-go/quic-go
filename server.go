@@ -165,11 +165,9 @@ func (s *server) setupTLS() error {
 			case <-s.errorChan:
 				return
 			case tlsSession := <-sessionChan:
-				sess := tlsSession.sess
 				// The connection ID is a randomly chosen 8 byte value.
 				// It is safe to assume that it doesn't collide with other randomly chosen values.
-				s.sessionHandler.Add(tlsSession.connID, sess)
-				go sess.run()
+				s.sessionHandler.Add(tlsSession.connID, tlsSession.sess)
 			}
 		}
 	}()

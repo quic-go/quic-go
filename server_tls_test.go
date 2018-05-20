@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/bifurcation/mint"
+	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/crypto"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
@@ -143,6 +144,15 @@ var _ = Describe("Stateless TLS handling", func() {
 		mintTLS.EXPECT().Handshake().Return(mint.AlertNoAlert).Do(func() {
 			mintReply.Write([]byte("Server Hello"))
 		})
+		run := make(chan struct{})
+		server.newSession = func(connection, sessionRunner, protocol.ConnectionID, protocol.ConnectionID, protocol.PacketNumber, *Config, handshake.MintTLS, *handshake.CryptoStreamConn, crypto.AEAD, *handshake.TransportParameters, protocol.VersionNumber, utils.Logger) (packetHandler, error) {
+			sess := NewMockPacketHandler(mockCtrl)
+			cryptoStream := NewMockCryptoStream(mockCtrl)
+			cryptoStream.EXPECT().setReadOffset(gomock.Any())
+			sess.EXPECT().getCryptoStream().Return(cryptoStream)
+			sess.EXPECT().run().Do(func() { close(run) })
+			return sess, nil
+		}
 		mintTLS.EXPECT().Handshake().Return(mint.AlertNoAlert)
 		mintTLS.EXPECT().State().Return(mint.StateServerNegotiated)
 		mintTLS.EXPECT().State().Return(mint.StateServerWaitFlight2)
@@ -163,6 +173,7 @@ var _ = Describe("Stateless TLS handling", func() {
 		// make sure we're using a server-generated connection ID
 		Expect(tlsSess.connID).ToNot(Equal(hdr.SrcConnectionID))
 		Expect(tlsSess.connID).ToNot(Equal(hdr.DestConnectionID))
+		Eventually(run).Should(BeClosed())
 		Eventually(done).Should(BeClosed())
 	})
 
