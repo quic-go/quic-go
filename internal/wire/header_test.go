@@ -82,7 +82,7 @@ var _ = Describe("Header", func() {
 				DestConnectionID: connID,
 				SrcConnectionID:  connID,
 				PacketNumber:     0x1337,
-				PacketNumberLen:  protocol.PacketNumberLen6,
+				PacketNumberLen:  protocol.PacketNumberLen4,
 			}).writePublicHeader(buf, protocol.PerspectiveClient, versionPublicHeader)
 			Expect(err).ToNot(HaveOccurred())
 			hdr, err := ParseHeaderSentByClient(bytes.NewReader(buf.Bytes()))
@@ -101,7 +101,7 @@ var _ = Describe("Header", func() {
 				DestConnectionID:     connID,
 				SrcConnectionID:      connID,
 				PacketNumber:         0x1337,
-				PacketNumberLen:      protocol.PacketNumberLen6,
+				PacketNumberLen:      protocol.PacketNumberLen4,
 				DiversificationNonce: bytes.Repeat([]byte{'f'}, 32),
 			}).writePublicHeader(buf, protocol.PerspectiveServer, versionPublicHeader)
 			Expect(err).ToNot(HaveOccurred())
@@ -122,7 +122,7 @@ var _ = Describe("Header", func() {
 				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				PacketNumber:     0x1337,
-				PacketNumberLen:  protocol.PacketNumberLen6,
+				PacketNumberLen:  protocol.PacketNumberLen2,
 			}).writePublicHeader(buf, protocol.PerspectiveClient, versionPublicHeader)
 			Expect(err).ToNot(HaveOccurred())
 			_, err = ParseHeaderSentByClient(bytes.NewReader(buf.Bytes()[0:12]))
