@@ -68,7 +68,7 @@ var _ = Describe("Header", func() {
 				PacketNumber:     0x42,
 			}).writeHeader(buf)
 			Expect(err).ToNot(HaveOccurred())
-			hdr, err := ParseHeaderSentByServer(bytes.NewReader(buf.Bytes()), versionIETFHeader)
+			hdr, err := ParseHeaderSentByServer(bytes.NewReader(buf.Bytes()))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.IsPublicHeader).To(BeFalse())
 		})
@@ -94,7 +94,7 @@ var _ = Describe("Header", func() {
 			Expect(hdr.IsPublicHeader).To(BeTrue())
 		})
 
-		It("parses a gQUIC Public Header, when the version is known", func() {
+		It("parses a gQUIC Public Header", func() {
 			connID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
 			buf := &bytes.Buffer{}
 			err := (&Header{
@@ -105,7 +105,7 @@ var _ = Describe("Header", func() {
 				DiversificationNonce: bytes.Repeat([]byte{'f'}, 32),
 			}).writePublicHeader(buf, protocol.PerspectiveServer, versionPublicHeader)
 			Expect(err).ToNot(HaveOccurred())
-			hdr, err := ParseHeaderSentByServer(bytes.NewReader(buf.Bytes()), versionPublicHeader)
+			hdr, err := ParseHeaderSentByServer(bytes.NewReader(buf.Bytes()))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.DestConnectionID).To(Equal(connID))
 			Expect(hdr.SrcConnectionID).To(Equal(connID))
@@ -130,7 +130,7 @@ var _ = Describe("Header", func() {
 		})
 
 		It("errors when given no data", func() {
-			_, err := ParseHeaderSentByServer(bytes.NewReader([]byte{}), protocol.VersionUnknown)
+			_, err := ParseHeaderSentByServer(bytes.NewReader([]byte{}))
 			Expect(err).To(MatchError(io.EOF))
 			_, err = ParseHeaderSentByClient(bytes.NewReader([]byte{}))
 			Expect(err).To(MatchError(io.EOF))
@@ -140,7 +140,7 @@ var _ = Describe("Header", func() {
 			connID := protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad, 0xde, 0xca, 0xfb, 0xad}
 			versions := []protocol.VersionNumber{0x13, 0x37}
 			data := ComposeGQUICVersionNegotiation(connID, versions)
-			hdr, err := ParseHeaderSentByServer(bytes.NewReader(data), protocol.VersionUnknown)
+			hdr, err := ParseHeaderSentByServer(bytes.NewReader(data))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.IsPublicHeader).To(BeTrue())
 			Expect(hdr.DestConnectionID).To(Equal(connID))
@@ -157,7 +157,7 @@ var _ = Describe("Header", func() {
 			versions := []protocol.VersionNumber{0x13, 0x37}
 			data, err := ComposeVersionNegotiation(destConnID, srcConnID, versions)
 			Expect(err).ToNot(HaveOccurred())
-			hdr, err := ParseHeaderSentByServer(bytes.NewReader(data), protocol.VersionUnknown)
+			hdr, err := ParseHeaderSentByServer(bytes.NewReader(data))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.IsPublicHeader).To(BeFalse())
 			Expect(hdr.IsVersionNegotiation).To(BeTrue())
@@ -199,7 +199,7 @@ var _ = Describe("Header", func() {
 			}
 			err := hdr.Write(buf, protocol.PerspectiveServer, versionIETFHeader)
 			Expect(err).ToNot(HaveOccurred())
-			_, err = ParseHeaderSentByServer(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+			_, err = ParseHeaderSentByServer(bytes.NewReader(buf.Bytes()))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.IsPublicHeader).To(BeFalse())
 		})

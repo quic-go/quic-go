@@ -39,7 +39,7 @@ type Header struct {
 }
 
 // ParseHeaderSentByServer parses the header for a packet that was sent by the server.
-func ParseHeaderSentByServer(b *bytes.Reader, version protocol.VersionNumber) (*Header, error) {
+func ParseHeaderSentByServer(b *bytes.Reader) (*Header, error) {
 	typeByte, err := b.ReadByte()
 	if err != nil {
 		return nil, err
@@ -49,13 +49,10 @@ func ParseHeaderSentByServer(b *bytes.Reader, version protocol.VersionNumber) (*
 	var isPublicHeader bool
 	if typeByte&0x80 > 0 { // gQUIC always has 0x80 unset. IETF Long Header or Version Negotiation
 		isPublicHeader = false
-	} else if typeByte&0xcf == 0x9 { // gQUIC Version Negotiation Packet
-		isPublicHeader = true
 	} else {
-		// the client knows the version that this packet was sent with
-		isPublicHeader = !version.UsesTLS()
+		// gQUIC never uses 6 byte packet numbers, so the third and fourth bit will never be 11
+		isPublicHeader = typeByte&0x30 != 0x30
 	}
-
 	return parsePacketHeader(b, protocol.PerspectiveServer, isPublicHeader)
 }
 
