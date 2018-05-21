@@ -45,9 +45,9 @@ var _ = Describe("Session Handler", func() {
 	})
 
 	It("closes", func() {
-		sess1 := NewMockPacketHandler(mockCtrl)
+		sess1 := NewMockQuicSession(mockCtrl)
 		sess1.EXPECT().Close(nil)
-		sess2 := NewMockPacketHandler(mockCtrl)
+		sess2 := NewMockQuicSession(mockCtrl)
 		sess2.EXPECT().Close(nil)
 		handler.Add(protocol.ConnectionID{1, 1, 1, 1}, sess1)
 		handler.Add(protocol.ConnectionID{2, 2, 2, 2}, sess2)

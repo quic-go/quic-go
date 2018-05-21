@@ -42,7 +42,7 @@ type client struct {
 
 	handshakeChan chan struct{}
 
-	session packetHandler
+	session quicSession
 
 	logger utils.Logger
 }
@@ -483,7 +483,7 @@ func (c *client) createNewGQUICSession() (err error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	runner := &runner{
-		onHandshakeCompleteImpl: func(_ packetHandler) { close(c.handshakeChan) },
+		onHandshakeCompleteImpl: func(_ Session) { close(c.handshakeChan) },
 		removeConnectionIDImpl:  func(protocol.ConnectionID) {},
 	}
 	c.session, err = newClientSession(
@@ -508,7 +508,7 @@ func (c *client) createNewTLSSession(
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	runner := &runner{
-		onHandshakeCompleteImpl: func(_ packetHandler) { close(c.handshakeChan) },
+		onHandshakeCompleteImpl: func(_ Session) { close(c.handshakeChan) },
 		removeConnectionIDImpl:  func(protocol.ConnectionID) {},
 	}
 	c.session, err = newTLSClientSession(

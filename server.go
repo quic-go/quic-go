@@ -18,25 +18,30 @@ import (
 
 // packetHandler handles packets
 type packetHandler interface {
-	Session
-	getCryptoStream() cryptoStreamI
 	handlePacket(*receivedPacket)
+	Close(error) error
+}
+
+type quicSession interface {
+	Session
+	handlePacket(*receivedPacket)
+	getCryptoStream() cryptoStreamI
 	GetVersion() protocol.VersionNumber
 	run() error
 	closeRemote(error)
 }
 
 type sessionRunner interface {
-	onHandshakeComplete(packetHandler)
+	onHandshakeComplete(Session)
 	removeConnectionID(protocol.ConnectionID)
 }
 
 type runner struct {
-	onHandshakeCompleteImpl func(packetHandler)
+	onHandshakeCompleteImpl func(Session)
 	removeConnectionIDImpl  func(protocol.ConnectionID)
 }
 
-func (r *runner) onHandshakeComplete(p packetHandler)        { r.onHandshakeCompleteImpl(p) }
+func (r *runner) onHandshakeComplete(s Session)              { r.onHandshakeCompleteImpl(s) }
 func (r *runner) removeConnectionID(c protocol.ConnectionID) { r.removeConnectionIDImpl(c) }
 
 var _ sessionRunner = &runner{}
@@ -70,7 +75,7 @@ type server struct {
 
 	sessionRunner sessionRunner
 	// set as a member, so they can be set in the tests
-	newSession func(connection, sessionRunner, protocol.VersionNumber, protocol.ConnectionID, *handshake.ServerConfig, *tls.Config, *Config, utils.Logger) (packetHandler, error)
+	newSession func(connection, sessionRunner, protocol.VersionNumber, protocol.ConnectionID, *handshake.ServerConfig, *tls.Config, *Config, utils.Logger) (quicSession, error)
 
 	logger utils.Logger
 }
@@ -143,7 +148,7 @@ func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener,
 
 func (s *server) setup() {
 	s.sessionRunner = &runner{
-		onHandshakeCompleteImpl: func(sess packetHandler) { s.sessionQueue <- sess },
+		onHandshakeCompleteImpl: func(sess Session) { s.sessionQueue <- sess },
 		removeConnectionIDImpl:  s.sessionHandler.Remove,
 	}
 }
@@ -405,8 +410,7 @@ func (s *server) handleGQUICPacket(hdr *wire.Header, packetData []byte, remoteAd
 		}
 
 		s.logger.Infof("Serving new connection: %s, version %s from %v", hdr.DestConnectionID, version, remoteAddr)
-		var err error
-		session, err = s.newSession(
+		sess, err := s.newSession(
 			&conn{pconn: s.conn, currentAddr: remoteAddr},
 			s.sessionRunner,
 			version,
@@ -419,9 +423,10 @@ func (s *server) handleGQUICPacket(hdr *wire.Header, packetData []byte, remoteAd
 		if err != nil {
 			return err
 		}
-		s.sessionHandler.Add(hdr.DestConnectionID, session)
+		s.sessionHandler.Add(hdr.DestConnectionID, sess)
 
-		go session.run()
+		go sess.run()
+		session = sess
 	}
 
 	session.handlePacket(&receivedPacket{

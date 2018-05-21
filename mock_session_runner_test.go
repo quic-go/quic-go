@@ -35,7 +35,7 @@ func (m *MockSessionRunner) EXPECT() *MockSessionRunnerMockRecorder {
 }
 
 // onHandshakeComplete mocks base method
-func (m *MockSessionRunner) onHandshakeComplete(arg0 packetHandler) {
+func (m *MockSessionRunner) onHandshakeComplete(arg0 Session) {
 	m.ctrl.Call(m, "onHandshakeComplete", arg0)
 }
 
