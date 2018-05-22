@@ -20,6 +20,7 @@ const (
 const (
 	Version39       VersionNumber = gquicVersion0 + 3*0x100 + 0x9
 	Version42       VersionNumber = gquicVersion0 + 4*0x100 + 0x2
+	Version43       VersionNumber = gquicVersion0 + 4*0x100 + 0x3
 	VersionTLS      VersionNumber = 101
 	VersionWhatever VersionNumber = 0 // for when the version doesn't matter
 	VersionUnknown  VersionNumber = math.MaxUint32
@@ -28,6 +29,7 @@ const (
 // SupportedVersions lists the versions that the server supports
 // must be in sorted descending order
 var SupportedVersions = []VersionNumber{
+	Version43,
 	Version42,
 	Version39,
 }
