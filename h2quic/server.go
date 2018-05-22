@@ -154,10 +154,18 @@ func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, 
 	if err != nil {
 		return qerr.Error(qerr.HeadersStreamDataDecompressFailure, "cannot read frame")
 	}
-	h2headersFrame, ok := h2frame.(*http2.HeadersFrame)
-	if !ok {
+	var h2headersFrame *http2.HeadersFrame
+	switch f := h2frame.(type) {
+	case *http2.PriorityFrame:
+		// ignore PRIORITY frames
+		s.logger.Debugf("Ignoring H2 PRIORITY frame: %#v", f)
+		return nil
+	case *http2.HeadersFrame:
+		h2headersFrame = f
+	default:
 		return qerr.Error(qerr.InvalidHeadersStreamData, "expected a header frame")
 	}
+
 	if !h2headersFrame.HeadersEnded() {
 		return errors.New("http2 header continuation not implemented")
 	}
