@@ -45,13 +45,13 @@ func (mr *MockPacketHandlerManagerMockRecorder) Add(arg0, arg1 interface{}) *gom
 }
 
 // Close mocks base method
-func (m *MockPacketHandlerManager) Close() {
-	m.ctrl.Call(m, "Close")
+func (m *MockPacketHandlerManager) Close(arg0 error) {
+	m.ctrl.Call(m, "Close", arg0)
 }
 
 // Close indicates an expected call of Close
-func (mr *MockPacketHandlerManagerMockRecorder) Close() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockPacketHandlerManager)(nil).Close))
+func (mr *MockPacketHandlerManagerMockRecorder) Close(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockPacketHandlerManager)(nil).Close), arg0)
 }
 
 // Get mocks base method

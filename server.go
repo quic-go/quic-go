@@ -26,7 +26,7 @@ type packetHandlerManager interface {
 	Add(protocol.ConnectionID, packetHandler)
 	Get(protocol.ConnectionID) (packetHandler, bool)
 	Remove(protocol.ConnectionID)
-	Close()
+	Close(error)
 }
 
 type quicSession interface {
@@ -288,7 +288,7 @@ func (s *server) Accept() (Session, error) {
 
 // Close the server
 func (s *server) Close() error {
-	s.sessionHandler.Close()
+	s.sessionHandler.Close(nil)
 	err := s.conn.Close()
 	<-s.errorChan // wait for serve() to return
 	return err

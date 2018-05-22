@@ -7,6 +7,10 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
 
+// The packetHandlerMap stores packetHandlers, identified by connection ID.
+// It is used:
+// * by the server to store sessions
+// * when multiplexing outgoing connections to store clients
 type packetHandlerMap struct {
 	mutex sync.RWMutex
 
@@ -50,7 +54,7 @@ func (h *packetHandlerMap) Remove(id protocol.ConnectionID) {
 	})
 }
 
-func (h *packetHandlerMap) Close() {
+func (h *packetHandlerMap) Close(err error) {
 	h.mutex.Lock()
 	if h.closed {
 		h.mutex.Unlock()
@@ -64,7 +68,7 @@ func (h *packetHandlerMap) Close() {
 			wg.Add(1)
 			go func(handler packetHandler) {
 				// session.Close() blocks until the CONNECTION_CLOSE has been sent and the run-loop has stopped
-				_ = handler.Close(nil)
+				_ = handler.Close(err)
 				wg.Done()
 			}(handler)
 		}
