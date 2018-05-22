@@ -18,7 +18,8 @@ const (
 
 // The version numbers, making grepping easier
 const (
-	Version39       VersionNumber = gquicVersion0 + 3*0x100 + 0x9 + iota
+	Version39       VersionNumber = gquicVersion0 + 3*0x100 + 0x9
+	Version42       VersionNumber = gquicVersion0 + 4*0x100 + 0x2
 	VersionTLS      VersionNumber = 101
 	VersionWhatever VersionNumber = 0 // for when the version doesn't matter
 	VersionUnknown  VersionNumber = math.MaxUint32
@@ -27,6 +28,7 @@ const (
 // SupportedVersions lists the versions that the server supports
 // must be in sorted descending order
 var SupportedVersions = []VersionNumber{
+	Version42,
 	Version39,
 }
 
@@ -74,12 +76,12 @@ func (vn VersionNumber) CryptoStreamID() StreamID {
 
 // UsesIETFFrameFormat tells if this version uses the IETF frame format
 func (vn VersionNumber) UsesIETFFrameFormat() bool {
-	return vn != Version39
+	return !vn.isGQUIC()
 }
 
 // UsesStopWaitingFrames tells if this version uses STOP_WAITING frames
 func (vn VersionNumber) UsesStopWaitingFrames() bool {
-	return vn == Version39
+	return vn.isGQUIC()
 }
 
 // StreamContributesToConnectionFlowControl says if a stream contributes to connection-level flow control
