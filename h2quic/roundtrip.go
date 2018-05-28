@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go/qerr"
 
 	"golang.org/x/net/http/httpguts"
 )
@@ -104,7 +105,12 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 	if err != nil {
 		return nil, err
 	}
-	return cl.RoundTrip(req)
+
+	res, err := cl.RoundTrip(req)
+	if _, ok := err.(*qerr.QuicError); ok {
+		r.closeClient(hostname, cl)
+	}
+	return res, err
 }
 
 // RoundTrip does a round trip.
@@ -135,6 +141,25 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTr
 		r.clients[hostname] = client
 	}
 	return client, nil
+}
+
+func (r *RoundTripper) closeClient(hostname string, closingClient http.RoundTripper) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	if r.clients == nil {
+		return
+	}
+
+	client, ok := r.clients[hostname]
+	if !ok {
+		return
+	} else if client != closingClient {
+		return
+	}
+
+	delete(r.clients, hostname)
+	client.Close()
 }
 
 // Close closes the QUIC connections that this RoundTripper has used
