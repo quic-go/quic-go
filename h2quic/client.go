@@ -77,7 +77,7 @@ func newClient(
 		opts:          opts,
 		headerErrored: make(chan struct{}),
 		dialer:        dialer,
-		logger:        utils.DefaultLogger,
+		logger:        utils.DefaultLogger.WithPrefix("client"),
 	}
 }
 

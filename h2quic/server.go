@@ -90,7 +90,7 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 	if s.Server == nil {
 		return errors.New("use of h2quic.Server without http.Server")
 	}
-	s.logger = utils.DefaultLogger
+	s.logger = utils.DefaultLogger.WithPrefix("server")
 	s.listenerMutex.Lock()
 	if s.closed {
 		s.listenerMutex.Unlock()
