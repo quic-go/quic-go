@@ -401,7 +401,7 @@ var newTLSClientSession = func(
 
 func (s *session) preSetup() {
 	s.rttStats = &congestion.RTTStats{}
-	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats, s.logger)
+	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats, s.logger, s.config.CongestionControl)
 	s.connFlowController = flowcontrol.NewConnectionFlowController(
 		protocol.ReceiveConnectionFlowControlWindow,
 		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),

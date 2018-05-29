@@ -124,6 +124,7 @@ func main() {
 	www := flag.String("www", "/var/www", "www data")
 	tcp := flag.Bool("tcp", false, "also listen on TCP")
 	tls := flag.Bool("tls", false, "activate support for IETF QUIC (work in progress)")
+	cc := flag.String("cc", "cubic", "the congestion control to use")
 	flag.Parse()
 
 	logger := utils.DefaultLogger
@@ -139,6 +140,8 @@ func main() {
 	if *tls {
 		versions = append([]protocol.VersionNumber{protocol.VersionTLS}, versions...)
 	}
+
+	congestionControl := protocol.GetCongestionAlgorithmFromString(*cc)
 
 	certFile := *certPath + "/fullchain.pem"
 	keyFile := *certPath + "/privkey.pem"
@@ -160,7 +163,7 @@ func main() {
 			} else {
 				server := h2quic.Server{
 					Server:     &http.Server{Addr: bCap},
-					QuicConfig: &quic.Config{Versions: versions},
+					QuicConfig: &quic.Config{Versions: versions, CongestionControl: congestionControl},
 				}
 				err = server.ListenAndServeTLS(certFile, keyFile)
 			}
