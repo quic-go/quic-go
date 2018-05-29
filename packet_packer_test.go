@@ -265,7 +265,7 @@ var _ = Describe("Packet packer", func() {
 		Expect(err).ToNot(HaveOccurred())
 		// parse the packet
 		r := bytes.NewReader(p.raw)
-		hdr, err := wire.ParseHeaderSentByServer(r, packer.version)
+		hdr, err := wire.ParseHeaderSentByServer(r)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.PayloadLen).To(BeEquivalentTo(r.Len()))
 	})
@@ -614,7 +614,7 @@ var _ = Describe("Packet packer", func() {
 			Expect(p.header.IsLongHeader).To(BeTrue())
 			// parse the packet
 			r := bytes.NewReader(p.raw)
-			hdr, err := wire.ParseHeaderSentByServer(r, packer.version)
+			hdr, err := wire.ParseHeaderSentByServer(r)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.PayloadLen).To(BeEquivalentTo(r.Len()))
 		})

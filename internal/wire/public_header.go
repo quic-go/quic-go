@@ -16,6 +16,7 @@ var (
 	errReceivedOmittedConnectionID       = qerr.Error(qerr.InvalidPacketHeader, "receiving packets with omitted ConnectionID is not supported")
 	errInvalidConnectionID               = qerr.Error(qerr.InvalidPacketHeader, "connection ID cannot be 0")
 	errGetLengthNotForVersionNegotiation = errors.New("PublicHeader: GetLength cannot be called for VersionNegotiation packets")
+	errInvalidPacketNumberLen6           = errors.New("invalid packet number length: 6 bytes")
 )
 
 // writePublicHeader writes a Public Header.
@@ -58,8 +59,6 @@ func (h *Header) writePublicHeader(b *bytes.Buffer, pers protocol.Perspective, _
 			publicFlagByte |= 0x10
 		case protocol.PacketNumberLen4:
 			publicFlagByte |= 0x20
-		case protocol.PacketNumberLen6:
-			publicFlagByte |= 0x30
 		}
 	}
 	b.WriteByte(publicFlagByte)
@@ -86,7 +85,7 @@ func (h *Header) writePublicHeader(b *bytes.Buffer, pers protocol.Perspective, _
 	case protocol.PacketNumberLen4:
 		utils.BigEndian.WriteUint32(b, uint32(h.PacketNumber))
 	case protocol.PacketNumberLen6:
-		utils.BigEndian.WriteUint48(b, uint64(h.PacketNumber)&(1<<48-1))
+		return errInvalidPacketNumberLen6
 	default:
 		return errors.New("PublicHeader: PacketNumberLen not set")
 	}
@@ -120,7 +119,7 @@ func parsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Hea
 	if header.hasPacketNumber(packetSentBy) {
 		switch publicFlagByte & 0x30 {
 		case 0x30:
-			header.PacketNumberLen = protocol.PacketNumberLen6
+			return nil, errInvalidPacketNumberLen6
 		case 0x20:
 			header.PacketNumberLen = protocol.PacketNumberLen4
 		case 0x10:
@@ -211,8 +210,11 @@ func (h *Header) getPublicHeaderLength(pers protocol.Perspective) (protocol.Byte
 	}
 
 	length := protocol.ByteCount(1) // 1 byte for public flags
+	if h.PacketNumberLen == protocol.PacketNumberLen6 {
+		return 0, errInvalidPacketNumberLen6
+	}
 	if h.hasPacketNumber(pers) {
-		if h.PacketNumberLen != protocol.PacketNumberLen1 && h.PacketNumberLen != protocol.PacketNumberLen2 && h.PacketNumberLen != protocol.PacketNumberLen4 && h.PacketNumberLen != protocol.PacketNumberLen6 {
+		if h.PacketNumberLen != protocol.PacketNumberLen1 && h.PacketNumberLen != protocol.PacketNumberLen2 && h.PacketNumberLen != protocol.PacketNumberLen4 {
 			return 0, errPacketNumberLenNotSet
 		}
 		length += protocol.ByteCount(h.PacketNumberLen)
