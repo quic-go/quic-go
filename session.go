@@ -603,9 +603,6 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		p.rcvTime = time.Now()
 	}
 
-	s.receivedFirstPacket = true
-	s.lastNetworkActivityTime = p.rcvTime
-	s.keepAlivePingSent = false
 	hdr := p.header
 	data := p.data
 
@@ -629,6 +626,10 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 	if err != nil {
 		return err
 	}
+
+	s.receivedFirstPacket = true
+	s.lastNetworkActivityTime = p.rcvTime
+	s.keepAlivePingSent = false
 
 	// In TLS 1.3, the client considers the handshake complete as soon as
 	// it received the server's Finished message and sent its Finished.
