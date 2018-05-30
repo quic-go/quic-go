@@ -230,6 +230,21 @@ var _ = Describe("Packet packer", func() {
 				Expect(h.DestConnectionID).To(Equal(destConnID))
 			})
 
+			It("changes the destination connection ID", func() {
+				srcConnID := protocol.ConnectionID{1, 1, 1, 1, 1, 1, 1, 1}
+				packer.srcConnID = srcConnID
+				dest1 := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+				dest2 := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
+				packer.ChangeDestConnectionID(dest1)
+				h := packer.getHeader(protocol.EncryptionUnencrypted)
+				Expect(h.SrcConnectionID).To(Equal(srcConnID))
+				Expect(h.DestConnectionID).To(Equal(dest1))
+				packer.ChangeDestConnectionID(dest2)
+				h = packer.getHeader(protocol.EncryptionUnencrypted)
+				Expect(h.SrcConnectionID).To(Equal(srcConnID))
+				Expect(h.DestConnectionID).To(Equal(dest2))
+			})
+
 			It("uses the Short Header format for forward-secure packets", func() {
 				h := packer.getHeader(protocol.EncryptionForwardSecure)
 				Expect(h.IsLongHeader).To(BeFalse())

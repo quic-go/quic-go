@@ -564,6 +564,10 @@ func (p *packetPacker) SetOmitConnectionID() {
 	p.omitConnectionID = true
 }
 
+func (p *packetPacker) ChangeDestConnectionID(connID protocol.ConnectionID) {
+	p.destConnID = connID
+}
+
 func (p *packetPacker) SetMaxPacketSize(size protocol.ByteCount) {
 	p.maxPacketSize = utils.MinByteCount(p.maxPacketSize, size)
 }

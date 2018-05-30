@@ -637,6 +637,12 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		return err
 	}
 
+	if s.perspective == protocol.PerspectiveClient && !s.receivedFirstPacket && !hdr.SrcConnectionID.Equal(s.destConnID) {
+		s.logger.Debugf("Received first packet. Switching destination connection ID to: %s", hdr.SrcConnectionID)
+		s.destConnID = hdr.SrcConnectionID
+		s.packer.ChangeDestConnectionID(s.destConnID)
+	}
+
 	s.receivedFirstPacket = true
 	s.lastNetworkActivityTime = p.rcvTime
 	s.keepAlivePingSent = false

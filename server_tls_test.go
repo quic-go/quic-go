@@ -146,7 +146,11 @@ var _ = Describe("Stateless TLS handling", func() {
 			Expect(conn.dataWritten.Len()).To(BeZero())
 			close(done)
 		}()
-		Eventually(sessionChan).Should(Receive())
+		var tlsSess tlsSession
+		Eventually(sessionChan).Should(Receive(&tlsSess))
+		// make sure we're using a server-generated connection ID
+		Expect(tlsSess.connID).ToNot(Equal(hdr.SrcConnectionID))
+		Expect(tlsSess.connID).ToNot(Equal(hdr.DestConnectionID))
 		Eventually(done).Should(BeClosed())
 	})
 
