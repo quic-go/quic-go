@@ -37,6 +37,8 @@ type client struct {
 	initialVersion protocol.VersionNumber
 	version        protocol.VersionNumber
 
+	handshakeChan chan struct{}
+
 	session packetHandler
 
 	logger utils.Logger
@@ -105,14 +107,15 @@ func Dial(
 		}
 	}
 	c := &client{
-		conn:       &conn{pconn: pconn, currentAddr: remoteAddr},
-		srcConnID:  srcConnID,
-		destConnID: destConnID,
-		hostname:   hostname,
-		tlsConf:    tlsConf,
-		config:     clientConfig,
-		version:    version,
-		logger:     utils.DefaultLogger.WithPrefix("client"),
+		conn:          &conn{pconn: pconn, currentAddr: remoteAddr},
+		srcConnID:     srcConnID,
+		destConnID:    destConnID,
+		hostname:      hostname,
+		tlsConf:       tlsConf,
+		config:        clientConfig,
+		version:       version,
+		handshakeChan: make(chan struct{}),
+		logger:        utils.DefaultLogger.WithPrefix("client"),
 	}
 
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", hostname, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
@@ -243,22 +246,19 @@ func (c *client) dialTLS() error {
 // - any other error that might occur
 // - when the connection is secure (for gQUIC), or forward-secure (for IETF QUIC)
 func (c *client) establishSecureConnection() error {
-	var runErr error
-	errorChan := make(chan struct{})
+	errorChan := make(chan error, 1)
+
 	go func() {
-		runErr = c.session.run() // returns as soon as the session is closed
-		close(errorChan)
-		c.logger.Infof("Connection %s closed.", c.srcConnID)
-		if runErr != handshake.ErrCloseSessionForRetry && runErr != errCloseSessionForNewVersion {
-			c.conn.Close()
-		}
+		err := c.session.run() // returns as soon as the session is closed
+		errorChan <- err
 	}()
 
 	select {
-	case <-errorChan:
-		return runErr
-	case err := <-c.session.handshakeStatus():
+	case err := <-errorChan:
 		return err
+	case <-c.handshakeChan:
+		// handshake successfully completed
+		return nil
 	}
 }
 
@@ -439,8 +439,13 @@ func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
 func (c *client) createNewGQUICSession() (err error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
+	runner := &runner{
+		onHandshakeCompleteImpl: func(_ packetHandler) { close(c.handshakeChan) },
+		removeConnectionIDImpl:  func(protocol.ConnectionID) {},
+	}
 	c.session, err = newClientSession(
 		c.conn,
+		runner,
 		c.hostname,
 		c.version,
 		c.destConnID,
@@ -459,8 +464,13 @@ func (c *client) createNewTLSSession(
 ) (err error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
+	runner := &runner{
+		onHandshakeCompleteImpl: func(_ packetHandler) { close(c.handshakeChan) },
+		removeConnectionIDImpl:  func(protocol.ConnectionID) {},
+	}
 	c.session, err = newTLSClientSession(
 		c.conn,
+		runner,
 		c.hostname,
 		c.version,
 		c.destConnID,

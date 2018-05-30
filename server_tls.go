@@ -42,7 +42,8 @@ type serverTLS struct {
 	params            *handshake.TransportParameters
 	newMintConn       func(*handshake.CryptoStreamConn, protocol.VersionNumber) (handshake.MintTLS, <-chan handshake.TransportParameters, error)
 
-	sessionChan chan<- tlsSession
+	sessionRunner sessionRunner
+	sessionChan   chan<- tlsSession
 
 	logger utils.Logger
 }
@@ -50,6 +51,7 @@ type serverTLS struct {
 func newServerTLS(
 	conn net.PacketConn,
 	config *Config,
+	runner sessionRunner,
 	cookieHandler *handshake.CookieHandler,
 	tlsConf *tls.Config,
 	logger utils.Logger,
@@ -72,6 +74,7 @@ func newServerTLS(
 		config:            config,
 		supportedVersions: config.Versions,
 		mintConf:          mconf,
+		sessionRunner:     runner,
 		sessionChan:       sessionChan,
 		params: &handshake.TransportParameters{
 			StreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
@@ -214,6 +217,7 @@ func (s *serverTLS) handleUnpackedInitial(remoteAddr net.Addr, hdr *wire.Header,
 	params := <-paramsChan
 	sess, err := newTLSServerSession(
 		&conn{pconn: s.conn, currentAddr: remoteAddr},
+		s.sessionRunner,
 		hdr.SrcConnectionID,
 		hdr.DestConnectionID,     // TODO(#1003): we can use a server-chosen connection ID here
 		protocol.PacketNumber(1), // TODO: use a random packet number here
