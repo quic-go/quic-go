@@ -195,6 +195,7 @@ func newSession(
 		paramsChan,
 		handshakeEvent,
 		s.logger,
+		&s.config.QuicTracer,
 	)
 	if err != nil {
 		return nil, err
@@ -214,6 +215,7 @@ func newSession(
 		s.streamFramer,
 		s.perspective,
 		s.version,
+        &s.config.QuicTracer,
 	)
 	return s, s.postSetup()
 }
@@ -265,6 +267,7 @@ var newClientSession = func(
 		initialVersion,
 		negotiatedVersions,
 		s.logger,
+		&s.config.QuicTracer,
 	)
 	if err != nil {
 		return nil, err
@@ -284,6 +287,7 @@ var newClientSession = func(
 		s.streamFramer,
 		s.perspective,
 		s.version,
+        &s.config.QuicTracer,
 	)
 	return s, s.postSetup()
 }
@@ -336,6 +340,7 @@ func newTLSServerSession(
 		s.streamFramer,
 		s.perspective,
 		s.version,
+        &s.config.QuicTracer,
 	)
 	if err := s.postSetup(); err != nil {
 		return nil, err
@@ -401,6 +406,7 @@ var newTLSClientSession = func(
 		s.streamFramer,
 		s.perspective,
 		s.version,
+        &s.config.QuicTracer,
 	)
 	return s, s.postSetup()
 }
@@ -624,6 +630,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 	)
 
 	packet, err := s.unpacker.Unpack(hdr.Raw, hdr, data)
+
 	if s.logger.Debug() {
 		if err != nil {
 			s.logger.Debugf("<- Reading packet 0x%x (%d bytes) for connection %s", hdr.PacketNumber, len(data)+len(hdr.Raw), hdr.DestConnectionID)

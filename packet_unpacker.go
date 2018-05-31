@@ -6,6 +6,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qerr"
+	"github.com/lucas-clemente/quic-go/qtrace"
 )
 
 type unpackedPacket struct {
@@ -51,6 +52,7 @@ func (u *packetUnpackerBase) parseFrames(decrypted []byte, hdr *wire.Header) ([]
 type packetUnpackerGQUIC struct {
 	packetUnpackerBase
 	aead gQUICAEAD
+	quicTracer *qtrace.Tracer
 }
 
 var _ unpacker = &packetUnpackerGQUIC{}
@@ -72,6 +74,10 @@ func (u *packetUnpackerGQUIC) Unpack(headerBinary []byte, hdr *wire.Header, data
 	fs, err := u.parseFrames(decrypted, hdr)
 	if err != nil {
 		return nil, err
+	}
+
+	if u.quicTracer != nil && u.quicTracer.GotPacket != nil {
+		u.quicTracer.GotPacket(decrypted, int(encryptionLevel))
 	}
 
 	return &unpackedPacket{

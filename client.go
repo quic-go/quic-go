@@ -177,6 +177,7 @@ func populateClientConfig(config *Config) *Config {
 		MaxIncomingStreams:                    maxIncomingStreams,
 		MaxIncomingUniStreams:                 maxIncomingUniStreams,
 		KeepAlive:                             config.KeepAlive,
+		QuicTracer:                            config.QuicTracer,
 	}
 }
 

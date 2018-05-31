@@ -81,6 +81,7 @@ var _ = Describe("Packet packer", func() {
 			mockStreamFramer,
 			protocol.PerspectiveServer,
 			version,
+			nil,
 		)
 		publicHeaderLen = 1 + 8 + 2 // 1 flag byte, 8 connection ID, 2 packet number
 		maxFrameSize = maxPacketSize - protocol.ByteCount((&mockSealer{}).Overhead()) - publicHeaderLen
@@ -93,20 +94,20 @@ var _ = Describe("Packet packer", func() {
 		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 		It("uses the minimum initial size, if it can't determine if the remote address is IPv4 or IPv6", func() {
 			remoteAddr := &net.TCPAddr{}
-			packer = newPacketPacker(connID, connID, 1, nil, remoteAddr, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
+			packer = newPacketPacker(connID, connID, 1, nil, remoteAddr, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever, nil)
 			Expect(packer.maxPacketSize).To(BeEquivalentTo(protocol.MinInitialPacketSize))
 		})
 
 		It("uses the maximum IPv4 packet size, if the remote address is IPv4", func() {
 			remoteAddr := &net.UDPAddr{IP: net.IPv4(11, 12, 13, 14), Port: 1337}
-			packer = newPacketPacker(connID, connID, 1, nil, remoteAddr, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
+			packer = newPacketPacker(connID, connID, 1, nil, remoteAddr, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever, nil)
 			Expect(packer.maxPacketSize).To(BeEquivalentTo(protocol.MaxPacketSizeIPv4))
 		})
 
 		It("uses the maximum IPv6 packet size, if the remote address is IPv6", func() {
 			ip := net.ParseIP("2001:0db8:85a3:0000:0000:8a2e:0370:7334")
 			remoteAddr := &net.UDPAddr{IP: ip, Port: 1337}
-			packer = newPacketPacker(connID, connID, 1, nil, remoteAddr, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
+			packer = newPacketPacker(connID, connID, 1, nil, remoteAddr, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever, nil)
 			Expect(packer.maxPacketSize).To(BeEquivalentTo(protocol.MaxPacketSizeIPv6))
 		})
 	})

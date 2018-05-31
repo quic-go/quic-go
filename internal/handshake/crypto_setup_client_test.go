@@ -131,6 +131,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			protocol.Version39,
 			nil,
 			utils.DefaultLogger,
+			nil,
 		)
 		Expect(err).ToNot(HaveOccurred())
 		cs = csInt.(*cryptoSetupClient)

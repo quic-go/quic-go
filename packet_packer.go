@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/qtrace"
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -53,6 +54,7 @@ type packetPacker struct {
 	version     protocol.VersionNumber
 	divNonce    []byte
 	cryptoSetup sealingManager
+	quicTracer  *qtrace.Tracer
 
 	packetNumberGenerator *packetNumberGenerator
 	getPacketNumberLen    func(protocol.PacketNumber) protocol.PacketNumberLen
@@ -80,6 +82,7 @@ func newPacketPacker(
 	streamFramer streamFrameSource,
 	perspective protocol.Perspective,
 	version protocol.VersionNumber,
+	quicTracer *qtrace.Tracer,
 ) *packetPacker {
 	maxPacketSize := protocol.ByteCount(protocol.MinInitialPacketSize)
 	// If this is not a UDP address, we don't know anything about the MTU.
@@ -105,6 +108,7 @@ func newPacketPacker(
 		getPacketNumberLen:    getPacketNumberLen,
 		packetNumberGenerator: newPacketNumberGenerator(initialPacketNumber, protocol.SkipPacketAveragePeriodLength),
 		maxPacketSize:         maxPacketSize,
+		quicTracer:            quicTracer,
 	}
 }
 
@@ -114,6 +118,11 @@ func (p *packetPacker) PackConnectionClose(ccf *wire.ConnectionCloseFrame) (*pac
 	encLevel, sealer := p.cryptoSetup.GetSealer()
 	header := p.getHeader(encLevel)
 	raw, err := p.writeAndSealPacket(header, frames, sealer)
+
+	if p.quicTracer != nil && p.quicTracer.SentPacket != nil {
+		p.quicTracer.SentPacket(raw, int(encLevel), uint64(header.PacketNumber))
+	}
+
 	return &packedPacket{
 		header:          header,
 		raw:             raw,
@@ -137,6 +146,11 @@ func (p *packetPacker) PackAckPacket() (*packedPacket, error) {
 	}
 	p.ackFrame = nil
 	raw, err := p.writeAndSealPacket(header, frames, sealer)
+
+	if p.quicTracer != nil && p.quicTracer.SentPacket != nil {
+		p.quicTracer.SentPacket(raw, int(encLevel), uint64(header.PacketNumber))
+	}
+
 	return &packedPacket{
 		header:          header,
 		raw:             raw,
@@ -275,6 +289,11 @@ func (p *packetPacker) packHandshakeRetransmission(packet *ackhandler.Packet) (*
 		frames = packet.Frames
 	}
 	raw, err := p.writeAndSealPacket(header, frames, sealer)
+
+	if p.quicTracer != nil && p.quicTracer.SentPacket != nil {
+		p.quicTracer.SentPacket(raw, int(packet.EncryptionLevel), uint64(header.PacketNumber))
+	}
+
 	return &packedPacket{
 		header:          header,
 		raw:             raw,
@@ -341,6 +360,11 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if p.quicTracer != nil && p.quicTracer.SentPacket != nil {
+		p.quicTracer.SentPacket(raw, int(encLevel), uint64(header.PacketNumber))
+	}
+
 	return &packedPacket{
 		header:          header,
 		raw:             raw,

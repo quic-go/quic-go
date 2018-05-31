@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/qtrace"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
@@ -192,6 +193,8 @@ type Config struct {
 	MaxIncomingUniStreams int
 	// KeepAlive defines whether this peer will periodically send PING frames to keep the connection alive.
 	KeepAlive bool
+	// The QuicTrace interface to receive packets and infomations from a quic session
+	QuicTracer qtrace.Tracer
 }
 
 // A Listener for incoming QUIC connections
