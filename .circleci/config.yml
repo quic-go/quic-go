@@ -1,0 +1,53 @@
+defaults: &defaults
+  working_directory: /go/src/github.com/marten-seemann/quic-go
+  steps:
+    - checkout
+    - run:
+        name: "Setup build environment"
+        command: |
+          go get -t ./...
+          go get github.com/onsi/ginkgo/ginkgo
+          go get github.com/onsi/gomega
+          echo 127.0.0.1 quic.clemente.io | sudo tee -a /etc/hosts
+    - run:
+        name: "Build infos"
+        command: |
+          echo $GOARCH
+          go version
+          google-chrome --version
+          printf "quic.clemente.io certificate valid until: " && openssl x509 -in example/fullchain.pem -enddate -noout | cut -d = -f 2
+    - run:
+        name: "Run benchmark tests"
+        command: ginkgo -randomizeAllSpecs -trace benchmark -- -samples=1
+    - run:
+        name: "Run benchmark tests with race detector"
+        command: ginkgo -race -randomizeAllSpecs -trace benchmark -- -samples=1 -size=10
+    - run:
+        name: "Run tools tests"
+        command: ginkgo -r -v -randomizeAllSpecs -trace integrationtests/tools
+    - run:
+        name: "Run Chrome integration tests"
+        command: ginkgo -v -randomizeAllSpecs -trace integrationtests/chrome
+    - run:
+        name: "Run integration tests using the gQUIC toy server / client"
+        command: ginkgo -v -randomizeAllSpecs -trace integrationtests/gquic
+    - run:
+        name: "Run self integration tests"
+        command: ginkgo -v -randomizeAllSpecs -trace integrationtests/self
+
+version: 2
+jobs:
+  build-go1.10:
+    docker:
+      - image: circleci/golang:1.10.2-stretch-browsers
+    <<: *defaults
+  build-go1.9:
+    docker:
+      - image: circleci/golang:1.9.6-stretch-browsers
+    <<: *defaults
+workflows:
+  version: 2
+  build:
+    jobs:
+      - build-go1.9
+      - build-go1.10

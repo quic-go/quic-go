@@ -22,5 +22,5 @@ if [ ${TESTMODE} == "integration" ]; then
     ginkgo -race -randomizeAllSpecs -randomizeSuites -trace benchmark -- -samples=1 -size=10
   fi
   # run integration tests
-  ginkgo -r -v -randomizeAllSpecs -randomizeSuites -trace integrationtests
+  ginkgo -r -v -randomizeAllSpecs -randomizeSuites -trace integrationtests -skipPackage chrome
 fi
