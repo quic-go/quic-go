@@ -34,7 +34,6 @@ const (
 var (
 	nFilesUploaded int32 // should be used atomically
 	doneCalled     utils.AtomicBool
-	version        protocol.VersionNumber
 )
 
 func TestChrome(t *testing.T) {
@@ -82,10 +81,6 @@ func init() {
 		doneCalled.Set(true)
 	})
 }
-
-var _ = JustBeforeEach(func() {
-	testserver.StartQuicServer([]protocol.VersionNumber{version})
-})
 
 var _ = AfterEach(func() {
 	testserver.StopQuicServer()
