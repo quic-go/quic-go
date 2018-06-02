@@ -1,5 +1,5 @@
 defaults: &defaults
-  working_directory: /go/src/github.com/marten-seemann/quic-go
+  working_directory: /go/src/github.com/lucas-clemente/quic-go
   steps:
     - checkout
     - run:
