@@ -2,7 +2,7 @@ package gquic_test
 
 import (
 	"fmt"
-	mrand "math/rand"
+	"math/rand"
 	"path/filepath"
 	"runtime"
 
@@ -26,7 +26,7 @@ func TestIntegration(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	mrand.Seed(GinkgoRandomSeed())
+	rand.Seed(GinkgoRandomSeed())
 })
 
 var _ = JustBeforeEach(func() {
