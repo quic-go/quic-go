@@ -67,17 +67,21 @@ func parseLongHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
 		return h, nil
 	}
 
-	pl, err := utils.ReadVarInt(b)
+	l, err := utils.ReadVarInt(b)
 	if err != nil {
 		return nil, err
 	}
-	h.PayloadLen = protocol.ByteCount(pl)
+	len := protocol.ByteCount(l)
 	pn, pnLen, err := utils.ReadVarIntPacketNumber(b)
 	if err != nil {
 		return nil, err
 	}
 	h.PacketNumber = pn
 	h.PacketNumberLen = pnLen
+	if len < protocol.ByteCount(pnLen) {
+		return nil, fmt.Errorf("Packet Length (%d bytes) smaller than Packet Number Length (%d bytes)", len, pnLen)
+	}
+	h.PayloadLen = len - protocol.ByteCount(pnLen)
 	h.Type = protocol.PacketType(typeByte & 0x7f)
 
 	if h.Type != protocol.PacketTypeInitial && h.Type != protocol.PacketTypeRetry && h.Type != protocol.PacketType0RTT && h.Type != protocol.PacketTypeHandshake {
@@ -132,7 +136,7 @@ func (h *Header) writeLongHeader(b *bytes.Buffer) error {
 	b.WriteByte(connIDLen)
 	b.Write(h.DestConnectionID.Bytes())
 	b.Write(h.SrcConnectionID.Bytes())
-	utils.WriteVarInt(b, uint64(h.PayloadLen))
+	utils.WriteVarInt(b, uint64(h.PayloadLen)+uint64(h.PacketNumberLen))
 	return utils.WriteVarIntPacketNumber(b, h.PacketNumber, h.PacketNumberLen)
 }
 
@@ -147,7 +151,7 @@ func (h *Header) writeShortHeader(b *bytes.Buffer) error {
 
 func (h *Header) getHeaderLength() (protocol.ByteCount, error) {
 	if h.IsLongHeader {
-		return 1 /* type byte */ + 4 /* version */ + 1 /* conn id len byte */ + protocol.ByteCount(h.DestConnectionID.Len()+h.SrcConnectionID.Len()) + utils.VarIntLen(uint64(h.PayloadLen)) + protocol.ByteCount(h.PacketNumberLen), nil
+		return 1 /* type byte */ + 4 /* version */ + 1 /* conn id len byte */ + protocol.ByteCount(h.DestConnectionID.Len()+h.SrcConnectionID.Len()) + utils.VarIntLen(uint64(h.PayloadLen)+uint64(h.PacketNumberLen)) + protocol.ByteCount(h.PacketNumberLen), nil
 	}
 
 	length := protocol.ByteCount(1 /* type byte */ + h.DestConnectionID.Len())
