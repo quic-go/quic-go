@@ -458,7 +458,6 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header
 	}
 
 	if p.version.UsesTLS() && encLevel != protocol.EncryptionForwardSecure {
-		header.PacketNumberLen = protocol.PacketNumberLen4
 		header.IsLongHeader = true
 		// Set the payload len to maximum size.
 		// Since it is encoded as a varint, this guarantees us that the header will end up at most as big as GetLength() returns.

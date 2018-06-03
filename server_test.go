@@ -311,6 +311,7 @@ var _ = Describe("Server", func() {
 				PayloadLen:       1000,
 				SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+				PacketNumberLen:  protocol.PacketNumberLen1,
 				Version:          versionIETFFrames,
 			}
 			Expect(hdr.Write(b, protocol.PerspectiveClient, versionIETFFrames)).To(Succeed())
@@ -332,6 +333,7 @@ var _ = Describe("Server", func() {
 				PayloadLen:       123,
 				SrcConnectionID:  connID,
 				DestConnectionID: connID,
+				PacketNumberLen:  protocol.PacketNumberLen1,
 				Version:          versionIETFFrames,
 			}
 			Expect(hdr.Write(b, protocol.PerspectiveClient, versionIETFFrames)).To(Succeed())
@@ -349,6 +351,7 @@ var _ = Describe("Server", func() {
 				PayloadLen:       123,
 				SrcConnectionID:  connID,
 				DestConnectionID: connID,
+				PacketNumberLen:  protocol.PacketNumberLen1,
 				Version:          versionIETFFrames,
 			}
 			Expect(hdr.Write(b, protocol.PerspectiveClient, versionIETFFrames)).To(Succeed())
@@ -507,6 +510,7 @@ var _ = Describe("Server", func() {
 			DestConnectionID: connID,
 			SrcConnectionID:  connID,
 			PacketNumber:     0x55,
+			PacketNumberLen:  protocol.PacketNumberLen1,
 			Version:          0x1234,
 			PayloadLen:       protocol.MinInitialPacketSize,
 		}
@@ -549,6 +553,7 @@ var _ = Describe("Server", func() {
 			DestConnectionID: connID,
 			SrcConnectionID:  connID,
 			PacketNumber:     0x55,
+			PacketNumberLen:  protocol.PacketNumberLen1,
 			Version:          protocol.VersionTLS,
 		}
 		err := hdr.Write(b, protocol.PerspectiveClient, protocol.VersionTLS)
@@ -571,6 +576,7 @@ var _ = Describe("Server", func() {
 			DestConnectionID: connID,
 			SrcConnectionID:  connID,
 			PacketNumber:     0x55,
+			PacketNumberLen:  protocol.PacketNumberLen1,
 			Version:          protocol.VersionTLS,
 		}
 		err := hdr.Write(b, protocol.PerspectiveClient, protocol.VersionTLS)

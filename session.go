@@ -407,7 +407,7 @@ var newTLSClientSession = func(
 
 func (s *session) preSetup() {
 	s.rttStats = &congestion.RTTStats{}
-	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats, s.logger)
+	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats, s.logger, s.version)
 	s.connFlowController = flowcontrol.NewConnectionFlowController(
 		protocol.ReceiveConnectionFlowControlWindow,
 		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),
@@ -621,6 +621,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		hdr.PacketNumberLen,
 		s.largestRcvdPacketNumber,
 		hdr.PacketNumber,
+		s.version,
 	)
 
 	packet, err := s.unpacker.Unpack(hdr.Raw, hdr, data)

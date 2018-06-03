@@ -72,6 +72,12 @@ var _ = Describe("Version", func() {
 		Expect(VersionTLS.UsesIETFFrameFormat()).To(BeTrue())
 	})
 
+	It("tells if a version uses varint packet numbers", func() {
+		Expect(Version39.UsesVarintPacketNumbers()).To(BeFalse())
+		Expect(Version42.UsesVarintPacketNumbers()).To(BeFalse())
+		Expect(VersionTLS.UsesVarintPacketNumbers()).To(BeTrue())
+	})
+
 	It("tells if a version uses the IETF frame types", func() {
 		Expect(Version39.UsesIETFFrameFormat()).To(BeFalse())
 		Expect(Version42.UsesIETFFrameFormat()).To(BeFalse())

@@ -125,6 +125,7 @@ func (s *serverTLS) sendConnectionClose(remoteAddr net.Addr, clientHdr *wire.Hea
 		SrcConnectionID:  clientHdr.DestConnectionID,
 		DestConnectionID: clientHdr.SrcConnectionID,
 		PacketNumber:     1, // random packet number
+		PacketNumberLen:  protocol.PacketNumberLen1,
 		Version:          clientHdr.Version,
 	}
 	data, err := packUnencryptedPacket(aead, replyHdr, ccf, protocol.PerspectiveServer, s.logger)
@@ -193,6 +194,7 @@ func (s *serverTLS) handleUnpackedInitial(remoteAddr net.Addr, hdr *wire.Header,
 			SrcConnectionID:  hdr.DestConnectionID,
 			PayloadLen:       f.Length(version) + protocol.ByteCount(aead.Overhead()),
 			PacketNumber:     hdr.PacketNumber, // echo the client's packet number
+			PacketNumberLen:  hdr.PacketNumberLen,
 			Version:          version,
 		}
 		data, err := packUnencryptedPacket(aead, replyHdr, f, protocol.PerspectiveServer, s.logger)
