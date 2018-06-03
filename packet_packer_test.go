@@ -216,7 +216,6 @@ var _ = Describe("Packet packer", func() {
 			It("uses the Long Header format for non-forward-secure packets", func() {
 				h := packer.getHeader(protocol.EncryptionSecure)
 				Expect(h.IsLongHeader).To(BeTrue())
-				Expect(h.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
 				Expect(h.Version).To(Equal(versionIETFHeader))
 			})
 

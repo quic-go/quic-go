@@ -52,6 +52,7 @@ var _ = Describe("Stateless TLS handling", func() {
 			DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 			SrcConnectionID:  protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
 			PacketNumber:     1,
+			PacketNumberLen:  protocol.PacketNumberLen1,
 			Version:          protocol.VersionTLS,
 		}
 		err := hdr.Write(hdrBuf, protocol.PerspectiveClient, protocol.VersionTLS)
@@ -85,6 +86,7 @@ var _ = Describe("Stateless TLS handling", func() {
 		hdr := &wire.Header{
 			DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 			SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+			PacketNumberLen:  protocol.PacketNumberLen1,
 			Version:          0x1337,
 		}
 		server.HandleInitial(nil, hdr, bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize))
