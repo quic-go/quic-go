@@ -6,7 +6,7 @@ import (
 
 type transportParameterID uint16
 
-const quicTLSExtensionType = 26
+const quicTLSExtensionType = 0xff5
 
 const (
 	initialMaxStreamDataParameterID  transportParameterID = 0x0
