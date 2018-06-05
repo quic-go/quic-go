@@ -259,6 +259,24 @@ var _ = Describe("H2 server", func() {
 			Expect(dataStream.reset).To(BeFalse())
 		})
 
+		It("ignores PRIORITY frames", func() {
+			handlerCalled := make(chan struct{})
+			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				close(handlerCalled)
+			})
+			buf := &bytes.Buffer{}
+			framer := http2.NewFramer(buf, nil)
+			err := framer.WritePriority(10, http2.PriorityParam{Weight: 42})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(buf.Bytes()).ToNot(BeEmpty())
+			headerStream.dataToRead.Write(buf.Bytes())
+			err = s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
+			Expect(err).ToNot(HaveOccurred())
+			Consistently(handlerCalled).ShouldNot(BeClosed())
+			Expect(dataStream.reset).To(BeFalse())
+			Expect(dataStream.closed).To(BeFalse())
+		})
+
 		It("errors when non-header frames are received", func() {
 			headerStream.dataToRead.Write([]byte{
 				0x0, 0x0, 0x06, 0x0, 0x0, 0x0, 0x0, 0x0, 0x5,

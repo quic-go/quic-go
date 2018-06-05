@@ -4,7 +4,7 @@
 
 - Add support for unidirectional streams (for IETF QUIC).
 - Add a `quic.Config` option for the maximum number of incoming streams.
-- Add support for QUIC 42.
+- Add support for QUIC 42 and 43.
 
 ## v0.7.0 (2018-02-03)
 
