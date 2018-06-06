@@ -86,6 +86,10 @@ func (vn VersionNumber) UsesStopWaitingFrames() bool {
 	return vn.isGQUIC()
 }
 
+func (vn VersionNumber) UsesVarintPacketNumbers() bool {
+	return !vn.isGQUIC()
+}
+
 // StreamContributesToConnectionFlowControl says if a stream contributes to connection-level flow control
 func (vn VersionNumber) StreamContributesToConnectionFlowControl(id StreamID) bool {
 	if id == vn.CryptoStreamID() {

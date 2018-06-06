@@ -74,10 +74,12 @@ type sentPacketHandler struct {
 	alarm time.Time
 
 	logger utils.Logger
+
+	version protocol.VersionNumber
 }
 
 // NewSentPacketHandler creates a new sentPacketHandler
-func NewSentPacketHandler(rttStats *congestion.RTTStats, logger utils.Logger) SentPacketHandler {
+func NewSentPacketHandler(rttStats *congestion.RTTStats, logger utils.Logger, version protocol.VersionNumber) SentPacketHandler {
 	congestion := congestion.NewCubicSender(
 		congestion.DefaultClock{},
 		rttStats,
@@ -92,6 +94,7 @@ func NewSentPacketHandler(rttStats *congestion.RTTStats, logger utils.Logger) Se
 		rttStats:           rttStats,
 		congestion:         congestion,
 		logger:             logger,
+		version:            version,
 	}
 }
 
@@ -494,7 +497,7 @@ func (h *sentPacketHandler) DequeuePacketForRetransmission() *Packet {
 }
 
 func (h *sentPacketHandler) GetPacketNumberLen(p protocol.PacketNumber) protocol.PacketNumberLen {
-	return protocol.GetPacketNumberLengthForHeader(p, h.lowestUnacked())
+	return protocol.GetPacketNumberLengthForHeader(p, h.lowestUnacked(), h.version)
 }
 
 func (h *sentPacketHandler) GetStopWaitingFrame(force bool) *wire.StopWaitingFrame {
