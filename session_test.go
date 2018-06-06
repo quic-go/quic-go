@@ -640,8 +640,8 @@ var _ = Describe("Session", func() {
 				Expect(err).To(MatchError(testErr))
 				close(done)
 			}()
-			sess.handlePacket(&receivedPacket{header: hdr})
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
+			sess.handlePacket(&receivedPacket{header: hdr})
 			Eventually(done).Should(BeClosed())
 		})
 
