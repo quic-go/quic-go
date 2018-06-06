@@ -2,6 +2,7 @@ package wire
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -154,6 +155,10 @@ func parseGQUICFrame(r *bytes.Reader, typeByte byte, hdr *Header, v protocol.Ver
 			err = qerr.Error(qerr.InvalidBlockedData, err.Error())
 		}
 	case 0x6:
+		if !v.UsesStopWaitingFrames() {
+			err = errors.New("STOP_WAITING frames not supported by this QUIC version")
+			break
+		}
 		frame, err = parseStopWaitingFrame(r, hdr.PacketNumber, hdr.PacketNumberLen, v)
 		if err != nil {
 			err = qerr.Error(qerr.InvalidStopWaitingData, err.Error())
