@@ -230,6 +230,21 @@ var _ = Describe("Packet packer", func() {
 				Expect(h.DestConnectionID).To(Equal(destConnID))
 			})
 
+			It("changes the destination connection ID", func() {
+				srcConnID := protocol.ConnectionID{1, 1, 1, 1, 1, 1, 1, 1}
+				packer.srcConnID = srcConnID
+				dest1 := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+				dest2 := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
+				packer.ChangeDestConnectionID(dest1)
+				h := packer.getHeader(protocol.EncryptionUnencrypted)
+				Expect(h.SrcConnectionID).To(Equal(srcConnID))
+				Expect(h.DestConnectionID).To(Equal(dest1))
+				packer.ChangeDestConnectionID(dest2)
+				h = packer.getHeader(protocol.EncryptionUnencrypted)
+				Expect(h.SrcConnectionID).To(Equal(srcConnID))
+				Expect(h.DestConnectionID).To(Equal(dest2))
+			})
+
 			It("uses the Short Header format for forward-secure packets", func() {
 				h := packer.getHeader(protocol.EncryptionForwardSecure)
 				Expect(h.IsLongHeader).To(BeFalse())
@@ -265,7 +280,7 @@ var _ = Describe("Packet packer", func() {
 		Expect(err).ToNot(HaveOccurred())
 		// parse the packet
 		r := bytes.NewReader(p.raw)
-		hdr, err := wire.ParseHeaderSentByServer(r, packer.version)
+		hdr, err := wire.ParseHeaderSentByServer(r)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.PayloadLen).To(BeEquivalentTo(r.Len()))
 	})
@@ -614,7 +629,7 @@ var _ = Describe("Packet packer", func() {
 			Expect(p.header.IsLongHeader).To(BeTrue())
 			// parse the packet
 			r := bytes.NewReader(p.raw)
-			hdr, err := wire.ParseHeaderSentByServer(r, packer.version)
+			hdr, err := wire.ParseHeaderSentByServer(r)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.PayloadLen).To(BeEquivalentTo(r.Len()))
 		})

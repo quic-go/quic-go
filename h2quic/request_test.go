@@ -101,16 +101,16 @@ var _ = Describe("Request", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("uses req.Host if available", func() {
+		It("uses req.URL.Host", func() {
+			req := &http.Request{URL: url}
+			Expect(hostnameFromRequest(req)).To(Equal("quic.clemente.io:1337"))
+		})
+
+		It("uses req.URL.Host even if req.Host is available", func() {
 			req := &http.Request{
 				Host: "www.example.org",
 				URL:  url,
 			}
-			Expect(hostnameFromRequest(req)).To(Equal("www.example.org"))
-		})
-
-		It("uses req.URL.Host if req.Host is not set", func() {
-			req := &http.Request{URL: url}
 			Expect(hostnameFromRequest(req)).To(Equal("quic.clemente.io:1337"))
 		})
 

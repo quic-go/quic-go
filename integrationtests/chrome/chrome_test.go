@@ -3,6 +3,7 @@ package chrome_test
 import (
 	"fmt"
 
+	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 
 	. "github.com/onsi/ginkgo"
@@ -10,9 +11,13 @@ import (
 
 var _ = Describe("Chrome tests", func() {
 	for i := range protocol.SupportedVersions {
-		version = protocol.SupportedVersions[i]
+		version := protocol.SupportedVersions[i]
 
 		Context(fmt.Sprintf("with version %s", version), func() {
+			JustBeforeEach(func() {
+				testserver.StartQuicServer([]protocol.VersionNumber{version})
+			})
+
 			It("downloads a small file", func() {
 				chromeTest(
 					version,

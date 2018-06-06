@@ -74,6 +74,8 @@ type closeError struct {
 
 // A Session is a QUIC session
 type session struct {
+	sessionRunner sessionRunner
+
 	destConnID protocol.ConnectionID
 	srcConnID  protocol.ConnectionID
 
@@ -117,11 +119,7 @@ type session struct {
 	paramsChan <-chan handshake.TransportParameters
 	// the handshakeEvent channel is passed to the CryptoSetup.
 	// It receives when it makes sense to try decrypting undecryptable packets.
-	handshakeEvent <-chan struct{}
-	// handshakeChan is returned by handshakeStatus.
-	// It receives any error that might occur during the handshake.
-	// It is closed when the handshake is complete.
-	handshakeChan     chan error
+	handshakeEvent    <-chan struct{}
 	handshakeComplete bool
 
 	receivedFirstPacket              bool // since packet numbers start at 0, we can't use largestRcvdPacketNumber != 0 for this
@@ -152,6 +150,7 @@ var _ streamSender = &session{}
 // newSession makes a new session
 func newSession(
 	conn connection,
+	sessionRunner sessionRunner,
 	v protocol.VersionNumber,
 	connectionID protocol.ConnectionID,
 	scfg *handshake.ServerConfig,
@@ -163,6 +162,7 @@ func newSession(
 	handshakeEvent := make(chan struct{}, 1)
 	s := &session{
 		conn:           conn,
+		sessionRunner:  sessionRunner,
 		srcConnID:      connectionID,
 		destConnID:     connectionID,
 		perspective:    protocol.PerspectiveServer,
@@ -222,6 +222,7 @@ func newSession(
 // declare this as a variable, so that we can it mock it in the tests
 var newClientSession = func(
 	conn connection,
+	sessionRunner sessionRunner,
 	hostname string,
 	v protocol.VersionNumber,
 	connectionID protocol.ConnectionID,
@@ -235,6 +236,7 @@ var newClientSession = func(
 	handshakeEvent := make(chan struct{}, 1)
 	s := &session{
 		conn:           conn,
+		sessionRunner:  sessionRunner,
 		srcConnID:      connectionID,
 		destConnID:     connectionID,
 		perspective:    protocol.PerspectiveClient,
@@ -289,6 +291,7 @@ var newClientSession = func(
 
 func newTLSServerSession(
 	conn connection,
+	runner sessionRunner,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
 	initialPacketNumber protocol.PacketNumber,
@@ -303,6 +306,7 @@ func newTLSServerSession(
 	handshakeEvent := make(chan struct{}, 1)
 	s := &session{
 		conn:           conn,
+		sessionRunner:  runner,
 		config:         config,
 		srcConnID:      srcConnID,
 		destConnID:     destConnID,
@@ -346,6 +350,7 @@ func newTLSServerSession(
 // declare this as a variable, such that we can it mock it in the tests
 var newTLSClientSession = func(
 	conn connection,
+	runner sessionRunner,
 	hostname string,
 	v protocol.VersionNumber,
 	destConnID protocol.ConnectionID,
@@ -359,6 +364,7 @@ var newTLSClientSession = func(
 	handshakeEvent := make(chan struct{}, 1)
 	s := &session{
 		conn:           conn,
+		sessionRunner:  runner,
 		config:         config,
 		srcConnID:      srcConnID,
 		destConnID:     destConnID,
@@ -414,7 +420,6 @@ func (s *session) preSetup() {
 }
 
 func (s *session) postSetup() error {
-	s.handshakeChan = make(chan error, 1)
 	s.receivedPackets = make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets)
 	s.closeChan = make(chan closeError, 1)
 	s.sendingScheduled = make(chan struct{}, 1)
@@ -426,7 +431,7 @@ func (s *session) postSetup() error {
 	s.lastNetworkActivityTime = now
 	s.sessionCreationTime = now
 
-	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.rttStats, s.version)
+	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.rttStats, s.logger, s.version)
 	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.cryptoStream, s.connFlowController, s.packer.QueueControlFrame)
 	return nil
 }
@@ -528,12 +533,11 @@ runLoop:
 		}
 	}
 
-	// only send the error the handshakeChan when the handshake is not completed yet
-	// otherwise this chan will already be closed
-	if !s.handshakeComplete {
-		s.handshakeChan <- closeErr.err
+	if err := s.handleCloseError(closeErr); err != nil {
+		s.logger.Infof("Handling close error failed: %s", err)
 	}
-	s.handleCloseError(closeErr)
+	s.logger.Infof("Connection %s closed.", s.srcConnID)
+	s.sessionRunner.removeConnectionID(s.srcConnID)
 	return closeErr.err
 }
 
@@ -580,14 +584,20 @@ func (s *session) handleHandshakeEvent(completed bool) {
 	}
 	s.handshakeComplete = true
 	s.handshakeEvent = nil // prevent this case from ever being selected again
-	if !s.version.UsesTLS() && s.perspective == protocol.PerspectiveClient {
-		// In gQUIC, there's no equivalent to the Finished message in TLS
-		// The server knows that the handshake is complete when it receives the first forward-secure packet sent by the client.
-		// We need to make sure that the client actually sends such a packet.
-		s.packer.QueueControlFrame(&wire.PingFrame{})
-		s.scheduleSending()
+	s.sessionRunner.onHandshakeComplete(s)
+
+	// In gQUIC, the server completes the handshake first (after sending the SHLO).
+	// In TLS 1.3, the client completes the handshake first (after sending the CFIN).
+	// We need to make sure they learn about the peer completing the handshake,
+	// in order to stop retransmitting handshake packets.
+	// They will stop retransmitting handshake packets when receiving the first forward-secure packet.
+	// We need to make sure that a retransmittable forward-secure packet is sent,
+	// independent from the application protocol.
+	if (!s.version.UsesTLS() && s.perspective == protocol.PerspectiveClient) ||
+		(s.version.UsesTLS() && s.perspective == protocol.PerspectiveServer) {
+		s.queueControlFrame(&wire.PingFrame{})
+		s.sentPacketHandler.SetHandshakeComplete()
 	}
-	close(s.handshakeChan)
 }
 
 func (s *session) handlePacketImpl(p *receivedPacket) error {
@@ -604,9 +614,6 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		p.rcvTime = time.Now()
 	}
 
-	s.receivedFirstPacket = true
-	s.lastNetworkActivityTime = p.rcvTime
-	s.keepAlivePingSent = false
 	hdr := p.header
 	data := p.data
 
@@ -654,13 +661,25 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		return err
 	}
 
-	// In TLS 1.3, the client considers the handshake complete as soon as
-	// it received the server's Finished message and sent its Finished.
-	// We have to wait for the first forward-secure packet from the server before
-	// deleting all handshake packets from the history.
-	if !s.receivedFirstForwardSecurePacket && packet.encryptionLevel == protocol.EncryptionForwardSecure {
-		s.receivedFirstForwardSecurePacket = true
-		s.sentPacketHandler.SetHandshakeComplete()
+	if s.perspective == protocol.PerspectiveClient && !s.receivedFirstPacket && !hdr.SrcConnectionID.Equal(s.destConnID) {
+		s.logger.Debugf("Received first packet. Switching destination connection ID to: %s", hdr.SrcConnectionID)
+		s.destConnID = hdr.SrcConnectionID
+		s.packer.ChangeDestConnectionID(s.destConnID)
+	}
+
+	s.receivedFirstPacket = true
+	s.lastNetworkActivityTime = p.rcvTime
+	s.keepAlivePingSent = false
+
+	// In gQUIC, the server completes the handshake first (after sending the SHLO).
+	// In TLS 1.3, the client completes the handshake first (after sending the CFIN).
+	// We know that the peer completed the handshake as soon as we receive a forward-secure packet.
+	if (!s.version.UsesTLS() && s.perspective == protocol.PerspectiveServer) ||
+		(s.version.UsesTLS() && s.perspective == protocol.PerspectiveClient) {
+		if !s.receivedFirstForwardSecurePacket && packet.encryptionLevel == protocol.EncryptionForwardSecure {
+			s.receivedFirstForwardSecurePacket = true
+			s.sentPacketHandler.SetHandshakeComplete()
+		}
 	}
 
 	s.lastRcvdPacketNumber = hdr.PacketNumber
@@ -854,7 +873,7 @@ func (s *session) handleCloseError(closeErr closeError) error {
 	}
 	// Don't log 'normal' reasons
 	if quicErr.ErrorCode == qerr.PeerGoingAway || quicErr.ErrorCode == qerr.NetworkIdleTimeout {
-		s.logger.Infof("Closing connection %s", s.srcConnID)
+		s.logger.Infof("Closing connection %s.", s.srcConnID)
 	} else {
 		s.logger.Errorf("Closing session with error: %s", closeErr.err.Error())
 	}
@@ -1020,9 +1039,9 @@ func (s *session) maybeSendRetransmission() (bool, error) {
 	}
 
 	if retransmitPacket.EncryptionLevel != protocol.EncryptionForwardSecure {
-		s.logger.Debugf("\tDequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
+		s.logger.Debugf("Dequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 	} else {
-		s.logger.Debugf("\tDequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
+		s.logger.Debugf("Dequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 	}
 
 	if s.version.UsesStopWaitingFrames() {
@@ -1251,10 +1270,6 @@ func (s *session) LocalAddr() net.Addr {
 
 func (s *session) RemoteAddr() net.Addr {
 	return s.conn.RemoteAddr()
-}
-
-func (s *session) handshakeStatus() <-chan error {
-	return s.handshakeChan
 }
 
 func (s *session) getCryptoStream() cryptoStreamI {

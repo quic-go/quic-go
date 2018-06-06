@@ -19,6 +19,7 @@ const (
 type streamSender interface {
 	queueControlFrame(wire.Frame)
 	onHasStreamData(protocol.StreamID)
+	// must be called without holding the mutex that is acquired by closeForShutdown
 	onStreamCompleted(protocol.StreamID)
 }
 
@@ -100,7 +101,7 @@ func newStream(streamID protocol.StreamID,
 	flowController flowcontrol.StreamFlowController,
 	version protocol.VersionNumber,
 ) *stream {
-	s := &stream{sender: sender}
+	s := &stream{sender: sender, version: version}
 	senderForSendStream := &uniStreamSender{
 		streamSender: sender,
 		onStreamCompletedImpl: func() {

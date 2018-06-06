@@ -23,8 +23,7 @@ type client struct {
 	conn     connection
 	hostname string
 
-	versionNegotiationChan           chan struct{} // the versionNegotiationChan is closed as soon as the server accepted the suggested version
-	versionNegotiated                bool          // has the server accepted our version
+	versionNegotiated                bool // has the server accepted our version
 	receivedVersionNegotiationPacket bool
 	negotiatedVersions               []protocol.VersionNumber // the list of versions from the version negotiation packet
 
@@ -37,6 +36,8 @@ type client struct {
 
 	initialVersion protocol.VersionNumber
 	version        protocol.VersionNumber
+
+	handshakeChan chan struct{}
 
 	session packetHandler
 
@@ -106,15 +107,15 @@ func Dial(
 		}
 	}
 	c := &client{
-		conn:                   &conn{pconn: pconn, currentAddr: remoteAddr},
-		srcConnID:              srcConnID,
-		destConnID:             destConnID,
-		hostname:               hostname,
-		tlsConf:                tlsConf,
-		config:                 clientConfig,
-		version:                version,
-		versionNegotiationChan: make(chan struct{}),
-		logger:                 utils.DefaultLogger,
+		conn:          &conn{pconn: pconn, currentAddr: remoteAddr},
+		srcConnID:     srcConnID,
+		destConnID:    destConnID,
+		hostname:      hostname,
+		tlsConf:       tlsConf,
+		config:        clientConfig,
+		version:       version,
+		handshakeChan: make(chan struct{}),
+		logger:        utils.DefaultLogger.WithPrefix("client"),
 	}
 
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", hostname, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
@@ -245,29 +246,19 @@ func (c *client) dialTLS() error {
 // - any other error that might occur
 // - when the connection is secure (for gQUIC), or forward-secure (for IETF QUIC)
 func (c *client) establishSecureConnection() error {
-	var runErr error
-	errorChan := make(chan struct{})
+	errorChan := make(chan error, 1)
+
 	go func() {
-		runErr = c.session.run() // returns as soon as the session is closed
-		close(errorChan)
-		c.logger.Infof("Connection %s closed.", c.srcConnID)
-		if runErr != handshake.ErrCloseSessionForRetry && runErr != errCloseSessionForNewVersion {
-			c.conn.Close()
-		}
+		err := c.session.run() // returns as soon as the session is closed
+		errorChan <- err
 	}()
 
-	// wait until the server accepts the QUIC version (or an error occurs)
 	select {
-	case <-errorChan:
-		return runErr
-	case <-c.versionNegotiationChan:
-	}
-
-	select {
-	case <-errorChan:
-		return runErr
-	case err := <-c.session.handshakeStatus():
+	case err := <-errorChan:
 		return err
+	case <-c.handshakeChan:
+		// handshake successfully completed
+		return nil
 	}
 }
 
@@ -304,7 +295,7 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
-	hdr, err := wire.ParseHeaderSentByServer(r, c.version)
+	hdr, err := wire.ParseHeaderSentByServer(r)
 	// drop the packet if we can't parse the header
 	if err != nil {
 		return fmt.Errorf("error parsing packet from %s: %s", remoteAddr.String(), err.Error())
@@ -340,7 +331,6 @@ func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
 }
 
 func (c *client) handleIETFQUICPacket(hdr *wire.Header, packetData []byte, remoteAddr net.Addr, rcvTime time.Time) error {
-	// TODO(#1003): add support for server-chosen connection IDs
 	// reject packets with the wrong connection ID
 	if !hdr.DestConnectionID.Equal(c.srcConnID) {
 		return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", hdr.DestConnectionID, c.srcConnID)
@@ -361,7 +351,6 @@ func (c *client) handleIETFQUICPacket(hdr *wire.Header, packetData []byte, remot
 	// since it is not a Version Negotiation Packet, this means the server supports the suggested version
 	if !c.versionNegotiated {
 		c.versionNegotiated = true
-		close(c.versionNegotiationChan)
 	}
 
 	c.session.handlePacket(&receivedPacket{
@@ -399,7 +388,6 @@ func (c *client) handleGQUICPacket(hdr *wire.Header, r *bytes.Reader, packetData
 	// since it is not a Version Negotiation Packet, this means the server supports the suggested version
 	if !c.versionNegotiated {
 		c.versionNegotiated = true
-		close(c.versionNegotiationChan)
 	}
 
 	c.session.handlePacket(&receivedPacket{
@@ -450,8 +438,13 @@ func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
 func (c *client) createNewGQUICSession() (err error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
+	runner := &runner{
+		onHandshakeCompleteImpl: func(_ packetHandler) { close(c.handshakeChan) },
+		removeConnectionIDImpl:  func(protocol.ConnectionID) {},
+	}
 	c.session, err = newClientSession(
 		c.conn,
+		runner,
 		c.hostname,
 		c.version,
 		c.destConnID,
@@ -470,8 +463,13 @@ func (c *client) createNewTLSSession(
 ) (err error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
+	runner := &runner{
+		onHandshakeCompleteImpl: func(_ packetHandler) { close(c.handshakeChan) },
+		removeConnectionIDImpl:  func(protocol.ConnectionID) {},
+	}
 	c.session, err = newTLSClientSession(
 		c.conn,
+		runner,
 		c.hostname,
 		c.version,
 		c.destConnID,

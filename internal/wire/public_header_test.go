@@ -163,13 +163,10 @@ var _ = Describe("Public Header", func() {
 				Expect(b.Len()).To(BeZero())
 			})
 
-			It("accepts 6-byte packet numbers", func() {
+			It("rejects 6-byte packet numbers", func() {
 				b := bytes.NewReader([]byte{0x38, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0x23, 0x42, 0xad, 0xfb, 0xca, 0xde})
-				hdr, err := parsePublicHeader(b, protocol.PerspectiveClient)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x2342adfbcade)))
-				Expect(hdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen6))
-				Expect(b.Len()).To(BeZero())
+				_, err := parsePublicHeader(b, protocol.PerspectiveClient)
+				Expect(err).To(MatchError(errInvalidPacketNumberLen6))
 			})
 		})
 	})
@@ -181,11 +178,11 @@ var _ = Describe("Public Header", func() {
 				DestConnectionID: connID,
 				SrcConnectionID:  connID,
 				PacketNumber:     2,
-				PacketNumberLen:  protocol.PacketNumberLen6,
+				PacketNumberLen:  protocol.PacketNumberLen4,
 			}
 			err := hdr.writePublicHeader(b, protocol.PerspectiveServer, versionBigEndian)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(b.Bytes()).To(Equal([]byte{0x38, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0, 0, 0, 0, 0, 2}))
+			Expect(b.Bytes()).To(Equal([]byte{0x28, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0, 0, 0, 2}))
 		})
 
 		It("writes a sample header as a client", func() {
@@ -194,11 +191,11 @@ var _ = Describe("Public Header", func() {
 				DestConnectionID: connID,
 				SrcConnectionID:  connID,
 				PacketNumber:     0x1337,
-				PacketNumberLen:  protocol.PacketNumberLen6,
+				PacketNumberLen:  protocol.PacketNumberLen2,
 			}
 			err := hdr.writePublicHeader(b, protocol.PerspectiveClient, versionBigEndian)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(b.Bytes()).To(Equal([]byte{0x38, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0x0, 0x0, 0x0, 0x0, 0x13, 0x37}))
+			Expect(b.Bytes()).To(Equal([]byte{0x18, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0x13, 0x37}))
 		})
 
 		It("refuses to write a Public Header if the source and destination connection IDs are not matching", func() {
@@ -207,7 +204,7 @@ var _ = Describe("Public Header", func() {
 				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				SrcConnectionID:  protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
 				PacketNumber:     0x1337,
-				PacketNumberLen:  protocol.PacketNumberLen6,
+				PacketNumberLen:  protocol.PacketNumberLen4,
 			}
 			err := hdr.writePublicHeader(b, protocol.PerspectiveClient, versionBigEndian)
 			Expect(err).To(MatchError("PublicHeader: SrcConnectionID must be equal to DestConnectionID"))
@@ -380,11 +377,11 @@ var _ = Describe("Public Header", func() {
 					DestConnectionID: connID,
 					SrcConnectionID:  connID,
 					PacketNumber:     0xdecafbad,
-					PacketNumberLen:  protocol.PacketNumberLen6,
+					PacketNumberLen:  protocol.PacketNumberLen4,
 				}
 				length, err := hdr.getPublicHeaderLength(protocol.PerspectiveServer)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(length).To(Equal(protocol.ByteCount(1 + 8 + 6))) // 1 byte public flag, 8 bytes connectionID, and packet number
+				Expect(length).To(Equal(protocol.ByteCount(1 + 8 + 4))) // 1 byte public flag, 8 bytes connectionID, and packet number
 			})
 
 			It("gets the lengths of a packet sent by the client with the VersionFlag set", func() {
@@ -393,13 +390,13 @@ var _ = Describe("Public Header", func() {
 					SrcConnectionID:  connID,
 					OmitConnectionID: true,
 					PacketNumber:     0xdecafbad,
-					PacketNumberLen:  protocol.PacketNumberLen6,
+					PacketNumberLen:  protocol.PacketNumberLen4,
 					VersionFlag:      true,
 					Version:          versionBigEndian,
 				}
 				length, err := hdr.getPublicHeaderLength(protocol.PerspectiveClient)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(length).To(Equal(protocol.ByteCount(1 + 4 + 6))) // 1 byte public flag, 4 version number, and packet number
+				Expect(length).To(Equal(protocol.ByteCount(1 + 4 + 4))) // 1 byte public flag, 4 version number, and packet number
 			})
 
 			It("gets the length of a packet with longest packet number length and omitted connectionID", func() {
@@ -408,11 +405,11 @@ var _ = Describe("Public Header", func() {
 					SrcConnectionID:  connID,
 					OmitConnectionID: true,
 					PacketNumber:     0xDECAFBAD,
-					PacketNumberLen:  protocol.PacketNumberLen6,
+					PacketNumberLen:  protocol.PacketNumberLen4,
 				}
 				length, err := hdr.getPublicHeaderLength(protocol.PerspectiveServer)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(length).To(Equal(protocol.ByteCount(1 + 6))) // 1 byte public flag, and packet number
+				Expect(length).To(Equal(protocol.ByteCount(1 + 4))) // 1 byte public flag, and packet number
 			})
 
 			It("gets the length of a packet 2 byte packet number length ", func() {
@@ -503,7 +500,7 @@ var _ = Describe("Public Header", func() {
 					Expect(b.Bytes()).To(Equal([]byte{0x28, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0xde, 0xca, 0xfb, 0xad}))
 				})
 
-				It("writes a header with a 6-byte packet number", func() {
+				It("refuses to write a header with a 6-byte packet number", func() {
 					b := &bytes.Buffer{}
 					hdr := Header{
 						DestConnectionID: connID,
@@ -512,8 +509,7 @@ var _ = Describe("Public Header", func() {
 						PacketNumberLen:  protocol.PacketNumberLen6,
 					}
 					err := hdr.writePublicHeader(b, protocol.PerspectiveServer, version)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(b.Bytes()).To(Equal([]byte{0x38, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0x13, 0x37, 0xde, 0xca, 0xfb, 0xad}))
+					Expect(err).To(MatchError(errInvalidPacketNumberLen6))
 				})
 			})
 		})

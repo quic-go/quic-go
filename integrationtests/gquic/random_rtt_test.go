@@ -24,7 +24,6 @@ func getRandomDuration(min, max time.Duration) time.Duration {
 }
 
 var _ = Describe("Random Duration Generator", func() {
-	rand.Seed(time.Now().UnixNano())
 	It("gets a random RTT", func() {
 		var min time.Duration = time.Hour
 		var max time.Duration
@@ -54,7 +53,6 @@ var _ = Describe("Random RTT", func() {
 	var proxy *quicproxy.QuicProxy
 
 	runRTTTest := func(minRtt, maxRtt time.Duration, version protocol.VersionNumber) {
-		rand.Seed(time.Now().UnixNano())
 		var err error
 		proxy, err = quicproxy.NewQuicProxy("localhost:", version, &quicproxy.Opts{
 			RemoteAddr: "localhost:" + testserver.Port(),

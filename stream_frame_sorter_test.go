@@ -10,7 +10,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("StreamFrame sorter", func() {
+var _ = Describe("STREAM frame sorter", func() {
 	var s *streamFrameSorter
 
 	checkGaps := func(expectedGaps []utils.ByteInterval) {
@@ -61,10 +61,11 @@ var _ = Describe("StreamFrame sorter", func() {
 			Expect(s.Head()).To(BeNil())
 		})
 
-		It("rejects empty frames", func() {
+		It("ignores empty frames", func() {
 			f := &wire.StreamFrame{}
 			err := s.Push(f)
-			Expect(err).To(MatchError(errEmptyStreamData))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(s.Pop()).To(BeNil())
 		})
 
 		Context("FinBit handling", func() {

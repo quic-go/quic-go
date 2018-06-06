@@ -37,7 +37,7 @@ var _ = Describe("Stateless TLS handling", func() {
 			Versions: []protocol.VersionNumber{protocol.VersionTLS},
 		}
 		var err error
-		server, sessionChan, err = newServerTLS(conn, config, nil, testdata.GetTLSConfig(), utils.DefaultLogger)
+		server, sessionChan, err = newServerTLS(conn, config, nil, nil, testdata.GetTLSConfig(), utils.DefaultLogger)
 		Expect(err).ToNot(HaveOccurred())
 		server.newMintConn = func(bc *handshake.CryptoStreamConn, v protocol.VersionNumber) (handshake.MintTLS, <-chan handshake.TransportParameters, error) {
 			mintReply = bc
@@ -71,7 +71,7 @@ var _ = Describe("Stateless TLS handling", func() {
 
 	unpackPacket := func(data []byte) (*wire.Header, []byte) {
 		r := bytes.NewReader(conn.dataWritten.Bytes())
-		hdr, err := wire.ParseHeaderSentByServer(r, protocol.VersionTLS)
+		hdr, err := wire.ParseHeaderSentByServer(r)
 		Expect(err).ToNot(HaveOccurred())
 		hdr.Raw = data[:len(data)-r.Len()]
 		aead, err := crypto.NewNullAEAD(protocol.PerspectiveClient, hdr.SrcConnectionID, protocol.VersionTLS)
@@ -89,7 +89,7 @@ var _ = Describe("Stateless TLS handling", func() {
 		}
 		server.HandleInitial(nil, hdr, bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize))
 		Expect(conn.dataWritten.Len()).ToNot(BeZero())
-		hdr, err := wire.ParseHeaderSentByServer(bytes.NewReader(conn.dataWritten.Bytes()), protocol.VersionUnknown)
+		hdr, err := wire.ParseHeaderSentByServer(bytes.NewReader(conn.dataWritten.Bytes()))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.IsVersionNegotiation).To(BeTrue())
 		Expect(sessionChan).ToNot(Receive())
@@ -118,7 +118,7 @@ var _ = Describe("Stateless TLS handling", func() {
 		server.HandleInitial(nil, hdr, data)
 		Expect(conn.dataWritten.Len()).ToNot(BeZero())
 		r := bytes.NewReader(conn.dataWritten.Bytes())
-		replyHdr, err := wire.ParseHeaderSentByServer(r, protocol.VersionTLS)
+		replyHdr, err := wire.ParseHeaderSentByServer(r)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(replyHdr.Type).To(Equal(protocol.PacketTypeRetry))
 		Expect(replyHdr.SrcConnectionID).To(Equal(hdr.DestConnectionID))
@@ -146,7 +146,11 @@ var _ = Describe("Stateless TLS handling", func() {
 			Expect(conn.dataWritten.Len()).To(BeZero())
 			close(done)
 		}()
-		Eventually(sessionChan).Should(Receive())
+		var tlsSess tlsSession
+		Eventually(sessionChan).Should(Receive(&tlsSess))
+		// make sure we're using a server-generated connection ID
+		Expect(tlsSess.connID).ToNot(Equal(hdr.SrcConnectionID))
+		Expect(tlsSess.connID).ToNot(Equal(hdr.DestConnectionID))
 		Eventually(done).Should(BeClosed())
 	})
 

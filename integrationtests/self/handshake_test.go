@@ -1,4 +1,4 @@
-package self
+package self_test
 
 import (
 	"crypto/tls"

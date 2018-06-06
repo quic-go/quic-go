@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/crypto"
@@ -21,11 +20,32 @@ import (
 type packetHandler interface {
 	Session
 	getCryptoStream() cryptoStreamI
-	handshakeStatus() <-chan error
 	handlePacket(*receivedPacket)
 	GetVersion() protocol.VersionNumber
 	run() error
 	closeRemote(error)
+}
+
+type sessionRunner interface {
+	onHandshakeComplete(packetHandler)
+	removeConnectionID(protocol.ConnectionID)
+}
+
+type runner struct {
+	onHandshakeCompleteImpl func(packetHandler)
+	removeConnectionIDImpl  func(protocol.ConnectionID)
+}
+
+func (r *runner) onHandshakeComplete(p packetHandler)        { r.onHandshakeCompleteImpl(p) }
+func (r *runner) removeConnectionID(c protocol.ConnectionID) { r.removeConnectionIDImpl(c) }
+
+var _ sessionRunner = &runner{}
+
+type sessionHandler interface {
+	Add(protocol.ConnectionID, packetHandler)
+	Get(protocol.ConnectionID) (packetHandler, bool)
+	Remove(protocol.ConnectionID)
+	Close()
 }
 
 // A Listener of QUIC
@@ -41,17 +61,16 @@ type server struct {
 	certChain crypto.CertChain
 	scfg      *handshake.ServerConfig
 
-	sessionsMutex sync.RWMutex
-	sessions      map[string] /* string(ConnectionID)*/ packetHandler
-	closed        bool
+	sessionHandler sessionHandler
 
-	serverError  error
+	serverError error
+
 	sessionQueue chan Session
 	errorChan    chan struct{}
 
-	// set as members, so they can be set in the tests
-	newSession                func(conn connection, v protocol.VersionNumber, connectionID protocol.ConnectionID, sCfg *handshake.ServerConfig, tlsConf *tls.Config, config *Config, logger utils.Logger) (packetHandler, error)
-	deleteClosedSessionsAfter time.Duration
+	sessionRunner sessionRunner
+	// set as a member, so they can be set in the tests
+	newSession func(connection, sessionRunner, protocol.VersionNumber, protocol.ConnectionID, *handshake.ServerConfig, *tls.Config, *Config, utils.Logger) (packetHandler, error)
 
 	logger utils.Logger
 }
@@ -99,19 +118,19 @@ func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener,
 	}
 
 	s := &server{
-		conn:                      conn,
-		tlsConf:                   tlsConf,
-		config:                    config,
-		certChain:                 certChain,
-		scfg:                      scfg,
-		sessions:                  map[string]packetHandler{},
-		newSession:                newSession,
-		deleteClosedSessionsAfter: protocol.ClosedSessionDeleteTimeout,
-		sessionQueue:              make(chan Session, 5),
-		errorChan:                 make(chan struct{}),
-		supportsTLS:               supportsTLS,
-		logger:                    utils.DefaultLogger,
+		conn:           conn,
+		tlsConf:        tlsConf,
+		config:         config,
+		certChain:      certChain,
+		scfg:           scfg,
+		newSession:     newSession,
+		sessionHandler: newSessionMap(),
+		sessionQueue:   make(chan Session, 5),
+		errorChan:      make(chan struct{}),
+		supportsTLS:    supportsTLS,
+		logger:         utils.DefaultLogger.WithPrefix("server"),
 	}
+	s.setup()
 	if supportsTLS {
 		if err := s.setupTLS(); err != nil {
 			return nil, err
@@ -122,12 +141,19 @@ func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener,
 	return s, nil
 }
 
+func (s *server) setup() {
+	s.sessionRunner = &runner{
+		onHandshakeCompleteImpl: func(sess packetHandler) { s.sessionQueue <- sess },
+		removeConnectionIDImpl:  s.sessionHandler.Remove,
+	}
+}
+
 func (s *server) setupTLS() error {
 	cookieHandler, err := handshake.NewCookieHandler(s.config.AcceptCookie, s.logger)
 	if err != nil {
 		return err
 	}
-	serverTLS, sessionChan, err := newServerTLS(s.conn, s.config, cookieHandler, s.tlsConf, s.logger)
+	serverTLS, sessionChan, err := newServerTLS(s.conn, s.config, s.sessionRunner, cookieHandler, s.tlsConf, s.logger)
 	if err != nil {
 		return err
 	}
@@ -139,16 +165,11 @@ func (s *server) setupTLS() error {
 			case <-s.errorChan:
 				return
 			case tlsSession := <-sessionChan:
-				connID := tlsSession.connID
 				sess := tlsSession.sess
-				s.sessionsMutex.Lock()
-				if _, ok := s.sessions[string(connID)]; ok { // drop this session if it already exists
-					s.sessionsMutex.Unlock()
-					continue
-				}
-				s.sessions[string(connID)] = sess
-				s.sessionsMutex.Unlock()
-				s.runHandshakeAndSession(sess, connID)
+				// The connection ID is a randomly chosen 8 byte value.
+				// It is safe to assume that it doesn't collide with other randomly chosen values.
+				s.sessionHandler.Add(tlsSession.connID, sess)
+				go sess.run()
 			}
 		}
 	}()
@@ -264,27 +285,7 @@ func (s *server) Accept() (Session, error) {
 
 // Close the server
 func (s *server) Close() error {
-	s.sessionsMutex.Lock()
-	if s.closed {
-		s.sessionsMutex.Unlock()
-		return nil
-	}
-	s.closed = true
-
-	var wg sync.WaitGroup
-	for _, session := range s.sessions {
-		if session != nil {
-			wg.Add(1)
-			go func(sess packetHandler) {
-				// session.Close() blocks until the CONNECTION_CLOSE has been sent and the run-loop has stopped
-				_ = sess.Close(nil)
-				wg.Done()
-			}(session)
-		}
-	}
-	s.sessionsMutex.Unlock()
-	wg.Wait()
-
+	s.sessionHandler.Close()
 	err := s.conn.Close()
 	<-s.errorChan // wait for serve() to return
 	return err
@@ -335,10 +336,7 @@ func (s *server) handleIETFQUICPacket(hdr *wire.Header, packetData []byte, remot
 		}
 	}
 
-	s.sessionsMutex.RLock()
-	session, sessionKnown := s.sessions[string(hdr.DestConnectionID)]
-	s.sessionsMutex.RUnlock()
-
+	session, sessionKnown := s.sessionHandler.Get(hdr.DestConnectionID)
 	if sessionKnown && session == nil {
 		// Late packet for closed session
 		return nil
@@ -358,18 +356,15 @@ func (s *server) handleIETFQUICPacket(hdr *wire.Header, packetData []byte, remot
 }
 
 func (s *server) handleGQUICPacket(hdr *wire.Header, packetData []byte, remoteAddr net.Addr, rcvTime time.Time) error {
-	s.sessionsMutex.RLock()
-	session, sessionKnown := s.sessions[string(hdr.DestConnectionID)]
-	s.sessionsMutex.RUnlock()
-
-	if sessionKnown && session == nil {
-		// Late packet for closed session
-		return nil
-	}
-
 	// ignore all Public Reset packets
 	if hdr.ResetFlag {
 		s.logger.Infof("Received unexpected Public Reset for connection %s.", hdr.DestConnectionID)
+		return nil
+	}
+
+	session, sessionKnown := s.sessionHandler.Get(hdr.DestConnectionID)
+	if sessionKnown && session == nil {
+		// Late packet for closed session
 		return nil
 	}
 
@@ -415,6 +410,7 @@ func (s *server) handleGQUICPacket(hdr *wire.Header, packetData []byte, remoteAd
 		var err error
 		session, err = s.newSession(
 			&conn{pconn: s.conn, currentAddr: remoteAddr},
+			s.sessionRunner,
 			version,
 			hdr.DestConnectionID,
 			s.scfg,
@@ -425,11 +421,9 @@ func (s *server) handleGQUICPacket(hdr *wire.Header, packetData []byte, remoteAd
 		if err != nil {
 			return err
 		}
-		s.sessionsMutex.Lock()
-		s.sessions[string(hdr.DestConnectionID)] = session
-		s.sessionsMutex.Unlock()
+		s.sessionHandler.Add(hdr.DestConnectionID, session)
 
-		s.runHandshakeAndSession(session, hdr.DestConnectionID)
+		go session.run()
 	}
 
 	session.handlePacket(&receivedPacket{
@@ -439,31 +433,4 @@ func (s *server) handleGQUICPacket(hdr *wire.Header, packetData []byte, remoteAd
 		rcvTime:    rcvTime,
 	})
 	return nil
-}
-
-func (s *server) runHandshakeAndSession(session packetHandler, connID protocol.ConnectionID) {
-	go func() {
-		_ = session.run()
-		// session.run() returns as soon as the session is closed
-		s.removeConnection(connID)
-	}()
-
-	go func() {
-		if err := <-session.handshakeStatus(); err != nil {
-			return
-		}
-		s.sessionQueue <- session
-	}()
-}
-
-func (s *server) removeConnection(id protocol.ConnectionID) {
-	s.sessionsMutex.Lock()
-	s.sessions[string(id)] = nil
-	s.sessionsMutex.Unlock()
-
-	time.AfterFunc(s.deleteClosedSessionsAfter, func() {
-		s.sessionsMutex.Lock()
-		delete(s.sessions, string(id))
-		s.sessionsMutex.Unlock()
-	})
 }

@@ -224,12 +224,6 @@ var _ = Describe("Receive Stream", func() {
 			Expect(b).To(Equal([]byte("foobar")))
 		})
 
-		It("passes on errors from the streamFrameSorter", func() {
-			mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(0), false)
-			err := str.handleStreamFrame(&wire.StreamFrame{StreamID: streamID}) // STREAM frame without data
-			Expect(err).To(MatchError(errEmptyStreamData))
-		})
-
 		Context("deadlines", func() {
 			It("the deadline error has the right net.Error properties", func() {
 				Expect(errDeadline.Temporary()).To(BeTrue())
