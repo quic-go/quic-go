@@ -17,6 +17,12 @@ import (
 var _ = Describe("IETF QUIC Header", func() {
 	srcConnID := protocol.ConnectionID(bytes.Repeat([]byte{'f'}, protocol.ConnectionIDLen))
 
+	appendPacketNumber := func(data []byte, pn protocol.PacketNumber, pnLen protocol.PacketNumberLen) []byte {
+		buf := &bytes.Buffer{}
+		utils.WriteVarIntPacketNumber(buf, pn, pnLen)
+		return append(data, buf.Bytes()...)
+	}
+
 	Context("parsing", func() {
 		Context("Version Negotiation Packets", func() {
 			It("parses", func() {
@@ -58,21 +64,19 @@ var _ = Describe("IETF QUIC Header", func() {
 		})
 
 		Context("long headers", func() {
-			generatePacket := func(t protocol.PacketType) []byte {
+			It("parses a long header", func() {
 				data := []byte{
-					0x80 ^ uint8(t),
+					0x80 ^ uint8(protocol.PacketTypeInitial),
 					0x1, 0x2, 0x3, 0x4, // version number
 					0x55,                                           // connection ID lengths
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // destination connection ID
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // source connection ID
 				}
-				data = append(data, encodeVarInt(0x1337)...)           // payload length
-				data = append(data, []byte{0xde, 0xca, 0xfb, 0xad}...) // packet number
-				return data
-			}
+				data = append(data, encodeVarInt(0x1337)...) // payload length
+				// packet number
+				data = appendPacketNumber(data, 0xbeef, protocol.PacketNumberLen4)
 
-			It("parses a long header", func() {
-				b := bytes.NewReader(generatePacket(protocol.PacketTypeInitial))
+				b := bytes.NewReader(data)
 				h, err := parseHeader(b)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(h.Type).To(Equal(protocol.PacketTypeInitial))
@@ -81,7 +85,7 @@ var _ = Describe("IETF QUIC Header", func() {
 				Expect(h.DestConnectionID).To(Equal(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}))
 				Expect(h.SrcConnectionID).To(Equal(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}))
 				Expect(h.PayloadLen).To(Equal(protocol.ByteCount(0x1337)))
-				Expect(h.PacketNumber).To(Equal(protocol.PacketNumber(0xdecafbad)))
+				Expect(h.PacketNumber).To(Equal(protocol.PacketNumber(0xbeef)))
 				Expect(h.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
 				Expect(h.Version).To(Equal(protocol.VersionNumber(0x1020304)))
 				Expect(h.IsVersionNegotiation).To(BeFalse())
@@ -102,6 +106,21 @@ var _ = Describe("IETF QUIC Header", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(h.SrcConnectionID).To(Equal(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}))
 				Expect(h.DestConnectionID).To(BeEmpty())
+			})
+
+			It("parses a long header with a 2 byte connection ID", func() {
+				data := []byte{
+					0x80 ^ uint8(protocol.PacketTypeInitial),
+					0x1, 0x2, 0x3, 0x4, // version number
+					0x0, // connection ID lengths
+				}
+				data = append(data, encodeVarInt(0x42)...) // payload length
+				data = appendPacketNumber(data, 0x123, protocol.PacketNumberLen2)
+				b := bytes.NewReader(data)
+				h, err := parseHeader(b)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(h.PacketNumber).To(Equal(protocol.PacketNumber(0x123)))
+				Expect(h.PacketNumberLen).To(Equal(protocol.PacketNumberLen2))
 			})
 
 			It("parses a long header without a source connection ID", func() {
@@ -127,6 +146,8 @@ var _ = Describe("IETF QUIC Header", func() {
 					Type:            42,
 					SrcConnectionID: srcConnID,
 					Version:         0x10203040,
+					PacketNumber:    1,
+					PacketNumberLen: protocol.PacketNumberLen1,
 				}).Write(buf, protocol.PerspectiveClient, protocol.VersionTLS)
 				Expect(err).ToNot(HaveOccurred())
 				b := bytes.NewReader(buf.Bytes())
@@ -141,8 +162,8 @@ var _ = Describe("IETF QUIC Header", func() {
 					0x55,                                           // connection ID lengths
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // destination connection ID
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // source connection ID
-					0xde, 0xca, 0xfb, 0xad, // packet number
 				}
+				data = appendPacketNumber(data, 0x1337, protocol.PacketNumberLen4)
 				for i := 0; i < len(data); i++ {
 					_, err := parseHeader(bytes.NewReader(data[:i]))
 					Expect(err).To(Equal(io.EOF))
@@ -155,8 +176,8 @@ var _ = Describe("IETF QUIC Header", func() {
 				data := []byte{
 					0x30,                                           // 1 byte packet number
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
-					0x42, // packet number
 				}
+				data = appendPacketNumber(data, 0x42, protocol.PacketNumberLen1)
 				b := bytes.NewReader(data)
 				h, err := parseHeader(b)
 				Expect(err).ToNot(HaveOccurred())
@@ -174,8 +195,8 @@ var _ = Describe("IETF QUIC Header", func() {
 				data := []byte{
 					0x30 ^ 0x40,
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
-					0x11,
 				}
+				data = appendPacketNumber(data, 11, protocol.PacketNumberLen1)
 				b := bytes.NewReader(data)
 				h, err := parseHeader(b)
 				Expect(err).ToNot(HaveOccurred())
@@ -188,8 +209,8 @@ var _ = Describe("IETF QUIC Header", func() {
 				data := []byte{
 					0x30 ^ 0x40 ^ 0x1,
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
-					0x13, 0x37, // packet number
 				}
+				data = appendPacketNumber(data, 0x1337, protocol.PacketNumberLen2)
 				b := bytes.NewReader(data)
 				h, err := parseHeader(b)
 				Expect(err).ToNot(HaveOccurred())
@@ -203,34 +224,23 @@ var _ = Describe("IETF QUIC Header", func() {
 				data := []byte{
 					0x30 ^ 0x40 ^ 0x2,
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
-					0xde, 0xad, 0xbe, 0xef, // packet number
 				}
+				data = appendPacketNumber(data, 0x99beef, protocol.PacketNumberLen4)
 				b := bytes.NewReader(data)
 				h, err := parseHeader(b)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(h.IsLongHeader).To(BeFalse())
-				Expect(h.PacketNumber).To(Equal(protocol.PacketNumber(0xdeadbeef)))
+				Expect(h.PacketNumber).To(Equal(protocol.PacketNumber(0x99beef)))
 				Expect(h.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
 				Expect(b.Len()).To(BeZero())
-			})
-
-			It("rejects headers that have an invalid type", func() {
-				data := []byte{
-					0x30 ^ 0x40 ^ 0x3,
-					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
-					0xde, 0xad, 0xbe, 0xef, // packet number
-				}
-				b := bytes.NewReader(data)
-				_, err := parseHeader(b)
-				Expect(err).To(MatchError("invalid short header type"))
 			})
 
 			It("rejects headers that have bit 3,4 and 5 set incorrectly", func() {
 				data := []byte{
 					0x38 ^ 0x2,
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
-					0xde, 0xca, 0xfb, 0xad, // packet number
 				}
+				data = appendPacketNumber(data, 1234, protocol.PacketNumberLen2)
 				b := bytes.NewReader(data)
 				_, err := parseHeader(b)
 				Expect(err).To(MatchError("invalid bits 3, 4 and 5"))
@@ -240,8 +250,8 @@ var _ = Describe("IETF QUIC Header", func() {
 				data := []byte{
 					0x30 ^ 0x2,
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
-					0xde, 0xca, 0xfb, 0xad, // packet number
 				}
+				data = appendPacketNumber(data, 1234, protocol.PacketNumberLen2)
 				for i := 0; i < len(data); i++ {
 					_, err := parseHeader(bytes.NewReader(data[:i]))
 					Expect(err).To(Equal(io.EOF))
@@ -265,7 +275,8 @@ var _ = Describe("IETF QUIC Header", func() {
 					DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe},
 					SrcConnectionID:  protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad, 0x0, 0x0, 0x13, 0x37},
 					PayloadLen:       0xcafe,
-					PacketNumber:     0xdecafbad,
+					PacketNumber:     0xdecaf,
+					PacketNumberLen:  protocol.PacketNumberLen4,
 					Version:          0x1020304,
 				}).writeHeader(buf)
 				Expect(err).ToNot(HaveOccurred())
@@ -276,8 +287,8 @@ var _ = Describe("IETF QUIC Header", func() {
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, // dest connection ID
 					0xde, 0xca, 0xfb, 0xad, 0x0, 0x0, 0x13, 0x37, // source connection ID
 				}
-				expected = append(expected, encodeVarInt(0xcafe)...)           // payload length
-				expected = append(expected, []byte{0xde, 0xca, 0xfb, 0xad}...) // packet number
+				expected = append(expected, encodeVarInt(0xcafe)...) // payload length
+				expected = appendPacketNumber(expected, 0xdecaf, protocol.PacketNumberLen4)
 				Expect(buf.Bytes()).To(Equal(expected))
 			})
 
@@ -288,6 +299,7 @@ var _ = Describe("IETF QUIC Header", func() {
 					SrcConnectionID:  srcConnID,
 					DestConnectionID: protocol.ConnectionID{1, 2, 3}, // connection IDs must be at least 4 bytes long
 					PacketNumber:     0xdecafbad,
+					PacketNumberLen:  protocol.PacketNumberLen4,
 					Version:          0x1020304,
 				}).writeHeader(buf)
 				Expect(err).To(MatchError("invalid connection ID length: 3 bytes"))
@@ -300,6 +312,7 @@ var _ = Describe("IETF QUIC Header", func() {
 					SrcConnectionID:  srcConnID,
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}, // connection IDs must be at most 18 bytes long
 					PacketNumber:     0xdecafbad,
+					PacketNumberLen:  protocol.PacketNumberLen4,
 					Version:          0x1020304,
 				}).writeHeader(buf)
 				Expect(err).To(MatchError("invalid connection ID length: 19 bytes"))
@@ -312,6 +325,7 @@ var _ = Describe("IETF QUIC Header", func() {
 					SrcConnectionID:  srcConnID,
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18}, // connection IDs must be at most 18 bytes long
 					PacketNumber:     0xdecafbad,
+					PacketNumberLen:  protocol.PacketNumberLen4,
 					Version:          0x1020304,
 				}).writeHeader(buf)
 				Expect(err).ToNot(HaveOccurred())
@@ -350,26 +364,24 @@ var _ = Describe("IETF QUIC Header", func() {
 				err := (&Header{
 					OmitConnectionID: true,
 					PacketNumberLen:  protocol.PacketNumberLen2,
-					PacketNumber:     0x1337,
+					PacketNumber:     0x765,
 				}).writeHeader(buf)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(buf.Bytes()).To(Equal([]byte{
-					0x30 | 0x1,
-					0x13, 0x37, // packet number
-				}))
+				expected := []byte{0x30}
+				expected = appendPacketNumber(expected, 0x765, protocol.PacketNumberLen2)
+				Expect(buf.Bytes()).To(Equal(expected))
 			})
 
 			It("writes a header with a 4 byte packet number", func() {
 				err := (&Header{
 					OmitConnectionID: true,
 					PacketNumberLen:  protocol.PacketNumberLen4,
-					PacketNumber:     0xdecafbad,
+					PacketNumber:     0x123456,
 				}).writeHeader(buf)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(buf.Bytes()).To(Equal([]byte{
-					0x30 | 0x2,
-					0xde, 0xca, 0xfb, 0xad, // packet number
-				}))
+				expected := []byte{0x30}
+				expected = appendPacketNumber(expected, 0x123456, protocol.PacketNumberLen4)
+				Expect(buf.Bytes()).To(Equal(expected))
 			})
 
 			It("errors when given an invalid packet number length", func() {
@@ -410,8 +422,9 @@ var _ = Describe("IETF QUIC Header", func() {
 				PayloadLen:       1,
 				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+				PacketNumberLen:  protocol.PacketNumberLen1,
 			}
-			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* conn ID len */ + 8 /* dest conn id */ + 8 /* src conn id */ + 1 /* short payload len */ + 4 /* packet number */
+			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* conn ID len */ + 8 /* dest conn id */ + 8 /* src conn id */ + 1 /* short payload len */ + 1 /* packet number */
 			Expect(h.getHeaderLength()).To(BeEquivalentTo(expectedLen))
 			err := h.writeHeader(buf)
 			Expect(err).ToNot(HaveOccurred())
@@ -424,8 +437,9 @@ var _ = Describe("IETF QUIC Header", func() {
 				PayloadLen:       1500,
 				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+				PacketNumberLen:  protocol.PacketNumberLen2,
 			}
-			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* conn ID len */ + 8 /* dest conn id */ + 8 /* src conn id */ + 2 /* long payload len */ + 4 /* packet number */
+			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* conn ID len */ + 8 /* dest conn id */ + 8 /* src conn id */ + 2 /* long payload len */ + 2 /* packet number */
 			Expect(h.getHeaderLength()).To(BeEquivalentTo(expectedLen))
 			err := h.writeHeader(buf)
 			Expect(err).ToNot(HaveOccurred())
@@ -518,12 +532,13 @@ var _ = Describe("IETF QUIC Header", func() {
 				IsLongHeader:     true,
 				Type:             protocol.PacketTypeHandshake,
 				PacketNumber:     0x1337,
+				PacketNumberLen:  protocol.PacketNumberLen2,
 				PayloadLen:       54321,
 				DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
 				SrcConnectionID:  protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad, 0x013, 0x37, 0x13, 0x37},
 				Version:          0xfeed,
 			}).logHeader(logger)
-			Expect(buf.String()).To(ContainSubstring("Long Header{Type: Handshake, DestConnectionID: 0xdeadbeefcafe1337, SrcConnectionID: 0xdecafbad13371337, PacketNumber: 0x1337, PayloadLen: 54321, Version: 0xfeed}"))
+			Expect(buf.String()).To(ContainSubstring("Long Header{Type: Handshake, DestConnectionID: 0xdeadbeefcafe1337, SrcConnectionID: 0xdecafbad13371337, PacketNumber: 0x1337, PacketNumberLen: 2, PayloadLen: 54321, Version: 0xfeed}"))
 		})
 
 		It("logs Short Headers containing a connection ID", func() {

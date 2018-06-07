@@ -46,6 +46,7 @@ var _ = Describe("Header", func() {
 				SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				Type:             protocol.PacketType0RTT,
 				PacketNumber:     0x42,
+				PacketNumberLen:  protocol.PacketNumberLen2,
 				Version:          0x1234,
 			}).writeHeader(buf)
 			Expect(err).ToNot(HaveOccurred())

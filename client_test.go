@@ -511,6 +511,7 @@ var _ = Describe("Client", func() {
 			PayloadLen:       1000,
 			SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 			DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+			PacketNumberLen:  protocol.PacketNumberLen1,
 			Version:          versionIETFFrames,
 		}
 		Expect(hdr.Write(b, protocol.PerspectiveClient, versionIETFFrames)).To(Succeed())
@@ -530,6 +531,7 @@ var _ = Describe("Client", func() {
 			PayloadLen:       123,
 			SrcConnectionID:  connID,
 			DestConnectionID: connID,
+			PacketNumberLen:  protocol.PacketNumberLen1,
 			Version:          versionIETFFrames,
 		}
 		Expect(hdr.Write(b, protocol.PerspectiveClient, versionIETFFrames)).To(Succeed())
@@ -545,6 +547,7 @@ var _ = Describe("Client", func() {
 			PayloadLen:       123,
 			SrcConnectionID:  connID,
 			DestConnectionID: connID,
+			PacketNumberLen:  protocol.PacketNumberLen1,
 			Version:          versionIETFFrames,
 		}
 		Expect(hdr.Write(b, protocol.PerspectiveServer, versionIETFFrames)).To(Succeed())
@@ -561,7 +564,7 @@ var _ = Describe("Client", func() {
 			SrcConnectionID:  connID,
 			DestConnectionID: connID,
 			PacketNumber:     1,
-			PacketNumberLen:  1,
+			PacketNumberLen:  protocol.PacketNumberLen1,
 		}).Write(buf, protocol.PerspectiveServer, versionGQUICFrames)
 		Expect(err).ToNot(HaveOccurred())
 		err = cl.handlePacket(addr, buf.Bytes())
@@ -579,7 +582,7 @@ var _ = Describe("Client", func() {
 			DestConnectionID: connID2,
 			SrcConnectionID:  connID,
 			PacketNumber:     1,
-			PacketNumberLen:  1,
+			PacketNumberLen:  protocol.PacketNumberLen1,
 			Version:          versionIETFFrames,
 		}).Write(buf, protocol.PerspectiveServer, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())

@@ -23,6 +23,7 @@ var _ = Describe("Packing and unpacking Initial packets", func() {
 		IsLongHeader:     true,
 		Type:             protocol.PacketTypeRetry,
 		PacketNumber:     0x42,
+		PacketNumberLen:  protocol.PacketNumberLen1,
 		DestConnectionID: connID,
 		SrcConnectionID:  connID,
 		Version:          ver,
