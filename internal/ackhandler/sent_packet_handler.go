@@ -606,11 +606,7 @@ func (h *sentPacketHandler) queuePacketForRetransmission(p *Packet) error {
 }
 
 func (h *sentPacketHandler) computeHandshakeTimeout() time.Duration {
-	// duration := utils.MaxDuration(2*h.rttStats.SmoothedOrInitialRTT(), minTPLTimeout)
-	duration := 1000 * time.Millisecond
-
-	h.logger.Debugf("HANDSHAKE-TIMEOUT=%v", duration << h.handshakeCount)
-	
+	duration := utils.MaxDuration(2*h.rttStats.SmoothedOrInitialRTT(), minTPLTimeout)
 	// exponential backoff
 	// There's an implicit limit to this set by the handshake timeout.
 	return duration << h.handshakeCount
