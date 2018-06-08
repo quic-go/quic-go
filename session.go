@@ -626,10 +626,10 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 	)
 
 	if hdr.HasSpinBit {
-		if (hdr.PacketNumber>=s.largestRcvdPacketNumber) {
+		if hdr.PacketNumber >= s.largestRcvdPacketNumber {
 			if s.perspective == protocol.PerspectiveClient {
 				// client = inverter
-				s.packer.SpinBit = !hdr.SpinBit	
+				s.packer.SpinBit = !hdr.SpinBit
 			} else {
 				// server = repeater
 				s.packer.SpinBit = hdr.SpinBit
@@ -639,7 +639,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 				s.packer.PrevSpinBit = s.packer.SpinBit
 				s.packer.Edge = true
 				s.packer.VEC = hdr.VEC + 1
-				if (s.packer.VEC > 3) {
+				if s.packer.VEC > 3 {
 					s.packer.VEC = 3
 				}
 				s.packer.LastTrigger = time.Now()

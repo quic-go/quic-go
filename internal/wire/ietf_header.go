@@ -146,7 +146,7 @@ func (h *Header) writeLongHeader(b *bytes.Buffer) error {
 func (h *Header) writeShortHeader(b *bytes.Buffer) error {
 	typeByte := byte(0x30)
 	typeByte |= byte(h.KeyPhase << 6)
-	if (h.SpinBit) {
+	if h.SpinBit {
 		typeByte |= 0x04
 	}
 	typeByte |= h.VEC
