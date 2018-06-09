@@ -86,7 +86,7 @@ func parseLongHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
 	return h, nil
 }
 
-// TYPE-BYTE:  0K1VVSTT
+// TYPE-BYTE:  0K110SVV
 
 func parseShortHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
 	spinbit := (typeByte & 0x04) > 0
