@@ -550,19 +550,10 @@ var _ = Describe("Session", func() {
 			Expect(mconn.written).To(BeEmpty()) // no CONNECTION_CLOSE or PUBLIC_RESET sent
 		})
 
-		It("sends a Public Reset if the client is initiating the head-of-line blocking experiment", func() {
-			streamManager.EXPECT().CloseWithError(gomock.Any())
-			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-			sess.Close(handshake.ErrHOLExperiment)
-			Expect(mconn.written).To(HaveLen(1))
-			Expect((<-mconn.written)[0] & 0x02).ToNot(BeZero()) // Public Reset
-			Expect(sess.Context().Done()).To(BeClosed())
-		})
-
 		It("sends a Public Reset if the client is initiating the no STOP_WAITING experiment", func() {
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-			sess.Close(handshake.ErrHOLExperiment)
+			sess.Close(handshake.ErrNSTPExperiment)
 			Expect(mconn.written).To(HaveLen(1))
 			Expect((<-mconn.written)[0] & 0x02).ToNot(BeZero()) // Public Reset
 			Expect(sess.Context().Done()).To(BeClosed())

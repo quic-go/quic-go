@@ -868,7 +868,6 @@ func (s *session) handleCloseError(closeErr closeError) error {
 	}
 
 	if quicErr.ErrorCode == qerr.DecryptionFailure ||
-		quicErr == handshake.ErrHOLExperiment ||
 		quicErr == handshake.ErrNSTPExperiment {
 		return s.sendPublicReset(s.lastRcvdPacketNumber)
 	}
