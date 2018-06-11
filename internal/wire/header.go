@@ -36,6 +36,11 @@ type Header struct {
 	IsLongHeader bool
 	KeyPhase     int
 	PayloadLen   protocol.ByteCount
+
+	// spin stuff
+	HasSpinBit bool
+	SpinBit    bool
+	VEC        byte
 }
 
 // ParseHeaderSentByServer parses the header for a packet that was sent by the server.

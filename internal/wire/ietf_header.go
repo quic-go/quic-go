@@ -86,7 +86,11 @@ func parseLongHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
 	return h, nil
 }
 
+// TYPE-BYTE:  0K110SVV
+
 func parseShortHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
+	spinbit := (typeByte & 0x04) > 0
+	vec := typeByte & 0x03
 	connID := make(protocol.ConnectionID, 8)
 	if _, err := io.ReadFull(b, connID); err != nil {
 		if err == io.ErrUnexpectedEOF {
@@ -107,6 +111,9 @@ func parseShortHeader(b *bytes.Reader, typeByte byte) (*Header, error) {
 		DestConnectionID: connID,
 		PacketNumber:     pn,
 		PacketNumberLen:  pnLen,
+		HasSpinBit:       true,
+		SpinBit:          spinbit,
+		VEC:              vec,
 	}, nil
 }
 
@@ -139,6 +146,10 @@ func (h *Header) writeLongHeader(b *bytes.Buffer) error {
 func (h *Header) writeShortHeader(b *bytes.Buffer) error {
 	typeByte := byte(0x30)
 	typeByte |= byte(h.KeyPhase << 6)
+	if h.SpinBit {
+		typeByte |= 0x04
+	}
+	typeByte |= h.VEC
 	b.WriteByte(typeByte)
 
 	b.Write(h.DestConnectionID.Bytes())

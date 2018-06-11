@@ -61,6 +61,10 @@ func init() {
 		io.WriteString(w, "</body></html>")
 	})
 
+	http.HandleFunc("/demo/big", func(w http.ResponseWriter, r *http.Request) {
+		w.Write(make([]byte, 10000000))
+	})
+
 	http.HandleFunc("/demo/echo", func(w http.ResponseWriter, r *http.Request) {
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
