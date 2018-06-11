@@ -210,17 +210,6 @@ var _ = Describe("Server Crypto Setup", func() {
 			}
 		})
 
-		It("doesn't support Chrome's head-of-line blocking experiment", func() {
-			HandshakeMessage{
-				Tag: TagCHLO,
-				Data: map[Tag][]byte{
-					TagFHL2: []byte("foobar"),
-				},
-			}.Write(&stream.dataToRead)
-			err := cs.HandleCryptoStream()
-			Expect(err).To(MatchError(ErrHOLExperiment))
-		})
-
 		It("doesn't support Chrome's no STOP_WAITING experiment", func() {
 			HandshakeMessage{
 				Tag: TagCHLO,
