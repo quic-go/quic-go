@@ -659,6 +659,29 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
+		It("ignores packets with a different source connection ID", func() {
+			// Send one packet, which might change the connection ID.
+			// only EXPECT one call to the unpacker
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
+			err := sess.handlePacketImpl(&receivedPacket{
+				header: &wire.Header{
+					IsLongHeader:     true,
+					DestConnectionID: sess.destConnID,
+					SrcConnectionID:  sess.srcConnID,
+				},
+			})
+			Expect(err).ToNot(HaveOccurred())
+			// The next packet has to be ignored, since the source connection ID doesn't match.
+			err = sess.handlePacketImpl(&receivedPacket{
+				header: &wire.Header{
+					IsLongHeader:     true,
+					DestConnectionID: sess.destConnID,
+					SrcConnectionID:  protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+				},
+			})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
 		Context("updating the remote address", func() {
 			It("doesn't support connection migration", func() {
 				unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
