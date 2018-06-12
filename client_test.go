@@ -724,6 +724,23 @@ var _ = Describe("Client", func() {
 			Eventually(done).Should(BeClosed())
 		})
 
+		It("only accepts one Retry packet", func() {
+			sess := NewMockPacketHandler(mockCtrl)
+			cl.session = sess
+			h := &wire.Header{
+				IsLongHeader:     true,
+				Type:             protocol.PacketTypeRetry,
+				SrcConnectionID:  connID,
+				DestConnectionID: connID,
+			}
+			// only EXPECT a single call to handlePacket()
+			sess.EXPECT().handlePacket(gomock.Any())
+			err := cl.handleIETFQUICPacket(h, nil, &net.UDPAddr{}, time.Now())
+			Expect(err).ToNot(HaveOccurred())
+			err = cl.handleIETFQUICPacket(h, nil, &net.UDPAddr{}, time.Now())
+			Expect(err).ToNot(HaveOccurred())
+		})
+
 		It("closes the session when encountering an error while reading from the connection", func() {
 			testErr := errors.New("test error")
 			sess := NewMockPacketHandler(mockCtrl)
