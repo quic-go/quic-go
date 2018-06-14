@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -196,6 +197,41 @@ var _ = Describe("Client", func() {
 			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, nil)
 			Expect(err).To(MatchError(testErr))
 			Eventually(handledPacket).Should(BeClosed())
+		})
+
+		It("closes the session when the context is canceledd", func() {
+			sessionRunning := make(chan struct{})
+			defer close(sessionRunning)
+			sess := NewMockPacketHandler(mockCtrl)
+			sess.EXPECT().run().Do(func() {
+				<-sessionRunning
+			})
+			newClientSession = func(
+				conn connection,
+				_ sessionRunner,
+				_ string,
+				_ protocol.VersionNumber,
+				_ protocol.ConnectionID,
+				_ *tls.Config,
+				_ *Config,
+				_ protocol.VersionNumber,
+				_ []protocol.VersionNumber,
+				_ utils.Logger,
+			) (packetHandler, error) {
+				return sess, nil
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			dialed := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				_, err := DialContext(ctx, packetConn, addr, "quic.clemnte.io:1337", nil, nil)
+				Expect(err).To(MatchError(context.Canceled))
+				close(dialed)
+			}()
+			Consistently(dialed).ShouldNot(BeClosed())
+			sess.EXPECT().Close(nil)
+			cancel()
+			Eventually(dialed).Should(BeClosed())
 		})
 
 		Context("quic.Config", func() {
@@ -398,7 +434,7 @@ var _ = Describe("Client", func() {
 				dialed := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
-					err := cl.dial()
+					err := cl.dial(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					close(dialed)
 				}()
@@ -442,7 +478,7 @@ var _ = Describe("Client", func() {
 				dialed := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
-					err := cl.dial()
+					err := cl.dial(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					close(dialed)
 				}()
