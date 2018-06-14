@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -52,7 +53,22 @@ var (
 
 // DialAddr establishes a new QUIC connection to a server.
 // The hostname for SNI is taken from the given address.
-func DialAddr(addr string, tlsConf *tls.Config, config *Config) (Session, error) {
+func DialAddr(
+	addr string,
+	tlsConf *tls.Config,
+	config *Config,
+) (Session, error) {
+	return DialAddrContext(context.Background(), addr, tlsConf, config)
+}
+
+// DialAddrContext establishes a new QUIC connection to a server using the provided context.
+// The hostname for SNI is taken from the given address.
+func DialAddrContext(
+	ctx context.Context,
+	addr string,
+	tlsConf *tls.Config,
+	config *Config,
+) (Session, error) {
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, err
@@ -61,12 +77,25 @@ func DialAddr(addr string, tlsConf *tls.Config, config *Config) (Session, error)
 	if err != nil {
 		return nil, err
 	}
-	return Dial(udpConn, udpAddr, addr, tlsConf, config)
+	return DialContext(ctx, udpConn, udpAddr, addr, tlsConf, config)
 }
 
 // Dial establishes a new QUIC connection to a server using a net.PacketConn.
 // The host parameter is used for SNI.
 func Dial(
+	pconn net.PacketConn,
+	remoteAddr net.Addr,
+	host string,
+	tlsConf *tls.Config,
+	config *Config,
+) (Session, error) {
+	return DialContext(context.Background(), pconn, remoteAddr, host, tlsConf, config)
+}
+
+// DialContext establishes a new QUIC connection to a server using a net.PacketConn using the provided context.
+// The host parameter is used for SNI.
+func DialContext(
+	ctx context.Context,
 	pconn net.PacketConn,
 	remoteAddr net.Addr,
 	host string,
@@ -106,6 +135,7 @@ func Dial(
 			}
 		}
 	}
+
 	c := &client{
 		conn:          &conn{pconn: pconn, currentAddr: remoteAddr},
 		srcConnID:     srcConnID,
@@ -120,7 +150,7 @@ func Dial(
 
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", hostname, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
 
-	if err := c.dial(); err != nil {
+	if err := c.dial(ctx); err != nil {
 		return nil, err
 	}
 	return c.session, nil
@@ -180,28 +210,28 @@ func populateClientConfig(config *Config) *Config {
 	}
 }
 
-func (c *client) dial() error {
+func (c *client) dial(ctx context.Context) error {
 	var err error
 	if c.version.UsesTLS() {
-		err = c.dialTLS()
+		err = c.dialTLS(ctx)
 	} else {
-		err = c.dialGQUIC()
+		err = c.dialGQUIC(ctx)
 	}
 	if err == errCloseSessionForNewVersion {
-		return c.dial()
+		return c.dial(ctx)
 	}
 	return err
 }
 
-func (c *client) dialGQUIC() error {
+func (c *client) dialGQUIC(ctx context.Context) error {
 	if err := c.createNewGQUICSession(); err != nil {
 		return err
 	}
 	go c.listen()
-	return c.establishSecureConnection()
+	return c.establishSecureConnection(ctx)
 }
 
-func (c *client) dialTLS() error {
+func (c *client) dialTLS(ctx context.Context) error {
 	params := &handshake.TransportParameters{
 		StreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
 		ConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
@@ -224,7 +254,7 @@ func (c *client) dialTLS() error {
 		return err
 	}
 	go c.listen()
-	if err := c.establishSecureConnection(); err != nil {
+	if err := c.establishSecureConnection(ctx); err != nil {
 		if err != handshake.ErrCloseSessionForRetry {
 			return err
 		}
@@ -232,7 +262,7 @@ func (c *client) dialTLS() error {
 		if err := c.createNewTLSSession(extHandler.GetPeerParams(), c.version); err != nil {
 			return err
 		}
-		if err := c.establishSecureConnection(); err != nil {
+		if err := c.establishSecureConnection(ctx); err != nil {
 			return err
 		}
 	}
@@ -245,7 +275,7 @@ func (c *client) dialTLS() error {
 // - handshake.ErrCloseSessionForRetry when the server performs a stateless retry (for IETF QUIC)
 // - any other error that might occur
 // - when the connection is secure (for gQUIC), or forward-secure (for IETF QUIC)
-func (c *client) establishSecureConnection() error {
+func (c *client) establishSecureConnection(ctx context.Context) error {
 	errorChan := make(chan error, 1)
 
 	go func() {
@@ -254,6 +284,10 @@ func (c *client) establishSecureConnection() error {
 	}()
 
 	select {
+	case <-ctx.Done():
+		// The session sending a PeerGoingAway error to the server.
+		c.session.Close(nil)
+		return ctx.Err()
 	case err := <-errorChan:
 		return err
 	case <-c.handshakeChan:
