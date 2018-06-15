@@ -8,11 +8,11 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Session Handler", func() {
-	var handler *sessionMap
+var _ = Describe("Packet Handler Map", func() {
+	var handler *packetHandlerMap
 
 	BeforeEach(func() {
-		handler = newSessionMap().(*sessionMap)
+		handler = newPacketHandlerMap().(*packetHandlerMap)
 	})
 
 	It("adds and gets", func() {

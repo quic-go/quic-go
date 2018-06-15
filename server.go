@@ -22,6 +22,13 @@ type packetHandler interface {
 	Close(error) error
 }
 
+type packetHandlerManager interface {
+	Add(protocol.ConnectionID, packetHandler)
+	Get(protocol.ConnectionID) (packetHandler, bool)
+	Remove(protocol.ConnectionID)
+	Close()
+}
+
 type quicSession interface {
 	Session
 	handlePacket(*receivedPacket)
@@ -46,13 +53,6 @@ func (r *runner) removeConnectionID(c protocol.ConnectionID) { r.removeConnectio
 
 var _ sessionRunner = &runner{}
 
-type sessionHandler interface {
-	Add(protocol.ConnectionID, packetHandler)
-	Get(protocol.ConnectionID) (packetHandler, bool)
-	Remove(protocol.ConnectionID)
-	Close()
-}
-
 // A Listener of QUIC
 type server struct {
 	tlsConf *tls.Config
@@ -66,7 +66,7 @@ type server struct {
 	certChain crypto.CertChain
 	scfg      *handshake.ServerConfig
 
-	sessionHandler sessionHandler
+	sessionHandler packetHandlerManager
 
 	serverError error
 
@@ -129,7 +129,7 @@ func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener,
 		certChain:      certChain,
 		scfg:           scfg,
 		newSession:     newSession,
-		sessionHandler: newSessionMap(),
+		sessionHandler: newPacketHandlerMap(),
 		sessionQueue:   make(chan Session, 5),
 		errorChan:      make(chan struct{}),
 		supportsTLS:    supportsTLS,

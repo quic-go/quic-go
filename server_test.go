@@ -84,11 +84,11 @@ var _ = Describe("Server", func() {
 			firstPacket    []byte // a valid first packet for a new connection with connectionID 0x4cfa9f9b668619f6 (= connID)
 			connID         = protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6}
 			sessions       = make([]*MockQuicSession, 0)
-			sessionHandler *MockSessionHandler
+			sessionHandler *MockPacketHandlerManager
 		)
 
 		BeforeEach(func() {
-			sessionHandler = NewMockSessionHandler(mockCtrl)
+			sessionHandler = NewMockPacketHandlerManager(mockCtrl)
 			newMockSession := func(
 				_ connection,
 				runner sessionRunner,
