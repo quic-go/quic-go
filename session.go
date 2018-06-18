@@ -607,13 +607,6 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		s.logger.Debugf("Dropping packet with unexpected source connection ID: %s (expected %s)", p.header.SrcConnectionID, s.destConnID)
 		return nil
 	}
-	if s.perspective == protocol.PerspectiveClient {
-		if divNonce := p.header.DiversificationNonce; len(divNonce) > 0 {
-			if err := s.cryptoStreamHandler.(divNonceSetter).SetDiversificationNonce(divNonce); err != nil {
-				return err
-			}
-		}
-	}
 
 	if p.rcvTime.IsZero() {
 		// To simplify testing
@@ -640,6 +633,14 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 	// if the decryption failed, this might be a packet sent by an attacker
 	if err != nil {
 		return err
+	}
+
+	if s.perspective == protocol.PerspectiveClient {
+		if divNonce := p.header.DiversificationNonce; len(divNonce) > 0 {
+			if err := s.cryptoStreamHandler.(divNonceSetter).SetDiversificationNonce(divNonce); err != nil {
+				return err
+			}
+		}
 	}
 
 	// The server can change the source connection ID with the first Handshake packet.
