@@ -1856,5 +1856,27 @@ var _ = Describe("Client Session", func() {
 			Expect(sess.Close(nil)).To(Succeed())
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
+
+		It("doesn't use the diversification nonce if the packet can't be authenticated", func() {
+			testErr := errors.New("unpack failed")
+			cryptoSetup := &mockCryptoSetup{}
+			sess.cryptoStreamHandler = cryptoSetup
+			unpacker := NewMockUnpacker(mockCtrl)
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, testErr)
+			sess.unpacker = unpacker
+			go func() {
+				defer GinkgoRecover()
+				sess.run()
+			}()
+			hdr.PacketNumber = 5
+			hdr.DiversificationNonce = []byte("foobar")
+			err := sess.handlePacketImpl(&receivedPacket{header: hdr})
+			Expect(err).To(MatchError(testErr))
+			Expect(cryptoSetup.divNonce).To(BeNil())
+			// make the go routine return
+			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
+			Expect(sess.Close(nil)).To(Succeed())
+			Eventually(sess.Context().Done()).Should(BeClosed())
+		})
 	})
 })
