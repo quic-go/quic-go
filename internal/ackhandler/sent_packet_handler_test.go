@@ -782,6 +782,15 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 	})
 
+	It("doesn't set an alarm if there are no outstanding packets", func() {
+		handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 10}))
+		handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 11}))
+		ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 10, Largest: 11}}}
+		err := handler.ReceivedAck(ack, 1, protocol.EncryptionForwardSecure, time.Now())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(handler.GetAlarmTimeout()).To(BeZero())
+	})
+
 	Context("TLPs", func() {
 		It("uses the RTT from RTT stats", func() {
 			rtt := 2 * time.Second
@@ -997,7 +1006,6 @@ var _ = Describe("SentPacketHandler", func() {
 			// Packet 1 should be considered lost (1+1/8) RTTs after it was sent.
 			Expect(handler.lossTime.IsZero()).To(BeFalse())
 			Expect(handler.lossTime.Sub(getPacket(1).SendTime)).To(Equal(time.Second * 9 / 8))
-			// Expect(time.Until(handler.GetAlarmTimeout())).To(BeNumerically("~", time.Hour*9/8, time.Minute))
 
 			err = handler.OnAlarm()
 			Expect(err).ToNot(HaveOccurred())
@@ -1016,13 +1024,11 @@ var _ = Describe("SentPacketHandler", func() {
 			now := time.Now()
 			sendTime := now.Add(-time.Minute)
 			lastHandshakePacketSendTime := now.Add(-30 * time.Second)
-			// send handshake packets: 1, 2, 4
-			// send a forward-secure packet: 3
+			// send handshake packets: 1, 3
+			// send a forward-secure packet: 2
 			handler.SentPacket(handshakePacket(&Packet{PacketNumber: 1, SendTime: sendTime}))
-			handler.SentPacket(handshakePacket(&Packet{PacketNumber: 2, SendTime: sendTime}))
-			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 3, SendTime: sendTime}))
-			handler.SentPacket(handshakePacket(&Packet{PacketNumber: 4, SendTime: lastHandshakePacketSendTime}))
-			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 5, SendTime: now}))
+			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 2, SendTime: sendTime}))
+			handler.SentPacket(handshakePacket(&Packet{PacketNumber: 3, SendTime: sendTime}))
 
 			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}}
 			err := handler.ReceivedAck(ack, 1, protocol.EncryptionForwardSecure, now)
@@ -1030,18 +1036,15 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.rttStats.SmoothedRTT()).To(Equal(time.Minute))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(handler.lossTime.IsZero()).To(BeTrue())
-			Expect(handler.GetAlarmTimeout().Sub(lastHandshakePacketSendTime)).To(Equal(2 * time.Minute))
+			Expect(handler.GetAlarmTimeout().Sub(sendTime)).To(Equal(2 * time.Minute))
 
 			err = handler.OnAlarm()
 			Expect(err).ToNot(HaveOccurred())
 			p := handler.DequeuePacketForRetransmission()
 			Expect(p).ToNot(BeNil())
-			Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(2)))
-			p = handler.DequeuePacketForRetransmission()
-			Expect(p).ToNot(BeNil())
-			Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(4)))
-			Expect(getPacket(3)).ToNot(BeNil())
+			Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(3)))
 			Expect(handler.handshakeCount).To(BeEquivalentTo(1))
+			handler.SentPacket(handshakePacket(&Packet{PacketNumber: 4, SendTime: lastHandshakePacketSendTime}))
 			// make sure the exponential backoff is used
 			Expect(handler.GetAlarmTimeout().Sub(lastHandshakePacketSendTime)).To(Equal(4 * time.Minute))
 		})

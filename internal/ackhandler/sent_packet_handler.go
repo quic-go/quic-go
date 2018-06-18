@@ -301,12 +301,12 @@ func (h *sentPacketHandler) maybeUpdateRTT(largestAcked protocol.PacketNumber, a
 
 func (h *sentPacketHandler) updateLossDetectionAlarm() {
 	// Cancel the alarm if no packets are outstanding
-	if h.packetHistory.Len() == 0 {
+	if !h.packetHistory.HasOutstandingPackets() {
 		h.alarm = time.Time{}
 		return
 	}
 
-	if !h.handshakeComplete {
+	if h.packetHistory.HasOutstandingHandshakePackets() {
 		h.alarm = h.lastSentHandshakePacketTime.Add(h.computeHandshakeTimeout())
 	} else if !h.lossTime.IsZero() {
 		// Early retransmit timer or time loss detection.
