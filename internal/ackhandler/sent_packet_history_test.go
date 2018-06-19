@@ -197,4 +197,101 @@ var _ = Describe("SentPacketHistory", func() {
 			Expect(hist.GetPacket(13).retransmissionOf).To(BeZero())
 		})
 	})
+
+	Context("outstanding packets", func() {
+		It("says if it has outstanding handshake packets", func() {
+			Expect(hist.HasOutstandingHandshakePackets()).To(BeFalse())
+			hist.SentPacket(&Packet{
+				EncryptionLevel:    protocol.EncryptionUnencrypted,
+				canBeRetransmitted: true,
+			})
+			Expect(hist.HasOutstandingHandshakePackets()).To(BeTrue())
+		})
+
+		It("says if it has outstanding packets", func() {
+			Expect(hist.HasOutstandingHandshakePackets()).To(BeFalse())
+			Expect(hist.HasOutstandingPackets()).To(BeFalse())
+			hist.SentPacket(&Packet{
+				EncryptionLevel:    protocol.EncryptionForwardSecure,
+				canBeRetransmitted: true,
+			})
+			Expect(hist.HasOutstandingHandshakePackets()).To(BeFalse())
+			Expect(hist.HasOutstandingPackets()).To(BeTrue())
+		})
+
+		It("doesn't consider non-retransmittable packets as outstanding", func() {
+			hist.SentPacket(&Packet{
+				EncryptionLevel: protocol.EncryptionUnencrypted,
+			})
+			Expect(hist.HasOutstandingHandshakePackets()).To(BeFalse())
+			Expect(hist.HasOutstandingPackets()).To(BeFalse())
+		})
+
+		It("accounts for deleted handshake packets", func() {
+			hist.SentPacket(&Packet{
+				PacketNumber:       5,
+				EncryptionLevel:    protocol.EncryptionSecure,
+				canBeRetransmitted: true,
+			})
+			Expect(hist.HasOutstandingHandshakePackets()).To(BeTrue())
+			err := hist.Remove(5)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(hist.HasOutstandingHandshakePackets()).To(BeFalse())
+		})
+
+		It("accounts for deleted packets", func() {
+			hist.SentPacket(&Packet{
+				PacketNumber:       10,
+				EncryptionLevel:    protocol.EncryptionForwardSecure,
+				canBeRetransmitted: true,
+			})
+			Expect(hist.HasOutstandingPackets()).To(BeTrue())
+			err := hist.Remove(10)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(hist.HasOutstandingPackets()).To(BeFalse())
+		})
+
+		It("doesn't count handshake packets marked as non-retransmittable", func() {
+			hist.SentPacket(&Packet{
+				PacketNumber:       5,
+				EncryptionLevel:    protocol.EncryptionUnencrypted,
+				canBeRetransmitted: true,
+			})
+			Expect(hist.HasOutstandingHandshakePackets()).To(BeTrue())
+			err := hist.MarkCannotBeRetransmitted(5)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(hist.HasOutstandingHandshakePackets()).To(BeFalse())
+		})
+
+		It("doesn't count packets marked as non-retransmittable", func() {
+			hist.SentPacket(&Packet{
+				PacketNumber:       10,
+				EncryptionLevel:    protocol.EncryptionForwardSecure,
+				canBeRetransmitted: true,
+			})
+			Expect(hist.HasOutstandingPackets()).To(BeTrue())
+			err := hist.MarkCannotBeRetransmitted(10)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(hist.HasOutstandingPackets()).To(BeFalse())
+		})
+
+		It("counts the number of packets", func() {
+			hist.SentPacket(&Packet{
+				PacketNumber:       10,
+				EncryptionLevel:    protocol.EncryptionForwardSecure,
+				canBeRetransmitted: true,
+			})
+			hist.SentPacket(&Packet{
+				PacketNumber:       11,
+				EncryptionLevel:    protocol.EncryptionForwardSecure,
+				canBeRetransmitted: true,
+			})
+			err := hist.Remove(11)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(hist.HasOutstandingPackets()).To(BeTrue())
+			err = hist.Remove(10)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(hist.HasOutstandingPackets()).To(BeFalse())
+		})
+	})
 })
