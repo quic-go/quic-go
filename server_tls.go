@@ -137,6 +137,9 @@ func (s *serverTLS) sendConnectionClose(remoteAddr net.Addr, clientHdr *wire.Hea
 }
 
 func (s *serverTLS) handleInitialImpl(remoteAddr net.Addr, hdr *wire.Header, data []byte) (packetHandler, protocol.ConnectionID, error) {
+	if hdr.DestConnectionID.Len() < protocol.MinConnectionIDLenInitial {
+		return nil, nil, errors.New("dropping Initial packet with too short connection ID")
+	}
 	if len(hdr.Raw)+len(data) < protocol.MinInitialPacketSize {
 		return nil, nil, errors.New("dropping too small Initial packet")
 	}

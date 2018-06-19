@@ -104,6 +104,16 @@ var _ = Describe("Stateless TLS handling", func() {
 		Expect(conn.dataWritten.Len()).To(BeZero())
 	})
 
+	It("drops packets with a too short connection ID", func() {
+		hdr := &wire.Header{
+			SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+			DestConnectionID: protocol.ConnectionID{1, 2, 3, 4},
+			PacketNumberLen:  protocol.PacketNumberLen1,
+		}
+		server.HandleInitial(nil, hdr, bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize))
+		Expect(conn.dataWritten.Len()).To(BeZero())
+	})
+
 	It("ignores packets with invalid contents", func() {
 		hdr, data := getPacket(&wire.StreamFrame{StreamID: 10, Offset: 11, Data: []byte("foobar")})
 		server.HandleInitial(nil, hdr, data)
