@@ -261,6 +261,9 @@ func (c *client) dialTLS(ctx context.Context) error {
 			return err
 		}
 		c.logger.Infof("Received a Retry packet. Recreating session.")
+		c.mutex.Lock()
+		c.receivedRetry = true
+		c.mutex.Unlock()
 		if err := c.createNewTLSSession(extHandler.GetPeerParams(), c.version); err != nil {
 			return err
 		}
@@ -377,7 +380,6 @@ func (c *client) handleIETFQUICPacket(hdr *wire.Header, packetData []byte, remot
 			if c.receivedRetry {
 				return nil
 			}
-			c.receivedRetry = true
 		case protocol.PacketTypeHandshake:
 		default:
 			return fmt.Errorf("Received unsupported packet type: %s", hdr.Type)
