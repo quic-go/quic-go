@@ -693,6 +693,60 @@ var _ = Describe("Client", func() {
 		Expect(sessions).To(BeEmpty())
 	})
 
+	It("only accepts one Retry packet", func() {
+		config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}}
+		sess1 := NewMockPacketHandler(mockCtrl)
+		sess1.EXPECT().run().Return(handshake.ErrCloseSessionForRetry)
+		// don't EXPECT any call to handlePacket()
+		sess2 := NewMockPacketHandler(mockCtrl)
+		run := make(chan struct{})
+		sess2.EXPECT().run().Do(func() { <-run })
+		sessions := make(chan *MockPacketHandler, 2)
+		sessions <- sess1
+		sessions <- sess2
+		newTLSClientSession = func(
+			connP connection,
+			_ sessionRunner,
+			hostnameP string,
+			versionP protocol.VersionNumber,
+			_ protocol.ConnectionID,
+			_ protocol.ConnectionID,
+			configP *Config,
+			tls handshake.MintTLS,
+			paramsChan <-chan handshake.TransportParameters,
+			_ protocol.PacketNumber,
+			_ utils.Logger,
+		) (packetHandler, error) {
+			return <-sessions, nil
+		}
+
+		done := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
+			Expect(err).ToNot(HaveOccurred())
+			close(done)
+		}()
+
+		buf := &bytes.Buffer{}
+		h := &wire.Header{
+			IsLongHeader:     true,
+			Type:             protocol.PacketTypeRetry,
+			SrcConnectionID:  connID,
+			DestConnectionID: connID,
+			PacketNumberLen:  protocol.PacketNumberLen1,
+		}
+		err := h.Write(buf, protocol.PerspectiveServer, protocol.VersionTLS)
+		Expect(err).ToNot(HaveOccurred())
+		Eventually(sessions).Should(BeEmpty())
+		packetConn.dataToRead <- buf.Bytes()
+		time.Sleep(50 * time.Millisecond) // make sure the packet is read and discarded
+
+		// make the go routine return
+		close(run)
+		Eventually(done).Should(BeClosed())
+	})
+
 	Context("handling packets", func() {
 		It("handles packets", func() {
 			sess := NewMockPacketHandler(mockCtrl)
