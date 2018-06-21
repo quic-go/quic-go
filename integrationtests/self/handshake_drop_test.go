@@ -175,9 +175,9 @@ var _ = Describe("Handshake drop tests", func() {
 							app.run(version)
 						})
 
-						It(fmt.Sprintf("establishes a connection when 1/4 of the packets are lost in %s direction", d), func() {
+						It(fmt.Sprintf("establishes a connection when 1/5 of the packets are lost in %s direction", d), func() {
 							startListenerAndProxy(func(d quicproxy.Direction, p uint64) bool {
-								return d.Is(direction) && stochasticDropper(4)
+								return d.Is(direction) && stochasticDropper(5)
 							}, version)
 							app.run(version)
 						})
