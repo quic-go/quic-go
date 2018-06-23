@@ -21,7 +21,7 @@ import (
 )
 
 type mockSession struct {
-	*MockPacketHandler
+	*MockQuicSession
 
 	connID protocol.ConnectionID
 	runner sessionRunner
@@ -83,12 +83,12 @@ var _ = Describe("Server", func() {
 			serv           *server
 			firstPacket    []byte // a valid first packet for a new connection with connectionID 0x4cfa9f9b668619f6 (= connID)
 			connID         = protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6}
-			sessions       = make([]*MockPacketHandler, 0)
-			sessionHandler *MockSessionHandler
+			sessions       = make([]*MockQuicSession, 0)
+			sessionHandler *MockPacketHandlerManager
 		)
 
 		BeforeEach(func() {
-			sessionHandler = NewMockSessionHandler(mockCtrl)
+			sessionHandler = NewMockPacketHandlerManager(mockCtrl)
 			newMockSession := func(
 				_ connection,
 				runner sessionRunner,
@@ -98,9 +98,9 @@ var _ = Describe("Server", func() {
 				_ *tls.Config,
 				_ *Config,
 				_ utils.Logger,
-			) (packetHandler, error) {
+			) (quicSession, error) {
 				ExpectWithOffset(0, sessions).ToNot(BeEmpty())
-				s := &mockSession{MockPacketHandler: sessions[0]}
+				s := &mockSession{MockQuicSession: sessions[0]}
 				s.connID = connID
 				s.runner = runner
 				sessions = sessions[1:]
@@ -136,7 +136,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("creates new sessions", func() {
-			s := NewMockPacketHandler(mockCtrl)
+			s := NewMockQuicSession(mockCtrl)
 			s.EXPECT().handlePacket(gomock.Any())
 			run := make(chan struct{})
 			s.EXPECT().run().Do(func() { close(run) })
@@ -153,21 +153,22 @@ var _ = Describe("Server", func() {
 
 		It("accepts new TLS sessions", func() {
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			run := make(chan struct{})
-			sess := NewMockPacketHandler(mockCtrl)
-			sess.EXPECT().run().Do(func() { close(run) })
+			sess := NewMockQuicSession(mockCtrl)
 			err := serv.setupTLS()
 			Expect(err).ToNot(HaveOccurred())
-			sessionHandler.EXPECT().Add(connID, sess)
+			added := make(chan struct{})
+			sessionHandler.EXPECT().Add(connID, sess).Do(func(protocol.ConnectionID, packetHandler) {
+				close(added)
+			})
 			serv.serverTLS.sessionChan <- tlsSession{
 				connID: connID,
 				sess:   sess,
 			}
-			Eventually(run).Should(BeClosed())
+			Eventually(added).Should(BeClosed())
 		})
 
 		It("accepts a session once the connection it is forward secure", func() {
-			s := NewMockPacketHandler(mockCtrl)
+			s := NewMockQuicSession(mockCtrl)
 			s.EXPECT().handlePacket(gomock.Any())
 			run := make(chan struct{})
 			s.EXPECT().run().Do(func() { close(run) })
@@ -183,7 +184,7 @@ var _ = Describe("Server", func() {
 			sessionHandler.EXPECT().Get(connID)
 			sessionHandler.EXPECT().Add(connID, gomock.Any()).Do(func(_ protocol.ConnectionID, sess packetHandler) {
 				Consistently(done).ShouldNot(BeClosed())
-				sess.(*mockSession).runner.onHandshakeComplete(sess)
+				sess.(*mockSession).runner.onHandshakeComplete(sess.(Session))
 			})
 			err := serv.handlePacket(nil, firstPacket)
 			Expect(err).ToNot(HaveOccurred())
@@ -193,7 +194,7 @@ var _ = Describe("Server", func() {
 
 		It("doesn't accept sessions that error during the handshake", func() {
 			run := make(chan error, 1)
-			sess := NewMockPacketHandler(mockCtrl)
+			sess := NewMockQuicSession(mockCtrl)
 			sess.EXPECT().handlePacket(gomock.Any())
 			sess.EXPECT().run().DoAndReturn(func() error { return <-run })
 			sessions = append(sessions, sess)
@@ -211,14 +212,14 @@ var _ = Describe("Server", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Consistently(done).ShouldNot(BeClosed())
 			// make the go routine return
-			sessionHandler.EXPECT().Close()
+			sessionHandler.EXPECT().Close(nil)
 			close(serv.errorChan)
 			serv.Close()
 			Eventually(done).Should(BeClosed())
 		})
 
 		It("assigns packets to existing sessions", func() {
-			sess := NewMockPacketHandler(mockCtrl)
+			sess := NewMockQuicSession(mockCtrl)
 			sess.EXPECT().handlePacket(gomock.Any())
 
 			sessionHandler.EXPECT().Get(connID).Return(sess, true)
@@ -232,7 +233,7 @@ var _ = Describe("Server", func() {
 				serv.serve()
 			}()
 			// close the server
-			sessionHandler.EXPECT().Close().AnyTimes()
+			sessionHandler.EXPECT().Close(nil).AnyTimes()
 			Expect(serv.Close()).To(Succeed())
 			Expect(conn.closed).To(BeTrue())
 		})
@@ -269,7 +270,7 @@ var _ = Describe("Server", func() {
 		It("errors when encountering a connection error", func() {
 			testErr := errors.New("connection error")
 			conn.readErr = testErr
-			sessionHandler.EXPECT().Close()
+			sessionHandler.EXPECT().Close(nil)
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -282,7 +283,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("ignores delayed packets with mismatching versions", func() {
-			sess := NewMockPacketHandler(mockCtrl)
+			sess := NewMockQuicSession(mockCtrl)
 			// don't EXPECT any handlePacket() calls to this session
 			sessionHandler.EXPECT().Get(connID).Return(sess, true)
 
@@ -320,7 +321,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("cuts packets at the payload length", func() {
-			sess := NewMockPacketHandler(mockCtrl)
+			sess := NewMockQuicSession(mockCtrl)
 			sess.EXPECT().handlePacket(gomock.Any()).Do(func(packet *receivedPacket) {
 				Expect(packet.data).To(HaveLen(123))
 			})

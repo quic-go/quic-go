@@ -42,10 +42,12 @@ type client struct {
 
 	handshakeChan chan struct{}
 
-	session packetHandler
+	session quicSession
 
 	logger utils.Logger
 }
+
+var _ packetHandler = &client{}
 
 var (
 	// make it possible to mock connection ID generation in the tests
@@ -79,7 +81,15 @@ func DialAddrContext(
 	if err != nil {
 		return nil, err
 	}
-	return DialContext(ctx, udpConn, udpAddr, addr, tlsConf, config)
+	c, err := newClient(udpConn, udpAddr, config, tlsConf, addr)
+	if err != nil {
+		return nil, err
+	}
+	go c.listen()
+	if err := c.dial(ctx); err != nil {
+		return nil, err
+	}
+	return c.session, nil
 }
 
 // Dial establishes a new QUIC connection to a server using a net.PacketConn.
@@ -104,6 +114,18 @@ func DialContext(
 	tlsConf *tls.Config,
 	config *Config,
 ) (Session, error) {
+	c, err := newClient(pconn, remoteAddr, config, tlsConf, host)
+	if err != nil {
+		return nil, err
+	}
+	getClientMultiplexer().Add(pconn, c.srcConnID, c)
+	if err := c.dial(ctx); err != nil {
+		return nil, err
+	}
+	return c.session, nil
+}
+
+func newClient(pconn net.PacketConn, remoteAddr net.Addr, config *Config, tlsConf *tls.Config, host string) (*client, error) {
 	clientConfig := populateClientConfig(config)
 	version := clientConfig.Versions[0]
 	srcConnID, err := generateConnectionID()
@@ -137,8 +159,7 @@ func DialContext(
 			}
 		}
 	}
-
-	c := &client{
+	return &client{
 		conn:          &conn{pconn: pconn, currentAddr: remoteAddr},
 		srcConnID:     srcConnID,
 		destConnID:    destConnID,
@@ -148,14 +169,7 @@ func DialContext(
 		version:       version,
 		handshakeChan: make(chan struct{}),
 		logger:        utils.DefaultLogger.WithPrefix("client"),
-	}
-
-	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", hostname, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
-
-	if err := c.dial(ctx); err != nil {
-		return nil, err
-	}
-	return c.session, nil
+	}, nil
 }
 
 // populateClientConfig populates fields in the quic.Config with their default values, if none are set
@@ -213,6 +227,8 @@ func populateClientConfig(config *Config) *Config {
 }
 
 func (c *client) dial(ctx context.Context) error {
+	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.hostname, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
+
 	var err error
 	if c.version.UsesTLS() {
 		err = c.dialTLS(ctx)
@@ -229,7 +245,6 @@ func (c *client) dialGQUIC(ctx context.Context) error {
 	if err := c.createNewGQUICSession(); err != nil {
 		return err
 	}
-	go c.listen()
 	return c.establishSecureConnection(ctx)
 }
 
@@ -255,7 +270,6 @@ func (c *client) dialTLS(ctx context.Context) error {
 	if err := c.createNewTLSSession(extHandler.GetPeerParams(), c.version); err != nil {
 		return err
 	}
-	go c.listen()
 	if err := c.establishSecureConnection(ctx); err != nil {
 		if err != handshake.ErrCloseSessionForRetry {
 			return err
@@ -324,70 +338,84 @@ func (c *client) listen() {
 			}
 			break
 		}
-		if err := c.handlePacket(addr, data[:n]); err != nil {
-			c.logger.Errorf("error handling packet: %s", err.Error())
-		}
+		c.handleRead(addr, data[:n])
 	}
 }
 
-func (c *client) handlePacket(remoteAddr net.Addr, packet []byte) error {
+func (c *client) handleRead(remoteAddr net.Addr, packet []byte) {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
 	hdr, err := wire.ParseHeaderSentByServer(r)
 	// drop the packet if we can't parse the header
 	if err != nil {
-		return fmt.Errorf("error parsing packet from %s: %s", remoteAddr.String(), err.Error())
-	}
-	// reject packets with truncated connection id if we didn't request truncation
-	if hdr.OmitConnectionID && !c.config.RequestConnectionIDOmission {
-		return errors.New("received packet with truncated connection ID, but didn't request truncation")
+		c.logger.Errorf("error handling packet: %s", err)
+		return
 	}
 	hdr.Raw = packet[:len(packet)-r.Len()]
 	packetData := packet[len(packet)-r.Len():]
+	c.handlePacket(&receivedPacket{
+		remoteAddr: remoteAddr,
+		header:     hdr,
+		data:       packetData,
+		rcvTime:    rcvTime,
+	})
+}
+
+func (c *client) handlePacket(p *receivedPacket) {
+	if err := c.handlePacketImpl(p); err != nil {
+		c.logger.Errorf("error handling packet: %s", err)
+	}
+}
+
+func (c *client) handlePacketImpl(p *receivedPacket) error {
+	// reject packets with truncated connection id if we didn't request truncation
+	if p.header.OmitConnectionID && !c.config.RequestConnectionIDOmission {
+		return errors.New("received packet with truncated connection ID, but didn't request truncation")
+	}
 
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
 	// handle Version Negotiation Packets
-	if hdr.IsVersionNegotiation {
+	if p.header.IsVersionNegotiation {
 		// ignore delayed / duplicated version negotiation packets
 		if c.receivedVersionNegotiationPacket || c.versionNegotiated {
 			return errors.New("received a delayed Version Negotiation Packet")
 		}
 
 		// version negotiation packets have no payload
-		if err := c.handleVersionNegotiationPacket(hdr); err != nil {
+		if err := c.handleVersionNegotiationPacket(p.header); err != nil {
 			c.session.Close(err)
 		}
 		return nil
 	}
 
-	if hdr.IsPublicHeader {
-		return c.handleGQUICPacket(hdr, r, packetData, remoteAddr, rcvTime)
+	if p.header.IsPublicHeader {
+		return c.handleGQUICPacket(p)
 	}
-	return c.handleIETFQUICPacket(hdr, packetData, remoteAddr, rcvTime)
+	return c.handleIETFQUICPacket(p)
 }
 
-func (c *client) handleIETFQUICPacket(hdr *wire.Header, packetData []byte, remoteAddr net.Addr, rcvTime time.Time) error {
+func (c *client) handleIETFQUICPacket(p *receivedPacket) error {
 	// reject packets with the wrong connection ID
-	if !hdr.DestConnectionID.Equal(c.srcConnID) {
-		return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", hdr.DestConnectionID, c.srcConnID)
+	if !p.header.DestConnectionID.Equal(c.srcConnID) {
+		return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", p.header.DestConnectionID, c.srcConnID)
 	}
-	if hdr.IsLongHeader {
-		switch hdr.Type {
+	if p.header.IsLongHeader {
+		switch p.header.Type {
 		case protocol.PacketTypeRetry:
 			if c.receivedRetry {
 				return nil
 			}
 		case protocol.PacketTypeHandshake:
 		default:
-			return fmt.Errorf("Received unsupported packet type: %s", hdr.Type)
+			return fmt.Errorf("Received unsupported packet type: %s", p.header.Type)
 		}
-		if protocol.ByteCount(len(packetData)) < hdr.PayloadLen {
-			return fmt.Errorf("packet payload (%d bytes) is smaller than the expected payload length (%d bytes)", len(packetData), hdr.PayloadLen)
+		if protocol.ByteCount(len(p.data)) < p.header.PayloadLen {
+			return fmt.Errorf("packet payload (%d bytes) is smaller than the expected payload length (%d bytes)", len(p.data), p.header.PayloadLen)
 		}
-		packetData = packetData[:int(hdr.PayloadLen)]
+		p.data = p.data[:int(p.header.PayloadLen)]
 		// TODO(#1312): implement parsing of compound packets
 	}
 
@@ -397,29 +425,24 @@ func (c *client) handleIETFQUICPacket(hdr *wire.Header, packetData []byte, remot
 		c.versionNegotiated = true
 	}
 
-	c.session.handlePacket(&receivedPacket{
-		remoteAddr: remoteAddr,
-		header:     hdr,
-		data:       packetData,
-		rcvTime:    rcvTime,
-	})
+	c.session.handlePacket(p)
 	return nil
 }
 
-func (c *client) handleGQUICPacket(hdr *wire.Header, r *bytes.Reader, packetData []byte, remoteAddr net.Addr, rcvTime time.Time) error {
+func (c *client) handleGQUICPacket(p *receivedPacket) error {
 	// reject packets with the wrong connection ID
-	if !hdr.OmitConnectionID && !hdr.DestConnectionID.Equal(c.srcConnID) {
-		return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", hdr.DestConnectionID, c.srcConnID)
+	if !p.header.OmitConnectionID && !p.header.DestConnectionID.Equal(c.srcConnID) {
+		return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", p.header.DestConnectionID, c.srcConnID)
 	}
 
-	if hdr.ResetFlag {
+	if p.header.ResetFlag {
 		cr := c.conn.RemoteAddr()
 		// check if the remote address and the connection ID match
 		// otherwise this might be an attacker trying to inject a PUBLIC_RESET to kill the connection
-		if cr.Network() != remoteAddr.Network() || cr.String() != remoteAddr.String() || !hdr.DestConnectionID.Equal(c.srcConnID) {
+		if cr.Network() != p.remoteAddr.Network() || cr.String() != p.remoteAddr.String() || !p.header.DestConnectionID.Equal(c.srcConnID) {
 			return errors.New("Received a spoofed Public Reset")
 		}
-		pr, err := wire.ParsePublicReset(r)
+		pr, err := wire.ParsePublicReset(bytes.NewReader(p.data))
 		if err != nil {
 			return fmt.Errorf("Received a Public Reset. An error occurred parsing the packet: %s", err)
 		}
@@ -434,12 +457,7 @@ func (c *client) handleGQUICPacket(hdr *wire.Header, r *bytes.Reader, packetData
 		c.versionNegotiated = true
 	}
 
-	c.session.handlePacket(&receivedPacket{
-		remoteAddr: remoteAddr,
-		header:     hdr,
-		data:       packetData,
-		rcvTime:    rcvTime,
-	})
+	c.session.handlePacket(p)
 	return nil
 }
 
@@ -483,7 +501,7 @@ func (c *client) createNewGQUICSession() (err error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	runner := &runner{
-		onHandshakeCompleteImpl: func(_ packetHandler) { close(c.handshakeChan) },
+		onHandshakeCompleteImpl: func(_ Session) { close(c.handshakeChan) },
 		removeConnectionIDImpl:  func(protocol.ConnectionID) {},
 	}
 	c.session, err = newClientSession(
@@ -508,7 +526,7 @@ func (c *client) createNewTLSSession(
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	runner := &runner{
-		onHandshakeCompleteImpl: func(_ packetHandler) { close(c.handshakeChan) },
+		onHandshakeCompleteImpl: func(_ Session) { close(c.handshakeChan) },
 		removeConnectionIDImpl:  func(protocol.ConnectionID) {},
 	}
 	c.session, err = newTLSClientSession(
@@ -525,4 +543,13 @@ func (c *client) createNewTLSSession(
 		c.logger,
 	)
 	return err
+}
+
+func (c *client) Close(err error) error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	if c.session == nil {
+		return nil
+	}
+	return c.session.Close(err)
 }

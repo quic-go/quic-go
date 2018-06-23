@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"errors"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -8,11 +9,11 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Session Handler", func() {
-	var handler *sessionMap
+var _ = Describe("Packet Handler Map", func() {
+	var handler *packetHandlerMap
 
 	BeforeEach(func() {
-		handler = newSessionMap().(*sessionMap)
+		handler = newPacketHandlerMap().(*packetHandlerMap)
 	})
 
 	It("adds and gets", func() {
@@ -45,12 +46,13 @@ var _ = Describe("Session Handler", func() {
 	})
 
 	It("closes", func() {
-		sess1 := NewMockPacketHandler(mockCtrl)
-		sess1.EXPECT().Close(nil)
-		sess2 := NewMockPacketHandler(mockCtrl)
-		sess2.EXPECT().Close(nil)
+		testErr := errors.New("test error")
+		sess1 := NewMockQuicSession(mockCtrl)
+		sess1.EXPECT().Close(testErr)
+		sess2 := NewMockQuicSession(mockCtrl)
+		sess2.EXPECT().Close(testErr)
 		handler.Add(protocol.ConnectionID{1, 1, 1, 1}, sess1)
 		handler.Add(protocol.ConnectionID{2, 2, 2, 2}, sess2)
-		handler.Close()
+		handler.Close(testErr)
 	})
 })

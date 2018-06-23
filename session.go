@@ -156,7 +156,7 @@ func newSession(
 	tlsConf *tls.Config,
 	config *Config,
 	logger utils.Logger,
-) (packetHandler, error) {
+) (quicSession, error) {
 	paramsChan := make(chan handshake.TransportParameters)
 	handshakeEvent := make(chan struct{}, 1)
 	s := &session{
@@ -230,7 +230,7 @@ var newClientSession = func(
 	initialVersion protocol.VersionNumber,
 	negotiatedVersions []protocol.VersionNumber, // needed for validation of the GQUIC version negotiation
 	logger utils.Logger,
-) (packetHandler, error) {
+) (quicSession, error) {
 	paramsChan := make(chan handshake.TransportParameters)
 	handshakeEvent := make(chan struct{}, 1)
 	s := &session{
@@ -301,7 +301,7 @@ func newTLSServerSession(
 	peerParams *handshake.TransportParameters,
 	v protocol.VersionNumber,
 	logger utils.Logger,
-) (packetHandler, error) {
+) (quicSession, error) {
 	handshakeEvent := make(chan struct{}, 1)
 	s := &session{
 		conn:           conn,
@@ -359,7 +359,7 @@ var newTLSClientSession = func(
 	paramsChan <-chan handshake.TransportParameters,
 	initialPacketNumber protocol.PacketNumber,
 	logger utils.Logger,
-) (packetHandler, error) {
+) (quicSession, error) {
 	handshakeEvent := make(chan struct{}, 1)
 	s := &session{
 		conn:           conn,
