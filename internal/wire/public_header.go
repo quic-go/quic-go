@@ -27,10 +27,10 @@ func (h *Header) writePublicHeader(b *bytes.Buffer, pers protocol.Perspective, _
 	if h.VersionFlag && h.ResetFlag {
 		return errResetAndVersionFlagSet
 	}
-	if !h.DestConnectionID.Equal(h.SrcConnectionID) {
-		return fmt.Errorf("PublicHeader: SrcConnectionID must be equal to DestConnectionID")
+	if h.SrcConnectionID.Len() != 0 {
+		return errors.New("PublicHeader: SrcConnectionID must not be set")
 	}
-	if len(h.DestConnectionID) != 8 {
+	if h.DestConnectionID.Len() != 8 {
 		return fmt.Errorf("PublicHeader: wrong length for Connection ID: %d (expected 8)", len(h.DestConnectionID))
 	}
 
@@ -142,7 +142,6 @@ func parsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Hea
 			return nil, errInvalidConnectionID
 		}
 		header.DestConnectionID = connID
-		header.SrcConnectionID = connID
 	}
 
 	// Contrary to what the gQUIC wire spec says, the 0x4 bit only indicates the presence of the diversification nonce for packets sent by the server.

@@ -158,6 +158,11 @@ var _ = Describe("Packet packer", func() {
 				packer.version = versionPublicHeader
 			})
 
+			It("doesn't set the source connection ID", func() {
+				ph := packer.getHeader(protocol.EncryptionForwardSecure)
+				Expect(ph.SrcConnectionID).To(BeEmpty())
+			})
+
 			It("it omits the connection ID for forward-secure packets", func() {
 				ph := packer.getHeader(protocol.EncryptionForwardSecure)
 				Expect(ph.OmitConnectionID).To(BeFalse())

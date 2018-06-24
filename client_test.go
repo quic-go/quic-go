@@ -36,7 +36,6 @@ var _ = Describe("Client", func() {
 		b := &bytes.Buffer{}
 		err := (&wire.Header{
 			DestConnectionID: connID,
-			SrcConnectionID:  connID,
 			PacketNumber:     1,
 			PacketNumberLen:  1,
 		}).Write(b, protocol.PerspectiveServer, protocol.VersionWhatever)
@@ -755,7 +754,6 @@ var _ = Describe("Client", func() {
 				PacketNumber:     1,
 				PacketNumberLen:  protocol.PacketNumberLen2,
 				DestConnectionID: connID,
-				SrcConnectionID:  connID,
 			}
 			b := &bytes.Buffer{}
 			err := ph.Write(b, protocol.PerspectiveServer, cl.version)

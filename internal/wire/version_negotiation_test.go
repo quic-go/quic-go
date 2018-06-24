@@ -17,7 +17,7 @@ var _ = Describe("Version Negotiation Packets", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.VersionFlag).To(BeTrue())
 		Expect(hdr.DestConnectionID).To(Equal(connID))
-		Expect(hdr.SrcConnectionID).To(Equal(connID))
+		Expect(hdr.SrcConnectionID).To(BeEmpty())
 		Expect(hdr.SupportedVersions).To(Equal(versions))
 	})
 
