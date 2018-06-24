@@ -18,7 +18,6 @@ type Header struct {
 
 	DestConnectionID protocol.ConnectionID
 	SrcConnectionID  protocol.ConnectionID
-	OmitConnectionID bool
 
 	PacketNumberLen protocol.PacketNumberLen
 	PacketNumber    protocol.PacketNumber

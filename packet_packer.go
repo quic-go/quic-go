@@ -451,9 +451,8 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header
 	packetNumberLen := p.getPacketNumberLen(pnum)
 
 	header := &wire.Header{
-		DestConnectionID: p.destConnID,
-		PacketNumber:     pnum,
-		PacketNumberLen:  packetNumberLen,
+		PacketNumber:    pnum,
+		PacketNumberLen: packetNumberLen,
 	}
 
 	if p.version.UsesTLS() && encLevel != protocol.EncryptionForwardSecure {
@@ -469,8 +468,8 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header
 		}
 	}
 
-	if p.omitConnectionID && encLevel == protocol.EncryptionForwardSecure {
-		header.OmitConnectionID = true
+	if !p.omitConnectionID || encLevel != protocol.EncryptionForwardSecure {
+		header.DestConnectionID = p.destConnID
 	}
 	if !p.version.UsesTLS() {
 		if p.perspective == protocol.PerspectiveServer && encLevel == protocol.EncryptionSecure {

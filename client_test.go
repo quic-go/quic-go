@@ -591,11 +591,9 @@ var _ = Describe("Client", func() {
 		cl.session = NewMockQuicSession(mockCtrl) // don't EXPECT any handlePacket calls
 		cl.config = &Config{RequestConnectionIDOmission: false}
 		hdr := &wire.Header{
-			OmitConnectionID: true,
-			SrcConnectionID:  connID,
-			DestConnectionID: connID,
-			PacketNumber:     1,
-			PacketNumberLen:  1,
+			IsPublicHeader:  true,
+			PacketNumber:    1,
+			PacketNumberLen: 1,
 		}
 		err := cl.handlePacketImpl(&receivedPacket{
 			remoteAddr: addr,
@@ -747,6 +745,7 @@ var _ = Describe("Client", func() {
 
 	Context("handling packets", func() {
 		It("handles packets", func() {
+			cl.config = &Config{}
 			sess := NewMockQuicSession(mockCtrl)
 			sess.EXPECT().handlePacket(gomock.Any())
 			cl.session = sess
@@ -786,6 +785,10 @@ var _ = Describe("Client", func() {
 	})
 
 	Context("Public Reset handling", func() {
+		BeforeEach(func() {
+			cl.config = &Config{}
+		})
+
 		It("closes the session when receiving a Public Reset", func() {
 			sess := NewMockQuicSession(mockCtrl)
 			sess.EXPECT().closeRemote(gomock.Any()).Do(func(err error) {

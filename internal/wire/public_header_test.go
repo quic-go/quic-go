@@ -38,14 +38,13 @@ var _ = Describe("Public Header", func() {
 		It("does not accept an omittedd connection ID as a server", func() {
 			b := bytes.NewReader([]byte{0x00, 0x01})
 			_, err := parsePublicHeader(b, protocol.PerspectiveClient)
-			Expect(err).To(MatchError(errReceivedOmittedConnectionID))
+			Expect(err).To(MatchError("InvalidPacketHeader: receiving packets with omitted ConnectionID is not supported"))
 		})
 
 		It("accepts an omitted connection ID as a client", func() {
 			b := bytes.NewReader([]byte{0x00, 0x01})
 			hdr, err := parsePublicHeader(b, protocol.PerspectiveServer)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(hdr.OmitConnectionID).To(BeTrue())
 			Expect(hdr.DestConnectionID).To(BeEmpty())
 			Expect(hdr.SrcConnectionID).To(BeEmpty())
 			Expect(b.Len()).To(BeZero())
@@ -232,13 +231,10 @@ var _ = Describe("Public Header", func() {
 		})
 
 		It("omits the connection ID", func() {
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			b := &bytes.Buffer{}
 			hdr := Header{
-				DestConnectionID: connID,
-				OmitConnectionID: true,
-				PacketNumberLen:  protocol.PacketNumberLen1,
-				PacketNumber:     1,
+				PacketNumberLen: protocol.PacketNumberLen1,
+				PacketNumber:    1,
 			}
 			err := hdr.writePublicHeader(b, protocol.PerspectiveServer, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
@@ -372,12 +368,10 @@ var _ = Describe("Public Header", func() {
 
 			It("gets the lengths of a packet sent by the client with the VersionFlag set", func() {
 				hdr := Header{
-					DestConnectionID: connID,
-					OmitConnectionID: true,
-					PacketNumber:     0xdecafbad,
-					PacketNumberLen:  protocol.PacketNumberLen4,
-					VersionFlag:      true,
-					Version:          versionBigEndian,
+					PacketNumber:    0xdecafbad,
+					PacketNumberLen: protocol.PacketNumberLen4,
+					VersionFlag:     true,
+					Version:         versionBigEndian,
 				}
 				length, err := hdr.getPublicHeaderLength(protocol.PerspectiveClient)
 				Expect(err).ToNot(HaveOccurred())
@@ -386,10 +380,8 @@ var _ = Describe("Public Header", func() {
 
 			It("gets the length of a packet with longest packet number length and omitted connectionID", func() {
 				hdr := Header{
-					DestConnectionID: connID,
-					OmitConnectionID: true,
-					PacketNumber:     0xDECAFBAD,
-					PacketNumberLen:  protocol.PacketNumberLen4,
+					PacketNumber:    0xDECAFBAD,
+					PacketNumberLen: protocol.PacketNumberLen4,
 				}
 				length, err := hdr.getPublicHeaderLength(protocol.PerspectiveServer)
 				Expect(err).ToNot(HaveOccurred())
@@ -414,7 +406,7 @@ var _ = Describe("Public Header", func() {
 				}
 				length, err := hdr.getPublicHeaderLength(protocol.PerspectiveServer)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(length).To(Equal(protocol.ByteCount(1 + 8 + 3 + 1))) // 1 byte public flag, 8 byte connectionID, 3 byte DiversificationNonce, 1 byte PacketNumber
+				Expect(length).To(Equal(protocol.ByteCount(1 + 3 + 1))) // 1 byte public flag, 3 byte DiversificationNonce, 1 byte PacketNumber
 			})
 
 			It("gets the length of a PublicReset", func() {
@@ -521,19 +513,17 @@ var _ = Describe("Public Header", func() {
 
 		It("logs a Public Header with omitted connection ID", func() {
 			(&Header{
-				OmitConnectionID: true,
-				PacketNumber:     0x1337,
-				PacketNumberLen:  6,
-				Version:          protocol.Version39,
+				PacketNumber:    0x1337,
+				PacketNumberLen: 6,
+				Version:         protocol.Version39,
 			}).logPublicHeader(logger)
 			Expect(buf.String()).To(ContainSubstring("Public Header{ConnectionID: (empty)"))
 		})
 
 		It("logs a Public Header without a version", func() {
 			(&Header{
-				OmitConnectionID: true,
-				PacketNumber:     0x1337,
-				PacketNumberLen:  6,
+				PacketNumber:    0x1337,
+				PacketNumberLen: 6,
 			}).logPublicHeader(logger)
 			Expect(buf.String()).To(ContainSubstring("Version: (unset)"))
 		})
