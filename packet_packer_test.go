@@ -158,18 +158,23 @@ var _ = Describe("Packet packer", func() {
 				packer.version = versionPublicHeader
 			})
 
+			It("doesn't set the source connection ID", func() {
+				ph := packer.getHeader(protocol.EncryptionForwardSecure)
+				Expect(ph.SrcConnectionID).To(BeEmpty())
+			})
+
 			It("it omits the connection ID for forward-secure packets", func() {
 				ph := packer.getHeader(protocol.EncryptionForwardSecure)
-				Expect(ph.OmitConnectionID).To(BeFalse())
+				Expect(ph.DestConnectionID.Len()).ToNot(BeZero())
 				packer.SetOmitConnectionID()
 				ph = packer.getHeader(protocol.EncryptionForwardSecure)
-				Expect(ph.OmitConnectionID).To(BeTrue())
+				Expect(ph.DestConnectionID.Len()).To(BeZero())
 			})
 
 			It("doesn't omit the connection ID for non-forward-secure packets", func() {
 				packer.SetOmitConnectionID()
 				ph := packer.getHeader(protocol.EncryptionSecure)
-				Expect(ph.OmitConnectionID).To(BeFalse())
+				Expect(ph.DestConnectionID.Len()).ToNot(BeZero())
 			})
 
 			It("adds the Version Flag to the Public Header before the crypto handshake is finished", func() {
@@ -248,20 +253,6 @@ var _ = Describe("Packet packer", func() {
 				h := packer.getHeader(protocol.EncryptionForwardSecure)
 				Expect(h.IsLongHeader).To(BeFalse())
 				Expect(h.PacketNumberLen).To(BeNumerically(">", 0))
-			})
-
-			It("it omits the connection ID for forward-secure packets", func() {
-				h := packer.getHeader(protocol.EncryptionForwardSecure)
-				Expect(h.OmitConnectionID).To(BeFalse())
-				packer.SetOmitConnectionID()
-				h = packer.getHeader(protocol.EncryptionForwardSecure)
-				Expect(h.OmitConnectionID).To(BeTrue())
-			})
-
-			It("doesn't omit the connection ID for non-forward-secure packets", func() {
-				packer.SetOmitConnectionID()
-				h := packer.getHeader(protocol.EncryptionSecure)
-				Expect(h.OmitConnectionID).To(BeFalse())
 			})
 		})
 	})

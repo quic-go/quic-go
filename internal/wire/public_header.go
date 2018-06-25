@@ -13,7 +13,6 @@ import (
 
 var (
 	errResetAndVersionFlagSet            = errors.New("PublicHeader: Reset Flag and Version Flag should not be set at the same time")
-	errReceivedOmittedConnectionID       = qerr.Error(qerr.InvalidPacketHeader, "receiving packets with omitted ConnectionID is not supported")
 	errInvalidConnectionID               = qerr.Error(qerr.InvalidPacketHeader, "connection ID cannot be 0")
 	errGetLengthNotForVersionNegotiation = errors.New("PublicHeader: GetLength cannot be called for VersionNegotiation packets")
 	errInvalidPacketNumberLen6           = errors.New("invalid packet number length: 6 bytes")
@@ -27,10 +26,10 @@ func (h *Header) writePublicHeader(b *bytes.Buffer, pers protocol.Perspective, _
 	if h.VersionFlag && h.ResetFlag {
 		return errResetAndVersionFlagSet
 	}
-	if !h.DestConnectionID.Equal(h.SrcConnectionID) {
-		return fmt.Errorf("PublicHeader: SrcConnectionID must be equal to DestConnectionID")
+	if h.SrcConnectionID.Len() != 0 {
+		return errors.New("PublicHeader: SrcConnectionID must not be set")
 	}
-	if len(h.DestConnectionID) != 8 {
+	if len(h.DestConnectionID) != 0 && len(h.DestConnectionID) != 8 {
 		return fmt.Errorf("PublicHeader: wrong length for Connection ID: %d (expected 8)", len(h.DestConnectionID))
 	}
 
@@ -41,7 +40,7 @@ func (h *Header) writePublicHeader(b *bytes.Buffer, pers protocol.Perspective, _
 	if h.ResetFlag {
 		publicFlagByte |= 0x02
 	}
-	if !h.OmitConnectionID {
+	if h.DestConnectionID.Len() > 0 {
 		publicFlagByte |= 0x08
 	}
 	if len(h.DiversificationNonce) > 0 {
@@ -63,7 +62,7 @@ func (h *Header) writePublicHeader(b *bytes.Buffer, pers protocol.Perspective, _
 	}
 	b.WriteByte(publicFlagByte)
 
-	if !h.OmitConnectionID {
+	if h.DestConnectionID.Len() > 0 {
 		b.Write(h.DestConnectionID)
 	}
 	if h.VersionFlag && pers == protocol.PerspectiveClient {
@@ -112,9 +111,9 @@ func parsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Hea
 	// 	return nil, errors.New("diversification nonces should only be sent by servers")
 	// }
 
-	header.OmitConnectionID = publicFlagByte&0x08 == 0
-	if header.OmitConnectionID && packetSentBy == protocol.PerspectiveClient {
-		return nil, errReceivedOmittedConnectionID
+	hasConnectionID := publicFlagByte&0x08 > 0
+	if !hasConnectionID && packetSentBy == protocol.PerspectiveClient {
+		return nil, qerr.Error(qerr.InvalidPacketHeader, "receiving packets with omitted ConnectionID is not supported")
 	}
 	if header.hasPacketNumber(packetSentBy) {
 		switch publicFlagByte & 0x30 {
@@ -130,19 +129,15 @@ func parsePublicHeader(b *bytes.Reader, packetSentBy protocol.Perspective) (*Hea
 	}
 
 	// Connection ID
-	if !header.OmitConnectionID {
-		connID := make(protocol.ConnectionID, 8)
-		if _, err := io.ReadFull(b, connID); err != nil {
-			if err == io.ErrUnexpectedEOF {
-				err = io.EOF
-			}
+	if hasConnectionID {
+		connID, err := protocol.ReadConnectionID(b, 8)
+		if err != nil {
 			return nil, err
 		}
 		if connID[0] == 0 && connID[1] == 0 && connID[2] == 0 && connID[3] == 0 && connID[4] == 0 && connID[5] == 0 && connID[6] == 0 && connID[7] == 0 {
 			return nil, errInvalidConnectionID
 		}
 		header.DestConnectionID = connID
-		header.SrcConnectionID = connID
 	}
 
 	// Contrary to what the gQUIC wire spec says, the 0x4 bit only indicates the presence of the diversification nonce for packets sent by the server.
@@ -219,9 +214,7 @@ func (h *Header) getPublicHeaderLength(pers protocol.Perspective) (protocol.Byte
 		}
 		length += protocol.ByteCount(h.PacketNumberLen)
 	}
-	if !h.OmitConnectionID {
-		length += 8 // 8 bytes for the connection ID
-	}
+	length += protocol.ByteCount(h.DestConnectionID.Len()) // if set, always 8 bytes
 	// Version Number in packets sent by the client
 	if h.VersionFlag {
 		length += 4

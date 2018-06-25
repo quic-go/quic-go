@@ -205,7 +205,7 @@ func newSession(
 	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
 	s.packer = newPacketPacker(
 		connectionID,
-		connectionID,
+		nil, // no src connection ID
 		1,
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),
@@ -275,7 +275,7 @@ var newClientSession = func(
 	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
 	s.packer = newPacketPacker(
 		connectionID,
-		connectionID,
+		nil, // no src connection ID
 		1,
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),
@@ -643,7 +643,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 	}
 
 	// The server can change the source connection ID with the first Handshake packet.
-	if s.perspective == protocol.PerspectiveClient && !s.receivedFirstPacket && !hdr.SrcConnectionID.Equal(s.destConnID) {
+	if s.perspective == protocol.PerspectiveClient && !s.receivedFirstPacket && hdr.IsLongHeader && !hdr.SrcConnectionID.Equal(s.destConnID) {
 		s.logger.Debugf("Received first packet. Switching destination connection ID to: %s", hdr.SrcConnectionID)
 		s.destConnID = hdr.SrcConnectionID
 		s.packer.ChangeDestConnectionID(s.destConnID)

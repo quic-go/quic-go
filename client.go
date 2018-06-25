@@ -369,11 +369,6 @@ func (c *client) handlePacket(p *receivedPacket) {
 }
 
 func (c *client) handlePacketImpl(p *receivedPacket) error {
-	// reject packets with truncated connection id if we didn't request truncation
-	if p.header.OmitConnectionID && !c.config.RequestConnectionIDOmission {
-		return errors.New("received packet with truncated connection ID, but didn't request truncation")
-	}
-
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -430,16 +425,21 @@ func (c *client) handleIETFQUICPacket(p *receivedPacket) error {
 }
 
 func (c *client) handleGQUICPacket(p *receivedPacket) error {
+	connID := p.header.DestConnectionID
+	// reject packets with truncated connection id if we didn't request truncation
+	if !c.config.RequestConnectionIDOmission && connID.Len() == 0 {
+		return errors.New("received packet with truncated connection ID, but didn't request truncation")
+	}
 	// reject packets with the wrong connection ID
-	if !p.header.OmitConnectionID && !p.header.DestConnectionID.Equal(c.srcConnID) {
-		return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", p.header.DestConnectionID, c.srcConnID)
+	if connID.Len() > 0 && !connID.Equal(c.srcConnID) {
+		return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", connID, c.srcConnID)
 	}
 
 	if p.header.ResetFlag {
 		cr := c.conn.RemoteAddr()
 		// check if the remote address and the connection ID match
 		// otherwise this might be an attacker trying to inject a PUBLIC_RESET to kill the connection
-		if cr.Network() != p.remoteAddr.Network() || cr.String() != p.remoteAddr.String() || !p.header.DestConnectionID.Equal(c.srcConnID) {
+		if cr.Network() != p.remoteAddr.Network() || cr.String() != p.remoteAddr.String() || !connID.Equal(c.srcConnID) {
 			return errors.New("Received a spoofed Public Reset")
 		}
 		pr, err := wire.ParsePublicReset(bytes.NewReader(p.data))

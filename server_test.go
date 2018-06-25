@@ -371,11 +371,10 @@ var _ = Describe("Server", func() {
 			hdr := wire.Header{
 				VersionFlag:      true,
 				DestConnectionID: connID,
-				SrcConnectionID:  connID,
 				PacketNumber:     1,
 				PacketNumberLen:  protocol.PacketNumberLen2,
 			}
-			hdr.Write(b, protocol.PerspectiveClient, 13 /* not a valid QUIC version */)
+			Expect(hdr.Write(b, protocol.PerspectiveClient, 13 /* not a valid QUIC version */)).To(Succeed())
 			b.Write(bytes.Repeat([]byte{0}, protocol.MinClientHelloSize)) // add a fake CHLO
 			serv.conn = conn
 			sessionHandler.EXPECT().Get(connID)
@@ -389,11 +388,10 @@ var _ = Describe("Server", func() {
 			hdr := wire.Header{
 				VersionFlag:      true,
 				DestConnectionID: connID,
-				SrcConnectionID:  connID,
 				PacketNumber:     1,
 				PacketNumberLen:  protocol.PacketNumberLen2,
 			}
-			hdr.Write(b, protocol.PerspectiveClient, 13 /* not a valid QUIC version */)
+			Expect(hdr.Write(b, protocol.PerspectiveClient, 13 /* not a valid QUIC version */)).To(Succeed())
 			b.Write(bytes.Repeat([]byte{0}, protocol.MinClientHelloSize-1)) // this packet is 1 byte too small
 			serv.conn = conn
 			sessionHandler.EXPECT().Get(connID)
@@ -468,11 +466,10 @@ var _ = Describe("Server", func() {
 		hdr := wire.Header{
 			VersionFlag:      true,
 			DestConnectionID: connID,
-			SrcConnectionID:  connID,
 			PacketNumber:     1,
 			PacketNumberLen:  protocol.PacketNumberLen2,
 		}
-		hdr.Write(b, protocol.PerspectiveClient, 13 /* not a valid QUIC version */)
+		Expect(hdr.Write(b, protocol.PerspectiveClient, 13 /* not a valid QUIC version */)).To(Succeed())
 		b.Write(bytes.Repeat([]byte{0}, protocol.MinClientHelloSize)) // add a fake CHLO
 		conn.dataToRead <- b.Bytes()
 		conn.dataReadFrom = udpAddr
@@ -485,7 +482,6 @@ var _ = Describe("Server", func() {
 			ln.Accept()
 			close(done)
 		}()
-
 		Eventually(func() int { return conn.dataWritten.Len() }).ShouldNot(BeZero())
 		Expect(conn.dataWrittenTo).To(Equal(udpAddr))
 		r := bytes.NewReader(conn.dataWritten.Bytes())
@@ -493,7 +489,6 @@ var _ = Describe("Server", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.VersionFlag).To(BeTrue())
 		Expect(packet.DestConnectionID).To(Equal(connID))
-		Expect(packet.SrcConnectionID).To(Equal(connID))
 		Expect(r.Len()).To(BeZero())
 		Consistently(done).ShouldNot(BeClosed())
 		// make the go routine return

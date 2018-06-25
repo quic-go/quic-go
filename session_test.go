@@ -1124,6 +1124,7 @@ var _ = Describe("Session", func() {
 			It("retransmits an unencrypted packet, and doesn't add a STOP_WAITING frame (for IETF QUIC)", func() {
 				sess.version = versionIETFFrames
 				sess.packer.version = versionIETFFrames
+				sess.packer.srcConnID = sess.destConnID
 				sf := &wire.StreamFrame{StreamID: 1, Data: []byte("foobar")}
 				sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
 					PacketNumber:    1337,
@@ -1799,6 +1800,7 @@ var _ = Describe("Client Session", func() {
 	It("changes the connection ID when receiving the first packet from the server", func() {
 		sess.version = protocol.VersionTLS
 		sess.packer.version = protocol.VersionTLS
+		sess.packer.srcConnID = sess.destConnID
 		unpacker := NewMockUnpacker(mockCtrl)
 		unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
 		sess.unpacker = unpacker
@@ -1808,6 +1810,7 @@ var _ = Describe("Client Session", func() {
 		}()
 		err := sess.handlePacketImpl(&receivedPacket{
 			header: &wire.Header{
+				IsLongHeader:     true,
 				Type:             protocol.PacketTypeHandshake,
 				SrcConnectionID:  protocol.ConnectionID{1, 3, 3, 7, 1, 3, 3, 7},
 				DestConnectionID: sess.srcConnID,

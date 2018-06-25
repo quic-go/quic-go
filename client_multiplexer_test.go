@@ -17,7 +17,6 @@ var _ = Describe("Client Multiplexer", func() {
 	getPacket := func(connID protocol.ConnectionID) []byte {
 		buf := &bytes.Buffer{}
 		err := (&wire.Header{
-			SrcConnectionID:  connID,
 			DestConnectionID: connID,
 			PacketNumberLen:  protocol.PacketNumberLen1,
 		}).Write(buf, protocol.PerspectiveServer, protocol.VersionWhatever)

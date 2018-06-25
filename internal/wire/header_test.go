@@ -81,7 +81,6 @@ var _ = Describe("Header", func() {
 				VersionFlag:      true,
 				Version:          versionPublicHeader,
 				DestConnectionID: connID,
-				SrcConnectionID:  connID,
 				PacketNumber:     0x1337,
 				PacketNumberLen:  protocol.PacketNumberLen4,
 			}).writePublicHeader(buf, protocol.PerspectiveClient, versionPublicHeader)
@@ -89,7 +88,7 @@ var _ = Describe("Header", func() {
 			hdr, err := ParseHeaderSentByClient(bytes.NewReader(buf.Bytes()))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.DestConnectionID).To(Equal(connID))
-			Expect(hdr.SrcConnectionID).To(Equal(connID))
+			Expect(hdr.SrcConnectionID).To(BeEmpty())
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x1337)))
 			Expect(hdr.Version).To(Equal(versionPublicHeader))
 			Expect(hdr.IsPublicHeader).To(BeTrue())
@@ -100,7 +99,6 @@ var _ = Describe("Header", func() {
 			buf := &bytes.Buffer{}
 			err := (&Header{
 				DestConnectionID:     connID,
-				SrcConnectionID:      connID,
 				PacketNumber:         0x1337,
 				PacketNumberLen:      protocol.PacketNumberLen4,
 				DiversificationNonce: bytes.Repeat([]byte{'f'}, 32),
@@ -109,7 +107,7 @@ var _ = Describe("Header", func() {
 			hdr, err := ParseHeaderSentByServer(bytes.NewReader(buf.Bytes()))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.DestConnectionID).To(Equal(connID))
-			Expect(hdr.SrcConnectionID).To(Equal(connID))
+			Expect(hdr.SrcConnectionID).To(BeEmpty())
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x1337)))
 			Expect(hdr.DiversificationNonce).To(HaveLen(32))
 			Expect(hdr.IsPublicHeader).To(BeTrue())
@@ -121,7 +119,6 @@ var _ = Describe("Header", func() {
 				VersionFlag:      true,
 				Version:          versionPublicHeader,
 				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-				SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				PacketNumber:     0x1337,
 				PacketNumberLen:  protocol.PacketNumberLen2,
 			}).writePublicHeader(buf, protocol.PerspectiveClient, versionPublicHeader)
@@ -145,7 +142,7 @@ var _ = Describe("Header", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.IsPublicHeader).To(BeTrue())
 			Expect(hdr.DestConnectionID).To(Equal(connID))
-			Expect(hdr.SrcConnectionID).To(Equal(connID))
+			Expect(hdr.SrcConnectionID).To(BeEmpty())
 			// in addition to the versions, the supported versions might contain a reserved version number
 			for _, version := range versions {
 				Expect(hdr.SupportedVersions).To(ContainElement(version))
@@ -177,7 +174,6 @@ var _ = Describe("Header", func() {
 			buf := &bytes.Buffer{}
 			hdr := &Header{
 				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-				SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				PacketNumber:     0x42,
 				PacketNumberLen:  protocol.PacketNumberLen2,
 			}
@@ -211,7 +207,6 @@ var _ = Describe("Header", func() {
 			buf := &bytes.Buffer{}
 			hdr := &Header{
 				DestConnectionID:     protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-				SrcConnectionID:      protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				PacketNumber:         0x42,
 				PacketNumberLen:      protocol.PacketNumberLen2,
 				DiversificationNonce: bytes.Repeat([]byte{'f'}, 32),

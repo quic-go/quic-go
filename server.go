@@ -393,7 +393,7 @@ func (s *server) handleGQUICPacket(hdr *wire.Header, packetData []byte, remoteAd
 			return errors.New("dropping small packet with unknown version")
 		}
 		s.logger.Infof("Client offered version %s, sending Version Negotiation Packet", hdr.Version)
-		_, err := s.conn.WriteTo(wire.ComposeGQUICVersionNegotiation(hdr.SrcConnectionID, s.config.Versions), remoteAddr)
+		_, err := s.conn.WriteTo(wire.ComposeGQUICVersionNegotiation(hdr.DestConnectionID, s.config.Versions), remoteAddr)
 		return err
 	}
 
