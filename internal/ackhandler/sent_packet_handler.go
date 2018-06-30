@@ -376,7 +376,7 @@ func (h *sentPacketHandler) OnAlarm() error {
 	now := time.Now()
 
 	var err error
-	if !h.handshakeComplete {
+	if h.packetHistory.HasOutstandingHandshakePackets() {
 		if h.logger.Debug() {
 			h.logger.Debugf("Loss detection alarm fired in handshake mode")
 		}
