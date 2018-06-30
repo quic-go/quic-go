@@ -42,7 +42,6 @@ var _ = Describe("Client", func() {
 		Expect(err).ToNot(HaveOccurred())
 		return b.Bytes()
 	}
-	_ = acceptClientVersionPacket
 
 	BeforeEach(func() {
 		connID = protocol.ConnectionID{0, 0, 0, 0, 0, 0, 0x13, 0x37}
@@ -522,6 +521,11 @@ var _ = Describe("Client", func() {
 		})
 	})
 
+	It("tells its version", func() {
+		Expect(cl.version).ToNot(BeZero())
+		Expect(cl.GetVersion()).To(Equal(cl.version))
+	})
+
 	It("ignores packets with an invalid public header", func() {
 		cl.session = NewMockQuicSession(mockCtrl) // don't EXPECT any handlePacket calls
 		cl.handleRead(addr, []byte("invalid packet"))
@@ -785,8 +789,22 @@ var _ = Describe("Client", func() {
 	})
 
 	Context("Public Reset handling", func() {
+		var (
+			pr     []byte
+			hdr    *wire.Header
+			hdrLen int
+		)
+
 		BeforeEach(func() {
 			cl.config = &Config{}
+
+			pr = wire.WritePublicReset(cl.destConnID, 1, 0)
+			r := bytes.NewReader(pr)
+			iHdr, err := wire.ParseInvariantHeader(r)
+			Expect(err).ToNot(HaveOccurred())
+			hdr, err = iHdr.Parse(r, protocol.PerspectiveServer, versionGQUICFrames)
+			Expect(err).ToNot(HaveOccurred())
+			hdrLen = r.Len()
 		})
 
 		It("closes the session when receiving a Public Reset", func() {
@@ -801,28 +819,20 @@ var _ = Describe("Client", func() {
 		It("ignores Public Resets from the wrong remote address", func() {
 			cl.session = NewMockQuicSession(mockCtrl) // don't EXPECT any calls
 			spoofedAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 5678}
-			pr := wire.WritePublicReset(cl.destConnID, 1, 0)
-			r := bytes.NewReader(pr)
-			hdr, err := wire.ParseHeaderSentByServer(r)
-			Expect(err).ToNot(HaveOccurred())
-			err = cl.handlePacketImpl(&receivedPacket{
+			err := cl.handlePacketImpl(&receivedPacket{
 				remoteAddr: spoofedAddr,
 				header:     hdr,
-				data:       pr[len(pr)-r.Len():],
+				data:       pr[len(pr)-hdrLen:],
 			})
 			Expect(err).To(MatchError("Received a spoofed Public Reset"))
 		})
 
 		It("ignores unparseable Public Resets", func() {
 			cl.session = NewMockQuicSession(mockCtrl) // don't EXPECT any calls
-			pr := wire.WritePublicReset(cl.destConnID, 1, 0)
-			r := bytes.NewReader(pr)
-			hdr, err := wire.ParseHeaderSentByServer(r)
-			Expect(err).ToNot(HaveOccurred())
-			err = cl.handlePacketImpl(&receivedPacket{
+			err := cl.handlePacketImpl(&receivedPacket{
 				remoteAddr: addr,
 				header:     hdr,
-				data:       pr[len(pr)-r.Len() : len(pr)-5], // cut off the last 5 bytes
+				data:       pr[len(pr)-hdrLen : len(pr)-5], // cut off the last 5 bytes
 			})
 			Expect(err.Error()).To(ContainSubstring("Received a Public Reset. An error occurred parsing the packet"))
 		})

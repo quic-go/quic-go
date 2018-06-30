@@ -20,6 +20,7 @@ import (
 type packetHandler interface {
 	handlePacket(*receivedPacket)
 	Close(error) error
+	GetVersion() protocol.VersionNumber
 }
 
 type packetHandlerManager interface {
@@ -303,7 +304,20 @@ func (s *server) handlePacket(remoteAddr net.Addr, packet []byte) error {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
-	hdr, err := wire.ParseHeaderSentByClient(r)
+	iHdr, err := wire.ParseInvariantHeader(r)
+	if err != nil {
+		return qerr.Error(qerr.InvalidPacketHeader, err.Error())
+	}
+	session, sessionKnown := s.sessionHandler.Get(iHdr.DestConnectionID)
+	if sessionKnown && session == nil {
+		// Late packet for closed session
+		return nil
+	}
+	version := protocol.VersionUnknown
+	if sessionKnown {
+		version = session.GetVersion()
+	}
+	hdr, err := iHdr.Parse(r, protocol.PerspectiveClient, version)
 	if err != nil {
 		return qerr.Error(qerr.InvalidPacketHeader, err.Error())
 	}
@@ -311,12 +325,18 @@ func (s *server) handlePacket(remoteAddr net.Addr, packet []byte) error {
 	packetData := packet[len(packet)-r.Len():]
 
 	if hdr.IsPublicHeader {
-		return s.handleGQUICPacket(hdr, packetData, remoteAddr, rcvTime)
+		return s.handleGQUICPacket(session, hdr, packetData, remoteAddr, rcvTime)
 	}
-	return s.handleIETFQUICPacket(hdr, packetData, remoteAddr, rcvTime)
+	return s.handleIETFQUICPacket(session, hdr, packetData, remoteAddr, rcvTime)
 }
 
-func (s *server) handleIETFQUICPacket(hdr *wire.Header, packetData []byte, remoteAddr net.Addr, rcvTime time.Time) error {
+func (s *server) handleIETFQUICPacket(
+	session packetHandler,
+	hdr *wire.Header,
+	packetData []byte,
+	remoteAddr net.Addr,
+	rcvTime time.Time,
+) error {
 	if hdr.IsLongHeader {
 		if !s.supportsTLS {
 			return errors.New("Received an IETF QUIC Long Header")
@@ -339,12 +359,7 @@ func (s *server) handleIETFQUICPacket(hdr *wire.Header, packetData []byte, remot
 		}
 	}
 
-	session, sessionKnown := s.sessionHandler.Get(hdr.DestConnectionID)
-	if sessionKnown && session == nil {
-		// Late packet for closed session
-		return nil
-	}
-	if !sessionKnown {
+	if session == nil {
 		s.logger.Debugf("Received %s packet for unknown connection %s.", hdr.Type, hdr.DestConnectionID)
 		return nil
 	}
@@ -358,18 +373,20 @@ func (s *server) handleIETFQUICPacket(hdr *wire.Header, packetData []byte, remot
 	return nil
 }
 
-func (s *server) handleGQUICPacket(hdr *wire.Header, packetData []byte, remoteAddr net.Addr, rcvTime time.Time) error {
+func (s *server) handleGQUICPacket(
+	session packetHandler,
+	hdr *wire.Header,
+	packetData []byte,
+	remoteAddr net.Addr,
+	rcvTime time.Time,
+) error {
 	// ignore all Public Reset packets
 	if hdr.ResetFlag {
 		s.logger.Infof("Received unexpected Public Reset for connection %s.", hdr.DestConnectionID)
 		return nil
 	}
 
-	session, sessionKnown := s.sessionHandler.Get(hdr.DestConnectionID)
-	if sessionKnown && session == nil {
-		// Late packet for closed session
-		return nil
-	}
+	sessionKnown := session != nil
 
 	// If we don't have a session for this connection, and this packet cannot open a new connection, send a Public Reset
 	// This should only happen after a server restart, when we still receive packets for connections that we lost the state for.
