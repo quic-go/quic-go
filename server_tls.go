@@ -84,6 +84,7 @@ func newServerTLS(
 			IdleTimeout:                 config.IdleTimeout,
 			MaxBidiStreams:              uint16(config.MaxIncomingStreams),
 			MaxUniStreams:               uint16(config.MaxIncomingUniStreams),
+			DisableMigration:            true,
 		},
 		newSession: newTLSServerSession,
 		logger:     logger,
