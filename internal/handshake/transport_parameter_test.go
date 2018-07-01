@@ -132,6 +132,7 @@ var _ = Describe("Transport Parameters", func() {
 					initialMaxUniStreamsParameterID:  {0x44, 0x55},
 					idleTimeoutParameterID:           {0x13, 0x37},
 					maxPacketSizeParameterID:         {0x73, 0x31},
+					disableMigrationParameterID:      {},
 				}
 			})
 			It("reads parameters", func() {
@@ -144,6 +145,7 @@ var _ = Describe("Transport Parameters", func() {
 				Expect(params.IdleTimeout).To(Equal(0x1337 * time.Second))
 				Expect(params.OmitConnectionID).To(BeFalse())
 				Expect(params.MaxPacketSize).To(Equal(protocol.ByteCount(0x7331)))
+				Expect(params.DisableMigration).To(BeTrue())
 			})
 
 			It("rejects the parameters if the initial_max_stream_data is missing", func() {
@@ -215,6 +217,12 @@ var _ = Describe("Transport Parameters", func() {
 				Expect(err).To(MatchError("invalid value for max_packet_size: 1199 (minimum 1200)"))
 			})
 
+			It("rejects the parameters if disable_connection_migration has the wrong length", func() {
+				parameters[disableMigrationParameterID] = []byte{0x11} // should empty
+				_, err := readTransportParameters(paramsMapToList(parameters))
+				Expect(err).To(MatchError("wrong length for disable_migration: 1 (expected empty)"))
+			})
+
 			It("ignores unknown parameters", func() {
 				parameters[1337] = []byte{42}
 				_, err := readTransportParameters(paramsMapToList(parameters))
@@ -240,18 +248,20 @@ var _ = Describe("Transport Parameters", func() {
 					IdleTimeout:                 0xcafe * time.Second,
 					MaxBidiStreams:              0x1234,
 					MaxUniStreams:               0x4321,
+					DisableMigration:            true,
 				}
 			})
 
 			It("creates the parameters list", func() {
 				values := paramsListToMap(params.getTransportParameters())
-				Expect(values).To(HaveLen(6))
+				Expect(values).To(HaveLen(7))
 				Expect(values).To(HaveKeyWithValue(initialMaxStreamDataParameterID, []byte{0xde, 0xad, 0xbe, 0xef}))
 				Expect(values).To(HaveKeyWithValue(initialMaxDataParameterID, []byte{0xde, 0xca, 0xfb, 0xad}))
 				Expect(values).To(HaveKeyWithValue(initialMaxBidiStreamsParameterID, []byte{0x12, 0x34}))
 				Expect(values).To(HaveKeyWithValue(initialMaxUniStreamsParameterID, []byte{0x43, 0x21}))
 				Expect(values).To(HaveKeyWithValue(idleTimeoutParameterID, []byte{0xca, 0xfe}))
 				Expect(values).To(HaveKeyWithValue(maxPacketSizeParameterID, []byte{0x5, 0xac})) // 1452 = 0x5ac
+				Expect(values).To(HaveKeyWithValue(disableMigrationParameterID, []byte{}))
 			})
 		})
 	})

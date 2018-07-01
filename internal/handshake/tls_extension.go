@@ -16,6 +16,7 @@ const (
 	maxPacketSizeParameterID         transportParameterID = 0x5
 	statelessResetTokenParameterID   transportParameterID = 0x6
 	initialMaxUniStreamsParameterID  transportParameterID = 0x8
+	disableMigrationParameterID      transportParameterID = 0x9
 )
 
 type transportParameter struct {
