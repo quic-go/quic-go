@@ -81,11 +81,11 @@ var _ = Describe("Client", func() {
 	})
 
 	Context("Dialing", func() {
-		var origGenerateConnectionID func() (protocol.ConnectionID, error)
+		var origGenerateConnectionID func(int) (protocol.ConnectionID, error)
 
 		BeforeEach(func() {
 			origGenerateConnectionID = generateConnectionID
-			generateConnectionID = func() (protocol.ConnectionID, error) {
+			generateConnectionID = func(int) (protocol.ConnectionID, error) {
 				return connID, nil
 			}
 		})
