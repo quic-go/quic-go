@@ -29,11 +29,12 @@ var _ = Describe("Client Multiplexer", func() {
 		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 		packetHandler := NewMockQuicSession(mockCtrl)
 		handledPacket := make(chan struct{})
-		packetHandler.EXPECT().handlePacket(gomock.Any()).Do(func(_ *receivedPacket) {
+		packetHandler.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
+			Expect(p.header.DestConnectionID).To(Equal(connID))
 			close(handledPacket)
 		})
 		packetHandler.EXPECT().GetVersion()
-		getClientMultiplexer().AddConn(conn)
+		getClientMultiplexer().AddConn(conn, 8)
 		err := getClientMultiplexer().AddHandler(conn, connID, packetHandler)
 		Expect(err).ToNot(HaveOccurred())
 		conn.dataToRead <- getPacket(connID)
@@ -41,6 +42,14 @@ var _ = Describe("Client Multiplexer", func() {
 		// makes the listen go routine return
 		packetHandler.EXPECT().Close(gomock.Any()).AnyTimes()
 		close(conn.dataToRead)
+	})
+
+	It("errors when adding an existing conn with a different connection ID length", func() {
+		conn := newMockPacketConn()
+		_, err := getClientMultiplexer().AddConn(conn, 5)
+		Expect(err).ToNot(HaveOccurred())
+		_, err = getClientMultiplexer().AddConn(conn, 6)
+		Expect(err).To(MatchError("cannot use 6 byte connection IDs on a connection that is already using 5 byte connction IDs"))
 	})
 
 	It("errors when adding a handler for an unknown conn", func() {
@@ -67,7 +76,7 @@ var _ = Describe("Client Multiplexer", func() {
 			close(handledPacket2)
 		})
 		packetHandler2.EXPECT().GetVersion()
-		getClientMultiplexer().AddConn(conn)
+		getClientMultiplexer().AddConn(conn, connID1.Len())
 		Expect(getClientMultiplexer().AddHandler(conn, connID1, packetHandler1)).To(Succeed())
 		Expect(getClientMultiplexer().AddHandler(conn, connID2, packetHandler2)).To(Succeed())
 
@@ -84,10 +93,10 @@ var _ = Describe("Client Multiplexer", func() {
 
 	It("drops unparseable packets", func() {
 		conn := newMockPacketConn()
-		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7}
 		conn.dataToRead <- []byte("invalid header")
 		packetHandler := NewMockQuicSession(mockCtrl)
-		getClientMultiplexer().AddConn(conn)
+		getClientMultiplexer().AddConn(conn, 7)
 		Expect(getClientMultiplexer().AddHandler(conn, connID, packetHandler)).To(Succeed())
 		time.Sleep(100 * time.Millisecond) // give the listen go routine some time to process the packet
 		packetHandler.EXPECT().Close(gomock.Any()).AnyTimes()
@@ -106,7 +115,7 @@ var _ = Describe("Client Multiplexer", func() {
 		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 		done := make(chan struct{})
 		manager.EXPECT().Get(connID).Do(func(protocol.ConnectionID) { close(done) }).Return(nil, true)
-		getClientMultiplexer().AddConn(conn)
+		getClientMultiplexer().AddConn(conn, 8)
 		conn.dataToRead <- getPacket(connID)
 		Eventually(done).Should(BeClosed())
 		// makes the listen go routine return
@@ -118,7 +127,7 @@ var _ = Describe("Client Multiplexer", func() {
 		conn := newMockPacketConn()
 		conn.dataToRead <- getPacket(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8})
 		packetHandler := NewMockQuicSession(mockCtrl)
-		getClientMultiplexer().AddConn(conn)
+		getClientMultiplexer().AddConn(conn, 8)
 		Expect(getClientMultiplexer().AddHandler(conn, protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}, packetHandler)).To(Succeed())
 		time.Sleep(100 * time.Millisecond) // give the listen go routine some time to process the packet
 		// makes the listen go routine return
@@ -135,7 +144,7 @@ var _ = Describe("Client Multiplexer", func() {
 		packetHandler.EXPECT().Close(testErr).Do(func(error) {
 			close(done)
 		})
-		getClientMultiplexer().AddConn(conn)
+		getClientMultiplexer().AddConn(conn, 8)
 		Expect(getClientMultiplexer().AddHandler(conn, protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}, packetHandler)).To(Succeed())
 		Eventually(done).Should(BeClosed())
 	})

@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.9.0 (unreleased)
+
+- Add a `quic.Config` option for the length of the connection ID (for IETF QUIC).
+
 ## v0.8.0 (2018-06-26)
 
 - Add support for unidirectional streams (for IETF QUIC).

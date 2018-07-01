@@ -194,7 +194,7 @@ func (s *serverTLS) handleUnpackedInitial(remoteAddr net.Addr, hdr *wire.Header,
 			StreamID: version.CryptoStreamID(),
 			Data:     bc.GetDataForWriting(),
 		}
-		srcConnID, err := protocol.GenerateConnectionID(protocol.ConnectionIDLenGQUIC)
+		srcConnID, err := protocol.GenerateConnectionID(s.config.ConnectionIDLength)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -228,7 +228,7 @@ func (s *serverTLS) handleUnpackedInitial(remoteAddr net.Addr, hdr *wire.Header,
 		return nil, nil, fmt.Errorf("Expected mint state to be %s, got %s", mint.StateServerWaitFlight2, tls.State())
 	}
 	params := <-paramsChan
-	connID, err := protocol.GenerateConnectionID(protocol.ConnectionIDLenGQUIC)
+	connID, err := protocol.GenerateConnectionID(s.config.ConnectionIDLength)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -1769,7 +1769,7 @@ var _ = Describe("Client Session", func() {
 			protocol.Version39,
 			protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
 			nil,
-			populateClientConfig(&Config{}),
+			populateClientConfig(&Config{}, false),
 			protocol.VersionWhatever,
 			nil,
 			utils.DefaultLogger,

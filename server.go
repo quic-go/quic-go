@@ -241,6 +241,10 @@ func populateServerConfig(config *Config) *Config {
 	} else if maxIncomingUniStreams < 0 {
 		maxIncomingUniStreams = 0
 	}
+	connIDLen := config.ConnectionIDLength
+	if connIDLen == 0 {
+		connIDLen = protocol.DefaultConnectionIDLength
+	}
 
 	return &Config{
 		Versions:                              versions,
@@ -252,6 +256,7 @@ func populateServerConfig(config *Config) *Config {
 		MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindow,
 		MaxIncomingStreams:                    maxIncomingStreams,
 		MaxIncomingUniStreams:                 maxIncomingUniStreams,
+		ConnectionIDLength:                    connIDLen,
 	}
 }
 
@@ -304,7 +309,7 @@ func (s *server) handlePacket(remoteAddr net.Addr, packet []byte) error {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
-	iHdr, err := wire.ParseInvariantHeader(r, protocol.ConnectionIDLenGQUIC)
+	iHdr, err := wire.ParseInvariantHeader(r, s.config.ConnectionIDLength)
 	if err != nil {
 		return qerr.Error(qerr.InvalidPacketHeader, err.Error())
 	}
