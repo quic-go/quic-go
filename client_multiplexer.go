@@ -87,7 +87,7 @@ func (m *clientMultiplexer) listen(c net.PacketConn, sessions packetHandlerManag
 		rcvTime := time.Now()
 
 		r := bytes.NewReader(data)
-		iHdr, err := wire.ParseInvariantHeader(r)
+		iHdr, err := wire.ParseInvariantHeader(r, protocol.ConnectionIDLenGQUIC)
 		// drop the packet if we can't parse the header
 		if err != nil {
 			m.logger.Debugf("error parsing invariant header from %s: %s", addr, err)

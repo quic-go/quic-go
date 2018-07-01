@@ -364,7 +364,7 @@ func (c *client) handleRead(remoteAddr net.Addr, packet []byte) {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
-	iHdr, err := wire.ParseInvariantHeader(r)
+	iHdr, err := wire.ParseInvariantHeader(r, protocol.ConnectionIDLenGQUIC)
 	// drop the packet if we can't parse the header
 	if err != nil {
 		c.logger.Errorf("error parsing invariant header: %s", err)

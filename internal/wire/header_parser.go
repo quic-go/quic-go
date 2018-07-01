@@ -21,7 +21,7 @@ type InvariantHeader struct {
 }
 
 // ParseInvariantHeader parses the version independent part of the header
-func ParseInvariantHeader(b *bytes.Reader) (*InvariantHeader, error) {
+func ParseInvariantHeader(b *bytes.Reader, shortHeaderConnIDLen int) (*InvariantHeader, error) {
 	typeByte, err := b.ReadByte()
 	if err != nil {
 		return nil, err
@@ -36,8 +36,15 @@ func ParseInvariantHeader(b *bytes.Reader) (*InvariantHeader, error) {
 		// In the IETF Short Header:
 		// * 0x8 it is the gQUIC Demultiplexing bit, and always 0.
 		// * 0x20 and 0x10 are always 1.
-		if typeByte&0x8 > 0 || typeByte&0x38 == 0x30 {
-			h.DestConnectionID, err = protocol.ReadConnectionID(b, 8)
+		var connIDLen int
+		if typeByte&0x8 > 0 { // Public Header containing a connection ID
+			connIDLen = 8
+		}
+		if typeByte&0x38 == 0x30 { // Short Header
+			connIDLen = shortHeaderConnIDLen
+		}
+		if connIDLen > 0 {
+			h.DestConnectionID, err = protocol.ReadConnectionID(b, connIDLen)
 			if err != nil {
 				return nil, err
 			}

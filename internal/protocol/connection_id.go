@@ -12,7 +12,7 @@ type ConnectionID []byte
 
 // GenerateConnectionID generates a connection ID using cryptographic random
 func GenerateConnectionID() (ConnectionID, error) {
-	b := make([]byte, ConnectionIDLen)
+	b := make([]byte, ConnectionIDLenGQUIC)
 	if _, err := rand.Read(b); err != nil {
 		return nil, err
 	}

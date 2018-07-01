@@ -56,9 +56,6 @@ func (h *Header) Write(b *bytes.Buffer, pers protocol.Perspective, version proto
 
 // TODO: add support for the key phase
 func (h *Header) writeLongHeader(b *bytes.Buffer) error {
-	if h.SrcConnectionID.Len() != protocol.ConnectionIDLen {
-		return fmt.Errorf("Header: source connection ID must be %d bytes, is %d", protocol.ConnectionIDLen, h.SrcConnectionID.Len())
-	}
 	b.WriteByte(byte(0x80 | h.Type))
 	utils.BigEndian.WriteUint32(b, uint32(h.Version))
 	connIDLen, err := encodeConnIDLen(h.DestConnectionID, h.SrcConnectionID)
@@ -174,7 +171,7 @@ func (h *Header) getPublicHeaderLength() (protocol.ByteCount, error) {
 		return 0, errPacketNumberLenNotSet
 	}
 	length += protocol.ByteCount(h.PacketNumberLen)
-	length += protocol.ByteCount(h.DestConnectionID.Len()) // if set, always 8 bytes
+	length += protocol.ByteCount(h.DestConnectionID.Len())
 	// Version Number in packets sent by the client
 	if h.VersionFlag {
 		length += 4

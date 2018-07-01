@@ -866,7 +866,7 @@ var _ = Describe("Client", func() {
 
 			pr = wire.WritePublicReset(cl.destConnID, 1, 0)
 			r := bytes.NewReader(pr)
-			iHdr, err := wire.ParseInvariantHeader(r)
+			iHdr, err := wire.ParseInvariantHeader(r, 0)
 			Expect(err).ToNot(HaveOccurred())
 			hdr, err = iHdr.Parse(r, protocol.PerspectiveServer, versionGQUICFrames)
 			Expect(err).ToNot(HaveOccurred())

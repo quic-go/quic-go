@@ -65,7 +65,7 @@ var _ = Describe("Packet packer", func() {
 
 	checkPayloadLen := func(data []byte) {
 		r := bytes.NewReader(data)
-		iHdr, err := wire.ParseInvariantHeader(r)
+		iHdr, err := wire.ParseInvariantHeader(r, 0)
 		Expect(err).ToNot(HaveOccurred())
 		hdr, err := iHdr.Parse(r, protocol.PerspectiveServer, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())

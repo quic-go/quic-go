@@ -73,7 +73,7 @@ var _ = Describe("Stateless TLS handling", func() {
 
 	unpackPacket := func(data []byte) (*wire.Header, []byte) {
 		r := bytes.NewReader(conn.dataWritten.Bytes())
-		iHdr, err := wire.ParseInvariantHeader(r)
+		iHdr, err := wire.ParseInvariantHeader(r, 0)
 		Expect(err).ToNot(HaveOccurred())
 		hdr, err := iHdr.Parse(r, protocol.PerspectiveServer, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())

@@ -14,7 +14,7 @@ var _ = Describe("Version Negotiation Packets", func() {
 		versions := []protocol.VersionNumber{1001, 1003}
 		data := ComposeGQUICVersionNegotiation(connID, versions)
 		b := bytes.NewReader(data)
-		iHdr, err := ParseInvariantHeader(b)
+		iHdr, err := ParseInvariantHeader(b, 4)
 		Expect(err).ToNot(HaveOccurred())
 		hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, versionPublicHeader)
 		Expect(err).ToNot(HaveOccurred())
@@ -32,7 +32,7 @@ var _ = Describe("Version Negotiation Packets", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data[0] & 0x80).ToNot(BeZero())
 		b := bytes.NewReader(data)
-		iHdr, err := ParseInvariantHeader(b)
+		iHdr, err := ParseInvariantHeader(b, 4)
 		Expect(err).ToNot(HaveOccurred())
 		hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, versionIETFHeader)
 		Expect(err).ToNot(HaveOccurred())

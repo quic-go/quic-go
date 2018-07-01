@@ -304,7 +304,7 @@ func (s *server) handlePacket(remoteAddr net.Addr, packet []byte) error {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
-	iHdr, err := wire.ParseInvariantHeader(r)
+	iHdr, err := wire.ParseInvariantHeader(r, protocol.ConnectionIDLenGQUIC)
 	if err != nil {
 		return qerr.Error(qerr.InvalidPacketHeader, err.Error())
 	}
