@@ -221,6 +221,7 @@ var _ = Describe("Server", func() {
 		It("assigns packets to existing sessions", func() {
 			sess := NewMockQuicSession(mockCtrl)
 			sess.EXPECT().handlePacket(gomock.Any())
+			sess.EXPECT().GetVersion()
 
 			sessionHandler.EXPECT().Get(connID).Return(sess, true)
 			err := serv.handlePacket(nil, []byte{0x08, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0x01})
@@ -284,6 +285,7 @@ var _ = Describe("Server", func() {
 
 		It("ignores delayed packets with mismatching versions", func() {
 			sess := NewMockQuicSession(mockCtrl)
+			sess.EXPECT().GetVersion()
 			// don't EXPECT any handlePacket() calls to this session
 			sessionHandler.EXPECT().Get(connID).Return(sess, true)
 
@@ -304,14 +306,18 @@ var _ = Describe("Server", func() {
 		})
 
 		It("errors on packets that are smaller than the Payload Length in the packet header", func() {
+			sess := NewMockQuicSession(mockCtrl)
+			sess.EXPECT().GetVersion().Return(protocol.VersionTLS)
+			sessionHandler.EXPECT().Get(connID).Return(sess, true)
+
 			serv.supportsTLS = true
 			b := &bytes.Buffer{}
 			hdr := &wire.Header{
 				IsLongHeader:     true,
 				Type:             protocol.PacketTypeHandshake,
 				PayloadLen:       1000,
-				SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+				SrcConnectionID:  connID,
+				DestConnectionID: connID,
 				PacketNumberLen:  protocol.PacketNumberLen1,
 				Version:          versionIETFFrames,
 			}
@@ -325,6 +331,8 @@ var _ = Describe("Server", func() {
 			sess.EXPECT().handlePacket(gomock.Any()).Do(func(packet *receivedPacket) {
 				Expect(packet.data).To(HaveLen(123))
 			})
+			sess.EXPECT().GetVersion().Return(protocol.VersionTLS)
+			sessionHandler.EXPECT().Get(connID).Return(sess, true)
 
 			serv.supportsTLS = true
 			b := &bytes.Buffer{}
@@ -338,12 +346,15 @@ var _ = Describe("Server", func() {
 				Version:          versionIETFFrames,
 			}
 			Expect(hdr.Write(b, protocol.PerspectiveClient, versionIETFFrames)).To(Succeed())
-			sessionHandler.EXPECT().Get(connID).Return(sess, true)
 			err := serv.handlePacket(nil, append(b.Bytes(), make([]byte, 456)...))
 			Expect(err).ToNot(HaveOccurred())
 		})
 
 		It("drops packets with invalid packet types", func() {
+			sess := NewMockQuicSession(mockCtrl)
+			sess.EXPECT().GetVersion().Return(protocol.VersionTLS)
+			sessionHandler.EXPECT().Get(connID).Return(sess, true)
+
 			serv.supportsTLS = true
 			b := &bytes.Buffer{}
 			hdr := &wire.Header{
@@ -361,6 +372,10 @@ var _ = Describe("Server", func() {
 		})
 
 		It("ignores Public Resets", func() {
+			sess := NewMockQuicSession(mockCtrl)
+			sess.EXPECT().GetVersion().Return(protocol.VersionTLS)
+			sessionHandler.EXPECT().Get(connID).Return(sess, true)
+
 			err := serv.handlePacket(nil, wire.WritePublicReset(connID, 1, 1337))
 			Expect(err).ToNot(HaveOccurred())
 		})
@@ -485,10 +500,13 @@ var _ = Describe("Server", func() {
 		Eventually(func() int { return conn.dataWritten.Len() }).ShouldNot(BeZero())
 		Expect(conn.dataWrittenTo).To(Equal(udpAddr))
 		r := bytes.NewReader(conn.dataWritten.Bytes())
-		packet, err := wire.ParseHeaderSentByServer(r)
+		iHdr, err := wire.ParseInvariantHeader(r)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.VersionFlag).To(BeTrue())
-		Expect(packet.DestConnectionID).To(Equal(connID))
+		Expect(iHdr.IsLongHeader).To(BeFalse())
+		replyHdr, err := iHdr.Parse(r, protocol.PerspectiveServer, versionIETFFrames)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(replyHdr.IsVersionNegotiation).To(BeTrue())
+		Expect(replyHdr.DestConnectionID).To(Equal(connID))
 		Expect(r.Len()).To(BeZero())
 		Consistently(done).ShouldNot(BeClosed())
 		// make the go routine return
@@ -528,11 +546,13 @@ var _ = Describe("Server", func() {
 		Eventually(func() int { return conn.dataWritten.Len() }).ShouldNot(BeZero())
 		Expect(conn.dataWrittenTo).To(Equal(udpAddr))
 		r := bytes.NewReader(conn.dataWritten.Bytes())
-		packet, err := wire.ParseHeaderSentByServer(r)
+		iHdr, err := wire.ParseInvariantHeader(r)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.IsVersionNegotiation).To(BeTrue())
-		Expect(packet.DestConnectionID).To(Equal(connID))
-		Expect(packet.SrcConnectionID).To(Equal(connID))
+		replyHdr, err := iHdr.Parse(r, protocol.PerspectiveServer, versionIETFFrames)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(replyHdr.IsVersionNegotiation).To(BeTrue())
+		Expect(replyHdr.DestConnectionID).To(Equal(connID))
+		Expect(replyHdr.SrcConnectionID).To(Equal(connID))
 		Expect(r.Len()).To(BeZero())
 		Consistently(done).ShouldNot(BeClosed())
 		// make the go routine return

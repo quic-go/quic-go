@@ -21,6 +21,10 @@ const (
 	versionBigEndian = protocol.Version39
 	// a QUIC version that uses the IETF frame types
 	versionIETFFrames = protocol.VersionTLS
+	// a QUIC version that uses the gQUIC Public Header
+	versionPublicHeader = protocol.Version43
+	// a QUIC version that the IETF QUIC Header
+	versionIETFHeader = protocol.VersionTLS
 )
 
 func encodeVarInt(i uint64) []byte {

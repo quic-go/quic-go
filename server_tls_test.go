@@ -73,13 +73,18 @@ var _ = Describe("Stateless TLS handling", func() {
 
 	unpackPacket := func(data []byte) (*wire.Header, []byte) {
 		r := bytes.NewReader(conn.dataWritten.Bytes())
-		hdr, err := wire.ParseHeaderSentByServer(r)
+		iHdr, err := wire.ParseInvariantHeader(r)
+		Expect(err).ToNot(HaveOccurred())
+		hdr, err := iHdr.Parse(r, protocol.PerspectiveServer, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
 		hdr.Raw = data[:len(data)-r.Len()]
-		aead, err := crypto.NewNullAEAD(protocol.PerspectiveClient, hdr.SrcConnectionID, protocol.VersionTLS)
-		Expect(err).ToNot(HaveOccurred())
-		payload, err := aead.Open(nil, data[len(data)-r.Len():], hdr.PacketNumber, hdr.Raw)
-		Expect(err).ToNot(HaveOccurred())
+		var payload []byte
+		if r.Len() > 0 {
+			aead, err := crypto.NewNullAEAD(protocol.PerspectiveClient, hdr.SrcConnectionID, protocol.VersionTLS)
+			Expect(err).ToNot(HaveOccurred())
+			payload, err = aead.Open(nil, data[len(data)-r.Len():], hdr.PacketNumber, hdr.Raw)
+			Expect(err).ToNot(HaveOccurred())
+		}
 		return hdr, payload
 	}
 
@@ -92,9 +97,8 @@ var _ = Describe("Stateless TLS handling", func() {
 		}
 		server.HandleInitial(nil, hdr, bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize))
 		Expect(conn.dataWritten.Len()).ToNot(BeZero())
-		hdr, err := wire.ParseHeaderSentByServer(bytes.NewReader(conn.dataWritten.Bytes()))
-		Expect(err).ToNot(HaveOccurred())
-		Expect(hdr.IsVersionNegotiation).To(BeTrue())
+		replyHdr, _ := unpackPacket(conn.dataWritten.Bytes())
+		Expect(replyHdr.IsVersionNegotiation).To(BeTrue())
 		Expect(sessionChan).ToNot(Receive())
 	})
 
@@ -130,13 +134,11 @@ var _ = Describe("Stateless TLS handling", func() {
 		hdr, data := getPacket(&wire.StreamFrame{Data: []byte("Client Hello")})
 		server.HandleInitial(nil, hdr, data)
 		Expect(conn.dataWritten.Len()).ToNot(BeZero())
-		r := bytes.NewReader(conn.dataWritten.Bytes())
-		replyHdr, err := wire.ParseHeaderSentByServer(r)
-		Expect(err).ToNot(HaveOccurred())
+		replyHdr, payload := unpackPacket(conn.dataWritten.Bytes())
 		Expect(replyHdr.Type).To(Equal(protocol.PacketTypeRetry))
 		Expect(replyHdr.SrcConnectionID).To(Equal(hdr.DestConnectionID))
 		Expect(replyHdr.DestConnectionID).To(Equal(hdr.SrcConnectionID))
-		Expect(replyHdr.PayloadLen).To(BeEquivalentTo(r.Len()))
+		Expect(replyHdr.PayloadLen).To(BeEquivalentTo(len(payload) + 16 /* AEAD overhead */))
 		Expect(sessionChan).ToNot(Receive())
 	})
 

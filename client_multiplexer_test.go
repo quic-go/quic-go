@@ -33,6 +33,7 @@ var _ = Describe("Client Multiplexer", func() {
 		packetHandler.EXPECT().handlePacket(gomock.Any()).Do(func(_ *receivedPacket) {
 			close(handledPacket)
 		})
+		packetHandler.EXPECT().GetVersion()
 		getClientMultiplexer().Add(conn, connID, packetHandler)
 		Eventually(handledPacket).Should(BeClosed())
 		// makes the listen go routine return
@@ -54,10 +55,12 @@ var _ = Describe("Client Multiplexer", func() {
 			Expect(p.header.DestConnectionID).To(Equal(connID1))
 			close(handledPacket1)
 		})
+		packetHandler1.EXPECT().GetVersion()
 		packetHandler2.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
 			Expect(p.header.DestConnectionID).To(Equal(connID2))
 			close(handledPacket2)
 		})
+		packetHandler2.EXPECT().GetVersion()
 		getClientMultiplexer().Add(conn, connID1, packetHandler1)
 		getClientMultiplexer().Add(conn, connID2, packetHandler2)
 		Eventually(handledPacket1).Should(BeClosed())

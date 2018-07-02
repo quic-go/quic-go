@@ -72,20 +72,25 @@ func (m *clientMultiplexer) listen(c net.PacketConn, sessions packetHandlerManag
 		rcvTime := time.Now()
 
 		r := bytes.NewReader(data)
-		hdr, err := wire.ParseHeaderSentByServer(r)
+		iHdr, err := wire.ParseInvariantHeader(r)
 		// drop the packet if we can't parse the header
 		if err != nil {
-			m.logger.Debugf("error parsing packet from %s: %s", addr, err)
+			m.logger.Debugf("error parsing invariant header from %s: %s", addr, err)
+			continue
+		}
+		client, ok := sessions.Get(iHdr.DestConnectionID)
+		if !ok {
+			m.logger.Debugf("received a packet with an unexpected connection ID %s", iHdr.DestConnectionID)
+			continue
+		}
+		hdr, err := iHdr.Parse(r, protocol.PerspectiveServer, client.GetVersion())
+		if err != nil {
+			m.logger.Debugf("error parsing header from %s: %s", addr, err)
 			continue
 		}
 		hdr.Raw = data[:len(data)-r.Len()]
 		packetData := data[len(data)-r.Len():]
 
-		client, ok := sessions.Get(hdr.DestConnectionID)
-		if !ok {
-			m.logger.Debugf("received a packet with an unexpected connection ID %s", hdr.DestConnectionID)
-			continue
-		}
 		client.handlePacket(&receivedPacket{
 			remoteAddr: addr,
 			header:     hdr,

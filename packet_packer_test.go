@@ -63,6 +63,15 @@ var _ = Describe("Packet packer", func() {
 		divNonce         []byte
 	)
 
+	checkPayloadLen := func(data []byte) {
+		r := bytes.NewReader(data)
+		iHdr, err := wire.ParseInvariantHeader(r)
+		Expect(err).ToNot(HaveOccurred())
+		hdr, err := iHdr.Parse(r, protocol.PerspectiveServer, versionIETFFrames)
+		Expect(err).ToNot(HaveOccurred())
+		ExpectWithOffset(0, hdr.PayloadLen).To(BeEquivalentTo(r.Len()))
+	}
+
 	BeforeEach(func() {
 		version := versionGQUICFrames
 		mockSender := NewMockStreamSender(mockCtrl)
@@ -268,11 +277,7 @@ var _ = Describe("Packet packer", func() {
 		mockStreamFramer.EXPECT().PopCryptoStreamFrame(gomock.Any()).Return(f)
 		p, err := packer.PackPacket()
 		Expect(err).ToNot(HaveOccurred())
-		// parse the packet
-		r := bytes.NewReader(p.raw)
-		hdr, err := wire.ParseHeaderSentByServer(r)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(hdr.PayloadLen).To(BeEquivalentTo(r.Len()))
+		checkPayloadLen(p.raw)
 	})
 
 	It("packs a CONNECTION_CLOSE", func() {
@@ -617,11 +622,7 @@ var _ = Describe("Packet packer", func() {
 			expectedPacketLen := packer.maxPacketSize - protocol.NonForwardSecurePacketSizeReduction
 			Expect(p.raw).To(HaveLen(int(expectedPacketLen)))
 			Expect(p.header.IsLongHeader).To(BeTrue())
-			// parse the packet
-			r := bytes.NewReader(p.raw)
-			hdr, err := wire.ParseHeaderSentByServer(r)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(hdr.PayloadLen).To(BeEquivalentTo(r.Len()))
+			checkPayloadLen(p.raw)
 		})
 
 		It("sends unencrypted stream data on the crypto stream", func() {
@@ -798,11 +799,7 @@ var _ = Describe("Packet packer", func() {
 			packer.cryptoSetup.(*mockCryptoSetup).encLevelSealCrypto = protocol.EncryptionUnencrypted
 			packet, err := packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
-			// parse the header and check the values
-			r := bytes.NewReader(packet.raw)
-			hdr, err := wire.ParseHeaderSentByClient(r)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(hdr.PayloadLen).To(BeEquivalentTo(r.Len()))
+			checkPayloadLen(packet.raw)
 		})
 
 		It("packs a retransmission for an Initial packet", func() {

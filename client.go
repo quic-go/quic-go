@@ -346,10 +346,15 @@ func (c *client) handleRead(remoteAddr net.Addr, packet []byte) {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(packet)
-	hdr, err := wire.ParseHeaderSentByServer(r)
+	iHdr, err := wire.ParseInvariantHeader(r)
 	// drop the packet if we can't parse the header
 	if err != nil {
-		c.logger.Errorf("error handling packet: %s", err)
+		c.logger.Errorf("error parsing invariant header: %s", err)
+		return
+	}
+	hdr, err := iHdr.Parse(r, protocol.PerspectiveServer, c.version)
+	if err != nil {
+		c.logger.Errorf("error parsing header: %s", err)
 		return
 	}
 	hdr.Raw = packet[:len(packet)-r.Len()]
@@ -552,4 +557,11 @@ func (c *client) Close(err error) error {
 		return nil
 	}
 	return c.session.Close(err)
+}
+
+func (c *client) GetVersion() protocol.VersionNumber {
+	c.mutex.Lock()
+	v := c.version
+	c.mutex.Unlock()
+	return v
 }
