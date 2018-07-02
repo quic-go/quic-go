@@ -15,8 +15,13 @@ import (
 
 var (
 	clientMuxerOnce sync.Once
-	clientMuxer     *clientMultiplexer
+	clientMuxer     multiplexer
 )
+
+type multiplexer interface {
+	AddConn(net.PacketConn) packetHandlerManager
+	AddHandler(net.PacketConn, protocol.ConnectionID, packetHandler) error
+}
 
 // The clientMultiplexer listens on multiple net.PacketConns and dispatches
 // incoming packets to the session handler.
@@ -29,7 +34,9 @@ type clientMultiplexer struct {
 	logger utils.Logger
 }
 
-func getClientMultiplexer() *clientMultiplexer {
+var _ multiplexer = &clientMultiplexer{}
+
+func getClientMultiplexer() multiplexer {
 	clientMuxerOnce.Do(func() {
 		clientMuxer = &clientMultiplexer{
 			conns:                   make(map[net.PacketConn]packetHandlerManager),

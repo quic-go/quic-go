@@ -96,11 +96,11 @@ var _ = Describe("Client Multiplexer", func() {
 
 	It("ignores packets arriving late for closed sessions", func() {
 		manager := NewMockPacketHandlerManager(mockCtrl)
-		origNewPacketHandlerManager := getClientMultiplexer().newPacketHandlerManager
+		origNewPacketHandlerManager := getClientMultiplexer().(*clientMultiplexer).newPacketHandlerManager
 		defer func() {
-			getClientMultiplexer().newPacketHandlerManager = origNewPacketHandlerManager
+			getClientMultiplexer().(*clientMultiplexer).newPacketHandlerManager = origNewPacketHandlerManager
 		}()
-		getClientMultiplexer().newPacketHandlerManager = func() packetHandlerManager { return manager }
+		getClientMultiplexer().(*clientMultiplexer).newPacketHandlerManager = func() packetHandlerManager { return manager }
 
 		conn := newMockPacketConn()
 		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
