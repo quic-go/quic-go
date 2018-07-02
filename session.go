@@ -536,7 +536,9 @@ runLoop:
 		s.logger.Infof("Handling close error failed: %s", err)
 	}
 	s.logger.Infof("Connection %s closed.", s.srcConnID)
-	s.sessionRunner.removeConnectionID(s.srcConnID)
+	if closeErr.err != handshake.ErrCloseSessionForRetry {
+		s.sessionRunner.removeConnectionID(s.srcConnID)
+	}
 	return closeErr.err
 }
 

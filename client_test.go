@@ -251,7 +251,7 @@ var _ = Describe("Client", func() {
 
 			It("errors when the Config contains an invalid version", func() {
 				version := protocol.VersionNumber(0x1234)
-				_, err := Dial(nil, nil, "localhost:1234", &tls.Config{}, &Config{Versions: []protocol.VersionNumber{version}})
+				_, err := Dial(packetConn, nil, "localhost:1234", &tls.Config{}, &Config{Versions: []protocol.VersionNumber{version}})
 				Expect(err).To(MatchError("0x1234 is not a valid QUIC version"))
 			})
 
