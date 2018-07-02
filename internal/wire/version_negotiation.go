@@ -22,7 +22,8 @@ func ComposeGQUICVersionNegotiation(connID protocol.ConnectionID, versions []pro
 // ComposeVersionNegotiation composes a Version Negotiation according to the IETF draft
 func ComposeVersionNegotiation(destConnID, srcConnID protocol.ConnectionID, versions []protocol.VersionNumber) ([]byte, error) {
 	greasedVersions := protocol.GetGreasedVersions(versions)
-	buf := bytes.NewBuffer(make([]byte, 0, 1+8+4+len(greasedVersions)*4))
+	expectedLen := 1 /* type byte */ + 4 /* version field */ + 1 /* connection ID length field */ + destConnID.Len() + srcConnID.Len() + len(greasedVersions)*4
+	buf := bytes.NewBuffer(make([]byte, 0, expectedLen))
 	r := make([]byte, 1)
 	_, _ = rand.Read(r) // ignore the error here. It is not critical to have perfect random here.
 	buf.WriteByte(r[0] | 0x80)
