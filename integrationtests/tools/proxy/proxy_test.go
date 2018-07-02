@@ -191,7 +191,7 @@ var _ = Describe("QUIC Proxy", func() {
 				Eventually(getClientDict).Should(HaveLen(1))
 				var conn *connection
 				for _, conn = range getClientDict() {
-					Expect(atomic.LoadUint64(&conn.incomingPacketCounter)).To(Equal(uint64(1)))
+					Eventually(func() uint64 { return atomic.LoadUint64(&conn.incomingPacketCounter) }).Should(Equal(uint64(1)))
 				}
 
 				// send the second packet
