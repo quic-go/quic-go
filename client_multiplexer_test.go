@@ -45,8 +45,6 @@ var _ = Describe("Client Multiplexer", func() {
 		conn := newMockPacketConn()
 		connID1 := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 		connID2 := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
-		conn.dataToRead <- getPacket(connID1)
-		conn.dataToRead <- getPacket(connID2)
 		packetHandler1 := NewMockQuicSession(mockCtrl)
 		packetHandler2 := NewMockQuicSession(mockCtrl)
 		handledPacket1 := make(chan struct{})
@@ -63,8 +61,12 @@ var _ = Describe("Client Multiplexer", func() {
 		packetHandler2.EXPECT().GetVersion()
 		getClientMultiplexer().Add(conn, connID1, packetHandler1)
 		getClientMultiplexer().Add(conn, connID2, packetHandler2)
+
+		conn.dataToRead <- getPacket(connID1)
+		conn.dataToRead <- getPacket(connID2)
 		Eventually(handledPacket1).Should(BeClosed())
 		Eventually(handledPacket2).Should(BeClosed())
+
 		// makes the listen go routine return
 		packetHandler1.EXPECT().Close(gomock.Any()).AnyTimes()
 		packetHandler2.EXPECT().Close(gomock.Any()).AnyTimes()
