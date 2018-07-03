@@ -28,6 +28,8 @@ type TransportParameters struct {
 
 	OmitConnectionID bool // only used for gQUIC
 	IdleTimeout      time.Duration
+	DisableMigration bool // only used for IETF QUIC
+
 }
 
 // readHelloMap reads the transport parameters from the tags sent in a gQUIC handshake message
@@ -141,6 +143,11 @@ func readTransportParameters(paramsList []transportParameter) (*TransportParamet
 				return nil, fmt.Errorf("invalid value for max_packet_size: %d (minimum 1200)", maxPacketSize)
 			}
 			params.MaxPacketSize = maxPacketSize
+		case disableMigrationParameterID:
+			if len(p.Value) != 0 {
+				return nil, fmt.Errorf("wrong length for disable_migration: %d (expected empty)", len(p.Value))
+			}
+			params.DisableMigration = true
 		}
 	}
 
@@ -172,6 +179,9 @@ func (p *TransportParameters) getTransportParameters() []transportParameter {
 		{initialMaxUniStreamsParameterID, initialMaxUniStreamID},
 		{idleTimeoutParameterID, idleTimeout},
 		{maxPacketSizeParameterID, maxPacketSize},
+	}
+	if p.DisableMigration {
+		params = append(params, transportParameter{disableMigrationParameterID, nil})
 	}
 	return params
 }

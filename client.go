@@ -256,6 +256,7 @@ func (c *client) dialTLS(ctx context.Context) error {
 		OmitConnectionID:            c.config.RequestConnectionIDOmission,
 		MaxBidiStreams:              uint16(c.config.MaxIncomingStreams),
 		MaxUniStreams:               uint16(c.config.MaxIncomingUniStreams),
+		DisableMigration:            true,
 	}
 	csc := handshake.NewCryptoStreamConn(nil)
 	extHandler := handshake.NewExtensionHandlerClient(params, c.initialVersion, c.config.Versions, c.version, c.logger)
