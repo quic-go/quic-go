@@ -84,21 +84,6 @@ var _ = Describe("Header", func() {
 					Expect(err).To(MatchError("invalid connection ID length: 19 bytes"))
 				})
 
-				It("refuses to write a Long Header with the wrong connection ID length", func() {
-					srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6}
-					Expect(srcConnID).ToNot(Equal(protocol.ConnectionIDLen))
-					err := (&Header{
-						IsLongHeader:     true,
-						Type:             0x5,
-						SrcConnectionID:  srcConnID,
-						DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5}, // connection IDs must be at most 18 bytes long
-						PacketNumber:     0xdecafbad,
-						PacketNumberLen:  protocol.PacketNumberLen4,
-						Version:          0x1020304,
-					}).Write(buf, protocol.PerspectiveServer, versionIETFHeader)
-					Expect(err).To(MatchError("Header: source connection ID must be 8 bytes, is 6"))
-				})
-
 				It("writes a header with an 18 byte connection ID", func() {
 					err := (&Header{
 						IsLongHeader:     true,
@@ -537,7 +522,7 @@ var _ = Describe("Header", func() {
 				data, err := ComposeVersionNegotiation(destConnID, srcConnID, []protocol.VersionNumber{0x12345678, 0x87654321})
 				Expect(err).ToNot(HaveOccurred())
 				b := bytes.NewReader(data)
-				iHdr, err := ParseInvariantHeader(b)
+				iHdr, err := ParseInvariantHeader(b, 4)
 				Expect(err).ToNot(HaveOccurred())
 				hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, versionIETFHeader)
 				Expect(err).ToNot(HaveOccurred())

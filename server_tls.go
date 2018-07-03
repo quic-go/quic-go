@@ -194,11 +194,15 @@ func (s *serverTLS) handleUnpackedInitial(remoteAddr net.Addr, hdr *wire.Header,
 			StreamID: version.CryptoStreamID(),
 			Data:     bc.GetDataForWriting(),
 		}
+		srcConnID, err := protocol.GenerateConnectionID(s.config.ConnectionIDLength)
+		if err != nil {
+			return nil, nil, err
+		}
 		replyHdr := &wire.Header{
 			IsLongHeader:     true,
 			Type:             protocol.PacketTypeRetry,
 			DestConnectionID: hdr.SrcConnectionID,
-			SrcConnectionID:  hdr.DestConnectionID,
+			SrcConnectionID:  srcConnID,
 			PayloadLen:       f.Length(version) + protocol.ByteCount(aead.Overhead()),
 			PacketNumber:     hdr.PacketNumber, // echo the client's packet number
 			PacketNumberLen:  hdr.PacketNumberLen,
@@ -224,7 +228,7 @@ func (s *serverTLS) handleUnpackedInitial(remoteAddr net.Addr, hdr *wire.Header,
 		return nil, nil, fmt.Errorf("Expected mint state to be %s, got %s", mint.StateServerWaitFlight2, tls.State())
 	}
 	params := <-paramsChan
-	connID, err := protocol.GenerateConnectionID()
+	connID, err := protocol.GenerateConnectionID(s.config.ConnectionIDLength)
 	if err != nil {
 		return nil, nil, err
 	}

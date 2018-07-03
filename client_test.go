@@ -81,11 +81,11 @@ var _ = Describe("Client", func() {
 	})
 
 	Context("Dialing", func() {
-		var origGenerateConnectionID func() (protocol.ConnectionID, error)
+		var origGenerateConnectionID func(int) (protocol.ConnectionID, error)
 
 		BeforeEach(func() {
 			origGenerateConnectionID = generateConnectionID
-			generateConnectionID = func() (protocol.ConnectionID, error) {
+			generateConnectionID = func(int) (protocol.ConnectionID, error) {
 				return connID, nil
 			}
 		})
@@ -147,7 +147,7 @@ var _ = Describe("Client", func() {
 
 		It("returns after the handshake is complete", func() {
 			manager := NewMockPacketHandlerManager(mockCtrl)
-			mockMultiplexer.EXPECT().AddConn(packetConn).Return(manager)
+			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any()).Return(manager, nil)
 			mockMultiplexer.EXPECT().AddHandler(packetConn, gomock.Any(), gomock.Any())
 
 			run := make(chan struct{})
@@ -176,7 +176,7 @@ var _ = Describe("Client", func() {
 
 		It("returns an error that occurs while waiting for the connection to become secure", func() {
 			manager := NewMockPacketHandlerManager(mockCtrl)
-			mockMultiplexer.EXPECT().AddConn(packetConn).Return(manager)
+			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any()).Return(manager, nil)
 			mockMultiplexer.EXPECT().AddHandler(packetConn, gomock.Any(), gomock.Any())
 
 			testErr := errors.New("early handshake error")
@@ -203,7 +203,7 @@ var _ = Describe("Client", func() {
 
 		It("closes the session when the context is canceled", func() {
 			manager := NewMockPacketHandlerManager(mockCtrl)
-			mockMultiplexer.EXPECT().AddConn(packetConn).Return(manager)
+			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any()).Return(manager, nil)
 			mockMultiplexer.EXPECT().AddHandler(packetConn, gomock.Any(), gomock.Any())
 
 			sessionRunning := make(chan struct{})
@@ -243,7 +243,7 @@ var _ = Describe("Client", func() {
 		It("removes closed sessions from the multiplexer", func() {
 			manager := NewMockPacketHandlerManager(mockCtrl)
 			manager.EXPECT().Remove(connID)
-			mockMultiplexer.EXPECT().AddConn(packetConn).Return(manager)
+			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any()).Return(manager, nil)
 			mockMultiplexer.EXPECT().AddHandler(packetConn, gomock.Any(), gomock.Any())
 
 			var runner sessionRunner
@@ -279,18 +279,20 @@ var _ = Describe("Client", func() {
 					RequestConnectionIDOmission: true,
 					MaxIncomingStreams:          1234,
 					MaxIncomingUniStreams:       4321,
+					ConnectionIDLength:          13,
 				}
-				c := populateClientConfig(config)
+				c := populateClientConfig(config, false)
 				Expect(c.HandshakeTimeout).To(Equal(1337 * time.Minute))
 				Expect(c.IdleTimeout).To(Equal(42 * time.Hour))
 				Expect(c.RequestConnectionIDOmission).To(BeTrue())
 				Expect(c.MaxIncomingStreams).To(Equal(1234))
 				Expect(c.MaxIncomingUniStreams).To(Equal(4321))
+				Expect(c.ConnectionIDLength).To(Equal(13))
 			})
 
 			It("errors when the Config contains an invalid version", func() {
 				manager := NewMockPacketHandlerManager(mockCtrl)
-				mockMultiplexer.EXPECT().AddConn(packetConn).Return(manager)
+				mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any()).Return(manager, nil)
 
 				version := protocol.VersionNumber(0x1234)
 				_, err := Dial(packetConn, nil, "localhost:1234", &tls.Config{}, &Config{Versions: []protocol.VersionNumber{version}})
@@ -302,7 +304,7 @@ var _ = Describe("Client", func() {
 					MaxIncomingStreams:    -1,
 					MaxIncomingUniStreams: 4321,
 				}
-				c := populateClientConfig(config)
+				c := populateClientConfig(config, false)
 				Expect(c.MaxIncomingStreams).To(BeZero())
 				Expect(c.MaxIncomingUniStreams).To(Equal(4321))
 			})
@@ -312,13 +314,25 @@ var _ = Describe("Client", func() {
 					MaxIncomingStreams:    1234,
 					MaxIncomingUniStreams: -1,
 				}
-				c := populateClientConfig(config)
+				c := populateClientConfig(config, false)
 				Expect(c.MaxIncomingStreams).To(Equal(1234))
 				Expect(c.MaxIncomingUniStreams).To(BeZero())
 			})
 
+			It("uses 0-byte connection IDs when dialing an address", func() {
+				config := &Config{}
+				c := populateClientConfig(config, false)
+				Expect(c.ConnectionIDLength).To(BeZero())
+			})
+
+			It("doesn't use 0-byte connection IDs when dialing an address", func() {
+				config := &Config{}
+				c := populateClientConfig(config, true)
+				Expect(c.ConnectionIDLength).To(Equal(protocol.DefaultConnectionIDLength))
+			})
+
 			It("fills in default values if options are not set in the Config", func() {
-				c := populateClientConfig(&Config{})
+				c := populateClientConfig(&Config{}, false)
 				Expect(c.Versions).To(Equal(protocol.SupportedVersions))
 				Expect(c.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
 				Expect(c.IdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
@@ -329,7 +343,7 @@ var _ = Describe("Client", func() {
 		Context("gQUIC", func() {
 			It("errors if it can't create a session", func() {
 				manager := NewMockPacketHandlerManager(mockCtrl)
-				mockMultiplexer.EXPECT().AddConn(packetConn).Return(manager)
+				mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any()).Return(manager, nil)
 				mockMultiplexer.EXPECT().AddHandler(packetConn, gomock.Any(), gomock.Any())
 
 				testErr := errors.New("error creating session")
@@ -355,7 +369,7 @@ var _ = Describe("Client", func() {
 		Context("IETF QUIC", func() {
 			It("creates new TLS sessions with the right parameters", func() {
 				manager := NewMockPacketHandlerManager(mockCtrl)
-				mockMultiplexer.EXPECT().AddConn(packetConn).Return(manager)
+				mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any()).Return(manager, nil)
 				mockMultiplexer.EXPECT().AddHandler(packetConn, gomock.Any(), gomock.Any())
 
 				config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}}
@@ -411,7 +425,7 @@ var _ = Describe("Client", func() {
 
 			It("returns an error that occurs during version negotiation", func() {
 				manager := NewMockPacketHandlerManager(mockCtrl)
-				mockMultiplexer.EXPECT().AddConn(packetConn).Return(manager)
+				mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any()).Return(manager, nil)
 				mockMultiplexer.EXPECT().AddHandler(packetConn, gomock.Any(), gomock.Any())
 
 				testErr := errors.New("early handshake error")
@@ -568,6 +582,7 @@ var _ = Describe("Client", func() {
 			})
 
 			It("drops version negotiation packets that contain the offered version", func() {
+				cl.config = &Config{}
 				ver := cl.version
 				cl.handleRead(nil, wire.ComposeGQUICVersionNegotiation(connID, []protocol.VersionNumber{ver}))
 				Expect(cl.version).To(Equal(ver))
@@ -581,6 +596,7 @@ var _ = Describe("Client", func() {
 	})
 
 	It("ignores packets with an invalid public header", func() {
+		cl.config = &Config{}
 		cl.session = NewMockQuicSession(mockCtrl) // don't EXPECT any handlePacket calls
 		cl.handleRead(addr, []byte("invalid packet"))
 	})
@@ -682,7 +698,7 @@ var _ = Describe("Client", func() {
 
 	It("creates new gQUIC sessions with the right parameters", func() {
 		manager := NewMockPacketHandlerManager(mockCtrl)
-		mockMultiplexer.EXPECT().AddConn(packetConn).Return(manager)
+		mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any()).Return(manager, nil)
 		mockMultiplexer.EXPECT().AddHandler(packetConn, gomock.Any(), gomock.Any())
 
 		config := &Config{Versions: protocol.SupportedVersions}
@@ -723,7 +739,7 @@ var _ = Describe("Client", func() {
 
 	It("creates a new session when the server performs a retry", func() {
 		manager := NewMockPacketHandlerManager(mockCtrl)
-		mockMultiplexer.EXPECT().AddConn(packetConn).Return(manager)
+		mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any()).Return(manager, nil)
 		mockMultiplexer.EXPECT().AddHandler(packetConn, gomock.Any(), gomock.Any())
 
 		config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}}
@@ -757,7 +773,7 @@ var _ = Describe("Client", func() {
 
 	It("only accepts one Retry packet", func() {
 		manager := NewMockPacketHandlerManager(mockCtrl)
-		mockMultiplexer.EXPECT().AddConn(packetConn).Return(manager)
+		mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any()).Return(manager, nil)
 		mockMultiplexer.EXPECT().AddHandler(packetConn, gomock.Any(), gomock.Any())
 
 		config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}}
@@ -866,7 +882,7 @@ var _ = Describe("Client", func() {
 
 			pr = wire.WritePublicReset(cl.destConnID, 1, 0)
 			r := bytes.NewReader(pr)
-			iHdr, err := wire.ParseInvariantHeader(r)
+			iHdr, err := wire.ParseInvariantHeader(r, 0)
 			Expect(err).ToNot(HaveOccurred())
 			hdr, err = iHdr.Parse(r, protocol.PerspectiveServer, versionGQUICFrames)
 			Expect(err).ToNot(HaveOccurred())

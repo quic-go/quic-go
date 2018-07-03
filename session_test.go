@@ -1769,7 +1769,7 @@ var _ = Describe("Client Session", func() {
 			protocol.Version39,
 			protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
 			nil,
-			populateClientConfig(&Config{}),
+			populateClientConfig(&Config{}, false),
 			protocol.VersionWhatever,
 			nil,
 			utils.DefaultLogger,
@@ -1823,7 +1823,7 @@ var _ = Describe("Client Session", func() {
 		sess.queueControlFrame(&wire.PingFrame{})
 		var packet []byte
 		Eventually(mconn.written).Should(Receive(&packet))
-		hdr, err := wire.ParseInvariantHeader(bytes.NewReader(packet))
+		hdr, err := wire.ParseInvariantHeader(bytes.NewReader(packet), 0)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.DestConnectionID).To(Equal(protocol.ConnectionID{1, 3, 3, 7, 1, 3, 3, 7}))
 		// make sure the go routine returns

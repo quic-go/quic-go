@@ -165,6 +165,13 @@ type Config struct {
 	// This saves 8 bytes in the Public Header in every packet. However, if the IP address of the server changes, the connection cannot be migrated.
 	// Currently only valid for the client.
 	RequestConnectionIDOmission bool
+	// The length of the connection ID in bytes. Only valid for IETF QUIC.
+	// It can be 0, or any value between 4 and 18.
+	// If not set, the interpretation depends on where the Config is used:
+	// If used for dialing an address, a 0 byte connection ID will be used.
+	// If used for a server, or dialing on a packet conn, a 4 byte connection ID will be used.
+	// When dialing on a packet conn, the ConnectionIDLength value must be the same for every Dial call.
+	ConnectionIDLength int
 	// HandshakeTimeout is the maximum duration that the cryptographic handshake may take.
 	// If the timeout is exceeded, the connection is closed.
 	// If this value is zero, the timeout is set to 10 seconds.

@@ -10,13 +10,26 @@ import (
 // A ConnectionID in QUIC
 type ConnectionID []byte
 
+const maxConnectionIDLen = 18
+
 // GenerateConnectionID generates a connection ID using cryptographic random
-func GenerateConnectionID() (ConnectionID, error) {
-	b := make([]byte, ConnectionIDLen)
+func GenerateConnectionID(len int) (ConnectionID, error) {
+	b := make([]byte, len)
 	if _, err := rand.Read(b); err != nil {
 		return nil, err
 	}
 	return ConnectionID(b), nil
+}
+
+// GenerateDestinationConnectionID generates a connection ID for the Initial packet.
+// It uses a length randomly chosen between 8 and 18 bytes.
+func GenerateDestinationConnectionID() (ConnectionID, error) {
+	r := make([]byte, 1)
+	if _, err := rand.Read(r); err != nil {
+		return nil, err
+	}
+	len := MinConnectionIDLenInitial + int(r[0])%(maxConnectionIDLen-MinConnectionIDLenInitial+1)
+	return GenerateConnectionID(len)
 }
 
 // ReadConnectionID reads a connection ID of length len from the given io.Reader.

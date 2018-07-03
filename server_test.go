@@ -48,6 +48,7 @@ var _ = Describe("Server", func() {
 				RequestConnectionIDOmission: true,
 				MaxIncomingStreams:          1234,
 				MaxIncomingUniStreams:       4321,
+				ConnectionIDLength:          12,
 			}
 			c := populateServerConfig(config)
 			Expect(c.HandshakeTimeout).To(Equal(1337 * time.Minute))
@@ -55,6 +56,7 @@ var _ = Describe("Server", func() {
 			Expect(c.RequestConnectionIDOmission).To(BeFalse())
 			Expect(c.MaxIncomingStreams).To(Equal(1234))
 			Expect(c.MaxIncomingUniStreams).To(Equal(4321))
+			Expect(c.ConnectionIDLength).To(Equal(12))
 		})
 
 		It("disables bidirectional streams", func() {
@@ -75,6 +77,12 @@ var _ = Describe("Server", func() {
 			c := populateServerConfig(config)
 			Expect(c.MaxIncomingStreams).To(Equal(1234))
 			Expect(c.MaxIncomingUniStreams).To(BeZero())
+		})
+
+		It("doesn't use 0-byte connection IDs", func() {
+			config := &Config{}
+			c := populateClientConfig(config, true)
+			Expect(c.ConnectionIDLength).To(Equal(protocol.DefaultConnectionIDLength))
 		})
 	})
 
@@ -500,7 +508,7 @@ var _ = Describe("Server", func() {
 		Eventually(func() int { return conn.dataWritten.Len() }).ShouldNot(BeZero())
 		Expect(conn.dataWrittenTo).To(Equal(udpAddr))
 		r := bytes.NewReader(conn.dataWritten.Bytes())
-		iHdr, err := wire.ParseInvariantHeader(r)
+		iHdr, err := wire.ParseInvariantHeader(r, 0)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(iHdr.IsLongHeader).To(BeFalse())
 		replyHdr, err := iHdr.Parse(r, protocol.PerspectiveServer, versionIETFFrames)
@@ -546,7 +554,7 @@ var _ = Describe("Server", func() {
 		Eventually(func() int { return conn.dataWritten.Len() }).ShouldNot(BeZero())
 		Expect(conn.dataWrittenTo).To(Equal(udpAddr))
 		r := bytes.NewReader(conn.dataWritten.Bytes())
-		iHdr, err := wire.ParseInvariantHeader(r)
+		iHdr, err := wire.ParseInvariantHeader(r, 0)
 		Expect(err).ToNot(HaveOccurred())
 		replyHdr, err := iHdr.Parse(r, protocol.PerspectiveServer, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())

@@ -22,13 +22,13 @@ var _ = Describe("Header Parsing", func() {
 
 		Context("Version Negotiation Packets", func() {
 			It("parses", func() {
-				srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-				destConnID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
+				srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
+				destConnID := protocol.ConnectionID{9, 8, 7, 6, 5, 4, 3, 2, 1}
 				versions := []protocol.VersionNumber{0x22334455, 0x33445566}
 				data, err := ComposeVersionNegotiation(destConnID, srcConnID, versions)
 				Expect(err).ToNot(HaveOccurred())
 				b := bytes.NewReader(data)
-				iHdr, err := ParseInvariantHeader(b)
+				iHdr, err := ParseInvariantHeader(b, 0)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(iHdr.DestConnectionID).To(Equal(destConnID))
 				Expect(iHdr.SrcConnectionID).To(Equal(srcConnID))
@@ -50,7 +50,7 @@ var _ = Describe("Header Parsing", func() {
 				data, err := ComposeVersionNegotiation(connID, connID, versions)
 				Expect(err).ToNot(HaveOccurred())
 				b := bytes.NewReader(data[:len(data)-2])
-				iHdr, err := ParseInvariantHeader(b)
+				iHdr, err := ParseInvariantHeader(b, 0)
 				Expect(err).ToNot(HaveOccurred())
 				_, err = iHdr.Parse(b, protocol.PerspectiveServer, versionIETFFrames)
 				Expect(err).To(MatchError(qerr.InvalidVersionNegotiationPacket))
@@ -63,7 +63,7 @@ var _ = Describe("Header Parsing", func() {
 				Expect(err).ToNot(HaveOccurred())
 				// remove 8 bytes (two versions), since ComposeVersionNegotiation also added a reserved version number
 				b := bytes.NewReader(data[:len(data)-8])
-				iHdr, err := ParseInvariantHeader(b)
+				iHdr, err := ParseInvariantHeader(b, 0)
 				Expect(err).ToNot(HaveOccurred())
 				_, err = iHdr.Parse(b, protocol.PerspectiveServer, versionIETFFrames)
 				Expect(err).To(MatchError("InvalidVersionNegotiationPacket: empty version list"))
@@ -71,13 +71,13 @@ var _ = Describe("Header Parsing", func() {
 		})
 
 		Context("Long Headers", func() {
-			It("parses a long header", func() {
-				destConnID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}
-				srcConnID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x42, 0x42}
+			It("parses a Long Header", func() {
+				destConnID := protocol.ConnectionID{9, 8, 7, 6, 5, 4, 3, 2, 1}
+				srcConnID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
 				data := []byte{
 					0x80 ^ uint8(protocol.PacketTypeInitial),
 					0x1, 0x2, 0x3, 0x4, // version number
-					0x55, // connection ID lengths
+					0x61, // connection ID lengths
 				}
 				data = append(data, destConnID...)
 				data = append(data, srcConnID...)
@@ -86,7 +86,7 @@ var _ = Describe("Header Parsing", func() {
 				data = appendPacketNumber(data, 0xbeef, protocol.PacketNumberLen4)
 
 				b := bytes.NewReader(data)
-				iHdr, err := ParseInvariantHeader(b)
+				iHdr, err := ParseInvariantHeader(b, 0)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(iHdr.IsLongHeader).To(BeTrue())
 				Expect(iHdr.DestConnectionID).To(Equal(destConnID))
@@ -105,7 +105,7 @@ var _ = Describe("Header Parsing", func() {
 				Expect(b.Len()).To(BeZero())
 			})
 
-			It("parses a long header without a destination connection ID", func() {
+			It("parses a Long Header without a destination connection ID", func() {
 				data := []byte{
 					0x80 ^ uint8(protocol.PacketTypeInitial),
 					0x1, 0x2, 0x3, 0x4, // version number
@@ -115,13 +115,13 @@ var _ = Describe("Header Parsing", func() {
 				data = append(data, encodeVarInt(0x42)...) // payload length
 				data = append(data, []byte{0xde, 0xca, 0xfb, 0xad}...)
 				b := bytes.NewReader(data)
-				iHdr, err := ParseInvariantHeader(b)
+				iHdr, err := ParseInvariantHeader(b, 0)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(iHdr.SrcConnectionID).To(Equal(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}))
 				Expect(iHdr.DestConnectionID).To(BeEmpty())
 			})
 
-			It("parses a long header without a source connection ID", func() {
+			It("parses a Long Header without a source connection ID", func() {
 				data := []byte{
 					0x80 ^ uint8(protocol.PacketTypeInitial),
 					0x1, 0x2, 0x3, 0x4, // version number
@@ -131,13 +131,13 @@ var _ = Describe("Header Parsing", func() {
 				data = append(data, encodeVarInt(0x42)...) // payload length
 				data = append(data, []byte{0xde, 0xca, 0xfb, 0xad}...)
 				b := bytes.NewReader(data)
-				iHdr, err := ParseInvariantHeader(b)
+				iHdr, err := ParseInvariantHeader(b, 0)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(iHdr.SrcConnectionID).To(BeEmpty())
 				Expect(iHdr.DestConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
 			})
 
-			It("parses a long header with a 2 byte packet number", func() {
+			It("parses a Long Header with a 2 byte packet number", func() {
 				data := []byte{
 					0x80 ^ uint8(protocol.PacketTypeInitial),
 					0x1, 0x2, 0x3, 0x4, // version number
@@ -146,7 +146,7 @@ var _ = Describe("Header Parsing", func() {
 				data = append(data, encodeVarInt(0x42)...) // payload length
 				data = appendPacketNumber(data, 0x123, protocol.PacketNumberLen2)
 				b := bytes.NewReader(data)
-				iHdr, err := ParseInvariantHeader(b)
+				iHdr, err := ParseInvariantHeader(b, 0)
 				Expect(err).ToNot(HaveOccurred())
 				hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, versionIETFHeader)
 				Expect(err).ToNot(HaveOccurred())
@@ -167,7 +167,7 @@ var _ = Describe("Header Parsing", func() {
 				}).Write(buf, protocol.PerspectiveClient, protocol.VersionTLS)
 				Expect(err).ToNot(HaveOccurred())
 				b := bytes.NewReader(buf.Bytes())
-				iHdr, err := ParseInvariantHeader(b)
+				iHdr, err := ParseInvariantHeader(b, 0)
 				Expect(err).ToNot(HaveOccurred())
 				_, err = iHdr.Parse(b, protocol.PerspectiveClient, versionIETFHeader)
 				Expect(err).To(MatchError("InvalidPacketHeader: Received packet with invalid packet type: 42"))
@@ -182,7 +182,7 @@ var _ = Describe("Header Parsing", func() {
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // source connection ID
 				}
 				for i := 0; i < len(data); i++ {
-					_, err := ParseInvariantHeader(bytes.NewReader(data[:i]))
+					_, err := ParseInvariantHeader(bytes.NewReader(data[:i]), 0)
 					Expect(err).To(Equal(io.EOF))
 				}
 			})
@@ -198,7 +198,7 @@ var _ = Describe("Header Parsing", func() {
 				data = appendPacketNumber(data, 0xdeadbeef, protocol.PacketNumberLen4)
 				for i := iHdrLen; i < len(data); i++ {
 					b := bytes.NewReader(data[:i])
-					iHdr, err := ParseInvariantHeader(b)
+					iHdr, err := ParseInvariantHeader(b, 0)
 					Expect(err).ToNot(HaveOccurred())
 					_, err = iHdr.Parse(b, protocol.PerspectiveServer, versionIETFHeader)
 					Expect(err).To(Equal(io.EOF))
@@ -207,12 +207,12 @@ var _ = Describe("Header Parsing", func() {
 		})
 
 		Context("Short Headers", func() {
-			It("reads a short header with a connection ID", func() {
+			It("reads a Short Header with a 8 byte connection ID", func() {
 				connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}
 				data := append([]byte{0x30}, connID...)
 				data = appendPacketNumber(data, 0x42, protocol.PacketNumberLen1)
 				b := bytes.NewReader(data)
-				iHdr, err := ParseInvariantHeader(b)
+				iHdr, err := ParseInvariantHeader(b, 8)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(iHdr.IsLongHeader).To(BeFalse())
 				Expect(iHdr.DestConnectionID).To(Equal(connID))
@@ -226,14 +226,31 @@ var _ = Describe("Header Parsing", func() {
 				Expect(b.Len()).To(BeZero())
 			})
 
+			It("reads a Short Header with a 5 byte connection ID", func() {
+				connID := protocol.ConnectionID{1, 2, 3, 4, 5}
+				data := append([]byte{0x30}, connID...)
+				data = appendPacketNumber(data, 0x42, protocol.PacketNumberLen1)
+				b := bytes.NewReader(data)
+				iHdr, err := ParseInvariantHeader(b, 5)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(iHdr.IsLongHeader).To(BeFalse())
+				Expect(iHdr.DestConnectionID).To(Equal(connID))
+				hdr, err := iHdr.Parse(b, protocol.PerspectiveClient, versionIETFHeader)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(hdr.KeyPhase).To(Equal(0))
+				Expect(hdr.DestConnectionID).To(Equal(connID))
+				Expect(hdr.SrcConnectionID).To(BeEmpty())
+				Expect(b.Len()).To(BeZero())
+			})
+
 			It("reads the Key Phase Bit", func() {
 				data := []byte{
 					0x30 ^ 0x40,
-					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
+					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, // connection ID
 				}
 				data = appendPacketNumber(data, 11, protocol.PacketNumberLen1)
 				b := bytes.NewReader(data)
-				iHdr, err := ParseInvariantHeader(b)
+				iHdr, err := ParseInvariantHeader(b, 6)
 				Expect(err).ToNot(HaveOccurred())
 				hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, versionIETFHeader)
 				Expect(err).ToNot(HaveOccurred())
@@ -245,11 +262,11 @@ var _ = Describe("Header Parsing", func() {
 			It("reads a header with a 2 byte packet number", func() {
 				data := []byte{
 					0x30 ^ 0x40 ^ 0x1,
-					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
+					0xde, 0xad, 0xbe, 0xef, // connection ID
 				}
 				data = appendPacketNumber(data, 0x1337, protocol.PacketNumberLen2)
 				b := bytes.NewReader(data)
-				iHdr, err := ParseInvariantHeader(b)
+				iHdr, err := ParseInvariantHeader(b, 4)
 				Expect(err).ToNot(HaveOccurred())
 				hdr, err := iHdr.Parse(b, protocol.PerspectiveClient, versionIETFHeader)
 				Expect(err).ToNot(HaveOccurred())
@@ -262,11 +279,11 @@ var _ = Describe("Header Parsing", func() {
 			It("reads a header with a 4 byte packet number", func() {
 				data := []byte{
 					0x30 ^ 0x40 ^ 0x2,
-					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
+					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x1, 0x2, 0x3, 0x4, // connection ID
 				}
 				data = appendPacketNumber(data, 0x99beef, protocol.PacketNumberLen4)
 				b := bytes.NewReader(data)
-				iHdr, err := ParseInvariantHeader(b)
+				iHdr, err := ParseInvariantHeader(b, 10)
 				Expect(err).ToNot(HaveOccurred())
 				hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, versionIETFHeader)
 				Expect(err).ToNot(HaveOccurred())
@@ -282,7 +299,7 @@ var _ = Describe("Header Parsing", func() {
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
 				}
 				for i := 0; i < len(data); i++ {
-					_, err := ParseInvariantHeader(bytes.NewReader(data[:i]))
+					_, err := ParseInvariantHeader(bytes.NewReader(data[:i]), 8)
 					Expect(err).To(Equal(io.EOF))
 				}
 			})
@@ -290,13 +307,13 @@ var _ = Describe("Header Parsing", func() {
 			It("errors on EOF, when parsing the invariant header", func() {
 				data := []byte{
 					0x30 ^ 0x2,
-					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
+					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, // connection ID
 				}
 				iHdrLen := len(data)
 				data = appendPacketNumber(data, 0xdeadbeef, protocol.PacketNumberLen4)
 				for i := iHdrLen; i < len(data); i++ {
 					b := bytes.NewReader(data[:i])
-					iHdr, err := ParseInvariantHeader(b)
+					iHdr, err := ParseInvariantHeader(b, 6)
 					Expect(err).ToNot(HaveOccurred())
 					_, err = iHdr.Parse(b, protocol.PerspectiveClient, versionIETFHeader)
 					Expect(err).To(Equal(io.EOF))
@@ -307,10 +324,14 @@ var _ = Describe("Header Parsing", func() {
 
 	Context("Public Header", func() {
 		It("accepts a sample client header", func() {
-			ver := make([]byte, 4)
-			binary.BigEndian.PutUint32(ver, uint32(protocol.SupportedVersions[0]))
-			b := bytes.NewReader(append(append([]byte{0x09, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6}, ver...), 0x01))
-			iHdr, err := ParseInvariantHeader(b)
+			data := []byte{
+				0x9,
+				0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6,
+			}
+			data = append(data, []byte{0xde, 0xad, 0xbe, 0xef}...)
+			data = append(data, 0x1) // packet number
+			b := bytes.NewReader(data)
+			iHdr, err := ParseInvariantHeader(b, 0)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(iHdr.IsLongHeader).To(BeFalse())
 			hdr, err := iHdr.Parse(b, protocol.PerspectiveClient, versionPublicHeader)
@@ -321,7 +342,7 @@ var _ = Describe("Header Parsing", func() {
 			connID := protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6}
 			Expect(hdr.DestConnectionID).To(Equal(connID))
 			Expect(hdr.SrcConnectionID).To(BeEmpty())
-			Expect(hdr.Version).To(Equal(protocol.SupportedVersions[0]))
+			Expect(hdr.Version).To(Equal(protocol.VersionNumber(0xdeadbeef)))
 			Expect(hdr.SupportedVersions).To(BeEmpty())
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(1)))
 			Expect(b.Len()).To(BeZero())
@@ -329,7 +350,7 @@ var _ = Describe("Header Parsing", func() {
 
 		It("accepts an omitted connection ID", func() {
 			b := bytes.NewReader([]byte{0x0, 0x1})
-			iHdr, err := ParseInvariantHeader(b)
+			iHdr, err := ParseInvariantHeader(b, 8)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(iHdr.IsLongHeader).To(BeFalse())
 			Expect(iHdr.DestConnectionID).To(BeEmpty())
@@ -342,7 +363,7 @@ var _ = Describe("Header Parsing", func() {
 
 		It("parses a PUBLIC_RESET packet", func() {
 			b := bytes.NewReader([]byte{0xa, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8})
-			iHdr, err := ParseInvariantHeader(b)
+			iHdr, err := ParseInvariantHeader(b, 4)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(iHdr.IsLongHeader).To(BeFalse())
 			hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, versionPublicHeader)
@@ -359,7 +380,7 @@ var _ = Describe("Header Parsing", func() {
 			divNonce := []byte{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f}
 			Expect(divNonce).To(HaveLen(32))
 			b := bytes.NewReader(append(append([]byte{0x0c, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c}, divNonce...), 0x37))
-			iHdr, err := ParseInvariantHeader(b)
+			iHdr, err := ParseInvariantHeader(b, 7)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(iHdr.IsLongHeader).To(BeFalse())
 			hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, versionPublicHeader)
@@ -380,7 +401,7 @@ var _ = Describe("Header Parsing", func() {
 			data = append(data, []byte{0x13, 37}...)            // packet number
 			for i := iHdrLen; i < len(data); i++ {
 				b := bytes.NewReader(data[:i])
-				iHdr, err := ParseInvariantHeader(b)
+				iHdr, err := ParseInvariantHeader(b, 5)
 				Expect(err).ToNot(HaveOccurred())
 				_, err = iHdr.Parse(b, protocol.PerspectiveServer, versionPublicHeader)
 				Expect(err).To(Equal(io.EOF))
@@ -398,7 +419,7 @@ var _ = Describe("Header Parsing", func() {
 				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 				versions := []protocol.VersionNumber{0x13, 0x37}
 				b := bytes.NewReader(ComposeGQUICVersionNegotiation(connID, versions))
-				iHdr, err := ParseInvariantHeader(b)
+				iHdr, err := ParseInvariantHeader(b, 6)
 				Expect(err).ToNot(HaveOccurred())
 				hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, versionPublicHeader)
 				Expect(err).ToNot(HaveOccurred())
@@ -416,7 +437,7 @@ var _ = Describe("Header Parsing", func() {
 
 			It("errors if it doesn't contain any versions", func() {
 				b := bytes.NewReader([]byte{0x9, 0xf6, 0x19, 0x86, 0x66, 0x9b, 0x9f, 0xfa, 0x4c})
-				iHdr, err := ParseInvariantHeader(b)
+				iHdr, err := ParseInvariantHeader(b, 4)
 				Expect(err).ToNot(HaveOccurred())
 				_, err = iHdr.Parse(b, protocol.PerspectiveServer, versionPublicHeader)
 				Expect(err).To(MatchError("InvalidVersionNegotiationPacket: empty version list"))
@@ -428,7 +449,7 @@ var _ = Describe("Header Parsing", func() {
 				data = appendVersion(data, protocol.SupportedVersions[0])
 				data = appendVersion(data, 99) // unsupported version
 				b := bytes.NewReader(data)
-				iHdr, err := ParseInvariantHeader(b)
+				iHdr, err := ParseInvariantHeader(b, 0)
 				Expect(err).ToNot(HaveOccurred())
 				hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, versionPublicHeader)
 				Expect(err).ToNot(HaveOccurred())
@@ -442,7 +463,7 @@ var _ = Describe("Header Parsing", func() {
 				data := ComposeGQUICVersionNegotiation(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}, protocol.SupportedVersions)
 				data = append(data, []byte{0x13, 0x37}...)
 				b := bytes.NewReader(data)
-				iHdr, err := ParseInvariantHeader(b)
+				iHdr, err := ParseInvariantHeader(b, 0)
 				Expect(err).ToNot(HaveOccurred())
 				_, err = iHdr.Parse(b, protocol.PerspectiveServer, versionPublicHeader)
 				Expect(err).To(MatchError(qerr.InvalidVersionNegotiationPacket))
@@ -452,7 +473,7 @@ var _ = Describe("Header Parsing", func() {
 		Context("Packet Number lengths", func() {
 			It("accepts 1-byte packet numbers", func() {
 				b := bytes.NewReader([]byte{0x08, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0xde})
-				iHdr, err := ParseInvariantHeader(b)
+				iHdr, err := ParseInvariantHeader(b, 0)
 				Expect(err).ToNot(HaveOccurred())
 				hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, versionPublicHeader)
 				Expect(err).ToNot(HaveOccurred())
@@ -463,7 +484,7 @@ var _ = Describe("Header Parsing", func() {
 
 			It("accepts 2-byte packet numbers", func() {
 				b := bytes.NewReader([]byte{0x18, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0xde, 0xca})
-				iHdr, err := ParseInvariantHeader(b)
+				iHdr, err := ParseInvariantHeader(b, 0)
 				Expect(err).ToNot(HaveOccurred())
 				hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, versionPublicHeader)
 				Expect(err).ToNot(HaveOccurred())
@@ -474,7 +495,7 @@ var _ = Describe("Header Parsing", func() {
 
 			It("accepts 4-byte packet numbers", func() {
 				b := bytes.NewReader([]byte{0x28, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0xad, 0xfb, 0xca, 0xde})
-				iHdr, err := ParseInvariantHeader(b)
+				iHdr, err := ParseInvariantHeader(b, 0)
 				Expect(err).ToNot(HaveOccurred())
 				hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, versionPublicHeader)
 				Expect(err).ToNot(HaveOccurred())

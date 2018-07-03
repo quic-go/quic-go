@@ -36,15 +36,16 @@ func (m *MockMultiplexer) EXPECT() *MockMultiplexerMockRecorder {
 }
 
 // AddConn mocks base method
-func (m *MockMultiplexer) AddConn(arg0 net.PacketConn) packetHandlerManager {
-	ret := m.ctrl.Call(m, "AddConn", arg0)
+func (m *MockMultiplexer) AddConn(arg0 net.PacketConn, arg1 int) (packetHandlerManager, error) {
+	ret := m.ctrl.Call(m, "AddConn", arg0, arg1)
 	ret0, _ := ret[0].(packetHandlerManager)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // AddConn indicates an expected call of AddConn
-func (mr *MockMultiplexerMockRecorder) AddConn(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddConn", reflect.TypeOf((*MockMultiplexer)(nil).AddConn), arg0)
+func (mr *MockMultiplexerMockRecorder) AddConn(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddConn", reflect.TypeOf((*MockMultiplexer)(nil).AddConn), arg0, arg1)
 }
 
 // AddHandler mocks base method
