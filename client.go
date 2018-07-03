@@ -41,6 +41,7 @@ type client struct {
 	version        protocol.VersionNumber
 
 	handshakeChan chan struct{}
+	closeCallback func(protocol.ConnectionID)
 
 	session quicSession
 
@@ -81,7 +82,7 @@ func DialAddrContext(
 	if err != nil {
 		return nil, err
 	}
-	c, err := newClient(udpConn, udpAddr, config, tlsConf, addr)
+	c, err := newClient(udpConn, udpAddr, config, tlsConf, addr, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -114,18 +115,29 @@ func DialContext(
 	tlsConf *tls.Config,
 	config *Config,
 ) (Session, error) {
-	c, err := newClient(pconn, remoteAddr, config, tlsConf, host)
+	multiplexer := getClientMultiplexer()
+	manager := multiplexer.AddConn(pconn)
+	c, err := newClient(pconn, remoteAddr, config, tlsConf, host, manager.Remove)
 	if err != nil {
 		return nil, err
 	}
-	getClientMultiplexer().Add(pconn, c.srcConnID, c)
+	if err := multiplexer.AddHandler(pconn, c.srcConnID, c); err != nil {
+		return nil, err
+	}
 	if err := c.dial(ctx); err != nil {
 		return nil, err
 	}
 	return c.session, nil
 }
 
-func newClient(pconn net.PacketConn, remoteAddr net.Addr, config *Config, tlsConf *tls.Config, host string) (*client, error) {
+func newClient(
+	pconn net.PacketConn,
+	remoteAddr net.Addr,
+	config *Config,
+	tlsConf *tls.Config,
+	host string,
+	closeCallback func(protocol.ConnectionID),
+) (*client, error) {
 	clientConfig := populateClientConfig(config)
 	version := clientConfig.Versions[0]
 	srcConnID, err := generateConnectionID()
@@ -159,6 +171,10 @@ func newClient(pconn net.PacketConn, remoteAddr net.Addr, config *Config, tlsCon
 			}
 		}
 	}
+	onClose := func(protocol.ConnectionID) {}
+	if closeCallback != nil {
+		onClose = closeCallback
+	}
 	return &client{
 		conn:          &conn{pconn: pconn, currentAddr: remoteAddr},
 		srcConnID:     srcConnID,
@@ -168,6 +184,7 @@ func newClient(pconn net.PacketConn, remoteAddr net.Addr, config *Config, tlsCon
 		config:        clientConfig,
 		version:       version,
 		handshakeChan: make(chan struct{}),
+		closeCallback: onClose,
 		logger:        utils.DefaultLogger.WithPrefix("client"),
 	}, nil
 }
@@ -508,7 +525,7 @@ func (c *client) createNewGQUICSession() (err error) {
 	defer c.mutex.Unlock()
 	runner := &runner{
 		onHandshakeCompleteImpl: func(_ Session) { close(c.handshakeChan) },
-		removeConnectionIDImpl:  func(protocol.ConnectionID) {},
+		removeConnectionIDImpl:  c.closeCallback,
 	}
 	c.session, err = newClientSession(
 		c.conn,
@@ -533,7 +550,7 @@ func (c *client) createNewTLSSession(
 	defer c.mutex.Unlock()
 	runner := &runner{
 		onHandshakeCompleteImpl: func(_ Session) { close(c.handshakeChan) },
-		removeConnectionIDImpl:  func(protocol.ConnectionID) {},
+		removeConnectionIDImpl:  c.closeCallback,
 	}
 	c.session, err = newTLSClientSession(
 		c.conn,

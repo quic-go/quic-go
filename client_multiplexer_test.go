@@ -27,18 +27,26 @@ var _ = Describe("Client Multiplexer", func() {
 	It("adds a new packet conn and handles packets", func() {
 		conn := newMockPacketConn()
 		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-		conn.dataToRead <- getPacket(connID)
 		packetHandler := NewMockQuicSession(mockCtrl)
 		handledPacket := make(chan struct{})
 		packetHandler.EXPECT().handlePacket(gomock.Any()).Do(func(_ *receivedPacket) {
 			close(handledPacket)
 		})
 		packetHandler.EXPECT().GetVersion()
-		getClientMultiplexer().Add(conn, connID, packetHandler)
+		getClientMultiplexer().AddConn(conn)
+		err := getClientMultiplexer().AddHandler(conn, connID, packetHandler)
+		Expect(err).ToNot(HaveOccurred())
+		conn.dataToRead <- getPacket(connID)
 		Eventually(handledPacket).Should(BeClosed())
 		// makes the listen go routine return
 		packetHandler.EXPECT().Close(gomock.Any()).AnyTimes()
 		close(conn.dataToRead)
+	})
+
+	It("errors when adding a handler for an unknown conn", func() {
+		conn := newMockPacketConn()
+		err := getClientMultiplexer().AddHandler(conn, protocol.ConnectionID{1, 2, 3, 4}, NewMockQuicSession(mockCtrl))
+		Expect(err).ToNot(MatchError("unknown packet conn"))
 	})
 
 	It("handles packets for different packet handlers on the same packet conn", func() {
@@ -59,8 +67,9 @@ var _ = Describe("Client Multiplexer", func() {
 			close(handledPacket2)
 		})
 		packetHandler2.EXPECT().GetVersion()
-		getClientMultiplexer().Add(conn, connID1, packetHandler1)
-		getClientMultiplexer().Add(conn, connID2, packetHandler2)
+		getClientMultiplexer().AddConn(conn)
+		Expect(getClientMultiplexer().AddHandler(conn, connID1, packetHandler1)).To(Succeed())
+		Expect(getClientMultiplexer().AddHandler(conn, connID2, packetHandler2)).To(Succeed())
 
 		conn.dataToRead <- getPacket(connID1)
 		conn.dataToRead <- getPacket(connID2)
@@ -78,9 +87,30 @@ var _ = Describe("Client Multiplexer", func() {
 		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 		conn.dataToRead <- []byte("invalid header")
 		packetHandler := NewMockQuicSession(mockCtrl)
-		getClientMultiplexer().Add(conn, connID, packetHandler)
+		getClientMultiplexer().AddConn(conn)
+		Expect(getClientMultiplexer().AddHandler(conn, connID, packetHandler)).To(Succeed())
 		time.Sleep(100 * time.Millisecond) // give the listen go routine some time to process the packet
 		packetHandler.EXPECT().Close(gomock.Any()).AnyTimes()
+		close(conn.dataToRead)
+	})
+
+	It("ignores packets arriving late for closed sessions", func() {
+		manager := NewMockPacketHandlerManager(mockCtrl)
+		origNewPacketHandlerManager := getClientMultiplexer().(*clientMultiplexer).newPacketHandlerManager
+		defer func() {
+			getClientMultiplexer().(*clientMultiplexer).newPacketHandlerManager = origNewPacketHandlerManager
+		}()
+		getClientMultiplexer().(*clientMultiplexer).newPacketHandlerManager = func() packetHandlerManager { return manager }
+
+		conn := newMockPacketConn()
+		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+		done := make(chan struct{})
+		manager.EXPECT().Get(connID).Do(func(protocol.ConnectionID) { close(done) }).Return(nil, true)
+		getClientMultiplexer().AddConn(conn)
+		conn.dataToRead <- getPacket(connID)
+		Eventually(done).Should(BeClosed())
+		// makes the listen go routine return
+		manager.EXPECT().Close(gomock.Any()).AnyTimes()
 		close(conn.dataToRead)
 	})
 
@@ -88,7 +118,8 @@ var _ = Describe("Client Multiplexer", func() {
 		conn := newMockPacketConn()
 		conn.dataToRead <- getPacket(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8})
 		packetHandler := NewMockQuicSession(mockCtrl)
-		getClientMultiplexer().Add(conn, protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}, packetHandler)
+		getClientMultiplexer().AddConn(conn)
+		Expect(getClientMultiplexer().AddHandler(conn, protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}, packetHandler)).To(Succeed())
 		time.Sleep(100 * time.Millisecond) // give the listen go routine some time to process the packet
 		// makes the listen go routine return
 		packetHandler.EXPECT().Close(gomock.Any()).AnyTimes()
@@ -104,7 +135,8 @@ var _ = Describe("Client Multiplexer", func() {
 		packetHandler.EXPECT().Close(testErr).Do(func(error) {
 			close(done)
 		})
-		getClientMultiplexer().Add(conn, protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}, packetHandler)
+		getClientMultiplexer().AddConn(conn)
+		Expect(getClientMultiplexer().AddHandler(conn, protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}, packetHandler)).To(Succeed())
 		Eventually(done).Should(BeClosed())
 	})
 })
