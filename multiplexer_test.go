@@ -33,8 +33,8 @@ var _ = Describe("Client Multiplexer", func() {
 			close(handledPacket)
 		})
 		packetHandler.EXPECT().GetVersion()
-		getClientMultiplexer().AddConn(conn, 8)
-		err := getClientMultiplexer().AddHandler(conn, connID, packetHandler)
+		getMultiplexer().AddConn(conn, 8)
+		err := getMultiplexer().AddHandler(conn, connID, packetHandler)
 		Expect(err).ToNot(HaveOccurred())
 		conn.dataToRead <- getPacket(connID)
 		Eventually(handledPacket).Should(BeClosed())
@@ -45,15 +45,15 @@ var _ = Describe("Client Multiplexer", func() {
 
 	It("errors when adding an existing conn with a different connection ID length", func() {
 		conn := newMockPacketConn()
-		_, err := getClientMultiplexer().AddConn(conn, 5)
+		_, err := getMultiplexer().AddConn(conn, 5)
 		Expect(err).ToNot(HaveOccurred())
-		_, err = getClientMultiplexer().AddConn(conn, 6)
+		_, err = getMultiplexer().AddConn(conn, 6)
 		Expect(err).To(MatchError("cannot use 6 byte connection IDs on a connection that is already using 5 byte connction IDs"))
 	})
 
 	It("errors when adding a handler for an unknown conn", func() {
 		conn := newMockPacketConn()
-		err := getClientMultiplexer().AddHandler(conn, protocol.ConnectionID{1, 2, 3, 4}, NewMockQuicSession(mockCtrl))
+		err := getMultiplexer().AddHandler(conn, protocol.ConnectionID{1, 2, 3, 4}, NewMockQuicSession(mockCtrl))
 		Expect(err).ToNot(MatchError("unknown packet conn"))
 	})
 
@@ -75,9 +75,9 @@ var _ = Describe("Client Multiplexer", func() {
 			close(handledPacket2)
 		})
 		packetHandler2.EXPECT().GetVersion()
-		getClientMultiplexer().AddConn(conn, connID1.Len())
-		Expect(getClientMultiplexer().AddHandler(conn, connID1, packetHandler1)).To(Succeed())
-		Expect(getClientMultiplexer().AddHandler(conn, connID2, packetHandler2)).To(Succeed())
+		getMultiplexer().AddConn(conn, connID1.Len())
+		Expect(getMultiplexer().AddHandler(conn, connID1, packetHandler1)).To(Succeed())
+		Expect(getMultiplexer().AddHandler(conn, connID2, packetHandler2)).To(Succeed())
 
 		conn.dataToRead <- getPacket(connID1)
 		conn.dataToRead <- getPacket(connID2)
@@ -91,7 +91,7 @@ var _ = Describe("Client Multiplexer", func() {
 	})
 
 	It("drops unparseable packets", func() {
-		err := getClientMultiplexer().(*clientMultiplexer).handlePacket(nil, []byte("invalid"), &connManager{connIDLen: 8})
+		err := getMultiplexer().(*connMultiplexer).handlePacket(nil, []byte("invalid"), &connManager{connIDLen: 8})
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("error parsing invariant header:"))
 	})
@@ -100,7 +100,7 @@ var _ = Describe("Client Multiplexer", func() {
 		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 		manager := NewMockPacketHandlerManager(mockCtrl)
 		manager.EXPECT().Get(connID).Return(nil, true)
-		err := getClientMultiplexer().(*clientMultiplexer).handlePacket(nil, getPacket(connID), &connManager{manager: manager, connIDLen: 8})
+		err := getMultiplexer().(*connMultiplexer).handlePacket(nil, getPacket(connID), &connManager{manager: manager, connIDLen: 8})
 		Expect(err).ToNot(HaveOccurred())
 	})
 
@@ -108,7 +108,7 @@ var _ = Describe("Client Multiplexer", func() {
 		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 		manager := NewMockPacketHandlerManager(mockCtrl)
 		manager.EXPECT().Get(connID).Return(nil, false)
-		err := getClientMultiplexer().(*clientMultiplexer).handlePacket(nil, getPacket(connID), &connManager{manager: manager, connIDLen: 8})
+		err := getMultiplexer().(*connMultiplexer).handlePacket(nil, getPacket(connID), &connManager{manager: manager, connIDLen: 8})
 		Expect(err).To(MatchError("received a packet with an unexpected connection ID 0x0102030405060708"))
 	})
 
@@ -130,7 +130,7 @@ var _ = Describe("Client Multiplexer", func() {
 		sess.EXPECT().GetVersion().Return(versionIETFFrames)
 		manager := NewMockPacketHandlerManager(mockCtrl)
 		manager.EXPECT().Get(connID).Return(sess, true)
-		err := getClientMultiplexer().(*clientMultiplexer).handlePacket(nil, buf.Bytes(), &connManager{manager: manager, connIDLen: 8})
+		err := getMultiplexer().(*connMultiplexer).handlePacket(nil, buf.Bytes(), &connManager{manager: manager, connIDLen: 8})
 		Expect(err).To(MatchError("packet payload (500 bytes) is smaller than the expected payload length (1000 bytes)"))
 	})
 
@@ -155,7 +155,7 @@ var _ = Describe("Client Multiplexer", func() {
 		})
 		manager := NewMockPacketHandlerManager(mockCtrl)
 		manager.EXPECT().Get(connID).Return(sess, true)
-		err := getClientMultiplexer().(*clientMultiplexer).handlePacket(nil, buf.Bytes(), &connManager{manager: manager, connIDLen: 8})
+		err := getMultiplexer().(*connMultiplexer).handlePacket(nil, buf.Bytes(), &connManager{manager: manager, connIDLen: 8})
 		Expect(err).ToNot(HaveOccurred())
 	})
 
@@ -167,8 +167,8 @@ var _ = Describe("Client Multiplexer", func() {
 		packetHandler.EXPECT().Close().Do(func() {
 			close(done)
 		})
-		getClientMultiplexer().AddConn(conn, 8)
-		Expect(getClientMultiplexer().AddHandler(conn, protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}, packetHandler)).To(Succeed())
+		getMultiplexer().AddConn(conn, 8)
+		Expect(getMultiplexer().AddHandler(conn, protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}, packetHandler)).To(Succeed())
 		Eventually(done).Should(BeClosed())
 	})
 })

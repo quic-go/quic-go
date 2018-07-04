@@ -15,8 +15,8 @@ import (
 )
 
 var (
-	clientMuxerOnce sync.Once
-	clientMuxer     multiplexer
+	connMuxerOnce sync.Once
+	connMuxer     multiplexer
 )
 
 type multiplexer interface {
@@ -29,9 +29,9 @@ type connManager struct {
 	manager   packetHandlerManager
 }
 
-// The clientMultiplexer listens on multiple net.PacketConns and dispatches
+// The connMultiplexer listens on multiple net.PacketConns and dispatches
 // incoming packets to the session handler.
-type clientMultiplexer struct {
+type connMultiplexer struct {
 	mutex sync.Mutex
 
 	conns                   map[net.PacketConn]connManager
@@ -40,20 +40,20 @@ type clientMultiplexer struct {
 	logger utils.Logger
 }
 
-var _ multiplexer = &clientMultiplexer{}
+var _ multiplexer = &connMultiplexer{}
 
-func getClientMultiplexer() multiplexer {
-	clientMuxerOnce.Do(func() {
-		clientMuxer = &clientMultiplexer{
+func getMultiplexer() multiplexer {
+	connMuxerOnce.Do(func() {
+		connMuxer = &connMultiplexer{
 			conns:                   make(map[net.PacketConn]connManager),
-			logger:                  utils.DefaultLogger.WithPrefix("client muxer"),
+			logger:                  utils.DefaultLogger.WithPrefix("muxer"),
 			newPacketHandlerManager: newPacketHandlerMap,
 		}
 	})
-	return clientMuxer
+	return connMuxer
 }
 
-func (m *clientMultiplexer) AddConn(c net.PacketConn, connIDLen int) (packetHandlerManager, error) {
+func (m *connMultiplexer) AddConn(c net.PacketConn, connIDLen int) (packetHandlerManager, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -72,7 +72,7 @@ func (m *clientMultiplexer) AddConn(c net.PacketConn, connIDLen int) (packetHand
 	return p.manager, nil
 }
 
-func (m *clientMultiplexer) AddHandler(c net.PacketConn, connID protocol.ConnectionID, handler packetHandler) error {
+func (m *connMultiplexer) AddHandler(c net.PacketConn, connID protocol.ConnectionID, handler packetHandler) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -84,7 +84,7 @@ func (m *clientMultiplexer) AddHandler(c net.PacketConn, connID protocol.Connect
 	return nil
 }
 
-func (m *clientMultiplexer) listen(c net.PacketConn, p *connManager) {
+func (m *connMultiplexer) listen(c net.PacketConn, p *connManager) {
 	for {
 		data := *getPacketBuffer()
 		data = data[:protocol.MaxReceivePacketSize]
@@ -105,7 +105,7 @@ func (m *clientMultiplexer) listen(c net.PacketConn, p *connManager) {
 	}
 }
 
-func (m *clientMultiplexer) handlePacket(addr net.Addr, data []byte, p *connManager) error {
+func (m *connMultiplexer) handlePacket(addr net.Addr, data []byte, p *connManager) error {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(data)
@@ -114,15 +114,15 @@ func (m *clientMultiplexer) handlePacket(addr net.Addr, data []byte, p *connMana
 	if err != nil {
 		return fmt.Errorf("error parsing invariant header: %s", err)
 	}
-	client, ok := p.manager.Get(iHdr.DestConnectionID)
+	handler, ok := p.manager.Get(iHdr.DestConnectionID)
 	if !ok {
 		return fmt.Errorf("received a packet with an unexpected connection ID %s", iHdr.DestConnectionID)
 	}
-	if client == nil {
+	if handler == nil {
 		// Late packet for closed session
 		return nil
 	}
-	hdr, err := iHdr.Parse(r, protocol.PerspectiveServer, client.GetVersion())
+	hdr, err := iHdr.Parse(r, protocol.PerspectiveServer, handler.GetVersion())
 	if err != nil {
 		return fmt.Errorf("error parsing header: %s", err)
 	}
@@ -137,7 +137,7 @@ func (m *clientMultiplexer) handlePacket(addr net.Addr, data []byte, p *connMana
 		// TODO(#1312): implement parsing of compound packets
 	}
 
-	client.handlePacket(&receivedPacket{
+	handler.handlePacket(&receivedPacket{
 		remoteAddr: addr,
 		header:     hdr,
 		data:       packetData,

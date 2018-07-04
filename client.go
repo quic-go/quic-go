@@ -123,7 +123,7 @@ func dialContext(
 	createdPacketConn bool,
 ) (Session, error) {
 	config = populateClientConfig(config, createdPacketConn)
-	multiplexer := getClientMultiplexer()
+	multiplexer := getMultiplexer()
 	manager, err := multiplexer.AddConn(pconn, config.ConnectionIDLength)
 	if err != nil {
 		return nil, err
@@ -484,7 +484,7 @@ func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
 	c.initialVersion = c.version
 	c.version = newVersion
 	c.generateConnectionIDs()
-	if err := getClientMultiplexer().AddHandler(c.pconn, c.srcConnID, c); err != nil {
+	if err := getMultiplexer().AddHandler(c.pconn, c.srcConnID, c); err != nil {
 		return err
 	}
 

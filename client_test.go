@@ -72,15 +72,15 @@ var _ = Describe("Client", func() {
 			conn:       &conn{pconn: packetConn, currentAddr: addr},
 			logger:     utils.DefaultLogger,
 		}
-		getClientMultiplexer() // make the sync.Once execute
+		getMultiplexer() // make the sync.Once execute
 		// replace the clientMuxer. getClientMultiplexer will now return the MockMultiplexer
 		mockMultiplexer = NewMockMultiplexer(mockCtrl)
-		origMultiplexer = clientMuxer
-		clientMuxer = mockMultiplexer
+		origMultiplexer = connMuxer
+		connMuxer = mockMultiplexer
 	})
 
 	AfterEach(func() {
-		clientMuxer = origMultiplexer
+		connMuxer = origMultiplexer
 		newClientSession = originalClientSessConstructor
 	})
 
