@@ -76,15 +76,15 @@ func (mr *MockQuicSessionMockRecorder) Close() *gomock.Call {
 }
 
 // CloseWithError mocks base method
-func (m *MockQuicSession) CloseWithError(arg0 error) error {
-	ret := m.ctrl.Call(m, "CloseWithError", arg0)
+func (m *MockQuicSession) CloseWithError(arg0 protocol.ApplicationErrorCode, arg1 error) error {
+	ret := m.ctrl.Call(m, "CloseWithError", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CloseWithError indicates an expected call of CloseWithError
-func (mr *MockQuicSessionMockRecorder) CloseWithError(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseWithError", reflect.TypeOf((*MockQuicSession)(nil).CloseWithError), arg0)
+func (mr *MockQuicSessionMockRecorder) CloseWithError(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseWithError", reflect.TypeOf((*MockQuicSession)(nil).CloseWithError), arg0, arg1)
 }
 
 // ConnectionState mocks base method

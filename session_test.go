@@ -535,9 +535,9 @@ var _ = Describe("Session", func() {
 
 		It("closes streams with proper error", func() {
 			testErr := errors.New("test error")
-			streamManager.EXPECT().CloseWithError(qerr.Error(qerr.InternalError, testErr.Error()))
+			streamManager.EXPECT().CloseWithError(qerr.Error(0x1337, testErr.Error()))
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-			sess.CloseWithError(testErr)
+			sess.CloseWithError(0x1337, testErr)
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(sess.Context().Done()).To(BeClosed())
 		})
@@ -1476,12 +1476,12 @@ var _ = Describe("Session", func() {
 		go func() {
 			defer GinkgoRecover()
 			err := sess.run()
-			Expect(err).To(MatchError(testErr))
+			Expect(err).To(MatchError(qerr.Error(0x1337, testErr.Error())))
 			close(done)
 		}()
 		streamManager.EXPECT().CloseWithError(gomock.Any())
 		sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-		Expect(sess.CloseWithError(testErr)).To(Succeed())
+		Expect(sess.CloseWithError(0x1337, testErr)).To(Succeed())
 		Eventually(done).Should(BeClosed())
 	})
 

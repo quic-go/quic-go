@@ -127,7 +127,7 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 func (s *Server) handleHeaderStream(session streamCreator) {
 	stream, err := session.AcceptStream()
 	if err != nil {
-		session.CloseWithError(qerr.Error(qerr.InvalidHeadersStreamData, err.Error()))
+		session.CloseWithError(quic.ErrorCode(qerr.InvalidHeadersStreamData), err)
 		return
 	}
 
@@ -140,10 +140,12 @@ func (s *Server) handleHeaderStream(session streamCreator) {
 			// QuicErrors must originate from stream.Read() returning an error.
 			// In this case, the session has already logged the error, so we don't
 			// need to log it again.
-			if _, ok := err.(*qerr.QuicError); !ok {
+			errorCode := qerr.InternalError
+			if qerr, ok := err.(*qerr.QuicError); !ok {
+				errorCode = qerr.ErrorCode
 				s.logger.Errorf("error handling h2 request: %s", err.Error())
 			}
-			session.CloseWithError(err)
+			session.CloseWithError(quic.ErrorCode(errorCode), err)
 			return
 		}
 	}

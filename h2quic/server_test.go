@@ -69,7 +69,7 @@ func (s *mockSession) Close() error {
 	s.closed = true
 	return nil
 }
-func (s *mockSession) CloseWithError(e error) error {
+func (s *mockSession) CloseWithError(_ quic.ErrorCode, e error) error {
 	s.closedWithError = e
 	return s.Close()
 }

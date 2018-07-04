@@ -853,11 +853,13 @@ func (s *session) closeRemote(e error) {
 // Close the connection. It sends a qerr.PeerGoingAway.
 // It waits until the run loop has stopped before returning
 func (s *session) Close() error {
-	return s.CloseWithError(nil)
+	s.closeLocal(nil)
+	<-s.ctx.Done()
+	return nil
 }
 
-func (s *session) CloseWithError(e error) error {
-	s.closeLocal(e)
+func (s *session) CloseWithError(code protocol.ApplicationErrorCode, e error) error {
+	s.closeLocal(qerr.Error(qerr.ErrorCode(code), e.Error()))
 	<-s.ctx.Done()
 	return nil
 }
