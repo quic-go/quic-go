@@ -112,6 +112,53 @@ var _ = Describe("Client Multiplexer", func() {
 		Expect(err).To(MatchError("received a packet with an unexpected connection ID 0x0102030405060708"))
 	})
 
+	It("errors on packets that are smaller than the Payload Length in the packet header", func() {
+		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+		hdr := &wire.Header{
+			IsLongHeader:     true,
+			Type:             protocol.PacketTypeHandshake,
+			PayloadLen:       1000,
+			DestConnectionID: connID,
+			PacketNumberLen:  protocol.PacketNumberLen1,
+			Version:          versionIETFFrames,
+		}
+		buf := &bytes.Buffer{}
+		Expect(hdr.Write(buf, protocol.PerspectiveServer, versionIETFFrames)).To(Succeed())
+		buf.Write(bytes.Repeat([]byte{0}, 500))
+
+		sess := NewMockQuicSession(mockCtrl)
+		sess.EXPECT().GetVersion().Return(versionIETFFrames)
+		manager := NewMockPacketHandlerManager(mockCtrl)
+		manager.EXPECT().Get(connID).Return(sess, true)
+		err := getClientMultiplexer().(*clientMultiplexer).handlePacket(nil, buf.Bytes(), &connManager{manager: manager, connIDLen: 8})
+		Expect(err).To(MatchError("packet payload (500 bytes) is smaller than the expected payload length (1000 bytes)"))
+	})
+
+	It("errors on packets that are smaller than the Payload Length in the packet header", func() {
+		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+		hdr := &wire.Header{
+			IsLongHeader:     true,
+			Type:             protocol.PacketTypeHandshake,
+			PayloadLen:       456,
+			DestConnectionID: connID,
+			PacketNumberLen:  protocol.PacketNumberLen1,
+			Version:          versionIETFFrames,
+		}
+		buf := &bytes.Buffer{}
+		Expect(hdr.Write(buf, protocol.PerspectiveServer, versionIETFFrames)).To(Succeed())
+		buf.Write(bytes.Repeat([]byte{0}, 500))
+
+		sess := NewMockQuicSession(mockCtrl)
+		sess.EXPECT().GetVersion().Return(versionIETFFrames)
+		sess.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
+			Expect(p.data).To(HaveLen(456))
+		})
+		manager := NewMockPacketHandlerManager(mockCtrl)
+		manager.EXPECT().Get(connID).Return(sess, true)
+		err := getClientMultiplexer().(*clientMultiplexer).handlePacket(nil, buf.Bytes(), &connManager{manager: manager, connIDLen: 8})
+		Expect(err).ToNot(HaveOccurred())
+	})
+
 	It("closes the packet handlers when reading from the conn fails", func() {
 		conn := newMockPacketConn()
 		conn.readErr = errors.New("test error")

@@ -412,11 +412,6 @@ func (c *client) handleIETFQUICPacket(p *receivedPacket) error {
 		default:
 			return fmt.Errorf("Received unsupported packet type: %s", p.header.Type)
 		}
-		if protocol.ByteCount(len(p.data)) < p.header.PayloadLen {
-			return fmt.Errorf("packet payload (%d bytes) is smaller than the expected payload length (%d bytes)", len(p.data), p.header.PayloadLen)
-		}
-		p.data = p.data[:int(p.header.PayloadLen)]
-		// TODO(#1312): implement parsing of compound packets
 	}
 
 	// this is the first packet we are receiving

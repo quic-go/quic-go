@@ -129,6 +129,14 @@ func (m *clientMultiplexer) handlePacket(addr net.Addr, data []byte, p *connMana
 	hdr.Raw = data[:len(data)-r.Len()]
 	packetData := data[len(data)-r.Len():]
 
+	if hdr.IsLongHeader {
+		if protocol.ByteCount(len(packetData)) < hdr.PayloadLen {
+			return fmt.Errorf("packet payload (%d bytes) is smaller than the expected payload length (%d bytes)", len(packetData), hdr.PayloadLen)
+		}
+		packetData = packetData[:int(hdr.PayloadLen)]
+		// TODO(#1312): implement parsing of compound packets
+	}
+
 	client.handlePacket(&receivedPacket{
 		remoteAddr: addr,
 		header:     hdr,

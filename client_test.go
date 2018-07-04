@@ -671,48 +671,6 @@ var _ = Describe("Client", func() {
 		Expect(cl.GetVersion()).To(Equal(cl.version))
 	})
 
-	It("errors on packets that are smaller than the Payload Length in the packet header", func() {
-		cl.session = NewMockQuicSession(mockCtrl) // don't EXPECT any handlePacket calls
-		hdr := &wire.Header{
-			IsLongHeader:     true,
-			Type:             protocol.PacketTypeHandshake,
-			PayloadLen:       1000,
-			SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-			DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-			PacketNumberLen:  protocol.PacketNumberLen1,
-			Version:          versionIETFFrames,
-		}
-		err := cl.handlePacketImpl(&receivedPacket{
-			remoteAddr: addr,
-			header:     hdr,
-			data:       make([]byte, 456),
-		})
-		Expect(err).To(MatchError("received a packet with an unexpected connection ID (0x0102030405060708, expected 0x0000000000001337)"))
-	})
-
-	It("cuts packets at the payload length", func() {
-		sess := NewMockQuicSession(mockCtrl)
-		sess.EXPECT().handlePacket(gomock.Any()).Do(func(packet *receivedPacket) {
-			Expect(packet.data).To(HaveLen(123))
-		})
-		cl.session = sess
-		hdr := &wire.Header{
-			IsLongHeader:     true,
-			Type:             protocol.PacketTypeHandshake,
-			PayloadLen:       123,
-			SrcConnectionID:  connID,
-			DestConnectionID: connID,
-			PacketNumberLen:  protocol.PacketNumberLen1,
-			Version:          versionIETFFrames,
-		}
-		err := cl.handlePacketImpl(&receivedPacket{
-			remoteAddr: addr,
-			header:     hdr,
-			data:       make([]byte, 456),
-		})
-		Expect(err).ToNot(HaveOccurred())
-	})
-
 	It("ignores packets with the wrong Long Header Type", func() {
 		hdr := &wire.Header{
 			IsLongHeader:     true,
