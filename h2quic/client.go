@@ -280,11 +280,14 @@ func (c *client) CloseWithError(e error) error {
 	if c.session == nil {
 		return nil
 	}
-	return c.session.Close(e)
+	return c.session.CloseWithError(e)
 }
 
 func (c *client) Close() error {
-	return c.CloseWithError(nil)
+	if c.session == nil {
+		return nil
+	}
+	return c.session.Close()
 }
 
 // copied from net/transport.go

@@ -52,7 +52,7 @@ var _ = Describe("Connection ID lengths tests", func() {
 			conf,
 		)
 		Expect(err).ToNot(HaveOccurred())
-		defer cl.Close(nil)
+		defer cl.Close()
 		str, err := cl.AcceptStream()
 		Expect(err).ToNot(HaveOccurred())
 		data, err := ioutil.ReadAll(str)

@@ -93,7 +93,7 @@ func (m *clientMultiplexer) listen(c net.PacketConn, p *connManager) {
 		n, addr, err := c.ReadFrom(data)
 		if err != nil {
 			if !strings.HasSuffix(err.Error(), "use of closed network connection") {
-				p.manager.Close(err)
+				p.manager.Close()
 			}
 			return
 		}

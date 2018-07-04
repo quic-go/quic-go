@@ -78,7 +78,7 @@ var _ = Describe("Unidirectional Streams", func() {
 			sess, err = server.Accept()
 			Expect(err).ToNot(HaveOccurred())
 			runReceivingPeer(sess)
-			sess.Close(nil)
+			sess.Close()
 		}()
 
 		client, err := quic.DialAddr(serverAddr, nil, qconf)

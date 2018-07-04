@@ -54,11 +54,11 @@ func (h *packetHandlerMap) Remove(id protocol.ConnectionID) {
 	})
 }
 
-func (h *packetHandlerMap) Close(err error) {
+func (h *packetHandlerMap) Close() error {
 	h.mutex.Lock()
 	if h.closed {
 		h.mutex.Unlock()
-		return
+		return nil
 	}
 	h.closed = true
 
@@ -68,11 +68,12 @@ func (h *packetHandlerMap) Close(err error) {
 			wg.Add(1)
 			go func(handler packetHandler) {
 				// session.Close() blocks until the CONNECTION_CLOSE has been sent and the run-loop has stopped
-				_ = handler.Close(err)
+				_ = handler.Close()
 				wg.Done()
 			}(handler)
 		}
 	}
 	h.mutex.Unlock()
 	wg.Wait()
+	return nil
 }

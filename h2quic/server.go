@@ -127,7 +127,7 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 func (s *Server) handleHeaderStream(session streamCreator) {
 	stream, err := session.AcceptStream()
 	if err != nil {
-		session.Close(qerr.Error(qerr.InvalidHeadersStreamData, err.Error()))
+		session.CloseWithError(qerr.Error(qerr.InvalidHeadersStreamData, err.Error()))
 		return
 	}
 
@@ -143,7 +143,7 @@ func (s *Server) handleHeaderStream(session streamCreator) {
 			if _, ok := err.(*qerr.QuicError); !ok {
 				s.logger.Errorf("error handling h2 request: %s", err.Error())
 			}
-			session.Close(err)
+			session.CloseWithError(err)
 			return
 		}
 	}
@@ -246,7 +246,7 @@ func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, 
 		}
 		if s.CloseAfterFirstRequest {
 			time.Sleep(100 * time.Millisecond)
-			session.Close(nil)
+			session.Close()
 		}
 	}()
 

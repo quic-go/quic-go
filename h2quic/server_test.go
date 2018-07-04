@@ -61,14 +61,17 @@ func (s *mockSession) OpenStreamSync() (quic.Stream, error) {
 	}
 	return s.OpenStream()
 }
-func (s *mockSession) Close(e error) error {
-	s.closedWithError = e
+func (s *mockSession) Close() error {
 	s.ctxCancel()
 	if !s.closed {
 		close(s.blockOpenStreamChan)
 	}
 	s.closed = true
 	return nil
+}
+func (s *mockSession) CloseWithError(e error) error {
+	s.closedWithError = e
+	return s.Close()
 }
 func (s *mockSession) LocalAddr() net.Addr {
 	panic("not implemented")

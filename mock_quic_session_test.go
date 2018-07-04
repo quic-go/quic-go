@@ -64,15 +64,27 @@ func (mr *MockQuicSessionMockRecorder) AcceptUniStream() *gomock.Call {
 }
 
 // Close mocks base method
-func (m *MockQuicSession) Close(arg0 error) error {
-	ret := m.ctrl.Call(m, "Close", arg0)
+func (m *MockQuicSession) Close() error {
+	ret := m.ctrl.Call(m, "Close")
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Close indicates an expected call of Close
-func (mr *MockQuicSessionMockRecorder) Close(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockQuicSession)(nil).Close), arg0)
+func (mr *MockQuicSessionMockRecorder) Close() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockQuicSession)(nil).Close))
+}
+
+// CloseWithError mocks base method
+func (m *MockQuicSession) CloseWithError(arg0 error) error {
+	ret := m.ctrl.Call(m, "CloseWithError", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CloseWithError indicates an expected call of CloseWithError
+func (mr *MockQuicSessionMockRecorder) CloseWithError(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseWithError", reflect.TypeOf((*MockQuicSession)(nil).CloseWithError), arg0)
 }
 
 // ConnectionState mocks base method
@@ -195,6 +207,16 @@ func (m *MockQuicSession) closeRemote(arg0 error) {
 // closeRemote indicates an expected call of closeRemote
 func (mr *MockQuicSessionMockRecorder) closeRemote(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "closeRemote", reflect.TypeOf((*MockQuicSession)(nil).closeRemote), arg0)
+}
+
+// destroy mocks base method
+func (m *MockQuicSession) destroy(arg0 error) {
+	m.ctrl.Call(m, "destroy", arg0)
+}
+
+// destroy indicates an expected call of destroy
+func (mr *MockQuicSessionMockRecorder) destroy(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "destroy", reflect.TypeOf((*MockQuicSession)(nil).destroy), arg0)
 }
 
 // getCryptoStream mocks base method

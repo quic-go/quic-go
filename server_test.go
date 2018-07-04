@@ -220,7 +220,7 @@ var _ = Describe("Server", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Consistently(done).ShouldNot(BeClosed())
 			// make the go routine return
-			sessionHandler.EXPECT().Close(nil)
+			sessionHandler.EXPECT().Close()
 			close(serv.errorChan)
 			serv.Close()
 			Eventually(done).Should(BeClosed())
@@ -242,7 +242,7 @@ var _ = Describe("Server", func() {
 				serv.serve()
 			}()
 			// close the server
-			sessionHandler.EXPECT().Close(nil).AnyTimes()
+			sessionHandler.EXPECT().Close().AnyTimes()
 			Expect(serv.Close()).To(Succeed())
 			Expect(conn.closed).To(BeTrue())
 		})
@@ -279,7 +279,7 @@ var _ = Describe("Server", func() {
 		It("errors when encountering a connection error", func() {
 			testErr := errors.New("connection error")
 			conn.readErr = testErr
-			sessionHandler.EXPECT().Close(nil)
+			sessionHandler.EXPECT().Close()
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()

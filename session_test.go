@@ -513,7 +513,7 @@ var _ = Describe("Session", func() {
 		It("shuts down without error", func() {
 			streamManager.EXPECT().CloseWithError(qerr.Error(qerr.PeerGoingAway, ""))
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-			sess.Close(nil)
+			sess.Close()
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(mconn.written).To(HaveLen(1))
 			buf := &bytes.Buffer{}
@@ -526,8 +526,8 @@ var _ = Describe("Session", func() {
 		It("only closes once", func() {
 			streamManager.EXPECT().CloseWithError(qerr.Error(qerr.PeerGoingAway, ""))
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-			sess.Close(nil)
-			sess.Close(nil)
+			sess.Close()
+			sess.Close()
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(mconn.written).To(HaveLen(1))
 			Expect(sess.Context().Done()).To(BeClosed())
@@ -537,7 +537,7 @@ var _ = Describe("Session", func() {
 			testErr := errors.New("test error")
 			streamManager.EXPECT().CloseWithError(qerr.Error(qerr.InternalError, testErr.Error()))
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-			sess.Close(testErr)
+			sess.CloseWithError(testErr)
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(sess.Context().Done()).To(BeClosed())
 		})
@@ -545,7 +545,7 @@ var _ = Describe("Session", func() {
 		It("closes the session in order to replace it with another QUIC version", func() {
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-			sess.Close(errCloseSessionForNewVersion)
+			sess.destroy(errCloseSessionForNewVersion)
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(mconn.written).To(BeEmpty()) // no CONNECTION_CLOSE or PUBLIC_RESET sent
 		})
@@ -553,8 +553,8 @@ var _ = Describe("Session", func() {
 		It("sends a Public Reset if the client is initiating the no STOP_WAITING experiment", func() {
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-			sess.Close(handshake.ErrNSTPExperiment)
-			Expect(mconn.written).To(HaveLen(1))
+			sess.closeLocal(handshake.ErrNSTPExperiment)
+			Eventually(mconn.written).Should(HaveLen(1))
 			Expect((<-mconn.written)[0] & 0x02).ToNot(BeZero()) // Public Reset
 			Expect(sess.Context().Done()).To(BeClosed())
 		})
@@ -571,7 +571,7 @@ var _ = Describe("Session", func() {
 				close(returned)
 			}()
 			Consistently(returned).ShouldNot(BeClosed())
-			sess.Close(nil)
+			sess.Close()
 			Eventually(returned).Should(BeClosed())
 		})
 	})
@@ -911,7 +911,7 @@ var _ = Describe("Session", func() {
 			Consistently(mconn.written).Should(HaveLen(2))
 			// make the go routine return
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-			sess.Close(nil)
+			sess.Close()
 			Eventually(done).Should(BeClosed())
 		})
 
@@ -935,7 +935,7 @@ var _ = Describe("Session", func() {
 			Consistently(mconn.written).Should(HaveLen(1))
 			// make the go routine return
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-			sess.Close(nil)
+			sess.Close()
 			Eventually(done).Should(BeClosed())
 		})
 
@@ -963,7 +963,7 @@ var _ = Describe("Session", func() {
 			Eventually(mconn.written, 2*pacingDelay).Should(HaveLen(2))
 			// make the go routine return
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-			sess.Close(nil)
+			sess.Close()
 			Eventually(done).Should(BeClosed())
 		})
 
@@ -986,7 +986,7 @@ var _ = Describe("Session", func() {
 			Eventually(mconn.written).Should(HaveLen(3))
 			// make the go routine return
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-			sess.Close(nil)
+			sess.Close()
 			Eventually(done).Should(BeClosed())
 		})
 
@@ -1007,7 +1007,7 @@ var _ = Describe("Session", func() {
 			Consistently(mconn.written).ShouldNot(Receive())
 			// make the go routine return
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-			sess.Close(nil)
+			sess.Close()
 			Eventually(done).Should(BeClosed())
 		})
 	})
@@ -1050,7 +1050,7 @@ var _ = Describe("Session", func() {
 			// make sure that the go routine returns
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
 			streamManager.EXPECT().CloseWithError(gomock.Any())
-			sess.Close(nil)
+			sess.Close()
 			Eventually(done).Should(BeClosed())
 		})
 
@@ -1081,7 +1081,7 @@ var _ = Describe("Session", func() {
 			// make sure that the go routine returns
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
 			streamManager.EXPECT().CloseWithError(gomock.Any())
-			sess.Close(nil)
+			sess.Close()
 			Eventually(done).Should(BeClosed())
 		})
 	})
@@ -1252,7 +1252,7 @@ var _ = Describe("Session", func() {
 			// make the go routine return
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
 			streamManager.EXPECT().CloseWithError(gomock.Any())
-			sess.Close(nil)
+			sess.Close()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
@@ -1283,7 +1283,7 @@ var _ = Describe("Session", func() {
 			// make sure the go routine returns
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
 			streamManager.EXPECT().CloseWithError(gomock.Any())
-			sess.Close(nil)
+			sess.Close()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 	})
@@ -1335,7 +1335,7 @@ var _ = Describe("Session", func() {
 			Consistently(mconn.written).Should(HaveLen(0))
 			// make the go routine return
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-			sess.Close(nil)
+			sess.Close()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
@@ -1348,7 +1348,7 @@ var _ = Describe("Session", func() {
 			Eventually(func() time.Time { return sess.receivedTooManyUndecrytablePacketsTime }).Should(BeTemporally("~", time.Now(), 20*time.Millisecond))
 			// make the go routine return
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-			sess.Close(nil)
+			sess.Close()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
@@ -1363,7 +1363,7 @@ var _ = Describe("Session", func() {
 			Expect(sess.undecryptablePackets[0].header.PacketNumber).To(Equal(protocol.PacketNumber(1)))
 			// make the go routine return
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-			Expect(sess.Close(nil)).To(Succeed())
+			Expect(sess.Close()).To(Succeed())
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
@@ -1398,7 +1398,7 @@ var _ = Describe("Session", func() {
 			Expect(sess.Context().Done()).ToNot(Receive())
 			// make the go routine return
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-			sess.Close(nil)
+			sess.Close()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
@@ -1412,7 +1412,7 @@ var _ = Describe("Session", func() {
 			Consistently(sess.undecryptablePackets).Should(BeEmpty())
 			// make the go routine return
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-			Expect(sess.Close(nil)).To(Succeed())
+			Expect(sess.Close()).To(Succeed())
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
@@ -1437,7 +1437,7 @@ var _ = Describe("Session", func() {
 		// make sure the go routine returns
 		sessionRunner.EXPECT().removeConnectionID(gomock.Any())
 		streamManager.EXPECT().CloseWithError(gomock.Any())
-		Expect(sess.Close(nil)).To(Succeed())
+		Expect(sess.Close()).To(Succeed())
 		Eventually(sess.Context().Done()).Should(BeClosed())
 	})
 
@@ -1452,8 +1452,22 @@ var _ = Describe("Session", func() {
 		// make sure the go routine returns
 		sessionRunner.EXPECT().removeConnectionID(gomock.Any())
 		streamManager.EXPECT().CloseWithError(gomock.Any())
-		Expect(sess.Close(nil)).To(Succeed())
+		Expect(sess.Close()).To(Succeed())
 		Eventually(sess.Context().Done()).Should(BeClosed())
+	})
+
+	It("doesn't return a run error when closing", func() {
+		done := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			err := sess.run()
+			Expect(err).ToNot(HaveOccurred())
+			close(done)
+		}()
+		streamManager.EXPECT().CloseWithError(gomock.Any())
+		sessionRunner.EXPECT().removeConnectionID(gomock.Any())
+		Expect(sess.Close()).To(Succeed())
+		Eventually(done).Should(BeClosed())
 	})
 
 	It("passes errors to the session runner", func() {
@@ -1467,7 +1481,7 @@ var _ = Describe("Session", func() {
 		}()
 		streamManager.EXPECT().CloseWithError(gomock.Any())
 		sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-		sess.Close(testErr)
+		Expect(sess.CloseWithError(testErr)).To(Succeed())
 		Eventually(done).Should(BeClosed())
 	})
 
@@ -1494,7 +1508,7 @@ var _ = Describe("Session", func() {
 		// make the go routine return
 		streamManager.EXPECT().CloseWithError(gomock.Any())
 		sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-		sess.Close(nil)
+		sess.Close()
 		Eventually(sess.Context().Done()).Should(BeClosed())
 	})
 
@@ -1525,7 +1539,7 @@ var _ = Describe("Session", func() {
 			// make the go routine return
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
 			streamManager.EXPECT().CloseWithError(gomock.Any())
-			sess.Close(nil)
+			sess.Close()
 			Eventually(done).Should(BeClosed())
 		})
 
@@ -1543,7 +1557,7 @@ var _ = Describe("Session", func() {
 			// make the go routine return
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
 			streamManager.EXPECT().CloseWithError(gomock.Any())
-			sess.Close(nil)
+			sess.Close()
 			Eventually(done).Should(BeClosed())
 		})
 
@@ -1561,7 +1575,7 @@ var _ = Describe("Session", func() {
 			// make the go routine return
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
 			streamManager.EXPECT().CloseWithError(gomock.Any())
-			sess.Close(nil)
+			sess.Close()
 			Eventually(done).Should(BeClosed())
 		})
 	})
@@ -1602,7 +1616,7 @@ var _ = Describe("Session", func() {
 
 		It("does not use the idle timeout before the handshake complete", func() {
 			sess.config.IdleTimeout = 9999 * time.Second
-			defer sess.Close(nil)
+			defer sess.Close()
 			sess.lastNetworkActivityTime = time.Now().Add(-time.Minute)
 			// the handshake timeout is irrelevant here, since it depends on the time the session was created,
 			// and not on the last network activity
@@ -1613,7 +1627,7 @@ var _ = Describe("Session", func() {
 			Consistently(sess.Context().Done()).ShouldNot(BeClosed())
 			// make the go routine return
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-			sess.Close(nil)
+			sess.Close()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
@@ -1793,7 +1807,7 @@ var _ = Describe("Client Session", func() {
 		Eventually(mconn.written).Should(Receive())
 		//make sure the go routine returns
 		sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-		Expect(sess.Close(nil)).To(Succeed())
+		Expect(sess.Close()).To(Succeed())
 		Eventually(sess.Context().Done()).Should(BeClosed())
 	})
 
@@ -1828,7 +1842,7 @@ var _ = Describe("Client Session", func() {
 		Expect(hdr.DestConnectionID).To(Equal(protocol.ConnectionID{1, 3, 3, 7, 1, 3, 3, 7}))
 		// make sure the go routine returns
 		sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-		Expect(sess.Close(nil)).To(Succeed())
+		Expect(sess.Close()).To(Succeed())
 		Eventually(sess.Context().Done()).Should(BeClosed())
 	})
 
@@ -1856,7 +1870,7 @@ var _ = Describe("Client Session", func() {
 			Expect(cryptoSetup.divNonce).To(Equal(hdr.DiversificationNonce))
 			// make the go routine return
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
-			Expect(sess.Close(nil)).To(Succeed())
+			Expect(sess.Close()).To(Succeed())
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 	})

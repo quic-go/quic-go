@@ -74,7 +74,7 @@ var _ = Describe("non-zero RTT", func() {
 					data, err := ioutil.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(testserver.PRData))
-					sess.Close(nil)
+					sess.Close()
 					Eventually(done).Should(BeClosed())
 				})
 			}
