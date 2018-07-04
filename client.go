@@ -7,9 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"strings"
 	"sync"
-	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -21,6 +19,7 @@ import (
 type client struct {
 	mutex sync.Mutex
 
+	pconn    net.PacketConn
 	conn     connection
 	hostname string
 
@@ -83,15 +82,7 @@ func DialAddrContext(
 	if err != nil {
 		return nil, err
 	}
-	c, err := newClient(udpConn, udpAddr, config, tlsConf, addr, nil)
-	if err != nil {
-		return nil, err
-	}
-	go c.listen()
-	if err := c.dial(ctx); err != nil {
-		return nil, err
-	}
-	return c.session, nil
+	return DialContext(ctx, udpConn, udpAddr, addr, tlsConf, config)
 }
 
 // Dial establishes a new QUIC connection to a server using a net.PacketConn.
@@ -128,6 +119,11 @@ func DialContext(
 	}
 	if err := multiplexer.AddHandler(pconn, c.srcConnID, c); err != nil {
 		return nil, err
+	}
+	if config.RequestConnectionIDOmission {
+		if err := multiplexer.AddHandler(pconn, protocol.ConnectionID{}, c); err != nil {
+			return nil, err
+		}
 	}
 	if err := c.dial(ctx); err != nil {
 		return nil, err
@@ -168,6 +164,7 @@ func newClient(
 		onClose = closeCallback
 	}
 	c := &client{
+		pconn:         pconn,
 		conn:          &conn{pconn: pconn, currentAddr: remoteAddr},
 		hostname:      hostname,
 		tlsConf:       tlsConf,
@@ -350,58 +347,6 @@ func (c *client) establishSecureConnection(ctx context.Context) error {
 	}
 }
 
-// Listen listens on the underlying connection and passes packets on for handling.
-// It returns when the connection is closed.
-func (c *client) listen() {
-	var err error
-
-	for {
-		var n int
-		var addr net.Addr
-		data := *getPacketBuffer()
-		data = data[:protocol.MaxReceivePacketSize]
-		// The packet size should not exceed protocol.MaxReceivePacketSize bytes
-		// If it does, we only read a truncated packet, which will then end up undecryptable
-		n, addr, err = c.conn.Read(data)
-		if err != nil {
-			if !strings.HasSuffix(err.Error(), "use of closed network connection") {
-				c.mutex.Lock()
-				if c.session != nil {
-					c.session.Close(err)
-				}
-				c.mutex.Unlock()
-			}
-			break
-		}
-		c.handleRead(addr, data[:n])
-	}
-}
-
-func (c *client) handleRead(remoteAddr net.Addr, packet []byte) {
-	rcvTime := time.Now()
-
-	r := bytes.NewReader(packet)
-	iHdr, err := wire.ParseInvariantHeader(r, c.config.ConnectionIDLength)
-	// drop the packet if we can't parse the header
-	if err != nil {
-		c.logger.Errorf("error parsing invariant header: %s", err)
-		return
-	}
-	hdr, err := iHdr.Parse(r, protocol.PerspectiveServer, c.version)
-	if err != nil {
-		c.logger.Errorf("error parsing header: %s", err)
-		return
-	}
-	hdr.Raw = packet[:len(packet)-r.Len()]
-	packetData := packet[len(packet)-r.Len():]
-	c.handlePacket(&receivedPacket{
-		remoteAddr: remoteAddr,
-		header:     hdr,
-		data:       packetData,
-		rcvTime:    rcvTime,
-	})
-}
-
 func (c *client) handlePacket(p *receivedPacket) {
 	if err := c.handlePacketImpl(p); err != nil {
 		c.logger.Errorf("error handling packet: %s", err)
@@ -524,6 +469,9 @@ func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
 	c.initialVersion = c.version
 	c.version = newVersion
 	c.generateConnectionIDs()
+	if err := getClientMultiplexer().AddHandler(c.pconn, c.srcConnID, c); err != nil {
+		return err
+	}
 
 	c.logger.Infof("Switching to QUIC version %s. New connection ID: %s", newVersion, c.destConnID)
 	c.session.Close(errCloseSessionForNewVersion)
