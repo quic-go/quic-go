@@ -63,7 +63,7 @@ func (m *clientMultiplexer) AddConn(c net.PacketConn, connIDLen int) (packetHand
 		m.conns[c] = p
 		// If we didn't know this packet conn before, listen for incoming packets
 		// and dispatch them to the right sessions.
-		go m.listen(c, p)
+		go m.listen(c, &p)
 	}
 	if p.connIDLen != connIDLen {
 		return nil, fmt.Errorf("cannot use %d byte connection IDs on a connection that is already using %d byte connction IDs", connIDLen, p.connIDLen)
@@ -80,7 +80,7 @@ func (m *clientMultiplexer) AddHandler(c net.PacketConn, connID protocol.Connect
 	return nil
 }
 
-func (m *clientMultiplexer) listen(c net.PacketConn, p connManager) {
+func (m *clientMultiplexer) listen(c net.PacketConn, p *connManager) {
 	for {
 		data := *getPacketBuffer()
 		data = data[:protocol.MaxReceivePacketSize]
@@ -94,37 +94,42 @@ func (m *clientMultiplexer) listen(c net.PacketConn, p connManager) {
 			return
 		}
 		data = data[:n]
-		rcvTime := time.Now()
 
-		r := bytes.NewReader(data)
-		iHdr, err := wire.ParseInvariantHeader(r, p.connIDLen)
-		// drop the packet if we can't parse the header
-		if err != nil {
-			m.logger.Debugf("error parsing invariant header from %s: %s", addr, err)
-			continue
+		if err := m.handlePacket(addr, data, p); err != nil {
+			m.logger.Debugf("error handling packet from %s: %s", addr, err)
 		}
-		client, ok := p.manager.Get(iHdr.DestConnectionID)
-		if !ok {
-			m.logger.Debugf("received a packet with an unexpected connection ID %s", iHdr.DestConnectionID)
-			continue
-		}
-		if client == nil {
-			// Late packet for closed session
-			continue
-		}
-		hdr, err := iHdr.Parse(r, protocol.PerspectiveServer, client.GetVersion())
-		if err != nil {
-			m.logger.Debugf("error parsing header from %s: %s", addr, err)
-			continue
-		}
-		hdr.Raw = data[:len(data)-r.Len()]
-		packetData := data[len(data)-r.Len():]
-
-		client.handlePacket(&receivedPacket{
-			remoteAddr: addr,
-			header:     hdr,
-			data:       packetData,
-			rcvTime:    rcvTime,
-		})
 	}
+}
+
+func (m *clientMultiplexer) handlePacket(addr net.Addr, data []byte, p *connManager) error {
+	rcvTime := time.Now()
+
+	r := bytes.NewReader(data)
+	iHdr, err := wire.ParseInvariantHeader(r, p.connIDLen)
+	// drop the packet if we can't parse the header
+	if err != nil {
+		return fmt.Errorf("error parsing invariant header: %s", err)
+	}
+	client, ok := p.manager.Get(iHdr.DestConnectionID)
+	if !ok {
+		return fmt.Errorf("received a packet with an unexpected connection ID %s", iHdr.DestConnectionID)
+	}
+	if client == nil {
+		// Late packet for closed session
+		return nil
+	}
+	hdr, err := iHdr.Parse(r, protocol.PerspectiveServer, client.GetVersion())
+	if err != nil {
+		return fmt.Errorf("error parsing header: %s", err)
+	}
+	hdr.Raw = data[:len(data)-r.Len()]
+	packetData := data[len(data)-r.Len():]
+
+	client.handlePacket(&receivedPacket{
+		remoteAddr: addr,
+		header:     hdr,
+		data:       packetData,
+		rcvTime:    rcvTime,
+	})
+	return nil
 }

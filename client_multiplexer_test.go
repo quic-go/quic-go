@@ -3,7 +3,6 @@ package quic
 import (
 	"bytes"
 	"errors"
-	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -92,47 +91,25 @@ var _ = Describe("Client Multiplexer", func() {
 	})
 
 	It("drops unparseable packets", func() {
-		conn := newMockPacketConn()
-		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7}
-		conn.dataToRead <- []byte("invalid header")
-		packetHandler := NewMockQuicSession(mockCtrl)
-		getClientMultiplexer().AddConn(conn, 7)
-		Expect(getClientMultiplexer().AddHandler(conn, connID, packetHandler)).To(Succeed())
-		time.Sleep(100 * time.Millisecond) // give the listen go routine some time to process the packet
-		packetHandler.EXPECT().Close(gomock.Any()).AnyTimes()
-		close(conn.dataToRead)
+		err := getClientMultiplexer().(*clientMultiplexer).handlePacket(nil, []byte("invalid"), &connManager{connIDLen: 8})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("error parsing invariant header:"))
 	})
 
 	It("ignores packets arriving late for closed sessions", func() {
-		manager := NewMockPacketHandlerManager(mockCtrl)
-		origNewPacketHandlerManager := getClientMultiplexer().(*clientMultiplexer).newPacketHandlerManager
-		defer func() {
-			getClientMultiplexer().(*clientMultiplexer).newPacketHandlerManager = origNewPacketHandlerManager
-		}()
-		getClientMultiplexer().(*clientMultiplexer).newPacketHandlerManager = func() packetHandlerManager { return manager }
-
-		conn := newMockPacketConn()
 		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-		done := make(chan struct{})
-		manager.EXPECT().Get(connID).Do(func(protocol.ConnectionID) { close(done) }).Return(nil, true)
-		getClientMultiplexer().AddConn(conn, 8)
-		conn.dataToRead <- getPacket(connID)
-		Eventually(done).Should(BeClosed())
-		// makes the listen go routine return
-		manager.EXPECT().Close(gomock.Any()).AnyTimes()
-		close(conn.dataToRead)
+		manager := NewMockPacketHandlerManager(mockCtrl)
+		manager.EXPECT().Get(connID).Return(nil, true)
+		err := getClientMultiplexer().(*clientMultiplexer).handlePacket(nil, getPacket(connID), &connManager{manager: manager, connIDLen: 8})
+		Expect(err).ToNot(HaveOccurred())
 	})
 
 	It("drops packets for unknown receivers", func() {
-		conn := newMockPacketConn()
-		conn.dataToRead <- getPacket(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8})
-		packetHandler := NewMockQuicSession(mockCtrl)
-		getClientMultiplexer().AddConn(conn, 8)
-		Expect(getClientMultiplexer().AddHandler(conn, protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}, packetHandler)).To(Succeed())
-		time.Sleep(100 * time.Millisecond) // give the listen go routine some time to process the packet
-		// makes the listen go routine return
-		packetHandler.EXPECT().Close(gomock.Any()).AnyTimes()
-		close(conn.dataToRead)
+		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+		manager := NewMockPacketHandlerManager(mockCtrl)
+		manager.EXPECT().Get(connID).Return(nil, false)
+		err := getClientMultiplexer().(*clientMultiplexer).handlePacket(nil, getPacket(connID), &connManager{manager: manager, connIDLen: 8})
+		Expect(err).To(MatchError("received a packet with an unexpected connection ID 0x0102030405060708"))
 	})
 
 	It("closes the packet handlers when reading from the conn fails", func() {
