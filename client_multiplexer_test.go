@@ -39,7 +39,7 @@ var _ = Describe("Client Multiplexer", func() {
 		conn.dataToRead <- getPacket(connID)
 		Eventually(handledPacket).Should(BeClosed())
 		// makes the listen go routine return
-		packetHandler.EXPECT().Close(gomock.Any()).AnyTimes()
+		packetHandler.EXPECT().Close().AnyTimes()
 		close(conn.dataToRead)
 	})
 
@@ -85,8 +85,8 @@ var _ = Describe("Client Multiplexer", func() {
 		Eventually(handledPacket2).Should(BeClosed())
 
 		// makes the listen go routine return
-		packetHandler1.EXPECT().Close(gomock.Any()).AnyTimes()
-		packetHandler2.EXPECT().Close(gomock.Any()).AnyTimes()
+		packetHandler1.EXPECT().Close().AnyTimes()
+		packetHandler2.EXPECT().Close().AnyTimes()
 		close(conn.dataToRead)
 	})
 
@@ -114,11 +114,10 @@ var _ = Describe("Client Multiplexer", func() {
 
 	It("closes the packet handlers when reading from the conn fails", func() {
 		conn := newMockPacketConn()
-		testErr := errors.New("test error")
-		conn.readErr = testErr
+		conn.readErr = errors.New("test error")
 		done := make(chan struct{})
 		packetHandler := NewMockQuicSession(mockCtrl)
-		packetHandler.EXPECT().Close(testErr).Do(func(error) {
+		packetHandler.EXPECT().Close().Do(func() {
 			close(done)
 		})
 		getClientMultiplexer().AddConn(conn, 8)

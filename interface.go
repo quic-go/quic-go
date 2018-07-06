@@ -145,8 +145,11 @@ type Session interface {
 	LocalAddr() net.Addr
 	// RemoteAddr returns the address of the peer.
 	RemoteAddr() net.Addr
-	// Close closes the connection. The error will be sent to the remote peer in a CONNECTION_CLOSE frame. An error value of nil is allowed and will cause a normal PeerGoingAway to be sent.
-	Close(error) error
+	// Close the connection.
+	io.Closer
+	// Close the connection with an error.
+	// The error must not be nil.
+	CloseWithError(ErrorCode, error) error
 	// The context is cancelled when the session is closed.
 	// Warning: This API should not be considered stable and might change soon.
 	Context() context.Context

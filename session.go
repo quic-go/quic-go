@@ -67,8 +67,9 @@ var (
 )
 
 type closeError struct {
-	err    error
-	remote bool
+	err       error
+	remote    bool
+	sendClose bool
 }
 
 // A Session is a QUIC session
@@ -441,7 +442,11 @@ func (s *session) run() error {
 
 	go func() {
 		if err := s.cryptoStreamHandler.HandleCryptoStream(); err != nil {
-			s.Close(err)
+			if err == handshake.ErrCloseSessionForRetry {
+				s.destroy(err)
+			} else {
+				s.closeLocal(err)
+			}
 		}
 	}()
 
@@ -825,9 +830,17 @@ func (s *session) handleAckFrame(frame *wire.AckFrame, encLevel protocol.Encrypt
 	return nil
 }
 
+// closeLocal closes the session and send a CONNECTION_CLOSE containing the error
 func (s *session) closeLocal(e error) {
 	s.closeOnce.Do(func() {
-		s.closeChan <- closeError{err: e, remote: false}
+		s.closeChan <- closeError{err: e, sendClose: true, remote: false}
+	})
+}
+
+// destroy closes the session without sending the error on the wire
+func (s *session) destroy(e error) {
+	s.closeOnce.Do(func() {
+		s.closeChan <- closeError{err: e, sendClose: false, remote: false}
 	})
 }
 
@@ -837,10 +850,16 @@ func (s *session) closeRemote(e error) {
 	})
 }
 
-// Close the connection. If err is nil it will be set to qerr.PeerGoingAway.
+// Close the connection. It sends a qerr.PeerGoingAway.
 // It waits until the run loop has stopped before returning
-func (s *session) Close(e error) error {
-	s.closeLocal(e)
+func (s *session) Close() error {
+	s.closeLocal(nil)
+	<-s.ctx.Done()
+	return nil
+}
+
+func (s *session) CloseWithError(code protocol.ApplicationErrorCode, e error) error {
+	s.closeLocal(qerr.Error(qerr.ErrorCode(code), e.Error()))
 	<-s.ctx.Done()
 	return nil
 }
@@ -865,7 +884,7 @@ func (s *session) handleCloseError(closeErr closeError) error {
 	s.cryptoStream.closeForShutdown(quicErr)
 	s.streamsMap.CloseWithError(quicErr)
 
-	if closeErr.err == errCloseSessionForNewVersion || closeErr.err == handshake.ErrCloseSessionForRetry {
+	if !closeErr.sendClose {
 		return nil
 	}
 
@@ -1243,7 +1262,7 @@ func (s *session) onHasStreamData(id protocol.StreamID) {
 
 func (s *session) onStreamCompleted(id protocol.StreamID) {
 	if err := s.streamsMap.DeleteStream(id); err != nil {
-		s.Close(err)
+		s.closeLocal(err)
 	}
 }
 
