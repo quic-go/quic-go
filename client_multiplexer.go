@@ -56,6 +56,7 @@ func getClientMultiplexer() multiplexer {
 func (m *clientMultiplexer) AddConn(c net.PacketConn, connIDLen int) (packetHandlerManager, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
+
 	p, ok := m.conns[c]
 	if !ok {
 		manager := m.newPacketHandlerManager()
@@ -72,6 +73,9 @@ func (m *clientMultiplexer) AddConn(c net.PacketConn, connIDLen int) (packetHand
 }
 
 func (m *clientMultiplexer) AddHandler(c net.PacketConn, connID protocol.ConnectionID, handler packetHandler) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
 	p, ok := m.conns[c]
 	if !ok {
 		return errors.New("unknown packet conn %s")
