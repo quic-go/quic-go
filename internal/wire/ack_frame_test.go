@@ -366,3 +366,45 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 		})
 	})
 })
+
+var _ = Describe("ACK_ECN frame", func() {
+	Context("parsing", func() {
+		It("parses an ACK_ECN frame", func() {
+			data := []byte{0xd}
+			data = append(data, encodeVarInt(100)...)        // largest acked
+			data = append(data, encodeVarInt(0)...)          // delay
+			data = append(data, encodeVarInt(0x42)...)       // ECT(0)
+			data = append(data, encodeVarInt(0x12345)...)    // ECT(1)
+			data = append(data, encodeVarInt(0x12345678)...) // ECN-CE
+			data = append(data, encodeVarInt(0)...)          // num blocks
+			data = append(data, encodeVarInt(10)...)         // first ack block
+			b := bytes.NewReader(data)
+			frame, err := parseAckEcnFrame(b, versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(100)))
+			Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(90)))
+			Expect(frame.HasMissingRanges()).To(BeFalse())
+			Expect(b.Len()).To(BeZero())
+		})
+
+		It("errors on EOF", func() {
+			data := []byte{0x1a}
+			data = append(data, encodeVarInt(1000)...)       // largest acked
+			data = append(data, encodeVarInt(0)...)          // delay
+			data = append(data, encodeVarInt(0x42)...)       // ECT(0)
+			data = append(data, encodeVarInt(0x12345)...)    // ECT(1)
+			data = append(data, encodeVarInt(0x12345678)...) // ECN-CE
+			data = append(data, encodeVarInt(1)...)          // num blocks
+			data = append(data, encodeVarInt(100)...)        // first ack block
+			data = append(data, encodeVarInt(98)...)         // gap
+			data = append(data, encodeVarInt(50)...)         // ack block
+			_, err := parseAckEcnFrame(bytes.NewReader(data), versionIETFFrames)
+			Expect(err).NotTo(HaveOccurred())
+			for i := range data {
+				_, err := parseAckEcnFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
+				Expect(err).To(MatchError(io.EOF))
+			}
+		})
+
+	})
+})
