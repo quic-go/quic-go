@@ -37,6 +37,7 @@ type Header struct {
 	IsLongHeader bool
 	KeyPhase     int
 	PayloadLen   protocol.ByteCount
+	Token        []byte
 }
 
 var errInvalidPacketNumberLen6 = errors.New("invalid packet number length: 6 bytes")
@@ -65,7 +66,14 @@ func (h *Header) writeLongHeader(b *bytes.Buffer) error {
 	b.WriteByte(connIDLen)
 	b.Write(h.DestConnectionID.Bytes())
 	b.Write(h.SrcConnectionID.Bytes())
+
+	if h.Type == protocol.PacketTypeInitial {
+		utils.WriteVarInt(b, uint64(len(h.Token)))
+		b.Write(h.Token)
+	}
+
 	utils.WriteVarInt(b, uint64(h.PayloadLen))
+
 	return utils.WriteVarIntPacketNumber(b, h.PacketNumber, h.PacketNumberLen)
 }
 
@@ -149,7 +157,11 @@ func (h *Header) GetLength(version protocol.VersionNumber) (protocol.ByteCount, 
 
 func (h *Header) getHeaderLength() (protocol.ByteCount, error) {
 	if h.IsLongHeader {
-		return 1 /* type byte */ + 4 /* version */ + 1 /* conn id len byte */ + protocol.ByteCount(h.DestConnectionID.Len()+h.SrcConnectionID.Len()) + utils.VarIntLen(uint64(h.PayloadLen)) + protocol.ByteCount(h.PacketNumberLen), nil
+		length := 1 /* type byte */ + 4 /* version */ + 1 /* conn id len byte */ + protocol.ByteCount(h.DestConnectionID.Len()+h.SrcConnectionID.Len()) + utils.VarIntLen(uint64(h.PayloadLen)) + protocol.ByteCount(h.PacketNumberLen)
+		if h.Type == protocol.PacketTypeInitial {
+			length += utils.VarIntLen(uint64(len(h.Token))) + protocol.ByteCount(len(h.Token))
+		}
+		return length, nil
 	}
 
 	length := protocol.ByteCount(1 /* type byte */ + h.DestConnectionID.Len())
@@ -194,7 +206,15 @@ func (h *Header) logHeader(logger utils.Logger) {
 		if h.Version == 0 {
 			logger.Debugf("\tVersionNegotiationPacket{DestConnectionID: %s, SrcConnectionID: %s, SupportedVersions: %s}", h.DestConnectionID, h.SrcConnectionID, h.SupportedVersions)
 		} else {
-			logger.Debugf("\tLong Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, PacketNumber: %#x, PacketNumberLen: %d, PayloadLen: %d, Version: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, h.PacketNumber, h.PacketNumberLen, h.PayloadLen, h.Version)
+			var token string
+			if h.Type == protocol.PacketTypeInitial {
+				if len(h.Token) == 0 {
+					token = "Token: (empty), "
+				} else {
+					token = fmt.Sprintf("Token: %#x, ", h.Token)
+				}
+			}
+			logger.Debugf("\tLong Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, %sPacketNumber: %#x, PacketNumberLen: %d, PayloadLen: %d, Version: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, token, h.PacketNumber, h.PacketNumberLen, h.PayloadLen, h.Version)
 		}
 	} else {
 		logger.Debugf("\tShort Header{DestConnectionID: %s, PacketNumber: %#x, PacketNumberLen: %d, KeyPhase: %d}", h.DestConnectionID, h.PacketNumber, h.PacketNumberLen, h.KeyPhase)
