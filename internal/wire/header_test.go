@@ -112,6 +112,37 @@ var _ = Describe("Header", func() {
 					expectedSubstring := append(encodeVarInt(uint64(len(token))), token...)
 					Expect(buf.Bytes()).To(ContainSubstring(string(expectedSubstring)))
 				})
+
+				It("writes a Retry packet", func() {
+					token := []byte("Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.")
+					err := (&Header{
+						IsLongHeader:         true,
+						Type:                 protocol.PacketTypeRetry,
+						Token:                token,
+						OrigDestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9},
+						Version:              0x1020304,
+					}).Write(buf, protocol.PerspectiveServer, versionIETFHeader)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(buf.Bytes()[:6]).To(Equal([]byte{
+						0x80 ^ uint8(protocol.PacketTypeRetry),
+						0x1, 0x2, 0x3, 0x4, // version number
+						0x0, // connection ID lengths))
+					}))
+					Expect(buf.Bytes()[6] & 0xf).To(Equal(uint8(6)))
+					Expect(buf.Bytes()[7 : 7+9]).To(Equal([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9})) // Orig Dest Connection ID
+					Expect(buf.Bytes()[7+9:]).To(Equal(token))
+				})
+
+				It("refuses to write a Retry packet with an invalid Orig Destination Connection ID length", func() {
+					err := (&Header{
+						IsLongHeader:         true,
+						Type:                 protocol.PacketTypeRetry,
+						Token:                []byte("foobar"),
+						OrigDestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}, // connection IDs must be at most 18 bytes long
+						Version:              0x1020304,
+					}).Write(buf, protocol.PerspectiveServer, versionIETFHeader)
+					Expect(err).To(MatchError("invalid connection ID length: 19 bytes"))
+				})
 			})
 
 			Context("short header", func() {
@@ -621,6 +652,19 @@ var _ = Describe("Header", func() {
 					Version:          0xfeed,
 				}).Log(logger)
 				Expect(buf.String()).To(ContainSubstring("Long Header{Type: Initial, DestConnectionID: 0xcafe1337, SrcConnectionID: 0xdecafbad, Token: (empty), PacketNumber: 0x42, PacketNumberLen: 2, PayloadLen: 100, Version: 0xfeed}"))
+			})
+
+			It("logs Initial Packets without a Token", func() {
+				(&Header{
+					IsLongHeader:         true,
+					Type:                 protocol.PacketTypeRetry,
+					DestConnectionID:     protocol.ConnectionID{0xca, 0xfe, 0x13, 0x37},
+					SrcConnectionID:      protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
+					OrigDestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+					Token:                []byte{0x12, 0x34, 0x56},
+					Version:              0xfeed,
+				}).Log(logger)
+				Expect(buf.String()).To(ContainSubstring("Long Header{Type: Retry, DestConnectionID: 0xcafe1337, SrcConnectionID: 0xdecafbad, Token: 0x123456, OrigDestConnectionID: 0xdeadbeef, Version: 0xfeed}"))
 			})
 
 			It("logs Short Headers containing a connection ID", func() {

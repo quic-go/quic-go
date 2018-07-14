@@ -159,6 +159,25 @@ var _ = Describe("Header Parsing", func() {
 				Expect(hdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen2))
 			})
 
+			It("parses a Retry packet", func() {
+				data := []byte{
+					0x80 ^ uint8(protocol.PacketTypeRetry),
+					0x1, 0x2, 0x3, 0x4, // version number
+					0x0,                           // connection ID lengths
+					0x97,                          // Orig Destination Connection ID length
+					1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // source connection ID
+					'f', 'o', 'o', 'b', 'a', 'r', // token
+				}
+				b := bytes.NewReader(data)
+				iHdr, err := ParseInvariantHeader(b, 0)
+				Expect(err).ToNot(HaveOccurred())
+				hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, versionIETFHeader)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(hdr.Type).To(Equal(protocol.PacketTypeRetry))
+				Expect(hdr.OrigDestConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
+				Expect(hdr.Token).To(Equal([]byte("foobar")))
+			})
+
 			It("rejects packets sent with an unknown packet type", func() {
 				srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 				buf := &bytes.Buffer{}
@@ -218,6 +237,26 @@ var _ = Describe("Header Parsing", func() {
 				iHdrLen := len(data)
 				data = append(data, encodeVarInt(0x1337)...)
 				data = appendPacketNumber(data, 0xdeadbeef, protocol.PacketNumberLen4)
+				for i := iHdrLen; i < len(data); i++ {
+					b := bytes.NewReader(data[:i])
+					iHdr, err := ParseInvariantHeader(b, 0)
+					Expect(err).ToNot(HaveOccurred())
+					_, err = iHdr.Parse(b, protocol.PerspectiveServer, versionIETFHeader)
+					Expect(err).To(Equal(io.EOF))
+				}
+			})
+
+			It("errors on EOF, for a Retry packet", func() {
+				data := []byte{
+					0x80 ^ uint8(protocol.PacketTypeRetry),
+					0x1, 0x2, 0x3, 0x4, // version number
+					0x0, // connection ID lengths
+				}
+				iHdrLen := len(data)
+				data = append(data, []byte{
+					0x97,                          // Orig Destination Connection ID length
+					1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // source connection ID
+				}...)
 				for i := iHdrLen; i < len(data); i++ {
 					b := bytes.NewReader(data[:i])
 					iHdr, err := ParseInvariantHeader(b, 0)

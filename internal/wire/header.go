@@ -2,6 +2,7 @@ package wire
 
 import (
 	"bytes"
+	"crypto/rand"
 	"errors"
 	"fmt"
 
@@ -18,8 +19,9 @@ type Header struct {
 
 	Version protocol.VersionNumber
 
-	DestConnectionID protocol.ConnectionID
-	SrcConnectionID  protocol.ConnectionID
+	DestConnectionID     protocol.ConnectionID
+	SrcConnectionID      protocol.ConnectionID
+	OrigDestConnectionID protocol.ConnectionID // only needed in the Retry packet
 
 	PacketNumberLen protocol.PacketNumberLen
 	PacketNumber    protocol.PacketNumber
@@ -72,8 +74,22 @@ func (h *Header) writeLongHeader(b *bytes.Buffer) error {
 		b.Write(h.Token)
 	}
 
-	utils.WriteVarInt(b, uint64(h.PayloadLen))
+	if h.Type == protocol.PacketTypeRetry {
+		odcil, err := encodeSingleConnIDLen(h.OrigDestConnectionID)
+		if err != nil {
+			return err
+		}
+		// randomize the first 4 bits
+		odcilByte := make([]byte, 1)
+		_, _ = rand.Read(odcilByte) // it's safe to ignore the error here
+		odcilByte[0] = (odcilByte[0] & 0xf0) | odcil
+		b.Write(odcilByte)
+		b.Write(h.OrigDestConnectionID.Bytes())
+		b.Write(h.Token)
+		return nil
+	}
 
+	utils.WriteVarInt(b, uint64(h.PayloadLen))
 	return utils.WriteVarIntPacketNumber(b, h.PacketNumber, h.PacketNumberLen)
 }
 
@@ -207,12 +223,16 @@ func (h *Header) logHeader(logger utils.Logger) {
 			logger.Debugf("\tVersionNegotiationPacket{DestConnectionID: %s, SrcConnectionID: %s, SupportedVersions: %s}", h.DestConnectionID, h.SrcConnectionID, h.SupportedVersions)
 		} else {
 			var token string
-			if h.Type == protocol.PacketTypeInitial {
+			if h.Type == protocol.PacketTypeInitial || h.Type == protocol.PacketTypeRetry {
 				if len(h.Token) == 0 {
 					token = "Token: (empty), "
 				} else {
 					token = fmt.Sprintf("Token: %#x, ", h.Token)
 				}
+			}
+			if h.Type == protocol.PacketTypeRetry {
+				logger.Debugf("\tLong Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, %sOrigDestConnectionID: %s, Version: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, token, h.OrigDestConnectionID, h.Version)
+				return
 			}
 			logger.Debugf("\tLong Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, %sPacketNumber: %#x, PacketNumberLen: %d, PayloadLen: %d, Version: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, token, h.PacketNumber, h.PacketNumberLen, h.PayloadLen, h.Version)
 		}
