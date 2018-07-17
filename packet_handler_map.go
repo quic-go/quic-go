@@ -1,10 +1,16 @@
 package quic
 
 import (
+	"bytes"
+	"fmt"
+	"net"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 // The packetHandlerMap stores packetHandlers, identified by connection ID.
@@ -14,19 +20,32 @@ import (
 type packetHandlerMap struct {
 	mutex sync.RWMutex
 
+	conn      net.PacketConn
+	connIDLen int
+
 	handlers map[string] /* string(ConnectionID)*/ packetHandler
 	closed   bool
 
 	deleteClosedSessionsAfter time.Duration
+
+	logger utils.Logger
 }
 
 var _ packetHandlerManager = &packetHandlerMap{}
 
-func newPacketHandlerMap() packetHandlerManager {
-	return &packetHandlerMap{
+// TODO(#561): remove the listen flag
+func newPacketHandlerMap(conn net.PacketConn, connIDLen int, logger utils.Logger, listen bool) packetHandlerManager {
+	m := &packetHandlerMap{
+		conn:                      conn,
+		connIDLen:                 connIDLen,
 		handlers:                  make(map[string]packetHandler),
 		deleteClosedSessionsAfter: protocol.ClosedSessionDeleteTimeout,
+		logger: logger,
 	}
+	if listen {
+		go m.listen()
+	}
+	return m
 }
 
 func (h *packetHandlerMap) Get(id protocol.ConnectionID) (packetHandler, bool) {
@@ -75,5 +94,67 @@ func (h *packetHandlerMap) Close() error {
 	}
 	h.mutex.Unlock()
 	wg.Wait()
+	return nil
+}
+
+func (h *packetHandlerMap) listen() {
+	for {
+		data := *getPacketBuffer()
+		data = data[:protocol.MaxReceivePacketSize]
+		// The packet size should not exceed protocol.MaxReceivePacketSize bytes
+		// If it does, we only read a truncated packet, which will then end up undecryptable
+		n, addr, err := h.conn.ReadFrom(data)
+		if err != nil {
+			if !strings.HasSuffix(err.Error(), "use of closed network connection") {
+				h.Close()
+			}
+			return
+		}
+		data = data[:n]
+
+		if err := h.handlePacket(addr, data); err != nil {
+			h.logger.Debugf("error handling packet from %s: %s", addr, err)
+		}
+	}
+}
+
+func (h *packetHandlerMap) handlePacket(addr net.Addr, data []byte) error {
+	rcvTime := time.Now()
+
+	r := bytes.NewReader(data)
+	iHdr, err := wire.ParseInvariantHeader(r, h.connIDLen)
+	// drop the packet if we can't parse the header
+	if err != nil {
+		return fmt.Errorf("error parsing invariant header: %s", err)
+	}
+	handler, ok := h.Get(iHdr.DestConnectionID)
+	if !ok {
+		return fmt.Errorf("received a packet with an unexpected connection ID %s", iHdr.DestConnectionID)
+	}
+	if handler == nil {
+		// Late packet for closed session
+		return nil
+	}
+	hdr, err := iHdr.Parse(r, protocol.PerspectiveServer, handler.GetVersion())
+	if err != nil {
+		return fmt.Errorf("error parsing header: %s", err)
+	}
+	hdr.Raw = data[:len(data)-r.Len()]
+	packetData := data[len(data)-r.Len():]
+
+	if hdr.IsLongHeader {
+		if protocol.ByteCount(len(packetData)) < hdr.PayloadLen {
+			return fmt.Errorf("packet payload (%d bytes) is smaller than the expected payload length (%d bytes)", len(packetData), hdr.PayloadLen)
+		}
+		packetData = packetData[:int(hdr.PayloadLen)]
+		// TODO(#1312): implement parsing of compound packets
+	}
+
+	handler.handlePacket(&receivedPacket{
+		remoteAddr: addr,
+		header:     hdr,
+		data:       packetData,
+		rcvTime:    rcvTime,
+	})
 	return nil
 }

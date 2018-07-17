@@ -19,13 +19,14 @@ import (
 type client struct {
 	mutex sync.Mutex
 
-	pconn net.PacketConn
-	conn  connection
+	conn connection
 	// If the client is created with DialAddr, we create a packet conn.
 	// If it is started with Dial, we take a packet conn as a parameter.
 	createdPacketConn bool
 
 	hostname string
+
+	packetHandlers packetHandlerManager
 
 	receivedRetry bool
 
@@ -123,22 +124,18 @@ func dialContext(
 	createdPacketConn bool,
 ) (Session, error) {
 	config = populateClientConfig(config, createdPacketConn)
-	multiplexer := getMultiplexer()
-	manager, err := multiplexer.AddConn(pconn, config.ConnectionIDLength)
+	packetHandlers, err := getMultiplexer().AddConn(pconn, config.ConnectionIDLength)
 	if err != nil {
 		return nil, err
 	}
-	c, err := newClient(pconn, remoteAddr, config, tlsConf, host, manager.Remove, createdPacketConn)
+	c, err := newClient(pconn, remoteAddr, config, tlsConf, host, packetHandlers.Remove, createdPacketConn)
 	if err != nil {
 		return nil, err
 	}
-	if err := multiplexer.AddHandler(pconn, c.srcConnID, c); err != nil {
-		return nil, err
-	}
+	c.packetHandlers = packetHandlers
+	c.packetHandlers.Add(c.srcConnID, c)
 	if config.RequestConnectionIDOmission {
-		if err := multiplexer.AddHandler(pconn, protocol.ConnectionID{}, c); err != nil {
-			return nil, err
-		}
+		c.packetHandlers.Add(protocol.ConnectionID{}, c)
 	}
 	if err := c.dial(ctx); err != nil {
 		return nil, err
@@ -180,7 +177,6 @@ func newClient(
 		onClose = closeCallback
 	}
 	c := &client{
-		pconn:             pconn,
 		conn:              &conn{pconn: pconn, currentAddr: remoteAddr},
 		createdPacketConn: createdPacketConn,
 		hostname:          hostname,
@@ -484,9 +480,7 @@ func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
 	c.initialVersion = c.version
 	c.version = newVersion
 	c.generateConnectionIDs()
-	if err := getMultiplexer().AddHandler(c.pconn, c.srcConnID, c); err != nil {
-		return err
-	}
+	c.packetHandlers.Add(c.srcConnID, c)
 
 	c.logger.Infof("Switching to QUIC version %s. New connection ID: %s", newVersion, c.destConnID)
 	c.session.destroy(errCloseSessionForNewVersion)

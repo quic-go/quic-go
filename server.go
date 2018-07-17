@@ -125,6 +125,7 @@ func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener,
 		}
 	}
 
+	logger := utils.DefaultLogger.WithPrefix("server")
 	s := &server{
 		conn:           conn,
 		tlsConf:        tlsConf,
@@ -132,11 +133,11 @@ func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener,
 		certChain:      certChain,
 		scfg:           scfg,
 		newSession:     newSession,
-		sessionHandler: newPacketHandlerMap(),
+		sessionHandler: newPacketHandlerMap(conn, config.ConnectionIDLength, logger, false),
 		sessionQueue:   make(chan Session, 5),
 		errorChan:      make(chan struct{}),
 		supportsTLS:    supportsTLS,
-		logger:         utils.DefaultLogger.WithPrefix("server"),
+		logger:         logger,
 	}
 	s.setup()
 	if supportsTLS {
