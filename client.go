@@ -544,9 +544,22 @@ func (c *client) Close() error {
 	return c.session.Close()
 }
 
+func (c *client) destroy(e error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	if c.session == nil {
+		return
+	}
+	c.session.destroy(e)
+}
+
 func (c *client) GetVersion() protocol.VersionNumber {
 	c.mutex.Lock()
 	v := c.version
 	c.mutex.Unlock()
 	return v
+}
+
+func (c *client) GetPerspective() protocol.Perspective {
+	return protocol.PerspectiveClient
 }

@@ -28,7 +28,7 @@ type connMultiplexer struct {
 	mutex sync.Mutex
 
 	conns                   map[net.PacketConn]connManager
-	newPacketHandlerManager func(net.PacketConn, int, utils.Logger, bool) packetHandlerManager // so it can be replaced in the tests
+	newPacketHandlerManager func(net.PacketConn, int, utils.Logger) packetHandlerManager // so it can be replaced in the tests
 
 	logger utils.Logger
 }
@@ -52,7 +52,7 @@ func (m *connMultiplexer) AddConn(c net.PacketConn, connIDLen int) (packetHandle
 
 	p, ok := m.conns[c]
 	if !ok {
-		manager := m.newPacketHandlerManager(c, connIDLen, m.logger, true)
+		manager := m.newPacketHandlerManager(c, connIDLen, m.logger)
 		p = connManager{connIDLen: connIDLen, manager: manager}
 		m.conns[c] = p
 	}

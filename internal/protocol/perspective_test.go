@@ -11,4 +11,9 @@ var _ = Describe("Perspective", func() {
 		Expect(PerspectiveServer.String()).To(Equal("Server"))
 		Expect(Perspective(0).String()).To(Equal("invalid perspective"))
 	})
+
+	It("returns the opposite", func() {
+		Expect(PerspectiveClient.Opposite()).To(Equal(PerspectiveServer))
+		Expect(PerspectiveServer.Opposite()).To(Equal(PerspectiveClient))
+	})
 })

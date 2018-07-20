@@ -44,29 +44,14 @@ func (mr *MockPacketHandlerManagerMockRecorder) Add(arg0, arg1 interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockPacketHandlerManager)(nil).Add), arg0, arg1)
 }
 
-// Close mocks base method
-func (m *MockPacketHandlerManager) Close() error {
-	ret := m.ctrl.Call(m, "Close")
-	ret0, _ := ret[0].(error)
-	return ret0
+// CloseServer mocks base method
+func (m *MockPacketHandlerManager) CloseServer() {
+	m.ctrl.Call(m, "CloseServer")
 }
 
-// Close indicates an expected call of Close
-func (mr *MockPacketHandlerManagerMockRecorder) Close() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockPacketHandlerManager)(nil).Close))
-}
-
-// Get mocks base method
-func (m *MockPacketHandlerManager) Get(arg0 protocol.ConnectionID) (packetHandler, bool) {
-	ret := m.ctrl.Call(m, "Get", arg0)
-	ret0, _ := ret[0].(packetHandler)
-	ret1, _ := ret[1].(bool)
-	return ret0, ret1
-}
-
-// Get indicates an expected call of Get
-func (mr *MockPacketHandlerManagerMockRecorder) Get(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockPacketHandlerManager)(nil).Get), arg0)
+// CloseServer indicates an expected call of CloseServer
+func (mr *MockPacketHandlerManagerMockRecorder) CloseServer() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseServer", reflect.TypeOf((*MockPacketHandlerManager)(nil).CloseServer))
 }
 
 // Remove mocks base method
@@ -77,4 +62,14 @@ func (m *MockPacketHandlerManager) Remove(arg0 protocol.ConnectionID) {
 // Remove indicates an expected call of Remove
 func (mr *MockPacketHandlerManagerMockRecorder) Remove(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockPacketHandlerManager)(nil).Remove), arg0)
+}
+
+// SetServer mocks base method
+func (m *MockPacketHandlerManager) SetServer(arg0 unknownPacketHandler) {
+	m.ctrl.Call(m, "SetServer", arg0)
+}
+
+// SetServer indicates an expected call of SetServer
+func (mr *MockPacketHandlerManagerMockRecorder) SetServer(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetServer", reflect.TypeOf((*MockPacketHandlerManager)(nil).SetServer), arg0)
 }
