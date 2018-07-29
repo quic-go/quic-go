@@ -254,6 +254,21 @@ var _ = Describe("Server", func() {
 			Eventually(done).Should(BeClosed())
 		})
 
+		It("closes the connection when it was created with ListenAddr", func() {
+			addr, err := net.ResolveUDPAddr("udp", "localhost:12345")
+			Expect(err).ToNot(HaveOccurred())
+
+			serv, err := ListenAddr("localhost:0", nil, nil)
+			Expect(err).ToNot(HaveOccurred())
+			// test that we can write on the packet conn
+			_, err = serv.(*server).conn.WriteTo([]byte("foobar"), addr)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(serv.Close()).To(Succeed())
+			// test that we can't write any more on the packet conn
+			_, err = serv.(*server).conn.WriteTo([]byte("foobar"), addr)
+			Expect(err.Error()).To(ContainSubstring("use of closed network connection"))
+		})
+
 		It("returns Accept when it is closed", func() {
 			done := make(chan struct{})
 			go func() {
