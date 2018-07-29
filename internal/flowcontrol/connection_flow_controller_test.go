@@ -95,31 +95,6 @@ var _ = Describe("Connection Flow controller", func() {
 		})
 	})
 
-	Context("send flow control", func() {
-		It("says when it's blocked", func() {
-			controller.UpdateSendWindow(100)
-			Expect(controller.IsNewlyBlocked()).To(BeFalse())
-			controller.AddBytesSent(100)
-			blocked, offset := controller.IsNewlyBlocked()
-			Expect(blocked).To(BeTrue())
-			Expect(offset).To(Equal(protocol.ByteCount(100)))
-		})
-
-		It("doesn't say that it's newly blocked multiple times for the same offset", func() {
-			controller.UpdateSendWindow(100)
-			controller.AddBytesSent(100)
-			newlyBlocked, offset := controller.IsNewlyBlocked()
-			Expect(newlyBlocked).To(BeTrue())
-			Expect(offset).To(Equal(protocol.ByteCount(100)))
-			newlyBlocked, _ = controller.IsNewlyBlocked()
-			Expect(newlyBlocked).To(BeFalse())
-			controller.UpdateSendWindow(150)
-			controller.AddBytesSent(150)
-			newlyBlocked, _ = controller.IsNewlyBlocked()
-			Expect(newlyBlocked).To(BeTrue())
-		})
-	})
-
 	Context("setting the minimum window size", func() {
 		var (
 			oldWindowSize     protocol.ByteCount

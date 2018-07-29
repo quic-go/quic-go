@@ -130,7 +130,6 @@ var _ = Describe("Stream", func() {
 				mockSender.EXPECT().onHasStreamData(streamID).Times(2) // once for the Write, once for the Close
 				mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount).AnyTimes()
 				mockFC.EXPECT().AddBytesSent(protocol.ByteCount(6))
-				mockFC.EXPECT().IsBlocked()
 				err := str.CancelRead(1234)
 				Expect(err).ToNot(HaveOccurred())
 				writeReturned := make(chan struct{})

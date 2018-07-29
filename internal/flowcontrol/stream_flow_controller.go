@@ -115,15 +115,6 @@ func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
 	return window
 }
 
-// IsBlocked says if it is blocked by stream-level flow control.
-// If it is blocked, the offset is returned.
-func (c *streamFlowController) IsBlocked() (bool, protocol.ByteCount) {
-	if c.sendWindowSize() != 0 {
-		return false, 0
-	}
-	return true, c.sendWindow
-}
-
 func (c *streamFlowController) MaybeQueueWindowUpdate() {
 	c.mutex.Lock()
 	hasWindowUpdate := !c.receivedFinalOffset && c.hasWindowUpdate()

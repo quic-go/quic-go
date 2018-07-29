@@ -166,22 +166,19 @@ func (s *sendStream) popStreamFrameImpl(maxBytes protocol.ByteCount) (bool /* co
 		if s.dataForWriting == nil {
 			return false, nil, false
 		}
-		isBlocked, _ := s.flowController.IsBlocked()
-		return false, nil, !isBlocked
-	}
-	if frame.FinBit {
-		s.finSent = true
-		return true, frame, s.dataForWriting != nil
-	} else if s.streamID != s.version.CryptoStreamID() { // TODO(#657): Flow control for the crypto stream
-		if isBlocked, offset := s.flowController.IsBlocked(); isBlocked {
+		if isBlocked, offset := s.flowController.IsNewlyBlocked(); isBlocked {
 			s.sender.queueControlFrame(&wire.StreamBlockedFrame{
 				StreamID: s.streamID,
 				Offset:   offset,
 			})
-			return false, frame, false
+			return false, nil, false
 		}
+		return false, nil, true
 	}
-	return false, frame, s.dataForWriting != nil
+	if frame.FinBit {
+		s.finSent = true
+	}
+	return frame.FinBit, frame, s.dataForWriting != nil
 }
 
 func (s *sendStream) getDataForWriting(maxBytes protocol.ByteCount) ([]byte, bool /* should send FIN */) {

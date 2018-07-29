@@ -61,6 +61,29 @@ var _ = Describe("Base Flow controller", func() {
 			controller.UpdateSendWindow(10)
 			Expect(controller.sendWindowSize()).To(Equal(protocol.ByteCount(20)))
 		})
+
+		It("says when it's blocked", func() {
+			controller.UpdateSendWindow(100)
+			Expect(controller.IsNewlyBlocked()).To(BeFalse())
+			controller.AddBytesSent(100)
+			blocked, offset := controller.IsNewlyBlocked()
+			Expect(blocked).To(BeTrue())
+			Expect(offset).To(Equal(protocol.ByteCount(100)))
+		})
+
+		It("doesn't say that it's newly blocked multiple times for the same offset", func() {
+			controller.UpdateSendWindow(100)
+			controller.AddBytesSent(100)
+			newlyBlocked, offset := controller.IsNewlyBlocked()
+			Expect(newlyBlocked).To(BeTrue())
+			Expect(offset).To(Equal(protocol.ByteCount(100)))
+			newlyBlocked, _ = controller.IsNewlyBlocked()
+			Expect(newlyBlocked).To(BeFalse())
+			controller.UpdateSendWindow(150)
+			controller.AddBytesSent(150)
+			newlyBlocked, _ = controller.IsNewlyBlocked()
+			Expect(newlyBlocked).To(BeTrue())
+		})
 	})
 
 	Context("receive flow control", func() {
