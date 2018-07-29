@@ -17,6 +17,7 @@
     "vet"
   ],
   "Linters": {
-    "vet": "go tool vet -printfuncs=Infof,Debugf,Warningf,Errorf:PATH:LINE:MESSAGE"
+    "vet": "go tool vet -printfuncs=Infof,Debugf,Warningf,Errorf:PATH:LINE:MESSAGE",
+    "misspell": "misspell -i ect:PATH:LINE:COL:MESSAGE"
   }
 }

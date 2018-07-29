@@ -19,8 +19,16 @@ type AckFrame struct {
 	DelayTime time.Duration
 }
 
-// parseAckFrame reads an ACK frame
 func parseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, error) {
+	return parseAckOrAckEcnFrame(r, false, version)
+}
+
+func parseAckEcnFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, error) {
+	return parseAckOrAckEcnFrame(r, true, version)
+}
+
+// parseAckFrame reads an ACK frame
+func parseAckOrAckEcnFrame(r *bytes.Reader, ecn bool, version protocol.VersionNumber) (*AckFrame, error) {
 	if !version.UsesIETFFrameFormat() {
 		return parseAckFrameLegacy(r, version)
 	}
@@ -41,6 +49,15 @@ func parseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 		return nil, err
 	}
 	frame.DelayTime = time.Duration(delay*1<<ackDelayExponent) * time.Microsecond
+
+	if ecn {
+		for i := 0; i < 3; i++ {
+			if _, err := utils.ReadVarInt(r); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	numBlocks, err := utils.ReadVarInt(r)
 	if err != nil {
 		return nil, err
