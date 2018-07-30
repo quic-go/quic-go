@@ -284,7 +284,7 @@ var _ = Describe("Stream Flow controller", func() {
 			controller.AddBytesSent(50)
 			blocked, _ := controller.connection.IsNewlyBlocked()
 			Expect(blocked).To(BeTrue())
-			Expect(controller.IsBlocked()).To(BeFalse())
+			Expect(controller.IsNewlyBlocked()).To(BeFalse())
 		})
 	})
 })
