@@ -591,12 +591,8 @@ var _ = Describe("SentPacketHandler", func() {
 				handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: i}))
 			}
 			handler.OnAlarm() // TLP
-			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
 			handler.OnAlarm() // TLP
-			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
 			handler.OnAlarm() // RTO
-			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
-			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
 		})
 
 		It("declares all lower packets lost and call OnRetransmissionTimeout when verifying an RTO", func() {
@@ -609,8 +605,6 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.OnAlarm() // TLP
 			handler.OnAlarm() // TLP
 			handler.OnAlarm() // RTO
-			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
-			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
 			// send one probe packet and receive an ACK for it
 			rcvTime := time.Now()
 			gomock.InOrder(
@@ -636,10 +630,8 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.OnAlarm() // TLP
 			handler.OnAlarm() // TLP
 			handler.OnAlarm() // RTO
-			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
-			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
-			// send one probe packet
 
+			// send one probe packet
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 3}))
 			// receive an ACK for a packet send *before* the probe packet
 			// don't EXPECT any call to OnRetransmissionTimeout
@@ -873,7 +865,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.computeRTOTimeout()).To(Equal(4 * defaultRTOTimeout))
 		})
 
-		It("queues two packets if RTO expires", func() {
+		It("gets two probe packets if RTO expires", func() {
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 1}))
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 2}))
 
@@ -884,10 +876,12 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.OnAlarm() // TLP
 			handler.OnAlarm() // TLP
 			handler.OnAlarm() // RTO
-			p := handler.DequeuePacketForRetransmission()
+			p, err := handler.DequeueProbePacket()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(p).ToNot(BeNil())
 			Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(1)))
-			p = handler.DequeuePacketForRetransmission()
+			p, err = handler.DequeueProbePacket()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(p).ToNot(BeNil())
 			Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(2)))
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(2)))
@@ -902,15 +896,17 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.OnAlarm() // TLP
 			handler.OnAlarm() // TLP
 			handler.OnAlarm() // RTO
-			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
-			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
+			_, err := handler.DequeueProbePacket()
+			Expect(err).ToNot(HaveOccurred())
+			_, err = handler.DequeueProbePacket()
+			Expect(err).ToNot(HaveOccurred())
 			expectInPacketHistory([]protocol.PacketNumber{1, 2})
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(2)))
 			// Send a probe packet and receive an ACK for it.
 			// This verifies the RTO.
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 3}))
 			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 3, Largest: 3}}}
-			err := handler.ReceivedAck(ack, 1, protocol.EncryptionForwardSecure, time.Now())
+			err = handler.ReceivedAck(ack, 1, protocol.EncryptionForwardSecure, time.Now())
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.packetHistory.Len()).To(BeZero())
 			Expect(handler.bytesInFlight).To(BeZero())
@@ -931,7 +927,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.SendMode()).ToNot(Equal(SendRTO))
 		})
 
-		It("queues packets sent before the probe packet for retransmission", func() {
+		It("gets packets sent before the probe packet for retransmission", func() {
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 1, SendTime: time.Now().Add(-time.Hour)}))
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 2, SendTime: time.Now().Add(-time.Hour)}))
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 3, SendTime: time.Now().Add(-time.Hour)}))
@@ -940,14 +936,16 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.OnAlarm() // TLP
 			handler.OnAlarm() // TLP
 			handler.OnAlarm() // RTO
-			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
-			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
+			_, err := handler.DequeueProbePacket()
+			Expect(err).ToNot(HaveOccurred())
+			_, err = handler.DequeueProbePacket()
+			Expect(err).ToNot(HaveOccurred())
 			expectInPacketHistory([]protocol.PacketNumber{1, 2, 3, 4, 5})
 			// Send a probe packet and receive an ACK for it.
 			// This verifies the RTO.
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 6}))
 			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 6, Largest: 6}}}
-			err := handler.ReceivedAck(ack, 1, protocol.EncryptionForwardSecure, time.Now())
+			err = handler.ReceivedAck(ack, 1, protocol.EncryptionForwardSecure, time.Now())
 			Expect(err).ToNot(HaveOccurred())
 			Expect(handler.packetHistory.Len()).To(BeZero())
 			Expect(handler.bytesInFlight).To(BeZero())
@@ -960,7 +958,6 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.OnAlarm() // TLP
 			handler.OnAlarm() // TLP
 			handler.OnAlarm() // RTO
-			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
 			handler.SentPacketsAsRetransmission([]*Packet{retransmittablePacket(&Packet{PacketNumber: 6})}, 5)
 			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 5, Largest: 5}}}
 			err := handler.ReceivedAck(ack, 1, protocol.EncryptionForwardSecure, time.Now())
