@@ -37,17 +37,17 @@ defaults: &defaults
 
 version: 2
 jobs:
+  build-go1.11:
+    docker:
+      - image: circleci/golang:1.11rc1-stretch-browsers
+    <<: *defaults
   build-go1.10:
     docker:
       - image: circleci/golang:1.10.3-stretch-browsers
-    <<: *defaults
-  build-go1.9:
-    docker:
-      - image: circleci/golang:1.9.7-stretch-browsers
     <<: *defaults
 workflows:
   version: 2
   build:
     jobs:
-      - build-go1.9
       - build-go1.10
+      - build-go1.11

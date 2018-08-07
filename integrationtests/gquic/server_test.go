@@ -46,10 +46,10 @@ var _ = Describe("Server tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			templateRoot := &x509.Certificate{
-				SerialNumber: big.NewInt(1),
-				NotBefore:    time.Now().Add(-time.Hour),
-				NotAfter:     time.Now().Add(time.Hour),
-				IsCA:         true,
+				SerialNumber:          big.NewInt(1),
+				NotBefore:             time.Now().Add(-time.Hour),
+				NotAfter:              time.Now().Add(time.Hour),
+				IsCA:                  true,
 				BasicConstraintsValid: true,
 			}
 			certDER, err := x509.CreateCertificate(rand.Reader, templateRoot, templateRoot, &key.PublicKey, key)
