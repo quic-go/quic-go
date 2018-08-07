@@ -398,6 +398,9 @@ func (h *sentPacketHandler) OnAlarm() error {
 		if h.logger.Debug() {
 			h.logger.Debugf("Loss detection alarm fired in RTO mode. RTO count: %d", h.rtoCount)
 		}
+		if h.rtoCount == 0 {
+			h.largestSentBeforeRTO = h.lastSentPacketNumber
+		}
 		h.rtoCount++
 		h.numRTOs += 2
 		err = h.queueRTOs()
@@ -560,7 +563,6 @@ func (h *sentPacketHandler) ShouldSendNumPackets() int {
 
 // retransmit the oldest two packets
 func (h *sentPacketHandler) queueRTOs() error {
-	h.largestSentBeforeRTO = h.lastSentPacketNumber
 	// Queue the first two outstanding packets for retransmission.
 	// This does NOT declare this packets as lost:
 	// They are still tracked in the packet history and count towards the bytes in flight.
