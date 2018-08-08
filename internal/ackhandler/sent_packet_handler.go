@@ -378,27 +378,29 @@ func (h *sentPacketHandler) OnAlarm() error {
 	var err error
 	if h.packetHistory.HasOutstandingHandshakePackets() {
 		if h.logger.Debug() {
-			h.logger.Debugf("Loss detection alarm fired in handshake mode")
+			h.logger.Debugf("Loss detection alarm fired in handshake mode. Handshake count: %d", h.handshakeCount)
 		}
 		h.handshakeCount++
 		err = h.queueHandshakePacketsForRetransmission()
 	} else if !h.lossTime.IsZero() {
 		if h.logger.Debug() {
-			h.logger.Debugf("Loss detection alarm fired in loss timer mode")
+			h.logger.Debugf("Loss detection alarm fired in loss timer mode. Loss time: %s", h.lossTime)
 		}
 		// Early retransmit or time loss detection
 		err = h.detectLostPackets(now, h.bytesInFlight)
-	} else if h.tlpCount < maxTLPs {
+	} else if h.tlpCount < maxTLPs { // TLP
 		if h.logger.Debug() {
-			h.logger.Debugf("Loss detection alarm fired in TLP mode")
+			h.logger.Debugf("Loss detection alarm fired in TLP mode. TLP count: %d", h.tlpCount)
 		}
 		h.allowTLP = true
 		h.tlpCount++
-	} else {
+	} else { // RTO
 		if h.logger.Debug() {
-			h.logger.Debugf("Loss detection alarm fired in RTO mode")
+			h.logger.Debugf("Loss detection alarm fired in RTO mode. RTO count: %d", h.rtoCount)
 		}
-		// RTO
+		if h.rtoCount == 0 {
+			h.largestSentBeforeRTO = h.lastSentPacketNumber
+		}
 		h.rtoCount++
 		h.numRTOs += 2
 		err = h.queueRTOs()
@@ -561,7 +563,6 @@ func (h *sentPacketHandler) ShouldSendNumPackets() int {
 
 // retransmit the oldest two packets
 func (h *sentPacketHandler) queueRTOs() error {
-	h.largestSentBeforeRTO = h.lastSentPacketNumber
 	// Queue the first two outstanding packets for retransmission.
 	// This does NOT declare this packets as lost:
 	// They are still tracked in the packet history and count towards the bytes in flight.
