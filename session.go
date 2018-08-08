@@ -511,7 +511,8 @@ runLoop:
 			pacingDeadline = s.sentPacketHandler.TimeUntilSend()
 		}
 		if s.config.KeepAlive && !s.keepAlivePingSent && s.handshakeComplete && time.Since(s.lastNetworkActivityTime) >= s.peerParams.IdleTimeout/2 {
-			// send the PING frame since there is no activity in the session
+			// send a PING frame since there is no activity in the session
+			s.logger.Debugf("Sending a keep-alive ping to keep the connection alive.")
 			s.packer.QueueControlFrame(&wire.PingFrame{})
 			s.keepAlivePingSent = true
 		} else if !pacingDeadline.IsZero() && now.Before(pacingDeadline) {
