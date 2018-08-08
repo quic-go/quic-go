@@ -373,8 +373,20 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, priorInFlight proto
 }
 
 func (h *sentPacketHandler) OnAlarm() error {
-	now := time.Now()
+	// When all outstanding are acknowledged, the alarm is canceled in
+	// updateLossDetectionAlarm. This doesn't reset the timer in the session though.
+	// When OnAlarm is called, we therefore need to make sure that there are
+	// actually packets outstanding.
+	if h.packetHistory.HasOutstandingPackets() {
+		if err := h.onVerifiedAlarm(); err != nil {
+			return err
+		}
+	}
+	h.updateLossDetectionAlarm()
+	return nil
+}
 
+func (h *sentPacketHandler) onVerifiedAlarm() error {
 	var err error
 	if h.packetHistory.HasOutstandingHandshakePackets() {
 		if h.logger.Debug() {
@@ -387,7 +399,7 @@ func (h *sentPacketHandler) OnAlarm() error {
 			h.logger.Debugf("Loss detection alarm fired in loss timer mode. Loss time: %s", h.lossTime)
 		}
 		// Early retransmit or time loss detection
-		err = h.detectLostPackets(now, h.bytesInFlight)
+		err = h.detectLostPackets(time.Now(), h.bytesInFlight)
 	} else if h.tlpCount < maxTLPs { // TLP
 		if h.logger.Debug() {
 			h.logger.Debugf("Loss detection alarm fired in TLP mode. TLP count: %d", h.tlpCount)
@@ -405,11 +417,7 @@ func (h *sentPacketHandler) OnAlarm() error {
 		h.numRTOs += 2
 		err = h.queueRTOs()
 	}
-	if err != nil {
-		return err
-	}
-	h.updateLossDetectionAlarm()
-	return nil
+	return err
 }
 
 func (h *sentPacketHandler) GetAlarmTimeout() time.Time {

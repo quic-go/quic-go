@@ -791,6 +791,11 @@ var _ = Describe("SentPacketHandler", func() {
 		Expect(handler.GetAlarmTimeout()).To(BeZero())
 	})
 
+	It("does nothing on OnAlarm if there are no outstanding packets", func() {
+		Expect(handler.OnAlarm()).To(Succeed())
+		Expect(handler.SendMode()).To(Equal(SendAny))
+	})
+
 	Context("TLPs", func() {
 		It("uses the RTT from RTT stats", func() {
 			rtt := 2 * time.Second
