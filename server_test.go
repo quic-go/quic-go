@@ -81,7 +81,7 @@ var _ = Describe("Server", func() {
 
 		It("doesn't use 0-byte connection IDs", func() {
 			config := &Config{}
-			c := populateClientConfig(config, true)
+			c := populateServerConfig(config)
 			Expect(c.ConnectionIDLength).To(Equal(protocol.DefaultConnectionIDLength))
 		})
 	})
