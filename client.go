@@ -82,7 +82,7 @@ func DialAddrContext(
 	if err != nil {
 		return nil, err
 	}
-	return DialContext(ctx, udpConn, udpAddr, addr, tlsConf, config)
+	return dialContext(ctx, udpConn, udpAddr, addr, tlsConf, config)
 }
 
 // Dial establishes a new QUIC connection to a server using a net.PacketConn.
@@ -108,6 +108,17 @@ func DialContext(
 	config *Config,
 ) (Session, error) {
 	config = populateClientConfig(config, true)
+	return dialContext(ctx, pconn, remoteAddr, host, tlsConf, config)
+}
+
+func dialContext(
+	ctx context.Context,
+	pconn net.PacketConn,
+	remoteAddr net.Addr,
+	host string,
+	tlsConf *tls.Config,
+	config *Config,
+) (Session, error) {
 	multiplexer := getClientMultiplexer()
 	manager, err := multiplexer.AddConn(pconn, config.ConnectionIDLength)
 	if err != nil {
