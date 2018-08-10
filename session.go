@@ -935,37 +935,11 @@ sendLoop:
 			// There will only be a new ACK after receiving new packets.
 			// SendAck is only returned when we're congestion limited, so we don't need to set the pacingt timer.
 			return s.maybeSendAckOnlyPacket()
-		case ackhandler.SendRTO:
-			// try to send a retransmission first
-			sentPacket, err := s.maybeSendRetransmission()
-			if err != nil {
+		case ackhandler.SendTLP, ackhandler.SendRTO:
+			if err := s.sendProbePacket(); err != nil {
 				return err
-			}
-			if !sentPacket {
-				// In RTO mode, a probe packet has to be sent.
-				// Add a PING frame to make sure a (retransmittable) packet will be sent.
-				s.queueControlFrame(&wire.PingFrame{})
-				sentPacket, err := s.sendPacket()
-				if err != nil {
-					return err
-				}
-				if !sentPacket {
-					return errors.New("session BUG: expected a packet to be sent in RTO mode")
-				}
 			}
 			numPacketsSent++
-		case ackhandler.SendTLP:
-			// In TLP mode, a probe packet has to be sent.
-			// Add a PING frame to make sure a (retransmittable) packet will be sent.
-			s.queueControlFrame(&wire.PingFrame{})
-			sentPacket, err := s.sendPacket()
-			if err != nil {
-				return err
-			}
-			if !sentPacket {
-				return errors.New("session BUG: expected a packet to be sent in TLP mode")
-			}
-			return nil
 		case ackhandler.SendRetransmission:
 			sentPacket, err := s.maybeSendRetransmission()
 			if err != nil {
@@ -1065,6 +1039,33 @@ func (s *session) maybeSendRetransmission() (bool, error) {
 		}
 	}
 	return true, nil
+}
+
+func (s *session) sendProbePacket() error {
+	p, err := s.sentPacketHandler.DequeueProbePacket()
+	if err != nil {
+		return err
+	}
+	s.logger.Debugf("Sending a retransmission for %#x as a probe packet.", p.PacketNumber)
+
+	if s.version.UsesStopWaitingFrames() {
+		s.packer.QueueControlFrame(s.sentPacketHandler.GetStopWaitingFrame(true))
+	}
+	packets, err := s.packer.PackRetransmission(p)
+	if err != nil {
+		return err
+	}
+	ackhandlerPackets := make([]*ackhandler.Packet, len(packets))
+	for i, packet := range packets {
+		ackhandlerPackets[i] = packet.ToAckHandlerPacket()
+	}
+	s.sentPacketHandler.SentPacketsAsRetransmission(ackhandlerPackets, p.PacketNumber)
+	for _, packet := range packets {
+		if err := s.sendPackedPacket(packet); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *session) sendPacket() (bool, error) {
