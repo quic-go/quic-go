@@ -21,4 +21,8 @@ export GOPATH="$TEMP_DIR:$GOPATH"
 
 mockgen -package $1 -self_package $1 -destination $2 $3 $INTERFACE_NAME
 
+# mockgen imports quic-go as 'import quic_go github.com/lucas_clemente/quic-go'
+sed -i '' 's/quic_go.//g' $2
+goimports -w $2
+
 rm -r "$TEMP_DIR"
