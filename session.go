@@ -86,7 +86,7 @@ type session struct {
 	conn connection
 
 	streamsMap   streamManager
-	cryptoStream cryptoStreamI
+	cryptoStream cryptoStream
 
 	rttStats *congestion.RTTStats
 
@@ -1188,7 +1188,7 @@ func (s *session) newFlowController(id protocol.StreamID) flowcontrol.StreamFlow
 	)
 }
 
-func (s *session) newCryptoStream() cryptoStreamI {
+func (s *session) newCryptoStream() cryptoStream {
 	id := s.version.CryptoStreamID()
 	flowController := flowcontrol.NewStreamFlowController(
 		id,
@@ -1276,7 +1276,7 @@ func (s *session) RemoteAddr() net.Addr {
 	return s.conn.RemoteAddr()
 }
 
-func (s *session) getCryptoStream() cryptoStreamI {
+func (s *session) getCryptoStream() cryptoStream {
 	return s.cryptoStream
 }
 

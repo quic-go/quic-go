@@ -14,7 +14,7 @@ type windowUpdateQueue struct {
 	queue      map[protocol.StreamID]bool // used as a set
 	queuedConn bool                       // connection-level window update
 
-	cryptoStream       cryptoStreamI
+	cryptoStream       cryptoStream
 	streamGetter       streamGetter
 	connFlowController flowcontrol.ConnectionFlowController
 	callback           func(wire.Frame)
@@ -22,7 +22,7 @@ type windowUpdateQueue struct {
 
 func newWindowUpdateQueue(
 	streamGetter streamGetter,
-	cryptoStream cryptoStreamI,
+	cryptoStream cryptoStream,
 	connFC flowcontrol.ConnectionFlowController,
 	cb func(wire.Frame),
 ) *windowUpdateQueue {
