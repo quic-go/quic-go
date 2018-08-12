@@ -114,7 +114,7 @@ var _ = Describe("Stateless TLS handling", func() {
 			data:   bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
 		}
 		run := make(chan struct{})
-		server.newSession = func(connection, sessionRunner, protocol.ConnectionID, protocol.ConnectionID, protocol.PacketNumber, *Config, *mint.Config, *handshake.TransportParameters, utils.Logger, protocol.VersionNumber) (quicSession, error) {
+		server.newSession = func(connection, sessionRunner, protocol.ConnectionID, protocol.ConnectionID, protocol.ConnectionID, protocol.PacketNumber, *Config, *mint.Config, *handshake.TransportParameters, utils.Logger, protocol.VersionNumber) (quicSession, error) {
 			sess := NewMockQuicSession(mockCtrl)
 			sess.EXPECT().handlePacket(p)
 			sess.EXPECT().run().Do(func() { close(run) })
@@ -133,8 +133,7 @@ var _ = Describe("Stateless TLS handling", func() {
 		Eventually(sessionChan).Should(Receive(&tlsSess))
 		// make sure we're using a server-generated connection ID
 		Expect(tlsSess.connID).ToNot(Equal(hdr.SrcConnectionID))
-		// TODO: use server-generated connection ID here
-		// Expect(tlsSess.connID).ToNot(Equal(hdr.DestConnectionID))
+		Expect(tlsSess.connID).ToNot(Equal(hdr.DestConnectionID))
 		Eventually(run).Should(BeClosed())
 		Eventually(done).Should(BeClosed())
 	})

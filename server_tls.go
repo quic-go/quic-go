@@ -26,7 +26,7 @@ type serverTLS struct {
 	params            *handshake.TransportParameters
 	cookieGenerator   *handshake.CookieGenerator
 
-	newSession func(connection, sessionRunner, protocol.ConnectionID, protocol.ConnectionID, protocol.PacketNumber, *Config, *mint.Config, *handshake.TransportParameters, utils.Logger, protocol.VersionNumber) (quicSession, error)
+	newSession func(connection, sessionRunner, protocol.ConnectionID, protocol.ConnectionID, protocol.ConnectionID, protocol.PacketNumber, *Config, *mint.Config, *handshake.TransportParameters, utils.Logger, protocol.VersionNumber) (quicSession, error)
 
 	sessionRunner sessionRunner
 	sessionChan   chan<- tlsSession
@@ -128,12 +128,15 @@ func (s *serverTLS) handleInitialImpl(p *receivedPacket) (quicSession, protocol.
 	mconf := s.mintConf.Clone()
 	mconf.ExtensionHandler = extHandler
 
-	// TODO: change the connection ID
-	// This means that the server crypto setup will need two different null AEADs.
-	connID := hdr.DestConnectionID
+	connID, err := protocol.GenerateConnectionID(s.config.ConnectionIDLength)
+	if err != nil {
+		return nil, nil, err
+	}
+	s.logger.Debugf("Changing connection ID to %s.", connID)
 	sess, err := s.newSession(
 		&conn{pconn: s.conn, currentAddr: p.remoteAddr},
 		s.sessionRunner,
+		hdr.DestConnectionID,
 		hdr.SrcConnectionID,
 		connID,
 		1,
@@ -169,7 +172,7 @@ func (s *serverTLS) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
 		OrigDestConnectionID: hdr.DestConnectionID,
 		Token:                token,
 	}
-	s.logger.Debugf("-> Sending Retry")
+	s.logger.Debugf("Changing connection ID to %s.\n-> Sending Retry", connID)
 	replyHdr.Log(s.logger)
 	buf := &bytes.Buffer{}
 	if err := replyHdr.Write(buf, protocol.PerspectiveServer, hdr.Version); err != nil {

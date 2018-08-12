@@ -294,6 +294,7 @@ var newClientSession = func(
 func newTLSServerSession(
 	conn connection,
 	runner sessionRunner,
+	origConnID protocol.ConnectionID,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
 	initialPacketNumber protocol.PacketNumber,
@@ -318,7 +319,7 @@ func newTLSServerSession(
 	s.preSetup()
 	cs, err := handshake.NewCryptoSetupTLSServer(
 		s.cryptoStream,
-		s.srcConnID,
+		origConnID,
 		mintConf,
 		handshakeEvent,
 		v,
