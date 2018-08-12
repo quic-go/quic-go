@@ -24,6 +24,7 @@ type cryptoSetupTLS struct {
 	aead          crypto.AEAD
 
 	tls            mintTLS
+	conn           *cryptoStreamConn
 	handshakeEvent chan<- struct{}
 }
 
@@ -41,9 +42,11 @@ func NewCryptoSetupTLSServer(
 	if err != nil {
 		return nil, err
 	}
-	conn := mint.Server(newCryptoStreamConn(cryptoStream), config)
+	conn := newCryptoStreamConn(cryptoStream)
+	tls := mint.Server(conn, config)
 	return &cryptoSetupTLS{
-		tls:            conn,
+		tls:            tls,
+		conn:           conn,
 		nullAEAD:       nullAEAD,
 		perspective:    protocol.PerspectiveServer,
 		keyDerivation:  crypto.DeriveAESKeys,
@@ -63,9 +66,11 @@ func NewCryptoSetupTLSClient(
 	if err != nil {
 		return nil, err
 	}
-	conn := mint.Client(newCryptoStreamConn(cryptoStream), config)
+	conn := newCryptoStreamConn(cryptoStream)
+	tls := mint.Client(conn, config)
 	return &cryptoSetupTLS{
-		tls:            conn,
+		tls:            tls,
+		conn:           conn,
 		perspective:    protocol.PerspectiveClient,
 		nullAEAD:       nullAEAD,
 		keyDerivation:  crypto.DeriveAESKeys,
@@ -79,6 +84,9 @@ func (h *cryptoSetupTLS) HandleCryptoStream() error {
 			return fmt.Errorf("TLS handshake error: %s (Alert %d)", alert.String(), alert)
 		}
 		state := h.tls.ConnectionState().HandshakeState
+		if err := h.conn.Flush(); err != nil {
+			return err
+		}
 		if state == mint.StateClientConnected || state == mint.StateServerConnected {
 			break
 		}

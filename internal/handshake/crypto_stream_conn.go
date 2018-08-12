@@ -1,21 +1,41 @@
 package handshake
 
 import (
+	"bytes"
 	"io"
 	"net"
 	"time"
 )
 
 type cryptoStreamConn struct {
-	io.ReadWriter
+	buffer *bytes.Buffer
+	stream io.ReadWriter
 }
 
 var _ net.Conn = &cryptoStreamConn{}
 
-func newCryptoStreamConn(stream io.ReadWriter) net.Conn {
+func newCryptoStreamConn(stream io.ReadWriter) *cryptoStreamConn {
 	return &cryptoStreamConn{
-		ReadWriter: stream,
+		stream: stream,
+		buffer: &bytes.Buffer{},
 	}
+}
+
+func (c *cryptoStreamConn) Read(b []byte) (int, error) {
+	return c.stream.Read(b)
+}
+
+func (c *cryptoStreamConn) Write(p []byte) (int, error) {
+	return c.buffer.Write(p)
+}
+
+func (c *cryptoStreamConn) Flush() error {
+	if c.buffer.Len() == 0 {
+		return nil
+	}
+	_, err := c.stream.Write(c.buffer.Bytes())
+	c.buffer.Reset()
+	return err
 }
 
 // Close is not implemented
