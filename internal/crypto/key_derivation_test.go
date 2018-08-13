@@ -19,11 +19,13 @@ var _ TLSExporter = &mockTLSExporter{}
 
 func (c *mockTLSExporter) Handshake() mint.Alert { panic("not implemented") }
 
-func (c *mockTLSExporter) GetCipherSuite() mint.CipherSuiteParams {
-	return mint.CipherSuiteParams{
-		Hash:   c.hash,
-		KeyLen: 32,
-		IvLen:  12,
+func (c *mockTLSExporter) ConnectionState() mint.ConnectionState {
+	return mint.ConnectionState{
+		CipherSuite: mint.CipherSuiteParams{
+			Hash:   c.hash,
+			KeyLen: 32,
+			IvLen:  12,
+		},
 	}
 }
 

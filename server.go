@@ -39,7 +39,6 @@ type packetHandlerManager interface {
 type quicSession interface {
 	Session
 	handlePacket(*receivedPacket)
-	getCryptoStream() cryptoStream
 	GetVersion() protocol.VersionNumber
 	run() error
 	destroy(error)
@@ -179,11 +178,7 @@ func (s *server) setup() {
 }
 
 func (s *server) setupTLS() error {
-	cookieHandler, err := handshake.NewCookieHandler(s.config.AcceptCookie, s.logger)
-	if err != nil {
-		return err
-	}
-	serverTLS, sessionChan, err := newServerTLS(s.conn, s.config, s.sessionRunner, cookieHandler, s.tlsConf, s.logger)
+	serverTLS, sessionChan, err := newServerTLS(s.conn, s.config, s.sessionRunner, s.tlsConf, s.logger)
 	if err != nil {
 		return err
 	}
@@ -195,7 +190,7 @@ func (s *server) setupTLS() error {
 			case <-s.errorChan:
 				return
 			case tlsSession := <-sessionChan:
-				// The connection ID is a randomly chosen 8 byte value.
+				// The connection ID is a randomly chosen value.
 				// It is safe to assume that it doesn't collide with other randomly chosen values.
 				serverSession := newServerSession(tlsSession.sess, s.config, s.logger)
 				s.sessionHandler.Add(tlsSession.connID, serverSession)
@@ -333,7 +328,7 @@ func (s *server) handlePacketImpl(p *receivedPacket) error {
 	version := hdr.Version
 
 	if hdr.Type == protocol.PacketTypeInitial {
-		go s.serverTLS.HandleInitial(p.remoteAddr, hdr, p.data)
+		go s.serverTLS.HandleInitial(p)
 		return nil
 	}
 

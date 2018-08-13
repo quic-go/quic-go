@@ -81,6 +81,8 @@ var _ = Describe("Header Parsing", func() {
 				}
 				data = append(data, destConnID...)
 				data = append(data, srcConnID...)
+				data = append(data, encodeVarInt(6)...)      // token length
+				data = append(data, []byte("foobar")...)     // token
 				data = append(data, encodeVarInt(0x1337)...) // payload length
 				// packet number
 				data = appendPacketNumber(data, 0xbeef, protocol.PacketNumberLen4)
@@ -97,6 +99,7 @@ var _ = Describe("Header Parsing", func() {
 				Expect(hdr.IsLongHeader).To(BeTrue())
 				Expect(hdr.DestConnectionID).To(Equal(destConnID))
 				Expect(hdr.SrcConnectionID).To(Equal(srcConnID))
+				Expect(hdr.Token).To(Equal([]byte("foobar")))
 				Expect(hdr.PayloadLen).To(Equal(protocol.ByteCount(0x1337)))
 				Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0xbeef)))
 				Expect(hdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
@@ -143,8 +146,10 @@ var _ = Describe("Header Parsing", func() {
 					0x1, 0x2, 0x3, 0x4, // version number
 					0x0, // connection ID lengths
 				}
+				data = append(data, encodeVarInt(0)...)    // token length
 				data = append(data, encodeVarInt(0x42)...) // payload length
 				data = appendPacketNumber(data, 0x123, protocol.PacketNumberLen2)
+
 				b := bytes.NewReader(data)
 				iHdr, err := ParseInvariantHeader(b, 0)
 				Expect(err).ToNot(HaveOccurred())
@@ -152,6 +157,25 @@ var _ = Describe("Header Parsing", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x123)))
 				Expect(hdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen2))
+			})
+
+			It("parses a Retry packet", func() {
+				data := []byte{
+					0x80 ^ uint8(protocol.PacketTypeRetry),
+					0x1, 0x2, 0x3, 0x4, // version number
+					0x0,                           // connection ID lengths
+					0x97,                          // Orig Destination Connection ID length
+					1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // source connection ID
+					'f', 'o', 'o', 'b', 'a', 'r', // token
+				}
+				b := bytes.NewReader(data)
+				iHdr, err := ParseInvariantHeader(b, 0)
+				Expect(err).ToNot(HaveOccurred())
+				hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, versionIETFHeader)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(hdr.Type).To(Equal(protocol.PacketTypeRetry))
+				Expect(hdr.OrigDestConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
+				Expect(hdr.Token).To(Equal([]byte("foobar")))
 			})
 
 			It("rejects packets sent with an unknown packet type", func() {
@@ -171,6 +195,23 @@ var _ = Describe("Header Parsing", func() {
 				Expect(err).ToNot(HaveOccurred())
 				_, err = iHdr.Parse(b, protocol.PerspectiveClient, versionIETFHeader)
 				Expect(err).To(MatchError("InvalidPacketHeader: Received packet with invalid packet type: 42"))
+			})
+
+			It("errors if the token length is too large", func() {
+				data := []byte{
+					0x80 ^ uint8(protocol.PacketTypeInitial),
+					0x1, 0x2, 0x3, 0x4, // version number
+					0x0, // connection ID lengths
+				}
+				data = append(data, encodeVarInt(4)...)                           // token length: 4 bytes (1 byte too long)
+				data = append(data, encodeVarInt(0x42)...)                        // payload length, 1 byte
+				data = appendPacketNumber(data, 0x123, protocol.PacketNumberLen2) // 2 bytes
+
+				b := bytes.NewReader(data)
+				iHdr, err := ParseInvariantHeader(b, 0)
+				Expect(err).ToNot(HaveOccurred())
+				_, err = iHdr.Parse(b, protocol.PerspectiveServer, versionIETFHeader)
+				Expect(err).To(MatchError(io.EOF))
 			})
 
 			It("errors on EOF, when parsing the invariant header", func() {
@@ -196,6 +237,26 @@ var _ = Describe("Header Parsing", func() {
 				iHdrLen := len(data)
 				data = append(data, encodeVarInt(0x1337)...)
 				data = appendPacketNumber(data, 0xdeadbeef, protocol.PacketNumberLen4)
+				for i := iHdrLen; i < len(data); i++ {
+					b := bytes.NewReader(data[:i])
+					iHdr, err := ParseInvariantHeader(b, 0)
+					Expect(err).ToNot(HaveOccurred())
+					_, err = iHdr.Parse(b, protocol.PerspectiveServer, versionIETFHeader)
+					Expect(err).To(Equal(io.EOF))
+				}
+			})
+
+			It("errors on EOF, for a Retry packet", func() {
+				data := []byte{
+					0x80 ^ uint8(protocol.PacketTypeRetry),
+					0x1, 0x2, 0x3, 0x4, // version number
+					0x0, // connection ID lengths
+				}
+				iHdrLen := len(data)
+				data = append(data, []byte{
+					0x97,                          // Orig Destination Connection ID length
+					1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // source connection ID
+				}...)
 				for i := iHdrLen; i < len(data); i++ {
 					b := bytes.NewReader(data[:i])
 					iHdr, err := ParseInvariantHeader(b, 0)

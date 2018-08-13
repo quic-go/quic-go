@@ -2,66 +2,40 @@ package handshake
 
 import (
 	"bytes"
-	"net"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("CryptoStreamConn", func() {
+var _ = Describe("Crypto Stream Conn", func() {
 	var (
-		csc        *CryptoStreamConn
-		remoteAddr net.Addr
+		stream *bytes.Buffer
+		csc    *cryptoStreamConn
 	)
 
 	BeforeEach(func() {
-		remoteAddr = &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
-		csc = NewCryptoStreamConn(remoteAddr)
+		stream = &bytes.Buffer{}
+		csc = newCryptoStreamConn(stream)
 	})
 
-	It("reads from the read buffer, when no stream is set", func() {
-		csc.AddDataForReading([]byte("foobar"))
-		data := make([]byte, 4)
-		n, err := csc.Read(data)
+	It("buffers writes", func() {
+		_, err := csc.Write([]byte("foo"))
 		Expect(err).ToNot(HaveOccurred())
-		Expect(n).To(Equal(4))
-		Expect(data).To(Equal([]byte("foob")))
-	})
-
-	It("writes to the write buffer, when no stream is set", func() {
-		csc.Write([]byte("foo"))
-		Expect(csc.GetDataForWriting()).To(Equal([]byte("foo")))
-		csc.Write([]byte("bar"))
-		Expect(csc.GetDataForWriting()).To(Equal([]byte("bar")))
-	})
-
-	It("reads from the stream, if available", func() {
-		csc.stream = &bytes.Buffer{}
-		csc.stream.Write([]byte("foobar"))
-		data := make([]byte, 3)
-		n, err := csc.Read(data)
+		Expect(stream.Len()).To(BeZero())
+		_, err = csc.Write([]byte("bar"))
 		Expect(err).ToNot(HaveOccurred())
-		Expect(n).To(Equal(3))
-		Expect(data).To(Equal([]byte("foo")))
-	})
+		Expect(stream.Len()).To(BeZero())
 
-	It("writes to the stream, if available", func() {
-		stream := &bytes.Buffer{}
-		csc.SetStream(stream)
-		csc.Write([]byte("foobar"))
+		Expect(csc.Flush()).To(Succeed())
 		Expect(stream.Bytes()).To(Equal([]byte("foobar")))
 	})
 
-	It("returns the remote address", func() {
-		Expect(csc.RemoteAddr()).To(Equal(remoteAddr))
-	})
-
-	It("has unimplemented methods", func() {
-		Expect(csc.Close()).ToNot(HaveOccurred())
-		Expect(csc.SetDeadline(time.Time{})).ToNot(HaveOccurred())
-		Expect(csc.SetReadDeadline(time.Time{})).ToNot(HaveOccurred())
-		Expect(csc.SetWriteDeadline(time.Time{})).ToNot(HaveOccurred())
-		Expect(csc.LocalAddr()).To(BeNil())
+	It("reads from the stream", func() {
+		stream.Write([]byte("foobar"))
+		b := make([]byte, 6)
+		n, err := csc.Read(b)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(n).To(Equal(6))
+		Expect(b).To(Equal([]byte("foobar")))
 	})
 })

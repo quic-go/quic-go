@@ -123,6 +123,42 @@ func (iv *InvariantHeader) parseVersionNegotiationPacket(b *bytes.Reader) (*Head
 
 func (iv *InvariantHeader) parseLongHeader(b *bytes.Reader) (*Header, error) {
 	h := iv.toHeader()
+	h.Type = protocol.PacketType(iv.typeByte & 0x7f)
+
+	if h.Type != protocol.PacketTypeInitial && h.Type != protocol.PacketTypeRetry && h.Type != protocol.PacketType0RTT && h.Type != protocol.PacketTypeHandshake {
+		return nil, qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", h.Type))
+	}
+
+	if h.Type == protocol.PacketTypeRetry {
+		odcilByte, err := b.ReadByte()
+		if err != nil {
+			return nil, err
+		}
+		odcil := decodeSingleConnIDLen(odcilByte & 0xf)
+		h.OrigDestConnectionID, err = protocol.ReadConnectionID(b, odcil)
+		if err != nil {
+			return nil, err
+		}
+		h.Token = make([]byte, b.Len())
+		if _, err := io.ReadFull(b, h.Token); err != nil {
+			return nil, err
+		}
+		return h, nil
+	}
+
+	if h.Type == protocol.PacketTypeInitial {
+		tokenLen, err := utils.ReadVarInt(b)
+		if err != nil {
+			return nil, err
+		}
+		if tokenLen > uint64(b.Len()) {
+			return nil, io.EOF
+		}
+		h.Token = make([]byte, tokenLen)
+		if _, err := io.ReadFull(b, h.Token); err != nil {
+			return nil, err
+		}
+	}
 
 	pl, err := utils.ReadVarInt(b)
 	if err != nil {
@@ -135,11 +171,7 @@ func (iv *InvariantHeader) parseLongHeader(b *bytes.Reader) (*Header, error) {
 	}
 	h.PacketNumber = pn
 	h.PacketNumberLen = pnLen
-	h.Type = protocol.PacketType(iv.typeByte & 0x7f)
 
-	if h.Type != protocol.PacketTypeInitial && h.Type != protocol.PacketTypeRetry && h.Type != protocol.PacketType0RTT && h.Type != protocol.PacketTypeHandshake {
-		return nil, qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", h.Type))
-	}
 	return h, nil
 }
 

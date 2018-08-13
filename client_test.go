@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/bifurcation/mint"
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -93,16 +94,22 @@ var _ = Describe("Client", func() {
 
 	Context("Dialing", func() {
 		var origGenerateConnectionID func(int) (protocol.ConnectionID, error)
+		var origGenerateDestConnectionID func() (protocol.ConnectionID, error)
 
 		BeforeEach(func() {
 			origGenerateConnectionID = generateConnectionID
+			origGenerateDestConnectionID = generateDestConnectionID
 			generateConnectionID = func(int) (protocol.ConnectionID, error) {
+				return connID, nil
+			}
+			generateDestConnectionID = func() (protocol.ConnectionID, error) {
 				return connID, nil
 			}
 		})
 
 		AfterEach(func() {
 			generateConnectionID = origGenerateConnectionID
+			generateDestConnectionID = origGenerateDestConnectionID
 		})
 
 		It("resolves the address", func() {
@@ -414,7 +421,6 @@ var _ = Describe("Client", func() {
 		Context("gQUIC", func() {
 			It("errors if it can't create a session", func() {
 				manager := NewMockPacketHandlerManager(mockCtrl)
-				manager.EXPECT().Add(connID, gomock.Any())
 				mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any()).Return(manager, nil)
 
 				testErr := errors.New("error creating session")
@@ -446,24 +452,22 @@ var _ = Describe("Client", func() {
 				config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}}
 				c := make(chan struct{})
 				var cconn connection
-				var hostname string
 				var version protocol.VersionNumber
 				var conf *Config
 				newTLSClientSession = func(
 					connP connection,
 					_ sessionRunner,
-					hostnameP string,
-					versionP protocol.VersionNumber,
+					tokenP []byte,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					configP *Config,
-					tls handshake.MintTLS,
+					_ *mint.Config,
 					paramsChan <-chan handshake.TransportParameters,
 					_ protocol.PacketNumber,
 					_ utils.Logger,
+					versionP protocol.VersionNumber,
 				) (quicSession, error) {
 					cconn = connP
-					hostname = hostnameP
 					version = versionP
 					conf = configP
 					close(c)
@@ -476,9 +480,59 @@ var _ = Describe("Client", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Eventually(c).Should(BeClosed())
 				Expect(cconn.(*conn).pconn).To(Equal(packetConn))
-				Expect(hostname).To(Equal("quic.clemente.io"))
 				Expect(version).To(Equal(config.Versions[0]))
 				Expect(conf.Versions).To(Equal(config.Versions))
+			})
+
+			It("creates a new session when the server performs a retry", func() {
+				manager := NewMockPacketHandlerManager(mockCtrl)
+				manager.EXPECT().Add(gomock.Any(), gomock.Any()).Do(func(id protocol.ConnectionID, handler packetHandler) {
+					go handler.handlePacket(&receivedPacket{
+						header: &wire.Header{
+							IsLongHeader:         true,
+							Type:                 protocol.PacketTypeRetry,
+							Token:                []byte("foobar"),
+							DestConnectionID:     id,
+							OrigDestConnectionID: connID,
+						},
+					})
+				})
+				manager.EXPECT().Add(gomock.Any(), gomock.Any())
+				mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any()).Return(manager, nil)
+
+				config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}}
+				cl.config = config
+				run1 := make(chan error)
+				sess1 := NewMockQuicSession(mockCtrl)
+				sess1.EXPECT().run().DoAndReturn(func() error {
+					return <-run1
+				})
+				sess1.EXPECT().destroy(errCloseSessionForRetry).Do(func(e error) {
+					run1 <- e
+				})
+				sess2 := NewMockQuicSession(mockCtrl)
+				sess2.EXPECT().run()
+				sessions := make(chan quicSession, 2)
+				sessions <- sess1
+				sessions <- sess2
+				newTLSClientSession = func(
+					_ connection,
+					_ sessionRunner,
+					_ []byte,
+					_ protocol.ConnectionID,
+					_ protocol.ConnectionID,
+					_ *Config,
+					_ *mint.Config,
+					_ <-chan handshake.TransportParameters,
+					_ protocol.PacketNumber,
+					_ utils.Logger,
+					_ protocol.VersionNumber,
+				) (quicSession, error) {
+					return <-sessions, nil
+				}
+				_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(sessions).To(BeEmpty())
 			})
 		})
 
@@ -536,9 +590,9 @@ var _ = Describe("Client", func() {
 				Expect(cl.versionNegotiated).To(BeTrue())
 			})
 
-			It("changes the version after receiving a version negotiation packet", func() {
+			It("changes the version after receiving a Version Negotiation Packet", func() {
 				phm := NewMockPacketHandlerManager(mockCtrl)
-				phm.EXPECT().Add(connID, gomock.Any())
+				phm.EXPECT().Add(connID, gomock.Any()).Times(2)
 				cl.packetHandlers = phm
 
 				version1 := protocol.Version39
@@ -583,7 +637,7 @@ var _ = Describe("Client", func() {
 
 			It("only accepts one version negotiation packet", func() {
 				phm := NewMockPacketHandlerManager(mockCtrl)
-				phm.EXPECT().Add(connID, gomock.Any())
+				phm.EXPECT().Add(connID, gomock.Any()).Times(2)
 				cl.packetHandlers = phm
 				version1 := protocol.Version39
 				version2 := protocol.Version39 + 1
@@ -651,7 +705,6 @@ var _ = Describe("Client", func() {
 
 			It("changes to the version preferred by the quic.Config", func() {
 				phm := NewMockPacketHandlerManager(mockCtrl)
-				phm.EXPECT().Add(connID, gomock.Any())
 				cl.packetHandlers = phm
 
 				sess := NewMockQuicSession(mockCtrl)
@@ -771,98 +824,6 @@ var _ = Describe("Client", func() {
 		Expect(hostname).To(Equal("quic.clemente.io"))
 		Expect(version).To(Equal(config.Versions[0]))
 		Expect(conf.Versions).To(Equal(config.Versions))
-	})
-
-	It("creates a new session when the server performs a retry", func() {
-		manager := NewMockPacketHandlerManager(mockCtrl)
-		manager.EXPECT().Add(gomock.Any(), gomock.Any())
-		mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any()).Return(manager, nil)
-
-		config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}}
-		cl.config = config
-		sess1 := NewMockQuicSession(mockCtrl)
-		sess1.EXPECT().run().Return(handshake.ErrCloseSessionForRetry)
-		sess2 := NewMockQuicSession(mockCtrl)
-		sess2.EXPECT().run()
-		sessions := []*MockQuicSession{sess1, sess2}
-		newTLSClientSession = func(
-			connP connection,
-			_ sessionRunner,
-			hostnameP string,
-			versionP protocol.VersionNumber,
-			_ protocol.ConnectionID,
-			_ protocol.ConnectionID,
-			configP *Config,
-			tls handshake.MintTLS,
-			paramsChan <-chan handshake.TransportParameters,
-			_ protocol.PacketNumber,
-			_ utils.Logger,
-		) (quicSession, error) {
-			sess := sessions[0]
-			sessions = sessions[1:]
-			return sess, nil
-		}
-		_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(sessions).To(BeEmpty())
-	})
-
-	It("only accepts one Retry packet", func() {
-		manager := NewMockPacketHandlerManager(mockCtrl)
-		manager.EXPECT().Add(gomock.Any(), gomock.Any())
-		mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any()).Return(manager, nil)
-
-		config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}}
-		sess1 := NewMockQuicSession(mockCtrl)
-		sess1.EXPECT().run().Return(handshake.ErrCloseSessionForRetry)
-		// don't EXPECT any call to handlePacket()
-		sess2 := NewMockQuicSession(mockCtrl)
-		run := make(chan struct{})
-		sess2.EXPECT().run().Do(func() { <-run })
-		sessions := make(chan *MockQuicSession, 2)
-		sessions <- sess1
-		sessions <- sess2
-		newTLSClientSession = func(
-			connP connection,
-			_ sessionRunner,
-			hostnameP string,
-			versionP protocol.VersionNumber,
-			_ protocol.ConnectionID,
-			_ protocol.ConnectionID,
-			configP *Config,
-			tls handshake.MintTLS,
-			paramsChan <-chan handshake.TransportParameters,
-			_ protocol.PacketNumber,
-			_ utils.Logger,
-		) (quicSession, error) {
-			return <-sessions, nil
-		}
-
-		done := make(chan struct{})
-		go func() {
-			defer GinkgoRecover()
-			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
-			Expect(err).ToNot(HaveOccurred())
-			close(done)
-		}()
-
-		buf := &bytes.Buffer{}
-		h := &wire.Header{
-			IsLongHeader:     true,
-			Type:             protocol.PacketTypeRetry,
-			SrcConnectionID:  connID,
-			DestConnectionID: connID,
-			PacketNumberLen:  protocol.PacketNumberLen1,
-		}
-		err := h.Write(buf, protocol.PerspectiveServer, protocol.VersionTLS)
-		Expect(err).ToNot(HaveOccurred())
-		Eventually(sessions).Should(BeEmpty())
-		packetConn.dataToRead <- buf.Bytes()
-		time.Sleep(50 * time.Millisecond) // make sure the packet is read and discarded
-
-		// make the go routine return
-		close(run)
-		Eventually(done).Should(BeClosed())
 	})
 
 	Context("Public Reset handling", func() {

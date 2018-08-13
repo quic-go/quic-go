@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bifurcation/mint"
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/congestion"
-	"github.com/lucas-clemente/quic-go/internal/crypto"
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -210,6 +210,7 @@ func newSession(
 		1,
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),
+		nil, // no token
 		divNonce,
 		cs,
 		s.streamFramer,
@@ -280,6 +281,7 @@ var newClientSession = func(
 		1,
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),
+		nil, // no token
 		nil, // no diversification nonce
 		cs,
 		s.streamFramer,
@@ -292,16 +294,15 @@ var newClientSession = func(
 func newTLSServerSession(
 	conn connection,
 	runner sessionRunner,
+	origConnID protocol.ConnectionID,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
 	initialPacketNumber protocol.PacketNumber,
 	config *Config,
-	tls handshake.MintTLS,
-	cryptoStreamConn *handshake.CryptoStreamConn,
-	nullAEAD crypto.AEAD,
+	mintConf *mint.Config,
 	peerParams *handshake.TransportParameters,
-	v protocol.VersionNumber,
 	logger utils.Logger,
+	v protocol.VersionNumber,
 ) (quicSession, error) {
 	handshakeEvent := make(chan struct{}, 1)
 	s := &session{
@@ -316,13 +317,16 @@ func newTLSServerSession(
 		logger:         logger,
 	}
 	s.preSetup()
-	cs := handshake.NewCryptoSetupTLSServer(
-		tls,
-		cryptoStreamConn,
-		nullAEAD,
+	cs, err := handshake.NewCryptoSetupTLSServer(
+		s.cryptoStream,
+		origConnID,
+		mintConf,
 		handshakeEvent,
 		v,
 	)
+	if err != nil {
+		return nil, err
+	}
 	s.cryptoStreamHandler = cs
 	s.streamsMap = newStreamsMap(s, s.newFlowController, s.config.MaxIncomingStreams, s.config.MaxIncomingUniStreams, s.perspective, s.version)
 	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
@@ -332,6 +336,7 @@ func newTLSServerSession(
 		initialPacketNumber,
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),
+		nil, // no token
 		nil, // no diversification nonce
 		cs,
 		s.streamFramer,
@@ -351,21 +356,21 @@ func newTLSServerSession(
 var newTLSClientSession = func(
 	conn connection,
 	runner sessionRunner,
-	hostname string,
-	v protocol.VersionNumber,
+	token []byte,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
-	config *Config,
-	tls handshake.MintTLS,
+	conf *Config,
+	mintConf *mint.Config,
 	paramsChan <-chan handshake.TransportParameters,
 	initialPacketNumber protocol.PacketNumber,
 	logger utils.Logger,
+	v protocol.VersionNumber,
 ) (quicSession, error) {
 	handshakeEvent := make(chan struct{}, 1)
 	s := &session{
 		conn:           conn,
 		sessionRunner:  runner,
-		config:         config,
+		config:         conf,
 		srcConnID:      srcConnID,
 		destConnID:     destConnID,
 		perspective:    protocol.PerspectiveClient,
@@ -375,13 +380,11 @@ var newTLSClientSession = func(
 		logger:         logger,
 	}
 	s.preSetup()
-	tls.SetCryptoStream(s.cryptoStream)
 	cs, err := handshake.NewCryptoSetupTLSClient(
 		s.cryptoStream,
 		s.destConnID,
-		hostname,
+		mintConf,
 		handshakeEvent,
-		tls,
 		v,
 	)
 	if err != nil {
@@ -397,6 +400,7 @@ var newTLSClientSession = func(
 		initialPacketNumber,
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),
+		token,
 		nil, // no diversification nonce
 		cs,
 		s.streamFramer,
@@ -442,11 +446,7 @@ func (s *session) run() error {
 
 	go func() {
 		if err := s.cryptoStreamHandler.HandleCryptoStream(); err != nil {
-			if err == handshake.ErrCloseSessionForRetry {
-				s.destroy(err)
-			} else {
-				s.closeLocal(err)
-			}
+			s.closeLocal(err)
 		}
 	}()
 
@@ -542,9 +542,7 @@ runLoop:
 		s.logger.Infof("Handling close error failed: %s", err)
 	}
 	s.logger.Infof("Connection %s closed.", s.srcConnID)
-	if closeErr.err != handshake.ErrCloseSessionForRetry {
-		s.sessionRunner.removeConnectionID(s.srcConnID)
-	}
+	s.sessionRunner.removeConnectionID(s.srcConnID)
 	return closeErr.err
 }
 
@@ -1274,10 +1272,6 @@ func (s *session) LocalAddr() net.Addr {
 
 func (s *session) RemoteAddr() net.Addr {
 	return s.conn.RemoteAddr()
-}
-
-func (s *session) getCryptoStream() cryptoStream {
-	return s.cryptoStream
 }
 
 func (s *session) GetVersion() protocol.VersionNumber {

@@ -219,18 +219,6 @@ func (mr *MockQuicSessionMockRecorder) destroy(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "destroy", reflect.TypeOf((*MockQuicSession)(nil).destroy), arg0)
 }
 
-// getCryptoStream mocks base method
-func (m *MockQuicSession) getCryptoStream() cryptoStream {
-	ret := m.ctrl.Call(m, "getCryptoStream")
-	ret0, _ := ret[0].(cryptoStream)
-	return ret0
-}
-
-// getCryptoStream indicates an expected call of getCryptoStream
-func (mr *MockQuicSessionMockRecorder) getCryptoStream() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getCryptoStream", reflect.TypeOf((*MockQuicSession)(nil).getCryptoStream))
-}
-
 // handlePacket mocks base method
 func (m *MockQuicSession) handlePacket(arg0 *receivedPacket) {
 	m.ctrl.Call(m, "handlePacket", arg0)
