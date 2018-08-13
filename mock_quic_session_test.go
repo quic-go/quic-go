@@ -220,9 +220,9 @@ func (mr *MockQuicSessionMockRecorder) destroy(arg0 interface{}) *gomock.Call {
 }
 
 // getCryptoStream mocks base method
-func (m *MockQuicSession) getCryptoStream() cryptoStreamI {
+func (m *MockQuicSession) getCryptoStream() cryptoStream {
 	ret := m.ctrl.Call(m, "getCryptoStream")
-	ret0, _ := ret[0].(cryptoStreamI)
+	ret0, _ := ret[0].(cryptoStream)
 	return ret0
 }
 

@@ -9,13 +9,13 @@ import (
 
 var _ = Describe("Crypto Stream", func() {
 	var (
-		str        *cryptoStream
+		str        *cryptoStreamImpl
 		mockSender *MockStreamSender
 	)
 
 	BeforeEach(func() {
 		mockSender = NewMockStreamSender(mockCtrl)
-		str = newCryptoStream(mockSender, nil, protocol.VersionWhatever).(*cryptoStream)
+		str = newCryptoStream(mockSender, nil, protocol.VersionWhatever).(*cryptoStreamImpl)
 	})
 
 	It("sets the read offset", func() {

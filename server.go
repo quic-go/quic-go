@@ -39,7 +39,7 @@ type packetHandlerManager interface {
 type quicSession interface {
 	Session
 	handlePacket(*receivedPacket)
-	getCryptoStream() cryptoStreamI
+	getCryptoStream() cryptoStream
 	GetVersion() protocol.VersionNumber
 	run() error
 	destroy(error)
