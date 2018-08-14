@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.9.0 (unreleased)
+## v0.9.0 (2018-08-15)
 
 - Add a `quic.Config` option for the length of the connection ID (for IETF QUIC).
 - Split Session.Close into one method for regular closing and one for closing with an error.
