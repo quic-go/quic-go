@@ -95,6 +95,7 @@ var _ = Describe("Stateless TLS handling", func() {
 		replyHdr := parseHeader(conn.dataWritten.Bytes())
 		Expect(replyHdr.Type).To(Equal(protocol.PacketTypeRetry))
 		Expect(replyHdr.SrcConnectionID).ToNot(Equal(hdr.DestConnectionID))
+		Expect(replyHdr.SrcConnectionID.Len()).To(BeNumerically(">=", protocol.MinConnectionIDLenInitial))
 		Expect(replyHdr.DestConnectionID).To(Equal(hdr.SrcConnectionID))
 		Expect(replyHdr.OrigDestConnectionID).To(Equal(hdr.DestConnectionID))
 		Expect(replyHdr.Token).ToNot(BeEmpty())

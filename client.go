@@ -57,10 +57,10 @@ var _ packetHandler = &client{}
 
 var (
 	// make it possible to mock connection ID generation in the tests
-	generateConnectionID         = protocol.GenerateConnectionID
-	generateDestConnectionID     = protocol.GenerateDestinationConnectionID
-	errCloseSessionForNewVersion = errors.New("closing session in order to recreate it with a new version")
-	errCloseSessionForRetry      = errors.New("closing session in response to a stateless retry")
+	generateConnectionID           = protocol.GenerateConnectionID
+	generateConnectionIDForInitial = protocol.GenerateConnectionIDForInitial
+	errCloseSessionForNewVersion   = errors.New("closing session in order to recreate it with a new version")
+	errCloseSessionForRetry        = errors.New("closing session in response to a stateless retry")
 )
 
 // DialAddr establishes a new QUIC connection to a server.
@@ -259,7 +259,7 @@ func (c *client) generateConnectionIDs() error {
 	}
 	destConnID := srcConnID
 	if c.version.UsesTLS() {
-		destConnID, err = generateDestConnectionID()
+		destConnID, err = generateConnectionIDForInitial()
 		if err != nil {
 			return err
 		}

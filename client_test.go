@@ -94,22 +94,22 @@ var _ = Describe("Client", func() {
 
 	Context("Dialing", func() {
 		var origGenerateConnectionID func(int) (protocol.ConnectionID, error)
-		var origGenerateDestConnectionID func() (protocol.ConnectionID, error)
+		var origGenerateConnectionIDForInitial func() (protocol.ConnectionID, error)
 
 		BeforeEach(func() {
 			origGenerateConnectionID = generateConnectionID
-			origGenerateDestConnectionID = generateDestConnectionID
+			origGenerateConnectionIDForInitial = generateConnectionIDForInitial
 			generateConnectionID = func(int) (protocol.ConnectionID, error) {
 				return connID, nil
 			}
-			generateDestConnectionID = func() (protocol.ConnectionID, error) {
+			generateConnectionIDForInitial = func() (protocol.ConnectionID, error) {
 				return connID, nil
 			}
 		})
 
 		AfterEach(func() {
 			generateConnectionID = origGenerateConnectionID
-			generateDestConnectionID = origGenerateDestConnectionID
+			generateConnectionIDForInitial = origGenerateConnectionIDForInitial
 		})
 
 		It("resolves the address", func() {
