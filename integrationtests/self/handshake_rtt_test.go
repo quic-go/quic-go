@@ -87,56 +87,127 @@ var _ = Describe("Handshake RTT tests", func() {
 		expectDurationInRTTs(1)
 	})
 
-	// 1 RTT for verifying the source address
-	// 1 RTT to become secure
-	// 1 RTT to become forward-secure
-	It("is forward-secure after 3 RTTs", func() {
-		runServerAndProxy()
-		_, err := quic.DialAddr(proxy.LocalAddr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
-		Expect(err).ToNot(HaveOccurred())
-		expectDurationInRTTs(3)
+	Context("gQUIC", func() {
+		// 1 RTT for verifying the source address
+		// 1 RTT to become secure
+		// 1 RTT to become forward-secure
+		It("is forward-secure after 3 RTTs", func() {
+			runServerAndProxy()
+			_, err := quic.DialAddr(proxy.LocalAddr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
+			Expect(err).ToNot(HaveOccurred())
+			expectDurationInRTTs(3)
+		})
+
+		It("does version negotiation in 1 RTT, IETF QUIC => gQUIC", func() {
+			clientConfig := &quic.Config{
+				Versions: []protocol.VersionNumber{protocol.VersionTLS, protocol.SupportedVersions[0]},
+			}
+			runServerAndProxy()
+			_, err := quic.DialAddr(
+				proxy.LocalAddr().String(),
+				&tls.Config{InsecureSkipVerify: true},
+				clientConfig,
+			)
+			Expect(err).ToNot(HaveOccurred())
+			expectDurationInRTTs(4)
+		})
+
+		It("is forward-secure after 2 RTTs when the server doesn't require a Cookie", func() {
+			serverConfig.AcceptCookie = func(_ net.Addr, _ *quic.Cookie) bool {
+				return true
+			}
+			runServerAndProxy()
+			_, err := quic.DialAddr(proxy.LocalAddr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
+			Expect(err).ToNot(HaveOccurred())
+			expectDurationInRTTs(2)
+		})
+
+		It("doesn't complete the handshake when the server never accepts the Cookie", func() {
+			serverConfig.AcceptCookie = func(_ net.Addr, _ *quic.Cookie) bool {
+				return false
+			}
+			runServerAndProxy()
+			_, err := quic.DialAddr(proxy.LocalAddr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
+			Expect(err).To(HaveOccurred())
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.CryptoTooManyRejects))
+		})
+
+		It("doesn't complete the handshake when the handshake timeout is too short", func() {
+			serverConfig.HandshakeTimeout = 2 * rtt
+			runServerAndProxy()
+			_, err := quic.DialAddr(proxy.LocalAddr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
+			Expect(err).To(HaveOccurred())
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.HandshakeTimeout))
+			// 2 RTTs during the timeout
+			// plus 1 RTT: the timer starts 0.5 RTTs after sending the first packet, and the CONNECTION_CLOSE needs another 0.5 RTTs to reach the client
+			expectDurationInRTTs(3)
+		})
 	})
 
-	It("does version negotiation in 1 RTT", func() {
-		if len(protocol.SupportedVersions) == 1 {
-			Skip("Test requires at least 2 supported versions.")
-		}
-		// the server doesn't support the highest supported version, which is the first one the client will try
-		serverConfig.Versions = []protocol.VersionNumber{protocol.SupportedVersions[1]}
-		runServerAndProxy()
-		_, err := quic.DialAddr(proxy.LocalAddr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
-		Expect(err).ToNot(HaveOccurred())
-		expectDurationInRTTs(4)
-	})
+	Context("IETF QUIC", func() {
+		var clientConfig *quic.Config
+		var clientTLSConfig *tls.Config
 
-	It("is forward-secure after 2 RTTs when the server doesn't require a Cookie", func() {
-		serverConfig.AcceptCookie = func(_ net.Addr, _ *quic.Cookie) bool {
-			return true
-		}
-		runServerAndProxy()
-		_, err := quic.DialAddr(proxy.LocalAddr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
-		Expect(err).ToNot(HaveOccurred())
-		expectDurationInRTTs(2)
-	})
+		BeforeEach(func() {
+			serverConfig.Versions = []protocol.VersionNumber{protocol.VersionTLS}
+			clientConfig = &quic.Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}}
+			clientTLSConfig = &tls.Config{
+				InsecureSkipVerify: true,
+				ServerName:         "quic.clemente.io",
+			}
+		})
 
-	It("doesn't complete the handshake when the server never accepts the Cookie", func() {
-		serverConfig.AcceptCookie = func(_ net.Addr, _ *quic.Cookie) bool {
-			return false
-		}
-		runServerAndProxy()
-		_, err := quic.DialAddr(proxy.LocalAddr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
-		Expect(err).To(HaveOccurred())
-		Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.CryptoTooManyRejects))
-	})
+		// 1 RTT for verifying the source address
+		// 1 RTT for the TLS handshake
+		It("is forward-secure after 2 RTTs", func() {
+			runServerAndProxy()
+			_, err := quic.DialAddr(
+				proxy.LocalAddr().String(),
+				clientTLSConfig,
+				clientConfig,
+			)
+			Expect(err).ToNot(HaveOccurred())
+			expectDurationInRTTs(2)
+		})
 
-	It("doesn't complete the handshake when the handshake timeout is too short", func() {
-		serverConfig.HandshakeTimeout = 2 * rtt
-		runServerAndProxy()
-		_, err := quic.DialAddr(proxy.LocalAddr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
-		Expect(err).To(HaveOccurred())
-		Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.HandshakeTimeout))
-		// 2 RTTs during the timeout
-		// plus 1 RTT: the timer starts 0.5 RTTs after sending the first packet, and the CONNECTION_CLOSE needs another 0.5 RTTs to reach the client
-		expectDurationInRTTs(3)
+		It("does version negotiation in 1 RTT, gQUIC => IETF QUIC", func() {
+			clientConfig.Versions = []protocol.VersionNumber{protocol.SupportedVersions[0], protocol.VersionTLS}
+			runServerAndProxy()
+			_, err := quic.DialAddr(
+				proxy.LocalAddr().String(),
+				clientTLSConfig,
+				clientConfig,
+			)
+			Expect(err).ToNot(HaveOccurred())
+			expectDurationInRTTs(3)
+		})
+
+		It("is forward-secure after 1 RTTs when the server doesn't require a Cookie", func() {
+			serverConfig.AcceptCookie = func(_ net.Addr, _ *quic.Cookie) bool {
+				return true
+			}
+			runServerAndProxy()
+			_, err := quic.DialAddr(
+				proxy.LocalAddr().String(),
+				clientTLSConfig,
+				clientConfig,
+			)
+			Expect(err).ToNot(HaveOccurred())
+			expectDurationInRTTs(1)
+		})
+
+		It("doesn't complete the handshake when the server never accepts the Cookie", func() {
+			serverConfig.AcceptCookie = func(_ net.Addr, _ *quic.Cookie) bool {
+				return false
+			}
+			runServerAndProxy()
+			_, err := quic.DialAddr(
+				proxy.LocalAddr().String(),
+				clientTLSConfig,
+				clientConfig,
+			)
+			Expect(err).To(HaveOccurred())
+			Expect(err.(qerr.ErrorCode)).To(Equal(qerr.CryptoTooManyRejects))
+		})
 	})
 })
