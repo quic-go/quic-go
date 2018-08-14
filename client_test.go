@@ -534,6 +534,61 @@ var _ = Describe("Client", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(sessions).To(BeEmpty())
 			})
+
+			It("only accepts 3 retries", func() {
+				manager := NewMockPacketHandlerManager(mockCtrl)
+				manager.EXPECT().Add(gomock.Any(), gomock.Any()).Do(func(id protocol.ConnectionID, handler packetHandler) {
+					go handler.handlePacket(&receivedPacket{
+						header: &wire.Header{
+							IsLongHeader:         true,
+							Type:                 protocol.PacketTypeRetry,
+							Token:                []byte("foobar"),
+							SrcConnectionID:      connID,
+							DestConnectionID:     id,
+							OrigDestConnectionID: connID,
+							Version:              protocol.VersionTLS,
+						},
+					})
+				}).AnyTimes()
+				manager.EXPECT().Add(gomock.Any(), gomock.Any()).AnyTimes()
+				mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any()).Return(manager, nil)
+
+				config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}}
+				cl.config = config
+
+				sessions := make(chan quicSession, protocol.MaxRetries+1)
+				for i := 0; i < protocol.MaxRetries+1; i++ {
+					run := make(chan error)
+					sess := NewMockQuicSession(mockCtrl)
+					sess.EXPECT().run().DoAndReturn(func() error {
+						return <-run
+					})
+					sess.EXPECT().destroy(gomock.Any()).Do(func(e error) {
+						run <- e
+					})
+					sessions <- sess
+				}
+
+				newTLSClientSession = func(
+					_ connection,
+					_ sessionRunner,
+					_ []byte,
+					_ protocol.ConnectionID,
+					_ protocol.ConnectionID,
+					_ *Config,
+					_ *mint.Config,
+					_ <-chan handshake.TransportParameters,
+					_ protocol.PacketNumber,
+					_ utils.Logger,
+					_ protocol.VersionNumber,
+				) (quicSession, error) {
+					return <-sessions, nil
+				}
+				_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
+				Expect(err).To(HaveOccurred())
+				Expect(err.(qerr.ErrorCode)).To(Equal(qerr.CryptoTooManyRejects))
+				Expect(sessions).To(BeEmpty())
+			})
 		})
 
 		Context("version negotiation", func() {

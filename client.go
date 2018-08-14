@@ -29,7 +29,8 @@ type client struct {
 
 	packetHandlers packetHandlerManager
 
-	token []byte
+	token      []byte
+	numRetries int
 
 	versionNegotiated                bool // has the server accepted our version
 	receivedVersionNegotiationPacket bool
@@ -493,6 +494,11 @@ func (c *client) handleRetryPacket(hdr *wire.Header) {
 	}
 	if !hdr.OrigDestConnectionID.Equal(c.destConnID) {
 		c.logger.Debugf("Received spoofed Retry. Original Destination Connection ID: %s, expected: %s", hdr.OrigDestConnectionID, c.destConnID)
+		return
+	}
+	c.numRetries++
+	if c.numRetries > protocol.MaxRetries {
+		c.session.destroy(qerr.CryptoTooManyRejects)
 		return
 	}
 	c.destConnID = hdr.SrcConnectionID
