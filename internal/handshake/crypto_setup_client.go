@@ -86,18 +86,20 @@ func NewCryptoSetupClient(
 	}
 	divNonceChan := make(chan struct{})
 	cs := &cryptoSetupClient{
-		cryptoStream:       cryptoStream,
-		hostname:           hostname,
-		connID:             connID,
-		version:            version,
-		certManager:        crypto.NewCertManager(tlsConfig),
-		params:             params,
-		keyDerivation:      crypto.DeriveQuicCryptoAESKeys,
-		nullAEAD:           nullAEAD,
-		paramsChan:         paramsChan,
-		handshakeEvent:     handshakeEvent,
-		initialVersion:     initialVersion,
-		negotiatedVersions: negotiatedVersions,
+		cryptoStream:   cryptoStream,
+		hostname:       hostname,
+		connID:         connID,
+		version:        version,
+		certManager:    crypto.NewCertManager(tlsConfig),
+		params:         params,
+		keyDerivation:  crypto.DeriveQuicCryptoAESKeys,
+		nullAEAD:       nullAEAD,
+		paramsChan:     paramsChan,
+		handshakeEvent: handshakeEvent,
+		initialVersion: initialVersion,
+		// The server might have sent greased versions in the Version Negotiation packet.
+		// We need strip those from the list, since they won't be included in the handshake tag.
+		negotiatedVersions: protocol.StripGreasedVersions(negotiatedVersions),
 		divNonceChan:       divNonceChan,
 		logger:             logger,
 	}
