@@ -65,10 +65,10 @@ var _ = Describe("Handshake RTT tests", func() {
 
 	expectDurationInRTTs := func(num int) {
 		testDuration := time.Since(testStartedAt)
-		expectedDuration := time.Duration(num) * rtt
-		Expect(testDuration).To(SatisfyAll(
-			BeNumerically(">=", expectedDuration),
-			BeNumerically("<", expectedDuration+rtt),
+		rtts := float32(testDuration) / float32(rtt)
+		Expect(rtts).To(SatisfyAll(
+			BeNumerically(">=", num),
+			BeNumerically("<", num+1),
 		))
 	}
 
