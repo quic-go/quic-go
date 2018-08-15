@@ -310,6 +310,20 @@ var _ = Describe("Server", func() {
 			Expect(serv.handlePacketImpl(p)).To(Succeed())
 			Expect(conn.dataWritten.Bytes()).ToNot(BeEmpty())
 		})
+
+		It("sends a PUBLIC_RESET for new connections that don't have the VersionFlag set", func() {
+			err := serv.handlePacketImpl(&receivedPacket{
+				remoteAddr: udpAddr,
+				header: &wire.Header{
+					IsPublicHeader: true,
+				},
+			})
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(conn.dataWritten.Len()).ToNot(BeZero())
+			Expect(conn.dataWrittenTo).To(Equal(udpAddr))
+			Expect(conn.dataWritten.Bytes()[0] & 0x02).ToNot(BeZero()) // check that the ResetFlag is set
+		})
 	})
 
 	It("setups with the right values", func() {
@@ -454,22 +468,6 @@ var _ = Describe("Server", func() {
 		// make the go routine return
 		ln.Close()
 		Eventually(done).Should(BeClosed())
-	})
-
-	It("sends a PublicReset for new connections that don't have the VersionFlag set", func() {
-		conn.dataReadFrom = udpAddr
-		conn.dataToRead <- []byte{0x08, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0x01}
-		ln, err := Listen(conn, nil, config)
-		Expect(err).ToNot(HaveOccurred())
-		go func() {
-			defer GinkgoRecover()
-			_, err := ln.Accept()
-			Expect(err).ToNot(HaveOccurred())
-		}()
-
-		Eventually(func() int { return conn.dataWritten.Len() }).ShouldNot(BeZero())
-		Expect(conn.dataWrittenTo).To(Equal(udpAddr))
-		Expect(conn.dataWritten.Bytes()[0] & 0x02).ToNot(BeZero()) // check that the ResetFlag is set
 	})
 })
 
