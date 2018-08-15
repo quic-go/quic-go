@@ -29,8 +29,8 @@ type client struct {
 
 	packetHandlers packetHandlerManager
 
-	token         []byte
-	receivedRetry bool
+	token      []byte
+	numRetries int
 
 	versionNegotiated                bool // has the server accepted our version
 	receivedVersionNegotiationPacket bool
@@ -58,10 +58,10 @@ var _ packetHandler = &client{}
 
 var (
 	// make it possible to mock connection ID generation in the tests
-	generateConnectionID         = protocol.GenerateConnectionID
-	generateDestConnectionID     = protocol.GenerateDestinationConnectionID
-	errCloseSessionForNewVersion = errors.New("closing session in order to recreate it with a new version")
-	errCloseSessionForRetry      = errors.New("closing session in response to a stateless retry")
+	generateConnectionID           = protocol.GenerateConnectionID
+	generateConnectionIDForInitial = protocol.GenerateConnectionIDForInitial
+	errCloseSessionForNewVersion   = errors.New("closing session in order to recreate it with a new version")
+	errCloseSessionForRetry        = errors.New("closing session in response to a stateless retry")
 )
 
 // DialAddr establishes a new QUIC connection to a server.
@@ -260,7 +260,7 @@ func (c *client) generateConnectionIDs() error {
 	}
 	destConnID := srcConnID
 	if c.version.UsesTLS() {
-		destConnID, err = generateDestConnectionID()
+		destConnID, err = generateConnectionIDForInitial()
 		if err != nil {
 			return err
 		}
@@ -486,15 +486,21 @@ func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
 func (c *client) handleRetryPacket(hdr *wire.Header) {
 	c.logger.Debugf("<- Received Retry")
 	hdr.Log(c.logger)
-	if c.receivedRetry { // only accept a single Retry
-		c.logger.Debugf("Received more than one Retry. Ignoring.")
+	// A server that performs multiple retries must use a source connection ID of at least 8 bytes.
+	// Only a server that won't send additional Retries can use shorter connection IDs.
+	if hdr.OrigDestConnectionID.Len() < protocol.MinConnectionIDLenInitial {
+		c.logger.Debugf("Received a Retry with a too short Original Destination Connection ID: %d bytes, must have at least %d bytes.", hdr.OrigDestConnectionID.Len(), protocol.MinConnectionIDLenInitial)
 		return
 	}
 	if !hdr.OrigDestConnectionID.Equal(c.destConnID) {
 		c.logger.Debugf("Received spoofed Retry. Original Destination Connection ID: %s, expected: %s", hdr.OrigDestConnectionID, c.destConnID)
 		return
 	}
-	c.receivedRetry = true
+	c.numRetries++
+	if c.numRetries > protocol.MaxRetries {
+		c.session.destroy(qerr.CryptoTooManyRejects)
+		return
+	}
 	c.destConnID = hdr.SrcConnectionID
 	c.token = hdr.Token
 	c.session.destroy(errCloseSessionForRetry)

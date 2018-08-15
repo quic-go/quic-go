@@ -149,3 +149,6 @@ const MinPacingDelay time.Duration = 100 * time.Microsecond
 // DefaultConnectionIDLength is the connection ID length that is used for multiplexed connections
 // if no other value is configured.
 const DefaultConnectionIDLength = 4
+
+// MaxRetries is the maximum number of Retries a client will do before failing the connection.
+const MaxRetries = 3

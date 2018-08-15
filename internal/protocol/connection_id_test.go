@@ -27,7 +27,7 @@ var _ = Describe("Connection ID generation", func() {
 	It("generates random length destination connection IDs", func() {
 		var has8ByteConnID, has18ByteConnID bool
 		for i := 0; i < 1000; i++ {
-			c, err := GenerateDestinationConnectionID()
+			c, err := GenerateConnectionIDForInitial()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(c.Len()).To(BeNumerically(">=", 8))
 			Expect(c.Len()).To(BeNumerically("<=", 18))

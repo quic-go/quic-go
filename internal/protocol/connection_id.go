@@ -21,9 +21,9 @@ func GenerateConnectionID(len int) (ConnectionID, error) {
 	return ConnectionID(b), nil
 }
 
-// GenerateDestinationConnectionID generates a connection ID for the Initial packet.
+// GenerateConnectionIDForInitial generates a connection ID for the Initial packet.
 // It uses a length randomly chosen between 8 and 18 bytes.
-func GenerateDestinationConnectionID() (ConnectionID, error) {
+func GenerateConnectionIDForInitial() (ConnectionID, error) {
 	r := make([]byte, 1)
 	if _, err := rand.Read(r); err != nil {
 		return nil, err
