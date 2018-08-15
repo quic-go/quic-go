@@ -379,6 +379,7 @@ var _ = Describe("Server", func() {
 			DestConnectionID: connID,
 			PacketNumber:     1,
 			PacketNumberLen:  protocol.PacketNumberLen2,
+			Version:          protocol.Version39 - 1,
 		}
 		Expect(hdr.Write(b, protocol.PerspectiveClient, 13 /* not a valid QUIC version */)).To(Succeed())
 		b.Write(bytes.Repeat([]byte{0}, protocol.MinClientHelloSize)) // add a fake CHLO
@@ -411,7 +412,6 @@ var _ = Describe("Server", func() {
 	})
 
 	It("sends an IETF draft style Version Negotaion Packet, if the client sent a IETF draft style header", func() {
-		config.Versions = append(config.Versions, protocol.VersionTLS)
 		ln, err := Listen(conn, testdata.GetTLSConfig(), config)
 		Expect(err).ToNot(HaveOccurred())
 

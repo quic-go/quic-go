@@ -19,12 +19,11 @@ type tlsSession struct {
 }
 
 type serverTLS struct {
-	conn              net.PacketConn
-	config            *Config
-	supportedVersions []protocol.VersionNumber
-	mintConf          *mint.Config
-	params            *handshake.TransportParameters
-	cookieGenerator   *handshake.CookieGenerator
+	conn            net.PacketConn
+	config          *Config
+	mintConf        *mint.Config
+	params          *handshake.TransportParameters
+	cookieGenerator *handshake.CookieGenerator
 
 	newSession func(connection, sessionRunner, protocol.ConnectionID, protocol.ConnectionID, protocol.ConnectionID, protocol.PacketNumber, *Config, *mint.Config, *handshake.TransportParameters, utils.Logger, protocol.VersionNumber) (quicSession, error)
 
@@ -60,16 +59,15 @@ func newServerTLS(
 
 	sessionChan := make(chan tlsSession)
 	s := &serverTLS{
-		conn:              conn,
-		config:            config,
-		supportedVersions: config.Versions,
-		mintConf:          mconf,
-		sessionRunner:     runner,
-		sessionChan:       sessionChan,
-		cookieGenerator:   cookieGenerator,
-		params:            params,
-		newSession:        newTLSServerSession,
-		logger:            logger,
+		conn:            conn,
+		config:          config,
+		mintConf:        mconf,
+		sessionRunner:   runner,
+		sessionChan:     sessionChan,
+		cookieGenerator: cookieGenerator,
+		params:          params,
+		newSession:      newTLSServerSession,
+		logger:          logger,
 	}
 	return s, sessionChan, nil
 }
@@ -98,16 +96,6 @@ func (s *serverTLS) handleInitialImpl(p *receivedPacket) (quicSession, protocol.
 	}
 	if len(hdr.Raw)+len(p.data) < protocol.MinInitialPacketSize {
 		return nil, nil, errors.New("dropping too small Initial packet")
-	}
-	// check version, if not matching send VNP
-	if !protocol.IsSupportedVersion(s.supportedVersions, hdr.Version) {
-		s.logger.Debugf("Client offered version %s, sending VersionNegotiationPacket", hdr.Version)
-		vnp, err := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, s.supportedVersions)
-		if err != nil {
-			return nil, nil, err
-		}
-		_, err = s.conn.WriteTo(vnp, p.remoteAddr)
-		return nil, nil, err
 	}
 
 	var cookie *handshake.Cookie

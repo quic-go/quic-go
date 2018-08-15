@@ -325,13 +325,19 @@ func (s *server) handlePacket(p *receivedPacket) {
 
 func (s *server) handlePacketImpl(p *receivedPacket) error {
 	hdr := p.header
-	version := hdr.Version
 
+	if hdr.VersionFlag || hdr.IsLongHeader {
+		// send a Version Negotiation Packet if the client is speaking a different protocol version
+		if !protocol.IsSupportedVersion(s.config.Versions, hdr.Version) {
+			return s.sendVersionNegotiationPacket(p)
+		}
+	}
 	if hdr.Type == protocol.PacketTypeInitial {
 		go s.serverTLS.HandleInitial(p)
 		return nil
 	}
 
+	// TODO(#943): send Stateless Reset, if this an IETF QUIC packet
 	if !hdr.VersionFlag {
 		_, err := s.conn.WriteTo(wire.WritePublicReset(hdr.DestConnectionID, 0, 0), p.remoteAddr)
 		return err
@@ -343,23 +349,11 @@ func (s *server) handlePacketImpl(p *receivedPacket) error {
 		return errors.New("dropping small packet for unknown connection")
 	}
 
-	// send a Version Negotiation Packet if the client is speaking a different protocol version
-	// since the client send a Public Header (only gQUIC has a Version Flag), we need to send a gQUIC Version Negotiation Packet
-	if hdr.VersionFlag && !protocol.IsSupportedVersion(s.config.Versions, version) {
-		s.logger.Infof("Client offered version %s, sending Version Negotiation Packet", version)
-		_, err := s.conn.WriteTo(wire.ComposeGQUICVersionNegotiation(hdr.DestConnectionID, s.config.Versions), p.remoteAddr)
-		return err
-	}
-
-	if !protocol.IsSupportedVersion(s.config.Versions, version) {
-		return errors.New("Server BUG: negotiated version not supported")
-	}
-
-	s.logger.Infof("Serving new connection: %s, version %s from %v", hdr.DestConnectionID, version, p.remoteAddr)
+	s.logger.Infof("Serving new connection: %s, version %s from %v", hdr.DestConnectionID, hdr.Version, p.remoteAddr)
 	sess, err := s.newSession(
 		&conn{pconn: s.conn, currentAddr: p.remoteAddr},
 		s.sessionRunner,
-		version,
+		hdr.Version,
 		hdr.DestConnectionID,
 		s.scfg,
 		s.tlsConf,
@@ -373,4 +367,22 @@ func (s *server) handlePacketImpl(p *receivedPacket) error {
 	go sess.run()
 	sess.handlePacket(p)
 	return nil
+}
+
+func (s *server) sendVersionNegotiationPacket(p *receivedPacket) error {
+	hdr := p.header
+	s.logger.Debugf("Client offered version %s, sending VersionNegotiationPacket", hdr.Version)
+
+	var data []byte
+	if hdr.Version.UsesIETFFrameFormat() {
+		var err error
+		data, err = wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, s.config.Versions)
+		if err != nil {
+			return err
+		}
+	} else {
+		data = wire.ComposeGQUICVersionNegotiation(hdr.DestConnectionID, s.config.Versions)
+	}
+	_, err := s.conn.WriteTo(data, p.remoteAddr)
+	return err
 }
