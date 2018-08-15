@@ -310,6 +310,77 @@ var _ = Describe("Server", func() {
 			Expect(serv.handlePacketImpl(p)).To(Succeed())
 			Expect(conn.dataWritten.Bytes()).ToNot(BeEmpty())
 		})
+
+		It("sends a PUBLIC_RESET for new connections that don't have the VersionFlag set", func() {
+			err := serv.handlePacketImpl(&receivedPacket{
+				remoteAddr: udpAddr,
+				header: &wire.Header{
+					IsPublicHeader: true,
+				},
+			})
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(conn.dataWritten.Len()).ToNot(BeZero())
+			Expect(conn.dataWrittenTo).To(Equal(udpAddr))
+			Expect(conn.dataWritten.Bytes()[0] & 0x02).ToNot(BeZero()) // check that the ResetFlag is set
+		})
+
+		It("sends a gQUIC Version Negotaion Packet, if the client sent a gQUIC Public Header", func() {
+			connID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
+			err := serv.handlePacketImpl(&receivedPacket{
+				remoteAddr: udpAddr,
+				header: &wire.Header{
+					VersionFlag:      true,
+					DestConnectionID: connID,
+					PacketNumber:     1,
+					PacketNumberLen:  protocol.PacketNumberLen2,
+					Version:          protocol.Version39 - 1,
+				},
+			})
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(conn.dataWritten.Len()).ToNot(BeZero())
+			Expect(conn.dataWrittenTo).To(Equal(udpAddr))
+			r := bytes.NewReader(conn.dataWritten.Bytes())
+			iHdr, err := wire.ParseInvariantHeader(r, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(iHdr.IsLongHeader).To(BeFalse())
+			replyHdr, err := iHdr.Parse(r, protocol.PerspectiveServer, versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(replyHdr.IsVersionNegotiation).To(BeTrue())
+			Expect(replyHdr.DestConnectionID).To(Equal(connID))
+			Expect(r.Len()).To(BeZero())
+		})
+
+		It("sends an IETF draft style Version Negotaion Packet, if the client sent a IETF draft style header", func() {
+			connID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
+			err := serv.handlePacketImpl(&receivedPacket{
+				remoteAddr: udpAddr,
+				header: &wire.Header{
+					Type:             protocol.PacketTypeInitial,
+					IsLongHeader:     true,
+					DestConnectionID: connID,
+					SrcConnectionID:  connID,
+					PacketNumber:     0x55,
+					PacketNumberLen:  protocol.PacketNumberLen1,
+					Version:          0x1234,
+					PayloadLen:       protocol.MinInitialPacketSize,
+				},
+			})
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(conn.dataWritten.Len()).ToNot(BeZero())
+			Expect(conn.dataWrittenTo).To(Equal(udpAddr))
+			r := bytes.NewReader(conn.dataWritten.Bytes())
+			iHdr, err := wire.ParseInvariantHeader(r, 0)
+			Expect(err).ToNot(HaveOccurred())
+			replyHdr, err := iHdr.Parse(r, protocol.PerspectiveServer, versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(replyHdr.IsVersionNegotiation).To(BeTrue())
+			Expect(replyHdr.DestConnectionID).To(Equal(connID))
+			Expect(replyHdr.SrcConnectionID).To(Equal(connID))
+			Expect(r.Len()).To(BeZero())
+		})
 	})
 
 	It("setups with the right values", func() {
@@ -369,107 +440,6 @@ var _ = Describe("Server", func() {
 		addr := "1.1.1.1:1111"
 		_, err := ListenAddr(addr, nil, config)
 		Expect(err).To(BeAssignableToTypeOf(&net.OpError{}))
-	})
-
-	It("sends a gQUIC Version Negotaion Packet, if the client sent a gQUIC Public Header", func() {
-		connID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
-		b := &bytes.Buffer{}
-		hdr := wire.Header{
-			VersionFlag:      true,
-			DestConnectionID: connID,
-			PacketNumber:     1,
-			PacketNumberLen:  protocol.PacketNumberLen2,
-			Version:          protocol.Version39 - 1,
-		}
-		Expect(hdr.Write(b, protocol.PerspectiveClient, 13 /* not a valid QUIC version */)).To(Succeed())
-		b.Write(bytes.Repeat([]byte{0}, protocol.MinClientHelloSize)) // add a fake CHLO
-		conn.dataToRead <- b.Bytes()
-		conn.dataReadFrom = udpAddr
-		ln, err := Listen(conn, nil, config)
-		Expect(err).ToNot(HaveOccurred())
-
-		done := make(chan struct{})
-		go func() {
-			defer GinkgoRecover()
-			ln.Accept()
-			close(done)
-		}()
-		Eventually(func() int { return conn.dataWritten.Len() }).ShouldNot(BeZero())
-		Expect(conn.dataWrittenTo).To(Equal(udpAddr))
-		r := bytes.NewReader(conn.dataWritten.Bytes())
-		iHdr, err := wire.ParseInvariantHeader(r, 0)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(iHdr.IsLongHeader).To(BeFalse())
-		replyHdr, err := iHdr.Parse(r, protocol.PerspectiveServer, versionIETFFrames)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(replyHdr.IsVersionNegotiation).To(BeTrue())
-		Expect(replyHdr.DestConnectionID).To(Equal(connID))
-		Expect(r.Len()).To(BeZero())
-		Consistently(done).ShouldNot(BeClosed())
-		// make the go routine return
-		ln.Close()
-		Eventually(done).Should(BeClosed())
-	})
-
-	It("sends an IETF draft style Version Negotaion Packet, if the client sent a IETF draft style header", func() {
-		ln, err := Listen(conn, testdata.GetTLSConfig(), config)
-		Expect(err).ToNot(HaveOccurred())
-
-		connID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
-		b := &bytes.Buffer{}
-		hdr := wire.Header{
-			Type:             protocol.PacketTypeInitial,
-			IsLongHeader:     true,
-			DestConnectionID: connID,
-			SrcConnectionID:  connID,
-			PacketNumber:     0x55,
-			PacketNumberLen:  protocol.PacketNumberLen1,
-			Version:          0x1234,
-			PayloadLen:       protocol.MinInitialPacketSize,
-		}
-		Expect(hdr.Write(b, protocol.PerspectiveClient, protocol.VersionTLS)).To(Succeed())
-		b.Write(bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize)) // add a fake CHLO
-		conn.dataToRead <- b.Bytes()
-		conn.dataReadFrom = udpAddr
-
-		done := make(chan struct{})
-		go func() {
-			defer GinkgoRecover()
-			ln.Accept()
-			close(done)
-		}()
-
-		Eventually(func() int { return conn.dataWritten.Len() }).ShouldNot(BeZero())
-		Expect(conn.dataWrittenTo).To(Equal(udpAddr))
-		r := bytes.NewReader(conn.dataWritten.Bytes())
-		iHdr, err := wire.ParseInvariantHeader(r, 0)
-		Expect(err).ToNot(HaveOccurred())
-		replyHdr, err := iHdr.Parse(r, protocol.PerspectiveServer, versionIETFFrames)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(replyHdr.IsVersionNegotiation).To(BeTrue())
-		Expect(replyHdr.DestConnectionID).To(Equal(connID))
-		Expect(replyHdr.SrcConnectionID).To(Equal(connID))
-		Expect(r.Len()).To(BeZero())
-		Consistently(done).ShouldNot(BeClosed())
-		// make the go routine return
-		ln.Close()
-		Eventually(done).Should(BeClosed())
-	})
-
-	It("sends a PublicReset for new connections that don't have the VersionFlag set", func() {
-		conn.dataReadFrom = udpAddr
-		conn.dataToRead <- []byte{0x08, 0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6, 0x01}
-		ln, err := Listen(conn, nil, config)
-		Expect(err).ToNot(HaveOccurred())
-		go func() {
-			defer GinkgoRecover()
-			_, err := ln.Accept()
-			Expect(err).ToNot(HaveOccurred())
-		}()
-
-		Eventually(func() int { return conn.dataWritten.Len() }).ShouldNot(BeZero())
-		Expect(conn.dataWrittenTo).To(Equal(udpAddr))
-		Expect(conn.dataWritten.Bytes()[0] & 0x02).ToNot(BeZero()) // check that the ResetFlag is set
 	})
 })
 
