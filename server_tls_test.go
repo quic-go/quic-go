@@ -41,22 +41,6 @@ var _ = Describe("Stateless TLS handling", func() {
 		return hdr
 	}
 
-	It("sends a Version Negotiation Packet if it doesn't support the version", func() {
-		server.HandleInitial(&receivedPacket{
-			header: &wire.Header{
-				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-				SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-				PacketNumberLen:  protocol.PacketNumberLen1,
-				Version:          0x1337,
-			},
-			data: bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
-		})
-		Expect(conn.dataWritten.Len()).ToNot(BeZero())
-		hdr := parseHeader(conn.dataWritten.Bytes())
-		Expect(hdr.IsVersionNegotiation).To(BeTrue())
-		Expect(sessionChan).ToNot(Receive())
-	})
-
 	It("drops too small packets", func() {
 		server.HandleInitial(&receivedPacket{
 			header: &wire.Header{},
