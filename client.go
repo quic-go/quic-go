@@ -283,17 +283,14 @@ func (c *client) dial(ctx context.Context) error {
 }
 
 func (c *client) dialGQUIC(ctx context.Context) error {
-	var cerr error
-	for {
-		if err := c.createNewGQUICSession(); err != nil {
-			return err
-		}
-		cerr = c.establishSecureConnection(ctx)
-		if cerr != errCloseSessionForNewVersion {
-			break
-		}
+	if err := c.createNewGQUICSession(); err != nil {
+		return err
 	}
-	return cerr
+	err := c.establishSecureConnection(ctx)
+	if err == errCloseSessionForNewVersion {
+		return c.dial(ctx)
+	}
+	return err
 }
 
 func (c *client) dialTLS(ctx context.Context) error {
@@ -315,17 +312,14 @@ func (c *client) dialTLS(ctx context.Context) error {
 	mintConf.ServerName = c.hostname
 	c.mintConf = mintConf
 
-	var cerr error
-	for {
-		if err := c.createNewTLSSession(extHandler.GetPeerParams(), c.version); err != nil {
-			return err
-		}
-		cerr = c.establishSecureConnection(ctx)
-		if cerr != errCloseSessionForRetry && cerr != errCloseSessionForNewVersion {
-			break
-		}
+	if err := c.createNewTLSSession(extHandler.GetPeerParams(), c.version); err != nil {
+		return err
 	}
-	return cerr
+	err = c.establishSecureConnection(ctx)
+	if err == errCloseSessionForRetry || err == errCloseSessionForNewVersion {
+		return c.dial(ctx)
+	}
+	return err
 }
 
 // establishSecureConnection runs the session, and tries to establish a secure connection
