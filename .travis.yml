@@ -8,8 +8,8 @@ addons:
 language: go
 
 go:
-  - "1.9.7"
   - "1.10.3"
+  - "1.11rc1"
 
 # first part of the GOARCH workaround
 # setting the GOARCH directly doesn't work, since the value will be overwritten later
@@ -23,6 +23,15 @@ env:
     - TRAVIS_GOARCH=amd64 TESTMODE=integration
     - TRAVIS_GOARCH=386 TESTMODE=unit
     - TRAVIS_GOARCH=386 TESTMODE=integration
+
+# Linters might work differently in different Go versions.
+# Only run them in the most recent one.
+matrix:
+  exclude:
+  - go: "1.10.3"
+    env: TRAVIS_GOARCH=amd64 TESTMODE=lint
+  - go: "1.10.3"
+    env: TRAVIS_GOARCH=386 TESTMODE=lint
 
 # second part of the GOARCH workaround
 # now actually set the GOARCH env variable to the value of the temporary variable set earlier
