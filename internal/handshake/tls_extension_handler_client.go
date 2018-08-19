@@ -107,24 +107,12 @@ func (h *extensionHandlerClient) Receive(hType mint.HandshakeType, el *mint.Exte
 		}
 	}
 
-	// check that the server sent the stateless reset token
-	var foundStatelessResetToken bool
-	for _, p := range eetp.Parameters {
-		if p.Parameter == statelessResetTokenParameterID {
-			if len(p.Value) != 16 {
-				return fmt.Errorf("wrong length for stateless_reset_token: %d (expected 16)", len(p.Value))
-			}
-			foundStatelessResetToken = true
-			// TODO: handle this value
-		}
-	}
-	if !foundStatelessResetToken {
-		// TODO: return the right error here
-		return errors.New("server didn't sent stateless_reset_token")
-	}
 	params, err := readTransportParameters(eetp.Parameters)
 	if err != nil {
 		return err
+	}
+	if len(params.StatelessResetToken) == 0 {
+		return errors.New("server didn't sent stateless_reset_token")
 	}
 	h.logger.Debugf("Received Transport Parameters: %s", params)
 	h.paramsChan <- *params

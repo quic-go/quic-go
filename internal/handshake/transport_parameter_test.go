@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"bytes"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -122,9 +123,13 @@ var _ = Describe("Transport Parameters", func() {
 		})
 
 		Context("parsing", func() {
-			var parameters map[transportParameterID][]byte
+			var (
+				parameters          map[transportParameterID][]byte
+				statelessResetToken []byte
+			)
 
 			BeforeEach(func() {
+				statelessResetToken = bytes.Repeat([]byte{42}, 16)
 				parameters = map[transportParameterID][]byte{
 					initialMaxStreamDataParameterID:  {0x11, 0x22, 0x33, 0x44},
 					initialMaxDataParameterID:        {0x22, 0x33, 0x44, 0x55},
@@ -133,6 +138,7 @@ var _ = Describe("Transport Parameters", func() {
 					idleTimeoutParameterID:           {0x13, 0x37},
 					maxPacketSizeParameterID:         {0x73, 0x31},
 					disableMigrationParameterID:      {},
+					statelessResetTokenParameterID:   statelessResetToken,
 				}
 			})
 			It("reads parameters", func() {
@@ -146,6 +152,7 @@ var _ = Describe("Transport Parameters", func() {
 				Expect(params.OmitConnectionID).To(BeFalse())
 				Expect(params.MaxPacketSize).To(Equal(protocol.ByteCount(0x7331)))
 				Expect(params.DisableMigration).To(BeTrue())
+				Expect(params.StatelessResetToken).To(Equal(statelessResetToken))
 			})
 
 			It("rejects the parameters if the idle_timeout is missing", func() {
@@ -209,6 +216,12 @@ var _ = Describe("Transport Parameters", func() {
 				parameters[disableMigrationParameterID] = []byte{0x11} // should empty
 				_, err := readTransportParameters(paramsMapToList(parameters))
 				Expect(err).To(MatchError("wrong length for disable_migration: 1 (expected empty)"))
+			})
+
+			It("rejects the parameters if the stateless_reset_token has the wrong length", func() {
+				parameters[statelessResetTokenParameterID] = statelessResetToken[1:]
+				_, err := readTransportParameters(paramsMapToList(parameters))
+				Expect(err).To(MatchError("wrong length for stateless_reset_token: 15 (expected 16)"))
 			})
 
 			It("ignores unknown parameters", func() {

@@ -96,15 +96,13 @@ func (h *extensionHandlerServer) Receive(hType mint.HandshakeType, el *mint.Exte
 		return qerr.Error(qerr.VersionNegotiationMismatch, "Client should have used the initial version")
 	}
 
-	for _, p := range chtp.Parameters {
-		if p.Parameter == statelessResetTokenParameterID {
-			// TODO: return the correct error type
-			return errors.New("client sent a stateless reset token")
-		}
-	}
 	params, err := readTransportParameters(chtp.Parameters)
 	if err != nil {
 		return err
+	}
+	if len(params.StatelessResetToken) != 0 {
+		// TODO: return the correct error type
+		return errors.New("client sent a stateless reset token")
 	}
 	h.logger.Debugf("Received Transport Parameters: %s", params)
 	h.paramsChan <- *params

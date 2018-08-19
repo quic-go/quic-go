@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/bifurcation/mint"
@@ -118,7 +119,7 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 		})
 
 		It("rejects messages that contain a stateless reset token", func() {
-			parameters[statelessResetTokenParameterID] = []byte("reset")
+			parameters[statelessResetTokenParameterID] = bytes.Repeat([]byte{0}, 16)
 			addClientHelloWithParameters(parameters)
 			err := handler.Receive(mint.HandshakeTypeClientHello, &el)
 			Expect(err).To(MatchError("client sent a stateless reset token"))

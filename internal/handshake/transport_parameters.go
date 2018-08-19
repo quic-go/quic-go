@@ -144,6 +144,11 @@ func readTransportParameters(paramsList []transportParameter) (*TransportParamet
 				return nil, fmt.Errorf("wrong length for disable_migration: %d (expected empty)", len(p.Value))
 			}
 			params.DisableMigration = true
+		case statelessResetTokenParameterID:
+			if len(p.Value) != 16 {
+				return nil, fmt.Errorf("wrong length for stateless_reset_token: %d (expected 16)", len(p.Value))
+			}
+			params.StatelessResetToken = p.Value
 		}
 	}
 

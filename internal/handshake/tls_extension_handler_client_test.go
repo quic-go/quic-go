@@ -135,13 +135,6 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 			Expect(err).To(MatchError("server didn't sent stateless_reset_token"))
 		})
 
-		It("errors if the stateless reset token has the wrong length", func() {
-			parameters[statelessResetTokenParameterID] = bytes.Repeat([]byte{0}, 15) // should be 16
-			addEncryptedExtensionsWithParameters(parameters)
-			err := handler.Receive(mint.HandshakeTypeEncryptedExtensions, &el)
-			Expect(err).To(MatchError("wrong length for stateless_reset_token: 15 (expected 16)"))
-		})
-
 		Context("Version Negotiation", func() {
 			It("accepts a valid version negotiation", func() {
 				done := make(chan struct{})
