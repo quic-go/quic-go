@@ -237,12 +237,13 @@ var _ = Describe("Transport Parameters", func() {
 					MaxBidiStreams:              0x1234,
 					MaxUniStreams:               0x4321,
 					DisableMigration:            true,
+					StatelessResetToken:         []byte("foobar"),
 				}
 			})
 
 			It("creates the parameters list", func() {
 				values := paramsListToMap(params.getTransportParameters())
-				Expect(values).To(HaveLen(7))
+				Expect(values).To(HaveLen(8))
 				Expect(values).To(HaveKeyWithValue(initialMaxStreamDataParameterID, []byte{0xde, 0xad, 0xbe, 0xef}))
 				Expect(values).To(HaveKeyWithValue(initialMaxDataParameterID, []byte{0xde, 0xca, 0xfb, 0xad}))
 				Expect(values).To(HaveKeyWithValue(initialMaxBidiStreamsParameterID, []byte{0x12, 0x34}))
@@ -250,6 +251,7 @@ var _ = Describe("Transport Parameters", func() {
 				Expect(values).To(HaveKeyWithValue(idleTimeoutParameterID, []byte{0xca, 0xfe}))
 				Expect(values).To(HaveKeyWithValue(maxPacketSizeParameterID, []byte{0x5, 0xac})) // 1452 = 0x5ac
 				Expect(values).To(HaveKeyWithValue(disableMigrationParameterID, []byte{}))
+				Expect(values).To(HaveKeyWithValue(statelessResetTokenParameterID, []byte("foobar")))
 			})
 		})
 	})

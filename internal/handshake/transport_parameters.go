@@ -26,10 +26,10 @@ type TransportParameters struct {
 	MaxBidiStreams uint16 // only used for IETF QUIC
 	MaxStreams     uint32 // only used for gQUIC
 
-	OmitConnectionID bool // only used for gQUIC
-	IdleTimeout      time.Duration
-	DisableMigration bool // only used for IETF QUIC
-
+	OmitConnectionID    bool // only used for gQUIC
+	IdleTimeout         time.Duration
+	DisableMigration    bool   // only used for IETF QUIC
+	StatelessResetToken []byte // only used for IETF QUIC
 }
 
 // readHelloMap reads the transport parameters from the tags sent in a gQUIC handshake message
@@ -178,6 +178,9 @@ func (p *TransportParameters) getTransportParameters() []transportParameter {
 	}
 	if p.DisableMigration {
 		params = append(params, transportParameter{disableMigrationParameterID, nil})
+	}
+	if len(p.StatelessResetToken) > 0 {
+		params = append(params, transportParameter{statelessResetTokenParameterID, p.StatelessResetToken})
 	}
 	return params
 }

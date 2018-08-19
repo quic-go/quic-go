@@ -1,7 +1,6 @@
 package handshake
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 
@@ -50,11 +49,6 @@ func (h *extensionHandlerServer) Send(hType mint.HandshakeType, el *mint.Extensi
 		return nil
 	}
 
-	transportParams := append(
-		h.ourParams.getTransportParameters(),
-		// TODO(#855): generate a real token
-		transportParameter{statelessResetTokenParameterID, bytes.Repeat([]byte{42}, 16)},
-	)
 	supportedVersions := protocol.GetGreasedVersions(h.supportedVersions)
 	versions := make([]uint32, len(supportedVersions))
 	for i, v := range supportedVersions {
@@ -64,7 +58,7 @@ func (h *extensionHandlerServer) Send(hType mint.HandshakeType, el *mint.Extensi
 	data, err := syntax.Marshal(encryptedExtensionsTransportParameters{
 		NegotiatedVersion: uint32(h.version),
 		SupportedVersions: versions,
-		Parameters:        transportParams,
+		Parameters:        h.ourParams.getTransportParameters(),
 	})
 	if err != nil {
 		return err
