@@ -100,20 +100,16 @@ func (p *TransportParameters) getHelloMap() map[Tag][]byte {
 func readTransportParameters(paramsList []transportParameter) (*TransportParameters, error) {
 	params := &TransportParameters{}
 
-	var foundInitialMaxStreamData bool
-	var foundInitialMaxData bool
 	var foundIdleTimeout bool
 
 	for _, p := range paramsList {
 		switch p.Parameter {
 		case initialMaxStreamDataParameterID:
-			foundInitialMaxStreamData = true
 			if len(p.Value) != 4 {
 				return nil, fmt.Errorf("wrong length for initial_max_stream_data: %d (expected 4)", len(p.Value))
 			}
 			params.StreamFlowControlWindow = protocol.ByteCount(binary.BigEndian.Uint32(p.Value))
 		case initialMaxDataParameterID:
-			foundInitialMaxData = true
 			if len(p.Value) != 4 {
 				return nil, fmt.Errorf("wrong length for initial_max_data: %d (expected 4)", len(p.Value))
 			}
@@ -151,7 +147,7 @@ func readTransportParameters(paramsList []transportParameter) (*TransportParamet
 		}
 	}
 
-	if !(foundInitialMaxStreamData && foundInitialMaxData && foundIdleTimeout) {
+	if !foundIdleTimeout {
 		return nil, errors.New("missing parameter")
 	}
 	return params, nil
