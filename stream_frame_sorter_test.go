@@ -39,7 +39,7 @@ var _ = Describe("STREAM frame sorter", func() {
 			err := s.Push(f)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(s.Head()).To(Equal(f))
-			Expect(s.Pop()).To(Equal(f))
+			s.Pop()
 			Expect(s.Head()).To(BeNil())
 		})
 
@@ -56,8 +56,10 @@ var _ = Describe("STREAM frame sorter", func() {
 			Expect(err).ToNot(HaveOccurred())
 			err = s.Push(f2)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(s.Pop()).To(Equal(f1))
-			Expect(s.Pop()).To(Equal(f2))
+			Expect(s.Head()).To(Equal(f1))
+			s.Pop()
+			Expect(s.Head()).To(Equal(f2))
+			s.Pop()
 			Expect(s.Head()).To(BeNil())
 		})
 
@@ -65,7 +67,7 @@ var _ = Describe("STREAM frame sorter", func() {
 			f := &wire.StreamFrame{}
 			err := s.Push(f)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(s.Pop()).To(BeNil())
+			Expect(s.Head()).To(BeNil())
 		})
 
 		Context("FinBit handling", func() {
@@ -92,8 +94,9 @@ var _ = Describe("STREAM frame sorter", func() {
 				}
 				err = s.Push(f2)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(s.Pop()).To(Equal(f1))
-				Expect(s.Pop()).To(Equal(f2))
+				Expect(s.Head()).To(Equal(f1))
+				s.Pop()
+				Expect(s.Head()).To(Equal(f2))
 			})
 		})
 
