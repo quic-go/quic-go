@@ -148,18 +148,6 @@ var _ = Describe("Transport Parameters", func() {
 				Expect(params.DisableMigration).To(BeTrue())
 			})
 
-			It("rejects the parameters if the initial_max_stream_data is missing", func() {
-				delete(parameters, initialMaxStreamDataParameterID)
-				_, err := readTransportParameters(paramsMapToList(parameters))
-				Expect(err).To(MatchError("missing parameter"))
-			})
-
-			It("rejects the parameters if the initial_max_data is missing", func() {
-				delete(parameters, initialMaxDataParameterID)
-				_, err := readTransportParameters(paramsMapToList(parameters))
-				Expect(err).To(MatchError("missing parameter"))
-			})
-
 			It("rejects the parameters if the idle_timeout is missing", func() {
 				delete(parameters, idleTimeoutParameterID)
 				_, err := readTransportParameters(paramsMapToList(parameters))
