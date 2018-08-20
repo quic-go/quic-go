@@ -141,13 +141,11 @@ func (s *streamFrameSorter) Push(frame *wire.StreamFrame) error {
 	return nil
 }
 
-func (s *streamFrameSorter) Pop() *wire.StreamFrame {
-	frame := s.Head()
-	if frame != nil {
+func (s *streamFrameSorter) Pop() {
+	if frame := s.Head(); frame != nil {
 		s.readPosition += frame.DataLen()
 		delete(s.queuedFrames, frame.Offset)
 	}
-	return frame
 }
 
 func (s *streamFrameSorter) Head() *wire.StreamFrame {
