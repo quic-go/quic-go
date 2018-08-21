@@ -27,7 +27,7 @@ var _ = Describe("STREAM frame sorter", func() {
 	})
 
 	It("head returns nil when empty", func() {
-		Expect(s.Head()).To(BeNil())
+		Expect(s.Pop()).To(BeNil())
 	})
 
 	Context("Push", func() {
@@ -36,11 +36,9 @@ var _ = Describe("STREAM frame sorter", func() {
 				Offset: 0,
 				Data:   []byte("foobar"),
 			}
-			err := s.Push(f)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(s.Head()).To(Equal(f))
-			s.Pop()
-			Expect(s.Head()).To(BeNil())
+			Expect(s.Push(f)).To(Succeed())
+			Expect(s.Pop()).To(Equal(f))
+			Expect(s.Pop()).To(BeNil())
 		})
 
 		It("inserts and pops two consecutive frame", func() {
@@ -52,22 +50,17 @@ var _ = Describe("STREAM frame sorter", func() {
 				Offset: 6,
 				Data:   []byte("foobar2"),
 			}
-			err := s.Push(f1)
-			Expect(err).ToNot(HaveOccurred())
-			err = s.Push(f2)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(s.Head()).To(Equal(f1))
-			s.Pop()
-			Expect(s.Head()).To(Equal(f2))
-			s.Pop()
-			Expect(s.Head()).To(BeNil())
+			Expect(s.Push(f1)).To(Succeed())
+			Expect(s.Push(f2)).To(Succeed())
+			Expect(s.Pop()).To(Equal(f1))
+			Expect(s.Pop()).To(Equal(f2))
+			Expect(s.Pop()).To(BeNil())
 		})
 
 		It("ignores empty frames", func() {
 			f := &wire.StreamFrame{}
-			err := s.Push(f)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(s.Head()).To(BeNil())
+			Expect(s.Push(f)).To(Succeed())
+			Expect(s.Pop()).To(BeNil())
 		})
 
 		Context("FinBit handling", func() {
@@ -76,9 +69,8 @@ var _ = Describe("STREAM frame sorter", func() {
 					Offset: 0,
 					FinBit: true,
 				}
-				err := s.Push(f)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(s.Head()).To(Equal(f))
+				Expect(s.Push(f)).To(Succeed())
+				Expect(s.Pop()).To(Equal(f))
 			})
 
 			It("sets the FinBit if a stream is closed after receiving some data", func() {
@@ -86,17 +78,14 @@ var _ = Describe("STREAM frame sorter", func() {
 					Offset: 0,
 					Data:   []byte("foobar"),
 				}
-				err := s.Push(f1)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(s.Push(f1)).To(Succeed())
 				f2 := &wire.StreamFrame{
 					Offset: 6,
 					FinBit: true,
 				}
-				err = s.Push(f2)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(s.Head()).To(Equal(f1))
-				s.Pop()
-				Expect(s.Head()).To(Equal(f2))
+				Expect(s.Push(f2)).To(Succeed())
+				Expect(s.Pop()).To(Equal(f1))
+				Expect(s.Pop()).To(Equal(f2))
 			})
 		})
 

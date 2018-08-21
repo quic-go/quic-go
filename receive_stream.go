@@ -8,7 +8,6 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
@@ -28,9 +27,11 @@ type receiveStream struct {
 
 	sender streamSender
 
-	frameQueue     *streamFrameSorter
+	frameQueue *streamFrameSorter
+	readOffset protocol.ByteCount
+
+	currentFrame   *wire.StreamFrame
 	readPosInFrame int
-	readOffset     protocol.ByteCount
 
 	closeForShutdownErr error
 	cancelReadErr       error
@@ -99,8 +100,10 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 
 	bytesRead := 0
 	for bytesRead < len(p) {
-		frame := s.frameQueue.Head()
-		if frame == nil && bytesRead > 0 {
+		if s.currentFrame == nil || s.readPosInFrame >= int(s.currentFrame.DataLen()) {
+			s.dequeueNextFrame()
+		}
+		if s.currentFrame == nil && bytesRead > 0 {
 			return false, bytesRead, s.closeForShutdownErr
 		}
 
@@ -121,8 +124,7 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 				return false, bytesRead, errDeadline
 			}
 
-			if frame != nil {
-				s.readPosInFrame = int(s.readOffset - frame.Offset)
+			if s.currentFrame != nil {
 				break
 			}
 
@@ -136,20 +138,21 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 				}
 			}
 			s.mutex.Lock()
-			frame = s.frameQueue.Head()
+			if s.currentFrame == nil {
+				s.dequeueNextFrame()
+			}
 		}
 
 		if bytesRead > len(p) {
 			return false, bytesRead, fmt.Errorf("BUG: bytesRead (%d) > len(p) (%d) in stream.Read", bytesRead, len(p))
 		}
-		if s.readPosInFrame > int(frame.DataLen()) {
-			return false, bytesRead, fmt.Errorf("BUG: readPosInFrame (%d) > frame.DataLen (%d) in stream.Read", s.readPosInFrame, frame.DataLen())
+		if s.readPosInFrame > int(s.currentFrame.DataLen()) {
+			return false, bytesRead, fmt.Errorf("BUG: readPosInFrame (%d) > frame.DataLen (%d) in stream.Read", s.readPosInFrame, s.currentFrame.DataLen())
 		}
 
 		s.mutex.Unlock()
 
-		copy(p[bytesRead:], frame.Data[s.readPosInFrame:])
-		m := utils.Min(len(p)-bytesRead, int(frame.DataLen())-s.readPosInFrame)
+		m := copy(p[bytesRead:], s.currentFrame.Data[s.readPosInFrame:])
 		s.readPosInFrame += m
 		bytesRead += m
 		s.readOffset += protocol.ByteCount(m)
@@ -162,15 +165,19 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 		// increase the flow control window, if necessary
 		s.flowController.MaybeQueueWindowUpdate()
 
-		if s.readPosInFrame >= int(frame.DataLen()) {
-			s.frameQueue.Pop()
-			s.finRead = frame.FinBit
-			if frame.FinBit {
+		if s.readPosInFrame >= int(s.currentFrame.DataLen()) {
+			if s.currentFrame.FinBit {
+				s.finRead = true
 				return true, bytesRead, io.EOF
 			}
 		}
 	}
 	return false, bytesRead, nil
+}
+
+func (s *receiveStream) dequeueNextFrame() {
+	s.currentFrame = s.frameQueue.Pop()
+	s.readPosInFrame = 0
 }
 
 func (s *receiveStream) CancelRead(errorCode protocol.ApplicationErrorCode) error {
