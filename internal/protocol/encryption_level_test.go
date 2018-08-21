@@ -11,5 +11,8 @@ var _ = Describe("Encryption Level", func() {
 		Expect(EncryptionUnencrypted.String()).To(Equal("unencrypted"))
 		Expect(EncryptionSecure.String()).To(Equal("encrypted (not forward-secure)"))
 		Expect(EncryptionForwardSecure.String()).To(Equal("forward-secure"))
+		Expect(EncryptionInitial.String()).To(Equal("Initial"))
+		Expect(EncryptionHandshake.String()).To(Equal("Handshake"))
+		Expect(Encryption1RTT.String()).To(Equal("1-RTT"))
 	})
 })
