@@ -328,6 +328,19 @@ var _ = Describe("Frame parsing", func() {
 			Expect(frame.(*PathResponseFrame).Data).To(Equal([8]byte{1, 2, 3, 4, 5, 6, 7, 8}))
 		})
 
+		It("unpacks CRYPTO frames", func() {
+			f := &CryptoFrame{
+				Offset: 0x1337,
+				Data:   []byte("lorem ipsum"),
+			}
+			err := f.Write(buf, versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), nil, versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame).ToNot(BeNil())
+			Expect(frame).To(Equal(f))
+		})
+
 		It("errors on invalid type", func() {
 			_, err := ParseNextFrame(bytes.NewReader([]byte{0x42}), nil, versionIETFFrames)
 			Expect(err).To(MatchError("InvalidFrameData: unknown type byte 0x42"))
