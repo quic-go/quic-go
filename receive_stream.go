@@ -30,8 +30,9 @@ type receiveStream struct {
 	frameQueue *streamFrameSorter
 	readOffset protocol.ByteCount
 
-	currentFrame   *wire.StreamFrame
-	readPosInFrame int
+	currentFrame       []byte
+	currentFrameIsLast bool // is the currentFrame the last frame on this stream
+	readPosInFrame     int
 
 	closeForShutdownErr error
 	cancelReadErr       error
@@ -100,7 +101,7 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 
 	bytesRead := 0
 	for bytesRead < len(p) {
-		if s.currentFrame == nil || s.readPosInFrame >= int(s.currentFrame.DataLen()) {
+		if s.currentFrame == nil || s.readPosInFrame >= len(s.currentFrame) {
 			s.dequeueNextFrame()
 		}
 		if s.currentFrame == nil && bytesRead > 0 {
@@ -124,7 +125,7 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 				return false, bytesRead, errDeadline
 			}
 
-			if s.currentFrame != nil {
+			if s.currentFrame != nil || s.currentFrameIsLast {
 				break
 			}
 
@@ -146,13 +147,13 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 		if bytesRead > len(p) {
 			return false, bytesRead, fmt.Errorf("BUG: bytesRead (%d) > len(p) (%d) in stream.Read", bytesRead, len(p))
 		}
-		if s.readPosInFrame > int(s.currentFrame.DataLen()) {
-			return false, bytesRead, fmt.Errorf("BUG: readPosInFrame (%d) > frame.DataLen (%d) in stream.Read", s.readPosInFrame, s.currentFrame.DataLen())
+		if s.readPosInFrame > len(s.currentFrame) {
+			return false, bytesRead, fmt.Errorf("BUG: readPosInFrame (%d) > frame.DataLen (%d) in stream.Read", s.readPosInFrame, len(s.currentFrame))
 		}
 
 		s.mutex.Unlock()
 
-		m := copy(p[bytesRead:], s.currentFrame.Data[s.readPosInFrame:])
+		m := copy(p[bytesRead:], s.currentFrame[s.readPosInFrame:])
 		s.readPosInFrame += m
 		bytesRead += m
 		s.readOffset += protocol.ByteCount(m)
@@ -165,18 +166,16 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 		// increase the flow control window, if necessary
 		s.flowController.MaybeQueueWindowUpdate()
 
-		if s.readPosInFrame >= int(s.currentFrame.DataLen()) {
-			if s.currentFrame.FinBit {
-				s.finRead = true
-				return true, bytesRead, io.EOF
-			}
+		if s.readPosInFrame >= len(s.currentFrame) && s.currentFrameIsLast {
+			s.finRead = true
+			return true, bytesRead, io.EOF
 		}
 	}
 	return false, bytesRead, nil
 }
 
 func (s *receiveStream) dequeueNextFrame() {
-	s.currentFrame = s.frameQueue.Pop()
+	s.currentFrame, s.currentFrameIsLast = s.frameQueue.Pop()
 	s.readPosInFrame = 0
 }
 

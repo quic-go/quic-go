@@ -37,5 +37,5 @@ func newCryptoStream(sender streamSender, flowController flowcontrol.StreamFlowC
 // It must not be called concurrently with any other stream methods, especially Read and Write.
 func (s *cryptoStreamImpl) setReadOffset(offset protocol.ByteCount) {
 	s.receiveStream.readOffset = offset
-	s.receiveStream.frameQueue.readPosition = offset
+	s.receiveStream.frameQueue.readPos = offset
 }

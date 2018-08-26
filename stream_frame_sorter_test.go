@@ -37,7 +37,9 @@ var _ = Describe("STREAM frame sorter", func() {
 				Data:   []byte("foobar"),
 			}
 			Expect(s.Push(f)).To(Succeed())
-			Expect(s.Pop()).To(Equal(f))
+			data, fin := s.Pop()
+			Expect(data).To(Equal(f.Data))
+			Expect(fin).To(BeFalse())
 			Expect(s.Pop()).To(BeNil())
 		})
 
@@ -52,8 +54,12 @@ var _ = Describe("STREAM frame sorter", func() {
 			}
 			Expect(s.Push(f1)).To(Succeed())
 			Expect(s.Push(f2)).To(Succeed())
-			Expect(s.Pop()).To(Equal(f1))
-			Expect(s.Pop()).To(Equal(f2))
+			data, fin := s.Pop()
+			Expect(data).To(Equal(f1.Data))
+			Expect(fin).To(BeFalse())
+			data, fin = s.Pop()
+			Expect(data).To(Equal(f2.Data))
+			Expect(fin).To(BeFalse())
 			Expect(s.Pop()).To(BeNil())
 		})
 
@@ -63,17 +69,37 @@ var _ = Describe("STREAM frame sorter", func() {
 			Expect(s.Pop()).To(BeNil())
 		})
 
-		Context("FinBit handling", func() {
-			It("saves a FinBit frame at offset 0", func() {
+		Context("FIN handling", func() {
+			It("saves a FIN frame at offset 0", func() {
 				f := &wire.StreamFrame{
 					Offset: 0,
 					FinBit: true,
 				}
 				Expect(s.Push(f)).To(Succeed())
-				Expect(s.Pop()).To(Equal(f))
+				data, fin := s.Pop()
+				Expect(data).To(Equal(f.Data))
+				Expect(fin).To(BeTrue())
+				data, fin = s.Pop()
+				Expect(data).To(BeNil())
+				Expect(fin).To(BeTrue())
 			})
 
-			It("sets the FinBit if a stream is closed after receiving some data", func() {
+			It("saves a FIN frame at non-zero offset", func() {
+				f := &wire.StreamFrame{
+					Offset: 0,
+					Data:   []byte("foobar"),
+					FinBit: true,
+				}
+				Expect(s.Push(f)).To(Succeed())
+				data, fin := s.Pop()
+				Expect(data).To(Equal(f.Data))
+				Expect(fin).To(BeTrue())
+				data, fin = s.Pop()
+				Expect(data).To(BeNil())
+				Expect(fin).To(BeTrue())
+			})
+
+			It("sets the FIN if a stream is closed after receiving some data", func() {
 				f1 := &wire.StreamFrame{
 					Offset: 0,
 					Data:   []byte("foobar"),
@@ -84,8 +110,12 @@ var _ = Describe("STREAM frame sorter", func() {
 					FinBit: true,
 				}
 				Expect(s.Push(f2)).To(Succeed())
-				Expect(s.Pop()).To(Equal(f1))
-				Expect(s.Pop()).To(Equal(f2))
+				data, fin := s.Pop()
+				Expect(data).To(Equal(f1.Data))
+				Expect(fin).To(BeTrue())
+				data, fin = s.Pop()
+				Expect(data).To(BeNil())
+				Expect(fin).To(BeTrue())
 			})
 		})
 
@@ -211,7 +241,7 @@ var _ = Describe("STREAM frame sorter", func() {
 				}
 				err = s.Push(f3)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(s.queuedFrames).To(HaveLen(3))
+				Expect(s.queue).To(HaveLen(3))
 				checkGaps([]utils.ByteInterval{
 					{Start: 15, End: protocol.MaxByteCount},
 				})
@@ -230,7 +260,7 @@ var _ = Describe("STREAM frame sorter", func() {
 				}
 				err = s.Push(f2)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(s.queuedFrames).To(HaveLen(2))
+				Expect(s.queue).To(HaveLen(2))
 				checkGaps([]utils.ByteInterval{
 					{Start: 0, End: 50},
 					{Start: 56, End: 100},
@@ -262,9 +292,9 @@ var _ = Describe("STREAM frame sorter", func() {
 					}
 					err := s.Push(f)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(0)))
-					Expect(s.queuedFrames[0].Data).To(Equal([]byte("fooba")))
-					Expect(s.queuedFrames[0].Data).To(HaveCap(5))
+					Expect(s.queue).To(HaveKey(protocol.ByteCount(0)))
+					Expect(s.queue[0]).To(Equal([]byte("fooba")))
+					Expect(s.queue[0]).To(HaveCap(5))
 					checkGaps([]utils.ByteInterval{
 						{Start: 10, End: 15},
 						{Start: 20, End: 25},
@@ -280,9 +310,9 @@ var _ = Describe("STREAM frame sorter", func() {
 					}
 					err := s.Push(f)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(4)))
-					Expect(s.queuedFrames[4].Data).To(Equal([]byte("f")))
-					Expect(s.queuedFrames[4].Data).To(HaveCap(1))
+					Expect(s.queue).To(HaveKey(protocol.ByteCount(4)))
+					Expect(s.queue[4]).To(Equal([]byte("f")))
+					Expect(s.queue[4]).To(HaveCap(1))
 					checkGaps([]utils.ByteInterval{
 						{Start: 0, End: 4},
 						{Start: 10, End: 15},
@@ -299,9 +329,9 @@ var _ = Describe("STREAM frame sorter", func() {
 					}
 					err := s.Push(f)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(10)))
-					Expect(s.queuedFrames[10].Data).To(Equal([]byte("fooba")))
-					Expect(s.queuedFrames[10].Data).To(HaveCap(5))
+					Expect(s.queue).To(HaveKey(protocol.ByteCount(10)))
+					Expect(s.queue[10]).To(Equal([]byte("fooba")))
+					Expect(s.queue[10]).To(HaveCap(5))
 					checkGaps([]utils.ByteInterval{
 						{Start: 0, End: 5},
 						{Start: 20, End: 25},
@@ -317,10 +347,10 @@ var _ = Describe("STREAM frame sorter", func() {
 					}
 					err := s.Push(f)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(8)))
-					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(10)))
-					Expect(s.queuedFrames[10].Data).To(Equal([]byte("obar")))
-					Expect(s.queuedFrames[10].Data).To(HaveCap(4))
+					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(8)))
+					Expect(s.queue).To(HaveKey(protocol.ByteCount(10)))
+					Expect(s.queue[10]).To(Equal([]byte("obar")))
+					Expect(s.queue[10]).To(HaveCap(4))
 					checkGaps([]utils.ByteInterval{
 						{Start: 0, End: 5},
 						{Start: 14, End: 15},
@@ -337,9 +367,9 @@ var _ = Describe("STREAM frame sorter", func() {
 					}
 					err := s.Push(f)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(5)))
-					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(2)))
-					Expect(s.queuedFrames[2].Data).To(Equal([]byte("1234567890")))
+					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(5)))
+					Expect(s.queue).To(HaveKey(protocol.ByteCount(2)))
+					Expect(s.queue[2]).To(Equal([]byte("1234567890")))
 					checkGaps([]utils.ByteInterval{
 						{Start: 0, End: 2},
 						{Start: 12, End: 15},
@@ -356,10 +386,10 @@ var _ = Describe("STREAM frame sorter", func() {
 					}
 					err := s.Push(f)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(5)))
-					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(2)))
-					Expect(s.queuedFrames[2].Data).To(Equal([]byte("1234567890123")))
-					Expect(s.queuedFrames[2].Data).To(HaveCap(13))
+					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(5)))
+					Expect(s.queue).To(HaveKey(protocol.ByteCount(2)))
+					Expect(s.queue[2]).To(Equal([]byte("1234567890123")))
+					Expect(s.queue[2]).To(HaveCap(13))
 					checkGaps([]utils.ByteInterval{
 						{Start: 0, End: 2},
 						{Start: 20, End: 25},
@@ -375,9 +405,9 @@ var _ = Describe("STREAM frame sorter", func() {
 					}
 					err := s.Push(f)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(5)))
-					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(15)))
-					Expect(s.queuedFrames[10].Data).To(Equal([]byte("678901234567")))
+					Expect(s.queue).To(HaveKey(protocol.ByteCount(5)))
+					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(15)))
+					Expect(s.queue[10]).To(Equal([]byte("678901234567")))
 					checkGaps([]utils.ByteInterval{
 						{Start: 0, End: 5},
 						{Start: 22, End: 25},
@@ -393,12 +423,12 @@ var _ = Describe("STREAM frame sorter", func() {
 					}
 					err := s.Push(f)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(5)))
-					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(15)))
-					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(25)))
-					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(2)))
-					Expect(s.queuedFrames[2].Data).To(Equal(bytes.Repeat([]byte{'e'}, 23)))
-					Expect(s.queuedFrames[2].Data).To(HaveCap(23))
+					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(5)))
+					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(15)))
+					Expect(s.queue).To(HaveKey(protocol.ByteCount(25)))
+					Expect(s.queue).To(HaveKey(protocol.ByteCount(2)))
+					Expect(s.queue[2]).To(Equal(bytes.Repeat([]byte{'e'}, 23)))
+					Expect(s.queue[2]).To(HaveCap(23))
 					checkGaps([]utils.ByteInterval{
 						{Start: 0, End: 2},
 						{Start: 30, End: protocol.MaxByteCount},
@@ -413,12 +443,12 @@ var _ = Describe("STREAM frame sorter", func() {
 					}
 					err := s.Push(f)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(5)))
-					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(15)))
-					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(25)))
-					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(10)))
-					Expect(s.queuedFrames[10].Data).To(Equal(bytes.Repeat([]byte{'d'}, 15)))
-					Expect(s.queuedFrames[10].Data).To(HaveCap(15))
+					Expect(s.queue).To(HaveKey(protocol.ByteCount(5)))
+					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(15)))
+					Expect(s.queue).To(HaveKey(protocol.ByteCount(25)))
+					Expect(s.queue).To(HaveKey(protocol.ByteCount(10)))
+					Expect(s.queue[10]).To(Equal(bytes.Repeat([]byte{'d'}, 15)))
+					Expect(s.queue[10]).To(HaveCap(15))
 					checkGaps([]utils.ByteInterval{
 						{Start: 0, End: 5},
 						{Start: 30, End: protocol.MaxByteCount},
@@ -433,10 +463,10 @@ var _ = Describe("STREAM frame sorter", func() {
 					}
 					err := s.Push(f)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(1)))
-					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(15)))
-					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(5)))
-					Expect(s.queuedFrames[1].Data).To(Equal(f.Data))
+					Expect(s.queue).To(HaveKey(protocol.ByteCount(1)))
+					Expect(s.queue).To(HaveKey(protocol.ByteCount(15)))
+					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(5)))
+					Expect(s.queue[1]).To(Equal(f.Data))
 					checkGaps([]utils.ByteInterval{
 						{Start: 0, End: 1},
 						{Start: 20, End: 25},
@@ -452,9 +482,9 @@ var _ = Describe("STREAM frame sorter", func() {
 					}
 					err := s.Push(f)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(s.queuedFrames).To(HaveLen(1))
-					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(0)))
-					Expect(s.queuedFrames[0].Data).To(Equal(f.Data))
+					Expect(s.queue).To(HaveLen(1))
+					Expect(s.queue).To(HaveKey(protocol.ByteCount(0)))
+					Expect(s.queue[0]).To(Equal(f.Data))
 					checkGaps([]utils.ByteInterval{
 						{Start: 32, End: protocol.MaxByteCount},
 					})
@@ -468,10 +498,10 @@ var _ = Describe("STREAM frame sorter", func() {
 					}
 					err := s.Push(f)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(8)))
-					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(10)))
-					Expect(s.queuedFrames[10].Data).To(Equal([]byte("34567")))
-					Expect(s.queuedFrames[10].Data).To(HaveCap(5))
+					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(8)))
+					Expect(s.queue).To(HaveKey(protocol.ByteCount(10)))
+					Expect(s.queue[10]).To(Equal([]byte("34567")))
+					Expect(s.queue[10]).To(HaveCap(5))
 					checkGaps([]utils.ByteInterval{
 						{Start: 0, End: 5},
 						{Start: 20, End: 25},
@@ -487,9 +517,9 @@ var _ = Describe("STREAM frame sorter", func() {
 					}
 					err := s.Push(f)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(s.queuedFrames).To(HaveKey(protocol.ByteCount(10)))
-					Expect(s.queuedFrames[10].Data).To(Equal([]byte("12345")))
-					Expect(s.queuedFrames[10].Data).To(HaveCap(5))
+					Expect(s.queue).To(HaveKey(protocol.ByteCount(10)))
+					Expect(s.queue[10]).To(Equal([]byte("12345")))
+					Expect(s.queue[10]).To(HaveCap(5))
 					checkGaps([]utils.ByteInterval{
 						{Start: 0, End: 5},
 						{Start: 20, End: 25},
@@ -521,46 +551,46 @@ var _ = Describe("STREAM frame sorter", func() {
 				It("does not modify data when receiving a duplicate", func() {
 					err := s.Push(&wire.StreamFrame{Offset: 0, Data: []byte("fffff")})
 					Expect(err).To(MatchError(errDuplicateStreamData))
-					Expect(s.queuedFrames[0].Data).ToNot(Equal([]byte("fffff")))
+					Expect(s.queue[0]).ToNot(Equal([]byte("fffff")))
 				})
 
 				It("detects a duplicate frame that is smaller than the original, starting at the beginning", func() {
 					// 10 to 12
 					err := s.Push(&wire.StreamFrame{Offset: 10, Data: []byte("12")})
 					Expect(err).To(MatchError(errDuplicateStreamData))
-					Expect(s.queuedFrames[10].Data).To(HaveLen(5))
+					Expect(s.queue[10]).To(HaveLen(5))
 				})
 
 				It("detects a duplicate frame that is smaller than the original, somewhere in the middle", func() {
 					// 1 to 4
 					err := s.Push(&wire.StreamFrame{Offset: 1, Data: []byte("123")})
 					Expect(err).To(MatchError(errDuplicateStreamData))
-					Expect(s.queuedFrames[0].Data).To(HaveLen(5))
-					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(1)))
+					Expect(s.queue[0]).To(HaveLen(5))
+					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(1)))
 				})
 
 				It("detects a duplicate frame that is smaller than the original, somewhere in the middle in the last block", func() {
 					// 11 to 14
 					err := s.Push(&wire.StreamFrame{Offset: 11, Data: []byte("123")})
 					Expect(err).To(MatchError(errDuplicateStreamData))
-					Expect(s.queuedFrames[10].Data).To(HaveLen(5))
-					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(11)))
+					Expect(s.queue[10]).To(HaveLen(5))
+					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(11)))
 				})
 
 				It("detects a duplicate frame that is smaller than the original, with aligned end in the last block", func() {
 					// 11 to 14
 					err := s.Push(&wire.StreamFrame{Offset: 11, Data: []byte("1234")})
 					Expect(err).To(MatchError(errDuplicateStreamData))
-					Expect(s.queuedFrames[10].Data).To(HaveLen(5))
-					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(11)))
+					Expect(s.queue[10]).To(HaveLen(5))
+					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(11)))
 				})
 
 				It("detects a duplicate frame that is smaller than the original, with aligned end", func() {
 					// 3 to 5
 					err := s.Push(&wire.StreamFrame{Offset: 3, Data: []byte("12")})
 					Expect(err).To(MatchError(errDuplicateStreamData))
-					Expect(s.queuedFrames[0].Data).To(HaveLen(5))
-					Expect(s.queuedFrames).ToNot(HaveKey(protocol.ByteCount(3)))
+					Expect(s.queue[0]).To(HaveLen(5))
+					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(3)))
 				})
 			})
 
