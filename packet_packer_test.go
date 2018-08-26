@@ -103,6 +103,7 @@ var _ = Describe("Packet packer", func() {
 
 	Context("determining the maximum packet size", func() {
 		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+
 		It("uses the minimum initial size, if it can't determine if the remote address is IPv4 or IPv6", func() {
 			remoteAddr := &net.TCPAddr{}
 			packer = newPacketPacker(connID, connID, 1, nil, remoteAddr, nil, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
@@ -176,6 +177,7 @@ var _ = Describe("Packet packer", func() {
 			})
 
 			It("it omits the connection ID for forward-secure packets", func() {
+				packer.version = protocol.Version43
 				ph := packer.getHeader(protocol.EncryptionForwardSecure)
 				Expect(ph.DestConnectionID.Len()).ToNot(BeZero())
 				packer.SetOmitConnectionID()
@@ -222,6 +224,52 @@ var _ = Describe("Packet packer", func() {
 					ph := packer.getHeader(protocol.EncryptionSecure)
 					Expect(ph.DiversificationNonce).To(BeEmpty())
 				})
+			})
+		})
+
+		Context("Header (for gQUIC 44)", func() {
+			BeforeEach(func() {
+				packer.version = protocol.Version44
+			})
+
+			It("sends an Initial packet as the first packets, for the client", func() {
+				packer.perspective = protocol.PerspectiveClient
+				packer.hasSentPacket = false
+				h := packer.getHeader(protocol.EncryptionUnencrypted)
+				Expect(h.IsLongHeader).To(BeTrue())
+				Expect(h.Type).To(Equal(protocol.PacketTypeInitial))
+				Expect(h.Version).To(Equal(protocol.Version44))
+				Expect(h.DestConnectionID).To(Equal(packer.destConnID))
+				Expect(h.SrcConnectionID).To(Equal(packer.srcConnID))
+				Expect(h.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
+			})
+
+			It("sends a Handshake for non-forward-secure packets, for the server", func() {
+				packer.perspective = protocol.PerspectiveServer
+				h := packer.getHeader(protocol.EncryptionUnencrypted)
+				Expect(h.IsLongHeader).To(BeTrue())
+				Expect(h.Type).To(Equal(protocol.PacketTypeHandshake))
+				Expect(h.Version).To(Equal(protocol.Version44))
+				Expect(h.DestConnectionID).To(Equal(packer.destConnID))
+				Expect(h.SrcConnectionID).To(Equal(packer.srcConnID))
+				Expect(h.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
+			})
+
+			It("sets the Diversification Nonce for secure packets", func() {
+				packer.perspective = protocol.PerspectiveServer
+				Expect(divNonce).ToNot(BeEmpty())
+				h := packer.getHeader(protocol.EncryptionSecure)
+				Expect(h.IsLongHeader).To(BeTrue())
+				Expect(h.Version).To(Equal(protocol.Version44))
+				Expect(h.Type).To(Equal(protocol.PacketType0RTT))
+				Expect(h.DiversificationNonce).To(Equal(divNonce))
+			})
+
+			It("uses the Short Header for forward-secure packets", func() {
+				h := packer.getHeader(protocol.EncryptionForwardSecure)
+				Expect(h.IsLongHeader).To(BeFalse())
+				Expect(h.IsPublicHeader).To(BeFalse())
+				Expect(h.DestConnectionID).To(Equal(packer.destConnID))
 			})
 		})
 
