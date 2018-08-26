@@ -14,10 +14,7 @@ type streamFrameSorter struct {
 	gaps        *utils.ByteIntervalList
 }
 
-var (
-	errTooManyGapsInReceivedStreamData = errors.New("Too many gaps in received StreamFrame data")
-	errDuplicateStreamData             = errors.New("Duplicate Stream Data")
-)
+var errDuplicateStreamData = errors.New("Duplicate Stream Data")
 
 func newStreamFrameSorter() *streamFrameSorter {
 	s := streamFrameSorter{
@@ -30,6 +27,14 @@ func newStreamFrameSorter() *streamFrameSorter {
 }
 
 func (s *streamFrameSorter) Push(data []byte, offset protocol.ByteCount, fin bool) error {
+	err := s.push(data, offset, fin)
+	if err == errDuplicateStreamData {
+		return nil
+	}
+	return err
+}
+
+func (s *streamFrameSorter) push(data []byte, offset protocol.ByteCount, fin bool) error {
 	if fin {
 		s.finalOffset = offset + protocol.ByteCount(len(data))
 	}
@@ -129,7 +134,7 @@ func (s *streamFrameSorter) Push(data []byte, offset protocol.ByteCount, fin boo
 	}
 
 	if s.gaps.Len() > protocol.MaxStreamFrameSorterGaps {
-		return errTooManyGapsInReceivedStreamData
+		return errors.New("Too many gaps in received data")
 	}
 
 	if wasCut {
