@@ -75,20 +75,32 @@ var _ = Describe("Version", func() {
 	It("tells if a version uses the IETF frame types", func() {
 		Expect(Version39.UsesIETFFrameFormat()).To(BeFalse())
 		Expect(Version43.UsesIETFFrameFormat()).To(BeFalse())
+		Expect(Version44.UsesIETFFrameFormat()).To(BeFalse())
 		Expect(VersionTLS.UsesIETFFrameFormat()).To(BeTrue())
+	})
+
+	It("tells if a version uses the IETF header format", func() {
+		Expect(Version39.UsesIETFHeaderFormat()).To(BeFalse())
+		Expect(Version43.UsesIETFHeaderFormat()).To(BeFalse())
+		Expect(Version44.UsesIETFHeaderFormat()).To(BeTrue())
+		Expect(VersionTLS.UsesIETFHeaderFormat()).To(BeTrue())
 	})
 
 	It("tells if a version uses varint packet numbers", func() {
 		Expect(Version39.UsesVarintPacketNumbers()).To(BeFalse())
 		Expect(Version43.UsesVarintPacketNumbers()).To(BeFalse())
+		Expect(Version44.UsesVarintPacketNumbers()).To(BeFalse())
 		Expect(VersionTLS.UsesVarintPacketNumbers()).To(BeTrue())
 	})
 
-	It("tells if a version uses the IETF frame types", func() {
-		Expect(Version39.UsesIETFFrameFormat()).To(BeFalse())
-		Expect(Version43.UsesIETFFrameFormat()).To(BeFalse())
-		Expect(Version44.UsesIETFFrameFormat()).To(BeFalse())
-		Expect(VersionTLS.UsesIETFFrameFormat()).To(BeTrue())
+	It("tells if a version uses the Length field in the IETF header", func() {
+		Expect(Version44.UsesLengthInHeader()).To(BeFalse())
+		Expect(VersionTLS.UsesLengthInHeader()).To(BeTrue())
+	})
+
+	It("tells if a version uses the Token field in the IETF header", func() {
+		Expect(Version44.UsesTokenInHeader()).To(BeFalse())
+		Expect(VersionTLS.UsesTokenInHeader()).To(BeTrue())
 	})
 
 	It("tells if a version uses STOP_WAITING frames", func() {

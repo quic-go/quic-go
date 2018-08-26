@@ -390,7 +390,7 @@ var _ = Describe("Header", func() {
 						PacketNumberLen:  protocol.PacketNumberLen6,
 					}
 					err := hdr.writePublicHeader(buf, protocol.PerspectiveServer, versionPublicHeader)
-					Expect(err).To(MatchError(errInvalidPacketNumberLen6))
+					Expect(err).To(MatchError(errInvalidPacketNumberLen))
 				})
 			})
 		})

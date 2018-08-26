@@ -42,7 +42,7 @@ type Header struct {
 	Token        []byte
 }
 
-var errInvalidPacketNumberLen6 = errors.New("invalid packet number length: 6 bytes")
+var errInvalidPacketNumberLen = errors.New("invalid packet number length")
 
 // Write writes the Header.
 func (h *Header) Write(b *bytes.Buffer, pers protocol.Perspective, version protocol.VersionNumber) error {
@@ -155,7 +155,7 @@ func (h *Header) writePublicHeader(b *bytes.Buffer, pers protocol.Perspective, _
 	case protocol.PacketNumberLen4:
 		utils.BigEndian.WriteUint32(b, uint32(h.PacketNumber))
 	case protocol.PacketNumberLen6:
-		return errInvalidPacketNumberLen6
+		return errInvalidPacketNumberLen
 	default:
 		return errors.New("PublicHeader: PacketNumberLen not set")
 	}
@@ -193,7 +193,7 @@ func (h *Header) getHeaderLength() (protocol.ByteCount, error) {
 func (h *Header) getPublicHeaderLength() (protocol.ByteCount, error) {
 	length := protocol.ByteCount(1) // 1 byte for public flags
 	if h.PacketNumberLen == protocol.PacketNumberLen6 {
-		return 0, errInvalidPacketNumberLen6
+		return 0, errInvalidPacketNumberLen
 	}
 	if h.PacketNumberLen != protocol.PacketNumberLen1 && h.PacketNumberLen != protocol.PacketNumberLen2 && h.PacketNumberLen != protocol.PacketNumberLen4 {
 		return 0, errPacketNumberLenNotSet
