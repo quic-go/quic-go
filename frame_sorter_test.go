@@ -10,7 +10,7 @@ import (
 )
 
 var _ = Describe("STREAM frame sorter", func() {
-	var s *streamFrameSorter
+	var s *frameSorter
 
 	checkGaps := func(expectedGaps []utils.ByteInterval) {
 		Expect(s.gaps.Len()).To(Equal(len(expectedGaps)))
@@ -22,7 +22,7 @@ var _ = Describe("STREAM frame sorter", func() {
 	}
 
 	BeforeEach(func() {
-		s = newStreamFrameSorter()
+		s = newFrameSorter()
 	})
 
 	It("head returns nil when empty", func() {

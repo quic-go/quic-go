@@ -7,7 +7,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
-type streamFrameSorter struct {
+type frameSorter struct {
 	queue       map[protocol.ByteCount][]byte
 	readPos     protocol.ByteCount
 	finalOffset protocol.ByteCount
@@ -16,8 +16,8 @@ type streamFrameSorter struct {
 
 var errDuplicateStreamData = errors.New("Duplicate Stream Data")
 
-func newStreamFrameSorter() *streamFrameSorter {
-	s := streamFrameSorter{
+func newFrameSorter() *frameSorter {
+	s := frameSorter{
 		gaps:        utils.NewByteIntervalList(),
 		queue:       make(map[protocol.ByteCount][]byte),
 		finalOffset: protocol.MaxByteCount,
@@ -26,7 +26,7 @@ func newStreamFrameSorter() *streamFrameSorter {
 	return &s
 }
 
-func (s *streamFrameSorter) Push(data []byte, offset protocol.ByteCount, fin bool) error {
+func (s *frameSorter) Push(data []byte, offset protocol.ByteCount, fin bool) error {
 	err := s.push(data, offset, fin)
 	if err == errDuplicateStreamData {
 		return nil
@@ -34,7 +34,7 @@ func (s *streamFrameSorter) Push(data []byte, offset protocol.ByteCount, fin boo
 	return err
 }
 
-func (s *streamFrameSorter) push(data []byte, offset protocol.ByteCount, fin bool) error {
+func (s *frameSorter) push(data []byte, offset protocol.ByteCount, fin bool) error {
 	if fin {
 		s.finalOffset = offset + protocol.ByteCount(len(data))
 	}
@@ -147,7 +147,7 @@ func (s *streamFrameSorter) push(data []byte, offset protocol.ByteCount, fin boo
 	return nil
 }
 
-func (s *streamFrameSorter) Pop() ([]byte /* data */, bool /* fin */) {
+func (s *frameSorter) Pop() ([]byte /* data */, bool /* fin */) {
 	data, ok := s.queue[s.readPos]
 	if !ok {
 		return nil, s.readPos >= s.finalOffset

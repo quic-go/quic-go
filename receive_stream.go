@@ -27,7 +27,7 @@ type receiveStream struct {
 
 	sender streamSender
 
-	frameQueue *streamFrameSorter
+	frameQueue *frameSorter
 	readOffset protocol.ByteCount
 
 	currentFrame       []byte
@@ -63,7 +63,7 @@ func newReceiveStream(
 		streamID:       streamID,
 		sender:         sender,
 		flowController: flowController,
-		frameQueue:     newStreamFrameSorter(),
+		frameQueue:     newFrameSorter(),
 		readChan:       make(chan struct{}, 1),
 		version:        version,
 	}
