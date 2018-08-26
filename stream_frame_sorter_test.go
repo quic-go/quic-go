@@ -5,7 +5,6 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/internal/wire"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -32,52 +31,35 @@ var _ = Describe("STREAM frame sorter", func() {
 
 	Context("Push", func() {
 		It("inserts and pops a single frame", func() {
-			f := &wire.StreamFrame{
-				Offset: 0,
-				Data:   []byte("foobar"),
-			}
-			Expect(s.Push(f)).To(Succeed())
+			Expect(s.Push([]byte("foobar"), 0, false)).To(Succeed())
 			data, fin := s.Pop()
-			Expect(data).To(Equal(f.Data))
+			Expect(data).To(Equal([]byte("foobar")))
 			Expect(fin).To(BeFalse())
 			Expect(s.Pop()).To(BeNil())
 		})
 
 		It("inserts and pops two consecutive frame", func() {
-			f1 := &wire.StreamFrame{
-				Offset: 0,
-				Data:   []byte("foobar"),
-			}
-			f2 := &wire.StreamFrame{
-				Offset: 6,
-				Data:   []byte("foobar2"),
-			}
-			Expect(s.Push(f1)).To(Succeed())
-			Expect(s.Push(f2)).To(Succeed())
+			Expect(s.Push([]byte("foo"), 0, false)).To(Succeed())
+			Expect(s.Push([]byte("bar"), 3, false)).To(Succeed())
 			data, fin := s.Pop()
-			Expect(data).To(Equal(f1.Data))
+			Expect(data).To(Equal([]byte("foo")))
 			Expect(fin).To(BeFalse())
 			data, fin = s.Pop()
-			Expect(data).To(Equal(f2.Data))
+			Expect(data).To(Equal([]byte("bar")))
 			Expect(fin).To(BeFalse())
 			Expect(s.Pop()).To(BeNil())
 		})
 
 		It("ignores empty frames", func() {
-			f := &wire.StreamFrame{}
-			Expect(s.Push(f)).To(Succeed())
+			Expect(s.Push(nil, 0, false)).To(Succeed())
 			Expect(s.Pop()).To(BeNil())
 		})
 
 		Context("FIN handling", func() {
-			It("saves a FIN frame at offset 0", func() {
-				f := &wire.StreamFrame{
-					Offset: 0,
-					FinBit: true,
-				}
-				Expect(s.Push(f)).To(Succeed())
+			It("saves a FIN at offset 0", func() {
+				Expect(s.Push(nil, 0, true)).To(Succeed())
 				data, fin := s.Pop()
-				Expect(data).To(Equal(f.Data))
+				Expect(data).To(BeEmpty())
 				Expect(fin).To(BeTrue())
 				data, fin = s.Pop()
 				Expect(data).To(BeNil())
@@ -85,14 +67,9 @@ var _ = Describe("STREAM frame sorter", func() {
 			})
 
 			It("saves a FIN frame at non-zero offset", func() {
-				f := &wire.StreamFrame{
-					Offset: 0,
-					Data:   []byte("foobar"),
-					FinBit: true,
-				}
-				Expect(s.Push(f)).To(Succeed())
+				Expect(s.Push([]byte("foobar"), 0, true)).To(Succeed())
 				data, fin := s.Pop()
-				Expect(data).To(Equal(f.Data))
+				Expect(data).To(Equal([]byte("foobar")))
 				Expect(fin).To(BeTrue())
 				data, fin = s.Pop()
 				Expect(data).To(BeNil())
@@ -100,18 +77,10 @@ var _ = Describe("STREAM frame sorter", func() {
 			})
 
 			It("sets the FIN if a stream is closed after receiving some data", func() {
-				f1 := &wire.StreamFrame{
-					Offset: 0,
-					Data:   []byte("foobar"),
-				}
-				Expect(s.Push(f1)).To(Succeed())
-				f2 := &wire.StreamFrame{
-					Offset: 6,
-					FinBit: true,
-				}
-				Expect(s.Push(f2)).To(Succeed())
+				Expect(s.Push([]byte("foobar"), 0, false)).To(Succeed())
+				Expect(s.Push(nil, 6, true)).To(Succeed())
 				data, fin := s.Pop()
-				Expect(data).To(Equal(f1.Data))
+				Expect(data).To(Equal([]byte("foobar")))
 				Expect(fin).To(BeTrue())
 				data, fin = s.Pop()
 				Expect(data).To(BeNil())
@@ -121,12 +90,7 @@ var _ = Describe("STREAM frame sorter", func() {
 
 		Context("Gap handling", func() {
 			It("finds the first gap", func() {
-				f := &wire.StreamFrame{
-					Offset: 10,
-					Data:   []byte("foobar"),
-				}
-				err := s.Push(f)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(s.Push([]byte("foobar"), 10, false)).To(Succeed())
 				checkGaps([]utils.ByteInterval{
 					{Start: 0, End: 10},
 					{Start: 16, End: protocol.MaxByteCount},
@@ -134,30 +98,15 @@ var _ = Describe("STREAM frame sorter", func() {
 			})
 
 			It("correctly sets the first gap for a frame with offset 0", func() {
-				f := &wire.StreamFrame{
-					Offset: 0,
-					Data:   []byte("foobar"),
-				}
-				err := s.Push(f)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(s.Push([]byte("foobar"), 0, false)).To(Succeed())
 				checkGaps([]utils.ByteInterval{
 					{Start: 6, End: protocol.MaxByteCount},
 				})
 			})
 
 			It("finds the two gaps", func() {
-				f1 := &wire.StreamFrame{
-					Offset: 10,
-					Data:   []byte("foobar"),
-				}
-				err := s.Push(f1)
-				Expect(err).ToNot(HaveOccurred())
-				f2 := &wire.StreamFrame{
-					Offset: 20,
-					Data:   []byte("foobar"),
-				}
-				err = s.Push(f2)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(s.Push([]byte("foobar"), 10, false)).To(Succeed())
+				Expect(s.Push([]byte("foobar"), 20, false)).To(Succeed())
 				checkGaps([]utils.ByteInterval{
 					{Start: 0, End: 10},
 					{Start: 16, End: 20},
@@ -166,18 +115,8 @@ var _ = Describe("STREAM frame sorter", func() {
 			})
 
 			It("finds the two gaps in reverse order", func() {
-				f1 := &wire.StreamFrame{
-					Offset: 20,
-					Data:   []byte("foobar"),
-				}
-				err := s.Push(f1)
-				Expect(err).ToNot(HaveOccurred())
-				f2 := &wire.StreamFrame{
-					Offset: 10,
-					Data:   []byte("foobar"),
-				}
-				err = s.Push(f2)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(s.Push([]byte("foobar"), 20, false)).To(Succeed())
+				Expect(s.Push([]byte("foobar"), 10, false)).To(Succeed())
 				checkGaps([]utils.ByteInterval{
 					{Start: 0, End: 10},
 					{Start: 16, End: 20},
@@ -186,18 +125,8 @@ var _ = Describe("STREAM frame sorter", func() {
 			})
 
 			It("shrinks a gap when it is partially filled", func() {
-				f1 := &wire.StreamFrame{
-					Offset: 10,
-					Data:   []byte("test"),
-				}
-				err := s.Push(f1)
-				Expect(err).ToNot(HaveOccurred())
-				f2 := &wire.StreamFrame{
-					Offset: 4,
-					Data:   []byte("foobar"),
-				}
-				err = s.Push(f2)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(s.Push([]byte("test"), 10, false)).To(Succeed())
+				Expect(s.Push([]byte("foobar"), 4, false)).To(Succeed())
 				checkGaps([]utils.ByteInterval{
 					{Start: 0, End: 4},
 					{Start: 14, End: protocol.MaxByteCount},
@@ -205,42 +134,17 @@ var _ = Describe("STREAM frame sorter", func() {
 			})
 
 			It("deletes a gap at the beginning, when it is filled", func() {
-				f1 := &wire.StreamFrame{
-					Offset: 6,
-					Data:   []byte("test"),
-				}
-				err := s.Push(f1)
-				Expect(err).ToNot(HaveOccurred())
-				f2 := &wire.StreamFrame{
-					Offset: 0,
-					Data:   []byte("foobar"),
-				}
-				err = s.Push(f2)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(s.Push([]byte("test"), 6, false)).To(Succeed())
+				Expect(s.Push([]byte("foobar"), 0, false)).To(Succeed())
 				checkGaps([]utils.ByteInterval{
 					{Start: 10, End: protocol.MaxByteCount},
 				})
 			})
 
 			It("deletes a gap in the middle, when it is filled", func() {
-				f1 := &wire.StreamFrame{
-					Offset: 0,
-					Data:   []byte("test"),
-				}
-				err := s.Push(f1)
-				Expect(err).ToNot(HaveOccurred())
-				f2 := &wire.StreamFrame{
-					Offset: 10,
-					Data:   []byte("test2"),
-				}
-				err = s.Push(f2)
-				Expect(err).ToNot(HaveOccurred())
-				f3 := &wire.StreamFrame{
-					Offset: 4,
-					Data:   []byte("foobar"),
-				}
-				err = s.Push(f3)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(s.Push([]byte("test"), 0, false)).To(Succeed())
+				Expect(s.Push([]byte("test2"), 10, false)).To(Succeed())
+				Expect(s.Push([]byte("foobar"), 4, false)).To(Succeed())
 				Expect(s.queue).To(HaveLen(3))
 				checkGaps([]utils.ByteInterval{
 					{Start: 15, End: protocol.MaxByteCount},
@@ -248,18 +152,8 @@ var _ = Describe("STREAM frame sorter", func() {
 			})
 
 			It("splits a gap into two", func() {
-				f1 := &wire.StreamFrame{
-					Offset: 100,
-					Data:   []byte("test"),
-				}
-				err := s.Push(f1)
-				Expect(err).ToNot(HaveOccurred())
-				f2 := &wire.StreamFrame{
-					Offset: 50,
-					Data:   []byte("foobar"),
-				}
-				err = s.Push(f2)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(s.Push([]byte("test"), 100, false)).To(Succeed())
+				Expect(s.Push([]byte("foobar"), 50, false)).To(Succeed())
 				Expect(s.queue).To(HaveLen(2))
 				checkGaps([]utils.ByteInterval{
 					{Start: 0, End: 50},
@@ -271,12 +165,9 @@ var _ = Describe("STREAM frame sorter", func() {
 			Context("Overlapping Stream Data detection", func() {
 				// create gaps: 0-5, 10-15, 20-25, 30-inf
 				BeforeEach(func() {
-					err := s.Push(&wire.StreamFrame{Offset: 5, Data: []byte("12345")})
-					Expect(err).ToNot(HaveOccurred())
-					err = s.Push(&wire.StreamFrame{Offset: 15, Data: []byte("12345")})
-					Expect(err).ToNot(HaveOccurred())
-					err = s.Push(&wire.StreamFrame{Offset: 25, Data: []byte("12345")})
-					Expect(err).ToNot(HaveOccurred())
+					Expect(s.Push([]byte("12345"), 5, false)).To(Succeed())
+					Expect(s.Push([]byte("12345"), 15, false)).To(Succeed())
+					Expect(s.Push([]byte("12345"), 25, false)).To(Succeed())
 					checkGaps([]utils.ByteInterval{
 						{Start: 0, End: 5},
 						{Start: 10, End: 15},
@@ -286,12 +177,7 @@ var _ = Describe("STREAM frame sorter", func() {
 				})
 
 				It("cuts a frame with offset 0 that overlaps at the end", func() {
-					f := &wire.StreamFrame{
-						Offset: 0,
-						Data:   []byte("foobar"),
-					}
-					err := s.Push(f)
-					Expect(err).ToNot(HaveOccurred())
+					Expect(s.Push([]byte("foobar"), 0, false)).To(Succeed())
 					Expect(s.queue).To(HaveKey(protocol.ByteCount(0)))
 					Expect(s.queue[0]).To(Equal([]byte("fooba")))
 					Expect(s.queue[0]).To(HaveCap(5))
@@ -304,12 +190,7 @@ var _ = Describe("STREAM frame sorter", func() {
 
 				It("cuts a frame that overlaps at the end", func() {
 					// 4 to 7
-					f := &wire.StreamFrame{
-						Offset: 4,
-						Data:   []byte("foo"),
-					}
-					err := s.Push(f)
-					Expect(err).ToNot(HaveOccurred())
+					Expect(s.Push([]byte("foo"), 4, false)).To(Succeed())
 					Expect(s.queue).To(HaveKey(protocol.ByteCount(4)))
 					Expect(s.queue[4]).To(Equal([]byte("f")))
 					Expect(s.queue[4]).To(HaveCap(1))
@@ -323,12 +204,7 @@ var _ = Describe("STREAM frame sorter", func() {
 
 				It("cuts a frame that completely fills a gap, but overlaps at the end", func() {
 					// 10 to 16
-					f := &wire.StreamFrame{
-						Offset: 10,
-						Data:   []byte("foobar"),
-					}
-					err := s.Push(f)
-					Expect(err).ToNot(HaveOccurred())
+					Expect(s.Push([]byte("foobar"), 10, false)).To(Succeed())
 					Expect(s.queue).To(HaveKey(protocol.ByteCount(10)))
 					Expect(s.queue[10]).To(Equal([]byte("fooba")))
 					Expect(s.queue[10]).To(HaveCap(5))
@@ -341,12 +217,7 @@ var _ = Describe("STREAM frame sorter", func() {
 
 				It("cuts a frame that overlaps at the beginning", func() {
 					// 8 to 14
-					f := &wire.StreamFrame{
-						Offset: 8,
-						Data:   []byte("foobar"),
-					}
-					err := s.Push(f)
-					Expect(err).ToNot(HaveOccurred())
+					Expect(s.Push([]byte("foobar"), 8, false)).To(Succeed())
 					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(8)))
 					Expect(s.queue).To(HaveKey(protocol.ByteCount(10)))
 					Expect(s.queue[10]).To(Equal([]byte("obar")))
@@ -361,12 +232,7 @@ var _ = Describe("STREAM frame sorter", func() {
 
 				It("processes a frame that overlaps at the beginning and at the end, starting in a gap", func() {
 					// 2 to 12
-					f := &wire.StreamFrame{
-						Offset: 2,
-						Data:   []byte("1234567890"),
-					}
-					err := s.Push(f)
-					Expect(err).ToNot(HaveOccurred())
+					Expect(s.Push([]byte("1234567890"), 2, false)).To(Succeed())
 					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(5)))
 					Expect(s.queue).To(HaveKey(protocol.ByteCount(2)))
 					Expect(s.queue[2]).To(Equal([]byte("1234567890")))
@@ -380,12 +246,7 @@ var _ = Describe("STREAM frame sorter", func() {
 
 				It("processes a frame that overlaps at the beginning and at the end, starting in a gap, ending in data", func() {
 					// 2 to 17
-					f := &wire.StreamFrame{
-						Offset: 2,
-						Data:   []byte("123456789012345"),
-					}
-					err := s.Push(f)
-					Expect(err).ToNot(HaveOccurred())
+					Expect(s.Push([]byte("123456789012345"), 2, false)).To(Succeed())
 					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(5)))
 					Expect(s.queue).To(HaveKey(protocol.ByteCount(2)))
 					Expect(s.queue[2]).To(Equal([]byte("1234567890123")))
@@ -399,12 +260,7 @@ var _ = Describe("STREAM frame sorter", func() {
 
 				It("processes a frame that overlaps at the beginning and at the end, starting in a gap, ending in data", func() {
 					// 5 to 22
-					f := &wire.StreamFrame{
-						Offset: 5,
-						Data:   []byte("12345678901234567"),
-					}
-					err := s.Push(f)
-					Expect(err).ToNot(HaveOccurred())
+					Expect(s.Push([]byte("12345678901234567"), 5, false)).To(Succeed())
 					Expect(s.queue).To(HaveKey(protocol.ByteCount(5)))
 					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(15)))
 					Expect(s.queue[10]).To(Equal([]byte("678901234567")))
@@ -417,12 +273,7 @@ var _ = Describe("STREAM frame sorter", func() {
 
 				It("processes a frame that closes multiple gaps", func() {
 					// 2 to 27
-					f := &wire.StreamFrame{
-						Offset: 2,
-						Data:   bytes.Repeat([]byte{'e'}, 25),
-					}
-					err := s.Push(f)
-					Expect(err).ToNot(HaveOccurred())
+					Expect(s.Push(bytes.Repeat([]byte{'e'}, 25), 2, false)).To(Succeed())
 					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(5)))
 					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(15)))
 					Expect(s.queue).To(HaveKey(protocol.ByteCount(25)))
@@ -437,12 +288,7 @@ var _ = Describe("STREAM frame sorter", func() {
 
 				It("processes a frame that closes multiple gaps", func() {
 					// 5 to 27
-					f := &wire.StreamFrame{
-						Offset: 5,
-						Data:   bytes.Repeat([]byte{'d'}, 22),
-					}
-					err := s.Push(f)
-					Expect(err).ToNot(HaveOccurred())
+					Expect(s.Push(bytes.Repeat([]byte{'d'}, 22), 5, false)).To(Succeed())
 					Expect(s.queue).To(HaveKey(protocol.ByteCount(5)))
 					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(15)))
 					Expect(s.queue).To(HaveKey(protocol.ByteCount(25)))
@@ -456,17 +302,13 @@ var _ = Describe("STREAM frame sorter", func() {
 				})
 
 				It("processes a frame that covers multiple gaps and ends at the end of a gap", func() {
+					data := bytes.Repeat([]byte{'e'}, 14)
 					// 1 to 15
-					f := &wire.StreamFrame{
-						Offset: 1,
-						Data:   bytes.Repeat([]byte{'f'}, 14),
-					}
-					err := s.Push(f)
-					Expect(err).ToNot(HaveOccurred())
+					Expect(s.Push(data, 1, false)).To(Succeed())
 					Expect(s.queue).To(HaveKey(protocol.ByteCount(1)))
 					Expect(s.queue).To(HaveKey(protocol.ByteCount(15)))
 					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(5)))
-					Expect(s.queue[1]).To(Equal(f.Data))
+					Expect(s.queue[1]).To(Equal(data))
 					checkGaps([]utils.ByteInterval{
 						{Start: 0, End: 1},
 						{Start: 20, End: 25},
@@ -475,16 +317,12 @@ var _ = Describe("STREAM frame sorter", func() {
 				})
 
 				It("processes a frame that closes all gaps (except for the last one)", func() {
+					data := bytes.Repeat([]byte{'f'}, 32)
 					// 0 to 32
-					f := &wire.StreamFrame{
-						Offset: 0,
-						Data:   bytes.Repeat([]byte{'f'}, 32),
-					}
-					err := s.Push(f)
-					Expect(err).ToNot(HaveOccurred())
+					Expect(s.Push(data, 0, false)).To(Succeed())
 					Expect(s.queue).To(HaveLen(1))
 					Expect(s.queue).To(HaveKey(protocol.ByteCount(0)))
-					Expect(s.queue[0]).To(Equal(f.Data))
+					Expect(s.queue[0]).To(Equal(data))
 					checkGaps([]utils.ByteInterval{
 						{Start: 32, End: protocol.MaxByteCount},
 					})
@@ -492,12 +330,7 @@ var _ = Describe("STREAM frame sorter", func() {
 
 				It("cuts a frame that overlaps at the beginning and at the end, starting in data already received", func() {
 					// 8 to 17
-					f := &wire.StreamFrame{
-						Offset: 8,
-						Data:   []byte("123456789"),
-					}
-					err := s.Push(f)
-					Expect(err).ToNot(HaveOccurred())
+					Expect(s.Push([]byte("123456789"), 8, false)).To(Succeed())
 					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(8)))
 					Expect(s.queue).To(HaveKey(protocol.ByteCount(10)))
 					Expect(s.queue[10]).To(Equal([]byte("34567")))
@@ -511,12 +344,7 @@ var _ = Describe("STREAM frame sorter", func() {
 
 				It("cuts a frame that completely covers two gaps", func() {
 					// 10 to 20
-					f := &wire.StreamFrame{
-						Offset: 10,
-						Data:   []byte("1234567890"),
-					}
-					err := s.Push(f)
-					Expect(err).ToNot(HaveOccurred())
+					Expect(s.Push([]byte("1234567890"), 10, false)).To(Succeed())
 					Expect(s.queue).To(HaveKey(protocol.ByteCount(10)))
 					Expect(s.queue[10]).To(Equal([]byte("12345")))
 					Expect(s.queue[10]).To(HaveCap(5))
@@ -536,10 +364,8 @@ var _ = Describe("STREAM frame sorter", func() {
 
 				BeforeEach(func() {
 					// create gaps: 5-10, 15-inf
-					err := s.Push(&wire.StreamFrame{Offset: 0, Data: []byte("12345")})
-					Expect(err).ToNot(HaveOccurred())
-					err = s.Push(&wire.StreamFrame{Offset: 10, Data: []byte("12345")})
-					Expect(err).ToNot(HaveOccurred())
+					Expect(s.Push([]byte("12345"), 0, false)).To(Succeed())
+					Expect(s.Push([]byte("12345"), 10, false)).To(Succeed())
 					checkGaps(expectedGaps)
 				})
 
@@ -549,21 +375,21 @@ var _ = Describe("STREAM frame sorter", func() {
 				})
 
 				It("does not modify data when receiving a duplicate", func() {
-					err := s.Push(&wire.StreamFrame{Offset: 0, Data: []byte("fffff")})
+					err := s.Push([]byte("fffff"), 0, false)
 					Expect(err).To(MatchError(errDuplicateStreamData))
 					Expect(s.queue[0]).ToNot(Equal([]byte("fffff")))
 				})
 
 				It("detects a duplicate frame that is smaller than the original, starting at the beginning", func() {
 					// 10 to 12
-					err := s.Push(&wire.StreamFrame{Offset: 10, Data: []byte("12")})
+					err := s.Push([]byte("12"), 10, false)
 					Expect(err).To(MatchError(errDuplicateStreamData))
 					Expect(s.queue[10]).To(HaveLen(5))
 				})
 
 				It("detects a duplicate frame that is smaller than the original, somewhere in the middle", func() {
 					// 1 to 4
-					err := s.Push(&wire.StreamFrame{Offset: 1, Data: []byte("123")})
+					err := s.Push([]byte("123"), 1, false)
 					Expect(err).To(MatchError(errDuplicateStreamData))
 					Expect(s.queue[0]).To(HaveLen(5))
 					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(1)))
@@ -571,15 +397,15 @@ var _ = Describe("STREAM frame sorter", func() {
 
 				It("detects a duplicate frame that is smaller than the original, somewhere in the middle in the last block", func() {
 					// 11 to 14
-					err := s.Push(&wire.StreamFrame{Offset: 11, Data: []byte("123")})
+					err := s.Push([]byte("123"), 11, false)
 					Expect(err).To(MatchError(errDuplicateStreamData))
 					Expect(s.queue[10]).To(HaveLen(5))
 					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(11)))
 				})
 
 				It("detects a duplicate frame that is smaller than the original, with aligned end in the last block", func() {
-					// 11 to 14
-					err := s.Push(&wire.StreamFrame{Offset: 11, Data: []byte("1234")})
+					// 11 to 15
+					err := s.Push([]byte("1234"), 1, false)
 					Expect(err).To(MatchError(errDuplicateStreamData))
 					Expect(s.queue[10]).To(HaveLen(5))
 					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(11)))
@@ -587,7 +413,7 @@ var _ = Describe("STREAM frame sorter", func() {
 
 				It("detects a duplicate frame that is smaller than the original, with aligned end", func() {
 					// 3 to 5
-					err := s.Push(&wire.StreamFrame{Offset: 3, Data: []byte("12")})
+					err := s.Push([]byte("12"), 3, false)
 					Expect(err).To(MatchError(errDuplicateStreamData))
 					Expect(s.queue[0]).To(HaveLen(5))
 					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(3)))
@@ -597,19 +423,10 @@ var _ = Describe("STREAM frame sorter", func() {
 			Context("DoS protection", func() {
 				It("errors when too many gaps are created", func() {
 					for i := 0; i < protocol.MaxStreamFrameSorterGaps; i++ {
-						f := &wire.StreamFrame{
-							Data:   []byte("foobar"),
-							Offset: protocol.ByteCount(i * 7),
-						}
-						err := s.Push(f)
-						Expect(err).ToNot(HaveOccurred())
+						Expect(s.Push([]byte("foobar"), protocol.ByteCount(i*7), false)).To(Succeed())
 					}
 					Expect(s.gaps.Len()).To(Equal(protocol.MaxStreamFrameSorterGaps))
-					f := &wire.StreamFrame{
-						Data:   []byte("foobar"),
-						Offset: protocol.ByteCount(protocol.MaxStreamFrameSorterGaps*7) + 100,
-					}
-					err := s.Push(f)
+					err := s.Push([]byte("foobar"), protocol.ByteCount(protocol.MaxStreamFrameSorterGaps*7)+100, false)
 					Expect(err).To(MatchError(errTooManyGapsInReceivedStreamData))
 				})
 			})

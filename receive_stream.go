@@ -209,7 +209,7 @@ func (s *receiveStream) handleStreamFrame(frame *wire.StreamFrame) error {
 
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	if err := s.frameQueue.Push(frame); err != nil && err != errDuplicateStreamData {
+	if err := s.frameQueue.Push(frame.Data, frame.Offset, frame.FinBit); err != nil && err != errDuplicateStreamData {
 		return err
 	}
 	s.signalRead()

@@ -5,7 +5,6 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 type streamFrameSorter struct {
@@ -30,11 +29,7 @@ func newStreamFrameSorter() *streamFrameSorter {
 	return &s
 }
 
-func (s *streamFrameSorter) Push(frame *wire.StreamFrame) error {
-	return s.push(frame.Data, frame.Offset, frame.FinBit)
-}
-
-func (s *streamFrameSorter) push(data []byte, offset protocol.ByteCount, fin bool) error {
+func (s *streamFrameSorter) Push(data []byte, offset protocol.ByteCount, fin bool) error {
 	if fin {
 		s.finalOffset = offset + protocol.ByteCount(len(data))
 	}
