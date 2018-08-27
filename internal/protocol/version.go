@@ -41,7 +41,7 @@ func IsValidVersion(v VersionNumber) bool {
 
 // UsesTLS says if this QUIC version uses TLS 1.3 for the handshake
 func (vn VersionNumber) UsesTLS() bool {
-	return vn == VersionTLS
+	return !vn.isGQUIC()
 }
 
 func (vn VersionNumber) String() string {
