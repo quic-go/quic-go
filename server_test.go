@@ -336,6 +336,7 @@ var _ = Describe("Server", func() {
 			err := serv.handlePacketImpl(&receivedPacket{
 				remoteAddr: udpAddr,
 				header: &wire.Header{
+					IsPublicHeader:   true,
 					VersionFlag:      true,
 					DestConnectionID: connID,
 					PacketNumber:     1,

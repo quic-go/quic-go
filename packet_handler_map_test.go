@@ -24,7 +24,7 @@ var _ = Describe("Packet Handler Map", func() {
 		err := (&wire.Header{
 			DestConnectionID: connID,
 			PacketNumberLen:  protocol.PacketNumberLen1,
-		}).Write(buf, protocol.PerspectiveServer, protocol.VersionWhatever)
+		}).Write(buf, protocol.PerspectiveServer, versionGQUICFrames)
 		Expect(err).ToNot(HaveOccurred())
 		return buf.Bytes()
 	}

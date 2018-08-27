@@ -267,7 +267,7 @@ var _ = Describe("Header", func() {
 					PacketNumber:     2,
 					PacketNumberLen:  protocol.PacketNumberLen2,
 				}
-				err := hdr.Write(buf, protocol.PerspectiveServer, protocol.VersionWhatever)
+				err := hdr.Write(buf, protocol.PerspectiveServer, versionPublicHeader)
 				Expect(err).To(MatchError("PublicHeader: wrong length for Connection ID: 7 (expected 8)"))
 			})
 
@@ -277,7 +277,7 @@ var _ = Describe("Header", func() {
 					DestConnectionID: connID,
 					PacketNumber:     2,
 				}
-				err := hdr.Write(buf, protocol.PerspectiveServer, protocol.VersionWhatever)
+				err := hdr.Write(buf, protocol.PerspectiveServer, versionPublicHeader)
 				Expect(err).To(MatchError("PublicHeader: PacketNumberLen not set"))
 			})
 
@@ -286,7 +286,7 @@ var _ = Describe("Header", func() {
 					PacketNumberLen: protocol.PacketNumberLen1,
 					PacketNumber:    1,
 				}
-				err := hdr.Write(buf, protocol.PerspectiveServer, protocol.VersionWhatever)
+				err := hdr.Write(buf, protocol.PerspectiveServer, versionPublicHeader)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(buf.Bytes()).To(Equal([]byte{0x0, 0x1}))
 			})
