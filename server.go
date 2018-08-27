@@ -374,14 +374,14 @@ func (s *server) sendVersionNegotiationPacket(p *receivedPacket) error {
 	s.logger.Debugf("Client offered version %s, sending VersionNegotiationPacket", hdr.Version)
 
 	var data []byte
-	if hdr.Version.UsesIETFFrameFormat() {
+	if hdr.IsPublicHeader {
+		data = wire.ComposeGQUICVersionNegotiation(hdr.DestConnectionID, s.config.Versions)
+	} else {
 		var err error
 		data, err = wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, s.config.Versions)
 		if err != nil {
 			return err
 		}
-	} else {
-		data = wire.ComposeGQUICVersionNegotiation(hdr.DestConnectionID, s.config.Versions)
 	}
 	_, err := s.conn.WriteTo(data, p.remoteAddr)
 	return err
