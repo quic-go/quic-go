@@ -5,49 +5,55 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
-type streamFrameSorter struct {
-	queuedFrames map[protocol.ByteCount]*wire.StreamFrame
-	readPosition protocol.ByteCount
-	gaps         *utils.ByteIntervalList
+type frameSorter struct {
+	queue       map[protocol.ByteCount][]byte
+	readPos     protocol.ByteCount
+	finalOffset protocol.ByteCount
+	gaps        *utils.ByteIntervalList
 }
 
-var (
-	errTooManyGapsInReceivedStreamData = errors.New("Too many gaps in received StreamFrame data")
-	errDuplicateStreamData             = errors.New("Duplicate Stream Data")
-)
+var errDuplicateStreamData = errors.New("Duplicate Stream Data")
 
-func newStreamFrameSorter() *streamFrameSorter {
-	s := streamFrameSorter{
-		gaps:         utils.NewByteIntervalList(),
-		queuedFrames: make(map[protocol.ByteCount]*wire.StreamFrame),
+func newFrameSorter() *frameSorter {
+	s := frameSorter{
+		gaps:        utils.NewByteIntervalList(),
+		queue:       make(map[protocol.ByteCount][]byte),
+		finalOffset: protocol.MaxByteCount,
 	}
 	s.gaps.PushFront(utils.ByteInterval{Start: 0, End: protocol.MaxByteCount})
 	return &s
 }
 
-func (s *streamFrameSorter) Push(frame *wire.StreamFrame) error {
-	if frame.DataLen() == 0 {
-		if frame.FinBit {
-			s.queuedFrames[frame.Offset] = frame
-		}
+func (s *frameSorter) Push(data []byte, offset protocol.ByteCount, fin bool) error {
+	err := s.push(data, offset, fin)
+	if err == errDuplicateStreamData {
+		return nil
+	}
+	return err
+}
+
+func (s *frameSorter) push(data []byte, offset protocol.ByteCount, fin bool) error {
+	if fin {
+		s.finalOffset = offset + protocol.ByteCount(len(data))
+	}
+	if len(data) == 0 {
 		return nil
 	}
 
 	var wasCut bool
-	if oldFrame, ok := s.queuedFrames[frame.Offset]; ok {
-		if frame.DataLen() <= oldFrame.DataLen() {
+	if oldData, ok := s.queue[offset]; ok {
+		if len(data) <= len(oldData) {
 			return errDuplicateStreamData
 		}
-		frame.Data = frame.Data[oldFrame.DataLen():]
-		frame.Offset += oldFrame.DataLen()
+		data = data[len(oldData):]
+		offset += protocol.ByteCount(len(oldData))
 		wasCut = true
 	}
 
-	start := frame.Offset
-	end := frame.Offset + frame.DataLen()
+	start := offset
+	end := offset + protocol.ByteCount(len(data))
 
 	// skip all gaps that are before this stream frame
 	var gap *utils.ByteIntervalElement
@@ -67,9 +73,9 @@ func (s *streamFrameSorter) Push(frame *wire.StreamFrame) error {
 
 	if start < gap.Value.Start {
 		add := gap.Value.Start - start
-		frame.Offset += add
+		offset += add
 		start += add
-		frame.Data = frame.Data[add:]
+		data = data[add:]
 		wasCut = true
 	}
 
@@ -87,15 +93,15 @@ func (s *streamFrameSorter) Push(frame *wire.StreamFrame) error {
 			break
 		}
 		// delete queued frames completely covered by the current frame
-		delete(s.queuedFrames, endGap.Value.End)
+		delete(s.queue, endGap.Value.End)
 		endGap = nextEndGap
 	}
 
 	if end > endGap.Value.End {
 		cutLen := end - endGap.Value.End
-		len := frame.DataLen() - cutLen
+		len := protocol.ByteCount(len(data)) - cutLen
 		end -= cutLen
-		frame.Data = frame.Data[:len]
+		data = data[:len]
 		wasCut = true
 	}
 
@@ -128,32 +134,25 @@ func (s *streamFrameSorter) Push(frame *wire.StreamFrame) error {
 	}
 
 	if s.gaps.Len() > protocol.MaxStreamFrameSorterGaps {
-		return errTooManyGapsInReceivedStreamData
+		return errors.New("Too many gaps in received data")
 	}
 
 	if wasCut {
-		data := make([]byte, frame.DataLen())
-		copy(data, frame.Data)
-		frame.Data = data
+		newData := make([]byte, len(data))
+		copy(newData, data)
+		data = newData
 	}
 
-	s.queuedFrames[frame.Offset] = frame
+	s.queue[offset] = data
 	return nil
 }
 
-func (s *streamFrameSorter) Pop() *wire.StreamFrame {
-	frame := s.Head()
-	if frame != nil {
-		s.readPosition += frame.DataLen()
-		delete(s.queuedFrames, frame.Offset)
+func (s *frameSorter) Pop() ([]byte /* data */, bool /* fin */) {
+	data, ok := s.queue[s.readPos]
+	if !ok {
+		return nil, s.readPos >= s.finalOffset
 	}
-	return frame
-}
-
-func (s *streamFrameSorter) Head() *wire.StreamFrame {
-	frame, ok := s.queuedFrames[s.readPosition]
-	if ok {
-		return frame
-	}
-	return nil
+	delete(s.queue, s.readPos)
+	s.readPos += protocol.ByteCount(len(data))
+	return data, s.readPos >= s.finalOffset
 }
