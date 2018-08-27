@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/crypto"
@@ -62,6 +63,8 @@ var _ sessionRunner = &runner{}
 
 // A Listener of QUIC
 type server struct {
+	mutex sync.Mutex
+
 	tlsConf *tls.Config
 	config  *Config
 
@@ -79,9 +82,10 @@ type server struct {
 	sessionHandler packetHandlerManager
 
 	serverError error
+	errorChan   chan struct{}
+	closed      bool
 
 	sessionQueue chan Session
-	errorChan    chan struct{}
 
 	sessionRunner sessionRunner
 	// set as a member, so they can be set in the tests
@@ -293,6 +297,15 @@ func (s *server) Accept() (Session, error) {
 
 // Close the server
 func (s *server) Close() error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.closed {
+		return nil
+	}
+	return s.closeWithMutex()
+}
+
+func (s *server) closeWithMutex() error {
 	s.sessionHandler.CloseServer()
 	if s.serverError == nil {
 		s.serverError = errors.New("server closed")
@@ -303,18 +316,24 @@ func (s *server) Close() error {
 	if s.createdPacketConn {
 		err = s.conn.Close()
 	}
+	s.closed = true
 	close(s.errorChan)
 	return err
+}
+
+func (s *server) closeWithError(e error) error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.closed {
+		return nil
+	}
+	s.serverError = e
+	return s.closeWithMutex()
 }
 
 // Addr returns the server's network address
 func (s *server) Addr() net.Addr {
 	return s.conn.LocalAddr()
-}
-
-func (s *server) closeWithError(e error) error {
-	s.serverError = e
-	return s.Close()
 }
 
 func (s *server) handlePacket(p *receivedPacket) {

@@ -233,6 +233,12 @@ var _ = Describe("Server", func() {
 			Expect(serv.Close()).To(Succeed())
 		})
 
+		It("closes twice", func() {
+			sessionHandler.EXPECT().CloseServer()
+			Expect(serv.Close()).To(Succeed())
+			Expect(serv.Close()).To(Succeed())
+		})
+
 		It("works if no quic.Config is given", func(done Done) {
 			ln, err := ListenAddr("127.0.0.1:0", testdata.GetTLSConfig(), nil)
 			Expect(err).ToNot(HaveOccurred())
