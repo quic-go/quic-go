@@ -46,7 +46,7 @@ func (s *serverSession) handlePacketImpl(p *receivedPacket) error {
 
 	if hdr.IsLongHeader {
 		switch hdr.Type {
-		case protocol.PacketTypeHandshake:
+		case protocol.PacketTypeHandshake, protocol.PacketType0RTT: // 0-RTT accepted for gQUIC 44
 			// nothing to do here. Packet will be passed to the session.
 		default:
 			// Note that this also drops 0-RTT packets.

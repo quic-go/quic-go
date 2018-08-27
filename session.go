@@ -152,19 +152,21 @@ func newSession(
 	conn connection,
 	sessionRunner sessionRunner,
 	v protocol.VersionNumber,
-	connectionID protocol.ConnectionID,
+	destConnID protocol.ConnectionID,
+	srcConnID protocol.ConnectionID,
 	scfg *handshake.ServerConfig,
 	tlsConf *tls.Config,
 	config *Config,
 	logger utils.Logger,
 ) (quicSession, error) {
+	logger.Debugf("Creating new session. Destination Connection ID: %s, Source Connection ID: %s", destConnID, srcConnID)
 	paramsChan := make(chan handshake.TransportParameters)
 	handshakeEvent := make(chan struct{}, 1)
 	s := &session{
 		conn:           conn,
 		sessionRunner:  sessionRunner,
-		srcConnID:      connectionID,
-		destConnID:     connectionID,
+		srcConnID:      srcConnID,
+		destConnID:     destConnID,
 		perspective:    protocol.PerspectiveServer,
 		version:        v,
 		config:         config,
@@ -185,7 +187,7 @@ func newSession(
 	}
 	cs, err := newCryptoSetup(
 		s.cryptoStream,
-		connectionID,
+		srcConnID,
 		s.conn.RemoteAddr(),
 		s.version,
 		divNonce,
@@ -205,8 +207,8 @@ func newSession(
 	s.streamsMap = newStreamsMapLegacy(s.newStream, s.config.MaxIncomingStreams, s.perspective)
 	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
 	s.packer = newPacketPacker(
-		connectionID,
-		nil, // no src connection ID
+		destConnID,
+		srcConnID,
 		1,
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),
@@ -226,20 +228,22 @@ var newClientSession = func(
 	sessionRunner sessionRunner,
 	hostname string,
 	v protocol.VersionNumber,
-	connectionID protocol.ConnectionID,
+	destConnID protocol.ConnectionID,
+	srcConnID protocol.ConnectionID,
 	tlsConf *tls.Config,
 	config *Config,
 	initialVersion protocol.VersionNumber,
 	negotiatedVersions []protocol.VersionNumber, // needed for validation of the GQUIC version negotiation
 	logger utils.Logger,
 ) (quicSession, error) {
+	logger.Debugf("Creating new session. Destination Connection ID: %s, Source Connection ID: %s", destConnID, srcConnID)
 	paramsChan := make(chan handshake.TransportParameters)
 	handshakeEvent := make(chan struct{}, 1)
 	s := &session{
 		conn:           conn,
 		sessionRunner:  sessionRunner,
-		srcConnID:      connectionID,
-		destConnID:     connectionID,
+		srcConnID:      srcConnID,
+		destConnID:     destConnID,
 		perspective:    protocol.PerspectiveClient,
 		version:        v,
 		config:         config,
@@ -258,7 +262,7 @@ var newClientSession = func(
 	cs, err := newCryptoSetupClient(
 		s.cryptoStream,
 		hostname,
-		connectionID,
+		destConnID,
 		s.version,
 		tlsConf,
 		transportParams,
@@ -276,8 +280,8 @@ var newClientSession = func(
 	s.streamsMap = newStreamsMapLegacy(s.newStream, s.config.MaxIncomingStreams, s.perspective)
 	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
 	s.packer = newPacketPacker(
-		connectionID,
-		nil, // no src connection ID
+		destConnID,
+		srcConnID,
 		1,
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),

@@ -180,7 +180,7 @@ func (h *packetHandlerMap) handlePacket(addr net.Addr, data []byte) error {
 	hdr.Raw = data[:len(data)-r.Len()]
 	packetData := data[len(data)-r.Len():]
 
-	if hdr.IsLongHeader {
+	if hdr.IsLongHeader && hdr.Version.UsesLengthInHeader() {
 		if protocol.ByteCount(len(packetData)) < hdr.PayloadLen {
 			return fmt.Errorf("packet payload (%d bytes) is smaller than the expected payload length (%d bytes)", len(packetData), hdr.PayloadLen)
 		}
