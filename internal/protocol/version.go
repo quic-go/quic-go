@@ -19,7 +19,6 @@ const (
 // The version numbers, making grepping easier
 const (
 	Version39       VersionNumber = gquicVersion0 + 3*0x100 + 0x9
-	Version42       VersionNumber = gquicVersion0 + 4*0x100 + 0x2
 	Version43       VersionNumber = gquicVersion0 + 4*0x100 + 0x3
 	VersionTLS      VersionNumber = 101
 	VersionWhatever VersionNumber = 0 // for when the version doesn't matter
@@ -30,7 +29,6 @@ const (
 // must be in sorted descending order
 var SupportedVersions = []VersionNumber{
 	Version43,
-	Version42,
 	Version39,
 }
 
