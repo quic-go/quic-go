@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.10.0 (unreleased)
+
+- Drop support for QUIC 42.
+
 ## v0.9.0 (2018-08-15)
 
 - Add a `quic.Config` option for the length of the connection ID (for IETF QUIC).
