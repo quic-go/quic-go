@@ -2,7 +2,7 @@
 
 ## v0.10.0 (unreleased)
 
-- Drop support for QUIC 42.
+- Add support for QUIC 44, drop support for QUIC 42.
 
 ## v0.9.0 (2018-08-15)
 
