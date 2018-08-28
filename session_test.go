@@ -1238,7 +1238,8 @@ var _ = Describe("Session", func() {
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 			rph.EXPECT().GetAckFrame().Return(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 0x1337}}})
 			rph.EXPECT().GetAlarmTimeout().Return(time.Now().Add(10 * time.Millisecond))
-			rph.EXPECT().GetAlarmTimeout().Return(time.Now().Add(time.Hour))
+			// make the run loop wait
+			rph.EXPECT().GetAlarmTimeout().Return(time.Now().Add(time.Hour)).MaxTimes(1)
 			sess.receivedPacketHandler = rph
 
 			go func() {
