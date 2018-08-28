@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.10.0 (unreleased)
+## v0.10.0 (2018-08-28)
 
 - Add support for QUIC 44, drop support for QUIC 42.
 
