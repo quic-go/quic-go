@@ -22,6 +22,7 @@ var _ = Describe("Version", func() {
 		Expect(IsValidVersion(Version43)).To(BeTrue())
 		Expect(IsValidVersion(Version44)).To(BeTrue())
 		Expect(IsValidVersion(VersionTLS)).To(BeTrue())
+		Expect(IsValidVersion(VersionMilestone0_10_0)).To(BeTrue())
 		Expect(IsValidVersion(VersionWhatever)).To(BeFalse())
 		Expect(IsValidVersion(VersionUnknown)).To(BeFalse())
 		Expect(IsValidVersion(1234)).To(BeFalse())
@@ -31,6 +32,7 @@ var _ = Describe("Version", func() {
 		Expect(Version39.UsesTLS()).To(BeFalse())
 		Expect(Version43.UsesTLS()).To(BeFalse())
 		Expect(Version44.UsesTLS()).To(BeFalse())
+		Expect(VersionMilestone0_10_0.UsesTLS()).To(BeTrue())
 		Expect(VersionTLS.UsesTLS()).To(BeTrue())
 	})
 
@@ -39,11 +41,13 @@ var _ = Describe("Version", func() {
 		Expect(isReservedVersion(Version43)).To(BeFalse())
 		Expect(isReservedVersion(Version44)).To(BeFalse())
 		Expect(isReservedVersion(VersionTLS)).To(BeFalse())
+		Expect(isReservedVersion(VersionMilestone0_10_0)).To(BeFalse())
 	})
 
 	It("has the right string representation", func() {
 		Expect(Version39.String()).To(Equal("gQUIC 39"))
 		Expect(VersionTLS.String()).To(ContainSubstring("TLS"))
+		Expect(VersionMilestone0_10_0.String()).To(Equal("quic-go Milestone 0.10.0"))
 		Expect(VersionWhatever.String()).To(Equal("whatever"))
 		Expect(VersionUnknown.String()).To(Equal("unknown"))
 		// check with unsupported version numbers from the wiki
@@ -70,6 +74,7 @@ var _ = Describe("Version", func() {
 		Expect(Version43.CryptoStreamID()).To(Equal(StreamID(1)))
 		Expect(Version44.CryptoStreamID()).To(Equal(StreamID(1)))
 		Expect(VersionTLS.CryptoStreamID()).To(Equal(StreamID(0)))
+		Expect(VersionMilestone0_10_0.CryptoStreamID()).To(Equal(StreamID(0)))
 	})
 
 	It("tells if a version uses the IETF frame types", func() {
@@ -77,6 +82,7 @@ var _ = Describe("Version", func() {
 		Expect(Version43.UsesIETFFrameFormat()).To(BeFalse())
 		Expect(Version44.UsesIETFFrameFormat()).To(BeFalse())
 		Expect(VersionTLS.UsesIETFFrameFormat()).To(BeTrue())
+		Expect(VersionMilestone0_10_0.UsesIETFFrameFormat()).To(BeTrue())
 	})
 
 	It("tells if a version uses the IETF header format", func() {
@@ -84,6 +90,7 @@ var _ = Describe("Version", func() {
 		Expect(Version43.UsesIETFHeaderFormat()).To(BeFalse())
 		Expect(Version44.UsesIETFHeaderFormat()).To(BeTrue())
 		Expect(VersionTLS.UsesIETFHeaderFormat()).To(BeTrue())
+		Expect(VersionMilestone0_10_0.UsesIETFHeaderFormat()).To(BeTrue())
 	})
 
 	It("tells if a version uses varint packet numbers", func() {
@@ -91,16 +98,19 @@ var _ = Describe("Version", func() {
 		Expect(Version43.UsesVarintPacketNumbers()).To(BeFalse())
 		Expect(Version44.UsesVarintPacketNumbers()).To(BeFalse())
 		Expect(VersionTLS.UsesVarintPacketNumbers()).To(BeTrue())
+		Expect(VersionMilestone0_10_0.UsesVarintPacketNumbers()).To(BeTrue())
 	})
 
 	It("tells if a version uses the Length field in the IETF header", func() {
 		Expect(Version44.UsesLengthInHeader()).To(BeFalse())
 		Expect(VersionTLS.UsesLengthInHeader()).To(BeTrue())
+		Expect(VersionMilestone0_10_0.UsesLengthInHeader()).To(BeTrue())
 	})
 
 	It("tells if a version uses the Token field in the IETF header", func() {
 		Expect(Version44.UsesTokenInHeader()).To(BeFalse())
 		Expect(VersionTLS.UsesTokenInHeader()).To(BeTrue())
+		Expect(VersionMilestone0_10_0.UsesTokenInHeader()).To(BeTrue())
 	})
 
 	It("tells if a version uses STOP_WAITING frames", func() {
@@ -108,6 +118,7 @@ var _ = Describe("Version", func() {
 		Expect(Version43.UsesStopWaitingFrames()).To(BeTrue())
 		Expect(Version44.UsesStopWaitingFrames()).To(BeFalse())
 		Expect(VersionTLS.UsesStopWaitingFrames()).To(BeFalse())
+		Expect(VersionMilestone0_10_0.UsesStopWaitingFrames()).To(BeFalse())
 	})
 
 	It("says if a stream contributes to connection-level flowcontrol, for gQUIC", func() {
@@ -126,6 +137,10 @@ var _ = Describe("Version", func() {
 		Expect(VersionTLS.StreamContributesToConnectionFlowControl(1)).To(BeTrue())
 		Expect(VersionTLS.StreamContributesToConnectionFlowControl(2)).To(BeTrue())
 		Expect(VersionTLS.StreamContributesToConnectionFlowControl(3)).To(BeTrue())
+		Expect(VersionMilestone0_10_0.StreamContributesToConnectionFlowControl(0)).To(BeFalse())
+		Expect(VersionMilestone0_10_0.StreamContributesToConnectionFlowControl(1)).To(BeTrue())
+		Expect(VersionMilestone0_10_0.StreamContributesToConnectionFlowControl(2)).To(BeTrue())
+		Expect(VersionMilestone0_10_0.StreamContributesToConnectionFlowControl(3)).To(BeTrue())
 	})
 
 	It("recognizes supported versions", func() {
