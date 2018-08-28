@@ -21,6 +21,8 @@ const (
 	VersionGQUIC39 = protocol.Version39
 	// VersionGQUIC43 is gQUIC version 43.
 	VersionGQUIC43 = protocol.Version43
+	// VersionGQUIC43 is gQUIC version 44.
+	VersionGQUIC44 = protocol.Version44
 )
 
 // A Cookie can be used to verify the ownership of the client address.

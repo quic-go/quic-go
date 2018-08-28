@@ -457,11 +457,15 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header
 	header := &wire.Header{
 		PacketNumber:    pnum,
 		PacketNumberLen: packetNumberLen,
+		Version:         p.version,
 	}
 
-	if p.version.UsesTLS() && encLevel != protocol.EncryptionForwardSecure {
+	if p.version.UsesIETFHeaderFormat() && encLevel != protocol.EncryptionForwardSecure {
 		header.IsLongHeader = true
 		header.SrcConnectionID = p.srcConnID
+		if !p.version.UsesVarintPacketNumbers() {
+			header.PacketNumberLen = protocol.PacketNumberLen4
+		}
 		// Set the payload len to maximum size.
 		// Since it is encoded as a varint, this guarantees us that the header will end up at most as big as GetLength() returns.
 		header.PayloadLen = p.maxPacketSize
@@ -478,15 +482,11 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header
 	}
 	if !p.version.UsesTLS() {
 		if p.perspective == protocol.PerspectiveServer && encLevel == protocol.EncryptionSecure {
+			header.Type = protocol.PacketType0RTT
 			header.DiversificationNonce = p.divNonce
 		}
 		if p.perspective == protocol.PerspectiveClient && encLevel != protocol.EncryptionForwardSecure {
 			header.VersionFlag = true
-			header.Version = p.version
-		}
-	} else {
-		if encLevel != protocol.EncryptionForwardSecure {
-			header.Version = p.version
 		}
 	}
 	return header

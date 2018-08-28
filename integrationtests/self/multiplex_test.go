@@ -21,6 +21,12 @@ var _ = Describe("Multiplexing", func() {
 	for _, v := range append(protocol.SupportedVersions, protocol.VersionTLS) {
 		version := v
 
+		// gQUIC 44 uses 0 byte connection IDs for packets sent to the client
+		// It's not possible to do demultiplexing.
+		if v == protocol.Version44 {
+			continue
+		}
+
 		Context(fmt.Sprintf("with QUIC version %s", version), func() {
 			runServer := func(ln quic.Listener) {
 				go func() {

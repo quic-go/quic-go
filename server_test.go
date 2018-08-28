@@ -50,6 +50,7 @@ var _ = Describe("Server", func() {
 				MaxIncomingStreams:          1234,
 				MaxIncomingUniStreams:       4321,
 				ConnectionIDLength:          12,
+				Versions:                    []protocol.VersionNumber{VersionGQUIC43},
 			}
 			c := populateServerConfig(config)
 			Expect(c.HandshakeTimeout).To(Equal(1337 * time.Minute))
@@ -58,6 +59,25 @@ var _ = Describe("Server", func() {
 			Expect(c.MaxIncomingStreams).To(Equal(1234))
 			Expect(c.MaxIncomingUniStreams).To(Equal(4321))
 			Expect(c.ConnectionIDLength).To(Equal(12))
+			Expect(c.Versions).To(Equal([]protocol.VersionNumber{VersionGQUIC43}))
+		})
+
+		It("uses 8 byte connection IDs if gQUIC 44 is supported", func() {
+			config := &Config{
+				Versions:           []protocol.VersionNumber{protocol.Version43, protocol.Version44},
+				ConnectionIDLength: 13,
+			}
+			c := populateServerConfig(config)
+			Expect(c.Versions).To(Equal([]protocol.VersionNumber{protocol.Version43, protocol.Version44}))
+			Expect(c.ConnectionIDLength).To(Equal(8))
+		})
+
+		It("uses 4 byte connection IDs by default, if gQUIC 44 is not supported", func() {
+			config := &Config{
+				Versions: []protocol.VersionNumber{protocol.Version39},
+			}
+			c := populateServerConfig(config)
+			Expect(c.ConnectionIDLength).To(Equal(protocol.DefaultConnectionIDLength))
 		})
 
 		It("disables bidirectional streams", func() {
@@ -79,12 +99,6 @@ var _ = Describe("Server", func() {
 			Expect(c.MaxIncomingStreams).To(Equal(1234))
 			Expect(c.MaxIncomingUniStreams).To(BeZero())
 		})
-
-		It("doesn't use 0-byte connection IDs", func() {
-			config := &Config{}
-			c := populateServerConfig(config)
-			Expect(c.ConnectionIDLength).To(Equal(protocol.DefaultConnectionIDLength))
-		})
 	})
 
 	Context("with mock session", func() {
@@ -103,6 +117,7 @@ var _ = Describe("Server", func() {
 				runner sessionRunner,
 				_ protocol.VersionNumber,
 				connID protocol.ConnectionID,
+				_ protocol.ConnectionID,
 				_ *handshake.ServerConfig,
 				_ *tls.Config,
 				_ *Config,
@@ -322,6 +337,7 @@ var _ = Describe("Server", func() {
 				remoteAddr: udpAddr,
 				header: &wire.Header{
 					IsPublicHeader: true,
+					Version:        versionGQUICFrames,
 				},
 			})
 			Expect(err).ToNot(HaveOccurred())

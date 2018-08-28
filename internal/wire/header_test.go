@@ -217,6 +217,114 @@ var _ = Describe("Header", func() {
 			})
 		})
 
+		Context("gQUIC 44", func() {
+			Context("Long Header", func() {
+				It("writes", func() {
+					err := (&Header{
+						IsLongHeader:     true,
+						Type:             protocol.PacketTypeInitial,
+						DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+						Version:          0xdeadbeef,
+						PacketNumberLen:  protocol.PacketNumberLen4,
+						PacketNumber:     0xdecafbad,
+					}).Write(buf, protocol.PerspectiveServer, protocol.Version44)
+					Expect(err).ToNot(HaveOccurred())
+					expected := []byte{
+						0x80 ^ uint8(protocol.PacketTypeInitial),
+						0xde, 0xad, 0xbe, 0xef, // version
+						0x50,                   // connection ID lengths
+						1, 2, 3, 4, 5, 6, 7, 8, // connection ID
+						0xde, 0xca, 0xfb, 0xad, // packet number
+					}
+					Expect(buf.Bytes()).To(Equal(expected))
+				})
+
+				It("writes a 0-RTT packet with a Diversification Nonce", func() {
+					divNonce := bytes.Repeat([]byte{'c'}, 32)
+					err := (&Header{
+						IsLongHeader:         true,
+						Type:                 protocol.PacketType0RTT,
+						DestConnectionID:     protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+						Version:              0xdeadbeef,
+						PacketNumberLen:      protocol.PacketNumberLen4,
+						PacketNumber:         0xdecafbad,
+						DiversificationNonce: divNonce,
+					}).Write(buf, protocol.PerspectiveServer, protocol.Version44)
+					Expect(err).ToNot(HaveOccurred())
+					expected := []byte{
+						0x80 ^ uint8(protocol.PacketType0RTT),
+						0xde, 0xad, 0xbe, 0xef, // version
+						0x50,                   // connection ID lengths
+						1, 2, 3, 4, 5, 6, 7, 8, // connection ID
+						0xde, 0xca, 0xfb, 0xad, // packet number
+					}
+					expected = append(expected, divNonce...)
+					Expect(buf.Bytes()).To(Equal(expected))
+				})
+
+				It("refuses to write a 0-RTT packet with a wrong length Diversification Nonce", func() {
+					divNonce := bytes.Repeat([]byte{'c'}, 31)
+					err := (&Header{
+						IsLongHeader:         true,
+						Type:                 protocol.PacketType0RTT,
+						DestConnectionID:     protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+						Version:              0xdeadbeef,
+						PacketNumberLen:      protocol.PacketNumberLen4,
+						PacketNumber:         0xdecafbad,
+						DiversificationNonce: divNonce,
+					}).Write(buf, protocol.PerspectiveServer, protocol.Version44)
+					Expect(err).To(MatchError("invalid diversification nonce length"))
+				})
+			})
+
+			Context("Short Header", func() {
+				It("writes a Short Header with a 1 byte packet number", func() {
+					err := (&Header{
+						DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+						PacketNumberLen:  protocol.PacketNumberLen1,
+						PacketNumber:     0x42,
+					}).Write(buf, protocol.PerspectiveServer, protocol.Version44)
+					Expect(err).ToNot(HaveOccurred())
+					expected := []byte{
+						0x30,
+						1, 2, 3, 4, 5, 6, 7, 8, // connection ID
+						0x42, // packet number
+					}
+					Expect(buf.Bytes()).To(Equal(expected))
+				})
+
+				It("writes a Short Header with a 2 byte packet number", func() {
+					err := (&Header{
+						DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+						PacketNumberLen:  protocol.PacketNumberLen2,
+						PacketNumber:     0xcafe,
+					}).Write(buf, protocol.PerspectiveServer, protocol.Version44)
+					Expect(err).ToNot(HaveOccurred())
+					expected := []byte{
+						0x30 ^ 0x1,
+						1, 2, 3, 4, 5, 6, 7, 8, // connection ID
+						0xca, 0xfe, // packet number
+					}
+					Expect(buf.Bytes()).To(Equal(expected))
+				})
+
+				It("writes a Short Header with a 4 byte packet number", func() {
+					err := (&Header{
+						DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+						PacketNumberLen:  protocol.PacketNumberLen4,
+						PacketNumber:     0xdeadbeef,
+					}).Write(buf, protocol.PerspectiveServer, protocol.Version44)
+					Expect(err).ToNot(HaveOccurred())
+					expected := []byte{
+						0x30 ^ 0x2,
+						1, 2, 3, 4, 5, 6, 7, 8, // connection ID
+						0xde, 0xad, 0xbe, 0xef, // packet number
+					}
+					Expect(buf.Bytes()).To(Equal(expected))
+				})
+			})
+		})
+
 		Context("Public Header", func() {
 			connID := protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6}
 
@@ -390,7 +498,7 @@ var _ = Describe("Header", func() {
 						PacketNumberLen:  protocol.PacketNumberLen6,
 					}
 					err := hdr.writePublicHeader(buf, protocol.PerspectiveServer, versionPublicHeader)
-					Expect(err).To(MatchError(errInvalidPacketNumberLen6))
+					Expect(err).To(MatchError(errInvalidPacketNumberLen))
 				})
 			})
 		})
@@ -508,72 +616,116 @@ var _ = Describe("Header", func() {
 				Expect(err).To(MatchError("invalid packet number length: 5"))
 			})
 		})
-	})
 
-	Context("Public Header", func() {
-		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+		Context("gQUIC 44", func() {
+			It("has the right length for the Long Header", func() {
+				h := &Header{
+					IsLongHeader:     true,
+					Type:             protocol.PacketTypeInitial,
+					PayloadLen:       1,
+					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+					PacketNumberLen:  protocol.PacketNumberLen4,
+				}
+				expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* conn ID len */ + 8 /* dest conn id */ + 4 /* packet number */
+				Expect(h.GetLength(protocol.Version44)).To(BeEquivalentTo(expectedLen))
+				err := h.Write(buf, protocol.PerspectiveClient, protocol.Version44)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(buf.Len()).To(Equal(expectedLen))
+			})
 
-		It("errors when PacketNumberLen is not set", func() {
-			hdr := Header{
-				DestConnectionID: connID,
-				PacketNumber:     0xdecafbad,
-			}
-			_, err := hdr.GetLength(versionPublicHeader)
-			Expect(err).To(MatchError(errPacketNumberLenNotSet))
+			It("has the right length for the Long Header containing a Diversification Nonce", func() {
+				h := &Header{
+					IsLongHeader:         true,
+					Type:                 protocol.PacketType0RTT,
+					DestConnectionID:     protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+					PacketNumberLen:      protocol.PacketNumberLen4,
+					DiversificationNonce: bytes.Repeat([]byte{'d'}, 32),
+				}
+				expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* conn ID len */ + 8 /* dest conn id */ + 4 /* packet number */ + 32 /* div nonce */
+				Expect(h.GetLength(protocol.Version44)).To(BeEquivalentTo(expectedLen))
+				err := h.Write(buf, protocol.PerspectiveServer, protocol.Version44)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(buf.Len()).To(Equal(expectedLen))
+			})
+
+			It("has the right length for a Short Header", func() {
+				h := &Header{
+					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+					PacketNumberLen:  protocol.PacketNumberLen2,
+				}
+				expectedLen := 1 /*type byte*/ + 8 /* conn ID */ + 2 /* packet number */
+				Expect(h.GetLength(protocol.Version44)).To(BeEquivalentTo(expectedLen))
+				err := h.Write(buf, protocol.PerspectiveServer, protocol.Version44)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(buf.Len()).To(Equal(expectedLen))
+			})
 		})
 
-		It("gets the length of a packet with longest packet number length and connectionID", func() {
-			hdr := Header{
-				DestConnectionID: connID,
-				PacketNumber:     0xdecafbad,
-				PacketNumberLen:  protocol.PacketNumberLen4,
-			}
-			length, err := hdr.GetLength(versionPublicHeader)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(length).To(Equal(protocol.ByteCount(1 + 8 + 4))) // 1 byte public flag, 8 bytes connectionID, and packet number
-		})
+		Context("Public Header", func() {
+			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 
-		It("gets the lengths of a packet sent by the client with the VersionFlag set", func() {
-			hdr := Header{
-				PacketNumber:    0xdecafbad,
-				PacketNumberLen: protocol.PacketNumberLen4,
-				VersionFlag:     true,
-				Version:         versionPublicHeader,
-			}
-			length, err := hdr.GetLength(versionPublicHeader)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(length).To(Equal(protocol.ByteCount(1 + 4 + 4))) // 1 byte public flag, 4 version number, and packet number
-		})
+			It("errors when PacketNumberLen is not set", func() {
+				hdr := Header{
+					DestConnectionID: connID,
+					PacketNumber:     0xdecafbad,
+				}
+				_, err := hdr.GetLength(versionPublicHeader)
+				Expect(err).To(MatchError(errPacketNumberLenNotSet))
+			})
 
-		It("gets the length of a packet with longest packet number length and omitted connectionID", func() {
-			hdr := Header{
-				PacketNumber:    0xDECAFBAD,
-				PacketNumberLen: protocol.PacketNumberLen4,
-			}
-			length, err := hdr.GetLength(versionPublicHeader)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(length).To(Equal(protocol.ByteCount(1 + 4))) // 1 byte public flag, and packet number
-		})
+			It("gets the length of a packet with longest packet number length and connectionID", func() {
+				hdr := Header{
+					DestConnectionID: connID,
+					PacketNumber:     0xdecafbad,
+					PacketNumberLen:  protocol.PacketNumberLen4,
+				}
+				length, err := hdr.GetLength(versionPublicHeader)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(length).To(Equal(protocol.ByteCount(1 + 8 + 4))) // 1 byte public flag, 8 bytes connectionID, and packet number
+			})
 
-		It("gets the length of a packet 2 byte packet number length ", func() {
-			hdr := Header{
-				DestConnectionID: connID,
-				PacketNumber:     0xDECAFBAD,
-				PacketNumberLen:  protocol.PacketNumberLen2,
-			}
-			length, err := hdr.GetLength(versionPublicHeader)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(length).To(Equal(protocol.ByteCount(1 + 8 + 2))) // 1 byte public flag, 8 byte connectionID, and packet number
-		})
+			It("gets the lengths of a packet sent by the client with the VersionFlag set", func() {
+				hdr := Header{
+					PacketNumber:    0xdecafbad,
+					PacketNumberLen: protocol.PacketNumberLen4,
+					VersionFlag:     true,
+					Version:         versionPublicHeader,
+				}
+				length, err := hdr.GetLength(versionPublicHeader)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(length).To(Equal(protocol.ByteCount(1 + 4 + 4))) // 1 byte public flag, 4 version number, and packet number
+			})
 
-		It("works with diversification nonce", func() {
-			hdr := Header{
-				DiversificationNonce: []byte("foo"),
-				PacketNumberLen:      protocol.PacketNumberLen1,
-			}
-			length, err := hdr.GetLength(versionPublicHeader)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(length).To(Equal(protocol.ByteCount(1 + 3 + 1))) // 1 byte public flag, 3 byte DiversificationNonce, 1 byte PacketNumber
+			It("gets the length of a packet with longest packet number length and omitted connectionID", func() {
+				hdr := Header{
+					PacketNumber:    0xDECAFBAD,
+					PacketNumberLen: protocol.PacketNumberLen4,
+				}
+				length, err := hdr.GetLength(versionPublicHeader)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(length).To(Equal(protocol.ByteCount(1 + 4))) // 1 byte public flag, and packet number
+			})
+
+			It("gets the length of a packet 2 byte packet number length ", func() {
+				hdr := Header{
+					DestConnectionID: connID,
+					PacketNumber:     0xDECAFBAD,
+					PacketNumberLen:  protocol.PacketNumberLen2,
+				}
+				length, err := hdr.GetLength(versionPublicHeader)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(length).To(Equal(protocol.ByteCount(1 + 8 + 2))) // 1 byte public flag, 8 byte connectionID, and packet number
+			})
+
+			It("works with diversification nonce", func() {
+				hdr := Header{
+					DiversificationNonce: []byte("foo"),
+					PacketNumberLen:      protocol.PacketNumberLen1,
+				}
+				length, err := hdr.GetLength(versionPublicHeader)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(length).To(Equal(protocol.ByteCount(1 + 3 + 1))) // 1 byte public flag, 3 byte DiversificationNonce, 1 byte PacketNumber
+			})
 		})
 	})
 
@@ -678,6 +830,34 @@ var _ = Describe("Header", func() {
 			})
 		})
 
+		Context("gQUIC 44", func() {
+			It("logs Long Headers", func() {
+				(&Header{
+					IsLongHeader:     true,
+					Type:             protocol.PacketTypeHandshake,
+					PacketNumber:     0x1337,
+					PacketNumberLen:  protocol.PacketNumberLen4,
+					DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
+					SrcConnectionID:  protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad, 0x013, 0x37, 0x13, 0x37},
+					Version:          protocol.Version44,
+				}).Log(logger)
+				Expect(buf.String()).To(ContainSubstring("Long Header{Type: Handshake, DestConnectionID: 0xdeadbeefcafe1337, SrcConnectionID: 0xdecafbad13371337, PacketNumber: 0x1337, PacketNumberLen: 4, Version: gQUIC 44}"))
+			})
+
+			It("logs a Long Header with a Diversification Nonce", func() {
+				(&Header{
+					IsLongHeader:         true,
+					Type:                 protocol.PacketType0RTT,
+					PacketNumber:         0x1337,
+					PacketNumberLen:      protocol.PacketNumberLen4,
+					SrcConnectionID:      protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad, 0x013, 0x37, 0x13, 0x37},
+					DiversificationNonce: []byte{0xde, 0xad, 0xbe, 0xef},
+					Version:              protocol.Version44,
+				}).Log(logger)
+				Expect(buf.String()).To(ContainSubstring("Long Header{Type: 0-RTT Protected, DestConnectionID: (empty), SrcConnectionID: 0xdecafbad13371337, PacketNumber: 0x1337, PacketNumberLen: 4, Diversification Nonce: 0xdeadbeef, Version: gQUIC 44}"))
+			})
+		})
+
 		Context("Public Header", func() {
 			It("logs a Public Header containing a connection ID", func() {
 				(&Header{
@@ -718,6 +898,5 @@ var _ = Describe("Header", func() {
 				Expect(buf.String()).To(ContainSubstring("DiversificationNonce: []byte{0xba, 0xdf, 0x0, 0xd}"))
 			})
 		})
-
 	})
 })

@@ -128,6 +128,13 @@ func dialContext(
 	createdPacketConn bool,
 ) (Session, error) {
 	config = populateClientConfig(config, createdPacketConn)
+	if !createdPacketConn {
+		for _, v := range config.Versions {
+			if v == protocol.Version44 {
+				return nil, errors.New("Cannot multiplex connections using gQUIC 44, see https://groups.google.com/a/chromium.org/forum/#!topic/proto-quic/pE9NlLLjizE. Please disable gQUIC 44 in the quic.Config, or use DialAddr")
+			}
+		}
+	}
 	packetHandlers, err := getMultiplexer().AddConn(pconn, config.ConnectionIDLength)
 	if err != nil {
 		return nil, err
@@ -234,6 +241,11 @@ func populateClientConfig(config *Config, createdPacketConn bool) *Config {
 	if connIDLen == 0 && !createdPacketConn {
 		connIDLen = protocol.DefaultConnectionIDLength
 	}
+	for _, v := range versions {
+		if v == protocol.Version44 {
+			connIDLen = 0
+		}
+	}
 
 	return &Config{
 		Versions:                              versions,
@@ -267,6 +279,9 @@ func (c *client) generateConnectionIDs() error {
 	}
 	c.srcConnID = srcConnID
 	c.destConnID = destConnID
+	if c.version == protocol.Version44 {
+		c.srcConnID = nil
+	}
 	return nil
 }
 
@@ -372,23 +387,32 @@ func (c *client) handlePacketImpl(p *receivedPacket) error {
 		return err
 	}
 
-	if p.header.IsPublicHeader {
-		return c.handleGQUICPacket(p)
+	if !c.version.UsesIETFHeaderFormat() {
+		connID := p.header.DestConnectionID
+		// reject packets with truncated connection id if we didn't request truncation
+		if !c.config.RequestConnectionIDOmission && connID.Len() == 0 {
+			return errors.New("received packet with truncated connection ID, but didn't request truncation")
+		}
+		// reject packets with the wrong connection ID
+		if connID.Len() > 0 && !connID.Equal(c.srcConnID) {
+			return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", connID, c.srcConnID)
+		}
+		if p.header.ResetFlag {
+			return c.handlePublicReset(p)
+		}
+	} else {
+		// reject packets with the wrong connection ID
+		if !p.header.DestConnectionID.Equal(c.srcConnID) {
+			return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", p.header.DestConnectionID, c.srcConnID)
+		}
 	}
-	return c.handleIETFQUICPacket(p)
-}
 
-func (c *client) handleIETFQUICPacket(p *receivedPacket) error {
-	// reject packets with the wrong connection ID
-	if !p.header.DestConnectionID.Equal(c.srcConnID) {
-		return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", p.header.DestConnectionID, c.srcConnID)
-	}
 	if p.header.IsLongHeader {
 		switch p.header.Type {
 		case protocol.PacketTypeRetry:
 			c.handleRetryPacket(p.header)
 			return nil
-		case protocol.PacketTypeHandshake:
+		case protocol.PacketTypeHandshake, protocol.PacketType0RTT:
 		default:
 			return fmt.Errorf("Received unsupported packet type: %s", p.header.Type)
 		}
@@ -404,40 +428,19 @@ func (c *client) handleIETFQUICPacket(p *receivedPacket) error {
 	return nil
 }
 
-func (c *client) handleGQUICPacket(p *receivedPacket) error {
-	connID := p.header.DestConnectionID
-	// reject packets with truncated connection id if we didn't request truncation
-	if !c.config.RequestConnectionIDOmission && connID.Len() == 0 {
-		return errors.New("received packet with truncated connection ID, but didn't request truncation")
+func (c *client) handlePublicReset(p *receivedPacket) error {
+	cr := c.conn.RemoteAddr()
+	// check if the remote address and the connection ID match
+	// otherwise this might be an attacker trying to inject a PUBLIC_RESET to kill the connection
+	if cr.Network() != p.remoteAddr.Network() || cr.String() != p.remoteAddr.String() || !p.header.DestConnectionID.Equal(c.srcConnID) {
+		return errors.New("Received a spoofed Public Reset")
 	}
-	// reject packets with the wrong connection ID
-	if connID.Len() > 0 && !connID.Equal(c.srcConnID) {
-		return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", connID, c.srcConnID)
+	pr, err := wire.ParsePublicReset(bytes.NewReader(p.data))
+	if err != nil {
+		return fmt.Errorf("Received a Public Reset. An error occurred parsing the packet: %s", err)
 	}
-
-	if p.header.ResetFlag {
-		cr := c.conn.RemoteAddr()
-		// check if the remote address and the connection ID match
-		// otherwise this might be an attacker trying to inject a PUBLIC_RESET to kill the connection
-		if cr.Network() != p.remoteAddr.Network() || cr.String() != p.remoteAddr.String() || !connID.Equal(c.srcConnID) {
-			return errors.New("Received a spoofed Public Reset")
-		}
-		pr, err := wire.ParsePublicReset(bytes.NewReader(p.data))
-		if err != nil {
-			return fmt.Errorf("Received a Public Reset. An error occurred parsing the packet: %s", err)
-		}
-		c.session.closeRemote(qerr.Error(qerr.PublicReset, fmt.Sprintf("Received a Public Reset for packet number %#x", pr.RejectedPacketNumber)))
-		c.logger.Infof("Received Public Reset, rejected packet number: %#x", pr.RejectedPacketNumber)
-		return nil
-	}
-
-	// this is the first packet we are receiving
-	// since it is not a Version Negotiation Packet, this means the server supports the suggested version
-	if !c.versionNegotiated {
-		c.versionNegotiated = true
-	}
-
-	c.session.handlePacket(p)
+	c.session.closeRemote(qerr.Error(qerr.PublicReset, fmt.Sprintf("Received a Public Reset for packet number %#x", pr.RejectedPacketNumber)))
+	c.logger.Infof("Received Public Reset, rejected packet number: %#x", pr.RejectedPacketNumber)
 	return nil
 }
 
@@ -513,6 +516,7 @@ func (c *client) createNewGQUICSession() error {
 		c.hostname,
 		c.version,
 		c.destConnID,
+		c.srcConnID,
 		c.tlsConf,
 		c.config,
 		c.initialVersion,

@@ -383,6 +383,153 @@ var _ = Describe("Header Parsing", func() {
 		})
 	})
 
+	Context("gQUIC 44", func() {
+		Context("Long Headers", func() {
+			It("parses a Long Header", func() {
+				destConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+				srcConnID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
+				data := []byte{
+					0x80 ^ uint8(protocol.PacketTypeInitial),
+					0x1, 0x2, 0x3, 0x4, // version
+					0x55, // connection ID lengths
+				}
+				data = append(data, destConnID...)
+				data = append(data, srcConnID...)
+				data = append(data, []byte{0xde, 0xad, 0xbe, 0xef}...)
+				b := bytes.NewReader(data)
+				iHdr, err := ParseInvariantHeader(b, 0)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(iHdr.IsLongHeader).To(BeTrue())
+				Expect(iHdr.Version).To(Equal(protocol.VersionNumber(0x1020304)))
+				Expect(iHdr.DestConnectionID).To(Equal(destConnID))
+				Expect(iHdr.SrcConnectionID).To(Equal(srcConnID))
+				hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, protocol.Version44)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(hdr.IsPublicHeader).To(BeFalse())
+				Expect(hdr.Type).To(Equal(protocol.PacketTypeInitial))
+				Expect(hdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
+				Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0xdeadbeef)))
+			})
+
+			It("parses a Long Header containing a Diversification Nonce", func() {
+				srcConnID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
+				divNonce := bytes.Repeat([]byte{'f'}, 32)
+				data := []byte{
+					0x80 ^ uint8(protocol.PacketType0RTT),
+					0x1, 0x2, 0x3, 0x4, // version
+					0x5, // connection ID lengths
+				}
+				data = append(data, srcConnID...)
+				data = append(data, []byte{0xde, 0xad, 0xbe, 0xef}...)
+				data = append(data, divNonce...)
+				b := bytes.NewReader(data)
+				iHdr, err := ParseInvariantHeader(b, 0)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(iHdr.IsLongHeader).To(BeTrue())
+				Expect(iHdr.Version).To(Equal(protocol.VersionNumber(0x1020304)))
+				Expect(iHdr.SrcConnectionID).To(Equal(srcConnID))
+				hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, protocol.Version44)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(hdr.IsPublicHeader).To(BeFalse())
+				Expect(hdr.Type).To(Equal(protocol.PacketType0RTT))
+				Expect(hdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
+				Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0xdeadbeef)))
+				Expect(hdr.DiversificationNonce).To(Equal(divNonce))
+			})
+
+			It("errors on EOF, for Long Headers containing a Diversification Nonce", func() {
+				data := []byte{
+					0x80 ^ uint8(protocol.PacketType0RTT),
+					0x1, 0x2, 0x3, 0x4, // version
+					0x5,
+					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
+				}
+				iHdrLen := len(data)
+				data = append(data, []byte{0xde, 0xca, 0xfb, 0xad}...) // packet number
+				data = append(data, bytes.Repeat([]byte{'d'}, 32)...)
+				for i := iHdrLen; i < len(data); i++ {
+					b := bytes.NewReader(data[:i])
+					iHdr, err := ParseInvariantHeader(b, 8)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(iHdr.IsLongHeader).To(BeTrue())
+					_, err = iHdr.Parse(b, protocol.PerspectiveServer, protocol.Version44)
+					Expect(err).To(Equal(io.EOF))
+				}
+			})
+		})
+
+		Context("Short Headers", func() {
+			It("parses a Short Header with a 1 byte packet number", func() {
+				destConnID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
+				data := []byte{0x30}
+				data = append(data, destConnID...)
+				data = append(data, 0x42) // packet number
+				b := bytes.NewReader(data)
+				iHdr, err := ParseInvariantHeader(b, 8)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(iHdr.IsLongHeader).To(BeFalse())
+				Expect(iHdr.DestConnectionID).To(Equal(destConnID))
+				hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, protocol.Version44)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(hdr.IsPublicHeader).To(BeFalse())
+				Expect(hdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen1))
+				Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x42)))
+			})
+
+			It("parses a Short Header with a 2 byte packet number", func() {
+				data := []byte{0x30 ^ 0x1, 0xca, 0xfe}
+				b := bytes.NewReader(data)
+				iHdr, err := ParseInvariantHeader(b, 0)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(iHdr.IsLongHeader).To(BeFalse())
+				Expect(iHdr.DestConnectionID.Len()).To(BeZero())
+				hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, protocol.Version44)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(hdr.IsPublicHeader).To(BeFalse())
+				Expect(hdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen2))
+				Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0xcafe)))
+			})
+
+			It("parses a Short Header with a 4 byte packet number", func() {
+				data := []byte{0x30 ^ 0x2, 0xde, 0xad, 0xbe, 0xef}
+				b := bytes.NewReader(data)
+				iHdr, err := ParseInvariantHeader(b, 0)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(iHdr.IsLongHeader).To(BeFalse())
+				Expect(iHdr.DestConnectionID.Len()).To(BeZero())
+				hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, protocol.Version44)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(hdr.IsPublicHeader).To(BeFalse())
+				Expect(hdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
+				Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0xdeadbeef)))
+			})
+
+			It("errors on an invalid packet number length flag", func() {
+				data := []byte{0x30 ^ 0x3, 0xde, 0xad, 0xbe, 0xef}
+				b := bytes.NewReader(data)
+				iHdr, err := ParseInvariantHeader(b, 0)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(iHdr.IsLongHeader).To(BeFalse())
+				Expect(iHdr.DestConnectionID.Len()).To(BeZero())
+				_, err = iHdr.Parse(b, protocol.PerspectiveServer, protocol.Version44)
+				Expect(err).To(MatchError(errInvalidPacketNumberLen))
+			})
+
+			It("errors on EOF", func() {
+				data := []byte{0x30 ^ 0x2, 0xde, 0xad, 0xbe, 0xef}
+				iHdrLen := 1
+				for i := iHdrLen; i < len(data); i++ {
+					b := bytes.NewReader(data[:i])
+					iHdr, err := ParseInvariantHeader(b, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(iHdr.IsLongHeader).To(BeFalse())
+					_, err = iHdr.Parse(b, protocol.PerspectiveServer, protocol.Version44)
+					Expect(err).To(Equal(io.EOF))
+				}
+			})
+		})
+	})
+
 	Context("Public Header", func() {
 		It("accepts a sample client header", func() {
 			data := []byte{

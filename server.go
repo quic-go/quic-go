@@ -89,7 +89,7 @@ type server struct {
 
 	sessionRunner sessionRunner
 	// set as a member, so they can be set in the tests
-	newSession func(connection, sessionRunner, protocol.VersionNumber, protocol.ConnectionID, *handshake.ServerConfig, *tls.Config, *Config, utils.Logger) (quicSession, error)
+	newSession func(connection, sessionRunner, protocol.VersionNumber, protocol.ConnectionID, protocol.ConnectionID, *handshake.ServerConfig, *tls.Config, *Config, utils.Logger) (quicSession, error)
 
 	logger utils.Logger
 }
@@ -269,6 +269,11 @@ func populateServerConfig(config *Config) *Config {
 	if connIDLen == 0 {
 		connIDLen = protocol.DefaultConnectionIDLength
 	}
+	for _, v := range versions {
+		if v == protocol.Version44 {
+			connIDLen = protocol.ConnectionIDLenGQUIC
+		}
+	}
 
 	return &Config{
 		Versions:                              versions,
@@ -351,13 +356,13 @@ func (s *server) handlePacketImpl(p *receivedPacket) error {
 			return s.sendVersionNegotiationPacket(p)
 		}
 	}
-	if hdr.Type == protocol.PacketTypeInitial {
+	if hdr.Type == protocol.PacketTypeInitial && hdr.Version.UsesTLS() {
 		go s.serverTLS.HandleInitial(p)
 		return nil
 	}
 
 	// TODO(#943): send Stateless Reset, if this an IETF QUIC packet
-	if !hdr.VersionFlag {
+	if !hdr.VersionFlag && !hdr.Version.UsesIETFHeaderFormat() {
 		_, err := s.conn.WriteTo(wire.WritePublicReset(hdr.DestConnectionID, 0, 0), p.remoteAddr)
 		return err
 	}
@@ -368,12 +373,20 @@ func (s *server) handlePacketImpl(p *receivedPacket) error {
 		return errors.New("dropping small packet for unknown connection")
 	}
 
+	var destConnID, srcConnID protocol.ConnectionID
+	if hdr.Version.UsesIETFHeaderFormat() {
+		srcConnID = hdr.DestConnectionID
+	} else {
+		destConnID = hdr.DestConnectionID
+		srcConnID = hdr.DestConnectionID
+	}
 	s.logger.Infof("Serving new connection: %s, version %s from %v", hdr.DestConnectionID, hdr.Version, p.remoteAddr)
 	sess, err := s.newSession(
 		&conn{pconn: s.conn, currentAddr: p.remoteAddr},
 		s.sessionRunner,
 		hdr.Version,
-		hdr.DestConnectionID,
+		destConnID,
+		srcConnID,
 		s.scfg,
 		s.tlsConf,
 		s.config,

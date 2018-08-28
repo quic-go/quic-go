@@ -20,6 +20,7 @@ const (
 const (
 	Version39       VersionNumber = gquicVersion0 + 3*0x100 + 0x9
 	Version43       VersionNumber = gquicVersion0 + 4*0x100 + 0x3
+	Version44       VersionNumber = gquicVersion0 + 4*0x100 + 0x4
 	VersionTLS      VersionNumber = 101
 	VersionWhatever VersionNumber = 0 // for when the version doesn't matter
 	VersionUnknown  VersionNumber = math.MaxUint32
@@ -28,6 +29,7 @@ const (
 // SupportedVersions lists the versions that the server supports
 // must be in sorted descending order
 var SupportedVersions = []VersionNumber{
+	Version44,
 	Version43,
 	Version39,
 }
@@ -79,11 +81,27 @@ func (vn VersionNumber) UsesIETFFrameFormat() bool {
 	return !vn.isGQUIC()
 }
 
-// UsesStopWaitingFrames tells if this version uses STOP_WAITING frames
-func (vn VersionNumber) UsesStopWaitingFrames() bool {
-	return vn.isGQUIC()
+// UsesIETFHeaderFormat tells if this version uses the IETF header format
+func (vn VersionNumber) UsesIETFHeaderFormat() bool {
+	return !vn.isGQUIC() || vn >= Version44
 }
 
+// UsesLengthInHeader tells if this version uses the Length field in the IETF header
+func (vn VersionNumber) UsesLengthInHeader() bool {
+	return !vn.isGQUIC()
+}
+
+// UsesTokenInHeader tells if this version uses the Token field in the IETF header
+func (vn VersionNumber) UsesTokenInHeader() bool {
+	return !vn.isGQUIC()
+}
+
+// UsesStopWaitingFrames tells if this version uses STOP_WAITING frames
+func (vn VersionNumber) UsesStopWaitingFrames() bool {
+	return vn.isGQUIC() && vn <= Version43
+}
+
+// UsesVarintPacketNumbers tells if this version uses 7/14/30 bit packet numbers
 func (vn VersionNumber) UsesVarintPacketNumbers() bool {
 	return !vn.isGQUIC()
 }

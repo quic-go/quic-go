@@ -72,13 +72,13 @@ var _ = Describe("Server Session", func() {
 		p := &receivedPacket{
 			header: &wire.Header{
 				IsLongHeader:     true,
-				Type:             protocol.PacketType0RTT,
+				Type:             protocol.PacketTypeRetry,
 				Version:          protocol.VersionNumber(100),
 				DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
 			},
 		}
 		err := sess.handlePacketImpl(p)
-		Expect(err).To(MatchError("Received unsupported packet type: 0-RTT Protected"))
+		Expect(err).To(MatchError("Received unsupported packet type: Retry"))
 	})
 
 	It("passes on Handshake packets", func() {
