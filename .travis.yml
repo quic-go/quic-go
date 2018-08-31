@@ -20,9 +20,7 @@ env:
   matrix:
     - TRAVIS_GOARCH=amd64 TESTMODE=lint
     - TRAVIS_GOARCH=amd64 TESTMODE=unit
-    - TRAVIS_GOARCH=amd64 TESTMODE=integration
     - TRAVIS_GOARCH=386 TESTMODE=unit
-    - TRAVIS_GOARCH=386 TESTMODE=integration
 
 # Linters might work differently in different Go versions.
 # Only run them in the most recent one.

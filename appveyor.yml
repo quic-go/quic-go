@@ -28,7 +28,6 @@ install:
 
 build_script:
   - ginkgo -r -v -randomizeAllSpecs -randomizeSuites -trace -skipPackage benchmark,integrationtests
-  - ginkgo -randomizeAllSpecs -randomizeSuites -trace benchmark -- -samples=1
 
 test: off
 
