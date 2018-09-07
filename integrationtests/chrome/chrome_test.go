@@ -13,11 +13,6 @@ var _ = Describe("Chrome tests", func() {
 	for i := range protocol.SupportedVersions {
 		version := protocol.SupportedVersions[i]
 
-		// TODO: activate Chrome integration tests with gQUIC 44
-		if version == protocol.Version44 {
-			continue
-		}
-
 		Context(fmt.Sprintf("with version %s", version), func() {
 			JustBeforeEach(func() {
 				testserver.StartQuicServer([]protocol.VersionNumber{version})
