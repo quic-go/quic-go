@@ -22,7 +22,6 @@ install:
   - set PATH=%PATH%;%GOPATH%\bin\windows_%GOARCH%;%GOPATH%\bin
   - echo %PATH%
   - echo %GOPATH%
-  - git submodule update --init --recursive
   - go get github.com/onsi/ginkgo/ginkgo
   - go get github.com/onsi/gomega
   - go version
