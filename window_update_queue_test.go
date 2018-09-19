@@ -15,16 +15,13 @@ var _ = Describe("Window Update Queue", func() {
 		streamGetter *MockStreamGetter
 		connFC       *mocks.MockConnectionFlowController
 		queuedFrames []wire.Frame
-		cryptoStream *MockCryptoStream
 	)
 
 	BeforeEach(func() {
 		streamGetter = NewMockStreamGetter(mockCtrl)
-		cryptoStream = NewMockCryptoStream(mockCtrl)
 		connFC = mocks.NewMockConnectionFlowController(mockCtrl)
-		cryptoStream.EXPECT().StreamID().Return(protocol.StreamID(0)).AnyTimes()
 		queuedFrames = queuedFrames[:0]
-		q = newWindowUpdateQueue(streamGetter, cryptoStream, connFC, func(f wire.Frame) {
+		q = newWindowUpdateQueue(streamGetter, connFC, func(f wire.Frame) {
 			queuedFrames = append(queuedFrames, f)
 		})
 	})
@@ -68,15 +65,6 @@ var _ = Describe("Window Update Queue", func() {
 		q.AddStream(5)
 		q.QueueAll()
 		Expect(queuedFrames).To(BeEmpty())
-	})
-
-	It("adds MAX_STREAM_DATA frames for the crypto stream", func() {
-		cryptoStream.EXPECT().getWindowUpdate().Return(protocol.ByteCount(42))
-		q.AddStream(0)
-		q.QueueAll()
-		Expect(queuedFrames).To(Equal([]wire.Frame{
-			&wire.MaxStreamDataFrame{StreamID: 0, ByteOffset: 42},
-		}))
 	})
 
 	It("queues MAX_DATA frames", func() {
