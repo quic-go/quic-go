@@ -3,7 +3,6 @@ package handshake
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"time"
 
@@ -97,8 +96,6 @@ func (p *TransportParameters) getHelloMap() map[Tag][]byte {
 }
 
 func (p *TransportParameters) unmarshal(data []byte) error {
-	var foundIdleTimeout bool
-
 	for len(data) >= 4 {
 		paramID := binary.BigEndian.Uint16(data[:2])
 		paramLen := int(binary.BigEndian.Uint16(data[2:4]))
@@ -128,7 +125,6 @@ func (p *TransportParameters) unmarshal(data []byte) error {
 			}
 			p.MaxUniStreams = binary.BigEndian.Uint16(data[:2])
 		case idleTimeoutParameterID:
-			foundIdleTimeout = true
 			if paramLen != 2 {
 				return fmt.Errorf("wrong length for idle_timeout: %d (expected 2)", paramLen)
 			}
@@ -158,9 +154,6 @@ func (p *TransportParameters) unmarshal(data []byte) error {
 
 	if len(data) != 0 {
 		return fmt.Errorf("should have read all data. Still have %d bytes", len(data))
-	}
-	if !foundIdleTimeout {
-		return errors.New("missing parameter")
 	}
 	return nil
 }

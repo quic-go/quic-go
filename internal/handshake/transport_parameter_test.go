@@ -160,12 +160,6 @@ var _ = Describe("Transport Parameters", func() {
 				Expect(params.StatelessResetToken).To(Equal(statelessResetToken))
 			})
 
-			It("rejects the parameters if the idle_timeout is missing", func() {
-				delete(parameters, idleTimeoutParameterID)
-				err := params.unmarshal(marshal(parameters))
-				Expect(err).To(MatchError("missing parameter"))
-			})
-
 			It("doesn't allow values below the minimum remote idle timeout", func() {
 				t := 2 * time.Second
 				Expect(t).To(BeNumerically("<", protocol.MinRemoteIdleTimeout))
