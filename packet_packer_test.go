@@ -73,6 +73,12 @@ var _ = Describe("Packet packer", func() {
 		ExpectWithOffset(0, hdr.PayloadLen).To(BeEquivalentTo(r.Len()))
 	}
 
+	expectAppendStreamFrames := func(frames ...wire.Frame) {
+		mockStreamFramer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).DoAndReturn(func(fs []wire.Frame, _ protocol.ByteCount) []wire.Frame {
+			return append(frames, fs...)
+		})
+	}
+
 	BeforeEach(func() {
 		version := versionGQUICFrames
 		mockSender := NewMockStreamSender(mockCtrl)
@@ -126,7 +132,7 @@ var _ = Describe("Packet packer", func() {
 
 	It("returns nil when no packet is queued", func() {
 		mockStreamFramer.EXPECT().HasCryptoStreamData()
-		mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any())
+		mockStreamFramer.EXPECT().AppendStreamFrames(nil, gomock.Any())
 		p, err := packer.PackPacket()
 		Expect(p).To(BeNil())
 		Expect(err).ToNot(HaveOccurred())
@@ -138,7 +144,7 @@ var _ = Describe("Packet packer", func() {
 			StreamID: 5,
 			Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
 		}
-		mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any()).Return([]*wire.StreamFrame{f})
+		expectAppendStreamFrames(f)
 		p, err := packer.PackPacket()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(p).ToNot(BeNil())
@@ -150,10 +156,10 @@ var _ = Describe("Packet packer", func() {
 
 	It("stores the encryption level a packet was sealed with", func() {
 		mockStreamFramer.EXPECT().HasCryptoStreamData()
-		mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any()).Return([]*wire.StreamFrame{{
+		expectAppendStreamFrames(&wire.StreamFrame{
 			StreamID: 5,
 			Data:     []byte("foobar"),
-		}})
+		})
 		packer.cryptoSetup.(*mockCryptoSetup).encLevelSeal = protocol.EncryptionForwardSecure
 		p, err := packer.PackPacket()
 		Expect(err).ToNot(HaveOccurred())
@@ -356,7 +362,7 @@ var _ = Describe("Packet packer", func() {
 
 	It("packs only control frames", func() {
 		mockStreamFramer.EXPECT().HasCryptoStreamData()
-		mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any())
+		expectAppendStreamFrames()
 		packer.QueueControlFrame(&wire.RstStreamFrame{})
 		packer.QueueControlFrame(&wire.MaxDataFrame{})
 		p, err := packer.PackPacket()
@@ -368,7 +374,8 @@ var _ = Describe("Packet packer", func() {
 
 	It("increases the packet number", func() {
 		mockStreamFramer.EXPECT().HasCryptoStreamData().Times(2)
-		mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any()).Times(2)
+		expectAppendStreamFrames()
+		expectAppendStreamFrames()
 		packer.QueueControlFrame(&wire.RstStreamFrame{})
 		p1, err := packer.PackPacket()
 		Expect(err).ToNot(HaveOccurred())
@@ -382,7 +389,7 @@ var _ = Describe("Packet packer", func() {
 
 	It("packs a STOP_WAITING frame first", func() {
 		mockStreamFramer.EXPECT().HasCryptoStreamData()
-		mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any())
+		expectAppendStreamFrames()
 		packer.packetNumberGenerator.next = 15
 		swf := &wire.StopWaitingFrame{LeastUnacked: 10}
 		packer.QueueControlFrame(&wire.RstStreamFrame{})
@@ -396,7 +403,7 @@ var _ = Describe("Packet packer", func() {
 
 	It("sets the LeastUnackedDelta length of a STOP_WAITING frame", func() {
 		mockStreamFramer.EXPECT().HasCryptoStreamData()
-		mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any())
+		expectAppendStreamFrames()
 		packer.packetNumberGenerator.next = 0x1337
 		swf := &wire.StopWaitingFrame{LeastUnacked: 0x1337 - 0x100}
 		packer.QueueControlFrame(&wire.RstStreamFrame{})
@@ -408,7 +415,7 @@ var _ = Describe("Packet packer", func() {
 
 	It("does not pack a packet containing only a STOP_WAITING frame", func() {
 		mockStreamFramer.EXPECT().HasCryptoStreamData()
-		mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any())
+		expectAppendStreamFrames()
 		swf := &wire.StopWaitingFrame{LeastUnacked: 10}
 		packer.QueueControlFrame(swf)
 		p, err := packer.PackPacket()
@@ -418,7 +425,7 @@ var _ = Describe("Packet packer", func() {
 
 	It("packs a packet if it has queued control frames, but no new control frames", func() {
 		mockStreamFramer.EXPECT().HasCryptoStreamData()
-		mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any())
+		expectAppendStreamFrames()
 		packer.controlFrames = []wire.Frame{&wire.BlockedFrame{}}
 		p, err := packer.PackPacket()
 		Expect(err).ToNot(HaveOccurred())
@@ -471,16 +478,16 @@ var _ = Describe("Packet packer", func() {
 
 	It("only increases the packet number when there is an actual packet to send", func() {
 		mockStreamFramer.EXPECT().HasCryptoStreamData().Times(2)
-		mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any())
+		expectAppendStreamFrames()
 		packer.packetNumberGenerator.nextToSkip = 1000
 		p, err := packer.PackPacket()
 		Expect(p).To(BeNil())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packer.packetNumberGenerator.Peek()).To(Equal(protocol.PacketNumber(1)))
-		mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any()).Return([]*wire.StreamFrame{{
+		expectAppendStreamFrames(&wire.StreamFrame{
 			StreamID: 5,
 			Data:     []byte{0xDE, 0xCA, 0xFB, 0xAD},
-		}})
+		})
 		p, err = packer.PackPacket()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(p).ToNot(BeNil())
@@ -491,9 +498,9 @@ var _ = Describe("Packet packer", func() {
 	Context("making ACK packets retransmittable", func() {
 		sendMaxNumNonRetransmittableAcks := func() {
 			mockStreamFramer.EXPECT().HasCryptoStreamData().Times(protocol.MaxNonRetransmittableAcks)
-			mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any()).Times(protocol.MaxNonRetransmittableAcks)
 			for i := 0; i < protocol.MaxNonRetransmittableAcks; i++ {
 				packer.QueueControlFrame(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}})
+				expectAppendStreamFrames()
 				p, err := packer.PackPacket()
 				Expect(p).ToNot(BeNil())
 				Expect(err).ToNot(HaveOccurred())
@@ -504,7 +511,7 @@ var _ = Describe("Packet packer", func() {
 		It("adds a PING frame when it's supposed to send a retransmittable packet", func() {
 			sendMaxNumNonRetransmittableAcks()
 			mockStreamFramer.EXPECT().HasCryptoStreamData().Times(2)
-			mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any()).Times(2)
+			expectAppendStreamFrames()
 			packer.QueueControlFrame(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}})
 			p, err := packer.PackPacket()
 			Expect(p).ToNot(BeNil())
@@ -512,6 +519,7 @@ var _ = Describe("Packet packer", func() {
 			Expect(p.frames).To(ContainElement(&wire.PingFrame{}))
 			// make sure the next packet doesn't contain another PING
 			packer.QueueControlFrame(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 2}}})
+			expectAppendStreamFrames()
 			p, err = packer.PackPacket()
 			Expect(p).ToNot(BeNil())
 			Expect(err).ToNot(HaveOccurred())
@@ -521,10 +529,11 @@ var _ = Describe("Packet packer", func() {
 		It("waits until there's something to send before adding a PING frame", func() {
 			sendMaxNumNonRetransmittableAcks()
 			mockStreamFramer.EXPECT().HasCryptoStreamData().Times(2)
-			mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any()).Times(2)
+			expectAppendStreamFrames()
 			p, err := packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p).To(BeNil())
+			expectAppendStreamFrames()
 			packer.QueueControlFrame(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}})
 			p, err = packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
@@ -535,7 +544,7 @@ var _ = Describe("Packet packer", func() {
 		It("doesn't send a PING if it already sent another retransmittable frame", func() {
 			sendMaxNumNonRetransmittableAcks()
 			mockStreamFramer.EXPECT().HasCryptoStreamData()
-			mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any())
+			expectAppendStreamFrames()
 			packer.QueueControlFrame(&wire.MaxDataFrame{})
 			packer.QueueControlFrame(&wire.StopWaitingFrame{})
 			p, err := packer.PackPacket()
@@ -547,18 +556,18 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	Context("STREAM frame handling", func() {
-		It("does not splits a STREAM frame with maximum size, for gQUIC frames", func() {
+		It("does not split a STREAM frame with maximum size, for gQUIC frames", func() {
 			mockStreamFramer.EXPECT().HasCryptoStreamData().Times(2)
-			mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any()).DoAndReturn(func(maxSize protocol.ByteCount) []*wire.StreamFrame {
+			mockStreamFramer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).DoAndReturn(func(_ []wire.Frame, maxSize protocol.ByteCount) ([]wire.Frame, protocol.ByteCount) {
 				f := &wire.StreamFrame{
 					Offset:         1,
 					StreamID:       5,
 					DataLenPresent: true,
 				}
 				f.Data = bytes.Repeat([]byte{'f'}, int(maxSize-f.Length(packer.version)))
-				return []*wire.StreamFrame{f}
+				return []wire.Frame{f}, f.Length(packer.version)
 			})
-			mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any())
+			mockStreamFramer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any())
 			p, err := packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.frames).To(HaveLen(1))
@@ -569,19 +578,19 @@ var _ = Describe("Packet packer", func() {
 			Expect(p).To(BeNil())
 		})
 
-		It("does not splits a STREAM frame with maximum size, for IETF draft style frame", func() {
+		It("does not split a STREAM frame with maximum size, for IETF draft style frame", func() {
 			packer.version = versionIETFFrames
 			mockStreamFramer.EXPECT().HasCryptoStreamData().Times(2)
-			mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any()).DoAndReturn(func(maxSize protocol.ByteCount) []*wire.StreamFrame {
+			mockStreamFramer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).DoAndReturn(func(_ []wire.Frame, maxSize protocol.ByteCount) ([]wire.Frame, protocol.ByteCount) {
 				f := &wire.StreamFrame{
 					Offset:         1,
 					StreamID:       5,
 					DataLenPresent: true,
 				}
 				f.Data = bytes.Repeat([]byte{'f'}, int(maxSize-f.Length(packer.version)))
-				return []*wire.StreamFrame{f}
+				return []wire.Frame{f}, f.Length(packer.version)
 			})
-			mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any())
+			mockStreamFramer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any())
 			p, err := packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.frames).To(HaveLen(1))
@@ -609,7 +618,7 @@ var _ = Describe("Packet packer", func() {
 				DataLenPresent: true,
 			}
 			mockStreamFramer.EXPECT().HasCryptoStreamData()
-			mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any()).Return([]*wire.StreamFrame{f1, f2, f3})
+			expectAppendStreamFrames(f1, f2, f3)
 			p, err := packer.PackPacket()
 			Expect(p).ToNot(BeNil())
 			Expect(err).ToNot(HaveOccurred())
@@ -632,12 +641,12 @@ var _ = Describe("Packet packer", func() {
 		})
 
 		It("sends non forward-secure data as the client", func() {
+			mockStreamFramer.EXPECT().HasCryptoStreamData()
 			f := &wire.StreamFrame{
 				StreamID: 5,
 				Data:     []byte("foobar"),
 			}
-			mockStreamFramer.EXPECT().HasCryptoStreamData()
-			mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any()).Return([]*wire.StreamFrame{f})
+			expectAppendStreamFrames(f)
 			packer.perspective = protocol.PerspectiveClient
 			packer.cryptoSetup.(*mockCryptoSetup).encLevelSeal = protocol.EncryptionSecure
 			p, err := packer.PackPacket()
@@ -718,7 +727,7 @@ var _ = Describe("Packet packer", func() {
 
 	It("packs a single ACK", func() {
 		mockStreamFramer.EXPECT().HasCryptoStreamData()
-		mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any())
+		expectAppendStreamFrames()
 		ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Largest: 42, Smallest: 1}}}
 		packer.QueueControlFrame(ack)
 		p, err := packer.PackPacket()
@@ -729,7 +738,7 @@ var _ = Describe("Packet packer", func() {
 
 	It("does not return nil if we only have a single ACK but request it to be sent", func() {
 		mockStreamFramer.EXPECT().HasCryptoStreamData()
-		mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any())
+		expectAppendStreamFrames()
 		ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}}
 		packer.QueueControlFrame(ack)
 		p, err := packer.PackPacket()
@@ -1049,7 +1058,9 @@ var _ = Describe("Packet packer", func() {
 				packer.QueueControlFrame(&wire.PingFrame{})
 			}
 			mockStreamFramer.EXPECT().HasCryptoStreamData().AnyTimes()
-			mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any()).AnyTimes()
+			mockStreamFramer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).DoAndReturn(func(fs []wire.Frame, _ protocol.ByteCount) []wire.Frame {
+				return fs
+			}).AnyTimes()
 			p, err := packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.raw).To(HaveLen(int(maxPacketSize)))
@@ -1065,7 +1076,9 @@ var _ = Describe("Packet packer", func() {
 				packer.QueueControlFrame(&wire.PingFrame{})
 			}
 			mockStreamFramer.EXPECT().HasCryptoStreamData().AnyTimes()
-			mockStreamFramer.EXPECT().PopStreamFrames(gomock.Any()).AnyTimes()
+			mockStreamFramer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).DoAndReturn(func(fs []wire.Frame, _ protocol.ByteCount) []wire.Frame {
+				return fs
+			}).AnyTimes()
 			p, err := packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.raw).To(HaveLen(int(maxPacketSize)))

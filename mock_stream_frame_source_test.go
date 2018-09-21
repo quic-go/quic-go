@@ -35,6 +35,18 @@ func (m *MockStreamFrameSource) EXPECT() *MockStreamFrameSourceMockRecorder {
 	return m.recorder
 }
 
+// AppendStreamFrames mocks base method
+func (m *MockStreamFrameSource) AppendStreamFrames(arg0 []wire.Frame, arg1 protocol.ByteCount) []wire.Frame {
+	ret := m.ctrl.Call(m, "AppendStreamFrames", arg0, arg1)
+	ret0, _ := ret[0].([]wire.Frame)
+	return ret0
+}
+
+// AppendStreamFrames indicates an expected call of AppendStreamFrames
+func (mr *MockStreamFrameSourceMockRecorder) AppendStreamFrames(arg0, arg1 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendStreamFrames", reflect.TypeOf((*MockStreamFrameSource)(nil).AppendStreamFrames), arg0, arg1)
+}
+
 // HasCryptoStreamData mocks base method
 func (m *MockStreamFrameSource) HasCryptoStreamData() bool {
 	ret := m.ctrl.Call(m, "HasCryptoStreamData")
@@ -57,16 +69,4 @@ func (m *MockStreamFrameSource) PopCryptoStreamFrame(arg0 protocol.ByteCount) *w
 // PopCryptoStreamFrame indicates an expected call of PopCryptoStreamFrame
 func (mr *MockStreamFrameSourceMockRecorder) PopCryptoStreamFrame(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PopCryptoStreamFrame", reflect.TypeOf((*MockStreamFrameSource)(nil).PopCryptoStreamFrame), arg0)
-}
-
-// PopStreamFrames mocks base method
-func (m *MockStreamFrameSource) PopStreamFrames(arg0 protocol.ByteCount) []*wire.StreamFrame {
-	ret := m.ctrl.Call(m, "PopStreamFrames", arg0)
-	ret0, _ := ret[0].([]*wire.StreamFrame)
-	return ret0
-}
-
-// PopStreamFrames indicates an expected call of PopStreamFrames
-func (mr *MockStreamFrameSourceMockRecorder) PopStreamFrames(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PopStreamFrames", reflect.TypeOf((*MockStreamFrameSource)(nil).PopStreamFrames), arg0)
 }

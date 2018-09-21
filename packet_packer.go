@@ -42,7 +42,7 @@ type sealingManager interface {
 type streamFrameSource interface {
 	HasCryptoStreamData() bool
 	PopCryptoStreamFrame(protocol.ByteCount) *wire.StreamFrame
-	PopStreamFrames(protocol.ByteCount) []*wire.StreamFrame
+	AppendStreamFrames([]wire.Frame, protocol.ByteCount) []wire.Frame
 }
 
 type packetPacker struct {
@@ -173,7 +173,7 @@ func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedP
 	encLevel, sealer := p.cryptoSetup.GetSealer()
 	for len(controlFrames) > 0 || len(streamFrames) > 0 {
 		var frames []wire.Frame
-		var payloadLength protocol.ByteCount
+		var length protocol.ByteCount
 
 		header := p.getHeader(encLevel)
 		headerLength, err := header.GetLength(p.version)
@@ -193,17 +193,17 @@ func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedP
 				PacketNumber:    header.PacketNumber,
 				PacketNumberLen: header.PacketNumberLen,
 			}
-			payloadLength += swf.Length(p.version)
+			length += swf.Length(p.version)
 			frames = append(frames, swf)
 		}
 
 		for len(controlFrames) > 0 {
 			frame := controlFrames[0]
-			length := frame.Length(p.version)
-			if payloadLength+length > maxSize {
+			frameLen := frame.Length(p.version)
+			if length+frameLen > maxSize {
 				break
 			}
-			payloadLength += length
+			length += frameLen
 			frames = append(frames, frame)
 			controlFrames = controlFrames[1:]
 		}
@@ -218,12 +218,12 @@ func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedP
 		} else {
 			maxSize += 2
 		}
-		for len(streamFrames) > 0 && payloadLength+protocol.MinStreamFrameSize < maxSize {
+		for len(streamFrames) > 0 && length+protocol.MinStreamFrameSize < maxSize {
 			// TODO: optimize by setting DataLenPresent = false on all but the last STREAM frame
 			frame := streamFrames[0]
 			frameToAdd := frame
 
-			sf, err := frame.MaybeSplitOffFrame(maxSize-payloadLength, p.version)
+			sf, err := frame.MaybeSplitOffFrame(maxSize-length, p.version)
 			if err != nil {
 				return nil, err
 			}
@@ -232,7 +232,7 @@ func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedP
 			} else {
 				streamFrames = streamFrames[1:]
 			}
-			payloadLength += frameToAdd.Length(p.version)
+			length += frameToAdd.Length(p.version)
 			frames = append(frames, frameToAdd)
 		}
 		if sf, ok := frames[len(frames)-1].(*wire.StreamFrame); ok {
@@ -312,24 +312,24 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 	}
 
 	maxSize := p.maxPacketSize - protocol.ByteCount(sealer.Overhead()) - headerLength
-	payloadFrames, err := p.composeNextPacket(maxSize, p.canSendData(encLevel))
+	frames, err := p.composeNextPacket(maxSize, p.canSendData(encLevel))
 	if err != nil {
 		return nil, err
 	}
 
 	// Check if we have enough frames to send
-	if len(payloadFrames) == 0 {
+	if len(frames) == 0 {
 		return nil, nil
 	}
 	// Don't send out packets that only contain a StopWaitingFrame
-	if len(payloadFrames) == 1 && p.stopWaiting != nil {
+	if len(frames) == 1 && p.stopWaiting != nil {
 		return nil, nil
 	}
 	if p.ackFrame != nil {
 		// check if this packet only contains an ACK (and maybe a STOP_WAITING)
-		if len(payloadFrames) == 1 || (p.stopWaiting != nil && len(payloadFrames) == 2) {
+		if len(frames) == 1 || (p.stopWaiting != nil && len(frames) == 2) {
 			if p.numNonRetransmittableAcks >= protocol.MaxNonRetransmittableAcks {
-				payloadFrames = append(payloadFrames, &wire.PingFrame{})
+				frames = append(frames, &wire.PingFrame{})
 				p.numNonRetransmittableAcks = 0
 			} else {
 				p.numNonRetransmittableAcks++
@@ -341,14 +341,14 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 	p.stopWaiting = nil
 	p.ackFrame = nil
 
-	raw, err := p.writeAndSealPacket(header, payloadFrames, sealer)
+	raw, err := p.writeAndSealPacket(header, frames, sealer)
 	if err != nil {
 		return nil, err
 	}
 	return &packedPacket{
 		header:          header,
 		raw:             raw,
-		frames:          payloadFrames,
+		frames:          frames,
 		encryptionLevel: encLevel,
 	}, nil
 }
@@ -380,39 +380,38 @@ func (p *packetPacker) composeNextPacket(
 	maxFrameSize protocol.ByteCount,
 	canSendStreamFrames bool,
 ) ([]wire.Frame, error) {
-	var payloadLength protocol.ByteCount
-	var payloadFrames []wire.Frame
+	var length protocol.ByteCount
+	var frames []wire.Frame
 
 	// STOP_WAITING and ACK will always fit
 	if p.ackFrame != nil { // ACKs need to go first, so that the sentPacketHandler will recognize them
-		payloadFrames = append(payloadFrames, p.ackFrame)
-		l := p.ackFrame.Length(p.version)
-		payloadLength += l
+		frames = append(frames, p.ackFrame)
+		length += p.ackFrame.Length(p.version)
 	}
 	if p.stopWaiting != nil { // a STOP_WAITING will only be queued when using gQUIC
-		payloadFrames = append(payloadFrames, p.stopWaiting)
-		payloadLength += p.stopWaiting.Length(p.version)
+		frames = append(frames, p.stopWaiting)
+		length += p.stopWaiting.Length(p.version)
 	}
 
 	p.controlFrameMutex.Lock()
 	for len(p.controlFrames) > 0 {
 		frame := p.controlFrames[len(p.controlFrames)-1]
-		length := frame.Length(p.version)
-		if payloadLength+length > maxFrameSize {
+		frameLen := frame.Length(p.version)
+		if length+frameLen > maxFrameSize {
 			break
 		}
-		payloadFrames = append(payloadFrames, frame)
-		payloadLength += length
+		frames = append(frames, frame)
+		length += frameLen
 		p.controlFrames = p.controlFrames[:len(p.controlFrames)-1]
 	}
 	p.controlFrameMutex.Unlock()
 
-	if payloadLength > maxFrameSize {
-		return nil, fmt.Errorf("Packet Packer BUG: packet payload (%d) too large (%d)", payloadLength, maxFrameSize)
+	if length > maxFrameSize {
+		return nil, fmt.Errorf("Packet Packer BUG: packet payload (%d) too large (%d)", length, maxFrameSize)
 	}
 
 	if !canSendStreamFrames {
-		return payloadFrames, nil
+		return frames, nil
 	}
 
 	// temporarily increase the maxFrameSize by the (minimum) length of the DataLen field
@@ -426,15 +425,14 @@ func (p *packetPacker) composeNextPacket(
 		maxFrameSize += 2
 	}
 
-	fs := p.streams.PopStreamFrames(maxFrameSize - payloadLength)
-	if len(fs) != 0 {
-		fs[len(fs)-1].DataLenPresent = false
+	frames = p.streams.AppendStreamFrames(frames, maxFrameSize-length)
+	if len(frames) > 0 {
+		lastFrame := frames[len(frames)-1]
+		if sf, ok := lastFrame.(*wire.StreamFrame); ok {
+			sf.DataLenPresent = false
+		}
 	}
-
-	for _, f := range fs {
-		payloadFrames = append(payloadFrames, f)
-	}
-	return payloadFrames, nil
+	return frames, nil
 }
 
 func (p *packetPacker) QueueControlFrame(frame wire.Frame) {
@@ -494,7 +492,7 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header
 
 func (p *packetPacker) writeAndSealPacket(
 	header *wire.Header,
-	payloadFrames []wire.Frame,
+	frames []wire.Frame,
 	sealer handshake.Sealer,
 ) ([]byte, error) {
 	raw := *getPacketBuffer()
@@ -507,7 +505,7 @@ func (p *packetPacker) writeAndSealPacket(
 			header.PayloadLen = protocol.ByteCount(protocol.MinInitialPacketSize) - headerLen
 		} else {
 			payloadLen := protocol.ByteCount(sealer.Overhead())
-			for _, frame := range payloadFrames {
+			for _, frame := range frames {
 				payloadLen += frame.Length(p.version)
 			}
 			header.PayloadLen = payloadLen
@@ -521,12 +519,12 @@ func (p *packetPacker) writeAndSealPacket(
 
 	// the Initial packet needs to be padded, so the last STREAM frame must have the data length present
 	if header.Type == protocol.PacketTypeInitial {
-		lastFrame := payloadFrames[len(payloadFrames)-1]
+		lastFrame := frames[len(frames)-1]
 		if sf, ok := lastFrame.(*wire.StreamFrame); ok {
 			sf.DataLenPresent = true
 		}
 	}
-	for _, frame := range payloadFrames {
+	for _, frame := range frames {
 		if err := frame.Write(buffer, p.version); err != nil {
 			return nil, err
 		}
