@@ -33,6 +33,23 @@ func (p *packedPacket) ToAckHandlerPacket() *ackhandler.Packet {
 	}
 }
 
+func getMaxPacketSize(addr net.Addr) protocol.ByteCount {
+	maxSize := protocol.ByteCount(protocol.MinInitialPacketSize)
+	// If this is not a UDP address, we don't know anything about the MTU.
+	// Use the minimum size of an Initial packet as the max packet size.
+	if udpAddr, ok := addr.(*net.UDPAddr); ok {
+		// If ip is not an IPv4 address, To4 returns nil.
+		// Note that there might be some corner cases, where this is not correct.
+		// See https://stackoverflow.com/questions/22751035/golang-distinguish-ipv4-ipv6.
+		if udpAddr.IP.To4() == nil {
+			maxSize = protocol.MaxPacketSizeIPv6
+		} else {
+			maxSize = protocol.MaxPacketSizeIPv4
+		}
+	}
+	return maxSize
+}
+
 type sealingManager interface {
 	GetSealer() (protocol.EncryptionLevel, handshake.Sealer)
 	GetSealerForCryptoStream() (protocol.EncryptionLevel, handshake.Sealer)
@@ -84,19 +101,6 @@ func newPacketPacker(
 	perspective protocol.Perspective,
 	version protocol.VersionNumber,
 ) *packetPacker {
-	maxPacketSize := protocol.ByteCount(protocol.MinInitialPacketSize)
-	// If this is not a UDP address, we don't know anything about the MTU.
-	// Use the minimum size of an Initial packet as the max packet size.
-	if udpAddr, ok := remoteAddr.(*net.UDPAddr); ok {
-		// If ip is not an IPv4 address, To4 returns nil.
-		// Note that there might be some corner cases, where this is not correct.
-		// See https://stackoverflow.com/questions/22751035/golang-distinguish-ipv4-ipv6.
-		if udpAddr.IP.To4() == nil {
-			maxPacketSize = protocol.MaxPacketSizeIPv6
-		} else {
-			maxPacketSize = protocol.MaxPacketSizeIPv4
-		}
-	}
 	return &packetPacker{
 		cryptoSetup:           cryptoSetup,
 		divNonce:              divNonce,
@@ -108,7 +112,7 @@ func newPacketPacker(
 		streams:               streamFramer,
 		getPacketNumberLen:    getPacketNumberLen,
 		packetNumberGenerator: newPacketNumberGenerator(initialPacketNumber, protocol.SkipPacketAveragePeriodLength),
-		maxPacketSize:         maxPacketSize,
+		maxPacketSize:         getMaxPacketSize(remoteAddr),
 	}
 }
 

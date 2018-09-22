@@ -108,25 +108,19 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	Context("determining the maximum packet size", func() {
-		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-
 		It("uses the minimum initial size, if it can't determine if the remote address is IPv4 or IPv6", func() {
-			remoteAddr := &net.TCPAddr{}
-			packer = newPacketPacker(connID, connID, 1, nil, remoteAddr, nil, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
-			Expect(packer.maxPacketSize).To(BeEquivalentTo(protocol.MinInitialPacketSize))
+			Expect(getMaxPacketSize(&net.TCPAddr{})).To(BeEquivalentTo(protocol.MinInitialPacketSize))
 		})
 
 		It("uses the maximum IPv4 packet size, if the remote address is IPv4", func() {
-			remoteAddr := &net.UDPAddr{IP: net.IPv4(11, 12, 13, 14), Port: 1337}
-			packer = newPacketPacker(connID, connID, 1, nil, remoteAddr, nil, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
-			Expect(packer.maxPacketSize).To(BeEquivalentTo(protocol.MaxPacketSizeIPv4))
+			addr := &net.UDPAddr{IP: net.IPv4(11, 12, 13, 14), Port: 1337}
+			Expect(getMaxPacketSize(addr)).To(BeEquivalentTo(protocol.MaxPacketSizeIPv4))
 		})
 
 		It("uses the maximum IPv6 packet size, if the remote address is IPv6", func() {
 			ip := net.ParseIP("2001:0db8:85a3:0000:0000:8a2e:0370:7334")
-			remoteAddr := &net.UDPAddr{IP: ip, Port: 1337}
-			packer = newPacketPacker(connID, connID, 1, nil, remoteAddr, nil, nil, nil, nil, protocol.PerspectiveServer, protocol.VersionWhatever)
-			Expect(packer.maxPacketSize).To(BeEquivalentTo(protocol.MaxPacketSizeIPv6))
+			addr := &net.UDPAddr{IP: ip, Port: 1337}
+			Expect(getMaxPacketSize(addr)).To(BeEquivalentTo(protocol.MaxPacketSizeIPv6))
 		})
 	})
 
