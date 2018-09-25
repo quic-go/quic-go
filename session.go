@@ -933,6 +933,12 @@ sendLoop:
 		case ackhandler.SendNone:
 			break sendLoop
 		case ackhandler.SendAck:
+			// If we already sent packets, and the send mode switches to SendAck,
+			// we've just become congestion limited.
+			// There's no need to try to send an ACK at this moment.
+			if numPacketsSent > 0 {
+				return nil
+			}
 			// We can at most send a single ACK only packet.
 			// There will only be a new ACK after receiving new packets.
 			// SendAck is only returned when we're congestion limited, so we don't need to set the pacingt timer.
