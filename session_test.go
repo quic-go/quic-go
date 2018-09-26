@@ -890,6 +890,10 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().TimeUntilSend().Return(time.Now())
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny)
 			sph.EXPECT().SendMode().Return(ackhandler.SendAck)
+			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
+			rph.EXPECT().GetAlarmTimeout().Return(time.Now().Add(time.Hour)).Times(2)
+			rph.EXPECT().GetAckFrame()
+			sess.receivedPacketHandler = rph
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
