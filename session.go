@@ -496,6 +496,7 @@ runLoop:
 			putPacketBuffer(&p.header.Raw)
 		case p := <-s.paramsChan:
 			s.processTransportParameters(&p)
+			continue
 		case _, ok := <-s.handshakeEvent:
 			// when the handshake is completed, the channel will be closed
 			s.handleHandshakeEvent(!ok)
