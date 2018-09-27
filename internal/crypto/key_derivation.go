@@ -1,6 +1,8 @@
 package crypto
 
 import (
+	"crypto"
+
 	"github.com/bifurcation/mint"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
@@ -43,7 +45,7 @@ func computeKeyAndIV(tls TLSExporter, label string) (key, iv []byte, err error) 
 	if err != nil {
 		return nil, nil, err
 	}
-	key = qhkdfExpand(secret, "key", cs.KeyLen)
-	iv = qhkdfExpand(secret, "iv", cs.IvLen)
+	key = hkdfExpand(crypto.SHA256, secret, []byte("key"), cs.KeyLen)
+	iv = hkdfExpand(crypto.SHA256, secret, []byte("iv"), cs.IvLen)
 	return key, iv, nil
 }

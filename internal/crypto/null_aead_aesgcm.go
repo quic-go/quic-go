@@ -28,13 +28,13 @@ func newNullAEADAESGCM(connectionID protocol.ConnectionID, pers protocol.Perspec
 
 func computeSecrets(connID protocol.ConnectionID) (clientSecret, serverSecret []byte) {
 	handshakeSecret := hkdfExtract(crypto.SHA256, connID, quicVersion1Salt)
-	clientSecret = qhkdfExpand(handshakeSecret, "client hs", crypto.SHA256.Size())
-	serverSecret = qhkdfExpand(handshakeSecret, "server hs", crypto.SHA256.Size())
+	clientSecret = hkdfExpandLabel(crypto.SHA256, handshakeSecret, "client hs", crypto.SHA256.Size())
+	serverSecret = hkdfExpandLabel(crypto.SHA256, handshakeSecret, "server hs", crypto.SHA256.Size())
 	return
 }
 
 func computeNullAEADKeyAndIV(secret []byte) (key, iv []byte) {
-	key = qhkdfExpand(secret, "key", 16)
-	iv = qhkdfExpand(secret, "iv", 12)
+	key = hkdfExpandLabel(crypto.SHA256, secret, "key", 16)
+	iv = hkdfExpandLabel(crypto.SHA256, secret, "iv", 12)
 	return
 }
