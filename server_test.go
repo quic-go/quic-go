@@ -254,12 +254,12 @@ var _ = Describe("Server", func() {
 			Expect(serv.Close()).To(Succeed())
 		})
 
-		It("works if no quic.Config is given", func(done Done) {
+		It("works if no quic.Config is given", func() {
 			ln, err := ListenAddr("127.0.0.1:0", testdata.GetTLSConfig(), nil)
 			Expect(err).ToNot(HaveOccurred())
+			// stop the listener
 			Expect(ln.Close()).To(Succeed())
-			close(done)
-		}, 1)
+		})
 
 		It("closes properly", func() {
 			ln, err := ListenAddr("127.0.0.1:0", testdata.GetTLSConfig(), config)
@@ -271,7 +271,7 @@ var _ = Describe("Server", func() {
 				ln.Accept()
 				close(done)
 			}()
-			ln.Close()
+			Expect(ln.Close()).To(Succeed())
 			Eventually(done).Should(BeClosed())
 		})
 
@@ -426,6 +426,8 @@ var _ = Describe("Server", func() {
 		Expect(server.config.IdleTimeout).To(Equal(42 * time.Minute))
 		Expect(reflect.ValueOf(server.config.AcceptCookie)).To(Equal(reflect.ValueOf(acceptCookie)))
 		Expect(server.config.KeepAlive).To(BeTrue())
+		// stop the listener
+		Expect(ln.Close()).To(Succeed())
 	})
 
 	It("errors when the Config contains an invalid version", func() {
@@ -443,6 +445,8 @@ var _ = Describe("Server", func() {
 		Expect(server.config.IdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
 		Expect(reflect.ValueOf(server.config.AcceptCookie)).To(Equal(reflect.ValueOf(defaultAcceptCookie)))
 		Expect(server.config.KeepAlive).To(BeFalse())
+		// stop the listener
+		Expect(ln.Close()).To(Succeed())
 	})
 
 	It("listens on a given address", func() {
@@ -451,6 +455,8 @@ var _ = Describe("Server", func() {
 		Expect(err).ToNot(HaveOccurred())
 		serv := ln.(*server)
 		Expect(serv.Addr().String()).To(Equal(addr))
+		// stop the listener
+		Expect(ln.Close()).To(Succeed())
 	})
 
 	It("errors if given an invalid address", func() {
