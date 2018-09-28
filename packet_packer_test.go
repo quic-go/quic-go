@@ -186,13 +186,17 @@ var _ = Describe("Packet packer", func() {
 				packer.version = protocol.Version43
 				ph := packer.getHeader(protocol.EncryptionForwardSecure)
 				Expect(ph.DestConnectionID.Len()).ToNot(BeZero())
-				packer.SetOmitConnectionID()
+				packer.HandleTransportParameters(&handshake.TransportParameters{
+					OmitConnectionID: true,
+				})
 				ph = packer.getHeader(protocol.EncryptionForwardSecure)
 				Expect(ph.DestConnectionID.Len()).To(BeZero())
 			})
 
 			It("doesn't omit the connection ID for non-forward-secure packets", func() {
-				packer.SetOmitConnectionID()
+				packer.HandleTransportParameters(&handshake.TransportParameters{
+					OmitConnectionID: true,
+				})
 				ph := packer.getHeader(protocol.EncryptionSecure)
 				Expect(ph.DestConnectionID.Len()).ToNot(BeZero())
 			})
@@ -1053,7 +1057,9 @@ var _ = Describe("Packet packer", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.raw).To(HaveLen(int(maxPacketSize)))
 			// now reduce the maxPacketSize
-			packer.SetMaxPacketSize(maxPacketSize - 10)
+			packer.HandleTransportParameters(&handshake.TransportParameters{
+				MaxPacketSize: maxPacketSize - 10,
+			})
 			p, err = packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.raw).To(HaveLen(int(maxPacketSize) - 10))
@@ -1072,7 +1078,9 @@ var _ = Describe("Packet packer", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.raw).To(HaveLen(int(maxPacketSize)))
 			// now try to increase the maxPacketSize
-			packer.SetMaxPacketSize(maxPacketSize + 10)
+			packer.HandleTransportParameters(&handshake.TransportParameters{
+				MaxPacketSize: maxPacketSize + 10,
+			})
 			p, err = packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p.raw).To(HaveLen(int(maxPacketSize)))

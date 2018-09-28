@@ -1289,8 +1289,7 @@ var _ = Describe("Session", func() {
 			MaxPacketSize:               0x42,
 		}
 		streamManager.EXPECT().UpdateLimits(&params)
-		packer.EXPECT().SetOmitConnectionID()
-		packer.EXPECT().SetMaxPacketSize(protocol.ByteCount(0x42))
+		packer.EXPECT().HandleTransportParameters(&params)
 		paramsChan <- params
 		Eventually(func() *handshake.TransportParameters { return sess.peerParams }).Should(Equal(&params))
 		// make the go routine return

@@ -23,9 +23,8 @@ type packer interface {
 	PackRetransmission(packet *ackhandler.Packet) ([]*packedPacket, error)
 	PackConnectionClose(*wire.ConnectionCloseFrame) (*packedPacket, error)
 
-	SetOmitConnectionID()
+	HandleTransportParameters(*handshake.TransportParameters)
 	ChangeDestConnectionID(protocol.ConnectionID)
-	SetMaxPacketSize(protocol.ByteCount)
 }
 
 type packedPacket struct {
@@ -576,14 +575,13 @@ func (p *packetPacker) canSendData(encLevel protocol.EncryptionLevel) bool {
 	return encLevel == protocol.EncryptionForwardSecure
 }
 
-func (p *packetPacker) SetOmitConnectionID() {
-	p.omitConnectionID = true
-}
-
 func (p *packetPacker) ChangeDestConnectionID(connID protocol.ConnectionID) {
 	p.destConnID = connID
 }
 
-func (p *packetPacker) SetMaxPacketSize(size protocol.ByteCount) {
-	p.maxPacketSize = utils.MinByteCount(p.maxPacketSize, size)
+func (p *packetPacker) HandleTransportParameters(params *handshake.TransportParameters) {
+	p.omitConnectionID = params.OmitConnectionID
+	if params.MaxPacketSize != 0 {
+		p.maxPacketSize = utils.MinByteCount(p.maxPacketSize, params.MaxPacketSize)
+	}
 }
