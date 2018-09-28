@@ -49,8 +49,8 @@ func hkdfExpand(hash crypto.Hash, prk, info []byte, l int) []byte {
 
 // hkdfExpandLabel HKDF expands a label
 func hkdfExpandLabel(hash crypto.Hash, secret []byte, label string, length int) []byte {
-	const prefix = "QUIC "
-	qlabel := make([]byte, 2+1+len(prefix)+len(label))
+	const prefix = "quic "
+	qlabel := make([]byte, 2 /* length */ +1 /* length of label */ +len(prefix)+len(label)+1 /* length of context (empty) */)
 	binary.BigEndian.PutUint16(qlabel[0:2], uint16(length))
 	qlabel[2] = uint8(len(prefix) + len(label))
 	copy(qlabel[3:], []byte(prefix+label))
