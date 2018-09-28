@@ -108,13 +108,3 @@ func (m *MockPacker) PackRetransmission(arg0 *ackhandler.Packet) ([]*packedPacke
 func (mr *MockPackerMockRecorder) PackRetransmission(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackRetransmission", reflect.TypeOf((*MockPacker)(nil).PackRetransmission), arg0)
 }
-
-// QueueControlFrame mocks base method
-func (m *MockPacker) QueueControlFrame(arg0 wire.Frame) {
-	m.ctrl.Call(m, "QueueControlFrame", arg0)
-}
-
-// QueueControlFrame indicates an expected call of QueueControlFrame
-func (mr *MockPackerMockRecorder) QueueControlFrame(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueControlFrame", reflect.TypeOf((*MockPacker)(nil).QueueControlFrame), arg0)
-}

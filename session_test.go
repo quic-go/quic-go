@@ -446,9 +446,10 @@ var _ = Describe("Session", func() {
 
 		It("handles PATH_CHALLENGE frames", func() {
 			data := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}
-			packer.EXPECT().QueueControlFrame(&wire.PathResponseFrame{Data: data})
 			err := sess.handleFrames([]wire.Frame{&wire.PathChallengeFrame{Data: data}}, protocol.EncryptionUnspecified)
 			Expect(err).ToNot(HaveOccurred())
+			frames, _ := sess.framer.AppendControlFrames(nil, 1000)
+			Expect(frames).To(Equal([]wire.Frame{&wire.PathResponseFrame{Data: data}}))
 		})
 
 		It("handles BLOCKED frames", func() {
@@ -748,10 +749,11 @@ var _ = Describe("Session", func() {
 			fc.EXPECT().IsNewlyBlocked().Return(true, protocol.ByteCount(1337))
 			packer.EXPECT().PackPacket().Return(getPacket(1), nil)
 			sess.connFlowController = fc
-			packer.EXPECT().QueueControlFrame(&wire.BlockedFrame{Offset: 1337})
 			sent, err := sess.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(sent).To(BeTrue())
+			frames, _ := sess.framer.AppendControlFrames(nil, 1000)
+			Expect(frames).To(Equal([]wire.Frame{&wire.BlockedFrame{Offset: 1337}}))
 		})
 
 		It("sends PUBLIC_RESET", func() {
@@ -1314,7 +1316,6 @@ var _ = Describe("Session", func() {
 			sess.config.KeepAlive = true
 			sess.lastNetworkActivityTime = time.Now().Add(-remoteIdleTimeout / 2)
 			sent := make(chan struct{})
-			packer.EXPECT().QueueControlFrame(&wire.PingFrame{})
 			packer.EXPECT().PackPacket().Do(func() (*packedPacket, error) {
 				close(sent)
 				return nil, nil
@@ -1610,7 +1611,6 @@ var _ = Describe("Client Session", func() {
 		done := make(chan struct{})
 		gomock.InOrder(
 			sessionRunner.EXPECT().onHandshakeComplete(gomock.Any()),
-			packer.EXPECT().QueueControlFrame(&wire.PingFrame{}),
 			packer.EXPECT().PackPacket().DoAndReturn(func() (*packedPacket, error) {
 				close(done)
 				return &packedPacket{header: &wire.Header{}, raw: *getPacketBuffer()}, nil

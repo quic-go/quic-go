@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
@@ -16,8 +15,6 @@ import (
 )
 
 type packer interface {
-	QueueControlFrame(frame wire.Frame)
-
 	PackPacket() (*packedPacket, error)
 	MaybePackAckPacket() (*packedPacket, error)
 	PackRetransmission(packet *ackhandler.Packet) ([]*packedPacket, error)
@@ -68,10 +65,11 @@ type sealingManager interface {
 	GetSealerWithEncryptionLevel(protocol.EncryptionLevel) (handshake.Sealer, error)
 }
 
-type streamFrameSource interface {
+type frameSource interface {
 	HasCryptoStreamData() bool
 	PopCryptoStreamFrame(protocol.ByteCount) *wire.StreamFrame
 	AppendStreamFrames([]wire.Frame, protocol.ByteCount) []wire.Frame
+	AppendControlFrames([]wire.Frame, protocol.ByteCount) ([]wire.Frame, protocol.ByteCount)
 }
 
 // sentAndReceivedPacketManager is only needed until STOP_WAITING is removed
@@ -100,11 +98,8 @@ type packetPacker struct {
 
 	packetNumberGenerator *packetNumberGenerator
 	getPacketNumberLen    func(protocol.PacketNumber) protocol.PacketNumberLen
-	streams               streamFrameSource
+	framer                frameSource
 	acks                  ackFrameSource
-
-	controlFrameMutex sync.Mutex
-	controlFrames     []wire.Frame
 
 	omitConnectionID          bool
 	maxPacketSize             protocol.ByteCount
@@ -123,7 +118,7 @@ func newPacketPacker(
 	token []byte,
 	divNonce []byte,
 	cryptoSetup sealingManager,
-	streamFramer streamFrameSource,
+	framer frameSource,
 	acks ackFrameSource,
 	perspective protocol.Perspective,
 	version protocol.VersionNumber,
@@ -136,7 +131,7 @@ func newPacketPacker(
 		srcConnID:             srcConnID,
 		perspective:           perspective,
 		version:               version,
-		streams:               streamFramer,
+		framer:                framer,
 		acks:                  acks,
 		getPacketNumberLen:    getPacketNumberLen,
 		packetNumberGenerator: newPacketNumberGenerator(initialPacketNumber, protocol.SkipPacketAveragePeriodLength),
@@ -320,7 +315,7 @@ func (p *packetPacker) packHandshakeRetransmission(packet *ackhandler.Packet) (*
 // PackPacket packs a new packet
 // the other controlFrames are sent in the next packet, but might be queued and sent in the next packet if the packet would overflow MaxPacketSize otherwise
 func (p *packetPacker) PackPacket() (*packedPacket, error) {
-	hasCryptoStreamFrame := p.streams.HasCryptoStreamData()
+	hasCryptoStreamFrame := p.framer.HasCryptoStreamData()
 	// if this is the first packet to be send, make sure it contains stream data
 	if !p.hasSentPacket && !hasCryptoStreamFrame {
 		return nil, nil
@@ -379,7 +374,7 @@ func (p *packetPacker) packCryptoPacket() (*packedPacket, error) {
 		return nil, err
 	}
 	maxLen := p.maxPacketSize - protocol.ByteCount(sealer.Overhead()) - protocol.NonForwardSecurePacketSizeReduction - headerLength
-	sf := p.streams.PopCryptoStreamFrame(maxLen)
+	sf := p.framer.PopCryptoStreamFrame(maxLen)
 	sf.DataLenPresent = false
 	frames := []wire.Frame{sf}
 	raw, err := p.writeAndSealPacket(header, frames, sealer)
@@ -418,18 +413,9 @@ func (p *packetPacker) composeNextPacket(
 		}
 	}
 
-	p.controlFrameMutex.Lock()
-	for len(p.controlFrames) > 0 {
-		frame := p.controlFrames[len(p.controlFrames)-1]
-		frameLen := frame.Length(p.version)
-		if length+frameLen > maxFrameSize {
-			break
-		}
-		frames = append(frames, frame)
-		length += frameLen
-		p.controlFrames = p.controlFrames[:len(p.controlFrames)-1]
-	}
-	p.controlFrameMutex.Unlock()
+	var lengthAdded protocol.ByteCount
+	frames, lengthAdded = p.framer.AppendControlFrames(frames, maxFrameSize-length)
+	length += lengthAdded
 
 	if !canSendStreamFrames {
 		return frames, nil
@@ -446,7 +432,7 @@ func (p *packetPacker) composeNextPacket(
 		maxFrameSize += 2
 	}
 
-	frames = p.streams.AppendStreamFrames(frames, maxFrameSize-length)
+	frames = p.framer.AppendStreamFrames(frames, maxFrameSize-length)
 	if len(frames) > 0 {
 		lastFrame := frames[len(frames)-1]
 		if sf, ok := lastFrame.(*wire.StreamFrame); ok {
@@ -454,12 +440,6 @@ func (p *packetPacker) composeNextPacket(
 		}
 	}
 	return frames, nil
-}
-
-func (p *packetPacker) QueueControlFrame(frame wire.Frame) {
-	p.controlFrameMutex.Lock()
-	p.controlFrames = append(p.controlFrames, frame)
-	p.controlFrameMutex.Unlock()
 }
 
 func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header {

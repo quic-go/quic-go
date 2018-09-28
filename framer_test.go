@@ -18,7 +18,7 @@ var _ = Describe("Stream Framer", func() {
 	)
 
 	var (
-		framer           *streamFramer
+		framer           *framer
 		cryptoStream     *MockCryptoStream
 		stream1, stream2 *MockSendStreamI
 		streamGetter     *MockStreamGetter
@@ -31,7 +31,45 @@ var _ = Describe("Stream Framer", func() {
 		stream2 = NewMockSendStreamI(mockCtrl)
 		stream2.EXPECT().StreamID().Return(protocol.StreamID(6)).AnyTimes()
 		cryptoStream = NewMockCryptoStream(mockCtrl)
-		framer = newStreamFramer(cryptoStream, streamGetter, versionGQUICFrames)
+		framer = newFramer(cryptoStream, streamGetter, versionGQUICFrames)
+	})
+
+	Context("handling control frames", func() {
+		It("adds control frames", func() {
+			mdf := &wire.MaxDataFrame{ByteOffset: 0x42}
+			msdf := &wire.MaxStreamDataFrame{ByteOffset: 0x1337}
+			framer.QueueControlFrame(mdf)
+			framer.QueueControlFrame(msdf)
+			frames, length := framer.AppendControlFrames(nil, 1000)
+			Expect(frames).To(ContainElement(mdf))
+			Expect(frames).To(ContainElement(msdf))
+			Expect(length).To(Equal(mdf.Length(framer.version) + msdf.Length(framer.version)))
+		})
+
+		It("appends to the slice given", func() {
+			ack := &wire.AckFrame{}
+			mdf := &wire.MaxDataFrame{ByteOffset: 0x42}
+			framer.QueueControlFrame(mdf)
+			frames, length := framer.AppendControlFrames([]wire.Frame{ack}, 1000)
+			Expect(frames).To(Equal([]wire.Frame{ack, mdf}))
+			Expect(length).To(Equal(mdf.Length(framer.version)))
+		})
+
+		It("adds the right number of frames", func() {
+			maxSize := protocol.ByteCount(1000)
+			bf := &wire.BlockedFrame{Offset: 0x1337}
+			bfLen := bf.Length(framer.version)
+			numFrames := int(maxSize / bfLen) // max number of frames that fit into maxSize
+			for i := 0; i < numFrames+1; i++ {
+				framer.QueueControlFrame(bf)
+			}
+			frames, length := framer.AppendControlFrames(nil, protocol.ByteCount(maxSize))
+			Expect(frames).To(HaveLen(numFrames))
+			Expect(length).To(BeNumerically(">", maxSize-bfLen))
+			frames, length = framer.AppendControlFrames(nil, protocol.ByteCount(maxSize))
+			Expect(frames).To(HaveLen(1))
+			Expect(length).To(Equal(bfLen))
+		})
 	})
 
 	Context("handling the crypto stream", func() {
@@ -66,7 +104,7 @@ var _ = Describe("Stream Framer", func() {
 		})
 	})
 
-	Context("Popping", func() {
+	Context("popping STREAM frames", func() {
 		It("returns nil when popping an empty framer", func() {
 			Expect(framer.AppendStreamFrames(nil, 1000)).To(BeEmpty())
 		})
