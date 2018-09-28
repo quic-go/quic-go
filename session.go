@@ -97,7 +97,7 @@ type session struct {
 	connFlowController    flowcontrol.ConnectionFlowController
 
 	unpacker unpacker
-	packer   *packetPacker
+	packer   packer
 
 	cryptoStreamHandler cryptoStreamHandler
 
@@ -216,6 +216,7 @@ func newSession(
 		divNonce,
 		cs,
 		s.streamFramer,
+		sentAndReceivedPacketManager{s.sentPacketHandler, s.receivedPacketHandler},
 		s.perspective,
 		s.version,
 	)
@@ -289,6 +290,7 @@ var newClientSession = func(
 		nil, // no diversification nonce
 		cs,
 		s.streamFramer,
+		sentAndReceivedPacketManager{s.sentPacketHandler, s.receivedPacketHandler},
 		s.perspective,
 		s.version,
 	)
@@ -344,6 +346,7 @@ func newTLSServerSession(
 		nil, // no diversification nonce
 		cs,
 		s.streamFramer,
+		sentAndReceivedPacketManager{s.sentPacketHandler, s.receivedPacketHandler},
 		s.perspective,
 		s.version,
 	)
@@ -408,6 +411,7 @@ var newTLSClientSession = func(
 		nil, // no diversification nonce
 		cs,
 		s.streamFramer,
+		sentAndReceivedPacketManager{s.sentPacketHandler, s.receivedPacketHandler},
 		s.perspective,
 		s.version,
 	)
@@ -417,6 +421,7 @@ var newTLSClientSession = func(
 func (s *session) preSetup() {
 	s.rttStats = &congestion.RTTStats{}
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats, s.logger, s.version)
+	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.rttStats, s.logger, s.version)
 	s.connFlowController = flowcontrol.NewConnectionFlowController(
 		protocol.ReceiveConnectionFlowControlWindow,
 		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),
@@ -439,7 +444,6 @@ func (s *session) postSetup() error {
 	s.lastNetworkActivityTime = now
 	s.sessionCreationTime = now
 
-	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.rttStats, s.logger, s.version)
 	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.connFlowController, s.packer.QueueControlFrame)
 	return nil
 }
@@ -988,20 +992,12 @@ sendLoop:
 }
 
 func (s *session) maybeSendAckOnlyPacket() error {
-	ack := s.receivedPacketHandler.GetAckFrame()
-	if ack == nil {
-		return nil
-	}
-	s.packer.QueueControlFrame(ack)
-
-	if s.version.UsesStopWaitingFrames() { // for gQUIC, maybe add a STOP_WAITING
-		if swf := s.sentPacketHandler.GetStopWaitingFrame(false); swf != nil {
-			s.packer.QueueControlFrame(swf)
-		}
-	}
-	packet, err := s.packer.PackAckPacket()
+	packet, err := s.packer.MaybePackAckPacket()
 	if err != nil {
 		return err
+	}
+	if packet == nil {
+		return nil
 	}
 	s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket())
 	return s.sendPackedPacket(packet)
@@ -1033,9 +1029,6 @@ func (s *session) maybeSendRetransmission() (bool, error) {
 		s.logger.Debugf("Dequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 	}
 
-	if s.version.UsesStopWaitingFrames() {
-		s.packer.QueueControlFrame(s.sentPacketHandler.GetStopWaitingFrame(true))
-	}
 	packets, err := s.packer.PackRetransmission(retransmitPacket)
 	if err != nil {
 		return false, err
@@ -1060,9 +1053,6 @@ func (s *session) sendProbePacket() error {
 	}
 	s.logger.Debugf("Sending a retransmission for %#x as a probe packet.", p.PacketNumber)
 
-	if s.version.UsesStopWaitingFrames() {
-		s.packer.QueueControlFrame(s.sentPacketHandler.GetStopWaitingFrame(true))
-	}
 	packets, err := s.packer.PackRetransmission(p)
 	if err != nil {
 		return err
@@ -1085,15 +1075,6 @@ func (s *session) sendPacket() (bool, error) {
 		s.packer.QueueControlFrame(&wire.BlockedFrame{Offset: offset})
 	}
 	s.windowUpdateQueue.QueueAll()
-
-	if ack := s.receivedPacketHandler.GetAckFrame(); ack != nil {
-		s.packer.QueueControlFrame(ack)
-		if s.version.UsesStopWaitingFrames() {
-			if swf := s.sentPacketHandler.GetStopWaitingFrame(false); swf != nil {
-				s.packer.QueueControlFrame(swf)
-			}
-		}
-	}
 
 	packet, err := s.packer.PackPacket()
 	if err != nil || packet == nil {

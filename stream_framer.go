@@ -61,14 +61,13 @@ func (f *streamFramer) PopCryptoStreamFrame(maxLen protocol.ByteCount) *wire.Str
 	return frame
 }
 
-func (f *streamFramer) PopStreamFrames(maxTotalLen protocol.ByteCount) []*wire.StreamFrame {
-	var currentLen protocol.ByteCount
-	var frames []*wire.StreamFrame
+func (f *streamFramer) AppendStreamFrames(frames []wire.Frame, maxLen protocol.ByteCount) []wire.Frame {
+	var length protocol.ByteCount
 	f.streamQueueMutex.Lock()
 	// pop STREAM frames, until less than MinStreamFrameSize bytes are left in the packet
 	numActiveStreams := len(f.streamQueue)
 	for i := 0; i < numActiveStreams; i++ {
-		if maxTotalLen-currentLen < protocol.MinStreamFrameSize {
+		if maxLen-length < protocol.MinStreamFrameSize {
 			break
 		}
 		id := f.streamQueue[0]
@@ -81,7 +80,7 @@ func (f *streamFramer) PopStreamFrames(maxTotalLen protocol.ByteCount) []*wire.S
 			delete(f.activeStreams, id)
 			continue
 		}
-		frame, hasMoreData := str.popStreamFrame(maxTotalLen - currentLen)
+		frame, hasMoreData := str.popStreamFrame(maxLen - length)
 		if hasMoreData { // put the stream back in the queue (at the end)
 			f.streamQueue = append(f.streamQueue, id)
 		} else { // no more data to send. Stream is not active any more
@@ -91,7 +90,7 @@ func (f *streamFramer) PopStreamFrames(maxTotalLen protocol.ByteCount) []*wire.S
 			continue
 		}
 		frames = append(frames, frame)
-		currentLen += frame.Length(f.version)
+		length += frame.Length(f.version)
 	}
 	f.streamQueueMutex.Unlock()
 	return frames
