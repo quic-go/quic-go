@@ -2,6 +2,8 @@ package quic
 
 import (
 	"bytes"
+	"fmt"
+	"math/rand"
 	"net"
 
 	"github.com/golang/mock/gomock"
@@ -89,6 +91,7 @@ var _ = Describe("Packet packer", func() {
 	}
 
 	BeforeEach(func() {
+		rand.Seed(GinkgoRandomSeed())
 		version := versionGQUICFrames
 		mockSender := NewMockStreamSender(mockCtrl)
 		mockSender.EXPECT().onHasStreamData(gomock.Any()).AnyTimes()
@@ -946,6 +949,45 @@ var _ = Describe("Packet packer", func() {
 			Expect(sf2.DataLenPresent).To(BeFalse())
 			Expect(sf1.DataLen() + sf2.DataLen()).To(Equal(maxPacketSize * 3 / 2))
 			Expect(packets[0].raw).To(HaveLen(int(maxPacketSize)))
+		})
+
+		It("splits STREAM frames, if necessary", func() {
+			for i := 0; i < 100; i++ {
+				swf := &wire.StopWaitingFrame{}
+				mockAckFramer.EXPECT().GetStopWaitingFrame(true).Return(swf)
+				sf1 := &wire.StreamFrame{
+					StreamID: 42,
+					Offset:   1337,
+					Data:     bytes.Repeat([]byte{'a'}, 1+int(rand.Int31n(int32(maxPacketSize*4/5)))),
+				}
+				sf2 := &wire.StreamFrame{
+					StreamID: 2,
+					Offset:   42,
+					Data:     bytes.Repeat([]byte{'b'}, 1+int(rand.Int31n(int32(maxPacketSize*4/5)))),
+				}
+				expectedDataLen := sf1.DataLen() + sf2.DataLen()
+				fmt.Fprintf(GinkgoWriter, "STREAM frame 1: %d bytes, STREAM frame 2: %d\n", sf1.DataLen(), sf2.DataLen())
+				frames := []wire.Frame{sf1, sf2}
+				packets, err := packer.PackRetransmission(&ackhandler.Packet{
+					EncryptionLevel: protocol.EncryptionForwardSecure,
+					Frames:          frames,
+				})
+				Expect(err).ToNot(HaveOccurred())
+
+				if len(packets) > 1 {
+					Expect(packets[0].raw).To(HaveLen(int(maxPacketSize)))
+				}
+
+				var dataLen protocol.ByteCount
+				for _, p := range packets {
+					for _, f := range p.frames {
+						if sf, ok := f.(*wire.StreamFrame); ok {
+							dataLen += sf.DataLen()
+						}
+					}
+				}
+				Expect(dataLen).To(Equal(expectedDataLen))
+			}
 		})
 
 		It("packs two packets for retransmission if the original packet contained many STREAM frames", func() {

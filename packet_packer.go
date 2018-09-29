@@ -238,19 +238,9 @@ func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedP
 			controlFrames = controlFrames[1:]
 		}
 
-		// temporarily increase the maxFrameSize by the (minimum) length of the DataLen field
-		// this leads to a properly sized packet in all cases, since we do all the packet length calculations with StreamFrames that have the DataLen set
-		// however, for the last STREAM frame in the packet, we can omit the DataLen, thus yielding a packet of exactly the correct size
-		// for gQUIC STREAM frames, DataLen is always 2 bytes
-		// for IETF draft style STREAM frames, the length is encoded to either 1 or 2 bytes
-		if p.version.UsesIETFFrameFormat() {
-			maxSize++
-		} else {
-			maxSize += 2
-		}
 		for len(streamFrames) > 0 && length+protocol.MinStreamFrameSize < maxSize {
-			// TODO: optimize by setting DataLenPresent = false on all but the last STREAM frame
 			frame := streamFrames[0]
+			frame.DataLenPresent = false
 			frameToAdd := frame
 
 			sf, err := frame.MaybeSplitOffFrame(maxSize-length, p.version)
@@ -262,6 +252,7 @@ func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedP
 			} else {
 				streamFrames = streamFrames[1:]
 			}
+			frame.DataLenPresent = true
 			length += frameToAdd.Length(p.version)
 			frames = append(frames, frameToAdd)
 		}
