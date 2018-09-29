@@ -206,13 +206,11 @@ func newSession(
 	s.unpacker = newPacketUnpackerGQUIC(cs, s.version)
 	s.streamsMap = newStreamsMapLegacy(s.newStream, s.config.MaxIncomingStreams, s.perspective)
 	s.framer = newFramer(s.cryptoStream, s.streamsMap, s.version)
-	s.packer = newPacketPacker(
+	s.packer = newPacketPackerLegacy(
 		destConnID,
 		srcConnID,
-		1,
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),
-		nil, // no token
 		divNonce,
 		s.cryptoStream,
 		cs,
@@ -279,13 +277,11 @@ var newClientSession = func(
 	s.unpacker = newPacketUnpackerGQUIC(cs, s.version)
 	s.streamsMap = newStreamsMapLegacy(s.newStream, s.config.MaxIncomingStreams, s.perspective)
 	s.framer = newFramer(s.cryptoStream, s.streamsMap, s.version)
-	s.packer = newPacketPacker(
+	s.packer = newPacketPackerLegacy(
 		destConnID,
 		srcConnID,
-		1,
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),
-		nil, // no token
 		nil, // no diversification nonce
 		s.cryptoStream,
 		cs,
@@ -343,7 +339,6 @@ func newTLSServerSession(
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),
 		nil, // no token
-		nil, // no diversification nonce
 		s.cryptoStream,
 		cs,
 		s.framer,
@@ -409,7 +404,6 @@ var newTLSClientSession = func(
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),
 		token,
-		nil, // no diversification nonce
 		s.cryptoStream,
 		cs,
 		s.framer,
