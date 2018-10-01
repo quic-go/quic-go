@@ -140,6 +140,18 @@ func (mr *MockSendStreamIMockRecorder) handleStopSendingFrame(arg0 interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleStopSendingFrame", reflect.TypeOf((*MockSendStreamI)(nil).handleStopSendingFrame), arg0)
 }
 
+// hasData mocks base method
+func (m *MockSendStreamI) hasData() bool {
+	ret := m.ctrl.Call(m, "hasData")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// hasData indicates an expected call of hasData
+func (mr *MockSendStreamIMockRecorder) hasData() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "hasData", reflect.TypeOf((*MockSendStreamI)(nil).hasData))
+}
+
 // popStreamFrame mocks base method
 func (m *MockSendStreamI) popStreamFrame(arg0 protocol.ByteCount) (*wire.StreamFrame, bool) {
 	ret := m.ctrl.Call(m, "popStreamFrame", arg0)

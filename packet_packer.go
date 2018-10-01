@@ -66,8 +66,6 @@ type sealingManager interface {
 }
 
 type frameSource interface {
-	HasCryptoStreamData() bool
-	PopCryptoStreamFrame(protocol.ByteCount) *wire.StreamFrame
 	AppendStreamFrames([]wire.Frame, protocol.ByteCount) []wire.Frame
 	AppendControlFrames([]wire.Frame, protocol.ByteCount) ([]wire.Frame, protocol.ByteCount)
 }
@@ -98,6 +96,7 @@ type packetPacker struct {
 
 	packetNumberGenerator *packetNumberGenerator
 	getPacketNumberLen    func(protocol.PacketNumber) protocol.PacketNumberLen
+	cryptoStream          cryptoStream
 	framer                frameSource
 	acks                  ackFrameSource
 
@@ -117,6 +116,7 @@ func newPacketPacker(
 	remoteAddr net.Addr, // only used for determining the max packet size
 	token []byte,
 	divNonce []byte,
+	cryptoStream cryptoStream,
 	cryptoSetup sealingManager,
 	framer frameSource,
 	acks ackFrameSource,
@@ -124,6 +124,7 @@ func newPacketPacker(
 	version protocol.VersionNumber,
 ) *packetPacker {
 	return &packetPacker{
+		cryptoStream:          cryptoStream,
 		cryptoSetup:           cryptoSetup,
 		divNonce:              divNonce,
 		token:                 token,
@@ -306,13 +307,16 @@ func (p *packetPacker) packHandshakeRetransmission(packet *ackhandler.Packet) (*
 // PackPacket packs a new packet
 // the other controlFrames are sent in the next packet, but might be queued and sent in the next packet if the packet would overflow MaxPacketSize otherwise
 func (p *packetPacker) PackPacket() (*packedPacket, error) {
-	hasCryptoStreamFrame := p.framer.HasCryptoStreamData()
-	// if this is the first packet to be send, make sure it contains stream data
-	if !p.hasSentPacket && !hasCryptoStreamFrame {
-		return nil, nil
+	packet, err := p.maybePackCryptoPacket()
+	if err != nil {
+		return nil, err
 	}
-	if hasCryptoStreamFrame {
-		return p.packCryptoPacket()
+	if packet != nil {
+		return packet, nil
+	}
+	// if this is the first packet to be send, make sure it contains stream data
+	if !p.hasSentPacket && packet == nil {
+		return nil, nil
 	}
 
 	encLevel, sealer := p.cryptoSetup.GetSealer()
@@ -357,7 +361,10 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 	}, nil
 }
 
-func (p *packetPacker) packCryptoPacket() (*packedPacket, error) {
+func (p *packetPacker) maybePackCryptoPacket() (*packedPacket, error) {
+	if !p.cryptoStream.hasData() {
+		return nil, nil
+	}
 	encLevel, sealer := p.cryptoSetup.GetSealerForCryptoStream()
 	header := p.getHeader(encLevel)
 	headerLength, err := header.GetLength(p.version)
@@ -365,7 +372,7 @@ func (p *packetPacker) packCryptoPacket() (*packedPacket, error) {
 		return nil, err
 	}
 	maxLen := p.maxPacketSize - protocol.ByteCount(sealer.Overhead()) - protocol.NonForwardSecurePacketSizeReduction - headerLength
-	sf := p.framer.PopCryptoStreamFrame(maxLen)
+	sf, _ := p.cryptoStream.popStreamFrame(maxLen)
 	sf.DataLenPresent = false
 	frames := []wire.Frame{sf}
 	raw, err := p.writeAndSealPacket(header, frames, sealer)

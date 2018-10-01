@@ -72,38 +72,6 @@ var _ = Describe("Stream Framer", func() {
 		})
 	})
 
-	Context("handling the crypto stream", func() {
-		It("says if it has crypto stream data", func() {
-			Expect(framer.HasCryptoStreamData()).To(BeFalse())
-			framer.AddActiveStream(framer.version.CryptoStreamID())
-			Expect(framer.HasCryptoStreamData()).To(BeTrue())
-		})
-
-		It("says that it doesn't have crypto stream data after popping all data", func() {
-			streamID := framer.version.CryptoStreamID()
-			f := &wire.StreamFrame{
-				StreamID: streamID,
-				Data:     []byte("foobar"),
-			}
-			cryptoStream.EXPECT().popStreamFrame(protocol.ByteCount(1000)).Return(f, false)
-			framer.AddActiveStream(streamID)
-			Expect(framer.PopCryptoStreamFrame(1000)).To(Equal(f))
-			Expect(framer.HasCryptoStreamData()).To(BeFalse())
-		})
-
-		It("says that it has more crypto stream data if not all data was popped", func() {
-			streamID := framer.version.CryptoStreamID()
-			f := &wire.StreamFrame{
-				StreamID: streamID,
-				Data:     []byte("foobar"),
-			}
-			cryptoStream.EXPECT().popStreamFrame(protocol.ByteCount(1000)).Return(f, true)
-			framer.AddActiveStream(streamID)
-			Expect(framer.PopCryptoStreamFrame(1000)).To(Equal(f))
-			Expect(framer.HasCryptoStreamData()).To(BeTrue())
-		})
-	})
-
 	Context("popping STREAM frames", func() {
 		It("returns nil when popping an empty framer", func() {
 			Expect(framer.AppendStreamFrames(nil, 1000)).To(BeEmpty())

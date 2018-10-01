@@ -214,6 +214,7 @@ func newSession(
 		s.RemoteAddr(),
 		nil, // no token
 		divNonce,
+		s.cryptoStream,
 		cs,
 		s.framer,
 		sentAndReceivedPacketManager{s.sentPacketHandler, s.receivedPacketHandler},
@@ -288,6 +289,7 @@ var newClientSession = func(
 		s.RemoteAddr(),
 		nil, // no token
 		nil, // no diversification nonce
+		s.cryptoStream,
 		cs,
 		s.framer,
 		sentAndReceivedPacketManager{s.sentPacketHandler, s.receivedPacketHandler},
@@ -344,6 +346,7 @@ func newTLSServerSession(
 		s.RemoteAddr(),
 		nil, // no token
 		nil, // no diversification nonce
+		s.cryptoStream,
 		cs,
 		s.framer,
 		sentAndReceivedPacketManager{s.sentPacketHandler, s.receivedPacketHandler},
@@ -409,6 +412,7 @@ var newTLSClientSession = func(
 		s.RemoteAddr(),
 		token,
 		nil, // no diversification nonce
+		s.cryptoStream,
 		cs,
 		s.framer,
 		sentAndReceivedPacketManager{s.sentPacketHandler, s.receivedPacketHandler},
@@ -1246,7 +1250,9 @@ func (s *session) onHasConnectionWindowUpdate() {
 }
 
 func (s *session) onHasStreamData(id protocol.StreamID) {
-	s.framer.AddActiveStream(id)
+	if id != s.version.CryptoStreamID() {
+		s.framer.AddActiveStream(id)
+	}
 	s.scheduleSending()
 }
 

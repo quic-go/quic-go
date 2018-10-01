@@ -12,10 +12,9 @@ type framer struct {
 	cryptoStream cryptoStream
 	version      protocol.VersionNumber
 
-	streamQueueMutex    sync.Mutex
-	activeStreams       map[protocol.StreamID]struct{}
-	streamQueue         []protocol.StreamID
-	hasCryptoStreamData bool
+	streamQueueMutex sync.Mutex
+	activeStreams    map[protocol.StreamID]struct{}
+	streamQueue      []protocol.StreamID
 
 	controlFrameMutex sync.Mutex
 	controlFrames     []wire.Frame
@@ -57,34 +56,15 @@ func (f *framer) AppendControlFrames(frames []wire.Frame, maxLen protocol.ByteCo
 	return frames, length
 }
 
+// AddActiveStream adds a stream that has data to write.
+// It should not be used for the crypto stream.
 func (f *framer) AddActiveStream(id protocol.StreamID) {
-	if id == f.version.CryptoStreamID() { // the crypto stream is handled separately
-		f.streamQueueMutex.Lock()
-		f.hasCryptoStreamData = true
-		f.streamQueueMutex.Unlock()
-		return
-	}
 	f.streamQueueMutex.Lock()
 	if _, ok := f.activeStreams[id]; !ok {
 		f.streamQueue = append(f.streamQueue, id)
 		f.activeStreams[id] = struct{}{}
 	}
 	f.streamQueueMutex.Unlock()
-}
-
-func (f *framer) HasCryptoStreamData() bool {
-	f.streamQueueMutex.Lock()
-	hasCryptoStreamData := f.hasCryptoStreamData
-	f.streamQueueMutex.Unlock()
-	return hasCryptoStreamData
-}
-
-func (f *framer) PopCryptoStreamFrame(maxLen protocol.ByteCount) *wire.StreamFrame {
-	f.streamQueueMutex.Lock()
-	frame, hasMoreData := f.cryptoStream.popStreamFrame(maxLen)
-	f.hasCryptoStreamData = hasMoreData
-	f.streamQueueMutex.Unlock()
-	return frame
 }
 
 func (f *framer) AppendStreamFrames(frames []wire.Frame, maxLen protocol.ByteCount) []wire.Frame {
