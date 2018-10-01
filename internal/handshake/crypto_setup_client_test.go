@@ -152,13 +152,13 @@ var _ = Describe("Client Crypto Setup", func() {
 
 		It("rejects handshake messages with the wrong message tag", func() {
 			HandshakeMessage{Tag: TagCHLO, Data: tagMap}.Write(&stream.dataToRead)
-			err := cs.HandleCryptoStream()
+			err := cs.RunHandshake()
 			Expect(err).To(MatchError(qerr.InvalidCryptoMessageType))
 		})
 
 		It("errors on invalid handshake messages", func() {
 			stream.dataToRead.Write([]byte("invalid message"))
-			err := cs.HandleCryptoStream()
+			err := cs.RunHandshake()
 			Expect(err).To(HaveOccurred())
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.HandshakeFailed))
 		})
@@ -170,7 +170,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				err := cs.HandleCryptoStream()
+				err := cs.RunHandshake()
 				Expect(err).To(MatchError(qerr.Error(qerr.HandshakeFailed, errMockStreamClosing.Error())))
 				close(done)
 			}()
@@ -453,7 +453,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				err := cs.HandleCryptoStream()
+				err := cs.RunHandshake()
 				Expect(err).To(MatchError(qerr.Error(qerr.HandshakeFailed, errMockStreamClosing.Error())))
 				close(done)
 			}()
@@ -470,7 +470,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				err := cs.HandleCryptoStream()
+				err := cs.RunHandshake()
 				Expect(err).To(MatchError(qerr.Error(qerr.HandshakeFailed, errMockStreamClosing.Error())))
 				close(done)
 			}()
@@ -703,7 +703,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				err := cs.HandleCryptoStream()
+				err := cs.RunHandshake()
 				Expect(err).To(MatchError(qerr.Error(qerr.HandshakeFailed, errMockStreamClosing.Error())))
 				close(done)
 			}()
@@ -722,7 +722,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			cs.serverVerified = true
 			go func() {
 				defer GinkgoRecover()
-				err := cs.HandleCryptoStream()
+				err := cs.RunHandshake()
 				Expect(err).To(MatchError(qerr.Error(qerr.HandshakeFailed, errMockStreamClosing.Error())))
 				close(done)
 			}()
@@ -922,7 +922,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				err := cs.HandleCryptoStream()
+				err := cs.RunHandshake()
 				Expect(err).To(MatchError(qerr.Error(qerr.HandshakeFailed, errMockStreamClosing.Error())))
 				close(done)
 			}()
@@ -938,7 +938,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				err := cs.HandleCryptoStream()
+				err := cs.RunHandshake()
 				Expect(err).To(MatchError(qerr.Error(qerr.HandshakeFailed, errMockStreamClosing.Error())))
 				close(done)
 			}()
@@ -955,7 +955,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				err := cs.HandleCryptoStream()
+				err := cs.RunHandshake()
 				Expect(err).To(MatchError(qerr.Error(qerr.HandshakeFailed, errMockStreamClosing.Error())))
 				close(done)
 			}()

@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -18,8 +19,9 @@ type gQUICAEAD interface {
 }
 
 type quicAEAD interface {
-	OpenHandshake(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error)
-	Open1RTT(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error)
+	OpenInitial(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)
+	OpenHandshake(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)
+	Open1RTT(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)
 }
 
 type packetUnpackerBase struct {
@@ -103,12 +105,19 @@ func (u *packetUnpacker) Unpack(headerBinary []byte, hdr *wire.Header, data []by
 	var decrypted []byte
 	var encryptionLevel protocol.EncryptionLevel
 	var err error
-	if hdr.IsLongHeader {
+	switch hdr.Type {
+	case protocol.PacketTypeInitial:
+		decrypted, err = u.aead.OpenInitial(buf, data, hdr.PacketNumber, headerBinary)
+		encryptionLevel = protocol.EncryptionInitial
+	case protocol.PacketTypeHandshake:
 		decrypted, err = u.aead.OpenHandshake(buf, data, hdr.PacketNumber, headerBinary)
-		encryptionLevel = protocol.EncryptionUnencrypted
-	} else {
+		encryptionLevel = protocol.EncryptionHandshake
+	default:
+		if hdr.IsLongHeader {
+			return nil, fmt.Errorf("unknown packet type: %s", hdr.Type)
+		}
 		decrypted, err = u.aead.Open1RTT(buf, data, hdr.PacketNumber, headerBinary)
-		encryptionLevel = protocol.EncryptionForwardSecure
+		encryptionLevel = protocol.Encryption1RTT
 	}
 	if err != nil {
 		// Wrap err in quicError so that public reset is sent by session

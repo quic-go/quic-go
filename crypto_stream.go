@@ -1,42 +1,65 @@
 package quic
 
 import (
+	"fmt"
 	"io"
 
-	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 type cryptoStream interface {
-	StreamID() protocol.StreamID
-	io.Reader
+	// for receiving data
+	HandleCryptoFrame(*wire.CryptoFrame) error
+	GetCryptoData() []byte
+	// for sending data
 	io.Writer
-	handleStreamFrame(*wire.StreamFrame) error
-	hasData() bool
-	popStreamFrame(protocol.ByteCount) (*wire.StreamFrame, bool)
-	closeForShutdown(error)
-	setReadOffset(protocol.ByteCount)
-	// methods needed for flow control
-	getWindowUpdate() protocol.ByteCount
-	handleMaxStreamDataFrame(*wire.MaxStreamDataFrame)
+	HasData() bool
+	PopCryptoFrame(protocol.ByteCount) *wire.CryptoFrame
 }
 
 type cryptoStreamImpl struct {
-	*stream
+	queue *frameSorter
+
+	writeOffset protocol.ByteCount
+	writeBuf    []byte
 }
 
-var _ cryptoStream = &cryptoStreamImpl{}
-
-func newCryptoStream(sender streamSender, flowController flowcontrol.StreamFlowController, version protocol.VersionNumber) cryptoStream {
-	str := newStream(version.CryptoStreamID(), sender, flowController, version)
-	return &cryptoStreamImpl{str}
+func newCryptoStream() cryptoStream {
+	return &cryptoStreamImpl{
+		queue: newFrameSorter(),
+	}
 }
 
-// SetReadOffset sets the read offset.
-// It is only needed for the crypto stream.
-// It must not be called concurrently with any other stream methods, especially Read and Write.
-func (s *cryptoStreamImpl) setReadOffset(offset protocol.ByteCount) {
-	s.receiveStream.readOffset = offset
-	s.receiveStream.frameQueue.readPos = offset
+func (s *cryptoStreamImpl) HandleCryptoFrame(f *wire.CryptoFrame) error {
+	if maxOffset := f.Offset + protocol.ByteCount(len(f.Data)); maxOffset > protocol.MaxCryptoStreamOffset {
+		return fmt.Errorf("received invalid offset %d on crypto stream, maximum allowed %d", maxOffset, protocol.MaxCryptoStreamOffset)
+	}
+	return s.queue.Push(f.Data, f.Offset, false)
+}
+
+// GetCryptoData retrieves data that was received in CRYPTO frames
+func (s *cryptoStreamImpl) GetCryptoData() []byte {
+	data, _ := s.queue.Pop()
+	return data
+}
+
+// Writes writes data that should be sent out in CRYPTO frames
+func (s *cryptoStreamImpl) Write(p []byte) (int, error) {
+	s.writeBuf = append(s.writeBuf, p...)
+	return len(p), nil
+}
+
+func (s *cryptoStreamImpl) HasData() bool {
+	return len(s.writeBuf) > 0
+}
+
+func (s *cryptoStreamImpl) PopCryptoFrame(maxLen protocol.ByteCount) *wire.CryptoFrame {
+	f := &wire.CryptoFrame{Offset: s.writeOffset}
+	n := utils.MinByteCount(f.MaxDataLen(maxLen), protocol.ByteCount(len(s.writeBuf)))
+	f.Data = s.writeBuf[:n]
+	s.writeBuf = s.writeBuf[n:]
+	s.writeOffset += n
+	return f
 }

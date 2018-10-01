@@ -110,6 +110,10 @@ const CryptoMaxParams = 128
 // CryptoParameterMaxLength is the upper limit for the length of a parameter in a crypto message.
 const CryptoParameterMaxLength = 4000
 
+// MaxCryptoStreamOffset is the maximum offset allowed on any of the crypto streams.
+// This limits the size of the ClientHello and Certificates that can be received.
+const MaxCryptoStreamOffset = 16 * (1 << 10)
+
 // EphermalKeyLifetime is the lifetime of the ephermal key during the handshake, see handshake.getEphermalKEX.
 const EphermalKeyLifetime = time.Minute
 

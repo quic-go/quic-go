@@ -18,10 +18,10 @@ var _ = Describe("Stream Framer", func() {
 	)
 
 	var (
-		framer           *framer
-		cryptoStream     *MockCryptoStream
+		framer           framer
 		stream1, stream2 *MockSendStreamI
 		streamGetter     *MockStreamGetter
+		version          protocol.VersionNumber
 	)
 
 	BeforeEach(func() {
@@ -30,8 +30,7 @@ var _ = Describe("Stream Framer", func() {
 		stream1.EXPECT().StreamID().Return(protocol.StreamID(5)).AnyTimes()
 		stream2 = NewMockSendStreamI(mockCtrl)
 		stream2.EXPECT().StreamID().Return(protocol.StreamID(6)).AnyTimes()
-		cryptoStream = NewMockCryptoStream(mockCtrl)
-		framer = newFramer(cryptoStream, streamGetter, versionGQUICFrames)
+		framer = newFramer(streamGetter, version)
 	})
 
 	Context("handling control frames", func() {
@@ -43,7 +42,7 @@ var _ = Describe("Stream Framer", func() {
 			frames, length := framer.AppendControlFrames(nil, 1000)
 			Expect(frames).To(ContainElement(mdf))
 			Expect(frames).To(ContainElement(msdf))
-			Expect(length).To(Equal(mdf.Length(framer.version) + msdf.Length(framer.version)))
+			Expect(length).To(Equal(mdf.Length(version) + msdf.Length(version)))
 		})
 
 		It("appends to the slice given", func() {
@@ -52,13 +51,13 @@ var _ = Describe("Stream Framer", func() {
 			framer.QueueControlFrame(mdf)
 			frames, length := framer.AppendControlFrames([]wire.Frame{ack}, 1000)
 			Expect(frames).To(Equal([]wire.Frame{ack, mdf}))
-			Expect(length).To(Equal(mdf.Length(framer.version)))
+			Expect(length).To(Equal(mdf.Length(version)))
 		})
 
 		It("adds the right number of frames", func() {
 			maxSize := protocol.ByteCount(1000)
 			bf := &wire.BlockedFrame{Offset: 0x1337}
-			bfLen := bf.Length(framer.version)
+			bfLen := bf.Length(version)
 			numFrames := int(maxSize / bfLen) // max number of frames that fit into maxSize
 			for i := 0; i < numFrames+1; i++ {
 				framer.QueueControlFrame(bf)

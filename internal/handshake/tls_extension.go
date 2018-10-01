@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/bifurcation/mint"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
@@ -101,23 +100,4 @@ func (p *encryptedExtensionsTransportParameters) Unmarshal(data []byte) error {
 		return fmt.Errorf("expected transport parameters to be %d bytes long, have %d", paramsLen, len(data))
 	}
 	return p.Parameters.unmarshal(data)
-}
-
-type tlsExtensionBody struct {
-	data []byte
-}
-
-var _ mint.ExtensionBody = &tlsExtensionBody{}
-
-func (e *tlsExtensionBody) Type() mint.ExtensionType {
-	return quicTLSExtensionType
-}
-
-func (e *tlsExtensionBody) Marshal() ([]byte, error) {
-	return e.data, nil
-}
-
-func (e *tlsExtensionBody) Unmarshal(data []byte) (int, error) {
-	e.data = data
-	return len(data), nil
 }

@@ -30,14 +30,14 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 	}
 
 	serverStreamMapping := streamMapping{
-		firstIncomingBidiStream: 4,
+		firstIncomingBidiStream: 0,
 		firstOutgoingBidiStream: 1,
 		firstIncomingUniStream:  2,
 		firstOutgoingUniStream:  3,
 	}
 	clientStreamMapping := streamMapping{
 		firstIncomingBidiStream: 1,
-		firstOutgoingBidiStream: 4,
+		firstOutgoingBidiStream: 0,
 		firstIncomingUniStream:  3,
 		firstOutgoingUniStream:  2,
 	}
@@ -287,7 +287,7 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 						MaxBidiStreams: 5,
 						MaxUniStreams:  5,
 					})
-					Expect(m.outgoingBidiStreams.maxStream).To(Equal(protocol.StreamID(20)))
+					Expect(m.outgoingBidiStreams.maxStream).To(Equal(protocol.StreamID(16)))
 					Expect(m.outgoingUniStreams.maxStream).To(Equal(protocol.StreamID(18)))
 				})
 			})

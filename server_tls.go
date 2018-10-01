@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net"
 
-	"github.com/bifurcation/mint"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -21,11 +20,11 @@ type tlsSession struct {
 type serverTLS struct {
 	conn            net.PacketConn
 	config          *Config
-	mintConf        *mint.Config
+	tlsConf         *tls.Config
 	params          *handshake.TransportParameters
 	cookieGenerator *handshake.CookieGenerator
 
-	newSession func(connection, sessionRunner, protocol.ConnectionID, protocol.ConnectionID, protocol.ConnectionID, protocol.PacketNumber, *Config, *mint.Config, *handshake.TransportParameters, utils.Logger, protocol.VersionNumber) (quicSession, error)
+	newSession func(connection, sessionRunner, protocol.ConnectionID, protocol.ConnectionID, protocol.ConnectionID, protocol.PacketNumber, *Config, *tls.Config, *handshake.TransportParameters, utils.Logger, protocol.VersionNumber) (quicSession, error)
 
 	sessionRunner sessionRunner
 	sessionChan   chan<- tlsSession
@@ -54,16 +53,12 @@ func newServerTLS(
 		// TODO(#855): generate a real token
 		StatelessResetToken: bytes.Repeat([]byte{42}, 16),
 	}
-	mconf, err := tlsToMintConfig(tlsConf, protocol.PerspectiveServer)
-	if err != nil {
-		return nil, nil, err
-	}
 
 	sessionChan := make(chan tlsSession)
 	s := &serverTLS{
 		conn:            conn,
 		config:          config,
-		mintConf:        mconf,
+		tlsConf:         tlsConf,
 		sessionRunner:   runner,
 		sessionChan:     sessionChan,
 		cookieGenerator: cookieGenerator,
@@ -114,10 +109,6 @@ func (s *serverTLS) handleInitialImpl(p *receivedPacket) (quicSession, protocol.
 		return nil, nil, s.sendRetry(p.remoteAddr, hdr)
 	}
 
-	extHandler := handshake.NewExtensionHandlerServer(s.params, s.config.Versions, hdr.Version, s.logger)
-	mconf := s.mintConf.Clone()
-	mconf.ExtensionHandler = extHandler
-
 	connID, err := protocol.GenerateConnectionID(s.config.ConnectionIDLength)
 	if err != nil {
 		return nil, nil, err
@@ -131,7 +122,7 @@ func (s *serverTLS) handleInitialImpl(p *receivedPacket) (quicSession, protocol.
 		connID,
 		1,
 		s.config,
-		mconf,
+		s.tlsConf,
 		s.params,
 		s.logger,
 		hdr.Version,

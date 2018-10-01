@@ -66,7 +66,7 @@ type mockCryptoSetup struct {
 
 var _ handshake.CryptoSetup = &mockCryptoSetup{}
 
-func (m *mockCryptoSetup) HandleCryptoStream() error { return m.handleErr }
+func (m *mockCryptoSetup) RunHandshake() error { return m.handleErr }
 func (m *mockCryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error) {
 	panic("not implemented")
 }
@@ -264,7 +264,7 @@ var _ = Describe("Session", func() {
 
 			It("errors on a STREAM frame that would close the crypto stream", func() {
 				err := sess.handleStreamFrame(&wire.StreamFrame{
-					StreamID: sess.version.CryptoStreamID(),
+					StreamID: 1,
 					Offset:   0x1337,
 					FinBit:   true,
 				}, protocol.EncryptionForwardSecure)
@@ -273,22 +273,17 @@ var _ = Describe("Session", func() {
 
 			It("accepts unencrypted STREAM frames on the crypto stream", func() {
 				f := &wire.StreamFrame{
-					StreamID: versionGQUICFrames.CryptoStreamID(),
+					StreamID: 1,
 					Data:     []byte("foobar"),
 				}
+				str := NewMockStreamI(mockCtrl)
+				str.EXPECT().handleStreamFrame(f)
+				streamManager.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(1)).Return(str, nil) // for closed streams, the streamManager returns nil
 				err := sess.handleStreamFrame(f, protocol.EncryptionUnencrypted)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("unpacks encrypted STREAM frames on the crypto stream", func() {
-				err := sess.handleStreamFrame(&wire.StreamFrame{
-					StreamID: versionGQUICFrames.CryptoStreamID(),
-					Data:     []byte("foobar"),
-				}, protocol.EncryptionSecure)
-				Expect(err).ToNot(HaveOccurred())
-			})
-
-			It("does not unpack unencrypted STREAM frames on higher streams", func() {
+			It("does not handle unencrypted STREAM frames on higher streams", func() {
 				err := sess.handleStreamFrame(&wire.StreamFrame{
 					StreamID: 3,
 					Data:     []byte("foobar"),
@@ -361,7 +356,7 @@ var _ = Describe("Session", func() {
 
 			It("erros when a RST_STREAM frame would reset the crypto stream", func() {
 				err := sess.handleRstStreamFrame(&wire.RstStreamFrame{
-					StreamID:  sess.version.CryptoStreamID(),
+					StreamID:  1,
 					ErrorCode: 123,
 				})
 				Expect(err).To(MatchError("Received RST_STREAM frame for the crypto stream"))
@@ -374,18 +369,6 @@ var _ = Describe("Session", func() {
 			BeforeEach(func() {
 				connFC = mocks.NewMockConnectionFlowController(mockCtrl)
 				sess.connFlowController = connFC
-			})
-
-			It("updates the flow control window of the crypto stream", func() {
-				fc := mocks.NewMockStreamFlowController(mockCtrl)
-				offset := protocol.ByteCount(0x4321)
-				fc.EXPECT().UpdateSendWindow(offset)
-				sess.cryptoStream.(*cryptoStreamImpl).sendStream.flowController = fc
-				err := sess.handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
-					StreamID:   sess.version.CryptoStreamID(),
-					ByteOffset: offset,
-				})
-				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("updates the flow control window of a stream", func() {
@@ -448,7 +431,7 @@ var _ = Describe("Session", func() {
 
 			It("errors when receiving a STOP_SENDING for the crypto stream", func() {
 				err := sess.handleStopSendingFrame(&wire.StopSendingFrame{
-					StreamID:  sess.version.CryptoStreamID(),
+					StreamID:  1,
 					ErrorCode: 10,
 				})
 				Expect(err).To(MatchError("Received a STOP_SENDING frame for the crypto stream"))

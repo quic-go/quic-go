@@ -14,12 +14,12 @@ var _ = Describe("Stream ID", func() {
 
 		It("allows one", func() {
 			Expect(MaxBidiStreamID(1, PerspectiveClient)).To(Equal(StreamID(1)))
-			Expect(MaxBidiStreamID(1, PerspectiveServer)).To(Equal(StreamID(4)))
+			Expect(MaxBidiStreamID(1, PerspectiveServer)).To(Equal(StreamID(0)))
 		})
 
 		It("allows many", func() {
 			Expect(MaxBidiStreamID(100, PerspectiveClient)).To(Equal(StreamID(397)))
-			Expect(MaxBidiStreamID(100, PerspectiveServer)).To(Equal(StreamID(400)))
+			Expect(MaxBidiStreamID(100, PerspectiveServer)).To(Equal(StreamID(396)))
 		})
 	})
 

@@ -107,7 +107,7 @@ func NewCryptoSetup(
 }
 
 // HandleCryptoStream reads and writes messages on the crypto stream
-func (h *cryptoSetupServer) HandleCryptoStream() error {
+func (h *cryptoSetupServer) RunHandshake() error {
 	for {
 		var chloData bytes.Buffer
 		message, err := ParseHandshakeMessage(io.TeeReader(h.cryptoStream, &chloData))

@@ -48,11 +48,11 @@ func newStreamsMap(
 	var firstOutgoingBidiStream, firstOutgoingUniStream, firstIncomingBidiStream, firstIncomingUniStream protocol.StreamID
 	if perspective == protocol.PerspectiveServer {
 		firstOutgoingBidiStream = 1
-		firstIncomingBidiStream = 4 // the crypto stream is handled separately
+		firstIncomingBidiStream = 0
 		firstOutgoingUniStream = 3
 		firstIncomingUniStream = 2
 	} else {
-		firstOutgoingBidiStream = 4 // the crypto stream is handled separately
+		firstOutgoingBidiStream = 0
 		firstIncomingBidiStream = 1
 		firstOutgoingUniStream = 2
 		firstIncomingUniStream = 3

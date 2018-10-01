@@ -17,7 +17,8 @@ type streamsMapLegacy struct {
 
 	perspective protocol.Perspective
 
-	streams map[protocol.StreamID]streamI
+	cryptoStream streamI
+	streams      map[protocol.StreamID]streamI
 
 	nextStreamToOpen          protocol.StreamID // StreamID of the next Stream that will be returned by OpenStream()
 	highestStreamOpenedByPeer protocol.StreamID
@@ -48,6 +49,7 @@ func newStreamsMapLegacy(newStream func(protocol.StreamID) streamI, maxStreams i
 	sm := streamsMapLegacy{
 		perspective:        pers,
 		streams:            make(map[protocol.StreamID]streamI),
+		cryptoStream:       newStream(1),
 		newStream:          newStream,
 		maxIncomingStreams: maxIncomingStreams,
 	}
@@ -90,6 +92,9 @@ func (m *streamsMapLegacy) GetOrOpenSendStream(id protocol.StreamID) (sendStream
 // getOrOpenStream either returns an existing stream, a newly opened stream, or nil if a stream with the provided ID is already closed.
 // Newly opened streams should only originate from the client. To open a stream from the server, OpenStream should be used.
 func (m *streamsMapLegacy) getOrOpenStream(id protocol.StreamID) (streamI, error) {
+	if id == 1 {
+		return m.cryptoStream, nil
+	}
 	m.mutex.RLock()
 	s, ok := m.streams[id]
 	m.mutex.RUnlock()

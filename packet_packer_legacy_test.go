@@ -22,8 +22,8 @@ var _ = Describe("Packet packer (legacy)", func() {
 		packer         *packetPackerLegacy
 		framer         *MockFrameSource
 		ackFramer      *MockAckFrameSource
-		cryptoStream   *MockCryptoStream
-		sealingManager *MockSealingManager
+		cryptoStream   *MockStreamI
+		sealingManager *MockSealingManagerLegacy
 		sealer         *mocks.MockSealer
 		divNonce       []byte
 	)
@@ -49,10 +49,10 @@ var _ = Describe("Packet packer (legacy)", func() {
 		version := versionGQUICFrames
 		mockSender := NewMockStreamSender(mockCtrl)
 		mockSender.EXPECT().onHasStreamData(gomock.Any()).AnyTimes()
-		cryptoStream = NewMockCryptoStream(mockCtrl)
+		cryptoStream = NewMockStreamI(mockCtrl)
 		framer = NewMockFrameSource(mockCtrl)
 		ackFramer = NewMockAckFrameSource(mockCtrl)
-		sealingManager = NewMockSealingManager(mockCtrl)
+		sealingManager = NewMockSealingManagerLegacy(mockCtrl)
 		sealer = mocks.NewMockSealer(mockCtrl)
 		sealer.EXPECT().Overhead().Return(9).AnyTimes()
 		sealer.EXPECT().Seal(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(dst, src []byte, pn protocol.PacketNumber, associatedData []byte) []byte {
@@ -544,7 +544,7 @@ var _ = Describe("Packet packer (legacy)", func() {
 		It("sends unencrypted stream data on the crypto stream", func() {
 			sealingManager.EXPECT().GetSealerForCryptoStream().Return(protocol.EncryptionUnencrypted, sealer)
 			f := &wire.StreamFrame{
-				StreamID: packer.version.CryptoStreamID(),
+				StreamID: 1,
 				Data:     []byte("foobar"),
 			}
 			cryptoStream.EXPECT().hasData().Return(true)
@@ -558,7 +558,7 @@ var _ = Describe("Packet packer (legacy)", func() {
 		It("sends encrypted stream data on the crypto stream", func() {
 			sealingManager.EXPECT().GetSealerForCryptoStream().Return(protocol.EncryptionSecure, sealer)
 			f := &wire.StreamFrame{
-				StreamID: packer.version.CryptoStreamID(),
+				StreamID: 1,
 				Data:     []byte("foobar"),
 			}
 			cryptoStream.EXPECT().hasData().Return(true)

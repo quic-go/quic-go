@@ -3,10 +3,14 @@ package handshake
 import (
 	"crypto/x509"
 
-	"github.com/bifurcation/mint"
-	"github.com/lucas-clemente/quic-go/internal/crypto"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/marten-seemann/qtls"
 )
+
+// Opener opens a packet
+type Opener interface {
+	Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error)
+}
 
 // Sealer seals a packet
 type Sealer interface {
@@ -14,42 +18,36 @@ type Sealer interface {
 	Overhead() int
 }
 
-// mintTLS combines some methods needed to interact with mint.
-type mintTLS interface {
-	crypto.TLSExporter
-	Handshake() mint.Alert
-}
-
-// A TLSExtensionHandler sends and received the QUIC TLS extension.
-// It provides the parameters sent by the peer on a channel.
-type TLSExtensionHandler interface {
-	Send(mint.HandshakeType, *mint.ExtensionList) error
-	Receive(mint.HandshakeType, *mint.ExtensionList) error
-	GetPeerParams() <-chan TransportParameters
+// A tlsExtensionHandler sends and received the QUIC TLS extension.
+type tlsExtensionHandler interface {
+	GetExtensions(msgType uint8) []qtls.Extension
+	ReceivedExtensions(msgType uint8, exts []qtls.Extension) error
 }
 
 type baseCryptoSetup interface {
-	HandleCryptoStream() error
+	RunHandshake() error
 	ConnectionState() ConnectionState
 
 	GetSealer() (protocol.EncryptionLevel, Sealer)
 	GetSealerWithEncryptionLevel(protocol.EncryptionLevel) (Sealer, error)
-	GetSealerForCryptoStream() (protocol.EncryptionLevel, Sealer)
 }
 
 // CryptoSetup is the crypto setup used by gQUIC
 type CryptoSetup interface {
 	baseCryptoSetup
 
-	Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error)
+	GetSealerForCryptoStream() (protocol.EncryptionLevel, Sealer)
+	Open(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, protocol.EncryptionLevel, error)
 }
 
 // CryptoSetupTLS is the crypto setup used by IETF QUIC
 type CryptoSetupTLS interface {
 	baseCryptoSetup
 
-	OpenHandshake(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error)
-	Open1RTT(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error)
+	HandleData([]byte, protocol.EncryptionLevel) error
+	OpenInitial(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)
+	OpenHandshake(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)
+	Open1RTT(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)
 }
 
 // ConnectionState records basic details about the QUIC connection.
