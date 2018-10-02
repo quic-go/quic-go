@@ -78,20 +78,20 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 		return nil, errors.New("quic: nil Request.Header")
 	}
 
-	if req.URL.Scheme == "https" {
-		for k, vv := range req.Header {
-			if !httpguts.ValidHeaderFieldName(k) {
-				return nil, fmt.Errorf("quic: invalid http header field name %q", k)
-			}
-			for _, v := range vv {
-				if !httpguts.ValidHeaderFieldValue(v) {
-					return nil, fmt.Errorf("quic: invalid http header field value %q for key %v", v, k)
-				}
-			}
-		}
-	} else {
+	if req.URL.Scheme != "https" {
 		closeRequestBody(req)
 		return nil, fmt.Errorf("quic: unsupported protocol scheme: %s", req.URL.Scheme)
+	}
+	
+	for k, vv := range req.Header {
+		if !httpguts.ValidHeaderFieldName(k) {
+			return nil, fmt.Errorf("quic: invalid http header field name %q", k)
+		}
+		for _, v := range vv {
+			if !httpguts.ValidHeaderFieldValue(v) {
+				return nil, fmt.Errorf("quic: invalid http header field value %q for key %v", v, k)
+			}
+		}
 	}
 
 	if req.Method != "" && !validMethod(req.Method) {
