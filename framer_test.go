@@ -18,7 +18,7 @@ var _ = Describe("Stream Framer", func() {
 	)
 
 	var (
-		framer           *streamFramer
+		framer           *framer
 		cryptoStream     *MockCryptoStream
 		stream1, stream2 *MockSendStreamI
 		streamGetter     *MockStreamGetter
@@ -31,42 +31,48 @@ var _ = Describe("Stream Framer", func() {
 		stream2 = NewMockSendStreamI(mockCtrl)
 		stream2.EXPECT().StreamID().Return(protocol.StreamID(6)).AnyTimes()
 		cryptoStream = NewMockCryptoStream(mockCtrl)
-		framer = newStreamFramer(cryptoStream, streamGetter, versionGQUICFrames)
+		framer = newFramer(cryptoStream, streamGetter, versionGQUICFrames)
 	})
 
-	Context("handling the crypto stream", func() {
-		It("says if it has crypto stream data", func() {
-			Expect(framer.HasCryptoStreamData()).To(BeFalse())
-			framer.AddActiveStream(framer.version.CryptoStreamID())
-			Expect(framer.HasCryptoStreamData()).To(BeTrue())
+	Context("handling control frames", func() {
+		It("adds control frames", func() {
+			mdf := &wire.MaxDataFrame{ByteOffset: 0x42}
+			msdf := &wire.MaxStreamDataFrame{ByteOffset: 0x1337}
+			framer.QueueControlFrame(mdf)
+			framer.QueueControlFrame(msdf)
+			frames, length := framer.AppendControlFrames(nil, 1000)
+			Expect(frames).To(ContainElement(mdf))
+			Expect(frames).To(ContainElement(msdf))
+			Expect(length).To(Equal(mdf.Length(framer.version) + msdf.Length(framer.version)))
 		})
 
-		It("says that it doesn't have crypto stream data after popping all data", func() {
-			streamID := framer.version.CryptoStreamID()
-			f := &wire.StreamFrame{
-				StreamID: streamID,
-				Data:     []byte("foobar"),
-			}
-			cryptoStream.EXPECT().popStreamFrame(protocol.ByteCount(1000)).Return(f, false)
-			framer.AddActiveStream(streamID)
-			Expect(framer.PopCryptoStreamFrame(1000)).To(Equal(f))
-			Expect(framer.HasCryptoStreamData()).To(BeFalse())
+		It("appends to the slice given", func() {
+			ack := &wire.AckFrame{}
+			mdf := &wire.MaxDataFrame{ByteOffset: 0x42}
+			framer.QueueControlFrame(mdf)
+			frames, length := framer.AppendControlFrames([]wire.Frame{ack}, 1000)
+			Expect(frames).To(Equal([]wire.Frame{ack, mdf}))
+			Expect(length).To(Equal(mdf.Length(framer.version)))
 		})
 
-		It("says that it has more crypto stream data if not all data was popped", func() {
-			streamID := framer.version.CryptoStreamID()
-			f := &wire.StreamFrame{
-				StreamID: streamID,
-				Data:     []byte("foobar"),
+		It("adds the right number of frames", func() {
+			maxSize := protocol.ByteCount(1000)
+			bf := &wire.BlockedFrame{Offset: 0x1337}
+			bfLen := bf.Length(framer.version)
+			numFrames := int(maxSize / bfLen) // max number of frames that fit into maxSize
+			for i := 0; i < numFrames+1; i++ {
+				framer.QueueControlFrame(bf)
 			}
-			cryptoStream.EXPECT().popStreamFrame(protocol.ByteCount(1000)).Return(f, true)
-			framer.AddActiveStream(streamID)
-			Expect(framer.PopCryptoStreamFrame(1000)).To(Equal(f))
-			Expect(framer.HasCryptoStreamData()).To(BeTrue())
+			frames, length := framer.AppendControlFrames(nil, protocol.ByteCount(maxSize))
+			Expect(frames).To(HaveLen(numFrames))
+			Expect(length).To(BeNumerically(">", maxSize-bfLen))
+			frames, length = framer.AppendControlFrames(nil, protocol.ByteCount(maxSize))
+			Expect(frames).To(HaveLen(1))
+			Expect(length).To(Equal(bfLen))
 		})
 	})
 
-	Context("Popping", func() {
+	Context("popping STREAM frames", func() {
 		It("returns nil when popping an empty framer", func() {
 			Expect(framer.AppendStreamFrames(nil, 1000)).To(BeEmpty())
 		})

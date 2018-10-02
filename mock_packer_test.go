@@ -9,6 +9,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	ackhandler "github.com/lucas-clemente/quic-go/internal/ackhandler"
+	handshake "github.com/lucas-clemente/quic-go/internal/handshake"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 	wire "github.com/lucas-clemente/quic-go/internal/wire"
 )
@@ -44,6 +45,16 @@ func (m *MockPacker) ChangeDestConnectionID(arg0 protocol.ConnectionID) {
 // ChangeDestConnectionID indicates an expected call of ChangeDestConnectionID
 func (mr *MockPackerMockRecorder) ChangeDestConnectionID(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChangeDestConnectionID", reflect.TypeOf((*MockPacker)(nil).ChangeDestConnectionID), arg0)
+}
+
+// HandleTransportParameters mocks base method
+func (m *MockPacker) HandleTransportParameters(arg0 *handshake.TransportParameters) {
+	m.ctrl.Call(m, "HandleTransportParameters", arg0)
+}
+
+// HandleTransportParameters indicates an expected call of HandleTransportParameters
+func (mr *MockPackerMockRecorder) HandleTransportParameters(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleTransportParameters", reflect.TypeOf((*MockPacker)(nil).HandleTransportParameters), arg0)
 }
 
 // MaybePackAckPacket mocks base method
@@ -96,34 +107,4 @@ func (m *MockPacker) PackRetransmission(arg0 *ackhandler.Packet) ([]*packedPacke
 // PackRetransmission indicates an expected call of PackRetransmission
 func (mr *MockPackerMockRecorder) PackRetransmission(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackRetransmission", reflect.TypeOf((*MockPacker)(nil).PackRetransmission), arg0)
-}
-
-// QueueControlFrame mocks base method
-func (m *MockPacker) QueueControlFrame(arg0 wire.Frame) {
-	m.ctrl.Call(m, "QueueControlFrame", arg0)
-}
-
-// QueueControlFrame indicates an expected call of QueueControlFrame
-func (mr *MockPackerMockRecorder) QueueControlFrame(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueControlFrame", reflect.TypeOf((*MockPacker)(nil).QueueControlFrame), arg0)
-}
-
-// SetMaxPacketSize mocks base method
-func (m *MockPacker) SetMaxPacketSize(arg0 protocol.ByteCount) {
-	m.ctrl.Call(m, "SetMaxPacketSize", arg0)
-}
-
-// SetMaxPacketSize indicates an expected call of SetMaxPacketSize
-func (mr *MockPackerMockRecorder) SetMaxPacketSize(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMaxPacketSize", reflect.TypeOf((*MockPacker)(nil).SetMaxPacketSize), arg0)
-}
-
-// SetOmitConnectionID mocks base method
-func (m *MockPacker) SetOmitConnectionID() {
-	m.ctrl.Call(m, "SetOmitConnectionID")
-}
-
-// SetOmitConnectionID indicates an expected call of SetOmitConnectionID
-func (mr *MockPackerMockRecorder) SetOmitConnectionID() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetOmitConnectionID", reflect.TypeOf((*MockPacker)(nil).SetOmitConnectionID))
 }

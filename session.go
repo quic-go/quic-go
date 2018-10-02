@@ -92,7 +92,7 @@ type session struct {
 
 	sentPacketHandler     ackhandler.SentPacketHandler
 	receivedPacketHandler ackhandler.ReceivedPacketHandler
-	streamFramer          *streamFramer
+	framer                *framer
 	windowUpdateQueue     *windowUpdateQueue
 	connFlowController    flowcontrol.ConnectionFlowController
 
@@ -205,7 +205,7 @@ func newSession(
 	s.cryptoStreamHandler = cs
 	s.unpacker = newPacketUnpackerGQUIC(cs, s.version)
 	s.streamsMap = newStreamsMapLegacy(s.newStream, s.config.MaxIncomingStreams, s.perspective)
-	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
+	s.framer = newFramer(s.cryptoStream, s.streamsMap, s.version)
 	s.packer = newPacketPacker(
 		destConnID,
 		srcConnID,
@@ -214,8 +214,9 @@ func newSession(
 		s.RemoteAddr(),
 		nil, // no token
 		divNonce,
+		s.cryptoStream,
 		cs,
-		s.streamFramer,
+		s.framer,
 		sentAndReceivedPacketManager{s.sentPacketHandler, s.receivedPacketHandler},
 		s.perspective,
 		s.version,
@@ -279,7 +280,7 @@ var newClientSession = func(
 	s.cryptoStreamHandler = cs
 	s.unpacker = newPacketUnpackerGQUIC(cs, s.version)
 	s.streamsMap = newStreamsMapLegacy(s.newStream, s.config.MaxIncomingStreams, s.perspective)
-	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
+	s.framer = newFramer(s.cryptoStream, s.streamsMap, s.version)
 	s.packer = newPacketPacker(
 		destConnID,
 		srcConnID,
@@ -288,8 +289,9 @@ var newClientSession = func(
 		s.RemoteAddr(),
 		nil, // no token
 		nil, // no diversification nonce
+		s.cryptoStream,
 		cs,
-		s.streamFramer,
+		s.framer,
 		sentAndReceivedPacketManager{s.sentPacketHandler, s.receivedPacketHandler},
 		s.perspective,
 		s.version,
@@ -335,7 +337,7 @@ func newTLSServerSession(
 	}
 	s.cryptoStreamHandler = cs
 	s.streamsMap = newStreamsMap(s, s.newFlowController, s.config.MaxIncomingStreams, s.config.MaxIncomingUniStreams, s.perspective, s.version)
-	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
+	s.framer = newFramer(s.cryptoStream, s.streamsMap, s.version)
 	s.packer = newPacketPacker(
 		s.destConnID,
 		s.srcConnID,
@@ -344,8 +346,9 @@ func newTLSServerSession(
 		s.RemoteAddr(),
 		nil, // no token
 		nil, // no diversification nonce
+		s.cryptoStream,
 		cs,
-		s.streamFramer,
+		s.framer,
 		sentAndReceivedPacketManager{s.sentPacketHandler, s.receivedPacketHandler},
 		s.perspective,
 		s.version,
@@ -400,7 +403,7 @@ var newTLSClientSession = func(
 	s.cryptoStreamHandler = cs
 	s.unpacker = newPacketUnpacker(cs, s.version)
 	s.streamsMap = newStreamsMap(s, s.newFlowController, s.config.MaxIncomingStreams, s.config.MaxIncomingUniStreams, s.perspective, s.version)
-	s.streamFramer = newStreamFramer(s.cryptoStream, s.streamsMap, s.version)
+	s.framer = newFramer(s.cryptoStream, s.streamsMap, s.version)
 	s.packer = newPacketPacker(
 		s.destConnID,
 		s.srcConnID,
@@ -409,8 +412,9 @@ var newTLSClientSession = func(
 		s.RemoteAddr(),
 		token,
 		nil, // no diversification nonce
+		s.cryptoStream,
 		cs,
-		s.streamFramer,
+		s.framer,
 		sentAndReceivedPacketManager{s.sentPacketHandler, s.receivedPacketHandler},
 		s.perspective,
 		s.version,
@@ -444,7 +448,7 @@ func (s *session) postSetup() error {
 	s.lastNetworkActivityTime = now
 	s.sessionCreationTime = now
 
-	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.connFlowController, s.packer.QueueControlFrame)
+	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.connFlowController, s.framer.QueueControlFrame)
 	return nil
 }
 
@@ -522,7 +526,7 @@ runLoop:
 		if s.config.KeepAlive && !s.keepAlivePingSent && s.handshakeComplete && time.Since(s.lastNetworkActivityTime) >= s.peerParams.IdleTimeout/2 {
 			// send a PING frame since there is no activity in the session
 			s.logger.Debugf("Sending a keep-alive ping to keep the connection alive.")
-			s.packer.QueueControlFrame(&wire.PingFrame{})
+			s.framer.QueueControlFrame(&wire.PingFrame{})
 			s.keepAlivePingSent = true
 		} else if !pacingDeadline.IsZero() && now.Before(pacingDeadline) {
 			// If we get to this point before the pacing deadline, we should wait until that deadline.
@@ -914,12 +918,7 @@ func (s *session) handleCloseError(closeErr closeError) error {
 func (s *session) processTransportParameters(params *handshake.TransportParameters) {
 	s.peerParams = params
 	s.streamsMap.UpdateLimits(params)
-	if params.OmitConnectionID {
-		s.packer.SetOmitConnectionID()
-	}
-	if params.MaxPacketSize != 0 {
-		s.packer.SetMaxPacketSize(params.MaxPacketSize)
-	}
+	s.packer.HandleTransportParameters(params)
 	s.connFlowController.UpdateSendWindow(params.ConnectionFlowControlWindow)
 	// the crypto stream is the only open stream at this moment
 	// so we don't need to update stream flow control windows
@@ -1072,7 +1071,7 @@ func (s *session) sendProbePacket() error {
 
 func (s *session) sendPacket() (bool, error) {
 	if isBlocked, offset := s.connFlowController.IsNewlyBlocked(); isBlocked {
-		s.packer.QueueControlFrame(&wire.BlockedFrame{Offset: offset})
+		s.framer.QueueControlFrame(&wire.BlockedFrame{Offset: offset})
 	}
 	s.windowUpdateQueue.QueueAll()
 
@@ -1236,7 +1235,7 @@ func (s *session) tryDecryptingQueuedPackets() {
 }
 
 func (s *session) queueControlFrame(f wire.Frame) {
-	s.packer.QueueControlFrame(f)
+	s.framer.QueueControlFrame(f)
 	s.scheduleSending()
 }
 
@@ -1251,7 +1250,9 @@ func (s *session) onHasConnectionWindowUpdate() {
 }
 
 func (s *session) onHasStreamData(id protocol.StreamID) {
-	s.streamFramer.AddActiveStream(id)
+	if id != s.version.CryptoStreamID() {
+		s.framer.AddActiveStream(id)
+	}
 	s.scheduleSending()
 }
 

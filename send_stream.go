@@ -15,6 +15,7 @@ import (
 type sendStreamI interface {
 	SendStream
 	handleStopSendingFrame(*wire.StopSendingFrame)
+	hasData() bool
 	popStreamFrame(maxBytes protocol.ByteCount) (*wire.StreamFrame, bool)
 	closeForShutdown(error)
 	handleMaxStreamDataFrame(*wire.MaxStreamDataFrame)
@@ -179,6 +180,13 @@ func (s *sendStream) popStreamFrameImpl(maxBytes protocol.ByteCount) (bool /* co
 		s.finSent = true
 	}
 	return frame.FinBit, frame, s.dataForWriting != nil
+}
+
+func (s *sendStream) hasData() bool {
+	s.mutex.Lock()
+	hasData := len(s.dataForWriting) > 0
+	s.mutex.Unlock()
+	return hasData
 }
 
 func (s *sendStream) getDataForWriting(maxBytes protocol.ByteCount) ([]byte, bool /* should send FIN */) {
