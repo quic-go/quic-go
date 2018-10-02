@@ -103,6 +103,24 @@ var _ = Describe("Streams Map (incoming)", func() {
 		Expect(acceptedStr.(*mockGenericStream).id).To(Equal(firstNewStream))
 	})
 
+	It("works with stream 0", func() {
+		m = newIncomingItemsMap(0, 1000, 1000, mockSender.queueControlFrame, newItem)
+		strChan := make(chan item)
+		go func() {
+			defer GinkgoRecover()
+			str, err := m.AcceptStream()
+			Expect(err).ToNot(HaveOccurred())
+			strChan <- str
+		}()
+		Consistently(strChan).ShouldNot(Receive())
+		str, err := m.GetOrOpenStream(0)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(str.(*mockGenericStream).id).To(BeZero())
+		var acceptedStr item
+		Eventually(strChan).Should(Receive(&acceptedStr))
+		Expect(acceptedStr.(*mockGenericStream).id).To(BeZero())
+	})
+
 	It("unblocks AcceptStream when it is closed", func() {
 		testErr := errors.New("test error")
 		done := make(chan struct{})

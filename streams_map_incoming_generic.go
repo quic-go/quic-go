@@ -16,10 +16,10 @@ type incomingItemsMap struct {
 
 	streams map[protocol.StreamID]item
 
-	nextStream    protocol.StreamID // the next stream that will be returned by AcceptStream()
-	highestStream protocol.StreamID // the highest stream that the peer openend
-	maxStream     protocol.StreamID // the highest stream that the peer is allowed to open
-	maxNumStreams int               // maximum number of streams
+	nextStreamToAccept protocol.StreamID // the next stream that will be returned by AcceptStream()
+	nextStreamToOpen   protocol.StreamID // the highest stream that the peer openend
+	maxStream          protocol.StreamID // the highest stream that the peer is allowed to open
+	maxNumStreams      int               // maximum number of streams
 
 	newStream        func(protocol.StreamID) item
 	queueMaxStreamID func(*wire.MaxStreamIDFrame)
@@ -28,19 +28,20 @@ type incomingItemsMap struct {
 }
 
 func newIncomingItemsMap(
-	nextStream protocol.StreamID,
+	nextStreamToAccept protocol.StreamID,
 	initialMaxStreamID protocol.StreamID,
 	maxNumStreams int,
 	queueControlFrame func(wire.Frame),
 	newStream func(protocol.StreamID) item,
 ) *incomingItemsMap {
 	m := &incomingItemsMap{
-		streams:          make(map[protocol.StreamID]item),
-		nextStream:       nextStream,
-		maxStream:        initialMaxStreamID,
-		maxNumStreams:    maxNumStreams,
-		newStream:        newStream,
-		queueMaxStreamID: func(f *wire.MaxStreamIDFrame) { queueControlFrame(f) },
+		streams:            make(map[protocol.StreamID]item),
+		nextStreamToAccept: nextStreamToAccept,
+		nextStreamToOpen:   nextStreamToAccept,
+		maxStream:          initialMaxStreamID,
+		maxNumStreams:      maxNumStreams,
+		newStream:          newStream,
+		queueMaxStreamID:   func(f *wire.MaxStreamIDFrame) { queueControlFrame(f) },
 	}
 	m.cond.L = &m.mutex
 	return m
@@ -56,13 +57,13 @@ func (m *incomingItemsMap) AcceptStream() (item, error) {
 		if m.closeErr != nil {
 			return nil, m.closeErr
 		}
-		str, ok = m.streams[m.nextStream]
+		str, ok = m.streams[m.nextStreamToAccept]
 		if ok {
 			break
 		}
 		m.cond.Wait()
 	}
-	m.nextStream += 4
+	m.nextStreamToAccept += 4
 	return str, nil
 }
 
@@ -75,7 +76,7 @@ func (m *incomingItemsMap) GetOrOpenStream(id protocol.StreamID) (item, error) {
 	// if the id is smaller than the highest we accepted
 	// * this stream exists in the map, and we can return it, or
 	// * this stream was already closed, then we can return the nil
-	if id <= m.highestStream {
+	if id < m.nextStreamToOpen {
 		s := m.streams[id]
 		m.mutex.RUnlock()
 		return s, nil
@@ -86,17 +87,11 @@ func (m *incomingItemsMap) GetOrOpenStream(id protocol.StreamID) (item, error) {
 	// no need to check the two error conditions from above again
 	// * maxStream can only increase, so if the id was valid before, it definitely is valid now
 	// * highestStream is only modified by this function
-	var start protocol.StreamID
-	if m.highestStream == 0 {
-		start = m.nextStream
-	} else {
-		start = m.highestStream + 4
-	}
-	for newID := start; newID <= id; newID += 4 {
+	for newID := m.nextStreamToOpen; newID <= id; newID += 4 {
 		m.streams[newID] = m.newStream(newID)
 		m.cond.Signal()
 	}
-	m.highestStream = id
+	m.nextStreamToOpen = id + 4
 	s := m.streams[id]
 	m.mutex.Unlock()
 	return s, nil
@@ -111,8 +106,8 @@ func (m *incomingItemsMap) DeleteStream(id protocol.StreamID) error {
 	}
 	delete(m.streams, id)
 	// queue a MAX_STREAM_ID frame, giving the peer the option to open a new stream
-	if numNewStreams := m.maxNumStreams - len(m.streams); numNewStreams > 0 {
-		m.maxStream = m.highestStream + protocol.StreamID(numNewStreams*4)
+	if numNewStreams := m.maxNumStreams - len(m.streams) - 1; numNewStreams > 0 {
+		m.maxStream = m.nextStreamToOpen + protocol.StreamID(numNewStreams*4)
 		m.queueMaxStreamID(&wire.MaxStreamIDFrame{StreamID: m.maxStream})
 	}
 	return nil
