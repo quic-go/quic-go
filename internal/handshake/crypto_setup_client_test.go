@@ -2,6 +2,7 @@ package handshake
 
 import (
 	"bytes"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/binary"
 	"errors"
@@ -121,10 +122,9 @@ var _ = Describe("Client Crypto Setup", func() {
 		handshakeEvent = make(chan struct{}, 2)
 		csInt, err := NewCryptoSetupClient(
 			stream,
-			"hostname",
 			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 			version,
-			nil,
+			&tls.Config{ServerName: "hostname"},
 			&TransportParameters{IdleTimeout: protocol.DefaultIdleTimeout},
 			paramsChan,
 			handshakeEvent,

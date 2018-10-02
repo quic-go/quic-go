@@ -33,7 +33,7 @@ var _ = Describe("Client", func() {
 
 		supportedVersionsWithoutGQUIC44 []protocol.VersionNumber
 
-		originalClientSessConstructor func(connection, sessionRunner, string, protocol.VersionNumber, protocol.ConnectionID, protocol.ConnectionID, *tls.Config, *Config, protocol.VersionNumber, []protocol.VersionNumber, utils.Logger) (quicSession, error)
+		originalClientSessConstructor func(connection, sessionRunner, protocol.VersionNumber, protocol.ConnectionID, protocol.ConnectionID, *tls.Config, *Config, protocol.VersionNumber, []protocol.VersionNumber, utils.Logger) (quicSession, error)
 	)
 
 	// generate a packet sent by the server that accepts the QUIC version suggested by the client
@@ -132,7 +132,6 @@ var _ = Describe("Client", func() {
 			newClientSession = func(
 				conn connection,
 				_ sessionRunner,
-				_ string,
 				_ protocol.VersionNumber,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
@@ -161,17 +160,16 @@ var _ = Describe("Client", func() {
 			newClientSession = func(
 				_ connection,
 				_ sessionRunner,
-				h string,
 				_ protocol.VersionNumber,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
-				_ *tls.Config,
+				tlsConf *tls.Config,
 				_ *Config,
 				_ protocol.VersionNumber,
 				_ []protocol.VersionNumber,
 				_ utils.Logger,
 			) (quicSession, error) {
-				hostnameChan <- h
+				hostnameChan <- tlsConf.ServerName
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().run()
 				return sess, nil
@@ -190,7 +188,6 @@ var _ = Describe("Client", func() {
 			newClientSession = func(
 				_ connection,
 				runner sessionRunner,
-				_ string,
 				_ protocol.VersionNumber,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
@@ -238,7 +235,6 @@ var _ = Describe("Client", func() {
 			newClientSession = func(
 				conn connection,
 				_ sessionRunner,
-				_ string,
 				_ protocol.VersionNumber,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
@@ -277,7 +273,6 @@ var _ = Describe("Client", func() {
 			newClientSession = func(
 				conn connection,
 				_ sessionRunner,
-				_ string,
 				_ protocol.VersionNumber,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
@@ -321,7 +316,6 @@ var _ = Describe("Client", func() {
 			newClientSession = func(
 				conn connection,
 				runnerP sessionRunner,
-				_ string,
 				_ protocol.VersionNumber,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
@@ -361,7 +355,6 @@ var _ = Describe("Client", func() {
 			newClientSession = func(
 				connP connection,
 				_ sessionRunner,
-				_ string,
 				_ protocol.VersionNumber,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
@@ -491,7 +484,6 @@ var _ = Describe("Client", func() {
 				newClientSession = func(
 					_ connection,
 					_ sessionRunner,
-					_ string,
 					_ protocol.VersionNumber,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
@@ -683,7 +675,6 @@ var _ = Describe("Client", func() {
 				newClientSession = func(
 					conn connection,
 					_ sessionRunner,
-					_ string,
 					_ protocol.VersionNumber,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
@@ -744,7 +735,6 @@ var _ = Describe("Client", func() {
 				newClientSession = func(
 					_ connection,
 					_ sessionRunner,
-					_ string,
 					_ protocol.VersionNumber,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
@@ -757,6 +747,7 @@ var _ = Describe("Client", func() {
 					return <-sessionChan, nil
 				}
 
+				cl.tlsConf = &tls.Config{}
 				cl.config = &Config{Versions: []protocol.VersionNumber{version1, version2}}
 				dialed := make(chan struct{})
 				go func() {
@@ -791,7 +782,6 @@ var _ = Describe("Client", func() {
 				newClientSession = func(
 					_ connection,
 					_ sessionRunner,
-					_ string,
 					_ protocol.VersionNumber,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
@@ -804,6 +794,7 @@ var _ = Describe("Client", func() {
 					return <-sessionChan, nil
 				}
 
+				cl.tlsConf = &tls.Config{}
 				cl.config = &Config{Versions: []protocol.VersionNumber{version1, version2, version3}}
 				dialed := make(chan struct{})
 				go func() {
@@ -934,18 +925,17 @@ var _ = Describe("Client", func() {
 		newClientSession = func(
 			connP connection,
 			_ sessionRunner,
-			hostnameP string,
 			versionP protocol.VersionNumber,
 			connIDP protocol.ConnectionID,
 			_ protocol.ConnectionID,
-			_ *tls.Config,
+			tlsConf *tls.Config,
 			configP *Config,
 			_ protocol.VersionNumber,
 			_ []protocol.VersionNumber,
 			_ utils.Logger,
 		) (quicSession, error) {
 			cconn = connP
-			hostname = hostnameP
+			hostname = tlsConf.ServerName
 			version = versionP
 			conf = configP
 			connID = connIDP
