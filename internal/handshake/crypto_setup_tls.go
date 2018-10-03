@@ -23,9 +23,10 @@ type cryptoSetupTLS struct {
 	nullAEAD      crypto.AEAD
 	aead          crypto.AEAD
 
-	tls            mintTLS
-	conn           *cryptoStreamConn
-	handshakeEvent chan<- struct{}
+	tls               mintTLS
+	conn              *cryptoStreamConn
+	handshakeEvent    chan<- struct{}
+	handshakeComplete chan<- struct{}
 }
 
 var _ CryptoSetupTLS = &cryptoSetupTLS{}
@@ -36,6 +37,7 @@ func NewCryptoSetupTLSServer(
 	connID protocol.ConnectionID,
 	config *mint.Config,
 	handshakeEvent chan<- struct{},
+	handshakeComplete chan<- struct{},
 	version protocol.VersionNumber,
 ) (CryptoSetupTLS, error) {
 	nullAEAD, err := crypto.NewNullAEAD(protocol.PerspectiveServer, connID, version)
@@ -45,12 +47,13 @@ func NewCryptoSetupTLSServer(
 	conn := newCryptoStreamConn(cryptoStream)
 	tls := mint.Server(conn, config)
 	return &cryptoSetupTLS{
-		tls:            tls,
-		conn:           conn,
-		nullAEAD:       nullAEAD,
-		perspective:    protocol.PerspectiveServer,
-		keyDerivation:  crypto.DeriveAESKeys,
-		handshakeEvent: handshakeEvent,
+		tls:               tls,
+		conn:              conn,
+		nullAEAD:          nullAEAD,
+		perspective:       protocol.PerspectiveServer,
+		keyDerivation:     crypto.DeriveAESKeys,
+		handshakeEvent:    handshakeEvent,
+		handshakeComplete: handshakeComplete,
 	}, nil
 }
 
@@ -60,6 +63,7 @@ func NewCryptoSetupTLSClient(
 	connID protocol.ConnectionID,
 	config *mint.Config,
 	handshakeEvent chan<- struct{},
+	handshakeComplete chan<- struct{},
 	version protocol.VersionNumber,
 ) (CryptoSetupTLS, error) {
 	nullAEAD, err := crypto.NewNullAEAD(protocol.PerspectiveClient, connID, version)
@@ -69,12 +73,13 @@ func NewCryptoSetupTLSClient(
 	conn := newCryptoStreamConn(cryptoStream)
 	tls := mint.Client(conn, config)
 	return &cryptoSetupTLS{
-		tls:            tls,
-		conn:           conn,
-		perspective:    protocol.PerspectiveClient,
-		nullAEAD:       nullAEAD,
-		keyDerivation:  crypto.DeriveAESKeys,
-		handshakeEvent: handshakeEvent,
+		tls:               tls,
+		conn:              conn,
+		perspective:       protocol.PerspectiveClient,
+		nullAEAD:          nullAEAD,
+		keyDerivation:     crypto.DeriveAESKeys,
+		handshakeEvent:    handshakeEvent,
+		handshakeComplete: handshakeComplete,
 	}, nil
 }
 
@@ -101,7 +106,7 @@ func (h *cryptoSetupTLS) HandleCryptoStream() error {
 	h.mutex.Unlock()
 
 	h.handshakeEvent <- struct{}{}
-	close(h.handshakeEvent)
+	close(h.handshakeComplete)
 	return nil
 }
 

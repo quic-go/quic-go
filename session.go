@@ -119,8 +119,9 @@ type session struct {
 	paramsChan <-chan handshake.TransportParameters
 	// the handshakeEvent channel is passed to the CryptoSetup.
 	// It receives when it makes sense to try decrypting undecryptable packets.
-	handshakeEvent    <-chan struct{}
-	handshakeComplete bool
+	handshakeEvent        <-chan struct{}
+	handshakeCompleteChan <-chan struct{} // is closed when the handshake completes
+	handshakeComplete     bool
 
 	receivedFirstPacket              bool // since packet numbers start at 0, we can't use largestRcvdPacketNumber != 0 for this
 	receivedFirstForwardSecurePacket bool
@@ -162,17 +163,19 @@ func newSession(
 	logger.Debugf("Creating new session. Destination Connection ID: %s, Source Connection ID: %s", destConnID, srcConnID)
 	paramsChan := make(chan handshake.TransportParameters)
 	handshakeEvent := make(chan struct{}, 1)
+	handshakeCompleteChan := make(chan struct{})
 	s := &session{
-		conn:           conn,
-		sessionRunner:  sessionRunner,
-		srcConnID:      srcConnID,
-		destConnID:     destConnID,
-		perspective:    protocol.PerspectiveServer,
-		version:        v,
-		config:         config,
-		handshakeEvent: handshakeEvent,
-		paramsChan:     paramsChan,
-		logger:         logger,
+		conn:                  conn,
+		sessionRunner:         sessionRunner,
+		srcConnID:             srcConnID,
+		destConnID:            destConnID,
+		perspective:           protocol.PerspectiveServer,
+		version:               v,
+		config:                config,
+		handshakeEvent:        handshakeEvent,
+		handshakeCompleteChan: handshakeCompleteChan,
+		paramsChan:            paramsChan,
+		logger:                logger,
 	}
 	s.preSetup()
 	transportParams := &handshake.TransportParameters{
@@ -197,6 +200,7 @@ func newSession(
 		s.config.AcceptCookie,
 		paramsChan,
 		handshakeEvent,
+		handshakeCompleteChan,
 		s.logger,
 	)
 	if err != nil {
@@ -238,17 +242,19 @@ var newClientSession = func(
 	logger.Debugf("Creating new session. Destination Connection ID: %s, Source Connection ID: %s", destConnID, srcConnID)
 	paramsChan := make(chan handshake.TransportParameters)
 	handshakeEvent := make(chan struct{}, 1)
+	handshakeCompleteChan := make(chan struct{})
 	s := &session{
-		conn:           conn,
-		sessionRunner:  sessionRunner,
-		srcConnID:      srcConnID,
-		destConnID:     destConnID,
-		perspective:    protocol.PerspectiveClient,
-		version:        v,
-		config:         config,
-		handshakeEvent: handshakeEvent,
-		paramsChan:     paramsChan,
-		logger:         logger,
+		conn:                  conn,
+		sessionRunner:         sessionRunner,
+		srcConnID:             srcConnID,
+		destConnID:            destConnID,
+		perspective:           protocol.PerspectiveClient,
+		version:               v,
+		config:                config,
+		handshakeEvent:        handshakeEvent,
+		handshakeCompleteChan: handshakeCompleteChan,
+		paramsChan:            paramsChan,
+		logger:                logger,
 	}
 	s.preSetup()
 	transportParams := &handshake.TransportParameters{
@@ -266,6 +272,7 @@ var newClientSession = func(
 		transportParams,
 		paramsChan,
 		handshakeEvent,
+		handshakeCompleteChan,
 		initialVersion,
 		negotiatedVersions,
 		s.logger,
@@ -307,16 +314,18 @@ func newTLSServerSession(
 	v protocol.VersionNumber,
 ) (quicSession, error) {
 	handshakeEvent := make(chan struct{}, 1)
+	handshakeCompleteChan := make(chan struct{})
 	s := &session{
-		conn:           conn,
-		sessionRunner:  runner,
-		config:         config,
-		srcConnID:      srcConnID,
-		destConnID:     destConnID,
-		perspective:    protocol.PerspectiveServer,
-		version:        v,
-		handshakeEvent: handshakeEvent,
-		logger:         logger,
+		conn:                  conn,
+		sessionRunner:         runner,
+		config:                config,
+		srcConnID:             srcConnID,
+		destConnID:            destConnID,
+		perspective:           protocol.PerspectiveServer,
+		version:               v,
+		handshakeEvent:        handshakeEvent,
+		handshakeCompleteChan: handshakeCompleteChan,
+		logger:                logger,
 	}
 	s.preSetup()
 	cs, err := handshake.NewCryptoSetupTLSServer(
@@ -324,6 +333,7 @@ func newTLSServerSession(
 		origConnID,
 		mintConf,
 		handshakeEvent,
+		handshakeCompleteChan,
 		v,
 	)
 	if err != nil {
@@ -370,17 +380,19 @@ var newTLSClientSession = func(
 	v protocol.VersionNumber,
 ) (quicSession, error) {
 	handshakeEvent := make(chan struct{}, 1)
+	handshakeCompleteChan := make(chan struct{})
 	s := &session{
-		conn:           conn,
-		sessionRunner:  runner,
-		config:         conf,
-		srcConnID:      srcConnID,
-		destConnID:     destConnID,
-		perspective:    protocol.PerspectiveClient,
-		version:        v,
-		handshakeEvent: handshakeEvent,
-		paramsChan:     paramsChan,
-		logger:         logger,
+		conn:                  conn,
+		sessionRunner:         runner,
+		config:                conf,
+		srcConnID:             srcConnID,
+		destConnID:            destConnID,
+		perspective:           protocol.PerspectiveClient,
+		version:               v,
+		handshakeEvent:        handshakeEvent,
+		handshakeCompleteChan: handshakeCompleteChan,
+		paramsChan:            paramsChan,
+		logger:                logger,
 	}
 	s.preSetup()
 	cs, err := handshake.NewCryptoSetupTLSClient(
@@ -388,6 +400,7 @@ var newTLSClientSession = func(
 		s.destConnID,
 		mintConf,
 		handshakeEvent,
+		handshakeCompleteChan,
 		v,
 	)
 	if err != nil {
@@ -463,9 +476,10 @@ runLoop:
 		select {
 		case closeErr = <-s.closeChan:
 			break runLoop
-		case _, ok := <-s.handshakeEvent:
-			// when the handshake is completed, the channel will be closed
-			s.handleHandshakeEvent(!ok)
+		case <-s.handshakeEvent:
+			s.tryDecryptingQueuedPackets()
+		case <-s.handshakeCompleteChan:
+			s.handleHandshakeComplete()
 		default:
 		}
 
@@ -497,9 +511,10 @@ runLoop:
 		case p := <-s.paramsChan:
 			s.processTransportParameters(&p)
 			continue
-		case _, ok := <-s.handshakeEvent:
-			// when the handshake is completed, the channel will be closed
-			s.handleHandshakeEvent(!ok)
+		case <-s.handshakeEvent:
+			s.tryDecryptingQueuedPackets()
+		case <-s.handshakeCompleteChan:
+			s.handleHandshakeComplete()
 		}
 
 		now := time.Now()
@@ -590,13 +605,9 @@ func (s *session) maybeResetTimer() {
 	s.timer.Reset(deadline)
 }
 
-func (s *session) handleHandshakeEvent(completed bool) {
-	if !completed {
-		s.tryDecryptingQueuedPackets()
-		return
-	}
+func (s *session) handleHandshakeComplete() {
 	s.handshakeComplete = true
-	s.handshakeEvent = nil // prevent this case from ever being selected again
+	s.handshakeCompleteChan = nil // prevent this case from ever being selected again
 	s.sessionRunner.onHandshakeComplete(s)
 
 	// In gQUIC, the server completes the handshake first (after sending the SHLO).

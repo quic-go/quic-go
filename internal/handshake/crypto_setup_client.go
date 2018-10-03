@@ -50,8 +50,9 @@ type cryptoSetupClient struct {
 	secureAEAD           crypto.AEAD
 	forwardSecureAEAD    crypto.AEAD
 
-	paramsChan     chan<- TransportParameters
-	handshakeEvent chan<- struct{}
+	paramsChan        chan<- TransportParameters
+	handshakeEvent    chan<- struct{}
+	handshakeComplete chan<- struct{}
 
 	params *TransportParameters
 
@@ -75,6 +76,7 @@ func NewCryptoSetupClient(
 	params *TransportParameters,
 	paramsChan chan<- TransportParameters,
 	handshakeEvent chan<- struct{},
+	handshakeComplete chan<- struct{},
 	initialVersion protocol.VersionNumber,
 	negotiatedVersions []protocol.VersionNumber,
 	logger utils.Logger,
@@ -85,17 +87,18 @@ func NewCryptoSetupClient(
 	}
 	divNonceChan := make(chan struct{})
 	cs := &cryptoSetupClient{
-		cryptoStream:   cryptoStream,
-		hostname:       tlsConf.ServerName,
-		connID:         connID,
-		version:        version,
-		certManager:    crypto.NewCertManager(tlsConf),
-		params:         params,
-		keyDerivation:  crypto.DeriveQuicCryptoAESKeys,
-		nullAEAD:       nullAEAD,
-		paramsChan:     paramsChan,
-		handshakeEvent: handshakeEvent,
-		initialVersion: initialVersion,
+		cryptoStream:      cryptoStream,
+		hostname:          tlsConf.ServerName,
+		connID:            connID,
+		version:           version,
+		certManager:       crypto.NewCertManager(tlsConf),
+		params:            params,
+		keyDerivation:     crypto.DeriveQuicCryptoAESKeys,
+		nullAEAD:          nullAEAD,
+		paramsChan:        paramsChan,
+		handshakeEvent:    handshakeEvent,
+		handshakeComplete: handshakeComplete,
+		initialVersion:    initialVersion,
 		// The server might have sent greased versions in the Version Negotiation packet.
 		// We need strip those from the list, since they won't be included in the handshake tag.
 		negotiatedVersions: protocol.StripGreasedVersions(negotiatedVersions),
@@ -158,7 +161,7 @@ func (h *cryptoSetupClient) HandleCryptoStream() error {
 			// blocks until the session has received the parameters
 			h.paramsChan <- *params
 			h.handshakeEvent <- struct{}{}
-			close(h.handshakeEvent)
+			close(h.handshakeComplete)
 		default:
 			return qerr.InvalidCryptoMessageType
 		}

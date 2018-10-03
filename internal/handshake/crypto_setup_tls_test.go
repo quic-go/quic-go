@@ -20,17 +20,20 @@ func mockKeyDerivation(crypto.TLSExporter, protocol.Perspective) (crypto.AEAD, e
 
 var _ = Describe("TLS Crypto Setup", func() {
 	var (
-		cs             *cryptoSetupTLS
-		handshakeEvent chan struct{}
+		cs                *cryptoSetupTLS
+		handshakeEvent    chan struct{}
+		handshakeComplete chan struct{}
 	)
 
 	BeforeEach(func() {
 		handshakeEvent = make(chan struct{}, 2)
+		handshakeComplete = make(chan struct{})
 		css, err := NewCryptoSetupTLSServer(
 			newCryptoStreamConn(bytes.NewBuffer([]byte{})),
 			protocol.ConnectionID{},
 			&mint.Config{},
 			handshakeEvent,
+			handshakeComplete,
 			protocol.VersionTLS,
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -54,7 +57,7 @@ var _ = Describe("TLS Crypto Setup", func() {
 		err := cs.HandleCryptoStream()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(handshakeEvent).To(Receive())
-		Expect(handshakeEvent).To(BeClosed())
+		Expect(handshakeComplete).To(BeClosed())
 	})
 
 	It("handshakes until it is connected", func() {

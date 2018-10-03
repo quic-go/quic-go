@@ -91,6 +91,7 @@ var _ = Describe("Client Crypto Setup", func() {
 		keyDerivationCalledWith *keyDerivationValues
 		shloMap                 map[Tag][]byte
 		handshakeEvent          chan struct{}
+		handshakeComplete       chan struct{}
 		paramsChan              chan TransportParameters
 	)
 
@@ -120,6 +121,7 @@ var _ = Describe("Client Crypto Setup", func() {
 		// use a buffered channel here, so that we can parse a SHLO without having to receive the TransportParameters to avoid blocking
 		paramsChan = make(chan TransportParameters, 1)
 		handshakeEvent = make(chan struct{}, 2)
+		handshakeComplete = make(chan struct{})
 		csInt, err := NewCryptoSetupClient(
 			stream,
 			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
@@ -128,6 +130,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			&TransportParameters{IdleTimeout: protocol.DefaultIdleTimeout},
 			paramsChan,
 			handshakeEvent,
+			handshakeComplete,
 			protocol.Version39,
 			nil,
 			utils.DefaultLogger,
@@ -445,7 +448,7 @@ var _ = Describe("Client Crypto Setup", func() {
 			Expect(params.IdleTimeout).To(Equal(13 * time.Second))
 		})
 
-		It("closes the handshakeEvent chan when receiving an SHLO", func() {
+		It("closes the handshakeComplete chan when receiving an SHLO", func() {
 			HandshakeMessage{Tag: TagSHLO, Data: shloMap}.Write(&stream.dataToRead)
 			done := make(chan struct{})
 			go func() {
@@ -455,7 +458,7 @@ var _ = Describe("Client Crypto Setup", func() {
 				close(done)
 			}()
 			Eventually(handshakeEvent).Should(Receive())
-			Eventually(handshakeEvent).Should(BeClosed())
+			Eventually(handshakeComplete).Should(BeClosed())
 			// make the go routine return
 			stream.close()
 			Eventually(done).Should(BeClosed())
