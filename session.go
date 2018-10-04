@@ -228,7 +228,6 @@ func newSession(
 var newClientSession = func(
 	conn connection,
 	sessionRunner sessionRunner,
-	hostname string,
 	v protocol.VersionNumber,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
@@ -263,7 +262,6 @@ var newClientSession = func(
 	}
 	cs, err := newCryptoSetupClient(
 		s.cryptoStream,
-		hostname,
 		destConnID,
 		s.version,
 		tlsConf,

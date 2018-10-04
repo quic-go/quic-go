@@ -25,8 +25,6 @@ type client struct {
 	// If it is started with Dial, we take a packet conn as a parameter.
 	createdPacketConn bool
 
-	hostname string
-
 	packetHandlers packetHandlerManager
 
 	token      []byte
@@ -159,13 +157,12 @@ func newClient(
 	closeCallback func(protocol.ConnectionID),
 	createdPacketConn bool,
 ) (*client, error) {
-	var hostname string
-	if tlsConf != nil {
-		hostname = tlsConf.ServerName
+	if tlsConf == nil {
+		tlsConf = &tls.Config{}
 	}
-	if hostname == "" {
+	if tlsConf.ServerName == "" {
 		var err error
-		hostname, _, err = net.SplitHostPort(host)
+		tlsConf.ServerName, _, err = net.SplitHostPort(host)
 		if err != nil {
 			return nil, err
 		}
@@ -186,7 +183,6 @@ func newClient(
 	c := &client{
 		conn:              &conn{pconn: pconn, currentAddr: remoteAddr},
 		createdPacketConn: createdPacketConn,
-		hostname:          hostname,
 		tlsConf:           tlsConf,
 		config:            config,
 		version:           config.Versions[0],
@@ -286,7 +282,7 @@ func (c *client) generateConnectionIDs() error {
 }
 
 func (c *client) dial(ctx context.Context) error {
-	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.hostname, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
+	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
 
 	var err error
 	if c.version.UsesTLS() {
@@ -324,7 +320,6 @@ func (c *client) dialTLS(ctx context.Context) error {
 		return err
 	}
 	mintConf.ExtensionHandler = extHandler
-	mintConf.ServerName = c.hostname
 	c.mintConf = mintConf
 
 	if err := c.createNewTLSSession(extHandler.GetPeerParams(), c.version); err != nil {
@@ -513,7 +508,6 @@ func (c *client) createNewGQUICSession() error {
 	sess, err := newClientSession(
 		c.conn,
 		runner,
-		c.hostname,
 		c.version,
 		c.destConnID,
 		c.srcConnID,

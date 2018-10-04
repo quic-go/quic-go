@@ -1567,7 +1567,6 @@ var _ = Describe("Client Session", func() {
 		cryptoSetup = &mockCryptoSetup{}
 		newCryptoSetupClient = func(
 			_ io.ReadWriter,
-			_ string,
 			_ protocol.ConnectionID,
 			_ protocol.VersionNumber,
 			_ *tls.Config,
@@ -1587,7 +1586,6 @@ var _ = Describe("Client Session", func() {
 		sessP, err := newClientSession(
 			mconn,
 			sessionRunner,
-			"hostname",
 			protocol.Version39,
 			protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
 			protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
