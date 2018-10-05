@@ -58,8 +58,8 @@ type streamI interface {
 	handleMaxStreamDataFrame(*wire.MaxStreamDataFrame)
 }
 
-var _ receiveStreamI = (streamI)(nil)
-var _ sendStreamI = (streamI)(nil)
+var _ receiveStreamI = streamI(nil)
+var _ sendStreamI = streamI(nil)
 
 // A Stream assembles the data from StreamFrames and provides a super-convenient Read-Interface
 //
