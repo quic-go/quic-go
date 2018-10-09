@@ -633,7 +633,7 @@ func (h *sentPacketHandler) computeRTOTimeout() time.Duration {
 	}
 	rto = utils.MaxDuration(rto, minRTOTimeout)
 	// Exponential backoff
-	rto = rto << h.rtoCount
+	rto <<= h.rtoCount
 	return utils.MinDuration(rto, maxRTOTimeout)
 }
 
