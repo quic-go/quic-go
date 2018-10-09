@@ -59,6 +59,32 @@ func (m *mockConnection) LocalAddr() net.Addr  { return m.localAddr }
 func (m *mockConnection) RemoteAddr() net.Addr { return m.remoteAddr }
 func (*mockConnection) Close() error           { panic("not implemented") }
 
+type mockCryptoSetup struct {
+	handleErr error
+	divNonce  []byte
+}
+
+var _ handshake.CryptoSetup = &mockCryptoSetup{}
+
+func (m *mockCryptoSetup) HandleCryptoStream() error { return m.handleErr }
+func (m *mockCryptoSetup) Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error) {
+	panic("not implemented")
+}
+func (m *mockCryptoSetup) GetSealer() (protocol.EncryptionLevel, handshake.Sealer) {
+	panic("not implemented")
+}
+func (m *mockCryptoSetup) GetSealerForCryptoStream() (protocol.EncryptionLevel, handshake.Sealer) {
+	panic("not implemented")
+}
+func (m *mockCryptoSetup) GetSealerWithEncryptionLevel(protocol.EncryptionLevel) (handshake.Sealer, error) {
+	panic("not implemented")
+}
+func (m *mockCryptoSetup) SetDiversificationNonce(divNonce []byte) error {
+	m.divNonce = divNonce
+	return nil
+}
+func (m *mockCryptoSetup) ConnectionState() ConnectionState { panic("not implemented") }
+
 func areSessionsRunning() bool {
 	var b bytes.Buffer
 	pprof.Lookup("goroutine").WriteTo(&b, 1)
