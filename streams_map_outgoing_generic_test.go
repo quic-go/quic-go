@@ -122,6 +122,23 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			Eventually(done).Should(BeClosed())
 		})
 
+		It("works with stream 0", func() {
+			m = newOutgoingItemsMap(0, newItem, mockSender.queueControlFrame)
+			mockSender.EXPECT().queueControlFrame(&wire.StreamIDBlockedFrame{StreamID: 0})
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				str, err := m.OpenStreamSync()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(str.(*mockGenericStream).id).To(BeZero())
+				close(done)
+			}()
+
+			Consistently(done).ShouldNot(BeClosed())
+			m.SetMaxStream(0)
+			Eventually(done).Should(BeClosed())
+		})
+
 		It("stops opening synchronously when it is closed", func() {
 			mockSender.EXPECT().queueControlFrame(gomock.Any())
 			testErr := errors.New("test error")
