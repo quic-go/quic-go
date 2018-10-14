@@ -9,14 +9,14 @@ import (
 )
 
 var _ = Describe("Packet Number Generator", func() {
-	var png packetNumberGenerator
+	var png *packetNumberGenerator
 
 	BeforeEach(func() {
-		png = *newPacketNumberGenerator(1, 100)
+		png = newPacketNumberGenerator(1, 100)
 	})
 
 	It("can be initialized to return any first packet number", func() {
-		png = *newPacketNumberGenerator(12345, 100)
+		png = newPacketNumberGenerator(12345, 100)
 		Expect(png.Pop()).To(Equal(protocol.PacketNumber(12345)))
 	})
 
@@ -36,6 +36,20 @@ var _ = Describe("Packet Number Generator", func() {
 	})
 
 	It("skips a packet number", func() {
+		var last protocol.PacketNumber
+		var skipped bool
+		for i := 0; i < 1000; i++ {
+			num := png.Pop()
+			if num > last+1 {
+				skipped = true
+				break
+			}
+			last = num
+		}
+		Expect(skipped).To(BeTrue())
+	})
+
+	It("skips a specific packet number", func() {
 		png.nextToSkip = 2
 		num := png.Pop()
 		Expect(num).To(Equal(protocol.PacketNumber(1)))

@@ -18,10 +18,12 @@ type packetNumberGenerator struct {
 }
 
 func newPacketNumberGenerator(initial, averagePeriod protocol.PacketNumber) *packetNumberGenerator {
-	return &packetNumberGenerator{
+	g := &packetNumberGenerator{
 		next:          initial,
 		averagePeriod: averagePeriod,
 	}
+	g.generateNewSkip()
+	return g
 }
 
 func (p *packetNumberGenerator) Peek() protocol.PacketNumber {
