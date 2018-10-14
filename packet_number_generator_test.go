@@ -69,8 +69,7 @@ var _ = Describe("Packet Number Generator", func() {
 		rep := 10000
 
 		for i := 0; i < rep; i++ {
-			num, err := png.getRandomNumber()
-			Expect(err).ToNot(HaveOccurred())
+			num := png.getRandomNumber()
 			sum += uint64(num)
 			if num > largest {
 				largest = num
