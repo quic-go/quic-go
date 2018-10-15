@@ -148,6 +148,7 @@ func (h *sentPacketHandler) SentPacketsAsRetransmission(packets []*Packet, retra
 
 func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* isRetransmittable */ {
 	for p := h.lastSentPacketNumber + 1; p < packet.PacketNumber; p++ {
+		h.logger.Debugf("Skipping packet number %#x", p)
 		h.skippedPackets = append(h.skippedPackets, p)
 		if len(h.skippedPackets) > protocol.MaxTrackedSkippedPackets {
 			h.skippedPackets = h.skippedPackets[1:]
