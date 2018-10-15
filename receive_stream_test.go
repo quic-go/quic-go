@@ -243,6 +243,20 @@ var _ = Describe("Receive Stream", func() {
 				Expect(n).To(BeZero())
 			})
 
+			It("unblocks when the deadline is changed to the past", func() {
+				str.SetReadDeadline(time.Now().Add(time.Hour))
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					_, err := str.Read(make([]byte, 6))
+					Expect(err).To(MatchError(errDeadline))
+					close(done)
+				}()
+				Consistently(done).ShouldNot(BeClosed())
+				str.SetReadDeadline(time.Now().Add(-time.Hour))
+				Eventually(done).Should(BeClosed())
+			})
+
 			It("unblocks after the deadline", func() {
 				deadline := time.Now().Add(scaleDuration(50 * time.Millisecond))
 				str.SetReadDeadline(deadline)
