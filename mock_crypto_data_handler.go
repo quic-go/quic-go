@@ -35,10 +35,8 @@ func (m *MockCryptoDataHandler) EXPECT() *MockCryptoDataHandlerMockRecorder {
 }
 
 // HandleData mocks base method
-func (m *MockCryptoDataHandler) HandleData(arg0 []byte, arg1 protocol.EncryptionLevel) error {
-	ret := m.ctrl.Call(m, "HandleData", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
+func (m *MockCryptoDataHandler) HandleData(arg0 []byte, arg1 protocol.EncryptionLevel) {
+	m.ctrl.Call(m, "HandleData", arg0, arg1)
 }
 
 // HandleData indicates an expected call of HandleData

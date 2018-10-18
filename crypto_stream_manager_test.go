@@ -1,8 +1,6 @@
 package quic
 
 import (
-	"errors"
-
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -53,13 +51,5 @@ var _ = Describe("Crypto Stream Manager", func() {
 		f := &wire.CryptoFrame{Data: []byte("foobar")}
 		cs.EXPECT().HandleData([]byte("foobar"), protocol.EncryptionHandshake)
 		Expect(csm.HandleCryptoFrame(f, protocol.EncryptionHandshake)).To(Succeed())
-	})
-
-	It("returns the error if handling crypto data fails", func() {
-		testErr := errors.New("test error")
-		f := &wire.CryptoFrame{Data: []byte("foobar")}
-		cs.EXPECT().HandleData([]byte("foobar"), protocol.EncryptionHandshake).Return(testErr)
-		err := csm.HandleCryptoFrame(f, protocol.EncryptionHandshake)
-		Expect(err).To(MatchError(testErr))
 	})
 })
