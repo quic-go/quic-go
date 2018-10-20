@@ -1,7 +1,6 @@
 package handshake
 
 import (
-	"bytes"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -74,14 +73,12 @@ type cryptoSetupTLS struct {
 	clientHelloWritten     bool
 	clientHelloWrittenChan chan struct{}
 
-	initialReadBuf bytes.Buffer
-	initialStream  io.Writer
-	initialAEAD    crypto.AEAD
+	initialStream io.Writer
+	initialAEAD   crypto.AEAD
 
-	handshakeReadBuf bytes.Buffer
-	handshakeStream  io.Writer
-	handshakeOpener  Opener
-	handshakeSealer  Sealer
+	handshakeStream io.Writer
+	handshakeOpener Opener
+	handshakeSealer Sealer
 
 	opener Opener
 	sealer Sealer
@@ -272,40 +269,14 @@ func (h *cryptoSetupTLS) RunHandshake() error {
 	}
 }
 
-func (h *cryptoSetupTLS) HandleData(data []byte, encLevel protocol.EncryptionLevel) {
-	var buf *bytes.Buffer
-	switch encLevel {
-	case protocol.EncryptionInitial:
-		buf = &h.initialReadBuf
-	case protocol.EncryptionHandshake:
-		buf = &h.handshakeReadBuf
-	default:
-		h.messageErrChan <- fmt.Errorf("received handshake data with unexpected encryption level: %s", encLevel)
-		return
-	}
-	buf.Write(data)
-	for buf.Len() >= 4 {
-		b := buf.Bytes()
-		// read the TLS message length
-		length := int(b[1])<<16 | int(b[2])<<8 | int(b[3])
-		if buf.Len() < 4+length { // message not yet complete
-			return
-		}
-		msg := make([]byte, length+4)
-		buf.Read(msg)
-		if err := h.handleMessage(msg, encLevel); err != nil {
-			h.messageErrChan <- err
-		}
-	}
-}
-
 // handleMessage handles a TLS handshake message.
 // It is called by the crypto streams when a new message is available.
-func (h *cryptoSetupTLS) handleMessage(data []byte, encLevel protocol.EncryptionLevel) error {
+func (h *cryptoSetupTLS) HandleMessage(data []byte, encLevel protocol.EncryptionLevel) {
 	msgType := messageType(data[0])
 	h.logger.Debugf("Received %s message (%d bytes, encryption level: %s)", msgType, len(data), encLevel)
 	if err := h.checkEncryptionLevel(msgType, encLevel); err != nil {
-		return err
+		h.messageErrChan <- err
+		return
 	}
 	h.messageChan <- data
 	switch h.perspective {
@@ -316,7 +287,6 @@ func (h *cryptoSetupTLS) handleMessage(data []byte, encLevel protocol.Encryption
 	default:
 		panic("")
 	}
-	return nil
 }
 
 func (h *cryptoSetupTLS) checkEncryptionLevel(msgType messageType, encLevel protocol.EncryptionLevel) error {

@@ -8,7 +8,7 @@ import (
 )
 
 type cryptoDataHandler interface {
-	HandleData([]byte, protocol.EncryptionLevel)
+	HandleMessage([]byte, protocol.EncryptionLevel)
 }
 
 type cryptoStreamManager struct {
@@ -48,6 +48,6 @@ func (m *cryptoStreamManager) HandleCryptoFrame(frame *wire.CryptoFrame, encLeve
 		if data == nil {
 			return nil
 		}
-		m.cryptoHandler.HandleData(data, encLevel)
+		m.cryptoHandler.HandleMessage(data, encLevel)
 	}
 }

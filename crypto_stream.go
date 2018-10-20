@@ -20,7 +20,8 @@ type cryptoStream interface {
 }
 
 type cryptoStreamImpl struct {
-	queue *frameSorter
+	queue  *frameSorter
+	msgBuf []byte
 
 	writeOffset protocol.ByteCount
 	writeBuf    []byte
@@ -36,13 +37,31 @@ func (s *cryptoStreamImpl) HandleCryptoFrame(f *wire.CryptoFrame) error {
 	if maxOffset := f.Offset + protocol.ByteCount(len(f.Data)); maxOffset > protocol.MaxCryptoStreamOffset {
 		return fmt.Errorf("received invalid offset %d on crypto stream, maximum allowed %d", maxOffset, protocol.MaxCryptoStreamOffset)
 	}
-	return s.queue.Push(f.Data, f.Offset, false)
+	if err := s.queue.Push(f.Data, f.Offset, false); err != nil {
+		return err
+	}
+	for {
+		data, _ := s.queue.Pop()
+		if data == nil {
+			return nil
+		}
+		s.msgBuf = append(s.msgBuf, data...)
+	}
 }
 
 // GetCryptoData retrieves data that was received in CRYPTO frames
 func (s *cryptoStreamImpl) GetCryptoData() []byte {
-	data, _ := s.queue.Pop()
-	return data
+	if len(s.msgBuf) < 4 {
+		return nil
+	}
+	msgLen := 4 + int(s.msgBuf[1])<<16 + int(s.msgBuf[2])<<8 + int(s.msgBuf[3])
+	if len(s.msgBuf) < msgLen {
+		return nil
+	}
+	msg := make([]byte, msgLen)
+	copy(msg, s.msgBuf[:msgLen])
+	s.msgBuf = s.msgBuf[msgLen:]
+	return msg
 }
 
 // Writes writes data that should be sent out in CRYPTO frames
