@@ -44,7 +44,7 @@ type CryptoSetup interface {
 type CryptoSetupTLS interface {
 	baseCryptoSetup
 
-	HandleMessage([]byte, protocol.EncryptionLevel)
+	HandleMessage([]byte, protocol.EncryptionLevel) bool
 	OpenInitial(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)
 	OpenHandshake(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)
 	Open1RTT(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)

@@ -271,19 +271,20 @@ func (h *cryptoSetupTLS) RunHandshake() error {
 
 // handleMessage handles a TLS handshake message.
 // It is called by the crypto streams when a new message is available.
-func (h *cryptoSetupTLS) HandleMessage(data []byte, encLevel protocol.EncryptionLevel) {
+// It returns if it is done with messages on the same encryption level.
+func (h *cryptoSetupTLS) HandleMessage(data []byte, encLevel protocol.EncryptionLevel) bool /* stream finished */ {
 	msgType := messageType(data[0])
 	h.logger.Debugf("Received %s message (%d bytes, encryption level: %s)", msgType, len(data), encLevel)
 	if err := h.checkEncryptionLevel(msgType, encLevel); err != nil {
 		h.messageErrChan <- err
-		return
+		return false
 	}
 	h.messageChan <- data
 	switch h.perspective {
 	case protocol.PerspectiveClient:
-		h.handleMessageForClient(msgType)
+		return h.handleMessageForClient(msgType)
 	case protocol.PerspectiveServer:
-		h.handleMessageForServer(msgType)
+		return h.handleMessageForServer(msgType)
 	default:
 		panic("")
 	}
@@ -310,78 +311,81 @@ func (h *cryptoSetupTLS) checkEncryptionLevel(msgType messageType, encLevel prot
 	return nil
 }
 
-func (h *cryptoSetupTLS) handleMessageForServer(msgType messageType) {
+func (h *cryptoSetupTLS) handleMessageForServer(msgType messageType) bool {
 	switch msgType {
 	case typeClientHello:
 		select {
 		case params := <-h.receivedTransportParams:
 			h.handleParamsCallback(&params)
 		case <-h.handshakeErrChan:
-			return
+			return false
 		}
 		// get the handshake write key
 		select {
 		case <-h.receivedWriteKey:
 		case <-h.handshakeErrChan:
-			return
+			return false
 		}
 		// get the 1-RTT write key
 		select {
 		case <-h.receivedWriteKey:
 		case <-h.handshakeErrChan:
-			return
+			return false
 		}
 		// get the handshake read key
 		// TODO: check that the initial stream doesn't have any more data
 		select {
 		case <-h.receivedReadKey:
 		case <-h.handshakeErrChan:
-			return
+			return false
 		}
 		h.handshakeEvent <- struct{}{}
+		return true
 	case typeCertificate, typeCertificateVerify:
 		// nothing to do
+		return false
 	case typeFinished:
 		// get the 1-RTT read key
-		// TODO: check that the handshake stream doesn't have any more data
 		select {
 		case <-h.receivedReadKey:
 		case <-h.handshakeErrChan:
-			return
+			return false
 		}
 		h.handshakeEvent <- struct{}{}
+		return true
 	default:
 		panic("unexpected handshake message")
 	}
 }
 
-func (h *cryptoSetupTLS) handleMessageForClient(msgType messageType) {
+func (h *cryptoSetupTLS) handleMessageForClient(msgType messageType) bool {
 	switch msgType {
 	case typeServerHello:
 		// get the handshake read key
-		// TODO: check that the initial stream doesn't have any more data
 		select {
 		case <-h.receivedReadKey:
 		case <-h.handshakeErrChan:
-			return
+			return false
 		}
 		h.handshakeEvent <- struct{}{}
+		return true
 	case typeEncryptedExtensions:
 		select {
 		case params := <-h.receivedTransportParams:
 			h.handleParamsCallback(&params)
 		case <-h.handshakeErrChan:
-			return
+			return false
 		}
+		return false
 	case typeCertificateRequest, typeCertificate, typeCertificateVerify:
 		// nothing to do
+		return false
 	case typeFinished:
 		// get the handshake write key
-		// TODO: check that the initial stream doesn't have any more data
 		select {
 		case <-h.receivedWriteKey:
 		case <-h.handshakeErrChan:
-			return
+			return false
 		}
 		// While the order of these two is not defined by the TLS spec,
 		// we have to do it on the same order as our TLS library does it.
@@ -389,16 +393,16 @@ func (h *cryptoSetupTLS) handleMessageForClient(msgType messageType) {
 		select {
 		case <-h.receivedWriteKey:
 		case <-h.handshakeErrChan:
-			return
+			return false
 		}
 		// get the 1-RTT read key
 		select {
 		case <-h.receivedReadKey:
 		case <-h.handshakeErrChan:
-			return
+			return false
 		}
-		// TODO: check that the handshake stream doesn't have any more data
 		h.handshakeEvent <- struct{}{}
+		return true
 	default:
 		panic("unexpected handshake message: ")
 	}

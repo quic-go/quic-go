@@ -89,6 +89,52 @@ var _ = Describe("Crypto Stream", func() {
 			Expect(str.GetCryptoData()).To(Equal(msg))
 			Expect(str.GetCryptoData()).To(BeNil())
 		})
+
+		Context("finishing", func() {
+			It("errors if there's still data to read after finishing", func() {
+				Expect(str.HandleCryptoFrame(&wire.CryptoFrame{
+					Data:   createHandshakeMessage(5),
+					Offset: 10,
+				})).To(Succeed())
+				err := str.Finish()
+				Expect(err).To(MatchError("encryption level changed, but crypto stream has more data to read"))
+			})
+
+			It("works with reordered data", func() {
+				f1 := &wire.CryptoFrame{
+					Data: []byte("foo"),
+				}
+				f2 := &wire.CryptoFrame{
+					Offset: 3,
+					Data:   []byte("bar"),
+				}
+				Expect(str.HandleCryptoFrame(f2)).To(Succeed())
+				Expect(str.HandleCryptoFrame(f1)).To(Succeed())
+				Expect(str.Finish()).To(Succeed())
+				Expect(str.HandleCryptoFrame(f2)).To(Succeed())
+			})
+
+			It("rejects new crypto data after finishing", func() {
+				Expect(str.Finish()).To(Succeed())
+				err := str.HandleCryptoFrame(&wire.CryptoFrame{
+					Data: createHandshakeMessage(5),
+				})
+				Expect(err).To(MatchError("received crypto data after change of encryption level"))
+			})
+
+			It("ignores crypto data below the maximum offset received before finishing", func() {
+				msg := createHandshakeMessage(15)
+				Expect(str.HandleCryptoFrame(&wire.CryptoFrame{
+					Data: msg,
+				})).To(Succeed())
+				Expect(str.GetCryptoData()).To(Equal(msg))
+				Expect(str.Finish()).To(Succeed())
+				Expect(str.HandleCryptoFrame(&wire.CryptoFrame{
+					Offset: protocol.ByteCount(len(msg) - 6),
+					Data:   []byte("foobar"),
+				})).To(Succeed())
+			})
+		})
 	})
 
 	Context("writing data", func() {
