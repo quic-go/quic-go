@@ -43,8 +43,9 @@ type receiveStream struct {
 	canceledRead      bool // set when CancelRead() is called
 	resetRemotely     bool // set when HandleRstStreamFrame() is called
 
-	readChan     chan struct{}
-	readDeadline time.Time
+	readChan      chan struct{}
+	deadline      time.Time
+	deadlineTimer *time.Timer // initialized by SetReadDeadline()
 
 	flowController flowcontrol.StreamFlowController
 	version        protocol.VersionNumber
@@ -120,8 +121,7 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 				return false, bytesRead, s.resetRemotelyErr
 			}
 
-			deadline := s.readDeadline
-			if !deadline.IsZero() && !time.Now().Before(deadline) {
+			if !s.deadline.IsZero() && !time.Now().Before(s.deadline) {
 				return false, bytesRead, errDeadline
 			}
 
@@ -130,12 +130,12 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 			}
 
 			s.mutex.Unlock()
-			if deadline.IsZero() {
+			if s.deadline.IsZero() {
 				<-s.readChan
 			} else {
 				select {
 				case <-s.readChan:
-				case <-time.After(time.Until(deadline)):
+				case <-s.deadlineTimer.C:
 				}
 			}
 			s.mutex.Lock()
@@ -272,13 +272,22 @@ func (s *receiveStream) onClose(offset protocol.ByteCount) {
 
 func (s *receiveStream) SetReadDeadline(t time.Time) error {
 	s.mutex.Lock()
-	oldDeadline := s.readDeadline
-	s.readDeadline = t
-	s.mutex.Unlock()
-	// if the new deadline is before the currently set deadline, wake up Read()
-	if t.Before(oldDeadline) {
+	defer s.mutex.Unlock()
+	s.deadline = t
+	if s.deadline.IsZero() { // skip if there's no deadline to set
 		s.signalRead()
+		return nil
 	}
+	// Lazily initialize the deadline timer.
+	if s.deadlineTimer == nil {
+		s.deadlineTimer = time.NewTimer(time.Until(t))
+		return nil
+	}
+	// reset the timer to the new deadline
+	if !s.deadlineTimer.Stop() {
+		<-s.deadlineTimer.C
+	}
+	s.deadlineTimer.Reset(time.Until(t))
 	return nil
 }
 

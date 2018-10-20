@@ -255,6 +255,21 @@ var _ = Describe("Send Stream", func() {
 				Expect(time.Now()).To(BeTemporally("~", deadline, scaleDuration(20*time.Millisecond)))
 			})
 
+			It("unblocks when the deadline is changed to the past", func() {
+				mockSender.EXPECT().onHasStreamData(streamID)
+				str.SetWriteDeadline(time.Now().Add(time.Hour))
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					_, err := str.Write([]byte("foobar"))
+					Expect(err).To(MatchError(errDeadline))
+					close(done)
+				}()
+				Consistently(done).ShouldNot(BeClosed())
+				str.SetWriteDeadline(time.Now().Add(-time.Hour))
+				Eventually(done).Should(BeClosed())
+			})
+
 			It("returns the number of bytes written, when the deadline expires", func() {
 				mockSender.EXPECT().onHasStreamData(streamID)
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(10000)).AnyTimes()
