@@ -12,40 +12,53 @@ var _ = Describe("Crypto Stream Manager", func() {
 	var (
 		csm *cryptoStreamManager
 		cs  *MockCryptoDataHandler
+
+		initialStream   *MockCryptoStream
+		handshakeStream *MockCryptoStream
 	)
 
 	BeforeEach(func() {
-		initialStream := newCryptoStream()
-		handshakeStream := newCryptoStream()
+		initialStream = NewMockCryptoStream(mockCtrl)
+		handshakeStream = NewMockCryptoStream(mockCtrl)
 		cs = NewMockCryptoDataHandler(mockCtrl)
 		csm = newCryptoStreamManager(cs, initialStream, handshakeStream)
 	})
 
-	It("passes messages to the right stream", func() {
-		initialMsg := createHandshakeMessage(10)
-		handshakeMsg := createHandshakeMessage(20)
+	It("passes messages to the initial stream", func() {
+		cf := &wire.CryptoFrame{Data: []byte("foobar")}
+		initialStream.EXPECT().HandleCryptoFrame(cf)
+		initialStream.EXPECT().GetCryptoData().Return([]byte("foobar"))
+		initialStream.EXPECT().GetCryptoData()
+		cs.EXPECT().HandleMessage([]byte("foobar"), protocol.EncryptionInitial)
+		Expect(csm.HandleCryptoFrame(cf, protocol.EncryptionInitial)).To(Succeed())
+	})
 
-		// only pass in a part of the message, to make sure they get assembled in the right crypto stream
-		Expect(csm.HandleCryptoFrame(&wire.CryptoFrame{
-			Data: initialMsg[:5],
-		}, protocol.EncryptionInitial)).To(Succeed())
-		Expect(csm.HandleCryptoFrame(&wire.CryptoFrame{
-			Data: handshakeMsg[:5],
-		}, protocol.EncryptionHandshake)).To(Succeed())
+	It("passes messages to the handshake stream", func() {
+		cf := &wire.CryptoFrame{Data: []byte("foobar")}
+		handshakeStream.EXPECT().HandleCryptoFrame(cf)
+		handshakeStream.EXPECT().GetCryptoData().Return([]byte("foobar"))
+		handshakeStream.EXPECT().GetCryptoData()
+		cs.EXPECT().HandleMessage([]byte("foobar"), protocol.EncryptionHandshake)
+		Expect(csm.HandleCryptoFrame(cf, protocol.EncryptionHandshake)).To(Succeed())
+	})
 
-		// now pass in the rest of the initial message
-		cs.EXPECT().HandleMessage(initialMsg, protocol.EncryptionInitial)
-		Expect(csm.HandleCryptoFrame(&wire.CryptoFrame{
-			Data:   initialMsg[5:],
-			Offset: 5,
-		}, protocol.EncryptionInitial)).To(Succeed())
+	It("doesn't call the message handler, if there's no message", func() {
+		cf := &wire.CryptoFrame{Data: []byte("foobar")}
+		handshakeStream.EXPECT().HandleCryptoFrame(cf)
+		handshakeStream.EXPECT().GetCryptoData() // don't return any data to handle
+		// don't EXPECT any calls to HandleMessage()
+		Expect(csm.HandleCryptoFrame(cf, protocol.EncryptionHandshake)).To(Succeed())
+	})
 
-		// now pass in the rest of the handshake message
-		cs.EXPECT().HandleMessage(handshakeMsg, protocol.EncryptionHandshake)
-		Expect(csm.HandleCryptoFrame(&wire.CryptoFrame{
-			Data:   handshakeMsg[5:],
-			Offset: 5,
-		}, protocol.EncryptionHandshake)).To(Succeed())
+	It("processes all messages", func() {
+		cf := &wire.CryptoFrame{Data: []byte("foobar")}
+		handshakeStream.EXPECT().HandleCryptoFrame(cf)
+		handshakeStream.EXPECT().GetCryptoData().Return([]byte("foo"))
+		handshakeStream.EXPECT().GetCryptoData().Return([]byte("bar"))
+		handshakeStream.EXPECT().GetCryptoData()
+		cs.EXPECT().HandleMessage([]byte("foo"), protocol.EncryptionHandshake)
+		cs.EXPECT().HandleMessage([]byte("bar"), protocol.EncryptionHandshake)
+		Expect(csm.HandleCryptoFrame(cf, protocol.EncryptionHandshake)).To(Succeed())
 	})
 
 	It("errors for unknown encryption levels", func() {
