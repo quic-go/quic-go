@@ -63,8 +63,6 @@ type cryptoSetupTLS struct {
 	handshakeErrChan chan struct{}
 	// HandleData() sends errors on the messageErrChan
 	messageErrChan chan error
-	// handshakeEvent signals a change of encryption level to the session
-	handshakeEvent chan<- struct{}
 	// handshakeComplete is closed when the handshake completes
 	handshakeComplete chan<- struct{}
 	// transport parameters are sent on the receivedTransportParams, as soon as they are received
@@ -108,7 +106,6 @@ func NewCryptoSetupTLSClient(
 	connID protocol.ConnectionID,
 	params *TransportParameters,
 	handleParams func(*TransportParameters),
-	handshakeEvent chan<- struct{},
 	handshakeComplete chan<- struct{},
 	tlsConf *tls.Config,
 	initialVersion protocol.VersionNumber,
@@ -123,7 +120,6 @@ func NewCryptoSetupTLSClient(
 		connID,
 		params,
 		handleParams,
-		handshakeEvent,
 		handshakeComplete,
 		tlsConf,
 		versionInfo{
@@ -143,7 +139,6 @@ func NewCryptoSetupTLSServer(
 	connID protocol.ConnectionID,
 	params *TransportParameters,
 	handleParams func(*TransportParameters),
-	handshakeEvent chan<- struct{},
 	handshakeComplete chan<- struct{},
 	tlsConf *tls.Config,
 	supportedVersions []protocol.VersionNumber,
@@ -157,7 +152,6 @@ func NewCryptoSetupTLSServer(
 		connID,
 		params,
 		handleParams,
-		handshakeEvent,
 		handshakeComplete,
 		tlsConf,
 		versionInfo{
@@ -176,7 +170,6 @@ func newCryptoSetupTLS(
 	connID protocol.ConnectionID,
 	params *TransportParameters,
 	handleParams func(*TransportParameters),
-	handshakeEvent chan<- struct{},
 	handshakeComplete chan<- struct{},
 	tlsConf *tls.Config,
 	versionInfo versionInfo,
@@ -194,7 +187,6 @@ func newCryptoSetupTLS(
 		readEncLevel:           protocol.EncryptionInitial,
 		writeEncLevel:          protocol.EncryptionInitial,
 		handleParamsCallback:   handleParams,
-		handshakeEvent:         handshakeEvent,
 		handshakeComplete:      handshakeComplete,
 		logger:                 logger,
 		perspective:            perspective,
@@ -339,7 +331,6 @@ func (h *cryptoSetupTLS) handleMessageForServer(msgType messageType) bool {
 		case <-h.handshakeErrChan:
 			return false
 		}
-		h.handshakeEvent <- struct{}{}
 		return true
 	case typeCertificate, typeCertificateVerify:
 		// nothing to do
@@ -351,7 +342,6 @@ func (h *cryptoSetupTLS) handleMessageForServer(msgType messageType) bool {
 		case <-h.handshakeErrChan:
 			return false
 		}
-		h.handshakeEvent <- struct{}{}
 		return true
 	default:
 		panic("unexpected handshake message")
@@ -367,7 +357,6 @@ func (h *cryptoSetupTLS) handleMessageForClient(msgType messageType) bool {
 		case <-h.handshakeErrChan:
 			return false
 		}
-		h.handshakeEvent <- struct{}{}
 		return true
 	case typeEncryptedExtensions:
 		select {
@@ -401,7 +390,6 @@ func (h *cryptoSetupTLS) handleMessageForClient(msgType messageType) bool {
 		case <-h.handshakeErrChan:
 			return false
 		}
-		h.handshakeEvent <- struct{}{}
 		return true
 	default:
 		panic("unexpected handshake message: ")

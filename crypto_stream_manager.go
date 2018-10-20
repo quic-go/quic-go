@@ -30,7 +30,7 @@ func newCryptoStreamManager(
 	}
 }
 
-func (m *cryptoStreamManager) HandleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.EncryptionLevel) error {
+func (m *cryptoStreamManager) HandleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.EncryptionLevel) (bool /* encryption level changed */, error) {
 	var str cryptoStream
 	switch encLevel {
 	case protocol.EncryptionInitial:
@@ -38,18 +38,18 @@ func (m *cryptoStreamManager) HandleCryptoFrame(frame *wire.CryptoFrame, encLeve
 	case protocol.EncryptionHandshake:
 		str = m.handshakeStream
 	default:
-		return fmt.Errorf("received CRYPTO frame with unexpected encryption level: %s", encLevel)
+		return false, fmt.Errorf("received CRYPTO frame with unexpected encryption level: %s", encLevel)
 	}
 	if err := str.HandleCryptoFrame(frame); err != nil {
-		return err
+		return false, err
 	}
 	for {
 		data := str.GetCryptoData()
 		if data == nil {
-			return nil
+			return false, nil
 		}
 		if encLevelFinished := m.cryptoHandler.HandleMessage(data, encLevel); encLevelFinished {
-			return str.Finish()
+			return true, str.Finish()
 		}
 	}
 }
