@@ -22,8 +22,9 @@ var _ = Describe("Transport Parameters", func() {
 			MaxBidiStreams:                 1337,
 			MaxUniStreams:                  7331,
 			IdleTimeout:                    42 * time.Second,
+			OriginalConnectionID:           protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
 		}
-		Expect(p.String()).To(Equal("&handshake.TransportParameters{InitialMaxStreamDataBidiLocal: 0x1234, InitialMaxStreamDataBidiRemote: 0x2345, InitialMaxStreamDataUni: 0x3456, InitialMaxData: 0x4567, MaxBidiStreams: 1337, MaxUniStreams: 7331, IdleTimeout: 42s}"))
+		Expect(p.String()).To(Equal("&handshake.TransportParameters{OriginalConnectionID: 0xdeadbeef, InitialMaxStreamDataBidiLocal: 0x1234, InitialMaxStreamDataBidiRemote: 0x2345, InitialMaxStreamDataUni: 0x3456, InitialMaxData: 0x4567, MaxBidiStreams: 1337, MaxUniStreams: 7331, IdleTimeout: 42s}"))
 	})
 
 	getRandomValue := func() uint64 {
@@ -43,6 +44,7 @@ var _ = Describe("Transport Parameters", func() {
 			MaxUniStreams:                  getRandomValue(),
 			DisableMigration:               true,
 			StatelessResetToken:            bytes.Repeat([]byte{100}, 16),
+			OriginalConnectionID:           protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
 		}
 		b := &bytes.Buffer{}
 		params.marshal(b)
@@ -58,6 +60,7 @@ var _ = Describe("Transport Parameters", func() {
 		Expect(p.IdleTimeout).To(Equal(params.IdleTimeout))
 		Expect(p.DisableMigration).To(Equal(params.DisableMigration))
 		Expect(p.StatelessResetToken).To(Equal(params.StatelessResetToken))
+		Expect(p.OriginalConnectionID).To(Equal(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}))
 	})
 
 	It("errors when the stateless_reset_token has the wrong length", func() {
@@ -166,5 +169,15 @@ var _ = Describe("Transport Parameters", func() {
 		params.marshal(b)
 		p := &TransportParameters{}
 		Expect(p.unmarshal(b.Bytes(), protocol.PerspectiveClient)).To(MatchError("client sent a stateless_reset_token"))
+	})
+
+	It("errors if the client sent a stateless_reset_token", func() {
+		params := &TransportParameters{
+			OriginalConnectionID: protocol.ConnectionID{0xca, 0xfe},
+		}
+		b := &bytes.Buffer{}
+		params.marshal(b)
+		p := &TransportParameters{}
+		Expect(p.unmarshal(b.Bytes(), protocol.PerspectiveClient)).To(MatchError("client sent an original_connection_id"))
 	})
 })

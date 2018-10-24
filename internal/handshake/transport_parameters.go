@@ -15,6 +15,7 @@ import (
 type transportParameterID uint16
 
 const (
+	originalConnectionIDParameterID           transportParameterID = 0x0
 	idleTimeoutParameterID                    transportParameterID = 0x1
 	statelessResetTokenParameterID            transportParameterID = 0x2
 	maxPacketSizeParameterID                  transportParameterID = 0x3
@@ -39,9 +40,11 @@ type TransportParameters struct {
 	MaxUniStreams  uint64
 	MaxBidiStreams uint64
 
-	IdleTimeout         time.Duration
-	DisableMigration    bool
-	StatelessResetToken []byte
+	IdleTimeout      time.Duration
+	DisableMigration bool
+
+	StatelessResetToken  []byte
+	OriginalConnectionID protocol.ConnectionID
 }
 
 func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective) error {
@@ -86,6 +89,11 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 				b := make([]byte, 16)
 				r.Read(b)
 				p.StatelessResetToken = b
+			case originalConnectionIDParameterID:
+				if sentBy == protocol.PerspectiveClient {
+					return errors.New("client sent an original_connection_id")
+				}
+				p.OriginalConnectionID, _ = protocol.ReadConnectionID(r, int(paramLen))
 			default:
 				r.Seek(int64(paramLen), io.SeekCurrent)
 			}
@@ -188,9 +196,15 @@ func (p *TransportParameters) marshal(b *bytes.Buffer) {
 		utils.BigEndian.WriteUint16(b, uint16(len(p.StatelessResetToken))) // should always be 16 bytes
 		b.Write(p.StatelessResetToken)
 	}
+	// original_connection_id
+	if p.OriginalConnectionID.Len() > 0 {
+		utils.BigEndian.WriteUint16(b, uint16(originalConnectionIDParameterID))
+		utils.BigEndian.WriteUint16(b, uint16(p.OriginalConnectionID.Len()))
+		b.Write(p.OriginalConnectionID.Bytes())
+	}
 }
 
 // String returns a string representation, intended for logging.
 func (p *TransportParameters) String() string {
-	return fmt.Sprintf("&handshake.TransportParameters{InitialMaxStreamDataBidiLocal: %#x, InitialMaxStreamDataBidiRemote: %#x, InitialMaxStreamDataUni: %#x, InitialMaxData: %#x, MaxBidiStreams: %d, MaxUniStreams: %d, IdleTimeout: %s}", p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreams, p.MaxUniStreams, p.IdleTimeout)
+	return fmt.Sprintf("&handshake.TransportParameters{OriginalConnectionID: %s, InitialMaxStreamDataBidiLocal: %#x, InitialMaxStreamDataBidiRemote: %#x, InitialMaxStreamDataUni: %#x, InitialMaxData: %#x, MaxBidiStreams: %d, MaxUniStreams: %d, IdleTimeout: %s}", p.OriginalConnectionID, p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreams, p.MaxUniStreams, p.IdleTimeout)
 }
