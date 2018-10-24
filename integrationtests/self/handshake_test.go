@@ -91,7 +91,7 @@ var _ = Describe("Handshake tests", func() {
 	})
 
 	Context("Certifiate validation", func() {
-		for _, v := range []protocol.VersionNumber{protocol.Version39, protocol.VersionTLS} {
+		for _, v := range protocol.SupportedVersions {
 			version := v
 
 			Context(fmt.Sprintf("using %s", version), func() {

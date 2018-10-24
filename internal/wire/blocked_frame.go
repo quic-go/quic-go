@@ -27,9 +27,6 @@ func parseBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*BlockedFrame
 }
 
 func (f *BlockedFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
-	if !version.UsesIETFFrameFormat() {
-		return (&blockedFrameLegacy{}).Write(b, version)
-	}
 	typeByte := uint8(0x08)
 	b.WriteByte(typeByte)
 	utils.WriteVarInt(b, uint64(f.Offset))
@@ -38,8 +35,5 @@ func (f *BlockedFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) er
 
 // Length of a written frame
 func (f *BlockedFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
-	if !version.UsesIETFFrameFormat() {
-		return 1 + 4
-	}
 	return 1 + utils.VarIntLen(uint64(f.Offset))
 }

@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -123,13 +122,6 @@ func dialContext(
 	createdPacketConn bool,
 ) (Session, error) {
 	config = populateClientConfig(config, createdPacketConn)
-	if !createdPacketConn {
-		for _, v := range config.Versions {
-			if v == protocol.Version44 {
-				return nil, errors.New("Cannot multiplex connections using gQUIC 44, see https://groups.google.com/a/chromium.org/forum/#!topic/proto-quic/pE9NlLLjizE. Please disable gQUIC 44 in the quic.Config, or use DialAddr")
-			}
-		}
-	}
 	packetHandlers, err := getMultiplexer().AddConn(pconn, config.ConnectionIDLength)
 	if err != nil {
 		return nil, err
@@ -234,17 +226,11 @@ func populateClientConfig(config *Config, createdPacketConn bool) *Config {
 	if connIDLen == 0 && !createdPacketConn {
 		connIDLen = protocol.DefaultConnectionIDLength
 	}
-	for _, v := range versions {
-		if v == protocol.Version44 {
-			connIDLen = 0
-		}
-	}
 
 	return &Config{
 		Versions:                              versions,
 		HandshakeTimeout:                      handshakeTimeout,
 		IdleTimeout:                           idleTimeout,
-		RequestConnectionIDOmission:           config.RequestConnectionIDOmission,
 		ConnectionIDLength:                    connIDLen,
 		MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindow,
 		MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindow,
@@ -255,53 +241,22 @@ func populateClientConfig(config *Config, createdPacketConn bool) *Config {
 }
 
 func (c *client) generateConnectionIDs() error {
-	connIDLen := protocol.ConnectionIDLenGQUIC
-	if c.version.UsesTLS() {
-		connIDLen = c.config.ConnectionIDLength
-	}
-	srcConnID, err := generateConnectionID(connIDLen)
+	srcConnID, err := generateConnectionID(c.config.ConnectionIDLength)
 	if err != nil {
 		return err
 	}
-	destConnID := srcConnID
-	if c.version.UsesTLS() {
-		destConnID, err = generateConnectionIDForInitial()
-		if err != nil {
-			return err
-		}
+	destConnID, err := generateConnectionIDForInitial()
+	if err != nil {
+		return err
 	}
 	c.srcConnID = srcConnID
 	c.destConnID = destConnID
-	if c.version == protocol.Version44 {
-		c.srcConnID = nil
-	}
 	return nil
 }
 
 func (c *client) dial(ctx context.Context) error {
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
 
-	var err error
-	if c.version.UsesTLS() {
-		err = c.dialTLS(ctx)
-	} else {
-		err = c.dialGQUIC(ctx)
-	}
-	return err
-}
-
-func (c *client) dialGQUIC(ctx context.Context) error {
-	if err := c.createNewGQUICSession(); err != nil {
-		return err
-	}
-	err := c.establishSecureConnection(ctx)
-	if err == errCloseSessionForNewVersion {
-		return c.dial(ctx)
-	}
-	return err
-}
-
-func (c *client) dialTLS(ctx context.Context) error {
 	if err := c.createNewTLSSession(c.version); err != nil {
 		return err
 	}
@@ -315,9 +270,9 @@ func (c *client) dialTLS(ctx context.Context) error {
 // establishSecureConnection runs the session, and tries to establish a secure connection
 // It returns:
 // - errCloseSessionForNewVersion when the server sends a version negotiation packet
-// - handshake.ErrCloseSessionForRetry when the server performs a stateless retry (for IETF QUIC)
+// - handshake.ErrCloseSessionForRetry when the server performs a stateless retry
 // - any other error that might occur
-// - when the connection is secure (for gQUIC), or forward-secure (for IETF QUIC)
+// - when the connection is forward-secure
 func (c *client) establishSecureConnection(ctx context.Context) error {
 	errorChan := make(chan error, 1)
 
@@ -362,24 +317,9 @@ func (c *client) handlePacketImpl(p *receivedPacket) error {
 		return err
 	}
 
-	if !c.version.UsesIETFHeaderFormat() {
-		connID := p.header.DestConnectionID
-		// reject packets with truncated connection id if we didn't request truncation
-		if !c.config.RequestConnectionIDOmission && connID.Len() == 0 {
-			return errors.New("received packet with truncated connection ID, but didn't request truncation")
-		}
-		// reject packets with the wrong connection ID
-		if connID.Len() > 0 && !connID.Equal(c.srcConnID) {
-			return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", connID, c.srcConnID)
-		}
-		if p.header.ResetFlag {
-			return c.handlePublicReset(p)
-		}
-	} else {
-		// reject packets with the wrong connection ID
-		if !p.header.DestConnectionID.Equal(c.srcConnID) {
-			return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", p.header.DestConnectionID, c.srcConnID)
-		}
+	// reject packets with the wrong connection ID
+	if !p.header.DestConnectionID.Equal(c.srcConnID) {
+		return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", p.header.DestConnectionID, c.srcConnID)
 	}
 
 	if p.header.Type == protocol.PacketTypeRetry {
@@ -394,22 +334,6 @@ func (c *client) handlePacketImpl(p *receivedPacket) error {
 	}
 
 	c.session.handlePacket(p)
-	return nil
-}
-
-func (c *client) handlePublicReset(p *receivedPacket) error {
-	cr := c.conn.RemoteAddr()
-	// check if the remote address and the connection ID match
-	// otherwise this might be an attacker trying to inject a PUBLIC_RESET to kill the connection
-	if cr.Network() != p.remoteAddr.Network() || cr.String() != p.remoteAddr.String() || !p.header.DestConnectionID.Equal(c.srcConnID) {
-		return errors.New("Received a spoofed Public Reset")
-	}
-	pr, err := wire.ParsePublicReset(bytes.NewReader(p.data))
-	if err != nil {
-		return fmt.Errorf("Received a Public Reset. An error occurred parsing the packet: %s", err)
-	}
-	c.session.closeRemote(qerr.Error(qerr.PublicReset, fmt.Sprintf("Received a Public Reset for packet number %#x", pr.RejectedPacketNumber)))
-	c.logger.Infof("Received Public Reset, rejected packet number: %#x", pr.RejectedPacketNumber)
 	return nil
 }
 
@@ -471,42 +395,11 @@ func (c *client) handleRetryPacket(hdr *wire.Header) {
 	c.session.destroy(errCloseSessionForRetry)
 }
 
-func (c *client) createNewGQUICSession() error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	runner := &runner{
-		onHandshakeCompleteImpl: func(_ Session) { close(c.handshakeChan) },
-		removeConnectionIDImpl:  c.closeCallback,
-	}
-	sess, err := newClientSession(
-		c.conn,
-		runner,
-		c.version,
-		c.destConnID,
-		c.srcConnID,
-		c.tlsConf,
-		c.config,
-		c.initialVersion,
-		c.negotiatedVersions,
-		c.logger,
-	)
-	if err != nil {
-		return err
-	}
-	c.session = sess
-	c.packetHandlers.Add(c.srcConnID, c)
-	if c.config.RequestConnectionIDOmission {
-		c.packetHandlers.Add(protocol.ConnectionID{}, c)
-	}
-	return nil
-}
-
 func (c *client) createNewTLSSession(version protocol.VersionNumber) error {
 	params := &handshake.TransportParameters{
 		StreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
 		ConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
 		IdleTimeout:                 c.config.IdleTimeout,
-		OmitConnectionID:            c.config.RequestConnectionIDOmission,
 		MaxBidiStreams:              uint16(c.config.MaxIncomingStreams),
 		MaxUniStreams:               uint16(c.config.MaxIncomingUniStreams),
 		DisableMigration:            true,
@@ -518,7 +411,7 @@ func (c *client) createNewTLSSession(version protocol.VersionNumber) error {
 		onHandshakeCompleteImpl: func(_ Session) { close(c.handshakeChan) },
 		removeConnectionIDImpl:  c.closeCallback,
 	}
-	sess, err := newTLSClientSession(
+	sess, err := newClientSession(
 		c.conn,
 		runner,
 		c.token,

@@ -17,14 +17,15 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 		handler    *extensionHandlerClient
 		paramsChan <-chan TransportParameters
 	)
+	version := protocol.VersionNumber(0x42)
 
 	BeforeEach(func() {
 		var h tlsExtensionHandler
 		h, paramsChan = newExtensionHandlerClient(
 			&TransportParameters{},
-			protocol.VersionWhatever,
+			version,
 			nil,
-			protocol.VersionWhatever,
+			version,
 			utils.DefaultLogger,
 		)
 		handler = h.(*extensionHandlerClient)
@@ -57,6 +58,7 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 				Type: quicTLSExtensionType,
 				Data: (&encryptedExtensionsTransportParameters{
 					Parameters:        params,
+					NegotiatedVersion: version,
 					SupportedVersions: []protocol.VersionNumber{handler.version},
 				}).Marshal(),
 			}

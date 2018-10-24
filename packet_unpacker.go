@@ -14,10 +14,6 @@ type unpackedPacket struct {
 	frames          []wire.Frame
 }
 
-type gQUICAEAD interface {
-	Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, protocol.EncryptionLevel, error)
-}
-
 type quicAEAD interface {
 	OpenInitial(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)
 	OpenHandshake(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)
@@ -49,40 +45,7 @@ func (u *packetUnpackerBase) parseFrames(decrypted []byte, hdr *wire.Header) ([]
 	return fs, nil
 }
 
-// The packetUnpackerGQUIC unpacks gQUIC packets.
-type packetUnpackerGQUIC struct {
-	packetUnpackerBase
-	aead gQUICAEAD
-}
-
-var _ unpacker = &packetUnpackerGQUIC{}
-
-func newPacketUnpackerGQUIC(aead gQUICAEAD, version protocol.VersionNumber) unpacker {
-	return &packetUnpackerGQUIC{
-		packetUnpackerBase: packetUnpackerBase{version: version},
-		aead:               aead,
-	}
-}
-
-func (u *packetUnpackerGQUIC) Unpack(headerBinary []byte, hdr *wire.Header, data []byte) (*unpackedPacket, error) {
-	decrypted, encryptionLevel, err := u.aead.Open(data[:0], data, hdr.PacketNumber, headerBinary)
-	if err != nil {
-		// Wrap err in quicError so that public reset is sent by session
-		return nil, qerr.Error(qerr.DecryptionFailure, err.Error())
-	}
-
-	fs, err := u.parseFrames(decrypted, hdr)
-	if err != nil {
-		return nil, err
-	}
-
-	return &unpackedPacket{
-		encryptionLevel: encryptionLevel,
-		frames:          fs,
-	}, nil
-}
-
-// The packetUnpacker unpacks IETF QUIC packets.
+// The packetUnpacker unpacks QUIC packets.
 type packetUnpacker struct {
 	packetUnpackerBase
 	aead quicAEAD

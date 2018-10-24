@@ -45,15 +45,3 @@ func (m *MockAckFrameSource) GetAckFrame() *wire.AckFrame {
 func (mr *MockAckFrameSourceMockRecorder) GetAckFrame() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAckFrame", reflect.TypeOf((*MockAckFrameSource)(nil).GetAckFrame))
 }
-
-// GetStopWaitingFrame mocks base method
-func (m *MockAckFrameSource) GetStopWaitingFrame(arg0 bool) *wire.StopWaitingFrame {
-	ret := m.ctrl.Call(m, "GetStopWaitingFrame", arg0)
-	ret0, _ := ret[0].(*wire.StopWaitingFrame)
-	return ret0
-}
-
-// GetStopWaitingFrame indicates an expected call of GetStopWaitingFrame
-func (mr *MockAckFrameSourceMockRecorder) GetStopWaitingFrame(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStopWaitingFrame", reflect.TypeOf((*MockAckFrameSource)(nil).GetStopWaitingFrame), arg0)
-}

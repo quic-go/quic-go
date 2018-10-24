@@ -9,11 +9,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/qerr"
 )
-
-// errMalformedTag is returned when the tag value cannot be read
-var errMalformedTag = qerr.Error(qerr.InvalidCryptoMessageParameter, "malformed Tag value")
 
 // TransportParameters are parameters sent to the peer during the handshake
 type TransportParameters struct {
@@ -22,78 +18,12 @@ type TransportParameters struct {
 
 	MaxPacketSize protocol.ByteCount
 
-	MaxUniStreams  uint16 // only used for IETF QUIC
-	MaxBidiStreams uint16 // only used for IETF QUIC
-	MaxStreams     uint32 // only used for gQUIC
+	MaxUniStreams  uint16
+	MaxBidiStreams uint16
 
-	OmitConnectionID    bool // only used for gQUIC
 	IdleTimeout         time.Duration
-	DisableMigration    bool   // only used for IETF QUIC
-	StatelessResetToken []byte // only used for IETF QUIC
-}
-
-// readHelloMap reads the transport parameters from the tags sent in a gQUIC handshake message
-func readHelloMap(tags map[Tag][]byte) (*TransportParameters, error) {
-	params := &TransportParameters{}
-	if value, ok := tags[TagTCID]; ok {
-		v, err := utils.LittleEndian.ReadUint32(bytes.NewBuffer(value))
-		if err != nil {
-			return nil, errMalformedTag
-		}
-		params.OmitConnectionID = (v == 0)
-	}
-	if value, ok := tags[TagMIDS]; ok {
-		v, err := utils.LittleEndian.ReadUint32(bytes.NewBuffer(value))
-		if err != nil {
-			return nil, errMalformedTag
-		}
-		params.MaxStreams = v
-	}
-	if value, ok := tags[TagICSL]; ok {
-		v, err := utils.LittleEndian.ReadUint32(bytes.NewBuffer(value))
-		if err != nil {
-			return nil, errMalformedTag
-		}
-		params.IdleTimeout = utils.MaxDuration(protocol.MinRemoteIdleTimeout, time.Duration(v)*time.Second)
-	}
-	if value, ok := tags[TagSFCW]; ok {
-		v, err := utils.LittleEndian.ReadUint32(bytes.NewBuffer(value))
-		if err != nil {
-			return nil, errMalformedTag
-		}
-		params.StreamFlowControlWindow = protocol.ByteCount(v)
-	}
-	if value, ok := tags[TagCFCW]; ok {
-		v, err := utils.LittleEndian.ReadUint32(bytes.NewBuffer(value))
-		if err != nil {
-			return nil, errMalformedTag
-		}
-		params.ConnectionFlowControlWindow = protocol.ByteCount(v)
-	}
-	return params, nil
-}
-
-// GetHelloMap gets all parameters needed for the Hello message in the gQUIC handshake.
-func (p *TransportParameters) getHelloMap() map[Tag][]byte {
-	sfcw := bytes.NewBuffer([]byte{})
-	utils.LittleEndian.WriteUint32(sfcw, uint32(p.StreamFlowControlWindow))
-	cfcw := bytes.NewBuffer([]byte{})
-	utils.LittleEndian.WriteUint32(cfcw, uint32(p.ConnectionFlowControlWindow))
-	mids := bytes.NewBuffer([]byte{})
-	utils.LittleEndian.WriteUint32(mids, p.MaxStreams)
-	icsl := bytes.NewBuffer([]byte{})
-	utils.LittleEndian.WriteUint32(icsl, uint32(p.IdleTimeout/time.Second))
-
-	tags := map[Tag][]byte{
-		TagICSL: icsl.Bytes(),
-		TagMIDS: mids.Bytes(),
-		TagCFCW: cfcw.Bytes(),
-		TagSFCW: sfcw.Bytes(),
-	}
-	if p.OmitConnectionID {
-		tags[TagTCID] = []byte{0, 0, 0, 0}
-	}
-	return tags
+	DisableMigration    bool
+	StatelessResetToken []byte
 }
 
 func (p *TransportParameters) unmarshal(data []byte) error {
@@ -209,7 +139,6 @@ func (p *TransportParameters) marshal(b *bytes.Buffer) {
 }
 
 // String returns a string representation, intended for logging.
-// It should only used for IETF QUIC.
 func (p *TransportParameters) String() string {
 	return fmt.Sprintf("&handshake.TransportParameters{StreamFlowControlWindow: %#x, ConnectionFlowControlWindow: %#x, MaxBidiStreams: %d, MaxUniStreams: %d, IdleTimeout: %s}", p.StreamFlowControlWindow, p.ConnectionFlowControlWindow, p.MaxBidiStreams, p.MaxUniStreams, p.IdleTimeout)
 }

@@ -23,7 +23,7 @@ var _ = Describe("Packet packer", func() {
 		ackFramer       *MockAckFrameSource
 		initialStream   *MockCryptoStream
 		handshakeStream *MockCryptoStream
-		sealingManager  *MockSealingManagerLegacy
+		sealingManager  *MockSealingManager
 		sealer          *mocks.MockSealer
 		token           []byte
 	)
@@ -32,7 +32,7 @@ var _ = Describe("Packet packer", func() {
 		r := bytes.NewReader(data)
 		iHdr, err := wire.ParseInvariantHeader(r, 0)
 		Expect(err).ToNot(HaveOccurred())
-		hdr, err := iHdr.Parse(r, protocol.PerspectiveServer, versionIETFFrames)
+		hdr, err := iHdr.Parse(r, protocol.PerspectiveServer, protocol.VersionWhatever)
 		Expect(err).ToNot(HaveOccurred())
 		ExpectWithOffset(0, hdr.PayloadLen).To(BeEquivalentTo(r.Len()))
 	}
@@ -55,14 +55,14 @@ var _ = Describe("Packet packer", func() {
 
 	BeforeEach(func() {
 		rand.Seed(GinkgoRandomSeed())
-		version := versionIETFFrames
+		version := protocol.VersionWhatever
 		mockSender := NewMockStreamSender(mockCtrl)
 		mockSender.EXPECT().onHasStreamData(gomock.Any()).AnyTimes()
 		initialStream = NewMockCryptoStream(mockCtrl)
 		handshakeStream = NewMockCryptoStream(mockCtrl)
 		framer = NewMockFrameSource(mockCtrl)
 		ackFramer = NewMockAckFrameSource(mockCtrl)
-		sealingManager = NewMockSealingManagerLegacy(mockCtrl)
+		sealingManager = NewMockSealingManager(mockCtrl)
 		sealer = mocks.NewMockSealer(mockCtrl)
 		sealer.EXPECT().Overhead().Return(7).AnyTimes()
 		sealer.EXPECT().Seal(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(dst, src []byte, pn protocol.PacketNumber, associatedData []byte) []byte {
@@ -120,7 +120,7 @@ var _ = Describe("Packet packer", func() {
 			destConnID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
 			packer.srcConnID = srcConnID
 			packer.destConnID = destConnID
-			h := packer.getHeader(protocol.EncryptionSecure)
+			h := packer.getHeader(protocol.EncryptionHandshake)
 			Expect(h.SrcConnectionID).To(Equal(srcConnID))
 			Expect(h.DestConnectionID).To(Equal(destConnID))
 		})
@@ -675,7 +675,6 @@ var _ = Describe("Packet packer", func() {
 
 		It("packs a maximum size crypto packet", func() {
 			var f *wire.CryptoFrame
-			packer.version = versionIETFFrames
 			sealingManager.EXPECT().GetSealerWithEncryptionLevel(protocol.EncryptionHandshake).Return(sealer, nil)
 			ackFramer.EXPECT().GetAckFrame()
 			initialStream.EXPECT().HasData()
@@ -701,7 +700,6 @@ var _ = Describe("Packet packer", func() {
 			ackFramer.EXPECT().GetAckFrame()
 			initialStream.EXPECT().HasData().Return(true)
 			initialStream.EXPECT().PopCryptoFrame(gomock.Any()).Return(f)
-			packer.version = protocol.VersionTLS
 			packer.hasSentPacket = false
 			packer.perspective = protocol.PerspectiveClient
 			packet, err := packer.PackPacket()
@@ -782,7 +780,6 @@ var _ = Describe("Packet packer", func() {
 
 			It("packs a retransmission for an Initial packet", func() {
 				sealingManager.EXPECT().GetSealerWithEncryptionLevel(protocol.EncryptionInitial).Return(sealer, nil)
-				packer.version = versionIETFFrames
 				packer.perspective = protocol.PerspectiveClient
 				packet := &ackhandler.Packet{
 					PacketType:      protocol.PacketTypeInitial,

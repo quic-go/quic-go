@@ -164,9 +164,7 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 			s.flowController.AddBytesRead(protocol.ByteCount(m))
 		}
 		// increase the flow control window, if necessary
-		if !s.version.IsCryptoStream(s.streamID) {
-			s.flowController.MaybeQueueWindowUpdate()
-		}
+		s.flowController.MaybeQueueWindowUpdate()
 
 		if s.readPosInFrame >= len(s.currentFrame) && s.currentFrameIsLast {
 			s.finRead = true
@@ -194,12 +192,10 @@ func (s *receiveStream) CancelRead(errorCode protocol.ApplicationErrorCode) erro
 	s.canceledRead = true
 	s.cancelReadErr = fmt.Errorf("Read on stream %d canceled with error code %d", s.streamID, errorCode)
 	s.signalRead()
-	if s.version.UsesIETFFrameFormat() {
-		s.sender.queueControlFrame(&wire.StopSendingFrame{
-			StreamID:  s.streamID,
-			ErrorCode: errorCode,
-		})
-	}
+	s.sender.queueControlFrame(&wire.StopSendingFrame{
+		StreamID:  s.streamID,
+		ErrorCode: errorCode,
+	})
 	return nil
 }
 
@@ -236,12 +232,6 @@ func (s *receiveStream) handleRstStreamFrameImpl(frame *wire.RstStreamFrame) (bo
 	if err := s.flowController.UpdateHighestReceived(frame.ByteOffset, true); err != nil {
 		return false, err
 	}
-	// In gQUIC, error code 0 has a special meaning.
-	// The peer will reliably continue transmitting, but is not interested in reading from the stream.
-	// We should therefore just continue reading from the stream, until we encounter the FIN bit.
-	if !s.version.UsesIETFFrameFormat() && frame.ErrorCode == 0 {
-		return false, nil
-	}
 
 	// ignore duplicate RST_STREAM frames for this stream (after checking their final offset)
 	if s.resetRemotely {
@@ -258,16 +248,6 @@ func (s *receiveStream) handleRstStreamFrameImpl(frame *wire.RstStreamFrame) (bo
 
 func (s *receiveStream) CloseRemote(offset protocol.ByteCount) {
 	s.handleStreamFrame(&wire.StreamFrame{FinBit: true, Offset: offset})
-}
-
-func (s *receiveStream) onClose(offset protocol.ByteCount) {
-	if s.canceledRead && !s.version.UsesIETFFrameFormat() {
-		s.sender.queueControlFrame(&wire.RstStreamFrame{
-			StreamID:   s.streamID,
-			ByteOffset: offset,
-			ErrorCode:  0,
-		})
-	}
 }
 
 func (s *receiveStream) SetReadDeadline(t time.Time) error {

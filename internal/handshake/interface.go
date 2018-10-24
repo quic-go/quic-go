@@ -25,28 +25,17 @@ type tlsExtensionHandler interface {
 	ReceivedExtensions(msgType uint8, exts []qtls.Extension) error
 }
 
-type baseCryptoSetup interface {
+// CryptoSetup handles the handshake and protecting / unprotecting packets
+type CryptoSetup interface {
 	RunHandshake() error
+	io.Closer
+
+	HandleMessage([]byte, protocol.EncryptionLevel) bool
 	ConnectionState() ConnectionState
 
 	GetSealer() (protocol.EncryptionLevel, Sealer)
 	GetSealerWithEncryptionLevel(protocol.EncryptionLevel) (Sealer, error)
-}
 
-// CryptoSetup is the crypto setup used by gQUIC
-type CryptoSetup interface {
-	baseCryptoSetup
-
-	GetSealerForCryptoStream() (protocol.EncryptionLevel, Sealer)
-	Open(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, protocol.EncryptionLevel, error)
-}
-
-// CryptoSetupTLS is the crypto setup used by IETF QUIC
-type CryptoSetupTLS interface {
-	baseCryptoSetup
-
-	io.Closer
-	HandleMessage([]byte, protocol.EncryptionLevel) bool
 	OpenInitial(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)
 	OpenHandshake(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)
 	Open1RTT(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)

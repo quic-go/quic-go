@@ -56,9 +56,9 @@ var _ = Describe("NullAEAD using AES-GCM", func() {
 
 	It("seals and opens", func() {
 		connectionID := protocol.ConnectionID([]byte{0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef})
-		clientAEAD, err := newNullAEADAESGCM(connectionID, protocol.PerspectiveClient)
+		clientAEAD, err := NewNullAEAD(connectionID, protocol.PerspectiveClient)
 		Expect(err).ToNot(HaveOccurred())
-		serverAEAD, err := newNullAEADAESGCM(connectionID, protocol.PerspectiveServer)
+		serverAEAD, err := NewNullAEAD(connectionID, protocol.PerspectiveServer)
 		Expect(err).ToNot(HaveOccurred())
 
 		clientMessage := clientAEAD.Seal(nil, []byte("foobar"), 42, []byte("aad"))
@@ -74,9 +74,9 @@ var _ = Describe("NullAEAD using AES-GCM", func() {
 	It("doesn't work if initialized with different connection IDs", func() {
 		c1 := protocol.ConnectionID([]byte{0, 0, 0, 0, 0, 0, 0, 1})
 		c2 := protocol.ConnectionID([]byte{0, 0, 0, 0, 0, 0, 0, 2})
-		clientAEAD, err := newNullAEADAESGCM(c1, protocol.PerspectiveClient)
+		clientAEAD, err := NewNullAEAD(c1, protocol.PerspectiveClient)
 		Expect(err).ToNot(HaveOccurred())
-		serverAEAD, err := newNullAEADAESGCM(c2, protocol.PerspectiveServer)
+		serverAEAD, err := NewNullAEAD(c2, protocol.PerspectiveServer)
 		Expect(err).ToNot(HaveOccurred())
 
 		clientMessage := clientAEAD.Seal(nil, []byte("foobar"), 42, []byte("aad"))

@@ -52,10 +52,7 @@ type client struct {
 
 var _ http.RoundTripper = &client{}
 
-var defaultQuicConfig = &quic.Config{
-	RequestConnectionIDOmission: true,
-	KeepAlive:                   true,
-}
+var defaultQuicConfig = &quic.Config{KeepAlive: true}
 
 // newClient creates a new client
 func newClient(

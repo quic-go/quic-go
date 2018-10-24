@@ -2,7 +2,6 @@ package wire
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -19,15 +18,12 @@ func ParseNextFrame(r *bytes.Reader, hdr *Header, v protocol.VersionNumber) (Fra
 		}
 		r.UnreadByte()
 
-		if !v.UsesIETFFrameFormat() {
-			return parseGQUICFrame(r, typeByte, hdr, v)
-		}
-		return parseIETFFrame(r, typeByte, v)
+		return parseFrame(r, typeByte, v)
 	}
 	return nil, nil
 }
 
-func parseIETFFrame(r *bytes.Reader, typeByte byte, v protocol.VersionNumber) (Frame, error) {
+func parseFrame(r *bytes.Reader, typeByte byte, v protocol.VersionNumber) (Frame, error) {
 	var frame Frame
 	var err error
 	if typeByte&0xf8 == 0x10 {
@@ -106,65 +102,6 @@ func parseIETFFrame(r *bytes.Reader, typeByte byte, v protocol.VersionNumber) (F
 		if err != nil {
 			err = qerr.Error(qerr.InvalidFrameData, err.Error())
 		}
-	default:
-		err = qerr.Error(qerr.InvalidFrameData, fmt.Sprintf("unknown type byte 0x%x", typeByte))
-	}
-	return frame, err
-}
-
-func parseGQUICFrame(r *bytes.Reader, typeByte byte, hdr *Header, v protocol.VersionNumber) (Frame, error) {
-	var frame Frame
-	var err error
-	if typeByte&0x80 == 0x80 {
-		frame, err = parseStreamFrame(r, v)
-		if err != nil {
-			err = qerr.Error(qerr.InvalidStreamData, err.Error())
-		}
-		return frame, err
-	} else if typeByte&0xc0 == 0x40 {
-		frame, err = parseAckFrame(r, v)
-		if err != nil {
-			err = qerr.Error(qerr.InvalidAckData, err.Error())
-		}
-		return frame, err
-	}
-	switch typeByte {
-	case 0x1:
-		frame, err = parseRstStreamFrame(r, v)
-		if err != nil {
-			err = qerr.Error(qerr.InvalidRstStreamData, err.Error())
-		}
-	case 0x2:
-		frame, err = parseConnectionCloseFrame(r, v)
-		if err != nil {
-			err = qerr.Error(qerr.InvalidConnectionCloseData, err.Error())
-		}
-	case 0x3:
-		frame, err = parseGoawayFrame(r, v)
-		if err != nil {
-			err = qerr.Error(qerr.InvalidGoawayData, err.Error())
-		}
-	case 0x4:
-		frame, err = parseWindowUpdateFrame(r, v)
-		if err != nil {
-			err = qerr.Error(qerr.InvalidWindowUpdateData, err.Error())
-		}
-	case 0x5:
-		frame, err = parseBlockedFrameLegacy(r, v)
-		if err != nil {
-			err = qerr.Error(qerr.InvalidBlockedData, err.Error())
-		}
-	case 0x6:
-		if !v.UsesStopWaitingFrames() {
-			err = errors.New("STOP_WAITING frames not supported by this QUIC version")
-			break
-		}
-		frame, err = parseStopWaitingFrame(r, hdr.PacketNumber, hdr.PacketNumberLen, v)
-		if err != nil {
-			err = qerr.Error(qerr.InvalidStopWaitingData, err.Error())
-		}
-	case 0x7:
-		frame, err = parsePingFrame(r, v)
 	default:
 		err = qerr.Error(qerr.InvalidFrameData, fmt.Sprintf("unknown type byte 0x%x", typeByte))
 	}

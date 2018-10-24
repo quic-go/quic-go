@@ -13,6 +13,8 @@ import (
 // TODO: use the value sent in the transport parameters
 const ackDelayExponent = 3
 
+var errInvalidAckRanges = errors.New("AckFrame: ACK frame contains invalid ACK ranges")
+
 // An AckFrame is an ACK frame
 type AckFrame struct {
 	AckRanges []AckRange // has to be ordered. The highest ACK range goes first, the lowest ACK range goes last
@@ -21,10 +23,6 @@ type AckFrame struct {
 
 // parseAckFrame reads an ACK frame
 func parseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, error) {
-	if !version.UsesIETFFrameFormat() {
-		return parseAckFrameLegacy(r, version)
-	}
-
 	typeByte, err := r.ReadByte()
 	if err != nil {
 		return nil, err
@@ -104,10 +102,6 @@ func parseAckFrame(r *bytes.Reader, version protocol.VersionNumber) (*AckFrame, 
 
 // Write writes an ACK frame.
 func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
-	if !version.UsesIETFFrameFormat() {
-		return f.writeLegacy(b, version)
-	}
-
 	b.WriteByte(0x1a)
 	utils.WriteVarInt(b, uint64(f.LargestAcked()))
 	utils.WriteVarInt(b, encodeAckDelay(f.DelayTime))
@@ -130,10 +124,6 @@ func (f *AckFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error 
 
 // Length of a written frame
 func (f *AckFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
-	if !version.UsesIETFFrameFormat() {
-		return f.lengthLegacy(version)
-	}
-
 	largestAcked := f.AckRanges[0].Largest
 	numRanges := f.numEncodableAckRanges()
 

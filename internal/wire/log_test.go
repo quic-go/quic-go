@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 
 	. "github.com/onsi/ginkgo"
@@ -85,22 +84,5 @@ var _ = Describe("Frame logging", func() {
 		}
 		LogFrame(logger, frame, false)
 		Expect(buf.String()).To(ContainSubstring("\t<- &wire.AckFrame{LargestAcked: 0x8, LowestAcked: 0x2, AckRanges: {{Largest: 0x8, Smallest: 0x5}, {Largest: 0x3, Smallest: 0x2}}, DelayTime: 12ms}\n"))
-	})
-
-	It("logs incoming StopWaiting frames", func() {
-		frame := &StopWaitingFrame{
-			LeastUnacked: 0x1337,
-		}
-		LogFrame(logger, frame, false)
-		Expect(buf.Bytes()).To(ContainSubstring("\t<- &wire.StopWaitingFrame{LeastUnacked: 0x1337}\n"))
-	})
-
-	It("logs outgoing StopWaiting frames", func() {
-		frame := &StopWaitingFrame{
-			LeastUnacked:    0x1337,
-			PacketNumberLen: protocol.PacketNumberLen4,
-		}
-		LogFrame(logger, frame, true)
-		Expect(buf.Bytes()).To(ContainSubstring("\t-> &wire.StopWaitingFrame{LeastUnacked: 0x1337, PacketNumberLen: 0x4}\n"))
 	})
 })

@@ -22,9 +22,12 @@ var _ = Describe("Packet Handler Map", func() {
 	getPacket := func(connID protocol.ConnectionID) []byte {
 		buf := &bytes.Buffer{}
 		err := (&wire.Header{
+			IsLongHeader:     true,
+			Type:             protocol.PacketTypeHandshake,
 			DestConnectionID: connID,
 			PacketNumberLen:  protocol.PacketNumberLen1,
-		}).Write(buf, protocol.PerspectiveServer, versionGQUICFrames)
+			Version:          protocol.VersionWhatever,
+		}).Write(buf, protocol.PerspectiveServer, protocol.VersionWhatever)
 		Expect(err).ToNot(HaveOccurred())
 		return buf.Bytes()
 	}
@@ -80,7 +83,7 @@ var _ = Describe("Packet Handler Map", func() {
 		})
 
 		It("drops unparseable packets", func() {
-			err := handler.handlePacket(nil, []byte("invalid"))
+			err := handler.handlePacket(nil, []byte{0, 1, 2, 3})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("error parsing invariant header:"))
 		})
@@ -113,7 +116,7 @@ var _ = Describe("Packet Handler Map", func() {
 		It("errors on packets that are smaller than the Payload Length in the packet header", func() {
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			packetHandler := NewMockPacketHandler(mockCtrl)
-			packetHandler.EXPECT().GetVersion().Return(versionIETFFrames)
+			packetHandler.EXPECT().GetVersion().Return(protocol.VersionWhatever)
 			packetHandler.EXPECT().GetPerspective().Return(protocol.PerspectiveClient)
 			handler.Add(connID, packetHandler)
 			hdr := &wire.Header{
@@ -122,10 +125,10 @@ var _ = Describe("Packet Handler Map", func() {
 				PayloadLen:       1000,
 				DestConnectionID: connID,
 				PacketNumberLen:  protocol.PacketNumberLen1,
-				Version:          versionIETFFrames,
+				Version:          protocol.VersionWhatever,
 			}
 			buf := &bytes.Buffer{}
-			Expect(hdr.Write(buf, protocol.PerspectiveServer, versionIETFFrames)).To(Succeed())
+			Expect(hdr.Write(buf, protocol.PerspectiveServer, protocol.VersionWhatever)).To(Succeed())
 			buf.Write(bytes.Repeat([]byte{0}, 500))
 
 			err := handler.handlePacket(nil, buf.Bytes())
@@ -135,7 +138,7 @@ var _ = Describe("Packet Handler Map", func() {
 		It("cuts packets at the Payload Length", func() {
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			packetHandler := NewMockPacketHandler(mockCtrl)
-			packetHandler.EXPECT().GetVersion().Return(versionIETFFrames)
+			packetHandler.EXPECT().GetVersion().Return(protocol.VersionWhatever)
 			packetHandler.EXPECT().GetPerspective().Return(protocol.PerspectiveClient)
 			handler.Add(connID, packetHandler)
 			packetHandler.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
@@ -148,10 +151,10 @@ var _ = Describe("Packet Handler Map", func() {
 				PayloadLen:       456,
 				DestConnectionID: connID,
 				PacketNumberLen:  protocol.PacketNumberLen1,
-				Version:          versionIETFFrames,
+				Version:          protocol.VersionWhatever,
 			}
 			buf := &bytes.Buffer{}
-			Expect(hdr.Write(buf, protocol.PerspectiveServer, versionIETFFrames)).To(Succeed())
+			Expect(hdr.Write(buf, protocol.PerspectiveServer, protocol.VersionWhatever)).To(Succeed())
 			buf.Write(bytes.Repeat([]byte{0}, 500))
 			err := handler.handlePacket(nil, buf.Bytes())
 			Expect(err).ToNot(HaveOccurred())

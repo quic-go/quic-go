@@ -24,10 +24,6 @@ const InitialCongestionWindow ByteCount = 32 * DefaultTCPMSS
 // session queues for later until it sends a public reset.
 const MaxUndecryptablePackets = 10
 
-// PublicResetTimeout is the time to wait before sending a Public Reset when receiving too many undecryptable packets during the handshake
-// This timeout allows the Go scheduler to switch to the Go rountine that reads the crypto stream and to escalate the crypto
-const PublicResetTimeout = 500 * time.Millisecond
-
 // ReceiveStreamFlowControlWindow is the stream-level flow control window for receiving data
 // This is the value that Google servers are using
 const ReceiveStreamFlowControlWindow = (1 << 10) * 32 // 32 kB
@@ -65,12 +61,6 @@ const DefaultMaxIncomingStreams = 100
 // DefaultMaxIncomingUniStreams is the maximum number of unidirectional streams that a peer may open
 const DefaultMaxIncomingUniStreams = 100
 
-// MaxStreamsMultiplier is the slack the client is allowed for the maximum number of streams per connection, needed e.g. when packets are out of order or dropped. The minimum of this procentual increase and the absolute increment specified by MaxStreamsMinimumIncrement is used.
-const MaxStreamsMultiplier = 1.1
-
-// MaxStreamsMinimumIncrement is the slack the client is allowed for the maximum number of streams per connection, needed e.g. when packets are out of order or dropped. The minimum of this absolute increment and the procentual increase specified by MaxStreamsMultiplier is used.
-const MaxStreamsMinimumIncrement = 10
-
 // MaxSessionUnprocessedPackets is the max number of packets stored in each session that are not yet processed.
 const MaxSessionUnprocessedPackets = defaultMaxCongestionWindowPackets
 
@@ -103,19 +93,9 @@ const MaxNonRetransmittableAcks = 19
 // prevents DoS attacks against the streamFrameSorter
 const MaxStreamFrameSorterGaps = 1000
 
-// CryptoMaxParams is the upper limit for the number of parameters in a crypto message.
-// Value taken from Chrome.
-const CryptoMaxParams = 128
-
-// CryptoParameterMaxLength is the upper limit for the length of a parameter in a crypto message.
-const CryptoParameterMaxLength = 4000
-
 // MaxCryptoStreamOffset is the maximum offset allowed on any of the crypto streams.
 // This limits the size of the ClientHello and Certificates that can be received.
 const MaxCryptoStreamOffset = 16 * (1 << 10)
-
-// EphermalKeyLifetime is the lifetime of the ephermal key during the handshake, see handshake.getEphermalKEX.
-const EphermalKeyLifetime = time.Minute
 
 // MinRemoteIdleTimeout is the minimum value that we accept for the remote idle timeout
 const MinRemoteIdleTimeout = 5 * time.Second
@@ -130,16 +110,13 @@ const DefaultHandshakeTimeout = 10 * time.Second
 // after this time all information about the old connection will be deleted
 const ClosedSessionDeleteTimeout = time.Minute
 
-// NumCachedCertificates is the number of cached compressed certificate chains, each taking ~1K space
-const NumCachedCertificates = 128
-
 // MinStreamFrameSize is the minimum size that has to be left in a packet, so that we add another STREAM frame.
 // This avoids splitting up STREAM frames into small pieces, which has 2 advantages:
 // 1. it reduces the framing overhead
 // 2. it reduces the head-of-line blocking, when a packet is lost
 const MinStreamFrameSize ByteCount = 128
 
-// MaxAckFrameSize is the maximum size for an (IETF QUIC) ACK frame that we write
+// MaxAckFrameSize is the maximum size for an ACK frame that we write
 // Due to the varint encoding, ACK frames can grow (almost) indefinitely large.
 // The MaxAckFrameSize should be large enough to encode many ACK range,
 // but must ensure that a maximum size ACK frame fits into one packet.

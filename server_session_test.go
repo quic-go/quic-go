@@ -28,32 +28,7 @@ var _ = Describe("Server Session", func() {
 		sess.handlePacket(p)
 	})
 
-	It("ignores Public Resets", func() {
-		p := &receivedPacket{
-			header: &wire.Header{
-				ResetFlag:        true,
-				DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
-			},
-		}
-		err := sess.handlePacketImpl(p)
-		Expect(err).To(MatchError("Received unexpected Public Reset for connection 0xdeadbeef"))
-	})
-
-	It("ignores delayed packets with mismatching versions, for gQUIC", func() {
-		qsess.EXPECT().GetVersion().Return(protocol.VersionNumber(100))
-		// don't EXPECT any calls to handlePacket()
-		p := &receivedPacket{
-			header: &wire.Header{
-				VersionFlag:      true,
-				Version:          protocol.VersionNumber(123),
-				DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
-			},
-		}
-		err := sess.handlePacketImpl(p)
-		Expect(err).ToNot(HaveOccurred())
-	})
-
-	It("ignores delayed packets with mismatching versions, for IETF QUIC", func() {
+	It("ignores delayed packets with mismatching versions", func() {
 		qsess.EXPECT().GetVersion().Return(protocol.VersionNumber(100))
 		// don't EXPECT any calls to handlePacket()
 		p := &receivedPacket{

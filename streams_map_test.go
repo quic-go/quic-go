@@ -24,7 +24,7 @@ type streamMapping struct {
 	firstOutgoingUniStream  protocol.StreamID
 }
 
-var _ = Describe("Streams Map (for IETF QUIC)", func() {
+var _ = Describe("Streams Map", func() {
 	newFlowController := func(protocol.StreamID) flowcontrol.StreamFlowController {
 		return mocks.NewMockStreamFlowController(mockCtrl)
 	}
@@ -71,7 +71,7 @@ var _ = Describe("Streams Map (for IETF QUIC)", func() {
 
 			BeforeEach(func() {
 				mockSender = NewMockStreamSender(mockCtrl)
-				m = newStreamsMap(mockSender, newFlowController, maxBidiStreams, maxUniStreams, perspective, versionIETFFrames).(*streamsMap)
+				m = newStreamsMap(mockSender, newFlowController, maxBidiStreams, maxUniStreams, perspective, protocol.VersionWhatever).(*streamsMap)
 			})
 
 			Context("opening", func() {

@@ -8,10 +8,8 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 
@@ -19,420 +17,17 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type mockSession struct {
-	*MockQuicSession
-
-	connID protocol.ConnectionID
-	runner sessionRunner
-}
-
-func (s *mockSession) GetPerspective() protocol.Perspective { panic("not implemented") }
-
 var _ = Describe("Server", func() {
-	var (
-		conn    *mockPacketConn
-		config  *Config
-		udpAddr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
-	)
+	var conn *mockPacketConn
 
 	BeforeEach(func() {
 		conn = newMockPacketConn()
 		conn.addr = &net.UDPAddr{}
-		config = &Config{Versions: protocol.SupportedVersions}
-	})
-
-	Context("quic.Config", func() {
-		It("setups with the right values", func() {
-			config := &Config{
-				HandshakeTimeout:            1337 * time.Minute,
-				IdleTimeout:                 42 * time.Hour,
-				RequestConnectionIDOmission: true,
-				MaxIncomingStreams:          1234,
-				MaxIncomingUniStreams:       4321,
-				ConnectionIDLength:          12,
-				Versions:                    []protocol.VersionNumber{VersionGQUIC43},
-			}
-			c := populateServerConfig(config)
-			Expect(c.HandshakeTimeout).To(Equal(1337 * time.Minute))
-			Expect(c.IdleTimeout).To(Equal(42 * time.Hour))
-			Expect(c.RequestConnectionIDOmission).To(BeFalse())
-			Expect(c.MaxIncomingStreams).To(Equal(1234))
-			Expect(c.MaxIncomingUniStreams).To(Equal(4321))
-			Expect(c.ConnectionIDLength).To(Equal(12))
-			Expect(c.Versions).To(Equal([]protocol.VersionNumber{VersionGQUIC43}))
-		})
-
-		It("uses 8 byte connection IDs if gQUIC 44 is supported", func() {
-			config := &Config{
-				Versions:           []protocol.VersionNumber{protocol.Version43, protocol.Version44},
-				ConnectionIDLength: 13,
-			}
-			c := populateServerConfig(config)
-			Expect(c.Versions).To(Equal([]protocol.VersionNumber{protocol.Version43, protocol.Version44}))
-			Expect(c.ConnectionIDLength).To(Equal(8))
-		})
-
-		It("uses 4 byte connection IDs by default, if gQUIC 44 is not supported", func() {
-			config := &Config{
-				Versions: []protocol.VersionNumber{protocol.Version39},
-			}
-			c := populateServerConfig(config)
-			Expect(c.ConnectionIDLength).To(Equal(protocol.DefaultConnectionIDLength))
-		})
-
-		It("disables bidirectional streams", func() {
-			config := &Config{
-				MaxIncomingStreams:    -1,
-				MaxIncomingUniStreams: 4321,
-			}
-			c := populateServerConfig(config)
-			Expect(c.MaxIncomingStreams).To(BeZero())
-			Expect(c.MaxIncomingUniStreams).To(Equal(4321))
-		})
-
-		It("disables unidirectional streams", func() {
-			config := &Config{
-				MaxIncomingStreams:    1234,
-				MaxIncomingUniStreams: -1,
-			}
-			c := populateServerConfig(config)
-			Expect(c.MaxIncomingStreams).To(Equal(1234))
-			Expect(c.MaxIncomingUniStreams).To(BeZero())
-		})
-	})
-
-	Context("with mock session", func() {
-		var (
-			serv           *server
-			firstPacket    *receivedPacket
-			connID         = protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6}
-			sessions       = make([]*MockQuicSession, 0)
-			sessionHandler *MockPacketHandlerManager
-		)
-
-		BeforeEach(func() {
-			sessionHandler = NewMockPacketHandlerManager(mockCtrl)
-			newMockSession := func(
-				_ connection,
-				runner sessionRunner,
-				_ protocol.VersionNumber,
-				connID protocol.ConnectionID,
-				_ protocol.ConnectionID,
-				_ *handshake.ServerConfig,
-				_ *tls.Config,
-				_ *Config,
-				_ utils.Logger,
-			) (quicSession, error) {
-				ExpectWithOffset(0, sessions).ToNot(BeEmpty())
-				s := &mockSession{MockQuicSession: sessions[0]}
-				s.connID = connID
-				s.runner = runner
-				sessions = sessions[1:]
-				return s, nil
-			}
-			serv = &server{
-				sessionHandler: sessionHandler,
-				newSession:     newMockSession,
-				conn:           conn,
-				config:         config,
-				sessionQueue:   make(chan Session, 5),
-				errorChan:      make(chan struct{}),
-				logger:         utils.DefaultLogger,
-			}
-			serv.setup()
-			b := &bytes.Buffer{}
-			utils.BigEndian.WriteUint32(b, uint32(protocol.SupportedVersions[0]))
-			firstPacket = &receivedPacket{
-				header: &wire.Header{
-					VersionFlag:      true,
-					Version:          serv.config.Versions[0],
-					DestConnectionID: protocol.ConnectionID{0x4c, 0xfa, 0x9f, 0x9b, 0x66, 0x86, 0x19, 0xf6},
-					PacketNumber:     1,
-				},
-				data:    bytes.Repeat([]byte{0}, protocol.MinClientHelloSize),
-				rcvTime: time.Now(),
-			}
-		})
-
-		AfterEach(func() {
-			Expect(sessions).To(BeEmpty())
-		})
-
-		It("returns the address", func() {
-			conn.addr = &net.UDPAddr{
-				IP:   net.IPv4(192, 168, 13, 37),
-				Port: 1234,
-			}
-			Expect(serv.Addr().String()).To(Equal("192.168.13.37:1234"))
-		})
-
-		It("creates new sessions", func() {
-			s := NewMockQuicSession(mockCtrl)
-			s.EXPECT().handlePacket(gomock.Any())
-			run := make(chan struct{})
-			s.EXPECT().run().Do(func() { close(run) })
-			sessions = append(sessions, s)
-
-			sessionHandler.EXPECT().Add(connID, gomock.Any()).Do(func(cid protocol.ConnectionID, _ packetHandler) {
-				Expect(cid).To(Equal(connID))
-			})
-			Expect(serv.handlePacketImpl(firstPacket)).To(Succeed())
-			Eventually(run).Should(BeClosed())
-		})
-
-		It("accepts new TLS sessions", func() {
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			sess := NewMockQuicSession(mockCtrl)
-			err := serv.setupTLS()
-			Expect(err).ToNot(HaveOccurred())
-			added := make(chan struct{})
-			sessionHandler.EXPECT().Add(connID, gomock.Any()).Do(func(_ protocol.ConnectionID, ph packetHandler) {
-				Expect(ph.GetPerspective()).To(Equal(protocol.PerspectiveServer))
-				close(added)
-			})
-			serv.serverTLS.sessionChan <- tlsSession{
-				connID: connID,
-				sess:   sess,
-			}
-			Eventually(added).Should(BeClosed())
-		})
-
-		It("accepts a session once the connection it is forward secure", func() {
-			s := NewMockQuicSession(mockCtrl)
-			s.EXPECT().handlePacket(gomock.Any())
-			run := make(chan struct{})
-			s.EXPECT().run().Do(func() { close(run) })
-			sessions = append(sessions, s)
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				_, err := serv.Accept()
-				Expect(err).ToNot(HaveOccurred())
-				close(done)
-			}()
-			sessionHandler.EXPECT().Add(connID, gomock.Any()).Do(func(_ protocol.ConnectionID, sess packetHandler) {
-				Consistently(done).ShouldNot(BeClosed())
-				sess.(*serverSession).quicSession.(*mockSession).runner.onHandshakeComplete(sess.(Session))
-			})
-			err := serv.handlePacketImpl(firstPacket)
-			Expect(err).ToNot(HaveOccurred())
-			Eventually(done).Should(BeClosed())
-			Eventually(run).Should(BeClosed())
-		})
-
-		It("doesn't accept sessions that error during the handshake", func() {
-			run := make(chan error, 1)
-			sess := NewMockQuicSession(mockCtrl)
-			sess.EXPECT().handlePacket(gomock.Any())
-			sess.EXPECT().run().DoAndReturn(func() error { return <-run })
-			sessions = append(sessions, sess)
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				serv.Accept()
-				close(done)
-			}()
-			sessionHandler.EXPECT().Add(connID, gomock.Any()).Do(func(protocol.ConnectionID, packetHandler) {
-				run <- errors.New("handshake error")
-			})
-			Expect(serv.handlePacketImpl(firstPacket)).To(Succeed())
-			Consistently(done).ShouldNot(BeClosed())
-
-			// make the go routine return
-			close(serv.errorChan)
-			Eventually(done).Should(BeClosed())
-		})
-
-		It("closes the sessionHandler when Close is called", func() {
-			sessionHandler.EXPECT().CloseServer()
-			Expect(serv.Close()).To(Succeed())
-		})
-
-		It("closes twice", func() {
-			sessionHandler.EXPECT().CloseServer()
-			Expect(serv.Close()).To(Succeed())
-			Expect(serv.Close()).To(Succeed())
-		})
-
-		It("works if no quic.Config is given", func() {
-			ln, err := ListenAddr("127.0.0.1:0", testdata.GetTLSConfig(), nil)
-			Expect(err).ToNot(HaveOccurred())
-			// stop the listener
-			Expect(ln.Close()).To(Succeed())
-		})
-
-		It("closes properly", func() {
-			ln, err := ListenAddr("127.0.0.1:0", testdata.GetTLSConfig(), config)
-			Expect(err).ToNot(HaveOccurred())
-
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				ln.Accept()
-				close(done)
-			}()
-			Expect(ln.Close()).To(Succeed())
-			Eventually(done).Should(BeClosed())
-		})
-
-		It("closes the connection when it was created with ListenAddr", func() {
-			addr, err := net.ResolveUDPAddr("udp", "localhost:12345")
-			Expect(err).ToNot(HaveOccurred())
-
-			serv, err := ListenAddr("localhost:0", nil, nil)
-			Expect(err).ToNot(HaveOccurred())
-			// test that we can write on the packet conn
-			_, err = serv.(*server).conn.WriteTo([]byte("foobar"), addr)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(serv.Close()).To(Succeed())
-			// test that we can't write any more on the packet conn
-			_, err = serv.(*server).conn.WriteTo([]byte("foobar"), addr)
-			Expect(err.Error()).To(ContainSubstring("use of closed network connection"))
-		})
-
-		It("returns Accept when it is closed", func() {
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				_, err := serv.Accept()
-				Expect(err).To(MatchError("server closed"))
-				close(done)
-			}()
-			sessionHandler.EXPECT().CloseServer()
-			Expect(serv.Close()).To(Succeed())
-			Eventually(done).Should(BeClosed())
-		})
-
-		It("returns Accept with the right error when closeWithError is called", func() {
-			testErr := errors.New("connection error")
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				_, err := serv.Accept()
-				Expect(err).To(MatchError(testErr))
-				close(done)
-			}()
-			sessionHandler.EXPECT().CloseServer()
-			serv.closeWithError(testErr)
-			Eventually(done).Should(BeClosed())
-		})
-
-		It("doesn't try to process a packet after sending a gQUIC Version Negotiation Packet", func() {
-			config.Versions = []protocol.VersionNumber{99}
-			p := &receivedPacket{
-				header: &wire.Header{
-					VersionFlag:      true,
-					DestConnectionID: connID,
-					PacketNumber:     1,
-					PacketNumberLen:  protocol.PacketNumberLen2,
-				},
-				data: make([]byte, protocol.MinClientHelloSize),
-			}
-			Expect(serv.handlePacketImpl(p)).To(Succeed())
-			Expect(conn.dataWritten.Bytes()).ToNot(BeEmpty())
-		})
-
-		It("sends a PUBLIC_RESET for new connections that don't have the VersionFlag set", func() {
-			err := serv.handlePacketImpl(&receivedPacket{
-				remoteAddr: udpAddr,
-				header: &wire.Header{
-					IsPublicHeader: true,
-					Version:        versionGQUICFrames,
-				},
-			})
-			Expect(err).ToNot(HaveOccurred())
-
-			Expect(conn.dataWritten.Len()).ToNot(BeZero())
-			Expect(conn.dataWrittenTo).To(Equal(udpAddr))
-			Expect(conn.dataWritten.Bytes()[0] & 0x02).ToNot(BeZero()) // check that the ResetFlag is set
-		})
-
-		It("sends a gQUIC Version Negotaion Packet, if the client sent a gQUIC Public Header", func() {
-			connID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
-			err := serv.handlePacketImpl(&receivedPacket{
-				remoteAddr: udpAddr,
-				header: &wire.Header{
-					IsPublicHeader:   true,
-					VersionFlag:      true,
-					DestConnectionID: connID,
-					PacketNumber:     1,
-					PacketNumberLen:  protocol.PacketNumberLen2,
-					Version:          protocol.Version39 - 1,
-				},
-			})
-			Expect(err).ToNot(HaveOccurred())
-
-			Expect(conn.dataWritten.Len()).ToNot(BeZero())
-			Expect(conn.dataWrittenTo).To(Equal(udpAddr))
-			r := bytes.NewReader(conn.dataWritten.Bytes())
-			iHdr, err := wire.ParseInvariantHeader(r, 0)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(iHdr.IsLongHeader).To(BeFalse())
-			replyHdr, err := iHdr.Parse(r, protocol.PerspectiveServer, versionIETFFrames)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(replyHdr.IsVersionNegotiation).To(BeTrue())
-			Expect(replyHdr.DestConnectionID).To(Equal(connID))
-			Expect(r.Len()).To(BeZero())
-		})
-
-		It("sends an IETF draft style Version Negotaion Packet, if the client sent a IETF draft style header", func() {
-			connID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
-			err := serv.handlePacketImpl(&receivedPacket{
-				remoteAddr: udpAddr,
-				header: &wire.Header{
-					Type:             protocol.PacketTypeInitial,
-					IsLongHeader:     true,
-					DestConnectionID: connID,
-					SrcConnectionID:  connID,
-					PacketNumber:     0x55,
-					PacketNumberLen:  protocol.PacketNumberLen1,
-					Version:          0x1234,
-					PayloadLen:       protocol.MinInitialPacketSize,
-				},
-			})
-			Expect(err).ToNot(HaveOccurred())
-
-			Expect(conn.dataWritten.Len()).ToNot(BeZero())
-			Expect(conn.dataWrittenTo).To(Equal(udpAddr))
-			r := bytes.NewReader(conn.dataWritten.Bytes())
-			iHdr, err := wire.ParseInvariantHeader(r, 0)
-			Expect(err).ToNot(HaveOccurred())
-			replyHdr, err := iHdr.Parse(r, protocol.PerspectiveServer, versionIETFFrames)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(replyHdr.IsVersionNegotiation).To(BeTrue())
-			Expect(replyHdr.DestConnectionID).To(Equal(connID))
-			Expect(replyHdr.SrcConnectionID).To(Equal(connID))
-			Expect(r.Len()).To(BeZero())
-		})
-	})
-
-	It("setups with the right values", func() {
-		supportedVersions := []protocol.VersionNumber{protocol.VersionTLS, protocol.Version39}
-		acceptCookie := func(_ net.Addr, _ *Cookie) bool { return true }
-		config := Config{
-			Versions:         supportedVersions,
-			AcceptCookie:     acceptCookie,
-			HandshakeTimeout: 1337 * time.Hour,
-			IdleTimeout:      42 * time.Minute,
-			KeepAlive:        true,
-		}
-		ln, err := Listen(conn, &tls.Config{}, &config)
-		Expect(err).ToNot(HaveOccurred())
-		server := ln.(*server)
-		Expect(server.sessionHandler).ToNot(BeNil())
-		Expect(server.scfg).ToNot(BeNil())
-		Expect(server.config.Versions).To(Equal(supportedVersions))
-		Expect(server.config.HandshakeTimeout).To(Equal(1337 * time.Hour))
-		Expect(server.config.IdleTimeout).To(Equal(42 * time.Minute))
-		Expect(reflect.ValueOf(server.config.AcceptCookie)).To(Equal(reflect.ValueOf(acceptCookie)))
-		Expect(server.config.KeepAlive).To(BeTrue())
-		// stop the listener
-		Expect(ln.Close()).To(Succeed())
 	})
 
 	It("errors when the Config contains an invalid version", func() {
 		version := protocol.VersionNumber(0x1234)
-		_, err := Listen(conn, &tls.Config{}, &Config{Versions: []protocol.VersionNumber{version}})
+		_, err := Listen(nil, &tls.Config{}, &Config{Versions: []protocol.VersionNumber{version}})
 		Expect(err).To(MatchError("0x1234 is not a valid QUIC version"))
 	})
 
@@ -449,9 +44,32 @@ var _ = Describe("Server", func() {
 		Expect(ln.Close()).To(Succeed())
 	})
 
+	It("setups with the right values", func() {
+		supportedVersions := []protocol.VersionNumber{protocol.VersionTLS}
+		acceptCookie := func(_ net.Addr, _ *Cookie) bool { return true }
+		config := Config{
+			Versions:         supportedVersions,
+			AcceptCookie:     acceptCookie,
+			HandshakeTimeout: 1337 * time.Hour,
+			IdleTimeout:      42 * time.Minute,
+			KeepAlive:        true,
+		}
+		ln, err := Listen(conn, &tls.Config{}, &config)
+		Expect(err).ToNot(HaveOccurred())
+		server := ln.(*server)
+		Expect(server.sessionHandler).ToNot(BeNil())
+		Expect(server.config.Versions).To(Equal(supportedVersions))
+		Expect(server.config.HandshakeTimeout).To(Equal(1337 * time.Hour))
+		Expect(server.config.IdleTimeout).To(Equal(42 * time.Minute))
+		Expect(reflect.ValueOf(server.config.AcceptCookie)).To(Equal(reflect.ValueOf(acceptCookie)))
+		Expect(server.config.KeepAlive).To(BeTrue())
+		// stop the listener
+		Expect(ln.Close()).To(Succeed())
+	})
+
 	It("listens on a given address", func() {
 		addr := "127.0.0.1:13579"
-		ln, err := ListenAddr(addr, nil, config)
+		ln, err := ListenAddr(addr, nil, &Config{})
 		Expect(err).ToNot(HaveOccurred())
 		serv := ln.(*server)
 		Expect(serv.Addr().String()).To(Equal(addr))
@@ -461,14 +79,293 @@ var _ = Describe("Server", func() {
 
 	It("errors if given an invalid address", func() {
 		addr := "127.0.0.1"
-		_, err := ListenAddr(addr, nil, config)
+		_, err := ListenAddr(addr, nil, &Config{})
 		Expect(err).To(BeAssignableToTypeOf(&net.AddrError{}))
 	})
 
 	It("errors if given an invalid address", func() {
 		addr := "1.1.1.1:1111"
-		_, err := ListenAddr(addr, nil, config)
+		_, err := ListenAddr(addr, nil, &Config{})
 		Expect(err).To(BeAssignableToTypeOf(&net.OpError{}))
+	})
+
+	Context("handling packets", func() {
+		var serv *server
+
+		BeforeEach(func() {
+			ln, err := Listen(conn, nil, nil)
+			Expect(err).ToNot(HaveOccurred())
+			serv = ln.(*server)
+		})
+
+		parseHeader := func(data []byte) *wire.Header {
+			b := bytes.NewReader(data)
+			iHdr, err := wire.ParseInvariantHeader(b, 0)
+			Expect(err).ToNot(HaveOccurred())
+			hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, protocol.VersionTLS)
+			Expect(err).ToNot(HaveOccurred())
+			return hdr
+		}
+
+		It("drops Initial packets with a too short connection ID", func() {
+			serv.handlePacket(&receivedPacket{
+				header: &wire.Header{
+					IsLongHeader:     true,
+					Type:             protocol.PacketTypeInitial,
+					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4},
+					Version:          serv.config.Versions[0],
+				},
+			})
+			Expect(conn.dataWritten.Len()).To(BeZero())
+		})
+
+		It("drops too small Initial", func() {
+			serv.handlePacket(&receivedPacket{
+				header: &wire.Header{
+					IsLongHeader:     true,
+					Type:             protocol.PacketTypeInitial,
+					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+					Version:          serv.config.Versions[0],
+				},
+				data: bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize-100),
+			})
+			Expect(conn.dataWritten.Len()).To(BeZero())
+		})
+
+		It("drops packets with a too short connection ID", func() {
+			hdr := &wire.Header{
+				SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4},
+				PacketNumberLen:  protocol.PacketNumberLen1,
+			}
+			serv.handlePacket(&receivedPacket{
+				header: hdr,
+				data:   bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
+			})
+			Expect(conn.dataWritten.Len()).To(BeZero())
+		})
+
+		It("drops non-Initial packets", func() {
+			serv.logger.SetLogLevel(utils.LogLevelDebug)
+			serv.handlePacket(&receivedPacket{
+				header: &wire.Header{Type: protocol.PacketTypeHandshake},
+				data:   []byte("invalid"),
+			})
+		})
+
+		It("decodes the cookie from the Token field", func() {
+			raddr := &net.UDPAddr{
+				IP:   net.IPv4(192, 168, 13, 37),
+				Port: 1337,
+			}
+			done := make(chan struct{})
+			serv.config.AcceptCookie = func(addr net.Addr, cookie *Cookie) bool {
+				Expect(addr).To(Equal(raddr))
+				Expect(cookie).ToNot(BeNil())
+				close(done)
+				return false
+			}
+			token, err := serv.cookieGenerator.NewToken(raddr)
+			Expect(err).ToNot(HaveOccurred())
+			serv.handlePacket(&receivedPacket{
+				remoteAddr: raddr,
+				header: &wire.Header{
+					Type:  protocol.PacketTypeInitial,
+					Token: token,
+				},
+				data: bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
+			})
+			Eventually(done).Should(BeClosed())
+		})
+
+		It("passes an empty cookie to the callback, if decoding fails", func() {
+			raddr := &net.UDPAddr{
+				IP:   net.IPv4(192, 168, 13, 37),
+				Port: 1337,
+			}
+			done := make(chan struct{})
+			serv.config.AcceptCookie = func(addr net.Addr, cookie *Cookie) bool {
+				Expect(addr).To(Equal(raddr))
+				Expect(cookie).To(BeNil())
+				close(done)
+				return false
+			}
+			serv.handlePacket(&receivedPacket{
+				remoteAddr: raddr,
+				header: &wire.Header{
+					Type:  protocol.PacketTypeInitial,
+					Token: []byte("foobar"),
+				},
+				data: bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
+			})
+			Eventually(done).Should(BeClosed())
+		})
+
+		It("sends a Version Negotiation Packet for unsupported versions", func() {
+			srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5}
+			destConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6}
+			serv.handlePacket(&receivedPacket{
+				header: &wire.Header{
+					IsLongHeader:     true,
+					SrcConnectionID:  srcConnID,
+					DestConnectionID: destConnID,
+					Type:             protocol.PacketTypeInitial,
+					Version:          0x42,
+				},
+			})
+			Expect(conn.dataWritten.Len()).ToNot(BeZero())
+			hdr := parseHeader(conn.dataWritten.Bytes())
+			Expect(hdr.IsVersionNegotiation).To(BeTrue())
+			Expect(hdr.DestConnectionID).To(Equal(srcConnID))
+			Expect(hdr.SrcConnectionID).To(Equal(destConnID))
+			Expect(hdr.SupportedVersions).ToNot(ContainElement(protocol.VersionNumber(0x42)))
+		})
+
+		It("replies with a Retry packet, if a Cookie is required", func() {
+			serv.config.AcceptCookie = func(_ net.Addr, _ *handshake.Cookie) bool { return false }
+			hdr := &wire.Header{
+				Type:             protocol.PacketTypeInitial,
+				SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
+				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+				Version:          protocol.VersionTLS,
+			}
+			serv.handleInitial(&receivedPacket{
+				remoteAddr: &net.UDPAddr{},
+				header:     hdr,
+				data:       bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
+			})
+			Expect(conn.dataWritten.Len()).ToNot(BeZero())
+			replyHdr := parseHeader(conn.dataWritten.Bytes())
+			Expect(replyHdr.Type).To(Equal(protocol.PacketTypeRetry))
+			Expect(replyHdr.SrcConnectionID).ToNot(Equal(hdr.DestConnectionID))
+			Expect(replyHdr.DestConnectionID).To(Equal(hdr.SrcConnectionID))
+			Expect(replyHdr.OrigDestConnectionID).To(Equal(hdr.DestConnectionID))
+			Expect(replyHdr.Token).ToNot(BeEmpty())
+		})
+
+		It("creates a session, if no Cookie is required", func() {
+			serv.config.AcceptCookie = func(_ net.Addr, _ *handshake.Cookie) bool { return true }
+			hdr := &wire.Header{
+				Type:             protocol.PacketTypeInitial,
+				SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
+				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+				Version:          protocol.VersionTLS,
+			}
+			p := &receivedPacket{
+				header: hdr,
+				data:   bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
+			}
+			run := make(chan struct{})
+			serv.newSession = func(
+				_ connection,
+				_ sessionRunner,
+				origConnID protocol.ConnectionID,
+				destConnID protocol.ConnectionID,
+				srcConnID protocol.ConnectionID,
+				_ protocol.PacketNumber,
+				_ *Config,
+				_ *tls.Config,
+				_ *handshake.TransportParameters,
+				_ utils.Logger,
+				_ protocol.VersionNumber,
+			) (quicSession, error) {
+				Expect(origConnID).To(Equal(hdr.DestConnectionID))
+				Expect(destConnID).To(Equal(hdr.SrcConnectionID))
+				// make sure we're using a server-generated connection ID
+				Expect(srcConnID).ToNot(Equal(hdr.DestConnectionID))
+				Expect(srcConnID).ToNot(Equal(hdr.SrcConnectionID))
+				sess := NewMockQuicSession(mockCtrl)
+				sess.EXPECT().handlePacket(p)
+				sess.EXPECT().run().Do(func() { close(run) })
+				return sess, nil
+			}
+
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				serv.handlePacket(p)
+				// the Handshake packet is written by the session
+				Expect(conn.dataWritten.Len()).To(BeZero())
+				close(done)
+			}()
+			// make sure we're using a server-generated connection ID
+			Eventually(run).Should(BeClosed())
+			Eventually(done).Should(BeClosed())
+		})
+	})
+
+	Context("accepting sessions", func() {
+		var serv *server
+
+		BeforeEach(func() {
+			ln, err := Listen(conn, nil, nil)
+			Expect(err).ToNot(HaveOccurred())
+			serv = ln.(*server)
+		})
+
+		It("returns Accept when an error occurs", func() {
+			testErr := errors.New("test err")
+
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				_, err := serv.Accept()
+				Expect(err).To(MatchError(testErr))
+				close(done)
+			}()
+
+			Expect(serv.closeWithError(testErr)).To(Succeed())
+			Eventually(done).Should(BeClosed())
+		})
+
+		It("returns immediately, if an error occurred before", func() {
+			testErr := errors.New("test err")
+			Expect(serv.closeWithError(testErr)).To(Succeed())
+			for i := 0; i < 3; i++ {
+				_, err := serv.Accept()
+				Expect(err).To(MatchError(testErr))
+			}
+		})
+
+		It("accepts new sessions when the handshake completes", func() {
+			sess := NewMockQuicSession(mockCtrl)
+
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				s, err := serv.Accept()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(s).To(Equal(sess))
+				close(done)
+			}()
+
+			completeHandshake := make(chan struct{})
+			serv.newSession = func(
+				_ connection,
+				runner sessionRunner,
+				_ protocol.ConnectionID,
+				_ protocol.ConnectionID,
+				_ protocol.ConnectionID,
+				_ protocol.PacketNumber,
+				_ *Config,
+				_ *tls.Config,
+				_ *handshake.TransportParameters,
+				_ utils.Logger,
+				_ protocol.VersionNumber,
+			) (quicSession, error) {
+				go func() {
+					<-completeHandshake
+					runner.onHandshakeComplete(sess)
+				}()
+				sess.EXPECT().run().Do(func() {})
+				return sess, nil
+			}
+			_, err := serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, protocol.VersionWhatever)
+			Expect(err).ToNot(HaveOccurred())
+			Consistently(done).ShouldNot(BeClosed())
+			close(completeHandshake)
+			Eventually(done).Should(BeClosed())
+		})
 	})
 })
 

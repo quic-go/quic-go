@@ -40,12 +40,11 @@ var _ = Describe("Stream Flow controller", func() {
 
 		It("sets the send and receive windows", func() {
 			cc := NewConnectionFlowController(0, 0, nil, nil, utils.DefaultLogger)
-			fc := NewStreamFlowController(5, true, cc, receiveWindow, maxReceiveWindow, sendWindow, nil, rttStats, utils.DefaultLogger).(*streamFlowController)
+			fc := NewStreamFlowController(5, cc, receiveWindow, maxReceiveWindow, sendWindow, nil, rttStats, utils.DefaultLogger).(*streamFlowController)
 			Expect(fc.streamID).To(Equal(protocol.StreamID(5)))
 			Expect(fc.receiveWindow).To(Equal(receiveWindow))
 			Expect(fc.maxReceiveWindowSize).To(Equal(maxReceiveWindow))
 			Expect(fc.sendWindow).To(Equal(sendWindow))
-			Expect(fc.contributesToConnection).To(BeTrue())
 		})
 
 		It("queues window updates with the correction stream ID", func() {
@@ -56,7 +55,7 @@ var _ = Describe("Stream Flow controller", func() {
 			}
 
 			cc := NewConnectionFlowController(0, 0, nil, nil, utils.DefaultLogger)
-			fc := NewStreamFlowController(5, true, cc, receiveWindow, maxReceiveWindow, sendWindow, queueWindowUpdate, rttStats, utils.DefaultLogger).(*streamFlowController)
+			fc := NewStreamFlowController(5, cc, receiveWindow, maxReceiveWindow, sendWindow, queueWindowUpdate, rttStats, utils.DefaultLogger).(*streamFlowController)
 			fc.AddBytesRead(receiveWindow)
 			fc.MaybeQueueWindowUpdate()
 			Expect(queued).To(BeTrue())
@@ -82,19 +81,10 @@ var _ = Describe("Stream Flow controller", func() {
 
 			It("informs the connection flow controller about received data", func() {
 				controller.highestReceived = 10
-				controller.contributesToConnection = true
 				controller.connection.(*connectionFlowController).highestReceived = 100
 				err := controller.UpdateHighestReceived(20, false)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(controller.connection.(*connectionFlowController).highestReceived).To(Equal(protocol.ByteCount(100 + 10)))
-			})
-
-			It("doesn't informs the connection flow controller about received data if it doesn't contribute", func() {
-				controller.highestReceived = 10
-				controller.connection.(*connectionFlowController).highestReceived = 100
-				err := controller.UpdateHighestReceived(20, false)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(controller.connection.(*connectionFlowController).highestReceived).To(Equal(protocol.ByteCount(100)))
 			})
 
 			It("does not decrease the highestReceived", func() {
@@ -111,6 +101,7 @@ var _ = Describe("Stream Flow controller", func() {
 			})
 
 			It("does not give a flow control violation when using the window completely", func() {
+				controller.connection.(*connectionFlowController).receiveWindow = receiveWindow
 				err := controller.UpdateHighestReceived(receiveWindow, false)
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -163,19 +154,10 @@ var _ = Describe("Stream Flow controller", func() {
 			})
 		})
 
-		Context("registering data read", func() {
-			It("saves when data is read, on a stream not contributing to the connection", func() {
-				controller.AddBytesRead(100)
-				Expect(controller.bytesRead).To(Equal(protocol.ByteCount(100)))
-				Expect(controller.connection.(*connectionFlowController).bytesRead).To(BeZero())
-			})
-
-			It("saves when data is read, on a stream not contributing to the connection", func() {
-				controller.contributesToConnection = true
-				controller.AddBytesRead(200)
-				Expect(controller.bytesRead).To(Equal(protocol.ByteCount(200)))
-				Expect(controller.connection.(*connectionFlowController).bytesRead).To(Equal(protocol.ByteCount(200)))
-			})
+		It("saves when data is read", func() {
+			controller.AddBytesRead(200)
+			Expect(controller.bytesRead).To(Equal(protocol.ByteCount(200)))
+			Expect(controller.connection.(*connectionFlowController).bytesRead).To(Equal(protocol.ByteCount(200)))
 		})
 
 		Context("generating window updates", func() {
@@ -209,7 +191,6 @@ var _ = Describe("Stream Flow controller", func() {
 			})
 
 			It("queues connection-level window updates", func() {
-				controller.contributesToConnection = true
 				controller.MaybeQueueWindowUpdate()
 				Expect(queuedConnWindowUpdate).To(BeFalse())
 				controller.AddBytesRead(60)
@@ -219,7 +200,6 @@ var _ = Describe("Stream Flow controller", func() {
 
 			It("tells the connection flow controller when the window was autotuned", func() {
 				oldOffset := controller.bytesRead
-				controller.contributesToConnection = true
 				setRtt(scaleDuration(20 * time.Millisecond))
 				controller.epochStartOffset = oldOffset
 				controller.epochStartTime = time.Now().Add(-time.Millisecond)
@@ -228,19 +208,6 @@ var _ = Describe("Stream Flow controller", func() {
 				Expect(offset).To(Equal(protocol.ByteCount(oldOffset + 55 + 2*oldWindowSize)))
 				Expect(controller.receiveWindowSize).To(Equal(2 * oldWindowSize))
 				Expect(controller.connection.(*connectionFlowController).receiveWindowSize).To(Equal(protocol.ByteCount(float64(controller.receiveWindowSize) * protocol.ConnectionFlowControlMultiplier)))
-			})
-
-			It("doesn't tell the connection flow controller if it doesn't contribute", func() {
-				oldOffset := controller.bytesRead
-				controller.contributesToConnection = false
-				setRtt(scaleDuration(20 * time.Millisecond))
-				controller.epochStartOffset = oldOffset
-				controller.epochStartTime = time.Now().Add(-time.Millisecond)
-				controller.AddBytesRead(55)
-				offset := controller.GetWindowUpdate()
-				Expect(offset).ToNot(BeZero())
-				Expect(controller.receiveWindowSize).To(Equal(2 * oldWindowSize))
-				Expect(controller.connection.(*connectionFlowController).receiveWindowSize).To(Equal(protocol.ByteCount(2 * oldWindowSize))) // unchanged
 			})
 
 			It("doesn't increase the window after a final offset was already received", func() {
@@ -257,20 +224,13 @@ var _ = Describe("Stream Flow controller", func() {
 
 	Context("sending data", func() {
 		It("gets the size of the send window", func() {
+			controller.connection.UpdateSendWindow(1000)
 			controller.UpdateSendWindow(15)
-			controller.AddBytesSent(5)
-			Expect(controller.SendWindowSize()).To(Equal(protocol.ByteCount(10)))
-		})
-
-		It("doesn't care about the connection-level window, if it doesn't contribute", func() {
-			controller.UpdateSendWindow(15)
-			controller.connection.UpdateSendWindow(1)
 			controller.AddBytesSent(5)
 			Expect(controller.SendWindowSize()).To(Equal(protocol.ByteCount(10)))
 		})
 
 		It("makes sure that it doesn't overflow the connection-level window", func() {
-			controller.contributesToConnection = true
 			controller.connection.UpdateSendWindow(12)
 			controller.UpdateSendWindow(20)
 			controller.AddBytesSent(10)
@@ -278,7 +238,6 @@ var _ = Describe("Stream Flow controller", func() {
 		})
 
 		It("doesn't say that it's blocked, if only the connection is blocked", func() {
-			controller.contributesToConnection = true
 			controller.connection.UpdateSendWindow(50)
 			controller.UpdateSendWindow(100)
 			controller.AddBytesSent(50)

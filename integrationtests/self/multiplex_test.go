@@ -18,14 +18,8 @@ import (
 )
 
 var _ = Describe("Multiplexing", func() {
-	for _, v := range append(protocol.SupportedVersions, protocol.VersionTLS) {
+	for _, v := range protocol.SupportedVersions {
 		version := v
-
-		// gQUIC 44 uses 0 byte connection IDs for packets sent to the client
-		// It's not possible to do demultiplexing.
-		if v == protocol.Version44 {
-			continue
-		}
 
 		Context(fmt.Sprintf("with QUIC version %s", version), func() {
 			runServer := func(ln quic.Listener) {
@@ -143,10 +137,6 @@ var _ = Describe("Multiplexing", func() {
 
 			Context("multiplexing server and client on the same conn", func() {
 				It("connects to itself", func() {
-					if version != protocol.VersionTLS {
-						Skip("Connecting to itself only works with IETF QUIC.")
-					}
-
 					addr, err := net.ResolveUDPAddr("udp", "localhost:0")
 					Expect(err).ToNot(HaveOccurred())
 					conn, err := net.ListenUDP("udp", addr)

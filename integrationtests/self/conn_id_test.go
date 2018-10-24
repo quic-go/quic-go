@@ -60,42 +60,32 @@ var _ = Describe("Connection ID lengths tests", func() {
 		Expect(data).To(Equal(testserver.PRData))
 	}
 
-	Context("IETF QUIC", func() {
-		It("downloads a file using a 0-byte connection ID for the client", func() {
-			serverConf := &quic.Config{
-				ConnectionIDLength: randomConnIDLen(),
-				Versions:           []protocol.VersionNumber{protocol.VersionTLS},
-			}
-			clientConf := &quic.Config{
-				Versions: []protocol.VersionNumber{protocol.VersionTLS},
-			}
+	It("downloads a file using a 0-byte connection ID for the client", func() {
+		serverConf := &quic.Config{
+			ConnectionIDLength: randomConnIDLen(),
+			Versions:           []protocol.VersionNumber{protocol.VersionTLS},
+		}
+		clientConf := &quic.Config{
+			Versions: []protocol.VersionNumber{protocol.VersionTLS},
+		}
 
-			ln := runServer(serverConf)
-			defer ln.Close()
-			runClient(ln.Addr(), clientConf)
-		})
-
-		It("downloads a file when both client and server use a random connection ID length", func() {
-			serverConf := &quic.Config{
-				ConnectionIDLength: randomConnIDLen(),
-				Versions:           []protocol.VersionNumber{protocol.VersionTLS},
-			}
-			clientConf := &quic.Config{
-				ConnectionIDLength: randomConnIDLen(),
-				Versions:           []protocol.VersionNumber{protocol.VersionTLS},
-			}
-
-			ln := runServer(serverConf)
-			defer ln.Close()
-			runClient(ln.Addr(), clientConf)
-		})
+		ln := runServer(serverConf)
+		defer ln.Close()
+		runClient(ln.Addr(), clientConf)
 	})
 
-	Context("gQUIC", func() {
-		It("downloads a file using a 0-byte connection ID for the client", func() {
-			ln := runServer(&quic.Config{})
-			defer ln.Close()
-			runClient(ln.Addr(), &quic.Config{RequestConnectionIDOmission: true})
-		})
+	It("downloads a file when both client and server use a random connection ID length", func() {
+		serverConf := &quic.Config{
+			ConnectionIDLength: randomConnIDLen(),
+			Versions:           []protocol.VersionNumber{protocol.VersionTLS},
+		}
+		clientConf := &quic.Config{
+			ConnectionIDLength: randomConnIDLen(),
+			Versions:           []protocol.VersionNumber{protocol.VersionTLS},
+		}
+
+		ln := runServer(serverConf)
+		defer ln.Close()
+		runClient(ln.Addr(), clientConf)
 	})
 })

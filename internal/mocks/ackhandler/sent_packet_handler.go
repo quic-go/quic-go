@@ -98,18 +98,6 @@ func (mr *MockSentPacketHandlerMockRecorder) GetPacketNumberLen(arg0 interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPacketNumberLen", reflect.TypeOf((*MockSentPacketHandler)(nil).GetPacketNumberLen), arg0)
 }
 
-// GetStopWaitingFrame mocks base method
-func (m *MockSentPacketHandler) GetStopWaitingFrame(arg0 bool) *wire.StopWaitingFrame {
-	ret := m.ctrl.Call(m, "GetStopWaitingFrame", arg0)
-	ret0, _ := ret[0].(*wire.StopWaitingFrame)
-	return ret0
-}
-
-// GetStopWaitingFrame indicates an expected call of GetStopWaitingFrame
-func (mr *MockSentPacketHandlerMockRecorder) GetStopWaitingFrame(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStopWaitingFrame", reflect.TypeOf((*MockSentPacketHandler)(nil).GetStopWaitingFrame), arg0)
-}
-
 // OnAlarm mocks base method
 func (m *MockSentPacketHandler) OnAlarm() error {
 	ret := m.ctrl.Call(m, "OnAlarm")

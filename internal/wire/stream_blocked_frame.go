@@ -34,9 +34,6 @@ func parseStreamBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*Stream
 
 // Write writes a STREAM_BLOCKED frame
 func (f *StreamBlockedFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
-	if !version.UsesIETFFrameFormat() {
-		return (&blockedFrameLegacy{StreamID: f.StreamID}).Write(b, version)
-	}
 	b.WriteByte(0x09)
 	utils.WriteVarInt(b, uint64(f.StreamID))
 	utils.WriteVarInt(b, uint64(f.Offset))
@@ -45,8 +42,5 @@ func (f *StreamBlockedFrame) Write(b *bytes.Buffer, version protocol.VersionNumb
 
 // Length of a written frame
 func (f *StreamBlockedFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
-	if !version.UsesIETFFrameFormat() {
-		return 1 + 4
-	}
 	return 1 + utils.VarIntLen(uint64(f.StreamID)) + utils.VarIntLen(uint64(f.Offset))
 }

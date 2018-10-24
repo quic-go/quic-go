@@ -46,7 +46,7 @@ func (m messageType) String() string {
 	}
 }
 
-type cryptoSetupTLS struct {
+type cryptoSetup struct {
 	tlsConf *qtls.Config
 
 	messageChan chan []byte
@@ -92,8 +92,8 @@ type cryptoSetupTLS struct {
 	perspective protocol.Perspective
 }
 
-var _ qtls.RecordLayer = &cryptoSetupTLS{}
-var _ CryptoSetupTLS = &cryptoSetupTLS{}
+var _ qtls.RecordLayer = &cryptoSetup{}
+var _ CryptoSetup = &cryptoSetup{}
 
 type versionInfo struct {
 	initialVersion    protocol.VersionNumber
@@ -101,8 +101,8 @@ type versionInfo struct {
 	currentVersion    protocol.VersionNumber
 }
 
-// NewCryptoSetupTLSClient creates a new TLS crypto setup for the client
-func NewCryptoSetupTLSClient(
+// NewCryptoSetupClient creates a new crypto setup for the client
+func NewCryptoSetupClient(
 	initialStream io.Writer,
 	handshakeStream io.Writer,
 	connID protocol.ConnectionID,
@@ -114,8 +114,8 @@ func NewCryptoSetupTLSClient(
 	currentVersion protocol.VersionNumber,
 	logger utils.Logger,
 	perspective protocol.Perspective,
-) (CryptoSetupTLS, <-chan struct{} /* ClientHello written */, error) {
-	return newCryptoSetupTLS(
+) (CryptoSetup, <-chan struct{} /* ClientHello written */, error) {
+	return newCryptoSetup(
 		initialStream,
 		handshakeStream,
 		connID,
@@ -132,8 +132,8 @@ func NewCryptoSetupTLSClient(
 	)
 }
 
-// NewCryptoSetupTLSServer creates a new TLS crypto setup for the server
-func NewCryptoSetupTLSServer(
+// NewCryptoSetupServer creates a new crypto setup for the server
+func NewCryptoSetupServer(
 	initialStream io.Writer,
 	handshakeStream io.Writer,
 	connID protocol.ConnectionID,
@@ -144,8 +144,8 @@ func NewCryptoSetupTLSServer(
 	currentVersion protocol.VersionNumber,
 	logger utils.Logger,
 	perspective protocol.Perspective,
-) (CryptoSetupTLS, error) {
-	cs, _, err := newCryptoSetupTLS(
+) (CryptoSetup, error) {
+	cs, _, err := newCryptoSetup(
 		initialStream,
 		handshakeStream,
 		connID,
@@ -162,7 +162,7 @@ func NewCryptoSetupTLSServer(
 	return cs, err
 }
 
-func newCryptoSetupTLS(
+func newCryptoSetup(
 	initialStream io.Writer,
 	handshakeStream io.Writer,
 	connID protocol.ConnectionID,
@@ -172,12 +172,12 @@ func newCryptoSetupTLS(
 	versionInfo versionInfo,
 	logger utils.Logger,
 	perspective protocol.Perspective,
-) (CryptoSetupTLS, <-chan struct{} /* ClientHello written */, error) {
-	initialAEAD, err := crypto.NewNullAEAD(perspective, connID, protocol.VersionTLS)
+) (CryptoSetup, <-chan struct{} /* ClientHello written */, error) {
+	initialAEAD, err := crypto.NewNullAEAD(connID, perspective)
 	if err != nil {
 		return nil, nil, err
 	}
-	cs := &cryptoSetupTLS{
+	cs := &cryptoSetup{
 		initialStream:          initialStream,
 		initialAEAD:            initialAEAD,
 		handshakeStream:        handshakeStream,
@@ -221,7 +221,7 @@ func newCryptoSetupTLS(
 	return cs, cs.clientHelloWrittenChan, nil
 }
 
-func (h *cryptoSetupTLS) RunHandshake() error {
+func (h *cryptoSetup) RunHandshake() error {
 	var conn *qtls.Conn
 	switch h.perspective {
 	case protocol.PerspectiveClient:
@@ -264,7 +264,7 @@ func (h *cryptoSetupTLS) RunHandshake() error {
 	}
 }
 
-func (h *cryptoSetupTLS) Close() error {
+func (h *cryptoSetup) Close() error {
 	close(h.closeChan)
 	// wait until qtls.Handshake() actually returned
 	<-h.handshakeDone
@@ -274,7 +274,7 @@ func (h *cryptoSetupTLS) Close() error {
 // handleMessage handles a TLS handshake message.
 // It is called by the crypto streams when a new message is available.
 // It returns if it is done with messages on the same encryption level.
-func (h *cryptoSetupTLS) HandleMessage(data []byte, encLevel protocol.EncryptionLevel) bool /* stream finished */ {
+func (h *cryptoSetup) HandleMessage(data []byte, encLevel protocol.EncryptionLevel) bool /* stream finished */ {
 	msgType := messageType(data[0])
 	h.logger.Debugf("Received %s message (%d bytes, encryption level: %s)", msgType, len(data), encLevel)
 	if err := h.checkEncryptionLevel(msgType, encLevel); err != nil {
@@ -292,7 +292,7 @@ func (h *cryptoSetupTLS) HandleMessage(data []byte, encLevel protocol.Encryption
 	}
 }
 
-func (h *cryptoSetupTLS) checkEncryptionLevel(msgType messageType, encLevel protocol.EncryptionLevel) error {
+func (h *cryptoSetup) checkEncryptionLevel(msgType messageType, encLevel protocol.EncryptionLevel) error {
 	var expected protocol.EncryptionLevel
 	switch msgType {
 	case typeClientHello,
@@ -313,7 +313,7 @@ func (h *cryptoSetupTLS) checkEncryptionLevel(msgType messageType, encLevel prot
 	return nil
 }
 
-func (h *cryptoSetupTLS) handleMessageForServer(msgType messageType) bool {
+func (h *cryptoSetup) handleMessageForServer(msgType messageType) bool {
 	switch msgType {
 	case typeClientHello:
 		select {
@@ -358,7 +358,7 @@ func (h *cryptoSetupTLS) handleMessageForServer(msgType messageType) bool {
 	}
 }
 
-func (h *cryptoSetupTLS) handleMessageForClient(msgType messageType) bool {
+func (h *cryptoSetup) handleMessageForClient(msgType messageType) bool {
 	switch msgType {
 	case typeServerHello:
 		// get the handshake read key
@@ -408,7 +408,7 @@ func (h *cryptoSetupTLS) handleMessageForClient(msgType messageType) bool {
 
 // ReadHandshakeMessage is called by TLS.
 // It blocks until a new handshake message is available.
-func (h *cryptoSetupTLS) ReadHandshakeMessage() ([]byte, error) {
+func (h *cryptoSetup) ReadHandshakeMessage() ([]byte, error) {
 	// TODO: add some error handling here (when the session is closed)
 	msg, ok := <-h.messageChan
 	if !ok {
@@ -417,7 +417,7 @@ func (h *cryptoSetupTLS) ReadHandshakeMessage() ([]byte, error) {
 	return msg, nil
 }
 
-func (h *cryptoSetupTLS) SetReadKey(suite *qtls.CipherSuite, trafficSecret []byte) {
+func (h *cryptoSetup) SetReadKey(suite *qtls.CipherSuite, trafficSecret []byte) {
 	key := crypto.HkdfExpandLabel(suite.Hash(), trafficSecret, "key", suite.KeyLen())
 	iv := crypto.HkdfExpandLabel(suite.Hash(), trafficSecret, "iv", suite.IVLen())
 	opener := newOpener(suite.AEAD(key, iv), iv)
@@ -437,7 +437,7 @@ func (h *cryptoSetupTLS) SetReadKey(suite *qtls.CipherSuite, trafficSecret []byt
 	h.receivedReadKey <- struct{}{}
 }
 
-func (h *cryptoSetupTLS) SetWriteKey(suite *qtls.CipherSuite, trafficSecret []byte) {
+func (h *cryptoSetup) SetWriteKey(suite *qtls.CipherSuite, trafficSecret []byte) {
 	key := crypto.HkdfExpandLabel(suite.Hash(), trafficSecret, "key", suite.KeyLen())
 	iv := crypto.HkdfExpandLabel(suite.Hash(), trafficSecret, "iv", suite.IVLen())
 	sealer := newSealer(suite.AEAD(key, iv), iv)
@@ -458,7 +458,7 @@ func (h *cryptoSetupTLS) SetWriteKey(suite *qtls.CipherSuite, trafficSecret []by
 }
 
 // WriteRecord is called when TLS writes data
-func (h *cryptoSetupTLS) WriteRecord(p []byte) (int, error) {
+func (h *cryptoSetup) WriteRecord(p []byte) (int, error) {
 	switch h.writeEncLevel {
 	case protocol.EncryptionInitial:
 		// assume that the first WriteRecord call contains the ClientHello
@@ -475,7 +475,7 @@ func (h *cryptoSetupTLS) WriteRecord(p []byte) (int, error) {
 	}
 }
 
-func (h *cryptoSetupTLS) GetSealer() (protocol.EncryptionLevel, Sealer) {
+func (h *cryptoSetup) GetSealer() (protocol.EncryptionLevel, Sealer) {
 	if h.sealer != nil {
 		return protocol.Encryption1RTT, h.sealer
 	}
@@ -485,7 +485,7 @@ func (h *cryptoSetupTLS) GetSealer() (protocol.EncryptionLevel, Sealer) {
 	return protocol.EncryptionInitial, h.initialAEAD
 }
 
-func (h *cryptoSetupTLS) GetSealerWithEncryptionLevel(level protocol.EncryptionLevel) (Sealer, error) {
+func (h *cryptoSetup) GetSealerWithEncryptionLevel(level protocol.EncryptionLevel) (Sealer, error) {
 	errNoSealer := fmt.Errorf("CryptoSetup: no sealer with encryption level %s", level.String())
 
 	switch level {
@@ -506,25 +506,25 @@ func (h *cryptoSetupTLS) GetSealerWithEncryptionLevel(level protocol.EncryptionL
 	}
 }
 
-func (h *cryptoSetupTLS) OpenInitial(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error) {
+func (h *cryptoSetup) OpenInitial(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error) {
 	return h.initialAEAD.Open(dst, src, pn, ad)
 }
 
-func (h *cryptoSetupTLS) OpenHandshake(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error) {
+func (h *cryptoSetup) OpenHandshake(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error) {
 	if h.handshakeOpener == nil {
 		return nil, errors.New("no handshake opener")
 	}
 	return h.handshakeOpener.Open(dst, src, pn, ad)
 }
 
-func (h *cryptoSetupTLS) Open1RTT(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error) {
+func (h *cryptoSetup) Open1RTT(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error) {
 	if h.opener == nil {
 		return nil, errors.New("no 1-RTT opener")
 	}
 	return h.opener.Open(dst, src, pn, ad)
 }
 
-func (h *cryptoSetupTLS) ConnectionState() ConnectionState {
+func (h *cryptoSetup) ConnectionState() ConnectionState {
 	// TODO: return the connection state
 	return ConnectionState{}
 }

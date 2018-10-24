@@ -45,8 +45,7 @@ type sentPacketHandler struct {
 	lowestPacketNotConfirmedAcked protocol.PacketNumber
 	largestSentBeforeRTO          protocol.PacketNumber
 
-	packetHistory      *sentPacketHistory
-	stopWaitingManager stopWaitingManager
+	packetHistory *sentPacketHistory
 
 	retransmissionQueue []*Packet
 
@@ -90,12 +89,11 @@ func NewSentPacketHandler(rttStats *congestion.RTTStats, logger utils.Logger, ve
 	)
 
 	return &sentPacketHandler{
-		packetHistory:      newSentPacketHistory(),
-		stopWaitingManager: stopWaitingManager{},
-		rttStats:           rttStats,
-		congestion:         congestion,
-		logger:             logger,
-		version:            version,
+		packetHistory: newSentPacketHistory(),
+		rttStats:      rttStats,
+		congestion:    congestion,
+		logger:        logger,
+		version:       version,
 	}
 }
 
@@ -110,15 +108,13 @@ func (h *sentPacketHandler) SetHandshakeComplete() {
 	h.logger.Debugf("Handshake complete. Discarding all outstanding handshake packets.")
 	var queue []*Packet
 	for _, packet := range h.retransmissionQueue {
-		if packet.EncryptionLevel == protocol.EncryptionForwardSecure ||
-			packet.EncryptionLevel == protocol.Encryption1RTT {
+		if packet.EncryptionLevel == protocol.Encryption1RTT {
 			queue = append(queue, packet)
 		}
 	}
 	var handshakePackets []*Packet
 	h.packetHistory.Iterate(func(p *Packet) (bool, error) {
-		if p.EncryptionLevel != protocol.EncryptionForwardSecure &&
-			p.EncryptionLevel != protocol.Encryption1RTT {
+		if p.EncryptionLevel != protocol.Encryption1RTT {
 			handshakePackets = append(handshakePackets, p)
 		}
 		return true, nil
@@ -169,8 +165,7 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* isRetransmitt
 	isRetransmittable := len(packet.Frames) != 0
 
 	if isRetransmittable {
-		if packet.EncryptionLevel != protocol.EncryptionForwardSecure &&
-			packet.EncryptionLevel != protocol.Encryption1RTT {
+		if packet.EncryptionLevel != protocol.Encryption1RTT {
 			h.lastSentHandshakePacketTime = packet.SendTime
 		}
 		h.lastSentRetransmittablePacketTime = packet.SendTime
@@ -217,12 +212,11 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 
 	priorInFlight := h.bytesInFlight
 	for _, p := range ackedPackets {
-		// TODO(#1534): also check the encryption level for IETF QUIC
-		if !h.version.UsesTLS() {
-			if encLevel < p.EncryptionLevel {
-				return fmt.Errorf("Received ACK with encryption level %s that acks a packet %d (encryption level %s)", encLevel, p.PacketNumber, p.EncryptionLevel)
-			}
-		}
+		// TODO(#1534): check the encryption level
+		// if encLevel < p.EncryptionLevel {
+		// 	return fmt.Errorf("Received ACK with encryption level %s that acks a packet %d (encryption level %s)", encLevel, p.PacketNumber, p.EncryptionLevel)
+		// }
+
 		// largestAcked == 0 either means that the packet didn't contain an ACK, or it just acked packet 0
 		// It is safe to ignore the corner case of packets that just acked packet 0, because
 		// the lowestPacketNotConfirmedAcked is only used to limit the number of ACK ranges we will send.
@@ -243,8 +237,6 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 	h.updateLossDetectionAlarm()
 
 	h.garbageCollectSkippedPackets()
-	h.stopWaitingManager.ReceivedAck(ackFrame)
-
 	return nil
 }
 
@@ -530,10 +522,6 @@ func (h *sentPacketHandler) GetPacketNumberLen(p protocol.PacketNumber) protocol
 	return protocol.GetPacketNumberLengthForHeader(p, h.lowestUnacked(), h.version)
 }
 
-func (h *sentPacketHandler) GetStopWaitingFrame(force bool) *wire.StopWaitingFrame {
-	return h.stopWaitingManager.GetStopWaitingFrame(force)
-}
-
 func (h *sentPacketHandler) SendMode() SendMode {
 	numTrackedPackets := len(h.retransmissionQueue) + h.packetHistory.Len()
 
@@ -592,9 +580,7 @@ func (h *sentPacketHandler) ShouldSendNumPackets() int {
 func (h *sentPacketHandler) queueHandshakePacketsForRetransmission() error {
 	var handshakePackets []*Packet
 	h.packetHistory.Iterate(func(p *Packet) (bool, error) {
-		if p.canBeRetransmitted &&
-			p.EncryptionLevel != protocol.EncryptionForwardSecure &&
-			p.EncryptionLevel != protocol.Encryption1RTT {
+		if p.canBeRetransmitted && p.EncryptionLevel != protocol.Encryption1RTT {
 			handshakePackets = append(handshakePackets, p)
 		}
 		return true, nil
@@ -616,7 +602,6 @@ func (h *sentPacketHandler) queuePacketForRetransmission(p *Packet) error {
 		return err
 	}
 	h.retransmissionQueue = append(h.retransmissionQueue, p)
-	h.stopWaitingManager.QueuedRetransmissionForPacketNumber(p.PacketNumber)
 	return nil
 }
 
