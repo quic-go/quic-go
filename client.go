@@ -27,8 +27,7 @@ type client struct {
 
 	packetHandlers packetHandlerManager
 
-	token      []byte
-	numRetries int
+	token []byte
 
 	versionNegotiated                bool // has the server accepted our version
 	receivedVersionNegotiationPacket bool
@@ -478,19 +477,18 @@ func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
 func (c *client) handleRetryPacket(hdr *wire.Header) {
 	c.logger.Debugf("<- Received Retry")
 	hdr.Log(c.logger)
-	// A server that performs multiple retries must use a source connection ID of at least 8 bytes.
-	// Only a server that won't send additional Retries can use shorter connection IDs.
-	if hdr.OrigDestConnectionID.Len() < protocol.MinConnectionIDLenInitial {
-		c.logger.Debugf("Received a Retry with a too short Original Destination Connection ID: %d bytes, must have at least %d bytes.", hdr.OrigDestConnectionID.Len(), protocol.MinConnectionIDLenInitial)
-		return
-	}
 	if !hdr.OrigDestConnectionID.Equal(c.destConnID) {
-		c.logger.Debugf("Received spoofed Retry. Original Destination Connection ID: %s, expected: %s", hdr.OrigDestConnectionID, c.destConnID)
+		c.logger.Debugf("Ignoring spoofed Retry. Original Destination Connection ID: %s, expected: %s", hdr.OrigDestConnectionID, c.destConnID)
 		return
 	}
-	c.numRetries++
-	if c.numRetries > protocol.MaxRetries {
-		c.session.destroy(qerr.CryptoTooManyRejects)
+	if hdr.SrcConnectionID.Equal(c.destConnID) {
+		c.logger.Debugf("Ignoring Retry, since the server didn't change the Source Connection ID.")
+		return
+	}
+	// If a token is already set, this means that we already received a Retry from the server.
+	// Ignore this Retry packet.
+	if len(c.token) > 0 {
+		c.logger.Debugf("Ignoring Retry, since a Retry was already received.")
 		return
 	}
 	c.destConnID = hdr.SrcConnectionID

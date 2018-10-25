@@ -598,7 +598,7 @@ var _ = Describe("Client", func() {
 				Expect(sessions).To(BeEmpty())
 			})
 
-			It("only accepts 3 retries", func() {
+			It("only accepts a single retry", func() {
 				manager := NewMockPacketHandlerManager(mockCtrl)
 				manager.EXPECT().Add(gomock.Any(), gomock.Any()).Do(func(id protocol.ConnectionID, handler packetHandler) {
 					go handler.handlePacket(&receivedPacket{
@@ -606,7 +606,7 @@ var _ = Describe("Client", func() {
 							IsLongHeader:         true,
 							Type:                 protocol.PacketTypeRetry,
 							Token:                []byte("foobar"),
-							SrcConnectionID:      connID,
+							SrcConnectionID:      protocol.ConnectionID{1, 2, 3, 4},
 							DestConnectionID:     id,
 							OrigDestConnectionID: connID,
 							Version:              protocol.VersionTLS,
@@ -619,18 +619,23 @@ var _ = Describe("Client", func() {
 				config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}}
 				cl.config = config
 
-				sessions := make(chan quicSession, protocol.MaxRetries+1)
-				for i := 0; i < protocol.MaxRetries+1; i++ {
-					run := make(chan error)
-					sess := NewMockQuicSession(mockCtrl)
-					sess.EXPECT().run().DoAndReturn(func() error {
-						return <-run
-					})
-					sess.EXPECT().destroy(gomock.Any()).Do(func(e error) {
-						run <- e
-					})
-					sessions <- sess
-				}
+				sessions := make(chan quicSession, 2)
+				run := make(chan error)
+				sess := NewMockQuicSession(mockCtrl)
+				sess.EXPECT().run().DoAndReturn(func() error {
+					defer GinkgoRecover()
+					var err error
+					Eventually(run).Should(Receive(&err))
+					return err
+				})
+				sess.EXPECT().destroy(gomock.Any()).Do(func(e error) {
+					run <- e
+				})
+				sessions <- sess
+				doneErr := errors.New("nothing to do")
+				sess = NewMockQuicSession(mockCtrl)
+				sess.EXPECT().run().Return(doneErr)
+				sessions <- sess
 
 				newTLSClientSession = func(
 					_ connection,
@@ -648,8 +653,7 @@ var _ = Describe("Client", func() {
 					return <-sessions, nil
 				}
 				_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
-				Expect(err).To(HaveOccurred())
-				Expect(err.(qerr.ErrorCode)).To(Equal(qerr.CryptoTooManyRejects))
+				Expect(err).To(MatchError(doneErr))
 				Expect(sessions).To(BeEmpty())
 			})
 		})

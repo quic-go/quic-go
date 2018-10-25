@@ -200,6 +200,7 @@ var _ = Describe("Handshake RTT tests", func() {
 			serverConfig.AcceptCookie = func(_ net.Addr, _ *quic.Cookie) bool {
 				return false
 			}
+			clientConfig.HandshakeTimeout = 500 * time.Millisecond
 			runServerAndProxy()
 			_, err := quic.DialAddr(
 				proxy.LocalAddr().String(),
@@ -207,7 +208,7 @@ var _ = Describe("Handshake RTT tests", func() {
 				clientConfig,
 			)
 			Expect(err).To(HaveOccurred())
-			Expect(err.(qerr.ErrorCode)).To(Equal(qerr.CryptoTooManyRejects))
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.HandshakeTimeout))
 		})
 	})
 })
