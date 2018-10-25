@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -96,14 +97,18 @@ func (p *TransportParameters) getHelloMap() map[Tag][]byte {
 }
 
 func (p *TransportParameters) unmarshal(data []byte) error {
+	// needed to check that every parameter is only sent at most once
+	var parameterIDs []transportParameterID
+
 	for len(data) >= 4 {
-		paramID := binary.BigEndian.Uint16(data[:2])
+		paramID := transportParameterID(binary.BigEndian.Uint16(data[:2]))
 		paramLen := int(binary.BigEndian.Uint16(data[2:4]))
 		data = data[4:]
 		if len(data) < paramLen {
 			return fmt.Errorf("remaining length (%d) smaller than parameter length (%d)", len(data), paramLen)
 		}
-		switch transportParameterID(paramID) {
+		parameterIDs = append(parameterIDs, paramID)
+		switch paramID {
 		case initialMaxStreamDataParameterID:
 			if paramLen != 4 {
 				return fmt.Errorf("wrong length for initial_max_stream_data: %d (expected 4)", paramLen)
@@ -150,6 +155,14 @@ func (p *TransportParameters) unmarshal(data []byte) error {
 			p.StatelessResetToken = data[:16]
 		}
 		data = data[paramLen:]
+	}
+
+	// check that every transport parameter was sent at most once
+	sort.Slice(parameterIDs, func(i, j int) bool { return parameterIDs[i] < parameterIDs[j] })
+	for i := 0; i < len(parameterIDs)-1; i++ {
+		if parameterIDs[i] == parameterIDs[i+1] {
+			return fmt.Errorf("received duplicate transport parameter %#x", parameterIDs[i])
+		}
 	}
 
 	if len(data) != 0 {

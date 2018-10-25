@@ -2,6 +2,7 @@ package handshake
 
 import (
 	"bytes"
+	"fmt"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -146,6 +147,7 @@ var _ = Describe("Transport Parameters", func() {
 					statelessResetTokenParameterID:   statelessResetToken,
 				}
 			})
+
 			It("reads parameters", func() {
 				err := params.unmarshal(marshal(parameters))
 				Expect(err).ToNot(HaveOccurred())
@@ -158,6 +160,16 @@ var _ = Describe("Transport Parameters", func() {
 				Expect(params.MaxPacketSize).To(Equal(protocol.ByteCount(0x7331)))
 				Expect(params.DisableMigration).To(BeTrue())
 				Expect(params.StatelessResetToken).To(Equal(statelessResetToken))
+			})
+
+			It("errors if a parameter is sent twice", func() {
+				data := marshal(parameters)
+				parameters = map[transportParameterID][]byte{
+					maxPacketSizeParameterID: {0x73, 0x31},
+				}
+				data = append(data, marshal(parameters)...)
+				err := params.unmarshal(data)
+				Expect(err).To(MatchError(fmt.Sprintf("received duplicate transport parameter %#x", maxPacketSizeParameterID)))
 			})
 
 			It("doesn't allow values below the minimum remote idle timeout", func() {
