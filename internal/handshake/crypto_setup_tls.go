@@ -1,7 +1,6 @@
 package handshake
 
 import (
-	"bytes"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -64,8 +63,6 @@ type cryptoSetupTLS struct {
 	handshakeErrChan chan struct{}
 	// HandleData() sends errors on the messageErrChan
 	messageErrChan chan error
-	// handshakeEvent signals a change of encryption level to the session
-	handshakeEvent chan<- struct{}
 	// handshakeComplete is closed when the handshake completes
 	handshakeComplete chan<- struct{}
 	// transport parameters are sent on the receivedTransportParams, as soon as they are received
@@ -74,14 +71,12 @@ type cryptoSetupTLS struct {
 	clientHelloWritten     bool
 	clientHelloWrittenChan chan struct{}
 
-	initialReadBuf bytes.Buffer
-	initialStream  io.Writer
-	initialAEAD    crypto.AEAD
+	initialStream io.Writer
+	initialAEAD   crypto.AEAD
 
-	handshakeReadBuf bytes.Buffer
-	handshakeStream  io.Writer
-	handshakeOpener  Opener
-	handshakeSealer  Sealer
+	handshakeStream io.Writer
+	handshakeOpener Opener
+	handshakeSealer Sealer
 
 	opener Opener
 	sealer Sealer
@@ -111,7 +106,6 @@ func NewCryptoSetupTLSClient(
 	connID protocol.ConnectionID,
 	params *TransportParameters,
 	handleParams func(*TransportParameters),
-	handshakeEvent chan<- struct{},
 	handshakeComplete chan<- struct{},
 	tlsConf *tls.Config,
 	initialVersion protocol.VersionNumber,
@@ -126,7 +120,6 @@ func NewCryptoSetupTLSClient(
 		connID,
 		params,
 		handleParams,
-		handshakeEvent,
 		handshakeComplete,
 		tlsConf,
 		versionInfo{
@@ -146,7 +139,6 @@ func NewCryptoSetupTLSServer(
 	connID protocol.ConnectionID,
 	params *TransportParameters,
 	handleParams func(*TransportParameters),
-	handshakeEvent chan<- struct{},
 	handshakeComplete chan<- struct{},
 	tlsConf *tls.Config,
 	supportedVersions []protocol.VersionNumber,
@@ -160,7 +152,6 @@ func NewCryptoSetupTLSServer(
 		connID,
 		params,
 		handleParams,
-		handshakeEvent,
 		handshakeComplete,
 		tlsConf,
 		versionInfo{
@@ -179,7 +170,6 @@ func newCryptoSetupTLS(
 	connID protocol.ConnectionID,
 	params *TransportParameters,
 	handleParams func(*TransportParameters),
-	handshakeEvent chan<- struct{},
 	handshakeComplete chan<- struct{},
 	tlsConf *tls.Config,
 	versionInfo versionInfo,
@@ -197,7 +187,6 @@ func newCryptoSetupTLS(
 		readEncLevel:           protocol.EncryptionInitial,
 		writeEncLevel:          protocol.EncryptionInitial,
 		handleParamsCallback:   handleParams,
-		handshakeEvent:         handshakeEvent,
 		handshakeComplete:      handshakeComplete,
 		logger:                 logger,
 		perspective:            perspective,
@@ -272,51 +261,25 @@ func (h *cryptoSetupTLS) RunHandshake() error {
 	}
 }
 
-func (h *cryptoSetupTLS) HandleData(data []byte, encLevel protocol.EncryptionLevel) {
-	var buf *bytes.Buffer
-	switch encLevel {
-	case protocol.EncryptionInitial:
-		buf = &h.initialReadBuf
-	case protocol.EncryptionHandshake:
-		buf = &h.handshakeReadBuf
-	default:
-		h.messageErrChan <- fmt.Errorf("received handshake data with unexpected encryption level: %s", encLevel)
-		return
-	}
-	buf.Write(data)
-	for buf.Len() >= 4 {
-		b := buf.Bytes()
-		// read the TLS message length
-		length := int(b[1])<<16 | int(b[2])<<8 | int(b[3])
-		if buf.Len() < 4+length { // message not yet complete
-			return
-		}
-		msg := make([]byte, length+4)
-		buf.Read(msg)
-		if err := h.handleMessage(msg, encLevel); err != nil {
-			h.messageErrChan <- err
-		}
-	}
-}
-
 // handleMessage handles a TLS handshake message.
 // It is called by the crypto streams when a new message is available.
-func (h *cryptoSetupTLS) handleMessage(data []byte, encLevel protocol.EncryptionLevel) error {
+// It returns if it is done with messages on the same encryption level.
+func (h *cryptoSetupTLS) HandleMessage(data []byte, encLevel protocol.EncryptionLevel) bool /* stream finished */ {
 	msgType := messageType(data[0])
 	h.logger.Debugf("Received %s message (%d bytes, encryption level: %s)", msgType, len(data), encLevel)
 	if err := h.checkEncryptionLevel(msgType, encLevel); err != nil {
-		return err
+		h.messageErrChan <- err
+		return false
 	}
 	h.messageChan <- data
 	switch h.perspective {
 	case protocol.PerspectiveClient:
-		h.handleMessageForClient(msgType)
+		return h.handleMessageForClient(msgType)
 	case protocol.PerspectiveServer:
-		h.handleMessageForServer(msgType)
+		return h.handleMessageForServer(msgType)
 	default:
 		panic("")
 	}
-	return nil
 }
 
 func (h *cryptoSetupTLS) checkEncryptionLevel(msgType messageType, encLevel protocol.EncryptionLevel) error {
@@ -340,78 +303,78 @@ func (h *cryptoSetupTLS) checkEncryptionLevel(msgType messageType, encLevel prot
 	return nil
 }
 
-func (h *cryptoSetupTLS) handleMessageForServer(msgType messageType) {
+func (h *cryptoSetupTLS) handleMessageForServer(msgType messageType) bool {
 	switch msgType {
 	case typeClientHello:
 		select {
 		case params := <-h.receivedTransportParams:
 			h.handleParamsCallback(&params)
 		case <-h.handshakeErrChan:
-			return
+			return false
 		}
 		// get the handshake write key
 		select {
 		case <-h.receivedWriteKey:
 		case <-h.handshakeErrChan:
-			return
+			return false
 		}
 		// get the 1-RTT write key
 		select {
 		case <-h.receivedWriteKey:
 		case <-h.handshakeErrChan:
-			return
+			return false
 		}
 		// get the handshake read key
 		// TODO: check that the initial stream doesn't have any more data
 		select {
 		case <-h.receivedReadKey:
 		case <-h.handshakeErrChan:
-			return
+			return false
 		}
-		h.handshakeEvent <- struct{}{}
+		return true
 	case typeCertificate, typeCertificateVerify:
 		// nothing to do
+		return false
 	case typeFinished:
 		// get the 1-RTT read key
-		// TODO: check that the handshake stream doesn't have any more data
 		select {
 		case <-h.receivedReadKey:
 		case <-h.handshakeErrChan:
-			return
+			return false
 		}
-		h.handshakeEvent <- struct{}{}
+		return true
 	default:
 		panic("unexpected handshake message")
 	}
 }
 
-func (h *cryptoSetupTLS) handleMessageForClient(msgType messageType) {
+func (h *cryptoSetupTLS) handleMessageForClient(msgType messageType) bool {
 	switch msgType {
 	case typeServerHello:
 		// get the handshake read key
-		// TODO: check that the initial stream doesn't have any more data
 		select {
 		case <-h.receivedReadKey:
 		case <-h.handshakeErrChan:
-			return
+			return false
 		}
-		h.handshakeEvent <- struct{}{}
+		return true
 	case typeEncryptedExtensions:
 		select {
 		case params := <-h.receivedTransportParams:
 			h.handleParamsCallback(&params)
 		case <-h.handshakeErrChan:
-			return
+			return false
 		}
+		return false
 	case typeCertificateRequest, typeCertificate, typeCertificateVerify:
 		// nothing to do
+		return false
 	case typeFinished:
 		// get the handshake write key
-		// TODO: check that the initial stream doesn't have any more data
 		select {
 		case <-h.receivedWriteKey:
 		case <-h.handshakeErrChan:
-			return
+			return false
 		}
 		// While the order of these two is not defined by the TLS spec,
 		// we have to do it on the same order as our TLS library does it.
@@ -419,16 +382,15 @@ func (h *cryptoSetupTLS) handleMessageForClient(msgType messageType) {
 		select {
 		case <-h.receivedWriteKey:
 		case <-h.handshakeErrChan:
-			return
+			return false
 		}
 		// get the 1-RTT read key
 		select {
 		case <-h.receivedReadKey:
 		case <-h.handshakeErrChan:
-			return
+			return false
 		}
-		// TODO: check that the handshake stream doesn't have any more data
-		h.handshakeEvent <- struct{}{}
+		return true
 	default:
 		panic("unexpected handshake message: ")
 	}

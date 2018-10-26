@@ -35,6 +35,18 @@ func (m *MockCryptoStream) EXPECT() *MockCryptoStreamMockRecorder {
 	return m.recorder
 }
 
+// Finish mocks base method
+func (m *MockCryptoStream) Finish() error {
+	ret := m.ctrl.Call(m, "Finish")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Finish indicates an expected call of Finish
+func (mr *MockCryptoStreamMockRecorder) Finish() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Finish", reflect.TypeOf((*MockCryptoStream)(nil).Finish))
+}
+
 // GetCryptoData mocks base method
 func (m *MockCryptoStream) GetCryptoData() []byte {
 	ret := m.ctrl.Call(m, "GetCryptoData")

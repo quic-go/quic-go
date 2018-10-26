@@ -120,6 +120,7 @@ type session struct {
 	paramsChan <-chan handshake.TransportParameters
 	// the handshakeEvent channel is passed to the CryptoSetup.
 	// It receives when it makes sense to try decrypting undecryptable packets.
+	// Only used for gQUIC.
 	handshakeEvent        <-chan struct{}
 	handshakeCompleteChan <-chan struct{} // is closed when the handshake completes
 	handshakeComplete     bool
@@ -325,7 +326,6 @@ func newTLSServerSession(
 	logger utils.Logger,
 	v protocol.VersionNumber,
 ) (quicSession, error) {
-	handshakeEvent := make(chan struct{}, 2) // TODO: explain cap
 	handshakeCompleteChan := make(chan struct{})
 	s := &session{
 		conn:                  conn,
@@ -334,7 +334,6 @@ func newTLSServerSession(
 		srcConnID:             srcConnID,
 		destConnID:            destConnID,
 		perspective:           protocol.PerspectiveServer,
-		handshakeEvent:        handshakeEvent,
 		handshakeCompleteChan: handshakeCompleteChan,
 		logger:                logger,
 		version:               v,
@@ -350,7 +349,6 @@ func newTLSServerSession(
 		origConnID,
 		params,
 		s.processTransportParameters,
-		handshakeEvent,
 		handshakeCompleteChan,
 		tlsConf,
 		conf.Versions,
@@ -403,7 +401,6 @@ var newTLSClientSession = func(
 	logger utils.Logger,
 	v protocol.VersionNumber,
 ) (quicSession, error) {
-	handshakeEvent := make(chan struct{}, 2) // TODO: explain cap
 	handshakeCompleteChan := make(chan struct{})
 	s := &session{
 		conn:                  conn,
@@ -412,7 +409,6 @@ var newTLSClientSession = func(
 		srcConnID:             srcConnID,
 		destConnID:            destConnID,
 		perspective:           protocol.PerspectiveClient,
-		handshakeEvent:        handshakeEvent,
 		handshakeCompleteChan: handshakeCompleteChan,
 		logger:                logger,
 		version:               v,
@@ -426,7 +422,6 @@ var newTLSClientSession = func(
 		s.destConnID,
 		params,
 		s.processTransportParameters,
-		handshakeEvent,
 		handshakeCompleteChan,
 		tlsConf,
 		initialVersion,
@@ -804,7 +799,14 @@ func (s *session) handlePacket(p *receivedPacket) {
 }
 
 func (s *session) handleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.EncryptionLevel) error {
-	return s.cryptoStreamManager.HandleCryptoFrame(frame, encLevel)
+	encLevelChanged, err := s.cryptoStreamManager.HandleCryptoFrame(frame, encLevel)
+	if err != nil {
+		return err
+	}
+	if encLevelChanged {
+		s.tryDecryptingQueuedPackets()
+	}
+	return nil
 }
 
 func (s *session) handleStreamFrame(frame *wire.StreamFrame, encLevel protocol.EncryptionLevel) error {

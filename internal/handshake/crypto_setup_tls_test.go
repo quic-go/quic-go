@@ -63,7 +63,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 			protocol.ConnectionID{},
 			&TransportParameters{},
 			func(p *TransportParameters) {},
-			make(chan struct{}, 100),
 			make(chan struct{}),
 			testdata.GetTLSConfig(),
 			[]protocol.VersionNumber{protocol.VersionTLS},
@@ -83,7 +82,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 		}()
 
 		fakeCH := append([]byte{byte(typeClientHello), 0, 0, 6}, []byte("foobar")...)
-		server.HandleData(fakeCH, protocol.EncryptionInitial)
+		server.HandleMessage(fakeCH, protocol.EncryptionInitial)
 		Eventually(done).Should(BeClosed())
 	})
 
@@ -95,7 +94,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 			protocol.ConnectionID{},
 			&TransportParameters{},
 			func(p *TransportParameters) {},
-			make(chan struct{}, 100),
 			make(chan struct{}),
 			testdata.GetTLSConfig(),
 			[]protocol.VersionNumber{protocol.VersionTLS},
@@ -114,7 +112,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 		}()
 
 		fakeCH := append([]byte{byte(typeClientHello), 0, 0, 6}, []byte("foobar")...)
-		server.HandleData(fakeCH, protocol.EncryptionHandshake) // wrong encryption level
+		server.HandleMessage(fakeCH, protocol.EncryptionHandshake) // wrong encryption level
 		Eventually(done).Should(BeClosed())
 	})
 
@@ -150,9 +148,9 @@ var _ = Describe("Crypto Setup TLS", func() {
 				for {
 					select {
 					case c := <-cChunkChan:
-						server.HandleData(c.data, c.encLevel)
+						server.HandleMessage(c.data, c.encLevel)
 					case c := <-sChunkChan:
-						client.HandleData(c.data, c.encLevel)
+						client.HandleMessage(c.data, c.encLevel)
 					case <-done: // handshake complete
 					}
 				}
@@ -178,7 +176,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 				protocol.ConnectionID{},
 				&TransportParameters{},
 				func(p *TransportParameters) {},
-				make(chan struct{}, 100),
 				make(chan struct{}),
 				clientConf,
 				protocol.VersionTLS,
@@ -196,7 +193,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 				protocol.ConnectionID{},
 				&TransportParameters{StatelessResetToken: bytes.Repeat([]byte{42}, 16)},
 				func(p *TransportParameters) {},
-				make(chan struct{}, 100),
 				make(chan struct{}),
 				serverConf,
 				[]protocol.VersionNumber{protocol.VersionTLS},
@@ -237,7 +233,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 				protocol.ConnectionID{},
 				&TransportParameters{},
 				func(p *TransportParameters) {},
-				make(chan struct{}, 100),
 				make(chan struct{}),
 				&tls.Config{InsecureSkipVerify: true},
 				protocol.VersionTLS,
@@ -264,7 +259,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			Expect(len(ch.data) - 4).To(Equal(length))
 
 			// make the go routine return
-			client.HandleData([]byte{42 /* unknown handshake message type */, 0, 0, 1, 0}, protocol.EncryptionInitial)
+			client.HandleMessage([]byte{42 /* unknown handshake message type */, 0, 0, 1, 0}, protocol.EncryptionInitial)
 			Eventually(done).Should(BeClosed())
 		})
 
@@ -278,7 +273,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 				protocol.ConnectionID{},
 				cTransportParameters,
 				func(p *TransportParameters) { sTransportParametersRcvd = p },
-				make(chan struct{}, 100),
 				make(chan struct{}),
 				&tls.Config{ServerName: "quic.clemente.io"},
 				protocol.VersionTLS,
@@ -300,7 +294,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 				protocol.ConnectionID{},
 				sTransportParameters,
 				func(p *TransportParameters) { cTransportParametersRcvd = p },
-				make(chan struct{}, 100),
 				make(chan struct{}),
 				testdata.GetTLSConfig(),
 				[]protocol.VersionNumber{protocol.VersionTLS},

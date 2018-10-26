@@ -55,6 +55,15 @@ var _ = Describe("STREAM frame sorter", func() {
 			Expect(s.Pop()).To(BeNil())
 		})
 
+		It("says if has more data", func() {
+			Expect(s.HasMoreData()).To(BeFalse())
+			Expect(s.Push([]byte("foo"), 0, false)).To(Succeed())
+			Expect(s.HasMoreData()).To(BeTrue())
+			data, _ := s.Pop()
+			Expect(data).To(Equal([]byte("foo")))
+			Expect(s.HasMoreData()).To(BeFalse())
+		})
+
 		Context("FIN handling", func() {
 			It("saves a FIN at offset 0", func() {
 				Expect(s.Push(nil, 0, true)).To(Succeed())
