@@ -46,6 +46,13 @@ var _ = Describe("Streams Map (for gQUIC)", func() {
 				setNewStreamsMap(protocol.PerspectiveServer)
 			})
 
+			It("gets the crypto stream", func() {
+				s, err := m.getOrOpenStream(1)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(s).ToNot(BeNil())
+				Expect(s.StreamID()).To(Equal(protocol.StreamID(1)))
+			})
+
 			Context("client-side streams", func() {
 				It("gets new streams", func() {
 					s, err := m.getOrOpenStream(3)

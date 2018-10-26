@@ -10,7 +10,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/bifurcation/mint"
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -524,8 +523,9 @@ var _ = Describe("Client", func() {
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					configP *Config,
-					_ *mint.Config,
-					paramsChan <-chan handshake.TransportParameters,
+					_ *tls.Config,
+					params *handshake.TransportParameters,
+					_ protocol.VersionNumber, /* initial version */
 					_ protocol.PacketNumber,
 					_ utils.Logger,
 					versionP protocol.VersionNumber,
@@ -585,8 +585,9 @@ var _ = Describe("Client", func() {
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ *Config,
-					_ *mint.Config,
-					_ <-chan handshake.TransportParameters,
+					_ *tls.Config,
+					_ *handshake.TransportParameters,
+					_ protocol.VersionNumber, /* initial version */
 					_ protocol.PacketNumber,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
@@ -644,8 +645,9 @@ var _ = Describe("Client", func() {
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ *Config,
-					_ *mint.Config,
-					_ <-chan handshake.TransportParameters,
+					_ *tls.Config,
+					_ *handshake.TransportParameters,
+					_ protocol.VersionNumber, /* initial version */
 					_ protocol.PacketNumber,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
@@ -859,25 +861,6 @@ var _ = Describe("Client", func() {
 	It("tells its version", func() {
 		Expect(cl.version).ToNot(BeZero())
 		Expect(cl.GetVersion()).To(Equal(cl.version))
-	})
-
-	It("ignores packets with the wrong Long Header Type", func() {
-		cl.config = &Config{}
-		hdr := &wire.Header{
-			IsLongHeader:     true,
-			Type:             protocol.PacketTypeInitial,
-			PayloadLen:       123,
-			SrcConnectionID:  connID,
-			DestConnectionID: connID,
-			PacketNumberLen:  protocol.PacketNumberLen1,
-			Version:          versionIETFFrames,
-		}
-		err := cl.handlePacketImpl(&receivedPacket{
-			remoteAddr: addr,
-			header:     hdr,
-			data:       make([]byte, 456),
-		})
-		Expect(err).To(MatchError("Received unsupported packet type: Initial"))
 	})
 
 	It("ignores packets without connection id, if it didn't request connection id trunctation", func() {

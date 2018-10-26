@@ -164,7 +164,7 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 			s.flowController.AddBytesRead(protocol.ByteCount(m))
 		}
 		// increase the flow control window, if necessary
-		if s.streamID != s.version.CryptoStreamID() {
+		if !s.version.IsCryptoStream(s.streamID) {
 			s.flowController.MaybeQueueWindowUpdate()
 		}
 

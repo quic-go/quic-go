@@ -65,11 +65,22 @@ var _ = Describe("Version", func() {
 		Expect(VersionNumber(0x51303438).ToAltSvc()).To(Equal("48"))
 	})
 
-	It("tells the Stream ID of the crypto stream", func() {
-		Expect(Version39.CryptoStreamID()).To(Equal(StreamID(1)))
-		Expect(Version43.CryptoStreamID()).To(Equal(StreamID(1)))
-		Expect(Version44.CryptoStreamID()).To(Equal(StreamID(1)))
-		Expect(VersionTLS.CryptoStreamID()).To(Equal(StreamID(0)))
+	It("says if a stream is the crypto stream, for gQUIC", func() {
+		for _, v := range []VersionNumber{Version39, Version43, Version44} {
+			version := v
+			Expect(version.IsCryptoStream(1)).To(BeTrue())
+			Expect(version.IsCryptoStream(2)).To(BeFalse())
+			Expect(version.IsCryptoStream(3)).To(BeFalse())
+			Expect(version.IsCryptoStream(4)).To(BeFalse())
+			Expect(version.IsCryptoStream(5)).To(BeFalse())
+		}
+	})
+
+	It("says if a stream is the crypto stream, for TLS", func() {
+		// all streams contribute to connection-level flow control
+		for id := StreamID(0); id < 10; id++ {
+			Expect(VersionTLS.IsCryptoStream(id)).To(BeFalse())
+		}
 	})
 
 	It("tells if a version uses the IETF frame types", func() {
@@ -122,10 +133,10 @@ var _ = Describe("Version", func() {
 	})
 
 	It("says if a stream contributes to connection-level flowcontrol, for TLS", func() {
-		Expect(VersionTLS.StreamContributesToConnectionFlowControl(0)).To(BeFalse())
-		Expect(VersionTLS.StreamContributesToConnectionFlowControl(1)).To(BeTrue())
-		Expect(VersionTLS.StreamContributesToConnectionFlowControl(2)).To(BeTrue())
-		Expect(VersionTLS.StreamContributesToConnectionFlowControl(3)).To(BeTrue())
+		// all streams contribute to connection-level flow control
+		for id := StreamID(0); id < 10; id++ {
+			Expect(VersionTLS.StreamContributesToConnectionFlowControl(id)).To(BeTrue())
+		}
 	})
 
 	It("recognizes supported versions", func() {

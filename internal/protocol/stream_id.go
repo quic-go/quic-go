@@ -14,7 +14,7 @@ func MaxBidiStreamID(numStreams int, pers Perspective) StreamID {
 	if pers == PerspectiveClient {
 		first = 1
 	} else {
-		first = 4
+		first = 0
 	}
 	return first + 4*StreamID(numStreams-1)
 }

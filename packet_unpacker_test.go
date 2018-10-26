@@ -78,12 +78,22 @@ var _ = Describe("Packet Unpacker (for IETF QUIC)", func() {
 		Expect(err).To(MatchError(qerr.MissingPayload))
 	})
 
-	It("opens handshake packets", func() {
+	It("opens Initial packets", func() {
 		hdr.IsLongHeader = true
+		hdr.Type = protocol.PacketTypeInitial
+		aead.EXPECT().OpenInitial(gomock.Any(), gomock.Any(), hdr.PacketNumber, hdr.Raw).Return([]byte{0}, nil)
+		packet, err := unpacker.Unpack(hdr.Raw, hdr, nil)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(packet.encryptionLevel).To(Equal(protocol.EncryptionInitial))
+	})
+
+	It("opens Handshake packets", func() {
+		hdr.IsLongHeader = true
+		hdr.Type = protocol.PacketTypeHandshake
 		aead.EXPECT().OpenHandshake(gomock.Any(), gomock.Any(), hdr.PacketNumber, hdr.Raw).Return([]byte{0}, nil)
 		packet, err := unpacker.Unpack(hdr.Raw, hdr, nil)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.encryptionLevel).To(Equal(protocol.EncryptionUnencrypted))
+		Expect(packet.encryptionLevel).To(Equal(protocol.EncryptionHandshake))
 	})
 
 	It("unpacks the frames", func() {

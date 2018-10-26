@@ -9,7 +9,6 @@ import (
 	"net"
 	"sync"
 
-	"github.com/bifurcation/mint"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -33,9 +32,8 @@ type client struct {
 	receivedVersionNegotiationPacket bool
 	negotiatedVersions               []protocol.VersionNumber // the list of versions from the version negotiation packet
 
-	tlsConf  *tls.Config
-	mintConf *mint.Config
-	config   *Config
+	tlsConf *tls.Config
+	config  *Config
 
 	srcConnID  protocol.ConnectionID
 	destConnID protocol.ConnectionID
@@ -304,27 +302,10 @@ func (c *client) dialGQUIC(ctx context.Context) error {
 }
 
 func (c *client) dialTLS(ctx context.Context) error {
-	params := &handshake.TransportParameters{
-		StreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
-		ConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
-		IdleTimeout:                 c.config.IdleTimeout,
-		OmitConnectionID:            c.config.RequestConnectionIDOmission,
-		MaxBidiStreams:              uint16(c.config.MaxIncomingStreams),
-		MaxUniStreams:               uint16(c.config.MaxIncomingUniStreams),
-		DisableMigration:            true,
-	}
-	extHandler := handshake.NewExtensionHandlerClient(params, c.initialVersion, c.config.Versions, c.version, c.logger)
-	mintConf, err := tlsToMintConfig(c.tlsConf, protocol.PerspectiveClient)
-	if err != nil {
+	if err := c.createNewTLSSession(c.version); err != nil {
 		return err
 	}
-	mintConf.ExtensionHandler = extHandler
-	c.mintConf = mintConf
-
-	if err := c.createNewTLSSession(extHandler.GetPeerParams(), c.version); err != nil {
-		return err
-	}
-	err = c.establishSecureConnection(ctx)
+	err := c.establishSecureConnection(ctx)
 	if err == errCloseSessionForRetry || err == errCloseSessionForNewVersion {
 		return c.dial(ctx)
 	}
@@ -401,15 +382,9 @@ func (c *client) handlePacketImpl(p *receivedPacket) error {
 		}
 	}
 
-	if p.header.IsLongHeader {
-		switch p.header.Type {
-		case protocol.PacketTypeRetry:
-			c.handleRetryPacket(p.header)
-			return nil
-		case protocol.PacketTypeHandshake, protocol.PacketType0RTT:
-		default:
-			return fmt.Errorf("Received unsupported packet type: %s", p.header.Type)
-		}
+	if p.header.Type == protocol.PacketTypeRetry {
+		c.handleRetryPacket(p.header)
+		return nil
 	}
 
 	// this is the first packet we are receiving
@@ -526,10 +501,17 @@ func (c *client) createNewGQUICSession() error {
 	return nil
 }
 
-func (c *client) createNewTLSSession(
-	paramsChan <-chan handshake.TransportParameters,
-	version protocol.VersionNumber,
-) error {
+func (c *client) createNewTLSSession(version protocol.VersionNumber) error {
+	params := &handshake.TransportParameters{
+		StreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
+		ConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
+		IdleTimeout:                 c.config.IdleTimeout,
+		OmitConnectionID:            c.config.RequestConnectionIDOmission,
+		MaxBidiStreams:              uint16(c.config.MaxIncomingStreams),
+		MaxUniStreams:               uint16(c.config.MaxIncomingUniStreams),
+		DisableMigration:            true,
+	}
+
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	runner := &runner{
@@ -543,8 +525,9 @@ func (c *client) createNewTLSSession(
 		c.destConnID,
 		c.srcConnID,
 		c.config,
-		c.mintConf,
-		paramsChan,
+		c.tlsConf,
+		params,
+		c.initialVersion,
 		1,
 		c.logger,
 		c.version,

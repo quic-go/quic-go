@@ -46,7 +46,17 @@ var _ = Describe("Frame logging", func() {
 		Expect(buf.Bytes()).To(ContainSubstring("\t<- &wire.RstStreamFrame{StreamID:0x0, ErrorCode:0x0, ByteOffset:0x0}\n"))
 	})
 
-	It("logs stream frames", func() {
+	It("logs CRYPTO frames", func() {
+		frame := &CryptoFrame{
+			Offset: 0x42,
+			Data:   make([]byte, 0x123),
+		}
+		LogFrame(logger, frame, false)
+		Expect(buf.Bytes()).To(ContainSubstring("\t<- &wire.CryptoFrame{Offset: 0x42, Data length: 0x123, Offset + Data length: 0x165}\n"))
+
+	})
+
+	It("logs STREAM frames", func() {
 		frame := &StreamFrame{
 			StreamID: 42,
 			Offset:   0x1337,

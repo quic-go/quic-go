@@ -2,191 +2,327 @@ package handshake
 
 import (
 	"bytes"
-	"errors"
-	"fmt"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"math/big"
+	"time"
 
-	"github.com/bifurcation/mint"
-	"github.com/lucas-clemente/quic-go/internal/crypto"
-	"github.com/lucas-clemente/quic-go/internal/mocks/crypto"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/testdata"
+	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/marten-seemann/qtls"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-func mockKeyDerivation(crypto.TLSExporter, protocol.Perspective) (crypto.AEAD, error) {
-	return mockcrypto.NewMockAEAD(mockCtrl), nil
+type chunk struct {
+	data     []byte
+	encLevel protocol.EncryptionLevel
 }
 
-var _ = Describe("TLS Crypto Setup", func() {
-	var (
-		cs             *cryptoSetupTLS
-		handshakeEvent chan struct{}
-	)
+type stream struct {
+	encLevel  protocol.EncryptionLevel
+	chunkChan chan<- chunk
+}
 
-	BeforeEach(func() {
-		handshakeEvent = make(chan struct{}, 2)
-		css, err := NewCryptoSetupTLSServer(
-			newCryptoStreamConn(bytes.NewBuffer([]byte{})),
+func newStream(chunkChan chan<- chunk, encLevel protocol.EncryptionLevel) *stream {
+	return &stream{
+		chunkChan: chunkChan,
+		encLevel:  encLevel,
+	}
+}
+
+func (s *stream) Write(b []byte) (int, error) {
+	data := make([]byte, len(b))
+	copy(data, b)
+	select {
+	case s.chunkChan <- chunk{data: data, encLevel: s.encLevel}:
+	default:
+		panic("chunkChan too small")
+	}
+	return len(b), nil
+}
+
+var _ = Describe("Crypto Setup TLS", func() {
+	initStreams := func() (chan chunk, *stream /* initial */, *stream /* handshake */) {
+		chunkChan := make(chan chunk, 100)
+		initialStream := newStream(chunkChan, protocol.EncryptionInitial)
+		handshakeStream := newStream(chunkChan, protocol.EncryptionHandshake)
+		return chunkChan, initialStream, handshakeStream
+	}
+
+	It("returns Handshake() when an error occurs", func() {
+		_, sInitialStream, sHandshakeStream := initStreams()
+		server, err := NewCryptoSetupTLSServer(
+			sInitialStream,
+			sHandshakeStream,
 			protocol.ConnectionID{},
-			&mint.Config{},
-			handshakeEvent,
+			&TransportParameters{},
+			func(p *TransportParameters) {},
+			make(chan struct{}, 100),
+			make(chan struct{}),
+			testdata.GetTLSConfig(),
+			[]protocol.VersionNumber{protocol.VersionTLS},
 			protocol.VersionTLS,
+			utils.DefaultLogger.WithPrefix("server"),
+			protocol.PerspectiveServer,
 		)
 		Expect(err).ToNot(HaveOccurred())
-		cs = css.(*cryptoSetupTLS)
-		cs.nullAEAD = mockcrypto.NewMockAEAD(mockCtrl)
+
+		done := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			err := server.RunHandshake()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("received unexpected handshake message"))
+			close(done)
+		}()
+
+		fakeCH := append([]byte{byte(typeClientHello), 0, 0, 6}, []byte("foobar")...)
+		server.HandleData(fakeCH, protocol.EncryptionInitial)
+		Eventually(done).Should(BeClosed())
 	})
 
-	It("errors when the handshake fails", func() {
-		alert := mint.AlertBadRecordMAC
-		cs.tls = NewMockMintTLS(mockCtrl)
-		cs.tls.(*MockMintTLS).EXPECT().Handshake().Return(alert)
-		err := cs.HandleCryptoStream()
-		Expect(err).To(MatchError(fmt.Errorf("TLS handshake error: %s (Alert %d)", alert.String(), alert)))
-	})
-
-	It("derives keys", func() {
-		cs.tls = NewMockMintTLS(mockCtrl)
-		cs.tls.(*MockMintTLS).EXPECT().Handshake().Return(mint.AlertNoAlert)
-		cs.tls.(*MockMintTLS).EXPECT().ConnectionState().Return(mint.ConnectionState{HandshakeState: mint.StateServerConnected})
-		cs.keyDerivation = mockKeyDerivation
-		err := cs.HandleCryptoStream()
+	It("returns Handshake() when handling a message fails", func() {
+		_, sInitialStream, sHandshakeStream := initStreams()
+		server, err := NewCryptoSetupTLSServer(
+			sInitialStream,
+			sHandshakeStream,
+			protocol.ConnectionID{},
+			&TransportParameters{},
+			func(p *TransportParameters) {},
+			make(chan struct{}, 100),
+			make(chan struct{}),
+			testdata.GetTLSConfig(),
+			[]protocol.VersionNumber{protocol.VersionTLS},
+			protocol.VersionTLS,
+			utils.DefaultLogger.WithPrefix("server"),
+			protocol.PerspectiveServer,
+		)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(handshakeEvent).To(Receive())
-		Expect(handshakeEvent).To(BeClosed())
+
+		done := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			err := server.RunHandshake()
+			Expect(err).To(MatchError("expected handshake message ClientHello to have encryption level Initial, has Handshake"))
+			close(done)
+		}()
+
+		fakeCH := append([]byte{byte(typeClientHello), 0, 0, 6}, []byte("foobar")...)
+		server.HandleData(fakeCH, protocol.EncryptionHandshake) // wrong encryption level
+		Eventually(done).Should(BeClosed())
 	})
 
-	It("handshakes until it is connected", func() {
-		cs.tls = NewMockMintTLS(mockCtrl)
-		cs.tls.(*MockMintTLS).EXPECT().Handshake().Return(mint.AlertNoAlert).Times(10)
-		cs.tls.(*MockMintTLS).EXPECT().ConnectionState().Return(mint.ConnectionState{HandshakeState: mint.StateServerNegotiated}).Times(9)
-		cs.tls.(*MockMintTLS).EXPECT().ConnectionState().Return(mint.ConnectionState{HandshakeState: mint.StateServerConnected})
-		cs.keyDerivation = mockKeyDerivation
-		err := cs.HandleCryptoStream()
-		Expect(err).ToNot(HaveOccurred())
-		Expect(handshakeEvent).To(Receive())
-	})
-
-	Context("reporting the handshake state", func() {
-		It("reports before the handshake compeletes", func() {
-			cs.tls = NewMockMintTLS(mockCtrl)
-			cs.tls.(*MockMintTLS).EXPECT().ConnectionState().Return(mint.ConnectionState{})
-			state := cs.ConnectionState()
-			Expect(state.HandshakeComplete).To(BeFalse())
-			Expect(state.PeerCertificates).To(BeNil())
-		})
-
-		It("reports after the handshake completes", func() {
-			cs.tls = NewMockMintTLS(mockCtrl)
-			cs.tls.(*MockMintTLS).EXPECT().Handshake().Return(mint.AlertNoAlert)
-			cs.tls.(*MockMintTLS).EXPECT().ConnectionState().Return(mint.ConnectionState{HandshakeState: mint.StateServerConnected}).Times(2)
-			cs.keyDerivation = mockKeyDerivation
-			err := cs.HandleCryptoStream()
+	Context("doing the handshake", func() {
+		generateCert := func() tls.Certificate {
+			priv, err := rsa.GenerateKey(rand.Reader, 2048)
 			Expect(err).ToNot(HaveOccurred())
-			state := cs.ConnectionState()
-			Expect(state.HandshakeComplete).To(BeTrue())
-			Expect(state.PeerCertificates).To(BeNil())
-		})
-	})
-
-	Context("escalating crypto", func() {
-		doHandshake := func() {
-			cs.tls = NewMockMintTLS(mockCtrl)
-			cs.tls.(*MockMintTLS).EXPECT().Handshake().Return(mint.AlertNoAlert)
-			cs.tls.(*MockMintTLS).EXPECT().ConnectionState().Return(mint.ConnectionState{HandshakeState: mint.StateServerConnected})
-			cs.keyDerivation = mockKeyDerivation
-			err := cs.HandleCryptoStream()
+			tmpl := &x509.Certificate{
+				SerialNumber:          big.NewInt(1),
+				Subject:               pkix.Name{},
+				SignatureAlgorithm:    x509.SHA256WithRSA,
+				NotBefore:             time.Now(),
+				NotAfter:              time.Now().Add(time.Hour), // valid for an hour
+				BasicConstraintsValid: true,
+			}
+			certDER, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, priv.Public(), priv)
 			Expect(err).ToNot(HaveOccurred())
+			return tls.Certificate{
+				PrivateKey:  priv,
+				Certificate: [][]byte{certDER},
+			}
 		}
 
-		Context("null encryption", func() {
-			It("is used initially", func() {
-				cs.nullAEAD.(*mockcrypto.MockAEAD).EXPECT().Seal(nil, []byte("foobar"), protocol.PacketNumber(5), []byte{}).Return([]byte("foobar signed"))
-				enc, sealer := cs.GetSealer()
-				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
-				d := sealer.Seal(nil, []byte("foobar"), 5, []byte{})
-				Expect(d).To(Equal([]byte("foobar signed")))
-			})
+		handshake := func(
+			client CryptoSetupTLS,
+			cChunkChan <-chan chunk,
+			server CryptoSetupTLS,
+			sChunkChan <-chan chunk) (error /* client error */, error /* server error */) {
+			done := make(chan struct{})
+			defer close(done)
+			go func() {
+				defer GinkgoRecover()
+				for {
+					select {
+					case c := <-cChunkChan:
+						server.HandleData(c.data, c.encLevel)
+					case c := <-sChunkChan:
+						client.HandleData(c.data, c.encLevel)
+					case <-done: // handshake complete
+					}
+				}
+			}()
 
-			It("is used for opening", func() {
-				cs.nullAEAD.(*mockcrypto.MockAEAD).EXPECT().Open(nil, []byte("foobar enc"), protocol.PacketNumber(10), []byte{}).Return([]byte("foobar"), nil)
-				d, err := cs.OpenHandshake(nil, []byte("foobar enc"), 10, []byte{})
-				Expect(err).ToNot(HaveOccurred())
-				Expect(d).To(Equal([]byte("foobar")))
-			})
+			serverErrChan := make(chan error)
+			go func() {
+				defer GinkgoRecover()
+				serverErrChan <- server.RunHandshake()
+			}()
 
-			It("is used for crypto stream", func() {
-				cs.nullAEAD.(*mockcrypto.MockAEAD).EXPECT().Seal(nil, []byte("foobar"), protocol.PacketNumber(20), []byte{}).Return([]byte("foobar signed"))
-				enc, sealer := cs.GetSealerForCryptoStream()
-				Expect(enc).To(Equal(protocol.EncryptionUnencrypted))
-				d := sealer.Seal(nil, []byte("foobar"), 20, []byte{})
-				Expect(d).To(Equal([]byte("foobar signed")))
-			})
+			clientErr := client.RunHandshake()
+			var serverErr error
+			Eventually(serverErrChan).Should(Receive(&serverErr))
+			return clientErr, serverErr
+		}
 
-			It("errors if the has the wrong hash", func() {
-				cs.nullAEAD.(*mockcrypto.MockAEAD).EXPECT().Open(nil, []byte("foobar enc"), protocol.PacketNumber(10), []byte{}).Return(nil, errors.New("authentication failed"))
-				_, err := cs.OpenHandshake(nil, []byte("foobar enc"), 10, []byte{})
-				Expect(err).To(MatchError("authentication failed"))
-			})
+		handshakeWithTLSConf := func(clientConf, serverConf *tls.Config) (error /* client error */, error /* server error */) {
+			cChunkChan, cInitialStream, cHandshakeStream := initStreams()
+			client, _, err := NewCryptoSetupTLSClient(
+				cInitialStream,
+				cHandshakeStream,
+				protocol.ConnectionID{},
+				&TransportParameters{},
+				func(p *TransportParameters) {},
+				make(chan struct{}, 100),
+				make(chan struct{}),
+				clientConf,
+				protocol.VersionTLS,
+				[]protocol.VersionNumber{protocol.VersionTLS},
+				protocol.VersionTLS,
+				utils.DefaultLogger.WithPrefix("client"),
+				protocol.PerspectiveClient,
+			)
+			Expect(err).ToNot(HaveOccurred())
+
+			sChunkChan, sInitialStream, sHandshakeStream := initStreams()
+			server, err := NewCryptoSetupTLSServer(
+				sInitialStream,
+				sHandshakeStream,
+				protocol.ConnectionID{},
+				&TransportParameters{StatelessResetToken: bytes.Repeat([]byte{42}, 16)},
+				func(p *TransportParameters) {},
+				make(chan struct{}, 100),
+				make(chan struct{}),
+				serverConf,
+				[]protocol.VersionNumber{protocol.VersionTLS},
+				protocol.VersionTLS,
+				utils.DefaultLogger.WithPrefix("server"),
+				protocol.PerspectiveServer,
+			)
+			Expect(err).ToNot(HaveOccurred())
+
+			return handshake(client, cChunkChan, server, sChunkChan)
+		}
+
+		It("handshakes", func() {
+			clientConf := &tls.Config{ServerName: "quic.clemente.io"}
+			serverConf := testdata.GetTLSConfig()
+			clientErr, serverErr := handshakeWithTLSConf(clientConf, serverConf)
+			Expect(clientErr).ToNot(HaveOccurred())
+			Expect(serverErr).ToNot(HaveOccurred())
 		})
 
-		Context("forward-secure encryption", func() {
-			It("is used for sealing after the handshake completes", func() {
-				doHandshake()
-				cs.aead.(*mockcrypto.MockAEAD).EXPECT().Seal(nil, []byte("foobar"), protocol.PacketNumber(5), []byte{}).Return([]byte("foobar forward sec"))
-				enc, sealer := cs.GetSealer()
-				Expect(enc).To(Equal(protocol.EncryptionForwardSecure))
-				d := sealer.Seal(nil, []byte("foobar"), 5, []byte{})
-				Expect(d).To(Equal([]byte("foobar forward sec")))
-			})
-
-			It("is used for opening", func() {
-				doHandshake()
-				cs.aead.(*mockcrypto.MockAEAD).EXPECT().Open(nil, []byte("encrypted"), protocol.PacketNumber(6), []byte{}).Return([]byte("decrypted"), nil)
-				d, err := cs.Open1RTT(nil, []byte("encrypted"), 6, []byte{})
-				Expect(err).ToNot(HaveOccurred())
-				Expect(d).To(Equal([]byte("decrypted")))
-			})
+		It("handshakes with client auth", func() {
+			clientConf := &tls.Config{
+				ServerName:   "quic.clemente.io",
+				Certificates: []tls.Certificate{generateCert()},
+			}
+			serverConf := testdata.GetTLSConfig()
+			serverConf.ClientAuth = qtls.RequireAnyClientCert
+			clientErr, serverErr := handshakeWithTLSConf(clientConf, serverConf)
+			Expect(clientErr).ToNot(HaveOccurred())
+			Expect(serverErr).ToNot(HaveOccurred())
 		})
 
-		Context("forcing encryption levels", func() {
-			It("forces null encryption", func() {
-				doHandshake()
-				cs.nullAEAD.(*mockcrypto.MockAEAD).EXPECT().Seal(nil, []byte("foobar"), protocol.PacketNumber(5), []byte{}).Return([]byte("foobar signed"))
-				sealer, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionUnencrypted)
-				Expect(err).ToNot(HaveOccurred())
-				d := sealer.Seal(nil, []byte("foobar"), 5, []byte{})
-				Expect(d).To(Equal([]byte("foobar signed")))
-			})
+		It("signals when it has written the ClientHello", func() {
+			cChunkChan, cInitialStream, cHandshakeStream := initStreams()
+			client, chChan, err := NewCryptoSetupTLSClient(
+				cInitialStream,
+				cHandshakeStream,
+				protocol.ConnectionID{},
+				&TransportParameters{},
+				func(p *TransportParameters) {},
+				make(chan struct{}, 100),
+				make(chan struct{}),
+				&tls.Config{InsecureSkipVerify: true},
+				protocol.VersionTLS,
+				[]protocol.VersionNumber{protocol.VersionTLS},
+				protocol.VersionTLS,
+				utils.DefaultLogger.WithPrefix("client"),
+				protocol.PerspectiveClient,
+			)
+			Expect(err).ToNot(HaveOccurred())
 
-			It("forces forward-secure encryption", func() {
-				doHandshake()
-				cs.aead.(*mockcrypto.MockAEAD).EXPECT().Seal(nil, []byte("foobar"), protocol.PacketNumber(5), []byte{}).Return([]byte("foobar forward sec"))
-				sealer, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionForwardSecure)
-				Expect(err).ToNot(HaveOccurred())
-				d := sealer.Seal(nil, []byte("foobar"), 5, []byte{})
-				Expect(d).To(Equal([]byte("foobar forward sec")))
-			})
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				client.RunHandshake()
+				close(done)
+			}()
+			var ch chunk
+			Eventually(cChunkChan).Should(Receive(&ch))
+			Eventually(chChan).Should(BeClosed())
+			// make sure the whole ClientHello was written
+			Expect(len(ch.data)).To(BeNumerically(">=", 4))
+			Expect(messageType(ch.data[0])).To(Equal(typeClientHello))
+			length := int(ch.data[1])<<16 | int(ch.data[2])<<8 | int(ch.data[3])
+			Expect(len(ch.data) - 4).To(Equal(length))
 
-			It("errors if the forward-secure AEAD is not available", func() {
-				sealer, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionForwardSecure)
-				Expect(err).To(MatchError("CryptoSetup: no sealer with encryption level forward-secure"))
-				Expect(sealer).To(BeNil())
-			})
+			// make the go routine return
+			client.HandleData([]byte{42 /* unknown handshake message type */, 0, 0, 1, 0}, protocol.EncryptionInitial)
+			Eventually(done).Should(BeClosed())
+		})
 
-			It("never returns a secure AEAD (they don't exist with TLS)", func() {
-				doHandshake()
-				sealer, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionSecure)
-				Expect(err).To(MatchError("CryptoSetup: no sealer with encryption level encrypted (not forward-secure)"))
-				Expect(sealer).To(BeNil())
-			})
+		It("receives transport parameters", func() {
+			var cTransportParametersRcvd, sTransportParametersRcvd *TransportParameters
+			cChunkChan, cInitialStream, cHandshakeStream := initStreams()
+			cTransportParameters := &TransportParameters{IdleTimeout: 0x42 * time.Second}
+			client, _, err := NewCryptoSetupTLSClient(
+				cInitialStream,
+				cHandshakeStream,
+				protocol.ConnectionID{},
+				cTransportParameters,
+				func(p *TransportParameters) { sTransportParametersRcvd = p },
+				make(chan struct{}, 100),
+				make(chan struct{}),
+				&tls.Config{ServerName: "quic.clemente.io"},
+				protocol.VersionTLS,
+				[]protocol.VersionNumber{protocol.VersionTLS},
+				protocol.VersionTLS,
+				utils.DefaultLogger.WithPrefix("client"),
+				protocol.PerspectiveClient,
+			)
+			Expect(err).ToNot(HaveOccurred())
 
-			It("errors if no encryption level is specified", func() {
-				seal, err := cs.GetSealerWithEncryptionLevel(protocol.EncryptionUnspecified)
-				Expect(err).To(MatchError("CryptoSetup: no sealer with encryption level unknown"))
-				Expect(seal).To(BeNil())
-			})
+			sChunkChan, sInitialStream, sHandshakeStream := initStreams()
+			sTransportParameters := &TransportParameters{
+				IdleTimeout:         0x1337 * time.Second,
+				StatelessResetToken: bytes.Repeat([]byte{42}, 16),
+			}
+			server, err := NewCryptoSetupTLSServer(
+				sInitialStream,
+				sHandshakeStream,
+				protocol.ConnectionID{},
+				sTransportParameters,
+				func(p *TransportParameters) { cTransportParametersRcvd = p },
+				make(chan struct{}, 100),
+				make(chan struct{}),
+				testdata.GetTLSConfig(),
+				[]protocol.VersionNumber{protocol.VersionTLS},
+				protocol.VersionTLS,
+				utils.DefaultLogger.WithPrefix("server"),
+				protocol.PerspectiveServer,
+			)
+			Expect(err).ToNot(HaveOccurred())
+
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				clientErr, serverErr := handshake(client, cChunkChan, server, sChunkChan)
+				Expect(clientErr).ToNot(HaveOccurred())
+				Expect(serverErr).ToNot(HaveOccurred())
+				close(done)
+			}()
+			Eventually(done).Should(BeClosed())
+			Expect(cTransportParametersRcvd).ToNot(BeNil())
+			Expect(cTransportParametersRcvd.IdleTimeout).To(Equal(cTransportParameters.IdleTimeout))
+			Expect(sTransportParametersRcvd).ToNot(BeNil())
+			Expect(sTransportParametersRcvd.IdleTimeout).To(Equal(sTransportParameters.IdleTimeout))
 		})
 	})
 })

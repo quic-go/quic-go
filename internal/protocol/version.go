@@ -68,12 +68,10 @@ func (vn VersionNumber) ToAltSvc() string {
 	return fmt.Sprintf("%d", vn)
 }
 
-// CryptoStreamID gets the Stream ID of the crypto stream
-func (vn VersionNumber) CryptoStreamID() StreamID {
-	if vn.isGQUIC() {
-		return 1
-	}
-	return 0
+// IsCryptoStream says if a  stream is the gQUIC crypto stream.
+// It never returns true for IETF QUIC.
+func (vn VersionNumber) IsCryptoStream(id StreamID) bool {
+	return vn.isGQUIC() && id == 1
 }
 
 // UsesIETFFrameFormat tells if this version uses the IETF frame format
@@ -108,13 +106,10 @@ func (vn VersionNumber) UsesVarintPacketNumbers() bool {
 
 // StreamContributesToConnectionFlowControl says if a stream contributes to connection-level flow control
 func (vn VersionNumber) StreamContributesToConnectionFlowControl(id StreamID) bool {
-	if id == vn.CryptoStreamID() {
-		return false
+	if !vn.isGQUIC() {
+		return true
 	}
-	if vn.isGQUIC() && id == 3 {
-		return false
-	}
-	return true
+	return id != 1 && id != 3
 }
 
 func (vn VersionNumber) isGQUIC() bool {

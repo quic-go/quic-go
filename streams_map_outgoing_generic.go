@@ -19,6 +19,7 @@ type outgoingItemsMap struct {
 
 	nextStream     protocol.StreamID // stream ID of the stream returned by OpenStream(Sync)
 	maxStream      protocol.StreamID // the maximum stream ID we're allowed to open
+	maxStreamSet   bool              // was maxStream set. If not, it's not possible to any stream (also works for stream 0)
 	highestBlocked protocol.StreamID // the highest stream ID that we queued a STREAM_ID_BLOCKED frame for
 
 	newStream            func(protocol.StreamID) item
@@ -69,7 +70,7 @@ func (m *outgoingItemsMap) openStreamImpl() (item, error) {
 	if m.closeErr != nil {
 		return nil, m.closeErr
 	}
-	if m.nextStream > m.maxStream {
+	if !m.maxStreamSet || m.nextStream > m.maxStream {
 		if m.maxStream == 0 || m.highestBlocked < m.maxStream {
 			m.queueStreamIDBlocked(&wire.StreamIDBlockedFrame{StreamID: m.maxStream})
 			m.highestBlocked = m.maxStream
@@ -106,8 +107,9 @@ func (m *outgoingItemsMap) DeleteStream(id protocol.StreamID) error {
 
 func (m *outgoingItemsMap) SetMaxStream(id protocol.StreamID) {
 	m.mutex.Lock()
-	if id > m.maxStream {
+	if !m.maxStreamSet || id > m.maxStream {
 		m.maxStream = id
+		m.maxStreamSet = true
 		m.cond.Broadcast()
 	}
 	m.mutex.Unlock()

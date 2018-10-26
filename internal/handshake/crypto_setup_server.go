@@ -42,9 +42,10 @@ type cryptoSetupServer struct {
 	receivedSecurePacket        bool
 	sentSHLO                    chan struct{} // this channel is closed as soon as the SHLO has been written
 
-	receivedParams bool
-	paramsChan     chan<- TransportParameters
-	handshakeEvent chan<- struct{}
+	receivedParams    bool
+	paramsChan        chan<- TransportParameters
+	handshakeEvent    chan<- struct{}
+	handshakeComplete chan<- struct{}
 
 	keyDerivation QuicCryptoKeyDerivationFunction
 	keyExchange   KeyExchangeFunction
@@ -77,6 +78,7 @@ func NewCryptoSetup(
 	acceptSTK func(net.Addr, *Cookie) bool,
 	paramsChan chan<- TransportParameters,
 	handshakeEvent chan<- struct{},
+	handshakeComplete chan<- struct{},
 	logger utils.Logger,
 ) (CryptoSetup, error) {
 	nullAEAD, err := crypto.NewNullAEAD(protocol.PerspectiveServer, connID, version)
@@ -99,12 +101,13 @@ func NewCryptoSetup(
 		sentSHLO:             make(chan struct{}),
 		paramsChan:           paramsChan,
 		handshakeEvent:       handshakeEvent,
+		handshakeComplete:    handshakeComplete,
 		logger:               logger,
 	}, nil
 }
 
 // HandleCryptoStream reads and writes messages on the crypto stream
-func (h *cryptoSetupServer) HandleCryptoStream() error {
+func (h *cryptoSetupServer) RunHandshake() error {
 	for {
 		var chloData bytes.Buffer
 		message, err := ParseHandshakeMessage(io.TeeReader(h.cryptoStream, &chloData))
@@ -210,7 +213,7 @@ func (h *cryptoSetupServer) Open(dst, src []byte, packetNumber protocol.PacketNu
 				h.receivedForwardSecurePacket = true
 				// wait for the send on the handshakeEvent chan
 				<-h.sentSHLO
-				close(h.handshakeEvent)
+				close(h.handshakeComplete)
 			}
 			return res, protocol.EncryptionForwardSecure, nil
 		}

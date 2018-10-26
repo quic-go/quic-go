@@ -122,6 +122,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		stream            *mockStream
 		paramsChan        chan TransportParameters
 		handshakeEvent    chan struct{}
+		handshakeComplete chan struct{}
 		nonce32           []byte
 		versionTag        []byte
 		validSTK          []byte
@@ -144,6 +145,7 @@ var _ = Describe("Server Crypto Setup", func() {
 		// use a buffered channel here, so that we can parse a CHLO without having to receive the TransportParameters to avoid blocking
 		paramsChan = make(chan TransportParameters, 1)
 		handshakeEvent = make(chan struct{}, 2)
+		handshakeComplete = make(chan struct{})
 		stream = newMockStream()
 		kex = &mockKEX{}
 		signer = &mockSigner{}
@@ -169,6 +171,7 @@ var _ = Describe("Server Crypto Setup", func() {
 			nil,
 			paramsChan,
 			handshakeEvent,
+			handshakeComplete,
 			utils.DefaultLogger,
 		)
 		Expect(err).NotTo(HaveOccurred())
@@ -215,7 +218,7 @@ var _ = Describe("Server Crypto Setup", func() {
 					TagNSTP: []byte("foobar"),
 				},
 			}.Write(&stream.dataToRead)
-			err := cs.HandleCryptoStream()
+			err := cs.RunHandshake()
 			Expect(err).To(MatchError(ErrNSTPExperiment))
 		})
 
@@ -312,26 +315,26 @@ var _ = Describe("Server Crypto Setup", func() {
 				},
 			}.Write(&stream.dataToRead)
 			HandshakeMessage{Tag: TagCHLO, Data: fullCHLO}.Write(&stream.dataToRead)
-			err := cs.HandleCryptoStream()
+			err := cs.RunHandshake()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stream.dataWritten.Bytes()).To(HavePrefix("REJ"))
 			Expect(handshakeEvent).To(Receive()) // for the switch to secure
 			Expect(stream.dataWritten.Bytes()).To(ContainSubstring("SHLO"))
 			Expect(handshakeEvent).To(Receive()) // for the switch to forward secure
-			Expect(handshakeEvent).ToNot(BeClosed())
+			Expect(handshakeComplete).ToNot(BeClosed())
 		})
 
 		It("rejects client nonces that have the wrong length", func() {
 			fullCHLO[TagNONC] = []byte("too short client nonce")
 			HandshakeMessage{Tag: TagCHLO, Data: fullCHLO}.Write(&stream.dataToRead)
-			err := cs.HandleCryptoStream()
+			err := cs.RunHandshake()
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "invalid client nonce length")))
 		})
 
 		It("rejects client nonces that have the wrong OBIT value", func() {
 			fullCHLO[TagNONC] = make([]byte, 32) // the OBIT value is nonce[4:12] and here just initialized to 0
 			HandshakeMessage{Tag: TagCHLO, Data: fullCHLO}.Write(&stream.dataToRead)
-			err := cs.HandleCryptoStream()
+			err := cs.RunHandshake()
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "OBIT not matching")))
 		})
 
@@ -339,19 +342,19 @@ var _ = Describe("Server Crypto Setup", func() {
 			testErr := errors.New("test error")
 			kex.sharedKeyError = testErr
 			HandshakeMessage{Tag: TagCHLO, Data: fullCHLO}.Write(&stream.dataToRead)
-			err := cs.HandleCryptoStream()
+			err := cs.RunHandshake()
 			Expect(err).To(MatchError(testErr))
 		})
 
 		It("handles 0-RTT handshake", func() {
 			HandshakeMessage{Tag: TagCHLO, Data: fullCHLO}.Write(&stream.dataToRead)
-			err := cs.HandleCryptoStream()
+			err := cs.RunHandshake()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(stream.dataWritten.Bytes()).To(HavePrefix("SHLO"))
 			Expect(stream.dataWritten.Bytes()).ToNot(ContainSubstring("REJ"))
 			Expect(handshakeEvent).To(Receive()) // for the switch to secure
 			Expect(handshakeEvent).To(Receive()) // for the switch to forward secure
-			Expect(handshakeEvent).ToNot(BeClosed())
+			Expect(handshakeComplete).ToNot(BeClosed())
 		})
 
 		It("recognizes inchoate CHLOs missing SCID", func() {
@@ -397,14 +400,14 @@ var _ = Describe("Server Crypto Setup", func() {
 					TagSNI:  []byte("quic.clemente.io"),
 				},
 			}.Write(&stream.dataToRead)
-			err := cs.HandleCryptoStream()
+			err := cs.RunHandshake()
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "client hello missing version tag")))
 		})
 
 		It("rejects CHLOs with a version tag that has the wrong length", func() {
 			fullCHLO[TagVER] = []byte{0x13, 0x37} // should be 4 bytes
 			HandshakeMessage{Tag: TagCHLO, Data: fullCHLO}.Write(&stream.dataToRead)
-			err := cs.HandleCryptoStream()
+			err := cs.RunHandshake()
 			Expect(err).To(MatchError(qerr.Error(qerr.InvalidCryptoMessageParameter, "incorrect version tag")))
 		})
 
@@ -417,7 +420,7 @@ var _ = Describe("Server Crypto Setup", func() {
 			binary.BigEndian.PutUint32(b, uint32(lowestSupportedVersion))
 			fullCHLO[TagVER] = b
 			HandshakeMessage{Tag: TagCHLO, Data: fullCHLO}.Write(&stream.dataToRead)
-			err := cs.HandleCryptoStream()
+			err := cs.RunHandshake()
 			Expect(err).To(MatchError(qerr.Error(qerr.VersionNegotiationMismatch, "Downgrade attack detected")))
 		})
 
@@ -430,35 +433,35 @@ var _ = Describe("Server Crypto Setup", func() {
 			binary.BigEndian.PutUint32(b, uint32(unsupportedVersion))
 			fullCHLO[TagVER] = b
 			HandshakeMessage{Tag: TagCHLO, Data: fullCHLO}.Write(&stream.dataToRead)
-			err := cs.HandleCryptoStream()
+			err := cs.RunHandshake()
 			Expect(err).ToNot(HaveOccurred())
 		})
 
 		It("errors if the AEAD tag is missing", func() {
 			delete(fullCHLO, TagAEAD)
 			HandshakeMessage{Tag: TagCHLO, Data: fullCHLO}.Write(&stream.dataToRead)
-			err := cs.HandleCryptoStream()
+			err := cs.RunHandshake()
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoNoSupport, "Unsupported AEAD or KEXS")))
 		})
 
 		It("errors if the AEAD tag has the wrong value", func() {
 			fullCHLO[TagAEAD] = []byte("wrong")
 			HandshakeMessage{Tag: TagCHLO, Data: fullCHLO}.Write(&stream.dataToRead)
-			err := cs.HandleCryptoStream()
+			err := cs.RunHandshake()
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoNoSupport, "Unsupported AEAD or KEXS")))
 		})
 
 		It("errors if the KEXS tag is missing", func() {
 			delete(fullCHLO, TagKEXS)
 			HandshakeMessage{Tag: TagCHLO, Data: fullCHLO}.Write(&stream.dataToRead)
-			err := cs.HandleCryptoStream()
+			err := cs.RunHandshake()
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoNoSupport, "Unsupported AEAD or KEXS")))
 		})
 
 		It("errors if the KEXS tag has the wrong value", func() {
 			fullCHLO[TagKEXS] = []byte("wrong")
 			HandshakeMessage{Tag: TagCHLO, Data: fullCHLO}.Write(&stream.dataToRead)
-			err := cs.HandleCryptoStream()
+			err := cs.RunHandshake()
 			Expect(err).To(MatchError(qerr.Error(qerr.CryptoNoSupport, "Unsupported AEAD or KEXS")))
 		})
 	})
@@ -470,7 +473,7 @@ var _ = Describe("Server Crypto Setup", func() {
 				TagSTK: validSTK,
 			},
 		}.Write(&stream.dataToRead)
-		err := cs.HandleCryptoStream()
+		err := cs.RunHandshake()
 		Expect(err).To(MatchError("CryptoMessageParameterNotFound: SNI required"))
 	})
 
@@ -482,19 +485,19 @@ var _ = Describe("Server Crypto Setup", func() {
 				TagSNI: nil,
 			},
 		}.Write(&stream.dataToRead)
-		err := cs.HandleCryptoStream()
+		err := cs.RunHandshake()
 		Expect(err).To(MatchError("CryptoMessageParameterNotFound: SNI required"))
 	})
 
 	It("errors with invalid message", func() {
 		stream.dataToRead.Write([]byte("invalid message"))
-		err := cs.HandleCryptoStream()
+		err := cs.RunHandshake()
 		Expect(err).To(MatchError(qerr.HandshakeFailed))
 	})
 
 	It("errors with non-CHLO message", func() {
 		HandshakeMessage{Tag: TagPAD, Data: nil}.Write(&stream.dataToRead)
-		err := cs.HandleCryptoStream()
+		err := cs.RunHandshake()
 		Expect(err).To(MatchError(qerr.InvalidCryptoMessageType))
 	})
 
@@ -629,7 +632,7 @@ var _ = Describe("Server Crypto Setup", func() {
 				cs.forwardSecureAEAD.(*mockcrypto.MockAEAD).EXPECT().Open(nil, []byte("forward secure encrypted"), protocol.PacketNumber(200), []byte{})
 				_, _, err := cs.Open(nil, []byte("forward secure encrypted"), 200, []byte{})
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handshakeEvent).To(BeClosed())
+				Expect(handshakeComplete).To(BeClosed())
 			})
 		})
 

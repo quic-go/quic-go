@@ -12,6 +12,12 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
+type sealingManagerLegacy interface {
+	GetSealer() (protocol.EncryptionLevel, handshake.Sealer)
+	GetSealerForCryptoStream() (protocol.EncryptionLevel, handshake.Sealer)
+	GetSealerWithEncryptionLevel(protocol.EncryptionLevel) (handshake.Sealer, error)
+}
+
 // sentAndReceivedPacketManager is only needed until STOP_WAITING is removed
 type sentAndReceivedPacketManager struct {
 	ackhandler.SentPacketHandler
@@ -26,13 +32,13 @@ type packetPackerLegacy struct {
 
 	perspective protocol.Perspective
 	version     protocol.VersionNumber
-	cryptoSetup sealingManager
+	cryptoSetup sealingManagerLegacy
 
 	divNonce []byte
 
 	packetNumberGenerator *packetNumberGenerator
 	getPacketNumberLen    func(protocol.PacketNumber) protocol.PacketNumberLen
-	cryptoStream          cryptoStream
+	cryptoStream          streamI
 	framer                frameSource
 	acks                  ackFrameSource
 
@@ -50,8 +56,8 @@ func newPacketPackerLegacy(
 	getPacketNumberLen func(protocol.PacketNumber) protocol.PacketNumberLen,
 	remoteAddr net.Addr, // only used for determining the max packet size
 	divNonce []byte,
-	cryptoStream cryptoStream,
-	cryptoSetup sealingManager,
+	cryptoStream streamI,
+	cryptoSetup sealingManagerLegacy,
 	framer frameSource,
 	acks ackFrameSource,
 	perspective protocol.Perspective,

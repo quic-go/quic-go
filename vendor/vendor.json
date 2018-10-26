@@ -3,12 +3,6 @@
 	"ignore": "test",
 	"package": [
 		{
-			"checksumSHA1": "Mb7/IC/rqrfJzLKVV5EIvZ+R8ls=",
-			"path": "github.com/bifurcation/mint",
-			"revision": "93c51c6ce11597a26e246fc33a301d62d3439cd2",
-			"revisionTime": "2018-07-15T13:32:06Z"
-		},
-		{
 			"checksumSHA1": "PZNcjO1c9gV/LZzppwpVRl6+QAY=",
 			"path": "github.com/bifurcation/mint/syntax",
 			"revision": "a544bfbca6a083ce9ddeb2c5f570cb240837355a",
@@ -45,6 +39,18 @@
 			"revisionTime": "2016-08-23T09:51:56Z"
 		},
 		{
+			"checksumSHA1": "tMUbiAxGypX/0kCJpIFg31Q6vOU=",
+			"path": "github.com/marten-seemann/qtls",
+			"revision": "c50a91d48284ab31c39389e64f7c57e475bb0633",
+			"revisionTime": "2018-09-29T20:20:13Z"
+		},
+		{
+			"checksumSHA1": "9TPZ7plxFmlYtMEv2LLXRCEQg7c=",
+			"path": "golang.org/x/crypto/chacha20poly1305",
+			"revision": "0c41d7ab0a0ee717d4590a44bcb987dfd9e183eb",
+			"revisionTime": "2018-10-15T00:23:17Z"
+		},
+		{
 			"checksumSHA1": "IQkUIOnvlf0tYloFx9mLaXSvXWQ=",
 			"path": "golang.org/x/crypto/curve25519",
 			"revision": "d585fd2cc9195196078f516b69daff6744ef5e84",
@@ -55,6 +61,30 @@
 			"path": "golang.org/x/crypto/hkdf",
 			"revision": "d585fd2cc9195196078f516b69daff6744ef5e84",
 			"revisionTime": "2017-12-16T04:08:15Z"
+		},
+		{
+			"checksumSHA1": "fhxj9uzosD3dQefNF5JuGJzGZwg=",
+			"path": "golang.org/x/crypto/internal/chacha20",
+			"revision": "0c41d7ab0a0ee717d4590a44bcb987dfd9e183eb",
+			"revisionTime": "2018-10-15T00:23:17Z"
+		},
+		{
+			"checksumSHA1": "/U7f2gaH6DnEmLguVLDbipU6kXU=",
+			"path": "golang.org/x/crypto/internal/subtle",
+			"revision": "0c41d7ab0a0ee717d4590a44bcb987dfd9e183eb",
+			"revisionTime": "2018-10-15T00:23:17Z"
+		},
+		{
+			"checksumSHA1": "vKbPb9fpjCdzuoOvajOJnYfHG2g=",
+			"path": "golang.org/x/crypto/poly1305",
+			"revision": "0c41d7ab0a0ee717d4590a44bcb987dfd9e183eb",
+			"revisionTime": "2018-10-15T00:23:17Z"
+		},
+		{
+			"checksumSHA1": "REkmyB368pIiip76LiqMLspgCRk=",
+			"path": "golang.org/x/sys/cpu",
+			"revision": "fa43e7bc11baaae89f3f902b2b4d832b68234844",
+			"revisionTime": "2018-10-11T14:35:51Z"
 		}
 	],
 	"rootPath": "github.com/lucas-clemente/quic-go"

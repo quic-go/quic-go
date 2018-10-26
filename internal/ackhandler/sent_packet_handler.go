@@ -110,13 +110,15 @@ func (h *sentPacketHandler) SetHandshakeComplete() {
 	h.logger.Debugf("Handshake complete. Discarding all outstanding handshake packets.")
 	var queue []*Packet
 	for _, packet := range h.retransmissionQueue {
-		if packet.EncryptionLevel == protocol.EncryptionForwardSecure {
+		if packet.EncryptionLevel == protocol.EncryptionForwardSecure ||
+			packet.EncryptionLevel == protocol.Encryption1RTT {
 			queue = append(queue, packet)
 		}
 	}
 	var handshakePackets []*Packet
 	h.packetHistory.Iterate(func(p *Packet) (bool, error) {
-		if p.EncryptionLevel != protocol.EncryptionForwardSecure {
+		if p.EncryptionLevel != protocol.EncryptionForwardSecure &&
+			p.EncryptionLevel != protocol.Encryption1RTT {
 			handshakePackets = append(handshakePackets, p)
 		}
 		return true, nil
@@ -167,7 +169,8 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* isRetransmitt
 	isRetransmittable := len(packet.Frames) != 0
 
 	if isRetransmittable {
-		if packet.EncryptionLevel < protocol.EncryptionForwardSecure {
+		if packet.EncryptionLevel != protocol.EncryptionForwardSecure &&
+			packet.EncryptionLevel != protocol.Encryption1RTT {
 			h.lastSentHandshakePacketTime = packet.SendTime
 		}
 		h.lastSentRetransmittablePacketTime = packet.SendTime
@@ -214,8 +217,11 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 
 	priorInFlight := h.bytesInFlight
 	for _, p := range ackedPackets {
-		if encLevel < p.EncryptionLevel {
-			return fmt.Errorf("Received ACK with encryption level %s that acks a packet %d (encryption level %s)", encLevel, p.PacketNumber, p.EncryptionLevel)
+		// TODO(#1534): also check the encryption level for IETF QUIC
+		if !h.version.UsesTLS() {
+			if encLevel < p.EncryptionLevel {
+				return fmt.Errorf("Received ACK with encryption level %s that acks a packet %d (encryption level %s)", encLevel, p.PacketNumber, p.EncryptionLevel)
+			}
 		}
 		// largestAcked == 0 either means that the packet didn't contain an ACK, or it just acked packet 0
 		// It is safe to ignore the corner case of packets that just acked packet 0, because
@@ -586,7 +592,9 @@ func (h *sentPacketHandler) ShouldSendNumPackets() int {
 func (h *sentPacketHandler) queueHandshakePacketsForRetransmission() error {
 	var handshakePackets []*Packet
 	h.packetHistory.Iterate(func(p *Packet) (bool, error) {
-		if p.canBeRetransmitted && p.EncryptionLevel < protocol.EncryptionForwardSecure {
+		if p.canBeRetransmitted &&
+			p.EncryptionLevel != protocol.EncryptionForwardSecure &&
+			p.EncryptionLevel != protocol.Encryption1RTT {
 			handshakePackets = append(handshakePackets, p)
 		}
 		return true, nil

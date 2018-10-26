@@ -94,7 +94,7 @@ func (c *client) dial() error {
 	}
 
 	// once the version has been negotiated, open the header stream
-	c.headerStream, err = c.session.OpenStream()
+	c.headerStream, err = c.session.OpenStreamSync()
 	if err != nil {
 		return err
 	}

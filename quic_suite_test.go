@@ -22,9 +22,7 @@ const (
 var mockCtrl *gomock.Controller
 
 var _ = BeforeSuite(func() {
-	Expect(versionGQUICFrames.CryptoStreamID()).To(Equal(protocol.StreamID(1)))
 	Expect(versionGQUICFrames.UsesIETFFrameFormat()).To(BeFalse())
-	Expect(versionIETFFrames.CryptoStreamID()).To(Equal(protocol.StreamID(0)))
 	Expect(versionIETFFrames.UsesIETFFrameFormat()).To(BeTrue())
 })
 

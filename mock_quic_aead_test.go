@@ -59,3 +59,16 @@ func (m *MockQuicAEAD) OpenHandshake(arg0, arg1 []byte, arg2 protocol.PacketNumb
 func (mr *MockQuicAEADMockRecorder) OpenHandshake(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenHandshake", reflect.TypeOf((*MockQuicAEAD)(nil).OpenHandshake), arg0, arg1, arg2, arg3)
 }
+
+// OpenInitial mocks base method
+func (m *MockQuicAEAD) OpenInitial(arg0, arg1 []byte, arg2 protocol.PacketNumber, arg3 []byte) ([]byte, error) {
+	ret := m.ctrl.Call(m, "OpenInitial", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].([]byte)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// OpenInitial indicates an expected call of OpenInitial
+func (mr *MockQuicAEADMockRecorder) OpenInitial(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenInitial", reflect.TypeOf((*MockQuicAEAD)(nil).OpenInitial), arg0, arg1, arg2, arg3)
+}

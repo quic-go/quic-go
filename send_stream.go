@@ -195,7 +195,7 @@ func (s *sendStream) getDataForWriting(maxBytes protocol.ByteCount) ([]byte, boo
 		return nil, s.finishedWriting && !s.finSent
 	}
 
-	if s.streamID != s.version.CryptoStreamID() {
+	if !s.version.IsCryptoStream(s.streamID) {
 		maxBytes = utils.MinByteCount(maxBytes, s.flowController.SendWindowSize())
 	}
 	if maxBytes == 0 {
