@@ -776,32 +776,6 @@ var _ = Describe("Session", func() {
 			Expect(mconn.written).To(Receive(ContainSubstring("PRST")))
 		})
 
-		It("doesn't retransmit an Initial packet if it already received a response", func() {
-			unpacker := NewMockUnpacker(mockCtrl)
-			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
-			sess.unpacker = unpacker
-			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
-			sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
-			sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
-				PacketNumber: 10,
-				PacketType:   protocol.PacketTypeInitial,
-			})
-			sph.EXPECT().DequeuePacketForRetransmission()
-			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
-			rph.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any())
-			sess.receivedPacketHandler = rph
-			sess.sentPacketHandler = sph
-			err := sess.handlePacketImpl(&receivedPacket{
-				header: &wire.Header{},
-				data:   []byte{0},
-			})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(sess.receivedFirstPacket).To(BeTrue())
-			sent, err := sess.maybeSendRetransmission()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(sent).To(BeFalse())
-		})
-
 		It("sends a retransmission and a regular packet in the same run", func() {
 			packetToRetransmit := &ackhandler.Packet{
 				PacketNumber: 10,
@@ -1668,6 +1642,32 @@ var _ = Describe("Client Session", func() {
 		sessionRunner.EXPECT().removeConnectionID(gomock.Any())
 		Expect(sess.Close()).To(Succeed())
 		Eventually(sess.Context().Done()).Should(BeClosed())
+	})
+
+	It("doesn't retransmit an Initial packet if it already received a response", func() {
+		unpacker := NewMockUnpacker(mockCtrl)
+		unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
+		sess.unpacker = unpacker
+		sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+		sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
+		sph.EXPECT().DequeuePacketForRetransmission().Return(&ackhandler.Packet{
+			PacketNumber: 10,
+			PacketType:   protocol.PacketTypeInitial,
+		})
+		sph.EXPECT().DequeuePacketForRetransmission()
+		rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
+		rph.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any())
+		sess.receivedPacketHandler = rph
+		sess.sentPacketHandler = sph
+		err := sess.handlePacketImpl(&receivedPacket{
+			header: &wire.Header{},
+			data:   []byte{0},
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(sess.receivedFirstPacket).To(BeTrue())
+		sent, err := sess.maybeSendRetransmission()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(sent).To(BeFalse())
 	})
 
 	Context("receiving packets", func() {
