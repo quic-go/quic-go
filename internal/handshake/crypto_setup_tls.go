@@ -65,6 +65,8 @@ type cryptoSetupTLS struct {
 	messageErrChan chan error
 	// handshakeComplete is closed when the handshake completes
 	handshakeComplete chan<- struct{}
+	// handshakeDone is closed as soon as the go routine running qtls.Handshake() returns
+	handshakeDone chan struct{}
 	// transport parameters are sent on the receivedTransportParams, as soon as they are received
 	receivedTransportParams <-chan TransportParameters
 	// is closed when Close() is called
@@ -192,6 +194,7 @@ func newCryptoSetupTLS(
 		handshakeComplete:      handshakeComplete,
 		logger:                 logger,
 		perspective:            perspective,
+		handshakeDone:          make(chan struct{}),
 		handshakeErrChan:       make(chan struct{}),
 		messageErrChan:         make(chan error, 1),
 		clientHelloWrittenChan: make(chan struct{}),
@@ -238,6 +241,7 @@ func (h *cryptoSetupTLS) RunHandshake() error {
 	handshakeErrChan := make(chan error, 1)
 	handshakeComplete := make(chan struct{})
 	go func() {
+		defer close(h.handshakeDone)
 		if err := conn.Handshake(); err != nil {
 			handshakeErrChan <- err
 			return
@@ -271,6 +275,8 @@ func (h *cryptoSetupTLS) RunHandshake() error {
 
 func (h *cryptoSetupTLS) Close() error {
 	close(h.closeChan)
+	// wait until qtls.Handshake() actually returned
+	<-h.handshakeDone
 	return nil
 }
 
