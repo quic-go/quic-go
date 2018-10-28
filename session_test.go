@@ -1638,6 +1638,7 @@ var _ = Describe("Client Session", func() {
 		})
 		Expect(err).ToNot(HaveOccurred())
 		// make sure the go routine returns
+		sess.version = protocol.Version39
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 		sessionRunner.EXPECT().removeConnectionID(gomock.Any())
 		Expect(sess.Close()).To(Succeed())

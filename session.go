@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -603,6 +604,9 @@ runLoop:
 	}
 	s.logger.Infof("Connection %s closed.", s.srcConnID)
 	s.sessionRunner.removeConnectionID(s.srcConnID)
+	if s.version.UsesTLS() {
+		s.cryptoStreamHandler.(io.Closer).Close()
+	}
 	return closeErr.err
 }
 
