@@ -67,6 +67,8 @@ type cryptoSetupTLS struct {
 	handshakeComplete chan<- struct{}
 	// transport parameters are sent on the receivedTransportParams, as soon as they are received
 	receivedTransportParams <-chan TransportParameters
+	// is closed when Close() is called
+	closeChan chan struct{}
 
 	clientHelloWritten     bool
 	clientHelloWrittenChan chan struct{}
@@ -196,6 +198,7 @@ func newCryptoSetupTLS(
 		messageChan:            make(chan []byte, 100),
 		receivedReadKey:        make(chan struct{}),
 		receivedWriteKey:       make(chan struct{}),
+		closeChan:              make(chan struct{}),
 	}
 	var extHandler tlsExtensionHandler
 	switch perspective {
@@ -243,6 +246,11 @@ func (h *cryptoSetupTLS) RunHandshake() error {
 	}()
 
 	select {
+	case <-h.closeChan:
+		close(h.messageChan)
+		// wait until the Handshake() go routine has returned
+		<-handshakeErrChan
+		return errors.New("Handshake aborted")
 	case <-handshakeComplete: // return when the handshake is done
 		close(h.handshakeComplete)
 		return nil
@@ -259,6 +267,11 @@ func (h *cryptoSetupTLS) RunHandshake() error {
 		close(h.messageChan)
 		return err
 	}
+}
+
+func (h *cryptoSetupTLS) Close() error {
+	close(h.closeChan)
+	return nil
 }
 
 // handleMessage handles a TLS handshake message.

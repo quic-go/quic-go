@@ -116,6 +116,34 @@ var _ = Describe("Crypto Setup TLS", func() {
 		Eventually(done).Should(BeClosed())
 	})
 
+	It("returns Handshake() when it is closed", func() {
+		_, sInitialStream, sHandshakeStream := initStreams()
+		server, err := NewCryptoSetupTLSServer(
+			sInitialStream,
+			sHandshakeStream,
+			protocol.ConnectionID{},
+			&TransportParameters{},
+			func(p *TransportParameters) {},
+			make(chan struct{}),
+			testdata.GetTLSConfig(),
+			[]protocol.VersionNumber{protocol.VersionTLS},
+			protocol.VersionTLS,
+			utils.DefaultLogger.WithPrefix("server"),
+			protocol.PerspectiveServer,
+		)
+		Expect(err).ToNot(HaveOccurred())
+
+		done := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			err := server.RunHandshake()
+			Expect(err).To(MatchError("Handshake aborted"))
+			close(done)
+		}()
+		Expect(server.Close()).To(Succeed())
+		Eventually(done).Should(BeClosed())
+	})
+
 	Context("doing the handshake", func() {
 		generateCert := func() tls.Certificate {
 			priv, err := rsa.GenerateKey(rand.Reader, 2048)
