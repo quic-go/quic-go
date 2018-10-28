@@ -123,7 +123,7 @@ type session struct {
 	// It receives when it makes sense to try decrypting undecryptable packets.
 	// Only used for gQUIC.
 	handshakeEvent        <-chan struct{}
-	handshakeCompleteChan <-chan struct{} // is closed when the handshake completes
+	handshakeCompleteChan chan struct{} // is closed when the handshake completes
 	handshakeComplete     bool
 
 	receivedFirstPacket              bool // since packet numbers start at 0, we can't use largestRcvdPacketNumber != 0 for this
@@ -327,7 +327,6 @@ func newTLSServerSession(
 	logger utils.Logger,
 	v protocol.VersionNumber,
 ) (quicSession, error) {
-	handshakeCompleteChan := make(chan struct{})
 	s := &session{
 		conn:                  conn,
 		sessionRunner:         runner,
@@ -335,7 +334,7 @@ func newTLSServerSession(
 		srcConnID:             srcConnID,
 		destConnID:            destConnID,
 		perspective:           protocol.PerspectiveServer,
-		handshakeCompleteChan: handshakeCompleteChan,
+		handshakeCompleteChan: make(chan struct{}),
 		logger:                logger,
 		version:               v,
 	}
@@ -350,7 +349,6 @@ func newTLSServerSession(
 		origConnID,
 		params,
 		s.processTransportParameters,
-		handshakeCompleteChan,
 		tlsConf,
 		conf.Versions,
 		v,
@@ -402,7 +400,6 @@ var newTLSClientSession = func(
 	logger utils.Logger,
 	v protocol.VersionNumber,
 ) (quicSession, error) {
-	handshakeCompleteChan := make(chan struct{})
 	s := &session{
 		conn:                  conn,
 		sessionRunner:         runner,
@@ -410,7 +407,7 @@ var newTLSClientSession = func(
 		srcConnID:             srcConnID,
 		destConnID:            destConnID,
 		perspective:           protocol.PerspectiveClient,
-		handshakeCompleteChan: handshakeCompleteChan,
+		handshakeCompleteChan: make(chan struct{}),
 		logger:                logger,
 		version:               v,
 	}
@@ -423,7 +420,6 @@ var newTLSClientSession = func(
 		s.destConnID,
 		params,
 		s.processTransportParameters,
-		handshakeCompleteChan,
 		tlsConf,
 		initialVersion,
 		conf.Versions,
@@ -494,6 +490,10 @@ func (s *session) run() error {
 	go func() {
 		if err := s.cryptoStreamHandler.RunHandshake(); err != nil {
 			s.closeLocal(err)
+			return
+		}
+		if s.version.UsesTLS() {
+			close(s.handshakeCompleteChan)
 		}
 	}()
 	if s.version.UsesTLS() && s.perspective == protocol.PerspectiveClient {
