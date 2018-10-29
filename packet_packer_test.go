@@ -664,6 +664,7 @@ var _ = Describe("Packet packer", func() {
 				Offset: 0x1337,
 				Data:   []byte("foobar"),
 			}
+			ackFramer.EXPECT().GetAckFrame()
 			initialStream.EXPECT().HasData().Return(true)
 			initialStream.EXPECT().PopCryptoFrame(gomock.Any()).Return(f)
 			sealingManager.EXPECT().GetSealerWithEncryptionLevel(protocol.EncryptionInitial).Return(sealer, nil)
@@ -676,6 +677,7 @@ var _ = Describe("Packet packer", func() {
 			var f *wire.CryptoFrame
 			packer.version = versionIETFFrames
 			sealingManager.EXPECT().GetSealerWithEncryptionLevel(protocol.EncryptionHandshake).Return(sealer, nil)
+			ackFramer.EXPECT().GetAckFrame()
 			initialStream.EXPECT().HasData()
 			handshakeStream.EXPECT().HasData().Return(true)
 			handshakeStream.EXPECT().PopCryptoFrame(gomock.Any()).DoAndReturn(func(size protocol.ByteCount) *wire.CryptoFrame {
@@ -694,10 +696,9 @@ var _ = Describe("Packet packer", func() {
 		})
 
 		It("pads Initial packets to the required minimum packet size", func() {
-			f := &wire.CryptoFrame{
-				Data: []byte("foobar"),
-			}
+			f := &wire.CryptoFrame{Data: []byte("foobar")}
 			sealingManager.EXPECT().GetSealerWithEncryptionLevel(protocol.EncryptionInitial).Return(sealer, nil)
+			ackFramer.EXPECT().GetAckFrame()
 			initialStream.EXPECT().HasData().Return(true)
 			initialStream.EXPECT().PopCryptoFrame(gomock.Any()).Return(f)
 			packer.version = protocol.VersionTLS
@@ -714,6 +715,7 @@ var _ = Describe("Packet packer", func() {
 
 		It("sets the correct payload length for an Initial packet", func() {
 			sealingManager.EXPECT().GetSealerWithEncryptionLevel(protocol.EncryptionInitial).Return(sealer, nil)
+			ackFramer.EXPECT().GetAckFrame()
 			initialStream.EXPECT().HasData().Return(true)
 			initialStream.EXPECT().PopCryptoFrame(gomock.Any()).Return(&wire.CryptoFrame{
 				Data: []byte("foobar"),
@@ -723,6 +725,24 @@ var _ = Describe("Packet packer", func() {
 			packet, err := packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
 			checkPayloadLen(packet.raw)
+		})
+
+		It("adds an ACK frame", func() {
+			f := &wire.CryptoFrame{Data: []byte("foobar")}
+			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 42, Largest: 1337}}}
+			sealingManager.EXPECT().GetSealerWithEncryptionLevel(protocol.EncryptionInitial).Return(sealer, nil)
+			ackFramer.EXPECT().GetAckFrame().Return(ack)
+			initialStream.EXPECT().HasData().Return(true)
+			initialStream.EXPECT().PopCryptoFrame(gomock.Any()).Return(f)
+			packer.version = protocol.VersionTLS
+			packer.hasSentPacket = false
+			packer.perspective = protocol.PerspectiveClient
+			packet, err := packer.PackPacket()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(packet.header.Token).To(Equal(token))
+			Expect(packet.raw).To(HaveLen(protocol.MinInitialPacketSize))
+			Expect(packet.frames).To(HaveLen(2))
+			Expect(packet.frames[0]).To(Equal(ack))
 		})
 
 		Context("retransmitions", func() {

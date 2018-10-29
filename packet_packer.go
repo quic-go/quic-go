@@ -343,8 +343,13 @@ func (p *packetPacker) maybePackCryptoPacket() (*packedPacket, error) {
 		return nil, err
 	}
 	var length protocol.ByteCount
+	frames := make([]wire.Frame, 0, 2)
+	if ack := p.acks.GetAckFrame(); ack != nil {
+		frames = append(frames, ack)
+		length += ack.Length(p.version)
+	}
 	cf := s.PopCryptoFrame(p.maxPacketSize - hdrLen - protocol.ByteCount(sealer.Overhead()) - length)
-	frames := []wire.Frame{cf}
+	frames = append(frames, cf)
 	raw, err := p.writeAndSealPacket(hdr, frames, sealer)
 	if err != nil {
 		return nil, err
