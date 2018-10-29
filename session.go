@@ -1066,7 +1066,7 @@ func (s *session) maybeSendRetransmission() (bool, error) {
 		// Don't retransmit Initial packets if we already received a response.
 		// An Initial might have been retransmitted multiple times before we receive a response.
 		// As soon as we receive one response, we don't need to send any more Initials.
-		if s.receivedFirstPacket && retransmitPacket.PacketType == protocol.PacketTypeInitial {
+		if s.perspective == protocol.PerspectiveClient && s.receivedFirstPacket && retransmitPacket.PacketType == protocol.PacketTypeInitial {
 			s.logger.Debugf("Skipping retransmission of packet %d. Already received a response to an Initial.", retransmitPacket.PacketNumber)
 			continue
 		}
