@@ -63,8 +63,6 @@ type cryptoSetupTLS struct {
 	handshakeErrChan chan struct{}
 	// HandleData() sends errors on the messageErrChan
 	messageErrChan chan error
-	// handshakeComplete is closed when the handshake completes
-	handshakeComplete chan<- struct{}
 	// handshakeDone is closed as soon as the go routine running qtls.Handshake() returns
 	handshakeDone chan struct{}
 	// transport parameters are sent on the receivedTransportParams, as soon as they are received
@@ -110,7 +108,6 @@ func NewCryptoSetupTLSClient(
 	connID protocol.ConnectionID,
 	params *TransportParameters,
 	handleParams func(*TransportParameters),
-	handshakeComplete chan<- struct{},
 	tlsConf *tls.Config,
 	initialVersion protocol.VersionNumber,
 	supportedVersions []protocol.VersionNumber,
@@ -124,7 +121,6 @@ func NewCryptoSetupTLSClient(
 		connID,
 		params,
 		handleParams,
-		handshakeComplete,
 		tlsConf,
 		versionInfo{
 			currentVersion:    currentVersion,
@@ -143,7 +139,6 @@ func NewCryptoSetupTLSServer(
 	connID protocol.ConnectionID,
 	params *TransportParameters,
 	handleParams func(*TransportParameters),
-	handshakeComplete chan<- struct{},
 	tlsConf *tls.Config,
 	supportedVersions []protocol.VersionNumber,
 	currentVersion protocol.VersionNumber,
@@ -156,7 +151,6 @@ func NewCryptoSetupTLSServer(
 		connID,
 		params,
 		handleParams,
-		handshakeComplete,
 		tlsConf,
 		versionInfo{
 			currentVersion:    currentVersion,
@@ -174,7 +168,6 @@ func newCryptoSetupTLS(
 	connID protocol.ConnectionID,
 	params *TransportParameters,
 	handleParams func(*TransportParameters),
-	handshakeComplete chan<- struct{},
 	tlsConf *tls.Config,
 	versionInfo versionInfo,
 	logger utils.Logger,
@@ -191,7 +184,6 @@ func newCryptoSetupTLS(
 		readEncLevel:           protocol.EncryptionInitial,
 		writeEncLevel:          protocol.EncryptionInitial,
 		handleParamsCallback:   handleParams,
-		handshakeComplete:      handshakeComplete,
 		logger:                 logger,
 		perspective:            perspective,
 		handshakeDone:          make(chan struct{}),
@@ -256,7 +248,6 @@ func (h *cryptoSetupTLS) RunHandshake() error {
 		<-handshakeErrChan
 		return errors.New("Handshake aborted")
 	case <-handshakeComplete: // return when the handshake is done
-		close(h.handshakeComplete)
 		return nil
 	case err := <-handshakeErrChan:
 		// if handleMessageFor{server,client} are waiting for some qtls action, make them return
