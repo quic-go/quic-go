@@ -2,6 +2,7 @@ package handshake
 
 import (
 	"crypto/x509"
+	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/marten-seemann/qtls"
@@ -44,6 +45,7 @@ type CryptoSetup interface {
 type CryptoSetupTLS interface {
 	baseCryptoSetup
 
+	io.Closer
 	HandleMessage([]byte, protocol.EncryptionLevel) bool
 	OpenInitial(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)
 	OpenHandshake(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)
