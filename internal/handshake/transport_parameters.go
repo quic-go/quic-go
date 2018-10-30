@@ -11,10 +11,23 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
+type transportParameterID uint16
+
+const (
+	initialMaxStreamDataParameterID  transportParameterID = 0x0
+	initialMaxDataParameterID        transportParameterID = 0x1
+	initialMaxBidiStreamsParameterID transportParameterID = 0x2
+	idleTimeoutParameterID           transportParameterID = 0x3
+	maxPacketSizeParameterID         transportParameterID = 0x5
+	statelessResetTokenParameterID   transportParameterID = 0x6
+	initialMaxUniStreamsParameterID  transportParameterID = 0x8
+	disableMigrationParameterID      transportParameterID = 0x9
+)
+
 // TransportParameters are parameters sent to the peer during the handshake
 type TransportParameters struct {
-	StreamFlowControlWindow     protocol.ByteCount
-	ConnectionFlowControlWindow protocol.ByteCount
+	InitialMaxStreamData protocol.ByteCount
+	InitialMaxData       protocol.ByteCount
 
 	MaxPacketSize protocol.ByteCount
 
@@ -43,12 +56,12 @@ func (p *TransportParameters) unmarshal(data []byte) error {
 			if paramLen != 4 {
 				return fmt.Errorf("wrong length for initial_max_stream_data: %d (expected 4)", paramLen)
 			}
-			p.StreamFlowControlWindow = protocol.ByteCount(binary.BigEndian.Uint32(data[:4]))
+			p.InitialMaxStreamData = protocol.ByteCount(binary.BigEndian.Uint32(data[:4]))
 		case initialMaxDataParameterID:
 			if paramLen != 4 {
 				return fmt.Errorf("wrong length for initial_max_data: %d (expected 4)", paramLen)
 			}
-			p.ConnectionFlowControlWindow = protocol.ByteCount(binary.BigEndian.Uint32(data[:4]))
+			p.InitialMaxData = protocol.ByteCount(binary.BigEndian.Uint32(data[:4]))
 		case initialMaxBidiStreamsParameterID:
 			if paramLen != 2 {
 				return fmt.Errorf("wrong length for initial_max_stream_id_bidi: %d (expected 2)", paramLen)
@@ -105,11 +118,11 @@ func (p *TransportParameters) marshal(b *bytes.Buffer) {
 	// initial_max_stream_data
 	utils.BigEndian.WriteUint16(b, uint16(initialMaxStreamDataParameterID))
 	utils.BigEndian.WriteUint16(b, 4)
-	utils.BigEndian.WriteUint32(b, uint32(p.StreamFlowControlWindow))
+	utils.BigEndian.WriteUint32(b, uint32(p.InitialMaxStreamData))
 	// initial_max_data
 	utils.BigEndian.WriteUint16(b, uint16(initialMaxDataParameterID))
 	utils.BigEndian.WriteUint16(b, 4)
-	utils.BigEndian.WriteUint32(b, uint32(p.ConnectionFlowControlWindow))
+	utils.BigEndian.WriteUint32(b, uint32(p.InitialMaxData))
 	// initial_max_bidi_streams
 	utils.BigEndian.WriteUint16(b, uint16(initialMaxBidiStreamsParameterID))
 	utils.BigEndian.WriteUint16(b, 2)
@@ -140,5 +153,5 @@ func (p *TransportParameters) marshal(b *bytes.Buffer) {
 
 // String returns a string representation, intended for logging.
 func (p *TransportParameters) String() string {
-	return fmt.Sprintf("&handshake.TransportParameters{StreamFlowControlWindow: %#x, ConnectionFlowControlWindow: %#x, MaxBidiStreams: %d, MaxUniStreams: %d, IdleTimeout: %s}", p.StreamFlowControlWindow, p.ConnectionFlowControlWindow, p.MaxBidiStreams, p.MaxUniStreams, p.IdleTimeout)
+	return fmt.Sprintf("&handshake.TransportParameters{InitialMaxStreamData: %#x, InitialMaxData: %#x, MaxBidiStreams: %d, MaxUniStreams: %d, IdleTimeout: %s}", p.InitialMaxStreamData, p.InitialMaxData, p.MaxBidiStreams, p.MaxUniStreams, p.IdleTimeout)
 }

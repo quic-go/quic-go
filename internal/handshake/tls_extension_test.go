@@ -16,14 +16,14 @@ var _ = Describe("QUIC TLS Extension", func() {
 			chtp := &clientHelloTransportParameters{
 				InitialVersion: 0x123456,
 				Parameters: TransportParameters{
-					StreamFlowControlWindow: 0x42,
-					IdleTimeout:             0x1337 * time.Second,
+					InitialMaxStreamData: 0x42,
+					IdleTimeout:          0x1337 * time.Second,
 				},
 			}
 			chtp2 := &clientHelloTransportParameters{}
 			Expect(chtp2.Unmarshal(chtp.Marshal())).To(Succeed())
 			Expect(chtp2.InitialVersion).To(Equal(chtp.InitialVersion))
-			Expect(chtp2.Parameters.StreamFlowControlWindow).To(Equal(chtp.Parameters.StreamFlowControlWindow))
+			Expect(chtp2.Parameters.InitialMaxStreamData).To(Equal(chtp.Parameters.InitialMaxStreamData))
 			Expect(chtp2.Parameters.IdleTimeout).To(Equal(chtp.Parameters.IdleTimeout))
 		})
 
@@ -44,15 +44,15 @@ var _ = Describe("QUIC TLS Extension", func() {
 				NegotiatedVersion: 0x123456,
 				SupportedVersions: []protocol.VersionNumber{0x42, 0x4242},
 				Parameters: TransportParameters{
-					StreamFlowControlWindow: 0x42,
-					IdleTimeout:             0x1337 * time.Second,
+					InitialMaxStreamData: 0x42,
+					IdleTimeout:          0x1337 * time.Second,
 				},
 			}
 			eetp2 := &encryptedExtensionsTransportParameters{}
 			Expect(eetp2.Unmarshal(eetp.Marshal())).To(Succeed())
 			Expect(eetp2.NegotiatedVersion).To(Equal(eetp.NegotiatedVersion))
 			Expect(eetp2.SupportedVersions).To(Equal(eetp.SupportedVersions))
-			Expect(eetp2.Parameters.StreamFlowControlWindow).To(Equal(eetp.Parameters.StreamFlowControlWindow))
+			Expect(eetp2.Parameters.InitialMaxStreamData).To(Equal(eetp.Parameters.InitialMaxStreamData))
 			Expect(eetp2.Parameters.IdleTimeout).To(Equal(eetp.Parameters.IdleTimeout))
 		})
 

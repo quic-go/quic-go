@@ -397,12 +397,12 @@ func (c *client) handleRetryPacket(hdr *wire.Header) {
 
 func (c *client) createNewTLSSession(version protocol.VersionNumber) error {
 	params := &handshake.TransportParameters{
-		StreamFlowControlWindow:     protocol.ReceiveStreamFlowControlWindow,
-		ConnectionFlowControlWindow: protocol.ReceiveConnectionFlowControlWindow,
-		IdleTimeout:                 c.config.IdleTimeout,
-		MaxBidiStreams:              uint16(c.config.MaxIncomingStreams),
-		MaxUniStreams:               uint16(c.config.MaxIncomingUniStreams),
-		DisableMigration:            true,
+		InitialMaxStreamData: protocol.InitialMaxStreamData,
+		InitialMaxData:       protocol.InitialMaxData,
+		IdleTimeout:          c.config.IdleTimeout,
+		MaxBidiStreams:       uint16(c.config.MaxIncomingStreams),
+		MaxUniStreams:        uint16(c.config.MaxIncomingUniStreams),
+		DisableMigration:     true,
 	}
 
 	c.mutex.Lock()

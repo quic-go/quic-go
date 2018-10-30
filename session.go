@@ -277,7 +277,7 @@ func (s *session) preSetup() {
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats, s.logger, s.version)
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.rttStats, s.logger, s.version)
 	s.connFlowController = flowcontrol.NewConnectionFlowController(
-		protocol.ReceiveConnectionFlowControlWindow,
+		protocol.InitialMaxData,
 		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),
 		s.onHasConnectionWindowUpdate,
 		s.rttStats,
@@ -746,7 +746,7 @@ func (s *session) processTransportParameters(params *handshake.TransportParamete
 	s.peerParams = params
 	s.streamsMap.UpdateLimits(params)
 	s.packer.HandleTransportParameters(params)
-	s.connFlowController.UpdateSendWindow(params.ConnectionFlowControlWindow)
+	s.connFlowController.UpdateSendWindow(params.InitialMaxData)
 	// the crypto stream is the only open stream at this moment
 	// so we don't need to update stream flow control windows
 }
@@ -992,12 +992,12 @@ func (s *session) newStream(id protocol.StreamID) streamI {
 func (s *session) newFlowController(id protocol.StreamID) flowcontrol.StreamFlowController {
 	var initialSendWindow protocol.ByteCount
 	if s.peerParams != nil {
-		initialSendWindow = s.peerParams.StreamFlowControlWindow
+		initialSendWindow = s.peerParams.InitialMaxStreamData
 	}
 	return flowcontrol.NewStreamFlowController(
 		id,
 		s.connFlowController,
-		protocol.ReceiveStreamFlowControlWindow,
+		protocol.InitialMaxStreamData,
 		protocol.ByteCount(s.config.MaxReceiveStreamFlowControlWindow),
 		initialSendWindow,
 		s.onHasStreamWindowUpdate,
