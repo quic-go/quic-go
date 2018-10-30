@@ -995,10 +995,10 @@ var _ = Describe("Session", func() {
 			sess.run()
 		}()
 		params := &handshake.TransportParameters{
-			IdleTimeout:                 90 * time.Second,
-			StreamFlowControlWindow:     0x5000,
-			ConnectionFlowControlWindow: 0x5000,
-			MaxPacketSize:               0x42,
+			IdleTimeout:          90 * time.Second,
+			InitialMaxStreamData: 0x5000,
+			InitialMaxData:       0x5000,
+			MaxPacketSize:        0x42,
 		}
 		streamManager.EXPECT().UpdateLimits(params)
 		packer.EXPECT().HandleTransportParameters(params)

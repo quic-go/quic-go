@@ -14,13 +14,13 @@ import (
 var _ = Describe("Transport Parameters", func() {
 	It("has a string representation", func() {
 		p := &TransportParameters{
-			StreamFlowControlWindow:     0x1234,
-			ConnectionFlowControlWindow: 0x4321,
-			MaxBidiStreams:              1337,
-			MaxUniStreams:               7331,
-			IdleTimeout:                 42 * time.Second,
+			InitialMaxStreamData: 0x1234,
+			InitialMaxData:       0x4321,
+			MaxBidiStreams:       1337,
+			MaxUniStreams:        7331,
+			IdleTimeout:          42 * time.Second,
 		}
-		Expect(p.String()).To(Equal("&handshake.TransportParameters{StreamFlowControlWindow: 0x1234, ConnectionFlowControlWindow: 0x4321, MaxBidiStreams: 1337, MaxUniStreams: 7331, IdleTimeout: 42s}"))
+		Expect(p.String()).To(Equal("&handshake.TransportParameters{InitialMaxStreamData: 0x1234, InitialMaxData: 0x4321, MaxBidiStreams: 1337, MaxUniStreams: 7331, IdleTimeout: 42s}"))
 	})
 
 	Context("parsing", func() {
@@ -57,8 +57,8 @@ var _ = Describe("Transport Parameters", func() {
 		It("reads parameters", func() {
 			err := params.unmarshal(marshal(parameters))
 			Expect(err).ToNot(HaveOccurred())
-			Expect(params.StreamFlowControlWindow).To(Equal(protocol.ByteCount(0x11223344)))
-			Expect(params.ConnectionFlowControlWindow).To(Equal(protocol.ByteCount(0x22334455)))
+			Expect(params.InitialMaxStreamData).To(Equal(protocol.ByteCount(0x11223344)))
+			Expect(params.InitialMaxData).To(Equal(protocol.ByteCount(0x22334455)))
 			Expect(params.MaxBidiStreams).To(Equal(uint16(0x3344)))
 			Expect(params.MaxUniStreams).To(Equal(uint16(0x4455)))
 			Expect(params.IdleTimeout).To(Equal(0x1337 * time.Second))
@@ -150,21 +150,21 @@ var _ = Describe("Transport Parameters", func() {
 	Context("marshalling", func() {
 		It("marshals", func() {
 			params := &TransportParameters{
-				StreamFlowControlWindow:     0xdeadbeef,
-				ConnectionFlowControlWindow: 0xdecafbad,
-				IdleTimeout:                 0xcafe * time.Second,
-				MaxBidiStreams:              0x1234,
-				MaxUniStreams:               0x4321,
-				DisableMigration:            true,
-				StatelessResetToken:         bytes.Repeat([]byte{100}, 16),
+				InitialMaxStreamData: 0xdeadbeef,
+				InitialMaxData:       0xdecafbad,
+				IdleTimeout:          0xcafe * time.Second,
+				MaxBidiStreams:       0x1234,
+				MaxUniStreams:        0x4321,
+				DisableMigration:     true,
+				StatelessResetToken:  bytes.Repeat([]byte{100}, 16),
 			}
 			b := &bytes.Buffer{}
 			params.marshal(b)
 
 			p := &TransportParameters{}
 			Expect(p.unmarshal(b.Bytes())).To(Succeed())
-			Expect(p.StreamFlowControlWindow).To(Equal(params.StreamFlowControlWindow))
-			Expect(p.ConnectionFlowControlWindow).To(Equal(params.ConnectionFlowControlWindow))
+			Expect(p.InitialMaxStreamData).To(Equal(params.InitialMaxStreamData))
+			Expect(p.InitialMaxData).To(Equal(params.InitialMaxData))
 			Expect(p.MaxUniStreams).To(Equal(params.MaxUniStreams))
 			Expect(p.MaxBidiStreams).To(Equal(params.MaxBidiStreams))
 			Expect(p.IdleTimeout).To(Equal(params.IdleTimeout))
