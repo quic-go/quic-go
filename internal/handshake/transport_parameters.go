@@ -11,6 +11,19 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
+type transportParameterID uint16
+
+const (
+	initialMaxStreamDataParameterID  transportParameterID = 0x0
+	initialMaxDataParameterID        transportParameterID = 0x1
+	initialMaxBidiStreamsParameterID transportParameterID = 0x2
+	idleTimeoutParameterID           transportParameterID = 0x3
+	maxPacketSizeParameterID         transportParameterID = 0x5
+	statelessResetTokenParameterID   transportParameterID = 0x6
+	initialMaxUniStreamsParameterID  transportParameterID = 0x8
+	disableMigrationParameterID      transportParameterID = 0x9
+)
+
 // TransportParameters are parameters sent to the peer during the handshake
 type TransportParameters struct {
 	StreamFlowControlWindow     protocol.ByteCount
