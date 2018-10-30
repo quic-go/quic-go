@@ -9,30 +9,6 @@
 			"revisionTime": "2017-03-28T20:00:08Z"
 		},
 		{
-			"checksumSHA1": "UquR8kc0nKU285HwLbkievlLQz4=",
-			"path": "github.com/hashicorp/golang-lru",
-			"revision": "0fb14efe8c47ae851c0034ed7a448854d3d34cf3",
-			"revisionTime": "2018-02-01T23:52:37Z"
-		},
-		{
-			"checksumSHA1": "8Z637dcPkbR5HdLQQBp/9jTbx9Y=",
-			"path": "github.com/hashicorp/golang-lru/simplelru",
-			"revision": "0fb14efe8c47ae851c0034ed7a448854d3d34cf3",
-			"revisionTime": "2018-02-01T23:52:37Z"
-		},
-		{
-			"checksumSHA1": "2RFzGcdTeQrFkkhT70WhQcMWF6c=",
-			"path": "github.com/lucas-clemente/aes12",
-			"revision": "cd47fb39b79f867c6e4e5cd39cf7abd799f71670",
-			"revisionTime": "2017-10-27T16:34:21Z"
-		},
-		{
-			"checksumSHA1": "OA9E+y7g05x/mWJJHmA7oPxWKQo=",
-			"path": "github.com/lucas-clemente/quic-go-certificates",
-			"revision": "d2f86524cced5186554df90d92529757d22c1cb6",
-			"revisionTime": "2016-08-23T09:51:56Z"
-		},
-		{
 			"checksumSHA1": "tMUbiAxGypX/0kCJpIFg31Q6vOU=",
 			"path": "github.com/marten-seemann/qtls",
 			"revision": "c50a91d48284ab31c39389e64f7c57e475bb0633",

@@ -195,9 +195,7 @@ func (s *sendStream) getDataForWriting(maxBytes protocol.ByteCount) ([]byte, boo
 		return nil, s.finishedWriting && !s.finSent
 	}
 
-	if !s.version.IsCryptoStream(s.streamID) {
-		maxBytes = utils.MinByteCount(maxBytes, s.flowController.SendWindowSize())
-	}
+	maxBytes = utils.MinByteCount(maxBytes, s.flowController.SendWindowSize())
 	if maxBytes == 0 {
 		return nil, false
 	}
@@ -286,9 +284,6 @@ func (s *sendStream) handleStopSendingFrameImpl(frame *wire.StopSendingFrame) bo
 		error:     fmt.Errorf("Stream %d was reset with error code %d", s.streamID, frame.ErrorCode),
 	}
 	errorCode := errorCodeStopping
-	if !s.version.UsesIETFFrameFormat() {
-		errorCode = errorCodeStoppingGQUIC
-	}
 	completed, _ := s.cancelWriteImpl(errorCode, writeErr)
 	return completed
 }

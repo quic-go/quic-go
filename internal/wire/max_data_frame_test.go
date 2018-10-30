@@ -15,7 +15,7 @@ var _ = Describe("MAX_DATA frame", func() {
 			data := []byte{0x4}
 			data = append(data, encodeVarInt(0xdecafbad123456)...) // byte offset
 			b := bytes.NewReader(data)
-			frame, err := parseMaxDataFrame(b, versionBigEndian)
+			frame, err := parseMaxDataFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0xdecafbad123456)))
 			Expect(b.Len()).To(BeZero())

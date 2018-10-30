@@ -10,39 +10,18 @@ var _ = Describe("Version", func() {
 		return v&0x0f0f0f0f == 0x0a0a0a0a
 	}
 
-	// version numbers taken from the wiki: https://github.com/quicwg/base-drafts/wiki/QUIC-Versions
-	It("has the right gQUIC version number", func() {
-		Expect(Version39).To(BeEquivalentTo(0x51303339))
-		Expect(Version43).To(BeEquivalentTo(0x51303433))
-		Expect(Version44).To(BeEquivalentTo(0x51303434))
-	})
-
 	It("says if a version is valid", func() {
-		Expect(IsValidVersion(Version39)).To(BeTrue())
-		Expect(IsValidVersion(Version43)).To(BeTrue())
-		Expect(IsValidVersion(Version44)).To(BeTrue())
 		Expect(IsValidVersion(VersionTLS)).To(BeTrue())
 		Expect(IsValidVersion(VersionWhatever)).To(BeFalse())
 		Expect(IsValidVersion(VersionUnknown)).To(BeFalse())
 		Expect(IsValidVersion(1234)).To(BeFalse())
 	})
 
-	It("says if a version supports TLS", func() {
-		Expect(Version39.UsesTLS()).To(BeFalse())
-		Expect(Version43.UsesTLS()).To(BeFalse())
-		Expect(Version44.UsesTLS()).To(BeFalse())
-		Expect(VersionTLS.UsesTLS()).To(BeTrue())
-	})
-
 	It("versions don't have reserved version numbers", func() {
-		Expect(isReservedVersion(Version39)).To(BeFalse())
-		Expect(isReservedVersion(Version43)).To(BeFalse())
-		Expect(isReservedVersion(Version44)).To(BeFalse())
 		Expect(isReservedVersion(VersionTLS)).To(BeFalse())
 	})
 
 	It("has the right string representation", func() {
-		Expect(Version39.String()).To(Equal("gQUIC 39"))
 		Expect(VersionTLS.String()).To(ContainSubstring("TLS"))
 		Expect(VersionWhatever.String()).To(Equal("whatever"))
 		Expect(VersionUnknown.String()).To(Equal("unknown"))
@@ -55,88 +34,7 @@ var _ = Describe("Version", func() {
 	})
 
 	It("has the right representation for the H2 Alt-Svc tag", func() {
-		Expect(Version39.ToAltSvc()).To(Equal("39"))
-		Expect(Version43.ToAltSvc()).To(Equal("43"))
-		Expect(Version44.ToAltSvc()).To(Equal("44"))
 		Expect(VersionTLS.ToAltSvc()).To(Equal("101"))
-		// check with unsupported version numbers from the wiki
-		Expect(VersionNumber(0x51303133).ToAltSvc()).To(Equal("13"))
-		Expect(VersionNumber(0x51303235).ToAltSvc()).To(Equal("25"))
-		Expect(VersionNumber(0x51303438).ToAltSvc()).To(Equal("48"))
-	})
-
-	It("says if a stream is the crypto stream, for gQUIC", func() {
-		for _, v := range []VersionNumber{Version39, Version43, Version44} {
-			version := v
-			Expect(version.IsCryptoStream(1)).To(BeTrue())
-			Expect(version.IsCryptoStream(2)).To(BeFalse())
-			Expect(version.IsCryptoStream(3)).To(BeFalse())
-			Expect(version.IsCryptoStream(4)).To(BeFalse())
-			Expect(version.IsCryptoStream(5)).To(BeFalse())
-		}
-	})
-
-	It("says if a stream is the crypto stream, for TLS", func() {
-		// all streams contribute to connection-level flow control
-		for id := StreamID(0); id < 10; id++ {
-			Expect(VersionTLS.IsCryptoStream(id)).To(BeFalse())
-		}
-	})
-
-	It("tells if a version uses the IETF frame types", func() {
-		Expect(Version39.UsesIETFFrameFormat()).To(BeFalse())
-		Expect(Version43.UsesIETFFrameFormat()).To(BeFalse())
-		Expect(Version44.UsesIETFFrameFormat()).To(BeFalse())
-		Expect(VersionTLS.UsesIETFFrameFormat()).To(BeTrue())
-	})
-
-	It("tells if a version uses the IETF header format", func() {
-		Expect(Version39.UsesIETFHeaderFormat()).To(BeFalse())
-		Expect(Version43.UsesIETFHeaderFormat()).To(BeFalse())
-		Expect(Version44.UsesIETFHeaderFormat()).To(BeTrue())
-		Expect(VersionTLS.UsesIETFHeaderFormat()).To(BeTrue())
-	})
-
-	It("tells if a version uses varint packet numbers", func() {
-		Expect(Version39.UsesVarintPacketNumbers()).To(BeFalse())
-		Expect(Version43.UsesVarintPacketNumbers()).To(BeFalse())
-		Expect(Version44.UsesVarintPacketNumbers()).To(BeFalse())
-		Expect(VersionTLS.UsesVarintPacketNumbers()).To(BeTrue())
-	})
-
-	It("tells if a version uses the Length field in the IETF header", func() {
-		Expect(Version44.UsesLengthInHeader()).To(BeFalse())
-		Expect(VersionTLS.UsesLengthInHeader()).To(BeTrue())
-	})
-
-	It("tells if a version uses the Token field in the IETF header", func() {
-		Expect(Version44.UsesTokenInHeader()).To(BeFalse())
-		Expect(VersionTLS.UsesTokenInHeader()).To(BeTrue())
-	})
-
-	It("tells if a version uses STOP_WAITING frames", func() {
-		Expect(Version39.UsesStopWaitingFrames()).To(BeTrue())
-		Expect(Version43.UsesStopWaitingFrames()).To(BeTrue())
-		Expect(Version44.UsesStopWaitingFrames()).To(BeFalse())
-		Expect(VersionTLS.UsesStopWaitingFrames()).To(BeFalse())
-	})
-
-	It("says if a stream contributes to connection-level flowcontrol, for gQUIC", func() {
-		for _, v := range []VersionNumber{Version39, Version43, Version44} {
-			version := v
-			Expect(version.StreamContributesToConnectionFlowControl(1)).To(BeFalse())
-			Expect(version.StreamContributesToConnectionFlowControl(2)).To(BeTrue())
-			Expect(version.StreamContributesToConnectionFlowControl(3)).To(BeFalse())
-			Expect(version.StreamContributesToConnectionFlowControl(4)).To(BeTrue())
-			Expect(version.StreamContributesToConnectionFlowControl(5)).To(BeTrue())
-		}
-	})
-
-	It("says if a stream contributes to connection-level flowcontrol, for TLS", func() {
-		// all streams contribute to connection-level flow control
-		for id := StreamID(0); id < 10; id++ {
-			Expect(VersionTLS.StreamContributesToConnectionFlowControl(id)).To(BeTrue())
-		}
 	})
 
 	It("recognizes supported versions", func() {

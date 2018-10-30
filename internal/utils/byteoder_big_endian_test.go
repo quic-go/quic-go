@@ -75,27 +75,6 @@ var _ = Describe("Big Endian encoding / decoding", func() {
 		})
 	})
 
-	Context("WriteUint24", func() {
-		It("outputs 3 bytes", func() {
-			b := &bytes.Buffer{}
-			BigEndian.WriteUint24(b, uint32(1))
-			Expect(b.Len()).To(Equal(3))
-		})
-
-		It("outputs a big endian", func() {
-			num := uint32(0x010203)
-			b := &bytes.Buffer{}
-			BigEndian.WriteUint24(b, num)
-			Expect(b.Bytes()).To(Equal([]byte{0x01, 0x02, 0x03}))
-		})
-
-		It("panics if the value doesn't fit into 24 bits", func() {
-			num := uint32(0x01020304)
-			b := &bytes.Buffer{}
-			Expect(func() { BigEndian.WriteUint24(b, num) }).Should(Panic())
-		})
-	})
-
 	Context("WriteUint32", func() {
 		It("outputs 4 bytes", func() {
 			b := &bytes.Buffer{}
@@ -108,69 +87,6 @@ var _ = Describe("Big Endian encoding / decoding", func() {
 			b := &bytes.Buffer{}
 			BigEndian.WriteUint32(b, num)
 			Expect(b.Bytes()).To(Equal([]byte{0xEF, 0xAC, 0x35, 0x12}))
-		})
-	})
-
-	Context("WriteUint40", func() {
-		It("outputs 5 bytes", func() {
-			b := &bytes.Buffer{}
-			BigEndian.WriteUint40(b, uint64(1))
-			Expect(b.Len()).To(Equal(5))
-		})
-
-		It("outputs a big endian", func() {
-			num := uint64(0xDECAFBAD42)
-			b := &bytes.Buffer{}
-			BigEndian.WriteUint40(b, num)
-			Expect(b.Bytes()).To(Equal([]byte{0xDE, 0xCA, 0xFB, 0xAD, 0x42}))
-		})
-
-		It("panics if the value doesn't fit into 40 bits", func() {
-			num := uint64(0x010203040506)
-			b := &bytes.Buffer{}
-			Expect(func() { BigEndian.WriteUint40(b, num) }).Should(Panic())
-		})
-	})
-
-	Context("WriteUint48", func() {
-		It("outputs 6 bytes", func() {
-			b := &bytes.Buffer{}
-			BigEndian.WriteUint48(b, uint64(1))
-			Expect(b.Len()).To(Equal(6))
-		})
-
-		It("outputs a big endian", func() {
-			num := uint64(0xDEADBEEFCAFE)
-			b := &bytes.Buffer{}
-			BigEndian.WriteUint48(b, num)
-			Expect(b.Bytes()).To(Equal([]byte{0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE}))
-		})
-
-		It("panics if the value doesn't fit into 48 bits", func() {
-			num := uint64(0xDEADBEEFCAFE01)
-			b := &bytes.Buffer{}
-			Expect(func() { BigEndian.WriteUint48(b, num) }).Should(Panic())
-		})
-	})
-
-	Context("WriteUint56", func() {
-		It("outputs 7 bytes", func() {
-			b := &bytes.Buffer{}
-			BigEndian.WriteUint56(b, uint64(1))
-			Expect(b.Len()).To(Equal(7))
-		})
-
-		It("outputs a big endian", func() {
-			num := uint64(0xEEDDCCBBAA9988)
-			b := &bytes.Buffer{}
-			BigEndian.WriteUint56(b, num)
-			Expect(b.Bytes()).To(Equal([]byte{0xEE, 0xDD, 0xCC, 0xBB, 0xAA, 0x99, 0x88}))
-		})
-
-		It("panics if the value doesn't fit into 56 bits", func() {
-			num := uint64(0xEEDDCCBBAA998801)
-			b := &bytes.Buffer{}
-			Expect(func() { BigEndian.WriteUint56(b, num) }).Should(Panic())
 		})
 	})
 

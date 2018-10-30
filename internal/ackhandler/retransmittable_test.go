@@ -11,10 +11,8 @@ import (
 var _ = Describe("retransmittable frames", func() {
 	for fl, el := range map[wire.Frame]bool{
 		&wire.AckFrame{}:             false,
-		&wire.StopWaitingFrame{}:     false,
 		&wire.BlockedFrame{}:         true,
 		&wire.ConnectionCloseFrame{}: true,
-		&wire.GoawayFrame{}:          true,
 		&wire.PingFrame{}:            true,
 		&wire.RstStreamFrame{}:       true,
 		&wire.StreamFrame{}:          true,

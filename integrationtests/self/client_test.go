@@ -13,6 +13,7 @@ import (
 	"github.com/lucas-clemente/quic-go/h2quic"
 	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
@@ -21,8 +22,7 @@ import (
 var _ = Describe("Client tests", func() {
 	var client *http.Client
 
-	// also run some tests with the TLS handshake
-	versions := append(protocol.SupportedVersions, protocol.VersionTLS)
+	versions := protocol.SupportedVersions
 
 	BeforeEach(func() {
 		err := os.Setenv("HOSTALIASES", "quic.clemente.io 127.0.0.1")

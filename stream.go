@@ -10,10 +10,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
-const (
-	errorCodeStopping      protocol.ApplicationErrorCode = 0
-	errorCodeStoppingGQUIC protocol.ApplicationErrorCode = 7
-)
+const errorCodeStopping protocol.ApplicationErrorCode = 0
 
 // The streamSender is notified by the stream about various events.
 type streamSender interface {
@@ -136,8 +133,6 @@ func (s *stream) Close() error {
 	if err := s.sendStream.Close(); err != nil {
 		return err
 	}
-	// in gQUIC, we need to send a RST_STREAM with the final offset if CancelRead() was called
-	s.receiveStream.onClose(s.sendStream.getWriteOffset())
 	return nil
 }
 
@@ -156,16 +151,7 @@ func (s *stream) closeForShutdown(err error) {
 }
 
 func (s *stream) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
-	if err := s.receiveStream.handleRstStreamFrame(frame); err != nil {
-		return err
-	}
-	if !s.version.UsesIETFFrameFormat() {
-		s.handleStopSendingFrame(&wire.StopSendingFrame{
-			StreamID:  s.StreamID(),
-			ErrorCode: frame.ErrorCode,
-		})
-	}
-	return nil
+	return s.receiveStream.handleRstStreamFrame(frame)
 }
 
 // checkIfCompleted is called from the uniStreamSender, when one of the stream halves is completed.

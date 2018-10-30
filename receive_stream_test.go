@@ -29,7 +29,7 @@ var _ = Describe("Receive Stream", func() {
 	BeforeEach(func() {
 		mockSender = NewMockStreamSender(mockCtrl)
 		mockFC = mocks.NewMockStreamFlowController(mockCtrl)
-		str = newReceiveStream(streamID, mockSender, mockFC, versionIETFFrames)
+		str = newReceiveStream(streamID, mockSender, mockFC, protocol.VersionWhatever)
 
 		timeout := scaleDuration(250 * time.Millisecond)
 		strWithTimeout = gbytes.TimeoutReader(str, timeout)
@@ -485,19 +485,11 @@ var _ = Describe("Receive Stream", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("queues a STOP_SENDING frame, for IETF QUIC", func() {
-				str.version = versionIETFFrames
+			It("queues a STOP_SENDING frame", func() {
 				mockSender.EXPECT().queueControlFrame(&wire.StopSendingFrame{
 					StreamID:  streamID,
 					ErrorCode: 1234,
 				})
-				err := str.CancelRead(1234)
-				Expect(err).ToNot(HaveOccurred())
-			})
-
-			It("doesn't queue a STOP_SENDING frame, for gQUIC", func() {
-				str.version = versionGQUICFrames
-				// no calls to mockSender.queueControlFrame
 				err := str.CancelRead(1234)
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -560,66 +552,6 @@ var _ = Describe("Receive Stream", func() {
 				str.closeForShutdown(nil)
 				err := str.handleRstStreamFrame(rst)
 				Expect(err).ToNot(HaveOccurred())
-			})
-
-			Context("for gQUIC", func() {
-				BeforeEach(func() {
-					str.version = versionGQUICFrames
-				})
-
-				It("unblocks Read when receiving a RST_STREAM frame with non-zero error code", func() {
-					mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(42), true)
-					readReturned := make(chan struct{})
-					go func() {
-						defer GinkgoRecover()
-						_, err := strWithTimeout.Read([]byte{0})
-						Expect(err).To(MatchError("Stream 1337 was reset with error code 1234"))
-						Expect(err).To(BeAssignableToTypeOf(streamCanceledError{}))
-						Expect(err.(streamCanceledError).Canceled()).To(BeTrue())
-						Expect(err.(streamCanceledError).ErrorCode()).To(Equal(protocol.ApplicationErrorCode(1234)))
-						close(readReturned)
-					}()
-					Consistently(readReturned).ShouldNot(BeClosed())
-					mockSender.EXPECT().onStreamCompleted(streamID)
-					err := str.handleRstStreamFrame(rst)
-					Expect(err).ToNot(HaveOccurred())
-					Eventually(readReturned).Should(BeClosed())
-				})
-
-				It("continues reading until the end when receiving a RST_STREAM frame with error code 0", func() {
-					mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), true).Times(2)
-					gomock.InOrder(
-						mockFC.EXPECT().AddBytesRead(protocol.ByteCount(4)),
-						mockFC.EXPECT().AddBytesRead(protocol.ByteCount(2)),
-						mockSender.EXPECT().onStreamCompleted(streamID),
-					)
-					mockFC.EXPECT().MaybeQueueWindowUpdate().Times(2)
-					readReturned := make(chan struct{})
-					go func() {
-						defer GinkgoRecover()
-						n, err := strWithTimeout.Read(make([]byte, 4))
-						Expect(err).ToNot(HaveOccurred())
-						Expect(n).To(Equal(4))
-						n, err = strWithTimeout.Read(make([]byte, 4))
-						Expect(err).To(MatchError(io.EOF))
-						Expect(n).To(Equal(2))
-						close(readReturned)
-					}()
-					Consistently(readReturned).ShouldNot(BeClosed())
-					err := str.handleStreamFrame(&wire.StreamFrame{
-						StreamID: streamID,
-						Data:     []byte("foobar"),
-						FinBit:   true,
-					})
-					Expect(err).ToNot(HaveOccurred())
-					err = str.handleRstStreamFrame(&wire.RstStreamFrame{
-						StreamID:   streamID,
-						ByteOffset: 6,
-						ErrorCode:  0,
-					})
-					Expect(err).ToNot(HaveOccurred())
-					Eventually(readReturned).Should(BeClosed())
-				})
 			})
 		})
 	})

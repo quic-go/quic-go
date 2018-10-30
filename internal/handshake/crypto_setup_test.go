@@ -57,7 +57,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 	It("returns Handshake() when an error occurs", func() {
 		_, sInitialStream, sHandshakeStream := initStreams()
-		server, err := NewCryptoSetupTLSServer(
+		server, err := NewCryptoSetupServer(
 			sInitialStream,
 			sHandshakeStream,
 			protocol.ConnectionID{},
@@ -87,7 +87,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 	It("returns Handshake() when handling a message fails", func() {
 		_, sInitialStream, sHandshakeStream := initStreams()
-		server, err := NewCryptoSetupTLSServer(
+		server, err := NewCryptoSetupServer(
 			sInitialStream,
 			sHandshakeStream,
 			protocol.ConnectionID{},
@@ -116,7 +116,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 	It("returns Handshake() when it is closed", func() {
 		_, sInitialStream, sHandshakeStream := initStreams()
-		server, err := NewCryptoSetupTLSServer(
+		server, err := NewCryptoSetupServer(
 			sInitialStream,
 			sHandshakeStream,
 			protocol.ConnectionID{},
@@ -162,9 +162,9 @@ var _ = Describe("Crypto Setup TLS", func() {
 		}
 
 		handshake := func(
-			client CryptoSetupTLS,
+			client CryptoSetup,
 			cChunkChan <-chan chunk,
-			server CryptoSetupTLS,
+			server CryptoSetup,
 			sChunkChan <-chan chunk) (error /* client error */, error /* server error */) {
 			done := make(chan struct{})
 			defer close(done)
@@ -195,7 +195,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 		handshakeWithTLSConf := func(clientConf, serverConf *tls.Config) (error /* client error */, error /* server error */) {
 			cChunkChan, cInitialStream, cHandshakeStream := initStreams()
-			client, _, err := NewCryptoSetupTLSClient(
+			client, _, err := NewCryptoSetupClient(
 				cInitialStream,
 				cHandshakeStream,
 				protocol.ConnectionID{},
@@ -211,7 +211,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			sChunkChan, sInitialStream, sHandshakeStream := initStreams()
-			server, err := NewCryptoSetupTLSServer(
+			server, err := NewCryptoSetupServer(
 				sInitialStream,
 				sHandshakeStream,
 				protocol.ConnectionID{},
@@ -250,7 +250,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 		It("signals when it has written the ClientHello", func() {
 			cChunkChan, cInitialStream, cHandshakeStream := initStreams()
-			client, chChan, err := NewCryptoSetupTLSClient(
+			client, chChan, err := NewCryptoSetupClient(
 				cInitialStream,
 				cHandshakeStream,
 				protocol.ConnectionID{},
@@ -289,7 +289,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			var cTransportParametersRcvd, sTransportParametersRcvd *TransportParameters
 			cChunkChan, cInitialStream, cHandshakeStream := initStreams()
 			cTransportParameters := &TransportParameters{IdleTimeout: 0x42 * time.Second}
-			client, _, err := NewCryptoSetupTLSClient(
+			client, _, err := NewCryptoSetupClient(
 				cInitialStream,
 				cHandshakeStream,
 				protocol.ConnectionID{},
@@ -309,7 +309,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				IdleTimeout:         0x1337 * time.Second,
 				StatelessResetToken: bytes.Repeat([]byte{42}, 16),
 			}
-			server, err := NewCryptoSetupTLSServer(
+			server, err := NewCryptoSetupServer(
 				sInitialStream,
 				sHandshakeStream,
 				protocol.ConnectionID{},

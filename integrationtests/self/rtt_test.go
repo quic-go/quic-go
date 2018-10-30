@@ -18,7 +18,7 @@ import (
 )
 
 var _ = Describe("non-zero RTT", func() {
-	for _, v := range append(protocol.SupportedVersions, protocol.VersionTLS) {
+	for _, v := range protocol.SupportedVersions {
 		version := v
 
 		Context(fmt.Sprintf("with QUIC version %s", version), func() {

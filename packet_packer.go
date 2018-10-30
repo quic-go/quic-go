@@ -71,7 +71,6 @@ type frameSource interface {
 
 type ackFrameSource interface {
 	GetAckFrame() *wire.AckFrame
-	GetStopWaitingFrame(bool) *wire.StopWaitingFrame
 }
 
 type packetPacker struct {

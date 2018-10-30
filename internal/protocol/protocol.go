@@ -23,7 +23,7 @@ const (
 	PacketNumberLen6 PacketNumberLen = 6
 )
 
-// The PacketType is the Long Header Type (only used for the IETF draft header format)
+// The PacketType is the Long Header Type
 type PacketType uint8
 
 const (
@@ -71,10 +71,7 @@ const MaxReceivePacketSize ByteCount = 1452
 // Used in QUIC for congestion window computations in bytes.
 const DefaultTCPMSS ByteCount = 1460
 
-// MinClientHelloSize is the minimum size the server expects an inchoate CHLO to have (in gQUIC)
-const MinClientHelloSize = 1024
-
-// MinInitialPacketSize is the minimum size an Initial packet (in IETF QUIC) is required to have.
+// MinInitialPacketSize is the minimum size an Initial packet is required to have.
 const MinInitialPacketSize = 1200
 
 // MaxClientHellos is the maximum number of times we'll send a client hello
@@ -82,9 +79,6 @@ const MinInitialPacketSize = 1200
 // * one failure due to an incorrect or missing source-address token
 // * one failure due the server's certificate chain being unavailable and the server being unwilling to send it without a valid source-address token
 const MaxClientHellos = 3
-
-// ConnectionIDLenGQUIC is the length of the source Connection ID used on gQUIC QUIC packets.
-const ConnectionIDLenGQUIC = 8
 
 // MinConnectionIDLenInitial is the minimum length of the destination connection ID on an Initial packet.
 const MinConnectionIDLenInitial = 8

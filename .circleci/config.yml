@@ -14,7 +14,6 @@ defaults: &defaults
         command: |
           echo $GOARCH
           go version
-          google-chrome --version
           printf "quic.clemente.io certificate valid until: " && openssl x509 -in example/fullchain.pem -enddate -noout | cut -d = -f 2
     - run:
         name: "Run benchmark tests"
@@ -25,12 +24,6 @@ defaults: &defaults
     - run:
         name: "Run tools tests"
         command: ginkgo -r -v -randomizeAllSpecs -trace integrationtests/tools
-    - run:
-        name: "Run Chrome integration tests"
-        command: ginkgo -v -randomizeAllSpecs -trace integrationtests/chrome
-    - run:
-        name: "Run integration tests using the gQUIC toy server / client"
-        command: ginkgo -v -randomizeAllSpecs -trace integrationtests/gquic
     - run:
         name: "Run self integration tests"
         command: ginkgo -v -randomizeAllSpecs -trace integrationtests/self

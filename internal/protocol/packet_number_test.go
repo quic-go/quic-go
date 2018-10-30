@@ -12,17 +12,15 @@ import (
 var _ = Describe("packet number calculation", func() {
 	Context("infering a packet number", func() {
 		getEpoch := func(len PacketNumberLen, v VersionNumber) uint64 {
-			if v.UsesVarintPacketNumbers() {
-				switch len {
-				case PacketNumberLen1:
-					return uint64(1) << 7
-				case PacketNumberLen2:
-					return uint64(1) << 14
-				case PacketNumberLen4:
-					return uint64(1) << 30
-				default:
-					Fail("invalid packet number len")
-				}
+			switch len {
+			case PacketNumberLen1:
+				return uint64(1) << 7
+			case PacketNumberLen2:
+				return uint64(1) << 14
+			case PacketNumberLen4:
+				return uint64(1) << 30
+			default:
+				Fail("invalid packet number len")
 			}
 			return uint64(1) << (len * 8)
 		}
@@ -33,134 +31,128 @@ var _ = Describe("packet number calculation", func() {
 			Expect(InferPacketNumber(length, PacketNumber(last), PacketNumber(wirePacketNumber), v)).To(Equal(PacketNumber(expected)))
 		}
 
-		for _, v := range []VersionNumber{Version39, VersionTLS} {
-			version := v
+		for _, l := range []PacketNumberLen{PacketNumberLen1, PacketNumberLen2, PacketNumberLen4} {
+			length := l
 
-			Context(fmt.Sprintf("using varint packet numbers: %t", version.UsesVarintPacketNumbers()), func() {
-				for _, l := range []PacketNumberLen{PacketNumberLen1, PacketNumberLen2, PacketNumberLen4} {
-					length := l
+			Context(fmt.Sprintf("with %d bytes", length), func() {
+				epoch := getEpoch(length, VersionWhatever)
+				epochMask := epoch - 1
 
-					Context(fmt.Sprintf("with %d bytes", length), func() {
-						epoch := getEpoch(length, version)
-						epochMask := epoch - 1
+				It("works near epoch start", func() {
+					// A few quick manual sanity check
+					check(length, 1, 0, VersionWhatever)
+					check(length, epoch+1, epochMask, VersionWhatever)
+					check(length, epoch, epochMask, VersionWhatever)
 
-						It("works near epoch start", func() {
-							// A few quick manual sanity check
-							check(length, 1, 0, version)
-							check(length, epoch+1, epochMask, version)
-							check(length, epoch, epochMask, version)
+					// Cases where the last number was close to the start of the range.
+					for last := uint64(0); last < 10; last++ {
+						// Small numbers should not wrap (even if they're out of order).
+						for j := uint64(0); j < 10; j++ {
+							check(length, j, last, VersionWhatever)
+						}
 
-							// Cases where the last number was close to the start of the range.
-							for last := uint64(0); last < 10; last++ {
-								// Small numbers should not wrap (even if they're out of order).
-								for j := uint64(0); j < 10; j++ {
-									check(length, j, last, version)
-								}
+						// Large numbers should not wrap either (because we're near 0 already).
+						for j := uint64(0); j < 10; j++ {
+							check(length, epoch-1-j, last, VersionWhatever)
+						}
+					}
+				})
 
-								// Large numbers should not wrap either (because we're near 0 already).
-								for j := uint64(0); j < 10; j++ {
-									check(length, epoch-1-j, last, version)
-								}
-							}
-						})
+				It("works near epoch end", func() {
+					// Cases where the last number was close to the end of the range
+					for i := uint64(0); i < 10; i++ {
+						last := epoch - i
 
-						It("works near epoch end", func() {
-							// Cases where the last number was close to the end of the range
-							for i := uint64(0); i < 10; i++ {
-								last := epoch - i
+						// Small numbers should wrap.
+						for j := uint64(0); j < 10; j++ {
+							check(length, epoch+j, last, VersionWhatever)
+						}
 
-								// Small numbers should wrap.
-								for j := uint64(0); j < 10; j++ {
-									check(length, epoch+j, last, version)
-								}
+						// Large numbers should not (even if they're out of order).
+						for j := uint64(0); j < 10; j++ {
+							check(length, epoch-1-j, last, VersionWhatever)
+						}
+					}
+				})
 
-								// Large numbers should not (even if they're out of order).
-								for j := uint64(0); j < 10; j++ {
-									check(length, epoch-1-j, last, version)
-								}
-							}
-						})
+				// Next check where we're in a non-zero epoch to verify we handle
+				// reverse wrapping, too.
+				It("works near previous epoch", func() {
+					prevEpoch := 1 * epoch
+					curEpoch := 2 * epoch
+					// Cases where the last number was close to the start of the range
+					for i := uint64(0); i < 10; i++ {
+						last := curEpoch + i
+						// Small number should not wrap (even if they're out of order).
+						for j := uint64(0); j < 10; j++ {
+							check(length, curEpoch+j, last, VersionWhatever)
+						}
 
-						// Next check where we're in a non-zero epoch to verify we handle
-						// reverse wrapping, too.
-						It("works near previous epoch", func() {
-							prevEpoch := 1 * epoch
-							curEpoch := 2 * epoch
-							// Cases where the last number was close to the start of the range
-							for i := uint64(0); i < 10; i++ {
-								last := curEpoch + i
-								// Small number should not wrap (even if they're out of order).
-								for j := uint64(0); j < 10; j++ {
-									check(length, curEpoch+j, last, version)
-								}
+						// But large numbers should reverse wrap.
+						for j := uint64(0); j < 10; j++ {
+							num := epoch - 1 - j
+							check(length, prevEpoch+num, last, VersionWhatever)
+						}
+					}
+				})
 
-								// But large numbers should reverse wrap.
-								for j := uint64(0); j < 10; j++ {
-									num := epoch - 1 - j
-									check(length, prevEpoch+num, last, version)
-								}
-							}
-						})
+				It("works near next epoch", func() {
+					curEpoch := 2 * epoch
+					nextEpoch := 3 * epoch
+					// Cases where the last number was close to the end of the range
+					for i := uint64(0); i < 10; i++ {
+						last := nextEpoch - 1 - i
 
-						It("works near next epoch", func() {
-							curEpoch := 2 * epoch
-							nextEpoch := 3 * epoch
-							// Cases where the last number was close to the end of the range
-							for i := uint64(0); i < 10; i++ {
-								last := nextEpoch - 1 - i
+						// Small numbers should wrap.
+						for j := uint64(0); j < 10; j++ {
+							check(length, nextEpoch+j, last, VersionWhatever)
+						}
 
-								// Small numbers should wrap.
-								for j := uint64(0); j < 10; j++ {
-									check(length, nextEpoch+j, last, version)
-								}
+						// but large numbers should not (even if they're out of order).
+						for j := uint64(0); j < 10; j++ {
+							num := epoch - 1 - j
+							check(length, curEpoch+num, last, VersionWhatever)
+						}
+					}
+				})
 
-								// but large numbers should not (even if they're out of order).
-								for j := uint64(0); j < 10; j++ {
-									num := epoch - 1 - j
-									check(length, curEpoch+num, last, version)
-								}
-							}
-						})
+				It("works near next max", func() {
+					maxNumber := uint64(math.MaxUint64)
+					maxEpoch := maxNumber & ^epochMask
 
-						It("works near next max", func() {
-							maxNumber := uint64(math.MaxUint64)
-							maxEpoch := maxNumber & ^epochMask
+					// Cases where the last number was close to the end of the range
+					for i := uint64(0); i < 10; i++ {
+						// Subtract 1, because the expected next packet number is 1 more than the
+						// last packet number.
+						last := maxNumber - i - 1
 
-							// Cases where the last number was close to the end of the range
-							for i := uint64(0); i < 10; i++ {
-								// Subtract 1, because the expected next packet number is 1 more than the
-								// last packet number.
-								last := maxNumber - i - 1
+						// Small numbers should not wrap, because they have nowhere to go.
+						for j := uint64(0); j < 10; j++ {
+							check(length, maxEpoch+j, last, VersionWhatever)
+						}
 
-								// Small numbers should not wrap, because they have nowhere to go.
-								for j := uint64(0); j < 10; j++ {
-									check(length, maxEpoch+j, last, version)
-								}
-
-								// Large numbers should not wrap either.
-								for j := uint64(0); j < 10; j++ {
-									num := epoch - 1 - j
-									check(length, maxEpoch+num, last, version)
-								}
-							}
-						})
-					})
-				}
+						// Large numbers should not wrap either.
+						for j := uint64(0); j < 10; j++ {
+							num := epoch - 1 - j
+							check(length, maxEpoch+num, last, VersionWhatever)
+						}
+					}
+				})
 
 				Context("shortening a packet number for the header", func() {
 					Context("shortening", func() {
 						It("sends out low packet numbers as 2 byte", func() {
-							length := GetPacketNumberLengthForHeader(4, 2, version)
+							length := GetPacketNumberLengthForHeader(4, 2, VersionWhatever)
 							Expect(length).To(Equal(PacketNumberLen2))
 						})
 
 						It("sends out high packet numbers as 2 byte, if all ACKs are received", func() {
-							length := GetPacketNumberLengthForHeader(0xdeadbeef, 0xdeadbeef-1, version)
+							length := GetPacketNumberLengthForHeader(0xdeadbeef, 0xdeadbeef-1, VersionWhatever)
 							Expect(length).To(Equal(PacketNumberLen2))
 						})
 
 						It("sends out higher packet numbers as 4 bytes, if a lot of ACKs are missing", func() {
-							length := GetPacketNumberLengthForHeader(40000, 2, version)
+							length := GetPacketNumberLengthForHeader(40000, 2, VersionWhatever)
 							Expect(length).To(Equal(PacketNumberLen4))
 						})
 					})
@@ -170,10 +162,10 @@ var _ = Describe("packet number calculation", func() {
 							for i := uint64(1); i < 10000; i++ {
 								packetNumber := PacketNumber(i)
 								leastUnacked := PacketNumber(1)
-								length := GetPacketNumberLengthForHeader(packetNumber, leastUnacked, version)
+								length := GetPacketNumberLengthForHeader(packetNumber, leastUnacked, VersionWhatever)
 								wirePacketNumber := (uint64(packetNumber) << (64 - length*8)) >> (64 - length*8)
 
-								inferedPacketNumber := InferPacketNumber(length, leastUnacked, PacketNumber(wirePacketNumber), version)
+								inferedPacketNumber := InferPacketNumber(length, leastUnacked, PacketNumber(wirePacketNumber), VersionWhatever)
 								Expect(inferedPacketNumber).To(Equal(packetNumber))
 							}
 						})
@@ -182,28 +174,28 @@ var _ = Describe("packet number calculation", func() {
 							for i := uint64(1); i < 10000; i++ {
 								packetNumber := PacketNumber(i)
 								leastUnacked := PacketNumber(i / 2)
-								length := GetPacketNumberLengthForHeader(packetNumber, leastUnacked, version)
-								epochMask := getEpoch(length, version) - 1
+								length := GetPacketNumberLengthForHeader(packetNumber, leastUnacked, VersionWhatever)
+								epochMask := getEpoch(length, VersionWhatever) - 1
 								wirePacketNumber := uint64(packetNumber) & epochMask
 
-								inferedPacketNumber := InferPacketNumber(length, leastUnacked, PacketNumber(wirePacketNumber), version)
+								inferedPacketNumber := InferPacketNumber(length, leastUnacked, PacketNumber(wirePacketNumber), VersionWhatever)
 								Expect(inferedPacketNumber).To(Equal(packetNumber))
 							}
 						})
 
 						It("also works for larger packet numbers", func() {
 							var increment uint64
-							for i := uint64(1); i < getEpoch(PacketNumberLen4, version); i += increment {
+							for i := uint64(1); i < getEpoch(PacketNumberLen4, VersionWhatever); i += increment {
 								packetNumber := PacketNumber(i)
 								leastUnacked := PacketNumber(1)
-								length := GetPacketNumberLengthForHeader(packetNumber, leastUnacked, version)
-								epochMask := getEpoch(length, version) - 1
+								length := GetPacketNumberLengthForHeader(packetNumber, leastUnacked, VersionWhatever)
+								epochMask := getEpoch(length, VersionWhatever) - 1
 								wirePacketNumber := uint64(packetNumber) & epochMask
 
-								inferedPacketNumber := InferPacketNumber(length, leastUnacked, PacketNumber(wirePacketNumber), version)
+								inferedPacketNumber := InferPacketNumber(length, leastUnacked, PacketNumber(wirePacketNumber), VersionWhatever)
 								Expect(inferedPacketNumber).To(Equal(packetNumber))
 
-								increment = getEpoch(length, version) / 8
+								increment = getEpoch(length, VersionWhatever) / 8
 							}
 						})
 
@@ -211,10 +203,10 @@ var _ = Describe("packet number calculation", func() {
 							for i := (uint64(1) << 48); i < ((uint64(1) << 63) - 1); i += (uint64(1) << 48) {
 								packetNumber := PacketNumber(i)
 								leastUnacked := PacketNumber(i - 1000)
-								length := GetPacketNumberLengthForHeader(packetNumber, leastUnacked, version)
+								length := GetPacketNumberLengthForHeader(packetNumber, leastUnacked, VersionWhatever)
 								wirePacketNumber := (uint64(packetNumber) << (64 - length*8)) >> (64 - length*8)
 
-								inferedPacketNumber := InferPacketNumber(length, leastUnacked, PacketNumber(wirePacketNumber), version)
+								inferedPacketNumber := InferPacketNumber(length, leastUnacked, PacketNumber(wirePacketNumber), VersionWhatever)
 								Expect(inferedPacketNumber).To(Equal(packetNumber))
 							}
 						})

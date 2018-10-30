@@ -21,10 +21,6 @@ type StreamFrame struct {
 
 // parseStreamFrame reads a STREAM frame
 func parseStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*StreamFrame, error) {
-	if !version.UsesIETFFrameFormat() {
-		return parseLegacyStreamFrame(r, version)
-	}
-
 	frame := &StreamFrame{}
 
 	typeByte, err := r.ReadByte()
@@ -81,10 +77,6 @@ func parseStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*StreamF
 
 // Write writes a STREAM frame
 func (f *StreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
-	if !version.UsesIETFFrameFormat() {
-		return f.writeLegacy(b, version)
-	}
-
 	if len(f.Data) == 0 && !f.FinBit {
 		return errors.New("StreamFrame: attempting to write empty frame without FIN")
 	}
@@ -114,9 +106,6 @@ func (f *StreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 
 // Length returns the total length of the STREAM frame
 func (f *StreamFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
-	if !version.UsesIETFFrameFormat() {
-		return f.lengthLegacy(version)
-	}
 	length := 1 + utils.VarIntLen(uint64(f.StreamID))
 	if f.Offset != 0 {
 		length += utils.VarIntLen(uint64(f.Offset))
@@ -127,13 +116,14 @@ func (f *StreamFrame) Length(version protocol.VersionNumber) protocol.ByteCount 
 	return length + f.DataLen()
 }
 
+// DataLen gives the length of data in bytes
+func (f *StreamFrame) DataLen() protocol.ByteCount {
+	return protocol.ByteCount(len(f.Data))
+}
+
 // MaxDataLen returns the maximum data length
 // If 0 is returned, writing will fail (a STREAM frame must contain at least 1 byte of data).
 func (f *StreamFrame) MaxDataLen(maxSize protocol.ByteCount, version protocol.VersionNumber) protocol.ByteCount {
-	if !version.UsesIETFFrameFormat() {
-		return f.maxDataLenLegacy(maxSize, version)
-	}
-
 	headerLen := 1 + utils.VarIntLen(uint64(f.StreamID))
 	if f.Offset != 0 {
 		headerLen += utils.VarIntLen(uint64(f.Offset))
