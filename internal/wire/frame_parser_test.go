@@ -117,10 +117,10 @@ var _ = Describe("Frame parsing", func() {
 		Expect(frame).To(Equal(f))
 	})
 
-	It("unpacks stream-level BLOCKED frames", func() {
-		f := &StreamBlockedFrame{
-			StreamID: 0xdeadbeef,
-			Offset:   0xdead,
+	It("unpacks STREAM_DATA_BLOCKED frames", func() {
+		f := &StreamDataBlockedFrame{
+			StreamID:  0xdeadbeef,
+			DataLimit: 0xdead,
 		}
 		buf := &bytes.Buffer{}
 		err := f.Write(buf, versionIETFFrames)

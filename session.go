@@ -552,7 +552,7 @@ func (s *session) handleFrames(fs []wire.Frame, encLevel protocol.EncryptionLeve
 		case *wire.MaxStreamIDFrame:
 			err = s.handleMaxStreamIDFrame(frame)
 		case *wire.DataBlockedFrame:
-		case *wire.StreamBlockedFrame:
+		case *wire.StreamDataBlockedFrame:
 		case *wire.StreamIDBlockedFrame:
 		case *wire.StopSendingFrame:
 			err = s.handleStopSendingFrame(frame)
