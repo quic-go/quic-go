@@ -5,7 +5,7 @@ import (
 )
 
 // ErrorCode can be used as a normal error without reason.
-type ErrorCode uint32
+type ErrorCode uint16
 
 func (e ErrorCode) Error() string {
 	return e.String()
