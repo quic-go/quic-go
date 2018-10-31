@@ -375,12 +375,14 @@ func (s *server) createNewSession(
 	version protocol.VersionNumber,
 ) (quicSession, error) {
 	params := &handshake.TransportParameters{
-		InitialMaxStreamData: protocol.InitialMaxStreamData,
-		InitialMaxData:       protocol.InitialMaxData,
-		IdleTimeout:          s.config.IdleTimeout,
-		MaxBidiStreams:       uint16(s.config.MaxIncomingStreams),
-		MaxUniStreams:        uint16(s.config.MaxIncomingUniStreams),
-		DisableMigration:     true,
+		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
+		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
+		InitialMaxStreamDataUni:        protocol.InitialMaxStreamData,
+		InitialMaxData:                 protocol.InitialMaxData,
+		IdleTimeout:                    s.config.IdleTimeout,
+		MaxBidiStreams:                 uint16(s.config.MaxIncomingStreams),
+		MaxUniStreams:                  uint16(s.config.MaxIncomingUniStreams),
+		DisableMigration:               true,
 		// TODO(#855): generate a real token
 		StatelessResetToken: bytes.Repeat([]byte{42}, 16),
 	}

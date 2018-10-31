@@ -992,7 +992,15 @@ func (s *session) newStream(id protocol.StreamID) streamI {
 func (s *session) newFlowController(id protocol.StreamID) flowcontrol.StreamFlowController {
 	var initialSendWindow protocol.ByteCount
 	if s.peerParams != nil {
-		initialSendWindow = s.peerParams.InitialMaxStreamData
+		if id.IsUniDirectional() {
+			initialSendWindow = s.peerParams.InitialMaxStreamDataUni
+		} else {
+			if id.InitiatedBy() == s.perspective {
+				initialSendWindow = s.peerParams.InitialMaxStreamDataBidiLocal
+			} else {
+				initialSendWindow = s.peerParams.InitialMaxStreamDataBidiRemote
+			}
+		}
 	}
 	return flowcontrol.NewStreamFlowController(
 		id,
