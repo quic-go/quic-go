@@ -11,25 +11,25 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("BLOCKED frame", func() {
+var _ = Describe("DATA_BLOCKED frame", func() {
 	Context("when parsing", func() {
 		It("accepts sample frame", func() {
 			data := []byte{0x08}
 			data = append(data, encodeVarInt(0x12345678)...)
 			b := bytes.NewReader(data)
-			frame, err := parseBlockedFrame(b, versionIETFFrames)
+			frame, err := parseDataBlockedFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(frame.Offset).To(Equal(protocol.ByteCount(0x12345678)))
+			Expect(frame.DataLimit).To(Equal(protocol.ByteCount(0x12345678)))
 			Expect(b.Len()).To(BeZero())
 		})
 
 		It("errors on EOFs", func() {
 			data := []byte{0x08}
 			data = append(data, encodeVarInt(0x12345678)...)
-			_, err := parseBlockedFrame(bytes.NewReader(data), versionIETFFrames)
+			_, err := parseDataBlockedFrame(bytes.NewReader(data), versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			for i := range data {
-				_, err := parseBlockedFrame(bytes.NewReader(data[:i]), versionIETFFrames)
+				_, err := parseDataBlockedFrame(bytes.NewReader(data[:i]), versionIETFFrames)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})
@@ -38,7 +38,7 @@ var _ = Describe("BLOCKED frame", func() {
 	Context("when writing", func() {
 		It("writes a sample frame", func() {
 			b := &bytes.Buffer{}
-			frame := BlockedFrame{Offset: 0xdeadbeef}
+			frame := DataBlockedFrame{DataLimit: 0xdeadbeef}
 			err := frame.Write(b, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x08}
@@ -47,7 +47,7 @@ var _ = Describe("BLOCKED frame", func() {
 		})
 
 		It("has the correct min length", func() {
-			frame := BlockedFrame{Offset: 0x12345}
+			frame := DataBlockedFrame{DataLimit: 0x12345}
 			Expect(frame.Length(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0x12345)))
 		})
 	})

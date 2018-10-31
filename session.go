@@ -551,7 +551,7 @@ func (s *session) handleFrames(fs []wire.Frame, encLevel protocol.EncryptionLeve
 			err = s.handleMaxStreamDataFrame(frame)
 		case *wire.MaxStreamIDFrame:
 			err = s.handleMaxStreamIDFrame(frame)
-		case *wire.BlockedFrame:
+		case *wire.DataBlockedFrame:
 		case *wire.StreamBlockedFrame:
 		case *wire.StreamIDBlockedFrame:
 		case *wire.StopSendingFrame:
@@ -893,7 +893,7 @@ func (s *session) sendProbePacket() error {
 
 func (s *session) sendPacket() (bool, error) {
 	if isBlocked, offset := s.connFlowController.IsNewlyBlocked(); isBlocked {
-		s.framer.QueueControlFrame(&wire.BlockedFrame{Offset: offset})
+		s.framer.QueueControlFrame(&wire.DataBlockedFrame{DataLimit: offset})
 	}
 	s.windowUpdateQueue.QueueAll()
 
