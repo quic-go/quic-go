@@ -992,7 +992,7 @@ func (s *session) newStream(id protocol.StreamID) streamI {
 func (s *session) newFlowController(id protocol.StreamID) flowcontrol.StreamFlowController {
 	var initialSendWindow protocol.ByteCount
 	if s.peerParams != nil {
-		if id.IsUniDirectional() {
+		if id.Type() == protocol.StreamTypeUni {
 			initialSendWindow = s.peerParams.InitialMaxStreamDataUni
 		} else {
 			if id.InitiatedBy() == s.perspective {
