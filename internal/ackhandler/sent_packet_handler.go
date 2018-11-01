@@ -37,7 +37,6 @@ type sentPacketHandler struct {
 	lastSentHandshakePacketTime       time.Time
 
 	nextPacketSendTime time.Time
-	skippedPackets     []protocol.PacketNumber
 
 	largestAcked                 protocol.PacketNumber
 	largestReceivedPacketWithAck protocol.PacketNumber
@@ -150,10 +149,6 @@ func (h *sentPacketHandler) SentPacketsAsRetransmission(packets []*Packet, retra
 func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* isRetransmittable */ {
 	for p := h.lastSentPacketNumber + 1; p < packet.PacketNumber; p++ {
 		h.logger.Debugf("Skipping packet number %#x", p)
-		h.skippedPackets = append(h.skippedPackets, p)
-		if len(h.skippedPackets) > protocol.MaxTrackedSkippedPackets {
-			h.skippedPackets = h.skippedPackets[1:]
-		}
 	}
 
 	h.lastSentPacketNumber = packet.PacketNumber
@@ -200,7 +195,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 	h.largestReceivedPacketWithAck = withPacketNumber
 	h.largestAcked = utils.MaxPacketNumber(h.largestAcked, largestAcked)
 
-	if h.skippedPacketsAcked(ackFrame) {
+	if !h.packetNumberGenerator.Validate(ackFrame) {
 		return qerr.Error(qerr.InvalidAckData, "Received an ACK for a skipped packet number")
 	}
 
@@ -238,8 +233,6 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 		return err
 	}
 	h.updateLossDetectionAlarm()
-
-	h.garbageCollectSkippedPackets()
 	return nil
 }
 
@@ -637,24 +630,4 @@ func (h *sentPacketHandler) computeRTOTimeout() time.Duration {
 	// Exponential backoff
 	rto <<= h.rtoCount
 	return utils.MinDuration(rto, maxRTOTimeout)
-}
-
-func (h *sentPacketHandler) skippedPacketsAcked(ackFrame *wire.AckFrame) bool {
-	for _, p := range h.skippedPackets {
-		if ackFrame.AcksPacket(p) {
-			return true
-		}
-	}
-	return false
-}
-
-func (h *sentPacketHandler) garbageCollectSkippedPackets() {
-	lowestUnacked := h.lowestUnacked()
-	deleteIndex := 0
-	for i, p := range h.skippedPackets {
-		if p < lowestUnacked {
-			deleteIndex = i + 1
-		}
-	}
-	h.skippedPackets = h.skippedPackets[deleteIndex:]
 }

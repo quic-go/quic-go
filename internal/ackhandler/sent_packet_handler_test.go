@@ -96,7 +96,6 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(2)))
 			expectInPacketHistory([]protocol.PacketNumber{1, 2})
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(2)))
-			Expect(handler.skippedPackets).To(BeEmpty())
 		})
 
 		It("accepts packet number 0", func() {
@@ -106,7 +105,6 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(1)))
 			expectInPacketHistory([]protocol.PacketNumber{0, 1})
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(2)))
-			Expect(handler.skippedPackets).To(BeEmpty())
 		})
 
 		It("stores the sent time", func() {
@@ -127,94 +125,6 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.packetHistory.Len()).To(BeZero())
 			Expect(handler.lastSentRetransmittablePacketTime).To(BeZero())
 			Expect(handler.bytesInFlight).To(BeZero())
-		})
-
-		Context("skipped packet numbers", func() {
-			It("works with non-consecutive packet numbers", func() {
-				handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 1}))
-				handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 3}))
-				Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(3)))
-				expectInPacketHistory([]protocol.PacketNumber{1, 3})
-				Expect(handler.skippedPackets).To(Equal([]protocol.PacketNumber{2}))
-			})
-
-			It("works with non-retransmittable packets", func() {
-				handler.SentPacket(nonRetransmittablePacket(&Packet{PacketNumber: 1}))
-				handler.SentPacket(nonRetransmittablePacket(&Packet{PacketNumber: 3}))
-				Expect(handler.skippedPackets).To(Equal([]protocol.PacketNumber{2}))
-			})
-
-			It("recognizes multiple skipped packets", func() {
-				handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 1}))
-				handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 3}))
-				handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 5}))
-				Expect(handler.skippedPackets).To(Equal([]protocol.PacketNumber{2, 4}))
-			})
-
-			It("recognizes multiple consecutive skipped packets", func() {
-				handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 1}))
-				handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 4}))
-				Expect(handler.skippedPackets).To(Equal([]protocol.PacketNumber{2, 3}))
-			})
-
-			It("limits the lengths of the skipped packet slice", func() {
-				for i := protocol.PacketNumber(0); i < protocol.MaxTrackedSkippedPackets+5; i++ {
-					handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 2*i + 1}))
-				}
-				Expect(handler.skippedPackets).To(HaveLen(protocol.MaxUndecryptablePackets))
-				Expect(handler.skippedPackets[0]).To(Equal(protocol.PacketNumber(10)))
-				Expect(handler.skippedPackets[protocol.MaxTrackedSkippedPackets-1]).To(Equal(protocol.PacketNumber(10 + 2*(protocol.MaxTrackedSkippedPackets-1))))
-			})
-
-			Context("garbage collection", func() {
-				It("keeps all packet numbers above the LargestAcked", func() {
-					handler.skippedPackets = []protocol.PacketNumber{2, 5, 8, 10}
-					handler.largestAcked = 1
-					handler.garbageCollectSkippedPackets()
-					Expect(handler.skippedPackets).To(Equal([]protocol.PacketNumber{2, 5, 8, 10}))
-				})
-
-				It("doesn't keep packet numbers below the LargestAcked", func() {
-					handler.skippedPackets = []protocol.PacketNumber{1, 5, 8, 10}
-					handler.largestAcked = 5
-					handler.garbageCollectSkippedPackets()
-					Expect(handler.skippedPackets).To(Equal([]protocol.PacketNumber{8, 10}))
-				})
-
-				It("deletes all packet numbers if LargestAcked is sufficiently high", func() {
-					handler.skippedPackets = []protocol.PacketNumber{1, 5, 10}
-					handler.largestAcked = 15
-					handler.garbageCollectSkippedPackets()
-					Expect(handler.skippedPackets).To(BeEmpty())
-				})
-			})
-
-			Context("ACK handling", func() {
-				BeforeEach(func() {
-					handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 10}))
-					handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 12}))
-				})
-
-				It("rejects ACKs for skipped packets", func() {
-					ack := &wire.AckFrame{
-						AckRanges: []wire.AckRange{{Smallest: 10, Largest: 12}},
-					}
-					err := handler.ReceivedAck(ack, 1337, protocol.Encryption1RTT, time.Now())
-					Expect(err).To(MatchError("InvalidAckData: Received an ACK for a skipped packet number"))
-				})
-
-				It("accepts an ACK that correctly nacks a skipped packet", func() {
-					ack := &wire.AckFrame{
-						AckRanges: []wire.AckRange{
-							{Smallest: 12, Largest: 12},
-							{Smallest: 10, Largest: 10},
-						},
-					}
-					err := handler.ReceivedAck(ack, 1337, protocol.Encryption1RTT, time.Now())
-					Expect(err).ToNot(HaveOccurred())
-					Expect(handler.largestAcked).ToNot(BeZero())
-				})
-			})
 		})
 	})
 
