@@ -40,7 +40,6 @@ var _ = Describe("Client", func() {
 			tlsConf *tls.Config,
 			params *handshake.TransportParameters,
 			initialVersion protocol.VersionNumber,
-			initialPacketNumber protocol.PacketNumber,
 			logger utils.Logger,
 			v protocol.VersionNumber,
 		) (quicSession, error)
@@ -143,7 +142,6 @@ var _ = Describe("Client", func() {
 				_ *tls.Config,
 				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
-				_ protocol.PacketNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) (quicSession, error) {
@@ -173,7 +171,6 @@ var _ = Describe("Client", func() {
 				tlsConf *tls.Config,
 				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
-				_ protocol.PacketNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) (quicSession, error) {
@@ -203,7 +200,6 @@ var _ = Describe("Client", func() {
 				_ *tls.Config,
 				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
-				_ protocol.PacketNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) (quicSession, error) {
@@ -240,7 +236,6 @@ var _ = Describe("Client", func() {
 				_ *tls.Config,
 				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
-				_ protocol.PacketNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) (quicSession, error) {
@@ -280,7 +275,6 @@ var _ = Describe("Client", func() {
 				_ *tls.Config,
 				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
-				_ protocol.PacketNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) (quicSession, error) {
@@ -325,7 +319,6 @@ var _ = Describe("Client", func() {
 				_ *tls.Config,
 				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
-				_ protocol.PacketNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) (quicSession, error) {
@@ -366,7 +359,6 @@ var _ = Describe("Client", func() {
 				_ *tls.Config,
 				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
-				_ protocol.PacketNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) (quicSession, error) {
@@ -481,7 +473,6 @@ var _ = Describe("Client", func() {
 				_ *tls.Config,
 				params *handshake.TransportParameters,
 				_ protocol.VersionNumber, /* initial version */
-				_ protocol.PacketNumber,
 				_ utils.Logger,
 				versionP protocol.VersionNumber,
 			) (quicSession, error) {
@@ -543,7 +534,6 @@ var _ = Describe("Client", func() {
 				_ *tls.Config,
 				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
-				_ protocol.PacketNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) (quicSession, error) {
@@ -603,7 +593,6 @@ var _ = Describe("Client", func() {
 				_ *tls.Config,
 				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
-				_ protocol.PacketNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) (quicSession, error) {
@@ -642,7 +631,6 @@ var _ = Describe("Client", func() {
 					_ *tls.Config,
 					_ *handshake.TransportParameters,
 					_ protocol.VersionNumber,
-					_ protocol.PacketNumber,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
 				) (quicSession, error) {

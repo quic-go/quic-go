@@ -103,7 +103,6 @@ func newPacketPacker(
 	srcConnID protocol.ConnectionID,
 	initialStream cryptoStream,
 	handshakeStream cryptoStream,
-	initialPacketNumber protocol.PacketNumber,
 	getPacketNumberLen func(protocol.PacketNumber) protocol.PacketNumberLen,
 	remoteAddr net.Addr, // only used for determining the max packet size
 	token []byte,
@@ -125,7 +124,7 @@ func newPacketPacker(
 		framer:                framer,
 		acks:                  acks,
 		getPacketNumberLen:    getPacketNumberLen,
-		packetNumberGenerator: newPacketNumberGenerator(initialPacketNumber, protocol.SkipPacketAveragePeriodLength),
+		packetNumberGenerator: newPacketNumberGenerator(1, protocol.SkipPacketAveragePeriodLength),
 		maxPacketSize:         getMaxPacketSize(remoteAddr),
 	}
 }

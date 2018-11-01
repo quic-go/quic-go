@@ -76,7 +76,6 @@ var _ = Describe("Packet packer", func() {
 			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 			initialStream,
 			handshakeStream,
-			1,
 			func(protocol.PacketNumber) protocol.PacketNumberLen { return protocol.PacketNumberLen2 },
 			&net.TCPAddr{},
 			token, // token

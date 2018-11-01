@@ -423,7 +423,6 @@ func (c *client) createNewTLSSession(version protocol.VersionNumber) error {
 		c.tlsConf,
 		params,
 		c.initialVersion,
-		1,
 		c.logger,
 		c.version,
 	)

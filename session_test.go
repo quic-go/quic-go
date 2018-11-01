@@ -84,7 +84,6 @@ var _ = Describe("Session", func() {
 			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 			protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
 			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-			1,
 			populateServerConfig(&Config{}),
 			nil, // tls.Config
 			nil, // handshake.TransportParameters,
@@ -1297,7 +1296,6 @@ var _ = Describe("Client Session", func() {
 			nil, // tls.Config
 			nil, // transport parameters
 			protocol.VersionWhatever,
-			1,
 			utils.DefaultLogger,
 			protocol.VersionWhatever,
 		)

@@ -138,7 +138,6 @@ var newSession = func(
 	origConnID protocol.ConnectionID,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
-	initialPacketNumber protocol.PacketNumber,
 	conf *Config,
 	tlsConf *tls.Config,
 	params *handshake.TransportParameters,
@@ -184,7 +183,6 @@ var newSession = func(
 		s.srcConnID,
 		initialStream,
 		handshakeStream,
-		initialPacketNumber,
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),
 		nil, // no token
@@ -214,7 +212,6 @@ var newClientSession = func(
 	tlsConf *tls.Config,
 	params *handshake.TransportParameters,
 	initialVersion protocol.VersionNumber,
-	initialPacketNumber protocol.PacketNumber,
 	logger utils.Logger,
 	v protocol.VersionNumber,
 ) (quicSession, error) {
@@ -259,7 +256,6 @@ var newClientSession = func(
 		s.srcConnID,
 		initialStream,
 		handshakeStream,
-		initialPacketNumber,
 		s.sentPacketHandler.GetPacketNumberLen,
 		s.RemoteAddr(),
 		token,
