@@ -35,7 +35,7 @@ func nonRetransmittablePacket(p *Packet) *Packet {
 	return p
 }
 
-func handshakePacket(p *Packet) *Packet {
+func cryptoPacket(p *Packet) *Packet {
 	p = retransmittablePacket(p)
 	p.EncryptionLevel = protocol.EncryptionInitial
 	return p
@@ -113,11 +113,11 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.lastSentRetransmittablePacketTime).To(Equal(sendTime))
 		})
 
-		It("stores the sent time of handshake packets", func() {
+		It("stores the sent time of crypto packets", func() {
 			sendTime := time.Now().Add(-time.Minute)
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 1, SendTime: sendTime, EncryptionLevel: protocol.EncryptionInitial}))
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 2, SendTime: sendTime.Add(time.Hour), EncryptionLevel: protocol.Encryption1RTT}))
-			Expect(handler.lastSentHandshakePacketTime).To(Equal(sendTime))
+			Expect(handler.lastSentCryptoPacketTime).To(Equal(sendTime))
 		})
 
 		It("does not store non-retransmittable packets", func() {
@@ -901,20 +901,20 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 	})
 
-	Context("handshake packets", func() {
+	Context("crypto packets", func() {
 		BeforeEach(func() {
 			handler.handshakeComplete = false
 		})
 
-		It("detects the handshake timeout", func() {
+		It("detects the crypto timeout", func() {
 			now := time.Now()
 			sendTime := now.Add(-time.Minute)
-			lastHandshakePacketSendTime := now.Add(-30 * time.Second)
-			// send handshake packets: 1, 3
+			lastCryptoPacketSendTime := now.Add(-30 * time.Second)
+			// send crypto packets: 1, 3
 			// send a forward-secure packet: 2
-			handler.SentPacket(handshakePacket(&Packet{PacketNumber: 1, SendTime: sendTime}))
+			handler.SentPacket(cryptoPacket(&Packet{PacketNumber: 1, SendTime: sendTime}))
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 2, SendTime: sendTime}))
-			handler.SentPacket(handshakePacket(&Packet{PacketNumber: 3, SendTime: sendTime}))
+			handler.SentPacket(cryptoPacket(&Packet{PacketNumber: 3, SendTime: sendTime}))
 
 			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}}
 			err := handler.ReceivedAck(ack, 1, protocol.Encryption1RTT, now)
@@ -929,10 +929,10 @@ var _ = Describe("SentPacketHandler", func() {
 			p := handler.DequeuePacketForRetransmission()
 			Expect(p).ToNot(BeNil())
 			Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(3)))
-			Expect(handler.handshakeCount).To(BeEquivalentTo(1))
-			handler.SentPacket(handshakePacket(&Packet{PacketNumber: 4, SendTime: lastHandshakePacketSendTime}))
+			Expect(handler.cryptoCount).To(BeEquivalentTo(1))
+			handler.SentPacket(cryptoPacket(&Packet{PacketNumber: 4, SendTime: lastCryptoPacketSendTime}))
 			// make sure the exponential backoff is used
-			Expect(handler.GetAlarmTimeout().Sub(lastHandshakePacketSendTime)).To(Equal(4 * time.Minute))
+			Expect(handler.GetAlarmTimeout().Sub(lastCryptoPacketSendTime)).To(Equal(4 * time.Minute))
 		})
 
 		// TODO(#1534): also check the encryption level for IETF QUIC
@@ -948,7 +948,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(err).To(MatchError("Received ACK with encryption level encrypted (not forward-secure) that acks a packet 13 (encryption level forward-secure)"))
 		})
 
-		It("deletes non handshake packets when the handshake completes", func() {
+		It("deletes crypto packets when the handshake completes", func() {
 			for i := protocol.PacketNumber(1); i <= 6; i++ {
 				p := retransmittablePacket(&Packet{PacketNumber: i})
 				p.EncryptionLevel = protocol.EncryptionHandshake
