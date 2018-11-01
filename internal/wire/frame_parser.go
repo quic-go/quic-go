@@ -40,7 +40,7 @@ func parseFrame(r *bytes.Reader, typeByte byte, v protocol.VersionNumber) (Frame
 		if err != nil {
 			err = qerr.Error(qerr.InvalidRstStreamData, err.Error())
 		}
-	case 0x2:
+	case 0x2, 0x3:
 		frame, err = parseConnectionCloseFrame(r, v)
 		if err != nil {
 			err = qerr.Error(qerr.InvalidConnectionCloseData, err.Error())

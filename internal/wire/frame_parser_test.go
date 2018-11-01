@@ -51,8 +51,20 @@ var _ = Describe("Frame parsing", func() {
 		Expect(frame).To(Equal(f))
 	})
 
-	It("unpacks CONNECTION_CLOSE frames", func() {
+	It("unpacks CONNECTION_CLOSE frames containing QUIC error codes", func() {
 		f := &ConnectionCloseFrame{ReasonPhrase: "foo"}
+		err := f.Write(buf, versionIETFFrames)
+		Expect(err).ToNot(HaveOccurred())
+		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), nil, versionIETFFrames)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(frame).To(Equal(f))
+	})
+
+	It("unpacks CONNECTION_CLOSE frames containing application error codes", func() {
+		f := &ConnectionCloseFrame{
+			IsApplicationError: true,
+			ReasonPhrase:       "foo",
+		}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), nil, versionIETFFrames)
