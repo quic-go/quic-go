@@ -183,7 +183,7 @@ var newSession = func(
 		s.srcConnID,
 		initialStream,
 		handshakeStream,
-		s.sentPacketHandler.GetPacketNumberLen,
+		s.sentPacketHandler,
 		s.RemoteAddr(),
 		nil, // no token
 		cs,
@@ -256,7 +256,7 @@ var newClientSession = func(
 		s.srcConnID,
 		initialStream,
 		handshakeStream,
-		s.sentPacketHandler.GetPacketNumberLen,
+		s.sentPacketHandler,
 		s.RemoteAddr(),
 		token,
 		cs,

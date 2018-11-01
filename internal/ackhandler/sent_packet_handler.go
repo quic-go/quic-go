@@ -30,7 +30,9 @@ const (
 )
 
 type sentPacketHandler struct {
-	lastSentPacketNumber              protocol.PacketNumber
+	lastSentPacketNumber  protocol.PacketNumber
+	packetNumberGenerator *packetNumberGenerator
+
 	lastSentRetransmittablePacketTime time.Time
 	lastSentHandshakePacketTime       time.Time
 
@@ -89,11 +91,12 @@ func NewSentPacketHandler(rttStats *congestion.RTTStats, logger utils.Logger, ve
 	)
 
 	return &sentPacketHandler{
-		packetHistory: newSentPacketHistory(),
-		rttStats:      rttStats,
-		congestion:    congestion,
-		logger:        logger,
-		version:       version,
+		packetNumberGenerator: newPacketNumberGenerator(1, protocol.SkipPacketAveragePeriodLength),
+		packetHistory:         newSentPacketHistory(),
+		rttStats:              rttStats,
+		congestion:            congestion,
+		logger:                logger,
+		version:               version,
 	}
 }
 
@@ -516,6 +519,14 @@ func (h *sentPacketHandler) DequeueProbePacket() (*Packet, error) {
 		}
 	}
 	return h.DequeuePacketForRetransmission(), nil
+}
+
+func (h *sentPacketHandler) PeekPacketNumber() protocol.PacketNumber {
+	return h.packetNumberGenerator.Peek()
+}
+
+func (h *sentPacketHandler) PopPacketNumber() protocol.PacketNumber {
+	return h.packetNumberGenerator.Pop()
 }
 
 func (h *sentPacketHandler) GetPacketNumberLen(p protocol.PacketNumber) protocol.PacketNumberLen {
