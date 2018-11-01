@@ -14,10 +14,10 @@ var _ = Describe("Stream ID", func() {
 	})
 
 	It("tells the directionality", func() {
-		Expect(StreamID(4).IsUniDirectional()).To(BeFalse())
-		Expect(StreamID(5).IsUniDirectional()).To(BeFalse())
-		Expect(StreamID(6).IsUniDirectional()).To(BeTrue())
-		Expect(StreamID(7).IsUniDirectional()).To(BeTrue())
+		Expect(StreamID(4).Type()).To(Equal(StreamTypeBidi))
+		Expect(StreamID(5).Type()).To(Equal(StreamTypeBidi))
+		Expect(StreamID(6).Type()).To(Equal(StreamTypeUni))
+		Expect(StreamID(7).Type()).To(Equal(StreamTypeUni))
 	})
 
 	Context("maximum stream IDs", func() {

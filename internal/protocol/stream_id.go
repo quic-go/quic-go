@@ -3,6 +3,16 @@ package protocol
 // A StreamID in QUIC
 type StreamID uint64
 
+// StreamType encodes if this is a unidirectional or bidirectional stream
+type StreamType uint8
+
+const (
+	// StreamTypeUni is a unidirectional stream
+	StreamTypeUni StreamType = iota
+	// StreamTypeBidi is a bidirectional stream
+	StreamTypeBidi
+)
+
 // InitiatedBy says if the stream was initiated by the client or by the server
 func (s StreamID) InitiatedBy() Perspective {
 	if s%2 == 0 {
@@ -11,9 +21,12 @@ func (s StreamID) InitiatedBy() Perspective {
 	return PerspectiveServer
 }
 
-// IsUniDirectional says if this is a unidirectional stream (true) or not (false)
-func (s StreamID) IsUniDirectional() bool {
-	return s%4 >= 2
+//Type says if this is a unidirectional or bidirectional stream
+func (s StreamID) Type() StreamType {
+	if s%4 >= 2 {
+		return StreamTypeUni
+	}
+	return StreamTypeBidi
 }
 
 // MaxBidiStreamID is the highest stream ID that the peer is allowed to open,
