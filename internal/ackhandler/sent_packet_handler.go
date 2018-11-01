@@ -521,16 +521,13 @@ func (h *sentPacketHandler) DequeueProbePacket() (*Packet, error) {
 	return h.DequeuePacketForRetransmission(), nil
 }
 
-func (h *sentPacketHandler) PeekPacketNumber() protocol.PacketNumber {
-	return h.packetNumberGenerator.Peek()
+func (h *sentPacketHandler) PeekPacketNumber() (protocol.PacketNumber, protocol.PacketNumberLen) {
+	pn := h.packetNumberGenerator.Peek()
+	return pn, protocol.GetPacketNumberLengthForHeader(pn, h.lowestUnacked(), h.version)
 }
 
 func (h *sentPacketHandler) PopPacketNumber() protocol.PacketNumber {
 	return h.packetNumberGenerator.Pop()
-}
-
-func (h *sentPacketHandler) GetPacketNumberLen(p protocol.PacketNumber) protocol.PacketNumberLen {
-	return protocol.GetPacketNumberLengthForHeader(p, h.lowestUnacked(), h.version)
 }
 
 func (h *sentPacketHandler) SendMode() SendMode {

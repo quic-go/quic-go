@@ -89,12 +89,6 @@ var _ = Describe("SentPacketHandler", func() {
 		ExpectWithOffset(1, handler.rttStats.SmoothedRTT()).To(Equal(rtt))
 	}
 
-	It("determines the packet number length", func() {
-		handler.largestAcked = 0x1337
-		Expect(handler.GetPacketNumberLen(0x1338)).To(Equal(protocol.PacketNumberLen2))
-		Expect(handler.GetPacketNumberLen(0xfffffff)).To(Equal(protocol.PacketNumberLen4))
-	})
-
 	Context("registering sent packets", func() {
 		It("accepts two consecutive packets", func() {
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 1}))

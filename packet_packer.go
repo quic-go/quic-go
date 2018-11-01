@@ -60,9 +60,8 @@ func getMaxPacketSize(addr net.Addr) protocol.ByteCount {
 }
 
 type packetNumberManager interface {
-	PeekPacketNumber() protocol.PacketNumber
+	PeekPacketNumber() (protocol.PacketNumber, protocol.PacketNumberLen)
 	PopPacketNumber() protocol.PacketNumber
-	GetPacketNumberLen(protocol.PacketNumber) protocol.PacketNumberLen
 }
 
 type sealingManager interface {
@@ -399,12 +398,10 @@ func (p *packetPacker) composeNextPacket(
 }
 
 func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header {
-	pnum := p.pnManager.PeekPacketNumber()
-	packetNumberLen := p.pnManager.GetPacketNumberLen(pnum)
-
+	pn, pnLen := p.pnManager.PeekPacketNumber()
 	header := &wire.Header{
-		PacketNumber:     pnum,
-		PacketNumberLen:  packetNumberLen,
+		PacketNumber:     pn,
+		PacketNumberLen:  pnLen,
 		Version:          p.version,
 		DestConnectionID: p.destConnID,
 	}
