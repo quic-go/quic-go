@@ -317,13 +317,6 @@ var _ = Describe("Header", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(buf.Len()).To(Equal(5))
 		})
-
-		It("errors when given an invalid packet number length", func() {
-			h := &Header{PacketNumberLen: 5}
-			_, err := h.GetLength(versionIETFHeader)
-			Expect(err).To(MatchError("invalid packet number length: 5"))
-		})
-
 	})
 
 	Context("Logging", func() {
