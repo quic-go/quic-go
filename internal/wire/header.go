@@ -86,21 +86,18 @@ func (h *Header) writeShortHeader(b *bytes.Buffer, v protocol.VersionNumber) err
 }
 
 // GetLength determines the length of the Header.
-func (h *Header) GetLength(v protocol.VersionNumber) (protocol.ByteCount, error) {
+func (h *Header) GetLength(v protocol.VersionNumber) protocol.ByteCount {
 	if h.IsLongHeader {
 		length := 1 /* type byte */ + 4 /* version */ + 1 /* conn id len byte */ + protocol.ByteCount(h.DestConnectionID.Len()+h.SrcConnectionID.Len()) + protocol.ByteCount(h.PacketNumberLen) + utils.VarIntLen(uint64(h.PayloadLen))
 		if h.Type == protocol.PacketTypeInitial {
 			length += utils.VarIntLen(uint64(len(h.Token))) + protocol.ByteCount(len(h.Token))
 		}
-		return length, nil
+		return length
 	}
 
 	length := protocol.ByteCount(1 /* type byte */ + h.DestConnectionID.Len())
-	if h.PacketNumberLen != protocol.PacketNumberLen1 && h.PacketNumberLen != protocol.PacketNumberLen2 && h.PacketNumberLen != protocol.PacketNumberLen4 {
-		return 0, fmt.Errorf("invalid packet number length: %d", h.PacketNumberLen)
-	}
 	length += protocol.ByteCount(h.PacketNumberLen)
-	return length, nil
+	return length
 }
 
 // Log logs the Header

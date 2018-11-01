@@ -193,11 +193,8 @@ func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedP
 		var length protocol.ByteCount
 
 		header := p.getHeader(encLevel)
-		headerLength, err := header.GetLength(p.version)
-		if err != nil {
-			return nil, err
-		}
-		maxSize := p.maxPacketSize - protocol.ByteCount(sealer.Overhead()) - headerLength
+		headerLen := header.GetLength(p.version)
+		maxSize := p.maxPacketSize - protocol.ByteCount(sealer.Overhead()) - headerLen
 
 		for len(controlFrames) > 0 {
 			frame := controlFrames[0]
@@ -283,12 +280,12 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 
 	encLevel, sealer := p.cryptoSetup.GetSealer()
 	header := p.getHeader(encLevel)
-	headerLength, err := header.GetLength(p.version)
+	headerLen := header.GetLength(p.version)
 	if err != nil {
 		return nil, err
 	}
 
-	maxSize := p.maxPacketSize - protocol.ByteCount(sealer.Overhead()) - headerLength
+	maxSize := p.maxPacketSize - protocol.ByteCount(sealer.Overhead()) - headerLen
 	frames, err := p.composeNextPacket(maxSize, p.canSendData(encLevel))
 	if err != nil {
 		return nil, err
@@ -336,7 +333,7 @@ func (p *packetPacker) maybePackCryptoPacket() (*packedPacket, error) {
 		return nil, nil
 	}
 	hdr := p.getHeader(encLevel)
-	hdrLen, _ := hdr.GetLength(p.version)
+	hdrLen := hdr.GetLength(p.version)
 	sealer, err := p.cryptoSetup.GetSealerWithEncryptionLevel(encLevel)
 	if err != nil {
 		return nil, err
@@ -442,7 +439,7 @@ func (p *packetPacker) writeAndSealPacket(
 			header.Token = p.token
 		}
 		if addPadding {
-			headerLen, _ := header.GetLength(p.version)
+			headerLen := header.GetLength(p.version)
 			header.PayloadLen = protocol.ByteCount(protocol.MinInitialPacketSize) - headerLen
 		} else {
 			payloadLen := protocol.ByteCount(sealer.Overhead())
