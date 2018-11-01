@@ -14,13 +14,15 @@ import (
 var _ = Describe("Transport Parameters", func() {
 	It("has a string representation", func() {
 		p := &TransportParameters{
-			InitialMaxStreamData: 0x1234,
-			InitialMaxData:       0x4321,
-			MaxBidiStreams:       1337,
-			MaxUniStreams:        7331,
-			IdleTimeout:          42 * time.Second,
+			InitialMaxStreamDataBidiLocal:  0x1234,
+			InitialMaxStreamDataBidiRemote: 0x2345,
+			InitialMaxStreamDataUni:        0x3456,
+			InitialMaxData:                 0x4567,
+			MaxBidiStreams:                 1337,
+			MaxUniStreams:                  7331,
+			IdleTimeout:                    42 * time.Second,
 		}
-		Expect(p.String()).To(Equal("&handshake.TransportParameters{InitialMaxStreamData: 0x1234, InitialMaxData: 0x4321, MaxBidiStreams: 1337, MaxUniStreams: 7331, IdleTimeout: 42s}"))
+		Expect(p.String()).To(Equal("&handshake.TransportParameters{InitialMaxStreamDataBidiLocal: 0x1234, InitialMaxStreamDataBidiRemote: 0x2345, InitialMaxStreamDataUni: 0x3456, InitialMaxData: 0x4567, MaxBidiStreams: 1337, MaxUniStreams: 7331, IdleTimeout: 42s}"))
 	})
 
 	Context("parsing", func() {
@@ -44,21 +46,24 @@ var _ = Describe("Transport Parameters", func() {
 			params = &TransportParameters{}
 			statelessResetToken = bytes.Repeat([]byte{42}, 16)
 			parameters = map[transportParameterID][]byte{
-				initialMaxStreamDataParameterID:  {0x11, 0x22, 0x33, 0x44},
-				initialMaxDataParameterID:        {0x22, 0x33, 0x44, 0x55},
-				initialMaxBidiStreamsParameterID: {0x33, 0x44},
-				initialMaxUniStreamsParameterID:  {0x44, 0x55},
-				idleTimeoutParameterID:           {0x13, 0x37},
-				maxPacketSizeParameterID:         {0x73, 0x31},
-				disableMigrationParameterID:      {},
-				statelessResetTokenParameterID:   statelessResetToken,
+				initialMaxStreamDataBidiLocalParameterID:  {0x11, 0x22, 0x33, 0x44},
+				initialMaxStreamDataBidiRemoteParameterID: {0x22, 0x33, 0x44, 0x55},
+				initialMaxStreamDataUniParameterID:        {0x33, 0x44, 0x55, 0x66},
+				initialMaxDataParameterID:                 {0x44, 0x55, 0x66, 0x77},
+				initialMaxBidiStreamsParameterID:          {0x33, 0x44},
+				initialMaxUniStreamsParameterID:           {0x44, 0x55},
+				idleTimeoutParameterID:                    {0x13, 0x37},
+				maxPacketSizeParameterID:                  {0x73, 0x31},
+				disableMigrationParameterID:               {},
+				statelessResetTokenParameterID:            statelessResetToken,
 			}
 		})
 		It("reads parameters", func() {
-			err := params.unmarshal(marshal(parameters))
-			Expect(err).ToNot(HaveOccurred())
-			Expect(params.InitialMaxStreamData).To(Equal(protocol.ByteCount(0x11223344)))
-			Expect(params.InitialMaxData).To(Equal(protocol.ByteCount(0x22334455)))
+			Expect(params.unmarshal(marshal(parameters))).To(Succeed())
+			Expect(params.InitialMaxStreamDataBidiLocal).To(Equal(protocol.ByteCount(0x11223344)))
+			Expect(params.InitialMaxStreamDataBidiRemote).To(Equal(protocol.ByteCount(0x22334455)))
+			Expect(params.InitialMaxStreamDataUni).To(Equal(protocol.ByteCount(0x33445566)))
+			Expect(params.InitialMaxData).To(Equal(protocol.ByteCount(0x44556677)))
 			Expect(params.MaxBidiStreams).To(Equal(uint16(0x3344)))
 			Expect(params.MaxUniStreams).To(Equal(uint16(0x4455)))
 			Expect(params.IdleTimeout).To(Equal(0x1337 * time.Second))
@@ -86,10 +91,22 @@ var _ = Describe("Transport Parameters", func() {
 			Expect(params.IdleTimeout).To(Equal(protocol.MinRemoteIdleTimeout))
 		})
 
-		It("rejects the parameters if the initial_max_stream_data has the wrong length", func() {
-			parameters[initialMaxStreamDataParameterID] = []byte{0x11, 0x22, 0x33} // should be 4 bytes
+		It("rejects the parameters if the initial_max_stream_data_bidi_local has the wrong length", func() {
+			parameters[initialMaxStreamDataBidiLocalParameterID] = []byte{0x11, 0x22, 0x33} // should be 4 bytes
 			err := params.unmarshal(marshal(parameters))
-			Expect(err).To(MatchError("wrong length for initial_max_stream_data: 3 (expected 4)"))
+			Expect(err).To(MatchError("wrong length for initial_max_stream_data_bidi_local: 3 (expected 4)"))
+		})
+
+		It("rejects the parameters if the initial_max_stream_data_bidi_remote has the wrong length", func() {
+			parameters[initialMaxStreamDataBidiRemoteParameterID] = []byte{0x11, 0x22, 0x33} // should be 4 bytes
+			err := params.unmarshal(marshal(parameters))
+			Expect(err).To(MatchError("wrong length for initial_max_stream_data_bidi_remote: 3 (expected 4)"))
+		})
+
+		It("rejects the parameters if the initial_max_stream_data_uni has the wrong length", func() {
+			parameters[initialMaxStreamDataUniParameterID] = []byte{0x11, 0x22, 0x33} // should be 4 bytes
+			err := params.unmarshal(marshal(parameters))
+			Expect(err).To(MatchError("wrong length for initial_max_stream_data_uni: 3 (expected 4)"))
 		})
 
 		It("rejects the parameters if the initial_max_data has the wrong length", func() {
@@ -150,20 +167,24 @@ var _ = Describe("Transport Parameters", func() {
 	Context("marshalling", func() {
 		It("marshals", func() {
 			params := &TransportParameters{
-				InitialMaxStreamData: 0xdeadbeef,
-				InitialMaxData:       0xdecafbad,
-				IdleTimeout:          0xcafe * time.Second,
-				MaxBidiStreams:       0x1234,
-				MaxUniStreams:        0x4321,
-				DisableMigration:     true,
-				StatelessResetToken:  bytes.Repeat([]byte{100}, 16),
+				InitialMaxStreamDataBidiLocal:  0xdeadbeef,
+				InitialMaxStreamDataBidiRemote: 0xbeef,
+				InitialMaxStreamDataUni:        0xcafe,
+				InitialMaxData:                 0xdecafbad,
+				IdleTimeout:                    0xcafe * time.Second,
+				MaxBidiStreams:                 0x1234,
+				MaxUniStreams:                  0x4321,
+				DisableMigration:               true,
+				StatelessResetToken:            bytes.Repeat([]byte{100}, 16),
 			}
 			b := &bytes.Buffer{}
 			params.marshal(b)
 
 			p := &TransportParameters{}
 			Expect(p.unmarshal(b.Bytes())).To(Succeed())
-			Expect(p.InitialMaxStreamData).To(Equal(params.InitialMaxStreamData))
+			Expect(p.InitialMaxStreamDataBidiLocal).To(Equal(params.InitialMaxStreamDataBidiLocal))
+			Expect(p.InitialMaxStreamDataBidiRemote).To(Equal(params.InitialMaxStreamDataBidiRemote))
+			Expect(p.InitialMaxStreamDataUni).To(Equal(params.InitialMaxStreamDataUni))
 			Expect(p.InitialMaxData).To(Equal(params.InitialMaxData))
 			Expect(p.MaxUniStreams).To(Equal(params.MaxUniStreams))
 			Expect(p.MaxBidiStreams).To(Equal(params.MaxBidiStreams))

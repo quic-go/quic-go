@@ -14,20 +14,24 @@ import (
 type transportParameterID uint16
 
 const (
-	initialMaxStreamDataParameterID  transportParameterID = 0x0
-	initialMaxDataParameterID        transportParameterID = 0x1
-	initialMaxBidiStreamsParameterID transportParameterID = 0x2
-	idleTimeoutParameterID           transportParameterID = 0x3
-	maxPacketSizeParameterID         transportParameterID = 0x5
-	statelessResetTokenParameterID   transportParameterID = 0x6
-	initialMaxUniStreamsParameterID  transportParameterID = 0x8
-	disableMigrationParameterID      transportParameterID = 0x9
+	initialMaxStreamDataBidiLocalParameterID  transportParameterID = 0x0
+	initialMaxDataParameterID                 transportParameterID = 0x1
+	initialMaxBidiStreamsParameterID          transportParameterID = 0x2
+	idleTimeoutParameterID                    transportParameterID = 0x3
+	maxPacketSizeParameterID                  transportParameterID = 0x5
+	statelessResetTokenParameterID            transportParameterID = 0x6
+	initialMaxUniStreamsParameterID           transportParameterID = 0x8
+	disableMigrationParameterID               transportParameterID = 0x9
+	initialMaxStreamDataBidiRemoteParameterID transportParameterID = 0xa
+	initialMaxStreamDataUniParameterID        transportParameterID = 0xb
 )
 
 // TransportParameters are parameters sent to the peer during the handshake
 type TransportParameters struct {
-	InitialMaxStreamData protocol.ByteCount
-	InitialMaxData       protocol.ByteCount
+	InitialMaxStreamDataBidiLocal  protocol.ByteCount
+	InitialMaxStreamDataBidiRemote protocol.ByteCount
+	InitialMaxStreamDataUni        protocol.ByteCount
+	InitialMaxData                 protocol.ByteCount
 
 	MaxPacketSize protocol.ByteCount
 
@@ -52,11 +56,21 @@ func (p *TransportParameters) unmarshal(data []byte) error {
 		}
 		parameterIDs = append(parameterIDs, paramID)
 		switch paramID {
-		case initialMaxStreamDataParameterID:
+		case initialMaxStreamDataBidiLocalParameterID:
 			if paramLen != 4 {
-				return fmt.Errorf("wrong length for initial_max_stream_data: %d (expected 4)", paramLen)
+				return fmt.Errorf("wrong length for initial_max_stream_data_bidi_local: %d (expected 4)", paramLen)
 			}
-			p.InitialMaxStreamData = protocol.ByteCount(binary.BigEndian.Uint32(data[:4]))
+			p.InitialMaxStreamDataBidiLocal = protocol.ByteCount(binary.BigEndian.Uint32(data[:4]))
+		case initialMaxStreamDataBidiRemoteParameterID:
+			if paramLen != 4 {
+				return fmt.Errorf("wrong length for initial_max_stream_data_bidi_remote: %d (expected 4)", paramLen)
+			}
+			p.InitialMaxStreamDataBidiRemote = protocol.ByteCount(binary.BigEndian.Uint32(data[:4]))
+		case initialMaxStreamDataUniParameterID:
+			if paramLen != 4 {
+				return fmt.Errorf("wrong length for initial_max_stream_data_uni: %d (expected 4)", paramLen)
+			}
+			p.InitialMaxStreamDataUni = protocol.ByteCount(binary.BigEndian.Uint32(data[:4]))
 		case initialMaxDataParameterID:
 			if paramLen != 4 {
 				return fmt.Errorf("wrong length for initial_max_data: %d (expected 4)", paramLen)
@@ -115,10 +129,18 @@ func (p *TransportParameters) unmarshal(data []byte) error {
 }
 
 func (p *TransportParameters) marshal(b *bytes.Buffer) {
-	// initial_max_stream_data
-	utils.BigEndian.WriteUint16(b, uint16(initialMaxStreamDataParameterID))
+	// initial_max_stream_data_bidi_local
+	utils.BigEndian.WriteUint16(b, uint16(initialMaxStreamDataBidiLocalParameterID))
 	utils.BigEndian.WriteUint16(b, 4)
-	utils.BigEndian.WriteUint32(b, uint32(p.InitialMaxStreamData))
+	utils.BigEndian.WriteUint32(b, uint32(p.InitialMaxStreamDataBidiLocal))
+	// initial_max_stream_data_bidi_remote
+	utils.BigEndian.WriteUint16(b, uint16(initialMaxStreamDataBidiRemoteParameterID))
+	utils.BigEndian.WriteUint16(b, 4)
+	utils.BigEndian.WriteUint32(b, uint32(p.InitialMaxStreamDataBidiRemote))
+	// initial_max_stream_data_uni
+	utils.BigEndian.WriteUint16(b, uint16(initialMaxStreamDataUniParameterID))
+	utils.BigEndian.WriteUint16(b, 4)
+	utils.BigEndian.WriteUint32(b, uint32(p.InitialMaxStreamDataUni))
 	// initial_max_data
 	utils.BigEndian.WriteUint16(b, uint16(initialMaxDataParameterID))
 	utils.BigEndian.WriteUint16(b, 4)
@@ -153,5 +175,5 @@ func (p *TransportParameters) marshal(b *bytes.Buffer) {
 
 // String returns a string representation, intended for logging.
 func (p *TransportParameters) String() string {
-	return fmt.Sprintf("&handshake.TransportParameters{InitialMaxStreamData: %#x, InitialMaxData: %#x, MaxBidiStreams: %d, MaxUniStreams: %d, IdleTimeout: %s}", p.InitialMaxStreamData, p.InitialMaxData, p.MaxBidiStreams, p.MaxUniStreams, p.IdleTimeout)
+	return fmt.Sprintf("&handshake.TransportParameters{InitialMaxStreamDataBidiLocal: %#x, InitialMaxStreamDataBidiRemote: %#x, InitialMaxStreamDataUni: %#x, InitialMaxData: %#x, MaxBidiStreams: %d, MaxUniStreams: %d, IdleTimeout: %s}", p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreams, p.MaxUniStreams, p.IdleTimeout)
 }
