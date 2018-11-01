@@ -10,7 +10,7 @@ import (
 
 // ParseNextFrame parses the next frame
 // It skips PADDING frames.
-func ParseNextFrame(r *bytes.Reader, hdr *Header, v protocol.VersionNumber) (Frame, error) {
+func ParseNextFrame(r *bytes.Reader, v protocol.VersionNumber) (Frame, error) {
 	for r.Len() != 0 {
 		typeByte, _ := r.ReadByte()
 		if typeByte == 0x0 { // PADDING frame

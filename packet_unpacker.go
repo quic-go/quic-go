@@ -62,7 +62,7 @@ func (u *packetUnpacker) Unpack(headerBinary []byte, hdr *wire.Header, data []by
 		return nil, qerr.Error(qerr.DecryptionFailure, err.Error())
 	}
 
-	fs, err := u.parseFrames(decrypted, hdr)
+	fs, err := u.parseFrames(decrypted)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (u *packetUnpacker) Unpack(headerBinary []byte, hdr *wire.Header, data []by
 	}, nil
 }
 
-func (u *packetUnpacker) parseFrames(decrypted []byte, hdr *wire.Header) ([]wire.Frame, error) {
+func (u *packetUnpacker) parseFrames(decrypted []byte) ([]wire.Frame, error) {
 	r := bytes.NewReader(decrypted)
 	if r.Len() == 0 {
 		return nil, qerr.MissingPayload
@@ -82,7 +82,7 @@ func (u *packetUnpacker) parseFrames(decrypted []byte, hdr *wire.Header) ([]wire
 	fs := make([]wire.Frame, 0, 2)
 	// Read all frames in the packet
 	for {
-		frame, err := wire.ParseNextFrame(r, hdr, u.version)
+		frame, err := wire.ParseNextFrame(r, u.version)
 		if err != nil {
 			return nil, err
 		}
