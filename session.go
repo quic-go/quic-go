@@ -177,7 +177,6 @@ var newSession = func(
 		return nil, err
 	}
 	s.cryptoStreamHandler = cs
-	s.streamsMap = newStreamsMap(s, s.newFlowController, s.config.MaxIncomingStreams, s.config.MaxIncomingUniStreams, s.perspective, s.version)
 	s.framer = newFramer(s.streamsMap, s.version)
 	s.packer = newPacketPacker(
 		s.destConnID,
