@@ -20,43 +20,18 @@ type quicAEAD interface {
 	Open1RTT(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)
 }
 
-type packetUnpackerBase struct {
-	version protocol.VersionNumber
-}
-
-func (u *packetUnpackerBase) parseFrames(decrypted []byte, hdr *wire.Header) ([]wire.Frame, error) {
-	r := bytes.NewReader(decrypted)
-	if r.Len() == 0 {
-		return nil, qerr.MissingPayload
-	}
-
-	fs := make([]wire.Frame, 0, 2)
-	// Read all frames in the packet
-	for {
-		frame, err := wire.ParseNextFrame(r, hdr, u.version)
-		if err != nil {
-			return nil, err
-		}
-		if frame == nil {
-			break
-		}
-		fs = append(fs, frame)
-	}
-	return fs, nil
-}
-
 // The packetUnpacker unpacks QUIC packets.
 type packetUnpacker struct {
-	packetUnpackerBase
-	aead quicAEAD
+	aead    quicAEAD
+	version protocol.VersionNumber
 }
 
 var _ unpacker = &packetUnpacker{}
 
 func newPacketUnpacker(aead quicAEAD, version protocol.VersionNumber) unpacker {
 	return &packetUnpacker{
-		packetUnpackerBase: packetUnpackerBase{version: version},
-		aead:               aead,
+		aead:    aead,
+		version: version,
 	}
 }
 
@@ -96,4 +71,25 @@ func (u *packetUnpacker) Unpack(headerBinary []byte, hdr *wire.Header, data []by
 		encryptionLevel: encryptionLevel,
 		frames:          fs,
 	}, nil
+}
+
+func (u *packetUnpacker) parseFrames(decrypted []byte, hdr *wire.Header) ([]wire.Frame, error) {
+	r := bytes.NewReader(decrypted)
+	if r.Len() == 0 {
+		return nil, qerr.MissingPayload
+	}
+
+	fs := make([]wire.Frame, 0, 2)
+	// Read all frames in the packet
+	for {
+		frame, err := wire.ParseNextFrame(r, hdr, u.version)
+		if err != nil {
+			return nil, err
+		}
+		if frame == nil {
+			break
+		}
+		fs = append(fs, frame)
+	}
+	return fs, nil
 }
