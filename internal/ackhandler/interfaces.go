@@ -30,7 +30,9 @@ type SentPacketHandler interface {
 	GetLowestPacketNotConfirmedAcked() protocol.PacketNumber
 	DequeuePacketForRetransmission() *Packet
 	DequeueProbePacket() (*Packet, error)
-	GetPacketNumberLen(protocol.PacketNumber) protocol.PacketNumberLen
+
+	PeekPacketNumber() (protocol.PacketNumber, protocol.PacketNumberLen)
+	PopPacketNumber() protocol.PacketNumber
 
 	GetAlarmTimeout() time.Time
 	OnAlarm() error

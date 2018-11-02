@@ -30,12 +30,13 @@ const (
 )
 
 type sentPacketHandler struct {
-	lastSentPacketNumber              protocol.PacketNumber
+	lastSentPacketNumber  protocol.PacketNumber
+	packetNumberGenerator *packetNumberGenerator
+
 	lastSentRetransmittablePacketTime time.Time
 	lastSentHandshakePacketTime       time.Time
 
 	nextPacketSendTime time.Time
-	skippedPackets     []protocol.PacketNumber
 
 	largestAcked                 protocol.PacketNumber
 	largestReceivedPacketWithAck protocol.PacketNumber
@@ -89,11 +90,12 @@ func NewSentPacketHandler(rttStats *congestion.RTTStats, logger utils.Logger, ve
 	)
 
 	return &sentPacketHandler{
-		packetHistory: newSentPacketHistory(),
-		rttStats:      rttStats,
-		congestion:    congestion,
-		logger:        logger,
-		version:       version,
+		packetNumberGenerator: newPacketNumberGenerator(1, protocol.SkipPacketAveragePeriodLength),
+		packetHistory:         newSentPacketHistory(),
+		rttStats:              rttStats,
+		congestion:            congestion,
+		logger:                logger,
+		version:               version,
 	}
 }
 
@@ -147,10 +149,6 @@ func (h *sentPacketHandler) SentPacketsAsRetransmission(packets []*Packet, retra
 func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* isRetransmittable */ {
 	for p := h.lastSentPacketNumber + 1; p < packet.PacketNumber; p++ {
 		h.logger.Debugf("Skipping packet number %#x", p)
-		h.skippedPackets = append(h.skippedPackets, p)
-		if len(h.skippedPackets) > protocol.MaxTrackedSkippedPackets {
-			h.skippedPackets = h.skippedPackets[1:]
-		}
 	}
 
 	h.lastSentPacketNumber = packet.PacketNumber
@@ -197,7 +195,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 	h.largestReceivedPacketWithAck = withPacketNumber
 	h.largestAcked = utils.MaxPacketNumber(h.largestAcked, largestAcked)
 
-	if h.skippedPacketsAcked(ackFrame) {
+	if !h.packetNumberGenerator.Validate(ackFrame) {
 		return qerr.Error(qerr.InvalidAckData, "Received an ACK for a skipped packet number")
 	}
 
@@ -235,8 +233,6 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 		return err
 	}
 	h.updateLossDetectionAlarm()
-
-	h.garbageCollectSkippedPackets()
 	return nil
 }
 
@@ -518,8 +514,13 @@ func (h *sentPacketHandler) DequeueProbePacket() (*Packet, error) {
 	return h.DequeuePacketForRetransmission(), nil
 }
 
-func (h *sentPacketHandler) GetPacketNumberLen(p protocol.PacketNumber) protocol.PacketNumberLen {
-	return protocol.GetPacketNumberLengthForHeader(p, h.lowestUnacked(), h.version)
+func (h *sentPacketHandler) PeekPacketNumber() (protocol.PacketNumber, protocol.PacketNumberLen) {
+	pn := h.packetNumberGenerator.Peek()
+	return pn, protocol.GetPacketNumberLengthForHeader(pn, h.lowestUnacked(), h.version)
+}
+
+func (h *sentPacketHandler) PopPacketNumber() protocol.PacketNumber {
+	return h.packetNumberGenerator.Pop()
 }
 
 func (h *sentPacketHandler) SendMode() SendMode {
@@ -629,24 +630,4 @@ func (h *sentPacketHandler) computeRTOTimeout() time.Duration {
 	// Exponential backoff
 	rto <<= h.rtoCount
 	return utils.MinDuration(rto, maxRTOTimeout)
-}
-
-func (h *sentPacketHandler) skippedPacketsAcked(ackFrame *wire.AckFrame) bool {
-	for _, p := range h.skippedPackets {
-		if ackFrame.AcksPacket(p) {
-			return true
-		}
-	}
-	return false
-}
-
-func (h *sentPacketHandler) garbageCollectSkippedPackets() {
-	lowestUnacked := h.lowestUnacked()
-	deleteIndex := 0
-	for i, p := range h.skippedPackets {
-		if p < lowestUnacked {
-			deleteIndex = i + 1
-		}
-	}
-	h.skippedPackets = h.skippedPackets[deleteIndex:]
 }

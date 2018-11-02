@@ -1,9 +1,10 @@
-package quic
+package ackhandler
 
 import (
 	"math"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -96,5 +97,46 @@ var _ = Describe("Packet Number Generator", func() {
 		Expect(smallest).To(BeNumerically("<", 300))
 		Expect(largest).To(BeNumerically(">", math.MaxUint16-300))
 		Expect(sum / uint64(rep)).To(BeNumerically("==", uint64(math.MaxUint16/2), 1000))
+	})
+
+	It("validates ACK frames", func() {
+		var skipped []protocol.PacketNumber
+		var lastPN protocol.PacketNumber
+		for len(skipped) < 3 {
+			if png.Peek() > lastPN+1 {
+				skipped = append(skipped, lastPN+1)
+			}
+			lastPN = png.Pop()
+		}
+		invalidACK := &wire.AckFrame{
+			AckRanges: []wire.AckRange{{Smallest: 1, Largest: lastPN}},
+		}
+		Expect(png.Validate(invalidACK)).To(BeFalse())
+		validACK1 := &wire.AckFrame{
+			AckRanges: []wire.AckRange{{Smallest: 1, Largest: skipped[0] - 1}},
+		}
+		Expect(png.Validate(validACK1)).To(BeTrue())
+		validACK2 := &wire.AckFrame{
+			AckRanges: []wire.AckRange{
+				{Smallest: 1, Largest: skipped[0] - 1},
+				{Smallest: skipped[0] + 1, Largest: skipped[1] - 1},
+				{Smallest: skipped[1] + 1, Largest: skipped[2] - 1},
+				{Smallest: skipped[2] + 1, Largest: skipped[2] + 100},
+			},
+		}
+		Expect(png.Validate(validACK2)).To(BeTrue())
+	})
+
+	It("tracks a maximum number of protocol.MaxTrackedSkippedPackets packets", func() {
+		var skipped []protocol.PacketNumber
+		var lastPN protocol.PacketNumber
+		for len(skipped) < protocol.MaxTrackedSkippedPackets+3 {
+			if png.Peek() > lastPN+1 {
+				skipped = append(skipped, lastPN+1)
+			}
+			lastPN = png.Pop()
+			Expect(len(png.history)).To(BeNumerically("<=", protocol.MaxTrackedSkippedPackets))
+		}
+		Expect(len(png.history)).To(Equal(protocol.MaxTrackedSkippedPackets))
 	})
 })

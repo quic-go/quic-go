@@ -59,6 +59,11 @@ func getMaxPacketSize(addr net.Addr) protocol.ByteCount {
 	return maxSize
 }
 
+type packetNumberManager interface {
+	PeekPacketNumber() (protocol.PacketNumber, protocol.PacketNumberLen)
+	PopPacketNumber() protocol.PacketNumber
+}
+
 type sealingManager interface {
 	GetSealer() (protocol.EncryptionLevel, handshake.Sealer)
 	GetSealerWithEncryptionLevel(protocol.EncryptionLevel) (handshake.Sealer, error)
@@ -86,10 +91,9 @@ type packetPacker struct {
 
 	token []byte
 
-	packetNumberGenerator *packetNumberGenerator
-	getPacketNumberLen    func(protocol.PacketNumber) protocol.PacketNumberLen
-	framer                frameSource
-	acks                  ackFrameSource
+	pnManager packetNumberManager
+	framer    frameSource
+	acks      ackFrameSource
 
 	maxPacketSize             protocol.ByteCount
 	hasSentPacket             bool // has the packetPacker already sent a packet
@@ -103,8 +107,7 @@ func newPacketPacker(
 	srcConnID protocol.ConnectionID,
 	initialStream cryptoStream,
 	handshakeStream cryptoStream,
-	initialPacketNumber protocol.PacketNumber,
-	getPacketNumberLen func(protocol.PacketNumber) protocol.PacketNumberLen,
+	packetNumberManager packetNumberManager,
 	remoteAddr net.Addr, // only used for determining the max packet size
 	token []byte,
 	cryptoSetup sealingManager,
@@ -114,19 +117,18 @@ func newPacketPacker(
 	version protocol.VersionNumber,
 ) *packetPacker {
 	return &packetPacker{
-		cryptoSetup:           cryptoSetup,
-		token:                 token,
-		destConnID:            destConnID,
-		srcConnID:             srcConnID,
-		initialStream:         initialStream,
-		handshakeStream:       handshakeStream,
-		perspective:           perspective,
-		version:               version,
-		framer:                framer,
-		acks:                  acks,
-		getPacketNumberLen:    getPacketNumberLen,
-		packetNumberGenerator: newPacketNumberGenerator(initialPacketNumber, protocol.SkipPacketAveragePeriodLength),
-		maxPacketSize:         getMaxPacketSize(remoteAddr),
+		cryptoSetup:     cryptoSetup,
+		token:           token,
+		destConnID:      destConnID,
+		srcConnID:       srcConnID,
+		initialStream:   initialStream,
+		handshakeStream: handshakeStream,
+		perspective:     perspective,
+		version:         version,
+		framer:          framer,
+		acks:            acks,
+		pnManager:       packetNumberManager,
+		maxPacketSize:   getMaxPacketSize(remoteAddr),
 	}
 }
 
@@ -396,12 +398,10 @@ func (p *packetPacker) composeNextPacket(
 }
 
 func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header {
-	pnum := p.packetNumberGenerator.Peek()
-	packetNumberLen := p.getPacketNumberLen(pnum)
-
+	pn, pnLen := p.pnManager.PeekPacketNumber()
 	header := &wire.Header{
-		PacketNumber:     pnum,
-		PacketNumberLen:  packetNumberLen,
+		PacketNumber:     pn,
+		PacketNumberLen:  pnLen,
 		Version:          p.version,
 		DestConnectionID: p.destConnID,
 	}
@@ -482,7 +482,7 @@ func (p *packetPacker) writeAndSealPacket(
 	_ = sealer.Seal(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], header.PacketNumber, raw[:payloadStartIndex])
 	raw = raw[0 : buffer.Len()+sealer.Overhead()]
 
-	num := p.packetNumberGenerator.Pop()
+	num := p.pnManager.PopPacketNumber()
 	if num != header.PacketNumber {
 		return nil, errors.New("packetPacker BUG: Peeked and Popped packet numbers do not match")
 	}

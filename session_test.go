@@ -84,7 +84,6 @@ var _ = Describe("Session", func() {
 			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 			protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
 			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-			1,
 			populateServerConfig(&Config{}),
 			nil, // tls.Config
 			nil, // handshake.TransportParameters,
@@ -611,7 +610,6 @@ var _ = Describe("Session", func() {
 			newPacket := getPacket(234)
 			sess.windowUpdateQueue.callback(&wire.MaxDataFrame{})
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
-			sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
 			sph.EXPECT().DequeuePacketForRetransmission().Return(packetToRetransmit)
 			sph.EXPECT().SendMode().Return(ackhandler.SendRetransmission)
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny)
@@ -665,7 +663,6 @@ var _ = Describe("Session", func() {
 			retransmittedPacket := getPacket(123)
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().TimeUntilSend()
-			sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
 			sph.EXPECT().SendMode().Return(ackhandler.SendTLP)
 			sph.EXPECT().ShouldSendNumPackets().Return(1)
 			sph.EXPECT().DequeueProbePacket().Return(packetToRetransmit, nil)
@@ -692,7 +689,6 @@ var _ = Describe("Session", func() {
 			BeforeEach(func() {
 				sph = mockackhandler.NewMockSentPacketHandler(mockCtrl)
 				sph.EXPECT().GetAlarmTimeout().AnyTimes()
-				sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
 				sph.EXPECT().DequeuePacketForRetransmission().AnyTimes()
 				sess.sentPacketHandler = sph
 				streamManager.EXPECT().CloseWithError(gomock.Any())
@@ -836,7 +832,6 @@ var _ = Describe("Session", func() {
 				sph.EXPECT().TimeUntilSend().AnyTimes()
 				sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
 				sph.EXPECT().ShouldSendNumPackets().AnyTimes().Return(1)
-				sph.EXPECT().GetPacketNumberLen(gomock.Any()).Return(protocol.PacketNumberLen2).AnyTimes()
 				sph.EXPECT().SentPacket(gomock.Any())
 				sess.sentPacketHandler = sph
 				packer.EXPECT().PackPacket().Return(getPacket(1), nil)
@@ -1297,7 +1292,6 @@ var _ = Describe("Client Session", func() {
 			nil, // tls.Config
 			nil, // transport parameters
 			protocol.VersionWhatever,
-			1,
 			utils.DefaultLogger,
 			protocol.VersionWhatever,
 		)
