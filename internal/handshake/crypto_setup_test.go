@@ -177,6 +177,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					case c := <-sChunkChan:
 						client.HandleMessage(c.data, c.encLevel)
 					case <-done: // handshake complete
+						return
 					}
 				}
 			}()
