@@ -48,7 +48,7 @@ var _ = Describe("Transport Parameters", func() {
 		params.marshal(b)
 
 		p := &TransportParameters{}
-		Expect(p.unmarshal(b.Bytes())).To(Succeed())
+		Expect(p.unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(Succeed())
 		Expect(p.InitialMaxStreamDataBidiLocal).To(Equal(params.InitialMaxStreamDataBidiLocal))
 		Expect(p.InitialMaxStreamDataBidiRemote).To(Equal(params.InitialMaxStreamDataBidiRemote))
 		Expect(p.InitialMaxStreamDataUni).To(Equal(params.InitialMaxStreamDataUni))
@@ -65,7 +65,7 @@ var _ = Describe("Transport Parameters", func() {
 		b := &bytes.Buffer{}
 		params.marshal(b)
 		p := &TransportParameters{}
-		Expect(p.unmarshal(b.Bytes())).To(MatchError("wrong length for stateless_reset_token: 15 (expected 16)"))
+		Expect(p.unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError("wrong length for stateless_reset_token: 15 (expected 16)"))
 	})
 
 	It("errors when the max_packet_size is too small", func() {
@@ -74,7 +74,7 @@ var _ = Describe("Transport Parameters", func() {
 		utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(1199)))
 		utils.WriteVarInt(b, 1199)
 		p := &TransportParameters{}
-		Expect(p.unmarshal(b.Bytes())).To(MatchError("invalid value for max_packet_size: 1199 (minimum 1200)"))
+		Expect(p.unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError("invalid value for max_packet_size: 1199 (minimum 1200)"))
 	})
 
 	It("errors when disable_migration has content", func() {
@@ -83,7 +83,7 @@ var _ = Describe("Transport Parameters", func() {
 		utils.BigEndian.WriteUint16(b, 6)
 		b.Write([]byte("foobar"))
 		p := &TransportParameters{}
-		Expect(p.unmarshal(b.Bytes())).To(MatchError("wrong length for disable_migration: 6 (expected empty)"))
+		Expect(p.unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError("wrong length for disable_migration: 6 (expected empty)"))
 	})
 
 	It("errors when the varint value has the wrong length", func() {
@@ -94,7 +94,7 @@ var _ = Describe("Transport Parameters", func() {
 		Expect(utils.VarIntLen(val)).ToNot(BeEquivalentTo(2))
 		utils.WriteVarInt(b, val)
 		p := &TransportParameters{}
-		err := p.unmarshal(b.Bytes())
+		err := p.unmarshal(b.Bytes(), protocol.PerspectiveServer)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("inconsistent transport parameter length"))
 	})
@@ -114,7 +114,7 @@ var _ = Describe("Transport Parameters", func() {
 		utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(0x42)))
 		utils.WriteVarInt(b, 0x42)
 		p := &TransportParameters{}
-		Expect(p.unmarshal(b.Bytes())).To(Succeed())
+		Expect(p.unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(Succeed())
 		Expect(p.InitialMaxStreamDataBidiLocal).To(Equal(protocol.ByteCount(0x1337)))
 		Expect(p.InitialMaxStreamDataBidiRemote).To(Equal(protocol.ByteCount(0x42)))
 	})
@@ -134,7 +134,7 @@ var _ = Describe("Transport Parameters", func() {
 		utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(0x1337)))
 		utils.WriteVarInt(b, 0x1337)
 		p := &TransportParameters{}
-		err := p.unmarshal(b.Bytes())
+		err := p.unmarshal(b.Bytes(), protocol.PerspectiveServer)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("received duplicate transport parameter"))
 	})
@@ -145,7 +145,7 @@ var _ = Describe("Transport Parameters", func() {
 		utils.BigEndian.WriteUint16(b, 7)
 		b.Write([]byte("foobar"))
 		p := &TransportParameters{}
-		Expect(p.unmarshal(b.Bytes())).To(MatchError("remaining length (6) smaller than parameter length (7)"))
+		Expect(p.unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError("remaining length (6) smaller than parameter length (7)"))
 	})
 
 	It("errors if there's unprocessed data after reading", func() {
@@ -155,6 +155,16 @@ var _ = Describe("Transport Parameters", func() {
 		utils.WriteVarInt(b, 0x1337)
 		b.Write([]byte("foo"))
 		p := &TransportParameters{}
-		Expect(p.unmarshal(b.Bytes())).To(MatchError("should have read all data. Still have 3 bytes"))
+		Expect(p.unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError("should have read all data. Still have 3 bytes"))
+	})
+
+	It("errors if the client sent a stateless_reset_token", func() {
+		params := &TransportParameters{
+			StatelessResetToken: make([]byte, 16),
+		}
+		b := &bytes.Buffer{}
+		params.marshal(b)
+		p := &TransportParameters{}
+		Expect(p.unmarshal(b.Bytes(), protocol.PerspectiveClient)).To(MatchError("client sent a stateless_reset_token"))
 	})
 })

@@ -1,7 +1,6 @@
 package handshake
 
 import (
-	"bytes"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -97,13 +96,6 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 			}
 			err := handler.ReceivedExtensions(uint8(typeClientHello), []qtls.Extension{ext})
 			Expect(err).To(HaveOccurred()) // this will be some kind of decoding error
-		})
-
-		It("rejects messages that contain a stateless reset token", func() {
-			parameters.StatelessResetToken = bytes.Repeat([]byte{0}, 16)
-			ext := getClientHello(parameters)
-			err := handler.ReceivedExtensions(uint8(typeClientHello), []qtls.Extension{ext})
-			Expect(err).To(MatchError("client sent a stateless reset token"))
 		})
 
 		Context("Version Negotiation", func() {

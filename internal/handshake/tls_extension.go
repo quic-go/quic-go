@@ -38,7 +38,7 @@ func (p *clientHelloTransportParameters) Unmarshal(data []byte) error {
 	if len(data) != paramsLen {
 		return fmt.Errorf("expected transport parameters to be %d bytes long, have %d", paramsLen, len(data))
 	}
-	return p.Parameters.unmarshal(data)
+	return p.Parameters.unmarshal(data, protocol.PerspectiveClient)
 }
 
 type encryptedExtensionsTransportParameters struct {
@@ -86,5 +86,5 @@ func (p *encryptedExtensionsTransportParameters) Unmarshal(data []byte) error {
 	if len(data) != paramsLen {
 		return fmt.Errorf("expected transport parameters to be %d bytes long, have %d", paramsLen, len(data))
 	}
-	return p.Parameters.unmarshal(data)
+	return p.Parameters.unmarshal(data, protocol.PerspectiveServer)
 }
