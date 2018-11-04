@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("RST_STREAM frame", func() {
+var _ = Describe("RESET_STREAM frame", func() {
 	Context("when parsing", func() {
 		It("accepts sample frame", func() {
 			data := []byte{0x1}
@@ -17,7 +17,7 @@ var _ = Describe("RST_STREAM frame", func() {
 			data = append(data, []byte{0x13, 0x37}...)        // error code
 			data = append(data, encodeVarInt(0x987654321)...) // byte offset
 			b := bytes.NewReader(data)
-			frame, err := parseRstStreamFrame(b, versionIETFFrames)
+			frame, err := parseResetStreamFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0xdeadbeef)))
 			Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0x987654321)))
@@ -29,10 +29,10 @@ var _ = Describe("RST_STREAM frame", func() {
 			data = append(data, encodeVarInt(0xdeadbeef)...)  // stream ID
 			data = append(data, []byte{0x13, 0x37}...)        // error code
 			data = append(data, encodeVarInt(0x987654321)...) // byte offset
-			_, err := parseRstStreamFrame(bytes.NewReader(data), versionIETFFrames)
+			_, err := parseResetStreamFrame(bytes.NewReader(data), versionIETFFrames)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := parseRstStreamFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
+				_, err := parseResetStreamFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
 				Expect(err).To(HaveOccurred())
 			}
 		})
@@ -40,7 +40,7 @@ var _ = Describe("RST_STREAM frame", func() {
 
 	Context("when writing", func() {
 		It("writes a sample frame", func() {
-			frame := RstStreamFrame{
+			frame := ResetStreamFrame{
 				StreamID:   0x1337,
 				ByteOffset: 0x11223344decafbad,
 				ErrorCode:  0xcafe,
@@ -56,7 +56,7 @@ var _ = Describe("RST_STREAM frame", func() {
 		})
 
 		It("has the correct min length", func() {
-			rst := RstStreamFrame{
+			rst := ResetStreamFrame{
 				StreamID:   0x1337,
 				ByteOffset: 0x1234567,
 				ErrorCode:  0xde,

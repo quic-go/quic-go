@@ -543,8 +543,8 @@ func (s *session) handleFrames(fs []wire.Frame, encLevel protocol.EncryptionLeve
 			err = s.handleAckFrame(frame, encLevel)
 		case *wire.ConnectionCloseFrame:
 			s.closeRemote(qerr.Error(frame.ErrorCode, frame.ReasonPhrase))
-		case *wire.RstStreamFrame:
-			err = s.handleRstStreamFrame(frame)
+		case *wire.ResetStreamFrame:
+			err = s.handleResetStreamFrame(frame)
 		case *wire.MaxDataFrame:
 			s.handleMaxDataFrame(frame)
 		case *wire.MaxStreamDataFrame:
@@ -631,7 +631,7 @@ func (s *session) handleMaxStreamIDFrame(frame *wire.MaxStreamIDFrame) error {
 	return s.streamsMap.HandleMaxStreamIDFrame(frame)
 }
 
-func (s *session) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
+func (s *session) handleResetStreamFrame(frame *wire.ResetStreamFrame) error {
 	str, err := s.streamsMap.GetOrOpenReceiveStream(frame.StreamID)
 	if err != nil {
 		return err
@@ -640,7 +640,7 @@ func (s *session) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
 		// stream is closed and already garbage collected
 		return nil
 	}
-	return str.handleRstStreamFrame(frame)
+	return str.handleResetStreamFrame(frame)
 }
 
 func (s *session) handleStopSendingFrame(frame *wire.StopSendingFrame) error {

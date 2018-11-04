@@ -467,7 +467,7 @@ var _ = Describe("Receive Stream", func() {
 				Expect(err).To(MatchError("Read on stream 1337 canceled with error code 1234"))
 			})
 
-			It("doesn't send a RST_STREAM frame, if the FIN was already read", func() {
+			It("doesn't send a RESET_STREAM frame, if the FIN was already read", func() {
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), true)
 				mockFC.EXPECT().AddBytesRead(protocol.ByteCount(6))
 				mockFC.EXPECT().MaybeQueueWindowUpdate()
@@ -495,8 +495,8 @@ var _ = Describe("Receive Stream", func() {
 			})
 		})
 
-		Context("receiving RST_STREAM frames", func() {
-			rst := &wire.RstStreamFrame{
+		Context("receiving RESET_STREAM frames", func() {
+			rst := &wire.ResetStreamFrame{
 				StreamID:   streamID,
 				ByteOffset: 42,
 				ErrorCode:  1234,
@@ -516,14 +516,14 @@ var _ = Describe("Receive Stream", func() {
 				}()
 				Consistently(done).ShouldNot(BeClosed())
 				mockSender.EXPECT().onStreamCompleted(streamID)
-				str.handleRstStreamFrame(rst)
+				str.handleResetStreamFrame(rst)
 				Eventually(done).Should(BeClosed())
 			})
 
 			It("doesn't allow further calls to Read", func() {
 				mockSender.EXPECT().onStreamCompleted(streamID)
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(42), true)
-				err := str.handleRstStreamFrame(rst)
+				err := str.handleResetStreamFrame(rst)
 				Expect(err).ToNot(HaveOccurred())
 				_, err = strWithTimeout.Read([]byte{0})
 				Expect(err).To(MatchError("Stream 1337 was reset with error code 1234"))
@@ -532,25 +532,25 @@ var _ = Describe("Receive Stream", func() {
 				Expect(err.(streamCanceledError).ErrorCode()).To(Equal(protocol.ApplicationErrorCode(1234)))
 			})
 
-			It("errors when receiving a RST_STREAM with an inconsistent offset", func() {
+			It("errors when receiving a RESET_STREAM with an inconsistent offset", func() {
 				testErr := errors.New("already received a different final offset before")
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(42), true).Return(testErr)
-				err := str.handleRstStreamFrame(rst)
+				err := str.handleResetStreamFrame(rst)
 				Expect(err).To(MatchError(testErr))
 			})
 
-			It("ignores duplicate RST_STREAM frames", func() {
+			It("ignores duplicate RESET_STREAM frames", func() {
 				mockSender.EXPECT().onStreamCompleted(streamID)
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(42), true).Times(2)
-				err := str.handleRstStreamFrame(rst)
+				err := str.handleResetStreamFrame(rst)
 				Expect(err).ToNot(HaveOccurred())
-				err = str.handleRstStreamFrame(rst)
+				err = str.handleResetStreamFrame(rst)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("doesn't do anyting when it was closed for shutdown", func() {
 				str.closeForShutdown(nil)
-				err := str.handleRstStreamFrame(rst)
+				err := str.handleResetStreamFrame(rst)
 				Expect(err).ToNot(HaveOccurred())
 			})
 		})

@@ -174,36 +174,36 @@ var _ = Describe("Session", func() {
 			})
 		})
 
-		Context("handling RST_STREAM frames", func() {
+		Context("handling RESET_STREAM frames", func() {
 			It("closes the streams for writing", func() {
-				f := &wire.RstStreamFrame{
+				f := &wire.ResetStreamFrame{
 					StreamID:   555,
 					ErrorCode:  42,
 					ByteOffset: 0x1337,
 				}
 				str := NewMockReceiveStreamI(mockCtrl)
 				streamManager.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(555)).Return(str, nil)
-				str.EXPECT().handleRstStreamFrame(f)
-				err := sess.handleRstStreamFrame(f)
+				str.EXPECT().handleResetStreamFrame(f)
+				err := sess.handleResetStreamFrame(f)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("returns errors", func() {
-				f := &wire.RstStreamFrame{
+				f := &wire.ResetStreamFrame{
 					StreamID:   7,
 					ByteOffset: 0x1337,
 				}
 				testErr := errors.New("flow control violation")
 				str := NewMockReceiveStreamI(mockCtrl)
 				streamManager.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(7)).Return(str, nil)
-				str.EXPECT().handleRstStreamFrame(f).Return(testErr)
-				err := sess.handleRstStreamFrame(f)
+				str.EXPECT().handleResetStreamFrame(f).Return(testErr)
+				err := sess.handleResetStreamFrame(f)
 				Expect(err).To(MatchError(testErr))
 			})
 
-			It("ignores RST_STREAM frames for closed streams", func() {
+			It("ignores RESET_STREAM frames for closed streams", func() {
 				streamManager.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(3)).Return(nil, nil)
-				err := sess.handleFrames([]wire.Frame{&wire.RstStreamFrame{
+				err := sess.handleFrames([]wire.Frame{&wire.ResetStreamFrame{
 					StreamID:  3,
 					ErrorCode: 42,
 				}}, protocol.EncryptionUnspecified)

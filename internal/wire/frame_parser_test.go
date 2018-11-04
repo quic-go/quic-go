@@ -38,8 +38,8 @@ var _ = Describe("Frame parsing", func() {
 		Expect(r.Len()).To(BeZero())
 	})
 
-	It("unpacks RST_STREAM frames", func() {
-		f := &RstStreamFrame{
+	It("unpacks RESET_STREAM frames", func() {
+		f := &ResetStreamFrame{
 			StreamID:   0xdeadbeef,
 			ByteOffset: 0xdecafbad1234,
 			ErrorCode:  0x1337,

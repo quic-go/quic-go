@@ -490,8 +490,8 @@ var _ = Describe("Send Stream", func() {
 
 	Context("stream cancelations", func() {
 		Context("canceling writing", func() {
-			It("queues a RST_STREAM frame", func() {
-				mockSender.EXPECT().queueControlFrame(&wire.RstStreamFrame{
+			It("queues a RESET_STREAM frame", func() {
+				mockSender.EXPECT().queueControlFrame(&wire.ResetStreamFrame{
 					StreamID:   streamID,
 					ByteOffset: 1234,
 					ErrorCode:  9876,
@@ -562,8 +562,8 @@ var _ = Describe("Send Stream", func() {
 		})
 
 		Context("receiving STOP_SENDING frames", func() {
-			It("queues a RST_STREAM frames with error code Stopping", func() {
-				mockSender.EXPECT().queueControlFrame(&wire.RstStreamFrame{
+			It("queues a RESET_STREAM frames with error code Stopping", func() {
+				mockSender.EXPECT().queueControlFrame(&wire.ResetStreamFrame{
 					StreamID:  streamID,
 					ErrorCode: errorCodeStopping,
 				})

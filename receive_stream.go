@@ -15,7 +15,7 @@ type receiveStreamI interface {
 	ReceiveStream
 
 	handleStreamFrame(*wire.StreamFrame) error
-	handleRstStreamFrame(*wire.RstStreamFrame) error
+	handleResetStreamFrame(*wire.ResetStreamFrame) error
 	closeForShutdown(error)
 	getWindowUpdate() protocol.ByteCount
 }
@@ -41,7 +41,7 @@ type receiveStream struct {
 	closedForShutdown bool // set when CloseForShutdown() is called
 	finRead           bool // set once we read a frame with a FinBit
 	canceledRead      bool // set when CancelRead() is called
-	resetRemotely     bool // set when HandleRstStreamFrame() is called
+	resetRemotely     bool // set when HandleResetStreamFrame() is called
 
 	readChan      chan struct{}
 	deadline      time.Time
@@ -159,7 +159,7 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 		s.readOffset += protocol.ByteCount(m)
 
 		s.mutex.Lock()
-		// when a RST_STREAM was received, the was already informed about the final byteOffset for this stream
+		// when a RESET_STREAM was received, the was already informed about the final byteOffset for this stream
 		if !s.resetRemotely {
 			s.flowController.AddBytesRead(protocol.ByteCount(m))
 		}
@@ -214,15 +214,15 @@ func (s *receiveStream) handleStreamFrame(frame *wire.StreamFrame) error {
 	return nil
 }
 
-func (s *receiveStream) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
-	completed, err := s.handleRstStreamFrameImpl(frame)
+func (s *receiveStream) handleResetStreamFrame(frame *wire.ResetStreamFrame) error {
+	completed, err := s.handleResetStreamFrameImpl(frame)
 	if completed {
 		s.sender.onStreamCompleted(s.streamID)
 	}
 	return err
 }
 
-func (s *receiveStream) handleRstStreamFrameImpl(frame *wire.RstStreamFrame) (bool /*completed */, error) {
+func (s *receiveStream) handleResetStreamFrameImpl(frame *wire.ResetStreamFrame) (bool /*completed */, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -233,7 +233,7 @@ func (s *receiveStream) handleRstStreamFrameImpl(frame *wire.RstStreamFrame) (bo
 		return false, err
 	}
 
-	// ignore duplicate RST_STREAM frames for this stream (after checking their final offset)
+	// ignore duplicate RESET_STREAM frames for this stream (after checking their final offset)
 	if s.resetRemotely {
 		return false, nil
 	}
@@ -273,7 +273,7 @@ func (s *receiveStream) SetReadDeadline(t time.Time) error {
 
 // CloseForShutdown closes a stream abruptly.
 // It makes Read unblock (and return the error) immediately.
-// The peer will NOT be informed about this: the stream is closed without sending a FIN or RST.
+// The peer will NOT be informed about this: the stream is closed without sending a FIN or RESET.
 func (s *receiveStream) closeForShutdown(err error) {
 	s.mutex.Lock()
 	s.closedForShutdown = true

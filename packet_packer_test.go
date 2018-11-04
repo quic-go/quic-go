@@ -243,7 +243,7 @@ var _ = Describe("Packet packer", func() {
 			pnManager.EXPECT().PopPacketNumber().Return(protocol.PacketNumber(0x42))
 			sealingManager.EXPECT().GetSealer().Return(protocol.Encryption1RTT, sealer)
 			ackFramer.EXPECT().GetAckFrame()
-			frames := []wire.Frame{&wire.RstStreamFrame{}, &wire.MaxDataFrame{}}
+			frames := []wire.Frame{&wire.ResetStreamFrame{}, &wire.MaxDataFrame{}}
 			expectAppendControlFrames(frames...)
 			expectAppendStreamFrames()
 			p, err := packer.PackPacket()

@@ -14,7 +14,7 @@ var _ = Describe("retransmittable frames", func() {
 		&wire.BlockedFrame{}:         true,
 		&wire.ConnectionCloseFrame{}: true,
 		&wire.PingFrame{}:            true,
-		&wire.RstStreamFrame{}:       true,
+		&wire.ResetStreamFrame{}:     true,
 		&wire.StreamFrame{}:          true,
 		&wire.MaxDataFrame{}:         true,
 		&wire.MaxStreamDataFrame{}:   true,

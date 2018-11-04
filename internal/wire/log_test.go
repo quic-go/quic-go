@@ -31,18 +31,18 @@ var _ = Describe("Frame logging", func() {
 
 	It("doesn't log when debug is disabled", func() {
 		logger.SetLogLevel(utils.LogLevelInfo)
-		LogFrame(logger, &RstStreamFrame{}, true)
+		LogFrame(logger, &ResetStreamFrame{}, true)
 		Expect(buf.Len()).To(BeZero())
 	})
 
 	It("logs sent frames", func() {
-		LogFrame(logger, &RstStreamFrame{}, true)
-		Expect(buf.Bytes()).To(ContainSubstring("\t-> &wire.RstStreamFrame{StreamID:0x0, ErrorCode:0x0, ByteOffset:0x0}\n"))
+		LogFrame(logger, &ResetStreamFrame{}, true)
+		Expect(buf.Bytes()).To(ContainSubstring("\t-> &wire.ResetStreamFrame{StreamID:0x0, ErrorCode:0x0, ByteOffset:0x0}\n"))
 	})
 
 	It("logs received frames", func() {
-		LogFrame(logger, &RstStreamFrame{}, false)
-		Expect(buf.Bytes()).To(ContainSubstring("\t<- &wire.RstStreamFrame{StreamID:0x0, ErrorCode:0x0, ByteOffset:0x0}\n"))
+		LogFrame(logger, &ResetStreamFrame{}, false)
+		Expect(buf.Bytes()).To(ContainSubstring("\t<- &wire.ResetStreamFrame{StreamID:0x0, ErrorCode:0x0, ByteOffset:0x0}\n"))
 	})
 
 	It("logs CRYPTO frames", func() {
