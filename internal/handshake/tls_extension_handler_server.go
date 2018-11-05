@@ -80,12 +80,6 @@ func (h *extensionHandlerServer) ReceivedExtensions(msgType uint8, exts []qtls.E
 	if chtp.InitialVersion != h.version && protocol.IsSupportedVersion(h.supportedVersions, chtp.InitialVersion) {
 		return qerr.Error(qerr.VersionNegotiationMismatch, "Client should have used the initial version")
 	}
-
-	// check that the client didn't send a stateless reset token
-	if len(chtp.Parameters.StatelessResetToken) != 0 {
-		// TODO: return the correct error type
-		return errors.New("client sent a stateless reset token")
-	}
 	h.logger.Debugf("Received Transport Parameters: %s", &chtp.Parameters)
 	h.paramsChan <- chtp.Parameters
 	return nil
