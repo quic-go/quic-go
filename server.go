@@ -380,8 +380,8 @@ func (s *server) createNewSession(
 		InitialMaxStreamDataUni:        protocol.InitialMaxStreamData,
 		InitialMaxData:                 protocol.InitialMaxData,
 		IdleTimeout:                    s.config.IdleTimeout,
-		MaxBidiStreams:                 uint16(s.config.MaxIncomingStreams),
-		MaxUniStreams:                  uint16(s.config.MaxIncomingUniStreams),
+		MaxBidiStreams:                 uint64(s.config.MaxIncomingStreams),
+		MaxUniStreams:                  uint64(s.config.MaxIncomingUniStreams),
 		DisableMigration:               true,
 		// TODO(#855): generate a real token
 		StatelessResetToken: bytes.Repeat([]byte{42}, 16),

@@ -402,8 +402,8 @@ func (c *client) createNewTLSSession(version protocol.VersionNumber) error {
 		InitialMaxStreamDataUni:        protocol.InitialMaxStreamData,
 		InitialMaxData:                 protocol.InitialMaxData,
 		IdleTimeout:                    c.config.IdleTimeout,
-		MaxBidiStreams:                 uint16(c.config.MaxIncomingStreams),
-		MaxUniStreams:                  uint16(c.config.MaxIncomingUniStreams),
+		MaxBidiStreams:                 uint64(c.config.MaxIncomingStreams),
+		MaxUniStreams:                  uint64(c.config.MaxIncomingUniStreams),
 		DisableMigration:               true,
 	}
 
