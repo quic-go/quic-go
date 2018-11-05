@@ -185,12 +185,10 @@ type Config struct {
 	// MaxIncomingStreams is the maximum number of concurrent bidirectional streams that a peer is allowed to open.
 	// If not set, it will default to 100.
 	// If set to a negative value, it doesn't allow any bidirectional streams.
-	// Values larger than 65535 (math.MaxUint16) are invalid.
 	MaxIncomingStreams int
 	// MaxIncomingUniStreams is the maximum number of concurrent unidirectional streams that a peer is allowed to open.
 	// If not set, it will default to 100.
 	// If set to a negative value, it doesn't allow any unidirectional streams.
-	// Values larger than 65535 (math.MaxUint16) are invalid.
 	MaxIncomingUniStreams int
 	// KeepAlive defines whether this peer will periodically send PING frames to keep the connection alive.
 	KeepAlive bool

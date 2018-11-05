@@ -2,8 +2,8 @@ package handshake
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
+	"io"
 	"sort"
 	"time"
 
@@ -35,8 +35,8 @@ type TransportParameters struct {
 
 	MaxPacketSize protocol.ByteCount
 
-	MaxUniStreams  uint16
-	MaxBidiStreams uint16
+	MaxUniStreams  uint64
+	MaxBidiStreams uint64
 
 	IdleTimeout         time.Duration
 	DisableMigration    bool
@@ -47,71 +47,45 @@ func (p *TransportParameters) unmarshal(data []byte) error {
 	// needed to check that every parameter is only sent at most once
 	var parameterIDs []transportParameterID
 
-	for len(data) >= 4 {
-		paramID := transportParameterID(binary.BigEndian.Uint16(data[:2]))
-		paramLen := int(binary.BigEndian.Uint16(data[2:4]))
-		data = data[4:]
-		if len(data) < paramLen {
-			return fmt.Errorf("remaining length (%d) smaller than parameter length (%d)", len(data), paramLen)
-		}
+	r := bytes.NewReader(data)
+	for r.Len() >= 4 {
+		paramIDInt, _ := utils.BigEndian.ReadUint16(r)
+		paramID := transportParameterID(paramIDInt)
+		paramLen, _ := utils.BigEndian.ReadUint16(r)
 		parameterIDs = append(parameterIDs, paramID)
 		switch paramID {
-		case initialMaxStreamDataBidiLocalParameterID:
-			if paramLen != 4 {
-				return fmt.Errorf("wrong length for initial_max_stream_data_bidi_local: %d (expected 4)", paramLen)
+		case initialMaxStreamDataBidiLocalParameterID,
+			initialMaxStreamDataBidiRemoteParameterID,
+			initialMaxStreamDataUniParameterID,
+			initialMaxDataParameterID,
+			initialMaxBidiStreamsParameterID,
+			initialMaxUniStreamsParameterID,
+			idleTimeoutParameterID,
+			maxPacketSizeParameterID:
+			if err := p.readNumericTransportParameter(r, paramID, int(paramLen)); err != nil {
+				return err
 			}
-			p.InitialMaxStreamDataBidiLocal = protocol.ByteCount(binary.BigEndian.Uint32(data[:4]))
-		case initialMaxStreamDataBidiRemoteParameterID:
-			if paramLen != 4 {
-				return fmt.Errorf("wrong length for initial_max_stream_data_bidi_remote: %d (expected 4)", paramLen)
+		default:
+			if r.Len() < int(paramLen) {
+				return fmt.Errorf("remaining length (%d) smaller than parameter length (%d)", r.Len(), paramLen)
 			}
-			p.InitialMaxStreamDataBidiRemote = protocol.ByteCount(binary.BigEndian.Uint32(data[:4]))
-		case initialMaxStreamDataUniParameterID:
-			if paramLen != 4 {
-				return fmt.Errorf("wrong length for initial_max_stream_data_uni: %d (expected 4)", paramLen)
+			switch paramID {
+			case disableMigrationParameterID:
+				if paramLen != 0 {
+					return fmt.Errorf("wrong length for disable_migration: %d (expected empty)", paramLen)
+				}
+				p.DisableMigration = true
+			case statelessResetTokenParameterID:
+				if paramLen != 16 {
+					return fmt.Errorf("wrong length for stateless_reset_token: %d (expected 16)", paramLen)
+				}
+				b := make([]byte, 16)
+				r.Read(b)
+				p.StatelessResetToken = b
+			default:
+				r.Seek(int64(paramLen), io.SeekCurrent)
 			}
-			p.InitialMaxStreamDataUni = protocol.ByteCount(binary.BigEndian.Uint32(data[:4]))
-		case initialMaxDataParameterID:
-			if paramLen != 4 {
-				return fmt.Errorf("wrong length for initial_max_data: %d (expected 4)", paramLen)
-			}
-			p.InitialMaxData = protocol.ByteCount(binary.BigEndian.Uint32(data[:4]))
-		case initialMaxBidiStreamsParameterID:
-			if paramLen != 2 {
-				return fmt.Errorf("wrong length for initial_max_stream_id_bidi: %d (expected 2)", paramLen)
-			}
-			p.MaxBidiStreams = binary.BigEndian.Uint16(data[:2])
-		case initialMaxUniStreamsParameterID:
-			if paramLen != 2 {
-				return fmt.Errorf("wrong length for initial_max_stream_id_uni: %d (expected 2)", paramLen)
-			}
-			p.MaxUniStreams = binary.BigEndian.Uint16(data[:2])
-		case idleTimeoutParameterID:
-			if paramLen != 2 {
-				return fmt.Errorf("wrong length for idle_timeout: %d (expected 2)", paramLen)
-			}
-			p.IdleTimeout = utils.MaxDuration(protocol.MinRemoteIdleTimeout, time.Duration(binary.BigEndian.Uint16(data[:2]))*time.Second)
-		case maxPacketSizeParameterID:
-			if paramLen != 2 {
-				return fmt.Errorf("wrong length for max_packet_size: %d (expected 2)", paramLen)
-			}
-			maxPacketSize := protocol.ByteCount(binary.BigEndian.Uint16(data[:2]))
-			if maxPacketSize < 1200 {
-				return fmt.Errorf("invalid value for max_packet_size: %d (minimum 1200)", maxPacketSize)
-			}
-			p.MaxPacketSize = maxPacketSize
-		case disableMigrationParameterID:
-			if paramLen != 0 {
-				return fmt.Errorf("wrong length for disable_migration: %d (expected empty)", paramLen)
-			}
-			p.DisableMigration = true
-		case statelessResetTokenParameterID:
-			if paramLen != 16 {
-				return fmt.Errorf("wrong length for stateless_reset_token: %d (expected 16)", paramLen)
-			}
-			p.StatelessResetToken = data[:16]
 		}
-		data = data[paramLen:]
 	}
 
 	// check that every transport parameter was sent at most once
@@ -122,8 +96,47 @@ func (p *TransportParameters) unmarshal(data []byte) error {
 		}
 	}
 
-	if len(data) != 0 {
-		return fmt.Errorf("should have read all data. Still have %d bytes", len(data))
+	if r.Len() != 0 {
+		return fmt.Errorf("should have read all data. Still have %d bytes", r.Len())
+	}
+	return nil
+}
+
+func (p *TransportParameters) readNumericTransportParameter(
+	r *bytes.Reader,
+	paramID transportParameterID,
+	expectedLen int,
+) error {
+	remainingLen := r.Len()
+	val, err := utils.ReadVarInt(r)
+	if err != nil {
+		return fmt.Errorf("error while reading transport parameter %d: %s", paramID, err)
+	}
+	if remainingLen-r.Len() != expectedLen {
+		return fmt.Errorf("inconsistent transport parameter length for %d", paramID)
+	}
+	switch paramID {
+	case initialMaxStreamDataBidiLocalParameterID:
+		p.InitialMaxStreamDataBidiLocal = protocol.ByteCount(val)
+	case initialMaxStreamDataBidiRemoteParameterID:
+		p.InitialMaxStreamDataBidiRemote = protocol.ByteCount(val)
+	case initialMaxStreamDataUniParameterID:
+		p.InitialMaxStreamDataUni = protocol.ByteCount(val)
+	case initialMaxDataParameterID:
+		p.InitialMaxData = protocol.ByteCount(val)
+	case initialMaxBidiStreamsParameterID:
+		p.MaxBidiStreams = val
+	case initialMaxUniStreamsParameterID:
+		p.MaxUniStreams = val
+	case idleTimeoutParameterID:
+		p.IdleTimeout = utils.MaxDuration(protocol.MinRemoteIdleTimeout, time.Duration(val)*time.Second)
+	case maxPacketSizeParameterID:
+		if val < 1200 {
+			return fmt.Errorf("invalid value for max_packet_size: %d (minimum 1200)", val)
+		}
+		p.MaxPacketSize = protocol.ByteCount(val)
+	default:
+		return fmt.Errorf("TransportParameter BUG: transport parameter %d not found", paramID)
 	}
 	return nil
 }
@@ -131,36 +144,36 @@ func (p *TransportParameters) unmarshal(data []byte) error {
 func (p *TransportParameters) marshal(b *bytes.Buffer) {
 	// initial_max_stream_data_bidi_local
 	utils.BigEndian.WriteUint16(b, uint16(initialMaxStreamDataBidiLocalParameterID))
-	utils.BigEndian.WriteUint16(b, 4)
-	utils.BigEndian.WriteUint32(b, uint32(p.InitialMaxStreamDataBidiLocal))
+	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(uint64(p.InitialMaxStreamDataBidiLocal))))
+	utils.WriteVarInt(b, uint64(p.InitialMaxStreamDataBidiLocal))
 	// initial_max_stream_data_bidi_remote
 	utils.BigEndian.WriteUint16(b, uint16(initialMaxStreamDataBidiRemoteParameterID))
-	utils.BigEndian.WriteUint16(b, 4)
-	utils.BigEndian.WriteUint32(b, uint32(p.InitialMaxStreamDataBidiRemote))
+	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(uint64(p.InitialMaxStreamDataBidiRemote))))
+	utils.WriteVarInt(b, uint64(p.InitialMaxStreamDataBidiRemote))
 	// initial_max_stream_data_uni
 	utils.BigEndian.WriteUint16(b, uint16(initialMaxStreamDataUniParameterID))
-	utils.BigEndian.WriteUint16(b, 4)
-	utils.BigEndian.WriteUint32(b, uint32(p.InitialMaxStreamDataUni))
+	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(uint64(p.InitialMaxStreamDataUni))))
+	utils.WriteVarInt(b, uint64(p.InitialMaxStreamDataUni))
 	// initial_max_data
 	utils.BigEndian.WriteUint16(b, uint16(initialMaxDataParameterID))
-	utils.BigEndian.WriteUint16(b, 4)
-	utils.BigEndian.WriteUint32(b, uint32(p.InitialMaxData))
+	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(uint64(p.InitialMaxData))))
+	utils.WriteVarInt(b, uint64(p.InitialMaxData))
 	// initial_max_bidi_streams
 	utils.BigEndian.WriteUint16(b, uint16(initialMaxBidiStreamsParameterID))
-	utils.BigEndian.WriteUint16(b, 2)
-	utils.BigEndian.WriteUint16(b, p.MaxBidiStreams)
+	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(p.MaxBidiStreams)))
+	utils.WriteVarInt(b, p.MaxBidiStreams)
 	// initial_max_uni_streams
 	utils.BigEndian.WriteUint16(b, uint16(initialMaxUniStreamsParameterID))
-	utils.BigEndian.WriteUint16(b, 2)
-	utils.BigEndian.WriteUint16(b, p.MaxUniStreams)
+	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(p.MaxUniStreams)))
+	utils.WriteVarInt(b, p.MaxUniStreams)
 	// idle_timeout
 	utils.BigEndian.WriteUint16(b, uint16(idleTimeoutParameterID))
-	utils.BigEndian.WriteUint16(b, 2)
-	utils.BigEndian.WriteUint16(b, uint16(p.IdleTimeout/time.Second))
+	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(uint64(p.IdleTimeout/time.Second))))
+	utils.WriteVarInt(b, uint64(p.IdleTimeout/time.Second))
 	// max_packet_size
 	utils.BigEndian.WriteUint16(b, uint16(maxPacketSizeParameterID))
-	utils.BigEndian.WriteUint16(b, 2)
-	utils.BigEndian.WriteUint16(b, uint16(protocol.MaxReceivePacketSize))
+	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(uint64(protocol.MaxReceivePacketSize))))
+	utils.WriteVarInt(b, uint64(protocol.MaxReceivePacketSize))
 	// disable_migration
 	if p.DisableMigration {
 		utils.BigEndian.WriteUint16(b, uint16(disableMigrationParameterID))
