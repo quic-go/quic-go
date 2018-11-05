@@ -191,16 +191,16 @@ func (mr *MockStreamIMockRecorder) handleMaxStreamDataFrame(arg0 interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleMaxStreamDataFrame", reflect.TypeOf((*MockStreamI)(nil).handleMaxStreamDataFrame), arg0)
 }
 
-// handleRstStreamFrame mocks base method
-func (m *MockStreamI) handleRstStreamFrame(arg0 *wire.RstStreamFrame) error {
-	ret := m.ctrl.Call(m, "handleRstStreamFrame", arg0)
+// handleResetStreamFrame mocks base method
+func (m *MockStreamI) handleResetStreamFrame(arg0 *wire.ResetStreamFrame) error {
+	ret := m.ctrl.Call(m, "handleResetStreamFrame", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// handleRstStreamFrame indicates an expected call of handleRstStreamFrame
-func (mr *MockStreamIMockRecorder) handleRstStreamFrame(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleRstStreamFrame", reflect.TypeOf((*MockStreamI)(nil).handleRstStreamFrame), arg0)
+// handleResetStreamFrame indicates an expected call of handleResetStreamFrame
+func (mr *MockStreamIMockRecorder) handleResetStreamFrame(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleResetStreamFrame", reflect.TypeOf((*MockStreamI)(nil).handleResetStreamFrame), arg0)
 }
 
 // handleStopSendingFrame mocks base method

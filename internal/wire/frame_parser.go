@@ -36,7 +36,7 @@ func parseFrame(r *bytes.Reader, typeByte byte, v protocol.VersionNumber) (Frame
 	// TODO: implement all IETF QUIC frame types
 	switch typeByte {
 	case 0x1:
-		frame, err = parseRstStreamFrame(r, v)
+		frame, err = parseResetStreamFrame(r, v)
 		if err != nil {
 			err = qerr.Error(qerr.InvalidRstStreamData, err.Error())
 		}

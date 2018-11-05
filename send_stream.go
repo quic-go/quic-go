@@ -249,7 +249,7 @@ func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, wr
 	s.canceledWrite = true
 	s.cancelWriteErr = writeErr
 	s.signalWrite()
-	s.sender.queueControlFrame(&wire.RstStreamFrame{
+	s.sender.queueControlFrame(&wire.ResetStreamFrame{
 		StreamID:   s.streamID,
 		ByteOffset: s.writeOffset,
 		ErrorCode:  errorCode,

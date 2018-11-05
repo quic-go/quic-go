@@ -46,7 +46,7 @@ type streamI interface {
 	closeForShutdown(error)
 	// for receiving
 	handleStreamFrame(*wire.StreamFrame) error
-	handleRstStreamFrame(*wire.RstStreamFrame) error
+	handleResetStreamFrame(*wire.ResetStreamFrame) error
 	getWindowUpdate() protocol.ByteCount
 	// for sending
 	hasData() bool
@@ -150,8 +150,8 @@ func (s *stream) closeForShutdown(err error) {
 	s.receiveStream.closeForShutdown(err)
 }
 
-func (s *stream) handleRstStreamFrame(frame *wire.RstStreamFrame) error {
-	return s.receiveStream.handleRstStreamFrame(frame)
+func (s *stream) handleResetStreamFrame(frame *wire.ResetStreamFrame) error {
+	return s.receiveStream.handleResetStreamFrame(frame)
 }
 
 // checkIfCompleted is called from the uniStreamSender, when one of the stream halves is completed.

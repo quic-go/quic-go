@@ -107,16 +107,16 @@ func (mr *MockReceiveStreamIMockRecorder) getWindowUpdate() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getWindowUpdate", reflect.TypeOf((*MockReceiveStreamI)(nil).getWindowUpdate))
 }
 
-// handleRstStreamFrame mocks base method
-func (m *MockReceiveStreamI) handleRstStreamFrame(arg0 *wire.RstStreamFrame) error {
-	ret := m.ctrl.Call(m, "handleRstStreamFrame", arg0)
+// handleResetStreamFrame mocks base method
+func (m *MockReceiveStreamI) handleResetStreamFrame(arg0 *wire.ResetStreamFrame) error {
+	ret := m.ctrl.Call(m, "handleResetStreamFrame", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// handleRstStreamFrame indicates an expected call of handleRstStreamFrame
-func (mr *MockReceiveStreamIMockRecorder) handleRstStreamFrame(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleRstStreamFrame", reflect.TypeOf((*MockReceiveStreamI)(nil).handleRstStreamFrame), arg0)
+// handleResetStreamFrame indicates an expected call of handleResetStreamFrame
+func (mr *MockReceiveStreamIMockRecorder) handleResetStreamFrame(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleResetStreamFrame", reflect.TypeOf((*MockReceiveStreamI)(nil).handleResetStreamFrame), arg0)
 }
 
 // handleStreamFrame mocks base method

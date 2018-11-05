@@ -7,15 +7,14 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
-// A RstStreamFrame is a RST_STREAM frame in QUIC
-type RstStreamFrame struct {
+// A ResetStreamFrame is a RESET_STREAM frame in QUIC
+type ResetStreamFrame struct {
 	StreamID   protocol.StreamID
 	ErrorCode  protocol.ApplicationErrorCode
 	ByteOffset protocol.ByteCount
 }
 
-// parseRstStreamFrame parses a RST_STREAM frame
-func parseRstStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*RstStreamFrame, error) {
+func parseResetStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*ResetStreamFrame, error) {
 	if _, err := r.ReadByte(); err != nil { // read the TypeByte
 		return nil, err
 	}
@@ -38,15 +37,14 @@ func parseRstStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*RstS
 	}
 	byteOffset = protocol.ByteCount(bo)
 
-	return &RstStreamFrame{
+	return &ResetStreamFrame{
 		StreamID:   streamID,
 		ErrorCode:  protocol.ApplicationErrorCode(errorCode),
 		ByteOffset: byteOffset,
 	}, nil
 }
 
-//Write writes a RST_STREAM frame
-func (f *RstStreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
+func (f *ResetStreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
 	b.WriteByte(0x01)
 	utils.WriteVarInt(b, uint64(f.StreamID))
 	utils.BigEndian.WriteUint16(b, uint16(f.ErrorCode))
@@ -55,6 +53,6 @@ func (f *RstStreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) 
 }
 
 // Length of a written frame
-func (f *RstStreamFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
+func (f *ResetStreamFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
 	return 1 + utils.VarIntLen(uint64(f.StreamID)) + 2 + utils.VarIntLen(uint64(f.ByteOffset))
 }
