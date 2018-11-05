@@ -211,7 +211,7 @@ var _ = Describe("Client", func() {
 			s, err := Dial(
 				packetConn,
 				addr,
-				"quic.clemente.io:1337",
+				"localhost:1337",
 				nil,
 				&Config{},
 			)
@@ -247,7 +247,7 @@ var _ = Describe("Client", func() {
 			_, err := Dial(
 				packetConn,
 				addr,
-				"quic.clemente.io:1337",
+				"localhost:1337",
 				nil,
 				&Config{},
 			)
@@ -288,7 +288,7 @@ var _ = Describe("Client", func() {
 					ctx,
 					packetConn,
 					addr,
-					"quic.clemnte.io:1337",
+					"localhost:1337",
 					nil,
 					&Config{},
 				)
@@ -333,7 +333,7 @@ var _ = Describe("Client", func() {
 				context.Background(),
 				packetConn,
 				addr,
-				"quic.clemnte.io:1337",
+				"localhost:1337",
 				nil,
 				&Config{},
 			)
@@ -373,7 +373,7 @@ var _ = Describe("Client", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				_, err := DialAddr("quic.clemente.io:1337", nil, nil)
+				_, err := DialAddr("localhost:1337", nil, nil)
 				Expect(err).ToNot(HaveOccurred())
 				close(done)
 			}()
@@ -485,7 +485,7 @@ var _ = Describe("Client", func() {
 				sess.EXPECT().run()
 				return sess, nil
 			}
-			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
+			_, err := Dial(packetConn, addr, "localhost:1337", nil, config)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(c).Should(BeClosed())
 			Expect(cconn.(*conn).pconn).To(Equal(packetConn))
@@ -539,7 +539,7 @@ var _ = Describe("Client", func() {
 			) (quicSession, error) {
 				return <-sessions, nil
 			}
-			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
+			_, err := Dial(packetConn, addr, "localhost:1337", nil, config)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(sessions).To(BeEmpty())
 		})
@@ -598,7 +598,7 @@ var _ = Describe("Client", func() {
 			) (quicSession, error) {
 				return <-sessions, nil
 			}
-			_, err := Dial(packetConn, addr, "quic.clemente.io:1337", nil, config)
+			_, err := Dial(packetConn, addr, "localhost:1337", nil, config)
 			Expect(err).To(MatchError(doneErr))
 			Expect(sessions).To(BeEmpty())
 		})
@@ -642,7 +642,7 @@ var _ = Describe("Client", func() {
 				_, err := Dial(
 					packetConn,
 					addr,
-					"quic.clemente.io:1337",
+					"localhost:1337",
 					nil,
 					&Config{},
 				)
