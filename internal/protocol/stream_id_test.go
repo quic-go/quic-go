@@ -20,39 +20,33 @@ var _ = Describe("Stream ID", func() {
 		Expect(StreamID(7).Type()).To(Equal(StreamTypeUni))
 	})
 
+	It("tells the first stream ID", func() {
+		Expect(FirstStream(StreamTypeBidi, PerspectiveClient)).To(Equal(StreamID(0)))
+		Expect(FirstStream(StreamTypeBidi, PerspectiveServer)).To(Equal(StreamID(1)))
+		Expect(FirstStream(StreamTypeUni, PerspectiveClient)).To(Equal(StreamID(2)))
+		Expect(FirstStream(StreamTypeUni, PerspectiveServer)).To(Equal(StreamID(3)))
+	})
+
 	Context("maximum stream IDs", func() {
-		Context("bidirectional streams", func() {
-			It("doesn't allow any", func() {
-				Expect(MaxBidiStreamID(0, PerspectiveClient)).To(Equal(StreamID(0)))
-				Expect(MaxBidiStreamID(0, PerspectiveServer)).To(Equal(StreamID(0)))
-			})
-
-			It("allows one", func() {
-				Expect(MaxBidiStreamID(1, PerspectiveClient)).To(Equal(StreamID(1)))
-				Expect(MaxBidiStreamID(1, PerspectiveServer)).To(Equal(StreamID(0)))
-			})
-
-			It("allows many", func() {
-				Expect(MaxBidiStreamID(100, PerspectiveClient)).To(Equal(StreamID(397)))
-				Expect(MaxBidiStreamID(100, PerspectiveServer)).To(Equal(StreamID(396)))
-			})
+		It("doesn't allow any", func() {
+			Expect(MaxStreamID(StreamTypeBidi, 0, PerspectiveClient)).To(Equal(StreamID(0)))
+			Expect(MaxStreamID(StreamTypeBidi, 0, PerspectiveServer)).To(Equal(StreamID(0)))
+			Expect(MaxStreamID(StreamTypeUni, 0, PerspectiveClient)).To(Equal(StreamID(0)))
+			Expect(MaxStreamID(StreamTypeUni, 0, PerspectiveServer)).To(Equal(StreamID(0)))
 		})
 
-		Context("unidirectional streams", func() {
-			It("doesn't allow any", func() {
-				Expect(MaxUniStreamID(0, PerspectiveClient)).To(Equal(StreamID(0)))
-				Expect(MaxUniStreamID(0, PerspectiveServer)).To(Equal(StreamID(0)))
-			})
+		It("allows one", func() {
+			Expect(MaxStreamID(StreamTypeBidi, 1, PerspectiveClient)).To(Equal(StreamID(0)))
+			Expect(MaxStreamID(StreamTypeBidi, 1, PerspectiveServer)).To(Equal(StreamID(1)))
+			Expect(MaxStreamID(StreamTypeUni, 1, PerspectiveClient)).To(Equal(StreamID(2)))
+			Expect(MaxStreamID(StreamTypeUni, 1, PerspectiveServer)).To(Equal(StreamID(3)))
+		})
 
-			It("allows one", func() {
-				Expect(MaxUniStreamID(1, PerspectiveClient)).To(Equal(StreamID(3)))
-				Expect(MaxUniStreamID(1, PerspectiveServer)).To(Equal(StreamID(2)))
-			})
-
-			It("allows many", func() {
-				Expect(MaxUniStreamID(100, PerspectiveClient)).To(Equal(StreamID(399)))
-				Expect(MaxUniStreamID(100, PerspectiveServer)).To(Equal(StreamID(398)))
-			})
+		It("allows many", func() {
+			Expect(MaxStreamID(StreamTypeBidi, 100, PerspectiveClient)).To(Equal(StreamID(396)))
+			Expect(MaxStreamID(StreamTypeBidi, 100, PerspectiveServer)).To(Equal(StreamID(397)))
+			Expect(MaxStreamID(StreamTypeUni, 100, PerspectiveClient)).To(Equal(StreamID(398)))
+			Expect(MaxStreamID(StreamTypeUni, 100, PerspectiveServer)).To(Equal(StreamID(399)))
 		})
 	})
 })

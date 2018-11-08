@@ -330,19 +330,19 @@ var _ = Describe("Streams Map", func() {
 
 			Context("sending MAX_STREAM_ID frames", func() {
 				It("sends MAX_STREAM_ID frames for bidirectional streams", func() {
-					_, err := m.GetOrOpenReceiveStream(ids.firstIncomingBidiStream + 4*10)
+					_, err := m.GetOrOpenReceiveStream(ids.firstIncomingBidiStream)
 					Expect(err).ToNot(HaveOccurred())
 					mockSender.EXPECT().queueControlFrame(&wire.MaxStreamIDFrame{
-						StreamID: protocol.MaxBidiStreamID(maxBidiStreams, perspective) + 4,
+						StreamID: ids.firstIncomingBidiStream + 4*maxBidiStreams,
 					})
 					Expect(m.DeleteStream(ids.firstIncomingBidiStream)).To(Succeed())
 				})
 
 				It("sends MAX_STREAM_ID frames for unidirectional streams", func() {
-					_, err := m.GetOrOpenReceiveStream(ids.firstIncomingUniStream + 4*10)
+					_, err := m.GetOrOpenReceiveStream(ids.firstIncomingUniStream)
 					Expect(err).ToNot(HaveOccurred())
 					mockSender.EXPECT().queueControlFrame(&wire.MaxStreamIDFrame{
-						StreamID: protocol.MaxUniStreamID(maxUniStreams, perspective) + 4,
+						StreamID: ids.firstIncomingUniStream + 4*maxUniStreams,
 					})
 					Expect(m.DeleteStream(ids.firstIncomingUniStream)).To(Succeed())
 				})
