@@ -15,16 +15,16 @@ import (
 type transportParameterID uint16
 
 const (
-	initialMaxStreamDataBidiLocalParameterID  transportParameterID = 0x0
-	initialMaxDataParameterID                 transportParameterID = 0x1
-	initialMaxBidiStreamsParameterID          transportParameterID = 0x2
-	idleTimeoutParameterID                    transportParameterID = 0x3
-	maxPacketSizeParameterID                  transportParameterID = 0x5
-	statelessResetTokenParameterID            transportParameterID = 0x6
-	initialMaxUniStreamsParameterID           transportParameterID = 0x8
-	disableMigrationParameterID               transportParameterID = 0x9
-	initialMaxStreamDataBidiRemoteParameterID transportParameterID = 0xa
-	initialMaxStreamDataUniParameterID        transportParameterID = 0xb
+	idleTimeoutParameterID                    transportParameterID = 0x1
+	statelessResetTokenParameterID            transportParameterID = 0x2
+	maxPacketSizeParameterID                  transportParameterID = 0x3
+	initialMaxDataParameterID                 transportParameterID = 0x4
+	initialMaxStreamDataBidiLocalParameterID  transportParameterID = 0x5
+	initialMaxStreamDataBidiRemoteParameterID transportParameterID = 0x6
+	initialMaxStreamDataUniParameterID        transportParameterID = 0x7
+	initialMaxBidiStreamsParameterID          transportParameterID = 0x8
+	initialMaxUniStreamsParameterID           transportParameterID = 0x9
+	disableMigrationParameterID               transportParameterID = 0xc
 )
 
 // TransportParameters are parameters sent to the peer during the handshake
