@@ -22,8 +22,8 @@ const (
 	initialMaxStreamDataBidiLocalParameterID  transportParameterID = 0x5
 	initialMaxStreamDataBidiRemoteParameterID transportParameterID = 0x6
 	initialMaxStreamDataUniParameterID        transportParameterID = 0x7
-	initialMaxBidiStreamsParameterID          transportParameterID = 0x8
-	initialMaxUniStreamsParameterID           transportParameterID = 0x9
+	initialMaxStreamsBidiParameterID          transportParameterID = 0x8
+	initialMaxStreamsUniParameterID           transportParameterID = 0x9
 	disableMigrationParameterID               transportParameterID = 0xc
 )
 
@@ -59,8 +59,8 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 			initialMaxStreamDataBidiRemoteParameterID,
 			initialMaxStreamDataUniParameterID,
 			initialMaxDataParameterID,
-			initialMaxBidiStreamsParameterID,
-			initialMaxUniStreamsParameterID,
+			initialMaxStreamsBidiParameterID,
+			initialMaxStreamsUniParameterID,
 			idleTimeoutParameterID,
 			maxPacketSizeParameterID:
 			if err := p.readNumericTransportParameter(r, paramID, int(paramLen)); err != nil {
@@ -128,9 +128,9 @@ func (p *TransportParameters) readNumericTransportParameter(
 		p.InitialMaxStreamDataUni = protocol.ByteCount(val)
 	case initialMaxDataParameterID:
 		p.InitialMaxData = protocol.ByteCount(val)
-	case initialMaxBidiStreamsParameterID:
+	case initialMaxStreamsBidiParameterID:
 		p.MaxBidiStreams = val
-	case initialMaxUniStreamsParameterID:
+	case initialMaxStreamsUniParameterID:
 		p.MaxUniStreams = val
 	case idleTimeoutParameterID:
 		p.IdleTimeout = utils.MaxDuration(protocol.MinRemoteIdleTimeout, time.Duration(val)*time.Second)
@@ -163,11 +163,11 @@ func (p *TransportParameters) marshal(b *bytes.Buffer) {
 	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(uint64(p.InitialMaxData))))
 	utils.WriteVarInt(b, uint64(p.InitialMaxData))
 	// initial_max_bidi_streams
-	utils.BigEndian.WriteUint16(b, uint16(initialMaxBidiStreamsParameterID))
+	utils.BigEndian.WriteUint16(b, uint16(initialMaxStreamsBidiParameterID))
 	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(p.MaxBidiStreams)))
 	utils.WriteVarInt(b, p.MaxBidiStreams)
 	// initial_max_uni_streams
-	utils.BigEndian.WriteUint16(b, uint16(initialMaxUniStreamsParameterID))
+	utils.BigEndian.WriteUint16(b, uint16(initialMaxStreamsUniParameterID))
 	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(p.MaxUniStreams)))
 	utils.WriteVarInt(b, p.MaxUniStreams)
 	// idle_timeout
