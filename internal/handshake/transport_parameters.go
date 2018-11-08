@@ -15,16 +15,16 @@ import (
 type transportParameterID uint16
 
 const (
-	initialMaxStreamDataBidiLocalParameterID  transportParameterID = 0x0
-	initialMaxDataParameterID                 transportParameterID = 0x1
-	initialMaxBidiStreamsParameterID          transportParameterID = 0x2
-	idleTimeoutParameterID                    transportParameterID = 0x3
-	maxPacketSizeParameterID                  transportParameterID = 0x5
-	statelessResetTokenParameterID            transportParameterID = 0x6
-	initialMaxUniStreamsParameterID           transportParameterID = 0x8
-	disableMigrationParameterID               transportParameterID = 0x9
-	initialMaxStreamDataBidiRemoteParameterID transportParameterID = 0xa
-	initialMaxStreamDataUniParameterID        transportParameterID = 0xb
+	idleTimeoutParameterID                    transportParameterID = 0x1
+	statelessResetTokenParameterID            transportParameterID = 0x2
+	maxPacketSizeParameterID                  transportParameterID = 0x3
+	initialMaxDataParameterID                 transportParameterID = 0x4
+	initialMaxStreamDataBidiLocalParameterID  transportParameterID = 0x5
+	initialMaxStreamDataBidiRemoteParameterID transportParameterID = 0x6
+	initialMaxStreamDataUniParameterID        transportParameterID = 0x7
+	initialMaxStreamsBidiParameterID          transportParameterID = 0x8
+	initialMaxStreamsUniParameterID           transportParameterID = 0x9
+	disableMigrationParameterID               transportParameterID = 0xc
 )
 
 // TransportParameters are parameters sent to the peer during the handshake
@@ -59,8 +59,8 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 			initialMaxStreamDataBidiRemoteParameterID,
 			initialMaxStreamDataUniParameterID,
 			initialMaxDataParameterID,
-			initialMaxBidiStreamsParameterID,
-			initialMaxUniStreamsParameterID,
+			initialMaxStreamsBidiParameterID,
+			initialMaxStreamsUniParameterID,
 			idleTimeoutParameterID,
 			maxPacketSizeParameterID:
 			if err := p.readNumericTransportParameter(r, paramID, int(paramLen)); err != nil {
@@ -128,9 +128,9 @@ func (p *TransportParameters) readNumericTransportParameter(
 		p.InitialMaxStreamDataUni = protocol.ByteCount(val)
 	case initialMaxDataParameterID:
 		p.InitialMaxData = protocol.ByteCount(val)
-	case initialMaxBidiStreamsParameterID:
+	case initialMaxStreamsBidiParameterID:
 		p.MaxBidiStreams = val
-	case initialMaxUniStreamsParameterID:
+	case initialMaxStreamsUniParameterID:
 		p.MaxUniStreams = val
 	case idleTimeoutParameterID:
 		p.IdleTimeout = utils.MaxDuration(protocol.MinRemoteIdleTimeout, time.Duration(val)*time.Second)
@@ -163,11 +163,11 @@ func (p *TransportParameters) marshal(b *bytes.Buffer) {
 	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(uint64(p.InitialMaxData))))
 	utils.WriteVarInt(b, uint64(p.InitialMaxData))
 	// initial_max_bidi_streams
-	utils.BigEndian.WriteUint16(b, uint16(initialMaxBidiStreamsParameterID))
+	utils.BigEndian.WriteUint16(b, uint16(initialMaxStreamsBidiParameterID))
 	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(p.MaxBidiStreams)))
 	utils.WriteVarInt(b, p.MaxBidiStreams)
 	// initial_max_uni_streams
-	utils.BigEndian.WriteUint16(b, uint16(initialMaxUniStreamsParameterID))
+	utils.BigEndian.WriteUint16(b, uint16(initialMaxStreamsUniParameterID))
 	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(p.MaxUniStreams)))
 	utils.WriteVarInt(b, p.MaxUniStreams)
 	// idle_timeout
