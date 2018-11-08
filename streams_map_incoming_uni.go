@@ -108,8 +108,8 @@ func (m *incomingUniStreamsMap) DeleteStream(id protocol.StreamID) error {
 	}
 	delete(m.streams, id)
 	// queue a MAX_STREAM_ID frame, giving the peer the option to open a new stream
-	if numNewStreams := m.maxNumStreams - len(m.streams) - 1; numNewStreams > 0 {
-		m.maxStream = m.nextStreamToOpen + protocol.StreamID(numNewStreams*4)
+	if numNewStreams := m.maxNumStreams - len(m.streams); numNewStreams > 0 {
+		m.maxStream = m.nextStreamToOpen + protocol.StreamID((numNewStreams-1)*4)
 		m.queueMaxStreamID(&wire.MaxStreamIDFrame{StreamID: m.maxStream})
 	}
 	return nil
