@@ -31,7 +31,7 @@ func (s StreamID) Type() StreamType {
 
 // MaxStreamID is the highest stream ID that a peer is allowed to open,
 // when it is allowed to open numStreams.
-func MaxStreamID(stype StreamType, numStreams int, pers Perspective) StreamID {
+func MaxStreamID(stype StreamType, numStreams uint64, pers Perspective) StreamID {
 	if numStreams == 0 {
 		return 0
 	}

@@ -19,7 +19,7 @@ type incomingItemsMap struct {
 	nextStreamToAccept protocol.StreamID // the next stream that will be returned by AcceptStream()
 	nextStreamToOpen   protocol.StreamID // the highest stream that the peer openend
 	maxStream          protocol.StreamID // the highest stream that the peer is allowed to open
-	maxNumStreams      int               // maximum number of streams
+	maxNumStreams      uint64            // maximum number of streams
 
 	newStream        func(protocol.StreamID) item
 	queueMaxStreamID func(*wire.MaxStreamIDFrame)
@@ -30,7 +30,7 @@ type incomingItemsMap struct {
 func newIncomingItemsMap(
 	nextStreamToAccept protocol.StreamID,
 	initialMaxStreamID protocol.StreamID,
-	maxNumStreams int,
+	maxNumStreams uint64,
 	queueControlFrame func(wire.Frame),
 	newStream func(protocol.StreamID) item,
 ) *incomingItemsMap {
@@ -106,7 +106,8 @@ func (m *incomingItemsMap) DeleteStream(id protocol.StreamID) error {
 	}
 	delete(m.streams, id)
 	// queue a MAX_STREAM_ID frame, giving the peer the option to open a new stream
-	if numNewStreams := m.maxNumStreams - len(m.streams); numNewStreams > 0 {
+	if m.maxNumStreams > uint64(len(m.streams)) {
+		numNewStreams := m.maxNumStreams - uint64(len(m.streams))
 		m.maxStream = m.nextStreamToOpen + protocol.StreamID((numNewStreams-1)*4)
 		m.queueMaxStreamID(&wire.MaxStreamIDFrame{StreamID: m.maxStream})
 	}

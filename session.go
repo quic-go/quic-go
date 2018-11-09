@@ -158,7 +158,14 @@ var newSession = func(
 	s.preSetup()
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
-	s.streamsMap = newStreamsMap(s, s.newFlowController, s.config.MaxIncomingStreams, s.config.MaxIncomingUniStreams, s.perspective, s.version)
+	s.streamsMap = newStreamsMap(
+		s,
+		s.newFlowController,
+		uint64(s.config.MaxIncomingStreams),
+		uint64(s.config.MaxIncomingUniStreams),
+		s.perspective,
+		s.version,
+	)
 	s.framer = newFramer(s.streamsMap, s.version)
 	cs, err := handshake.NewCryptoSetupServer(
 		initialStream,
@@ -248,7 +255,14 @@ var newClientSession = func(
 	s.cryptoStreamHandler = cs
 	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream)
 	s.unpacker = newPacketUnpacker(cs, s.version)
-	s.streamsMap = newStreamsMap(s, s.newFlowController, s.config.MaxIncomingStreams, s.config.MaxIncomingUniStreams, s.perspective, s.version)
+	s.streamsMap = newStreamsMap(
+		s,
+		s.newFlowController,
+		uint64(s.config.MaxIncomingStreams),
+		uint64(s.config.MaxIncomingUniStreams),
+		s.perspective,
+		s.version,
+	)
 	s.framer = newFramer(s.streamsMap, s.version)
 	s.packer = newPacketPacker(
 		s.destConnID,

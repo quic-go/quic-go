@@ -26,8 +26,8 @@ var _ streamManager = &streamsMap{}
 func newStreamsMap(
 	sender streamSender,
 	newFlowController func(protocol.StreamID) flowcontrol.StreamFlowController,
-	maxIncomingStreams int,
-	maxIncomingUniStreams int,
+	maxIncomingStreams uint64,
+	maxIncomingUniStreams uint64,
 	perspective protocol.Perspective,
 	version protocol.VersionNumber,
 ) streamManager {
@@ -162,8 +162,8 @@ func (m *streamsMap) HandleMaxStreamIDFrame(f *wire.MaxStreamIDFrame) error {
 
 func (m *streamsMap) UpdateLimits(p *handshake.TransportParameters) {
 	// Max{Uni,Bidi}StreamID returns the highest stream ID that the peer is allowed to open.
-	m.outgoingBidiStreams.SetMaxStream(protocol.MaxStreamID(protocol.StreamTypeBidi, int(p.MaxBidiStreams), m.perspective))
-	m.outgoingUniStreams.SetMaxStream(protocol.MaxStreamID(protocol.StreamTypeUni, int(p.MaxUniStreams), m.perspective))
+	m.outgoingBidiStreams.SetMaxStream(protocol.MaxStreamID(protocol.StreamTypeBidi, p.MaxBidiStreams, m.perspective))
+	m.outgoingUniStreams.SetMaxStream(protocol.MaxStreamID(protocol.StreamTypeUni, p.MaxUniStreams, m.perspective))
 }
 
 func (m *streamsMap) CloseWithError(err error) {

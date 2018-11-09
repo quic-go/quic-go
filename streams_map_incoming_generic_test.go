@@ -27,7 +27,7 @@ func (s *mockGenericStream) closeForShutdown(err error) {
 var _ = Describe("Streams Map (incoming)", func() {
 	const (
 		firstNewStream   protocol.StreamID = 20
-		maxNumStreams    int               = 10
+		maxNumStreams    uint64            = 10
 		initialMaxStream protocol.StreamID = firstNewStream + 4*protocol.StreamID(maxNumStreams-1)
 	)
 
