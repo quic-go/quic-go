@@ -55,11 +55,6 @@ func parseFrame(r *bytes.Reader, typeByte byte, v protocol.VersionNumber) (Frame
 		if err != nil {
 			err = qerr.Error(qerr.InvalidWindowUpdateData, err.Error())
 		}
-	case 0x6:
-		frame, err = parseMaxStreamIDFrame(r, v)
-		if err != nil {
-			err = qerr.Error(qerr.InvalidFrameData, err.Error())
-		}
 	case 0x7:
 		frame, err = parsePingFrame(r, v)
 	case 0x8:
@@ -96,6 +91,11 @@ func parseFrame(r *bytes.Reader, typeByte byte, v protocol.VersionNumber) (Frame
 		frame, err = parseAckFrame(r, v)
 		if err != nil {
 			err = qerr.Error(qerr.InvalidAckData, err.Error())
+		}
+	case 0x1c, 0x1d:
+		frame, err = parseMaxStreamsFrame(r, v)
+		if err != nil {
+			err = qerr.Error(qerr.InvalidFrameData, err.Error())
 		}
 	case 0x18:
 		frame, err = parseCryptoFrame(r, v)

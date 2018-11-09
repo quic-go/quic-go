@@ -8,8 +8,8 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
-//go:generate genny -in $GOFILE -out streams_map_incoming_bidi.go gen "item=streamI Item=BidiStream"
-//go:generate genny -in $GOFILE -out streams_map_incoming_uni.go gen "item=receiveStreamI Item=UniStream"
+//go:generate genny -in $GOFILE -out streams_map_incoming_bidi.go gen "item=streamI Item=BidiStream streamTypeGeneric=protocol.StreamTypeBidi"
+//go:generate genny -in $GOFILE -out streams_map_incoming_uni.go gen "item=receiveStreamI Item=UniStream streamTypeGeneric=protocol.StreamTypeUni"
 type incomingItemsMap struct {
 	mutex sync.RWMutex
 	cond  sync.Cond
@@ -22,7 +22,7 @@ type incomingItemsMap struct {
 	maxNumStreams      uint64            // maximum number of streams
 
 	newStream        func(protocol.StreamID) item
-	queueMaxStreamID func(*wire.MaxStreamIDFrame)
+	queueMaxStreamID func(*wire.MaxStreamsFrame)
 
 	closeErr error
 }
@@ -41,7 +41,7 @@ func newIncomingItemsMap(
 		maxStream:          initialMaxStreamID,
 		maxNumStreams:      maxNumStreams,
 		newStream:          newStream,
-		queueMaxStreamID:   func(f *wire.MaxStreamIDFrame) { queueControlFrame(f) },
+		queueMaxStreamID:   func(f *wire.MaxStreamsFrame) { queueControlFrame(f) },
 	}
 	m.cond.L = &m.mutex
 	return m
@@ -109,7 +109,10 @@ func (m *incomingItemsMap) DeleteStream(id protocol.StreamID) error {
 	if m.maxNumStreams > uint64(len(m.streams)) {
 		numNewStreams := m.maxNumStreams - uint64(len(m.streams))
 		m.maxStream = m.nextStreamToOpen + protocol.StreamID((numNewStreams-1)*4)
-		m.queueMaxStreamID(&wire.MaxStreamIDFrame{StreamID: m.maxStream})
+		m.queueMaxStreamID(&wire.MaxStreamsFrame{
+			Type:       streamTypeGeneric,
+			MaxStreams: m.maxStream.StreamNum(),
+		})
 	}
 	return nil
 }

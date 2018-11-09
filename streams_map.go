@@ -146,15 +146,13 @@ func (m *streamsMap) GetOrOpenSendStream(id protocol.StreamID) (sendStreamI, err
 	panic("")
 }
 
-func (m *streamsMap) HandleMaxStreamIDFrame(f *wire.MaxStreamIDFrame) error {
-	id := f.StreamID
-	if id.InitiatedBy() != m.perspective {
-		return fmt.Errorf("received MAX_STREAM_DATA frame for incoming stream %d", id)
-	}
+func (m *streamsMap) HandleMaxStreamsFrame(f *wire.MaxStreamsFrame) error {
+	id := protocol.MaxStreamID(f.Type, f.MaxStreams, m.perspective)
 	switch id.Type() {
 	case protocol.StreamTypeUni:
 		m.outgoingUniStreams.SetMaxStream(id)
 	case protocol.StreamTypeBidi:
+		fmt.Printf("")
 		m.outgoingBidiStreams.SetMaxStream(id)
 	}
 	return nil

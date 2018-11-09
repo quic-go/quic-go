@@ -26,8 +26,8 @@ func (s *mockGenericStream) closeForShutdown(err error) {
 
 var _ = Describe("Streams Map (incoming)", func() {
 	const (
-		firstNewStream   protocol.StreamID = 20
-		maxNumStreams    uint64            = 10
+		firstNewStream   protocol.StreamID = 2
+		maxNumStreams    uint64            = 5
 		initialMaxStream protocol.StreamID = firstNewStream + 4*protocol.StreamID(maxNumStreams-1)
 	)
 
@@ -49,9 +49,9 @@ var _ = Describe("Streams Map (incoming)", func() {
 	})
 
 	It("opens all streams up to the id on GetOrOpenStream", func() {
-		_, err := m.GetOrOpenStream(firstNewStream + 4*5)
+		_, err := m.GetOrOpenStream(firstNewStream + 4*4)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(newItemCounter).To(Equal(6))
+		Expect(newItemCounter).To(Equal(5))
 	})
 
 	It("starts opening streams at the right position", func() {
@@ -59,9 +59,9 @@ var _ = Describe("Streams Map (incoming)", func() {
 		_, err := m.GetOrOpenStream(firstNewStream + 4)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(newItemCounter).To(Equal(2))
-		_, err = m.GetOrOpenStream(firstNewStream + 4*5)
+		_, err = m.GetOrOpenStream(firstNewStream + 4*4)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(newItemCounter).To(Equal(6))
+		Expect(newItemCounter).To(Equal(5))
 	})
 
 	It("accepts streams in the right order", func() {
@@ -143,9 +143,9 @@ var _ = Describe("Streams Map (incoming)", func() {
 	})
 
 	It("closes all streams when CloseWithError is called", func() {
-		str1, err := m.GetOrOpenStream(20)
+		str1, err := m.GetOrOpenStream(firstNewStream)
 		Expect(err).ToNot(HaveOccurred())
-		str2, err := m.GetOrOpenStream(20 + 8)
+		str2, err := m.GetOrOpenStream(firstNewStream + 8)
 		Expect(err).ToNot(HaveOccurred())
 		testErr := errors.New("test err")
 		m.CloseWithError(testErr)
@@ -157,11 +157,11 @@ var _ = Describe("Streams Map (incoming)", func() {
 
 	It("deletes streams", func() {
 		mockSender.EXPECT().queueControlFrame(gomock.Any())
-		_, err := m.GetOrOpenStream(20)
+		_, err := m.GetOrOpenStream(initialMaxStream)
 		Expect(err).ToNot(HaveOccurred())
-		err = m.DeleteStream(20)
+		err = m.DeleteStream(initialMaxStream)
 		Expect(err).ToNot(HaveOccurred())
-		str, err := m.GetOrOpenStream(20)
+		str, err := m.GetOrOpenStream(initialMaxStream)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(str).To(BeNil())
 	})
@@ -171,13 +171,17 @@ var _ = Describe("Streams Map (incoming)", func() {
 		Expect(err).To(MatchError("Tried to delete unknown stream 1337"))
 	})
 
-	It("sends MAX_STREAM_ID frames when streams are deleted", func() {
+	It("sends MAX_STREAMS frames when streams are deleted", func() {
 		// open a bunch of streams
 		_, err := m.GetOrOpenStream(firstNewStream + 4*4)
 		Expect(err).ToNot(HaveOccurred())
-		mockSender.EXPECT().queueControlFrame(&wire.MaxStreamIDFrame{StreamID: initialMaxStream + 4})
-		Expect(m.DeleteStream(firstNewStream + 4)).To(Succeed())
-		mockSender.EXPECT().queueControlFrame(&wire.MaxStreamIDFrame{StreamID: initialMaxStream + 8})
+		mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
+			Expect(f.(*wire.MaxStreamsFrame).MaxStreams).To(Equal(maxNumStreams + 1))
+		})
+		Expect(m.DeleteStream(firstNewStream + 2*4)).To(Succeed())
+		mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
+			Expect(f.(*wire.MaxStreamsFrame).MaxStreams).To(Equal(maxNumStreams + 2))
+		})
 		Expect(m.DeleteStream(firstNewStream + 3*4)).To(Succeed())
 	})
 })

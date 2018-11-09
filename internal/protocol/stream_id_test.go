@@ -27,6 +27,17 @@ var _ = Describe("Stream ID", func() {
 		Expect(FirstStream(StreamTypeUni, PerspectiveServer)).To(Equal(StreamID(3)))
 	})
 
+	It("tells the stream number", func() {
+		Expect(StreamID(0).StreamNum()).To(BeEquivalentTo(1))
+		Expect(StreamID(1).StreamNum()).To(BeEquivalentTo(1))
+		Expect(StreamID(2).StreamNum()).To(BeEquivalentTo(1))
+		Expect(StreamID(3).StreamNum()).To(BeEquivalentTo(1))
+		Expect(StreamID(8).StreamNum()).To(BeEquivalentTo(3))
+		Expect(StreamID(9).StreamNum()).To(BeEquivalentTo(3))
+		Expect(StreamID(10).StreamNum()).To(BeEquivalentTo(3))
+		Expect(StreamID(11).StreamNum()).To(BeEquivalentTo(3))
+	})
+
 	Context("maximum stream IDs", func() {
 		It("doesn't allow any", func() {
 			Expect(MaxStreamID(StreamTypeBidi, 0, PerspectiveClient)).To(Equal(StreamID(0)))

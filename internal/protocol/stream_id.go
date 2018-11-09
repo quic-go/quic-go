@@ -29,6 +29,12 @@ func (s StreamID) Type() StreamType {
 	return StreamTypeBidi
 }
 
+// StreamNum returns how many streams in total are below this
+// Example: for stream 9 it returns 3 (i.e. streams 1, 5 and 9)
+func (s StreamID) StreamNum() uint64 {
+	return uint64(s/4) + 1
+}
+
 // MaxStreamID is the highest stream ID that a peer is allowed to open,
 // when it is allowed to open numStreams.
 func MaxStreamID(stype StreamType, numStreams uint64, pers Perspective) StreamID {

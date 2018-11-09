@@ -97,8 +97,11 @@ var _ = Describe("Frame parsing", func() {
 		Expect(frame).To(Equal(f))
 	})
 
-	It("unpacks MAX_STREAM_ID frames", func() {
-		f := &MaxStreamIDFrame{StreamID: 0x1337}
+	It("unpacks MAX_STREAMS frames", func() {
+		f := &MaxStreamsFrame{
+			Type:       protocol.StreamTypeBidi,
+			MaxStreams: 0x1337,
+		}
 		buf := &bytes.Buffer{}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())

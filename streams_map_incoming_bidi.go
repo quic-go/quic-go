@@ -24,7 +24,7 @@ type incomingBidiStreamsMap struct {
 	maxNumStreams      uint64            // maximum number of streams
 
 	newStream        func(protocol.StreamID) streamI
-	queueMaxStreamID func(*wire.MaxStreamIDFrame)
+	queueMaxStreamID func(*wire.MaxStreamsFrame)
 
 	closeErr error
 }
@@ -43,7 +43,7 @@ func newIncomingBidiStreamsMap(
 		maxStream:          initialMaxStreamID,
 		maxNumStreams:      maxNumStreams,
 		newStream:          newStream,
-		queueMaxStreamID:   func(f *wire.MaxStreamIDFrame) { queueControlFrame(f) },
+		queueMaxStreamID:   func(f *wire.MaxStreamsFrame) { queueControlFrame(f) },
 	}
 	m.cond.L = &m.mutex
 	return m
@@ -111,7 +111,10 @@ func (m *incomingBidiStreamsMap) DeleteStream(id protocol.StreamID) error {
 	if m.maxNumStreams > uint64(len(m.streams)) {
 		numNewStreams := m.maxNumStreams - uint64(len(m.streams))
 		m.maxStream = m.nextStreamToOpen + protocol.StreamID((numNewStreams-1)*4)
-		m.queueMaxStreamID(&wire.MaxStreamIDFrame{StreamID: m.maxStream})
+		m.queueMaxStreamID(&wire.MaxStreamsFrame{
+			Type:       protocol.StreamTypeBidi,
+			MaxStreams: m.maxStream.StreamNum(),
+		})
 	}
 	return nil
 }
