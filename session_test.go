@@ -319,7 +319,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("handles STREAM_ID_BLOCKED frames", func() {
-			err := sess.handleFrames([]wire.Frame{&wire.StreamIDBlockedFrame{}}, protocol.EncryptionUnspecified)
+			err := sess.handleFrames([]wire.Frame{&wire.StreamsBlockedFrame{}}, protocol.EncryptionUnspecified)
 			Expect(err).NotTo(HaveOccurred())
 		})
 

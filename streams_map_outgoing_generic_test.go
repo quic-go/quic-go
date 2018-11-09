@@ -12,7 +12,8 @@ import (
 )
 
 var _ = Describe("Streams Map (outgoing)", func() {
-	const firstNewStream protocol.StreamID = 10
+	const firstNewStream protocol.StreamID = 3
+
 	var (
 		m          *outgoingItemsMap
 		newItem    func(id protocol.StreamID) item
@@ -57,16 +58,16 @@ var _ = Describe("Streams Map (outgoing)", func() {
 		})
 
 		It("errors when trying to get a stream that has not yet been opened", func() {
-			_, err := m.GetStream(10)
-			Expect(err).To(MatchError(qerr.Error(qerr.InvalidStreamID, "peer attempted to open stream 10")))
+			_, err := m.GetStream(firstNewStream)
+			Expect(err).To(MatchError(qerr.Error(qerr.InvalidStreamID, "peer attempted to open stream 3")))
 		})
 
 		It("deletes streams", func() {
-			_, err := m.OpenStream() // opens stream 10
+			_, err := m.OpenStream() // opens firstNewStream
 			Expect(err).ToNot(HaveOccurred())
-			err = m.DeleteStream(10)
+			err = m.DeleteStream(firstNewStream)
 			Expect(err).ToNot(HaveOccurred())
-			str, err := m.GetStream(10)
+			str, err := m.GetStream(firstNewStream)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(str).To(BeNil())
 		})
@@ -77,12 +78,12 @@ var _ = Describe("Streams Map (outgoing)", func() {
 		})
 
 		It("errors when deleting a stream twice", func() {
-			_, err := m.OpenStream() // opens stream 10
+			_, err := m.OpenStream() // opens firstNewStream
 			Expect(err).ToNot(HaveOccurred())
-			err = m.DeleteStream(10)
+			err = m.DeleteStream(firstNewStream)
 			Expect(err).ToNot(HaveOccurred())
-			err = m.DeleteStream(10)
-			Expect(err).To(MatchError("Tried to delete unknown stream 10"))
+			err = m.DeleteStream(firstNewStream)
+			Expect(err).To(MatchError("Tried to delete unknown stream 3"))
 		})
 
 		It("closes all streams when CloseWithError is called", func() {
@@ -124,7 +125,9 @@ var _ = Describe("Streams Map (outgoing)", func() {
 
 		It("works with stream 0", func() {
 			m = newOutgoingItemsMap(0, newItem, mockSender.queueControlFrame)
-			mockSender.EXPECT().queueControlFrame(&wire.StreamIDBlockedFrame{StreamID: 0})
+			mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
+				Expect(f.(*wire.StreamsBlockedFrame).StreamLimit).To(BeZero())
+			})
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -156,25 +159,35 @@ var _ = Describe("Streams Map (outgoing)", func() {
 		})
 
 		It("doesn't reduce the stream limit", func() {
+			m.SetMaxStream(firstNewStream + 4)
 			m.SetMaxStream(firstNewStream)
-			m.SetMaxStream(firstNewStream - 4)
+			_, err := m.OpenStream()
+			Expect(err).ToNot(HaveOccurred())
 			str, err := m.OpenStream()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(str.(*mockGenericStream).id).To(Equal(firstNewStream))
+			Expect(str.(*mockGenericStream).id).To(Equal(firstNewStream + 4))
 		})
 
 		It("queues a STREAM_ID_BLOCKED frame if no stream can be opened", func() {
-			m.SetMaxStream(firstNewStream)
-			mockSender.EXPECT().queueControlFrame(&wire.StreamIDBlockedFrame{StreamID: firstNewStream})
+			m.SetMaxStream(firstNewStream + 5*4)
+			// open the 6 allowed streams
+			for i := 0; i < 6; i++ {
+				_, err := m.OpenStream()
+				Expect(err).ToNot(HaveOccurred())
+			}
+
+			mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
+				Expect(f.(*wire.StreamsBlockedFrame).StreamLimit).To(BeEquivalentTo(6))
+			})
 			_, err := m.OpenStream()
-			Expect(err).ToNot(HaveOccurred())
-			_, err = m.OpenStream()
 			Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 		})
 
 		It("only sends one STREAM_ID_BLOCKED frame for one stream ID", func() {
 			m.SetMaxStream(firstNewStream)
-			mockSender.EXPECT().queueControlFrame(&wire.StreamIDBlockedFrame{StreamID: firstNewStream})
+			mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
+				Expect(f.(*wire.StreamsBlockedFrame).StreamLimit).To(BeEquivalentTo(1))
+			})
 			_, err := m.OpenStream()
 			Expect(err).ToNot(HaveOccurred())
 			// try to open a stream twice, but expect only one STREAM_ID_BLOCKED to be sent

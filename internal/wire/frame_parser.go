@@ -67,8 +67,8 @@ func parseFrame(r *bytes.Reader, typeByte byte, v protocol.VersionNumber) (Frame
 		if err != nil {
 			err = qerr.Error(qerr.InvalidBlockedData, err.Error())
 		}
-	case 0xa:
-		frame, err = parseStreamIDBlockedFrame(r, v)
+	case 0xa, 0xb:
+		frame, err = parseStreamsBlockedFrame(r, v)
 		if err != nil {
 			err = qerr.Error(qerr.InvalidFrameData, err.Error())
 		}
