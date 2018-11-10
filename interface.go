@@ -17,7 +17,10 @@ type StreamID = protocol.StreamID
 type VersionNumber = protocol.VersionNumber
 
 // A Cookie can be used to verify the ownership of the client address.
-type Cookie = handshake.Cookie
+type Cookie struct {
+	RemoteAddr string
+	SentTime   time.Time
+}
 
 // ConnectionState records basic details about the QUIC connection.
 type ConnectionState = handshake.ConnectionState

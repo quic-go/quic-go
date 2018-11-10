@@ -135,7 +135,7 @@ var _ streamSender = &session{}
 var newSession = func(
 	conn connection,
 	runner sessionRunner,
-	origConnID protocol.ConnectionID,
+	clientDestConnID protocol.ConnectionID,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
 	conf *Config,
@@ -163,7 +163,7 @@ var newSession = func(
 	cs, err := handshake.NewCryptoSetupServer(
 		initialStream,
 		handshakeStream,
-		origConnID,
+		clientDestConnID,
 		params,
 		s.processTransportParameters,
 		tlsConf,
