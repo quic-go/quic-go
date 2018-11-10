@@ -208,25 +208,14 @@ var _ = Describe("Frame parsing", func() {
 	})
 
 	It("errors on invalid frames", func() {
-		for b, e := range map[byte]qerr.ErrorCode{
-			0x01: qerr.InvalidRstStreamData,
-			0x02: qerr.InvalidConnectionCloseData,
-			0x04: qerr.InvalidWindowUpdateData,
-			0x05: qerr.InvalidWindowUpdateData,
-			0x06: qerr.InvalidFrameData,
-			0x08: qerr.InvalidBlockedData,
-			0x09: qerr.InvalidBlockedData,
-			0x0a: qerr.InvalidFrameData,
-			0x0c: qerr.InvalidFrameData,
-			0x0e: qerr.InvalidFrameData,
-			0x0f: qerr.InvalidFrameData,
-			0x10: qerr.InvalidStreamData,
-			0x1a: qerr.InvalidAckData,
-			0x1b: qerr.InvalidAckData,
-		} {
-			_, err := ParseNextFrame(bytes.NewReader([]byte{b}), versionIETFFrames)
-			Expect(err).To(HaveOccurred())
-			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(e))
+		f := &MaxStreamDataFrame{
+			StreamID:   0x1337,
+			ByteOffset: 0xdeadbeef,
 		}
+		b := &bytes.Buffer{}
+		f.Write(b, versionIETFFrames)
+		_, err := ParseNextFrame(bytes.NewReader(b.Bytes()[:b.Len()-2]), versionIETFFrames)
+		Expect(err).To(HaveOccurred())
+		Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.InvalidFrameData))
 	})
 })
