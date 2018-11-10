@@ -6,6 +6,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -14,7 +15,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 	Context("when parsing", func() {
 		It("accepts sample frame containing a QUIC error code", func() {
 			reason := "No recent network activity."
-			data := []byte{0x2, 0x0, 0x19}
+			data := []byte{0x1c, 0x0, 0x19}
 			data = append(data, encodeVarInt(0x1337)...)              // frame type
 			data = append(data, encodeVarInt(uint64(len(reason)))...) // reason phrase length
 			data = append(data, []byte(reason)...)
@@ -29,7 +30,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 
 		It("accepts sample frame containing an application error code", func() {
 			reason := "The application messed things up."
-			data := []byte{0x3, 0x0, 0x19}
+			data := []byte{0x1d, 0x0, 0x19}
 			data = append(data, encodeVarInt(uint64(len(reason)))...) // reason phrase length
 			data = append(data, reason...)
 			b := bytes.NewReader(data)
@@ -42,7 +43,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 		})
 
 		It("rejects long reason phrases", func() {
-			data := []byte{0x2, 0xca, 0xfe}
+			data := []byte{0x1c, 0xca, 0xfe}
 			data = append(data, encodeVarInt(0x42)...)   // frame type
 			data = append(data, encodeVarInt(0xffff)...) // reason phrase length
 			b := bytes.NewReader(data)
@@ -52,7 +53,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 
 		It("errors on EOFs", func() {
 			reason := "No recent network activity."
-			data := []byte{0x2, 0x0, 0x19}
+			data := []byte{0x1c, 0x0, 0x19}
 			data = append(data, encodeVarInt(0x1337)...)              // frame type
 			data = append(data, encodeVarInt(uint64(len(reason)))...) // reason phrase length
 			data = append(data, []byte(reason)...)
@@ -65,7 +66,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 		})
 
 		It("parses a frame without a reason phrase", func() {
-			data := []byte{0x2, 0xca, 0xfe}
+			data := []byte{0x1c, 0xca, 0xfe}
 			data = append(data, encodeVarInt(0x42)...) // frame type
 			data = append(data, encodeVarInt(0)...)
 			b := bytes.NewReader(data)
@@ -77,20 +78,20 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 	})
 
 	Context("when writing", func() {
-		It("writes a frame without a ReasonPhrase", func() {
+		It("writes a frame without a reason phrase", func() {
 			b := &bytes.Buffer{}
 			frame := &ConnectionCloseFrame{
 				ErrorCode: 0xbeef,
 			}
 			err := frame.Write(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x2, 0xbe, 0xef}
+			expected := []byte{0x1c, 0xbe, 0xef}
 			expected = append(expected, encodeVarInt(0)...) // frame type
 			expected = append(expected, encodeVarInt(0)...) // reason phrase length
 			Expect(b.Bytes()).To(Equal(expected))
 		})
 
-		It("writes a frame with a ReasonPhrase", func() {
+		It("writes a frame with a reason phrase", func() {
 			b := &bytes.Buffer{}
 			frame := &ConnectionCloseFrame{
 				ErrorCode:    0xdead,
@@ -98,7 +99,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 			}
 			err := frame.Write(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x2, 0xde, 0xad}
+			expected := []byte{0x1c, 0xde, 0xad}
 			expected = append(expected, encodeVarInt(0)...) // frame type
 			expected = append(expected, encodeVarInt(6)...) // reason phrase length
 			expected = append(expected, []byte("foobar")...)
@@ -114,7 +115,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 			}
 			err := frame.Write(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x3, 0xde, 0xad}
+			expected := []byte{0x1d, 0xde, 0xad}
 			expected = append(expected, encodeVarInt(6)...) // reason phrase length
 			expected = append(expected, []byte("foobar")...)
 			Expect(b.Bytes()).To(Equal(expected))

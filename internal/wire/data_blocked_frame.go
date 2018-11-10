@@ -26,7 +26,7 @@ func parseDataBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*DataBloc
 }
 
 func (f *DataBlockedFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
-	typeByte := uint8(0x08)
+	typeByte := uint8(0x14)
 	b.WriteByte(typeByte)
 	utils.WriteVarInt(b, uint64(f.DataLimit))
 	return nil

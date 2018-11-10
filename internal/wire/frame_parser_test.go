@@ -38,6 +38,17 @@ var _ = Describe("Frame parsing", func() {
 		Expect(r.Len()).To(BeZero())
 	})
 
+	It("unpacks ACK frames", func() {
+		f := &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 0x13}}}
+		err := f.Write(buf, versionIETFFrames)
+		Expect(err).ToNot(HaveOccurred())
+		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(frame).ToNot(BeNil())
+		Expect(frame).To(BeAssignableToTypeOf(f))
+		Expect(frame.(*AckFrame).LargestAcked()).To(Equal(protocol.PacketNumber(0x13)))
+	})
+
 	It("unpacks RESET_STREAM frames", func() {
 		f := &ResetStreamFrame{
 			StreamID:   0xdeadbeef,
@@ -51,8 +62,9 @@ var _ = Describe("Frame parsing", func() {
 		Expect(frame).To(Equal(f))
 	})
 
-	It("unpacks CONNECTION_CLOSE frames containing QUIC error codes", func() {
-		f := &ConnectionCloseFrame{ReasonPhrase: "foo"}
+	It("unpacks STOP_SENDING frames", func() {
+		f := &StopSendingFrame{StreamID: 0x42}
+		buf := &bytes.Buffer{}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
@@ -60,15 +72,31 @@ var _ = Describe("Frame parsing", func() {
 		Expect(frame).To(Equal(f))
 	})
 
-	It("unpacks CONNECTION_CLOSE frames containing application error codes", func() {
-		f := &ConnectionCloseFrame{
-			IsApplicationError: true,
-			ReasonPhrase:       "foo",
+	It("unpacks CRYPTO frames", func() {
+		f := &CryptoFrame{
+			Offset: 0x1337,
+			Data:   []byte("lorem ipsum"),
 		}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
+		Expect(frame).ToNot(BeNil())
+		Expect(frame).To(Equal(f))
+	})
+
+	It("unpacks STREAM frames", func() {
+		f := &StreamFrame{
+			StreamID: 0x42,
+			Offset:   0x1337,
+			FinBit:   true,
+			Data:     []byte("foobar"),
+		}
+		err := f.Write(buf, versionIETFFrames)
+		Expect(err).ToNot(HaveOccurred())
+		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(frame).ToNot(BeNil())
 		Expect(frame).To(Equal(f))
 	})
 
@@ -125,7 +153,6 @@ var _ = Describe("Frame parsing", func() {
 			StreamID:  0xdeadbeef,
 			DataLimit: 0xdead,
 		}
-		buf := &bytes.Buffer{}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
@@ -144,27 +171,6 @@ var _ = Describe("Frame parsing", func() {
 		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(Equal(f))
-	})
-
-	It("unpacks STOP_SENDING frames", func() {
-		f := &StopSendingFrame{StreamID: 0x42}
-		buf := &bytes.Buffer{}
-		err := f.Write(buf, versionIETFFrames)
-		Expect(err).ToNot(HaveOccurred())
-		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(frame).To(Equal(f))
-	})
-
-	It("unpacks ACK frames", func() {
-		f := &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 0x13}}}
-		err := f.Write(buf, versionIETFFrames)
-		Expect(err).ToNot(HaveOccurred())
-		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(frame).ToNot(BeNil())
-		Expect(frame).To(BeAssignableToTypeOf(f))
-		Expect(frame.(*AckFrame).LargestAcked()).To(Equal(protocol.PacketNumber(0x13)))
 	})
 
 	It("unpacks PATH_CHALLENGE frames", func() {
@@ -189,16 +195,16 @@ var _ = Describe("Frame parsing", func() {
 		Expect(frame.(*PathResponseFrame).Data).To(Equal([8]byte{1, 2, 3, 4, 5, 6, 7, 8}))
 	})
 
-	It("unpacks CRYPTO frames", func() {
-		f := &CryptoFrame{
-			Offset: 0x1337,
-			Data:   []byte("lorem ipsum"),
+	It("unpacks CONNECTION_CLOSE frames", func() {
+		f := &ConnectionCloseFrame{
+			IsApplicationError: true,
+			ReasonPhrase:       "foobar",
 		}
+		buf := &bytes.Buffer{}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(frame).ToNot(BeNil())
 		Expect(frame).To(Equal(f))
 	})
 

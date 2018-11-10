@@ -14,7 +14,7 @@ import (
 var _ = Describe("DATA_BLOCKED frame", func() {
 	Context("when parsing", func() {
 		It("accepts sample frame", func() {
-			data := []byte{0x08}
+			data := []byte{0x14}
 			data = append(data, encodeVarInt(0x12345678)...)
 			b := bytes.NewReader(data)
 			frame, err := parseDataBlockedFrame(b, versionIETFFrames)
@@ -24,7 +24,7 @@ var _ = Describe("DATA_BLOCKED frame", func() {
 		})
 
 		It("errors on EOFs", func() {
-			data := []byte{0x08}
+			data := []byte{0x14}
 			data = append(data, encodeVarInt(0x12345678)...)
 			_, err := parseDataBlockedFrame(bytes.NewReader(data), versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
@@ -41,7 +41,7 @@ var _ = Describe("DATA_BLOCKED frame", func() {
 			frame := DataBlockedFrame{DataLimit: 0xdeadbeef}
 			err := frame.Write(b, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x08}
+			expected := []byte{0x14}
 			expected = append(expected, encodeVarInt(0xdeadbeef)...)
 			Expect(b.Bytes()).To(Equal(expected))
 		})

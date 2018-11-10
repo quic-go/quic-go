@@ -12,7 +12,7 @@ import (
 var _ = Describe("MAX_STREAMS frame", func() {
 	Context("parsing", func() {
 		It("accepts a frame for a bidirectional stream", func() {
-			data := []byte{0x1c}
+			data := []byte{0x12}
 			data = append(data, encodeVarInt(0xdecaf)...)
 			b := bytes.NewReader(data)
 			f, err := parseMaxStreamsFrame(b, protocol.VersionWhatever)
@@ -23,7 +23,7 @@ var _ = Describe("MAX_STREAMS frame", func() {
 		})
 
 		It("accepts a frame for a bidirectional stream", func() {
-			data := []byte{0x1d}
+			data := []byte{0x13}
 			data = append(data, encodeVarInt(0xdecaf)...)
 			b := bytes.NewReader(data)
 			f, err := parseMaxStreamsFrame(b, protocol.VersionWhatever)
@@ -53,7 +53,7 @@ var _ = Describe("MAX_STREAMS frame", func() {
 			}
 			b := &bytes.Buffer{}
 			Expect(f.Write(b, protocol.VersionWhatever)).To(Succeed())
-			expected := []byte{0x1c}
+			expected := []byte{0x12}
 			expected = append(expected, encodeVarInt(0xdeadbeef)...)
 			Expect(b.Bytes()).To(Equal(expected))
 		})
@@ -65,7 +65,7 @@ var _ = Describe("MAX_STREAMS frame", func() {
 			}
 			b := &bytes.Buffer{}
 			Expect(f.Write(b, protocol.VersionWhatever)).To(Succeed())
-			expected := []byte{0x1d}
+			expected := []byte{0x13}
 			expected = append(expected, encodeVarInt(0xdecafbad)...)
 			Expect(b.Bytes()).To(Equal(expected))
 		})

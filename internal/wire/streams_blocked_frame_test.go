@@ -13,7 +13,7 @@ import (
 var _ = Describe("STREAMS_BLOCKED frame", func() {
 	Context("parsing", func() {
 		It("accepts a frame for bidirectional streams", func() {
-			expected := []byte{0xa}
+			expected := []byte{0x16}
 			expected = append(expected, encodeVarInt(0x1337)...)
 			b := bytes.NewReader(expected)
 			f, err := parseStreamsBlockedFrame(b, protocol.VersionWhatever)
@@ -24,7 +24,7 @@ var _ = Describe("STREAMS_BLOCKED frame", func() {
 		})
 
 		It("accepts a frame for unidirectional streams", func() {
-			expected := []byte{0xb}
+			expected := []byte{0x17}
 			expected = append(expected, encodeVarInt(0x7331)...)
 			b := bytes.NewReader(expected)
 			f, err := parseStreamsBlockedFrame(b, protocol.VersionWhatever)
@@ -35,7 +35,7 @@ var _ = Describe("STREAMS_BLOCKED frame", func() {
 		})
 
 		It("errors on EOFs", func() {
-			data := []byte{0xa}
+			data := []byte{0x16}
 			data = append(data, encodeVarInt(0x12345678)...)
 			_, err := parseStreamsBlockedFrame(bytes.NewReader(data), versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
@@ -54,7 +54,7 @@ var _ = Describe("STREAMS_BLOCKED frame", func() {
 				StreamLimit: 0xdeadbeefcafe,
 			}
 			Expect(f.Write(b, protocol.VersionWhatever)).To(Succeed())
-			expected := []byte{0xa}
+			expected := []byte{0x16}
 			expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)
 			Expect(b.Bytes()).To(Equal(expected))
 		})
@@ -66,7 +66,7 @@ var _ = Describe("STREAMS_BLOCKED frame", func() {
 				StreamLimit: 0xdeadbeefcafe,
 			}
 			Expect(f.Write(b, protocol.VersionWhatever)).To(Succeed())
-			expected := []byte{0xb}
+			expected := []byte{0x17}
 			expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)
 			Expect(b.Bytes()).To(Equal(expected))
 		})

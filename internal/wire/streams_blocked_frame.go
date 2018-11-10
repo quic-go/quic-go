@@ -21,9 +21,9 @@ func parseStreamsBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*Strea
 
 	f := &StreamsBlockedFrame{}
 	switch typeByte {
-	case 0xa:
+	case 0x16:
 		f.Type = protocol.StreamTypeBidi
-	case 0xb:
+	case 0x17:
 		f.Type = protocol.StreamTypeUni
 	}
 	streamLimit, err := utils.ReadVarInt(r)
@@ -38,9 +38,9 @@ func parseStreamsBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*Strea
 func (f *StreamsBlockedFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) error {
 	switch f.Type {
 	case protocol.StreamTypeBidi:
-		b.WriteByte(0xa)
+		b.WriteByte(0x16)
 	case protocol.StreamTypeUni:
-		b.WriteByte(0xb)
+		b.WriteByte(0x17)
 	}
 	utils.WriteVarInt(b, f.StreamLimit)
 	return nil

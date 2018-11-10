@@ -16,14 +16,13 @@ type ConnectionCloseFrame struct {
 	ReasonPhrase       string
 }
 
-// parseConnectionCloseFrame reads a CONNECTION_CLOSE frame
 func parseConnectionCloseFrame(r *bytes.Reader, version protocol.VersionNumber) (*ConnectionCloseFrame, error) {
 	typeByte, err := r.ReadByte()
 	if err != nil {
 		return nil, err
 	}
 
-	f := &ConnectionCloseFrame{IsApplicationError: typeByte == 0x03}
+	f := &ConnectionCloseFrame{IsApplicationError: typeByte == 0x1d}
 	ec, err := utils.BigEndian.ReadUint16(r)
 	if err != nil {
 		return nil, err
@@ -65,12 +64,11 @@ func (f *ConnectionCloseFrame) Length(version protocol.VersionNumber) protocol.B
 	return length
 }
 
-// Write writes an CONNECTION_CLOSE frame.
 func (f *ConnectionCloseFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
 	if f.IsApplicationError {
-		b.WriteByte(0x03)
+		b.WriteByte(0x1d)
 	} else {
-		b.WriteByte(0x02)
+		b.WriteByte(0x1c)
 	}
 
 	utils.BigEndian.WriteUint16(b, uint16(f.ErrorCode))

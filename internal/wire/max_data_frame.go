@@ -14,7 +14,6 @@ type MaxDataFrame struct {
 
 // parseMaxDataFrame parses a MAX_DATA frame
 func parseMaxDataFrame(r *bytes.Reader, version protocol.VersionNumber) (*MaxDataFrame, error) {
-	// read the TypeByte
 	if _, err := r.ReadByte(); err != nil {
 		return nil, err
 	}
@@ -30,7 +29,7 @@ func parseMaxDataFrame(r *bytes.Reader, version protocol.VersionNumber) (*MaxDat
 
 //Write writes a MAX_STREAM_DATA frame
 func (f *MaxDataFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
-	b.WriteByte(0x4)
+	b.WriteByte(0x10)
 	utils.WriteVarInt(b, uint64(f.ByteOffset))
 	return nil
 }
