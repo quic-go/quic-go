@@ -44,7 +44,8 @@ func parseFrame(r *bytes.Reader, typeByte byte, v protocol.VersionNumber) (Frame
 		frame, err = parseStopSendingFrame(r, v)
 	case 0x6:
 		frame, err = parseCryptoFrame(r, v)
-	// TODO: implement the NEW_TOKEN frame
+	case 0x7:
+		frame, err = parseNewTokenFrame(r, v)
 	case 0x10:
 		frame, err = parseMaxDataFrame(r, v)
 	case 0x11:

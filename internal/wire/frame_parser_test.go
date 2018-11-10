@@ -85,6 +85,16 @@ var _ = Describe("Frame parsing", func() {
 		Expect(frame).To(Equal(f))
 	})
 
+	It("unpacks NEW_TOKEN frames", func() {
+		f := &NewTokenFrame{Token: []byte("foobar")}
+		err := f.Write(buf, versionIETFFrames)
+		Expect(err).ToNot(HaveOccurred())
+		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(frame).ToNot(BeNil())
+		Expect(frame).To(Equal(f))
+	})
+
 	It("unpacks STREAM frames", func() {
 		f := &StreamFrame{
 			StreamID: 0x42,
