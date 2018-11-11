@@ -34,8 +34,9 @@ type client struct {
 	tlsConf *tls.Config
 	config  *Config
 
-	srcConnID  protocol.ConnectionID
-	destConnID protocol.ConnectionID
+	srcConnID      protocol.ConnectionID
+	destConnID     protocol.ConnectionID
+	origDestConnID protocol.ConnectionID // the destination conn ID used on the first Initial (before a Retry)
 
 	initialVersion protocol.VersionNumber
 	version        protocol.VersionNumber
@@ -390,6 +391,7 @@ func (c *client) handleRetryPacket(hdr *wire.Header) {
 		c.logger.Debugf("Ignoring Retry, since a Retry was already received.")
 		return
 	}
+	c.origDestConnID = c.destConnID
 	c.destConnID = hdr.SrcConnectionID
 	c.token = hdr.Token
 	c.session.destroy(errCloseSessionForRetry)
@@ -417,6 +419,7 @@ func (c *client) createNewTLSSession(version protocol.VersionNumber) error {
 		c.conn,
 		runner,
 		c.token,
+		c.origDestConnID,
 		c.destConnID,
 		c.srcConnID,
 		c.config,

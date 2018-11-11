@@ -99,6 +99,7 @@ var _ CryptoSetup = &cryptoSetup{}
 func NewCryptoSetupClient(
 	initialStream io.Writer,
 	handshakeStream io.Writer,
+	origConnID protocol.ConnectionID,
 	connID protocol.ConnectionID,
 	params *TransportParameters,
 	handleParams func(*TransportParameters),
@@ -111,6 +112,7 @@ func NewCryptoSetupClient(
 ) (CryptoSetup, <-chan struct{} /* ClientHello written */, error) {
 	extHandler, receivedTransportParams := newExtensionHandlerClient(
 		params,
+		origConnID,
 		initialVersion,
 		supportedVersions,
 		currentVersion,

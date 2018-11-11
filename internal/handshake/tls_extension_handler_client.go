@@ -2,6 +2,7 @@ package handshake
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -13,6 +14,7 @@ type extensionHandlerClient struct {
 	ourParams  *TransportParameters
 	paramsChan chan<- TransportParameters
 
+	origConnID        protocol.ConnectionID
 	initialVersion    protocol.VersionNumber
 	supportedVersions []protocol.VersionNumber
 	version           protocol.VersionNumber
@@ -25,6 +27,7 @@ var _ tlsExtensionHandler = &extensionHandlerClient{}
 // newExtensionHandlerClient creates a new extension handler for the client.
 func newExtensionHandlerClient(
 	params *TransportParameters,
+	origConnID protocol.ConnectionID,
 	initialVersion protocol.VersionNumber,
 	supportedVersions []protocol.VersionNumber,
 	version protocol.VersionNumber,
@@ -37,6 +40,7 @@ func newExtensionHandlerClient(
 	return &extensionHandlerClient{
 		ourParams:         params,
 		paramsChan:        paramsChan,
+		origConnID:        origConnID,
 		initialVersion:    initialVersion,
 		supportedVersions: supportedVersions,
 		version:           version,
@@ -94,11 +98,16 @@ func (h *extensionHandlerClient) ReceivedExtensions(msgType uint8, exts []qtls.E
 		}
 	}
 
+	params := eetp.Parameters
 	// check that the server sent a stateless reset token
-	if len(eetp.Parameters.StatelessResetToken) == 0 {
+	if len(params.StatelessResetToken) == 0 {
 		return errors.New("server didn't sent stateless_reset_token")
 	}
-	h.logger.Debugf("Received Transport Parameters: %s", &eetp.Parameters)
-	h.paramsChan <- eetp.Parameters
+	// check the Retry token
+	if !h.origConnID.Equal(params.OriginalConnectionID) {
+		return fmt.Errorf("expected original_connection_id to equal %s, is %s", h.origConnID, params.OriginalConnectionID)
+	}
+	h.logger.Debugf("Received Transport Parameters: %s", &params)
+	h.paramsChan <- params
 	return nil
 }
