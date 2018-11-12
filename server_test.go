@@ -165,7 +165,7 @@ var _ = Describe("Server", func() {
 				close(done)
 				return false
 			}
-			token, err := serv.cookieGenerator.NewToken(raddr)
+			token, err := serv.cookieGenerator.NewToken(raddr, nil)
 			Expect(err).ToNot(HaveOccurred())
 			serv.handlePacket(&receivedPacket{
 				remoteAddr: raddr,
@@ -222,7 +222,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("replies with a Retry packet, if a Cookie is required", func() {
-			serv.config.AcceptCookie = func(_ net.Addr, _ *handshake.Cookie) bool { return false }
+			serv.config.AcceptCookie = func(_ net.Addr, _ *Cookie) bool { return false }
 			hdr := &wire.Header{
 				Type:             protocol.PacketTypeInitial,
 				SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
@@ -244,7 +244,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("creates a session, if no Cookie is required", func() {
-			serv.config.AcceptCookie = func(_ net.Addr, _ *handshake.Cookie) bool { return true }
+			serv.config.AcceptCookie = func(_ net.Addr, _ *Cookie) bool { return true }
 			hdr := &wire.Header{
 				Type:             protocol.PacketTypeInitial,
 				SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
@@ -358,7 +358,7 @@ var _ = Describe("Server", func() {
 				sess.EXPECT().run().Do(func() {})
 				return sess, nil
 			}
-			_, err := serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, protocol.VersionWhatever)
+			_, err := serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Consistently(done).ShouldNot(BeClosed())
 			close(completeHandshake)

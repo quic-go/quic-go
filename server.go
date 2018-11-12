@@ -340,11 +340,16 @@ func (s *server) handleInitialImpl(p *receivedPacket) (quicSession, protocol.Con
 		return nil, nil, errors.New("dropping too small Initial packet")
 	}
 
-	var cookie *handshake.Cookie
+	var cookie *Cookie
+	var origDestConnectionID protocol.ConnectionID
 	if len(hdr.Token) > 0 {
 		c, err := s.cookieGenerator.DecodeToken(hdr.Token)
 		if err == nil {
-			cookie = c
+			cookie = &Cookie{
+				RemoteAddr: c.RemoteAddr,
+				SentTime:   c.SentTime,
+			}
+			origDestConnectionID = c.OriginalDestConnectionID
 		}
 	}
 	if !s.config.AcceptCookie(p.remoteAddr, cookie) {
@@ -359,7 +364,14 @@ func (s *server) handleInitialImpl(p *receivedPacket) (quicSession, protocol.Con
 		return nil, nil, err
 	}
 	s.logger.Debugf("Changing connection ID to %s.", connID)
-	sess, err := s.createNewSession(p.remoteAddr, hdr.DestConnectionID, hdr.SrcConnectionID, connID, hdr.Version)
+	sess, err := s.createNewSession(
+		p.remoteAddr,
+		origDestConnectionID,
+		hdr.DestConnectionID,
+		hdr.SrcConnectionID,
+		connID,
+		hdr.Version,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -369,7 +381,8 @@ func (s *server) handleInitialImpl(p *receivedPacket) (quicSession, protocol.Con
 
 func (s *server) createNewSession(
 	remoteAddr net.Addr,
-	origConnID protocol.ConnectionID,
+	origDestConnID protocol.ConnectionID,
+	clientDestConnID protocol.ConnectionID,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
 	version protocol.VersionNumber,
@@ -384,12 +397,13 @@ func (s *server) createNewSession(
 		MaxUniStreams:                  uint64(s.config.MaxIncomingUniStreams),
 		DisableMigration:               true,
 		// TODO(#855): generate a real token
-		StatelessResetToken: bytes.Repeat([]byte{42}, 16),
+		StatelessResetToken:  bytes.Repeat([]byte{42}, 16),
+		OriginalConnectionID: origDestConnID,
 	}
 	sess, err := s.newSession(
 		&conn{pconn: s.conn, currentAddr: remoteAddr},
 		s.sessionRunner,
-		origConnID,
+		clientDestConnID,
 		destConnID,
 		srcConnID,
 		s.config,
@@ -406,7 +420,7 @@ func (s *server) createNewSession(
 }
 
 func (s *server) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
-	token, err := s.cookieGenerator.NewToken(remoteAddr)
+	token, err := s.cookieGenerator.NewToken(remoteAddr, hdr.DestConnectionID)
 	if err != nil {
 		return err
 	}

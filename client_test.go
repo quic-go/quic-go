@@ -34,6 +34,7 @@ var _ = Describe("Client", func() {
 			conn connection,
 			runner sessionRunner,
 			token []byte,
+			origDestConnID protocol.ConnectionID,
 			destConnID protocol.ConnectionID,
 			srcConnID protocol.ConnectionID,
 			conf *Config,
@@ -139,6 +140,7 @@ var _ = Describe("Client", func() {
 				_ []byte, // token
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
+				_ protocol.ConnectionID,
 				_ *Config,
 				_ *tls.Config,
 				_ *handshake.TransportParameters,
@@ -168,6 +170,7 @@ var _ = Describe("Client", func() {
 				_ []byte, // token
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
+				_ protocol.ConnectionID,
 				_ *Config,
 				tlsConf *tls.Config,
 				_ *handshake.TransportParameters,
@@ -195,6 +198,7 @@ var _ = Describe("Client", func() {
 				_ connection,
 				runner sessionRunner,
 				_ []byte, // token
+				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ *Config,
@@ -231,6 +235,7 @@ var _ = Describe("Client", func() {
 				_ connection,
 				_ sessionRunner,
 				_ []byte, // token
+				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ *Config,
@@ -270,6 +275,7 @@ var _ = Describe("Client", func() {
 				_ connection,
 				_ sessionRunner,
 				_ []byte, // token
+				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ *Config,
@@ -316,6 +322,7 @@ var _ = Describe("Client", func() {
 				_ []byte, // token
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
+				_ protocol.ConnectionID,
 				_ *Config,
 				_ *tls.Config,
 				_ *handshake.TransportParameters,
@@ -358,6 +365,7 @@ var _ = Describe("Client", func() {
 				connP connection,
 				_ sessionRunner,
 				_ []byte, // token
+				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ *Config,
@@ -474,6 +482,7 @@ var _ = Describe("Client", func() {
 				tokenP []byte,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
+				_ protocol.ConnectionID,
 				configP *Config,
 				_ *tls.Config,
 				params *handshake.TransportParameters,
@@ -533,7 +542,8 @@ var _ = Describe("Client", func() {
 				conn connection,
 				_ sessionRunner,
 				_ []byte, // token
-				_ protocol.ConnectionID,
+				origDestConnID protocol.ConnectionID,
+				destConnID protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ *Config,
 				_ *tls.Config,
@@ -542,6 +552,14 @@ var _ = Describe("Client", func() {
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) (quicSession, error) {
+				switch len(sessions) {
+				case 2: // for the first session
+					Expect(origDestConnID).To(BeNil())
+					Expect(destConnID).ToNot(BeNil())
+				case 1: // for the second session
+					Expect(origDestConnID).To(Equal(connID))
+					Expect(destConnID).ToNot(Equal(connID))
+				}
 				return <-sessions, nil
 			}
 			_, err := Dial(packetConn, addr, "localhost:1337", nil, config)
@@ -594,6 +612,7 @@ var _ = Describe("Client", func() {
 				_ []byte, // token
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
+				_ protocol.ConnectionID,
 				_ *Config,
 				_ *tls.Config,
 				_ *handshake.TransportParameters,
@@ -630,6 +649,7 @@ var _ = Describe("Client", func() {
 					conn connection,
 					_ sessionRunner,
 					_ []byte, // token
+					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ *Config,

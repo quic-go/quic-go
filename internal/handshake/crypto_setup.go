@@ -95,16 +95,11 @@ type cryptoSetup struct {
 var _ qtls.RecordLayer = &cryptoSetup{}
 var _ CryptoSetup = &cryptoSetup{}
 
-type versionInfo struct {
-	initialVersion    protocol.VersionNumber
-	supportedVersions []protocol.VersionNumber
-	currentVersion    protocol.VersionNumber
-}
-
 // NewCryptoSetupClient creates a new crypto setup for the client
 func NewCryptoSetupClient(
 	initialStream io.Writer,
 	handshakeStream io.Writer,
+	origConnID protocol.ConnectionID,
 	connID protocol.ConnectionID,
 	params *TransportParameters,
 	handleParams func(*TransportParameters),
@@ -115,18 +110,22 @@ func NewCryptoSetupClient(
 	logger utils.Logger,
 	perspective protocol.Perspective,
 ) (CryptoSetup, <-chan struct{} /* ClientHello written */, error) {
+	extHandler, receivedTransportParams := newExtensionHandlerClient(
+		params,
+		origConnID,
+		initialVersion,
+		supportedVersions,
+		currentVersion,
+		logger,
+	)
 	return newCryptoSetup(
 		initialStream,
 		handshakeStream,
 		connID,
-		params,
+		extHandler,
+		receivedTransportParams,
 		handleParams,
 		tlsConf,
-		versionInfo{
-			currentVersion:    currentVersion,
-			initialVersion:    initialVersion,
-			supportedVersions: supportedVersions,
-		},
 		logger,
 		perspective,
 	)
@@ -145,17 +144,20 @@ func NewCryptoSetupServer(
 	logger utils.Logger,
 	perspective protocol.Perspective,
 ) (CryptoSetup, error) {
+	extHandler, receivedTransportParams := newExtensionHandlerServer(
+		params,
+		supportedVersions,
+		currentVersion,
+		logger,
+	)
 	cs, _, err := newCryptoSetup(
 		initialStream,
 		handshakeStream,
 		connID,
-		params,
+		extHandler,
+		receivedTransportParams,
 		handleParams,
 		tlsConf,
-		versionInfo{
-			currentVersion:    currentVersion,
-			supportedVersions: supportedVersions,
-		},
 		logger,
 		perspective,
 	)
@@ -166,10 +168,10 @@ func newCryptoSetup(
 	initialStream io.Writer,
 	handshakeStream io.Writer,
 	connID protocol.ConnectionID,
-	params *TransportParameters,
+	extHandler tlsExtensionHandler,
+	transportParamChan <-chan TransportParameters,
 	handleParams func(*TransportParameters),
 	tlsConf *tls.Config,
-	versionInfo versionInfo,
 	logger utils.Logger,
 	perspective protocol.Perspective,
 ) (CryptoSetup, <-chan struct{} /* ClientHello written */, error) {
@@ -178,40 +180,23 @@ func newCryptoSetup(
 		return nil, nil, err
 	}
 	cs := &cryptoSetup{
-		initialStream:          initialStream,
-		initialAEAD:            initialAEAD,
-		handshakeStream:        handshakeStream,
-		readEncLevel:           protocol.EncryptionInitial,
-		writeEncLevel:          protocol.EncryptionInitial,
-		handleParamsCallback:   handleParams,
-		logger:                 logger,
-		perspective:            perspective,
-		handshakeDone:          make(chan struct{}),
-		handshakeErrChan:       make(chan struct{}),
-		messageErrChan:         make(chan error, 1),
-		clientHelloWrittenChan: make(chan struct{}),
-		messageChan:            make(chan []byte, 100),
-		receivedReadKey:        make(chan struct{}),
-		receivedWriteKey:       make(chan struct{}),
-		closeChan:              make(chan struct{}),
-	}
-	var extHandler tlsExtensionHandler
-	switch perspective {
-	case protocol.PerspectiveClient:
-		extHandler, cs.receivedTransportParams = newExtensionHandlerClient(
-			params,
-			versionInfo.initialVersion,
-			versionInfo.supportedVersions,
-			versionInfo.currentVersion,
-			logger,
-		)
-	case protocol.PerspectiveServer:
-		extHandler, cs.receivedTransportParams = newExtensionHandlerServer(
-			params,
-			versionInfo.supportedVersions,
-			versionInfo.currentVersion,
-			logger,
-		)
+		initialStream:           initialStream,
+		initialAEAD:             initialAEAD,
+		handshakeStream:         handshakeStream,
+		readEncLevel:            protocol.EncryptionInitial,
+		writeEncLevel:           protocol.EncryptionInitial,
+		handleParamsCallback:    handleParams,
+		receivedTransportParams: transportParamChan,
+		logger:                  logger,
+		perspective:             perspective,
+		handshakeDone:           make(chan struct{}),
+		handshakeErrChan:        make(chan struct{}),
+		messageErrChan:          make(chan error, 1),
+		clientHelloWrittenChan:  make(chan struct{}),
+		messageChan:             make(chan []byte, 100),
+		receivedReadKey:         make(chan struct{}),
+		receivedWriteKey:        make(chan struct{}),
+		closeChan:               make(chan struct{}),
 	}
 	qtlsConf := tlsConfigToQtlsConfig(tlsConf)
 	qtlsConf.AlternativeRecordLayer = cs

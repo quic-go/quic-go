@@ -1291,6 +1291,7 @@ var _ = Describe("Client Session", func() {
 			[]byte("token"),
 			protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
 			protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
+			protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
 			populateClientConfig(&Config{}, true),
 			nil, // tls.Config
 			nil, // transport parameters

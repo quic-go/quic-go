@@ -199,6 +199,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			client, _, err := NewCryptoSetupClient(
 				cInitialStream,
 				cHandshakeStream,
+				nil,
 				protocol.ConnectionID{},
 				&TransportParameters{},
 				func(p *TransportParameters) {},
@@ -254,6 +255,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			client, chChan, err := NewCryptoSetupClient(
 				cInitialStream,
 				cHandshakeStream,
+				nil,
 				protocol.ConnectionID{},
 				&TransportParameters{},
 				func(p *TransportParameters) {},
@@ -293,6 +295,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			client, _, err := NewCryptoSetupClient(
 				cInitialStream,
 				cHandshakeStream,
+				nil,
 				protocol.ConnectionID{},
 				cTransportParameters,
 				func(p *TransportParameters) { sTransportParametersRcvd = p },

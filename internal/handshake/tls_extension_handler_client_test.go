@@ -23,6 +23,7 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 		var h tlsExtensionHandler
 		h, paramsChan = newExtensionHandlerClient(
 			&TransportParameters{},
+			nil,
 			version,
 			nil,
 			version,
@@ -105,11 +106,26 @@ var _ = Describe("TLS Extension Handler, for the client", func() {
 			Expect(err).To(HaveOccurred()) // this will be some kind of decoding error
 		})
 
-		It("rejects TransportParameters if they don't contain the stateless reset token", func() {
+		It("errors if the TransportParameters don't contain the stateless reset token", func() {
 			parameters.StatelessResetToken = nil
 			ext := getEncryptedExtensions(parameters)
 			err := handler.ReceivedExtensions(uint8(typeEncryptedExtensions), []qtls.Extension{ext})
 			Expect(err).To(MatchError("server didn't sent stateless_reset_token"))
+		})
+
+		It("errors if the TransportParameters contain an original_connection_id, although no Retry was performed", func() {
+			parameters.OriginalConnectionID = protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad}
+			ext := getEncryptedExtensions(parameters)
+			err := handler.ReceivedExtensions(uint8(typeEncryptedExtensions), []qtls.Extension{ext})
+			Expect(err).To(MatchError("expected original_connection_id to equal (empty), is 0xdecafbad"))
+		})
+
+		It("errors if the TransportParameters contain a wrong original_connection_id", func() {
+			handler.origConnID = protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
+			parameters.OriginalConnectionID = protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad}
+			ext := getEncryptedExtensions(parameters)
+			err := handler.ReceivedExtensions(uint8(typeEncryptedExtensions), []qtls.Extension{ext})
+			Expect(err).To(MatchError("expected original_connection_id to equal 0xdeadbeef, is 0xdecafbad"))
 		})
 
 		Context("Version Negotiation", func() {
