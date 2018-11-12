@@ -21,10 +21,10 @@ type incomingBidiStreamsMap struct {
 	nextStreamToAccept protocol.StreamID // the next stream that will be returned by AcceptStream()
 	nextStreamToOpen   protocol.StreamID // the highest stream that the peer openend
 	maxStream          protocol.StreamID // the highest stream that the peer is allowed to open
-	maxNumStreams      int               // maximum number of streams
+	maxNumStreams      uint64            // maximum number of streams
 
 	newStream        func(protocol.StreamID) streamI
-	queueMaxStreamID func(*wire.MaxStreamIDFrame)
+	queueMaxStreamID func(*wire.MaxStreamsFrame)
 
 	closeErr error
 }
@@ -32,7 +32,7 @@ type incomingBidiStreamsMap struct {
 func newIncomingBidiStreamsMap(
 	nextStreamToAccept protocol.StreamID,
 	initialMaxStreamID protocol.StreamID,
-	maxNumStreams int,
+	maxNumStreams uint64,
 	queueControlFrame func(wire.Frame),
 	newStream func(protocol.StreamID) streamI,
 ) *incomingBidiStreamsMap {
@@ -43,7 +43,7 @@ func newIncomingBidiStreamsMap(
 		maxStream:          initialMaxStreamID,
 		maxNumStreams:      maxNumStreams,
 		newStream:          newStream,
-		queueMaxStreamID:   func(f *wire.MaxStreamIDFrame) { queueControlFrame(f) },
+		queueMaxStreamID:   func(f *wire.MaxStreamsFrame) { queueControlFrame(f) },
 	}
 	m.cond.L = &m.mutex
 	return m
@@ -108,9 +108,13 @@ func (m *incomingBidiStreamsMap) DeleteStream(id protocol.StreamID) error {
 	}
 	delete(m.streams, id)
 	// queue a MAX_STREAM_ID frame, giving the peer the option to open a new stream
-	if numNewStreams := m.maxNumStreams - len(m.streams); numNewStreams > 0 {
+	if m.maxNumStreams > uint64(len(m.streams)) {
+		numNewStreams := m.maxNumStreams - uint64(len(m.streams))
 		m.maxStream = m.nextStreamToOpen + protocol.StreamID((numNewStreams-1)*4)
-		m.queueMaxStreamID(&wire.MaxStreamIDFrame{StreamID: m.maxStream})
+		m.queueMaxStreamID(&wire.MaxStreamsFrame{
+			Type:       protocol.StreamTypeBidi,
+			MaxStreams: m.maxStream.StreamNum(),
+		})
 	}
 	return nil
 }

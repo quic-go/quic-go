@@ -110,16 +110,16 @@ func (mr *MockStreamManagerMockRecorder) GetOrOpenSendStream(arg0 interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrOpenSendStream", reflect.TypeOf((*MockStreamManager)(nil).GetOrOpenSendStream), arg0)
 }
 
-// HandleMaxStreamIDFrame mocks base method
-func (m *MockStreamManager) HandleMaxStreamIDFrame(arg0 *wire.MaxStreamIDFrame) error {
-	ret := m.ctrl.Call(m, "HandleMaxStreamIDFrame", arg0)
+// HandleMaxStreamsFrame mocks base method
+func (m *MockStreamManager) HandleMaxStreamsFrame(arg0 *wire.MaxStreamsFrame) error {
+	ret := m.ctrl.Call(m, "HandleMaxStreamsFrame", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// HandleMaxStreamIDFrame indicates an expected call of HandleMaxStreamIDFrame
-func (mr *MockStreamManagerMockRecorder) HandleMaxStreamIDFrame(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleMaxStreamIDFrame", reflect.TypeOf((*MockStreamManager)(nil).HandleMaxStreamIDFrame), arg0)
+// HandleMaxStreamsFrame indicates an expected call of HandleMaxStreamsFrame
+func (mr *MockStreamManagerMockRecorder) HandleMaxStreamsFrame(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleMaxStreamsFrame", reflect.TypeOf((*MockStreamManager)(nil).HandleMaxStreamsFrame), arg0)
 }
 
 // OpenStream mocks base method

@@ -56,7 +56,7 @@ var _ = Describe("Stream Framer", func() {
 
 		It("adds the right number of frames", func() {
 			maxSize := protocol.ByteCount(1000)
-			bf := &wire.BlockedFrame{Offset: 0x1337}
+			bf := &wire.DataBlockedFrame{DataLimit: 0x1337}
 			bfLen := bf.Length(version)
 			numFrames := int(maxSize / bfLen) // max number of frames that fit into maxSize
 			for i := 0; i < numFrames+1; i++ {

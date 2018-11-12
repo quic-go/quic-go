@@ -19,13 +19,13 @@ type outgoingBidiStreamsMap struct {
 
 	streams map[protocol.StreamID]streamI
 
-	nextStream     protocol.StreamID // stream ID of the stream returned by OpenStream(Sync)
-	maxStream      protocol.StreamID // the maximum stream ID we're allowed to open
-	maxStreamSet   bool              // was maxStream set. If not, it's not possible to any stream (also works for stream 0)
-	highestBlocked protocol.StreamID // the highest stream ID that we queued a STREAM_ID_BLOCKED frame for
+	nextStream   protocol.StreamID // stream ID of the stream returned by OpenStream(Sync)
+	maxStream    protocol.StreamID // the maximum stream ID we're allowed to open
+	maxStreamSet bool              // was maxStream set. If not, it's not possible to any stream (also works for stream 0)
+	blockedSent  bool              // was a STREAMS_BLOCKED sent for the current maxStream
 
 	newStream            func(protocol.StreamID) streamI
-	queueStreamIDBlocked func(*wire.StreamIDBlockedFrame)
+	queueStreamIDBlocked func(*wire.StreamsBlockedFrame)
 
 	closeErr error
 }
@@ -39,7 +39,7 @@ func newOutgoingBidiStreamsMap(
 		streams:              make(map[protocol.StreamID]streamI),
 		nextStream:           nextStream,
 		newStream:            newStream,
-		queueStreamIDBlocked: func(f *wire.StreamIDBlockedFrame) { queueControlFrame(f) },
+		queueStreamIDBlocked: func(f *wire.StreamsBlockedFrame) { queueControlFrame(f) },
 	}
 	m.cond.L = &m.mutex
 	return m
@@ -73,9 +73,19 @@ func (m *outgoingBidiStreamsMap) openStreamImpl() (streamI, error) {
 		return nil, m.closeErr
 	}
 	if !m.maxStreamSet || m.nextStream > m.maxStream {
-		if m.maxStream == 0 || m.highestBlocked < m.maxStream {
-			m.queueStreamIDBlocked(&wire.StreamIDBlockedFrame{StreamID: m.maxStream})
-			m.highestBlocked = m.maxStream
+		if !m.blockedSent {
+			if m.maxStreamSet {
+				m.queueStreamIDBlocked(&wire.StreamsBlockedFrame{
+					Type:        protocol.StreamTypeBidi,
+					StreamLimit: m.maxStream.StreamNum(),
+				})
+			} else {
+				m.queueStreamIDBlocked(&wire.StreamsBlockedFrame{
+					Type:        protocol.StreamTypeBidi,
+					StreamLimit: 0,
+				})
+			}
+			m.blockedSent = true
 		}
 		return nil, qerr.TooManyOpenStreams
 	}
@@ -112,6 +122,7 @@ func (m *outgoingBidiStreamsMap) SetMaxStream(id protocol.StreamID) {
 	if !m.maxStreamSet || id > m.maxStream {
 		m.maxStream = id
 		m.maxStreamSet = true
+		m.blockedSent = false
 		m.cond.Broadcast()
 	}
 	m.mutex.Unlock()

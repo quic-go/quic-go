@@ -97,30 +97,10 @@ var _ = Describe("Frame parsing", func() {
 		Expect(frame).To(Equal(f))
 	})
 
-	It("unpacks MAX_STREAM_ID frames", func() {
-		f := &MaxStreamIDFrame{StreamID: 0x1337}
-		buf := &bytes.Buffer{}
-		err := f.Write(buf, versionIETFFrames)
-		Expect(err).ToNot(HaveOccurred())
-		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(frame).To(Equal(f))
-	})
-
-	It("unpacks connection-level BLOCKED frames", func() {
-		f := &BlockedFrame{Offset: 0x1234}
-		buf := &bytes.Buffer{}
-		err := f.Write(buf, versionIETFFrames)
-		Expect(err).ToNot(HaveOccurred())
-		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(frame).To(Equal(f))
-	})
-
-	It("unpacks stream-level BLOCKED frames", func() {
-		f := &StreamBlockedFrame{
-			StreamID: 0xdeadbeef,
-			Offset:   0xdead,
+	It("unpacks MAX_STREAMS frames", func() {
+		f := &MaxStreamsFrame{
+			Type:       protocol.StreamTypeBidi,
+			MaxStreams: 0x1337,
 		}
 		buf := &bytes.Buffer{}
 		err := f.Write(buf, versionIETFFrames)
@@ -130,8 +110,34 @@ var _ = Describe("Frame parsing", func() {
 		Expect(frame).To(Equal(f))
 	})
 
-	It("unpacks STREAM_ID_BLOCKED frames", func() {
-		f := &StreamIDBlockedFrame{StreamID: 0x1234567}
+	It("unpacks DATA_BLOCKED frames", func() {
+		f := &DataBlockedFrame{DataLimit: 0x1234}
+		buf := &bytes.Buffer{}
+		err := f.Write(buf, versionIETFFrames)
+		Expect(err).ToNot(HaveOccurred())
+		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(frame).To(Equal(f))
+	})
+
+	It("unpacks STREAM_DATA_BLOCKED frames", func() {
+		f := &StreamDataBlockedFrame{
+			StreamID:  0xdeadbeef,
+			DataLimit: 0xdead,
+		}
+		buf := &bytes.Buffer{}
+		err := f.Write(buf, versionIETFFrames)
+		Expect(err).ToNot(HaveOccurred())
+		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(frame).To(Equal(f))
+	})
+
+	It("unpacks STREAMS_BLOCKED frames", func() {
+		f := &StreamsBlockedFrame{
+			Type:        protocol.StreamTypeBidi,
+			StreamLimit: 0x1234567,
+		}
 		buf := &bytes.Buffer{}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())

@@ -249,17 +249,20 @@ var _ = Describe("Session", func() {
 
 		Context("handling MAX_STREAM_ID frames", func() {
 			It("passes the frame to the streamsMap", func() {
-				f := &wire.MaxStreamIDFrame{StreamID: 10}
-				streamManager.EXPECT().HandleMaxStreamIDFrame(f)
-				err := sess.handleMaxStreamIDFrame(f)
+				f := &wire.MaxStreamsFrame{
+					Type:       protocol.StreamTypeUni,
+					MaxStreams: 10,
+				}
+				streamManager.EXPECT().HandleMaxStreamsFrame(f)
+				err := sess.handleMaxStreamsFrame(f)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("returns errors", func() {
-				f := &wire.MaxStreamIDFrame{StreamID: 10}
+				f := &wire.MaxStreamsFrame{MaxStreams: 10}
 				testErr := errors.New("test error")
-				streamManager.EXPECT().HandleMaxStreamIDFrame(f).Return(testErr)
-				err := sess.handleMaxStreamIDFrame(f)
+				streamManager.EXPECT().HandleMaxStreamsFrame(f).Return(testErr)
+				err := sess.handleMaxStreamsFrame(f)
 				Expect(err).To(MatchError(testErr))
 			})
 		})
@@ -306,17 +309,17 @@ var _ = Describe("Session", func() {
 		})
 
 		It("handles BLOCKED frames", func() {
-			err := sess.handleFrames([]wire.Frame{&wire.BlockedFrame{}}, protocol.EncryptionUnspecified)
+			err := sess.handleFrames([]wire.Frame{&wire.DataBlockedFrame{}}, protocol.EncryptionUnspecified)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("handles STREAM_BLOCKED frames", func() {
-			err := sess.handleFrames([]wire.Frame{&wire.StreamBlockedFrame{}}, protocol.EncryptionUnspecified)
+			err := sess.handleFrames([]wire.Frame{&wire.StreamDataBlockedFrame{}}, protocol.EncryptionUnspecified)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("handles STREAM_ID_BLOCKED frames", func() {
-			err := sess.handleFrames([]wire.Frame{&wire.StreamIDBlockedFrame{}}, protocol.EncryptionUnspecified)
+			err := sess.handleFrames([]wire.Frame{&wire.StreamsBlockedFrame{}}, protocol.EncryptionUnspecified)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -598,7 +601,7 @@ var _ = Describe("Session", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(sent).To(BeTrue())
 			frames, _ := sess.framer.AppendControlFrames(nil, 1000)
-			Expect(frames).To(Equal([]wire.Frame{&wire.BlockedFrame{Offset: 1337}}))
+			Expect(frames).To(Equal([]wire.Frame{&wire.DataBlockedFrame{DataLimit: 1337}}))
 		})
 
 		It("sends a retransmission and a regular packet in the same run", func() {

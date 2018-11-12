@@ -40,7 +40,7 @@ type streamManager interface {
 	AcceptUniStream() (ReceiveStream, error)
 	DeleteStream(protocol.StreamID) error
 	UpdateLimits(*handshake.TransportParameters)
-	HandleMaxStreamIDFrame(*wire.MaxStreamIDFrame) error
+	HandleMaxStreamsFrame(*wire.MaxStreamsFrame) error
 	CloseWithError(error)
 }
 
@@ -158,7 +158,14 @@ var newSession = func(
 	s.preSetup()
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
-	s.streamsMap = newStreamsMap(s, s.newFlowController, s.config.MaxIncomingStreams, s.config.MaxIncomingUniStreams, s.perspective, s.version)
+	s.streamsMap = newStreamsMap(
+		s,
+		s.newFlowController,
+		uint64(s.config.MaxIncomingStreams),
+		uint64(s.config.MaxIncomingUniStreams),
+		s.perspective,
+		s.version,
+	)
 	s.framer = newFramer(s.streamsMap, s.version)
 	cs, err := handshake.NewCryptoSetupServer(
 		initialStream,
@@ -248,7 +255,14 @@ var newClientSession = func(
 	s.cryptoStreamHandler = cs
 	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream)
 	s.unpacker = newPacketUnpacker(cs, s.version)
-	s.streamsMap = newStreamsMap(s, s.newFlowController, s.config.MaxIncomingStreams, s.config.MaxIncomingUniStreams, s.perspective, s.version)
+	s.streamsMap = newStreamsMap(
+		s,
+		s.newFlowController,
+		uint64(s.config.MaxIncomingStreams),
+		uint64(s.config.MaxIncomingUniStreams),
+		s.perspective,
+		s.version,
+	)
 	s.framer = newFramer(s.streamsMap, s.version)
 	s.packer = newPacketPacker(
 		s.destConnID,
@@ -549,11 +563,11 @@ func (s *session) handleFrames(fs []wire.Frame, encLevel protocol.EncryptionLeve
 			s.handleMaxDataFrame(frame)
 		case *wire.MaxStreamDataFrame:
 			err = s.handleMaxStreamDataFrame(frame)
-		case *wire.MaxStreamIDFrame:
-			err = s.handleMaxStreamIDFrame(frame)
-		case *wire.BlockedFrame:
-		case *wire.StreamBlockedFrame:
-		case *wire.StreamIDBlockedFrame:
+		case *wire.MaxStreamsFrame:
+			err = s.handleMaxStreamsFrame(frame)
+		case *wire.DataBlockedFrame:
+		case *wire.StreamDataBlockedFrame:
+		case *wire.StreamsBlockedFrame:
 		case *wire.StopSendingFrame:
 			err = s.handleStopSendingFrame(frame)
 		case *wire.PingFrame:
@@ -627,8 +641,8 @@ func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error
 	return nil
 }
 
-func (s *session) handleMaxStreamIDFrame(frame *wire.MaxStreamIDFrame) error {
-	return s.streamsMap.HandleMaxStreamIDFrame(frame)
+func (s *session) handleMaxStreamsFrame(frame *wire.MaxStreamsFrame) error {
+	return s.streamsMap.HandleMaxStreamsFrame(frame)
 }
 
 func (s *session) handleResetStreamFrame(frame *wire.ResetStreamFrame) error {
@@ -893,7 +907,7 @@ func (s *session) sendProbePacket() error {
 
 func (s *session) sendPacket() (bool, error) {
 	if isBlocked, offset := s.connFlowController.IsNewlyBlocked(); isBlocked {
-		s.framer.QueueControlFrame(&wire.BlockedFrame{Offset: offset})
+		s.framer.QueueControlFrame(&wire.DataBlockedFrame{DataLimit: offset})
 	}
 	s.windowUpdateQueue.QueueAll()
 

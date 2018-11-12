@@ -26,8 +26,8 @@ var _ streamManager = &streamsMap{}
 func newStreamsMap(
 	sender streamSender,
 	newFlowController func(protocol.StreamID) flowcontrol.StreamFlowController,
-	maxIncomingStreams int,
-	maxIncomingUniStreams int,
+	maxIncomingStreams uint64,
+	maxIncomingUniStreams uint64,
 	perspective protocol.Perspective,
 	version protocol.VersionNumber,
 ) streamManager {
@@ -35,18 +35,6 @@ func newStreamsMap(
 		perspective:       perspective,
 		newFlowController: newFlowController,
 		sender:            sender,
-	}
-	var firstOutgoingBidiStream, firstOutgoingUniStream, firstIncomingBidiStream, firstIncomingUniStream protocol.StreamID
-	if perspective == protocol.PerspectiveServer {
-		firstOutgoingBidiStream = 1
-		firstIncomingBidiStream = 0
-		firstOutgoingUniStream = 3
-		firstIncomingUniStream = 2
-	} else {
-		firstOutgoingBidiStream = 0
-		firstIncomingBidiStream = 1
-		firstOutgoingUniStream = 2
-		firstIncomingUniStream = 3
 	}
 	newBidiStream := func(id protocol.StreamID) streamI {
 		return newStream(id, m.sender, m.newFlowController(id), version)
@@ -58,25 +46,25 @@ func newStreamsMap(
 		return newReceiveStream(id, m.sender, m.newFlowController(id), version)
 	}
 	m.outgoingBidiStreams = newOutgoingBidiStreamsMap(
-		firstOutgoingBidiStream,
+		protocol.FirstStream(protocol.StreamTypeBidi, perspective),
 		newBidiStream,
 		sender.queueControlFrame,
 	)
 	m.incomingBidiStreams = newIncomingBidiStreamsMap(
-		firstIncomingBidiStream,
-		protocol.MaxBidiStreamID(maxIncomingStreams, perspective),
+		protocol.FirstStream(protocol.StreamTypeBidi, perspective.Opposite()),
+		protocol.MaxStreamID(protocol.StreamTypeBidi, maxIncomingStreams, perspective.Opposite()),
 		maxIncomingStreams,
 		sender.queueControlFrame,
 		newBidiStream,
 	)
 	m.outgoingUniStreams = newOutgoingUniStreamsMap(
-		firstOutgoingUniStream,
+		protocol.FirstStream(protocol.StreamTypeUni, perspective),
 		newUniSendStream,
 		sender.queueControlFrame,
 	)
 	m.incomingUniStreams = newIncomingUniStreamsMap(
-		firstIncomingUniStream,
-		protocol.MaxUniStreamID(maxIncomingUniStreams, perspective),
+		protocol.FirstStream(protocol.StreamTypeUni, perspective.Opposite()),
+		protocol.MaxStreamID(protocol.StreamTypeUni, maxIncomingUniStreams, perspective.Opposite()),
 		maxIncomingUniStreams,
 		sender.queueControlFrame,
 		newUniReceiveStream,
@@ -158,15 +146,13 @@ func (m *streamsMap) GetOrOpenSendStream(id protocol.StreamID) (sendStreamI, err
 	panic("")
 }
 
-func (m *streamsMap) HandleMaxStreamIDFrame(f *wire.MaxStreamIDFrame) error {
-	id := f.StreamID
-	if id.InitiatedBy() != m.perspective {
-		return fmt.Errorf("received MAX_STREAM_DATA frame for incoming stream %d", id)
-	}
+func (m *streamsMap) HandleMaxStreamsFrame(f *wire.MaxStreamsFrame) error {
+	id := protocol.MaxStreamID(f.Type, f.MaxStreams, m.perspective)
 	switch id.Type() {
 	case protocol.StreamTypeUni:
 		m.outgoingUniStreams.SetMaxStream(id)
 	case protocol.StreamTypeBidi:
+		fmt.Printf("")
 		m.outgoingBidiStreams.SetMaxStream(id)
 	}
 	return nil
@@ -174,13 +160,8 @@ func (m *streamsMap) HandleMaxStreamIDFrame(f *wire.MaxStreamIDFrame) error {
 
 func (m *streamsMap) UpdateLimits(p *handshake.TransportParameters) {
 	// Max{Uni,Bidi}StreamID returns the highest stream ID that the peer is allowed to open.
-	// Invert the perspective to determine the value that we are allowed to open.
-	peerPers := protocol.PerspectiveServer
-	if m.perspective == protocol.PerspectiveServer {
-		peerPers = protocol.PerspectiveClient
-	}
-	m.outgoingBidiStreams.SetMaxStream(protocol.MaxBidiStreamID(int(p.MaxBidiStreams), peerPers))
-	m.outgoingUniStreams.SetMaxStream(protocol.MaxUniStreamID(int(p.MaxUniStreams), peerPers))
+	m.outgoingBidiStreams.SetMaxStream(protocol.MaxStreamID(protocol.StreamTypeBidi, p.MaxBidiStreams, m.perspective))
+	m.outgoingUniStreams.SetMaxStream(protocol.MaxStreamID(protocol.StreamTypeUni, p.MaxUniStreams, m.perspective))
 }
 
 func (m *streamsMap) CloseWithError(err error) {

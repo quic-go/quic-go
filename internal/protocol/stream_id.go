@@ -29,32 +29,39 @@ func (s StreamID) Type() StreamType {
 	return StreamTypeBidi
 }
 
-// MaxBidiStreamID is the highest stream ID that the peer is allowed to open,
-// when it is allowed to open numStreams bidirectional streams.
-func MaxBidiStreamID(numStreams int, pers Perspective) StreamID {
+// StreamNum returns how many streams in total are below this
+// Example: for stream 9 it returns 3 (i.e. streams 1, 5 and 9)
+func (s StreamID) StreamNum() uint64 {
+	return uint64(s/4) + 1
+}
+
+// MaxStreamID is the highest stream ID that a peer is allowed to open,
+// when it is allowed to open numStreams.
+func MaxStreamID(stype StreamType, numStreams uint64, pers Perspective) StreamID {
 	if numStreams == 0 {
 		return 0
 	}
 	var first StreamID
-	if pers == PerspectiveClient {
-		first = 1
-	} else {
-		first = 0
+	switch stype {
+	case StreamTypeBidi:
+		switch pers {
+		case PerspectiveClient:
+			first = 0
+		case PerspectiveServer:
+			first = 1
+		}
+	case StreamTypeUni:
+		switch pers {
+		case PerspectiveClient:
+			first = 2
+		case PerspectiveServer:
+			first = 3
+		}
 	}
 	return first + 4*StreamID(numStreams-1)
 }
 
-// MaxUniStreamID is the highest stream ID that the peer is allowed to open,
-// when it is allowed to open numStreams unidirectional streams.
-func MaxUniStreamID(numStreams int, pers Perspective) StreamID {
-	if numStreams == 0 {
-		return 0
-	}
-	var first StreamID
-	if pers == PerspectiveClient {
-		first = 3
-	} else {
-		first = 2
-	}
-	return first + 4*StreamID(numStreams-1)
+// FirstStream returns the first valid stream ID
+func FirstStream(stype StreamType, pers Perspective) StreamID {
+	return MaxStreamID(stype, 1, pers)
 }

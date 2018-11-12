@@ -57,10 +57,10 @@ var _ = Describe("Packet Unpacker", func() {
 	It("unpacks the frames", func() {
 		buf := &bytes.Buffer{}
 		(&wire.PingFrame{}).Write(buf, protocol.VersionWhatever)
-		(&wire.BlockedFrame{}).Write(buf, protocol.VersionWhatever)
+		(&wire.DataBlockedFrame{}).Write(buf, protocol.VersionWhatever)
 		aead.EXPECT().Open1RTT(gomock.Any(), gomock.Any(), hdr.PacketNumber, hdr.Raw).Return(buf.Bytes(), nil)
 		packet, err := unpacker.Unpack(hdr.Raw, hdr, nil)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(Equal([]wire.Frame{&wire.PingFrame{}, &wire.BlockedFrame{}}))
+		Expect(packet.frames).To(Equal([]wire.Frame{&wire.PingFrame{}, &wire.DataBlockedFrame{}}))
 	})
 })

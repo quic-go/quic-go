@@ -292,7 +292,7 @@ var _ = Describe("Streams Map", func() {
 				})
 			})
 
-			Context("handling MAX_STREAM_ID frames", func() {
+			Context("handling MAX_STREAMS frames", func() {
 				BeforeEach(func() {
 					mockSender.EXPECT().queueControlFrame(gomock.Any()).AnyTimes()
 				})
@@ -300,49 +300,49 @@ var _ = Describe("Streams Map", func() {
 				It("processes IDs for outgoing bidirectional streams", func() {
 					_, err := m.OpenStream()
 					Expect(err).To(MatchError(qerr.TooManyOpenStreams))
-					err = m.HandleMaxStreamIDFrame(&wire.MaxStreamIDFrame{StreamID: ids.firstOutgoingBidiStream})
-					Expect(err).ToNot(HaveOccurred())
+					Expect(m.HandleMaxStreamsFrame(&wire.MaxStreamsFrame{
+						Type:       protocol.StreamTypeBidi,
+						MaxStreams: 1,
+					})).To(Succeed())
 					str, err := m.OpenStream()
 					Expect(err).ToNot(HaveOccurred())
 					Expect(str.StreamID()).To(Equal(ids.firstOutgoingBidiStream))
+					_, err = m.OpenStream()
+					Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 				})
 
-				It("processes IDs for outgoing bidirectional streams", func() {
+				It("processes IDs for outgoing unidirectional streams", func() {
 					_, err := m.OpenUniStream()
 					Expect(err).To(MatchError(qerr.TooManyOpenStreams))
-					err = m.HandleMaxStreamIDFrame(&wire.MaxStreamIDFrame{StreamID: ids.firstOutgoingUniStream})
-					Expect(err).ToNot(HaveOccurred())
+					Expect(m.HandleMaxStreamsFrame(&wire.MaxStreamsFrame{
+						Type:       protocol.StreamTypeUni,
+						MaxStreams: 1,
+					})).To(Succeed())
 					str, err := m.OpenUniStream()
 					Expect(err).ToNot(HaveOccurred())
 					Expect(str.StreamID()).To(Equal(ids.firstOutgoingUniStream))
-				})
-
-				It("rejects IDs for incoming bidirectional streams", func() {
-					err := m.HandleMaxStreamIDFrame(&wire.MaxStreamIDFrame{StreamID: ids.firstIncomingBidiStream})
-					Expect(err).To(MatchError(fmt.Sprintf("received MAX_STREAM_DATA frame for incoming stream %d", ids.firstIncomingBidiStream)))
-				})
-
-				It("rejects IDs for incoming unidirectional streams", func() {
-					err := m.HandleMaxStreamIDFrame(&wire.MaxStreamIDFrame{StreamID: ids.firstIncomingUniStream})
-					Expect(err).To(MatchError(fmt.Sprintf("received MAX_STREAM_DATA frame for incoming stream %d", ids.firstIncomingUniStream)))
+					_, err = m.OpenUniStream()
+					Expect(err).To(MatchError(qerr.TooManyOpenStreams))
 				})
 			})
 
-			Context("sending MAX_STREAM_ID frames", func() {
-				It("sends MAX_STREAM_ID frames for bidirectional streams", func() {
-					_, err := m.GetOrOpenReceiveStream(ids.firstIncomingBidiStream + 4*10)
+			Context("sending MAX_STREAMS frames", func() {
+				It("sends a MAX_STREAMS frame for bidirectional streams", func() {
+					_, err := m.GetOrOpenReceiveStream(ids.firstIncomingBidiStream)
 					Expect(err).ToNot(HaveOccurred())
-					mockSender.EXPECT().queueControlFrame(&wire.MaxStreamIDFrame{
-						StreamID: protocol.MaxBidiStreamID(maxBidiStreams, perspective) + 4,
+					mockSender.EXPECT().queueControlFrame(&wire.MaxStreamsFrame{
+						Type:       protocol.StreamTypeBidi,
+						MaxStreams: maxBidiStreams + 1,
 					})
 					Expect(m.DeleteStream(ids.firstIncomingBidiStream)).To(Succeed())
 				})
 
-				It("sends MAX_STREAM_ID frames for unidirectional streams", func() {
-					_, err := m.GetOrOpenReceiveStream(ids.firstIncomingUniStream + 4*10)
+				It("sends a MAX_STREAMS frame for unidirectional streams", func() {
+					_, err := m.GetOrOpenReceiveStream(ids.firstIncomingUniStream)
 					Expect(err).ToNot(HaveOccurred())
-					mockSender.EXPECT().queueControlFrame(&wire.MaxStreamIDFrame{
-						StreamID: protocol.MaxUniStreamID(maxUniStreams, perspective) + 4,
+					mockSender.EXPECT().queueControlFrame(&wire.MaxStreamsFrame{
+						Type:       protocol.StreamTypeUni,
+						MaxStreams: maxUniStreams + 1,
 					})
 					Expect(m.DeleteStream(ids.firstIncomingUniStream)).To(Succeed())
 				})
