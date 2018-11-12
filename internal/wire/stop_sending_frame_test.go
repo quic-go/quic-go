@@ -13,7 +13,7 @@ import (
 var _ = Describe("STOP_SENDING frame", func() {
 	Context("when parsing", func() {
 		It("parses a sample frame", func() {
-			data := []byte{0x0c}
+			data := []byte{0x5}
 			data = append(data, encodeVarInt(0xdecafbad)...) // stream ID
 			data = append(data, []byte{0x13, 0x37}...)       // error code
 			b := bytes.NewReader(data)
@@ -25,7 +25,7 @@ var _ = Describe("STOP_SENDING frame", func() {
 		})
 
 		It("errors on EOFs", func() {
-			data := []byte{0x0c}
+			data := []byte{0x5}
 			data = append(data, encodeVarInt(0xdecafbad)...) // stream ID
 			data = append(data, []byte{0x13, 0x37}...)       // error code
 			_, err := parseStopSendingFrame(bytes.NewReader(data), versionIETFFrames)
@@ -46,7 +46,7 @@ var _ = Describe("STOP_SENDING frame", func() {
 			buf := &bytes.Buffer{}
 			err := frame.Write(buf, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x0c}
+			expected := []byte{0x5}
 			expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)
 			expected = append(expected, []byte{0x0, 0x10}...)
 			Expect(buf.Bytes()).To(Equal(expected))

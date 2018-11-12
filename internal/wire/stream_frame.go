@@ -19,18 +19,17 @@ type StreamFrame struct {
 	Data           []byte
 }
 
-// parseStreamFrame reads a STREAM frame
 func parseStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*StreamFrame, error) {
-	frame := &StreamFrame{}
-
 	typeByte, err := r.ReadByte()
 	if err != nil {
 		return nil, err
 	}
 
-	frame.FinBit = typeByte&0x1 > 0
-	frame.DataLenPresent = typeByte&0x2 > 0
 	hasOffset := typeByte&0x4 > 0
+	frame := &StreamFrame{
+		FinBit:         typeByte&0x1 > 0,
+		DataLenPresent: typeByte&0x2 > 0,
+	}
 
 	streamID, err := utils.ReadVarInt(r)
 	if err != nil {
@@ -81,7 +80,7 @@ func (f *StreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) err
 		return errors.New("StreamFrame: attempting to write empty frame without FIN")
 	}
 
-	typeByte := byte(0x10)
+	typeByte := byte(0x8)
 	if f.FinBit {
 		typeByte ^= 0x1
 	}

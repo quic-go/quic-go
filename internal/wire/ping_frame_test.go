@@ -11,7 +11,7 @@ import (
 var _ = Describe("PingFrame", func() {
 	Context("when parsing", func() {
 		It("accepts sample frame", func() {
-			b := bytes.NewReader([]byte{0x07})
+			b := bytes.NewReader([]byte{0x1})
 			_, err := parsePingFrame(b, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b.Len()).To(BeZero())
@@ -28,7 +28,7 @@ var _ = Describe("PingFrame", func() {
 			b := &bytes.Buffer{}
 			frame := PingFrame{}
 			frame.Write(b, protocol.VersionWhatever)
-			Expect(b.Bytes()).To(Equal([]byte{0x07}))
+			Expect(b.Bytes()).To(Equal([]byte{0x1}))
 		})
 
 		It("has the correct min length", func() {

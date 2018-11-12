@@ -12,7 +12,7 @@ import (
 var _ = Describe("MAX_STREAM_DATA frame", func() {
 	Context("parsing", func() {
 		It("accepts sample frame", func() {
-			data := []byte{0x5}
+			data := []byte{0x11}
 			data = append(data, encodeVarInt(0xdeadbeef)...) // Stream ID
 			data = append(data, encodeVarInt(0x12345678)...) // Offset
 			b := bytes.NewReader(data)
@@ -24,7 +24,7 @@ var _ = Describe("MAX_STREAM_DATA frame", func() {
 		})
 
 		It("errors on EOFs", func() {
-			data := []byte{0x5}
+			data := []byte{0x11}
 			data = append(data, encodeVarInt(0xdeadbeef)...) // Stream ID
 			data = append(data, encodeVarInt(0x12345678)...) // Offset
 			_, err := parseMaxStreamDataFrame(bytes.NewReader(data), versionIETFFrames)
@@ -51,7 +51,7 @@ var _ = Describe("MAX_STREAM_DATA frame", func() {
 				StreamID:   0xdecafbad,
 				ByteOffset: 0xdeadbeefcafe42,
 			}
-			expected := []byte{0x5}
+			expected := []byte{0x11}
 			expected = append(expected, encodeVarInt(0xdecafbad)...)
 			expected = append(expected, encodeVarInt(0xdeadbeefcafe42)...)
 			err := f.Write(b, versionIETFFrames)

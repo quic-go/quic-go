@@ -13,7 +13,7 @@ import (
 var _ = Describe("STREAM_DATA_BLOCKED frame", func() {
 	Context("parsing", func() {
 		It("accepts sample frame", func() {
-			data := []byte{0x9}
+			data := []byte{0x15}
 			data = append(data, encodeVarInt(0xdeadbeef)...) // stream ID
 			data = append(data, encodeVarInt(0xdecafbad)...) // offset
 			b := bytes.NewReader(data)
@@ -25,7 +25,7 @@ var _ = Describe("STREAM_DATA_BLOCKED frame", func() {
 		})
 
 		It("errors on EOFs", func() {
-			data := []byte{0x9}
+			data := []byte{0x15}
 			data = append(data, encodeVarInt(0xdeadbeef)...)
 			data = append(data, encodeVarInt(0xc0010ff)...)
 			_, err := parseStreamDataBlockedFrame(bytes.NewReader(data), versionIETFFrames)
@@ -54,7 +54,7 @@ var _ = Describe("STREAM_DATA_BLOCKED frame", func() {
 			}
 			err := f.Write(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x9}
+			expected := []byte{0x15}
 			expected = append(expected, encodeVarInt(uint64(f.StreamID))...)
 			expected = append(expected, encodeVarInt(uint64(f.DataLimit))...)
 			Expect(b.Bytes()).To(Equal(expected))

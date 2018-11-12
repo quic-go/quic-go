@@ -13,7 +13,7 @@ import (
 var _ = Describe("STREAM frame", func() {
 	Context("when parsing", func() {
 		It("parses a frame with OFF bit", func() {
-			data := []byte{0x10 ^ 0x4}
+			data := []byte{0x8 ^ 0x4}
 			data = append(data, encodeVarInt(0x12345)...)    // stream ID
 			data = append(data, encodeVarInt(0xdecafbad)...) // offset
 			data = append(data, []byte("foobar")...)
@@ -28,7 +28,7 @@ var _ = Describe("STREAM frame", func() {
 		})
 
 		It("respects the LEN when parsing the frame", func() {
-			data := []byte{0x10 ^ 0x2}
+			data := []byte{0x8 ^ 0x2}
 			data = append(data, encodeVarInt(0x12345)...) // stream ID
 			data = append(data, encodeVarInt(4)...)       // data length
 			data = append(data, []byte("foobar")...)
@@ -43,7 +43,7 @@ var _ = Describe("STREAM frame", func() {
 		})
 
 		It("parses a frame with FIN bit", func() {
-			data := []byte{0x10 ^ 0x1}
+			data := []byte{0x8 ^ 0x1}
 			data = append(data, encodeVarInt(9)...) // stream ID
 			data = append(data, []byte("foobar")...)
 			r := bytes.NewReader(data)
@@ -57,7 +57,7 @@ var _ = Describe("STREAM frame", func() {
 		})
 
 		It("allows empty frames", func() {
-			data := []byte{0x10 ^ 0x4}
+			data := []byte{0x8 ^ 0x4}
 			data = append(data, encodeVarInt(0x1337)...)  // stream ID
 			data = append(data, encodeVarInt(0x12345)...) // offset
 			r := bytes.NewReader(data)
@@ -70,7 +70,7 @@ var _ = Describe("STREAM frame", func() {
 		})
 
 		It("rejects frames that overflow the maximum offset", func() {
-			data := []byte{0x10 ^ 0x4}
+			data := []byte{0x8 ^ 0x4}
 			data = append(data, encodeVarInt(0x12345)...)                         // stream ID
 			data = append(data, encodeVarInt(uint64(protocol.MaxByteCount-5))...) // offset
 			data = append(data, []byte("foobar")...)
@@ -80,7 +80,7 @@ var _ = Describe("STREAM frame", func() {
 		})
 
 		It("errors on EOFs", func() {
-			data := []byte{0x10 ^ 0x4 ^ 0x2}
+			data := []byte{0x8 ^ 0x4 ^ 0x2}
 			data = append(data, encodeVarInt(0x12345)...)    // stream ID
 			data = append(data, encodeVarInt(0xdecafbad)...) // offset
 			data = append(data, encodeVarInt(6)...)          // data length
@@ -103,7 +103,7 @@ var _ = Describe("STREAM frame", func() {
 			b := &bytes.Buffer{}
 			err := f.Write(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x10}
+			expected := []byte{0x8}
 			expected = append(expected, encodeVarInt(0x1337)...) // stream ID
 			expected = append(expected, []byte("foobar")...)
 			Expect(b.Bytes()).To(Equal(expected))
@@ -118,7 +118,7 @@ var _ = Describe("STREAM frame", func() {
 			b := &bytes.Buffer{}
 			err := f.Write(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x10 ^ 0x4}
+			expected := []byte{0x8 ^ 0x4}
 			expected = append(expected, encodeVarInt(0x1337)...)   // stream ID
 			expected = append(expected, encodeVarInt(0x123456)...) // offset
 			expected = append(expected, []byte("foobar")...)
@@ -134,7 +134,7 @@ var _ = Describe("STREAM frame", func() {
 			b := &bytes.Buffer{}
 			err := f.Write(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x10 ^ 0x4 ^ 0x1}
+			expected := []byte{0x8 ^ 0x4 ^ 0x1}
 			expected = append(expected, encodeVarInt(0x1337)...)   // stream ID
 			expected = append(expected, encodeVarInt(0x123456)...) // offset
 			Expect(b.Bytes()).To(Equal(expected))
@@ -149,7 +149,7 @@ var _ = Describe("STREAM frame", func() {
 			b := &bytes.Buffer{}
 			err := f.Write(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x10 ^ 0x2}
+			expected := []byte{0x8 ^ 0x2}
 			expected = append(expected, encodeVarInt(0x1337)...) // stream ID
 			expected = append(expected, encodeVarInt(6)...)      // data length
 			expected = append(expected, []byte("foobar")...)
@@ -166,7 +166,7 @@ var _ = Describe("STREAM frame", func() {
 			b := &bytes.Buffer{}
 			err := f.Write(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x10 ^ 0x4 ^ 0x2}
+			expected := []byte{0x8 ^ 0x4 ^ 0x2}
 			expected = append(expected, encodeVarInt(0x1337)...)   // stream ID
 			expected = append(expected, encodeVarInt(0x123456)...) // offset
 			expected = append(expected, encodeVarInt(6)...)        // data length

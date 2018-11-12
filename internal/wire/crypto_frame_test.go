@@ -12,7 +12,7 @@ import (
 var _ = Describe("CRYPTO frame", func() {
 	Context("when parsing", func() {
 		It("parses", func() {
-			data := []byte{0x18}
+			data := []byte{0x6}
 			data = append(data, encodeVarInt(0xdecafbad)...) // offset
 			data = append(data, encodeVarInt(6)...)          // length
 			data = append(data, []byte("foobar")...)
@@ -25,7 +25,7 @@ var _ = Describe("CRYPTO frame", func() {
 		})
 
 		It("errors on EOFs", func() {
-			data := []byte{0x18}
+			data := []byte{0x6}
 			data = append(data, encodeVarInt(0xdecafbad)...) // offset
 			data = append(data, encodeVarInt(6)...)          // data length
 			data = append(data, []byte("foobar")...)
@@ -47,7 +47,7 @@ var _ = Describe("CRYPTO frame", func() {
 			b := &bytes.Buffer{}
 			err := f.Write(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x18}
+			expected := []byte{0x6}
 			expected = append(expected, encodeVarInt(0x123456)...) // offset
 			expected = append(expected, encodeVarInt(6)...)        // length
 			expected = append(expected, []byte("foobar")...)

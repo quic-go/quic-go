@@ -43,7 +43,7 @@ func parseCryptoFrame(r *bytes.Reader, _ protocol.VersionNumber) (*CryptoFrame, 
 }
 
 func (f *CryptoFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) error {
-	b.WriteByte(0x18)
+	b.WriteByte(0x6)
 	utils.WriteVarInt(b, uint64(f.Offset))
 	utils.WriteVarInt(b, uint64(len(f.Data)))
 	b.Write(f.Data)

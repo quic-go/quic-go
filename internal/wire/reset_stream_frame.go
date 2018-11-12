@@ -45,7 +45,7 @@ func parseResetStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*Re
 }
 
 func (f *ResetStreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
-	b.WriteByte(0x01)
+	b.WriteByte(0x4)
 	utils.WriteVarInt(b, uint64(f.StreamID))
 	utils.BigEndian.WriteUint16(b, uint16(f.ErrorCode))
 	utils.WriteVarInt(b, uint64(f.ByteOffset))
