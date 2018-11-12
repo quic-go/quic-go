@@ -124,13 +124,14 @@ var _ = Describe("Client", func() {
 		})
 
 		It("resolves the address", func() {
+			if os.Getenv("APPVEYOR") == "True" {
+				Skip("This test is flaky on AppVeyor.")
+			}
+
 			manager := NewMockPacketHandlerManager(mockCtrl)
 			manager.EXPECT().Add(gomock.Any(), gomock.Any())
 			mockMultiplexer.EXPECT().AddConn(gomock.Any(), gomock.Any()).Return(manager, nil)
 
-			if os.Getenv("APPVEYOR") == "True" {
-				Skip("This test is flaky on AppVeyor.")
-			}
 			remoteAddrChan := make(chan string, 1)
 			newClientSession = func(
 				conn connection,
@@ -341,6 +342,10 @@ var _ = Describe("Client", func() {
 		})
 
 		It("closes the connection when it was created by DialAddr", func() {
+			if os.Getenv("APPVEYOR") == "True" {
+				Skip("This test is flaky on AppVeyor.")
+			}
+
 			manager := NewMockPacketHandlerManager(mockCtrl)
 			mockMultiplexer.EXPECT().AddConn(gomock.Any(), gomock.Any()).Return(manager, nil)
 			manager.EXPECT().Add(gomock.Any(), gomock.Any())
