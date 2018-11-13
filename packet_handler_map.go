@@ -26,7 +26,7 @@ type packetHandlerMap struct {
 	server   unknownPacketHandler
 	closed   bool
 
-	deleteClosedSessionsAfter time.Duration
+	deleteRetiredSessionsAfter time.Duration
 
 	logger utils.Logger
 }
@@ -35,11 +35,11 @@ var _ packetHandlerManager = &packetHandlerMap{}
 
 func newPacketHandlerMap(conn net.PacketConn, connIDLen int, logger utils.Logger) packetHandlerManager {
 	m := &packetHandlerMap{
-		conn:                      conn,
-		connIDLen:                 connIDLen,
-		handlers:                  make(map[string]packetHandler),
-		deleteClosedSessionsAfter: protocol.ClosedSessionDeleteTimeout,
-		logger:                    logger,
+		conn:                       conn,
+		connIDLen:                  connIDLen,
+		handlers:                   make(map[string]packetHandler),
+		deleteRetiredSessionsAfter: protocol.RetiredConnectionIDDeleteTimeout,
+		logger:                     logger,
 	}
 	go m.listen()
 	return m
@@ -56,7 +56,7 @@ func (h *packetHandlerMap) Retire(id protocol.ConnectionID) {
 }
 
 func (h *packetHandlerMap) retireByConnectionIDAsString(id string) {
-	time.AfterFunc(h.deleteClosedSessionsAfter, func() {
+	time.AfterFunc(h.deleteRetiredSessionsAfter, func() {
 		h.mutex.Lock()
 		delete(h.handlers, id)
 		h.mutex.Unlock()

@@ -94,9 +94,9 @@ const DefaultIdleTimeout = 30 * time.Second
 // DefaultHandshakeTimeout is the default timeout for a connection until the crypto handshake succeeds.
 const DefaultHandshakeTimeout = 10 * time.Second
 
-// ClosedSessionDeleteTimeout the server ignores packets arriving on a connection that is already closed
+// RetiredConnectionIDDeleteTimeout is the time we keep closed sessions around in order to retransmit the CONNECTION_CLOSE.
 // after this time all information about the old connection will be deleted
-const ClosedSessionDeleteTimeout = time.Minute
+const RetiredConnectionIDDeleteTimeout = time.Minute
 
 // MinStreamFrameSize is the minimum size that has to be left in a packet, so that we add another STREAM frame.
 // This avoids splitting up STREAM frames into small pieces, which has 2 advantages:

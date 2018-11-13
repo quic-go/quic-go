@@ -89,7 +89,7 @@ var _ = Describe("Packet Handler Map", func() {
 		})
 
 		It("deletes closed session entries after a wait time", func() {
-			handler.deleteClosedSessionsAfter = 10 * time.Millisecond
+			handler.deleteRetiredSessionsAfter = 10 * time.Millisecond
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			handler.Add(connID, NewMockPacketHandler(mockCtrl))
 			handler.Retire(connID)
@@ -98,7 +98,7 @@ var _ = Describe("Packet Handler Map", func() {
 		})
 
 		It("passes packets arriving late for closed sessions to that session", func() {
-			handler.deleteClosedSessionsAfter = time.Hour
+			handler.deleteRetiredSessionsAfter = time.Hour
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			packetHandler := NewMockPacketHandler(mockCtrl)
 			packetHandler.EXPECT().GetVersion().Return(protocol.VersionWhatever)
