@@ -424,7 +424,7 @@ runLoop:
 	}
 	s.closed.Set(true)
 	s.logger.Infof("Connection %s closed.", s.srcConnID)
-	s.sessionRunner.removeConnectionID(s.srcConnID)
+	s.sessionRunner.retireConnectionID(s.srcConnID)
 	s.cryptoStreamHandler.Close()
 	return closeErr.err
 }

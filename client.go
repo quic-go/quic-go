@@ -406,7 +406,7 @@ func (c *client) createNewTLSSession(version protocol.VersionNumber) error {
 	defer c.mutex.Unlock()
 	runner := &runner{
 		onHandshakeCompleteImpl: func(_ Session) { close(c.handshakeChan) },
-		removeConnectionIDImpl:  c.packetHandlers.Remove,
+		retireConnectionIDImpl:  c.packetHandlers.Retire,
 	}
 	sess, err := newClientSession(
 		c.conn,

@@ -44,12 +44,12 @@ func (mr *MockSessionRunnerMockRecorder) onHandshakeComplete(arg0 interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "onHandshakeComplete", reflect.TypeOf((*MockSessionRunner)(nil).onHandshakeComplete), arg0)
 }
 
-// removeConnectionID mocks base method
-func (m *MockSessionRunner) removeConnectionID(arg0 protocol.ConnectionID) {
-	m.ctrl.Call(m, "removeConnectionID", arg0)
+// retireConnectionID mocks base method
+func (m *MockSessionRunner) retireConnectionID(arg0 protocol.ConnectionID) {
+	m.ctrl.Call(m, "retireConnectionID", arg0)
 }
 
-// removeConnectionID indicates an expected call of removeConnectionID
-func (mr *MockSessionRunnerMockRecorder) removeConnectionID(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "removeConnectionID", reflect.TypeOf((*MockSessionRunner)(nil).removeConnectionID), arg0)
+// retireConnectionID indicates an expected call of retireConnectionID
+func (mr *MockSessionRunnerMockRecorder) retireConnectionID(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "retireConnectionID", reflect.TypeOf((*MockSessionRunner)(nil).retireConnectionID), arg0)
 }

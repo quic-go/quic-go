@@ -54,14 +54,14 @@ func (mr *MockPacketHandlerManagerMockRecorder) CloseServer() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseServer", reflect.TypeOf((*MockPacketHandlerManager)(nil).CloseServer))
 }
 
-// Remove mocks base method
-func (m *MockPacketHandlerManager) Remove(arg0 protocol.ConnectionID) {
-	m.ctrl.Call(m, "Remove", arg0)
+// Retire mocks base method
+func (m *MockPacketHandlerManager) Retire(arg0 protocol.ConnectionID) {
+	m.ctrl.Call(m, "Retire", arg0)
 }
 
-// Remove indicates an expected call of Remove
-func (mr *MockPacketHandlerManagerMockRecorder) Remove(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockPacketHandlerManager)(nil).Remove), arg0)
+// Retire indicates an expected call of Retire
+func (mr *MockPacketHandlerManagerMockRecorder) Retire(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Retire", reflect.TypeOf((*MockPacketHandlerManager)(nil).Retire), arg0)
 }
 
 // SetServer mocks base method
