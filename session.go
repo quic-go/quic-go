@@ -579,6 +579,7 @@ func (s *session) handleFrames(fs []wire.Frame, encLevel protocol.EncryptionLeve
 			// since we don't send PATH_CHALLENGEs, we don't expect PATH_RESPONSEs
 			err = errors.New("unexpected PATH_RESPONSE frame")
 		case *wire.NewTokenFrame:
+		case *wire.NewConnectionIDFrame:
 		default:
 			return errors.New("Session BUG: unexpected frame type")
 		}
