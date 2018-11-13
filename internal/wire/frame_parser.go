@@ -60,7 +60,8 @@ func parseFrame(r *bytes.Reader, typeByte byte, v protocol.VersionNumber) (Frame
 		frame, err = parseStreamsBlockedFrame(r, v)
 	case 0x18:
 		frame, err = parseNewConnectionIDFrame(r, v)
-	// TODO: implement RETIRE_CONNECTION_ID frame
+	case 0x19:
+		frame, err = parseRetireConnectionIDFrame(r, v)
 	case 0x1a:
 		frame, err = parsePathChallengeFrame(r, v)
 	case 0x1b:

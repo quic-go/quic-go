@@ -196,6 +196,15 @@ var _ = Describe("Frame parsing", func() {
 		Expect(frame).To(Equal(f))
 	})
 
+	It("unpacks RETIRE_CONNECTION_ID frames", func() {
+		f := &RetireConnectionIDFrame{SequenceNumber: 0x1337}
+		buf := &bytes.Buffer{}
+		Expect(f.Write(buf, versionIETFFrames)).To(Succeed())
+		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(frame).To(Equal(f))
+	})
+
 	It("unpacks PATH_CHALLENGE frames", func() {
 		f := &PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}
 		err := f.Write(buf, versionIETFFrames)
