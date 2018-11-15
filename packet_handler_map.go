@@ -51,6 +51,12 @@ func (h *packetHandlerMap) Add(id protocol.ConnectionID, handler packetHandler) 
 	h.mutex.Unlock()
 }
 
+func (h *packetHandlerMap) Remove(id protocol.ConnectionID) {
+	h.mutex.Lock()
+	delete(h.handlers, string(id))
+	h.mutex.Unlock()
+}
+
 func (h *packetHandlerMap) Retire(id protocol.ConnectionID) {
 	h.retireByConnectionIDAsString(string(id))
 }

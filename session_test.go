@@ -326,7 +326,7 @@ var _ = Describe("Session", func() {
 		It("handles CONNECTION_CLOSE frames", func() {
 			testErr := qerr.Error(qerr.ProofInvalid, "foobar")
 			streamManager.EXPECT().CloseWithError(testErr)
-			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 
 			go func() {
@@ -402,7 +402,7 @@ var _ = Describe("Session", func() {
 
 		It("closes the session in order to replace it with another QUIC version", func() {
 			streamManager.EXPECT().CloseWithError(gomock.Any())
-			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			sess.destroy(errCloseSessionForNewVersion)
 			Eventually(areSessionsRunning).Should(BeFalse())

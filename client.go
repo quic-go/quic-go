@@ -407,6 +407,7 @@ func (c *client) createNewTLSSession(version protocol.VersionNumber) error {
 	runner := &runner{
 		onHandshakeCompleteImpl: func(_ Session) { close(c.handshakeChan) },
 		retireConnectionIDImpl:  c.packetHandlers.Retire,
+		removeConnectionIDImpl:  c.packetHandlers.Remove,
 	}
 	sess, err := newClientSession(
 		c.conn,

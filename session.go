@@ -424,7 +424,6 @@ runLoop:
 	}
 	s.closed.Set(true)
 	s.logger.Infof("Connection %s closed.", s.srcConnID)
-	s.sessionRunner.retireConnectionID(s.srcConnID)
 	s.cryptoStreamHandler.Close()
 	return closeErr.err
 }
@@ -718,6 +717,7 @@ func (s *session) handleAckFrame(frame *wire.AckFrame, encLevel protocol.Encrypt
 // closeLocal closes the session and send a CONNECTION_CLOSE containing the error
 func (s *session) closeLocal(e error) {
 	s.closeOnce.Do(func() {
+		s.sessionRunner.retireConnectionID(s.srcConnID)
 		s.closeChan <- closeError{err: e, sendClose: true, remote: false}
 	})
 }
@@ -725,12 +725,14 @@ func (s *session) closeLocal(e error) {
 // destroy closes the session without sending the error on the wire
 func (s *session) destroy(e error) {
 	s.closeOnce.Do(func() {
+		s.sessionRunner.removeConnectionID(s.srcConnID)
 		s.closeChan <- closeError{err: e, sendClose: false, remote: false}
 	})
 }
 
 func (s *session) closeRemote(e error) {
 	s.closeOnce.Do(func() {
+		s.sessionRunner.removeConnectionID(s.srcConnID)
 		s.closeChan <- closeError{err: e, remote: true}
 	})
 }

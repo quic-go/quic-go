@@ -88,7 +88,15 @@ var _ = Describe("Packet Handler Map", func() {
 			Expect(err.Error()).To(ContainSubstring("error parsing invariant header:"))
 		})
 
-		It("deletes closed session entries after a wait time", func() {
+		It("deletes removed session immediately", func() {
+			handler.deleteRetiredSessionsAfter = time.Hour
+			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+			handler.Add(connID, NewMockPacketHandler(mockCtrl))
+			handler.Remove(connID)
+			Expect(handler.handlePacket(nil, getPacket(connID))).To(MatchError("received a packet with an unexpected connection ID 0x0102030405060708"))
+		})
+
+		It("deletes retired session entries after a wait time", func() {
 			handler.deleteRetiredSessionsAfter = 10 * time.Millisecond
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			handler.Add(connID, NewMockPacketHandler(mockCtrl))
