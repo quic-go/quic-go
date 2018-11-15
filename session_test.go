@@ -426,6 +426,24 @@ var _ = Describe("Session", func() {
 			sess.Close()
 			Eventually(returned).Should(BeClosed())
 		})
+
+		It("retransmits the CONNECTION_CLOSE packet if packets are arriving late", func() {
+			streamManager.EXPECT().CloseWithError(gomock.Any())
+			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
+			cryptoSetup.EXPECT().Close()
+			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{raw: []byte("foobar")}, nil)
+			sess.Close()
+			Expect(mconn.written).To(Receive(Equal([]byte("foobar")))) // receive the CONNECTION_CLOSE
+			Eventually(sess.Context().Done()).Should(BeClosed())
+			for i := 1; i <= 20; i++ {
+				sess.handlePacket(&receivedPacket{})
+				if i == 1 || i == 2 || i == 4 || i == 8 || i == 16 {
+					Expect(mconn.written).To(Receive(Equal([]byte("foobar")))) // receive the CONNECTION_CLOSE
+				} else {
+					Expect(mconn.written).To(HaveLen(0))
+				}
+			}
+		})
 	})
 
 	Context("receiving packets", func() {

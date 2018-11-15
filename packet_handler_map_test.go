@@ -88,20 +88,23 @@ var _ = Describe("Packet Handler Map", func() {
 			Expect(err.Error()).To(ContainSubstring("error parsing invariant header:"))
 		})
 
-		It("deletes nil session entries after a wait time", func() {
+		It("deletes closed session entries after a wait time", func() {
 			handler.deleteClosedSessionsAfter = 10 * time.Millisecond
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			handler.Add(connID, NewMockPacketHandler(mockCtrl))
 			handler.Remove(connID)
-			Eventually(func() error {
-				return handler.handlePacket(nil, getPacket(connID))
-			}).Should(MatchError("received a packet with an unexpected connection ID 0x0102030405060708"))
+			time.Sleep(30 * time.Millisecond)
+			Expect(handler.handlePacket(nil, getPacket(connID))).To(MatchError("received a packet with an unexpected connection ID 0x0102030405060708"))
 		})
 
-		It("ignores packets arriving late for closed sessions", func() {
+		It("passes packets arriving late for closed sessions to that session", func() {
 			handler.deleteClosedSessionsAfter = time.Hour
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			handler.Add(connID, NewMockPacketHandler(mockCtrl))
+			packetHandler := NewMockPacketHandler(mockCtrl)
+			packetHandler.EXPECT().GetVersion().Return(protocol.VersionWhatever)
+			packetHandler.EXPECT().GetPerspective().Return(protocol.PerspectiveClient)
+			packetHandler.EXPECT().handlePacket(gomock.Any())
+			handler.Add(connID, packetHandler)
 			handler.Remove(connID)
 			err := handler.handlePacket(nil, getPacket(connID))
 			Expect(err).ToNot(HaveOccurred())

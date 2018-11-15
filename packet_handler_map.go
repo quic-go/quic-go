@@ -56,10 +56,6 @@ func (h *packetHandlerMap) Remove(id protocol.ConnectionID) {
 }
 
 func (h *packetHandlerMap) removeByConnectionIDAsString(id string) {
-	h.mutex.Lock()
-	h.handlers[id] = nil
-	h.mutex.Unlock()
-
 	time.AfterFunc(h.deleteClosedSessionsAfter, func() {
 		h.mutex.Lock()
 		delete(h.handlers, id)
@@ -102,13 +98,11 @@ func (h *packetHandlerMap) close(e error) error {
 
 	var wg sync.WaitGroup
 	for _, handler := range h.handlers {
-		if handler != nil {
-			wg.Add(1)
-			go func(handler packetHandler) {
-				handler.destroy(e)
-				wg.Done()
-			}(handler)
-		}
+		wg.Add(1)
+		go func(handler packetHandler) {
+			handler.destroy(e)
+			wg.Done()
+		}(handler)
 	}
 
 	if h.server != nil {
