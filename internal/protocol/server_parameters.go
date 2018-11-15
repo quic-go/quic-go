@@ -96,7 +96,7 @@ const DefaultHandshakeTimeout = 10 * time.Second
 
 // RetiredConnectionIDDeleteTimeout is the time we keep closed sessions around in order to retransmit the CONNECTION_CLOSE.
 // after this time all information about the old connection will be deleted
-const RetiredConnectionIDDeleteTimeout = time.Minute
+const RetiredConnectionIDDeleteTimeout = 5 * time.Second
 
 // MinStreamFrameSize is the minimum size that has to be left in a packet, so that we add another STREAM frame.
 // This avoids splitting up STREAM frames into small pieces, which has 2 advantages:
