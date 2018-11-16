@@ -94,9 +94,13 @@ type session struct {
 
 	receivedPackets  chan *receivedPacket
 	sendingScheduled chan struct{}
-	// closeChan is used to notify the run loop that it should terminate.
-	closeChan chan closeError
+
 	closeOnce sync.Once
+	closed    utils.AtomicBool
+	// closeChan is used to notify the run loop that it should terminate
+	closeChan                 chan closeError
+	connectionClosePacket     *packedPacket
+	packetsReceivedAfterClose int
 
 	ctx       context.Context
 	ctxCancel context.CancelFunc
@@ -418,6 +422,7 @@ runLoop:
 	if err := s.handleCloseError(closeErr); err != nil {
 		s.logger.Infof("Handling close error failed: %s", err)
 	}
+	s.closed.Set(true)
 	s.logger.Infof("Connection %s closed.", s.srcConnID)
 	s.sessionRunner.removeConnectionID(s.srcConnID)
 	s.cryptoStreamHandler.Close()
@@ -596,11 +601,32 @@ func (s *session) handleFrames(fs []wire.Frame, encLevel protocol.EncryptionLeve
 
 // handlePacket is called by the server with a new packet
 func (s *session) handlePacket(p *receivedPacket) {
+	if s.closed.Get() {
+		s.handlePacketAfterClosed(p)
+	}
 	// Discard packets once the amount of queued packets is larger than
 	// the channel size, protocol.MaxSessionUnprocessedPackets
 	select {
 	case s.receivedPackets <- p:
 	default:
+	}
+}
+
+func (s *session) handlePacketAfterClosed(p *receivedPacket) {
+	s.packetsReceivedAfterClose++
+	if s.connectionClosePacket == nil {
+		return
+	}
+	// exponential backoff
+	// only send a CONNECTION_CLOSE for the 1st, 2nd, 4th, 8th, 16th, ... packet arriving
+	for n := s.packetsReceivedAfterClose; n > 1; n = n / 2 {
+		if n%2 != 0 {
+			return
+		}
+	}
+	s.logger.Debugf("Received %d packets after sending CONNECTION_CLOSE. Retransmitting.", s.packetsReceivedAfterClose)
+	if err := s.conn.Write(s.connectionClosePacket.raw); err != nil {
+		s.logger.Debugf("Error retransmitting CONNECTION_CLOSE: %s", err)
 	}
 }
 
@@ -943,6 +969,7 @@ func (s *session) sendConnectionClose(quicErr *qerr.QuicError) error {
 	if err != nil {
 		return err
 	}
+	s.connectionClosePacket = packet
 	s.logPacket(packet)
 	return s.conn.Write(packet.raw)
 }
