@@ -53,3 +53,13 @@ func (m *MockSessionRunner) removeConnectionID(arg0 protocol.ConnectionID) {
 func (mr *MockSessionRunnerMockRecorder) removeConnectionID(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "removeConnectionID", reflect.TypeOf((*MockSessionRunner)(nil).removeConnectionID), arg0)
 }
+
+// retireConnectionID mocks base method
+func (m *MockSessionRunner) retireConnectionID(arg0 protocol.ConnectionID) {
+	m.ctrl.Call(m, "retireConnectionID", arg0)
+}
+
+// retireConnectionID indicates an expected call of retireConnectionID
+func (mr *MockSessionRunnerMockRecorder) retireConnectionID(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "retireConnectionID", reflect.TypeOf((*MockSessionRunner)(nil).retireConnectionID), arg0)
+}

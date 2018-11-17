@@ -32,8 +32,9 @@ type unknownPacketHandler interface {
 
 type packetHandlerManager interface {
 	Add(protocol.ConnectionID, packetHandler)
-	SetServer(unknownPacketHandler)
+	Retire(protocol.ConnectionID)
 	Remove(protocol.ConnectionID)
+	SetServer(unknownPacketHandler)
 	CloseServer()
 }
 
@@ -48,15 +49,18 @@ type quicSession interface {
 
 type sessionRunner interface {
 	onHandshakeComplete(Session)
+	retireConnectionID(protocol.ConnectionID)
 	removeConnectionID(protocol.ConnectionID)
 }
 
 type runner struct {
 	onHandshakeCompleteImpl func(Session)
+	retireConnectionIDImpl  func(protocol.ConnectionID)
 	removeConnectionIDImpl  func(protocol.ConnectionID)
 }
 
 func (r *runner) onHandshakeComplete(s Session)              { r.onHandshakeCompleteImpl(s) }
+func (r *runner) retireConnectionID(c protocol.ConnectionID) { r.retireConnectionIDImpl(c) }
 func (r *runner) removeConnectionID(c protocol.ConnectionID) { r.removeConnectionIDImpl(c) }
 
 var _ sessionRunner = &runner{}
@@ -152,6 +156,7 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*server, 
 func (s *server) setup() error {
 	s.sessionRunner = &runner{
 		onHandshakeCompleteImpl: func(sess Session) { s.sessionQueue <- sess },
+		retireConnectionIDImpl:  s.sessionHandler.Retire,
 		removeConnectionIDImpl:  s.sessionHandler.Remove,
 	}
 	cookieGenerator, err := handshake.NewCookieGenerator()
