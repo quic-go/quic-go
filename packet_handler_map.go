@@ -80,7 +80,7 @@ func (h *packetHandlerMap) CloseServer() {
 	h.server = nil
 	var wg sync.WaitGroup
 	for id, handler := range h.handlers {
-		if handler != nil && handler.GetPerspective() == protocol.PerspectiveServer {
+		if handler.GetPerspective() == protocol.PerspectiveServer {
 			wg.Add(1)
 			go func(id string, handler packetHandler) {
 				// session.Close() blocks until the CONNECTION_CLOSE has been sent and the run-loop has stopped
@@ -156,21 +156,17 @@ func (h *packetHandlerMap) handlePacket(addr net.Addr, data []byte) error {
 	var sentBy protocol.Perspective
 	var version protocol.VersionNumber
 	var handlePacket func(*receivedPacket)
-	if ok && handler == nil {
-		// Late packet for closed session
-		return nil
-	}
-	if !ok {
+	if ok { // existing session
+		sentBy = handler.GetPerspective().Opposite()
+		version = handler.GetVersion()
+		handlePacket = handler.handlePacket
+	} else { // no session found
 		if server == nil { // no server set
 			return fmt.Errorf("received a packet with an unexpected connection ID %s", iHdr.DestConnectionID)
 		}
 		handlePacket = server.handlePacket
 		sentBy = protocol.PerspectiveClient
 		version = iHdr.Version
-	} else {
-		sentBy = handler.GetPerspective().Opposite()
-		version = handler.GetVersion()
-		handlePacket = handler.handlePacket
 	}
 
 	hdr, err := iHdr.Parse(r, sentBy, version)
