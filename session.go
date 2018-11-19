@@ -487,11 +487,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		return nil
 	}
 
-	if p.rcvTime.IsZero() {
-		// To simplify testing
-		p.rcvTime = time.Now()
-	}
-
+	p.rcvTime = time.Now()
 	// Calculate packet number
 	hdr.PacketNumber = protocol.InferPacketNumber(
 		hdr.PacketNumberLen,
