@@ -468,13 +468,13 @@ var _ = Describe("Session", func() {
 
 		It("informs the ReceivedPacketHandler", func() {
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
-			now := time.Now().Add(time.Hour)
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
-			rph.EXPECT().ReceivedPacket(protocol.PacketNumber(5), now, false)
+			rph.EXPECT().ReceivedPacket(protocol.PacketNumber(5), gomock.Any(), false).Do(func(_ protocol.PacketNumber, t time.Time, _ bool) {
+				Expect(t).To(BeTemporally("~", time.Now(), scaleDuration(25*time.Millisecond)))
+			})
 			sess.receivedPacketHandler = rph
 			hdr.PacketNumber = 5
-			err := sess.handlePacketImpl(&receivedPacket{header: hdr, rcvTime: now})
-			Expect(err).ToNot(HaveOccurred())
+			Expect(sess.handlePacketImpl(&receivedPacket{header: hdr})).To(Succeed())
 		})
 
 		It("doesn't inform the ReceivedPacketHandler about Retry packets", func() {
