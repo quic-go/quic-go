@@ -19,8 +19,6 @@ const (
 	PacketNumberLen2 PacketNumberLen = 2
 	// PacketNumberLen4 is a packet number length of 4 bytes
 	PacketNumberLen4 PacketNumberLen = 4
-	// PacketNumberLen6 is a packet number length of 6 bytes
-	PacketNumberLen6 PacketNumberLen = 6
 )
 
 // The PacketType is the Long Header Type
