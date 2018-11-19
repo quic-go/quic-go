@@ -58,8 +58,5 @@ func GetPacketNumberLength(packetNumber PacketNumber) PacketNumberLen {
 	if packetNumber < (1 << (uint8(PacketNumberLen2) * 8)) {
 		return PacketNumberLen2
 	}
-	if packetNumber < (1 << (uint8(PacketNumberLen4) * 8)) {
-		return PacketNumberLen4
-	}
-	return PacketNumberLen6
+	return PacketNumberLen4
 }

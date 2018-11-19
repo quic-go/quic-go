@@ -228,9 +228,5 @@ var _ = Describe("packet number calculation", func() {
 		It("4 byte", func() {
 			Expect(GetPacketNumberLength(0xFFFFFFFF)).To(Equal(PacketNumberLen4))
 		})
-
-		It("6 byte", func() {
-			Expect(GetPacketNumberLength(0xFFFFFFFFFFFF)).To(Equal(PacketNumberLen6))
-		})
 	})
 })

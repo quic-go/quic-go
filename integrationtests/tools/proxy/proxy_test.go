@@ -24,7 +24,7 @@ var _ = Describe("QUIC Proxy", func() {
 		b := &bytes.Buffer{}
 		hdr := wire.Header{
 			PacketNumber:     p,
-			PacketNumberLen:  protocol.PacketNumberLen6,
+			PacketNumberLen:  protocol.PacketNumberLen4,
 			DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0, 0, 0x13, 0x37},
 			SrcConnectionID:  protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0, 0, 0x13, 0x37},
 		}

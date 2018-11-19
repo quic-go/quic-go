@@ -453,7 +453,7 @@ var _ = Describe("Session", func() {
 		BeforeEach(func() {
 			unpacker = NewMockUnpacker(mockCtrl)
 			sess.unpacker = unpacker
-			hdr = &wire.Header{PacketNumberLen: protocol.PacketNumberLen6}
+			hdr = &wire.Header{PacketNumberLen: protocol.PacketNumberLen4}
 		})
 
 		It("sets the {last,largest}RcvdPacketNumber", func() {
