@@ -185,14 +185,18 @@ func (h *packetHandlerMap) handlePacket(addr net.Addr, data []byte) error {
 		handlePacket = handler.handlePacket
 	} else { // no session found
 		// this might be a stateless reset
-		if !iHdr.IsLongHeader && len(data) >= protocol.MinStatelessResetSize {
-			var token [16]byte
-			copy(token[:], data[len(data)-16:])
-			if sess, ok := h.resetTokens[token]; ok {
-				h.mutex.RUnlock()
-				sess.destroy(errors.New("received a stateless reset"))
-				return nil
+		if !iHdr.IsLongHeader {
+			if len(data) >= protocol.MinStatelessResetSize {
+				var token [16]byte
+				copy(token[:], data[len(data)-16:])
+				if sess, ok := h.resetTokens[token]; ok {
+					h.mutex.RUnlock()
+					sess.destroy(errors.New("received a stateless reset"))
+					return nil
+				}
 			}
+			// TODO(#943): send a stateless reset
+			return fmt.Errorf("received a short header packet with an unexpected connection ID %s", iHdr.DestConnectionID)
 		}
 		if server == nil { // no server set
 			h.mutex.RUnlock()
