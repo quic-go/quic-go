@@ -10,8 +10,8 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
-// The InvariantHeader is the version independent part of the header
-type InvariantHeader struct {
+// The Header is the version independent part of the header
+type Header struct {
 	IsLongHeader     bool
 	Version          protocol.VersionNumber
 	SrcConnectionID  protocol.ConnectionID
@@ -21,10 +21,10 @@ type InvariantHeader struct {
 	len      int // how many bytes were read while parsing this header
 }
 
-// ParseInvariantHeader parses the version independent part of the header
-func ParseInvariantHeader(b *bytes.Reader, shortHeaderConnIDLen int) (*InvariantHeader, error) {
+// ParseHeader parses the version independent part of the header
+func ParseHeader(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error) {
 	startLen := b.Len()
-	h, err := parseInvariantHeaderImpl(b, shortHeaderConnIDLen)
+	h, err := parseHeaderImpl(b, shortHeaderConnIDLen)
 	if err != nil {
 		return nil, err
 	}
@@ -32,13 +32,13 @@ func ParseInvariantHeader(b *bytes.Reader, shortHeaderConnIDLen int) (*Invariant
 	return h, nil
 }
 
-func parseInvariantHeaderImpl(b *bytes.Reader, shortHeaderConnIDLen int) (*InvariantHeader, error) {
+func parseHeaderImpl(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error) {
 	typeByte, err := b.ReadByte()
 	if err != nil {
 		return nil, err
 	}
 
-	h := &InvariantHeader{typeByte: typeByte}
+	h := &Header{typeByte: typeByte}
 	h.IsLongHeader = typeByte&0x80 > 0
 
 	// If this is not a Long Header, it could either be a Public Header or a Short Header.
@@ -74,71 +74,71 @@ func parseInvariantHeaderImpl(b *bytes.Reader, shortHeaderConnIDLen int) (*Invar
 
 // Parse parses the version dependent part of the header.
 // The Reader has to be set such that it points to the first byte of the header.
-func (iv *InvariantHeader) Parse(b *bytes.Reader, ver protocol.VersionNumber) (*ExtendedHeader, error) {
-	if _, err := b.Seek(int64(iv.len), io.SeekCurrent); err != nil {
+func (h *Header) Parse(b *bytes.Reader, ver protocol.VersionNumber) (*ExtendedHeader, error) {
+	if _, err := b.Seek(int64(h.len), io.SeekCurrent); err != nil {
 		return nil, err
 	}
-	if iv.IsLongHeader {
-		if iv.Version == 0 { // Version Negotiation Packet
-			return iv.parseVersionNegotiationPacket(b)
+	if h.IsLongHeader {
+		if h.Version == 0 { // Version Negotiation Packet
+			return h.parseVersionNegotiationPacket(b)
 		}
-		return iv.parseLongHeader(b, ver)
+		return h.parseLongHeader(b, ver)
 	}
-	return iv.parseShortHeader(b, ver)
+	return h.parseShortHeader(b, ver)
 }
 
-func (iv *InvariantHeader) toExtendedHeader() *ExtendedHeader {
+func (h *Header) toExtendedHeader() *ExtendedHeader {
 	return &ExtendedHeader{
-		IsLongHeader:     iv.IsLongHeader,
-		DestConnectionID: iv.DestConnectionID,
-		SrcConnectionID:  iv.SrcConnectionID,
-		Version:          iv.Version,
+		IsLongHeader:     h.IsLongHeader,
+		DestConnectionID: h.DestConnectionID,
+		SrcConnectionID:  h.SrcConnectionID,
+		Version:          h.Version,
 	}
 }
 
-func (iv *InvariantHeader) parseVersionNegotiationPacket(b *bytes.Reader) (*ExtendedHeader, error) {
-	h := iv.toExtendedHeader()
+func (h *Header) parseVersionNegotiationPacket(b *bytes.Reader) (*ExtendedHeader, error) {
+	eh := h.toExtendedHeader()
 	if b.Len() == 0 {
 		return nil, qerr.Error(qerr.InvalidVersionNegotiationPacket, "empty version list")
 	}
-	h.IsVersionNegotiation = true
-	h.SupportedVersions = make([]protocol.VersionNumber, b.Len()/4)
+	eh.IsVersionNegotiation = true
+	eh.SupportedVersions = make([]protocol.VersionNumber, b.Len()/4)
 	for i := 0; b.Len() > 0; i++ {
 		v, err := utils.BigEndian.ReadUint32(b)
 		if err != nil {
 			return nil, qerr.InvalidVersionNegotiationPacket
 		}
-		h.SupportedVersions[i] = protocol.VersionNumber(v)
+		eh.SupportedVersions[i] = protocol.VersionNumber(v)
 	}
-	return h, nil
+	return eh, nil
 }
 
-func (iv *InvariantHeader) parseLongHeader(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
-	h := iv.toExtendedHeader()
-	h.Type = protocol.PacketType(iv.typeByte & 0x7f)
+func (h *Header) parseLongHeader(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
+	eh := h.toExtendedHeader()
+	eh.Type = protocol.PacketType(h.typeByte & 0x7f)
 
-	if h.Type != protocol.PacketTypeInitial && h.Type != protocol.PacketTypeRetry && h.Type != protocol.PacketType0RTT && h.Type != protocol.PacketTypeHandshake {
-		return nil, qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", h.Type))
+	if eh.Type != protocol.PacketTypeInitial && eh.Type != protocol.PacketTypeRetry && eh.Type != protocol.PacketType0RTT && eh.Type != protocol.PacketTypeHandshake {
+		return nil, qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", eh.Type))
 	}
 
-	if h.Type == protocol.PacketTypeRetry {
+	if eh.Type == protocol.PacketTypeRetry {
 		odcilByte, err := b.ReadByte()
 		if err != nil {
 			return nil, err
 		}
 		odcil := decodeSingleConnIDLen(odcilByte & 0xf)
-		h.OrigDestConnectionID, err = protocol.ReadConnectionID(b, odcil)
+		eh.OrigDestConnectionID, err = protocol.ReadConnectionID(b, odcil)
 		if err != nil {
 			return nil, err
 		}
-		h.Token = make([]byte, b.Len())
-		if _, err := io.ReadFull(b, h.Token); err != nil {
+		eh.Token = make([]byte, b.Len())
+		if _, err := io.ReadFull(b, eh.Token); err != nil {
 			return nil, err
 		}
-		return h, nil
+		return eh, nil
 	}
 
-	if h.Type == protocol.PacketTypeInitial {
+	if eh.Type == protocol.PacketTypeInitial {
 		tokenLen, err := utils.ReadVarInt(b)
 		if err != nil {
 			return nil, err
@@ -146,8 +146,8 @@ func (iv *InvariantHeader) parseLongHeader(b *bytes.Reader, v protocol.VersionNu
 		if tokenLen > uint64(b.Len()) {
 			return nil, io.EOF
 		}
-		h.Token = make([]byte, tokenLen)
-		if _, err := io.ReadFull(b, h.Token); err != nil {
+		eh.Token = make([]byte, tokenLen)
+		if _, err := io.ReadFull(b, eh.Token); err != nil {
 			return nil, err
 		}
 	}
@@ -156,27 +156,27 @@ func (iv *InvariantHeader) parseLongHeader(b *bytes.Reader, v protocol.VersionNu
 	if err != nil {
 		return nil, err
 	}
-	h.Length = protocol.ByteCount(pl)
+	eh.Length = protocol.ByteCount(pl)
 	pn, pnLen, err := utils.ReadVarIntPacketNumber(b)
 	if err != nil {
 		return nil, err
 	}
-	h.PacketNumber = pn
-	h.PacketNumberLen = pnLen
+	eh.PacketNumber = pn
+	eh.PacketNumberLen = pnLen
 
-	return h, nil
+	return eh, nil
 }
 
-func (iv *InvariantHeader) parseShortHeader(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
-	h := iv.toExtendedHeader()
-	h.KeyPhase = int(iv.typeByte&0x40) >> 6
+func (h *Header) parseShortHeader(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
+	eh := h.toExtendedHeader()
+	eh.KeyPhase = int(h.typeByte&0x40) >> 6
 
 	pn, pnLen, err := utils.ReadVarIntPacketNumber(b)
 	if err != nil {
 		return nil, err
 	}
-	h.PacketNumber = pn
-	h.PacketNumberLen = pnLen
+	eh.PacketNumber = pn
+	eh.PacketNumberLen = pnLen
 
-	return h, nil
+	return eh, nil
 }

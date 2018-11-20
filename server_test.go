@@ -99,11 +99,11 @@ var _ = Describe("Server", func() {
 		})
 
 		parseHeader := func(data []byte) *wire.ExtendedHeader {
-			iHdr, err := wire.ParseInvariantHeader(bytes.NewReader(data), 0)
+			hdr, err := wire.ParseHeader(bytes.NewReader(data), 0)
 			Expect(err).ToNot(HaveOccurred())
-			hdr, err := iHdr.Parse(bytes.NewReader(data), protocol.VersionTLS)
+			extHdr, err := hdr.Parse(bytes.NewReader(data), protocol.VersionTLS)
 			Expect(err).ToNot(HaveOccurred())
-			return hdr
+			return extHdr
 		}
 
 		It("drops Initial packets with a too short connection ID", func() {

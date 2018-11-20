@@ -31,12 +31,12 @@ var _ = Describe("Packet packer", func() {
 	)
 
 	checkLength := func(data []byte) {
-		iHdr, err := wire.ParseInvariantHeader(bytes.NewReader(data), 0)
+		hdr, err := wire.ParseHeader(bytes.NewReader(data), 0)
 		Expect(err).ToNot(HaveOccurred())
 		r := bytes.NewReader(data)
-		hdr, err := iHdr.Parse(r, protocol.VersionWhatever)
+		extHdr, err := hdr.Parse(r, protocol.VersionWhatever)
 		Expect(err).ToNot(HaveOccurred())
-		ExpectWithOffset(0, hdr.Length).To(BeEquivalentTo(r.Len() + int(hdr.PacketNumberLen)))
+		ExpectWithOffset(0, extHdr.Length).To(BeEquivalentTo(r.Len() + int(extHdr.PacketNumberLen)))
 	}
 
 	expectAppendStreamFrames := func(frames ...wire.Frame) {

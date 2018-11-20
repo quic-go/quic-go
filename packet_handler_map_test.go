@@ -83,7 +83,7 @@ var _ = Describe("Packet Handler Map", func() {
 		It("drops unparseable packets", func() {
 			err := handler.handlePacket(nil, []byte{0, 1, 2, 3})
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("error parsing invariant header:"))
+			Expect(err.Error()).To(ContainSubstring("error parsing header:"))
 		})
 
 		It("deletes removed session immediately", func() {
