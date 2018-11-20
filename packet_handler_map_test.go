@@ -184,6 +184,54 @@ var _ = Describe("Packet Handler Map", func() {
 		})
 	})
 
+	Context("stateless reset handling", func() {
+		It("handles packets for connections added with a reset token", func() {
+			packetHandler := NewMockPacketHandler(mockCtrl)
+			connID := protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad}
+			token := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+			handler.AddWithResetToken(connID, packetHandler, token)
+			// first send a normal packet
+			handledPacket := make(chan struct{})
+			packetHandler.EXPECT().GetPerspective()
+			packetHandler.EXPECT().GetVersion()
+			packetHandler.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
+				Expect(p.header.DestConnectionID).To(Equal(connID))
+				close(handledPacket)
+			})
+			conn.dataToRead <- getPacket(connID)
+			Eventually(handledPacket).Should(BeClosed())
+		})
+
+		It("handles stateless resets", func() {
+			packetHandler := NewMockPacketHandler(mockCtrl)
+			connID := protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad}
+			token := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+			handler.AddWithResetToken(connID, packetHandler, token)
+			packet := append([]byte{0x40} /* short header packet */, make([]byte, 50)...)
+			packet = append(packet, token[:]...)
+			destroyed := make(chan struct{})
+			packetHandler.EXPECT().destroy(errors.New("received a stateless reset")).Do(func(error) {
+				close(destroyed)
+			})
+			conn.dataToRead <- packet
+			Eventually(destroyed).Should(BeClosed())
+		})
+
+		It("deletes reset tokens when the session is retired", func() {
+			handler.deleteRetiredSessionsAfter = scaleDuration(10 * time.Millisecond)
+			connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0x42}
+			token := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+			handler.AddWithResetToken(connID, NewMockPacketHandler(mockCtrl), token)
+			handler.Retire(connID)
+			time.Sleep(scaleDuration(30 * time.Millisecond))
+			Expect(handler.handlePacket(nil, getPacket(connID))).To(MatchError("received a packet with an unexpected connection ID 0xdeadbeef42"))
+			packet := append([]byte{0x40, 0xde, 0xca, 0xfb, 0xad, 0x99} /* short header packet */, make([]byte, 50)...)
+			packet = append(packet, token[:]...)
+			Expect(handler.handlePacket(nil, packet)).To(MatchError("received a packet with an unexpected connection ID 0xdecafbad99"))
+			Expect(handler.resetTokens).To(BeEmpty())
+		})
+	})
+
 	Context("running a server", func() {
 		It("adds a server", func() {
 			connID := protocol.ConnectionID{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88}

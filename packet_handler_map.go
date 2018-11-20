@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -11,6 +12,11 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
+
+type packetHandlerEntry struct {
+	handler    packetHandler
+	resetToken *[16]byte
+}
 
 // The packetHandlerMap stores packetHandlers, identified by connection ID.
 // It is used:
@@ -22,9 +28,10 @@ type packetHandlerMap struct {
 	conn      net.PacketConn
 	connIDLen int
 
-	handlers map[string] /* string(ConnectionID)*/ packetHandler
-	server   unknownPacketHandler
-	closed   bool
+	handlers    map[string] /* string(ConnectionID)*/ packetHandlerEntry
+	resetTokens map[[16]byte] /* stateless reset token */ packetHandler
+	server      unknownPacketHandler
+	closed      bool
 
 	deleteRetiredSessionsAfter time.Duration
 
@@ -37,7 +44,8 @@ func newPacketHandlerMap(conn net.PacketConn, connIDLen int, logger utils.Logger
 	m := &packetHandlerMap{
 		conn:                       conn,
 		connIDLen:                  connIDLen,
-		handlers:                   make(map[string]packetHandler),
+		handlers:                   make(map[string]packetHandlerEntry),
+		resetTokens:                make(map[[16]byte]packetHandler),
 		deleteRetiredSessionsAfter: protocol.RetiredConnectionIDDeleteTimeout,
 		logger:                     logger,
 	}
@@ -47,13 +55,29 @@ func newPacketHandlerMap(conn net.PacketConn, connIDLen int, logger utils.Logger
 
 func (h *packetHandlerMap) Add(id protocol.ConnectionID, handler packetHandler) {
 	h.mutex.Lock()
-	h.handlers[string(id)] = handler
+	h.handlers[string(id)] = packetHandlerEntry{handler: handler}
+	h.mutex.Unlock()
+}
+
+func (h *packetHandlerMap) AddWithResetToken(id protocol.ConnectionID, handler packetHandler, token [16]byte) {
+	h.mutex.Lock()
+	h.handlers[string(id)] = packetHandlerEntry{handler: handler, resetToken: &token}
+	h.resetTokens[token] = handler
 	h.mutex.Unlock()
 }
 
 func (h *packetHandlerMap) Remove(id protocol.ConnectionID) {
+	h.removeByConnectionIDAsString(string(id))
+}
+
+func (h *packetHandlerMap) removeByConnectionIDAsString(id string) {
 	h.mutex.Lock()
-	delete(h.handlers, string(id))
+	if handlerEntry, ok := h.handlers[id]; ok {
+		if token := handlerEntry.resetToken; token != nil {
+			delete(h.resetTokens, *token)
+		}
+		delete(h.handlers, id)
+	}
 	h.mutex.Unlock()
 }
 
@@ -63,9 +87,7 @@ func (h *packetHandlerMap) Retire(id protocol.ConnectionID) {
 
 func (h *packetHandlerMap) retireByConnectionIDAsString(id string) {
 	time.AfterFunc(h.deleteRetiredSessionsAfter, func() {
-		h.mutex.Lock()
-		delete(h.handlers, id)
-		h.mutex.Unlock()
+		h.removeByConnectionIDAsString(id)
 	})
 }
 
@@ -79,7 +101,8 @@ func (h *packetHandlerMap) CloseServer() {
 	h.mutex.Lock()
 	h.server = nil
 	var wg sync.WaitGroup
-	for id, handler := range h.handlers {
+	for id, handlerEntry := range h.handlers {
+		handler := handlerEntry.handler
 		if handler.GetPerspective() == protocol.PerspectiveServer {
 			wg.Add(1)
 			go func(id string, handler packetHandler) {
@@ -103,12 +126,12 @@ func (h *packetHandlerMap) close(e error) error {
 	h.closed = true
 
 	var wg sync.WaitGroup
-	for _, handler := range h.handlers {
+	for _, handlerEntry := range h.handlers {
 		wg.Add(1)
-		go func(handler packetHandler) {
-			handler.destroy(e)
+		go func(handlerEntry packetHandlerEntry) {
+			handlerEntry.handler.destroy(e)
 			wg.Done()
-		}(handler)
+		}(handlerEntry)
 	}
 
 	if h.server != nil {
@@ -149,25 +172,37 @@ func (h *packetHandlerMap) handlePacket(addr net.Addr, data []byte) error {
 	}
 
 	h.mutex.RLock()
-	handler, ok := h.handlers[string(iHdr.DestConnectionID)]
+	handlerEntry, handlerFound := h.handlers[string(iHdr.DestConnectionID)]
 	server := h.server
-	h.mutex.RUnlock()
 
 	var sentBy protocol.Perspective
 	var version protocol.VersionNumber
 	var handlePacket func(*receivedPacket)
-	if ok { // existing session
+	if handlerFound { // existing session
+		handler := handlerEntry.handler
 		sentBy = handler.GetPerspective().Opposite()
 		version = handler.GetVersion()
 		handlePacket = handler.handlePacket
 	} else { // no session found
+		// this might be a stateless reset
+		if !iHdr.IsLongHeader && len(data) >= protocol.MinStatelessResetSize {
+			var token [16]byte
+			copy(token[:], data[len(data)-16:])
+			if sess, ok := h.resetTokens[token]; ok {
+				h.mutex.RUnlock()
+				sess.destroy(errors.New("received a stateless reset"))
+				return nil
+			}
+		}
 		if server == nil { // no server set
+			h.mutex.RUnlock()
 			return fmt.Errorf("received a packet with an unexpected connection ID %s", iHdr.DestConnectionID)
 		}
 		handlePacket = server.handlePacket
 		sentBy = protocol.PerspectiveClient
 		version = iHdr.Version
 	}
+	h.mutex.RUnlock()
 
 	hdr, err := iHdr.Parse(r, sentBy, version)
 	if err != nil {
