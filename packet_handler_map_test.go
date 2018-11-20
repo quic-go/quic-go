@@ -227,7 +227,7 @@ var _ = Describe("Packet Handler Map", func() {
 			Expect(handler.handlePacket(nil, getPacket(connID))).To(MatchError("received a packet with an unexpected connection ID 0xdeadbeef42"))
 			packet := append([]byte{0x40, 0xde, 0xca, 0xfb, 0xad, 0x99} /* short header packet */, make([]byte, 50)...)
 			packet = append(packet, token[:]...)
-			Expect(handler.handlePacket(nil, packet)).To(MatchError("received a packet with an unexpected connection ID 0xdecafbad99"))
+			Expect(handler.handlePacket(nil, packet)).To(MatchError("received a short header packet with an unexpected connection ID 0xdecafbad99"))
 			Expect(handler.resetTokens).To(BeEmpty())
 		})
 	})

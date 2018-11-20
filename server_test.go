@@ -129,27 +129,33 @@ var _ = Describe("Server", func() {
 				},
 				data: bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize-100),
 			})
-			Expect(conn.dataWritten.Len()).To(BeZero())
+			Consistently(conn.dataWritten.Len).Should(BeZero())
 		})
 
 		It("drops packets with a too short connection ID", func() {
 			hdr := &wire.Header{
+				IsLongHeader:     true,
+				Type:             protocol.PacketTypeInitial,
 				SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4},
+				Version:          serv.config.Versions[0],
 				PacketNumberLen:  protocol.PacketNumberLen1,
 			}
 			serv.handlePacket(&receivedPacket{
 				header: hdr,
 				data:   bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
 			})
-			Expect(conn.dataWritten.Len()).To(BeZero())
+			Consistently(conn.dataWritten.Len).Should(BeZero())
 		})
 
 		It("drops non-Initial packets", func() {
 			serv.logger.SetLogLevel(utils.LogLevelDebug)
 			serv.handlePacket(&receivedPacket{
-				header: &wire.Header{Type: protocol.PacketTypeHandshake},
-				data:   []byte("invalid"),
+				header: &wire.Header{
+					Type:    protocol.PacketTypeHandshake,
+					Version: serv.config.Versions[0],
+				},
+				data: []byte("invalid"),
 			})
 		})
 
@@ -170,8 +176,9 @@ var _ = Describe("Server", func() {
 			serv.handlePacket(&receivedPacket{
 				remoteAddr: raddr,
 				header: &wire.Header{
-					Type:  protocol.PacketTypeInitial,
-					Token: token,
+					Type:    protocol.PacketTypeInitial,
+					Token:   token,
+					Version: serv.config.Versions[0],
 				},
 				data: bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
 			})
@@ -193,8 +200,9 @@ var _ = Describe("Server", func() {
 			serv.handlePacket(&receivedPacket{
 				remoteAddr: raddr,
 				header: &wire.Header{
-					Type:  protocol.PacketTypeInitial,
-					Token: []byte("foobar"),
+					Type:    protocol.PacketTypeInitial,
+					Token:   []byte("foobar"),
+					Version: serv.config.Versions[0],
 				},
 				data: bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
 			})

@@ -308,11 +308,9 @@ func (s *server) handlePacket(p *receivedPacket) {
 func (s *server) handlePacketImpl(p *receivedPacket) error {
 	hdr := p.header
 
-	if hdr.IsLongHeader {
-		// send a Version Negotiation Packet if the client is speaking a different protocol version
-		if !protocol.IsSupportedVersion(s.config.Versions, hdr.Version) {
-			return s.sendVersionNegotiationPacket(p)
-		}
+	// send a Version Negotiation Packet if the client is speaking a different protocol version
+	if !protocol.IsSupportedVersion(s.config.Versions, hdr.Version) {
+		return s.sendVersionNegotiationPacket(p)
 	}
 	if hdr.Type == protocol.PacketTypeInitial {
 		go s.handleInitial(p)
