@@ -31,9 +31,9 @@ var _ = Describe("Packet packer", func() {
 	)
 
 	checkLength := func(data []byte) {
-		r := bytes.NewReader(data)
-		iHdr, err := wire.ParseInvariantHeader(r, 0)
+		iHdr, err := wire.ParseInvariantHeader(bytes.NewReader(data), 0)
 		Expect(err).ToNot(HaveOccurred())
+		r := bytes.NewReader(data)
 		hdr, err := iHdr.Parse(r, protocol.VersionWhatever)
 		Expect(err).ToNot(HaveOccurred())
 		ExpectWithOffset(0, hdr.Length).To(BeEquivalentTo(r.Len() + int(hdr.PacketNumberLen)))

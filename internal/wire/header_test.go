@@ -326,10 +326,9 @@ var _ = Describe("Header", func() {
 			srcConnID := protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad, 0x013, 0x37, 0x13, 0x37}
 			data, err := ComposeVersionNegotiation(destConnID, srcConnID, []protocol.VersionNumber{0x12345678, 0x87654321})
 			Expect(err).ToNot(HaveOccurred())
-			b := bytes.NewReader(data)
-			iHdr, err := ParseInvariantHeader(b, 4)
+			iHdr, err := ParseInvariantHeader(bytes.NewReader(data), 4)
 			Expect(err).ToNot(HaveOccurred())
-			hdr, err := iHdr.Parse(b, versionIETFHeader)
+			hdr, err := iHdr.Parse(bytes.NewReader(data), versionIETFHeader)
 			Expect(err).ToNot(HaveOccurred())
 			hdr.Log(logger)
 			Expect(buf.String()).To(ContainSubstring("VersionNegotiationPacket{DestConnectionID: 0xdeadbeefcafe1337, SrcConnectionID: 0xdecafbad13371337"))

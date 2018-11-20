@@ -205,6 +205,7 @@ func (h *packetHandlerMap) handlePacket(addr net.Addr, data []byte) error {
 	}
 	h.mutex.RUnlock()
 
+	r = bytes.NewReader(data)
 	hdr, err := iHdr.Parse(r, version)
 	if err != nil {
 		return fmt.Errorf("error parsing header: %s", err)
