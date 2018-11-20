@@ -331,7 +331,7 @@ func (c *client) handlePacketImpl(p *receivedPacket) error {
 	return nil
 }
 
-func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
+func (c *client) handleVersionNegotiationPacket(hdr *wire.ExtendedHeader) error {
 	// ignore delayed / duplicated version negotiation packets
 	if c.receivedVersionNegotiationPacket || c.versionNegotiated {
 		c.logger.Debugf("Received a delayed Version Negotiation Packet.")
@@ -367,7 +367,7 @@ func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
 	return nil
 }
 
-func (c *client) handleRetryPacket(hdr *wire.Header) {
+func (c *client) handleRetryPacket(hdr *wire.ExtendedHeader) {
 	c.logger.Debugf("<- Received Retry")
 	hdr.Log(c.logger)
 	if !hdr.OrigDestConnectionID.Equal(c.destConnID) {

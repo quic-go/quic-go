@@ -98,7 +98,7 @@ var _ = Describe("Server", func() {
 			serv = ln.(*server)
 		})
 
-		parseHeader := func(data []byte) *wire.Header {
+		parseHeader := func(data []byte) *wire.ExtendedHeader {
 			iHdr, err := wire.ParseInvariantHeader(bytes.NewReader(data), 0)
 			Expect(err).ToNot(HaveOccurred())
 			hdr, err := iHdr.Parse(bytes.NewReader(data), protocol.VersionTLS)
@@ -108,7 +108,7 @@ var _ = Describe("Server", func() {
 
 		It("drops Initial packets with a too short connection ID", func() {
 			serv.handlePacket(&receivedPacket{
-				header: &wire.Header{
+				header: &wire.ExtendedHeader{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4},
@@ -120,7 +120,7 @@ var _ = Describe("Server", func() {
 
 		It("drops too small Initial", func() {
 			serv.handlePacket(&receivedPacket{
-				header: &wire.Header{
+				header: &wire.ExtendedHeader{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
@@ -132,7 +132,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("drops packets with a too short connection ID", func() {
-			hdr := &wire.Header{
+			hdr := &wire.ExtendedHeader{
 				IsLongHeader:     true,
 				Type:             protocol.PacketTypeInitial,
 				SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
@@ -150,7 +150,7 @@ var _ = Describe("Server", func() {
 		It("drops non-Initial packets", func() {
 			serv.logger.SetLogLevel(utils.LogLevelDebug)
 			serv.handlePacket(&receivedPacket{
-				header: &wire.Header{
+				header: &wire.ExtendedHeader{
 					Type:    protocol.PacketTypeHandshake,
 					Version: serv.config.Versions[0],
 				},
@@ -174,7 +174,7 @@ var _ = Describe("Server", func() {
 			Expect(err).ToNot(HaveOccurred())
 			serv.handlePacket(&receivedPacket{
 				remoteAddr: raddr,
-				header: &wire.Header{
+				header: &wire.ExtendedHeader{
 					Type:    protocol.PacketTypeInitial,
 					Token:   token,
 					Version: serv.config.Versions[0],
@@ -198,7 +198,7 @@ var _ = Describe("Server", func() {
 			}
 			serv.handlePacket(&receivedPacket{
 				remoteAddr: raddr,
-				header: &wire.Header{
+				header: &wire.ExtendedHeader{
 					Type:    protocol.PacketTypeInitial,
 					Token:   []byte("foobar"),
 					Version: serv.config.Versions[0],
@@ -212,7 +212,7 @@ var _ = Describe("Server", func() {
 			srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5}
 			destConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6}
 			serv.handlePacket(&receivedPacket{
-				header: &wire.Header{
+				header: &wire.ExtendedHeader{
 					IsLongHeader:     true,
 					SrcConnectionID:  srcConnID,
 					DestConnectionID: destConnID,
@@ -230,7 +230,7 @@ var _ = Describe("Server", func() {
 
 		It("replies with a Retry packet, if a Cookie is required", func() {
 			serv.config.AcceptCookie = func(_ net.Addr, _ *Cookie) bool { return false }
-			hdr := &wire.Header{
+			hdr := &wire.ExtendedHeader{
 				Type:             protocol.PacketTypeInitial,
 				SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
 				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
@@ -252,7 +252,7 @@ var _ = Describe("Server", func() {
 
 		It("creates a session, if no Cookie is required", func() {
 			serv.config.AcceptCookie = func(_ net.Addr, _ *Cookie) bool { return true }
-			hdr := &wire.Header{
+			hdr := &wire.ExtendedHeader{
 				Type:             protocol.PacketTypeInitial,
 				SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
 				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},

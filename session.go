@@ -21,7 +21,7 @@ import (
 )
 
 type unpacker interface {
-	Unpack(headerBinary []byte, hdr *wire.Header, data []byte) (*unpackedPacket, error)
+	Unpack(headerBinary []byte, hdr *wire.ExtendedHeader, data []byte) (*unpackedPacket, error)
 }
 
 type streamGetter interface {
@@ -52,7 +52,7 @@ type cryptoStreamHandler interface {
 
 type receivedPacket struct {
 	remoteAddr net.Addr
-	header     *wire.Header
+	header     *wire.ExtendedHeader
 	data       []byte
 	rcvTime    time.Time
 }

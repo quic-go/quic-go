@@ -22,7 +22,7 @@ type packetData []byte
 var _ = Describe("QUIC Proxy", func() {
 	makePacket := func(p protocol.PacketNumber, payload []byte) []byte {
 		b := &bytes.Buffer{}
-		hdr := wire.Header{
+		hdr := wire.ExtendedHeader{
 			PacketNumber:     p,
 			PacketNumberLen:  protocol.PacketNumberLen4,
 			DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0, 0, 0x13, 0x37},

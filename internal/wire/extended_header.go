@@ -9,8 +9,8 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
-// Header is the header of a QUIC packet.
-type Header struct {
+// ExtendedHeader is the header of a QUIC packet.
+type ExtendedHeader struct {
 	Raw []byte
 
 	Version protocol.VersionNumber
@@ -33,7 +33,7 @@ type Header struct {
 }
 
 // Write writes the Header.
-func (h *Header) Write(b *bytes.Buffer, ver protocol.VersionNumber) error {
+func (h *ExtendedHeader) Write(b *bytes.Buffer, ver protocol.VersionNumber) error {
 	if h.IsLongHeader {
 		return h.writeLongHeader(b, ver)
 	}
@@ -41,7 +41,7 @@ func (h *Header) Write(b *bytes.Buffer, ver protocol.VersionNumber) error {
 }
 
 // TODO: add support for the key phase
-func (h *Header) writeLongHeader(b *bytes.Buffer, v protocol.VersionNumber) error {
+func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, v protocol.VersionNumber) error {
 	b.WriteByte(byte(0x80 | h.Type))
 	utils.BigEndian.WriteUint32(b, uint32(h.Version))
 	connIDLen, err := encodeConnIDLen(h.DestConnectionID, h.SrcConnectionID)
@@ -76,7 +76,7 @@ func (h *Header) writeLongHeader(b *bytes.Buffer, v protocol.VersionNumber) erro
 	return utils.WriteVarIntPacketNumber(b, h.PacketNumber, h.PacketNumberLen)
 }
 
-func (h *Header) writeShortHeader(b *bytes.Buffer, v protocol.VersionNumber) error {
+func (h *ExtendedHeader) writeShortHeader(b *bytes.Buffer, v protocol.VersionNumber) error {
 	typeByte := byte(0x30)
 	typeByte |= byte(h.KeyPhase << 6)
 
@@ -86,7 +86,7 @@ func (h *Header) writeShortHeader(b *bytes.Buffer, v protocol.VersionNumber) err
 }
 
 // GetLength determines the length of the Header.
-func (h *Header) GetLength(v protocol.VersionNumber) protocol.ByteCount {
+func (h *ExtendedHeader) GetLength(v protocol.VersionNumber) protocol.ByteCount {
 	if h.IsLongHeader {
 		length := 1 /* type byte */ + 4 /* version */ + 1 /* conn id len byte */ + protocol.ByteCount(h.DestConnectionID.Len()+h.SrcConnectionID.Len()) + protocol.ByteCount(h.PacketNumberLen) + utils.VarIntLen(uint64(h.Length))
 		if h.Type == protocol.PacketTypeInitial {
@@ -101,7 +101,7 @@ func (h *Header) GetLength(v protocol.VersionNumber) protocol.ByteCount {
 }
 
 // Log logs the Header
-func (h *Header) Log(logger utils.Logger) {
+func (h *ExtendedHeader) Log(logger utils.Logger) {
 	if h.IsLongHeader {
 		if h.Version == 0 {
 			logger.Debugf("\tVersionNegotiationPacket{DestConnectionID: %s, SrcConnectionID: %s, SupportedVersions: %s}", h.DestConnectionID, h.SrcConnectionID, h.SupportedVersions)

@@ -180,7 +180,7 @@ var _ = Describe("Header Parsing", func() {
 		It("rejects packets sent with an unknown packet type", func() {
 			srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			buf := &bytes.Buffer{}
-			Expect((&Header{
+			Expect((&ExtendedHeader{
 				IsLongHeader:    true,
 				Type:            42,
 				SrcConnectionID: srcConnID,
@@ -226,7 +226,7 @@ var _ = Describe("Header Parsing", func() {
 			}
 		})
 
-		It("errors on EOF, when parsing the header", func() {
+		It("errors on EOF, when parsing the extended header", func() {
 			data := []byte{
 				0x80 ^ uint8(protocol.PacketTypeInitial),
 				0x1, 0x2, 0x3, 0x4, // version number
@@ -363,7 +363,7 @@ var _ = Describe("Header Parsing", func() {
 			}
 		})
 
-		It("errors on EOF, when parsing the invariant header", func() {
+		It("errors on EOF, when parsing the extended header", func() {
 			data := []byte{
 				0x30 ^ 0x2,
 				0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, // connection ID

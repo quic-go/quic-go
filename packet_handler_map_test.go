@@ -21,7 +21,7 @@ var _ = Describe("Packet Handler Map", func() {
 
 	getPacket := func(connID protocol.ConnectionID) []byte {
 		buf := &bytes.Buffer{}
-		Expect((&wire.Header{
+		Expect((&wire.ExtendedHeader{
 			IsLongHeader:     true,
 			Type:             protocol.PacketTypeHandshake,
 			DestConnectionID: connID,
@@ -126,7 +126,7 @@ var _ = Describe("Packet Handler Map", func() {
 			packetHandler := NewMockPacketHandler(mockCtrl)
 			packetHandler.EXPECT().GetVersion().Return(protocol.VersionWhatever)
 			handler.Add(connID, packetHandler)
-			hdr := &wire.Header{
+			hdr := &wire.ExtendedHeader{
 				IsLongHeader:     true,
 				Type:             protocol.PacketTypeHandshake,
 				Length:           1000,
@@ -147,7 +147,7 @@ var _ = Describe("Packet Handler Map", func() {
 			packetHandler := NewMockPacketHandler(mockCtrl)
 			packetHandler.EXPECT().GetVersion().Return(protocol.VersionWhatever)
 			handler.Add(connID, packetHandler)
-			hdr := &wire.Header{
+			hdr := &wire.ExtendedHeader{
 				IsLongHeader:     true,
 				Type:             protocol.PacketTypeHandshake,
 				Length:           3,
@@ -169,7 +169,7 @@ var _ = Describe("Packet Handler Map", func() {
 				Expect(p.data).To(HaveLen(456 - int(p.header.PacketNumberLen)))
 			})
 
-			hdr := &wire.Header{
+			hdr := &wire.ExtendedHeader{
 				IsLongHeader:     true,
 				Type:             protocol.PacketTypeHandshake,
 				Length:           456,

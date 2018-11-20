@@ -444,13 +444,13 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("receiving packets", func() {
-		var hdr *wire.Header
+		var hdr *wire.ExtendedHeader
 		var unpacker *MockUnpacker
 
 		BeforeEach(func() {
 			unpacker = NewMockUnpacker(mockCtrl)
 			sess.unpacker = unpacker
-			hdr = &wire.Header{PacketNumberLen: protocol.PacketNumberLen4}
+			hdr = &wire.ExtendedHeader{PacketNumberLen: protocol.PacketNumberLen4}
 		})
 
 		It("sets the largestRcvdPacketNumber", func() {
@@ -517,7 +517,7 @@ var _ = Describe("Session", func() {
 			// only EXPECT one call to the unpacker
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
 			err := sess.handlePacketImpl(&receivedPacket{
-				header: &wire.Header{
+				header: &wire.ExtendedHeader{
 					IsLongHeader:     true,
 					DestConnectionID: sess.destConnID,
 					SrcConnectionID:  sess.srcConnID,
@@ -526,7 +526,7 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 			// The next packet has to be ignored, since the source connection ID doesn't match.
 			err = sess.handlePacketImpl(&receivedPacket{
-				header: &wire.Header{
+				header: &wire.ExtendedHeader{
 					IsLongHeader:     true,
 					DestConnectionID: sess.destConnID,
 					SrcConnectionID:  protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
@@ -543,7 +543,7 @@ var _ = Describe("Session", func() {
 				Expect(origAddr).ToNot(Equal(remoteIP))
 				p := receivedPacket{
 					remoteAddr: remoteIP,
-					header:     &wire.Header{PacketNumber: 1337},
+					header:     &wire.ExtendedHeader{PacketNumber: 1337},
 				}
 				err := sess.handlePacketImpl(&p)
 				Expect(err).ToNot(HaveOccurred())
@@ -558,7 +558,7 @@ var _ = Describe("Session", func() {
 			data = append(data, []byte("foobar")...)
 			return &packedPacket{
 				raw:    data,
-				header: &wire.Header{PacketNumber: pn},
+				header: &wire.ExtendedHeader{PacketNumber: pn},
 			}
 		}
 
@@ -929,7 +929,7 @@ var _ = Describe("Session", func() {
 			packer.EXPECT().PackPacket().DoAndReturn(func() (*packedPacket, error) {
 				defer close(done)
 				return &packedPacket{
-					header: &wire.Header{},
+					header: &wire.ExtendedHeader{},
 					raw:    *getPacketBuffer(),
 				}, nil
 			}),
@@ -1317,7 +1317,7 @@ var _ = Describe("Client Session", func() {
 		newConnID := protocol.ConnectionID{1, 3, 3, 7, 1, 3, 3, 7}
 		packer.EXPECT().ChangeDestConnectionID(newConnID)
 		err := sess.handlePacketImpl(&receivedPacket{
-			header: &wire.Header{
+			header: &wire.ExtendedHeader{
 				IsLongHeader:     true,
 				Type:             protocol.PacketTypeHandshake,
 				SrcConnectionID:  newConnID,

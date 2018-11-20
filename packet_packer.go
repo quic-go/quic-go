@@ -25,7 +25,7 @@ type packer interface {
 }
 
 type packedPacket struct {
-	header          *wire.Header
+	header          *wire.ExtendedHeader
 	raw             []byte
 	frames          []wire.Frame
 	encryptionLevel protocol.EncryptionLevel
@@ -397,9 +397,9 @@ func (p *packetPacker) composeNextPacket(
 	return frames, nil
 }
 
-func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header {
+func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.ExtendedHeader {
 	pn, pnLen := p.pnManager.PeekPacketNumber()
-	header := &wire.Header{
+	header := &wire.ExtendedHeader{
 		PacketNumber:     pn,
 		PacketNumberLen:  pnLen,
 		Version:          p.version,
@@ -424,8 +424,7 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Header
 }
 
 func (p *packetPacker) writeAndSealPacket(
-	header *wire.Header,
-	frames []wire.Frame,
+	header *wire.ExtendedHeader, frames []wire.Frame,
 	sealer handshake.Sealer,
 ) ([]byte, error) {
 	raw := *getPacketBuffer()

@@ -35,7 +35,7 @@ func (m *MockUnpacker) EXPECT() *MockUnpackerMockRecorder {
 }
 
 // Unpack mocks base method
-func (m *MockUnpacker) Unpack(arg0 []byte, arg1 *wire.Header, arg2 []byte) (*unpackedPacket, error) {
+func (m *MockUnpacker) Unpack(arg0 []byte, arg1 *wire.ExtendedHeader, arg2 []byte) (*unpackedPacket, error) {
 	ret := m.ctrl.Call(m, "Unpack", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*unpackedPacket)
 	ret1, _ := ret[1].(error)

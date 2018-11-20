@@ -15,13 +15,13 @@ import (
 var _ = Describe("Packet Unpacker", func() {
 	var (
 		unpacker *packetUnpacker
-		hdr      *wire.Header
+		hdr      *wire.ExtendedHeader
 		aead     *MockQuicAEAD
 	)
 
 	BeforeEach(func() {
 		aead = NewMockQuicAEAD(mockCtrl)
-		hdr = &wire.Header{
+		hdr = &wire.ExtendedHeader{
 			PacketNumber:    10,
 			PacketNumberLen: 1,
 			Raw:             []byte{0x04, 0x4c, 0x01},

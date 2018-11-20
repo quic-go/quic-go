@@ -422,7 +422,7 @@ func (s *server) createNewSession(
 	return sess, nil
 }
 
-func (s *server) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
+func (s *server) sendRetry(remoteAddr net.Addr, hdr *wire.ExtendedHeader) error {
 	token, err := s.cookieGenerator.NewToken(remoteAddr, hdr.DestConnectionID)
 	if err != nil {
 		return err
@@ -431,7 +431,7 @@ func (s *server) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
 	if err != nil {
 		return err
 	}
-	replyHdr := &wire.Header{
+	replyHdr := &wire.ExtendedHeader{
 		IsLongHeader:         true,
 		Type:                 protocol.PacketTypeRetry,
 		Version:              hdr.Version,
