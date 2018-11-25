@@ -36,7 +36,7 @@ var _ = Describe("Header", func() {
 					Type:             0x5,
 					DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe},
 					SrcConnectionID:  protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad, 0x0, 0x0, 0x13, 0x37},
-					PayloadLen:       0xcafe,
+					Length:           0xcafe,
 					PacketNumber:     0xdecaf,
 					PacketNumberLen:  protocol.PacketNumberLen4,
 					Version:          0x1020304,
@@ -49,7 +49,7 @@ var _ = Describe("Header", func() {
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, // dest connection ID
 					0xde, 0xca, 0xfb, 0xad, 0x0, 0x0, 0x13, 0x37, // source connection ID
 				}
-				expected = append(expected, encodeVarInt(0xcafe)...) // payload length
+				expected = append(expected, encodeVarInt(0xcafe)...) // length
 				expected = appendPacketNumber(expected, 0xdecaf, protocol.PacketNumberLen4)
 				Expect(buf.Bytes()).To(Equal(expected))
 			})
@@ -220,30 +220,30 @@ var _ = Describe("Header", func() {
 			buf = &bytes.Buffer{}
 		})
 
-		It("has the right length for the Long Header, for a short payload length", func() {
+		It("has the right length for the Long Header, for a short length", func() {
 			h := &Header{
 				IsLongHeader:     true,
-				PayloadLen:       1,
+				Length:           1,
 				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				PacketNumberLen:  protocol.PacketNumberLen1,
 			}
-			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* conn ID len */ + 8 /* dest conn id */ + 8 /* src conn id */ + 1 /* short payload len */ + 1 /* packet number */
+			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* conn ID len */ + 8 /* dest conn id */ + 8 /* src conn id */ + 1 /* short len */ + 1 /* packet number */
 			Expect(h.GetLength(versionIETFHeader)).To(BeEquivalentTo(expectedLen))
 			err := h.Write(buf, protocol.PerspectiveClient, versionIETFHeader)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(buf.Len()).To(Equal(expectedLen))
 		})
 
-		It("has the right length for the Long Header, for a long payload length", func() {
+		It("has the right length for the Long Header, for a long length", func() {
 			h := &Header{
 				IsLongHeader:     true,
-				PayloadLen:       1500,
+				Length:           1500,
 				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				PacketNumberLen:  protocol.PacketNumberLen2,
 			}
-			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* conn ID len */ + 8 /* dest conn id */ + 8 /* src conn id */ + 2 /* long payload len */ + 2 /* packet number */
+			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* conn ID len */ + 8 /* dest conn id */ + 8 /* src conn id */ + 2 /* long len */ + 2 /* packet number */
 			Expect(h.GetLength(versionIETFHeader)).To(BeEquivalentTo(expectedLen))
 			err := h.Write(buf, protocol.PerspectiveServer, versionIETFHeader)
 			Expect(err).ToNot(HaveOccurred())
@@ -254,12 +254,12 @@ var _ = Describe("Header", func() {
 			h := &Header{
 				Type:             protocol.PacketTypeInitial,
 				IsLongHeader:     true,
-				PayloadLen:       1500,
+				Length:           1500,
 				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4},
 				PacketNumberLen:  protocol.PacketNumberLen2,
 			}
-			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* conn ID len */ + 8 /* dest conn id */ + 4 /* src conn id */ + 1 /* token length */ + 2 /* long payload len */ + 2 /* packet number */
+			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* conn ID len */ + 8 /* dest conn id */ + 4 /* src conn id */ + 1 /* token length */ + 2 /* long len */ + 2 /* packet number */
 			Expect(h.GetLength(versionIETFHeader)).To(BeEquivalentTo(expectedLen))
 			err := h.Write(buf, protocol.PerspectiveServer, versionIETFHeader)
 			Expect(err).ToNot(HaveOccurred())
@@ -270,13 +270,13 @@ var _ = Describe("Header", func() {
 			h := &Header{
 				Type:             protocol.PacketTypeInitial,
 				IsLongHeader:     true,
-				PayloadLen:       1500,
+				Length:           1500,
 				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4},
 				PacketNumberLen:  protocol.PacketNumberLen2,
 				Token:            []byte("foo"),
 			}
-			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* conn ID len */ + 8 /* dest conn id */ + 4 /* src conn id */ + 1 /* token length */ + 3 /* token */ + 2 /* long payload len */ + 2 /* packet number */
+			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* conn ID len */ + 8 /* dest conn id */ + 4 /* src conn id */ + 1 /* token length */ + 3 /* token */ + 2 /* long len */ + 2 /* packet number */
 			Expect(h.GetLength(versionIETFHeader)).To(BeEquivalentTo(expectedLen))
 			err := h.Write(buf, protocol.PerspectiveServer, versionIETFHeader)
 			Expect(err).ToNot(HaveOccurred())
@@ -358,12 +358,12 @@ var _ = Describe("Header", func() {
 				Type:             protocol.PacketTypeHandshake,
 				PacketNumber:     0x1337,
 				PacketNumberLen:  protocol.PacketNumberLen2,
-				PayloadLen:       54321,
+				Length:           54321,
 				DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
 				SrcConnectionID:  protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad, 0x013, 0x37, 0x13, 0x37},
 				Version:          0xfeed,
 			}).Log(logger)
-			Expect(buf.String()).To(ContainSubstring("Long Header{Type: Handshake, DestConnectionID: 0xdeadbeefcafe1337, SrcConnectionID: 0xdecafbad13371337, PacketNumber: 0x1337, PacketNumberLen: 2, PayloadLen: 54321, Version: 0xfeed}"))
+			Expect(buf.String()).To(ContainSubstring("Long Header{Type: Handshake, DestConnectionID: 0xdeadbeefcafe1337, SrcConnectionID: 0xdecafbad13371337, PacketNumber: 0x1337, PacketNumberLen: 2, Length: 54321, Version: 0xfeed}"))
 		})
 
 		It("logs Initial Packets with a Token", func() {
@@ -373,12 +373,12 @@ var _ = Describe("Header", func() {
 				Token:            []byte{0xde, 0xad, 0xbe, 0xef},
 				PacketNumber:     0x42,
 				PacketNumberLen:  protocol.PacketNumberLen2,
-				PayloadLen:       100,
+				Length:           100,
 				DestConnectionID: protocol.ConnectionID{0xca, 0xfe, 0x13, 0x37},
 				SrcConnectionID:  protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
 				Version:          0xfeed,
 			}).Log(logger)
-			Expect(buf.String()).To(ContainSubstring("Long Header{Type: Initial, DestConnectionID: 0xcafe1337, SrcConnectionID: 0xdecafbad, Token: 0xdeadbeef, PacketNumber: 0x42, PacketNumberLen: 2, PayloadLen: 100, Version: 0xfeed}"))
+			Expect(buf.String()).To(ContainSubstring("Long Header{Type: Initial, DestConnectionID: 0xcafe1337, SrcConnectionID: 0xdecafbad, Token: 0xdeadbeef, PacketNumber: 0x42, PacketNumberLen: 2, Length: 100, Version: 0xfeed}"))
 		})
 
 		It("logs Initial Packets without a Token", func() {
@@ -387,12 +387,12 @@ var _ = Describe("Header", func() {
 				Type:             protocol.PacketTypeInitial,
 				PacketNumber:     0x42,
 				PacketNumberLen:  protocol.PacketNumberLen2,
-				PayloadLen:       100,
+				Length:           100,
 				DestConnectionID: protocol.ConnectionID{0xca, 0xfe, 0x13, 0x37},
 				SrcConnectionID:  protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
 				Version:          0xfeed,
 			}).Log(logger)
-			Expect(buf.String()).To(ContainSubstring("Long Header{Type: Initial, DestConnectionID: 0xcafe1337, SrcConnectionID: 0xdecafbad, Token: (empty), PacketNumber: 0x42, PacketNumberLen: 2, PayloadLen: 100, Version: 0xfeed}"))
+			Expect(buf.String()).To(ContainSubstring("Long Header{Type: Initial, DestConnectionID: 0xcafe1337, SrcConnectionID: 0xdecafbad, Token: (empty), PacketNumber: 0x42, PacketNumberLen: 2, Length: 100, Version: 0xfeed}"))
 		})
 
 		It("logs Initial Packets with a Token", func() {
