@@ -1321,14 +1321,12 @@ var _ = Describe("Client Session", func() {
 		newConnID := protocol.ConnectionID{1, 3, 3, 7, 1, 3, 3, 7}
 		packer.EXPECT().ChangeDestConnectionID(newConnID)
 		err := sess.handlePacketImpl(&receivedPacket{
-			extHdr: &wire.ExtendedHeader{
-				Header: wire.Header{
-					IsLongHeader:     true,
-					SrcConnectionID:  newConnID,
-					DestConnectionID: sess.srcConnID,
-				},
-				Type: protocol.PacketTypeHandshake,
-			},
+			extHdr: &wire.ExtendedHeader{Header: wire.Header{
+				IsLongHeader:     true,
+				Type:             protocol.PacketTypeHandshake,
+				SrcConnectionID:  newConnID,
+				DestConnectionID: sess.srcConnID,
+			}},
 			data: []byte{0},
 		})
 		Expect(err).ToNot(HaveOccurred())

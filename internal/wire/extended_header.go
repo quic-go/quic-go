@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"crypto/rand"
 	"fmt"
-	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
@@ -17,18 +15,10 @@ type ExtendedHeader struct {
 
 	Raw []byte
 
-	OrigDestConnectionID protocol.ConnectionID // only needed in the Retry packet
-
 	PacketNumberLen protocol.PacketNumberLen
 	PacketNumber    protocol.PacketNumber
 
-	IsVersionNegotiation bool
-	SupportedVersions    []protocol.VersionNumber // Version Number sent in a Version Negotiation Packet by the server
-
-	Type     protocol.PacketType
 	KeyPhase int
-	Length   protocol.ByteCount
-	Token    []byte
 }
 
 func (h *ExtendedHeader) parse(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
@@ -39,55 +29,15 @@ func (h *ExtendedHeader) parse(b *bytes.Reader, v protocol.VersionNumber) (*Exte
 }
 
 func (h *ExtendedHeader) parseLongHeader(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
-	h.Type = protocol.PacketType(h.typeByte & 0x7f)
-
-	if h.Type != protocol.PacketTypeInitial && h.Type != protocol.PacketTypeRetry && h.Type != protocol.PacketType0RTT && h.Type != protocol.PacketTypeHandshake {
-		return nil, qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", h.Type))
-	}
-
 	if h.Type == protocol.PacketTypeRetry {
-		odcilByte, err := b.ReadByte()
-		if err != nil {
-			return nil, err
-		}
-		odcil := decodeSingleConnIDLen(odcilByte & 0xf)
-		h.OrigDestConnectionID, err = protocol.ReadConnectionID(b, odcil)
-		if err != nil {
-			return nil, err
-		}
-		h.Token = make([]byte, b.Len())
-		if _, err := io.ReadFull(b, h.Token); err != nil {
-			return nil, err
-		}
 		return h, nil
 	}
-
-	if h.Type == protocol.PacketTypeInitial {
-		tokenLen, err := utils.ReadVarInt(b)
-		if err != nil {
-			return nil, err
-		}
-		if tokenLen > uint64(b.Len()) {
-			return nil, io.EOF
-		}
-		h.Token = make([]byte, tokenLen)
-		if _, err := io.ReadFull(b, h.Token); err != nil {
-			return nil, err
-		}
-	}
-
-	pl, err := utils.ReadVarInt(b)
-	if err != nil {
-		return nil, err
-	}
-	h.Length = protocol.ByteCount(pl)
 	pn, pnLen, err := utils.ReadVarIntPacketNumber(b)
 	if err != nil {
 		return nil, err
 	}
 	h.PacketNumber = pn
 	h.PacketNumberLen = pnLen
-
 	return h, nil
 }
 
@@ -100,7 +50,6 @@ func (h *ExtendedHeader) parseShortHeader(b *bytes.Reader, v protocol.VersionNum
 	}
 	h.PacketNumber = pn
 	h.PacketNumberLen = pnLen
-
 	return h, nil
 }
 
@@ -112,7 +61,6 @@ func (h *ExtendedHeader) Write(b *bytes.Buffer, ver protocol.VersionNumber) erro
 	return h.writeShortHeader(b, ver)
 }
 
-// TODO: add support for the key phase
 func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, v protocol.VersionNumber) error {
 	b.WriteByte(byte(0x80 | h.Type))
 	utils.BigEndian.WriteUint32(b, uint32(h.Version))
@@ -148,6 +96,7 @@ func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, v protocol.VersionNumb
 	return utils.WriteVarIntPacketNumber(b, h.PacketNumber, h.PacketNumberLen)
 }
 
+// TODO: add support for the key phase
 func (h *ExtendedHeader) writeShortHeader(b *bytes.Buffer, v protocol.VersionNumber) error {
 	typeByte := byte(0x30)
 	typeByte |= byte(h.KeyPhase << 6)
@@ -214,15 +163,4 @@ func encodeSingleConnIDLen(id protocol.ConnectionID) (byte, error) {
 		return 0, fmt.Errorf("invalid connection ID length: %d bytes", len)
 	}
 	return byte(len - 3), nil
-}
-
-func decodeConnIDLen(enc byte) (int /*dest conn id len*/, int /*src conn id len*/) {
-	return decodeSingleConnIDLen(enc >> 4), decodeSingleConnIDLen(enc & 0xf)
-}
-
-func decodeSingleConnIDLen(enc uint8) int {
-	if enc == 0 {
-		return 0
-	}
-	return int(enc) + 3
 }

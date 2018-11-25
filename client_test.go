@@ -515,12 +515,12 @@ var _ = Describe("Client", func() {
 						Version:          cl.version,
 						DestConnectionID: id,
 					},
-					extHdr: &wire.ExtendedHeader{
-						Header:               wire.Header{IsLongHeader: true},
+					extHdr: &wire.ExtendedHeader{Header: wire.Header{
+						IsLongHeader:         true,
 						Type:                 protocol.PacketTypeRetry,
 						Token:                []byte("foobar"),
 						OrigDestConnectionID: connID,
-					},
+					}},
 				})
 			})
 			manager.EXPECT().Add(gomock.Any(), gomock.Any())
@@ -579,15 +579,13 @@ var _ = Describe("Client", func() {
 						DestConnectionID: id,
 						Version:          cl.version,
 					},
-					extHdr: &wire.ExtendedHeader{
-						Header: wire.Header{
-							IsLongHeader: true,
-							Version:      protocol.VersionTLS,
-						},
+					extHdr: &wire.ExtendedHeader{Header: wire.Header{
+						IsLongHeader:         true,
 						Type:                 protocol.PacketTypeRetry,
 						Token:                []byte("foobar"),
 						OrigDestConnectionID: connID,
-					},
+						Version:              protocol.VersionTLS,
+					}},
 				})
 			}).AnyTimes()
 			manager.EXPECT().Add(gomock.Any(), gomock.Any()).AnyTimes()

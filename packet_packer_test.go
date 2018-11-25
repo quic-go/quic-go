@@ -57,7 +57,7 @@ var _ = Describe("Packet packer", func() {
 
 	BeforeEach(func() {
 		rand.Seed(GinkgoRandomSeed())
-		version := protocol.VersionWhatever
+		version := protocol.VersionTLS
 		mockSender := NewMockStreamSender(mockCtrl)
 		mockSender.EXPECT().onHasStreamData(gomock.Any()).AnyTimes()
 		initialStream = NewMockCryptoStream(mockCtrl)
